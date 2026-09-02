@@ -66,8 +66,10 @@
  * Ein Dienst, der lauscht, aber keinen Bestand hat, ist eine Anwendung ohne
  * Inhalt — und genau das hätte man ihm von außen nicht angesehen.
  *
- * Der Lauf lenkt das Anwendungsdatenverzeichnis über `XDG_DATA_HOME` in einen
- * Wegwerfordner und fasst die echten Daten des Benutzers nicht an.
+ * Der Lauf lenkt das Anwendungsdatenverzeichnis in einen Wegwerfordner und
+ * fasst die echten Daten des Benutzers nicht an — unter Windows über
+ * `%LOCALAPPDATA%`, sonst über `XDG_DATA_HOME`. Warum das zwei Variablen sind
+ * und nicht eine, steht bei `APP_DATA` weiter unten.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -107,6 +109,32 @@ const BASE = `http://127.0.0.1:${PORT}/api/v1`;
  * Binärdatei — und nicht zufällig ein anderes.
  */
 const TASKPANE_MARK = `takt-nachweis-${randomBytes(8).toString('hex')}`;
+
+/**
+ * Der Ablageort wird umgelenkt — und zwar auf **jeder** Plattform (T-075).
+ *
+ * `apps/local-api/src/access/paths.ts` kennt zwei Regeln und nicht eine:
+ *
+ *   win32   `%LOCALAPPDATA%\Takt`   — `XDG_DATA_HOME` wird dort **nicht** gelesen
+ *   sonst   `$XDG_DATA_HOME/takt`
+ *
+ * Dieser Lauf setzte bis T-075 nur `XDG_DATA_HOME`. Unter Linux und macOS ist
+ * das richtig; unter Windows lief er damit gegen das **echte**
+ * `%LOCALAPPDATA%\Takt` des angemeldeten Kontos. Zwei Schäden auf einmal: Der
+ * Nachweis hätte die Datenbank des Benutzers angefasst, und die Prüfung „die
+ * Datenbankdatei liegt im Anwendungsdatenverzeichnis" hätte im Wegwerfordner
+ * nichts gefunden und wäre rot geworden — nicht, weil der Dienst falsch liegt,
+ * sondern weil der Prüfer am falschen Ort nachsieht. Genau diese Sorte
+ * Fehlschlag verleitet dazu, die Prüfung „für Windows zu lockern".
+ *
+ * Deshalb steht die Regel hier einmal und wird an beiden Stellen benutzt: beim
+ * Start des Dienstes (welche Variable) und beim Nachsehen (welcher Ordnername).
+ */
+const APP_DATA = Object.freeze(
+  process.platform === 'win32'
+    ? { variable: 'LOCALAPPDATA', folder: 'Takt' }
+    : { variable: 'XDG_DATA_HOME', folder: 'takt' },
+);
 
 let passed = 0;
 let failed = 0;
@@ -213,7 +241,7 @@ function startSidecar(binary, cwd, dataDir, secret, osUser = 'pruefer') {
   const child = spawn(binary, [], {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, XDG_DATA_HOME: dataDir },
+    env: { ...process.env, [APP_DATA.variable]: dataDir },
   });
   let output = '';
   child.stdout.setEncoding('utf8');
@@ -360,7 +388,9 @@ mkdirSync(dataDir, { recursive: true });
 const emptyCwd = join(root, 'cwd');
 mkdirSync(emptyCwd, { recursive: true });
 // Genau das, was die Hülle beim Start tut: Verzeichnis anlegen, 0700 setzen.
-const preparedDir = join(dataDir, 'takt');
+// Der Ordnername kommt aus derselben Regel wie die Umgebungsvariable oben —
+// unter Windows `Takt`, sonst `takt`.
+const preparedDir = join(dataDir, APP_DATA.folder);
 mkdirSync(preparedDir, { recursive: true, mode: 0o700 });
 chmodSync(preparedDir, 0o700);
 

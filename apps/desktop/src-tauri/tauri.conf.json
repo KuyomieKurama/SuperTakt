@@ -66,7 +66,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "deb", "appimage"],
+
+    // ---------------------------------------------------------------------
+    // Ein Eintrag je Erzeugnis, das ausgeliefert wird (T-075).
+    //
+    // Tauri filtert diese Liste nach der Plattform, auf der gerade gebaut
+    // wird: Unter Windows bleibt `nsis`, unter Linux `deb` und `appimage`,
+    // unter macOS `app` und `dmg`. Es ist also **eine** Liste fuer drei
+    // Plattformen und keine Fallunterscheidung.
+    //
+    // `app` und `dmg` kamen mit T-075 dazu. Ohne sie waere unter macOS keiner
+    // der Eintraege uebrig geblieben, und `tauri build` haette dort einen
+    // Bau ohne Erzeugnis hinterlassen — gruen, mit leerem Ausgabeordner.
+    // `app` ist die Anwendung selbst, `dmg` das Abbild, das ein Mensch
+    // herunterlaedt; das `dmg` braucht das `app`.
+    //
+    // `msi` steht bewusst nicht dabei: Der Auslieferungsweg unter Windows ist
+    // NSIS (`installMode: currentUser`, kein Administrator noetig). `rpm`
+    // ebenso wenig — es ist nie gebaut und nie geprueft worden.
+    "targets": ["nsis", "deb", "appimage", "app", "dmg"],
     "publisher": "Takt",
 
     // Der einzige Urheberrechtshinweis ausserhalb von /LICENSE. Er steht hier,
@@ -110,7 +128,23 @@
     // Ressourcenverzeichnis dasselbe wie das Verzeichnis der ausfuehrbaren
     // Datei: NSIS legt Hauptprogramm, Sidecar und Ressourcen zusammen nach
     // `$INSTDIR`. `resources` trifft also genau den gesuchten Ort.
-    "resources": ["taskpane/**/*"],
+    //
+    // ---------------------------------------------------------------------
+    // Der zweite Eintrag: die Lizenzbeilage (T-068, T-075).
+    //
+    // `licenses/` entsteht aus `scripts/collect-licenses.mjs` und enthaelt
+    // `THIRD-PARTY-LICENSES.txt` und eine Kopie von `/LICENSE`. Er steht in
+    // `.gitignore`, weil er aus dem Abhaengigkeitsgraphen des jeweiligen Baus
+    // erzeugt wird und plattformgebunden ist.
+    //
+    // Anders als beim Aufgabenbereich braucht es hier **keinen** zweiten
+    // Eintrag unter `linux.*.files`: Diese Dateien werden von keinem Programm
+    // gesucht, sie muessen nur im Paket liegen. `/usr/lib/Takt/licenses/`
+    // reicht dafuer; eine zweite Kopie waeren 730 KiB ohne Gegenwert.
+    //
+    // `scripts/build-app.mjs` bricht ab, wenn der Ordner fehlt. Ein Paket,
+    // das ohne die Lizenztexte weitergegeben wird, sieht vollstaendig aus.
+    "resources": ["taskpane/**/*", "licenses/**/*"],
 
     "windows": {
       "nsis": {
