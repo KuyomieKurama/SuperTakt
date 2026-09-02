@@ -1,0 +1,21 @@
+{
+  "name": "@takt/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — Fachlogik. Kennt weder HTTP noch SQL (E-001) und hat keine Laufzeitabhängigkeit.",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./export": "./src/export.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:boundary": "node scripts/check-export-boundary.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

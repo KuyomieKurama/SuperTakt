@@ -1,0 +1,4312 @@
+openapi: 3.1.0
+
+info:
+  title: Takt — lokaler Dienst
+  version: 1.0.0-entwurf
+  summary: HTTP-Schnittstelle des Node-Sidecars für Oberfläche und Outlook-Add-in.
+  description: |
+    Ressourcenschnitt aus T-001, Zugriffsverfahren aus T-011, Anwendungsfälle
+    und Verdrahtung aus T-021. Diese Beschreibung ist die Prüfgrundlage für den
+    Security-Checker.
+
+    **Stand T-021:** Alle hier beschriebenen Routen sind umgesetzt und hängen
+    hinter der Prüfkette. Dazu gekommen sind zwei Gruppen, die T-001 noch nicht
+    kannte: die globale Suche (`/search`, E-038) und die schmale Fläche des
+    Outlook-Add-ins (`/addin/*`, T-019). Der Aufgabenbereich des Add-ins wird
+    auf einem **zweiten Port** über HTTPS ausgeliefert (E-046); dieser Port
+    liefert ausschließlich statische Dateien und ist nicht Teil dieser
+    Beschreibung.
+
+    ## Betriebsform
+
+    Der Dienst läuft als Node-Sidecar unter der Tauri-Hülle (E-004) und lauscht
+    ausschließlich auf `127.0.0.1`. Es gibt keine Cloudanbindung, keinen
+    Datenbankserver und keine Telemetrie (E-001).
+
+    Der Port ist **fest vorgegeben** (17843) und ausdrücklich **kein
+    Geheimnis** (B-1.5). Ein zufälliger Port wäre keine Sicherheitsmaßnahme:
+    Eine Webseite klopft einige tausend Loopback-Ports in Sekunden ab, und ein
+    lokaler Prozess sieht die offenen Ports ohnehin. Ist der Port belegt,
+    startet Takt **nicht** und weicht nicht aus — sonst könnte ein fremder
+    Prozess ihn zuerst belegen und sich gegenüber dem Add-in als Takt ausgeben,
+    um Tokens einzusammeln.
+
+    ## Vertrauensgrenze — zwei Maßnahmen gegen zwei verschiedene Angreifer
+
+    Ein Dienst auf `127.0.0.1` nimmt Anfragen von jedem Prozess auf demselben
+    Rechner an, einschließlich beliebiger Webseiten im Browser des Benutzers
+    (R-02). Er hält Kundendaten.
+
+    **Der Nachweis** über die Kopfzeile `X-Takt-Token` wirkt gegen einen
+    beliebigen lokalen Prozess. Er ist dort die einzige Maßnahme, die überhaupt
+    wirkt.
+
+    **Die Herkunftsprüfung** (`Host`, `Origin`, `Sec-Fetch-*`) wirkt gegen eine
+    fremde Webseite im Browser des Benutzers, weil ein Browser sie zu
+    wahrheitsgemäßen Werten zwingt. Gegen einen lokalen Prozess ist sie
+    **wirkungslos** — drei Zeilen Skript setzen diese Kopfzeilen frei. Sie ist
+    also **keine zweite Schicht hinter dem Token**, sondern eine eigenständige
+    Maßnahme gegen einen anderen Akteur (B-2.9). Keine ersetzt die andere.
+
+    Daraus folgt im Einzelnen:
+
+    * **Jede** Route verlangt den Nachweis. Es gibt keine offene Route, auch
+      keine Zustandsabfrage — eine unauthentifizierte Antwort würde jedem
+      lokalen Prozess verraten, dass Takt läuft.
+    * Der `Host`-Kopf muss buchstäblich `127.0.0.1:<port>` oder
+      `localhost:<port>` sein. Das schließt DNS-Rebinding aus. Die Prüfung
+      steht **vor** dem Nachweis, damit ein Angreifer am Token nicht einmal
+      einen Zeitunterschied beobachten kann.
+    * Eine vorhandene, aber nicht gelistete `Origin` wird **abgewiesen**, nicht
+      nur ohne CORS-Kopfzeilen beantwortet.
+    * Zustandsändernde Routen nehmen ausschließlich `application/json` an und
+      antworten sonst mit 415, bevor der Rumpf gelesen wird.
+    * **Keine Cookies, keine Sitzung, kein `Authorization`-Kopf.** Der Nachweis
+      steht in einer eigenen Kopfzeile. Damit gibt es keine Berechtigung, die
+      ein Browser von sich aus mitschickt, und CSRF verliert seine Grundlage.
+      `Access-Control-Allow-Credentials` bleibt aus.
+    * Das Token steht nie in der Adresse. Eine Anfrage, die eines mitführt,
+      wird mit 400 abgewiesen; das Token gilt danach als kompromittiert.
+
+    ## Zwei Sorten Nachweis
+
+    | Sorte | Herkunft | Lebensdauer | Wozu |
+    |---|---|---|---|
+    | Sitzungsgeheimnis | von der Tauri-Hülle über `stdin` an den Sidecar | je Start | die Oberfläche |
+    | Add-in-Token | in der Anwendung erzeugt, vom Benutzer in Outlook eingetragen | bis zur Neuerzeugung | das Outlook-Add-in |
+
+    Beide gehen durch dieselbe Kopfzeile und denselben zeitkonstanten
+    Vergleich. Die Oberfläche benutzt das Add-in-Token **nicht**: Damit hängt
+    das dauerhafte Geheimnis allein an der Add-in-Strecke, und ein entwendetes
+    Add-in-Token kann sich weder anzeigen noch selbst austauschen.
+
+  contact:
+    name: Takt, lokale Anwendung
+  license:
+    name: proprietär
+
+servers:
+  - url: http://127.0.0.1:{port}/api/v1
+    description: Node-Sidecar, ausschließlich lokal erreichbar
+    variables:
+      port:
+        default: '17843'
+        description: |
+          Fest vorgegeben und ausdrücklich kein Geheimnis (B-1.5). Ist er
+          belegt, startet der Dienst nicht und weicht nicht aus.
+
+security:
+  - TaktToken: []
+
+tags:
+  - name: Zustand
+    description: Erreichbarkeit des Dienstes.
+  - name: Zugriff
+    description: |
+      Token-Verfahren und Sicherheitsmeldungen (E-009, T-011). Erreichbar
+      ausschließlich mit dem Sitzungsgeheimnis der Oberfläche.
+  - name: Todos
+    description: Todos und Tickets (A-2.*).
+  - name: Notizen
+    description: Die persönliche Todo-Notiz (A-7.1, A-7.2). Getrennte Ressource, siehe R-06.
+  - name: Tags
+    description: Tags und Tag-Ordner (A-4.*).
+  - name: Pools
+    description: |
+      Regeln über Tags. Regel gespeichert, Mitgliedschaft abgeleitet (A-3.4).
+
+      Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**; `placement` sagt,
+      wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an.
+  - name: Kanban
+    description: |
+      Das Board (E-054) und der Status eines Todos (A-5.4).
+
+      Zwei verschiedene Dinge, seit E-054 auch im Modell: Die **Spalten** des
+      Boards sind Regeln über Tags und stehen unter `/pools`; der **Status**
+      ist eine Eigenschaft des Todos und steht unter `/todo-statuses`. Das
+      Board selbst wird unter `/board` gelesen.
+  - name: Zeitbuchungen
+    description: Erfasste Arbeitszeit (A-6.*).
+  - name: Timer
+    description: Der laufende Timer. Höchstens einer (A-6.8).
+  - name: Export
+    description: Exportläufe, Vorlagen und Exportstatus (A-8.*, E-012).
+  - name: Suche
+    description: |
+      Die globale Suche trifft Todos **und** Zeitbuchungen (E-038). Zwei
+      Listen in einer Antwort, keine gemischte: Ein Treffer in einer Leistung
+      ist etwas anderes als ein Treffer in einem Titel.
+  - name: Add-in
+    description: |
+      Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
+
+      Vier Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
+      Call-Nummer suchen, ein Todo anlegen, eine Zeit buchen. Kein Löschen,
+      kein Export, kein Zugriff auf den internen Vermerk eines fremden Todos,
+      keine Einstellungen.
+
+      Der Grund ist nicht Sparsamkeit: Das Add-in weist sich mit dem
+      **dauerhaften** Token aus, die Oberfläche mit dem Sitzungsgeheimnis
+      (B-2.9 Punkt 3). Ein entwendetes Add-in-Token kommt genau so weit, wie
+      diese Fläche reicht.
+  - name: Einstellungen
+    description: Anwendungseinstellungen, Standard-Tags (A-9, E-011).
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  /health:
+    get:
+      tags: [Zustand]
+      operationId: health
+      summary: Erreichbarkeit prüfen
+      description: |
+        Bewusst hinter der Token-Prüfung. Das Add-in benutzt diese Route für
+        „Verbindung testen"; sie ist deshalb keine Ausnahme von der Regel,
+        sondern der erste Fall, in dem das Token gebraucht wird.
+
+        Die Antwort nennt keine Pfade, keine Bestandsgrößen, keine Fassung und
+        keinen Benutzernamen — nur, dass der Dienst läuft.
+      responses:
+        '200':
+          description: Der Dienst läuft.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [status]
+                    properties:
+                      status: { type: string, const: ok }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  # ---------------------------------------------------------------------------
+  /token:
+    get:
+      tags: [Zugriff]
+      operationId: getTokenStatus
+      summary: Zustand des Add-in-Tokens
+      description: |
+        Nur mit dem **Sitzungsgeheimnis** erreichbar, also nur aus der
+        Tauri-Hülle. Mit dem Add-in-Token beantwortet der Dienst diese Route mit
+        401 — derselbe Text wie bei fehlendem Nachweis, damit ein Aufrufer nicht
+        erfährt, dass es die Route für jemand anderen gibt.
+
+        Es gibt **keinen** Klartext zurück. Der existiert nach der Erzeugung
+        nicht mehr, auch nicht für die Oberfläche.
+      responses:
+        '200':
+          description: Zustand des Tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [configured, issuedAt, lastUsedAt, generation, unreadable]
+                    properties:
+                      configured:
+                        type: boolean
+                        description: Ist ein Add-in-Token eingerichtet?
+                      issuedAt:
+                        oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+                      lastUsedAt:
+                        oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+                        description: |
+                          Zuletzt erfolgreich verwendet. So sieht der Benutzer, ob
+                          überhaupt noch jemand mit dem Token arbeitet — und ob
+                          jemand damit arbeitet, von dem er nichts weiß (B-2.7).
+                      generation:
+                        type: integer
+                        minimum: 0
+                        description: Wievieltes Token seit der Einrichtung.
+                      unreadable:
+                        type: boolean
+                        description: |
+                          Die Tokendatei war vorhanden, aber nicht lesbar. Der
+                          Dienst erzeugt dann **kein** neues von sich aus, weil
+                          das ein eingerichtetes Add-in ohne Vorwarnung
+                          aussperren würde.
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+    post:
+      tags: [Zugriff]
+      operationId: rotateToken
+      summary: Neues Add-in-Token erzeugen
+      description: |
+        Erzeugt ein neues Token. **Das alte wird sofort ungültig** (B-2.7): Es
+        gibt genau einen gültigen Abdruck, keine Nachfrist und keine zweite
+        Gültigkeit. Die Oberfläche sagt das vor dem Bestätigen ausdrücklich —
+        das Add-in funktioniert danach erst wieder, wenn der Benutzer das neue
+        Token dort eingetragen hat.
+
+        Dies ist die **einzige** Stelle im ganzen Dienst, an der ein Token in
+        einer Antwort steht. Die Stelle ist eng gefasst:
+
+        * Nur mit dem Sitzungsgeheimnis erreichbar. Ein entwendetes Add-in-Token
+          kann sich nicht selbst austauschen und den Benutzer damit nicht aus
+          seinem eigenen Dienst aussperren.
+        * `Cache-Control: no-store` steht auf jeder Antwort dieses Dienstes.
+        * Der Wert wird nicht protokolliert. Die Protokollzeile kennt nur
+          Methode, Pfad ohne Abfrageparameter, Status, Dauer und einen
+          technischen Schlüssel.
+
+        Der Klartext ist danach nicht wieder abrufbar. Wer ihn verliert, erzeugt
+        ein neues.
+      responses:
+        '201':
+          description: Erzeugt. Der Klartext steht genau in dieser einen Antwort.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [token, issuedAt, generation]
+                    properties:
+                      token:
+                        type: string
+                        pattern: '^takt_[A-Za-z0-9_-]{43}$'
+                        minLength: 48
+                        maxLength: 48
+                        examples: ['takt_<48 Zeichen, hier bewusst kein Beispielwert>']
+                      issuedAt: { $ref: '#/components/schemas/Timestamp' }
+                      generation: { type: integer, minimum: 1 }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+
+  # ---------------------------------------------------------------------------
+  /security/notices:
+    get:
+      tags: [Zugriff]
+      operationId: getSecurityNotices
+      summary: Sicherheitsmeldungen
+      description: |
+        Zählwerte und Zeitpunkte, mehr nicht. **Kein Wert aus einer Anfrage** —
+        kein geratenes Token, keine Herkunft, keine Adresse.
+
+        Ohne diese Route erführe der Benutzer nie, dass jemand seinen lokalen
+        Dienst anspricht. Sie ist der einzige Weg, auf dem ein Angriff nach
+        B-1.1 überhaupt sichtbar wird.
+
+        Alles liegt im Arbeitsspeicher und ist beim nächsten Start wieder leer.
+        Eine Protokolldatei darüber wäre eine zweite Datei in der Nähe von
+        Kundendaten, die niemand aufräumt (B-12.2).
+      responses:
+        '200':
+          description: Die Meldungen seit dem Start des Dienstes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [notices]
+                    properties:
+                      notices:
+                        type: array
+                        items:
+                          type: object
+                          required: [kind, count, firstAt, lastAt]
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - auth_failure_burst
+                                - token_in_url
+                                - origin_rejected
+                                - host_rejected
+                                - file_permissions_wide
+                            count: { type: integer, minimum: 1 }
+                            firstAt: { $ref: '#/components/schemas/Timestamp' }
+                            lastAt: { $ref: '#/components/schemas/Timestamp' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  # ---------------------------------------------------------------------------
+  /todos:
+    get:
+      tags: [Todos]
+      operationId: searchTodos
+      summary: Todos suchen und filtern
+      parameters:
+        - { $ref: '#/components/parameters/Search' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: statusId
+          in: query
+          schema: { type: array, items: { $ref: '#/components/schemas/Id' } }
+          style: form
+          explode: false
+        - name: tagId
+          in: query
+          schema: { type: array, items: { $ref: '#/components/schemas/Id' } }
+          style: form
+          explode: false
+        - name: poolId
+          in: query
+          schema: { type: array, items: { $ref: '#/components/schemas/Id' } }
+          style: form
+          explode: false
+        - name: callNumber
+          in: query
+          description: Genaue Übereinstimmung. Grundlage der Duplikatprüfung im Add-in (A-10.9).
+          schema: { type: string, maxLength: 128 }
+        - name: onlyOpen
+          in: query
+          description: Nur Todos, die nicht auf „Erledigt" stehen.
+          schema: { type: boolean, default: false }
+        - name: onlyWithOpenEntries
+          in: query
+          description: Nur Todos mit mindestens einer noch nicht exportierten Buchung.
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Trefferliste.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: '#/components/schemas/PageInfo' }
+                      - type: object
+                        required: [items]
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/Todo' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    post:
+      tags: [Todos]
+      operationId: createTodo
+      summary: Todo anlegen
+      description: |
+        Die Standard-Tags aus A-9 werden im Dienst ergänzt, nicht vom Aufrufer
+        mitgeschickt. Damit greifen sie auf jedem Weg, auch aus dem Add-in
+        heraus (A-9.5).
+
+        Auf eine bereits vergebene Call-Nummer wird nicht geprüft. A-10.9
+        verlangt, dass der Benutzer entscheidet; das Add-in fragt zuvor über
+        `GET /todos?callNumber=` und legt bewusst an oder bucht auf das
+        vorhandene Todo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoCreate' }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse des neuen Todos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoCreated' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /todos/{todoId}:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    get:
+      tags: [Todos]
+      operationId: getTodo
+      summary: Todo lesen
+      description: |
+        Enthält die persönliche Notiz **nicht**. Sie wird über
+        `/todos/{todoId}/note` gesondert geholt (A-7.2, R-06).
+
+        Die Antwort ist **nicht** das Todo selbst, sondern `TodoDetail`: das
+        Todo unter `todo` und daneben die beiden Summen. Bis T-041 stand hier
+        `Todo`; wer dagegen baute, las `data.title` als `undefined` und bekam
+        keine Fehlermeldung, sondern eine leere Anzeige. Dieselbe Schadensart
+        wie C-03 und derselbe Befund, den T-022 an `GET /settings` und
+        `POST /todos` von Hand gefunden hat.
+      responses:
+        '200':
+          description: Das Todo und seine berechneten Summen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoDetail' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Todos]
+      operationId: updateTodo
+      summary: Todo ändern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoUpdate' }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Todo' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Todos]
+      operationId: deleteTodo
+      summary: Todo löschen
+      description: |
+        Scheitert mit `409`, sobald am Todo eine bereits exportierte Buchung
+        hängt. Abgerechnete Zeit wird nicht durch das Löschen eines Todos
+        entfernt.
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /todos/{todoId}/note:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    get:
+      tags: [Notizen]
+      operationId: getTodoNote
+      summary: Persönliche Todo-Notiz lesen
+      description: |
+        Eigene Ressource, nicht ein Feld am Todo. Die Notiz ist ausschließlich
+        innerhalb der Anwendung sichtbar und geht nie in den Export (A-7.2).
+        Die Trennung ist im Datenmodell verankert: eigene Tabelle, nicht Teil
+        der Exportsicht, nicht als Vorlagenquelle wählbar (R-06).
+      responses:
+        '200':
+          description: Die Notiz.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoNote' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Notizen]
+      operationId: putTodoNote
+      summary: Persönliche Todo-Notiz schreiben
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 20000 }
+      responses:
+        '200':
+          description: Gespeichert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoNote' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /todos/{todoId}/done:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    put:
+      tags: [Todos]
+      operationId: markTodoDone
+      summary: Todo als erledigt markieren (A-2.4)
+      responses:
+        '200':
+          description: Erledigt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Todo' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Todos]
+      operationId: clearTodoDone
+      summary: Erledigt-Status aufheben
+      description: |
+        Das Todo kehrt in die Spalte zurück, in der es vor dem Erledigen lag,
+        ersatzweise in die Standardspalte. Seine Pools findet es ohne weiteres
+        Zutun wieder, weil die Zugehörigkeit aus den Tags abgeleitet und nicht
+        gespeichert ist (A-3.4).
+      responses:
+        '200':
+          description: Wieder aktiv.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Todo' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  /tag-tree:
+    get:
+      tags: [Tags]
+      operationId: getTagTree
+      summary: Vollständigen Tag- und Ordnerbaum lesen
+      description: |
+        Ein Aufruf liefert den ganzen Baum, beliebig tief (A-4.3, A-10.4).
+        Der Dienst holt Ordner und Tags mit je einer Abfrage und setzt den Baum
+        im Speicher zusammen; es gibt keinen Aufruf je Ebene.
+      responses:
+        '200':
+          description: Der Baum.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TagTree' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /tags:
+    get:
+      tags: [Tags]
+      operationId: listTags
+      summary: Tags listen
+      parameters:
+        - name: folderId
+          in: query
+          description: |
+            Leer lassen für die Wurzelebene. Genau **eine** Ebene, ohne
+            Unterordner — der ganze Baum kommt über `/tag-tree` (A-10.4).
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: |
+            Die Tags dieser Ebene, vollständig und ohne Seiten. Eine Ebene ist
+            überschaubar; die Fortsetzungsmarke hätte hier nichts zu tragen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Tags]
+      operationId: createTag
+      summary: Tag anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                folderId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+                color: { $ref: '#/components/schemas/Color' }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse des neuen Tags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Tag' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /tags/{tagId}:
+    parameters: [{ $ref: '#/components/parameters/TagId' }]
+    patch:
+      tags: [Tags]
+      operationId: updateTag
+      summary: Tag umbenennen, umfärben oder in einen anderen Ordner legen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                folderId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+                color: { $ref: '#/components/schemas/Color' }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Tag' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+    delete:
+      tags: [Tags]
+      operationId: deleteTag
+      summary: Tag löschen
+      description: |
+        Scheitert mit `409` (`tag_in_use`), solange das Tag an Todos oder in
+        einer Pool-Regel hängt.
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tag-folders:
+    post:
+      tags: [Tags]
+      operationId: createTagFolder
+      summary: Tag-Ordner anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                parentId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse des neuen Ordners.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TagFolder' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /tag-folders/{folderId}:
+    parameters: [{ $ref: '#/components/parameters/FolderId' }]
+    patch:
+      tags: [Tags]
+      operationId: updateTagFolder
+      summary: Tag-Ordner umbenennen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TagFolder' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+    delete:
+      tags: [Tags]
+      operationId: deleteTagFolder
+      summary: Tag-Ordner löschen
+      description: Scheitert mit `409`, solange der Ordner Unterordner oder Tags enthält.
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tag-folders/{folderId}/move:
+    parameters: [{ $ref: '#/components/parameters/FolderId' }]
+    post:
+      tags: [Tags]
+      operationId: moveTagFolder
+      summary: Tag-Ordner unter einen anderen Ordner hängen (A-4.6)
+      description: |
+        Eigene Route statt eines `parentId`-Feldes in `PATCH`, weil hier eine
+        fachliche Prüfung hängt und der Fehlerfall ein eigener ist: Ein Ordner
+        darf weder sich selbst noch einen seiner Nachfahren als übergeordneten
+        Ordner bekommen. Der Versuch endet mit `409` und dem Code
+        `tag_folder_cycle`.
+
+        Die Prüfung läuft in derselben Transaktion wie das Verschieben. Sie
+        folgt der Vorfahrenkette des Ziels mit einem Indexzugriff je Ebene und
+        liest nie die gesamte Tabelle.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newParentId]
+              properties:
+                newParentId:
+                  oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+                  description: '`null` hebt den Ordner auf die Wurzelebene.'
+      responses:
+        '200':
+          description: Verschoben.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TagFolder' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Zyklus (`tag_folder_cycle`) oder Namenskonflikt im Zielordner
+            (`name_conflict`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                zyklus:
+                  value:
+                    error:
+                      code: tag_folder_cycle
+                      message: Ein Ordner kann nicht unter einen seiner eigenen Unterordner verschoben werden.
+
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+  # ---------------------------------------------------------------------------
+  /pools:
+    get:
+      tags: [Pools]
+      operationId: listPools
+      summary: Regeln listen — Pools, Spalten oder beides
+      description: |
+        Seit E-054 ist eine Kanban-Spalte dieselbe Entität wie ein Pool: ein
+        Name und eine Regel über Tags. `placement` sagt, wo eine Regel
+        erscheint, und dieser Filter sagt, wonach gefragt ist.
+
+        **Ohne `placement` ist die Antwort die Pool-Liste** — also das, was
+        diese Route vor E-054 lieferte. Eine Regel, die ausdrücklich nur auf dem
+        Board stehen soll, taucht hier nicht auf.
+      parameters:
+        - name: placement
+          in: query
+          description: |
+            `pool` (Vorgabe) — was in der Pool-Liste steht, also `placement`
+            `pool` oder `both`. `board` — die Spalten des Kanban-Boards.
+            `all` — jede Regel, ungeachtet der Fläche.
+          schema: { type: string, enum: [pool, board, all], default: pool }
+      responses:
+        '200':
+          description: Die Regeln der gewählten Fläche, nach Position.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Pool' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Pools]
+      operationId: createPool
+      summary: Pool anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PoolCreate' }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse des neuen Pools.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Pool' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /pools/{poolId}:
+    parameters: [{ $ref: '#/components/parameters/PoolId' }]
+    patch:
+      tags: [Pools]
+      operationId: updatePool
+      summary: Pool-Regel ändern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PoolUpdate' }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Pool' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Pools]
+      operationId: deletePool
+      summary: Pool löschen
+      description: |
+        Löscht nur die Regel. An den Todos ändert sich nichts, weil die
+        Zugehörigkeit nie gespeichert war (A-3.4).
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /pools/{poolId}/todos:
+    parameters:
+      - { $ref: '#/components/parameters/PoolId' }
+      - { $ref: '#/components/parameters/Cursor' }
+      - { $ref: '#/components/parameters/Limit' }
+      - name: includeCompleted
+        in: query
+        description: |
+          Ohne Angabe bleiben erledigte Todos außen vor. Der Pool zeigt, was zu
+          tun ist (A-3.4).
+        schema: { type: boolean, default: false }
+    get:
+      tags: [Pools]
+      operationId: listPoolTodos
+      summary: Todos eines Pools
+      description: |
+        Bei jedem Aufruf aus den Tags abgeleitet (A-3.4). Es gibt keine
+        gespeicherte Zuordnung, die veralten könnte.
+      responses:
+        '200':
+          description: Mitglieder des Pools.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: '#/components/schemas/PageInfo' }
+                      - type: object
+                        required: [items]
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/Todo' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  /board:
+    get:
+      tags: [Kanban]
+      operationId: getBoard
+      summary: Das Kanban-Board lesen
+      description: |
+        Das ganze Board in **einem** Aufruf: die Spalten in ihrer Reihenfolge,
+        je Spalte die erste Seite ihrer Karten, und die Karten, die in mehr als
+        einer Spalte stehen.
+
+        **Eine Spalte ist eine Regel über Tags** (E-054), also ein `Pool` mit
+        `placement` `board` oder `both`. Eingerichtet wird sie deshalb über
+        `POST /pools` und `PATCH /pools/{poolId}`; hier wird nur gelesen. Es
+        gibt keine Route, die eine Karte in eine Spalte legt: Ziehen ist mit
+        E-054 entfallen, weil sich eine Regel nicht durch Verschieben umkehren
+        lässt, ohne Tags zu setzen.
+
+        **`columns: []` heißt „keine Spalte eingerichtet"**, nicht „nichts zu
+        tun". Nach der Umstellung ist das der Ausgangszustand — Migration 0009
+        macht aus keinem vorhandenen Pool eine Spalte, weil sie das nicht raten
+        kann.
+
+        **Eine Karte kann in mehreren Spalten stehen.** Bei Status war das
+        ausgeschlossen, bei Regeln ist es unvermeidlich: Zwei zutreffende Regeln
+        treffen beide zu. Die Karte steht dann in beiden `columns[].todos` und
+        einmal in `appearances`.
+
+        `limit` gilt **je Spalte**. Eine Fortsetzungsmarke nimmt diese Route
+        nicht entgegen — eine Marke gehört zu genau einer geordneten Liste, und
+        hier sind es so viele Listen wie Spalten. Weiter blättert man je Spalte
+        über `GET /pools/{poolId}/todos` mit der Marke, die dieselbe Spalte hier
+        mitgegeben hat.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - name: includeCompleted
+          in: query
+          description: |
+            Ohne Angabe bleiben erledigte Karten außen vor — dieselbe Vorgabe
+            wie in Pool-Ansichten (E-039). Sie sind trotzdem Mitglied ihrer
+            Spalte; hebt ein Timerstart „Erledigt" auf, stehen sie ohne Zutun
+            wieder da (A-2.5).
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Das Board zum Zeitpunkt `generatedAt`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Board' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  # ---------------------------------------------------------------------------
+  /todo-statuses:
+    get:
+      tags: [Kanban]
+      operationId: listTodoStatuses
+      summary: Statusspalten listen (A-5.4)
+      responses:
+        '200':
+          description: Spalten in ihrer Reihenfolge.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TodoStatus' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Kanban]
+      operationId: createTodoStatus
+      summary: Statusspalte anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                color: { $ref: '#/components/schemas/Color' }
+                position: { type: integer, minimum: 0, default: 0 }
+      # `color` ist seit T-051 **gelesen**. Bis dahin nahm die Route es nicht
+      # entgegen, während die Oberfläche es sendete: Zod streifte den Schlüssel
+      # ab, die Spalte entstand farblos, und niemand bekam eine Meldung. Der
+      # Fund stammt von `proof:callers`, dem Abgleich der Aufrufer gegen die
+      # Routenschemata. Ohne Angabe bleibt die Spalte farblos; `PATCH` setzt die
+      # Farbe weiterhin nachträglich.
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse der neuen Spalte.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoStatus' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /todo-statuses/order:
+    put:
+      tags: [Kanban]
+      operationId: reorderTodoStatuses
+      summary: Reihenfolge der Spalten festlegen
+      description: |
+        Vollständige Liste, nicht ein Teilstück. Die Neuordnung läuft in einer
+        Transaktion, damit der eindeutige Index auf der Position zwischendurch
+        nicht verletzt wird.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: Neu geordnet.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TodoStatus' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /todo-statuses/{statusId}:
+    parameters: [{ $ref: '#/components/parameters/StatusId' }]
+    patch:
+      tags: [Kanban]
+      operationId: updateTodoStatus
+      summary: Statusspalte ändern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                isDefault: { type: boolean }
+                color: { $ref: '#/components/schemas/Color' }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TodoStatus' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+    delete:
+      tags: [Kanban]
+      operationId: deleteTodoStatus
+      summary: Statusspalte löschen
+      description: |
+        Scheitert mit `409`, wenn noch Todos in der Spalte liegen
+        (`status_in_use`) oder wenn es die letzte Spalte wäre
+        (`last_status_column`).
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ---------------------------------------------------------------------------
+  /time-entries:
+    get:
+      tags: [Zeitbuchungen]
+      operationId: searchTimeEntries
+      summary: Zeitbuchungen filtern (A-6.6, I-10)
+      parameters:
+        - name: todoId
+          in: query
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: exportStatus
+          in: query
+          schema: { $ref: '#/components/schemas/ExportStatus' }
+        - name: fromDay
+          in: query
+          description: |
+            Kalendertag **in Ortszeit**, einschließlich (E-025).
+
+            Ortszeit und nicht UTC, und das ist der Unterschied, der zählt:
+            Eine Buchung, die um 00:30 Ortszeit beginnt, trägt in UTC noch das
+            Datum des Vortags. Maßgeblich ist der Tag des **Starts**; eine
+            Buchung von 23:40 bis 00:20 zählt vollständig zum Starttag und wird
+            nicht geteilt. Es ist derselbe Tagesbegriff, nach dem der Export
+            gruppiert — bis T-042 war er es nicht, und die Liste zeigte eine
+            Buchung unter einem anderen Tag, als die Vorschau sie abrechnete.
+          schema: { type: string, format: date }
+        - name: toDay
+          in: query
+          description: Kalendertag in Ortszeit, einschließlich (E-025). Siehe `fromDay`.
+          schema: { type: string, format: date }
+        - name: onlyPreviouslyExported
+          in: query
+          description: Buchungen, deren Exportstatus zurückgesetzt wurde (R-10).
+          schema: { type: boolean, default: false }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: |
+            Trefferliste. Eine Summe der Dauer liefert diese Route **nicht** —
+            sie entstünde je Seite und wäre damit eine andere Zahl als die, die
+            der Benutzer erwartet. Wer eine Tagessumme braucht, bekommt sie über
+            die Vorschau (`POST /export/preview`), die nach denselben Regeln
+            gruppiert wie der Export.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: '#/components/schemas/PageInfo' }
+                      - type: object
+                        required: [items]
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/TimeEntry' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    post:
+      tags: [Zeitbuchungen]
+      operationId: createTimeEntry
+      summary: Zeitbuchung von Hand anlegen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [todoId, startedAt, endedAt]
+              properties:
+                todoId: { $ref: '#/components/schemas/Id' }
+                startedAt: { $ref: '#/components/schemas/Timestamp' }
+                endedAt: { $ref: '#/components/schemas/Timestamp' }
+                note: { type: string, maxLength: 20000, default: '' }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse der neuen Buchung.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /time-entries/{timeEntryId}:
+    parameters: [{ $ref: '#/components/parameters/TimeEntryId' }]
+    get:
+      tags: [Zeitbuchungen]
+      operationId: getTimeEntry
+      summary: Zeitbuchung lesen
+      responses:
+        '200':
+          description: Die Buchung.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Zeitbuchungen]
+      operationId: updateTimeEntry
+      summary: Zeitbuchung ändern
+      description: |
+        Eine bereits exportierte Buchung ist gesperrt (A-6.9) und antwortet mit
+        `409` und dem Code `time_entry_locked`. Erst nach dem ausdrücklichen
+        Zurücksetzen des Exportstatus (E-012) ist sie wieder änderbar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                todoId: { $ref: '#/components/schemas/Id' }
+                startedAt: { $ref: '#/components/schemas/Timestamp' }
+                endedAt: { $ref: '#/components/schemas/Timestamp' }
+                note: { type: string, maxLength: 20000 }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Die Buchung ist exportiert und damit gesperrt (A-6.9).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                gesperrt:
+                  value:
+                    error:
+                      code: time_entry_locked
+                      message: Diese Buchung wurde bereits exportiert und kann nicht geändert werden. Setzen Sie den Exportstatus zurück, um sie zu bearbeiten.
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Zeitbuchungen]
+      operationId: deleteTimeEntry
+      summary: Zeitbuchung löschen
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /time-entries/{timeEntryId}/export-status:
+    parameters: [{ $ref: '#/components/parameters/TimeEntryId' }]
+    put:
+      tags: [Export]
+      operationId: resetExportStatus
+      summary: Exportstatus einer Buchung zurücksetzen (E-012)
+      description: |
+        Die einzige Route, die den Exportstatus von Hand ändert, und sie kann
+        ihn ausschließlich auf `open` setzen. Der Weg nach `exported` führt
+        allein über einen Exportlauf, damit keine Buchung als abgerechnet gilt,
+        ohne dass eine Datei dazu existiert. Ein Versuch, `exported` zu
+        setzen, endet mit `409` und `export_status_not_settable`.
+
+        Der Vorgang wird protokolliert (R-10). Buchung, Zeitpunkt, Windows-
+        Benutzer, vorheriger Exportlauf und die Begründung landen in einer
+        anhängenden, unveränderlichen Tabelle. `exportCount` bleibt stehen,
+        sodass die Oberfläche die Buchung dauerhaft als „schon einmal
+        exportiert" kennzeichnen kann.
+
+        Nach dem Zurücksetzen geht dieselbe Arbeitszeit erneut in die
+        Abrechnung. Die Oberfläche fragt vorher nach und sagt das ausdrücklich.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, reason]
+              properties:
+                status:
+                  type: string
+                  enum: [open, exported]
+                  description: |
+                    Beide Werte werden **angenommen**, nur einer wirkt.
+
+                    Dass `exported` durch die Eingabeprüfung kommt, ist Absicht:
+                    Der Versuch wird eine Ebene tiefer abgelehnt, in der Domäne
+                    (`checkExportStatusTransition`), und heißt deshalb
+                    `export_status_not_settable` und nicht „ungültiger Wert".
+                    Der Unterschied ist der zwischen einer Regel und einem
+                    Tippfehler — und nur der erste sagt dem Aufrufer, warum es
+                    diese Regel gibt.
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                  description: Begründung aus dem Bestätigungsdialog. Wandert unverändert ins Protokoll.
+      responses:
+        '200':
+          description: Zurückgesetzt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Die Buchung ist bereits offen (`export_status_unchanged`) oder es
+            wurde versucht, `exported` zu setzen (`export_status_not_settable`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ---------------------------------------------------------------------------
+  /timer:
+    get:
+      tags: [Timer]
+      operationId: getRunningTimer
+      summary: Laufenden Timer lesen
+      responses:
+        '200':
+          description: '`data` ist `null`, wenn kein Timer läuft.'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - { $ref: '#/components/schemas/RunningTimerView' }
+                      - { type: 'null' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /timer/start:
+    post:
+      tags: [Timer]
+      operationId: startTimer
+      summary: Timer starten (A-6.2, A-6.8, A-2.5)
+      description: |
+        Zwei Ausgänge, beide erfolgreich, unterschieden durch `kind` in der
+        Antwort — **nicht** durch einen Fehlercode.
+
+        Läuft bereits ein Timer und `stopRunning` ist nicht gesetzt, antwortet
+        der Dienst mit **200** und `kind: confirmation_required` und ändert
+        nichts. Er nennt den laufenden Timer, damit die Oberfläche die Rückfrage
+        aus A-6.8 stellen kann. Erst der erneute Aufruf mit `stopRunning: true`
+        beendet ihn und startet den neuen (**201**, `kind: started`). Es gibt
+        keinen Weg, einen laufenden Timer stillschweigend zu stoppen.
+
+        Der Statuscode der Rückfrage ist ausdrücklich kein 4xx. Bis T-039 stand
+        hier `409 timer_already_running`; das war nie das, was der Dienst tat,
+        und es wäre auch falsch: Die Rückfrage ist kein Fehler des Aufrufers,
+        sondern der vorgesehene erste Schritt eines zweistufigen Vorgangs. Ein
+        4xx liefe in jeder Fehleranzeige auf und ließe den Benutzer an eine
+        Störung glauben, wo keine ist.
+
+        War das Zieltodo erledigt, hebt der Start diesen Status auf (A-2.5).
+        Die Kanban-Spalte bleibt unverändert — Erledigt und Spalte sind zwei
+        getrennte Achsen. Das Todo erscheint ohne weiteres Zutun wieder in
+        seinen Pools: Die Zugehörigkeit ist aus den Tags abgeleitet und war nie
+        gespeichert (A-3.4); ausgeblendet war es allein, weil erledigte Todos in
+        Pool-Ansichten nicht gezeigt werden.
+
+        Alle Teilschritte laufen in einer Transaktion. Es gibt keinen Zustand,
+        in dem der alte Timer gestoppt, der neue aber nicht gestartet ist.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [todoId]
+              properties:
+                todoId: { $ref: '#/components/schemas/Id' }
+                stopRunning:
+                  type: boolean
+                  default: false
+                  description: |
+                    Antwort des Benutzers auf die Rückfrage aus A-6.8.
+
+                    Eine **Leistung** für den Timer, der dabei gestoppt wird,
+                    nimmt diese Route nicht entgegen. Bis T-039 stand hier ein
+                    `noteForRunning`, das der Dienst nie gelesen hat: Der
+                    verdrängte Timer wird ohne Leistung gebucht, seine Notiz ist
+                    die, die beim Start gesetzt war. Wer eine Leistung
+                    nachtragen will, ändert die entstandene Buchung
+                    (`PATCH /time-entries/{timeEntryId}`) — oder stoppt zuerst
+                    ausdrücklich über `POST /timer/stop`, das eine Leistung
+                    entgegennimmt.
+      responses:
+        '200':
+          description: |
+            Es läuft bereits ein Timer und die Rückfrage aus A-6.8 steht aus.
+            Es wurde **nichts** geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [kind, running, runningTodoTitle]
+                    properties:
+                      kind: { type: string, const: confirmation_required }
+                      running: { $ref: '#/components/schemas/RunningTimeEntry' }
+                      runningTodoTitle:
+                        type: string
+                        description: |
+                          Der Titel des Todos, auf dem der laufende Timer sitzt
+                          — damit die Rückfrage ihn nennen kann, ohne ein
+                          zweites Mal zu fragen. Leer, wenn das Todo
+                          zwischenzeitlich gelöscht wurde.
+              examples:
+                laeuftBereits:
+                  value:
+                    data:
+                      kind: confirmation_required
+                      running:
+                        id: 01931f4e-0000-7000-8000-00000000ab12
+                        todoId: 01931f4e-0000-7000-8000-00000000aa01
+                        startedAt: '2026-03-02T09:00:00Z'
+                        note: ''
+                        source: timer
+                      runningTodoTitle: Fehleranalyse Backend
+        '201':
+          description: Timer gestartet.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [kind, started, stopped, doneCleared]
+                    properties:
+                      kind: { type: string, const: started }
+                      started: { $ref: '#/components/schemas/RunningTimeEntry' }
+                      stopped:
+                        oneOf:
+                          - { $ref: '#/components/schemas/TimeEntry' }
+                          - { type: 'null' }
+                        description: |
+                          Die Buchung, die aus dem verdrängten Timer entstanden
+                          ist, oder `null`, wenn keiner lief.
+                      doneCleared:
+                        type: boolean
+                        description: War das Todo erledigt und ist durch den Start wieder aktiv? (A-2.5)
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+  /timer/stop:
+    post:
+      tags: [Timer]
+      operationId: stopTimer
+      summary: Timer stoppen
+      description: |
+        Schreibt Ende, Dauer und Leistung in einem Zug. Die Dauer entsteht
+        aus einer monotonen Messung, nicht aus der Differenz zweier
+        Wanduhrzeiten — eine Zeitumstellung während eines laufenden Timers darf
+        die Abrechnung nicht verändern.
+
+        Läuft der Timer kürzer als eine Sekunde, wird nichts gebucht. Das ist
+        der Doppelklick auf „Start", nicht geleistete Arbeit. Der Dienst
+        antwortet mit `200` und `kind: "discarded"`; das ist kein Fehler.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 20000
+                  default: ''
+                  description: |
+                    Leistung nach A-7.3 (E-016). Sie geht in die Abrechnung
+                    (A-7.4) — nicht zu verwechseln mit dem Vermerk des Todos,
+                    der in der Anwendung bleibt (A-7.2).
+      responses:
+        '200':
+          description: Gestoppt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - type: object
+                        required: [kind, entry]
+                        properties:
+                          kind: { type: string, const: recorded }
+                          entry: { $ref: '#/components/schemas/TimeEntry' }
+                      - type: object
+                        required: [kind, reason]
+                        properties:
+                          kind: { type: string, const: discarded }
+                          reason: { type: string, const: timer_too_short }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409':
+          description: Es läuft kein Timer (`timer_not_running`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+  /timer/heartbeat:
+    post:
+      tags: [Timer]
+      operationId: touchTimerHeartbeat
+      summary: Lebenszeichen des laufenden Timers schreiben (E-036)
+      description: |
+        Die Oberfläche ruft das mindestens jede Minute auf, solange ein Timer
+        läuft. Der Dienst schreibt den Zeitpunkt nach `timer_heartbeat` — nicht
+        auf die Buchung selbst, damit der einzige Schreibvorgang im Minutentakt
+        die Zeile mit den Abrechnungsdaten nicht anfasst.
+
+        Der Sinn zeigt sich erst beim nächsten Start: Stürzt die Anwendung ab
+        oder fällt der Strom aus, bleibt eine Buchung ohne Ende zurück. Ohne
+        Lebenszeichen bliebe nur, sie auf „jetzt" zu enden — ein über Nacht
+        vergessener Timer buchte dann vierzehn Stunden, und nach der Aufrundung
+        aus E-008 landet das in einer Rechnung. Mit Lebenszeichen ist der
+        Schaden auf ein Schreibintervall gedeckelt.
+
+        Der Aufruf ist mehrfach ausführbar und ohne weitere Wirkung: Er
+        überschreibt denselben Wert.
+
+        **Läuft kein Timer, ist das kein Fehler.** Der Dienst antwortet mit
+        `200` und `seenAt: null` — „nichts zu tun". Die Oberfläche schickt
+        weiter, bis sie selbst merkt, dass der Timer aus ist; sie soll dabei
+        keine Störung anzeigen müssen.
+
+        Bis T-041 stand hier `204` für den Erfolgsfall und `409
+        timer_not_running` für den leeren. Beides war falsch: Der Dienst hat
+        nie mit `204` geantwortet und den Fehlerfall nie erzeugt. Es ist
+        dieselbe Schadensart wie beim Timerstart vor T-039 — eine Oberfläche,
+        die gegen die Beschreibung gebaut wird, behandelt einen Fehler, den es
+        nicht gibt, und den wirklichen Fall gar nicht.
+      responses:
+        '200':
+          description: |
+            Lebenszeichen geschrieben, oder es lief keiner. Beide Ausgänge sind
+            derselbe Statuscode; unterschieden werden sie an `seenAt`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [seenAt]
+                    properties:
+                      seenAt:
+                        oneOf:
+                          - { $ref: '#/components/schemas/Timestamp' }
+                          - { type: 'null' }
+                        description: |
+                          Der geschriebene Zeitpunkt, oder `null`, wenn kein
+                          Timer lief und deshalb nichts zu schreiben war.
+              examples:
+                geschrieben:
+                  value:
+                    data:
+                      seenAt: '2026-03-02T09:03:00Z'
+                keinTimer:
+                  value:
+                    data:
+                      seenAt: null
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /timer/orphaned:
+    get:
+      tags: [Timer]
+      operationId: getOrphanedTimer
+      summary: Verwaiste Buchung nach ungeordnetem Ende lesen (E-036)
+      description: |
+        Beim Start prüft die Anwendung, ob eine Buchung ohne Ende vorliegt.
+        Solange sie unbeantwortet ist, bleibt sie unvollständig und geht in
+        keinen Export — die Sicht `v_export_candidate` führt ausschließlich
+        abgeschlossene Buchungen.
+      responses:
+        '200':
+          description: '`data` ist `null`, wenn kein Timer verwaist ist.'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/OrphanedTimer'
+                      - { type: 'null' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /timer/orphaned/resolve:
+    post:
+      tags: [Timer]
+      operationId: resolveOrphanedTimer
+      summary: Verwaiste Buchung buchen oder verwerfen (E-036)
+      description: |
+        Der Benutzer entscheidet, nicht die Anwendung. `book_until_heartbeat`
+        beendet die Buchung zum letzten Lebenszeichen; gibt es keines, ist die
+        Dauer null und die Buchung wird verworfen — es gibt nichts zu buchen,
+        was jemand bezeugen könnte. `discard` verwirft sie ohne Rückfrage.
+
+        Es gibt bewusst keine dritte Möglichkeit „bis jetzt buchen". Genau die
+        wäre der Weg, auf dem vierzehn ungearbeitete Stunden in eine Rechnung
+        gelangen.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution:
+                  type: string
+                  enum: [book_until_heartbeat, discard]
+      responses:
+        '200':
+          description: Entschieden.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - type: object
+                        required: [kind, entry]
+                        properties:
+                          kind: { type: string, const: recorded }
+                          entry: { $ref: '#/components/schemas/TimeEntry' }
+                      - type: object
+                        required: [kind, reason]
+                        properties:
+                          kind: { type: string, const: discarded }
+                          reason:
+                            type: string
+                            enum: [timer_too_short, orphan_discarded]
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409':
+          description: Es gibt keine verwaiste Buchung (`timer_not_running`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+  # ---------------------------------------------------------------------------
+  /export/templates:
+    get:
+      tags: [Export]
+      operationId: listExportTemplates
+      summary: Exportvorlagen listen (A-8.7)
+      responses:
+        '200':
+          description: Alle Vorlagen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ExportTemplate' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Export]
+      operationId: createExportTemplate
+      summary: Exportvorlage anlegen
+      description: |
+        Die Feldliste wird gegen die abschließende Liste erlaubter Quellenpfade
+        geprüft. `todo.note` ist darin nicht enthalten und wird es nie sein: Die
+        persönliche Todo-Notiz ist als Feldquelle nicht wählbar, damit sich die
+        Grenze aus A-7.2 nicht über eine selbstgebaute Vorlage aushebeln lässt
+        (R-06). Ein unerlaubter Pfad endet mit `422` und
+        `export_source_forbidden`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, definition]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                definition:
+                  type: object
+                  description: Feldliste nach E-005. Aufbau und Prüfung gehören zu T-007.
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse der neuen Vorlage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportTemplate' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: |
+            Ungültige Feldliste (`export_template_invalid`) oder unerlaubte
+            Feldquelle (`export_source_forbidden`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                verboteneQuelle:
+                  value:
+                    error:
+                      code: export_source_forbidden
+                      message: Der Vermerk des Todos kann nicht exportiert werden.
+                      details:
+                        - field: fields[2].source
+                          message: Diese Feldquelle ist nicht zulässig.
+                          code: forbidden_source
+
+  /export/templates/{templateId}:
+    parameters: [{ $ref: '#/components/parameters/TemplateId' }]
+    patch:
+      tags: [Export]
+      operationId: updateExportTemplate
+      summary: Exportvorlage ändern
+      description: Die mitgelieferte Standardvorlage ist unveränderlich (A-8.7) und antwortet mit `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                definition: { type: object }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportTemplate' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+    delete:
+      tags: [Export]
+      operationId: deleteExportTemplate
+      summary: Exportvorlage löschen
+      description: Die Standardvorlage ist nicht löschbar, aber kopierbar (A-8.7).
+      responses:
+        '204': { description: Gelöscht. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /time-entries/{timeEntryId}/not-billed:
+    parameters: [{ $ref: '#/components/parameters/TimeEntryId' }]
+    post:
+      tags: [Export]
+      operationId: markTimeEntryNotBilled
+      summary: Buchung ausbuchen, ohne sie abzurechnen (E-047)
+      description: |
+        Der zweite und einzige andere Weg, auf dem eine Buchung den Exportstatus
+        `exported` bekommt — und ausdrücklich **kein** Export: Es entsteht keine
+        Datei, kein Exportlauf und kein Beleg. Der Benutzer rechnet diese Zeit
+        schlicht nicht ab.
+
+        Der Vorgang heißt deshalb nirgends „als exportiert markieren". Er steht
+        als eigene Route und nicht als weiterer erlaubter Wert von
+        `PUT /time-entries/{id}/export-status`, weil ein
+        `{"status":"exported"}` genau die Gleichsetzung nahelegte, die E-047
+        aufhebt.
+
+        Im Protokoll entsteht eine Zeile mit `event = 'not_billed'`, ohne
+        Exportlauf und ohne Exportzeile; das Schema erzwingt diese Kombination.
+        Damit bleibt die Frage „wie viel Zeit haben wir nie abgerechnet"
+        beantwortbar — sie ist ein Filter auf diesen einen Wert.
+
+        `exportCount` bleibt stehen. Er zählt Exportläufe, und einer hat nicht
+        stattgefunden: Nach einem späteren Zurücksetzen darf die Oberfläche die
+        Buchung nicht als „schon einmal exportiert" kennzeichnen (R-10).
+
+        Statuswechsel und Protokollzeile entstehen in **einer** Transaktion.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 512
+                  default: ''
+                  description: |
+                    Freiwillig (E-047). Ein Pflichtfeld erzeugt in der Praxis den
+                    Text „x"; was zählt, ist die Nachvollziehbarkeit des
+                    Vorgangs. Wandert unverändert ins Protokoll.
+      responses:
+        '200':
+          description: Ausgebucht. Die Buchung geht in keinen Export mehr ein.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TimeEntry' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Die Buchung ist bereits ausgebucht oder exportiert
+            (`export_status_unchanged`). Ein zweites Ausbuchen gibt es nicht.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /export/sources:
+    get:
+      tags: [Export]
+      operationId: listExportSources
+      summary: Die geschlossene Auswahlliste des Vorlageneditors (E-049, E-017)
+      description: |
+        Die Feldquellen und Transformationen, aus denen eine Exportvorlage
+        gebaut wird — samt deutscher Beschriftung, damit die Oberfläche
+        **fragt**, statt sie zu wissen.
+
+        Bis E-049 stand die Liste zweimal: im Motor `packages/export` und noch
+        einmal in `apps/web`, weil dort `@takt/export` nicht eingebunden werden
+        darf und es keine Route gab, die sie hätte liefern können. Eine
+        Paketabhängigkeit wäre der falsche Weg gewesen; eine Auskunft des
+        Dienstes ist es, also gibt der Dienst sie heraus.
+
+        Die ausgelieferte Menge ist **wörtlich** die, gegen die
+        `POST /export/templates` und `POST /export/preview` prüfen — beide
+        laufen über dieselbe Liste, und ein `Record` über `ExportSourcePath`
+        hält sie am Übersetzer zusammen. Was hier nicht steht, wird beim
+        Speichern mit `export_source_forbidden` abgewiesen.
+
+        **Der interne Vermerk eines Todos steht nicht darauf und kommt nie
+        darauf** (A-7.2, R-06, B-3.1). `noteBoundaryHint` ist der Satz, der das
+        im Editor ausspricht, ohne die Möglichkeit anzubieten.
+
+        Ohne Parameter, ohne Bestand, für jeden Aufruf dieselbe Antwort. Wie
+        jede Route hinter dem Nachweis (B-1.1).
+      responses:
+        '200':
+          description: Die Auswahlliste.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportSourceCatalog' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /export/preview:
+    post:
+      tags: [Export]
+      operationId: previewExport
+      summary: Live-Vorschau auf tatsächlich offene Buchungen (A-8.7, S-14)
+      description: |
+        Schreibt keine Datei und ändert keinen Exportstatus. Rein lesend.
+
+        Die Antwort enthält nur Felder, die in der Vorlage stehen. Da der
+        interne Vermerk des Todos keine wählbare Quelle ist, kann er auch in der
+        Vorschau nicht erscheinen.
+
+        Vorschau und Datei benutzen denselben Renderer (R-17). Eine Zeile
+        entsteht je Todo und Kalendertag, nicht je Buchung — siehe
+        `POST /export/runs`.
+
+        **Zwei Rümpfe, ausgeschlossen ineinander (E-051).** Entweder
+        `templateId` — dann rendert die Vorschau eine gespeicherte Vorlage —
+        oder `definition` — dann rendert sie eine ungespeicherte. A-8.7
+        verlangt eine Vorschau, die sich bei jeder Änderung aktualisiert; ohne
+        den zweiten Rumpf wäre sie nur mit einem zweiten Renderer in der
+        Oberfläche erfüllbar, und genau den verbietet R-17.
+
+        Die Definition wird mit **derselben Funktion** geprüft wie beim
+        Speichern (`export_template_invalid`, `export_source_forbidden`,
+        gleicher Satz, gleiche `details`). Eine Vorschau, die etwas durchließe,
+        das `POST /export/templates` abweist, wäre schlimmer als gar keine.
+        Geschrieben wird dabei nichts: keine Vorlage, kein Lauf, keine
+        Markierung.
+
+        Ein Rumpf mit **beidem** wird mit `422` abgewiesen, statt eine der
+        beiden Angaben gewinnen zu lassen. `"definition": null` gilt als
+        angegebene Definition und läuft in dieselbe Ablehnung wie beim
+        Speichern — der Schlüssel entscheidet, nicht sein Wert.
+
+        Ein Exportlauf nimmt umgekehrt **keine** Definition entgegen; siehe
+        `POST /export/runs`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                templateId:
+                  oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+                  description: |
+                    Ohne Angabe oder `null` die in den Einstellungen aktive
+                    Vorlage. Die Vorschau benutzt dieselbe Auflösung wie der
+                    Lauf; zwei Wege wären genau dort blind, wofür die Vorschau da
+                    ist.
+
+                    Nicht zusammen mit `definition` (E-051).
+                definition:
+                  type: object
+                  description: |
+                    Eine **ungespeicherte** Vorlagendefinition, Aufbau wie in
+                    `POST /export/templates` (E-005, Fassung 1). Geprüft wie
+                    beim Speichern, aber ohne zu schreiben.
+
+                    Ist der Schlüssel vorhanden, rendert die Vorschau ihn — auch
+                    wenn er `null` oder etwas anderes als ein Objekt trägt; dann
+                    endet sie mit `422`, genauso wie das Speichern.
+
+                    Nicht zusammen mit `templateId`.
+                timeEntryIds:
+                  type: array
+                  maxItems: 20000
+                  default: []
+                  items: { $ref: '#/components/schemas/Id' }
+                  description: Leer bedeutet alle offenen Buchungen.
+      responses:
+        '200':
+          description: Vorschau.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportPreview' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: |
+            Die mitgeschickte Definition ist unzulässig
+            (`export_template_invalid`) oder benennt eine gesperrte Feldquelle
+            (`export_source_forbidden`) — mit **demselben** Schlüssel, Satz und
+            `details` wie beim Speichern derselben Definition.
+
+            Ebenso, wenn der Rumpf `templateId` **und** `definition` trägt
+            (`validation_error`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                verboteneQuelleImEntwurf:
+                  value:
+                    error:
+                      code: export_source_forbidden
+                      message: 'Feld 1: Der interne Vermerk eines Todos ist als Feldquelle nicht wählbar. Die abrechenbare Leistung steht unter „group.bookingNotes".'
+                      details:
+                        - field: source
+                          message: Der interne Vermerk eines Todos ist als Feldquelle nicht wählbar. Die abrechenbare Leistung steht unter „group.bookingNotes".
+                          code: export_source_forbidden
+                beidesZugleich:
+                  value:
+                    error:
+                      code: validation_error
+                      message: Die Vorschau nimmt entweder „templateId" oder „definition" entgegen, nicht beides.
+                      details:
+                        - field: definition
+                          message: Entweder eine Vorlagenkennung oder eine Definition, nicht beides.
+                          code: exclusive
+
+  /export/runs:
+    get:
+      tags: [Export]
+      operationId: listExportRuns
+      summary: Exportläufe listen
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Läufe, neueste zuerst.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: '#/components/schemas/PageInfo' }
+                      - type: object
+                        required: [items]
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/ExportRun' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Export]
+      operationId: runExport
+      summary: Export ausführen (A-8.1, A-8.8)
+      description: |
+        Der Vorgang ist eine Transaktion. Entweder wird die Datei geschrieben
+        **und** jede enthaltene Buchung als exportiert markiert, oder es passiert
+        nichts. Ein Abbruch mitten im Vorgang hinterlässt keine Buchung in einem
+        Zwischenzustand.
+
+        Die Datei entsteht zunächst unter einem Zufallsnamen im Zielordner und
+        wird anschließend umbenannt; ein Umbenennen innerhalb desselben
+        Dateisystems ist unteilbar. Scheitert das Markieren danach, wird die
+        Datei wieder entfernt und die Transaktion zurückgerollt.
+
+        Der Zielordner stammt aus den Einstellungen (E-011) und wird vor jedem
+        Lauf erneut geprüft: vorhanden, ein Ordner, beschreibbar, und der
+        aufgelöste Zielpfad liegt innerhalb (R-11). Der Dateiname wird vom
+        Dienst gebildet und enthält keine Eingabe des Aufrufers.
+
+        **Eine Zeile je Todo und Kalendertag.** Gerundet wird nicht die
+        einzelne Buchung, sondern die Tagessumme: Alle noch offenen Buchungen
+        eines Todos an einem Kalendertag werden addiert, dann wird die Summe
+        nach E-008 aufgerundet. Zehn, zwanzig und fünf Minuten am selben Tag
+        ergeben 0,75 statt dreimal 0,25. Maßgeblich ist der Tag des
+        Timer**starts**; eine Buchung von 23:40 bis 00:20 zählt vollständig zum
+        Starttag. Bereits exportierte Buchungen desselben Tages bleiben außen
+        vor. Die Leistungstexte der Gruppe werden nach Startzeit mit `'; '`
+        verbunden, leere Texte entfallen.
+
+        Sind keine offenen Buchungen vorhanden, antwortet der Dienst mit `409`
+        und `export_nothing_to_do` — es wird keine leere Datei geschrieben.
+
+        Die erzeugte Datei enthält Kundendaten im Klartextäquivalent. Base64
+        nach A-8.4 ist eine Kodierung, keine Verschlüsselung (A-8.9, R-05).
+
+        **Kein `definition` (E-051).** Anders als die Vorschau läuft ein Export
+        nur gegen eine gespeicherte Vorlage; ein Rumpf mit diesem Schlüssel
+        wird mit `422` abgewiesen statt stillschweigend übergangen. Der Grund
+        steht in `templateSnapshot`: Jeder Lauf legt einen Abzug der Vorlage ab,
+        damit sich später feststellen lässt, welche Felder in der Abrechnung
+        gelandet sind. Ein Abzug ohne Vorlage wäre ein Beleg auf etwas, das nie
+        existiert hat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                templateId:
+                  oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+                  description: Ohne Angabe oder `null` die aktive Vorlage aus den Einstellungen.
+                timeEntryIds:
+                  type: array
+                  maxItems: 20000
+                  default: []
+                  items: { $ref: '#/components/schemas/Id' }
+                  description: |
+                    Leer bedeutet alle offenen Buchungen. Ist die Liste gesetzt
+                    und enthält eine bereits exportierte Buchung, scheitert der
+                    gesamte Lauf, statt sie stillschweigend zu überspringen.
+      responses:
+        '201':
+          description: Datei geschrieben und alle Buchungen markiert.
+          headers:
+            Location:
+              schema: { type: string }
+              description: |
+                Adresse des Laufs. **Nicht** die der geschriebenen Datei — die
+                steht als `filePath` im Rumpf und liegt außerhalb dieses
+                Dienstes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportRunResult' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Nichts zu exportieren (`export_nothing_to_do`) oder eine der
+            angegebenen Buchungen ist bereits exportiert (`time_entry_locked`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: |
+            Exportordner nicht gesetzt, nicht vorhanden oder nicht beschreibbar
+            (`export_directory_missing`, `export_directory_not_writable`) — oder
+            der Rumpf trug `definition` (`validation_error`, E-051).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+              examples:
+                ordnerFehlt:
+                  value:
+                    error:
+                      code: export_directory_missing
+                      message: Der eingestellte Exportordner ist nicht erreichbar. Bitte prüfen Sie ihn in den Einstellungen.
+
+  /export/runs/{runId}:
+    parameters: [{ $ref: '#/components/parameters/RunId' }]
+    get:
+      tags: [Export]
+      operationId: getExportRun
+      summary: Exportlauf lesen
+      responses:
+        '200':
+          description: Der Lauf mit den enthaltenen Buchungen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExportRun' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /export/audit:
+    get:
+      tags: [Export]
+      operationId: listExportAudit
+      summary: Protokoll der Exportstatuswechsel (R-10)
+      description: |
+        Anhängend und unveränderlich. Es gibt keine Route, die Protokollzeilen
+        ändert oder löscht; die Speicherung verbietet beides zusätzlich über
+        Trigger.
+
+        Zweck: Wird eine Buchung zurückgesetzt und erneut exportiert, geht
+        dieselbe Arbeitszeit ein zweites Mal in die Abrechnung. Über dieses
+        Protokoll ist das nachträglich auffindbar.
+
+        Zwei Filter, für die beiden Fragen, die man an ein Protokoll stellt:
+        „Was ist mit **dieser Buchung** passiert?" und „Welche Buchungen waren
+        in **diesem Lauf**?". Beide dürfen zusammen stehen und wirken dann mit
+        `und`.
+      parameters:
+        - name: timeEntryId
+          in: query
+          description: Nur die Zeilen zu dieser Buchung.
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: exportRunId
+          in: query
+          description: |
+            Nur die Zeilen dieses Exportlaufs — die vollständige Antwort auf
+            „welche Buchungen waren darin?".
+
+            Bis T-042 gab es diesen Filter nicht, und die Oberfläche siebte
+            stattdessen die gerade geladene Seite. Ein Lauf mit mehr Buchungen,
+            als eine Seite fasst, verdrängt jeden älteren Lauf aus ihr — der
+            Knopf landete also gerade bei den großen Läufen im Leerzustand, und
+            je größer der Export, desto sicherer.
+          schema: { $ref: '#/components/schemas/Id' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Protokollzeilen, neueste zuerst.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - { $ref: '#/components/schemas/PageInfo' }
+                      - type: object
+                        required: [items]
+                        properties:
+                          items: { type: array, items: { $ref: '#/components/schemas/ExportAuditEntry' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  # ---------------------------------------------------------------------------
+  /search:
+    get:
+      tags: [Suche]
+      operationId: searchEverything
+      summary: Globale Suche über Todos und Zeitbuchungen (E-038)
+      description: |
+        Zwei Listen in einer Antwort. Todos werden über Titel und Call-Nummer
+        getroffen, Zeitbuchungen über ihren Leistungstext (A-7.3).
+
+        Der interne Vermerk (A-7.1) ist **kein** Suchfeld und kommt in keiner
+        Antwort vor. Er ist eine eigene Ressource mit einem eigenen Aufruf
+        (`/todos/{id}/note`) — das ist die vierte Schicht der Notiz-Trennung.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Treffer.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [todos, timeEntries]
+                    properties:
+                      todos:
+                        allOf:
+                          - { $ref: '#/components/schemas/PageInfo' }
+                          - type: object
+                            required: [items]
+                            properties:
+                              items: { type: array, items: { $ref: '#/components/schemas/Todo' } }
+                        description: |
+                          Seitenweise, mit derselben Fortsetzungsmarke wie
+                          `/todos`. Die Marke gilt **nur** für diese Liste.
+                      timeEntries:
+                        type: array
+                        items: { $ref: '#/components/schemas/TimeEntry' }
+                        description: |
+                          Nicht seitenweise: Die Buchungen entstehen als Filter
+                          auf einer bereits begrenzten Menge (höchstens 200
+                          gelesene Buchungen), nicht aus einer eigenen Abfrage.
+                          Eine zweite Fortsetzungsmarke in derselben Antwort
+                          wäre nicht zu bedienen, ohne die erste zu verlieren.
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ---------------------------------------------------------------------------
+  /addin/context:
+    get:
+      tags: [Add-in]
+      operationId: getAddinContext
+      summary: Tag-Baum, Pools, Spalten und Standard-Tags in einem Aufruf (A-10.4)
+      description: |
+        Der Baum kommt vollständig und beliebig tief in **einer** Antwort
+        (A-4.3). Das Add-in hält keine eigene Kopie: Wer Tags in der
+        Hauptanwendung umsortiert, sieht das beim nächsten Öffnen einer E-Mail,
+        ohne irgendetwas abzugleichen.
+      responses:
+        '200':
+          description: Vorbelegungen des Aufgabenbereichs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [tagTree, pools, statuses, defaultStatusId, defaultTagIds]
+                    properties:
+                      tagTree: { $ref: '#/components/schemas/TagTree' }
+                      pools:
+                        type: array
+                        items: { $ref: '#/components/schemas/Pool' }
+                      statuses:
+                        type: array
+                        items: { $ref: '#/components/schemas/TodoStatus' }
+                      defaultStatusId:
+                        allOf: [{ $ref: '#/components/schemas/Id' }]
+                        description: |
+                          Die Spalte, in der ein Todo ohne ausdrückliche Angabe
+                          landet. Nie leer — es gibt immer genau eine
+                          Standardspalte.
+                      defaultTagIds:
+                        type: array
+                        items: { $ref: '#/components/schemas/Id' }
+                        description: |
+                          Die Standard-Tags (A-9.1) **in ihrer eingestellten
+                          Reihenfolge**. Der Aufgabenbereich zeigt sie damit so
+                          an, wie die Hauptanwendung sie führt, ohne selbst zu
+                          sortieren.
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /addin/todo-matches:
+    get:
+      tags: [Add-in]
+      operationId: findAddinDuplicates
+      summary: Gibt es schon ein Todo mit dieser Call-Nummer? (A-10.9, R-15)
+      description: |
+        Die Antwort unterscheidet **nicht gesucht** von **nichts gefunden**.
+
+        Das ist der Kern der Gegenmaßnahme aus B-4.3 Punkt 4: Eine leere oder
+        unplausible Call-Nummer erzeugt kein Übereinstimmungskriterium. Sie
+        liefert kein „kein Treffer", sondern gar keine Suche — der Unterschied
+        zählt, weil „kein Treffer" später jemand als „dann leg halt an"
+        verkürzen könnte, während „nicht gesucht" eine Aussage über die Eingabe
+        ist.
+
+        Der Statuscode für „nicht gesucht" ist **200**, nicht 4xx: Es ist kein
+        Fehler des Aufrufers, sondern der Normalfall einer E-Mail ohne Vorgang.
+
+        Ob eine Nummer plausibel ist, entscheidet `checkCallNumber` in
+        `packages/domain` (E-045) — dieselbe Fassung, die das Add-in für die
+        Anzeige benutzt.
+      parameters:
+        - name: callNumber
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Ergebnis der Suche oder die Auskunft, dass nicht gesucht wurde.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [searched, matches]
+                    properties:
+                      searched: { type: boolean }
+                      reason: { type: string }
+                      message: { type: string }
+                      callNumber: { type: string }
+                      matches:
+                        type: array
+                        items: { $ref: '#/components/schemas/AddinTodoMatch' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  /addin/todos:
+    post:
+      tags: [Add-in]
+      operationId: createAddinTodo
+      summary: Ein Todo aus einer E-Mail anlegen (A-2.1, A-9.5, A-10.5)
+      description: |
+        Auf eine bereits vergebene Call-Nummer wird hier **nicht** geprüft.
+        A-10.9 verlangt, dass der Benutzer entscheidet; das Add-in fragt vorher
+        über `/addin/todo-matches` und legt danach bewusst an. Eine Prüfung an
+        dieser Stelle wäre das „stillschweigende Zusammenlegen", das A-10.9
+        ausschließt.
+
+        Die Standard-Tags (A-9) kommen im Anwendungsfall dazu, nicht im Add-in
+        — deshalb gelten sie über beide Wege gleichermaßen (A-9.5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 512 }
+                callNumber:
+                  oneOf: [{ type: string, maxLength: 128 }, { type: 'null' }]
+                  default: null
+                  description: |
+                    Wird getrimmt; eine leere Zeichenkette wird zu `null`
+                    (`normalizeCallNumber`).
+
+                    Ein gesetzter Wert muss **plausibel** sein (E-045, B-4.3):
+                    3 bis 64 Zeichen aus Buchstaben, Ziffern, Punkt,
+                    Schrägstrich, Bindestrich und Unterstrich, und nicht mit
+                    `=`, `+`, `-` oder `@` beginnend. Sonst `422` mit
+                    `details[].field = "callNumber"` und dem Grund der Domäne
+                    in `details[].code`.
+
+                    **Der Deckel von 128 Zeichen ist ein Transportdeckel,
+                    keine Fachregel.** Er liegt bewusst darüber: Wer 70
+                    Zeichen einträgt, soll den Satz der Domäne lesen
+                    („höchstens 64 Zeichen") und nicht eine englische
+                    Schemameldung. Abgefangen wird hier nur unbegrenzte
+                    Eingabe, bevor sie überhaupt in die Prüfung läuft.
+
+                    Bis T-046 war der Deckel die **einzige** Grenze, und diese
+                    Beschreibung führte das als Absicht („prüft diese Route
+                    bewusst nicht"). Das war ein Befund und keine Absicht: Ein
+                    Todo mit einer 70-stelligen Call-Nummer entstand und war
+                    über die Duplikatsuche nie wieder auffindbar — beim
+                    nächsten Mal wurde dieselbe Nummer erneut angelegt. Zwei
+                    Todos, ein Kundenvorgang, zwei Zeilen in der
+                    Abrechnungsdatei (R-15).
+                statusId:
+                  oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+                  default: null
+                tagIds:
+                  type: array
+                  items: { $ref: '#/components/schemas/Id' }
+                  maxItems: 200
+                  default: []
+                tagNames:
+                  type: array
+                  items: { type: string, minLength: 1, maxLength: 200 }
+                  maxItems: 50
+                  default: []
+                  description: |
+                    Tags über ihren **Namen** statt über eine Kennung (T-061).
+                    Gibt es den Namen schon, wird das vorhandene Tag verwendet;
+                    gibt es ihn nicht, entsteht es — in derselben Transaktion
+                    wie das Todo.
+
+                    Wortgleich mit `TodoCreate.tagNames` (T-058), und das ist
+                    keine Doppelung, sondern die Bedingung: Wer aus Outlook ein
+                    Todo anlegt und einen Tag tippt, den es noch nicht gibt,
+                    wird nicht anders behandelt als in der Hauptanwendung. Bis
+                    T-061 nahm diese Route nur Kennungen — derselbe Vorgang,
+                    zwei Ergebnisse, je nachdem wo er geschieht (Befund C-03).
+
+                    Wann zwei Namen **derselbe** sind, sagt
+                    `packages/domain/src/tag-name.ts`: NFC, Leerraum
+                    vereinheitlicht und getrimmt, Groß-/Kleinschreibung
+                    gefaltet für A–Z, U+00C0–U+00DE und ẞ. Also
+                    `Backend` = `backend` = `" Backend "`, `Änderung` =
+                    `änderung`, aber `Straße` ≠ `Strasse`. Zwei Schreibweisen
+                    desselben Namens **in einer Anfrage** sind ein Tag.
+
+                    Obergrenze 50 gegenüber 200 bei `tagIds`: Kennungen kommen
+                    aus einer Auswahl, Namen aus einem Eingabefeld.
+
+                    Zwei Ausgänge gehören dazu:
+                    `422 validation_error` mit
+                    `details[].code = "tag_name_ambiguous"`, wenn es den Namen
+                    in mehreren Ordnern gibt (A-4.2) — dann entscheidet der
+                    Benutzer, nicht der Dienst; und `409 name_conflict`, wenn
+                    der eindeutige Index abweist. In beiden Fällen ist
+                    **nichts** angelegt, auch kein Tag.
+                note:
+                  type: string
+                  maxLength: 4000
+                  default: ''
+                  description: |
+                    Der **interne Vermerk** (A-7.1) — hier landet der
+                    übernommene E-Mail-Text (B-12.3). Er geht nie in den Export
+                    (A-7.2).
+
+                    4000 Zeichen und nicht 65536 wie über die Hauptanwendung
+                    (B-12.3): Was aus einer E-Mail übernommen wird, soll der
+                    Kontext sein und nicht ein ganzer Zitatverlauf.
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: |
+                Adresse des neuen Todos — `/api/v1/todos/{id}`, also auf der
+                **Hauptfläche**. Das Add-in-Token kommt dort nicht hin; der
+                Verweis ist für die Hauptanwendung gedacht.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf: [{ $ref: '#/components/schemas/AddinTodoCreated' }]
+                    description: |
+                      Dieselbe Gestalt wie bei `POST /todos` — seit T-061
+                      einschließlich `createdTags`. Bis dahin stand hier „ohne
+                      `createdTags`: Das Add-in benennt Tags ausschließlich über
+                      ihre Kennung"; das war der offene Punkt aus T-058 und ist
+                      damit erledigt.
+
+                      Was beide Wege teilen, ist das Ergänzen der Standard-Tags
+                      (A-9.5) — es geschieht in beiden Fällen im Dienst über
+                      `applyDefaultTags` und nicht im Aufrufer.
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /addin/todos/{todoId}/time-entries:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    post:
+      tags: [Add-in]
+      operationId: createAddinTimeEntry
+      summary: Zeit auf ein vorhandenes Todo buchen (A-6.1, A-10.9)
+      description: |
+        Die Buchung entsteht mit Start und Ende, nicht mit einer Dauer:
+        `TimeEntry` führt beide, und die Dauer wird daraus berechnet. Wer eine
+        Dauer schickte, müsste sich auf eine Zeitzone einigen — und die
+        Tagesgruppe des Exports hängt am Kalendertag des Starts (E-025).
+
+        War das Todo als erledigt gekennzeichnet, ist es nach dieser Buchung
+        wieder offen (A-2.5). Das ist **keine** Option der Anfrage. Es gibt
+        keinen Schalter, und es gibt keine Voreinstellung, die man umlegen
+        könnte: Buchen aus dem Add-in wirkt wie der Timerstart in der
+        Hauptanwendung, sonst hätte dieselbe Handlung je nach Weg zwei
+        Ergebnisse (Befund C-03, behoben in T-038).
+
+        Bis T-038 stand hier ein Rumpffeld `reopenIfDone` mit der Vorgabe
+        `false`. Es ist ersatzlos weg. Ein Aufrufer, der es weiterhin
+        mitschickt, bekommt trotzdem **201** und trotzdem die Aufhebung — die
+        Eingabeprüfung kennt den Schlüssel nicht und wirft ihn still weg. Ein
+        422 wäre an dieser Stelle falsch: Es ließe eine fachlich vollständige
+        Buchung scheitern.
+
+        Was geschehen ist, sagt die **Antwort** und nicht die Anfrage:
+        `doneCleared` und `poolNames`. Die Kanban-Spalte bleibt, wo sie ist
+        (E-023) — Erledigt und Spalte sind zwei Achsen.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              # Bewusst **kein** `additionalProperties: false`: Der Dienst weist
+              # unbekannte Schlüssel nicht ab, er wirft sie weg. Ein strenges
+              # Prüfwerkzeug, das hier abriegelte, beschriebe eine Ablehnung,
+              # die es nicht gibt — siehe den Absatz zu `reopenIfDone` oben.
+              required: [startedAt, endedAt]
+              properties:
+                startedAt: { $ref: '#/components/schemas/Timestamp' }
+                endedAt: { $ref: '#/components/schemas/Timestamp' }
+                note:
+                  type: string
+                  maxLength: 4000
+                  default: ''
+                  description: |
+                    Die **Leistung** (A-7.3). Sie geht in die Abrechnung
+                    (A-7.4) und ist deshalb — anders als der Vermerk beim
+                    Anlegen — nicht das Feld, in das E-Mail-Text vorbelegt
+                    wird.
+      responses:
+        '201':
+          description: |
+            Gebucht. War das Todo erledigt, ist es das jetzt nicht mehr.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [timeEntry, todoWasDone, doneCleared, poolNames]
+                    properties:
+                      timeEntry: { $ref: '#/components/schemas/TimeEntry' }
+                      todoWasDone:
+                        type: boolean
+                        description: |
+                          Der **Vorzustand**: War das Todo vor dieser Buchung
+                          als erledigt gekennzeichnet?
+                      doneCleared:
+                        type: boolean
+                        description: |
+                          Die **Wirkung**: Wurde „Erledigt" durch diese Buchung
+                          aufgehoben? Seit T-038 gilt `doneCleared ===
+                          todoWasDone`; beide Felder bleiben, weil sie
+                          Verschiedenes aussagen und ein Aufrufer, der nur
+                          eines liest, so oder so das Richtige liest.
+                      poolNames:
+                        type: array
+                        items: { type: string }
+                        description: |
+                          Die Pools, in denen das Todo **nach** dieser Buchung
+                          steht — beim Namen (I-05). Eine leere Liste ist eine
+                          Aussage und kein Fehlen: Auf die Tags dieses Todos
+                          passt derzeit keine Poolregel. Die Zugehörigkeit ist
+                          nirgends gespeichert, sie folgt aus den Tags (A-3.4)
+                          — deshalb kostet die Aufhebung keinen einzigen
+                          Schreibvorgang an den Pools.
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  # ---------------------------------------------------------------------------
+  /settings:
+    get:
+      tags: [Einstellungen]
+      operationId: getSettings
+      summary: Einstellungen lesen
+      description: |
+        Das Add-in-Token gehört nicht zu den Einstellungen und wird über diese
+        Route weder gelesen noch geschrieben (E-009, R-09). Es liegt in einer
+        eigenen Datei im Anwendungsdatenverzeichnis und ist ausschließlich über
+        die Oberfläche der Hauptanwendung sichtbar zu machen.
+      responses:
+        '200':
+          description: |
+            Die Einstellungen, der **jetzige** Zustand des Exportordners und die
+            Standard-Tags in einem Zug. Der Ordnerzustand steht hier und nicht in
+            `AppSettings`, weil er kein gespeicherter Wert ist: Ein Netzlaufwerk
+            kann seit dem Einstellen verschwunden sein, und die Oberfläche soll
+            das sehen, ohne eine zweite Anfrage zu stellen (R-11).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SettingsView' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    patch:
+      tags: [Einstellungen]
+      operationId: updateSettings
+      summary: Einstellungen ändern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                exportDirectory:
+                  oneOf: [{ type: string, maxLength: 4096 }, { type: 'null' }]
+                  description: |
+                    Wird beim Setzen geprüft: vorhanden, ein Ordner,
+                    beschreibbar (E-011, R-11). Die Prüfung wiederholt sich bei
+                    jedem Exportlauf, weil der Ordner zwischenzeitlich
+                    verschwinden kann.
+                activeExportTemplateId:
+                  oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+                roundingMode: { $ref: '#/components/schemas/RoundingMode' }
+                locale: { type: string, minLength: 2, maxLength: 35 }
+                theme: { type: string, enum: [system, light, dark] }
+      responses:
+        '200':
+          description: Geändert.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AppSettings' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /settings/default-tags:
+    get:
+      tags: [Einstellungen]
+      operationId: listDefaultTags
+      summary: Standard-Tags lesen (A-9.1)
+      responses:
+        '200':
+          description: Standard-Tags in ihrer Reihenfolge.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DefaultTag' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    put:
+      tags: [Einstellungen]
+      operationId: setDefaultTags
+      summary: Standard-Tags festlegen (A-9.4)
+      description: |
+        Vollständige Liste. Sie greift bei jedem neu angelegten Todo, auch bei
+        Anlage aus dem Outlook-Add-in (A-9.5), weil sie im Dienst und nicht im
+        jeweiligen Aufrufer ergänzt wird.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tagIds]
+              properties:
+                tagIds:
+                  type: array
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: Gesetzt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DefaultTag' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+components:
+
+  securitySchemes:
+    TaktToken:
+      type: apiKey
+      in: header
+      name: X-Takt-Token
+      description: |
+        Nachweis nach E-009 in einer **eigenen Kopfzeile**, nicht in einem
+        Cookie und nicht im `Authorization`-Kopf. Der `Authorization`-Kopf ist
+        bewusst vermieden: Ein 401 mit `WWW-Authenticate` öffnet den
+        Anmeldedialog des Browsers und lädt zu automatisch mitgesendeten
+        Anmeldedaten ein. Eine eigene Kopfzeile schickt kein Browser von sich
+        aus mit — damit entfällt die CSRF-Klasse (B-1.2).
+
+        Die Kopfzeile trägt eines von zwei Geheimnissen: das Sitzungsgeheimnis
+        der Oberfläche oder das Add-in-Token. Beide haben dieselbe Gestalt:
+        `takt_` gefolgt von 43 Zeichen base64url, insgesamt 48 Zeichen.
+
+        Eigenschaften des Add-in-Tokens:
+
+        * 32 Byte aus `crypto.randomBytes` — 256 Bit. Keine UUID, kein
+          `Math.random`, keine Zeitmarke.
+        * Das Präfix `takt_` ist keine Sicherheitsmaßnahme, sondern
+          Fundbarkeit: Geheimnissuchen und die Schwärzung in der
+          Protokollausgabe erkennen daran ein Takt-Geheimnis.
+        * **Auf der Platte liegt nur der SHA-256-Abdruck**, in einer eigenen
+          Datei im lokalen Anwendungsdatenverzeichnis (`%LOCALAPPDATA%\Takt\`
+          beziehungsweise `~/.local/share/takt/`, E-018), Verzeichnis `0700`,
+          Datei `0600`. Nicht in der Datenbank, nicht im Roaming-Profil, nicht
+          im Repository. Wer die Datei liest, hält einen Abdruck in der Hand.
+        * Der Klartext wird genau einmal herausgegeben — als Antwort auf
+          `POST /token` — und ist danach nicht wieder abrufbar.
+        * Vergleich in konstanter Zeit über die SHA-256-Abdrücke beider Seiten.
+          Der Umweg über den Abdruck ist nötig, weil ein direkter
+          zeitkonstanter Vergleich bei ungleicher Länge scheitert und damit die
+          Länge verriete. Es gibt keinen früheren Ausstieg: eine fehlende, eine
+          leere und eine falsche Kopfzeile nehmen denselben Weg.
+        * Erscheint nie in Protokollausgaben, nie in Fehlermeldungen, nie in
+          einer Adresse.
+        * Eine Neuerzeugung macht das alte Token **sofort** ungültig. Es gibt
+          genau einen gültigen Abdruck, keine Liste und keine Nachfrist.
+
+        Fehlgeschlagene Nachweise werden gezählt; ab zehn innerhalb einer
+        Minute antwortet der Dienst mit ansteigender Verzögerung und hinterlegt
+        eine sichtbare Warnung unter `/security/notices` (B-2.6).
+
+        ### Welches der beiden Geheimnisse eine Operation verlangt (B-2.10)
+
+        Die beiden Geheimnisse sind **nicht** gleichwertig, und die Vorgabe ist
+        verschlossen:
+
+        * **Jede** Operation dieser Beschreibung verlangt das
+          **Sitzungsgeheimnis** der Oberfläche.
+        * **Ausschließlich** der Teilbaum `/addin` — `GET /addin/context`,
+          `GET /addin/todo-matches`, `POST /addin/todos`,
+          `POST /addin/todos/{todoId}/time-entries` — nimmt daneben auch das
+          **Add-in-Token** an.
+        * Dazu genau eine benannte Ausnahme: `GET /health`. Sie ist der Knopf
+          „Verbindung prüfen" in den Add-in-Einstellungen, gibt nichts heraus
+          als `{ "status": "ok" }`, ändert nichts und liegt weiterhin hinter dem
+          Nachweis — ohne Token antwortet sie mit `401` und verrät nicht
+          einmal, dass Takt läuft.
+
+        Ein Aufrufer, der sich mit dem Add-in-Token ausweist, bekommt auf jeder
+        der übrigen Operationen `401 unauthorized` — mit demselben Text wie bei einem
+        fehlenden Token, damit er nicht erfährt, dass es die Operation für
+        jemand anderen gibt. Das gilt auch für einen unbekannten Pfad: `401`,
+        nicht `404`.
+
+        Der Grund ist die Lebensdauer, nicht die Sparsamkeit. Das Add-in-Token
+        ist das dauerhafte Geheimnis; sein Weg zum Benutzer führt über die
+        Zwischenablage, und es liegt im `localStorage` einer Herkunft, die in
+        einem fremdgehosteten Webview lädt (E-009, E-019, R-09). Das
+        Sitzungsgeheimnis entsteht bei jedem Start neu, kommt über `stdin` von
+        der Hülle und berührt die Platte nie. Ein entwendetes Add-in-Token
+        kommt genau so weit, wie die vier Add-in-Operationen reichen — es liest
+        keinen internen Vermerk, ändert keine Einstellung und löst keinen
+        Exportlauf aus.
+
+        Die Anforderung fällt am Pfad und nicht an einer gepflegten
+        Aufzählung: Eine künftig hinzugefügte Operation außerhalb von `/addin`
+        ist damit von selbst geschlossen.
+
+  parameters:
+    TodoId:
+      name: todoId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FolderId:
+      name: folderId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    PoolId:
+      name: poolId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    StatusId:
+      name: statusId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    TimeEntryId:
+      name: timeEntryId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    Search:
+      name: search
+      in: query
+      description: Freitextsuche (A-13.7).
+      schema: { type: string, maxLength: 256 }
+    Cursor:
+      name: cursor
+      in: query
+      description: |
+        Fortsetzungsmarke der vorigen Seite. Undurchsichtig; nicht selbst bilden.
+        Fortsetzungsmarke statt Seitenzahl, weil Listen sich unter laufendem
+        Timer verschieben und eine Seitenzahl dann Einträge doppelt oder gar
+        nicht zeigt.
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    Unauthorized:
+      description: |
+        Token fehlt, ist ungültig oder wurde durch eine Neuerzeugung ersetzt.
+        Die Antwort unterscheidet diese Fälle nicht und nennt keinen Grund.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            standard:
+              value:
+                error:
+                  code: unauthorized
+                  message: Zugriff nicht möglich.
+    OriginRejected:
+      description: |
+        Token gültig, aber Herkunft, Abrufkontext oder Zielrechner der Anfrage
+        sind nicht zugelassen. Fängt den Fall ab, dass ein entwendetes Token aus
+        einem fremden Browsertab benutzt wird (R-09).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            standard:
+              value:
+                error:
+                  code: origin_not_allowed
+                  message: Zugriff nicht möglich.
+    TokenInUrl:
+      description: |
+        Die Anfrage führte ein Takt-Geheimnis in der Adresse mit. Sie wurde
+        **nicht ausgeführt**. Die Antwort wiederholt den Wert nicht und nennt
+        ihn nirgends; der Vorfall steht als `token_in_url` unter
+        `/security/notices`, und das Token gilt als kompromittiert (B-2.4).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            standard:
+              value:
+                error:
+                  code: token_in_url
+                  message: Das Token gehört in die Kopfzeile, nicht in die Adresse.
+    UnsupportedMediaType:
+      description: |
+        Fehlerschlüssel `unsupported_media_type`.
+
+        Zustandsändernde Routen nehmen ausschließlich `application/json` an.
+        Geprüft **bevor** der Rumpf gelesen wird. Damit besteht eine „einfache"
+        Anfrage aus einem fremden Browsertab die Prüfung nicht und löst keine
+        Wirkung aus (B-1.2).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PayloadTooLarge:
+      description: |
+        Fehlerschlüssel `payload_too_large`. Der Anfragerumpf überschreitet
+        1 MB (B-1.7).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: |
+        Fehlerschlüssel `not_found`. Nicht vorhanden.
+
+        Auch die Antwort auf einen Pfad, den es nicht gibt — aber **nur** mit
+        gültigem Nachweis. Ohne ihn antwortet der Dienst mit `401`, damit ein
+        Aufrufer ohne Token nicht erfährt, welche Pfade es gibt.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: |
+        Der Vorgang widerspricht dem aktuellen Zustand. Der Aufrufer hat richtig
+        gefragt; der Bestand steht dagegen.
+
+        Welcher Schlüssel kommt, hängt an der Route und steht dort. Der Dienst
+        führt an dieser Stelle: `tag_folder_cycle`, `tag_folder_not_empty`,
+        `tag_in_use`, `name_conflict`, `timer_already_running`,
+        `timer_not_running`, `time_entry_locked`, `export_status_unchanged`,
+        `export_status_not_settable`, `export_nothing_to_do`,
+        `builtin_template_immutable`, `status_in_use`, `last_status_column`
+        und `conflict`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    UnprocessableEntity:
+      description: Die Anfrage ist wohlgeformt, aber fachlich unzulässig.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          examples:
+            standard:
+              value:
+                error:
+                  code: validation_error
+                  message: Die Eingabe ist unvollständig oder unzulässig.
+                  details:
+                    - field: title
+                      message: Der Titel darf nicht leer sein.
+                      code: too_short
+
+  schemas:
+
+    Id:
+      type: string
+      format: uuid
+      description: UUID Fassung 7. Zufällig genug und nach Erzeugungszeit sortierbar.
+      examples: ['01931f4e-0000-7000-8000-00000000aa01']
+
+    Timestamp:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+      description: UTC, sekundengenau. Lexikographische Sortierung ist chronologisch.
+      examples: ['2026-03-02T09:00:00Z']
+
+    Color:
+      oneOf:
+        - { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        - { type: 'null' }
+
+    ExportStatus:
+      type: string
+      enum: [open, exported]
+      description: |
+        Zweiwertig, nie leer, nie mehrdeutig (A-6.9). Es gibt keinen dritten
+        Wert und keinen Zwischenzustand: Der Exportlauf ist eine Transaktion,
+        zwischen den beiden Werten liegt nichts Beobachtbares. Auf dem
+        Bildschirm heißen die Werte „offen" und „exportiert"; die Zuordnung
+        gehört in die Oberfläche.
+
+    RoundingMode:
+      type: string
+      enum: [up, nearest]
+      default: up
+      description: |
+        `up` ist die Vorgabe aus E-008: jede Dauer auf die nächste
+        Viertelstunde aufwärts, Minimum 0,25. `nearest` ist die
+        Alternative aus R-03: zur nächstgelegenen Viertelstunde, bei genau
+        dazwischen aufwärts, nie unter 0,25. Die deutsche Beschriftung
+        („aufwärts", „kaufmännisch") bildet die Oberfläche darauf ab. Beide Verfahren sind in
+        docs/datenmodell.md mit Beispieltabelle gegenübergestellt. Der beim
+        Lauf verwendete Modus wird mitgeschrieben.
+
+    PageInfo:
+      type: object
+      required: [nextCursor, total]
+      properties:
+        nextCursor:
+          oneOf: [{ type: string }, { type: 'null' }]
+          description: '`null`, wenn keine weitere Seite folgt.'
+        total: { type: integer, minimum: 0 }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Englischer technischer Schlüssel. Die einzige Größe, gegen die
+                ein Aufrufer verzweigt.
+            message:
+              type: string
+              description: |
+                Deutscher Anzeigetext. Enthält keine Ablaufverfolgung, keine
+                SQL-Meldung, keinen Dateipfad außerhalb des gewählten
+                Exportordners und niemals das Token.
+            details:
+              type: array
+              items:
+                type: object
+                required: [field, message, code]
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+                  code: { type: string }
+
+    Todo:
+      type: object
+      description: |
+        Enthält die persönliche Notiz nicht. Sie ist eine eigene Ressource
+        (A-7.2, R-06). Ebenfalls nicht enthalten: die Pool-Zugehörigkeit, weil
+        sie aus den Tags abgeleitet und nie gespeichert wird (A-3.4), und die
+        Kanban-Spalte, weil sie sich seit E-054 aus denselben Tags ergibt.
+
+        **Entfallen mit Migration 0010:** `boardRank`, der Sortierschlüssel aus
+        der Zeit des Ziehens (A-5.2). Kein Aufrufer hat ihn je gesetzt, keine
+        Ansicht sortiert mehr danach.
+      required: [id, title, callNumber, statusId, completedAt, tagIds, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        title: { type: string, minLength: 1, maxLength: 512 }
+        callNumber:
+          oneOf: [{ type: string, maxLength: 128 }, { type: 'null' }]
+          description: Aus dem Add-in erkannt (E-006, A-2.6). Darf leer bleiben.
+        statusId: { $ref: '#/components/schemas/Id' }
+        completedAt:
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+          description: '`null` bedeutet aktiv (A-2.4).'
+        tagIds: { type: array, items: { $ref: '#/components/schemas/Id' } }
+        sumSeconds:
+          type: integer
+          minimum: 0
+          description: Summe der Zeitbuchungen. Berechnet, nicht gespeichert.
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TodoCreate:
+      type: object
+      description: |
+        Die Obergrenzen sind die der **Hauptfläche** (`titleSchema`,
+        `textSchema` in `http/input.ts`). Die Add-in-Route hat eigene und
+        engere für den Vermerk (B-12.3) — siehe `POST /addin/todos`.
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        callNumber: { oneOf: [{ type: string, maxLength: 64 }, { type: 'null' }] }
+        statusId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: Leer bedeutet Standardspalte.
+        tagIds:
+          type: array
+          maxItems: 200
+          default: []
+          items: { $ref: '#/components/schemas/Id' }
+          description: Die Standard-Tags aus A-9 kommen im Dienst hinzu.
+        tagNames:
+          type: array
+          maxItems: 50
+          default: []
+          items: { type: string, minLength: 1, maxLength: 200 }
+          description: |
+            Tags über ihren **Namen** statt über eine Kennung (T-058).
+
+            Je Name: Gibt es ihn schon, wird das vorhandene Tag verwendet; gibt
+            es ihn nicht, entsteht ein neues auf Wurzelebene. Beides geschieht
+            in derselben Transaktion wie das Anlegen des Todos — es kann kein
+            Tag ohne sein Todo und kein Todo an einem verschwundenen Tag
+            entstehen.
+
+            **Wann zwei Namen derselbe sind:** Groß- und Kleinschreibung zählt
+            nicht (auch bei Umlauten), Leerraum am Rand und doppelter Leerraum
+            im Inneren zählen nicht. „Backend“, „backend“ und „ Backend “ sind
+            ein Tag. „Straße“ und „Strasse“ sind zwei. Die Regel steht in
+            `packages/domain/src/tag-name.ts` und nirgends sonst.
+
+            Kommt ein Name in **mehreren** Ordnern vor, wird die Anfrage mit
+            422 abgewiesen (`details[].code = tag_name_ambiguous`); dann muss
+            der Aufrufer das gemeinte Tag über `tagIds` benennen.
+        note:
+          type: string
+          maxLength: 20000
+          default: ''
+          description: Persönliche Todo-Notiz (A-7.1). Bleibt intern (A-7.2).
+
+    TodoUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 500 }
+        callNumber: { oneOf: [{ type: string, maxLength: 64 }, { type: 'null' }] }
+        statusId: { $ref: '#/components/schemas/Id' }
+        tagIds: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Id' } }
+
+    TodoNote:
+      type: object
+      required: [todoId, text, updatedAt]
+      properties:
+        todoId: { $ref: '#/components/schemas/Id' }
+        text: { type: string, maxLength: 20000 }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    Tag:
+      type: object
+      required: [id, folderId, name, color, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        folderId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: '`null` bedeutet Wurzelebene.'
+        name: { type: string, minLength: 1, maxLength: 200 }
+        color: { $ref: '#/components/schemas/Color' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TagFolder:
+      type: object
+      required: [id, parentId, name, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        parentId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TagFolderNode:
+      type: object
+      required: [folder, subfolders, tags]
+      properties:
+        folder: { $ref: '#/components/schemas/TagFolder' }
+        subfolders:
+          type: array
+          items: { $ref: '#/components/schemas/TagFolderNode' }
+          description: Beliebig tief (A-4.3).
+        tags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+
+    TagTree:
+      type: object
+      required: [rootFolders, rootTags]
+      properties:
+        rootFolders: { type: array, items: { $ref: '#/components/schemas/TagFolderNode' } }
+        rootTags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
+
+    PoolRuleTerm:
+      oneOf:
+        - type: object
+          required: [kind, tagId]
+          properties:
+            kind: { type: string, const: tag }
+            tagId: { $ref: '#/components/schemas/Id' }
+        - type: object
+          required: [kind, folderId]
+          properties:
+            kind: { type: string, const: folder }
+            folderId: { $ref: '#/components/schemas/Id' }
+
+    Pool:
+      type: object
+      description: |
+        Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform
+        einer **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`:
+        Name, Regel, Auflösung über Ordner und die Mitgliederabfrage wären
+        Wort für Wort dieselben. Was eine Spalte von einem Pool unterscheidet,
+        ist allein `placement`.
+      required: [id, name, matchMode, includeSubfolders, placement, position, rule, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        matchMode:
+          type: string
+          enum: [any, all]
+          description: '`any` — mindestens ein Regel-Tag. `all` — alle Regel-Tags.'
+        includeSubfolders: { type: boolean }
+        placement: { $ref: '#/components/schemas/PoolPlacement' }
+        position:
+          type: integer
+          minimum: 0
+          description: |
+            Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board
+            sortieren nach diesem Wert.
+
+        rule: { type: array, items: { $ref: '#/components/schemas/PoolRuleTerm' } }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    PoolPlacement:
+      type: string
+      enum: [pool, board, both]
+      description: |
+        Wo eine Regel erscheint (E-054).
+
+        `pool` — nur in der Pool-Liste. `board` — nur als Spalte des
+        Kanban-Boards. `both` — beides, dieselbe Regel an zwei Stellen.
+
+        Dreiwertig und nie leer: Zwei Wahrheitswerte nebeneinander hätten vier
+        Zustände, und einer davon wäre eine Regel, die nirgends erscheint.
+
+    PoolCreate:
+      type: object
+      description: |
+        Nur `name` ist Pflicht. Alles andere hat eine Voreinstellung im Dienst —
+        ein Pool ohne Regel ist ausdrücklich zulässig und trifft dann kein Todo.
+        Das ist der Zustand direkt nach dem Anlegen, bevor der Benutzer die
+        erste Bedingung setzt (S-05). Für eine Kanban-Spalte gilt dasselbe: eine
+        Spalte ohne Regel zeigt nichts, nicht alles.
+
+        **So legt man eine Kanban-Spalte an:** `placement: board`. Es gibt keine
+        eigene Route dafür, weil eine Spalte ein Pool ist (E-054).
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        matchMode: { type: string, enum: [any, all], default: any }
+        includeSubfolders: { type: boolean, default: true }
+        placement:
+          allOf: [{ $ref: '#/components/schemas/PoolPlacement' }]
+          default: pool
+        position: { type: integer, minimum: 0, default: 0 }
+        rule:
+          type: array
+          maxItems: 200
+          default: []
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+
+    PoolUpdate:
+      type: object
+      description: |
+        Teiländerung: Jedes Feld ist freiwillig, was fehlt bleibt, wie es ist.
+        Ein leerer Rumpf ist zulässig und ändert nichts — eine gültige Anfrage
+        und kein Fehler.
+
+        `placement` ist der Weg, aus einem Pool eine Kanban-Spalte zu machen und
+        zurück. An der Regel und an den Todos ändert sich dabei nichts — nur
+        daran, wo die Regel erscheint (E-054).
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        matchMode: { type: string, enum: [any, all] }
+        includeSubfolders: { type: boolean }
+        placement: { $ref: '#/components/schemas/PoolPlacement' }
+        position: { type: integer, minimum: 0 }
+        rule:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+
+    Board:
+      type: object
+      description: |
+        Das Kanban-Board als **Ansicht**, nicht als Bestand (E-054). Es gibt
+        nichts Gespeichertes, das diese Antwort wiedergäbe: Sie entsteht aus den
+        Regeln der Spalten und den Tags der Todos, bei jedem Aufruf neu — wie
+        die Pool-Zugehörigkeit und aus demselben Grund (A-3.4).
+      required: [columns, appearances, generatedAt]
+      properties:
+        columns:
+          type: array
+          items: { $ref: '#/components/schemas/BoardColumn' }
+          description: In der Reihenfolge von `position`. Leer heißt: keine Spalte eingerichtet.
+        appearances:
+          type: array
+          items: { $ref: '#/components/schemas/BoardAppearance' }
+          description: |
+            Karten, die in **mehr als einer** Spalte stehen. Leer, solange jede
+            Karte höchstens einmal vorkommt — der Zustand, der vor E-054 der
+            einzig mögliche war.
+        generatedAt:
+          allOf: [{ $ref: '#/components/schemas/Timestamp' }]
+          description: |
+            Wann diese Ansicht entstanden ist. Ein Board aus Regeln hat keinen
+            gespeicherten Zustand; es ist die Antwort auf eine Frage zu einem
+            Zeitpunkt, und der Zeitpunkt gehört in die Antwort.
+
+    BoardColumn:
+      type: object
+      description: |
+        Eine Spalte mit ihrer ersten Seite. `column` ist ein vollständiger
+        `Pool` — mit seiner Regel, damit die Oberfläche sagen kann, **warum**
+        eine Karte hier steht, ohne sie nachzuladen.
+      required: [column, todos, nextCursor, total]
+      properties:
+        column: { $ref: '#/components/schemas/Pool' }
+        todos:
+          type: array
+          items: { $ref: '#/components/schemas/Todo' }
+        nextCursor:
+          oneOf: [{ type: string }, { type: 'null' }]
+          description: |
+            Fortsetzungsmarke **dieser** Spalte, einzulösen bei
+            `GET /pools/{poolId}/todos`.
+        total:
+          type: integer
+          minimum: 0
+          description: Alle Mitglieder der Spalte, nicht nur die geladenen.
+
+    BoardAppearance:
+      type: object
+      description: |
+        Dieselbe Karte in mehreren Spalten (E-054). `columnIds` steht in der
+        Reihenfolge der Spalten, nicht in der ihrer Entdeckung.
+      required: [todoId, columnIds]
+      properties:
+        todoId: { $ref: '#/components/schemas/Id' }
+        columnIds:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/Id' }
+
+    TodoStatus:
+      type: object
+      description: |
+        Eine Kanban-Spalte (A-5.3, A-5.4). Sie trägt bewusst kein Merkmal, das
+        sie als „Erledigt-Spalte" ausweist: Erledigt (A-2.4) und die
+        Kanban-Abschlussspalte sind zwei getrennte Dinge. Das
+        Erledigt-Kennzeichen ist `Todo.completedAt` und hängt an keiner Spalte.
+      required: [id, name, position, isDefault, color, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        position: { type: integer, minimum: 0 }
+        isDefault:
+          type: boolean
+          description: Spalte für neu angelegte Todos ohne ausdrückliche Angabe. Genau eine Spalte trägt die Markierung.
+        color: { $ref: '#/components/schemas/Color' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TimeEntry:
+      type: object
+      required: [id, todoId, startedAt, endedAt, durationSeconds, note, exportStatus, exportCount, source, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        todoId: { $ref: '#/components/schemas/Id' }
+        startedAt: { $ref: '#/components/schemas/Timestamp' }
+        endedAt: { $ref: '#/components/schemas/Timestamp' }
+        durationSeconds: { type: integer, minimum: 1 }
+        note:
+          type: string
+          maxLength: 20000
+          description: |
+            Buchungsnotiz nach A-7.3. Diese Notiz geht in die Abrechnung
+            (A-7.4) — im Unterschied zum internen Vermerk des Todos, der in
+            der Anwendung bleibt (A-7.2).
+        exportStatus: { $ref: '#/components/schemas/ExportStatus' }
+        exportCount:
+          type: integer
+          minimum: 0
+          description: |
+            Wie oft die Buchung schon in einem Exportlauf war.
+            `exportStatus = open` bei `exportCount > 0` ist genau der Zustand,
+            den die Oberfläche als „schon einmal exportiert" kennzeichnet (R-10).
+        source: { type: string, enum: [timer, manual] }
+        quarters:
+          type: integer
+          minimum: 1
+          description: |
+            Gerundeter Wert nach dem eingestellten Modus. Anzahl Viertelstunden;
+            der Exportwert ist `quarters / 4`.
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    RunningTimeEntry:
+      type: object
+      description: |
+        Eine Buchung **ohne Ende** — der laufende Timer, wie ihn die Domäne
+        führt (`RunningTimeEntry`). Kein `endedAt`, keine Dauer, kein
+        Exportstatus: Solange sie läuft, ist sie keine Zeitbuchung, und
+        `v_export_candidate` sieht sie nicht.
+
+        Bis T-039 stand hier ein Bauteil `RunningTimer` mit `todoTitle` und
+        ohne `note` und `source`. Der Dienst hat nie so etwas geliefert; der
+        Titel des Todos steht **neben** der Buchung, nicht in ihr — siehe
+        `RunningTimerView`.
+      required: [id, todoId, startedAt, note, source]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        todoId: { $ref: '#/components/schemas/Id' }
+        startedAt: { $ref: '#/components/schemas/Timestamp' }
+        note:
+          type: string
+          description: |
+            Die Leistung (A-7.3), soweit beim Start schon bekannt. In aller
+            Regel leer; sie entsteht beim Stoppen.
+        source: { type: string, const: timer }
+
+    RunningTimerView:
+      type: object
+      description: |
+        Was `GET /timer` liefert: die laufende Buchung, der Titel ihres Todos
+        und die verstrichene Zeit.
+
+        `elapsedSeconds` ist **gerechnet und nicht gespeichert** — der Abstand
+        zwischen Start und dem Zeitpunkt dieser Anfrage. Die Oberfläche zählt
+        zwischen zwei Anfragen selbst weiter; maßgeblich für die Buchung ist
+        aber, was beim Stoppen entsteht, nicht diese Zahl.
+      required: [entry, todoTitle, elapsedSeconds]
+      properties:
+        entry: { $ref: '#/components/schemas/RunningTimeEntry' }
+        todoTitle:
+          type: string
+          description: Leer, wenn das Todo zwischenzeitlich gelöscht wurde.
+        elapsedSeconds: { type: integer, minimum: 0 }
+
+    OrphanedTimer:
+      type: object
+      required: [running, todoTitle, heartbeatAt, bookableSeconds]
+      description: |
+        Eine beim Start vorgefundene Buchung ohne Ende, samt ihrem letzten
+        Lebenszeichen (E-036).
+      properties:
+        running: { $ref: '#/components/schemas/RunningTimeEntry' }
+        todoTitle:
+          type: string
+          description: Leer, wenn das Todo zwischenzeitlich gelöscht wurde.
+        heartbeatAt:
+          description: |
+            Letztes Lebenszeichen. `null`, wenn nie eines geschrieben wurde —
+            dann ist `book_until_heartbeat` gleichbedeutend mit Verwerfen.
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - { type: 'null' }
+        bookableSeconds:
+          type: integer
+          minimum: 0
+          description: |
+            Was `book_until_heartbeat` buchen würde. Steht hier, damit die
+            Rückfrage die Zahl nennen kann, statt den Benutzer raten zu lassen —
+            gerechnet in der Domäne (`decideOrphanedTimer`), nicht in der
+            Oberfläche.
+
+    ExportTemplate:
+      type: object
+      required: [id, name, isBuiltin, definition, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        isBuiltin:
+          type: boolean
+          description: Die mitgelieferte Standardvorlage. Kopierbar, nicht löschbar (A-8.7).
+        definition:
+          type: object
+          additionalProperties: true
+          description: |
+            Feldliste nach E-005. Aufbau gehört zu T-007.
+
+            `additionalProperties: true` steht hier ausdrücklich: Die Gestalt
+            ist **absichtlich** nicht beschrieben, weil sie dem Vorlagen-Motor
+            in `packages/export` gehört und sich dort weiterentwickeln darf.
+            Ohne diesen Zusatz wäre ein `type: object` ohne Felder von einem
+            vergessenen Feld nicht zu unterscheiden — und genau diese
+            Ununterscheidbarkeit ist die Lücke, aus der die Befunde von T-022
+            und T-041 entstanden sind.
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    ExportRun:
+      type: object
+      required: [id, templateId, filePath, fileSha256, bytes, entryCount, totalQuarters, roundingMode, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        templateId: { $ref: '#/components/schemas/Id' }
+        filePath:
+          type: string
+          description: |
+            Liegt immer innerhalb des eingestellten Exportordners (E-011, R-11).
+        fileSha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: |
+            Belegt, dass die Datei im Ordner die vom Lauf geschriebene ist. Der
+            Ordner ist Benutzereingabe und kann von außen verändert werden.
+        bytes: { type: integer, minimum: 1 }
+        entryCount: { type: integer, minimum: 1 }
+        totalQuarters: { type: integer, minimum: 1 }
+        roundingMode: { $ref: '#/components/schemas/RoundingMode' }
+        windowsUser:
+          type: string
+          description: Vom Betriebssystem gelesen, keine Benutzereingabe (E-010, A-8.5).
+        templateSnapshot:
+          type: object
+          additionalProperties: true
+          description: |
+            Die Vorlage in der Fassung, mit der dieser Lauf geschrieben wurde —
+            unveränderlich und vollständig. Sie steht hier, damit eine
+            nachträglich geänderte Vorlage nicht die Auskunft darüber ändert,
+            wie eine bereits verschickte Datei entstanden ist.
+
+            Ohne Gestalt beschrieben, weil das Vorlagenformat dem Vorlagen-Motor
+            gehört und sich weiterentwickeln darf, ohne dass diese Beschreibung
+            mitwandert (siehe `ExportTemplate.definition`). Bis T-041 stand hier
+            gar kein `type`; das hieß in JSON Schema „irgendetwas" und war damit
+            weniger eine Aussage als eine Auslassung.
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+
+    # Die geschriebenen Zeilen eines Laufs. Zurzeit gibt sie keine Route heraus;
+    # `ExportRunGroup` steht hier, weil `ExportAuditEntry.exportRunGroupId` auf
+    # sie verweist und der Leser wissen muss, worauf.
+
+    ExportRunGroup:
+      type: object
+      description: |
+        Eine geschriebene Exportzeile: ein Todo an einem Kalendertag. Hier hängt
+        der gerundete Wert, und nur hier. `seconds` ist die ungerundete
+        Tagessumme, `quarters` der Wert, der in die Abrechnung ging; die
+        Differenz ist der Aufschlag der Rundung und damit nachrechenbar.
+      required: [id, exportRunId, todoId, day, seconds, quarters]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        exportRunId: { $ref: '#/components/schemas/Id' }
+        todoId: { $ref: '#/components/schemas/Id' }
+        day:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Starttag der enthaltenen Buchungen.
+          examples: ['2026-03-02']
+        seconds: { type: integer, minimum: 1 }
+        quarters: { type: integer, minimum: 1 }
+        timeEntryIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          description: |
+            Die Buchungen, die in diese Zeile eingegangen sind. Sie führen ihre
+            ungerundete Dauer, nicht einen Anteil an `quarters`.
+
+    ExportRunResult:
+      type: object
+      description: |
+        Was ein Lauf hinterlässt: der Lauf selbst und die Tagesgruppen, die er
+        ausgelassen hat. Beides gehört in dieselbe Antwort — eine ausgelassene
+        Gruppe ist kein Fehlschlag (E-034), aber der Benutzer soll sie sehen,
+        ohne danach zu fragen.
+      required: [run, skipped]
+      properties:
+        run: { $ref: '#/components/schemas/ExportRun' }
+        skipped:
+          type: array
+          items: { $ref: '#/components/schemas/SkippedExportGroup' }
+
+    ExportGroupSummary:
+      type: object
+      description: |
+        Eine Tagesgruppe, wie der Plan sie sieht: ein Todo an einem Kalendertag.
+        Kennungen und Kennzahlen, kein Text — weder Leistung noch Vermerk.
+      required: [todoId, day, seconds, quarters, entryCount, timeEntryIds, previouslyExported]
+      properties:
+        todoId: { $ref: '#/components/schemas/Id' }
+        day:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Kalendertag des Timerstarts (E-025).
+          examples: ['2026-03-02']
+        seconds:
+          type: integer
+          minimum: 0
+          description: Ungerundete Summe der enthaltenen offenen Buchungen.
+        quarters:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+          description: |
+            Gerundete Viertelstunden der Gruppe, oder `null`, wenn die Vorlage
+            keinen Zeitwert führt.
+        entryCount: { type: integer, minimum: 1 }
+        timeEntryIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+        previouslyExported:
+          type: boolean
+          description: |
+            Mindestens eine enthaltene Buchung war schon einmal exportiert und
+            wurde zurückgesetzt (R-10).
+
+    SkippedExportGroup:
+      type: object
+      description: |
+        Eine Tagesgruppe, die nicht in die Datei geht. Kein Fehler: Der übrige
+        Export läuft durch, die Gruppe bleibt offen (E-034).
+      required: [group, reason]
+      properties:
+        group: { $ref: '#/components/schemas/ExportGroupSummary' }
+        reason:
+          type: string
+          enum: [empty_note]
+          description: |
+            `empty_note` — die Vorlage verlangt einen Leistungstext, und die
+            Gruppe hat keinen.
+
+    ExportSourceCatalog:
+      type: object
+      description: |
+        Die geschlossene Auswahlliste des Vorlageneditors (E-049, E-017).
+
+        Sie ist eine **Auskunft**, keine Regel: Welche Quellen es gibt, sagt der
+        Motor in `packages/export`; was eine Quelle liefert, sagt er ebenfalls.
+        Hier stehen dieselben Werte plus deutsche Beschriftung.
+      required: [groups, sources, transformations, conditionOperators, noteBoundaryHint]
+      properties:
+        groups:
+          type: array
+          description: Die fachlichen Ebenen in Anzeigereihenfolge.
+          items:
+            type: object
+            required: [id, label, hint]
+            properties:
+              id: { type: string, enum: [todo, group, system] }
+              label: { type: string }
+              hint:
+                type: string
+                description: Warum diese Ebene existiert. Steht als Erklärung über der Gruppe.
+        sources:
+          type: array
+          description: |
+            Alle wählbaren Quellen, nach `groups` sortiert. `path` ist der Wert,
+            der in `definition.fields[].source` steht.
+          items:
+            type: object
+            required: [path, group, label, description]
+            properties:
+              path:
+                type: string
+                enum:
+                  - todo.callNumber
+                  - todo.title
+                  - todo.tags
+                  - group.day
+                  - group.quarters
+                  - group.durationSeconds
+                  - group.bookingNotes
+                  - group.startedAt
+                  - group.endedAt
+                  - group.entryCount
+                  - system.windowsUser
+                  - system.exportedAt
+                description: |
+                  `booking.*` gibt es nicht (E-033): Seit E-020 entsteht eine
+                  Exportzeile aus einer Tagesgruppe, und ein Pfad, der weiter
+                  `booking` hieße und die Gruppe meinte, wäre ein stiller
+                  Bedeutungswechsel auf einer Rechnung.
+
+                  Ein Pfad zum internen Vermerk steht hier nicht und kommt nicht
+                  hierher (A-7.2, R-06). `group.bookingNotes` ist die
+                  abrechenbare **Leistung**, nicht der Vermerk.
+              group: { type: string, enum: [todo, group, system] }
+              label: { type: string, description: Deutsche Beschriftung in der Auswahlliste. }
+              description: { type: string, description: 'Was diese Quelle liefert, in einem Satz.' }
+        transformations:
+          type: array
+          items:
+            type: object
+            required: [value, label, effect]
+            properties:
+              value: { $ref: '#/components/schemas/ExportTransformation' }
+              label: { type: string }
+              effect: { type: string }
+        conditionOperators:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value: { type: string, enum: [is_set, is_not_set] }
+              label: { type: string }
+        noteBoundaryHint:
+          type: string
+          description: |
+            Der feste Satz unter der Quellenauswahl (A-7.2). Er klärt auf, ohne
+            die Möglichkeit anzubieten: Der Vermerk steht nicht auf der Liste —
+            auch nicht gesperrt.
+
+    ExportTransformation:
+      type: string
+      enum: [raw, base64, quarter_hours_to_number]
+      description: |
+        `raw` — Wert unverändert. `base64` — UTF-8 nach Base64 (A-8.4).
+        `quarter_hours_to_number` — ganze Viertelstunden nach 0,25-Schritten
+        (A-8.3).
+
+        Der dritte Name ist nicht `round_to_quarter_hour`: Der alte Name bekäme
+        eine bereits gerundete Anzahl Viertelstunden und läse sie als Sekunden —
+        aus 3 würde 0,25 statt 0,75, still und erst auf einer Rechnung sichtbar.
+
+    ExportPreview:
+      type: object
+      required: [rows, groups, skipped, entryCount, totalQuarters, roundingMode, previouslyExportedCount, templateSource, templateId, templateName]
+      properties:
+        rows:
+          type: array
+          items: { type: object, additionalProperties: true }
+          description: Erzeugte JSON-Objekte, genau wie sie in die Datei gingen.
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/ExportGroupSummary' }
+          description: |
+            Die Tagesgruppen zu den Zeilen; `groups[i]` gehört zu `rows[i]`.
+
+            Sie stehen hier, damit die Oberfläche die Gliederung nicht selbst
+            herstellen muss. Welcher Kalendertag zu einer Buchung gehört, ist
+            eine Regel der Domäne — der Tag des Timer**starts** (E-025) —, und
+            eine zweite Fassung dieser Regel im Aufrufer wäre ausgerechnet an der
+            Grenze falsch, an der es weh tut: bei einer Buchung über Mitternacht.
+        skipped:
+          type: array
+          items: { $ref: '#/components/schemas/SkippedExportGroup' }
+          description: |
+            Tagesgruppen, die nicht in die Datei gehen und den Lauf trotzdem
+            nicht aufhalten (E-034). Sie bleiben offen und erscheinen beim
+            nächsten Mal wieder.
+        templateSource:
+          type: string
+          enum: [stored, draft]
+          description: |
+            Woher die Felddefinition kam (E-051). `stored` — eine gespeicherte
+            Vorlage, `templateId` und `templateName` sind belegt. `draft` — eine
+            mitgeschickte, nicht gespeicherte Definition; beide sind `null`.
+
+            Ausgeschrieben und nicht aus `templateId === null` abzuleiten: Eine
+            Vorschau, die den gezeigten Stand nur andeutet, ist genau die
+            Mehrdeutigkeit, wegen der in S-14 vorher „zeigt den gespeicherten
+            Stand" darunterstand.
+        templateId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: '`null` genau dann, wenn `templateSource` gleich `draft` ist.'
+        templateName:
+          oneOf: [{ type: string }, { type: 'null' }]
+          description: '`null` genau dann, wenn `templateSource` gleich `draft` ist.'
+        entryCount: { type: integer, minimum: 0 }
+        totalQuarters: { type: integer, minimum: 0 }
+        roundingMode: { $ref: '#/components/schemas/RoundingMode' }
+        previouslyExportedCount:
+          type: integer
+          minimum: 0
+          description: Buchungen, deren Exportstatus zurückgesetzt worden war (R-10).
+
+    ExportAuditEntry:
+      type: object
+      required: [id, timeEntryId, event, previousStatus, newStatus, actor, reason, occurredAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        timeEntryId: { $ref: '#/components/schemas/Id' }
+        event:
+          type: string
+          enum: [exported, reset, not_billed]
+          description: |
+            `exported` — in einem Exportlauf enthalten gewesen.
+            `reset` — von Hand auf `open` zurückgesetzt (E-012).
+            `not_billed` — ausgebucht ohne Abrechnung (E-047). Kein Export: Die
+            Zeile trägt weder Exportlauf noch Exportzeile, und die Auswertung
+            „nie abgerechnete Zeit" ist genau ein Filter auf diesen Wert.
+        previousStatus: { $ref: '#/components/schemas/ExportStatus' }
+        newStatus: { $ref: '#/components/schemas/ExportStatus' }
+        exportRunId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: |
+            Gesetzt genau dann, wenn `event` gleich `exported` ist. Bei `reset`
+            und `not_billed` ist er `null`, und das Schema erzwingt das.
+        exportRunGroupId:
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+          description: |
+            Die Exportzeile, in der die Buchung stand. Gesetzt genau dann, wenn
+            `event` gleich `exported` ist.
+
+            Hier steht bewusst kein Viertelstundenwert. Der gerundete Wert
+            gehört der Zeile, nicht der Buchung; ein Anteil je Buchung
+            existiert nicht. Über diese Kennung sind Tagessumme und gerundeter
+            Wert der Zeile erreichbar.
+        actor: { type: string, description: Windows-Benutzername (E-010). }
+        reason: { type: string, maxLength: 512 }
+        occurredAt: { $ref: '#/components/schemas/Timestamp' }
+
+    SettingsView:
+      type: object
+      description: Antwort von `GET /settings`. Siehe dort.
+      required:
+        - settings
+        - exportDirectoryState
+        - exportDirectoryTraits
+        - defaultTags
+        - windowsUser
+        - databasePath
+      properties:
+        settings: { $ref: '#/components/schemas/AppSettings' }
+        exportDirectoryState:
+          type: string
+          enum: [ok, not_set, missing, not_writable, not_a_directory, unreachable]
+          description: |
+            Zustand des Exportordners **jetzt**, nicht beim Einstellen (R-11).
+            Er wird bei jedem Lesen der Einstellungen neu geprüft, weil ein
+            Netzlaufwerk zwischendurch verschwinden kann.
+
+            `unreachable` ist nicht `missing`. Die Prüfung wartet höchstens drei
+            Sekunden; was danach kommt, hat **nicht geantwortet** und ist damit
+            nicht als abwesend belegt. Der Unterschied führt zu verschiedenen
+            Handgriffen: einen anderen Ordner wählen oder das Laufwerk neu
+            verbinden.
+        exportDirectoryTraits:
+          type: array
+          items: { $ref: '#/components/schemas/ExportDirectoryTrait' }
+          description: |
+            Was am eingestellten Ordner **belegbar** ist. Leer, solange nichts
+            belegt ist — und leer ist keine Entwarnung, sondern eine
+            Nichtaussage.
+
+            Steht unabhängig von `exportDirectoryState`: Ein Systemverzeichnis
+            bleibt eines, ob dorthin geschrieben werden darf oder nicht, und
+            eine Netzfreigabe bleibt eine, auch wenn sie gerade nicht antwortet.
+            Nur nach `unreachable` bleibt der Befund `network` aus — dafür
+            müsste das Dateisystem gefragt werden, und das ist gerade die
+            Wand, an der die Prüfung abgebrochen wurde.
+        defaultTags:
+          type: array
+          items: { $ref: '#/components/schemas/DefaultTag' }
+        windowsUser:
+          type: string
+          description: |
+            Der Name, unter dem abgerechnet wird (E-010, E-042, A-8.5).
+
+            Er kommt über die zweite `stdin`-Zeile von der Hülle und ist über
+            **keine** Route setzbar (B-8.1). Er steht hier und nicht in
+            `AppSettings`, weil er keine Einstellung ist, sondern eine Auskunft
+            über den angemeldeten Benutzer.
+
+            Bis T-042 war er ausschließlich in `ExportRun.windowsUser` zu
+            sehen, also erst **nach** dem ersten Export. Genau davor will man
+            ihn wissen: E-042 hat einen abgesicherten Kanal gebaut, damit der
+            Name nicht manipulierbar ist — wenn ihn niemand vorher nachprüfen
+            kann, ist die halbe Wirkung dahin.
+        databasePath:
+          oneOf: [{ type: string }, { type: 'null' }]
+          description: |
+            Wo der Bestand liegt (E-018, R-13). `null` bei einem Bestand im
+            Arbeitsspeicher — im Prüfpfad und in Tests.
+
+            Auskunft, keine Einstellung: Der Pfad entsteht aus dem
+            Anwendungsdatenverzeichnis und ist über keine Route und kein
+            Startargument verstellbar (B-1.6 Punkt 1). Nach allem, was über
+            Synchronisierungsordner entschieden wurde, soll man nachsehen
+            können, wo die Datei tatsächlich liegt, statt es zu vermuten.
+
+            **Kein Widerspruch zu B-2.4.** Dort geht es um Pfade in
+            **Fehlermeldungen**: Die gehen auch an einen Aufrufer, der sie
+            nicht bekommen soll. Hier ist es eine ausdrücklich erfragte
+            Auskunft hinter dem Sitzungsgeheimnis, das ausschließlich die Hülle
+            hat — das Add-in-Token erreicht `/settings` nicht —, und derselbe
+            Rumpf führt mit `settings.exportDirectory` bereits einen Pfad
+            desselben Rechners.
+
+    ExportDirectoryTrait:
+      type: string
+      enum: [unc, network, sync_folder, system_dir]
+      description: |
+        Ein belegter Befund über einen Exportordner (B-5.2, B-5.3 Punkt 3).
+
+        Die Oberfläche warnt zusätzlich aus dem Pfad heraus. Das ist eine
+        Auslegung von Zeichenketten und sagt es auch so („liegt in", nicht
+        „ist"). Diese Liste ist die andere Hälfte: Sie entsteht dort, wo das
+        Betriebssystem befragt werden kann, und nennt nur, was daraus folgt.
+
+          `unc`          Netzfreigabe in UNC-Schreibweise. Aus der Form sicher.
+          `network`      Netzdateisystem, belegt über die Art des Dateisystems.
+          `sync_folder`  Im Ablageordner eines Synchronisierungsdienstes, wie
+                         dessen Client ihn der Umgebung meldet — auch wenn der
+                         Ordner umbenannt wurde.
+          `system_dir`   In einem Systemverzeichnis, wie das Betriebssystem es
+                         selbst benennt. Auch wenn Windows nicht auf `C:` liegt.
+
+        Nicht enthalten und bewusst offen: ein **zugeordnetes** Netzlaufwerk
+        (`Z:`) unter Windows. Das steht weder im Pfad noch in einer Auskunft,
+        die Node bekommt; es weiß nur die Hülle über `GetDriveType` (E-004).
+        Solange das fehlt, sagt eine leere Liste dort nichts.
+
+    DefaultTag:
+      type: object
+      description: |
+        Ein Standard-Tag ist eine **Zuordnung**, kein Tag: Kennung und Platz in
+        der Reihenfolge. Der Tag selbst steht in `/tags`.
+      required: [tagId, position]
+      properties:
+        tagId: { $ref: '#/components/schemas/Id' }
+        position: { type: integer, minimum: 0 }
+
+    TodoDetail:
+      type: object
+      description: |
+        Antwort von `GET /todos/{todoId}`. Das Todo und die beiden Summen, die
+        die Detailansicht anzeigt, in einem Aufruf.
+
+        Die Summen sind **berechnet und nirgends gespeichert**; sie stehen
+        deshalb neben dem Todo und nicht darin. Ein Feld `totalSeconds` am
+        `Todo` selbst wäre in jeder Liste mitgeschleppt und in jeder Antwort zu
+        pflegen, in der es niemand braucht.
+
+        Der interne Vermerk steht hier nicht (A-7.2, R-06). Er hat eine eigene
+        Ressource, und der Aufruf dorthin ist im Quelltext auffindbar.
+      required: [todo, totalSeconds, openSeconds]
+      properties:
+        todo: { $ref: '#/components/schemas/Todo' }
+        totalSeconds:
+          type: integer
+          minimum: 0
+          description: Alle Sekunden aller abgeschlossenen Buchungen dieses Todos.
+        openSeconds:
+          type: integer
+          minimum: 0
+          description: |
+            Davon die noch nicht exportierten. Das ist die Zahl, die beim
+            Löschen eines Todos zählt: Was schon exportiert ist, hält das
+            Löschen auf (`409`).
+
+    TodoCreated:
+      type: object
+      description: |
+        Antwort von `POST /todos`. Neben dem Todo steht dort, **welche**
+        Standard-Tags der Dienst ergänzt hat (A-9.5) — sonst müsste der Aufrufer
+        die Regel nachbilden oder das Todo sofort erneut lesen, um zu wissen,
+        was er bekommen hat.
+      required: [todo, addedDefaultTagIds, createdTags]
+      properties:
+        todo: { $ref: '#/components/schemas/Todo' }
+        addedDefaultTagIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+        createdTags:
+          type: array
+          items: { $ref: '#/components/schemas/Tag' }
+          description: |
+            Die Tags, die durch `tagNames` **neu entstanden** sind (T-058).
+            Leer, wenn jeder genannte Name schon ein Tag hatte. Vollständige
+            Tags und nicht nur Kennungen, damit die Oberfläche den neuen Namen
+            zeigen kann, ohne den Tag-Baum erneut zu holen.
+
+    AddinTodoCreated:
+      type: object
+      description: |
+        Antwort von `POST /addin/todos`.
+
+        Seit T-061 **gestaltgleich** mit `TodoCreated`, `createdTags`
+        eingeschlossen: Der Add-in-Weg legt Tags über ihren Namen an wie die
+        Hauptanwendung (T-058). Bis dahin stand hier „ohne `createdTags`", und
+        das war der Unterschied, der mit T-061 aufgehoben wurde.
+
+        Das Bauteil bleibt trotzdem eigenständig und wird nicht durch einen
+        Verweis auf `TodoCreated` ersetzt. Die Add-in-Fläche wird bewusst
+        getrennt beschrieben (siehe die Fußnote am Ende dieser Datei); ein
+        Verweis machte aus zwei Flächen, die heute dasselbe sagen, eine, die
+        sich nur noch gemeinsam ändern lässt. Dass beide dasselbe sagen, ist
+        gewollt und wird gemessen — `proof:addin`, Abschnitt 11 — und nicht
+        dadurch erzwungen, dass es nur eine Zeile gibt.
+      required: [todo, addedDefaultTagIds, createdTags]
+      properties:
+        todo: { $ref: '#/components/schemas/Todo' }
+        addedDefaultTagIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+        createdTags:
+          type: array
+          items: { $ref: '#/components/schemas/Tag' }
+          description: |
+            Die Tags, die durch `tagNames` **neu entstanden** sind. Leer, wenn
+            jeder genannte Name schon ein Tag hatte. Vollständige Tags und nicht
+            nur Kennungen, damit der Aufgabenbereich den neuen Namen in seiner
+            Erfolgsmeldung zeigen kann, ohne `GET /addin/context` erneut zu
+            holen.
+
+    AddinTodoMatch:
+      type: object
+      description: |
+        Ein Treffer der Duplikatsuche (`GET /addin/todo-matches`).
+
+        **Nicht** `Todo`: bewusst eine eigene, engere Gestalt. Was das Add-in
+        zur Entscheidung braucht, steht drin; alles andere nicht. Der interne
+        Vermerk fehlt hier nicht aus Versehen, sondern weil er die Add-in-Fläche
+        nicht verlässt (A-7.2, R-06).
+
+        Zwei Felder gehen über `Todo` hinaus, und beide beantworten die Frage,
+        die vor der Buchung steht — „was passiert, wenn ich hier draufbuche?":
+        die bereits gebuchte Zeit, getrennt nach offen und exportiert, und die
+        Pools, in denen das Todo steht.
+      required: [id, title, callNumber, statusId, tagIds, completedAt, openSeconds, exportedSeconds, poolNames]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        title: { type: string }
+        callNumber: { oneOf: [{ type: string }, { type: 'null' }] }
+        statusId: { $ref: '#/components/schemas/Id' }
+        tagIds: { type: array, items: { $ref: '#/components/schemas/Id' } }
+        completedAt:
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+          description: |
+            `null` bedeutet aktiv (A-2.4). Steht hier ein Zeitpunkt, hebt eine
+            Buchung auf dieses Todo das Kennzeichen auf (A-2.5) — der
+            Aufgabenbereich kündigt das an, bevor gebucht wird.
+        openSeconds:
+          type: integer
+          minimum: 0
+          description: Gebuchte, noch nicht exportierte Sekunden.
+        exportedSeconds:
+          type: integer
+          minimum: 0
+          description: |
+            Bereits exportierte Sekunden. Getrennt ausgewiesen und nicht zu
+            einer Summe verrechnet: A-8.6 verlangt, dass der Unterschied
+            zwischen „schon exportiert" und „noch zu exportieren" sichtbar ist,
+            und eine exportierte Buchung ist gesperrt.
+        poolNames:
+          type: array
+          items: { type: string }
+          description: |
+            Die Pools, in denen dieses Todo Mitglied ist — beim Namen (I-05).
+
+            Mitgliedschaft, nicht Sichtbarkeit: Sie folgt allein aus den Tags
+            (A-3.4) und kennt den Erledigt-Status nicht. Ein erledigtes Todo hat
+            seinen Pool nie verlassen, es wurde dort nur nicht angezeigt —
+            deshalb kann diese Liste schon **vor** der Buchung sagen, wo das
+            Todo danach wieder auftaucht.
+
+    AppSettings:
+      type: object
+      description: |
+        Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
+      required: [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, updatedAt]
+      properties:
+        exportDirectory:
+          oneOf: [{ type: string }, { type: 'null' }]
+          description: '`null` bedeutet: noch nicht gewählt, Export nicht möglich (E-011).'
+        activeExportTemplateId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        roundingMode: { $ref: '#/components/schemas/RoundingMode' }
+        locale: { type: string }
+        theme: { type: string, enum: [system, light, dark] }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+# -----------------------------------------------------------------------------
+# Wem welcher Abschnitt gehört — und was hier wirklich nicht steht
+#
+# Der Namensraum /api/v1/addin/** STEHT in dieser Datei. Seit T-019 sind es vier
+# Operationen — getAddinContext, findAddinDuplicates, createAddinTodo,
+# createAddinTimeEntry — samt der Bauteile AddinTodoCreated und AddinTodoMatch.
+#
+# Bis T-062 stand hier das Gegenteil: „wird gesondert beschrieben", „Nicht in
+# dieser Datei beschrieben". Der Satz stammte aus der Zeit vor T-019 und ist
+# drei Aufgaben lang stehen geblieben. Schaden hat er nicht angerichtet, weil
+# `proof:openapi` die Routen in beide Richtungen vergleicht und eine
+# unbeschriebene Route rot färbt — aber genau deshalb war er auch nicht zu
+# messen: Er ist eine Aussage ÜBER die Datei, und die führt kein Lauf aus.
+# Gefunden hat ihn ein Mensch (T-061, Nebenbefund).
+#
+# Dateihoheit. Die vier /addin-Pfade und die beiden Add-in-Bauteile gehören zu
+# `apps/local-api/src/routes/addin/` (integration-dev), alles Übrige in dieser
+# Datei dem domain-dev. Eine Datei mit zwei Abschnitten und nicht zwei Dateien:
+# Die Add-in-Fläche benutzt dieselbe Token-Prüfung, dasselbe Fehlerformat,
+# dieselben Herkunftsprüfungen und dieselben Bauteile (Id, Timestamp, Tag,
+# Problem). Zwei Dateien hätten davon irgendwann zwei Fassungen — und die
+# Add-in-Fläche ist die, bei der ein Auseinanderlaufen zuletzt auffiele.
+#
+# Unverändert gilt für sie: Sie darf keine Route enthalten, die den internen
+# Vermerk (A-7.1) an eine Exportfläche weiterreicht (A-7.2, R-06).
+#
+# Nicht in dieser Datei beschrieben ist der Aufgabenbereich selbst. Er wird auf
+# einem zweiten Port über HTTPS ausgeliefert (E-046), besteht ausschließlich aus
+# statischen Dateien und hat keine Operation — es gibt also nichts zu
+# beschreiben, nicht bloß nichts Beschriebenes.
+# -----------------------------------------------------------------------------

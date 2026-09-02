@@ -1,0 +1,25 @@
+# Takt — was aus apps/desktop nicht ins Repository gehört (E-021).
+
+# Die gebündelte Sidecar-Binärdatei. Rund 120 MiB, plattformgebunden und aus
+# `pnpm --filter @takt/desktop sidecar` jederzeit wieder herstellbar. Sie in die
+# Historie zu legen, würde das Repository bei jedem Bau um dieselbe Größe
+# aufblähen.
+binaries/
+src-tauri/binaries/
+
+# Zwischenstände der Bündelung und die heruntergeladene Node-Laufzeit.
+.sidecar-build/
+.sidecar-runtime/
+
+# Rust-Bauverzeichnis und die von tauri-build erzeugten Dateien.
+src-tauri/target/
+src-tauri/gen/
+
+# Das bereitgestellte Bündel des Aufgabenbereichs (T-054). Eine Kopie von
+# `apps/outlook-addin/dist`, aus `pnpm --filter @takt/desktop taskpane`
+# jederzeit wieder herstellbar. Es liegt hier und nicht anderswo, weil
+# `tauri build` es von hier neben die Sidecar-Binärdatei ins Paket nimmt.
+src-tauri/taskpane/
+
+# Vom Bündelvorgang erzeugte Installationsdateien.
+src-tauri/WixTools*/

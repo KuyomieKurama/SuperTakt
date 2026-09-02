@@ -1,0 +1,17 @@
+// Die Hülle hat zwei TypeScript-Anteile:
+//
+//   `sidecar/`  der Einstiegspunkt, aus dem die Sidecar-Binärdatei entsteht.
+//               Läuft in Node, sieht `node:*`.
+//   `src/`      die Schnittstelle zur Oberfläche. Läuft im Webview.
+//
+// Beide erben `tsconfig.base.json`. `scripts/` steht bewusst nicht drin: Das
+// sind `.mjs`-Bauskripte ohne Typen; ein `checkJs` darüber würde Aufwand
+// erzeugen, den niemand gewinnt.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["sidecar", "src"]
+}

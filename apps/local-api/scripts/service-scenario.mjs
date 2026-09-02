@@ -1,0 +1,699 @@
+/**
+ * Takt — ein fester Bestand, einmal durch **jede** Operation gefahren (T-041).
+ *
+ * ===========================================================================
+ * Wozu
+ * ===========================================================================
+ *
+ * `proof:openapi` verglich bis T-041 Routen und **Anfragen**. Die Antworten
+ * blieben außen vor, und genau dort lagen zweimal die teuersten Befunde:
+ *
+ *  - T-022: `GET /settings` und `POST /todos` liefern eine Hülle, wo die
+ *    Beschreibung die Entität selbst versprach. Wer dagegen baute, las
+ *    `undefined` — kein Übersetzungsfehler, eine leere Anzeige.
+ *  - T-029: der Seitenumschlag stimmte bei **keiner** Listenroute.
+ *  - T-039: `POST /timer/start` antwortete laut Beschreibung mit `409
+ *    timer_already_running`, tatsächlich mit `200` und
+ *    `kind: confirmation_required`.
+ *
+ * Dreimal derselbe Fehlertyp, dreimal von Hand gefunden, jedes Mal erst,
+ * nachdem jemand dagegen gebaut hatte. Diese Datei ist der Teil, der das
+ * maschinell macht: Sie baut den Dienst **einmal**, legt einen kleinen festen
+ * Bestand an und ruft jede beschriebene Operation mindestens einmal auf. Was
+ * dabei über die Leitung geht, hält `proof-openapi.mjs` gegen die
+ * Beschreibung.
+ *
+ * ===========================================================================
+ * Warum auch die Schreibrouten, obwohl T-039 sie ausnahm
+ * ===========================================================================
+ *
+ * T-039 schlug vor, nur Leserouten anzufahren — Schreibrouten bräuchten je
+ * Route gültige Eingaben, also im Kern eine zweite Prüfsuite. Das stimmt für
+ * eine Prüfsuite, die **Verhalten** misst. Hier wird kein Verhalten gemessen,
+ * sondern **Gestalt**, und dafür genügt ein Bestand, der aufeinander aufbaut:
+ * Ein Ordner, ein Tag, ein Pool, zwei Todos, ein paar Buchungen und ein
+ * Exportlauf reichen, um jede der 64 Operationen einmal auszulösen. Genau die
+ * drei bekannten Befunde saßen auf Schreibrouten (`POST /todos`,
+ * `POST /timer/start`); eine Prüfung, die sie ausließe, ließe die Hälfte aus,
+ * in der die Funde lagen.
+ *
+ * ===========================================================================
+ * Warum im Prozess und nicht über einen Kindprozess
+ * ===========================================================================
+ *
+ * `proof:export-api` startet den echten Sidecar, weil es die **Kette** misst:
+ * Host, Herkunft, Inhaltstyp, Token. Hier geht es um die Gestalt der Antwort,
+ * und die entsteht hinter der Kette. `compose(...)` und `app.request(...)`
+ * geben denselben Rumpf in einem Bruchteil der Zeit und ohne belegten Port —
+ * dieselbe Anwendung, derselbe Zusammenbau, nur ohne Steckdose. Die Anfragen
+ * tragen trotzdem `Host`, `Origin` und Token, laufen also durch dieselbe
+ * Kette; eine Anfrage, die dort hängen bliebe, fiele als 401 oder 403 auf.
+ *
+ * Ein Wegwerfordner dient als Exportziel. Er wird am Ende gelöscht; der
+ * Bestand liegt im Arbeitsspeicher und überlebt den Lauf nicht.
+ */
+
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { compose } from '../src/composition.ts';
+import { API_BASE_PATH } from '../src/config.ts';
+
+const PORT = 17843;
+const UI_ORIGIN = 'http://127.0.0.1:5173';
+
+/** Ein Sitzungsgeheimnis der richtigen Gestalt; es verlässt diesen Lauf nicht. */
+const SECRET = `takt_${'0'.repeat(43)}`;
+
+/** Ein Tokenspeicher im Arbeitsspeicher — hier wird nichts auf die Platte geschrieben. */
+const memoryStore = () => ({
+  read: async () => ({ status: 'absent' }),
+  write: async () => {},
+  inspectPermissions: async () => ({ checked: false, dirTooPermissive: false, fileTooPermissive: false }),
+});
+
+/**
+ * Der interne Vermerk (A-7.1, A-7.2).
+ *
+ * Er steht hier als erkennbarer Text, damit `proof-openapi.mjs` am Ende
+ * belegen kann, dass er in **keiner** Antwort außer der eigenen Vermerksroute
+ * vorkommt. Die Notiz-Trennung ist eine Zusicherung über Datenstrukturen; ein
+ * Lauf, der ohnehin jede Antwort einsammelt, kann sie nebenbei messen.
+ */
+export const INTERNAL_NOTE = 'VERMERK-INTERN-A72-nicht-exportierbar';
+
+/**
+ * Die Farbe, mit der der Durchlauf eine Kanban-Spalte anlegt (T-051).
+ *
+ * Sie steht hier und nicht im Aufruf, damit `proof-openapi.mjs` in der Antwort
+ * nach **genau diesem** Wert sehen kann. Ein Schlüssel, den eine Route
+ * stillschweigend abstreift, sieht in der Gestaltprüfung wie ein Erfolg aus:
+ * Die Antwort trägt `color: null`, und `null` ist erlaubt.
+ */
+export const STATUS_COLOR = '#3f7fbf';
+
+/**
+ * Die vier Kanban-Spalten, die der Durchlauf einrichtet (E-054).
+ *
+ * Sie stehen hier mit Namen, damit `proof-openapi.mjs` sie in den
+ * Aufzeichnungen wiederfindet, ohne sich auf eine Reihenfolge zu verlassen.
+ * Jede prüft etwas anderes:
+ *
+ *   `tag`   — Regel über ein einzelnes Tag.
+ *   `folder`— Regel über einen **Ordner**: andere Regelgestalt, dieselbe Karte.
+ *             Das ist der Fall, den es vor E-054 nicht geben konnte — eine
+ *             Karte in zwei Spalten zugleich.
+ *   `both`  — **zwei** zutreffende Regelterme in **einer** Spalte. Die Karte
+ *             darf darin genau einmal stehen und nicht zweimal.
+ *   `empty` — leere Regel. Trifft nichts, nicht alles (T-009).
+ */
+export const BOARD_COLUMNS = Object.freeze({
+  tag: 'Spalte über ein Tag',
+  folder: 'Spalte über einen Ordner',
+  both: 'Spalte über zwei Tags',
+  empty: 'Spalte ohne Regel',
+});
+
+/**
+ * Fährt den festen Bestand durch den Dienst.
+ *
+ * Rückgabe: eine Liste von Aufzeichnungen `{ operationId, method, path,
+ * status, body, hasBody, label }`. `path` ist die **Schablone** der
+ * Beschreibung (`/todos/{todoId}`), nicht die angefahrene Adresse — sonst
+ * fände sich die Operation in der Beschreibung nicht wieder.
+ */
+export async function runScenario() {
+  const directory = mkdtempSync(join(tmpdir(), 'takt-proof-openapi-'));
+
+  // Eine gestellte Uhr. Der Timer braucht vergehende Zeit, und eine echte Uhr
+  // machte den Lauf entweder langsam oder von der Maschine abhängig.
+  let clockMs = Date.parse('2026-03-02T09:00:00Z');
+  const tick = (seconds) => {
+    clockMs += seconds * 1000;
+  };
+
+  const service = compose({
+    port: PORT,
+    store: memoryStore(),
+    sessionSecret: SECRET,
+    windowsUser: 't.beispiel',
+    databaseLocation: ':memory:',
+    clock: () => new Date(clockMs),
+    timeZone: 'Europe/Berlin',
+    // Die Protokollzeilen dieses Laufs gehören nicht in die Ausgabe des
+    // Nachweispfads; sie sind hier kein Befund, sondern Rauschen.
+    logger: { request: () => {}, lifecycle: () => {} },
+  });
+  await service.database.migrations.migrateToLatest();
+
+  const records = [];
+
+  /** Eine Anfrage durch die vollständige Kette, mit Nachweis und Herkunft. */
+  async function call(method, path, body, options = {}) {
+    const headers = { Host: `127.0.0.1:${PORT}` };
+    if (options.origin !== null) headers['Origin'] = options.origin ?? UI_ORIGIN;
+    if (options.token !== null) headers[options.tokenHeader ?? 'X-Takt-Token'] = options.token ?? SECRET;
+    const init = { method, headers };
+    if (options.contentType !== undefined) {
+      // Für die Prüfung des Inhaltstyps: ein Rumpf mit falscher Ansage.
+      headers['Content-Type'] = options.contentType;
+      init.body = 'kein JSON';
+    } else if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(body);
+    }
+    const response = await service.app.request(`http://127.0.0.1:${PORT}${API_BASE_PATH}${path}`, init);
+    const text = await response.text();
+    let json;
+    let parsed = false;
+    try {
+      json = JSON.parse(text);
+      parsed = true;
+    } catch {
+      /* 204 und leere Antworten */
+    }
+    const seen = {};
+    response.headers.forEach((value, name) => {
+      seen[name.toLowerCase()] = value;
+    });
+    return { status: response.status, body: json, headers: seen, hasBody: parsed && text.length > 0, text };
+  }
+
+  /**
+   * Ruft auf **und** legt die Antwort zur Prüfung ab.
+   *
+   * `template` ist der Pfad, wie ihn die Beschreibung führt. Wer ihn vergisst,
+   * bekommt keinen stillen blinden Fleck: `proof-openapi.mjs` sucht die
+   * Operation über `operationId` und wird rot, wenn sie nicht zu finden ist.
+   */
+  async function record(operationId, method, template, url, body, options) {
+    const result = await call(method, url, body, options);
+    records.push({
+      operationId,
+      method,
+      path: template,
+      status: result.status,
+      body: result.body,
+      headers: result.headers,
+      hasBody: result.hasBody,
+      text: result.text,
+    });
+    return result;
+  }
+
+  // Ein stiller Aufruf: er baut Bestand auf, wird aber nicht geprüft, weil
+  // dieselbe Operation an anderer Stelle schon aufgezeichnet ist.
+  const quiet = (method, path, body) => call(method, path, body);
+
+  try {
+    // -----------------------------------------------------------------------
+    // Zugriff und Auskunft
+    // -----------------------------------------------------------------------
+    await record('health', 'GET', '/health', '/health');
+    await record('getTokenStatus', 'GET', '/token', '/token');
+    await record('rotateToken', 'POST', '/token', '/token');
+    await record('getSecurityNotices', 'GET', '/security/notices', '/security/notices');
+
+    // -----------------------------------------------------------------------
+    // Ordner, Tags, Pools (A-3, A-4)
+    // -----------------------------------------------------------------------
+    const rootFolder = await record('createTagFolder', 'POST', '/tag-folders', '/tag-folders', {
+      name: 'Mandant Beispiel',
+    });
+    const rootFolderId = rootFolder.body.data.id;
+
+    const subFolder = await quiet('POST', '/tag-folders', { name: 'Unterordner', parentId: rootFolderId });
+    const subFolderId = subFolder.body.data.id;
+
+    await record(
+      'updateTagFolder',
+      'PATCH',
+      '/tag-folders/{folderId}',
+      `/tag-folders/${subFolderId}`,
+      { name: 'Unterordner, umbenannt' },
+    );
+    await record(
+      'moveTagFolder',
+      'POST',
+      '/tag-folders/{folderId}/move',
+      `/tag-folders/${subFolderId}/move`,
+      { newParentId: null },
+    );
+
+    const tag = await record('createTag', 'POST', '/tags', '/tags', {
+      name: 'Beratung',
+      folderId: rootFolderId,
+      color: '#2563eb',
+    });
+    const tagId = tag.body.data.id;
+
+    await record('updateTag', 'PATCH', '/tags/{tagId}', `/tags/${tagId}`, { name: 'Beratung (neu)' });
+    await record('listTags', 'GET', '/tags', '/tags');
+    await record('getTagTree', 'GET', '/tag-tree', '/tag-tree');
+
+    const pool = await record('createPool', 'POST', '/pools', '/pools', {
+      name: 'Offene Beratung',
+      matchMode: 'any',
+      includeSubfolders: true,
+      position: 0,
+      rule: [{ kind: 'tag', tagId }],
+    });
+    const poolId = pool.body.data.id;
+
+    await record('updatePool', 'PATCH', '/pools/{poolId}', `/pools/${poolId}`, { name: 'Offene Beratung (neu)' });
+    await record('listPools', 'GET', '/pools', '/pools');
+
+    // -----------------------------------------------------------------------
+    // Kanban-Spalten (A-5)
+    // -----------------------------------------------------------------------
+    const statuses = await record('listTodoStatuses', 'GET', '/todo-statuses', '/todo-statuses');
+    const statusId = statuses.body.data[0].id;
+
+    // `color` geht mit (T-051): Die Route hat den Schlüssel bis dahin still
+    // verworfen, während die Oberfläche ihn sendete. Der Durchlauf schickt ihn
+    // deshalb mit, und `proof-openapi.mjs` sieht in der Antwort nach, ob er
+    // ankommt — ein stilles Abstreifen sähe sonst wieder wie Erfolg aus.
+    const extraStatus = await record('createTodoStatus', 'POST', '/todo-statuses', '/todo-statuses', {
+      name: 'Wartet auf Rückruf',
+      color: STATUS_COLOR,
+      position: 9,
+    });
+    const extraStatusId = extraStatus.body.data.id;
+
+    await record(
+      'updateTodoStatus',
+      'PATCH',
+      '/todo-statuses/{statusId}',
+      `/todo-statuses/${extraStatusId}`,
+      { name: 'Wartet', color: '#a16207' },
+    );
+    const allStatuses = await quiet('GET', '/todo-statuses');
+    await record('reorderTodoStatuses', 'PUT', '/todo-statuses/order', '/todo-statuses/order', {
+      order: allStatuses.body.data.map((entry) => entry.id).reverse(),
+    });
+    await record(
+      'deleteTodoStatus',
+      'DELETE',
+      '/todo-statuses/{statusId}',
+      `/todo-statuses/${extraStatusId}`,
+    );
+
+    // -----------------------------------------------------------------------
+    // Todos, Vermerk, Erledigt (A-2, A-7)
+    // -----------------------------------------------------------------------
+    const todo = await record('createTodo', 'POST', '/todos', '/todos', {
+      title: 'Akte 4711 — Schriftsatz',
+      callNumber: 'C-4711-2026',
+      statusId,
+      tagIds: [tagId],
+      note: INTERNAL_NOTE,
+    });
+    const todoId = todo.body.data.todo.id;
+
+    await record('getTodo', 'GET', '/todos/{todoId}', `/todos/${todoId}`);
+    await record('updateTodo', 'PATCH', '/todos/{todoId}', `/todos/${todoId}`, {
+      title: 'Akte 4711 — Schriftsatz (überarbeitet)',
+    });
+    await record('getTodoNote', 'GET', '/todos/{todoId}/note', `/todos/${todoId}/note`);
+    await record('putTodoNote', 'PUT', '/todos/{todoId}/note', `/todos/${todoId}/note`, {
+      text: INTERNAL_NOTE,
+    });
+    await record('markTodoDone', 'PUT', '/todos/{todoId}/done', `/todos/${todoId}/done`);
+    await record('clearTodoDone', 'DELETE', '/todos/{todoId}/done', `/todos/${todoId}/done`);
+    await record('listPoolTodos', 'GET', '/pools/{poolId}/todos', `/pools/${poolId}/todos`);
+    await record('searchTodos', 'GET', '/todos', '/todos');
+
+    const second = await quiet('POST', '/todos', {
+      title: 'Akte 4712 — Telefonat',
+      callNumber: 'C-4712-2026',
+      statusId,
+      tagIds: [tagId],
+      note: '',
+    });
+    const secondTodoId = second.body.data.todo.id;
+
+    // -----------------------------------------------------------------------
+    // Kanban-Board: Spalten sind Regeln (A-5.3, A-5.4, E-054)
+    //
+    // Vier Spalten, und der Bestand ist so gewählt, dass genau der Fall
+    // eintritt, den es vor E-054 nicht geben konnte: **dieselbe Karte in
+    // mehreren Spalten**. Sie trägt zwei Tags, beide liegen im selben Ordner;
+    // die Spalte über das Tag, die Spalte über den Ordner und die Spalte über
+    // beide Tags treffen sie deshalb alle drei.
+    //
+    // `proof-openapi.mjs` Abschnitt 11 misst daran zweierlei: dass die Karte
+    // wirklich in jeder dieser Spalten steht, und dass `appearances` — von
+    // `matchesPool` in der Domäne gebildet — genau dieselben Spalten nennt, die
+    // die Abfrage geliefert hat. Laufen die beiden auseinander, zeigt das Board
+    // eine Karte und behauptet daneben, sie stünde dort nicht.
+    // -----------------------------------------------------------------------
+    const boardTag = await quiet('POST', '/tags', { name: 'Rückfrage', folderId: rootFolderId });
+    const boardTagId = boardTag.body.data.id;
+    await quiet('PATCH', `/todos/${todoId}`, { tagIds: [tagId, boardTagId] });
+
+    // Angelegt wird **mit** `record`: Ein stillschweigend abgestreiftes
+    // `placement` sähe sonst wie Erfolg aus — dieselbe Falle wie die Farbe
+    // einer Spalte in T-051. Abschnitt 11 sieht in der Antwort nach.
+    await record('createPool', 'POST', '/pools', '/pools', {
+      name: BOARD_COLUMNS.tag,
+      placement: 'board',
+      position: 21,
+      rule: [{ kind: 'tag', tagId }],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.folder,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 22,
+      rule: [{ kind: 'folder', folderId: rootFolderId }],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.both,
+      placement: 'board',
+      matchMode: 'any',
+      position: 23,
+      rule: [
+        { kind: 'tag', tagId },
+        { kind: 'tag', tagId: boardTagId },
+      ],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.empty,
+      placement: 'board',
+      position: 24,
+      rule: [],
+    });
+
+    await record('getBoard', 'GET', '/board', '/board');
+    // Und die Fläche, auf der der ursprüngliche Pool **nicht** steht.
+    await record('listPools', 'GET', '/pools', '/pools?placement=board');
+
+    // -----------------------------------------------------------------------
+    // Timer (A-6). Beide Ausgänge des Starts, beide Ausgänge des Stopps.
+    // -----------------------------------------------------------------------
+    await record('getRunningTimer', 'GET', '/timer', '/timer');
+    await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId });
+    tick(180);
+    await record('getRunningTimer', 'GET', '/timer', '/timer', undefined);
+    await record('touchTimerHeartbeat', 'POST', '/timer/heartbeat', '/timer/heartbeat', {});
+    await record('getOrphanedTimer', 'GET', '/timer/orphaned', '/timer/orphaned');
+
+    // Der zweite Start bei laufendem Timer: 200 und `confirmation_required`.
+    // Das ist der Befund aus T-039, und er ist ab hier gemessen.
+    await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId: secondTodoId });
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Schriftsatz entworfen' });
+
+    // Der verworfene Stopp: Start und Stopp ohne vergehende Zeit.
+    await quiet('POST', '/timer/start', { todoId });
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: '' });
+
+    // Die verwaiste Buchung (E-036): ein laufender Timer, dann aufgelöst.
+    await quiet('POST', '/timer/start', { todoId: secondTodoId });
+    tick(600);
+    await quiet('POST', '/timer/heartbeat');
+    tick(120);
+    await record('getOrphanedTimer', 'GET', '/timer/orphaned', '/timer/orphaned');
+    await record('resolveOrphanedTimer', 'POST', '/timer/orphaned/resolve', '/timer/orphaned/resolve', {
+      resolution: 'book_until_heartbeat',
+    });
+
+    // -----------------------------------------------------------------------
+    // Zeitbuchungen (A-6.1, A-7.3)
+    // -----------------------------------------------------------------------
+    const entry = await record('createTimeEntry', 'POST', '/time-entries', '/time-entries', {
+      todoId,
+      startedAt: '2026-03-02T08:00:00Z',
+      endedAt: '2026-03-02T08:45:00Z',
+      note: 'Akteneinsicht',
+    });
+    const entryId = entry.body.data.id;
+
+    await record('getTimeEntry', 'GET', '/time-entries/{timeEntryId}', `/time-entries/${entryId}`);
+    await record('updateTimeEntry', 'PATCH', '/time-entries/{timeEntryId}', `/time-entries/${entryId}`, {
+      note: 'Akteneinsicht und Vermerk',
+    });
+    await record('searchTimeEntries', 'GET', '/time-entries', '/time-entries');
+    // Der Tagesfilter, mit einem Ortstag (E-025, T-042). Die Zone des Laufs ist
+    // Europe/Berlin, der Bestand liegt am 2. März — die Antwort darf nicht leer
+    // sein, sonst zieht die Tagesgrenze wieder an der falschen Stelle.
+    await record(
+      'searchTimeEntries',
+      'GET',
+      '/time-entries',
+      '/time-entries?fromDay=2026-03-02&toDay=2026-03-02',
+    );
+    await record('searchEverything', 'GET', '/search', '/search?q=Akte');
+
+    // -----------------------------------------------------------------------
+    // Vorlagen, Vorschau, Lauf (A-8, E-049, E-051)
+    // -----------------------------------------------------------------------
+    const definition = {
+      version: 1,
+      fields: [
+        { name: 'Call', source: 'todo.callNumber', transformation: 'raw' },
+        { name: 'Zeit', source: 'group.quarters', transformation: 'quarter_hours_to_number' },
+        { name: 'Leistung', source: 'group.bookingNotes', transformation: 'raw' },
+      ],
+    };
+
+    const template = await record('createExportTemplate', 'POST', '/export/templates', '/export/templates', {
+      name: 'Kanzleiabrechnung',
+      definition,
+    });
+    const templateId = template.body.data.id;
+
+    await record(
+      'updateExportTemplate',
+      'PATCH',
+      '/export/templates/{templateId}',
+      `/export/templates/${templateId}`,
+      { name: 'Kanzleiabrechnung (März)' },
+    );
+    await record('listExportTemplates', 'GET', '/export/templates', '/export/templates');
+    await record('listExportSources', 'GET', '/export/sources', '/export/sources');
+    await record('previewExport', 'POST', '/export/preview', '/export/preview', { templateId });
+    await record('previewExport', 'POST', '/export/preview', '/export/preview', { definition });
+
+    await record('updateSettings', 'PATCH', '/settings', '/settings', {
+      exportDirectory: directory,
+      activeExportTemplateId: templateId,
+      roundingMode: 'up',
+      locale: 'de-DE',
+      theme: 'dark',
+    });
+    await record('getSettings', 'GET', '/settings', '/settings');
+    await record('setDefaultTags', 'PUT', '/settings/default-tags', '/settings/default-tags', {
+      tagIds: [tagId],
+    });
+    await record('listDefaultTags', 'GET', '/settings/default-tags', '/settings/default-tags');
+
+    const run = await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
+    const runId = run.body?.data?.run?.id;
+    await record('listExportRuns', 'GET', '/export/runs', '/export/runs');
+    if (runId !== undefined) {
+      await record('getExportRun', 'GET', '/export/runs/{runId}', `/export/runs/${runId}`);
+    }
+    await record('listExportAudit', 'GET', '/export/audit', '/export/audit');
+    // Die beiden Filter (T-042). `exportRunId` beantwortet „welche Buchungen
+    // waren in diesem Lauf?" vollständig statt nur so weit, wie geladen ist.
+    if (runId !== undefined) {
+      await record(
+        'listExportAudit',
+        'GET',
+        '/export/audit',
+        `/export/audit?exportRunId=${runId}`,
+      );
+    }
+    await record('listExportAudit', 'GET', '/export/audit', `/export/audit?timeEntryId=${entryId}`);
+
+    // Exportstatus zurücksetzen und „nicht abrechnen" (E-012, E-047)
+    await record(
+      'resetExportStatus',
+      'PUT',
+      '/time-entries/{timeEntryId}/export-status',
+      `/time-entries/${entryId}/export-status`,
+      { status: 'open', reason: 'Falsche Vorlage gewählt' },
+    );
+    await record(
+      'markTimeEntryNotBilled',
+      'POST',
+      '/time-entries/{timeEntryId}/not-billed',
+      `/time-entries/${entryId}/not-billed`,
+      { reason: 'Kulanz' },
+    );
+
+    // -----------------------------------------------------------------------
+    // Die schmale Fläche des Add-ins (T-019)
+    // -----------------------------------------------------------------------
+    await record('getAddinContext', 'GET', '/addin/context', '/addin/context');
+    await record(
+      'findAddinDuplicates',
+      'GET',
+      '/addin/todo-matches',
+      '/addin/todo-matches?callNumber=C-4711-2026',
+    );
+    const addinTodo = await record('createAddinTodo', 'POST', '/addin/todos', '/addin/todos', {
+      title: 'Aus der E-Mail übernommen',
+      callNumber: 'C-4713-2026',
+      tagIds: [],
+      note: INTERNAL_NOTE,
+    });
+    const addinTodoId = addinTodo.body?.data?.todo?.id;
+    if (addinTodoId !== undefined) {
+      // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
+      // `doneCleared` und `poolNames` stehen dann nicht auf ihrem Ruhewert.
+      await quiet('PUT', `/todos/${addinTodoId}/done`);
+      await record(
+        'createAddinTimeEntry',
+        'POST',
+        '/addin/todos/{todoId}/time-entries',
+        `/addin/todos/${addinTodoId}/time-entries`,
+        { startedAt: '2026-03-02T10:00:00Z', endedAt: '2026-03-02T10:30:00Z', note: 'Telefonat' },
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Löschen. Jeweils an einem eigens dafür angelegten Stück, damit der
+    // erfolgreiche Ausgang (204) gemessen wird und nicht ein Konflikt.
+    // -----------------------------------------------------------------------
+    const spareEntry = await quiet('POST', '/time-entries', {
+      todoId,
+      startedAt: '2026-03-01T08:00:00Z',
+      endedAt: '2026-03-01T08:30:00Z',
+      note: 'Wird gelöscht',
+    });
+    await record(
+      'deleteTimeEntry',
+      'DELETE',
+      '/time-entries/{timeEntryId}',
+      `/time-entries/${spareEntry.body.data.id}`,
+    );
+
+    const spareTodo = await quiet('POST', '/todos', { title: 'Wird gelöscht', tagIds: [], note: '' });
+    await record('deleteTodo', 'DELETE', '/todos/{todoId}', `/todos/${spareTodo.body.data.todo.id}`);
+
+    const spareTag = await quiet('POST', '/tags', { name: 'Wird gelöscht' });
+    await record('deleteTag', 'DELETE', '/tags/{tagId}', `/tags/${spareTag.body.data.id}`);
+
+    const spareFolder = await quiet('POST', '/tag-folders', { name: 'Wird gelöscht' });
+    await record(
+      'deleteTagFolder',
+      'DELETE',
+      '/tag-folders/{folderId}',
+      `/tag-folders/${spareFolder.body.data.id}`,
+    );
+
+    await record('deletePool', 'DELETE', '/pools/{poolId}', `/pools/${poolId}`);
+
+    // Die Vorlage ist noch die aktive; erst umstellen, dann löschen.
+    const builtin = await quiet('GET', '/export/templates');
+    const builtinId = builtin.body.data.find((entry) => entry.isBuiltin === true).id;
+    await quiet('PATCH', '/settings', { activeExportTemplateId: builtinId });
+    const spareTemplate = await quiet('POST', '/export/templates', {
+      name: 'Wird gelöscht',
+      definition,
+    });
+    await record(
+      'deleteExportTemplate',
+      'DELETE',
+      '/export/templates/{templateId}',
+      `/export/templates/${spareTemplate.body.data.id}`,
+    );
+
+    // -----------------------------------------------------------------------
+    // Die Abweisungen.
+    //
+    // Sie stehen hier nicht der Vollständigkeit halber. Eine beschriebene
+    // Fehlerantwort ist das, wogegen jede Fehleranzeige der Oberfläche gebaut
+    // wird — und sie ist der Teil der Beschreibung, den im Normalbetrieb
+    // niemand zu Gesicht bekommt. Genau dort hält sich eine Falschaussage am
+    // längsten. Der Statuscode zählt dabei so viel wie der Rumpf: Eine
+    // Beschreibung, die 409 verspricht und 200 bekommt, führt zu einer
+    // Oberfläche, die einen Fehlerfall behandelt, den es nicht gibt, und den
+    // echten nicht (T-039, `POST /timer/start`).
+    // -----------------------------------------------------------------------
+    const unknownId = '01931f4e-0000-7000-8000-0000000000ff';
+
+    // 404 — es gibt das Ding nicht.
+    await record('getTodo', 'GET', '/todos/{todoId}', `/todos/${unknownId}`);
+    await record('getTimeEntry', 'GET', '/time-entries/{timeEntryId}', `/time-entries/${unknownId}`);
+    await record('getExportRun', 'GET', '/export/runs/{runId}', `/export/runs/${unknownId}`);
+    await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId: unknownId });
+
+    // 422 — gelesen und für unzulässig befunden.
+    await record('createTodo', 'POST', '/todos', '/todos', { title: '   ' });
+    // Seit T-046 weist die Add-in-Fläche eine unplausible Call-Nummer ab,
+    // statt sie anzunehmen und unauffindbar zu machen (E-045, R-15). Die
+    // Beschreibung führte das Gegenteil als Absicht; sie ist mit T-041
+    // nachgezogen, und dieser Aufruf hält sie ab jetzt daran fest.
+    await record('createAddinTodo', 'POST', '/addin/todos', '/addin/todos', {
+      title: 'Unplausible Call-Nummer',
+      callNumber: `TCK-${'0'.repeat(70)}`,
+      tagIds: [],
+      note: '',
+    });
+    await record('previewExport', 'POST', '/export/preview', '/export/preview', {
+      definition: { version: 1, fields: [{ name: 'X', source: 'todo.note', transformation: 'raw' }] },
+    });
+    await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId, definition });
+    await record('updateSettings', 'PATCH', '/settings', '/settings', {
+      exportDirectory: join(directory, 'gibt-es-nicht'),
+    });
+
+    // 409 — der Bestand steht dagegen.
+    await record('deleteTag', 'DELETE', '/tags/{tagId}', `/tags/${tagId}`);
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: '' });
+
+    // Und der Gegenprobe halber: das Lebenszeichen **ohne** laufenden Timer.
+    // Es ist ausdrücklich kein Fehler (E-036, `usecases/timer.ts`), und bis
+    // T-041 stand in der Beschreibung dafür ein `409`, das es nie gab.
+    await record('touchTimerHeartbeat', 'POST', '/timer/heartbeat', '/timer/heartbeat', {});
+    await record(
+      'moveTagFolder',
+      'POST',
+      '/tag-folders/{folderId}/move',
+      `/tag-folders/${rootFolderId}/move`,
+      { newParentId: rootFolderId },
+    );
+    await record(
+      'resetExportStatus',
+      'PUT',
+      '/time-entries/{timeEntryId}/export-status',
+      `/time-entries/${entryId}/export-status`,
+      { status: 'open', reason: 'Schon offen' },
+    );
+    await quiet('PATCH', '/settings', { activeExportTemplateId: templateId });
+
+    // Zwei weitere Läufe, und die Uhr rückt zwischen ihnen vor: Der Dateiname
+    // trägt den Zeitpunkt auf die Sekunde genau (`exportFileName`), und zwei
+    // Läufe in derselben Sekunde schrieben in dieselbe Datei. Der erste räumt
+    // die noch offenen Buchungen ab, der zweite findet nichts mehr vor —
+    // `409 export_nothing_to_do`, der Fall, in dem die Oberfläche „nichts zu
+    // exportieren" anzeigen muss statt einer Störung.
+    tick(3600);
+    await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
+    tick(3600);
+    await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
+
+    // Die Kette selbst: kein Nachweis, fremde Herkunft, Geheimnis in der
+    // Adresse, falscher Inhaltstyp.
+    await record('health', 'GET', '/health', '/health', undefined, { token: null });
+    await record('health', 'GET', '/health', '/health', undefined, { origin: 'https://fremde.example' });
+    await record('health', 'GET', '/health', `/health?token=${SECRET}`);
+    await record('createTodo', 'POST', '/todos', '/todos', undefined, { contentType: 'text/plain' });
+
+    // Der Ordner ist weg, während er eingestellt bleibt (R-11). Zuletzt, weil
+    // es der einzige Schritt ist, der etwas außerhalb des Bestands verändert.
+    await quiet('PATCH', '/settings', { exportDirectory: directory });
+    rmSync(directory, { recursive: true, force: true });
+    tick(3600);
+    await record('getSettings', 'GET', '/settings', '/settings');
+    await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
+
+    return { records, directory };
+  } finally {
+    service.database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}

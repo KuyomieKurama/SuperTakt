@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Takt — Manifest des Outlook-Add-ins (A-10.1, A-10.2, S-12).
+
+  Reihenfolge und Elementnamen folgen dem Schema für `MailApp` aus der
+  Microsoft-Dokumentation (`docs/develop/manifest-element-ordering.md`,
+  `docs/develop/xml-manifest-overview.md`, über Context7 abgerufen).
+
+  Drei Punkte sind bewusst gesetzt:
+
+  1. `<Permissions>ReadItem</Permissions>` — die schwächste Stufe, die genügt.
+     Das Add-in liest Betreff, Absender und Text; es schreibt nichts in die
+     E-Mail. `ReadWriteItem` oder gar `ReadWriteMailbox` wären mehr Recht, als
+     A-10.5 verlangt, und ein entwendetes Token trüge sie mit.
+
+  2. `<AppDomains>` enthält **nur** die eigene Herkunft. Der Aufgabenbereich
+     navigiert nirgendwohin; der Eintrag ist die Zusicherung, dass er es auch
+     nicht kann (B-10.6). Der lokale Dienst steht hier absichtlich nicht: Er
+     wird über `fetch` angesprochen, nicht über Navigation, und `AppDomains`
+     regelt Navigation.
+
+  3. `<Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>` — das
+     Add-in erscheint an gelesenen Nachrichten. Termine sind nicht die
+     Anwendung aus A-10.2.
+
+  Die Kennung unten ist eine erfundene GUID für dieses Projekt. Sie ist kein
+  Geheimnis, und sie gehört vor der Auslieferung durch eine neu erzeugte
+  ersetzt, wenn dieses Manifest je als Vorlage weiterverwendet wird.
+
+  Die Adressen zeigen auf `https://localhost:17844` — siehe `src/config.ts`.
+  Office verlangt HTTPS; Takt liefert lokal aus (E-001).
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+  xsi:type="MailApp">
+
+  <Id>6f2c1d84-9a4e-4f2b-b7d1-3c5a8e0b41f7</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>Takt</ProviderName>
+  <DefaultLocale>de-DE</DefaultLocale>
+  <DisplayName DefaultValue="Takt" />
+  <Description DefaultValue="Aus einer E-Mail heraus ein Todo in Takt anlegen oder Zeit auf ein vorhandenes buchen." />
+  <IconUrl DefaultValue="https://localhost:17844/assets/takt-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:17844/assets/takt-128.png" />
+  <SupportUrl DefaultValue="https://localhost:17844/" />
+
+  <AppDomains>
+    <AppDomain>https://localhost:17844</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.1" />
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:17844/index.html" />
+        <RequestedHeight>400</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <!-- Die schwächste Stufe, die für A-10.5 genügt: lesen, nicht schreiben. -->
+  <Permissions>ReadItem</Permissions>
+
+  <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.5">
+          <bt:Set Name="Mailbox" />
+        </bt:Sets>
+      </Requirements>
+      <Hosts>
+        <Host xsi:type="MailHost">
+          <DesktopFormFactor>
+            <ExtensionPoint xsi:type="MessageReadCommandSurface">
+              <OfficeTab id="TabDefault">
+                <Group id="taktMsgReadGroup">
+                  <Label resid="groupLabel" />
+                  <Control xsi:type="Button" id="taktOpenPaneButton">
+                    <Label resid="paneButtonLabel" />
+                    <Supertip>
+                      <Title resid="paneButtonLabel" />
+                      <Description resid="paneButtonTip" />
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="icon16" />
+                      <bt:Image size="32" resid="icon32" />
+                      <bt:Image size="80" resid="icon80" />
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <SourceLocation resid="paneUrl" />
+                      <!--
+                        Der Bereich lässt sich anheften. Wer eine Reihe von
+                        E-Mails abarbeitet, will ihn nicht je Nachricht neu
+                        öffnen. Verlangt das Schema VersionOverrides v1.1.
+                      -->
+                      <SupportsPinning>true</SupportsPinning>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+      <Resources>
+        <bt:Images>
+          <bt:Image id="icon16" DefaultValue="https://localhost:17844/assets/takt-16.png" />
+          <bt:Image id="icon32" DefaultValue="https://localhost:17844/assets/takt-32.png" />
+          <bt:Image id="icon80" DefaultValue="https://localhost:17844/assets/takt-80.png" />
+        </bt:Images>
+        <bt:Urls>
+          <bt:Url id="paneUrl" DefaultValue="https://localhost:17844/index.html" />
+        </bt:Urls>
+        <bt:ShortStrings>
+          <bt:String id="groupLabel" DefaultValue="Takt" />
+          <bt:String id="paneButtonLabel" DefaultValue="Todo anlegen" />
+        </bt:ShortStrings>
+        <bt:LongStrings>
+          <bt:String id="paneButtonTip" DefaultValue="Aus dieser E-Mail ein Todo in Takt anlegen oder Zeit auf ein vorhandenes Todo buchen." />
+        </bt:LongStrings>
+      </Resources>
+    </VersionOverrides>
+  </VersionOverrides>
+</OfficeApp>

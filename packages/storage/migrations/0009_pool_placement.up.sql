@@ -1,0 +1,93 @@
+-- Takt — Migration 0009 "pool_placement", Vorwärtsrichtung
+-- Deckt: A-3.*, A-5.3, A-5.4, E-054
+--
+-- ===========================================================================
+-- Wogegen
+-- ===========================================================================
+--
+-- Bis hierher war `todo_status` zweierlei zugleich: die Eigenschaft am Todo und
+-- die Spalte auf dem Kanban-Board. Der Auftraggeber hat das getrennt (E-054):
+--
+--   „Die Statusspalte ist nicht gleichbedeutend mit einem Kanban-Board. Ein
+--    Kanban-Board kann aus einer oder mehreren frei konfigurierbaren Spalten
+--    bestehen. Daher sollen die Kanban-Spalten unabhängig vom Status
+--    konfigurierbar sein."
+--
+-- Eine Kanban-Spalte ist seitdem eine **Regel über Tags**, wie ein Pool. Der
+-- Status bleibt, wo er war: `todo.status_id`, Tabelle `todo_status`, Migration
+-- 0002 mit ihren vier Startwerten, die Standardspalte für neue Todos. Diese
+-- Migration fasst davon nichts an.
+--
+-- ===========================================================================
+-- Warum keine Tabelle `board_column`
+-- ===========================================================================
+--
+-- Weil sie `pool` Wort für Wort abgeschrieben hätte: Name, Position,
+-- Regelterme, Auflösung über Ordner samt Unterordnern, „genau eine Quelle je
+-- Regel", der eindeutige Name, die Mitgliederabfrage, die leere Regel, die
+-- nichts trifft. Das wäre die achte Doppelung dieses Bestands gewesen — und
+-- die teuerste, weil die rekursive Ordnerauflösung (datenmodell.md 4.4) und die
+-- Blätterung doppelt daran gehangen hätten.
+--
+-- Es gibt deshalb **eine** Entität und einen Unterschied: `pool.placement`
+-- sagt, auf welcher Fläche eine Regel erscheint.
+--
+--   'pool'  — nur in der Pool-Liste
+--   'board' — nur als Spalte des Kanban-Boards
+--   'both'  — beides, dieselbe Regel an zwei Stellen
+--
+-- Dreiwertig und nie leer, aus demselben Grund wie der Exportstatus. Zwei
+-- Wahrheitswerte nebeneinander hätten vier Zustände, und einer davon — beide
+-- falsch — wäre eine Regel, die nirgends erscheint und die niemand wiederfindet.
+--
+-- ===========================================================================
+-- Was mit dem Bestand geschieht: nichts, und das ist die Entscheidung
+-- ===========================================================================
+--
+-- Jede vorhandene Regel bekommt 'pool'. Sie steht danach genau dort, wo sie
+-- vorher stand, und **keine** wird zur Spalte.
+--
+-- Das Board ist damit nach der Aktualisierung leer, bis jemand eine Spalte
+-- einrichtet. Die beiden Alternativen wären schlechter gewesen:
+--
+--  - Alle vorhandenen Pools zu Spalten machen ('both'): Das Board wäre eine
+--    Kopie der Pool-Liste, die niemand bestellt hat, und der Benutzer müsste
+--    erst aufräumen, was ihm eingerichtet wurde.
+--  - Die vier Statuswerte in Spalten übersetzen: Es gibt keine Übersetzung.
+--    Eine Spalte ist eine Regel über **Tags**; „In Progress" ist kein Tag. Der
+--    Auftraggeber hat ausdrücklich ausgeschlossen, dass Takt von sich aus Tags
+--    setzt („du darfst keine Tags setzen"). Eine Migration, die dafür vier Tags
+--    anlegt und an jedes Todo hängt, täte genau das.
+--
+-- Ein leeres Board ist sichtbar leer. Ein Board, das mit erfundenen Spalten
+-- gefüllt wurde, sieht aus, als hätte es jemand so gewollt.
+
+-- ---------------------------------------------------------------------------
+-- 1. Die Spalte
+-- ---------------------------------------------------------------------------
+--
+-- `DEFAULT 'pool'` ist zweierlei: der Wert für den Bestand (SQLite füllt beim
+-- ALTER jede vorhandene Zeile damit) und die Vorgabe für jede künftige Zeile,
+-- die den Wert nicht nennt. Beides ist gewollt und dasselbe: Wer eine Regel
+-- anlegt, ohne eine Fläche zu nennen, legt einen Pool an.
+--
+-- Der CHECK ist an dieser Stelle zulässig — anders als PRIMARY KEY und UNIQUE,
+-- die ALTER TABLE ADD COLUMN nicht annimmt — und gemessen wirksam: ein INSERT
+-- mit 'quatsch' wird abgewiesen.
+ALTER TABLE pool ADD COLUMN placement TEXT NOT NULL DEFAULT 'pool'
+  CHECK (placement IN ('pool', 'board', 'both'));
+
+-- ---------------------------------------------------------------------------
+-- 2. Kein Index — und warum das hier eine Aussage ist
+-- ---------------------------------------------------------------------------
+--
+-- Die beiden neuen Abfragen lauten `WHERE placement IN ('pool','both')` und
+-- `WHERE placement IN ('board','both')`, jeweils `ORDER BY position`. Ein
+-- partieller Index darauf wäre schnell hingeschrieben und wertlos: `pool` hält
+-- die Regeln, die ein Mensch von Hand eingerichtet hat — eine Handvoll Zeilen,
+-- in keinem denkbaren Bestand mehr als ein paar Dutzend. SQLite liest die
+-- Tabelle in einem Durchlauf, und `ux_pool_position` trägt die Ordnung bereits.
+--
+-- Ein Index hier behauptete einen Zugriffspfad, den kein Abfrageplan je
+-- wählen würde. Dieselbe Begründung steht bei `timer_heartbeat`
+-- (datenmodell.md 9), und sie gilt hier aus demselben Grund.

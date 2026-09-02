@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Was das Fenster darf. Bewusst kurz — jede Zeile hier ist eine Fähigkeit, die ein eingeschleustes Skript im Webview mitbenutzt. `dialog:allow-open` gibt genau den Ordnerauswahldialog frei: Er liest nichts und schreibt nichts, er gibt einen Pfad zurück (B-5.1 Punkt 1, Befund S-04). Ausdrücklich nicht dabei: `dialog:allow-save`, `dialog:allow-message`, `dialog:allow-ask`, `dialog:allow-confirm` — Takt fragt in seiner eigenen Oberfläche, damit die Rückfrage den Grund nennen kann.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-open"
+  ]
+}

@@ -1,0 +1,636 @@
+/*
+ * Takt — Design-Token
+ * ===================
+ *
+ * Zwei Ebenen:
+ *   1. Primitive   --takt-<ramp>-<stufe>   Rohfarben. Nie direkt in Komponenten verwenden.
+ *   2. Semantisch  --bg-*, --text-*, --border-*, --status-*, ...
+ *      Nur diese Ebene wird in Komponenten benutzt.
+ *
+ * Der helle Modus ist vollstaendig unter :root definiert. Der dunkle Modus definiert
+ * ausschliesslich die semantische Ebene neu, die Primitiven bleiben unveraendert.
+ *
+ * Themenwahl: [data-theme="light"] | [data-theme="dark"] am <html>-Element.
+ * Ohne Attribut entscheidet die Systemeinstellung (prefers-color-scheme).
+ *
+ * Gemessene Kontrastwerte: siehe apps/web/design/DESIGNSYSTEM.md, Abschnitt 2.4.
+ * Nachmessen mit:  node scripts/contrast-check.mjs
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ------------------------------------------------------------------ */
+  /* 1. Primitive — Farbrampen                                          */
+  /* ------------------------------------------------------------------ */
+
+  /* Neutral: kuehles Schiefergrau mit leichtem Blaustich. Traegt Flaechen,
+     Text und Rahmen in beiden Modi. */
+  --takt-neutral-0: #ffffff;
+  --takt-neutral-25: #fbfcfd;
+  --takt-neutral-50: #f6f8fa;
+  --takt-neutral-100: #eff2f6;
+  --takt-neutral-200: #e3e8ef;
+  --takt-neutral-300: #cfd6e1;
+  --takt-neutral-400: #a8b2c3;
+  --takt-neutral-500: #7e8a9e;
+  --takt-neutral-600: #5d6879;
+  --takt-neutral-700: #454e5d;
+  --takt-neutral-800: #2e3644;
+  --takt-neutral-900: #1c2330;
+  --takt-neutral-950: #0f1520;
+  --takt-neutral-1000: #080c14;
+
+  /* Akzent: ein einziges Blau fuer Primaeraktion, Auswahl und Fokus.
+     Bewusst nur eine Markenfarbe, damit die Statusfarben Signalwirkung behalten. */
+  --takt-accent-50: #eef4ff;
+  --takt-accent-100: #dce7ff;
+  --takt-accent-200: #bdd1fe;
+  --takt-accent-300: #93b4fc;
+  --takt-accent-400: #6091f8;
+  --takt-accent-500: #3b76ef;
+  --takt-accent-600: #2159da;
+  --takt-accent-700: #1a47b0;
+  --takt-accent-800: #17398a;
+  --takt-accent-900: #16326f;
+  --takt-accent-950: #0f1f45;
+
+  /* Gruen — Exportstatus "Exportiert", allgemeiner Erfolg. */
+  --takt-green-50: #e9f7f0;
+  --takt-green-100: #d0efe0;
+  --takt-green-200: #a4dfc3;
+  --takt-green-300: #6cc79e;
+  --takt-green-400: #34a87a;
+  --takt-green-500: #17875f;
+  --takt-green-600: #0f6b4c;
+  --takt-green-700: #0c543c;
+  --takt-green-800: #0a4230;
+  --takt-green-900: #073226;
+
+  /* Bernstein — Exportstatus "Offen", allgemeine Warnung. */
+  --takt-amber-50: #fdf5e6;
+  --takt-amber-100: #fae9c6;
+  --takt-amber-200: #f3d392;
+  --takt-amber-300: #e6b554;
+  --takt-amber-400: #d2952a;
+  --takt-amber-500: #ae7413;
+  --takt-amber-600: #8c5b0b;
+  --takt-amber-700: #6f4708;
+  --takt-amber-800: #573706;
+  --takt-amber-900: #402804;
+
+  /* Rose — Exportstatus "Erneut offen" (E-012, R-10) und destruktive Aktionen. */
+  --takt-rose-50: #fdf0ef;
+  --takt-rose-100: #fbdcda;
+  --takt-rose-200: #f6bab6;
+  --takt-rose-300: #ee8d87;
+  --takt-rose-400: #e05b53;
+  --takt-rose-500: #c93b32;
+  --takt-rose-600: #ac2a22;
+  --takt-rose-700: #8b211b;
+  --takt-rose-800: #6e1a15;
+  --takt-rose-900: #551410;
+
+  /* Violett — ausschliesslich fuer den laufenden Timer. Eine eigene Farbe,
+     damit "Timer laeuft" nie mit einem Exportstatus verwechselt wird. */
+  --takt-violet-50: #f3f0ff;
+  --takt-violet-100: #e6e0ff;
+  --takt-violet-200: #cdc2fd;
+  --takt-violet-300: #ab98f8;
+  --takt-violet-400: #8768ef;
+  --takt-violet-500: #6b46d9;
+  --takt-violet-600: #5734b4;
+  --takt-violet-700: #472b90;
+  --takt-violet-800: #392472;
+  --takt-violet-900: #2b1b56;
+
+  /* ------------------------------------------------------------------ */
+  /* 2. Semantisch — Flaechen                                           */
+  /* ------------------------------------------------------------------ */
+
+  --bg-canvas: #f6f8fa; /* Anwendungshintergrund hinter allen Panels */
+  --bg-surface: #ffffff; /* Karte, Panel, Dialog, Tabellenkoerper */
+  --bg-surface-alt: #fbfcfd; /* Zebrastreifen in Tabellen */
+  --bg-subtle: #eff2f6; /* Tabellenkopf, Werkzeugleiste, Kanban-Spalte */
+  --bg-inset: #e3e8ef; /* Eingabefeld-Vertiefung, Fortschrittsbalken-Bahn */
+  --bg-hover: #eff2f6; /* Zeile / Menueeintrag unter dem Zeiger */
+  --bg-active: #e3e8ef; /* Zeile / Knopf waehrend des Klicks */
+  --bg-selected: #eef4ff; /* ausgewaehlte Zeile, aktiver Navigationseintrag */
+  --bg-scrim: rgba(15, 21, 32, 0.48); /* Dialog-Abdunklung */
+  --bg-disabled: #eff2f6;
+
+  /* ------------------------------------------------------------------ */
+  /* 3. Semantisch — Text und Symbole                                   */
+  /* ------------------------------------------------------------------ */
+
+  --text-primary: #1c2330;
+  --text-secondary: #454e5d;
+  --text-muted: #5d6879; /* Hilfetext, Sekundaerangaben, Platzhalter */
+  --text-disabled: #7e8a9e;
+  --text-on-accent: #ffffff;
+  --text-on-solid: #ffffff; /* Text auf gefuellten Status-/Aktionsflaechen */
+  --text-link: #1a47b0;
+
+  /* ------------------------------------------------------------------ */
+  /* 4. Semantisch — Rahmen und Trennlinien                             */
+  /* ------------------------------------------------------------------ */
+
+  /* Rein dekorative Linien. SC 1.4.11 ist auf sie nicht anwendbar, weil sie
+     kein Bedienelement und keinen Zustand kennzeichnen. */
+  --border-subtle: #e3e8ef; /* Trennlinien in Tabellen und Listen */
+  --border-default: #cfd6e1; /* Karten- und Panelumriss */
+  /* Grenze eines Bedienelements. Muss 3:1 gegen die Flaeche erreichen,
+     auf der das Element liegt (SC 1.4.11). */
+  --border-control: #7e8a9e; /* Eingabefeld, Auswahlliste, Sekundaerknopf */
+  --border-strong: #5d6879; /* Bedienelement unter dem Zeiger */
+  --border-accent: #2159da;
+
+  /* ------------------------------------------------------------------ */
+  /* 5. Semantisch — Aktion                                             */
+  /* ------------------------------------------------------------------ */
+
+  --accent-bg: #2159da;
+  --accent-bg-hover: #1a47b0;
+  --accent-bg-active: #17398a;
+  --accent-bg-subtle: #eef4ff;
+  --accent-text: #1a47b0; /* Akzentfarbener Text auf heller Flaeche */
+  --accent-border-subtle: #bdd1fe;
+
+  --danger-bg: #ac2a22;
+  --danger-bg-hover: #8b211b;
+  --danger-bg-active: #6e1a15;
+  --danger-bg-subtle: #fdf0ef;
+  --danger-text: #ac2a22;
+  --danger-border: #f6bab6;
+
+  /* ------------------------------------------------------------------ */
+  /* 6. Semantisch — Exportstatus einer Zeitbuchung (A-6.5 bis A-6.7)   */
+  /* ------------------------------------------------------------------ */
+
+  /* Offen: noch nicht uebertragen. Kontur, keine Fuellung. */
+  --status-open-fg: #6f4708;
+  --status-open-bg: #fdf5e6;
+  --status-open-border: #ae7413;
+  --status-open-marker: #8c5b0b; /* Zeilenmarkierung, Punkt, Spaltenakzent */
+
+  /* Exportiert: uebertragen und gesperrt. Gefuellt, hoechstes Gewicht. */
+  --status-exported-fg: #ffffff;
+  --status-exported-bg: #0f6b4c;
+  --status-exported-border: #0c543c;
+  --status-exported-marker: #0f6b4c;
+  --status-exported-tint: #e9f7f0; /* Zeilenhintergrund in Listen */
+
+  /* Erneut offen: Exportstatus wurde zurueckgesetzt (E-012). Kontur plus
+     Schraffur, weil daraus eine Doppelabrechnung entstehen kann (R-10). */
+  --status-reopened-fg: #8b211b;
+  --status-reopened-bg: #fdf0ef;
+  --status-reopened-border: #e05b53;
+  --status-reopened-marker: #ac2a22;
+  --status-reopened-hatch: rgba(172, 42, 34, 0.14); /* Streifen der Schraffur */
+
+  /* Nicht abgerechnet: von Hand ausgebucht, nie exportiert (E-047, E-050).
+     Bewusst **ohne eigene Signalfarbe** — hier ist kein Geld geflossen, es
+     gibt nichts zu signalisieren, und eine vierte Farbe neben Bernstein,
+     Gruen und Rose haette die Deuteranopie-Lage verschlechtert. Der Zustand
+     unterscheidet sich an gestrichelter Kontur, Balken statt Punkt,
+     durchgestrichenem Kreis und Wortlaut.
+
+     Deshalb Verweise und keine eigenen Farbwerte: Der Zustand *soll* die
+     neutralen Flaechen des Themas tragen. Aus demselben Grund stehen sie nur
+     hier und nicht noch einmal in den beiden Dunkelbloecken — `var()` loest
+     zur Benutzungszeit auf, das Thema traegt also bereits das Ziel. Wer den
+     Zustand doch einmal einfaerben will, aendert diese vier Zeilen und keine
+     Komponente (T-035, offene Frage 1). */
+  --status-notbilled-fg: var(--text-secondary);
+  --status-notbilled-bg: var(--bg-inset);
+  --status-notbilled-border: var(--border-strong);
+  --status-notbilled-marker: var(--border-strong);
+
+  /* ------------------------------------------------------------------ */
+  /* 7. Semantisch — Timer                                              */
+  /* ------------------------------------------------------------------ */
+
+  --timer-running-fg: #472b90;
+  --timer-running-bg: #f3f0ff;
+  --timer-running-border: #cdc2fd;
+  --timer-running-pulse: #6b46d9;
+  --timer-idle-fg: #5d6879;
+  --timer-idle-bg: #eff2f6;
+  --timer-idle-border: #cfd6e1;
+
+  /* ------------------------------------------------------------------ */
+  /* 8. Semantisch — Hinweisfarben ausserhalb des Exportstatus          */
+  /* ------------------------------------------------------------------ */
+
+  --info-fg: #1a47b0;
+  --info-bg: #eef4ff;
+  --info-border: #bdd1fe;
+  --success-fg: #0f6b4c;
+  --success-bg: #e9f7f0;
+  --success-border: #a4dfc3;
+  --warning-fg: #6f4708;
+  --warning-bg: #fdf5e6;
+  --warning-border: #f3d392;
+
+  /* ------------------------------------------------------------------ */
+  /* 9. Semantisch — Vermerk- und Leistungsfeld (R-08, E-016)           */
+  /* ------------------------------------------------------------------ */
+
+  /* Leistung: Inhalt verlaesst die Anwendung und landet beim Kunden. */
+  --note-billing-rail: #2159da;
+  --note-billing-rail-stripe: #17398a; /* Streifen der Schiene, zweites Merkmal */
+  --note-billing-bg: #ffffff;
+  --note-billing-header-bg: #eef4ff;
+  --note-billing-header-fg: #17398a;
+  --note-billing-border: #bdd1fe;
+
+  /* Vermerk: Inhalt bleibt in Takt. */
+  --note-internal-rail: #7e8a9e; /* 3,49:1 gegen Karte — Zustandsgrenze, SC 1.4.11 */
+  --note-internal-bg: #f6f8fa;
+  --note-internal-header-bg: #eff2f6;
+  --note-internal-header-fg: #454e5d;
+  --note-internal-border: #cfd6e1;
+
+  /* ------------------------------------------------------------------ */
+  /* 10. Fokus                                                          */
+  /* ------------------------------------------------------------------ */
+
+  --focus-ring-color: #2159da;
+  --focus-ring-contrast: #ffffff; /* aeusserer Ring auf dunklen Flaechen */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* ------------------------------------------------------------------ */
+  /* 11. Schrift                                                        */
+  /* ------------------------------------------------------------------ */
+
+  /* Keine Web-Schrift von einem CDN: Takt laeuft vollstaendig lokal (E-001),
+     ein Schriftabruf waere eine Netzverbindung. Es gilt der Systemstapel. */
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system,
+    BlinkMacSystemFont, "Noto Sans", Roboto, Ubuntu, Cantarell, system-ui,
+    sans-serif;
+  --font-mono:
+    "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", "JetBrains Mono",
+    "Roboto Mono", "Ubuntu Mono", ui-monospace, monospace;
+
+  /* Groessenskala. Basis ist 14px, weil Takt eine Desktop-Anwendung mit
+     dichten Tabellen ist (A-13.9, Abschnitt 17). Die Wurzel bleibt bei 16px,
+     damit rem-Rechnung und Browser-Zoom unveraendert funktionieren. */
+  --text-2xs: 0.6875rem; /* 11px — nur Versalien-Etiketten mit Sperrung */
+  --text-xs: 0.75rem; /* 12px — Hilfetext, Zeitstempel, Zaehler */
+  --text-sm: 0.8125rem; /* 13px — Tabellenzelle, Chip, dichte Liste */
+  --text-base: 0.875rem; /* 14px — Standardtext der Oberflaeche */
+  --text-md: 1rem; /* 16px — Fliesstext, Dialogtext */
+  --text-lg: 1.125rem; /* 18px — Karten- und Abschnittsueberschrift */
+  --text-xl: 1.25rem; /* 20px — Panelueberschrift */
+  --text-2xl: 1.5rem; /* 24px — Seitentitel */
+  --text-3xl: 1.875rem; /* 30px — Kennzahl auf dem Dashboard */
+  --text-4xl: 2.375rem; /* 38px — grosse Timer-Anzeige */
+
+  --leading-tight: 1.2; /* Ueberschriften, Kennzahlen */
+  --leading-snug: 1.35; /* Tabellenzeilen, Chips, dichte Listen */
+  --leading-normal: 1.5; /* Standardtext der Oberflaeche */
+  --leading-relaxed: 1.65; /* Fliesstext, Hilfe- und Fehlertexte */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --tracking-wide: 0.06em; /* Versalien-Etiketten */
+  --tracking-normal: 0;
+  --tracking-tight: -0.01em; /* ab 24px, gegen zu lockere Ueberschriften */
+
+  /* ------------------------------------------------------------------ */
+  /* 12. Abstandsraster — Basis 4px                                     */
+  /* ------------------------------------------------------------------ */
+
+  --space-0: 0;
+  --space-1: 0.25rem; /* 4  — Symbol zu Text */
+  --space-2: 0.5rem; /* 8  — innerhalb eines Bausteins */
+  --space-3: 0.75rem; /* 12 — Zellinnenabstand dicht */
+  --space-4: 1rem; /* 16 — Standardinnenabstand einer Karte */
+  --space-5: 1.25rem; /* 20 */
+  --space-6: 1.5rem; /* 24 — Abstand zwischen Bausteinen */
+  --space-8: 2rem; /* 32 — Abstand zwischen Gruppen */
+  --space-10: 2.5rem; /* 40 */
+  --space-12: 3rem; /* 48 — Abstand zwischen Abschnitten */
+  --space-16: 4rem; /* 64 — Seitenrand oben/unten */
+
+  /* Zeilenhoehen der Tabellen. Zwei Dichten, umschaltbar ueber
+     [data-density] am Wurzelelement. */
+  --row-height: 2.5rem; /* 40px, Vorgabe */
+  --row-padding-x: var(--space-3);
+
+  /* ------------------------------------------------------------------ */
+  /* 13. Radien                                                         */
+  /* ------------------------------------------------------------------ */
+
+  --radius-xs: 3px; /* Schraffurflaechen, kleine Marker */
+  --radius-sm: 4px; /* Chip, Etikett */
+  --radius-md: 6px; /* Knopf, Eingabefeld, Auswahlliste */
+  --radius-lg: 8px; /* Karte, Kanban-Karte */
+  --radius-xl: 12px; /* Panel, Dialog */
+  --radius-pill: 999px; /* Statusetikett, Zaehlblase */
+
+  /* ------------------------------------------------------------------ */
+  /* 14. Erhebung                                                       */
+  /* ------------------------------------------------------------------ */
+
+  --shadow-none: none;
+  --shadow-xs: 0 1px 2px rgba(15, 21, 32, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 21, 32, 0.08), 0 1px 2px rgba(15, 21, 32, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 21, 32, 0.1), 0 1px 3px rgba(15, 21, 32, 0.06);
+  --shadow-lg: 0 12px 28px rgba(15, 21, 32, 0.14), 0 2px 6px rgba(15, 21, 32, 0.06);
+  --shadow-drag: 0 16px 32px rgba(15, 21, 32, 0.2), 0 0 0 1px rgba(33, 89, 218, 0.4);
+
+  /* ------------------------------------------------------------------ */
+  /* 15. Bewegung                                                       */
+  /* ------------------------------------------------------------------ */
+
+  --motion-instant: 80ms; /* Zeigerrueckmeldung */
+  --motion-fast: 140ms; /* Hover, Fokus, Farbwechsel */
+  --motion-base: 200ms; /* Aufklappen, Einblenden */
+  --motion-slow: 280ms; /* Dialog, Schublade */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ------------------------------------------------------------------ */
+  /* 16. Ebenen                                                         */
+  /* ------------------------------------------------------------------ */
+
+  --z-base: 0;
+  --z-sticky: 10; /* Tabellenkopf, Werkzeugleiste */
+  --z-dropdown: 100; /* Auswahlliste, Kontextmenue im Seitenfluss */
+  --z-drag: 200; /* Karte am Zeiger */
+  --z-scrim: 300;
+  --z-dialog: 310;
+  /*
+   * Aufgeklappte Liste, die in den Dokumentkoerper ausgelagert wird (T-059).
+   *
+   * Seit die Auswahlfelder, die Tag-Vervollstaendigung und die Menues ihre
+   * Liste ueber ein Portal an `document.body` haengen, steht sie nicht mehr
+   * im Stapelkontext ihres Feldes. Liegt das Feld in einem Dialog, muss die
+   * Liste **ueber** dem Dialog liegen — sonst klappt sie hinter ihm auf und
+   * ist unsichtbar. Deshalb hoeher als `--z-dialog` und niedriger als
+   * `--z-toast`: Eine Meldung ueber den Ausgang einer Aktion darf eine
+   * geoeffnete Liste verdecken, nicht umgekehrt.
+   */
+  --z-popover: 320;
+  --z-toast: 400;
+
+  /* ------------------------------------------------------------------ */
+  /* 17. Masse                                                          */
+  /* ------------------------------------------------------------------ */
+
+  --control-height-sm: 1.75rem; /* 28px — Werkzeugleiste, Symbolknopf */
+  --control-height-md: 2rem; /* 32px — Standardknopf, Eingabefeld */
+  --control-height-lg: 2.25rem; /* 36px — Primaeraktion, Suchfeld */
+  --hit-target-min: 1.5rem; /* 24px — WCAG 2.2 SC 2.5.8 Mindestziel */
+  --sidebar-width: 15rem; /* 240px */
+  --sidebar-width-collapsed: 3.5rem; /* 56px */
+  --panel-max-width: 90rem; /* 1440px */
+  --measure-prose: 68ch; /* Zeilenlaenge fuer Fliesstext */
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+}
+
+/* -------------------------------------------------------------------- */
+/* Dichte "kompakt" — mehr Zeilen pro Bildschirm                        */
+/* -------------------------------------------------------------------- */
+
+:root[data-density="compact"] {
+  --row-height: 2rem; /* 32px */
+  --row-padding-x: var(--space-2);
+}
+
+/* ==================================================================== */
+/* Dunkler Modus                                                        */
+/* ==================================================================== */
+/*
+ * Nur die semantische Ebene wird neu definiert. Keine Invertierung:
+ * die Farbtoene werden aufgehellt und entsaettigt, damit sie auf dunklem
+ * Grund nicht flimmern (Material-/HIG-Empfehlung).
+ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg-canvas: #0b1220;
+    --bg-surface: #131b2b;
+    --bg-surface-alt: #172032;
+    --bg-subtle: #1a2334;
+    --bg-inset: #0e1626;
+    --bg-hover: #1f2a3e;
+    --bg-active: #27344a;
+    --bg-selected: #16294a;
+    --bg-scrim: rgba(3, 6, 12, 0.68);
+    --bg-disabled: #1a2334;
+
+    --text-primary: #e8edf5;
+    --text-secondary: #b9c4d4;
+    --text-muted: #97a3b6;
+    --text-disabled: #6c7c93;
+    --text-on-accent: #06101f;
+    --text-on-solid: #06101f;
+    --text-link: #93b4fc;
+
+    --border-subtle: #212c40;
+    --border-default: #2f3d55;
+    --border-control: #61779e;
+    --border-strong: #8098c0;
+    --border-accent: #6091f8;
+
+    --accent-bg: #6091f8;
+    --accent-bg-hover: #93b4fc;
+    --accent-bg-active: #bdd1fe;
+    --accent-bg-subtle: #16294a;
+    --accent-text: #93b4fc;
+    --accent-border-subtle: #2b4a86;
+
+    --danger-bg: #ee8d87;
+    --danger-bg-hover: #f6bab6;
+    --danger-bg-active: #fbdcda;
+    --danger-bg-subtle: #3a1512;
+    --danger-text: #ee8d87;
+    --danger-border: #7a2a24;
+
+    --status-open-fg: #e6b554;
+    --status-open-bg: #2b2210;
+    --status-open-border: #ab8232;
+    --status-open-marker: #d2952a;
+
+    --status-exported-fg: #06101f;
+    --status-exported-bg: #6cc79e;
+    --status-exported-border: #a4dfc3;
+    --status-exported-marker: #6cc79e;
+    --status-exported-tint: #0f2a20;
+
+    --status-reopened-fg: #ee8d87;
+    --status-reopened-bg: #2f1513;
+    --status-reopened-border: #c04a41;
+    --status-reopened-marker: #e05b53;
+    --status-reopened-hatch: rgba(238, 141, 135, 0.2);
+
+    --timer-running-fg: #cdc2fd;
+    --timer-running-bg: #221a3f;
+    --timer-running-border: #4a3a86;
+    --timer-running-pulse: #ab98f8;
+    --timer-idle-fg: #97a3b6;
+    --timer-idle-bg: #1a2334;
+    --timer-idle-border: #2f3d55;
+
+    --info-fg: #93b4fc;
+    --info-bg: #16294a;
+    --info-border: #2b4a86;
+    --success-fg: #6cc79e;
+    --success-bg: #0f2a20;
+    --success-border: #1d5741;
+    --warning-fg: #e6b554;
+    --warning-bg: #2b2210;
+    --warning-border: #7a5a1c;
+
+    --note-billing-rail: #6091f8;
+    --note-billing-rail-stripe: #bdd1fe;
+    --note-billing-bg: #131b2b;
+    --note-billing-header-bg: #16294a;
+    --note-billing-header-fg: #bdd1fe;
+    --note-billing-border: #2b4a86;
+
+    --note-internal-rail: #6b80a5;
+    --note-internal-bg: #101827;
+    --note-internal-header-bg: #1a2334;
+    --note-internal-header-fg: #b9c4d4;
+    --note-internal-border: #2f3d55;
+
+    --focus-ring-color: #93b4fc;
+    --focus-ring-contrast: #06101f;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+    --shadow-drag: 0 16px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(96, 145, 248, 0.55);
+  }
+}
+
+/*
+ * Ausdrueckliche Wahl des Benutzers. Identischer Inhalt wie der Medienblock
+ * oben; getrennt notiert, damit die Systemeinstellung ueberschreibbar bleibt.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0b1220;
+  --bg-surface: #131b2b;
+  --bg-surface-alt: #172032;
+  --bg-subtle: #1a2334;
+  --bg-inset: #0e1626;
+  --bg-hover: #1f2a3e;
+  --bg-active: #27344a;
+  --bg-selected: #16294a;
+  --bg-scrim: rgba(3, 6, 12, 0.68);
+  --bg-disabled: #1a2334;
+
+  --text-primary: #e8edf5;
+  --text-secondary: #b9c4d4;
+  --text-muted: #97a3b6;
+  --text-disabled: #6c7c93;
+  --text-on-accent: #06101f;
+  --text-on-solid: #06101f;
+  --text-link: #93b4fc;
+
+  --border-subtle: #212c40;
+  --border-default: #2f3d55;
+  --border-control: #61779e;
+  --border-strong: #8098c0;
+  --border-accent: #6091f8;
+
+  --accent-bg: #6091f8;
+  --accent-bg-hover: #93b4fc;
+  --accent-bg-active: #bdd1fe;
+  --accent-bg-subtle: #16294a;
+  --accent-text: #93b4fc;
+  --accent-border-subtle: #2b4a86;
+
+  --danger-bg: #ee8d87;
+  --danger-bg-hover: #f6bab6;
+  --danger-bg-active: #fbdcda;
+  --danger-bg-subtle: #3a1512;
+  --danger-text: #ee8d87;
+  --danger-border: #7a2a24;
+
+  --status-open-fg: #e6b554;
+  --status-open-bg: #2b2210;
+  --status-open-border: #ab8232;
+  --status-open-marker: #d2952a;
+
+  --status-exported-fg: #06101f;
+  --status-exported-bg: #6cc79e;
+  --status-exported-border: #a4dfc3;
+  --status-exported-marker: #6cc79e;
+  --status-exported-tint: #0f2a20;
+
+  --status-reopened-fg: #ee8d87;
+  --status-reopened-bg: #2f1513;
+  --status-reopened-border: #c04a41;
+  --status-reopened-marker: #e05b53;
+  --status-reopened-hatch: rgba(238, 141, 135, 0.2);
+
+  --timer-running-fg: #cdc2fd;
+  --timer-running-bg: #221a3f;
+  --timer-running-border: #4a3a86;
+  --timer-running-pulse: #ab98f8;
+  --timer-idle-fg: #97a3b6;
+  --timer-idle-bg: #1a2334;
+  --timer-idle-border: #2f3d55;
+
+  --info-fg: #93b4fc;
+  --info-bg: #16294a;
+  --info-border: #2b4a86;
+  --success-fg: #6cc79e;
+  --success-bg: #0f2a20;
+  --success-border: #1d5741;
+  --warning-fg: #e6b554;
+  --warning-bg: #2b2210;
+  --warning-border: #7a5a1c;
+
+  --note-billing-rail: #6091f8;
+  --note-billing-rail-stripe: #bdd1fe;
+  --note-billing-bg: #131b2b;
+  --note-billing-header-bg: #16294a;
+  --note-billing-header-fg: #bdd1fe;
+  --note-billing-border: #2b4a86;
+
+  --note-internal-rail: #6b80a5;
+  --note-internal-bg: #101827;
+  --note-internal-header-bg: #1a2334;
+  --note-internal-header-fg: #b9c4d4;
+  --note-internal-border: #2f3d55;
+
+  --focus-ring-color: #93b4fc;
+  --focus-ring-contrast: #06101f;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-drag: 0 16px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(96, 145, 248, 0.55);
+}
+
+/* -------------------------------------------------------------------- */
+/* Hoher Kontrast — respektiert die Systemeinstellung                   */
+/* -------------------------------------------------------------------- */
+
+@media (prefers-contrast: more) {
+  :root {
+    --border-subtle: var(--border-default);
+    --border-default: var(--border-strong);
+    --text-muted: var(--text-secondary);
+    --focus-ring-width: 3px;
+  }
+}

@@ -1,0 +1,3291 @@
+/*
+ * Takt — die Anwendung
+ * ====================
+ * Hülle, Navigation, Kopfleiste und die Flächen der neun Ansichten.
+ * Setzt tokens.css, base.css und components.css voraus.
+ *
+ * Regel für diese Datei: **kein Farbwert steht hier**. Jede Farbe, jeder
+ * Abstand, jeder Radius kommt aus einem Token. Wer hier `#` tippt, hat die
+ * Kontrastprüfung umgangen — sie liest `packages/ui-tokens/tokens.css` und
+ * sonst nichts.
+ */
+
+/* ==================================================================== */
+/* Start und Verbindung                                                 */
+/* ==================================================================== */
+/*
+ * Die Musterseite hat seit T-057 einen eigenen Einstiegspunkt
+ * (`designsystem.html`) und damit auch ihr eigenes Geruest in `showcase.css`.
+ * Der Rahmen, der sie frueher in die Anwendung einbettete, ist ersatzlos weg —
+ * er war die einzige Stelle, an der die Anwendung ihre eigene Musterseite
+ * kannte.
+ */
+
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 100dvh;
+  padding: var(--space-8);
+  background-color: var(--bg-canvas);
+}
+
+.boot > .card {
+  width: min(38rem, 100%);
+}
+
+.boot__text {
+  max-width: var(--measure-prose);
+  margin-block: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.boot__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* ==================================================================== */
+/* Hülle                                                                */
+/* ==================================================================== */
+
+/*
+ * Die aeussere Struktur steht fest, unabhaengig von der aktiven Ansicht
+ * (T-057). Ein Raster mit zwei Spalten und drei Zeilen:
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │ Meldungen der Huelle (ueber beide Spalten)   │
+ *   ├─────────┬────────────────────────────────────┤
+ *   │ Sidebar │ Fester Kopf                        │
+ *   │         ├────────────────────────────────────┤
+ *   │         │ Scrollbarer Inhaltsbereich         │
+ *   └─────────┴────────────────────────────────────┘
+ *
+ * Drei Eigenschaften tragen das und duerfen nicht wegverhandelt werden:
+ *
+ *  1. `height: 100%` — nicht `min-height`. Die Huelle misst sich am Fenster,
+ *     nie am Inhalt. Genau das war Ursache 1 des Springens.
+ *  2. `overflow: hidden` — nichts verlaesst die Huelle. Damit gibt es keinen
+ *     Bildlauf des Dokuments mehr und keine Fensterbildlaufleiste, die alles
+ *     um ihre Breite verschiebt (Ursache 2).
+ *  3. `minmax(0, 1fr)` in Spalte und Zeile — eine Rasterspur ist von Haus aus
+ *     `auto`, und `auto` heisst „mindestens so breit wie der Inhalt". Ohne die
+ *     Null als Untergrenze druecken eine breite Tabelle oder ein Kanban mit
+ *     zwoelf Spalten das Raster auseinander, und die Sidebar wandert.
+ */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "notice notice"
+    "side   head"
+    "side   main";
+  height: 100%;
+  overflow: hidden;
+  /* Nur absolut positionierte Nachfahren brauchen einen positionierten
+     Vorfahren, damit `overflow: hidden` sie ueberhaupt erreicht. Die
+     Begruendung im Einzelnen steht bei `.app__main`. Feste Positionierung
+     (`.scrim`, `.toast-layer`) bleibt unberuehrt: Ihr umschliessender Block
+     ist das Fenster, und `.app` traegt keine Transformation, die daran etwas
+     aendern wuerde. Aufgeklappte Listen und Menues liegen seit T-059 in einem
+     Portal am Dokumentkoerper und damit ganz ausserhalb dieses Rasters — der
+     `overflow: hidden` des Inhaltsbereichs kann sie nicht mehr abschneiden. */
+  position: relative;
+  background-color: var(--bg-canvas);
+
+  /* Aus Tokens gerechnet, damit der Kopf genauso hoch ist wie das hoechste
+     Bedienelement darin (Suchfeld, `--control-height-lg`) plus Innenabstand.
+     Eine feste Hoehe und keine Untergrenze: Sonst waechst der Kopf, sobald der
+     Timer laeuft, und der Inhaltsbereich springt nach unten. */
+  --app-header-height: calc(var(--control-height-lg) + 2 * var(--space-2));
+
+  /* Dieselbe Ueberlegung auf der waagerechten Achse (T-065): Der Timer
+     wechselt seine Breite, wenn er startet und stoppt. Sein Fach bekommt den
+     Platz deshalb vorher zugeteilt, statt ihn sich beim Start von der Suche zu
+     nehmen. Die gemessenen Zahlen stehen bei `.app__header-timer`. */
+  --app-header-timer-width: 35rem;
+  /* Untergrenze fuer schmale Fenster: 298px braucht die laufende Leiste ohne
+     jeden Titel (Puls, Zeit, „Stoppen", Abstaende — gemessen), 19rem sind
+     304px. Darunter faengt der Knopf an zu leiden, und der ist das eine, was
+     dort niemals verhandelbar ist. Eine feste Laenge und ausdruecklich nichts
+     Inhaltsabhaengiges — sonst haenge die Breite der Suche doch wieder daran,
+     ob gerade ein Timer laeuft. */
+  --app-header-timer-min-width: 19rem;
+}
+
+/*
+ * Die Meldungen der Huelle stehen ueber allem und sind im DOM das Erste nach
+ * der Sprungmarke (Bildschirmleser, T-020). Sie sind der einzige Kasten neben
+ * `.app__main`, der scrollen darf — und nur, damit eine sehr lange Meldung den
+ * Inhaltsbereich nicht auf null Hoehe druecken kann.
+ */
+.app > .shellnotes {
+  grid-area: notice;
+  /* Gedeckelt, damit eine lange Meldung den Inhaltsbereich nicht auf null
+     Hoehe druecken kann. Gemessen in einem 320px hohen Fenster: Meldungsband
+     144px mit eigenem Bildlauf, Inhaltsbereich 124px — beides erreichbar. */
+  max-block-size: 45dvh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.app__sidebar {
+  grid-area: side;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-3);
+  border-inline-end: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  overflow-y: auto;
+  /* Reserviert die Rinne dauerhaft. Ohne sie wuerde die Navigation um die
+     Breite der Bildlaufleiste schmaler, sobald das Fenster niedrig genug ist,
+     dass die Liste scrollt — dieselbe Fehlerklasse wie Ursache 2, nur eine
+     Ebene tiefer. */
+  scrollbar-gutter: stable;
+}
+
+.app__header {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--app-header-height);
+  padding-inline: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+/*
+ * Das Fach des Timers — die rechte Ecke der Kopfleiste (T-065).
+ *
+ * ## Was vorher hier stand
+ *
+ * `.app__header-actions`, das Fach des Farbmodus-Auswahlfeldes ganz rechts.
+ * Das Feld ist mit T-065 entfallen — der Farbmodus steht in den Einstellungen,
+ * Bereich „Darstellung", und ein zweiter Bedienweg für etwas, das man einmal
+ * einstellt, war der Punkt des Auftraggebers. Der frei gewordene Platz geht
+ * an den Timer, und zwar an ihn allein.
+ *
+ * ## Warum ein Fach und nicht einfach das nächste Element
+ *
+ * Der Timer wechselt seine Breite. Alle Zahlen dieses Kommentars sind im
+ * Standardfenster gemessen (1280×820, `tauri.conf.json`), bei 16px
+ * Grundschrift:
+ *
+ *   Ruhe    274px  — Uhrsymbol, „Kein Timer läuft.", „Zeit erfassen"
+ *   Lauf    554px  — Puls, Zeit, Todo-Titel (bis 256px), „Stoppen"
+ *
+ * Als gewöhnliches Flex-Element neben der Suche nahm er sich die Differenz
+ * beim Start von der Suche und gab sie beim Stopp wieder her. Gemessen im
+ * Zustand vor dieser Aufgabe, mit dem Farbmodus-Feld (150px) noch daneben:
+ * **Suchfeld 512px im Ruhezustand, 272px sobald ein Timer lief.** 240 Pixel
+ * Sprung, ausgelöst von einem Vorgang, der mit der Suche nichts zu tun hat —
+ * unter Umständen mitten im Tippen, mit der offenen Trefferliste darunter, die
+ * an der Breite des Feldes hängt (`.gsearch__panel`, `inset-inline: 0`).
+ *
+ * Das Fach behebt das: feste Breite, kein Wachsen, Schrumpfen nur bis zu einer
+ * ebenfalls **festen** Untergrenze. Damit hängt die Breite der Suche an keiner
+ * Stelle mehr am Zustand des Timers — gemessen 432px, ruhend wie laufend. Es
+ * ist dieselbe Überlegung, die den Kopf eine feste **Höhe** tragen lässt
+ * (`--app-header-height`), nur eine Achse weiter: Ein Bereich, dessen Inhalt
+ * sich von selbst ändert, bekommt seinen Platz vorher zugeteilt, statt ihn
+ * sich im Betrieb zu nehmen.
+ *
+ * ## Woher die 35rem kommen
+ *
+ * Die laufende Leiste braucht 554px: 298px für alles außer dem Titel (Puls,
+ * Zeit, „Stoppen", Rahmen, Abstände — gemessen, nicht gerechnet) plus die
+ * 16rem, auf die `.timerbar__todo` den Titel deckelt. 35rem sind 560px und
+ * decken das mit sechs Pixeln Luft. Mehr wäre eine Lücke; weniger schnitte den
+ * Titel ab, obwohl Platz da ist — bei 30rem endete er nach 209 statt 256
+ * Pixeln, nachgemessen.
+ *
+ * Der Preis steht dazu: Im Standardfenster bleiben der Suche 432px statt der
+ * 512px, die sie im Ruhezustand hatte. Sie hat sie dafür **immer** — und der
+ * Timer bekommt umgekehrt seine 554px, ohne sie sich holen zu müssen. Genau
+ * das ist der Platz, den das entfernte Farbmodus-Feld frei gemacht hat.
+ *
+ * ## Wo der Timer im Fach steht
+ *
+ * Rechts (`justify-content: flex-end`), und das ist der zweite Gewinn: Die
+ * rechte Kante der Leiste liegt in beiden Zuständen an derselben Stelle
+ * (gemessen 1264px), und damit auch der Knopf, der dort sitzt (1255px).
+ * „Zeit erfassen" und „Stoppen" lösen einander an derselben Stelle ab, statt
+ * über den halben Kopf zu springen.
+ */
+.app__header-timer {
+  flex: 0 1 var(--app-header-timer-width);
+  /* Schrumpfen darf es, aber nur bis zu einer **festen** Laenge — nicht bis
+     zum Inhalt. Eine inhaltsabhaengige Untergrenze haette die Breite der Suche
+     doch wieder an den Zustand des Timers gehaengt, nur eine Ebene spaeter. */
+  min-width: var(--app-header-timer-min-width);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+}
+
+/*
+ * Der einzige Kasten der Anwendung, der scrollt.
+ *
+ * `scrollbar-gutter: stable` ist der Kern der Behebung von Ursache 2: Der Platz
+ * fuer die Bildlaufleiste ist immer reserviert, ob sie erscheint oder nicht.
+ * Gemessen vorher: 1190px auf Ansichten mit langem Inhalt gegen 1200px auf
+ * kurzen. Nachher: eine einzige Breite auf allen neun Punkten.
+ */
+.app__main {
+  grid-area: main;
+  /*
+   * `position: relative` ist hier kein Beiwerk, sondern die zweite Haelfte der
+   * Behebung von Ursache 2 — und die einzige gemessene Ueberraschung dieser
+   * Aufgabe.
+   *
+   * Nach dem Umbau auf `height: 100%` und `overflow: hidden` scrollte das
+   * Dokument auf zwei Ansichten weiter: Todo-Liste (`scrollHeight` 2876 bei
+   * 820 Fensterhoehe) und Vorlagen (1116). Gesucht, nicht geraten — ein
+   * Durchlauf ueber alle Elemente mit einem Unterrand unterhalb des Fensters
+   * nannte die Schuldigen: `span.visually-hidden`, absolut positioniert.
+   *
+   * Ein absolut positioniertes Element ohne positionierten Vorfahren bezieht
+   * sich auf den Anfangsblock, also auf das Fenster. Es liegt dann ausserhalb
+   * jedes `overflow: hidden` auf dem Weg dorthin — `.app` konnte es gar nicht
+   * beschneiden — und traegt zum Bildlaufbereich des **Dokuments** bei. Eine
+   * Hilfsklasse fuer Bildschirmleser erzeugte so die Fensterbildlaufleiste,
+   * die alles um zehn Pixel verschob.
+   *
+   * Mit `position: relative` auf dem Inhaltsbereich haben alle absolut
+   * positionierten Nachfahren wieder einen umschliessenden Block innerhalb der
+   * Huelle. Das gilt nicht nur fuer `.visually-hidden`, sondern fuer jedes
+   * kuenftige `position: absolute` im Inhalt — deshalb steht die Regel hier und
+   * nicht bei der Hilfsklasse.
+   */
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-6);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  /* Ein Bildlauf innerhalb des Inhalts soll nicht auf das Fenster
+     durchschlagen, wenn er am Ende angekommen ist. */
+  overscroll-behavior: contain;
+}
+
+.app__main:focus-visible {
+  outline-offset: calc(var(--focus-ring-offset) * -2);
+}
+
+/*
+ * Die Marke steht in der Seitenleiste und nicht mehr im Kopf: Die Seitenleiste
+ * laeuft seit T-057 ueber die volle Hoehe, und der Kopf beginnt rechts von ihr
+ * — so, wie es der Auftraggeber gezeichnet hat.
+ */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--app-header-height);
+  padding-inline: var(--space-2);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-md);
+  background-color: var(--accent-bg);
+  color: var(--text-on-accent);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+}
+
+.brand__name {
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* ==================================================================== */
+/* Navigation (Abschnitt 14)                                            */
+/* ==================================================================== */
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.nav__item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav__item:active {
+  background-color: var(--bg-active);
+}
+
+.nav__item--current {
+  background-color: var(--accent-bg-subtle);
+  color: var(--accent-text);
+  font-weight: var(--weight-medium);
+}
+
+.nav__item--current .nav__icon {
+  color: var(--accent-text);
+}
+
+.nav__icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.nav__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nav__badge {
+  min-width: 1.5rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav__item--current .nav__badge {
+  background-color: var(--accent-bg);
+  color: var(--text-on-accent);
+}
+
+/* `.nav__foot` und `.nav__item--quiet` sind mit dem Punkt „Designsystem"
+   entfallen (T-057). Sie hatten keinen zweiten Benutzer. */
+
+/* ==================================================================== */
+/* Globale Suche                                                        */
+/* ==================================================================== */
+
+.gsearch {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 32rem;
+  /* Untergrenze, seit der Timer rechts ein Fach fester Breite hat (T-065).
+     Im kleinsten zugelassenen Fenster (960px, `tauri.conf.json`) bliebe der
+     Suche sonst weniger als die Breite ihres eigenen Platzhaltertextes; mit
+     14rem stehen rund zwanzig Zeichen. Unterhalb dieser Grenze gibt das Fach
+     des Timers nach, nicht die Suche. */
+  min-width: 14rem;
+}
+
+.gsearch__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.gsearch__field:hover {
+  border-color: var(--border-strong);
+}
+
+.gsearch__field:focus-within {
+  border-color: var(--border-accent);
+  background-color: var(--bg-surface);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.gsearch__icon {
+  color: var(--text-muted);
+}
+
+.gsearch__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.gsearch__input:focus-visible {
+  outline: none;
+}
+
+.gsearch__input::placeholder {
+  color: var(--text-muted);
+}
+
+.gsearch__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.gsearch__panel {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + var(--space-1));
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.gsearch__list {
+  max-height: 22rem;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.gsearch__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.gsearch__option--active {
+  background-color: var(--bg-selected);
+}
+
+.gsearch__option-icon {
+  color: var(--text-muted);
+}
+
+.gsearch__option-title {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+}
+
+.gsearch__option-detail {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.gsearch__empty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ==================================================================== */
+/* Timer in der Kopfleiste (A-13.4)                                     */
+/* ==================================================================== */
+
+/*
+ * Die Leiste ist so hoch wie die Suche daneben (`--control-height-lg`) und
+ * traegt denselben Radius wie jedes andere Bedienelement. Vorher war sie eine
+ * Kapsel mit `--radius-pill` — als einziges Element der Kopfzeile, und damit
+ * die eine Form, die im ganzen Fenster nicht vorkommt (T-056).
+ */
+.timerbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-lg);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  /* Die Leiste ist so breit wie ihr Inhalt und endet an der rechten Kante des
+     Fachs (`.app__header-timer`). Wird das Fach im schmalen Fenster kleiner
+     als sie, gibt sie nach, statt darueber hinauszustehen — der Titel des
+     laufenden Todos kuerzt sich dann (`.timerbar__todo`, `truncate`). */
+  max-width: 100%;
+  min-width: 0;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.timerbar--idle {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Innen sitzt `TimerDisplay`. Es bringt seine eigene Huelle mit — Rahmen,
+ * Flaeche, Innenabstand —, und die waere hier eine zweite Kiste in der
+ * ersten. Sie wird abgeraeumt; die Leiste ist die Huelle.
+ */
+.timerbar .timer {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+}
+
+/*
+ * Der laufende Timer ist Zustand, seine Kontur faellt damit unter SC 1.4.11.
+ * `--timer-running-border` erreicht die 3:1 gegen die Kartenflaeche nicht
+ * (1.64:1 hell, 1.83:1 dunkel); genommen wird die Vordergrundfarbe desselben
+ * Paares. Zusaetzlich traegt das Bedienelement den Zustand ohne Farbe: Aus
+ * „Start" wird „Stopp", aus dem Dreieck werden zwei Balken (SC 1.4.1).
+ */
+.timerbar--running {
+  border-color: var(--timer-running-fg);
+  background-color: var(--timer-running-bg);
+}
+
+/* Der Stoppknopf sitzt am Ende der Leiste und traegt sein Wort. Ein Quadrat
+   ohne Beschriftung mitten in der Zeile war der Grund, warum er wirkte, als
+   sei er hineingefallen (T-056). */
+.timerbar .timer__action {
+  margin-inline-start: var(--space-1);
+}
+
+.timerbar__icon {
+  color: var(--text-muted);
+}
+
+.timerbar__idle-text,
+.timerbar__placeholder {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.timerbar__todo {
+  max-width: 16rem;
+  padding-inline-start: var(--space-2);
+  border-inline-start: 1px solid var(--timer-running-border);
+  color: var(--timer-running-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.timerbar__todo:hover {
+  text-decoration: underline;
+}
+
+/* ==================================================================== */
+/* Rückmeldungen                                                        */
+/* ==================================================================== */
+
+.toast-layer {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: min(26rem, calc(100vw - var(--space-8)));
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: takt-rise var(--motion-base) var(--ease-out);
+}
+
+.toast--success {
+  border-inline-start: 3px solid var(--success-fg);
+}
+.toast--info {
+  border-inline-start: 3px solid var(--info-fg);
+}
+.toast--warning {
+  border-inline-start: 3px solid var(--warning-fg);
+}
+.toast--danger {
+  border-inline-start: 3px solid var(--danger-text);
+}
+
+.toast--success .toast__icon {
+  color: var(--success-fg);
+}
+.toast--info .toast__icon {
+  color: var(--info-fg);
+}
+.toast--warning .toast__icon {
+  color: var(--warning-fg);
+}
+.toast--danger .toast__icon {
+  color: var(--danger-text);
+}
+
+.toast__title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.toast__body {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.toast__action {
+  margin-top: var(--space-2);
+}
+
+/* ==================================================================== */
+/* Ansichten                                                            */
+/* ==================================================================== */
+
+/*
+ * Jede Ansicht ist genauso breit wie jede andere (T-057, Ursache 3).
+ *
+ * Bis T-057 trug das Kanban `.screen--wide` mit `max-width: none`. Gemessen bei
+ * 1920px Fensterbreite: 1440px auf acht Ansichten, 1622px auf dem Kanban — ein
+ * Sprung von 182px allein durch den Wechsel des Reiters. Das Kanban braucht die
+ * Breite nicht ueber den Rahmen hinaus; es hat mit `.kboard` und `.board`
+ * seinen eigenen waagerechten Bildlauf und bleibt darin.
+ */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: var(--panel-max-width);
+}
+
+.screen__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.screen__headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.screen__title {
+  font-size: var(--text-2xl);
+}
+
+.screen__lead {
+  margin-top: var(--space-1);
+  max-width: var(--measure-prose);
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}
+
+.screen__actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.refresh-hint {
+  min-height: 1rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.refresh-hint--active::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline-end: var(--space-1);
+  border-radius: var(--radius-pill);
+  background-color: var(--accent-bg);
+}
+
+/* Kennzahlen ------------------------------------------------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+}
+
+.stat-grid--tight {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-2);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+}
+
+.stat--accent {
+  border-color: var(--accent-border-subtle);
+  background-color: var(--accent-bg-subtle);
+}
+
+.stat--warning {
+  border-color: var(--warning-border);
+  background-color: var(--warning-bg);
+}
+
+.stat__label {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.stat__value {
+  color: var(--text-primary);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat__detail {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.stat__action {
+  margin-top: var(--space-2);
+}
+
+/* ==================================================================== */
+/* Formularfelder                                                       */
+/* ==================================================================== */
+
+/*
+ * Textfeld. Hoehe, Radius, Innenabstand und Schriftgroesse sind zeichengleich
+ * mit `.select__trigger` — ein Feld und ein Auswahlfeld nebeneinander duerfen
+ * nicht wie zwei Bausaetze aussehen (T-056).
+ */
+.field__input {
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.field__input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.field__input:focus-visible {
+  border-color: var(--border-accent);
+}
+
+.field__input::placeholder {
+  color: var(--text-muted);
+}
+
+.field__input:disabled {
+  background-color: var(--bg-disabled);
+  border-color: var(--border-default);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* Ein Feld, das nur zum Lesen da ist, ist nicht dasselbe wie ein gesperrtes:
+   Es traegt seinen Inhalt weiter in voller Lesbarkeit. */
+.field__input[readonly] {
+  background-color: var(--bg-inset);
+  border-color: var(--border-default);
+  cursor: default;
+}
+
+/*
+ * Die Kontur eines fehlerhaften Feldes traegt Zustand und muss deshalb
+ * SC 1.4.11 erfuellen. `--danger-border` schafft die 3:1 gegen die Kartenflaeche
+ * nicht (gemessen 1.66:1 hell, 1.79:1 dunkel) — hier steht deshalb die
+ * Textfarbe des Fehlers. Der Fehler haengt ausserdem nicht an der Farbe allein:
+ * `aria-invalid` und der Fehlertext unter dem Feld tragen ihn mit (SC 1.4.1).
+ */
+.field__input--invalid {
+  border-color: var(--danger-text);
+}
+
+.field__hint {
+  max-width: var(--measure-prose);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.field__error {
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+}
+
+.checkbox-row__hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+}
+
+.choice__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+}
+
+.choice__option:hover {
+  background-color: var(--bg-hover);
+}
+
+.choice__hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+}
+
+/* Dialog mit Formular ---------------------------------------------- */
+
+.dialog--form {
+  width: min(34rem, 100%);
+}
+
+.dialog--wide {
+  width: min(52rem, 100%);
+}
+
+.dialog__head--form {
+  align-items: flex-start;
+}
+
+.dialog__lead {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.dialog__body--form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.dialog__hint {
+  max-width: var(--measure-prose);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+/* ==================================================================== */
+/* Todo-Liste (S-02)                                                    */
+/* ==================================================================== */
+
+.hidden-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.hidden-notice svg {
+  color: var(--text-muted);
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-height);
+  padding: var(--space-2) var(--row-padding-x);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.todo-row:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+.todo-row:focus-within {
+  border-color: var(--border-accent);
+}
+
+.todo-row--done .todo-row__title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.todo-row--running {
+  border-color: var(--timer-running-fg);
+  background-color: var(--timer-running-bg);
+}
+
+.todo-row__check {
+  display: inline-flex;
+  flex: none;
+}
+
+.todo-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.todo-row__title {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.todo-row__title:hover {
+  text-decoration: underline;
+}
+
+.todo-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.todo-row__call {
+  font-family: var(--font-mono);
+}
+
+.todo-row__tags {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  max-width: 18rem;
+}
+
+.todo-row__more {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.todo-row__export {
+  flex: none;
+}
+
+.todo-row__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.list-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+/* ==================================================================== */
+/* Detailansicht (S-03)                                                 */
+/* ==================================================================== */
+
+.detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.detail__main,
+.detail__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.done-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+}
+
+.done-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.done-switch__box {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  color: transparent;
+}
+
+.done-switch--on .done-switch__box {
+  border-color: var(--success-fg);
+  background-color: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.done-switch input:focus-visible + .done-switch__box {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/*
+ * Zustandswort und Etikett nebeneinander (Befund C-23). Das Etikett erscheint
+ * nur im dritten Zustand: „Erledigt" und „Offen" sagt das Wort selbst, aber
+ * „Erledigt aufgehoben" ist eine Aenderung, die Takt vorgenommen hat — sie
+ * traegt dasselbe Kennzeichen wie in den Listen daneben, damit man sie dort
+ * wiedererkennt.
+ */
+.done-switch__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.done-switch__hint {
+  display: block;
+  max-width: var(--measure-prose);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.daygroups {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.daygroup {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-4);
+}
+
+.daygroup:first-child {
+  border-top: none;
+}
+
+.daygroup__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.daygroup__day {
+  font-size: var(--text-md);
+}
+
+.daygroup__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.daygroup__blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/*
+ * Buchungszeile — T-059.
+ *
+ * `flex-wrap: wrap` ist die Antwort auf einen Befund aus T-058: Auf dem
+ * Bildschirmfoto des Auftraggebers stand in der schmalen Dashboard-Karte
+ * „Ohne Le…". Der Text heißt „Ohne Leistung"; abgeschnitten hat ihn nicht der
+ * Inhalt, sondern die Zeile — Zeitraum (8,5rem), Dauer (4rem), Herkunft und
+ * die Abstände dazwischen belegen den Platz, und die Leistung war das einzige
+ * Feld, das nachgeben konnte.
+ *
+ * Ein Abschneiden ist bei einer langen Leistung richtig — man sieht, dass da
+ * mehr steht. Bei „Ohne Leistung" ist es falsch: Das ist kein gekürzter
+ * Inhalt, sondern die Auskunft, dass keiner da ist, und die muss vollständig
+ * lesbar sein. Deshalb bricht die Zeile jetzt um, sobald der Leistung weniger
+ * als ihre Grundbreite bleibt, statt sie zu quetschen.
+ */
+.entry-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.entry-row:last-child {
+  border-bottom: none;
+}
+
+.entry-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.entry-row__period {
+  flex: none;
+  min-width: 8.5rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-row__duration {
+  flex: none;
+  min-width: 4rem;
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+  text-align: end;
+}
+
+/* Grundbreite statt `auto`: Darunter wandert die Leistung in die nächste
+   Zeile, statt auf „Ohne Le…" einzugehen. */
+.entry-row__note {
+  flex: 1 1 9rem;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.entry-row__source {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.entry-row__link {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.facts dt {
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.note-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.note-actions__hint {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* ==================================================================== */
+/* Zeiterfassung (S-05)                                                 */
+/* ==================================================================== */
+
+.time-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.time-layout__main,
+.time-layout__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.timer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.timer-panel__hint {
+  max-width: var(--measure-prose);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.pick-list--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pick-list--inline .pick-row {
+  border-bottom: none;
+  padding: 0;
+}
+
+.pick-row:last-child {
+  border-bottom: none;
+}
+
+.pick-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.pick-row--running {
+  box-shadow: inset 3px 0 0 var(--timer-running-fg);
+  background-color: var(--timer-running-bg);
+}
+
+.pick-row__title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  text-decoration: none;
+}
+
+.pick-row__title:hover {
+  text-decoration: underline;
+}
+
+.pick-row__call {
+  flex: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.pick-row__tags {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/*
+ * Erledigt-Kennzeichen an einer Zeile (S-01, S-02, S-03, S-05; A-2.5,
+ * Befunde C-04 und C-23).
+ *
+ * Bis T-045 gab es dieses Etikett zweimal: `.pick-row__flag` fuer S-01 und
+ * S-05 mit Symbol und Statusfarbe, `.todo-row__flag` fuer S-02 als graue
+ * Sprechblase ohne Symbol und ohne den dritten Zustand. Dieselbe Aussage in
+ * zwei Faellen verschieden dargestellt und im dritten gar nicht — eine
+ * Uneinheitlichkeit wiegt schwerer als ein durchgaengiges Fehlen, weil sie
+ * nach Bedeutung aussieht. Jetzt gibt es einen Block; er gehoert zu
+ * `components/DoneFlag.tsx`.
+ *
+ * Dieselbe Sprache wie auf der Kanban-Karte: Der Normalfall „offen" traegt in
+ * einer Zeile gar kein Etikett, „Erledigt" spricht, „Erledigt aufgehoben"
+ * traegt Symbol und gestrichelten Rand statt einer fuenften Statusfarbe.
+ * Bernstein, Gruen und Rose sind an den Exportstatus vergeben, Violett an den
+ * laufenden Timer; ein weiterer Farbcode kaeme sich in derselben Zeile mit
+ * ihnen ins Gehege.
+ */
+.doneflag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+}
+
+.doneflag--done {
+  border-color: var(--success-fg);
+  background-color: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.doneflag--reopened {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+/* ==================================================================== */
+/* Buchungen (S-06)                                                     */
+/* ==================================================================== */
+
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-2);
+}
+
+.bulkbar__hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.bulkbar__count {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.message__code {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ==================================================================== */
+/* Export (S-07)                                                        */
+/* ==================================================================== */
+
+.export-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.export-settings__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.export-settings__fact .muted {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.export-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--accent-border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--accent-bg-subtle);
+}
+
+.export-summary__count {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.export-summary__total {
+  margin-inline-start: auto;
+  color: var(--accent-text);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+}
+
+.export-summary__unit {
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+}
+
+.export-summary__warn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--warning-fg);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Zwei weitere Zustaende der Zusammenfassung (A-8.6, T-045).
+ *
+ * „Wird gerechnet" und „nicht abrufbar" sehen verschieden aus, weil sie
+ * verschiedene Dinge sind: das eine geht vorbei, das andere sperrt den Lauf.
+ * Beide stehen neben der Stundenzahl, die dann „—" zeigt — ohne sie laese man
+ * den Strich als Null.
+ */
+.export-summary__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.export-summary__danger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--danger-text);
+  font-size: var(--text-sm);
+}
+
+.run-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.run-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.run-row:last-child {
+  border-bottom: none;
+}
+
+.run-row__date {
+  flex: none;
+  min-width: 10rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-row__path {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.run-row__meta {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Der Weg ins Protokoll steht an jeder Laufzeile (R-10, Befund C-01). */
+.run-row .btn {
+  flex: none;
+  align-self: center;
+}
+
+.skipped-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.skipped-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.skipped-row__day {
+  min-width: 10rem;
+  font-weight: var(--weight-medium);
+}
+
+.skipped-row__meta {
+  flex: 1 1 auto;
+  color: var(--text-secondary);
+}
+
+/* ==================================================================== */
+/* Exportprotokoll (S-07, Bereich „Protokoll") — R-10, Befund C-01      */
+/* ==================================================================== */
+
+/*
+ * Eine Protokollzeile ist ein Beleg und keine Tabellenzeile: Sie traegt
+ * Zeitpunkt, Vorgang, Buchung, Lauf, Begruendung und Urheber, und keines
+ * davon darf abgeschnitten werden. Deshalb ein Block je Zeile statt Spalten —
+ * eine sechsspaltige Tabelle waere auf jedem Fensterformat unlesbar, und
+ * gerade beim Protokoll ist „nicht ganz sichtbar" derselbe Schaden wie
+ * „nicht vorhanden".
+ */
+.auditlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auditrow {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+}
+
+.auditrow:hover {
+  background-color: var(--bg-hover);
+}
+
+/*
+ * Die Randschiene wiederholt die Aussage des Etiketts an der Kante der Zeile.
+ * Sie ist die zweite, von der Farbe unabhaengige Spur: In Graustufen bleibt
+ * die Position der Schiene, und das Symbol im Etikett bleibt ohnehin.
+ */
+.auditrow--exported {
+  box-shadow: inset 3px 0 0 var(--status-exported-marker);
+}
+
+.auditrow--reset {
+  box-shadow: inset 3px 0 0 var(--status-reopened-marker);
+}
+
+.auditrow--not_billed {
+  box-shadow: inset 3px 0 0 var(--status-notbilled-marker);
+}
+
+.auditrow__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.auditrow__when {
+  flex: none;
+  min-width: 10rem;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.auditrow__transition {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.auditrow__open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: var(--control-height-sm);
+  margin-inline-start: auto;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.auditrow__open:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* Dieselbe Flaeche ohne Klickverhalten: Wo es nichts zu oeffnen gibt, sieht
+   der Titel auch nicht so aus, als gaebe es etwas zu oeffnen. */
+.auditrow__open--static {
+  border-style: dashed;
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.auditrow__open-title {
+  min-width: 0;
+  max-width: 22rem;
+}
+
+.auditrow__booking {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.auditrow__period,
+.auditrow__duration {
+  color: var(--text-primary);
+}
+
+.auditrow__run {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.auditrow__run svg {
+  flex: none;
+}
+
+.auditrow__file {
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+.auditrow__written {
+  flex: none;
+}
+
+/*
+ * Die Begruendung ist der Teil, um dessentwillen es das Protokoll gibt: Sie
+ * beantwortet „warum wurde diese Zeit noch einmal freigegeben". Sie steht
+ * deshalb abgesetzt und nicht als weiterer Nebensatz in der Zeile.
+ */
+.auditrow__reason {
+  display: grid;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  border-inline-start: 2px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+}
+
+.auditrow__reason-label {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.auditrow__reason-text {
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.auditrow__reason--absent {
+  border-inline-start-style: dashed;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.auditrow__actor {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+}
+
+.auditlist__end {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+  font-size: var(--text-xs);
+}
+
+/*
+ * Worueber die drei Kacheln zaehlen (Befund C-25).
+ *
+ * Steht unter ihnen und nicht in ihnen: Eine Kachel traegt eine Zahl. Der
+ * Umfang der Zaehlung gehoert daneben — aber sichtbar, nicht in einem
+ * Hilfetext.
+ */
+.auditcount__scope {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-1)) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+/* Was die drei Vorgaenge bedeuten — einmal ausgeschrieben, ueber der Liste. */
+.auditlegend {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.auditlegend__item {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.auditlegend__term {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.auditlegend__text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.auditlegend__note {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+/* Der Verlauf einer einzelnen Buchung im Dialog (R-10). */
+.bhistory__now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-inset);
+  font-size: var(--text-xs);
+}
+
+.bhistory__now-label {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.bhistory__lead {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+/* Schmale Fenster: Begriff und Erklaerung stapeln sich (A-13.8). */
+@media (max-width: 60rem) {
+  .auditlegend__item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .auditrow__when {
+    min-width: 0;
+  }
+
+  .auditrow__open {
+    margin-inline-start: 0;
+  }
+}
+
+/* ==================================================================== */
+/* Bereichsreiter (S-07 und S-14 gehören zum selben Punkt)              */
+/* ==================================================================== */
+
+.subtabs {
+  margin-top: var(--space-3);
+}
+
+.subtabs__list {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.subtab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+
+.subtab:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.subtab--current {
+  border-bottom-color: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+/* ==================================================================== */
+/* Vorlageneditor (S-14)                                                */
+/* ==================================================================== */
+
+.tpl-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 17rem) minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Die Vorlagenliste ------------------------------------------------- */
+
+.tpl-list {
+  position: sticky;
+  top: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  overflow: hidden;
+}
+
+.tpl-list__items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpl-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-end: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid transparent;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.tpl-item:last-child {
+  border-bottom: none;
+}
+
+.tpl-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.tpl-item--current {
+  border-inline-start-color: var(--accent-bg);
+  background-color: var(--bg-selected);
+}
+
+.tpl-item__link {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+  padding: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.tpl-item__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.tpl-item__lock {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.tpl-item__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.tpl-item__badges:empty {
+  display: none;
+}
+
+.tpl-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.tpl-badge--builtin {
+  border: 1px solid var(--border-control);
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.tpl-badge--active {
+  border: 1px solid var(--success-border);
+  background-color: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.tpl-item__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tpl-item__tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+/* Zeigerkontakt und Tastaturfokus wirken gleich (SC 1.4.13). */
+.tpl-item:hover .tpl-item__tools,
+.tpl-item:focus-within .tpl-item__tools,
+.tpl-item--current .tpl-item__tools {
+  opacity: 1;
+}
+
+.tpl-list__empty {
+  margin: 0;
+  padding: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+/* Der Editor -------------------------------------------------------- */
+
+.tpl-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tpl-editor__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tpl-dirty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: var(--text-xs);
+}
+
+.tpl-builtin {
+  padding: var(--space-3);
+  border: 1px solid var(--accent-border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--accent-bg-subtle);
+}
+
+.tpl-builtin__lead {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.tpl-builtin__icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+.tpl-builtin__text {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+/* Abgleich mit der Standardvorlage ---------------------------------- */
+
+.tpl-deviation__lead {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.tpl-deviation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpl-deviation {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.tpl-deviation--warning {
+  border: 1px solid var(--warning-border);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.tpl-deviation--info {
+  border: 1px solid var(--info-border);
+  background-color: var(--info-bg);
+  color: var(--info-fg);
+}
+
+.tpl-deviation--ok {
+  border: 1px solid var(--success-border);
+  background-color: var(--success-bg);
+  color: var(--success-fg);
+}
+
+.tpl-activate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tpl-activate__text {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+/* Die Feldliste ----------------------------------------------------- */
+
+.tfields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.tfields__lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tfield-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tfield {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface-alt);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.tfield:hover {
+  border-color: var(--border-strong);
+}
+
+.tfield:focus-within {
+  border-color: var(--border-accent);
+}
+
+.tfield--dragging {
+  opacity: 0.55;
+}
+
+.tfield--drop {
+  border-color: var(--accent-bg);
+  box-shadow: inset 0 3px 0 0 var(--accent-bg);
+}
+
+.tfield--invalid {
+  border-color: var(--danger-text);
+}
+
+.tfield__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding-top: var(--space-5);
+}
+
+.tfield__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit-target-min);
+  height: var(--hit-target-min);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: grab;
+}
+
+.tfield__handle--static {
+  cursor: default;
+}
+
+.tfield__position {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.tfield__body {
+  min-width: 0;
+}
+
+.tfield__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* Auswahllisten duerfen schrumpfen; ohne min-width erzwingt die laengste
+   Option ihre Breite und die Zeile laeuft aus der Karte heraus. */
+.tfield__row > .field,
+.tfield__condition-body > .field {
+  min-width: 0;
+}
+
+.tfield__row .select__trigger,
+.tfield__condition-body .select__trigger {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Zwei mal zwei statt einer Reihe: vier Symbolknoepfe nebeneinander waeren so
+   breit wie eine Auswahlliste. */
+.tfield__tools {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  align-content: start;
+  gap: 2px;
+  padding-top: var(--space-5);
+}
+
+/*
+ * Der Loeschknopf traegt seine Farbe erst bei Zeigerkontakt und Fokus. Vier
+ * Symbolknoepfe je Zeile, davon einer dauerhaft rot gefuellt, machten das
+ * Loeschen zum lautesten Element einer Liste, in der es um etwas anderes geht.
+ */
+.tfield__remove:hover,
+.tfield__remove:focus-visible {
+  background-color: var(--danger-bg-subtle);
+  color: var(--danger-text);
+}
+
+.tfield__hint {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tfield__error {
+  margin: var(--space-1) 0 0;
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.tfield__condition {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tfield__condition-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.tfield__condition-toggle input {
+  width: 0.9rem;
+  height: 0.9rem;
+  accent-color: var(--accent-bg);
+}
+
+.tfield__condition-body {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.4fr) minmax(7rem, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.tfield__condition-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+/*
+ * Der Satz zur Notiz-Grenze steht auf der Fläche, die in dieser Anwendung
+ * überall für „bleibt in Takt" steht (E-016). Das ist kein Schmuck: Wer den
+ * Vermerk in der Detailansicht auf dieser Fläche gesehen hat, erkennt hier
+ * wieder, wovon die Rede ist.
+ */
+.tfields__boundary {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--note-internal-border);
+  border-inline-start: 3px solid var(--note-internal-rail);
+  border-radius: var(--radius-md);
+  background-color: var(--note-internal-bg);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tfields__boundary-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
+.tfields__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tfields__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.tfields__empty-icon {
+  color: var(--text-muted);
+}
+
+.tfields__empty-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.tfields__empty-text {
+  max-width: var(--measure-prose);
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+/* Die Vorschau ------------------------------------------------------ */
+
+.tpl-preview {
+  position: sticky;
+  top: var(--space-4);
+  min-width: 0;
+}
+
+.tpreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tpreview__lead {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tpreview__lead svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--success-fg);
+}
+
+.tpreview__scope {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tpgroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpgroup {
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  overflow: hidden;
+}
+
+.tpgroup--blocked {
+  border-inline-start-color: var(--warning-fg);
+  background-color: var(--warning-bg);
+}
+
+.tpgroup__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: none;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.tpgroup__head:hover {
+  background-color: var(--bg-hover);
+}
+
+.tpgroup__twisty {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.tpgroup__identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tpgroup__title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.tpgroup__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tpgroup__value {
+  justify-self: end;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.tpgroup__unit {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+}
+
+.tpgroup__value-none {
+  color: var(--text-muted);
+  font-size: var(--text-base);
+}
+
+.tpgroup__blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--warning-fg);
+}
+
+.tpgroup__blocked .btn {
+  flex: none;
+}
+
+.tpgroup__blocked-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Symbol und Text bleiben zusammen; umbrechen darf nur der Knopf. */
+.tpgroup__blocked-body {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.tpgroup__blocked-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.tpgroup__blocked-text {
+  margin: 2px 0 var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tpgroup__error {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tpgroup__body {
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.tpgroup__body[hidden] {
+  display: none;
+}
+
+.tpgroup__loading {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Die Gegenueberstellung "Datei" gegen "Bedeutung". Sie steht seit T-040 in
+ * S-14 **und** in S-07 — die Klasse heisst deshalb `erow` (Exportzeile) und
+ * nicht mehr `tprow` (Vorlagenvorschau): Sie gehoert nicht mehr einem Screen.
+ */
+.erow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.erow__pane {
+  min-width: 0;
+}
+
+.erow__pane-title {
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+/*
+ * Umbruch statt Rollbalken: Ein base64-kodierter Leistungstext ist laenger als
+ * jede Spalte. Abgeschnitten waere er genau das, was die Vorschau verhindern
+ * soll — etwas anderes zu sehen als zu schreiben.
+ */
+.erow__json {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-inset);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.erow__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface-alt);
+}
+
+.erow__field {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.erow__key {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.erow__detail {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+}
+
+.erow__value {
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.erow__origin {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+}
+
+.erow__note {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
+}
+
+.erow__missing {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tpsegments {
+  min-width: 0;
+}
+
+.tpsegments__hint {
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+}
+
+.tpsegment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpsegment {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-alt);
+  font-size: var(--text-xs);
+}
+
+.tpsegment__period {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.tpsegment__duration {
+  color: var(--text-secondary);
+}
+
+.tpsegment__note {
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Schmalere Fenster: die drei Bereiche stapeln sich (A-13.8). */
+@media (max-width: 92rem) {
+  .tpl-layout {
+    grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
+  }
+
+  .tpl-preview {
+    position: static;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 68rem) {
+  .tpl-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tpl-list {
+    position: static;
+  }
+
+  .tfield {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tfield__tools {
+    grid-column: 2;
+    grid-template-columns: repeat(4, auto);
+    justify-content: end;
+    padding-top: 0;
+  }
+
+  .tfield__row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .tfield__condition-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==================================================================== */
+/* Kanban (S-04)                                                        */
+/* ==================================================================== */
+
+.board {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: var(--space-3);
+}
+
+.board__empty {
+  padding: var(--space-4) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.column-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.column-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+}
+
+.column-row__name {
+  color: var(--text-primary);
+}
+
+.column-row__flag {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background-color: var(--accent-bg-subtle);
+  color: var(--accent-text);
+  font-size: var(--text-2xs);
+}
+
+.column-row__up svg {
+  transform: rotate(180deg);
+}
+
+/* ==================================================================== */
+/* Tags und Pools (S-08, S-11)                                          */
+/* ==================================================================== */
+
+.tags-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tags-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Der Fehler eines misslungenen Ziehvorgangs steht ueber beiden Spalten:
+   Er gehoert weder zum Baum allein noch zur Detailspalte allein. */
+.tags-split__error {
+  grid-column: 1 / -1;
+}
+
+.tags-detail {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-subtle);
+}
+
+.tags-detail__kind {
+  margin-bottom: var(--space-1);
+}
+
+.tags-detail__name {
+  font-size: var(--text-lg);
+}
+
+.tags-detail__path {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.tags-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.pool-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+}
+
+.pool-row:hover {
+  border-color: var(--border-default);
+  background-color: var(--bg-hover);
+}
+
+.pool-row__name {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.pool-row__rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.pool-row__term {
+  display: inline-flex;
+}
+
+.pool-row__folder,
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  min-height: var(--control-height-sm);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.folder-chip {
+  cursor: pointer;
+}
+
+.folder-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.folder-chip--on {
+  border-color: var(--border-accent);
+  background-color: var(--accent-bg-subtle);
+  color: var(--accent-text);
+}
+
+/* ==================================================================== */
+/* Einstellungen (S-09, S-10, S-13)                                     */
+/* ==================================================================== */
+
+/*
+ * Fuenf Bereiche statt einer langen Liste (T-057, Punkt 2).
+ *
+ * Die Leiste bleibt beim Scrollen stehen (`sticky`) und haengt dafuer am
+ * Bildlauf von `.app__main` — dem einzigen Kasten der Anwendung, der scrollt.
+ * `top: 0` ist deshalb der obere Rand des Inhaltsbereichs und nicht der des
+ * Fensters; vor T-057 waere sie unter die Kopfleiste gewandert.
+ */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.settings-rail {
+  position: sticky;
+  top: 0;
+}
+
+.settings-rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.settings-rail__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.settings-rail__item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-rail__item:active {
+  background-color: var(--bg-active);
+}
+
+.settings-rail__item--current {
+  border-color: var(--accent-border-subtle);
+  background-color: var(--accent-bg-subtle);
+  color: var(--accent-text);
+}
+
+.settings-rail__icon {
+  display: inline-flex;
+  padding-top: 2px;
+  color: var(--text-muted);
+}
+
+.settings-rail__item--current .settings-rail__icon {
+  color: var(--accent-text);
+}
+
+.settings-rail__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-rail__label {
+  font-weight: var(--weight-medium);
+}
+
+/* `--text-muted` auf `--accent-bg-subtle` ist ein gemessenes Paar der
+   Kontrastpruefung und keine Annahme. */
+.settings-rail__hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Schmales Fenster: Die Leiste legt sich ueber den Bereich statt daneben. */
+@media (max-width: 60rem) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-rail {
+    position: static;
+  }
+
+  .settings-rail__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .settings-rail__hint {
+    display: none;
+  }
+}
+
+.token-value {
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.token-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.token-actions__hint {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.notice-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: var(--text-sm);
+}
+
+.notice-row__count,
+.notice-row__time {
+  flex: none;
+  font-size: var(--text-xs);
+}
+
+/* ==================================================================== */
+/* Dashboard (S-01)                                                     */
+/* ==================================================================== */
+
+.dash-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* ==================================================================== */
+/* Schmalere Fenster (A-13.8)                                           */
+/* ==================================================================== */
+
+@media (max-width: 68rem) {
+  .detail,
+  .time-layout,
+  .tags-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .todo-row__tags {
+    display: none;
+  }
+}
+
+/*
+ * Schmales Fenster: aus zwei Spalten wird eine, die Seitenleiste legt sich als
+ * Band über den Kopf. Das Raster wird dabei **umgeschrieben und nicht
+ * aufgelöst** — `minmax(0, 1fr)` in der letzten Zeile bleibt, und damit bleibt
+ * auch die Zusicherung, dass nur `.app__main` scrollt.
+ */
+@media (max-width: 52rem) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "notice"
+      "side"
+      "head"
+      "main";
+  }
+
+  .app__sidebar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    border-inline-end: none;
+    border-bottom: 1px solid var(--border-subtle);
+    /* Kein eigener Bildlauf mehr: Das Band ist so hoch, wie es sein muss. */
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .brand {
+    min-height: var(--control-height-lg);
+  }
+
+  .nav__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  /* Im schmalen Fenster ist kein Platz mehr zu verteilen: Das Fach des Timers
+     gibt seine zugeteilte Breite auf und wird so gross wie sein Inhalt. Die
+     Suche steht dann als einziges links davon; ein Sprung beim Timerstart
+     faellt hier nicht ins Gewicht, weil ohnehin beide Elemente am Anschlag
+     stehen. */
+  .app__header-timer {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .app__main {
+    padding: var(--space-4);
+  }
+
+  .field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* -------------------------------------------------------------------- */
+/* S-07 — der stehende Base64-Satz neben dem Exportziel (B-6.1 Punkt 1)  */
+/* -------------------------------------------------------------------- */
+/*
+ * Er steht **unter** dem Raster aus Vorlage, Rundung und Exportordner und nicht
+ * darin: In einer Rasterspalte waere er eine vierte Angabe unter drei
+ * Angaben — er ist aber keine Einstellung, sondern eine Tatsache ueber die
+ * Datei, die aus allen dreien entsteht.
+ */
+.export-settings__base64 {
+  margin-top: var(--space-3);
+}

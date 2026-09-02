@@ -1,0 +1,11 @@
+// Die Domäne bekommt ausdrücklich keine Umgebungstypen: `types: []` nimmt ihr
+// `node`, `vite/client` und alles andere, was pnpm sonst automatisch
+// einsammelt. Damit ist `fs`, `http` oder `process` hier nicht einmal
+// benennbar — E-001 hängt nicht an Disziplin, sondern am Übersetzer.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src"]
+}

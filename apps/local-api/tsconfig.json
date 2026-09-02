@@ -1,0 +1,9 @@
+// Der lokale Dienst ist der eingehende Adapter. Er darf `node:*` sehen — die
+// Domäne nicht (architektur.md 1.1).
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

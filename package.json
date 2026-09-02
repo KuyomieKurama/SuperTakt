@@ -1,0 +1,39 @@
+{
+  "name": "takt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export (E-001).",
+  "license": "MIT",
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=22.5.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "test:e2e": "playwright test --pass-with-no-tests",
+    "boundaries": "pnpm -r --if-present check:boundary",
+    "dev": "pnpm --filter @takt/web dev",
+    "contrast": "pnpm --filter @takt/web contrast",
+    "desktop": "pnpm --filter @takt/desktop app:dev",
+    "desktop:build": "pnpm --filter @takt/desktop app:build",
+    "sidecar:verify": "pnpm --filter @takt/desktop sidecar:verify",
+    "verify:bundle": "pnpm --filter @takt/desktop sidecar && pnpm --filter @takt/desktop sidecar:verify",
+    "proof:openapi": "pnpm --filter @takt/local-api proof:openapi",
+    "proof:callers": "pnpm --filter @takt/local-api proof:callers",
+    "proof:tags": "pnpm --filter @takt/local-api proof:tags",
+    "check": "pnpm run typecheck && pnpm run boundaries && pnpm run contrast && pnpm run proof:openapi && pnpm run proof:callers && pnpm run proof:tags && pnpm run test:coverage && pnpm run build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

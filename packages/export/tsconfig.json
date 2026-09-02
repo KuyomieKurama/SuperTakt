@@ -1,0 +1,15 @@
+// Der Vorlagen-Motor bekommt wie die Domäne ausdrücklich keine Umgebungstypen.
+// `types: []` nimmt ihm `node` und alles, was pnpm sonst einsammelt: `fs`,
+// `process` und `Buffer` sind hier nicht einmal benennbar.
+//
+// Das ist kein Schmuck. Der Motor muss in zwei Laufzeiten dasselbe Ergebnis
+// liefern — im Sidecar beim Schreiben der Datei und in der Oberfläche bei der
+// Vorschau (R-17). Eine Base64-Umsetzung über `Buffer` liefe nur in der einen
+// von beiden; deshalb kodiert `base64.ts` UTF-8 von Hand.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src"]
+}

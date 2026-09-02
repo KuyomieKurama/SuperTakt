@@ -1,0 +1,65 @@
+[package]
+name = "takt-desktop"
+version = "0.0.0"
+description = "Takt — Hülle: Fenster, Menü, Lebenszyklus des lokalen Dienstes, Windows-Benutzername"
+edition = "2021"
+rust-version = "1.82"
+publish = false
+# SPDX-Kennung, nicht die npm-Konvention: Cargo liest dieses Feld als SPDX,
+# und "UNLICENSED" ist dort keine gueltige Kennung. Der Wert muss mit der
+# Datei /LICENSE und den neun package.json uebereinstimmen — zwei
+# Lizenzaussagen sind keine. `publish = false` aendert daran nichts, die
+# Angabe wird trotzdem von Werkzeugen gelesen.
+license = "MIT"
+
+# Der Rust-Anteil bleibt bewusst dünn (E-004). Fachlogik lebt in TypeScript;
+# das ist der ganze Grund für die Sidecar-Bauweise. Wer hier eine Berechnung,
+# eine Rundung oder eine Kodierung einbaut, doppelt sie.
+
+[lib]
+name = "takt_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+# `config-json5` erlaubt Kommentare in `tauri.conf.json`. Das ist kein Komfort:
+# An `app.windows[].useHttpsScheme` haengt E-043, und der Grund, warum dieser
+# Schalter nicht umgelegt werden darf, gehoert an den Schalter und nicht in eine
+# Datei daneben. Reines JSON kann das nicht. Sowohl `tauri-build` (Bauzeit) als
+# auch `tauri` (generate_context!) brauchen die Kennzeichnung; die Kommandozeile
+# beherrscht es von sich aus.
+tauri-build = { version = "2", features = ["config-json5"] }
+
+[dependencies]
+tauri = { version = "2", features = ["config-json5"] }  # siehe oben
+# Startet und beendet den Sidecar und gibt uns `stdin` des Kindprozesses.
+# Ohne diesen Schreibzugriff müsste das Startgeheimnis über die Befehlszeile —
+# und damit in jede Prozessliste des Rechners (B-1.6 Punkt 2).
+tauri-plugin-shell = "2"
+# B-1.6 Punkt 5: Ein zweiter Start bringt das vorhandene Fenster nach vorn,
+# statt einen zweiten Sidecar auf dieselbe Datenbank zu setzen.
+tauri-plugin-single-instance = "2"
+# B-5.1 Punkt 1, Befund S-04: Der Exportordner wird im Systemdialog gewaehlt
+# und nicht getippt. Die Faehigkeitenliste gibt davon ausschliesslich
+# `dialog:allow-open` frei — kein `save`, kein `message`, kein `ask`. Ein
+# Dateiauswahldialog kann nichts lesen und nichts schreiben; er gibt einen
+# Pfad zurueck. Das ist der ganze Zuwachs an Flaeche.
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Der einzige Ort mit Zufall in der Hülle. Betriebssystemquelle, kein
+# Pseudozufall aus einem Startwert.
+getrandom = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+# Von tauri-build erzeugt. Muss stehen bleiben.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

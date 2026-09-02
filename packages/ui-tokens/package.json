@@ -1,0 +1,19 @@
+{
+  "name": "@takt/ui-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — Design-Token als CSS-Variablen. Eine Quelle für Oberfläche, Outlook-Add-in und Hülle (A-10.6, E-024).",
+  "license": "MIT",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./tokens.css",
+    "./tokens.css": "./tokens.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "tokens.css"
+  ]
+}

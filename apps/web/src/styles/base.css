@@ -1,0 +1,301 @@
+/*
+ * Takt — Grundlagen
+ * =================
+ * Zuruecksetzen, Schriftgrundlage, Fokus, Bewegungsvorbehalt, Hilfsklassen.
+ * Setzt tokens.css voraus.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* Wurzel bleibt bei 16px, damit rem-Rechnung und Browser-Zoom stimmen.
+     Die Oberflaeche selbst arbeitet mit --text-base (14px). */
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * Wurzel, Dokument und Einhaengepunkt sind so hoch wie das Fenster — nicht so
+ * hoch wie ihr Inhalt (T-057, Ursache 1).
+ *
+ * Vorher stand hier `min-height: 100dvh`. Das ist eine Untergrenze: Der Kasten
+ * durfte hoeher werden, sobald der Inhalt hoeher war, und genau das tat er.
+ * Gemessen: `main.clientHeight` war auf jeder Ansicht gleich
+ * `main.scrollHeight` — auf dem Kanban 5857px in einem 820px hohen Fenster.
+ * Gescrollt hat dann das Dokument, nicht der Inhaltsbereich, und mit dem
+ * Dokument kam die Bildlaufleiste des Fensters, die alles darunter um ihre
+ * Breite verschob (Ursache 2, gemessen als 1190px gegen 1200px).
+ *
+ * `height: 100%` ist eine feste Groesse und keine Untergrenze. Sie loest sich
+ * bei `html` gegen den Anfangsblock des Fensters auf; `body` und `#root`
+ * reichen sie durch. Was hoeher wird als das Fenster, muss sich seitdem selbst
+ * um seinen Bildlauf kuemmern — in der Anwendung tut das genau ein Kasten,
+ * `.app__main`.
+ *
+ * Kein `overflow: hidden` auf `body`: Die Startbilder (`.boot`) und die
+ * Musterseite haengen nicht in dieser Huelle und duerfen weiterhin das
+ * Dokument scrollen lassen. Die Anwendung selbst kann nichts hinausschieben,
+ * weil `.app` sie auf `height: 100%` festnagelt.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-regular);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+h4 {
+  font-size: var(--text-md);
+  letter-spacing: var(--tracking-normal);
+}
+
+/* Zeilenlaenge wird dort begrenzt, wo Fliesstext steht — nicht global.
+   Eine globale Regel auf `p` wuerde auch Kopfbaender und Etiketten kuerzen. */
+.prose,
+.section__lead,
+.card__description,
+.note__help,
+.message__body {
+  max-width: var(--measure-prose);
+}
+
+a {
+  color: var(--text-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+svg {
+  display: block;
+  flex: none;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* Ziffern in Tabellen, Timern und Kennzahlen laufen nicht,
+   weil sie gleiche Breite bekommen. */
+.tabular,
+td,
+th,
+time,
+output {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* -------------------------------------------------------------------- */
+/* Fokus — WCAG 2.2 SC 2.4.7 und SC 2.4.11                              */
+/* -------------------------------------------------------------------- */
+/*
+ * Nie entfernen, nur verlegen. Der Ring liegt ausserhalb des Elements
+ * (outline-offset), damit er nie vom Element selbst verdeckt wird.
+ */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+/* Innerhalb gefuellter Flaechen braucht der Ring einen hellen Gegenring,
+   sonst verschwindet er auf der Fuellfarbe. */
+.on-solid:focus-visible {
+  outline-color: var(--focus-ring-contrast);
+  box-shadow: 0 0 0 calc(var(--focus-ring-width) + var(--focus-ring-offset))
+    var(--focus-ring-color);
+}
+
+::selection {
+  background-color: var(--accent-bg-subtle);
+  color: var(--text-primary);
+}
+
+/* -------------------------------------------------------------------- */
+/* Bildlaufleisten                                                      */
+/* -------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* -------------------------------------------------------------------- */
+/* Bewegungsvorbehalt                                                   */
+/* -------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -------------------------------------------------------------------- */
+/* Hilfsklassen                                                         */
+/* -------------------------------------------------------------------- */
+
+/* Nur fuer Hilfsmittel sichtbar. Bleibt fokussierbar. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.visually-hidden:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+/* Sprungmarke zum Hauptinhalt — WCAG SC 2.4.1 */
+/*
+ * `fixed` und nicht `absolute`: Seit T-057 hat die Huelle `overflow: hidden`.
+ * Ein absolut positionierter Nachfahre wird davon zwar nur beschnitten, wenn
+ * sein umschliessender Block innerhalb des beschneidenden Kastens liegt — aber
+ * diese Bedingung haengt daran, dass niemand `.app` jemals positioniert. Das
+ * ist keine Zusicherung, die eine Sprungmarke tragen sollte.
+ */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: var(--accent-bg);
+  color: var(--text-on-accent);
+  font-weight: var(--weight-medium);
+  transform: translateY(-200%);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * `hidden` schlaegt jede Klassenregel — T-059.
+ *
+ * Ark UI blendet zugeklappte Listen aus, indem es das HTML-Attribut `hidden`
+ * setzt. Die Vorgabe dafuer (`[hidden] { display: none }`) steht im Blatt des
+ * **Browsers** und liegt damit unter jeder Autorenregel: Eine eigene Zeile wie
+ * `.select__content { display: flex }` hebt sie auf, ohne dass man es sieht.
+ *
+ * Der Schaden ist nicht optisch — die Liste steht dann bei -100vh und faellt
+ * niemandem auf —, sondern er trifft genau die, die nicht hinsehen: Der Inhalt
+ * bleibt im Baum der Vorlesehilfe und in der Tabulatorreihenfolge. Deshalb
+ * hier einmal und mit `!important`, was sonst nirgends in diesem Projekt
+ * vorkommt: Es ist der Zweck dieser Regel, jede Autorenregel zu schlagen.
+ */
+[hidden] {
+  display: none !important;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.overline {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}

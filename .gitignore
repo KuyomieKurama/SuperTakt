@@ -1,0 +1,124 @@
+# Abhängigkeiten
+node_modules/
+.pnpm-store/
+
+# Bauergebnisse
+dist/
+build/
+target/
+*.tsbuildinfo
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Lokale Daten — enthalten Kundendaten, gehören nie ins Repository
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+exports/
+takt-daten/
+
+# Geheimnisse
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+token
+*.token
+addin-token*
+
+# Testergebnisse und Artefakte
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Werkzeuge und Editoren
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code — lokale Sitzungsdaten und rechnerspezifische Konfiguration.
+# Die Teamdateien (.claude/agents, .claude/team, .claude/commands) gehen mit.
+#
+# settings.json bleibt draußen: Sie führt ein Berechtigungsschema für genau
+# diesen Rechner und diese Arbeitsweise. Wer klont, soll seine eigenen Regeln
+# setzen statt fremde zu erben — und ein Schema mit absoluten Pfaden eines
+# anderen greift ohnehin nirgends (Befund V-3 aus T-067).
+.claude/settings.json
+.claude/settings.local.json
+
+# --- Ergaenzt in T-008a (domain-dev) ---
+
+# Sicherungskopien der Datenbank. Der Migrationslaeufer legt vor jedem Lauf
+# eine an; sie traegt denselben Kundenbestand wie das Original.
+*.db.bak
+*.sqlite.bak
+*.db-journal
+*.sqlite-journal
+backups/
+
+# Exportdateien. Der Zielordner ist konfigurierbar (E-011) und liegt per
+# Vorgabe ausserhalb des Repositorys (E-018) — wer ihn umstellt, soll die
+# Kundennotizen trotzdem nicht versehentlich einchecken. Base64 ist keine
+# Verschluesselung (R-05).
+takt-export*.json
+export-*.json
+
+# Protokolle koennen Pfade, Dateinamen und Fehlermeldungen mit Kundenbezug
+# tragen.
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Zwischenspeicher der Werkzeugkette
+.vite/
+.cache/
+.tsbuildinfo
+*.tmp
+
+# Die Sperrdatei gehoert ausdruecklich INS Repository und steht deshalb
+# nirgends hier: pnpm-lock.yaml ist der einzige Nachweis darueber, welche
+# Fassung einer Abhaengigkeit tatsaechlich installiert wurde.
+
+# --- Ergaenzt in T-067 (security-checker), Pruefung vor der Veroeffentlichung ---
+
+# Playwright legt Bericht und Artefakte je Konfiguration in einen eigenen
+# Ordner. Die Regeln `playwright-report/` und `test-results/` weiter oben
+# treffen nur die Vorgabenamen; die vier Konfigurationen unter `tests/e2e/`
+# haengen ein Suffix an und fielen bis T-067 durch. Sechs solche Ordner lagen
+# im Baum und waeren mit dem ersten Commit veroeffentlicht worden.
+#
+# Nachgesehen, nicht angenommen: Die vier `index.html` sind Playwrights
+# Selbstberichte mit eingebettetem ZIP; sie enthielten Testtitel, Zeiten und
+# Quelltextausschnitte der Spezifikationsdateien — **keine** Anhaenge, keine
+# Bildschirmfotos, keine Aufzeichnungen, keine Antwortkoerper, keine Pfade mit
+# Benutzernamen. Das einzige eingebettete PNG ist in allen vier Berichten
+# byteweise identisch und damit ein Bestandteil des Berichterstatters.
+# Der Ausschluss ist Hygiene, keine Schadensbegrenzung — aber er muss stehen,
+# bevor ein Lauf mit echten Daten ihn zur Schadensbegrenzung macht.
+playwright-report*/
+test-results*/
+blob-report*/
+
+# Der Vorgabe-Exportordner traegt unter Windows und in den bisherigen
+# Handlaeufen den Namen `Export/` mit grossem E; die Regel `exports/` weiter
+# oben trifft ihn nicht. Er lag zum Zeitpunkt dieser Pruefung im Baum und
+# enthielt eine echte Exportdatei mit `WindowsUser` und einer base64-kodierten
+# Notiz — gerettet allein durch das Dateinamensmuster `takt-export*.json`.
+# Ein Ordner, in dem Kundendaten liegen, soll nicht von einem Dateinamen
+# abhaengen (R-05, B-5.4, B-6.1).
+/Export/
+/export/
+
+# Verzeichnisse mit Abdeckungsberichten, wenn sie je ein Suffix bekommen —
+# dieselbe Sorte Luecke wie oben, nur noch nicht eingetreten.
+coverage*/

@@ -1,0 +1,53 @@
+// Takt — gemeinsame Übersetzerschalter (T-008a).
+//
+// Jedes Paket erbt hiervon und überschreibt nur, was es wirklich braucht:
+// apps/web setzt jsx, die DOM-Bibliotheken und die vite/client-Typen,
+// packages/domain nimmt die Umgebungstypen ausdrücklich wieder weg.
+//
+// Die strengen Schalter sind kein Geschmack, sondern die Bedingung, unter der
+// T-013b übersetzt hat. Wer einen davon abschaltet, ändert die Zusicherungen
+// der Domäne — das gehört in eine Entscheidung, nicht in eine Aufgabe.
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "useUnknownInCatchVariables": true,
+
+    // `a?: string` heißt fehlend, nicht `undefined`. Die Domäne unterscheidet
+    // beides — eine offene Leistung ist etwas anderes als eine leere (E-034).
+    "exactOptionalPropertyTypes": true,
+
+    // arr[i] ist `T | undefined`. Trifft jede Zeilenschleife im Export und
+    // jede Baumtiefe im Tag-Baum (E-022).
+    "noUncheckedIndexedAccess": true,
+
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // `import type` bleibt stehen und wird nicht geraten. Hält die
+    // Paketgrenze aus R-06 im Quelltext lesbar.
+    "verbatimModuleSyntax": true,
+
+    // Jede Datei für sich übersetzbar. Bedingung dafür, dass der lokale
+    // Dienst als Sidecar-Binärdatei gebündelt werden kann (E-004).
+    "isolatedModules": true,
+
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "noEmit": true,
+    "skipLibCheck": true
+  }
+}

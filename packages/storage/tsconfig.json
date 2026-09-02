@@ -1,0 +1,10 @@
+// Die Speicherung ist die einzige Schicht, die das Dateisystem und
+// `node:sqlite` sehen darf (E-035). Deshalb hier `types: ["node"]` — und
+// deshalb nicht in packages/domain.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

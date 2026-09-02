@@ -1,0 +1,34 @@
+{
+  "name": "@takt/local-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — lokaler Dienst (Node-Sidecar). Eingehender Adapter: HTTP, Token, Herkunft, JSON.",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "proof:access": "node scripts/proof-access.mjs",
+    "proof:export": "node scripts/proof-export.mjs",
+    "proof:export-api": "node scripts/proof-export-api.mjs",
+    "proof:taskpane": "node scripts/proof-taskpane.mjs",
+    "proof:addin-wiring": "node scripts/proof-addin-wiring.mjs",
+    "proof:route-policy": "node scripts/proof-route-policy.mjs",
+    "proof:template-fields": "node scripts/proof-template-fields.mjs",
+    "proof:db-permissions": "node scripts/proof-db-permissions.mjs",
+    "proof:openapi": "node scripts/proof-openapi.mjs",
+    "proof:callers": "node scripts/proof-callers.mjs",
+    "proof:tags": "node scripts/proof-tags.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@takt/domain": "workspace:*",
+    "@takt/export": "workspace:*",
+    "@takt/storage": "workspace:*",
+    "hono": "4.13.4",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
+  }
+}

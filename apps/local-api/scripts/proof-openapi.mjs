@@ -1,0 +1,1071 @@
+/**
+ * Takt — Nachweis, dass die Schnittstellenbeschreibung den Dienst beschreibt
+ * (T-039).
+ *
+ * Aufruf:  pnpm --filter @takt/local-api proof:openapi
+ *
+ * ===========================================================================
+ * Warum dieser Lauf existiert
+ * ===========================================================================
+ *
+ * Dreimal ist `apps/local-api/openapi/takt-local-api.yaml` vom Dienst
+ * abgewichen, und dreimal hat es jemand von Hand gefunden:
+ *
+ *  - T-022: vier Befunde.
+ *  - T-029: zwölf. Darunter der Seitenumschlag, der bei **keiner** Listenroute
+ *    stimmte — wer `response.data.map(...)` schrieb, merkte es zur Laufzeit.
+ *  - T-038/T-039: `reopenIfDone`, ein Rumpffeld, das der Dienst nicht mehr
+ *    kennt. Der Satz des integration-dev dazu: „Wer gegen die Beschreibung
+ *    baut, baut C-03 nach."
+ *
+ * Jedes Mal war die Beschreibung *plausibel*. Das ist ihre Eigenart: Sie wird
+ * nicht ausgeführt, also fällt nichts auf. Dieser Lauf führt sie aus — nicht
+ * als Prüfwerkzeug für Anfragen, sondern als Vergleich gegen die einzige
+ * Wahrheit, die es gibt: den zusammengebauten Dienst.
+ *
+ * ===========================================================================
+ * Was verglichen wird, und was nicht
+ * ===========================================================================
+ *
+ * **1. Routen, beide Richtungen.** Die Aufzählung kommt aus `Hono#routes` des
+ * über `compose` gebauten Dienstes, nicht aus einer gepflegten Liste. Eine neue
+ * Route ohne Beschreibung wird rot, eine beschriebene Route ohne Dienst
+ * ebenfalls.
+ *
+ * **2. Anfragerümpfe.** Jede Route mit Rumpf prüft ihre Eingabe mit einem
+ * zod-Schema. `z.toJSONSchema` macht daraus JSON Schema, und das wird gegen
+ * das gehalten, was die Beschreibung über denselben Rumpf sagt: Feldnamen,
+ * Pflichtfelder, Obergrenzen, Aufzählungen.
+ *
+ * Die Zuordnung „Route → Schema" steht nicht hier, sondern als
+ * `REQUEST_SCHEMAS` in den Routendateien selbst. Das ist Absicht: Wer eine
+ * Route hinzufügt, sieht die Zuordnung neben seiner Arbeit und nicht in einem
+ * Skript, von dem er nichts weiß. Fehlt der Eintrag, wird dieser Lauf rot.
+ *
+ * **3. Der Leser selbst.** Abschnitt 0 prüft an bekannten Stellen, dass er die
+ * Datei wirklich liest. Ohne das wäre ein kaputter Leser die schlimmste aller
+ * Möglichkeiten: grün, weil er nichts findet.
+ *
+ * **4. Antwortgestalten und Statuscodes (T-041).** Das war bis dahin die
+ * offene Hälfte — und die, in der die teuersten Befunde lagen:
+ *
+ *  - T-022: `GET /settings` und `POST /todos` lieferten eine Hülle, wo die
+ *    Beschreibung die Entität versprach. Wer dagegen baute, las `undefined`
+ *    und bekam keine Fehlermeldung, sondern eine leere Anzeige.
+ *  - T-029: der Seitenumschlag stimmte bei **keiner** Listenroute.
+ *  - T-039: `POST /timer/start` antwortete laut Beschreibung mit `409
+ *    timer_already_running`, tatsächlich mit `200` und
+ *    `kind: confirmation_required`.
+ *
+ * Dreimal derselbe Fehlertyp, dreimal von Hand gefunden, jedes Mal erst,
+ * nachdem jemand dagegen gebaut hatte. `service-scenario.mjs` baut den Dienst
+ * einmal mit einem kleinen festen Bestand auf und fährt **jede** der 64
+ * Operationen mindestens einmal an; `schema-match.mjs` hält jede Antwort gegen
+ * das, was die Beschreibung über sie sagt. Der Statuscode zählt dabei so viel
+ * wie der Rumpf: Eine Beschreibung, die 409 verspricht und 200 bekommt, führt
+ * zu einer Oberfläche, die einen Fehlerfall behandelt, den es nicht gibt — und
+ * den echten nicht.
+ *
+ * **Was auch dieser Lauf nicht prüft.** Ob die Werte **stimmen**. Er misst
+ * Gestalt, nicht Verhalten: dass `durationSeconds` da ist und eine Zahl, nicht
+ * dass sie die richtige Zahl ist. Dafür gibt es die Prüfsuite und die übrigen
+ * Nachweispfade. Und er misst nur, was der Durchlauf auslöst — ein
+ * Fehlerfall, den niemand herbeiführt, bleibt unbeschrieben messbar falsch.
+ * Deshalb führt der Durchlauf auch Abweisungen herbei und nicht nur
+ * Erfolgsfälle.
+ */
+
+import { readFileSync } from 'node:fs';
+
+import { z } from 'zod';
+
+import { parseYaml } from './openapi-reader.mjs';
+import { createMatcher } from './schema-match.mjs';
+import { BOARD_COLUMNS, INTERNAL_NOTE, STATUS_COLOR, runScenario } from './service-scenario.mjs';
+import { compose } from '../src/composition.ts';
+import { API_BASE_PATH } from '../src/config.ts';
+import { statusFor } from '../src/http/problem.ts';
+import { errorStatus } from '../src/errors.ts';
+import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
+import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
+import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
+import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
+import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
+
+const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
+const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+
+function check(name, condition, detail = '') {
+  if (condition) {
+    passed += 1;
+    console.log(`  ok    ${name}`);
+  } else {
+    failed += 1;
+    failures.push(name);
+    console.log(`  FEHL  ${name}${detail === '' ? '' : ` — ${detail}`}`);
+  }
+}
+
+function section(title) {
+  console.log(`\n${title}`);
+}
+
+const text = readFileSync(SPEC_PATH, 'utf8');
+const doc = parseYaml(text);
+
+// ---------------------------------------------------------------------------
+section('0  Der Leser liest die Datei — sonst wäre alles Folgende wertlos');
+// ---------------------------------------------------------------------------
+
+check('die Beschreibung ist OpenAPI 3.1', doc?.openapi === '3.1.0', String(doc?.openapi));
+
+// Die Zahl der Pfade steht auch ohne Leser fest: Ein Pfad ist eine Zeile, die
+// mit genau zwei Leerzeichen und einem Schrägstrich beginnt. Stimmen beide
+// Zählungen überein, hat der Leser keinen Zweig verschluckt.
+const pathLines = text.split('\n').filter((line) => /^ {2}\/\S/.test(line)).length;
+check(
+  `so viele Pfade gelesen wie in der Datei stehen (${pathLines})`,
+  Object.keys(doc.paths ?? {}).length === pathLines,
+  `gelesen ${Object.keys(doc.paths ?? {}).length}`,
+);
+
+const schemaLines = text.split('\n').filter((line) => /^ {4}[A-Z][A-Za-z]*:$/.test(line)).length;
+check(
+  'so viele benannte Bauteile gelesen wie in der Datei stehen',
+  Object.keys(doc.components?.schemas ?? {}).length +
+    Object.keys(doc.components?.responses ?? {}).length +
+    Object.keys(doc.components?.parameters ?? {}).length +
+    Object.keys(doc.components?.securitySchemes ?? {}).length ===
+    schemaLines,
+  `gelesen ${
+    Object.keys(doc.components?.schemas ?? {}).length +
+    Object.keys(doc.components?.responses ?? {}).length +
+    Object.keys(doc.components?.parameters ?? {}).length +
+    Object.keys(doc.components?.securitySchemes ?? {}).length
+  }, gezählt ${schemaLines}`,
+);
+
+check(
+  'ein Blockskalar kommt vollständig an (mehrzeilige Beschreibung)',
+  typeof doc.paths?.['/timer/start']?.post?.description === 'string' &&
+    doc.paths['/timer/start'].post.description.includes('confirmation_required') &&
+    doc.paths['/timer/start'].post.description.split('\n').length > 5,
+);
+
+/**
+ * Zählt Vorkommen eines Schlüssels im gelesenen Baum.
+ *
+ * Der Vergleich läuft gegen dieselbe Zählung im Rohtext. Das ist die schärfste
+ * Probe, die ohne einen zweiten Leser zu haben ist: Ein Zweig, den der Leser
+ * verschluckt, fehlt hier und steht dort — und beide Zahlen sind nirgends
+ * niedergeschrieben, also veralten sie auch nicht.
+ */
+const countKey = (node, key) => {
+  if (Array.isArray(node)) return node.reduce((sum, entry) => sum + countKey(entry, key), 0);
+  if (node === null || typeof node !== 'object') return 0;
+  let sum = 0;
+  for (const [name, value] of Object.entries(node)) {
+    if (name === key) sum += 1;
+    sum += countKey(value, key);
+  }
+  return sum;
+};
+
+const rawMaxLength = [...text.matchAll(/(?<![\w-])maxLength: \d+/g)].length;
+check(
+  `jede Obergrenze aus dem Rohtext steht auch im gelesenen Baum (${rawMaxLength})`,
+  rawMaxLength > 30 && countKey(doc, 'maxLength') === rawMaxLength,
+  `gelesen ${countKey(doc, 'maxLength')}`,
+);
+
+const rawRefs = [...text.matchAll(/(?<![\w-])\$ref: /g)].length;
+check(
+  `jeder Verweis aus dem Rohtext steht auch im gelesenen Baum (${rawRefs})`,
+  rawRefs > 300 && countKey(doc, '$ref') === rawRefs,
+  `gelesen ${countKey(doc, '$ref')}`,
+);
+
+check(
+  'eine Blockliste kommt vollständig an (Fragezeichenparameter)',
+  Array.isArray(doc.paths?.['/addin/todo-matches']?.get?.parameters) &&
+    doc.paths['/addin/todo-matches'].get.parameters[0].name === 'callNumber',
+);
+
+// ---------------------------------------------------------------------------
+section('1  Jeder Verweis zeigt auf etwas, und nichts liegt unbenutzt herum');
+// ---------------------------------------------------------------------------
+
+const refs = [...text.matchAll(/#\/components\/([A-Za-z]+)\/([A-Za-z0-9]+)/g)].map((m) => [m[1], m[2]]);
+const dangling = refs.filter(([kind, name]) => doc.components?.[kind]?.[name] === undefined);
+check(
+  `alle ${refs.length} Verweise zeigen auf ein vorhandenes Bauteil`,
+  dangling.length === 0,
+  dangling.map((r) => r.join('/')).join(', '),
+);
+
+/*
+ * Ein Bauteil gilt als benutzt, wenn sein Name irgendwo außerhalb seiner
+ * eigenen Kopfzeile vorkommt — als `$ref` oder als Erwähnung in einem Text.
+ *
+ * Die zweite Möglichkeit ist keine Nachlässigkeit, sondern ein vorhandener
+ * Fall: `ExportRunGroup` gibt keine Route heraus und steht nur da, weil
+ * `ExportAuditEntry.exportRunGroupId` auf sie verweist und der Leser wissen
+ * muss, worauf. Das ist ein Zweck; ein Bauteil, dessen Name in der ganzen
+ * Datei genau einmal vorkommt, hat keinen.
+ */
+const orphans = [];
+for (const kind of ['schemas', 'responses', 'parameters']) {
+  for (const name of Object.keys(doc.components?.[kind] ?? {})) {
+    const mentions = [...text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length;
+    if (mentions <= 1) orphans.push(`${kind}/${name}`);
+  }
+}
+check(
+  'kein Bauteil ist beschrieben, ohne irgendwo benutzt oder erklärt zu werden',
+  orphans.length === 0,
+  orphans.join(', '),
+);
+
+// ---------------------------------------------------------------------------
+section('2  Die Routen: die Aufzählung kommt aus dem Dienst, nicht von Hand');
+// ---------------------------------------------------------------------------
+
+/** Ein Tokenspeicher im Arbeitsspeicher — hier wird nichts geschrieben. */
+const memoryStore = () => ({
+  read: async () => ({ status: 'absent' }),
+  write: async () => {},
+  inspectPermissions: async () => ({ checked: false, dirTooPermissive: false, fileTooPermissive: false }),
+});
+
+const probe = compose({
+  port: 17843,
+  store: memoryStore(),
+  sessionSecret: `takt_${'0'.repeat(43)}`,
+  windowsUser: 't.beispiel',
+  databaseLocation: ':memory:',
+});
+
+const serviceRoutes = new Set();
+const outside = [];
+for (const route of probe.app.routes) {
+  // `Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*`.
+  if (route.method === 'ALL') continue;
+  if (!route.path.startsWith(API_BASE_PATH)) {
+    outside.push(`${route.method} ${route.path}`);
+    continue;
+  }
+  const path = route.path.slice(API_BASE_PATH.length).replace(/:([A-Za-z0-9_]+)/g, '{$1}');
+  serviceRoutes.add(`${route.method} ${path === '' ? '/' : path}`);
+}
+probe.database.close();
+
+const specRoutes = new Set();
+for (const [path, item] of Object.entries(doc.paths)) {
+  for (const method of METHODS) {
+    if (item[method] !== undefined) specRoutes.add(`${method.toUpperCase()} ${path}`);
+  }
+}
+
+check(
+  'keine Route steht nur in der Beschreibung',
+  [...specRoutes].every((route) => serviceRoutes.has(route)),
+  [...specRoutes].filter((route) => !serviceRoutes.has(route)).join(', '),
+);
+check(
+  'keine Route gibt es nur im Dienst',
+  [...serviceRoutes].every((route) => specRoutes.has(route)),
+  [...serviceRoutes].filter((route) => !specRoutes.has(route)).join(', '),
+);
+check(
+  `beide Seiten führen dieselbe Zahl (${specRoutes.size})`,
+  specRoutes.size === serviceRoutes.size && specRoutes.size > 50,
+  `Beschreibung ${specRoutes.size}, Dienst ${serviceRoutes.size}`,
+);
+check(
+  'außerhalb von /api/v1 hängt nur, was dort hingehört',
+  outside.every((entry) => entry.endsWith('/health') || entry.endsWith('/taskpane') || entry.includes('/taskpane/')),
+  outside.join(', '),
+);
+
+// ---------------------------------------------------------------------------
+section('3  Die Anfragerümpfe: Feldnamen, Pflichtfelder, Obergrenzen');
+// ---------------------------------------------------------------------------
+
+const REQUEST_SCHEMAS = {
+  ...TODO_SCHEMAS,
+  ...STRUCTURE_SCHEMAS,
+  ...TIME_SCHEMAS,
+  ...EXPORT_SCHEMAS,
+  // Die Add-in-Routen liegen in fremder Hoheit und führen kein
+  // `REQUEST_SCHEMAS`; ihre beiden Schemata sind einzeln ausgeführt.
+  createAddinTodo: createTodoSchema,
+  createAddinTimeEntry: bookSchema,
+};
+
+/** Folgt `$ref` bis zum Bauteil. */
+const deref = (node) => {
+  if (node !== null && typeof node === 'object' && typeof node.$ref === 'string') {
+    const [, kind, name] = /#\/components\/([A-Za-z]+)\/([A-Za-z0-9]+)/.exec(node.$ref) ?? [];
+    return deref(doc.components[kind][name]);
+  }
+  return node;
+};
+
+/**
+ * Nimmt aus `oneOf`/`anyOf`/`allOf` den einen inhaltlichen Zweig.
+ *
+ * `oneOf: [{…}, {type: null}]` ist in dieser Datei die Schreibweise für „darf
+ * auch fehlen". Für den Vergleich der Obergrenzen zählt der andere Zweig.
+ */
+const branch = (node) => {
+  const resolved = deref(node);
+  if (resolved === null || typeof resolved !== 'object') return resolved;
+  const alternatives = resolved.oneOf ?? resolved.anyOf ?? resolved.allOf;
+  if (!Array.isArray(alternatives)) return resolved;
+  const meaty = alternatives.map(deref).filter((entry) => entry?.type !== 'null');
+  if (meaty.length !== 1) return resolved;
+  const rest = Object.fromEntries(
+    Object.entries(resolved).filter(([key]) => !['oneOf', 'anyOf', 'allOf'].includes(key)),
+  );
+  return { ...meaty[0], ...rest };
+};
+
+/** Zeigt die Beschreibung an dieser Stelle auf ein benanntes Bauteil? */
+const isNamed = (node) => {
+  if (node !== null && typeof node === 'object' && typeof node.$ref === 'string') return true;
+  const alternatives = node?.oneOf ?? node?.anyOf ?? node?.allOf;
+  return Array.isArray(alternatives) && alternatives.some((entry) => typeof entry?.$ref === 'string');
+};
+
+const FACETS = ['maxLength', 'minLength', 'maxItems', 'minItems'];
+
+const bodyOperations = [];
+for (const [path, item] of Object.entries(doc.paths)) {
+  for (const method of METHODS) {
+    const operation = item[method];
+    if (operation?.requestBody !== undefined) bodyOperations.push([`${method.toUpperCase()} ${path}`, operation]);
+  }
+}
+
+check(
+  `jede beschriebene Route mit Rumpf hat ein Schema im Dienst (${bodyOperations.length})`,
+  bodyOperations.every(([, operation]) => REQUEST_SCHEMAS[operation.operationId] !== undefined),
+  bodyOperations
+    .filter(([, operation]) => REQUEST_SCHEMAS[operation.operationId] === undefined)
+    .map(([label, operation]) => `${label} (${operation.operationId})`)
+    .join(', '),
+);
+
+const documentedIds = new Set(bodyOperations.map(([, operation]) => operation.operationId));
+check(
+  'kein Schema im Dienst ohne beschriebene Route — kein toter Eintrag',
+  Object.keys(REQUEST_SCHEMAS).every((id) => documentedIds.has(id)),
+  Object.keys(REQUEST_SCHEMAS).filter((id) => !documentedIds.has(id)).join(', '),
+);
+
+const nameProblems = [];
+const requiredProblems = [];
+const facetProblems = [];
+
+for (const [label, operation] of bodyOperations) {
+  const id = operation.operationId;
+  const zodSchema = REQUEST_SCHEMAS[id];
+  if (zodSchema === undefined) continue;
+
+  const specSchema = branch(operation.requestBody.content?.['application/json']?.schema);
+  if (specSchema === null || specSchema === undefined) {
+    nameProblems.push(`${label}: kein application/json`);
+    continue;
+  }
+  const actual = z.toJSONSchema(zodSchema, { io: 'input' });
+
+  const specProps = Object.keys(specSchema.properties ?? {});
+  const actualProps = Object.keys(actual.properties ?? {});
+  const onlySpec = specProps.filter((name) => !actualProps.includes(name));
+  const onlyService = actualProps.filter((name) => !specProps.includes(name));
+  if (onlySpec.length > 0) nameProblems.push(`${id}: beschrieben, aber nicht gelesen: ${onlySpec.join('/')}`);
+  if (onlyService.length > 0) nameProblems.push(`${id}: gelesen, aber nicht beschrieben: ${onlyService.join('/')}`);
+
+  const specRequired = [...(specSchema.required ?? [])].sort().join(',');
+  const actualRequired = [...(actual.required ?? [])].sort().join(',');
+  if (specRequired !== actualRequired) {
+    requiredProblems.push(`${id}: Beschreibung [${specRequired}] gegen Dienst [${actualRequired}]`);
+  }
+
+  for (const name of specProps.filter((entry) => actualProps.includes(entry))) {
+    const described = branch(specSchema.properties[name]) ?? {};
+    const enforced = branch(actual.properties[name]) ?? {};
+    for (const facet of FACETS) {
+      if (described[facet] !== undefined && enforced[facet] !== undefined) {
+        if (described[facet] !== enforced[facet]) {
+          facetProblems.push(`${id}.${name}: ${facet} ${described[facet]} gegen ${enforced[facet]}`);
+        }
+        continue;
+      }
+      // Eine Grenze, die der Dienst zieht, muss beschrieben sein — sonst läuft
+      // ein gültig aussehender Aufruf in ein 422, das niemand angekündigt hat.
+      // Ausgenommen sind Felder, die auf ein benanntes Bauteil zeigen: Dort
+      // steht die Beschreibung am Bauteil und nicht am Feld.
+      if (enforced[facet] !== undefined && !isNamed(specSchema.properties[name])) {
+        facetProblems.push(`${id}.${name}: ${facet}=${enforced[facet]} wird erzwungen, aber nicht beschrieben`);
+      }
+    }
+    const describedEnum = described.enum ?? (described.const === undefined ? undefined : [described.const]);
+    const enforcedEnum = enforced.enum ?? (enforced.const === undefined ? undefined : [enforced.const]);
+    if (describedEnum !== undefined && enforcedEnum !== undefined) {
+      const a = [...describedEnum].sort().join('|');
+      const b = [...enforcedEnum].sort().join('|');
+      if (a !== b) facetProblems.push(`${id}.${name}: Aufzählung [${a}] gegen [${b}]`);
+    }
+  }
+}
+
+check('kein Rumpffeld nur auf einer der beiden Seiten', nameProblems.length === 0, nameProblems.join(' | '));
+check('dieselben Pflichtfelder auf beiden Seiten', requiredProblems.length === 0, requiredProblems.join(' | '));
+check(
+  'keine Obergrenze und keine Aufzählung, die sich widersprechen',
+  facetProblems.length === 0,
+  facetProblems.join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('4  Was T-038 entfernt hat, steht auch nicht mehr in der Beschreibung');
+// ---------------------------------------------------------------------------
+
+check(
+  '`reopenIfDone` kommt in der Beschreibung nur noch als Rückblick vor',
+  !/^\s*reopenIfDone\s*:/m.test(text),
+  'als Feld beschrieben, aber vom Dienst nicht gelesen (Befund C-03)',
+);
+
+const booking = doc.paths['/addin/todos/{todoId}/time-entries'].post;
+check(
+  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolNames',
+  (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
+    'doneCleared',
+  ) &&
+    (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
+      'poolNames',
+    ),
+);
+check(
+  'und sie begründet, warum ein Nachzügler trotzdem 201 bekommt',
+  booking.description.includes('201') && booking.description.includes('reopenIfDone'),
+);
+
+// ---------------------------------------------------------------------------
+section('5  Der Vergleicher prüft sich selbst — sonst wäre alles Folgende grün aus Versehen');
+// ---------------------------------------------------------------------------
+
+/*
+ * Ein Vergleicher, der nichts findet, sieht genauso aus wie eine Beschreibung,
+ * die stimmt. Der Unterschied lässt sich nur zeigen, indem man ihm etwas
+ * Falsches hinhält und sieht, ob er es merkt.
+ *
+ * Genommen wird ein echtes Schema aus der Datei — der Seitenumschlag von
+ * `GET /todos`, also genau die Gestalt, an der T-029 zwölf Befunde hatte.
+ */
+const matcher = createMatcher(doc);
+const listSchema = doc.paths['/todos'].get.responses['200'].content['application/json'].schema;
+const goodPage = {
+  data: {
+    items: [
+      {
+        id: 'a',
+        title: 't',
+        callNumber: null,
+        statusId: 's',
+        completedAt: null,
+        tagIds: [],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    nextCursor: null,
+    total: 1,
+  },
+};
+const withMutation = (change) => {
+  const copy = structuredClone(goodPage);
+  change(copy);
+  return matcher.condense(matcher.match(copy, listSchema, 'probe'));
+};
+
+check(
+  'eine gültige Antwort geht ohne Beanstandung durch',
+  matcher.match(goodPage, listSchema, 'probe').length === 0,
+  matcher.match(goodPage, listSchema, 'probe').join(' | '),
+);
+check(
+  'ein fehlendes Pflichtfeld im Umschlag fällt auf (der Befund aus T-029)',
+  withMutation((page) => delete page.data.nextCursor).length === 1,
+);
+check(
+  'eine Liste, wo ein Umschlag beschrieben ist, fällt auf (der Befund aus T-022)',
+  withMutation((page) => {
+    page.data = [];
+  }).length === 1,
+);
+check(
+  'ein geliefertes, aber nicht beschriebenes Feld fällt auf — auch tief in einer Liste',
+  withMutation((page) => {
+    page.data.items[0].note = 'Vermerk';
+  }).length === 1,
+);
+check(
+  'ein Pflichtfeld tief in einer Liste fällt auf',
+  withMutation((page) => delete page.data.items[0].statusId).length === 1,
+);
+check(
+  'eine falsche Art fällt auf',
+  withMutation((page) => {
+    page.data.items[0].tagIds = 'nein';
+  }).length === 1,
+);
+check(
+  'ein fester Wert, der nicht stimmt, fällt auf',
+  matcher.match(
+    { data: { kind: 'weg' } },
+    doc.paths['/timer/stop'].post.responses['200'].content['application/json'].schema,
+    'probe',
+  ).length === 1,
+);
+
+// ---------------------------------------------------------------------------
+section('6  Der Durchlauf: jede Operation wird angefahren');
+// ---------------------------------------------------------------------------
+
+const operations = new Map();
+for (const [path, item] of Object.entries(doc.paths)) {
+  for (const method of METHODS) {
+    const operation = item[method];
+    if (operation === undefined) continue;
+    if (typeof operation.operationId !== 'string') {
+      throw new Error(`Operation ohne operationId: ${method.toUpperCase()} ${path}`);
+    }
+    operations.set(operation.operationId, { path, method: method.toUpperCase(), operation });
+  }
+}
+
+const { records } = await runScenario();
+
+const unknownIds = [...new Set(records.map((r) => r.operationId))].filter((id) => !operations.has(id));
+check(
+  'jede Aufzeichnung nennt eine Operation, die es in der Beschreibung gibt',
+  unknownIds.length === 0,
+  unknownIds.join(', '),
+);
+
+const exercised = new Set(records.map((record) => record.operationId));
+check(
+  `jede der ${operations.size} beschriebenen Operationen wird mindestens einmal angefahren`,
+  [...operations.keys()].every((id) => exercised.has(id)),
+  [...operations.keys()].filter((id) => !exercised.has(id)).join(', '),
+);
+
+// Der Pfad der Aufzeichnung muss die Schablone der Beschreibung sein. Ohne
+// diese Probe könnte eine Aufzeichnung auf die falsche Operation zeigen und
+// deren Antwort messen.
+const wrongPaths = records
+  .filter((record) => operations.get(record.operationId)?.path !== record.path.split('?')[0])
+  .map((record) => `${record.operationId}: ${record.path}`);
+check('jede Aufzeichnung trägt den Pfad ihrer Operation', wrongPaths.length === 0, wrongPaths.join(', '));
+
+const wrongMethods = records
+  .filter((record) => operations.get(record.operationId)?.method !== record.method)
+  .map((record) => `${record.operationId}: ${record.method}`);
+check('und ihre Methode', wrongMethods.length === 0, wrongMethods.join(', '));
+
+const serverErrors = records
+  .filter((record) => record.status >= 500)
+  .map((record) => `${record.method} ${record.path} → ${record.status}`);
+check(
+  'kein einziger Aufruf des Durchlaufs endet mit 5xx',
+  serverErrors.length === 0,
+  serverErrors.join(', '),
+);
+
+/**
+ * A-7.2, R-06 — der interne Vermerk verlässt seine eigene Route nicht.
+ *
+ * Der Durchlauf hat ihn beim Anlegen zweier Todos mitgegeben. Er darf in
+ * genau zwei Antworten stehen: in der der Vermerksroute selbst. Diese Probe
+ * kostet nichts, weil ohnehin jede Antwort eingesammelt wird — und sie misst
+ * eine Zusicherung, die sonst nur behauptet wird.
+ */
+const noteBearing = records
+  .filter((record) => (record.text ?? '').includes(INTERNAL_NOTE))
+  .map((record) => record.operationId);
+check(
+  'der interne Vermerk steht in keiner Antwort außer der Vermerksroute (A-7.2)',
+  noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote'),
+  noteBearing.filter((id) => id !== 'getTodoNote' && id !== 'putTodoNote').join(', '),
+);
+
+/*
+ * T-051 — ein mitgeschickter Schlüssel kommt auch an.
+ *
+ * Die Gestaltprüfung allein kann das nicht: Streift eine Route ein Feld ab,
+ * antwortet sie mit `color: null`, und `null` ist erlaubt. Der Durchlauf legt
+ * die Spalte deshalb mit einer erkennbaren Farbe an, und hier wird nach genau
+ * diesem Wert gesehen. Bis T-051 nahm `POST /todo-statuses` die Farbe nicht
+ * entgegen, während die Oberfläche sie sendete — gefunden hat das
+ * `proof:callers`, nachgemessen wird es hier.
+ */
+const createdStatus = records.find((record) => record.operationId === 'createTodoStatus');
+check(
+  'eine mit Farbe angelegte Spalte trägt sie auch (T-051)',
+  createdStatus?.body?.data?.color === STATUS_COLOR,
+  `geliefert ${JSON.stringify(createdStatus?.body?.data?.color)}`,
+);
+
+// ---------------------------------------------------------------------------
+section('7  Die Statuscodes: was der Dienst liefert, steht in der Beschreibung');
+// ---------------------------------------------------------------------------
+
+const observed = new Map();
+const undescribedStatus = [];
+for (const record of records) {
+  const entry = operations.get(record.operationId);
+  if (entry === undefined) continue;
+  const code = String(record.status);
+  if (!observed.has(record.operationId)) observed.set(record.operationId, new Set());
+  observed.get(record.operationId).add(code);
+  if (entry.operation.responses?.[code] === undefined) {
+    undescribedStatus.push(
+      `${entry.method} ${entry.path} (${record.operationId}): geliefert ${code}, beschrieben sind ` +
+        Object.keys(entry.operation.responses ?? {}).join('/'),
+    );
+  }
+}
+check(
+  `jeder gelieferte Statuscode ist beschrieben (${records.length} Aufrufe)`,
+  undescribedStatus.length === 0,
+  undescribedStatus.join(' | '),
+);
+
+/*
+ * Und die Gegenrichtung, für die Erfolgsfälle: Ein beschriebenes 2xx, das der
+ * Dienst im ganzen Durchlauf nie liefert, ist entweder erfunden oder ein Fall,
+ * den niemand ausgelöst hat. Beides gehört angesehen. Bei 4xx gilt das nicht —
+ * `413 payload_too_large` verlangt ein Megabyte Rumpf, und ein Durchlauf, der
+ * jede Abweisung erzwingt, wäre die zweite Prüfsuite.
+ */
+const unseenSuccess = [];
+for (const [id, entry] of operations) {
+  const seen = observed.get(id) ?? new Set();
+  for (const code of Object.keys(entry.operation.responses ?? {})) {
+    if (code.startsWith('2') && !seen.has(code)) {
+      unseenSuccess.push(`${entry.method} ${entry.path} (${id}): ${code}`);
+    }
+  }
+}
+check(
+  'jeder beschriebene Erfolgsfall kommt im Durchlauf auch vor',
+  unseenSuccess.length === 0,
+  unseenSuccess.join(', '),
+);
+
+/*
+ * Die Antworten der Kette (Herkunft, Nachweis, Inhaltstyp, Rumpfgrenze) hängen
+ * an **keiner** Route, sondern vor allen. Also müssen sie auch an jeder stehen:
+ *
+ *  - `400 token_in_url`, `401`, `403` treffen jede Operation — ein Aufrufer
+ *    braucht dafür nichts als eine Adresse und eine Kopfzeile.
+ *  - `413` und `415` kommen dazu, sobald eine Operation einen Rumpf entgegen-
+ *    nimmt. Was der Dienst auf einen Rumpf antwortet, den die Beschreibung gar
+ *    nicht führt, schuldet sie niemandem.
+ *
+ * Bis T-041 standen sie an 4, 5 und 1 von 64 Operationen — nicht als
+ * Entscheidung, sondern als Rest. Eine Kettenantwort, die an drei Routen steht
+ * und an einundsechzig nicht, liest sich wie eine Aussage über die drei.
+ *
+ * `500` steht bewusst **nicht** in dieser Liste. Es ist der einzige Ausgang,
+ * gegen den kein Aufrufer verzweigt, es trägt an keiner Route eine eigene
+ * Bedeutung — und ein 500 im Durchlauf soll rot werden (Abschnitt 6) und nicht
+ * als beschrieben durchgehen.
+ */
+const CHAIN_ALWAYS = { 400: 'TokenInUrl', 401: 'Unauthorized', 403: 'OriginRejected' };
+const CHAIN_WITH_BODY = { 413: 'PayloadTooLarge', 415: 'UnsupportedMediaType' };
+
+const missingChain = [];
+for (const [id, entry] of operations) {
+  const responses = entry.operation.responses ?? {};
+  const expected = {
+    ...CHAIN_ALWAYS,
+    ...(entry.operation.requestBody === undefined ? {} : CHAIN_WITH_BODY),
+  };
+  for (const [code, component] of Object.entries(expected)) {
+    const described = responses[code];
+    if (described === undefined) {
+      missingChain.push(`${entry.method} ${entry.path} (${id}): ${code} fehlt`);
+    } else if (described.$ref !== `#/components/responses/${component}`) {
+      missingChain.push(`${entry.method} ${entry.path} (${id}): ${code} zeigt nicht auf ${component}`);
+    }
+  }
+}
+check(
+  'die Antworten der Kette stehen an jeder Operation, die sie erzeugen kann',
+  missingChain.length === 0,
+  missingChain.slice(0, 6).join(' | ') + (missingChain.length > 6 ? ` … (${missingChain.length})` : ''),
+);
+
+// ---------------------------------------------------------------------------
+section('8  Die Antwortrümpfe: Pflichtfelder, unbeschriebene Felder, Gestalt');
+// ---------------------------------------------------------------------------
+
+const shapeProblems = [];
+const headerProblems = [];
+let matchedResponses = 0;
+
+for (const record of records) {
+  const entry = operations.get(record.operationId);
+  if (entry === undefined) continue;
+  const described = entry.operation.responses?.[String(record.status)];
+  if (described === undefined) continue; // schon in Abschnitt 7 gemeldet
+  const response = matcher.deref(described);
+  const where = `${entry.method} ${entry.path} ${record.status}`;
+
+  // ---- Kopfzeilen, beide Richtungen ---------------------------------------
+  for (const name of Object.keys(response.headers ?? {})) {
+    if (record.headers[name.toLowerCase()] === undefined) {
+      headerProblems.push(`${where}: Kopfzeile ${name} beschrieben, nicht geliefert`);
+    }
+  }
+  // Nur `Location`. Die übrigen Kopfzeilen des Dienstes (`Cache-Control`,
+  // `X-Content-Type-Options`, die CSP) stehen auf **jeder** Antwort und gehören
+  // in das Bedrohungsmodell, nicht 64-mal in diese Datei. `Location` ist die
+  // eine, die zur Operation gehört und die ein Aufrufer benutzt.
+  if (record.headers['location'] !== undefined && response.headers?.['Location'] === undefined) {
+    headerProblems.push(`${where}: Location geliefert, aber nicht beschrieben`);
+  }
+
+  // ---- Rumpf ---------------------------------------------------------------
+  const schema = response.content?.['application/json']?.schema;
+  if (record.status === 204) {
+    if (response.content !== undefined) {
+      shapeProblems.push(`${where}: die Beschreibung führt einen Rumpf, der Dienst liefert keinen`);
+    }
+    if (record.hasBody) {
+      shapeProblems.push(`${where}: der Dienst liefert einen Rumpf, obwohl 204 keinen hat`);
+    }
+    continue;
+  }
+  if (schema === undefined) {
+    shapeProblems.push(`${where}: kein application/json-Schema beschrieben`);
+    continue;
+  }
+  if (!record.hasBody) {
+    shapeProblems.push(`${where}: ein Rumpf ist beschrieben, geliefert wurde keiner`);
+    continue;
+  }
+  matchedResponses += 1;
+  for (const problem of matcher.condense(matcher.match(record.body, schema, where))) {
+    shapeProblems.push(problem);
+  }
+}
+
+check(
+  `jede gelieferte Antwort passt auf ihr Schema (${matchedResponses} verglichen)`,
+  shapeProblems.length === 0,
+  shapeProblems.slice(0, 8).join(' | ') + (shapeProblems.length > 8 ? ` … (${shapeProblems.length})` : ''),
+);
+check(
+  'die Kopfzeilen stimmen in beide Richtungen',
+  headerProblems.length === 0,
+  headerProblems.join(' | '),
+);
+
+/*
+ * Der Vergleich muss auch wirklich stattgefunden haben. Ohne diese Zahl wäre
+ * ein Durchlauf, dessen Aufzeichnungen aus irgendeinem Grund leer bleiben,
+ * grün — mit null Beanstandungen über null Antworten.
+ */
+check(
+  `es wurden genug Antworten verglichen (${matchedResponses}, mindestens 60)`,
+  matchedResponses >= 60,
+);
+
+// ---------------------------------------------------------------------------
+section('9  Die Fehlerschlüssel: benannt, und mit dem Statuscode des Dienstes');
+// ---------------------------------------------------------------------------
+
+/** Welchen Statuscode der Dienst zu einem Schlüssel liefert, aus seinen zwei Tabellen. */
+const serviceStatusOf = (code) => {
+  try {
+    const fachlich = statusFor(code);
+    if (fachlich !== undefined) return fachlich;
+  } catch {
+    /* kein fachlicher Schlüssel */
+  }
+  try {
+    return errorStatus(code);
+  } catch {
+    return undefined;
+  }
+};
+
+/*
+ * `error.code` ist laut Beschreibung „die einzige Größe, gegen die ein
+ * Aufrufer verzweigt". Ein Schlüssel, der geliefert wird und in der ganzen
+ * Datei nicht vorkommt, ist damit ein Zweig, den niemand kennen kann.
+ */
+const deliveredCodes = new Set(
+  records.map((record) => record.body?.error?.code).filter((code) => typeof code === 'string'),
+);
+const unnamedCodes = [...deliveredCodes].filter(
+  (code) => !new RegExp(`\\b${code}\\b`).test(text),
+);
+check(
+  `jeder gelieferte Fehlerschlüssel kommt in der Beschreibung vor (${deliveredCodes.size})`,
+  unnamedCodes.length === 0,
+  unnamedCodes.join(', '),
+);
+
+/*
+ * Und umgekehrt: Wo die Beschreibung einen Schlüssel unter einem Statuscode
+ * nennt, muss der Dienst ihn mit genau diesem Statuscode beantworten. Das ist
+ * die Verbindung zwischen dem Fließtext der Beschreibung und `http/problem.ts`
+ * — ein `export_status_unchanged` unter einem `422` fiele hier auf, ohne dass
+ * der Durchlauf den Fall auslösen muss.
+ */
+const wrongCodeStatus = [];
+let namedCodes = 0;
+for (const [, entry] of operations) {
+  for (const [code, response] of Object.entries(entry.operation.responses ?? {})) {
+    if (!/^[45]/.test(code)) continue;
+    const described = typeof response.description === 'string' ? response.description : '';
+    for (const hit of described.matchAll(/`([a-z][a-z0-9_]{4,})`/g)) {
+      const status = serviceStatusOf(hit[1]);
+      if (status === undefined) continue;
+      namedCodes += 1;
+      if (String(status) !== code) {
+        wrongCodeStatus.push(
+          `${entry.method} ${entry.path}: „${hit[1]}" steht unter ${code}, der Dienst antwortet damit ${status}`,
+        );
+      }
+    }
+  }
+}
+check(
+  `ein unter einem Statuscode genannter Schlüssel gehört auch dorthin (${namedCodes})`,
+  wrongCodeStatus.length === 0,
+  wrongCodeStatus.join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('10  Beispiele und Fragezeichenparameter');
+// ---------------------------------------------------------------------------
+
+/*
+ * Ein Beispiel ist das, was ein Leser zuerst ansieht und zuletzt prüft. Wenn
+ * es dem Schema daneben widerspricht, hat die Datei zwei Aussagen über
+ * dieselbe Antwort — und der Leser glaubt der falschen.
+ */
+const exampleProblems = [];
+let examplesChecked = 0;
+const walkExamples = (node, where) => {
+  if (Array.isArray(node)) {
+    node.forEach((entry, index) => walkExamples(entry, `${where}[${index}]`));
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  if (node.schema !== undefined) {
+    for (const [name, example] of Object.entries(node.examples ?? {})) {
+      if (example?.value === undefined) continue;
+      examplesChecked += 1;
+      for (const problem of matcher.condense(
+        matcher.match(example.value, node.schema, `${where}.${name}`),
+      )) {
+        exampleProblems.push(problem);
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(node)) walkExamples(value, `${where}.${key}`);
+};
+walkExamples(doc.paths, 'paths');
+walkExamples(doc.components, 'components');
+
+check(
+  `jedes Beispiel passt auf das Schema daneben (${examplesChecked})`,
+  exampleProblems.length === 0,
+  exampleProblems.join(' | '),
+);
+check('und es gibt überhaupt Beispiele', examplesChecked >= 8, String(examplesChecked));
+
+/*
+ * Fragezeichenparameter lassen sich nicht über einen Aufruf messen — ein
+ * Parameter, den der Dienst nicht liest, ändert die Antwort schlicht nicht,
+ * und das sieht wie ein gültiger Filter ohne Treffer aus. Was sich messen
+ * lässt: ob der Name im Quelltext der Routen überhaupt vorkommt. T-039 hat auf
+ * der Anfrageseite zwei deutsche Feldnamen gefunden, die der Dienst nie gelesen
+ * hat; dieselbe Sorte Fund ist hier möglich.
+ */
+const routeSources = [
+  '../src/routes/todos.ts',
+  '../src/routes/structure.ts',
+  '../src/routes/board.ts',
+  '../src/routes/time.ts',
+  '../src/routes/export.ts',
+  '../src/routes/addin/index.ts',
+  '../src/http/input.ts',
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+
+const unreadParameters = [];
+let queryParameters = 0;
+for (const [path, item] of Object.entries(doc.paths)) {
+  const shared = item.parameters ?? [];
+  for (const method of METHODS) {
+    const operation = item[method];
+    if (operation === undefined) continue;
+    for (const raw of [...shared, ...(operation.parameters ?? [])]) {
+      const parameter = matcher.deref(raw);
+      if (parameter.in !== 'query') continue;
+      queryParameters += 1;
+      if (!new RegExp(`['"\`]${parameter.name}['"\`]`).test(routeSources)) {
+        unreadParameters.push(`${method.toUpperCase()} ${path}: „${parameter.name}"`);
+      }
+    }
+  }
+}
+check(
+  `jeder beschriebene Fragezeichenparameter kommt im Quelltext der Routen vor (${queryParameters})`,
+  unreadParameters.length === 0,
+  unreadParameters.join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('11  Das Board: dieselbe Karte in mehreren Spalten (E-054)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Fall, den es vor E-054 nicht geben konnte.
+ *
+ * Solange eine Spalte ein Status war, stand eine Karte in genau einer — das
+ * Schema ließ nichts anderes zu, `todo.status_id` ist ein Wert. Seit eine
+ * Spalte eine **Regel** ist, treffen zwei zutreffende Regeln beide zu, und die
+ * Karte steht in beiden Spalten. Das ist keine Ausnahme, die man behandeln
+ * muss, sondern der Normalfall, und er wird hier gemessen statt behauptet.
+ *
+ * Vier Prüfungen, und die dritte ist die eigentliche:
+ *
+ *  1. Die Spalte kommt so an, wie sie angelegt wurde — `placement: board`
+ *     wird nicht stillschweigend abgestreift (die Falle aus T-051).
+ *  2. Die Karte steht wirklich in mehreren Spalten, und die Spalte ohne Regel
+ *     ist leer: Eine leere Regel trifft nichts, nicht alles (T-009).
+ *  3. **Abfrage und Domänenregel sind sich einig.** Welche Karte in welcher
+ *     Spalte steht, entscheidet SQL (`PoolPort.members`); welche Karte
+ *     mehrfach vorkommt, entscheidet `matchesPool` in der Domäne. Zwei
+ *     Fassungen derselben Regel — hier wird gemessen, dass sie dieselbe
+ *     Antwort geben. Laufen sie auseinander, zeigt das Board eine Karte in
+ *     einer Spalte und behauptet daneben, sie stünde dort nicht.
+ *  4. Mehrere zutreffende Regelterme derselben Spalte ergeben **eine**
+ *     Nennung. Der Fall ist alltäglich: eine Spalte im Modus `any` mit zwei
+ *     Tags, eine Karte mit beiden.
+ */
+
+const boardColumnRecord = records.find(
+  (record) => record.operationId === 'createPool' && record.body?.data?.name === BOARD_COLUMNS.tag,
+);
+check(
+  'eine als Spalte angelegte Regel kommt auch als Spalte zurück (placement)',
+  boardColumnRecord?.body?.data?.placement === 'board',
+  `geliefert ${JSON.stringify(boardColumnRecord?.body?.data?.placement)}`,
+);
+
+const boardRecord = records.find((record) => record.operationId === 'getBoard');
+const board = boardRecord?.body?.data;
+const columnsByName = new Map(
+  (board?.columns ?? []).map((entry) => [entry.column?.name, entry]),
+);
+
+check(
+  `das Board führt die vier eingerichteten Spalten und nur die (${columnsByName.size})`,
+  Object.values(BOARD_COLUMNS).every((name) => columnsByName.has(name)) &&
+    columnsByName.size === Object.keys(BOARD_COLUMNS).length,
+  [...columnsByName.keys()].join(', '),
+);
+
+check(
+  'eine Regel mit placement "pool" steht nicht auf dem Board',
+  ![...columnsByName.keys()].some((name) => String(name).startsWith('Offene Beratung')),
+  [...columnsByName.keys()].join(', '),
+);
+
+const emptyColumn = columnsByName.get(BOARD_COLUMNS.empty);
+check(
+  'eine Spalte ohne Regel zeigt nichts — nicht alles (T-009)',
+  emptyColumn?.todos?.length === 0 && emptyColumn?.total === 0,
+  `${emptyColumn?.todos?.length} Karten, total ${emptyColumn?.total}`,
+);
+
+/** Was die **Abfrage** sagt: Kennung → Spalten, in denen sie steht. */
+const bySql = new Map();
+for (const entry of board?.columns ?? []) {
+  for (const todo of entry.todos ?? []) {
+    if (!bySql.has(todo.id)) bySql.set(todo.id, []);
+    const seen = bySql.get(todo.id);
+    // Zugleich Prüfung 4: Eine Spalte darf höchstens einmal dastehen, auch
+    // wenn mehrere ihrer Regelterme dieselbe Karte treffen.
+    if (!seen.includes(entry.column.id)) seen.push(entry.column.id);
+  }
+}
+
+const multiple = [...bySql.entries()].filter(([, columnIds]) => columnIds.length > 1);
+check(
+  `mindestens eine Karte steht in mehreren Spalten (${multiple.length})`,
+  multiple.length >= 1 && multiple.some(([, columnIds]) => columnIds.length >= 3),
+  multiple.map(([id, columnIds]) => `${id}: ${columnIds.length}`).join(', '),
+);
+
+const doubled = [];
+for (const entry of board?.columns ?? []) {
+  const ids = (entry.todos ?? []).map((todo) => todo.id);
+  if (new Set(ids).size !== ids.length) doubled.push(entry.column?.name);
+}
+check(
+  'mehrere zutreffende Regelterme einer Spalte liefern die Karte einmal, nicht mehrfach',
+  doubled.length === 0,
+  doubled.join(', '),
+);
+
+/** Was die **Domäne** sagt: dieselbe Frage, über `matchesPool`. */
+const byDomain = new Map(
+  (board?.appearances ?? []).map((entry) => [entry.todoId, entry.columnIds]),
+);
+
+const disagreements = [];
+for (const [todoId, columnIds] of multiple) {
+  const claimed = byDomain.get(todoId);
+  if (claimed === undefined) {
+    disagreements.push(`${todoId}: von der Abfrage in ${columnIds.length} Spalten, von der Regel in keiner`);
+    continue;
+  }
+  if ([...claimed].sort().join(',') !== [...columnIds].sort().join(',')) {
+    disagreements.push(`${todoId}: Abfrage [${columnIds}] gegen Regel [${claimed}]`);
+  }
+}
+for (const [todoId, columnIds] of byDomain) {
+  if (!bySql.has(todoId)) {
+    disagreements.push(`${todoId}: von der Regel in ${columnIds.length} Spalten, von der Abfrage in keiner`);
+  }
+}
+check(
+  `Abfrage und Domänenregel nennen dieselben Spalten (${byDomain.size} Mehrfachnennungen)`,
+  disagreements.length === 0 && byDomain.size === multiple.length,
+  disagreements.join(' | ') || `Regel ${byDomain.size}, Abfrage ${multiple.length}`,
+);
+
+// ---------------------------------------------------------------------------
+console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
+if (failed > 0) {
+  console.log('\nFehlgeschlagen:');
+  for (const name of failures) console.log(`  - ${name}`);
+  process.exitCode = 1;
+}

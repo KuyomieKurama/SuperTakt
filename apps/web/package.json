@@ -1,0 +1,33 @@
+{
+  "name": "@takt/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — Oberflaeche. Die Musterseite des Designsystems liegt seit T-057 auf einem eigenen Einstiegspunkt: /designsystem.html im Entwicklungsbetrieb, im Auslieferungsbuendel gar nicht. Seit T-059 liefert @ark-ui/react das Verhalten von Auswahlfeld, Kombobox und Menue (E-052) — ungestylt; das Aussehen kommt weiter aus @takt/ui-tokens. @takt/domain steckt hier ausschliesslich wegen tagNameKey: Die Vorschlagsliste der Tag-Eingabe muss nach derselben Regel vergleichen wie der Dienst.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build:designsystem": "tsc -p tsconfig.json --noEmit && node scripts/build-designsystem.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "contrast": "node scripts/contrast-check.mjs",
+    "contrast:md": "node scripts/contrast-check.mjs --markdown"
+  },
+  "dependencies": {
+    "@ark-ui/react": "^5.39.0",
+    "@takt/desktop": "workspace:*",
+    "@takt/domain": "workspace:*",
+    "@takt/ui-tokens": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.0"
+  }
+}

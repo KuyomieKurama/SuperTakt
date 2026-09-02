@@ -1,0 +1,22 @@
+{
+  "name": "@takt/export",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Takt — Exportvorlagen-Motor (E-005, E-017, E-026, E-028, E-033, E-034, A-8.*).",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@takt/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,60 @@
+# Takt — pnpm-Arbeitsbereich (T-008a).
+#
+# Zwei Ebenen, mehr nicht: Anwendungen unter apps/, geteilte Pakete unter
+# packages/. Testordner sind ausgenommen, damit dort nie versehentlich ein
+# eigenes Paket entsteht — die Hoheit über Tests liegt bei unit-tester und
+# e2e-tester, nicht bei der Paketstruktur.
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - '!**/test/**'
+  - '!tests/**'
+
+# Lieferkette. Takt hält Kundendaten und ein Zugriffstoken (E-009, R-09); ein
+# untergeschobenes Paket hätte beides. Die vier Schalter kosten nichts und
+# schließen die bekannten Wege:
+#   minimumReleaseAge  — frisch veröffentlichte Versionen sieben Tage lang nicht
+#                        installieren. Die meisten Übernahmen von npm-Konten
+#                        werden in diesem Fenster entdeckt.
+#   trustPolicy        — verhindert, dass ein Update die Sicherheitsschalter
+#                        wieder herabsetzt.
+#   blockExoticSubdeps — transitive Abhängigkeiten dürfen nicht aus Git-, URL-
+#                        oder Dateiquellen kommen, sondern nur aus der Registry.
+#   strictDepBuilds    — eine Abhängigkeit mit unfreigegebenem Lebenszyklus-
+#                        Skript bricht die Installation ab, statt still zu
+#                        überspringen.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+# Eine begruendete Ausnahme, keine Bequemlichkeitsliste.
+#
+# undici-types@6.21.0 ist die von @types/node 22.x fest verlangte Fassung
+# (`~6.21.0`); eine neuere gibt es in dieser Linie nicht. Das Paket enthaelt
+# ausschliesslich .d.ts-Dateien, keinen Laufzeitanteil und kein
+# Lebenszyklus-Skript — es kann zur Installations- und zur Laufzeit nichts
+# ausfuehren. Der Provenienznachweis fehlt, weil die Veroeffentlichungskette
+# von undici gewechselt hat, nicht weil ein Konto uebernommen wurde.
+#
+# semver@6.3.1 kommt ueber @babel/core und damit ueber @vitejs/plugin-react
+# herein — eine reine Bauzeit-Abhaengigkeit der Oberflaeche, die im
+# ausgelieferten Buendel nicht vorkommt. @babel/core verlangt die 6er-Linie
+# fest; eine neuere Fassung gibt es dort nicht. Auch dieses Paket hat kein
+# Lebenszyklus-Skript.
+#
+# Jeder weitere Eintrag hier braucht dieselbe Begruendung: warum das Paket
+# nichts ausfuehren kann, und warum der fehlende Nachweis erklaerbar ist.
+# Waechst die Liste, ist das ein Befund fuer den security-checker und keine
+# Formalie.
+trustPolicyExclude:
+  - undici-types@6.21.0
+  - semver@6.3.1
+blockExoticSubdeps: true
+strictDepBuilds: true
+
+# pnpm 11 führt Lebenszyklus-Skripte von Abhängigkeiten nur nach ausdrücklicher
+# Freigabe aus. Ohne diesen Eintrag bricht der Bauschritt von esbuild ab
+# (Befund aus T-006). Jeder weitere Eintrag hier ist eine bewusste
+# Vertrauensentscheidung und gehört begründet.
+allowBuilds:
+  # esbuild lädt seine Plattform-Binärdatei im postinstall. Wird von Vite und
+  # Vitest gebraucht.
+  esbuild: true

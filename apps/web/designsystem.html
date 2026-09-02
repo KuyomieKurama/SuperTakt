@@ -1,0 +1,28 @@
+<!doctype html>
+<!--
+  Takt — Musterseite des Designsystems.
+
+  Eigener Einstiegspunkt seit T-057. Sie war bis dahin ein Punkt der
+  Navigation und eine Route der Anwendung; beides ist sie nicht mehr.
+
+  Erreichbar im Entwicklungsbetrieb unter
+  `http://127.0.0.1:5173/designsystem.html` (`pnpm dev`).
+
+  Im ausgelieferten Buendel entsteht diese Seite nicht: `vite.config.ts` nimmt
+  sie nur dann in `rollupOptions.input` auf, wenn `TAKT_DESIGNSYSTEM=1` gesetzt
+  ist. `pnpm --filter @takt/web build:designsystem` tut genau das — fuer die
+  Abnahme, nicht fuer die Auslieferung.
+-->
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Takt — Designsystem</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/designsystem.tsx"></script>
+  </body>
+</html>

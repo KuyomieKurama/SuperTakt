@@ -1,0 +1,288 @@
+/**
+ * Fünf bei mir angemeldete Fälle (T-048), aus drei Berichten zusammengezogen:
+ *
+ *  - TP-SEC-13 — Exportieren, Exportstatus zurücksetzen, erneut exportieren.
+ *    Der Weg, den R-10 nachvollziehbar halten soll: Der Verlauf dieser
+ *    Buchung zeigt danach drei Protokollzeilen in der richtigen Reihenfolge,
+ *    mit der Begründung des Zurücksetzens dazwischen (T-040, offene Frage 2a).
+ *    Reset und der zweite Export laufen hier bewusst in schneller Folge — das
+ *    ist genau das Szenario, für das Migration 0007 die Reihenfolge im
+ *    Protokoll von `occurred_at` auf `rowid` umgestellt hat, weil zwei
+ *    Protokollzeilen derselben Sekunde sonst vertauscht sein konnten.
+ *  - „Verlauf dieser Buchung" bei einer nie exportierten Buchung (T-040,
+ *    offene Frage 2c): Leerzustand statt Fehler.
+ *  - Der gesperrte Export (T-045, offene Frage 1): Vorschau antwortet nicht →
+ *    „Export ausführen" ist gesperrt, Meldung mit Ursache, Wiederholung holt
+ *    die Zahlen zurück.
+ *  - Derselbe Fehlschlag, während der Bestätigungsdialog bereits offen ist:
+ *    der Dialog muss verschwinden und darf nicht von selbst wiederkommen.
+ *
+ * Die beiden letzten Fälle bilden die Vorschau-Fehlschläge über
+ * `page.route()` gegen `POST /export/preview` nach — es gibt in diesem Aufbau
+ * keinen anderen Weg, den Dienst gezielt für genau diese eine Route
+ * scheitern zu lassen, ohne den Dienst selbst zu verändern (nicht meine
+ * Dateihoheit). Der zweite Fall braucht zusätzlich einen Kniff: Der
+ * Bestätigungsdialog ist ein echtes Modal (`.scrim` mit `position: fixed;
+ * inset: 0`) und blockiert jeden echten Klick auf die Auswahl dahinter — ein
+ * Testklick käme nie an. `locator.click({ force: true })` überspringt genau
+ * die Erreichbarkeitsprüfung (sichtbar, nicht verdeckt), löst aber weiterhin
+ * ein echtes, vertrauenswürdiges Klickereignis über die Eingabe-Pipeline des
+ * Browsers aus — React reagiert also genauso, wie es auf einen normalen
+ * Klick reagieren würde. Das bildet denselben Codepfad nach, den in
+ * Wirklichkeit z. B. eine zweite gleichzeitige Sitzung auslösen könnte, die
+ * eine der ausgewählten Buchungen während der Bestätigung ändert.
+ */
+import { test, expect } from '@playwright/test';
+
+import { createTimeEntry, createTodo, deleteTimeEntry, listTimeEntriesByTodo } from './support/api';
+import { runExportFromScreen } from './support/actions';
+import { gotoExport, gotoTodo } from './support/nav';
+
+function todayAt(hour: number, minute: number): string {
+  const now = new Date();
+  now.setHours(hour, minute, 0, 0);
+  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** Öffnet das Zeilenmenü der einzigen Buchung auf S-03 und wählt einen Eintrag. */
+async function chooseEntryMenuItem(
+  page: import('@playwright/test').Page,
+  label: string,
+): Promise<void> {
+  await page.locator('.entry-row').getByRole('button', { name: 'Menü für diese Buchung' }).click();
+  await page.getByRole('menuitem', { name: label }).click();
+}
+
+test('TP-SEC-13 — exportieren, zurücksetzen, erneut exportieren: Verlauf bleibt in der richtigen Reihenfolge nachvollziehbar', async ({
+  page,
+}) => {
+  const title = `E2E-AUDIT-CYCLE-${Date.now()}`;
+  const todo = await createTodo({ title });
+  await createTimeEntry({
+    todoId: todo.id,
+    startedAt: todayAt(5, 0),
+    endedAt: todayAt(5, 20),
+    note: 'Erster Durchlauf',
+  });
+
+  // --- Erster Export -------------------------------------------------------
+  await gotoExport(page);
+  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  await runExportFromScreen(page);
+
+  const afterFirstExport = await listTimeEntriesByTodo(todo.id);
+  expect(afterFirstExport[0]?.exportStatus).toBe('exported');
+  expect(afterFirstExport[0]?.exportCount).toBe(1);
+
+  // --- Zurücksetzen, mit Begründung und ausdrücklicher Bestätigung ---------
+  await gotoTodo(page, todo.id);
+  await chooseEntryMenuItem(page, 'Exportstatus zurücksetzen');
+  const resetDialog = page.getByRole('alertdialog', { name: 'Exportstatus zurücksetzen?' });
+  await expect(resetDialog).toBeVisible();
+  const reasonText = `E2E-Begruendung-${Date.now()}`;
+  await resetDialog.getByLabel(/Begründung für das Protokoll/).fill(reasonText);
+  await resetDialog
+    .getByLabel(/Mir ist klar, dass diese Zeit dadurch ein zweites Mal abgerechnet werden kann/)
+    .check();
+  await resetDialog.getByRole('button', { name: 'Zurücksetzen' }).click();
+  await expect(resetDialog).toBeHidden();
+
+  const afterReset = await listTimeEntriesByTodo(todo.id);
+  expect(afterReset[0]?.exportStatus).toBe('open');
+  expect(afterReset[0]?.exportCount).toBe(1); // E-047/R-10: die Historie sinkt beim Zurücksetzen nicht.
+
+  // --- Zweiter Export, unmittelbar danach (Migration 0007 betrifft genau ---
+  // diesen Fall: zwei Protokollzeilen in derselben Sekunde). -----------------
+  await gotoExport(page);
+  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  await runExportFromScreen(page);
+
+  const afterSecondExport = await listTimeEntriesByTodo(todo.id);
+  expect(afterSecondExport[0]?.exportStatus).toBe('exported');
+  expect(afterSecondExport[0]?.exportCount).toBe(2);
+
+  // --- Verlauf dieser Buchung: drei Zeilen, jüngste zuerst, in der ----------
+  // tatsächlichen Reihenfolge der Vorgänge, mit der Begründung dazwischen.
+  await gotoTodo(page, todo.id);
+  await chooseEntryMenuItem(page, 'Verlauf dieser Buchung');
+  const history = page.getByRole('dialog', { name: 'Verlauf dieser Buchung' });
+  await expect(history).toBeVisible();
+
+  const rows = history.locator('.auditrow');
+  await expect(rows).toHaveCount(3);
+  // Jüngste zuerst: exportiert (2.), zurückgesetzt, exportiert (1.).
+  await expect(rows.nth(0)).toHaveClass(/auditrow--exported/);
+  await expect(rows.nth(1)).toHaveClass(/auditrow--reset/);
+  await expect(rows.nth(1)).toContainText(reasonText);
+  await expect(rows.nth(2)).toHaveClass(/auditrow--exported/);
+
+  await history.getByRole('button', { name: 'Schließen', exact: true }).click();
+  await expect(history).toBeHidden();
+
+  // Dieselbe Kette ist auch im Gesamtprotokoll (S-07, dritter Bereich) zu
+  // finden — S-07 hat seit T-040 drei Bereiche: Export, Vorlagen, Protokoll.
+  await gotoExport(page);
+  await page.getByRole('link', { name: 'Protokoll' }).click();
+  await expect(page).toHaveURL(/#\/export\/protokoll/);
+  await expect(page.getByRole('heading', { name: 'Exportprotokoll' })).toBeVisible();
+});
+
+test('Verlauf einer nie exportierten Buchung zeigt den Leerzustand, keinen Fehler', async ({ page }) => {
+  const title = `E2E-AUDIT-EMPTY-${Date.now()}`;
+  const todo = await createTodo({ title });
+  await createTimeEntry({
+    todoId: todo.id,
+    startedAt: todayAt(6, 0),
+    endedAt: todayAt(6, 15),
+    note: 'Nie exportiert',
+  });
+
+  await gotoTodo(page, todo.id);
+  await chooseEntryMenuItem(page, 'Verlauf dieser Buchung');
+  const history = page.getByRole('dialog', { name: 'Verlauf dieser Buchung' });
+  await expect(history).toBeVisible();
+
+  await expect(history.getByText('In keinem Exportlauf gewesen.')).toBeVisible();
+  await expect(
+    history.getByText('Für diese Buchung ist nichts protokolliert'),
+  ).toBeVisible();
+  await expect(history.locator('.auditrow')).toHaveCount(0);
+  // Kein Fehlerzustand — insbesondere keine "InlineMessage" mit Gefahrenton.
+  await expect(history.locator('[role="alert"]')).toHaveCount(0);
+
+  // Aufräumen: keine offene Buchung im gemeinsamen Bestand zurücklassen.
+  for (const entry of await listTimeEntriesByTodo(todo.id)) await deleteTimeEntry(entry.id);
+});
+
+test('Der gesperrte Export: Vorschau antwortet nicht → Schaltfläche gesperrt, Meldung mit Ursache, Wiederholung möglich', async ({
+  page,
+}) => {
+  // Zwei Gruppen: Die Gliederung selbst (`GET .../export/preview` über *alle*
+  // offenen Buchungen) muss beim ersten Laden gelingen, sonst gäbe es gar
+  // keine `.egroup`-Elemente, an denen sich "gesperrt" zeigen ließe. Die
+  // eigentliche Fehlschlagsprobe kommt danach über die *Auswahl* (zweiter,
+  // von der Gliederung unabhängiger Aufruf derselben Route mit den
+  // ausgewählten statt aller Kennungen) — deshalb zwei Gruppen: Eine
+  // abwählen ändert die Auswahl, ohne sie leer werden zu lassen (eine leere
+  // Auswahl braucht laut `ExportScreen.tsx` gar keine Vorschau und ginge in
+  // den Zustand `idle`, nicht `failed`).
+  const run = Date.now();
+  const titleA = `E2E-LOCKED-A-${run}`;
+  const titleB = `E2E-LOCKED-B-${run}`;
+  const todoA = await createTodo({ title: titleA });
+  const todoB = await createTodo({ title: titleB });
+  await createTimeEntry({ todoId: todoA.id, startedAt: todayAt(7, 0), endedAt: todayAt(7, 20), note: 'Gruppe A' });
+  await createTimeEntry({ todoId: todoB.id, startedAt: todayAt(7, 30), endedAt: todayAt(7, 50), note: 'Gruppe B' });
+
+  await gotoExport(page);
+  const groupA = page.locator('.egroup', { hasText: titleA });
+  const groupB = page.locator('.egroup', { hasText: titleB });
+  await expect(groupA).toBeVisible();
+  await expect(groupB).toBeVisible();
+
+  const exportButton = page.getByRole('button', { name: 'Export ausführen' });
+  await expect(exportButton).toBeEnabled();
+
+  // Ab jetzt scheitert jede weitere Gesamtvorschau — die bereits geladene
+  // Gliederung bleibt davon unberührt.
+  let failPreview = true;
+  await page.route('**/api/v1/export/preview', async (route) => {
+    if (!failPreview) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'server_error', message: 'E2E: absichtlich fehlgeschlagen' } }),
+    });
+  });
+
+  // Auswahl ändern löst eine neue Gesamtvorschau aus, die jetzt scheitert.
+  // `dispatchEvent('click')` statt eines echten Klicks: das Kontrollkästchen
+  // ist zwar sichtbar und nicht überdeckt, aber der native Klick auf ein
+  // gerade neu gerendertes Kästchen ist in diesem Lauf spürbar instabil
+  // (siehe Bericht); das Ereignis direkt am Element ist deterministisch und
+  // löst denselben `onChange` aus.
+  await groupA.locator('input.egroup__check').dispatchEvent('click');
+
+  await expect(exportButton).toBeDisabled();
+  const failure = page.locator('[role="alert"]', { hasText: 'Die Gesamtvorschau ließ sich nicht abrufen' });
+  await expect(failure).toBeVisible();
+  await expect(failure).toContainText('E2E: absichtlich fehlgeschlagen');
+  await expect(page.getByText('Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet')).toBeVisible();
+  // Die Gliederung selbst bleibt stehen — nur die Zahlen fehlen.
+  await expect(groupA).toBeVisible();
+  await expect(groupB).toBeVisible();
+
+  // --- Wiederholung: die Zahlen kommen zurück, die Auswahl bleibt ----------
+  failPreview = false;
+  await failure.getByRole('button', { name: 'Erneut versuchen' }).click();
+  await expect(exportButton).toBeEnabled();
+  await expect(failure).toBeHidden();
+
+  // Der Export selbst läuft danach normal durch — nur mit der Buchung, die
+  // zum Zeitpunkt des Fehlschlags noch ausgewählt war (Gruppe B).
+  await runExportFromScreen(page);
+  const entriesB = await listTimeEntriesByTodo(todoB.id);
+  expect(entriesB[0]?.exportStatus).toBe('exported');
+  const entriesA = await listTimeEntriesByTodo(todoA.id);
+  expect(entriesA[0]?.exportStatus).toBe('open'); // war zum Laufzeitpunkt abgewählt.
+
+  // Aufräumen: die bewusst offen gelassene Buchung nicht im Bestand lassen.
+  for (const entry of entriesA) await deleteTimeEntry(entry.id);
+});
+
+test('Fehlschlag der Vorschau, während der Bestätigungsdialog bereits offen ist: der Dialog verschwindet und kommt nicht von selbst zurück', async ({
+  page,
+}) => {
+  const run = Date.now();
+  const titleA = `E2E-LOCKED-OPEN-A-${run}`;
+  const titleB = `E2E-LOCKED-OPEN-B-${run}`;
+  const todoA = await createTodo({ title: titleA });
+  const todoB = await createTodo({ title: titleB });
+  await createTimeEntry({ todoId: todoA.id, startedAt: todayAt(8, 0), endedAt: todayAt(8, 20), note: 'Gruppe A' });
+  await createTimeEntry({ todoId: todoB.id, startedAt: todayAt(9, 0), endedAt: todayAt(9, 20), note: 'Gruppe B' });
+
+  await gotoExport(page);
+  const groupA = page.locator('.egroup', { hasText: titleA });
+  const groupB = page.locator('.egroup', { hasText: titleB });
+  await expect(groupA).toBeVisible();
+  await expect(groupB).toBeVisible();
+
+  const exportButton = page.getByRole('button', { name: 'Export ausführen' });
+  await expect(exportButton).toBeEnabled();
+  await exportButton.click();
+  const confirmDialog = page.getByRole('alertdialog', { name: 'Export ausführen?' });
+  await expect(confirmDialog).toBeVisible();
+
+  // Ab jetzt scheitert jede weitere Gesamtvorschau.
+  await page.route('**/api/v1/export/preview', (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'server_error', message: 'E2E: Datenänderung während der Bestätigung' } }),
+    }),
+  );
+
+  // Die Auswahl ändert sich, während der Dialog offen ist (siehe Dateikopf:
+  // `dispatchEvent`, weil das Modal echte Klicks auf die Auswahl dahinter
+  // ohnehin blockieren würde — `force: true` bringt hier nichts, weil es nur
+  // Playwrights eigene Erreichbarkeitsprüfung überspringt, den Klick aber
+  // weiterhin an den obersten Bildpunkt schickt, und der gehört dem Scrim).
+  await groupA.locator('input.egroup__check').dispatchEvent('click');
+
+  await expect(confirmDialog).toBeHidden();
+  await expect(exportButton).toBeDisabled();
+  await expect(page.locator('[role="alert"]', { hasText: 'Die Gesamtvorschau ließ sich nicht abrufen' })).toBeVisible();
+
+  // Er kommt nicht von selbst zurück, obwohl der Auslöser (der Knopf) noch
+  // dieselbe Handlung anböte.
+  await page.waitForTimeout(500);
+  await expect(confirmDialog).toBeHidden();
+
+  // Aufräumen: beide Buchungen bleiben offen (nie exportiert) — nicht im
+  // gemeinsamen Bestand zurücklassen.
+  for (const entry of await listTimeEntriesByTodo(todoA.id)) await deleteTimeEntry(entry.id);
+  for (const entry of await listTimeEntriesByTodo(todoB.id)) await deleteTimeEntry(entry.id);
+});

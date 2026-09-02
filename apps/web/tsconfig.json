@@ -1,0 +1,17 @@
+// Erbt die strengen Schalter von der Wurzel (T-008a). Hier steht nur, was die
+// Oberflaeche zusaetzlich braucht: JSX, die DOM-Bibliotheken und die Typen des
+// Vite-Clients. Die frueher hier verdoppelten Schalter — strict,
+// exactOptionalPropertyTypes, noUncheckedIndexedAccess, verbatimModuleSyntax,
+// isolatedModules und die uebrigen — stehen jetzt genau einmal in
+// tsconfig.base.json.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "useDefineForClassFields": true,
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "vite.config.ts"]
+}
