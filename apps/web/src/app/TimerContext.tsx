@@ -250,9 +250,11 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         return;
       }
 
-      // A-2.5, I-05: Das Kennzeichen ist gefallen, die Statusspalte nicht.
-      // Beides wird ausgesprochen — der Benutzer sucht die Karte sonst an
-      // einer anderen Stelle (T-005n, Abschnitt 2, Schritt 8).
+      // A-2.5, I-05: Das Kennzeichen ist gefallen — der Status nicht, und die
+      // Tags auch nicht. Seit E-054 haengt die Kanban-Spalte an den Tags, also
+      // steht die Karte danach in denselben Spalten wie zuvor; sie war nur
+      // ausgeblendet. Beides wird ausgesprochen — der Benutzer sucht die Karte
+      // sonst an einer anderen Stelle (T-005n, Abschnitt 2, Schritt 8).
       /*
         Befund C-24: Derselbe Satz stand hier und im Add-in
         (`duplicate/reopen.ts`) in zwei Fassungen. Der Fall „kein Pool trifft"

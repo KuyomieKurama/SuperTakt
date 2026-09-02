@@ -110,6 +110,18 @@ export type TaktErrorCode =
   // Kanban und Status
   | 'status_in_use'
   | 'last_status_column'
+  /**
+   * Der Standard-Status für neue Todos lässt sich nicht löschen (T-074).
+   *
+   * Bis dahin stand diese Zusage allein in der Oberfläche: `apps/web` sperrte
+   * den Knopf, der Dienst ließ den Löschvorgang durch, und `defaultStatus()`
+   * fiel danach **still** auf den ersten Status nach Position zurück. Wer die
+   * Route unmittelbar aufrief, stellte damit einen Zustand her, den die
+   * Oberfläche für unmöglich hielt — und niemand erfuhr, dass sein Standard
+   * jetzt ein anderer ist. Eine Regel, die nur in der Oberfläche steht, ist
+   * keine Regel.
+   */
+  | 'default_status_locked'
   // Speicherung
   | 'conflict'
   | 'storage_error';

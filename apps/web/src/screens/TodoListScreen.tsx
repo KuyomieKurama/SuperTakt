@@ -4,9 +4,10 @@ import {
   deleteTodo,
   listTodos,
   markTodoDone,
+  updateTodo,
 } from "../api/endpoints";
 import { errorMessage } from "../api/client";
-import type { Todo } from "../api/types";
+import type { Todo, TodoStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DoneFlag } from "../components/DoneFlag";
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../components/FilterBar";
@@ -43,8 +44,9 @@ import { TodoFormDialog } from "./TodoFormDialog";
  * fehlen, mit einem Schalter daneben.
  *
  * **E-023 — Erledigt ist ein Kennzeichen, keine Spalte.** Das Kontrollkästchen
- * setzt und nimmt es zurück (I-03). Die Statusspalte des Todos steht in
- * derselben Zeile und ändert sich dabei nicht.
+ * setzt und nimmt es zurück (I-03). Der Status des Todos steht in derselben
+ * Zeile und ändert sich dabei nicht. Welche Statuswerte es überhaupt gibt,
+ * wird seit T-073 in den Einstellungen festgelegt (A-5.4).
  *
  * **E-027 — jede Zeile hat ihre Timer-Aktion.** Startet der Timer auf einem
  * erledigten Todo, hebt das „Erledigt“ auf (A-2.5, I-05); die Zeile bleibt
@@ -121,11 +123,23 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     }
     const status = statuses.find((candidate) => candidate.id === statusId);
     if (status !== undefined) {
-      entries.push({ id: "spalte", field: "Spalte", value: status.name, onRemove: () => setStatusId("") });
+      entries.push({ id: "spalte", field: "Status", value: status.name, onRemove: () => setStatusId("") });
     }
-    const pool = pools.find((candidate) => candidate.id === poolId);
-    if (pool !== undefined) {
-      entries.push({ id: "pool", field: "Pool", value: pool.name, onRemove: () => setPoolId("") });
+    /*
+      Der Name kommt aus **allen** Regeln und nicht nur aus den Pools (E-054):
+      Wer aus einer Board-Spalte hierher springt, filtert nach einer Regel mit
+      Anzeigeort „Board". Sie steht nicht in der Pool-Auswahl — ohne diesen
+      Rueckgriff wirkte der Filter, ohne dass er angezeigt wuerde, und
+      niemand faende heraus, warum die Liste kurz ist.
+    */
+    if (poolId.length > 0) {
+      const poolName = structure.ruleName(poolId);
+      entries.push({
+        id: "pool",
+        field: "Regel",
+        value: poolName ?? "unbekannte Regel",
+        onRemove: () => setPoolId(""),
+      });
     }
     for (const id of tagIds) {
       const tag = structure.tagInfo(id);
@@ -172,15 +186,15 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
             toasts.show({
               tone: "info",
               title: `„${todo.title}“ ist wieder offen.`,
-              body: "Es erscheint wieder in seinen Pools. Die Statusspalte bleibt unverändert.",
+              body: "Es erscheint wieder in seinen Pools und auf dem Board. Der Status bleibt unverändert.",
             });
           } else {
             toasts.show({
               tone: "success",
               title: `„${todo.title}“ ist erledigt.`,
               body: showDone
-                ? "Die Statusspalte bleibt unverändert."
-                : "Es verschwindet damit aus dieser Liste und aus seinen Pools. Die Statusspalte bleibt unverändert.",
+                ? "Der Status bleibt unverändert."
+                : "Es verschwindet damit aus dieser Liste, aus seinen Pools und vom Board. Der Status bleibt unverändert.",
               action: {
                 label: "Rückgängig",
                 onSelect: () => {
@@ -218,6 +232,31 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       .finally(() => setDeleting(false));
   }, [bump, pendingDelete, toasts]);
 
+  /**
+   * Den Status setzen, ohne einen Dialog zu oeffnen (I-02).
+   *
+   * Seit E-054 ist der Status keine Kanban-Spalte mehr und laesst sich auf dem
+   * Board nicht mehr durch Ziehen aendern. Damit er nicht schwerer erreichbar
+   * ist als vorher, steht er hier als ein Griff im Zeilenmenue — nicht nur
+   * als Feld im Bearbeiten-Dialog.
+   */
+  const setStatus = useCallback(
+    (todo: Todo, status: TodoStatus) => {
+      void updateTodo(todo.id, { statusId: status.id })
+        .then(() => {
+          bump();
+          toasts.success(
+            `Status geändert: ${status.name}.`,
+            `„${todo.title}“ steht jetzt auf „${status.name}“. Tags und Kanban-Spalten bleiben unberührt.`,
+          );
+        })
+        .catch((cause: unknown) =>
+          toasts.failure("Der Status ließ sich nicht ändern", errorMessage(cause)),
+        );
+    },
+    [bump, toasts],
+  );
+
   const rowMenu = useCallback(
     (todo: Todo): readonly MenuEntry[] => [
       {
@@ -235,6 +274,16 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           setFormOpen(true);
         },
       },
+      { kind: "separator", id: "sep-status" },
+      ...statuses.map<MenuEntry>((status) => ({
+        id: `status-${status.id}`,
+        label: `Status: ${status.name}`,
+        icon: "chevron-right",
+        disabled: status.id === todo.statusId,
+        ...(status.id === todo.statusId ? { disabledReason: "Aktueller Status" } : {}),
+        onSelect: () => setStatus(todo, status),
+      })),
+      { kind: "separator", id: "sep-done" },
       {
         id: "done",
         label: todo.completedAt === null ? "Als erledigt markieren" : "Erledigt zurücknehmen",
@@ -253,7 +302,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         },
       },
     ],
-    [toggleDone],
+    [setStatus, statuses, toggleDone],
   );
 
   return (
@@ -293,11 +342,11 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                 busy={list.state.status === "ready" && list.state.refreshing}
               />
               <Select
-                label="Statusspalte"
+                label="Status"
                 value={statusId}
                 onChange={setStatusId}
                 options={[
-                  { value: "", label: "Alle Spalten" },
+                  { value: "", label: "Jeder Status" },
                   ...statuses.map((status) => ({ value: status.id, label: status.name })),
                 ]}
               />

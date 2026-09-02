@@ -1,94 +1,89 @@
-import { useCallback, useMemo, useState, type DragEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
-import {
-  clearTodoDone,
-  createTodoStatus,
-  deleteTodoStatus,
-  listTodos,
-  markTodoDone,
-  reorderTodoStatuses,
-  updateTodo,
-  updateTodoStatus,
-} from "../api/endpoints";
-import type { Id, Todo, TodoStatus } from "../api/types";
+import { clearTodoDone, markTodoDone, getBoard, updatePool } from "../api/endpoints";
+import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FilterToggle } from "../components/FilterBar";
-import { FormDialog, TextField } from "../components/FormDialog";
+import { FormDialog } from "../components/FormDialog";
+import { Icon } from "../components/Icon";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Button, EmptyState, IconButton, InlineMessage } from "../components/Primitives";
+import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
+import { TagChip } from "../components/Tag";
 import { EMPTY_SUMMARY, loadExportSummaries } from "../app/exportSummary";
 import { useRefresh } from "../app/RefreshContext";
 import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
-import { useAsync, useMutation } from "../app/useAsync";
-import { formatDuration } from "../lib/format";
-import { AsyncBoundary, ScreenHeader } from "./parts";
+import { useAsync } from "../app/useAsync";
+import { flatFolders } from "../lib/folderPaths";
+import { formatDuration, formatTime, plural } from "../lib/format";
+import { POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
+import { PoolFormDialog } from "./PoolFormDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
 
 /**
- * Takt — S-04, das Kanban-Board (A-5, I-14, A-13.6).
+ * Takt — S-04, das Kanban-Board (A-5.1, A-5.3 bis A-5.6, E-054).
  *
- * ## Zwei Achsen, die nichts voneinander wissen (E-023)
+ * ## Eine Spalte ist eine Regel über Tags
  *
- * Die **Statusspalte** sagt, wo die Karte liegt. Das **Erledigt-Kennzeichen**
- * sagt, ob das Todo fertig ist. Beide sind unabhängig, und **keine
- * Kombination ist ungültig**:
+ * Bis E-054 war eine Spalte ein Statuswert; jede Karte stand in genau einer.
+ * Seitdem ist eine Spalte dieselbe Entität wie ein Pool — eine Regel über Tags
+ * —, und `pool.placement` sagt, wo sie erscheint. Der Status bleibt als
+ * Eigenschaft am Todo; er ist nur nicht mehr die Spalte.
  *
- *   „In Arbeit" + offen     — der Regelfall
- *   „In Arbeit" + erledigt  — fachlich fertig, das Board wurde nicht nachgeführt
- *   „Erledigt"  + offen     — der Arbeitsfluss ist durch, das Todo nicht
- *   „Erledigt"  + erledigt  — beides trifft zu
+ * Daraus folgen drei Dinge, die diese Ansicht sichtbar machen muss:
  *
- * Deshalb: **Ziehen ändert die Spalte und sonst nichts.** Kein
- * Bestätigungsdialog, kein Erledigt-Setzen, kein Timer wird berührt — und die
- * Live-Ansage sagt das ausdrücklich, damit niemand eine Nebenwirkung vermutet
- * (I-14, T-005n Abschnitt 3).
+ *  1. **Kein Ziehen.** Eine Regel lässt sich nicht durch Verschieben umkehren,
+ *     ohne Tags zu setzen — und das hat der Auftraggeber ausgeschlossen. A-5.2
+ *     und I-14 sind aufgehoben. Wer eine Karte in eine andere Spalte bringen
+ *     will, ändert ihre **Tags**; das sagt das Kartenmenü ausdrücklich.
+ *  2. **Eine Karte kann in mehreren Spalten stehen.** Das ist kein Fehler,
+ *     sondern der Normalfall: Zwei zutreffende Regeln treffen beide zu. Jedes
+ *     Vorkommen nennt die anderen Spalten beim Namen und hebt sie auf Wunsch
+ *     hervor.
+ *  3. **Das Board ist nach der Umstellung leer.** Migration 0009 hat aus keiner
+ *     vorhandenen Regel eine Spalte gemacht, weil es keine ehrliche Übersetzung
+ *     von „In Progress" in ein Tag gibt. Der Leerzustand erklärt das und führt
+ *     zur Einrichtung, statt „keine Daten" zu sagen.
  *
- * Der Begriff „Abschlussspalte" kommt hier nicht vor. Die letzte Spalte einer
- * Statusstruktur ist die letzte Spalte, mehr nicht.
+ * ## Warum es keine Blätterung je Spalte gibt
  *
- * ## Bedienung ohne Ziehen (SC 2.5.7)
+ * `GET /board` liefert je Spalte die erste Seite; weiterblättern ließe sich je
+ * Spalte über `GET /pools/{id}/todos`. Diese Ansicht tut es trotzdem nicht,
+ * sondern erhöht die Kartenzahl **je Spalte** und lädt das Board neu. Grund ist
+ * die Mehrfachnennung: `appearances` wird vom Dienst an der Regel berechnet,
+ * über alle Mitglieder — nachgeladene Karten kämen ohne diese Auskunft an, und
+ * eine Karte, die dann in zwei Spalten steht, ohne es zu sagen, sieht aus wie
+ * ein Fehler. Lieber ein Aufruf mehr als eine Ansicht, die je nach Seite etwas
+ * anderes behauptet.
  *
- * Jede Karte lässt sich mit den Pfeiltasten links und rechts eine Spalte
- * weiterschieben, solange sie den Fokus hat. Drag & Drop ist der bequeme Weg,
- * nicht der einzige.
+ * ## Was hier nicht mehr steht
+ *
+ * `DRAG_MIME`, `draggable`, `dropColumn`, `moveByOffset` und der Aufruf
+ * `updateTodo({ statusId })` aus dem Ziehen. Der Status wird in S-02 und S-03
+ * geändert; das Kartenmenü führt dorthin.
  */
 
-const DRAG_MIME = "application/x-takt-todo";
+/** Karten je Spalte beim ersten Laden. Eine Bildschirmhöhe, nicht mehr. */
+const PAGE_SIZE = 25;
 
 /**
- * Die Ordnung **innerhalb** einer Spalte: zuletzt geändert zuerst.
+ * Die ausdrücklich genannten Tags einer Regel.
  *
- * Bis Migration 0010 stand hier der Sortierschlüssel `boardRank` — aus der
- * Zeit, als Karten innerhalb einer Spalte an ihren Platz gezogen wurden
- * (A-5.2). Mit E-054 ist dieses Ziehen entfallen; geblieben ist das Ziehen
- * **zwischen** Spalten, das die Spalte ändert und sonst nichts. Damit gibt es
- * keine vom Benutzer gesetzte Reihenfolge mehr, die eine Spalte wiedergeben
- * könnte, und das Feld gibt es auch nicht mehr.
- *
- * **Warum diese Ordnung und keine andere.** Sie ist wörtlich die, in der
- * `GET /todos` die Liste ohnehin liefert (`repo-todos.ts`:
- * `ORDER BY t.updated_at DESC, t.id DESC`). Die Ansicht stellt damit keine
- * zweite Ordnung neben die des Dienstes, sie spricht dessen Ordnung aus — und
- * was zuletzt angefasst wurde, steht oben, wo man es sucht.
- *
- * **Gerechnet wird hier nicht.** Beide Felder sind Zeichenketten des Dienstes,
- * und beide sind so gebaut, dass ihr Vergleich als Text die zeitliche
- * Reihenfolge ergibt: `Timestamp` ist UTC in fester Breite („Lexikographische
- * Sortierung ist chronologisch", `takt-local-api.yaml`), `Id` ist UUID Fassung
- * 7 und nach Erzeugungszeit sortierbar. Kein `Date`, keine Zeitzone, keine
- * Dauer.
- *
- * Die Kennung ist der zweite Schlüssel, weil Zeitstempel sekundengenau sind:
- * Zwei Karten derselben Sekunde bekämen sonst die Reihenfolge, in der sie
- * zufällig hereinkamen.
+ * Ordnerterme bleiben außen vor: Welche Tags in einem Ordner samt Unterordnern
+ * liegen, löst der Dienst auf (`resolveRule`) — hier wäre es die zweite Fassung
+ * derselben Rechnung, und die erste wäre nicht mehr die einzige Wahrheit.
  */
-function byRecency(left: Todo, right: Todo): number {
-  const byUpdated = right.updatedAt.localeCompare(left.updatedAt);
-  return byUpdated !== 0 ? byUpdated : right.id.localeCompare(left.id);
+function seedTagIds(rule: readonly PoolRuleTerm[]): readonly Id[] {
+  return rule.flatMap((term) => (term.kind === "tag" ? [term.tagId] : []));
+}
+
+/** Dieselbe Frage für eine ganze Spalte. */
+function seedTagsOf(column: Pool): readonly Id[] {
+  return seedTagIds(column.rule);
 }
 
 export function BoardScreen() {
@@ -98,56 +93,27 @@ export function BoardScreen() {
   const { version, bump } = useRefresh();
 
   const [showDone, setShowDone] = useState(false);
-  const [dragging, setDragging] = useState<Id | null>(null);
-  const [dropColumn, setDropColumn] = useState<Id | null>(null);
+  const [perColumn, setPerColumn] = useState(PAGE_SIZE);
+  const [setupOpen, setSetupOpen] = useState(false);
+  /** Offener Regel-Dialog: `null` zu, sonst anlegen (`pool` fehlt) oder ändern. */
+  const [ruleForm, setRuleForm] = useState<{ readonly pool?: Pool } | null>(null);
+  const [removing, setRemoving] = useState<Pool | null>(null);
+  const [createIn, setCreateIn] = useState<Pool | null>(null);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [highlighted, setHighlighted] = useState<Id | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [columnsOpen, setColumnsOpen] = useState(false);
-  const [createIn, setCreateIn] = useState<Id | null>(null);
-  const [editing, setEditing] = useState<Todo | null>(null);
-
-  const statuses = useMemo(
-    () =>
-      structure.state.status === "ready"
-        ? [...structure.state.value.statuses].sort((left, right) => left.position - right.position)
-        : [],
-    [structure.state],
-  );
 
   const data = useAsync(async () => {
-    const [todos, summaries] = await Promise.all([
-      listTodos(showDone ? {} : { onlyOpen: true }, { limit: 200 }),
+    const [board, summaries] = await Promise.all([
+      getBoard({ includeCompleted: showDone, limit: perColumn }),
       loadExportSummaries(),
     ]);
-    return { todos: todos.items, summaries };
-  }, [version, showDone]);
+    return { board, summaries };
+  }, [version, showDone, perColumn]);
 
-  const move = useCallback(
-    (todo: Todo, target: TodoStatus) => {
-      if (todo.statusId === target.id) return;
-      void updateTodo(todo.id, { statusId: target.id })
-        .then(() => {
-          bump();
-          setAnnouncement(
-            `„${todo.title}“ verschoben nach ${target.name}. Das Erledigt-Kennzeichen bleibt unverändert: ${todo.completedAt === null ? "offen" : "erledigt"}.`,
-          );
-        })
-        .catch((cause: unknown) =>
-          toasts.failure("Die Karte ließ sich nicht verschieben", errorMessage(cause)),
-        );
-    },
-    [bump, toasts],
-  );
-
-  const moveByOffset = useCallback(
-    (todo: Todo, delta: number) => {
-      const index = statuses.findIndex((status) => status.id === todo.statusId);
-      if (index < 0) return;
-      const target = statuses[Math.min(Math.max(index + delta, 0), statuses.length - 1)];
-      if (target === undefined) return;
-      move(todo, target);
-    },
-    [move, statuses],
-  );
+  const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
+  const tree = structure.state.status === "ready" ? structure.state.value.tagTree : null;
+  const folders = useMemo(() => (tree === null ? [] : flatFolders(tree)), [tree]);
 
   const toggleDone = useCallback(
     (todo: Todo) => {
@@ -158,54 +124,97 @@ export function BoardScreen() {
           bump();
           toasts.show({
             tone: wasDone ? "info" : "success",
-            title: wasDone
-              ? `„${todo.title}“ ist wieder offen.`
-              : `„${todo.title}“ ist erledigt.`,
-            body: "Die Karte bleibt in ihrer Spalte — Erledigt ist ein Kennzeichen, keine Spalte.",
+            title: wasDone ? `„${todo.title}“ ist wieder offen.` : `„${todo.title}“ ist erledigt.`,
+            // Erledigt entscheidet über die Sichtbarkeit, nicht über die
+            // Zugehörigkeit: Die Regel trifft weiter zu, die Karte wird nur
+            // ausgeblendet, solange erledigte Karten ausgeblendet sind.
+            body: wasDone
+              ? "Die Regeln ihrer Spalten treffen unverändert zu — sie erscheint wieder auf dem Board."
+              : showDone
+                ? "Sie bleibt in ihren Spalten stehen, weil erledigte Karten eingeblendet sind."
+                : "Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. Ihre Tags ändern sich dadurch nicht.",
           });
         })
         .catch((cause: unknown) =>
           toasts.failure("Das Kennzeichen ließ sich nicht ändern", errorMessage(cause)),
         );
     },
-    [bump, timer, toasts],
+    [bump, showDone, timer, toasts],
   );
 
-  const cardMenu = useCallback(
-    (todo: Todo): readonly MenuEntry[] => [
-      { id: "open", label: "Todo öffnen", icon: "arrow-up-right", shortcut: "Eingabe", onSelect: () => navigate("todo", todo.id) },
-      { id: "edit", label: "Bearbeiten", icon: "pencil", onSelect: () => setEditing(todo) },
+  const setPlacement = useCallback(
+    (pool: Pool, placement: "pool" | "board" | "both", spoken: string) => {
+      void updatePool(pool.id, { placement })
+        .then(() => {
+          structure.reload();
+          bump();
+          toasts.success(spoken, `„${pool.name}“ — ${POOL_PLACEMENT_SHORT[placement]}.`);
+        })
+        .catch((cause: unknown) =>
+          toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
+        );
+    },
+    [bump, structure, toasts],
+  );
+
+  const columnMenu = useCallback(
+    (column: Pool): readonly MenuEntry[] => [
+      /*
+       * Der Eintrag steht auch dann da, wenn er nicht geht — mit dem Grund
+       * daneben. Eine Spalte, die als einzige kein Pluszeichen trägt, wirkt
+       * sonst kaputt; hier steht stattdessen, warum Takt die Tags für diese
+       * Regel nicht raten kann.
+       */
+      seedTagsOf(column).length === 0
+        ? {
+            id: "add",
+            label: "Todo in dieser Spalte anlegen",
+            icon: "plus",
+            disabled: true,
+            disabledReason:
+              "Diese Regel nennt nur Ordner. Welche Tags darin liegen, löst der Dienst auf — die Ansicht rechnet das nicht nach.",
+            onSelect: () => undefined,
+          }
+        : {
+            id: "add",
+            label: "Todo mit den Tags dieser Regel anlegen",
+            icon: "plus",
+            onSelect: () => setCreateIn(column),
+          },
       {
-        id: "done",
-        label: todo.completedAt === null ? "Als erledigt markieren" : "Erledigt zurücknehmen",
-        icon: todo.completedAt === null ? "check" : "rotate-ccw",
-        onSelect: () => toggleDone(todo),
+        id: "edit",
+        label: "Regel bearbeiten",
+        icon: "pencil",
+        onSelect: () => setRuleForm({ pool: column }),
+      },
+      {
+        id: "list",
+        label: "Alle Todos dieser Regel in der Liste",
+        icon: "filter",
+        onSelect: () => navigate("todos", undefined, { pool: column.id }),
       },
       { kind: "separator", id: "sep" },
-      ...statuses
-        .filter((status) => status.id !== todo.statusId)
-        .map<MenuEntry>((status) => ({
-          id: `move-${status.id}`,
-          label: `Nach „${status.name}“ verschieben`,
-          icon: "chevron-right",
-          onSelect: () => move(todo, status),
-        })),
+      {
+        id: "remove",
+        label: "Vom Board nehmen",
+        icon: "x",
+        tone: "danger",
+        onSelect: () => setRemoving(column),
+      },
     ],
-    [move, statuses, toggleDone],
+    [],
   );
 
-  /*
-   * `screen--wide` stand hier bis T-057 und hob die Breitengrenze auf, die für
-   * jede andere Ansicht gilt. Gemessen bei 1920px Fensterbreite: 1440px auf
-   * acht Ansichten, 1622px hier — der Inhaltsbereich sprang um 182px, sobald
-   * man diesen Reiter wählte. Das Board braucht die Ausnahme nicht: `.kboard`
-   * scrollt waagerecht, sobald mehr Spalten da sind, als hineinpassen.
-   */
+  const createInTags = useMemo(
+    () => (createIn === null ? [] : seedTagIds(createIn.rule)),
+    [createIn],
+  );
+
   return (
     <section className="screen">
       <ScreenHeader
         title="Kanban"
-        lead="Spalten sind frei definierbar. Ziehen ändert die Spalte — und sonst nichts."
+        lead="Jede Spalte ist eine Regel über Tags. Welche Karte wo steht, entscheiden die Tags des Todos — nicht die Maus."
         actions={
           <>
             <FilterToggle
@@ -214,7 +223,7 @@ export function BoardScreen() {
               onChange={setShowDone}
               hint="Voreingestellt ausgeblendet"
             />
-            <Button variant="secondary" iconStart="filter" onClick={() => setColumnsOpen(true)}>
+            <Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
               Spalten verwalten
             </Button>
           </>
@@ -226,123 +235,376 @@ export function BoardScreen() {
       </p>
 
       <AsyncBoundary state={data.state} label="Board wird geladen" rows={4} onRetry={data.reload}>
-        {(value) => {
-          if (statuses.length === 0) {
+        {(value, refreshing) => {
+          const columnName = new Map(value.board.columns.map((view) => [view.column.id, view.column.name]));
+          const appearances = new Map(
+            value.board.appearances.map((entry) => [entry.todoId, entry.columnIds]),
+          );
+          const partial = value.board.columns.some((view) => view.todos.length < view.total);
+
+          if (value.board.columns.length === 0) {
             return (
-              <EmptyState
-                icon="square"
-                title="Es gibt noch keine Statusspalte"
-                description="Ohne Spalte hat eine Karte keinen Platz. Legen Sie die erste an — zum Beispiel „Offen“, „In Arbeit“ und „Fertig“."
-                action={
-                  <Button variant="primary" iconStart="plus" onClick={() => setColumnsOpen(true)}>
-                    Spalten verwalten
-                  </Button>
-                }
+              <BoardEmptyState
+                pools={pools}
+                onCreate={() => setRuleForm({})}
+                onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
               />
             );
           }
 
           return (
-            <div className="board">
-              {statuses.map((status) => {
-                const cards = value.todos
-                  .filter((todo) => todo.statusId === status.id)
-                  .sort(byRecency);
-                const doneCount = cards.filter((todo) => todo.completedAt !== null).length;
+            <>
+              <div className="board__bar">
+                <p className="board__stamp">
+                  Stand {formatTime(value.board.generatedAt)} ·{" "}
+                  {plural(value.board.columns.length, "Spalte", "Spalten")}
+                  {value.board.appearances.length === 0
+                    ? ""
+                    : ` · ${plural(value.board.appearances.length, "Karte steht", "Karten stehen")} in mehreren Spalten`}
+                </p>
+                <RefreshHint active={refreshing} />
+                <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
+                  Neu berechnen
+                </Button>
+              </div>
 
-                return (
-                  <KanbanColumn
-                    key={status.id}
-                    title={status.name}
-                    count={cards.length}
-                    doneCount={doneCount}
-                    dropTarget={dropColumn === status.id}
-                    onDragOver={(event: DragEvent<HTMLElement>) => {
-                      if (!event.dataTransfer.types.includes(DRAG_MIME)) return;
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      setDropColumn(status.id);
+              <div className="board">
+                {value.board.columns.map((view) => (
+                  <BoardColumn
+                    key={view.column.id}
+                    view={view}
+                    columnName={columnName}
+                    appearances={appearances}
+                    summaries={value.summaries}
+                    highlighted={highlighted}
+                    seedTagIds={seedTagsOf(view.column)}
+                    folderNames={folders}
+                    entries={columnMenu(view.column)}
+                    onEditRule={() => setRuleForm({ pool: view.column })}
+                    onAdd={() => setCreateIn(view.column)}
+                    onOpenTodo={(todo) => navigate("todo", todo.id)}
+                    onEditTodo={setEditingTodo}
+                    onToggleDone={toggleDone}
+                    onToggleTimer={(todo) => timer.toggle(todo.id, todo.title)}
+                    onHighlight={(todo, columns) => {
+                      const next = highlighted === todo.id ? null : todo.id;
+                      setHighlighted(next);
+                      setAnnouncement(
+                        next === null
+                          ? "Hervorhebung aufgehoben."
+                          : `„${todo.title}“ steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].join(", ")}.`,
+                      );
                     }}
-                    onDragLeave={() => setDropColumn((current) => (current === status.id ? null : current))}
-                    onDrop={(event: DragEvent<HTMLElement>) => {
-                      event.preventDefault();
-                      setDropColumn(null);
-                      setDragging(null);
-                      const todoId = event.dataTransfer.getData(DRAG_MIME);
-                      const todo = value.todos.find((candidate) => candidate.id === todoId);
-                      if (todo !== undefined) move(todo, status);
-                    }}
-                    onAdd={() => setCreateIn(status.id)}
-                    entries={[
-                      {
-                        id: "rename",
-                        label: "Spalten verwalten",
-                        icon: "pencil",
-                        onSelect: () => setColumnsOpen(true),
-                      },
-                      {
-                        id: "add",
-                        label: "Todo in dieser Spalte anlegen",
-                        icon: "plus",
-                        onSelect: () => setCreateIn(status.id),
-                      },
-                    ]}
+                    isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
+                    isReactivated={(todo) => timer.reactivated.has(todo.id)}
+                    statusName={(todo) => structure.statusName(todo.statusId)}
+                  />
+                ))}
+              </div>
+
+              {partial ? (
+                <div className="list-more">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setPerColumn((current) => current + PAGE_SIZE)}
                   >
-                    {cards.length === 0 ? (
-                      <p className="board__empty">
-                        Keine Karte. Ziehen Sie eine hierher oder legen Sie eine an.
-                      </p>
-                    ) : (
-                      cards.map((todo) => (
-                        <KanbanCard
-                          key={todo.id}
-                          card={toCard(todo, value.summaries, structure, timer.isRunningFor(todo.id), timer.reactivated.has(todo.id))}
-                          entries={cardMenu(todo)}
-                          dragging={dragging === todo.id}
-                          onOpen={() => navigate("todo", todo.id)}
-                          onToggleTimer={() => timer.toggle(todo.id, todo.title)}
-                          onMoveByKeyboard={(delta) => moveByOffset(todo, delta)}
-                          onDragStart={(event: DragEvent<HTMLElement>) => {
-                            event.dataTransfer.setData(DRAG_MIME, todo.id);
-                            event.dataTransfer.effectAllowed = "move";
-                            setDragging(todo.id);
-                          }}
-                          onDragEnd={() => {
-                            setDragging(null);
-                            setDropColumn(null);
-                          }}
-                        />
-                      ))
-                    )}
-                  </KanbanColumn>
-                );
-              })}
-            </div>
+                    Mehr Karten je Spalte laden (derzeit {perColumn})
+                  </Button>
+                  <p className="list-more__hint">
+                    Das Board wird dabei neu berechnet — nur so bleibt die Auskunft „steht auch
+                    in …“ für jede Karte vollständig.
+                  </p>
+                </div>
+              ) : null}
+            </>
           );
         }}
       </AsyncBoundary>
 
-      <StatusColumnsDialog open={columnsOpen} statuses={statuses} onClose={() => setColumnsOpen(false)} />
+      <BoardSetupDialog
+        open={setupOpen}
+        columns={data.state.status === "ready" ? data.state.value.board.columns : []}
+        pools={pools}
+        onClose={() => setSetupOpen(false)}
+        onCreate={() => {
+          setSetupOpen(false);
+          setRuleForm({});
+        }}
+        onEdit={(pool) => {
+          setSetupOpen(false);
+          setRuleForm({ pool });
+        }}
+        onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
+        onRemove={(pool) => {
+          setSetupOpen(false);
+          setRemoving(pool);
+        }}
+      />
 
+      <PoolFormDialog
+        open={ruleForm !== null}
+        {...(ruleForm?.pool === undefined ? {} : { pool: ruleForm.pool })}
+        defaultPlacement="board"
+        onClose={() => setRuleForm(null)}
+      />
+
+      <ConfirmDialog
+        open={removing !== null}
+        title="Spalte vom Board nehmen?"
+        description={
+          removing === null
+            ? ""
+            : `Die Regel „${removing.name}“ erscheint danach nicht mehr auf dem Board.`
+        }
+        consequence="Die Regel bleibt als Pool erhalten — mit Namen, Bedingungen und allem, was daran hängt. Gelöscht wird nichts, und an den Todos ändert sich nichts."
+        confirmLabel="Vom Board nehmen"
+        onConfirm={() => {
+          const pool = removing;
+          if (pool === null) return;
+          setRemoving(null);
+          setPlacement(pool, "pool", "Spalte vom Board genommen.");
+        }}
+        onCancel={() => setRemoving(null)}
+      />
+
+      {/*
+        Die Vorbelegung haengt an `createIn` und nicht am Rendern: Ein bei
+        jedem Durchlauf neu gebautes Feld waere eine neue Kennung, und der
+        Ruecksetz-Effekt im Dialog liefe mit — mitten im Tippen.
+      */}
       <TodoFormDialog
         open={createIn !== null}
-        {...(createIn === null ? {} : { presetStatusId: createIn })}
+        presetTagIds={createInTags}
         onClose={() => setCreateIn(null)}
       />
 
-      {editing === null ? null : (
-        <TodoFormDialog open todo={editing} onClose={() => setEditing(null)} />
+      {editingTodo === null ? null : (
+        <TodoFormDialog open todo={editingTodo} onClose={() => setEditingTodo(null)} />
       )}
     </section>
   );
 }
 
+/* ==================================================================== */
+/* Eine Spalte                                                          */
+/* ==================================================================== */
+
+interface BoardColumnProps {
+  readonly view: BoardColumnView;
+  readonly columnName: ReadonlyMap<Id, string>;
+  readonly appearances: ReadonlyMap<Id, readonly Id[]>;
+  readonly summaries: {
+    readonly byTodo: ReadonlyMap<Id, typeof EMPTY_SUMMARY>;
+    readonly secondsByTodo: ReadonlyMap<Id, number>;
+  };
+  readonly highlighted: Id | null;
+  readonly seedTagIds: readonly Id[];
+  readonly folderNames: ReadonlyArray<{ readonly id: Id; readonly path: readonly string[] }>;
+  readonly entries: readonly MenuEntry[];
+  readonly onEditRule: () => void;
+  readonly onAdd: () => void;
+  readonly onOpenTodo: (todo: Todo) => void;
+  readonly onEditTodo: (todo: Todo) => void;
+  readonly onToggleDone: (todo: Todo) => void;
+  readonly onToggleTimer: (todo: Todo) => void;
+  readonly onHighlight: (todo: Todo, otherColumns: readonly string[]) => void;
+  readonly isTimerRunning: (todo: Todo) => boolean;
+  readonly isReactivated: (todo: Todo) => boolean;
+  readonly statusName: (todo: Todo) => string;
+}
+
+function BoardColumn({
+  view,
+  columnName,
+  appearances,
+  summaries,
+  highlighted,
+  seedTagIds,
+  folderNames,
+  entries,
+  onEditRule,
+  onAdd,
+  onOpenTodo,
+  onEditTodo,
+  onToggleDone,
+  onToggleTimer,
+  onHighlight,
+  isTimerRunning,
+  isReactivated,
+  statusName,
+}: BoardColumnProps) {
+  const structure = useStructure();
+  const column = view.column;
+  const doneCount = view.todos.filter((todo) => todo.completedAt !== null).length;
+
+  return (
+    <KanbanColumn
+      title={column.name}
+      count={view.todos.length}
+      total={view.total}
+      doneCount={doneCount}
+      rule={<RuleSummary pool={column} folderNames={folderNames} />}
+      entries={entries}
+      {...(seedTagIds.length === 0
+        ? {}
+        : {
+            onAdd,
+            addLabel: `Todo in „${column.name}“ anlegen — mit den Tags dieser Regel`,
+          })}
+    >
+      {view.todos.length === 0 ? (
+        <EmptyState
+          compact
+          icon="inbox"
+          title="Keine Karte trifft diese Regel"
+          description={
+            column.rule.length === 0
+              ? "Diese Spalte hat noch keine Bedingung. Eine leere Regel trifft nichts — nicht alles."
+              : "Sobald ein Todo die genannten Tags trägt, erscheint es hier von selbst."
+          }
+          action={
+            <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
+              Regel bearbeiten
+            </Button>
+          }
+        />
+      ) : (
+        view.todos.map((todo) => {
+          const others = (appearances.get(todo.id) ?? [])
+            .filter((id) => id !== column.id)
+            .map((id) => columnName.get(id))
+            .filter((name): name is string => name !== undefined);
+
+          return (
+            <KanbanCard
+              key={todo.id}
+              card={toCard(
+                todo,
+                summaries,
+                structure,
+                statusName(todo),
+                isTimerRunning(todo),
+                isReactivated(todo),
+                others,
+              )}
+              entries={cardMenu(todo, others.length > 0, highlighted === todo.id, {
+                open: () => onOpenTodo(todo),
+                edit: () => onEditTodo(todo),
+                done: () => onToggleDone(todo),
+                highlight: () => onHighlight(todo, others),
+              })}
+              highlighted={highlighted === todo.id}
+              onOpen={() => onOpenTodo(todo)}
+              onToggleTimer={() => onToggleTimer(todo)}
+              {...(others.length === 0 ? {} : { onHighlight: () => onHighlight(todo, others) })}
+            />
+          );
+        })
+      )}
+    </KanbanColumn>
+  );
+}
+
+/**
+ * Das Kartenmenü. Es nennt den Weg, den es seit E-054 gibt — Tags ändern —,
+ * und den Ort, an dem der Status geändert wird. Beides führt in denselben
+ * Dialog; getrennt genannt, weil sonst niemand auf die Idee käme, den Status
+ * unter „Bearbeiten" zu suchen.
+ */
+function cardMenu(
+  todo: Todo,
+  multiple: boolean,
+  highlighted: boolean,
+  on: {
+    readonly open: () => void;
+    readonly edit: () => void;
+    readonly done: () => void;
+    readonly highlight: () => void;
+  },
+): readonly MenuEntry[] {
+  return [
+    { id: "open", label: "Todo öffnen", icon: "arrow-up-right", onSelect: on.open },
+    {
+      id: "tags",
+      label: "Tags ändern — sie entscheiden die Spalte",
+      icon: "tag",
+      onSelect: on.edit,
+    },
+    { id: "status", label: "Status ändern", icon: "pencil", onSelect: on.edit },
+    { kind: "separator", id: "sep-done" },
+    {
+      id: "done",
+      label: todo.completedAt === null ? "Als erledigt markieren" : "Erledigt zurücknehmen",
+      icon: todo.completedAt === null ? "check" : "rotate-ccw",
+      onSelect: on.done,
+    },
+    ...(multiple
+      ? ([
+          { kind: "separator", id: "sep-also" },
+          {
+            id: "highlight",
+            label: highlighted ? "Hervorhebung aufheben" : "Alle Vorkommen hervorheben",
+            icon: "copy",
+            onSelect: on.highlight,
+          },
+        ] as const)
+      : []),
+  ];
+}
+
+/** Die Regel in Worten, direkt unter dem Spaltenkopf. */
+function RuleSummary({
+  pool,
+  folderNames,
+}: {
+  readonly pool: Pool;
+  readonly folderNames: ReadonlyArray<{ readonly id: Id; readonly path: readonly string[] }>;
+}) {
+  const structure = useStructure();
+
+  if (pool.rule.length === 0) {
+    return <p className="kcolumn__rule-text muted">Ohne Bedingung — diese Spalte trifft nichts.</p>;
+  }
+
+  return (
+    <p className="kcolumn__rule-text">
+      <span className="kcolumn__rule-mode">
+        {pool.matchMode === "any" ? "Mindestens eines von" : "Alle von"}
+      </span>
+      {pool.rule.map((term, index) =>
+        term.kind === "tag" ? (
+          <TagChip
+            key={`tag-${String(index)}`}
+            size="sm"
+            label={structure.tagInfo(term.tagId)?.tag.name ?? "unbekannter Tag"}
+            {...(structure.tagInfo(term.tagId) === undefined
+              ? {}
+              : { path: structure.tagInfo(term.tagId)?.path ?? [] })}
+          />
+        ) : (
+          <span key={`folder-${String(index)}`} className="kcolumn__rule-folder">
+            <Icon name="folder" size={11} />
+            {folderNames.find((folder) => folder.id === term.folderId)?.path.join(" / ") ??
+              "unbekannter Ordner"}
+            {pool.includeSubfolders ? " (mit Unterordnern)" : ""}
+          </span>
+        ),
+      )}
+    </p>
+  );
+}
+
 function toCard(
   todo: Todo,
-  summaries: { byTodo: ReadonlyMap<Id, typeof EMPTY_SUMMARY>; secondsByTodo: ReadonlyMap<Id, number> },
+  summaries: {
+    readonly byTodo: ReadonlyMap<Id, typeof EMPTY_SUMMARY>;
+    readonly secondsByTodo: ReadonlyMap<Id, number>;
+  },
   structure: ReturnType<typeof useStructure>,
+  statusName: string,
   timerRunning: boolean,
   reactivated: boolean,
+  otherColumns: readonly string[],
 ): KanbanCardData {
   return {
     id: todo.id,
@@ -355,175 +617,230 @@ function toCard(
     trackedDisplay: formatDuration(summaries.secondsByTodo.get(todo.id) ?? 0),
     exportSummary: summaries.byTodo.get(todo.id) ?? EMPTY_SUMMARY,
     timerRunning,
+    statusName,
     done: todo.completedAt !== null,
     reactivated,
+    ...(otherColumns.length === 0 ? {} : { appearance: { otherColumns } }),
   };
 }
 
 /* ==================================================================== */
-/* Statusspalten verwalten (A-5.4)                                      */
+/* Der Leerzustand — der wichtigste Bildschirm dieser Ansicht           */
 /* ==================================================================== */
 
-function StatusColumnsDialog({
-  open,
-  statuses,
-  onClose,
-}: {
-  readonly open: boolean;
-  readonly statuses: readonly TodoStatus[];
-  readonly onClose: () => void;
-}) {
-  const structure = useStructure();
-  const toasts = useToasts();
-  const { bump } = useRefresh();
-  const mutation = useMutation();
-  const [newName, setNewName] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<TodoStatus | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+/**
+ * Kein Board heißt hier **nicht** „nichts zu tun".
+ *
+ * Nach der Umstellung auf E-054 ist das Board leer, und zwar aus einem Grund,
+ * den der Benutzer kennen muss: Es gab keine ehrliche Übersetzung der alten
+ * Statusspalten in Tag-Regeln, und Takt setzt keine Tags von sich aus. Ein
+ * Leerzustand, der nur „keine Daten" sagt, ließe ihn glauben, seine Arbeit sei
+ * verschwunden. Deshalb steht hier, was geschehen ist, wo seine Todos geblieben
+ * sind und wie er in zwei Klicks eine Spalte bekommt.
+ */
+export interface BoardEmptyStateProps {
+  /** Vorhandene Pool-Regeln, die sich als Spalte aufnehmen lassen. */
+  readonly pools: readonly Pool[];
+  readonly onCreate: () => void;
+  readonly onAdopt: (pool: Pool) => void;
+}
 
-  const after = (): void => {
-    structure.reload();
-    bump();
-  };
-
+export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStateProps) {
   return (
-    <>
-      <FormDialog
-        open={open}
-        title="Statusspalten"
-        description="Frei definierbar. Keine Spalte ist ausgezeichnet — Erledigt ist ein Kennzeichen am Todo, keine Spalte."
-        submitLabel="Spalte anlegen"
-        cancelLabel="Schließen"
-        submitDisabled={newName.trim().length === 0}
-        busy={mutation.busy}
-        error={mutation.error}
-        onSubmit={() => {
-          void mutation.run(async () => {
-            await createTodoStatus(newName.trim(), null);
-            setNewName("");
-            after();
-            toasts.success("Spalte angelegt.");
-          });
-        }}
-        onCancel={onClose}
-      >
-        <ul className="column-list">
-          {statuses.map((status, index) => (
-            <li key={status.id} className="column-row">
-              <span className="column-row__name grow truncate">{status.name}</span>
-              {status.isDefault ? (
-                <span className="column-row__flag">Standardspalte</span>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    void mutation.run(async () => {
-                      await updateTodoStatus(status.id, { isDefault: true });
-                      after();
-                    });
-                  }}
-                >
-                  Als Standard
-                </Button>
-              )}
-              <IconButton
-                label={`„${status.name}“ nach links`}
-                icon="chevron-right"
-                size="sm"
-                className="column-row__up"
-                disabled={index === 0}
-                onClick={() => {
-                  void mutation.run(async () => {
-                    const order = statuses.map((entry) => entry.id);
-                    const previous = order[index - 1];
-                    const current = order[index];
-                    if (previous === undefined || current === undefined) return;
-                    order[index - 1] = current;
-                    order[index] = previous;
-                    await reorderTodoStatuses(order);
-                    after();
-                  });
-                }}
-              />
-              <IconButton
-                label={`„${status.name}“ nach rechts`}
-                icon="chevron-right"
-                size="sm"
-                disabled={index === statuses.length - 1}
-                onClick={() => {
-                  void mutation.run(async () => {
-                    const order = statuses.map((entry) => entry.id);
-                    const next = order[index + 1];
-                    const current = order[index];
-                    if (next === undefined || current === undefined) return;
-                    order[index + 1] = current;
-                    order[index] = next;
-                    await reorderTodoStatuses(order);
-                    after();
-                  });
-                }}
-              />
-              <IconButton
-                label={`„${status.name}“ löschen`}
-                icon="trash"
-                size="sm"
-                variant="danger"
-                disabled={statuses.length <= 1}
-                onClick={() => {
-                  setDeleteError(null);
-                  setPendingDelete(status);
-                }}
-              />
-            </li>
-          ))}
-        </ul>
-
-        <TextField
-          label="Neue Spalte"
-          value={newName}
-          onChange={setNewName}
-          maxLength={64}
-          placeholder="z. B. Wartet auf Rückmeldung"
-        />
-
-        <InlineMessage tone="info" title="Reihenfolge und Namen gelten sofort">
-          Die Karten bleiben, wo sie sind. Wird eine Spalte gelöscht, fragt Takt vorher, was mit
-          ihren Karten geschehen soll.
-        </InlineMessage>
-      </FormDialog>
-
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        tone="danger"
-        title="Statusspalte löschen?"
-        description={
-          pendingDelete === null ? "" : `Die Spalte „${pendingDelete.name}“ wird entfernt.`
+    <div className="board-setup">
+      <EmptyState
+        icon="square"
+        title="Das Board hat noch keine Spalte"
+        description="Seit der Umstellung ist eine Spalte eine Regel über Tags — dieselbe Art Regel wie ein Pool. Sie richten die Spalten selbst ein; Takt erfindet keine."
+        action={
+          <Button variant="primary" iconStart="plus" onClick={onCreate}>
+            Erste Spalte einrichten
+          </Button>
         }
-        consequence={
-          deleteError ??
-          "Liegen noch Karten in dieser Spalte, lehnt Takt das Löschen ab. Verschieben Sie sie vorher — dann geht keine Karte verloren."
-        }
-        confirmLabel="Löschen"
-        onConfirm={() => {
-          const status = pendingDelete;
-          if (status === null) return;
-          void deleteTodoStatus(status.id)
-            .then(() => {
-              setPendingDelete(null);
-              structure.reload();
-              bump();
-              toasts.success("Spalte gelöscht.");
-            })
-            .catch((cause: unknown) => {
-              setDeleteError(
-                cause instanceof Error ? cause.message : "Die Spalte ließ sich nicht löschen.",
-              );
-            });
-        }}
-        onCancel={() => setPendingDelete(null)}
       />
-    </>
+
+      <Card title="Was sich geändert hat" description="Kurz, damit nichts verloren wirkt.">
+        <ul className="board-setup__points">
+          <li>
+            <strong>Ihre Todos sind vollzählig da.</strong> Sie stehen in der Todo-Liste, mit
+            Status, Tags und allen erfassten Zeiten. Es wurde nichts gelöscht und nichts
+            verschoben.
+          </li>
+          <li>
+            <strong>Der Status bleibt.</strong> Er ist weiterhin eine Eigenschaft jedes Todos und
+            wird in der Liste und in der Detailansicht geändert — er ist nur nicht mehr die
+            Spalte. Welche Statuswerte es gibt, richten Sie in den Einstellungen unter „Status“
+            ein.
+          </li>
+          <li>
+            <strong>Keine automatische Übersetzung.</strong> Aus „In Progress" ließe sich nur dann
+            eine Spalte machen, wenn Takt dafür ein Tag anlegte und an Ihre Todos hinge. Genau das
+            soll es nicht tun.
+          </li>
+          <li>
+            <strong>Nichts wird mehr gezogen.</strong> Welche Karte in welcher Spalte steht,
+            entscheiden ihre Tags. Ändern Sie die Tags eines Todos, wandert es von selbst.
+          </li>
+        </ul>
+        <div className="board-setup__actions">
+          <Button variant="primary" iconStart="plus" onClick={onCreate}>
+            Erste Spalte einrichten
+          </Button>
+          <Button variant="ghost" iconStart="arrow-up-right" onClick={() => navigate("todos")}>
+            Zur Todo-Liste
+          </Button>
+        </div>
+      </Card>
+
+      {pools.length === 0 ? (
+        <InlineMessage tone="info" title="Sie haben noch keine Regel">
+          Eine Spalte nennt Tags oder einen Ordner — zum Beispiel „alles unter Kunden" oder „Tag
+          Wartet". Wer noch keine Tags vergeben hat, fängt am besten damit an.
+        </InlineMessage>
+      ) : (
+        <Card
+          title="Vorhandene Regeln als Spalte aufnehmen"
+          description="Diese Regeln gibt es bereits in Ihren Pools. Sie werden dadurch nicht kopiert — dieselbe Regel erscheint zusätzlich auf dem Board."
+        >
+          <ul className="rule-list">
+            {pools.map((pool) => (
+              <li key={pool.id} className="rule-row">
+                <span className="rule-row__name grow truncate">{pool.name}</span>
+                <span className="rule-row__count">
+                  {plural(pool.rule.length, "Bedingung", "Bedingungen")}
+                </span>
+                <Button size="sm" variant="secondary" iconStart="plus" onClick={() => onAdopt(pool)}>
+                  Als Spalte aufnehmen
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   );
 }
 
+/* ==================================================================== */
+/* Spalten verwalten (S-11 auf der Board-Seite)                         */
+/* ==================================================================== */
+
+function BoardSetupDialog({
+  open,
+  columns,
+  pools,
+  onClose,
+  onCreate,
+  onEdit,
+  onAdopt,
+  onRemove,
+}: {
+  readonly open: boolean;
+  readonly columns: readonly BoardColumnView[];
+  readonly pools: readonly Pool[];
+  readonly onClose: () => void;
+  readonly onCreate: () => void;
+  readonly onEdit: (pool: Pool) => void;
+  readonly onAdopt: (pool: Pool) => void;
+  readonly onRemove: (pool: Pool) => void;
+}) {
+  const onBoard = new Set(columns.map((view) => view.column.id));
+  const available = pools.filter((pool) => !onBoard.has(pool.id));
+
+  return (
+    <FormDialog
+      open={open}
+      title="Spalten des Boards"
+      description="Eine Spalte ist eine Regel über Tags — dieselbe Entität wie ein Pool. Was hier steht, ist eine Regel mit dem Anzeigeort „Board“."
+      submitLabel="Neue Spalte anlegen"
+      cancelLabel="Schließen"
+      onSubmit={onCreate}
+      onCancel={onClose}
+    >
+      {columns.length === 0 ? (
+        <EmptyState
+          compact
+          icon="square"
+          title="Noch keine Spalte"
+          description="Legen Sie eine an oder nehmen Sie eine vorhandene Regel auf."
+        />
+      ) : (
+        <ul className="rule-list">
+          {columns.map((view) => (
+            <li key={view.column.id} className="rule-row">
+              <div className="grow">
+                <p className="rule-row__name">{view.column.name}</p>
+                <p className="rule-row__meta">
+                  {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
+                  {plural(view.column.rule.length, "Bedingung", "Bedingungen")} ·{" "}
+                  {plural(view.total, "Karte", "Karten")}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                iconStart="pencil"
+                onClick={() => onEdit(view.column)}
+              >
+                Bearbeiten
+              </Button>
+              <Button size="sm" variant="ghost" iconStart="x" onClick={() => onRemove(view.column)}>
+                Vom Board nehmen
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {available.length === 0 ? null : (
+        <div className="field">
+          <span className="field__label">Vorhandene Pool-Regeln</span>
+          <ul className="rule-list">
+            {available.map((pool) => (
+              <li key={pool.id} className="rule-row">
+                <span className="rule-row__name grow truncate">{pool.name}</span>
+                <Button size="sm" variant="ghost" iconStart="plus" onClick={() => onAdopt(pool)}>
+                  Als Spalte aufnehmen
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <p className="field__hint">
+            Die Regel erscheint dann an beiden Stellen. Wollen Sie sie nur auf dem Board, stellen
+            Sie den Anzeigeort im Bearbeiten-Dialog auf „Nur auf dem Board“.
+          </p>
+        </div>
+      )}
+
+      <InlineMessage tone="info" title="Reihenfolge">
+        Die Spalten stehen in der Reihenfolge ihrer Position, die sie mit der Pool-Liste teilen.
+        Sie lässt sich hier noch nicht ändern.
+      </InlineMessage>
+
+      {/*
+        Wer „Statusspalten" sucht, sucht sie hier — bis E-054 wurden sie in
+        genau diesem Dialog verwaltet. Der Hinweis nennt den neuen Ort und den
+        Grund, statt ihn suchen zu lassen (A-5.4, T-073).
+      */}
+      <InlineMessage
+        tone="info"
+        title="Sie suchen die Statuswerte?"
+        action={
+          <Button
+            size="sm"
+            variant="secondary"
+            iconStart="arrow-up-right"
+            onClick={() => navigate("settings", undefined, { bereich: "status" })}
+          >
+            Zu den Einstellungen
+          </Button>
+        }
+      >
+        Der Status ist seit der Umstellung keine Spalte mehr, sondern eine Eigenschaft des Todos —
+        sichtbar auf jeder Karte, geändert in der Liste und in der Detailansicht. Angelegt,
+        umbenannt, sortiert und gelöscht werden die Statuswerte in den Einstellungen unter
+        „Status“.
+      </InlineMessage>
+    </FormDialog>
+  );
+}

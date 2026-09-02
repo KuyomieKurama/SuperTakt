@@ -866,16 +866,6 @@
 /* Kanban                                                               */
 /* ==================================================================== */
 
-.kboard {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(15rem, 1fr);
-  gap: var(--space-4);
-  align-items: start;
-  overflow-x: auto;
-  padding-bottom: var(--space-2);
-}
-
 .kcolumn {
   display: flex;
   flex-direction: column;
@@ -886,13 +876,6 @@
   transition:
     border-color var(--motion-fast) var(--ease-out),
     background-color var(--motion-fast) var(--ease-out);
-}
-
-.kcolumn--drop {
-  border-color: var(--border-accent);
-  background-color: var(--accent-bg-subtle);
-  /* Zweites Merkmal neben der Farbe: gestrichelter Rand. */
-  border-style: dashed;
 }
 
 .kcolumn__head {
@@ -944,6 +927,39 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Die Regel der Spalte, direkt unter ihrem Kopf. Sie beantwortet die Frage,
+   die eine Spalte aus Regeln als Erstes aufwirft: Warum steht diese Karte
+   hier? (E-054) */
+.kcolumn__rule {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.kcolumn__rule-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+
+.kcolumn__rule-mode {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.kcolumn__rule-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+
 .kcolumn__body {
   display: flex;
   flex-direction: column;
@@ -952,20 +968,21 @@
   min-height: 4rem;
 }
 
+/* Kein `cursor: grab` und kein Griff mehr: Seit E-054 wird nichts gezogen.
+   Ein Zeiger, der Greifen anbietet, waere ein Versprechen, das die Ansicht
+   nicht halten kann. */
 .kcard {
   position: relative;
   display: flex;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  padding: var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background-color: var(--bg-surface);
   box-shadow: var(--shadow-xs);
-  cursor: grab;
   transition:
     box-shadow var(--motion-fast) var(--ease-out),
-    border-color var(--motion-fast) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out);
+    border-color var(--motion-fast) var(--ease-out);
 }
 .kcard:hover {
   border-color: var(--border-strong);
@@ -974,15 +991,20 @@
 .kcard:focus-within {
   border-color: var(--border-accent);
 }
-.kcard--dragging {
-  opacity: 0.55;
-  box-shadow: var(--shadow-drag);
-  cursor: grabbing;
+/* Alle Vorkommen derselben Karte auf einmal (E-054). Zwei Merkmale, nicht
+   eins: Flaeche **und** Kontur — die Verbindung darf nicht allein an der
+   Farbe haengen (SC 1.4.1). */
+.kcard--linked {
+  border-color: var(--border-accent);
+  /* Ein Ring statt einer getoenten Flaeche: Die Karte behaelt ihren
+     Untergrund, und damit behalten Etiketten, Exportmarker und Zeit die
+     gemessenen Kontraste, die sie auf `--bg-surface` haben. */
+  box-shadow: inset 0 0 0 2px var(--border-accent);
 }
 .kcard--running {
   border-color: var(--timer-running-border);
   border-inline-start: 3px solid var(--timer-running-pulse);
-  padding-inline-start: 0;
+  padding-inline-start: calc(var(--space-2) - 2px);
   background-color: var(--bg-surface);
 }
 .kcard--done .kcard__title {
@@ -996,13 +1018,6 @@
 .kcard--reactivated {
   border-style: dashed;
   border-color: var(--border-strong);
-}
-
-.kcard__grip {
-  display: flex;
-  align-items: flex-start;
-  padding-top: var(--space-1);
-  color: var(--border-strong);
 }
 
 .kcard__main {
@@ -1087,6 +1102,64 @@
   color: var(--accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Dieselbe Karte steht auch woanders (E-054). Ein Knopf und kein Etikett:
+   Er hebt alle Vorkommen hervor, meldet seinen Zustand ueber `aria-pressed`
+   und ist damit auch ohne Maus bedienbar. */
+.kcard__also {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px var(--space-1);
+  border: 1px solid var(--info-fg);
+  border-radius: var(--radius-xs);
+  background-color: var(--info-bg);
+  color: var(--info-fg);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* Der gedrueckte Zustand schlaegt den Zeigerzustand — sonst gewaenne
+   `:hover` (eine Klasse plus Pseudoklasse) gegen `--on` (eine Klasse), und
+   das Etikett stuende hell auf hell, waehrend der Zeiger darauf steht. */
+.kcard__also:not(.kcard__also--on):hover {
+  background-color: var(--bg-surface);
+}
+
+.kcard__also--on,
+.kcard__also--on:hover {
+  background-color: var(--info-fg);
+  color: var(--info-bg);
+}
+
+/* Der Status des Todos. Er ist keine Spalte mehr (E-054) und steht deshalb
+   ausdruecklich da — leise, weil er auf dem Board nichts steuert. */
+.kcard__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-2xs);
+}
+
+.kcard__status-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.kcard__status-value {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+  font-weight: var(--weight-medium);
 }
 
 .kcard__tags {

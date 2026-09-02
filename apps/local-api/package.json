@@ -17,7 +17,8 @@
     "proof:db-permissions": "node scripts/proof-db-permissions.mjs",
     "proof:openapi": "node scripts/proof-openapi.mjs",
     "proof:callers": "node scripts/proof-callers.mjs",
-    "proof:tags": "node scripts/proof-tags.mjs"
+    "proof:tags": "node scripts/proof-tags.mjs",
+    "proof:conflicts": "node scripts/proof-conflicts.mjs"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",

@@ -26,8 +26,9 @@
     "verify:bundle": "pnpm --filter @takt/desktop sidecar && pnpm --filter @takt/desktop sidecar:verify",
     "proof:openapi": "pnpm --filter @takt/local-api proof:openapi",
     "proof:callers": "pnpm --filter @takt/local-api proof:callers",
+    "proof:conflicts": "pnpm --filter @takt/local-api proof:conflicts",
     "proof:tags": "pnpm --filter @takt/local-api proof:tags",
-    "check": "pnpm run typecheck && pnpm run boundaries && pnpm run contrast && pnpm run proof:openapi && pnpm run proof:callers && pnpm run proof:tags && pnpm run test:coverage && pnpm run build"
+    "check": "pnpm run typecheck && pnpm run boundaries && pnpm run contrast && pnpm run proof:openapi && pnpm run proof:callers && pnpm run proof:conflicts && pnpm run proof:tags && pnpm run test:coverage && pnpm run build"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

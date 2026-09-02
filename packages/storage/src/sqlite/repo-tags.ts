@@ -43,7 +43,7 @@ import type {
   Todo,
   TodoFilter,
 } from '@takt/domain';
-import { checkFolderMove, err, normalizeTagName, ok, tagNameKey, taktError } from '@takt/domain';
+import { checkFolderMove, err, normalizeName, normalizeTagName, ok, tagNameKey, taktError } from '@takt/domain';
 
 import { integer, text, placeholders, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
@@ -542,6 +542,20 @@ export function createPoolPort(
       return rows.map((row) => toPool(row, ruleOf(text(row, 'id') as PoolId)));
     },
 
+    /**
+     * Kennung und Name jeder Regel, ohne Regelterme (T-074).
+     *
+     * Bewusst **nicht** über `list('all')`: Das löst für jede Regel zusätzlich
+     * ihre Terme auf, und für die Frage „ist der Name vergeben?“ ist das eine
+     * Abfrage je Regel zu viel. Eine Abfrage, ein Durchlauf, zwei Spalten.
+     */
+    async listNames() {
+      return conn
+        .prepare('SELECT id, name FROM pool ORDER BY position')
+        .all()
+        .map((row) => ({ id: text(row, 'id') as PoolId, name: text(row, 'name') }));
+    },
+
     async create(pool, now) {
       const id = ids.next() as PoolId;
       conn
@@ -551,7 +565,13 @@ export function createPoolPort(
         )
         .run(
           id,
-          pool.name,
+          // Die Anzeigeform aus der Domäne, wie bei `TagPort.create` (T-058).
+          // Der Anwendungsfall reicht sie bereits normalisiert herein; hier
+          // steht sie ein zweites Mal, damit ein Aufrufer, der die Prüfung
+          // umgeht, keinen Namen mit doppeltem Leerzeichen in den Bestand
+          // bringt. Geurteilt wird dabei nicht — `normalizeName` weist nichts
+          // ab, es vereinheitlicht nur.
+          normalizeName(pool.name),
           pool.matchMode,
           pool.includeSubfolders ? 1 : 0,
           // Ohne genannte Fläche ein Pool — dieselbe Vorgabe wie im Schema
@@ -583,7 +603,8 @@ export function createPoolPort(
         const params: (string | number | null)[] = [];
         if (pool.name !== undefined) {
           sets.push('name = ?');
-          params.push(pool.name);
+          // Dieselbe Vereinheitlichung wie beim Anlegen. Siehe dort.
+          params.push(normalizeName(pool.name));
         }
         if (pool.matchMode !== undefined) {
           sets.push('match_mode = ?');

@@ -20,8 +20,11 @@ import { bodyLimit } from 'hono/body-limit';
 import { timeout } from 'hono/timeout';
 import { HTTPException } from 'hono/http-exception';
 
+import { asStorageFailure } from '@takt/storage';
+
 import { API_BASE_PATH, MAX_BODY_BYTES, REQUEST_TIMEOUT_MS } from './config.ts';
 import { errorEnvelope, errorStatus } from './errors.ts';
+import { fail } from './http/problem.ts';
 import {
   authGuard,
   contentTypeGuard,
@@ -251,6 +254,40 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     if (error instanceof HTTPException && error.status === 413) {
       c.set('outcome', 'payload_too_large');
       return c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large'));
+    }
+
+    /**
+     * Das letzte Netz unter der Speicherung (T-074).
+     *
+     * Ein Adapter, der eine Regel der Datenbank durchschlagen lässt, ist ein
+     * Versehen — `attempt` und `attemptAtomically` in `packages/storage` sind
+     * die Stelle, an der eine Verletzung zum **Wert** wird. Vergisst sie jemand,
+     * kam die Störung bis hierher und wurde ein 500. Genau das ist in T-072
+     * gemessen worden: `POST /pools` mit vergebenem Namen antwortete
+     * `internal_error`, und die Oberfläche riet daraufhin zum erneuten Versuch,
+     * der genauso scheiterte.
+     *
+     * Der Unterschied ist nicht kosmetisch. Ein 500 sagt „bei mir ist etwas
+     * kaputt“, ein 409 sagt „das geht so nicht“ — nur das zweite lässt sich
+     * beantworten.
+     *
+     * **Dieses Netz ersetzt keinen Fehlerzweig.** Es sagt nur „ein doppelter
+     * Wert“, wo der Anwendungsfall sagen könnte, welcher. `proof:conflicts`
+     * misst deshalb beides: dass keine Route mit 500 antwortet, **und** dass
+     * die Antwort einen lesbaren Schlüssel trägt.
+     *
+     * Was nicht aus der Speicherung stammt, geht unverändert weiter unten durch
+     * und bleibt ein 500 ohne Innenleben. `asStorageFailure` liefert dafür
+     * `null` statt zu werfen; die werfende Fassung wäre hier eine Fangklammer
+     * um eine Fangklammer.
+     */
+    const stored = asStorageFailure(error);
+    if (stored !== null) {
+      runtime.logger.lifecycle(
+        'warn',
+        `Regel der Speicherung in ${c.req.method} ${c.req.path}: ${stored.code}`,
+      );
+      return fail(c, stored);
     }
     // Hier stand bis T-058 ein `console.error('DEBUG-T041', …, error)` — eine
     // Zeile aus einer Fehlersuche, die den vollständigen Wurf samt

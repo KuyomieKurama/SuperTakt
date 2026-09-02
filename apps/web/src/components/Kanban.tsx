@@ -1,4 +1,4 @@
-import type { DragEvent, KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { DONE_FLAG_LABEL, doneFlagState } from "../lib/labels";
 import { ExportStatusMarker, EXPORT_STATE, type ExportDisplayState } from "./ExportStatus";
@@ -8,12 +8,29 @@ import { IconButton } from "./Primitives";
 import { TagChip } from "./Tag";
 
 /**
- * Kanban-Board — A-5.1 bis A-5.6, I-14.
+ * Kanban-Board — A-5.1, A-5.3 bis A-5.6, E-054.
  *
- * Ziehen und Ablegen ist der schnelle Weg, aber nie der einzige:
- * WCAG 2.2 SC 2.5.7 verlangt fuer jede Ziehbewegung eine Alternative mit
- * einem einzelnen Zeigerdruck. Jede Karte traegt deshalb ein Menue
- * "Verschieben nach" und reagiert zusaetzlich auf Strg+Pfeil links/rechts.
+ * ## Warum hier nichts mehr gezogen wird
+ *
+ * Bis E-054 war eine Spalte ein Statuswert, und Ziehen setzte diesen Wert. Seit
+ * E-054 ist eine Spalte eine **Regel über Tags**. Eine Regel lässt sich nicht
+ * durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von sich aus
+ * Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit
+ * aufgehoben; `draggable`, `DataTransfer` und die Tastaturalternative dazu
+ * (SC 2.5.7) stehen deshalb nicht mehr in dieser Datei. Was es nicht gibt,
+ * braucht keine Ersatzbedienung.
+ *
+ * Der **Status** bleibt als Eigenschaft am Todo. Er steht auf der Karte, damit
+ * niemand ihn auf dem Board sucht, und geändert wird er dort, wo er hingehört:
+ * in der Detailansicht (S-03) und in der Liste (S-02).
+ *
+ * ## Eine Karte kann in mehreren Spalten stehen
+ *
+ * Bei Status war das unmöglich, bei Regeln ist es der Normalfall: Zwei
+ * zutreffende Regeln treffen beide zu. Wer eine Karte zweimal sieht und nicht
+ * weiß warum, hält es für einen Fehler — deshalb trägt jedes Vorkommen ein
+ * Etikett, das die anderen Spalten **beim Namen nennt** und sie auf Wunsch
+ * hervorhebt.
  */
 
 export interface KanbanTagRef {
@@ -33,6 +50,19 @@ export interface KanbanTagRef {
  */
 export type ExportSummary = Readonly<Record<ExportDisplayState, number>>;
 
+/**
+ * Dieselbe Karte in mehreren Spalten (E-054) — aus Sicht **eines** Vorkommens.
+ *
+ * `otherColumns` sind die übrigen Spalten, in denen dieselbe Karte steht, ohne
+ * die eigene. Die Liste kommt aus `GET /board` (`appearances`) und wird nicht
+ * aus den geladenen Seiten zusammengezählt: Eine Karte kann in Spalte A auf
+ * Seite 1 und in Spalte B auf Seite 2 stehen, und eine Auskunft, die nur die
+ * geladene Seite kennt, behauptete dann, sie stünde nur einmal da.
+ */
+export interface KanbanAppearance {
+  readonly otherColumns: readonly string[];
+}
+
 export interface KanbanCardData {
   readonly id: string;
   readonly title: string;
@@ -43,19 +73,25 @@ export interface KanbanCardData {
   readonly exportSummary: ExportSummary;
   readonly timerRunning: boolean;
   /**
-   * Erledigt-Kennzeichen des Todos (A-2.4). Es haengt **nicht** an der Spalte:
-   * Die Statusspalten sind frei definierbar (A-5.4), ein Kanban-Abschluss ist
-   * kein Erledigt. Ein Todo kann in "Erledigt" stehen und offen sein, und es
-   * kann in "In Arbeit" stehen und erledigt sein.
+   * Der Status des Todos (A-5.4) — eine Eigenschaft, **keine** Spalte mehr
+   * (E-054). Er steht auf der Karte, weil er sonst auf dem Board nirgends
+   * mehr vorkäme und man ihn für abgeschafft hielte.
+   */
+  readonly statusName: string;
+  /**
+   * Erledigt-Kennzeichen des Todos (A-2.4). Es haengt an keiner Spalte: Eine
+   * Spalte ist eine Regel ueber Tags, und Tags sagen nichts darueber, ob etwas
+   * fertig ist. Ein Todo kann in jeder Spalte stehen und erledigt sein.
    */
   readonly done: boolean;
   /**
    * "Erledigt" wurde von der Anwendung selbst aufgehoben, weil jemand den
-   * Timer gestartet hat (A-2.5). Die Karte bleibt dabei in ihrer Spalte; nur
-   * das Kennzeichen faellt. Der Zustand bleibt sichtbar, bis der Benutzer das
-   * Kennzeichen selbst wieder setzt — sonst wirkt der Wechsel unerklaert.
+   * Timer gestartet hat (A-2.5). Der Zustand bleibt sichtbar, bis der Benutzer
+   * das Kennzeichen selbst wieder setzt — sonst wirkt der Wechsel unerklaert.
    */
   readonly reactivated?: boolean;
+  /** Gesetzt, wenn diese Karte in mehr als einer Spalte steht. */
+  readonly appearance?: KanbanAppearance;
 }
 
 export interface KanbanCardProps {
@@ -63,11 +99,13 @@ export interface KanbanCardProps {
   readonly entries: readonly MenuEntry[];
   readonly onOpen: () => void;
   readonly onToggleTimer: () => void;
-  /** Verschiebt die Karte um `delta` Spalten. Tastaturalternative zum Ziehen. */
-  readonly onMoveByKeyboard: (delta: number) => void;
-  readonly dragging?: boolean;
-  readonly onDragStart?: (event: DragEvent<HTMLElement>) => void;
-  readonly onDragEnd?: (event: DragEvent<HTMLElement>) => void;
+  /**
+   * Hebt alle Vorkommen derselben Karte hervor. Nur belegt, wenn die Karte
+   * mehrfach vorkommt; ohne Mehrfachvorkommen gibt es nichts zu verbinden.
+   */
+  readonly onHighlight?: () => void;
+  /** Dieses Vorkommen gehoert zur gerade hervorgehobenen Karte. */
+  readonly highlighted?: boolean;
 }
 
 export function KanbanCard({
@@ -75,60 +113,38 @@ export function KanbanCard({
   entries,
   onOpen,
   onToggleTimer,
-  onMoveByKeyboard,
-  dragging = false,
-  onDragStart,
-  onDragEnd,
+  onHighlight,
+  highlighted = false,
 }: KanbanCardProps) {
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
-    if (!event.ctrlKey) return;
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      onMoveByKeyboard(1);
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      onMoveByKeyboard(-1);
-    }
-  };
-
   const cardFlagState = doneFlagState(card.done, card.reactivated === true);
+  const others = card.appearance?.otherColumns ?? [];
 
   return (
     <article
       className={cx(
         "kcard",
-        dragging && "kcard--dragging",
         card.timerRunning && "kcard--running",
         card.done && "kcard--done",
         card.reactivated === true && "kcard--reactivated",
+        highlighted && "kcard--linked",
       )}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onKeyDown={onKeyDown}
     >
-      <div className="kcard__grip" aria-hidden>
-        <Icon name="drag" size={14} />
-      </div>
-
       <div className="kcard__main">
         <div className="kcard__top">
           {card.callNumber !== null ? (
             <span className="kcard__call mono">{card.callNumber}</span>
           ) : null}
           {/* Das Erledigt-Kennzeichen steht auf jeder Karte, auch wenn es
-              "offen" lautet. Waere es nur bei "erledigt" da, muesste man aus
-              dem Spaltennamen raten — und genau das ist der Fehler, den die
-              Trennung von Spalte und Kennzeichen verhindern soll. */}
+              "offen" lautet. Waere es nur bei "erledigt" da, muesste man es
+              aus der Spalte erschliessen — und eine Spalte ist eine Regel
+              ueber Tags, die darueber nichts sagt. */}
           <span className={cx("kcard__flag", `kcard__flag--${cardFlagState}`)}>
             <Icon
               name={card.done ? "check" : card.reactivated === true ? "rotate-ccw" : "circle"}
               size={12}
             />
             {/* Die Woerter stehen in `lib/labels.ts`, damit die Karte nicht
-                etwas anderes sagt als die Zeile daneben (Befund C-23). Die
-                Huelle bleibt eigen: Eine Karte hat andere Masse als eine
-                Zeile. */}
+                etwas anderes sagt als die Zeile daneben (Befund C-23). */}
             {DONE_FLAG_LABEL[cardFlagState]}
           </span>
         </div>
@@ -138,6 +154,22 @@ export function KanbanCard({
             {card.title}
           </button>
         </h4>
+
+        {others.length > 0 ? (
+          <button
+            type="button"
+            className={cx("kcard__also", highlighted && "kcard__also--on")}
+            aria-pressed={highlighted}
+            onClick={onHighlight}
+            title={`Dieselbe Karte steht auch in: ${others.join(", ")}`}
+          >
+            <Icon name="copy" size={12} />
+            <span>
+              Steht auch in {others.length === 1 ? "" : `${String(others.length)} Spalten: `}
+              {others.map((name) => `„${name}“`).join(", ")}
+            </span>
+          </button>
+        ) : null}
 
         {card.tags.length > 0 ? (
           <div className="kcard__tags">
@@ -159,11 +191,21 @@ export function KanbanCard({
             {card.trackedDisplay}
           </span>
         </div>
+
+        {/* Der Status, sichtbar und nicht anklickbar: Auf dem Board gibt es
+            ihn zu sehen, geaendert wird er in S-02 und S-03. Das Kartenmenue
+            fuehrt dorthin. */}
+        <p className="kcard__status">
+          <span className="kcard__status-label">Status</span>
+          <span className="kcard__status-value">{card.statusName}</span>
+        </p>
       </div>
 
       <div className="kcard__actions">
         <IconButton
-          /* E-030, Befund C-17: Der Timer wird gestartet, nicht der Bereich. */
+          /* A-5.6 bleibt: Der Timer laesst sich weiterhin von der Karte aus
+             starten. E-030, Befund C-17: Der Timer wird gestartet, nicht der
+             Bereich. */
           label={
             card.timerRunning
               ? `Timer für „${card.title}“ stoppen`
@@ -222,50 +264,51 @@ export function ExportSummaryStrip({ summary, className }: ExportSummaryStripPro
 
 export interface KanbanColumnProps {
   readonly title: string;
+  /** Geladene Karten dieser Spalte. */
   readonly count: number;
-  /** Optionale Obergrenze aus der Spaltenkonfiguration (A-5.4). */
-  readonly limit?: number;
   /**
-   * Wie viele Todos dieser Spalte erledigt sind. Die Spalte sagt nichts
-   * darueber aus — das Kennzeichen haengt am Todo, nicht an der Phase. Steht
-   * die Zahl nicht im Kopf, muss man sie aus den Karten zusammenzaehlen.
+   * Alle Mitglieder der Spalte, auch die noch nicht geladenen. Steht die Zahl
+   * nicht im Kopf, sieht eine geblaetterte Spalte aus wie eine kurze.
+   */
+  readonly total?: number;
+  /**
+   * Wie viele der geladenen Todos erledigt sind. Die Spalte sagt darueber
+   * nichts aus — sie ist eine Regel ueber Tags, und Tags sagen nichts ueber
+   * Fertigsein.
    */
   readonly doneCount?: number;
+  /** Die Regel in Worten: warum diese Karten hier stehen (E-054). */
+  readonly rule?: ReactNode;
   readonly entries: readonly MenuEntry[];
-  readonly dropTarget?: boolean;
-  readonly onDragOver?: (event: DragEvent<HTMLElement>) => void;
-  readonly onDragLeave?: (event: DragEvent<HTMLElement>) => void;
-  readonly onDrop?: (event: DragEvent<HTMLElement>) => void;
   readonly onAdd?: () => void;
+  /** Beschriftung des Pluszeichens, falls "Todo in X anlegen" nicht passt. */
+  readonly addLabel?: string;
   readonly children: ReactNode;
 }
 
 export function KanbanColumn({
   title,
   count,
-  limit,
+  total,
   doneCount = 0,
+  rule,
   entries,
-  dropTarget = false,
-  onDragOver,
-  onDragLeave,
-  onDrop,
   onAdd,
+  addLabel,
   children,
 }: KanbanColumnProps) {
-  const overLimit = limit !== undefined && count > limit;
-  const accessibleName =
-    doneCount === 0
-      ? `Spalte ${title}, ${count} Todos`
-      : `Spalte ${title}, ${count} Todos, davon ${doneCount} erledigt`;
+  const full = total ?? count;
+  const partial = full > count;
+  const accessibleName = [
+    `Spalte ${title}`,
+    partial ? `${String(count)} von ${String(full)} Karten geladen` : `${String(full)} Karten`,
+    doneCount === 0 ? null : `davon ${String(doneCount)} erledigt`,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(", ");
+
   return (
-    <section
-      className={cx("kcolumn", dropTarget && "kcolumn--drop")}
-      aria-label={accessibleName}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
+    <section className="kcolumn" aria-label={accessibleName}>
       <header className="kcolumn__head">
         <div className="kcolumn__heading">
           <h3 className="kcolumn__title">{title}</h3>
@@ -276,22 +319,26 @@ export function KanbanColumn({
             </p>
           ) : null}
         </div>
-        <span className={cx("kcolumn__count", overLimit && "kcolumn__count--over")}>
-          {count}
-          {limit !== undefined ? <span aria-hidden> / {limit}</span> : null}
-          {overLimit ? <span className="visually-hidden"> — Obergrenze überschritten</span> : null}
+        <span className="kcolumn__count" aria-hidden>
+          {partial ? `${String(count)}/${String(full)}` : full}
         </span>
         {onAdd !== undefined ? (
-          <IconButton label={`Todo in ${title} anlegen`} icon="plus" size="sm" onClick={onAdd} />
+          <IconButton
+            label={addLabel ?? `Todo in ${title} anlegen`}
+            icon="plus"
+            size="sm"
+            onClick={onAdd}
+          />
         ) : null}
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Spalte ${title} konfigurieren`}
+          triggerLabel={`Spalte ${title} verwalten`}
           triggerClassName="kcolumn__menu"
           align="end"
           entries={entries}
         />
       </header>
+      {rule === undefined ? null : <div className="kcolumn__rule">{rule}</div>}
       <div className="kcolumn__body">{children}</div>
     </section>
   );

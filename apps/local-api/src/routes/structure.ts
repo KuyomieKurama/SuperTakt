@@ -262,7 +262,7 @@ export function createStructureRoutes(context: AppContext): {
     const parsed = poolCreateSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
-    const pool = await createPool(context, {
+    const result = await createPool(context, {
       name: parsed.data.name,
       matchMode: parsed.data.matchMode,
       includeSubfolders: parsed.data.includeSubfolders,
@@ -270,8 +270,13 @@ export function createStructureRoutes(context: AppContext): {
       position: parsed.data.position,
       rule: parsed.data.rule as never,
     });
-    c.header('Location', `/api/v1/pools/${pool.id}`);
-    return data(c, pool, 201);
+    // Bis T-074 stand hier ein `await createPool(...)` ohne Fehlerzweig: Der
+    // eindeutige Index auf `pool.name` warf, niemand fing ihn, und die Antwort
+    // war ein 500. Ein doppelter Name ist aber kein Fehler des Dienstes,
+    // sondern eine Antwort an den Benutzer (T-072).
+    if (!result.ok) return fail(c, result.error);
+    c.header('Location', `/api/v1/pools/${result.value.id}`);
+    return data(c, result.value, 201);
   });
 
   pools.patch('/:poolId', async (c) => {

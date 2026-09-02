@@ -279,6 +279,12 @@ export interface TagFolderPort {
 // jeder von ihnen.
 // ---------------------------------------------------------------------------
 
+/** Eine Regel, auf Kennung und Name verkürzt. Siehe `PoolPort.listNames`. */
+export interface PoolNameEntry {
+  readonly id: PoolId;
+  readonly name: string;
+}
+
 export interface PoolPort {
   load(id: PoolId): Promise<Pool | null>;
 
@@ -301,6 +307,30 @@ export interface PoolPort {
    * Das Board fragt ausdrücklich.
    */
   list(shownOn?: PoolSurface | 'all'): Promise<readonly Pool[]>;
+
+  /**
+   * Kennung und Name **jeder** Regel, ohne ihre Regelterme (T-074).
+   *
+   * Für die eine Frage „ist dieser Name schon vergeben?“. Sie lässt sich nicht
+   * in SQL stellen: Ob zwei Namen derselbe sind, entscheidet `nameKey` in der
+   * Domäne, und SQLite kennt weder Unicode-Zusammensetzung noch eine Faltung
+   * über A–Z hinaus (siehe `packages/domain/src/tag-name.ts`). Der
+   * Anwendungsfall muss die Namen also sehen.
+   *
+   * **Warum das die ganze Tabelle lesen darf, und `TagPort` nicht.** `pool`
+   * hält die Regeln, die ein Mensch von Hand eingerichtet hat — eine Handvoll
+   * Zeilen, in keinem denkbaren Bestand mehr als ein paar Dutzend (Migration
+   * 0009 begründet an derselben Stelle, warum es hier keinen Index braucht).
+   * Tags sind Tausende; dort trägt `tag.name_key` mit `ix_tag_name_key` die
+   * Frage, und `findByKey` stellt sie ohne Tabellendurchlauf.
+   *
+   * Ausdrücklich **ohne** `placement`-Filter: Ein Name ist über alle Flächen
+   * hinweg eindeutig, weil `ux_pool_name` es über alle Flächen hinweg ist.
+   * Fragte diese Liste nach der Fläche, ließe sich eine Board-Spalte anlegen,
+   * deren Name ein Pool schon trägt — und der eindeutige Index wiese sie ab,
+   * nachdem die Prüfung sie durchgelassen hat.
+   */
+  listNames(): Promise<readonly PoolNameEntry[]>;
 
   /**
    * Legt eine Regel an.
@@ -350,6 +380,12 @@ export interface TodoStatusPort {
     now: Timestamp,
     color?: string | null,
   ): Promise<Result<TodoStatus, TaktError<'name_conflict'>>>;
+  /**
+   * Ändern. `isDefault: true` gibt den Standard weiter; `isDefault: false` auf
+   * dem **aktuellen** Standard wird abgewiesen (`default_status_locked`,
+   * T-074) — sonst bliebe kein Standard übrig und `defaultStatus()` fiele
+   * still auf den ersten nach Position.
+   */
   update(
     id: StatusId,
     fields: Partial<Omit<TodoStatus, 'id'>>,
@@ -357,7 +393,19 @@ export interface TodoStatusPort {
   ): Promise<Result<TodoStatus, TaktError>>;
   /** Neuordnung in einem Zug, damit der eindeutige Index nicht zwischendrin bricht. */
   reorder(order: readonly StatusId[], now: Timestamp): Promise<Result<readonly TodoStatus[], TaktError>>;
-  remove(id: StatusId): Promise<Result<void, TaktError<'status_in_use' | 'last_status_column' | 'not_found'>>>;
+  /**
+   * Löschen. Drei fachliche Gründe können es verhindern (T-074):
+   * `status_in_use`, `last_status_column` und — seit T-074 auch im Dienst und
+   * nicht mehr nur in der Oberfläche — `default_status_locked`.
+   */
+  remove(
+    id: StatusId,
+  ): Promise<
+    Result<
+      void,
+      TaktError<'status_in_use' | 'last_status_column' | 'default_status_locked' | 'not_found'>
+    >
+  >;
 }
 
 // ---------------------------------------------------------------------------

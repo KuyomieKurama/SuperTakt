@@ -172,8 +172,10 @@ export interface ReactivationNoticeProps {
  *   3. es erscheint erneut in seinen Pools
  *
  * Was er ausdruecklich **nicht** sagt: dass das Todo die Spalte gewechselt
- * habe. Das tut es nicht. Erledigt-Kennzeichen und Statusspalte sind zwei
- * unabhaengige Dinge; ein Timerstart fasst nur das Kennzeichen an.
+ * habe. Das tut es nicht. Ein Timerstart fasst nur das Kennzeichen an — nicht
+ * den Status und nicht die Tags. Seit E-054 haengt die Kanban-Spalte an den
+ * Tags, das Todo steht also danach in denselben Spalten wie vorher; es war
+ * nur ausgeblendet, solange es erledigt war.
  *
  * Dieser eine Satz steht zeichengleich in `lib/labels.ts` (`CARD_STAYS`), im
  * Toast der Hauptanwendung und im Outlook-Add-in. Bis T-045 stand hier

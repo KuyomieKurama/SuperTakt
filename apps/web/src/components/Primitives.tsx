@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cx } from "../lib/cx";
 import { Icon, type IconName } from "./Icon";
 
@@ -68,6 +68,16 @@ export interface IconButtonProps
   readonly size?: ControlSize;
   readonly variant?: ButtonVariant;
   readonly className?: string;
+  /**
+   * Zugriff auf das Element, ausschliesslich zum Setzen des Fokus.
+   *
+   * Gebraucht dort, wo ein Knopf durch seine eigene Wirkung gesperrt wird und
+   * der Fokus sonst auf den Dokumentkoerper faellt — etwa beim Verschieben
+   * eines Status an das Ende seiner Liste (SC 2.4.3, `StatusSettings`). Seit
+   * React 19 ist `ref` eine gewoehnliche Eigenschaft; sie geht mit `rest` an
+   * das `<button>`.
+   */
+  readonly ref?: Ref<HTMLButtonElement>;
 }
 
 /**

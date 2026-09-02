@@ -920,7 +920,22 @@ paths:
     post:
       tags: [Pools]
       operationId: createPool
-      summary: Pool anlegen
+      summary: Pool oder Kanban-Spalte anlegen
+      description: |
+        **Der Name ist über alle Flächen hinweg eindeutig.** Pools und
+        Kanban-Spalten sind seit E-054 dieselbe Entität; eine Spalte kann
+        deshalb nicht den Namen tragen, den ein Pool schon hat, auch wenn beide
+        nie nebeneinander erscheinen.
+
+        Wann zwei Namen derselbe sind, entscheidet dieselbe Regel wie bei
+        Tagnamen (`packages/domain/src/tag-name.ts`): Unicode-Zusammensetzung
+        (NFC), Leerraum vereinheitlicht, Groß- und Kleinschreibung gefaltet —
+        `Backend` = `backend`, aber `Straße` ≠ `Strasse`. Ein vergebener Name
+        ist ein `409 name_conflict` und die Meldung nennt ihn.
+
+        Der gespeicherte Name ist die **Anzeigeform** der Eingabe: `„ Vertrieb
+        Süd “` wird zu `„Vertrieb Süd“`. Wer den Namen zurückliest, bekommt
+        deshalb nicht immer Zeichen für Zeichen das, was er geschickt hat.
       requestBody:
         required: true
         content:
@@ -954,6 +969,13 @@ paths:
       tags: [Pools]
       operationId: updatePool
       summary: Pool-Regel ändern
+      description: |
+        Teiländerung: Was nicht im Rumpf steht, bleibt.
+
+        Für den Namen gilt dasselbe wie beim Anlegen — dieselbe
+        Gleichheitsregel, `409 name_conflict` bei einem vergebenen Namen. Die
+        Regel darf ihren **eigenen** Namen behalten; sie steht sich nicht selbst
+        im Weg.
       requestBody:
         required: true
         content:
@@ -973,6 +995,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
@@ -1223,11 +1246,30 @@ paths:
     delete:
       tags: [Kanban]
       operationId: deleteTodoStatus
-      summary: Statusspalte löschen
+      summary: Status löschen
       description: |
-        Scheitert mit `409`, wenn noch Todos in der Spalte liegen
-        (`status_in_use`) oder wenn es die letzte Spalte wäre
-        (`last_status_column`).
+        Der **Status** ist eine Eigenschaft am Todo. Er ist seit E-054 nicht
+        dasselbe wie eine Kanban-Spalte; die ist eine Regel über Tags und steht
+        unter `/pools`.
+
+        Drei Gründe können das Löschen mit `409` verhindern:
+
+        | Schlüssel | Wann |
+        |---|---|
+        | `status_in_use` | Todos tragen diesen Status noch |
+        | `last_status_column` | es wäre der letzte |
+        | `default_status_locked` | es ist der Standard für neue Todos |
+
+        `default_status_locked` seit T-074. Bis dahin sperrte allein die
+        Oberfläche diesen Fall; der Dienst ließ ihn durch und fiel danach
+        **still** auf den ersten Status nach Position zurück — ein neu
+        angelegtes Todo landete woanders, ohne dass jemand es erfahren hätte.
+        Der Weg heißt: erst über `PATCH /todo-statuses/{statusId}` mit
+        `isDefault: true` einen anderen zum Standard machen, dann löschen.
+
+        Der Schlüssel `last_status_column` trägt aus der Zeit vor E-054 noch das
+        Wort „column". Er bleibt, wie er ist: Ein Fehlerschlüssel ist eine
+        Zusage an seine Aufrufer.
       responses:
         '204': { description: Gelöscht. }
         '400': { $ref: '#/components/responses/TokenInUrl' }
@@ -3161,8 +3203,8 @@ components:
         `tag_in_use`, `name_conflict`, `timer_already_running`,
         `timer_not_running`, `time_entry_locked`, `export_status_unchanged`,
         `export_status_not_settable`, `export_nothing_to_do`,
-        `builtin_template_immutable`, `status_in_use`, `last_status_column`
-        und `conflict`.
+        `builtin_template_immutable`, `status_in_use`, `last_status_column`,
+        `default_status_locked` und `conflict`.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }

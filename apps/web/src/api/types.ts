@@ -18,9 +18,9 @@
  */
 
 import type { ExportStatus } from "../components/ExportStatus";
-import type { RoundingMode, ThemeSetting, TimeEntrySource } from "../lib/labels";
+import type { PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource } from "../lib/labels";
 
-export type { ExportStatus, RoundingMode, ThemeSetting, TimeEntrySource };
+export type { ExportStatus, PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource };
 
 /** UUID Fassung 7, als Zeichenkette. */
 export type Id = string;
@@ -92,6 +92,13 @@ export interface Todo {
   readonly id: Id;
   readonly title: string;
   readonly callNumber: string | null;
+  /**
+   * Der Status als **Eigenschaft** des Todos (A-5.4).
+   *
+   * Seit E-054 ist er nicht mehr die Kanban-Spalte: Spalten sind Regeln über
+   * Tags (siehe {@link Pool}). Geändert wird der Status in der Detailansicht
+   * und in der Liste, nicht durch Verschieben auf dem Board.
+   */
   readonly statusId: Id;
   /** `null` heißt aktiv, ein Zeitstempel heißt erledigt (A-2.4). */
   readonly completedAt: Timestamp | null;
@@ -152,12 +159,19 @@ export interface TodoFilter {
 }
 
 /* ==================================================================== */
-/* Statusspalten (A-5.4, E-023)                                          */
+/* Status eines Todos (A-5.4, E-023, E-054)                              */
 /* ==================================================================== */
 
 /**
- * Eine Statusspalte. Sie trägt kein Merkmal, das sie als „Erledigt-Spalte“
- * auswiese — Erledigt hängt am Todo, nicht an der Spalte (E-023).
+ * Ein Statuswert.
+ *
+ * **Keine Kanban-Spalte mehr.** Bis E-054 war beides dasselbe; seitdem ist eine
+ * Spalte des Boards eine Regel über Tags (`Pool` mit `placement`), und der
+ * Status ist eine Eigenschaft des Todos geblieben. Verwaltet wird er im Bereich
+ * „Status" der Einstellungen (`screens/StatusSettings.tsx`).
+ *
+ * Er trägt kein Merkmal, das ihn als „Erledigt" auswiese — Erledigt hängt am
+ * Todo und an keinem Statuswert (E-023).
  */
 export interface TodoStatus {
   readonly id: Id;
@@ -206,11 +220,18 @@ export type PoolRuleTerm =
   | { readonly kind: "tag"; readonly tagId: Id }
   | { readonly kind: "folder"; readonly folderId: Id };
 
+/**
+ * Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform einer
+ * **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`; was eine
+ * Spalte von einem Pool unterscheidet, ist allein `placement`.
+ */
 export interface Pool {
   readonly id: Id;
   readonly name: string;
   readonly matchMode: "any" | "all";
   readonly includeSubfolders: boolean;
+  readonly placement: PoolPlacement;
+  /** Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board. */
   readonly position: number;
   readonly rule: readonly PoolRuleTerm[];
   readonly createdAt: Timestamp;
@@ -221,7 +242,70 @@ export interface PoolWrite {
   readonly name: string;
   readonly matchMode?: "any" | "all";
   readonly includeSubfolders?: boolean;
+  /** Ohne Angabe legt der Dienst einen Pool an, keine Spalte. */
+  readonly placement?: PoolPlacement;
+  readonly position?: number;
   readonly rule: readonly PoolRuleTerm[];
+}
+
+/**
+ * Teiländerung einer Regel. Was fehlt, bleibt, wie es ist — auch die Regel
+ * selbst. Genau das braucht der Wechsel des Anzeigeorts: Aus einem Pool wird
+ * eine Spalte, ohne dass die Oberfläche die Regel noch einmal mitschicken und
+ * dabei womöglich verkürzen muss.
+ */
+export type PoolPatch = Partial<PoolWrite>;
+
+/**
+ * Fragezeichenparameter von `GET /pools`. `all` ist keine Fläche, sondern der
+ * Verzicht auf den Filter — und `both` ist hier kein zulässiger Wert: Eine
+ * Regel mit `both` steht auf beiden Flächen und kommt in beiden Antworten vor.
+ */
+export type PoolSurfaceQuery = "pool" | "board" | "all";
+
+/* ==================================================================== */
+/* Kanban-Board (E-054)                                                 */
+/* ==================================================================== */
+
+/**
+ * Eine Spalte mit ihrer ersten Seite.
+ *
+ * `column` ist ein vollständiger `Pool` samt Regel — damit die Ansicht sagen
+ * kann, **warum** eine Karte hier steht, ohne sie nachzuladen. `total` zählt
+ * alle Mitglieder, nicht die geladenen; weitergeblättert wird über
+ * `GET /pools/{id}/todos` mit `nextCursor`.
+ */
+export interface BoardColumnView {
+  readonly column: Pool;
+  readonly todos: readonly Todo[];
+  readonly nextCursor: string | null;
+  readonly total: number;
+}
+
+/**
+ * Dieselbe Karte in mehreren Spalten (E-054).
+ *
+ * Geliefert werden **nur** Karten in mehr als einer Spalte; `columnIds` steht
+ * in der Reihenfolge der Spalten. Vor E-054 war dieser Fall ausgeschlossen,
+ * seitdem ist er der Normalfall: Zwei zutreffende Regeln treffen beide zu.
+ */
+export interface BoardAppearance {
+  readonly todoId: Id;
+  readonly columnIds: readonly Id[];
+}
+
+/**
+ * Das Board als **Ansicht**, nicht als Bestand.
+ *
+ * Es gibt nichts Gespeichertes, das diese Antwort wiedergäbe: Sie entsteht bei
+ * jedem Aufruf neu aus den Regeln der Spalten und den Tags der Todos. Ein
+ * leeres `columns` heißt „keine Spalte eingerichtet“ und nirgends „nichts zu
+ * tun“ — nach der Umstellung ist das der Ausgangszustand.
+ */
+export interface BoardView {
+  readonly columns: readonly BoardColumnView[];
+  readonly appearances: readonly BoardAppearance[];
+  readonly generatedAt: Timestamp;
 }
 
 /* ==================================================================== */

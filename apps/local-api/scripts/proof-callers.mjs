@@ -425,21 +425,12 @@ const NEVER_SENT = {
   // Aufgabe durfte dort nichts ändern. Wer die Zeile entfernt, ohne dass die
   // Oberfläche `tagNames` sendet, bekommt den Befund zurück — so soll es sein.
   createTodo: ['tagNames'],
-  // Zwei Felder, zwei Gründe, beide benannt:
-  //
-  // `position` — T-051, Frage an den Orchestrator: Pools sind aus der
-  // Oberfläche heraus nicht sortierbar; `PoolWrite` führt kein `position`.
-  // Jeder neue Pool entsteht auf 0. Ob Pools überhaupt sortierbar sein sollen,
-  // entscheidet keine Aufgabe, die ich kenne (T-050, Punkt 7b).
-  //
-  // `placement` — T-066, **Übergabe an frontend-dev.** Es sagt seit E-054, ob eine
-  // Regel in der Pool-Liste steht, eine Kanban-Spalte ist oder beides. Der
-  // Dienst liest es, die Beschreibung führt es, und die Spaltenverwaltung der
-  // Oberfläche schickt es noch nicht — sie verwaltet bislang Statuswerte und
-  // keine Regeln. Ohne den Schlüssel entsteht ein Pool, also genau das, was
-  // vor E-054 als einzige Bedeutung möglich war; nichts geht dabei verloren.
-  createPool: ['position', 'placement'],
-  updatePool: ['position', 'placement'],
+  // `createPool` und `updatePool` standen hier bis T-074 mit `position` und
+  // `placement`. Beide Übergaben sind eingelöst: T-072 hat der Oberfläche ein
+  // gemeinsames Formular für Pool und Spalte gegeben, das den Anzeigeort als
+  // eigenes Feld führt, und `PoolWrite` trägt seitdem beide Schlüssel. Die
+  // Zeilen sind deshalb weg statt fortgeschrieben — ein Zusatz, der nicht mehr
+  // gilt, macht die Liste zum Rauschen.
 };
 const surprises = [];
 for (const [id, schema] of Object.entries(REQUEST_SCHEMAS)) {

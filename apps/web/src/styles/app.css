@@ -694,8 +694,10 @@
  * Bis T-057 trug das Kanban `.screen--wide` mit `max-width: none`. Gemessen bei
  * 1920px Fensterbreite: 1440px auf acht Ansichten, 1622px auf dem Kanban — ein
  * Sprung von 182px allein durch den Wechsel des Reiters. Das Kanban braucht die
- * Breite nicht ueber den Rahmen hinaus; es hat mit `.kboard` und `.board`
- * seinen eigenen waagerechten Bildlauf und bleibt darin.
+ * Breite nicht ueber den Rahmen hinaus; es hat mit `.board` seinen eigenen
+ * waagerechten Bildlauf und bleibt darin. (`.kboard` gab es bis T-072 als
+ * zweite Fassung derselben Flaeche fuer die Musterseite — zwei Behaelter mit
+ * verschiedenen Spaltenbreiten fuer dasselbe Board.)
  */
 .screen {
   display: flex;
@@ -1097,8 +1099,26 @@
 
 .list-more {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-3);
+}
+
+/* Eine Angabe mit einem Griff daneben — etwa der Status in der Detailansicht,
+   der seit E-054 dort geaendert wird und nicht mehr auf dem Board. */
+.facts__with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.list-more__hint {
+  max-width: 42rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: center;
 }
 
 /* ==================================================================== */
@@ -2858,29 +2878,78 @@
 /* Kanban (S-04)                                                        */
 /* ==================================================================== */
 
+/* Gleich breite Spalten, gedeckelt: Eine Spalte, die sich nach ihrem Inhalt
+   richtet, macht aus vier Regeln vier verschiedene Formate — und aus einer
+   Karte, die in zwei Spalten steht, zwei verschieden aussehende Karten. */
 .board {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(17rem, 21rem);
+  justify-content: start;
   gap: var(--space-3);
-  align-items: flex-start;
+  align-items: start;
   overflow-x: auto;
   padding-bottom: var(--space-3);
 }
 
-.board__empty {
-  padding: var(--space-4) var(--space-2);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  text-align: center;
+/* Kopfzeile ueber dem Board: Stand, Nachladehinweis, Neuberechnen. Ein Board
+   aus Regeln ist die Antwort auf eine Frage zu einem Zeitpunkt (E-054) —
+   deshalb steht der Zeitpunkt da. */
+.board__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
 }
 
-.column-list {
+.board__stamp {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* Der Leerzustand nach der Umstellung. Er erklaert und fuehrt weiter; er ist
+   kein "keine Daten". */
+.board-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 56rem;
+}
+
+.board-setup__points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  list-style: disc;
+}
+
+.board-setup__points strong {
+  color: var(--text-primary);
+}
+
+.board-setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* Eine Regel in einer Verwaltungsliste — Board-Spalte wie Pool, weil es
+   dieselbe Entitaet ist (E-054). */
+.rule-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   margin: 0;
 }
 
-.column-row {
+.rule-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -2890,20 +2959,40 @@
   font-size: var(--text-base);
 }
 
-.column-row__name {
+.rule-row:hover {
+  border-color: var(--border-default);
+  background-color: var(--bg-hover);
+}
+
+.rule-row__name {
   color: var(--text-primary);
 }
 
-.column-row__flag {
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background-color: var(--accent-bg-subtle);
-  color: var(--accent-text);
-  font-size: var(--text-2xs);
+.rule-row__meta,
+.rule-row__count {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
-.column-row__up svg {
-  transform: rotate(180deg);
+.rule-row__meta {
+  margin-top: 2px;
+}
+
+/* Wo eine Regel erscheint (E-054). Das Wort traegt die Aussage; die Flaeche
+   trennt sie nur vom Namen daneben. */
+.placement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  vertical-align: middle;
 }
 
 /* ==================================================================== */
@@ -3033,7 +3122,7 @@
 /* ==================================================================== */
 
 /*
- * Fuenf Bereiche statt einer langen Liste (T-057, Punkt 2).
+ * Bereiche statt einer langen Liste (T-057, Punkt 2; „Status" kam mit T-073).
  *
  * Die Leiste bleibt beim Scrollen stehen (`sticky`) und haengt dafuer am
  * Bildlauf von `.app__main` — dem einzigen Kasten der Anwendung, der scrollt.
@@ -3191,6 +3280,200 @@
 .notice-row__time {
   flex: none;
   font-size: var(--text-xs);
+}
+
+/* -------------------------------------------------------------------- */
+/* Statusstruktur (A-5.4, Bereich „Status" in S-09)                      */
+/* -------------------------------------------------------------------- */
+
+/*
+ * Eine Verwaltungszeile, die vier Aussagen und vier Wege traegt.
+ *
+ * Bewusst keine `.rule-row`: Dort steht eine Regel mit einer Handvoll
+ * Bedienelemente in einer Reihe. Hier kommen Stelle, Standardwahl, zwei
+ * Pfeile, Umbenennen und Loeschen zusammen — und im gesperrten Fall eine
+ * dritte Zeile mit dem Grund. Das braucht ein Raster, keine Flexzeile:
+ * `align-items: start` haelt die Bedienelemente oben, waehrend der Grund
+ * darunter beliebig lang werden darf.
+ */
+.status-admin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.status-admin__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.status-admin__row:hover {
+  border-color: var(--border-default);
+  background-color: var(--bg-hover);
+}
+
+/* Die Stelle in der Reihenfolge. Sie ist eine Ablesehilfe und kein Inhalt —
+   was sie sagt, sagen die Pfeile und die Ansage danach noch einmal in Worten,
+   deshalb steht sie fuer Hilfsmittel auf `aria-hidden`. */
+.status-admin__position {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+
+.status-admin__body {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.status-admin__name {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.status-admin__meta {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Der Grund, warum sich dieser Status nicht loeschen laesst.
+ *
+ * Sichtbar in der Zeile und nicht in einem `title`: Ein gesperrter Knopf ist
+ * nicht anspringbar, sein Titel damit fuer die Tastatur unerreichbar. Die
+ * Warnfarbe ist gemessen (`--warning-fg` auf `--warning-bg`), die Randschiene
+ * traegt die Aussage ein zweites Mal ohne Farbe (SC 1.4.1).
+ */
+/*
+ * Der Grund einer Sperre — ruhig, nicht laut.
+ *
+ * Kein Warnband: Ein Status mit Todos ist der Normalfall, und in einem
+ * eingerichteten Takt traegt fast jede Zeile hier einen Grund. Getoent
+ * gelesen waere der Bereich eine Wand aus Gelb, und die eine Meldung, die
+ * wirklich eine ist — der abgewiesene Loeschversuch im Bestaetigungsdialog —
+ * ginge darin unter. Sichtbar bleibt der Satz durch eigene Flaeche und
+ * Schloss, nicht durch Farbe (SC 1.4.1).
+ */
+.status-admin__blocked {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.status-admin__blocked-icon {
+  display: inline-flex;
+  padding-top: 2px;
+  color: var(--text-muted);
+}
+
+/* Mehrere Gruende, in der Reihenfolge, in der sie sich beheben lassen. */
+.status-admin__blocked-list {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  list-style: disc;
+}
+
+.status-admin__blocked-list li + li {
+  margin-top: var(--space-1);
+}
+
+/* Der Ausweg gehoert zum Grund, nicht in die Knopfreihe der Zeile. */
+.status-admin__blocked-action {
+  margin-top: var(--space-1);
+}
+
+/* Genau einer ist der Standard — eine Optionsgruppe, kein Schalter je Zeile. */
+.status-admin__default {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.status-admin__default:hover {
+  background-color: var(--bg-inset);
+  color: var(--text-primary);
+}
+
+.status-admin__default input {
+  width: 0.875rem;
+  height: 0.875rem;
+  accent-color: var(--accent-bg);
+  cursor: pointer;
+}
+
+.status-admin__default input:disabled,
+.status-admin__default:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.status-admin__default:has(input:checked) {
+  color: var(--accent-text);
+  font-weight: var(--weight-medium);
+}
+
+.status-admin__default-text {
+  white-space: nowrap;
+}
+
+.status-admin__order {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* Die beiden Verweise unter der Erklaerung, warum Status und Spalte zwei
+   verschiedene Dinge sind. */
+.status-admin__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.status-admin__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  list-style: disc;
+}
+
+.status-admin__rules strong {
+  color: var(--text-primary);
 }
 
 /* ==================================================================== */

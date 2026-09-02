@@ -73,6 +73,33 @@ export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>
 };
 
 /* ==================================================================== */
+/* Anzeigeort einer Regel (`pool.placement`, E-054)                     */
+/* ==================================================================== */
+
+/**
+ * Wo eine Regel erscheint. Spalte `pool.placement`.
+ *
+ * Seit E-054 ist eine Kanban-Spalte dieselbe Entitaet wie ein Pool; der
+ * Anzeigeort ist der einzige Unterschied. Die Beschriftungen sagen deshalb
+ * **Flaechen** und nicht Typen: Es gibt nicht „Pool" und „Spalte", es gibt eine
+ * Regel, die im Pool-Bereich steht, auf dem Board oder an beiden Stellen.
+ */
+export type PoolPlacement = "pool" | "board" | "both";
+
+export const POOL_PLACEMENT_LABEL: Readonly<Record<PoolPlacement, string>> = {
+  pool: "Nur in den Pools",
+  board: "Nur auf dem Board",
+  both: "In den Pools und auf dem Board",
+};
+
+/** Kurzform fuer Etiketten in Listen, wo der Zusammenhang schon klar ist. */
+export const POOL_PLACEMENT_SHORT: Readonly<Record<PoolPlacement, string>> = {
+  pool: "Pool",
+  board: "Board-Spalte",
+  both: "Pool und Board",
+};
+
+/* ==================================================================== */
 /* Erledigt-Kennzeichen — die drei Anzeigezustaende (A-2.5, E-023)      */
 /* ==================================================================== */
 

@@ -242,6 +242,38 @@ const pairs = [
   { group: "Erledigt", fg: "--success-fg", bg: "--bg-subtle", min: 4.5, note: "Zaehler erledigter Todos im Spaltenkopf" },
   { group: "Erledigt", fg: "--text-muted", bg: "--timer-running-bg", min: 4.5, note: "Fussnote im Wiederaufnahme-Hinweis" },
 
+  // Kanban nach E-054: Eine Spalte ist eine Regel ueber Tags, dieselbe Karte
+  // kann in mehreren Spalten stehen. Beides braucht eigene Flaechen — die
+  // Regelzeile im Spaltenkopf, das Etikett "steht auch in", der Status auf der
+  // Karte und die Hervorhebung aller Vorkommen.
+  { group: "Board (E-054)", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Regelzeile im Spaltenkopf" },
+  { group: "Board (E-054)", fg: "--text-secondary", bg: "--bg-subtle", min: 4.5, note: "Ordner in der Regelzeile" },
+  { group: "Board (E-054)", fg: "--info-fg", bg: "--info-bg", min: 4.5, note: "Etikett Steht auch in" },
+  { group: "Board (E-054)", fg: "--info-fg", bg: "--bg-surface", min: 3, note: "Kontur des Etiketts gegen die Karte, SC 1.4.11" },
+  { group: "Board (E-054)", fg: "--info-bg", bg: "--info-fg", min: 4.5, note: "Etikett gedrueckt, Farben getauscht" },
+  { group: "Board (E-054)", fg: "--text-secondary", bg: "--bg-inset", min: 4.5, note: "Status auf der Karte" },
+  { group: "Board (E-054)", fg: "--border-accent", bg: "--bg-surface", min: 3, note: "Ring um ein hervorgehobenes Vorkommen, innen" },
+  { group: "Board (E-054)", fg: "--border-accent", bg: "--bg-subtle", min: 3, note: "Ring um ein hervorgehobenes Vorkommen, gegen die Spalte" },
+  { group: "Board (E-054)", fg: "--text-muted", bg: "--bg-surface", min: 4.5, note: "Anzeigeort-Etikett in der Regelliste" },
+
+  // Statusverwaltung (A-5.4, Bereich „Status" in S-09, T-073). Der Status hat
+  // mit E-054 seine Spalte verloren und ist eine Stammgroesse geworden; seine
+  // Verwaltungszeile bringt vier Flaechen mit, die es so vorher nicht gab —
+  // die Stelle in der Reihenfolge, der Auswahlknopf fuer den Standard, der
+  // Sperrgrund auf eigener Flaeche und beides noch einmal unter dem Zeiger.
+  // Jede hier gemessen statt behauptet.
+  { group: "Statusverwaltung", fg: "--text-secondary", bg: "--bg-inset", min: 4.5, note: "Stelle in der Reihenfolge" },
+  { group: "Statusverwaltung", fg: "--text-muted", bg: "--bg-hover", min: 4.5, note: "Zaehlung der Todos, Zeile unter dem Zeiger" },
+  { group: "Statusverwaltung", fg: "--accent-text", bg: "--bg-surface", min: 4.5, note: "Beschriftung Standard, gewaehlt" },
+  { group: "Statusverwaltung", fg: "--accent-text", bg: "--bg-hover", min: 4.5, note: "Beschriftung Standard, gewaehlt und unter dem Zeiger" },
+  { group: "Statusverwaltung", fg: "--text-primary", bg: "--bg-inset", min: 4.5, note: "Beschriftung Standard unter dem Zeiger" },
+  { group: "Statusverwaltung", fg: "--accent-bg", bg: "--bg-surface", min: 3, note: "Auswahlknopf Standard, SC 1.4.11" },
+  { group: "Statusverwaltung", fg: "--accent-bg", bg: "--bg-hover", min: 3, note: "Auswahlknopf Standard unter dem Zeiger, SC 1.4.11" },
+  { group: "Statusverwaltung", fg: "--text-secondary", bg: "--bg-inset", min: 4.5, note: "Grund, warum sich ein Status nicht loeschen laesst" },
+  { group: "Statusverwaltung", fg: "--text-muted", bg: "--bg-inset", min: 3, note: "Schloss vor dem Sperrgrund, Zustandsanzeige nach SC 1.4.11" },
+  { group: "Statusverwaltung", fg: "--bg-inset", bg: "--bg-surface", min: 0, exempt: true, note: "Flaeche des Sperrgrundes gegen die Karte, rein abgrenzend" },
+  { group: "Statusverwaltung", fg: "--bg-inset", bg: "--bg-hover", min: 0, exempt: true, note: "dieselbe Flaeche in der Zeile unter dem Zeiger" },
+
   // Exportvorschau nach Tagesgruppen (E-031, E-034) und Filterschalter (E-039).
   // Neue Flaechenkombinationen aus T-018 — jede hier gemessen statt behauptet.
   { group: "Tagesgruppe", fg: "--text-primary", bg: "--bg-selected", min: 4.5, note: "Titel einer ausgewaehlten Tagesgruppe" },

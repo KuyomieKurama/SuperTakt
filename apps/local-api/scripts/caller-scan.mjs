@@ -45,7 +45,8 @@ const nameOf = (node) => {
  *
  * Nur Schnittstellen und Aliasse auf ein Typliteral. Alles andere — Vereinigung,
  * `Omit`, `Record` — bleibt außen vor und führt beim Nachschlagen zu
- * „unaufgelöst"; siehe Kopfabsatz.
+ * „unaufgelöst"; siehe Kopfabsatz. Die Ausnahme sind `Partial`, `Required` und
+ * `Readonly`, die die Feldnamen unverändert lassen; siehe `resolveTypeNode`.
  */
 export function buildTypeIndex(text, fileName = 'types.ts') {
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
@@ -73,8 +74,17 @@ export function buildTypeIndex(text, fileName = 'types.ts') {
       index.set(statement.name.text, { members: membersOf(statement.members), bases });
       continue;
     }
-    if (ts.isTypeAliasDeclaration(statement) && ts.isTypeLiteralNode(statement.type)) {
-      index.set(statement.name.text, { members: membersOf(statement.type.members), bases: [] });
+    if (ts.isTypeAliasDeclaration(statement)) {
+      // Der Alias wird **nicht** hier aufgelöst, sondern beim Nachschlagen:
+      // `type PoolPatch = Partial<PoolWrite>` zeigt auf einen Typ, der weiter
+      // unten in der Datei stehen darf. Bis T-074 wurden nur Aliasse auf ein
+      // Typliteral aufgenommen, und alles andere fiel stumm heraus — als
+      // „unaufgelöst" beim Aufrufer, nicht als Lücke im Verzeichnis.
+      index.set(statement.name.text, {
+        members: ts.isTypeLiteralNode(statement.type) ? membersOf(statement.type.members) : null,
+        alias: ts.isTypeLiteralNode(statement.type) ? undefined : statement.type,
+        bases: [],
+      });
     }
   }
   return index;
@@ -107,6 +117,29 @@ function resolveTypeNode(node, index, seen = new Set()) {
   }
 
   if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
+    /**
+     * Die drei eingebauten Hilfstypen, die die **Feldnamen unverändert**
+     * lassen (T-074).
+     *
+     * `Partial<T>`, `Required<T>` und `Readonly<T>` ändern nur, ob ein Feld
+     * weglassbar oder schreibbar ist, nie welche es gibt. Für die Frage dieses
+     * Lesers — „welche Schlüssel kann dieser Aufruf schreiben?" — ist die
+     * Antwort deshalb dieselbe wie für `T`.
+     *
+     * `Omit`, `Pick` und `Record` bleiben ausdrücklich draußen: Sie ändern die
+     * Menge, und ein Leser, der sie raten würde, gäbe eine falsche Antwort
+     * statt „unaufgelöst".
+     *
+     * Anlass: `PoolPatch = Partial<PoolWrite>` aus T-072. Der Rumpf von
+     * `updatePool` war damit unauflösbar, und der Lauf meldete gleich dreierlei
+     * — einen blinden Fleck, vier angeblich nie gesendete Felder und den
+     * Selbsttest aus Abschnitt 6.
+     */
+    const TRANSPARENT = new Set(['Partial', 'Required', 'Readonly']);
+    if (TRANSPARENT.has(node.typeName.text)) {
+      const argument = node.typeArguments?.[0];
+      return argument === undefined ? null : resolveTypeNode(argument, index, seen);
+    }
     return resolveTypeName(node.typeName.text, index, seen);
   }
   return null;
@@ -116,7 +149,14 @@ function resolveTypeName(name, index, seen) {
   if (seen.has(name)) return null; // Kreis: lieber unaufgelöst als endlos
   seen.add(name);
   const entry = index.get(name);
-  if (entry === undefined || entry.members === null) return null;
+  if (entry === undefined) return null;
+  // Ein Alias auf etwas anderes als ein Typliteral — `Partial<PoolWrite>` etwa.
+  // Er wird über denselben Weg aufgelöst wie jede andere Typangabe, damit es
+  // nur **eine** Stelle gibt, die weiß, was dieser Leser kann.
+  if (entry.members === null && entry.alias !== undefined) {
+    return resolveTypeNode(entry.alias, index, seen);
+  }
+  if (entry.members === null) return null;
   const names = [...entry.members];
   for (const base of entry.bases) {
     if (base === null) return null;

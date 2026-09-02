@@ -77,47 +77,62 @@ export const BOOKING_ROWS: readonly BookingRowData[] = [
   },
 ];
 
+/**
+ * Eine Spalte des Boards — seit E-054 eine **Regel ueber Tags**, dieselbe
+ * Entitaet wie ein Pool. `rule` steht hier als Text, weil die Musterseite
+ * keine Regelaufloesung braucht: Welche Karte eine Regel trifft, entscheidet
+ * der Dienst, und fuer die Darstellung genuegt die feste Zuordnung unten.
+ */
 export interface BoardColumn {
   readonly id: string;
   readonly title: string;
-  readonly limit?: number;
+  readonly rule: string;
 }
 
 /**
- * Beispielspalten nach A-5.3. Die Struktur ist frei konfigurierbar (A-5.4),
- * und keine Spalte hat eine besondere Bedeutung — auch die letzte nicht.
- * Dass sie hier „Erledigt“ heißt, ist ein vom Benutzer gewählter Name und
- * setzt kein Erledigt-Kennzeichen. Genau das zeigt Abschnitt 5.
+ * Fuenf Spalten, und keine davon ist ein Status.
+ *
+ * "Eskalation" bleibt leer: Eine Regel, die derzeit nichts trifft, ist der
+ * haeufigste Zustand einer frisch eingerichteten Spalte und braucht deshalb
+ * einen eigenen Leerzustand.
  */
 export const BOARD_COLUMNS: readonly BoardColumn[] = [
-  { id: "backlog", title: "Backlog" },
-  { id: "progress", title: "In Arbeit", limit: 3 },
-  { id: "waiting", title: "Wartet" },
-  { id: "done", title: "Erledigt" },
+  { id: "kunden-nord", title: "Kunden Nord", rule: "Ordner „Kunden / Nord“, mit Unterordnern" },
+  { id: "support", title: "Support", rule: "Tag „Support“" },
+  { id: "wartet", title: "Wartet auf Rückmeldung", rule: "Tag „Wartet“" },
+  { id: "intern", title: "Intern", rule: "Tag „Intern“" },
+  { id: "eskalation", title: "Eskalation", rule: "Tag „Eskalation“" },
 ];
 
 export interface BoardCard extends KanbanCardData {
-  readonly columnId: string;
+  /**
+   * In welchen Spalten diese Karte steht — **mehrere sind der Normalfall**
+   * (E-054). Vor E-054 war das ausgeschlossen, weil eine Karte genau eine
+   * Statusspalte hatte.
+   */
+  readonly columnIds: readonly string[];
 }
 
 export const BOARD_CARDS: readonly BoardCard[] = [
   {
     id: "t-1",
-    columnId: "backlog",
+    columnIds: ["support"],
     title: "Musterwerk AG — Exportvorlage für Sammelrechnung anlegen",
     callNumber: "CALL-2026-0388",
     tags: [
       { label: "Musterwerk AG", path: ["Kunden", "Süd"] },
-      { label: "Hoch", path: ["Priorität"] },
+      { label: "Support" },
     ],
     trackedDisplay: "0:45 h",
     exportSummary: { open: 0, exported: 1, reopened: 0, not_billed: 0 },
     timerRunning: false,
+    statusName: "Backlog",
     done: false,
   },
   {
+    /* Die Karte, die zweimal dasteht: Ihre Tags treffen zwei Regeln. */
     id: "t-2",
-    columnId: "progress",
+    columnIds: ["kunden-nord", "support"],
     title: "Musterkunde Nord — Rechnungslauf prüfen",
     callNumber: "CALL-2026-0417",
     tags: [
@@ -127,43 +142,45 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     trackedDisplay: "1:52 h",
     exportSummary: { open: 1, exported: 1, reopened: 0, not_billed: 1 },
     timerRunning: true,
+    statusName: "In Progress",
     done: false,
   },
   {
-    /* Der ueberraschende Fall Nummer eins: erledigt, steht aber in
-       "In Arbeit". Erlaubt und richtig — das Kennzeichen haengt am Todo. */
+    /* Erledigt und trotzdem in einer Spalte: Das Kennzeichen haengt am Todo,
+       die Spalte an seinen Tags. Beide wissen nichts voneinander. */
     id: "t-3",
-    columnId: "progress",
+    columnIds: ["wartet"],
     title: "Beispiel GmbH — Schnittstelle neu aufsetzen",
     callNumber: "CALL-2026-0392",
-    tags: [{ label: "Beispiel GmbH", path: ["Kunden", "West"] }],
+    tags: [{ label: "Beispiel GmbH", path: ["Kunden", "West"] }, { label: "Wartet" }],
     trackedDisplay: "2:36 h",
     exportSummary: { open: 0, exported: 0, reopened: 1, not_billed: 0 },
     timerRunning: false,
+    statusName: "In Progress",
     done: true,
   },
   {
-    /* Der ueberraschende Fall Nummer zwei: steht in der Spalte "Erledigt",
-       ist aber nicht erledigt. Die Spalte ist eine Phase, kein Kennzeichen. */
     id: "t-4",
-    columnId: "done",
+    columnIds: ["intern", "wartet"],
     title: "Rückmeldung zur Testumgebung abwarten",
     callNumber: null,
-    tags: [{ label: "Intern" }, { label: "Nicht abgerechnet" }],
+    tags: [{ label: "Intern" }, { label: "Wartet" }],
     trackedDisplay: "0:07 h",
     exportSummary: { open: 1, exported: 0, reopened: 0, not_billed: 0 },
     timerRunning: false,
+    statusName: "Waiting",
     done: false,
   },
   {
     id: "t-5",
-    columnId: "done",
+    columnIds: ["intern"],
     title: "Betriebshandbuch Kapitel 3 abgeschlossen",
     callNumber: null,
     tags: [{ label: "Intern" }],
     trackedDisplay: "3:15 h",
     exportSummary: { open: 0, exported: 2, reopened: 0, not_billed: 0 },
     timerRunning: false,
+    statusName: "Done",
     done: true,
   },
 ];

@@ -32,7 +32,10 @@ import type {
   OrphanResolution,
   OrphanedTimerView,
   Page,
+  BoardView,
   Pool,
+  PoolPatch,
+  PoolSurfaceQuery,
   PoolWrite,
   RunningTimerView,
   SearchResult,
@@ -141,7 +144,7 @@ export function putTodoNote(id: Id, text: string): Promise<TodoNote> {
   });
 }
 
-/** A-2.4 — erledigt setzen. Die Statusspalte bleibt unverändert (E-023). */
+/** A-2.4 — erledigt setzen. Der Status bleibt unverändert (E-023). */
 export function markTodoDone(id: Id): Promise<Todo> {
   return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "PUT", body: {} });
 }
@@ -152,7 +155,7 @@ export function clearTodoDone(id: Id): Promise<Todo> {
 }
 
 /* ==================================================================== */
-/* Statusspalten                                                        */
+/* Status eines Todos — seit E-054 keine Kanban-Spalte mehr (A-5.4)     */
 /* ==================================================================== */
 
 export function listTodoStatuses(): Promise<readonly TodoStatus[]> {
@@ -182,7 +185,12 @@ export function deleteTodoStatus(id: Id): Promise<void> {
  *
  * Der Schlüssel heißt `order`. Er hieß hier bis T-050 `reihenfolge` — ein Name,
  * den weder das Routenschema noch die Beschreibung kennen; die Route wies jeden
- * Aufruf mit 422 ab, und das Umsortieren der Spalten (A-5.4) war unbenutzbar.
+ * Aufruf mit 422 ab, und das Umsortieren (A-5.4) war unbenutzbar.
+ *
+ * **Immer die ganze Folge.** Der Dienst weist ein Teilstück mit
+ * `validation_error` ab, weil der eindeutige Index auf die Position sonst mitten
+ * in der Umsortierung bräche. Der einzige Aufrufer ist der Bereich „Status" der
+ * Einstellungen (`screens/StatusSettings.tsx`).
  */
 export function reorderTodoStatuses(order: readonly Id[]): Promise<readonly TodoStatus[]> {
   return request<readonly TodoStatus[]>("/todo-statuses/order", {
@@ -260,20 +268,67 @@ export function moveTagFolder(id: Id, newParentId: Id | null): Promise<TagFolder
 /* Pools                                                                */
 /* ==================================================================== */
 
-export function listPools(): Promise<readonly Pool[]> {
-  return request<readonly Pool[]>("/pools");
+/**
+ * Die Regeln **einer Fläche** (E-054).
+ *
+ * Welche Regel auf welcher Fläche steht, entscheidet der Dienst
+ * (`WHERE placement IN (?, 'both')`) und nicht die Oberfläche. Deshalb steht
+ * hier ein Parameter und kein Filter über der vollen Liste: Zwei Fassungen
+ * desselben Prädikats gingen früher oder später auseinander.
+ *
+ *   `pool`  — Pool-Liste und Pool-Filter. Die Vorgabe, wie vor E-054.
+ *   `board` — die Spalten des Kanban-Boards.
+ *   `all`   — jede Regel, für die Verwaltung in S-11.
+ */
+export function listPools(surface: PoolSurfaceQuery = "pool"): Promise<readonly Pool[]> {
+  return request<readonly Pool[]>("/pools", { query: { placement: surface } });
 }
 
+/** `placement: "board"` legt eine Kanban-Spalte an. Eine eigene Route dafür gibt es nicht. */
 export function createPool(body: PoolWrite): Promise<Pool> {
   return request<Pool>("/pools", { method: "POST", body });
 }
 
-export function updatePool(id: Id, body: PoolWrite): Promise<Pool> {
+/**
+ * Teiländerung. Ein Rumpf mit nur `placement` verschiebt eine Regel zwischen
+ * Pool-Liste und Board, ohne die Regel selbst anzufassen.
+ */
+export function updatePool(id: Id, body: PoolPatch): Promise<Pool> {
   return request<Pool>(`/pools/${encodeURIComponent(id)}`, { method: "PATCH", body });
 }
 
 export function deletePool(id: Id): Promise<void> {
   return request<void>(`/pools/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/* ==================================================================== */
+/* Kanban-Board (E-054)                                                 */
+/* ==================================================================== */
+
+/**
+ * `GET /board` — das ganze Board in **einem** Aufruf.
+ *
+ * Die Spalten in ihrer Reihenfolge, je Spalte die erste Seite ihrer Karten und
+ * die Karten, die in mehr als einer Spalte stehen. `limit` gilt **je Spalte**.
+ *
+ * Eine Fortsetzungsmarke nimmt diese Route nicht entgegen: Eine Marke gehört zu
+ * genau einer geordneten Liste, und hier sind es so viele Listen wie Spalten.
+ * Weiter blättert man je Spalte über {@link listPoolTodos} mit dem `nextCursor`
+ * derselben Spalte.
+ *
+ * Es gibt **kein** Gegenstück, das eine Karte in eine Spalte legt. Ziehen ist
+ * mit E-054 entfallen, weil sich eine Regel nicht durch Verschieben umkehren
+ * lässt, ohne Tags zu setzen.
+ */
+export function getBoard(
+  options: { includeCompleted?: boolean; limit?: number } = {},
+): Promise<BoardView> {
+  return request<BoardView>("/board", {
+    query: {
+      ...(options.includeCompleted === true ? { includeCompleted: "true" } : {}),
+      ...(options.limit === undefined ? {} : { limit: options.limit }),
+    },
+  });
 }
 
 /**
