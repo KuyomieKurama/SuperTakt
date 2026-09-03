@@ -266,7 +266,27 @@ export interface TagFolderPort {
     now: Timestamp,
   ): Promise<Result<TagFolder, TaktError<'tag_folder_cycle' | 'name_conflict' | 'not_found'>>>;
 
-  remove(id: TagFolderId): Promise<Result<void, TaktError<'tag_folder_not_empty' | 'not_found'>>>;
+  /**
+   * Löschen. Zwei fachliche Gründe können es verhindern (A-4.5, E-057).
+   *
+   * `tag_folder_not_empty` — der Ordner enthält Unterordner oder Tags.
+   *
+   * `tag_in_use` — der Ordner steht in der Regel eines Pools oder einer
+   * Kanban-Spalte. Derselbe Schlüssel wie beim Tag in einer Regel, weil es
+   * derselbe Sachverhalt ist; welches Ding gemeint ist, sagt die Route. Bis
+   * T-089 fehlte dieser Grund, `pool_rule.folder_id` stand auf CASCADE, und
+   * das Löschen eines **leeren** Ordners entkernte die Regel still — sie traf
+   * danach mehr, als der Benutzer gesagt hatte. Seit Migration 0012 steht die
+   * Spalte auf RESTRICT; die Prüfung im Adapter nennt den fachlichen Grund,
+   * bevor die Datenbank ihn nennen muss.
+   *
+   * Die Antwort trägt in `details` je betroffener Regel einen Eintrag mit
+   * `code: 'pool_rule'`, der **Kennung** in `field` und dem Namen in
+   * `message`. Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
+   */
+  remove(
+    id: TagFolderId,
+  ): Promise<Result<void, TaktError<'tag_folder_not_empty' | 'tag_in_use' | 'not_found'>>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -411,10 +431,27 @@ export interface PoolPort {
    *
    * **Nur die erforderlichen.** Der Name ist der aus der Zeit, als es nur eine
    * Liste gab; die zweite hat mit T-076 eine eigene Methode bekommen, statt
-   * dass diese hier zwei Dinge zurückgäbe. Der Grund ist nicht Geschmack: An
-   * dieser Signatur hängt ein Aufrufer in fremder Hoheit
-   * (`routes/addin/service.ts`), und eine geänderte Rückgabe hätte ihn
-   * gebrochen, ohne dass er dabei richtiger geworden wäre.
+   * dass diese hier zwei Dinge zurückgäbe.
+   *
+   * ---------------------------------------------------------------------------
+   * Wer diese beiden Methoden noch ruft — richtiggestellt (O-I, T-089)
+   * ---------------------------------------------------------------------------
+   *
+   * Hier stand bis T-089: „An dieser Signatur hängt ein Aufrufer in fremder
+   * Hoheit (`routes/addin/service.ts`)." Das stimmt seit T-086 nicht mehr —
+   * der Ausschnitt dort heißt `Pick<PoolPort, 'list' | 'resolveAxes'>`, und
+   * der Add-in-Dienst löst über {@link PoolPort.resolveAxes} auf, weil er seit
+   * E-057 wissen muss, **welcher** genannte Ordner nichts beigetragen hat.
+   *
+   * In `src` gibt es damit **keinen** Aufrufer mehr. Es rufen nur noch die
+   * Prüffälle (`packages/storage/test/repo-tags.test.ts`) und die Attrappe im
+   * Nachweispfad des Add-ins. Eine tote Portfläche mit einer Begründung, die
+   * nicht mehr stimmt, ist schlechter als tote Portfläche allein — beim
+   * nächsten Mal glaubt ihr jemand.
+   *
+   * Die Streichung selbst ist **nicht** hier entschieden: Sie zöge zwei
+   * Dateien in fremder Hoheit nach (der Prüffall und die Attrappe), und beide
+   * gehören nicht dem domain-dev. Der Vorschlag steht im Bericht zu T-089.
    */
   resolveRule(id: PoolId): Promise<readonly TagId[]>;
 
@@ -443,9 +480,10 @@ export interface PoolPort {
    * brauchen ausnahmslos beide Achsen und lösten schon vorher zweimal auf. Zwei
    * Methoden wären hier zwei Aufrufe für eine Antwort.
    *
-   * Die schmalen Methoden bleiben daneben stehen. An ihnen hängt ein Aufrufer
-   * in fremder Hoheit (`routes/addin/service.ts`), und sie sind für den, der
-   * nur die Tagmenge braucht, weiterhin die genügsamere Frage.
+   * Die schmalen Methoden bleiben daneben stehen — für den, der nur die
+   * Tagmenge braucht, sind sie weiterhin die genügsamere Frage. Dass sie in
+   * `src` keinen Aufrufer mehr haben, steht an `resolveRule`; ob sie deshalb
+   * entfallen, entscheidet der Orchestrator (O-I).
    */
   resolveAxes(id: PoolId): Promise<PoolAxesResolution>;
 

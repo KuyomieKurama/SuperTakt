@@ -57,8 +57,11 @@ Migration 0001 legt 16 Tabellen, eine Sicht, 32 Indizes und 12 Trigger an. Migra
 Spalte auf `pool` und **keinen** Index — die Begründung steht in der Migrationsdatei und in 8.4d.
 0010 (T-070, E-054) nimmt `todo.board_rank` und `ux_todo_rank` weg und verkürzt `ix_todo_status`
 auf eine Spalte; siehe 8.4e. 0011 (T-076) baut `pool_rule` um — zwei Spalten mehr an `pool`, eine
-Rolle und eine Statuskennung an `pool_rule`, ein Index dazu; siehe 3.5 und 8.4f.
-Der Stand nach 0011 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
+Rolle und eine Statuskennung an `pool_rule`, ein Index dazu; siehe 3.5 und 8.4f. 0012 (T-089,
+R-1 Befund 1) baut dieselbe Tabelle ein zweites Mal um, ohne eine Spalte anzufassen: `tag_id` und
+`folder_id` gehen von ON DELETE CASCADE auf **RESTRICT**; siehe 3.5 und 8.4g. Tabellen, Sichten,
+Indizes und Trigger bleiben dabei in Zahl und Namen gleich.
+Der Stand nach 0012 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
 `sqlite_master` nach `migrateToLatest`, Node 22.23.2). Hinzu kommt `schema_migration`, die der Migrationsläufer selbst
 führt und die deshalb in keiner Migration steht.
 
@@ -337,7 +340,15 @@ siehe „Erledigt und Abschlussspalte sind zwei Dinge" weiter unten.
 3. Es ist der **Standard** für neue Todos → `409 default_status_locked` (T-074, siehe oben).
 4. Todos tragen ihn noch → `409 status_in_use`, „Diesen Status tragen noch Todos. Geben Sie
    ihnen zuerst einen anderen."
-5. Sonst wird gelöscht.
+5. Die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn → `409 status_in_use`, „Diesen
+   Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst
+   heraus." Seit T-076, weil eine Spalte seitdem nach dem Status filtern kann; seit T-089 nennt
+   die Antwort in `details` auch **welche** Regeln (`code: pool_rule`, Kennung in `field`, Name in
+   `message`). Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
+6. Sonst wird gelöscht.
+
+Punkt 4 und 5 teilen sich einen Schlüssel, weil der Aufrufer dasselbe tun muss: den Status
+irgendwo herausnehmen. **Wo**, sagt `details`.
 
 Der Schlüssel `last_status_column` trägt aus der Zeit vor E-054 noch das Wort „column". Er
 bleibt, wie er ist: Ein Fehlerschlüssel ist eine Zusage an seine Aufrufer, und `tests/e2e` und
@@ -485,6 +496,20 @@ ausdrückbar und werden beim Verschieben geprüft, siehe Abschnitt 4.3.
 Beide Fremdschlüssel auf `tag_folder` stehen auf `ON DELETE RESTRICT`. Ein `CASCADE` würde beim
 Löschen eines Ordners einen ganzen Tagbaum stillschweigend mitreißen, samt aller Zuordnungen an
 Todos.
+
+**Was beim Löschen eines Ordners geschieht.** Der Dienst weist in dieser Reihenfolge ab:
+
+1. Den Ordner gibt es nicht → `404 not_found`.
+2. Er enthält Unterordner oder Tags → `409 tag_folder_not_empty`, „Dieser Ordner ist nicht leer.
+   Verschieben oder löschen Sie zuerst seinen Inhalt."
+3. Die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn → `409 tag_in_use`, „Dieser Ordner
+   wird in der Regel eines Pools verwendet.", mit den betroffenen Regeln in `details`.
+4. Sonst wird gelöscht.
+
+Punkt 3 ist seit T-089 da und ist der Fall, der lange durchrutschte: Löschbar ist ohnehin nur ein
+**leerer** Ordner — und der leere Ordner in einer erforderlichen Achse ist genau der Fall, um den
+es in E-057 geht (siehe 3.5). Derselbe Schlüssel wie beim Tag in einer Regel, weil es derselbe
+Sachverhalt ist; welches Ding gemeint ist, sagt die Route.
 
 ### 3.4 `time_entry` — Zeitbuchung (A-6.*, A-7.3)
 
@@ -688,10 +713,25 @@ kollidierten zwei **verschiedene** Statusterme derselben Regel miteinander; ohne
 dasselbe Tag nicht zugleich erfordern und ausschließen — eine unsinnige Regel, aber eine Eingabe
 des Benutzers und kein Datenbankfehler.
 
-`pool_rule.status_id` steht auf **ON DELETE RESTRICT**, anders als `tag_id` und `folder_id`
-(CASCADE). Eine Regel, der ihr letzter Statusterm stillschweigend entzogen wird, träfe danach
-mehr Todos als vorher — oder, wenn es ihre einzige Achse war, gar keine. `TodoStatusPort.remove`
-nennt den fachlichen Grund (`status_in_use`), bevor die Datenbank ihn nennen muss.
+**Alle drei Termspalten stehen auf ON DELETE RESTRICT** — `status_id` seit 0011, `tag_id` und
+`folder_id` seit 0012 (T-089). Nur `pool_id` kaskadiert: Die Regel geht, ihre Terme gehen mit, und
+ein Term ohne Regel wäre kein Datensatz, sondern Müll.
+
+Die Begründung ist für alle drei dieselbe: Eine Regel, der ein Term stillschweigend entzogen wird,
+träfe danach **mehr** Todos als vorher — oder, wenn es ihre einzige Achse war, gar keine. Beides
+fiele erst auf, wenn jemand auf das Board sieht.
+
+Bis T-089 galt das nur für den Status, und der Preis stand in R-1 Befund 1: Ein Ordner ist genau
+dann löschbar, wenn er **leer** ist — und der leere Ordner in einer erforderlichen Achse ist der
+Fall, um den es in E-057 geht. Aus „Tags aus Ordner Ost **und** Status offen" wurde beim Löschen
+von Ost still „Status offen". Die Oberfläche führte den Benutzer sogar dorthin: Der Leerzustand
+eines Ordners bietet „Ordner löschen" an.
+
+Die Datenbank ist dabei die **zweite** Wache. `TagPort.remove`, `TagFolderPort.remove` und
+`TodoStatusPort.remove` fragen vorher und antworten fachlich — `tag_in_use` beziehungsweise
+`status_in_use`, 409, mit den betroffenen Regeln in `details` (`code: pool_rule`, Kennung in
+`field`, Name in `message`). RESTRICT nimmt der Datenbank nur die Möglichkeit, still zu gehorchen,
+falls eines Tages jemand an der Prüfung vorbeischreibt.
 
 **Einen ausgeschlossenen Status gibt es nicht.** Er wäre eine vierte Rolle für eine Bedingung, die
 sich ohne sie ausdrücken lässt: Wer „alles außer Erledigt" meint, wählt die übrigen Status. Bei
@@ -1831,6 +1871,25 @@ nichts — sichtbar leer. Die Alternative, solche Regeln zu löschen, weil es si
 nähme dem Benutzer eine von Hand eingerichtete Regel samt Namen und Position weg, ohne zu fragen.
 Dieselbe Abwägung wie in 8.4d.
 
+### 8.4g Migration 0012 — dieselbe Tabelle, drei RESTRICT (T-089, R-1 Befund 1)
+
+`0012_pool_rule_restrict` ändert **keine Spalte und keinen Index**. Sie setzt `pool_rule.tag_id`
+und `pool_rule.folder_id` von ON DELETE CASCADE auf **RESTRICT** — der Stand, auf dem `status_id`
+seit 0011 steht. Die Begründung steht in 3.5; kurz: Ein Term, der beim Löschen eines Tags oder
+eines Ordners still mitgeht, ändert die Bedeutung einer Regel, ohne dass jemand sie angefasst hat,
+und in die gefährliche Richtung — die Regel trifft danach **mehr**.
+
+**Warum ein Umbau und kein ALTER.** SQLite kennt kein ALTER TABLE für eine REFERENCES-Klausel. Der
+Weg ist Zeile für Zeile der aus 0011: neue Tabelle, kopieren, alte weg, umbenennen, Indizes wieder
+anlegen, mit `-- takt: foreign_keys=off` und `PRAGMA legacy_alter_table = ON`.
+
+**Kein Datenverlust in beiden Richtungen.** Der Inhalt wird eins zu eins kopiert, vorwärts wie
+rückwärts; Spalten, CHECK, Indexnamen und Indexform bleiben gleich. Was der Rückweg zurücknimmt,
+ist allein das Verhalten beim Löschen — und er sagt es in seinem Kopf: Danach nimmt ein gelöschter
+Ordner seine Regelterme wieder still mit. Der Bestand ist dann nicht ungeschützt, sondern wieder
+auf **eine** Wache statt zweier zurückgesetzt: `TagPort.remove` und `TagFolderPort.remove` prüfen
+weiterhin vorher.
+
 ### 8.5 Nachgewiesen
 
 Alle Migrationen wurden gegen SQLite 3.51.3 ausgeführt und in T-013 gegen SQLite 3.53.4 sowie
@@ -1887,6 +1946,10 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | 0011, dasselbe Tag erforderlich **und** ausgeschlossen | zulässig. Eine unsinnige Regel, aber eine Eingabe des Benutzers; sie trifft nichts, und die Antwort darauf gehört in die Oberfläche, nicht in einen 409 |
 | 0011 rückwärts **mit Daten** | 11 → 10 mit zwei Regeln, davon eine gemischte: die erforderlichen Tagterme unverändert da, ausgeschlossene und Statusterme weg, `completion`/`export_state` weg, `pool_rule` wortgleich wie in 0001 (drei Spalten, drei Indizes) |
 | 0011 wieder vorwärts | 10 → 11: die überlebende Zeile trägt `role = 'required'`, `pragma_foreign_key_check` leer |
+| 0012 vorwärts (T-089) | 0 → 12 auf leerer Datei: 17 Tabellen, 34 benannte Indizes, 17 Trigger, 1 Sicht — Zahl und Namen wie nach 0011; `pool_rule.tag_id` und `.folder_id` tragen `ON DELETE RESTRICT` |
+| 0012, die drei RESTRICT | Regel mit einem Ordnerterm, einem ausgeschlossenen Tagterm und einem Statusterm: Löschen des Ordners, des Tags und des Status je `FOREIGN KEY constraint failed`, alle drei Terme unversehrt. Über die Routen `409 tag_in_use` beziehungsweise `409 status_in_use`, mit den betroffenen Regeln in `details` |
+| 0012 rückwärts **mit Daten** | 12 → 11 mit drei Termen: alle drei unverändert da, `tag_id`/`folder_id` wieder auf CASCADE. Die Gegenprobe unmittelbar danach: Das Löschen des Ordners geht durch und nimmt seinen Term mit (3 → 2) — genau der Zustand, gegen den 0012 geschrieben ist |
+| 0012 wieder vorwärts | 11 → 12, `integrity_check` = ok, `foreign_key_check` leer, 81 Objekte in `sqlite_master` (Node 22.23.2, `node:sqlite`) |
 | 0010 erneut vorwärts mit Daten | 9 → 10: Spalte wieder weg, Todos und Vermerk unverändert, `integrity_check` = ok, `foreign_key_check` leer |
 | 0010 → 0000 rückwärts, dann erneut vorwärts | 10 → 0 → 10, `todo` verschwindet und steht danach wieder ohne `board_rank` (T-070, Node 22.23.2, `node:sqlite`, 25 Prüfungen) |
 | Der vollständige Stand, jeder eindeutige Index (T-074) | 0 → 10, dann jede der **14** `UNIQUE`-Verletzungen aus `sqlite_master` ausgelöst: jede ergibt einen eigenen Fehlerschlüssel und einen eigenen Satz, keine fällt auf „Dieser Wert ist bereits vergeben", keine Antwort nennt Index-, Tabellen- oder Spaltennamen (`proof:conflicts` 1) |

@@ -816,7 +816,26 @@ paths:
       tags: [Tags]
       operationId: deleteTagFolder
       summary: Tag-Ordner löschen
-      description: Scheitert mit `409`, solange der Ordner Unterordner oder Tags enthält.
+      description: |
+        Zwei Gründe können das Löschen mit `409` verhindern:
+
+        | Schlüssel | Wann |
+        |---|---|
+        | `tag_folder_not_empty` | der Ordner enthält Unterordner oder Tags |
+        | `tag_in_use` | die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn |
+
+        Der zweite Grund ist seit T-089 da, und er ist der wichtigere: Löschbar
+        ist ohnehin nur ein **leerer** Ordner — und der leere Ordner in einer
+        erforderlichen Achse ist genau der Fall, um den es in E-057 geht. Bis
+        T-089 nahm das Löschen den Regelterm still mit; aus „Tags aus Ordner
+        Ost **und** Status offen" wurde „Status offen", und die Regel traf
+        **mehr**, als der Benutzer gesagt hatte. Eine Spalte, die zu viel
+        zeigt, fällt niemandem auf.
+
+        Derselbe Schlüssel wie beim Tag in einer Regel, weil es derselbe
+        Sachverhalt ist; welches Ding gemeint ist, sagt die Route. **Welche**
+        Regeln betroffen sind, sagt `details`: je Eintrag `code: pool_rule`, in
+        `field` die Kennung der Regel und in `message` ihr Name.
       responses:
         '204': { description: Gelöscht. }
         '400': { $ref: '#/components/responses/TokenInUrl' }
@@ -1252,13 +1271,28 @@ paths:
         dasselbe wie eine Kanban-Spalte; die ist eine Regel über Tags und steht
         unter `/pools`.
 
-        Drei Gründe können das Löschen mit `409` verhindern:
+        Vier Gründe können das Löschen mit `409` verhindern, und zwei davon
+        teilen sich einen Schlüssel:
 
         | Schlüssel | Wann |
         |---|---|
         | `status_in_use` | Todos tragen diesen Status noch |
+        | `status_in_use` | die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn (seit T-076) |
         | `last_status_column` | es wäre der letzte |
         | `default_status_locked` | es ist der Standard für neue Todos |
+
+        Der vierte Grund kam mit E-054 und T-076 dazu: Seitdem ist eine
+        Kanban-Spalte eine Regel, und eine Regel kann nach dem Status filtern
+        (`Pool.statusIds`). Würde der Status hier stillschweigend gelöscht,
+        verlöre die Regel eine Achse und träfe **mehr** Todos als vorher — oder,
+        wenn es ihre einzige war, gar keine. Beides fiele erst auf, wenn jemand
+        auf das Board sieht.
+
+        In beiden Fällen steht derselbe Schlüssel, weil der Aufrufer dasselbe
+        tun muss: den Status irgendwo herausnehmen. **Wo**, sagt `details`: Im
+        Regelfall trägt jeder Eintrag `code: pool_rule`, in `field` die
+        **Kennung** der Regel und in `message` ihren Namen. Bei zwanzig Regeln
+        ist das der Unterschied zwischen einer Sperre und einer Suche.
 
         `default_status_locked` seit T-074. Bis dahin sperrte allein die
         Oberfläche diesen Fall; der Dienst ließ ihn durch und fiel danach
@@ -1574,11 +1608,18 @@ paths:
         Störung glauben, wo keine ist.
 
         War das Zieltodo erledigt, hebt der Start diesen Status auf (A-2.5).
-        Die Kanban-Spalte bleibt unverändert — Erledigt und Spalte sind zwei
-        getrennte Achsen. Das Todo erscheint ohne weiteres Zutun wieder in
-        seinen Pools: Die Zugehörigkeit ist aus den Tags abgeleitet und war nie
-        gespeichert (A-3.4); ausgeblendet war es allein, weil erledigte Todos in
-        Pool-Ansichten nicht gezeigt werden.
+        Der **Status** des Todos bleibt unverändert — Erledigt und Status sind
+        zwei getrennte Achsen (E-023). Das Todo erscheint ohne weiteres Zutun
+        wieder in seinen Pools: Die Zugehörigkeit ist aus der Regel abgeleitet
+        und war nie gespeichert (A-3.4); ausgeblendet war es allein, weil
+        erledigte Todos in Pool-Ansichten nicht gezeigt werden.
+
+        **Welche Pools das sind, sagt die Antwort** (`poolMovement`, E-058).
+        Bis dahin stand an dieser Stelle „die Spalte ändert sich dadurch nicht",
+        und das ist seit E-055 falsch: Eine Kanban-Spalte ist eine Regel und
+        entscheidet auch über „Erledigt" und über den Exportstatus. Beides
+        ändert dieser Start, also ändert sich unter Umständen sehr wohl, in
+        welchen Spalten die Karte steht.
 
         Alle Teilschritte laufen in einer Transaktion. Es gibt keinen Zustand,
         in dem der alte Timer gestoppt, der neue aber nicht gestartet ist.
@@ -1652,7 +1693,7 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [kind, started, stopped, doneCleared]
+                    required: [kind, started, stopped, doneCleared, poolMovement]
                     properties:
                       kind: { type: string, const: started }
                       started: { $ref: '#/components/schemas/RunningTimeEntry' }
@@ -1666,6 +1707,41 @@ paths:
                       doneCleared:
                         type: boolean
                         description: War das Todo erledigt und ist durch den Start wieder aktiv? (A-2.5)
+                      poolMovement:
+                        oneOf:
+                          - { $ref: '#/components/schemas/PoolMovement' }
+                          - { type: 'null' }
+                        description: |
+                          Wie dieser Start das Todo durch die Pools bewegt —
+                          oder `null` (E-058).
+
+                          Gerechnet wird in genau zwei Fällen, und beide sind
+                          Wirkungen dieses Starts:
+
+                          1. **Er hat „Erledigt" aufgehoben** (`doneCleared`,
+                             A-2.5). Jede Regel mit einer Erledigt-Achse
+                             urteilt danach anders: Die Spalte „nur Erledigte"
+                             verliert das Todo, die Spalte „nur Offene" bekommt
+                             es.
+                          2. **Die erste abgeschlossene Buchung ist
+                             entstanden.** Das geschieht dann, wenn der Start
+                             mit `stopRunning` einen laufenden Timer
+                             **desselben** Todos beendet: Aus dem laufenden
+                             Timer wird eine offene Buchung, und jede Regel mit
+                             `exportState: open` nimmt das Todo damit auf.
+
+                          Sonst `null`. Ein laufender Timer allein ist keine
+                          Buchung — die Abfrage verlangt ein Ende —, und an
+                          Tags und Status ändert der Start nichts (E-023). Es
+                          gibt dann nichts zu berichten, und `null` sagt das,
+                          statt drei leere Listen zu schicken.
+
+                          `null` ist deshalb **nicht** dasselbe wie „drei leere
+                          Listen": Das eine heißt „hier war keine Bewegung
+                          möglich", das andere „es wurde nachgesehen und es hat
+                          sich nichts geändert". Beide führen zu derselben
+                          Anzeige — keiner —, aber nur das erste kostet keine
+                          Ordnerauflösung.
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3772,6 +3848,58 @@ components:
             `@takt/domain`. Die Oberfläche liest sie, statt `isEmpty` und
             `unresolvedRequired` selbst zu verknüpfen — das wäre die zweite
             Fassung derselben Bedingung.
+
+    PoolMovement:
+      type: object
+      description: |
+        Wie eine Handlung ein Todo durch die Pools bewegt (E-056, E-058, T-084).
+
+        Drei Listen mit **Namen**, und sie beantworten drei verschiedene Fragen:
+
+        | Feld | Bedeutung |
+        |---|---|
+        | `appears` | gilt **nachher** — der Zustand, nicht die Bewegung |
+        | `enters` | gilt nachher und galt **vorher nicht** |
+        | `leaves` | galt **vorher** und gilt nachher nicht |
+
+        `enters` ist eine Teilmenge von `appears`; ein Pool steht nie zugleich
+        in `enters` und in `leaves`.
+
+        **Wozu drei und nicht eine.** `appears` allein beantwortet die Frage
+        nicht, um die es geht: Es ist fast immer besetzt, auch wenn sich nichts
+        rührt. Ob überhaupt etwas zu sagen ist, steht in `enters` und `leaves`
+        — sind beide leer, hat die Handlung an der Zugehörigkeit nichts
+        geändert. Und `enters` läßt sich nicht nachträglich ausrechnen: Der
+        Unterschied verlangt beide Zustände **derselben** Regel, und zwei Pools
+        dürfen denselben Namen tragen.
+
+        **Es sind Namen und keine Kennungen**, weil ein Mensch sie liest und in
+        der Hauptanwendung wiederfindet. Die Rechnung dahinter vergleicht
+        Regeln und nie Namen.
+
+        **Auch reine Kanban-Spalten stehen darin** (`placement: board`). Eine
+        Bewegung ist eine Bewegung, gleich auf welcher Fläche die Regel
+        erscheint — und der Fall, für den E-056 geschrieben wurde, ist
+        ausgerechnet eine Spalte: „erledigt und noch nicht abgerechnet" als
+        Abrechnungsliste.
+
+        Den Satz dazu bildet `poolMovementSentence` in `@takt/domain`. Er ist
+        an beiden Flächen derselbe — Hauptanwendung und Aufgabenbereich —, weil
+        er aus einer Quelle kommt (E-058).
+      required: [appears, enters, leaves]
+      properties:
+        appears:
+          type: array
+          items: { type: string }
+          description: Pools, in denen das Todo **nach** der Handlung steht.
+        enters:
+          type: array
+          items: { type: string }
+          description: Pools, in die dieselbe Handlung es hineinbewegt.
+        leaves:
+          type: array
+          items: { type: string }
+          description: Pools, aus denen dieselbe Handlung es entfernt.
 
     PoolWithResolution:
       description: |

@@ -539,3 +539,47 @@ export function completionSpoken(value: PoolCompletionFilter): string {
 export function exportSpoken(value: PoolExportFilter): string {
   return value === "any" ? POOL_EXPORT_LABEL.any : EXPORT_TEXT[value];
 }
+
+/**
+ * Die ganze Regel in **einem** Satz — für die Live-Region der Vorschau
+ * (S-8 aus R-2, SC 4.1.3).
+ *
+ * ## Warum es diesen Satz überhaupt gibt
+ *
+ * Die Vorschau im Regelformular ist die einzige Fläche, an der die fünf Achsen
+ * zu **einer** Aussage zusammenkommen — und sie ändert sich bei jeder Wahl.
+ * Für eine Vorlesehilfe war sie damit unsichtbar: Wer die Regel mit der
+ * Tastatur ändert, hört, dass er einen Optionsknopf gewählt hat, aber nicht,
+ * was die Regel jetzt trifft.
+ *
+ * ## Warum die Chips **nicht** einzeln vorgelesen werden
+ *
+ * Die Live-Region bekommt genau diesen einen Satz und nicht den Kasten. Wird
+ * eine ganze Chipwolke zur Live-Region, sagt sie bei jedem Tastendruck alles
+ * noch einmal — und dann schaltet der Benutzer die Vorlesehilfe ab, nicht die
+ * Region.
+ *
+ * Aus demselben Grund steht der **Grund** einer nicht erfüllbaren Regel am
+ * Ende: Wer nach dem dritten Wort weghört, hat trotzdem gehört, was die Regel
+ * trifft. Wer zuhört, erfährt danach, warum sie es nicht tut.
+ */
+export function ruleSpoken(description: RuleDescription, reach: RuleReach | null): string {
+  const fault =
+    reach?.kind === "empty-folder"
+      ? ` Kein Tag in ${emptyFolderNames(reach.folders)} — diese Regel trifft deshalb nichts.`
+      : "";
+
+  if (description.isEmpty) {
+    return `Diese Regel nennt keine Bedingung und trifft nichts.${fault}`;
+  }
+
+  const conditions = description.axes
+    .map((axis) => `${axis.label} ${axis.text ?? axis.chips.map((chip) => chip.label).join(", ")}`)
+    .join("; ");
+  const neutral =
+    description.neutral.length === 0
+      ? ""
+      : ` Ohne Einschränkung: ${description.neutral.map((axis) => axis.label).join(", ")}.`;
+
+  return `Diese Regel trifft: ${conditions}.${neutral}${fault}`;
+}

@@ -40,6 +40,20 @@ import { cx } from "../lib/cx";
  * der Tabulator springt in die Gruppe und aus ihr heraus, die Beschriftung ist
  * anklickbar. Nichts davon ist hier nachgebaut — nachgebaute Optionsknöpfe sind
  * die zuverlässigste Art, eine Tastaturbedienung zu verlieren.
+ *
+ * ## Name und Beschreibung sind zweierlei (SC 4.1.2, S-6 aus R-2)
+ *
+ * Der **Name** einer Option ist das Wort, das dasteht — „Alle", „Erledigt",
+ * „Unerledigt". Der **Hilfssatz** ist ihre Beschreibung und hängt über
+ * `aria-describedby` an jedem Knopf, auch am ungewählten: Wer mit den
+ * Pfeiltasten durch die Gruppe geht, soll hören, wozu die nächste Wahl führt,
+ * statt sie erst treffen zu müssen.
+ *
+ * Bis T-091 stand der Satz als versteckter Span **im** `<label>` und war
+ * dadurch beides zugleich: Teil des Namens und Beschreibung. Eine Vorlesehilfe
+ * las ihn zweimal, und die Option „Alle" hieß achtundzwanzig Wörter lang. Die
+ * Spans stehen deshalb als Geschwister der Optionsliste; die Kennungen sind
+ * dieselben geblieben.
  */
 
 export interface RadioRowOption<TValue extends string> {
@@ -103,21 +117,31 @@ export function RadioRow<TValue extends string>({
               {option.neutral === true && neutralNote !== undefined ? (
                 <span className="radio-row__neutral">{neutralNote}</span>
               ) : null}
-              {option.hint === undefined ? null : (
-                /*
-                 * Der Satz haengt hier als Beschreibung **jedes** Knopfes, auch
-                 * des ungewaehlten: Wer mit den Pfeiltasten durch die Gruppe
-                 * geht, soll hoeren, wozu die naechste Wahl fuehrt, statt sie
-                 * erst treffen zu muessen.
-                 */
-                <span className="visually-hidden" id={`${optionId}-hint`}>
-                  {option.hint}
-                </span>
-              )}
             </label>
           );
         })}
       </div>
+
+      {/*
+        Die Hilfssaetze stehen **ausserhalb** der `<label>` (S-6 aus R-2).
+
+        Innerhalb waren sie Teil des zugaenglichen **Namens** — und zugleich
+        ueber `aria-describedby` die **Beschreibung**. Eine Vorlesehilfe las
+        beides: Die Option „Alle" hiess achtundzwanzig Woerter lang, und der
+        Satz kam zweimal. Genau das wollte die Komponente vermeiden; der
+        sichtbare Satz darunter traegt deshalb `aria-hidden`.
+
+        Als Geschwister der Optionsliste bleiben die Kennungen, auf die
+        `aria-describedby` zeigt, unveraendert — nur der Name ist wieder das
+        Wort, das dasteht.
+      */}
+      {options.map((option) =>
+        option.hint === undefined ? null : (
+          <span key={option.value} className="visually-hidden" id={`${id}-${option.value}-hint`}>
+            {option.hint}
+          </span>
+        ),
+      )}
       {selected?.hint === undefined ? null : (
         /*
          * Sichtbar, aber fuer Hilfsmittel ausgeblendet: Derselbe Satz steht

@@ -183,8 +183,9 @@ export interface TodoFilter {
  * Ein Statuswert.
  *
  * **Keine Kanban-Spalte mehr.** Bis E-054 war beides dasselbe; seitdem ist eine
- * Spalte des Boards eine Regel über Tags (`Pool` mit `placement`), und der
- * Status ist eine Eigenschaft des Todos geblieben. Verwaltet wird er im Bereich
+ * Spalte des Boards eine Regel (`Pool` mit `placement`), und der Status ist
+ * eine Eigenschaft des Todos geblieben — eine von fünf Bedingungen, nach denen
+ * eine Regel fragen kann (E-055), und keine Ablagefläche mehr. Verwaltet wird er im Bereich
  * „Status" der Einstellungen (`screens/StatusSettings.tsx`).
  *
  * Er trägt kein Merkmal, das ihn als „Erledigt" auswiese — Erledigt hängt am
@@ -246,7 +247,7 @@ export type PoolRuleTerm =
   | { readonly kind: "folder"; readonly folderId: Id };
 
 /**
- * Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform einer
+ * Eine benannte Regel — und seit E-054 zugleich die Bauform einer
  * **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`; was eine
  * Spalte von einem Pool unterscheidet, ist allein `placement`.
  *

@@ -116,7 +116,14 @@ import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases
 // sie liegt. Über den Paketnamen und nicht über einen Pfad: Das Add-in führt
 // `@takt/domain` seit T-028 in seiner Abhängigkeitsliste, und derselbe
 // Bezeichner steht im Quelltext des Aufgabenbereichs.
-import { checkCallNumber, matchesPool, mayLookUpDuplicates, tagNameKey } from '@takt/domain';
+import {
+  POOL_RULE_AXIS_IDS,
+  POOL_RULE_AXIS_OF_FIELD,
+  checkCallNumber,
+  matchesPool,
+  mayLookUpDuplicates,
+  tagNameKey,
+} from '@takt/domain';
 
 // --- Prüflinge: der Vorlagen-Motor ----------------------------------------
 import { fromBase64, toBase64 } from '../../../packages/export/src/base64.ts';
@@ -135,6 +142,7 @@ import {
   ID,
   MAIL_MIT_NUMMER,
   MAIL_OHNE_NUMMER,
+  PLACEMENT_POOLS,
   buildAxisTodos,
   buildTagTree,
   createFakeStore,
@@ -2118,6 +2126,37 @@ const movementOf = async (callNumber) => {
 /** Nur die genannten Pools — für die Prüfungen, die von T-078 stammen. */
 const poolsOf = async (callNumber) => (await movementOf(callNumber)).appears;
 
+/*
+ * Die Wache gegen die **sechste** Achse, zweite Hälfte (R-1, T-090)
+ * ----------------------------------------------------------------
+ *
+ * Die erste Hälfte trägt der Übersetzer: `NamedPoolRule` in
+ * `routes/addin/service.ts` verlangt seit T-090 **jedes** Feld der Regelseite,
+ * und das Objektliteral darunter wird rot, sobald `MatchesPoolRule` eines
+ * dazubekommt. Nachgestellt: Nimmt man dort `exportState` heraus, meldet `tsc`
+ * genau diese Zuweisung.
+ *
+ * Was der Übersetzer nicht sieht, ist der Schritt davor — ob eine neue **Achse**
+ * überhaupt ein Feld auf der Regelseite bekommen hat. Ohne Feld kann
+ * `matchesPool` sie nicht auswerten, und niemand wird rot: `PoolRuleAxes` und
+ * `MatchesPoolRule` sind zwei Typen, und `POOL_RULE_AXIS_OF_FIELD` schaut nur
+ * in die eine Richtung (Feld → Achse). Diese Prüfung schaut in die andere.
+ */
+check('T-090: jede Achse der Domäne hat ein Feld auf der aufgelösten Regelseite', () => {
+  const belegt = new Set(Object.values(POOL_RULE_AXIS_OF_FIELD));
+
+  for (const axis of POOL_RULE_AXIS_IDS) {
+    assert.ok(
+      belegt.has(axis),
+      `die Achse „${axis}" hat kein Feld in MatchesPoolRule — matchesPool kann sie nicht auswerten`,
+    );
+  }
+
+  // Die Gegenprobe zur Gegenprobe: Es gibt überhaupt Achsen. Eine leere
+  // Aufzählung liefe fehlerfrei durch und prüfte nichts.
+  assert.ok(POOL_RULE_AXIS_IDS.length >= 5, 'die Achsenliste der Domäne ist geschrumpft');
+});
+
 check('Die Ausgangslage: alle sieben eingerichteten Regeln fordern dieselben Tags', () => {
   // Ohne diese Prüfung wäre jede Aussage unten mehrdeutig: Ein fehlender Pool
   // könnte auch daran liegen, dass seine Tagliste nicht passt.
@@ -2704,6 +2743,269 @@ check('T-082: das Pflichtfeld ist der Unterschied, und zwar in beide Richtungen'
     false,
     'das Pflichtfeld wirkt nicht: eine erforderliche Bedingung ohne Treffer lässt die Regel trotzdem treffen',
   );
+});
+
+// ===========================================================================
+heading('14  Der Anzeigeort ist keine Antwort: reine Board-Spalten (E-054, E-056, T-090)');
+// ===========================================================================
+
+/*
+ * Der Befund, den dieser Abschnitt misst
+ * --------------------------------------
+ *
+ * `PoolPort.list` fragt seit E-054 nach einer **Fläche** und setzt ohne
+ * Argument `'pool'` ein — geliefert werden dann nur Regeln mit `placement`
+ * `pool` oder `both`. Die Vorgabe ist für ihre Aufrufer richtig; `poolNamer`
+ * war bis T-090 einer von ihnen und ist es seit E-056 nicht mehr. Er
+ * beantwortet nicht „in welchen Pools steht das Todo", sondern was diese
+ * Buchung ändert, und diese Frage kennt keine Fläche.
+ *
+ * Was daraus wurde: Eine Spalte „erledigt und noch nicht abgerechnet" mit
+ * Anzeigeort **„Nur auf dem Board"** — die naheliegende Wahl, denn sie ist eine
+ * Board-Spalte, und `board` ist die Vorgabe beim Anlegen über das Board —
+ * wurde im Aufgabenbereich nie genannt. Weder beim Erscheinen noch beim
+ * Verschwinden. Wer dieselbe Regel versehentlich als „Pool und Board"
+ * einrichtete, bekam die Auskunft. Dieselbe Regel, dieselbe Wirkung, zwei
+ * Verhalten — unterschieden durch eine Einstellung, die mit der Frage nichts
+ * zu tun hat. E-056 begründet sich wörtlich mit genau diesem Fall und war für
+ * ihn nicht umgesetzt (R-1 Befund 3, R-2 B-4).
+ *
+ * Gemessen wird gegen die **echten** Routen, mit `PLACEMENT_POOLS`: dreimal
+ * dieselbe Regel, einmal je Anzeigeort. Die erste Prüfung gilt der Attrappe
+ * selbst — sie hat das Flächenargument bis T-090 verschluckt und damit den
+ * Befund unsichtbar gemacht.
+ */
+
+const flaechenStore = createFakeStore({ pools: PLACEMENT_POOLS });
+const flaechenApp = mountAddinRoutes(flaechenStore.deps);
+const flaechenClient = createApiClient({
+  baseUrl: 'http://127.0.0.1:17843',
+  token: () => 'takt_GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+  fetch: (url, init) => flaechenApp.request(String(url), init),
+});
+
+for (const todo of buildAxisTodos()) flaechenStore.seedTodo(todo);
+
+/*
+ * Eine **offene** Buchung am Turnus-Todo. Erst damit ist es der Fall aus E-056:
+ * erledigt und noch nicht abgerechnet — es steht in der Abrechnungsliste, und
+ * die nächste Buchung nimmt es dort heraus.
+ */
+flaechenStore.state.timeEntries.push({
+  id: 'te-flaeche-offen',
+  todoId: AXIS_TODO.turnus,
+  startedAt: '2026-02-25T14:00:00Z',
+  endedAt: '2026-02-25T15:00:00Z',
+  durationSeconds: 3600,
+  note: 'Turnus, erster Teil',
+  exportStatus: 'open',
+  exportCount: 0,
+  source: 'manual',
+  createdAt: '2026-02-25T15:00:00Z',
+  updatedAt: '2026-02-25T15:00:00Z',
+});
+
+const flaechenBewegung = async (callNumber) => {
+  const result = await flaechenClient.findMatches(callNumber);
+  assert.equal(result.ok, true, result.ok ? '' : result.message);
+  assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
+  const match = result.value.matches[0];
+  return {
+    appears: match.poolNames,
+    enters: match.enteringPoolNames,
+    leaves: match.leavingPoolNames,
+  };
+};
+
+await checkAsync('Die Ausgangslage: die Attrappe unterscheidet die Flächen', async () => {
+  /*
+   * Ohne diese Prüfung misst der ganze Abschnitt nichts. Die Attrappe schrieb
+   * bis T-090 `list: async () => pools` und gab jede Regel heraus, gleich
+   * wonach gefragt wurde — eine Attrappe, die großzügiger ist als der Betrieb,
+   * macht den Fehler unsichtbar, den sie zeigen soll.
+   *
+   * `GET /addin/context` ist der Aufrufer, der weiterhin **ohne** Argument
+   * fragt (`loadContext`), weil er die Pool-Liste als Fläche meint. Er darf die
+   * reine Board-Spalte deshalb nicht sehen — und sieht die Regel mit `both`
+   * sehr wohl.
+   */
+  const context = await flaechenClient.loadContext();
+  assert.equal(context.ok, true, context.ok ? '' : context.message);
+
+  assert.deepEqual(
+    context.value.pools.map((pool) => pool.name),
+    ['Wartung Nord', 'Erledigte Wartung (Pool und Board)'],
+    'die Attrappe wertet das Flächenargument nicht aus — dann misst dieser Abschnitt nichts',
+  );
+});
+
+await checkAsync('B-4: die reine Board-Spalte steht in `leaves` (E-056)', async () => {
+  const turnus = await flaechenBewegung('TCK-000518');
+
+  /*
+   * Die Zeile, die vor T-090 rot gewesen wäre: Mit `unit.pools.list()` fehlt
+   * „Erledigt, noch nicht abgerechnet" — die Spalte, für die E-056 geschrieben
+   * wurde. Übrig bliebe allein die Regel mit `both`, und genau daran ist der
+   * Befund zu erkennen: Es lag nie an der Regel.
+   */
+  assert.deepEqual(turnus.leaves, [
+    'Erledigt, noch nicht abgerechnet',
+    'Erledigte Wartung (Pool und Board)',
+  ]);
+
+  // Die Gegenprobe daneben: Die Regel ohne Erledigt-Achse bleibt, und sie
+  // bleibt auch die einzige. Ein Pool steht nie in beiden Listen.
+  assert.deepEqual(turnus.appears, ['Wartung Nord']);
+  for (const name of turnus.leaves) {
+    assert.equal(turnus.appears.includes(name), false, `„${name}" steht in beiden Listen`);
+  }
+});
+
+await checkAsync('Der Satz nennt die Board-Spalte beim Namen', async () => {
+  const turnus = await flaechenBewegung('TCK-000518');
+  const satz = reopenPreview(15, turnus).effects[2];
+
+  assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste fehlt im Satz');
+  assert.match(satz, /verschwindet aus den Pools/);
+
+  // Ein Satz, wie E-056 es verlangt — auch mit einer Spalte darin.
+  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
+
+  /*
+   * Festgehalten, nicht behauptet: Der Satz sagt „den Pools" und meint dabei
+   * eine reine Board-Spalte. Das Wort ist falsch, der Name stimmt. Die
+   * Korrektur gehört zu E-058 (`poolMovementSentence` in der Domäne) und steht
+   * noch aus; diese Zeile hält den heutigen Wortlaut fest, damit die Umstellung
+   * ihn nicht versehentlich beibehält.
+   */
+  assert.equal(/den Pools/.test(satz), true, 'der Wortlaut hat sich geändert — E-058 prüfen');
+});
+
+await checkAsync('I-05 über die Flächen: die Bestätigung sagt dasselbe wie die Ankündigung', async () => {
+  const davor = await flaechenBewegung('TCK-000518');
+
+  const booked = await flaechenClient.book({
+    todoId: AXIS_TODO.turnus,
+    startedAt: '2026-03-02T11:00:00Z',
+    endedAt: '2026-03-02T11:15:00Z',
+    note: 'Turnus abgeschlossen',
+  });
+
+  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
+  assert.equal(booked.value.doneCleared, true, 'die Ausgangslage stimmt nicht — das Todo war erledigt');
+
+  assert.deepEqual(booked.value.leavingPoolNames, davor.leaves);
+  assert.deepEqual(booked.value.poolNames, davor.appears);
+});
+
+// ===========================================================================
+heading('15  Scheitert das Wiederöffnen, fällt die Buchung mit (R-1 Befund 2)');
+// ===========================================================================
+
+/*
+ * Der Befund, den dieser Abschnitt misst
+ * --------------------------------------
+ *
+ * `bookOnTodo` schreibt erst die Buchung und hebt danach „Erledigt" auf.
+ * Scheitert das Aufheben, gab die Funktion bis T-090 `{ kind: 'rejected' }`
+ * **zurück** — und die Transaktionsklammer nimmt nur bei einem **Wurf**
+ * zurück. Eine gewöhnliche Rückgabe führt zu `COMMIT`.
+ *
+ * Das Ergebnis war der teuerste Zustand dieses Bestands: Die Zeit steht
+ * festgeschrieben in der Datenbank, das Todo gilt weiter als erledigt, und der
+ * Aufgabenbereich meldet „abgewiesen". Wer das liest, bucht noch einmal — und
+ * derselbe Zeitraum geht zweimal in die Abrechnung.
+ *
+ * Gemessen wird an der Attrappe, weil nur sie den Fehlschlag herstellen kann
+ * (`clearDoneFailure`). Sie nimmt bei einem Wurf denselben Abzug zurück wie
+ * SQLite mit `ROLLBACK` — dieselbe Bauart, aus der schon „kein Tag ohne sein
+ * Todo" (T-047) gemessen wird. Drei Prüfungen: der Fehlschlag, der Bestand
+ * danach, und die Gegenprobe ohne den Fehlschlag.
+ */
+
+const FEHLSCHLAG = Object.freeze({
+  code: 'storage_error',
+  message: 'Die Datenbank hat den Schreibvorgang abgelehnt.',
+});
+
+const abbruchStore = createFakeStore({ clearDoneFailure: FEHLSCHLAG });
+const abbruchApp = mountAddinRoutes(abbruchStore.deps);
+const abbruchClient = createApiClient({
+  baseUrl: 'http://127.0.0.1:17843',
+  token: () => 'takt_HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH',
+  fetch: (url, init) => abbruchApp.request(String(url), init),
+});
+
+for (const todo of buildAxisTodos()) abbruchStore.seedTodo(todo);
+
+const BUCHUNG = Object.freeze({
+  todoId: AXIS_TODO.turnus,
+  startedAt: '2026-03-02T11:00:00Z',
+  endedAt: '2026-03-02T11:15:00Z',
+  note: 'Turnus abgeschlossen',
+});
+
+check('Die Ausgangslage: das Todo ist erledigt, und es gibt keine Buchung darauf', () => {
+  // Ohne sie wäre unten jede Aussage mehrdeutig: Ein Bestand ohne neue Buchung
+  // beweist nichts, wenn schon vorher keine da war und das Todo offen ist.
+  assert.notEqual(abbruchStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
+  assert.equal(
+    abbruchStore.state.timeEntries.some((entry) => entry.todoId === AXIS_TODO.turnus),
+    false,
+  );
+});
+
+await checkAsync('Scheitert `clearDone`, entsteht keine Buchung — und das Todo bleibt erledigt', async () => {
+  const booked = await abbruchClient.book(BUCHUNG);
+
+  assert.equal(booked.ok, false, 'der Fehlschlag ist gar nicht eingetreten');
+  assert.equal(booked.code, FEHLSCHLAG.code, 'der Grund kommt nicht durch');
+
+  /*
+   * Der Kern des Befundes. Vor T-090 stand hier **eine** Buchung: Die Klammer
+   * hatte festgeschrieben, weil eine Rückgabe kein Wurf ist.
+   */
+  assert.deepEqual(
+    abbruchStore.state.timeEntries.filter((entry) => entry.todoId === AXIS_TODO.turnus),
+    [],
+    'die Zeit ist gebucht, obwohl die Antwort „abgewiesen" lautet — dieselbe Zeit geht zweimal in die Abrechnung',
+  );
+
+  // Und der zweite Teil desselben Zustands: Das Kennzeichen steht noch. Ein
+  // halber Vorgang ist auch dann falsch, wenn er in die andere Richtung
+  // stehenbleibt.
+  assert.notEqual(
+    abbruchStore.state.todos.get(AXIS_TODO.turnus).completedAt,
+    null,
+    'das Kennzeichen ist gefallen, obwohl das Aufheben gescheitert ist',
+  );
+});
+
+await checkAsync('Die Gegenprobe: ohne den Fehlschlag bucht derselbe Aufruf', async () => {
+  /*
+   * Ohne sie stünde nur fest, dass irgendetwas den Aufruf abweist — nicht,
+   * dass es der Fehlschlag beim Wiederöffnen war. Derselbe Bestand, derselbe
+   * Aufruf, ein Schalter Unterschied.
+   */
+  const heilStore = createFakeStore();
+  const heilApp = mountAddinRoutes(heilStore.deps);
+  const heilClient = createApiClient({
+    baseUrl: 'http://127.0.0.1:17843',
+    token: () => 'takt_HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH',
+    fetch: (url, init) => heilApp.request(String(url), init),
+  });
+
+  for (const todo of buildAxisTodos()) heilStore.seedTodo(todo);
+
+  const booked = await heilClient.book(BUCHUNG);
+
+  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
+  assert.equal(booked.value.doneCleared, true);
+  assert.equal(
+    heilStore.state.timeEntries.filter((entry) => entry.todoId === AXIS_TODO.turnus).length,
+    1,
+  );
+  assert.equal(heilStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
 });
 
 // ===========================================================================

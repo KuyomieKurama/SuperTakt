@@ -304,7 +304,7 @@ const INVENTORY: readonly InventoryEntry[] = [
     name: "Kanban-Spalte",
     file: "Kanban.tsx",
     purpose:
-      "Eine Regel über Tags als Spalte (E-054), mit ihrer Regelzeile, dem Zähler und dem Spaltenmenü. Kein Ablageziel mehr: Welche Karte hier steht, entscheiden die Tags des Todos.",
+      "Eine Regel als Spalte (E-054), mit ihrer Regelzeile, dem Zähler und dem Spaltenmenü. Kein Ablageziel mehr: Welche Karte hier steht, entscheidet die Regel — über Tags, Status, „Erledigt“ und den Exportstatus (E-055).",
     states: "normal · leer, weil keine Karte die Regel trifft · leere Regel · mit erledigten Todos · mehr Karten vorhanden als geladen",
     screens: "S-04",
     built: true,

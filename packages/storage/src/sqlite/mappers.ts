@@ -37,6 +37,7 @@ import type {
   TagFolder,
   TagFolderId,
   TagId,
+  TaktFieldError,
   TimeEntry,
   TimeEntryId,
   TimeEntrySource,
@@ -197,6 +198,37 @@ export function toPoolRuleTerm(row: SqlRow): PoolTagTerm {
   const tagId = textOrNull(row, 'tag_id');
   if (tagId !== null) return { kind: 'tag', tagId: brand<TagId>(tagId) };
   return { kind: 'folder', folderId: brand<TagFolderId>(text(row, 'folder_id')) };
+}
+
+/**
+ * Eine Regel als Feldangabe in `details` (R-3 H-2, R-1 Befund 1, T-089).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Kennung in `field` steht
+ * ---------------------------------------------------------------------------
+ *
+ * `TaktFieldError` hat drei Felder: `field`, `code`, `message`. Bei einer
+ * Löschanfrage gibt es kein Eingabefeld, dem etwas vorzuwerfen wäre — die
+ * Anfrage besteht aus einem Pfadbestandteil und sonst nichts. `field` ist
+ * damit der einzige Platz in der Hülle, der eine maschinenlesbare Angabe
+ * tragen kann, und die Kennung der Regel ist genau das, was die Oberfläche
+ * braucht: Sie soll dorthin verweisen können, wo der Benutzer den Term
+ * herausnimmt.
+ *
+ * Der Vertrag lautet deshalb, und er steht so auch in der
+ * Schnittstellenbeschreibung: **`code` ist `pool_rule`, `field` ist die
+ * Kennung des Pools, `message` nennt ihn beim Namen.** Ein Aufrufer liest
+ * `details.filter((d) => d.code === 'pool_rule')` und hat Kennung und Namen.
+ *
+ * Der Name kommt aus dem eigenen Bestand und nicht aus der Anfrage; er verrät
+ * dem Aufrufer nichts, was ihm die Pool-Liste nicht ohnehin sagt (B-2.4).
+ */
+export function poolReference(row: SqlRow): TaktFieldError {
+  return {
+    field: text(row, 'id'),
+    code: 'pool_rule',
+    message: `Regel „${text(row, 'name')}“`,
+  };
 }
 
 /**

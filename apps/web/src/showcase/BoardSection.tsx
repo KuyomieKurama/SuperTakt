@@ -2,12 +2,13 @@ import { useCallback, useMemo, useState } from "react";
 import { FilterToggle } from "../components/FilterBar";
 import { KanbanCard, KanbanColumn } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Card, InlineMessage, Button } from "../components/Primitives";
+import { Card, InlineMessage, Button, LoadingBlock } from "../components/Primitives";
 import { RuleSummary } from "../components/RuleSummary";
 import { ReactivationNotice } from "../components/Timer";
 import { describeRule, describeRuleReach } from "../lib/poolRule";
 import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
 import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
+import { RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -15,8 +16,10 @@ import { Section, SubHeading } from "./Section";
  *
  * ## Was diese Musterseite zeigt und warum
  *
- * Eine Spalte ist eine **Regel ueber Tags**, dieselbe Entitaet wie ein Pool.
- * Daraus folgen drei Zustaende, die es vor E-054 nicht gab und die hier
+ * Eine Spalte ist eine **Regel**, dieselbe Entitaet wie ein Pool — und seit
+ * E-055 eine Regel ueber fuenf Bedingungen: erforderliche Tags, ausgeschlossene
+ * Tags, Status, „Erledigt" und Exportstatus.
+ * Daraus folgen Zustaende, die es vor E-054 nicht gab und die hier
  * nebeneinander stehen, weil sie einzeln harmlos und zusammen verwirrend sind:
  *
  *   1. Dieselbe Karte in **zwei** Spalten ("Musterkunde Nord" steht in
@@ -28,6 +31,11 @@ import { Section, SubHeading } from "./Section";
  *      genau einer von ihnen ist ein Einrichtungsfehler — er steht zweimal da,
  *      einmal allein und einmal neben einer gesunden Bedingung, weil er in
  *      dieser zweiten Form bis T-087 unsichtbar war.
+ *   5. **Laden und Scheitern** (T-091). Beides galt bis dahin als
+ *      selbstverstaendlich und stand deshalb nirgends — und was nirgends
+ *      steht, wird nicht abgenommen, sondern geglaubt. Beide gelten fuer die
+ *      **ganze** Seite und nicht je Spalte: Der Dienst liefert das Board in
+ *      einer Antwort.
  *
  * ## Was hier bewusst fehlt
  *
@@ -219,14 +227,14 @@ export function BoardSection() {
     <Section
       id="board"
       title="5 — Kanban-Board"
-      lead="Eine Spalte ist eine Regel über Tags, kein Status (E-054). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet."
+      lead={`${RULE_IS_A_RULE} Kein Status und kein Ablageort (E-054, E-055). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet.`}
       refs={["S-04", "S-11", "A-2.4", "A-2.5", "A-5.1", "A-5.3", "A-5.4", "A-5.6", "E-054", "I-03", "I-05"]}
     >
       <InlineMessage tone="info" title="Was an die Stelle des Ziehens getreten ist">
-        Welche Karte in welcher Spalte steht, entscheiden die Tags des Todos. Wer eine Karte
-        anderswohin bringen will, ändert ihre Tags — das Kartenmenü sagt das ausdrücklich. Der
-        Status bleibt als Eigenschaft am Todo und wird in der Liste und in der Detailansicht
-        geändert.
+        {RULE_WHAT_MOVES_A_CARD} Wer eine Karte anderswohin bringen will, ändert am Todo das,
+        wonach die Regel fragt — meist ein Tag, manchmal den Status; das Kartenmenü sagt das
+        ausdrücklich. Der Status bleibt dabei eine Eigenschaft des Todos und wird in der Liste und
+        in der Detailansicht geändert.
       </InlineMessage>
 
       <div className="showcase__switch">
@@ -383,6 +391,43 @@ export function BoardSection() {
           );
         })}
       </div>
+      <SubHeading>Wie das Board lädt und wie es scheitert</SubHeading>
+      <p className="section__lead">
+        Die Leerzustände oben sind Auskünfte über eingerichtete Spalten. Davor stehen zwei
+        Zustände, die gar nichts über die Regeln sagen — und die bis T-091 auf dieser Seite
+        fehlten: Das Board <strong>lädt</strong>, und das Board <strong>ließ sich nicht laden</strong>.
+        Beide kommen aus <code>AsyncBoundary</code> und gelten für die ganze Seite, nicht je
+        Spalte: Der Dienst liefert das Board in einer Antwort, und eine Spalte, die für sich lädt,
+        gäbe es nirgends.
+      </p>
+      <div className="grid grid--2">
+        <Card title="Lädt" description="Vier Platzhalterzeilen, angesagt als „Board wird geladen“.">
+          <LoadingBlock label="Board wird geladen" rows={4} />
+        </Card>
+        <Card
+          title="Ließ sich nicht laden"
+          description="Die Meldung des Dienstes samt Fehlerschlüssel und ein Weg zurück — nie eine Sackgasse."
+        >
+          <InlineMessage
+            tone="danger"
+            title="Das ließ sich nicht laden"
+            action={
+              <Button
+                size="sm"
+                variant="secondary"
+                iconStart="rotate-ccw"
+                onClick={() => setAnnouncement("Erneut versucht.")}
+              >
+                Erneut versuchen
+              </Button>
+            }
+          >
+            Der lokale Dienst antwortet nicht.
+            <span className="message__code"> (service_unavailable)</span>
+          </InlineMessage>
+        </Card>
+      </div>
+
       <InlineMessage tone="info" title="Warum der leere Ordner eigens dasteht">
         Ein erforderlicher Ordner, in dem kein Tag liegt, löst sich <strong>nie</strong> von
         selbst auf — im Unterschied zu „trifft gerade nichts", das mit dem nächsten passenden Todo
@@ -434,8 +479,11 @@ export function BoardSection() {
           <tbody>
             <tr>
               <td>Spalte</td>
-              <td>Eine Regel über Tags (`pool` mit Anzeigeort „Board“)</td>
-              <td>Die Tags des Todos — oder die Regel selbst</td>
+              <td>Eine Regel (`pool` mit Anzeigeort „Board“)</td>
+              <td>
+                Die fünf Bedingungen der Regel — Tags, Status, „Erledigt“, Exportstatus — oder
+                die Regel selbst
+              </td>
             </tr>
             <tr>
               <td>Status</td>
@@ -450,10 +498,18 @@ export function BoardSection() {
           </tbody>
         </table>
         <p className="section__lead">
-          Erledigt entscheidet über die <em>Sichtbarkeit</em>, nicht über die Zugehörigkeit: Ein
-          erledigtes Todo bleibt Mitglied jeder Regel, die auf seine Tags passt, und erscheint
-          wieder, sobald erledigte Karten eingeblendet werden oder ein Timerstart das Kennzeichen
-          aufhebt. Probieren Sie es an „Beispiel GmbH — Schnittstelle neu aufsetzen“.
+          <strong>Was „Erledigt“ entscheidet, hängt an der Regel</strong> (E-055). Steht ihre
+          Erledigt-Bedingung auf „Alle“, entscheidet das Kennzeichen nur über die{" "}
+          <em>Sichtbarkeit</em>: Das Todo bleibt Mitglied und erscheint wieder, sobald erledigte
+          Karten eingeblendet werden oder ein Timerstart das Kennzeichen aufhebt. Fragt die Regel
+          dagegen ausdrücklich nach „Erledigt“ oder „Unerledigt“, entscheidet das Kennzeichen
+          über die <em>Zugehörigkeit</em> — dann verlässt die Karte mit demselben Timerstart ihre
+          Spalte.
+        </p>
+        <p className="section__lead">
+          Bis T-091 stand hier der halbe Satz „Erledigt entscheidet über die Sichtbarkeit, nicht
+          über die Zugehörigkeit“. Er war die richtige Erklärung für E-054 und mit E-055 zur
+          halben geworden. Probieren Sie beides an „Beispiel GmbH — Schnittstelle neu aufsetzen“.
         </p>
       </Card>
     </Section>

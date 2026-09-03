@@ -11,6 +11,7 @@
 import type {
   CallNumberRejection,
   DefaultTag,
+  MatchesPoolRule,
   Pool,
   Result,
   StatusId,
@@ -235,6 +236,32 @@ export interface AddinPoolMovement {
 }
 
 /**
+ * Eine aufgelöste Regel mit ihrem Namen — **jede** Achse ausdrücklich belegt.
+ *
+ * Der Zusatz `-?` ist der ganze Zweck dieses Typs (R-1, „sollte" zu
+ * `service.ts:306`). Bis T-090 stand hier gar kein Typ: `resolved` war aus
+ * einem Objektliteral abgeleitet, und `matchesPool` überspringt jede Achse, die
+ * es nicht genannt bekommt. Eine sechste Achse hätte diese Stelle deshalb
+ * **still** übersprungen — dieselbe Falle wie in T-078 und T-082, eine Achse
+ * später, und sie ist beide Male hier zugeschnappt.
+ *
+ * Mit der Pflicht an jedem Feld wird das Objektliteral unten rot, sobald
+ * `MatchesPoolRule` in der Domäne ein Feld bekommt. Und ein Feld muss es
+ * bekommen, damit eine neue Achse überhaupt wirken kann: `POOL_RULE_AXIS_OF_FIELD`
+ * verlangt zu jedem Feld der Regelseite eine Achse aus `PoolRuleAxisId`,
+ * und `PoolRuleAxes` verlangt zu jeder Achse ein Feld. Die Brücke zwischen
+ * Achse und Feld hält der Nachweispfad (`proof:addin`, Abschnitt 12) fest; hier
+ * hält der Übersetzer die zweite Hälfte.
+ *
+ * `name` steht daneben und nicht darin. Er ist keine Bedingung, sondern das,
+ * was der Aufgabenbereich am Ende ausspricht — beim Spreizen in `matchesPool`
+ * geht er als überzähliges Feld mit und wird dort nicht gelesen.
+ */
+type NamedPoolRule = { readonly [K in keyof MatchesPoolRule]-?: MatchesPoolRule[K] } & {
+  readonly name: string;
+};
+
+/**
  * Baut eine Zuordnung „Zustand eines Todos → Namen seiner Pools".
  *
  * Die Regeln werden **einmal** je Anfrage aufgelöst und danach nur noch gegen
@@ -296,15 +323,44 @@ export interface AddinPoolMovement {
  * Sie diffft ausdrücklich nicht zwei Namenslisten gegeneinander: Zwei Pools
  * dürfen denselben Namen tragen, und ein Vergleich über Namen ließe den einen
  * für den anderen einstehen. Verglichen wird die Regel mit sich selbst.
+ *
+ * ---------------------------------------------------------------------------
+ * `list('all')` und nicht `list()` — seit T-090 (E-056, R-1 Befund 3, R-2 B-4)
+ * ---------------------------------------------------------------------------
+ *
+ * Ohne Argument setzt `PoolPort.list` die Fläche `'pool'` ein und liefert nur
+ * Regeln mit `placement` `pool` oder `both`. Diese Vorgabe ist für ihre
+ * Aufrufer richtig — sie meinen „die Pools" —, und `poolNamer` war bis T-090
+ * einer von ihnen. Er ist es seit E-056 nicht mehr: Er beantwortet nicht „in
+ * welchen Pools steht das Todo", sondern **was diese Buchung ändert**, und
+ * diese Frage kennt keine Fläche.
+ *
+ * Der Schaden hing damit an einer Einstellung, die mit der Frage nichts zu tun
+ * hat. E-056 begründet sich wörtlich mit der Spalte „erledigt und noch nicht
+ * abgerechnet", benutzt als Abrechnungsliste — und `placement: 'board'` ist die
+ * Vorgabe, wenn eine Spalte über das Board angelegt wird, also die naheliegende
+ * Wahl für genau diese Spalte. Wer sie so einrichtete, bekam kein Wort; wer sie
+ * versehentlich als „Pool und Board" einrichtete, bekam die Auskunft. Dieselbe
+ * Regel, dieselbe Wirkung, zwei Verhalten.
+ *
+ * `loadContext` weiter oben ruft weiterhin `list()` **ohne** Argument, und das
+ * ist kein Versehen: Dort geht es um die Pool-Liste als Fläche, nicht um eine
+ * Bewegung. Zwei Fragen, zwei Argumente — dass beide in derselben Datei stehen,
+ * macht sie nicht zu einer.
+ *
+ * Der Satz, den der Aufgabenbereich daraus baut, sagt heute unbedingt „dem
+ * Pool" / „den Pools" (`duplicate/reopen.ts`). Für eine reine Board-Spalte ist
+ * das Wort falsch — der Name stimmt, das Gattungswort nicht. Die Korrektur
+ * gehört zu E-058 und steht deshalb noch aus.
  */
 const poolNamer = async (
   unit: AddinUnit,
 ): Promise<(states: { readonly before: PoolCandidate; readonly after: PoolCandidate }) => AddinPoolMovement> => {
-  const pools = await unit.pools.list();
+  const pools = await unit.pools.list('all');
   const ordered = [...pools].sort((left, right) => left.position - right.position);
 
-  const resolved = await Promise.all(
-    ordered.map(async (pool) => {
+  const resolved: readonly NamedPoolRule[] = await Promise.all(
+    ordered.map(async (pool): Promise<NamedPoolRule> => {
       // Beide Taglisten in **einer** Antwort (`PoolPort.resolveAxes`, E-057).
       // Sie bewirken im Ergebnis Gegenteiliges und stehen deshalb getrennt
       // nebeneinander; aufgelöst werden sie zusammen, weil hier ausnahmslos
@@ -334,24 +390,28 @@ const poolNamer = async (
     }),
   );
 
-  /** Ein Pool gegen einen Zustand — die Regel, an genau einer Stelle. */
-  const holds = (pool: (typeof resolved)[number], todo: PoolCandidate): boolean =>
+  /**
+   * Ein Pool gegen einen Zustand — die Regel, an genau einer Stelle.
+   *
+   * Die Regelseite wird **gespreizt** und nicht Feld für Feld abgeschrieben
+   * (R-1). Eine Abschrift ist eine zweite Aufzählung der Achsen, und eine
+   * Aufzählung, die eine Achse vergisst, sieht aus wie eine, die keine
+   * vergisst: `matchesPool` überspringt schweigend, was es nicht genannt
+   * bekommt. Das Spreizen kann nichts vergessen — was in {@link NamedPoolRule}
+   * steht, geht mit, und dort steht seit T-090 jedes Feld der Regelseite.
+   *
+   * Die Kartenseite steht weiterhin ausgeschrieben: Sie ist die andere Hälfte
+   * der Frage und kommt aus `PoolCandidate`, dessen Felder anders heißen
+   * (`completedAt` gehört der Karte, `completion` der Regel).
+   */
+  const holds = (pool: NamedPoolRule, todo: PoolCandidate): boolean =>
     matchesPool({
+      ...pool,
       todoTagIds: todo.tagIds,
-      ruleTagIds: pool.ruleTagIds,
-      matchMode: pool.matchMode,
-      excludedTagIds: pool.excludedTagIds,
-      // Pflichtfeld seit T-082, und der einzige Wert hier, der keine Bedingung
-      // ist, sondern eine Auskunft über eine: Ist eine erforderliche
-      // Bedingung genannt, die auf nichts auflöst? (E-057)
-      unresolvedRequired: pool.unresolvedRequired,
       todoStatusId: todo.statusId,
-      ruleStatusIds: pool.ruleStatusIds,
       completedAt: todo.completedAt,
-      completion: pool.completion,
       hasOpenEntries: todo.hasOpenEntries,
       hasExportedEntries: todo.hasExportedEntries,
-      exportState: pool.exportState,
     });
 
   return ({ before, after }) => {
@@ -769,6 +829,39 @@ export type AddinBookResult =
     };
 
 /**
+ * Der geplante Abbruch einer Buchung (R-1 Befund 2).
+ *
+ * Dieselbe Bauart und dieselbe Begründung wie `AbortTodoCreate` in
+ * `usecases/tag-names.ts`: Die Transaktionsklammer nimmt **nur bei einem Wurf**
+ * zurück, ein fachlicher Fehlschlag ist aber kein Programmierfehler. Eine
+ * eigene Klasse trennt beides — der `catch`-Zweig unterscheidet „geplanter
+ * Abbruch" von „etwas ist kaputtgegangen", und nur das Zweite endet als 500.
+ *
+ * **Eine eigene Klasse und nicht `AbortTodoCreate`.** Deren Name sagt, was der
+ * Abbruch mitnimmt („das Anlegen des Todos"), und genau darauf beruft sich der
+ * Kommentar dort. Hier nimmt er die **Buchung** mit; ein Name, der das Falsche
+ * behauptet, ist schlechter als eine zweite Zeile Code.
+ *
+ * Nicht exportiert: Sie wird in dieser Datei geworfen und in dieser Datei
+ * gefangen. Wer sie außerhalb fängt, fängt einen Abbruch, dessen Klammer er
+ * nicht geöffnet hat.
+ */
+class AbortBooking extends Error {
+  /**
+   * Ausgeschriebenes Feld statt einer Parametereigenschaft: Node führt
+   * TypeScript nur durch Streichen der Typen aus, und eine
+   * Parametereigenschaft müsste umgeschrieben werden.
+   */
+  readonly failure: TaktError;
+
+  constructor(failure: TaktError) {
+    super(failure.code);
+    this.name = 'AbortBooking';
+    this.failure = failure;
+  }
+}
+
+/**
  * Bucht Zeit auf ein vorhandenes Todo (A-6.1, A-10.9) und hebt „Erledigt"
  * dabei **automatisch** auf (A-2.5, I-05).
  *
@@ -790,83 +883,128 @@ export type AddinBookResult =
  * Pool-Ansicht nicht auftaucht (E-039) — genau der Zustand, den C-03 als
  * Dauerzustand beschrieben hat.
  *
- * Scheitert das Aufheben, scheitert die **ganze** Buchung (`rejected`, die
- * Transaktion rollt zurück). Eine Buchung ohne die zugehörige Aufhebung
+ * Scheitert das Aufheben, scheitert die **ganze** Buchung: Der Anwendungsfall
+ * **wirft** {@link AbortBooking}, die Klammer nimmt zurück, und erst außerhalb
+ * wird daraus `rejected`. Eine Buchung ohne die zugehörige Aufhebung
  * durchgehen zu lassen, wäre wieder der halbe Zustand.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum ein Wurf und keine Rückgabe — seit T-090 (R-1 Befund 2)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-090 stand hier `return { kind: 'rejected' }`, und das war der teuerste
+ * Fehler dieses Bestands. `createTransactionPort.run` nimmt **nur bei einem
+ * Wurf** zurück; eine gewöhnliche Rückgabe führt zu `COMMIT`
+ * (`packages/storage/src/sqlite/unit-of-work.ts`, und der Kopf dort sagt es
+ * ausdrücklich: „Ein fachlicher Fehlschlag ist kein Wurf … er rollt also nicht
+ * von selbst zurück"). Zwei Zeilen darüber war die Buchung bereits geschrieben.
+ * Das Ergebnis: Die Zeit steht festgeschrieben in der Datenbank, das Todo gilt
+ * weiter als erledigt, und der Aufgabenbereich meldet „abgewiesen" — der
+ * Benutzer bucht erneut, und dieselbe Zeit geht **zweimal** in die Abrechnung.
+ * Der Kommentar an dieser Stelle behauptete dabei genau das Gegenteil.
+ *
+ * Der Weg ist derselbe wie bei `createTodo` einen Abschnitt weiter oben
+ * (`AbortTodoCreate` aus `usecases/tag-names.ts`): eine eigene Abbruchklasse,
+ * geworfen innen, gefangen außen, dort in einen Wert übersetzt. Eine eigene
+ * Klasse und keine allgemeine `Error`, damit der `catch`-Zweig „geplanter
+ * Abbruch" von „etwas ist kaputtgegangen" unterscheiden kann; das Zweite bleibt
+ * ein Wurf und endet als 500 im Protokoll.
+ *
+ * **Nicht** geworfen wird in den beiden Zweigen davor. `not_found` steht vor
+ * jedem Schreibvorgang, und ein abgewiesenes `timeEntries.create` hat nichts
+ * geschrieben — dort gibt es nichts zurückzunehmen, und ein Wurf wäre eine
+ * Umständlichkeit ohne Wirkung.
  */
-export const bookOnTodo = (deps: AddinDeps, input: AddinBookInput): Promise<AddinBookResult> =>
-  deps.inTransaction(async (unit) => {
-    const now = deps.now();
-    const todo = await unit.todos.load(input.todoId);
-    if (todo === null) {
-      return { kind: 'not_found' };
-    }
-
-    /*
-     * Die Buchungslage **vor** der Buchung, und deshalb steht sie vor ihr.
-     *
-     * Nach `timeEntries.create` wäre die offene Summe unbrauchbar: Sie
-     * enthielte die soeben entstandene Buchung und wäre damit der Zustand
-     * danach, nicht davor. Für `leavingPoolNames` (E-056) wird aber genau der
-     * Zustand davor gebraucht — sonst gibt es nichts, aus dem etwas
-     * verschwinden könnte.
-     *
-     * Beide Summen in einem Zug und innerhalb derselben Transaktion: Ein
-     * Exportlauf, der dazwischenliefe, dürfte den Satz nicht mehr verschieben,
-     * den der Aufgabenbereich gleich anzeigt.
-     */
-    const [openBefore, exportedBefore] = await Promise.all([
-      unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'open' }),
-      unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'exported' }),
-    ]);
-
-    const created = await unit.timeEntries.create(
-      {
-        todoId: input.todoId,
-        startedAt: input.startedAt,
-        endedAt: input.endedAt,
-        note: input.note,
-      },
-      now,
-    );
-
-    if (!created.ok) {
-      return { kind: 'rejected', code: created.error.code, message: created.error.message };
-    }
-
-    const todoWasDone = todo.completedAt !== null;
-
-    if (todoWasDone) {
-      const reopened = await unit.todos.clearDone(input.todoId, now);
-      if (!reopened.ok) {
-        return { kind: 'rejected', code: reopened.error.code, message: reopened.error.message };
+export const bookOnTodo = async (deps: AddinDeps, input: AddinBookInput): Promise<AddinBookResult> => {
+  try {
+    return await deps.inTransaction(async (unit) => {
+      const now = deps.now();
+      const todo = await unit.todos.load(input.todoId);
+      if (todo === null) {
+        return { kind: 'not_found' };
       }
+
+      /*
+       * Die Buchungslage **vor** der Buchung, und deshalb steht sie vor ihr.
+       *
+       * Nach `timeEntries.create` wäre die offene Summe unbrauchbar: Sie
+       * enthielte die soeben entstandene Buchung und wäre damit der Zustand
+       * danach, nicht davor. Für `leavingPoolNames` (E-056) wird aber genau der
+       * Zustand davor gebraucht — sonst gibt es nichts, aus dem etwas
+       * verschwinden könnte.
+       *
+       * Beide Summen in einem Zug und innerhalb derselben Transaktion: Ein
+       * Exportlauf, der dazwischenliefe, dürfte den Satz nicht mehr verschieben,
+       * den der Aufgabenbereich gleich anzeigt.
+       */
+      const [openBefore, exportedBefore] = await Promise.all([
+        unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'open' }),
+        unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'exported' }),
+      ]);
+
+      const created = await unit.timeEntries.create(
+        {
+          todoId: input.todoId,
+          startedAt: input.startedAt,
+          endedAt: input.endedAt,
+          note: input.note,
+        },
+        now,
+      );
+
+      if (!created.ok) {
+        return { kind: 'rejected', code: created.error.code, message: created.error.message };
+      }
+
+      const todoWasDone = todo.completedAt !== null;
+
+      if (todoWasDone) {
+        const reopened = await unit.todos.clearDone(input.todoId, now);
+        // Ein **Wurf** und keine Rückgabe: Die Buchung ein paar Zeilen darüber
+        // ist geschrieben, und nur ein Wurf nimmt sie wieder zurück (R-1
+        // Befund 2). Eine Rückgabe hier hieße `COMMIT` — festgeschriebene Zeit
+        // bei gemeldetem Fehlschlag, und derselbe Zeitraum ein zweites Mal in
+        // der Abrechnung, sobald der Benutzer es noch einmal versucht.
+        if (!reopened.ok) throw new AbortBooking(reopened.error);
+      }
+
+      const movementOf = await poolNamer(unit);
+
+      // `todo` ist der Stand **vor** der Buchung — `load` lief davor, und
+      // `clearDone` gibt seinen neuen Wert nicht hierher zurück. Genau so wird er
+      // gebraucht: `bookingStates` rechnet aus ihm **beide** Zustände aus. Wer
+      // hier den Stand von danach einsetzte, bekäme zwei gleiche Zustände und
+      // damit für immer ein leeres `leavingPoolNames` — E-056 wäre still wieder
+      // abgeschafft.
+      const movement = movementOf(
+        bookingStates(todo, {
+          hasOpenEntries: openBefore > 0,
+          hasExportedEntries: exportedBefore > 0,
+        }),
+      );
+
+      return {
+        kind: 'booked',
+        timeEntry: created.value,
+        todoWasDone,
+        // Es gibt keinen Weg mehr, auf dem diese beiden Werte auseinanderfallen.
+        doneCleared: todoWasDone,
+        poolNames: movement.appears,
+        enteringPoolNames: movement.enters,
+        leavingPoolNames: movement.leaves,
+      };
+    });
+  } catch (error) {
+    // Die Klammer hat bereits zurückgenommen — die Buchung ebenso wie das
+    // Kennzeichen. Hier steht nur noch die Antwort, und es ist dieselbe, die
+    // vor T-090 an der falschen Stelle stand.
+    if (error instanceof AbortBooking) {
+      return { kind: 'rejected', code: error.failure.code, message: error.failure.message };
     }
 
-    const movementOf = await poolNamer(unit);
-
-    // `todo` ist der Stand **vor** der Buchung — `load` lief davor, und
-    // `clearDone` gibt seinen neuen Wert nicht hierher zurück. Genau so wird er
-    // gebraucht: `bookingStates` rechnet aus ihm **beide** Zustände aus. Wer
-    // hier den Stand von danach einsetzte, bekäme zwei gleiche Zustände und
-    // damit für immer ein leeres `leavingPoolNames` — E-056 wäre still wieder
-    // abgeschafft.
-    const movement = movementOf(
-      bookingStates(todo, {
-        hasOpenEntries: openBefore > 0,
-        hasExportedEntries: exportedBefore > 0,
-      }),
-    );
-
-    return {
-      kind: 'booked',
-      timeEntry: created.value,
-      todoWasDone,
-      // Es gibt keinen Weg mehr, auf dem diese beiden Werte auseinanderfallen.
-      doneCleared: todoWasDone,
-      poolNames: movement.appears,
-      enteringPoolNames: movement.enters,
-      leavingPoolNames: movement.leaves,
-    };
-  });
+    // Kein fachlicher Fall. Der Wurf bleibt ein Wurf und endet als 500 mit
+    // einem Satz ohne Innenleben (B-2.4).
+    throw error;
+  }
+};
 

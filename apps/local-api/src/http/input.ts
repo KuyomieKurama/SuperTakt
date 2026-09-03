@@ -32,6 +32,28 @@ export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Erwartet wird 
  */
 export const idSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/);
 
+/**
+ * Eine **kommagetrennte** Liste von Kennungen aus der Abfragezeichenkette
+ * (R-3 S-2, T-089).
+ *
+ * Steht hier und nicht je Route, weil es dieselbe Eingabeform an jeder Stelle
+ * ist und dieselbe Obergrenze tragen soll. Die Begründung für die Zahl steht
+ * an der einzigen heutigen Aufrufstelle (`routes/todos.ts`, `idListSchema`);
+ * kurz: Fünfzig Kennungen liegen über jedem Arbeitsablauf und weit unter der
+ * Schwelle, an der die Abfrage teuer wird — gemessen 8,4 Sekunden bei 200 und
+ * ein `500` aus `SQLITE_MAX_EXPR_DEPTH` bei 1 000.
+ *
+ * `z.preprocess` und nicht `.transform` hinter dem Schema: Die Zerlegung muss
+ * **vor** der Prüfung geschehen, sonst prüfte `idSchema` die ganze Zeichenkette
+ * samt Kommas und wiese jede Liste mit mehr als einem Eintrag ab. Fehlt der
+ * Wert, bleibt er `undefined` und das Feld gilt als nicht gesetzt — eine
+ * fehlende Angabe ist kein leerer Filter.
+ */
+export const commaSeparatedIds = z.preprocess(
+  (value) => (typeof value === 'string' ? value.split(',') : value),
+  z.array(idSchema).min(1).max(50),
+);
+
 export const titleSchema = z.string().trim().min(1).max(500);
 export const nameSchema = z.string().trim().min(1).max(200);
 /** Leistung und Vermerk. 1 MB Rumpfgrenze steht davor (B-1.7). */
@@ -40,6 +62,52 @@ export const colorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Erwartet wird eine Farbe der Form #rrggbb.')
   .nullable();
+
+/**
+ * Eine **Teiländerung** aus einem geprüften Rumpf (T-089).
+ *
+ * ---------------------------------------------------------------------------
+ * Wozu
+ * ---------------------------------------------------------------------------
+ *
+ * `exactOptionalPropertyTypes` unterscheidet „das Feld fehlt" von „das Feld ist
+ * `undefined`" — und diese Unterscheidung ist in Takt gewollt (siehe
+ * `tsconfig.base.json`: eine offene Leistung ist etwas anderes als eine leere).
+ * Zod liefert für `.optional()` aber das zweite: `{ name: string | undefined }`,
+ * mit dem Schlüssel. Ein Rumpf, der so weitergereicht wird, passt deshalb auf
+ * kein `Partial<…>` dieses Bestands.
+ *
+ * Die naheliegende Antwort war bisher `parsed.data as never` — eine Zusicherung,
+ * die nicht die Optionalität glättet, sondern **jede** Prüfung abschaltet
+ * (`never` ist an alles zuweisbar). Die zweitnaheliegende ist eine Zeile je
+ * Feld (`...(x === undefined ? {} : { x })`), und die ist die Falle aus R-1:
+ * Ein neues Feld, das dort vergessen wird, verschwindet **still**.
+ *
+ * Diese Funktion tut das eine, was nötig ist: Sie lässt Schlüssel mit dem Wert
+ * `undefined` weg. Der Rest geht durch, wie er dasteht — auch ein Feld, das es
+ * gestern noch nicht gab.
+ *
+ * ---------------------------------------------------------------------------
+ * Die eine Zusicherung darin, und warum sie hier vertretbar ist
+ * ---------------------------------------------------------------------------
+ *
+ * Der Rückgabetyp lässt sich nicht ohne `as` erzeugen: Für `tsc` ist der Aufbau
+ * eines Objekts in einer Schleife eine Zuweisung an `Record<string, unknown>`.
+ * Die Zusicherung steht deshalb **hier**, an einer Stelle, deren ganzer Inhalt
+ * fünf Zeilen sind, statt an jedem Aufrufer. Sie behauptet genau das, was die
+ * Schleife tut, und nicht mehr: dieselben Schlüssel, dieselben Werte, ohne die
+ * `undefined`.
+ *
+ * `null` bleibt erhalten. Es ist ein Wert und heißt „setze auf leer" — wer es
+ * mit „nicht genannt" verwechselt, macht aus einer Löschung ein Weglassen.
+ */
+export function patchOf<T extends object>(value: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  const patch: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) patch[key] = entry;
+  }
+  return patch as { [K in keyof T]?: Exclude<T[K], undefined> };
+}
 
 export const paginationSchema = z.object({
   cursor: z.string().max(512).optional(),

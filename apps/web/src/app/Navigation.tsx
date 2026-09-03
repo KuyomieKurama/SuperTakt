@@ -35,7 +35,7 @@ interface NavItem {
 const ITEMS: readonly NavItem[] = [
   { route: "dashboard", label: "Dashboard", icon: "monitor", hint: "Überblick und schnelle Aktionen" },
   { route: "todos", label: "Todos", icon: "inbox", hint: "Liste aller Todos mit Filtern" },
-  { route: "board", label: "Kanban", icon: "square", hint: "Board aus frei definierbaren Regeln über Tags" },
+  { route: "board", label: "Kanban", icon: "square", hint: "Board aus frei definierbaren Regeln" },
   { route: "time", label: "Zeiterfassung", icon: "clock", hint: "Timer, heutige Buchungen, Zeit von Hand erfassen" },
   { route: "bookings", label: "Buchungen", icon: "filter", hint: "Alle Zeitbuchungen, filterbar" },
   { route: "export", label: "Export", icon: "download", hint: "Vorschau, Lauf und Protokoll" },

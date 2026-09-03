@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { Card, InlineMessage } from "../components/Primitives";
 import { RadioRow } from "../components/RadioRow";
+import {
+  FolderPicker,
+  StatusPicker,
+  type FolderOption,
+  type PickerSource,
+  type StatusOption,
+} from "../components/RulePickers";
 import { RuleSummary } from "../components/RuleSummary";
 import {
   POOL_AXIS_NEUTRAL_HINT,
@@ -12,8 +19,13 @@ import {
   type PoolExportFilter,
   type PoolMatchMode,
 } from "../lib/labels";
-import { describeRule, describeRuleReach, type RuleAxes } from "../lib/poolRule";
-import { NEUTRAL_RULE, SHOWCASE_RULE_LOOKUP } from "./data";
+import { describeRule, describeRuleReach, ruleSpoken, type RuleAxes } from "../lib/poolRule";
+import {
+  NEUTRAL_RULE,
+  SHOWCASE_FOLDER_OPTIONS,
+  SHOWCASE_RULE_LOOKUP,
+  SHOWCASE_STATUS_OPTIONS,
+} from "./data";
 import type { PoolResolution } from "../api/types";
 import { Section, SubHeading } from "./Section";
 
@@ -44,6 +56,15 @@ import { Section, SubHeading } from "./Section";
  *      diesen einen Ordner nennt.
  *   6. **Ohne jede Bedingung** — der Zustand direkt nach dem Anlegen. Sie
  *      trifft nichts, nicht alles.
+ *
+ * ## Die Quellen des Formulars haben drei Zustaende, nicht einen (T-091)
+ *
+ * Ordner und Statuswerte kommen aus demselben Aufbau wie die Tags. Bis T-091
+ * kannte das Formular davon nur den guten und schrieb sonst „Es gibt noch
+ * keinen Ordner." — waehrend es lud und wenn es fehlgeschlagen war. Die vier
+ * Ausgaenge stehen hier nebeneinander: **laedt**, **Fehler mit Rueckweg**,
+ * **bereit und leer**, **bereit und gefuellt**. Der letzte zeigt zugleich das
+ * Suchfeld, das ab acht Ordnern erscheint (A-4.4).
  *
  * ## Was die Zusammenfassung weglaesst
  *
@@ -236,10 +257,46 @@ function ShapeSummary({ shape }: { readonly shape: (typeof SHAPES)[number] }) {
   );
 }
 
+/* ==================================================================== */
+/* Die vier Zustaende der beiden Chip-Auswahlen (T-091, B-5 aus R-2)     */
+/* ==================================================================== */
+
+const LOADING: PickerSource<FolderOption> = { status: "loading" };
+
+/**
+ * Die Meldung stammt aus dem Dienst und ist hier erfunden — sie enthaelt
+ * keinen Pfad, keinen Rechnernamen und keine Kennung.
+ */
+const FAILED: PickerSource<FolderOption> = {
+  status: "error",
+  message: "Der lokale Dienst antwortet nicht.",
+};
+
+const NO_FOLDERS: PickerSource<FolderOption> = { status: "ready", items: [] };
+
+const FOLDERS: PickerSource<FolderOption> = {
+  status: "ready",
+  items: SHOWCASE_FOLDER_OPTIONS,
+};
+
+const STATUS_LOADING: PickerSource<StatusOption> = { status: "loading" };
+
+const STATUSES: PickerSource<StatusOption> = {
+  status: "ready",
+  items: SHOWCASE_STATUS_OPTIONS,
+};
+
+/** Damit die Vorgabe kein neues Set je Durchlauf ist. */
+const NOTHING_SELECTED: ReadonlySet<string> = new Set<string>();
+
 export function RuleSection() {
   const [matchMode, setMatchMode] = useState<PoolMatchMode>("any");
   const [completion, setCompletion] = useState<PoolCompletionFilter>("any");
   const [exportState, setExportState] = useState<PoolExportFilter>("any");
+  const [pickedFolders, setPickedFolders] = useState<ReadonlySet<string>>(
+    () => new Set(["folder-ost"]),
+  );
+  const [pickedStatuses, setPickedStatuses] = useState<readonly string[]>([]);
 
   const live: RuleAxes = {
     ...NEUTRAL_RULE,
@@ -343,8 +400,125 @@ export function RuleSection() {
             size="md"
             emptyText="Keine Bedingung — diese Regel trifft nichts."
           />
+          {/*
+            Was eine Vorlesehilfe hoert (S-8 aus R-2).
+
+            In der Anwendung steht dieser Satz in einer `role="status"`-Region
+            und ist unsichtbar. Hier steht er **sichtbar** daneben, weil eine
+            Ansage, die man nur hoeren kann, nicht abgenommen, sondern geglaubt
+            wird — und weil man erst nebeneinander sieht, dass beide dasselbe
+            sagen. In der Anwendung wartet er eine halbe Sekunde, damit ein
+            Durchqueren mit den Pfeiltasten nicht angesagt wird; hier folgt er
+            sofort.
+          */}
+          <p className="field__hint">
+            <strong>Vorgelesen:</strong>{" "}
+            {ruleSpoken(describeRule(live, SHOWCASE_RULE_LOOKUP), null)}
+          </p>
         </div>
       </Card>
+
+      <SubHeading>Die Quellen des Formulars — vier Zustände nebeneinander</SubHeading>
+      <div className="grid grid--2">
+        <Card
+          title="Lädt"
+          description="Das Feld steht da, ist als beschäftigt ausgezeichnet und sagt, worauf es wartet. Es verschwindet nicht — sonst springt das Formular."
+        >
+          <FolderPicker
+            label="Erforderliche Ordner"
+            hint="Ein Ordner steht für alles, was in ihm liegt."
+            source={LOADING}
+            onRetry={() => undefined}
+            selected={NOTHING_SELECTED}
+            onToggle={() => undefined}
+          />
+        </Card>
+
+        <Card
+          title="Fehler"
+          description="Die Meldung des Dienstes und ein Weg zurück. Eine Fehlermeldung ohne Wiederholungsknopf ist eine Sackgasse (Abschnitt 15)."
+        >
+          <FolderPicker
+            label="Erforderliche Ordner"
+            hint="Ein Ordner steht für alles, was in ihm liegt."
+            source={FAILED}
+            onRetry={() => undefined}
+            selected={NOTHING_SELECTED}
+            onToggle={() => undefined}
+          />
+        </Card>
+
+        <Card
+          title="Bereit, aber leer"
+          description="Erst hier darf der Satz „Es gibt noch keinen Ordner.“ stehen — jetzt ist er belegt."
+        >
+          <FolderPicker
+            label="Erforderliche Ordner"
+            hint="Ein Ordner steht für alles, was in ihm liegt."
+            source={NO_FOLDERS}
+            onRetry={() => undefined}
+            selected={NOTHING_SELECTED}
+            onToggle={() => undefined}
+          />
+        </Card>
+
+        <Card
+          title="Bereit, mit Suche"
+          description="Ab acht Ordnern steht ein Suchfeld darüber, das über den ganzen Pfad filtert (A-4.4). Gewähltes bleibt sichtbar, auch wenn die Suche es nicht trifft."
+        >
+          <FolderPicker
+            label="Erforderliche Ordner"
+            hint="Ein Ordner steht für alles, was in ihm liegt."
+            source={FOLDERS}
+            onRetry={() => undefined}
+            selected={pickedFolders}
+            onToggle={(id) =>
+              setPickedFolders((current) => {
+                const next = new Set(current);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              })
+            }
+          />
+        </Card>
+
+        <Card
+          title="Status — lädt"
+          description="Dieselbe Bauform, dieselben drei Ausgänge. Zwei Felder in einem Dialog dürfen sich nicht verschieden verhalten."
+        >
+          <StatusPicker
+            source={STATUS_LOADING}
+            onRetry={() => undefined}
+            value={[]}
+            onChange={() => undefined}
+            hint="Nichts gewählt heißt „Alle“ — schränkt nicht ein."
+          />
+        </Card>
+
+        <Card
+          title="Status — bereit"
+          description="Umschaltknöpfe mit „aria-pressed“, nicht Ankreuzfelder: dieselbe Frage soll nicht zweimal anders aussehen."
+        >
+          <StatusPicker
+            source={STATUSES}
+            onRetry={() => undefined}
+            value={pickedStatuses}
+            onChange={setPickedStatuses}
+            hint={
+              pickedStatuses.length === 0
+                ? "Nichts gewählt heißt „Alle“ — schränkt nicht ein."
+                : "Ein Todo genügt mit einem davon; es trägt immer genau einen."
+            }
+          />
+        </Card>
+      </div>
+
+      <InlineMessage tone="info" title="Was hier nicht steht: eine Auswahl, die beim Laden verschwindet">
+        Alle sechs Felder behalten in jedem Zustand ihren Platz und ihre Beschriftung. Ein Feld,
+        das während des Ladens verschwindet und danach wiederkommt, lässt das Formular springen —
+        und wer gerade tippt, verliert dabei die Stelle.
+      </InlineMessage>
 
       <InlineMessage tone="info" title="Der Exportstatus gehört der Buchung, nicht dem Todo">
         „Exportiert“ heißt hier <strong>mindestens eine</strong> exportierte Buchung und nicht

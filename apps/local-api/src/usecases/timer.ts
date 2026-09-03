@@ -21,16 +21,19 @@
  */
 
 import type {
+  PoolMovement,
   RunningTimeEntry,
   TimeEntry,
   TimeEntryId,
   Timestamp,
+  Todo,
   TodoId,
 } from '@takt/domain';
 import { decideOrphanedTimer, err, ok, taktError } from '@takt/domain';
-import type { Page, Pagination, TimeEntryFilter } from '@takt/storage';
+import type { Page, Pagination, TimeEntryFilter, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
+import { poolMovementNamer } from './pool-movement.ts';
 
 export interface RunningTimerView {
   readonly entry: RunningTimeEntry;
@@ -60,6 +63,44 @@ export type StartTimerResult =
       readonly stopped: TimeEntry | null;
       /** A-2.5: war das Todo erledigt und ist durch den Start wieder aktiv? */
       readonly doneCleared: boolean;
+      /**
+       * Wie der Start das Todo durch die Pools bewegt — oder `null` (E-058).
+       *
+       * ---------------------------------------------------------------------
+       * Wann gerechnet wird und wann nicht
+       * ---------------------------------------------------------------------
+       *
+       * Gerechnet wird, wenn der Start etwas bewegt haben **kann**, und das
+       * sind genau zwei Fälle:
+       *
+       *  1. **Der Start hat „Erledigt" aufgehoben** (A-2.5, `doneCleared`).
+       *     Jede Regel mit einer Erledigt-Achse urteilt danach anders — die
+       *     Spalte „nur Erledigte" verliert das Todo, die Spalte „nur Offene"
+       *     bekommt es.
+       *  2. **Die erste abgeschlossene Buchung ist entstanden.** Das geschieht
+       *     beim Start dann, wenn er einen laufenden Timer **desselben** Todos
+       *     stoppt: Aus dem laufenden Timer wird eine offene Buchung, und
+       *     jede Regel mit `exportState: 'open'` nimmt das Todo damit auf.
+       *
+       * Sonst `null`. Ein laufender Timer allein ist keine Buchung — die
+       * Abfrage verlangt `ended_at IS NOT NULL`, „ein laufender Timer ist noch
+       * nichts, was man abrechnen könnte" —, an den Tags ändert der Start
+       * nichts, und am Status auch nicht (E-023). Es gibt dann buchstäblich
+       * nichts zu berichten, und `null` sagt das, statt drei leere Listen zu
+       * schicken, aus denen der Aufrufer dasselbe schließen müsste.
+       *
+       * ---------------------------------------------------------------------
+       * Warum das nicht dieselbe Frage ist wie `doneCleared`
+       * ---------------------------------------------------------------------
+       *
+       * `doneCleared` sagt, **was geschehen ist**; `poolMovement` sagt, **was
+       * daraus folgt**. Bis E-058 sagten beide Flächen dazu denselben Satz
+       * („Die Karte bleibt, wo sie ist"), und der war seit E-055 falsch: Eine
+       * Regel entscheidet auch über Erledigt und über den Exportstatus, und
+       * beides ändert dieser Start. Der Satz dazu steht in
+       * `poolMovementSentence` (`packages/domain`); hier stehen nur die Namen.
+       */
+      readonly poolMovement: PoolMovement | null;
     }
   | {
       readonly kind: 'confirmation_required';
@@ -93,6 +134,23 @@ export async function startTimer(
       });
     }
 
+    /*
+     * Der Zustand **vor** dem Start, gelesen bevor etwas geschrieben wird
+     * (E-058).
+     *
+     * Er muss hier stehen und nicht danach: Nach dem Start ist `completed_at`
+     * bereits `NULL`, und aus dem Ergebnis allein ließe sich nicht mehr sagen,
+     * woraus das Todo verschwindet. Genau das ist die Auskunft, die E-056
+     * verlangt.
+     *
+     * Beides zusammen ist ein Lesezugriff auf die Zeile und einer auf den
+     * Index `ix_time_entry_queue`; die Ordner werden erst weiter unten
+     * aufgelöst, und nur dann, wenn es etwas zu berichten gibt.
+     */
+    const before = await unit.todos.load(todoId);
+    const presenceBefore =
+      before === null ? undefined : (await unit.timeEntries.exportPresence([todoId])).get(todoId);
+
     const result = await unit.timer.start(todoId, stopRunning, timestamp);
     if (!result.ok) return err(result.error);
 
@@ -107,7 +165,85 @@ export async function startTimer(
       started: result.value.started,
       stopped: result.value.stopped,
       doneCleared: result.value.doneCleared,
+      poolMovement: await movementOfStart(unit, {
+        todo: before,
+        hadOpenEntries: presenceBefore?.hasOpen === true,
+        hadExportedEntries: presenceBefore?.hasExported === true,
+        doneCleared: result.value.doneCleared,
+        // Der gestoppte Timer wird zu einer **offenen** Buchung (E-032), und
+        // nur wenn er auf demselben Todo lief, betrifft das dieses hier.
+        bookedOnThisTodo: result.value.stopped?.todoId === todoId,
+      }),
     });
+  });
+}
+
+/**
+ * Die Bewegung zum Timerstart, oder `null` (E-058, A-2.5, E-032).
+ *
+ * Getrennt von `startTimer`, weil sie eine andere Sorte Arbeit ist: `startTimer`
+ * ändert den Bestand, diese Funktion sagt, was das bedeutet. Sie schreibt
+ * nichts und läuft in derselben Transaktion — der Bestand, über den sie
+ * urteilt, ist der, in dem der Start stattgefunden hat.
+ *
+ * **Die beiden Zustände bildet diese Stelle und nicht der Anwendungsfall
+ * darunter** (`usecases/pool-movement.ts`): Was ein Timerstart am Todo ändert,
+ * steht in A-2.5 und E-032 und ist die Sache dieses Moduls. Die Rechnung
+ * darunter weiß davon nichts und soll es nicht wissen — sie bekommt zwei
+ * Zustände und alle Regeln.
+ *
+ * `after` setzt zwei Werte fest, und beide sind die Wirkung der Handlung und
+ * keine Vermutung:
+ *
+ *  - `completedAt: null` — der Start hebt „Erledigt" auf (A-2.5). War das Todo
+ *    nicht erledigt, stand dort ohnehin `null`.
+ *  - `hasOpenEntries` — wahr, sobald die vorige Buchung auf **diesem** Todo
+ *    abgeschlossen wurde; sonst unverändert. Der frisch gestartete Timer selbst
+ *    zählt nicht: Er trägt `ended_at IS NULL` und ist nichts, was man abrechnen
+ *    könnte.
+ *
+ * `before` trägt den echten Zustand von vorher, `completedAt` eingeschlossen.
+ * Ein `null` an dieser Stelle machte beide Zustände gleich und `leaves` für
+ * immer leer — die stille Rückabwicklung von E-056.
+ */
+async function movementOfStart(
+  unit: UnitOfWork,
+  input: {
+    readonly todo: Todo | null;
+    readonly hadOpenEntries: boolean;
+    readonly hadExportedEntries: boolean;
+    readonly doneCleared: boolean;
+    readonly bookedOnThisTodo: boolean;
+  },
+): Promise<PoolMovement | null> {
+  const { todo, hadOpenEntries, hadExportedEntries, doneCleared, bookedOnThisTodo } = input;
+
+  // Kein Todo gelesen: Dann hat der Start es auch nicht gefunden, und der
+  // Fehlerzweig darüber ist bereits genommen worden. Hier steht es nur, damit
+  // dieser Pfad nichts behauptet, was er nicht gelesen hat.
+  if (todo === null) return null;
+
+  const firstEntryAppeared = bookedOnThisTodo && !hadOpenEntries;
+  // Nichts bewegt sich, nichts wird aufgelöst. Der Normalfall — und er kostet
+  // damit keine einzige Ordnerauflösung.
+  if (!doneCleared && !firstEntryAppeared) return null;
+
+  const namer = await poolMovementNamer(unit);
+  return namer({
+    before: {
+      tagIds: todo.tagIds,
+      statusId: todo.statusId,
+      completedAt: todo.completedAt,
+      hasOpenEntries: hadOpenEntries,
+      hasExportedEntries: hadExportedEntries,
+    },
+    after: {
+      tagIds: todo.tagIds,
+      statusId: todo.statusId,
+      completedAt: null,
+      hasOpenEntries: hadOpenEntries || bookedOnThisTodo,
+      hasExportedEntries: hadExportedEntries,
+    },
   });
 }
 

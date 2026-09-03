@@ -55,7 +55,7 @@
  */
 
 import type { PoolId, StatusId, TagId, Timestamp, TodoId } from './kernel.ts';
-import type { Pool, PoolCompletionFilter, PoolExportFilter } from './tag.ts';
+import type { MatchesPoolRule, Pool } from './tag.ts';
 import { isVisibleInPool, matchesPool } from './tag.ts';
 
 /**
@@ -74,49 +74,35 @@ export type BoardColumn = Pool;
  * dafür braucht es den Baum. Diese Datei bekommt das Ergebnis und liest nichts
  * nach; sie bleibt damit rein und ohne laufenden Dienst prüfbar.
  *
- * Die übrigen Achsen (Status, Erledigt, Exportstatus) stehen unaufgelöst am
- * `Pool` und werden hier durchgereicht. Sie sind freiwillig und stehen ohne
- * Angabe neutral: Eine Spalte aus der Zeit vor T-076 verhält sich damit
- * unverändert.
+ * ---------------------------------------------------------------------------
+ * Warum die Achsen **nicht mehr** hier aufgezählt stehen (T-089)
+ * ---------------------------------------------------------------------------
  *
- * **Eine Angabe ist Pflicht**, und sie ist keine Achse: `unresolvedRequired`
- * (E-057). Wer eine Spalte auflöst, hat die Antwort; wer sie wegläßt, hätte
- * nicht „nichts gesagt", sondern „nicht nachgesehen".
+ * Bis T-089 zählte dieser Typ die Achsen als **eigene** Felder auf, jede von
+ * ihnen freiwillig. Damit war er ein zweites, unabhängiges Abbild von
+ * {@link MatchesPoolRule} — und ein Abbild, das nicht mitwächst: Eine sechste
+ * Achse in der Domäne wäre hier weder aufgetaucht noch rot geworden,
+ * `boardAppearances` hätte sie stillschweigend übersprungen, und das Board
+ * behauptete eine Zugehörigkeit, die die Abfrage nicht kennt. Der Kommentar an
+ * {@link PoolRuleAxes} versprach das Gegenteil („jede dieser Stellen wird
+ * rot"); R-1 hat die Lücke gemessen.
+ *
+ * Seitdem **ist** die Regelseite einer Spalte die Regelseite von
+ * `matchesPool`: `BoardColumnRule extends MatchesPoolRule`. Was dort dazukommt,
+ * steht hier ohne Zutun; was dort Pflicht wird, macht jeden Erbauer einer
+ * Spalte rot. Die beiden Felder darunter sind alles, was eine Spalte darüber
+ * hinaus hat — eine Kennung und eine **Ansichts**einstellung, und die ist
+ * ausdrücklich keine Achse.
+ *
+ * Die geerbten Achsen (Status, Erledigt, Exportstatus, ausgeschlossene Tags)
+ * bleiben freiwillig und stehen ohne Angabe neutral: Eine Spalte aus der Zeit
+ * vor T-076 verhält sich unverändert. **Eine Angabe ist Pflicht**, und sie ist
+ * keine Achse: `unresolvedRequired` (E-057). Wer eine Spalte auflöst, hat die
+ * Antwort; wer sie wegläßt, hätte nicht „nichts gesagt", sondern „nicht
+ * nachgesehen". Die Begründung steht am Feld in `MatchesPoolRule`.
  */
-export interface BoardColumnRule {
+export interface BoardColumnRule extends MatchesPoolRule {
   readonly columnId: PoolId;
-  /** Die erforderlichen Tags, aufgelöst. Leer heißt: Diese Achse schränkt nicht ein. */
-  readonly ruleTagIds: readonly TagId[];
-  readonly matchMode: 'any' | 'all';
-  /** Die ausgeschlossenen Tags, aufgelöst (T-076). */
-  readonly excludedTagIds?: readonly TagId[];
-  /** Die Status der Regel (T-076). Leer heißt „Alle". */
-  readonly ruleStatusIds?: readonly StatusId[];
-  /** Die Erledigt-Achse **der Regel** (T-076). */
-  readonly completion?: PoolCompletionFilter;
-  /** Die Exportstatus-Achse (T-076). */
-  readonly exportState?: PoolExportFilter;
-  /**
-   * Zeigt einer der erforderlichen Terme dieser Spalte ins Leere? (E-057)
-   *
-   * Ein Ordner ohne Tags trägt zu `ruleTagIds` nichts bei, und das sieht aus
-   * wie „diese Spalte sagt über Tags nichts" — oder, wenn daneben ein Tagterm
-   * steht, wie gar nichts. Ohne diese Auskunft nennt `boardAppearances` eine
-   * Spalte, in der die Abfrage die Karte nicht zeigt: dieselbe Karte, zwei
-   * Antworten, und die Oberfläche behauptete neben der leeren Spalte, die Karte
-   * stünde auch dort.
-   *
-   * **Pflicht**, anders als die Achsen darüber. Ein weggelassenes Achsenfeld
-   * heißt „diese Spalte sagt dazu nichts" und ist damit beantwortet; ein
-   * weggelassenes `unresolvedRequired` hieße „ich habe nicht nachgesehen", und
-   * die Antwort darauf wäre die zu weite. Die Begründung steht an
-   * `MatchesPoolRule.unresolvedRequired`.
-   *
-   * Der Aufrufer bekommt die Antwort ohne Zusatzarbeit: Sie steht in
-   * `PoolResolution.unresolvedRequired`, und die Auflösung braucht das Board
-   * für die Spaltenauskunft ohnehin.
-   */
-  readonly unresolvedRequired: boolean;
   /**
    * Zeigt diese Spalte erledigte Karten? (E-039)
    *
@@ -214,20 +200,30 @@ export const boardAppearances = (
   for (const card of cards) {
     const columnIds: PoolId[] = [];
     for (const column of columns) {
-      // Jedes Feld wird durchgereicht, wie es dasteht — auch `undefined`.
-      // `MatchesPool` nimmt es ausdrücklich an und liest es als „nicht
-      // genannt". Ein Wegkürzen je Feld wären acht Verzweigungen, die nichts
-      // entscheiden; die Begründung steht am Typ.
+      /*
+       * Die Regelseite geht **als Ganzes** hinüber, nicht Feld für Feld
+       * (T-089).
+       *
+       * Bis T-089 stand hier eine Aufzählung, und sie war der stille Teil der
+       * Lücke: Eine sechste Achse hätte in ihr gefehlt, ohne daß etwas rot
+       * geworden wäre — `matchesPool` überspringt, was es nicht genannt
+       * bekommt. Jetzt trennt das Muster die **Regel** von den zwei Feldern,
+       * die keine sind, und reicht den Rest weiter, wie er dasteht.
+       *
+       * Warum nicht `...column` mit den beiden Zusatzfeldern darin: Ein Spread
+       * gibt sie mit, und sollte `MatchesPoolRule` je ein Feld gleichen Namens
+       * bekommen, ginge die **Ansichts**einstellung stillschweigend als
+       * Bedingung durch. So bleibt `axes` genau die Regelseite — fehlt darin
+       * etwas, sagt es der Übersetzer.
+       *
+       * `undefined` wird dabei durchgereicht, wie es dasteht: `MatchesPool`
+       * nimmt es ausdrücklich an und liest es als „nicht genannt".
+       */
+      const { columnId, includeCompleted, ...axes } = column;
       if (
         matchesPool({
+          ...axes,
           todoTagIds: card.tagIds,
-          ruleTagIds: column.ruleTagIds,
-          matchMode: column.matchMode,
-          excludedTagIds: column.excludedTagIds,
-          ruleStatusIds: column.ruleStatusIds,
-          completion: column.completion,
-          exportState: column.exportState,
-          unresolvedRequired: column.unresolvedRequired,
           todoStatusId: card.statusId,
           completedAt: card.completedAt,
           hasOpenEntries: card.hasOpenEntries,
@@ -244,12 +240,12 @@ export const boardAppearances = (
           card.completedAt !== undefined &&
           !isVisibleInPool({
             completedAt: card.completedAt,
-            includeCompleted: column.includeCompleted ?? true,
+            includeCompleted: includeCompleted ?? true,
           })
         ) {
           continue;
         }
-        columnIds.push(column.columnId);
+        columnIds.push(columnId);
       }
     }
     if (columnIds.length > 1) appearances.push({ todoId: card.todoId, columnIds });

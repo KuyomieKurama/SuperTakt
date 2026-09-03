@@ -13,15 +13,59 @@
  * Regel fuer alle Eintraege: Der Schluessel ist der Wert aus dem Datenmodell,
  * niemals ein hier erfundener. Wer eine Beschriftung braucht, deren Wert es im
  * Datenmodell nicht gibt, hat einen Modellfehler und keine Uebersetzungsluecke.
+ *
+ * ## Der Wertebereich kommt aus der Domaene, nicht von hier (R-1, T-091)
+ *
+ * Wo `@takt/domain` eine Aufzaehlung bereits als benannten Typ fuehrt, wird er
+ * hier **importiert und weitergereicht** — nicht ein zweites Mal getippt. Der
+ * Grund ist die Richtung, die weh tut: Eine hier abgeschriebene Fassung bliebe
+ * bei einem vierten Domaenenwert stillschweigend **enger**, jede Zuweisung
+ * bliebe gueltig, nichts wuerde rot — und die `Record`-Tabelle darunter liefe
+ * fuer den neuen Wert auf `undefined`, wo ihr Typ `string` verspricht. Mit dem
+ * Import wird stattdessen genau die Tabelle rot, der eine Beschriftung fehlt.
+ *
+ * **Sechs** Aufzaehlungen liegen deshalb in der Domaene und werden hier nur
+ * beschriftet: {@link TimeEntrySource}, {@link RoundingMode},
+ * {@link ExportAuditEvent}, {@link PoolPlacement}, {@link PoolCompletionFilter}
+ * und {@link PoolExportFilter}.
+ *
+ * **Drei** bleiben hier definiert, jede aus einem genannten Grund:
+ *
+ *  - {@link DoneFlagState} ist ein **Anzeige**zustand ohne Entsprechung im
+ *    Datenmodell — `reopened` steht in keiner Spalte.
+ *  - {@link ThemeSetting} und {@link PoolMatchMode} fuehrt die Domaene bis
+ *    heute nur als Inline-Vereinigung an ihrem Feld (`settings.ts:37`,
+ *    `tag.ts:283`); es gibt dort keinen Namen zum Importieren. Sobald sie einen
+ *    bekommen, gehoeren beide in die Liste darueber. Gemeldet an den
+ *    domain-dev, T-091.
  */
+
+import type {
+  ExportAuditEvent,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolPlacement,
+  RoundingMode,
+  TimeEntrySource,
+} from "@takt/domain";
+
+export type {
+  ExportAuditEvent,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolPlacement,
+  RoundingMode,
+  TimeEntrySource,
+};
 
 /* ==================================================================== */
 /* Zeitbuchung — Herkunft (`time_entry.source`, E-041)                  */
 /* ==================================================================== */
 
-/** Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`. */
-export type TimeEntrySource = "timer" | "manual";
-
+/**
+ * Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`.
+ * Der Wertebereich steht in `@takt/domain` (`time-entry.ts`).
+ */
 export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> = {
   timer: "Timer",
   manual: "Von Hand",
@@ -31,7 +75,14 @@ export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> 
 /* Darstellung (`app_setting.theme`, E-041)                             */
 /* ==================================================================== */
 
-/** Farbmodus der Anwendung. Spalte `app_setting.theme`. */
+/**
+ * Farbmodus der Anwendung. Spalte `app_setting.theme`.
+ *
+ * Zweite Fassung: Die Domaene schreibt denselben Wertebereich inline an
+ * `AppSettings.theme` (`packages/domain/src/settings.ts:37`) und gibt ihm
+ * keinen Namen. Sobald sie einen vergibt, wird dieser Typ dagegen getauscht —
+ * siehe den Kopf dieser Datei.
+ */
 export type ThemeSetting = "system" | "light" | "dark";
 
 export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
@@ -44,9 +95,10 @@ export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
 /* Rundung (`app_setting.rounding_mode`, `export_run.rounding_mode`)    */
 /* ==================================================================== */
 
-/** Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008). */
-export type RoundingMode = "up" | "nearest";
-
+/**
+ * Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008).
+ * Der Wertebereich steht in `@takt/domain` (`rounding.ts`).
+ */
 export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
   up: "aufwärts",
   nearest: "kaufmännisch",
@@ -64,8 +116,6 @@ export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
  * abgerechnet" und nirgends „als exportiert markiert" — exportiert wurde diese
  * Zeit nie.
  */
-export type ExportAuditEvent = "exported" | "reset" | "not_billed";
-
 export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>> = {
   exported: "exportiert",
   reset: "zurückgesetzt",
@@ -84,8 +134,6 @@ export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>
  * **Flaechen** und nicht Typen: Es gibt nicht „Pool" und „Spalte", es gibt eine
  * Regel, die im Pool-Bereich steht, auf dem Board oder an beiden Stellen.
  */
-export type PoolPlacement = "pool" | "board" | "both";
-
 export const POOL_PLACEMENT_LABEL: Readonly<Record<PoolPlacement, string>> = {
   pool: "Nur in den Pools",
   board: "Nur auf dem Board",
@@ -168,23 +216,51 @@ export const CARD_STAYS = "Die Karte bleibt, wo sie ist — die Spalte ändert s
  * 0001 je Regel einzeln fest. Wer die Vorgabe hier auf `all` stellt, deutet
  * keinen Bestand um — aber er legt neue Regeln anders an, als der Benutzer es
  * aus dem Bestand kennt.
+ *
+ * Zweite Fassung wie {@link ThemeSetting}: Die Domaene fuehrt denselben
+ * Wertebereich inline an `Pool.matchMode` (`packages/domain/src/tag.ts:283`)
+ * und gibt ihm keinen Namen. Sobald sie einen vergibt, wird dieser Typ dagegen
+ * getauscht — siehe den Kopf dieser Datei.
  */
 export type PoolMatchMode = "any" | "all";
 
+/**
+ * **„Alle" ist hier kein Wort mehr** (R-2, Sprache 2).
+ *
+ * Bis T-091 hiess der strengste Modus „Alle davon" — drei Zeilen unter einem
+ * Neutralwert, der ebenfalls „Alle" heisst und das **Gegenteil** bedeutet:
+ * „schraenkt nicht ein". Dasselbe Wort fuer „engt am meisten ein" und „engt gar
+ * nicht ein", untereinander im selben Formular. Der Modus heisst deshalb
+ * „Jedes der genannten"; der Neutralwert behaelt „Alle", weil er der Wert des
+ * Vorbilds ist und an drei Achsen gleich lautet.
+ */
 export const POOL_MATCH_MODE_LABEL: Readonly<Record<PoolMatchMode, string>> = {
   any: "Mindestens eines davon",
-  all: "Alle davon",
+  all: "Jedes der genannten",
 };
 
 /** Dieselbe Aussage als Satzanfang vor der Tagliste einer Regelzusammenfassung. */
 export const POOL_MATCH_MODE_PREFIX: Readonly<Record<PoolMatchMode, string>> = {
   any: "Mindestens eines von",
-  all: "Alle von",
+  all: "Jedes von",
 };
 
 export const POOL_MATCH_MODE_HINT: Readonly<Record<PoolMatchMode, string>> = {
   any: "Ein Todo genügt schon mit einem der genannten Tags.",
   all: "Ein Todo muss jeden genannten Tag tragen. Das trifft weniger als „mindestens eines davon“.",
+};
+
+/**
+ * Der Neutralwert der **Status**achse (H-3 aus R-2).
+ *
+ * Wortgleich mit `POOL_COMPLETION_LABEL.any`, und trotzdem eine eigene
+ * Konstante: Bis T-091 holte sich der Hilfssatz der Statusachse sein Wort aus
+ * der **Erledigt**-Achse. Wer dort eines Tages „Beliebig" schreibt, aendert
+ * stillschweigend eine Achse mit, die er gar nicht angefasst hat. Zwei Achsen,
+ * zwei Konstanten — auch wenn heute dasselbe darin steht.
+ */
+export const POOL_STATUS_LABEL: Readonly<Record<"any", string>> = {
+  any: "Alle",
 };
 
 /**
@@ -195,8 +271,6 @@ export const POOL_MATCH_MODE_HINT: Readonly<Record<PoolMatchMode, string>> = {
  * Achse neutral, entscheidet wie bisher der Schalter; sagt sie etwas, hat sie
  * das letzte Wort — sonst waere eine Spalte „Erledigt" dauerhaft leer.
  */
-export type PoolCompletionFilter = "any" | "done" | "open";
-
 export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string>> = {
   any: "Alle",
   done: "Erledigt",
@@ -211,14 +285,32 @@ export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string
  * Todo (E-032). Ein Todo mit einer offenen und einer exportierten Buchung
  * erfuellt beide Werte und steht in beiden Spalten. Ein Todo ohne jede Buchung
  * erfuellt keinen von beiden.
+ *
+ * **Und `exported` schliesst die Ausbuchungen nach E-047 mit ein** (S-1 aus
+ * R-2). Eine Buchung, die der Benutzer ausdruecklich **nicht** abrechnen
+ * wollte, traegt denselben Statuswert `exported` — zweiwertig bleibt
+ * zweiwertig (E-032) —, und die Regelachse fragt genau diesen Wert ab. Eine
+ * vierte Option waere deshalb falsch; gesagt werden muss es trotzdem, sonst
+ * enthaelt eine Spalte „schon abgerechnet" genau die Zeit, die nie abgerechnet
+ * wurde. Der Satz dazu steht in {@link POOL_EXPORT_NOT_BILLED_HINT} und an der
+ * Stelle, an der gewaehlt wird.
  */
-export type PoolExportFilter = "any" | "open" | "exported";
-
 export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
   any: "Alle",
   open: "Offen",
   exported: "Exportiert",
 };
+
+/**
+ * Was „Exportiert" ausserdem mitnimmt (E-047, E-050, S-1 aus R-2).
+ *
+ * Steht an der Achse und nicht in einer Fussnote: Wer eine Spalte „schon
+ * abgerechnet" baut, soll vor dem Speichern lesen, dass die ausgebuchten
+ * Buchungen darin stehen — sie sind die einzige Auswertung, fuer die E-047
+ * ueberhaupt eingefuehrt wurde.
+ */
+export const POOL_EXPORT_NOT_BILLED_HINT =
+  "Ausgebuchte Buchungen („Nicht abgerechnet“, E-047) zählen mit: Sie tragen denselben Exportstatus, obwohl sie nie in einer Datei waren.";
 
 /**
  * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.
@@ -229,3 +321,38 @@ export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
  * andere Achse ausgewaehlt haette — und die Regel trifft nichts (A-3.4).
  */
 export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";
+
+/* ==================================================================== */
+/* Was eine Spalte ist — die eine Fassung (S-2 aus R-2, E-054, E-055)   */
+/* ==================================================================== */
+
+/**
+ * Bis T-091 stand an elf Oberflaechenstellen „eine Regel **ueber Tags**", und
+ * an mehreren daneben „welche Karte wo steht, entscheiden die Tags des Todos".
+ *
+ * Das war die richtige Erklaerung fuer E-054 und mit E-055 zur halben
+ * geworden: Eine Regel hat seither **fuenf** Achsen, und drei davon — Status,
+ * „Erledigt", Exportstatus — aendern sich, ohne dass jemand ein Tag anfasst.
+ * Wer den alten Satz gelesen hat, sucht die nach einem Timerstart verschwundene
+ * Karte bei den Tags. Dort ist sie nicht.
+ *
+ * Deshalb drei Fassungen, je nach Platz, und keine vierte:
+ *
+ *  - {@link RULE_IS_A_RULE} — der Satz, wo Platz fuer eine Aufzaehlung ist.
+ *  - {@link RULE_NOT_A_PLACE} — die Kurzform fuer Kopfzeilen und Menues.
+ *  - {@link RULE_WHAT_MOVES_A_CARD} — was eine Karte bewegt, statt „die Tags".
+ */
+export const RULE_IS_A_RULE =
+  "Eine Spalte ist eine Regel — über Tags, Status, „Erledigt“ und den Exportstatus.";
+
+/** Die Kurzform, wo der Platz fuer die Aufzaehlung fehlt. */
+export const RULE_NOT_A_PLACE = "Eine Spalte ist eine Regel, kein Ablageort.";
+
+/**
+ * Was eine Karte bewegt — die Nachfolge von „das entscheiden die Tags".
+ *
+ * Sie nennt die Bewegung und ihren Ausloeser, ohne eine der fuenf Achsen
+ * hervorzuheben: Was sich am Todo aendert, aendert seine Zugehoerigkeit.
+ */
+export const RULE_WHAT_MOVES_A_CARD =
+  "Welche Karte wo steht, entscheidet die Regel — nicht die Maus. Eine Karte wandert, wenn sich am Todo etwas ändert, das die Regel abfragt.";

@@ -27,7 +27,7 @@ import { err, ok, taktError } from '@takt/domain';
 import { integer, text, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
-import { toTodoStatus } from './mappers.ts';
+import { poolReference, toTodoStatus } from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 const COLUMNS = 'id, name, position, is_default, color, created_at, updated_at';
@@ -287,16 +287,33 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
        * keine. Beides fiele erst auf, wenn jemand auf das Board sieht und sich
        * wundert.
        */
+      /*
+       * Und die Regel steht mit **Namen** in der Antwort (R-3 H-2, T-089).
+       *
+       * Der Satz allein sagt nicht, **welche** Regel. Bei einer Handvoll ist
+       * das gleichgültig, bei zwanzig ist es eine Suche — und eine Sperre, aus
+       * der man nicht herausfindet, ist nur halb reversibel. Die Abfrage hat
+       * die `pool_id` ohnehin in der Hand; sie mitzugeben kostet nichts.
+       *
+       * `pool_rule` hält eine Handvoll von Hand eingerichteter Zeilen (siehe
+       * `PoolPort.listNames`), und `ix_pool_rule_status` trägt die Frage. Eine
+       * Obergrenze braucht diese Liste deshalb nicht.
+       */
       const inRule = conn
-        .prepare("SELECT COUNT(*) AS n FROM pool_rule WHERE status_id = ? AND role = 'status'")
-        .get(id);
-      if (inRule !== undefined && integer(inRule, 'n') > 0) {
-        return err(
-          taktError(
-            'status_in_use',
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.status_id = ? AND r.role = 'status'
+            ORDER BY p.position, p.name`,
+        )
+        .all(id);
+      if (inRule.length > 0) {
+        return err({
+          code: 'status_in_use' as const,
+          message:
             'Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst heraus.',
-          ),
-        );
+          details: inRule.map((row) => poolReference(row)),
+        });
       }
 
       const outcome = attempt(() => conn.prepare('DELETE FROM todo_status WHERE id = ?').run(id));

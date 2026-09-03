@@ -51,7 +51,15 @@ import { checkFolderMove, err, normalizeName, normalizeTagName, ok, tagNameKey, 
 import { integer, text, placeholders, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
-import { toPool, toPoolCompletion, toPoolExportState, toPoolRuleTerm, toTag, toTagFolder } from './mappers.ts';
+import {
+  poolReference,
+  toPool,
+  toPoolCompletion,
+  toPoolExportState,
+  toPoolRuleTerm,
+  toTag,
+  toTagFolder,
+} from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 const TAG_COLUMNS = 'id, folder_id, name, color, created_at, updated_at';
@@ -438,7 +446,44 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
       return ok(moved);
     },
 
-    /** Ein Ordner mit Inhalt wird nicht gelöscht — weder mit Unterordnern noch mit Tags. */
+    /**
+     * Ein Ordner wird nicht gelöscht, solange er **Inhalt** hat oder in einer
+     * **Regel** steht (A-4.5, A-4.6, E-057, R-1 Befund 1).
+     *
+     * ---------------------------------------------------------------------------
+     * Warum die zweite Frage seit T-089 danebensteht
+     * ---------------------------------------------------------------------------
+     *
+     * Bis T-089 fragte diese Stelle nur nach dem Inhalt. Löschbar war also
+     * genau ein **leerer** Ordner — und der leere Ordner in einer
+     * erforderlichen Achse ist der Fall, um den es in E-057 geht. Die Wirkung
+     * war die, gegen die E-057 geschrieben ist, nur über die Hintertür: Die
+     * Regel „Ordner Ost **und** Status offen" verlor beim Löschen von Ost
+     * still ihren Term und hieß danach „Status offen". Sie traf **mehr**, als
+     * der Benutzer gesagt hatte, und eine Spalte, die zu viel zeigt, fällt
+     * niemandem auf.
+     *
+     * Zwei Funktionen weiter oben, bei `TagPort.remove`, stand dieselbe
+     * Überlegung längst ausgeschrieben; hier fehlte sie.
+     *
+     * Seit Migration 0012 steht `pool_rule.folder_id` zusätzlich auf
+     * ON DELETE **RESTRICT** — dieselbe Bauart wie bei `status_id` (0011): Die
+     * Datenbank weist ab, und diese Prüfung nimmt ihr das Wort aus dem Mund.
+     * „Dieser Ordner wird in der Regel eines Pools verwendet" statt
+     * „FOREIGN KEY constraint failed", und mit den Namen der Regeln in
+     * `details`, damit der Benutzer weiß, wo er nachsehen muss.
+     *
+     * ---------------------------------------------------------------------------
+     * Warum `tag_in_use` und kein eigener Schlüssel
+     * ---------------------------------------------------------------------------
+     *
+     * Es ist wörtlich derselbe Sachverhalt wie bei einem Tag in einer Regel,
+     * und dort heißt er `tag_in_use` — drei verschiedene Gründe teilen sich
+     * diesen Schlüssel bereits (Todos, Regel, Standard-Tag). Der Fehlerschlüssel
+     * ist eine Zusage an seine Aufrufer; ein vierter Schlüssel für denselben
+     * Satz hätte jede Fehleranzeige um einen Zweig verlängert, ohne dass
+     * jemand anders damit umgeht. Welches Ding gemeint ist, sagt die Route.
+     */
     async remove(id) {
       if (loadOne(id) === null) return err(taktError('not_found', 'Diesen Ordner gibt es nicht.'));
 
@@ -461,12 +506,33 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
         );
       }
 
+      // Die Regel beim Namen: `pool_id` und `name` stehen der Abfrage ohnehin
+      // zur Verfügung, und ohne sie ist die Sperre bei zwanzig Regeln eine
+      // Suche. `ix_pool_rule_folder` trägt die Frage (Migration 0011).
+      const usedIn = conn
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.folder_id = ?
+            ORDER BY p.position, p.name`,
+        )
+        .all(id);
+
+      if (usedIn.length > 0) {
+        return err({
+          code: 'tag_in_use' as const,
+          message: 'Dieser Ordner wird in der Regel eines Pools verwendet.',
+          details: usedIn.map((row) => poolReference(row)),
+        });
+      }
+
       const outcome = attempt(() => conn.prepare('DELETE FROM tag_folder WHERE id = ?').run(id));
       if (!outcome.ok) return err(outcome.error as never);
       return ok(undefined);
     },
   };
 }
+
 
 /**
  * Pools (A-3.1 bis A-3.4).

@@ -1237,3 +1237,37 @@ Abschrift.
 
 **Nicht entschieden.** Ob der Aufgabenbereich des Add-ins den *Grund* einer fehlenden Spalte nennen
 kann (O-K), bleibt beim Auftraggeber.
+
+**Ergänzung (2026-09-03, nach Welle A).**
+
+4. **Kein Gattungswort im Satz.** Die drei Listen tragen Namen, aber keine Fläche, und die
+   Funktion darf nicht raten, ob ein Name einen Pool, eine Kanban-Spalte oder beides bezeichnet.
+   Der Satz nennt deshalb nur den Namen in Anführungszeichen: „Es erscheint dann wieder in
+   „Abrechnung“ und „Ost“.", nicht „in dem Pool „Abrechnung““. Die Zahl der Namen ändert nur die
+   Aufzählung, nicht den Artikel. Der Satz ohne Treffer lautet: „Auf dieses Todo passt derzeit
+   keine Regel — es erscheint danach in keinem Pool und in keiner Spalte." (Ankündigung) bzw.
+   „Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner
+   Spalte." (Bericht). Alle übrigen Sätze aus T-089 bleiben, nur der Einschub `inPools` wird
+   durch die reine Aufzählung ersetzt.
+5. **Dritter Parameter `occasion`** (`'reopen' | 'booking'`) bleibt, wie in T-089 gebaut, ohne
+   Vorgabewert; die Überladungen (`'reopen'` gibt `string`, `'booking'` gibt `string | null`)
+   sind die Signatur, gegen die beide Oberflächen bauen.
+6. **Auch `POST /timer/stop` und `POST /timer/orphaned/resolve` liefern `poolMovement`**, mit
+   Anlass `'booking'`: Die erste abgeschlossene Buchung setzt „hat offene Buchungen", und jede
+   Spalte mit `exportState: 'open'` nimmt das Todo damit auf. Wer nur am Start eine Auskunft gibt
+   und am Stopp schweigt, sagt die halbe Wahrheit. `null`, wenn sich nichts bewegt.
+7. **`GET /addin/context` bleibt bei `list()`.** Der Aufgabenbereich hat kein Board; die Liste
+   dort dient der Auswahl. Reine Spalten erreichen das Add-in ausschließlich über den
+   Bewegungssatz.
+
+## E-059 — Zwei Wortlaute der Oberfläche, aus T-091
+
+- Der Exportstatus einer Spalte heißt in der Oberfläche **„Noch nicht abgerechnet"** und
+  **„Abgerechnet"**, nicht „Offen" und „Exportiert". „Offen" ist bereits das Gegenteil von
+  „Erledigt" (Achse Erledigt) und darf nicht zugleich das Gegenteil von „Exportiert" sein; ein
+  Wort mit zwei Bedeutungen auf demselben Dialog ist ein Fehler, den der Benutzer ausbadet.
+  Der Wert im Datenmodell (`export_state = 'open'`) bleibt.
+- **„Vom Board nehmen" fragt nicht nach**, sondern bietet „Rückgängig" an — auf dem Board und im
+  Regeldialog. Die Handlung ist umkehrbar und verliert nichts (die Regel bleibt als Pool
+  bestehen); ein Bestätigungsdialog vor einer umkehrbaren Handlung ist Reibung ohne Schutz.
+  Löschen einer Regel fragt weiterhin nach.

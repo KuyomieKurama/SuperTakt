@@ -108,6 +108,11 @@ export interface StructureApi {
    * `packages/domain`; sie hier nachzubauen hieße, zwei Wahrheiten über
    * dieselbe Zugehörigkeit zu führen — und die eine davon fiele erst auf,
    * wenn ein Todo nach A-2.5 im falschen Pool auftaucht.
+   *
+   * **Die Antwort ist vollständig oder sie ist keine** (B-3b aus R-2, T-091).
+   * Wer sie einsetzt, schreibt daraus eine Aufzählung — „Es ist zurück in den
+   * Pools A, B und C" —, und eine Aufzählung behauptet Vollständigkeit. Siehe
+   * die Umsetzung: Die stille Kürzung bei zwölf ist deshalb weg.
    */
   readonly poolsContaining: (todoId: Id) => Promise<readonly string[]>;
 }
@@ -204,11 +209,37 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
 
   const pools = value?.pools ?? null;
 
+  /**
+   * **Keine stille Kürzung mehr** (B-3b aus R-2, T-091).
+   *
+   * Bis T-091 stand hier `pools.slice(0, 12)`. Der einzige Aufrufer macht aus
+   * der Antwort eine Aufzählung, und eine Aufzählung sagt „das sind sie" —
+   * beim dreizehnten Pool sagte sie das fälschlich. Seit E-054 ist jede
+   * Board-Spalte mit Anzeigeort „beide" zugleich ein Pool; zwölf sind damit
+   * schnell erreicht.
+   *
+   * **Warum aufheben und nicht benennen.** „… und drei weitere" wäre hier
+   * nicht sagbar, ohne selbst falsch zu sein: Gekürzt wurde **vor** der
+   * Abfrage, also weiß niemand, ob die übersprungenen Pools das Todo überhaupt
+   * enthalten. Der Satz hieße „drei weitere, vielleicht" — und das ist keine
+   * Auskunft, sondern eine Ausrede.
+   *
+   * **Was das kostet.** Ein Abruf je Pool, alle nebenläufig, gegen einen
+   * Dienst auf `127.0.0.1` und eine eingebettete SQLite-Datei. Die Zahl der
+   * Pools legt der Benutzer selbst an; sie ist keine Datenmenge, sondern eine
+   * Konfiguration. Der Vorgang läuft ausserdem nur beim Timerstart auf einem
+   * **erledigten** Todo — nicht bei jedem Start.
+   *
+   * **Und er läuft nicht mehr lange.** Nach E-058 liefert `POST /timer/start`
+   * die Bewegung als `poolMovement` mit, und dieser Weg entfällt vollständig
+   * (Welle B). Bis dahin ist eine ehrliche Aufzählung mehr wert als eine
+   * billige.
+   */
   const poolsContaining = useCallback(
     async (todoId: Id): Promise<readonly string[]> => {
       if (pools === null || pools.length === 0) return [];
       const results = await Promise.all(
-        pools.slice(0, 12).map(async (pool) => {
+        pools.map(async (pool) => {
           try {
             const page = await listPoolTodos(pool.id, { includeCompleted: false }, { limit: 200 });
             return page.items.some((todo) => todo.id === todoId) ? pool.name : null;

@@ -113,6 +113,44 @@ Abdeckung 91 %), `pnpm test:e2e` 34/34. Prüfumfang `git diff 7c71186..HEAD`.
 
 Danach documenter.
 
+### Welle vom 2026-09-03, Reparatur nach Review — Welle A
+
+Vorab durch den Orchestrator: 186 MB Bauergebnisse (`apps/desktop/release/`) und die
+Lizenzbeilage aus den fünf Commits des Branches genommen (`git filter-branch`, Sicherung
+`backup/status-als-regelterm-vor-filter`), `apps/desktop/.gitignore` wörtlich von
+`release-workflow`. E-058 festgehalten. Doppelte O-Kennungen umbenannt (O-M bis O-Q).
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-089~~ | **fertig, braucht Review (R-1a).** Migration 0012 `pool_rule.tag_id`/`folder_id` CASCADE → RESTRICT, `TagFolderPort.remove` weist mit `tag_in_use` + Regelnamen in `details` ab (gleicher Zusatz an `status_in_use`, H-2); `check-export-boundary.mjs` Untergrenzen; `z.array(idSchema).min(1).max(50)` für die drei Kennungslisten von `GET /todos`; `BoardColumnRule extends MatchesPoolRule`; `structure.ts` ohne `as never`; `matchesPool` wirft bei fehlendem `unresolvedRequired`. E-058: `usecases/pool-movement.ts` (`poolMovementNamer`), `POST /timer/start` liefert `poolMovement \| null`, `poolMovementSentence(movement, tense, occasion)` in `@takt/domain` mit Überladungen. 595/595, typecheck 0. Offen (entschieden, siehe E-058 Ergänzung): Gattungswort → keins; Stopp/orphaned liefern ebenfalls `poolMovement`; `GET /addin/context` bleibt bei `list()`. R-3 H-1 (Ordnerauflösung Faktor 70) weiter beim Auftraggeber | domain-dev |
+| ~~T-090~~ | **fertig.** `poolNamer` über `list('all')`, Attrappe wertet die Fläche aus, `proof:addin` 123 auf 131; `bookOnTodo` wirft `AbortBooking` statt `rejected` zurückzugeben — Doppelbuchung zu, Mutation gemessen; Typwache `NamedPoolRule` (lokal, in Welle B durch Domänen-Erbauer ersetzen); „Status" statt „Spalte". Offen: Gattungswort im Bewegungssatz für reine Board-Spalten (E-058/Welle B); Kommentar an `PoolPort.list` nennt `poolNamer` als Zeugen für die Vorgabe `'pool'` — stimmt nicht mehr (domain-dev) | integration-dev |
+| ~~T-091~~ | **fertig.** B-5: Ordner- und Statusauswahl mit lädt/Fehler+Wiederholen/bereit (`RulePickers.tsx`), keine falsche Leermeldung mehr; B-3b: `slice(0,12)` aufgehoben; `labels.ts` über Domänentypen; „Regel über Tags" an 15 Stellen; `aria-describedby`; Live-Region an `RuleSummary` (500 ms); S-1, S-3, S-5 (schwache Fassung: kein Bestätigungsdialog, dafür „Rückgängig"), S-7, S-9, S-10, H-1–H-3; Ordnersuche (A-4.4 halb). typecheck 0, contrast 0/432, e2e 34/34. Offen: benannte Domänentypen für `AppSettings.theme`/`Pool.matchMode` (domain-dev); `POOL_EXPORT_LABEL.open` → „Noch nicht abgerechnet"? (Auftraggeber); Bestätigungsdialog „Vom Board nehmen" fallen lassen? (Auftraggeber); Kommentar `tests/e2e/support/actions.ts:125-131` veraltet (e2e-tester, Welle B) | frontend-dev |
+
+**Messung nach Welle A (Orchestrator):** `pnpm check` — 13 Nachweispfade 838/0, 595 Einheitentests,
+Zweigabdeckung `packages/domain/src` 69,72 % unter 80 % (allein `pool-movement.ts` mit 0 %, Tests
+kommen in T-095) → Exitcode 1 an dieser einen Schwelle, sonst grün. `pnpm test:e2e` 34/34 grün (1,3 min).
+
+### Welle vom 2026-09-03, Reparatur nach Review — Welle B
+
+Vorab durch den Orchestrator: E-058 um die Punkte 4–7 ergänzt (kein Gattungswort im Satz;
+`occasion` bleibt Pflicht; auch Stopp und `orphaned/resolve` liefern `poolMovement`;
+`GET /addin/context` bleibt bei `list()`), E-059 (Exportstatus heißt in der Oberfläche „Noch
+nicht abgerechnet"/„Abgerechnet"; „Vom Board nehmen" ohne Bestätigungsdialog, mit „Rückgängig").
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| T-092 | E-058 Absatz 3 im Add-in: `bookingStates`/`poolNamer` in `routes/addin/service.ts` durch `poolMovementNamer` aus `usecases/pool-movement.ts` ersetzen; `reopen.ts`: `poolSentence`, `bookingPoolSentence`, `CARD_STAYS` streichen, Aufrufer auf `poolMovementSentence(movement, tense, 'reopen' \| 'booking')` aus `@takt/domain`; lokale `NamedPoolRule`-Wache durch den Domänentyp ersetzen; `proof:addin` prüft gegen die Funktion statt gegen eine Abschrift; Attrappe in `fixtures.mjs` nachziehen | integration-dev |
+| T-093 | E-058 Punkt 4: `inPools` in `pool-movement.ts` durch reine Aufzählung ersetzen, Satz ohne Treffer „… in keinem Pool und in keiner Spalte"; Punkt 6: `POST /timer/stop` und `POST /timer/orphaned/resolve` liefern `poolMovement \| null` mit Anlass Buchung (OpenAPI, `proof:openapi`); `PoolPort.list`-Kommentar (`ports.ts:328-335`) richtigstellen; benannte Domänentypen `Theme` für `AppSettings.theme` und `PoolMatchMode` für `Pool.matchMode` exportieren (T-091 Frage 1) | domain-dev |
+| T-094 | E-058 Absatz 3 in der Oberfläche: `CARD_STAYS` (`labels.ts`, `Timer.tsx`, `TimerContext.tsx`, `TodoDetailScreen.tsx:340`) und `poolsContaining` entfernen; `TimerContext` nimmt `poolMovement` aus `POST /timer/start` und bildet den Satz über `poolMovementSentence(movement, 'past', doneCleared ? 'reopen' : 'booking')`; Board-Toast aus S-3 an dieselbe Quelle; `api/types.ts` nachziehen (`poolMovement: PoolMovement \| null`, Typ aus `@takt/domain`); `showcase/TimeSection.tsx:122-123`; E-059 Wortlaute (`POOL_EXPORT_LABEL`); Stopp-Antwort noch **nicht** anbinden (kommt mit T-093, Welle C) | frontend-dev |
+| T-095 | Einheitentests: `poolMovementSentence` alle Fälle beider Anlässe und Zeitformen gegen den Wortlaut aus E-058 Punkt 4 (Zweigabdeckung `packages/domain/src` wieder ≥ 80 %); `poolMovementNamer` (enters/leaves nie zugleich, `list('all')`, Regeln statt Namen); Laufzeitwache in `matchesPool`; Ordnersperre `tag_in_use` mit `details`; `describeRuleReach`/`emptyFolderNames` acht Fälle; rote Tests aus T-089 | unit-tester |
+| T-096 | End-to-End: Spalte „erledigt und noch nicht abgerechnet" — Timerstart zeigt in der Hauptanwendung denselben Satz wie das Add-in (`proof:addin`-Fixture als Vergleich); Spalte über leeren Ordner trifft nichts und sagt es; Ordner in einer Regel nicht löschbar (409 mit Regelname in der Oberfläche); Kommentar `tests/e2e/support/actions.ts:125-131` nachziehen; `docs/testplan.md` | e2e-tester |
+
+Danach Welle C: Stopp-Antwort in der Oberfläche anbinden (frontend-dev), Wiedervorlage R-1a/R-2a/
+R-3a, documenter D-1/D-2 und „Regel über Tags" in `docs/`.
+
+**Beim Auftraggeber:** `docs/spec.md` — Drag & Drop in Zeilen 84, 257, 306 seit E-054 aufgehoben;
+A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
+
 ## Offen — Restpunkte, keine Blocker
 
 | Nr | Punkt | Wer |
@@ -124,11 +162,11 @@ Danach documenter.
 | ~~O-F~~ | *erledigt.* Alle 13 Nachweispfade laufen seit T-08x in `pnpm check` (`proof:all`), zuletzt gemessen nach T-088: 818 Prüfungen, 0 rot |
 | ~~O-G~~ | *erledigt in T-084.* Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
 | O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
-| O-D | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
-| O-G | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
-| O-H | `pnpm desktop` braucht jetzt beide Ports frei (17843 und 17844). Verhaltensänderung durch den mitlaufenden Nachweis; die Kette bleibt sauber stehen und nennt den Grund. | — |
-| O-E | Neun End-to-End-Fälle nicht gelaufen: Add-in (kein Office.js-Wirt), drei Hüllenzustände (kein echter Tauri-Prozess), Stichprobe über die 19 Orte mit Exportstatus, Standard-Tags über die Oberfläche | e2e-tester |
-| O-F | 14 Befunde aus T-025 unverändert offen, geordnet nach Gewicht ab C-12 | spec-ux-reviewer |
+| O-M | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
+| O-N | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
+| O-O | `pnpm desktop` braucht jetzt beide Ports frei (17843 und 17844). Verhaltensänderung durch den mitlaufenden Nachweis; die Kette bleibt sauber stehen und nennt den Grund. | — |
+| O-P | Neun End-to-End-Fälle nicht gelaufen: Add-in (kein Office.js-Wirt), drei Hüllenzustände (kein echter Tauri-Prozess), Stichprobe über die 19 Orte mit Exportstatus, Standard-Tags über die Oberfläche | e2e-tester |
+| O-Q | 14 Befunde aus T-025 unverändert offen, geordnet nach Gewicht ab C-12 | spec-ux-reviewer |
 
 | O-I | Kommentar an `packages/storage/src/ports.ts` begründet `resolveRule`/`resolveExcluded` mit einem Aufrufer in `routes/addin`, den es seit T-086 nicht mehr gibt; einziger Nutzer in `src` ist der Adapter, dazu `repo-tags.test.ts`. Entweder Kommentar richtigstellen oder beide zugunsten von `resolveAxes` streichen | domain-dev |
 | O-J | `resolved` trägt drei Wahrheitswerte (`isEmpty`, `unresolvedRequired`, `matchesNothing`); frontend-dev schlägt einen benannten Grund `matchesNothingReason: 'none' \| 'empty' \| 'unresolved-required'` vor, damit ein dritter Grund die Oberfläche rot statt still macht | domain-dev |

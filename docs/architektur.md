@@ -102,8 +102,23 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
 | Plausibilisierung der Call-Nummer | `call-number.ts` → `checkCallNumber` | E-045, B-4.3, R-15 |
+| Der Satz über die Bewegung durch die Pools | `pool-movement.ts` → `poolMovementSentence` | E-056, E-058 |
 
-Die letzte Zeile ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
+Die letzte Zeile ist mit T-089 dazugekommen, und sie ist die einzige der Tabelle, die keine
+Fachregel enthält, sondern einen **Text**. Sie steht trotzdem hier und aus demselben Grund wie
+alles andere: Der Satz muss an zwei Flächen zeichengleich sein — in der Hauptanwendung und im
+Aufgabenbereich des Add-ins —, und er war es auf die schlechte Weise. „Die Karte bleibt, wo sie
+ist" stand als Abschrift in beiden und war seit E-055 falsch: Eine Kanban-Spalte ist eine Regel
+und entscheidet auch über „Erledigt" und über den Exportstatus, und beides ändert ein Timerstart.
+Ein Text, den zwei Flächen gleich sagen müssen, hat genau eine Quelle (E-058).
+
+Die Rechnung dazu — welche Pools ein Todo betritt und verlässt — ist **keine** Domänenfunktion,
+sondern ein Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`): Sie braucht die
+aufgelösten Regeln und damit den Port. Die Entscheidung selbst fällt trotzdem in `matchesPool`;
+der Anwendungsfall hält sie nur zweimal gegen dasselbe Todo, einmal für den Zustand davor und
+einmal für den danach.
+
+Die Zeile davor ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
 entscheidet mit, ob das Duplikatangebot aus A-10.9 auf den **richtigen Kundenvorgang** zeigt.
 Trifft sie falsch, wird Arbeitszeit auf ein fremdes Todo gebucht und landet auf einer fremden
 Rechnung (R-15). Eine Regel, die über Geld entscheidet, existiert einmal und wird aufgerufen,
@@ -896,7 +911,7 @@ derselbe, der Fehler entfällt.
 | `404` | Nicht vorhanden |
 | `413` | Anfragerumpf über 1 MB |
 | `415` | Kein `application/json` auf einer zustandsändernden Route. Geprüft vor dem Lesen des Rumpfs |
-| `409` | Widerspruch zum Zustand: `timer_already_running`, `time_entry_locked`, `tag_folder_cycle`, `export_status_not_settable`, `export_nothing_to_do`, `status_in_use` |
+| `409` | Widerspruch zum Zustand: `timer_already_running`, `time_entry_locked`, `tag_folder_cycle`, `tag_folder_not_empty`, `tag_in_use`, `export_status_not_settable`, `export_nothing_to_do`, `status_in_use` |
 | `422` | Wohlgeformt, aber fachlich unzulässig: `validation_error`, `export_source_forbidden`, `export_directory_missing` |
 | `500` | Unerwartet. Immer derselbe Text, nie Innenleben |
 

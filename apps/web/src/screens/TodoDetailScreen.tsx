@@ -472,10 +472,13 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
 
                   <Card
                     title="Tags"
-                    description="Aus ihnen leiten sich Pools und Kanban-Spalten ab (E-054) — sie sind der Griff, mit dem eine Karte die Spalte wechselt."
+                    description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt — aber nicht der einzige: Eine Regel fragt auch nach Status, „Erledigt“ und Exportstatus (E-055)."
                   >
                     {todo.tagIds.length === 0 ? (
-                      <p className="muted">Keine Tags. Damit passt auf dieses Todo keine Poolregel.</p>
+                      <p className="muted">
+                        Keine Tags. Regeln, die Tags verlangen, treffen dieses Todo damit nicht —
+                        Regeln über Status, „Erledigt“ oder den Exportstatus schon.
+                      </p>
                     ) : (
                       <div className="tag-row">
                         {todo.tagIds.map((id) => {

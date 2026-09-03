@@ -275,6 +275,19 @@ const pairs = [
    */
   { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-hover", min: 4.5, note: "Befund in der Spaltenzeile unter dem Zeiger" },
 
+  // Regelformular (S-11, E-055, H-2 aus R-2). Die Flaechen des Formulars sind
+  // fast alle ueber bereits gemessene Farbpaare abgedeckt — bis auf eines: den
+  // **Optionsknopf** selbst auf der Flaeche der **gewaehlten** Optionszeile.
+  // `accent-color: --accent-bg` auf `--accent-bg-subtle` ist die Grenze eines
+  // Bedienelements nach SC 1.4.11, und beide Farben unterscheiden sich in den
+  // zwei Farbmodi verschieden stark. Der Fall ist harmlos; „gemessen statt
+  // behauptet" ist trotzdem der Massstab.
+  { group: "Regelformular", fg: "--accent-bg", bg: "--accent-bg-subtle", min: 3, note: "Optionsknopf auf der gewaehlten Optionszeile, SC 1.4.11" },
+  { group: "Regelformular", fg: "--accent-bg", bg: "--bg-surface", min: 3, note: "Optionsknopf auf der ungewaehlten Optionszeile, SC 1.4.11" },
+  { group: "Regelformular", fg: "--accent-bg", bg: "--bg-hover", min: 3, note: "Optionsknopf unter dem Zeiger, SC 1.4.11" },
+  // Die Ladezeile und das Suchfeld der Chip-Auswahlen (B-5, A-4.4, T-091).
+  { group: "Regelformular", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Ladezeile und Leersatz der Ordnerauswahl" },
+
   // Statusverwaltung (A-5.4, Bereich „Status" in S-09, T-073). Der Status hat
   // mit E-054 seine Spalte verloren und ist eine Stammgroesse geworden; seine
   // Verwaltungszeile bringt vier Flaechen mit, die es so vorher nicht gab —

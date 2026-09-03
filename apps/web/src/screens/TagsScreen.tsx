@@ -158,7 +158,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
           <EmptyState
             icon="tag"
             title="Noch kein Tag"
-            description="Tags ordnen Todos. Aus ihnen leiten sich die Pools ab — ohne Tag passt keine Poolregel."
+            description="Tags ordnen Todos, und die meisten Regeln fragen nach ihnen. Ohne ein einziges Tag bleibt von einer Regel nur, was sie über Status, „Erledigt“ und den Exportstatus sagt."
             action={
               <Button
                 variant="primary"
@@ -457,15 +457,35 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
 
   const lookup = useRuleLookup();
 
-  const setPlacement = (pool: Pool, placement: PoolPlacement): void => {
+  /**
+   * Den Anzeigeort einer Regel ändern — mit demselben Rückweg wie auf dem
+   * Board (S-5 aus R-2).
+   *
+   * Bis T-091 war „Vom Board nehmen" hier eine Sofortaktion ohne Rückweg und
+   * auf dem Board dieselbe Handlung hinter einem Bestätigungsdialog. Zwei
+   * Schutzniveaus für dieselbe Handlung lehren, dass eines davon bedeutungslos
+   * ist. Jetzt haben beide Flächen denselben: ein Toast, der sagt, dass nichts
+   * verlorengeht, und einen Knopf, mit dem man es ausprobieren kann.
+   */
+  const setPlacement = (pool: Pool, placement: PoolPlacement, undoable = true): void => {
+    const previous = pool.placement;
     void updatePool(pool.id, { placement })
       .then(() => {
         structure.reload();
         bump();
-        toasts.success(
-          "Anzeigeort geändert.",
-          `„${pool.name}“ — Anzeigeort: ${POOL_PLACEMENT_LABEL[placement]}.`,
-        );
+        toasts.show({
+          tone: "success",
+          title: "Anzeigeort geändert.",
+          body: `„${pool.name}“ — Anzeigeort: ${POOL_PLACEMENT_LABEL[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+          ...(undoable && previous !== placement
+            ? {
+                action: {
+                  label: "Rückgängig",
+                  onSelect: () => setPlacement({ ...pool, placement }, previous, false),
+                },
+              }
+            : {}),
+        });
       })
       .catch((cause: unknown) =>
         toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
@@ -475,8 +495,8 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   return (
     <>
       <Card
-        title="Regeln über Tags"
-        description="Eine Regel bündelt Todos über ihre Tags. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
+        title="Regeln"
+        description="Eine Regel bündelt Todos — über Tags, Status, „Erledigt“ und den Exportstatus. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
         actions={
           <Button size="sm" variant="primary" iconStart="plus" onClick={() => setForm({})}>
             Neue Regel
@@ -488,7 +508,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
             compact
             icon="filter"
             title="Noch keine Regel"
-            description="Eine Regel bündelt Todos über ihre Tags — etwa alles unter dem Ordner „Kunden“. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
+            description="Eine Regel bündelt Todos — etwa alles unter dem Ordner „Kunden“ oder alles Erledigte, das noch nicht abgerechnet ist. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
             action={
               <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
                 Erste Regel anlegen

@@ -1,5 +1,5 @@
 import { countPoolRuleConditions } from "@takt/domain";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPool, updatePool } from "../api/endpoints";
 import type {
   Id,
@@ -11,10 +11,16 @@ import type {
   PoolRuleTerm,
 } from "../api/types";
 import { FormDialog, TextField } from "../components/FormDialog";
-import { Icon } from "../components/Icon";
 import { InlineMessage } from "../components/Primitives";
 import { RadioRow } from "../components/RadioRow";
 import { RuleSummary } from "../components/RuleSummary";
+import {
+  FolderPicker,
+  StatusPicker,
+  type FolderOption,
+  type PickerSource,
+  type StatusOption,
+} from "../components/RulePickers";
 import { Select } from "../components/Select";
 import { TagInput } from "../components/TagInput";
 import { useRefresh } from "../app/RefreshContext";
@@ -27,14 +33,18 @@ import {
   POOL_AXIS_NEUTRAL_HINT,
   POOL_COMPLETION_LABEL,
   POOL_EXPORT_LABEL,
+  POOL_EXPORT_NOT_BILLED_HINT,
   POOL_MATCH_MODE_HINT,
   POOL_MATCH_MODE_LABEL,
   POOL_PLACEMENT_LABEL,
+  POOL_STATUS_LABEL,
 } from "../lib/labels";
 import {
+  axesOf,
   describeRule,
   describeRuleReach,
   emptyFolderNames,
+  ruleSpoken,
   type RuleAxes,
   type RuleReach,
 } from "../lib/poolRule";
@@ -98,6 +108,15 @@ import {
  * dann auseinanderlaufen.
  */
 
+/**
+ * Wie lange die Live-Region der Vorschau wartet, bevor sie spricht (S-8).
+ *
+ * Lang genug, dass ein Durchqueren mit den Pfeiltasten nicht angesagt wird,
+ * kurz genug, dass die Ansage noch zur Handlung gehört. Der sichtbare Kasten
+ * wartet nicht.
+ */
+const SPEAK_DELAY_MS = 500;
+
 const PLACEMENT_HINT: Readonly<Record<PoolPlacement, string>> = {
   pool: "Die Regel steht im Pool-Bereich und in den Filtern. Auf dem Board erscheint sie nicht.",
   board:
@@ -129,6 +148,11 @@ function withTagIds(terms: readonly PoolRuleTerm[], next: readonly Id[]): readon
 
 function hasFolder(terms: readonly PoolRuleTerm[], folderId: Id): boolean {
   return terms.some((term) => term.kind === "folder" && term.folderId === folderId);
+}
+
+/** Die Ordnerkennungen einer Termliste als Menge. */
+function folderIdsOf(terms: readonly PoolRuleTerm[]): ReadonlySet<Id> {
+  return new Set(terms.flatMap((term) => (term.kind === "folder" ? [term.folderId] : [])));
 }
 
 function toggleFolder(terms: readonly PoolRuleTerm[], folderId: Id): readonly PoolRuleTerm[] {
@@ -185,110 +209,17 @@ function FormSection({
   );
 }
 
-/** Die Ordner einer Termliste — dieselbe Bauform für beide Listen. */
-function FolderPicker({
-  label,
-  hint,
-  folders,
-  terms,
-  onToggle,
-}: {
-  readonly label: string;
-  readonly hint: string;
-  readonly folders: ReadonlyArray<{ readonly id: Id; readonly path: readonly string[] }>;
-  readonly terms: readonly PoolRuleTerm[];
-  readonly onToggle: (folderId: Id) => void;
-}) {
-  return (
-    <div className="field">
-      <span className="field__label">{label}</span>
-      <div className="tag-picker">
-        {folders.length === 0 ? (
-          <p className="field__hint">Es gibt noch keinen Ordner.</p>
-        ) : (
-          folders.map((folder) => {
-            const active = hasFolder(terms, folder.id);
-            return (
-              <button
-                key={folder.id}
-                type="button"
-                className={`folder-chip${active ? " folder-chip--on" : ""}`}
-                aria-pressed={active}
-                onClick={() => onToggle(folder.id)}
-              >
-                <Icon name="folder" size={12} />
-                {folder.path.join(" / ")}
-              </button>
-            );
-          })
-        )}
-      </div>
-      <p className="field__hint">{hint}</p>
-    </div>
-  );
-}
-
 /**
- * Die Status einer Regel — mehrere möglich, nichts gewählt heißt „Alle".
+ * Ordner- und Statusauswahl stehen seit T-091 in
+ * `components/RulePickers.tsx`.
  *
- * Keine Optionszeile wie bei Erledigt und Exportstatus: Dort gibt es drei feste
- * Werte und genau einen davon, hier eine Menge, die der Benutzer selbst
- * verwaltet. Und keine Mehrfachauswahlliste: Bei einer Handvoll Status ist eine
- * aufklappbare Liste ein zusätzlicher Klick vor einer Antwort, die ohnehin
- * hinpasst.
- *
- * Umschaltknöpfe mit `aria-pressed` und nicht Ankreuzfelder, weil sie dieselbe
- * Bauform wie die Ordnerauswahl darüber haben — dieselbe Frage soll nicht
- * zweimal anders aussehen.
+ * Nicht wegen der Länge, sondern wegen ihrer **Zustände**: Beide hängen an
+ * derselben Quelle wie das `TagInput` daneben und müssen dieselben drei
+ * Ausgänge haben — lädt, Fehler, bereit (B-5 aus R-2, Abschnitt 15). Als
+ * eigener Baustein nehmen sie ihre Daten entgegen, statt sie zu holen, und
+ * lassen sich damit auf der Musterseite in allen vier Zuständen nebeneinander
+ * zeigen statt nur in dem einen guten.
  */
-function StatusPicker({
-  statuses,
-  value,
-  onChange,
-}: {
-  readonly statuses: ReadonlyArray<{ readonly id: Id; readonly name: string }>;
-  readonly value: readonly Id[];
-  readonly onChange: (next: readonly Id[]) => void;
-}) {
-  const labelId = useId();
-  return (
-    <div className="field">
-      <span className="field__label" id={labelId}>
-        Status
-      </span>
-      <div className="tag-picker" role="group" aria-labelledby={labelId}>
-        {statuses.length === 0 ? (
-          <p className="field__hint">Es gibt noch keinen Statuswert.</p>
-        ) : (
-          statuses.map((status) => {
-            const active = value.includes(status.id);
-            return (
-              <button
-                key={status.id}
-                type="button"
-                className={`folder-chip${active ? " folder-chip--on" : ""}`}
-                aria-pressed={active}
-                onClick={() =>
-                  onChange(
-                    active ? value.filter((id) => id !== status.id) : [...value, status.id],
-                  )
-                }
-              >
-                <Icon name="square" size={12} />
-                {status.name}
-              </button>
-            );
-          })
-        )}
-      </div>
-      <p className="field__hint">
-        {value.length === 0
-          ? `Nichts gewählt heißt „${POOL_COMPLETION_LABEL.any}“ — ${POOL_AXIS_NEUTRAL_HINT.toLowerCase()}.`
-          : `${plural(value.length, "Status gewählt", "Status gewählt")} — ein Todo genügt mit einem davon; es trägt immer genau einen.`}
-      </p>
-    </div>
-  );
-}
 
 /* ==================================================================== */
 /* Der Dialog                                                           */
@@ -320,6 +251,36 @@ export function PoolFormDialog({
   const tree = ready?.tagTree ?? null;
   const folders = useMemo(() => (tree === null ? [] : flatFolders(tree)), [tree]);
   const statuses = ready?.statuses ?? [];
+
+  /*
+   * Die drei Zustände der Quelle, einmal gebildet und an beide Auswahlen
+   * gegeben (B-5 aus R-2).
+   *
+   * `ready === null` heißt **zweierlei** — es lädt noch, oder es ist
+   * fehlgeschlagen —, und bis T-091 wurde beides als „es gibt keinen Ordner"
+   * ausgegeben. Das ist eine Behauptung über den Bestand, und sie war genau
+   * dann unbelegt, wenn sie erschien: Der Dienst war weg, der Benutzer hatte
+   * seine Ordner, und das Formular sagte ihm das Gegenteil.
+   *
+   * Die Fehlermeldung trägt den Satz des Dienstes und einen
+   * Wiederholungsknopf, der dieselbe Quelle neu lädt wie `TagInput` — eine
+   * Fehlermeldung ohne Rückweg ist eine Sackgasse (Abschnitt 15).
+   */
+  const folderSource = useMemo<PickerSource<FolderOption>>(() => {
+    if (structure.state.status === "loading") return { status: "loading" };
+    if (structure.state.status === "error") {
+      return { status: "error", message: structure.state.message };
+    }
+    return { status: "ready", items: folders };
+  }, [structure.state, folders]);
+
+  const statusSource = useMemo<PickerSource<StatusOption>>(() => {
+    if (structure.state.status === "loading") return { status: "loading" };
+    if (structure.state.status === "error") {
+      return { status: "error", message: structure.state.message };
+    }
+    return { status: "ready", items: statuses };
+  }, [structure.state, statuses]);
 
   const [name, setName] = useState("");
   const [placement, setPlacement] = useState<PoolPlacement>(defaultPlacement);
@@ -353,6 +314,14 @@ export function PoolFormDialog({
     () => ({ matchMode, includeSubfolders, rule, excludedTags, statusIds, completion, exportState }),
     [matchMode, includeSubfolders, rule, excludedTags, statusIds, completion, exportState],
   );
+
+  /*
+   * Welche Ordner in welcher Liste stehen — als Menge, weil die Auswahl sie
+   * je Chip abfragt. Die Termliste bleibt die Wahrheit; das hier ist nur ihr
+   * Nachschlagewerk.
+   */
+  const requiredFolderIds = useMemo(() => folderIdsOf(rule), [rule]);
+  const excludedFolderIds = useMemo(() => folderIdsOf(excludedTags), [excludedTags]);
 
   const description = useMemo(
     () =>
@@ -433,6 +402,27 @@ export function PoolFormDialog({
   const modeMatters = rule.length > 1 || rule.some((term) => term.kind === "folder");
   const modeChanged = pool !== undefined && pool.matchMode !== matchMode && modeMatters;
 
+  /**
+   * Der Satz für die Live-Region unter der Vorschau (S-8 aus R-2).
+   *
+   * Er hinkt der Anzeige um {@link SPEAK_DELAY_MS} hinterher, und das mit
+   * Absicht: Pfeiltasten in einer Optionszeile wechseln den Wert bei jedem
+   * Anschlag. Ohne die Bremse spräche die Vorlesehilfe drei Regeln aus, die
+   * der Benutzer nur durchquert hat, bevor sie zu der kommt, die er meint.
+   * Die **sichtbare** Vorschau wartet nicht — sie steht sofort richtig da.
+   */
+  const [spoken, setSpoken] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setSpoken("");
+      return;
+    }
+    const sentence = ruleSpoken(description, savedReach);
+    const handle = setTimeout(() => setSpoken(sentence), SPEAK_DELAY_MS);
+    return () => clearTimeout(handle);
+  }, [open, description, savedReach]);
+
   return (
     <FormDialog
       open={open}
@@ -464,19 +454,58 @@ export function PoolFormDialog({
           const saved = pool === undefined ? await createPool(body) : await updatePool(pool.id, body);
           structure.reload();
           bump();
-          toasts.show({
-            tone: conditions === 0 ? "warning" : "success",
-            title:
-              pool === undefined
-                ? isBoardColumn
-                  ? "Spalte angelegt."
-                  : "Pool angelegt."
-                : "Regel geändert.",
-            body:
-              conditions === 0
-                ? `„${saved.name}“ nennt noch keine Bedingung und bleibt deshalb leer. Ergänzen Sie eine, dann füllt sie sich von selbst.`
-                : `„${saved.name}“ — ${plural(conditions, "Bedingung", "Bedingungen")}, Anzeigeort: ${POOL_PLACEMENT_LABEL[saved.placement]}.`,
-          });
+          /*
+            Der Toast sagt, was der **gespeicherte** Stand trifft — nicht bloß,
+            wie viele Bedingungen er nennt (S-9 aus R-2).
+
+            Bis T-091 unterschied er „0 Bedingungen" von „n Bedingungen". Eine
+            Regel mit zwei Bedingungen, von denen eine auf einen leeren Ordner
+            zeigt, trifft nichts — und wurde als Erfolg gemeldet: Der Dialog
+            schloss zufrieden, die Spalte blieb fuer immer leer, und der Grund
+            stand nur noch dort, wohin der Benutzer gerade nicht mehr schaute.
+            Eine Warnung, die im Formular steht und beim Speichern verschwindet,
+            liest sich wie eine behobene Warnung.
+
+            Die Auskunft lag die ganze Zeit vor: `POST`/`PATCH` liefern
+            `resolved` in der Antwort. Beschrieben wird der **gespeicherte**
+            Stand und nicht der Entwurf — die beiden sind in diesem Augenblick
+            zwar gleich, aber der Dienst hat die Ordner aufgeloest und die
+            Oberflaeche nicht.
+          */
+          const savedFault = describeRuleReach(
+            describeRule(axesOf(saved), {
+              tag: (id) => {
+                const info = structure.tagInfo(id);
+                return info === undefined ? undefined : { name: info.tag.name, path: info.path };
+              },
+              folder: (id) => folders.find((entry) => entry.id === id)?.path,
+              status: (id) => statuses.find((entry) => entry.id === id)?.name,
+            }),
+            saved.resolved,
+          );
+          const title =
+            pool === undefined
+              ? isBoardColumn
+                ? "Spalte angelegt."
+                : "Pool angelegt."
+              : "Regel geändert.";
+
+          if (savedFault.kind === "empty-folder") {
+            toasts.show({
+              tone: "warning",
+              title,
+              body: `„${saved.name}“ trifft zurzeit nichts: In ${emptyFolderNames(savedFault.folders)} liegt kein Tag. Legen Sie dort ein Tag an, dann füllt sich ${isBoardColumn ? "die Spalte" : "der Pool"} von selbst.`,
+            });
+          } else {
+            toasts.show({
+              tone: conditions === 0 ? "warning" : "success",
+              title,
+              body:
+                conditions === 0
+                  ? `„${saved.name}“ nennt noch keine Bedingung und bleibt deshalb leer. Ergänzen Sie eine, dann füllt sie sich von selbst.`
+                  : `„${saved.name}“ — ${plural(conditions, "Bedingung", "Bedingungen")}, Anzeigeort: ${POOL_PLACEMENT_LABEL[saved.placement]}.`,
+            });
+          }
           onSaved?.(saved);
           onClose();
         });
@@ -508,8 +537,16 @@ export function PoolFormDialog({
         title="Erforderliche Tags"
         lead="Was ein Todo tragen muss, damit es dazugehört. Ein genannter Ordner steht für die Tags, die in ihm liegen."
       >
+        {/*
+          Vier Bedienelemente, vier Namen (S-7 aus R-2, SC 1.3.1). Bis T-091
+          hiessen zwei davon „Tags" und zwei „Ordner"; unterschieden waren sie
+          allein durch die Abschnittsueberschrift darueber — die eine
+          Vorlesehilfe beim Tabulator nicht mitliest. Ein ausgeschlossener
+          Ordner statt eines erforderlichen kehrt die Regel um.
+          Die Ueberschrift bleibt: Sie ist die Gliederung fuer Sehende.
+        */}
         <TagInput
-          label="Tags"
+          label="Erforderliche Tags"
           hideLabel
           value={tagIdsOf(rule)}
           onChange={(next) => setRule((current) => withTagIds(current, next))}
@@ -536,10 +573,11 @@ export function PoolFormDialog({
         ) : null}
 
         <FolderPicker
-          label="Ordner"
+          label="Erforderliche Ordner"
           hint="Ein Ordner steht für alles, was in ihm liegt."
-          folders={folders}
-          terms={rule}
+          source={folderSource}
+          onRetry={structure.reload}
+          selected={requiredFolderIds}
           onToggle={(folderId) => setRule((current) => toggleFolder(current, folderId))}
         />
       </FormSection>
@@ -549,7 +587,7 @@ export function PoolFormDialog({
         lead="Was ein Todo nicht tragen darf. Keines davon — dafür gibt es keine Einstellung, „ausgeschlossen“ heißt immer „keines davon“."
       >
         <TagInput
-          label="Tags"
+          label="Ausgeschlossene Tags"
           hideLabel
           value={tagIdsOf(excludedTags)}
           onChange={(next) => setExcludedTags((current) => withTagIds(current, next))}
@@ -558,10 +596,11 @@ export function PoolFormDialog({
         />
 
         <FolderPicker
-          label="Ordner"
+          label="Ausgeschlossene Ordner"
           hint="Ein ausgeschlossener Ordner schließt jedes Tag darin aus."
-          folders={folders}
-          terms={excludedTags}
+          source={folderSource}
+          onRetry={structure.reload}
+          selected={excludedFolderIds}
           onToggle={(folderId) => setExcludedTags((current) => toggleFolder(current, folderId))}
         />
       </FormSection>
@@ -596,9 +635,19 @@ export function PoolFormDialog({
 
       <FormSection
         title="Weitere Bedingungen"
-        lead="Drei Achsen, die keine Tags brauchen. Jede steht auf „Alle“, solange sie nicht einschränken soll."
+        lead="Drei Bedingungen, die keine Tags brauchen. Jede steht auf „Alle“, solange sie nicht einschränken soll."
       >
-        <StatusPicker statuses={statuses} value={statusIds} onChange={setStatusIds} />
+        <StatusPicker
+          source={statusSource}
+          onRetry={structure.reload}
+          value={statusIds}
+          onChange={setStatusIds}
+          hint={
+            statusIds.length === 0
+              ? `Nichts gewählt heißt „${POOL_STATUS_LABEL.any}“ — ${POOL_AXIS_NEUTRAL_HINT.toLowerCase()}.`
+              : `${plural(statusIds.length, "Status gewählt", "Status gewählt")} — ein Todo genügt mit einem davon; es trägt immer genau einen.`
+          }
+        />
 
         <RadioRow
           label="Erledigt"
@@ -647,22 +696,21 @@ export function PoolFormDialog({
               label: POOL_EXPORT_LABEL.exported,
               // Punkt 4 im Kopf dieser Datei, an der Stelle, an der gewaehlt
               // wird: Der Exportstatus haengt an der Buchung, nicht am Todo.
-              hint: "Todos mit mindestens einer exportierten Buchung. Nicht „vollständig abgerechnet“: Ein Todo mit einer offenen und einer exportierten Buchung erfüllt beide Bedingungen und steht in beiden Spalten.",
+              hint: `Todos mit mindestens einer exportierten Buchung. Nicht „vollständig abgerechnet“: Ein Todo mit einer offenen und einer exportierten Buchung erfüllt beide Bedingungen und steht in beiden Spalten. ${POOL_EXPORT_NOT_BILLED_HINT}`,
             },
           ]}
         />
       </FormSection>
 
-      <FormSection title="Diese Regel trifft" lead="So liest sie sich, sobald sie gespeichert ist.">
-        <RuleSummary
-          description={description}
-          showNeutral
-          size="md"
-          {...(savedReach === null ? {} : { reach: savedReach })}
-          emptyText={`Keine Bedingung — diese Regel trifft nichts. ${surface === "Spalte" ? "Die Spalte" : "Der Pool"} bleibt leer, bis eine Bedingung dazukommt.`}
-        />
-      </FormSection>
+      {/*
+        Die Warnbaender stehen **vor** der Vorschau (R-2, Abschnitt 9).
 
+        Bis T-091 kamen sie danach — also hinter der Stelle, auf die sie sich
+        beziehen. Fuer eine Vorlesehilfe ist das die falsche Richtung: Sie liest
+        erst das Ergebnis und danach die Diagnose, die es erklaert. Jetzt steht
+        die Diagnose vor dem Ergebnis, und die Live-Region unter der Vorschau
+        traegt beides in einem Satz.
+      */}
       {savedReach?.kind === "empty-folder" ? (
         <InlineMessage
           tone="warning"
@@ -674,8 +722,8 @@ export function PoolFormDialog({
         >
           In {emptyFolderNames(savedReach.folders)} liegt zurzeit kein Tag. Eine Bedingung, die auf
           keinen Tag zeigt, kann <strong>kein Todo</strong> erfüllen — die Regel trifft damit
-          nichts, auch wenn die übrigen Achsen stehen und auch dann, wenn daneben ein Tag oder ein
-          gefüllter Ordner genannt ist. Legen Sie ein Tag in{" "}
+          nichts, auch wenn die übrigen Bedingungen stehen und auch dann, wenn daneben ein Tag oder
+          ein gefüllter Ordner genannt ist. Legen Sie ein Tag in{" "}
           {savedReach.folders.length === 1 ? "diesem Ordner" : "diesen Ordnern"} an oder nennen Sie
           hier einen anderen. Ausgeschlossene Ordner sind davon nicht betroffen: Was leer ist,
           schließt nichts aus.
@@ -690,6 +738,34 @@ export function PoolFormDialog({
           Ordner liegt, greift der Ausschluss von selbst.
         </InlineMessage>
       ) : null}
+
+      <FormSection title="Diese Regel trifft" lead="So liest sie sich, sobald sie gespeichert ist.">
+        <RuleSummary
+          description={description}
+          showNeutral
+          size="md"
+          {...(savedReach === null ? {} : { reach: savedReach })}
+          emptyText={`Keine Bedingung — diese Regel trifft nichts. ${surface === "Spalte" ? "Die Spalte" : "Der Pool"} bleibt leer, bis eine Bedingung dazukommt.`}
+        />
+
+        {/*
+          Die Vorschau, vorgelesen (S-8 aus R-2, SC 4.1.3).
+
+          Sie ist die einzige Flaeche, an der die fuenf Achsen zu **einer**
+          Aussage zusammenkommen, und sie aendert sich bei jeder Wahl — fuer
+          eine Vorlesehilfe war sie damit unsichtbar.
+
+          Vorgelesen wird der **Satz**, nicht der Kasten: Eine Chipwolke als
+          Live-Region saegt bei jedem Tastendruck alles noch einmal herunter,
+          und dann schaltet der Benutzer die Vorlesehilfe ab statt der Region.
+          Aus demselben Grund wartet der Satz eine halbe Sekunde: Wer mit den
+          Pfeiltasten durch eine Optionszeile geht, beruehrt drei Werte auf dem
+          Weg zum vierten, und angesagt gehoert nur der vierte.
+        */}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {spoken}
+        </p>
+      </FormSection>
 
       {conditions === 0 ? (
         <InlineMessage

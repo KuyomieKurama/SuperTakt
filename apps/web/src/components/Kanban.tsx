@@ -13,9 +13,11 @@ import { TagChip } from "./Tag";
  * ## Warum hier nichts mehr gezogen wird
  *
  * Bis E-054 war eine Spalte ein Statuswert, und Ziehen setzte diesen Wert. Seit
- * E-054 ist eine Spalte eine **Regel über Tags**. Eine Regel lässt sich nicht
- * durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von sich aus
- * Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit
+ * E-054 ist eine Spalte eine **Regel**, seit E-055 eine über fünf Bedingungen:
+ * erforderliche Tags, ausgeschlossene Tags, Status, „Erledigt" und
+ * Exportstatus. Eine Regel lässt sich nicht durch Verschieben umkehren, ohne
+ * Tags zu setzen — und dass Takt von sich aus Tags setzt, hat der Auftraggeber
+ * ausgeschlossen. A-5.2 und I-14 sind damit
  * aufgehoben; `draggable`, `DataTransfer` und die Tastaturalternative dazu
  * (SC 2.5.7) stehen deshalb nicht mehr in dieser Datei. Was es nicht gibt,
  * braucht keine Ersatzbedienung.
@@ -79,9 +81,12 @@ export interface KanbanCardData {
    */
   readonly statusName: string;
   /**
-   * Erledigt-Kennzeichen des Todos (A-2.4). Es haengt an keiner Spalte: Eine
-   * Spalte ist eine Regel ueber Tags, und Tags sagen nichts darueber, ob etwas
-   * fertig ist. Ein Todo kann in jeder Spalte stehen und erledigt sein.
+   * Erledigt-Kennzeichen des Todos (A-2.4).
+   *
+   * Es haengt an keiner Spalte — aber eine Spalte darf seit E-055 danach
+   * **fragen**. Steht die Erledigt-Bedingung einer Regel neutral, sagt das
+   * Kennzeichen nichts ueber die Zugehoerigkeit und nur etwas ueber die
+   * Sichtbarkeit; sagt sie etwas, entscheidet es die Zugehoerigkeit mit.
    */
   readonly done: boolean;
   /**
@@ -272,9 +277,10 @@ export interface KanbanColumnProps {
    */
   readonly total?: number;
   /**
-   * Wie viele der geladenen Todos erledigt sind. Die Spalte sagt darueber
-   * nichts aus — sie ist eine Regel ueber Tags, und Tags sagen nichts ueber
-   * Fertigsein.
+   * Wie viele der geladenen Todos erledigt sind. Ob das etwas ueber die Spalte
+   * aussagt, haengt an ihrer Regel: Nur wenn deren Erledigt-Bedingung etwas
+   * sagt, ist Fertigsein hier eine Bedingung und nicht bloss eine Eigenschaft
+   * der Karten (E-055).
    */
   readonly doneCount?: number;
   /** Die Regel in Worten: warum diese Karten hier stehen (E-054). */

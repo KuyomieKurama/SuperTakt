@@ -537,6 +537,16 @@ export interface MatchesPoolCandidate {
  * die diese Frage stellt, nennt alle Achsen ausdrücklich. Kommt eine sechste
  * dazu, wird jede dieser Stellen rot — die Tabelle unten, `matchesPool`, die
  * Übersetzung nach SQL in `packages/storage` und die Auflösung im Dienst.
+ *
+ * **Wie weit „jede dieser Stellen" reicht** (T-089). Der Satz galt für die
+ * Stellen, die dieses Gebilde zusammensetzen; er galt **nicht** für die
+ * Aufrufer von {@link matchesPool}, die sich ihre Regelseite selbst aus
+ * eigenen Feldern bauten. Zwei taten das: `BoardColumnRule` in `board.ts` und
+ * der Auflöser des Add-in-Dienstes. Beide hätten eine sechste Achse
+ * stillschweigend übersprungen — R-1 hat es gemessen. `BoardColumnRule` erbt
+ * seine Regelseite deshalb seit T-089 von {@link MatchesPoolRule}, statt sie
+ * abzuschreiben. Wer einen weiteren Aufrufer schreibt, hält es genauso: Die
+ * Regelseite wird geerbt oder durchgereicht, nicht nachgebaut.
  */
 export interface PoolRuleAxes {
   /** Erforderliche Tags — Terme oder aufgelöste Tagkennungen. */
@@ -1087,6 +1097,36 @@ export const matchesPool: MatchesPool = ({
   exportState,
   unresolvedRequired,
 }) => {
+  /*
+   * Die Laufzeitwache über das eine Pflichtfeld (E-057, O-L, R-3 H-3, T-089).
+   *
+   * Der Übersetzer trägt sie für allen übersetzten Code, und seit T-088 auch
+   * für die Prüffälle in domain, storage und export. Nicht erfaßt bleiben die
+   * Nachweisskripte: die Dateien unter `scripts/` sieht kein Übersetzer, und ein
+   * fehlendes Feld liest sich dort zur Laufzeit als `undefined` — also als
+   * „nein". Die Regel träfe damit wieder das, was sie vor E-057 traf, nämlich
+   * **mehr**, und der Nachweis wäre grün.
+   *
+   * Deshalb wird hier geworfen und nicht weitergerechnet. Fail-closed ist an
+   * dieser Stelle möglich, weil kein zulässiger Aufrufer das Feld weglassen
+   * darf: Es ist keine Bedingung, sondern die Auskunft, ob eine genannte
+   * Bedingung aufgelöst werden konnte. Wer sie nicht hat, holt sie bei
+   * `PoolPort.resolveAxes` — aus einer flachen Tagmenge ist sie nicht zu
+   * gewinnen.
+   *
+   * Ein Wurf und kein `false`: „diese Regel trifft nichts" wäre eine fachliche
+   * Antwort auf eine Frage, die niemand gestellt hat. Der Aufrufer hat einen
+   * Fehler gemacht, und der gehört laut gesagt.
+   */
+  if (typeof unresolvedRequired !== 'boolean') {
+    throw new TypeError(
+      'matchesPool: Das Feld `unresolvedRequired` fehlt oder ist kein Wahrheitswert. ' +
+        'Es ist seit E-057 Pflicht und sagt, ob die erforderliche Tagachse Terme nennt, ' +
+        'die auf keinen Tag auflösen (der leere Ordner). Die Antwort liefert ' +
+        '`PoolPort.resolveAxes` zusammen mit `tagAxisIsUnresolved`.',
+    );
+  }
+
   const excluded = excludedTagIds ?? [];
   const statuses = ruleStatusIds ?? [];
   const wantedCompletion = completion ?? 'any';

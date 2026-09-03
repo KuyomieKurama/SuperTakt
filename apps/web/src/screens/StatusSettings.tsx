@@ -25,10 +25,12 @@ import { plural } from "../lib/format";
  * ## Warum das hier steht und nicht auf dem Board
  *
  * Bis E-054 war der Status die Kanban-Spalte, und die Spalten wurden dort
- * verwaltet, wo man sie sah. Seit E-054 ist eine Spalte des Boards eine **Regel
- * über Tags**; der Status blieb, was er immer auch war: eine Eigenschaft des
- * Todos. Damit hat er kein Zuhause mehr auf dem Board — er ist eine Stammgröße
- * wie die Standard-Tags, und Stammgrößen stehen in den Einstellungen.
+ * verwaltet, wo man sie sah. Seit E-054 ist eine Spalte des Boards eine
+ * **Regel**, und seit E-055 hat eine Regel fuenf Bedingungen — der Status ist
+ * eine davon. Er blieb damit, was er immer auch war: eine Eigenschaft des
+ * Todos, die eine Spalte abfragen **kann**, aber nicht mehr **ist**. Ein
+ * Zuhause auf dem Board hat er deshalb nicht mehr; er ist eine Stammgroesse
+ * wie die Standard-Tags, und Stammgroessen stehen in den Einstellungen.
  *
  * Mit dem Board-Dialog ist in T-072 das letzte Bedienelement für
  * `POST/PATCH/DELETE /todo-statuses` und `PUT /todo-statuses/order`
@@ -259,9 +261,11 @@ export function StatusSettings() {
         <InlineMessage tone="info" title="Der Status ist nicht die Kanban-Spalte">
           <p>
             Sie suchen die Statusspalten des Boards? Die gibt es dort nicht mehr. Eine Spalte des
-            Kanban-Boards ist seit der Umstellung eine <strong>Regel über Tags</strong> — welche
-            Karte wo steht, entscheiden die Tags des Todos. Diese Spalten richten Sie auf dem Board
-            selbst ein, unter „Spalten verwalten“.
+            Kanban-Boards ist seit der Umstellung eine <strong>Regel</strong> — über Tags, Status,
+            „Erledigt“ und den Exportstatus. Der Status kann also weiterhin eine Spalte
+            bestimmen; er ist nur nicht mehr <em>die</em> Spalte, sondern eine von fünf
+            Bedingungen. Diese Spalten richten Sie auf dem Board selbst ein, unter „Spalten
+            verwalten“.
           </p>
           <p>
             Der <strong>Status</strong> ist etwas anderes geblieben: eine Eigenschaft des Todos.

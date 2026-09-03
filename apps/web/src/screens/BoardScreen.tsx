@@ -3,13 +3,12 @@ import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { clearTodoDone, markTodoDone, getBoard, updatePool } from "../api/endpoints";
 import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types";
-import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FilterToggle } from "../components/FilterBar";
 import { FormDialog } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
+import { Button, Card, EmptyState, InlineMessage, LoadingBlock } from "../components/Primitives";
 import { RuleSummary } from "../components/RuleSummary";
 import { EMPTY_SUMMARY, loadExportSummaries } from "../app/exportSummary";
 import { useRefresh } from "../app/RefreshContext";
@@ -19,7 +18,7 @@ import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { useAsync } from "../app/useAsync";
 import { formatDuration, formatTime, plural } from "../lib/format";
-import { POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { POOL_PLACEMENT_SHORT, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
 import {
   axesOf,
   describeRule,
@@ -35,19 +34,29 @@ import { TodoFormDialog } from "./TodoFormDialog";
 /**
  * Takt — S-04, das Kanban-Board (A-5.1, A-5.3 bis A-5.6, E-054).
  *
- * ## Eine Spalte ist eine Regel über Tags
+ * ## Eine Spalte ist eine Regel
  *
  * Bis E-054 war eine Spalte ein Statuswert; jede Karte stand in genau einer.
- * Seitdem ist eine Spalte dieselbe Entität wie ein Pool — eine Regel über Tags
- * —, und `pool.placement` sagt, wo sie erscheint. Der Status bleibt als
- * Eigenschaft am Todo; er ist nur nicht mehr die Spalte.
+ * Seitdem ist eine Spalte dieselbe Entität wie ein Pool — eine Regel —, und
+ * `pool.placement` sagt, wo sie erscheint. Der Status bleibt als Eigenschaft
+ * am Todo; er ist nur nicht mehr die Spalte.
+ *
+ * **Und die Regel ist seit E-055 mehr als ihre Tags** (S-2 aus R-2). Sie hat
+ * fünf Bedingungen: erforderliche Tags, ausgeschlossene Tags, Status,
+ * „Erledigt" und Exportstatus. Drei davon ändern sich, ohne dass jemand ein Tag
+ * anfasst — ein Timerstart hebt „Erledigt" auf (A-2.5) und lässt die erste
+ * Buchung entstehen. Der Satz „welche Karte wo steht, entscheiden die Tags"
+ * stand bis T-091 an elf Stellen und schickte den Benutzer im wichtigsten Fall
+ * an die falsche Stelle suchen; die Fassungen dafür stehen jetzt in
+ * `lib/labels.ts` (`RULE_IS_A_RULE`, `RULE_WHAT_MOVES_A_CARD`).
  *
  * Daraus folgen drei Dinge, die diese Ansicht sichtbar machen muss:
  *
  *  1. **Kein Ziehen.** Eine Regel lässt sich nicht durch Verschieben umkehren,
  *     ohne Tags zu setzen — und das hat der Auftraggeber ausgeschlossen. A-5.2
  *     und I-14 sind aufgehoben. Wer eine Karte in eine andere Spalte bringen
- *     will, ändert ihre **Tags**; das sagt das Kartenmenü ausdrücklich.
+ *     will, ändert am Todo das, wonach die Regel fragt — meist die **Tags**,
+ *     manchmal den Status; das sagt das Kartenmenü ausdrücklich.
  *  2. **Eine Karte kann in mehreren Spalten stehen.** Das ist kein Fehler,
  *     sondern der Normalfall: Zwei zutreffende Regeln treffen beide zu. Jedes
  *     Vorkommen nennt die anderen Spalten beim Namen und hebt sie auf Wunsch
@@ -105,7 +114,6 @@ export function BoardScreen() {
   const [setupOpen, setSetupOpen] = useState(false);
   /** Offener Regel-Dialog: `null` zu, sonst anlegen (`pool` fehlt) oder ändern. */
   const [ruleForm, setRuleForm] = useState<{ readonly pool?: Pool } | null>(null);
-  const [removing, setRemoving] = useState<Pool | null>(null);
   const [createIn, setCreateIn] = useState<Pool | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [highlighted, setHighlighted] = useState<Id | null>(null);
@@ -129,17 +137,32 @@ export function BoardScreen() {
       void (wasDone ? clearTodoDone(todo.id) : markTodoDone(todo.id))
         .then(() => {
           bump();
+          /*
+            Der Toast nennt das Faktum und behauptet nichts über die Spalten
+            (S-3 aus R-2).
+
+            Bis T-091 stand hier „Die Regeln ihrer Spalten treffen unverändert
+            zu" beziehungsweise „Sie bleibt in ihren Spalten stehen". Beide
+            Sätze stammen aus der Zeit, in der eine Spalte nur an Tags hing.
+            Seit E-055 kann eine Spalte ausdrücklich nach „Erledigt" fragen —
+            dann wechselt die Karte mit genau dieser Handlung die Spalte, und
+            der Toast behauptete das Gegenteil.
+
+            Gesagt wird deshalb nur, was ohne Kenntnis der eingerichteten
+            Regeln wahr ist: das Kennzeichen, die Sichtbarkeit und die
+            Nicht-Wirkung auf Tags und Status. **Wohin** die Karte wandert,
+            sagt nach E-058 die Domäne über `poolMovementSentence` — dieselbe
+            Quelle wie im Add-in, und derselbe Satz. Bis dahin behauptet hier
+            niemand etwas, das er nicht weiß.
+          */
           toasts.show({
             tone: wasDone ? "info" : "success",
             title: wasDone ? `„${todo.title}“ ist wieder offen.` : `„${todo.title}“ ist erledigt.`,
-            // Erledigt entscheidet über die Sichtbarkeit, nicht über die
-            // Zugehörigkeit: Die Regel trifft weiter zu, die Karte wird nur
-            // ausgeblendet, solange erledigte Karten ausgeblendet sind.
             body: wasDone
-              ? "Die Regeln ihrer Spalten treffen unverändert zu — sie erscheint wieder auf dem Board."
+              ? "Tags und Status ändern sich dadurch nicht."
               : showDone
-                ? "Sie bleibt in ihren Spalten stehen, weil erledigte Karten eingeblendet sind."
-                : "Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. Ihre Tags ändern sich dadurch nicht.",
+                ? "Erledigte Karten sind eingeblendet, sie bleibt also sichtbar. Tags und Status ändern sich dadurch nicht."
+                : "Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. Tags und Status ändern sich dadurch nicht.",
           });
         })
         .catch((cause: unknown) =>
@@ -149,13 +172,47 @@ export function BoardScreen() {
     [bump, showDone, timer, toasts],
   );
 
-  const setPlacement = useCallback(
-    (pool: Pool, placement: "pool" | "board" | "both", spoken: string) => {
+  /**
+   * Den Anzeigeort einer Regel ändern — mit einem Rückweg im Toast
+   * (S-5 aus R-2).
+   *
+   * Bis T-091 war „Vom Board nehmen" auf dieser Fläche durch einen
+   * Bestätigungsdialog geschützt und in der Regelliste (S-08) dieselbe
+   * Handlung eine Sofortaktion mit Toast, ohne Rückweg. Zwei Schutzniveaus für
+   * dieselbe Handlung lehren, dass eines davon bedeutungslos ist.
+   *
+   * Aufgelöst zugunsten der **schwächeren, ehrlicheren** Fassung: Der Dialog
+   * erklärte vor allem, dass nichts verlorengeht — und das sagt ein Toast mit
+   * „Rückgängig" überzeugender, weil man es ausprobieren kann. Die Handlung ist
+   * ein `PATCH` auf ein Feld und vollständig umkehrbar; ein Dialog davor
+   * kostet jedes Mal einen Klick für einen Schaden, den es nicht gibt.
+   *
+   * `previous` wird **vor** dem Aufruf gelesen und mitgegeben, nicht hinterher
+   * aus dem neu geladenen Bestand geholt: Nach `structure.reload()` steht dort
+   * bereits der neue Wert, und „Rückgängig" führte dann zurück auf sich selbst.
+   */
+  const setPlacement = useCallback<PlacementChange>(
+    (pool, placement, spoken, undoable = true) => {
+      const previous = pool.placement;
       void updatePool(pool.id, { placement })
         .then(() => {
           structure.reload();
           bump();
-          toasts.success(spoken, `„${pool.name}“ — ${POOL_PLACEMENT_SHORT[placement]}.`);
+          toasts.show({
+            tone: "success",
+            title: spoken,
+            body: `„${pool.name}“ — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+            ...(undoable && previous !== placement
+              ? {
+                  action: {
+                    label: "Rückgängig",
+                    onSelect: () => {
+                      setPlacement({ ...pool, placement }, previous, "Anzeigeort wiederhergestellt.", false);
+                    },
+                  },
+                }
+              : {}),
+          });
         })
         .catch((cause: unknown) =>
           toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
@@ -206,10 +263,10 @@ export function BoardScreen() {
         label: "Vom Board nehmen",
         icon: "x",
         tone: "danger",
-        onSelect: () => setRemoving(column),
+        onSelect: () => setPlacement(column, "pool", "Spalte vom Board genommen."),
       },
     ],
-    [],
+    [setPlacement],
   );
 
   const createInTags = useMemo(
@@ -221,14 +278,14 @@ export function BoardScreen() {
     <section className="screen">
       <ScreenHeader
         title="Kanban"
-        lead="Jede Spalte ist eine Regel über Tags. Welche Karte wo steht, entscheiden die Tags des Todos — nicht die Maus."
+        lead={`${RULE_IS_A_RULE} ${RULE_WHAT_MOVES_A_CARD}`}
         actions={
           <>
             <FilterToggle
               label="Erledigte einblenden"
               pressed={showDone}
               onChange={setShowDone}
-              hint="Voreingestellt ausgeblendet"
+              hint="Voreingestellt ausgeblendet. Spalten, die ausdrücklich nach „Erledigt“ fragen, zeigen ihre Karten trotzdem."
             />
             <Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
               Spalten verwalten
@@ -253,6 +310,7 @@ export function BoardScreen() {
             return (
               <BoardEmptyState
                 pools={pools}
+                poolsKnown={structure.state.status === "ready"}
                 onCreate={() => setRuleForm({})}
                 onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
               />
@@ -330,6 +388,8 @@ export function BoardScreen() {
 
       <BoardSetupDialog
         open={setupOpen}
+        boardState={data.state.status}
+        onRetry={data.reload}
         columns={data.state.status === "ready" ? data.state.value.board.columns : []}
         pools={pools}
         lookup={lookup}
@@ -345,7 +405,7 @@ export function BoardScreen() {
         onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
         onRemove={(pool) => {
           setSetupOpen(false);
-          setRemoving(pool);
+          setPlacement(pool, "pool", "Spalte vom Board genommen.");
         }}
       />
 
@@ -354,25 +414,6 @@ export function BoardScreen() {
         {...(ruleForm?.pool === undefined ? {} : { pool: ruleForm.pool })}
         defaultPlacement="board"
         onClose={() => setRuleForm(null)}
-      />
-
-      <ConfirmDialog
-        open={removing !== null}
-        title="Spalte vom Board nehmen?"
-        description={
-          removing === null
-            ? ""
-            : `Die Regel „${removing.name}“ erscheint danach nicht mehr auf dem Board.`
-        }
-        consequence="Die Regel bleibt als Pool erhalten — mit Namen, Bedingungen und allem, was daran hängt. Gelöscht wird nichts, und an den Todos ändert sich nichts."
-        confirmLabel="Vom Board nehmen"
-        onConfirm={() => {
-          const pool = removing;
-          if (pool === null) return;
-          setRemoving(null);
-          setPlacement(pool, "pool", "Spalte vom Board genommen.");
-        }}
-        onCancel={() => setRemoving(null)}
       />
 
       {/*
@@ -396,6 +437,22 @@ export function BoardScreen() {
 /* ==================================================================== */
 /* Eine Spalte                                                          */
 /* ==================================================================== */
+
+/**
+ * Den Anzeigeort einer Regel ändern.
+ *
+ * Ausgeschriebener Typ, weil die Funktion sich für „Rückgängig" **selbst**
+ * aufruft: Ohne Annotation liefe der Übersetzer in eine ringförmige Ableitung
+ * und setzte `any` ein — genau die Sorte stiller Aufgabe der Prüfung, die
+ * dieses Projekt nicht will.
+ */
+type PlacementChange = (
+  pool: Pool,
+  placement: "pool" | "board" | "both",
+  spoken: string,
+  /** Bietet der Toast einen Rückweg an? Beim Rückweg selbst nicht. */
+  undoable?: boolean,
+) => void;
 
 interface BoardColumnProps {
   readonly view: BoardColumnView;
@@ -728,17 +785,32 @@ function toCard(
 export interface BoardEmptyStateProps {
   /** Vorhandene Pool-Regeln, die sich als Spalte aufnehmen lassen. */
   readonly pools: readonly Pool[];
+  /**
+   * Ist die Regelliste geladen? (B-5 aus R-2, sinngemäß.)
+   *
+   * `pools` ist leer, solange der Aufbau lädt und wenn er fehlgeschlagen ist.
+   * „Sie haben noch keine Regel" wäre dann eine Behauptung über den Bestand,
+   * die niemand belegt hat — und sie stünde ausgerechnet neben der
+   * Aufforderung, Tags zu vergeben, die der Benutzer längst hat. Fehlt die
+   * Angabe, wird der Satz weggelassen statt geraten.
+   */
+  readonly poolsKnown?: boolean;
   readonly onCreate: () => void;
   readonly onAdopt: (pool: Pool) => void;
 }
 
-export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStateProps) {
+export function BoardEmptyState({
+  pools,
+  poolsKnown = true,
+  onCreate,
+  onAdopt,
+}: BoardEmptyStateProps) {
   return (
     <div className="board-setup">
       <EmptyState
         icon="square"
         title="Das Board hat noch keine Spalte"
-        description="Seit der Umstellung ist eine Spalte eine Regel über Tags — dieselbe Art Regel wie ein Pool. Sie richten die Spalten selbst ein; Takt erfindet keine."
+        description={`Seit der Umstellung ist eine Spalte eine Regel — dieselbe Art Regel wie ein Pool, über Tags, Status, „Erledigt“ und den Exportstatus. Sie richten die Spalten selbst ein; Takt erfindet keine.`}
         action={
           <Button variant="primary" iconStart="plus" onClick={onCreate}>
             Erste Spalte einrichten
@@ -766,7 +838,9 @@ export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStatePro
           </li>
           <li>
             <strong>Nichts wird mehr gezogen.</strong> Welche Karte in welcher Spalte steht,
-            entscheiden ihre Tags. Ändern Sie die Tags eines Todos, wandert es von selbst.
+            entscheidet die Regel der Spalte — über Tags, Status, „Erledigt“ und den
+            Exportstatus. Ändert sich am Todo etwas, wonach die Regel fragt, wandert es von
+            selbst.
           </li>
         </ul>
         <div className="board-setup__actions">
@@ -779,10 +853,12 @@ export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStatePro
         </div>
       </Card>
 
-      {pools.length === 0 ? (
+      {!poolsKnown ? null : pools.length === 0 ? (
         <InlineMessage tone="info" title="Sie haben noch keine Regel">
-          Eine Spalte nennt Tags oder einen Ordner — zum Beispiel „alles unter Kunden" oder „Tag
-          Wartet". Wer noch keine Tags vergeben hat, fängt am besten damit an.
+          Eine Spalte nennt Bedingungen — zum Beispiel „alles unter Kunden“, „Tag Wartet“ oder
+          „erledigt und noch nicht abgerechnet“. Wer noch keine Tags vergeben hat, fängt am besten
+          damit an; über Status, „Erledigt“ und den Exportstatus kommt man auch ganz ohne Tag zu
+          einer Spalte.
         </InlineMessage>
       ) : (
         <Card
@@ -814,6 +890,8 @@ export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStatePro
 
 function BoardSetupDialog({
   open,
+  boardState,
+  onRetry,
   columns,
   pools,
   lookup,
@@ -824,6 +902,16 @@ function BoardSetupDialog({
   onRemove,
 }: {
   readonly open: boolean;
+  /**
+   * Woher die Spaltenliste kommt (B-5 aus R-2, sinngemäß).
+   *
+   * `columns` ist leer, solange das Board lädt **und** wenn es
+   * fehlgeschlagen ist. „Noch keine Spalte" wäre in beiden Fällen eine
+   * Behauptung über den Bestand, für die es keinen Beleg gibt — derselbe
+   * Fehler, den das Regelformular bei Ordnern und Status gemacht hat.
+   */
+  readonly boardState: "loading" | "ready" | "error";
+  readonly onRetry: () => void;
   readonly columns: readonly BoardColumnView[];
   readonly pools: readonly Pool[];
   readonly lookup: RuleLookup;
@@ -840,13 +928,28 @@ function BoardSetupDialog({
     <FormDialog
       open={open}
       title="Spalten des Boards"
-      description="Eine Spalte ist eine Regel über Tags — dieselbe Entität wie ein Pool. Was hier steht, ist eine Regel mit dem Anzeigeort „Board“."
+      description={`${RULE_IS_A_RULE} Dieselbe Entität wie ein Pool — was hier steht, ist eine Regel mit dem Anzeigeort „Board“.`}
       submitLabel="Neue Spalte anlegen"
       cancelLabel="Schließen"
       onSubmit={onCreate}
       onCancel={onClose}
     >
-      {columns.length === 0 ? (
+      {boardState === "loading" ? (
+        <LoadingBlock label="Spalten werden geladen" rows={3} />
+      ) : boardState === "error" ? (
+        <InlineMessage
+          tone="danger"
+          title="Die Spalten ließen sich nicht laden"
+          action={
+            <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={onRetry}>
+              Erneut versuchen
+            </Button>
+          }
+        >
+          Ob dieses Board Spalten hat, ist gerade nicht feststellbar. Angelegt ist deshalb nichts
+          verloren — nur ungezeigt.
+        </InlineMessage>
+      ) : columns.length === 0 ? (
         <EmptyState
           compact
           icon="square"

@@ -630,7 +630,12 @@ export function TaskPane({
 const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   title: 'Titel',
   callNumber: 'Call-Nummer',
-  statusId: 'Spalte',
+  // „Status" und nicht „Spalte" (E-054, R-2 S-4). Bis T-090 stand hier
+  // „Spalte", und das war einmal richtig: Der Status **war** die Spalte des
+  // Boards. Seit E-054 ist eine Spalte eine Regel und der Status eine
+  // Eigenschaft am Todo — wer nach einer abgewiesenen Eingabe „Spalte: …" liest,
+  // sucht auf dem Board nach einem Feld, das in diesem Formular steht.
+  statusId: 'Status',
   tagIds: 'Tags',
   tagNames: 'Neue Tags',
   note: 'Vermerk',

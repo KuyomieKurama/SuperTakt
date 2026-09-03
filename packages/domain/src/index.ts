@@ -26,6 +26,7 @@ export * from './rounding.ts';
 export * from './call-number.ts';
 export * from './tag.ts';
 export * from './board.ts';
+export * from './pool-movement.ts';
 export * from './tag-name.ts';
 export * from './time-entry.ts';
 export * from './export.ts';

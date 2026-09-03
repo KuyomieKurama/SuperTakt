@@ -215,7 +215,8 @@ export function RuleSummary({
         <p className="rule-summary__neutral">
           <Icon name="info" size={11} />
           Ohne Einschränkung: {description.neutral.map((axis) => axis.label).join(", ")}. Diese
-          Achsen lassen alles durch, was die übrigen übrig lassen — sie treffen nichts von sich aus.
+          Bedingungen lassen alles durch, was die übrigen übrig lassen — sie treffen nichts von
+          sich aus.
         </p>
       ) : null}
     </div>

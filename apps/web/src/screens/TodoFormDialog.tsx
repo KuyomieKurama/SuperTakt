@@ -206,7 +206,7 @@ export function TodoFormDialog({
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
-        hint="Der Status ist keine Kanban-Spalte — auf dem Board entscheiden die Tags. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
+        hint="Der Status ist keine Kanban-Spalte — eine Spalte ist eine Regel, und der Status ist eine von fünf Bedingungen, die sie abfragen kann. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
       />
 
       <TagInput

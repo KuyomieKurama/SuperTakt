@@ -93,6 +93,7 @@ import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
 import {
   POOL_RULE_AXIS_IDS,
+  poolMovementSentence,
   poolRuleIsEmpty,
   poolRuleMatchesNothing,
   tagAxisIsUnresolved,
@@ -1725,6 +1726,180 @@ check(
     // sein: Die Achse geht leer aus, obwohl kein leerer Ordner gezählt wurde.
     tagAxisIsUnresolved({ named: 1, resolved: 0, emptyTerms: 0 }) === true,
   'die Ableitung urteilt nicht wie E-057',
+);
+
+// ---------------------------------------------------------------------------
+section('15  Die Poolbewegung beim Timerstart (E-058) und die Sperre auf einem Ordner in einer Regel');
+// ---------------------------------------------------------------------------
+
+/*
+ * **Der Befund hinter E-058.** Der Satz „Die Karte bleibt, wo sie ist — die
+ * Spalte ändert sich dadurch nicht." stand zeichengleich in der Hauptanwendung
+ * und im Aufgabenbereich des Add-ins. Er stammt aus der Zeit, in der eine
+ * Spalte nur an Tags hing. Seit E-055 entscheidet eine Spalte auch über
+ * „Erledigt" und über den Exportstatus, und **beides ändert ein Timerstart**.
+ *
+ * Gemessen wird hier deshalb die Bewegung selbst, über die echte Route und an
+ * einem Bestand, in dem alle drei Antworten verschieden sind: Die Karte
+ * **verlässt** die Spalte `completion: 'done'`, sie **betritt** die Spalte
+ * `completion: 'open'`, und die Spalte über den **leeren Ordner** darf in
+ * keiner der drei Listen vorkommen (E-057).
+ */
+
+const startRecords = records.filter(
+  (record) => record.operationId === 'startTimer' && record.body?.data?.kind === 'started',
+);
+const reopening = startRecords.find((record) => record.body?.data?.doneCleared === true);
+const movement = reopening?.body?.data?.poolMovement;
+
+check(
+  `der Timerstart auf einem erledigten Todo liefert eine Bewegung (${startRecords.length} Starts aufgezeichnet)`,
+  reopening !== undefined && movement !== null && movement !== undefined,
+  JSON.stringify(reopening?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  `er **verlässt** die Spalte „${BOARD_COLUMNS.done}"`,
+  Array.isArray(movement?.leaves) && movement.leaves.includes(BOARD_COLUMNS.done),
+  JSON.stringify(movement?.leaves),
+);
+
+check(
+  `er **betritt** die Spalte „${BOARD_COLUMNS.openOnly}"`,
+  Array.isArray(movement?.enters) && movement.enters.includes(BOARD_COLUMNS.openOnly),
+  JSON.stringify(movement?.enters),
+);
+
+/*
+ * E-057 über die Bewegung: Eine Spalte, deren erforderlicher Ordnerterm auf
+ * keinen Tag auflöst, trifft nichts — vorher nicht und nachher nicht. Sie darf
+ * deshalb in **keiner** der drei Listen stehen. Stünde sie in `appears`, hätte
+ * der Aufrufer die Antwort von vor E-057 bekommen; stünde sie in `enters` oder
+ * `leaves`, behauptete der Dienst eine Bewegung, die die Abfrage nicht kennt.
+ */
+const barrenNames = [
+  BOARD_COLUMNS.emptyFolder,
+  BOARD_COLUMNS.emptyFolderAndStatus,
+  BOARD_COLUMNS.tagOrEmptyFolder,
+];
+const namedBarren = barrenNames.filter((name) =>
+  [...(movement?.appears ?? []), ...(movement?.enters ?? []), ...(movement?.leaves ?? [])].includes(
+    name,
+  ),
+);
+check(
+  'eine Spalte über einen leeren Ordner steht in keiner der drei Listen (E-057)',
+  movement !== undefined && movement !== null && namedBarren.length === 0,
+  namedBarren.join(', '),
+);
+
+/*
+ * Die zwei Invarianten des Wertepaares. Sie folgen aus dem Aufbau der Schleife
+ * und nicht aus einer Prüfung danach — hier steht, dass der Aufbau hält.
+ */
+check(
+  '`enters` ist eine Teilmenge von `appears`, und kein Pool steht zugleich in `enters` und `leaves`',
+  movement !== undefined &&
+    movement !== null &&
+    movement.enters.every((name) => movement.appears.includes(name)) &&
+    movement.enters.every((name) => !movement.leaves.includes(name)),
+  JSON.stringify(movement),
+);
+
+/*
+ * Die Gegenprobe, ohne die die Prüfungen darüber auch dann grün wären, wenn
+ * der Dienst **immer** eine Bewegung schickte: Derselbe Start auf einem Todo,
+ * das nicht erledigt ist und schon Buchungen hat, bewegt nichts — und
+ * `poolMovement` ist dann `null` und nicht ein Trio leerer Listen.
+ */
+const quietStart = startRecords.find((record) => record.body?.data?.doneCleared === false);
+check(
+  'ein Start, der nichts aufhebt und keine erste Buchung entstehen lässt, liefert `poolMovement: null`',
+  quietStart !== undefined && quietStart.body.data.poolMovement === null,
+  JSON.stringify(quietStart?.body?.data?.poolMovement),
+);
+
+/*
+ * **Der Satz kommt aus der Domäne** (E-058 Absatz 2). Gemessen wird an
+ * derselben Bewegung, die soeben über die Leitung kam: Was der Dienst liefert,
+ * muss die reine Funktion in einen Satz übersetzen können, und der Satz muss
+ * die Spalten nennen, um die es geht.
+ *
+ * Zugleich die eine Änderung gegenüber `reopen.ts`: „Poolregel" heißt jetzt
+ * „Regel", weil eine Regel fünf Achsen hat und nicht nur Tags.
+ */
+const futureSentence = poolMovementSentence(movement ?? { appears: [], enters: [], leaves: [] }, 'future', 'reopen');
+const pastSentence = poolMovementSentence(movement ?? { appears: [], enters: [], leaves: [] }, 'past', 'reopen');
+check(
+  'der Wiederöffnen-Satz nennt beide Richtungen und kommt aus der Domäne',
+  futureSentence.includes(BOARD_COLUMNS.openOnly) &&
+    futureSentence.includes(BOARD_COLUMNS.done) &&
+    futureSentence.startsWith('Es erscheint dann wieder in ') &&
+    pastSentence.startsWith('Es ist zurück in '),
+  `${futureSentence} || ${pastSentence}`,
+);
+
+check(
+  'der Satz für „keine Regel trifft" spricht von der **Regel** und nicht mehr von der Poolregel (E-058)',
+  poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen') ===
+    'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool.' &&
+    poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'past', 'reopen') ===
+      'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool.',
+  poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen'),
+);
+
+check(
+  'die reine Buchung bekommt einen eigenen Satz — ohne „wieder", und `null`, wenn nichts geschieht',
+  poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking') ===
+    'Es erscheint dann in dem Pool „B“.' &&
+    poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'past', 'booking') ===
+      'Es steht jetzt in dem Pool „B“.' &&
+    poolMovementSentence({ appears: ['A'], enters: [], leaves: [] }, 'future', 'booking') === null,
+  String(poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking')),
+);
+
+/*
+ * **Ein Ordner in einer Regel wird nicht gelöscht** (R-1 Befund 1).
+ *
+ * Löschbar war ohnehin nur ein leerer Ordner — und der leere Ordner in einer
+ * erforderlichen Achse ist genau der Fall aus E-057. `pool_rule.folder_id`
+ * stand dabei auf CASCADE: Die Regel verlor ihren Term still und traf danach
+ * mehr, als der Benutzer gesagt hatte.
+ *
+ * Gemessen wird der Statuscode, der Schlüssel **und** die Auskunft darüber,
+ * welche Regeln betroffen sind — ohne sie ist die Sperre bei zwanzig Regeln
+ * eine Suche.
+ */
+const folderDeletes = records.filter((record) => record.operationId === 'deleteTagFolder');
+const blockedFolder = folderDeletes.find((record) => record.status === 409);
+const freeFolder = folderDeletes.find((record) => record.status === 204);
+
+check(
+  `ein Ordner, den eine Regel nennt, wird mit 409 \`tag_in_use\` abgewiesen (${folderDeletes.length} Löschversuche)`,
+  blockedFolder !== undefined && blockedFolder.body?.error?.code === 'tag_in_use',
+  `${blockedFolder?.status ?? '—'} ${JSON.stringify(blockedFolder?.body ?? null).slice(0, 200)}`,
+);
+
+const ruleDetails = (blockedFolder?.body?.error?.details ?? []).filter(
+  (entry) => entry.code === 'pool_rule',
+);
+check(
+  `die Abweisung nennt die Regeln beim Namen und mit Kennung (${ruleDetails.length})`,
+  ruleDetails.length >= 1 &&
+    ruleDetails.every((entry) => typeof entry.field === 'string' && entry.field.length > 0) &&
+    ruleDetails.some((entry) => String(entry.message).includes(BOARD_COLUMNS.emptyFolderAndStatus)),
+  JSON.stringify(ruleDetails),
+);
+
+/*
+ * Die Gegenprobe: Ein Ordner, den keine Regel nennt, lässt sich weiterhin
+ * löschen. Ohne sie wäre die Prüfung darüber auch an einer Fassung grün, die
+ * **jeden** Ordner sperrt.
+ */
+check(
+  'ein Ordner ohne Regel und ohne Inhalt wird weiterhin gelöscht (204)',
+  freeFolder !== undefined,
+  folderDeletes.map((record) => record.status).join(', '),
 );
 
 // ---------------------------------------------------------------------------

@@ -113,6 +113,42 @@ const SHOWCASE_STATUSES: Readonly<Record<string, string>> = {
   "status-review": "Prüfung",
 };
 
+/**
+ * Die Ordner als Liste, wie sie die Ordnerauswahl bekommt (T-091).
+ *
+ * Zwoelf statt zwei: Erst ab acht Eintraegen zeigt `FolderPicker` sein
+ * Suchfeld (A-4.4), und ein Zustand, den die Musterseite nicht erreicht, wird
+ * nicht abgenommen, sondern geglaubt. Die zusaetzlichen Namen sind erfunden und
+ * enthalten weder Kunden- noch Call-Daten.
+ */
+export const SHOWCASE_FOLDER_OPTIONS: ReadonlyArray<{
+  readonly id: string;
+  readonly path: readonly string[];
+}> = [
+  { id: "folder-nord", path: ["Kunden", "Nord"] },
+  { id: "folder-ost", path: ["Kunden", "Ost"] },
+  { id: "folder-sued", path: ["Kunden", "Süd"] },
+  { id: "folder-west", path: ["Kunden", "West"] },
+  { id: "folder-ost-wartung", path: ["Kunden", "Ost", "Wartung"] },
+  { id: "folder-ost-projekte", path: ["Kunden", "Ost", "Projekte"] },
+  { id: "folder-ablage", path: ["Ablage"] },
+  { id: "folder-ablage-alt", path: ["Ablage", "Altbestand"] },
+  { id: "folder-intern", path: ["Intern"] },
+  { id: "folder-intern-it", path: ["Intern", "IT"] },
+  { id: "folder-intern-hr", path: ["Intern", "Personal"] },
+  { id: "folder-lieferanten", path: ["Lieferanten", "Nord"] },
+];
+
+/** Die Statuswerte als Liste, wie sie die Statusauswahl bekommt (T-091). */
+export const SHOWCASE_STATUS_OPTIONS: ReadonlyArray<{
+  readonly id: string;
+  readonly name: string;
+}> = [
+  { id: "status-progress", name: "In Arbeit" },
+  { id: "status-review", name: "Prüfung" },
+  { id: "status-waiting", name: "Wartet auf Rückmeldung" },
+];
+
 export const SHOWCASE_RULE_LOOKUP: RuleLookup = {
   tag: (id) => SHOWCASE_TAGS[id],
   folder: (id) => SHOWCASE_FOLDERS[id],
@@ -131,8 +167,8 @@ export const NEUTRAL_RULE: RuleAxes = {
 };
 
 /**
- * Eine Spalte des Boards — seit E-054 eine **Regel ueber Tags**, dieselbe
- * Entitaet wie ein Pool.
+ * Eine Spalte des Boards — seit E-054 eine **Regel** und dieselbe Entitaet wie
+ * ein Pool, seit E-055 eine Regel ueber fuenf Bedingungen.
  */
 export interface BoardColumn {
   readonly id: string;

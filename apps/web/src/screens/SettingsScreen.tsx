@@ -614,7 +614,7 @@ function DefaultTagSettings() {
           placeholder="Tag suchen …"
           hint={
             value.length === 0
-              ? "Kein Standard-Tag gesetzt. Neue Todos entstehen ohne Tags — damit passt zunächst keine Poolregel auf sie."
+              ? "Kein Standard-Tag gesetzt. Neue Todos entstehen ohne Tags — Regeln, die Tags verlangen, treffen sie damit zunächst nicht."
               : `${plural(value.length, "Tag wird", "Tags werden")} an jedes neue Todo gehängt.`
           }
         />

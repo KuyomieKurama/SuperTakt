@@ -267,12 +267,18 @@ const seedTags = () => {
  * benutzen — und der Bestand aus `DEFAULT_POOLS` soll dabei unberührt bleiben,
  * damit die Prüfungen von T-038 weiterhin dasselbe messen wie zuvor.
  *
- * @param {{ serializeTransactions?: boolean, enforceUniqueTagName?: boolean, pools?: readonly object[] }} [options]
+ * `clearDoneFailure` ist der dritte abschaltbare Teil und seit T-090 da: Er
+ * lässt `TodoPort.clearDone` einen fachlichen Fehlschlag liefern. Ohne ihn
+ * ließe sich nicht zeigen, dass ein Fehlschlag beim Wiederöffnen die bereits
+ * geschriebene Buchung **mitnimmt** (R-1 Befund 2).
+ *
+ * @param {{ serializeTransactions?: boolean, enforceUniqueTagName?: boolean, pools?: readonly object[], clearDoneFailure?: { code: string, message: string } | null }} [options]
  */
 export const createFakeStore = (options = {}) => {
   const serializeTransactions = options.serializeTransactions ?? true;
   const enforceUniqueTagName = options.enforceUniqueTagName ?? true;
   const pools = options.pools ?? DEFAULT_POOLS;
+  const clearDoneFailure = options.clearDoneFailure ?? null;
 
   const state = {
     todos: new Map(),
@@ -333,6 +339,17 @@ export const createFakeStore = (options = {}) => {
       },
 
       clearDone: async (todoId, now) => {
+        /*
+         * Der Fehlschlag auf Bestellung (T-090, R-1 Befund 2).
+         *
+         * Im Betrieb kommt er aus `attempt()` im Adapter — eine gesperrte
+         * Datei, eine volle Platte, ein Todo, das es zwischen `load` und
+         * `UPDATE` nicht mehr gibt. Er ist selten und deshalb nie gemessen
+         * worden; gerade darum steht er hier als Schalter. Was nicht
+         * herstellbar ist, wird nicht geprüft.
+         */
+        if (clearDoneFailure !== null) return { ok: false, error: clearDoneFailure };
+
         const todo = state.todos.get(todoId);
         if (todo === undefined) {
           return { ok: false, error: { code: 'not_found', message: 'Nicht vorhanden.' } };
@@ -395,7 +412,25 @@ export const createFakeStore = (options = {}) => {
     },
 
     pools: {
-      list: async () => pools,
+      /*
+       * Das Flächenargument wird **ausgewertet** und nicht verschluckt (T-090).
+       *
+       * `PoolPort.list` nimmt seit E-054 `'pool'`, `'board'` oder `'all'` und
+       * setzt ohne Argument `'pool'` ein — eine reine Board-Spalte ist damit für
+       * jeden Aufrufer unsichtbar, der nichts sagt. Genau daran hing R-1
+       * Befund 3 / R-2 B-4, und genau deshalb hat es niemand gemessen: Die
+       * Attrappe gab bis T-090 unbesehen **alle** Regeln zurück. Eine Attrappe,
+       * die großzügiger ist als der Betrieb, macht den Fehler unsichtbar, den
+       * sie zeigen soll.
+       *
+       * `both` steht in beiden Flächen. Das ist keine Bequemlichkeit, sondern
+       * die Bedeutung des Wertes: Die Regel erscheint an beiden Orten.
+       */
+      list: async (shownOn = 'pool') =>
+        pools.filter((pool) => {
+          if (shownOn === 'all') return true;
+          return pool.placement === shownOn || pool.placement === 'both';
+        }),
 
       // Die Auflösung, die im Betrieb SQL ist: Regelteile der Art `folder`
       // ziehen die Tags aller Unterordner mit (A-4.3), Regelteile der Art
@@ -852,6 +887,104 @@ export const E057_POOLS = Object.freeze([
     statusIds: [],
     completion: 'any',
     exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+]);
+
+// ---------------------------------------------------------------------------
+// T-090 — der Bestand für die Anzeigefläche (E-054, E-056)
+// ---------------------------------------------------------------------------
+
+/**
+ * Die Kennungen des Flächen-Bestands. Erfunden, UUID Fassung 7, wie alles hier.
+ */
+export const PLACEMENT_POOL = Object.freeze({
+  nurPool:  '01931f4e-0000-7000-8000-0000000043f1',
+  nurBoard: '01931f4e-0000-7000-8000-0000000043f2',
+  beides:   '01931f4e-0000-7000-8000-0000000043f3',
+});
+
+/**
+ * Dieselbe Regel, dreimal — einmal je Anzeigeort (R-1 Befund 3, R-2 B-4).
+ *
+ * Ein **eigener** Poolsatz, aus demselben Grund wie {@link E057_POOLS}: Die
+ * Namenslisten, die T-078, E-056 und T-084 Zeichen für Zeichen festhalten,
+ * sollen weiterhin dasselbe messen.
+ *
+ * Der Zuschnitt ist so gewählt, dass allein der Anzeigeort den Unterschied
+ * macht. Alle drei Regeln fordern **wortgleich dieselben** Tags (den Ordner
+ * „Wartung", mit Unterordnern); die beiden Erledigt-Regeln sind bis auf
+ * `placement` gleich. Fragt der Dienst die falsche Fläche ab, fehlt genau eine
+ * Zeile im Ergebnis, und die Gegenprobe daneben steht noch da:
+ *
+ * | Regel | `placement` | `list()` (Vorgabe `'pool'`) | `list('all')` |
+ * |---|---|---|---|
+ * | `nurPool` — „Wartung Nord" | `pool` | ja | ja |
+ * | `nurBoard` — die Abrechnungsliste | `board` | **nein** | ja |
+ * | `beides` — dieselbe Liste als Pool **und** Spalte | `both` | ja | ja |
+ *
+ * Die mittlere Zeile ist der Fall, mit dem E-056 sich begründet: „erledigt und
+ * noch nicht abgerechnet", benutzt als Abrechnungsliste. Wer sie über das Board
+ * anlegt, bekommt `placement: 'board'` als Vorgabe — also die naheliegende Wahl
+ * für genau diese Spalte, und bis T-090 die einzige, bei der der
+ * Aufgabenbereich schwieg.
+ *
+ * Die untere Zeile ist die Gegenprobe, die den Befund erst zu einem Befund
+ * macht: **dieselbe** Regel mit `placement: 'both'` wurde genannt. Der
+ * Unterschied lag nie an der Regel, sondern an einer Einstellung, die mit der
+ * Frage nichts zu tun hat.
+ */
+export const PLACEMENT_POOLS = Object.freeze([
+  {
+    // Die Kontrolle: eine gewöhnliche Poolregel ohne Erledigt-Achse. Sie wird
+    // in jeder Fassung genannt und verschwindet durch keine Buchung.
+    id: PLACEMENT_POOL.nurPool,
+    name: 'Wartung Nord',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 0,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Die Abrechnungsliste aus E-056, angelegt über das Board: erledigt **und**
+    // noch nicht abgerechnet, sichtbar nur dort.
+    id: PLACEMENT_POOL.nurBoard,
+    name: 'Erledigt, noch nicht abgerechnet',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'board',
+    position: 1,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'done',
+    exportState: 'open',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Dieselbe Regel, an beiden Orten sichtbar. Sie wurde schon vor T-090
+    // genannt — daran ist der Befund zu erkennen: zwei Verhalten für eine
+    // Wirkung, unterschieden durch den Anzeigeort.
+    id: PLACEMENT_POOL.beides,
+    name: 'Erledigte Wartung (Pool und Board)',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'both',
+    position: 2,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'done',
+    exportState: 'open',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   },
