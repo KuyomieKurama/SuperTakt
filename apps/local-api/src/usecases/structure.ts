@@ -24,6 +24,7 @@ import type {
   PoolPlacement,
   PoolCompletionFilter,
   PoolExportFilter,
+  PoolMatchMode,
   PoolResolution,
   PoolSurface,
   PoolTagTerm,
@@ -34,6 +35,7 @@ import type {
   TagFolderId,
   TagId,
   TagTree,
+  Theme,
   TimeEntry,
   TimeEntryId,
   Todo,
@@ -279,7 +281,7 @@ export function listPools(
 export interface PoolInput {
   readonly name: string;
   /** Wie die **erforderlichen** Tags verknüpft sind. Gilt für keine andere Achse. */
-  readonly matchMode: 'any' | 'all';
+  readonly matchMode: PoolMatchMode;
   readonly includeSubfolders: boolean;
   /** Wo die Regel erscheint (E-054). Ohne Angabe ein Pool. */
   readonly placement?: PoolPlacement;
@@ -722,7 +724,7 @@ export interface SettingsUpdate {
   readonly activeExportTemplateId?: ExportTemplateId | null;
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
-  readonly theme?: 'system' | 'light' | 'dark';
+  readonly theme?: Theme;
 }
 
 /**

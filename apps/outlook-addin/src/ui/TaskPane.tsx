@@ -22,6 +22,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+/*
+ * Der Satz über die Bewegung kommt seit T-092 aus der Domäne und nicht mehr aus
+ * dem Add-in (E-058 Absatz 2). `PoolMovement` ist derselbe Typ, den der Dienst
+ * ausrechnet und den `poolMovementSentence` liest — eine Zweitschrift im
+ * Aufgabenbereich wäre der Anfang zweier verschiedener Sätze für dieselbe
+ * Handlung.
+ */
+import { poolMovementSentence, type PoolMovement } from '@takt/domain';
+
 import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
 import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
@@ -33,10 +42,8 @@ import {
 } from '../duplicate/rule.ts';
 import {
   bookingOutcome,
-  bookingPoolSentence,
   reopenOutcome,
   reopenPreview,
-  type PoolMovement,
   type ReopenNotice,
 } from '../duplicate/reopen.ts';
 import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
@@ -690,7 +697,12 @@ function Failure({
  * Zeile andeutet.
  */
 function MovementNote({ movement }: { readonly movement: PoolMovement }) {
-  const sentence = bookingPoolSentence(movement, 'future');
+  /*
+   * Anlass `'booking'` und nicht `'reopen'`: Hier wird nichts aufgehoben. Die
+   * Überladung gibt dafür `string | null` zurück — und dieses `null` ist die
+   * Auskunft, nicht ihr Fehlen.
+   */
+  const sentence = poolMovementSentence(movement, 'future', 'booking');
   if (sentence === null) return null;
 
   /*
@@ -732,13 +744,17 @@ function BookedOutcome({
 }
 
 /**
- * Die drei Wirkungen einer Buchung auf ein erledigtes Todo — und die eine
- * Nicht-Wirkung (A-2.5, I-05, E-023).
+ * Die drei Wirkungen einer Buchung auf ein erledigtes Todo (A-2.5, I-05).
  *
  * **Eine** Darstellung für vorher und nachher. Der Aufgabenbereich ist schmal;
  * eine Aufzählung von drei kurzen Zeilen ist darin lesbarer als ein Absatz und
- * lässt vor allem sehen, dass es **drei** sind. Der Satz zur Spalte steht
- * abgesetzt darunter, weil er das Gegenteil sagt: Hier ändert sich nichts.
+ * lässt vor allem sehen, dass es **drei** sind.
+ *
+ * Unter der Aufzählung stand bis T-092 eine vierte Zeile über das, was sich
+ * **nicht** ändert („Die Karte bleibt, wo sie ist"). Sie ist ersatzlos weg
+ * (E-058 Absatz 2): Der dritte Punkt sagt vollständig, was sich bewegt, und
+ * eine Zeile daneben, die das Gegenteil behauptete, war seit E-055 schlicht
+ * falsch.
  */
 function ReopenAnnouncement({
   notice,
@@ -754,7 +770,6 @@ function ReopenAnnouncement({
           <li key={effect}>{effect}</li>
         ))}
       </ul>
-      <p className="effects__aside">{notice.aside}</p>
     </Callout>
   );
 }

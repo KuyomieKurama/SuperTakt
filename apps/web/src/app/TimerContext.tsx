@@ -1,3 +1,4 @@
+import { poolMovementSentence } from "@takt/domain";
 import {
   createContext,
   useCallback,
@@ -19,7 +20,7 @@ import {
   stopTimer,
   touchTimerHeartbeat,
 } from "../api/endpoints";
-import type { Id, OrphanedTimerView, RunningTimerView } from "../api/types";
+import type { Id, OrphanedTimerView, PoolMovement, RunningTimerView } from "../api/types";
 import { FormDialog } from "../components/FormDialog";
 import { NoteField } from "../components/NoteField";
 import {
@@ -27,12 +28,9 @@ import {
   formatDuration,
   formatQuarters,
   formatStopwatch,
-  joinGerman,
 } from "../lib/format";
-import { CARD_STAYS } from "../lib/labels";
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
-import { useStructure } from "./StructureContext";
 import { useToasts } from "./ToastContext";
 
 /**
@@ -120,7 +118,6 @@ interface StartConflict {
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const toasts = useToasts();
   const { bump } = useRefresh();
-  const { poolsContaining } = useStructure();
 
   const [running, setRunning] = useState<RunningTimerView | null>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -234,67 +231,87 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* Nach dem Start                                                    */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Was der Start bewirkt hat — in **einem** Toast und aus **einer** Quelle
+   * (A-2.5, I-05, E-058).
+   *
+   * ## Die Oberflaeche fragt nicht mehr nach, sie zeigt
+   *
+   * Bis T-094 stand hier ein zweiter Weg zur selben Auskunft: `poolsContaining`
+   * rief je Pool `/pools/{id}/todos` ab und setzte den Satz hier zusammen. Er
+   * hatte drei Fehler, und alle drei sind mit E-058 weg.
+   *
+   * 1. Er kannte nur, was **hinzukommt**. Eine Regel „nur Erledigte" verliert
+   *    das Todo mit genau diesem Start; davon stand nichts im Satz.
+   * 2. Er lief erst **nach** der Handlung und sah damit nur den Zustand
+   *    danach — „erscheint" und „erscheint schon vorher" waren nicht zu
+   *    unterscheiden.
+   * 3. Er war die zweite Fassung eines Satzes, den der Aufgabenbereich des
+   *    Add-ins ebenfalls sagt. Zwei Fassungen einer Auskunft laufen
+   *    auseinander; sie haben es getan (Befund C-24, B-2).
+   *
+   * Jetzt bringt `POST /timer/start` die Bewegung als `poolMovement` mit, und
+   * den Satz bildet `poolMovementSentence` aus `@takt/domain` — dieselbe
+   * Funktion, die das Add-in aufruft.
+   *
+   * ## Zwei Anlaesse, ein Aufruf
+   *
+   * `doneCleared` entscheidet, **welche Frage** an dieselben drei Listen
+   * gestellt wird: `'reopen'` erzaehlt vom Wiedererscheinen eines erledigten
+   * Todos, `'booking'` von der ersten abgeschlossenen Buchung, die eine Spalte
+   * „noch nicht abgerechnet" fuellt. Der zweite Fall war bis T-094 gar nicht
+   * sichtbar (O-G): Der Dienst rechnete ihn, niemand zeigte ihn.
+   *
+   * ## `null` heisst: keine Flaeche
+   *
+   * Meldet der Dienst keine Bewegung, steht kein Poolsatz da — kein leerer,
+   * kein beruhigender. Ein `?? ""` haette dem Toast eine Zeile mit null Zeichen
+   * gegeben; ausgelassen wird die Zeile ganz.
+   */
   const announceStart = useCallback(
-    (todoId: Id, todoTitle: string, doneCleared: boolean) => {
+    (
+      todoId: Id,
+      todoTitle: string,
+      doneCleared: boolean,
+      poolMovement: PoolMovement | null,
+    ) => {
       refresh();
       bump();
 
       if (doneCleared) setReactivated((previous) => new Set(previous).add(todoId));
 
+      const movementSentence =
+        poolMovement === null
+          ? null
+          : poolMovementSentence(poolMovement, "past", doneCleared ? "reopen" : "booking");
+
       if (!doneCleared) {
         toasts.show({
           tone: "success",
           title: "Timer gestartet.",
-          body: `Er läuft auf „${todoTitle}“.`,
+          body: `Er läuft auf „${todoTitle}“.${movementSentence === null ? "" : ` ${movementSentence}`}`,
         });
         return;
       }
 
-      // A-2.5, I-05: Das Kennzeichen ist gefallen — der Status nicht, und die
-      // Tags auch nicht. Seit E-054 haengt die Kanban-Spalte an den Tags, also
-      // steht die Karte danach in denselben Spalten wie zuvor; sie war nur
-      // ausgeblendet. Beides wird ausgesprochen — der Benutzer sucht die Karte
-      // sonst an einer anderen Stelle (T-005n, Abschnitt 2, Schritt 8).
       /*
-        Befund C-24: Derselbe Satz stand hier und im Add-in
-        (`duplicate/reopen.ts`) in zwei Fassungen. Der Fall „kein Pool trifft"
-        war bereits zeichengleich — die Absicht war da, nur nicht durchgezogen.
-        Jetzt sind es beide: die Aufzaehlung ueber `joinGerman` („A, B und C"
-        statt „A und B und C") und der Kartensatz ueber `CARD_STAYS`. Der
-        Halbsatz zur Spalte macht E-023 aussprechbar, statt vorauszusetzen,
-        dass jemand weiss, was „die Karte" mit „der Spalte" zu tun hat.
+        A-2.5: Das Kennzeichen ist gefallen — der Status nicht (E-023) und die
+        Tags auch nicht. Der Titel sagt, was geschehen ist; der Rumpf sagt, wo
+        es sichtbar wird. Ohne beides sucht der Benutzer die Karte an der
+        falschen Stelle (T-005n, Abschnitt 2, Schritt 8).
 
-        Der Fehlschlag der Pool-Abfrage bleibt nicht stumm: Die drei Wirkungen
-        aus A-2.5 sind eingetreten, gleich ob Takt die Pools nennen kann. Sie
-        zu verschweigen, weil eine Nebenauskunft fehlt, waere der teurere
-        Fehler — das Kennzeichen ist dann trotzdem weg.
+        Der Rueckweg steht unabhaengig davon da, ob es einen Poolsatz gibt: Das
+        Kennzeichen ist auch dann weg, wenn ueber die Bewegung nichts zu sagen
+        ist, und „Rueckgaengig" ist die Antwort darauf.
       */
-      const announce = (poolText: string): void => {
-        toasts.show({
-          tone: "success",
-          title: `Timer gestartet. „${todoTitle}“ ist wieder offen.`,
-          body: `${poolText} ${CARD_STAYS}`,
-          action: { label: "Rückgängig", onSelect: () => undoReactivation(todoId, todoTitle) },
-        });
-      };
-
-      void poolsContaining(todoId)
-        .then((pools) => {
-          announce(
-            pools.length === 0
-              ? "Auf seine Tags passt derzeit keine Poolregel, es erscheint also in keinem Pool."
-              : `Es ist zurück in ${pools.length === 1 ? "dem Pool" : "den Pools"} ${joinGerman(
-                  pools.map((name) => `„${name}“`),
-                )}.`,
-          );
-        })
-        .catch(() => {
-          announce(
-            "In welchen Pools es jetzt erscheint, ließ sich gerade nicht abfragen — die Todo-Liste zeigt es.",
-          );
-        });
+      toasts.show({
+        tone: "success",
+        title: `Timer gestartet. „${todoTitle}“ ist wieder offen.`,
+        ...(movementSentence === null ? {} : { body: movementSentence }),
+        action: { label: "Rückgängig", onSelect: () => undoReactivation(todoId, todoTitle) },
+      });
     },
-    [bump, poolsContaining, refresh, toasts, undoReactivation],
+    [bump, refresh, toasts, undoReactivation],
   );
 
   /* ---------------------------------------------------------------- */
@@ -312,7 +329,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             setConflict({ todoId, todoTitle, runningTitle: result.runningTodoTitle });
             return;
           }
-          announceStart(todoId, todoTitle, result.doneCleared);
+          announceStart(todoId, todoTitle, result.doneCleared, result.poolMovement);
         } catch (cause) {
           toasts.failure("Der Timer ließ sich nicht starten", errorMessage(cause));
         }
@@ -439,7 +456,12 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           return;
         }
         setConflict(null);
-        announceStart(pending.todoId, pending.todoTitle, result.doneCleared);
+        announceStart(
+          pending.todoId,
+          pending.todoTitle,
+          result.doneCleared,
+          result.poolMovement,
+        );
       } catch (cause) {
         setDialogError(errorMessage(cause));
       } finally {

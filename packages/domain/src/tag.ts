@@ -124,6 +124,28 @@ export type PoolTagTerm =
 export type PoolRuleTerm = PoolTagTerm;
 
 /**
+ * Wie die **erforderlichen** Tags einer Regel verknüpft sind (A-3.2, T-076).
+ *
+ *   `any` — das Todo trägt mindestens eines davon. **Vorgabe**, und der Wert
+ *           jeder Regel, die vor T-076 ohne ausdrückliche Wahl entstand.
+ *   `all` — das Todo trägt alle davon.
+ *
+ * Gilt für **keine andere Achse**: Ausgeschlossene Tags sind immer „keines
+ * davon", Status immer „einer von diesen". Ein `matchMode` an einer der beiden
+ * wäre eine Wahl ohne Bedeutung.
+ *
+ * **Warum das ein benannter Typ ist** (T-091 Frage 1, T-093). `'any' | 'all'`
+ * stand ausgeschrieben an fünf Stellen in vier Paketen — in der Domäne zweimal,
+ * in der Speicherung, im lokalen Dienst und in der Oberfläche, die daraus ihre
+ * Beschriftungen ableitet. Fünf Abschriften derselben Aufzählung sind fünf
+ * Gelegenheiten, eine dritte Verknüpfungsart an vier Stellen zu ergänzen und an
+ * der fünften zu vergessen. Der Name macht daraus eine Quelle: Wer sie
+ * erweitert, bekommt überall dort einen Übersetzerfehler, wo die Fälle
+ * aufgezählt werden.
+ */
+export type PoolMatchMode = 'any' | 'all';
+
+/**
  * Die Erledigt-Achse einer Regel (A-2.4, E-023, T-076).
  *
  *   `any`  — Erledigt spielt für die Zugehörigkeit keine Rolle. Neutralwert.
@@ -280,7 +302,7 @@ export interface Pool extends PoolRuleAxes {
    * Gilt ausschließlich für `rule`. Die ausgeschlossenen Tags sind immer
    * „keines davon", die Status immer „einer von diesen".
    */
-  readonly matchMode: 'any' | 'all';
+  readonly matchMode: PoolMatchMode;
   /**
    * Bei Termen der Art `folder` zählen auch die Tags in dessen Unterordnern,
    * beliebig tief. Gilt für **beide** Taglisten — eine getrennte Tiefe je
@@ -426,7 +448,7 @@ export interface MatchesPoolRule {
   /** Die **erforderlichen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
   readonly ruleTagIds: readonly TagId[];
   /** Wie `ruleTagIds` verknüpft ist. Gilt für keine andere Achse. */
-  readonly matchMode: 'any' | 'all';
+  readonly matchMode: PoolMatchMode;
   /** Die **ausgeschlossenen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
   readonly excludedTagIds?: readonly TagId[] | undefined;
   /** Die Status der Regel. Leer oder weggelassen heißt „Alle". */

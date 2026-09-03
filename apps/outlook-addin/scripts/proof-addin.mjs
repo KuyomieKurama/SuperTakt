@@ -44,11 +44,8 @@ import { detectCallNumber } from '../src/callnumber/detect.ts';
 import { runPattern } from '../src/callnumber/run.ts';
 import { decideLookup, describeOffers, offerMovement } from '../src/duplicate/rule.ts';
 import {
-  CARD_STAYS,
   REOPEN_HINT,
   bookingOutcome,
-  bookingPoolSentence,
-  poolSentence,
   reopenOutcome,
   reopenPreview,
 } from '../src/duplicate/reopen.ts';
@@ -122,6 +119,7 @@ import {
   checkCallNumber,
   matchesPool,
   mayLookUpDuplicates,
+  poolMovementSentence,
   tagNameKey,
 } from '@takt/domain';
 
@@ -261,6 +259,103 @@ check('C-03/A-2.5: kein Schalter für das Aufheben von „Erledigt" im Add-in', 
   const pane = readFileSync(path.join(srcRoot, 'ui', 'TaskPane.tsx'), 'utf8');
   const bookingCheckbox = /type="checkbox"/.test(pane);
   assert.equal(bookingCheckbox, false, 'im Aufgabenbereich steht wieder ein Kästchen');
+});
+
+/**
+ * Quelltext ohne seine Kommentare — für die statischen Prüfungen darunter.
+ *
+ * Dieselbe Hausregel wie beim Schalter aus C-03 ein paar Zeilen weiter oben:
+ * Der Name **darf** im Kommentar stehen, denn die Begründung, warum es etwas
+ * nicht mehr gibt, gehört in den Quelltext. Verboten ist die **Verwendung**.
+ * Ohne diese Trennung könnte man einen gestrichenen Satz nicht mehr erklären,
+ * ohne den eigenen Nachweispfad rot zu machen.
+ *
+ * Zeilenkommentare nur in TypeScript: In CSS ist `//` kein Kommentar.
+ */
+const sourceWithoutComments = (file) => {
+  const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  return /\.tsx?$/.test(file) ? text.replace(/\/\/.*$/gm, '') : text;
+};
+
+check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => {
+  /*
+   * Der Befund, der zu E-058 geführt hat, in einer statischen Zeile.
+   *
+   * Bis T-092 stand der Satz zweimal im Baum — einmal in
+   * `apps/outlook-addin/src/duplicate/reopen.ts`, einmal zeichengleich in
+   * `apps/web/src/lib/labels.ts` —, und beide Fassungen sind auseinandergelaufen:
+   * Die eine kannte `leaves` nicht, die andere nannte eine reine Board-Spalte
+   * „Pool". Zwei Abschriften desselben Textes sind zwei Gelegenheiten,
+   * Verschiedenes zu behaupten.
+   *
+   * Geprüft wird deshalb nicht, ob der Wortlaut stimmt — das misst die Domäne —,
+   * sondern ob es im Add-in überhaupt eine **zweite Stelle** gibt, die ihn
+   * formuliert. Die Satzanfänge stehen als Muster da, weil sie sich zwischen
+   * beiden Wortlauten (vor und nach T-093) nicht geändert haben; wer den Satz
+   * hier nachbaut, schreibt einen von ihnen hin.
+   */
+  const satzanfaenge =
+    /Es erscheint dann|Es steht jetzt|Es ist zurück in|Es verschwindet dann|Auf dieses Todo passt/;
+  const offenders = files.filter((file) => satzanfaenge.test(sourceWithoutComments(file)));
+  assert.deepEqual(
+    offenders,
+    [],
+    `der Bewegungssatz wird im Add-in nachgebaut statt gerufen (E-058): ${offenders.join(', ')}`,
+  );
+
+  // Und die Gegenprobe zur Gegenprobe: Der Aufgabenbereich **ruft** die
+  // Funktion. Ohne sie wäre die Zeile darüber auch dann grün, wenn der Satz
+  // gar nicht mehr vorkäme.
+  const rufer = files.filter((file) => /poolMovementSentence\s*\(/.test(sourceWithoutComments(file)));
+  assert.ok(
+    rufer.length >= 2,
+    `nur ${String(rufer.length)} Datei(en) rufen poolMovementSentence — der Satz erscheint nirgends mehr`,
+  );
+});
+
+check('E-058 Absatz 2: „Die Karte bleibt, wo sie ist" ist ersatzlos gestrichen', () => {
+  // Der Satz war seit E-055 falsch: Ein Timerstart lässt das
+  // Erledigt-Kennzeichen fallen, und die erste Buchung setzt „hat offene
+  // Buchungen" — beides ändert die Spalte. Der Nachweis ist statisch, weil er
+  // die Wiedereinführung treffen soll und nicht nur den einen Aufruf. Die
+  // CSS-Klasse zählt mit: Eine Klasse ohne Element ist die Einladung, den Satz
+  // wieder darunterzuschreiben.
+  const pattern = /CARD_STAYS|Die Karte bleibt, wo sie ist|effects__aside/;
+  const offenders = files.filter((file) => pattern.test(sourceWithoutComments(file)));
+  assert.deepEqual(offenders, [], `gefunden in: ${offenders.join(', ')}`);
+});
+
+check('E-058 Absatz 1: der Add-in-Dienst wertet keine Poolregel mehr selbst aus', () => {
+  /*
+   * Die andere Hälfte derselben Entscheidung, eine Schicht tiefer.
+   *
+   * `routes/addin/service.ts` hielt bis T-092 mit `poolNamer` eine **zweite**
+   * Fassung der Rechnung, die die Hauptanwendung ebenfalls anstellt — samt
+   * eigenem Zustandstyp, eigenem Bewegungstyp und eigener Regelwache. Genau
+   * daran hing der Befund aus R-1 und R-2: Zwei Rechnungen für dieselbe
+   * Handlung, und die zweite kannte `leaves` nicht.
+   *
+   * Seit E-058 Absatz 1 gibt es **eine** Rechnung
+   * (`usecases/pool-movement.ts`), und der Add-in-Dienst ruft sie. Wer hier
+   * wieder `matchesPool` importiert, baut die zweite Fassung neu — und diese
+   * Zeile wird rot, bevor die beiden Antworten auseinanderlaufen können.
+   *
+   * Der Name darf im Kommentar stehen; verboten ist der **Aufruf**.
+   */
+  const service = sourceWithoutComments(
+    path.join(here, '..', '..', 'local-api', 'src', 'routes', 'addin', 'service.ts'),
+  );
+
+  assert.equal(
+    /\bmatchesPool\s*\(/.test(service),
+    false,
+    'der Add-in-Dienst wertet wieder selbst eine Poolregel aus (E-058 Absatz 1)',
+  );
+  assert.match(
+    service,
+    /poolMovementNamer/,
+    'der Add-in-Dienst fragt den Anwendungsfall nicht mehr — woher kommt die Bewegung?',
+  );
 });
 
 check('Keine echte Call-Nummer und kein echter Kundenname in den Prüfdaten', () => {
@@ -758,21 +853,73 @@ check('C-03: die Trefferliste kündigt die Aufhebung an, statt sie zur Wahl zu s
   assert.equal(/sofern|wenn du|ausdrücklich|Kästchen/.test(REOPEN_HINT), false, `bedingt formuliert: ${REOPEN_HINT}`);
 });
 
+/*
+ * ---------------------------------------------------------------------------
+ * Wie hier seit T-092 gegen den Satz geprüft wird (E-058)
+ * ---------------------------------------------------------------------------
+ *
+ * Nicht mehr gegen eine **Abschrift** des Wortlauts, sondern gegen die
+ * **Funktion**: `poolMovementSentence` aus `@takt/domain` ist die eine Quelle,
+ * und die Erwartung entsteht aus demselben Aufruf mit denselben Argumenten.
+ *
+ * Das klingt nach einer Prüfung, die sich selbst bestätigt, und ist das
+ * Gegenteil. Gemessen wird nicht, welchen Satz die Domäne formuliert — das
+ * messen die Einheitentests dort, zeichengenau gegen den Wortlaut aus E-058
+ * Punkt 4. Gemessen wird, ob der Aufgabenbereich **denselben** Satz zeigt: mit
+ * demselben Anlass (`'reopen'` gegen `'booking'` — sie zählen verschiedene
+ * Listen auf), derselben Zeitform und derselben Bewegung. Eine Abschrift im
+ * Add-in, ein vertauschter Anlass, eine verlorene Liste unterwegs — jeder
+ * dieser drei Fehler macht die Zeile rot, und keiner von ihnen wird grün, nur
+ * weil die Domäne ihren Wortlaut ändert.
+ *
+ * Der Wortlaut selbst wird hier deshalb **nicht** buchstabiert. Er hat sich mit
+ * T-093 geändert (kein Gattungswort mehr vor dem Namen), und eine Abschrift
+ * hätte genau das zu einer roten Zeile im Add-in gemacht — für eine Änderung,
+ * die in einer Entscheidung steht und in keiner Datei dieses Teilbaums.
+ *
+ * Was hier trotzdem buchstabiert wird, sind die Eigenschaften, die **unabhängig
+ * vom Wortlaut** gelten müssen: dass Namen einzeln genannt und nicht gezählt
+ * werden, dass der Buchungssatz keine Rückkehr behauptet, dass es ein Satz
+ * bleibt und nicht zwei, und dass ohne Bewegung gar keiner entsteht.
+ */
+
 check('I-05: die Ankündigung vor dem Buchen nennt alle drei Wirkungen und die Pools einzeln', () => {
-  const notice = reopenPreview(15, {
-    appears: ['Wartung Nord', 'Offene Störungen'],
-    enters: [],
-    leaves: [],
-  });
+  const bewegung = { appears: ['Wartung Nord', 'Offene Störungen'], enters: [], leaves: [] };
+  const notice = reopenPreview(15, bewegung);
 
   assert.equal(notice.effects.length, 3, 'es sind nicht drei Wirkungen');
   assert.match(notice.effects[0], /15 Minuten/, 'die Buchung selbst fehlt');
   assert.match(notice.effects[1], /automatisch aufgehoben/, 'die Aufhebung fehlt');
+
+  // Die dritte Wirkung ist **die Funktion** und keine Abschrift daneben.
+  assert.equal(
+    notice.effects[2],
+    poolMovementSentence(bewegung, 'future', 'reopen'),
+    'der Aufgabenbereich formuliert den Satz selbst, statt die Domäne zu fragen (E-058)',
+  );
+
   assert.match(notice.effects[2], /Wartung Nord/, 'der erste Pool fehlt');
   assert.match(notice.effects[2], /Offene Störungen/, 'der zweite Pool fehlt');
   assert.equal(/\b2 Pools\b/.test(notice.effects[2]), false, 'die Pools sind gezählt statt genannt');
-  assert.equal(notice.aside, CARD_STAYS);
-  assert.match(notice.aside, /Die Karte bleibt, wo sie ist/);
+
+  /*
+   * E-058 Absatz 2: `CARD_STAYS` ist **ersatzlos** gestrichen. Kein viertes
+   * Feld, keine vierte Zeile — und vor allem kein neuer Satz an derselben
+   * Stelle, der dasselbe behauptet. Der Nachweis ist statisch, weil er auch die
+   * Wiedereinführung treffen soll und nicht nur diesen einen Aufruf.
+   */
+  assert.equal(
+    Object.hasOwn(notice, 'aside'),
+    false,
+    'die abgesetzte Zeile ist zurück — E-058 Absatz 2 streicht sie ersatzlos',
+  );
+  for (const effect of notice.effects) {
+    assert.equal(
+      /Karte bleibt|ändert sich dadurch nicht/.test(effect),
+      false,
+      `der gestrichene Satz steht wieder da: ${effect}`,
+    );
+  }
 });
 
 check('I-05: die Rückmeldung danach sagt dasselbe wie die Ankündigung davor', () => {
@@ -785,20 +932,43 @@ check('I-05: die Rückmeldung danach sagt dasselbe wie die Ankündigung davor', 
   assert.match(after.title, /Turnuswartung Frühjahr/);
   assert.match(after.effects[1], /aufgehoben/);
   assert.match(after.effects[2], /Wartung Nord/);
-  assert.equal(after.aside, before.aside, 'vorher und nachher sagen Verschiedenes über die Spalte');
 
-  // Ein einzelner Pool heißt „dem Pool", zwei heißen „den Pools". Eine falsche
-  // Zahl im Satz ist die Art Detail, an der ein Benutzer zu zweifeln beginnt.
-  assert.match(before.effects[2], /in dem Pool/);
+  // Dieselbe Bewegung, derselbe Anlass, die andere Zeitform — beide Male aus
+  // der Funktion. Ein vertauschter Anlass fiele hier auf: `'booking'` zählt
+  // `enters` auf und gäbe für diese Bewegung `null`.
+  assert.equal(before.effects[2], poolMovementSentence(bewegung, 'future', 'reopen'));
+  assert.equal(after.effects[2], poolMovementSentence(bewegung, 'past', 'reopen'));
+
+  /*
+   * Die Aufzählung: ein Name allein, zwei mit „und" dazwischen. Das ist die
+   * Eigenschaft, die den Wortlautwechsel aus T-093 überlebt — dort ist der
+   * Einschub „dem Pool"/„den Pools" weggefallen, die Aufzählung nicht.
+   */
+  assert.match(before.effects[2], /„Wartung Nord“/);
   assert.match(
-    reopenPreview(30, { appears: ['A', 'B'], enters: [], leaves: [] }).effects[2],
-    /in den Pools/,
+    reopenPreview(30, { appears: ['Ost', 'West'], enters: [], leaves: [] }).effects[2],
+    /„Ost“ und „West“/,
   );
 });
 
-check('Ein Todo ohne passende Poolregel bekommt die unangenehme Wahrheit, nicht Schweigen', () => {
-  assert.match(poolSentence({ appears: [], enters: [], leaves: [] }, 'future'), /in keinem Pool/);
-  assert.match(poolSentence({ appears: [], enters: [], leaves: [] }, 'past'), /in keinem Pool/);
+check('Ein Todo ohne passende Regel bekommt die unangenehme Wahrheit, nicht Schweigen', () => {
+  const nichts = { appears: [], enters: [], leaves: [] };
+
+  // Der Wiederöffnen-Satz hat **immer** etwas zu sagen, auch wenn beide Listen
+  // leer sind. Das ist die Zusage der Überladung, und der Aufgabenbereich zeigt
+  // sie als dritte Wirkung.
+  for (const tense of ['future', 'past']) {
+    const satz = poolMovementSentence(nichts, tense, 'reopen');
+    assert.equal(typeof satz, 'string');
+    assert.ok(satz.length > 0, 'ein Satz mit null Zeichen ist kein Satz');
+    assert.match(satz, /keine Regel/, 'der Grund fehlt');
+  }
+
+  assert.equal(reopenPreview(15, nichts).effects[2], poolMovementSentence(nichts, 'future', 'reopen'));
+  assert.equal(
+    reopenOutcome('Ohne Regel', 15, nichts).effects[2],
+    poolMovementSentence(nichts, 'past', 'reopen'),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -824,30 +994,33 @@ check('T-084: die erste Buchung auf einem offenen Todo bekommt einen eigenen Sat
     leaves: [],
   };
 
-  const vorher = bookingPoolSentence(bewegung, 'future');
-  const nachher = bookingPoolSentence(bewegung, 'past');
-
-  assert.equal(vorher, 'Es erscheint dann in dem Pool „Offen abzurechnen“.');
-  assert.equal(nachher, 'Es steht jetzt in dem Pool „Offen abzurechnen“.');
+  const vorher = poolMovementSentence(bewegung, 'future', 'booking');
+  const nachher = poolMovementSentence(bewegung, 'past', 'booking');
 
   // Kein „wieder" und kein „zurück": Aufgehoben wird hier nichts, und ein Wort,
   // das eine Vorgeschichte behauptet, ist an dieser Stelle eine Unwahrheit.
   for (const satz of [vorher, nachher]) {
+    assert.equal(typeof satz, 'string', 'die Bewegung ist da, der Satz fehlt');
     assert.equal(/wieder|zurück/.test(satz), false, `der Satz behauptet eine Rückkehr: ${satz}`);
     assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
+    assert.match(satz, /„Offen abzurechnen“/, 'die eine Änderung wird nicht beim Namen genannt');
   }
 
-  // Und kein Pool, in dem das Todo ohnehin schon stand. Zum Vergleich derselbe
-  // Wert durch den Satz für den Wiederöffnen-Fall: Dort gehört „Wartung Nord"
-  // hinein, weil ein erledigtes Todo in **keinem** davon zu sehen war.
+  /*
+   * Der Kern: Der Anlass entscheidet, **welche** Liste aufgezählt wird.
+   * `'booking'` nennt `enters`, `'reopen'` nennt `appears`. „Wartung Nord" ist
+   * der Pool, in dem das Todo ohnehin schon stand — er gehört in den einen Satz
+   * und nicht in den anderen. Ein vertauschter Anlass fiele genau hier auf.
+   */
   assert.equal(/Wartung Nord/.test(vorher), false, 'der Satz zählt auf, was sich nicht geändert hat');
-  assert.match(poolSentence(bewegung, 'future'), /Wartung Nord/);
+  assert.match(poolMovementSentence(bewegung, 'future', 'reopen'), /Wartung Nord/);
 
-  // Ein einzelner Pool heißt „dem Pool", zwei heißen „den Pools" — dieselbe
-  // Beugung wie im anderen Satz, weil sie aus derselben Stelle kommt.
+  // Die Aufzählung: zwei Namen mit „und" dazwischen, einzeln genannt und nicht
+  // gezählt. Dieselbe Aufzählung wie im Wiederöffnen-Satz, weil sie aus
+  // derselben Stelle kommt.
   assert.match(
-    bookingPoolSentence({ appears: [], enters: ['A', 'B'], leaves: [] }, 'future'),
-    /in den Pools „A“ und „B“/,
+    poolMovementSentence({ appears: [], enters: ['Ost', 'West'], leaves: [] }, 'future', 'booking'),
+    /„Ost“ und „West“/,
   );
 });
 
@@ -857,12 +1030,16 @@ check('T-084: ohne Bewegung kein Satz — und die Bestätigung ist Zeichen für 
   // Ereignis wäre.
   const ohneBewegung = { appears: ['Wartung Nord'], enters: [], leaves: [] };
 
-  assert.equal(bookingPoolSentence(ohneBewegung, 'future'), null);
-  assert.equal(bookingPoolSentence(ohneBewegung, 'past'), null);
+  assert.equal(poolMovementSentence(ohneBewegung, 'future', 'booking'), null);
+  assert.equal(poolMovementSentence(ohneBewegung, 'past', 'booking'), null);
 
   const notice = bookingOutcome(15, ohneBewegung);
   assert.equal(notice.pools, null, 'ein Satz ohne Ereignis');
   assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
+
+  // `null` und kein leerer String: Ein Satz mit null Zeichen bekommt in der
+  // Oberfläche trotzdem eine Zeile. Die Aufrufstelle muss den Fall behandeln.
+  assert.equal(notice.pools === '', false, 'aus `null` ist ein leerer Satz geworden');
 
   // Kein Halbsatz, kein Komma zu viel, keine leere Aufzählung — die Auflage aus
   // E-056, eine Stufe früher angewandt.
@@ -2027,9 +2204,11 @@ heading('12  Die Pools eines Todos: fünf Regelachsen und beide Richtungen (T-07
  * Der Befund, den dieser Abschnitt misst
  * --------------------------------------
  *
- * Seit T-076 ist eine Regel eine Struktur mit fünf benannten Feldern.
- * `poolNamer` in `routes/addin/service.ts` gab `matchesPool` bis T-078 nur die
- * **erforderlichen Tags** mit — und `matchesPool` überspringt jede Achse, die
+ * Seit T-076 ist eine Regel eine Struktur mit fünf benannten Feldern. Die
+ * Rechnung des Add-in-Dienstes — bis T-092 `poolNamer` in
+ * `routes/addin/service.ts`, seitdem `poolMovementNamer` in
+ * `usecases/pool-movement.ts` — gab `matchesPool` bis T-078 nur die
+ * **erforderlichen Tags** mit, und `matchesPool` überspringt jede Achse, die
  * es nicht genannt bekommt. Eine Regel „Wartung, außer Störungen" wurde damit
  * zu „Wartung", und das Add-in nannte einen Pool, in dem das Todo nicht steht.
  * Der Fehler ging nie in die andere Richtung: zu viele Pools, nie zu wenige.
@@ -2127,14 +2306,16 @@ const movementOf = async (callNumber) => {
 const poolsOf = async (callNumber) => (await movementOf(callNumber)).appears;
 
 /*
- * Die Wache gegen die **sechste** Achse, zweite Hälfte (R-1, T-090)
- * ----------------------------------------------------------------
+ * Die Wache gegen die **sechste** Achse, zweite Hälfte (R-1, T-090, T-092)
+ * -----------------------------------------------------------------------
  *
- * Die erste Hälfte trägt der Übersetzer: `NamedPoolRule` in
- * `routes/addin/service.ts` verlangt seit T-090 **jedes** Feld der Regelseite,
- * und das Objektliteral darunter wird rot, sobald `MatchesPoolRule` eines
- * dazubekommt. Nachgestellt: Nimmt man dort `exportState` heraus, meldet `tsc`
- * genau diese Zuweisung.
+ * Die erste Hälfte trägt der Übersetzer. Bis T-092 stand dafür eine eigene
+ * Wache im Add-in-Dienst (`NamedPoolRule`); seit E-058 rechnet der Dienst nicht
+ * mehr selbst, und die Wache steht dort, wo gerechnet wird: `ResolvedPoolRule`
+ * in `usecases/pool-movement.ts` trägt `MatchesPoolRule` als Ganzes, und das
+ * Objektliteral darunter wird rot, sobald der Typ ein Feld dazubekommt.
+ * Nachgestellt: Nimmt man dort `exportState` heraus, meldet `tsc` genau diese
+ * Zuweisung.
  *
  * Was der Übersetzer nicht sieht, ist der Schritt davor — ob eine neue **Achse**
  * überhaupt ein Feld auf der Regelseite bekommen hat. Ohne Feld kann
@@ -2355,8 +2536,14 @@ await checkAsync('E-056: wen keine solche Regel betrifft, dem bleibt kein Halbsa
   assert.equal(/verschwind/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
   assert.equal(/und aus/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
 
-  // Zeichen für Zeichen der Satz von vor E-056.
-  assert.equal(satz, 'Es erscheint dann wieder in den Pools „Wartung Nord“ und „Wartung, noch nicht abgerechnet“.');
+  // Aus der Funktion und nicht aus einer Abschrift (E-058). Gemessen wird, dass
+  // der Aufgabenbereich denselben Satz zeigt — der Wortlaut selbst wird in der
+  // Domäne gemessen.
+  assert.equal(satz, poolMovementSentence(stoerung, 'future', 'reopen'));
+
+  // Beide Namen, einzeln aufgezählt und nicht gezählt.
+  assert.match(satz, /„Wartung Nord“ und „Wartung, noch nicht abgerechnet“/);
+  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
 });
 
 await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und keine zweite Liste', async () => {
@@ -2366,11 +2553,16 @@ await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und 
   // Die Zahl der Wirkungen ist unverändert drei. Eine vierte Zeile wäre die
   // zweite Aussage, die E-056 ausschließt.
   assert.equal(notice.effects.length, 3, 'aus dem Verschwinden ist eine eigene Wirkung geworden');
-  assert.equal(notice.aside, CARD_STAYS, 'die Nicht-Wirkung hat sich verschoben');
+  assert.equal(
+    Object.hasOwn(notice, 'aside'),
+    false,
+    'die abgesetzte Zeile ist zurück — E-058 Absatz 2 streicht sie ersatzlos',
+  );
 
   const satz = notice.effects[2];
-  assert.match(satz, /Es erscheint dann wieder in den Pools/, 'die erste Hälfte fehlt');
-  assert.match(satz, /und verschwindet aus den Pools/, 'die zweite Hälfte steht nicht im selben Satz');
+  assert.equal(satz, poolMovementSentence(turnus, 'future', 'reopen'));
+  assert.match(satz, /^Es erscheint dann wieder in /, 'die erste Hälfte fehlt');
+  assert.match(satz, / und verschwindet aus /, 'die zweite Hälfte steht nicht im selben Satz');
   assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste wird nicht beim Namen genannt');
 
   // Ein Satz: Der Punkt steht am Ende und sonst nirgends.
@@ -2378,8 +2570,9 @@ await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und 
 
   // Und derselbe Satz im Perfekt, mit denselben beiden Hälften.
   const danach = reopenOutcome('Turnus abschließen', 15, turnus).effects[2];
-  assert.match(danach, /Es ist zurück in den Pools/);
-  assert.match(danach, /und aus den Pools .* verschwunden/);
+  assert.equal(danach, poolMovementSentence(turnus, 'past', 'reopen'));
+  assert.match(danach, /^Es ist zurück in /);
+  assert.match(danach, / und aus .* verschwunden/);
   assert.equal(danach.indexOf('.'), danach.length - 1, `mehr als ein Satz: ${danach}`);
 });
 
@@ -2405,6 +2598,23 @@ await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor —
     booked.value.leavingPoolNames,
     davor.leaves,
     'die Ankündigung und die Bestätigung nennen Verschiedenes als verschwunden',
+  );
+  /*
+   * Die dritte Liste steht seit T-092 mit hier, und zwar aus einem neuen Grund.
+   *
+   * Bis dahin bildete **eine** Funktion (`bookingStates`) das Zustandspaar für
+   * beide Aufrufer. Seit E-058 bilden die Duplikatsuche und `bookOnTodo` es je
+   * selbst — die Rechnung ist eine, die Annahme über die Wirkung der Handlung
+   * steht an zwei Stellen. Sie ist als **ein** Wert ausgeschrieben
+   * (`BOOKING_EFFECT`), aber das ist eine Zusage im Quelltext; hier wird sie
+   * gemessen. Nähme eine der beiden Stellen etwas anderes an, sagten
+   * Ankündigung und Bestätigung Verschiedenes über dieselbe Handlung — der
+   * Befund C-03 aus T-025, eine Ebene tiefer.
+   */
+  assert.deepEqual(
+    booked.value.enteringPoolNames,
+    davor.enters,
+    'die Ankündigung und die Bestätigung nennen Verschiedenes als hinzugekommen',
   );
 
   /*
@@ -2439,8 +2649,9 @@ await checkAsync('Der Satz, den der Benutzer liest, nennt die richtigen Pools un
  * T-084 — die Bewegung eines Todos, das gar nicht erledigt ist
  * ---------------------------------------------------------------------------
  *
- * Der Befund, der zu T-084 geführt hat: `bookingStates` rechnet seit E-056
- * beide Zustände, und `after.hasOpenEntries` steht fest auf wahr. Für ein Todo
+ * Der Befund, der zu T-084 geführt hat: Der Dienst bildet seit E-056 ein
+ * Zustandspaar, und `after.hasOpenEntries` steht fest auf wahr (seit T-092 in
+ * `BOOKING_EFFECT`, `routes/addin/service.ts`). Für ein Todo
  * **ohne** Buchung ist das eine Änderung — eine Spalte `exportState: 'open'`
  * nimmt es damit auf. Der Dienst wusste das bereits; gefehlt hat die Anzeige.
  *
@@ -2475,8 +2686,10 @@ await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte �
   assert.deepEqual(stoerung.enters, ['Wartung, noch nicht abgerechnet']);
   assert.deepEqual(stoerung.leaves, [], 'ein offenes Todo verliert durch eine Buchung keinen Pool');
 
-  const satz = bookingPoolSentence(stoerung, 'future');
-  assert.equal(satz, 'Es erscheint dann in dem Pool „Wartung, noch nicht abgerechnet“.');
+  const satz = poolMovementSentence(stoerung, 'future', 'booking');
+  assert.match(satz, /„Wartung, noch nicht abgerechnet“/, 'die eine Änderung fehlt im Satz');
+  assert.equal(/„Wartung Nord“/.test(satz), false, 'der Satz zählt auf, was sich nicht geändert hat');
+  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
 
   // Derselbe Satz über den Weg, den der Aufgabenbereich geht: Treffer →
   // Angebot → Bewegung. Eine Zusammensetzung, die unterwegs ein Feld verliert,
@@ -2484,7 +2697,7 @@ await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte �
   const found = await axisClient.findMatches('TCK-000517');
   const offer = describeOffers(found.value.matches)[0];
   assert.equal(
-    bookingPoolSentence(offerMovement(offer), 'future'),
+    poolMovementSentence(offerMovement(offer), 'future', 'booking'),
     satz,
     'über das Angebot kommt ein anderer Satz heraus als über den Treffer',
   );
@@ -2542,13 +2755,19 @@ await checkAsync('T-084: die Bestätigung nach der Buchung nennt dieselbe Spalte
     'vorher und nachher nennen verschiedene Pools',
   );
 
-  const notice = bookingOutcome(15, {
+  const bewegung = {
     appears: booked.value.poolNames,
     enters: booked.value.enteringPoolNames,
     leaves: booked.value.leavingPoolNames,
-  });
+  };
+  const notice = bookingOutcome(15, bewegung);
   assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
-  assert.equal(notice.pools, 'Es steht jetzt in dem Pool „Wartung, noch nicht abgerechnet“.');
+
+  // Der Satz kommt aus der Funktion, mit Anlass `'booking'` und im Perfekt —
+  // dieselbe Bewegung wie in der Ankündigung, nur die Zeitform ist anders.
+  assert.equal(notice.pools, poolMovementSentence(bewegung, 'past', 'booking'));
+  assert.match(notice.pools, /„Wartung, noch nicht abgerechnet“/);
+  assert.equal(/wieder|zurück/.test(notice.pools), false, `der Satz behauptet eine Rückkehr: ${notice.pools}`);
 });
 
 await checkAsync('T-084: dasselbe Todo mit bestehender Buchung — kein Satz, kein Halbsatz', async () => {
@@ -2569,7 +2788,7 @@ await checkAsync('T-084: dasselbe Todo mit bestehender Buchung — kein Satz, ke
   assert.deepEqual(danach.leaves, []);
 
   assert.equal(
-    bookingPoolSentence(danach, 'future'),
+    poolMovementSentence(danach, 'future', 'booking'),
     null,
     'über der Schaltfläche steht eine Ankündigung ohne Ereignis',
   );
@@ -2601,9 +2820,10 @@ heading('13  Der leere Ordner: eine Einschränkung ohne Treffer (E-057, T-086)')
  * E-057 entscheidet: Der Benutzer hat die Einschränkung ausgesprochen, also
  * bleibt sie — als eine, die niemand erfüllt. Seit T-082 ist
  * `unresolvedRequired` deshalb ein **Pflichtfeld** von `matchesPool`, und seit
- * T-086 holt `poolNamer` die Auskunft dort, wo sie steht: bei
+ * T-086 holt die Rechnung die Auskunft dort, wo sie steht: bei
  * `PoolPort.resolveAxes`, das zu jeder Achse auch die Ordner nennt, aus denen
- * kein Tag geworden ist.
+ * kein Tag geworden ist. Seit T-092 steht sie in `usecases/pool-movement.ts` —
+ * dieselbe Frage, ein Aufrufer weniger.
  *
  * Gemessen wird gegen die **echten** Routen, mit einem eigenen Poolsatz
  * (`E057_POOLS`) und demselben erfundenen Bestand wie oben. Jede betroffene
@@ -2755,10 +2975,12 @@ heading('14  Der Anzeigeort ist keine Antwort: reine Board-Spalten (E-054, E-056
  *
  * `PoolPort.list` fragt seit E-054 nach einer **Fläche** und setzt ohne
  * Argument `'pool'` ein — geliefert werden dann nur Regeln mit `placement`
- * `pool` oder `both`. Die Vorgabe ist für ihre Aufrufer richtig; `poolNamer`
- * war bis T-090 einer von ihnen und ist es seit E-056 nicht mehr. Er
- * beantwortet nicht „in welchen Pools steht das Todo", sondern was diese
- * Buchung ändert, und diese Frage kennt keine Fläche.
+ * `pool` oder `both`. Die Vorgabe ist für ihre Aufrufer richtig; die Rechnung
+ * über die Bewegung war bis T-090 eine von ihnen und ist es seit E-056 nicht
+ * mehr. Sie beantwortet nicht „in welchen Pools steht das Todo", sondern was
+ * diese Buchung ändert, und diese Frage kennt keine Fläche. Seit T-092 steht
+ * sie als `poolMovementNamer` in `usecases/pool-movement.ts` und fragt dort
+ * `list('all')`.
  *
  * Was daraus wurde: Eine Spalte „erledigt und noch nicht abgerechnet" mit
  * Anzeigeort **„Nur auf dem Board"** — die naheliegende Wahl, denn sie ist eine
@@ -2861,24 +3083,36 @@ await checkAsync('B-4: die reine Board-Spalte steht in `leaves` (E-056)', async 
   }
 });
 
-await checkAsync('Der Satz nennt die Board-Spalte beim Namen', async () => {
+await checkAsync('Der Satz nennt die Board-Spalte beim Namen — und nennt sie nicht „Pool"', async () => {
   const turnus = await flaechenBewegung('TCK-000518');
   const satz = reopenPreview(15, turnus).effects[2];
 
+  assert.equal(satz, poolMovementSentence(turnus, 'future', 'reopen'));
   assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste fehlt im Satz');
-  assert.match(satz, /verschwindet aus den Pools/);
+  assert.match(satz, / und verschwindet aus /, 'das Verschwinden steht nicht im selben Satz');
 
   // Ein Satz, wie E-056 es verlangt — auch mit einer Spalte darin.
   assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
 
   /*
-   * Festgehalten, nicht behauptet: Der Satz sagt „den Pools" und meint dabei
-   * eine reine Board-Spalte. Das Wort ist falsch, der Name stimmt. Die
-   * Korrektur gehört zu E-058 (`poolMovementSentence` in der Domäne) und steht
-   * noch aus; diese Zeile hält den heutigen Wortlaut fest, damit die Umstellung
-   * ihn nicht versehentlich beibehält.
+   * E-058 Punkt 4, an genau dem Fall gemessen, für den er entschieden wurde.
+   *
+   * „Erledigt, noch nicht abgerechnet" ist eine **reine Board-Spalte**
+   * (`placement: 'board'`). Bis T-092 setzte der Satz unbedingt „dem Pool" /
+   * „den Pools" davor: der Name stimmte, das Gattungswort nicht — und wer ihn
+   * las, suchte in der Pool-Liste, in der die Spalte nicht steht. Seit T-093
+   * nennt der Satz nur noch den Namen in Anführungszeichen.
+   *
+   * Geprüft wird deshalb die **Abwesenheit** des Gattungswortes vor dem Namen
+   * und nicht ein bestimmter Wortlaut. „in keinem Pool und in keiner Spalte" —
+   * der Satz ohne jeden Treffer — bleibt davon unberührt: Dort steht kein Name
+   * dahinter, und dieser Satz hat einen.
    */
-  assert.equal(/den Pools/.test(satz), true, 'der Wortlaut hat sich geändert — E-058 prüfen');
+  assert.equal(
+    /(dem Pool|den Pools|der Spalte|den Spalten)\s+„/.test(satz),
+    false,
+    `der Satz stellt ein Gattungswort vor den Namen (E-058 Punkt 4): ${satz}`,
+  );
 });
 
 await checkAsync('I-05 über die Flächen: die Bestätigung sagt dasselbe wie die Ankündigung', async () => {

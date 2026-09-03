@@ -6,6 +6,26 @@ import type { ExportTemplateId, Timestamp } from './kernel.ts';
 import type { RoundingMode } from './rounding.ts';
 
 /**
+ * Das Farbschema der Oberfläche (B-5.1).
+ *
+ *   `system` — dem Betriebssystem folgen. **Vorgabe**, und der Wert in der
+ *              Migration.
+ *   `light`  — helles Schema, ungeachtet der Systemeinstellung.
+ *   `dark`   — dunkles Schema, ungeachtet der Systemeinstellung.
+ *
+ * Ein benannter Typ und keine ausgeschriebene Aufzählung (T-091 Frage 1,
+ * T-093): Die Oberfläche beschriftet die drei Werte und tippte die Aufzählung
+ * dafür ein zweites Mal ab. Zwei Abschriften einer Aufzählung sind zwei
+ * Gelegenheiten, einen vierten Wert nur an einer Stelle zu ergänzen — die
+ * Oberfläche zeigte dann eine leere Beschriftung statt eines Übersetzerfehlers.
+ *
+ * `system` ist ausdrücklich ein eigener Wert und nicht `null`: „folge dem
+ * System" ist eine Wahl, keine fehlende Angabe, und die Spalte ist deshalb
+ * `NOT NULL`.
+ */
+export type Theme = 'system' | 'light' | 'dark';
+
+/**
  * Anwendungseinstellungen. Eine Zeile, feste Felder — kein Schlüssel-Wert-Beutel,
  * damit jede Einstellung einen Typ hat und eine Migration erzwingt.
  *
@@ -34,7 +54,7 @@ export interface AppSettings {
   /** Umschaltbar; der verwendete Modus wird je Exportlauf mitgeschrieben (E-008). */
   readonly roundingMode: RoundingMode;
   readonly locale: string;
-  readonly theme: 'system' | 'light' | 'dark';
+  readonly theme: Theme;
   readonly updatedAt: Timestamp;
 }
 
@@ -44,7 +64,7 @@ export interface AppSettingsUpdate {
   readonly activeExportTemplateId?: ExportTemplateId | null;
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
-  readonly theme?: 'system' | 'light' | 'dark';
+  readonly theme?: Theme;
   readonly now: Timestamp;
 }
 

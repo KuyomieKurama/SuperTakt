@@ -247,9 +247,130 @@ async function movementOfStart(
   });
 }
 
+/**
+ * Der Ausgang eines Stopps — und was er durch die Pools bewegt hat (E-058
+ * Punkt 6).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum der Stopp überhaupt etwas zu berichten hat
+ * ---------------------------------------------------------------------------
+ *
+ * Weil die **erste abgeschlossene Buchung** eine Achse umlegt. Seit E-055 kann
+ * eine Regel nach dem Exportstatus fragen (`exportState: 'open'` — „was habe
+ * ich noch nicht abgerechnet"), und ein Todo ohne jede abgeschlossene Buchung
+ * erfüllt diese Achse nicht. Der Stopp macht aus dem laufenden Timer eine
+ * offene Buchung; jede solche Spalte nimmt das Todo damit auf.
+ *
+ * Bis T-093 sagte nur `POST /timer/start` etwas dazu. Wer am Start eine
+ * Auskunft gibt und am Stopp schweigt, sagt die halbe Wahrheit — und
+ * ausgerechnet die unwichtigere Hälfte: Der Start kann die erste Buchung nur
+ * in dem Sonderfall entstehen lassen, in dem er einen Timer **desselben** Todos
+ * verdrängt. Der Regelweg zur ersten Buchung ist dieser hier.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das Feld auch im verworfenen Ausgang steht
+ * ---------------------------------------------------------------------------
+ *
+ * Ein Stopp unter der Mindestdauer erzeugt keine Buchung (A-6.2), bewegt also
+ * nichts, und `poolMovement` ist dort **immer** `null`. Trotzdem steht das Feld
+ * da, statt in diesem Zweig zu fehlen: Ein Feld, das je nach `kind` da ist oder
+ * nicht, zwingt jede Aufrufstelle zu einer Fallunterscheidung, bevor sie die
+ * eigentliche treffen kann — und `movement?.appears` auf einem Zweig, der es
+ * nicht kennt, liest sich fehlerfrei und fragt ins Leere. Ein immer
+ * vorhandenes `null` ist die Antwort „nachgesehen, nichts".
+ *
+ * Der Anlaß ist stets `'booking'` und nie `'reopen'`: Ein Stopp hebt kein
+ * „Erledigt" auf. Das tut allein der Start (A-2.5).
+ */
 export type StopTimerResult =
-  | { readonly kind: 'recorded'; readonly entry: TimeEntry }
-  | { readonly kind: 'discarded'; readonly reason: 'timer_too_short' };
+  | {
+      readonly kind: 'recorded';
+      readonly entry: TimeEntry;
+      /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
+      readonly poolMovement: PoolMovement | null;
+    }
+  | {
+      readonly kind: 'discarded';
+      readonly reason: 'timer_too_short';
+      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
+      readonly poolMovement: null;
+    };
+
+/**
+ * Was vor einer Buchung über das Todo galt — gelesen, bevor geschrieben wird.
+ *
+ * `hadOpenEntries` ist die einzige Angabe, die nach dem Stopp nicht mehr zu
+ * bekommen ist: Danach ist sie **immer** wahr, und ob sie es vorher schon war,
+ * ließe sich nicht mehr sagen. Genau daran hängt aber, ob es eine Bewegung gab.
+ *
+ * Der Todo-Datensatz steht hier absichtlich **nicht** darin. Er wird erst
+ * gelesen, wenn feststeht, dass es etwas zu berichten gibt — der Normalfall
+ * (zweite und jede weitere Buchung) kostet damit weder einen Todo-Zugriff noch
+ * eine einzige Ordnerauflösung.
+ */
+interface BookingPresence {
+  readonly todoId: TodoId;
+  readonly hadOpenEntries: boolean;
+  readonly hadExportedEntries: boolean;
+}
+
+/**
+ * Liest den Bestand, gegen den die Bewegung einer Buchung gerechnet wird.
+ *
+ * Ein Indexzugriff (`ix_time_entry_queue`) und sonst nichts. Er muß **vor** dem
+ * Schreiben stehen; danach beantwortet dieselbe Abfrage eine andere Frage.
+ */
+async function presenceBeforeBooking(unit: UnitOfWork, todoId: TodoId): Promise<BookingPresence> {
+  const presence = (await unit.timeEntries.exportPresence([todoId])).get(todoId);
+  return {
+    todoId,
+    hadOpenEntries: presence?.hasOpen === true,
+    hadExportedEntries: presence?.hasExported === true,
+  };
+}
+
+/**
+ * Die Bewegung, die eine **abgeschlossene Buchung** auslöst, oder `null`
+ * (E-058 Punkt 6, E-032).
+ *
+ * Sie ändert genau eine Achse: `hasOpenEntries` von falsch auf wahr. Tags,
+ * Status und „Erledigt" bleiben, wie sie waren — ein Stopp faßt das
+ * Erledigt-Kennzeichen nicht an, das tut allein der Start (A-2.5).
+ *
+ * **Der erste Zweig ist die ganze Sparsamkeit dieser Funktion.** Hatte das Todo
+ * schon eine offene Buchung, sind beide Zustände gleich, die Antwort wären drei
+ * leere Listen — und der Weg dorthin führte über das Auflösen jeder Regel über
+ * beliebig tiefe Ordnerbäume. Das ist der Normalfall, und er kostet hier
+ * nichts.
+ *
+ * `null` und nicht drei leere Listen: Das eine heißt „hier war keine Bewegung
+ * möglich", das andere „nachgesehen und nichts gefunden". Beide führen zu
+ * derselben Anzeige, aber nur das erste kostet keine Ordnerauflösung — und die
+ * Aufrufstelle muß den Fall behandeln, statt ihn mit `?? []` zu übergehen.
+ */
+async function movementOfBooking(
+  unit: UnitOfWork,
+  presence: BookingPresence,
+): Promise<PoolMovement | null> {
+  if (presence.hadOpenEntries) return null;
+
+  const todo = await unit.todos.load(presence.todoId);
+  // Ein Todo, das es nicht gibt, kann keine Buchung getragen haben. Der Zweig
+  // steht da, damit dieser Pfad nichts behauptet, was er nicht gelesen hat.
+  if (todo === null) return null;
+
+  const namer = await poolMovementNamer(unit);
+  const unchanged = {
+    tagIds: todo.tagIds,
+    statusId: todo.statusId,
+    completedAt: todo.completedAt,
+    hasExportedEntries: presence.hadExportedEntries,
+  };
+  return namer({
+    before: { ...unchanged, hasOpenEntries: false },
+    after: { ...unchanged, hasOpenEntries: true },
+  });
+}
 
 /**
  * Timer stoppen (A-6.2, A-6.4, A-7.3).
@@ -265,12 +386,33 @@ export async function stopTimer(
 ): Promise<UseCaseResult<StopTimerResult>> {
   const timestamp = now(context);
   return context.transactions.inTransaction(async (unit) => {
+    /*
+     * Der Bestand **vor** dem Stopp (E-058 Punkt 6).
+     *
+     * Erst hier steht fest, auf welchem Todo der Timer sitzt; danach ist die
+     * Frage „gab es schon eine abgeschlossene Buchung?" nicht mehr zu stellen,
+     * weil es ab dem Stopp immer eine gibt.
+     *
+     * Läuft kein Timer, wird nichts gelesen und nichts geraten — den Fehler
+     * bildet `timer.stop` gleich darunter, an genau einer Stelle.
+     */
+    const running = await unit.timer.running();
+    const presence = running === null ? null : await presenceBeforeBooking(unit, running.todoId);
+
     const result = await unit.timer.stop(note, timestamp);
     if (!result.ok) return err(result.error);
     if (result.value.kind === 'discarded') {
-      return ok({ kind: 'discarded' as const, reason: 'timer_too_short' as const });
+      return ok({
+        kind: 'discarded' as const,
+        reason: 'timer_too_short' as const,
+        poolMovement: null,
+      });
     }
-    return ok({ kind: 'recorded' as const, entry: result.value.entry });
+    return ok({
+      kind: 'recorded' as const,
+      entry: result.value.entry,
+      poolMovement: presence === null ? null : await movementOfBooking(unit, presence),
+    });
   });
 }
 
@@ -361,8 +503,18 @@ export async function resolveOrphanedTimer(
     if (decision.kind === 'discarded') {
       const removed = await unit.timer.stop('', orphan.running.startedAt);
       if (!removed.ok) return err(removed.error);
-      return ok({ kind: 'discarded' as const, reason: 'timer_too_short' as const });
+      // **Verwerfen bewegt nichts** (E-058 Punkt 6). Die Buchung entsteht gar
+      // nicht, `hasOpenEntries` bleibt, was es war — und deshalb wird hier auch
+      // nichts gelesen und keine Regel aufgelöst.
+      return ok({
+        kind: 'discarded' as const,
+        reason: 'timer_too_short' as const,
+        poolMovement: null,
+      });
     }
+
+    // Der Bestand vor dem Buchen, aus demselben Grund wie in `stopTimer`.
+    const presence = await presenceBeforeBooking(unit, orphan.running.todoId);
 
     // `timer.stop` mit dem Zeitpunkt des Lebenszeichens statt mit „jetzt".
     // Damit läuft der Stopp durch dieselbe Regel wie jeder andere, und es gibt
@@ -370,10 +522,18 @@ export async function resolveOrphanedTimer(
     const stopped = await unit.timer.stop(orphan.running.note, decision.entry.endedAt);
     if (!stopped.ok) return err(stopped.error);
     if (stopped.value.kind === 'discarded') {
-      return ok({ kind: 'discarded' as const, reason: 'timer_too_short' as const });
+      return ok({
+        kind: 'discarded' as const,
+        reason: 'timer_too_short' as const,
+        poolMovement: null,
+      });
     }
     void timestamp;
-    return ok({ kind: 'recorded' as const, entry: stopped.value.entry });
+    return ok({
+      kind: 'recorded' as const,
+      entry: stopped.value.entry,
+      poolMovement: await movementOfBooking(unit, presence),
+    });
   });
 }
 

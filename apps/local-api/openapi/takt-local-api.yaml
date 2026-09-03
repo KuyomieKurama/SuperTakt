@@ -1763,6 +1763,12 @@ paths:
         Läuft der Timer kürzer als eine Sekunde, wird nichts gebucht. Das ist
         der Doppelklick auf „Start", nicht geleistete Arbeit. Der Dienst
         antwortet mit `200` und `kind: "discarded"`; das ist kein Fehler.
+
+        **Die Antwort sagt, was die Buchung bewegt hat** (`poolMovement`,
+        E-058 Punkt 6). Die erste abgeschlossene Buchung eines Todos setzt „hat
+        offene Buchungen", und jede Spalte mit `exportState: open` nimmt es
+        damit auf. Wer nur am Start eine Auskunft gibt und am Stopp schweigt,
+        sagt die halbe Wahrheit.
       requestBody:
         required: true
         content:
@@ -1790,15 +1796,60 @@ paths:
                   data:
                     oneOf:
                       - type: object
-                        required: [kind, entry]
+                        required: [kind, entry, poolMovement]
                         properties:
                           kind: { type: string, const: recorded }
                           entry: { $ref: '#/components/schemas/TimeEntry' }
+                          poolMovement:
+                            oneOf:
+                              - { $ref: '#/components/schemas/PoolMovement' }
+                              - { type: 'null' }
+                            description: |
+                              Wie **diese Buchung** das Todo durch die Pools
+                              bewegt — oder `null` (E-058 Punkt 6).
+
+                              Gerechnet wird in genau einem Fall: Die
+                              **erste abgeschlossene Buchung** dieses Todos ist
+                              soeben entstanden. Sie setzt „hat offene
+                              Buchungen" von falsch auf wahr, und jede Regel
+                              mit `exportState: open` — „was habe ich noch
+                              nicht abgerechnet" — nimmt das Todo damit auf.
+
+                              Sonst `null`, und das ist der Normalfall ab der
+                              zweiten Buchung: An Tags, Status und „Erledigt"
+                              ändert ein Stopp nichts, also bleibt jede Regel
+                              bei ihrem Urteil.
+
+                              Der Anlaß ist stets `booking` und nie `reopen`:
+                              Ein Stopp hebt kein „Erledigt" auf, das tut allein
+                              der Start (A-2.5). Wer den Satz dazu bildet, ruft
+                              `poolMovementSentence(movement, tense, 'booking')`
+                              aus `@takt/domain`.
+
+                              Bis T-093 sagte nur `POST /timer/start` etwas zur
+                              Bewegung. Das war die halbe Wahrheit und
+                              ausgerechnet die unwichtigere Hälfte: Der Start
+                              läßt die erste Buchung nur in dem Sonderfall
+                              entstehen, in dem er einen Timer **desselben**
+                              Todos verdrängt. Der Regelweg dorthin ist dieser
+                              hier.
                       - type: object
-                        required: [kind, reason]
+                        required: [kind, reason, poolMovement]
                         properties:
                           kind: { type: string, const: discarded }
                           reason: { type: string, const: timer_too_short }
+                          poolMovement:
+                            type: 'null'
+                            description: |
+                              Immer `null`. Ein verworfener Stopp erzeugt keine
+                              Buchung und bewegt deshalb nichts.
+
+                              Das Feld steht trotzdem da, statt in diesem Zweig
+                              zu fehlen: Ein Feld, das je nach `kind` vorhanden
+                              ist oder nicht, zwingt jeden Aufrufer zu einer
+                              Fallunterscheidung, bevor er die eigentliche
+                              treffen kann. Ein immer vorhandenes `null` ist die
+                              Antwort „nachgesehen, nichts".
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -1918,6 +1969,11 @@ paths:
         Es gibt bewusst keine dritte Möglichkeit „bis jetzt buchen". Genau die
         wäre der Weg, auf dem vierzehn ungearbeitete Stunden in eine Rechnung
         gelangen.
+
+        **Auch hier sagt die Antwort, was die Buchung bewegt hat**
+        (`poolMovement`, E-058 Punkt 6) — aber nur, wenn tatsächlich eine
+        entsteht. `discard` erzeugt keine Buchung und bewegt nichts; dort steht
+        `null`, ohne dass eine einzige Regel aufgelöst wird.
       requestBody:
         required: true
         content:
@@ -1941,17 +1997,62 @@ paths:
                   data:
                     oneOf:
                       - type: object
-                        required: [kind, entry]
+                        required: [kind, entry, poolMovement]
                         properties:
                           kind: { type: string, const: recorded }
                           entry: { $ref: '#/components/schemas/TimeEntry' }
+                          poolMovement:
+                            oneOf:
+                              - { $ref: '#/components/schemas/PoolMovement' }
+                              - { type: 'null' }
+                            description: |
+                              Wie **diese Buchung** das Todo durch die Pools
+                              bewegt — oder `null` (E-058 Punkt 6).
+
+                              Gerechnet wird in genau einem Fall: Die
+                              **erste abgeschlossene Buchung** dieses Todos ist
+                              soeben entstanden. Sie setzt „hat offene
+                              Buchungen" von falsch auf wahr, und jede Regel
+                              mit `exportState: open` — „was habe ich noch
+                              nicht abgerechnet" — nimmt das Todo damit auf.
+
+                              Sonst `null`, und das ist der Normalfall ab der
+                              zweiten Buchung: An Tags, Status und „Erledigt"
+                              ändert ein Stopp nichts, also bleibt jede Regel
+                              bei ihrem Urteil.
+
+                              Der Anlaß ist stets `booking` und nie `reopen`:
+                              Ein Stopp hebt kein „Erledigt" auf, das tut allein
+                              der Start (A-2.5). Wer den Satz dazu bildet, ruft
+                              `poolMovementSentence(movement, tense, 'booking')`
+                              aus `@takt/domain`.
+
+                              Bis T-093 sagte nur `POST /timer/start` etwas zur
+                              Bewegung. Das war die halbe Wahrheit und
+                              ausgerechnet die unwichtigere Hälfte: Der Start
+                              läßt die erste Buchung nur in dem Sonderfall
+                              entstehen, in dem er einen Timer **desselben**
+                              Todos verdrängt. Der Regelweg dorthin ist dieser
+                              hier.
                       - type: object
-                        required: [kind, reason]
+                        required: [kind, reason, poolMovement]
                         properties:
                           kind: { type: string, const: discarded }
                           reason:
                             type: string
                             enum: [timer_too_short, orphan_discarded]
+                          poolMovement:
+                            type: 'null'
+                            description: |
+                              Immer `null`. Ein verworfener Stopp erzeugt keine
+                              Buchung und bewegt deshalb nichts.
+
+                              Das Feld steht trotzdem da, statt in diesem Zweig
+                              zu fehlen: Ein Feld, das je nach `kind` vorhanden
+                              ist oder nicht, zwingt jeden Aufrufer zu einer
+                              Fallunterscheidung, bevor er die eigentliche
+                              treffen kann. Ein immer vorhandenes `null` ist die
+                              Antwort „nachgesehen, nichts".
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3886,6 +3987,18 @@ components:
         Den Satz dazu bildet `poolMovementSentence` in `@takt/domain`. Er ist
         an beiden Flächen derselbe — Hauptanwendung und Aufgabenbereich —, weil
         er aus einer Quelle kommt (E-058).
+
+        **Der Satz nennt die Namen ohne Gattungswort** (E-058 Punkt 4): „in
+        „Ost“", nicht „in dem Pool „Ost“". Diese drei Listen tragen Namen, aber
+        keine Fläche — ob „Ost" ein Pool ist, eine Spalte oder bei
+        `placement: both` beides, steht nicht darin und darf nicht geraten
+        werden. Wer die Fläche braucht, fragt `GET /pools`.
+
+        Geliefert wird die Bewegung von drei Vorgängen: `POST /timer/start`
+        (Anlaß `reopen`, wenn er „Erledigt" aufgehoben hat, sonst `booking`),
+        `POST /timer/stop` und `POST /timer/orphaned/resolve` (beide stets
+        `booking`). Überall gilt: `null` heißt „hier war keine Bewegung
+        möglich", drei leere Listen hießen „nachgesehen und nichts gefunden".
       required: [appears, enters, leaves]
       properties:
         appears:

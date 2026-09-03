@@ -7,7 +7,6 @@ import {
   type RuleDescription,
   type RuleReach,
 } from "../lib/poolRule";
-import { ExportStatusBadge } from "./ExportStatus";
 import { Icon, type IconName } from "./Icon";
 import { TagChip } from "./Tag";
 
@@ -40,12 +39,28 @@ import { TagChip } from "./Tag";
  * | ausgeschlossene Tags | durchgestrichener Kreis | „Ohne" |
  * | Status | Quadrat | „Status" |
  * | Erledigt | Haken / Kreis | „Nur erledigte" / „Nur unerledigte" |
- * | Exportstatus | dasselbe Etikett wie überall | „Offen" / „Exportiert" |
+ * | Exportstatus | Pfeil nach unten | „Noch nicht abgerechnet" / „Abgerechnet" |
  *
- * Symbol **und** Wort, nie nur die Farbe (SC 1.4.1). Die Exportachse borgt sich
- * `ExportStatusBadge` — dasselbe Etikett, das an jeder Buchung, in jeder Zeile
- * und in jeder Vorschau steht. Der Exportstatus ist die Unterscheidung, um die
- * sich Takt dreht; ihn hier anders zu zeichnen hieße, ihn zweimal zu erklären.
+ * Symbol **und** Wort, nie nur die Farbe (SC 1.4.1).
+ *
+ * ## Warum die Exportachse seit T-094 kein Buchungsetikett mehr trägt (E-059)
+ *
+ * Bis T-094 borgte sich diese Achse `ExportStatusBadge` — dasselbe Etikett,
+ * das an jeder Buchung steht. Die Absicht war richtig: Der Exportstatus ist
+ * die Unterscheidung, um die sich Takt dreht, und zwei Aussehen dafür wären
+ * zwei Sprachen.
+ *
+ * Das Etikett brachte aber sein **Wort** mit, und das Wort gehört der Buchung:
+ * „Offen". Im Regelformular stand damit drei Zeilen unter dem Optionsknopf
+ * „Noch nicht abgerechnet" eine Vorschau, die „Offen" sagte — dieselbe Wahl,
+ * zwei Wörter. E-059 hat genau das abgeschafft, und zwar zugunsten des
+ * Formularworts.
+ *
+ * Eine Regel ist auch keine Buchung: Sie **fragt** nach dem Exportstatus ihrer
+ * Buchungen. Ein Etikett „Exportiert" am Spaltenkopf ließ sich lesen als „diese
+ * Spalte ist exportiert". Die Achse zeichnet deshalb wie jede andere Textachse
+ * — Symbol der Achse plus ihr Wort. Das Buchungsetikett bleibt, wo Buchungen
+ * stehen.
  *
  * ## Der leere Ordner steht am Ordner (E-057, T-083, T-087)
  *
@@ -180,12 +195,7 @@ export function RuleSummary({
             <Icon name={AXIS_ICON[axis.id]} size={11} />
             {axis.label}
           </span>
-          {axis.exportState === undefined ? null : (
-            <ExportStatusBadge state={axis.exportState} size="sm" detail="mindestens eine Buchung" />
-          )}
-          {axis.text === null || axis.exportState !== undefined ? null : (
-            <span className="rule-summary__value">{axis.text}</span>
-          )}
+          {axis.text === null ? null : <span className="rule-summary__value">{axis.text}</span>}
           {axis.chips.map((chip, index) => (
             <ChipView
               key={`${chip.kind}-${chip.label}-${String(index)}`}

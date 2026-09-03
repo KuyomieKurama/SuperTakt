@@ -144,12 +144,29 @@ export function putTodoNote(id: Id, text: string): Promise<TodoNote> {
   });
 }
 
-/** A-2.4 — erledigt setzen. Der Status bleibt unverändert (E-023). */
+/**
+ * A-2.4 — erledigt setzen. Der **Status** bleibt unverändert (E-023).
+ *
+ * Unverändert bleibt der Status, nicht die Spalte: Seit E-055 darf eine Regel
+ * nach „Erledigt" fragen, und dann wechselt die Karte mit genau dieser
+ * Handlung. Was diese Antwort **nicht** enthält, ist die Bewegung dazu — beide
+ * Erledigt-Routen liefern nur das Todo. E-058 hat `poolMovement` an den Timer
+ * gehängt (Start, mit T-093 auch Stopp und `orphaned/resolve`); für das Setzen
+ * und Aufheben von Hand gibt es sie nicht. Die Oberfläche behauptet an dieser
+ * Stelle deshalb nichts über Spalten und rechnet auch nichts nach.
+ */
 export function markTodoDone(id: Id): Promise<Todo> {
   return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "PUT", body: {} });
 }
 
-/** A-2.5 — „Erledigt“ von Hand aufheben. Verschiebt keine Karte. */
+/**
+ * A-2.5 — „Erledigt“ von Hand aufheben.
+ *
+ * Bis T-094 stand hier „Verschiebt keine Karte." Das war der Satz aus der Zeit
+ * vor E-055 und aus demselben Irrtum wie `CARD_STAYS`: Eine Spalte, die nach
+ * „Erledigt" fragt, verliert oder gewinnt das Todo mit dieser Handlung. Siehe
+ * {@link markTodoDone}.
+ */
 export function clearTodoDone(id: Id): Promise<Todo> {
   return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "DELETE" });
 }
@@ -339,6 +356,14 @@ export function getBoard(
  * schickte diese Funktion `nurOffene`, einen Namen, den der Dienst nicht liest.
  * Ein Aufruf mit `includeCompleted: true` blieb damit wirkungslos — er lieferte
  * still die offenen Todos statt aller.
+ *
+ * **Ohne Aufrufer in der Oberfläche seit T-094**, und das ist eine gute
+ * Nachricht: Der letzte war `poolsContaining`, das je Pool einmal hier
+ * anklopfte, um nach einem Timerstart eine Pool-Aufzählung zusammenzusuchen.
+ * Diese Auskunft liefert der Dienst inzwischen fertig (E-058). Die Funktion
+ * bleibt als Abbildung der Route stehen — sie ist der Weiterblätterweg einer
+ * Board-Spalte ({@link getBoard}) und wird gebraucht, sobald eine Ansicht
+ * über die erste Seite hinausblättert.
  */
 export function listPoolTodos(
   id: Id,

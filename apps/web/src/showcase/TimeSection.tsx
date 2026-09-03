@@ -1,8 +1,47 @@
+import type { PoolMovement } from "@takt/domain";
 import { useState } from "react";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Button, Card, InlineMessage } from "../components/Primitives";
 import { ReactivationNotice, TimerDisplay } from "../components/Timer";
 import { Section, SubHeading } from "./Section";
+
+/**
+ * Die vier Bewegungen des Anlasses „Wiederoeffnen" (E-058, Wortlauttabelle).
+ *
+ * Erfundene Namen, wie ueberall auf dieser Seite. Der **Satz** dazu steht hier
+ * nicht: Er entsteht in `poolMovementSentence` und wird von
+ * `ReactivationNotice` geholt. Eine Musterseite, die den erwarteten Wortlaut
+ * abschreibt, prueft nur sich selbst — hier steht deshalb die Eingabe, und
+ * lesen laesst sich, was die Domaene daraus macht.
+ *
+ * `null` ist kein Fall dieser Tabelle: Beim Wiederoeffnen rechnet der Dienst
+ * die Bewegung immer. `null` hiesse „nicht gerechnet", und dann bliebe die
+ * Flaeche leer — zu sehen im Abschnitt darueber, sobald man den Knopf drueckt.
+ */
+const REOPEN_BOTH: PoolMovement = {
+  appears: ["Intern"],
+  enters: ["Intern"],
+  leaves: ["Erledigt diese Woche"],
+};
+
+const REOPEN_CASES: readonly {
+  readonly title: string;
+  readonly movement: PoolMovement;
+}[] = [
+  { title: "Es erscheint und verschwindet zugleich", movement: REOPEN_BOTH },
+  {
+    title: "Es erscheint nur",
+    movement: { appears: ["Intern", "Ost"], enters: ["Intern", "Ost"], leaves: [] },
+  },
+  {
+    title: "Es verschwindet nur",
+    movement: { appears: [], enters: [], leaves: ["Erledigt diese Woche"] },
+  },
+  {
+    title: "Es passt derzeit nirgends hin",
+    movement: { appears: [], enters: [], leaves: [] },
+  },
+];
 
 export function TimeSection() {
   const [running, setRunning] = useState(false);
@@ -104,26 +143,52 @@ export function TimeSection() {
               {reactivated ? (
                 <ReactivationNotice
                   todoTitle="Betriebshandbuch Kapitel 3"
-                  poolNames={["Intern", "Nicht abgerechnet"]}
+                  movement={REOPEN_BOTH}
                   onUndo={() => setReactivated(false)}
                   onDismiss={() => setReactivated(false)}
                 />
               ) : null}
               <p className="section__lead">
-                Der Satz nennt alle Wirkungen: „Erledigt“ ist weg, und das Todo erscheint wieder in
-                seinen Pools (A-3.4) — Pool-Ansichten blenden erledigte Todos aus, deshalb war es
-                dort verschwunden. Was der Satz ausdrücklich <em>nicht</em> behauptet: dass die
-                Karte die Spalte gewechselt habe. Das tut sie nicht; Statusspalte und
-                Erledigt-Kennzeichen sind unabhängig. Derselbe Satz erscheint an jedem Startpunkt —
-                Dashboard, Todo-Liste, Detailansicht, Board, Zeiterfassung und Outlook-Add-in — und
-                geht zusätzlich in einen <code>aria-live</code>-Bereich. Auf dem Board in
+                Der Hinweis nennt zwei Dinge: <strong>was</strong> geschehen ist — „Erledigt“ ist
+                aufgehoben, der Timer läuft — und <strong>wo</strong> es sichtbar wird. Den zweiten
+                Satz bildet nicht diese Ansicht, sondern <code>poolMovementSentence</code> aus{" "}
+                <code>@takt/domain</code>, aus den drei Namenslisten, die{" "}
+                <code>POST /timer/start</code> als <code>poolMovement</code> mitschickt (E-058).
+                Dieselbe Funktion ruft der Aufgabenbereich des Outlook-Add-ins auf; zwei Fassungen
+                desselben Satzes gibt es nicht mehr. Der Hinweis erscheint an jedem Startpunkt —
+                Dashboard, Todo-Liste, Detailansicht, Board, Zeiterfassung — und geht über{" "}
+                <code>role="status"</code> in einen <code>aria-live</code>-Bereich. Auf dem Board in
                 Abschnitt 5 ist der ganze Vorgang bedienbar.
               </p>
-              <InlineMessage tone="info" title="Wenn keine Poolregel greift">
-                Passt zu den Tags des Todos keine Poolregel, nennt die Meldung keinen Pool, sondern
-                sagt das ausdrücklich. Eine Meldung, die einen Pool erfindet, wäre schlimmer als
-                keine.
+              <InlineMessage tone="warning" title="Der Kartensatz ist ersatzlos entfallen">
+                Bis T-094 endete dieser Hinweis mit „Die Karte bleibt, wo sie ist — die Spalte
+                ändert sich dadurch nicht.“ Das war falsch: Seit E-055 darf eine Regel nach
+                „Erledigt“ und nach dem Exportstatus fragen, und ein Timerstart ändert beides. An
+                seine Stelle tritt keine zweite Beruhigung, sondern die Auskunft des Dienstes —
+                und wo es nichts zu berichten gibt, bleibt die Fläche leer.
               </InlineMessage>
+
+              <SubHeading>Vier Bewegungen, vier Sätze</SubHeading>
+              <p className="section__lead">
+                Der Wortlaut ist in E-058 festgelegt und steht hier nebeneinander, weil man ihn nur
+                nebeneinander prüfen kann. Kein Gattungswort vor dem Namen: Ob „Ost“ ein Pool ist,
+                eine Board-Spalte oder beides, steht in den drei Listen nicht — und ein Satz, der
+                „der Pool „Ost““ sagt, wo eine reine Spalte gemeint ist, schickt den Leser in die
+                falsche Ansicht.
+              </p>
+              <div className="stack" style={{ gap: "var(--space-3)" }}>
+                {REOPEN_CASES.map((example) => (
+                  <div key={example.title} className="stack" style={{ gap: "var(--space-1)" }}>
+                    <p className="section__lead">
+                      <strong>{example.title}</strong>
+                    </p>
+                    <ReactivationNotice
+                      todoTitle="Betriebshandbuch Kapitel 3"
+                      movement={example.movement}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </Card>
         </div>

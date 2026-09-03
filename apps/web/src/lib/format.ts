@@ -284,15 +284,24 @@ export function plural(count: number, one: string, many: string): string {
 /**
  * Zählt Textstücke deutsch auf: `A`, `A und B`, `A, B und C`.
  *
- * Es gibt diese Funktion, weil dieselbe Aufzählung an drei Stellen entsteht —
- * im Toast nach der Wiederaufnahme (`app/TimerContext.tsx`), im Hinweis
- * `ReactivationNotice` und im Outlook-Add-in (`duplicate/reopen.ts`,
- * `listPools`). Bis T-045 hing an einer davon `join(" und ")`, was bei drei
- * Namen „A und B und C" ergab: dieselbe Auskunft in einer anderen Fassung,
- * und die schlechtere (Befund C-24).
+ * ## Wofür sie **nicht** mehr da ist (T-094)
  *
- * Zeichengleich mit `listPools` des Add-ins. Wer die eine ändert, ändert die
- * andere mit — sonst behaupten zwei Stellen dasselbe verschieden.
+ * Bis T-094 zählte sie die Pools im Toast nach der Wiederaufnahme und im
+ * Hinweis `ReactivationNotice` auf, zeichengleich mit `listPools` im
+ * Outlook-Add-in — drei Stellen, an denen dieselbe Aufzählung entstand, und
+ * bis T-045 eine davon mit `join(" und ")` und dem Ergebnis „A und B und C"
+ * (Befund C-24).
+ *
+ * Alle drei sind weg. Der Satz über die Poolbewegung kommt seit E-058 fertig
+ * aus `poolMovementSentence` in `@takt/domain`, und dort zählt die Domäne
+ * selbst auf. Zeichengleichheit über Paketgrenzen zu **verabreden** war immer
+ * die schwächere Fassung von „es gibt nur eine Stelle".
+ *
+ * ## Wofür sie geblieben ist
+ *
+ * Für Aufzählungen, die in der Oberfläche entstehen und nirgendwo sonst: die
+ * leeren Regelordner in `lib/poolRule.ts` (`emptyFolderNames`, E-057). Ein
+ * eigenes `join` dafür wäre die vierte Fassung derselben fünf Zeilen.
  */
 export function joinGerman(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";

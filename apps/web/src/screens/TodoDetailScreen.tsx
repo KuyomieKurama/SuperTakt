@@ -30,7 +30,6 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import {
-  CARD_STAYS,
   DONE_FLAG_LABEL,
   doneFlagState,
   TIME_ENTRY_SOURCE_LABEL,
@@ -333,12 +332,30 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                             <DoneFlag state={flagState} />
                           ) : null}
                         </span>
+                        {/*
+                          Drei Saetze, und keiner wertet eine Regel aus (E-058,
+                          T-094).
+
+                          Bis T-094 stand im mittleren „… erscheint erneut in
+                          jedem Pool, dessen Regel auf seine Tags passt. Die
+                          Karte bleibt, wo sie ist …" — doppelt falsch. Eine
+                          Regel hat seit E-055 fuenf Achsen, nicht nur Tags; und
+                          die Spalte aendert sich sehr wohl, wenn eine Regel
+                          nach „Erledigt" oder nach dem Exportstatus fragt.
+
+                          Rekonstruiert wird die Bewegung hier auch nicht
+                          nachtraeglich: Diese Ansicht weiss nicht, welcher
+                          Zustand vor dem Start galt. Wer es weiss, ist der
+                          Dienst, und er hat es beim Start gesagt (`poolMovement`
+                          an `POST /timer/start`). Der Satz verweist deshalb auf
+                          jene Meldung, statt eine zweite, schlechtere zu bauen.
+                        */}
                         <span className="done-switch__hint">
                           {flagState === "done"
                             ? `Erledigt am ${formatDateTime(todo.completedAt ?? todo.updatedAt)}. Das Todo ist aus seinen Pools ausgeblendet; ein Timerstart hebt das auf.`
                             : flagState === "reopened"
-                              ? `Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen und erscheint erneut in jedem Pool, dessen Regel auf seine Tags passt. ${CARD_STAYS} Setzen Sie den Haken, gilt wieder „Erledigt".`
-                              : "Erscheint in jedem Pool und in jeder Board-Spalte, deren Regel auf seine Tags passt."}
+                              ? 'Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen; welche Pools und Spalten das betrifft, hat die Meldung beim Start genannt. Setzen Sie den Haken, gilt wieder „Erledigt".'
+                              : "Es erscheint überall dort, wo eine Regel es aufnimmt — als Pool, als Board-Spalte oder beides."}
                         </span>
                       </span>
                     </label>

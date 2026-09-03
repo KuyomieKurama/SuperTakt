@@ -38,6 +38,7 @@ import type {
 import type {
   PoolCompletionFilter,
   PoolExportFilter,
+  PoolMatchMode,
   Result,
   StatusId,
   TagId,
@@ -278,7 +279,7 @@ function escapeLike(value: string): string {
  */
 export interface ResolvedPool {
   readonly tagIds: readonly TagId[];
-  readonly matchMode: 'any' | 'all';
+  readonly matchMode: PoolMatchMode;
   readonly excludedTagIds: readonly TagId[];
   /**
    * Nennt die **erforderliche** Tagachse Terme, von denen keiner auf einen Tag

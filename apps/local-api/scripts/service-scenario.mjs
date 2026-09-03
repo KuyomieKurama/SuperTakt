@@ -816,7 +816,33 @@ export async function runScenario() {
     // kein Kennzeichen auf und lässt keine erste Buchung entstehen — also
     // `poolMovement: null` und nicht drei leere Listen.
     await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId });
-    await quiet('POST', '/timer/stop', { note: '' });
+
+    // Der **Stopp** bewegt ebenfalls (E-058 Punkt 6, T-093), und zwar an genau
+    // einer Achse: Die erste abgeschlossene, offene Buchung setzt „hat offene
+    // Buchungen", und die Spalte über offene Buchungen nimmt das Todo damit auf.
+    //
+    // Der Zeitpunkt ist mit Bedacht **nach** dem Exportlauf: Der hat die
+    // bisherigen Buchungen von `todoId` auf `exported` gesetzt, „hat offene
+    // Buchungen" steht also wieder auf falsch. Diese zwei Minuten sind damit
+    // erneut die erste offene Buchung — und die Karte betritt die Spalte.
+    tick(120);
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Rückfrage geklärt' });
+
+    // Und die Gegenprobe zum Stopp: **noch einmal dasselbe**, unmittelbar
+    // danach. Es entsteht wieder eine echte Buchung von zwei Minuten — kein
+    // Doppelklick, kein verworfener Stopp —, und trotzdem bewegt sich nichts:
+    // „hat offene Buchungen" steht seit der Zeile darüber auf wahr, und keine
+    // Regel urteilt anders als vorher. Die Antwort ist `null`.
+    //
+    // Ohne diese Aufzeichnung wäre Abschnitt 15 auch an einer Fassung grün, die
+    // die Sparsamkeitsbedingung wegläßt und bei **jedem** Stopp alle Regeln
+    // auflöst: Sie lieferte dann drei leere Listen statt `null`. Das ist der
+    // Unterschied zwischen „hier war keine Bewegung möglich" und „nachgesehen
+    // und nichts gefunden" — und die drei leeren Listen kosten die Auflösung
+    // jedes Ordnerbaums, für nichts.
+    await quiet('POST', '/timer/start', { todoId });
+    tick(120);
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Nachtrag zur Akte' });
 
     // -----------------------------------------------------------------------
     // Löschen. Jeweils an einem eigens dafür angelegten Stück, damit der

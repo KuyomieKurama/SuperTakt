@@ -139,14 +139,38 @@ nicht abgerechnet"/„Abgerechnet"; „Vom Board nehmen" ohne Bestätigungsdialo
 
 | Nr | Aufgabe | Wer |
 |---|---|---|
-| T-092 | E-058 Absatz 3 im Add-in: `bookingStates`/`poolNamer` in `routes/addin/service.ts` durch `poolMovementNamer` aus `usecases/pool-movement.ts` ersetzen; `reopen.ts`: `poolSentence`, `bookingPoolSentence`, `CARD_STAYS` streichen, Aufrufer auf `poolMovementSentence(movement, tense, 'reopen' \| 'booking')` aus `@takt/domain`; lokale `NamedPoolRule`-Wache durch den Domänentyp ersetzen; `proof:addin` prüft gegen die Funktion statt gegen eine Abschrift; Attrappe in `fixtures.mjs` nachziehen | integration-dev |
-| T-093 | E-058 Punkt 4: `inPools` in `pool-movement.ts` durch reine Aufzählung ersetzen, Satz ohne Treffer „… in keinem Pool und in keiner Spalte"; Punkt 6: `POST /timer/stop` und `POST /timer/orphaned/resolve` liefern `poolMovement \| null` mit Anlass Buchung (OpenAPI, `proof:openapi`); `PoolPort.list`-Kommentar (`ports.ts:328-335`) richtigstellen; benannte Domänentypen `Theme` für `AppSettings.theme` und `PoolMatchMode` für `Pool.matchMode` exportieren (T-091 Frage 1) | domain-dev |
-| T-094 | E-058 Absatz 3 in der Oberfläche: `CARD_STAYS` (`labels.ts`, `Timer.tsx`, `TimerContext.tsx`, `TodoDetailScreen.tsx:340`) und `poolsContaining` entfernen; `TimerContext` nimmt `poolMovement` aus `POST /timer/start` und bildet den Satz über `poolMovementSentence(movement, 'past', doneCleared ? 'reopen' : 'booking')`; Board-Toast aus S-3 an dieselbe Quelle; `api/types.ts` nachziehen (`poolMovement: PoolMovement \| null`, Typ aus `@takt/domain`); `showcase/TimeSection.tsx:122-123`; E-059 Wortlaute (`POOL_EXPORT_LABEL`); Stopp-Antwort noch **nicht** anbinden (kommt mit T-093, Welle C) | frontend-dev |
-| T-095 | Einheitentests: `poolMovementSentence` alle Fälle beider Anlässe und Zeitformen gegen den Wortlaut aus E-058 Punkt 4 (Zweigabdeckung `packages/domain/src` wieder ≥ 80 %); `poolMovementNamer` (enters/leaves nie zugleich, `list('all')`, Regeln statt Namen); Laufzeitwache in `matchesPool`; Ordnersperre `tag_in_use` mit `details`; `describeRuleReach`/`emptyFolderNames` acht Fälle; rote Tests aus T-089 | unit-tester |
-| T-096 | End-to-End: Spalte „erledigt und noch nicht abgerechnet" — Timerstart zeigt in der Hauptanwendung denselben Satz wie das Add-in (`proof:addin`-Fixture als Vergleich); Spalte über leeren Ordner trifft nichts und sagt es; Ordner in einer Regel nicht löschbar (409 mit Regelname in der Oberfläche); Kommentar `tests/e2e/support/actions.ts:125-131` nachziehen; `docs/testplan.md` | e2e-tester |
+| ~~T-092~~ | **fertig.** `poolNamer`/`bookingStates`/`NamedPoolRule` gelöscht, Add-in-Dienst bildet nur das Zustandspaar (`BOOKING_EFFECT` einmal) und ruft `poolMovementNamer`; `reopen.ts` ohne `poolSentence`/`bookingPoolSentence`/`CARD_STAYS`/`aside`, alles über `poolMovementSentence`; `proof:addin` erzeugt die Erwartung aus der Funktion, 134/0, drei statische Wachen (keine zweite Satzfassung, kein `CARD_STAYS`, kein `matchesPool` im Add-in-Dienst). typecheck 0, 648 Tests, fünf Mutationen rot. Offen: Zustandspaar „Wirkung einer Buchung" jetzt an vier Stellen — `bookingMovementStates(todo, entries)` in `usecases/pool-movement.ts` (domain-dev, O-S); Add-in-Routen liefern drei flache Listen, Timer-Routen `poolMovement` — Vereinheitlichung berührt zwei Hoheiten (O-T) | integration-dev |
+| ~~T-093~~ | **fertig.** Satz nur mit Namen, 14/14 zeichengenau nach Tabelle; `POST /timer/stop` und `orphaned/resolve` liefern `poolMovement \| null` (Anlass Buchung, im verworfenen Zweig fest `null`); `PoolPort.list`-Kommentar richtiggestellt (O-I damit erledigt); `Theme`, `PoolMatchMode` exportiert. Alle Nachweispfade 0, `proof:openapi` 100, 633 Einheitentests, Zweigabdeckung Domäne 87,5 %. **Neuer Befund:** `orphaned/resolve` verspricht `reason: [timer_too_short, orphan_discarded]`, liefert nur `timer_too_short` — Entscheidung nötig (O-R) | domain-dev |
+| ~~T-094~~ | **fertig.** `CARD_STAYS` und `poolsContaining` ersatzlos weg; Satz an jeder Fläche aus `poolMovementSentence` mit `poolMovement` aus `POST /timer/start`, Anlass aus `doneCleared`, `null` = keine Fläche (O-G damit erledigt: erste Buchung meldet die Spalte); E-059 bis in die Vorschau, `EXPORT_TEXT` gelöscht, Buchungsetikett aus der Regelachse genommen (Annahme 1, an R-2a); Musterseite zeigt vier Wiederöffnen-Fälle aus der Funktion. typecheck 0, build 0, contrast 0/432, boundaries 0, e2e 36 grün + 1 rot (`kanban.spec.ts:357` TP-KANBAN-06 von T-096, nicht T-094). Offen: `PUT`/`DELETE /todos/{id}/done` ebenfalls `poolMovement`? (O-U); Board-Toast nach „Erledigt" schweigt über Spalten, bis O-U entschieden | frontend-dev |
+| ~~T-095~~ | **fertig.** 53 neue Fälle: 15 Wortfälle `poolMovementSentence` + Mehrfachaufzählung, Laufzeitwache `matchesPool`, `poolMovementNamer` (list('all'), enters/leaves-Invarianten, gleichnamige Pools über die Regel), Ordnersperre `tag_in_use` mit `details`, Migration 0012 vor/zurück mit Bestand, `describeRuleReach`/`emptyFolderNames` acht Fälle in `apps/web/test/lib/poolRule.test.ts`. 648/648, Domäne 87,5 % Zweige, `typecheck:test` über fünf Konfigurationen (Orchestrator: `apps/local-api/tsconfig.test.json`, `apps/web/tsconfig.test.json`) | unit-tester |
+| ~~T-096~~ | **fertig.** TP-KANBAN-06 (E-057: leerer Ordner + Statusachse, Karte bleibt draußen, Vorschau nennt den Grund, Tag im Ordner füllt die Spalte); `tag-folder-rule-lock.spec.ts` (409 `tag_in_use` mit `details[]` über API und Oberfläche, Gegenprobe ungebundener Ordner); `actions.ts`-Kommentar berichtigt; `docs/testplan.md` Abschnitt 17. e2e 37/37. **Zwei Funde in `apps/web`:** (1) zweites `page.goto()` auf eine offene Route löst keine neue Anfrage aus (Daten veralten; im Test über `page.reload()` umgangen); (2) `TaktApiError.details` wird nirgends gelesen — Regelname bei `tag_in_use`/`status_in_use` erscheint nicht in der Fehlermeldung. Beides an frontend-dev, Welle C | e2e-tester |
 
-Danach Welle C: Stopp-Antwort in der Oberfläche anbinden (frontend-dev), Wiedervorlage R-1a/R-2a/
-R-3a, documenter D-1/D-2 und „Regel über Tags" in `docs/`.
+Wortlaut nach E-058 Punkt 4 (Vorlage für T-092 bis T-095; `„X“` steht für einen Namen, mehrere
+werden als `„A“, „B“ und „C“` aufgezählt):
+
+| Anlass | Fall | Ankündigung (`future`) | Bericht (`past`) |
+|---|---|---|---|
+| reopen | nichts, nichts | Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool und in keiner Spalte. | Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte. |
+| reopen | nur `leaves` | Es verschwindet dann aus „X“ und erscheint sonst nirgends. | Es ist aus „X“ verschwunden und erscheint sonst nirgends. |
+| reopen | nur `appears` | Es erscheint dann wieder in „X“. | Es ist zurück in „X“. |
+| reopen | beides | Es erscheint dann wieder in „X“ und verschwindet aus „Y“. | Es ist zurück in „X“ und aus „Y“ verschwunden. |
+| booking | nichts, nichts | `null` | `null` |
+| booking | nur `enters` | Es erscheint dann in „X“. | Es steht jetzt in „X“. |
+| booking | nur `leaves` | Es verschwindet dann aus „X“. | Es ist aus „X“ verschwunden. |
+| booking | beides | Es erscheint dann in „X“ und verschwindet aus „Y“. | Es steht jetzt in „X“ und ist aus „Y“ verschwunden. |
+
+**Messung nach Welle B (Orchestrator):** `pnpm check` Exitcode 0 — 13 Nachweispfade 848/0, 648
+Einheitentests, Zweigabdeckung gesamt 84,34 %; `pnpm test:e2e` 37/37.
+
+### Welle vom 2026-09-04, Welle C
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| T-097 | Stopp-Antwort anbinden: `POST /timer/stop` und `POST /timer/orphaned/resolve` liefern `poolMovement \| null` (E-058 Punkt 6, OpenAPI ab T-093) — `performStop`/`confirmOrphan` in `TimerContext` bilden den Satz mit Anlass `'booking'`, `null` heißt keine Fläche; `api/types.ts` nachziehen. Funde aus T-096: (1) `TaktApiError.details` nirgends gelesen — bei `tag_in_use`/`status_in_use` die Regelnamen aus `details[]` in der Fehlermeldung nennen (Löschen-Dialog Ordner, Tag, Status); (2) zweites `page.goto()` auf eine offene Route löst keine neue Anfrage aus — Ursache finden (Router/Effekt-Abhängigkeit), beheben, damit `StructureContext`/Listen beim erneuten Aufruf frisch laden | frontend-dev |
+
+Danach Welle D: e2e-Vergleich des Bewegungssatzes Hauptanwendung/Add-in und Stopp-Anzeige
+(e2e-tester), Wiedervorlage R-1a (mit O-R `orphan_discarded`), R-2a (mit T-094 Annahme 1), R-3a
+parallel; danach documenter D-1/D-2 und „Regel über Tags" in `docs/`.
 
 **Beim Auftraggeber:** `docs/spec.md` — Drag & Drop in Zeilen 84, 257, 306 seit E-054 aufgehoben;
 A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
@@ -168,9 +192,13 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 | O-P | Neun End-to-End-Fälle nicht gelaufen: Add-in (kein Office.js-Wirt), drei Hüllenzustände (kein echter Tauri-Prozess), Stichprobe über die 19 Orte mit Exportstatus, Standard-Tags über die Oberfläche | e2e-tester |
 | O-Q | 14 Befunde aus T-025 unverändert offen, geordnet nach Gewicht ab C-12 | spec-ux-reviewer |
 
-| O-I | Kommentar an `packages/storage/src/ports.ts` begründet `resolveRule`/`resolveExcluded` mit einem Aufrufer in `routes/addin`, den es seit T-086 nicht mehr gibt; einziger Nutzer in `src` ist der Adapter, dazu `repo-tags.test.ts`. Entweder Kommentar richtigstellen oder beide zugunsten von `resolveAxes` streichen | domain-dev |
+| ~~O-I~~ | erledigt mit T-089/T-093. Restfrage: `resolveRule`/`resolveExcluded` zugunsten von `resolveAxes` streichen? Kommentar an `packages/storage/src/ports.ts` begründete `resolveRule`/`resolveExcluded` mit einem Aufrufer in `routes/addin`, den es seit T-086 nicht mehr gibt; einziger Nutzer in `src` ist der Adapter, dazu `repo-tags.test.ts`. Entweder Kommentar richtigstellen oder beide zugunsten von `resolveAxes` streichen | domain-dev |
 | O-J | `resolved` trägt drei Wahrheitswerte (`isEmpty`, `unresolvedRequired`, `matchesNothing`); frontend-dev schlägt einen benannten Grund `matchesNothingReason: 'none' \| 'empty' \| 'unresolved-required'` vor, damit ein dritter Grund die Oberfläche rot statt still macht | domain-dev |
 | O-K | Das Add-in kann nicht sagen, *warum* ein Pool im Aufgabenbereich fehlt (bekommt nur Namen). Produktfrage: reicht das? | Auftraggeber |
+| O-S | Das Zustandspaar „Wirkung einer Buchung" (`completedAt: null`, `hasOpenEntries: true`) wird an vier Stellen gebildet (Add-in zweimal, `timer/start`, `timer/stop`+`orphaned/resolve`). Vorschlag T-092: `bookingMovementStates(todo, entries)` in `usecases/pool-movement.ts` | domain-dev |
+| O-T | Add-in-Routen liefern `poolNames`/`enteringPoolNames`/`leavingPoolNames`, Timer-Routen `poolMovement: {appears, enters, leaves}`. Eine Form, zwei Hoheiten plus OpenAPI | Orchestrator |
+| O-U | `PUT`/`DELETE /todos/{todoId}/done` liefern kein `poolMovement`; der Board-Toast nach „Erledigt" schweigt deshalb über Spalten. Begründung aus E-058 Punkt 6 gilt wörtlich — dritter Anlass oder Wiederverwendung von `'booking'` (Bewegung ohne „wieder")? | domain-dev |
+| O-R | `POST /timer/orphaned/resolve` verspricht `reason: [timer_too_short, orphan_discarded]`, der Dienst liefert ausnahmslos `timer_too_short` (T-093). Entweder unterscheiden oder Aufzählung kürzen | domain-dev |
 | O-L | `scripts/**/*.mjs` (Nachweispfade, Attrappen) sieht kein Übersetzer; ein `matchesPool`-Aufruf ohne Pflichtfeld bleibt dort still. Option: `checkJs` mit JSDoc-Typen für die Skripte | Orchestrator |
 
 ## Blockiert — braucht eine Umgebung, die hier nicht steht

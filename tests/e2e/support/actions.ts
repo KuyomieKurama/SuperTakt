@@ -70,11 +70,63 @@ export interface BoardColumnRule {
   readonly requiredTagNames?: readonly string[];
   readonly excludedTagNames?: readonly string[];
   /**
+   * Ordnerpfade für "Erforderliche Ordner" (E-057, T-096) — volle
+   * Pfadsegmente, so wie `FolderPicker` sie als Chipbeschriftung anzeigt
+   * (`folder.path.join(" / ")`). Für einen Wurzelordner genügt `[name]`.
+   */
+  readonly requiredFolderPaths?: readonly (readonly string[])[];
+  /** Namen für die Achse "Status" (`RulePickers.tsx`, `StatusPicker`). */
+  readonly statusNames?: readonly string[];
+  /**
    * Die Achse "Erledigt" (E-055). Ohne Angabe bleibt sie auf ihrem
    * Neutralwert "Alle" — sie schränkt dann nicht ein, siehe
    * `POOL_AXIS_NEUTRAL_HINT` in `apps/web/src/lib/labels.ts`.
    */
   readonly completion?: 'done' | 'open';
+}
+
+/**
+ * Wählt einen Ordner in einer der beiden Ordnerauswahlen des Regelformulars
+ * (`RulePickers.tsx`, `FolderPicker`) — unterschieden über die Beschriftung
+ * ihrer Gruppe ("Erforderliche Ordner" gegen "Ausgeschlossene Ordner").
+ *
+ * Ab acht Ordnern zeigt `FolderPicker` ein Suchfeld (A-4.4, T-091); über
+ * einen ganzen `pnpm test:e2e`-Lauf sammeln sich Ordner aus mehreren
+ * Spezifikationsdateien in derselben Datenbank an (`support/services.ts`
+ * setzt sie nur je Lauf zurück, nicht je Datei). Es wird deshalb immer
+ * gesucht, sobald ein Suchfeld da ist, statt sich auf eine Chipzahl zu
+ * verlassen, die von der Ausführungsreihenfolge anderer Dateien abhinge.
+ */
+async function pickFolder(
+  dialog: Locator,
+  groupLabel: string,
+  folderPath: readonly string[],
+): Promise<void> {
+  const group = dialog.getByRole('group', { name: groupLabel, exact: true });
+  /*
+   * Das Suchfeld (falls ab acht Ordnern vorhanden, `RulePickers.tsx`,
+   * `SEARCH_FROM`) steht im selben `.field`-Container als Geschwister der
+   * Gruppe, nicht darin. Gefunden über den gemeinsamen Vorfahren
+   * (XPath-Achse `ancestor`) statt über `Locator.filter({ has })`: Ein
+   * `has`-Filter mit einer schon an `dialog` gebundenen Gruppe kombinierte
+   * hier zusätzlich das Dialogpräfix und traf dadurch nichts — gemessen an
+   * einem hängenden Klick (T-096).
+   */
+  const search = group.locator(
+    'xpath=./ancestor::div[contains(concat(" ", normalize-space(@class), " "), " field ")][1]//input[@type="search"]',
+  );
+  if ((await search.count()) > 0) {
+    await search.fill(folderPath[folderPath.length - 1] ?? '');
+  }
+  await group.getByRole('button', { name: folderPath.join(' / '), exact: true }).click();
+}
+
+/** Wählt einen Status in der Achse "Status" (`RulePickers.tsx`, `StatusPicker`). */
+async function pickStatus(dialog: Locator, statusName: string): Promise<void> {
+  await dialog
+    .getByRole('group', { name: 'Status', exact: true })
+    .getByRole('button', { name: statusName, exact: true })
+    .click();
 }
 
 /**
@@ -117,13 +169,23 @@ export async function createBoardColumn(
     await pickExistingTag(page, excludedSection, tagName);
   }
 
-  // Die Optionszeile "Erledigt" trägt an jedem Knopf zusätzlich den
-  // erklärenden Hinweistext (`RadioRow.tsx`, der Hinweis steht **innerhalb**
-  // des <label>, nicht nur als `aria-describedby`) — der zugängliche Name
-  // ist deshalb "Erledigt Nur erledigte Todos. …", nicht nur "Erledigt".
-  // Ein am Anfang verankertes Muster trifft trotzdem genau einen Knopf, ohne
-  // "Unerledigt" (das mit `Erledigt` als Teilzeichenkette endet) versehentlich
-  // mitzutreffen (an der laufenden Oberfläche nachgesehen, T-081).
+  for (const folderPath of rule.requiredFolderPaths ?? []) {
+    await pickFolder(ruleDialog, 'Erforderliche Ordner', folderPath);
+  }
+
+  for (const statusName of rule.statusNames ?? []) {
+    await pickStatus(ruleDialog, statusName);
+  }
+
+  // Seit T-091 trägt die Optionszeile "Erledigt" den erklärenden Hinweistext
+  // nicht mehr **im** `<label>` (`RadioRow.tsx`) — er hängt jetzt als
+  // Geschwister der Optionsliste über `aria-describedby` an jedem Knopf. Der
+  // zugängliche Name ist deshalb wieder schlicht "Erledigt" bzw.
+  // "Unerledigt", nicht mehr "Erledigt Nur erledigte Todos. …". Das am
+  // Anfang verankerte Muster bleibt trotzdem stehen: Es traf schon vor T-091
+  // genau einen Knopf, weil "Unerledigt" nicht mit "Erledigt" **beginnt**
+  // (sondern nur damit endet), und tut das unverändert (an der laufenden
+  // Oberfläche nachgesehen, T-096).
   if (rule.completion === 'done') {
     await ruleDialog.getByRole('radio', { name: /^Erledigt\b/ }).check();
   } else if (rule.completion === 'open') {

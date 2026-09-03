@@ -17,6 +17,7 @@
  * die Oberfläche erzeugt keine davon selbst.
  */
 
+import type { PoolMovement } from "@takt/domain";
 import type { ExportStatus } from "../components/ExportStatus";
 import type {
   PoolCompletionFilter,
@@ -28,11 +29,23 @@ import type {
   TimeEntrySource,
 } from "../lib/labels";
 
+/**
+ * `PoolMovement` kommt **unmittelbar** aus `@takt/domain` und nicht über
+ * `lib/labels.ts` wie die Aufzählungen daneben (E-058).
+ *
+ * Der Unterschied ist kein Zufall: `lib/labels.ts` gibt es, weil eine
+ * Aufzählung eine deutsche **Beschriftung** braucht, die die Domäne nicht
+ * kennt. `PoolMovement` braucht keine — der Satz dazu kommt fertig aus
+ * derselben Domäne (`poolMovementSentence`), und die Oberfläche hat an drei
+ * Namenslisten nichts zu beschriften. Ein Umweg über `labels.ts` wäre die
+ * Einladung, dort doch eine zweite Fassung des Satzes abzulegen.
+ */
 export type {
   ExportStatus,
   PoolCompletionFilter,
   PoolExportFilter,
   PoolMatchMode,
+  PoolMovement,
   PoolPlacement,
   RoundingMode,
   ThemeSetting,
@@ -536,6 +549,27 @@ export type StartTimerResult =
       readonly stopped: TimeEntry | null;
       /** A-2.5: war das Todo erledigt und ist durch den Start wieder aktiv? */
       readonly doneCleared: boolean;
+      /**
+       * Wie dieser Start das Todo durch die Pools bewegt — oder `null` (E-058).
+       *
+       * `doneCleared` sagt, **was** geschehen ist; dieses Feld sagt, **wo** es
+       * sichtbar wird. Der Dienst rechnet es in genau zwei Fällen: Der Start
+       * hat „Erledigt" aufgehoben, oder die erste abgeschlossene Buchung ist
+       * entstanden. Sonst `null` — und `null` heißt „hier war keine Bewegung
+       * möglich", nicht „es hat sich nichts geändert".
+       *
+       * Die Oberfläche zählt die Namen **nicht** selbst auf. Den Satz bildet
+       * `poolMovementSentence` in `@takt/domain`, und zwar denselben, den der
+       * Aufgabenbereich des Add-ins zeigt. Bis T-094 fragte die Oberfläche
+       * stattdessen je Pool `/pools/{id}/todos` ab und setzte den Satz selbst
+       * zusammen — eine zweite Auskunft über dieselbe Handlung, die `leaves`
+       * nicht kannte und deshalb nur die halbe Bewegung berichtete.
+       *
+       * **Nur an dieser Antwort.** `POST /timer/stop` und
+       * `POST /timer/orphaned/resolve` bekommen dasselbe Feld erst mit T-093;
+       * hier steht nichts, was der Dienst heute nicht liefert.
+       */
+      readonly poolMovement: PoolMovement | null;
     }
   | {
       readonly kind: "confirmation_required";

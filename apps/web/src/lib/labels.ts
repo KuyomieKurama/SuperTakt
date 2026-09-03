@@ -189,16 +189,30 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
   return reactivated ? "reopened" : "open";
 }
 
-/**
- * Was beim Aufheben des Kennzeichens **nicht** geschieht (E-023).
+/*
+ * Hier stand bis T-094 `CARD_STAYS`:
  *
- * Zeichengleich mit `CARD_STAYS` aus `apps/outlook-addin/src/duplicate/reopen.ts`.
- * Die Fassung des Add-ins gewinnt: Der Halbsatz zur Spalte macht E-023
- * aussprechbar, statt vorauszusetzen, dass der Benutzer weiss, was „die Karte"
- * mit „der Spalte" zu tun hat (Befund C-24). Wer den Satz hier aendert, muss
- * ihn dort mitaendern — sonst behaupten zwei Stellen dasselbe verschieden.
+ *     „Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht."
+ *
+ * Der Satz ist **ersatzlos** entfallen (E-058 Absatz 2), und diese Notiz steht
+ * an seiner Stelle, damit ihn niemand aus bester Absicht neu erfindet.
+ *
+ * Er war falsch. Er stammte aus der Zeit, in der eine Spalte nur an Tags hing;
+ * seit E-055 fragt eine Regel auch nach „Erledigt" und nach dem Exportstatus,
+ * und **beides** ändert ein Timerstart — das Kennzeichen fällt (A-2.5), die
+ * erste abgeschlossene Buchung setzt „hat offene Buchungen". Die Karte bleibt
+ * also gerade nicht zwingend, wo sie ist.
+ *
+ * Ersetzt wird er nicht durch einen zweiten Kartensatz, sondern durch eine
+ * **Auskunft**: `POST /timer/start` liefert `poolMovement`, und
+ * `poolMovementSentence` aus `@takt/domain` macht daraus den Satz — denselben,
+ * den der Aufgabenbereich des Add-ins zeigt. Bewegt sich nichts, steht dort
+ * nichts; eine Fläche ohne Inhalt wird weggelassen und nicht mit einer
+ * Beruhigung gefüllt.
+ *
+ * Keine Beschriftung für diesen Satz in dieser Datei: Was aus der Domäne
+ * kommt, wird hier nicht noch einmal getippt.
  */
-export const CARD_STAYS = "Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht.";
 
 /* ==================================================================== */
 /* Die Achsen einer Regel (T-076, T-079)                                */
@@ -280,6 +294,22 @@ export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string
 /**
  * Der Exportstatus-Achse einer Regel (`pool.export_state`).
  *
+ * ## Die Woerter kommen aus E-059, nicht aus dem Datenmodell
+ *
+ * Der Wert heisst in der Datenbank weiter `open` beziehungsweise `exported`;
+ * in der Oberflaeche heisst er **„Noch nicht abgerechnet"** und
+ * **„Abgerechnet"**. Der Grund ist kein Geschmack: „Offen" ist auf der Karte
+ * bereits das Gegenteil von „Erledigt" ({@link DONE_FLAG_LABEL}), und
+ * dasselbe Wort im selben Dialog ein zweites Mal als Gegenteil von
+ * „Exportiert" zu verwenden ist ein Fehler, den der Benutzer ausbadet.
+ *
+ * Verworfen wurden in T-091 zwei naheliegende Ersatzwoerter: „Nicht
+ * exportiert" waere **falsch** — die Achse fragt „hat mindestens eine offene
+ * Buchung" und nicht „hat keine exportierte" —, und „Mit offener Buchung" war
+ * bereits die zweite Fassung derselben Zeichenkette in `lib/poolRule.ts`. Die
+ * gibt es seit T-094 nicht mehr: Die Regelvorschau nimmt genau diese
+ * Beschriftung.
+ *
  * **`exported` heisst „hat mindestens eine exportierte Buchung"** und nicht
  * „vollstaendig abgerechnet" — der Exportstatus gehoert der Buchung, nicht dem
  * Todo (E-032). Ein Todo mit einer offenen und einer exportierten Buchung
@@ -297,20 +327,29 @@ export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string
  */
 export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
   any: "Alle",
-  open: "Offen",
-  exported: "Exportiert",
+  open: "Noch nicht abgerechnet",
+  exported: "Abgerechnet",
 };
 
 /**
- * Was „Exportiert" ausserdem mitnimmt (E-047, E-050, S-1 aus R-2).
+ * Was „Abgerechnet" ausserdem mitnimmt (E-047, E-050, S-1 aus R-2).
  *
  * Steht an der Achse und nicht in einer Fussnote: Wer eine Spalte „schon
  * abgerechnet" baut, soll vor dem Speichern lesen, dass die ausgebuchten
  * Buchungen darin stehen — sie sind die einzige Auswertung, fuer die E-047
  * ueberhaupt eingefuehrt wurde.
+ *
+ * **Seit E-059 muss dieser Satz mehr leisten als vorher.** Solange die Achse
+ * „Exportiert" hiess, war der Zusatz eine Praezisierung. Jetzt heisst sie
+ * „Abgerechnet", und eine Buchung, die als **„Nicht abgerechnet"** ausgebucht
+ * wurde, steht trotzdem darin — zwei Woerter, die sich zu widersprechen
+ * scheinen und beide richtig sind, weil das eine den Anzeigezustand einer
+ * Buchung meint (E-050) und das andere den Wert `export_state = 'exported'`,
+ * den beide teilen (E-032, zweiwertig). Der Satz spricht den Widerspruch
+ * deshalb aus, statt ihn zu ueberspielen.
  */
 export const POOL_EXPORT_NOT_BILLED_HINT =
-  "Ausgebuchte Buchungen („Nicht abgerechnet“, E-047) zählen mit: Sie tragen denselben Exportstatus, obwohl sie nie in einer Datei waren.";
+  "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ (E-047) trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
 
 /**
  * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.

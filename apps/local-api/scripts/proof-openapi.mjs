@@ -1729,7 +1729,7 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-section('15  Die Poolbewegung beim Timerstart (E-058) und die Sperre auf einem Ordner in einer Regel');
+section('15  Die Poolbewegung bei Start, Stopp und verwaister Buchung (E-058) und die Sperre auf einem Ordner in einer Regel');
 // ---------------------------------------------------------------------------
 
 /*
@@ -1840,22 +1840,155 @@ check(
 );
 
 check(
-  'der Satz für „keine Regel trifft" spricht von der **Regel** und nicht mehr von der Poolregel (E-058)',
+  'der Satz für „keine Regel trifft" spricht von der **Regel** und nennt beide Flächen (E-058 Punkt 4)',
   poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen') ===
-    'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool.' &&
+    'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool und in keiner Spalte.' &&
     poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'past', 'reopen') ===
-      'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool.',
+      'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte.',
   poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen'),
 );
 
 check(
   'die reine Buchung bekommt einen eigenen Satz — ohne „wieder", und `null`, wenn nichts geschieht',
   poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking') ===
-    'Es erscheint dann in dem Pool „B“.' &&
+    'Es erscheint dann in „B“.' &&
     poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'past', 'booking') ===
-      'Es steht jetzt in dem Pool „B“.' &&
+      'Es steht jetzt in „B“.' &&
     poolMovementSentence({ appears: ['A'], enters: [], leaves: [] }, 'future', 'booking') === null,
   String(poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking')),
+);
+
+/*
+ * **Kein Gattungswort, in keinem der vierzehn Sätze** (E-058 Punkt 4, T-093).
+ *
+ * Bis T-093 baute die Funktion „dem Pool „X“" beziehungsweise „den Pools „X“
+ * und „Y“" ein. Das war falsch, seit E-054 eine Kanban-Spalte dieselbe Entität
+ * ist wie ein Pool: Die drei Listen tragen Namen, aber keine Fläche. Ein Satz,
+ * der „der Pool „Ost“" sagt, wo eine reine Board-Spalte gemeint ist, schickt
+ * den Benutzer in die Pool-Liste, in der sie nicht steht.
+ *
+ * Gemessen wird über **alle** Zweige beider Anläße und beider Zeitformen, mit
+ * einem und mit zwei Namen — eine Stichprobe an einem Zweig ließe die übrigen
+ * elf offen, und genau so war der Fehler entstanden.
+ */
+const sentencesEverywhere = [];
+for (const occasion of ['reopen', 'booking']) {
+  for (const tense of ['future', 'past']) {
+    for (const movementCase of [
+      { appears: [], enters: [], leaves: [] },
+      { appears: [], enters: [], leaves: ['A'] },
+      { appears: ['A'], enters: ['A'], leaves: [] },
+      { appears: ['A', 'B'], enters: ['A', 'B'], leaves: ['C', 'D'] },
+    ]) {
+      const sentence = poolMovementSentence(movementCase, tense, occasion);
+      if (sentence !== null) sentencesEverywhere.push(sentence);
+    }
+  }
+}
+const withGenus = sentencesEverywhere.filter((sentence) =>
+  /\b(dem Pool|den Pools|der Spalte|den Spalten|die Spalte|der Pool)\b/u.test(sentence),
+);
+check(
+  `kein Satz nennt ein Gattungswort vor dem Namen (${sentencesEverywhere.length} Sätze geprüft)`,
+  sentencesEverywhere.length === 14 && withGenus.length === 0,
+  withGenus.join(' | ') || `${sentencesEverywhere.length} Sätze`,
+);
+
+/*
+ * Die Gegenprobe zur Gegenprobe: Der Name steht **überhaupt** im Satz, und die
+ * Aufzählung zweier Namen trennt sie mit „und". Ohne sie wäre die Prüfung
+ * darüber auch an einer Fassung grün, die die Namen ganz wegläßt.
+ */
+check(
+  'die Namen stehen in Anführungszeichen und werden mit „und" aufgezählt',
+  poolMovementSentence({ appears: ['A', 'B'], enters: [], leaves: [] }, 'future', 'reopen') ===
+    'Es erscheint dann wieder in „A“ und „B“.' &&
+    poolMovementSentence({ appears: ['A', 'B', 'C'], enters: [], leaves: [] }, 'past', 'reopen') ===
+      'Es ist zurück in „A“, „B“ und „C“.',
+  poolMovementSentence({ appears: ['A', 'B', 'C'], enters: [], leaves: [] }, 'past', 'reopen'),
+);
+
+/*
+ * **Auch der Stopp sagt, was er bewegt hat** (E-058 Punkt 6, T-093).
+ *
+ * Die erste abgeschlossene Buchung setzt „hat offene Buchungen", und jede
+ * Spalte mit `exportState: 'open'` nimmt das Todo damit auf. Bis T-093 gab nur
+ * der Start eine Auskunft — und ausgerechnet der ist der Sonderweg: Er läßt die
+ * erste Buchung nur dann entstehen, wenn er einen Timer **desselben** Todos
+ * verdrängt. Der Regelweg ist der Stopp.
+ *
+ * Gemessen wird an der echten Route, an vier Aufzeichnungen, die sich
+ * gegenseitig halten:
+ *
+ *   1. ein Stopp, der die erste offene Buchung erzeugt  → `enters`
+ *   2. ein Stopp unter der Mindestdauer (verworfen)      → `null`
+ *   3. ein Stopp auf einem Todo, das schon eine hat      → `null`
+ *   4. die verwaiste Buchung, gebucht                    → `enters`
+ *
+ * Ohne 3 wäre der Abschnitt auch an einer Fassung grün, die bei jedem Stopp
+ * alle Regeln auflöst und drei leere Listen schickt.
+ */
+const stopRecords = records.filter((record) => record.operationId === 'stopTimer');
+const bookedStops = stopRecords.filter((record) => record.body?.data?.kind === 'recorded');
+const movingStop = bookedStops.find((record) => record.body.data.poolMovement !== null);
+const quietStop = bookedStops.find((record) => record.body.data.poolMovement === null);
+const discardedStop = stopRecords.find((record) => record.body?.data?.kind === 'discarded');
+
+check(
+  `\`POST /timer/stop\` liefert eine Bewegung, wenn die erste offene Buchung entsteht (${bookedStops.length} gebuchte Stopps)`,
+  movingStop !== undefined &&
+    movingStop.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork) &&
+    movingStop.body.data.poolMovement.leaves.length === 0,
+  JSON.stringify(movingStop?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  'ein Stopp auf einem Todo, das schon eine offene Buchung hat, liefert `poolMovement: null`',
+  quietStop !== undefined,
+  bookedStops.map((record) => JSON.stringify(record.body.data.poolMovement)).join(' | '),
+);
+
+check(
+  'ein verworfener Stopp liefert `poolMovement: null` — ohne Buchung keine Bewegung',
+  discardedStop !== undefined && discardedStop.body.data.poolMovement === null,
+  JSON.stringify(discardedStop?.body?.data ?? null),
+);
+
+/*
+ * Und derselbe Weg über die verwaiste Buchung (E-036). Sie ist der zweite und
+ * einzige andere Weg, auf dem aus einem laufenden Timer eine Buchung wird —
+ * und `timer.stop` ist dort dieselbe Anweisung. Wenn hier nichts stünde, ließe
+ * sich der Zweig durch Verwerfen des `poolMovement` ersetzen, ohne dass etwas
+ * rot würde.
+ */
+const orphanResolutions = records.filter(
+  (record) => record.operationId === 'resolveOrphanedTimer' && record.body?.data?.kind === 'recorded',
+);
+check(
+  `\`POST /timer/orphaned/resolve\` liefert dieselbe Bewegung, wenn es bucht (${orphanResolutions.length} gebucht)`,
+  orphanResolutions.length >= 1 &&
+    orphanResolutions.every(
+      (record) =>
+        record.body.data.poolMovement !== null &&
+        record.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork),
+    ),
+  JSON.stringify(orphanResolutions[0]?.body?.data?.poolMovement ?? null),
+);
+
+/*
+ * Der Anlaß ist beim Stopp **immer** `'booking'` und nie `'reopen'`: Ein Stopp
+ * hebt kein „Erledigt" auf. Gemessen wird das am Satz, den die Domäne aus der
+ * gelieferten Bewegung bildet — er darf kein „wieder" tragen und keine
+ * Aufzählung von `appears` sein.
+ */
+const stopSentence =
+  movingStop === undefined
+    ? null
+    : poolMovementSentence(movingStop.body.data.poolMovement, 'past', 'booking');
+check(
+  'der Satz zum Stopp nennt die betretene Spalte, ohne „wieder" und ohne `appears`',
+  stopSentence === `Es steht jetzt in „${BOARD_COLUMNS.openWork}“.`,
+  String(stopSentence),
 );
 
 /*

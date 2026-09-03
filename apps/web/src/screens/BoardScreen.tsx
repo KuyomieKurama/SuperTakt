@@ -150,10 +150,24 @@ export function BoardScreen() {
 
             Gesagt wird deshalb nur, was ohne Kenntnis der eingerichteten
             Regeln wahr ist: das Kennzeichen, die Sichtbarkeit und die
-            Nicht-Wirkung auf Tags und Status. **Wohin** die Karte wandert,
-            sagt nach E-058 die Domäne über `poolMovementSentence` — dieselbe
-            Quelle wie im Add-in, und derselbe Satz. Bis dahin behauptet hier
-            niemand etwas, das er nicht weiß.
+            Nicht-Wirkung auf Tags und Status.
+
+            **Warum hier kein Bewegungssatz steht, der Timer-Toast aber einen
+            hat (Stand T-094).** Der Satz kommt aus `poolMovementSentence`, und
+            der braucht die drei Namenslisten aus einem Zustandspaar vor und
+            nach der Handlung. Die hat nur der Dienst, und er gibt sie nach
+            E-058 an den **Timer**-Routen heraus: `POST /timer/start` seit
+            T-089, Stopp und `orphaned/resolve` mit T-093. Die beiden
+            Erledigt-Routen (`PUT`/`DELETE /todos/{id}/done`) antworten mit dem
+            Todo und sonst nichts.
+
+            Hier selbst zu rechnen wäre die zweite Fassung einer Auskunft, die
+            E-058 gerade auf eine zusammengeführt hat — und sie wäre die
+            schlechtere: Nach dem Aufruf ist der Zustand davor weg, und ohne
+            ihn ist „erscheint neu" von „stand schon da" nicht zu
+            unterscheiden. Solange der Dienst an dieser Handlung schweigt,
+            schweigt der Toast über die Spalten mit. Als Vorschlag an den
+            Orchestrator im Bericht zu T-094 vermerkt.
           */
           toasts.show({
             tone: wasDone ? "info" : "success",

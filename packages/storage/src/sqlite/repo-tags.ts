@@ -34,6 +34,7 @@ import type {
   PoolCompletionFilter,
   PoolExportFilter,
   PoolId,
+  PoolMatchMode,
   PoolTagTerm,
   StatusId,
   Tag,
@@ -1009,7 +1010,7 @@ export function resolvePoolAxis(
 }
 
 /** Der Modus einer Pool-Regel. Für die Filterübersetzung in `repo-todos.ts`. */
-export function poolMatchMode(conn: SqlConnection, poolId: string): 'any' | 'all' {
+export function poolMatchMode(conn: SqlConnection, poolId: string): PoolMatchMode {
   const row = conn.prepare('SELECT match_mode FROM pool WHERE id = ?').get(poolId);
   return row !== undefined && text(row, 'match_mode') === 'all' ? 'all' : 'any';
 }

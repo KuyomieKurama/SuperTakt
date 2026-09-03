@@ -27,18 +27,29 @@
  * Diese Datei importiert nichts; sie braucht nichts.
  *
  * ---------------------------------------------------------------------------
- * Was gegenüber `reopen.ts` geändert ist — genau eine Sache
+ * Was gegenüber `reopen.ts` geändert ist — zwei Dinge, beide entschieden
  * ---------------------------------------------------------------------------
  *
- * „Poolregel" heißt jetzt **Regel** (E-058 Absatz 2). Eine Regel hat seit
- * E-055 fünf Achsen: erforderliche Tags, ausgeschlossene Tags, Status,
+ * **Erstens: „Poolregel" heißt jetzt Regel** (E-058 Absatz 2). Eine Regel hat
+ * seit E-055 fünf Achsen: erforderliche Tags, ausgeschlossene Tags, Status,
  * Erledigt und Exportstatus. Von „der Poolregel auf seine Tags" zu sprechen
  * benennt eine von fünf und legt dem Benutzer nahe, an den übrigen vier nach
  * dem Grund zu suchen, warum sein Todo nirgends auftaucht.
  *
- * Alles andere ist Wort für Wort übernommen. Das ist Absicht: Die Sätze sind
+ * **Zweitens: kein Gattungswort vor dem Namen** (E-058 Punkt 4, T-093). Der
+ * Satz sagt „in „Ost“", nicht „in dem Pool „Ost“". Begründung an `listPools`:
+ * Die drei Listen tragen Namen, aber keine Fläche, und seit E-054 kann
+ * derselbe Name eine Spalte bezeichnen. Zwei Sätze ändern sich dadurch
+ * mehr als nur im Einschub — der ohne jeden Treffer nennt jetzt **beide**
+ * Flächen („in keinem Pool und in keiner Spalte"), und „erscheint in keinem
+ * anderen" wird zu „erscheint sonst nirgends", weil „anderen" ohne
+ * Gattungswort keinen Bezug mehr hat.
+ *
+ * Alles Übrige ist Wort für Wort übernommen. Das ist Absicht: Die Sätze sind
  * an beiden Flächen erprobt, und eine Verbesserung nebenbei wäre eine
- * Änderung, die in keiner Entscheidung steht.
+ * Änderung, die in keiner Entscheidung steht. Der verbindliche Wortlaut aller
+ * vierzehn Sätze steht in `.claude/team/board.md` bei T-093; die Tests messen
+ * zeichengenau dagegen.
  */
 
 /**
@@ -109,27 +120,34 @@ export type PoolMovementTense = 'future' | 'past';
 export type PoolMovementOccasion = 'reopen' | 'booking';
 
 /**
- * Zählt Pools **einzeln** auf, in deutschen Anführungszeichen.
+ * Zählt die Namen **einzeln** auf, in deutschen Anführungszeichen — und sonst
+ * nichts (E-058 Punkt 4).
  *
- * Keine Zusammenfassung wie „in 3 Pools": Der Benutzer soll die Namen lesen,
- * die er gleich in der Hauptanwendung wiederfindet. Eine Zahl wäre schneller
- * geschrieben und ließe die Frage offen, die sie beantworten soll.
+ * Zwei Entscheidungen stecken in diesen fünf Zeilen.
+ *
+ * **Namen statt Zahl.** Keine Zusammenfassung wie „in 3 Pools": Der Benutzer
+ * soll die Namen lesen, die er gleich in der Hauptanwendung wiederfindet. Eine
+ * Zahl wäre schneller geschrieben und ließe die Frage offen, die sie
+ * beantworten soll.
+ *
+ * **Kein Gattungswort davor.** Bis T-093 stand hier ein zweiter Baustein
+ * (`inPools`), der „dem Pool „X“" oder „den Pools „X“ und „Y“" daraus
+ * machte. Er war falsch, seit E-054 eine Kanban-Spalte dieselbe Entität ist wie
+ * ein Pool: Die drei Listen tragen Namen, aber keine Fläche. Ob „Ost" ein Pool
+ * ist, eine Spalte oder — bei `placement: 'both'` — beides, steht in dieser
+ * Datei nicht und darf hier auch nicht geraten werden. Ein Satz, der „der Pool
+ * „Ost“" sagt, wo eine reine Board-Spalte gemeint ist, schickt den Benutzer in
+ * die Pool-Liste, in der sie nicht steht.
+ *
+ * Der Nebengewinn: Die Zahl der Namen ändert nur die Aufzählung, nicht den
+ * Artikel. Es gibt keinen Singular-Plural-Fall mehr, in dem der Satz stolpern
+ * könnte.
  */
 const listPools = (poolNames: readonly string[]): string => {
   const quoted = poolNames.map((name) => `„${name}“`);
   if (quoted.length <= 1) return quoted[0] ?? '';
   return `${quoted.slice(0, -1).join(', ')} und ${quoted[quoted.length - 1] ?? ''}`;
 };
-
-/**
- * „dem Pool X" oder „den Pools X und Y" — der Einschub, der in jeden Satz
- * dieser Datei paßt.
- *
- * Die Zahl der Pools entscheidet über den Artikel; ein „in den Pools „X“" für
- * einen einzigen wäre die Art Fehler, die jeder liest und niemand meldet.
- */
-const inPools = (names: readonly string[]): string =>
-  `${names.length === 1 ? 'dem Pool' : 'den Pools'} ${listPools(names)}`;
 
 /**
  * Der Satz über die Bewegung — vor oder nach der Handlung (E-058).
@@ -159,11 +177,13 @@ const inPools = (names: readonly string[]): string =>
  * Die Überladungen sagen es dem Aufrufer, statt ihn raten zu lassen.
  *
  *  - `'reopen'` **hat immer etwas zu sagen**, auch wenn beide Listen leer sind:
- *    „Auf dieses Todo paßt derzeit keine Regel — es erscheint danach in keinem
- *    Pool." Das ist die unangenehmere, aber die wahre Auskunft. Ein Todo, auf
- *    das keine Regel paßt, ist nach der Aufhebung offen und trotzdem nirgends
- *    zu sehen außer in der Todo-Liste; wer das verschweigt, schickt jemanden
- *    suchen.
+ *    „Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem
+ *    Pool und in keiner Spalte." Das ist die unangenehmere, aber die wahre
+ *    Auskunft. Ein Todo, auf das keine Regel passt, ist nach der Aufhebung
+ *    offen und trotzdem nirgends zu sehen außer in der Todo-Liste; wer das
+ *    verschweigt, schickt jemanden suchen. Beide Flächen werden genannt, weil
+ *    keine der beiden das Todo zeigt und der Benutzer sonst auf der einen
+ *    weitersucht.
  *  - `'booking'` liefert `null`, wenn `enters` und `leaves` leer sind — der
  *    Normalfall bei jeder zweiten und jeder weiteren Buchung. `null` und nicht
  *    der leere String: Ein leerer String ist ein Satz mit null Zeichen, und die
@@ -181,9 +201,9 @@ const inPools = (names: readonly string[]): string =>
  * ---------------------------------------------------------------------------
  *
  * Aus Bausteinen zusammengesetzt wäre es kürzer und ergäbe im vierten Fall
- * einen Widerspruch: „Auf dieses Todo paßt keine Regel" und „es verschwindet
- * aus dem Pool X" können nicht beide wahr sein. Ein Satz, den niemand ganz
- * gelesen hat, sagt so etwas.
+ * einen Widerspruch: „Auf dieses Todo passt keine Regel" und „es verschwindet
+ * aus „X“" können nicht beide wahr sein. Ein Satz, den niemand ganz gelesen
+ * hat, sagt so etwas.
  *
  * Zwei Zweige sind im Betrieb heute unerreichbar — auf einem offenen Todo
  * ändert eine Buchung genau eine Achse, „hat offene Buchungen" von falsch auf
@@ -219,25 +239,25 @@ export function poolMovementSentence(
     // erledigt und in keinem dieser Pools zu sehen.
     if (appears.length === 0 && leaves.length === 0) {
       return tense === 'future'
-        ? 'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool.'
-        : 'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool.';
+        ? 'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool und in keiner Spalte.'
+        : 'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte.';
     }
 
     if (appears.length === 0) {
       return tense === 'future'
-        ? `Es verschwindet dann aus ${inPools(leaves)} und erscheint in keinem anderen.`
-        : `Es ist aus ${inPools(leaves)} verschwunden und erscheint in keinem anderen.`;
+        ? `Es verschwindet dann aus ${listPools(leaves)} und erscheint sonst nirgends.`
+        : `Es ist aus ${listPools(leaves)} verschwunden und erscheint sonst nirgends.`;
     }
 
     if (leaves.length === 0) {
       return tense === 'future'
-        ? `Es erscheint dann wieder in ${inPools(appears)}.`
-        : `Es ist zurück in ${inPools(appears)}.`;
+        ? `Es erscheint dann wieder in ${listPools(appears)}.`
+        : `Es ist zurück in ${listPools(appears)}.`;
     }
 
     return tense === 'future'
-      ? `Es erscheint dann wieder in ${inPools(appears)} und verschwindet aus ${inPools(leaves)}.`
-      : `Es ist zurück in ${inPools(appears)} und aus ${inPools(leaves)} verschwunden.`;
+      ? `Es erscheint dann wieder in ${listPools(appears)} und verschwindet aus ${listPools(leaves)}.`
+      : `Es ist zurück in ${listPools(appears)} und aus ${listPools(leaves)} verschwunden.`;
   }
 
   // Keine Bewegung, kein Satz. Diese Zeile ist die Auflage aus E-056 und steht
@@ -246,17 +266,17 @@ export function poolMovementSentence(
 
   if (leaves.length === 0) {
     return tense === 'future'
-      ? `Es erscheint dann in ${inPools(enters)}.`
-      : `Es steht jetzt in ${inPools(enters)}.`;
+      ? `Es erscheint dann in ${listPools(enters)}.`
+      : `Es steht jetzt in ${listPools(enters)}.`;
   }
 
   if (enters.length === 0) {
     return tense === 'future'
-      ? `Es verschwindet dann aus ${inPools(leaves)}.`
-      : `Es ist aus ${inPools(leaves)} verschwunden.`;
+      ? `Es verschwindet dann aus ${listPools(leaves)}.`
+      : `Es ist aus ${listPools(leaves)} verschwunden.`;
   }
 
   return tense === 'future'
-    ? `Es erscheint dann in ${inPools(enters)} und verschwindet aus ${inPools(leaves)}.`
-    : `Es steht jetzt in ${inPools(enters)} und ist aus ${inPools(leaves)} verschwunden.`;
+    ? `Es erscheint dann in ${listPools(enters)} und verschwindet aus ${listPools(leaves)}.`
+    : `Es steht jetzt in ${listPools(enters)} und ist aus ${listPools(leaves)} verschwunden.`;
 }

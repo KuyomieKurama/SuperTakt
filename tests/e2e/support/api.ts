@@ -77,6 +77,14 @@ export async function markTodoDone(id: string): Promise<Todo> {
   return call<Todo>(`/todos/${id}/done`, { method: 'PUT' });
 }
 
+/** Setzt die Tags eines Todos vollständig neu (Vorbereitung, kein Teil der geprüften Bedienung). */
+export async function setTodoTags(id: string, tagIds: readonly string[]): Promise<Todo> {
+  return call<Todo>(`/todos/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tagIds: [...tagIds] }),
+  });
+}
+
 /** A-2.5 — „Erledigt" von Hand aufheben, ohne über den Timer zu gehen. */
 export async function clearTodoDone(id: string): Promise<Todo> {
   return call<Todo>(`/todos/${id}/done`, { method: 'DELETE' });
@@ -191,6 +199,54 @@ export async function moveTagFolder(
   return { ok: true, value: envelope.data };
 }
 
+/** Aufräumen — ein leerer, an keiner Regel hängender Ordner ist löschbar. */
+export async function deleteTagFolder(id: string): Promise<void> {
+  await call<void>(`/tag-folders/${id}`, { method: 'DELETE' });
+}
+
+export interface ApiFieldErrorEntry {
+  readonly field: string;
+  readonly code: string;
+  readonly message: string;
+}
+
+/**
+ * `DELETE /tag-folders/:id` roh — anders als {@link deleteTagFolder} wirft
+ * dieser Weg bei einer Ablehnung nicht, sondern liefert Status und Antwortkörper
+ * zur Prüfung (T-096, R-1 Befund 1 / T-089): Ein in einer Regel stehender
+ * Ordner antwortet `409 tag_in_use` mit `details` — je betroffener Regel ein
+ * Eintrag mit ihrer Kennung (`field`) und ihrem Namen (`message`,
+ * `packages/storage/src/sqlite/mappers.ts#poolReference`).
+ */
+export async function attemptDeleteTagFolder(id: string): Promise<
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly status: number;
+      readonly body: {
+        readonly error?: {
+          readonly code?: string;
+          readonly message?: string;
+          readonly details?: readonly ApiFieldErrorEntry[];
+        };
+      };
+    }
+> {
+  const response = await fetch(`${API_BASE_URL}/tag-folders/${id}`, {
+    method: 'DELETE',
+    headers: { Origin: WEB_BASE_URL, [TOKEN_HEADER]: SESSION_SECRET },
+  });
+  if (response.status === 204) return { ok: true };
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: {
+      code?: string;
+      message?: string;
+      details?: readonly ApiFieldErrorEntry[];
+    };
+  };
+  return { ok: false, status: response.status, body };
+}
+
 export interface Status {
   readonly id: string;
   readonly name: string;
@@ -229,6 +285,8 @@ export async function createPool(input: {
   name: string;
   placement?: 'pool' | 'board' | 'both';
   requiredTagIds?: readonly string[];
+  /** Ordnerterme der erforderlichen Achse (E-057, T-096). */
+  requiredFolderIds?: readonly string[];
   completion?: 'any' | 'done' | 'open';
 }): Promise<Pool> {
   return call<Pool>('/pools', {
@@ -236,7 +294,10 @@ export async function createPool(input: {
     body: JSON.stringify({
       name: input.name,
       placement: input.placement ?? 'pool',
-      rule: (input.requiredTagIds ?? []).map((tagId) => ({ kind: 'tag', tagId })),
+      rule: [
+        ...(input.requiredTagIds ?? []).map((tagId) => ({ kind: 'tag', tagId })),
+        ...(input.requiredFolderIds ?? []).map((folderId) => ({ kind: 'folder', folderId })),
+      ],
       completion: input.completion ?? 'any',
     }),
   });

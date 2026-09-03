@@ -411,6 +411,17 @@ export const createFakeStore = (options = {}) => {
       },
     },
 
+    /*
+     * Der Ausschnitt, gegen den seit T-092 der **Anwendungsfall** läuft.
+     *
+     * `poolMovementNamer` (`apps/local-api/src/usecases/pool-movement.ts`)
+     * verlangt `Pick<PoolPort, 'list' | 'resolveAxes'>` — genau diese beiden
+     * Methoden, und keine schreibt. Der Add-in-Dienst reicht ihm seinen eigenen
+     * Port-Ausschnitt durch, ohne ihn anzufassen (E-058 Absatz 1); die Attrappe
+     * musste dafür nichts lernen, was sie nicht schon seit T-086 und T-090 kann.
+     * Das ist keine Selbstverständlichkeit, sondern der Grund, aus dem der
+     * Anwendungsfall diesen Zuschnitt trägt und nicht den ganzen Port.
+     */
     pools: {
       /*
        * Das Flächenargument wird **ausgewertet** und nicht verschluckt (T-090).
@@ -449,9 +460,10 @@ export const createFakeStore = (options = {}) => {
        * Beide Achsen in einer Antwort — **und** die Ordner, aus denen kein Tag
        * geworden ist (E-057, `PoolPort.resolveAxes`).
        *
-       * Seit T-086 ist das die Methode, die der Add-in-Teilbaum benutzt; die
-       * beiden schmalen darüber bleiben als der Rest des Ports stehen, den ein
-       * `UnitOfWork` mitbringt. Sie rufen dieselbe Auflösung — eine zweite,
+       * Seit T-086 ist das die Methode, die der Add-in-Teilbaum benutzt — seit
+       * T-092 über `poolMovementNamer` und nicht mehr über eine eigene Rechnung
+       * im Dienst; die beiden schmalen darüber bleiben als der Rest des Ports
+       * stehen, den ein `UnitOfWork` mitbringt. Sie rufen dieselbe Auflösung — eine zweite,
        * die auseinanderlaufen könnte, wäre eine Attrappe, die etwas anderes
        * behauptet als der Betrieb.
        */

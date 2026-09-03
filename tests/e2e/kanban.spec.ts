@@ -57,12 +57,17 @@ import { test, expect } from '@playwright/test';
 
 import {
   cleanupAnyTimer,
+  createStatus,
   createTag,
+  createTagFolder,
   createTodo,
   deletePoolByName,
   deleteTag,
+  deleteTagFolder,
   deleteTodo,
+  deleteTodoStatus,
   markTodoDone,
+  setTodoTags,
   type Todo,
 } from './support/api';
 import { createBoardColumn } from './support/actions';
@@ -345,6 +350,80 @@ test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ a
       await deletePoolByName(openColumnName).catch(() => undefined);
       await deleteTodo(todo.id).catch(() => undefined);
       await deleteTag(tag.id).catch(() => undefined);
+    }
+  });
+});
+
+test.describe('TP-KANBAN-06 — Ein leerer Ordner in der Regel trifft nichts und sagt es (E-057, T-096)', () => {
+  test('Spalte über einen leeren Ordner und einen Status bleibt leer, bis ein Tag im Ordner liegt', async ({
+    page,
+  }) => {
+    /*
+     * Der Befund aus T-080/E-057: Ein Ordnerterm, der auf keinen Tag
+     * auflöst, ist keine neutrale Achse, sondern eine Einschränkung ohne
+     * Treffer — die Regel trifft nichts, **unabhängig von den übrigen
+     * Achsen** (`decisions.md`, E-057). Die Regel unten kombiniert deshalb
+     * den leeren Ordner ausdrücklich mit einer zweiten, für sich genommen
+     * erfüllbaren Achse (Status): Ohne E-057 verschwände der leere
+     * Ordnerterm als Neutralwert, und ein Todo mit dem passenden Status
+     * erschiene trotzdem — genau die Richtung, die E-057 ausschließt.
+     */
+    const run = Date.now();
+    const columnName = `E2E-Kanban-LeererOrdner-${run}`;
+    const emptyFolder = await createTagFolder(`E2E-Kanban-LeererOrdner-Ordner-${run}`);
+    const status = await createStatus(`E2E-Kanban-LeererOrdner-Status-${run}`);
+    const todo = await createTodo({ title: `E2E-KANBAN-LEER-${run}`, statusId: status.id });
+    let tag: Awaited<ReturnType<typeof createTag>> | null = null;
+
+    try {
+      await gotoBoard(page);
+      await createBoardColumn(page, columnName, {
+        requiredFolderPaths: [[emptyFolder.name]],
+        statusNames: [status.name],
+      });
+
+      const column = boardColumn(page, columnName);
+      await expect(column).toBeVisible();
+
+      // Der Leerzustand nennt den betroffenen Ordner beim Namen und bietet
+      // "Tag anlegen" an — nicht den allgemeinen "keine Bedingung"- oder
+      // "keine Karte trifft"-Zustand (`BoardColumnEmpty`, `BoardScreen.tsx`).
+      await expect(column.getByText('Der geforderte Ordner enthält kein Tag')).toBeVisible();
+      await expect(column).toContainText(emptyFolder.name);
+      await expect(column.locator('.kcard')).toHaveCount(0);
+      await expect(column.locator('.kcard', { hasText: todo.title })).toHaveCount(0);
+
+      // Dieselbe Auskunft steht schon unter dem Spaltenkopf, an der Regel-
+      // vorschau selbst (`RuleSummary`, `describeRuleReach`) — nicht erst im
+      // Leerzustand darunter, und beide nennen denselben Ordner.
+      await expect(column.locator('.kcolumn__rule')).toContainText('kein Tag darin');
+      await expect(column.locator('.kcolumn__rule')).toContainText(emptyFolder.name);
+      await expect(column.locator('.kcolumn__rule')).toContainText('trifft damit nichts');
+
+      // Ein Tag im betroffenen Ordner anlegen und dem Todo zuweisen — jetzt
+      // löst sich der Ordnerterm auf, und beide Achsen (Ordner **und**
+      // Status) sind erfüllt.
+      tag = await createTag(`E2E-Kanban-LeererOrdner-Tag-${run}`, emptyFolder.id);
+      await setTodoTags(todo.id, [tag.id]);
+
+      // Die Zuweisung lief über die API, am `bump()`-Mechanismus der
+      // Oberfläche vorbei — genau das Muster aus TP-KANBAN-04
+      // (`markTodoDone` über die API): Ohne Neuladen zeigt das Board noch
+      // den Stand von vor der Zuweisung, weil `gotoBoard` allein auf einer
+      // bereits offenen Seite keine neue Anfrage auslöst.
+      await page.reload();
+      const columnAfter = boardColumn(page, columnName);
+      await expect(columnAfter.locator('.kcard', { hasText: todo.title })).toBeVisible();
+      await expect(columnAfter.getByText('Der geforderte Ordner enthält kein Tag')).toHaveCount(0);
+    } finally {
+      // Reihenfolge wie beim Muster in TP-KANBAN-01: Die Spalte hängt am
+      // Ordner (Löschschutz `tag_in_use`, R-1 Befund 1 / T-089) — erst die
+      // Regel weg, dann Tag, Ordner, Todo und Status.
+      await deletePoolByName(columnName).catch(() => undefined);
+      await deleteTodo(todo.id).catch(() => undefined);
+      if (tag !== null) await deleteTag(tag.id).catch(() => undefined);
+      await deleteTagFolder(emptyFolder.id).catch(() => undefined);
+      await deleteTodoStatus(status.id).catch(() => undefined);
     }
   });
 });

@@ -521,10 +521,19 @@ export function RuleSection() {
       </InlineMessage>
 
       <InlineMessage tone="info" title="Der Exportstatus gehört der Buchung, nicht dem Todo">
-        „Exportiert“ heißt hier <strong>mindestens eine</strong> exportierte Buchung und nicht
+        „Abgerechnet“ heißt hier <strong>mindestens eine</strong> exportierte Buchung und nicht
         „vollständig abgerechnet“ (E-032). Ein Todo mit einer offenen und einer exportierten
         Buchung erfüllt beide Bedingungen und steht deshalb in beiden Spalten — derselbe Fall, den
         E-054 zum Normalfall gemacht hat.
+      </InlineMessage>
+
+      <InlineMessage tone="info" title="Warum die Achse nicht „Offen“ und „Exportiert“ heißt (E-059)">
+        Das sind die Wörter der <strong>Buchung</strong>, und eines davon ist auf der Karte bereits
+        vergeben: „Offen“ ist dort das Gegenteil von „Erledigt“. Dasselbe Wort im selben Dialog ein
+        zweites Mal als Gegenteil von „Exportiert“ zu verwenden ist ein Fehler, den der Benutzer
+        ausbadet. Die Achse heißt deshalb „Noch nicht abgerechnet“ und „Abgerechnet“ — und die
+        Vorschau darunter sagt seit T-094 dieselben Wörter statt eigener. Das Etikett der Buchung
+        (Abschnitt 2) bleibt unverändert: Es beschreibt eine Buchung, keine Regel.
       </InlineMessage>
     </Section>
   );

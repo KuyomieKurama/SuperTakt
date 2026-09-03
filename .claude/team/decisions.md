@@ -1247,8 +1247,11 @@ kann (O-K), bleibt beim Auftraggeber.
    Aufzählung, nicht den Artikel. Der Satz ohne Treffer lautet: „Auf dieses Todo passt derzeit
    keine Regel — es erscheint danach in keinem Pool und in keiner Spalte." (Ankündigung) bzw.
    „Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner
-   Spalte." (Bericht). Alle übrigen Sätze aus T-089 bleiben, nur der Einschub `inPools` wird
-   durch die reine Aufzählung ersetzt.
+   Spalte." (Bericht). „… und erscheint in keinem anderen" wird zu „… und erscheint sonst
+   nirgends", weil „anderen" ohne Gattungswort keinen Bezug mehr hat. Alle übrigen Sätze aus
+   T-089 bleiben, nur der Einschub `inPools` wird durch die reine Aufzählung ersetzt. Der
+   vollständige Wortlaut aller vierzehn Sätze steht in `.claude/team/board.md` bei T-093 und
+   ist die Vorlage für Domäne, Tests und beide Oberflächen.
 5. **Dritter Parameter `occasion`** (`'reopen' | 'booking'`) bleibt, wie in T-089 gebaut, ohne
    Vorgabewert; die Überladungen (`'reopen'` gibt `string`, `'booking'` gibt `string | null`)
    sind die Signatur, gegen die beide Oberflächen bauen.

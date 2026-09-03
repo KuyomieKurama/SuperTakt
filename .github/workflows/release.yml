@@ -1,0 +1,515 @@
+# Takt — Auslieferung: bauen für drei Plattformen, danach veröffentlichen (T-075).
+#
+# ===========================================================================
+# Der Ablauf in einem Satz
+# ===========================================================================
+#
+# Ein Etikett `v1.2.3` löst aus; erst wird der Baum geprüft, dann bauen drei
+# Läufer je ein Installationsstück, und **nur wenn alle drei fertig werden**
+# entsteht daraus eine Fassung auf GitHub.
+#
+# ---------------------------------------------------------------------------
+# Vier Entscheidungen, die man sonst raten müsste
+# ---------------------------------------------------------------------------
+#
+# **1. Etikett statt jedem Commit.** Ein Release ist eine Entscheidung. Wer
+# `git tag v1.2.3 && git push --tags` tippt, hat sie getroffen; wer etwas nach
+# `main` schiebt, nicht.
+#
+# **2. Erst prüfen, dann bauen.** `pnpm check` und `pnpm verify:bundle` laufen
+# vor jedem Bau. Eine Auslieferung aus einem roten Baum ist schlimmer als keine
+# Auslieferung — sie sieht aus wie ein Erfolg.
+#
+# **3. Alles oder nichts.** Der Veröffentlichungsschritt hängt an allen drei
+# Bauläufen. Fällt einer aus, entsteht kein Release. Ein Release mit zwei von
+# drei Dateien wäre schlechter als keins: Der Auftraggeber lädt es herunter,
+# findet seine Plattform nicht und weiß nicht, ob sie fehlt oder kaputt ist.
+# `fail-fast: false` sorgt trotzdem dafür, dass alle drei Läufe **zu Ende**
+# laufen — sonst sähe man beim ersten Fehlschlag nur einen von drei Befunden.
+#
+# **4. „What's changed" kommt von GitHub.** Der Text wird nicht hier
+# geschrieben, sondern über `POST /releases/generate-notes` aus den Commits seit
+# dem letzten Etikett erzeugt. Vor diesen Text kommt ein fester Vorspann
+# (`.github/release-preamble.md`) mit dem, was GitHub nicht wissen kann: dass
+# die Dateien **unsigniert** sind.
+#
+# ---------------------------------------------------------------------------
+# Was hier bewusst nicht steht
+# ---------------------------------------------------------------------------
+#
+# **Keine Signatur.** Die Erzeugnisse sind unsigniert. Windows zeigt eine
+# SmartScreen-Warnung, macOS verweigert den Start ohne Umweg über die
+# Einstellungen. Ein Zertifikat kostet Geld und einen Antrag; das ist eine
+# Entscheidung des Auftraggebers und keine Aufgabe dieses Ablaufs. Der Vorspann
+# der Fassungsbeschreibung sagt es jedem, der die Datei lädt.
+#
+# **Kein Zwischenspeicher für Rust und pnpm.** Er würde jeden Lauf um Minuten
+# verkürzen und um zwei Fremdbestandteile verlängern. Ein Ablauf, der ein paar
+# Mal im Jahr läuft, hat ohnehin kaum Treffer im Zwischenspeicher: Er verfällt
+# nach sieben Tagen ohne Benutzung.
+#
+# **Keine fremden Aktionen außer denen von GitHub selbst.** pnpm wird über die
+# Angabe `packageManager` aus der Wurzel-`package.json` installiert, nicht über
+# eine Aktion aus fremder Hand. Die vier benutzten Aktionen sind auf ihren
+# Commit festgenagelt; ein verschobenes Etikett ändert nichts an dem, was läuft.
+# Das ist dieselbe Haltung wie `minimumReleaseAge` und `trustPolicy` in
+# `pnpm-workspace.yaml`.
+#
+# **Feste Läufer-Kennungen, kein `-latest`.** `ubuntu-latest` wandert innerhalb
+# von zwei Monaten auf die nächste Fassung. Für ein Erzeugnis, das
+# weitergegeben wird, hieße das: Die kleinste noch unterstützte glibc ändert
+# sich, ohne dass jemand etwas geändert hat. Wird eine Kennung eingestellt,
+# scheitert der Lauf sofort und deutlich — das ist der bessere Fehlschlag.
+# Stand 2026-09: `ubuntu-24.04`, `windows-2022`, `macos-15` sind gültig und
+# nicht abgekündigt; `macos-14` **ist** abgekündigt und steht deshalb nicht da.
+
+name: Auslieferung
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  # Der Probelauf. Er baut alles und veröffentlicht nichts — damit der erste
+  # echte Lauf nicht zugleich der erste Lauf überhaupt ist.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Fassung für den Probelauf, ohne führendes v (Beispiel: 0.1.0)'
+        required: true
+        default: '0.0.0'
+
+# Vorgabe für alle Aufträge. Nur der Veröffentlichungsschritt bekommt mehr, und
+# nur er braucht es.
+permissions:
+  contents: read
+
+# Zwei Läufe auf dasselbe Etikett würden zweimal dieselbe Fassung anlegen. Der
+# zweite wartet; abgebrochen wird keiner — ein halb hochgeladenes Release ist
+# schlimmer als ein doppelter Lauf, der am Schluss sauber scheitert.
+concurrency:
+  group: auslieferung-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Dieselbe Fassung, die `scripts/sidecar-runtime.mjs` in die Sidecar-Binärdatei
+  # einbettet. Zwei verschiedene Node-Fassungen im selben Bau wären eine Quelle
+  # von Unterschieden, die niemand erklären will.
+  NODE_VERSION: '22.23.2'
+
+jobs:
+  # =========================================================================
+  # 1 — Welche Fassung wird gebaut, und wird überhaupt veröffentlicht?
+  # =========================================================================
+  #
+  # Steht in einem eigenen Auftrag, damit die Antwort **einmal** entsteht und
+  # alle folgenden Aufträge dieselbe benutzen. Dreimal dieselbe Zeichenkette aus
+  # `github.ref_name` zu schneiden wäre dreimal Gelegenheit, es unterschiedlich
+  # zu tun.
+  prepare:
+    name: Fassung bestimmen
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.determine.outputs.version }}
+      tag: ${{ steps.determine.outputs.tag }}
+      publish: ${{ steps.determine.outputs.publish }}
+      prerelease: ${{ steps.determine.outputs.prerelease }}
+    steps:
+      - id: determine
+        name: Fassung aus Etikett oder Eingabe ableiten
+        shell: bash
+        env:
+          # Die Eingabe kommt über die Umgebung und nicht über `${{ }}` mittenł
+          # in die Zeile: Sonst stünde ein vom Benutzer gewählter Text als
+          # Befehl in der Shell.
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+            publish=true
+          else
+            version="${INPUT_VERSION#v}"
+            tag="v${version}"
+            publish=false
+          fi
+
+          # Dieselbe Regel wie in `scripts/build-app.mjs`. Sie steht hier ein
+          # zweites Mal, weil der Fehlschlag hier zehn Minuten früher kommt.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::\"$version\" ist keine brauchbare Fassung. Erwartet wird X.Y.Z, wahlweise mit Vorabkennung (1.2.3, 1.2.3-rc.1)."
+            exit 1
+          fi
+
+          case "$version" in
+            *-*) prerelease=true ;;
+            *)   prerelease=false ;;
+          esac
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Auslieferung"
+            echo
+            echo "| Angabe | Wert |"
+            echo "|---|---|"
+            echo "| Etikett | \`$tag\` |"
+            echo "| Fassung | \`$version\` |"
+            echo "| Vorabfassung | \`$prerelease\` |"
+            echo "| Wird veröffentlicht | \`$publish\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # =========================================================================
+  # 2 — Der Baum, bevor irgendetwas gebaut wird
+  # =========================================================================
+  #
+  # `pnpm check` ist die vollständige Kette des Projekts: Typen, Grenzen,
+  # Kontraste, drei Nachweisläufe gegen den Dienst, Tests mit Abdeckung, Bau.
+  # `pnpm verify:bundle` baut die Sidecar-Binärdatei und **führt sie aus** —
+  # zwanzig Prüfungen gegen das Erzeugnis, nicht gegen den Quelltext. Das ist
+  # der Lauf, der T-053 gefunden hätte.
+  gate:
+    name: Prüfen (pnpm check, verify:bundle)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Hier stehen **keine** Systemabhängigkeiten für Tauri. Dieser Auftrag
+      # bündelt nichts: `pnpm check` prüft Typen, Grenzen, Kontraste, die drei
+      # Nachweisläufe und die Tests, und `pnpm verify:bundle` baut die
+      # Sidecar-Binärdatei, die mit GTK und WebKit nichts zu tun hat. `rustc`
+      # wird nur nach dem Ziel-Tripel gefragt. Ein `apt-get install` an dieser
+      # Stelle wäre eine Minute je Lauf für nichts.
+
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: pnpm bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Die Fassung steht in `packageManager` der Wurzel-`package.json` und
+          # wird von dort gelesen. Sie hier ein zweites Mal hinzuschreiben hieße,
+          # zwei Wahrheiten zu pflegen.
+          manager="$(node -p "require('./package.json').packageManager")"
+          case "$manager" in
+            pnpm@*) ;;
+            *) echo "::error::packageManager ist \"$manager\" und nicht pnpm. Dieser Ablauf kann damit nichts anfangen."; exit 1 ;;
+          esac
+          npm install --global "$manager"
+          pnpm --version
+
+      - name: Rust-Toolchain zeigen
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Die Toolchain ist auf allen drei Läuferbildern vorinstalliert. Sie
+          # wird hier nicht eingerichtet, sondern **benannt**: Das Ziel-Tripel
+          # aus dieser Ausgabe ist derselbe Wert, nach dem `build-sidecar.mjs`
+          # die Binärdatei benennt und `tauri build` sie sucht.
+          rustc -vV
+          cargo --version
+
+      - name: Abhängigkeiten installieren
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm check
+        shell: bash
+        run: pnpm check
+
+      - name: pnpm verify:bundle
+        shell: bash
+        run: pnpm verify:bundle
+
+      - name: Prüfsummen der Node-Laufzeit gegen nodejs.org
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Fünf der sechs Zeilen in `sidecar-runtime.mjs` werden nur unter
+          # Windows und macOS gebraucht und wurden bis T-075 nie gegen etwas
+          # gehalten. Ein Tippfehler darin sähe im Windows-Bau aus wie ein
+          # Angriff auf die Lieferkette.
+          pnpm --filter @takt/desktop sidecar:checksums
+
+  # =========================================================================
+  # 3 — Drei Plattformen, drei Läufer
+  # =========================================================================
+  build:
+    name: Bauen (${{ matrix.label }})
+    needs: [prepare, gate]
+    runs-on: ${{ matrix.os }}
+    env:
+      # Steht auf Auftragsebene, weil **zwei** Schritte sie brauchen und beide
+      # dieselbe Antwort geben müssen: `build-app.mjs` prägt sie in das
+      # Erzeugnis, `collect-release.mjs` sammelt nur ein, was sie trägt. Zwei
+      # verschiedene Werte hießen: ein Bau, der nichts einsammelt.
+      #
+      # Ohne sie trüge jedes Erzeugnis die 0.0.0 aus `tauri.conf.json`, und zwei
+      # Auslieferungen wären für `dpkg` dieselbe Fassung.
+      TAKT_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+    strategy:
+      # Ein Fehlschlag unter Windows darf den macOS-Lauf nicht abwürgen. Sonst
+      # gibt es einen Befund statt dreien, und der zweite fällt erst nach dem
+      # nächsten Anlauf auf.
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 24.04 — und das ist ein Zugeständnis, kein Wunsch.
+          #
+          # Das Erzeugnis wird gegen die glibc des Läufers gebunden: Auf 22.04
+          # gebaut liefe es auch auf 24.04 und neuer, umgekehrt nicht. Für eine
+          # Datei, die weitergegeben wird, wäre 22.04 also die bessere Wahl.
+          #
+          # Sie steht nicht mehr offen: Die Läuferbilder auf Ubuntu-22-Grundlage
+          # gehen ab dem 17.09.2026 in die Abkündigung und sind ab dem
+          # 17.04.2027 ohne Unterstützung (actions/runner-images#14254). Ein
+          # Auslieferungsablauf, der in wenigen Wochen von selbst stehen bleibt,
+          # ist keine Grundlage.
+          #
+          # Die Folge gehört benannt und steht in der Fassungsbeschreibung: Die
+          # `.deb` und die `.AppImage` verlangen glibc 2.39 — also Ubuntu 24.04,
+          # Debian 13 oder neuer. Ältere Systeme sind mit dieser Fassung nicht
+          # bedient.
+          - label: Linux x86-64
+            os: ubuntu-24.04
+            artifact: linux-x86_64
+          - label: Windows x86-64
+            os: windows-2022
+            artifact: windows-x86_64
+          # Apple Silicon. Intel-Macs sind damit **nicht** bedient; das gehört
+          # in die Fassungsbeschreibung und nicht in eine stille Annahme.
+          - label: macOS Apple Silicon
+            os: macos-15
+            artifact: macos-aarch64
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Systemabhängigkeiten für Tauri
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            file
+
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: pnpm bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm --version
+
+      - name: Rust-Toolchain zeigen
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc -vV
+          cargo --version
+
+      - name: Abhängigkeiten installieren
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Anwendung bauen
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Die vollständige Kette: Sidecar bauen, ihn ausführen und
+          # zwanzigmal befragen, den Aufgabenbereich des Add-ins danebenlegen,
+          # die Lizenzbeilage erzeugen, bündeln.
+          pnpm desktop:build
+
+      - name: Erzeugnisse einsammeln
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @takt/desktop release:collect
+
+      - name: Lizenzbeilage danebenlegen
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          set -euo pipefail
+          # Die Beilage ist plattformgebunden — der Windows-Baum nennt andere
+          # Systemkisten als der Linux-Baum. Deshalb geht sie mit der Kennung
+          # der Plattform im Namen mit, sonst überschriebe eine die andere.
+          # Sie liegt zusätzlich **in** jedem Paket; das hier ist die Fassung
+          # für den, der vor dem Herunterladen hineinsehen will.
+          ziel="apps/desktop/release"
+          quelle="apps/desktop/src-tauri/licenses"
+          cp "$quelle/THIRD-PARTY-LICENSES.txt" "$ziel/THIRD-PARTY-LICENSES-${ARTIFACT}.txt"
+          cp "$quelle/LICENSE.txt" "$ziel/LICENSE.txt"
+
+      - name: Erzeugnisse hinterlegen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: takt-${{ matrix.artifact }}
+          path: apps/desktop/release/
+          # Ein Bau, der nichts hinterlässt, soll rot werden und nicht still
+          # ein leeres Paket weiterreichen.
+          if-no-files-found: error
+          retention-days: 14
+
+  # =========================================================================
+  # 4 — Veröffentlichen, und zwar nur wenn alle drei fertig sind
+  # =========================================================================
+  #
+  # `needs: build` bezieht sich auf die **ganze** Matrix. Fällt ein Läufer aus,
+  # läuft dieser Auftrag nicht. Das ist die technische Fassung des Satzes „beim
+  # erfolgreichen Beenden".
+  publish:
+    name: Fassung veröffentlichen
+    needs: [prepare, gate, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      # Der einzige Ort im ganzen Ablauf mit Schreibrecht.
+      contents: write
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Erzeugnisse aller drei Plattformen holen
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: eingegangen
+
+      - name: Vollzähligkeit prüfen
+        id: gather
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p versand
+
+          # Flach zusammenlegen. Die Dateinamen von Tauri tragen Produktname,
+          # Fassung und Architektur bereits — sie kollidieren nicht.
+          find eingegangen -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.dmg' \
+               -o -name 'THIRD-PARTY-LICENSES-*.txt' -o -name 'LICENSE.txt' \) \
+            -exec cp -n {} versand/ \;
+
+          # Die Prüfsummen der drei Läufe zu einer Datei. `sort` macht die
+          # Reihenfolge unabhängig davon, welcher Läufer zuerst fertig war.
+          find eingegangen -type f -name 'SHA256SUMS' -exec cat {} + | sort > versand/SHA256SUMS
+
+          echo "Eingegangen:"
+          ls -l versand
+
+          # Die eigentliche Aussage dieses Schritts: **eine je Plattform**.
+          # Ein Release mit zwei von drei Dateien wäre schlechter als keins.
+          fehlt=0
+          for muster in '*.deb' '*.AppImage' '*-setup.exe' '*.dmg'; do
+            anzahl=$(find versand -maxdepth 1 -name "$muster" | wc -l)
+            if [ "$anzahl" -eq 0 ]; then
+              echo "::error::Es fehlt eine Datei nach dem Muster $muster. Ohne sie wird nichts veröffentlicht."
+              fehlt=1
+            fi
+          done
+          [ "$fehlt" -eq 0 ] || exit 1
+
+      - name: Prüfen, dass die Fassung noch nicht existiert
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Zu $TAG gibt es bereits eine Fassung. Sie zu überschreiben ist eine Entscheidung und passiert hier nicht von selbst — erst löschen oder ein neues Etikett vergeben."
+            exit 1
+          fi
+
+      - name: Beschreibung zusammensetzen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # 1 — Der feste Vorspann: was GitHub nicht wissen kann.
+          cat .github/release-preamble.md > beschreibung.md
+
+          # 2 — Die Prüfsummen. Sie stehen in der Beschreibung und nicht nur in
+          #     einer Datei daneben: Wer eine Datei prüfen will, soll dafür
+          #     nicht dieselbe Quelle herunterladen müssen, die er prüft.
+          {
+            echo
+            echo '## Prüfsummen (SHA-256)'
+            echo
+            echo '```'
+            cat versand/SHA256SUMS
+            echo '```'
+            echo
+          } >> beschreibung.md
+
+          # 3 — „What's changed" von GitHub, aus den Commits seit dem letzten
+          #     Etikett. Selbst geschrieben wäre es eine zweite Wahrheit neben
+          #     der Historie.
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            --jq '.body' >> beschreibung.md
+
+          echo "--- Beschreibung ---"
+          cat beschreibung.md
+
+      - name: Fassung anlegen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          zusatz=()
+          if [ "$PRERELEASE" = "true" ]; then
+            zusatz+=(--prerelease)
+          fi
+
+          # `--verify-tag` legt keine Etiketten an, die es nicht gibt. Ohne den
+          # Schalter erzeugte ein Tippfehler ein Etikett auf dem Vorgabezweig —
+          # und damit eine Fassung, die auf nichts zeigt, was jemand geprüft hat.
+          gh release create "$TAG" \
+            --title "Takt $VERSION" \
+            --notes-file beschreibung.md \
+            --verify-tag \
+            "${zusatz[@]}" \
+            versand/*
+
+          echo "### Veröffentlicht" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --json url --jq '.url' >> "$GITHUB_STEP_SUMMARY"

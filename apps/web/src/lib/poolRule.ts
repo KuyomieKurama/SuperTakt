@@ -1,8 +1,7 @@
 import { countPoolRuleConditions, poolRuleIsEmpty, type PoolRuleAxes } from "@takt/domain";
-import type { ExportStatus, Id, Pool, PoolResolution, PoolRuleTerm } from "../api/types";
+import type { Id, Pool, PoolResolution, PoolRuleTerm } from "../api/types";
 import { formatCount, joinGerman } from "./format";
 import {
-  POOL_COMPLETION_LABEL,
   POOL_EXPORT_LABEL,
   POOL_MATCH_MODE_PREFIX,
   type PoolCompletionFilter,
@@ -111,15 +110,6 @@ export interface RuleAxis {
   readonly chips: readonly RuleChip[];
   /** Statt Chips ein Ausdruck, etwa „Nur erledigte". */
   readonly text: string | null;
-  /**
-   * Nur an der Exportachse: der fachliche Exportstatus, auf den sie zeigt.
-   *
-   * Er steht hier, damit die Zusammenfassung dasselbe Etikett zeichnen kann wie
-   * jede andere Fläche der Anwendung (`ExportStatusBadge`). Der Exportstatus
-   * ist die Unterscheidung, um die sich Takt dreht; ein zweites Aussehen dafür
-   * wäre eine zweite Sprache.
-   */
-  readonly exportState?: ExportStatus;
 }
 
 /** Eine Achse, die auf ihrem Neutralwert steht — und deshalb nichts wegnimmt. */
@@ -196,18 +186,22 @@ const COMPLETION_TEXT: Readonly<Record<Exclude<PoolCompletionFilter, "any">, str
   open: "Nur unerledigte",
 };
 
-/**
- * Der Text der Exportachse, wenn sie einschränkt.
+/*
+ * Hier stand bis T-094 `EXPORT_TEXT` — „Mit offener Buchung" / „Mit
+ * exportierter Buchung".
  *
- * Ausgeschrieben als „mindestens eine …" und nirgends als „abgerechnet": Der
- * Exportstatus hängt an der Buchung, nicht am Todo (E-032). „Exportiert"
- * bedeutet **eine** exportierte Buchung, nicht die vollständige Abrechnung des
- * Todos.
+ * Es war die **zweite Fassung** derselben Auswahl: Im Formular stand über dem
+ * Optionsknopf ein Wort, drei Zeilen darunter in der Vorschau ein anderes, und
+ * beide meinten denselben Wert. Genau diese Doppelung nennt E-059 als Fehler,
+ * den der Benutzer ausbadet. Die Vorschau nimmt seither `POOL_EXPORT_LABEL` —
+ * dieselbe Beschriftung wie der Optionsknopf, an dem gewählt wird.
+ *
+ * Der Grund, aus dem die alte Fassung „mindestens eine …" ausschrieb, ist
+ * damit nicht verloren: Der Exportstatus hängt an der Buchung und nicht am
+ * Todo (E-032). Dieser Satz steht jetzt dort, wo gewählt wird
+ * ({@link POOL_EXPORT_NOT_BILLED_HINT} und der Hilfssatz der Achse) — also
+ * vor der Entscheidung statt in der Zusammenfassung danach.
  */
-const EXPORT_TEXT: Readonly<Record<Exclude<PoolExportFilter, "any">, string>> = {
-  open: "Mit offener Buchung",
-  exported: "Mit exportierter Buchung",
-};
 
 function chipsOf(
   terms: readonly PoolRuleTerm[],
@@ -304,8 +298,7 @@ export function describeRule(axes: RuleAxes, lookup: RuleLookup): RuleDescriptio
       id: "export",
       label: "Exportstatus",
       chips: [],
-      text: EXPORT_TEXT[axes.exportState],
-      exportState: axes.exportState,
+      text: POOL_EXPORT_LABEL[axes.exportState],
     });
   }
 
@@ -525,20 +518,19 @@ export function axesOf(pool: Pool): RuleAxes {
   };
 }
 
-/**
- * Der Wert einer Achse als Wort — für Vorlesehilfen und einzeilige Auskünfte.
+/*
+ * Hier standen bis T-094 `completionSpoken` und `exportSpoken` — „der Wert
+ * einer Achse als Wort, für Vorlesehilfen".
  *
- * Nicht dieselbe Zeichenkette wie das Etikett im Formular: Dort steht „Alle",
- * hier „Alle (schränkt nicht ein)". Im Formular steht der Zusatz daneben, in
- * einem vorgelesenen Satz muss er mit.
+ * Beide hatten seit T-091 **keinen Aufrufer**. Der vorgelesene Satz entsteht in
+ * {@link ruleSpoken} aus derselben Beschreibung, die auch die sichtbare
+ * Vorschau zeichnet — und das ist der Grund, aus dem beide dasselbe sagen.
+ * Zwei ungenutzte Nebenwege dorthin sind kein Vorrat, sondern zwei Stellen,
+ * an denen ein späterer Aufrufer eine dritte Fassung bekommt.
+ *
+ * `exportSpoken` war zudem der letzte Leser von `EXPORT_TEXT`, das mit E-059
+ * entfallen ist.
  */
-export function completionSpoken(value: PoolCompletionFilter): string {
-  return value === "any" ? POOL_COMPLETION_LABEL.any : COMPLETION_TEXT[value];
-}
-
-export function exportSpoken(value: PoolExportFilter): string {
-  return value === "any" ? POOL_EXPORT_LABEL.any : EXPORT_TEXT[value];
-}
 
 /**
  * Die ganze Regel in **einem** Satz — für die Live-Region der Vorschau

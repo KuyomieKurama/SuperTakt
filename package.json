@@ -38,7 +38,7 @@
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r --if-present typecheck && pnpm run typecheck:test",
-    "typecheck:test": "tsc -p packages/domain/tsconfig.test.json && tsc -p packages/storage/tsconfig.test.json && tsc -p packages/export/tsconfig.test.json",
+    "typecheck:test": "tsc -p packages/domain/tsconfig.test.json && tsc -p packages/storage/tsconfig.test.json && tsc -p packages/export/tsconfig.test.json && tsc -p apps/local-api/tsconfig.test.json && tsc -p apps/web/tsconfig.test.json",
     "verify:bundle": "pnpm --filter @takt/desktop sidecar && pnpm --filter @takt/desktop sidecar:verify"
   },
   "devDependencies": {

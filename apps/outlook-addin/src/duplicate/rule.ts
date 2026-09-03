@@ -31,9 +31,8 @@
  * dafür liegen in `reopen.ts`.
  */
 
-import { checkCallNumber, type CallNumberRejection } from '@takt/domain';
+import { checkCallNumber, type CallNumberRejection, type PoolMovement } from '@takt/domain';
 import type { TodoMatchDto } from '../api/types.ts';
-import type { PoolMovement } from './reopen.ts';
 
 export type LookupDecision =
   | { readonly kind: 'lookup'; readonly callNumber: string }
@@ -158,7 +157,7 @@ export const describeOffers = (matches: readonly TodoMatchDto[]): readonly Offer
   matches.map(describeOffer).filter((offer): offer is OfferDescription => offer !== null);
 
 /**
- * Die drei Poollisten eines Angebots als **ein** Wert (T-084).
+ * Die drei Poollisten eines Angebots als **ein** Wert (T-084, E-058).
  *
  * Steht hier und nicht im Aufgabenbereich, damit es sie genau einmal gibt. Die
  * drei Listen sind gleich getippt; wer sie an zwei Stellen einzeln zuweist,
@@ -166,6 +165,12 @@ export const describeOffers = (matches: readonly TodoMatchDto[]): readonly Offer
  * einen Satz, der sich fehlerfrei liest und das Gegenteil behauptet. Der
  * Nachweispfad baut denselben Wert über dieselbe Funktion und misst damit die
  * Zusammensetzung mit, die der Aufgabenbereich benutzt.
+ *
+ * Der Rückgabetyp ist seit T-092 `PoolMovement` aus `@takt/domain` und keine
+ * Zweitschrift im Add-in: Es ist derselbe Typ, den `poolMovementSentence`
+ * entgegennimmt, und derselbe, den `usecases/pool-movement.ts` ausrechnet. Eine
+ * eigene Fassung hier hätte sich stillschweigend von ihm entfernen können —
+ * dieselbe Falle wie beim Satz selbst, eine Ebene tiefer.
  */
 export const offerMovement = (offer: OfferDescription): PoolMovement => ({
   appears: offer.poolNames,

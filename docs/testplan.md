@@ -1721,7 +1721,7 @@ kein Dialog ausgelöst.
 | A-2.6 (`callNumber`) | TP-EXPORT-01, TP-TPL-05, TP-ADDIN-01, -02 |
 | A-3.4 (Pool abgeleitet) | TP-TIMER-02, TP-TAG-04 |
 | A-4.1–A-4.6 (Tags/Ordner) | TP-TAG-01 bis TP-TAG-06 |
-| A-5.1, A-5.3–A-5.6 (Kanban, E-054/E-055) | TP-KANBAN-01 bis TP-KANBAN-05 — **A-5.2 entfällt** (Drag & Drop, aufgehoben durch E-054) |
+| A-5.1, A-5.3–A-5.6 (Kanban, E-054/E-055) | TP-KANBAN-01 bis TP-KANBAN-06 — **A-5.2 entfällt** (Drag & Drop, aufgehoben durch E-054) |
 | A-6.4–A-6.9 (Zeitbuchung/Exportstatus) | TP-EXPST-01 bis TP-EXPST-09 |
 | A-7.2/A-7.4 (Vermerk/Leistung-Trennung) | TP-NOTE-01 bis TP-NOTE-04 |
 | A-8.1–A-8.6, A-8.9 (Export) | TP-EXPORT-01 bis TP-EXPORT-10, TP-EXPORT-11 bis -17 (Gruppierung, Abschnitt 9a), TP-ROUND-*, TP-B64-* |
@@ -2146,3 +2146,122 @@ Liste als Ziel. **Ergebnis: bestanden**, dreifach wiederholt. Siehe `tests/e2e/t
 (NVDA/JAWS/Orca) tatsächlich mitschneiden, ob sie die geschlossene Liste ansagt. Der Fall oben
 prüft den DOM-Zustand, von dem dieses Verhalten abhängt (`hidden`, keine Tab-Erreichbarkeit), nicht
 die Ansage selbst — das ist eine Grenze der Werkzeugausstattung, keine Auslassung im Test.
+
+---
+
+## 17. Nachträge aus T-096 (Welle B nach R-1/R-3 — Ordnersperre, leerer Ordner in einer Regel)
+
+Grundlage: `decisions.md` E-057 (Ordnerterm ohne Treffer ist eine Einschränkung, kein
+Neutralwert) und der R-1-Befund aus der Review-Runde, behoben in T-089 (Migration 0012,
+`pool_rule.tag_id`/`folder_id` von `CASCADE` auf `RESTRICT`, `tag_in_use` mit `details`). Beide
+Fälle unten sind **neu und bestanden**, dreifach nachgemessen über `pnpm run test:e2e` (37/37,
+Exitcode 0). Der von T-094 parallel umgebaute Bewegungssatz (Hauptanwendung gegen Add-in) ist
+ausdrücklich **nicht** Teil dieser Welle — er wäre hier zwangsläufig rot, siehe „Für Welle C
+zurückgestellt" am Ende dieses Abschnitts.
+
+### TP-KANBAN-06 — Ein leerer Ordner in der Regel: die Spalte trifft nichts und sagt es (E-057)
+**Anforderungen:** A-3.4, A-4.2, E-057
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein leerer Tag-Ordner (kein Tag darin); ein eigener Statuswert; ein Todo mit
+genau diesem Status, ohne Tags.
+**Schritte:**
+1. Über die Oberfläche eine Board-Spalte anlegen, deren Regel **zwei** Achsen kombiniert: den
+   leeren Ordner als „Erforderliche Ordner" und den Statuswert als „Status" — bewusst zwei
+   Achsen und nicht nur den Ordner allein, damit der Fall geprüft wird, den E-057 eigentlich
+   meint: Ein leerer Ordnerterm **neben** einer für sich genommen erfüllbaren Achse verschwindet
+   nicht als Neutralwert, sondern lässt die ganze Regel nichts treffen (`RulePickers.tsx`,
+   `FolderPicker`/`StatusPicker`, über `tests/e2e/support/actions.ts`, `createBoardColumn`).
+2. Spalte betrachten.
+3. Ein Tag im betroffenen Ordner anlegen und dem Todo zuweisen.
+4. Spalte erneut betrachten (nach Neuladen).
+**Erwartetes Ergebnis:** Nach Schritt 2 trifft die Spalte nichts — der Leerzustand
+(`BoardColumnEmpty`) zeigt „Der geforderte Ordner enthält kein Tag" und nennt den Ordner beim
+Namen, nicht den allgemeinen Zustand „keine Karte trifft diese Regel"; dieselbe Auskunft steht
+bereits unter dem Spaltenkopf an der Regelvorschau selbst (`RuleSummary`,
+`describeRuleReach`: „kein Tag darin" am Chip, „… trifft damit nichts" im Satz darunter). Das
+Todo mit dem passenden Status landet **trotzdem nicht** in der Spalte — der leere Ordner
+schränkt ein, unabhängig davon, dass die Statusachse erfüllt wäre. Nach Schritt 3 löst sich der
+Ordnerterm auf; die Karte erscheint, und der Leerzustand ist weg.
+
+**Befund während der Umsetzung, behoben.** Die Tag-Zuweisung an das Todo lief für diesen Fall
+bewusst über die API (`support/api.ts`, `setTodoTags`) und nicht über den Bearbeiten-Dialog —
+beides ist als Vorbereitung zulässig (das eigentliche Verhalten der Bearbeiten-Dialog-Zuweisung
+prüft bereits `TP-KANBAN-01`). Genau das deckte einen zweiten, unabhängigen Befund auf: Ein
+zweiter `page.goto()` auf **dieselbe** bereits offene Route (`#/kanban` → `#/kanban`, ohne
+zwischenzeitliche Navigation auf eine andere Route) löst in dieser Oberfläche **keine** neue
+Anfrage aus — dasselbe Muster wie in `TP-KANBAN-04`, wo `markTodoDone` über die API am
+`bump()`-Mechanismus der Oberfläche vorbeiläuft. Der Testfall benutzt deshalb nach der
+API-Zuweisung `page.reload()` statt eines zweiten `gotoBoard()`. Das ist eine Eigenschaft der
+Testvorbereitung (eine Änderung an der Oberfläche vorbei verlangt ein ausdrückliches Neuladen),
+keine Regression der geprüften Funktion selbst — mit der echten Bearbeiten-Dialog-Zuweisung
+(`TP-KANBAN-01`) navigiert die Oberfläche ohnehin über eine andere Route und lädt frisch.
+**Ergebnis: bestanden**, dreifach wiederholt.
+
+### TP-TAG-14 — Ein Ordner in einer Regel ist nicht löschbar (409 `tag_in_use`, R-1 Befund 1 / T-089)
+**Anforderungen:** A-3.2, A-3.4, A-4.2, E-057
+**Ebene:** End-to-End (`tests/e2e/tag-folder-rule-lock.spec.ts`), ein Fall davon zusätzlich als
+Integrationsprobe direkt über die API (wie `TP-TPL-08`/`export-template-validation.spec.ts`)
+**Vorbedingung:** Ein Ordner, der als erforderlicher Term in einer Regel (Pool oder
+Kanban-Spalte) steht; ein zweiter Ordner ohne jeden Regelbezug, als Gegenprobe.
+**Schritte:**
+1. Über die API direkt `DELETE /tag-folders/{id}` auf dem in der Regel stehenden Ordner
+   aufrufen.
+2. Denselben Aufruf ein zweites Mal, ohne zwischenzeitliche Änderung.
+3. `DELETE /tag-folders/{id}` auf dem Ordner ohne Regelbezug.
+4. Über die Oberfläche (S-08): den in der Regel stehenden Ordner auswählen, „Löschen" auslösen,
+   im Bestätigungsdialog erneut „Löschen" bestätigen.
+5. Dialog mit „Abbrechen" schließen, Tags-Ansicht neu aufsuchen.
+**Erwartetes Ergebnis:** Schritt 1 und 2 antworten `409` mit dem Fehlerschlüssel `tag_in_use`;
+`details` enthält mindestens einen Eintrag mit `code: "pool_rule"`, der Kennung des Pools in
+`field` und seinem Namen in Anführungszeichen in `message` — beides maschinenlesbar und für die
+Oberfläche verwertbar. Schritt 3 antwortet mit Erfolg (204) — ein Ordner ohne Regelbezug bleibt
+löschbar, dieselbe Sperre trifft nicht jeden Ordner. Schritt 4: Der Bestätigungsdialog schließt
+**nicht** und zeigt den vom Dienst gelieferten Grund („Dieser Ordner wird in der Regel eines
+Pools verwendet."). Nach Schritt 5 ist der Ordner weiterhin im Tag-Baum vorhanden — die Ablehnung
+hat nichts verändert.
+
+**Zur Erwartung „Regelname in der Oberfläche" aus dem Auftrag — abweichend gemessen, nicht
+stillschweigend gelockert.** Der Auftrag benannte die Erwartung „die Oberfläche zeigt den
+Regelnamen in der Fehlermeldung (wie bei `status_in_use`)". Nachgesehen im Quelltext:
+`TaktApiError.details` (`apps/web/src/api/client.ts`) wird im gesamten `apps/web`-Baum an keiner
+einzigen Stelle gelesen — weder für `tag_in_use` (`TagsScreen.tsx`, `deleteError` ist schlicht
+`cause.message`) noch für das namensgleiche Vorbild `status_in_use`
+(`StatusSettings.tsx`, `errorMessage(cause)`, ebenfalls nur die allgemeine Dienstmeldung ohne
+Namen). Beide Flächen zeigen heute denselben generischen Satz ihres jeweiligen Fehlerschlüssels,
+aber **nicht** den konkreten Regelnamen aus `details` — die Auskunft liegt seit T-089 vollständig
+vor (Kennung und Name je Regel), nur die Oberfläche liest sie noch nicht. Dieser Testfall prüft
+deshalb genau den tatsächlichen, stabilen Stand (Sperre greift sichtbar, Grund wird genannt,
+Ordner bleibt erhalten) und behauptet nicht mehr, als der Quelltext hergibt — ein wissentlich
+rot geschriebener Fall widerspräche dem Auftrag „nur die stabilen Fälle". Die Lücke ist eine
+offene Frage an den Orchestrator/frontend-dev, keine Auslassung dieses Testfalls.
+**Ergebnis: bestanden**, dreifach wiederholt.
+
+### Nachgezogener Kommentar: `tests/e2e/support/actions.ts` (T-091, `RadioRow`-Umbau)
+
+Der Kommentar über der `completion`-Auswahl in `createBoardColumn` beschrieb noch die vor T-091
+gültige Bauform von `RadioRow` — der erklärende Hinweistext stand bis dahin **im** `<label>`,
+wodurch der zugängliche Name „Erledigt Nur erledigte Todos. …" statt schlicht „Erledigt" lautete.
+Seit T-091 hängt der Hinweis als Geschwister der Optionsliste über `aria-describedby` an jedem
+Knopf; der zugängliche Name ist wieder nur das Wort selbst. Der Kommentar ist berichtigt, das am
+Anfang verankerte Muster (`/^Erledigt\b/`) bleibt unverändert stehen — es traf schon vor T-091
+genau einen Knopf, weil „Unerledigt" nicht mit „Erledigt" **beginnt**, sondern nur damit endet,
+und trifft ihn nach der Berichtigung unverändert. Kein eigener Testfall, weil `TP-KANBAN-01` bis
+`TP-KANBAN-06` diesen Zugriff bei jedem Lauf mitprüfen.
+
+### Für Welle C zurückgestellt (nicht in dieser Welle geschrieben, absichtlich)
+
+Zwei Fälle sind im Auftrag zu T-096 ausdrücklich ausgenommen, weil sie mit dem Wortlaut aus
+E-058 Punkt 4 arbeiten, den `T-093`/`T-094` zum Zeitpunkt dieser Welle erst umbauen — ein hier
+geschriebener Fall wäre zwangsläufig rot, keine Auslassung:
+
+- **TP-EXPST-12 (Arbeitstitel) — Bewegungssatz Hauptanwendung gegen Add-in.** Derselbe
+  Timerstart, einmal über die Hauptanwendung (`Timer.tsx`/`TimerContext.tsx`,
+  `poolMovementSentence(movement, 'past', …)`) und einmal über das Add-in
+  (`duplicate/reopen.ts`), muss zeichengleich denselben Satz melden — die Eigenschaft, für die
+  E-058 überhaupt geschrieben wurde. Geplant für Welle C, nach T-094 (`docs/testplan.md`,
+  Board-Eintrag T-096).
+- **TP-TIMER-08 (Arbeitstitel) — Stopp-Antwort trägt `poolMovement`.** `POST /timer/stop` und
+  `POST /timer/orphaned/resolve` liefern seit T-093 `poolMovement` mit Anlass `booking`
+  (E-058 Punkt 6); die Oberfläche bindet die Stopp-Antwort laut Board-Eintrag T-094 aber
+  „noch **nicht**" an — das ist Gegenstand von Welle C. Ein Testfall, der die Anzeige nach dem
+  Stoppen prüft, wäre bis dahin zwangsläufig rot.

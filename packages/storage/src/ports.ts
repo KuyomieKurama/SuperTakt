@@ -345,12 +345,39 @@ export interface PoolPort {
    *   `'board'` — die Spalten des Kanban-Boards (`board` oder `both`).
    *   `'all'`   — jede Regel, ungeachtet der Fläche.
    *
-   * **Ohne Argument gilt `'pool'`**, und das ist der Grund, warum das Argument
-   * überhaupt weglassbar ist: Jeder Aufrufer, den es vor E-054 gab, meinte
-   * „die Pools" — allen voran `poolNamer` in `routes/addin/service.ts`, der die
-   * Pools eines Todos beim Namen nennt. Der bekommt damit weiterhin Pools und
-   * nicht die Spalten eines Boards, ohne dass die Datei angefasst werden musste.
-   * Das Board fragt ausdrücklich.
+   * ---------------------------------------------------------------------------
+   * Warum es überhaupt eine Vorgabe gibt — richtiggestellt (T-093)
+   * ---------------------------------------------------------------------------
+   *
+   * **Ohne Argument gilt `'pool'`.** Hier stand bis T-093 als Zeuge dafür
+   * `poolNamer` in `routes/addin/service.ts`, „der die Pools eines Todos beim
+   * Namen nennt". Das war schon bei der Niederschrift kein guter Zeuge und ist
+   * seit T-090/T-092 gar keiner mehr: `poolNamer` fragte versehentlich ohne
+   * Argument und übersah damit jede **reine** Board-Spalte (R-1 Befund 3, R-2
+   * B-4); er ruft seit T-090 `list('all')` und ist seit T-092 durch
+   * `poolMovementNamer` ersetzt, den es hier nicht mehr gibt.
+   *
+   * Die Vorgabe bleibt trotzdem, und zwar mit den beiden Zeugen, die sie
+   * wirklich tragen — beide fragen nach einer **Auswahlliste für einen
+   * Menschen**, nicht nach einer Zugehörigkeit:
+   *
+   *   - `GET /pools` ohne `placement` — die Pool-Ansicht (`listPools` in
+   *     `usecases/structure.ts`). Sie zeigt die Pool-Liste, und eine reine
+   *     Board-Spalte gehört dort nicht hinein.
+   *   - `GET /addin/context` — der Aufgabenbereich des Add-ins. Er hat kein
+   *     Board; die Liste dient dort der Auswahl. Dass er bei `list()` bleibt,
+   *     ist ausdrücklich entschieden (E-058 Punkt 7).
+   *
+   * **Wer über Zugehörigkeit rechnet, fragt `'all'`** und nicht die Vorgabe:
+   * `poolMovementNamer` (`usecases/pool-movement.ts`, E-058 Absatz 1) will
+   * jede Regel sehen, gleich auf welcher Fläche sie erscheint — eine Bewegung
+   * aus einer reinen Board-Spalte heraus ist eine Bewegung. Das Board fragt
+   * ausdrücklich `'board'`.
+   *
+   * Die Lehre aus dem falschen Zeugen steht besser hier als in einem Bericht:
+   * Eine Vorgabe, die mit einem Aufrufer begründet wird, überlebt den Aufrufer.
+   * Diese hier ist mit der **Frage** begründet — Auswahlliste gegen
+   * Zugehörigkeit —, und die bleibt, auch wenn die Dateien wechseln.
    */
   list(shownOn?: PoolSurface | 'all'): Promise<readonly Pool[]>;
 

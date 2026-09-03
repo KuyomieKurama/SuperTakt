@@ -1,7 +1,6 @@
+import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
-import { joinGerman } from "../lib/format";
-import { CARD_STAYS } from "../lib/labels";
 import { Icon } from "./Icon";
 import { Button, IconButton } from "./Primitives";
 
@@ -149,11 +148,20 @@ export function TimerDisplay({
 export interface ReactivationNoticeProps {
   readonly todoTitle: string;
   /**
-   * Namen aller Pools, in denen das Todo jetzt wieder liegt (A-3.4).
-   * Leer, wenn keine Poolregel auf seine Tags passt — dann darf die Meldung
-   * keinen Pool nennen (T-005, B-12).
+   * Wohin der Timerstart dieses Todo bewegt hat — so, wie der Dienst es
+   * gemeldet hat (`POST /timer/start`, Feld `poolMovement`, E-058).
+   *
+   * Drei Namenslisten und kein fertiger Satz: Den bildet
+   * `poolMovementSentence` aus `@takt/domain`, damit dieselbe Handlung hier
+   * und im Aufgabenbereich des Add-ins mit denselben Worten berichtet wird.
+   *
+   * `null` heisst, dass der Dienst keine Bewegung gemeldet hat. Dann steht
+   * hier **kein** Poolsatz — weder ein leerer noch ein beruhigender. Bis T-094
+   * stand an dieser Stelle eine Namensliste, die die Oberflaeche selbst
+   * zusammengesucht hatte, und dahinter der Satz „Die Karte bleibt, wo sie ist"
+   * (E-058: falsch, ersatzlos entfallen).
    */
-  readonly poolNames: readonly string[];
+  readonly movement: PoolMovement | null;
   /** Setzt den Vorgang zurueck: Timer stoppen, Todo wieder auf "Erledigt". */
   readonly onUndo?: () => void;
   readonly onDismiss?: () => void;
@@ -166,31 +174,42 @@ export interface ReactivationNoticeProps {
  * deshalb muss sie es hinterher unmissverstaendlich sagen und einen Rueckweg
  * anbieten.
  *
- * Der Satz nennt die drei Wirkungen aus A-2.5:
- *   1. "Erledigt" ist aufgehoben
- *   2. das Todo ist wieder aktiv
- *   3. es erscheint erneut in seinen Pools
+ * Der Hinweis nennt zwei Dinge, und sie kommen aus zwei Quellen:
+ *   1. **Was geschehen ist** — "Erledigt" ist aufgehoben, das Todo ist wieder
+ *      offen, der Timer laeuft. Das weiss diese Flaeche selbst.
+ *   2. **Wo es sichtbar wird** — der Satz aus `poolMovementSentence`
+ *      (`@takt/domain`), gebildet aus dem `poolMovement`, das der Dienst zum
+ *      Start gemeldet hat.
  *
- * Was er ausdruecklich **nicht** sagt: dass das Todo die Spalte gewechselt
- * habe. Das tut es nicht. Ein Timerstart fasst nur das Kennzeichen an — nicht
- * den Status und nicht die Tags. Seit E-054 haengt die Kanban-Spalte an den
- * Tags, das Todo steht also danach in denselben Spalten wie vorher; es war
- * nur ausgeblendet, solange es erledigt war.
+ * Bis T-094 stand hier ein selbstgebauter Satz: eine Aufzaehlung der Pools,
+ * die die Oberflaeche je Pool einzeln abgefragt hatte, und dahinter „Die Karte
+ * bleibt, wo sie ist — die Spalte aendert sich dadurch nicht." Beides ist weg.
+ * Die Aufzaehlung kannte nur, was **hinzukommt**, und schwieg darueber, was
+ * verschwindet; der Kartensatz war seit E-055 schlicht falsch, weil eine Regel
+ * nach "Erledigt" und nach dem Exportstatus fragen darf und ein Timerstart
+ * beides anfasst (E-058).
  *
- * Dieser eine Satz steht zeichengleich in `lib/labels.ts` (`CARD_STAYS`), im
- * Toast der Hauptanwendung und im Outlook-Add-in. Bis T-045 stand hier
- * „Statusspalte" und dort „Spalte" — dieselbe Aussage in zwei Fassungen, und
- * genau das ist der Anfang zweier Bedeutungen (Befund C-24). Die
- * Aufzaehlung der Pools kommt aus demselben Grund aus `joinGerman`.
+ * Jetzt gibt es **eine** Quelle fuer diesen Satz, und der Aufgabenbereich des
+ * Add-ins liest dieselbe. Wer den Wortlaut aendern will, aendert ihn in der
+ * Domaene; hier steht keine Abschrift.
  */
 export function ReactivationNotice({
   todoTitle,
-  poolNames,
+  movement,
   onUndo,
   onDismiss,
   className,
 }: ReactivationNoticeProps) {
-  const poolText = joinGerman(poolNames);
+  /*
+    `'past'`, weil der Start bereits gelaufen ist, und `'reopen'`, weil genau
+    dieser Hinweis den Fall A-2.5 begleitet. Beim Anlass `'reopen'` gibt die
+    Funktion immer einen Satz — auch den unangenehmen, dass gerade keine Regel
+    passt. Nur wenn der Dienst gar keine Bewegung gemeldet hat, bleibt die
+    Flaeche leer.
+  */
+  const movementSentence =
+    movement === null ? null : poolMovementSentence(movement, "past", "reopen");
+
   return (
     <div className={cx("reactivation", className)} role="status" aria-live="polite">
       <span className="reactivation__icon">
@@ -200,17 +219,8 @@ export function ReactivationNotice({
         {/* E-030: Der **Timer** läuft. „Zeiterfassung" ist der Bereich. */}
         <p className="reactivation__title">„Erledigt“ wurde aufgehoben — der Timer läuft</p>
         <p className="reactivation__body">
-          <strong>{todoTitle}</strong> ist wieder offen
-          {poolNames.length > 0 ? (
-            <>
-              {" und erscheint erneut "}
-              {poolNames.length === 1 ? "im Pool " : "in den Pools "}
-              <strong>{poolText}</strong>.
-            </>
-          ) : (
-            ". Zu seinen Tags passt derzeit keine Poolregel, deshalb erscheint es in keinem Pool."
-          )}{" "}
-          {CARD_STAYS}
+          <strong>{todoTitle}</strong> ist wieder offen.
+          {movementSentence === null ? null : ` ${movementSentence}`}
         </p>
         <p className="reactivation__hint">
           „Rückgängig“ stoppt den Timer, verwirft die eben entstandene Buchung und setzt

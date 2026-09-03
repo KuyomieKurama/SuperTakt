@@ -118,6 +118,21 @@ aufgelösten Regeln und damit den Port. Die Entscheidung selbst fällt trotzdem 
 der Anwendungsfall hält sie nur zweimal gegen dasselbe Todo, einmal für den Zustand davor und
 einmal für den danach.
 
+**Der Satz nennt Namen und kein Gattungswort** (E-058 Punkt 4, T-093): „Es erscheint dann wieder
+in „Ost“.", nicht „in dem Pool „Ost“". Die drei Listen tragen Namen, aber keine Fläche — und seit
+E-054 kann derselbe Name eine Kanban-Spalte bezeichnen, einen Pool oder bei `placement: both`
+beides. Eine Funktion, die das Gattungswort setzt, rät. Der Satz ohne jeden Treffer nennt
+folgerichtig **beide** Flächen: „… es erscheint danach in keinem Pool und in keiner Spalte."
+
+**Drei Vorgänge liefern die Bewegung**, nicht einer (E-058 Punkt 6, T-093): `POST /timer/start`,
+`POST /timer/stop` und `POST /timer/orphaned/resolve`, jeweils als `poolMovement` oder `null`.
+Der Start ist dabei der Sonderweg — er lässt die erste abgeschlossene Buchung nur entstehen, wenn
+er einen Timer desselben Todos verdrängt. Der Regelweg ist der Stopp, und dort setzt die erste
+Buchung „hat offene Buchungen" von falsch auf wahr; jede Spalte mit `exportState: open` nimmt das
+Todo damit auf. Wer am Start eine Auskunft gibt und am Stopp schweigt, sagt die halbe Wahrheit.
+Gerechnet wird nur, wenn sich etwas bewegt haben **kann**: Sonst steht `null` da, und keine
+Ordnerauflösung läuft.
+
 Die Zeile davor ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
 entscheidet mit, ob das Duplikatangebot aus A-10.9 auf den **richtigen Kundenvorgang** zeigt.
 Trifft sie falsch, wird Arbeitszeit auf ein fremdes Todo gebucht und landet auf einer fremden
@@ -875,7 +890,7 @@ Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein 
 | `/time-entries` | |
 | `/time-entries/{id}/export-status` | Nur nach `open` setzbar (E-012) |
 | `/time-entries/{id}/not-billed` | Ausbuchen ohne Abrechnung (E-047). Eigener Vorgang, eigener Ereignistyp im Protokoll — kein Export |
-| `/timer`, `/timer/start`, `/timer/stop` | Siehe unten |
+| `/timer`, `/timer/start`, `/timer/stop`, `/timer/orphaned/resolve` | Siehe unten. Alle drei schreibenden Vorgänge liefern `poolMovement` (E-058 Punkt 6) |
 | `/export/templates`, `/export/runs` | |
 | `/export/audit` | Filter `timeEntryId` **und** `exportRunId` (T-042), einzeln oder zusammen. „Welche Buchungen waren in diesem Lauf?" ist damit vollständig beantwortbar; bis dahin siebte die Oberfläche die geladene Seite, und ein Lauf, der länger als eine Seite ist, verdrängte jeden älteren daraus |
 | `/export/sources` | Die geschlossene Auswahlliste als **Auskunft** des Dienstes (E-049). Die Oberfläche fragt, statt zu wissen — sonst stünde die Liste ein zweites Mal in `apps/web`, das `@takt/export` nicht einbinden darf |
@@ -893,6 +908,10 @@ Schnittstelle sehen soll: Der Start kann eine Rückfrage auslösen und einen Erl
 aufheben, der Stopp liefert eine erzeugte Buchung oder verwirft sie. Ein `DELETE`, das einen
 Datensatz zurückgibt, verschleiert das mehr, als die Form es einbringt. Die Regel „Verben
 sparsam" heißt sparsam, nicht nie.
+
+Seit T-093 tragen beide Antworten zusätzlich `poolMovement` — die Auskunft, welche Pools und
+Spalten das Todo durch diese Handlung betritt und verlässt. Sie ist kein Ersatz für `doneCleared`:
+Das eine sagt, **was geschehen ist**, das andere, **was daraus folgt**.
 
 **Blätterung mit Fortsetzungsmarke, nicht mit Seitenzahl.** Listen verschieben sich unter einem
 laufenden Timer. Eine Seitenzahl zeigt dann Einträge doppelt oder gar nicht. Der Aufwand ist

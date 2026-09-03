@@ -1,3 +1,4 @@
+import type { PoolMovement } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { FilterToggle } from "../components/FilterBar";
 import { KanbanCard, KanbanColumn } from "../components/Kanban";
@@ -86,7 +87,15 @@ export function BoardSection() {
     [],
   );
 
-  /** Erledigt setzen und zuruecknehmen (I-03). Aendert keine Spalte — nur die Sichtbarkeit. */
+  /**
+   * Erledigt setzen und zuruecknehmen (I-03).
+   *
+   * Gesagt wird nur das Faktum. Bis T-094 stand hier „die Regeln treffen weiter
+   * zu" — eine Behauptung ueber Spalten, die seit E-055 falsch sein kann: Eine
+   * Regel darf nach „Erledigt" fragen, und dann wechselt die Karte mit genau
+   * dieser Handlung. Dieselbe Zurueckhaltung uebt der echte Board-Toast
+   * (S-3 aus R-2).
+   */
   const toggleDone = useCallback((cardId: string) => {
     setCards((previous) =>
       previous.map((candidate) => {
@@ -94,7 +103,7 @@ export function BoardSection() {
         const next = !candidate.done;
         setAnnouncement(
           next
-            ? `${candidate.title} ist jetzt erledigt. Die Tags bleiben, die Regeln treffen weiter zu.`
+            ? `${candidate.title} ist jetzt erledigt. Tags und Status ändern sich dadurch nicht.`
             : `${candidate.title} ist wieder offen.`,
         );
         return { ...candidate, done: next, reactivated: false };
@@ -105,9 +114,9 @@ export function BoardSection() {
 
   /**
    * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
-   * (A-2.5). Die Tags aendern sich dabei nicht — die Karte erscheint deshalb
-   * genau dort wieder, wo sie vorher stand, sobald erledigte Karten
-   * ausgeblendet sind. Gefragt wird nicht; gesagt wird hinterher.
+   * (A-2.5). Gefragt wird nicht; gesagt wird hinterher — und **wo** die Karte
+   * danach steht, sagt in der Anwendung der Dienst (`poolMovement`, E-058),
+   * nicht diese Ansicht. Siehe `reactivatedMovement`.
    */
   const toggleTimer = useCallback((cardId: string) => {
     setCards((previous) => {
@@ -119,7 +128,7 @@ export function BoardSection() {
       if (reactivating) {
         setReactivatedCardId(cardId);
         setAnnouncement(
-          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo erscheint wieder in seinen Pools und in denselben Spalten wie zuvor.`,
+          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo ist wieder offen.`,
         );
       } else {
         setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
@@ -152,6 +161,27 @@ export function BoardSection() {
   }, [reactivatedCardId]);
 
   const reactivatedCard = cards.find((card) => card.id === reactivatedCardId);
+
+  /**
+   * Die Bewegung, wie der Dienst sie beim Start gemeldet haette (E-058).
+   *
+   * In der Anwendung kommt sie als `poolMovement` mit `POST /timer/start`; auf
+   * dieser Seite gibt es keinen Dienst, also wird sie aus dem gestellt, was
+   * hier ohnehin sichtbar ist: den Spalten, in denen die Karte danach steht.
+   *
+   * `leaves` bleibt leer, und das ist keine Bequemlichkeit — **keine** der
+   * Spalten dieser Musterseite fragt nach „Erledigt: nur erledigte", also gibt
+   * es hier nichts zu verlassen. Wie der Satz mit besetztem `leaves` klingt,
+   * steht in Abschnitt 6 neben den drei uebrigen Faellen; er wird dort nicht
+   * abgeschrieben, sondern von derselben Funktion gebildet.
+   */
+  const reactivatedMovement = useMemo((): PoolMovement | null => {
+    if (reactivatedCard === undefined) return null;
+    const names = reactivatedCard.columnIds
+      .map((id) => columnTitle.get(id))
+      .filter((title): title is string => title !== undefined);
+    return { appears: names, enters: names, leaves: [] };
+  }, [columnTitle, reactivatedCard]);
 
   const cardMenu = useCallback(
     (card: BoardCard, others: readonly string[]): readonly MenuEntry[] => [
@@ -342,9 +372,7 @@ export function BoardSection() {
       {reactivatedCard === undefined ? null : (
         <ReactivationNotice
           todoTitle={reactivatedCard.title}
-          poolNames={reactivatedCard.columnIds
-            .map((id) => columnTitle.get(id))
-            .filter((title): title is string => title !== undefined)}
+          movement={reactivatedMovement}
           onUndo={undoReactivation}
           onDismiss={() => setReactivatedCardId(null)}
         />

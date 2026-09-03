@@ -1,0 +1,12 @@
+// Typprüfung der Testdateien; siehe packages/domain/tsconfig.test.json.
+// Die Tests unter apps/web/test laufen über die Vitest-Konfiguration der Wurzel
+// (apps/*/test ist dort eingeschlossen), ohne DOM: reine Bibliotheken wie
+// src/lib/poolRule.ts. Ein Test, der das DOM braucht, sagt es in der Datei.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}
