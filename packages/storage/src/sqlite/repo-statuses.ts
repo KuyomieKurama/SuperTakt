@@ -1,16 +1,22 @@
 /**
- * Takt — Kanban-Spalten (A-5.3, A-5.4, E-023).
+ * Takt — der **Status** eines Todos (A-5.3, A-5.4, E-023, E-054).
  *
- * Eine Spalte trägt **kein** Merkmal „Erledigt". Erledigt (A-2.4) und die
- * Abschlussspalte (A-5.3) sind zwei getrennte Achsen: Ein Todo kann in „Done"
- * stehen und nicht erledigt sein, und es kann erledigt sein und in
- * „In Progress" stehen. Das Kennzeichen ist `todo.completed_at` und hängt an
- * keiner Spalte.
+ * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel über
+ * Tags und liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist
+ * eine Eigenschaft am Todo und liegt hier. Die Wörter in den Meldungen dieser
+ * Datei sagen das seit T-074 auch — bis dahin sprachen fünf von ihnen von einer
+ * „Spalte", und die erste davon erscheint im Einstellungsbereich *Status*, zwei
+ * Absätze unter der Erklärung, dass beides zweierlei ist.
+ *
+ * Ein Status trägt **kein** Merkmal „Erledigt". Erledigt (A-2.4) und der
+ * Abschlussstatus (A-5.3) sind zwei getrennte Achsen: Ein Todo kann „Done"
+ * tragen und nicht erledigt sein, und es kann erledigt sein und „In Progress"
+ * tragen. Das Kennzeichen ist `todo.completed_at` und hängt an keinem Status.
  *
  * Die Neuordnung ist ein eigener Vorgang und kein Feld auf `update`. Grund ist
- * `ux_todo_status_position`: Der eindeutige Index bricht, sobald zwei Spalten
+ * `ux_todo_status_position`: Der eindeutige Index bricht, sobald zwei Zeilen
  * auch nur für die Dauer einer Anweisung dieselbe Position tragen. Eine
- * Neuordnung, die Spalte für Spalte schreibt, ist deshalb nicht bloß langsam,
+ * Neuordnung, die Zeile für Zeile schreibt, ist deshalb nicht bloß langsam,
  * sondern schlägt fehl.
  */
 
@@ -41,11 +47,24 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
       return loadOne(id);
     },
 
+    /**
+     * Der Standard für neue Todos.
+     *
+     * Die zweite Zeile ist ein **Rückfall**, kein Normalweg: Gibt es keinen
+     * Standard, wird der erste nach Position genommen. Über die Routen ist das
+     * seit T-074 nicht mehr erreichbar — weder `remove` noch `update` lassen
+     * den letzten Standard fallen —, und Migration 0002 setzt einen. Der
+     * Rückfall bleibt für einen Bestand, an dem jemand von Hand gearbeitet hat;
+     * ohne ihn schlüge dort jedes Anlegen eines Todos fehl.
+     *
+     * Bis T-074 war er der stille Ausgang aus einer Lücke: Wer den Standard
+     * löschte, bekam wortlos einen anderen. Genau das ist jetzt zu.
+     */
     async defaultStatus() {
       const row =
         conn.prepare(`SELECT ${COLUMNS} FROM todo_status WHERE is_default = 1 LIMIT 1`).get() ??
         conn.prepare(`SELECT ${COLUMNS} FROM todo_status ORDER BY position LIMIT 1`).get();
-      if (row === undefined) throw new Error('Es gibt keine einzige Kanban-Spalte.');
+      if (row === undefined) throw new Error('Es gibt keinen einzigen Status.');
       return toTodoStatus(row);
     },
 
@@ -89,12 +108,36 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
       if (!outcome.ok) return err(outcome.error as never);
 
       const created = loadOne(id);
-      if (created === null) throw new Error('Die angelegte Spalte ist nicht auffindbar.');
+      if (created === null) throw new Error('Der angelegte Status ist nicht auffindbar.');
       return ok(created);
     },
 
     async update(id, fields, now) {
-      if (loadOne(id) === null) return err(taktError('not_found', 'Diese Spalte gibt es nicht.'));
+      const current = loadOne(id);
+      if (current === null) return err(taktError('not_found', 'Diesen Status gibt es nicht.'));
+
+      /**
+       * Der Standard lässt sich **weitergeben**, nicht abwählen (T-074).
+       *
+       * Dieselbe Lücke wie beim Löschen und in derselben Datei: `isDefault:
+       * false` auf dem Standard räumte die Marke ab und ließ **null** zurück.
+       * `ux_todo_status_default` sichert „höchstens einer", nicht „mindestens
+       * einer"; danach fiel `defaultStatus()` still auf den ersten nach
+       * Position. Die Oberfläche kennt die Regel — „abwählen lässt sich der
+       * Standard nicht, nur weitergeben" steht dort ausgeschrieben —, der
+       * Dienst kannte sie nicht.
+       *
+       * Auf einem Status, der ohnehin nicht der Standard ist, bleibt
+       * `isDefault: false` wie bisher folgenlos.
+       */
+      if (fields.isDefault === false && current.isDefault) {
+        return err(
+          taktError(
+            'default_status_locked',
+            'Der Standard für neue Todos lässt sich nicht abwählen, nur weitergeben. Bestimmen Sie einen anderen Status zum Standard.',
+          ),
+        );
+      }
 
       // Sicherungspunkt (T-047): Ohne ihn ist der schlimmste Fall dieser
       // Methode ein Bestand **ohne** Standardspalte. Wer gleichzeitig
@@ -130,7 +173,7 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
       if (!outcome.ok) return err(outcome.error);
 
       const updated = loadOne(id);
-      if (updated === null) return err(taktError('not_found', 'Diese Spalte gibt es nicht.'));
+      if (updated === null) return err(taktError('not_found', 'Diesen Status gibt es nicht.'));
       return ok(updated);
     },
 
@@ -151,7 +194,7 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
         return err(
           taktError(
             'validation_error',
-            'Die Reihenfolge muss alle Spalten genau einmal nennen. Teilstücke sind nicht zulässig.',
+            'Die Reihenfolge muss alle Status genau einmal nennen. Teilstücke sind nicht zulässig.',
           ),
         );
       }
@@ -174,22 +217,45 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
     },
 
     /**
-     * Löschen. Eine Spalte mit Todos wird nicht gelöscht, und die letzte
-     * Spalte auch nicht.
+     * Löschen. Drei Gründe, die es verhindern, und alle drei sind fachlich.
      *
      * Der Fremdschlüssel `todo.status_id` steht auf `ON DELETE RESTRICT` und
-     * würde ohnehin abweisen. Die Prüfung hier davor liefert den fachlichen
-     * Grund statt einer Datenbankmeldung — der Unterschied ist der zwischen
-     * „In dieser Spalte stehen noch Karten" und „FOREIGN KEY constraint
-     * failed".
+     * würde den zweiten Fall ohnehin abweisen. Die Prüfung hier davor liefert
+     * den fachlichen Grund statt einer Datenbankmeldung — der Unterschied ist
+     * der zwischen „Diesen Status tragen noch Todos" und „FOREIGN KEY
+     * constraint failed".
+     *
+     * **Der dritte Grund ist seit T-074 hier und nicht mehr nur in der
+     * Oberfläche.** `ux_todo_status_default` sichert „höchstens **ein**
+     * Standard", nicht „mindestens einer". Wer den Standard löschte, ließ null
+     * zurück, und `defaultStatus()` fiel **still** auf den ersten nach Position
+     * — ein neu angelegtes Todo landete danach woanders, ohne dass jemand es
+     * erfahren hätte. `apps/web` sperrte den Knopf; wer die Route unmittelbar
+     * aufrief, stellte trotzdem den Zustand her, den die Oberfläche für
+     * unmöglich hielt.
+     *
+     * Abgewiesen statt umgehängt: Welcher Status danach der Standard sein soll,
+     * ist eine Entscheidung des Benutzers und kein Rest, den eine Löschroutine
+     * nebenbei trifft. Der Weg heißt `PATCH /todo-statuses/{id}` mit
+     * `isDefault: true` auf einem anderen — und der ist in der Meldung genannt.
      */
     async remove(id) {
-      if (loadOne(id) === null) return err(taktError('not_found', 'Diese Spalte gibt es nicht.'));
+      const status = loadOne(id);
+      if (status === null) return err(taktError('not_found', 'Diesen Status gibt es nicht.'));
 
       const count = conn.prepare('SELECT COUNT(*) AS n FROM todo_status').get();
       if (count !== undefined && integer(count, 'n') <= 1) {
         return err(
-          taktError('last_status_column', 'Die letzte Spalte kann nicht gelöscht werden.'),
+          taktError('last_status_column', 'Der letzte Status kann nicht gelöscht werden.'),
+        );
+      }
+
+      if (status.isDefault) {
+        return err(
+          taktError(
+            'default_status_locked',
+            'Dieser Status ist der Standard für neue Todos und lässt sich deshalb nicht löschen. Machen Sie zuerst einen anderen Status zum Standard.',
+          ),
         );
       }
 
@@ -198,7 +264,7 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
         return err(
           taktError(
             'status_in_use',
-            'In dieser Spalte stehen noch Todos. Verschieben Sie sie zuerst.',
+            'Diesen Status tragen noch Todos. Geben Sie ihnen zuerst einen anderen.',
           ),
         );
       }

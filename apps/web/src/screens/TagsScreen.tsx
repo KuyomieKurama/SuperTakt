@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
-  createPool,
   createTag,
   createTagFolder,
   deletePool,
@@ -12,22 +11,23 @@ import {
   updatePool,
   updateTag,
 } from "../api/endpoints";
-import type { Id, Pool, PoolRuleTerm, TagFolderNode, TagTree as TagTreeData } from "../api/types";
+import type { Id, Pool, PoolPlacement, TagFolderNode, TagTree as TagTreeData } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Select } from "../components/Select";
 import { FormDialog, TextField } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
 import { TagChip, TagPath } from "../components/Tag";
-import { TagInput } from "../components/TagInput";
 import { TagTree, type TagTreeNode } from "../components/TagTree";
 import { useRefresh } from "../app/RefreshContext";
 import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
-import { plural } from "../lib/format";
+import { flatFolders } from "../lib/folderPaths";
+import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
 import { AsyncBoundary, ScreenHeader } from "./parts";
+import { PoolFormDialog } from "./PoolFormDialog";
 
 /**
  * Takt — S-08 (Tags und Ordner) und S-11 (Pools).
@@ -57,7 +57,7 @@ export function TagsScreen() {
     <section className="screen">
       <ScreenHeader
         title="Tags"
-        lead="Tags, Ordner und die Pools, die sich daraus ergeben."
+        lead="Tags, Ordner und die Regeln darüber. Dieselbe Regel kann ein Pool sein, eine Spalte des Kanban-Boards oder beides (E-054)."
       />
 
       <AsyncBoundary
@@ -69,7 +69,7 @@ export function TagsScreen() {
         {(value) => (
           <div className="tags-layout">
             <TagAdministration tree={value.tagTree} />
-            <PoolAdministration pools={value.pools} tree={value.tagTree} />
+            <PoolAdministration rules={value.rules} />
           </div>
         )}
       </AsyncBoundary>
@@ -445,81 +445,69 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
 /* Pools (S-11, I-13)                                                   */
 /* ==================================================================== */
 
-function PoolAdministration({
-  pools,
-  tree,
-}: {
-  readonly pools: readonly Pool[];
-  readonly tree: TagTreeData;
-}) {
+function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   const structure = useStructure();
   const toasts = useToasts();
   const { bump } = useRefresh();
-  const mutation = useMutation();
 
-  const [editing, setEditing] = useState<Pool | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [matchMode, setMatchMode] = useState<"any" | "all">("any");
-  const [includeSubfolders, setIncludeSubfolders] = useState(true);
-  const [rule, setRule] = useState<readonly PoolRuleTerm[]>([]);
+  const [form, setForm] = useState<{ readonly pool?: Pool } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Pool | null>(null);
 
-  const folders = useMemo(() => flatFolders(tree), [tree]);
-  const open = creating || editing !== null;
+  const folders = useMemo(
+    () => (structure.state.status === "ready" ? flatFolders(structure.state.value.tagTree) : []),
+    [structure.state],
+  );
 
-  const startCreate = (): void => {
-    setEditing(null);
-    setName("");
-    setMatchMode("any");
-    setIncludeSubfolders(true);
-    setRule([]);
-    setCreating(true);
-  };
-
-  const startEdit = (pool: Pool): void => {
-    setCreating(false);
-    setName(pool.name);
-    setMatchMode(pool.matchMode);
-    setIncludeSubfolders(pool.includeSubfolders);
-    setRule(pool.rule);
-    setEditing(pool);
-  };
-
-  const close = (): void => {
-    setCreating(false);
-    setEditing(null);
+  const setPlacement = (pool: Pool, placement: PoolPlacement): void => {
+    void updatePool(pool.id, { placement })
+      .then(() => {
+        structure.reload();
+        bump();
+        toasts.success(
+          "Anzeigeort geändert.",
+          `„${pool.name}“ — Anzeigeort: ${POOL_PLACEMENT_LABEL[placement]}.`,
+        );
+      })
+      .catch((cause: unknown) =>
+        toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
+      );
   };
 
   return (
     <>
       <Card
-        title="Todo-Pools"
-        description="Ein Pool ist eine Regel über Tags und Ordner. Welche Todos in ihm liegen, wird bei jeder Abfrage neu bestimmt."
+        title="Regeln über Tags"
+        description="Eine Regel bündelt Todos über ihre Tags. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
         actions={
-          <Button size="sm" variant="primary" iconStart="plus" onClick={startCreate}>
-            Neuer Pool
+          <Button size="sm" variant="primary" iconStart="plus" onClick={() => setForm({})}>
+            Neue Regel
           </Button>
         }
       >
-        {pools.length === 0 ? (
+        {rules.length === 0 ? (
           <EmptyState
             compact
             icon="filter"
-            title="Noch kein Pool"
-            description="Ein Pool bündelt Todos über ihre Tags — etwa alles unter dem Ordner „Kunden“."
+            title="Noch keine Regel"
+            description="Eine Regel bündelt Todos über ihre Tags — etwa alles unter dem Ordner „Kunden“. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
             action={
-              <Button variant="primary" iconStart="plus" onClick={startCreate}>
-                Ersten Pool anlegen
+              <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
+                Erste Regel anlegen
               </Button>
             }
           />
         ) : (
           <ul className="pool-list">
-            {pools.map((pool) => (
+            {rules.map((pool) => (
               <li key={pool.id} className="pool-row">
                 <div className="grow">
-                  <p className="pool-row__name">{pool.name}</p>
+                  <p className="pool-row__name">
+                    {pool.name}
+                    <span className={`placement-badge placement-badge--${pool.placement}`}>
+                      <Icon name={pool.placement === "pool" ? "filter" : "square"} size={11} />
+                      {POOL_PLACEMENT_SHORT[pool.placement]}
+                    </span>
+                  </p>
                   <p className="pool-row__rule">
                     {pool.matchMode === "any" ? "Mindestens einer von" : "Alle von"}:{" "}
                     {pool.rule.length === 0 ? (
@@ -545,7 +533,14 @@ function PoolAdministration({
                         </span>
                       ))
                     )}
-                    {pool.includeSubfolders ? " · mit Unterordnern" : " · ohne Unterordner"}
+                    {/* Der Zusatz gilt nur Ordnertermen. Bei einer Regel aus
+                        lauter Tags sagte er etwas ueber eine Bedingung aus,
+                        die es in dieser Regel gar nicht gibt. */}
+                    {pool.rule.some((term) => term.kind === "folder")
+                      ? pool.includeSubfolders
+                        ? " · mit Unterordnern"
+                        : " · ohne Unterordner"
+                      : null}
                   </p>
                 </div>
                 <Button
@@ -556,7 +551,22 @@ function PoolAdministration({
                 >
                   Todos ansehen
                 </Button>
-                <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => startEdit(pool)}>
+                {/*
+                  Der Anzeigeort ist der einzige Unterschied zwischen Pool und
+                  Spalte (E-054) — deshalb steht er als ein Griff hier und
+                  nicht nur im Formular. „Nur auf dem Board" bleibt dem Dialog
+                  vorbehalten: Wer eine Regel aus seinen Pools nehmen will,
+                  soll dabei lesen, was das bedeutet.
+                */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  iconStart={pool.placement === "pool" ? "plus" : "x"}
+                  onClick={() => setPlacement(pool, pool.placement === "pool" ? "both" : "pool")}
+                >
+                  {pool.placement === "pool" ? "Auf das Board" : "Vom Board nehmen"}
+                </Button>
+                <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => setForm({ pool })}>
                   Bearbeiten
                 </Button>
                 <Button
@@ -573,123 +583,23 @@ function PoolAdministration({
         )}
       </Card>
 
-      <FormDialog
-        open={open}
-        title={editing === null ? "Neuen Pool anlegen" : "Pool bearbeiten"}
-        description="Die Regel nennt Tags und Ordner. Ein Ordner steht für alles, was in ihm liegt."
-        submitLabel={editing === null ? "Anlegen" : "Speichern"}
-        submitDisabled={name.trim().length === 0 || rule.length === 0}
-        busy={mutation.busy}
-        error={mutation.error}
-        onSubmit={() => {
-          void mutation.run(async () => {
-            const body = { name: name.trim(), matchMode, includeSubfolders, rule };
-            if (editing === null) await createPool(body);
-            else await updatePool(editing.id, body);
-            close();
-            structure.reload();
-            bump();
-            toasts.success(editing === null ? "Pool angelegt." : "Pool geändert.");
-          });
-        }}
-        onCancel={close}
-      >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
-
-        <Select
-          label="Wie viele Regel-Tags müssen zutreffen?"
-          value={matchMode}
-          onChange={(next) => setMatchMode(next as "any" | "all")}
-          options={[
-            { value: "any", label: "Mindestens einer" },
-            { value: "all", label: "Alle" },
-          ]}
-        />
-
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={includeSubfolders}
-            onChange={(event) => setIncludeSubfolders(event.target.checked)}
-          />
-          <span>
-            Unterordner einschließen
-            <span className="checkbox-row__hint">
-              Ein genannter Ordner steht dann auch für alles, was tiefer liegt.
-            </span>
-          </span>
-        </label>
-
-        {/*
-          Bis T-057 stand hier eine Chip-Wand mit **allen** Tags, auf vierzig
-          Stück gekappt. Wer mehr als vierzig Tags hat, konnte den
-          einundvierzigsten in einer Poolregel nicht nennen — und sah nicht
-          einmal, dass er fehlt. Die Tag-Eingabe kennt diese Grenze nicht;
-          sie sucht.
-        */}
-        <TagInput
-          label="Regel — Tags"
-          value={rule.flatMap((term) => (term.kind === "tag" ? [term.tagId] : []))}
-          onChange={(next) =>
-            setRule([
-              ...next.map((tagId) => ({ kind: "tag", tagId }) as const),
-              ...rule.filter((term) => term.kind === "folder"),
-            ])
-          }
-          hint="Ein genanntes Tag trifft jedes Todo, das es trägt."
-        />
-
-        <div className="field">
-          <span className="field__label">Regel — Ordner</span>
-          <div className="tag-picker">
-            {folders.map((folder) => {
-              const active = rule.some(
-                (term) => term.kind === "folder" && term.folderId === folder.id,
-              );
-              return (
-                <button
-                  key={folder.id}
-                  type="button"
-                  className={`folder-chip${active ? " folder-chip--on" : ""}`}
-                  aria-pressed={active}
-                  onClick={() =>
-                    setRule((previous) =>
-                      active
-                        ? previous.filter(
-                            (term) => !(term.kind === "folder" && term.folderId === folder.id),
-                          )
-                        : [...previous, { kind: "folder", folderId: folder.id }],
-                    )
-                  }
-                >
-                  <Icon name="folder" size={12} />
-                  {folder.path.join(" / ")}
-                </button>
-              );
-            })}
-          </div>
-          {rule.length === 0 ? (
-            <p className="field__error">
-              Ohne Regel bliebe der Pool immer leer. Wählen Sie mindestens einen Tag oder Ordner.
-            </p>
-          ) : (
-            <p className="field__hint">{plural(rule.length, "Bedingung", "Bedingungen")} gewählt.</p>
-          )}
-        </div>
-
-        <InlineMessage tone="info" title="Nichts wird gespeichert außer der Regel">
-          Ein Pool merkt sich keine Todos. Ändern sich die Tags eines Todos, ändert sich seine
-          Pool-Zugehörigkeit von selbst — und ein erledigtes Todo kehrt beim Timerstart ohne
-          Zutun zurück.
-        </InlineMessage>
-      </FormDialog>
+      <PoolFormDialog
+        open={form !== null}
+        {...(form?.pool === undefined ? {} : { pool: form.pool })}
+        defaultPlacement="pool"
+        onClose={() => setForm(null)}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title="Pool löschen?"
+        title="Regel löschen?"
         description={pendingDelete === null ? "" : `Die Regel „${pendingDelete.name}“ wird entfernt.`}
-        consequence="An den Todos ändert sich nichts. Die Zugehörigkeit war nie gespeichert."
+        consequence={
+          pendingDelete !== null && pendingDelete.placement !== "pool"
+            ? "An den Todos ändert sich nichts — die Zugehörigkeit war nie gespeichert. Auf dem Board verschwindet die Spalte; ihre Karten stehen weiter in der Todo-Liste."
+            : "An den Todos ändert sich nichts. Die Zugehörigkeit war nie gespeichert."
+        }
         confirmLabel="Löschen"
         onConfirm={() => {
           const pool = pendingDelete;
@@ -699,10 +609,10 @@ function PoolAdministration({
               setPendingDelete(null);
               structure.reload();
               bump();
-              toasts.success("Pool gelöscht.");
+              toasts.success("Regel gelöscht.");
             })
             .catch((cause: unknown) =>
-              toasts.failure("Der Pool ließ sich nicht löschen", errorMessage(cause)),
+              toasts.failure("Die Regel ließ sich nicht löschen", errorMessage(cause)),
             );
         }}
         onCancel={() => setPendingDelete(null)}
@@ -735,19 +645,6 @@ function toTreeNodes(tree: TagTreeData): readonly TagTreeNode[] {
 
 function countTags(node: TagFolderNode): number {
   return node.tags.length + node.subfolders.reduce((sum, child) => sum + countTags(child), 0);
-}
-
-function flatFolders(tree: TagTreeData): ReadonlyArray<{ id: Id; path: readonly string[] }> {
-  const out: Array<{ id: Id; path: readonly string[] }> = [];
-  const walk = (nodes: readonly TagFolderNode[], prefix: readonly string[]): void => {
-    for (const node of nodes) {
-      const path = [...prefix, node.folder.name];
-      out.push({ id: node.folder.id, path });
-      walk(node.subfolders, path);
-    }
-  };
-  walk(tree.rootFolders, []);
-  return out;
 }
 
 function findSelection(tree: TagTreeData, id: Id): Selection {

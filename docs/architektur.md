@@ -900,9 +900,71 @@ Der Adapter übersetzt SQLite-Meldungen an genau einer Stelle in `TaktError`. Di
 deshalb absichtlich dieselben Zeichenketten wie die Fehlerkennungen der Domäne
 (`time_entry_locked`, `append_only`, `builtin_template_immutable`).
 
+#### Wie SQLite seine eindeutigen Indizes benennt (T-074)
+
+Die Zuordnung „Indexverletzung → Fehlerschlüssel" hängt daran, was in der Meldung von SQLite
+steht — und das ist **nicht** immer der Indexname. Gemessen mit `node:sqlite`:
+
+| Index | Meldung |
+|---|---|
+| `ON t (pos)` | `UNIQUE constraint failed: t.pos` |
+| `ON t (name COLLATE NOCASE)` | `UNIQUE constraint failed: t.name` |
+| `ON t (a, b, c)` | `UNIQUE constraint failed: t.a, t.b, t.c` |
+| `ON t (COALESCE(x,'~'), name)` | `UNIQUE constraint failed: index 'ux_…'` |
+| `ON t ((1)) WHERE flag = 1` | `UNIQUE constraint failed: index 'ux_…'` |
+
+Nur ein Index über einen **Ausdruck** oder mit **WHERE-Bedingung** trägt seinen Namen; ein Index
+über nackte Spalten nennt die Spalten. `COLLATE NOCASE` ist keine Rechnung, sondern eine
+Vergleichsvorschrift, und ändert daran nichts.
+
+Bis T-074 suchte `errors.ts` je Eintrag nur nach dem Indexnamen. Sieben von zwölf Einträgen waren
+damit unerreichbar — darunter `ux_pool_name` und `ux_todo_status_name`, die beide einen genaueren
+Satz trugen, den nie jemand zu sehen bekam. Jeder Eintrag führt seitdem die Suchbegriffe, die für
+**seinen** Indextyp auftreten, und `proof:conflicts` löst jeden Index des Schemas einmal aus,
+statt die Zuordnung zu behaupten.
+
+#### Das Netz am Rand — und warum es keinen Fehlerzweig ersetzt
+
+Ein Adapter, der eine Regel der Datenbank durchschlagen lässt, war bis T-074 ein `500`:
+`POST /pools` mit vergebenem Namen antwortete `internal_error` (gemessen in T-072). Der
+Unterschied ist nicht kosmetisch — ein `500` sagt „bei mir ist etwas kaputt", und die Oberfläche
+rät daraufhin zum erneuten Versuch, der genauso scheitert.
+
+`app.onError` fragt deshalb zuerst `asStorageFailure(error)`. Ist der Wurf eine SQLite-Störung,
+wird er wie jeder fachliche Fehler beantwortet; sonst bleibt er ein `500` ohne Innenleben. Die
+Reihenfolge der Ebenen ist damit:
+
+```
+   1. Anwendungsfall prüft vorher   → genaue Meldung, nennt den Namen
+   2. attempt / attemptAtomically   → Fehlschlag als Wert, Sicherungspunkt zurück
+   3. app.onError + asStorageFailure→ das Netz: richtiger Code, allgemeiner Satz
+```
+
+Ebene 3 ersetzt Ebene 1 nicht. Sie sagt „ein doppelter Wert", wo der Anwendungsfall sagen könnte,
+welcher. `proof:conflicts` misst deshalb beides: dass keine Route mit `500` antwortet **und** dass
+die Antwort einen Schlüssel trägt, gegen den eine Oberfläche verzweigen kann.
+
+#### Eine Regel, die nur in der Oberfläche steht, ist keine Regel (T-073, T-074)
+
+Der verwandte Befund, und die vierte Ebene, die es **nicht** gibt: `apps/web` sperrte das Löschen
+des Standard-Status und schrieb hin, dass der Standard sich nur weitergeben und nicht abwählen
+lässt. Der Dienst kannte beides nicht. Wer die Route unmittelbar aufrief, ließ den Bestand ohne
+Standard zurück — und `TodoStatusPort.defaultStatus()` fiel **still** auf den ersten Status nach
+Position. Ein neu angelegtes Todo bekam danach einen anderen Status, ohne dass jemand es erfahren
+hätte.
+
+Der partielle Index `ux_todo_status_default` konnte das nicht aufhalten: Er sichert „höchstens
+ein Standard", nicht „mindestens einer". Die Zusage steht seit T-074 im Adapter, mit einem
+eigenen Fehlerschlüssel (`default_status_locked`, 409), den die Oberfläche lesen kann — so wie
+`status_in_use`.
+
+Die Prüffrage, die daraus folgt und die in keinen Prüflauf passt, weil sie über Schichten geht:
+**Welche Zusicherung steht nur in `apps/web`?** Ein gesperrter Knopf ohne Fehlerschlüssel
+dahinter ist eine Vermutung über den Dienst, keine Eigenschaft von ihm.
+
 ### 5.5 Was der Dienst zur Laufzeit über sich wissen darf (T-053)
 
-Der Dienst läuft in zwei Gestalten: aus dem Quelltext (Entwicklung, alle elf Nachweispfade, alle
+Der Dienst läuft in zwei Gestalten: aus dem Quelltext (Entwicklung, alle Nachweispfade, alle
 Tests) und als **eine Binärdatei** (Node-SEA, Auslieferung). Zwischen beiden liegt ein Unterschied,
 den man nicht sieht und der deshalb dreimal überlesen wurde:
 

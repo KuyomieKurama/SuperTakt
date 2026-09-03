@@ -29,6 +29,7 @@ import { ROUNDING_MODE_LABEL, THEME_LABEL } from "../lib/labels";
 import { formatDateTime, plural } from "../lib/format";
 import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
+import { StatusSettings } from "./StatusSettings";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -69,7 +70,7 @@ import { AsyncBoundary, ScreenHeader } from "./parts";
  * Pfad, bevor jemand nach der Datei mit den Kundendaten sucht (R-13). Der
  * Inhalt liegt in `components/WorkstationFacts.tsx`.
  *
- * ## Fünf Bereiche statt einer langen Liste (T-057, Punkt 2)
+ * ## Bereiche statt einer langen Liste (T-057, Punkt 2)
  *
  * Bis T-057 standen hier fünf Karten untereinander — Export (mit Ordner,
  * Vorlage, Rundung und Farbmodus in einem), Arbeitsplatz, Standard-Tags,
@@ -77,8 +78,9 @@ import { AsyncBoundary, ScreenHeader } from "./parts";
  * hohen Fenster: Wer den Farbmodus suchte, scrollte an allem vorbei, was er
  * nicht suchte.
  *
- * Jetzt gibt es fünf Bereiche mit einer Leiste links. Jeder hat **eine eigene
- * Adresse** (`#/einstellungen?bereich=darstellung`), und deshalb ist die Leiste
+ * Jetzt gibt es sechs Bereiche mit einer Leiste links — der sechste, „Status“,
+ * kam mit T-073 dazu, als die Statusstruktur ihr Bedienelement auf dem Board
+ * verlor. Jeder Bereich hat **eine eigene Adresse** (`#/einstellungen?bereich=darstellung`), und deshalb ist die Leiste
  * eine `<nav>` mit Verweisen und keine ARIA-Registerkarte: Registerkarten sind
  * Bereiche derselben Seite ohne eigenen Verlauf. Hier gibt es Zurück, Neuladen
  * an Ort und Stelle und einen Verweis, den man weitergeben kann. Wo man ist,
@@ -102,7 +104,7 @@ const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
 /* Die Bereiche                                                         */
 /* ==================================================================== */
 
-const AREAS = ["darstellung", "export", "standardtags", "addin", "arbeitsplatz"] as const;
+const AREAS = ["darstellung", "export", "standardtags", "status", "addin", "arbeitsplatz"] as const;
 
 type SettingsArea = (typeof AREAS)[number];
 
@@ -120,8 +122,13 @@ interface AreaDescriptor {
  * „Darstellung“ steht vorn, weil der Auftraggeber sie ausdrücklich als eigenen
  * Bereich verlangt hat und weil sie der einzige Bereich ist, der sofort wirkt.
  * Danach kommt, was Geld betrifft (Export), dann was jedes neue Todo betrifft
- * (Standard-Tags), dann die Nachbarsysteme (Add-in), zuletzt die Auskünfte
- * über diesen Arbeitsplatz, die man nachsieht statt einzustellen.
+ * (Standard-Tags und Status), dann die Nachbarsysteme (Add-in), zuletzt die
+ * Auskünfte über diesen Arbeitsplatz, die man nachsieht statt einzustellen.
+ *
+ * „Status“ steht neben den Standard-Tags, weil beide dieselbe Frage
+ * beantworten: Was bekommt ein neu angelegtes Todo mit? Seit E-054 ist der
+ * Status keine Kanban-Spalte mehr, sondern eine Stammgröße wie sie — deshalb
+ * ist er aus dem Board hierher gezogen und nicht ersatzlos entfallen (A-5.4).
  */
 const AREA_LIST: readonly AreaDescriptor[] = [
   {
@@ -143,6 +150,12 @@ const AREA_LIST: readonly AreaDescriptor[] = [
     hint: "Tags, die an jedes neue Todo kommen",
   },
   {
+    area: "status",
+    label: "Status",
+    icon: "inbox",
+    hint: "Die Statuswerte eines Todos — nicht die Spalten des Boards",
+  },
+  {
     area: "addin",
     label: "Outlook-Add-in",
     icon: "shield",
@@ -160,6 +173,7 @@ const AREA_LEAD: Readonly<Record<SettingsArea, string>> = {
   darstellung: "Wie Takt aussieht. Änderungen wirken sofort, ohne Speichern.",
   export: "Wohin die Exportdatei geht, welche Vorlage sie füllt und wie gerundet wird.",
   standardtags: "Welche Tags jedes neu angelegte Todo mitbekommt — auf jedem Weg.",
+  status: "Welche Statuswerte es gibt, in welcher Reihenfolge und welcher an ein neues Todo kommt.",
   addin: "Das Token, mit dem sich das Outlook-Add-in beim lokalen Dienst ausweist.",
   arbeitsplatz: "Was der Dienst über diesen Arbeitsplatz meldet. Hier nicht änderbar.",
 };
@@ -232,6 +246,8 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
       return <ExportSettings />;
     case "standardtags":
       return <DefaultTagSettings />;
+    case "status":
+      return <StatusSettings />;
     case "addin":
       return <AddinSettings />;
     case "arbeitsplatz":

@@ -47,7 +47,7 @@ export type { UnitOptions } from './sqlite/unit-of-work.ts';
 export { createMigrationRunner, loadMigrations, migrationsFromFiles } from './sqlite/migration-runner.ts';
 export type { MigrationRunnerOptions } from './sqlite/migration-runner.ts';
 
-export { translateSqliteError } from './sqlite/errors.ts';
+export { asStorageFailure, translateSqliteError, UNIQUE_INDEX_CATALOG } from './sqlite/errors.ts';
 
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, decodeCursor, encodeCursor, pageSize } from './sqlite/paging.ts';
 

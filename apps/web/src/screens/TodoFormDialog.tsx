@@ -37,8 +37,15 @@ export interface TodoFormDialogProps {
   readonly open: boolean;
   /** Vorhandenes Todo — dann wird geändert, sonst angelegt. */
   readonly todo?: Todo;
-  /** Vorbelegte Statusspalte beim Anlegen, etwa aus einer Kanban-Spalte. */
+  /** Vorbelegter Status beim Anlegen. */
   readonly presetStatusId?: Id;
+  /**
+   * Vorbelegte Tags beim Anlegen — etwa die Regel-Tags einer Kanban-Spalte
+   * (E-054). Sie sind ein Vorschlag und keine Zusage: Ob das Todo am Ende in
+   * der Spalte steht, entscheidet die Regelauswertung im Dienst, sobald das
+   * Board neu berechnet wird.
+   */
+  readonly presetTagIds?: readonly Id[];
   readonly onClose: () => void;
   readonly onSaved?: (todo: Todo) => void;
 }
@@ -47,6 +54,7 @@ export function TodoFormDialog({
   open,
   todo,
   presetStatusId,
+  presetTagIds,
   onClose,
   onSaved,
 }: TodoFormDialogProps) {
@@ -72,11 +80,11 @@ export function TodoFormDialog({
     setTitle(todo?.title ?? "");
     setCallNumber(todo?.callNumber ?? "");
     setStatusId(todo?.statusId ?? defaultStatusId);
-    setTagIds(todo?.tagIds ?? []);
+    setTagIds(todo?.tagIds ?? presetTagIds ?? []);
     setNewTagNames([]);
     setNote("");
     setTitleTouched(false);
-  }, [open, todo, defaultStatusId]);
+  }, [open, todo, defaultStatusId, presetTagIds]);
 
   const trimmedTitle = title.trim();
   const titleError =
@@ -194,10 +202,11 @@ export function TodoFormDialog({
       />
 
       <Select
-        label="Statusspalte"
+        label="Status"
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
+        hint="Der Status ist keine Kanban-Spalte — auf dem Board entscheiden die Tags. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
       />
 
       <TagInput

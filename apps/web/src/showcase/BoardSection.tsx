@@ -1,144 +1,53 @@
-import { useCallback, useState } from "react";
-import { FilterBar, FilterToggle, type ActiveFilter } from "../components/FilterBar";
-import { ExportSummaryStrip, KanbanCard, KanbanColumn } from "../components/Kanban";
+import { useCallback, useMemo, useState } from "react";
+import { FilterToggle } from "../components/FilterBar";
+import { KanbanCard, KanbanColumn } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { Icon } from "../components/Icon";
-import { TagChip } from "../components/Tag";
+import { Card, EmptyState, InlineMessage, Button } from "../components/Primitives";
 import { ReactivationNotice } from "../components/Timer";
-import { cx } from "../lib/cx";
+import { BoardEmptyState } from "../screens/BoardScreen";
 import { BOARD_CARDS, BOARD_COLUMNS, type BoardCard } from "./data";
 import { Section, SubHeading } from "./Section";
 
 /**
- * Zwei Pool-Ansichten ueber demselben Bestand — E-039, E-023, A-3.4.
+ * Das Kanban-Board nach E-054 — S-04, A-5.1, A-5.3 bis A-5.6.
  *
- * Ein Pool ist ueber eine Tag-Regel definiert; die Zugehoerigkeit wird bei
- * jeder Abfrage neu berechnet und nicht gespeichert (A-3.4). Fuer die
- * Musterseite reicht die Regel als Praedikat.
+ * ## Was diese Musterseite zeigt und warum
+ *
+ * Eine Spalte ist eine **Regel ueber Tags**, dieselbe Entitaet wie ein Pool.
+ * Daraus folgen drei Zustaende, die es vor E-054 nicht gab und die hier
+ * nebeneinander stehen, weil sie einzeln harmlos und zusammen verwirrend sind:
+ *
+ *   1. Dieselbe Karte in **zwei** Spalten ("Musterkunde Nord" steht in
+ *      "Kunden Nord" und in "Support").
+ *   2. Eine Spalte, deren Regel derzeit **nichts** trifft ("Eskalation").
+ *   3. Ein **leeres Board** — der Zustand direkt nach der Umstellung.
+ *
+ * ## Was hier bewusst fehlt
+ *
+ * Ziehen und Ablegen. Bis T-072 stand an dieser Stelle eine ausfuehrliche
+ * Vorfuehrung davon samt Tastaturalternative nach SC 2.5.7. Beides ist mit
+ * E-054 gegenstandslos: Eine Regel laesst sich nicht durch Verschieben
+ * umkehren, ohne Tags zu setzen. Eine Musterseite, die eine entfernte Geste
+ * weiter vorfuehrt, ist schlimmer als keine.
  */
-interface PoolView {
-  readonly id: string;
-  readonly name: string;
-  readonly rule: string;
-  readonly matches: (card: BoardCard) => boolean;
-}
 
-const POOLS: readonly PoolView[] = [
-  {
-    id: "pool-intern",
-    name: "Intern",
-    rule: "Tag „Intern“",
-    matches: (card) => card.tags.some((tag) => tag.label === "Intern"),
-  },
-  {
-    id: "pool-kunden",
-    name: "Kunden",
-    rule: "Ordner „Kunden“, alle Unterordner",
-    matches: (card) => card.tags.some((tag) => tag.path?.[0] === "Kunden"),
-  },
-];
-
-const DRAG_MIME = "application/x-takt-todo";
-
-interface CombinationRow {
-  readonly column: string;
-  readonly flag: string;
-  readonly meaning: string;
-  readonly onBoard: string;
-}
-
-/**
- * Alle vier Kombinationen aus Statusspalte und Erledigt-Kennzeichen.
- * Zwei davon überraschen, und genau die stehen auf dem Board darüber.
- */
-const COMBINATIONS: readonly CombinationRow[] = [
-  {
-    column: "„In Arbeit“",
-    flag: "Offen",
-    meaning: "Der Normalfall: wird gerade bearbeitet.",
-    onBoard: "„Musterkunde Nord — Rechnungslauf prüfen“",
-  },
-  {
-    column: "„In Arbeit“",
-    flag: "Erledigt",
-    meaning:
-      "Die Arbeit ist fertig, die Karte ist nur noch nicht weitergezogen. Erlaubt und häufig.",
-    onBoard: "„Beispiel GmbH — Schnittstelle neu aufsetzen“",
-  },
-  {
-    column: "„Erledigt“",
-    flag: "Offen",
-    meaning:
-      "Die Spalte heißt so, weil der Benutzer sie so genannt hat. Das Todo ist trotzdem offen.",
-    onBoard: "„Rückmeldung zur Testumgebung abwarten“",
-  },
-  {
-    column: "„Erledigt“",
-    flag: "Erledigt",
-    meaning: "Beides trifft zu — der Fall, den man erwartet.",
-    onBoard: "„Betriebshandbuch Kapitel 3 abgeschlossen“",
-  },
-];
+/** Der Leerzustand ist ein eigener Bildschirm — hier zum Umschalten. */
+type Stage = "board" | "empty";
 
 export function BoardSection() {
   const [cards, setCards] = useState<readonly BoardCard[]>(BOARD_CARDS);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropColumnId, setDropColumnId] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage>("board");
+  const [showDone, setShowDone] = useState(true);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [reactivatedCardId, setReactivatedCardId] = useState<string | null>(null);
-  /**
-   * Je Pool-Ansicht gemerkt, ob erledigte Todos eingeblendet sind (E-039).
-   * Voreinstellung ist ausgeblendet; die Menge enthaelt nur die Ansichten, in
-   * denen der Benutzer eingeblendet hat.
-   */
-  const [poolsShowingDone, setPoolsShowingDone] = useState<ReadonlySet<string>>(
-    () => new Set(),
+
+  const columnTitle = useMemo(
+    () => new Map(BOARD_COLUMNS.map((column) => [column.id, column.title])),
+    [],
   );
 
-  const setPoolDoneVisible = useCallback((poolId: string, visible: boolean) => {
-    setPoolsShowingDone((previous) => {
-      const next = new Set(previous);
-      if (visible) next.add(poolId);
-      else next.delete(poolId);
-      return next;
-    });
-  }, []);
-
-  /**
-   * Verschieben ändert die Spalte — und nur die. Das Erledigt-Kennzeichen
-   * bleibt, wo es war. Statusspalten sind frei definierbar (A-5.4); die
-   * Anwendung darf aus einem Spaltennamen nicht auf „erledigt“ schließen.
-   */
-  const moveCard = useCallback((cardId: string, targetColumnId: string) => {
-    setCards((previous) => {
-      const card = previous.find((candidate) => candidate.id === cardId);
-      const column = BOARD_COLUMNS.find((candidate) => candidate.id === targetColumnId);
-      if (card === undefined || column === undefined || card.columnId === targetColumnId) {
-        return previous;
-      }
-      setAnnouncement(
-        `${card.title} verschoben nach ${column.title}. Das Erledigt-Kennzeichen bleibt unverändert: ${card.done ? "erledigt" : "offen"}.`,
-      );
-      return previous.map((candidate) =>
-        candidate.id === cardId ? { ...candidate, columnId: targetColumnId } : candidate,
-      );
-    });
-  }, []);
-
-  const moveByOffset = useCallback(
-    (cardId: string, delta: number) => {
-      const card = cards.find((candidate) => candidate.id === cardId);
-      if (card === undefined) return;
-      const index = BOARD_COLUMNS.findIndex((column) => column.id === card.columnId);
-      const target = BOARD_COLUMNS[Math.min(Math.max(index + delta, 0), BOARD_COLUMNS.length - 1)];
-      if (target === undefined) return;
-      moveCard(cardId, target.id);
-    },
-    [cards, moveCard],
-  );
-
-  /** Erledigt setzen und zurücknehmen von Hand (I-03). Ändert die Spalte nicht. */
+  /** Erledigt setzen und zuruecknehmen (I-03). Aendert keine Spalte — nur die Sichtbarkeit. */
   const toggleDone = useCallback((cardId: string) => {
     setCards((previous) =>
       previous.map((candidate) => {
@@ -146,8 +55,8 @@ export function BoardSection() {
         const next = !candidate.done;
         setAnnouncement(
           next
-            ? `${candidate.title} ist jetzt erledigt. Die Karte bleibt in ihrer Spalte.`
-            : `${candidate.title} ist wieder offen. Die Karte bleibt in ihrer Spalte.`,
+            ? `${candidate.title} ist jetzt erledigt. Die Tags bleiben, die Regeln treffen weiter zu.`
+            : `${candidate.title} ist wieder offen.`,
         );
         return { ...candidate, done: next, reactivated: false };
       }),
@@ -156,10 +65,10 @@ export function BoardSection() {
   }, []);
 
   /**
-   * I-05: Der Timerstart auf einem erledigten Todo hebt „Erledigt“ auf
-   * (A-2.5). Die Karte wechselt dabei die Spalte **nicht** — sie erscheint
-   * nur wieder in ihren Pools, weil Pool-Ansichten erledigte Todos ausblenden.
-   * Gefragt wird nicht; gesagt wird hinterher, und der Rückweg steht bereit.
+   * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
+   * (A-2.5). Die Tags aendern sich dabei nicht — die Karte erscheint deshalb
+   * genau dort wieder, wo sie vorher stand, sobald erledigte Karten
+   * ausgeblendet sind. Gefragt wird nicht; gesagt wird hinterher.
    */
   const toggleTimer = useCallback((cardId: string) => {
     setCards((previous) => {
@@ -171,7 +80,7 @@ export function BoardSection() {
       if (reactivating) {
         setReactivatedCardId(cardId);
         setAnnouncement(
-          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo erscheint wieder in seinen Pools und bleibt in seiner Spalte.`,
+          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo erscheint wieder in seinen Pools und in denselben Spalten wie zuvor.`,
         );
       } else {
         setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
@@ -189,7 +98,6 @@ export function BoardSection() {
     });
   }, []);
 
-  /** Rückgängig nach I-05: Timer stoppen, Buchung verwerfen, „Erledigt“ zurück. */
   const undoReactivation = useCallback(() => {
     const cardId = reactivatedCardId;
     if (cardId === null) return;
@@ -205,73 +113,72 @@ export function BoardSection() {
   }, [reactivatedCardId]);
 
   const reactivatedCard = cards.find((card) => card.id === reactivatedCardId);
-  /**
-   * Pools, in denen das wieder aktivierte Todo nach seinen Tags erscheint
-   * (A-3.4). Abgeleitet und nicht fest hinterlegt — eine Meldung, die einen
-   * Pool erfindet, waere schlimmer als keine.
-   */
-  const reactivatedPools =
-    reactivatedCard === undefined
-      ? []
-      : POOLS.filter((pool) => pool.matches(reactivatedCard)).map((pool) => pool.name);
 
   const cardMenu = useCallback(
-    (card: BoardCard): readonly MenuEntry[] => [
+    (card: BoardCard, others: readonly string[]): readonly MenuEntry[] => [
       {
         id: "open",
         label: "Todo öffnen",
-        icon: "pencil",
-        shortcut: "Eingabe",
+        icon: "arrow-up-right",
         onSelect: () => setAnnouncement(`${card.title} geöffnet.`),
       },
+      {
+        id: "tags",
+        label: "Tags ändern — sie entscheiden die Spalte",
+        icon: "tag",
+        onSelect: () => setAnnouncement(`Tags von ${card.title} bearbeiten.`),
+      },
+      {
+        id: "status",
+        label: "Status ändern",
+        icon: "pencil",
+        onSelect: () => setAnnouncement(`Status von ${card.title} ändern.`),
+      },
+      { kind: "separator", id: "sep-done" },
       {
         id: "done",
         label: card.done ? "Erledigt zurücknehmen" : "Als erledigt markieren",
         icon: card.done ? "rotate-ccw" : "check",
         onSelect: () => toggleDone(card.id),
       },
-      { kind: "separator", id: "sep-move" },
-      ...BOARD_COLUMNS.map<MenuEntry>((column) => ({
-        id: `move-${column.id}`,
-        label: `Verschieben nach „${column.title}“`,
-        icon: "chevron-right",
-        disabled: column.id === card.columnId,
-        ...(column.id === card.columnId ? { disabledReason: "Aktuelle Spalte" } : {}),
-        onSelect: () => moveCard(card.id, column.id),
-      })),
-      { kind: "separator", id: "sep-danger" },
-      {
-        id: "delete",
-        label: "Todo löschen",
-        icon: "trash",
-        tone: "danger",
-        onSelect: () => setAnnouncement(`Löschen angefragt für ${card.title}.`),
-      },
+      ...(others.length === 0
+        ? []
+        : ([
+            { kind: "separator", id: "sep-also" },
+            {
+              id: "highlight",
+              label:
+                highlighted === card.id ? "Hervorhebung aufheben" : "Alle Vorkommen hervorheben",
+              icon: "copy",
+              onSelect: () =>
+                setHighlighted((current) => (current === card.id ? null : card.id)),
+            },
+          ] as const)),
     ],
-    [moveCard, toggleDone],
+    [highlighted, toggleDone],
   );
 
   const columnMenu = useCallback(
-    (columnTitle: string): readonly MenuEntry[] => [
+    (columnTitleText: string): readonly MenuEntry[] => [
       {
-        id: "rename",
-        label: "Spalte umbenennen",
+        id: "rule",
+        label: "Regel bearbeiten",
         icon: "pencil",
-        onSelect: () => setAnnouncement(`Spalte ${columnTitle} umbenennen.`),
+        onSelect: () => setAnnouncement(`Regel von ${columnTitleText} bearbeiten.`),
       },
       {
-        id: "limit",
-        label: "Obergrenze festlegen",
+        id: "list",
+        label: "Alle Todos dieser Regel in der Liste",
         icon: "filter",
-        onSelect: () => setAnnouncement(`Obergrenze für ${columnTitle} festlegen.`),
+        onSelect: () => setAnnouncement(`Liste zu ${columnTitleText}.`),
       },
       { kind: "separator", id: "sep" },
       {
         id: "remove",
-        label: "Spalte entfernen",
-        icon: "trash",
+        label: "Vom Board nehmen",
+        icon: "x",
         tone: "danger",
-        onSelect: () => setAnnouncement(`Spalte ${columnTitle} entfernen.`),
+        onSelect: () => setAnnouncement(`${columnTitleText} vom Board genommen.`),
       },
     ],
     [],
@@ -281,275 +188,184 @@ export function BoardSection() {
     <Section
       id="board"
       title="5 — Kanban-Board"
-      lead="Ziehen und Ablegen ist der schnelle Weg. Es ist aber nie der einzige: WCAG 2.2 SC 2.5.7 verlangt für jede Ziehbewegung eine Alternative. Jede Karte trägt deshalb „Verschieben nach …“ im Menü und reagiert auf Strg+Pfeil links und rechts."
-      refs={["S-04", "A-2.4", "A-2.5", "A-5.1", "A-5.2", "A-5.4", "A-5.6", "I-03", "I-05", "I-14"]}
+      lead="Eine Spalte ist eine Regel über Tags, kein Status (E-054). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet."
+      refs={["S-04", "S-11", "A-2.4", "A-2.5", "A-5.1", "A-5.3", "A-5.4", "A-5.6", "E-054", "I-03", "I-05"]}
     >
-      <InlineMessage tone="info" title="So bedienen Sie das Board ohne Maus">
-        Mit dem Tabulator auf eine Karte springen, dann <kbd>Strg</kbd> + <kbd>→</kbd> oder{" "}
-        <kbd>Strg</kbd> + <kbd>←</kbd>. Alternativ das Kartenmenü öffnen und eine Zielspalte wählen.
-        Jede Verschiebung wird angesagt.
+      <InlineMessage tone="info" title="Was an die Stelle des Ziehens getreten ist">
+        Welche Karte in welcher Spalte steht, entscheiden die Tags des Todos. Wer eine Karte
+        anderswohin bringen will, ändert ihre Tags — das Kartenmenü sagt das ausdrücklich. Der
+        Status bleibt als Eigenschaft am Todo und wird in der Liste und in der Detailansicht
+        geändert.
       </InlineMessage>
+
+      <div className="showcase__switch">
+        <Button
+          variant={stage === "board" ? "primary" : "secondary"}
+          size="sm"
+          onClick={() => setStage("board")}
+        >
+          Board mit Spalten
+        </Button>
+        <Button
+          variant={stage === "empty" ? "primary" : "secondary"}
+          size="sm"
+          onClick={() => setStage("empty")}
+        >
+          Leeres Board nach der Umstellung
+        </Button>
+        <FilterToggle
+          label="Erledigte einblenden"
+          pressed={showDone}
+          onChange={setShowDone}
+          hint="Voreingestellt ausgeblendet"
+        />
+      </div>
 
       <p className="visually-hidden" role="status" aria-live="polite">
         {announcement}
       </p>
 
-      <div className="kboard">
-        {BOARD_COLUMNS.map((column) => {
-          const columnCards = cards.filter((card) => card.columnId === column.id);
-          const doneCount = columnCards.filter((card) => card.done).length;
-          return (
-            <KanbanColumn
-              key={column.id}
-              title={column.title}
-              count={columnCards.length}
-              {...(column.limit === undefined ? {} : { limit: column.limit })}
-              doneCount={doneCount}
-              entries={columnMenu(column.title)}
-              dropTarget={dropColumnId === column.id}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDropColumnId(column.id);
-              }}
-              onDragLeave={() => setDropColumnId(null)}
-              onDrop={(event) => {
-                event.preventDefault();
-                const id = event.dataTransfer.getData(DRAG_MIME);
-                setDropColumnId(null);
-                setDraggingId(null);
-                if (id !== "") moveCard(id, column.id);
-              }}
-              onAdd={() => setAnnouncement(`Neues Todo in ${column.title}.`)}
-            >
-              {columnCards.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon="inbox"
-                  title="Keine Todos"
-                  description="Karte hierher ziehen oder mit dem Pluszeichen anlegen."
-                />
-              ) : (
-                columnCards.map((card) => (
-                  <KanbanCard
-                    key={card.id}
-                    card={card}
-                    entries={cardMenu(card)}
-                    dragging={draggingId === card.id}
-                    onOpen={() => setAnnouncement(`${card.title} geöffnet.`)}
-                    onToggleTimer={() => toggleTimer(card.id)}
-                    onMoveByKeyboard={(delta) => moveByOffset(card.id, delta)}
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData(DRAG_MIME, card.id);
-                      event.dataTransfer.effectAllowed = "move";
-                      setDraggingId(card.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDropColumnId(null);
-                    }}
-                  />
-                ))
-              )}
-            </KanbanColumn>
-          );
-        })}
-      </div>
-
-      {reactivatedCard !== undefined ? (
-        <ReactivationNotice
-          todoTitle={reactivatedCard.title}
-          poolNames={reactivatedPools}
-          onUndo={undoReactivation}
-          onDismiss={() => setReactivatedCardId(null)}
+      {stage === "empty" ? (
+        <BoardEmptyState
+          pools={[]}
+          onCreate={() => setAnnouncement("Spalte einrichten.")}
+          onAdopt={() => setAnnouncement("Regel aufgenommen.")}
         />
-      ) : null}
-
-      <Card
-        title="Spalte und „Erledigt“ sind zwei verschiedene Dinge"
-        description="Die Statusspalten sind frei definierbar (A-5.4). Ein Kanban-Abschluss ist deshalb kein Erledigt: Ein Todo kann in „Erledigt“ stehen und offen sein, und es kann in „In Arbeit“ stehen und erledigt sein. Beide überraschenden Fälle stehen oben auf dem Board."
-      >
-        <p className="section__lead">
-          Damit man nie raten muss, welcher der beiden Zustände gerade welcher ist, trägt{" "}
-          <strong>jede Karte ihr Erledigt-Kennzeichen ausdrücklich</strong> — auch dann, wenn es
-          „Offen“ lautet. Der Normalfall flüstert (schmale Kontur, gedämpft), der auffällige Fall
-          spricht (gefülltes grünes Etikett, durchgestrichener Titel). Der Spaltenkopf zählt
-          zusätzlich, wie viele seiner Todos erledigt sind. Wäre das Kennzeichen nur beim Zustand
-          „erledigt“ da, müsste man es aus dem Spaltennamen erschließen — und genau das ist der
-          Fehler, den die Trennung verhindern soll.
-        </p>
-
-        <SubHeading>Die vier Kombinationen</SubHeading>
-        <table className="statematrix">
-          <thead>
-            <tr>
-              <th scope="col">Spalte</th>
-              <th scope="col">Kennzeichen</th>
-              <th scope="col">Bedeutung</th>
-              <th scope="col">Auf dem Board oben</th>
-            </tr>
-          </thead>
-          <tbody>
-            {COMBINATIONS.map((row) => (
-              <tr key={`${row.column}-${row.flag}`}>
-                <td>{row.column}</td>
-                <td>{row.flag}</td>
-                <td>{row.meaning}</td>
-                <td>{row.onBoard}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
-      <Card
-        title="Zwei Wege, zwei Wirkungen — zum Ausprobieren"
-        description="Beide Zustände lassen sich unabhängig voneinander ändern. Was der eine Weg anfasst, lässt der andere in Ruhe."
-      >
-        <ul className="intro__list">
-          <li className="intro__item">
-            <span className="intro__step" aria-hidden>
-              ↔
-            </span>
-            <p className="intro__text">
-              <strong>Karte verschieben</strong> — ziehen, <kbd>Strg</kbd> + <kbd>→</kbd> oder
-              „Verschieben nach …“ im Kartenmenü. Ändert die Spalte. Das Kennzeichen bleibt, wie es
-              war; die Ansage nennt es ausdrücklich mit.
-            </p>
-          </li>
-          <li className="intro__item">
-            <span className="intro__step" aria-hidden>
-              ✓
-            </span>
-            <p className="intro__text">
-              <strong>Erledigt setzen oder zurücknehmen</strong> — „Als erledigt markieren“ im
-              Kartenmenü. Ändert das Kennzeichen. Die Karte bleibt, wo sie ist.
-            </p>
-          </li>
-          <li className="intro__item">
-            <span className="intro__step" aria-hidden>
-              ▶
-            </span>
-            <p className="intro__text">
-              <strong>Timer auf einem erledigten Todo starten</strong> — der Abspielknopf auf
-              „Beispiel GmbH — Schnittstelle neu aufsetzen“. Takt hebt „Erledigt“ von sich aus auf
-              (A-2.5), fragt dabei nicht und sagt es hinterher: Der Hinweis unter dem Board nennt
-              die Pools, in denen das Todo wieder erscheint, sagt ausdrücklich, dass die Spalte
-              gleich bleibt, und bietet „Rückgängig“ an. Die Karte trägt danach das Kennzeichen
-              „Erledigt aufgehoben“, damit später niemand rätselt, warum das Häkchen weg ist.
-            </p>
-          </li>
-        </ul>
-      </Card>
-
-      <Card
-        title="Pool-Ansichten blenden erledigte Todos aus"
-        description="Genau daran hängt A-2.5: Ein erledigtes Todo verschwindet aus seinen Pools, ein wieder aktiviertes erscheint dort erneut. Wäre es dauerhaft sichtbar, gäbe es nichts, wohin es zurückkehren könnte. Ausgeblendet ist die Voreinstellung; der Schalter in der Filterleiste blendet ein, und die Wahl wird je Ansicht gemerkt (E-039)."
-      >
-        <p className="section__lead">
-          Die beiden Listen zeigen denselben Bestand wie das Board oben und ändern sich mit ihm.
-          Starten Sie den Timer auf „Beispiel GmbH — Schnittstelle neu aufsetzen“: Das Todo ist
-          erledigt und deshalb im Pool <strong>Kunden</strong> nicht zu sehen — nach dem Timerstart
-          steht es wieder da. Der Schalter steht bewusst in der Filterleiste und nicht in einem
-          Menü: Ein Filter, der als Voreinstellung greift, muss sichtbar sein, sonst sucht jemand
-          ein Todo, das er selbst abgehakt hat.
-        </p>
-
-        <div className="grid grid--2">
-          {POOLS.map((pool) => {
-            const inPool = cards.filter((card) => pool.matches(card));
-            const showDone = poolsShowingDone.has(pool.id);
-            const visible = showDone ? inPool : inPool.filter((card) => !card.done);
-            const hidden = inPool.length - visible.length;
-            const activeFilters: readonly ActiveFilter[] = showDone
-              ? []
-              : [
-                  {
-                    id: `${pool.id}-done`,
-                    field: "Erledigte Todos",
-                    value: "ausgeblendet",
-                    onRemove: () => setPoolDoneVisible(pool.id, true),
-                  },
-                ];
+      ) : (
+        <div className="board">
+          {BOARD_COLUMNS.map((column) => {
+            const inColumn = cards.filter((card) => card.columnIds.includes(column.id));
+            const visible = showDone ? inColumn : inColumn.filter((card) => !card.done);
+            const doneCount = visible.filter((card) => card.done).length;
 
             return (
-              <Card key={pool.id} title={`Pool „${pool.name}“`} description={`Regel: ${pool.rule}`}>
-                <FilterBar
-                  label={`Pool ${pool.name} filtern`}
-                  controls={
-                    <FilterToggle
-                      label="Erledigte Todos anzeigen"
-                      pressed={showDone}
-                      hint={
-                        hidden === 0
-                          ? "derzeit keins ausgeblendet"
-                          : `${hidden} ${hidden === 1 ? "Todo" : "Todos"} ausgeblendet`
-                      }
-                      onChange={(next) => setPoolDoneVisible(pool.id, next)}
-                    />
-                  }
-                  activeFilters={activeFilters}
-                  onResetAll={() => setPoolDoneVisible(pool.id, true)}
-                  resultLabel={`${visible.length} von ${inPool.length} Todos`}
-                />
-
+              <KanbanColumn
+                key={column.id}
+                title={column.title}
+                count={visible.length}
+                total={visible.length}
+                doneCount={doneCount}
+                rule={<p className="kcolumn__rule-text">{column.rule}</p>}
+                entries={columnMenu(column.title)}
+                onAdd={() => setAnnouncement(`Neues Todo mit den Tags von ${column.title}.`)}
+                addLabel={`Todo in „${column.title}“ anlegen — mit den Tags dieser Regel`}
+              >
                 {visible.length === 0 ? (
                   <EmptyState
                     compact
                     icon="inbox"
-                    title="Kein Todo in diesem Pool"
-                    description={
-                      hidden === 0
-                        ? "Zu dieser Regel passt derzeit kein Tag."
-                        : "Alle Todos dieses Pools sind erledigt. Der Schalter oben blendet sie ein."
-                    }
+                    title="Keine Karte trifft diese Regel"
+                    description="Sobald ein Todo die genannten Tags trägt, erscheint es hier von selbst."
                   />
                 ) : (
-                  <ul className="poollist">
-                    {visible.map((card) => (
-                      <li
-                        className={cx("poollist__item", card.done && "poollist__item--done")}
+                  visible.map((card) => {
+                    const others = card.columnIds
+                      .filter((id) => id !== column.id)
+                      .map((id) => columnTitle.get(id))
+                      .filter((title): title is string => title !== undefined);
+
+                    return (
+                      <KanbanCard
                         key={card.id}
-                      >
-                        <span className="poollist__flag">
-                          <Icon name={card.done ? "check" : "circle"} size={11} />
-                          <span className="visually-hidden">
-                            {card.done ? "Erledigt" : "Offen"}
-                          </span>
-                        </span>
-                        <span className="poollist__main">
-                          <span className="poollist__title truncate">{card.title}</span>
-                          <span className="poollist__tags">
-                            {card.tags.map((tag) => (
-                              <TagChip
-                                key={`${tag.path?.join("/") ?? ""}/${tag.label}`}
-                                label={tag.label}
-                                size="sm"
-                                {...(tag.path === undefined ? {} : { path: tag.path })}
-                              />
-                            ))}
-                          </span>
-                        </span>
-                        <ExportSummaryStrip summary={card.exportSummary} />
-                      </li>
-                    ))}
-                  </ul>
+                        card={{
+                          ...card,
+                          ...(others.length === 0 ? {} : { appearance: { otherColumns: others } }),
+                        }}
+                        entries={cardMenu(card, others)}
+                        highlighted={highlighted === card.id}
+                        onOpen={() => setAnnouncement(`${card.title} geöffnet.`)}
+                        onToggleTimer={() => toggleTimer(card.id)}
+                        {...(others.length === 0
+                          ? {}
+                          : {
+                              onHighlight: () =>
+                                setHighlighted((current) =>
+                                  current === card.id ? null : card.id,
+                                ),
+                            })}
+                      />
+                    );
+                  })
                 )}
-              </Card>
+              </KanbanColumn>
             );
           })}
         </div>
+      )}
+
+      {reactivatedCard === undefined ? null : (
+        <ReactivationNotice
+          todoTitle={reactivatedCard.title}
+          poolNames={reactivatedCard.columnIds
+            .map((id) => columnTitle.get(id))
+            .filter((title): title is string => title !== undefined)}
+          onUndo={undoReactivation}
+          onDismiss={() => setReactivatedCardId(null)}
+        />
+      )}
+
+      <Card
+        title="Dieselbe Karte in mehreren Spalten"
+        description="Bei Statusspalten war das unmöglich, bei Regeln ist es der Normalfall: Zwei zutreffende Regeln treffen beide zu."
+      >
+        <p className="section__lead">
+          „Musterkunde Nord — Rechnungslauf prüfen“ trägt die Tags <strong>Musterkunde Nord</strong>{" "}
+          (im Ordner Kunden / Nord) und <strong>Support</strong>. Damit trifft es zwei Regeln und
+          steht in zwei Spalten. Beide Vorkommen tragen ein Etikett, das die jeweils andere Spalte
+          beim Namen nennt; ein Druck darauf hebt alle Vorkommen hervor, ein zweiter nimmt die
+          Hervorhebung zurück. Der Weg über die Tastatur ist derselbe — das Etikett ist ein Knopf
+          mit <code>aria-pressed</code>, kein Zierrat.
+        </p>
+        <p className="section__lead">
+          Ohne diese Auskunft sähe ein doppeltes Vorkommen wie ein Fehler aus. Verstecken ließe es
+          sich nur um den Preis einer Lüge: Die Karte <em>ist</em> in beiden Spalten, weil beide
+          Regeln zutreffen.
+        </p>
+
+        <SubHeading>Was auf einer Karte steht</SubHeading>
+        <p className="section__lead">
+          Call-Nummer, Erledigt-Kennzeichen, Titel, das Etikett für Mehrfachvorkommen, Tags mit
+          Ordnerpfad, die Zusammenfassung der Exportstände, die erfasste Zeit — und der{" "}
+          <strong>Status</strong>. Der steht dort, weil er sonst auf dem Board nirgends mehr
+          vorkäme: Er ist seit E-054 keine Spalte mehr, aber er ist nicht abgeschafft.
+        </p>
       </Card>
 
       <Card
-        title="Was die Karte zeigt"
-        description="Call-Nummer, Erledigt-Kennzeichen, Titel, Tags mit Ordnerpfad, Zusammenfassung der Exportstände, erfasste Zeit und der Timer-Knopf. Läuft der Timer, bekommt die Karte eine violette Kante — dieselbe Farbe wie die Timer-Anzeige, und keine, die für einen Exportstatus steht."
+        title="Drei Dinge, die nichts voneinander wissen"
+        description="Spalte, Status und Erledigt-Kennzeichen. Jede Kombination ist gültig, und keine lässt sich aus einer anderen ableiten."
       >
+        <table className="statematrix">
+          <thead>
+            <tr>
+              <th scope="col">Größe</th>
+              <th scope="col">Wo sie steht</th>
+              <th scope="col">Wer sie ändert</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Spalte</td>
+              <td>Eine Regel über Tags (`pool` mit Anzeigeort „Board“)</td>
+              <td>Die Tags des Todos — oder die Regel selbst</td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td>Eigenschaft am Todo (`todo.status_id`)</td>
+              <td>Detailansicht und Liste, ausdrücklich</td>
+            </tr>
+            <tr>
+              <td>Erledigt</td>
+              <td>Kennzeichen am Todo (`todo.completed_at`)</td>
+              <td>Der Benutzer — oder ein Timerstart, der es aufhebt (A-2.5)</td>
+            </tr>
+          </tbody>
+        </table>
         <p className="section__lead">
-          Die Spaltenstruktur ist konfigurierbar (A-5.4): Umbenennen, Obergrenze und Entfernen
-          liegen im Spaltenmenü. Wird eine Obergrenze überschritten, färbt sich der Zähler und sagt
-          es Hilfsmitteln zusätzlich an. Das Kennzeichen „Erledigt aufgehoben“ trägt bewusst keine
-          eigene Statusfarbe: Bernstein, Grün und Rosé gehören dem Exportstatus, Violett dem
-          laufenden Timer. Hier tragen Symbol und gestrichelter Rand die Aussage.
+          Erledigt entscheidet über die <em>Sichtbarkeit</em>, nicht über die Zugehörigkeit: Ein
+          erledigtes Todo bleibt Mitglied jeder Regel, die auf seine Tags passt, und erscheint
+          wieder, sobald erledigte Karten eingeblendet werden oder ein Timerstart das Kennzeichen
+          aufhebt. Probieren Sie es an „Beispiel GmbH — Schnittstelle neu aufsetzen“.
         </p>
       </Card>
     </Section>

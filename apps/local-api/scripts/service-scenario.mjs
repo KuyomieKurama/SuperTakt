@@ -262,6 +262,33 @@ export async function runScenario() {
     const poolId = pool.body.data.id;
 
     await record('updatePool', 'PATCH', '/pools/{poolId}', `/pools/${poolId}`, { name: 'Offene Beratung (neu)' });
+
+    /**
+     * Derselbe Name ein zweites Mal (T-074).
+     *
+     * Die Beschreibung verspricht für `createPool` seit jeher einen `409`. Der
+     * Dienst antwortete bis T-074 mit `500`, und dieser Durchlauf hat es nicht
+     * gemerkt, weil er den Fall nie ausgelöst hat — genau der Vorbehalt, der im
+     * Kopf von `proof-openapi.mjs` steht: „ein Fehlerfall, den niemand
+     * herbeiführt, bleibt unbeschrieben messbar falsch".
+     *
+     * Deshalb hier zweimal ausgelöst, für beide Richtungen: eine neue Regel mit
+     * einem vergebenen Namen, und eine vorhandene Regel, die auf einen
+     * vergebenen Namen umbenannt werden soll.
+     */
+    await record('createPool', 'POST', '/pools', '/pools', {
+      name: 'Offene Beratung (neu)',
+      rule: [{ kind: 'tag', tagId }],
+    });
+    const secondPool = await quiet('POST', '/pools', { name: 'Zweite Beratung', rule: [] });
+    await record(
+      'updatePool',
+      'PATCH',
+      '/pools/{poolId}',
+      `/pools/${secondPool.body.data.id}`,
+      { name: 'offene beratung (neu)' },
+    );
+
     await record('listPools', 'GET', '/pools', '/pools');
 
     // -----------------------------------------------------------------------

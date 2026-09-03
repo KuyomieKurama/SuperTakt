@@ -23,7 +23,7 @@ import { Button, Card, EmptyState, InlineMessage } from "../components/Primitive
 import { TagChip } from "../components/Tag";
 import { previewOpenEntries } from "../app/dayGroup";
 import { useRefresh } from "../app/RefreshContext";
-import { href, navigate } from "../app/router";
+import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
@@ -151,7 +151,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           toasts.show({
             tone: done ? "info" : "success",
             title: done ? `„${title}“ ist wieder offen.` : `„${title}“ ist erledigt.`,
-            body: "Die Statusspalte bleibt unverändert — Erledigt und Spalte sind zwei getrennte Achsen.",
+            body: "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
           });
         })
         .catch((cause: unknown) =>
@@ -282,8 +282,8 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 title={todo.title}
                 lead={
                   todo.callNumber === null
-                    ? `In Spalte „${structure.statusName(todo.statusId)}“`
-                    : `Call ${todo.callNumber} · In Spalte „${structure.statusName(todo.statusId)}“`
+                    ? `Status: ${structure.statusName(todo.statusId)}`
+                    : `Call ${todo.callNumber} · Status: ${structure.statusName(todo.statusId)}`
                 }
                 actions={
                   <>
@@ -315,7 +315,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 <div className="detail__main">
                   <Card
                     title="Erledigt"
-                    description="Ein Kennzeichen am Todo — nicht die Statusspalte. Beide sind unabhängig."
+                    description="Ein Kennzeichen am Todo — weder der Status noch eine Kanban-Spalte. Alle drei sind unabhängig."
                   >
                     <label className={cx("done-switch", done && "done-switch--on")}>
                       <input
@@ -338,7 +338,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                             ? `Erledigt am ${formatDateTime(todo.completedAt ?? todo.updatedAt)}. Das Todo ist aus seinen Pools ausgeblendet; ein Timerstart hebt das auf.`
                             : flagState === "reopened"
                               ? `Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen und erscheint erneut in jedem Pool, dessen Regel auf seine Tags passt. ${CARD_STAYS} Setzen Sie den Haken, gilt wieder „Erledigt".`
-                              : "Erscheint in jedem Pool, dessen Regel auf seine Tags passt."}
+                              : "Erscheint in jedem Pool und in jeder Board-Spalte, deren Regel auf seine Tags passt."}
                         </span>
                       </span>
                     </label>
@@ -470,7 +470,10 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                     )}
                   </Card>
 
-                  <Card title="Tags" description="Aus ihnen leiten sich die Pools ab.">
+                  <Card
+                    title="Tags"
+                    description="Aus ihnen leiten sich Pools und Kanban-Spalten ab (E-054) — sie sind der Griff, mit dem eine Karte die Spalte wechselt."
+                  >
                     {todo.tagIds.length === 0 ? (
                       <p className="muted">Keine Tags. Damit passt auf dieses Todo keine Poolregel.</p>
                     ) : (
@@ -539,9 +542,18 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       <dd>{formatDateTime(todo.createdAt)}</dd>
                       <dt>Zuletzt geändert</dt>
                       <dd>{formatDateTime(todo.updatedAt)}</dd>
-                      <dt>Statusspalte</dt>
-                      <dd>
-                        <a href={href("board")}>{structure.statusName(todo.statusId)}</a>
+                      {/*
+                        Der Status ist seit E-054 **keine** Kanban-Spalte mehr;
+                        ein Verweis von hier auf das Board hat deshalb kein Ziel
+                        mehr, das ihn zeigte. Geaendert wird er hier — die
+                        Detailansicht ist neben der Liste der Ort dafuer.
+                      */}
+                      <dt>Status</dt>
+                      <dd className="facts__with-action">
+                        <span>{structure.statusName(todo.statusId)}</span>
+                        <Button size="sm" variant="ghost" iconStart="pencil" onClick={() => setEditOpen(true)}>
+                          Ändern
+                        </Button>
                       </dd>
                     </dl>
                   </Card>

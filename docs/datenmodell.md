@@ -298,9 +298,30 @@ liegen in einem Sicherungspunkt (T-047) — ohne ihn wäre der schlimmste Fall d
 Bestand **ohne** Standardspalte, und dann scheiterte jedes neue Todo.
 
 Fehlt die Markierung trotzdem — etwa nach einem Eingriff von Hand in die Datei —, nimmt
-`TodoStatusPort.defaultStatus()` die Spalte mit der kleinsten Position. Gibt es überhaupt keine
-Spalte, wirft er. Das ist kein Zustand, den ein Benutzer herstellen kann: Die letzte Spalte
-lässt sich nicht löschen.
+`TodoStatusPort.defaultStatus()` den Status mit der kleinsten Position. Gibt es überhaupt keinen
+Status, wirft er.
+
+**Über die Routen ist der markierungslose Zustand seit T-074 nicht mehr erreichbar.** Der Index
+sichert „höchstens **ein** Standard", nicht „mindestens einer" — und bis T-074 gab es genau zwei
+Wege, null zu erzeugen:
+
+| Aufruf | vorher | seit T-074 |
+|---|---|---|
+| `DELETE /todo-statuses/{id}` auf den Standard | gelöscht, stiller Rückfall | `409 default_status_locked` |
+| `PATCH /todo-statuses/{id}` mit `isDefault: false` auf den Standard | Marke weg, stiller Rückfall | `409 default_status_locked` |
+
+Beide Zusagen standen bis dahin **allein in `apps/web`**: Die Oberfläche sperrte den Knopf und
+schrieb hin, dass sich der Standard nur weitergeben und nicht abwählen lässt. Wer die Route
+unmittelbar aufrief, stellte trotzdem den Zustand her, den die Oberfläche für unmöglich hielt —
+und erfuhr nichts davon, weil der Rückfall still war. Eine Regel, die nur in der Oberfläche
+steht, ist keine Regel (T-073, T-074).
+
+**Weitergeben statt umhängen.** Abgewiesen wird, statt den Standard beim Löschen selbst
+weiterzureichen: Welcher Status danach der Standard sein soll, ist eine Entscheidung des
+Benutzers und kein Rest, den eine Löschroutine nebenbei trifft. Der Weg heißt
+`PATCH /todo-statuses/{id}` mit `isDefault: true` auf einem anderen, und er steht in der Meldung.
+`proof:conflicts` Abschnitt 5 misst beide Abweisungen **und** die Gegenprobe, dass Weitergeben
+weiterhin geht — eine Sperre ohne Ausweg wäre eine Sackgasse.
 
 **Die Standardspalte hat nichts mit „Erledigt" zu tun** und die Abschlussspalte auch nicht —
 siehe „Erledigt und Abschlussspalte sind zwei Dinge" weiter unten.
@@ -309,21 +330,29 @@ siehe „Erledigt und Abschlussspalte sind zwei Dinge" weiter unten.
 
 **Nichts — die Spalte wird nicht gelöscht.** Der Dienst weist ab, und zwar in dieser Reihenfolge:
 
-1. Die Spalte gibt es nicht → `404 not_found`.
-2. Es ist die **letzte** Spalte → `409 last_status_column`, „Die letzte Spalte kann nicht
-   gelöscht werden." Ein Brett ohne Spalten hätte keinen Ort für ein neues Todo.
-3. In der Spalte stehen **Todos** → `409 status_in_use`, „In dieser Spalte stehen noch Todos.
-   Verschieben Sie sie zuerst."
-4. Sonst wird gelöscht.
+1. Den Status gibt es nicht → `404 not_found`.
+2. Es ist der **letzte** → `409 last_status_column`, „Der letzte Status kann nicht gelöscht
+   werden." Ohne einen einzigen Status gäbe es nichts, was ein neues Todo tragen könnte.
+3. Es ist der **Standard** für neue Todos → `409 default_status_locked` (T-074, siehe oben).
+4. Todos tragen ihn noch → `409 status_in_use`, „Diesen Status tragen noch Todos. Geben Sie
+   ihnen zuerst einen anderen."
+5. Sonst wird gelöscht.
+
+Der Schlüssel `last_status_column` trägt aus der Zeit vor E-054 noch das Wort „column". Er
+bleibt, wie er ist: Ein Fehlerschlüssel ist eine Zusage an seine Aufrufer, und `tests/e2e` und
+die Schnittstellenbeschreibung nennen ihn beim Namen. Die **Meldungen** dieser Routen sprechen
+seit T-074 dagegen vom Status und nicht mehr von der Spalte — fünf Sätze, und der erste davon
+erschien im Einstellungsbereich *Status*, zwei Absätze unter der Erklärung, dass Status und
+Kanban-Spalte zweierlei sind.
 
 Es gibt bewusst **kein** automatisches Umhängen der Karten in eine andere Spalte. Die Alternative
 wäre gewesen, sie in die Standardspalte zu schieben; sie ist schlechter, weil sie eine
 Zustandsänderung an fremden Datensätzen hinter einer Löschung versteckt. Wer dreißig Karten
 verschoben haben will, soll sie verschieben — dann sieht er, wohin.
 
-Punkt 3 ist doppelt gesichert: Der Fremdschlüssel `todo.status_id` steht auf `ON DELETE RESTRICT`
+Punkt 4 ist doppelt gesichert: Der Fremdschlüssel `todo.status_id` steht auf `ON DELETE RESTRICT`
 und würde ohnehin abweisen. Die Prüfung davor liefert den fachlichen Grund statt einer
-Datenbankmeldung; der Unterschied ist der zwischen „In dieser Spalte stehen noch Karten" und
+Datenbankmeldung; der Unterschied ist der zwischen „Diesen Status tragen noch Todos" und
 „FOREIGN KEY constraint failed".
 
 #### Der einzige Ort im Frontend mit eigenen Spalten
@@ -405,8 +434,14 @@ vergleicht den Text so, wie er gespeichert ist:
 Seit Migration 0008 trägt jedes Tag deshalb einen zweiten Wert: `name_key`, den
 **Vergleichsschlüssel**. Er entsteht aus dem Namen in vier Schritten — NFC, jeder Leerraum zu
 einem Leerzeichen und Folgen davon zu einem, vorn und hinten nichts, dann Groß- auf
-Kleinschreibung. Die Regel steht als `tagNameKey` in `packages/domain/src/tag-name.ts` und
-nirgends sonst.
+Kleinschreibung. Die Regel steht als `nameKey` in `packages/domain/src/tag-name.ts` und
+nirgends sonst. `tagNameKey` ist derselbe Wert unter seinem tagbezogenen Namen — kein zweiter
+Bezeichner für eine zweite Fassung, sondern zwei Bezeichner für **eine** Funktion.
+
+**Seit T-074 gilt dieselbe Regel für Regelnamen** (Pools und Kanban-Spalten, 3.5). Nichts an ihr
+ist tagspezifisch: Sie beantwortet „bezeichnen zwei getippte Namen dasselbe Ding?", und die Frage
+stellt sich dort Wort für Wort genauso. Wie sie dort durchgesetzt wird — und warum es dafür
+**keine** Spalte `pool.name_key` gibt — steht in 3.5.
 
 ```sql
 CREATE UNIQUE INDEX ux_tag_name_key ON tag (COALESCE(folder_id, '~root'), name_key);
@@ -620,6 +655,51 @@ danach, das Board die mit `board`/`both`. Eine zweite Positionsspalte je Fläche
 Wahrheit über dieselbe Ordnung.
 
 Die Mitgliederabfrage steht in Abschnitt 4.4, das Board in 4.4a.
+
+#### `pool.name` — wann zwei Regelnamen derselbe sind (T-074)
+
+**Dieselbe Regel wie bei Tagnamen** (3.3): Unicode-Zusammensetzung (NFC), jeder Leerraum ein
+Leerzeichen und Folgen zu einem, Groß- und Kleinschreibung gefaltet über A–Z, den lateinischen
+Ergänzungsblock U+00C0–U+00DE und ẞ. Also `Backend` = `backend` = `` ` Backend ` ``,
+`Änderung` = `änderung`, aber `Straße` ≠ `Strasse`.
+
+Entschieden wurde sie und nicht neu erfunden: Es ist **wörtlich dieselbe Funktion**
+(`nameKey` in `packages/domain/src/tag-name.ts`), nicht eine zweite Fassung daneben. Die Frage
+„bezeichnen zwei getippte Namen dasselbe Ding?" stellt sich bei einer Regel Wort für Wort wie
+bei einem Tag; zwei Antworten darauf wären zwei Regeln, von denen die Oberfläche zufällig eine
+zu sehen bekäme.
+
+**Wo sie durchgesetzt wird — und wo nicht.** Anders als bei Tags gibt es **keine** Spalte
+`pool.name_key`:
+
+| Ebene | Was sie trägt |
+|---|---|
+| Anwendungsfall (`createPool`, `updatePool`) | die volle Regel. Er liest die Namen aller Regeln (`PoolPort.listNames`) und vergleicht die Schlüssel in der Domäne |
+| `ux_pool_name` (`COLLATE NOCASE`, Migration 0001) | nur A–Z, aber strukturell. Er bleibt als zweite Ebene stehen |
+
+Der Vergleich im Anwendungsfall steht in **derselben** Transaktion wie das anschließende
+Schreiben, und `TransactionPort` reiht Transaktionen (architektur.md 3.4): Zwei laufen nie
+ineinander, die zweite Anfrage sieht die Regel der ersten. Ein Wettlauf entsteht daraus also
+nicht.
+
+**Warum trotzdem kein `name_key` wie bei Tags.** Die Spalte wäre nur zu haben, indem die
+aufgezählte Faltung ein zweites Mal in SQL steht — Migration 0008 baut sie über 40 Zeilen einer
+rekursiven Abfrage nach, weil SQLite keine Unicode-Faltung kennt. Für Tags lohnt das: Sie sind
+Tausende, entstehen nebenbei beim Anlegen eines Todos und brauchen einen Index für die Frage
+„gibt es das schon?". Regeln sind ein paar Dutzend, ein Mensch legt sie einzeln an, und ein
+vollständiger Durchlauf über die Tabelle kostet nichts (dieselbe Begründung wie bei „kein Index
+auf `placement`" in Migration 0009). Eine zweite SQL-Fassung der Faltung wäre der teurere Teil
+des Handels — sie müsste mit der ersten mitwandern, und die Stelle, an der beide auseinanderlaufen,
+wäre genau die, an der wieder zwei gleiche Namen entstünden.
+
+Der **Preis** dieser Entscheidung steht ausdrücklich da: Wer am Anwendungsfall vorbei in die
+Datenbank schreibt, kann `Änderung` und `änderung` nebeneinander anlegen. Der Index verhindert
+das nicht, weil `COLLATE NOCASE` kein `Ä` kennt. Für Takt — ein Prozess, ein Schreibweg — ist das
+kein erreichbarer Zustand; `proof:conflicts` Abschnitt 4 misst ihn über die Routen.
+
+**Gespeichert wird die Anzeigeform.** `„  Vertrieb   Süd  "` wird zu `„Vertrieb Süd"`, wie bei
+Tags (3.3). Ohne diesen Schritt stünden zwei Regeln nebeneinander, die auf dem Bildschirm gleich
+aussehen und es für die Datenbank nicht sind.
 
 ### 3.6 `export_template`, `export_run`, `export_run_group`, `export_run_entry`, `export_audit`
 
@@ -1600,6 +1680,9 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | 0010, die zurückgelegte Wache | doppelter Rang in derselben Statusspalte: `UNIQUE`; ausgelassener Rang beim zweiten INSERT: ebenfalls `UNIQUE` (die Folge des `DEFAULT ''`, siehe 8.4e) |
 | 0010 erneut vorwärts mit Daten | 9 → 10: Spalte wieder weg, Todos und Vermerk unverändert, `integrity_check` = ok, `foreign_key_check` leer |
 | 0010 → 0000 rückwärts, dann erneut vorwärts | 10 → 0 → 10, `todo` verschwindet und steht danach wieder ohne `board_rank` (T-070, Node 22.23.2, `node:sqlite`, 25 Prüfungen) |
+| Der vollständige Stand, jeder eindeutige Index (T-074) | 0 → 10, dann jede der **14** `UNIQUE`-Verletzungen aus `sqlite_master` ausgelöst: jede ergibt einen eigenen Fehlerschlüssel und einen eigenen Satz, keine fällt auf „Dieser Wert ist bereits vergeben", keine Antwort nennt Index-, Tabellen- oder Spaltennamen (`proof:conflicts` 1) |
+| Der Standard-Status, ohne die Oberfläche (T-074) | `DELETE` auf den Standard und `PATCH … isDefault:false` auf den Standard ergeben beide `409 default_status_locked`; der Standard steht danach unverändert da; Weitergeben und anschließendes Löschen gehen (`proof:conflicts` 5) |
+| Der Bestand der Indizes gegen die Übersetzung | die Liste aus `sqlite_master` und `UNIQUE_INDEX_CATALOG` sind in **beide** Richtungen deckungsgleich, und jeder Indexname bringt genau seinen eigenen Satz zurück — ein neuer Index ohne Eintrag, ein Eintrag ohne Index und ein Name, der in einem anderen steckt, werden alle drei rot (`proof:conflicts` 1) |
 
 **Seit T-021 läuft das Verfahren nicht mehr von Hand, sondern über den Läufer**
 (`packages/storage/src/sqlite/migration-runner.ts`). Er ist Teil von

@@ -22,7 +22,7 @@ import { useAsync, type AsyncState } from "./useAsync";
 /**
  * Takt — der Aufbau, den fast jede Ansicht braucht.
  *
- * Statusspalten, Tag-Baum, Pools und Einstellungen ändern sich selten und
+ * Statuswerte, Tag-Baum, Pools und Einstellungen ändern sich selten und
  * werden von acht Ansichten gelesen. Sie einmal zu laden und weiterzureichen
  * ist der Unterschied zwischen einer Anwendung und einer Sammlung von Seiten,
  * die sich gegenseitig nicht kennen.
@@ -42,7 +42,30 @@ export interface TagInfo {
 export interface Structure {
   readonly statuses: readonly TodoStatus[];
   readonly tagTree: TagTree;
+  /**
+   * Die Regeln der **Pool-Fläche** (E-054): `placement` `pool` oder `both`.
+   *
+   * Das ist die Liste für Pool-Filter und Pool-Navigation. Eine Regel, die der
+   * Benutzer ausdrücklich nur auf das Board gestellt hat, steht hier nicht —
+   * sie hier mitzuführen hieße, seine Entscheidung zu übergehen.
+   */
   readonly pools: readonly Pool[];
+  /**
+   * **Alle** Regeln, unabhängig von der Fläche.
+   *
+   * Zwei Leser: die Verwaltung in S-11, die jede Regel zeigen und ihren
+   * Anzeigeort ändern können muss, und das Auflösen einer Kennung zu einem
+   * Namen — etwa wenn die Todo-Liste über `?pool=` nach einer Board-Spalte
+   * filtert. Ohne sie stünde dort ein Filter, der wirkt, aber nicht angezeigt
+   * wird.
+   *
+   * **Zwei Abrufe statt eines mit Filter.** Welche Regel auf welcher Fläche
+   * steht, entscheidet der Dienst (`WHERE placement IN (?, 'both')`). Hier aus
+   * `rules` die `pools` zu filtern hieße, dieses Prädikat ein zweites Mal zu
+   * schreiben — und die zweite Fassung fiele erst auf, wenn eine Regel an der
+   * falschen Stelle erscheint.
+   */
+  readonly rules: readonly Pool[];
   readonly settings: AppSettings;
   /** Der **jetzt** geprüfte Zustand des Exportordners (R-11). */
   readonly exportDirectoryState: ExportDirectoryState;
@@ -72,6 +95,8 @@ export interface StructureApi {
   /** Tag samt Ordnerpfad. `undefined`, wenn die Kennung unbekannt ist. */
   readonly tagInfo: (id: Id) => TagInfo | undefined;
   readonly statusName: (id: Id) => string;
+  /** Name einer Regel, gleich auf welcher Fläche sie steht. */
+  readonly ruleName: (id: Id) => string | undefined;
   readonly allTags: readonly TagInfo[];
   /**
    * In welchen Pools liegt dieses Todo (A-3.4)?
@@ -113,16 +138,18 @@ function collectTags(tree: TagTree): readonly TagInfo[] {
 
 export function StructureProvider({ children }: { readonly children: ReactNode }) {
   const { state, reload } = useAsync<Structure>(async () => {
-    const [statuses, tagTree, pools, view] = await Promise.all([
+    const [statuses, tagTree, pools, rules, view] = await Promise.all([
       listTodoStatuses(),
       getTagTree(),
-      listPools(),
+      listPools("pool"),
+      listPools("all"),
       getSettings(),
     ]);
     return {
       statuses,
       tagTree,
       pools,
+      rules,
       settings: view.settings,
       exportDirectoryState: view.exportDirectoryState,
       // Ältere Dienststände liefern das Feld nicht; dann ist die Liste leer,
@@ -160,8 +187,16 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
 
   const tagInfo = useCallback((id: Id) => tagIndex.get(id), [tagIndex]);
 
+  const ruleIndex = useMemo(() => {
+    const map = new Map<Id, string>();
+    for (const rule of value?.rules ?? []) map.set(rule.id, rule.name);
+    return map;
+  }, [value]);
+
+  const ruleName = useCallback((id: Id) => ruleIndex.get(id), [ruleIndex]);
+
   const statusName = useCallback(
-    (id: Id) => statusIndex.get(id) ?? "Unbekannte Spalte",
+    (id: Id) => statusIndex.get(id) ?? "Unbekannter Status",
     [statusIndex],
   );
 
@@ -186,8 +221,8 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   );
 
   const api = useMemo<StructureApi>(
-    () => ({ state, reload, tagInfo, statusName, allTags, poolsContaining }),
-    [state, reload, tagInfo, statusName, allTags, poolsContaining],
+    () => ({ state, reload, tagInfo, statusName, ruleName, allTags, poolsContaining }),
+    [state, reload, tagInfo, statusName, ruleName, allTags, poolsContaining],
   );
 
   return <StructureContext.Provider value={api}>{children}</StructureContext.Provider>;

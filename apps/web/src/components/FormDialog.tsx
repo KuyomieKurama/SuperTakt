@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useRef,
+  type FocusEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -62,7 +63,22 @@ export function FormDialog({
   const titleId = useId();
   const descriptionId = `${titleId}-description`;
   const dialogRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * Eine Fehlermeldung, die man erst suchen muss, ist keine (Abschnitt 15).
+   *
+   * Der Rumpf eines Formulardialogs scrollt. Die Meldung steht unter den
+   * Feldern — bei einem langen Formular also unterhalb des Sichtfelds, waehrend
+   * der Blick beim Absendeknopf steht und dort nichts geschieht. Gemessen im
+   * Dialog „Neue Board-Spalte anlegen" (T-072): Der Dienst wies einen doppelten
+   * Namen ab, und der Text lag zwei Bildschirmhoehen tiefer.
+   */
+  useEffect(() => {
+    if (error === null) return;
+    errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,6 +119,34 @@ export function FormDialog({
     [busy, onCancel],
   );
 
+  /**
+   * Holt den Fokus zurueck, wenn das fokussierte Element verschwindet (T-072).
+   *
+   * **Der gemessene Fall.** Im Dialog „Spalten des Boards" nimmt ein Knopf eine
+   * Regel auf das Board — und verschwindet dabei, weil die Regel danach oben
+   * unter den Spalten steht. Der Fokus faellt auf `body`, also **ausserhalb**
+   * der Flaeche, an der `onKeyDown` haengt: Escape schliesst nicht mehr, und
+   * die Tabulatorschleife greift nicht mehr. Der Dialog laesst sich nur noch
+   * mit der Maus verlassen (Verstoss gegen SC 2.1.1 und 2.4.3).
+   *
+   * `relatedTarget === null` heisst „der Fokus ging nirgendwohin". Das gilt
+   * auch, wenn das Fenster den Fokus verliert — deshalb die Nachfrage bei
+   * `document.hasFocus()`: Wer zur Nachbaranwendung wechselt, soll nicht
+   * zurueckgerissen werden. Die Pruefung steht in einem `setTimeout`, weil
+   * `document.activeElement` waehrend `blur` noch das alte Element ist.
+   */
+  const recoverFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget !== null) return;
+    const dialog = dialogRef.current;
+    if (dialog === null) return;
+    window.setTimeout(() => {
+      if (!document.hasFocus()) return;
+      const active = document.activeElement;
+      if (active !== null && active !== document.body && dialog.contains(active)) return;
+      if (!focusFirstWithin(dialog)) dialog.focus();
+    }, 0);
+  }, []);
+
   const submit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -115,11 +159,12 @@ export function FormDialog({
   if (!open) return null;
 
   return (
-    <div className="scrim" onKeyDown={onKeyDown}>
+    <div className="scrim" onKeyDown={onKeyDown} onBlur={recoverFocus}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-labelledby={titleId}
         {...(description === undefined ? {} : { "aria-describedby": descriptionId })}
         className={cx("dialog", "dialog--form", wide && "dialog--wide", tone === "danger" && "dialog--danger")}
@@ -142,9 +187,11 @@ export function FormDialog({
           <div className="dialog__body dialog__body--form">
             {children}
             {error === null ? null : (
-              <InlineMessage tone="danger" title="Das hat nicht geklappt">
-                {error}
-              </InlineMessage>
+              <div ref={errorRef}>
+                <InlineMessage tone="danger" title="Das hat nicht geklappt">
+                  {error}
+                </InlineMessage>
+              </div>
             )}
           </div>
 

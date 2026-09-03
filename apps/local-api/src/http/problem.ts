@@ -61,6 +61,10 @@ const STATUS: Readonly<Record<TaktErrorCode, ContentfulStatusCode>> = Object.fre
   builtin_template_immutable: 409,
   status_in_use: 409,
   last_status_column: 409,
+  // Der Standard-Status für neue Todos. 409 und nicht 422: Der Aufrufer hat
+  // richtig gefragt, der Bestand steht dagegen — und er kann es ändern, indem
+  // er zuerst einen anderen Status zum Standard macht (T-074).
+  default_status_locked: 409,
   conflict: 409,
 
   // Gelesen, aber fachlich unzulässig (422).

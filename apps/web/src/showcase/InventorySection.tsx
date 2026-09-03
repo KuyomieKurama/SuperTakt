@@ -211,6 +211,16 @@ const INVENTORY: readonly InventoryEntry[] = [
     built: true,
   },
   {
+    name: "Statuszeile",
+    file: "StatusSettings.tsx",
+    purpose:
+      "Ein Statuswert in der Verwaltung (A-5.4): Stelle, Name, Zahl der Todos, Standardwahl als Optionsgruppe, Verschieben, Umbenennen, Löschen. Der Grund einer Sperre steht in der Zeile, bevor jemand sie auslöst — nicht danach.",
+    states:
+      "frei · Standard für neue Todos · gesperrt, weil Todos darin stehen · gesperrt, weil Standard · gesperrt, weil letzter Status · zwei Gründe zugleich · Zählung läuft · Anzahl unbekannt · unter dem Zeiger",
+    screens: "S-09",
+    built: true,
+  },
+  {
     name: "Base64-Hinweis",
     file: "ExportDirectoryField.tsx",
     purpose:
@@ -293,8 +303,9 @@ const INVENTORY: readonly InventoryEntry[] = [
   {
     name: "Kanban-Spalte",
     file: "Kanban.tsx",
-    purpose: "Statusspalte mit Zähler, Zahl der erledigten Todos, Obergrenze und Konfigurationsmenü.",
-    states: "normal · Ablageziel · leer · Obergrenze überschritten · mit erledigten Todos",
+    purpose:
+      "Eine Regel über Tags als Spalte (E-054), mit ihrer Regelzeile, dem Zähler und dem Spaltenmenü. Kein Ablageziel mehr: Welche Karte hier steht, entscheiden die Tags des Todos.",
+    states: "normal · leer, weil keine Karte die Regel trifft · leere Regel · mit erledigten Todos · mehr Karten vorhanden als geladen",
     screens: "S-04",
     built: true,
   },

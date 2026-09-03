@@ -35,10 +35,19 @@ import type {
   TimeEntryId,
   Todo,
   TodoFilter,
+  TaktError,
   TodoStatus,
 } from '@takt/domain';
-import { checkExportStatusTransition, checkTagName, err, ok, taktError } from '@takt/domain';
-import type { ExportAuditFilter, Page, Pagination } from '@takt/storage';
+import {
+  checkExportStatusTransition,
+  checkPoolName,
+  checkTagName,
+  err,
+  nameKey,
+  ok,
+  taktError,
+} from '@takt/domain';
+import type { ExportAuditFilter, Page, Pagination, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
 import { checkTemplateDefinition } from './export.ts';
@@ -189,18 +198,101 @@ export interface PoolInput {
   readonly rule: readonly PoolRuleTerm[];
 }
 
-export function createPool(context: AppContext, input: PoolInput): Promise<Pool> {
-  const timestamp = now(context);
-  return context.transactions.inTransaction((unit) => unit.pools.create(input, timestamp));
+/**
+ * Ist dieser Name schon vergeben? (T-074)
+ *
+ * Die Antwort steht in der Domäne (`nameKey`) und nicht in SQL. Der eindeutige
+ * Index `ux_pool_name` vergleicht mit `COLLATE NOCASE` und deckt damit A–Z und
+ * sonst nichts: „Änderung“ und „änderung“ liefen aneinander vorbei, „back  end“
+ * und „back end“ auch. Deshalb wird hier verglichen und der Index steht daneben
+ * als schwächere, aber strukturelle Absicherung.
+ *
+ * **Warum das kein Wettlauf ist.** Die Prüfung und das anschließende Anlegen
+ * stehen in **derselben** Transaktion, und `TransactionPort` reiht Transaktionen
+ * (`unit-of-work.ts`): Zwei laufen nie ineinander. Eine zweite Anfrage sieht
+ * also die Regel der ersten. Käme dieser Schutz je abhanden, wiese `ux_pool_name`
+ * den ASCII-Fall weiterhin ab — und die Antwort darauf ist seit T-074 ein 409
+ * und kein 500 mehr.
+ */
+async function poolNameTaken(unit: UnitOfWork, key: string): Promise<boolean> {
+  const names = await unit.pools.listNames();
+  return names.some((entry) => nameKey(entry.name) === key);
 }
 
-export function updatePool(
+/**
+ * Der Name steht in der Meldung (T-072, T-074).
+ *
+ * Das ist der Unterschied zwischen „Es gibt bereits eine Regel mit diesem
+ * Namen“ und einer Meldung, mit der ein Benutzer etwas anfangen kann: Der Name,
+ * den er getippt hat, ist womöglich nicht der Name, der gespeichert ist —
+ * „Backend“ trifft ein vorhandenes „backend“, und ohne den Namen im Satz sieht
+ * die Abweisung aus wie ein Fehler des Dienstes.
+ *
+ * Der eingesetzte Text ist die **Anzeigeform der Eingabe** des Aufrufers und
+ * kommt nicht aus dem Bestand. Er verrät damit nichts, was der Aufrufer nicht
+ * schon geschickt hat (B-2.4).
+ */
+function poolNameConflict(name: string): TaktError {
+  return taktError(
+    'name_conflict',
+    `Es gibt bereits eine Regel mit dem Namen „${name}“. Pools und Kanban-Spalten teilen sich die Namen, auch wenn sie auf verschiedenen Flächen stehen.`,
+  );
+}
+
+/**
+ * Eine Regel anlegen — Pool, Kanban-Spalte oder beides (A-3.1, E-054).
+ *
+ * Bis T-074 gab dieser Anwendungsfall `Promise<Pool>` zurück und überließ den
+ * doppelten Namen dem eindeutigen Index. Der warf, niemand fing ihn, und
+ * `POST /pools` antwortete mit **500 internal_error** — gemessen vom
+ * frontend-dev in T-072. Ein 500 heißt „bei mir ist etwas kaputt“; die
+ * Oberfläche riet daraufhin zum erneuten Versuch, der genauso scheiterte.
+ */
+export async function createPool(
+  context: AppContext,
+  input: PoolInput,
+): Promise<UseCaseResult<Pool>> {
+  // Rein, und deshalb vor der Transaktion: Ein unbrauchbarer Name soll gar
+  // keine Klammer öffnen. Dieselbe Reihenfolge wie in `createTag`.
+  const checked = checkPoolName(input.name);
+  if (!checked.ok) return err(checked.error);
+
+  const timestamp = now(context);
+  return context.transactions.inTransaction(async (unit) => {
+    if (await poolNameTaken(unit, checked.value.key)) {
+      return err(poolNameConflict(checked.value.name));
+    }
+    return ok(await unit.pools.create({ ...input, name: checked.value.name }, timestamp));
+  });
+}
+
+export async function updatePool(
   context: AppContext,
   id: PoolId,
   input: Partial<PoolInput>,
 ): Promise<UseCaseResult<Pool>> {
+  const checked = input.name === undefined ? null : checkPoolName(input.name);
+  if (checked !== null && !checked.ok) return err(checked.error);
+
   const timestamp = now(context);
-  return context.transactions.inTransaction((unit) => unit.pools.update(id, input, timestamp));
+  return context.transactions.inTransaction(async (unit) => {
+    if (checked !== null) {
+      const names = await unit.pools.listNames();
+      // **Erst die Frage nach der Regel selbst.** Gibt es sie nicht, ist 404 die
+      // Antwort und nicht 409 — sonst bekäme ein Aufrufer, der eine gelöschte
+      // Regel umbenennt, „Name vergeben" zu lesen und suchte am falschen Ende.
+      // Der 404 kommt aus `update` weiter unten, mit dem Satz, der dort steht.
+      const exists = names.some((entry) => entry.id === id);
+      // `entry.id !== id` ist der zweite Punkt: Eine Regel, die ihren eigenen
+      // Namen behält, darf sich nicht selbst im Weg stehen.
+      const taken = names.some(
+        (entry) => entry.id !== id && nameKey(entry.name) === checked.value.key,
+      );
+      if (exists && taken) return err(poolNameConflict(checked.value.name));
+    }
+    const fields = checked === null ? input : { ...input, name: checked.value.name };
+    return unit.pools.update(id, fields, timestamp);
+  });
 }
 
 export function removePool(context: AppContext, id: PoolId): Promise<UseCaseResult<void>> {
