@@ -35,7 +35,7 @@
     "sidecar:verify": "pnpm --filter @takt/desktop sidecar:verify",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
-    "test:e2e": "playwright test --pass-with-no-tests",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r --if-present typecheck",
     "verify:bundle": "pnpm --filter @takt/desktop sidecar && pnpm --filter @takt/desktop sidecar:verify"

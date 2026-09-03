@@ -72,6 +72,16 @@ export async function createTodo(input: {
   return result.todo;
 }
 
+/** A-2.4 — als erledigt markieren. Verschiebt keine Karte (A-3.4, E-054). */
+export async function markTodoDone(id: string): Promise<Todo> {
+  return call<Todo>(`/todos/${id}/done`, { method: 'PUT' });
+}
+
+/** A-2.5 — „Erledigt" von Hand aufheben, ohne über den Timer zu gehen. */
+export async function clearTodoDone(id: string): Promise<Todo> {
+  return call<Todo>(`/todos/${id}/done`, { method: 'DELETE' });
+}
+
 export async function createTimeEntry(input: {
   todoId: string;
   startedAt: string;
@@ -193,6 +203,64 @@ export async function listStatuses(): Promise<readonly Status[]> {
 
 export async function createStatus(name: string, position = 0): Promise<Status> {
   return call<Status>('/todo-statuses', { method: 'POST', body: JSON.stringify({ name, position }) });
+}
+
+/* ==================================================================== */
+/* Pools / Kanban-Spalten (E-054, E-055)                                 */
+/* ==================================================================== */
+
+/**
+ * Seit E-054 dieselbe Entität wie eine Kanban-Spalte — `placement`
+ * unterscheidet, wo eine Regel erscheint. Nur die Felder, die die
+ * Aufräumung und die wenigen Fälle brauchen, in denen das Anlegen selbst
+ * nicht der geprüfte Schritt ist (`todo-revival.spec.ts`): Eine Kanban-Spalte,
+ * die tatsächlich geprüft wird, entsteht in `kanban.spec.ts` ausschließlich
+ * über die Oberfläche (`support/actions.ts`, `createBoardColumn`) — ein
+ * Testaufbau an der Datenbank vorbei würde genau das nicht mitmessen
+ * (T-081-Auftrag, "Zwei Fallen").
+ */
+export interface Pool {
+  readonly id: string;
+  readonly name: string;
+  readonly placement: 'pool' | 'board' | 'both';
+}
+
+export async function createPool(input: {
+  name: string;
+  placement?: 'pool' | 'board' | 'both';
+  requiredTagIds?: readonly string[];
+  completion?: 'any' | 'done' | 'open';
+}): Promise<Pool> {
+  return call<Pool>('/pools', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      placement: input.placement ?? 'pool',
+      rule: (input.requiredTagIds ?? []).map((tagId) => ({ kind: 'tag', tagId })),
+      completion: input.completion ?? 'any',
+    }),
+  });
+}
+
+export async function deletePool(id: string): Promise<void> {
+  await call<void>(`/pools/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * Für die Aufräumung nach einem `kanban.spec.ts`-Fall: Eine über die
+ * Oberfläche angelegte Spalte (`createBoardColumn`, `support/actions.ts`)
+ * liefert keine Kennung an den Aufrufer zurück — sie wird hier über ihren
+ * (im Testlauf eindeutigen, zeitgestempelten) Namen wiedergefunden.
+ */
+export async function listPools(placement: 'pool' | 'board' | 'all' = 'pool'): Promise<readonly Pool[]> {
+  return call<readonly Pool[]>(`/pools?${new URLSearchParams({ placement }).toString()}`);
+}
+
+/** Löscht eine über die Oberfläche angelegte Spalte anhand ihres Namens, falls vorhanden. */
+export async function deletePoolByName(name: string): Promise<void> {
+  const pools = await listPools('all');
+  const found = pools.find((pool) => pool.name === name);
+  if (found !== undefined) await deletePool(found.id);
 }
 
 export async function setDefaultTags(tagIds: readonly string[]): Promise<unknown> {

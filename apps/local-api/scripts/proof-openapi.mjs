@@ -91,6 +91,7 @@ import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
+import { POOL_RULE_AXIS_IDS, poolRuleIsEmpty } from '@takt/domain';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
@@ -1278,6 +1279,193 @@ check(
   `auch mit allen fünf Achsen nennen Abfrage und Domänenregel dieselben Spalten (${lateByDomain.size})`,
   lateProblems.length === 0 && lateByDomain.size > 0,
   lateProblems.join(' | ') || 'keine Mehrfachnennung im zweiten Durchgang',
+);
+
+// ---------------------------------------------------------------------------
+section('13  Die Frage „ist diese Regel leer" steht einmal (T-080)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Bis T-080 stand die Bedingung „alle Achsen neutral" dreimal da: in
+ * `matchesPool`, in der Übersetzung nach SQL und in der Oberfläche, die sie
+ * für den Leerzustand einer frisch angelegten Spalte braucht und über keine
+ * Route erfragen konnte. Jetzt steht sie in `poolRuleIsEmpty`, und dieser
+ * Abschnitt hält sie gegen den laufenden Dienst.
+ *
+ * Die Aufzählung der Achsen kommt aus der **Domäne** und nicht aus dieser
+ * Datei (`POOL_RULE_AXIS_IDS`). Das ist der Punkt: Wer eine sechste Achse
+ * hinzufügt, macht diesen Abschnitt rot, bis sie beschrieben, annehmbar und
+ * ausgeliefert ist — und `tsc` hat ihn vorher schon in der Domäne, in
+ * `packages/storage` und im Dienst rot gemacht.
+ */
+
+const poolSchema = doc.components.schemas.Pool;
+const axisGaps = [];
+for (const axis of POOL_RULE_AXIS_IDS) {
+  if (poolSchema.properties?.[axis] === undefined) axisGaps.push(`Pool.${axis} fehlt`);
+  if (!(poolSchema.required ?? []).includes(axis)) axisGaps.push(`Pool.${axis} nicht Pflicht`);
+  for (const name of ['PoolCreate', 'PoolUpdate']) {
+    if (doc.components.schemas[name].properties?.[axis] === undefined) {
+      axisGaps.push(`${name}.${axis} fehlt`);
+    }
+  }
+}
+check(
+  `jede Achse der Domäne ist beschrieben — im Pool und in beiden Rümpfen (${POOL_RULE_AXIS_IDS.length})`,
+  axisGaps.length === 0,
+  axisGaps.join(', '),
+);
+
+const axisNotRead = [];
+for (const id of ['createPool', 'updatePool']) {
+  const properties = Object.keys(z.toJSONSchema(REQUEST_SCHEMAS[id], { io: 'input' }).properties ?? {});
+  for (const axis of POOL_RULE_AXIS_IDS) {
+    if (!properties.includes(axis)) axisNotRead.push(`${id}.${axis}`);
+  }
+}
+check(
+  'jede Achse wird von der Eingabeprüfung beider Routen angenommen',
+  axisNotRead.length === 0,
+  axisNotRead.join(', '),
+);
+
+/** Jede ausgelieferte Regel, gleich über welche Antwort sie kam. */
+const deliveredPools = [
+  ...records
+    .filter((record) => ['listPools', 'createPool', 'updatePool'].includes(record.operationId))
+    .flatMap((record) => (Array.isArray(record.body?.data) ? record.body.data : [record.body?.data])),
+  ...(board?.columns ?? []).map((entry) => entry.column),
+  ...(lateBoard?.columns ?? []).map((entry) => entry.column),
+].filter((pool) => pool !== undefined && pool !== null && typeof pool === 'object' && 'id' in pool);
+
+const deliveryGaps = [];
+for (const pool of deliveredPools) {
+  for (const axis of POOL_RULE_AXIS_IDS) {
+    if (pool[axis] === undefined) deliveryGaps.push(`${pool.name}.${axis}`);
+  }
+  const resolved = pool.resolved;
+  if (
+    typeof resolved?.tagCount !== 'number' ||
+    typeof resolved?.excludedTagCount !== 'number' ||
+    typeof resolved?.isEmpty !== 'boolean'
+  ) {
+    deliveryGaps.push(`${pool.name}.resolved`);
+  }
+}
+check(
+  `jede ausgelieferte Regel trägt alle Achsen und ihre Auflösung (${deliveredPools.length})`,
+  deliveryGaps.length === 0 && deliveredPools.length >= 15,
+  deliveryGaps.slice(0, 8).join(', '),
+);
+
+/*
+ * **Domäne gegen Dienst.** Wo keine Ordner im Spiel sind, muss die Antwort der
+ * Domäne auf die gespeicherte Regel dieselbe sein wie die des Dienstes auf die
+ * aufgelöste: Ein Tagterm löst sich zu genau einem Tag auf, ein Status zu sich
+ * selbst. Weichen die beiden hier ab, hat eine Seite ihre Achsen vergessen.
+ *
+ * Regeln **mit** Ordnertermen sind ausgenommen, und zwar nicht aus Nachsicht:
+ * Dort dürfen die Antworten auseinandergehen, und genau diese Lücke ist der
+ * Zustand, den die Zahl daneben benennbar macht (die Prüfung darunter).
+ */
+const hasFolderTerm = (pool) =>
+  [...(pool.rule ?? []), ...(pool.excludedTags ?? [])].some((term) => term.kind === 'folder');
+
+const emptinessProblems = [];
+for (const pool of deliveredPools.filter((entry) => !hasFolderTerm(entry))) {
+  if (poolRuleIsEmpty(pool) !== pool.resolved.isEmpty) {
+    emptinessProblems.push(
+      `${pool.name}: Domäne ${poolRuleIsEmpty(pool)}, Dienst ${pool.resolved.isEmpty}`,
+    );
+  }
+}
+check(
+  'ohne Ordnerterm sagen Domäne und Dienst dasselbe über die leere Regel',
+  emptinessProblems.length === 0,
+  emptinessProblems.join(' | '),
+);
+
+/*
+ * Und die fachliche Folge: Was leer ist, trifft nichts. Gemessen an der Zahl,
+ * die aus der **Abfrage** kommt und nicht aus der Domäne — das ist die dritte
+ * Fassung derselben Regel, die in `packages/storage` steht.
+ */
+const notEmptyButMatching = [];
+const emptyWithCards = [];
+for (const entry of board?.columns ?? []) {
+  if (entry.column.resolved.isEmpty && entry.total !== 0) {
+    emptyWithCards.push(`${entry.column.name}: ${entry.total} Karten`);
+  }
+  if (!entry.column.resolved.isEmpty && entry.total > 0) notEmptyButMatching.push(entry.column.name);
+}
+check(
+  `eine aufgelöst leere Regel hat keine Mitglieder — und das ist nicht leer gemessen (${notEmptyButMatching.length} Gegenproben)`,
+  emptyWithCards.length === 0 && notEmptyButMatching.length >= 3,
+  emptyWithCards.join(' | ') || `Gegenproben: ${notEmptyButMatching.join(', ')}`,
+);
+
+/*
+ * Der Fall, für den die Zahl überhaupt da ist: **ein Ordner, in dem kein Tag
+ * liegt.** Die Regel nennt eine Bedingung — `poolRuleIsEmpty` sagt also nein —
+ * und trifft trotzdem nichts. Ohne `resolved.tagCount` sähe das in jeder
+ * Ansicht aus wie „im Augenblick passt nichts", und der Benutzer wartete auf
+ * ein Todo, das nie erscheinen kann.
+ */
+const barren = columnsByName.get(BOARD_COLUMNS.emptyFolder);
+check(
+  'ein Ordner ohne Tags ist von einer Regel ohne Treffer unterscheidbar',
+  barren !== undefined &&
+    barren.column.rule.length === 1 &&
+    poolRuleIsEmpty(barren.column) === false &&
+    barren.column.resolved.tagCount === 0 &&
+    barren.column.resolved.isEmpty === true &&
+    barren.total === 0,
+  JSON.stringify({
+    regelterme: barren?.column?.rule?.length,
+    nenntBedingung: barren === undefined ? undefined : !poolRuleIsEmpty(barren.column),
+    aufgeloest: barren?.column?.resolved,
+    karten: barren?.total,
+  }),
+);
+
+/*
+ * Die Gegenprobe dazu: derselbe Aufbau mit einem Ordner, in dem Tags liegen.
+ * Ohne sie wäre die Prüfung darüber auch dann grün, wenn die Auflösung
+ * grundsätzlich null zählte.
+ */
+const filled = columnsByName.get(BOARD_COLUMNS.folder);
+check(
+  'ein Ordner **mit** Tags zählt sie auch',
+  filled !== undefined && filled.column.resolved.tagCount >= 1 && filled.column.resolved.isEmpty === false,
+  JSON.stringify(filled?.column?.resolved),
+);
+
+/*
+ * Und der Prüfer prüft sich selbst — sonst wäre `poolRuleIsEmpty` auch dann
+ * grün, wenn es immer dasselbe antwortete. Je Achse einmal, mit sonst
+ * neutralen Nachbarn: Jede einzelne muss die Regel aus der Leere holen.
+ */
+const neutral = {
+  rule: [],
+  excludedTags: [],
+  statusIds: [],
+  completion: 'any',
+  exportState: 'any',
+};
+const setTo = {
+  rule: [{ kind: 'tag', tagId: 'x' }],
+  excludedTags: [{ kind: 'tag', tagId: 'x' }],
+  statusIds: ['x'],
+  completion: 'done',
+  exportState: 'open',
+};
+const blind = POOL_RULE_AXIS_IDS.filter(
+  (axis) => poolRuleIsEmpty({ ...neutral, [axis]: setTo[axis] }) !== false,
+);
+check(
+  `jede einzelne Achse hebt die Leere auf, und keine ohne (${POOL_RULE_AXIS_IDS.join(', ')})`,
+  blind.length === 0 && poolRuleIsEmpty(neutral) === true,
+  blind.length > 0 ? `wirkungslos: ${blind.join(', ')}` : 'die neutrale Regel gilt nicht als leer',
 );
 
 // ---------------------------------------------------------------------------

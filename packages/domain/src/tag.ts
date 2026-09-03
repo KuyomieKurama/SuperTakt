@@ -252,8 +252,22 @@ export type PoolSurface = 'pool' | 'board';
  * getrennt. Eine Spalte wird durch `statusIds` nicht wieder zum Status: Sie
  * kann mehrere Status umfassen, keinen, oder Status und Tags mischen, und
  * dieselbe Karte kann weiterhin in mehreren Spalten stehen.
+ *
+ * ---------------------------------------------------------------------------
+ * `extends PoolRuleAxes` — die fünf Achsen stehen nicht zufällig hier (T-080)
+ * ---------------------------------------------------------------------------
+ *
+ * {@link PoolRuleAxes} ist die Aufzählung der Achsen, auf der die Frage „nennt
+ * diese Regel überhaupt eine Bedingung?" beruht. Das `extends` hält beide
+ * aneinander: Wer hier ein Achsenfeld umbenennt oder entfernt, bekommt einen
+ * Übersetzerfehler, statt eine Regel zu hinterlassen, deren Leere niemand mehr
+ * richtig beantwortet.
+ *
+ * Die Felder stehen unten trotzdem ausgeschrieben. Sie sind dort **enger**
+ * getippt — Terme statt `unknown` — und tragen ihre Begründung; geerbt wird
+ * die Aufzählung, nicht die Beschreibung.
  */
-export interface Pool {
+export interface Pool extends PoolRuleAxes {
   readonly id: PoolId;
   readonly name: string;
   /**
@@ -381,33 +395,152 @@ export interface Pool {
  * diese Funktion vom Erledigt-Kennzeichen so wenig wie vor T-076, und A-2.5
  * gilt unverändert.
  */
-export type MatchesPool = (input: {
-  readonly todoTagIds: readonly TagId[];
+export type MatchesPool = (input: MatchesPoolRule & MatchesPoolCandidate) => boolean;
+
+/**
+ * Die **Regelseite** der Eingabe von {@link MatchesPool} — aufgelöst.
+ *
+ * Getrennt von der Kartenseite und nicht als ein Objektliteral im
+ * Funktionstyp, seit T-080. Der Grund ist nicht Ordnungsliebe: Über diese
+ * Felder läuft die Aufzählung der Achsen, und nur weil sie einen Namen haben,
+ * kann `tsc` verlangen, dass jedes von ihnen einer Achse zugeordnet ist
+ * ({@link POOL_RULE_AXIS_OF_FIELD}). Wer hier ein Feld ergänzt, bekommt einen
+ * Fehler, bis er gesagt hat, welche Achse es füllt.
+ *
+ * Die Feldnamen tragen `rule`/`todo` im Namen, weil beide Hälften zusammen als
+ * **ein** Argument hereinkommen: `completedAt` gehört der Karte, `completion`
+ * der Regel, und ohne die Vorsilbe stünden `statusIds` zweimal da.
+ */
+export interface MatchesPoolRule {
   /** Die **erforderlichen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
   readonly ruleTagIds: readonly TagId[];
   /** Wie `ruleTagIds` verknüpft ist. Gilt für keine andere Achse. */
   readonly matchMode: 'any' | 'all';
   /** Die **ausgeschlossenen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
   readonly excludedTagIds?: readonly TagId[] | undefined;
+  /** Die Status der Regel. Leer oder weggelassen heißt „Alle". */
+  readonly ruleStatusIds?: readonly StatusId[] | undefined;
+  /** Die Erledigt-Achse der Regel. Weggelassen ist `any`. */
+  readonly completion?: PoolCompletionFilter | undefined;
+  /** Die Exportstatus-Achse der Regel. Weggelassen ist `any`. */
+  readonly exportState?: PoolExportFilter | undefined;
+}
+
+/**
+ * Die **Kartenseite** der Eingabe von {@link MatchesPool}.
+ *
+ * Alles außer den Tags ist freiwillig, und was fehlt, lässt eine Achse, die
+ * danach fragt, **nicht** treffen. Die Begründung steht an {@link MatchesPool}.
+ */
+export interface MatchesPoolCandidate {
+  readonly todoTagIds: readonly TagId[];
   /**
    * Der Status der Karte. Jedes Todo trägt genau einen (`todo.status_id` ist
    * NOT NULL); `null` oder weggelassen heißt „dieser Aufrufer kennt ihn nicht",
    * nicht „diese Karte hat keinen".
    */
   readonly todoStatusId?: StatusId | null | undefined;
-  /** Die Status der Regel. Leer oder weggelassen heißt „Alle". */
-  readonly ruleStatusIds?: readonly StatusId[] | undefined;
   /** `null` bedeutet unerledigt (A-2.4). Weggelassen: dem Aufrufer unbekannt. */
   readonly completedAt?: Timestamp | null | undefined;
-  /** Die Erledigt-Achse der Regel. Weggelassen ist `any`. */
-  readonly completion?: PoolCompletionFilter | undefined;
   /** Hat die Karte mindestens eine abgeschlossene, offene Buchung? */
   readonly hasOpenEntries?: boolean | undefined;
   /** Hat die Karte mindestens eine exportierte Buchung? */
   readonly hasExportedEntries?: boolean | undefined;
-  /** Die Exportstatus-Achse der Regel. Weggelassen ist `any`. */
-  readonly exportState?: PoolExportFilter | undefined;
-}) => boolean;
+}
+
+/**
+ * Die fünf Achsen einer Regel, so weit die Frage „nennt diese Regel überhaupt
+ * eine Bedingung?" sie liest (T-080).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die drei Listen `readonly unknown[]` sind
+ * ---------------------------------------------------------------------------
+ *
+ * Weil dieselbe Frage an **zwei** Gestalten derselben Regel gestellt wird und
+ * die Antwort beide Male dieselbe sein muss:
+ *
+ *   **gespeichert** — `rule` und `excludedTags` sind Terme ({@link PoolTagTerm}),
+ *   ein Ordnerterm steht darin für beliebig viele Tags. Das ist die Gestalt in
+ *   der Datenbank, in der Antwort des Dienstes und im Formular der Oberfläche,
+ *   auch für einen Entwurf, den noch niemand gespeichert hat.
+ *
+ *   **aufgelöst** — dieselben Felder tragen Tagkennungen, die Ordner sind zu
+ *   ihren Tags geworden. Das ist die Gestalt, in der `matchesPool` und die
+ *   Abfrage in SQL urteilen.
+ *
+ * Gezählt wird beide Male die **Länge**, und mehr liest diese Frage von den
+ * Listen nicht. Ein engerer Typ hätte zwei Fassungen der Funktion erzwungen —
+ * und zwei Fassungen sind genau das, was T-080 beseitigt. `readonly unknown[]`
+ * und nicht `{ length: number }`: Eine Zeichenkette hat auch eine Länge, ist
+ * hier aber nie gemeint.
+ *
+ * Die Feldnamen sind die des gespeicherten Pools und die der Schnittstelle
+ * (`rule`, `excludedTags`, `statusIds`, `completion`, `exportState`). Ein
+ * `Pool` erfüllt diesen Typ deshalb unverändert, und die Oberfläche kann ihren
+ * Formularentwurf ohne Umbau hineinreichen.
+ *
+ * **Kein Feld ist freiwillig.** Das ist die ganze Absicherung: Jede Stelle,
+ * die diese Frage stellt, nennt alle Achsen ausdrücklich. Kommt eine sechste
+ * dazu, wird jede dieser Stellen rot — die Tabelle unten, `matchesPool`, die
+ * Übersetzung nach SQL in `packages/storage` und die Auflösung im Dienst.
+ */
+export interface PoolRuleAxes {
+  /** Erforderliche Tags — Terme oder aufgelöste Tagkennungen. */
+  readonly rule: readonly unknown[];
+  /** Ausgeschlossene Tags — Terme oder aufgelöste Tagkennungen. */
+  readonly excludedTags: readonly unknown[];
+  /** Status: einer von diesen. Leer heißt „Alle". */
+  readonly statusIds: readonly unknown[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+}
+
+/** Der Name einer Achse — zugleich der Feldname am `Pool` und in der Schnittstelle. */
+export type PoolRuleAxisId = keyof PoolRuleAxes;
+
+/**
+ * Was eine Regel nach dem Auflösen ihrer Ordner ergibt (T-080).
+ *
+ * Der Grund, warum das über die Leitung geht: Die Oberfläche kann eine Regel
+ * ohne Bedingung selbst erkennen — die Felder liegen ihr vor —, aber sie kann
+ * nicht wissen, ob in einem genannten Ordner überhaupt ein Tag liegt. Ohne
+ * diese Auskunft sieht ein leerer Ordner aus wie eine Regel ohne Treffer, und
+ * das sind zwei verschiedene Zustände: Der eine löst sich morgen von selbst,
+ * der andere nie.
+ */
+export interface PoolResolution {
+  /** Wie viele Tags die **erforderliche** Liste ergibt, Unterordner eingerechnet. */
+  readonly tagCount: number;
+  /** Dasselbe für die **ausgeschlossene** Liste. */
+  readonly excludedTagCount: number;
+  /**
+   * Bleibt nach dem Auflösen **keine** Bedingung übrig?
+   *
+   * Nicht dasselbe wie `poolRuleIsEmpty` über die gespeicherte Regel: Eine
+   * Regel, die einen leeren Ordner nennt, nennt eine Bedingung und trifft
+   * trotzdem nichts. Der Unterschied ist genau der Zustand, den die Oberfläche
+   * benennen können muss.
+   *
+   * Ist dieser Wert `true`, liefert die Mitgliederabfrage nichts — dieselbe
+   * Entscheidung wie `matchesPool` und wie die Übersetzung nach SQL.
+   */
+  readonly isEmpty: boolean;
+}
+
+/**
+ * Die Auflösung einer Regel zusammensetzen (T-080).
+ *
+ * Rein: Die aufgelösten Taglisten kommen herein, das Auflösen selbst ist
+ * Aufgabe des Ports — dafür braucht es den Ordnerbaum.
+ */
+export type ResolvePool = (input: {
+  /** Die gespeicherte Regel. Gelesen werden die drei Achsen, die nichts auflösen. */
+  readonly axes: PoolRuleAxes;
+  /** Die erforderlichen Tags, aufgelöst. */
+  readonly ruleTagIds: readonly unknown[];
+  /** Die ausgeschlossenen Tags, aufgelöst. */
+  readonly excludedTagIds: readonly unknown[];
+}) => PoolResolution;
 
 /**
  * Wird ein Todo in einer Pool-Ansicht gezeigt? (A-2.4, A-2.5)
@@ -507,6 +640,139 @@ export const checkFolderMove: CheckFolderMove = ({ folderId, newParentId, target
   return ok(undefined);
 };
 
+// ---------------------------------------------------------------------------
+// Die Achsen einer Regel, einmal aufgezählt (T-080)
+//
+// Bis T-080 stand die Frage „nennt diese Regel überhaupt eine Bedingung?" an
+// drei Stellen: in `matchesPool` unten, in der Übersetzung nach SQL
+// (`packages/storage`, `buildConditions`) und in der Oberfläche, die sie für
+// den Leerzustand einer frisch angelegten Spalte braucht und über keine Route
+// erfragen konnte. Drei Fassungen derselben Bedingung, alle drei richtig, alle
+// drei von Hand gepflegt.
+//
+// Hier steht sie einmal. Und sie steht so, dass eine **sechste** Achse nicht
+// stillschweigend an ihr vorbeikommt: Die Tabelle darunter ist über
+// `PoolRuleAxes` abgebildet und verlangt zu jedem Feld einen Eintrag.
+// ---------------------------------------------------------------------------
+
+/**
+ * Zu jeder Achse: Wie viele Bedingungen nennt sie?
+ *
+ * Zwei Bauformen, und das ist der ganze Bestand — eine Liste, deren
+ * Neutralwert leer ist, und eine Dreiwahl, deren Neutralwert `any` heißt. Der
+ * Rückgabewert ist eine **Anzahl** und kein Wahrheitswert, weil die Oberfläche
+ * „3 Bedingungen" schreibt und nicht „Bedingungen: ja".
+ *
+ * Das `-?` in der Abbildung ist kein Zierrat: Ohne es würde eine neu
+ * hinzugefügte, freiwillige Achse hier stillschweigend fehlen dürfen.
+ */
+const POOL_RULE_AXIS_CONDITIONS: {
+  readonly [K in PoolRuleAxisId]-?: (axes: PoolRuleAxes) => number;
+} = {
+  rule: (axes) => axes.rule.length,
+  excludedTags: (axes) => axes.excludedTags.length,
+  statusIds: (axes) => axes.statusIds.length,
+  completion: (axes) => (axes.completion === 'any' ? 0 : 1),
+  exportState: (axes) => (axes.exportState === 'any' ? 0 : 1),
+};
+
+/**
+ * Die Achsen in Leserichtung: erforderlich, ausgeschlossen, Status, Erledigt,
+ * Exportstatus. Dieselbe Folge wie im Formular und in der Zusammenfassung.
+ *
+ * Abgeleitet und nicht abgeschrieben: Wer eine Achse ergänzt, ergänzt sie in
+ * der Tabelle darüber, und diese Liste weiß sofort davon.
+ */
+export const POOL_RULE_AXIS_IDS = Object.keys(
+  POOL_RULE_AXIS_CONDITIONS,
+) as readonly PoolRuleAxisId[];
+
+/**
+ * Zu jedem Feld der **aufgelösten** Regelseite die Achse, die es füllt.
+ *
+ * Kein Datenbestand, sondern eine Behauptung an den Übersetzer, und sie schaut
+ * in die Richtung, die die Tabelle darüber nicht abdeckt: Wer
+ * {@link MatchesPoolRule} ein Feld hinzufügt — und das muss er, damit eine
+ * neue Achse überhaupt wirkt —, bekommt hier einen Fehler, bis er sagt, zu
+ * welcher Achse es gehört. Und Achsen gibt es nur die in {@link PoolRuleAxes};
+ * damit wird die Tabelle darüber im selben Zug rot.
+ *
+ * `matchMode` steht ausdrücklich **nicht** darin. Er ist keine Achse, sondern
+ * sagt, wie **eine** Achse verknüpft ist; eine Regel, die nur ihn setzt, nennt
+ * keine Bedingung. Wer ihn hier vermisst, hat die Unterscheidung gefunden, um
+ * die es geht.
+ *
+ * Gelesen wird die Zuordnung außerhalb der Domäne: `proof:openapi` hält sie
+ * gegen die Schnittstellenbeschreibung und gegen die Eingabeprüfung der
+ * Routen — jede Achse muss beschrieben, annehmbar und ausgeliefert sein.
+ */
+export const POOL_RULE_AXIS_OF_FIELD: {
+  readonly [K in Exclude<keyof MatchesPoolRule, 'matchMode'>]-?: PoolRuleAxisId;
+} = {
+  ruleTagIds: 'rule',
+  excludedTagIds: 'excludedTags',
+  ruleStatusIds: 'statusIds',
+  completion: 'completion',
+  exportState: 'exportState',
+};
+
+/**
+ * Wie viele Bedingungen nennt diese Regel? (A-3.4, T-080)
+ *
+ * Null heißt: keine einzige. Die Regel trifft dann **nichts** — nicht alles.
+ *
+ * Die Zahl zählt, was die Regel **nennt**, nicht wie viel dabei herauskommt:
+ * Ein Ordnerterm ist eine Bedingung, auch wenn in dem Ordner kein Tag liegt.
+ * Ob nach dem Auflösen noch etwas übrig ist, beantwortet
+ * {@link PoolResolution}; die beiden Antworten sind verschieden, und beide
+ * werden gebraucht.
+ */
+export const countPoolRuleConditions = (axes: PoolRuleAxes): number =>
+  Object.values(POOL_RULE_AXIS_CONDITIONS).reduce((sum, count) => sum + count(axes), 0);
+
+/**
+ * Nennt diese Regel keine einzige Bedingung? (A-3.4, E-055, T-080)
+ *
+ * Die eine Frage, die dieser Bestand achtmal an verschiedenen Stellen
+ * beantwortet hatte. Sie steht jetzt hier, und alle stellen sie: die
+ * Zugehörigkeitsregel darunter, die Übersetzung nach SQL, der Dienst beim
+ * Ausliefern einer Regel und die Oberfläche — für den gespeicherten Pool
+ * genauso wie für den Entwurf im Formular, den noch keine Route gesehen hat.
+ *
+ * **Was sie nicht ist.** Kein Fehler und keine Abweisung: Eine Regel ohne
+ * Bedingung ist der Zustand unmittelbar nach dem Anlegen und ausdrücklich
+ * zulässig (E-055). Sie bleibt nur leer, bis eine Bedingung dazukommt — und
+ * genau das soll die Oberfläche sagen können, statt „keine Karte trifft diese
+ * Regel" zu schreiben.
+ */
+export const poolRuleIsEmpty = (axes: PoolRuleAxes): boolean =>
+  countPoolRuleConditions(axes) === 0;
+
+/**
+ * Was eine Regel nach dem Auflösen ihrer Ordner ergibt (T-080).
+ *
+ * Der Unterschied zu {@link poolRuleIsEmpty} ist der Ordner, in dem kein Tag
+ * liegt: Er ist eine genannte Bedingung und trotzdem keine wirksame. In
+ * `matchesPool` verschwindet er spurlos — eine leere Tagmenge ist der
+ * Neutralwert und wird übersprungen —, und eine Regel „Tags aus diesem Ordner
+ * **und** Status offen" schrumpft damit still auf „Status offen". Sichtbar
+ * wird das nur, wenn jemand die Zahl mitliefert; deshalb steht sie an jeder
+ * ausgelieferten Regel.
+ */
+export const resolvePool: ResolvePool = ({ axes, ruleTagIds, excludedTagIds }) => ({
+  tagCount: ruleTagIds.length,
+  excludedTagCount: excludedTagIds.length,
+  isEmpty: poolRuleIsEmpty({
+    // Dieselben fünf Achsen, nur die beiden Taglisten in ihrer aufgelösten
+    // Gestalt. Genau so urteilen `matchesPool` und die Abfrage in SQL.
+    rule: ruleTagIds,
+    excludedTags: excludedTagIds,
+    statusIds: axes.statusIds,
+    completion: axes.completion,
+    exportState: axes.exportState,
+  }),
+});
+
 /**
  * Gehört ein Todo in diesen Pool? (A-3.2, A-3.4, T-076)
  *
@@ -540,10 +806,20 @@ export const matchesPool: MatchesPool = ({
   const wantedExport = exportState ?? 'any';
 
   // Alle Achsen neutral: Die Regel ist nicht eingerichtet und trifft nichts.
+  //
+  // Die Bedingung stand bis T-080 hier ausgeschrieben — und noch einmal in der
+  // Übersetzung nach SQL und ein drittes Mal in der Oberfläche. Jetzt steht sie
+  // in `poolRuleIsEmpty`, und dieser Aufruf ist zugleich die Stelle, die rot
+  // wird, wenn eine sechste Achse dazukommt: Das Literal muss jede Achse
+  // nennen.
   if (
-    ruleTagIds.length + excluded.length + statuses.length === 0 &&
-    wantedCompletion === 'any' &&
-    wantedExport === 'any'
+    poolRuleIsEmpty({
+      rule: ruleTagIds,
+      excludedTags: excluded,
+      statusIds: statuses,
+      completion: wantedCompletion,
+      exportState: wantedExport,
+    })
   ) {
     return false;
   }

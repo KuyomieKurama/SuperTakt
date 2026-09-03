@@ -913,7 +913,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Pool' } }
+                  data: { type: array, items: { $ref: '#/components/schemas/PoolWithResolution' } }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -954,7 +954,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/Pool' }
+                  data: { $ref: '#/components/schemas/PoolWithResolution' }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -990,7 +990,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/Pool' }
+                  data: { $ref: '#/components/schemas/PoolWithResolution' }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3544,6 +3544,17 @@ components:
         Ein Statusfeld macht die Spalte **nicht** wieder zum Status (E-054):
         Sie kann mehrere Status umfassen, keinen, oder Status und Tags
         mischen, und dieselbe Karte kann weiterhin in mehreren Spalten stehen.
+
+        **Ob eine Regel eine Bedingung nennt, steht in diesen Feldern** und
+        wird nicht als eigenes Feld mitgeliefert: `poolRuleIsEmpty` in
+        `@takt/domain` beantwortet es aus genau den fünf Achsen der Tabelle
+        oben. Dieselbe Funktion benutzt der Dienst, die Übersetzung nach SQL
+        und die Oberfläche — auch für einen Entwurf, den noch keine Route
+        gesehen hat (T-080).
+
+        **Was der Aufrufer nicht selbst ausrechnen kann**, ist die Auflösung
+        der Ordner. Sie steht in `PoolWithResolution`, und die Antworten, die
+        eine Regel anzeigen, liefern genau diese Gestalt.
       required: [id, name, matchMode, includeSubfolders, placement, position, rule, excludedTags, statusIds, completion, exportState, createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
@@ -3597,6 +3608,72 @@ components:
         exportState: { $ref: '#/components/schemas/PoolExportFilter' }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    PoolResolution:
+      type: object
+      description: |
+        Was eine Regel **nach dem Auflösen** ihrer Ordner ergibt (T-080).
+
+        Ein Ordnerterm steht für die Tags in diesem Ordner — mit
+        `includeSubfolders` auch für die seiner Unterordner, beliebig tief. Wie
+        viele das sind, weiß nur der Dienst; er steigt dafür über den
+        Ordnerbaum ab.
+
+        **Wozu die Zahlen da sind.** Eine Regel, die einen Ordner nennt, in dem
+        kein Tag liegt, sieht in jeder Ansicht aus wie eine Regel, auf die
+        gerade nichts passt. Das sind zwei verschiedene Zustände: Der eine löst
+        sich auf, sobald jemand ein passendes Todo anlegt, der andere nie. Nur
+        der zweite ist ein Einrichtungsfehler, und nur mit diesen Zahlen lässt
+        er sich benennen.
+
+        **Der Fall, der still ist.** `tagCount: 0` bei nicht leerem `rule`
+        heißt: Diese Achse schränkt nicht mehr ein. Eine Regel „Tags aus diesem
+        Ordner **und** Status offen" ist damit faktisch „Status offen" — sie
+        trifft **mehr** als beabsichtigt, nicht weniger.
+
+        **Nicht enthalten: ob die Regel eine Bedingung nennt.** Diese Frage
+        beantwortet `poolRuleIsEmpty` in `@takt/domain`, und zwar für jeden, der
+        die Felder in der Hand hat — auch für einen Entwurf im Formular, den
+        noch keine Route gesehen hat. Ein zweites Feld dafür wäre eine zweite
+        Antwort auf dieselbe Frage.
+      required: [tagCount, excludedTagCount, isEmpty]
+      properties:
+        tagCount:
+          type: integer
+          minimum: 0
+          description: |
+            Wie viele Tags die **erforderliche** Liste (`rule`) ergibt,
+            Unterordner eingerechnet. `0` bei nicht leerem `rule` heißt: Die
+            genannten Ordner enthalten kein Tag.
+        excludedTagCount:
+          type: integer
+          minimum: 0
+          description: Dasselbe für die **ausgeschlossene** Liste (`excludedTags`).
+        isEmpty:
+          type: boolean
+          description: |
+            Bleibt nach dem Auflösen **keine** Bedingung übrig? Dann trifft die
+            Regel nichts, und die Mitgliederabfrage liefert nichts — dieselbe
+            Entscheidung wie in `matchesPool` und in der Übersetzung nach SQL.
+
+            Nicht dasselbe wie „nennt keine Bedingung": Eine Regel, die einen
+            leeren Ordner nennt, nennt eine Bedingung und ist hier trotzdem
+            `true`.
+
+    PoolWithResolution:
+      description: |
+        Eine Regel samt ihrer Auflösung (T-080).
+
+        Dasselbe wie `Pool`, mit einem zusätzlichen Feld. Es steht an jeder
+        Antwort, die eine Regel **anzeigt** — Liste, Board, Anlegen, Ändern —,
+        und nicht an `/addin/context`: Der Aufgabenbereich nennt Pools beim
+        Namen, er zeichnet keinen Leerzustand.
+      allOf:
+        - $ref: '#/components/schemas/Pool'
+        - type: object
+          required: [resolved]
+          properties:
+            resolved: { $ref: '#/components/schemas/PoolResolution' }
 
     PoolPlacement:
       type: string
@@ -3730,7 +3807,7 @@ components:
         eine Karte hier steht, ohne sie nachzuladen.
       required: [column, todos, nextCursor, total]
       properties:
-        column: { $ref: '#/components/schemas/Pool' }
+        column: { $ref: '#/components/schemas/PoolWithResolution' }
         todos:
           type: array
           items: { $ref: '#/components/schemas/Todo' }

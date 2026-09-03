@@ -129,6 +129,15 @@ export const STATUS_COLOR = '#3f7fbf';
  *                   abgerechnet").
  *   `exported`    — Todos mit exportierter Buchung. Beide zugleich sind
  *                   möglich, und das ist der Punkt.
+ *
+ * Und der Fall, den man von außen nicht von einer treffelosen Regel
+ * unterscheiden kann, solange die Auflösung nicht mitkommt (T-080):
+ *
+ *   `emptyFolder` — Regel über einen Ordner, in dem **kein Tag** liegt. Sie
+ *                   nennt eine Bedingung und trifft trotzdem nichts:
+ *                   `resolved.tagCount` ist 0, `resolved.isEmpty` ist wahr.
+ *                   Abschnitt 13 misst daran, dass die Zahl ankommt und dass
+ *                   die Spalte leer ist.
  */
 export const BOARD_COLUMNS = Object.freeze({
   tag: 'Spalte über ein Tag',
@@ -142,6 +151,7 @@ export const BOARD_COLUMNS = Object.freeze({
   done: 'Spalte nur über Erledigt',
   openWork: 'Spalte über offene Buchungen',
   exported: 'Spalte über exportierte Buchungen',
+  emptyFolder: 'Spalte über einen leeren Ordner',
 });
 
 /**
@@ -501,6 +511,18 @@ export async function runScenario() {
       position: 31,
       rule: [],
       exportState: 'exported',
+    });
+
+    // Ein Ordner, in dem kein Tag liegt — und eine Spalte, die ihn nennt
+    // (T-080). Von außen sieht sie aus wie jede andere Regel; erst
+    // `resolved.tagCount` sagt, dass ihre einzige Bedingung ins Leere zeigt.
+    const barrenFolder = await quiet('POST', '/tag-folders', { name: 'Ordner ohne Tags' });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.emptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 32,
+      rule: [{ kind: 'folder', folderId: barrenFolder.body.data.id }],
     });
 
     await record('getBoard', 'GET', '/board', '/board');

@@ -17,6 +17,19 @@ ausdrücklicher Richtigstellung des Auftraggebers während T-016 **nicht** um �
 Das ist ein möglicher Widerspruch zu `decisions.md`, der dort von der zuständigen Stelle zu
 klären ist; dieser Testplan kann `decisions.md` nicht selbst berichtigen.
 
+**Nachtrag T-081 — Abschnitt 8 ist durch E-054/E-055 abgelöst, nicht nur ergänzt.** Seit E-054
+ist eine Kanban-Spalte eine **Regel über Tags**, dieselbe Entität wie ein Pool; Ziehen zwischen
+Spalten (A-5.2, I-14) gibt es nicht mehr, ebenso wenig die „Statusspalten"-Verwaltung, die
+Abschnitt 8 in der bis T-080 gültigen Fassung beschrieb. Seit E-055 ist die Regel eine Struktur
+mit fünf benannten Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt,
+Exportstatus) statt einer Liste von Termen. Abschnitt 8 ist deshalb vollständig neu geschrieben,
+nicht ergänzt — die vorherige Fassung prüfte eine Bedienung, die es nicht mehr gibt (Bericht
+`T-081-e2e-tester.md`). Die Korrektur aus T-016 in Abschnitt 5 („Erledigt ist unabhängig von der
+Kanban-Spalte") gilt fachlich fort, aber nur für eine Spalte, die zur Achse „Erledigt" neutral
+steht; für eine Spalte, die auf „Erledigt" oder „Unerledigt" filtert, ist das Gegenteil richtig
+und beabsichtigt (E-054, Abschnitt 8, TP-KANBAN-04) — das ist die einzige Art, wie eine Karte
+heute noch ohne Tag-Änderung die Spalte wechselt.
+
 **Begriffe.** Seit E-016 heißen die beiden Notizfelder in der Oberfläche, in diesem Dokument und
 im Review **Vermerk** (am Todo, ausschließlich intern, A-7.2) und **Leistung** (an der Buchung,
 geht in den Export, A-7.4). Der JSON-Schlüssel im Export bleibt `Notiz` (A-8.2) — das betrifft
@@ -604,9 +617,18 @@ konfigurierte Rückkehr-Spalte. Alle Rückkehr-Spalten-Zusicherungen sind unten 
 Stattdessen gilt: **A-2.5 löst sich ausschließlich über Sichtbarkeit.** Pools sind
 tag-abgeleitet (A-3.4); ein erledigtes Todo wird darin ausgeblendet. Hebt der Timerstart das
 Kennzeichen „Erledigt" auf, erscheint das Todo wieder im Pool — die Kanban-Spalte, in der es
-liegt, ändert sich dabei **nicht**. Neue Fälle `TP-KANBAN-05` und `TP-KANBAN-06` (Abschnitt 8)
-prüfen diese Unabhängigkeit ausdrücklich, weil sie die Stelle ist, an der eine Umsetzung gern
-eigenmächtig verschiebt.
+liegt, ändert sich dabei **nicht**.
+
+**Nachtrag T-081, seit E-054/E-055 zu ergänzen statt zu widerrufen.** Die vorstehende Aussage
+gilt unverändert für jede Spalte, deren Achse „Erledigt" auf ihrem Neutralwert „Alle" steht — das
+ist der Normalfall, und `TP-TIMER-04` bis `TP-TIMER-06` unten prüfen genau diesen. Seit eine
+Regel die Achse „Erledigt" ausdrücklich auf „Erledigt" oder „Unerledigt" stellen kann (E-055),
+gibt es die eine Ausnahme, für die das Gegenteil beabsichtigt ist: Eine solche Spalte **soll**
+die Karte verlieren bzw. bekommen, sobald der Timerstart das Kennzeichen aufhebt — sonst wäre die
+Achse wirkungslos. Das prüft `TP-KANBAN-04` (Abschnitt 8), nicht diese Fälle hier. Die früheren
+`TP-KANBAN-05`/`TP-KANBAN-06` aus T-016 sind mit dieser Überarbeitung in `TP-KANBAN-04`
+aufgegangen — sie beschrieben ein manuelles Verschieben zwischen Spalten, das es seit E-054 nicht
+mehr gibt (siehe Abschnitt 8).
 
 ### TP-TIMER-01 — Domänenregel: Start auf erledigtem Todo
 **Anforderungen:** A-2.5, A-3.4
@@ -617,7 +639,8 @@ notwendigerweise einer Abschlussspalte (siehe Korrektur oben: die beiden Zustän
 **Erwartetes Ergebnis:** Todo-Status wechselt zu „aktiv", Timer läuft. Die Tags des Todos bleiben
 unverändert — die Rückkehr in den Pool ergibt sich allein daraus, dass die abgeleitete
 Pool-Zugehörigkeit (A-3.4) das Todo nicht mehr als „erledigt" ausfiltert. Die Kanban-Spalte des
-Todos bleibt ebenfalls unverändert (Querverweis `TP-KANBAN-06`).
+Todos bleibt ebenfalls unverändert, sofern ihre Achse „Erledigt" neutral steht (Querverweis
+`TP-KANBAN-04`, Abschnitt 8, für die Spalte, die das ausdrücklich nicht tut).
 
 ### TP-TIMER-02 — Pool-Sichtbarkeit nach Wiederbelebung
 **Anforderungen:** A-2.5, A-3.2, A-3.4
@@ -802,95 +825,123 @@ Voraussetzung dafür, dass TP-DTAG-01 und TP-DTAG-02 dasselbe Ergebnis liefern k
 
 ---
 
-## 8. Kanban (A-5.1 bis A-5.6)
+## 8. Kanban (A-5.1, A-5.3 bis A-5.6, E-054, E-055)
 
-### TP-KANBAN-01 — Drag & Drop zwischen Spalten
-**Anforderungen:** A-5.2, A-5.3, I-14, S-04
-**Ebene:** End-to-End
-**Vorbedingung:** Kanban-Board mit Standardspalten (z. B. Backlog, In Progress, Waiting, Done),
-mindestens eine Karte in „Backlog".
-**Schritte:** Karte per Drag & Drop von „Backlog" nach „In Progress" ziehen. Seite neu laden.
-**Erwartetes Ergebnis:** Karte liegt nach dem Ziehen sofort in „In Progress" und bleibt es nach
-Neuladen — der Statuswechsel ist persistent, nicht nur visuell im Client.
+**Vollständig neu geschrieben in T-081.** Bis T-080 beschrieb dieser Abschnitt ein Kanban-Board,
+das es seit E-054 nicht mehr gibt: feste Statusspalten, Karten per Drag & Drop verschoben,
+Spalten in einem Dialog „Statusspalten" verwaltet. **A-5.2 und I-14 sind aufgehoben** — eine Regel
+lässt sich nicht durch Verschieben umkehren, ohne dass die Anwendung selbst Tags setzt, und genau
+das hat der Auftraggeber ausgeschlossen (`decisions.md`, E-054). Die frühere Fassung dieses
+Abschnitts prüfte diese Bedienung trotzdem weiter — ein Testfall, der grün blieb, obwohl er nichts
+mehr maß, das schlimmere Ergebnis als gar kein Test (Bericht `T-081-e2e-tester.md`).
 
-### TP-KANBAN-02 — Statusspalten umkonfigurieren
-**Anforderungen:** A-5.4
-**Ebene:** End-to-End
-**Vorbedingung:** Board wie in TP-KANBAN-01. **Annahme, zu bestätigen mit T-005:** Die
-Spezifikation weist die Konfiguration der Kanban-Spalten keinem der vierzehn benannten Screens
-eindeutig zu. Dieser Test geht davon aus, dass sie entweder Teil der Einstellungen (S-09) oder
-eines Bearbeitungsdialogs auf dem Board selbst (S-04) ist; der tatsächliche Ort ist mit dem
-spec-ux-reviewer zu klären.
+**Was seit E-054/E-055 gilt.** Eine Kanban-Spalte ist eine **Regel über Tags**, dieselbe Entität
+wie ein Pool (A-3.2, A-3.4); `placement` sagt, ob eine Regel im Pool-Bereich, auf dem Board oder
+an beiden Stellen erscheint. Seit E-055 ist die Regel eine Struktur mit fünf benannten Achsen,
+nicht eine Liste von Termen:
+
+| Achse | Wirkung | Neutralwert |
+|---|---|---|
+| Erforderliche Tags | alle bzw. mindestens eines müssen vorhanden sein (`matchMode`) | keiner genannt |
+| Ausgeschlossene Tags | keiner davon darf vorhanden sein | keiner genannt |
+| Status | einer der genannten Statuswerte | „Alle" |
+| Erledigt | nur erledigte / nur unerledigte | „Alle" |
+| Exportstatus | mindestens eine offene / mindestens eine exportierte Buchung | „Alle" |
+
+Zwischen den Achsen gilt „und"; eine Regel, in der jede Achse neutral steht, trifft **nichts**,
+nicht alles (A-3.4) — das ist der Zustand unmittelbar nach dem Anlegen einer Spalte. Daraus folgt,
+was diese vier Testfälle prüfen: Zugehörigkeit ist eine berechnete Antwort auf eine Regel, keine
+gespeicherte Position, und die Oberfläche muss das an drei Stellen ehrlich zeigen — eine Karte kann
+in mehreren Spalten zugleich stehen, eine Spalte ohne Bedingung ist etwas anderes als eine Spalte
+mit Bedingung ohne Treffer, und der einzige noch verbliebene Weg, wie eine Karte ohne
+Tag-Änderung die Spalte wechselt, ist ein Timerstart, der „Erledigt" aufhebt.
+
+### TP-KANBAN-01 — Zugehörigkeit folgt der Regel, nicht der Ablage
+**Anforderungen:** A-3.4, A-5.1, A-5.3, E-054, E-055
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein Tag existiert; ein Todo existiert, trägt dieses Tag zunächst **nicht**.
 **Schritte:**
-1. Eine Spalte umbenennen.
-2. Eine neue Spalte hinzufügen.
-3. Eine Spalte mit Karten löschen bzw. mit einer anderen zusammenführen.
-4. Spaltenreihenfolge ändern.
-**Erwartetes Ergebnis:** Board übernimmt die neue Konfiguration. Für Schritt 3 gilt: keine Karte
-geht verloren; die Anwendung bietet eine nachvollziehbare, nicht destruktive Lösung (z. B.
-Zuordnung zu einer Standardspalte). Das genaue Verhalten ist in der Spezifikation nicht
-festgelegt und wird bei Umsetzung präzisiert; der Test prüft in jedem Fall „keine Karte verloren",
-nicht ein bestimmtes Zielverhalten.
+1. Über die Oberfläche eine Board-Spalte anlegen, deren einzige Bedingung das Tag verlangt
+   („Spalten verwalten" → „Neue Spalte anlegen" → Regelformular, nicht über die API).
+2. Board betrachten: Spalte vorhanden, Karte fehlt, Leerzustand nennt eine gestellte, aber
+   unerfüllte Bedingung.
+3. Über die Todo-Liste (Menü „Bearbeiten") das Tag am Todo ergänzen und speichern.
+4. Board erneut betrachten.
+5. Über dieselbe Bedienung das Tag wieder entfernen und speichern.
+6. Board ein drittes Mal betrachten.
+**Erwartetes Ergebnis:** Nach Schritt 2 zeigt die Spalte „Keine Karte trifft diese Regel" (nicht
+„keine Bedingung"). Nach Schritt 4 steht die Karte in der Spalte, ohne dass irgendetwas an der
+Regel selbst geändert wurde. Nach Schritt 6 ist sie wieder verschwunden, und der ursprüngliche
+Leerzustand steht wieder da. Jede Änderung, die Zugehörigkeit herstellt oder aufhebt, geschieht an
+den **Tags des Todos**, nie an der Spalte — die Falle, die dieser Auftrag ausdrücklich benennt,
+ist ein Testaufbau, der Spalten an der Datenbank vorbei anlegt; dieser Fall tut es nicht.
 
-**Ausführungsstand (T-052).** Schritte 2 (anlegen), 3 (löschen ohne Karten) und 4 (Reihenfolge)
-sind gelaufen und bestanden, über die Oberfläche und mit Nachschau am Board selbst — siehe
-`tests/e2e/kanban.spec.ts`. **Schritt 1 (umbenennen) ist strukturell nicht prüfbar:**
-`StatusColumnsDialog` (`apps/web/src/screens/BoardScreen.tsx`) bietet dafür keine Bedienung —
-`column-row__name` ist eine reine `<span>`, `updateTodoStatus` wird dort ausschließlich mit
-`{ isDefault: true }` aufgerufen, nie mit `{ name }`. Das ist eine Lücke in der Umsetzung, keine
-im Testfall; ein e2e-Test kann eine Bedienung nicht ausführen, die es nicht gibt. Schritt 3
-(„mit einer anderen zusammenführen" bzw. Löschen einer Spalte **mit** Karten) ist ebenfalls noch
-offen — der gelaufene Fall deckt nur eine leere Spalte ab.
-
-### TP-KANBAN-03 — Todo direkt vom Board aus öffnen und bearbeiten
-**Anforderungen:** A-5.5
-**Ebene:** End-to-End
-**Vorbedingung:** Board mit mindestens einer Karte.
-**Schritte:** Karte anklicken/öffnen, Titel ändern, speichern.
-**Erwartetes Ergebnis:** Detailansicht öffnet sich aus dem Board heraus, Änderung wird
-gespeichert und auf der Karte sofort sichtbar (z. B. neuer Titel).
-
-### TP-KANBAN-04 — Timer direkt von der Karte starten und stoppen
-**Anforderungen:** A-5.6, S-04
-**Ebene:** End-to-End
-**Vorbedingung:** Karte für ein aktives Todo ohne laufenden Timer.
-**Schritte:** Timer über einen Bedienelement auf der Karte selbst starten, danach stoppen —
-ohne die Karte bzw. die Detailansicht zu öffnen.
-**Erwartetes Ergebnis:** Karte zeigt während der Laufzeit einen aktiven Timer-Indikator. Nach
-dem Stoppen entsteht eine Zeitbuchung mit plausibler Dauer, Indikator verschwindet. Querverweis:
-TP-TIMER-05 für den Sonderfall „Karte eines erledigten Todos".
-
-### TP-KANBAN-05 — Erledigt und Kanban-Spalte sind unabhängige Zustände (Auftraggeber-Klarstellung, neu in T-016)
-**Anforderungen:** A-2.4, A-2.5, A-5.3, I-05
-**Ebene:** End-to-End
-**Vorbedingung:** Kanban-Board mit frei konfigurierten Spalten, darunter eine, die als
-Abschlussspalte im Sinne von A-5.3 gilt (z. B. „Done"). Zwei Todos A und B.
+### TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich
+**Anforderungen:** A-5.1, A-5.3, E-054
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Zwei Tags; ein Todo, das **beide** trägt.
 **Schritte:**
-1. Todo A in die Abschlussspalte verschieben, ohne es als erledigt zu markieren.
-2. Todo B als erledigt markieren, ohne seine Kanban-Spalte zu ändern (es bleibt z. B. in „In
-   Progress").
-3. Beide Zustände in der Oberfläche betrachten (Kanban-Karte und Detailansicht).
-**Erwartetes Ergebnis:** Todo A liegt in der Abschlussspalte, trägt aber **kein**
-„Erledigt"-Kennzeichen. Todo B trägt „Erledigt", liegt aber weiterhin in „In Progress", nicht
-automatisch in der Abschlussspalte. Beide Kombinationen sind gültige, gleichzeitig darstellbare
-Zustände — wörtlich vom Auftraggeber festgestellt: „Erledigt ist etwas eigenes. Die Kanban Phase
-sind selbst definierbar. Daher ist Kanban-Abschluss nicht gleich Erledigt." Kein Automatismus
-verknüpft die beiden Zustände in irgendeine Richtung.
+1. Über die Oberfläche zwei Board-Spalten anlegen, jede mit genau einem der beiden Tags als
+   einziger Bedingung.
+2. Board betrachten.
+3. Auf das Etikett „Steht auch in …" einer der beiden Kartenvorkommen klicken.
+4. Ein zweites Mal klicken.
+**Erwartetes Ergebnis:** Die Karte erscheint in **beiden** Spalten, jedes Vorkommen trägt das
+Etikett „Steht auch in …" mit dem Namen der jeweils anderen Spalte. Nach Schritt 3 tragen **beide**
+Vorkommen die Hervorhebung, und eine Anwendungsmeldung (Live-Region) nennt Titel und beide
+Spaltennamen. Nach Schritt 4 ist die Hervorhebung an beiden Vorkommen wieder weg. Das ist der Fall,
+der vor E-054 unmöglich war (bei einem Statuswert trug ein Todo genau einen) und den der
+unit-tester in T-077 bereits auf der SQL-Seite mit vier Karten über sechs Spalten gemessen hat; an
+dieser Stelle wird dieselbe Mehrfachnennung erstmals durch die Oberfläche gemessen.
 
-### TP-KANBAN-06 — Erledigt setzen und aufheben ändert die Kanban-Spalte nicht (neu in T-016)
-**Anforderungen:** A-2.4, A-2.5, A-5.2
-**Ebene:** End-to-End
-**Vorbedingung:** Ein Todo liegt in einer beliebigen, nicht als Abschlussspalte konfigurierten
-Spalte, z. B. „In Progress".
+### TP-KANBAN-03 — Eine Spalte ohne Bedingung ist kein „keine Treffer"
+**Anforderungen:** A-3.4, E-055
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Keine.
+**Schritte:** Über die Oberfläche eine Board-Spalte anlegen, ohne irgendeine der fünf Achsen zu
+belegen — nur der Name wird ausgefüllt. Anlegen bestätigen.
+**Erwartetes Ergebnis:** Anlegen ist möglich (seit T-079 nicht mehr gesperrt); die
+Erfolgsmeldung ist ausdrücklich ein Warnton und sagt, dass die Spalte „noch keine Bedingung"
+nennt. Unter dem Spaltenkopf steht „Ohne Bedingung — diese Spalte bleibt leer." Der Leerzustand in
+der Spalte selbst trägt ein Warndreieck, die Überschrift „Diese Spalte hat noch keine Bedingung"
+und den primären Knopf „Bedingung ergänzen" — **nicht** dieselbe Formulierung wie bei einer Spalte
+mit Bedingung, die nur zufällig gerade nichts trifft (TP-KANBAN-01, Schritt 2). Der Knopf
+„Bedingung ergänzen" öffnet tatsächlich das Regelformular dieser Spalte.
+
+### TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt" auf und ändert dadurch die Spaltenzugehörigkeit
+**Anforderungen:** A-2.5, A-5.6, E-054, E-055, I-05
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein Tag existiert; ein erledigtes Todo trägt es.
 **Schritte:**
-1. Todo als erledigt markieren, Kanban-Spalte notieren.
-2. Todo wieder aktivieren (Timer erneut starten, siehe `TP-TIMER-04`), Kanban-Spalte erneut
-   notieren.
-**Erwartetes Ergebnis:** Die Kanban-Spalte ist nach Schritt 1 und nach Schritt 2 identisch mit der
-Ausgangsspalte. Weder das Setzen noch das Aufheben von „Erledigt" verschiebt die Karte in eine
-andere Spalte — insbesondere nicht in eine Abschlussspalte beim Erledigen und nicht in eine
-vermeintliche Rückkehr-Spalte beim Wiederbeleben, denn eine solche existiert laut ausdrücklicher
-Richtigstellung des Auftraggebers nicht.
+1. Über die Oberfläche zwei Board-Spalten anlegen, beide mit demselben Tag als Bedingung, eine
+   zusätzlich mit der Achse „Erledigt" auf „Erledigt", die andere auf „Unerledigt".
+2. Board betrachten.
+3. Auf der Karte in der „Erledigt"-Spalte direkt den Timer starten — ohne die Detailansicht zu
+   öffnen.
+4. Board erneut betrachten.
+5. Timer über dieselbe Karte wieder stoppen.
+**Erwartetes Ergebnis:** Vor Schritt 3 steht die Karte ausschließlich in der „Erledigt"-Spalte,
+unabhängig vom Schalter „Erledigte einblenden" — eine Regel, die selbst etwas über „Erledigt"
+sagt, hat das letzte Wort (T-076). Der Klick auf den Timer-Knopf hebt „Erledigt" automatisch auf
+(A-2.5); danach steht dieselbe Karte in der „Unerledigt"-Spalte und **nicht mehr** in der
+„Erledigt"-Spalte, ohne dass irgendjemand ihre Tags oder eine Regel angefasst hat. Das ist der
+**einzige** Weg, auf dem eine Karte heute noch ohne Regel- oder Tag-Änderung die Spalte wechselt
+(siehe Abschnitt 5, Nachtrag T-081). Nach dem Stoppen entsteht eine Zeitbuchung mit plausibler
+Dauer. Dieser Fall schließt zugleich das frühere `TP-KANBAN-04` (Timer direkt von der Karte
+starten/stoppen, A-5.6) ein — eine Karte ohne jede reale Spalte konnte diese Bedienung gar nicht
+sinnvoll prüfen, siehe Vorbedingung oben.
+
+**Aufgegangen in TP-KANBAN-04, nicht mehr eigenständig geführt:** die früheren `TP-KANBAN-05` und
+`TP-KANBAN-06` aus T-016 („Erledigt und Kanban-Spalte sind unabhängige Zustände"). Beide setzten
+ein manuelles Verschieben zwischen Spalten voraus, das es seit E-054 nicht mehr gibt; ihre
+fachliche Aussage — eine Spalte, die zur Achse „Erledigt" neutral steht, ändert sich durch Setzen
+oder Aufheben von „Erledigt" nicht — ist weiterhin durch `TP-TIMER-04` bis `TP-TIMER-06`
+(Abschnitt 5) geprüft, die ausschließlich neutrale Spalten voraussetzen.
+
+**TP-KANBAN-05 — Todo direkt vom Board aus öffnen und bearbeiten** (vormals TP-KANBAN-03,
+A-5.5): durch E-054/E-055 unberührt — das Öffnen einer Karte zur Detailansicht ist keine
+Bedienung, die sich an der Spaltendefinition ändert. **Noch nicht als eigene Datei unter
+`tests/e2e/**` automatisiert** (weder vor noch nach T-081); nicht Gegenstand dieses Auftrags.
 
 ---
 
@@ -1474,7 +1525,7 @@ stillschweigend übersprungen. Alle Fälle in diesem Abschnitt sind Ebene **End-
 | TP-STATE-01 | S-01 Dashboard | Erststart ohne Daten | Kennzahlen werden aggregiert | Schnellaktionen auf Karten | laufender Timer prominent markiert | Kennzahl konnte nicht geladen werden | n/a auf dieser Ebene, siehe TP-TIMER-07 falls Timer-Stopp vom Dashboard aus möglich ist |
 | TP-STATE-02 | S-02 Todo-Liste | keine Todos / kein Treffer bei Filter | Liste lädt | Zeilen-Hover zeigt Aktionen | aktiver Filter-Chip erkennbar | Liste konnte nicht geladen werden | Massenaktion (z. B. mehrere als erledigt markieren), sofern vorhanden — in Spezifikation nicht ausdrücklich benannt, als Annahme markiert |
 | TP-STATE-03 | S-03 Todo-Detail | Todo ohne Zeitbuchungen zeigt Empty-Hinweis im Buchungsteil | Detaildaten laden | Bearbeiten-Icons bei Hover | „Erledigt"-Umschalter aktiv, Timer läuft | Speichern fehlgeschlagen | Todo löschen; Exportstatus einer Buchung zurücksetzen (TP-EXPST-06) |
-| TP-STATE-04 | S-04 Kanban | Spalte ohne Karten | Board lädt | Drop-Ziel wird beim Ziehen hervorgehoben | Karte wird gerade gezogen | Verschieben konnte nicht gespeichert werden | Spalte mit Karten löschen (TP-KANBAN-02) |
+| TP-STATE-04 | S-04 Kanban | zwei Leerzustände (T-081): „keine Bedingung" gegen „Bedingung ohne Treffer" (TP-KANBAN-03) | Board lädt | Kartenmenü/Spaltenmenü bei Hover — kein Ziehen mehr, siehe Abschnitt 8 | Timer läuft auf einer Karte (TP-KANBAN-04) | Regel konnte nicht gespeichert werden | Spalte vom Board nehmen (Regel bleibt als Pool erhalten, kein Karten-Verlust möglich — anders als bei einer Statusspalte gibt es hier nichts, das an der Spalte selbst hängt) |
 | TP-STATE-05 | S-05 Time-Tracking | keine Buchungen im gewählten Zeitraum | Buchungen laden | Zeilenaktionen bei Hover | laufender Timer prominent (A-13.4) | Timer konnte nicht gestartet/gestoppt werden | Timer wechseln (TP-TIMER-07), Buchung löschen |
 | TP-STATE-06 | S-06 Übersicht Zeitbuchungen | keine Buchungen / Filter ohne Treffer | Liste lädt | Zeilen-Hover | Filter aktiv, Status-Badges sichtbar | Liste konnte nicht geladen werden | Exportstatus zurücksetzen (TP-EXPST-06) |
 | TP-STATE-07 | S-07 Export-Ansicht | keine offenen Buchungen (TP-EXPORT-03) | Export läuft | Vorlagenauswahl bei Hover | ausgewählte Vorlage hervorgehoben | Ordner ungültig/schreibgeschützt (TP-EXPORT-04/05) | in der Spezifikation kein eigener Bestätigungsdialog für den Exportvorgang selbst vorgesehen — nur für das Zurücksetzen (Abschnitt 4); nicht erfunden |
@@ -1666,11 +1717,11 @@ kein Dialog ausgelöst.
 
 | Anforderung/Interaktion | Testfälle |
 |---|---|
-| A-2.5 (Wiederbelebung) | TP-TIMER-01, -02, -04, -05, -06; TP-KANBAN-05, -06 (Unabhängigkeit von der Kanban-Spalte) |
+| A-2.5 (Wiederbelebung) | TP-TIMER-01, -02, -04, -05, -06 (neutrale Spalte bleibt unverändert); TP-KANBAN-04 (Spalte, die auf „Erledigt" filtert, ändert sich absichtlich) |
 | A-2.6 (`callNumber`) | TP-EXPORT-01, TP-TPL-05, TP-ADDIN-01, -02 |
 | A-3.4 (Pool abgeleitet) | TP-TIMER-02, TP-TAG-04 |
 | A-4.1–A-4.6 (Tags/Ordner) | TP-TAG-01 bis TP-TAG-06 |
-| A-5.1–A-5.6 (Kanban) | TP-KANBAN-01 bis TP-KANBAN-06 |
+| A-5.1, A-5.3–A-5.6 (Kanban, E-054/E-055) | TP-KANBAN-01 bis TP-KANBAN-05 — **A-5.2 entfällt** (Drag & Drop, aufgehoben durch E-054) |
 | A-6.4–A-6.9 (Zeitbuchung/Exportstatus) | TP-EXPST-01 bis TP-EXPST-09 |
 | A-7.2/A-7.4 (Vermerk/Leistung-Trennung) | TP-NOTE-01 bis TP-NOTE-04 |
 | A-8.1–A-8.6, A-8.9 (Export) | TP-EXPORT-01 bis TP-EXPORT-10, TP-EXPORT-11 bis -17 (Gruppierung, Abschnitt 9a), TP-ROUND-*, TP-B64-* |
@@ -1699,7 +1750,7 @@ kein Dialog ausgelöst.
 | I-11 (Daten exportieren) | TP-EXPORT-01 bis TP-EXPORT-06 |
 | I-12 (Standard-Tags konfigurieren) | TP-DTAG-01, -03 |
 | I-13 (Pools konfigurieren) | TP-TAG-06 |
-| I-14 (Drag & Drop) | TP-KANBAN-01 |
+| I-14 (Drag & Drop) | **aufgehoben durch E-054** (T-081) — es gibt seit E-054 keine Bedienung mehr, die dies prüfen könnte; `TP-KANBAN-01` bedeutet seit T-081 etwas anderes (siehe Abschnitt 8) |
 | I-15 (Exportvorlage anlegen/prüfen) | TP-TPL-01 bis TP-TPL-04 |
 | S-01 bis S-14 (alle Screens) | je einmal explizit in Abschnitt 12 (TP-STATE-01 bis -14), zusätzlich in den fachlichen Abschnitten 0–11 |
 
@@ -1713,8 +1764,10 @@ kein Dialog ausgelöst.
 - Für die als „End-to-End" markierten Fälle existiert auf dem aktuellen Board keine eigene
   Aufgabe, die sie tatsächlich als Playwright-Dateien unter `tests/e2e/**` anlegt — das ist
   ausdrücklich nicht Teil von T-002. Diese Lücke gehört in die Wellenplanung (siehe Bericht).
-- TP-KANBAN-02 markiert eine Annahme zum Ort der Kanban-Spaltenkonfiguration, die mit T-005
-  abzugleichen ist.
+- **Aus T-081, erledigt:** Die frühere `TP-KANBAN-02` markierte eine Annahme zum Ort der
+  Kanban-Spaltenkonfiguration, die mit T-005 abzugleichen war. Der Ort steht seit T-072 fest
+  (Dialog „Spalten des Boards" auf S-04 selbst, `BoardScreen.tsx`); die Frage ist damit
+  gegenstandslos, und Abschnitt 8 ist vollständig neu geschrieben (E-054/E-055).
 - Mehrere Zellen in der Zustandstabelle (Abschnitt 12) markieren Ermessensentscheidungen, die
   nicht wörtlich aus der Spezifikation folgen (z. B. Bestätigungsdialoge, die dort nicht
   ausdrücklich verlangt sind). Diese sind bewusst sichtbar gemacht, nicht heimlich als Vorgabe

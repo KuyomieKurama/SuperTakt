@@ -957,7 +957,17 @@ beides in **einer** Bedingung können, und genau deshalb ist der Status ein eige
 und kein weiterer Termtyp.
 
 Bleibt keine einzige Bedingung übrig, steht `0 = 1` — die leere Regel trifft nichts (A-3.4).
-Dieselbe Entscheidung wie in `matchesPool`, und ihre Übereinstimmung wird gemessen (4.4a).
+**Ob das so ist, entscheidet seit T-080 die Domäne und nicht diese Übersetzung:**
+`buildConditions` ruft `poolRuleIsEmpty` mit den fünf Achsen auf, so wie sie hier vorliegen —
+die beiden Taglisten bereits aufgelöst. Die Bedingung stand vorher hier ausgeschrieben, ein
+zweites Mal in `matchesPool` und ein drittes Mal in der Oberfläche; ihre Übereinstimmung wird
+weiterhin gemessen (4.4a, `proof:openapi` Abschnitt 13).
+
+`axes.length === 0` steht daneben und nicht statt dessen. Es ist das Sicherheitsnetz für den
+Tag, an dem eine sechste Achse in der Domäne steht und in dieser Übersetzung noch nicht: Dann
+sagt die Domäne „schränkt ein", hier gäbe es keine einzige Bedingung, und `WHERE ()` wäre ein
+Syntaxfehler. Der Ausgang ist eine leere Spalte — falsch, aber sichtbar leer statt still zu
+weit.
 
 Gemessener Plan: `SEARCH pool_rule USING INDEX ux_pool_rule (pool_id=?)`,
 `SEARCH f USING INDEX ix_tag_folder_parent (parent_id=?)`,
@@ -1008,6 +1018,34 @@ gegen die Menge, die `matchesPool` auswählt, und wird rot, sobald sie sich unte
 Eine **leere Regel** trifft auch als Spalte nichts. Eine Spalte, die gerade eingerichtet wird,
 zeigt nichts statt alles — dieselbe Antwort wie beim Pool, und in der Abfrage dieselbe Zeile
 (`0 = 1` in `repo-todos.ts`).
+
+### 4.4b Zwei Arten von Leere, und warum die zweite über die Leitung muss (T-080)
+
+„Diese Spalte ist leer" hat zwei Ursachen, die sich für den Benutzer völlig verschieden anfühlen
+und in den Daten fast gleich aussehen:
+
+| | Woran man es erkennt | Wer es beheben kann |
+|---|---|---|
+| **Keine Bedingung genannt** | `poolRuleIsEmpty` über die fünf Achsen der Regel | nur der Benutzer, und zwar durch Ergänzen |
+| **Bedingung zeigt ins Leere** | `resolved.tagCount = 0` bei nicht leerem `rule` | nur der Benutzer, durch ein Tag im Ordner |
+| **Regel trifft gerade nichts** | keines von beidem, `total = 0` | löst sich mit dem nächsten passenden Todo |
+
+Die erste Zeile beantwortet jeder selbst: `poolRuleIsEmpty` aus `packages/domain` liest genau die
+Felder, die der Aufrufer ohnehin in der Hand hat. Sie ist deshalb **kein** Feld der Antwort — die
+Oberfläche braucht sie auch für den Entwurf im Formular, den noch keine Route gesehen hat, und
+ein Feld hätte nur den gespeicherten Stand beantwortet.
+
+Die zweite kann nur der Dienst beantworten; die Auflösung steigt über den Ordnerbaum ab
+(rekursive CTE, E-022). Sie steht deshalb als `resolved` an jeder ausgelieferten Regel:
+`tagCount`, `excludedTagCount` und `isEmpty`. Das Board zahlt dafür nichts — es löst jede Spalte
+für `boardAppearances` ohnehin einmal auf —, `GET /pools` zwei Abfragen je Regel, und `pool` hält
+eine Handvoll Zeilen.
+
+**Der Fall, der ohne diese Zahlen still bleibt.** Ein Ordner ohne Tags löst sich zur leeren
+Tagmenge auf, und eine leere Tagmenge ist der **Neutralwert** dieser Achse — `matchesPool`
+überspringt sie. Eine Regel „Tags aus diesem Ordner **und** Status offen" ist damit faktisch
+„Status offen": Sie trifft **mehr** als beabsichtigt, nicht weniger, und nichts an ihr sieht
+danach aus. `pnpm proof:openapi` Abschnitt 13 fährt genau diese Spalte an.
 
 ---
 

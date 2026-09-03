@@ -94,6 +94,8 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Verwaiste Buchung | `time-entry.ts` → `decideOrphanedTimer` | E-036 |
 | Zyklusprüfung beim Verschieben | `tag.ts` → `checkFolderMove` | A-4.6, E-022 |
 | Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `tag.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
+| Nennt eine Regel überhaupt eine Bedingung? | `tag.ts` → `poolRuleIsEmpty` | A-3.4, E-055, T-080 |
+| Was eine Regel nach dem Auflösen ergibt | `tag.ts` → `resolvePool` | T-080 |
 | Dieselbe Karte in mehreren Kanban-Spalten | `board.ts` → `boardAppearances` | E-054 |
 | Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
@@ -105,6 +107,30 @@ Trifft sie falsch, wird Arbeitszeit auf ein fremdes Todo gebucht und landet auf 
 Rechnung (R-15). Eine Regel, die über Geld entscheidet, existiert einmal und wird aufgerufen,
 statt nachgebaut zu werden. Bis T-019 stand sie zweimal — im Add-in als Bedienhilfe, im Dienst
 als Vertrauensgrenze — mit einem Wächter dagegen; E-045 hat das aufgelöst.
+
+**Die zweite und dritte Zeile sind mit T-080 dazugekommen, und der Grund ist derselbe.** „Ist
+diese Regel leer?" stand zu diesem Zeitpunkt dreimal da: in `matchesPool`, in der Übersetzung
+nach SQL (`repo-todos.ts`) und in `apps/web/src/lib/poolRule.ts`, wo der frontend-dev sie
+nachbilden musste, weil die Antwort über keine Route kam. Alle drei Fassungen waren richtig, und
+genau das war das Gefährliche: Solange sie übereinstimmen, merkt niemand, dass es drei sind.
+
+Jetzt stellt die Frage jeder an derselben Stelle. Die Oberfläche ruft `poolRuleIsEmpty`
+unmittelbar auf — auch für den **Entwurf** im Formular, den noch keine Route gesehen hat, und
+genau deshalb ist die Antwort **keine** Auskunft des Dienstes geworden: Ein Feld an der Antwort
+hätte den gespeicherten Pool beantwortet und den Entwurf nicht, und die Oberfläche hätte für den
+Entwurf doch wieder selbst gerechnet.
+
+Was der Aufrufer **nicht** selbst wissen kann, ist die Auflösung der Ordner. Sie steht deshalb
+als `resolved` an jeder ausgelieferten Regel (`PoolWithResolution`): zwei Zahlen und ein
+Wahrheitswert. Ohne sie sieht ein Ordner ohne Tags aus wie eine Regel, auf die im Augenblick
+nichts passt — und nur der erste Fall ist ein Einrichtungsfehler, der von selbst nie vergeht.
+
+**Wodurch das rot wird.** `PoolRuleAxes` zählt die Achsen auf, und die Tabelle darüber ist über
+diesen Typ abgebildet: Eine sechste Achse lässt `tsc` in der Domäne, in `packages/storage` und im
+Dienst fehlschlagen — gemessen, nicht behauptet. `POOL_RULE_AXIS_OF_FIELD` schließt die
+Gegenrichtung: Ein neues Feld an der Regelseite von `matchesPool` verlangt die Angabe, zu welcher
+Achse es gehört. Und `pnpm proof:openapi` Abschnitt 13 hält die Aufzählung der Domäne gegen die
+Beschreibung, gegen die Eingabeprüfung beider Routen und gegen die ausgelieferten Antworten.
 
 **Die eine Ausnahme von der Reinheit, und wie sie eingehegt ist.** `toCalendarDay` braucht eine
 Zeitzone, denn der Kalendertag einer Buchung ist der Tag an der Wand des Benutzers und nicht der
@@ -802,7 +828,7 @@ Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein 
 | `/tag-tree` | Ganzer Baum in einem Aufruf (A-10.4). Kein Aufruf je Ebene |
 | `/tags`, `/tag-folders` | |
 | `/tag-folders/{id}/move` | Eigene Route, weil eine fachliche Prüfung daran hängt und der Fehlerfall ein eigener ist (A-4.6) |
-| `/pools`, `/pools/{id}/todos` | Mitglieder abgeleitet (A-3.4). Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**: `placement` (`pool`/`board`/`both`) sagt, wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an; `GET /pools` liefert ohne Angabe die Pool-Liste |
+| `/pools`, `/pools/{id}/todos` | Mitglieder abgeleitet (A-3.4). Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**: `placement` (`pool`/`board`/`both`) sagt, wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an; `GET /pools` liefert ohne Angabe die Pool-Liste. Jede ausgelieferte Regel trägt seit T-080 ihre Auflösung (`resolved`) |
 | `/board` | Das Kanban-Board, nur lesend (E-054). Die Spalten in ihrer Reihenfolge, je Spalte die erste Seite, und die Karten, die in **mehr als einer** Spalte stehen. Kein `PUT`, das eine Karte verschiebt: Ziehen ist mit E-054 entfallen, weil sich eine Regel nicht durch Verschieben umkehren lässt, ohne Tags zu setzen. Weiter geblättert wird je Spalte über `/pools/{id}/todos` — eine Spalte ist ein Pool |
 | `/todo-statuses`, `/todo-statuses/order` | Der **Status** eines Todos, seit E-054 nicht mehr die Kanban-Spalte. Reihenfolge vollständig, nicht in Teilstücken |
 | `/time-entries` | |

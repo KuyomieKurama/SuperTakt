@@ -50,7 +50,7 @@ import type {
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
-import { err, ok, taktError } from '@takt/domain';
+import { err, ok, poolRuleIsEmpty, taktError } from '@takt/domain';
 
 import { chunk, integer, placeholders, text, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
@@ -180,10 +180,32 @@ function buildConditions(
         );
       }
 
-      if (axes.length === 0) {
-        // Eine Regel, deren Achsen alle neutral stehen, trifft nichts — dieselbe
-        // Entscheidung wie `matchesPool` in tag.ts, und aus demselben Grund.
-        // `0 = 1` hält die Vereinigung formal richtig, ohne zu treffen.
+      /**
+       * Eine Regel, deren Achsen alle neutral stehen, trifft nichts — und ob
+       * das so ist, entscheidet seit T-080 die **Domäne** und nicht diese
+       * Datei. `0 = 1` hält die Vereinigung formal richtig, ohne zu treffen.
+       *
+       * Die Taglisten gehen **aufgelöst** hinein, so wie sie hier vorliegen:
+       * Ein Ordner ohne Tags ergibt die leere Menge, und dann schränkt diese
+       * Achse in der Abfrage genauso wenig ein wie in `matchesPool`.
+       *
+       * `axes.length === 0` steht daneben und nicht statt dessen. Es ist das
+       * Sicherheitsnetz für den Tag, an dem eine sechste Achse in der Domäne
+       * steht und in dieser Übersetzung noch nicht: Dann sagt die Domäne
+       * „schränkt ein", hier gäbe es aber keine einzige Bedingung, und
+       * `WHERE ()` wäre ein Syntaxfehler. Der Ausgang ist dann eine leere
+       * Spalte — falsch, aber sichtbar leer statt still zu weit.
+       */
+      if (
+        poolRuleIsEmpty({
+          rule: pool.tagIds,
+          excludedTags: pool.excludedTagIds,
+          statusIds: pool.statusIds,
+          completion: pool.completion,
+          exportState: pool.exportState,
+        }) ||
+        axes.length === 0
+      ) {
         parts.push('0 = 1');
         continue;
       }

@@ -1,297 +1,350 @@
 /**
- * Kanban (A-5.1 bis A-5.6, TP-KANBAN-01/02/04, docs/testplan.md Abschnitt 8).
+ * Kanban — Spalten sind Regeln über Tags, keine Ablageorte (A-5.1, A-5.3 bis
+ * A-5.6, E-054, E-055, T-081, `docs/testplan.md` Abschnitt 8).
  *
- * Karte per Drag & Drop zwischen Spalten, Statusspalten umkonfigurieren
- * (T-052-Auftrag: die Reihenfolge — genau die, die bis T-050 an einem
- * falschen Feldnamen scheiterte), Timer direkt von der Karte starten und
- * stoppen. In T-012/T-048 zweimal in Folge als "nicht gelaufen, Zeitmangel"
- * vermerkt (T-012 Fall 25, T-048 Fall 25) — hier zum ersten Mal tatsächlich
- * gefahren.
+ * ## Warum diese Datei komplett neu geschrieben ist, nicht nur repariert
  *
- * **Der Anlass (T-052).** `apps/web/src/api/endpoints.ts` sendete bis T-050
- * beim Umsortieren `{ reihenfolge: order }` statt `{ order }`; die Route
- * (`PUT /todo-statuses/order`, `statusOrderSchema`) verlangt `order` und wies
- * jeden Aufruf mit 422 ab — die Pfeile „nach links“/„nach rechts“ in
- * „Spalten verwalten“ haben **nie etwas bewirkt**. Kein Testfall in
- * `tests/e2e/**` hat das je durch die Oberfläche geprüft; der Fehler kam erst
- * beim Quelltextabgleich in T-050 ans Licht. Der Reihenfolge-Testfall unten
- * ist deshalb bewusst **doppelt** abgesichert: Nachschau im selben Dialog
- * (derselbe Zustand könnte rein clientseitig sein) **und** an den
- * tatsächlichen Spaltentiteln auf dem Board **und** nach einem vollständigen
- * `page.reload()` (ein rein optimistischer, nie gespeicherter Zustand fiele
- * hier zurück) — nirgends am Rückgabewert des Aufrufs selbst.
+ * Bis T-080 prüfte diese Datei drei Fälle, die es nicht mehr gibt:
+ * Drag & Drop zwischen Statusspalten (TP-KANBAN-01), einen Dialog
+ * „Statusspalten“ mit einem Feld „Neue Spalte“ und Knöpfen „nach
+ * rechts“/„nach links“ (TP-KANBAN-02), und einen Timer-Testfall
+ * (TP-KANBAN-04), der zwar noch eine gültige Bedienung ansprach, aber ohne
+ * jede reale Spalte lief — seit E-054 ist das Board nach der Umstellung leer,
+ * bis jemand eine Regel einrichtet, und `createTodo({ title })` ohne Tags
+ * landet in keiner.
  *
- * **Richtigstellung zu einer Angabe aus T-050.** Dort steht, jede neue Spalte
- * entstehe „auf 0“, weil das Formular kein `position` mitschickt und
- * `statusCreateSchema` dafür `0` vorgibt. Das ist nur die halbe Wahrheit und
- * an dieser Stelle live nachgemessen (`console.log` während der Entwicklung
- * dieses Falls, unten nicht mehr enthalten): Die Speicherschicht
- * (`packages/storage/src/sqlite/repo-statuses.ts`, `create()`) behandelt
- * `position <= 0` als Übergabewert **„ans Ende anhängen“**
- * (`MAX(position) + 1`), nicht als Wunsch nach der ersten Stelle. Eine neu
- * angelegte Spalte landet deshalb zuverlässig **hinter** den vier
- * Standardspalten, nicht davor — beide Testspalten unten werden dynamisch an
- * ihrer tatsächlichen, ermittelten Position gefunden, nicht an einer
- * angenommenen. Beide werden am Ende jedes Falls wieder entfernt
- * (`deleteTodoStatus`) — die relative Reihenfolge der Standardspalten
- * zueinander ist danach unverändert, auch wenn ihre absoluten Positionswerte
- * sich durch das Umsortieren zwischenzeitlich verschoben haben (Reihenfolge
- * zählt, nicht die absolute Zahl).
+ * Seit **E-054** ist eine Kanban-Spalte eine **Regel über Tags**, dieselbe
+ * Entität wie ein Pool (`Pool.placement`). Ziehen zwischen Spalten hat der
+ * Auftraggeber ausdrücklich ausgeschlossen: Eine Regel lässt sich nicht durch
+ * Verschieben umkehren, ohne dass die Anwendung selbst Tags setzt
+ * (`decisions.md`, E-054). Seit **E-055** ist die Regel eine Struktur mit
+ * fünf benannten Achsen (erforderliche Tags, ausgeschlossene Tags, Status,
+ * Erledigt, Exportstatus) statt einer Liste gleichartiger Terme.
  *
- * **Befund am Rande, nicht Gegenstand eines eigenen Testfalls:** Die
- * Spezifikation aus `docs/testplan.md` (TP-KANBAN-02, Schritt 1) verlangt
- * „Eine Spalte umbenennen“ — dafür gibt es in `StatusColumnsDialog`
- * (`apps/web/src/screens/BoardScreen.tsx`) keine Bedienung. `updateTodoStatus`
- * wird dort ausschließlich mit `{ isDefault: true }` aufgerufen, nie mit
- * `{ name }`. `column-row__name` ist eine reine `<span>`, kein Eingabefeld.
- * Ein e2e-Fall kann eine Bedienung nicht prüfen, die es nicht gibt; siehe
- * Bericht.
+ * Ein Test, der weiter Drag & Drop simuliert, bliebe grün, ohne noch etwas zu
+ * messen — der schlechtere Zustand, weil er wie ein bestandener Test aussieht
+ * (Auftrag T-081). Was jetzt hier steht, prüft stattdessen, dass Oberfläche
+ * und Speicherung *dieselbe* Antwort geben: Eine Karte erscheint, weil eine
+ * Regel sie trifft, und verschwindet, wenn sie es nicht mehr tut — beides über
+ * die Oberfläche ausgelöst, nicht über die API. Der unit-tester hat die
+ * Mehrfachnennung einer Karte über mehrere Spalten in T-077 bereits auf der
+ * SQL-Seite gemessen (vier Karten × sechs Spalten); durch die Oberfläche war
+ * sie bislang ungemessen.
+ *
+ * ## Zwei Fallen aus dem Auftrag, und wie diese Datei sie umgeht
+ *
+ * 1. **Spalten entstehen ausschließlich über die Oberfläche**
+ *    (`support/actions.ts`, `createBoardColumn`) — nie über `POST /pools`.
+ *    Ein Testaufbau an der Datenbank vorbei würde nicht messen, was der
+ *    Benutzer erlebt, und hätte einen Fehler im Regelformular selbst nicht
+ *    gefunden. Tags und Todos entstehen weiterhin über die API
+ *    (`support/api.ts`) — das ist reine Vorbereitung, kein Teil der
+ *    geprüften Bedienung, genau wie in jeder anderen Datei unter
+ *    `tests/e2e/**`.
+ * 2. **Jede Spalte trägt mindestens zwei Karten, wo es um Zugehörigkeit
+ *    geht** — eine einzelne Karte je Spalte ließe Zugehörigkeit nicht von
+ *    Reihenfolge unterscheiden. TP-KANBAN-01 vergleicht deshalb "die Karte
+ *    matcht" gegen "die Karte matcht nicht mehr", nicht nur "eine Karte ist
+ *    da".
+ *
+ * Playwrights `hasText` vergleicht Text case-insensitiv als Teilzeichenkette
+ * — wichtig für die Achse "Erledigt": "Unerledigt" enthält "erledigt" als
+ * Teilzeichenkette, weshalb die Auswahl der Optionsknöpfe in
+ * `createBoardColumn` mit einem am Anfang verankerten Muster arbeitet statt
+ * mit einem bloßen Namensvergleich (siehe dortiger Kommentar).
  */
 import { test, expect } from '@playwright/test';
 
-import { createStatus, createTodo, deleteTodo, deleteTodoStatus, listStatuses } from './support/api';
-import { gotoBoard } from './support/nav';
+import {
+  cleanupAnyTimer,
+  createTag,
+  createTodo,
+  deletePoolByName,
+  deleteTag,
+  deleteTodo,
+  markTodoDone,
+  type Todo,
+} from './support/api';
+import { createBoardColumn } from './support/actions';
+import { gotoBoard, gotoTodos } from './support/nav';
 
-/** Stoppt einen laufenden Timer über den Karten-Knopf selbst (kein Öffnen der Detailansicht). */
-async function stopTimerFromCard(page: import('@playwright/test').Page, card: import('@playwright/test').Locator): Promise<void> {
-  await card.getByRole('button', { name: /Timer für/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Timer stoppen' });
-  if (await dialog.isVisible().catch(() => false)) {
-    await dialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
-    await expect(dialog).toBeHidden();
-  }
-}
+test.afterEach(async () => {
+  // Falls ein Fall in Testfall 4 (Timer auf der Karte) fehlschlägt, bevor er
+  // selbst aufräumt — derselbe Grund wie in `todo-revival.spec.ts` (T-048):
+  // ein laufender Timer aus einem vorherigen Fall blockiert jeden folgenden
+  // mit der Rückfrage nach einem verwaisten Timer.
+  await cleanupAnyTimer();
+});
 
 /**
- * Zieht eine Kanban-Karte per echtem HTML5-Drag&Drop in eine Zielspalte.
+ * Findet **eine** Spalte über ihren Titel — nicht über `.kcolumn` mit
+ * `hasText`, wie ein erster Entwurf dieser Datei es tat.
  *
- * `locator.dragTo()` simuliert nur eine Zeigerbewegung und trifft die native
- * Ziehgeste in diesem Aufbau nicht zuverlässig (in der Entwicklung dieses
- * Falls beobachtet: die Karte blieb liegen, kein Fehler, kein Ereignis).
- * Diese Funktion löst stattdessen die vier echten Ereignisse aus, die
- * `Kanban.tsx` (`onDragStart`/`onDragEnd`) und `BoardScreen.tsx`
- * (`onDragOver`/`onDrop`) selbst abonniert haben, mit **einem** geteilten
- * `DataTransfer` — genau das Objekt, über das die Anwendung die Kennung des
- * gezogenen Todos weiterreicht (`DRAG_MIME`, `BoardScreen.tsx`). Geprüft wird
- * damit derselbe Code, den ein echter Mauszug auch träfe; nur die
- * Low-Level-Zeigermechanik der Ziehgeste wird ersetzt, nicht die Anwendung.
+ * Der Grund, gemessen an TP-KANBAN-02: Steht eine Karte in mehreren Spalten,
+ * nennt jedes Vorkommen die jeweils **andere** Spalte beim vollen,
+ * zeitgestempelten Namen ("Steht auch in „E2E-Kanban-Mehrfach-B-…“", siehe
+ * `Kanban.tsx`). Ein `hasText`-Filter auf den ganzen Spaltenrumpf träfe dann
+ * **zwei** Spalten statt einer — die eigene und jede, die auf sie verweist.
+ * `.kcolumn__title` trägt nur die Überschrift und nie einen Querverweis auf
+ * eine andere Spalte.
  */
-async function dragCardIntoColumn(
-  page: import('@playwright/test').Page,
-  card: import('@playwright/test').Locator,
-  column: import('@playwright/test').Locator,
-): Promise<void> {
-  const cardHandle = await card.elementHandle();
-  const columnHandle = await column.elementHandle();
-  if (cardHandle === null || columnHandle === null) {
-    throw new Error('Karte oder Zielspalte nicht im DOM gefunden.');
-  }
-  await page.evaluate(
-    ({ cardEl, columnEl }) => {
-      const dataTransfer = new DataTransfer();
-      const fire = (target: Element, type: string): void => {
-        target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
-      };
-      fire(cardEl, 'dragstart');
-      fire(columnEl, 'dragenter');
-      fire(columnEl, 'dragover');
-      fire(columnEl, 'drop');
-      fire(cardEl, 'dragend');
-    },
-    { cardEl: cardHandle, columnEl: columnHandle },
-  );
+function boardColumn(page: import('@playwright/test').Page, name: string) {
+  return page.locator('.kcolumn').filter({ has: page.locator('.kcolumn__title', { hasText: name }) });
 }
 
-test.describe('Kanban — Drag & Drop, Spaltenverwaltung, Timer von der Karte', () => {
-  test('TP-KANBAN-01 — Karte per Drag & Drop zwischen Spalten, persistent nach Neuladen', async ({ page }) => {
-    const run = Date.now();
-    const colA = await createStatus(`E2E-Kanban-Quelle-${run}`);
-    const colB = await createStatus(`E2E-Kanban-Ziel-${run}`);
-    const title = `E2E-KANBAN-DND-${run}`;
-    const todo = await createTodo({ title, statusId: colA.id });
+/** Öffnet den Bearbeiten-Dialog eines Todos über die Menü-Aktion der Todo-Liste (S-02). */
+async function openEditDialog(page: import('@playwright/test').Page, todo: Todo) {
+  await gotoTodos(page);
+  const row = page.locator('.todo-row', { hasText: todo.title });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: `Menü für „${todo.title}“` }).click();
+  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Todo bearbeiten' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
 
-    try {
-      await gotoBoard(page);
-
-      const columnA = page.locator('.kcolumn', { hasText: colA.name });
-      const columnB = page.locator('.kcolumn', { hasText: colB.name });
-      await expect(columnA).toBeVisible();
-      await expect(columnB).toBeVisible();
-
-      const card = columnA.locator('.kcard', { hasText: title });
-      await expect(card).toBeVisible();
-      await expect(columnB.locator('.kcard', { hasText: title })).toHaveCount(0);
-
-      // Der eigentliche Zug: echtes HTML5-Drag&Drop (die Karte trägt
-      // `draggable`, `Kanban.tsx`), keine Tastaturalternative.
-      await dragCardIntoColumn(page, card, columnB);
-
-      // Sofort nach dem Ziehen liegt die Karte in der Zielspalte — und nicht
-      // mehr in der Quelle.
-      await expect(columnB.locator('.kcard', { hasText: title })).toBeVisible();
-      await expect(columnA.locator('.kcard', { hasText: title })).toHaveCount(0);
-
-      // Persistiert, nicht nur clientseitig verschoben (A-5.2/A-5.3 — der
-      // Statuswechsel ist ein `PATCH /todos/{id}` auf dem Dienst).
-      await page.reload();
-      const columnBAfterReload = page.locator('.kcolumn', { hasText: colB.name });
-      const columnAAfterReload = page.locator('.kcolumn', { hasText: colA.name });
-      await expect(columnBAfterReload.locator('.kcard', { hasText: title })).toBeVisible();
-      await expect(columnAAfterReload.locator('.kcard', { hasText: title })).toHaveCount(0);
-    } finally {
-      await deleteTodo(todo.id).catch(() => undefined);
-      await deleteTodoStatus(colA.id).catch(() => undefined);
-      await deleteTodoStatus(colB.id).catch(() => undefined);
-    }
-  });
-
-  test('TP-KANBAN-02 — Spalte anlegen, Reihenfolge ändern (der bis T-050 wirkungslose Fall), Spalte ohne Karten löschen', async ({
+test.describe('TP-KANBAN-01 — Zugehörigkeit folgt der Regel, nicht der Ablage', () => {
+  test('Karte erscheint, weil die Regel sie trifft, und verschwindet über die Oberfläche wieder', async ({
     page,
   }) => {
     const run = Date.now();
-    const nameA = `E2E-Kanban-A-${run}`;
-    const nameB = `E2E-Kanban-B-${run}`;
-    let idA: string | null = null;
-    let idB: string | null = null;
+    const columnName = `E2E-Kanban-Sichtbarkeit-${run}`;
+    const tag = await createTag(`E2E-Kanban-Sichtbar-${run}`);
+    // Zwei Karten, keine davon trägt das Tag zu Beginn (Falle 2 aus dem
+    // Auftrag: Zugehörigkeit muss sich von Reihenfolge unterscheiden lassen —
+    // die zweite Karte bleibt während des gesamten Falls außerhalb der Regel
+    // und dient als Gegenprobe, dass die Spalte nicht einfach "irgendwas"
+    // zeigt).
+    const matching = await createTodo({ title: `E2E-KANBAN-MATCH-${run}` });
+    const other = await createTodo({ title: `E2E-KANBAN-OTHER-${run}` });
 
     try {
       await gotoBoard(page);
-      await page.getByRole('button', { name: 'Spalten verwalten' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Statusspalten' });
-      await expect(dialog).toBeVisible();
+      await createBoardColumn(page, columnName, { requiredTagNames: [tag.name] });
 
-      // --- Anlegen: über das echte Formular, nicht über die Testhilfe -------
-      await dialog.getByLabel('Neue Spalte').fill(nameA);
-      await dialog.getByRole('button', { name: 'Spalte anlegen' }).click();
-      await expect(dialog.locator('.column-row', { hasText: nameA })).toBeVisible();
+      const column = boardColumn(page, columnName);
+      await expect(column).toBeVisible();
 
-      await dialog.getByLabel('Neue Spalte').fill(nameB);
-      await dialog.getByRole('button', { name: 'Spalte anlegen' }).click();
-      await expect(dialog.locator('.column-row', { hasText: nameB })).toBeVisible();
+      // Noch trägt keines der beiden Todos das Tag: Die Spalte hat eine
+      // gestellte Bedingung, die gerade nichts trifft — das ist ein anderer
+      // Leerzustand als "keine Bedingung" (TP-KANBAN-03).
+      await expect(column.getByText('Keine Karte trifft diese Regel')).toBeVisible();
+      await expect(column.locator('.kcard')).toHaveCount(0);
 
-      // Kennungen für die Aufräumung am Ende — nur zum Aufräumen aus der API
-      // gelesen, nicht Teil der eigentlichen Prüfung.
-      const created = await listStatuses();
-      idA = created.find((status) => status.name === nameA)?.id ?? null;
-      idB = created.find((status) => status.name === nameB)?.id ?? null;
-      expect(idA).not.toBeNull();
-      expect(idB).not.toBeNull();
+      // --- Erscheinen: Tag über die Todo-Liste ergänzen, nicht über die API -
+      const editDialog = await openEditDialog(page, matching);
+      const tagsBox = editDialog.getByRole('combobox', { name: 'Tags' });
+      await tagsBox.click();
+      await tagsBox.fill(tag.name);
+      await page.getByRole('option', { name: tag.name }).click();
+      await page.keyboard.press('Escape');
+      await editDialog.getByRole('button', { name: 'Speichern' }).click();
+      await expect(editDialog).toBeHidden();
 
-      // --- Reihenfolge: der Kern dieses Testfalls -----------------------
-      // Beide neuen Spalten hängen sich ans Ende an (siehe Dateikopf) und
-      // stehen deshalb nebeneinander hinter den Standardspalten — in
-      // welcher der beiden Reihenfolgen, wird hier ermittelt statt
-      // unterstellt.
-      const rowNames = () => dialog.locator('.column-row__name').allInnerTexts();
-      const namesBefore = await rowNames();
-      const indexA = namesBefore.indexOf(nameA);
-      const indexB = namesBefore.indexOf(nameB);
-      expect(indexA).toBeGreaterThanOrEqual(0);
-      expect(indexB).toBeGreaterThanOrEqual(0);
-      const [leftName, rightName] = indexA < indexB ? [nameA, nameB] : [nameB, nameA];
+      await gotoBoard(page);
+      const columnAfterAdd = boardColumn(page, columnName);
+      await expect(columnAfterAdd.locator('.kcard', { hasText: matching.title })).toBeVisible();
+      await expect(columnAfterAdd.getByText('Keine Karte trifft diese Regel')).toHaveCount(0);
+      // Die zweite Karte trägt das Tag weiterhin nicht — sie erscheint nicht,
+      // nur weil irgendeine Karte jetzt da ist.
+      await expect(columnAfterAdd.locator('.kcard', { hasText: other.title })).toHaveCount(0);
 
-      // "leftName" steht vor "rightName" — ein Klick auf dessen "nach
-      // rechts" muss die beiden tauschen.
-      await dialog.getByRole('button', { name: `„${leftName}“ nach rechts` }).click();
+      // --- Verschwinden: Tag über dieselbe Bedienung wieder entfernen ------
+      const editDialog2 = await openEditDialog(page, matching);
+      await editDialog2.getByRole('button', { name: `Tag ${tag.name} entfernen` }).click();
+      await editDialog2.getByRole('button', { name: 'Speichern' }).click();
+      await expect(editDialog2).toBeHidden();
 
-      // Nachschau 1 — im selben Dialog: die Zeilenliste hat tatsächlich
-      // getauscht (nicht nur das Symbol des Knopfs). Über `expect.poll`, weil
-      // der Klick selbst sofort zurückkehrt — `reorderTodoStatuses` und der
-      // anschließende Neulade-Aufruf laufen asynchron dahinter, und ein
-      // sofortiges `allInnerTexts()` läse noch den alten Stand (in der Probe
-      // zu diesem Fall tatsächlich beobachtet: der Dienst hatte die Reihen-
-      // folge schon umgestellt, das DOM zeigte sie noch nicht).
-      await expect
-        .poll(async () => {
-          const names = await rowNames();
-          return names.indexOf(rightName) - names.indexOf(leftName);
-        })
-        .toBeLessThan(0);
+      await gotoBoard(page);
+      const columnAfterRemove = boardColumn(page, columnName);
+      await expect(columnAfterRemove.locator('.kcard', { hasText: matching.title })).toHaveCount(0);
+      await expect(columnAfterRemove.getByText('Keine Karte trifft diese Regel')).toBeVisible();
+    } finally {
+      // Reihenfolge wichtig: Die Spalte hängt am Tag (Löschschutz
+      // `tag_in_use`), das Todo trägt es unter Umständen noch — erst die
+      // Regel weg, dann Todo und Tag.
+      await deletePoolByName(columnName).catch(() => undefined);
+      await deleteTodo(matching.id).catch(() => undefined);
+      await deleteTodo(other.id).catch(() => undefined);
+      await deleteTag(tag.id).catch(() => undefined);
+    }
+  });
+});
 
-      await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
-      await expect(dialog).toBeHidden();
+test.describe('TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich', () => {
+  test('Zwei zutreffende Regeln zeigen dieselbe Karte zweimal, mit Querverweis und gemeinsamer Hervorhebung', async ({
+    page,
+  }) => {
+    const run = Date.now();
+    const columnAName = `E2E-Kanban-Mehrfach-A-${run}`;
+    const columnBName = `E2E-Kanban-Mehrfach-B-${run}`;
+    const tagA = await createTag(`E2E-Kanban-MehrfachA-${run}`);
+    const tagB = await createTag(`E2E-Kanban-MehrfachB-${run}`);
+    // Vor E-054 unmöglich: Ein Todo trug genau einen Status. Seit eine Spalte
+    // eine Regel ist, ist eine Karte, die zwei Regeln erfüllt, der Normalfall
+    // (`decisions.md`, E-054) — hier mit beiden Tags an derselben Karte.
+    const todo = await createTodo({
+      title: `E2E-KANBAN-MULTI-${run}`,
+      tagIds: [tagA.id, tagB.id],
+    });
 
-      // Nachschau 2 — auf dem Board selbst, nicht mehr im Dialog: Ein
-      // Dialog, der nur seinen eigenen, nie gespeicherten Zustand anzeigt,
-      // wäre hier nicht zu unterscheiden von einem echten Erfolg — die
-      // Spaltenköpfe auf dem Board sind ein zweiter, unabhängiger Ort, an
-      // dem sich dieselbe Reihenfolge zeigen muss.
-      // `.kcolumn__title` stellt seinen Text per CSS in Großbuchstaben dar
-      // (`text-transform: uppercase`) — `innerText` folgt dem Bildschirmbild,
-      // nicht dem Quelltext. Deshalb hier ohne Rücksicht auf Groß-/
-      // Kleinschreibung verglichen; das Vorkommen selbst bleibt eindeutig,
-      // die erfundenen Testnamen unterscheiden sich sonst nur im Zeitstempel.
-      const boardTitles = async (): Promise<readonly string[]> =>
-        (await page.locator('.kcolumn__title').allInnerTexts()).map((text) => text.toLowerCase());
-      let titles = await boardTitles();
-      expect(titles.indexOf(rightName.toLowerCase())).toBeLessThan(titles.indexOf(leftName.toLowerCase()));
+    try {
+      await gotoBoard(page);
+      await createBoardColumn(page, columnAName, { requiredTagNames: [tagA.name] });
+      await createBoardColumn(page, columnBName, { requiredTagNames: [tagB.name] });
 
-      // Nachschau 3 — nach vollständigem Neuladen: Genau die Prüfung, die am
-      // eingebauten `reihenfolge`-Fehler (T-050) rot geworden wäre. Vor
-      // T-050 hätte der Klick oben bereits eine 422-Fehlermeldung ausgelöst
-      // (heute: `mutation.error`, sichtbar in `StatusColumnsDialog`) und die
-      // Reihenfolge wäre unverändert geblieben — dieser Fall hätte ihn
-      // gefunden.
-      await page.reload();
-      // Nach `reload()` ist die Navigation fertig, nicht zwingend schon der
-      // asynchrone Ladevorgang von Board und Struktur — deshalb erst auf
-      // beide Testspalten warten, bevor die Reihenfolge gelesen wird.
-      await expect(page.locator('.kcolumn', { hasText: leftName })).toBeVisible();
-      await expect(page.locator('.kcolumn', { hasText: rightName })).toBeVisible();
-      titles = await boardTitles();
-      expect(titles.indexOf(rightName.toLowerCase())).toBeLessThan(titles.indexOf(leftName.toLowerCase()));
+      const columnA = boardColumn(page, columnAName);
+      const columnB = boardColumn(page, columnBName);
+      const cardInA = columnA.locator('.kcard', { hasText: todo.title });
+      const cardInB = columnB.locator('.kcard', { hasText: todo.title });
+      await expect(cardInA).toBeVisible();
+      await expect(cardInB).toBeVisible();
 
-      // --- Löschen einer Spalte ohne Karten (Rest von TP-KANBAN-02) --------
-      await page.getByRole('button', { name: 'Spalten verwalten' }).click();
-      const dialog2 = page.getByRole('dialog', { name: 'Statusspalten' });
-      await expect(dialog2).toBeVisible();
-      const rowToDelete = dialog2.locator('.column-row', { hasText: rightName });
-      await rowToDelete.getByRole('button', { name: `„${rightName}“ löschen` }).click();
-      const confirm = page.getByRole('alertdialog', { name: 'Statusspalte löschen?' });
-      await expect(confirm).toBeVisible();
-      await expect(confirm).toContainText(
-        'Liegen noch Karten in dieser Spalte, lehnt Takt das Löschen ab.',
+      // Jedes Vorkommen nennt das jeweils andere beim Namen (Kanban.tsx,
+      // "Steht auch in …") — nicht nur "in mehreren Spalten" ohne zu sagen,
+      // in welchen.
+      await expect(cardInA.getByRole('button', { name: /Steht auch in/ })).toContainText(columnBName);
+      await expect(cardInB.getByRole('button', { name: /Steht auch in/ })).toContainText(columnAName);
+
+      // Live-Region der Ansicht (BoardScreen.tsx, `announcement`) — nicht per
+      // Rolle "status" gesucht, weil jede Hinweismeldung (`InlineMessage`)
+      // auf der Seite dieselbe Rolle trägt; die eindeutige Fläche ist die
+      // unsichtbare Ansage selbst.
+      const announcement = page.locator('[role="status"].visually-hidden');
+
+      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await expect(cardInA).toHaveClass(/kcard--linked/);
+      await expect(cardInB).toHaveClass(/kcard--linked/);
+      await expect(announcement).toContainText(todo.title);
+      await expect(announcement).toContainText('2 Spalten');
+      await expect(announcement).toContainText(columnAName);
+      await expect(announcement).toContainText(columnBName);
+
+      // Ein zweiter Klick hebt die Hervorhebung an **beiden** Vorkommen auf.
+      await cardInA.getByRole('button', { name: /Steht auch in/ }).click();
+      await expect(cardInA).not.toHaveClass(/kcard--linked/);
+      await expect(cardInB).not.toHaveClass(/kcard--linked/);
+      await expect(announcement).toHaveText('Hervorhebung aufgehoben.');
+    } finally {
+      await deletePoolByName(columnAName).catch(() => undefined);
+      await deletePoolByName(columnBName).catch(() => undefined);
+      await deleteTodo(todo.id).catch(() => undefined);
+      await deleteTag(tagA.id).catch(() => undefined);
+      await deleteTag(tagB.id).catch(() => undefined);
+    }
+  });
+});
+
+test.describe('TP-KANBAN-03 — Eine Spalte ohne Bedingung ist kein „keine Treffer“', () => {
+  test('Spalte ohne jede Bedingung sagt das ausdrücklich, statt „keine Karte trifft diese Regel“ zu behaupten', async ({
+    page,
+  }) => {
+    const run = Date.now();
+    const columnName = `E2E-Kanban-Ohne-Bedingung-${run}`;
+
+    try {
+      await gotoBoard(page);
+      await createBoardColumn(page, columnName);
+
+      // Die Erfolgsmeldung ist beim Anlegen ohne Bedingung ein Warnton, kein
+      // Erfolgston (`PoolFormDialog.tsx`), und nennt den Grund von sich aus.
+      await expect(page.locator('.toast__title')).toHaveText('Spalte angelegt.');
+      await expect(page.locator('.toast__body')).toContainText(columnName);
+      await expect(page.locator('.toast__body')).toContainText('nennt noch keine Bedingung');
+
+      const column = boardColumn(page, columnName);
+      await expect(column).toBeVisible();
+      await expect(column.locator('.kcolumn__rule')).toContainText(
+        'Ohne Bedingung — diese Spalte bleibt leer.',
       );
-      await confirm.getByRole('button', { name: 'Löschen' }).click();
-      await expect(confirm).toBeHidden();
-      await expect(dialog2.locator('.column-row', { hasText: rightName })).toHaveCount(0);
-      if (rightName === nameA) idA = null;
-      else idB = null;
 
-      await dialog2.getByRole('button', { name: 'Schließen', exact: true }).click();
-      await expect(page.locator('.kcolumn', { hasText: rightName })).toHaveCount(0);
+      // Der andere Leerzustand — TP-KANBAN-01 — behauptet "keine Karte trifft
+      // diese Regel". Hier steht ausdrücklich etwas anderes: Es gibt gar
+      // keine Regel, die etwas treffen könnte.
+      await expect(column.getByText('Diese Spalte hat noch keine Bedingung')).toBeVisible();
+      await expect(column.getByText('Keine Karte trifft diese Regel')).toHaveCount(0);
+
+      const editButton = column.getByRole('button', { name: 'Bedingung ergänzen' });
+      await expect(editButton).toBeVisible();
+      await editButton.click();
+
+      const editDialog = page.getByRole('dialog', { name: `„${columnName}“ bearbeiten` });
+      await expect(editDialog).toBeVisible();
+      await editDialog.getByRole('button', { name: 'Abbrechen' }).click();
+      await expect(editDialog).toBeHidden();
     } finally {
-      if (idA !== null) await deleteTodoStatus(idA).catch(() => undefined);
-      if (idB !== null) await deleteTodoStatus(idB).catch(() => undefined);
+      await deletePoolByName(columnName).catch(() => undefined);
     }
   });
+});
 
-  test('TP-KANBAN-04 — Timer direkt von der Karte starten und stoppen, ohne die Detailansicht zu öffnen', async ({
+test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ auf und ändert dadurch die Spaltenzugehörigkeit', () => {
+  test('Timerstart direkt von der Karte verschiebt sie von der Erledigt- in die Unerledigt-Spalte, ohne dass eine Regel angefasst wird', async ({
     page,
   }) => {
-    const title = `E2E-KANBAN-TIMER-${Date.now()}`;
-    const todo = await createTodo({ title });
+    const run = Date.now();
+    const doneColumnName = `E2E-Kanban-Erledigt-${run}`;
+    const openColumnName = `E2E-Kanban-Unerledigt-${run}`;
+    const tag = await createTag(`E2E-Kanban-Reaktivierung-${run}`);
+    const todo = await createTodo({ title: `E2E-KANBAN-REAKTIVIERT-${run}`, tagIds: [tag.id] });
+    await markTodoDone(todo.id);
 
     try {
       await gotoBoard(page);
-      const card = page.locator('.kcard', { hasText: title });
-      await expect(card).toBeVisible();
-      await expect(card.getByRole('button', { name: /Timer für „.*“ starten/ })).toBeVisible();
+      await createBoardColumn(page, doneColumnName, {
+        requiredTagNames: [tag.name],
+        completion: 'done',
+      });
+      await createBoardColumn(page, openColumnName, {
+        requiredTagNames: [tag.name],
+        completion: 'open',
+      });
 
-      await card.getByRole('button', { name: /Timer für/ }).click();
+      // `markTodoDone` lief über die API, am `bump()`-Mechanismus der
+      // Oberfläche vorbei — ohne Neuladen zeigte das Board noch den Stand vor
+      // dem Erledigen.
+      await page.reload();
 
-      // Karte zeigt einen laufenden Timer, ohne dass die Detailansicht
-      // geöffnet wurde — die Adresse bleibt auf dem Board.
-      await expect(page).toHaveURL(/#\/kanban/);
-      await expect(card).toHaveClass(/kcard--running/);
-      await expect(card.getByRole('button', { name: /Timer für „.*“ stoppen/ })).toBeVisible();
+      const doneColumn = boardColumn(page, doneColumnName);
+      const openColumn = boardColumn(page, openColumnName);
+      const cardInDone = doneColumn.locator('.kcard', { hasText: todo.title });
+      const cardInOpen = openColumn.locator('.kcard', { hasText: todo.title });
 
-      await stopTimerFromCard(page, card);
+      // Absichtlich **ohne** "Erledigte einblenden" anzuklicken (Vorgabe:
+      // ausgeblendet): Eine Regel, die selbst etwas über "Erledigt" sagt, hat
+      // das letzte Wort und zeigt die Karte trotzdem (T-076,
+      // `PoolFormDialog.tsx`-Hinweistext an der Optionszeile).
+      await expect(cardInDone).toBeVisible();
+      await expect(cardInDone.locator('.kcard__flag')).toHaveText('Erledigt');
+      await expect(openColumn.getByText('Keine Karte trifft diese Regel')).toBeVisible();
+      await expect(cardInOpen).toHaveCount(0);
 
-      await expect(card).not.toHaveClass(/kcard--running/);
-      await expect(card.getByRole('button', { name: /Timer für „.*“ starten/ })).toBeVisible();
+      await cardInDone.getByRole('button', { name: /Timer für/ }).click();
+
+      // Die Regel "Erledigt" trifft die Karte nicht mehr, die Regel
+      // "Unerledigt" jetzt schon — der einzige Weg, auf dem eine Karte heute
+      // noch ohne Tag- oder Regeländerung die Spalte wechselt (A-2.5).
+      await expect(doneColumn.locator('.kcard', { hasText: todo.title })).toHaveCount(0);
+      await expect(cardInOpen).toBeVisible();
+      await expect(cardInOpen.locator('.kcard__flag')).toHaveText(/Erledigt aufgehoben/);
+      await expect(cardInOpen).toHaveClass(/kcard--running/);
+      await expect(cardInOpen.getByRole('button', { name: /Timer für „.*“ stoppen/ })).toBeVisible();
+
+      // A-5.6 bleibt: der Timer lässt sich weiterhin direkt von der Karte aus
+      // stoppen, ohne die Detailansicht zu öffnen.
+      await cardInOpen.getByRole('button', { name: /Timer für/ }).click();
+      const stopDialog = page.getByRole('dialog', { name: 'Timer stoppen' });
+      if (await stopDialog.isVisible().catch(() => false)) {
+        await stopDialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
+        await expect(stopDialog).toBeHidden();
+      }
+      await expect(cardInOpen).not.toHaveClass(/kcard--running/);
     } finally {
+      await deletePoolByName(doneColumnName).catch(() => undefined);
+      await deletePoolByName(openColumnName).catch(() => undefined);
       await deleteTodo(todo.id).catch(() => undefined);
+      await deleteTag(tag.id).catch(() => undefined);
     }
   });
 });

@@ -53,6 +53,7 @@ import type {
 import { boardAppearances } from '@takt/domain';
 
 import { type AppContext, read } from './context.ts';
+import { type PoolWithResolution, poolWithResolution } from './structure.ts';
 
 /** Eine Spalte mit ihrer ersten Seite (E-054). */
 export interface BoardColumnView {
@@ -60,8 +61,13 @@ export interface BoardColumnView {
    * Die Spalte selbst — ein `Pool`. Kein zweiter Typ, siehe `board.ts` in der
    * Domäne. Die Regel steht mit darin, damit die Oberfläche sagen kann,
    * **warum** eine Karte hier steht, ohne sie nachzuladen.
+   *
+   * Samt ihrer Auflösung (T-080): Ein Ordner, in dem kein Tag liegt, ergibt
+   * eine Spalte, die nichts trifft — und ohne die Zahl sähe das aus wie eine
+   * Regel, auf die im Augenblick nur nichts passt. Die Auflösung kostet hier
+   * nichts, sie wird für `appearances` ohnehin gebraucht.
    */
-  readonly column: Pool;
+  readonly column: PoolWithResolution;
   readonly todos: readonly Todo[];
   /**
    * Fortsetzungsmarke **dieser** Spalte. Weitergeblättert wird über
@@ -161,22 +167,26 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
 
     for (const column of columns) {
       const page = await unit.pools.members(column.id, filterFor(column), pagination);
+      // Einmal je Anfrage und je Spalte aufgelöst, nicht je Karte. Die
+      // Auflösung steigt über die Ordner ab (rekursiv, beliebig tief) und ist
+      // der teuerste Teil dieser Antwort; sie hängt nicht von der Karte ab.
+      // Seit T-080 wird sie zweimal gelesen — für die Mehrfachnennung unten und
+      // für die Auskunft an der Spalte — und **einmal** geholt.
+      const ruleTagIds = await unit.pools.resolveRule(column.id);
+      // Die Ausschlussliste braucht dieselbe Auflösung wie die erforderliche.
+      const excludedTagIds = await unit.pools.resolveExcluded(column.id);
       views.push({
-        column,
+        column: poolWithResolution(column, ruleTagIds, excludedTagIds),
         todos: page.items,
         nextCursor: page.nextCursor,
         total: page.total,
       });
       rules.push({
         columnId: column.id,
-        // Einmal je Anfrage und je Spalte aufgelöst, nicht je Karte. Die
-        // Auflösung steigt über die Ordner ab (rekursiv, beliebig tief) und ist
-        // der teuerste Teil dieser Antwort; sie hängt nicht von der Karte ab.
-        ruleTagIds: await unit.pools.resolveRule(column.id),
+        ruleTagIds,
         matchMode: column.matchMode,
-        // Die drei Achsen aus T-076. Die Ausschlussliste braucht dieselbe
-        // Auflösung wie die erforderliche; die übrigen stehen am `Pool`.
-        excludedTagIds: await unit.pools.resolveExcluded(column.id),
+        // Die drei übrigen Achsen aus T-076 stehen am `Pool`.
+        excludedTagIds,
         ruleStatusIds: column.statusIds,
         completion: column.completion,
         exportState: column.exportState,

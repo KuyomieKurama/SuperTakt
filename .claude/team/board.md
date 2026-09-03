@@ -42,7 +42,29 @@ ausgeschlossene Tags, Status, Erledigt, Exportstatus. Alle dreizehn Nachweispfad
 |---|---|---|
 | ~~T-077~~ | **fertig.** `pnpm check` Exitcode 0. Zweigabdeckung Speicherung 79,55 auf 81,68, Domäne 80,00 auf 85,29 | unit-tester |
 | ~~T-078~~ | **fertig.** `poolNamer` behoben, E-056 gebaut, `proof:addin` 100 auf 112 | integration-dev |
-| T-079 | Regelformular in der Oberfläche nach dem Vorbild | frontend-dev |
+| ~~T-079~~ | **fertig.** Regelformular, `PoolFormDialog` 236 auf 604 Zeilen, Kontrast 416 Paare ohne Durchfaller | frontend-dev |
+
+Alle drei fertig, committet als `48c982a`. `pnpm check` grün.
+
+**Dabei gefunden und behoben — dieselbe Lücke wie T-053:** `pnpm check` lief nur **vier der
+dreizehn** Nachweispfade. Die anderen neun waren nur im Unterpaket erreichbar und hingen in keiner
+Kette. Alle dreizehn hängen jetzt an `proof:all`, dazu `verify:bundle`: 770 Prüfungen in 37
+Sekunden, ganzer Durchlauf 71.
+
+### Welle vom 2026-09-03, zweite Runde
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| T-080 | `poolRuleIsEmpty` in die Domäne — die Oberfläche baut die Bedingung aus `matchesPool` nach (**achte Doppelung derselben Fachregel**). Dazu aufgelöste Tagzahl am Pool, `NEVER_SENT` aufräumen | domain-dev |
+| ~~T-081~~ | **fertig.** 3 gegenstandslose Fälle gelöscht, 4 neue; dazu 2 Fälle in anderen Dateien repariert, die dieselbe Umstellung gebrochen hatte. **34/34** | e2e-tester |
+
+T-080 wurde mit HTTP 529 abgebrochen und per Nachricht fortgesetzt, nicht neu gestartet.
+
+**Dabei gefunden — wieder ein Nachweis, der nur von Hand lief:** `pnpm test:e2e` benutzte den
+Wurzel-`playwright.config.ts` ohne `globalSetup`, startete keine Dienste, und **alle 34 Fälle
+scheiterten sofort**. Die echte Konfiguration lag seit T-012 in `tests/e2e/`, mit dem richtigen
+Aufruf im Dateikopf dokumentiert — den man kennen musste. Wurzel-Config gelöscht, `test:e2e`
+zeigt auf die echte. Gemessen: 34 passed über `pnpm test:e2e`.
 
 Kollisionsfrei: `packages/*/test/**` gegen `routes/addin/**` gegen `apps/web/**`.
 End-to-End erst danach — `tests/e2e/kanban.spec.ts` prüft noch das Ziehen, das E-054 abgeschafft
@@ -58,6 +80,7 @@ hat.
 | O-D | `Pool.rule` heißt weiter `rule`, enthält aber nur noch die erforderlichen Tags. Umbenennen berührt drei Hoheiten — eigene Aufgabe | Orchestrator |
 | O-F | **Nachlauf offen:** `proof:access`, `export-api`, `addin-wiring`, `tags`, `conflicts` konnten in T-078 nicht laufen — Port 17843 war von der Arbeitsumgebung der parallelen Aufgabe belegt. Der Agent hat nicht abgeschossen, was ihm nicht gehört. Eine Minute Nachlauf, sobald der Port frei ist | Orchestrator |
 | O-G | Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
+| O-H | `forbidOnly: CI` stand nur in der gelöschten Wurzel-Config. In `tests/e2e/playwright.config.ts` nachtragen — ein vergessenes `test.only` soll im Bauserver rot sein, nicht still 33 Fälle überspringen | e2e-tester |
 | O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
 | O-D | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
 | O-G | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
