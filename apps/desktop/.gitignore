@@ -23,3 +23,18 @@ src-tauri/taskpane/
 
 # Vom Bündelvorgang erzeugte Installationsdateien.
 src-tauri/WixTools*/
+
+# Die Lizenzbeilage (T-075). Sie entsteht aus `pnpm --filter @takt/desktop
+# licenses` aus dem Abhängigkeitsgraphen des jeweiligen Baus und ist damit
+# plattformgebunden — die Windows-Fassung nennt andere Systemkisten als die
+# Linux-Fassung. Eine eingecheckte Fassung wäre nach dem nächsten
+# Abhängigkeitswechsel falsch, ohne dass es jemand merkt.
+src-tauri/licenses/
+
+# Die Fassungsangabe, die `build-app.mjs` für `tauri build --config` schreibt,
+# wenn TAKT_RELEASE_VERSION gesetzt ist. Sie gehört zu genau einem Bau.
+src-tauri/.release-config.json
+
+# Die eingesammelten Installationsdateien aus `release:collect`. Kopien der
+# Erzeugnisse aus `src-tauri/target/`, dreistellig in MiB.
+release/
