@@ -23,3 +23,10 @@ src-tauri/taskpane/
 
 # Vom Bündelvorgang erzeugte Installationsdateien.
 src-tauri/WixTools*/
+
+# Die Lizenzbeilage (T-075). Sie entsteht aus `pnpm --filter @takt/desktop
+# licenses` aus dem Abhängigkeitsgraphen des jeweiligen Baus und ist damit
+# plattformgebunden — die Windows-Fassung nennt andere Systemkisten als die
+# Linux-Fassung. Eine eingecheckte Fassung wäre nach dem nächsten
+# Abhängigkeitswechsel falsch, ohne dass es jemand merkt.
+src-tauri/licenses/

@@ -108,14 +108,19 @@ hat.
 | O-B | `PoolWrite` kennt kein `position`; jeder neue Pool entsteht auf 0. Fachliche Frage: sollen Pools sortierbar sein? | Auftraggeber |
 | O-C | `GET /settings` belegt keine Merkmale zum Datenbankpfad, anders als beim Exportordner | domain-dev |
 | O-D | `Pool.rule` heißt weiter `rule`, enthält aber nur noch die erforderlichen Tags. Umbenennen berührt drei Hoheiten — eigene Aufgabe | Orchestrator |
-| O-F | **Nachlauf offen:** `proof:access`, `export-api`, `addin-wiring`, `tags`, `conflicts` konnten in T-078 nicht laufen — Port 17843 war von der Arbeitsumgebung der parallelen Aufgabe belegt. Der Agent hat nicht abgeschossen, was ihm nicht gehört. Eine Minute Nachlauf, sobald der Port frei ist | Orchestrator |
-| ~~O-G~~ | *läuft als T-084.* Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
+| ~~O-F~~ | *erledigt.* Alle 13 Nachweispfade laufen seit T-08x in `pnpm check` (`proof:all`), zuletzt gemessen nach T-088: 818 Prüfungen, 0 rot |
+| ~~O-G~~ | *erledigt in T-084.* Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
 | O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
 | O-D | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
 | O-G | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
 | O-H | `pnpm desktop` braucht jetzt beide Ports frei (17843 und 17844). Verhaltensänderung durch den mitlaufenden Nachweis; die Kette bleibt sauber stehen und nennt den Grund. | — |
 | O-E | Neun End-to-End-Fälle nicht gelaufen: Add-in (kein Office.js-Wirt), drei Hüllenzustände (kein echter Tauri-Prozess), Stichprobe über die 19 Orte mit Exportstatus, Standard-Tags über die Oberfläche | e2e-tester |
 | O-F | 14 Befunde aus T-025 unverändert offen, geordnet nach Gewicht ab C-12 | spec-ux-reviewer |
+
+| O-I | Kommentar an `packages/storage/src/ports.ts` begründet `resolveRule`/`resolveExcluded` mit einem Aufrufer in `routes/addin`, den es seit T-086 nicht mehr gibt; einziger Nutzer in `src` ist der Adapter, dazu `repo-tags.test.ts`. Entweder Kommentar richtigstellen oder beide zugunsten von `resolveAxes` streichen | domain-dev |
+| O-J | `resolved` trägt drei Wahrheitswerte (`isEmpty`, `unresolvedRequired`, `matchesNothing`); frontend-dev schlägt einen benannten Grund `matchesNothingReason: 'none' \| 'empty' \| 'unresolved-required'` vor, damit ein dritter Grund die Oberfläche rot statt still macht | domain-dev |
+| O-K | Das Add-in kann nicht sagen, *warum* ein Pool im Aufgabenbereich fehlt (bekommt nur Namen). Produktfrage: reicht das? | Auftraggeber |
+| O-L | `scripts/**/*.mjs` (Nachweispfade, Attrappen) sieht kein Übersetzer; ein `matchesPool`-Aufruf ohne Pflichtfeld bleibt dort still. Option: `checkJs` mit JSDoc-Typen für die Skripte | Orchestrator |
 
 ## Blockiert — braucht eine Umgebung, die hier nicht steht
 
