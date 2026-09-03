@@ -1197,3 +1197,43 @@ niemand, wenn X leer ist. Beide Modi treffen nichts.
 **Nicht betroffen.** Ein Term, der auf mindestens einen Tag auflöst, verhält sich wie bisher.
 Ausgeschlossene Tags über einen leeren Ordner schließen nichts aus — das ist die richtige
 Lesart von „keiner davon" über nichts, und es engt nicht ein, sondern lässt in Ruhe.
+
+## E-058 — Die Poolbewegung wird einmal berechnet und an beiden Flächen in denselben Worten gesagt
+
+**Befund aus R-1 und R-2 (2026-09-03).** Der Satz `CARD_STAYS` („Die Karte bleibt, wo sie ist —
+die Spalte ändert sich dadurch nicht.") steht zeichengleich in `apps/web/src/lib/labels.ts` und
+`apps/outlook-addin/src/duplicate/reopen.ts`. Er stammt aus der Zeit, in der eine Spalte nur an
+Tags hing. Seit E-055 entscheidet eine Spalte auch über „Erledigt" und über den Exportstatus, und
+beides ändert ein Timerstart: Das Kennzeichen fällt, die erste Buchung setzt „hat offene
+Buchungen". Der Satz ist also falsch, und er ist es an vier Flächen gleichzeitig. Dazu berechnet
+das Add-in die Bewegung serverseitig (`bookingStates`, drei Listen), die Hauptanwendung fragt
+`poolsContaining` und kürzt bei zwölf — zwei Auskünfte für dieselbe Handlung, und die zweite
+kennt `leaves` nicht.
+
+**Entscheidung.**
+
+1. Die Bewegung eines Todos durch die Pools ist **ein** Anwendungsfall des lokalen Dienstes:
+   `apps/local-api/src/usecases/pool-movement.ts` nimmt das Zustandspaar vor und nach der
+   Handlung (Tags, Status, `completedAt`, offene und exportierte Buchungen) und alle Pools
+   (`list('all')`, auch reine Board-Spalten) und liefert `{ appears, enters, leaves }` mit den
+   Bedeutungen aus T-084: `appears` = gilt nachher, `enters` = gilt nachher und galt vorher nicht,
+   `leaves` = galt vorher und gilt nachher nicht. Der Add-in-Dienst benutzt ihn statt einer
+   eigenen Fassung; `POST /timer/start` liefert ihn als `poolMovement` mit, wenn der Start das
+   Kennzeichen aufgehoben hat oder die erste Buchung entsteht — sonst `null`.
+2. Der Satz dazu ist eine reine Funktion in `packages/domain` (`poolMovementSentence(movement,
+   tense)`), übernommen aus `reopen.ts` und in einer Hinsicht geändert: Er spricht nicht mehr von
+   „Poolregel auf seine Tags", sondern von „Regel", weil eine Regel fünf Achsen hat. Beide
+   Oberflächen rufen diese Funktion; keine hält eine eigene Abschrift. `CARD_STAYS` entfällt
+   ersatzlos — wo nichts hinzukommt und nichts wegfällt, sagt die Funktion das, und wo sich etwas
+   ändert, sagt sie was.
+3. Reihenfolge: domain-dev baut 1 und 2 (Welle A). integration-dev und frontend-dev stellen um,
+   sobald beides steht (Welle B). Bis dahin bleibt der falsche Satz stehen, mit Board-Eintrag,
+   nicht stillschweigend.
+
+**Warum die Funktion in der Domäne liegt.** Sie ist reine Abbildung von drei Listen auf einen
+Satz, ohne HTTP und ohne SQL. Ein Text, der an zwei Flächen zeichengleich sein muss, hat genau
+eine Quelle; `proof:addin` prüft die Gleichheit weiter, jetzt gegen die Funktion statt gegen eine
+Abschrift.
+
+**Nicht entschieden.** Ob der Aufgabenbereich des Add-ins den *Grund* einer fehlenden Spalte nennen
+kann (O-K), bleibt beim Auftraggeber.

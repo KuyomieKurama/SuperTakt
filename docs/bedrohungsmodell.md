@@ -1,8 +1,15 @@
 # Bedrohungsmodell — Takt
 
-Stand: **2026-09-02, Aufgabe T-067** — Prüfung vor der Veröffentlichung.
-Vorstand: 2026-09-01, Aufgabe T-023, Welle 8 — Gegenprobe gegen den fertigen Code.
+Stand: **2026-09-03, Aufgabe R-3** — Nachprüfung des Branches `status-als-regelterm`.
+Vorstand: 2026-09-02, Aufgabe T-067 — Prüfung vor der Veröffentlichung.
+Davor: 2026-09-01, Aufgabe T-023, Welle 8 — Gegenprobe gegen den fertigen Code.
 Erstfassung: 2026-08-31, Aufgabe T-003, Welle 1. Verantwortlich: security-checker.
+
+Was R-3 geändert hat: der neue **Abschnitt 14**. Er schreibt **VG-2** (was das Add-in seit
+T-076/T-084/T-086 zusätzlich bekommt), **B-1.7** (zwei gemessene Zahlen) und **B-11.4** samt
+Abschnitt 13 fort (der Baum, der veröffentlicht würde, trägt jetzt 186 MB Bauergebnisse). Am
+Katalog B-1.1 bis B-12.x ist nichts umnummeriert und nichts umgeschrieben; das Urteil in
+Abschnitt 11 bleibt stehen.
 
 Was T-067 geändert hat: Abschnitt 0 um den Werkzeugstand vom 2026-09-02, die neuen Bedrohungen
 **B-11.4** (der erste Commit ist die Veröffentlichung) und **B-11.5** (Lizenz und fremdes
@@ -2361,3 +2368,214 @@ Zeichenkette ausgeführt).
 
 Alles Übrige in diesem Dokument beschreibt geschlossene Türen und wie sie geschlossen wurden.
 Das ist für einen Leser wertvoll und für einen Angreifer wertlos.
+
+---
+
+## 14. Nachprüfung R-3 (2026-09-03) — die Regel als Struktur
+
+Anlass: der Branch `status-als-regelterm` (E-055 bis E-057), vier Commits, 99 geänderte Dateien.
+Die Regel eines Pools ist keine Liste gleichartiger Terme mehr, sondern eine Struktur mit fünf
+Achsen: erforderliche Tags mit Modus, ausgeschlossene Tags, Status, Erledigt, Exportstatus. Der
+vollständige Befundbericht steht in `.claude/team/reports/R-3-security-checker.md`; hier steht
+nur, was die **Bewertung** dieses Dokuments ändert.
+
+### 14.1 Werkzeugstand
+
+| Werkzeug | Lief | Ergebnis |
+|---|---|---|
+| Semgrep CLI 1.166.0, `p/secrets p/security-audit p/typescript p/owasp-top-ten` über die 64 geänderten Quelldateien | **ja** | 129 Regeln, **0 Befunde** |
+| Semgrep Guardian — SAST, Geheimnisse, Lieferkette | **nein** | `Not logged into Semgrep Guardian.` Zum vierten Mal. Offene Frage 8 bleibt offen. |
+| 42Crunch-Audit und -Scan | **nein** | `42c-ast` weiterhin nicht installiert, `~/.42crunch` existiert nicht. **Es gibt weiterhin keinen Auditwert.** |
+| `pnpm run boundaries`, `proof:route-policy`, `proof:access`, `proof:db-permissions`, `proof:openapi`, `proof:addin`, `proof:conflicts` | **ja** | sämtlich grün; 485 Prüfungen |
+| Eigene Messungen gegen den zusammengesetzten Dienst (Injektion, Kosten, Statuscodes) | **ja** | 14.3 |
+| Inhalt der beiden eingecheckten Bündel | **nein** | weder `unsquashfs` noch `dpkg-deb` auf dieser Maschine. Siehe 14.4. |
+
+### 14.2 VG-2 fortgeschrieben — was das Add-in jetzt bekommt
+
+Die Fläche des Add-in-Tokens ist in dieser Welle **inhaltlich gewachsen und im Ausschnitt
+geschrumpft**. Beides gehört zusammengelesen:
+
+- `AddinUnit.pools` steht auf `Pick<PoolPort, 'list' | 'resolveAxes'>`. Vorher waren es
+  `'list' | 'resolveRule'` plus vorübergehend `'resolveExcluded'` — zwei Methoden sind weg, eine ist
+  dazugekommen, und sie liest dieselben Zeilen derselben Tabelle.
+- `GET /addin/context` liefert weiterhin Tagbaum, Status, Standard-Tags und die Pools. Der `Pool`
+  trägt seit T-076 vier Felder mehr: `excludedTags`, `statusIds`, `completion`, `exportState`.
+- Die Treffer- und die Buchungsantwort tragen zwei Namenslisten mehr: `enteringPoolNames` und
+  `leavingPoolNames` neben dem bestehenden `poolNames`.
+
+**Bewertung: dieselbe Datenklasse, keine neue.** Ordnerkennungen verließen den Dienst an dieser
+Route schon vorher — als `folderId` im Regelterm und ohnehin vollständig über `folders.loadTree()`.
+Die neu berechneten `emptyFolderIds` bleiben **im Dienst**: Sie werden ausschließlich zu
+`unresolvedRequired` verrechnet und stehen in keiner Antwort. Poolnamen gingen seit T-038 hinaus;
+`appears`/`enters`/`leaves` sind drei Sichten auf dieselbe Menge. Die vier zusätzlichen Regelfelder
+sind Konfiguration, die der Benutzer selbst angelegt hat: Sie sagen, wonach eine Spalte filtert,
+nicht was in ihr steht. Ein entwendetes Dauertoken (B-2.8, B-2.9) gewinnt damit Kenntnis über die
+**Einrichtung**, nicht über Kundendaten — keine Todos, keine Vermerke, keine Buchungen fremder
+Todos. `PoolWithResolution` hängt ausdrücklich an `/pools` und am Board und **nicht** an
+`/addin/context`.
+
+**B-2.10 bleibt geschlossen.** `requiredCredentialForPath` ist unverändert; abgesenkt sind nur der
+Teilbaum `/api/v1/addin` und `GET /health`. `proof:route-policy` misst, dass die Add-in-Fläche
+**genau vier Routen** sind, dass daneben genau `GET /health` abgesenkt ist und dass alle übrigen
+60 Routen mit dem Add-in-Token 401 ergeben.
+
+**Was dieser Nachweis nicht deckt, und das gehört in dieses Dokument.** Er bewacht die **Zahl und
+Identität** der erreichbaren Routen, nicht den **Inhalt** ihrer Antworten. Die Add-in-Fläche wächst
+künftig nicht über eine fünfte Route — die würde rot —, sondern über ein neues Feld an einer der
+vier bestehenden Antworten. Genau das ist in dieser Welle zweimal geschehen (T-084, T-086), beide
+Male begründet und beide Male vertretbar. Die Wache dagegen ist zweiteilig und **kein** Exitcode:
+der Port-Ausschnitt in `routes/addin/ports.ts`, den ein Entwickler anfassen muss, um an neue Daten
+zu kommen, und die Gestaltprüfung in `proof:openapi`. Wer diese Grenze künftig beurteilt, prüft
+`ports.ts` und nicht die Routenliste.
+
+### 14.3 B-1.7 fortgeschrieben — zwei gemessene Zahlen
+
+Der Fragezeichenparameter `poolId` von `GET /todos` wird zerteilt, ohne geprüft und ohne gezählt zu
+werden (`apps/local-api/src/routes/todos.ts:105`, `:114`). Injektion ist ausgeschlossen — gemessen
+mit `'`, `a' OR '1'='1` und `%` als Poolkennung, alle drei ergeben 200 mit leerer Trefferliste, weil
+die Abfrage ausschließlich mit Platzhaltern arbeitet. Die Wirkung ist Rechenzeit und ein
+Statuscode:
+
+| Anfrage (Ordnerkette 200 tief, Regel mit 200 Ordnertermen) | Antwort |
+|---|---|
+| eine Regel genannt | 200 in 42 ms |
+| dieselbe Regel 200-mal genannt | 200 in **8 370 ms** |
+| 999 unbekannte Kennungen | 200 |
+| 1 000 unbekannte Kennungen | **500** `internal_error` (Ausdrucksbaumgrenze von SQLite) |
+
+Die 500 verrät nichts: Der Text ist konstant, die Protokollzeile nennt nur den Schlüssel. Sie ist
+ein **falscher Statuscode**, kein Auskunftsproblem — 422 wäre richtig. Die Schwelle liegt am
+ODER-Aufbau und ist älter als dieser Branch; die 8,4 Sekunden sind neu in dieser Höhe, weil je
+Poolkennung jetzt rund acht Abfragen statt zweier laufen.
+
+**Einordnung.** A-02, die fremde Webseite, erreicht diesen Weg nicht: Die Kette weist sie vor dem
+Router ab (eigene Kopfzeile, Herkunftsprüfung, `Sec-Fetch-Site`). Es bleibt A-03, ein lokaler
+Prozess mit dem Sitzungsgeheimnis — und der hat größere Möglichkeiten, als den Dienst zu
+beschäftigen. Der Sidecar ist allerdings einfädig: Acht Sekunden in einer Abfrage sind acht
+Sekunden stehende Oberfläche und ein ausbleibendes Lebenszeichen des Timers, und das trifft auch
+den Benutzer, der sich selbst eine ungünstige Regel gebaut hat. **Gegenmittel:** `poolId`,
+`statusId` und `tagId` nach dem Zerteilen durch `z.array(idSchema).max(50)`.
+
+Dazu gehört eine zweite Zahl. Die rekursive Ordnerauflösung trägt seit E-057 die Wurzel im Tripel
+(`down(root, id, depth)`), weil sonst nicht zu sagen wäre, **welcher** genannte Ordner nichts
+beigetragen hat. Der Preis: Der Aufwand ist je Term statt je Teilbaum. Gemessen an derselben Kette
+kostet ein Ordnerterm 0,6 ms und kosten 200 Ordnerterme auf dieselbe Kette 41,6 ms — Faktor 70 bei
+gleicher aufgelöster Tagmenge. Nach oben begrenzen ihn `max(200)` je Liste und die Schranke
+`down.depth < 1000`; letztere ist zugleich das, was einen Zyklus im Ordnerbaum enden ließe, weil
+das `UNION` über `(root, id, depth)` entdoppelt und `depth` mitläuft. Wer die Spitze nehmen will,
+begrenzt die Zahl der **Ordner**terme enger als die der Tagterme.
+
+### 14.4 B-11.4 und Abschnitt 13 fortgeschrieben — der Baum trägt jetzt 186 MB Bauergebnisse
+
+Abschnitt 13 hat am 2026-09-02 „die 473 Dateien, die `git status --porcelain -uall` auflistet"
+geprüft und für hygienisch befunden. Diese Aussage gilt für den Branch `status-als-regelterm`
+**nicht mehr**. Mit `48c982a` sind hinzugekommen:
+
+```
+apps/desktop/release/x86_64-unknown-linux-gnu/Takt_0.1.0_amd64.AppImage   138 721 784 Bytes
+apps/desktop/release/x86_64-unknown-linux-gnu/Takt_0.1.0_amd64.deb         47 511 598 Bytes
+apps/desktop/release/x86_64-unknown-linux-gnu/SHA256SUMS                          179 Bytes
+```
+
+`git check-ignore` meldet Exitcode 1: Die Dateien sind von **keiner** Ignorierregel gedeckt.
+`apps/desktop/.gitignore` schließt jedes andere erzeugte Ergebnis aus — `binaries/`,
+`src-tauri/target/`, `src-tauri/taskpane/`, `.sidecar-build/` und seit `3240dcc` auch
+`src-tauri/licenses/`, jedes mit ausgeschriebener Begründung. Der Ordner `release/` ist neu und in
+keiner dieser Regeln enthalten. Es ist eine Lücke, keine Entscheidung.
+
+**Wirkung, im Rahmen dieses Dokuments.**
+
+1. **Nicht prüfbar (Abschnitt 13, VG-7).** Ein Bündel dieser Größe sieht in einem Review niemand
+   an. `strings` über die `.AppImage` findet keine Pfade aus dem Heimatverzeichnis des
+   Entwicklers; der Inhalt liegt aber in einem SquashFS, und weder `unsquashfs` noch `dpkg-deb`
+   stehen hier zur Verfügung. **Was in diesen 186 MB steckt, ist nicht festgestellt.** Das Bündel
+   enthält bauartbedingt die Sidecar-Binärdatei und das Add-in-Bündel aus `src-tauri/taskpane/`,
+   also alles, was zur Bauzeit in diesen Verzeichnissen lag.
+2. **Lieferkette (VG-7, B-10.x).** Eine eingecheckte, vorgebaute Binärdatei mit daneben liegender
+   `SHA256SUMS` sieht aus wie eine beglaubigte Auslieferung und ist eine Selbstauskunft. Der
+   nächste Schritt, der „nimm die Datei aus dem Repository" heißt, stünde auf einer Grundlage, die
+   niemand geprüft hat.
+3. **B-11.4 wörtlich.** „Der erste Commit ist die Veröffentlichung." Der Branch ist noch **nicht**
+   gepusht — `git branch -r` kennt ihn nicht. Solange das so ist, kostet die Bereinigung einen
+   Rebase; danach kostet sie eine Historienumschreibung auf einem geteilten Branch, und die 186 MB
+   liegen bis dahin in jedem Klon.
+
+**Gegenmittel (Orchestrator, vor dem Push).** `release/` in `apps/desktop/.gitignore` aufnehmen,
+mit derselben Begründung wie bei `src-tauri/licenses/`; die drei Dateien aus der Historie des
+Branches nehmen. Ein `git rm` in einem weiteren Commit genügt nicht — die Blobs blieben in der
+Historie.
+
+### 14.5 `pool_rule.status_id ON DELETE RESTRICT` — kein neuer Angriffsweg
+
+Wer eine Regel mit einem Statusterm anlegt, macht diesen Status unlöschbar, bis die Regel geändert
+oder entfernt ist. Ausdrücklich bewertet, weil die Frage nahe liegt:
+
+1. **Der Hebel liegt hinter dem Sitzungsgeheimnis.** `POST /pools` ist eine der 60 Routen, die mit
+   dem Add-in-Token 401 ergeben. Ein entwendetes Dauertoken erreicht ihn nicht.
+2. **Wer das Sitzungsgeheimnis hat, hat mehr.** Todos löschen, Buchungen ändern, den Exportstatus
+   zurücksetzen (B-2.10 beschreibt den Fall). Ein unlöschbarer Status ist demgegenüber kein
+   Zugewinn.
+3. **Reversibel und sichtbar.** 409 mit `status_in_use` und einem deutschen Satz; `proof:conflicts`
+   misst die Gegenprobe, dass der Status nach dem Herausnehmen des Terms löschbar ist.
+
+`RESTRICT` ist überdies die sicherheitlich richtige Wahl: `CASCADE` entkernte eine Regel
+stillschweigend, und eine Spalte, die danach **mehr** Todos trifft als vorher, ist der Fehler in
+die gefährliche Richtung. Kein Eintrag im Bedrohungskatalog, festgehalten als geprüft.
+
+### 14.6 Was in dieser Welle nachweislich gehalten hat
+
+- **VG-5, die Notiz-Trennung.** Alle vier Schichten grün, und zusätzlich dynamisch: `proof:openapi`
+  sammelt jede Antwort des Szenariodurchlaufs ein und misst, dass der interne Vermerk in keiner
+  außer seiner eigenen Route vorkommt. `Todo` trägt weiterhin kein Notizfeld.
+- **Injektion.** Die neu zusammengesetzten Bedingungen arbeiten ausschließlich mit Platzhaltern;
+  `IN`-Listen sind auf 200 begrenzt beziehungsweise geblockt. Nachgemessen, nicht gelesen.
+- **Integrität der Abfrage.** Der in T-082 behobene Fehler an der Parameterreihenfolge wäre nach
+  E-057 erreichbar geworden und hätte **alle** folgenden Werte einer Abfrage verschoben,
+  einschließlich derer von Suche und Blätterung. Das ist ein Integritätsproblem an W-04 über den
+  Umweg der Anzeige, und es ist behoben.
+- **Fehlerhülle (B-2.4).** Fremdschlüssel- und Eindeutigkeitsverletzungen werden 422
+  beziehungsweise 409 mit konstanten Sätzen; kein Indexname, keine SQLite-Meldung, kein
+  Aufrufstapel verlässt den Dienst.
+- **Lieferkette (VG-7).** `pnpm-lock.yaml` ist im gesamten Diff unverändert. Kein neues Paket.
+- **Kein neuer XSS- oder ReDoS-Weg.** Kein `dangerouslySetInnerHTML`, kein `eval`, kein
+  `new RegExp` im Diff; der konfigurierbare reguläre Ausdruck des Add-ins ist nicht angefasst.
+
+### 14.7 Ein Nachweis, der grün wird, ohne etwas geprüft zu haben
+
+Zum Schluss ein Punkt, der kein Loch ist und trotzdem in dieses Dokument gehört, weil mehrere
+Aussagen darauf ruhen.
+
+`packages/domain/scripts/check-export-boundary.mjs` trägt die vierte Schicht der Notiz-Trennung —
+die, die kein Paketmanager erzwingen kann. Zwei seiner Prüfungen laufen über gesammelte Dateien und
+melden deren Zahl als Fließtext (`packages/export: 8 Quelldatei(en)`, `298 Quelldatei(en)
+außerhalb der Domäne`), **prüfen die Zahl aber nicht**. `collect()` gibt für ein nicht vorhandenes
+Verzeichnis eine leere Liste zurück. Eine Umbenennung, ein Umzug oder ein Fehler im Sammler ergäbe
+„0 Quelldatei(en) geprüft", Exitcode 0 und die Schlusszeile „Notiz-Trennung: alle Schichten
+unverletzt."
+
+Das ist die allgemeine Gestalt eines Risikos, das dieses Projekt an mehreren Stellen trägt: Die
+Nachweisskripte unter `scripts/**/*.mjs` sieht kein Übersetzer (Board-Punkt O-L), und sie sind das
+Sicherheitsnetz für Aussagen, die sonst niemand nachrechnet. Sie scheitern laut, wenn sie werfen —
+Node beendet sich mit Code 1 —, aber sie scheitern **still**, wenn ihre Grundmenge leer ist oder
+eine Vergleichszeile beidseitig `undefined` vergleicht. Die Gegenmaßnahme ist billig und steht in
+`proof:route-policy` bereits vorbildlich da: eine Untergrenze auf die Zahl der geprüften Gegenstände
+(`routes.length >= 60`), die rot wird, statt eine Null zu drucken. Dieselben zwei Zeilen fehlen im
+Grenzwächter.
+
+Ebenfalls unter O-L: `matchesPool` verlangt seit T-082 das Feld `unresolvedRequired`, und ein
+fehlendes Feld liest sich zur Laufzeit als „nein" — also als die zu weite Antwort von vor E-057.
+Für übersetzten Code und seit T-088 auch für die Prüffälle in domain, storage und export hält das
+Typsystem; für `scripts/**/*.mjs` und `apps/*/test/**` hält es nichts. Die Skripte dieser Welle
+geben das Feld ausdrücklich mit, und `proof-addin.mjs` misst sogar in **beide** Richtungen, dass es
+den Unterschied macht. Die dauerhafte Antwort wäre ein Wurf in `matchesPool`, wenn das Feld kein
+Wahrheitswert ist: Ein Aufrufer, der die Frage nicht beantwortet, bekäme einen lauten Fehler statt
+einer zu weiten Antwort.
+
+### 14.8 Urteil dieser Nachprüfung
+
+**Freigegeben mit einer Auflage.** Der Code des Branches ist aus Sicht dieses Dokuments in Ordnung:
+Die neuen Achsen sind an der Routengrenze geprüft und begrenzt, die Abfrage ist parametrisiert, die
+Add-in-Grenze ist enger geworden, die Notiz-Trennung hält, und die Migration ist in beide
+Richtungen mit engen Dateirechten gefahren. Die Auflage betrifft den **Baum**, nicht den Code: Die
+186 MB aus 14.4 sind vor dem Push zu entfernen. Bis dahin gilt die Aussage aus Abschnitt 13 — „der
+Baum, der veröffentlicht würde, ist geprüft" — für diesen Branch nicht.

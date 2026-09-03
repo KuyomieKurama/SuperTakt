@@ -100,6 +100,19 @@ Kollisionsfrei: `packages/*/test/**` gegen `routes/addin/**` gegen `apps/web/**`
 End-to-End erst danach — `tests/e2e/kanban.spec.ts` prüft noch das Ziehen, das E-054 abgeschafft
 hat.
 
+### Welle vom 2026-09-03, Review-Runde (Qualitätstor)
+
+Stand `3240dcc`: `pnpm check` Exitcode 0 (13 Nachweispfade, 818 Prüfungen, 595 Einheitentests,
+Abdeckung 91 %), `pnpm test:e2e` 34/34. Prüfumfang `git diff 7c71186..HEAD`.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~R-1~~ | **nicht freigegeben.** Blockierend: (1) `TagFolderPort.remove` prüft keine Verwendung in `pool_rule`, `folder_id` steht auf `CASCADE` — Löschen eines leeren Ordners macht „Ordner Ost und Status offen" still zu „Status offen", genau die Richtung gegen E-057; (2) `bookOnTodo` gibt bei scheiterndem `clearDone` `rejected` **zurück** statt abzubrechen, die Unit of Work committet — Buchung steht, Client hört „abgewiesen", Doppelbuchung; (3) `poolNamer` ruft `pools.list()` ohne `'all'`, Attrappe ignoriert das Argument — deckt sich mit R-2 B-4; (4) 138,7 MB AppImage + 47,5 MB `.deb` unter `apps/desktop/release/` in `48c982a`, `.git` 181 MB. Sollte: Typwache lückenhaft in `board.ts:86` und `service.ts:306` (sechste Achse würde dort nicht rot), `as never` in `structure.ts`, zweite Fassung der Filteraufzählungen in `labels.ts`, `status_in_use` ohne vierten Grund in OpenAPI | code-reviewer |
+| ~~R-2~~ | **nicht freigegeben.** B-1: `CARD_STAYS` („die Spalte ändert sich dadurch nicht") ist seit E-055 falsch, zeichengleich an vier Flächen, seit T-072 offen. B-2: Add-in nennt `leaves`, Hauptanwendung nicht (C-03). B-4: `poolNamer` ruft `pools.list()` ohne `'board'` — reine Board-Spalten nie genannt. B-5: `PoolFormDialog` ohne Lade-/Fehlerzustand für Ordner und Status. D-1/D-2: Benutzerhandbuch beschreibt Drag & Drop. Deckungslücken A-3.5/A-3.6/A-5.7 nachzutragen. Empfehlung O-E: kein Ziehen, Status-Untermenü auf der Karte; O-K: Wahrheitswert über den ganzen Satz | spec-ux-reviewer |
+| R-3 | Sicherheitsprüfung: Validierung der Regelfelder, SQL-Zusammensetzung, Vertrauensgrenze Add-in nach `resolveAxes`, Notiz-Trennung, `RESTRICT`, Repository-Hygiene | security-checker |
+
+Danach documenter.
+
 ## Offen — Restpunkte, keine Blocker
 
 | Nr | Punkt | Wer |
