@@ -217,7 +217,7 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
     },
 
     /**
-     * Löschen. Drei Gründe, die es verhindern, und alle drei sind fachlich.
+     * Löschen. Vier Gründe, die es verhindern, und alle vier sind fachlich.
      *
      * Der Fremdschlüssel `todo.status_id` steht auf `ON DELETE RESTRICT` und
      * würde den zweiten Fall ohnehin abweisen. Die Prüfung hier davor liefert
@@ -265,6 +265,36 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
           taktError(
             'status_in_use',
             'Diesen Status tragen noch Todos. Geben Sie ihnen zuerst einen anderen.',
+          ),
+        );
+      }
+
+      /**
+       * Der vierte Grund, seit T-076: Der Status steht in der Regel eines Pools
+       * oder einer Kanban-Spalte.
+       *
+       * Wörtlich dieselbe Lage wie bei einem Tag in einer Regel (`tag_in_use`,
+       * A-4.5) — mit einem Unterschied, den man sehen muss: `pool_rule.tag_id`
+       * steht auf ON DELETE **CASCADE**, `status_id` auf **RESTRICT**. Bei den
+       * Tags ist die Prüfung hier die einzige Wache; bei den Status weist auch
+       * die Datenbank ab, und diese Prüfung nimmt ihr nur das Wort aus dem
+       * Mund: „Diesen Status benutzt noch eine Regel" statt „FOREIGN KEY
+       * constraint failed".
+       *
+       * Warum nicht kaskadieren: Eine Regel, der ihr letzter Statusterm
+       * stillschweigend entzogen wird, hat danach eine Achse weniger und trifft
+       * mehr Todos als vorher — oder, wenn es ihre einzige Achse war, gar
+       * keine. Beides fiele erst auf, wenn jemand auf das Board sieht und sich
+       * wundert.
+       */
+      const inRule = conn
+        .prepare("SELECT COUNT(*) AS n FROM pool_rule WHERE status_id = ? AND role = 'status'")
+        .get(id);
+      if (inRule !== undefined && integer(inRule, 'n') > 0) {
+        return err(
+          taktError(
+            'status_in_use',
+            'Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst heraus.',
           ),
         );
       }

@@ -56,8 +56,9 @@ Migration 0001 legt 16 Tabellen, eine Sicht, 32 Indizes und 12 Trigger an. Migra
 `time_entry`; 0008 (T-058) zwei Indizes und zwei Trigger auf `tag`; 0009 (T-066, E-054) eine
 Spalte auf `pool` und **keinen** Index — die Begründung steht in der Migrationsdatei und in 8.4d.
 0010 (T-070, E-054) nimmt `todo.board_rank` und `ux_todo_rank` weg und verkürzt `ix_todo_status`
-auf eine Spalte; siehe 8.4e.
-Der Stand nach 0010 sind damit 17 Tabellen, eine Sicht, 33 Indizes und 17 Trigger (nachgezählt:
+auf eine Spalte; siehe 8.4e. 0011 (T-076) baut `pool_rule` um — zwei Spalten mehr an `pool`, eine
+Rolle und eine Statuskennung an `pool_rule`, ein Index dazu; siehe 3.5 und 8.4f.
+Der Stand nach 0011 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
 `sqlite_master` nach `migrateToLatest`, Node 22.23.2). Hinzu kommt `schema_migration`, die der Migrationsläufer selbst
 führt und die deshalb in keiner Migration steht.
 
@@ -620,13 +621,86 @@ andere wäre ein Fehler im Adapter und soll auffallen, statt stillschweigend Dat
 
 ### 3.5 `pool` und `pool_rule` (A-3.*) — und die Kanban-Spalten (E-054)
 
-Gespeichert wird die Regel, nie die Mitgliedschaft. Ein Regelteil verweist entweder auf ein
-einzelnes Tag (A-3.2) oder auf einen Ordner, dessen Tags samt Unterordnern zählen — genau eines
-von beidem, erzwungen über `CHECK ((tag_id IS NULL) <> (folder_id IS NULL))`.
+Gespeichert wird die Regel, nie die Mitgliedschaft.
 
-`match_mode` unterscheidet „mindestens ein Regel-Tag" von „alle Regel-Tags", `include_subfolders`
-steuert die Tiefe. Das deckt „flexibel konfigurieren" aus A-3.3, ohne eine Abfragesprache
-einzuführen, die man validieren und gegen Einschleusung absichern müsste.
+#### Die Regel ist eine Struktur mit benannten Feldern (T-076, Migration 0011)
+
+Bis T-076 war eine Regel **eine Liste gleichartiger Terme**: `pool_rule` mit `tag_id` **oder**
+`folder_id`, und `pool.match_mode` sagte, ob eines oder alle zutreffen müssen. Der Auftraggeber
+wollte den Status als Regel aufnehmen und hat dazu ein Vorbild gezeigt — die Board-Konfiguration
+von Super Productivity mit getrennten Feldern für erforderliche Tags, ausgeschlossene Tags und
+drei Optionsgruppen mit „Alle" als Vorgabe. „Nimm dir ein Beispiel daran. Das regelt das."
+
+Es regelt drei Dinge, die eine Liste gleichartiger Terme nicht kann:
+
+1. **„nicht".** Eine Liste hat keinen Platz für ein ausgeschlossenes Tag. Man müsste das
+   Vorzeichen an den Term hängen — und hätte danach zwei Sorten Term in einer Liste, deren
+   Verknüpfung man erklären muss, statt sie zu lesen.
+2. **Größen, die keine Tagmenge sind.** `tag` und `folder` lösen sich beide zu Tagkennungen an
+   `todo_tag` auf. Der Status tut das nicht: Er steht als `todo.status_id` **an der Zeile**,
+   genau einer je Todo. Ebenso „Erledigt" (`todo.completed_at`) und der Exportstatus, der an den
+   **Buchungen** hängt und nicht am Todo.
+3. **Einen Neutralwert je Bedingung.** In einer Liste ist „diese Bedingung ist nicht gesetzt"
+   dasselbe wie „die Liste ist leer" — die leere Regel war deshalb ein Sonderfall, den jede
+   Auswertung eigens abfangen musste.
+
+Seitdem hat jede Bedingung ihr eigenes Feld:
+
+| Achse | Wo sie steht | Verknüpfung | Neutralwert |
+|---|---|---|---|
+| erforderliche Tags | `pool_rule`, `role = 'required'` | `pool.match_mode`: alle oder mindestens eines | leere Liste |
+| ausgeschlossene Tags | `pool_rule`, `role = 'excluded'` | keines davon | leere Liste |
+| Status | `pool_rule`, `role = 'status'` | einer von diesen | leere Liste = „Alle" |
+| Erledigt | `pool.completion` | `any` / `done` / `open` | `any` |
+| Exportstatus | `pool.export_state` | `any` / `open` / `exported` | `any` |
+
+**Die Achsen sind mit „und" verbunden**, jede engt weiter ein; keine kann das Ergebnis
+vergrößern. Das ist keine Wahl, die man auch anders treffen könnte: Ein „oder" zwischen
+erforderlichen und ausgeschlossenen Tags wäre sinnlos, und eine zusätzlich genannte Bedingung,
+die **mehr** trifft, wäre in jeder Ansicht eine Überraschung.
+
+**Innerhalb** einer Achse steht die Verknüpfung an der Achse. Für die Status ist sie keine
+Entscheidung, sondern eine Tatsache: `todo.status_id` trägt genau einen Wert, ein „alle davon"
+über zwei Status wäre nicht streng, sondern unerfüllbar — eine Spalte, die garantiert leer bleibt.
+
+**Stehen alle Achsen neutral, trifft die Regel nichts** (A-3.4). Nicht „alle null Bedingungen sind
+erfüllt": Eine Regel, die noch nicht eingerichtet ist, hätte sonst schlagartig jedes Todo als
+Mitglied.
+
+**Was das an E-054 nicht ändert.** Status und Kanban-Spalte bleiben getrennt. Eine Spalte wird
+durch `role = 'status'` nicht wieder zum Status: Sie kann mehrere Status umfassen, keinen, oder
+Status und Tags mischen, und dieselbe Karte kann weiterhin in mehreren Spalten stehen.
+
+Das Schema erzwingt die Zuordnung Rolle → gefüllte Spalte erschöpfend:
+
+```sql
+CHECK (
+     (role IN ('required', 'excluded')
+      AND status_id IS NULL
+      AND ((tag_id IS NULL) <> (folder_id IS NULL)))
+  OR (role = 'status'
+      AND status_id IS NOT NULL AND tag_id IS NULL AND folder_id IS NULL)
+)
+```
+
+`ux_pool_rule` führt seitdem `role` und `status_id` mit. Beides ist notwendig: Ohne `status_id`
+kollidierten zwei **verschiedene** Statusterme derselben Regel miteinander; ohne `role` ließe sich
+dasselbe Tag nicht zugleich erfordern und ausschließen — eine unsinnige Regel, aber eine Eingabe
+des Benutzers und kein Datenbankfehler.
+
+`pool_rule.status_id` steht auf **ON DELETE RESTRICT**, anders als `tag_id` und `folder_id`
+(CASCADE). Eine Regel, der ihr letzter Statusterm stillschweigend entzogen wird, träfe danach
+mehr Todos als vorher — oder, wenn es ihre einzige Achse war, gar keine. `TodoStatusPort.remove`
+nennt den fachlichen Grund (`status_in_use`), bevor die Datenbank ihn nennen muss.
+
+**Einen ausgeschlossenen Status gibt es nicht.** Er wäre eine vierte Rolle für eine Bedingung, die
+sich ohne sie ausdrücken lässt: Wer „alles außer Erledigt" meint, wählt die übrigen Status. Bei
+Tags ist das anders — dort sind es Tausende, und „alle außer diesem einen" ließe sich nicht
+aufzählen. Genau deshalb gibt es die Ausschlussliste für Tags und nicht für Status.
+
+`include_subfolders` steuert die Tiefe und gilt für **beide** Taglisten; eine getrennte Tiefe je
+Liste wäre eine zweite Wahrheit über denselben Baum. Das deckt „flexibel konfigurieren" aus A-3.3,
+ohne eine Abfragesprache einzuführen, die man validieren und gegen Einschleusung absichern müsste.
 
 #### `placement` — eine Entität, zwei Flächen (E-054, Migration 0009)
 
@@ -865,6 +939,26 @@ JOIN regel_tags r ON r.tag_id = tt.tag_id;
 Für `match_mode = 'all'` tritt eine `GROUP BY t.id HAVING count(DISTINCT r.tag_id) = :anzahl`
 hinzu.
 
+**Seit T-076 ist das die erste von fünf Achsen** (3.5). Die übrigen vier treten als weitere
+Bedingungen **derselben** WHERE-Klausel hinzu, mit UND verbunden; jede fällt weg, wenn sie neutral
+steht. `buildConditions` in `repo-todos.ts` setzt sie zusammen:
+
+| Achse | Bedingung | Zugriffspfad |
+|---|---|---|
+| ausgeschlossene Tags | `NOT EXISTS (SELECT 1 FROM todo_tag tt WHERE tt.todo_id = t.id AND tt.tag_id IN (…))` | `ix_todo_tag_reverse` |
+| Status | `t.status_id IN (…)` | Spalte an der Zeile, kein JOIN |
+| Erledigt | `t.completed_at IS NULL` bzw. `IS NOT NULL` | Spalte an der Zeile |
+| Exportstatus offen | `EXISTS (… te.export_status = 'open' AND te.ended_at IS NOT NULL)` | `ix_time_entry_queue` |
+| Exportstatus exportiert | `EXISTS (… te.export_status = 'exported')` | `ix_time_entry_todo` |
+
+Der Status ist der Grund, warum diese Übersetzung nicht durchweg über eine Verknüpfungstabelle
+gehen kann: Tags stehen in `todo_tag`, der Status steht als Spalte an `todo`. Die Abfrage muss
+beides in **einer** Bedingung können, und genau deshalb ist der Status ein eigenes Feld der Regel
+und kein weiterer Termtyp.
+
+Bleibt keine einzige Bedingung übrig, steht `0 = 1` — die leere Regel trifft nichts (A-3.4).
+Dieselbe Entscheidung wie in `matchesPool`, und ihre Übereinstimmung wird gemessen (4.4a).
+
 Gemessener Plan: `SEARCH pool_rule USING INDEX ux_pool_rule (pool_id=?)`,
 `SEARCH f USING INDEX ix_tag_folder_parent (parent_id=?)`,
 `SEARCH tt USING PRIMARY KEY (todo_id=?)`. Kein Basistabellenscan.
@@ -889,6 +983,17 @@ Wer wo steht, entscheidet damit die Abfrage. **Wer mehrfach steht**, entscheidet
 `boardAppearances` in `packages/domain/src/board.ts` — über `matchesPool`, dieselbe Funktion, die
 das Add-in benutzt, um die Pools eines Todos zu benennen. Zwei Fassungen derselben Regel also:
 eine in SQL, eine in TypeScript.
+
+**Zugehörigkeit und Sichtbarkeit sind dabei zwei getrennte Fragen, in dieser Reihenfolge**
+(T-076). Ob eine Karte in eine Spalte gehört, entscheidet die Regel; ob sie gezeigt wird,
+entscheidet die Ansicht (`includeCompleted`, E-039). Die Sichtbarkeit als sechste Achse zu führen
+wäre falsch, und zwar messbar: Eine Spalte **ohne** Regel bekäme dadurch die Bedingung „alle
+unerledigten" und zeigte alles statt nichts. `boardAppearances` prüft deshalb erst `matchesPool`
+und danach `isVisibleInPool` — mit derselben Ausblendung, unter der die Abfrage gelaufen ist.
+
+**Sagt die Regel selbst etwas über „Erledigt", tritt die Ansichtseinstellung zurück.** Eine Spalte
+`completion = 'done'` wäre unter der Vorgabe `includeCompleted = false` sonst immer leer, und die
+zweite Bedingung hat der Benutzer nie für diese Spalte gesetzt, sondern für die Ansicht.
 
 Das ist eine bewusste Wiederholung mit einem Grund. Die Mehrfachnennung aus den **geladenen
 Seiten** zu zählen wäre falsch, sobald eine Spalte mehr Karten hat, als eine Seite fasst: Die
@@ -1628,6 +1733,39 @@ NOT-NULL-Spalte nur mit Vorgabewert annimmt. Folgenlos, weil `ux_todo_rank` dana
 Ein INSERT ohne `board_rank` liefe beim zweiten Mal in derselben Statusspalte in die
 Eindeutigkeitsbedingung. Die Wache überlebt, sie heißt nur anders.
 
+### 8.4f Migration 0011 — ein Tabellenumbau, und die Frage, die er nicht stellen muss (T-076)
+
+`0011_pool_rule_axes` hängt `completion` und `export_state` an `pool` und baut `pool_rule` um:
+`role`, `status_id`, ein erschöpfender CHECK, ein erweiterter eindeutiger Index, ein neuer
+Teilindex auf `status_id`. Die Gestalt der Regel steht in 3.5.
+
+**Warum ein Umbau und kein ALTER.** SQLite kennt kein ALTER TABLE für einen CHECK, und der CHECK
+aus 0001 — `(tag_id IS NULL) <> (folder_id IS NULL)` — ist genau die Bedingung, die eine Zeile mit
+`status_id` verböte. Der Weg ist der vorgeschriebene und derselbe wie in 0006: neue Tabelle,
+kopieren, alte weg, umbenennen, Indizes wieder anlegen, mit `-- takt: foreign_keys=off` und
+`PRAGMA legacy_alter_table = ON`. `pool_rule` hat keine Kindtabelle und kein Trigger hängt daran;
+der Umbau ist deshalb einfacher als der in 0006.
+
+**Die Frage, die diese Migration nicht stellen muss.** Bei einer Umstellung von „Liste" auf
+„erforderliche Tags" lautet die gefährliche Frage: Wird eine vorhandene Tagliste zu „alle davon"
+oder zu „mindestens eines davon"? Sie wird hier **nicht geraten**, weil die Antwort schon dasteht.
+`pool.match_mode` hält sie seit 0001, je Regel einzeln — `'any'` ist die Vorgabe der Spalte, der
+Route und der Oberfläche (die dort wörtlich „Mindestens eines von" anzeigt), `'all'` steht nur, wo
+jemand es ausdrücklich gewählt hat. Jede vorhandene Zeile wird zu `role = 'required'`, `match_mode`
+bleibt unangetastet, `completion` und `export_state` stehen neutral. **Jede bestehende Regel
+trifft nach der Migration genau dieselben Todos wie davor.**
+
+Migration 0002 legt keine Pools an; es gibt also auch keinen mitgelieferten Bestand, der umgedeutet
+werden könnte.
+
+**Der Rückweg ist nicht verlustfrei, und er sagt es.** Zurück bleibt die Form von 0001: eine Liste
+gleichartiger Tagterme und `match_mode`. Erforderliche Tags stehen unverändert da; ausgeschlossene
+Tags, Statusterme und die beiden Spalten fallen weg, weil die alte Form kein Feld für sie hat.
+Eine Regel, die **nur** aus solchen Bedingungen bestand, hat danach eine leere Regel und trifft
+nichts — sichtbar leer. Die Alternative, solche Regeln zu löschen, weil es sie vorher nicht gab,
+nähme dem Benutzer eine von Hand eingerichtete Regel samt Namen und Position weg, ohne zu fragen.
+Dieselbe Abwägung wie in 8.4d.
+
 ### 8.5 Nachgewiesen
 
 Alle Migrationen wurden gegen SQLite 3.51.3 ausgeführt und in T-013 gegen SQLite 3.53.4 sowie
@@ -1678,6 +1816,12 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | 0010, zwei Todos in derselben Statusspalte | zulässig — die Rangeindeutigkeit, die es nicht mehr zu sichern gibt, sichert nichts mehr |
 | 0010 rückwärts **mit Daten** | 10 → 9: `board_rank` wieder da und wieder gleich der Kennung, alle Todos und der interne Vermerk unverändert, beide Indizes wortgleich wie in 0001 |
 | 0010, die zurückgelegte Wache | doppelter Rang in derselben Statusspalte: `UNIQUE`; ausgelassener Rang beim zweiten INSERT: ebenfalls `UNIQUE` (die Folge des `DEFAULT ''`, siehe 8.4e) |
+| 0011 vorwärts (T-076) | 0 → 11 auf leerer Datei; `pool.completion`/`pool.export_state` da, `pool_rule` mit `role`/`status_id`, `ux_pool_rule` fünfspaltig, `ix_pool_rule_status` neu — Stand danach 17 Tabellen, 34 Indizes, 17 Trigger, 1 Sicht |
+| 0011, die sechs Wachen | Tag und Status in **einer** Zeile: `CHECK`; Rolle `status` ohne `status_id`: `CHECK`; unbekannte Rolle: `CHECK`; derselbe Term zweimal: `UNIQUE ux_pool_rule`; `completion = 'vielleicht'`: `CHECK`; `export_state = 'vielleicht'`: `CHECK` |
+| 0011, RESTRICT auf dem Status | Löschen eines Status, der in einer Regel steht: `FOREIGN KEY constraint failed` — und über die Route `409 status_in_use` mit dem fachlichen Satz |
+| 0011, dasselbe Tag erforderlich **und** ausgeschlossen | zulässig. Eine unsinnige Regel, aber eine Eingabe des Benutzers; sie trifft nichts, und die Antwort darauf gehört in die Oberfläche, nicht in einen 409 |
+| 0011 rückwärts **mit Daten** | 11 → 10 mit zwei Regeln, davon eine gemischte: die erforderlichen Tagterme unverändert da, ausgeschlossene und Statusterme weg, `completion`/`export_state` weg, `pool_rule` wortgleich wie in 0001 (drei Spalten, drei Indizes) |
+| 0011 wieder vorwärts | 10 → 11: die überlebende Zeile trägt `role = 'required'`, `pragma_foreign_key_check` leer |
 | 0010 erneut vorwärts mit Daten | 9 → 10: Spalte wieder weg, Todos und Vermerk unverändert, `integrity_check` = ok, `foreign_key_check` leer |
 | 0010 → 0000 rückwärts, dann erneut vorwärts | 10 → 0 → 10, `todo` verschwindet und steht danach wieder ohne `board_rank` (T-070, Node 22.23.2, `node:sqlite`, 25 Prüfungen) |
 | Der vollständige Stand, jeder eindeutige Index (T-074) | 0 → 10, dann jede der **14** `UNIQUE`-Verletzungen aus `sqlite_master` ausgelöst: jede ergibt einen eigenen Fehlerschlüssel und einen eigenen Satz, keine fällt auf „Dieser Wert ist bereits vergeben", keine Antwort nennt Index-, Tabellen- oder Spaltennamen (`proof:conflicts` 1) |

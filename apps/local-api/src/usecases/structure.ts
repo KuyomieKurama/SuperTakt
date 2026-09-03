@@ -22,8 +22,10 @@ import type {
   Pool,
   PoolId,
   PoolPlacement,
-  PoolRuleTerm,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolSurface,
+  PoolTagTerm,
   RoundingMode,
   StatusId,
   Tag,
@@ -188,14 +190,31 @@ export function listPools(
   return context.transactions.inTransaction((unit) => unit.pools.list(shownOn));
 }
 
+/**
+ * Die Regel einer Fläche, wie eine Anfrage sie schickt (A-3.*, E-054, T-076).
+ *
+ * Fünf Achsen mit je einem Neutralwert. Alle außer `rule` sind weglassbar und
+ * stehen dann neutral — eine Anfrage aus der Zeit vor T-076 legt damit
+ * dieselbe Regel an wie zuvor.
+ */
 export interface PoolInput {
   readonly name: string;
+  /** Wie die **erforderlichen** Tags verknüpft sind. Gilt für keine andere Achse. */
   readonly matchMode: 'any' | 'all';
   readonly includeSubfolders: boolean;
   /** Wo die Regel erscheint (E-054). Ohne Angabe ein Pool. */
   readonly placement?: PoolPlacement;
   readonly position: number;
-  readonly rule: readonly PoolRuleTerm[];
+  /** Erforderliche Tags. Leer: schränkt nicht ein. */
+  readonly rule: readonly PoolTagTerm[];
+  /** Ausgeschlossene Tags: keines davon (T-076). */
+  readonly excludedTags?: readonly PoolTagTerm[];
+  /** Status: einer von diesen. Leer heißt „Alle" (T-076). */
+  readonly statusIds?: readonly StatusId[];
+  /** Erledigt: alle / nur erledigte / nur unerledigte (T-076). */
+  readonly completion?: PoolCompletionFilter;
+  /** Exportstatus: alle / mit offener / mit exportierter Buchung (T-076). */
+  readonly exportState?: PoolExportFilter;
 }
 
 /**
@@ -306,6 +325,12 @@ export function removePool(context: AppContext, id: PoolId): Promise<UseCaseResu
  * Todos sind in Pool-Ansichten ausgeblendet, aber einblendbar. Genau deshalb
  * erscheint ein Todo, dessen „Erledigt" ein Timerstart aufgehoben hat, ohne
  * einen einzigen Schreibvorgang wieder in seinem Pool.
+ *
+ * **Sagt die Regel selbst etwas über „Erledigt", entscheidet die Regel**
+ * (T-076). Dieselbe Abwägung wie auf dem Board, mit derselben Begründung: Ein
+ * Pool `completion: 'done'` wäre mit `onlyOpen` obendrauf immer leer, und die
+ * zweite Bedingung hat der Benutzer für die Ansicht gesetzt und nicht für
+ * diesen Pool. Steht die Achse neutral, bleibt alles wie zuvor.
  */
 export async function listPoolMembers(
   context: AppContext,
@@ -317,7 +342,8 @@ export async function listPoolMembers(
     const pool = await unit.pools.load(id);
     if (pool === null) return err(taktError('not_found', 'Diesen Pool gibt es nicht.'));
 
-    const filter: TodoFilter = includeCompleted ? {} : { onlyOpen: true };
+    const filter: TodoFilter =
+      pool.completion !== 'any' ? {} : includeCompleted ? {} : { onlyOpen: true };
     return ok(await unit.pools.members(id, filter, pagination));
   });
 }

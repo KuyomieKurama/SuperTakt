@@ -431,6 +431,20 @@ const NEVER_SENT = {
   // eigenes Feld führt, und `PoolWrite` trägt seitdem beide Schlüssel. Die
   // Zeilen sind deshalb weg statt fortgeschrieben — ein Zusatz, der nicht mehr
   // gilt, macht die Liste zum Rauschen.
+  //
+  // T-076, **Übergabe an frontend-dev.** Die Regel ist keine Liste mehr,
+  // sondern eine Struktur mit benannten Feldern: ausgeschlossene Tags, Status,
+  // Erledigt, Exportstatus. Modell, Speicherung und Routen stehen und sind
+  // gemessen (`proof:openapi` Abschnitt 12); das Regelformular in `apps/web`
+  // ist ausdrücklich eine eigene Aufgabe und durfte hier nicht angefasst
+  // werden.
+  //
+  // Bis dahin kann die Oberfläche Regeln anlegen wie bisher — jedes dieser
+  // Felder ist weglassbar und steht dann neutral. Wer die vier Zeilen
+  // entfernt, ohne dass das Formular sie sendet, bekommt den Befund zurück; so
+  // soll es sein.
+  createPool: ['excludedTags', 'statusIds', 'completion', 'exportState'],
+  updatePool: ['excludedTags', 'statusIds', 'completion', 'exportState'],
 };
 const surprises = [];
 for (const [id, schema] of Object.entries(REQUEST_SCHEMAS)) {

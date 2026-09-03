@@ -144,6 +144,22 @@ describe('createTodoStatusPort — anlegen mit Platz schaffen, Neuordnung, Lösc
     expect(result.error.code).toBe('status_in_use');
   });
 
+  it('ein in der Regel eines Pools oder einer Kanban-Spalte verwendeter Status wird nicht gelöscht (status_in_use, T-076)', async () => {
+    db = openTestDatabase();
+    const extra = await db.unit.statuses.create('In Regel', 0, NOW);
+    expect(extra.ok).toBe(true);
+    if (!extra.ok) return;
+    await db.unit.pools.create(
+      { name: 'Spalte über Status', matchMode: 'any', includeSubfolders: false, position: 0, rule: [], statusIds: [extra.value.id] },
+      NOW,
+    );
+
+    const result = await db.unit.statuses.remove(extra.value.id);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('status_in_use');
+  });
+
   it('remove auf eine unbekannte Spalte ergibt not_found; eine leere zusätzliche Spalte lässt sich löschen', async () => {
     db = openTestDatabase();
     expect((await db.unit.statuses.remove('unbekannt' as never)).ok).toBe(false);

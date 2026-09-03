@@ -151,3 +151,81 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
  * ihn dort mitaendern — sonst behaupten zwei Stellen dasselbe verschieden.
  */
 export const CARD_STAYS = "Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht.";
+
+/* ==================================================================== */
+/* Die Achsen einer Regel (T-076, T-079)                                */
+/* ==================================================================== */
+
+/**
+ * Wie viele der **erforderlichen** Tags zutreffen muessen (`pool.match_mode`).
+ *
+ * Der Wert gilt ausschliesslich fuer die erforderlichen Tags. Ausgeschlossene
+ * Tags sind immer „keines davon", Status ist immer „einer von diesen" — beides
+ * folgt aus dem Feld und ist keine Einstellung (T-076, Abschnitt 2).
+ *
+ * **Die Vorgabe ist `any` und bleibt es.** Jede Regel, die es heute gibt,
+ * bedeutet „mindestens eines davon"; `pool.match_mode` haelt das seit Migration
+ * 0001 je Regel einzeln fest. Wer die Vorgabe hier auf `all` stellt, deutet
+ * keinen Bestand um — aber er legt neue Regeln anders an, als der Benutzer es
+ * aus dem Bestand kennt.
+ */
+export type PoolMatchMode = "any" | "all";
+
+export const POOL_MATCH_MODE_LABEL: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Mindestens eines davon",
+  all: "Alle davon",
+};
+
+/** Dieselbe Aussage als Satzanfang vor der Tagliste einer Regelzusammenfassung. */
+export const POOL_MATCH_MODE_PREFIX: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Mindestens eines von",
+  all: "Alle von",
+};
+
+export const POOL_MATCH_MODE_HINT: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Ein Todo genügt schon mit einem der genannten Tags.",
+  all: "Ein Todo muss jeden genannten Tag tragen. Das trifft weniger als „mindestens eines davon“.",
+};
+
+/**
+ * Die Erledigt-Achse einer Regel (`pool.completion`).
+ *
+ * Nicht zu verwechseln mit „Erledigte einblenden": Diese Achse entscheidet
+ * ueber **Zugehoerigkeit**, jener Schalter ueber **Sichtbarkeit**. Steht die
+ * Achse neutral, entscheidet wie bisher der Schalter; sagt sie etwas, hat sie
+ * das letzte Wort — sonst waere eine Spalte „Erledigt" dauerhaft leer.
+ */
+export type PoolCompletionFilter = "any" | "done" | "open";
+
+export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string>> = {
+  any: "Alle",
+  done: "Erledigt",
+  open: "Unerledigt",
+};
+
+/**
+ * Der Exportstatus-Achse einer Regel (`pool.export_state`).
+ *
+ * **`exported` heisst „hat mindestens eine exportierte Buchung"** und nicht
+ * „vollstaendig abgerechnet" — der Exportstatus gehoert der Buchung, nicht dem
+ * Todo (E-032). Ein Todo mit einer offenen und einer exportierten Buchung
+ * erfuellt beide Werte und steht in beiden Spalten. Ein Todo ohne jede Buchung
+ * erfuellt keinen von beiden.
+ */
+export type PoolExportFilter = "any" | "open" | "exported";
+
+export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
+  any: "Alle",
+  open: "Offen",
+  exported: "Exportiert",
+};
+
+/**
+ * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.
+ *
+ * „Alle" ist die haeufigste Fehllesart dieses Formulars: Es heisst **nicht**
+ * „trifft alles", sondern „diese Achse laesst alles durch, was die anderen
+ * uebrig lassen". Stehen alle Achsen neutral, bleibt nichts uebrig, das eine
+ * andere Achse ausgewaehlt haette — und die Regel trifft nichts (A-3.4).
+ */
+export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";

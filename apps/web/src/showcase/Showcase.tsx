@@ -13,6 +13,7 @@ import { FoundationsSection } from "./FoundationsSection";
 import { IntroSection } from "./IntroSection";
 import { InventorySection } from "./InventorySection";
 import { NotesSection } from "./NotesSection";
+import { RuleSection } from "./RuleSection";
 import { ShellStateSection } from "./ShellStateSection";
 import { TagsSection } from "./TagsSection";
 import { TimeSection } from "./TimeSection";
@@ -36,6 +37,7 @@ const NAV: readonly NavEntry[] = [
   { id: "exportordner", label: "↳ Exportordner (S-04)" },
   { id: "arbeitsplatz", label: "↳ Arbeitsplatz (C-20)" },
   { id: "board", label: "5 — Kanban-Board" },
+  { id: "regel", label: "↳ Die Regel einer Spalte (T-079)" },
   { id: "zeit", label: "6 — Zeiterfassung" },
   { id: "notizen", label: "7 — Vermerk und Leistung" },
   { id: "tags", label: "8 — Tags und Ordner" },
@@ -139,6 +141,7 @@ export function Showcase() {
           <ExportDirectorySection />
           <WorkstationSection />
           <BoardSection />
+          <RuleSection />
           <TimeSection />
           <NotesSection />
           <TagsSection />

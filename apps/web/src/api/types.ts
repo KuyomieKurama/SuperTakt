@@ -18,9 +18,26 @@
  */
 
 import type { ExportStatus } from "../components/ExportStatus";
-import type { PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource } from "../lib/labels";
+import type {
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolPlacement,
+  RoundingMode,
+  ThemeSetting,
+  TimeEntrySource,
+} from "../lib/labels";
 
-export type { ExportStatus, PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource };
+export type {
+  ExportStatus,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolPlacement,
+  RoundingMode,
+  ThemeSetting,
+  TimeEntrySource,
+};
 
 /** UUID Fassung 7, als Zeichenkette. */
 export type Id = string;
@@ -216,6 +233,14 @@ export interface TagTree {
   readonly rootTags: readonly Tag[];
 }
 
+/**
+ * Ein **Tagbestandteil** einer Regel: ein einzelnes Tag oder ein Ordner.
+ *
+ * Es gibt keinen Fall für den Status und keinen für „nicht" (T-076). Ein Term
+ * mit Vorzeichen wäre Aussagenlogik im Datenmodell; stattdessen gibt es zwei
+ * Listen derselben Terme — `rule` und `excludedTags` — und der Feldname sagt,
+ * was gemeint ist.
+ */
 export type PoolRuleTerm =
   | { readonly kind: "tag"; readonly tagId: Id }
   | { readonly kind: "folder"; readonly folderId: Id };
@@ -224,28 +249,63 @@ export type PoolRuleTerm =
  * Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform einer
  * **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`; was eine
  * Spalte von einem Pool unterscheidet, ist allein `placement`.
+ *
+ * ## Die Regel ist eine Struktur mit benannten Feldern, keine Liste (T-076)
+ *
+ * | Feld | Bedeutung | Neutralwert |
+ * |---|---|---|
+ * | `rule` + `matchMode` | erforderliche Tags: alle davon oder mindestens eines | `[]` |
+ * | `excludedTags` | ausgeschlossene Tags: **keines** davon | `[]` |
+ * | `statusIds` | Status: **einer** von diesen | `[]` = „Alle" |
+ * | `completion` | Erledigt: alle / nur erledigte / nur unerledigte | `"any"` |
+ * | `exportState` | Exportstatus: alle / mit offener / mit exportierter Buchung | `"any"` |
+ *
+ * **Zwischen** den Achsen gilt „und", jede engt weiter ein. Die Verknüpfung
+ * folgt damit aus dem Feldnamen und nicht aus einem Und/Oder-Schalter:
+ * „erforderlich" heißt und, „ausgeschlossen" heißt nicht (E-055).
+ *
+ * **Ein Neutralwert schränkt nicht ein — er trifft nicht alles.** Stehen alle
+ * Achsen neutral, trifft die Regel **nichts** (A-3.4). Das ist der Zustand
+ * unmittelbar nach dem Anlegen, und die Oberfläche sagt an jeder Fläche, dass
+ * die Spalte leer bleibt, bis eine Bedingung dazukommt.
  */
 export interface Pool {
   readonly id: Id;
   readonly name: string;
-  readonly matchMode: "any" | "all";
+  /** Gilt **nur** für `rule`. Ausgeschlossene Tags sind immer „keines davon". */
+  readonly matchMode: PoolMatchMode;
   readonly includeSubfolders: boolean;
   readonly placement: PoolPlacement;
   /** Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board. */
   readonly position: number;
+  /** Die erforderlichen Tags und Ordner. */
   readonly rule: readonly PoolRuleTerm[];
+  /** Die ausgeschlossenen Tags und Ordner (T-076). Keiner darf am Todo hängen. */
+  readonly excludedTags: readonly PoolRuleTerm[];
+  /** Die Status der Regel (T-076). Leer heißt „Alle" und schränkt nicht ein. */
+  readonly statusIds: readonly Id[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
 export interface PoolWrite {
   readonly name: string;
-  readonly matchMode?: "any" | "all";
+  readonly matchMode?: PoolMatchMode;
   readonly includeSubfolders?: boolean;
   /** Ohne Angabe legt der Dienst einen Pool an, keine Spalte. */
   readonly placement?: PoolPlacement;
   readonly position?: number;
   readonly rule: readonly PoolRuleTerm[];
+  /**
+   * Die vier Achsen aus T-076 sind alle weglassbar und stehen dann neutral.
+   * Ein Aufrufer aus der Zeit davor legt damit dieselbe Regel an wie zuvor.
+   */
+  readonly excludedTags?: readonly PoolRuleTerm[];
+  readonly statusIds?: readonly Id[];
+  readonly completion?: PoolCompletionFilter;
+  readonly exportState?: PoolExportFilter;
 }
 
 /**

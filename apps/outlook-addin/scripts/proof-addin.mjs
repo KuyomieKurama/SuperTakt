@@ -114,7 +114,7 @@ import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases
 // sie liegt. Über den Paketnamen und nicht über einen Pfad: Das Add-in führt
 // `@takt/domain` seit T-028 in seiner Abhängigkeitsliste, und derselbe
 // Bezeichner steht im Quelltext des Aufgabenbereichs.
-import { checkCallNumber, mayLookUpDuplicates, tagNameKey } from '@takt/domain';
+import { checkCallNumber, matchesPool, mayLookUpDuplicates, tagNameKey } from '@takt/domain';
 
 // --- Prüflinge: der Vorlagen-Motor ----------------------------------------
 import { fromBase64, toBase64 } from '../../../packages/export/src/base64.ts';
@@ -126,9 +126,13 @@ import {
 import { renderExportGroup } from '../../../packages/export/src/render.ts';
 
 import {
+  AXIS_POOL,
+  AXIS_POOLS,
+  AXIS_TODO,
   ID,
   MAIL_MIT_NUMMER,
   MAIL_OHNE_NUMMER,
+  buildAxisTodos,
   buildTagTree,
   createFakeStore,
   createMemoryStorage,
@@ -679,6 +683,7 @@ check('R-15: das Angebot trägt Titel und Call-Nummer, nicht nur eine Kennung', 
       openSeconds: 2700,
       exportedSeconds: 3600,
       poolNames: ['Wartung Nord'],
+      leavingPoolNames: [],
     },
   ]);
   assert.equal(offers.length, 1);
@@ -700,6 +705,7 @@ check('Ein Treffer ohne plausible Call-Nummer wird gar nicht erst angeboten', ()
       openSeconds: 0,
       exportedSeconds: 0,
       poolNames: [],
+      leavingPoolNames: [],
     },
   ]);
   assert.deepEqual(offers, []);
@@ -717,6 +723,7 @@ check('Ein erledigtes Todo wird im Angebot als solches ausgewiesen (A-2.4)', () 
       openSeconds: 0,
       exportedSeconds: 0,
       poolNames: ['Wartung Nord'],
+      leavingPoolNames: [],
     },
   ]);
   assert.equal(offers[0].isDone, true);
@@ -738,7 +745,10 @@ check('C-03: die Trefferliste kündigt die Aufhebung an, statt sie zur Wahl zu s
 });
 
 check('I-05: die Ankündigung vor dem Buchen nennt alle drei Wirkungen und die Pools einzeln', () => {
-  const notice = reopenPreview(15, ['Wartung Nord', 'Offene Störungen']);
+  const notice = reopenPreview(15, {
+    appears: ['Wartung Nord', 'Offene Störungen'],
+    leaves: [],
+  });
 
   assert.equal(notice.effects.length, 3, 'es sind nicht drei Wirkungen');
   assert.match(notice.effects[0], /15 Minuten/, 'die Buchung selbst fehlt');
@@ -751,8 +761,9 @@ check('I-05: die Ankündigung vor dem Buchen nennt alle drei Wirkungen und die P
 });
 
 check('I-05: die Rückmeldung danach sagt dasselbe wie die Ankündigung davor', () => {
-  const before = reopenPreview(30, ['Wartung Nord']);
-  const after = reopenOutcome('Turnuswartung Frühjahr', 30, ['Wartung Nord']);
+  const bewegung = { appears: ['Wartung Nord'], leaves: [] };
+  const before = reopenPreview(30, bewegung);
+  const after = reopenOutcome('Turnuswartung Frühjahr', 30, bewegung);
 
   assert.equal(after.effects.length, before.effects.length);
   assert.match(after.title, /wieder offen/);
@@ -764,12 +775,12 @@ check('I-05: die Rückmeldung danach sagt dasselbe wie die Ankündigung davor', 
   // Ein einzelner Pool heißt „dem Pool", zwei heißen „den Pools". Eine falsche
   // Zahl im Satz ist die Art Detail, an der ein Benutzer zu zweifeln beginnt.
   assert.match(before.effects[2], /in dem Pool/);
-  assert.match(reopenPreview(30, ['A', 'B']).effects[2], /in den Pools/);
+  assert.match(reopenPreview(30, { appears: ['A', 'B'], leaves: [] }).effects[2], /in den Pools/);
 });
 
 check('Ein Todo ohne passende Poolregel bekommt die unangenehme Wahrheit, nicht Schweigen', () => {
-  assert.match(poolSentence([], 'future'), /in keinem Pool/);
-  assert.match(poolSentence([], 'past'), /in keinem Pool/);
+  assert.match(poolSentence({ appears: [], leaves: [] }, 'future'), /in keinem Pool/);
+  assert.match(poolSentence({ appears: [], leaves: [] }, 'past'), /in keinem Pool/);
 });
 
 // ===========================================================================
@@ -1102,7 +1113,10 @@ await checkAsync('A-2.5/C-03: die Duplikatsuche zeigt „erledigt" und die Pools
 
   const offer = describeOffers(found.value.matches)[0];
   assert.equal(offer.isDone, true);
-  assert.deepEqual(reopenPreview(15, offer.poolNames).effects.length, 3);
+  assert.deepEqual(
+    reopenPreview(15, { appears: offer.poolNames, leaves: offer.leavingPoolNames }).effects.length,
+    3,
+  );
 });
 
 await checkAsync('A-2.5: eine Buchung auf ein erledigtes Todo hebt „Erledigt" automatisch auf', async () => {
@@ -1126,7 +1140,10 @@ await checkAsync('A-2.5: eine Buchung auf ein erledigtes Todo hebt „Erledigt" 
   // I-05: Der Dienst nennt die Pools, in denen das Todo jetzt wieder steht.
   assert.deepEqual(booked.value.poolNames, ['Wartung Nord']);
   assert.match(
-    reopenOutcome('Turnuswartung Frühjahr', 15, booked.value.poolNames).effects[2],
+    reopenOutcome('Turnuswartung Frühjahr', 15, {
+      appears: booked.value.poolNames,
+      leaves: booked.value.leavingPoolNames,
+    }).effects[2],
     /Wartung Nord/,
   );
 });
@@ -1909,6 +1926,381 @@ await checkAsync('T-047: scheitert die Anfrage, bleibt kein Tag zurück — an d
     );
     assert.equal(todos.items.length, 0, 'ein Todo ist trotz Abbruch entstanden');
   });
+});
+
+// ===========================================================================
+heading('12  Die Pools eines Todos: fünf Regelachsen und beide Richtungen (T-076, T-078, E-056)');
+// ===========================================================================
+
+/*
+ * Der Befund, den dieser Abschnitt misst
+ * --------------------------------------
+ *
+ * Seit T-076 ist eine Regel eine Struktur mit fünf benannten Feldern.
+ * `poolNamer` in `routes/addin/service.ts` gab `matchesPool` bis T-078 nur die
+ * **erforderlichen Tags** mit — und `matchesPool` überspringt jede Achse, die
+ * es nicht genannt bekommt. Eine Regel „Wartung, außer Störungen" wurde damit
+ * zu „Wartung", und das Add-in nannte einen Pool, in dem das Todo nicht steht.
+ * Der Fehler ging nie in die andere Richtung: zu viele Pools, nie zu wenige.
+ *
+ * Warum das schlimmer ist, als es klingt: Das Add-in nennt die Pools **vor**
+ * dem Buchen (T-038, I-05), damit der Benutzer sieht, wo sein erledigtes Todo
+ * danach auftaucht. Eine falsche Auskunft an dieser Stelle kostet nicht Zeit,
+ * sondern Vertrauen — wer einmal vergeblich in „Wartung ohne Störungen" gesucht
+ * hat, liest die Anzeige beim nächsten Mal nicht mehr.
+ *
+ * Gemessen wird gegen die **echten** Routen, mit acht Regeln, die alle
+ * dieselben erforderlichen Tags tragen (siehe `AXIS_POOLS`). Ein Ergebnis, das
+ * nur die Tags auswertet, müsste deshalb für jedes Todo alle sieben
+ * eingerichteten Regeln nennen. Jeder Unterschied unten stammt nachweisbar aus
+ * einer der neuen Achsen.
+ *
+ * Der zweite Teil des Abschnitts misst E-056: dass der Aufgabenbereich auch
+ * ausspricht, **woraus** das Todo durch die Buchung verschwindet — in
+ * demselben Satz, und nur dann, wenn eine Regel es betrifft.
+ */
+
+const axisStore = createFakeStore({ pools: AXIS_POOLS });
+const axisApp = mountAddinRoutes(axisStore.deps);
+const axisClient = createApiClient({
+  baseUrl: 'http://127.0.0.1:17843',
+  token: () => 'takt_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
+  fetch: (url, init) => axisApp.request(String(url), init),
+});
+
+for (const todo of buildAxisTodos()) axisStore.seedTodo(todo);
+
+/*
+ * Eine bereits **exportierte** Buchung am Turnus-Todo. Sie entsteht nicht über
+ * `timeEntries.create` — eine neue Buchung ist immer offen (E-032) —, sondern
+ * wird gesetzt, weil sie den Zustand herstellt, den die Achse `exported`
+ * abfragt: ein Vorgang, an dem schon einmal abgerechnet wurde.
+ */
+axisStore.state.timeEntries.push({
+  id: 'te-axis-exportiert',
+  todoId: AXIS_TODO.turnus,
+  startedAt: '2026-02-24T09:00:00Z',
+  endedAt: '2026-02-24T10:00:00Z',
+  durationSeconds: 3600,
+  note: 'Turnus, erster Teil',
+  exportStatus: 'exported',
+  exportCount: 1,
+  source: 'manual',
+  createdAt: '2026-02-24T10:00:00Z',
+  updatedAt: '2026-02-26T08:00:00Z',
+});
+
+/*
+ * Und eine **offene** dazu. Erst damit ist das Turnus-Todo der Fall, für den
+ * E-056 entschieden wurde: erledigt und noch nicht abgerechnet — es steht in
+ * der Abrechnungsliste, und die Buchung nimmt es dort heraus.
+ */
+axisStore.state.timeEntries.push({
+  id: 'te-axis-offen',
+  todoId: AXIS_TODO.turnus,
+  startedAt: '2026-02-25T14:00:00Z',
+  endedAt: '2026-02-25T15:00:00Z',
+  durationSeconds: 3600,
+  note: 'Turnus, zweiter Teil',
+  exportStatus: 'open',
+  exportCount: 0,
+  source: 'manual',
+  createdAt: '2026-02-25T15:00:00Z',
+  updatedAt: '2026-02-25T15:00:00Z',
+});
+
+/** Die Tags des Ordners „Wartung", aus demselben Baum, den der Dienst auflöst. */
+const WARTUNG_TAGS = flattenTagTree(buildTagTree())
+  .filter((tag) => tag.folderPath.includes('Wartung'))
+  .map((tag) => tag.id);
+
+/**
+ * Die Bewegung eines Todos, über die Route und nicht über den Dienst.
+ *
+ * Beide Hälften in einem Wert, wie sie auch in der Antwort stehen. Getrennt
+ * abzufragen hieße, den Aufgabenbereich nachzubilden, statt ihn zu messen.
+ */
+const movementOf = async (callNumber) => {
+  const result = await axisClient.findMatches(callNumber);
+  assert.equal(result.ok, true, result.ok ? '' : result.message);
+  assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
+  const match = result.value.matches[0];
+  return { appears: match.poolNames, leaves: match.leavingPoolNames };
+};
+
+/** Nur die genannten Pools — für die Prüfungen, die von T-078 stammen. */
+const poolsOf = async (callNumber) => (await movementOf(callNumber)).appears;
+
+check('Die Ausgangslage: alle sieben eingerichteten Regeln fordern dieselben Tags', () => {
+  // Ohne diese Prüfung wäre jede Aussage unten mehrdeutig: Ein fehlender Pool
+  // könnte auch daran liegen, dass seine Tagliste nicht passt.
+  const eingerichtet = AXIS_POOLS.filter((pool) => pool.rule.length > 0);
+  assert.equal(eingerichtet.length, 7);
+  for (const pool of eingerichtet) {
+    assert.deepEqual(pool.rule, [{ kind: 'folder', folderId: ID.folderWartung }], pool.name);
+    assert.equal(pool.matchMode, 'any', pool.name);
+    assert.equal(pool.includeSubfolders, true, pool.name);
+  }
+
+  // Und beide Todos erfüllen diese eine Tagliste — sonst prüfte der Abschnitt
+  // nur, dass eine unpassende Regel nicht trifft.
+  assert.deepEqual(WARTUNG_TAGS, [ID.tagTurnuswartung, ID.tagStoerung]);
+  for (const todo of buildAxisTodos()) {
+    assert.ok(
+      todo.tagIds.some((tagId) => WARTUNG_TAGS.includes(tagId)),
+      `${todo.title} hängt an keinem Tag des Ordners „Wartung"`,
+    );
+  }
+});
+
+await checkAsync('Ausgeschlossenes Tag: genannt für das Todo ohne, nicht für das mit (T-076)', async () => {
+  const mitStoerung = await poolsOf('TCK-000517');
+  const ohneStoerung = await poolsOf('TCK-000518');
+
+  assert.equal(
+    mitStoerung.includes('Wartung ohne Störungen'),
+    false,
+    'der Pool wird genannt, obwohl das Todo das ausgeschlossene Tag trägt',
+  );
+
+  // Die Gegenprobe. Ohne sie wäre „wird nicht genannt" auch dann grün, wenn
+  // die Regel überhaupt niemanden träfe.
+  assert.ok(
+    ohneStoerung.includes('Wartung ohne Störungen'),
+    'der Pool wird für kein Todo genannt — die Regel trifft nichts statt weniger',
+  );
+});
+
+await checkAsync('Status: genannt nur für das Todo im Backlog (T-076)', async () => {
+  const inArbeit = await poolsOf('TCK-000517');
+  const backlog = await poolsOf('TCK-000518');
+
+  assert.equal(inArbeit.includes('Wartung im Backlog'), false, 'der Status wird nicht ausgewertet');
+  assert.ok(backlog.includes('Wartung im Backlog'), 'die Gegenprobe fehlt — die Regel trifft nichts');
+});
+
+await checkAsync('Exportstatus: „bereits abgerechnet" nur, wo es eine exportierte Buchung gibt', async () => {
+  const ohneExport = await poolsOf('TCK-000517');
+  const mitExport = await poolsOf('TCK-000518');
+
+  assert.equal(ohneExport.includes('Wartung, bereits abgerechnet'), false);
+  assert.ok(mitExport.includes('Wartung, bereits abgerechnet'));
+
+  // Die andere Hälfte derselben Achse: Wer bucht, hat danach etwas Offenes.
+  // Das gilt für beide Todos und ist keine Vermutung — eine neue Buchung ist
+  // abgeschlossen und offen (E-032).
+  assert.ok(ohneExport.includes('Wartung, noch nicht abgerechnet'));
+  assert.ok(mitExport.includes('Wartung, noch nicht abgerechnet'));
+});
+
+await checkAsync('Erledigt: der Pool „Erledigte Wartung" wird nicht genannt — er wäre die Vergangenheit', async () => {
+  const erledigtesTodo = await poolsOf('TCK-000518');
+
+  assert.equal(
+    erledigtesTodo.includes('Erledigte Wartung'),
+    false,
+    'genannt wird ein Pool, aus dem das Todo durch genau diese Buchung verschwindet',
+  );
+
+  /*
+   * Die Gegenprobe, und zugleich die Stelle, an der Zugehörigkeit und
+   * Sichtbarkeit auseinandergehen (T-076, Befund 2):
+   *
+   * **Jetzt** gehört das Todo in diesen Pool — dieselbe Funktion der Domäne
+   * sagt es, mit demselben Bestand. Genannt wird es trotzdem nicht, und das
+   * ist richtig: Der Satz, den der Aufgabenbereich daraus baut, steht im
+   * Futur („Es erscheint dann wieder in …"), und die Buchung, über die er
+   * redet, hebt „Erledigt" auf (A-2.5). Wer hier den Zustand von **jetzt**
+   * einsetzt, nennt einen Pool, in dem das Todo eine Sekunde später nicht
+   * mehr steht — derselbe Fehler wie bei den Tags, nur um einen Augenblick
+   * verschoben.
+   */
+  assert.equal(
+    matchesPool({
+      todoTagIds: [ID.tagTurnuswartung],
+      ruleTagIds: WARTUNG_TAGS,
+      matchMode: 'any',
+      excludedTagIds: [],
+      todoStatusId: ID.statusBacklog,
+      ruleStatusIds: [],
+      completedAt: '2026-02-25T16:00:00Z',
+      completion: 'done',
+      exportState: 'any',
+    }),
+    true,
+    'die Regel „Erledigte Wartung" trifft das Todo nicht einmal jetzt — die Gegenprobe misst nichts',
+  );
+});
+
+await checkAsync('A-3.4: eine Regel ohne Bedingungen wird für niemanden genannt', async () => {
+  for (const callNumber of ['TCK-000517', 'TCK-000518']) {
+    assert.equal(
+      (await poolsOf(callNumber)).includes('Noch nicht eingerichtet'),
+      false,
+      'ein frisch angelegter Pool nimmt alles auf, was ihm begegnet',
+    );
+  }
+});
+
+await checkAsync('Die vollständige Auskunft, in der Reihenfolge der Pools', async () => {
+  // Der eigentliche Nachweis: nicht „ein Pool fehlt", sondern **welche** sechs
+  // von sieben Regeln zutreffen und welche nicht. Vor T-078 hätten hier beide
+  // Zeilen alle sechs eingerichteten Namen getragen.
+  assert.deepEqual(await poolsOf('TCK-000517'), [
+    'Wartung Nord',
+    'Wartung, noch nicht abgerechnet',
+  ]);
+
+  assert.deepEqual(await poolsOf('TCK-000518'), [
+    'Wartung Nord',
+    'Wartung ohne Störungen',
+    'Wartung im Backlog',
+    'Wartung, noch nicht abgerechnet',
+    'Wartung, bereits abgerechnet',
+  ]);
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * E-056 — der Aufgabenbereich nennt auch, woraus das Todo verschwindet
+ * ---------------------------------------------------------------------------
+ *
+ * Der entschiedene Fall: eine Spalte `completion: 'done'` **mit**
+ * `exportState: 'open'` ist eine **Abrechnungsliste** — erledigt, noch nicht
+ * abgerechnet. Wer per Add-in auf eine Karte darin bucht, sieht sie aus genau
+ * der Liste verschwinden, in der er sie sucht. Ohne einen Satz darüber wird die
+ * Bewegung als Datenverlust gelesen.
+ *
+ * Die Auflagen aus E-056 sind messbar und werden einzeln gemessen: **ein**
+ * Satz, in derselben Aussage wie das Erscheinen, und **kein Halbsatz**, wenn
+ * keine Regel betroffen ist.
+ */
+
+await checkAsync('E-056: die Abrechnungsliste steht in `leavingPoolNames`, nicht in `poolNames`', async () => {
+  const turnus = await movementOf('TCK-000518');
+
+  assert.deepEqual(
+    turnus.leaves,
+    ['Erledigte Wartung', 'Erledigt, noch nicht abgerechnet'],
+    'das Verschwinden aus den Erledigt-Regeln wird verschwiegen',
+  );
+
+  // Kein Pool in beiden Hälften. Ein Name, der zugleich erscheint und
+  // verschwindet, wäre kein Satz, den jemand lesen möchte.
+  for (const name of turnus.leaves) {
+    assert.equal(turnus.appears.includes(name), false, `„${name}" steht in beiden Listen`);
+  }
+
+  // Die Gegenprobe zur Gegenprobe: Das Todo steht dort **jetzt** wirklich
+  // drin. Ohne offene Buchung wäre die Abrechnungsliste nur zufällig leer.
+  assert.equal(
+    matchesPool({
+      todoTagIds: [ID.tagTurnuswartung],
+      ruleTagIds: WARTUNG_TAGS,
+      matchMode: 'any',
+      excludedTagIds: [],
+      todoStatusId: ID.statusBacklog,
+      ruleStatusIds: [],
+      completedAt: '2026-02-25T16:00:00Z',
+      completion: 'done',
+      hasOpenEntries: true,
+      exportState: 'open',
+    }),
+    true,
+    'die Abrechnungsliste trifft das Todo nicht einmal jetzt',
+  );
+});
+
+await checkAsync('E-056: wen keine solche Regel betrifft, dem bleibt kein Halbsatz', async () => {
+  const stoerung = await movementOf('TCK-000517');
+
+  // Das Todo ist nicht erledigt — durch eine Buchung verliert es keinen Pool.
+  assert.deepEqual(stoerung.leaves, []);
+
+  const satz = reopenPreview(15, stoerung).effects[2];
+  assert.equal(/verschwind/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
+  assert.equal(/und aus/.test(satz), false, `ein Halbsatz ist übrig geblieben: ${satz}`);
+
+  // Zeichen für Zeichen der Satz von vor E-056.
+  assert.equal(satz, 'Es erscheint dann wieder in den Pools „Wartung Nord“ und „Wartung, noch nicht abgerechnet“.');
+});
+
+await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und keine zweite Liste', async () => {
+  const turnus = await movementOf('TCK-000518');
+  const notice = reopenPreview(15, turnus);
+
+  // Die Zahl der Wirkungen ist unverändert drei. Eine vierte Zeile wäre die
+  // zweite Aussage, die E-056 ausschließt.
+  assert.equal(notice.effects.length, 3, 'aus dem Verschwinden ist eine eigene Wirkung geworden');
+  assert.equal(notice.aside, CARD_STAYS, 'die Nicht-Wirkung hat sich verschoben');
+
+  const satz = notice.effects[2];
+  assert.match(satz, /Es erscheint dann wieder in den Pools/, 'die erste Hälfte fehlt');
+  assert.match(satz, /und verschwindet aus den Pools/, 'die zweite Hälfte steht nicht im selben Satz');
+  assert.match(satz, /„Erledigt, noch nicht abgerechnet“/, 'die Abrechnungsliste wird nicht beim Namen genannt');
+
+  // Ein Satz: Der Punkt steht am Ende und sonst nirgends.
+  assert.equal(satz.indexOf('.'), satz.length - 1, `mehr als ein Satz: ${satz}`);
+
+  // Und derselbe Satz im Perfekt, mit denselben beiden Hälften.
+  const danach = reopenOutcome('Turnus abschließen', 15, turnus).effects[2];
+  assert.match(danach, /Es ist zurück in den Pools/);
+  assert.match(danach, /und aus den Pools .* verschwunden/);
+  assert.equal(danach.indexOf('.'), danach.length - 1, `mehr als ein Satz: ${danach}`);
+});
+
+await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor — in beiden Hälften', async () => {
+  const davor = await movementOf('TCK-000518');
+
+  const booked = await axisClient.book({
+    todoId: AXIS_TODO.turnus,
+    startedAt: '2026-03-02T11:00:00Z',
+    endedAt: '2026-03-02T11:15:00Z',
+    note: 'Turnus abgeschlossen',
+  });
+
+  assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
+  assert.equal(booked.value.doneCleared, true, 'die Ausgangslage stimmt nicht — das Todo war erledigt');
+  assert.equal(axisStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
+
+  // Die Zusage aus T-038, jetzt über fünf Achsen statt über eine — und seit
+  // E-056 über beide Hälften der Aussage: Der Satz vorher und der Satz nachher
+  // reden über dieselbe Bewegung.
+  assert.deepEqual(booked.value.poolNames, davor.appears, 'vorher und nachher nennen verschiedene Pools');
+  assert.deepEqual(
+    booked.value.leavingPoolNames,
+    davor.leaves,
+    'die Ankündigung und die Bestätigung nennen Verschiedenes als verschwunden',
+  );
+
+  /*
+   * Und dieselbe Suche noch einmal, nachdem das Kennzeichen gefallen ist.
+   *
+   * `appears` ist unverändert — das war die Zusage. `leaves` ist jetzt **leer**,
+   * und das ist keine Abweichung, sondern dieselbe Rechnung auf einem anderen
+   * Bestand: Das Todo ist nicht mehr erledigt, also nimmt eine **weitere**
+   * Buchung es aus keiner Erledigt-Regel mehr heraus. Stünde hier noch etwas,
+   * hätte der Aufgabenbereich eine Bewegung angekündigt, die schon geschehen
+   * ist.
+   */
+  const danach = await movementOf('TCK-000518');
+  assert.deepEqual(danach.appears, davor.appears);
+  assert.deepEqual(danach.leaves, [], 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
+});
+
+await checkAsync('Der Satz, den der Benutzer liest, nennt die richtigen Pools und den falschen nicht', async () => {
+  const found = await axisClient.findMatches('TCK-000517');
+  const offer = describeOffers(found.value.matches)[0];
+  const satz = reopenPreview(15, {
+    appears: offer.poolNames,
+    leaves: offer.leavingPoolNames,
+  }).effects[2];
+
+  assert.match(satz, /Wartung Nord/);
+  assert.match(satz, /noch nicht abgerechnet/);
+  assert.equal(/ohne Störungen/.test(satz), false, 'der Satz nennt einen Pool mit ausgeschlossenem Tag');
+  assert.equal(/im Backlog/.test(satz), false, 'der Satz nennt einen Pool mit fremdem Status');
+  assert.equal(/Noch nicht eingerichtet/.test(satz), false, 'der Satz nennt eine leere Regel');
 });
 
 // ===========================================================================

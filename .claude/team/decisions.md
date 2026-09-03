@@ -1079,3 +1079,89 @@ beantwortet Fragen, die ein Statusboard nicht kann: alle Todos eines Kunden, all
 Priorität, alle ohne Zuordnung. Der Preis ist das Ziehen — und er hat ihn ausdrücklich in Kauf
 genommen, statt ihn sich durch stilles Tag-Setzen erschleichen zu lassen. Das ist die
 konsequentere Hälfte seiner Antwort.
+
+---
+
+## E-055 — Eine Regel ist eine Struktur mit benannten Feldern, keine Liste von Termen
+
+**Kontext.** Der Auftraggeber wollte den Status als Regelbedingung aufnehmen. Ich hatte das als
+dritten Termtyp neben `tag` und `folder` beauftragt und dem domain-dev die Frage überlassen, wie
+mehrere Terme verknüpft werden — „und" oder „oder".
+
+Dann schickte er ein Bildschirmfoto der Board-Konfiguration von **Super Productivity** mit dem
+Satz: „Nimm dir ein Beispiel daran. Das regelt das."
+
+**Was dort steht:** Erforderliche Tags. Ausgeschlossene Tags. Aufgabenstatus erledigt als
+Dreiwahl mit „Alle". Planungsstatus ebenso. Projekt als Auswahl. Und ein Kästchen für
+übergeordnete Aufgaben.
+
+**Entscheidung.** Eine Regel ist eine Struktur mit benannten Feldern:
+
+| Feld | Wirkung |
+|---|---|
+| Erforderliche Tags | alle müssen vorhanden sein |
+| Ausgeschlossene Tags | keiner darf vorhanden sein |
+| Status | Auswahl, „Alle" als Vorgabe, mehrere wählbar |
+| Erledigt | Alle / Erledigt / Unerledigt |
+| Exportstatus | Alle / Offen / Exportiert |
+
+**Begründung — die Frage nach der Verknüpfung stellt sich nicht mehr.** Sie folgt aus der
+Beschriftung: „Erforderlich" heißt und, „Ausgeschlossen" heißt nicht. Ein Und/Oder-Schalter
+verlangt vom Benutzer, Aussagenlogik zu lesen; zwei benannte Listen verlangen nichts.
+
+Zwei Dinge kann eine Liste gleichartiger Terme grundsätzlich nicht, und beide fehlen dadurch: Sie
+hat **keinen Platz für die Verneinung** — „alles außer in Bearbeitung" ist nicht ausdrückbar —,
+und ihre leere Fassung ist ein **Sonderfall**, den man eigens regeln muss. Mit „Alle" als
+Vorgabewert jeder Zeile ist der Neutralzustand je Achse der Normalfall statt einer Ausnahme.
+
+**Korrektur, 2026-09-03.** Ich hatte hier zusätzlich geschrieben, die vollständig leere Regel
+solle „alles treffen statt nichts". Der domain-dev hat in T-076 widersprochen, statt es
+umzusetzen — zu Recht. Es widerspricht dem Absatz weiter unten in derselben Entscheidung: Wenn
+eine Regel ohne Bedingungen alles trifft, trifft ein bestehender Pool nach der Migration eben
+nicht mehr dasselbe wie vorher. Und eine Regel ohne Bedingungen ist der Zustand **direkt nach dem
+Anlegen** — sie spränge von „kein Todo" auf „jedes Todo", und ein Pool, der alles enthält, ist
+kein Pool.
+
+Bei Super Productivity ist das stimmig, weil dort ausschließlich Boards konfiguriert werden. Bei
+uns sind Pool und Kanban-Spalte seit E-054 **dieselbe Entität**; was für die eine Fläche
+einleuchtet, wäre auf der anderen falsch.
+
+**Es bleibt also bei A-3.4 und E-054: Die leere Regel trifft nichts.** Der Neutralwert „Alle" je
+Achse bleibt davon unberührt — er sagt „diese Achse schränkt nicht ein", nicht „diese Regel
+trifft alles". Dass eine Spalte ohne jede Bedingung leer bleibt, gehört in den Leerzustand der
+Oberfläche, nicht ins Modell.
+
+**Was nicht übernommen wird.** Planungsstatus, Rückstandsaufgaben, Projekt und übergeordnete
+Aufgaben — die Begriffe gibt es in Takt nicht. „Sortieren nach" ist Anzeige, keine Regel.
+
+**Was dazukommt und im Vorbild fehlt.** Der **Exportstatus** als Dreiwahl. Er ist bei Takt die
+Unterscheidung, um die sich alles dreht, und beantwortet als Spalte die Frage „was habe ich noch
+nicht abgerechnet".
+
+**Konsequenz.** Bestehende Regeln müssen überführt werden. Ob eine heutige Tagliste „alle davon"
+oder „mindestens eines davon" bedeutet, entscheidet, ob ein Pool nach der Migration dasselbe
+trifft wie vorher — das ist nachzusehen, nicht zu raten.
+
+---
+
+## E-056 — Der Aufgabenbereich nennt auch, woraus ein Todo verschwindet
+
+**Frage aus T-078.** Eine Regel mit `completion: 'done'` kann das Add-in **nie** nennen: Das
+Buchen hebt „Erledigt" auf (A-2.5), also fällt das Todo aus jedem Pool heraus, der Erledigte
+sammelt. Soll der Aufgabenbereich das aussprechen, oder still bleiben?
+
+**Entscheidung: aussprechen** — ein Satz, und nur wenn es tatsächlich Pools betrifft.
+
+**Warum.** Der Satz erscheint ausschließlich im Wiederöffnen-Fall, also genau dann, wenn das Todo
+erledigt war. Sein Zweck ist, dem Benutzer die Folge seiner Handlung zu zeigen, bevor sie
+eintritt. Das Verschwinden ist dieselbe Folge wie das Erscheinen, nur in die andere Richtung —
+sie wegzulassen macht die Auskunft nicht kürzer, sondern halb.
+
+Entscheidend ist der Fall, für den man so eine Spalte überhaupt anlegt: **erledigt und noch nicht
+abgerechnet** (`completion: 'done'` mit `exportState: 'open'`). Wer dort arbeitet, benutzt die
+Spalte als Abrechnungsliste. Bucht er per Add-in auf eine Karte, verschwindet sie aus genau der
+Liste, in der er sie sucht — und das ist der Moment, in dem eine unerklärte Bewegung als
+Datenverlust gelesen wird.
+
+**Nicht** aussprechen, wenn keine Regel betroffen ist. Kein zweiter Absatz, keine zweite Liste;
+die Nennung gehört in denselben Satz wie das Erscheinen.

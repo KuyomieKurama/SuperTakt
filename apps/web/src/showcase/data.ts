@@ -3,6 +3,7 @@ import type { BookingRowData } from "../components/BookingTable";
 import type { ExportGroupData } from "../components/ExportGroups";
 import type { KanbanCardData } from "../components/Kanban";
 import type { TagTreeNode } from "../components/TagTree";
+import type { RuleAxes, RuleLookup } from "../lib/poolRule";
 
 /**
  * Beispieldaten der Musterseite.
@@ -77,31 +78,106 @@ export const BOOKING_ROWS: readonly BookingRowData[] = [
   },
 ];
 
+/* ==================================================================== */
+/* Regeln — die Namen hinter den Kennungen (T-079)                      */
+/* ==================================================================== */
+
+/*
+ * Die Musterseite loest keine Regel auf: Welche Karte eine Regel trifft,
+ * entscheidet der Dienst. Was sie braucht, sind **Namen** zu Kennungen — genau
+ * das, was `useRuleLookup` in der laufenden Anwendung aus dem Aufbau holt.
+ *
+ * Seit T-079 steht die Regel hier deshalb als `RuleAxes` und nicht mehr als
+ * fertiger Satz. Der Unterschied ist nicht Bequemlichkeit: Ein Satz haette die
+ * Musterseite von der Zusammenfassung entkoppelt, und genau ihre Zustaende —
+ * ausgeschlossene Tags, Statusachse, Exportachse, keine Bedingung — sind das,
+ * was hier abgenommen werden soll.
+ */
+const SHOWCASE_TAGS: Readonly<Record<string, { readonly name: string; readonly path: readonly string[] }>> = {
+  "tag-support": { name: "Support", path: [] },
+  "tag-wartet": { name: "Wartet", path: [] },
+  "tag-intern": { name: "Intern", path: [] },
+  "tag-eskalation": { name: "Eskalation", path: [] },
+  "tag-archiv": { name: "Archiv", path: ["Ablage"] },
+};
+
+const SHOWCASE_FOLDERS: Readonly<Record<string, readonly string[]>> = {
+  "folder-nord": ["Kunden", "Nord"],
+};
+
+const SHOWCASE_STATUSES: Readonly<Record<string, string>> = {
+  "status-progress": "In Arbeit",
+  "status-review": "Prüfung",
+};
+
+export const SHOWCASE_RULE_LOOKUP: RuleLookup = {
+  tag: (id) => SHOWCASE_TAGS[id],
+  folder: (id) => SHOWCASE_FOLDERS[id],
+  status: (id) => SHOWCASE_STATUSES[id],
+};
+
+/** Eine Regel, deren Achsen alle neutral stehen — der Zustand nach dem Anlegen. */
+export const NEUTRAL_RULE: RuleAxes = {
+  matchMode: "any",
+  includeSubfolders: true,
+  rule: [],
+  excludedTags: [],
+  statusIds: [],
+  completion: "any",
+  exportState: "any",
+};
+
 /**
  * Eine Spalte des Boards — seit E-054 eine **Regel ueber Tags**, dieselbe
- * Entitaet wie ein Pool. `rule` steht hier als Text, weil die Musterseite
- * keine Regelaufloesung braucht: Welche Karte eine Regel trifft, entscheidet
- * der Dienst, und fuer die Darstellung genuegt die feste Zuordnung unten.
+ * Entitaet wie ein Pool.
  */
 export interface BoardColumn {
   readonly id: string;
   readonly title: string;
-  readonly rule: string;
+  readonly rule: RuleAxes;
 }
 
 /**
- * Fuenf Spalten, und keine davon ist ein Status.
+ * Sechs Spalten, und keine davon ist ein Status.
  *
- * "Eskalation" bleibt leer: Eine Regel, die derzeit nichts trifft, ist der
- * haeufigste Zustand einer frisch eingerichteten Spalte und braucht deshalb
- * einen eigenen Leerzustand.
+ * "Eskalation" bleibt leer, obwohl ihre Regel steht: Eine Regel, die derzeit
+ * nichts trifft, ist der haeufigste Zustand einer frisch eingerichteten Spalte.
+ * "Noch nicht eingerichtet" ist der **andere** Leerzustand — eine Regel ohne
+ * jede Bedingung. Sie trifft nichts und wird auch morgen nichts treffen; beide
+ * stehen hier nebeneinander, weil sie sich nur im Text unterscheiden und
+ * niemand sie sonst auseinanderhaelt (T-079).
  */
 export const BOARD_COLUMNS: readonly BoardColumn[] = [
-  { id: "kunden-nord", title: "Kunden Nord", rule: "Ordner „Kunden / Nord“, mit Unterordnern" },
-  { id: "support", title: "Support", rule: "Tag „Support“" },
-  { id: "wartet", title: "Wartet auf Rückmeldung", rule: "Tag „Wartet“" },
-  { id: "intern", title: "Intern", rule: "Tag „Intern“" },
-  { id: "eskalation", title: "Eskalation", rule: "Tag „Eskalation“" },
+  {
+    id: "kunden-nord",
+    title: "Kunden Nord",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "folder", folderId: "folder-nord" }] },
+  },
+  {
+    id: "support",
+    title: "Support",
+    rule: {
+      ...NEUTRAL_RULE,
+      rule: [{ kind: "tag", tagId: "tag-support" }],
+      excludedTags: [{ kind: "tag", tagId: "tag-archiv" }],
+    },
+  },
+  {
+    id: "wartet",
+    title: "Wartet auf Rückmeldung",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "tag", tagId: "tag-wartet" }], completion: "open" },
+  },
+  {
+    id: "intern",
+    title: "Intern",
+    rule: { ...NEUTRAL_RULE, statusIds: ["status-progress", "status-review"] },
+  },
+  {
+    id: "eskalation",
+    title: "Eskalation",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "tag", tagId: "tag-eskalation" }], exportState: "open" },
+  },
+  { id: "neu", title: "Noch nicht eingerichtet", rule: NEUTRAL_RULE },
 ];
 
 export interface BoardCard extends KanbanCardData {

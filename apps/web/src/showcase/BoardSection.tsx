@@ -2,10 +2,12 @@ import { useCallback, useMemo, useState } from "react";
 import { FilterToggle } from "../components/FilterBar";
 import { KanbanCard, KanbanColumn } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Card, EmptyState, InlineMessage, Button } from "../components/Primitives";
+import { Card, InlineMessage, Button } from "../components/Primitives";
+import { RuleSummary } from "../components/RuleSummary";
 import { ReactivationNotice } from "../components/Timer";
-import { BoardEmptyState } from "../screens/BoardScreen";
-import { BOARD_CARDS, BOARD_COLUMNS, type BoardCard } from "./data";
+import { describeRule } from "../lib/poolRule";
+import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
+import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -237,6 +239,7 @@ export function BoardSection() {
             const inColumn = cards.filter((card) => card.columnIds.includes(column.id));
             const visible = showDone ? inColumn : inColumn.filter((card) => !card.done);
             const doneCount = visible.filter((card) => card.done).length;
+            const description = describeRule(column.rule, SHOWCASE_RULE_LOOKUP);
 
             return (
               <KanbanColumn
@@ -245,17 +248,20 @@ export function BoardSection() {
                 count={visible.length}
                 total={visible.length}
                 doneCount={doneCount}
-                rule={<p className="kcolumn__rule-text">{column.rule}</p>}
+                rule={
+                  <RuleSummary
+                    description={description}
+                    emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+                  />
+                }
                 entries={columnMenu(column.title)}
                 onAdd={() => setAnnouncement(`Neues Todo mit den Tags von ${column.title}.`)}
                 addLabel={`Todo in „${column.title}“ anlegen — mit den Tags dieser Regel`}
               >
                 {visible.length === 0 ? (
-                  <EmptyState
-                    compact
-                    icon="inbox"
-                    title="Keine Karte trifft diese Regel"
-                    description="Sobald ein Todo die genannten Tags trägt, erscheint es hier von selbst."
+                  <BoardColumnEmpty
+                    withoutCondition={description.isEmpty}
+                    onEditRule={() => setAnnouncement(`Regel von ${column.title} bearbeiten.`)}
                   />
                 ) : (
                   visible.map((card) => {

@@ -979,6 +979,8 @@ check(
   `geliefert ${JSON.stringify(boardColumnRecord?.body?.data?.placement)}`,
 );
 
+// Der **erste** Durchgang: vier Spalten über Tags, dazu die Achsen aus T-076,
+// die ohne Buchungen und ohne erledigte Karte auskommen.
 const boardRecord = records.find((record) => record.operationId === 'getBoard');
 const board = boardRecord?.body?.data;
 const columnsByName = new Map(
@@ -986,7 +988,7 @@ const columnsByName = new Map(
 );
 
 check(
-  `das Board führt die vier eingerichteten Spalten und nur die (${columnsByName.size})`,
+  `das Board führt die eingerichteten Spalten und nur die (${columnsByName.size})`,
   Object.values(BOARD_COLUMNS).every((name) => columnsByName.has(name)) &&
     columnsByName.size === Object.keys(BOARD_COLUMNS).length,
   [...columnsByName.keys()].join(', '),
@@ -1035,6 +1037,23 @@ check(
   doubled.join(', '),
 );
 
+/**
+ * Spaltenkennung → Spaltenname.
+ *
+ * Eine Abweichung, die nur Kennungen nennt, verlagert die Arbeit auf den
+ * Leser: Er muss erst herausfinden, **welche** Spalte streitet. Mit dem Namen
+ * steht der Befund fertig da.
+ */
+const columnName = new Map(
+  (board?.columns ?? []).map((entry) => [entry.column?.id, entry.column?.name]),
+);
+for (const entry of lateBoardColumnsForNames()) columnName.set(entry.id, entry.name);
+function lateBoardColumnsForNames() {
+  const late = records.filter((record) => record.operationId === 'getBoard').at(-1);
+  return (late?.body?.data?.columns ?? []).map((entry) => entry.column ?? {});
+}
+const named = (ids) => [...ids].map((id) => columnName.get(id) ?? id).sort().join(' / ') || '(keine)';
+
 /** Was die **Domäne** sagt: dieselbe Frage, über `matchesPool`. */
 const byDomain = new Map(
   (board?.appearances ?? []).map((entry) => [entry.todoId, entry.columnIds]),
@@ -1048,7 +1067,7 @@ for (const [todoId, columnIds] of multiple) {
     continue;
   }
   if ([...claimed].sort().join(',') !== [...columnIds].sort().join(',')) {
-    disagreements.push(`${todoId}: Abfrage [${columnIds}] gegen Regel [${claimed}]`);
+    disagreements.push(`${todoId}: Abfrage [${named(columnIds)}] gegen Regel [${named(claimed)}]`);
   }
 }
 for (const [todoId, columnIds] of byDomain) {
@@ -1060,6 +1079,205 @@ check(
   `Abfrage und Domänenregel nennen dieselben Spalten (${byDomain.size} Mehrfachnennungen)`,
   disagreements.length === 0 && byDomain.size === multiple.length,
   disagreements.join(' | ') || `Regel ${byDomain.size}, Abfrage ${multiple.length}`,
+);
+
+// ---------------------------------------------------------------------------
+section('12  Die Regel ist eine Struktur mit benannten Feldern (T-076)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Auftraggeber wollte den Status als Regel — und hat, mit einem Vorbild vor
+ * Augen, mehr bestellt: „Nimm dir ein Beispiel daran. Das regelt das."
+ * Statt einer Liste gleichartiger Terme hat jede Bedingung ein eigenes Feld mit
+ * einem Neutralwert; die Felder sind mit „und" verbunden.
+ *
+ * Gemessen wird hier, dass jedes dieser Felder **wirkt** — und zwar an einem
+ * Bestand, in dem eine bloß durchgereichte Bedingung auffiele:
+ *
+ *   Karte A trägt `Beratung` und `Rückfrage`, Status 1.
+ *   Karte B trägt `Beratung`,                 Status 1.
+ *
+ * Damit ergibt jede Achse eine **andere** Menge, und keine davon ist zufällig
+ * gleich einer anderen:
+ *
+ *   nur Status        → A und B
+ *   Tag und Status    → nur A     (das „und": weniger als die Tagspalte, nicht mehr)
+ *   ausgeschlossen    → nur B     (die Bedingung, die eine Termliste nicht kann)
+ *   fremder Status    → leer      (die Gegenprobe: die Achse filtert wirklich)
+ *
+ * Die vier Prüfungen darunter fahren die drei Achsen an, die einen Bestand
+ * brauchen — Erledigt, offene und exportierte Buchungen —, und zwar am
+ * **zweiten** Board-Durchgang, nach Timer, Buchungen und Exportlauf.
+ */
+
+const idsIn = (name) =>
+  new Set((columnsByName.get(name)?.todos ?? []).map((todo) => todo.id));
+const asList = (set) => [...set].sort().join(', ') || '(leer)';
+
+const onlyStatus = idsIn(BOARD_COLUMNS.status);
+const mixedColumn = idsIn(BOARD_COLUMNS.mixed);
+const excludedColumn = idsIn(BOARD_COLUMNS.excluded);
+const foreignStatus = idsIn(BOARD_COLUMNS.otherStatus);
+const tagColumn = idsIn(BOARD_COLUMNS.tag);
+
+check(
+  `eine Spalte, die nur nach dem Status filtert, führt beide Karten (${onlyStatus.size})`,
+  onlyStatus.size === 2,
+  asList(onlyStatus),
+);
+
+check(
+  'eine Spalte über einen Status, den keine Karte trägt, ist leer — die Achse filtert wirklich',
+  foreignStatus.size === 0,
+  asList(foreignStatus),
+);
+
+check(
+  `Tag **und** Status ergibt weniger als das Tag allein (${mixedColumn.size} statt ${tagColumn.size})`,
+  mixedColumn.size === 1 &&
+    [...mixedColumn].every((id) => onlyStatus.has(id)) &&
+    mixedColumn.size < onlyStatus.size,
+  `gemischt ${asList(mixedColumn)} | nur Status ${asList(onlyStatus)}`,
+);
+
+check(
+  'ein ausgeschlossenes Tag nimmt genau die Karte heraus, die es trägt',
+  excludedColumn.size === 1 && [...excludedColumn].every((id) => !mixedColumn.has(id)),
+  `ausgeschlossen ${asList(excludedColumn)} | gemischt ${asList(mixedColumn)}`,
+);
+
+/*
+ * Und der Fall, um den es dem Auftraggeber ging: **eine Karte, die durch den
+ * Status in zwei Spalten steht.**
+ *
+ * Nicht „steht in zwei Spalten" allein — das gab es seit E-054. Gemessen wird,
+ * dass mindestens eine Karte in einer Spalte über Tags **und** in einer Spalte
+ * über den Status steht, dass also die beiden Arten von Bedingung dieselbe
+ * Karte treffen, ohne einander zu verdrängen.
+ */
+const inTagAndStatus = [...tagColumn].filter((id) => onlyStatus.has(id));
+check(
+  `eine Karte steht zugleich in einer Tag- und in einer Statusspalte (${inTagAndStatus.length})`,
+  inTagAndStatus.length >= 1,
+  `Tagspalte ${asList(tagColumn)} | Statusspalte ${asList(onlyStatus)}`,
+);
+
+// ---------------------------------------------------------------------------
+// Der zweite Durchgang: Erledigt und Exportstatus
+// ---------------------------------------------------------------------------
+
+const boardRecords = records.filter((record) => record.operationId === 'getBoard');
+const lateBoard = boardRecords[boardRecords.length - 1]?.body?.data;
+const lateColumns = new Map(
+  (lateBoard?.columns ?? []).map((entry) => [entry.column?.name, entry]),
+);
+const lateIdsIn = (name) =>
+  new Set((lateColumns.get(name)?.todos ?? []).map((todo) => todo.id));
+
+check(
+  `es gibt einen zweiten Board-Durchgang, nach Buchungen und Exportlauf (${boardRecords.length})`,
+  boardRecords.length >= 2 && lateBoard !== undefined,
+  `${boardRecords.length} Aufzeichnung(en)`,
+);
+
+/*
+ * Erledigt. Die Spalte fragt ausdrücklich nach erledigten Karten, die Ansicht
+ * steht auf `includeCompleted=false` — die Vorgabe. Wäre die
+ * Ansichtseinstellung stärker als die Regel, bliebe die Spalte leer, und der
+ * Benutzer sähe eine Spalte, die er eingerichtet hat und die nie etwas zeigt.
+ */
+const doneColumn = lateIdsIn(BOARD_COLUMNS.done);
+check(
+  `eine Spalte „nur Erledigt" zeigt die erledigte Karte, obwohl die Ansicht Erledigtes ausblendet (${doneColumn.size})`,
+  doneColumn.size >= 1,
+  asList(doneColumn),
+);
+
+/*
+ * Exportstatus. Die Erwartung wird nicht angenommen, sondern aus einem
+ * **zweiten, unabhängigen** Weg gelesen: der Liste der Buchungen. Laufen die
+ * beiden auseinander, zeigt das Board eine Spalte „noch nicht abgerechnet",
+ * die etwas anderes meint als die Buchungsliste.
+ */
+const entriesRecord = records
+  .filter((record) => record.operationId === 'searchTimeEntries')
+  .at(-1);
+const entries = entriesRecord?.body?.data?.items ?? [];
+const expectedOpen = new Set(
+  entries.filter((entry) => entry.exportStatus === 'open').map((entry) => entry.todoId),
+);
+const expectedExported = new Set(
+  entries.filter((entry) => entry.exportStatus === 'exported').map((entry) => entry.todoId),
+);
+
+const openColumn = lateIdsIn(BOARD_COLUMNS.openWork);
+const exportedColumn = lateIdsIn(BOARD_COLUMNS.exported);
+
+/*
+ * Die Erwartung wird um die **erledigten** Karten gekürzt, und das ist keine
+ * Nachgiebigkeit, sondern die zweite Hälfte der Messung.
+ *
+ * Beide Exportspalten lassen die Erledigt-Achse offen. Wo die Regel schweigt,
+ * gilt die Ansichtseinstellung — und die steht auf ihrer Vorgabe
+ * `includeCompleted=false`. Eine erledigte Karte mit offener Buchung gehört
+ * damit in die Spalte und wird trotzdem nicht gezeigt.
+ *
+ * Welche Karten erledigt sind, wird nicht angenommen: Es ist genau der Inhalt
+ * der Spalte `done` daneben, die ausdrücklich danach fragt.
+ */
+const visible = (set) => new Set([...set].filter((id) => !doneColumn.has(id)));
+
+check(
+  `„mit offener Buchung" trifft genau die Todos, die eine haben (${openColumn.size})`,
+  openColumn.size > 0 && asList(openColumn) === asList(visible(expectedOpen)),
+  `Spalte ${asList(openColumn)} | Buchungsliste ${asList(visible(expectedOpen))}`,
+);
+
+check(
+  `„mit exportierter Buchung" trifft genau die Todos, die eine haben (${exportedColumn.size})`,
+  exportedColumn.size > 0 && asList(exportedColumn) === asList(visible(expectedExported)),
+  `Spalte ${asList(exportedColumn)} | Buchungsliste ${asList(visible(expectedExported))}`,
+);
+
+check(
+  'die erledigte Karte hat eine offene Buchung und wird trotzdem nur in der Erledigt-Spalte gezeigt',
+  [...doneColumn].some((id) => expectedOpen.has(id)) &&
+    ![...doneColumn].some((id) => openColumn.has(id)),
+  `erledigt ${asList(doneColumn)} | offen laut Buchungsliste ${asList(expectedOpen)} | Spalte ${asList(openColumn)}`,
+);
+
+/*
+ * Und die Übereinstimmung von Abfrage und Domänenregel noch einmal — für den
+ * zweiten Durchgang, in dem alle fünf Achsen etwas zu sagen haben. Dieselbe
+ * Prüfung wie in Abschnitt 11, aber an dem Bestand, an dem sie am ehesten
+ * auseinanderlaufen: `matchesPool` entscheidet über Erledigt und Buchungen
+ * anhand von Angaben, die der Anwendungsfall erst zusammensuchen muss, die
+ * Abfrage anhand von SQL.
+ */
+const lateBySql = new Map();
+for (const entry of lateBoard?.columns ?? []) {
+  for (const todo of entry.todos ?? []) {
+    if (!lateBySql.has(todo.id)) lateBySql.set(todo.id, new Set());
+    lateBySql.get(todo.id).add(entry.column.id);
+  }
+}
+const lateByDomain = new Map(
+  (lateBoard?.appearances ?? []).map((entry) => [entry.todoId, new Set(entry.columnIds)]),
+);
+const lateProblems = [];
+for (const [todoId, columnIds] of lateBySql) {
+  const claimed = lateByDomain.get(todoId) ?? new Set();
+  if (columnIds.size > 1 && asList(claimed) !== asList(columnIds)) {
+    lateProblems.push(`${todoId}: Abfrage [${named(columnIds)}] gegen Regel [${named(claimed)}]`);
+  }
+  if (columnIds.size <= 1 && claimed.size > 0) {
+    lateProblems.push(`${todoId}: von der Regel mehrfach genannt, von der Abfrage einmal`);
+  }
+}
+check(
+  `auch mit allen fünf Achsen nennen Abfrage und Domänenregel dieselben Spalten (${lateByDomain.size})`,
+  lateProblems.length === 0 && lateByDomain.size > 0,
+  lateProblems.join(' | ') || 'keine Mehrfachnennung im zweiten Durchgang',
 );
 
 // ---------------------------------------------------------------------------

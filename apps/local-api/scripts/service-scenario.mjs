@@ -107,12 +107,41 @@ export const STATUS_COLOR = '#3f7fbf';
  *   `both`  — **zwei** zutreffende Regelterme in **einer** Spalte. Die Karte
  *             darf darin genau einmal stehen und nicht zweimal.
  *   `empty` — leere Regel. Trifft nichts, nicht alles (T-009).
+ *
+ * Und die fünf Achsen aus T-076, jede einzeln messbar:
+ *
+ *   `status`      — **nur** Status. Keine Tagbedingung; die Spalte steht und
+ *                   fällt mit `todo.status_id`, und das ist eine Spalte an der
+ *                   Zeile und kein Eintrag in einer Verknüpfungstabelle.
+ *   `otherStatus` — dieselbe Bauart mit einem Status, den kein Todo trägt. Die
+ *                   Gegenprobe: Ohne sie wäre `status` auch dann grün, wenn die
+ *                   Statusachse gar nicht filterte.
+ *   `mixed`       — Tag **und** Status. Die Verknüpfung der Achsen ist „und":
+ *                   Die Spalte muss weniger enthalten als die Tagspalte allein,
+ *                   nicht mehr.
+ *   `excluded`    — Tag erforderlich, anderes Tag ausgeschlossen. Die
+ *                   Bedingung, die eine Liste gleichartiger Terme nicht
+ *                   ausdrücken konnte.
+ *   `done`        — nur erledigte Karten. Sie misst zugleich, dass die Regel
+ *                   der Ansichtseinstellung vorgeht: Ohne das wäre die Spalte
+ *                   unter `includeCompleted=false` immer leer.
+ *   `openWork`    — Todos mit offener Buchung („was habe ich noch nicht
+ *                   abgerechnet").
+ *   `exported`    — Todos mit exportierter Buchung. Beide zugleich sind
+ *                   möglich, und das ist der Punkt.
  */
 export const BOARD_COLUMNS = Object.freeze({
   tag: 'Spalte über ein Tag',
   folder: 'Spalte über einen Ordner',
   both: 'Spalte über zwei Tags',
   empty: 'Spalte ohne Regel',
+  status: 'Spalte nur über den Status',
+  otherStatus: 'Spalte über einen unbenutzten Status',
+  mixed: 'Spalte über Tag und Status',
+  excluded: 'Spalte mit ausgeschlossenem Tag',
+  done: 'Spalte nur über Erledigt',
+  openWork: 'Spalte über offene Buchungen',
+  exported: 'Spalte über exportierte Buchungen',
 });
 
 /**
@@ -296,6 +325,9 @@ export async function runScenario() {
     // -----------------------------------------------------------------------
     const statuses = await record('listTodoStatuses', 'GET', '/todo-statuses', '/todo-statuses');
     const statusId = statuses.body.data[0].id;
+    // Ein zweiter, den kein Todo dieses Durchlaufs trägt. Er ist die Gegenprobe
+    // zur Statusachse (T-076): Eine Spalte über ihn muss **leer** sein.
+    const unusedStatusId = statuses.body.data[1].id;
 
     // `color` geht mit (T-051): Die Route hat den Schlüssel bis dahin still
     // verworfen, während die Oberfläche ihn sendete. Der Durchlauf schickt ihn
@@ -410,6 +442,65 @@ export async function runScenario() {
       placement: 'board',
       position: 24,
       rule: [],
+    });
+
+    // -----------------------------------------------------------------------
+    // Die fünf Achsen aus T-076, jede als eigene Spalte
+    //
+    // Der Bestand ist so gewählt, dass die Antworten nicht zufällig richtig
+    // sein können: Beide Todos tragen `statusId`, aber nur eines trägt
+    // `boardTagId`. Damit muss `status` **beide** enthalten, `mixed` **eines**
+    // und `excluded` das **andere** — drei verschiedene Mengen aus demselben
+    // Bestand, und keine davon ist die Tagspalte.
+    // -----------------------------------------------------------------------
+    await record('createPool', 'POST', '/pools', '/pools', {
+      name: BOARD_COLUMNS.status,
+      placement: 'board',
+      position: 25,
+      rule: [],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.otherStatus,
+      placement: 'board',
+      position: 26,
+      rule: [],
+      statusIds: [unusedStatusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.mixed,
+      placement: 'board',
+      position: 27,
+      rule: [{ kind: 'tag', tagId: boardTagId }],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.excluded,
+      placement: 'board',
+      position: 28,
+      rule: [{ kind: 'tag', tagId }],
+      excludedTags: [{ kind: 'tag', tagId: boardTagId }],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.done,
+      placement: 'board',
+      position: 29,
+      rule: [],
+      completion: 'done',
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.openWork,
+      placement: 'board',
+      position: 30,
+      rule: [],
+      exportState: 'open',
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.exported,
+      placement: 'board',
+      position: 31,
+      rule: [],
+      exportState: 'exported',
     });
 
     await record('getBoard', 'GET', '/board', '/board');
@@ -579,6 +670,29 @@ export async function runScenario() {
         { startedAt: '2026-03-02T10:00:00Z', endedAt: '2026-03-02T10:30:00Z', note: 'Telefonat' },
       );
     }
+
+    // -----------------------------------------------------------------------
+    // Das Board ein **zweites** Mal — jetzt mit Buchungen und mit Erledigt
+    //
+    // Die drei Achsen `done`, `openWork` und `exported` (T-076) konnten beim
+    // ersten Lesen nichts zeigen: Zu diesem Zeitpunkt gab es weder eine
+    // Buchung noch eine erledigte Karte. Eine Spalte, die leer ist, weil es
+    // nichts zu zeigen gibt, misst nichts — sie sähe genauso aus wie eine
+    // Spalte, deren Achse gar nicht wirkt.
+    //
+    // Deshalb hier, nach Timer, Buchungen und Exportlauf, noch einmal. Und
+    // `secondTodoId` wird vorher erledigt: Ohne eine erledigte Karte bliebe
+    // `done` wieder leer, und der Fall, den diese Spalte trägt — die Regel
+    // geht der Ansichtseinstellung `includeCompleted=false` vor —, wäre
+    // ungemessen.
+    //
+    // Der Bestand der Buchungen wird nicht angenommen, sondern gelesen:
+    // `GET /time-entries` ist der zweite, unabhängige Weg zu derselben
+    // Auskunft, und `proof-openapi.mjs` hält die beiden gegeneinander.
+    // -----------------------------------------------------------------------
+    await quiet('PUT', `/todos/${secondTodoId}/done`);
+    await record('searchTimeEntries', 'GET', '/time-entries', '/time-entries?limit=100');
+    await record('getBoard', 'GET', '/board', '/board');
 
     // -----------------------------------------------------------------------
     // Löschen. Jeweils an einem eigens dafür angelegten Stück, damit der

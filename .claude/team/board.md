@@ -31,6 +31,23 @@ Alle Aufgaben von T-001 bis T-052. Berichte unter `.claude/team/reports/`.
 Urteile: Spezifikations- und UX-Abgleich **freigegeben** (T-042). Sicherheitsprüfung und
 Code-Review haben je vier blockierende Befunde gemeldet, alle behoben.
 
+## Läuft — Welle vom 2026-09-03
+
+Ausgangspunkt: T-076 hat die Regel von einer Liste gleichartiger Terme auf eine **Struktur mit
+benannten Feldern** umgebaut (E-055, Vorbild Super Productivity): erforderliche Tags mit Modus,
+ausgeschlossene Tags, Status, Erledigt, Exportstatus. Alle dreizehn Nachweispfade grün.
+`pnpm check` rot an genau einem Punkt — Zweigabdeckung `packages/storage/src` 79,54 gegen 80.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-077~~ | **fertig.** `pnpm check` Exitcode 0. Zweigabdeckung Speicherung 79,55 auf 81,68, Domäne 80,00 auf 85,29 | unit-tester |
+| ~~T-078~~ | **fertig.** `poolNamer` behoben, E-056 gebaut, `proof:addin` 100 auf 112 | integration-dev |
+| T-079 | Regelformular in der Oberfläche nach dem Vorbild | frontend-dev |
+
+Kollisionsfrei: `packages/*/test/**` gegen `routes/addin/**` gegen `apps/web/**`.
+End-to-End erst danach — `tests/e2e/kanban.spec.ts` prüft noch das Ziehen, das E-054 abgeschafft
+hat.
+
 ## Offen — Restpunkte, keine Blocker
 
 | Nr | Punkt | Wer |
@@ -38,6 +55,10 @@ Code-Review haben je vier blockierende Befunde gemeldet, alle behoben.
 | O-A | Kanban-Spalten lassen sich nicht umbenennen — es gibt keine Bedienmöglichkeit dafür (T-052) | frontend-dev |
 | O-B | `PoolWrite` kennt kein `position`; jeder neue Pool entsteht auf 0. Fachliche Frage: sollen Pools sortierbar sein? | Auftraggeber |
 | O-C | `GET /settings` belegt keine Merkmale zum Datenbankpfad, anders als beim Exportordner | domain-dev |
+| O-D | `Pool.rule` heißt weiter `rule`, enthält aber nur noch die erforderlichen Tags. Umbenennen berührt drei Hoheiten — eigene Aufgabe | Orchestrator |
+| O-F | **Nachlauf offen:** `proof:access`, `export-api`, `addin-wiring`, `tags`, `conflicts` konnten in T-078 nicht laufen — Port 17843 war von der Arbeitsumgebung der parallelen Aufgabe belegt. Der Agent hat nicht abgeschossen, was ihm nicht gehört. Eine Minute Nachlauf, sobald der Port frei ist | Orchestrator |
+| O-G | Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
+| O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
 | O-D | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
 | O-G | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
 | O-H | `pnpm desktop` braucht jetzt beide Ports frei (17843 und 17844). Verhaltensänderung durch den mitlaufenden Nachweis; die Kette bleibt sauber stehen und nennt den Grund. | — |

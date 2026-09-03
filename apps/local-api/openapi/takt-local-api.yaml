@@ -2819,7 +2819,7 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [timeEntry, todoWasDone, doneCleared, poolNames]
+                    required: [timeEntry, todoWasDone, doneCleared, poolNames, leavingPoolNames]
                     properties:
                       timeEntry: { $ref: '#/components/schemas/TimeEntry' }
                       todoWasDone:
@@ -2841,11 +2841,32 @@ paths:
                         description: |
                           Die Pools, in denen das Todo **nach** dieser Buchung
                           steht — beim Namen (I-05). Eine leere Liste ist eine
-                          Aussage und kein Fehlen: Auf die Tags dieses Todos
-                          passt derzeit keine Poolregel. Die Zugehörigkeit ist
-                          nirgends gespeichert, sie folgt aus den Tags (A-3.4)
-                          — deshalb kostet die Aufhebung keinen einzigen
-                          Schreibvorgang an den Pools.
+                          Aussage und kein Fehlen: Auf dieses Todo passt
+                          derzeit keine Poolregel. Die Zugehörigkeit ist
+                          nirgends gespeichert, sie wird bei jeder Abfrage neu
+                          bestimmt (A-3.4) — deshalb kostet die Aufhebung
+                          keinen einzigen Schreibvorgang an den Pools.
+
+                          Derselbe Zustand wie in `AddinTodoMatch.poolNames`
+                          und aus derselben Rechnung: erledigt ist das Todo
+                          danach nicht mehr, und eine offene Buchung hat es in
+                          jedem Fall. Beide Antworten müssen übereinstimmen,
+                          sonst sagt der Aufgabenbereich vor der Buchung etwas
+                          anderes als danach.
+                      leavingPoolNames:
+                        type: array
+                        items: { type: string }
+                        description: |
+                          Die Pools, aus denen diese Buchung das Todo
+                          **entfernt** hat — beim Namen (E-056). Fast immer
+                          leer; der Aufgabenbereich sagt dann kein Wort
+                          darüber.
+
+                          Dieselbe Rechnung wie in
+                          `AddinTodoMatch.leavingPoolNames`, damit die
+                          Ankündigung und die Bestätigung auch in dieser Hälfte
+                          übereinstimmen. Ein Pool steht nie zugleich hier und
+                          in `poolNames`.
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3440,6 +3461,15 @@ components:
         rootTags: { type: array, items: { $ref: '#/components/schemas/Tag' } }
 
     PoolRuleTerm:
+      description: |
+        Ein Tagbestandteil einer Regel: ein einzelnes Tag oder ein Ordner,
+        dessen Tags zählen — mit `includeSubfolders` auch die seiner
+        Unterordner, beliebig tief.
+
+        Es gibt **keinen** Fall für den Status. Der Status ist keine Tagmenge:
+        Er steht am Todo, genau einer je Todo. Er hat ein eigenes Feld
+        (`statusIds`), so wie „Erledigt" und der Exportstatus eigene Felder
+        haben (T-076).
       oneOf:
         - type: object
           required: [kind, tagId]
@@ -3452,23 +3482,88 @@ components:
             kind: { type: string, const: folder }
             folderId: { $ref: '#/components/schemas/Id' }
 
+    PoolCompletionFilter:
+      type: string
+      enum: [any, done, open]
+      description: |
+        Die Erledigt-Achse einer Regel (T-076).
+
+        `any` — Erledigt spielt für die Zugehörigkeit keine Rolle
+        (**Neutralwert**). `open` — nur unerledigte Todos. `done` — nur
+        erledigte.
+
+        Nicht der Status: „Erledigt" ist `completedAt` und hängt an keinem
+        Status (E-023). Und nicht `includeCompleted`: Diese Achse entscheidet
+        über **Zugehörigkeit**, jener Parameter über **Sichtbarkeit**. Steht
+        die Achse auf `any`, entscheidet wie bisher der Parameter; sagt sie
+        etwas, hat sie das letzte Wort — sonst wäre eine Spalte „Erledigt" in
+        der Vorgabeansicht dauerhaft leer.
+
+    PoolExportFilter:
+      type: string
+      enum: [any, open, exported]
+      description: |
+        Die Exportstatus-Achse einer Regel (T-076).
+
+        `any` — der Exportstatus spielt keine Rolle (**Neutralwert**). `open` —
+        das Todo hat mindestens eine abgeschlossene, offene Buchung; das ist
+        „was habe ich noch nicht abgerechnet". `exported` — das Todo hat
+        mindestens eine exportierte Buchung.
+
+        Der Exportstatus gehört der **Buchung**, nicht dem Todo (E-032). Ein
+        Todo mit einer offenen und einer exportierten Buchung erfüllt deshalb
+        beide und steht in beiden Spalten — derselbe Fall, den E-054 zum
+        Normalfall gemacht hat. Ein Todo ohne jede Buchung erfüllt keinen von
+        beiden.
+
     Pool:
       type: object
       description: |
-        Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform
-        einer **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`:
-        Name, Regel, Auflösung über Ordner und die Mitgliederabfrage wären
-        Wort für Wort dieselben. Was eine Spalte von einem Pool unterscheidet,
-        ist allein `placement`.
-      required: [id, name, matchMode, includeSubfolders, placement, position, rule, createdAt, updatedAt]
+        Eine benannte Regel — und seit E-054 zugleich die Bauform einer
+        **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`: Name,
+        Regel, Auflösung über Ordner und die Mitgliederabfrage wären Wort für
+        Wort dieselben. Was eine Spalte von einem Pool unterscheidet, ist
+        allein `placement`.
+
+        **Die Regel ist eine Struktur mit benannten Feldern, keine Liste**
+        (T-076). Jede Bedingung hat ihr eigenes Feld mit einem Neutralwert, und
+        die Verknüpfung folgt aus dem Feldnamen:
+
+        | Feld | Bedeutung | Neutralwert |
+        |---|---|---|
+        | `rule` + `matchMode` | erforderliche Tags: alle oder mindestens eines | `[]` |
+        | `excludedTags` | ausgeschlossene Tags: keines davon | `[]` |
+        | `statusIds` | Status: einer von diesen | `[]` = „Alle" |
+        | `completion` | Erledigt | `any` |
+        | `exportState` | Exportstatus | `any` |
+
+        Die Felder sind mit **und** verbunden; jedes engt weiter ein, keines
+        kann das Ergebnis vergrößern. Stehen alle neutral, trifft die Regel
+        **nichts** (A-3.4) — nicht alles.
+
+        Ein Statusfeld macht die Spalte **nicht** wieder zum Status (E-054):
+        Sie kann mehrere Status umfassen, keinen, oder Status und Tags
+        mischen, und dieselbe Karte kann weiterhin in mehreren Spalten stehen.
+      required: [id, name, matchMode, includeSubfolders, placement, position, rule, excludedTags, statusIds, completion, exportState, createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         name: { type: string, minLength: 1, maxLength: 200 }
         matchMode:
           type: string
           enum: [any, all]
-          description: '`any` — mindestens ein Regel-Tag. `all` — alle Regel-Tags.'
-        includeSubfolders: { type: boolean }
+          description: |
+            Wie die **erforderlichen** Tags (`rule`) verknüpft sind: `any` —
+            mindestens eines, `all` — alle.
+
+            Gilt für keine andere Achse. Die ausgeschlossenen Tags sind immer
+            „keines davon", die Status immer „einer von diesen" — ein „alle
+            davon" über zwei Status wäre nicht streng, sondern unerfüllbar,
+            weil ein Todo genau einen Status trägt.
+        includeSubfolders:
+          type: boolean
+          description: |
+            Bei Termen der Art `folder` zählen auch die Tags der Unterordner,
+            beliebig tief. Gilt für **beide** Taglisten.
         placement: { $ref: '#/components/schemas/PoolPlacement' }
         position:
           type: integer
@@ -3477,7 +3572,29 @@ components:
             Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board
             sortieren nach diesem Wert.
 
-        rule: { type: array, items: { $ref: '#/components/schemas/PoolRuleTerm' } }
+        rule:
+          type: array
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: |
+            Die **erforderlichen** Tags. Leer: Diese Achse schränkt nicht ein.
+
+            Das Feld heißt aus historischen Gründen `rule` — es war einmal die
+            ganze Regel. Was es bedeutet, steht hier; `excludedTags` daneben
+            macht es unübersehbar.
+        excludedTags:
+          type: array
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: |
+            **Ausgeschlossene** Tags (T-076). Trägt das Todo eines davon,
+            gehört es nicht dazu — ganz gleich, was die übrigen Felder sagen.
+        statusIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          description: |
+            Status, von denen das Todo **einen** tragen muss (T-076). Leer
+            heißt „Alle".
+        completion: { $ref: '#/components/schemas/PoolCompletionFilter' }
+        exportState: { $ref: '#/components/schemas/PoolExportFilter' }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
 
@@ -3504,6 +3621,10 @@ components:
 
         **So legt man eine Kanban-Spalte an:** `placement: board`. Es gibt keine
         eigene Route dafür, weil eine Spalte ein Pool ist (E-054).
+
+        **Jede Achse der Regel ist weglassbar und steht dann neutral** (T-076).
+        Eine Anfrage, die nur `name` und `rule` schickt, legt damit Wort für
+        Wort die Regel an, die man vor T-076 anlegen konnte.
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
@@ -3518,6 +3639,25 @@ components:
           maxItems: 200
           default: []
           items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: Erforderliche Tags. Leer trifft nichts, nicht alles.
+        excludedTags:
+          type: array
+          maxItems: 200
+          default: []
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+          description: Ausgeschlossene Tags — keines davon darf am Todo hängen (T-076).
+        statusIds:
+          type: array
+          maxItems: 200
+          default: []
+          items: { $ref: '#/components/schemas/Id' }
+          description: Status — einer von diesen. Leer heißt „Alle" (T-076).
+        completion:
+          allOf: [{ $ref: '#/components/schemas/PoolCompletionFilter' }]
+          default: any
+        exportState:
+          allOf: [{ $ref: '#/components/schemas/PoolExportFilter' }]
+          default: any
 
     PoolUpdate:
       type: object
@@ -3529,6 +3669,11 @@ components:
         `placement` ist der Weg, aus einem Pool eine Kanban-Spalte zu machen und
         zurück. An der Regel und an den Todos ändert sich dabei nichts — nur
         daran, wo die Regel erscheint (E-054).
+
+        **Auch die drei Listen der Regel sind einzeln änderbar** (T-076): Wer
+        nur `rule` schickt, ändert die erforderlichen Tags und behält seine
+        Ausschlüsse und Status. Eine Liste leeren heißt, sie ausdrücklich als
+        `[]` zu schicken.
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
         matchMode: { type: string, enum: [any, all] }
@@ -3539,6 +3684,16 @@ components:
           type: array
           maxItems: 200
           items: { $ref: '#/components/schemas/PoolRuleTerm' }
+        excludedTags:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/PoolRuleTerm' }
+        statusIds:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/Id' }
+        completion: { $ref: '#/components/schemas/PoolCompletionFilter' }
+        exportState: { $ref: '#/components/schemas/PoolExportFilter' }
 
     Board:
       type: object
@@ -4269,7 +4424,7 @@ components:
         die vor der Buchung steht — „was passiert, wenn ich hier draufbuche?":
         die bereits gebuchte Zeit, getrennt nach offen und exportiert, und die
         Pools, in denen das Todo steht.
-      required: [id, title, callNumber, statusId, tagIds, completedAt, openSeconds, exportedSeconds, poolNames]
+      required: [id, title, callNumber, statusId, tagIds, completedAt, openSeconds, exportedSeconds, poolNames, leavingPoolNames]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         title: { type: string }
@@ -4298,13 +4453,50 @@ components:
           type: array
           items: { type: string }
           description: |
-            Die Pools, in denen dieses Todo Mitglied ist — beim Namen (I-05).
+            Die Pools, in denen dieses Todo **nach einer Buchung darauf**
+            stünde — beim Namen (I-05).
 
-            Mitgliedschaft, nicht Sichtbarkeit: Sie folgt allein aus den Tags
-            (A-3.4) und kennt den Erledigt-Status nicht. Ein erledigtes Todo hat
-            seinen Pool nie verlassen, es wurde dort nur nicht angezeigt —
-            deshalb kann diese Liste schon **vor** der Buchung sagen, wo das
-            Todo danach wieder auftaucht.
+            **Zugehörigkeit, nicht Sichtbarkeit.** Die Liste beantwortet
+            `matchesPool` und nicht `isVisibleInPool`: Sichtbarkeit hinge an
+            `includeCompleted`, einer Einstellung der Ansicht in der
+            Hauptanwendung (E-039), die das Add-in nicht kennt. Nach der
+            Buchung ist das Todo ohnehin offen, und dann ist es in jedem Pool,
+            zu dem es gehört, auch sichtbar.
+
+            **Warum „nach einer Buchung" und nicht „jetzt".** Der
+            Aufgabenbereich baut daraus einen Satz im Futur — „Es erscheint
+            dann wieder in …". Bis T-076 war das dasselbe wie „jetzt", weil die
+            Zugehörigkeit allein an den Tags hing. Seit eine Regel auch über
+            `completion` und `exportState` urteilen kann, fallen die beiden
+            Zeitpunkte auseinander: Eine Regel `completion: done` enthält ein
+            erledigtes Todo jetzt und **nach** der Buchung nicht mehr (A-2.5
+            hebt „Erledigt" auf), eine Regel `exportState: open` umgekehrt.
+            Genannt wird, was der Benutzer nach seiner Entscheidung vorfindet.
+
+            Alle fünf Achsen der Regel werden ausgewertet (T-078). Vor T-078
+            waren es nur die erforderlichen Tags, und die Antwort nannte
+            deshalb **zu viele** Pools, sobald eine Regel eine der übrigen
+            Achsen benutzte.
+        leavingPoolNames:
+          type: array
+          items: { type: string }
+          description: |
+            Die Pools, aus denen dieselbe Buchung das Todo **entfernen** würde
+            — beim Namen (E-056).
+
+            Die andere Hälfte derselben Auskunft, und der Grund, warum sie
+            überhaupt nötig ist: Eine Regel `completion: done` zusammen mit
+            `exportState: open` ist eine **Abrechnungsliste** — erledigt, noch
+            nicht abgerechnet. Wer aus Outlook auf eine Karte darin bucht,
+            sieht sie aus genau der Liste verschwinden, in der er sie sucht;
+            eine unerklärte Bewegung wird an dieser Stelle als Datenverlust
+            gelesen.
+
+            Fast immer leer: Nur eine Regel, die nach „Erledigt" fragt, kann
+            ein Todo durch eine Buchung verlieren. Ist die Liste leer, sagt der
+            Aufgabenbereich kein Wort darüber — kein Halbsatz, keine zweite
+            Liste. Ein Pool steht nie zugleich hier und in `poolNames`: Diese
+            Liste trägt nur, was **vorher** zutraf und **nachher** nicht.
 
     AppSettings:
       type: object

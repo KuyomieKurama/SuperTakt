@@ -17,6 +17,8 @@ import type {
   TagTree,
   TodoStatus,
 } from "../api/types";
+import { flatFolders } from "../lib/folderPaths";
+import type { RuleLookup } from "../lib/poolRule";
 import { useAsync, type AsyncState } from "./useAsync";
 
 /**
@@ -226,4 +228,48 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   );
 
   return <StructureContext.Provider value={api}>{children}</StructureContext.Provider>;
+}
+
+
+/**
+ * Woher eine Regelzusammenfassung ihre Namen holt (T-079).
+ *
+ * Drei Ansichten stellen dieselbe Frage — das Board unter jedem Spaltenkopf,
+ * die Regelverwaltung in jeder Zeile und das Regelformular in seiner Vorschau:
+ * Wie heißt das Tag, der Ordner, der Status hinter dieser Kennung? Vor T-079
+ * beantworteten zwei davon sie getrennt, und die dritte gab es nicht.
+ *
+ * Der Nachschlag ist bewusst ein **Argument** von `describeRule` und kein
+ * Zusammenhang, den die Beschreibung sich selbst holt: Damit bleibt
+ * `lib/poolRule.ts` ohne laufenden Dienst prüfbar und auf der Musterseite des
+ * Designsystems zeigbar, wo es keinen `StructureProvider` gibt. Dieser Haken
+ * ist nur die Brücke dorthin.
+ */
+export function useRuleLookup(): RuleLookup {
+  const { state, tagInfo } = useStructure();
+  const value = state.status === "ready" ? state.value : null;
+
+  const folderPaths = useMemo(() => {
+    const map = new Map<Id, readonly string[]>();
+    if (value !== null) for (const entry of flatFolders(value.tagTree)) map.set(entry.id, entry.path);
+    return map;
+  }, [value]);
+
+  const statusNames = useMemo(() => {
+    const map = new Map<Id, string>();
+    for (const status of value?.statuses ?? []) map.set(status.id, status.name);
+    return map;
+  }, [value]);
+
+  return useMemo<RuleLookup>(
+    () => ({
+      tag: (id) => {
+        const info = tagInfo(id);
+        return info === undefined ? undefined : { name: info.tag.name, path: info.path };
+      },
+      folder: (id) => folderPaths.get(id),
+      status: (id) => statusNames.get(id),
+    }),
+    [tagInfo, folderPaths, statusNames],
+  );
 }

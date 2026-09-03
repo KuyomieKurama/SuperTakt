@@ -38,7 +38,7 @@ import type {
 } from '@takt/domain';
 import { calendarDayBounds, decideTimerStop, err, ok, taktError } from '@takt/domain';
 
-import { integer, text, type SqlConnection, type SqlValue } from './database.ts';
+import { chunk, integer, placeholders, text, type SqlConnection, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
 import { toRunningTimeEntry, toTimeEntry } from './mappers.ts';
@@ -261,6 +261,43 @@ export function createTimeEntryPort(
         .prepare(`SELECT COALESCE(SUM(duration_seconds), 0) AS seconds FROM time_entry ${sql}`)
         .get(...params);
       return row === undefined ? 0 : integer(row, 'seconds');
+    },
+
+    /**
+     * Offene und exportierte Buchungen je Todo, in **einer** Abfrage (T-076).
+     *
+     * `MAX(CASE …)` statt zweier EXISTS-Unterabfragen je Todo: ein Durchlauf
+     * über `ix_time_entry_todo`, ein Ergebnis je Todo. Die Blöcke aus `chunk`
+     * halten die Zahl der Fragezeichen unter der Grenze von SQLite — dieselbe
+     * Vorsichtsmaßnahme wie beim Laden der Tags in `repo-todos.ts`.
+     */
+    async exportPresence(todoIds) {
+      // Keine Sonderbehandlung für die leere Liste: `chunk([])` liefert keinen
+      // Block, die Schleife läuft nicht, und die leere Zuordnung ist die
+      // richtige Antwort. Eine vorgeschaltete Prüfung wäre ein zweiter Weg zu
+      // demselben Ergebnis.
+      const found = new Map<TodoId, { hasOpen: boolean; hasExported: boolean }>();
+
+      for (const block of chunk(todoIds)) {
+        const rows = conn
+          .prepare(
+            `SELECT todo_id,
+                    MAX(CASE WHEN export_status = 'open'     AND ended_at IS NOT NULL THEN 1 ELSE 0 END) AS has_open,
+                    MAX(CASE WHEN export_status = 'exported'                          THEN 1 ELSE 0 END) AS has_exported
+               FROM time_entry
+              WHERE todo_id IN (${placeholders(block.length)})
+              GROUP BY todo_id`,
+          )
+          .all(...block);
+        for (const row of rows) {
+          found.set(text(row, 'todo_id') as TodoId, {
+            hasOpen: integer(row, 'has_open') !== 0,
+            hasExported: integer(row, 'has_exported') !== 0,
+          });
+        }
+      }
+
+      return found;
     },
   };
 }

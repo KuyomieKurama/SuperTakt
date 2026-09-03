@@ -31,8 +31,11 @@
 import type { PoolPort, TagFolderPort, TagPort, Page, Pagination } from '../ports.ts';
 import type {
   Pool,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolId,
-  PoolRuleTerm,
+  PoolTagTerm,
+  StatusId,
   Tag,
   TagFolder,
   TagFolderId,
@@ -48,20 +51,21 @@ import { checkFolderMove, err, normalizeName, normalizeTagName, ok, tagNameKey, 
 import { integer, text, placeholders, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
-import { toPool, toPoolRuleTerm, toTag, toTagFolder } from './mappers.ts';
+import { toPool, toPoolCompletion, toPoolExportState, toPoolRuleTerm, toTag, toTagFolder } from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 const TAG_COLUMNS = 'id, folder_id, name, color, created_at, updated_at';
 const FOLDER_COLUMNS = 'id, parent_id, name, created_at, updated_at';
 /**
- * Alle Spalten von `pool`, ausgeschrieben — `placement` seit E-054 darunter.
+ * Alle Spalten von `pool`, ausgeschrieben — `placement` seit E-054 darunter,
+ * `completion` und `export_state` seit T-076.
  *
  * Ausgeschrieben und nicht `SELECT *`, aus demselben Grund wie in
  * `repo-todos.ts`: Eine später ergänzte Spalte soll nicht von selbst in einem
  * Datensatz landen, den irgendein Pfad weiterreicht.
  */
 const POOL_COLUMNS =
-  'id, name, match_mode, include_subfolders, placement, position, created_at, updated_at';
+  'id, name, match_mode, include_subfolders, placement, position, completion, export_state, created_at, updated_at';
 
 export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
   const loadOne = (id: TagId): Tag | null => {
@@ -492,24 +496,94 @@ export function createPoolPort(
   ids: IdSource,
   searchTodos: (filter: TodoFilter, pagination?: Pagination) => Promise<Page<Todo>>,
 ): PoolPort {
-  const ruleOf = (id: PoolId): readonly PoolRuleTerm[] =>
-    conn
-      .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ? ORDER BY COALESCE(tag_id, folder_id)')
-      .all(id)
-      .map(toPoolRuleTerm);
+  /**
+   * Alle drei Rollen einer Regel in **einer** Abfrage (T-076).
+   *
+   * Nicht drei Abfragen mit je einem `WHERE role = ?`: Es ist derselbe
+   * Indexzugriff auf `ux_pool_rule (pool_id, role, …)`, und drei Aufrufe je
+   * geladener Regel wären auf der Pool-Liste dreimal so viele wie nötig.
+   * Sortiert wird nach `role`, damit die Reihenfolge nicht davon abhängt, in
+   * welcher Folge SQLite die Zeilen zurückgibt.
+   */
+  const partsOf = (
+    id: PoolId,
+  ): {
+    readonly required: readonly PoolTagTerm[];
+    readonly excluded: readonly PoolTagTerm[];
+    readonly statusIds: readonly StatusId[];
+  } => {
+    const required: PoolTagTerm[] = [];
+    const excluded: PoolTagTerm[] = [];
+    const statusIds: StatusId[] = [];
+
+    const rows = conn
+      .prepare(
+        `SELECT role, tag_id, folder_id, status_id FROM pool_rule
+          WHERE pool_id = ?
+          ORDER BY role, COALESCE(tag_id, folder_id, status_id)`,
+      )
+      .all(id);
+
+    for (const row of rows) {
+      const role = text(row, 'role');
+      if (role === 'status') {
+        // `text` und nicht eine Prüfung auf `null`: Der CHECK des Schemas sagt
+        // zu, dass eine Zeile mit `role = 'status'` eine Kennung trägt. Eine
+        // Zeile, die das nicht tut, ist ein Fehler im Schema und soll auffallen
+        // — dieselbe Haltung wie in `toPoolRuleTerm` und `toTimeEntry`, wo ein
+        // stiller Rückfall eine halbe Regel beziehungsweise eine Buchung mit
+        // Dauer 0 ergäbe.
+        statusIds.push(text(row, 'status_id') as StatusId);
+        continue;
+      }
+      // Der CHECK des Schemas lässt nur `required`, `excluded` und `status` zu.
+      // Alles, was nicht `excluded` ist, ist deshalb `required` — und ein Wert,
+      // den es nicht geben kann, landet in der einschränkenderen der beiden
+      // Listen und nicht in der ausschließenden.
+      (role === 'excluded' ? excluded : required).push(toPoolRuleTerm(row));
+    }
+
+    return { required, excluded, statusIds };
+  };
 
   const loadOne = (id: PoolId): Pool | null => {
     const row = conn.prepare(`SELECT ${POOL_COLUMNS} FROM pool WHERE id = ?`).get(id);
-    return row === undefined ? null : toPool(row, ruleOf(id));
+    if (row === undefined) return null;
+    const parts = partsOf(id);
+    return toPool(row, parts.required, { excludedTags: parts.excluded, statusIds: parts.statusIds });
   };
 
-  const writeRule = (poolId: PoolId, rule: readonly PoolRuleTerm[]): void => {
+  /**
+   * Schreibt **alle** Achsen, die als Zeilen in `pool_rule` stehen (T-076).
+   *
+   * Erst löschen, dann schreiben — wie zuvor, und aus demselben Grund in einem
+   * Sicherungspunkt (siehe `update`). Neu ist, dass die drei Listen zusammen
+   * geschrieben werden: Eine Änderung, die nur die erforderlichen Tags
+   * ersetzte und die ausgeschlossenen stehen ließe, wäre eine halbe Regel, und
+   * welche Hälfte gemeint war, könnte hier niemand entscheiden.
+   */
+  const writeRule = (
+    poolId: PoolId,
+    required: readonly PoolTagTerm[],
+    excluded: readonly PoolTagTerm[],
+    statusIds: readonly StatusId[],
+  ): void => {
     conn.prepare('DELETE FROM pool_rule WHERE pool_id = ?').run(poolId);
-    const insert = conn.prepare('INSERT INTO pool_rule (pool_id, tag_id, folder_id) VALUES (?, ?, ?)');
-    for (const term of rule) {
-      if (term.kind === 'tag') insert.run(poolId, term.tagId, null);
-      else insert.run(poolId, null, term.folderId);
-    }
+    const insert = conn.prepare(
+      'INSERT INTO pool_rule (pool_id, role, tag_id, folder_id, status_id) VALUES (?, ?, ?, ?, ?)',
+    );
+    // **Eine** Schleife für beide Taglisten, mit der Rolle als Argument. Zwei
+    // Schleifen wären dieselbe Fallunterscheidung zweimal — und die zweite
+    // wäre die, die beim nächsten Termtyp vergessen wird.
+    const writeTerms = (role: 'required' | 'excluded', terms: readonly PoolTagTerm[]): void => {
+      for (const term of terms) {
+        if (term.kind === 'tag') insert.run(poolId, role, term.tagId, null, null);
+        else insert.run(poolId, role, null, term.folderId, null);
+      }
+    };
+    writeTerms('required', required);
+    writeTerms('excluded', excluded);
+    for (const statusId of statusIds) insert.run(poolId, 'status', null, null, statusId);
   };
 
   const nextPosition = (): number => {
@@ -539,7 +613,13 @@ export function createPoolPort(
                 `SELECT ${POOL_COLUMNS} FROM pool WHERE placement IN (?, 'both') ORDER BY position`,
               )
               .all(surface);
-      return rows.map((row) => toPool(row, ruleOf(text(row, 'id') as PoolId)));
+      return rows.map((row) => {
+        const parts = partsOf(text(row, 'id') as PoolId);
+        return toPool(row, parts.required, {
+          excludedTags: parts.excluded,
+          statusIds: parts.statusIds,
+        });
+      });
     },
 
     /**
@@ -558,10 +638,22 @@ export function createPoolPort(
 
     async create(pool, now) {
       const id = ids.next() as PoolId;
+      // Die Neutralwerte der vier Achsen aus T-076 an **einer** Stelle, als
+      // Vorspann statt als vier `??` weiter unten. Was der Aufrufer nennt,
+      // gewinnt; was er wegläßt, steht neutral — dieselbe Vorgabe, die auch das
+      // Schema setzt (Migration 0011).
+      const axes = {
+        excludedTags: [] as readonly PoolTagTerm[],
+        statusIds: [] as readonly StatusId[],
+        completion: 'any' as const,
+        exportState: 'any' as const,
+        ...pool,
+      };
       conn
         .prepare(
-          `INSERT INTO pool (id, name, match_mode, include_subfolders, placement, position, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO pool (id, name, match_mode, include_subfolders, placement, position,
+                             completion, export_state, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -580,10 +672,14 @@ export function createPoolPort(
           // Vorgabe: Die greift nur, wenn die Spalte gar nicht genannt wird.
           pool.placement ?? 'pool',
           pool.position > 0 ? pool.position : nextPosition(),
+          // Ohne genannte Achse der Neutralwert (T-076) — dieselbe Bauart und
+          // derselbe Grund wie bei `placement` eine Zeile darüber.
+          axes.completion,
+          axes.exportState,
           now,
           now,
         );
-      writeRule(id, pool.rule);
+      writeRule(id, pool.rule, axes.excludedTags, axes.statusIds);
       const created = loadOne(id);
       if (created === null) throw new Error('Der angelegte Pool ist nicht auffindbar.');
       return created;
@@ -622,10 +718,37 @@ export function createPoolPort(
           sets.push('position = ?');
           params.push(pool.position);
         }
+        if (pool.completion !== undefined) {
+          sets.push('completion = ?');
+          params.push(pool.completion);
+        }
+        if (pool.exportState !== undefined) {
+          sets.push('export_state = ?');
+          params.push(pool.exportState);
+        }
         sets.push('updated_at = ?');
         params.push(now, id);
         conn.prepare(`UPDATE pool SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-        if (pool.rule !== undefined) writeRule(id, pool.rule);
+
+        // Die drei Listen werden **gemeinsam** geschrieben, sobald eine von
+        // ihnen genannt ist: `writeRule` löscht alle Zeilen der Regel und legt
+        // sie neu an. Wer nur `rule` schickt, meint „diese erforderlichen Tags"
+        // und nicht „lösche meine Ausschlüsse"; deshalb wird für jede nicht
+        // genannte Liste der **vorhandene** Stand eingesetzt und nicht die
+        // leere Liste.
+        if (
+          pool.rule !== undefined ||
+          pool.excludedTags !== undefined ||
+          pool.statusIds !== undefined
+        ) {
+          const current = partsOf(id);
+          writeRule(
+            id,
+            pool.rule ?? current.required,
+            pool.excludedTags ?? current.excluded,
+            pool.statusIds ?? current.statusIds,
+          );
+        }
       });
       if (!outcome.ok) return err(outcome.error);
 
@@ -654,6 +777,16 @@ export function createPoolPort(
     },
 
     /**
+     * Dieselbe Auflösung für die **ausgeschlossenen** Tags (T-076).
+     *
+     * Ein Argument Unterschied, keine zweite Abfrage: Die rekursive
+     * Ordnerauflösung steht einmal da und wird von beiden Listen benutzt.
+     */
+    async resolveExcluded(id) {
+      return resolvePoolRule(conn, id, 'excluded');
+    },
+
+    /**
      * Mitglieder eines Pools — abgeleitet, nicht gespeichert.
      *
      * Die Abfrage geht über `TodoPort.search`, damit Pool-Ansicht und Liste
@@ -667,19 +800,32 @@ export function createPoolPort(
 }
 
 /**
- * Die Regel eines Pools als Tagmenge.
+ * Eine Tagliste einer Regel als aufgelöste Tagmenge.
  *
  * Steht außerhalb von `createPoolPort`, weil `TodoPort.search` sie ebenfalls
  * braucht und die beiden Ports sich sonst gegenseitig halten müssten.
+ *
+ * `role` sagt, **welche** der beiden Taglisten gemeint ist (T-076). Der
+ * Vorgabewert `'required'` ist die Liste, die es seit A-3.2 gibt: Jeder
+ * Aufrufer aus der Zeit davor bekommt damit unverändert das, was er meinte.
+ *
+ * Die Auflösung ist für beide Listen dieselbe — Ordner samt Unterordnern,
+ * beliebig tief, über eine rekursive Abfrage —, und das ist der Grund, warum es
+ * hier eine Funktion mit einem Argument gibt und nicht zwei Funktionen: Die
+ * zweite wäre die erste, abgeschrieben samt der rekursiven Abfrage.
  */
-export function resolvePoolRule(conn: SqlConnection, poolId: PoolId | string): readonly TagId[] {
+export function resolvePoolRule(
+  conn: SqlConnection,
+  poolId: PoolId | string,
+  role: 'required' | 'excluded' = 'required',
+): readonly TagId[] {
   const pool = conn.prepare('SELECT include_subfolders FROM pool WHERE id = ?').get(poolId);
   if (pool === undefined) return [];
   const includeSubfolders = integer(pool, 'include_subfolders') !== 0;
 
   const terms = conn
-    .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ?')
-    .all(poolId);
+    .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ? AND role = ?')
+    .all(poolId, role);
 
   const tagIds = new Set<string>();
   const folderIds: string[] = [];
@@ -721,6 +867,41 @@ export function resolvePoolRule(conn: SqlConnection, poolId: PoolId | string): r
 export function poolMatchMode(conn: SqlConnection, poolId: string): 'any' | 'all' {
   const row = conn.prepare('SELECT match_mode FROM pool WHERE id = ?').get(poolId);
   return row !== undefined && text(row, 'match_mode') === 'all' ? 'all' : 'any';
+}
+
+/**
+ * Die Achsen einer Regel, die **keine** Tagmenge sind (T-076).
+ *
+ * Für dieselbe Filterübersetzung wie `poolMatchMode` daneben. Eine Regel, die
+ * es nicht gibt, liefert lauter Neutralwerte — und trifft in Verbindung mit
+ * zwei leeren Taglisten damit nichts, so wie es `matchesPool` für sie
+ * entschiede.
+ */
+export function poolAxes(
+  conn: SqlConnection,
+  poolId: string,
+): {
+  readonly statusIds: readonly StatusId[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+} {
+  // Eine Regel, die es nicht gibt, liefert eine leere Zeile — und damit über
+  // die Mapper lauter Neutralwerte.
+  const row = conn.prepare('SELECT completion, export_state FROM pool WHERE id = ?').get(poolId) ?? {};
+
+  return {
+    statusIds: conn
+      .prepare("SELECT status_id FROM pool_rule WHERE pool_id = ? AND role = 'status'")
+      .all(poolId)
+      .map((entry) => text(entry, 'status_id') as StatusId),
+    // **Dieselben** Funktionen wie in `toPool`, nicht dieselbe Regel ein
+    // zweites Mal. Beide Wege — die geladene Regel und die Filterübersetzung —
+    // müssen aus demselben gespeicherten Wert dieselbe Achse lesen; zwei
+    // Fassungen davon wären zwei Boards, von denen die Oberfläche eines zeigt
+    // und die Abfrage das andere beantwortet.
+    completion: toPoolCompletion(row['completion']),
+    exportState: toPoolExportState(row['export_state']),
+  };
 }
 
 export type { Timestamp };

@@ -55,16 +55,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { TransactionPort, UnitOfWork } from '../ports.ts';
-import type { TagId, TodoFilter } from '@takt/domain';
+import type { TodoFilter } from '@takt/domain';
 
 import type { SqlConnection } from './database.ts';
 import { createIdSource, type IdSource } from './ids.ts';
 import { createExportPort, createExportReadPort } from './repo-export.ts';
 import { createAppSettingsPort, createDefaultTagPort, createExportTemplatePort } from './repo-settings.ts';
 import { createTodoStatusPort } from './repo-statuses.ts';
-import { createPoolPort, createTagFolderPort, createTagPort, poolMatchMode, resolvePoolRule } from './repo-tags.ts';
+import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatchMode, resolvePoolRule } from './repo-tags.ts';
 import { createTimeEntryPort, createTimerHeartbeatPort, createTimerPort } from './repo-time.ts';
-import { createTodoNotePort, createTodoPort } from './repo-todos.ts';
+import { createTodoNotePort, createTodoPort, type PoolResolver } from './repo-todos.ts';
 import type { Page, Pagination } from '../ports.ts';
 import type { Todo } from '@takt/domain';
 
@@ -93,13 +93,18 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
   // `PoolPort` braucht `TodoPort.search` für seine Mitglieder. Statt die
   // beiden Ports einander in die Hand zu geben — womit jeder den ganzen
   // anderen sähe — wird genau die eine gebrauchte Fähigkeit gereicht.
-  const resolvePools = (
-    poolIds: readonly string[],
-  ): readonly { readonly tagIds: readonly TagId[]; readonly matchMode: 'any' | 'all' }[] =>
-    poolIds.map((poolId) => ({
-      tagIds: resolvePoolRule(conn, poolId),
-      matchMode: poolMatchMode(conn, poolId),
-    }));
+  const resolvePools: PoolResolver = (poolIds) =>
+    poolIds.map((poolId) => {
+      const axes = poolAxes(conn, poolId);
+      return {
+        tagIds: resolvePoolRule(conn, poolId),
+        excludedTagIds: resolvePoolRule(conn, poolId, 'excluded'),
+        matchMode: poolMatchMode(conn, poolId),
+        statusIds: axes.statusIds,
+        completion: axes.completion,
+        exportState: axes.exportState,
+      };
+    });
 
   const todos = createTodoPort(conn, ids, resolvePools);
   const searchTodos = (filter: TodoFilter, pagination?: Pagination): Promise<Page<Todo>> =>

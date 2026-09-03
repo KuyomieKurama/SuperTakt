@@ -492,6 +492,77 @@ describe('createPoolPort und resolvePoolRule — Regel gespeichert, Mitgliedscha
   });
 });
 
+describe('createPoolPort — die vier neuen Achsen aus T-076 (ausgeschlossene Tags, Status, Erledigt, Exportstatus)', () => {
+  let db: TestDatabase;
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('create/load: excludedTags, statusIds, completion und exportState kommen zurück, wie sie hineingingen', async () => {
+    db = openTestDatabase();
+    const required = await db.unit.tags.create(null, 'Erforderlich', null, NOW);
+    const excluded = await db.unit.tags.create(null, 'Ausgeschlossen', null, NOW);
+    expect(required.ok && excluded.ok).toBe(true);
+    if (!required.ok || !excluded.ok) return;
+    const status = await db.unit.statuses.create('Sonderstatus', 0, NOW);
+    expect(status.ok).toBe(true);
+    if (!status.ok) return;
+
+    const pool = await db.unit.pools.create(
+      {
+        name: 'Vier Achsen',
+        matchMode: 'any',
+        includeSubfolders: false,
+        position: 0,
+        rule: [{ kind: 'tag', tagId: required.value.id }],
+        excludedTags: [{ kind: 'tag', tagId: excluded.value.id }],
+        statusIds: [status.value.id],
+        completion: 'done',
+        exportState: 'exported',
+      },
+      NOW,
+    );
+
+    const loaded = await db.unit.pools.load(pool.id);
+    expect(loaded?.rule).toEqual([{ kind: 'tag', tagId: required.value.id }]);
+    expect(loaded?.excludedTags).toEqual([{ kind: 'tag', tagId: excluded.value.id }]);
+    expect(loaded?.statusIds).toEqual([status.value.id]);
+    expect(loaded?.completion).toBe('done');
+    expect(loaded?.exportState).toBe('exported');
+  });
+
+  it('update mit NUR excludedTags lässt die erforderlichen Tags unverändert (Vollständigkeitszusage aus PoolPort.update)', async () => {
+    db = openTestDatabase();
+    const required = await db.unit.tags.create(null, 'Erforderlich', null, NOW);
+    const excluded = await db.unit.tags.create(null, 'Ausgeschlossen', null, NOW);
+    expect(required.ok && excluded.ok).toBe(true);
+    if (!required.ok || !excluded.ok) return;
+    const pool = await db.unit.pools.create(
+      {
+        name: 'Teiländerung',
+        matchMode: 'any',
+        includeSubfolders: false,
+        position: 0,
+        rule: [{ kind: 'tag', tagId: required.value.id }],
+      },
+      NOW,
+    );
+
+    const updated = await db.unit.pools.update(
+      pool.id,
+      { excludedTags: [{ kind: 'tag', tagId: excluded.value.id }] },
+      NOW,
+    );
+
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    // Die erforderlichen Tags standen nicht im Aufruf — sie bleiben stehen.
+    expect(updated.value.rule).toEqual([{ kind: 'tag', tagId: required.value.id }]);
+    expect(updated.value.excludedTags).toEqual([{ kind: 'tag', tagId: excluded.value.id }]);
+  });
+});
+
 describe('poolMatchMode', () => {
   it('liefert "all" nur, wenn genau das in der Zeile steht, sonst "any"', async () => {
     const db = openTestDatabase();

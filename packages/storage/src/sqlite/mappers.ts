@@ -26,8 +26,10 @@ import type {
   ExportTemplateId,
   Pool,
   PoolId,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolPlacement,
-  PoolRuleTerm,
+  PoolTagTerm,
   RoundingMode,
   RunningTimeEntry,
   StatusId,
@@ -130,7 +132,42 @@ function toPoolPlacement(value: SqlValue | undefined): PoolPlacement {
   return value === 'board' || value === 'both' ? value : 'pool';
 }
 
-export function toPool(row: SqlRow, rule: readonly PoolRuleTerm[]): Pool {
+/**
+ * Die Erledigt-Achse einer Regel (T-076).
+ *
+ * Dieselbe Bauart wie `toPoolPlacement` daneben: Alles, was nicht wörtlich
+ * `done` oder `open` ist, wird zu `any` — dem **Neutralwert**. Ein Mapper
+ * urteilt nicht, er liest; und ein unbekannter Wert darf keine Bedingung
+ * erfinden, die niemand gesetzt hat. Ein Bestand vor Migration 0011 hat die
+ * Spalte gar nicht, und auch dann ist `any` die richtige Antwort.
+ */
+export function toPoolCompletion(value: SqlValue | undefined): PoolCompletionFilter {
+  return value === 'done' || value === 'open' ? value : 'any';
+}
+
+/** Die Exportstatus-Achse einer Regel (T-076). Siehe `toPoolCompletion`. */
+export function toPoolExportState(value: SqlValue | undefined): PoolExportFilter {
+  return value === 'open' || value === 'exported' ? value : 'any';
+}
+
+/**
+ * Die übrigen Regelachsen, die als eigene Zeilen in `pool_rule` stehen (T-076).
+ *
+ * Freiwillig und leer als Vorgabe: `toPool(row, [])` bleibt damit ein
+ * gültiger Aufruf, und ein Aufrufer, der nur die erforderlichen Tags kennt,
+ * bekommt eine Regel, die genau das sagt — statt eine, die eine Achse
+ * behauptet, die er nie gelesen hat.
+ */
+export interface PoolRuleParts {
+  readonly excludedTags?: readonly PoolTagTerm[];
+  readonly statusIds?: readonly StatusId[];
+}
+
+export function toPool(
+  row: SqlRow,
+  rule: readonly PoolTagTerm[],
+  parts: PoolRuleParts = {},
+): Pool {
   return {
     id: brand<PoolId>(text(row, 'id')),
     name: text(row, 'name'),
@@ -139,12 +176,24 @@ export function toPool(row: SqlRow, rule: readonly PoolRuleTerm[]): Pool {
     placement: toPoolPlacement(row['placement']),
     position: integer(row, 'position'),
     rule,
+    excludedTags: parts.excludedTags ?? [],
+    statusIds: parts.statusIds ?? [],
+    completion: toPoolCompletion(row['completion']),
+    exportState: toPoolExportState(row['export_state']),
     createdAt: asTimestamp(text(row, 'created_at')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
 }
 
-export function toPoolRuleTerm(row: SqlRow): PoolRuleTerm {
+/**
+ * Eine Zeile aus `pool_rule` mit `role` `required` oder `excluded`.
+ *
+ * Statuszeilen kommen hier **nicht** an: Sie tragen keinen Term, sondern eine
+ * Kennung, und `repo-tags.ts` liest sie als solche. Ein Mapper, der beides
+ * könnte, müsste einen dritten Rückgabefall haben, den kein Aufrufer je
+ * bekäme.
+ */
+export function toPoolRuleTerm(row: SqlRow): PoolTagTerm {
   const tagId = textOrNull(row, 'tag_id');
   if (tagId !== null) return { kind: 'tag', tagId: brand<TagId>(tagId) };
   return { kind: 'folder', folderId: brand<TagFolderId>(text(row, 'folder_id')) };

@@ -67,13 +67,26 @@ export interface OfferDescription {
    */
   readonly exportedSeconds: number;
   /**
-   * Die Pools, in denen dieses Todo Mitglied ist — beim Namen (I-05).
+   * Die Pools, in denen dieses Todo **nach der Buchung** steht — beim Namen
+   * (I-05).
    *
    * Gehört zum Angebot, weil ein erledigtes Todo mit dieser Buchung wieder
    * offen wird (A-2.5) und der Benutzer **vor** der Entscheidung wissen soll,
-   * wo es danach steht. Aus dem Dienst übernommen, nicht im Add-in gerechnet.
+   * wo es danach steht. Aus dem Dienst übernommen, nicht im Add-in gerechnet —
+   * und dort über alle fünf Achsen einer Regel gerechnet, nicht nur über die
+   * Tags (T-078).
    */
   readonly poolNames: readonly string[];
+  /**
+   * Die Pools, aus denen dieselbe Buchung es **entfernt** — beim Namen
+   * (E-056).
+   *
+   * Steht neben `poolNames` und nicht darin: Beides sind Namen, und eine
+   * gemeinsame Liste könnte nicht mehr sagen, in welche Richtung sich der Pool
+   * bewegt. Fast immer leer; nur eine Regel über „Erledigt" kann ein Todo
+   * durch eine Buchung verlieren.
+   */
+  readonly leavingPoolNames: readonly string[];
   /** Ein Satz, der in S-12 unmittelbar über den Schaltflächen stehen kann. */
   readonly summary: string;
 }
@@ -116,6 +129,7 @@ export const describeOffer = (match: TodoMatchDto): OfferDescription | null => {
     openSeconds: match.openSeconds,
     exportedSeconds: match.exportedSeconds,
     poolNames: match.poolNames,
+    leavingPoolNames: match.leavingPoolNames,
     summary: `${parts.join(' · ')}.`,
   };
 };

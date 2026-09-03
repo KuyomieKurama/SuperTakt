@@ -127,15 +127,26 @@ const DEFAULT_TAGS = [
  * `includeSubfolders` steht auf `true` und die Regel zeigt auf den tiefsten
  * Ordner des Baums. Damit prüft der Nachweispfad die Auflösung über mehrere
  * Ebenen mit und nicht nur den einfachen Fall.
+ *
+ * Die vier Achsen aus T-076 stehen ausdrücklich auf ihrem **Neutralwert** und
+ * fehlen nicht. Das ist der Unterschied zwischen „diese Regel sagt dazu
+ * nichts" und „diese Attrappe kennt das Feld nicht": Nur der erste Fall ist
+ * der Bestand, den es im Betrieb gibt (jede Regel von vor T-076), und nur er
+ * belegt, dass eine solche Regel weiterhin genau dieselben Todos trifft.
  */
-const POOLS = [
+export const DEFAULT_POOLS = [
   {
     id: ID.poolWartung,
     name: 'Wartung Nord',
     matchMode: 'any',
     includeSubfolders: true,
+    placement: 'pool',
     position: 0,
     rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   },
@@ -159,6 +170,21 @@ const tagsInFolder = (folderId, includeSubfolders) => {
 
   const node = find(buildTagTree().rootFolders);
   return node === null ? [] : collect(node);
+};
+
+/**
+ * Eine der beiden Taglisten einer Regel, aufgelöst (T-076).
+ *
+ * `which` ist `rule` (erforderlich) oder `excludedTags` (ausgeschlossen). Eine
+ * fehlende Liste ist eine **leere** Liste und kein Fehler: Genau so sieht eine
+ * Regel aus der Zeit vor T-076 aus, und sie muss weiterhin dasselbe treffen.
+ */
+const resolveTerms = (pools, poolId, which) => {
+  const pool = pools.find((entry) => entry.id === poolId);
+  if (pool === undefined) return [];
+  return (pool[which] ?? []).flatMap((term) =>
+    term.kind === 'tag' ? [term.tagId] : tagsInFolder(term.folderId, pool.includeSubfolders),
+  );
 };
 
 /** Alle Tags des Startbaums, flach — der Bestand, den die Attrappe kennt. */
@@ -187,11 +213,17 @@ const seedTags = () => {
  * und nur wer sie einzeln wegnehmen kann, kann zeigen, **dass** sie tragen.
  * Der Betrieb hat immer beide.
  *
- * @param {{ serializeTransactions?: boolean, enforceUniqueTagName?: boolean }} [options]
+ * `pools` ist seit T-078 austauschbar. Nicht der Bequemlichkeit wegen: Die
+ * Regelachsen aus T-076 lassen sich nur zeigen, wenn es Regeln gibt, die sie
+ * benutzen — und der Bestand aus `DEFAULT_POOLS` soll dabei unberührt bleiben,
+ * damit die Prüfungen von T-038 weiterhin dasselbe messen wie zuvor.
+ *
+ * @param {{ serializeTransactions?: boolean, enforceUniqueTagName?: boolean, pools?: readonly object[] }} [options]
  */
 export const createFakeStore = (options = {}) => {
   const serializeTransactions = options.serializeTransactions ?? true;
   const enforceUniqueTagName = options.enforceUniqueTagName ?? true;
+  const pools = options.pools ?? DEFAULT_POOLS;
 
   const state = {
     todos: new Map(),
@@ -314,20 +346,20 @@ export const createFakeStore = (options = {}) => {
     },
 
     pools: {
-      list: async () => POOLS,
+      list: async () => pools,
 
       // Die Auflösung, die im Betrieb SQL ist: Regelteile der Art `folder`
       // ziehen die Tags aller Unterordner mit (A-4.3), Regelteile der Art
       // `tag` genau ihr eigenes. Die Attrappe rechnet sie aus demselben Baum
       // aus, den `loadTree` liefert — sonst könnte sie behaupten, ein Todo sei
       // in einem Pool, den es nach dem Baum gar nicht gibt.
-      resolveRule: async (poolId) => {
-        const pool = POOLS.find((entry) => entry.id === poolId);
-        if (pool === undefined) return [];
-        return pool.rule.flatMap((term) =>
-          term.kind === 'tag' ? [term.tagId] : tagsInFolder(term.folderId, pool.includeSubfolders),
-        );
-      },
+      resolveRule: async (poolId) => resolveTerms(pools, poolId, 'rule'),
+
+      // Dieselbe Auflösung, dieselbe Tiefe, die andere Liste (T-076). Sie
+      // steht hier nicht als Kopie, sondern als zweiter Aufruf derselben
+      // Funktion: Zwei Auflösungen, die auseinanderlaufen könnten, wären genau
+      // die Art Attrappe, die grün behauptet, was der Betrieb anders macht.
+      resolveExcluded: async (poolId) => resolveTerms(pools, poolId, 'excludedTags'),
     },
     statuses: {
       list: async () => STATUSES,
@@ -445,6 +477,220 @@ export const createFakeStore = (options = {}) => {
     },
   };
 };
+
+// ---------------------------------------------------------------------------
+// T-078 — der Bestand für die fünf Regelachsen aus T-076
+// ---------------------------------------------------------------------------
+
+/**
+ * Die Kennungen des Achsen-Bestands. Wieder UUID Fassung 7, wieder erfunden.
+ *
+ * Getrennt von {@link ID}, weil dieser Bestand **neben** dem von T-038 steht
+ * und ihn nicht verändert: Die Prüfungen von damals sollen weiterhin dasselbe
+ * messen wie damals, sonst wäre nicht zu unterscheiden, ob eine Änderung den
+ * Fehler behebt oder die Messung verstellt.
+ */
+export const AXIS_POOL = Object.freeze({
+  alleWartung:       '01931f4e-0000-7000-8000-0000000041d1',
+  ohneStoerungen:    '01931f4e-0000-7000-8000-0000000041d2',
+  imBacklog:         '01931f4e-0000-7000-8000-0000000041d3',
+  erledigte:         '01931f4e-0000-7000-8000-0000000041d4',
+  nichtAbgerechnet:  '01931f4e-0000-7000-8000-0000000041d5',
+  bereitsAbgerechnet:'01931f4e-0000-7000-8000-0000000041d6',
+  erledigtOffen:     '01931f4e-0000-7000-8000-0000000041d7',
+  leereRegel:        '01931f4e-0000-7000-8000-0000000041d8',
+});
+
+export const AXIS_TODO = Object.freeze({
+  stoerung: '01931f4e-0000-7000-8000-0000000051a1',
+  turnus:   '01931f4e-0000-7000-8000-0000000051a2',
+});
+
+/**
+ * Acht Regeln über **demselben** Ordner — eine je Achse (T-076, T-078, E-056).
+ *
+ * Der Zuschnitt ist so gewählt, dass keine Antwort zufällig richtig sein kann:
+ * Alle sieben eingerichteten Regeln tragen **wortgleich dieselben**
+ * erforderlichen Tags (den Ordner „Wartung", mit Unterordnern). Wer nur diese
+ * eine Liste auswertet — der Zustand vor T-078 —, muss deshalb für jedes Todo
+ * **alle sieben** nennen. Jeder Unterschied im Ergebnis kommt damit nachweisbar
+ * aus einer der neuen Achsen und aus nichts anderem.
+ *
+ * Die vorletzte Regel ist der Fall, für den E-056 entschieden wurde:
+ * **erledigt und noch nicht abgerechnet**, benutzt als Abrechnungsliste. Sie
+ * ist die einzige Art Regel, die ein Todo durch eine Buchung **verliert**.
+ *
+ * Die letzte Regel ist leer. Sie trifft nichts (A-3.4, E-055 in seiner
+ * berichtigten Fassung) und steht hier, weil ein Pool im Zustand „gerade
+ * angelegt, noch nicht eingerichtet" (S-05) der Normalfall ist und niemals
+ * genannt werden darf.
+ */
+export const AXIS_POOLS = Object.freeze([
+  {
+    id: AXIS_POOL.alleWartung,
+    name: 'Wartung Nord',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 0,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Die Achse, an der T-078 hängt: „Wartung, **außer** Störungen".
+    id: AXIS_POOL.ohneStoerungen,
+    name: 'Wartung ohne Störungen',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 1,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [{ kind: 'tag', tagId: ID.tagStoerung }],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: AXIS_POOL.imBacklog,
+    name: 'Wartung im Backlog',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 2,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [ID.statusBacklog],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: AXIS_POOL.erledigte,
+    name: 'Erledigte Wartung',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 3,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'done',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: AXIS_POOL.nichtAbgerechnet,
+    name: 'Wartung, noch nicht abgerechnet',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 4,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'open',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: AXIS_POOL.bereitsAbgerechnet,
+    name: 'Wartung, bereits abgerechnet',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 5,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'exported',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Der Fall aus E-056: die Abrechnungsliste. Erledigt **und** noch nicht
+    // abgerechnet — wer hier bucht, sieht die Karte aus genau der Liste
+    // verschwinden, in der er sie sucht.
+    id: AXIS_POOL.erledigtOffen,
+    name: 'Erledigt, noch nicht abgerechnet',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 6,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'done',
+    exportState: 'open',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: AXIS_POOL.leereRegel,
+    name: 'Noch nicht eingerichtet',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 7,
+    rule: [],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+]);
+
+/**
+ * Zwei erfundene Todos, die sich in **jeder** Achse unterscheiden.
+ *
+ * | | Störung | Status | Erledigt | offene Buchung | exportierte Buchung |
+ * |---|---|---|---|---|---|
+ * | `stoerung` | ja | In Arbeit | nein | nein | nein |
+ * | `turnus`   | nein | Backlog | ja | ja | ja |
+ *
+ * Beide hängen an einem Tag des Ordners „Wartung" und erfüllen damit die
+ * erforderlichen Tags **jeder** der sechs eingerichteten Regeln. Alles, was
+ * sie danach trennt, ist eine der neuen Achsen.
+ *
+ * Die Call-Nummern sind erfunden, wie alles hier: `TCK-000517` und
+ * `TCK-000518` gehören zu keinem Vorgang.
+ */
+export const buildAxisTodos = () => [
+  {
+    id: AXIS_TODO.stoerung,
+    title: 'Notbetrieb prüfen',
+    callNumber: 'TCK-000517',
+    statusId: ID.statusInArbeit,
+    boardRank: 'm',
+    completedAt: null,
+    tagIds: [ID.tagMusterbetrieb, ID.tagStoerung],
+    createdAt: '2026-02-20T08:00:00Z',
+    updatedAt: '2026-02-20T08:00:00Z',
+  },
+  {
+    id: AXIS_TODO.turnus,
+    title: 'Turnus abschließen',
+    callNumber: 'TCK-000518',
+    statusId: ID.statusBacklog,
+    boardRank: 'n',
+    completedAt: '2026-02-25T16:00:00Z',
+    tagIds: [ID.tagTurnuswartung],
+    createdAt: '2026-02-21T08:00:00Z',
+    updatedAt: '2026-02-25T16:00:00Z',
+  },
+];
 
 /** Zwei erfundene E-Mails, deutlich verschiedener erfundener Absender. */
 export const MAIL_MIT_NUMMER = Object.freeze({

@@ -1,5 +1,5 @@
 /**
- * Takt — das Kanban-Board als Ansicht über Regeln (A-5.*, E-054).
+ * Takt — das Kanban-Board als Ansicht über Regeln (A-5.*, E-054, T-076).
  *
  * ---------------------------------------------------------------------------
  * Was sich mit E-054 geändert hat
@@ -54,9 +54,9 @@
  * in einer Spalte und behauptet daneben, sie stünde dort nicht.
  */
 
-import type { PoolId, TagId, TodoId } from './kernel.ts';
-import type { Pool } from './tag.ts';
-import { matchesPool } from './tag.ts';
+import type { PoolId, StatusId, TagId, Timestamp, TodoId } from './kernel.ts';
+import type { Pool, PoolCompletionFilter, PoolExportFilter } from './tag.ts';
+import { isVisibleInPool, matchesPool } from './tag.ts';
 
 /**
  * Eine Spalte des Boards. **Derselbe Typ wie ein Pool** (E-054).
@@ -68,23 +68,66 @@ import { matchesPool } from './tag.ts';
 export type BoardColumn = Pool;
 
 /**
- * Eine Spalte, deren Regel bereits zur Tagmenge aufgelöst ist.
+ * Eine Spalte, deren Taglisten bereits zu Tagmengen aufgelöst sind.
  *
  * Das Auflösen (Ordner, Unterordner, beliebig tief) ist Aufgabe des Ports —
  * dafür braucht es den Baum. Diese Datei bekommt das Ergebnis und liest nichts
  * nach; sie bleibt damit rein und ohne laufenden Dienst prüfbar.
+ *
+ * Die übrigen Achsen (Status, Erledigt, Exportstatus) stehen unaufgelöst am
+ * `Pool` und werden hier durchgereicht. Alle sind freiwillig und stehen ohne
+ * Angabe neutral: Eine Spalte aus der Zeit vor T-076 verhält sich damit
+ * unverändert.
  */
 export interface BoardColumnRule {
   readonly columnId: PoolId;
-  /** Die Regel, aufgelöst. Leer heißt: Diese Spalte trifft nichts (A-3.4). */
+  /** Die erforderlichen Tags, aufgelöst. Leer heißt: Diese Achse schränkt nicht ein. */
   readonly ruleTagIds: readonly TagId[];
   readonly matchMode: 'any' | 'all';
+  /** Die ausgeschlossenen Tags, aufgelöst (T-076). */
+  readonly excludedTagIds?: readonly TagId[];
+  /** Die Status der Regel (T-076). Leer heißt „Alle". */
+  readonly ruleStatusIds?: readonly StatusId[];
+  /** Die Erledigt-Achse **der Regel** (T-076). */
+  readonly completion?: PoolCompletionFilter;
+  /** Die Exportstatus-Achse (T-076). */
+  readonly exportState?: PoolExportFilter;
+  /**
+   * Zeigt diese Spalte erledigte Karten? (E-039)
+   *
+   * **Keine Achse der Regel, sondern die Einstellung der Ansicht** — und
+   * deshalb ein eigenes Feld und kein weiterer Wert in `completion`. Der
+   * Unterschied ist nicht formal: Eine Regel, deren Achsen alle neutral
+   * stehen, trifft nichts (A-3.4). Stünde die Ansichtseinstellung als
+   * Erledigt-**Achse** darin, wäre eine Spalte ohne Regel plötzlich eine Regel
+   * „alle unerledigten" — und zeigte alles statt nichts. Genau das hat
+   * `proof:openapi` Abschnitt 11 gemessen, bevor dieses Feld hier stand.
+   *
+   * Ohne Angabe `true`: keine zusätzliche Ausblendung. Der Aufrufer, der die
+   * Frage nicht stellt, bekommt die Antwort von vor T-076.
+   */
+  readonly includeCompleted?: boolean;
 }
 
-/** Eine Karte, so viel davon, wie für die Zuordnung gebraucht wird. */
+/**
+ * Eine Karte, so viel davon, wie für die Zuordnung gebraucht wird.
+ *
+ * Alles außer `todoId` und `tagIds` ist freiwillig — und was fehlt, lässt eine
+ * Spalte, die danach fragt, **nicht** treffen (`matchesPool`, fail-closed).
+ * Ein Aufrufer, der nur Tags kennt, bekommt damit die Antwort von vor T-076
+ * und keine geratene.
+ */
 export interface BoardCard {
   readonly todoId: TodoId;
   readonly tagIds: readonly TagId[];
+  /** Der Status der Karte (T-076). Jedes Todo trägt genau einen. */
+  readonly statusId?: StatusId;
+  /** `null` bedeutet unerledigt (A-2.4). */
+  readonly completedAt?: Timestamp | null;
+  /** Mindestens eine abgeschlossene, offene Buchung (T-076). */
+  readonly hasOpenEntries?: boolean;
+  /** Mindestens eine exportierte Buchung (T-076). */
+  readonly hasExportedEntries?: boolean;
 }
 
 /**
@@ -121,9 +164,14 @@ export interface BoardAppearance {
  *     Dass sie doppelt gezählt wird, kann nur noch dadurch geschehen, dass ein
  *     Aufrufer dieselbe Spalte zweimal übergibt; dagegen steht hier keine
  *     Prüfung, weil `PoolPort.list` eine Menge liefert und keine Folge.
- *  3. **Die Erledigt-Eigenschaft geht nicht ein.** Sie entscheidet über
- *     Sichtbarkeit (`isVisibleInPool`), nicht über Zugehörigkeit. Wer erledigte
- *     Karten einblendet, sieht sie in denselben Spalten wie vorher.
+ *  3. **Die Erledigt-Eigenschaft geht nur ein, wenn die Spalte danach fragt.**
+ *     Steht die Erledigt-Achse der Spalte neutral (`any`, die Vorgabe), gilt
+ *     wie bisher: Erledigt entscheidet über Sichtbarkeit (`isVisibleInPool`),
+ *     nicht über Zugehörigkeit — wer erledigte Karten einblendet, sieht sie in
+ *     denselben Spalten wie vorher. Eine Spalte, die ausdrücklich „nur
+ *     erledigte" oder „nur unerledigte" sagt, macht daraus eine Bedingung der
+ *     Zugehörigkeit (T-076); dann ist es ihre Regel und nicht mehr die
+ *     Ansichtseinstellung, die entscheidet.
  *
  * Rein: Spalten herein, Karten herein, Zuordnung heraus. Keine Uhr, keine
  * Datenbank, kein Netz.
@@ -137,13 +185,40 @@ export const boardAppearances = (
   for (const card of cards) {
     const columnIds: PoolId[] = [];
     for (const column of columns) {
+      // Jedes Feld wird durchgereicht, wie es dasteht — auch `undefined`.
+      // `MatchesPool` nimmt es ausdrücklich an und liest es als „nicht
+      // genannt". Ein Wegkürzen je Feld wären acht Verzweigungen, die nichts
+      // entscheiden; die Begründung steht am Typ.
       if (
         matchesPool({
           todoTagIds: card.tagIds,
           ruleTagIds: column.ruleTagIds,
           matchMode: column.matchMode,
+          excludedTagIds: column.excludedTagIds,
+          ruleStatusIds: column.ruleStatusIds,
+          completion: column.completion,
+          exportState: column.exportState,
+          todoStatusId: card.statusId,
+          completedAt: card.completedAt,
+          hasOpenEntries: card.hasOpenEntries,
+          hasExportedEntries: card.hasExportedEntries,
         })
       ) {
+        // Und erst danach die Sichtbarkeit (E-039). Zwei getrennte Fragen, in
+        // dieser Reihenfolge: **ob** die Karte dazugehört, entscheidet die
+        // Regel; **ob sie gezeigt wird**, entscheidet die Ansicht. Umgekehrt
+        // aufgeschrieben — die Sichtbarkeit als sechste Achse — machte die
+        // Ansichtseinstellung zu einer Bedingung und aus einer Spalte ohne
+        // Regel eine Spalte „alle unerledigten".
+        if (
+          card.completedAt !== undefined &&
+          !isVisibleInPool({
+            completedAt: card.completedAt,
+            includeCompleted: column.includeCompleted ?? true,
+          })
+        ) {
+          continue;
+        }
         columnIds.push(column.columnId);
       }
     }

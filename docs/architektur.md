@@ -93,7 +93,7 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Erledigt aufheben beim Start | `time-entry.ts` → `determineReopen` | A-2.5, E-023 |
 | Verwaiste Buchung | `time-entry.ts` → `decideOrphanedTimer` | E-036 |
 | Zyklusprüfung beim Verschieben | `tag.ts` → `checkFolderMove` | A-4.6, E-022 |
-| Pool-Zugehörigkeit aus Tags | `tag.ts` → `matchesPool` | A-3.2, A-3.4 |
+| Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `tag.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
 | Dieselbe Karte in mehreren Kanban-Spalten | `board.ts` → `boardAppearances` | E-054 |
 | Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |

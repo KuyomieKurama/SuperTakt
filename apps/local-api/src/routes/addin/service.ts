@@ -112,49 +112,258 @@ export interface AddinTodoMatch {
   readonly openSeconds: number;
   readonly exportedSeconds: number;
   /**
-   * Die Pools, in denen dieses Todo Mitglied ist — beim Namen genannt (I-05,
-   * T-038).
+   * Die Pools, in denen dieses Todo **nach einer Buchung darauf** stünde —
+   * beim Namen genannt (I-05, T-038, T-078).
    *
    * Steht **vor** der Entscheidung in der Antwort und nicht erst danach. Ist
    * das Todo erledigt, hebt eine Buchung darauf das Kennzeichen automatisch
    * auf (A-2.5); der Aufgabenbereich kann damit vorher sagen, wo es danach
    * wieder auftaucht, statt den Benutzer hinterher suchen zu lassen.
    *
-   * Mitgliedschaft, nicht Sichtbarkeit: `matchesPool` kennt den Erledigt-Status
-   * nicht (A-3.4). Ein erledigtes Todo hat seinen Pool nie verlassen, es wurde
-   * dort nur nicht angezeigt.
+   * **Zugehörigkeit, nicht Sichtbarkeit** — und seit T-078 ist das eine
+   * Unterscheidung mit Folgen. `matchesPool` beantwortet die Zugehörigkeit,
+   * `isVisibleInPool` die Sichtbarkeit; das Add-in fragt die erste. Die zweite
+   * bräuchte `includeCompleted`, eine Einstellung der **Ansicht** in der
+   * Hauptanwendung (E-039), die das Add-in nicht kennt und die es raten
+   * müsste. Nach der Buchung ist das Todo ohnehin offen, und dann liefert
+   * `isVisibleInPool` für jeden Pool `true` — die Frage trüge nichts bei und
+   * brächte einen geratenen Wert herein.
+   *
+   * **Warum „nach einer Buchung" und nicht „jetzt".** Der Satz, den der
+   * Aufgabenbereich daraus baut, steht im Futur: „Es erscheint dann wieder in
+   * …" (`duplicate/reopen.ts`). Bis T-076 war das derselbe Satz wie „jetzt",
+   * weil die Zugehörigkeit allein an den Tags hing. Seitdem gibt es Regeln
+   * über `completion` und `exportState`, und die beiden Zeitpunkte fallen
+   * auseinander: Eine Spalte „Erledigt" (`completion: 'done'`) enthält das
+   * Todo **jetzt** und **nach** der Buchung nicht mehr; eine Spalte „Noch
+   * nicht abgerechnet" (`exportState: 'open'`) umgekehrt. Genannt wird, was
+   * der Benutzer nach seiner Entscheidung vorfindet.
    */
   readonly poolNames: readonly string[];
+  /**
+   * Die Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
+   *
+   * Die andere Hälfte derselben Auskunft. Sie ist fast immer leer — nur eine
+   * Regel, die nach „Erledigt" fragt, kann ein Todo durch eine Buchung
+   * verlieren. Genau diese Regel ist aber die, für die man so eine Spalte
+   * anlegt: **erledigt und noch nicht abgerechnet**, benutzt als
+   * Abrechnungsliste. Wer dort bucht, sieht die Karte aus der Liste
+   * verschwinden, in der er sie gerade sucht; eine unerklärte Bewegung wird an
+   * dieser Stelle als Datenverlust gelesen.
+   *
+   * Ein Pool steht nie in beiden Listen: `poolNames` gewinnt, und diese hier
+   * trägt nur, was vorher zutraf und nachher nicht.
+   */
+  readonly leavingPoolNames: readonly string[];
 }
 
 /**
- * Baut eine Zuordnung „Tags eines Todos → Namen seiner Pools".
+ * Der Zustand eines Todos, über den die Poolregel urteilt.
+ *
+ * Alle fünf Achsen aus T-076 in einem Wert. Er steht hier als eigener Typ und
+ * nicht als lose Argumentliste, damit `tsc` widerspricht, wenn die Domäne eine
+ * sechste Achse bekommt und diese Datei sie nicht mitgibt — genau der Fehler,
+ * den T-078 zu beheben hat.
+ */
+interface PoolCandidate {
+  readonly tagIds: readonly TagId[];
+  readonly statusId: StatusId;
+  /** `null` bedeutet unerledigt (A-2.4). */
+  readonly completedAt: Timestamp | null;
+  /** Mindestens eine abgeschlossene, offene Buchung? */
+  readonly hasOpenEntries: boolean;
+  /** Mindestens eine exportierte Buchung? */
+  readonly hasExportedEntries: boolean;
+}
+
+/**
+ * Die Bewegung, die eine Buchung auslöst (E-056).
+ *
+ * Zwei Listen, benannt statt der Reihe nach: Sie sind gleich getippt, und wer
+ * sie vertauscht, bekommt einen Satz, der sich richtig liest und das Gegenteil
+ * behauptet. Ein Paar mit Feldnamen kann man nicht vertauschen, ohne es zu
+ * bemerken.
+ */
+export interface AddinPoolMovement {
+  /** Pools, in denen das Todo **nach** der Buchung steht. */
+  readonly appears: readonly string[];
+  /**
+   * Pools, aus denen dieselbe Buchung es **entfernt** — genannt, weil es
+   * dieselbe Folge ist wie das Erscheinen, nur in die andere Richtung (E-056).
+   *
+   * Leer, solange keine Regel danach fragt. Das ist der Normalfall, und der
+   * Aufgabenbereich sagt dann kein Wort darüber.
+   */
+  readonly leaves: readonly string[];
+}
+
+/**
+ * Baut eine Zuordnung „Zustand eines Todos → Namen seiner Pools".
  *
  * Die Regeln werden **einmal** je Anfrage aufgelöst und danach nur noch gegen
- * Tagmengen gehalten. Die Entscheidung selbst fällt in `matchesPool` aus
+ * einzelne Todos gehalten. Die Entscheidung selbst fällt in `matchesPool` aus
  * `@takt/domain` — dieselbe Funktion, die auch die Pool-Ansicht der
  * Hauptanwendung benutzt. Eine zweite Fassung dieser Regel wäre der Anfang
  * zweier verschiedener Antworten auf dieselbe Frage.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum hier seit T-078 fünf Achsen stehen und nicht eine
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-078 gab diese Stelle **nur** die erforderlichen Tags mit. Solange eine
+ * Regel nichts anderes kannte, war das vollständig; seit T-076 ist es eine
+ * halbe Frage mit einer ganzen Antwort. `matchesPool` überspringt jede Achse,
+ * die es nicht genannt bekommt — eine Regel „Wartung, **außer** Störung"
+ * wurde damit zu „Wartung", und das Add-in behauptete eine Zugehörigkeit, die
+ * nicht besteht. Der Fehler ging **nie** in die andere Richtung: Es nannte zu
+ * viele Pools, nie zu wenige. Das ist die schlechtere der beiden Richtungen —
+ * der Benutzer sucht das Todo in einem genannten Pool, findet es nicht und
+ * glaubt der Anzeige beim nächsten Mal nicht mehr.
+ *
+ * Die drei Angaben über die **Karte** (Status, Erledigt, Buchungen) kommen
+ * deshalb vollständig herein oder gar nicht: Ein weggelassenes Feld ist für
+ * `matchesPool` „unbekannt", und unbekannt lehnt ab. Weglassen wäre also nicht
+ * mehr falsch, aber leise unvollständig — und niemand sähe, warum ein Pool
+ * fehlt.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Antwort seit E-056 zwei Listen hat und nicht eine
+ * ---------------------------------------------------------------------------
+ *
+ * Die zurückgegebene Funktion urteilt über **beide** Zustände desselben Todos —
+ * den vor und den nach der Buchung — und geht dabei je Pool **einmal** durch.
+ * Sie diffft ausdrücklich nicht zwei Namenslisten gegeneinander: Zwei Pools
+ * dürfen denselben Namen tragen, und ein Vergleich über Namen ließe den einen
+ * für den anderen einstehen. Verglichen wird die Regel mit sich selbst.
  */
-const poolNamer = async (unit: AddinUnit): Promise<(tagIds: readonly TagId[]) => readonly string[]> => {
+const poolNamer = async (
+  unit: AddinUnit,
+): Promise<(states: { readonly before: PoolCandidate; readonly after: PoolCandidate }) => AddinPoolMovement> => {
   const pools = await unit.pools.list();
   const ordered = [...pools].sort((left, right) => left.position - right.position);
 
   const resolved = await Promise.all(
-    ordered.map(async (pool) => ({
-      name: pool.name,
-      matchMode: pool.matchMode,
-      ruleTagIds: await unit.pools.resolveRule(pool.id),
-    })),
+    ordered.map(async (pool) => {
+      // Beide Taglisten in einem Zug. Getrennte Methoden, weil sie im Ergebnis
+      // Gegenteiliges bewirken (`PoolPort.resolveExcluded`, T-076); getrennt
+      // **aufgelöst** werden sie trotzdem nebeneinander, nicht nacheinander.
+      const [ruleTagIds, excludedTagIds] = await Promise.all([
+        unit.pools.resolveRule(pool.id),
+        unit.pools.resolveExcluded(pool.id),
+      ]);
+
+      return {
+        name: pool.name,
+        matchMode: pool.matchMode,
+        ruleTagIds,
+        excludedTagIds,
+        ruleStatusIds: pool.statusIds,
+        completion: pool.completion,
+        exportState: pool.exportState,
+      };
+    }),
   );
 
-  return (todoTagIds) =>
-    resolved
-      .filter((pool) =>
-        matchesPool({ todoTagIds, ruleTagIds: pool.ruleTagIds, matchMode: pool.matchMode }),
-      )
-      .map((pool) => pool.name);
+  /** Ein Pool gegen einen Zustand — die Regel, an genau einer Stelle. */
+  const holds = (pool: (typeof resolved)[number], todo: PoolCandidate): boolean =>
+    matchesPool({
+      todoTagIds: todo.tagIds,
+      ruleTagIds: pool.ruleTagIds,
+      matchMode: pool.matchMode,
+      excludedTagIds: pool.excludedTagIds,
+      todoStatusId: todo.statusId,
+      ruleStatusIds: pool.ruleStatusIds,
+      completedAt: todo.completedAt,
+      completion: pool.completion,
+      hasOpenEntries: todo.hasOpenEntries,
+      hasExportedEntries: todo.hasExportedEntries,
+      exportState: pool.exportState,
+    });
+
+  return ({ before, after }) => {
+    const appears: string[] = [];
+    const leaves: string[] = [];
+
+    for (const pool of resolved) {
+      if (holds(pool, after)) {
+        appears.push(pool.name);
+        continue;
+      }
+      // Nur hier wird der Zustand **vor** der Buchung befragt, und nur für die
+      // Pools, die danach nicht mehr zutreffen. Ein Pool kann deshalb nie in
+      // beiden Listen stehen — „erscheint" und „verschwindet" über denselben
+      // Namen wäre kein Satz, den jemand lesen möchte.
+      if (holds(pool, before)) leaves.push(pool.name);
+    }
+
+    return { appears, leaves };
+  };
 };
+
+/**
+ * Die zwei Zustände, zwischen denen eine Buchung das Todo bewegt.
+ *
+ * Der Aufgabenbereich sagt vorher „Es erscheint dann wieder in …" und
+ * hinterher „Es ist zurück in …" (`duplicate/reopen.ts`). Beide Sätze meinen
+ * denselben Zeitpunkt, und deshalb rechnet ihn **eine** Funktion aus. Zwei
+ * Rechnungen an zwei Stellen wären zwei Gelegenheiten, Verschiedenes zu
+ * behaupten — dieselbe Begründung, aus der die Sätze selbst in einer Datei
+ * stehen. Seit E-056 gilt das für beide Hälften der Aussage: Das Erscheinen
+ * und das Verschwinden kommen aus **einem** Wertepaar, nicht aus zwei
+ * Rechnungen, die man einzeln richtig oder falsch stellen könnte.
+ *
+ * ---------------------------------------------------------------------------
+ * `after` — zwei Werte stehen fest und werden nicht abgefragt
+ * ---------------------------------------------------------------------------
+ *
+ *  - `completedAt: null` — eine Buchung hebt „Erledigt" **automatisch** auf
+ *    (A-2.5). Seit T-038 gibt es keinen Schalter mehr, der das verhindern
+ *    könnte; die Aufhebung ist damit keine Vermutung, sondern die Wirkung der
+ *    Handlung, um die es geht.
+ *  - `hasOpenEntries: true` — die entstehende Buchung ist abgeschlossen und
+ *    **offen** (E-032: `export_status` ist zweiwertig und beginnt bei `open`).
+ *    Ein Todo, auf das gebucht wird, hat danach in jedem Fall etwas
+ *    Abzurechnendes.
+ *
+ * ---------------------------------------------------------------------------
+ * `before` — **hier** steht der Zustand von jetzt, und zwar mit Absicht
+ * ---------------------------------------------------------------------------
+ *
+ * Das ist kein Rückfall in den Fehler von T-078, sondern die zweite Hälfte
+ * derselben Rechnung. Dort war falsch, den **jetzigen** Zustand für eine
+ * Aussage über **danach** zu benutzen. Hier wird er für eine Aussage über
+ * jetzt benutzt: „woraus verschwindet es" hat nur eine Antwort, wenn man weiß,
+ * worin es gerade steht. `completedAt` trägt deshalb den echten Wert des Todos
+ * und nicht `null` — wer ihn hier auf `null` setzt, macht beide Zustände
+ * gleich, und die Liste `leaves` ist dann für immer leer, ohne dass etwas
+ * bricht. **Genau das wäre die stille Rückabwicklung von E-056.**
+ *
+ * Die Kanban-Spalte geht durch beide Zustände unverändert mit: Erledigen und
+ * Spalte sind zwei Achsen (E-023), und diese Buchung fasst die zweite nicht an.
+ */
+const bookingStates = (
+  todo: {
+    readonly tagIds: readonly TagId[];
+    readonly statusId: StatusId;
+    readonly completedAt: Timestamp | null;
+  },
+  entries: { readonly hasOpenEntries: boolean; readonly hasExportedEntries: boolean },
+): { readonly before: PoolCandidate; readonly after: PoolCandidate } => ({
+  before: {
+    tagIds: todo.tagIds,
+    statusId: todo.statusId,
+    completedAt: todo.completedAt,
+    hasOpenEntries: entries.hasOpenEntries,
+    hasExportedEntries: entries.hasExportedEntries,
+  },
+  after: {
+    tagIds: todo.tagIds,
+    statusId: todo.statusId,
+    completedAt: null,
+    hasOpenEntries: true,
+    hasExportedEntries: entries.hasExportedEntries,
+  },
+});
 
 export type AddinMatchResult =
   /**
@@ -193,7 +402,7 @@ export const findMatches = async (
 
   return deps.inTransaction(async (unit) => {
     const found = await unit.todos.findByCallNumber(callNumber);
-    const namePools = await poolNamer(unit);
+    const movementOf = await poolNamer(unit);
 
     const matches = await Promise.all(
       found.map(async (todo): Promise<AddinTodoMatch> => {
@@ -201,6 +410,20 @@ export const findMatches = async (
           unit.timeEntries.sumSeconds({ todoId: todo.id, exportStatus: 'open' }),
           unit.timeEntries.sumSeconds({ todoId: todo.id, exportStatus: 'exported' }),
         ]);
+
+        // `> 0` heißt „es gibt mindestens eine solche Buchung" und nicht bloß
+        // „es ist Zeit zusammengekommen": Eine Buchung hat mindestens eine
+        // Sekunde (`CHECK duration_seconds >= 1` aus Migration 0001), eine
+        // laufende trägt `NULL` und fällt aus der Summe, und eine exportierte
+        // ist gesperrt und kann nachträglich nicht auf null schrumpfen. Beide
+        // Zahlen stehen ohnehin schon da — ein zweiter Port dafür wäre Fläche
+        // am Add-in-Token ohne Zuwachs an Wahrheit.
+        const movement = movementOf(
+          bookingStates(todo, {
+            hasOpenEntries: openSeconds > 0,
+            hasExportedEntries: exportedSeconds > 0,
+          }),
+        );
 
         return {
           id: todo.id,
@@ -211,7 +434,8 @@ export const findMatches = async (
           completedAt: todo.completedAt,
           openSeconds,
           exportedSeconds,
-          poolNames: namePools(todo.tagIds),
+          poolNames: movement.appears,
+          leavingPoolNames: movement.leaves,
         };
       }),
     );
@@ -430,12 +654,20 @@ export type AddinBookResult =
        * Die Pools, in denen das Todo nach dieser Buchung steht — beim Namen
        * (I-05).
        *
-       * Aus derselben Quelle wie in der Duplikatsuche, damit der Satz vor der
-       * Buchung und der Satz danach nicht auseinandergehen. Eine leere Liste
-       * ist eine Aussage und kein Fehlen: Auf die Tags dieses Todos passt
-       * derzeit keine Poolregel.
+       * Aus derselben Quelle **und demselben Zustandspaar** wie in der
+       * Duplikatsuche (`bookingStates`), damit der Satz vor der Buchung und der
+       * Satz danach nicht auseinandergehen. Eine leere Liste ist eine Aussage
+       * und kein Fehlen: Auf dieses Todo passt derzeit keine Poolregel.
        */
       readonly poolNames: readonly string[];
+      /**
+       * Die Pools, aus denen diese Buchung das Todo entfernt hat (E-056).
+       *
+       * Dieselbe Rechnung wie in der Duplikatsuche, damit die Ankündigung und
+       * die Bestätigung auch in dieser Hälfte übereinstimmen. Fast immer leer;
+       * der Aufgabenbereich sagt dann nichts darüber.
+       */
+      readonly leavingPoolNames: readonly string[];
     };
 
 /**
@@ -472,6 +704,24 @@ export const bookOnTodo = (deps: AddinDeps, input: AddinBookInput): Promise<Addi
       return { kind: 'not_found' };
     }
 
+    /*
+     * Die Buchungslage **vor** der Buchung, und deshalb steht sie vor ihr.
+     *
+     * Nach `timeEntries.create` wäre die offene Summe unbrauchbar: Sie
+     * enthielte die soeben entstandene Buchung und wäre damit der Zustand
+     * danach, nicht davor. Für `leavingPoolNames` (E-056) wird aber genau der
+     * Zustand davor gebraucht — sonst gibt es nichts, aus dem etwas
+     * verschwinden könnte.
+     *
+     * Beide Summen in einem Zug und innerhalb derselben Transaktion: Ein
+     * Exportlauf, der dazwischenliefe, dürfte den Satz nicht mehr verschieben,
+     * den der Aufgabenbereich gleich anzeigt.
+     */
+    const [openBefore, exportedBefore] = await Promise.all([
+      unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'open' }),
+      unit.timeEntries.sumSeconds({ todoId: input.todoId, exportStatus: 'exported' }),
+    ]);
+
     const created = await unit.timeEntries.create(
       {
         todoId: input.todoId,
@@ -495,7 +745,20 @@ export const bookOnTodo = (deps: AddinDeps, input: AddinBookInput): Promise<Addi
       }
     }
 
-    const namePools = await poolNamer(unit);
+    const movementOf = await poolNamer(unit);
+
+    // `todo` ist der Stand **vor** der Buchung — `load` lief davor, und
+    // `clearDone` gibt seinen neuen Wert nicht hierher zurück. Genau so wird er
+    // gebraucht: `bookingStates` rechnet aus ihm **beide** Zustände aus. Wer
+    // hier den Stand von danach einsetzte, bekäme zwei gleiche Zustände und
+    // damit für immer ein leeres `leavingPoolNames` — E-056 wäre still wieder
+    // abgeschafft.
+    const movement = movementOf(
+      bookingStates(todo, {
+        hasOpenEntries: openBefore > 0,
+        hasExportedEntries: exportedBefore > 0,
+      }),
+    );
 
     return {
       kind: 'booked',
@@ -503,7 +766,8 @@ export const bookOnTodo = (deps: AddinDeps, input: AddinBookInput): Promise<Addi
       todoWasDone,
       // Es gibt keinen Weg mehr, auf dem diese beiden Werte auseinanderfallen.
       doneCleared: todoWasDone,
-      poolNames: namePools(todo.tagIds),
+      poolNames: movement.appears,
+      leavingPoolNames: movement.leaves,
     };
   });
 

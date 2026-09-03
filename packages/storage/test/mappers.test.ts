@@ -16,6 +16,8 @@ import {
   toExportRun,
   toExportTemplate,
   toPool,
+  toPoolCompletion,
+  toPoolExportState,
   toPoolRuleTerm,
   toRoundingMode,
   toRunningTimeEntry,
@@ -136,6 +138,39 @@ describe('toPool / toPoolRuleTerm', () => {
   it('toPoolRuleTerm: tag_id gesetzt ergibt einen Tag-Term, sonst einen Ordner-Term', () => {
     expect(toPoolRuleTerm({ tag_id: 'tag-1', folder_id: null })).toEqual({ kind: 'tag', tagId: 'tag-1' });
     expect(toPoolRuleTerm({ tag_id: null, folder_id: 'folder-1' })).toEqual({ kind: 'folder', folderId: 'folder-1' });
+  });
+});
+
+describe('toPoolCompletion / toPoolExportState — die Erledigt- und Exportstatus-Achse einer Regel (T-076)', () => {
+  it('toPoolCompletion: "done" und "open" bleiben, jeder andere Wert (auch undefined) wird zum Neutralwert "any"', () => {
+    expect(toPoolCompletion('done')).toBe('done');
+    expect(toPoolCompletion('open')).toBe('open');
+    expect(toPoolCompletion('garbage')).toBe('any');
+    expect(toPoolCompletion(undefined)).toBe('any');
+  });
+
+  it('toPoolExportState: "open" und "exported" bleiben, jeder andere Wert (auch undefined) wird zum Neutralwert "any"', () => {
+    expect(toPoolExportState('open')).toBe('open');
+    expect(toPoolExportState('exported')).toBe('exported');
+    expect(toPoolExportState('garbage')).toBe('any');
+    expect(toPoolExportState(undefined)).toBe('any');
+  });
+
+  it('toPool liest completion und exportState über genau diese beiden Funktionen (kein zweiter Übersetzungsweg)', () => {
+    const row: SqlRow = {
+      id: 'p',
+      name: 'Pool',
+      match_mode: 'any',
+      include_subfolders: 0,
+      position: 1,
+      completion: 'done',
+      export_state: 'exported',
+      created_at: 'a',
+      updated_at: 'b',
+    };
+    const pool = toPool(row, []);
+    expect(pool.completion).toBe('done');
+    expect(pool.exportState).toBe('exported');
   });
 });
 

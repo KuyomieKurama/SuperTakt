@@ -365,6 +365,12 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
           todoWasDone: result.todoWasDone,
           doneCleared: result.doneCleared,
           poolNames: result.poolNames,
+          // Diese Zeile ist die Falle aus T-076 Befund 1: Die Antwort zählt
+          // ihre Felder einzeln auf, und ein neues Feld am Ergebnis kommt hier
+          // **nicht** von selbst an. Wer `leavingPoolNames` hier vergisst,
+          // bekommt eine Antwort, die wie Erfolg aussieht, und einen
+          // Aufgabenbereich, der die Hälfte der Auskunft nicht bekommt (E-056).
+          leavingPoolNames: result.leavingPoolNames,
         },
       },
       201,

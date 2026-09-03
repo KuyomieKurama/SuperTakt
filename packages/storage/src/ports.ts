@@ -32,7 +32,10 @@ import type {
   NotBilledRequest,
   Pool,
   PoolId,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolPlacement,
+  PoolTagTerm,
   PoolSurface,
   QuarterHours,
   Result,
@@ -340,29 +343,80 @@ export interface PoolPort {
    * Pool; das war die einzige Bedeutung, die eine Regel vor E-054 haben konnte.
    */
   create(
-    pool: Omit<Pool, 'id' | 'createdAt' | 'updatedAt' | 'placement'> & {
+    pool: Omit<
+      Pool,
+      | 'id'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'placement'
+      | 'excludedTags'
+      | 'statusIds'
+      | 'completion'
+      | 'exportState'
+    > & {
       readonly placement?: PoolPlacement;
+      /**
+       * Die vier Achsen aus T-076 sind weglassbar und stehen dann auf ihrem
+       * **Neutralwert** — dieselbe Vorgabe, die auch das Schema setzt
+       * (Migration 0011), und dieselbe Bauart wie bei `placement`.
+       *
+       * Eine Regel, die nur `rule` nennt, ist damit Wort für Wort die Regel,
+       * die man vor T-076 anlegen konnte.
+       */
+      readonly excludedTags?: readonly PoolTagTerm[];
+      readonly statusIds?: readonly StatusId[];
+      readonly completion?: PoolCompletionFilter;
+      readonly exportState?: PoolExportFilter;
     },
     now: Timestamp,
   ): Promise<Pool>;
+  /**
+   * Teiländerung. Was fehlt, bleibt, wie es ist — **auch bei den drei Listen**
+   * der Regel: Wer nur `rule` schickt, ändert die erforderlichen Tags und
+   * behält seine Ausschlüsse und Status (T-076).
+   */
   update(id: PoolId, pool: Partial<Omit<Pool, 'id'>>, now: Timestamp): Promise<Result<Pool, TaktError>>;
   remove(id: PoolId): Promise<Result<void, TaktError<'not_found'>>>;
 
   /**
-   * Löst die Regel eines Pools zur vollständigen Tagmenge auf, einschließlich
-   * der Tags aus Unterordnern, wenn `includeSubfolders` gesetzt ist.
+   * Löst die **erforderlichen** Tags einer Regel zur vollständigen Tagmenge
+   * auf, einschließlich der Tags aus Unterordnern, wenn `includeSubfolders`
+   * gesetzt ist.
    *
    * Es gibt keine Methode, die Pool-Mitgliedschaft speichert. Sie wird bei
    * jeder Abfrage neu bestimmt (A-3.4).
+   *
+   * **Nur die erforderlichen.** Der Name ist der aus der Zeit, als es nur eine
+   * Liste gab; die zweite hat mit T-076 eine eigene Methode bekommen, statt
+   * dass diese hier zwei Dinge zurückgäbe. Der Grund ist nicht Geschmack: An
+   * dieser Signatur hängt ein Aufrufer in fremder Hoheit
+   * (`routes/addin/service.ts`), und eine geänderte Rückgabe hätte ihn
+   * gebrochen, ohne dass er dabei richtiger geworden wäre.
    */
   resolveRule(id: PoolId): Promise<readonly TagId[]>;
+
+  /**
+   * Löst die **ausgeschlossenen** Tags einer Regel auf (T-076).
+   *
+   * Dieselbe Auflösung wie `resolveRule`, dieselbe Tiefe, dasselbe
+   * `includeSubfolders`. Getrennt, weil die beiden Listen im Ergebnis
+   * Gegenteiliges bewirken und eine gemeinsame Rückgabe an jeder Aufrufstelle
+   * wieder auseinandergenommen werden müsste.
+   */
+  resolveExcluded(id: PoolId): Promise<readonly TagId[]>;
 
   /** Mitglieder eines Pools. Abgeleitet, nicht gespeichert. */
   members(id: PoolId, filter?: TodoFilter, pagination?: Pagination): Promise<Page<Todo>>;
 }
 
 // ---------------------------------------------------------------------------
-// Kanban-Spalten (A-5.4) — Tabelle `todo_status`
+// Der Status eines Todos (A-5.3, A-5.4) — Tabelle `todo_status`
+//
+// **Keine Kanban-Spalte.** Seit E-054 ist eine Spalte eine Regel und liegt in
+// `pool`; der Status ist eine Eigenschaft am Todo und liegt hier. Seit T-076
+// lässt sich in einer Regel **nach** dem Status filtern (`Pool.statusIds`) —
+// das macht die Spalte nicht wieder zum Status: Eine Spalte kann mehrere
+// Status umfassen, keinen, oder Status und Tags mischen.
 // ---------------------------------------------------------------------------
 
 export interface TodoStatusPort {
@@ -394,9 +448,10 @@ export interface TodoStatusPort {
   /** Neuordnung in einem Zug, damit der eindeutige Index nicht zwischendrin bricht. */
   reorder(order: readonly StatusId[], now: Timestamp): Promise<Result<readonly TodoStatus[], TaktError>>;
   /**
-   * Löschen. Drei fachliche Gründe können es verhindern (T-074):
-   * `status_in_use`, `last_status_column` und — seit T-074 auch im Dienst und
-   * nicht mehr nur in der Oberfläche — `default_status_locked`.
+   * Löschen. Vier fachliche Gründe können es verhindern:
+   * `status_in_use` (Todos tragen ihn — oder, seit T-076, eine Regel benutzt
+   * ihn), `last_status_column` und — seit T-074 auch im Dienst und nicht mehr
+   * nur in der Oberfläche — `default_status_locked`.
    */
   remove(
     id: StatusId,
@@ -449,6 +504,28 @@ export interface TimeEntryPort {
   remove(id: TimeEntryId): Promise<Result<void, TaktError<'time_entry_locked' | 'not_found'>>>;
 
   sumSeconds(filter: TimeEntryFilter): Promise<number>;
+
+  /**
+   * Hat dieses Todo offene, hat es exportierte Buchungen? (T-076)
+   *
+   * Für die Exportstatus-Achse einer Regel. **Eine** Abfrage für alle
+   * genannten Todos, nicht eine je Todo: Das Board fragt für jede geladene
+   * Karte, und ein Aufruf je Karte wäre genau das N+1, das A-10.4 ausschließt.
+   *
+   * Zwei Wahrheitswerte und keine Summe: Gefragt ist, ob es solche Buchungen
+   * **gibt**. `sumSeconds` daneben beantwortet die andere Frage — wie viel —
+   * und braucht dafür je Todo einen eigenen Aufruf, weil sie eine Zahl je
+   * Filter liefert und keine Zuordnung.
+   *
+   * `open` zählt nur **abgeschlossene** Buchungen: Ein laufender Timer ist
+   * noch nichts, was man abrechnen könnte, und derselbe Zusatz steht seit
+   * jeher in `TodoFilter.onlyWithOpenEntries`. Ein Todo, das in keiner der
+   * beiden Mengen vorkommt, hat gar keine Buchungen; es fehlt dann in der
+   * Zuordnung, und der Aufrufer liest zweimal `false`.
+   */
+  exportPresence(
+    todoIds: readonly TodoId[],
+  ): Promise<ReadonlyMap<TodoId, { readonly hasOpen: boolean; readonly hasExported: boolean }>>;
 }
 
 /**

@@ -98,8 +98,25 @@ export interface AddinUnit {
    * — oder das Add-in müsste `pools.members(...)` bekommen, also eine Abfrage
    * über **fremde** Todos. Das ist die weitere Fläche; `resolveRule` ist die
    * engere: Sie liest die Regel eines Pools, nie einen Bestand.
+   *
+   * `resolveExcluded` kam mit T-078 dazu, und es ist **keine** Ausweitung
+   * dieser Überlegung, sondern ihre Vervollständigung. Seit T-076 hat eine
+   * Regel zwei Taglisten: die erforderliche und die ausgeschlossene. Wer nur
+   * die erste liest, beantwortet die Frage „gehört das Todo hier hinein?" mit
+   * einer halben Regel und bekommt eine Antwort, die **zu viele** Pools nennt
+   * (Risiko 1 aus T-076). Die Methode liest dieselbe Art Wert aus derselben
+   * Zeile mit derselben Auflösung über Ordner — sie sieht keine Todos, keine
+   * Notizen und keinen Bestand. Ein entwendetes Add-in-Token kommt damit
+   * genau um die zweite Hälfte der Regel weiter, die es zur richtigen Antwort
+   * braucht, und um nichts sonst.
+   *
+   * Die übrigen drei Achsen (`statusIds`, `completion`, `exportState`) stehen
+   * am Pool selbst und kommen mit `list()`; sie brauchen keine eigene Methode.
+   * Für die Buchungslage des Todos genügt `timeEntries.sumSeconds`, das
+   * ohnehin schon hier steht — `TimeEntryPort.exportPresence` (T-076) wäre der
+   * zweite Weg zu derselben Auskunft und bliebe deshalb draußen.
    */
-  readonly pools: Pick<PoolPort, 'list' | 'resolveRule'>;
+  readonly pools: Pick<PoolPort, 'list' | 'resolveRule' | 'resolveExcluded'>;
   readonly statuses: Pick<TodoStatusPort, 'list' | 'defaultStatus'>;
   readonly defaultTags: Pick<DefaultTagPort, 'list'>;
   readonly timeEntries: Pick<TimeEntryPort, 'create' | 'sumSeconds'>;

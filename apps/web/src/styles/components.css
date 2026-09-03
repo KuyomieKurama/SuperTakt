@@ -324,8 +324,8 @@
  * Abstand ihn behaelt.
  */
 .card__body
-  > :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker)
-  + :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker) {
+  > :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section)
+  + :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section) {
   margin-top: var(--space-4);
 }
 
@@ -929,35 +929,11 @@
 
 /* Die Regel der Spalte, direkt unter ihrem Kopf. Sie beantwortet die Frage,
    die eine Spalte aus Regeln als Erstes aufwirft: Warum steht diese Karte
-   hier? (E-054) */
+   hier? (E-054) — gezeichnet wird sie von `.rule-summary` weiter unten, seit
+   T-079 an allen drei Flaechen gleich. */
 .kcolumn__rule {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.kcolumn__rule-text {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  line-height: var(--leading-snug);
-}
-
-.kcolumn__rule-mode {
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-}
-
-.kcolumn__rule-folder {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
 }
 
 .kcolumn__body {
@@ -3874,4 +3850,129 @@
 .dbconcerns__impacts {
   color: var(--text-muted);
   font-size: var(--text-2xs);
+}
+
+/* ==================================================================== */
+/* Regelzusammenfassung (T-076, T-079)                                  */
+/* ==================================================================== */
+
+/*
+ * Eine Achse je Zeile statt einer langen Umbruchzeile. Der Grund ist die
+ * Kanban-Spalte: Sie ist rund 17rem breit, und fuenf Achsen nebeneinander
+ * braechen ohnehin um — nur an unvorhersehbaren Stellen, sodass „Ohne" mal
+ * hinter den erforderlichen Tags und mal davor steht.
+ *
+ * Was hier **nicht** steht, ist genauso wichtig: Eine Achse auf ihrem
+ * Neutralwert erscheint nicht. Die Leseregel dieser Flaeche lautet: Was
+ * dasteht, engt ein; was fehlt, laesst alles durch.
+ */
+.rule-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-summary--md {
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Die leere Regel ist ein Zustand und keine fehlende Angabe (A-3.4, T-079).
+ * Deshalb Warndreieck und ganzer Satz statt eines gedaempften Gedankenstrichs:
+ * Eine Spalte ohne Bedingung bleibt leer, bis jemand etwas daran aendert.
+ */
+.rule-summary--empty {
+  /*
+   * `flex-direction: row` steht hier ausdruecklich: `.rule-summary` setzt
+   * `column`, weil dort eine Achse je Zeile steht. Ohne diese Zeile ruecken
+   * Warndreieck und Satz untereinander, und das Dreieck steht mittig ueber
+   * dem Text — gemessen im Spaltenkopf und in der Formularvorschau.
+   */
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-summary--empty svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.rule-summary--empty.rule-summary--md {
+  font-size: var(--text-xs);
+}
+
+.rule-summary__axis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/*
+ * Die Beschriftung traegt Symbol **und** Wort. Keine der fuenf Achsen
+ * unterscheidet sich allein durch Farbe (SC 1.4.1) — die Zusammenfassung ist
+ * durchgehend gedaempft, und ausgeschlossene Tags erkennt man am
+ * durchgestrichenen Kreis, am Wort „Ohne" und an der Randschiene.
+ */
+.rule-summary__axis-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.rule-summary__axis--excluded {
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-strong);
+}
+
+/* „Nur erledigte", „Nur unerledigte" — eine Auswahl, kein Tag. Deshalb eine
+   eigene Huelle: Als Chip gezeichnet sähe sie aus wie etwas, das am Todo
+   haengt. */
+.rule-summary__value,
+.rule-summary__status,
+.rule-summary__folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.rule-summary__folder-note {
+  color: var(--text-muted);
+}
+
+/*
+ * Nur im Formular sichtbar (`showNeutral`). Dort wird gewaehlt, und dort muss
+ * ausgesprochen werden, was „Alle" bedeutet — an den Flaechen, die eine
+ * fertige Regel nur anzeigen, waere derselbe Satz Rauschen.
+ */
+.rule-summary__neutral {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  padding-top: var(--space-1);
+  border-top: 1px dashed var(--border-default);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__neutral svg {
+  flex: none;
+  margin-top: 2px;
 }

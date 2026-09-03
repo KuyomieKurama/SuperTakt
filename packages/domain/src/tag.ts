@@ -5,6 +5,7 @@
 import type {
   PoolId,
   Result,
+  StatusId,
   TagFolderId,
   TagId,
   TaktError,
@@ -94,13 +95,78 @@ export interface Tag {
 // ---------------------------------------------------------------------------
 
 /**
- * Ein Bestandteil einer Pool-Regel: entweder ein einzelnes Tag (A-3.2) oder
- * ein Ordner, dessen Tags allesamt zählen. Genau eines von beidem.
- * Tabelle `pool_rule`.
+ * Ein Tagbestandteil einer Regel: ein einzelnes Tag (A-3.2) oder ein Ordner,
+ * dessen Tags zählen — mit `Pool.includeSubfolders` auch die seiner
+ * Unterordner, beliebig tief (A-3.3). Genau eines von beidem.
+ *
+ * Beide lösen sich zur **selben** Größe auf: einer Menge von Tagkennungen, die
+ * über `todo_tag` am Todo hängen. Ein Ordnerterm ist deshalb nur eine bequeme
+ * Schreibweise für „diese Tags"; wer die Regel auswertet, sieht am Ende eine
+ * Tagmenge und keinen Ordner mehr.
+ *
+ * Deshalb steht hier **kein** dritter Fall für den Status. Der Status ist keine
+ * Tagmenge: Er steht als `todo.status_id` an der Zeile, genau einer je Todo,
+ * nie keiner und nie zwei. Er ist eine eigene Achse der Regel und hat ein
+ * eigenes Feld — siehe {@link Pool}.
  */
-export type PoolRuleTerm =
+export type PoolTagTerm =
   | { readonly kind: 'tag'; readonly tagId: TagId }
   | { readonly kind: 'folder'; readonly folderId: TagFolderId };
+
+/**
+ * Der Name aus der Zeit, als eine Regel **nur** aus solchen Termen bestand.
+ *
+ * Derselbe Typ, nicht ein zweiter daneben. Er bleibt stehen, weil an ihm
+ * Aufrufer in fremder Hoheit hängen (`apps/web`, die Prüfpfade); wer neu
+ * schreibt, nimmt {@link PoolTagTerm}, weil der Name sagt, was der Term
+ * bezeichnet.
+ */
+export type PoolRuleTerm = PoolTagTerm;
+
+/**
+ * Die Erledigt-Achse einer Regel (A-2.4, E-023, T-076).
+ *
+ *   `any`  — Erledigt spielt für die Zugehörigkeit keine Rolle. Neutralwert.
+ *   `open` — nur unerledigte Todos.
+ *   `done` — nur erledigte Todos.
+ *
+ * **Nicht zu verwechseln mit dem Status** (A-5.3). „Erledigt" ist
+ * `todo.completed_at` und hängt an keinem Status; ein Todo kann „Done" tragen
+ * und unerledigt sein und umgekehrt. Die beiden Achsen sind seit E-023
+ * getrennt und bleiben es.
+ *
+ * **Nicht zu verwechseln mit `includeCompleted`** (E-039). Diese Achse
+ * entscheidet über **Zugehörigkeit**, jene über **Sichtbarkeit**: `any` heißt
+ * „die Regel sagt dazu nichts", und dann entscheidet die Ansicht wie bisher.
+ * Sagt die Regel etwas, hat sie das letzte Wort — sonst wäre eine Spalte
+ * „Erledigt" in der Vorgabeansicht dauerhaft leer.
+ */
+export type PoolCompletionFilter = 'any' | 'done' | 'open';
+
+/**
+ * Die Exportstatus-Achse einer Regel (E-032, T-076).
+ *
+ *   `any`      — der Exportstatus spielt keine Rolle. Neutralwert.
+ *   `open`     — das Todo hat mindestens eine **abgeschlossene, offene**
+ *                Buchung. Das ist „was habe ich noch nicht abgerechnet".
+ *   `exported` — das Todo hat mindestens eine exportierte Buchung.
+ *
+ * Der Exportstatus ist eine Eigenschaft der **Buchung**, nicht des Todos
+ * (E-032: zweiwertig, nie leer). Ein Todo hat viele Buchungen; die Achse fragt
+ * deshalb nach dem Vorhandensein, nicht nach einem Zustand des Todos.
+ *
+ * **Warum `exported` nicht „vollständig abgerechnet" heißt.** Das wäre die
+ * andere denkbare Lesart, und sie wäre nicht die Umkehrung von `open`, sondern
+ * deren Verneinung — ein Todo mit einer offenen und einer exportierten Buchung
+ * fiele dann durch beide Raster. So wie es hier steht, steht es in beiden
+ * Spalten, und das ist die richtige Antwort: Beides trifft zu. Es ist genau
+ * derselbe Fall, den E-054 auf dem Board zum Normalfall gemacht hat.
+ *
+ * Ein Todo **ohne jede Buchung** erfüllt weder `open` noch `exported`. Es
+ * steht damit nur in Spalten, deren Regel diese Achse offenlässt — richtig, denn
+ * abzurechnen gibt es an ihm nichts.
+ */
+export type PoolExportFilter = 'any' | 'open' | 'exported';
 
 /**
  * Wo eine Regel erscheint (E-054).
@@ -149,17 +215,63 @@ export type PoolSurface = 'pool' | 'board';
  * Ein gespeicherter Mitgliederstand müsste an dieser Stelle nachgezogen werden
  * und wäre die wahrscheinlichste Fehlerquelle des ganzen Ablaufs.
  *
- * `matchMode`:
- *   `any` — das Todo trägt mindestens eines der Regel-Tags.
- *   `all` — das Todo trägt alle Regel-Tags.
+ * ---------------------------------------------------------------------------
+ * Die Regel ist eine Struktur mit benannten Feldern, keine Liste (T-076)
+ * ---------------------------------------------------------------------------
  *
- * `includeSubfolders`: Bei Regelteilen der Art `folder` zählen auch die Tags in
- * dessen Unterordnern, beliebig tief.
+ * Bis T-076 war die Regel **eine** Liste gleichartiger Terme, und wie mehrere
+ * davon verknüpft sind, stand nirgends — man musste es erklären. Seitdem hat
+ * jede Bedingung ihr eigenes Feld, und die Verknüpfung folgt aus dem Feldnamen:
+ *
+ * | Feld | Bedeutung | Neutralwert |
+ * |---|---|---|
+ * | `rule` + `matchMode` | erforderliche Tags: alle (`all`) oder mindestens eines (`any`) | leere Liste |
+ * | `excludedTags` | ausgeschlossene Tags: **keines** davon darf am Todo hängen | leere Liste |
+ * | `statusIds` | Status: **einer** von diesen | leere Liste = „Alle" |
+ * | `completion` | Erledigt: alle / nur erledigte / nur unerledigte | `any` |
+ * | `exportState` | Exportstatus: alle / mit offener / mit exportierter Buchung | `any` |
+ *
+ * **Die Felder sind mit „und" verbunden**, jedes einzelne engt weiter ein. Das
+ * ist keine Wahl, die man treffen und anders treffen könnte: Ein „oder"
+ * zwischen „erforderliche Tags" und „ausgeschlossene Tags" wäre sinnlos, und
+ * eine zusätzlich genannte Bedingung, die das Ergebnis **vergrößert**, wäre in
+ * jeder Ansicht eine Überraschung.
+ *
+ * **Innerhalb** eines Feldes steht die Verknüpfung am Feld: `matchMode` für die
+ * erforderlichen Tags, „keines davon" für die ausgeschlossenen, „einer von
+ * diesen" für die Status. Für die Status ist das keine Entscheidung, sondern
+ * eine Tatsache: `todo.status_id` trägt genau einen Wert, ein „alle davon"
+ * über zwei Status wäre nicht streng, sondern unerfüllbar.
+ *
+ * **Alle Felder neutral heißt weiterhin: die Regel trifft nichts** (A-3.4).
+ * Nicht „alle null Bedingungen sind erfüllt": Eine Regel, die noch nicht
+ * eingerichtet ist, hätte sonst schlagartig jedes Todo der Datenbank als
+ * Mitglied.
+ *
+ * **Was das an E-054 nicht ändert.** Status und Kanban-Spalte bleiben
+ * getrennt. Eine Spalte wird durch `statusIds` nicht wieder zum Status: Sie
+ * kann mehrere Status umfassen, keinen, oder Status und Tags mischen, und
+ * dieselbe Karte kann weiterhin in mehreren Spalten stehen.
  */
 export interface Pool {
   readonly id: PoolId;
   readonly name: string;
+  /**
+   * Wie die **erforderlichen** Tags (`rule`) verknüpft sind.
+   *
+   *   `any` — das Todo trägt mindestens eines davon. **Vorgabe**, und der Wert
+   *           jeder Regel, die vor T-076 ohne ausdrückliche Wahl entstand.
+   *   `all` — das Todo trägt alle davon.
+   *
+   * Gilt ausschließlich für `rule`. Die ausgeschlossenen Tags sind immer
+   * „keines davon", die Status immer „einer von diesen".
+   */
   readonly matchMode: 'any' | 'all';
+  /**
+   * Bei Termen der Art `folder` zählen auch die Tags in dessen Unterordnern,
+   * beliebig tief. Gilt für **beide** Taglisten — eine getrennte Tiefe je
+   * Liste wäre eine zweite Wahrheit über denselben Baum.
+   */
   readonly includeSubfolders: boolean;
   /**
    * Wo diese Regel erscheint (E-054). Siehe {@link PoolPlacement}.
@@ -177,26 +289,124 @@ export interface Pool {
    * Fläche wäre eine zweite Wahrheit über dieselbe Ordnung.
    */
   readonly position: number;
-  readonly rule: readonly PoolRuleTerm[];
+  /**
+   * Die **erforderlichen** Tags (A-3.2, A-3.3). Leer heißt: Diese Achse
+   * schränkt nicht ein.
+   *
+   * Das Feld heißt seit T-009 `rule` — aus der Zeit, als es die ganze Regel
+   * war. Der Name bleibt, weil ein Umbenennen Aufrufer in fremder Hoheit bräche
+   * (`apps/web`, die Prüfpfade) und die Aussage nicht verbesserte: Was das Feld
+   * bedeutet, steht hier, und `excludedTags` daneben macht es unübersehbar.
+   * Der Umbau auf `requiredTags` gehört in eine Aufgabe, die alle Aufrufer
+   * zugleich anfasst.
+   */
+  readonly rule: readonly PoolTagTerm[];
+  /**
+   * **Ausgeschlossene** Tags (T-076). Trägt das Todo eines davon, gehört es
+   * nicht dazu — ganz gleich, was die übrigen Felder sagen.
+   *
+   * Das ist die Bedingung, die eine Liste gleichartiger Terme nicht ausdrücken
+   * konnte: Sie hat keinen Platz für „nicht". Deshalb eine zweite Liste und
+   * kein Term mit einem Vorzeichen.
+   */
+  readonly excludedTags: readonly PoolTagTerm[];
+  /**
+   * Status, von denen das Todo **einen** tragen muss (T-076). Leer heißt
+   * „Alle" — die Achse schränkt dann nicht ein.
+   *
+   * Mehrere sind ausdrücklich zulässig: Eine Spalte soll mehrere Status
+   * umfassen können (E-054). Ein „alle davon" gibt es hier nicht, siehe
+   * `matchMode`.
+   */
+  readonly statusIds: readonly StatusId[];
+  /** Die Erledigt-Achse (T-076). Siehe {@link PoolCompletionFilter}. */
+  readonly completion: PoolCompletionFilter;
+  /** Die Exportstatus-Achse (T-076). Siehe {@link PoolExportFilter}. */
+  readonly exportState: PoolExportFilter;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
 /**
- * Gehört ein Todo mit diesen Tags in diesen Pool?
+ * Gehört ein Todo in diesen Pool? — die Regel als reine Funktion.
  *
- * Rein und ohne laufenden Dienst prüfbar. `ruleTagIds` ist die zur Regel
- * aufgelöste Tagmenge einschließlich der Tags aus Unterordnern; das Auflösen
+ * Rein und ohne laufenden Dienst prüfbar. Die beiden Tagmengen kommen bereits
+ * **aufgelöst** herein, einschließlich der Tags aus Unterordnern; das Auflösen
  * ist Aufgabe des Ports, weil dafür der Baum gebraucht wird.
  *
- * Der Erledigt-Status geht hier bewusst nicht ein. Ein erledigtes Todo bleibt
- * Mitglied seines Pools; ob es angezeigt wird, entscheidet der Filter der
- * Ansicht, nicht die Zugehörigkeit.
+ * ---------------------------------------------------------------------------
+ * Die Verknüpfung steht in der Feldstruktur, nicht in einer Erklärung (T-076)
+ * ---------------------------------------------------------------------------
+ *
+ * Fünf Achsen, jede mit einem Neutralwert, alle mit „und" verbunden. Die
+ * vollständige Begründung steht an {@link Pool}; hier nur, was das für die
+ * Auswertung heißt:
+ *
+ *  1. Jede Achse, die auf ihrem Neutralwert steht, wird **übersprungen**. Eine
+ *     Regel, die nur Tags nennt, ist damit Zeichen für Zeichen das, was sie vor
+ *     T-076 war — der Grund, warum keine bestehende Regel ihre Bedeutung
+ *     ändert.
+ *  2. Jede Achse, die etwas sagt, kann nur **ablehnen**. Deshalb ist die
+ *     Reihenfolge der Prüfungen unten gleichgültig und deshalb wird eine
+ *     zusätzlich gesetzte Bedingung das Ergebnis nie vergrößern.
+ *  3. Stehen **alle** Achsen neutral, trifft die Regel **nichts** (A-3.4).
+ *     Das ist der eine Fall, den Punkt 1 und 2 zusammen nicht ergeben, und er
+ *     ist eine fachliche Entscheidung: Eine Regel, die noch nicht eingerichtet
+ *     ist, hätte sonst jedes Todo der Datenbank als Mitglied.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum alle neuen Felder freiwillig sind
+ * ---------------------------------------------------------------------------
+ *
+ * Damit jeder Aufrufer aus der Zeit vor T-076 unverändert dieselbe Antwort
+ * bekommt: Was er nicht nennt, steht neutral, und dann verhält sich die
+ * Funktion wie zuvor.
+ *
+ * Jedes dieser Felder nimmt ausdrücklich auch `undefined` an und nicht nur das
+ * Fehlen (`?: T | undefined`). Der Grund ist der Aufrufer: Wer eine Karte aus
+ * einer Liste durchreicht, hat die Werte in der Hand und weiß nicht, welche
+ * davon gesetzt sind. Ohne diesen Zusatz müsste er unter
+ * `exactOptionalPropertyTypes` acht Felder einzeln wegkürzen — acht
+ * Verzweigungen, die nichts entscheiden und alle mitgeprüft werden wollen.
+ * Fehlend und `undefined` bedeuten hier dasselbe, und das steht damit im Typ.
+ *
+ * Die Angaben über die **Karte** — Status, Erledigt-Zeitpunkt, Vorhandensein
+ * von Buchungen — fehlen, wenn der Aufrufer sie nicht kennt. Dann trifft eine
+ * Regel, die danach fragt, **nicht**. Die Antwort fällt zu, nicht auf: Eine
+ * Zugehörigkeit zu behaupten, deren Bedingung man nicht geprüft hat, wäre die
+ * schlechtere der beiden Richtungen.
+ *
+ * Nicht zu verwechseln: `completion` entscheidet über **Zugehörigkeit**,
+ * `isVisibleInPool` über **Sichtbarkeit**. Steht `completion` neutral, weiß
+ * diese Funktion vom Erledigt-Kennzeichen so wenig wie vor T-076, und A-2.5
+ * gilt unverändert.
  */
 export type MatchesPool = (input: {
   readonly todoTagIds: readonly TagId[];
+  /** Die **erforderlichen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
   readonly ruleTagIds: readonly TagId[];
+  /** Wie `ruleTagIds` verknüpft ist. Gilt für keine andere Achse. */
   readonly matchMode: 'any' | 'all';
+  /** Die **ausgeschlossenen** Tags der Regel, aufgelöst. Leer: schränkt nicht ein. */
+  readonly excludedTagIds?: readonly TagId[] | undefined;
+  /**
+   * Der Status der Karte. Jedes Todo trägt genau einen (`todo.status_id` ist
+   * NOT NULL); `null` oder weggelassen heißt „dieser Aufrufer kennt ihn nicht",
+   * nicht „diese Karte hat keinen".
+   */
+  readonly todoStatusId?: StatusId | null | undefined;
+  /** Die Status der Regel. Leer oder weggelassen heißt „Alle". */
+  readonly ruleStatusIds?: readonly StatusId[] | undefined;
+  /** `null` bedeutet unerledigt (A-2.4). Weggelassen: dem Aufrufer unbekannt. */
+  readonly completedAt?: Timestamp | null | undefined;
+  /** Die Erledigt-Achse der Regel. Weggelassen ist `any`. */
+  readonly completion?: PoolCompletionFilter | undefined;
+  /** Hat die Karte mindestens eine abgeschlossene, offene Buchung? */
+  readonly hasOpenEntries?: boolean | undefined;
+  /** Hat die Karte mindestens eine exportierte Buchung? */
+  readonly hasExportedEntries?: boolean | undefined;
+  /** Die Exportstatus-Achse der Regel. Weggelassen ist `any`. */
+  readonly exportState?: PoolExportFilter | undefined;
 }) => boolean;
 
 /**
@@ -298,21 +508,86 @@ export const checkFolderMove: CheckFolderMove = ({ folderId, newParentId, target
 };
 
 /**
- * Gehört ein Todo mit diesen Tags in diesen Pool? (A-3.2, A-3.4)
+ * Gehört ein Todo in diesen Pool? (A-3.2, A-3.4, T-076)
  *
- * Eine leere Regel trifft nichts — auch im Modus `all` nicht. Die mathematisch
- * saubere Lesart „alle null Bedingungen sind erfüllt" wäre hier fachlich
- * falsch: Ein Pool, dessen Regel noch nicht fertig eingerichtet ist, hätte
- * schlagartig jedes Todo der Datenbank als Mitglied.
+ * Fünf Achsen, jede mit einem Neutralwert. Der Aufbau ist immer derselbe:
+ * steht die Achse neutral, wird sie übersprungen; sagt sie etwas, kann sie nur
+ * ablehnen. Deshalb steht am Ende ein nacktes `true` und keine Verknüpfung von
+ * fünf Ausdrücken — die wäre dieselbe Aussage in unlesbar.
+ *
+ * Die **eine** Ausnahme steht ganz oben und ist eine fachliche Entscheidung:
+ * Stehen alle fünf Achsen neutral, trifft die Regel nichts. Die mathematisch
+ * saubere Lesart „alle null Bedingungen sind erfüllt" wäre hier falsch — eine
+ * Regel, die noch nicht fertig eingerichtet ist, hätte schlagartig jedes Todo
+ * der Datenbank als Mitglied.
  */
-export const matchesPool: MatchesPool = ({ todoTagIds, ruleTagIds, matchMode }) => {
-  if (ruleTagIds.length === 0) return false;
+export const matchesPool: MatchesPool = ({
+  todoTagIds,
+  ruleTagIds,
+  matchMode,
+  excludedTagIds,
+  todoStatusId,
+  ruleStatusIds,
+  completedAt,
+  completion,
+  hasOpenEntries,
+  hasExportedEntries,
+  exportState,
+}) => {
+  const excluded = excludedTagIds ?? [];
+  const statuses = ruleStatusIds ?? [];
+  const wantedCompletion = completion ?? 'any';
+  const wantedExport = exportState ?? 'any';
+
+  // Alle Achsen neutral: Die Regel ist nicht eingerichtet und trifft nichts.
+  if (
+    ruleTagIds.length + excluded.length + statuses.length === 0 &&
+    wantedCompletion === 'any' &&
+    wantedExport === 'any'
+  ) {
+    return false;
+  }
 
   const onTodo = new Set<TagId>(todoTagIds);
 
-  return matchMode === 'all'
-    ? ruleTagIds.every((tagId) => onTodo.has(tagId))
-    : ruleTagIds.some((tagId) => onTodo.has(tagId));
+  // Erforderliche Tags — die einzige Achse, deren Verknüpfung wählbar ist.
+  if (ruleTagIds.length > 0) {
+    const hit =
+      matchMode === 'all'
+        ? ruleTagIds.every((tagId) => onTodo.has(tagId))
+        : ruleTagIds.some((tagId) => onTodo.has(tagId));
+    if (!hit) return false;
+  }
+
+  // Ausgeschlossene Tags — immer „keines davon". Ein `matchMode` hier wäre
+  // zweideutig: „nicht alle" und „keines" sind verschiedene Aussagen, und nur
+  // die zweite ist die, die jemand meint, der ein Tag ausschließt.
+  //
+  // Ohne vorgeschaltete Längenprüfung: `some` auf einer leeren Liste ist
+  // `false`, und das ist genau die Bedeutung des Neutralwerts.
+  if (excluded.some((tagId) => onTodo.has(tagId))) return false;
+
+  // Status — immer „einer von diesen".
+  //
+  // Der Vergleich erledigt den unbekannten Status nebenbei: `undefined` und
+  // `null` stehen in keiner Statusliste, `some` liefert `false`, die Regel
+  // trifft nicht. Eine eigene Prüfung darauf wäre dieselbe Aussage ein zweites
+  // Mal — und die Stelle, an der die beiden eines Tages auseinanderliefen.
+  if (statuses.length > 0 && !statuses.some((id) => id === todoStatusId)) return false;
+
+  // Erledigt. `undefined` heißt „unbekannt" und zählt weder als erledigt noch
+  // als unerledigt: Beide Richtungen lehnen dann ab, statt eine Hälfte zu
+  // raten.
+  const done = completedAt === undefined ? null : completedAt !== null;
+  if (wantedCompletion === 'done' && done !== true) return false;
+  if (wantedCompletion === 'open' && done !== false) return false;
+
+  // Exportstatus. Die beiden Kennzeichen sind Vorhandenseinsaussagen über die
+  // Buchungen des Todos, nicht sein Zustand — ein Todo kann beide tragen.
+  if (wantedExport === 'open' && hasOpenEntries !== true) return false;
+  if (wantedExport === 'exported' && hasExportedEntries !== true) return false;
+
+  return true;
 };
 
 /**

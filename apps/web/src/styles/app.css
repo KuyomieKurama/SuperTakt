@@ -944,6 +944,142 @@
   background-color: var(--bg-subtle);
 }
 
+/*
+ * Ein benannter Abschnitt in einem langen Formular (T-079).
+ *
+ * Das Regelformular hat seit T-076 fuenf Achsen und neun Bedienelemente.
+ * Untereinander waeren sie eine Liste; die Ueberschriften machen daraus die
+ * drei Fragen, die ein Benutzer wirklich stellt: was dazugehoeren muss, was
+ * nicht dazugehoeren darf, und woran das Todo sonst erkennbar ist.
+ *
+ * Die Trennlinie sitzt oben statt unten: So traegt sie den Abschnitt an, statt
+ * ihn abzuschliessen — und der letzte Abschnitt endet nicht mit einem Strich
+ * ins Leere.
+ */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.form-section__title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.form-section__lead {
+  max-width: var(--measure-prose);
+  margin-top: calc(var(--space-3) * -1 + var(--space-1));
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* ==================================================================== */
+/* Optionszeile — wenige Werte nebeneinander (T-079)                    */
+/* ==================================================================== */
+
+/*
+ * Drei Werte, einer davon gewaehlt, alle drei sichtbar. Die Bauform kommt aus
+ * dem Vorbild des Auftraggebers und ist hier richtig: Ein Aufklappfeld
+ * verbaerge die Alternativen, und eine Achse mit einem Neutralwert wird dann
+ * zur Frage, die man erst stellen muss.
+ *
+ * `fieldset` und `legend` statt `div` und `span`: Die Gruppenbeschriftung
+ * gehoert zur Gruppe, nicht daneben — sonst hoert ein Bildschirmleser drei
+ * Knoepfe „Alle", „Erledigt", „Unerledigt" ohne die Frage dazu.
+ */
+.radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+}
+
+.radio-row__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/*
+ * Der gewaehlte Zustand haengt an drei Merkmalen und keines ist allein die
+ * Farbe (SC 1.4.1): gefuellter Optionsknopf, Akzentkontur, halbfette Schrift.
+ */
+.radio-row__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.radio-row__option:hover {
+  border-color: var(--border-strong);
+  background-color: var(--bg-hover);
+}
+
+.radio-row__option--on {
+  border-color: var(--border-accent);
+  background-color: var(--accent-bg-subtle);
+}
+
+.radio-row__option--on .radio-row__label {
+  font-weight: var(--weight-medium);
+}
+
+.radio-row__option input[type="radio"] {
+  accent-color: var(--accent-bg);
+  margin: 0;
+}
+
+/*
+ * Der Fokusring liegt an der Huelle und nicht am winzigen Optionsknopf: Wer
+ * mit den Pfeiltasten durch die Gruppe geht, soll sehen, wo er steht — und
+ * ein 13px breiter Ring ist an einer 36px hohen Flaeche kein Hinweis.
+ */
+.radio-row__option:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.radio-row__option input[type="radio"]:focus-visible {
+  outline: none;
+}
+
+/*
+ * Der Zusatz am Neutralwert. Er steht dauerhaft da und nicht erst nach der
+ * Wahl: „Alle" heisst „schraenkt nicht ein" und nicht „trifft alles" — die
+ * haeufigste Fehllesart dieses Formulars laesst sich nicht durch einen
+ * Hilfetext beheben, den man erst durch Auswaehlen sieht.
+ */
+.radio-row__neutral {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.radio-row:disabled .radio-row__option {
+  border-color: var(--border-default);
+  background-color: var(--bg-disabled);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
 /* Dialog mit Formular ---------------------------------------------- */
 
 .dialog--form {
@@ -3074,21 +3210,16 @@
   font-weight: var(--weight-medium);
 }
 
+/*
+ * Die Regel steht seit T-079 in `.rule-summary` — dieselbe Bauform wie unter
+ * jedem Spaltenkopf des Boards. Hier bleibt nur der Abstand: Wer hier wieder
+ * `display: flex` hinschreibt, kippt die Zeilenrichtung der Zusammenfassung
+ * und stellt fuenf Achsen nebeneinander.
+ */
 .pool-row__rule {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
   margin-top: var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
 }
 
-.pool-row__term {
-  display: inline-flex;
-}
-
-.pool-row__folder,
 .folder-chip {
   display: inline-flex;
   align-items: center;
@@ -3100,9 +3231,6 @@
   background-color: var(--bg-surface);
   color: var(--text-secondary);
   font-size: var(--text-xs);
-}
-
-.folder-chip {
   cursor: pointer;
 }
 

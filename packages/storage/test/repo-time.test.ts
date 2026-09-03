@@ -162,6 +162,45 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
     expect(filtered.items.map((e) => e.id)).toEqual([created.value.id]);
   });
 
+  it('exportPresence liefert je Todo, ob es offene und ob es exportierte Buchungen gibt (T-076, Grundlage der Exportstatus-Achse)', async () => {
+    db = openTestDatabase();
+    const withOpen = await db.unit.todos.create(
+      { title: 'Mit offener Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+    const withExported = await db.unit.todos.create(
+      { title: 'Mit exportierter Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+    const withoutEntries = await db.unit.todos.create(
+      { title: 'Ohne Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+
+    await db.unit.timeEntries.create(
+      { todoId: withOpen.id, startedAt: ts('2026-08-31T08:00:00Z'), endedAt: ts('2026-08-31T08:10:00Z'), note: '' },
+      NOW,
+    );
+    const exportedEntry = await db.unit.timeEntries.create(
+      { todoId: withExported.id, startedAt: ts('2026-08-31T09:00:00Z'), endedAt: ts('2026-08-31T09:10:00Z'), note: '' },
+      NOW,
+    );
+    expect(exportedEntry.ok).toBe(true);
+    if (!exportedEntry.ok) return;
+    db.conn
+      .prepare("UPDATE time_entry SET export_status = 'exported', export_count = 1 WHERE id = ?")
+      .run(exportedEntry.value.id);
+
+    const presence = await db.unit.timeEntries.exportPresence([withOpen.id, withExported.id, withoutEntries.id]);
+
+    expect(presence.get(withOpen.id)).toEqual({ hasOpen: true, hasExported: false });
+    expect(presence.get(withExported.id)).toEqual({ hasOpen: false, hasExported: true });
+    // Ein Todo ganz ohne Buchungen fehlt in der Zuordnung; der Aufrufer liest
+    // zweimal `false` (siehe Kommentar am Port).
+    expect(presence.get(withoutEntries.id)).toBeUndefined();
+    expect(await db.unit.timeEntries.exportPresence([])).toEqual(new Map());
+  });
+
   it('sumSeconds summiert nur die Buchungen, die den Filter treffen', async () => {
     db = openTestDatabase();
     const todo = await db.unit.todos.create(

@@ -26,7 +26,12 @@ import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
 import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
 import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
-import { reopenOutcome, reopenPreview, type ReopenNotice } from '../duplicate/reopen.ts';
+import {
+  reopenOutcome,
+  reopenPreview,
+  type PoolMovement,
+  type ReopenNotice,
+} from '../duplicate/reopen.ts';
 import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
 import type { ApiClient, ApiFailure } from '../api/client.ts';
 import type { AddinContextDto } from '../api/types.ts';
@@ -76,8 +81,14 @@ type Done =
        * gäbe wieder einen Fall dazwischen.
        */
       readonly reopened: boolean;
-      /** Pools, in denen das Todo nach der Buchung steht — aus dem Dienst. */
-      readonly poolNames: readonly string[];
+      /**
+       * Wohin sich das Todo durch die Buchung bewegt — aus dem Dienst (E-056).
+       *
+       * Ein Paar und keine zwei Listen nebeneinander: `appears` und `leaves`
+       * sind gleich getippt, und vertauscht ergäben sie einen Satz, der sich
+       * richtig liest und das Gegenteil behauptet.
+       */
+      readonly movement: PoolMovement;
     };
 
 export function TaskPane({
@@ -322,7 +333,10 @@ export function TaskPane({
       title: offer.title,
       minutes,
       reopened: result.value.doneCleared,
-      poolNames: result.value.poolNames,
+      movement: {
+        appears: result.value.poolNames,
+        leaves: result.value.leavingPoolNames,
+      },
     });
   };
 
@@ -548,7 +562,13 @@ export function TaskPane({
             hinter ihr.
           */}
           {booking.isDone ? (
-            <ReopenAnnouncement notice={reopenPreview(minutes, booking.poolNames)} tone="warning" />
+            <ReopenAnnouncement
+              notice={reopenPreview(minutes, {
+                appears: booking.poolNames,
+                leaves: booking.leavingPoolNames,
+              })}
+              tone="warning"
+            />
           ) : null}
 
           {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
@@ -686,7 +706,7 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
       {done.kind === 'booked' && done.reopened ? (
         <>
           <ReopenAnnouncement
-            notice={reopenOutcome(done.title, done.minutes, done.poolNames)}
+            notice={reopenOutcome(done.title, done.minutes, done.movement)}
             tone="success"
           />
           <p className="pane-note">Gerundet wird beim Export, auf die Tagessumme.</p>

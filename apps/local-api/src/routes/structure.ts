@@ -66,12 +66,40 @@ const folderCreateSchema = z.object({ name: nameSchema, parentId: idSchema.nulli
 const folderRenameSchema = z.object({ name: nameSchema });
 const folderMoveSchema = z.object({ newParentId: idSchema.nullable() });
 
-const poolRuleSchema = z.array(
+/**
+ * Eine Tagliste einer Regel (T-076).
+ *
+ * Dieselbe Gestalt wie vor T-076 — ein Term ist ein Tag **oder** ein Ordner.
+ * Was sich geändert hat, ist nicht der Term, sondern dass es zwei solche
+ * Listen gibt: `rule` (erforderlich) und `excludedTags` (ausgeschlossen). Das
+ * ist der Grund, warum hier **kein** dritter Fall für den Status steht: Der
+ * Status ist keine Tagmenge und hat ein eigenes Feld.
+ */
+const poolTagListSchema = z.array(
   z.union([
     z.object({ kind: z.literal('tag'), tagId: idSchema }),
     z.object({ kind: z.literal('folder'), folderId: idSchema }),
   ]),
 ).max(200);
+
+/**
+ * Die Erledigt- und die Exportstatus-Achse (T-076).
+ *
+ * Dreiwertig mit `any` als **Neutralwert**, nicht zwei Wahrheitswerte
+ * nebeneinander: Ein Feld, das „alle" sagen kann, braucht keinen zweiten, der
+ * sagt, ob das erste gilt.
+ */
+const completionSchema = z.enum(['any', 'done', 'open']);
+const exportStateSchema = z.enum(['any', 'open', 'exported']);
+
+/**
+ * Die Status einer Regel. Leer heißt „Alle" (T-076).
+ *
+ * Dieselbe Obergrenze wie bei den Taglisten, obwohl es nie mehr Status als
+ * eine Handvoll gibt: Die Grenze schützt nicht vor dem Benutzer, sondern vor
+ * einem Rumpf, der die Datenbank mit Fragezeichen überfährt.
+ */
+const poolStatusListSchema = z.array(idSchema).max(200);
 
 /**
  * Wo die Regel erscheint (E-054).
@@ -89,7 +117,11 @@ const poolCreateSchema = z.object({
   includeSubfolders: z.boolean().default(true),
   placement: placementSchema.default('pool'),
   position: z.number().int().min(0).default(0),
-  rule: poolRuleSchema.default([]),
+  rule: poolTagListSchema.default([]),
+  excludedTags: poolTagListSchema.default([]),
+  statusIds: poolStatusListSchema.default([]),
+  completion: completionSchema.default('any'),
+  exportState: exportStateSchema.default('any'),
 });
 
 const poolUpdateSchema = z.object({
@@ -98,7 +130,11 @@ const poolUpdateSchema = z.object({
   includeSubfolders: z.boolean().optional(),
   placement: placementSchema.optional(),
   position: z.number().int().min(0).optional(),
-  rule: poolRuleSchema.optional(),
+  rule: poolTagListSchema.optional(),
+  excludedTags: poolTagListSchema.optional(),
+  statusIds: poolStatusListSchema.optional(),
+  completion: completionSchema.optional(),
+  exportState: exportStateSchema.optional(),
 });
 
 /**
@@ -262,6 +298,11 @@ export function createStructureRoutes(context: AppContext): {
     const parsed = poolCreateSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
+    // Jedes Feld einzeln und keines vergessen. Die ausgeschriebene Liste ist
+    // hier die Falle, die T-051 und T-050 aufgestellt haben: Was das Schema
+    // annimmt und diese Zeilen nicht weiterreichen, verschwindet **still**.
+    // `proof:openapi` Abschnitt 12 misst deshalb nicht, ob die Felder
+    // beschrieben sind, sondern ob die angelegte Spalte danach anders trifft.
     const result = await createPool(context, {
       name: parsed.data.name,
       matchMode: parsed.data.matchMode,
@@ -269,6 +310,10 @@ export function createStructureRoutes(context: AppContext): {
       placement: parsed.data.placement,
       position: parsed.data.position,
       rule: parsed.data.rule as never,
+      excludedTags: parsed.data.excludedTags as never,
+      statusIds: parsed.data.statusIds as never,
+      completion: parsed.data.completion,
+      exportState: parsed.data.exportState,
     });
     // Bis T-074 stand hier ein `await createPool(...)` ohne Fehlerzweig: Der
     // eindeutige Index auf `pool.name` warf, niemand fing ihn, und die Antwort

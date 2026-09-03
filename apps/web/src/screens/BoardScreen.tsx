@@ -5,21 +5,20 @@ import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FilterToggle } from "../components/FilterBar";
 import { FormDialog } from "../components/FormDialog";
-import { Icon } from "../components/Icon";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { TagChip } from "../components/Tag";
+import { RuleSummary } from "../components/RuleSummary";
 import { EMPTY_SUMMARY, loadExportSummaries } from "../app/exportSummary";
 import { useRefresh } from "../app/RefreshContext";
 import { navigate } from "../app/router";
-import { useStructure } from "../app/StructureContext";
+import { useRuleLookup, useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { useAsync } from "../app/useAsync";
-import { flatFolders } from "../lib/folderPaths";
 import { formatDuration, formatTime, plural } from "../lib/format";
 import { POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { axesOf, countConditions, describeRule, type RuleLookup } from "../lib/poolRule";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
@@ -111,9 +110,8 @@ export function BoardScreen() {
     return { board, summaries };
   }, [version, showDone, perColumn]);
 
+  const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
-  const tree = structure.state.status === "ready" ? structure.state.value.tagTree : null;
-  const folders = useMemo(() => (tree === null ? [] : flatFolders(tree)), [tree]);
 
   const toggleDone = useCallback(
     (todo: Todo) => {
@@ -278,7 +276,7 @@ export function BoardScreen() {
                     summaries={value.summaries}
                     highlighted={highlighted}
                     seedTagIds={seedTagsOf(view.column)}
-                    folderNames={folders}
+                    lookup={lookup}
                     entries={columnMenu(view.column)}
                     onEditRule={() => setRuleForm({ pool: view.column })}
                     onAdd={() => setCreateIn(view.column)}
@@ -399,7 +397,7 @@ interface BoardColumnProps {
   };
   readonly highlighted: Id | null;
   readonly seedTagIds: readonly Id[];
-  readonly folderNames: ReadonlyArray<{ readonly id: Id; readonly path: readonly string[] }>;
+  readonly lookup: RuleLookup;
   readonly entries: readonly MenuEntry[];
   readonly onEditRule: () => void;
   readonly onAdd: () => void;
@@ -420,7 +418,7 @@ function BoardColumn({
   summaries,
   highlighted,
   seedTagIds,
-  folderNames,
+  lookup,
   entries,
   onEditRule,
   onAdd,
@@ -436,6 +434,12 @@ function BoardColumn({
   const structure = useStructure();
   const column = view.column;
   const doneCount = view.todos.filter((todo) => todo.completedAt !== null).length;
+  /*
+   * Die Regel wird je Spalte einmal beschrieben und zweimal gelesen: unter dem
+   * Kopf und im Leerzustand. Beide muessen dieselbe Antwort geben — sonst sagt
+   * die eine „ohne Bedingung" und die andere zaehlt Bedingungen auf.
+   */
+  const description = describeRule(axesOf(column), lookup);
 
   return (
     <KanbanColumn
@@ -443,7 +447,12 @@ function BoardColumn({
       count={view.todos.length}
       total={view.total}
       doneCount={doneCount}
-      rule={<RuleSummary pool={column} folderNames={folderNames} />}
+      rule={
+        <RuleSummary
+          description={description}
+          emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+        />
+      }
       entries={entries}
       {...(seedTagIds.length === 0
         ? {}
@@ -453,21 +462,7 @@ function BoardColumn({
           })}
     >
       {view.todos.length === 0 ? (
-        <EmptyState
-          compact
-          icon="inbox"
-          title="Keine Karte trifft diese Regel"
-          description={
-            column.rule.length === 0
-              ? "Diese Spalte hat noch keine Bedingung. Eine leere Regel trifft nichts — nicht alles."
-              : "Sobald ein Todo die genannten Tags trägt, erscheint es hier von selbst."
-          }
-          action={
-            <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
-              Regel bearbeiten
-            </Button>
-          }
-        />
+        <BoardColumnEmpty withoutCondition={description.isEmpty} onEditRule={onEditRule} />
       ) : (
         view.todos.map((todo) => {
           const others = (appearances.get(todo.id) ?? [])
@@ -502,6 +497,67 @@ function BoardColumn({
         })
       )}
     </KanbanColumn>
+  );
+}
+
+/* ==================================================================== */
+/* Der Leerzustand einer einzelnen Spalte                               */
+/* ==================================================================== */
+
+/**
+ * Zwei Leerzustände, nicht einer (T-079).
+ *
+ * „Keine Karte trifft diese Regel" ist die Antwort auf eine **gestellte**
+ * Frage: Die Bedingungen stehen, im Augenblick passt nichts darauf, und morgen
+ * kann es anders sein. Eine Spalte **ohne** Bedingung hat die Frage nie
+ * gestellt — sie trifft nichts, weil nichts von ihr verlangt wird, und sie wird
+ * auch morgen nichts treffen (A-3.4).
+ *
+ * Beides „keine Todos" zu nennen wäre der teuerste Leerzustand dieser
+ * Anwendung: Er verschwiege genau den Zustand, den ausschließlich der Benutzer
+ * beheben kann, und ließe ihn stattdessen auf Todos warten, die nie kommen.
+ * Deshalb unterscheiden sich Symbol, Überschrift, Erklärung **und** die
+ * angebotene Handlung — „Bedingung ergänzen" gegen „Regel bearbeiten".
+ *
+ * Ausgelagert und ausgeführt, weil dieselben zwei Zustände auf der Musterseite
+ * des Designsystems nebeneinander stehen müssen: Sie unterscheiden sich nur im
+ * Text, und zwei getrennt gepflegte Fassungen davon liefen binnen einer
+ * Aufgabe auseinander.
+ */
+export function BoardColumnEmpty({
+  withoutCondition,
+  onEditRule,
+}: {
+  readonly withoutCondition: boolean;
+  readonly onEditRule: () => void;
+}) {
+  if (withoutCondition) {
+    return (
+      <EmptyState
+        compact
+        icon="alert-triangle"
+        title="Diese Spalte hat noch keine Bedingung"
+        description="Sie bleibt leer, bis eine dazukommt — eine Regel ohne Bedingung trifft nichts, nicht alles. Nennen Sie einen Tag, einen Ordner, einen Status, „Erledigt“ oder den Exportstatus, dann füllt sie sich von selbst."
+        action={
+          <Button size="sm" variant="primary" iconStart="pencil" onClick={onEditRule}>
+            Bedingung ergänzen
+          </Button>
+        }
+      />
+    );
+  }
+  return (
+    <EmptyState
+      compact
+      icon="inbox"
+      title="Keine Karte trifft diese Regel"
+      description="Die Bedingungen stehen — im Augenblick erfüllt sie kein Todo. Sobald eines dazu passt, erscheint es hier von selbst."
+      action={
+        <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
+          Regel bearbeiten
+        </Button>
+      }
+    />
   );
 }
 
@@ -550,48 +606,6 @@ function cardMenu(
         ] as const)
       : []),
   ];
-}
-
-/** Die Regel in Worten, direkt unter dem Spaltenkopf. */
-function RuleSummary({
-  pool,
-  folderNames,
-}: {
-  readonly pool: Pool;
-  readonly folderNames: ReadonlyArray<{ readonly id: Id; readonly path: readonly string[] }>;
-}) {
-  const structure = useStructure();
-
-  if (pool.rule.length === 0) {
-    return <p className="kcolumn__rule-text muted">Ohne Bedingung — diese Spalte trifft nichts.</p>;
-  }
-
-  return (
-    <p className="kcolumn__rule-text">
-      <span className="kcolumn__rule-mode">
-        {pool.matchMode === "any" ? "Mindestens eines von" : "Alle von"}
-      </span>
-      {pool.rule.map((term, index) =>
-        term.kind === "tag" ? (
-          <TagChip
-            key={`tag-${String(index)}`}
-            size="sm"
-            label={structure.tagInfo(term.tagId)?.tag.name ?? "unbekannter Tag"}
-            {...(structure.tagInfo(term.tagId) === undefined
-              ? {}
-              : { path: structure.tagInfo(term.tagId)?.path ?? [] })}
-          />
-        ) : (
-          <span key={`folder-${String(index)}`} className="kcolumn__rule-folder">
-            <Icon name="folder" size={11} />
-            {folderNames.find((folder) => folder.id === term.folderId)?.path.join(" / ") ??
-              "unbekannter Ordner"}
-            {pool.includeSubfolders ? " (mit Unterordnern)" : ""}
-          </span>
-        ),
-      )}
-    </p>
-  );
 }
 
 function toCard(
@@ -707,7 +721,7 @@ export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStatePro
               <li key={pool.id} className="rule-row">
                 <span className="rule-row__name grow truncate">{pool.name}</span>
                 <span className="rule-row__count">
-                  {plural(pool.rule.length, "Bedingung", "Bedingungen")}
+                  {plural(countConditions(axesOf(pool)), "Bedingung", "Bedingungen")}
                 </span>
                 <Button size="sm" variant="secondary" iconStart="plus" onClick={() => onAdopt(pool)}>
                   Als Spalte aufnehmen
@@ -772,7 +786,7 @@ function BoardSetupDialog({
                 <p className="rule-row__name">{view.column.name}</p>
                 <p className="rule-row__meta">
                   {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
-                  {plural(view.column.rule.length, "Bedingung", "Bedingungen")} ·{" "}
+                  {plural(countConditions(axesOf(view.column)), "Bedingung", "Bedingungen")} ·{" "}
                   {plural(view.total, "Karte", "Karten")}
                 </p>
               </div>

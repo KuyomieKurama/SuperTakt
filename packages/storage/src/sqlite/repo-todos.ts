@@ -36,6 +36,8 @@ import type {
   TodoPort,
 } from '../ports.ts';
 import type {
+  PoolCompletionFilter,
+  PoolExportFilter,
   Result,
   StatusId,
   TagId,
@@ -75,7 +77,7 @@ interface Condition {
  */
 function buildConditions(
   filter: TodoFilter,
-  resolvedPools: readonly { readonly tagIds: readonly TagId[]; readonly matchMode: 'any' | 'all' }[],
+  resolvedPools: readonly ResolvedPool[],
 ): readonly Condition[] {
   const conditions: Condition[] = [];
 
@@ -115,21 +117,77 @@ function buildConditions(
     // gewählten Pools liegt, gehört in das Ergebnis. Die Alternative — der
     // Schnitt — ließe die Auswahl zweier Pools regelmäßig leer ausgehen und
     // wäre für niemanden erklärbar.
+    //
+    // **Innerhalb** eines Pools ist es umgekehrt: Die Achsen einer Regel sind
+    // mit UND verbunden (T-076). Das ist dieselbe Verknüpfung, die
+    // `matchesPool` in der Domäne trifft — diese Übersetzung ist die zweite
+    // Fassung derselben Regel, und ihre Übereinstimmung wird gemessen
+    // (`proof:openapi`, Abschnitt 11), nicht angenommen.
     const parts: string[] = [];
     const params: SqlValue[] = [];
     for (const pool of resolvedPools) {
-      if (pool.tagIds.length === 0) {
-        // Ein Pool ohne aufgelöste Tags trifft nichts (matchesPool in tag.ts).
+      const axes: string[] = [];
+
+      if (pool.tagIds.length > 0) {
+        // Erforderliche Tags. `HAVING`-freie Zählung über eine Unterabfrage:
+        // ein Indexdurchlauf auf `ix_todo_tag_reverse`, kein GROUP BY.
+        const needed = pool.matchMode === 'all' ? pool.tagIds.length : 1;
+        axes.push(
+          `(SELECT COUNT(DISTINCT tt.tag_id) FROM todo_tag tt
+             WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(pool.tagIds.length)})) >= ?`,
+        );
+        params.push(...pool.tagIds, needed);
+      }
+
+      const excluded = pool.excludedTagIds;
+      if (excluded.length > 0) {
+        // Ausgeschlossene Tags: **keines** davon. `NOT EXISTS` und nicht
+        // `COUNT(...) = 0` — die Abfrage bricht beim ersten Treffer ab, und
+        // „keines" ist genau das, was `NOT EXISTS` heißt.
+        axes.push(
+          `NOT EXISTS (SELECT 1 FROM todo_tag tt
+                        WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(excluded.length)}))`,
+        );
+        params.push(...excluded);
+      }
+
+      const statusIds = pool.statusIds;
+      if (statusIds.length > 0) {
+        // Der Status steht **an der Zeile** und nicht in einer
+        // Verknüpfungstabelle: kein JOIN, kein EXISTS, ein Vergleich auf
+        // `todo.status_id`. Genau darin unterscheidet sich diese Achse von den
+        // beiden darüber, und genau deshalb ist sie ein eigenes Feld.
+        axes.push(`t.status_id IN (${placeholders(statusIds.length)})`);
+        params.push(...statusIds);
+      }
+
+      if (pool.completion === 'open') axes.push('t.completed_at IS NULL');
+      if (pool.completion === 'done') axes.push('t.completed_at IS NOT NULL');
+
+      if (pool.exportState === 'open') {
+        // Dieselbe Bedingung wie `TodoFilter.onlyWithOpenEntries`, einschließlich
+        // `ended_at IS NOT NULL`: Ein laufender Timer ist noch nichts, was man
+        // abrechnen könnte. Trifft `ix_time_entry_queue`.
+        axes.push(
+          `EXISTS (SELECT 1 FROM time_entry te
+                    WHERE te.todo_id = t.id AND te.export_status = 'open' AND te.ended_at IS NOT NULL)`,
+        );
+      }
+      if (pool.exportState === 'exported') {
+        axes.push(
+          `EXISTS (SELECT 1 FROM time_entry te
+                    WHERE te.todo_id = t.id AND te.export_status = 'exported')`,
+        );
+      }
+
+      if (axes.length === 0) {
+        // Eine Regel, deren Achsen alle neutral stehen, trifft nichts — dieselbe
+        // Entscheidung wie `matchesPool` in tag.ts, und aus demselben Grund.
         // `0 = 1` hält die Vereinigung formal richtig, ohne zu treffen.
         parts.push('0 = 1');
         continue;
       }
-      const needed = pool.matchMode === 'all' ? pool.tagIds.length : 1;
-      parts.push(
-        `(SELECT COUNT(DISTINCT tt.tag_id) FROM todo_tag tt
-           WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(pool.tagIds.length)})) >= ?`,
-      );
-      params.push(...pool.tagIds, needed);
+      parts.push(`(${axes.join(' AND ')})`);
     }
     conditions.push({ sql: `(${parts.join(' OR ')})`, params });
   }
@@ -153,10 +211,33 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+/**
+ * Eine Regel, so weit aufgelöst, wie die Abfrage sie braucht (T-076).
+ *
+ * Die beiden Taglisten kommen aufgelöst herein — dafür braucht es den
+ * Ordnerbaum, und das ist Sache von `resolvePoolRule`. Die übrigen drei Achsen
+ * stehen unaufgelöst da: Sie sind Werte an der Regel und nichts, was man
+ * auflösen könnte.
+ *
+ * **Jedes Feld ist Pflicht**, auch das leere. Der Auflöser hat sie alle in der
+ * Hand (`poolAxes` liefert für eine Regel, die es nicht gibt, lauter
+ * Neutralwerte); sie freiwillig zu machen hieße, an jeder Lesestelle ein
+ * `?? []` zu schreiben — eine Verzweigung je Achse, die nichts entscheidet und
+ * eine Vorgabe an einen zweiten Ort trüge. Der Neutralwert ist die leere Liste
+ * beziehungsweise `any`, und er steht an genau einer Stelle: bei dem, der
+ * auflöst.
+ */
+export interface ResolvedPool {
+  readonly tagIds: readonly TagId[];
+  readonly matchMode: 'any' | 'all';
+  readonly excludedTagIds: readonly TagId[];
+  readonly statusIds: readonly StatusId[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+}
+
 /** Auflösung der Pool-Regeln. Wird von außen gereicht, damit `TodoPort` `PoolPort` nicht kennt. */
-export type PoolResolver = (
-  poolIds: readonly string[],
-) => readonly { readonly tagIds: readonly TagId[]; readonly matchMode: 'any' | 'all' }[];
+export type PoolResolver = (poolIds: readonly string[]) => readonly ResolvedPool[];
 
 export function createTodoPort(
   conn: SqlConnection,

@@ -17,15 +17,17 @@ import { Select } from "../components/Select";
 import { FormDialog, TextField } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { TagChip, TagPath } from "../components/Tag";
+import { RuleSummary } from "../components/RuleSummary";
+import { TagPath } from "../components/Tag";
 import { TagTree, type TagTreeNode } from "../components/TagTree";
 import { useRefresh } from "../app/RefreshContext";
 import { navigate } from "../app/router";
-import { useStructure } from "../app/StructureContext";
+import { useRuleLookup, useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
 import { flatFolders } from "../lib/folderPaths";
 import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { axesOf, describeRule } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 
@@ -453,10 +455,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   const [form, setForm] = useState<{ readonly pool?: Pool } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Pool | null>(null);
 
-  const folders = useMemo(
-    () => (structure.state.status === "ready" ? flatFolders(structure.state.value.tagTree) : []),
-    [structure.state],
-  );
+  const lookup = useRuleLookup();
 
   const setPlacement = (pool: Pool, placement: PoolPlacement): void => {
     void updatePool(pool.id, { placement })
@@ -508,40 +507,17 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                       {POOL_PLACEMENT_SHORT[pool.placement]}
                     </span>
                   </p>
-                  <p className="pool-row__rule">
-                    {pool.matchMode === "any" ? "Mindestens einer von" : "Alle von"}:{" "}
-                    {pool.rule.length === 0 ? (
-                      <span className="muted">keine Regel</span>
-                    ) : (
-                      pool.rule.map((term, index) => (
-                        <span key={index} className="pool-row__term">
-                          {term.kind === "tag" ? (
-                            <TagChip
-                              size="sm"
-                              label={structure.tagInfo(term.tagId)?.tag.name ?? "unbekannter Tag"}
-                              {...(structure.tagInfo(term.tagId) === undefined
-                                ? {}
-                                : { path: structure.tagInfo(term.tagId)?.path ?? [] })}
-                            />
-                          ) : (
-                            <span className="pool-row__folder">
-                              <Icon name="folder" size={12} />
-                              {folders.find((folder) => folder.id === term.folderId)?.path.join(" / ") ??
-                                "unbekannter Ordner"}
-                            </span>
-                          )}
-                        </span>
-                      ))
-                    )}
-                    {/* Der Zusatz gilt nur Ordnertermen. Bei einer Regel aus
-                        lauter Tags sagte er etwas ueber eine Bedingung aus,
-                        die es in dieser Regel gar nicht gibt. */}
-                    {pool.rule.some((term) => term.kind === "folder")
-                      ? pool.includeSubfolders
-                        ? " · mit Unterordnern"
-                        : " · ohne Unterordner"
-                      : null}
-                  </p>
+                  {/*
+                    Dieselbe Zusammenfassung wie unter jedem Spaltenkopf des
+                    Boards (T-079). Bis dahin stand hier eine zweite Fassung,
+                    die nur die Tagliste kannte — seit die Regel fuenf Achsen
+                    hat, haette sie eine Regel behauptet, die es nicht gibt.
+                  */}
+                  <RuleSummary
+                    className="pool-row__rule"
+                    description={describeRule(axesOf(pool), lookup)}
+                    emptyText="Ohne Bedingung — dieser Pool bleibt leer."
+                  />
                 </div>
                 <Button
                   size="sm"

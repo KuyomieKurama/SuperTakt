@@ -74,14 +74,29 @@ export interface TodoMatchDto {
   readonly openSeconds: number;
   readonly exportedSeconds: number;
   /**
-   * Namen der Pools, in denen dieses Todo Mitglied ist (I-05).
+   * Namen der Pools, in denen dieses Todo **nach einer Buchung darauf** stünde
+   * (I-05).
    *
    * Kommt aus dem Dienst und wird im Add-in **nicht** nachgerechnet: Die
-   * Poolregeln lösen Ordner beliebig tief auf (A-4.3), und eine zweite Fassung
-   * dieser Auflösung im Aufgabenbereich wäre eine zweite Wahrheit über die
-   * Frage, wo ein Todo auftaucht.
+   * Poolregeln lösen Ordner beliebig tief auf (A-4.3) und urteilen seit T-076
+   * über fünf Achsen — erforderliche Tags, ausgeschlossene Tags, Status,
+   * Erledigt, Exportstatus. Eine zweite Fassung davon im Aufgabenbereich wäre
+   * eine zweite Wahrheit über die Frage, wo ein Todo auftaucht; sie liefe
+   * spätestens mit der sechsten Achse auseinander.
+   *
+   * Der Zeitpunkt ist der **nach** der Buchung, weil der Satz daraus im Futur
+   * steht (`duplicate/reopen.ts`). Für eine Regel über „Erledigt" oder den
+   * Exportstatus ist das seit T-078 ein Unterschied.
    */
   readonly poolNames: readonly string[];
+  /**
+   * Namen der Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
+   *
+   * Die andere Hälfte derselben Auskunft, und aus demselben Grund aus dem
+   * Dienst übernommen statt hier gerechnet. Fast immer leer — nur eine Regel,
+   * die nach „Erledigt" fragt, kann ein Todo durch eine Buchung verlieren.
+   */
+  readonly leavingPoolNames: readonly string[];
 }
 
 export type MatchResponseDto =
@@ -150,4 +165,6 @@ export interface BookResponseDto {
   readonly doneCleared: boolean;
   /** Pools, in denen das Todo nach der Buchung steht — beim Namen (I-05). */
   readonly poolNames: readonly string[];
+  /** Pools, aus denen die Buchung es entfernt hat — beim Namen (E-056). */
+  readonly leavingPoolNames: readonly string[];
 }

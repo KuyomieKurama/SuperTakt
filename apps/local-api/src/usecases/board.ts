@@ -121,16 +121,46 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
   return read(context, async (unit) => {
     const columns = await unit.pools.list('board');
 
-    // Erledigte Karten sind Mitglied ihrer Spalte, sie werden nur nicht
-    // gezeigt (isVisibleInPool). `onlyOpen` ist die Abfrageseite davon.
-    const filter: TodoFilter = request.includeCompleted ? {} : { onlyOpen: true };
     const pagination = request.limit === undefined ? {} : { limit: request.limit };
+
+    /**
+     * Die Ansichtseinstellung tritt zurück, wenn die Regel selbst etwas sagt
+     * (T-076).
+     *
+     * Erledigte Karten sind Mitglied ihrer Spalte, sie werden nur nicht gezeigt
+     * (`isVisibleInPool`); `onlyOpen` ist die Abfrageseite davon, und
+     * `includeCompleted` schaltet sie ab. Das galt, solange keine Spalte etwas
+     * über „Erledigt" sagen konnte.
+     *
+     * Seit T-076 kann sie es. Eine Spalte „Erledigt" (`completion: 'done'`)
+     * wäre mit `onlyOpen` obendrauf **immer leer** — zwei Bedingungen, die
+     * einander ausschließen, und die zweite hat der Benutzer nie für diese
+     * Spalte gesetzt, sondern für die Ansicht. Deshalb: Sagt die Regel etwas,
+     * entscheidet die Regel; steht sie neutral, entscheidet die Ansicht wie
+     * bisher.
+     */
+    /**
+     * Blendet diese Spalte erledigte Karten aus? (E-039, T-076)
+     *
+     * Sagt die Regel etwas über „Erledigt", steht ihre Achse in der
+     * Mitgliederabfrage und die Ansichtseinstellung tritt zurück — sonst wäre
+     * eine Spalte `completion: 'done'` unter der Vorgabe `includeCompleted =
+     * false` **immer leer**, und die zweite Bedingung hat der Benutzer nie für
+     * diese Spalte gesetzt, sondern für die Ansicht.
+     *
+     * Steht die Achse neutral, gilt alles wie vor T-076.
+     */
+    const showsCompleted = (column: Pool): boolean =>
+      column.completion !== 'any' || request.includeCompleted;
+
+    const filterFor = (column: Pool): TodoFilter =>
+      showsCompleted(column) ? {} : { onlyOpen: true };
 
     const views: BoardColumnView[] = [];
     const rules: BoardColumnRule[] = [];
 
     for (const column of columns) {
-      const page = await unit.pools.members(column.id, filter, pagination);
+      const page = await unit.pools.members(column.id, filterFor(column), pagination);
       views.push({
         column,
         todos: page.items,
@@ -144,6 +174,28 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
         // der teuerste Teil dieser Antwort; sie hängt nicht von der Karte ab.
         ruleTagIds: await unit.pools.resolveRule(column.id),
         matchMode: column.matchMode,
+        // Die drei Achsen aus T-076. Die Ausschlussliste braucht dieselbe
+        // Auflösung wie die erforderliche; die übrigen stehen am `Pool`.
+        excludedTagIds: await unit.pools.resolveExcluded(column.id),
+        ruleStatusIds: column.statusIds,
+        completion: column.completion,
+        exportState: column.exportState,
+        /**
+         * Und dieselbe Ausblendung, unter der die Abfrage gelaufen ist.
+         *
+         * Das ist der Punkt, an dem die beiden Fassungen derselben Regel
+         * auseinanderliefen, und `proof:openapi` hat es gemessen: Solange keine
+         * Spalte erledigte Karten zeigen konnte, kam eine erledigte Karte gar
+         * nicht erst in die Antwort — `onlyOpen` hielt sie aus **jeder** Spalte
+         * heraus, und `boardAppearances` bekam sie nie zu sehen. Sobald eine
+         * Spalte `completion: 'done'` trägt, wird sie geladen; und dann
+         * behauptete die Domänenregel, dieselbe Karte stehe auch in allen
+         * übrigen Spalten — dort, wo die Abfrage sie soeben ausgeblendet hatte.
+         *
+         * `appearances` sagt, wo eine Karte auf **diesem Board** steht, nicht
+         * wo sie stünde, wenn man anders hinsähe.
+         */
+        includeCompleted: showsCompleted(column),
       });
     }
 
@@ -154,11 +206,44 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
       for (const todo of view.todos) cards.set(todo.id, todo);
     }
 
+    /**
+     * Offene und exportierte Buchungen je Karte — **nur wenn danach gefragt
+     * ist** (T-076).
+     *
+     * Keine Spalte mit Exportstatus-Achse, keine Abfrage. Das ist der
+     * Normalfall und der Zustand jedes Bestands unmittelbar nach der
+     * Aktualisierung; ihn eine zusätzliche Abfrage kosten zu lassen, wäre der
+     * Preis für eine Auskunft, die niemand haben will.
+     *
+     * Und wenn gefragt ist: **eine** Abfrage für alle geladenen Karten, nicht
+     * eine je Karte (A-10.4).
+     */
+    const needsExportState = rules.some((rule) => rule.exportState !== 'any');
+    const presence = needsExportState
+      ? await unit.timeEntries.exportPresence([...cards.keys()])
+      : undefined;
+
     return {
       columns: views,
       appearances: boardAppearances(
         rules,
-        [...cards.values()].map((todo) => ({ todoId: todo.id, tagIds: todo.tagIds })),
+        [...cards.values()].map((todo) => {
+          const seen = presence?.get(todo.id);
+          return {
+            todoId: todo.id,
+            tagIds: todo.tagIds,
+            statusId: todo.statusId,
+            completedAt: todo.completedAt,
+            // Fehlt die Auskunft, bleibt das Feld weg statt auf `false` zu
+            // fallen: `matchesPool` unterscheidet „unbekannt" von „nein", und
+            // eine Spalte mit Exportstatus-Achse gibt es hier dann ohnehin
+            // nicht. Ein hingeschriebenes `false` wäre eine Behauptung über
+            // Buchungen, die niemand gelesen hat.
+            ...(presence === undefined
+              ? {}
+              : { hasOpenEntries: seen?.hasOpen === true, hasExportedEntries: seen?.hasExported === true }),
+          };
+        }),
       ),
       generatedAt,
     };
