@@ -90,6 +90,22 @@ export interface TodoMatchDto {
    */
   readonly poolNames: readonly string[];
   /**
+   * Namen der Pools, in die dieselbe Buchung das Todo **hineinbewegt**
+   * (T-084) — eine Teilmenge von `poolNames`.
+   *
+   * `poolNames` sagt, wo das Todo **danach steht**; diese Liste sagt, was sich
+   * **dadurch ändert**. Für ein erledigtes Todo ist das Erste die Auskunft, für
+   * ein offenes das Zweite: Dort wird nichts aufgehoben, und die Pools, in
+   * denen es ohnehin schon steht, sind keine Nachricht. Die erste Buchung auf
+   * einem Todo ist eine — sie setzt „hat offene Buchungen" von falsch auf wahr,
+   * und eine Spalte über den Exportstatus nimmt es damit auf.
+   *
+   * Der Unterschied wird im Dienst gerechnet und nicht hier: Er verlangt beide
+   * Zustände desselben Pools, und ein Vergleich über **Namen** ließe zwei
+   * gleichnamige Pools füreinander einstehen.
+   */
+  readonly enteringPoolNames: readonly string[];
+  /**
    * Namen der Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
    *
    * Die andere Hälfte derselben Auskunft, und aus demselben Grund aus dem
@@ -165,6 +181,13 @@ export interface BookResponseDto {
   readonly doneCleared: boolean;
   /** Pools, in denen das Todo nach der Buchung steht — beim Namen (I-05). */
   readonly poolNames: readonly string[];
+  /**
+   * Pools, in die diese Buchung es **hineinbewegt** hat — beim Namen (T-084).
+   *
+   * Teilmenge von `poolNames`. Leer heißt: Es steht danach in keinem Pool, in
+   * dem es nicht schon vorher stand.
+   */
+  readonly enteringPoolNames: readonly string[];
   /** Pools, aus denen die Buchung es entfernt hat — beim Namen (E-056). */
   readonly leavingPoolNames: readonly string[];
 }

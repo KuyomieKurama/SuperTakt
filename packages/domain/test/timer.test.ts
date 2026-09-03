@@ -35,7 +35,7 @@
 import { describe, expect, it } from 'vitest';
 import { determineReopen, decideTimerStart, decideOrphanedTimer } from '../src/time-entry.js';
 import { isVisibleInPool } from '../src/tag.js';
-import type { RunningTimeEntry, TimerStartRequest, TimerStartResult } from '../src/time-entry.js';
+import type { RunningTimeEntry, TimerStartRequest } from '../src/time-entry.js';
 import type { Timestamp, TodoId } from '../src/kernel.js';
 
 const todoId = (value: string) => value as unknown as TodoId;

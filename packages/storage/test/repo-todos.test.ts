@@ -8,8 +8,8 @@
  * einem Todo dessen Löschen verhindert.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { matchesPool } from '@takt/domain';
-import { poolAxes, poolMatchMode, resolvePoolRule } from '../src/sqlite/repo-tags.ts';
+import { matchesPool, tagAxisIsUnresolved } from '@takt/domain';
+import { poolAxes, poolMatchMode, resolvePoolAxis } from '../src/sqlite/repo-tags.ts';
 import { NOW, openTestDatabase, ts, type TestDatabase } from './support/setup.ts';
 
 /** Die mitgelieferte Standardvorlage (Migration 0002) — dieselbe Kennung wie in repo-export.test.ts. */
@@ -709,18 +709,29 @@ describe('T-076 — pools.members über die fünf Achsen einer Regel (Zusammensp
     for (const column of columns) {
       const sqlMembers = new Set((await db.unit.pools.members(column.id)).items.map((t) => t.id));
 
-      const ruleTagIds = resolvePoolRule(db.conn, column.id);
-      const excludedTagIds = resolvePoolRule(db.conn, column.id, 'excluded');
+      // Seit T-082/E-057: `resolvePoolAxis` statt der flachen `resolvePoolRule`,
+      // weil `unresolvedRequired` termweise aus `named`/`resolved`/`emptyTerms`
+      // hervorgeht (T-082-domain-dev, Abschnitt 4) — vor dieser Umstellung lief
+      // dieselbe Kreuzprüfung mit `unresolvedRequired: undefined`, also der
+      // Antwort von vor E-057, und blieb grün, weil `pools.members` denselben
+      // Fehler machte.
+      const required = resolvePoolAxis(db.conn, column.id);
+      const excluded = resolvePoolAxis(db.conn, column.id, 'excluded');
       const axes = poolAxes(db.conn, column.id);
       const matchMode = poolMatchMode(db.conn, column.id);
+      const unresolvedRequired = tagAxisIsUnresolved({
+        named: required.named,
+        resolved: required.tagIds.length,
+        emptyTerms: required.emptyFolderIds.length,
+      });
 
       for (const card of cards) {
         const cardPresence = presence.get(card.id);
         const domainVerdict = matchesPool({
           todoTagIds: card.tagIds,
-          ruleTagIds,
+          ruleTagIds: required.tagIds,
           matchMode,
-          excludedTagIds,
+          excludedTagIds: excluded.tagIds,
           todoStatusId: card.statusId,
           ruleStatusIds: axes.statusIds,
           completedAt: card.completedAt,
@@ -728,6 +739,7 @@ describe('T-076 — pools.members über die fünf Achsen einer Regel (Zusammensp
           hasOpenEntries: cardPresence?.hasOpen ?? false,
           hasExportedEntries: cardPresence?.hasExported ?? false,
           exportState: axes.exportState,
+          unresolvedRequired,
         });
 
         expect(sqlMembers.has(card.id)).toBe(domainVerdict);

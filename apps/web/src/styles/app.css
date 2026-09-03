@@ -3114,6 +3114,27 @@
   margin-top: 2px;
 }
 
+/*
+ * Ein Einrichtungsfehler in der Spaltenliste (E-057, T-083): Die Regel nennt
+ * Ordner, in denen kein Tag liegt. Eigene Zeile statt eines Anhaengsels an
+ * `.rule-row__meta` — die Meta-Zeile zaehlt auf, was ist; diese sagt, was
+ * nicht stimmt, und traegt deshalb Warnfarbe und Warndreieck.
+ */
+.rule-row__fault {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 2px;
+  color: var(--warning-fg);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-row__fault svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* Wo eine Regel erscheint (E-054). Das Wort traegt die Aussage; die Flaeche
    trennt sie nur vom Namen daneben. */
 .placement-badge {

@@ -89,26 +89,53 @@ export interface AddinUnit {
    */
   readonly tags: Pick<TagPort, 'findByKey' | 'create'>;
   /**
-   * `resolveRule` kam mit T-038 dazu, und der Zuwachs ist Absicht.
+   * Die Auflösung einer Regel kam mit T-038 dazu (damals `resolveRule`), und
+   * der Zuwachs ist Absicht.
    *
    * A-2.5 hebt „Erledigt" beim Buchen **automatisch** auf. Damit das keine
    * stille Änderung ist, muss das Add-in den Satz sagen können, den die
    * Hauptanwendung sagt: in **welchen** Pools das Todo danach wieder steht
    * (I-05). Ohne die aufgelöste Tagmenge einer Regel ließe sich das nur raten
    * — oder das Add-in müsste `pools.members(...)` bekommen, also eine Abfrage
-   * über **fremde** Todos. Das ist die weitere Fläche; `resolveRule` ist die
+   * über **fremde** Todos. Das ist die weitere Fläche; die Auflösung ist die
    * engere: Sie liest die Regel eines Pools, nie einen Bestand.
    *
-   * `resolveExcluded` kam mit T-078 dazu, und es ist **keine** Ausweitung
-   * dieser Überlegung, sondern ihre Vervollständigung. Seit T-076 hat eine
+   * Die **ausgeschlossenen** Tags kamen mit T-078 dazu, und sie sind **keine**
+   * Ausweitung dieser Überlegung, sondern ihre Vervollständigung. Seit T-076 hat eine
    * Regel zwei Taglisten: die erforderliche und die ausgeschlossene. Wer nur
    * die erste liest, beantwortet die Frage „gehört das Todo hier hinein?" mit
    * einer halben Regel und bekommt eine Antwort, die **zu viele** Pools nennt
-   * (Risiko 1 aus T-076). Die Methode liest dieselbe Art Wert aus derselben
+   * (Risiko 1 aus T-076). Die Auflösung liest dieselbe Art Wert aus derselben
    * Zeile mit derselben Auflösung über Ordner — sie sieht keine Todos, keine
    * Notizen und keinen Bestand. Ein entwendetes Add-in-Token kommt damit
    * genau um die zweite Hälfte der Regel weiter, die es zur richtigen Antwort
    * braucht, und um nichts sonst.
+   *
+   * `resolveAxes` **ersetzt** seit T-086 die beiden Methoden darüber, und das
+   * ist wieder keine Ausweitung, sondern dieselbe Bewegung ein drittes Mal:
+   * Seit E-057 ist ein Ordnerterm, der auf keinen Tag auflöst, eine
+   * Einschränkung **ohne Treffer** und keine schweigende Achse. Diese Auskunft
+   * kann eine flache Tagmenge nicht tragen — „über Tags sagt die Regel nichts"
+   * und „die Regel nennt einen leeren Ordner" ergeben beide `[]`. Wer
+   * `resolveRule` liest, bekommt deshalb die zu weite Antwort von vor E-057,
+   * und `matchesPool` verlangt seit T-082 mit `unresolvedRequired` ein Feld,
+   * das aus `resolveRule` gar nicht zu gewinnen ist.
+   *
+   * Deshalb stehen die beiden schmalen Methoden hier **nicht mehr**: Der
+   * Ausschnitt ist der Übersetzer, und der Übersetzer ist die Wache. Wer in
+   * diesem Teilbaum eine Regel auflöst, bekommt die Ordner, aus denen nichts
+   * geworden ist, unvermeidlich mit — statt sich `unresolvedRequired` aus
+   * einer Tagmenge zusammenzureimen, die die Antwort nicht kennt. Am Port
+   * (`PoolPort`) bleiben sie für Aufrufer bestehen, die wirklich nur die
+   * Tagmenge brauchen.
+   *
+   * **Die Fläche wächst dabei nicht.** `resolveAxes` liest dieselben Zeilen
+   * derselben Regel wie `resolveRule` und liefert zusätzlich
+   * **Ordnerkennungen** — und den ganzen Tag- und Ordnerbaum bekommt das
+   * Add-in ohnehin mit `folders.loadTree()` in `GET /addin/context`. Es ist
+   * dieselbe Auskunft in aufgelöster Form, keine neue Datenklasse: keine
+   * Todos, keine Notizen, kein Bestand. Es sind außerdem zwei Portaufrufe
+   * weniger je Anfrage, weil eine Antwort beide Achsen trägt.
    *
    * Die übrigen drei Achsen (`statusIds`, `completion`, `exportState`) stehen
    * am Pool selbst und kommen mit `list()`; sie brauchen keine eigene Methode.
@@ -116,7 +143,7 @@ export interface AddinUnit {
    * ohnehin schon hier steht — `TimeEntryPort.exportPresence` (T-076) wäre der
    * zweite Weg zu derselben Auskunft und bliebe deshalb draußen.
    */
-  readonly pools: Pick<PoolPort, 'list' | 'resolveRule' | 'resolveExcluded'>;
+  readonly pools: Pick<PoolPort, 'list' | 'resolveAxes'>;
   readonly statuses: Pick<TodoStatusPort, 'list' | 'defaultStatus'>;
   readonly defaultTags: Pick<DefaultTagPort, 'list'>;
   readonly timeEntries: Pick<TimeEntryPort, 'create' | 'sumSeconds'>;

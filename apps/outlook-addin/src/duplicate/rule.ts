@@ -33,6 +33,7 @@
 
 import { checkCallNumber, type CallNumberRejection } from '@takt/domain';
 import type { TodoMatchDto } from '../api/types.ts';
+import type { PoolMovement } from './reopen.ts';
 
 export type LookupDecision =
   | { readonly kind: 'lookup'; readonly callNumber: string }
@@ -77,6 +78,17 @@ export interface OfferDescription {
    * Tags (T-078).
    */
   readonly poolNames: readonly string[];
+  /**
+   * Die Pools, in die dieselbe Buchung es **hineinbewegt** — beim Namen
+   * (T-084). Teilmenge von `poolNames`.
+   *
+   * Gehört ebenfalls zum Angebot, und zwar für den **häufigeren** Fall: Das
+   * gefundene Todo ist meistens nicht erledigt, und dann gibt es nichts
+   * aufzuheben und nichts anzukündigen — außer dieser einen Bewegung. Die
+   * erste Buchung auf einem Todo hebt es in jede Spalte, die nach offener,
+   * noch nicht abgerechneter Zeit fragt.
+   */
+  readonly enteringPoolNames: readonly string[];
   /**
    * Die Pools, aus denen dieselbe Buchung es **entfernt** — beim Namen
    * (E-056).
@@ -129,6 +141,7 @@ export const describeOffer = (match: TodoMatchDto): OfferDescription | null => {
     openSeconds: match.openSeconds,
     exportedSeconds: match.exportedSeconds,
     poolNames: match.poolNames,
+    enteringPoolNames: match.enteringPoolNames,
     leavingPoolNames: match.leavingPoolNames,
     summary: `${parts.join(' · ')}.`,
   };
@@ -143,3 +156,19 @@ export const describeOffer = (match: TodoMatchDto): OfferDescription | null => {
  */
 export const describeOffers = (matches: readonly TodoMatchDto[]): readonly OfferDescription[] =>
   matches.map(describeOffer).filter((offer): offer is OfferDescription => offer !== null);
+
+/**
+ * Die drei Poollisten eines Angebots als **ein** Wert (T-084).
+ *
+ * Steht hier und nicht im Aufgabenbereich, damit es sie genau einmal gibt. Die
+ * drei Listen sind gleich getippt; wer sie an zwei Stellen einzeln zuweist,
+ * hat zwei Gelegenheiten, `enters` und `leaves` zu vertauschen — und bekäme
+ * einen Satz, der sich fehlerfrei liest und das Gegenteil behauptet. Der
+ * Nachweispfad baut denselben Wert über dieselbe Funktion und misst damit die
+ * Zusammensetzung mit, die der Aufgabenbereich benutzt.
+ */
+export const offerMovement = (offer: OfferDescription): PoolMovement => ({
+  appears: offer.poolNames,
+  enters: offer.enteringPoolNames,
+  leaves: offer.leavingPoolNames,
+});

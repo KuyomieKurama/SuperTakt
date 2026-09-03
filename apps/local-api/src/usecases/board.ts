@@ -172,11 +172,15 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
       // der teuerste Teil dieser Antwort; sie hängt nicht von der Karte ab.
       // Seit T-080 wird sie zweimal gelesen — für die Mehrfachnennung unten und
       // für die Auskunft an der Spalte — und **einmal** geholt.
-      const ruleTagIds = await unit.pools.resolveRule(column.id);
-      // Die Ausschlussliste braucht dieselbe Auflösung wie die erforderliche.
-      const excludedTagIds = await unit.pools.resolveExcluded(column.id);
+      // Beide Achsen in einem Aufruf — samt der Ordner, aus denen kein Tag
+      // geworden ist (E-057). Ohne diese Auskunft nennte `boardAppearances`
+      // eine Spalte, aus der die Abfrage die Karte soeben herausgehalten hat.
+      const axes = await unit.pools.resolveAxes(column.id);
+      const ruleTagIds = axes.required.tagIds;
+      const excludedTagIds = axes.excluded.tagIds;
+      const view = poolWithResolution(column, axes);
       views.push({
-        column: poolWithResolution(column, ruleTagIds, excludedTagIds),
+        column: view,
         todos: page.items,
         nextCursor: page.nextCursor,
         total: page.total,
@@ -190,6 +194,19 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
         ruleStatusIds: column.statusIds,
         completion: column.completion,
         exportState: column.exportState,
+        /**
+         * Und die Auskunft, die `ruleTagIds` nicht tragen kann (E-057).
+         *
+         * Ein Ordner ohne Tags löst zu `[]` auf — und eine leere Tagliste ist
+         * der Neutralwert der Achse. Ohne diese Zeile nennte `boardAppearances`
+         * eine Spalte, aus der die Abfrage (`pools.members`) die Karte soeben
+         * herausgehalten hat: dieselbe Karte, zwei Antworten. Genau so hat der
+         * Fehler vor T-082 ausgesehen.
+         *
+         * Sie kostet nichts: Die Auflösung steht schon in `view.resolved`, weil
+         * die Spalte sie ohnehin ausliefert.
+         */
+        unresolvedRequired: view.resolved.unresolvedRequired,
         /**
          * Und dieselbe Ausblendung, unter der die Abfrage gelaufen ist.
          *

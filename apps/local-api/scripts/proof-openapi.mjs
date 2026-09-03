@@ -91,7 +91,12 @@ import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
-import { POOL_RULE_AXIS_IDS, poolRuleIsEmpty } from '@takt/domain';
+import {
+  POOL_RULE_AXIS_IDS,
+  poolRuleIsEmpty,
+  poolRuleMatchesNothing,
+  tagAxisIsUnresolved,
+} from '@takt/domain';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
@@ -1347,7 +1352,11 @@ for (const pool of deliveredPools) {
   if (
     typeof resolved?.tagCount !== 'number' ||
     typeof resolved?.excludedTagCount !== 'number' ||
-    typeof resolved?.isEmpty !== 'boolean'
+    typeof resolved?.isEmpty !== 'boolean' ||
+    typeof resolved?.unresolvedRequired !== 'boolean' ||
+    typeof resolved?.unresolvedExcluded !== 'boolean' ||
+    typeof resolved?.matchesNothing !== 'boolean' ||
+    !Array.isArray(resolved?.emptyRuleFolderIds)
   ) {
     deliveryGaps.push(`${pool.name}.resolved`);
   }
@@ -1466,6 +1475,256 @@ check(
   `jede einzelne Achse hebt die Leere auf, und keine ohne (${POOL_RULE_AXIS_IDS.join(', ')})`,
   blind.length === 0 && poolRuleIsEmpty(neutral) === true,
   blind.length > 0 ? `wirkungslos: ${blind.join(', ')}` : 'die neutrale Regel gilt nicht als leer',
+);
+
+// ---------------------------------------------------------------------------
+section('14  Ein Ordnerterm ohne Tags trifft nichts, statt zu verschwinden (E-057)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund aus T-080, den T-082 behebt.
+ *
+ * Eine leere Tagmenge war der **Neutralwert** der Achse: Wer nichts über Tags
+ * sagte, bekam sie übersprungen. Ein Ordner, in dem kein Tag liegt, löst
+ * ebenfalls auf die leere Menge auf — und verschwand damit aus der Regel.
+ * „Tags aus Ordner X **und** Status offen" wurde zu „Status offen". Die Regel
+ * traf **mehr**, als der Benutzer gesagt hatte, und das ist die Richtung, die
+ * niemandem auffällt: Eine Spalte, die zu viel zeigt, sieht aus wie eine volle
+ * Spalte.
+ *
+ * Bei einer Regel, die **nur** aus dem Ordnerterm besteht, fiel es nicht auf —
+ * sie ist nach dem Auflösen leer und trifft schon deshalb nichts (A-3.4,
+ * Abschnitt 13). Gemessen wird hier deshalb der **gemischte** Fall, und die
+ * Gegenprobe daneben ist die andere Hälfte von E-057: Ein Ausschluß über
+ * denselben leeren Ordner schließt nichts aus.
+ */
+
+const mixedBarren = columnsByName.get(BOARD_COLUMNS.emptyFolderAndStatus);
+check(
+  'ein leerer Ordner **neben** einer zweiten Achse läßt die Regel nichts treffen',
+  mixedBarren !== undefined &&
+    mixedBarren.column.rule.length === 1 &&
+    mixedBarren.column.statusIds.length === 1 &&
+    // Nach dem Auflösen bleibt die Statusachse stehen: Diese Regel ist **nicht**
+    // leer, und bis T-082 hätte sie deshalb nach dem Status gefiltert.
+    mixedBarren.column.resolved.isEmpty === false &&
+    mixedBarren.column.resolved.tagCount === 0 &&
+    mixedBarren.column.resolved.unresolvedRequired === true &&
+    mixedBarren.column.resolved.matchesNothing === true &&
+    mixedBarren.total === 0,
+  JSON.stringify({
+    terme: mixedBarren?.column?.rule?.length,
+    status: mixedBarren?.column?.statusIds?.length,
+    aufgeloest: mixedBarren?.column?.resolved,
+    karten: mixedBarren?.total,
+  }),
+);
+
+/*
+ * Und die Gegenprobe, ohne die die Prüfung darüber auch an einer Spalte grün
+ * wäre, deren Status ohnehin niemand trägt: **derselbe** Status, allein
+ * genannt, führt zwei Karten. Der leere Ordner ist also das einzige, was die
+ * Spalte darüber leer macht.
+ */
+const statusColumn = columnsByName.get(BOARD_COLUMNS.status);
+check(
+  `derselbe Status ohne den leeren Ordner führt Karten (${statusColumn?.total ?? 0})`,
+  statusColumn !== undefined &&
+    mixedBarren !== undefined &&
+    statusColumn.total >= 2 &&
+    JSON.stringify(statusColumn.column.statusIds) === JSON.stringify(mixedBarren.column.statusIds),
+  JSON.stringify({
+    nurStatus: statusColumn?.column?.statusIds,
+    mitLeeremOrdner: mixedBarren?.column?.statusIds,
+    karten: statusColumn?.total,
+  }),
+);
+
+/*
+ * Die andere Hälfte von E-057: **Ausgeschlossene** Tags über einen leeren
+ * Ordner schließen nichts aus. „Keiner davon" über nichts läßt in Ruhe, statt
+ * einzuengen — die Spalte führt deshalb genau dieselben Karten wie die Spalte
+ * über dasselbe Tag ohne den Ausschluß.
+ *
+ * Diese Prüfung ist die, die eine zu grobe Behebung fängt: Wer „eine Tagachse
+ * ohne Auflösung trifft nichts" auf **beide** Listen anwendet, macht diese
+ * Spalte leer, und dann steht hier eine Abweichung.
+ */
+const excludedBarren = columnsByName.get(BOARD_COLUMNS.excludedEmptyFolder);
+const idsOf = (entry) => [...new Set((entry?.todos ?? []).map((todo) => todo.id))].sort().join(', ');
+check(
+  `ein Ausschluß über einen leeren Ordner schließt nichts aus (${excludedBarren?.total ?? 0} Karten)`,
+  excludedBarren !== undefined &&
+    excludedBarren.column.excludedTags.length === 1 &&
+    excludedBarren.column.resolved.excludedTagCount === 0 &&
+    excludedBarren.column.resolved.unresolvedExcluded === true &&
+    excludedBarren.column.resolved.unresolvedRequired === false &&
+    excludedBarren.column.resolved.matchesNothing === false &&
+    excludedBarren.total >= 2 &&
+    idsOf(excludedBarren) === idsOf(columnsByName.get(BOARD_COLUMNS.tag)),
+  JSON.stringify({
+    aufgeloest: excludedBarren?.column?.resolved,
+    mitAusschluss: idsOf(excludedBarren),
+    ohneAusschluss: idsOf(columnsByName.get(BOARD_COLUMNS.tag)),
+  }),
+);
+
+/*
+ * **Der Fall, den die Achsensumme nicht sieht** (E-057, termweise).
+ *
+ * Ein Tagterm **neben** dem leeren Ordner, im Modus „mindestens eines davon":
+ * `resolved.tagCount` ist positiv, die Achse sieht also gesund aus, und der
+ * leere Ordner ist in der Summe nicht mehr zu erkennen. Achsenweise gemessen
+ * bliebe er unsichtbar — die Spalte zeigte die Tag-Karten, niemandem fiele auf,
+ * daß der Ordner leer ist, und sobald jemand einen Tag hineinlegt, änderte sich
+ * die Spalte ohne ersichtlichen Grund.
+ *
+ * `emptyRuleFolderIds` ist die Auskunft, mit der die Oberfläche **welcher**
+ * Ordner sagen kann und nicht nur **ein** Ordner. Geprüft wird deshalb auch,
+ * daß darin die Kennung aus der Regel steht und keine andere.
+ */
+const mixedTerms = columnsByName.get(BOARD_COLUMNS.tagOrEmptyFolder);
+const namedFolderIds = (pool) =>
+  (pool?.rule ?? []).filter((term) => term.kind === 'folder').map((term) => term.folderId);
+check(
+  'ein leerer Ordner **neben** einem Tagterm bleibt sichtbar und läßt die Regel nichts treffen',
+  mixedTerms !== undefined &&
+    mixedTerms.column.rule.length === 2 &&
+    mixedTerms.column.matchMode === 'any' &&
+    // Der Tagterm steuert seinen Tag bei: Die Achsensumme ist positiv, und
+    // genau deshalb taugt sie hier nicht als Erkennung.
+    mixedTerms.column.resolved.tagCount === 1 &&
+    mixedTerms.column.resolved.isEmpty === false &&
+    mixedTerms.column.resolved.unresolvedRequired === true &&
+    mixedTerms.column.resolved.matchesNothing === true &&
+    JSON.stringify(mixedTerms.column.resolved.emptyRuleFolderIds) ===
+      JSON.stringify(namedFolderIds(mixedTerms.column)) &&
+    mixedTerms.total === 0,
+  JSON.stringify({
+    terme: mixedTerms?.column?.rule?.length,
+    modus: mixedTerms?.column?.matchMode,
+    aufgeloest: mixedTerms?.column?.resolved,
+    genannteOrdner: namedFolderIds(mixedTerms?.column),
+    karten: mixedTerms?.total,
+  }),
+);
+
+/*
+ * Die Gegenprobe: **derselbe** Tagterm ohne den leeren Ordner führt Karten. Ohne
+ * sie wäre die Prüfung darüber auch dann grün, wenn das Tag niemandem gehörte.
+ */
+check(
+  `derselbe Tagterm ohne den leeren Ordner führt Karten (${columnsByName.get(BOARD_COLUMNS.tag)?.total ?? 0})`,
+  (columnsByName.get(BOARD_COLUMNS.tag)?.total ?? 0) >= 2 &&
+    JSON.stringify((columnsByName.get(BOARD_COLUMNS.tag)?.column?.rule ?? []).filter((t) => t.kind === 'tag')) ===
+      JSON.stringify((mixedTerms?.column?.rule ?? []).filter((t) => t.kind === 'tag')),
+  JSON.stringify({
+    nurTag: columnsByName.get(BOARD_COLUMNS.tag)?.column?.rule,
+    mitLeeremOrdner: mixedTerms?.column?.rule,
+  }),
+);
+
+/*
+ * Und die Ordner der **Ausschlußliste** stehen nicht darin — auch dann nicht,
+ * wenn sie leer sind (E-057). Sie schließen nichts aus, also folgt aus ihnen
+ * keine Handlung, und eine Kennung ohne Handlung wäre eine Anzeige ohne Sinn.
+ */
+check(
+  'ein leerer Ordner in der Ausschlußliste steht nicht bei den erforderlichen',
+  excludedBarren !== undefined && excludedBarren.column.resolved.emptyRuleFolderIds.length === 0,
+  JSON.stringify(excludedBarren?.column?.resolved),
+);
+
+/*
+ * **Domäne gegen Dienst**, über die Leitung. Die ausgelieferte Auflösung trägt
+ * alles, was `poolRuleMatchesNothing` braucht; die Antwort muß dieselbe sein.
+ * Läuft eine der beiden Seiten weg, steht es hier — für **jede** ausgelieferte
+ * Regel und nicht nur für die beiden von oben.
+ */
+const asResolvedAxes = (pool) => ({
+  // Die Länge ist alles, was die Frage von den Listen liest (siehe
+  // `PoolRuleAxes`), und die Länge steht in der Auflösung.
+  rule: Array.from({ length: pool.resolved.tagCount }, () => null),
+  excludedTags: Array.from({ length: pool.resolved.excludedTagCount }, () => null),
+  statusIds: pool.statusIds,
+  completion: pool.completion,
+  exportState: pool.exportState,
+  unresolvedRequired: pool.resolved.unresolvedRequired,
+});
+
+/** Dieselbe Achse, wie `tagAxisIsUnresolved` sie liest — termweise. */
+const asRequiredAxis = (pool) => ({
+  named: (pool.rule ?? []).length,
+  resolved: pool.resolved.tagCount,
+  emptyTerms: pool.resolved.emptyRuleFolderIds.length,
+});
+
+const verdictProblems = [];
+for (const pool of deliveredPools) {
+  const domain = poolRuleMatchesNothing(asResolvedAxes(pool));
+  if (domain !== pool.resolved.matchesNothing) {
+    verdictProblems.push(`${pool.name}: Domäne ${domain}, Dienst ${pool.resolved.matchesNothing}`);
+  }
+  const unresolved = tagAxisIsUnresolved(asRequiredAxis(pool));
+  if (unresolved !== pool.resolved.unresolvedRequired) {
+    verdictProblems.push(
+      `${pool.name}: ${JSON.stringify(asRequiredAxis(pool))}, geliefert ${pool.resolved.unresolvedRequired}`,
+    );
+  }
+  // Und die Kennungen selbst: Was als leer gemeldet wird, muß in der Regel
+  // stehen — sonst nennt die Oberfläche einen Ordner, den niemand gewählt hat.
+  const named = new Set(namedFolderIds(pool));
+  for (const folderId of pool.resolved.emptyRuleFolderIds) {
+    if (!named.has(folderId)) verdictProblems.push(`${pool.name}: fremder Ordner ${folderId}`);
+  }
+}
+check(
+  `Domäne und Dienst urteilen gleich über „trifft nichts" (${deliveredPools.length} Regeln)`,
+  verdictProblems.length === 0,
+  verdictProblems.slice(0, 6).join(' | '),
+);
+
+/*
+ * Und die fachliche Folge, gemessen an der Zahl aus der **Abfrage** — der
+ * dritten Fassung derselben Regel, die in `packages/storage` steht.
+ *
+ * Die zweite Bedingung ist der Grund, warum dieser Abschnitt auf dem Stand vor
+ * T-082 rot wäre und nicht nur grün ohne Aussage: Es muß mindestens eine Spalte
+ * geben, die nichts trifft, **obwohl** nach dem Auflösen noch eine Bedingung
+ * dasteht. Genau die gab es vorher nicht.
+ */
+const matchingNothingButFull = [];
+let unresolvedButNotEmpty = 0;
+for (const entry of board?.columns ?? []) {
+  const resolved = entry.column.resolved;
+  if (resolved.matchesNothing && entry.total !== 0) {
+    matchingNothingButFull.push(`${entry.column.name}: ${entry.total} Karten`);
+  }
+  if (resolved.matchesNothing && !resolved.isEmpty) unresolvedButNotEmpty += 1;
+}
+check(
+  `was nichts trifft, hat keine Mitglieder — und es gibt den Fall „nicht leer und trotzdem nichts" (${unresolvedButNotEmpty})`,
+  matchingNothingButFull.length === 0 && unresolvedButNotEmpty >= 1,
+  matchingNothingButFull.join(' | ') || 'kein gemischter Fall im Bestand — die Prüfung mißt nichts',
+);
+
+/*
+ * Der Prüfer prüft sich selbst. `named > 0 && resolved === 0` ist die Art
+ * Bedingung, die man beim zweiten Hinschreiben umdreht; hier stehen alle vier
+ * Ecken.
+ */
+check(
+  'die Ableitung „genannt, aber nichts daraus geworden" gilt in genau einer Ecke',
+  tagAxisIsUnresolved({ named: 1, resolved: 0, emptyTerms: 1 }) === true &&
+    tagAxisIsUnresolved({ named: 0, resolved: 0, emptyTerms: 0 }) === false &&
+    tagAxisIsUnresolved({ named: 1, resolved: 1, emptyTerms: 0 }) === false &&
+    tagAxisIsUnresolved({ named: 0, resolved: 3, emptyTerms: 0 }) === false &&
+    // Der termweise Fall: Die Summe ist positiv, ein Term trotzdem leer.
+    tagAxisIsUnresolved({ named: 2, resolved: 1, emptyTerms: 1 }) === true &&
+    // Und das Netz für eine Termart, die ins Leere zeigt, ohne ein Ordner zu
+    // sein: Die Achse geht leer aus, obwohl kein leerer Ordner gezählt wurde.
+    tagAxisIsUnresolved({ named: 1, resolved: 0, emptyTerms: 0 }) === true,
+  'die Ableitung urteilt nicht wie E-057',
 );
 
 // ---------------------------------------------------------------------------

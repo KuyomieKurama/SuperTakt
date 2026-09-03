@@ -787,6 +787,21 @@ export function createPoolPort(
     },
 
     /**
+     * Beide Achsen samt der Ordner, aus denen nichts geworden ist (E-057).
+     *
+     * Dieselbe Auflösung wie die beiden Methoden darüber — sie rufen dieselbe
+     * Funktion —, nur mit der Auskunft, die eine Tagmenge nicht tragen kann.
+     */
+    async resolveAxes(id) {
+      const required = resolvePoolAxis(conn, id);
+      const excluded = resolvePoolAxis(conn, id, 'excluded');
+      return {
+        required: { tagIds: required.tagIds, emptyFolderIds: required.emptyFolderIds },
+        excluded: { tagIds: excluded.tagIds, emptyFolderIds: excluded.emptyFolderIds },
+      };
+    },
+
+    /**
      * Mitglieder eines Pools — abgeleitet, nicht gespeichert.
      *
      * Die Abfrage geht über `TodoPort.search`, damit Pool-Ansicht und Liste
@@ -819,8 +834,45 @@ export function resolvePoolRule(
   poolId: PoolId | string,
   role: 'required' | 'excluded' = 'required',
 ): readonly TagId[] {
+  return resolvePoolAxis(conn, poolId, role).tagIds;
+}
+
+/**
+ * Was aus einer Tagachse geworden ist — die Tags, die Zahl der Terme **und**
+ * die Ordner, aus denen nichts geworden ist (E-057).
+ *
+ * Der Zusatz gegenüber {@link resolvePoolRule} ist der Grund für E-057: Aus
+ * `tagIds` allein läßt sich nicht ablesen, ob ein genannter Ordner etwas
+ * beigetragen hat. Zwei Zustände sehen dort gleich aus —
+ *
+ *   „über Tags sagt diese Regel nichts"      → Neutralwert, die übrigen Achsen
+ *                                              entscheiden
+ *   „Ordner Ost genannt, Ost ist leer"       → Einschränkung ohne Treffer, die
+ *                                              Regel trifft nichts
+ *
+ * — und der zweite verschwindet vollends, sobald daneben ein Tagterm steht:
+ * Dann ist `tagIds` gefüllt, und die achsenweise Summe verrät den leeren Ordner
+ * nicht mehr. Deshalb wird **je Ordnerterm** gezählt.
+ *
+ * Es kostet keine zweite Abfrage: Die Terme werden hier ohnehin gelesen, und
+ * die rekursive Auflösung trägt die Wurzel, von der sie ausgegangen ist, in
+ * derselben Zeile mit. Beurteilt wird nichts davon hier, sondern in der Domäne
+ * (`tagAxisIsUnresolved`) — diese Datei liest, sie entscheidet nicht.
+ */
+export function resolvePoolAxis(
+  conn: SqlConnection,
+  poolId: PoolId | string,
+  role: 'required' | 'excluded' = 'required',
+): {
+  readonly named: number;
+  readonly tagIds: readonly TagId[];
+  readonly emptyFolderIds: readonly TagFolderId[];
+} {
   const pool = conn.prepare('SELECT include_subfolders FROM pool WHERE id = ?').get(poolId);
-  if (pool === undefined) return [];
+  // Eine Regel, die es nicht gibt, nennt auch nichts: `named: 0`. Sie ist damit
+  // eine leere Regel und keine Einschränkung ohne Treffer — sie trifft nichts,
+  // aber aus dem Grund aus A-3.4 und nicht aus dem aus E-057.
+  if (pool === undefined) return { named: 0, tagIds: [], emptyFolderIds: [] };
   const includeSubfolders = integer(pool, 'include_subfolders') !== 0;
 
   const terms = conn
@@ -837,30 +889,57 @@ export function resolvePoolRule(
       continue;
     }
     const folderId = term['folder_id'];
-    if (typeof folderId === 'string') folderIds.push(folderId);
+    // Zweimal derselbe Ordner ist ein Ordner: Sonst stünde er in der Auskunft
+    // an die Oberfläche doppelt.
+    if (typeof folderId === 'string' && !folderIds.includes(folderId)) folderIds.push(folderId);
   }
 
+  const emptyFolderIds: string[] = [];
+
   if (folderIds.length > 0) {
+    // `root` ist der Ordner **aus der Regel**, `id` der Tag, der über ihn
+    // hereinkommt — auch aus beliebig tiefen Unterordnern. Ohne diese Spalte
+    // wüßte der Aufrufer nur, wie viele Tags insgesamt herausgekommen sind,
+    // und ein leerer Ordner neben einem gefüllten bliebe unsichtbar.
     const rows = includeSubfolders
       ? conn
           .prepare(
-            `WITH RECURSIVE down(id, depth) AS (
-                 SELECT f.id, 0 FROM tag_folder f WHERE f.id IN (${placeholders(folderIds.length)})
+            `WITH RECURSIVE down(root, id, depth) AS (
+                 SELECT f.id, f.id, 0 FROM tag_folder f WHERE f.id IN (${placeholders(folderIds.length)})
                  UNION
-                 SELECT f.id, down.depth + 1
+                 SELECT down.root, f.id, down.depth + 1
                    FROM tag_folder f JOIN down ON f.parent_id = down.id
                   WHERE down.depth < 1000
                )
-               SELECT t.id FROM tag t JOIN down ON t.folder_id = down.id`,
+               SELECT down.root AS root, t.id AS id FROM tag t JOIN down ON t.folder_id = down.id`,
           )
           .all(...folderIds)
       : conn
-          .prepare(`SELECT id FROM tag WHERE folder_id IN (${placeholders(folderIds.length)})`)
+          .prepare(
+            `SELECT folder_id AS root, id FROM tag WHERE folder_id IN (${placeholders(folderIds.length)})`,
+          )
           .all(...folderIds);
-    for (const row of rows) tagIds.add(text(row, 'id'));
+
+    const filled = new Set<string>();
+    for (const row of rows) {
+      tagIds.add(text(row, 'id'));
+      filled.add(text(row, 'root'));
+    }
+    // Die Reihenfolge ist die der Regel und nicht die der Abfrage: Die
+    // Oberfläche nennt die Ordner in derselben Folge, in der sie im Formular
+    // stehen.
+    for (const folderId of folderIds) {
+      if (!filled.has(folderId)) emptyFolderIds.push(folderId);
+    }
   }
 
-  return [...tagIds] as TagId[];
+  // `named` zählt die **Terme**, nicht die Tags: Ein Ordnerterm ist eine
+  // genannte Bedingung, gleich wie viele Tags er ergibt — auch keinen.
+  return {
+    named: terms.length,
+    tagIds: [...tagIds] as TagId[],
+    emptyFolderIds: emptyFolderIds as TagFolderId[],
+  };
 }
 
 /** Der Modus einer Pool-Regel. Für die Filterübersetzung in `repo-todos.ts`. */

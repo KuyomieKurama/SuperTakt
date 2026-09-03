@@ -55,7 +55,37 @@ Sekunden, ganzer Durchlauf 71.
 
 | Nr | Aufgabe | Wer |
 |---|---|---|
-| T-080 | `poolRuleIsEmpty` in die Domäne — die Oberfläche baut die Bedingung aus `matchesPool` nach (**achte Doppelung derselben Fachregel**). Dazu aufgelöste Tagzahl am Pool, `NEVER_SENT` aufräumen | domain-dev |
+| ~~T-080~~ | **fertig.** Es waren **drei** Fassungen, nicht zwei — Domäne, SQL, Oberfläche. Alle fragen `poolRuleIsEmpty`; sechste Achse gibt sechs Typfehler in drei Paketen. Committet als `a2d74ef` | domain-dev |
+
+**Nebenbefund aus T-080, schwerer als der Anlass:** Ein Ordnerterm über einen leeren Ordner
+verschwindet in `matchesPool` als Neutralwert. „Tags aus Ordner X **und** Status offen" wird zu
+„Status offen" — die Regel trifft **mehr**, als der Benutzer gesagt hat. Entschieden als **E-057**:
+Einschränkung ohne Treffer, die Regel trifft nichts.
+
+### Welle vom 2026-09-03, dritte Runde
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-082~~ | **braucht Review.** `poolRuleMatchesNothing` in Domäne und SQL, termweise; `unresolvedRequired` Pflicht; `resolved.emptyRuleFolderIds`. Nebenfund: `buildConditions` hängte Parameter an, bevor feststand, ob ihre Bedingung im Text landet — mit E-057 wären alle folgenden Werte verrutscht. Behoben. Kein bestehender Prüffall wäre rot geworden (beide Seiten hatten denselben Fehler); `pnpm check` rot an genau `routes/addin/service.ts:326` | domain-dev |
+| ~~T-083~~ | **fertig.** `countConditions` gelöscht, Domäne gefragt; drei Leerzustände an sechs Flächen. Befund: `resolved.tagCount` ist achsenweise, E-057 termweise — im gemischten Fall unsichtbar. An T-082 weitergegeben: `emptyRuleFolderIds` | frontend-dev |
+| ~~T-084~~ | **fertig.** Dritte Liste `enters` neben `appears`/`leaves`, `proof:addin` 112 auf 117. Befund: `matchesPool` hat ein neues **freiwilliges** Feld, `poolNamer` gibt es nicht mit — T-078-Falle ein zweites Mal. An T-082: Feld wird Pflicht | integration-dev |
+| ~~T-085~~ | **fertig.** `forbidOnly` greift — nachgewiesen mit temporärem `.only` unter `CI=1`. Erster Lauf 30/3/1 durch Last paralleler Agenten, zweiter 34/34 | e2e-tester |
+
+### Welle vom 2026-09-03, vierte Runde (Nachwelle zu T-082)
+
+Vorab durch den Orchestrator: Testdateien wurden von `pnpm typecheck` nicht erfaßt — die
+Paket-`tsconfig`s stehen auf `include: ["src"]`, Vitest prüft keine Typen. Das Pflichtfeld
+`unresolvedRequired` erzwang in den Tests also nichts. Neu: `tsconfig.test.json` in domain,
+storage, export und `typecheck:test` in `typecheck`. Erste Messung: 62 Typfehler in Tests, davon
+31 fehlende `unresolvedRequired` in `board.test.ts`/`tags-and-pools.test.ts` und einer in der
+Kreuzprüfung `repo-todos.test.ts:719` — die lief bislang mit `undefined`.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-086~~ | **fertig.** `poolNamer` über `resolveAxes`, ein Portaufruf statt zweier; `resolveRule`/`resolveExcluded` aus dem Add-in-Ausschnitt entfernt (kein Aufrufer mehr). `proof:addin` 117 auf 123, drei Mutationen gegengemessen. `pnpm run typecheck` Exitcode 0. Nachtrag für domain-dev: Kommentar an `ports.ts` nennt einen Aufrufer in `routes/addin`, den es nicht mehr gibt | integration-dev |
+| ~~T-087~~ | **fertig.** `describeRuleReach` über `unresolvedRequired` + `emptyRuleFolderIds`, Chip statt Achse markiert; `unresolvedExcluded` als Hinweis. `matchesNothing` bewusst nicht als Ganzes gelesen (vermischt Regelterme mit allen Achsen — im Formular stünde „trifft nichts" am Entwurf). Vorschlag an domain-dev: `matchesNothingReason` als Aufzählung statt weiterer Wahrheitswerte. E2E 34/34 | frontend-dev |
+| ~~T-088~~ | **fertig.** `typecheck:test` 62 auf 0; vier T-082-Fälle je als reine Funktion und gegen SQL, mit Gegenprobe und bewusst falscher Vergleichsfunktion statt Gleichheitstest. 595 Fälle grün, 80 % gehalten. Nebenfund: `pnpm --filter <paket> test` lief lautlos leer (kein Skript) — Orchestrator hat `test`-Skripte in den drei Paketen nachgetragen | unit-tester |
+
 | ~~T-081~~ | **fertig.** 3 gegenstandslose Fälle gelöscht, 4 neue; dazu 2 Fälle in anderen Dateien repariert, die dieselbe Umstellung gebrochen hatte. **34/34** | e2e-tester |
 
 T-080 wurde mit HTTP 529 abgebrochen und per Nachricht fortgesetzt, nicht neu gestartet.
@@ -79,8 +109,7 @@ hat.
 | O-C | `GET /settings` belegt keine Merkmale zum Datenbankpfad, anders als beim Exportordner | domain-dev |
 | O-D | `Pool.rule` heißt weiter `rule`, enthält aber nur noch die erforderlichen Tags. Umbenennen berührt drei Hoheiten — eigene Aufgabe | Orchestrator |
 | O-F | **Nachlauf offen:** `proof:access`, `export-api`, `addin-wiring`, `tags`, `conflicts` konnten in T-078 nicht laufen — Port 17843 war von der Arbeitsumgebung der parallelen Aufgabe belegt. Der Agent hat nicht abgeschossen, was ihm nicht gehört. Eine Minute Nachlauf, sobald der Port frei ist | Orchestrator |
-| O-G | Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
-| O-H | `forbidOnly: CI` stand nur in der gelöschten Wurzel-Config. In `tests/e2e/playwright.config.ts` nachtragen — ein vergessenes `test.only` soll im Bauserver rot sein, nicht still 33 Fälle überspringen | e2e-tester |
+| ~~O-G~~ | *läuft als T-084.* Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
 | O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
 | O-D | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
 | O-G | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |

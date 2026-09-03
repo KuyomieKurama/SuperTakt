@@ -95,7 +95,9 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Zyklusprüfung beim Verschieben | `tag.ts` → `checkFolderMove` | A-4.6, E-022 |
 | Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `tag.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
 | Nennt eine Regel überhaupt eine Bedingung? | `tag.ts` → `poolRuleIsEmpty` | A-3.4, E-055, T-080 |
-| Was eine Regel nach dem Auflösen ergibt | `tag.ts` → `resolvePool` | T-080 |
+| Trifft eine Regel von vornherein nichts? | `tag.ts` → `poolRuleMatchesNothing` | A-3.4, E-057, T-082 |
+| Zeigt eine Tagachse nach dem Auflösen ins Leere? | `tag.ts` → `tagAxisIsUnresolved` | E-057, T-082 |
+| Was eine Regel nach dem Auflösen ergibt | `tag.ts` → `resolvePool` | T-080, E-057 |
 | Dieselbe Karte in mehreren Kanban-Spalten | `board.ts` → `boardAppearances` | E-054 |
 | Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
@@ -121,9 +123,33 @@ hätte den gespeicherten Pool beantwortet und den Entwurf nicht, und die Oberfl�
 Entwurf doch wieder selbst gerechnet.
 
 Was der Aufrufer **nicht** selbst wissen kann, ist die Auflösung der Ordner. Sie steht deshalb
-als `resolved` an jeder ausgelieferten Regel (`PoolWithResolution`): zwei Zahlen und ein
-Wahrheitswert. Ohne sie sieht ein Ordner ohne Tags aus wie eine Regel, auf die im Augenblick
+als `resolved` an jeder ausgelieferten Regel (`PoolWithResolution`): zwei Zahlen und vier
+Wahrheitswerte. Ohne sie sieht ein Ordner ohne Tags aus wie eine Regel, auf die im Augenblick
 nichts passt — und nur der erste Fall ist ein Einrichtungsfehler, der von selbst nie vergeht.
+
+**Die vierte und fünfte Zeile sind mit T-082 dazugekommen, und sie beheben den Befund aus T-080.**
+Eine leere Tagmenge galt als Neutralwert der Achse. Ein Ordnerterm über einen leeren Ordner löste
+auf die leere Menge auf und **verschwand damit aus der Regel**: „Tags aus Ordner X **und** Status
+offen" wurde zu „Status offen", in `matchesPool` wie in der Übersetzung nach SQL. Die Regel traf
+mehr, als der Benutzer gesagt hatte — die Richtung, die niemandem auffällt.
+
+Seit E-057 ist ein solcher Term eine **Einschränkung ohne Treffer**: Die Regel trifft nichts,
+unabhängig vom Modus und von den übrigen Achsen. Entschieden wird das in
+`poolRuleMatchesNothing`, und beide Fassungen der Regel rufen es auf — die Domäne und die
+Übersetzung nach SQL, die dafür `0 = 1` setzt. Ausgeschlossene Tags über einen leeren Ordner
+schließen dagegen nichts aus; „keiner davon" über nichts lässt in Ruhe.
+
+Gefragt wird **termweise**: Ein leerer Ordner **neben** einem Tagterm bleibt eine Einschränkung
+ohne Treffer, obwohl die Achsensumme (`resolved.tagCount`) dann positiv ist. Dafür trägt die
+rekursive Auflösung die Wurzel mit, von der sie ausgegangen ist, und die Antwort nennt die leeren
+erforderlichen Ordner (`resolved.emptyRuleFolderIds`) — damit die Oberfläche **welcher** sagen
+kann, ohne die Ordnerrekursion ein zweites Mal zu schreiben.
+
+Die Absicherung dagegen, dass die beiden wieder auseinanderlaufen, ist der Typ:
+`ResolvedPoolRuleAxes` verlangt die Angabe `unresolvedRequired` ohne Vorgabewert, und wer eine
+aufgelöste Regel beurteilt, muss sie hersagen. `pnpm proof:openapi` Abschnitt 14 mißt die Folge am
+laufenden Dienst — eine Spalte „leerer Ordner **und** Status" bleibt leer, die Gegenprobe mit dem
+Ausschluß über denselben Ordner nicht.
 
 **Wodurch das rot wird.** `PoolRuleAxes` zählt die Achsen auf, und die Tabelle darüber ist über
 diesen Typ abgebildet: Eine sechste Achse lässt `tsc` in der Domäne, in `packages/storage` und im

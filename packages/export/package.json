@@ -11,7 +11,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm -w exec vitest run packages/export"
   },
   "dependencies": {
     "@takt/domain": "workspace:*"

@@ -25,8 +25,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
 import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
-import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
 import {
+  decideLookup,
+  describeOffers,
+  offerMovement,
+  type OfferDescription,
+} from '../duplicate/rule.ts';
+import {
+  bookingOutcome,
+  bookingPoolSentence,
   reopenOutcome,
   reopenPreview,
   type PoolMovement,
@@ -82,11 +89,16 @@ type Done =
        */
       readonly reopened: boolean;
       /**
-       * Wohin sich das Todo durch die Buchung bewegt — aus dem Dienst (E-056).
+       * Wohin sich das Todo durch die Buchung bewegt — aus dem Dienst
+       * (E-056, T-084).
        *
-       * Ein Paar und keine zwei Listen nebeneinander: `appears` und `leaves`
-       * sind gleich getippt, und vertauscht ergäben sie einen Satz, der sich
-       * richtig liest und das Gegenteil behauptet.
+       * Ein Wert und keine drei Listen nebeneinander: `appears`, `enters` und
+       * `leaves` sind gleich getippt, und vertauscht ergäben sie einen Satz,
+       * der sich richtig liest und das Gegenteil behauptet.
+       *
+       * Steht unabhängig von `reopened` da, weil beide Fälle daraus einen Satz
+       * bauen — der erledigte den über die Rückkehr, der offene den über die
+       * Bewegung.
        */
       readonly movement: PoolMovement;
     };
@@ -335,6 +347,7 @@ export function TaskPane({
       reopened: result.value.doneCleared,
       movement: {
         appears: result.value.poolNames,
+        enters: result.value.enteringPoolNames,
         leaves: result.value.leavingPoolNames,
       },
     });
@@ -563,13 +576,20 @@ export function TaskPane({
           */}
           {booking.isDone ? (
             <ReopenAnnouncement
-              notice={reopenPreview(minutes, {
-                appears: booking.poolNames,
-                leaves: booking.leavingPoolNames,
-              })}
+              notice={reopenPreview(minutes, offerMovement(booking))}
               tone="warning"
             />
-          ) : null}
+          ) : (
+            /*
+              T-084: Auch ohne Aufhebung kann eine Buchung das Todo bewegen —
+              die erste hebt es in jede Spalte, die nach offener, noch nicht
+              abgerechneter Zeit fragt. Der Hinweis steht an derselben Stelle
+              wie der andere, unmittelbar über der Schaltfläche, und er
+              erscheint nur, wenn es etwas zu berichten gibt: `MovementNote`
+              gibt sonst nichts zurück.
+            */
+            <MovementNote movement={offerMovement(booking)} />
+          )}
 
           {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
 
@@ -656,6 +676,57 @@ function Failure({
 }
 
 /**
+ * Der Satz über die Pools, wenn nichts aufgehoben wird (T-084).
+ *
+ * Gibt **nichts** zurück, wenn die Buchung das Todo in keinen Pool hinein und
+ * aus keinem herausbewegt. Das ist der häufigere Fall — jede zweite und jede
+ * weitere Buchung auf demselben Todo —, und dann bleibt die Fläche ganz weg:
+ * keine leere Hinweisfläche, kein Halbsatz, kein Abstand, der eine fehlende
+ * Zeile andeutet.
+ */
+function MovementNote({ movement }: { readonly movement: PoolMovement }) {
+  const sentence = bookingPoolSentence(movement, 'future');
+  if (sentence === null) return null;
+
+  /*
+    Die Überschrift ist Rahmen und keine zweite Behauptung: Sie sagt, wovon
+    der Satz handelt, und nennt selbst weder Pool noch Wirkung. Ohne sie
+    begänne die Fläche mit „Es" — und zwischen dem Titel des Todos und dieser
+    Stelle liegen zwei Eingabefelder.
+  */
+  return (
+    <Callout tone="info" title="Was sich dadurch ändert">
+      {sentence}
+    </Callout>
+  );
+}
+
+/**
+ * Die Bestätigung nach einer Buchung, die nichts aufgehoben hat (T-084).
+ *
+ * Zwei Zeilen oder eine. Der Satz über die Pools steht als eigener Absatz
+ * darunter und nicht im selben: Er redet über etwas anderes als die gebuchte
+ * Zeit, und ein angehängter Nebensatz wäre die Art Zeile, die man zu
+ * überfliegen lernt.
+ */
+function BookedOutcome({
+  minutes,
+  movement,
+}: {
+  readonly minutes: number;
+  readonly movement: PoolMovement;
+}) {
+  const notice = bookingOutcome(minutes, movement);
+
+  return (
+    <>
+      {notice.booked}
+      {notice.pools !== null ? <p className="pane-note">{notice.pools}</p> : null}
+    </>
+  );
+}
+
+/**
  * Die drei Wirkungen einer Buchung auf ein erledigtes Todo — und die eine
  * Nicht-Wirkung (A-2.5, I-05, E-023).
  *
@@ -735,10 +806,14 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
               ) : null}
             </>
           ) : (
-            <>
-              {String(done.minutes)} Minuten sind gebucht. Gerundet wird beim Export, auf die
-              Tagessumme.
-            </>
+            /*
+              T-084: Derselbe Satz wie eben über der Schaltfläche, nur im
+              Perfekt — und wieder nur, wenn sich etwas bewegt hat. Der erste
+              Satz ist Zeichen für Zeichen der von vorher; er steht jetzt in
+              `bookingOutcome` statt hier, damit der Nachweispfad ihn messen
+              kann, ohne den Aufgabenbereich zu rendern.
+            */
+            <BookedOutcome minutes={done.minutes} movement={done.movement} />
           )}
         </Callout>
       )}

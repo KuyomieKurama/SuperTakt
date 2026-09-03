@@ -30,7 +30,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderExportGroup } from '../src/render.js';
 import type { ExportGroup, ExportSourcePath, ExportSystemContext } from '@takt/domain/export';
-import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain/export';
+import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
 
 interface ExportFieldDefinition {
   readonly name: string;

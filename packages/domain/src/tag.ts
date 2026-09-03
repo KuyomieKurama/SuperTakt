@@ -367,14 +367,25 @@ export interface Pool extends PoolRuleAxes {
  *     Das ist der eine Fall, den Punkt 1 und 2 zusammen nicht ergeben, und er
  *     ist eine fachliche Entscheidung: Eine Regel, die noch nicht eingerichtet
  *     ist, hätte sonst jedes Todo der Datenbank als Mitglied.
+ *  4. **Ein erforderlicher Term, der ins Leere zeigt, läßt ebenfalls nichts
+ *     treffen** (E-057). Der Ausnahmefall zu Punkt 1: Eine leere Tagmenge ist
+ *     der Neutralwert — aber nur, wenn die Regel wirklich nichts genannt hat.
+ *     Kommt sie aus einem Ordner, in dem kein Tag liegt, ist sie eine
+ *     Einschränkung ohne Treffer, und dann trifft die ganze Regel nichts —
+ *     auch dann, wenn daneben ein Tagterm steht, der Tags beisteuert. Ob das so
+ *     ist, sagt `unresolvedRequired`; die Tagmenge allein kann es nicht sagen.
  *
  * ---------------------------------------------------------------------------
- * Warum alle neuen Felder freiwillig sind
+ * Warum die Felder der Achsen freiwillig sind — und eines nicht
  * ---------------------------------------------------------------------------
  *
  * Damit jeder Aufrufer aus der Zeit vor T-076 unverändert dieselbe Antwort
  * bekommt: Was er nicht nennt, steht neutral, und dann verhält sich die
  * Funktion wie zuvor.
+ *
+ * Die Ausnahme ist `unresolvedRequired` (E-057): keine Achse, sondern eine
+ * Auskunft über eine bereits genannte. Schweigen hieße dort nicht „neutral",
+ * sondern „zu weit" — und niemand würde rot. Die Begründung steht am Feld.
  *
  * Jedes dieser Felder nimmt ausdrücklich auch `undefined` an und nicht nur das
  * Fehlen (`?: T | undefined`). Der Grund ist der Aufrufer: Wer eine Karte aus
@@ -424,6 +435,49 @@ export interface MatchesPoolRule {
   readonly completion?: PoolCompletionFilter | undefined;
   /** Die Exportstatus-Achse der Regel. Weggelassen ist `any`. */
   readonly exportState?: PoolExportFilter | undefined;
+  /**
+   * Nennt die **erforderliche** Tagachse Terme, von denen keiner auf einen Tag
+   * auflöst? (E-057)
+   *
+   * Der Fall ist der Ordner, in dem kein Tag liegt — **ein einziger genügt**,
+   * auch wenn daneben ein Tagterm steht und `ruleTagIds` deshalb gefüllt ist
+   * (E-057, termweise). Steht der leere Ordner allein, ist `ruleTagIds` leer —
+   * und eine leere Tagliste ist der **Neutralwert** dieser Achse, also dasselbe,
+   * was ein Aufrufer schickt, der über Tags gar nichts sagen wollte. Genau
+   * diese zwei Zustände sind verschieden und sehen gleich aus:
+   *
+   *   „keine Tagbedingung"        → die Achse schränkt nicht ein
+   *   „Tagbedingung ohne Treffer" → die **Regel** trifft nichts (E-057)
+   *
+   * Deshalb steht die Unterscheidung hier als eigenes Feld und nicht in
+   * `ruleTagIds`: Die aufgelöste Liste kann sie nicht tragen, sie ist in beiden
+   * Fällen `[]`. Wer auflöst, weiß es; wer nur die Menge weiterreicht, nicht
+   * mehr. {@link tagAxisIsUnresolved} beantwortet es an genau einer Stelle,
+   * {@link resolvePool} liefert die Antwort mit.
+   *
+   * ---------------------------------------------------------------------------
+   * **Pflicht**, und das ist der Kern der Sache
+   * ---------------------------------------------------------------------------
+   *
+   * Das einzige Feld der Regelseite, das nicht weggelassen werden darf — die
+   * übrigen sind freiwillig, damit ein Aufrufer aus der Zeit vor T-076
+   * unverändert dieselbe Antwort bekommt.
+   *
+   * Hier gilt das Gegenteil, weil dieses Feld keine **Bedingung** ist, sondern
+   * eine Auskunft über eine Bedingung, die der Aufrufer bereits genannt hat.
+   * `matchesPool` überspringt, was es nicht genannt bekommt; ein freiwilliges
+   * Feld hieße also: Wer schweigt, bekommt die zu weite Antwort von vor E-057 —
+   * und **niemand wird rot**. Genau so ist der Fehler aus T-078 entstanden, bei
+   * dem der Aufgabenbereich Pools nannte, die die Hauptanwendung nicht führt.
+   * Die Wache dagegen ist der Übersetzer und nicht die Sorgfalt: Wer
+   * `matchesPool` ruft, sagt, ob die erforderlichen Terme aufgelöst sind.
+   *
+   * Wer die Antwort nicht hat, holt sie beim Port: `PoolPort.resolveAxes`
+   * liefert zu jeder Achse die Tags **und** die Ordner, aus denen nichts
+   * geworden ist. Aus einer flachen Tagmenge (`resolveRule`) ist sie nicht zu
+   * gewinnen — das ist der ganze Punkt von E-057.
+   */
+  readonly unresolvedRequired: boolean;
 }
 
 /**
@@ -499,6 +553,35 @@ export interface PoolRuleAxes {
 export type PoolRuleAxisId = keyof PoolRuleAxes;
 
 /**
+ * Dieselben Achsen, **nachdem** die Ordner aufgelöst sind (E-057).
+ *
+ * Der Unterschied zu {@link PoolRuleAxes} ist eine einzige Auskunft, die sich
+ * beim Auflösen verliert: **was aus den einzelnen erforderlichen Termen
+ * geworden ist.** Danach steht dort eine Tagmenge — eine leere sieht aus wie
+ * „nicht genannt", ist aber „genannt und ohne Treffer", und eine gefüllte
+ * verschweigt, daß einer der Terme nichts beigetragen hat.
+ *
+ * `unresolvedRequired` ist **Pflicht**. Das ist der Zweck dieses Typs: Wer eine
+ * aufgelöste Regel beurteilen will ({@link poolRuleMatchesNothing}), muß die
+ * Frage beantworten, statt sie zu übergehen. Die Übersetzung nach SQL in
+ * `packages/storage` und die Auflösung im Dienst werden damit rot, wenn sie die
+ * Auskunft nicht durchreichen — und genau dort ist die Regel bis E-057 still
+ * verschwunden.
+ *
+ * Für die **ausgeschlossene** Achse gibt es hier bewußt kein Gegenstück. Sie
+ * braucht keines: Ein Ausschluß über einen leeren Ordner schließt nichts aus,
+ * und das ist Zeichen für Zeichen dasselbe wie „nicht genannt". Nur die
+ * erforderliche Achse kennt den Unterschied.
+ */
+export interface ResolvedPoolRuleAxes extends PoolRuleAxes {
+  /**
+   * Nennt die erforderliche Tagachse Terme, von denen keiner auf einen Tag
+   * auflöst? Siehe {@link tagAxisIsUnresolved}.
+   */
+  readonly unresolvedRequired: boolean;
+}
+
+/**
  * Was eine Regel nach dem Auflösen ihrer Ordner ergibt (T-080).
  *
  * Der Grund, warum das über die Leitung geht: Die Oberfläche kann eine Regel
@@ -517,14 +600,74 @@ export interface PoolResolution {
    * Bleibt nach dem Auflösen **keine** Bedingung übrig?
    *
    * Nicht dasselbe wie `poolRuleIsEmpty` über die gespeicherte Regel: Eine
-   * Regel, die einen leeren Ordner nennt, nennt eine Bedingung und trifft
-   * trotzdem nichts. Der Unterschied ist genau der Zustand, den die Oberfläche
-   * benennen können muss.
+   * Regel, die nur einen leeren Ordner nennt, nennt eine Bedingung und hat nach
+   * dem Auflösen keine mehr.
    *
-   * Ist dieser Wert `true`, liefert die Mitgliederabfrage nichts — dieselbe
-   * Entscheidung wie `matchesPool` und wie die Übersetzung nach SQL.
+   * Ist dieser Wert `true`, trifft die Regel nichts. Seit E-057 ist das
+   * **hinreichend und nicht mehr notwendig**: Eine Regel „Tags aus dem leeren
+   * Ordner **und** Status offen" hat nach dem Auflösen noch die Statusachse,
+   * ist hier also `false` — und trifft trotzdem nichts. Die vollständige
+   * Antwort auf „trifft diese Regel überhaupt etwas?" steht in
+   * {@link PoolResolution.matchesNothing}; dieses Feld unterscheidet, **warum**
+   * nicht.
    */
   readonly isEmpty: boolean;
+  /**
+   * Nennt die **erforderliche** Achse Terme, von denen keiner auf einen Tag
+   * auflöst? (E-057)
+   *
+   * Das ist der leere Ordner in der Liste „muß eines davon tragen". Die Regel
+   * trifft damit nichts, unabhängig vom Modus und von den übrigen Achsen: Der
+   * Benutzer hat eine Einschränkung ausgesprochen, und die erfüllt niemand.
+   *
+   * Für die Oberfläche ist es die Auskunft, die den Satz trägt: „Der Ordner
+   * enthält keinen Tag" ist etwas anderes als „im Augenblick paßt nichts" — der
+   * eine Zustand löst sich von selbst, der andere nie. Sie geht deshalb vor
+   * `isEmpty`, wenn beide gesetzt sind (die Regel nennt nur den leeren Ordner):
+   * „richte die Regel ein" wäre dort die falsche Auskunft, sie **ist**
+   * eingerichtet.
+   */
+  readonly unresolvedRequired: boolean;
+  /**
+   * Dasselbe für die **ausgeschlossene** Achse (E-057).
+   *
+   * Und hier **ohne** Folgen für die Treffermenge: „keiner davon" über nichts
+   * schließt nichts aus, es läßt in Ruhe. Die Zahl steht trotzdem da, weil ein
+   * Ausschluß, der nicht wirkt, eine Auskunft wert ist — sichtbar gemacht,
+   * nicht zur Bedingung erhoben.
+   */
+  readonly unresolvedExcluded: boolean;
+  /**
+   * **Welche** erforderlichen Ordner keinen Tag enthalten (E-057).
+   *
+   * Der Unterschied zwischen „ein Ordner ist leer" und „der Ordner **Ost** ist
+   * leer" — und der Grund, warum diese Liste über die Leitung geht: Die
+   * Oberfläche hat die Ordnerkennungen aus der Regel, aber sie kann nicht
+   * wissen, in welchem davon ein Tag liegt. Die Ordnerrekursion dafür ein
+   * zweites Mal zu schreiben wäre die Doppelung, die T-080 beseitigt hat.
+   *
+   * Leer heißt: kein erforderlicher Ordnerterm zeigt ins Leere. Nicht leer
+   * heißt: `unresolvedRequired` ist `true` und die Regel trifft nichts.
+   *
+   * **Ausgeschlossene Ordner stehen nicht darin.** Ein leerer Ordner in der
+   * Ausschlußliste ist kein Fehler; er schließt nichts aus und läßt alles, wie
+   * es ist. Ob es ihn gibt, sagt `unresolvedExcluded` — ohne Namen, weil daraus
+   * keine Handlung folgt.
+   */
+  readonly emptyRuleFolderIds: readonly TagFolderId[];
+  /**
+   * Trifft diese Regel von vornherein nichts? (A-3.4, E-057)
+   *
+   * Die eine Frage, die die Oberfläche wirklich stellt, und die einzige, deren
+   * Antwort sie nicht selbst zusammensetzen soll: `isEmpty || unresolvedRequired`
+   * wäre die sechste Fassung derselben Bedingung. Sie kommt aus
+   * {@link poolRuleMatchesNothing} — derselben Funktion, die `matchesPool` und
+   * die Übersetzung nach SQL benutzen.
+   *
+   * Ist dieser Wert `true`, liefert die Mitgliederabfrage nichts. Nicht
+   * „vielleicht nichts": nichts.
+   */
+  readonly matchesNothing: boolean;
 }
 
 /**
@@ -540,6 +683,21 @@ export type ResolvePool = (input: {
   readonly ruleTagIds: readonly unknown[];
   /** Die ausgeschlossenen Tags, aufgelöst. */
   readonly excludedTagIds: readonly unknown[];
+  /**
+   * Die **erforderlichen** Ordnerterme, aus denen kein Tag geworden ist
+   * (E-057). Jeder einzelne davon läßt die Regel nichts treffen.
+   *
+   * Warum als Liste und nicht als Anzahl: Die Oberfläche soll „Der Ordner Ost
+   * enthält keinen Tag" sagen können und nicht „ein Ordner". Die Kennungen
+   * kennt sie ohnehin — sie stehen in der Regel —, den **Inhalt** der Ordner
+   * kennt nur der Dienst.
+   */
+  readonly emptyRuleFolderIds: readonly TagFolderId[];
+  /**
+   * Dasselbe für die **ausgeschlossenen** Ordnerterme — ohne Folgen für die
+   * Treffermenge (E-057), aber die Auskunft, daß ein Ausschluß nicht wirkt.
+   */
+  readonly emptyExcludedFolderIds: readonly TagFolderId[];
 }) => PoolResolution;
 
 /**
@@ -714,6 +872,12 @@ export const POOL_RULE_AXIS_OF_FIELD: {
   ruleStatusIds: 'statusIds',
   completion: 'completion',
   exportState: 'exportState',
+  // Keine sechste Achse, sondern eine Auskunft **über** die erste: Sie sagt
+  // nicht, was die Regel verlangt, sondern was aus dem Verlangten geworden ist
+  // (E-057). Eine eigene Achse daraus zu machen wäre falsch — sie zählt in
+  // `countPoolRuleConditions` nicht mit, eine Regel wird durch einen leeren
+  // Ordner nicht um eine Bedingung reicher.
+  unresolvedRequired: 'rule',
 };
 
 /**
@@ -749,29 +913,147 @@ export const poolRuleIsEmpty = (axes: PoolRuleAxes): boolean =>
   countPoolRuleConditions(axes) === 0;
 
 /**
- * Was eine Regel nach dem Auflösen ihrer Ordner ergibt (T-080).
+ * Hat eine Tagachse Terme genannt, die auf **keinen** Tag auflösen? (E-057)
+ *
+ * Die Ableitung ist eine Zeile, und genau deshalb steht sie hier: Sie wird an
+ * drei Stellen gebraucht — beim Auflösen im Dienst, in der Übersetzung nach SQL
+ * und beim Aufbau der Frage an {@link matchesPool} —, und drei Fassungen einer
+ * Zeile sind drei Gelegenheiten, sie verschieden zu schreiben. „> 0 und === 0"
+ * ist außerdem die Art Bedingung, die man beim zweiten Hinschreiben umdreht.
+ *
+ * **Gefragt wird termweise, nicht achsenweise.** `emptyTerms` zählt die
+ * einzelnen Terme, aus denen kein Tag geworden ist — und ein einziger davon
+ * genügt. Die achsenweise Summe (`resolved`) reicht nicht: Nennt eine Regel
+ * „Tag Support **oder** Ordner Ost" und ist nur Ost leer, bleibt die Summe
+ * positiv, und der leere Ordner wäre wieder unsichtbar. Er trägt dann still
+ * nichts bei — bis jemand einen Tag in Ost legt und die Spalte sich ohne
+ * ersichtlichen Grund ändert. Das ist dieselbe Falle wie in E-057, nur
+ * verzögert.
+ *
+ * **Auch im Modus `any`.** Aussagenlogisch trüge ein leerer Term zu einem
+ * „oder" nichts bei, und die Regel bliebe gültig. Diese Lesart wird nicht
+ * nachgebaut, und zwar aus demselben Grund wie in E-057: Der Benutzer hat den
+ * Ordner genannt, weil er ihn meint.
+ *
+ * Die zweite Bedingung (`named > 0 && resolved === 0`) bleibt daneben stehen.
+ * Sie ist heute von der ersten mit abgedeckt — nur ein Ordnerterm kann leer
+ * ausgehen, ein Tagterm bringt immer seinen Tag mit — und ist das Netz für eine
+ * dritte Termart, die eines Tages ins Leere zeigt, ohne ein Ordner zu sein.
+ *
+ * Benannte Felder statt dreier Zahlen: `(0, 3, 0)` und `(3, 0, 0)` bedeuten
+ * Gegenteiliges und sähen am Aufrufpunkt gleich aus.
+ */
+export const tagAxisIsUnresolved = (axis: {
+  /** Wie viele **Terme** die Achse nennt — Tags und Ordner, ungeachtet ihres Inhalts. */
+  readonly named: number;
+  /** Wie viele **Tags** daraus geworden sind. */
+  readonly resolved: number;
+  /** Wie viele **einzelne Terme** keinen Tag beigetragen haben (E-057). */
+  readonly emptyTerms: number;
+}): boolean => axis.emptyTerms > 0 || (axis.named > 0 && axis.resolved === 0);
+
+/**
+ * Trifft diese Regel von vornherein nichts? (A-3.4, E-057)
+ *
+ * Die Frage an die **aufgelöste** Regel, und die einzige Stelle, an der die
+ * beiden Gründe zusammenkommen:
+ *
+ *  1. **Sie nennt keine Bedingung** ({@link poolRuleIsEmpty}, A-3.4). Der
+ *     Zustand unmittelbar nach dem Anlegen. Er löst sich, sobald jemand die
+ *     Regel einrichtet.
+ *  2. **Sie nennt eine erforderliche Tagbedingung, die auf nichts auflöst**
+ *     (E-057). Der leere Ordner. Er löst sich, sobald jemand einen Tag
+ *     hineinlegt — und bis dahin ist die Regel eine Einschränkung, die niemand
+ *     erfüllt.
+ *
+ * Der zweite Fall war bis E-057 kein Fall: Eine leere Tagmenge galt als
+ * Neutralwert, die Achse verschwand, und „Tags aus Ordner X **und** Status
+ * offen" wurde zu „Status offen". Die Regel traf **mehr**, als der Benutzer
+ * gesagt hatte — die gefährliche Richtung, weil eine Spalte, die zu viel zeigt,
+ * niemandem auffällt.
+ *
+ * **Der Modus spielt keine Rolle.** Aussagenlogisch wäre „alle davon" über eine
+ * leere Menge wahr und „mindestens eines davon" falsch; diese Unterscheidung
+ * wird ausdrücklich nicht nachgebaut. Der Benutzer meint mit „Ordner X" nicht
+ * die Menge, sondern die Zugehörigkeit zu X, und die hat niemand, wenn X leer
+ * ist.
+ *
+ * **Die ausgeschlossene Achse steht nicht darin.** „Keiner davon" über nichts
+ * schließt nichts aus; das ist die richtige Lesart, und sie engt nicht ein.
+ * Bleibt daneben keine andere Bedingung übrig, greift Fall 1 — nicht, weil ein
+ * Ausschluß ins Leere zeigt, sondern weil die Regel dann gar nichts mehr sagt.
+ *
+ * ---------------------------------------------------------------------------
+ * Wie weit Fall 2 reicht — termweise, nicht achsenweise
+ * ---------------------------------------------------------------------------
+ *
+ * Gefragt wird über den **einzelnen Term**: Nennt eine Regel „Tag Support
+ * **oder** Ordner Ost" und ist nur Ost leer, trifft sie trotzdem nichts,
+ * obwohl Support Tags beisteuert.
+ *
+ * Achsenweise — „nur wenn die ganze Liste leer ausgeht" — wäre die
+ * naheliegendere und die schwächere Antwort: Der leere Ordner trüge still
+ * nichts bei, die Spalte zeigte die Support-Karten, niemandem fiele auf, daß
+ * Ost leer ist. Sobald jemand einen Tag in Ost legt, änderte sich die Spalte
+ * ohne ersichtlichen Grund. Das ist dieselbe Falle wie in E-057, nur verzögert.
+ *
+ * Und das gilt **in beiden Modi**, auch in `any`. Siehe
+ * {@link tagAxisIsUnresolved}.
+ */
+export const poolRuleMatchesNothing = (axes: ResolvedPoolRuleAxes): boolean =>
+  poolRuleIsEmpty(axes) || axes.unresolvedRequired;
+
+/**
+ * Was eine Regel nach dem Auflösen ihrer Ordner ergibt (T-080, E-057).
  *
  * Der Unterschied zu {@link poolRuleIsEmpty} ist der Ordner, in dem kein Tag
- * liegt: Er ist eine genannte Bedingung und trotzdem keine wirksame. In
- * `matchesPool` verschwindet er spurlos — eine leere Tagmenge ist der
- * Neutralwert und wird übersprungen —, und eine Regel „Tags aus diesem Ordner
- * **und** Status offen" schrumpft damit still auf „Status offen". Sichtbar
- * wird das nur, wenn jemand die Zahl mitliefert; deshalb steht sie an jeder
- * ausgelieferten Regel.
+ * liegt: Er ist eine genannte Bedingung, aus der keine Tagmenge wird. Bis
+ * E-057 verschwand er in `matchesPool` spurlos — eine leere Tagmenge galt als
+ * Neutralwert und wurde übersprungen —, und eine Regel „Tags aus diesem Ordner
+ * **und** Status offen" schrumpfte still auf „Status offen".
+ *
+ * Seit E-057 trifft sie statt dessen **nichts**, und diese Auskunft steht in
+ * `matchesNothing`. Die Zahlen daneben bleiben: Sie sagen, **warum** — und das
+ * ist der Unterschied zwischen „richte die Regel ein" und „leg einen Tag in den
+ * Ordner", zwei Sätzen, von denen die Oberfläche den richtigen sagen soll.
  */
-export const resolvePool: ResolvePool = ({ axes, ruleTagIds, excludedTagIds }) => ({
-  tagCount: ruleTagIds.length,
-  excludedTagCount: excludedTagIds.length,
-  isEmpty: poolRuleIsEmpty({
-    // Dieselben fünf Achsen, nur die beiden Taglisten in ihrer aufgelösten
-    // Gestalt. Genau so urteilen `matchesPool` und die Abfrage in SQL.
+export const resolvePool: ResolvePool = ({
+  axes,
+  ruleTagIds,
+  excludedTagIds,
+  emptyRuleFolderIds,
+  emptyExcludedFolderIds,
+}) => {
+  // Dieselben fünf Achsen, nur die beiden Taglisten in ihrer aufgelösten
+  // Gestalt — und die eine Auskunft, die dabei sonst verlorenginge (E-057).
+  // Genau dieses Gebilde beurteilen auch `matchesPool` und die Abfrage in SQL.
+  const resolved: ResolvedPoolRuleAxes = {
     rule: ruleTagIds,
     excludedTags: excludedTagIds,
     statusIds: axes.statusIds,
     completion: axes.completion,
     exportState: axes.exportState,
-  }),
-});
+    unresolvedRequired: tagAxisIsUnresolved({
+      named: axes.rule.length,
+      resolved: ruleTagIds.length,
+      emptyTerms: emptyRuleFolderIds.length,
+    }),
+  };
+
+  return {
+    tagCount: ruleTagIds.length,
+    excludedTagCount: excludedTagIds.length,
+    isEmpty: poolRuleIsEmpty(resolved),
+    unresolvedRequired: resolved.unresolvedRequired,
+    unresolvedExcluded: tagAxisIsUnresolved({
+      named: axes.excludedTags.length,
+      resolved: excludedTagIds.length,
+      emptyTerms: emptyExcludedFolderIds.length,
+    }),
+    emptyRuleFolderIds,
+    matchesNothing: poolRuleMatchesNothing(resolved),
+  };
+};
 
 /**
  * Gehört ein Todo in diesen Pool? (A-3.2, A-3.4, T-076)
@@ -781,11 +1063,15 @@ export const resolvePool: ResolvePool = ({ axes, ruleTagIds, excludedTagIds }) =
  * ablehnen. Deshalb steht am Ende ein nacktes `true` und keine Verknüpfung von
  * fünf Ausdrücken — die wäre dieselbe Aussage in unlesbar.
  *
- * Die **eine** Ausnahme steht ganz oben und ist eine fachliche Entscheidung:
- * Stehen alle fünf Achsen neutral, trifft die Regel nichts. Die mathematisch
- * saubere Lesart „alle null Bedingungen sind erfüllt" wäre hier falsch — eine
- * Regel, die noch nicht fertig eingerichtet ist, hätte schlagartig jedes Todo
- * der Datenbank als Mitglied.
+ * Die **zwei** Ausnahmen stehen ganz oben und sind fachliche Entscheidungen:
+ *
+ *  - Stehen alle fünf Achsen neutral, trifft die Regel nichts (A-3.4). Die
+ *    mathematisch saubere Lesart „alle null Bedingungen sind erfüllt" wäre hier
+ *    falsch — eine Regel, die noch nicht fertig eingerichtet ist, hätte
+ *    schlagartig jedes Todo der Datenbank als Mitglied.
+ *  - Zeigt einer der erforderlichen Terme ins Leere, trifft die Regel nichts
+ *    (E-057). Auch das ist keine Aussagenlogik, sondern eine Lesart: „Tags aus
+ *    Ordner X" heißt Zugehörigkeit zu X, und die hat niemand, wenn X leer ist.
  */
 export const matchesPool: MatchesPool = ({
   todoTagIds,
@@ -799,26 +1085,32 @@ export const matchesPool: MatchesPool = ({
   hasOpenEntries,
   hasExportedEntries,
   exportState,
+  unresolvedRequired,
 }) => {
   const excluded = excludedTagIds ?? [];
   const statuses = ruleStatusIds ?? [];
   const wantedCompletion = completion ?? 'any';
   const wantedExport = exportState ?? 'any';
 
-  // Alle Achsen neutral: Die Regel ist nicht eingerichtet und trifft nichts.
+  // Zwei Gründe, aus denen die Regel nichts trifft, bevor eine Karte überhaupt
+  // angesehen wird: Sie nennt keine Bedingung (A-3.4), oder ihre erforderliche
+  // Tagachse zeigt ins Leere (E-057).
   //
-  // Die Bedingung stand bis T-080 hier ausgeschrieben — und noch einmal in der
-  // Übersetzung nach SQL und ein drittes Mal in der Oberfläche. Jetzt steht sie
-  // in `poolRuleIsEmpty`, und dieser Aufruf ist zugleich die Stelle, die rot
-  // wird, wenn eine sechste Achse dazukommt: Das Literal muss jede Achse
-  // nennen.
+  // Beides stand bis T-080/T-082 hier ausgeschrieben — und noch einmal in der
+  // Übersetzung nach SQL. Jetzt steht es in `poolRuleMatchesNothing`, und
+  // dieser Aufruf ist zugleich die Stelle, die rot wird, wenn eine sechste
+  // Achse dazukommt: Das Literal muß jede nennen.
   if (
-    poolRuleIsEmpty({
+    poolRuleMatchesNothing({
       rule: ruleTagIds,
       excludedTags: excluded,
       statusIds: statuses,
       completion: wantedCompletion,
       exportState: wantedExport,
+      // Ohne Vorgabewert: Das Feld ist Pflicht, und die Begründung steht am
+      // Feld in `MatchesPoolRule`. Ein `?? false` an dieser Stelle wäre die
+      // Wache, die sich selbst abschaltet.
+      unresolvedRequired,
     })
   ) {
     return false;

@@ -2819,7 +2819,15 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [timeEntry, todoWasDone, doneCleared, poolNames, leavingPoolNames]
+                    required:
+                      [
+                        timeEntry,
+                        todoWasDone,
+                        doneCleared,
+                        poolNames,
+                        enteringPoolNames,
+                        leavingPoolNames,
+                      ]
                     properties:
                       timeEntry: { $ref: '#/components/schemas/TimeEntry' }
                       todoWasDone:
@@ -2853,6 +2861,25 @@ paths:
                           jedem Fall. Beide Antworten müssen übereinstimmen,
                           sonst sagt der Aufgabenbereich vor der Buchung etwas
                           anderes als danach.
+                      enteringPoolNames:
+                        type: array
+                        items: { type: string }
+                        description: |
+                          Die Pools, in die diese Buchung das Todo
+                          **hineinbewegt** hat — beim Namen (T-084). Eine
+                          Teilmenge von `poolNames`: genau die Pools, für die
+                          vorher nicht galt, was nachher gilt.
+
+                          Der Unterschied zu `poolNames` ist der zwischen
+                          Zustand und Bewegung. `poolNames` ist auch dann
+                          besetzt, wenn sich nichts geändert hat; diese Liste
+                          ist es nur, wenn die Buchung etwas bewirkt hat. Der
+                          häufigste Fall ist die **erste** Buchung auf einem
+                          Todo: Sie setzt „hat offene Buchungen" von falsch auf
+                          wahr, und eine Spalte `exportState: open` nimmt das
+                          Todo damit auf. Zusammen mit `leavingPoolNames` leer
+                          heißt: Diese Buchung bewegt das Todo in keinen Pool
+                          hinein und aus keinem heraus.
                       leavingPoolNames:
                         type: array
                         items: { type: string }
@@ -3626,17 +3653,31 @@ components:
         der zweite ist ein Einrichtungsfehler, und nur mit diesen Zahlen lässt
         er sich benennen.
 
-        **Der Fall, der still ist.** `tagCount: 0` bei nicht leerem `rule`
-        heißt: Diese Achse schränkt nicht mehr ein. Eine Regel „Tags aus diesem
-        Ordner **und** Status offen" ist damit faktisch „Status offen" — sie
-        trifft **mehr** als beabsichtigt, nicht weniger.
+        **Der Fall, der still war.** `tagCount: 0` bei nicht leerem `rule`
+        hieß bis E-057: Diese Achse schränkt nicht mehr ein. Eine Regel „Tags
+        aus diesem Ordner **und** Status offen" war damit faktisch „Status
+        offen" — sie traf **mehr** als beabsichtigt, nicht weniger.
+
+        Seit E-057 ist ein Ordnerterm, der auf nichts auflöst, eine
+        **Einschränkung ohne Treffer**: Die Regel trifft nichts, unabhängig vom
+        Modus und von den übrigen Achsen. `unresolvedRequired` sagt, daß dieser
+        Fall vorliegt, `matchesNothing` die Folge daraus.
 
         **Nicht enthalten: ob die Regel eine Bedingung nennt.** Diese Frage
         beantwortet `poolRuleIsEmpty` in `@takt/domain`, und zwar für jeden, der
         die Felder in der Hand hat — auch für einen Entwurf im Formular, den
         noch keine Route gesehen hat. Ein zweites Feld dafür wäre eine zweite
         Antwort auf dieselbe Frage.
-      required: [tagCount, excludedTagCount, isEmpty]
+      required:
+        [
+          tagCount,
+          excludedTagCount,
+          isEmpty,
+          unresolvedRequired,
+          unresolvedExcluded,
+          emptyRuleFolderIds,
+          matchesNothing,
+        ]
       properties:
         tagCount:
           type: integer
@@ -3645,6 +3686,11 @@ components:
             Wie viele Tags die **erforderliche** Liste (`rule`) ergibt,
             Unterordner eingerechnet. `0` bei nicht leerem `rule` heißt: Die
             genannten Ordner enthalten kein Tag.
+
+            Eine **Summe über die Achse** — sie taugt nicht als Erkennung eines
+            leeren Ordners: Steht neben dem leeren Ordner ein Tagterm, ist sie
+            positiv und der leere Ordner trotzdem da. Dafür ist
+            `emptyRuleFolderIds` gedacht (E-057).
         excludedTagCount:
           type: integer
           minimum: 0
@@ -3653,12 +3699,79 @@ components:
           type: boolean
           description: |
             Bleibt nach dem Auflösen **keine** Bedingung übrig? Dann trifft die
-            Regel nichts, und die Mitgliederabfrage liefert nichts — dieselbe
-            Entscheidung wie in `matchesPool` und in der Übersetzung nach SQL.
+            Regel nichts.
 
             Nicht dasselbe wie „nennt keine Bedingung": Eine Regel, die einen
             leeren Ordner nennt, nennt eine Bedingung und ist hier trotzdem
             `true`.
+
+            Seit E-057 **hinreichend, aber nicht notwendig** für „trifft
+            nichts": Steht neben dem leeren Ordner noch eine Statusachse, bleibt
+            eine Bedingung übrig, und die Regel trifft trotzdem nichts. Wer
+            wissen will, ob überhaupt etwas kommen kann, liest `matchesNothing`;
+            dieses Feld sagt, **warum** nicht.
+        unresolvedRequired:
+          type: boolean
+          description: |
+            Nennt die **erforderliche** Liste (`rule`) Terme, von denen keiner
+            auf einen Tag auflöst? (E-057)
+
+            Das ist der Ordner ohne Tags, und **ein einziger genügt**: Steht
+            daneben ein Tagterm, der Tags beisteuert, bleibt es dabei. Die Regel
+            trifft nichts — unabhängig vom Modus (`matchMode`) und von den
+            übrigen Achsen: Der Benutzer hat eine Zugehörigkeit verlangt, die
+            niemand hat.
+
+            Welche Ordner es sind, steht in `emptyRuleFolderIds`.
+
+            Für die Anzeige die wichtigere der beiden Auskünfte: „Der Ordner
+            enthält keinen Tag" ist ein anderer Satz als „diese Regel ist noch
+            nicht eingerichtet". Ist dieses Feld `true`, gilt es vor `isEmpty`.
+        unresolvedExcluded:
+          type: boolean
+          description: |
+            Dasselbe für die **ausgeschlossene** Liste (`excludedTags`) — und
+            **ohne** Folgen für die Treffermenge (E-057).
+
+            „Keiner davon" über nichts schließt nichts aus; ein Ausschluß über
+            einen leeren Ordner läßt in Ruhe, statt einzuengen. Die Auskunft
+            steht trotzdem da, weil ein Ausschluß, der nicht wirkt, eine Anzeige
+            wert ist.
+        emptyRuleFolderIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          description: |
+            **Welche** erforderlichen Ordner keinen Tag enthalten (E-057).
+
+            Der Unterschied zwischen „ein Ordner ist leer" und „der Ordner
+            **Ost** ist leer". Die Oberfläche hat die Ordnerkennungen aus der
+            Regel, aber sie kann nicht wissen, in welchem davon ein Tag liegt;
+            die Ordnerrekursion dafür ein zweites Mal zu schreiben wäre die
+            Doppelung, die T-080 beseitigt hat.
+
+            Nicht leer heißt: `unresolvedRequired` ist `true` und die Regel
+            trifft nichts. Auch dann, wenn `tagCount` positiv ist — ein Tagterm
+            neben dem leeren Ordner steuert Tags bei und ändert an E-057 nichts.
+
+            **Ausgeschlossene Ordner stehen nicht darin.** Ein leerer Ordner in
+            `excludedTags` ist kein Fehler: Er schließt nichts aus und läßt
+            alles, wie es ist. Daß es ihn gibt, sagt `unresolvedExcluded` — ohne
+            Namen, weil daraus keine Handlung folgt.
+        matchesNothing:
+          type: boolean
+          description: |
+            Trifft diese Regel von vornherein nichts? (A-3.4, E-057)
+
+            `true` heißt: Die Mitgliederabfrage liefert nichts, und zwar
+            unabhängig vom Bestand — entweder weil die Regel keine Bedingung
+            nennt (`isEmpty`) oder weil ihre erforderliche Tagachse ins Leere
+            zeigt (`unresolvedRequired`).
+
+            Dieselbe Entscheidung wie in `matchesPool` und in der Übersetzung
+            nach SQL, und aus derselben Funktion: `poolRuleMatchesNothing` in
+            `@takt/domain`. Die Oberfläche liest sie, statt `isEmpty` und
+            `unresolvedRequired` selbst zu verknüpfen — das wäre die zweite
+            Fassung derselben Bedingung.
 
     PoolWithResolution:
       description: |
@@ -4501,7 +4614,20 @@ components:
         die vor der Buchung steht — „was passiert, wenn ich hier draufbuche?":
         die bereits gebuchte Zeit, getrennt nach offen und exportiert, und die
         Pools, in denen das Todo steht.
-      required: [id, title, callNumber, statusId, tagIds, completedAt, openSeconds, exportedSeconds, poolNames, leavingPoolNames]
+      required:
+        [
+          id,
+          title,
+          callNumber,
+          statusId,
+          tagIds,
+          completedAt,
+          openSeconds,
+          exportedSeconds,
+          poolNames,
+          enteringPoolNames,
+          leavingPoolNames,
+        ]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         title: { type: string }
@@ -4554,6 +4680,25 @@ components:
             waren es nur die erforderlichen Tags, und die Antwort nannte
             deshalb **zu viele** Pools, sobald eine Regel eine der übrigen
             Achsen benutzte.
+        enteringPoolNames:
+          type: array
+          items: { type: string }
+          description: |
+            Die Pools, in die dieselbe Buchung das Todo **hineinbewegen** würde
+            — beim Namen (T-084). Eine Teilmenge von `poolNames`.
+
+            `poolNames` ist ein **Zustand**, diese Liste eine **Bewegung**. Der
+            Unterschied ist der, den der Aufgabenbereich braucht, wenn das Todo
+            gar nicht erledigt ist: Dort gibt es nichts aufzuheben, und eine
+            Aufzählung aller ohnehin zutreffenden Pools wäre kein Hinweis. Was
+            sich aber ändert, ist eine Nachricht wert — die **erste** Buchung
+            auf einem Todo setzt „hat offene Buchungen" von falsch auf wahr,
+            und eine Spalte `exportState: open` nimmt es damit auf.
+
+            Leer heißt: Diese Buchung bringt das Todo in keinen Pool, in dem es
+            nicht schon steht. Zusammen mit einem leeren `leavingPoolNames`
+            heißt es, dass sie an der Zugehörigkeit überhaupt nichts ändert —
+            und dann sagt der Aufgabenbereich kein Wort über Pools.
         leavingPoolNames:
           type: array
           items: { type: string }

@@ -27,7 +27,7 @@ import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
 import { flatFolders } from "../lib/folderPaths";
 import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
-import { axesOf, describeRule } from "../lib/poolRule";
+import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 
@@ -497,7 +497,10 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
           />
         ) : (
           <ul className="pool-list">
-            {rules.map((pool) => (
+            {rules.map((pool) => {
+              const poolDescription = describeRule(axesOf(pool), lookup);
+
+              return (
               <li key={pool.id} className="pool-row">
                 <div className="grow">
                   <p className="pool-row__name">
@@ -512,10 +515,18 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                     Boards (T-079). Bis dahin stand hier eine zweite Fassung,
                     die nur die Tagliste kannte — seit die Regel fuenf Achsen
                     hat, haette sie eine Regel behauptet, die es nicht gibt.
+
+                    Und derselbe Befund: Ein erforderlicher Ordner ohne Tag ist
+                    ein Einrichtungsfehler und keine Regel ohne Treffer
+                    (E-057, T-083). Er gehoert auf jede Flaeche, die eine Regel
+                    zeigt, nicht nur auf das Board. `reach` kommt aus derselben
+                    Beschreibung, die die Chips zeichnet — der Ordner, den die
+                    Warnung nennt, ist der markierte Chip darueber.
                   */}
                   <RuleSummary
                     className="pool-row__rule"
-                    description={describeRule(axesOf(pool), lookup)}
+                    description={poolDescription}
+                    reach={describeRuleReach(poolDescription, pool.resolved)}
                     emptyText="Ohne Bedingung — dieser Pool bleibt leer."
                   />
                 </div>
@@ -554,7 +565,8 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                   Löschen
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>

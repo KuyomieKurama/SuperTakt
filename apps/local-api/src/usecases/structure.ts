@@ -51,7 +51,7 @@ import {
   resolvePool,
   taktError,
 } from '@takt/domain';
-import type { ExportAuditFilter, Page, Pagination, UnitOfWork } from '@takt/storage';
+import type { ExportAuditFilter, Page, Pagination, PoolAxesResolution, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
 import { checkTemplateDefinition } from './export.ts';
@@ -197,6 +197,13 @@ export function removeTagFolder(
  *
  * Ohne die zweite Zahl sieht ein Ordner, in dem kein Tag liegt, aus wie eine
  * Regel ohne Treffer — und nur der erste Fall ist ein Einrichtungsfehler.
+ *
+ * `resolved.matchesNothing` (E-057) ist **kein** Rückfall in Frage 1. Es
+ * beantwortet „trifft diese Regel überhaupt etwas?" für die **aufgelöste**
+ * Regel, und dafür braucht es den Ordnerbaum: Der leere Ordner steht neben
+ * einer zweiten Achse, die Regel nennt also eine Bedingung und trifft trotzdem
+ * nichts. Für den Entwurf im Formular bleibt es bei `poolRuleIsEmpty` — dort
+ * gibt es keine Auflösung, die eine andere Antwort geben könnte.
  */
 export interface PoolWithResolution extends Pool {
   readonly resolved: PoolResolution;
@@ -208,13 +215,23 @@ export interface PoolWithResolution extends Pool {
  * Für Aufrufer, die ohnehin auflösen mussten — das Board tut es je Spalte, um
  * die Mehrfachnennung zu bestimmen. Sie zahlen die Abfrage damit einmal und
  * nicht zweimal.
+ *
+ * Herein kommt die Antwort des Ports (`PoolPort.resolveAxes`) unverändert: die
+ * beiden Tagmengen **und** die Ordner, aus denen nichts geworden ist. Diese
+ * Datei nimmt sie auseinander und urteilt nicht; das Urteil fällt in
+ * `resolvePool` (E-057).
  */
-export function poolWithResolution(
-  pool: Pool,
-  ruleTagIds: readonly TagId[],
-  excludedTagIds: readonly TagId[],
-): PoolWithResolution {
-  return { ...pool, resolved: resolvePool({ axes: pool, ruleTagIds, excludedTagIds }) };
+export function poolWithResolution(pool: Pool, axes: PoolAxesResolution): PoolWithResolution {
+  return {
+    ...pool,
+    resolved: resolvePool({
+      axes: pool,
+      ruleTagIds: axes.required.tagIds,
+      excludedTagIds: axes.excluded.tagIds,
+      emptyRuleFolderIds: axes.required.emptyFolderIds,
+      emptyExcludedFolderIds: axes.excluded.emptyFolderIds,
+    }),
+  };
 }
 
 /**
@@ -232,13 +249,7 @@ async function withResolution(
   pools: readonly Pool[],
 ): Promise<readonly PoolWithResolution[]> {
   return Promise.all(
-    pools.map(async (pool) => {
-      const [ruleTagIds, excludedTagIds] = await Promise.all([
-        unit.pools.resolveRule(pool.id),
-        unit.pools.resolveExcluded(pool.id),
-      ]);
-      return poolWithResolution(pool, ruleTagIds, excludedTagIds);
-    }),
+    pools.map(async (pool) => poolWithResolution(pool, await unit.pools.resolveAxes(pool.id))),
   );
 }
 

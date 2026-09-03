@@ -269,6 +269,114 @@ export type PoolRuleTerm =
  * unmittelbar nach dem Anlegen, und die Oberfläche sagt an jeder Fläche, dass
  * die Spalte leer bleibt, bis eine Bedingung dazukommt.
  */
+/**
+ * Was eine Regel **nach dem Auflösen** ihrer Ordner ergibt (T-080, E-057).
+ *
+ * Ein Ordnerterm nennt keinen Tag, sondern einen Ort. Wie viele Tags dort
+ * liegen — mit `includeSubfolders` auch in allen Unterordnern, beliebig tief —
+ * weiß ausschließlich der Dienst; er steigt dafür über den Ordnerbaum ab. Die
+ * Oberfläche rechnet das nicht nach, sie liest die Zahl.
+ *
+ * **Wozu sie da ist.** Ohne sie sieht eine Regel, die einen leeren Ordner
+ * nennt, genauso aus wie eine Regel, auf die gerade nichts passt. Das sind
+ * zwei verschiedene Zustände: Der eine löst sich auf, sobald jemand ein
+ * passendes Todo anlegt, der andere nie — er ist ein Einrichtungsfehler, und
+ * nur der Benutzer kann ihn beheben. Erst mit dieser Auskunft lässt er sich
+ * benennen (siehe `describeRuleReach` in `lib/poolRule.ts`).
+ *
+ * **Termweise, nicht achsenweise (T-082, T-087).** Die beiden Zahlen sind
+ * Summen über eine ganze Achse und taugen deshalb **nicht** als Erkennung: Ein
+ * leerer Ordner neben einem Tagterm lässt `tagCount` positiv und ist trotzdem
+ * da. Gefragt wird deshalb `unresolvedRequired`, und **welcher** Ordner es ist,
+ * sagt `emptyRuleFolderIds`.
+ *
+ * **Nicht enthalten: ob die Regel überhaupt eine Bedingung nennt.** Diese
+ * Frage beantwortet `poolRuleIsEmpty` aus `@takt/domain` — für jeden, der die
+ * Felder in der Hand hat, also auch für den Entwurf im Formular, den noch
+ * keine Route gesehen hat.
+ *
+ * **Alle Felder sind Pflicht.** Ein freiwilliges Feld hieße `=== true` an jeder
+ * Leserstelle, und damit schaltete sich die Wache selbst ab: Ein Dienst, der
+ * die Auskunft eines Tages nicht mehr mitschickt, ließe die Oberfläche
+ * stillschweigend die Antwort von vor E-057 zeichnen. Alle Antworten, aus denen
+ * diese Oberfläche einen `Pool` bezieht, liefern sie mit (Schema
+ * `PoolResolution` in `takt-local-api.yaml`, `required` mit sieben Feldern).
+ */
+export interface PoolResolution {
+  /**
+   * Wie viele Tags die **erforderliche** Liste (`rule`) ergibt.
+   *
+   * Eine **Summe über die Achse**: `0` bei nicht leerem `rule` heißt zwar „die
+   * genannten Ordner enthalten kein Tag", ein positiver Wert heißt aber
+   * **nicht**, dass alle Terme auflösen. Für die Erkennung eines leeren
+   * Ordners ist `emptyRuleFolderIds` zuständig, nicht diese Zahl (E-057).
+   */
+  readonly tagCount: number;
+  /** Dasselbe für die **ausgeschlossene** Liste (`excludedTags`). */
+  readonly excludedTagCount: number;
+  /**
+   * Bleibt nach dem Auflösen **keine** Bedingung übrig?
+   *
+   * Seit E-057 **hinreichend, aber nicht notwendig** für „trifft nichts":
+   * Steht neben dem leeren Ordner noch eine Statusachse, bleibt eine Bedingung
+   * übrig, und die Regel trifft trotzdem nichts. Dieses Feld sagt, **warum**
+   * nicht; ob überhaupt etwas kommen kann, sagt `matchesNothing`.
+   */
+  readonly isEmpty: boolean;
+  /**
+   * Nennt die **erforderliche** Liste (`rule`) einen Term, der auf keinen
+   * einzigen Tag auflöst? (E-057)
+   *
+   * Das ist der Ordner ohne Tags, und **ein einziger genügt** — auch neben
+   * einem Tagterm, der Tags beisteuert. Die Regel trifft dann nichts,
+   * unabhängig von `matchMode` und den übrigen Achsen: Der Benutzer hat eine
+   * Zugehörigkeit verlangt, die niemand hat.
+   *
+   * Für die Anzeige die **wichtigere** der beiden Auskünfte und deshalb vor
+   * `isEmpty` zu lesen: „Der Ordner enthält kein Tag" ist ein anderer Satz —
+   * und eine andere Handlung — als „diese Regel ist noch nicht eingerichtet".
+   */
+  readonly unresolvedRequired: boolean;
+  /**
+   * Dasselbe für die **ausgeschlossene** Liste — und **ohne** Folgen für die
+   * Treffermenge (E-057).
+   *
+   * „Keiner davon" über nichts schließt nichts aus; ein Ausschluss über einen
+   * leeren Ordner lässt in Ruhe, statt einzuengen. Die Oberfläche zeigt ihn
+   * deshalb als **Hinweis** und nie als Warnung: Eine Warnung ohne Folge
+   * glaubt beim nächsten Mal niemand mehr.
+   */
+  readonly unresolvedExcluded: boolean;
+  /**
+   * **Welche** erforderlichen Ordner keinen Tag enthalten (E-057).
+   *
+   * Der Unterschied zwischen „ein Ordner ist leer" und „der Ordner **Ost** ist
+   * leer". In der Reihenfolge der Regel und ohne Doppelte — damit die
+   * Oberfläche sie in derselben Folge nennt, in der sie im Formular stehen.
+   *
+   * Die Namen dazu stehen im Ordnerbaum, den die Oberfläche ohnehin lädt.
+   * Ausgeschlossene Ordner stehen **nicht** darin: Aus ihnen folgt keine
+   * Handlung.
+   */
+  readonly emptyRuleFolderIds: readonly Id[];
+  /**
+   * Trifft diese Regel von vornherein nichts? (A-3.4, E-057)
+   *
+   * Die zusammengefasste Antwort der Domäne (`poolRuleMatchesNothing`) über
+   * den **gespeicherten** Stand: `isEmpty || unresolvedRequired`.
+   *
+   * Die Oberfläche liest sie bewusst **nicht als Ganzes**, sondern die beiden
+   * Gründe einzeln — und zwar aus verschiedenen Quellen, weil sie von
+   * Verschiedenem abhängen: `unresolvedRequired` hängt allein an den
+   * Regeltermen und `includeSubfolders` und kommt deshalb von hier;
+   * „nennt keine Bedingung" hängt an allen fünf Achsen und kommt aus
+   * `poolRuleIsEmpty` über die Felder, die gerade im Formular stehen. Ein
+   * Entwurf, der eine Statusachse ergänzt, ist eingerichtet — auch wenn der
+   * gespeicherte Stand daneben noch `matchesNothing: true` sagt.
+   */
+  readonly matchesNothing: boolean;
+}
+
 export interface Pool {
   readonly id: Id;
   readonly name: string;
@@ -286,6 +394,14 @@ export interface Pool {
   readonly statusIds: readonly Id[];
   readonly completion: PoolCompletionFilter;
   readonly exportState: PoolExportFilter;
+  /**
+   * Die aufgelöste Regel (T-080). Pflicht, nicht freiwillig: Alle vier
+   * Antworten, aus denen diese Oberfläche einen `Pool` bezieht — `GET /pools`,
+   * `POST /pools`, `PATCH /pools/{id}` und `GET /board` —, liefern sie mit.
+   * Ein freiwilliges Feld hieße, den Leerzustand mit einem Vielleicht zu
+   * begründen.
+   */
+  readonly resolved: PoolResolution;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }

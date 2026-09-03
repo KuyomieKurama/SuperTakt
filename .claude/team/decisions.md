@@ -1165,3 +1165,35 @@ Datenverlust gelesen wird.
 
 **Nicht** aussprechen, wenn keine Regel betroffen ist. Kein zweiter Absatz, keine zweite Liste;
 die Nennung gehört in denselben Satz wie das Erscheinen.
+
+---
+
+## E-057 — Ein Ordnerterm, der auf nichts auflöst, ist eine Bedingung ohne Treffer, kein Neutralwert
+
+**Befund aus T-080.** In `matchesPool` gilt eine leere Tagmenge als Neutralwert der Achse. Ein
+Ordnerterm über einen leeren Ordner löst auf eine leere Menge auf — und **verschwindet damit aus
+der Regel**. „Tags aus Ordner X **und** Status offen" wird zu „Status offen". Die Regel trifft
+mehr, als der Benutzer gesagt hat.
+
+Bei einer Regel, die nur aus diesem Term besteht, fällt es nicht auf: Sie ist dann leer und trifft
+nichts (A-3.4), und ein bestehender Prüffall belegt genau das. Sobald eine zweite Achse dazukommt,
+ist die Regel nicht mehr leer, die Ordnerachse aber still weg.
+
+**Entscheidung.** Ein Ordnerterm, der auf keinen Tag auflöst, ist keine neutrale Achse. Er ist
+eine **Einschränkung ohne Treffer** — und die Regel trifft damit nichts, unabhängig vom Modus und
+von den übrigen Achsen.
+
+**Warum.** Der Benutzer hat eine Einschränkung ausgesprochen. Dass sie sich ins Leere auflöst,
+macht sie nicht zur Nicht-Einschränkung; es macht sie zur Einschränkung, die niemand erfüllt.
+Die Alternative — die Achse fällt weg — ist der gefährliche Fehler in die falsche Richtung: Eine
+Spalte, die plötzlich mehr zeigt, wird nicht bemerkt. Eine, die leer bleibt, wird bemerkt, und
+seit T-080 steht die aufgelöste Tagzahl am Pool, sodass die Oberfläche sagen kann, **warum**.
+
+**Zum Modus.** Aussagenlogisch wäre „alle davon" über eine leere Menge wahr (Vakuum) und
+„mindestens eines davon" falsch. Diese Unterscheidung wird hier **nicht** nachgebaut: Der
+Benutzer meint mit „Ordner X" nicht die Menge, sondern die Zugehörigkeit zu X — und die hat
+niemand, wenn X leer ist. Beide Modi treffen nichts.
+
+**Nicht betroffen.** Ein Term, der auf mindestens einen Tag auflöst, verhält sich wie bisher.
+Ausgeschlossene Tags über einen leeren Ordner schließen nichts aus — das ist die richtige
+Lesart von „keiner davon" über nichts, und es engt nicht ein, sondern lässt in Ruhe.

@@ -56,8 +56,8 @@ Zwei gleichzeitig laufende Agenten fassen nie dieselbe Datei an.
 
 Gemeinsame Dateien ändert nur der Orchestrator, also die Hauptsession: `CLAUDE.md`,
 `.claude/team/board.md`, `decisions.md`, `risks.md`, `.claude/settings.json`, `package.json`,
-`pnpm-workspace.yaml`, `tsconfig.base.json`, die Modulregistrierung des lokalen Dienstes und die
-Reihenfolge der Datenbankmigrationen.
+`pnpm-workspace.yaml`, `tsconfig.base.json` und alle `tsconfig*.json` der Pakete, die
+Modulregistrierung des lokalen Dienstes und die Reihenfolge der Datenbankmigrationen.
 
 ## Ablauf
 

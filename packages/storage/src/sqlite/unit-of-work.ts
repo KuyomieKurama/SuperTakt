@@ -55,14 +55,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { TransactionPort, UnitOfWork } from '../ports.ts';
-import type { TodoFilter } from '@takt/domain';
+import { tagAxisIsUnresolved, type TodoFilter } from '@takt/domain';
 
 import type { SqlConnection } from './database.ts';
 import { createIdSource, type IdSource } from './ids.ts';
 import { createExportPort, createExportReadPort } from './repo-export.ts';
 import { createAppSettingsPort, createDefaultTagPort, createExportTemplatePort } from './repo-settings.ts';
 import { createTodoStatusPort } from './repo-statuses.ts';
-import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatchMode, resolvePoolRule } from './repo-tags.ts';
+import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatchMode, resolvePoolAxis } from './repo-tags.ts';
 import { createTimeEntryPort, createTimerHeartbeatPort, createTimerPort } from './repo-time.ts';
 import { createTodoNotePort, createTodoPort, type PoolResolver } from './repo-todos.ts';
 import type { Page, Pagination } from '../ports.ts';
@@ -96,9 +96,25 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
   const resolvePools: PoolResolver = (poolIds) =>
     poolIds.map((poolId) => {
       const axes = poolAxes(conn, poolId);
+      // Beide Taglisten samt der Zahl ihrer Terme (E-057). Die Zahl ist der
+      // Unterschied zwischen „diese Regel sagt über Tags nichts" und „sie nennt
+      // einen Ordner, in dem kein Tag liegt"; nach dem Auflösen steht in beiden
+      // Fällen dieselbe leere Menge da, und die Abfrage träfe im zweiten Fall
+      // ohne diese Auskunft zu viel.
+      const required = resolvePoolAxis(conn, poolId);
+      const excluded = resolvePoolAxis(conn, poolId, 'excluded');
       return {
-        tagIds: resolvePoolRule(conn, poolId),
-        excludedTagIds: resolvePoolRule(conn, poolId, 'excluded'),
+        tagIds: required.tagIds,
+        excludedTagIds: excluded.tagIds,
+        // Beurteilt wird in der Domäne, nicht hier. Diese Datei reicht die
+        // beiden Zahlen weiter, die nur sie hat.
+        unresolvedRequired: tagAxisIsUnresolved({
+          named: required.named,
+          resolved: required.tagIds.length,
+          // Termweise (E-057): Ein leerer Ordner **neben** einem Tagterm
+          // verschwindet in der Summe darüber, nicht aber hier.
+          emptyTerms: required.emptyFolderIds.length,
+        }),
         matchMode: poolMatchMode(conn, poolId),
         statusIds: axes.statusIds,
         completion: axes.completion,

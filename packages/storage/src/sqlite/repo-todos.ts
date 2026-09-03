@@ -50,7 +50,7 @@ import type {
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
-import { err, ok, poolRuleIsEmpty, taktError } from '@takt/domain';
+import { err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
 
 import { chunk, integer, placeholders, text, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
@@ -127,6 +127,23 @@ function buildConditions(
     const params: SqlValue[] = [];
     for (const pool of resolvedPools) {
       const axes: string[] = [];
+      /**
+       * Die Werte **dieser** Regel, getrennt gesammelt (E-057).
+       *
+       * Bis T-082 gingen sie unmittelbar in `params`. Das war nur so lange
+       * richtig, wie der Ausgang „trifft nichts" ausschließlich bei einer Regel
+       * ohne jede Bedingung eintrat — dann war auch nichts gesammelt worden.
+       * Seit E-057 kann eine Regel **mit** Achsen nichts treffen: Der leere
+       * Ordner steht neben einer Statusachse, deren Kennungen bereits in
+       * `params` gelegen hätten, während ihr Fragezeichen mit `0 = 1`
+       * verschwindet. Danach steht ein Wert zu viel in der Liste, und **alle**
+       * folgenden Fragezeichen der Abfrage bekommen den falschen Wert — auch
+       * die der Suche und der Blätterung.
+       *
+       * Deshalb wandern die Werte erst dann hinüber, wenn feststeht, daß die
+       * Bedingungen dieser Regel auch im Text landen.
+       */
+      const poolParams: SqlValue[] = [];
 
       if (pool.tagIds.length > 0) {
         // Erforderliche Tags. `HAVING`-freie Zählung über eine Unterabfrage:
@@ -136,7 +153,7 @@ function buildConditions(
           `(SELECT COUNT(DISTINCT tt.tag_id) FROM todo_tag tt
              WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(pool.tagIds.length)})) >= ?`,
         );
-        params.push(...pool.tagIds, needed);
+        poolParams.push(...pool.tagIds, needed);
       }
 
       const excluded = pool.excludedTagIds;
@@ -148,7 +165,7 @@ function buildConditions(
           `NOT EXISTS (SELECT 1 FROM todo_tag tt
                         WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(excluded.length)}))`,
         );
-        params.push(...excluded);
+        poolParams.push(...excluded);
       }
 
       const statusIds = pool.statusIds;
@@ -158,7 +175,7 @@ function buildConditions(
         // `todo.status_id`. Genau darin unterscheidet sich diese Achse von den
         // beiden darüber, und genau deshalb ist sie ein eigenes Feld.
         axes.push(`t.status_id IN (${placeholders(statusIds.length)})`);
-        params.push(...statusIds);
+        poolParams.push(...statusIds);
       }
 
       if (pool.completion === 'open') axes.push('t.completed_at IS NULL');
@@ -181,13 +198,19 @@ function buildConditions(
       }
 
       /**
-       * Eine Regel, deren Achsen alle neutral stehen, trifft nichts — und ob
-       * das so ist, entscheidet seit T-080 die **Domäne** und nicht diese
-       * Datei. `0 = 1` hält die Vereinigung formal richtig, ohne zu treffen.
+       * Trifft diese Regel von vornherein nichts? Zwei Gründe, und beide
+       * entscheidet seit T-080/T-082 die **Domäne** und nicht diese Datei
+       * (`poolRuleMatchesNothing`). `0 = 1` hält die Vereinigung formal
+       * richtig, ohne zu treffen.
        *
-       * Die Taglisten gehen **aufgelöst** hinein, so wie sie hier vorliegen:
-       * Ein Ordner ohne Tags ergibt die leere Menge, und dann schränkt diese
-       * Achse in der Abfrage genauso wenig ein wie in `matchesPool`.
+       *  1. **Keine Bedingung genannt** (A-3.4). Dann steht hier ohnehin keine
+       *     Achse im Text.
+       *  2. **Die erforderliche Tagachse zeigt ins Leere** (E-057) — der
+       *     Ordner ohne Tags. Das ist der Fall, den diese Übersetzung bis T-082
+       *     nicht kannte: Die aufgelöste Liste ist leer, die Achse fiel damit
+       *     aus dem `AND` heraus, und aus „Tags aus Ordner X **und** Status
+       *     offen" wurde in SQL „Status offen" — dieselbe stille Erweiterung
+       *     wie in `matchesPool`, nur an der Stelle, die zählt und blättert.
        *
        * `axes.length === 0` steht daneben und nicht statt dessen. Es ist das
        * Sicherheitsnetz für den Tag, an dem eine sechste Achse in der Domäne
@@ -197,12 +220,13 @@ function buildConditions(
        * Spalte — falsch, aber sichtbar leer statt still zu weit.
        */
       if (
-        poolRuleIsEmpty({
+        poolRuleMatchesNothing({
           rule: pool.tagIds,
           excludedTags: pool.excludedTagIds,
           statusIds: pool.statusIds,
           completion: pool.completion,
           exportState: pool.exportState,
+          unresolvedRequired: pool.unresolvedRequired,
         }) ||
         axes.length === 0
       ) {
@@ -210,6 +234,9 @@ function buildConditions(
         continue;
       }
       parts.push(`(${axes.join(' AND ')})`);
+      // Erst hier, und nur für die Regeln, deren Bedingungen wirklich im Text
+      // stehen. Siehe `poolParams` oben.
+      params.push(...poolParams);
     }
     conditions.push({ sql: `(${parts.join(' OR ')})`, params });
   }
@@ -253,6 +280,21 @@ export interface ResolvedPool {
   readonly tagIds: readonly TagId[];
   readonly matchMode: 'any' | 'all';
   readonly excludedTagIds: readonly TagId[];
+  /**
+   * Nennt die **erforderliche** Tagachse Terme, von denen keiner auf einen Tag
+   * auflöst? (E-057)
+   *
+   * Die eine Auskunft, die `tagIds` nicht tragen kann: Ein Ordner ohne Tags und
+   * eine Regel, die über Tags nichts sagt, ergeben beide `[]`. Das erste ist
+   * eine Einschränkung ohne Treffer und läßt die Abfrage nichts liefern, das
+   * zweite ein Neutralwert und läßt die übrigen Achsen entscheiden.
+   *
+   * **Pflicht wie alle anderen.** Wer auflöst, hat die Zahl der Terme in der
+   * Hand (`resolvePoolAxis`); sie freiwillig zu machen hieße, die Vorgabe
+   * `false` an jede Lesestelle zu tragen — und `false` ist hier die Antwort,
+   * die zu viel trifft.
+   */
+  readonly unresolvedRequired: boolean;
   readonly statusIds: readonly StatusId[];
   readonly completion: PoolCompletionFilter;
   readonly exportState: PoolExportFilter;

@@ -110,6 +110,12 @@ class Flow {
       this.ws();
       if (this.text[this.i] === ',') {
         this.i += 1;
+        // Dasselbe für die Zuordnung: `{ a: 1, }`.
+        this.ws();
+        if (this.text[this.i] === '}') {
+          this.i += 1;
+          return out;
+        }
         continue;
       }
       if (this.text[this.i] === '}') {
@@ -133,6 +139,15 @@ class Flow {
       this.ws();
       if (this.text[this.i] === ',') {
         this.i += 1;
+        // Nachlaufendes Komma: `[a, b, ]` ist eine Liste mit zwei Werten und
+        // nicht mit dreien. Ohne diese Zeile stünde am Ende ein `null` — und
+        // Werkzeuge, die eine mehrzeilige Flussliste setzen, schreiben das
+        // Komma hin.
+        this.ws();
+        if (this.text[this.i] === ']') {
+          this.i += 1;
+          return out;
+        }
         continue;
       }
       if (this.text[this.i] === ']') {
@@ -194,6 +209,57 @@ const plain = (raw) => {
   return raw;
 };
 
+/**
+ * Läuft dieser Flussausdruck in der Zeile zu Ende?
+ *
+ * Gezählt wird die Klammertiefe außerhalb von Zeichenketten. Ein Doppelpunkt in
+ * Anführungszeichen darf nicht mitzählen, sonst gälte eine Beschreibung als
+ * offene Klammer.
+ */
+const flowIsComplete = (text) => {
+  let depth = 0;
+  let quote = null;
+  for (const c of text) {
+    if (quote !== null) {
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    if (c === '[' || c === '{') depth += 1;
+    if (c === ']' || c === '}') depth -= 1;
+  }
+  return quote === null && depth <= 0;
+};
+
+/**
+ * Setzt einen Flussausdruck zusammen, der über mehrere Zeilen läuft.
+ *
+ * `required: [a, b, c]` darf auch so dastehen:
+ *
+ *     required:
+ *       [
+ *         a,
+ *         b,
+ *       ]
+ *
+ * Beides ist dieselbe Liste; welche der beiden Formen in der Datei steht, hängt
+ * davon ab, ob jemand einen Formatierer über sie hat laufen lassen. Ein Leser,
+ * der nur die eine kennt, macht aus einer Umformatierung einen Fehlschlag im
+ * Prüfpfad — und der sieht dann aus wie ein Befund über die Schnittstelle.
+ */
+const gatherFlow = (reader, first) => {
+  let text = first;
+  while (!flowIsComplete(text)) {
+    const line = reader.next();
+    if (line === null) throw new Error(`Flussausdruck ohne Ende: ${text}`);
+    text += ` ${line.trim()}`;
+  }
+  return text;
+};
+
 const readInline = (raw) => {
   const trimmed = raw.trim();
   if (trimmed.startsWith("'") || trimmed.startsWith('"')) return new Flow(trimmed).quoted();
@@ -246,9 +312,20 @@ const readAfterKey = (reader, indent, rest) => {
   if (rest === '|' || rest === '|-' || rest === '|+' || rest === '>' || rest === '>-') {
     return readBlockScalar(reader, indent);
   }
-  if (rest !== '') return readInline(rest);
+  if (rest !== '') {
+    const head = rest.trim();
+    if (head.startsWith('[') || head.startsWith('{')) return readInline(gatherFlow(reader, head));
+    return readInline(rest);
+  }
   const nextLine = reader.peek();
   if (nextLine === null || indentOf(nextLine) <= indent) return null;
+  // Ein Flussausdruck in der **nächsten** Zeile gehört noch zu diesem
+  // Schlüssel und ist kein neuer Block.
+  const head = nextLine.trim();
+  if (head.startsWith('[') || head.startsWith('{')) {
+    reader.next();
+    return readInline(gatherFlow(reader, head));
+  }
   return parseNode(reader, indentOf(nextLine));
 };
 

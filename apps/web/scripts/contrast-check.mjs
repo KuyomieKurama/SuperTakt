@@ -256,6 +256,25 @@ const pairs = [
   { group: "Board (E-054)", fg: "--border-accent", bg: "--bg-subtle", min: 3, note: "Ring um ein hervorgehobenes Vorkommen, gegen die Spalte" },
   { group: "Board (E-054)", fg: "--text-muted", bg: "--bg-surface", min: 4.5, note: "Anzeigeort-Etikett in der Regelliste" },
 
+  // Der leere Ordner (E-057, T-083). Ein erforderlicher Ordner ohne ein
+  // einziges Tag ist der einzige der drei Leerzustaende einer Spalte, den
+  // ausschliesslich der Benutzer beheben kann — deshalb traegt er Warnfarbe.
+  // Er erscheint auf drei Untergruenden: im Spaltenkopf (`--bg-subtle`), in
+  // der Regelliste und im Formular (`--bg-surface`) und in der Zeile des
+  // Spaltendialogs unter dem Zeiger (`--bg-hover`). Jeder gemessen, weil
+  // Warnfarben auf getoenten Flaechen gern knapp durchfallen.
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--warning-bg", min: 4.5, note: "Ordnerchip ohne Tag in der Regelzusammenfassung" },
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-subtle", min: 4.5, note: "Folgesatz im Spaltenkopf; zugleich Kontur des Chips, SC 1.4.11" },
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-surface", min: 4.5, note: "Folgesatz in Regelliste und Formular; zugleich Kontur des Chips, SC 1.4.11" },
+  /*
+   * `--warning-border` steht hier ausdruecklich **nicht** als Kontur: gemessen
+   * 1,28:1 gegen `--bg-subtle` und 1,44:1 gegen `--bg-surface` im hellen Modus,
+   * 2,47:1 und 2,71:1 im dunklen — alle vier unter 3:1. Der Chip nimmt deshalb
+   * `--warning-fg` als Kontur. Die Zeile steht hier als Merkposten, damit
+   * niemand die weichere Farbe „aus Konsistenz" zurueckholt.
+   */
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-hover", min: 4.5, note: "Befund in der Spaltenzeile unter dem Zeiger" },
+
   // Statusverwaltung (A-5.4, Bereich „Status" in S-09, T-073). Der Status hat
   // mit E-054 seine Spalte verloren und ist eine Stammgroesse geworden; seine
   // Verwaltungszeile bringt vier Flaechen mit, die es so vorher nicht gab —

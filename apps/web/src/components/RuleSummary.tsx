@@ -1,5 +1,12 @@
+import type { Id } from "../api/types";
 import { cx } from "../lib/cx";
-import type { RuleAxis, RuleChip, RuleDescription } from "../lib/poolRule";
+import {
+  emptyFolderNames,
+  type RuleAxis,
+  type RuleChip,
+  type RuleDescription,
+  type RuleReach,
+} from "../lib/poolRule";
 import { ExportStatusBadge } from "./ExportStatus";
 import { Icon, type IconName } from "./Icon";
 import { TagChip } from "./Tag";
@@ -39,6 +46,26 @@ import { TagChip } from "./Tag";
  * `ExportStatusBadge` — dasselbe Etikett, das an jeder Buchung, in jeder Zeile
  * und in jeder Vorschau steht. Der Exportstatus ist die Unterscheidung, um die
  * sich Takt dreht; ihn hier anders zu zeichnen hieße, ihn zweimal zu erklären.
+ *
+ * ## Der leere Ordner steht am Ordner (E-057, T-083, T-087)
+ *
+ * Nennt eine Regel Ordner, in denen kein einziges Tag liegt, ist das kein
+ * „trifft gerade nichts", sondern eine Einschränkung, die niemand erfüllen
+ * kann — ein Einrichtungsfehler. Er wird hier **am betroffenen Chip** gezeigt
+ * und nicht bloß als Satz darunter: Die Frage des Benutzers lautet „welcher
+ * Ordner", und ein Satz, der sie nicht beantwortet, schickt ihn suchen.
+ *
+ * **Am betroffenen Chip, nicht an der Achse (T-087).** Bis T-087 trug jeder
+ * Ordnerchip der erforderlichen Achse die Markierung, sobald irgendeiner leer
+ * war — bei „Ordner Nord **oder** Ordner Ost" zeigte die Oberfläche auf beide
+ * und damit auf den falschen. Markiert wird jetzt, wessen Kennung in
+ * `resolved.emptyRuleFolderIds` steht, und der Satz darunter nennt genau diese
+ * Ordner beim Namen, in der Reihenfolge der Regel.
+ *
+ * Die Auskunft dazu (`reach`) ist freiwillig. Wo sie fehlt — auf der
+ * Musterseite, im Formularentwurf, den noch keine Route gesehen hat —, zeichnet
+ * diese Fläche wie bisher. Sie **rät nicht**: Wie viele Tags in einem Ordner
+ * liegen, weiß allein der Dienst.
  */
 
 export interface RuleSummaryProps {
@@ -53,6 +80,12 @@ export interface RuleSummaryProps {
    * sein will, sagt keines von beiden.
    */
   readonly emptyText: string;
+  /**
+   * Was die Regel nach dem Auflösen ihrer Ordner ergibt — soweit bekannt
+   * (E-057). Fehlt sie, bleibt der leere Ordner ungenannt, statt geraten zu
+   * werden.
+   */
+  readonly reach?: RuleReach;
   readonly size?: "sm" | "md";
   readonly className?: string;
 }
@@ -65,7 +98,16 @@ const AXIS_ICON: Readonly<Record<RuleAxis["id"], IconName>> = {
   export: "download",
 };
 
-function ChipView({ chip, size }: { readonly chip: RuleChip; readonly size: "sm" | "md" }) {
+function ChipView({
+  chip,
+  size,
+  empty = false,
+}: {
+  readonly chip: RuleChip;
+  readonly size: "sm" | "md";
+  /** Dieser Ordner enthält kein Tag (E-057). Nur an erforderlichen Ordnern. */
+  readonly empty?: boolean;
+}) {
   if (chip.kind === "tag") {
     return <TagChip size={size} label={chip.label} path={chip.path} />;
   }
@@ -78,10 +120,18 @@ function ChipView({ chip, size }: { readonly chip: RuleChip; readonly size: "sm"
     );
   }
   return (
-    <span className="rule-summary__folder">
-      <Icon name="folder" size={11} />
+    <span className={cx("rule-summary__folder", empty && "rule-summary__folder--empty")}>
+      {/*
+        Ein anderes Symbol und ein eigener Rand, nicht nur eine andere Farbe
+        (SC 1.4.1): Der leere Ordner traegt das Warndreieck, der gefuellte den
+        Ordner. Der Zusatz „kein Tag darin" steht als Wort daneben, damit die
+        Unterscheidung auch vorgelesen ankommt.
+      */}
+      <Icon name={empty ? "alert-triangle" : "folder"} size={11} />
       {chip.label}
-      {chip.withSubfolders === true ? (
+      {empty ? (
+        <span className="rule-summary__folder-note"> — kein Tag darin</span>
+      ) : chip.withSubfolders === true ? (
         <span className="rule-summary__folder-note"> mit Unterordnern</span>
       ) : null}
     </span>
@@ -92,9 +142,17 @@ export function RuleSummary({
   description,
   showNeutral = false,
   emptyText,
+  reach,
   size = "sm",
   className,
 }: RuleSummaryProps) {
+  /*
+   * Nur die **erforderlichen** Ordner werden markiert. Ein ausgeschlossener
+   * Ordner ohne Tags schliesst nichts aus — er engt nicht ein, sondern laesst
+   * in Ruhe, und eine Warnung darueber waere eine Warnung ohne Folge (E-057).
+   */
+  const emptyFolders = reach?.kind === "empty-folder" ? reach.folders : null;
+
   if (description.isEmpty) {
     return (
       <p className={cx("rule-summary", `rule-summary--${size}`, "rule-summary--empty", className)}>
@@ -103,6 +161,16 @@ export function RuleSummary({
       </p>
     );
   }
+
+  /*
+   * Je Chip statt je Achse (T-087): markiert wird, wessen Kennung der Dienst
+   * genannt hat. Ein Eintrag ohne Kennung — der Dienst meldet einen
+   * unaufgeloesten Term, ohne einen Ordner dazu zu nennen — markiert keinen
+   * Chip; der Satz darunter steht trotzdem, denn der Befund gilt.
+   */
+  const emptyFolderIds = new Set<Id>(
+    (emptyFolders ?? []).flatMap((folder) => (folder.id === null ? [] : [folder.id])),
+  );
 
   return (
     <div className={cx("rule-summary", `rule-summary--${size}`, className)}>
@@ -119,10 +187,29 @@ export function RuleSummary({
             <span className="rule-summary__value">{axis.text}</span>
           )}
           {axis.chips.map((chip, index) => (
-            <ChipView key={`${chip.kind}-${chip.label}-${String(index)}`} chip={chip} size={size} />
+            <ChipView
+              key={`${chip.kind}-${chip.label}-${String(index)}`}
+              chip={chip}
+              size={size}
+              empty={
+                axis.id === "required" &&
+                chip.kind === "folder" &&
+                chip.folderId !== undefined &&
+                emptyFolderIds.has(chip.folderId)
+              }
+            />
           ))}
         </span>
       ))}
+
+      {emptyFolders === null ? null : (
+        <p className="rule-summary__unreachable">
+          <Icon name="alert-triangle" size={11} />
+          Kein Tag in {emptyFolderNames(emptyFolders)} —{" "}
+          {emptyFolders.length === 1 ? "diese Bedingung kann" : "diese Bedingungen können"} kein
+          Todo erfüllen, und die Regel trifft damit nichts.
+        </p>
+      )}
 
       {showNeutral && description.neutral.length > 0 ? (
         <p className="rule-summary__neutral">

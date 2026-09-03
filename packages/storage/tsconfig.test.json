@@ -1,0 +1,9 @@
+// Typprüfung der Testdateien; siehe packages/domain/tsconfig.test.json.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test"]
+}

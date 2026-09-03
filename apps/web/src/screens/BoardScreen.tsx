@@ -1,3 +1,4 @@
+import { countPoolRuleConditions } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { clearTodoDone, markTodoDone, getBoard, updatePool } from "../api/endpoints";
@@ -5,6 +6,7 @@ import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FilterToggle } from "../components/FilterBar";
 import { FormDialog } from "../components/FormDialog";
+import { Icon } from "../components/Icon";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
@@ -18,7 +20,14 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync } from "../app/useAsync";
 import { formatDuration, formatTime, plural } from "../lib/format";
 import { POOL_PLACEMENT_SHORT } from "../lib/labels";
-import { axesOf, countConditions, describeRule, type RuleLookup } from "../lib/poolRule";
+import {
+  axesOf,
+  describeRule,
+  describeRuleReach,
+  emptyFolderNames,
+  type RuleLookup,
+  type RuleReach,
+} from "../lib/poolRule";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
@@ -323,6 +332,7 @@ export function BoardScreen() {
         open={setupOpen}
         columns={data.state.status === "ready" ? data.state.value.board.columns : []}
         pools={pools}
+        lookup={lookup}
         onClose={() => setSetupOpen(false)}
         onCreate={() => {
           setSetupOpen(false);
@@ -440,6 +450,14 @@ function BoardColumn({
    * die eine „ohne Bedingung" und die andere zaehlt Bedingungen auf.
    */
   const description = describeRule(axesOf(column), lookup);
+  /*
+   * Und dieselbe Auskunft ein drittes Mal — der **Grund**, aus dem die Spalte
+   * nichts trifft (E-057). Sie kommt aus der beschriebenen Regel und aus der
+   * Auflösung des Dienstes und wird deshalb hier einmal gebildet: Der Ordner,
+   * den der Leerzustand nennt, muss derselbe sein, den der Spaltenkopf als
+   * leer markiert.
+   */
+  const reach = describeRuleReach(description, column.resolved);
 
   return (
     <KanbanColumn
@@ -450,6 +468,7 @@ function BoardColumn({
       rule={
         <RuleSummary
           description={description}
+          reach={reach}
           emptyText="Ohne Bedingung — diese Spalte bleibt leer."
         />
       }
@@ -462,7 +481,7 @@ function BoardColumn({
           })}
     >
       {view.todos.length === 0 ? (
-        <BoardColumnEmpty withoutCondition={description.isEmpty} onEditRule={onEditRule} />
+        <BoardColumnEmpty reach={reach} onEditRule={onEditRule} onOpenTags={() => navigate("tags")} />
       ) : (
         view.todos.map((todo) => {
           const others = (appearances.get(todo.id) ?? [])
@@ -505,33 +524,58 @@ function BoardColumn({
 /* ==================================================================== */
 
 /**
- * Zwei Leerzustände, nicht einer (T-079).
+ * Drei Leerzustände, nicht einer und nicht zwei (T-079, E-057, T-083).
  *
- * „Keine Karte trifft diese Regel" ist die Antwort auf eine **gestellte**
- * Frage: Die Bedingungen stehen, im Augenblick passt nichts darauf, und morgen
- * kann es anders sein. Eine Spalte **ohne** Bedingung hat die Frage nie
- * gestellt — sie trifft nichts, weil nichts von ihr verlangt wird, und sie wird
- * auch morgen nichts treffen (A-3.4).
+ * Eine leere Spalte ist keine Auskunft, sondern eine Frage: **Warum** ist sie
+ * leer? Es gibt drei Antworten darauf, und sie verlangen drei verschiedene
+ * Handlungen — deshalb stehen hier drei Zustände und nicht ein Satz mit drei
+ * Bedeutungen.
  *
- * Beides „keine Todos" zu nennen wäre der teuerste Leerzustand dieser
- * Anwendung: Er verschwiege genau den Zustand, den ausschließlich der Benutzer
- * beheben kann, und ließe ihn stattdessen auf Todos warten, die nie kommen.
- * Deshalb unterscheiden sich Symbol, Überschrift, Erklärung **und** die
- * angebotene Handlung — „Bedingung ergänzen" gegen „Regel bearbeiten".
+ * | Zustand | Was los ist | Was zu tun ist |
+ * |---|---|---|
+ * | `no-condition` | Die Regel nennt keine Bedingung (A-3.4). | eine ergänzen |
+ * | `empty-folder` | Sie verlangt Tags aus Ordnern, in denen keines liegt (E-057). | ein Tag anlegen oder einen anderen Ordner nennen |
+ * | `reachable` | Die Bedingungen stehen, gerade passt nichts. | nichts |
  *
- * Ausgelagert und ausgeführt, weil dieselben zwei Zustände auf der Musterseite
+ * **Nur der mittlere ist ein Fehler.** Der erste ist der Zustand unmittelbar
+ * nach dem Anlegen, der letzte löst sich mit dem nächsten passenden Todo von
+ * selbst. Der mittlere löst sich **nie** — bis jemand etwas ändert, und dieser
+ * jemand ist ausschließlich der Benutzer. Deshalb nennt er den betroffenen
+ * Ordner beim Namen, statt nur zu sagen, dass etwas nicht stimmt: „Ein Ordner
+ * ist leer" schickt ihn suchen, „Kunden / Ost ist leer" nicht.
+ *
+ * **Und er tritt auch neben einer gesunden Bedingung auf (T-087).** Steht der
+ * leere Ordner neben einem Tagterm, sieht die Achsensumme gesund aus und die
+ * Spalte ist trotzdem leer (E-057). Bis T-087 fiel dieser Fall in den dritten
+ * Zustand — „gerade passt nichts" —, und damit in den einzigen, der zum Warten
+ * auffordert. Erkannt wird er jetzt termweise, über
+ * `resolved.emptyRuleFolderIds`.
+ *
+ * Alle drei unterscheiden sich in Symbol, Überschrift, Erklärung **und** der
+ * angebotenen Handlung — nie nur in der Farbe (SC 1.4.1). Zwei davon „keine
+ * Todos" zu nennen wäre der teuerste Leerzustand dieser Anwendung: Er
+ * verschwiege den Zustand, den nur der Benutzer beheben kann, und ließe ihn
+ * stattdessen auf Karten warten, die nie kommen.
+ *
+ * Ausgelagert und ausgeführt, weil dieselben drei Zustände auf der Musterseite
  * des Designsystems nebeneinander stehen müssen: Sie unterscheiden sich nur im
- * Text, und zwei getrennt gepflegte Fassungen davon liefen binnen einer
+ * Text, und drei getrennt gepflegte Fassungen davon liefen binnen einer
  * Aufgabe auseinander.
  */
 export function BoardColumnEmpty({
-  withoutCondition,
+  reach,
   onEditRule,
+  onOpenTags,
 }: {
-  readonly withoutCondition: boolean;
+  readonly reach: RuleReach;
   readonly onEditRule: () => void;
+  /**
+   * Zu den Tags — der Ort, an dem der leere Ordner gefüllt wird. Freiwillig,
+   * weil die Musterseite keine Navigation hat.
+   */
+  readonly onOpenTags?: () => void;
 }) {
-  if (withoutCondition) {
+  if (reach.kind === "no-condition") {
     return (
       <EmptyState
         compact
@@ -546,6 +590,35 @@ export function BoardColumnEmpty({
       />
     );
   }
+
+  if (reach.kind === "empty-folder") {
+    const folders = emptyFolderNames(reach.folders);
+    return (
+      <EmptyState
+        compact
+        icon="folder-open"
+        title={
+          reach.folders.length === 1
+            ? "Der geforderte Ordner enthält kein Tag"
+            : "Die geforderten Ordner enthalten kein Tag"
+        }
+        description={`Die Regel verlangt ein Tag aus ${folders} — dort liegt keines. Eine Bedingung, die auf keinen Tag zeigt, kann kein Todo erfüllen; daran ändert auch ein zweiter Tag oder Ordner daneben nichts. Legen Sie ein Tag in ${reach.folders.length === 1 ? "diesem Ordner" : "diesen Ordnern"} an oder nennen Sie in der Regel einen anderen.`}
+        action={
+          <>
+            {onOpenTags === undefined ? null : (
+              <Button size="sm" variant="primary" iconStart="tag" onClick={onOpenTags}>
+                Tag anlegen
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" iconStart="pencil" onClick={onEditRule}>
+              Regel bearbeiten
+            </Button>
+          </>
+        }
+      />
+    );
+  }
+
   return (
     <EmptyState
       compact
@@ -721,7 +794,7 @@ export function BoardEmptyState({ pools, onCreate, onAdopt }: BoardEmptyStatePro
               <li key={pool.id} className="rule-row">
                 <span className="rule-row__name grow truncate">{pool.name}</span>
                 <span className="rule-row__count">
-                  {plural(countConditions(axesOf(pool)), "Bedingung", "Bedingungen")}
+                  {plural(countPoolRuleConditions(axesOf(pool)), "Bedingung", "Bedingungen")}
                 </span>
                 <Button size="sm" variant="secondary" iconStart="plus" onClick={() => onAdopt(pool)}>
                   Als Spalte aufnehmen
@@ -743,6 +816,7 @@ function BoardSetupDialog({
   open,
   columns,
   pools,
+  lookup,
   onClose,
   onCreate,
   onEdit,
@@ -752,6 +826,7 @@ function BoardSetupDialog({
   readonly open: boolean;
   readonly columns: readonly BoardColumnView[];
   readonly pools: readonly Pool[];
+  readonly lookup: RuleLookup;
   readonly onClose: () => void;
   readonly onCreate: () => void;
   readonly onEdit: (pool: Pool) => void;
@@ -780,15 +855,34 @@ function BoardSetupDialog({
         />
       ) : (
         <ul className="rule-list">
-          {columns.map((view) => (
+          {columns.map((view) => {
+            /*
+             * Derselbe Befund wie im Leerzustand der Spalte, aus derselben
+             * Quelle (E-057). Er steht auch hier, weil dieser Dialog die
+             * Fläche ist, auf der Spalten verwaltet werden — wer den Fehler
+             * nur unter einer Spalte sähe, müsste erst dorthin scrollen.
+             */
+            const reach = describeRuleReach(
+              describeRule(axesOf(view.column), lookup),
+              view.column.resolved,
+            );
+
+            return (
             <li key={view.column.id} className="rule-row">
               <div className="grow">
                 <p className="rule-row__name">{view.column.name}</p>
                 <p className="rule-row__meta">
                   {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
-                  {plural(countConditions(axesOf(view.column)), "Bedingung", "Bedingungen")} ·{" "}
-                  {plural(view.total, "Karte", "Karten")}
+                  {plural(countPoolRuleConditions(axesOf(view.column)), "Bedingung", "Bedingungen")}{" "}
+                  · {plural(view.total, "Karte", "Karten")}
                 </p>
+                {reach.kind === "empty-folder" ? (
+                  <p className="rule-row__fault">
+                    <Icon name="alert-triangle" size={11} />
+                    Kein Tag in {emptyFolderNames(reach.folders)} — diese Spalte kann nichts
+                    treffen.
+                  </p>
+                ) : null}
               </div>
               <Button
                 size="sm"
@@ -802,7 +896,8 @@ function BoardSetupDialog({
                 Vom Board nehmen
               </Button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 

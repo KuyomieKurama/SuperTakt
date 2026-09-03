@@ -1,3 +1,4 @@
+import { countPoolRuleConditions } from "@takt/domain";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { createPool, updatePool } from "../api/endpoints";
 import type {
@@ -30,7 +31,13 @@ import {
   POOL_MATCH_MODE_LABEL,
   POOL_PLACEMENT_LABEL,
 } from "../lib/labels";
-import { countConditions, describeRule, type RuleAxes } from "../lib/poolRule";
+import {
+  describeRule,
+  describeRuleReach,
+  emptyFolderNames,
+  type RuleAxes,
+  type RuleReach,
+} from "../lib/poolRule";
 
 /**
  * Takt — eine Regel anlegen und ändern (S-11, I-13, E-054, E-055, T-076, T-079).
@@ -128,6 +135,25 @@ function toggleFolder(terms: readonly PoolRuleTerm[], folderId: Id): readonly Po
   return hasFolder(terms, folderId)
     ? terms.filter((term) => !(term.kind === "folder" && term.folderId === folderId))
     : [...terms, { kind: "folder", folderId } as const];
+}
+
+/**
+ * Nennt der Entwurf noch dieselben Terme wie der gespeicherte Stand?
+ *
+ * Keine Regelauswertung, sondern ein Vergleich zweier Listen: Er entscheidet
+ * allein, ob die vom Dienst gelieferte Auflösung (`pool.resolved`) noch zu dem
+ * gehört, was gerade im Formular steht. Sobald sie es nicht mehr tut, wird sie
+ * nicht angepasst, sondern weggelassen.
+ */
+function sameTerms(draft: readonly PoolRuleTerm[], saved: readonly PoolRuleTerm[]): boolean {
+  if (draft.length !== saved.length) return false;
+  return draft.every((term, index) => {
+    const other = saved[index];
+    if (other === undefined) return false;
+    return term.kind === "tag"
+      ? other.kind === "tag" && other.tagId === term.tagId
+      : other.kind === "folder" && other.folderId === term.folderId;
+  });
 }
 
 /* ==================================================================== */
@@ -341,7 +367,61 @@ export function PoolFormDialog({
     [axes, folders, statuses, structure],
   );
 
-  const conditions = countConditions(axes);
+  const conditions = countPoolRuleConditions(axes);
+
+  /**
+   * Der leere Ordner — aber nur, solange der Entwurf ihn noch nennt (E-057).
+   *
+   * Wie viele Tags in einem Ordner liegen, weiß allein der Dienst, und er hat
+   * es zum **gespeicherten** Stand gesagt (`pool.resolved`). Sobald jemand die
+   * erforderlichen Terme oder die Ordnertiefe ändert, bezieht sich diese
+   * Auskunft auf eine andere Regel als die im Formular — dann steht sie hier
+   * nicht mehr. Eine veraltete Warnung wäre schlimmer als keine: Sie zeigte auf
+   * einen Ordner, den der Benutzer gerade herausgenommen hat.
+   *
+   * Nachgerechnet wird nichts. Der Ordnerbaum liegt der Oberfläche zwar vor,
+   * aber die Auflösung eines Ordnerterms — samt Unterordnern, beliebig tief —
+   * ist die Rechnung des Dienstes, und eine zweite Fassung davon wäre genau die
+   * Doppelung, die T-080 beseitigt hat.
+   *
+   * **Warum genau diese beiden Bedingungen und keine weitere.** Ob ein
+   * erforderlicher Ordner leer ist, hängt allein an den Termen der Liste `rule`
+   * und an `includeSubfolders` — nicht am Status, nicht an „Erledigt", nicht am
+   * Exportstatus. Wer die Statusachse umstellt, ändert am leeren Ordner nichts,
+   * und die Warnung darf deshalb stehen bleiben. Die zweite Hälfte der Auskunft
+   * — „nennt diese Regel überhaupt eine Bedingung" — hängt dagegen an allen
+   * fünf Achsen und kommt darum nicht aus `pool.resolved`, sondern aus
+   * `description.isEmpty`, das dem Entwurf folgt.
+   */
+  const savedReach = useMemo<RuleReach | null>(() => {
+    if (pool === undefined) return null;
+    if (includeSubfolders !== pool.includeSubfolders) return null;
+    if (!sameTerms(rule, pool.rule)) return null;
+    return describeRuleReach(description, pool.resolved);
+  }, [pool, rule, includeSubfolders, description]);
+
+  /**
+   * Ein **ausgeschlossener** Ordner ohne Tag — ein Hinweis, keine Warnung
+   * (E-057, T-087).
+   *
+   * „Keiner davon" über nichts schließt nichts aus: Der Ausschluss lässt in
+   * Ruhe, statt einzuengen, die Regel trifft genau dasselbe wie ohne ihn. Das
+   * ist **kein Einrichtungsfehler**, und eine Warnfarbe darüber wäre eine
+   * Warnung ohne Folge — die nächste echte glaubte dann niemand mehr.
+   *
+   * Gesagt wird es trotzdem, und nur hier: Ein Ausschluss, den man hingeschrieben
+   * hat und der nichts tut, ist genau an der Fläche eine Auskunft wert, an der
+   * er geschrieben wird. Auf Board und Pool-Liste wäre er Rauschen.
+   *
+   * **Ohne Namen.** Der Dienst nennt die leeren ausgeschlossenen Ordner
+   * bewusst nicht (T-082): Aus ihnen folgt keine Handlung. Der Hinweis bleibt
+   * deshalb allgemein, statt einen Ordner zu erfinden.
+   */
+  const excludedWithoutEffect =
+    pool !== undefined &&
+    includeSubfolders === pool.includeSubfolders &&
+    sameTerms(excludedTags, pool.excludedTags) &&
+    pool.resolved.unresolvedExcluded;
 
   /**
    * Der Modus wurde umgestellt — und die Regel hat mehr als einen Tag.
@@ -578,9 +658,38 @@ export function PoolFormDialog({
           description={description}
           showNeutral
           size="md"
+          {...(savedReach === null ? {} : { reach: savedReach })}
           emptyText={`Keine Bedingung — diese Regel trifft nichts. ${surface === "Spalte" ? "Die Spalte" : "Der Pool"} bleibt leer, bis eine Bedingung dazukommt.`}
         />
       </FormSection>
+
+      {savedReach?.kind === "empty-folder" ? (
+        <InlineMessage
+          tone="warning"
+          title={
+            savedReach.folders.length === 1
+              ? "Der geforderte Ordner enthält kein Tag"
+              : "Die geforderten Ordner enthalten kein Tag"
+          }
+        >
+          In {emptyFolderNames(savedReach.folders)} liegt zurzeit kein Tag. Eine Bedingung, die auf
+          keinen Tag zeigt, kann <strong>kein Todo</strong> erfüllen — die Regel trifft damit
+          nichts, auch wenn die übrigen Achsen stehen und auch dann, wenn daneben ein Tag oder ein
+          gefüllter Ordner genannt ist. Legen Sie ein Tag in{" "}
+          {savedReach.folders.length === 1 ? "diesem Ordner" : "diesen Ordnern"} an oder nennen Sie
+          hier einen anderen. Ausgeschlossene Ordner sind davon nicht betroffen: Was leer ist,
+          schließt nichts aus.
+        </InlineMessage>
+      ) : null}
+
+      {excludedWithoutEffect ? (
+        <InlineMessage tone="info" title="Ein Ausschluss bleibt ohne Wirkung">
+          Mindestens einer der ausgeschlossenen Ordner enthält zurzeit kein Tag. „Keiner davon“
+          über nichts schließt nichts aus — dieser Teil der Regel lässt alles durch, und sie trifft
+          genau dasselbe wie ohne ihn. Das ist <strong>kein Fehler</strong>: Sobald ein Tag in dem
+          Ordner liegt, greift der Ausschluss von selbst.
+        </InlineMessage>
+      ) : null}
 
       {conditions === 0 ? (
         <InlineMessage

@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { renderExportGroup } from '../src/render.js';
 import type { ExportFieldDefinition, ExportTransformation } from '../src/model.js';
 import type { ExportGroup, ExportSourcePath, ExportSystemContext } from '@takt/domain/export';
-import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain/export';
+import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
 
 const todoId = (value: string) => value as unknown as TodoId;
 const timeEntryId = (value: string) => value as unknown as TimeEntryId;

@@ -5,7 +5,7 @@ import type { MenuEntry } from "../components/Menu";
 import { Card, InlineMessage, Button } from "../components/Primitives";
 import { RuleSummary } from "../components/RuleSummary";
 import { ReactivationNotice } from "../components/Timer";
-import { describeRule } from "../lib/poolRule";
+import { describeRule, describeRuleReach } from "../lib/poolRule";
 import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
 import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
 import { Section, SubHeading } from "./Section";
@@ -23,6 +23,11 @@ import { Section, SubHeading } from "./Section";
  *      "Kunden Nord" und in "Support").
  *   2. Eine Spalte, deren Regel derzeit **nichts** trifft ("Eskalation").
  *   3. Ein **leeres Board** — der Zustand direkt nach der Umstellung.
+ *   4. Die **Leerzustaende einer Spalte** nebeneinander (T-083, T-087). Sie
+ *      unterscheiden sich nur im Text und in der angebotenen Handlung, und
+ *      genau einer von ihnen ist ein Einrichtungsfehler — er steht zweimal da,
+ *      einmal allein und einmal neben einer gesunden Bedingung, weil er in
+ *      dieser zweiten Form bis T-087 unsichtbar war.
  *
  * ## Was hier bewusst fehlt
  *
@@ -35,6 +40,30 @@ import { Section, SubHeading } from "./Section";
 
 /** Der Leerzustand ist ein eigener Bildschirm — hier zum Umschalten. */
 type Stage = "board" | "empty";
+
+/**
+ * Die vier Leerzustaende einer Spalte, in der Reihenfolge, in der sie zu lesen
+ * sind (T-083, T-087): erst der harmlose, dann der Fehler, dann derselbe
+ * Fehler neben einer gesunden Bedingung, dann der unfertige.
+ *
+ * Der dritte ist der Grund fuer T-087: Seine Achsensumme steht auf `1`, und
+ * bis dahin sah er aus wie der erste — "gerade passt nichts" statt "hier fehlt
+ * ein Tag". Er steht deshalb unmittelbar neben dem zweiten, damit beide
+ * denselben Satz sagen.
+ *
+ * Aus `BOARD_COLUMNS` gefiltert und nicht daneben getippt — sonst zeigte diese
+ * Aufstellung Regeln, die es im Board darueber nicht gibt.
+ */
+const EMPTY_COLUMN_IDS: readonly string[] = [
+  "eskalation",
+  "kunden-ost",
+  "support-oder-ost",
+  "neu",
+];
+
+const EMPTY_COLUMNS = EMPTY_COLUMN_IDS.flatMap((id) =>
+  BOARD_COLUMNS.filter((column) => column.id === id),
+);
 
 export function BoardSection() {
   const [cards, setCards] = useState<readonly BoardCard[]>(BOARD_CARDS);
@@ -240,6 +269,7 @@ export function BoardSection() {
             const visible = showDone ? inColumn : inColumn.filter((card) => !card.done);
             const doneCount = visible.filter((card) => card.done).length;
             const description = describeRule(column.rule, SHOWCASE_RULE_LOOKUP);
+            const reach = describeRuleReach(description, column.resolved);
 
             return (
               <KanbanColumn
@@ -251,6 +281,7 @@ export function BoardSection() {
                 rule={
                   <RuleSummary
                     description={description}
+                    reach={reach}
                     emptyText="Ohne Bedingung — diese Spalte bleibt leer."
                   />
                 }
@@ -260,8 +291,9 @@ export function BoardSection() {
               >
                 {visible.length === 0 ? (
                   <BoardColumnEmpty
-                    withoutCondition={description.isEmpty}
+                    reach={reach}
                     onEditRule={() => setAnnouncement(`Regel von ${column.title} bearbeiten.`)}
+                    onOpenTags={() => setAnnouncement("Zu den Tags.")}
                   />
                 ) : (
                   visible.map((card) => {
@@ -309,6 +341,56 @@ export function BoardSection() {
           onDismiss={() => setReactivatedCardId(null)}
         />
       )}
+
+      <SubHeading>Die Leerzustände einer Spalte</SubHeading>
+      <p className="section__lead">
+        Eine leere Spalte ist keine Auskunft, sondern eine Frage: <strong>warum</strong> ist sie
+        leer? Es gibt drei Antworten, sie verlangen drei verschiedene Handlungen, und nur die
+        mittlere ist ein Einrichtungsfehler. Sie stehen hier nebeneinander, weil sie sich allein im
+        Text unterscheiden — getrennt gepflegt liefen sie binnen einer Aufgabe auseinander. Der
+        Einrichtungsfehler steht zweimal: allein und neben einer gesunden Bedingung. Die zweite
+        Form sah bis T-087 aus wie die erste Spalte, weil die Achsensumme dort positiv bleibt —
+        seither entscheidet die Auflösung <strong>je Term</strong>, und die Spalte nennt den leeren
+        Ordner beim Namen.
+      </p>
+      <div className="board">
+        {EMPTY_COLUMNS.map((column) => {
+          const description = describeRule(column.rule, SHOWCASE_RULE_LOOKUP);
+          const reach = describeRuleReach(description, column.resolved);
+
+          return (
+            <KanbanColumn
+              key={column.id}
+              title={column.title}
+              count={0}
+              total={0}
+              doneCount={0}
+              rule={
+                <RuleSummary
+                  description={description}
+                  reach={reach}
+                  emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+                />
+              }
+              entries={columnMenu(column.title)}
+            >
+              <BoardColumnEmpty
+                reach={reach}
+                onEditRule={() => setAnnouncement(`Regel von ${column.title} bearbeiten.`)}
+                onOpenTags={() => setAnnouncement("Zu den Tags.")}
+              />
+            </KanbanColumn>
+          );
+        })}
+      </div>
+      <InlineMessage tone="info" title="Warum der leere Ordner eigens dasteht">
+        Ein erforderlicher Ordner, in dem kein Tag liegt, löst sich <strong>nie</strong> von
+        selbst auf — im Unterschied zu „trifft gerade nichts", das mit dem nächsten passenden Todo
+        vorbei ist. Deshalb nennt dieser Zustand den Ordner beim Namen, markiert ihn in der
+        Zusammenfassung darüber und bietet den Weg an, auf dem er zu beheben ist. Ausgeschlossene
+        Ordner ohne Tag sind davon nicht betroffen: Was leer ist, schließt nichts aus, und eine
+        Warnung ohne Folge glaubt beim nächsten Mal niemand mehr (E-057).
+      </InlineMessage>
 
       <Card
         title="Dieselbe Karte in mehreren Spalten"

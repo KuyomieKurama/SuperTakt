@@ -52,7 +52,7 @@ import { validateExportTemplateField } from '../src/template.js';
 import { renderExportGroup } from '../src/render.js';
 import { toBase64 } from '../src/base64.js';
 import type { ExportGroup, ExportSourcePath, ExportSystemContext } from '@takt/domain/export';
-import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain/export';
+import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
 
 interface ExportFieldDefinition {
   readonly name: string;

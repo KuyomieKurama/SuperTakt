@@ -13,7 +13,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:boundary": "node scripts/check-export-boundary.mjs"
+    "check:boundary": "node scripts/check-export-boundary.mjs",
+    "test": "pnpm -w exec vitest run packages/domain"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

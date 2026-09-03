@@ -152,6 +152,9 @@ export const BOARD_COLUMNS = Object.freeze({
   openWork: 'Spalte über offene Buchungen',
   exported: 'Spalte über exportierte Buchungen',
   emptyFolder: 'Spalte über einen leeren Ordner',
+  emptyFolderAndStatus: 'Spalte über einen leeren Ordner und den Status',
+  excludedEmptyFolder: 'Spalte mit Ausschluss über einen leeren Ordner',
+  tagOrEmptyFolder: 'Spalte über ein Tag oder einen leeren Ordner',
 });
 
 /**
@@ -517,12 +520,65 @@ export async function runScenario() {
     // (T-080). Von außen sieht sie aus wie jede andere Regel; erst
     // `resolved.tagCount` sagt, dass ihre einzige Bedingung ins Leere zeigt.
     const barrenFolder = await quiet('POST', '/tag-folders', { name: 'Ordner ohne Tags' });
+    const barrenFolderId = barrenFolder.body.data.id;
     await quiet('POST', '/pools', {
       name: BOARD_COLUMNS.emptyFolder,
       placement: 'board',
       includeSubfolders: true,
       position: 32,
-      rule: [{ kind: 'folder', folderId: barrenFolder.body.data.id }],
+      rule: [{ kind: 'folder', folderId: barrenFolderId }],
+    });
+
+    // -----------------------------------------------------------------------
+    // Derselbe leere Ordner, aber **nicht allein** (E-057)
+    //
+    // Die Spalte darüber besteht nur aus dem Ordnerterm; sie ist nach dem
+    // Auflösen leer und trifft schon deshalb nichts (A-3.4). Der Fall, um den
+    // es in T-082 geht, ist dieser hier: Der Ordnerterm steht **neben** einer
+    // zweiten Achse. Bis T-082 fiel er aus der Regel heraus — die aufgelöste
+    // Tagmenge war leer, und eine leere Tagmenge galt als Neutralwert —, und
+    // aus „Tags aus dem leeren Ordner **und** Status" wurde „Status": zwei
+    // Karten statt keiner, in der Abfrage wie in der Domäne.
+    //
+    // Die Gegenprobe steht daneben und ist die andere Hälfte von E-057: Ein
+    // **Ausschluß** über denselben leeren Ordner schließt nichts aus. Die
+    // Spalte führt deshalb genau dieselben Karten wie die Spalte über das Tag
+    // allein — „keiner davon" über nichts läßt in Ruhe, statt einzuengen.
+    // -----------------------------------------------------------------------
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.emptyFolderAndStatus,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 33,
+      rule: [{ kind: 'folder', folderId: barrenFolderId }],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.excludedEmptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 34,
+      rule: [{ kind: 'tag', tagId }],
+      excludedTags: [{ kind: 'folder', folderId: barrenFolderId }],
+    });
+
+    // Der Fall, den die Achsensumme nicht sieht (E-057, termweise): ein
+    // **Tagterm neben** dem leeren Ordner, im Modus „mindestens eines davon".
+    // `resolved.tagCount` ist hier **1** — der Tagterm steuert seinen Tag bei —,
+    // und trotzdem trifft die Spalte nichts: Der Benutzer hat den Ordner
+    // genannt, weil er ihn meint. Achsenweise gemessen bliebe der leere Ordner
+    // unsichtbar, die Spalte zeigte die Tag-Karten, und sobald jemand einen Tag
+    // in den Ordner legt, änderte sie sich ohne ersichtlichen Grund.
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.tagOrEmptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      matchMode: 'any',
+      position: 35,
+      rule: [
+        { kind: 'tag', tagId },
+        { kind: 'folder', folderId: barrenFolderId },
+      ],
     });
 
     await record('getBoard', 'GET', '/board', '/board');

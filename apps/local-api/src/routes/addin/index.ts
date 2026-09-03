@@ -365,6 +365,12 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
           todoWasDone: result.todoWasDone,
           doneCleared: result.doneCleared,
           poolNames: result.poolNames,
+          // Die Bewegung, nicht der Zustand (T-084). Ohne dieses Feld kann der
+          // Aufgabenbereich für ein **offenes** Todo nicht sagen, was die
+          // Buchung verändert hat — `poolNames` ist auch dann besetzt, wenn
+          // sich nichts gerührt hat, und wäre als Auskunft eine Behauptung
+          // über eine Bewegung, die nie stattfand.
+          enteringPoolNames: result.enteringPoolNames,
           // Diese Zeile ist die Falle aus T-076 Befund 1: Die Antwort zählt
           // ihre Felder einzeln auf, und ein neues Feld am Ergebnis kommt hier
           // **nicht** von selbst an. Wer `leavingPoolNames` hier vergisst,

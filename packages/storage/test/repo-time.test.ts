@@ -8,7 +8,12 @@
  * einem erledigten Todo (A-2.5) und der verwaiste Timer (E-036).
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CalendarDay } from '@takt/domain';
 import { NOW, openTestDatabase, ts, type TestDatabase } from './support/setup.ts';
+
+// Dieselbe Marke wie in calendar-day-boundary.test.ts: `CalendarDay` ist eine
+// Marke aus der Domäne (`Branded<'CalendarDay'>`), kein eigener Testtyp.
+const day = (value: string): CalendarDay => value as CalendarDay;
 
 describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
   let db: TestDatabase;
@@ -129,7 +134,7 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
     const byTodo = await db.unit.timeEntries.search({ todoId: todo.id });
     expect(byTodo.total).toBe(3);
 
-    const byDay = await db.unit.timeEntries.search({ fromDay: '2026-08-30', toDay: '2026-08-30' });
+    const byDay = await db.unit.timeEntries.search({ fromDay: day('2026-08-30'), toDay: day('2026-08-30') });
     expect(byDay.total).toBe(1);
 
     const page = await db.unit.timeEntries.search({ todoId: todo.id }, { limit: 1 });

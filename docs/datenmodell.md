@@ -1019,7 +1019,7 @@ Eine **leere Regel** trifft auch als Spalte nichts. Eine Spalte, die gerade eing
 zeigt nichts statt alles — dieselbe Antwort wie beim Pool, und in der Abfrage dieselbe Zeile
 (`0 = 1` in `repo-todos.ts`).
 
-### 4.4b Zwei Arten von Leere, und warum die zweite über die Leitung muss (T-080)
+### 4.4b Zwei Arten von Leere, und warum die zweite über die Leitung muss (T-080, E-057)
 
 „Diese Spalte ist leer" hat zwei Ursachen, die sich für den Benutzer völlig verschieden anfühlen
 und in den Daten fast gleich aussehen:
@@ -1027,8 +1027,11 @@ und in den Daten fast gleich aussehen:
 | | Woran man es erkennt | Wer es beheben kann |
 |---|---|---|
 | **Keine Bedingung genannt** | `poolRuleIsEmpty` über die fünf Achsen der Regel | nur der Benutzer, und zwar durch Ergänzen |
-| **Bedingung zeigt ins Leere** | `resolved.tagCount = 0` bei nicht leerem `rule` | nur der Benutzer, durch ein Tag im Ordner |
+| **Bedingung zeigt ins Leere** | `resolved.unresolvedRequired`, benannt in `emptyRuleFolderIds` | nur der Benutzer, durch ein Tag im Ordner |
 | **Regel trifft gerade nichts** | keines von beidem, `total = 0` | löst sich mit dem nächsten passenden Todo |
+
+Die ersten beiden Zeilen sind zusammen `resolved.matchesNothing`: Die Abfrage liefert nichts, und
+zwar unabhängig vom Bestand. Die dritte ist der Normalfall und geht vorbei.
 
 Die erste Zeile beantwortet jeder selbst: `poolRuleIsEmpty` aus `packages/domain` liest genau die
 Felder, die der Aufrufer ohnehin in der Hand hat. Sie ist deshalb **kein** Feld der Antwort — die
@@ -1037,15 +1040,39 @@ ein Feld hätte nur den gespeicherten Stand beantwortet.
 
 Die zweite kann nur der Dienst beantworten; die Auflösung steigt über den Ordnerbaum ab
 (rekursive CTE, E-022). Sie steht deshalb als `resolved` an jeder ausgelieferten Regel:
-`tagCount`, `excludedTagCount` und `isEmpty`. Das Board zahlt dafür nichts — es löst jede Spalte
-für `boardAppearances` ohnehin einmal auf —, `GET /pools` zwei Abfragen je Regel, und `pool` hält
-eine Handvoll Zeilen.
+`tagCount`, `excludedTagCount`, `isEmpty`, `unresolvedRequired`, `unresolvedExcluded`,
+`emptyRuleFolderIds` und `matchesNothing`. Das Board zahlt dafür nichts — es löst jede Spalte für `boardAppearances`
+ohnehin einmal auf —, `GET /pools` zwei Abfragen je Regel, und `pool` hält eine Handvoll Zeilen.
 
-**Der Fall, der ohne diese Zahlen still bleibt.** Ein Ordner ohne Tags löst sich zur leeren
-Tagmenge auf, und eine leere Tagmenge ist der **Neutralwert** dieser Achse — `matchesPool`
-überspringt sie. Eine Regel „Tags aus diesem Ordner **und** Status offen" ist damit faktisch
-„Status offen": Sie trifft **mehr** als beabsichtigt, nicht weniger, und nichts an ihr sieht
-danach aus. `pnpm proof:openapi` Abschnitt 13 fährt genau diese Spalte an.
+**Der Fall, der bis E-057 still war.** Ein Ordner ohne Tags löst sich zur leeren Tagmenge auf, und
+eine leere Tagmenge war der **Neutralwert** dieser Achse — `matchesPool` übersprang sie, und die
+Übersetzung nach SQL ließ sie aus dem `AND` heraus. Eine Regel „Tags aus diesem Ordner **und**
+Status offen" war damit faktisch „Status offen": Sie traf **mehr** als beabsichtigt, nicht
+weniger, und nichts an ihr sah danach aus.
+
+Seit E-057 ist ein solcher Term eine **Einschränkung ohne Treffer**: Die Regel trifft nichts,
+unabhängig vom Modus und von den übrigen Achsen. Entschieden wird das an genau einer Stelle
+(`poolRuleMatchesNothing` in `packages/domain`); die Abfrage in SQL setzt für eine solche Regel
+`0 = 1` und fragt dieselbe Funktion. `pnpm proof:openapi` Abschnitt 14 fährt beide Spalten an —
+den leeren Ordner **neben** einer Statusachse und die Gegenprobe.
+
+**Die Gegenrichtung gilt nicht.** Ausgeschlossene Tags über einen leeren Ordner schließen nichts
+aus: „keiner davon" über nichts läßt in Ruhe, statt einzuengen. `unresolvedExcluded` steht
+deshalb in der Antwort, wirkt aber auf keine Treffermenge.
+
+**Gefragt wird termweise, nicht achsenweise.** Nennt eine Regel „Tag Support **oder** Ordner Ost"
+und ist nur Ost leer, trifft sie trotzdem nichts — obwohl `tagCount` positiv ist. Achsenweise
+gemessen bliebe der leere Ordner unsichtbar: Die Spalte zeigte die Support-Karten, niemandem fiele
+auf, dass Ost leer ist, und sobald jemand einen Tag in Ost legt, änderte sich die Spalte ohne
+ersichtlichen Grund — dieselbe Falle, nur verzögert. Das gilt **in beiden Modi**, auch bei
+„mindestens eines davon".
+
+Damit die Oberfläche **welcher** Ordner sagen kann und nicht nur **ein** Ordner, steht die Liste
+der leeren erforderlichen Ordner in der Antwort: `resolved.emptyRuleFolderIds`. Die Auflösung
+kennt nur der Dienst, und sie wird nirgends nachgebaut; die rekursive Abfrage trägt dafür die
+Wurzel mit, von der sie ausgegangen ist — eine Abfrage, kein Aufruf je Ordner.
+
+Ausgeschlossene Ordner stehen nicht in dieser Liste: Aus ihnen folgt keine Handlung.
 
 ---
 

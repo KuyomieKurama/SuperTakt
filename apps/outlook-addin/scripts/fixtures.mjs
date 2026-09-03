@@ -56,6 +56,10 @@ export const ID = Object.freeze({
   folderBetrieb:        '01931f4e-0000-7000-8000-0000000020b3',
   folderWartung:        '01931f4e-0000-7000-8000-0000000020b4',
   folderArt:            '01931f4e-0000-7000-8000-0000000020b5',
+  // Ein Ordner **ohne Tags** — angelegt, noch nicht gefüllt. Genau der
+  // Bestand, für den E-057 entschieden wurde, und ein Zustand, den jede
+  // Einrichtung durchläuft.
+  folderArchiv:         '01931f4e-0000-7000-8000-0000000020b6',
 
   statusBacklog:        '01931f4e-0000-7000-8000-0000000030c1',
   statusInArbeit:       '01931f4e-0000-7000-8000-0000000030c2',
@@ -67,7 +71,14 @@ export const ID = Object.freeze({
   todoTurnus:           '01931f4e-0000-7000-8000-0000000050e2',
 });
 
-/** Vier Ebenen Ordner (A-4.3): Kunden › Nord › Betrieb › Wartung. */
+/**
+ * Vier Ebenen Ordner (A-4.3): Kunden › Nord › Betrieb › Wartung.
+ *
+ * Dazu ein **leerer** Ordner „Archiv" auf Wurzelebene (E-057). Er trägt kein
+ * Tag und keinen Unterordner und ändert damit an keiner Tagzählung etwas — er
+ * ist der Bestand, an dem sich zeigen läßt, daß ein Ordnerterm ohne Treffer
+ * eine Einschränkung ist und kein Neutralwert.
+ */
 export const buildTagTree = () => ({
   rootTags: [{ id: ID.tagIntern, folderId: null, name: 'Intern', color: '#7e8a9e' }],
   rootFolders: [
@@ -103,6 +114,13 @@ export const buildTagTree = () => ({
         { id: ID.tagTodo, folderId: ID.folderArt, name: 'Todo', color: null },
         { id: ID.tagNichtAbgerechnet, folderId: ID.folderArt, name: 'Nicht abgerechnet', color: null },
       ],
+      subfolders: [],
+    },
+    {
+      // Leer, und zwar auch über Unterordner: Wer ihn in einer Regel nennt,
+      // nennt eine Bedingung, die niemand erfüllt (E-057).
+      folder: { id: ID.folderArchiv, parentId: null, name: 'Archiv' },
+      tags: [],
       subfolders: [],
     },
   ],
@@ -173,19 +191,50 @@ const tagsInFolder = (folderId, includeSubfolders) => {
 };
 
 /**
- * Eine der beiden Taglisten einer Regel, aufgelöst (T-076).
+ * Eine der beiden Tagachsen einer Regel, aufgelöst (T-076, E-057).
  *
  * `which` ist `rule` (erforderlich) oder `excludedTags` (ausgeschlossen). Eine
  * fehlende Liste ist eine **leere** Liste und kein Fehler: Genau so sieht eine
  * Regel aus der Zeit vor T-076 aus, und sie muss weiterhin dasselbe treffen.
+ *
+ * Zurück kommt dieselbe Gestalt wie aus `resolvePoolAxis` im echten Adapter:
+ * die Tags **und** die genannten Ordner, aus denen keiner geworden ist — in
+ * der Reihenfolge der Regel und ohne Doppelte. Die zweite Hälfte ist die
+ * Auskunft, die eine Tagmenge nicht tragen kann: „über Tags sagt die Regel
+ * nichts" und „die Regel nennt einen leeren Ordner" ergeben beide `[]`.
+ *
+ * Beurteilt wird hier nichts. Ob eine Achse damit unaufgelöst ist, sagt
+ * `tagAxisIsUnresolved` in der Domäne — so wie der Betrieb es auch tut.
  */
-const resolveTerms = (pools, poolId, which) => {
+const resolveAxis = (pools, poolId, which) => {
   const pool = pools.find((entry) => entry.id === poolId);
-  if (pool === undefined) return [];
-  return (pool[which] ?? []).flatMap((term) =>
-    term.kind === 'tag' ? [term.tagId] : tagsInFolder(term.folderId, pool.includeSubfolders),
-  );
+  if (pool === undefined) return { tagIds: [], emptyFolderIds: [] };
+
+  const tagIds = [];
+  const emptyFolderIds = [];
+
+  for (const term of pool[which] ?? []) {
+    if (term.kind === 'tag') {
+      if (!tagIds.includes(term.tagId)) tagIds.push(term.tagId);
+      continue;
+    }
+    // Zweimal derselbe Ordner ist ein Ordner — sonst stünde er in der Auskunft
+    // an die Oberfläche doppelt (`repo-tags.ts`).
+    if (emptyFolderIds.includes(term.folderId)) continue;
+
+    const inFolder = tagsInFolder(term.folderId, pool.includeSubfolders);
+    if (inFolder.length === 0) {
+      emptyFolderIds.push(term.folderId);
+      continue;
+    }
+    for (const tagId of inFolder) if (!tagIds.includes(tagId)) tagIds.push(tagId);
+  }
+
+  return { tagIds, emptyFolderIds };
 };
+
+/** Nur die Tagmenge — dieselbe Auflösung, die schmale Frage (`resolvePoolRule`). */
+const resolveTerms = (pools, poolId, which) => resolveAxis(pools, poolId, which).tagIds;
 
 /** Alle Tags des Startbaums, flach — der Bestand, den die Attrappe kennt. */
 const seedTags = () => {
@@ -360,6 +409,21 @@ export const createFakeStore = (options = {}) => {
       // Funktion: Zwei Auflösungen, die auseinanderlaufen könnten, wären genau
       // die Art Attrappe, die grün behauptet, was der Betrieb anders macht.
       resolveExcluded: async (poolId) => resolveTerms(pools, poolId, 'excludedTags'),
+
+      /*
+       * Beide Achsen in einer Antwort — **und** die Ordner, aus denen kein Tag
+       * geworden ist (E-057, `PoolPort.resolveAxes`).
+       *
+       * Seit T-086 ist das die Methode, die der Add-in-Teilbaum benutzt; die
+       * beiden schmalen darüber bleiben als der Rest des Ports stehen, den ein
+       * `UnitOfWork` mitbringt. Sie rufen dieselbe Auflösung — eine zweite,
+       * die auseinanderlaufen könnte, wäre eine Attrappe, die etwas anderes
+       * behauptet als der Betrieb.
+       */
+      resolveAxes: async (poolId) => ({
+        required: resolveAxis(pools, poolId, 'rule'),
+        excluded: resolveAxis(pools, poolId, 'excludedTags'),
+      }),
     },
     statuses: {
       list: async () => STATUSES,
@@ -644,6 +708,147 @@ export const AXIS_POOLS = Object.freeze([
     position: 7,
     rule: [],
     excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+]);
+
+// ---------------------------------------------------------------------------
+// T-086 — der Bestand für den leeren Ordner (E-057)
+// ---------------------------------------------------------------------------
+
+/**
+ * Die Kennungen des E-057-Bestands. Wieder erfunden, wieder UUID Fassung 7.
+ *
+ * Ein **eigener** Poolsatz neben {@link AXIS_POOLS}, aus demselben Grund, aus
+ * dem jener neben {@link DEFAULT_POOLS} steht: Die Sätze und Namenslisten, die
+ * T-078, E-056 und T-084 Zeichen für Zeichen festhalten, sollen weiterhin
+ * dasselbe messen. Eine zusätzliche Spalte im Achsen-Bestand hätte drei
+ * bestehende Erwartungen verschoben, ohne einen Fehler zu zeigen.
+ */
+export const E057_POOL = Object.freeze({
+  wartung:           '01931f4e-0000-7000-8000-0000000042e1',
+  archivUndTagterm:  '01931f4e-0000-7000-8000-0000000042e2',
+  archivUndStatus:   '01931f4e-0000-7000-8000-0000000042e3',
+  nurStatus:         '01931f4e-0000-7000-8000-0000000042e4',
+  archivImAusschluss:'01931f4e-0000-7000-8000-0000000042e5',
+});
+
+/**
+ * Fünf Regeln über dem **leeren** Ordner „Archiv" (E-057).
+ *
+ * Sie messen die Entscheidung in beiden Richtungen, und jede der drei
+ * betroffenen Regeln hat ihre Gegenprobe unmittelbar daneben:
+ *
+ * | Regel | erwartet | ohne E-057 |
+ * |---|---|---|
+ * | `wartung` — nur der volle Ordner | beide Todos | beide Todos |
+ * | `archivUndTagterm` — „Wartung **oder** Archiv" | **niemand** | beide Todos |
+ * | `archivUndStatus` — „Archiv **und** In Arbeit" | **niemand** | das Todo In Arbeit |
+ * | `nurStatus` — „In Arbeit", ohne Ordner | das Todo In Arbeit | dasselbe |
+ * | `archivImAusschluss` — „Wartung, **außer** Archiv" | beide Todos | beide Todos |
+ *
+ * Die zweite Zeile ist der Fall, den eine achsenweise Zählung nicht sieht: Die
+ * Tagmenge ist **gefüllt** (der Ordner „Wartung" trägt zwei Tags bei), und der
+ * leere Ordner daneben verschwindet in der Summe. Gefragt wird deshalb
+ * termweise.
+ *
+ * Die letzte Zeile ist die Grenze der Entscheidung: „Keiner davon" über nichts
+ * schließt nichts aus. Eine zu grobe Behebung — „leerer Ordner, gleich in
+ * welcher Achse" — fällt genau hier auf und sonst nirgends.
+ */
+export const E057_POOLS = Object.freeze([
+  {
+    // Die Kontrolle. Ohne sie wäre „nennt niemanden" auch dann grün, wenn der
+    // Bestand die Regeln aus einem anderen Grund nicht erfüllte.
+    id: E057_POOL.wartung,
+    name: 'Wartung Nord',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 0,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Termweise (E-057): Der leere Ordner steht **neben** einem Ordner, der
+    // Tags beisteuert, und im Modus `any`. Aussagenlogisch trüge er zu einem
+    // „oder" nichts bei; die Entscheidung sagt, der Benutzer hat ihn genannt,
+    // weil er ihn meint.
+    id: E057_POOL.archivUndTagterm,
+    name: 'Wartung oder Archiv',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 1,
+    rule: [
+      { kind: 'folder', folderId: ID.folderWartung },
+      { kind: 'folder', folderId: ID.folderArchiv },
+    ],
+    excludedTags: [],
+    statusIds: [],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Der Fall aus E-057 in seiner ursprünglichen Gestalt: „Tags aus Ordner X
+    // **und** Status In Arbeit". Vor der Entscheidung schrumpfte die Regel
+    // still auf „Status In Arbeit" — sie traf mehr, als der Benutzer gesagt
+    // hatte, und das fällt niemandem auf.
+    id: E057_POOL.archivUndStatus,
+    name: 'Archiv, in Arbeit',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 2,
+    rule: [{ kind: 'folder', folderId: ID.folderArchiv }],
+    excludedTags: [],
+    statusIds: [ID.statusInArbeit],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Die Gegenprobe dazu: **dieselbe** Statusachse ohne den Ordner. Sie nennt
+    // das Todo — damit steht fest, daß die Regel darüber am leeren Ordner
+    // scheitert und nicht am Status.
+    id: E057_POOL.nurStatus,
+    name: 'In Arbeit',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 3,
+    rule: [],
+    excludedTags: [],
+    statusIds: [ID.statusInArbeit],
+    completion: 'any',
+    exportState: 'any',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    // Derselbe leere Ordner, die andere Achse. „Keiner davon" über nichts
+    // schließt nichts aus (E-057, Absatz „Nicht betroffen") — die Regel muß
+    // genau dieselben Todos nennen wie `wartung` darüber.
+    id: E057_POOL.archivImAusschluss,
+    name: 'Wartung, außer Archiv',
+    matchMode: 'any',
+    includeSubfolders: true,
+    placement: 'pool',
+    position: 4,
+    rule: [{ kind: 'folder', folderId: ID.folderWartung }],
+    excludedTags: [{ kind: 'folder', folderId: ID.folderArchiv }],
     statusIds: [],
     completion: 'any',
     exportState: 'any',

@@ -75,9 +75,13 @@ export type BoardColumn = Pool;
  * nach; sie bleibt damit rein und ohne laufenden Dienst prüfbar.
  *
  * Die übrigen Achsen (Status, Erledigt, Exportstatus) stehen unaufgelöst am
- * `Pool` und werden hier durchgereicht. Alle sind freiwillig und stehen ohne
+ * `Pool` und werden hier durchgereicht. Sie sind freiwillig und stehen ohne
  * Angabe neutral: Eine Spalte aus der Zeit vor T-076 verhält sich damit
  * unverändert.
+ *
+ * **Eine Angabe ist Pflicht**, und sie ist keine Achse: `unresolvedRequired`
+ * (E-057). Wer eine Spalte auflöst, hat die Antwort; wer sie wegläßt, hätte
+ * nicht „nichts gesagt", sondern „nicht nachgesehen".
  */
 export interface BoardColumnRule {
   readonly columnId: PoolId;
@@ -92,6 +96,27 @@ export interface BoardColumnRule {
   readonly completion?: PoolCompletionFilter;
   /** Die Exportstatus-Achse (T-076). */
   readonly exportState?: PoolExportFilter;
+  /**
+   * Zeigt einer der erforderlichen Terme dieser Spalte ins Leere? (E-057)
+   *
+   * Ein Ordner ohne Tags trägt zu `ruleTagIds` nichts bei, und das sieht aus
+   * wie „diese Spalte sagt über Tags nichts" — oder, wenn daneben ein Tagterm
+   * steht, wie gar nichts. Ohne diese Auskunft nennt `boardAppearances` eine
+   * Spalte, in der die Abfrage die Karte nicht zeigt: dieselbe Karte, zwei
+   * Antworten, und die Oberfläche behauptete neben der leeren Spalte, die Karte
+   * stünde auch dort.
+   *
+   * **Pflicht**, anders als die Achsen darüber. Ein weggelassenes Achsenfeld
+   * heißt „diese Spalte sagt dazu nichts" und ist damit beantwortet; ein
+   * weggelassenes `unresolvedRequired` hieße „ich habe nicht nachgesehen", und
+   * die Antwort darauf wäre die zu weite. Die Begründung steht an
+   * `MatchesPoolRule.unresolvedRequired`.
+   *
+   * Der Aufrufer bekommt die Antwort ohne Zusatzarbeit: Sie steht in
+   * `PoolResolution.unresolvedRequired`, und die Auflösung braucht das Board
+   * für die Spaltenauskunft ohnehin.
+   */
+  readonly unresolvedRequired: boolean;
   /**
    * Zeigt diese Spalte erledigte Karten? (E-039)
    *
@@ -154,7 +179,11 @@ export interface BoardAppearance {
  *  1. **Eine leere Regel trifft nichts.** `matchesPool` liefert für eine leere
  *     Tagmenge `false`, auch im Modus `all`. Eine Spalte, deren Regel noch nicht
  *     eingerichtet ist, zeigt deshalb nichts statt alles — dieselbe Antwort wie
- *     beim Pool (T-009).
+ *     beim Pool (T-009). Und seit E-057 gilt dasselbe für eine Spalte, deren
+ *     erforderliche Tagachse ins Leere zeigt: Ein Ordner ohne Tags ist eine
+ *     Einschränkung ohne Treffer, nicht eine Achse, die schweigt. Der Aufrufer
+ *     sagt es über `BoardColumnRule.unresolvedRequired`; ohne die Angabe bliebe
+ *     es bei der Antwort von vor E-057.
  *  2. **Mehrere zutreffende Regelteile derselben Spalte ergeben eine
  *     Nennung, nicht mehrere.** Jede Spalte wird einmal befragt und höchstens
  *     einmal genannt, ganz gleich, über wie viele ihrer Tags die Karte
@@ -198,6 +227,7 @@ export const boardAppearances = (
           ruleStatusIds: column.ruleStatusIds,
           completion: column.completion,
           exportState: column.exportState,
+          unresolvedRequired: column.unresolvedRequired,
           todoStatusId: card.statusId,
           completedAt: card.completedAt,
           hasOpenEntries: card.hasOpenEntries,

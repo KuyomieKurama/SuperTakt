@@ -288,6 +288,29 @@ export interface PoolNameEntry {
   readonly name: string;
 }
 
+/**
+ * Eine Tagachse einer Regel, aufgelöst (E-057).
+ *
+ * `emptyFolderIds` sind die **genannten** Ordner, aus denen kein Tag geworden
+ * ist — in der Reihenfolge der Regel, ohne Doppelte. Sie sind der Unterschied
+ * zwischen „diese Achse sagt nichts" und „diese Achse verlangt etwas, das
+ * niemand hat"; beurteilt wird das in der Domäne (`tagAxisIsUnresolved`).
+ *
+ * Die Zahl der genannten Terme steht **nicht** darin: Wer sie braucht, hat die
+ * Regel in der Hand und zählt `rule.length`. Ein Feld dafür wäre eine zweite
+ * Fassung derselben Zahl.
+ */
+export interface ResolvedTagAxis {
+  readonly tagIds: readonly TagId[];
+  readonly emptyFolderIds: readonly TagFolderId[];
+}
+
+/** Beide Tagachsen einer Regel in einer Antwort. Siehe `PoolPort.resolveAxes`. */
+export interface PoolAxesResolution {
+  readonly required: ResolvedTagAxis;
+  readonly excluded: ResolvedTagAxis;
+}
+
 export interface PoolPort {
   load(id: PoolId): Promise<Pool | null>;
 
@@ -404,6 +427,27 @@ export interface PoolPort {
    * wieder auseinandergenommen werden müsste.
    */
   resolveExcluded(id: PoolId): Promise<readonly TagId[]>;
+
+  /**
+   * Beide Taglisten, aufgelöst — **und** die Ordner, aus denen nichts geworden
+   * ist (E-057).
+   *
+   * Der Zusatz gegenüber `resolveRule`/`resolveExcluded` ist die Auskunft, die
+   * eine Tagmenge nicht tragen kann: welcher **genannte Ordner** keinen Tag
+   * enthält. Ohne sie sieht ein leerer Ordner aus wie eine Achse, die schweigt
+   * — und steht daneben noch ein Tagterm, ist er in der Summe überhaupt nicht
+   * mehr zu sehen.
+   *
+   * **Eine Methode für beide Achsen**, obwohl die schmale Fassung darüber zwei
+   * hat: Die beiden Aufrufer dieser Fassung — die Pool-Liste und das Board —
+   * brauchen ausnahmslos beide Achsen und lösten schon vorher zweimal auf. Zwei
+   * Methoden wären hier zwei Aufrufe für eine Antwort.
+   *
+   * Die schmalen Methoden bleiben daneben stehen. An ihnen hängt ein Aufrufer
+   * in fremder Hoheit (`routes/addin/service.ts`), und sie sind für den, der
+   * nur die Tagmenge braucht, weiterhin die genügsamere Frage.
+   */
+  resolveAxes(id: PoolId): Promise<PoolAxesResolution>;
 
   /** Mitglieder eines Pools. Abgeleitet, nicht gespeichert. */
   members(id: PoolId, filter?: TodoFilter, pagination?: Pagination): Promise<Page<Todo>>;

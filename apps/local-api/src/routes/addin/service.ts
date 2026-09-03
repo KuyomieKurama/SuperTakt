@@ -31,6 +31,7 @@ import {
   err,
   matchesPool,
   ok,
+  tagAxisIsUnresolved,
 } from '@takt/domain';
 
 import { AbortTodoCreate, resolveTagNames } from '../../usecases/tag-names.ts';
@@ -141,6 +142,32 @@ export interface AddinTodoMatch {
    */
   readonly poolNames: readonly string[];
   /**
+   * Die Pools, in denen das Todo **vorher nicht** stand und nach der Buchung
+   * steht (T-084).
+   *
+   * Eine **Teilmenge** von `poolNames` und keine zweite Rechnung: Beide
+   * entstehen in einem Durchgang durch dieselben Regeln (`poolNamer`).
+   * `poolNames` beantwortet „wo steht es danach", diese Liste „was ändert sich
+   * dadurch" — und das sind zwei verschiedene Fragen, seit eine Spalte über den
+   * Exportstatus urteilen kann (T-076).
+   *
+   * Wozu sie gebraucht wird: Für ein **erledigtes** Todo ist die Buchung eine
+   * Rückkehr, und der Aufgabenbereich nennt alle Pools, in denen es danach zu
+   * finden ist. Für ein **offenes** Todo ist sie das nicht — dort wäre eine
+   * Aufzählung der ohnehin schon zutreffenden Pools kein Hinweis, sondern
+   * Rauschen. Was der Benutzer dort erfährt, ist genau der Unterschied: Die
+   * erste Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte
+   * `exportState: 'open'` nimmt das Todo damit auf. Ohne diese Liste ließe sich
+   * „es erscheint neu in …" nicht von „es steht ohnehin schon in …"
+   * unterscheiden, ohne zwei Namenslisten gegeneinander zu halten — und Namen
+   * sind nicht eindeutig (siehe `poolNamer`).
+   *
+   * Leer heißt: Diese Buchung bewegt das Todo in keinen Pool hinein. Zusammen
+   * mit einem leeren `leavingPoolNames` heißt es, dass sie es überhaupt nicht
+   * bewegt — und dann sagt der Aufgabenbereich kein Wort über Pools.
+   */
+  readonly enteringPoolNames: readonly string[];
+  /**
    * Die Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
    *
    * Die andere Hälfte derselben Auskunft. Sie ist fast immer leer — nur eine
@@ -188,6 +215,16 @@ export interface AddinPoolMovement {
   /** Pools, in denen das Todo **nach** der Buchung steht. */
   readonly appears: readonly string[];
   /**
+   * Pools, in die dieselbe Buchung es **hineinbewegt** — die Teilmenge von
+   * `appears`, für die vorher nicht galt, was nachher gilt (T-084).
+   *
+   * Das Gegenstück zu `leaves`, und zusammen sind die beiden die **Bewegung**:
+   * Sind beide leer, ändert diese Buchung an der Pool-Zugehörigkeit nichts,
+   * und darüber ist dann auch nichts zu sagen. `appears` beantwortet diese
+   * Frage nicht — es ist fast immer besetzt, auch wenn sich nichts rührt.
+   */
+  readonly enters: readonly string[];
+  /**
    * Pools, aus denen dieselbe Buchung es **entfernt** — genannt, weil es
    * dieselbe Folge ist wie das Erscheinen, nur in die andere Richtung (E-056).
    *
@@ -227,6 +264,30 @@ export interface AddinPoolMovement {
  * fehlt.
  *
  * ---------------------------------------------------------------------------
+ * Der leere Ordner geht seit T-086 mit (E-057)
+ * ---------------------------------------------------------------------------
+ *
+ * Derselbe Fehler wie oben, eine Achse weiter: Eine Regel, die einen Ordner
+ * **ohne Tags** fordert, trifft seit E-057 nichts — vorher verschwand die
+ * Bedingung beim Auflösen spurlos, weil eine leere Tagmenge und „keine
+ * Tagbedingung" gleich aussehen. T-084 hat den Befund gemeldet und nicht
+ * behoben: Die Antwort steckt nicht in einer flachen Tagmenge, denn die kann
+ * nicht sagen, **welcher** genannte Ordner nichts beigetragen hat.
+ *
+ * Sie steckt in `PoolPort.resolveAxes`, und die liefert der Port-Ausschnitt
+ * seit T-086. Damit geht `unresolvedRequired` mit — seit T-082 ohnehin ein
+ * **Pflichtfeld** von `matchesPool`, und genau deshalb: Ein freiwilliges Feld
+ * hieße „wer schweigt, bekommt die zu weite Antwort von vorher, und niemand
+ * wird rot". Das war die Falle aus T-078, zweimal.
+ *
+ * Gefragt wird **termweise** und nicht über die Summe: Ein leerer Ordner
+ * **neben** einem Tagterm bleibt in `ruleTagIds` unsichtbar (die Menge ist
+ * gefüllt), zählt aber in `emptyFolderIds`. Beurteilt wird nichts hier,
+ * sondern in `tagAxisIsUnresolved` — dieselbe Ableitung, die auch die
+ * Übersetzung nach SQL und die Pool-Liste benutzen. Eine zweite Fassung dieser
+ * einen Zeile wäre der Anfang zweier verschiedener Antworten.
+ *
+ * ---------------------------------------------------------------------------
  * Warum die Antwort seit E-056 zwei Listen hat und nicht eine
  * ---------------------------------------------------------------------------
  *
@@ -244,19 +305,28 @@ const poolNamer = async (
 
   const resolved = await Promise.all(
     ordered.map(async (pool) => {
-      // Beide Taglisten in einem Zug. Getrennte Methoden, weil sie im Ergebnis
-      // Gegenteiliges bewirken (`PoolPort.resolveExcluded`, T-076); getrennt
-      // **aufgelöst** werden sie trotzdem nebeneinander, nicht nacheinander.
-      const [ruleTagIds, excludedTagIds] = await Promise.all([
-        unit.pools.resolveRule(pool.id),
-        unit.pools.resolveExcluded(pool.id),
-      ]);
+      // Beide Taglisten in **einer** Antwort (`PoolPort.resolveAxes`, E-057).
+      // Sie bewirken im Ergebnis Gegenteiliges und stehen deshalb getrennt
+      // nebeneinander; aufgelöst werden sie zusammen, weil hier ausnahmslos
+      // beide gebraucht werden — und weil nur diese Antwort die Ordner nennt,
+      // aus denen kein Tag geworden ist.
+      const axes = await unit.pools.resolveAxes(pool.id);
 
       return {
         name: pool.name,
         matchMode: pool.matchMode,
-        ruleTagIds,
-        excludedTagIds,
+        ruleTagIds: axes.required.tagIds,
+        excludedTagIds: axes.excluded.tagIds,
+        // Termweise (E-057): `named` zählt die **Terme** der Regel, nicht die
+        // Tags, die daraus geworden sind — `pool.rule` ist die Liste, die der
+        // Benutzer ausgesprochen hat. Die ausgeschlossene Achse steht
+        // absichtlich nicht daneben: „keiner davon" über nichts schließt
+        // nichts aus.
+        unresolvedRequired: tagAxisIsUnresolved({
+          named: pool.rule.length,
+          resolved: axes.required.tagIds.length,
+          emptyTerms: axes.required.emptyFolderIds.length,
+        }),
         ruleStatusIds: pool.statusIds,
         completion: pool.completion,
         exportState: pool.exportState,
@@ -271,6 +341,10 @@ const poolNamer = async (
       ruleTagIds: pool.ruleTagIds,
       matchMode: pool.matchMode,
       excludedTagIds: pool.excludedTagIds,
+      // Pflichtfeld seit T-082, und der einzige Wert hier, der keine Bedingung
+      // ist, sondern eine Auskunft über eine: Ist eine erforderliche
+      // Bedingung genannt, die auf nichts auflöst? (E-057)
+      unresolvedRequired: pool.unresolvedRequired,
       todoStatusId: todo.statusId,
       ruleStatusIds: pool.ruleStatusIds,
       completedAt: todo.completedAt,
@@ -282,21 +356,34 @@ const poolNamer = async (
 
   return ({ before, after }) => {
     const appears: string[] = [];
+    const enters: string[] = [];
     const leaves: string[] = [];
 
     for (const pool of resolved) {
+      // Ein Pool, ein Durchgang, beide Zustände. Seit T-084 fällt dabei ein
+      // dritter Wert ab, und zwar aus **derselben** Antwort: Ob sich für
+      // diesen Pool etwas geändert hat, weiß nur die Stelle, die ihn für
+      // beide Zustände befragt hat. Wer `enters` später aus `appears` und
+      // einer zweiten Abfrage nachrechnete, verglich Namen mit Namen — und
+      // zwei Pools dürfen denselben Namen tragen.
+      const held = holds(pool, before);
+
       if (holds(pool, after)) {
         appears.push(pool.name);
+        // Die Teilmenge, die die **Bewegung** trägt. `continue` steht
+        // absichtlich danach: Ein Pool, der nachher zutrifft, kann nicht
+        // zugleich verlassen werden.
+        if (!held) enters.push(pool.name);
         continue;
       }
       // Nur hier wird der Zustand **vor** der Buchung befragt, und nur für die
       // Pools, die danach nicht mehr zutreffen. Ein Pool kann deshalb nie in
       // beiden Listen stehen — „erscheint" und „verschwindet" über denselben
       // Namen wäre kein Satz, den jemand lesen möchte.
-      if (holds(pool, before)) leaves.push(pool.name);
+      if (held) leaves.push(pool.name);
     }
 
-    return { appears, leaves };
+    return { appears, enters, leaves };
   };
 };
 
@@ -435,6 +522,7 @@ export const findMatches = async (
           openSeconds,
           exportedSeconds,
           poolNames: movement.appears,
+          enteringPoolNames: movement.enters,
           leavingPoolNames: movement.leaves,
         };
       }),
@@ -661,6 +749,16 @@ export type AddinBookResult =
        */
       readonly poolNames: readonly string[];
       /**
+       * Die Pools, in die diese Buchung das Todo **hineinbewegt** hat (T-084).
+       *
+       * Teilmenge von `poolNames`, aus demselben Zustandspaar. Sie ist der
+       * Unterschied zwischen „das Todo steht in diesen Pools" und „durch diese
+       * Buchung ist es dort neu" — und nur die zweite Aussage ist eine
+       * Nachricht wert, wenn das Todo gar nicht erledigt war und deshalb auch
+       * nichts aufgehoben wurde.
+       */
+      readonly enteringPoolNames: readonly string[];
+      /**
        * Die Pools, aus denen diese Buchung das Todo entfernt hat (E-056).
        *
        * Dieselbe Rechnung wie in der Duplikatsuche, damit die Ankündigung und
@@ -767,6 +865,7 @@ export const bookOnTodo = (deps: AddinDeps, input: AddinBookInput): Promise<Addi
       // Es gibt keinen Weg mehr, auf dem diese beiden Werte auseinanderfallen.
       doneCleared: todoWasDone,
       poolNames: movement.appears,
+      enteringPoolNames: movement.enters,
       leavingPoolNames: movement.leaves,
     };
   });

@@ -3956,6 +3956,52 @@
 }
 
 /*
+ * Ein erforderlicher Ordner, in dem kein Tag liegt (E-057, T-083).
+ *
+ * Das ist der einzige der drei Leerzustaende einer Regel, den ausschliesslich
+ * der Benutzer beheben kann — deshalb traegt er die Warnfarbe und nicht die
+ * gedaempfte Flaeche der uebrigen Chips. Erkennbar ist er aber auch ohne sie:
+ * Das Symbol wechselt vom Ordner zum Warndreieck, und der Zusatz „kein Tag
+ * darin" steht als Wort daneben (SC 1.4.1).
+ */
+.rule-summary__folder--empty {
+  /*
+   * Die Kontur traegt `--warning-fg` und nicht `--warning-border`: Gemessen
+   * gegen den Untergrund, auf dem der Chip liegt — den Spaltenkopf
+   * (`--bg-subtle`) und die Regelliste (`--bg-surface`) — kommt
+   * `--warning-border` auf 1,28:1 bzw. 1,44:1 und verfehlt SC 1.4.11 deutlich.
+   * Nachgemessen in `scripts/contrast-check.mjs`, nicht geschaetzt.
+   */
+  border-color: var(--warning-fg);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.rule-summary__folder--empty .rule-summary__folder-note {
+  color: var(--warning-fg);
+}
+
+/*
+ * Die Folge, einmal ausgesprochen. Welcher Ordner leer ist, steht am Chip
+ * darueber und wird hier nicht wiederholt: In einer 17rem breiten Kanban-Spalte
+ * waere derselbe Ordnerpfad zweimal drei Zeilen, und der Satz sagt etwas
+ * anderes als der Chip — der eine nennt den Befund, der andere die Folge.
+ */
+.rule-summary__unreachable {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  color: var(--warning-fg);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__unreachable svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/*
  * Nur im Formular sichtbar (`showNeutral`). Dort wird gewaehlt, und dort muss
  * ausgesprochen werden, was „Alle" bedeutet — an den Flaechen, die eine
  * fertige Regel nur anzeigen, waere derselbe Satz Rauschen.
