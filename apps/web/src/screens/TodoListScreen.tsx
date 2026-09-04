@@ -32,6 +32,8 @@ import { doneFlagState, type DoneFlagState } from "../lib/labels";
 import { doneMovementSentence, withMovement } from "../lib/movement";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { TodoFormDialog } from "./TodoFormDialog";
+import { foreignText, quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-02, die Todo-Liste.
@@ -200,13 +202,13 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           if (wasDone) {
             toasts.show({
               tone: "info",
-              title: `„${todo.title}“ ist wieder offen.`,
+              title: `${quotedName(todo.title)} ist wieder offen.`,
               body: withMovement(unchanged, movement),
             });
           } else {
             toasts.show({
               tone: "success",
-              title: `„${todo.title}“ ist erledigt.`,
+              title: `${quotedName(todo.title)} ist erledigt.`,
               body: withMovement(
                 showDone
                   ? unchanged
@@ -233,7 +235,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       .then(() => {
         setPendingDelete(null);
         bump();
-        toasts.success("Todo gelöscht.", `„${todo.title}“ ist entfernt.`);
+        toasts.success("Todo gelöscht.", `${quotedName(todo.title)} ist entfernt.`);
       })
       .catch((cause: unknown) => {
         setDeleteError(
@@ -259,8 +261,8 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         .then(() => {
           bump();
           toasts.success(
-            `Status geändert: ${status.name}.`,
-            `„${todo.title}“ steht jetzt auf „${status.name}“. Tags und Kanban-Spalten bleiben unberührt.`,
+            `Status geändert: ${foreignText(status.name)}.`,
+            `${quotedName(todo.title)} steht jetzt auf ${quotedName(status.name)}. Tags und Kanban-Spalten bleiben unberührt.`,
           );
         })
         .catch((cause: unknown) =>
@@ -290,7 +292,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       { kind: "separator", id: "sep-status" },
       ...statuses.map<MenuEntry>((status) => ({
         id: `status-${status.id}`,
-        label: `Status: ${status.name}`,
+        label: `Status: ${foreignText(status.name)}`,
         icon: "chevron-right",
         disabled: status.id === todo.statusId,
         ...(status.id === todo.statusId ? { disabledReason: "Aktueller Status" } : {}),
@@ -494,7 +496,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         description={
           pendingDelete === null
             ? ""
-            : `„${pendingDelete.title}“ wird mit allen noch nicht exportierten Zeitbuchungen entfernt.`
+            : `${quotedName(pendingDelete.title)} wird mit allen noch nicht exportierten Zeitbuchungen entfernt.`
         }
         consequence={
           deleteError ??
@@ -577,19 +579,19 @@ function TodoRow({
       <label className="todo-row__check">
         <input type="checkbox" checked={done} onChange={onToggleDone} />
         <span className="visually-hidden">
-          {done ? `„${todo.title}“ als offen markieren` : `„${todo.title}“ als erledigt markieren`}
+          {done ? `${quotedName(todo.title)} als offen markieren` : `${quotedName(todo.title)} als erledigt markieren`}
         </span>
       </label>
 
       <div className="todo-row__main">
         <a className="todo-row__title" href={href("todo", todo.id)}>
-          {todo.title}
+          <Foreign value={todo.title} />
         </a>
         <div className="todo-row__meta">
           {todo.callNumber === null ? null : (
             <span className="todo-row__call">Call {todo.callNumber}</span>
           )}
-          <span className="todo-row__status">{statusName}</span>
+          <Foreign className="todo-row__status" value={statusName} />
           {/*
             A-2.5, T-005n Abschnitt 1 Regel 1: Hat ein Timerstart „Erledigt"
             aufgehoben, darf die Zeile nicht aussehen, als waere sie nie
@@ -619,12 +621,12 @@ function TodoRow({
 
       <div className="todo-row__actions">
         <IconButton
-          label={running ? `Timer für „${todo.title}“ stoppen` : `Timer für „${todo.title}“ starten`}
+          label={running ? `Timer für ${quotedName(todo.title)} stoppen` : `Timer für ${quotedName(todo.title)} starten`}
           icon={running ? "pause" : "play"}
           variant={running ? "primary" : "ghost"}
           onClick={onToggleTimer}
         />
-        <Menu trigger={<Icon name="more-horizontal" size={16} />} triggerLabel={`Menü für „${todo.title}“`} entries={menu} align="end" />
+        <Menu trigger={<Icon name="more-horizontal" size={16} />} triggerLabel={`Menü für ${quotedName(todo.title)}`} entries={menu} align="end" />
       </div>
     </li>
   );

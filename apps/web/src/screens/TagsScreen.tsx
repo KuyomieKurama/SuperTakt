@@ -31,6 +31,8 @@ import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../lib/labels";
 import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-08 (Tags und Ordner) und S-11 (Pools).
@@ -227,8 +229,8 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   const place =
                     targetFolderId === null
                       ? "auf der Wurzelebene"
-                      : `in „${folderName(tree, targetFolderId)}“`;
-                  toasts.success(`„${node.label}“ liegt jetzt ${place}.`);
+                      : `in ${quotedName(folderName(tree, targetFolderId))}`;
+                  toasts.success(`${quotedName(node.label)} liegt jetzt ${place}.`);
                 });
               }}
             />
@@ -453,8 +455,8 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
           pendingDelete === null
             ? ""
             : deleteError === null
-              ? `„${pendingDelete.name}“ wird entfernt.`
-              : `„${pendingDelete.name}“ gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+              ? `${quotedName(pendingDelete.name)} wird entfernt.`
+              : `${quotedName(pendingDelete.name)} gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
         }
         /*
           Vorwarnung und Absage sind seit T-118 zwei Eigenschaften (B-5 aus
@@ -604,7 +606,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
               <li key={pool.id} className="pool-row">
                 <div className="grow">
                   <p className="pool-row__name">
-                    {pool.name}
+                    <Foreign value={pool.name} />
                     <span className={`placement-badge placement-badge--${pool.placement}`}>
                       <Icon name={pool.placement === "pool" ? "filter" : "square"} size={11} />
                       {POOL_PLACEMENT_SHORT[pool.placement]}
@@ -682,7 +684,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
         open={pendingDelete !== null}
         tone="danger"
         title="Regel löschen?"
-        description={pendingDelete === null ? "" : `Die Regel „${pendingDelete.name}“ wird entfernt.`}
+        description={pendingDelete === null ? "" : `Die Regel ${quotedName(pendingDelete.name)} wird entfernt.`}
         consequence={
           pendingDelete !== null && pendingDelete.placement !== "pool"
             ? "An den Todos ändert sich nichts — die Zugehörigkeit war nie gespeichert. Auf dem Board verschwindet die Spalte; ihre Karten stehen weiter in der Todo-Liste."

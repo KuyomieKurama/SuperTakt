@@ -74,6 +74,16 @@ import { cutToCharacterBoundary } from '../src/text/cut.ts';
 import { mountAddinRoutes } from '../../local-api/src/routes/addin/index.ts';
 
 /*
+ * Und der Leser der Schnittstellenbeschreibung, für den **Add-in-Abschnitt**
+ * (E-053, T-123).
+ *
+ * Der Abschnitt gehört dem Add-in, also wird er hier gemessen und nicht in
+ * `proof:openapi` — dieselbe Aufteilung wie bei den Routen selbst. Der Leser
+ * ist der aus T-039: ein kleiner, strenger YAML-Leser ohne neue Abhängigkeit.
+ */
+import { parseYaml } from '../../local-api/scripts/openapi-reader.mjs';
+
+/*
  * --- Prüflinge: die **beiden Türen** (T-114) -------------------------------
  *
  * Zwei Schemata, die dieser Nachweis bis T-114 nicht brauchte, und sie stehen
@@ -87,9 +97,16 @@ import { mountAddinRoutes } from '../../local-api/src/routes/addin/index.ts';
  * Wellen lang, ohne dass ein Lauf rot wurde.
  *
  * Geprüft wird deshalb nicht, ob beide Dateien dieselbe Zeile enthalten —
- * das wäre wieder eine Aussage über den Wortlaut —, sondern ob beide Türen
- * **dieselben Zeichenketten annehmen und dieselben abweisen**. Das bliebe auch
- * dann richtig, wenn eine der beiden Seiten ihre Prüfung umbaut.
+ * das wäre wieder eine Aussage über den Wortlaut —, sondern was jede Tür
+ * **annimmt und abweist**. Das bliebe auch dann richtig, wenn eine der beiden
+ * Seiten ihre Prüfung umbaut.
+ *
+ * **Seit T-123 gegen die Quelle und nicht mehr gegeneinander** (E-063 Punkt 4).
+ * Zwei Türen gegeneinander zu halten sagt, daß sie gleich sind, aber nicht,
+ * daß sie richtig sind — und wenn beide dieselbe Abschrift tragen, sagt es gar
+ * nichts. Abschnitt 16 hält deshalb **jede** Tür einzeln gegen
+ * `FORBIDDEN_NAME_CHARACTERS` aus `@takt/domain`; daß sie einander gleichen,
+ * folgt daraus, statt gemessen zu werden.
  */
 import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/routes/todos.ts';
 import { createTodoSchema as addinCreateTodoSchema } from '../../local-api/src/routes/addin/schema.ts';
@@ -142,14 +159,20 @@ import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases
 // `@takt/domain` seit T-028 in seiner Abhängigkeitsliste, und derselbe
 // Bezeichner steht im Quelltext des Aufgabenbereichs.
 import {
+  CONTROL_WHITESPACE,
+  FORBIDDEN_NAME_CHARACTERS,
+  HIDDEN_MARKER as DOMAENE_MARKE,
   MAX_TAG_NAME_LENGTH,
   POOL_RULE_AXIS_IDS,
   POOL_RULE_AXIS_OF_FIELD,
   checkCallNumber,
+  dropHiddenCharacters,
+  hasHiddenCharacter,
   matchesPool,
   mayLookUpDuplicates,
   poolMovementSentence,
   tagNameKey,
+  visibleText as domaeneVisibleText,
 } from '@takt/domain';
 
 // --- Prüflinge: der Vorlagen-Motor ----------------------------------------
@@ -3335,50 +3358,68 @@ await checkAsync('Die Gegenprobe: ohne den Fehlschlag bucht derselbe Aufruf', as
 
 
 // ===========================================================================
-heading('16  Beide Türen weisen dieselben Zeichen ab (T-114, Befund T-112-1)');
+heading('16  Beide Türen lesen die Zeichenklasse der Domäne (T-114, T-122, T-123)');
 // ===========================================================================
 
 /*
- * Der Befund, gegen den dieser Abschnitt steht.
+ * Der Befund, gegen den dieser Abschnitt steht — und der zweite, an dem er
+ * selbst beteiligt war.
  *
  * `apps/local-api/src/http/input.ts` weist seit T-101 Steuerzeichen (C0, C1)
  * und die bidirektionalen Formatierungszeichen an Titeln und Namen ab. Die
  * Add-in-Tür hatte ihre eigene Abschrift des Schemas und bekam die Prüfung
  * nicht mit — ausgerechnet die Tür, deren Titel mit dem **Betreff einer
  * E-Mail** vorbelegt ist und deren Kopfkommentar sagt, dass hier jede
- * Zeichenkette eine fremde Quelle berührt hat.
+ * Zeichenkette eine fremde Quelle berührt hat. Das war T-114.
  *
- * Die Zeichen stehen unten als **Zahlen** und nicht als Zeichen im Quelltext.
- * Das ist kein Geschmack: Ein rohes `U+0000` in einer Quelldatei macht sie für
- * Git zu einer Binärdatei — `git diff` zeigt dann „Bin 0 -> … bytes", und
- * ausgerechnet der Nachweis einer Zeichenwache wäre der eine Teil, den ein
- * Reviewer nicht lesen kann. `String.fromCodePoint` prüft dasselbe und lässt
- * die Datei Text bleiben.
+ * **Dieser Abschnitt hat den nächsten Fall derselben Art durchgelassen.** Bis
+ * T-123 stand hier eine Liste von zwanzig **abgeschriebenen** Codepunkten. Als
+ * T-117 die Klasse um `U+061C`, `U+200E` und `U+200F` erweiterte, wuchs die
+ * Liste nicht mit, der Lauf blieb grün, und der Titelvorschlag des Add-ins ließ
+ * die drei Marken stehen (gefunden in T-119). Eine Abschrift im Nachweis ist
+ * dieselbe Fehlerquelle wie eine Abschrift im Quelltext, nur schlechter: Sie
+ * gibt zusätzlich das Gefühl, gemessen zu haben.
+ *
+ * Seit T-122 liegt die Klasse an genau einer Stelle
+ * (`packages/domain/src/characters.ts`), und seit T-123 liest dieser Abschnitt
+ * sie dort. Es gibt hier **keine Liste mehr, die jemand pflegen müsste** — die
+ * Zeichen unten entstehen bei jedem Lauf aus den Bereichen der Domäne.
+ *
+ * Die Zeichen bleiben dabei **Zahlen** und werden nie roh in diese Datei
+ * geschrieben. Das ist kein Geschmack: Ein rohes `U+0000` in einer Quelldatei
+ * macht sie für Git zu einer Binärdatei — `git diff` zeigt dann
+ * „Bin 0 -> … bytes", und ausgerechnet der Nachweis einer Zeichenwache wäre der
+ * eine Teil, den ein Reviewer nicht lesen kann. `String.fromCodePoint` prüft
+ * dasselbe und lässt die Datei Text bleiben.
  */
 
-/** Was beide Türen abweisen müssen. */
-const ABGEWIESENE_ZEICHEN = [
-  [0x0000, 'NUL — bricht Zeichenketten und Protokollzeilen von innen auf'],
-  [0x0001, 'C0, Anfang des Bereichs'],
-  [0x0008, 'Rückschritt — löscht in einer Konsole das Zeichen davor'],
-  [0x0009, 'Tabulator — C0, auch wenn er wie Leerraum aussieht'],
-  [0x000a, 'Zeilenvorschub — macht aus einem Titel zwei Zeilen'],
-  [0x000d, 'Wagenrücklauf'],
-  [0x001b, 'ESC — Anfang einer Terminalfolge'],
-  [0x001f, 'C0, Ende des Bereichs'],
-  [0x007f, 'DEL'],
-  [0x0080, 'C1, Anfang des Bereichs'],
-  [0x009f, 'C1, Ende des Bereichs'],
-  [0x202a, 'LRE'],
-  [0x202b, 'RLE'],
-  [0x202c, 'PDF — beendet eine Einbettung'],
-  [0x202d, 'LRO'],
-  [0x202e, 'RLO — dreht den Rest der Zeile optisch um'],
-  [0x2066, 'LRI'],
-  [0x2067, 'RLI'],
-  [0x2068, 'FSI'],
-  [0x2069, 'PDI'],
-];
+/** `U+XXXX` — für Meldungen und für die Aufzählung in Fehlertexten. */
+const alsName = (punkt) => `U+${punkt.toString(16).toUpperCase().padStart(4, '0')}`;
+
+/**
+ * Jeder einzelne Codepunkt der Klasse — **erzeugt**, nicht abgeschrieben.
+ *
+ * `FORBIDDEN_NAME_CHARACTERS` führt Bereiche; hier werden sie ausgerollt, weil
+ * jede Prüfung darunter ein Zeichen braucht und keinen Bereich. Wächst die
+ * Klasse, wächst diese Liste im selben Lauf mit.
+ */
+const KLASSE = [];
+for (const bereich of FORBIDDEN_NAME_CHARACTERS) {
+  for (let punkt = bereich.from; punkt <= bereich.to; punkt += 1) KLASSE.push(punkt);
+}
+
+/**
+ * Abgewiesen, aber **Leerraum** und deshalb kein Ausfall: Ein Tabulator trennt
+ * zwei Wörter, ein `U+0000` nicht.
+ *
+ * Auch diese Grenze wird gelesen und nicht abgeschrieben. Sie stand bis T-123
+ * als `0x0009` bis `0x000d` hier — eine kleine Abschrift, aber eine, die
+ * dieselbe Aufgabe hat wie die große: Sie sagt, welche Zeichen zu einem
+ * Leerzeichen werden statt zur Marke. Zwei Stellen, die das verschieden sagen,
+ * ergäben eine Anzeige und einen Vorschlag, die sich uneinig sind.
+ */
+const istLeerraum = (punkt) =>
+  CONTROL_WHITESPACE.some((bereich) => punkt >= bereich.from && punkt <= bereich.to);
 
 /**
  * Was beide Türen **annehmen** müssen.
@@ -3388,6 +3429,12 @@ const ABGEWIESENE_ZEICHEN = [
  * Eszett, Gedankenstrich, deutsche Anführungszeichen und ein Emoji stehen in
  * echten Betreffzeilen; das geschützte und das schmale Leerzeichen stehen
  * dicht neben der abgewiesenen Menge und gehören trotzdem nicht dazu.
+ *
+ * **Diese Liste bleibt von Hand geschrieben, und das ist kein Rückfall in die
+ * Abschrift** (T-123). Sie ist nicht die Klasse noch einmal, sondern eine
+ * Anforderung **an** sie: Diese Zeichen müssen eintragbar bleiben. Aus der
+ * Domäne erzeugt wäre sie wertlos — sie würde mitwachsen, wenn die Klasse in
+ * die falsche Richtung wächst, und genau dann soll sie rot werden.
  */
 const ANGENOMMENE_ZEICHEN = [
   [0x0020, 'Leerzeichen'],
@@ -3416,33 +3463,125 @@ const beanstandet = (tuer, rumpf) => {
 const alsTitel = (zeichen) => ({ title: `Wartung${zeichen}Nord` });
 const alsTagname = (zeichen) => ({ title: 'Wartung Nord', tagNames: [`Kunde${zeichen}Ost`] });
 
-check(`beide Türen weisen dieselben ${String(ABGEWIESENE_ZEICHEN.length)} Zeichen im Titel ab`, () => {
-  const abweichungen = [];
-  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
-    const zeichen = String.fromCodePoint(punkt);
-    const haupt = nimmtAn(hauptTuer, alsTitel(zeichen));
-    const addin = nimmtAn(addinTuer, alsTitel(zeichen));
-    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
-    if (haupt !== addin) {
-      abweichungen.push(`${name}: Haupttür ${haupt ? 'nimmt an' : 'weist ab'}, Add-in-Tür ${addin ? 'nimmt an' : 'weist ab'}`);
-    } else if (haupt) {
-      abweichungen.push(`${name}: **beide** Türen nehmen es an`);
-    }
-  }
-  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+/*
+ * Ein Durchlauf durch die **ganze BMP**, für beide Türen und beide Felder.
+ *
+ * Gefragt wird jede Tür einzeln und keine gegen die andere. Der Unterschied ist
+ * der ganze Punkt von T-123: Zwei Türen, die einander gleichen, können
+ * gemeinsam falsch liegen — sie taten es zwischen T-117 und T-119 gegenüber dem
+ * Add-in. Gegen die **Quelle** gemessen kann jede Tür nur einzeln falsch
+ * liegen, und dass sie einander gleichen, folgt daraus.
+ *
+ * Die Ersatzstellen (`U+D800` bis `U+DFFF`) bleiben ausgespart: Einzeln stehen
+ * sie für kein Zeichen; die Frage nach ihnen ist die des Schnitts (Abschnitt
+ * 17) und nicht die der Zeichenklasse.
+ *
+ * Ein Durchlauf und nicht vier: Die vier Messungen brauchen dasselbe Zeichen.
+ */
+const gemessen = {
+  'Add-in-Tür, Titel': [],
+  'Add-in-Tür, Tagname': [],
+  'Haupttür, Titel': [],
+  'Haupttür, Tagname': [],
+};
+for (let punkt = 0; punkt <= 0xffff; punkt += 1) {
+  if (punkt >= 0xd800 && punkt <= 0xdfff) continue;
+  const zeichen = String.fromCodePoint(punkt);
+  if (!nimmtAn(addinTuer, alsTitel(zeichen))) gemessen['Add-in-Tür, Titel'].push(punkt);
+  if (!nimmtAn(addinTuer, alsTagname(zeichen))) gemessen['Add-in-Tür, Tagname'].push(punkt);
+  if (!nimmtAn(hauptTuer, alsTitel(zeichen))) gemessen['Haupttür, Titel'].push(punkt);
+  if (!nimmtAn(hauptTuer, alsTagname(zeichen))) gemessen['Haupttür, Tagname'].push(punkt);
+}
+
+/** Was die Domäne für diesen Durchlauf sagt: die Klasse, auf die BMP beschnitten. */
+const KLASSE_BMP = KLASSE.filter((punkt) => punkt <= 0xffff);
+
+check(`die Klasse der Domäne trägt ${String(KLASSE.length)} Zeichen — und nicht alles`, () => {
+  /*
+   * Der Wächter vor allem Folgenden. Wäre `FORBIDDEN_NAME_CHARACTERS` leer,
+   * prüfte jede Schleife darunter die leere Menge und wäre grün, ohne etwas zu
+   * sagen; enthielte sie zu viel, wäre eine Tür grün, die niemanden mehr
+   * hereinlässt. Beide Enden stehen deshalb hier.
+   */
+  assert.ok(KLASSE.length > 50, `nur ${String(KLASSE.length)} Zeichen — die Klasse greift ins Leere`);
+  assert.ok(KLASSE.length < 200, `${String(KLASSE.length)} Zeichen — die Klasse ist zu breit geworden`);
+
+  // Und zwei Zeichen, die ausdrücklich **nicht** dazugehören dürfen: der
+  // Verbinder hält zusammengesetzte Emoji zusammen, der Umlaut steht in jedem
+  // zweiten deutschen Betreff. Diese Zeile ist eine Anforderung an die Klasse
+  // und keine Abschrift von ihr — sie wird rot, wenn die Klasse zu weit wächst.
+  assert.equal(KLASSE.includes(0x200d), false, 'ZWJ steht in der Klasse — Emoji zerfallen');
+  assert.equal(KLASSE.includes(0x00e4), false, '„ä" steht in der Klasse');
 });
 
-check('beide Türen weisen dieselben Zeichen in einem Tagnamen ab', () => {
-  const abweichungen = [];
-  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
-    const zeichen = String.fromCodePoint(punkt);
-    const haupt = nimmtAn(hauptTuer, alsTagname(zeichen));
-    const addin = nimmtAn(addinTuer, alsTagname(zeichen));
-    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
-    if (haupt !== addin) abweichungen.push(`${name}: Haupttür ${haupt}, Add-in-Tür ${addin}`);
-    else if (haupt) abweichungen.push(`${name}: **beide** Türen nehmen es an`);
+check('die Add-in-Tür weist im Titel genau die Zeichen der Domäne ab — die ganze BMP gefragt', () => {
+  assert.deepEqual(
+    gemessen['Add-in-Tür, Titel'].map(alsName),
+    KLASSE_BMP.map(alsName),
+    'die Tür und die Domäne sagen nicht dasselbe',
+  );
+});
+
+check('dieselbe Messung an einem Tagnamen der Add-in-Tür', () => {
+  assert.deepEqual(gemessen['Add-in-Tür, Tagname'].map(alsName), KLASSE_BMP.map(alsName));
+});
+
+check('und die Haupttür sagt es an beiden Feldern ebenso — damit gleichen sich beide Türen', () => {
+  /*
+   * Die Haupttür steht hier, obwohl sie nicht dem Add-in gehört: Sie ist die
+   * zweite Hälfte der Sackgasse. Ein Todo, das über `POST /addin/todos`
+   * hineingeht und über `PATCH /todos/{todoId}` nicht mehr zu speichern ist,
+   * ist derselbe Befund C-03 wie 2024 die Länge 512.
+   */
+  assert.deepEqual(gemessen['Haupttür, Titel'].map(alsName), KLASSE_BMP.map(alsName));
+  assert.deepEqual(gemessen['Haupttür, Tagname'].map(alsName), KLASSE_BMP.map(alsName));
+});
+
+check('der Add-in-Abschnitt der Schnittstellenbeschreibung führt die Klasse nicht mit', () => {
+  /*
+   * T-117 R1, und dieselbe Lehre eine Ebene weiter.
+   *
+   * Eine **Beschreibung** kann eine Regel nicht importieren; sie kann sie nur
+   * nachzeichnen oder auf sie zeigen. Nachgezeichnet hat sie hier zwei Wellen
+   * lang falsch: `POST /addin/todos` zählte die Zeichen auf, T-117 erweiterte
+   * die Klasse, die Aufzählung blieb stehen. Seit T-123 zeigt sie nur noch —
+   * auf `packages/domain/src/characters.ts` und auf die Antwort `422`, in der
+   * die Aufzählung **einmal** steht und gegen die Klasse gemessen wird
+   * (`proof:openapi` Abschnitt 16).
+   *
+   * Gemessen wird deshalb das Gegenteil des Üblichen: dass hier **kein**
+   * Zeichen der Klasse genannt ist. Eine Beschreibung, die nichts aufzählt,
+   * kann nicht hinterherhinken.
+   */
+  const spec = parseYaml(readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'));
+  const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
+  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+
+  const abschnitt = JSON.stringify(addinPfade.map((pfad) => spec.paths[pfad])).toUpperCase();
+  const aufgezaehlt = KLASSE.filter((punkt) => abschnitt.includes(alsName(punkt)));
+  assert.deepEqual(
+    aufgezaehlt.map(alsName),
+    [],
+    'der Add-in-Abschnitt zählt die Klasse ein zweites Mal auf — sie wird dort veralten',
+  );
+
+  // Und die Gegenprobe: Ein Verweis, der auf nichts zeigt, wäre schlechter als
+  // die Aufzählung. Beide Felder nennen den einen Ort, und die Route führt die
+  // Antwort, in der die Zeichen stehen.
+  const rumpf = spec.paths['/addin/todos']?.post;
+  const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+  for (const feld of ['title', 'tagNames']) {
+    assert.match(
+      String(felder[feld]?.description ?? ''),
+      /packages\/domain\/src\/characters\.ts/,
+      `${feld} nennt den Ort der Zeichenklasse nicht`,
+    );
   }
-  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+  assert.equal(
+    rumpf?.responses?.['422']?.$ref,
+    '#/components/responses/UnprocessableEntity',
+    'die Route verweist nicht auf die Antwort, in der die Zeichen aufgezählt sind',
+  );
 });
 
 check('die Beanstandung nennt das Feld, in dem sie entstanden ist', () => {
@@ -3457,6 +3596,10 @@ check(`beide Türen nehmen dieselben ${String(ANGENOMMENE_ZEICHEN.length)} harml
   const abweichungen = [];
   for (const [punkt, was] of ANGENOMMENE_ZEICHEN) {
     const zeichen = String.fromCodePoint(punkt);
+    // Erst an die Quelle: Ein harmloses Zeichen, das in der Klasse steht, ist
+    // ein Fehler der Klasse und nicht der Tür — und die Türen wären dabei
+    // einträchtig grün.
+    if (KLASSE.includes(punkt)) abweichungen.push(`${was}: steht in der Klasse der Domäne`);
     for (const [feld, bauen] of [['Titel', alsTitel], ['Tagname', alsTagname]]) {
       const haupt = nimmtAn(hauptTuer, bauen(zeichen));
       const addin = nimmtAn(addinTuer, bauen(zeichen));
@@ -3518,9 +3661,11 @@ check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () =
   assert.equal(nimmtAn(hauptTuer, { title: 'Wartung Nord', note: `Zeile${nul}zwei` }), true);
 });
 
-check('der Titelvorschlag aus einem Betreff läuft nie in die Abweisung', () => {
+check('kein Titelvorschlag läuft in die Abweisung — für jedes Zeichen der Klasse', () => {
   /*
-   * Der Grund, aus dem die Abweisung allein an dieser Tür nicht genügt.
+   * Der Grund, aus dem die Abweisung allein an dieser Tür nicht genügt, und die
+   * Prüfung, die T-123 als einzige aus der Zeichenschleife des alten Abschnitts
+   * 17 übernimmt.
    *
    * Der Titel ist im Aufgabenbereich mit dem Betreff vorbelegt. Trüge der
    * Betreff ein unsichtbares Zeichen, bekäme der Benutzer ein 422 auf ein
@@ -3528,20 +3673,32 @@ check('der Titelvorschlag aus einem Betreff läuft nie in die Abweisung', () => 
    * den ganzen Titel neu zu tippen. `suggestTitle` nimmt die Zeichen deshalb
    * schon aus dem Vorschlag heraus; was der Benutzer danach selbst einfügt,
    * geht unverändert an den Dienst und wird dort abgewiesen.
+   *
+   * **Tautologisch ist das nicht**, obwohl beide Seiten seit T-123 dieselbe
+   * Klasse lesen. Gemessen wird nicht die Klasse, sondern was `suggestTitle`
+   * um sie herum tut: Vorsilben abschneiden, Leerraum zusammenziehen, auf 500
+   * kürzen, trimmen. Jeder dieser Schritte kann einen Vorschlag erzeugen, den
+   * die Tür abweist — genau hier fiele es auf.
    */
   const stehengeblieben = [];
-  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
+  for (const punkt of KLASSE) {
     const zeichen = String.fromCodePoint(punkt);
     const vorschlag = suggestTitle(`AW: Störung${zeichen}Lüftung`);
-    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
 
     if (!nimmtAn(addinTuer, { title: vorschlag })) {
-      stehengeblieben.push(`${name}: der Vorschlag „${vorschlag}" wird abgewiesen`);
+      stehengeblieben.push(`${alsName(punkt)}: die Add-in-Tür weist den Vorschlag ab`);
       continue;
     }
-    if (vorschlag.includes(zeichen)) stehengeblieben.push(`${name}: das Zeichen steht noch im Vorschlag`);
-    if (!vorschlag.startsWith('Störung')) stehengeblieben.push(`${name}: die Vorsilbe „AW:" ist stehengeblieben`);
-    if (!vorschlag.endsWith('Lüftung')) stehengeblieben.push(`${name}: der Text nach dem Zeichen fehlt`);
+    if (!nimmtAn(hauptTuer, { title: vorschlag })) {
+      stehengeblieben.push(`${alsName(punkt)}: die Haupttür weist den Vorschlag ab`);
+      continue;
+    }
+    if (vorschlag.includes(zeichen)) stehengeblieben.push(`${alsName(punkt)}: steht noch im Vorschlag`);
+    if (!vorschlag.startsWith('Störung')) stehengeblieben.push(`${alsName(punkt)}: „AW:" blieb stehen`);
+    if (!vorschlag.endsWith('Lüftung')) stehengeblieben.push(`${alsName(punkt)}: der Text danach fehlt`);
+    if (istLeerraum(punkt) && vorschlag !== 'Störung Lüftung') {
+      stehengeblieben.push(`${alsName(punkt)}: Leerraum wurde nicht zu einem Leerzeichen`);
+    }
   }
   assert.deepEqual(stehengeblieben, [], stehengeblieben.join('; '));
 });
@@ -3564,7 +3721,7 @@ check('ein Betreff aus lauter unsichtbaren Zeichen ergibt einen sichtbar leeren 
   // Kein Rest, der wie ein Titel aussieht und keiner ist. Das leere Feld ist
   // die ehrliche Anzeige: Der Benutzer sieht, dass er etwas eintragen muss,
   // statt „Anlegen" zu drücken und eine Abweisung zu bekommen.
-  const nurUnsichtbar = ABGEWIESENE_ZEICHEN.map(([punkt]) => String.fromCodePoint(punkt)).join('');
+  const nurUnsichtbar = KLASSE.map((punkt) => String.fromCodePoint(punkt)).join('');
   assert.equal(suggestTitle(nurUnsichtbar), '');
   assert.equal(nimmtAn(addinTuer, { title: '' }), false, 'ein leerer Titel darf nicht durchgehen');
 });
@@ -3654,11 +3811,12 @@ await checkAsync('T-114 Punkt 4: die Call-Nummer braucht keine zweite Wache', as
 });
 
 // ===========================================================================
-heading('17  Fremder Text in der Anzeige und der Schnitt auf ganze Zeichen (T-119)');
+heading('17  Fremder Text in der Anzeige und der Schnitt auf ganze Zeichen (T-119, T-123)');
 // ===========================================================================
 
 /*
- * Zwei Befunde aus dem Bericht zu T-114, beide dort bewusst nicht behoben.
+ * Zwei Befunde aus dem Bericht zu T-114, beide dort bewusst nicht behoben —
+ * und seit T-123 eine dritte Frage, die die ersten beiden zusammenhält.
  *
  * ---------------------------------------------------------------------------
  * 1. Der rohe Betreff im Aufgabenbereich
@@ -3691,129 +3849,70 @@ heading('17  Fremder Text in der Anzeige und der Schnitt auf ganze Zeichen (T-11
  * UTF-8 — in die Datenbank und in den Export — wird sie zu `U+FFFD`.
  *
  * ---------------------------------------------------------------------------
- * Und die Lehre aus Abschnitt 16
+ * 3. Und was T-123 hier geändert hat: eine Quelle statt zweier Ergebnisse
  * ---------------------------------------------------------------------------
  *
- * Abschnitt 16 prüft gegen eine **abgeschriebene Liste** von 20 Zeichen. Das
- * hat einen Fall durchgelassen: T-117 hat die Klasse an der Tür um `U+061C`,
- * `U+200E` und `U+200F` erweitert, die Liste blieb bei 20, der Titelvorschlag
- * ließ die drei stehen — und ein Betreff mit einer dieser Richtungsmarken führte
- * wieder in die Sackgasse, die T-114 geschlossen hatte. Dieser Abschnitt fragt
- * deshalb **die Tür selbst**: Er geht die ganze BMP durch und sammelt, was sie
- * abweist. Eine Erweiterung wie die aus T-117 wird damit rot, ohne dass jemand
- * daran denken muss.
- */
-
-/**
- * Jedes Zeichen der BMP, das die Add-in-Tür in einem Titel abweist — gefragt,
- * nicht abgeschrieben.
+ * Bis T-123 hielt dieser Abschnitt die Zeichenklasse des Add-ins gegen die der
+ * Tür — Zeichen für Zeichen über die ganze BMP. Das war richtig, **solange es
+ * zwei Fassungen gab**. Seit T-122 gibt es eine (`packages/domain/src/
+ * characters.ts`), und seit T-123 liest das Add-in sie dort. Zwei Ergebnisse
+ * zu vergleichen, die aus derselben Funktion stammen, ist keine Messung mehr,
+ * sondern eine Schleife, die immer grün ist — und die schlimmste Art grün:
+ * eine, die aussieht wie eine Prüfung (E-063 Punkt 4).
  *
- * Ersatzstellen (`U+D800` bis `U+DFFF`) bleiben ausgespart: Einzeln stehen sie
- * für kein Zeichen, und die Frage nach ihnen ist die des Schnitts weiter unten,
- * nicht die der Zeichenklasse.
+ * An ihre Stelle tritt die Frage, die noch offen ist: **Liest das Add-in die
+ * Quelle wirklich?** Sie wird zweimal gestellt, weil sie zwei Hälften hat —
+ * einmal an den Objekten (unten: `dropHidden` *ist* `dropHiddenCharacters`) und
+ * einmal am Quelltext (keine Datei führt eine zweite Fassung). Die erste Hälfte
+ * bemerkt eine Umleitung, die zweite eine daneben angelegte Kopie.
+ *
+ * **Was von der Zeichenschleife bleibt, steht in Abschnitt 16** und misst dort
+ * etwas anderes: dass `zod` die Klasse an `title` und `tagNames` tatsächlich
+ * anwendet. Das ist keine Aussage über die Klasse, sondern über die Bindung —
+ * und die kann jemand lösen, ohne die Klasse anzufassen.
  */
-const TUERKLASSE = [];
-for (let punkt = 0; punkt <= 0xffff; punkt += 1) {
-  if (punkt >= 0xd800 && punkt <= 0xdfff) continue;
-  const zeichen = String.fromCodePoint(punkt);
-  if (!nimmtAn(addinTuer, { title: `Wartung${zeichen}Nord` })) TUERKLASSE.push(punkt);
-}
 
-/** `U+0009` bis `U+000D` — abgewiesen, aber Leerraum und deshalb kein Ausfall. */
-const istLeerraum = (punkt) => punkt >= 0x0009 && punkt <= 0x000d;
-
-const alsName = (punkt) => `U+${punkt.toString(16).toUpperCase().padStart(4, '0')}`;
-
-check(`die Tür weist in der BMP ${String(TUERKLASSE.length)} Zeichen ab — gefragt, nicht abgeschrieben`, () => {
-  // Der Scan muss etwas gefunden haben, sonst prüft alles Folgende die leere
-  // Menge und ist grün, ohne etwas zu sagen.
-  assert.ok(TUERKLASSE.length > 50, `nur ${String(TUERKLASSE.length)} Zeichen — der Scan greift ins Leere`);
-
-  // Und er muss dieselbe Tür gefragt haben wie Abschnitt 16: Jedes dort von
-  // Hand aufgeschriebene Zeichen steht in der gemessenen Menge.
-  const fehlend = ABGEWIESENE_ZEICHEN.map(([punkt]) => punkt).filter(
-    (punkt) => !TUERKLASSE.includes(punkt),
-  );
-  assert.deepEqual(fehlend.map(alsName), [], 'Abschnitt 16 nennt ein Zeichen, das die Tür annimmt');
-});
-
-check('kein Titelvorschlag läuft in die Abweisung — für jedes Zeichen der Tür', () => {
+check('das Add-in liest die Zeichenklasse — dieselben Objekte, keine zweite Fassung', () => {
   /*
-   * Dieselbe Prüfung wie in Abschnitt 16, aber über die **gemessene** Menge
-   * statt über die abgeschriebene. Genau hier wäre T-117 aufgefallen.
+   * Der Kern von T-123, und der Grund, warum hier `equal` und nicht
+   * `deepEqual` steht: Zwei Funktionen, die sich gleich verhalten, sind zwei
+   * Funktionen. Sie können sich beim nächsten Mal verschieden verhalten — genau
+   * das ist zwischen T-117 und T-119 geschehen. Zwei Namen für **ein** Objekt
+   * können das nicht.
+   *
+   * `src/text/hidden.ts` darf deshalb nichts anderes tun als weiterreichen.
+   * Diese Zeile wird rot, sobald jemand dort eine eigene Zeile schreibt — auch
+   * eine, die zufällig dasselbe tut.
    */
-  const stehengeblieben = [];
-  for (const punkt of TUERKLASSE) {
-    const zeichen = String.fromCodePoint(punkt);
-    const vorschlag = suggestTitle(`AW: Störung${zeichen}Lüftung`);
-
-    if (!nimmtAn(addinTuer, { title: vorschlag })) {
-      stehengeblieben.push(`${alsName(punkt)}: die Add-in-Tür weist den Vorschlag ab`);
-      continue;
-    }
-    if (!nimmtAn(hauptTuer, { title: vorschlag })) {
-      stehengeblieben.push(`${alsName(punkt)}: die Haupttür weist den Vorschlag ab`);
-      continue;
-    }
-    if (vorschlag.includes(zeichen)) stehengeblieben.push(`${alsName(punkt)}: steht noch im Vorschlag`);
-    if (!vorschlag.startsWith('Störung')) stehengeblieben.push(`${alsName(punkt)}: „AW:" blieb stehen`);
-    if (!vorschlag.endsWith('Lüftung')) stehengeblieben.push(`${alsName(punkt)}: der Text danach fehlt`);
-    if (istLeerraum(punkt) && vorschlag !== 'Störung Lüftung') {
-      stehengeblieben.push(`${alsName(punkt)}: Leerraum wurde nicht zu einem Leerzeichen`);
-    }
-  }
-  assert.deepEqual(stehengeblieben, [], stehengeblieben.join('; '));
+  assert.equal(dropHidden, dropHiddenCharacters, 'dropHidden ist eine eigene Funktion');
+  assert.equal(hasHidden, hasHiddenCharacter, 'hasHidden ist eine eigene Funktion');
+  assert.equal(visibleText, domaeneVisibleText, 'visibleText ist eine eigene Funktion');
+  assert.equal(HIDDEN_MARKER, DOMAENE_MARKE, 'die Marke ist eine zweite Marke');
 });
 
-check('Gegenprobe: die Fassung vor T-119 wäre an drei Zeichen gescheitert', () => {
+check('keine Quelldatei des Add-ins führt eine eigene Fassung der Klasse', () => {
   /*
-   * Ohne diese Zeile wäre „grün" nur die Aussage, dass die Prüfung nichts
-   * findet. Nachgebaut ist die Klasse aus T-114 — dieselbe Zeile, die bis
-   * heute in `office/mail.ts` stand.
+   * Die zweite Hälfte derselben Frage. Die Zeile darüber prüft, dass das, was
+   * benutzt wird, aus der Domäne kommt; diese hier prüft, dass **daneben**
+   * nichts liegt. Beides zusammen ist die Aussage „eine Quelle" — einzeln ist
+   * keine von beiden sie.
+   *
+   * Gesucht wird die Bauform, in der die Klasse im Baum je stand: Escape-Folgen
+   * aus ihrem Wertebereich in einer Zeichenkette oder einem Ausdruck.
+   * Kommentare sind ausgenommen — dort stehen die Codepunkte absichtlich, und
+   * eine Prüfung, die ihre eigene Begründung findet, zwingt zum Schweigen an
+   * genau der Stelle, an der etwas erklärt gehört.
    */
-  // Als Escape-Folgen und nicht roh (T-112-H2): Ein rohes Richtungszeichen
-  // drehte ausgerechnet die Zeile um, die von ihm handelt.
-  // eslint-disable-next-line no-control-regex -- die alte Fassung, wörtlich
-  const alteKlasse = new RegExp(
-    '[\\u0000-\\u0008\\u000e-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]',
-    'gu',
-  );
-  const alterVorschlag = (betreff) =>
-    betreff
-      .replace(/^(?:(?:AW|WG|RE|FW|FWD|ANTW)\s*:\s*)+/i, '')
-      .replace(alteKlasse, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+  const bauform = /\\u(?:0{2}[01][0-9a-f]|007f|009f|061c|200[ef]|202[a-e]|206[6-9])/i;
+  const gefunden = files
+    .filter((datei) => /\.tsx?$/.test(datei))
+    .filter((datei) => bauform.test(sourceWithoutComments(datei)))
+    .map((datei) => path.relative(srcRoot, datei));
+  assert.deepEqual(gefunden, [], `eigene Fassung der Klasse in: ${gefunden.join(', ')}`);
 
-  const durchgefallen = TUERKLASSE.filter(
-    (punkt) => !nimmtAn(addinTuer, { title: alterVorschlag(`AW: Störung${String.fromCodePoint(punkt)}Lüftung`) }),
-  );
-
-  assert.deepEqual(
-    durchgefallen.map(alsName),
-    ['U+061C', 'U+200E', 'U+200F'],
-    'die alte Fassung fiel an anderen Zeichen durch als den drei aus T-117',
-  );
-});
-
-check('die Anzeige trägt kein Zeichen mehr, das sie umordnen kann', () => {
-  const uebrig = [];
-  for (const punkt of TUERKLASSE) {
-    const zeichen = String.fromCodePoint(punkt);
-    const angezeigt = visibleText(`Rechnung${zeichen}gnp.exe`);
-
-    if (hasHidden(angezeigt)) uebrig.push(`${alsName(punkt)}: steht noch in der Anzeige`);
-    if (angezeigt.includes(zeichen) && !istLeerraum(punkt)) {
-      uebrig.push(`${alsName(punkt)}: unverändert durchgereicht`);
-    }
-    if (istLeerraum(punkt) && angezeigt !== 'Rechnung gnp.exe') {
-      uebrig.push(`${alsName(punkt)}: Leerraum wurde nicht zu einem Leerzeichen`);
-    }
-    if (!istLeerraum(punkt) && angezeigt !== `Rechnung${HIDDEN_MARKER}gnp.exe`) {
-      uebrig.push(`${alsName(punkt)}: keine Marke an der Stelle des Zeichens`);
-    }
-  }
-  assert.deepEqual(uebrig, [], uebrig.join('; '));
+  // Und die eine Datei, die die Namen trägt, muss sie aus der Domäne holen.
+  const durchreiche = readFileSync(path.join(srcRoot, 'text', 'hidden.ts'), 'utf8');
+  assert.match(durchreiche, /from '@takt\/domain'/, 'hidden.ts liest die Domäne nicht');
 });
 
 check('der Trick, um den es geht: „Rechnung<RLO>gnp.exe" ist als solcher zu sehen', () => {
@@ -3826,8 +3925,13 @@ check('der Trick, um den es geht: „Rechnung<RLO>gnp.exe" ist als solcher zu se
   assert.equal(visibleText(betreff), `Rechnung${HIDDEN_MARKER}gnp.exe`);
 
   // Und die Länge bleibt: Eine Marke steht **an der Stelle** des Zeichens und
-  // nicht anstelle des ganzen Textes.
+  // nicht anstelle des ganzen Textes. Das ist E-063 Punkt 2 als Zahl.
   assert.equal(visibleText(betreff).length, betreff.length);
+
+  // Der Leerraum aus C0 ist dabei der eine Fall, der **keine** Marke bekommt:
+  // Er trennt Wörter, und ein Betreff, der eine zweite Zeile aufmachte, ist
+  // etwas anderes als einer, der etwas verbirgt.
+  assert.equal(visibleText(`Störung${String.fromCodePoint(0x0009)}Lüftung`), 'Störung Lüftung');
 });
 
 check('die Marke ist eine Marke: sichtbar, stabil, nicht selbst betroffen', () => {
@@ -3857,40 +3961,54 @@ check('harmloser Text bleibt harmloser Text — auch rechtsläufiger', () => {
   }
 });
 
-check('Anzeige und Vorschlag behandeln dieselbe Klasse verschieden — und beide vollständig', () => {
+check('der Vorschlag lässt fallen, die Anzeige markiert — und keiner tut das andere', () => {
   /*
-   * Eine Klasse, drei Behandlungen (`src/text/hidden.ts`): Die Tür weist ab,
-   * der Vorschlag lässt fallen, die Anzeige macht sichtbar. Die Zeile hält die
-   * beiden Fassungen des Add-ins gegeneinander, damit sie nicht auseinander
-   * laufen wie zuvor die Fassung des Add-ins und die der Tür.
+   * Was von „eine Klasse, drei Behandlungen" im Add-in überhaupt noch zu
+   * messen ist (E-063).
+   *
+   * **Dass** beide Behandlungen die ganze Klasse erfassen, ist seit T-123 eine
+   * Eigenschaft der Domäne und wird dort gemessen. Hier steht die Frage, die
+   * dem Add-in gehört: **welche** Behandlung an welchem Ort. Sie ist nicht
+   * ableitbar, sie ist eine Entscheidung — und sie ließe sich vertauschen, ohne
+   * dass irgendeine Zeile in der Domäne rot würde:
+   *
+   *  - Eine **Anzeige**, die fallen lässt, verschweigt, dass etwas da war.
+   *  - Ein **Vorschlag**, der markiert, setzt ein `U+FFFD` in ein Eingabefeld.
+   *    Der Benutzer müsste ein Zeichen löschen, das er nicht geschrieben hat,
+   *    bevor er anlegen kann — die Sackgasse aus T-114 in neuer Form.
    */
-  const abweichungen = [];
-  for (const punkt of TUERKLASSE) {
-    if (istLeerraum(punkt)) continue;
-    const zeichen = String.fromCodePoint(punkt);
-    if (dropHidden(`a${zeichen}b`) !== 'ab') abweichungen.push(`${alsName(punkt)}: fällt nicht`);
-    if (visibleText(`a${zeichen}b`) !== `a${HIDDEN_MARKER}b`) {
-      abweichungen.push(`${alsName(punkt)}: wird nicht markiert`);
-    }
-  }
-  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+  const rlo = String.fromCodePoint(0x202e);
+
+  // Der Unterschied als Verhalten, an einem Zeichen statt an der ganzen Klasse.
+  assert.equal(dropHidden(`a${rlo}b`), 'ab', 'der Vorschlag markiert statt fallen zu lassen');
+  assert.equal(visibleText(`a${rlo}b`), `a${HIDDEN_MARKER}b`, 'die Anzeige streicht statt zu markieren');
+
+  // Und als Wahl der Aufrufstelle: Der Titelvorschlag darf nicht markieren, der
+  // Anzeigebaustein nicht streichen.
+  const vorschlag = sourceWithoutComments(path.join(srcRoot, 'office', 'mail.ts'));
+  assert.match(vorschlag, /dropHidden\(/, 'der Titelvorschlag lässt die Zeichen nicht fallen');
+  assert.equal(vorschlag.includes('visibleText'), false, 'der Titelvorschlag markiert in ein Eingabefeld hinein');
+
+  const anzeige = sourceWithoutComments(path.join(srcRoot, 'ui', 'Primitives.tsx'));
+  assert.match(anzeige, /visibleText\(/, 'der Anzeigebaustein markiert nicht');
+  assert.equal(anzeige.includes('dropHidden'), false, 'der Anzeigebaustein streicht in einer Anzeige');
 });
 
 // ---------------------------------------------------------------------------
 // Was sich in Node nicht rendern lässt: die statischen Prüfungen
 // ---------------------------------------------------------------------------
 
-/**
- * Die Dateien des Aufgabenbereichs ohne Kommentare.
+/*
+ * Die Flächen des Aufgabenbereichs, **ohne Kommentare**. Ohne diesen Schritt
+ * fände die Prüfung ihre eigenen Begründungen: In den Kommentaren stehen die
+ * Zeilen, um die es geht, absichtlich ausgeschrieben.
  *
- * Ohne diesen Schritt fände die Prüfung ihre eigenen Begründungen: In den
- * Kommentaren stehen die Zeilen, um die es geht, absichtlich ausgeschrieben.
+ * Bis T-123 stand dafür ein zweiter Kommentarschneider neben
+ * `sourceWithoutComments` aus Abschnitt 0 — in einer Datei, deren Thema die
+ * doppelte Fassung ist. Er ist weg.
  */
-const ohneKommentare = (text) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-
 const paneDateien = ['TaskPane.tsx', 'DuplicateOffer.tsx', 'TagPicker.tsx', 'SettingsView.tsx'].map(
-  (name) => ({ name, text: ohneKommentare(readFileSync(path.join(srcRoot, 'ui', name), 'utf8')) }),
+  (name) => ({ name, text: sourceWithoutComments(path.join(srcRoot, 'ui', name)) }),
 );
 
 check('kein fremder Wert steht mehr roh im JSX', () => {

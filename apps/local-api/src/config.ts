@@ -134,3 +134,19 @@ export const LAST_USED_PERSIST_INTERVAL_MS = 60_000;
 
 /** Wartezeit auf das Startgeheimnis der Hülle über `stdin` (B-1.6 Punkt 2). */
 export const SESSION_SECRET_TIMEOUT_MS = 5_000;
+
+/**
+ * Letzte Frist beim Anhalten (B-1.6 Punkt 3, T-125-4).
+ *
+ * Kein Wert, der im Normalfall je abläuft. `server.closeAllConnections()`
+ * räumt die Verbindungen ab, und der Rückruf von `server.close()` kommt danach
+ * binnen Millisekunden; zwei Sekunden sind dafür auch auf einem ausgelasteten
+ * Rechner reichlich. Der Wert ist der **Boden** darunter: Bleibt der Rückruf
+ * aus einem Grund aus, an den niemand gedacht hat, endet der Dienst trotzdem,
+ * statt als Prozess ohne Fenster stehen zu bleiben.
+ *
+ * Kurz genug, dass niemand darauf wartet; lang genug, dass der ordentliche Weg
+ * ihn nie erreicht. `proof:access` Abschnitt 0e misst beides — dass angehalten
+ * wird, und dass es nicht erst die Frist ist, die dafür sorgt.
+ */
+export const SHUTDOWN_DEADLINE_MS = 2_000;

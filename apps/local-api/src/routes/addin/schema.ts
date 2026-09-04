@@ -86,17 +86,25 @@ export const createTodoSchema = z.object({
    * ---------------------------------------------------------------------------
    *
    * Bis T-114 stand hier `z.string().trim().min(1).max(512)`. Das sagt nichts
-   * über C0 und C1 (`U+0000` bis `U+001F`, `U+007F` bis `U+009F`) und nichts
-   * über die bidirektionalen Formatierungszeichen (`U+202A` bis `U+202E`,
-   * `U+2066` bis `U+2069`).
+   * über Steuerzeichen und nichts über die bidirektionalen
+   * Formatierungszeichen.
+   *
+   * **Welche Zeichen das sind, steht hier nicht** — sie stehen seit T-122 als
+   * `FORBIDDEN_NAME_CHARACTERS` in `packages/domain/src/characters.ts`, und
+   * `titleSchema` liest sie dort. Diese Zeilen haben sie bis T-123 aufgezählt
+   * und dabei genau den Fehler wiederholt, gegen den sie geschrieben sind: Als
+   * T-117 die Klasse um drei Richtungsmarken erweiterte, blieb die Aufzählung
+   * stehen und beschrieb die Tür zwei Wellen lang falsch (T-119 R1, E-063
+   * Punkt 4). Eine Beschreibung, die eine Regel nachzeichnet, ist eine
+   * Abschrift wie jede andere; sie kann nur nicht rot werden.
    *
    * **Die Fachregel schließt die Lücke nicht.** `checkName` in `@takt/domain`
-   * normalisiert nach NFC und zieht Leerraum zusammen; seine Menge
-   * `WHITESPACE` enthält `U+0009` bis `U+000D`, `U+00A0`, `U+2000` bis
-   * `U+200A`, `U+2028`/`U+2029`, `U+202F`, `U+205F`, `U+3000` und `U+FEFF` —
-   * **nicht** `U+0000` bis `U+0008`, **nicht** `U+000E` bis `U+001F`,
-   * **nicht** C1 und **nicht** die Richtungszeichen. Wer sich auf sie verlässt,
-   * verlässt sich auf eine Prüfung, die einen anderen Zweck hat.
+   * normalisiert nach NFC und zieht Leerraum zusammen — seine Menge
+   * `WHITESPACE` ist eine andere und für einen anderen Zweck gedacht: Sie sagt,
+   * was als Trennung zwischen zwei Wörtern gilt, und nicht, was in einem Namen
+   * nichts zu suchen hat. Beide überschneiden sich (der Leerraum aus C0), und
+   * keine ist in der anderen enthalten. Wer sich auf `checkName` verlässt,
+   * verlässt sich auf eine Prüfung, die eine andere Frage beantwortet.
    *
    * ---------------------------------------------------------------------------
    * Warum es ausgerechnet an dieser Tür zählt

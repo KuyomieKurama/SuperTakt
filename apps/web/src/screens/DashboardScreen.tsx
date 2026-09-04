@@ -24,6 +24,7 @@ import {
 import { doneFlagState } from "../lib/labels";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
 import { TodoFormDialog } from "./TodoFormDialog";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-01, das Dashboard (Abschnitt 12).
@@ -262,7 +263,7 @@ export function DashboardScreen() {
                               {timer.isRunningFor(todo.id) ? "Stopp" : "Start"}
                             </Button>
                             <a className="pick-row__title grow truncate" href={href("todo", todo.id)}>
-                              {todo.title}
+                              <Foreign value={todo.title} />
                             </a>
                             <DoneFlag state={doneFlagState(done, reactivated)} />
                             <span className="pick-row__tags">
@@ -309,7 +310,7 @@ export function DashboardScreen() {
                               {entry.note.length === 0 ? (
                                 <span className="muted">Ohne Leistung</span>
                               ) : (
-                                entry.note
+                                <Foreign value={entry.note} />
                               )}
                             </span>
                             <a

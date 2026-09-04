@@ -30,6 +30,7 @@ import { formatDateTime, plural } from "../lib/format";
 import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { StatusSettings } from "./StatusSettings";
+import { foreignText } from "../lib/foreign";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -455,7 +456,9 @@ function ExportSettings() {
           ...(templates.state.status === "ready"
             ? templates.state.value.map((template) => ({
                 value: template.id,
-                label: template.isBuiltin ? `${template.name} (mitgeliefert)` : template.name,
+                label: template.isBuiltin
+                    ? `${foreignText(template.name)} (mitgeliefert)`
+                    : foreignText(template.name),
               }))
             : []),
         ]}

@@ -14,7 +14,15 @@ import type { AsyncState } from "../app/useAsync";
  */
 
 export interface ScreenHeaderProps {
-  readonly title: string;
+  /**
+   * Die Ueberschrift der Ansicht.
+   *
+   * Ein `ReactNode` und keine Zeichenkette (T-124): Die Detailansicht setzt
+   * hier den **Titel eines Todos** ein, und der ist fremder Text — er muss
+   * durch `<Foreign>` gehen (E-063). Jede bisherige Aufrufstelle bleibt
+   * gueltig; eine Zeichenkette **ist** ein `ReactNode`.
+   */
+  readonly title: ReactNode;
   /** Ein Satz darunter: was diese Ansicht beantwortet. */
   readonly lead?: string;
   readonly actions?: ReactNode;

@@ -2,6 +2,8 @@ import { useId, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
 import { Button, IconButton, Spinner } from "./Primitives";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Suche und Filter — A-3.3, A-13.7, I-10.
@@ -120,11 +122,16 @@ export function FilterBar({
               <li key={filter.id}>
                 <span className="filter-chip">
                   <span className="filter-chip__field">{filter.field}:</span>
-                  <span className="filter-chip__value">{filter.value}</span>
+                  {/*
+                    Der Wert eines aktiven Filters ist ein Tag-, Status- oder
+                    Poolname aus dem Bestand — fremder Text (E-063, T-124). Das
+                    Feld davor („Tag", „Status") ist unseres.
+                  */}
+                  <Foreign className="filter-chip__value" value={filter.value} />
                   <button
                     type="button"
                     className="filter-chip__remove"
-                    aria-label={`Filter ${filter.field} ${filter.value} entfernen`}
+                    aria-label={`Filter ${filter.field} ${foreignText(filter.value)} entfernen`}
                     onClick={filter.onRemove}
                   >
                     <Icon name="x" size={12} />

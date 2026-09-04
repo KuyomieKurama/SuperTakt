@@ -2724,6 +2724,15 @@ bleiben, beide ohne Angreifer und beide billig zu schließen:
   Rest der Zeile optisch um. Diese Namen reisen seit dieser Welle weiter als je zuvor: in den
   Bewegungssatz an **beiden** Flächen, in den Aufgabenbereich des Add-ins und in die Löschdialoge.
   `apps/local-api/src/access/session-secret.ts:85` trägt die passende Prüfung bereits ausgeschrieben.
+
+  > **Nachtrag T-125 (2026-09-04).** Die Aufzählung oben ist der Stand von R-3a und **unvollständig
+  > gemessen an heute**: Es fehlen die drei Richtungsmarken U+061C (ALM), U+200E (LRM) und U+200F
+  > (RLM), die T-117 nachgetragen hat. Der Absatz bleibt als Protokoll stehen — er sagt, was am
+  > 2026-09-04 vor Welle K bekannt war —, aber wer ihn als Beschreibung der Klasse liest, liest
+  > eine Auswahl. **Die maßgebliche Fassung steht seit T-122 an genau einer Stelle im Baum:**
+  > `packages/domain/src/characters.ts`, als Codepunktbereiche und nicht als Ausdruck. Der Satz
+  > „session-secret.ts:85 trägt die passende Prüfung bereits ausgeschrieben" ist überholt und in der
+  > guten Richtung: Diese Datei trägt die Prüfung nicht mehr selbst, sie liest sie (T-122, siehe 17.1).
 - **`details` ist der Zahl nach unbegrenzt.** Die beiden Abfragen liefern eine Zeile je verweisender
   Regel, ohne `LIMIT`, und eine Obergrenze für die Zahl der Pools gibt es nirgends. Bei zweihundert
   Zeichen je Name steht der ganze Bestand in einem Satz. Kein Grenzübertritt — Pools legt nur an,
@@ -2963,6 +2972,13 @@ Prüfung, zwei Schemata, deutsche Meldung, kein stilles Bereinigen. Über sie la
 Hauptfläche — Tags, Ordner, Regeln, Status, Exportvorlagen (`routes/structure.ts`,
 `routes/export.ts`) — und die Titel und Tagnamen aus `POST /todos` (`routes/todos.ts:51`, `:66`).
 
+> **Nachtrag T-125 (2026-09-04).** Auch diese Aufzählung ist der Stand vor Welle K und
+> **unvollständig**: T-117 hat U+061C, U+200E und U+200F ergänzt, T-122 die ganze Klasse nach
+> `packages/domain/src/characters.ts` gelegt. `input.ts` führt sie seither nicht mehr, sondern
+> liest sie (`hasForbiddenNameCharacter`, `FORBIDDEN_NAME_CHARACTER_MESSAGE`; nachgesehen an
+> `input.ts:15-17`, `:140`). Der Absatz bleibt als Protokoll stehen; die vollständige und
+> gemessene Fassung steht in 17.1.
+
 **Die Add-in-Routen laufen nicht über sie.** `routes/addin/schema.ts` hat sein eigenes Schema, und
 es ist auf dem Stand von vor T-101 geblieben: `title` ist `z.string().trim().min(1).max(512)`,
 `tagNames` ist ein Feld aus `z.string().trim().min(1).max(MAX_TAG_NAME_LENGTH)`. Keine
@@ -3004,6 +3020,25 @@ tut, weiß niemand in diesem Projekt.
 `routes/addin/schema.ts` anwenden — dieselbe Prüfung, dieselbe Meldung, dieselbe Abweisung mit 422
 über `toFieldIssues`. Der Bezug über die Modulgrenze ist unbedenklich: `routes/addin/index.ts`
 holt `readJson` bereits aus `../http/input.ts`.
+
+> **Nachtrag T-125 (2026-09-04) — der Befund ist geschlossen, das Gegenmittel war an zwei Stellen
+> falsch.** Nachgemessen an `c96a2b2`: `routes/addin/schema.ts:128` ist `title: titleSchema`,
+> `:168` ist `tagNames: z.array(nameSchema).max(ADDIN_TAG_NAMES_MAX)`, und der Kommentar, der die
+> Zeichengleichheit zusicherte, steht bei `:140-154` richtiggestellt da. Damit ist es nicht mehr
+> ein zeichengleiches, sondern **dasselbe** Schema — die bessere Antwort als die vorgeschlagene.
+>
+> Zwei Angaben dieses Absatzes waren falsch, und T-114 hat sie beim Ausführen bemerkt; sie stehen
+> hier, damit die nächste Prüfung sie nicht abschreibt:
+>
+> 1. `withoutControlCharacters` war **nicht exportiert**. „Eine Zeile, und sie ist schon
+>    geschrieben" traf nicht zu; benutzbar waren nur die beiden Anwendungen `titleSchema` und
+>    `nameSchema`.
+> 2. `readJson` ist in `routes/addin/index.ts` **lokal definiert** und nicht importiert. Der
+>    Import über die Modulgrenze, den es gibt, ist `statusFor` aus `../../http/problem.ts`. Die
+>    Schlussfolgerung stimmte, die Fundstelle nicht.
+>
+> Der Preis der guten Lösung steht in T-114 Annahme 1: Der Titeldeckel sinkt von 512 auf 500.
+> Was der Befund nicht mit erledigt hat, ist die **Anzeigeseite** — siehe E-063 und 17.1.
 
 **Und der Kommentar daneben gehört mit richtiggestellt.** `routes/addin/schema.ts:74` sagt heute:
 „Der Wortlaut des Schemas ist zeichengleich der aus `routes/todos.ts` (`nameSchema` =
@@ -3154,3 +3189,360 @@ vorhanden ist.
 Das Tor aus Abschnitt 8 bleibt an zwei Stellen uneinlösbar: kein 42Crunch-Auditwert für eine weiter
 gewachsene Beschreibung, und Semgrep Guardian zum sechsten Mal nicht erreichbar. Beides ist eine
 Beschaffungsentscheidung und kein Befund dieses Branches.
+
+---
+
+## 17. Prüfung T-125 (2026-09-04) — Wellen J bis L: eine Wahrheit an einem Ort, und was daneben noch stand
+
+Prüfumfang: `git diff 71c6695..c96a2b2` — Wellen I (T-113 bis T-116), J (T-117, T-118) und K
+(T-119 bis T-122). 68 geänderte Dateien, davon 54 übersetzbare Quelldateien. **Bewerteter Stand:
+`c96a2b2`**, Arbeitsbaum zum Zeitpunkt der Messung sauber bis auf `board.md`. Während der Prüfung
+haben integration-dev und frontend-dev abgelegt; was dadurch zugefallen ist, steht gemessen in
+17.9 und ist nicht Teil der Bewertung von `c96a2b2`.
+
+Anlass ist die Kette, die Befund T-112-1 ausgelöst hat: T-114 schloss die Add-in-Tür, T-117
+erweiterte die Zeichenklasse an der Haupttür um `U+061C`, `U+200E`, `U+200F`, `suggestTitle` zog
+nicht nach — **und der Nachweis, der genau das verhindern sollte, blieb grün, weil er gegen eine
+abgeschriebene Liste prüfte** (T-119, E-063 Punkt 4).
+
+### 17.0 Was tatsächlich gelaufen ist
+
+| Werkzeug | Lief | Ergebnis |
+|---|---|---|
+| Semgrep CLI 1.166.0, `p/secrets p/security-audit p/typescript p/owasp-top-ten` über die 54 geänderten Quelldateien | **ja** | 156 Regeln, 54 Ziele, **0 Befunde**, ~99,9 % geparst. Aus `p/secrets` null Treffer. Keine Teilparser-Meldung mehr — der Hinweis T-112-H2 ist an `input.test.ts` erledigt. |
+| Semgrep Guardian — SAST, Geheimnisse, Lieferkette | **nein** | `Not logged into Semgrep Guardian.` Zum **siebten** Mal, seit T-003 unverändert. Kein Plattformbefund, weder positiv noch negativ. Kein Ersatz vorgetäuscht. |
+| 42Crunch-Audit, 42Crunch-Scan | **nein** | `42c-ast` nicht auffindbar, `~/.42crunch` existiert nicht. Die Beschreibung liegt vor (5417 Zeilen); das Hindernis ist ausschließlich das Werkzeug. |
+| Eigene Messungen: Codepunktsuche über **jede** der 604 versionierten Dateien; Auszählung der Prosafassungen der Zeichenklasse über den YAML-Leser des Projekts; Verhalten von `server.close()` unter einer offenen lokalen Verbindung auf diesem Node; Diff je Pfad; Muster für Zugangsdaten, Call-Nummern, E-Mail-Adressen; Lesen der Wächter und ihrer Reichweite | **ja** | 17.1 bis 17.6 |
+| `pnpm proof:access`, `proof:openapi`, `proof:addin`, `pnpm test`, `pnpm test:e2e` | **nein** | Die portgebundenen Pfade belegen 17843/17844, und integration-dev sowie frontend-dev arbeiteten parallel in `apps/outlook-addin/**` und `apps/web/**`; `proof:access` Abschnitt 13 misst Zeitverhalten und wird unter fremder Last falsch rot (T-122 hat das gemessen). Die Zahlen der anderen Berichte sind hier **nicht** als eigene ausgegeben. Statt eines Laufs: der Quelltext der Wächter gelesen und ihre Reichweite ausgemessen. |
+
+Die Definition of Done ist an einem Punkt erfüllt („Semgrep ohne Befunde hoher Schwere") und an
+einem unverändert **nicht erfüllbar** („42Crunch über der Schwelle"). Das steht seit T-023 und ist
+eine Beschaffungsentscheidung, kein Befund dieses Branches.
+
+### 17.1 Trägt die geteilte Fassung die Antwort?
+
+**Für den ausführbaren Teil: ja.** `packages/domain/src/characters.ts` führt die Klasse als
+Codepunktbereiche, und vier Stellen lesen sie, statt sie zu kopieren — nachgesehen, nicht
+angenommen:
+
+```
+apps/local-api/src/http/input.ts:15-17,140      hasForbiddenNameCharacter, FORBIDDEN_NAME_CHARACTER_MESSAGE
+apps/local-api/src/access/session-secret.ts     isPlausibleUserName über dieselbe Funktion (T-122)
+apps/local-api/src/routes/addin/schema.ts:128   title: titleSchema
+apps/local-api/src/routes/addin/schema.ts:168   tagNames: z.array(nameSchema).max(ADDIN_TAG_NAMES_MAX)
+```
+
+Dazu zwei **abgeleitete** Wächter, die eine Abweichung rot machen, ohne dass jemand daran denken
+muss: `proof:openapi` Abschnitt 16 hält `titleSchema` über `0x0000`–`0x20FF` gegen
+`isForbiddenNameCharacter`; `proof:addin` Abschnitt 17 sammelt aus der Add-in-Tür über die ganze
+BMP, was sie abweist, und hält `dropHidden` und `visibleText` dagegen. Beide **fragen** und
+schreiben nicht ab. Das ist die richtige Bauart, und die Begründung in `characters.ts` — Zahlen
+statt eines `RegExp`, weil ein Ausdruck mit `g` sich `lastIndex` merkt und weil Bereiche sich
+**lesen** lassen — ist die tragende.
+
+**Für den nicht ausführbaren Teil: an `c96a2b2` nein.** Die Wahrheit stand weiter an mehreren
+Orten, und die Wächter deckten nicht alle. Vollständige Bilanz des bewerteten Standes:
+
+| Träger | Art | Wächter |
+|---|---|---|
+| `packages/domain/src/characters.ts` | **maßgeblich** | — |
+| `http/input.ts`, `access/session-secret.ts`, `routes/addin/schema.ts` | liest | `proof:openapi` 16, `proof:access` 0b/0c, `proof:addin` 16/17 |
+| `apps/outlook-addin/src/text/hidden.ts:83` | **zweite Fassung** (`HIDDEN_SOURCE`, ein Ausdruck) | `proof:addin` 17 — misst, greift |
+| `apps/outlook-addin/scripts/proof-addin.mjs:3359-3380` | 20 abgeschriebene Codepunkte | nur **Teilmengenprüfung**: kann unvollständig werden, nicht falsch |
+| `apps/outlook-addin/scripts/proof-addin.mjs`, `istLeerraum` | Abschrift von `CONTROL_WHITESPACE` | keiner — fällt aber laut aus |
+| OpenAPI `components.responses.UnprocessableEntity.description` | Prosa | `proof:openapi` 16 |
+| OpenAPI `/addin/todos` → `title.description` | **Prosa** | **keiner** |
+| OpenAPI `/addin/todos` → `tagNames.description` | **Prosa** | **keiner** |
+| `routes/addin/schema.ts:88-91` (Kommentar, historisch) | Prosa, unvollständig | keiner |
+| `apps/local-api/test/http/input.test.ts`, `apps/outlook-addin/test/text/hidden.test.ts` | Randfälle | prüfen Ränder, nicht die Klasse — und sollen es auch nicht |
+| `docs/bedrohungsmodell.md` 15 und 16.4 (zweimal) | Prosa, unvollständig | keiner — mit dieser Prüfung als Nachtrag richtiggestellt |
+
+Die Prosafassungen in der OpenAPI habe ich über den YAML-Leser des Projekts ausgezählt und gegen
+die elf Grenzen aus `FORBIDDEN_NAME_CHARACTERS` gehalten:
+
+```
+Grenzen der Klasse: U+0000, U+001F, U+007F, U+009F, U+061C, U+200E, U+200F, U+202A, U+202E, U+2066, U+2069
+Prosafassungen an c96a2b2: 3 — alle drei zu diesem Zeitpunkt vollständig
+vom Wächter gelesen:       components.responses.UnprocessableEntity.description   (1 von 3)
+```
+
+**Warum das kein Formalismus war.** Die beiden ungewachten waren genau die beiden, die schon einmal
+auseinandergelaufen sind: T-119 musste dort die drei Marken aus T-117 von Hand nachtragen („hier
+mit T-119 nachgetragen" stand wörtlich in beiden). Der Wächter deckte die eine Fassung, die nie
+abgewichen ist, und keine der beiden, die es getan hatten.
+
+**Und eine Zusicherung war unwahr.** `UnprocessableEntity.description` sagte an `c96a2b2`: „der
+Dienst liest sie dort … und das Add-in liest dieselbe Fassung, statt sie abzuschreiben."
+`apps/outlook-addin/src/text/hidden.ts` hatte zu diesem Zeitpunkt **keine einzige `import`-Zeile**
+— es schrieb ab. Der Grund, der dort für die Doppelung stand — der Aufgabenbereich dürfe
+`@takt/local-api` nicht führen —, galt seit T-122 nicht mehr: Die Klasse liegt nicht mehr dort, und
+`@takt/domain` steht in der Abhängigkeitsliste des Add-ins.
+
+**Fünf Wellen — warum es so lange gedauert hat.** Die Regression hat nicht überdauert, weil niemand
+hingesehen hätte. Sie hat überdauert, weil an jeder Stelle **etwas** hingesehen hat: Abschnitt 16
+des Nachweispfads war grün, der Kommentar sagte „dasselbe Schema", die Beschreibung nannte die
+Klasse. Drei Zeugen, und alle drei sagten dasselbe aus derselben Quelle — einer Abschrift. Erst
+T-119 hat einen Zeugen gebaut, der die Tür selbst fragt. **Die Bedingung dafür, dass sich das nicht
+wiederholt, ist nicht Wachsamkeit, sondern dass jeder Träger entweder liest oder gemessen wird.**
+Eine Beschreibung kann nicht importieren; deshalb muss sie gemessen werden, und an `c96a2b2` wurde
+eine von drei gemessen.
+
+### 17.2 Der verwaiste Sidecar und die Vertrauensgrenze
+
+**Was offen war.** `readStartupHandshake` las `stdin` im fließenden Zustand und meldete danach nur
+seine Zuhörer ab; das Dateiende ging im Startfenster an einen Strom ohne Zuhörer, und
+`watchParentLink` meldete sich anschließend mit `once('end')` an einem beendeten Strom an. Mit dem
+echten Dienst nachgestellt: 15 Sekunden und weiter laufend (T-122 Abschnitt 3).
+
+**Was das für die Vertrauensgrenze bedeutet.** Die Reihenfolge in `main.ts` ist der Kern der Sache:
+`server.listen` steht bei `:217`, `watchParentLink` bei `:283`. **Der Dienst hört auf
+`127.0.0.1:17843`, bevor der Wächter über die Elternverbindung angemeldet ist.** Dazwischen liegen
+Migration, Bestandssicherung und das Zertifikat des Aufgabenbereichs — Sekunden. Ein Dienst, der
+den Elternprozess überlebt, ist deshalb nicht bloß ein hängender Prozess:
+
+- Er ist **für jeden Prozess auf dem Rechner erreichbar** (VG-1) und hält den Datenbestand offen,
+  ohne dass ein Fenster ihn zeigt. Die einzige Anzeige, an der ein Benutzer bemerken könnte, dass
+  Takt noch läuft, ist weg.
+- Er hält **den Port**, und das ist die zweite Hälfte: Takt weicht bewusst nicht auf einen anderen
+  Port aus (`sidecar.rs:312`, B-1.5), weil sich sonst ein fremdes Programm als Takt ausgeben
+  könnte. Ein verwaister Sidecar macht damit jeden weiteren Start unmöglich, und der Benutzer sieht
+  „Der Port 17843 ist belegt", ohne dass ein Fenster offen wäre, das er schließen könnte.
+- Er hat das **Sitzungsgeheimnis** der beendeten Sitzung noch im Speicher, und der Add-in-Weg
+  (17844, Zertifikat) steht ebenfalls weiter.
+
+Das ist der Grund, warum B-1.6 Punkt 3 keine Aufräumfrage ist, sondern die Bedingung dafür, dass
+„lokal" überhaupt eine Grenze beschreibt: **Die Lebensdauer des Dienstes ist die Lebensdauer der
+Sitzung**, und alles andere in diesem Modell hängt daran.
+
+**Die Behebung ist die richtige, und sie sitzt an der Ursache.** `input.pause()` im Handschlag lässt
+das Dateiende ungelesen liegen, bis `watchParentLink` es mit seinem `resume()` abholt; und wer sich
+an einem bereits beendeten Strom anmeldet (`readableEnded || destroyed`), bekommt die Meldung
+sofort. Das eine verhindert den Verlust, das andere fängt ihn ab — zwei unabhängige Zeilen für
+einen Fall, und das ist hier angemessen, weil die eine über Zeitverhalten urteilt.
+
+**Ist `proof:access` Abschnitt 0d der richtige Wächter? Fast.** Er ist deutlich besser als sein
+Vorgänger: Er schließt die Röhre **unmittelbar nach dem Handschlag**, ohne auf `/health` zu warten,
+hängt damit nicht am Zeitverhalten des Rechners und hat eine gefahrene Gegenprobe („ohne Behebung
+rot"). Mit 0c (Röhre zu, sobald `/health` antwortet) und 15 (Röhre zu im Ruhezustand) sind drei
+Punkte des Lebenslaufs abgedeckt. Zwei Dinge sieht er nicht:
+
+1. **Er misst einen Zeitpunkt, nicht das Fenster.** Der Fehler lag zwischen `finish()` und
+   `watchParentLink`; 0d trifft dieses Fenster sicher, aber nur an seinem Anfang. Das ist
+   verzeihlich — der Anfang ist die schärfste Stelle — und der Grund, warum die Behebung an der
+   **Ursache** mehr wert ist als der Nachweis.
+2. **Er misst mit einer stillen Leitung.** Kein Abschnitt schließt die Röhre, während eine
+   Verbindung auf 17843 offen ist. Genau dann hält `shutdown()` nicht Wort — siehe 17.3.
+
+### 17.3 `shutdown()` hat keine Frist — Befund T-125-4
+
+`apps/local-api/src/main.ts:275-281` ruft `taskpane?.close()`, `database?.close()` und dann
+`server.close(() => process.exit(0))`. Der **einzige** Weg zu `process.exit(0)` führt durch diesen
+Rückruf, und `server.close()` hört zwar sofort auf zu lauschen, wartet aber auf die offenen
+Verbindungen. Gemessen auf dem Node dieses Rechners (v22.23.2, eigener Server auf einem flüchtigen
+Port, damit 17843 unbelegt bleibt):
+
+```
+keepAliveTimeout 5000   headersTimeout 60000   requestTimeout 300000
+ein lokaler Prozess verbindet sich und schickt einen unvollständigen Kopf
+→ close() hat nach 8000 ms nicht zurückgerufen; der Prozess läuft weiter
+→ die Schranke ist headersTimeout (60 s), bei stockendem Rumpf requestTimeout (300 s)
+```
+
+**Was das entschärft, ebenfalls gemessen:** Der Lauscher ist sofort weg — ein zweiter Server bindet
+denselben Port unmittelbar nach `close()` wieder. `database.close()` und `taskpane.close()` sind
+vorher gelaufen. Der überlebende Prozess hält also **weder den Port noch einen offenen
+Datenbestand**; die schweren Folgen aus 17.2 treten nicht ein.
+
+**Was bleibt.** Die Zusage aus B-1.6 Punkt 3 lautet „der Sidecar überlebt die Hülle nicht". Sie gilt
+heute mit einer Fußnote: *es sei denn, ein lokaler Prozess entscheidet anders* — und ein lokaler
+Prozess ist genau der Akteur, gegen den dieses Modell geschrieben ist. Er kann das Ende um bis zu
+fünf Minuten verzögern, ohne ein Geheimnis zu kennen; eine TCP-Verbindung und ein halber Kopf
+genügen. Der Gewinn für ihn ist gering, der Aufwand für uns auch: `server.closeAllConnections()`
+vor `server.close(…)`, und ein `setTimeout(() => process.exit(0), …).unref()` als Boden, damit das
+Anhalten eine Frist hat statt einer Hoffnung. **Schwere: Hinweis. Zuständig: domain-dev.** Ein
+Abschnitt 0e, der die Röhre mit **einer offenen Verbindung** schließt, wäre der Nachweis dazu.
+
+**Der zweite Befund aus T-122 — Code 1 beim ordentlichen Anhalten — ist richtig behoben und
+sicherheitlich mehr als Kosmetik.** `end` und `close` feuerten beide auf derselben Röhre, `onLost`
+lief zweimal, das zweite `database.close()` warf `ERR_INVALID_STATE`, und ein Wurf aus einem
+Ereignisbehandler endet mit Code 1. Die Hülle liest diesen Code, um den Grund zu **unterscheiden**
+(74 Port, 78 Konfiguration, sonst „unerwartet beendet", `sidecar.rs:304-333`). Eine 1 für ein
+ordentliches Anhalten ist damit keine falsche Zahl, sondern eine **falsche Diagnose an den
+Benutzer** — und sie trat nicht bei jedem Lauf auf, also genau die Sorte Meldung, der man beim
+nächsten Mal nicht glaubt. Zwei Sperren (`reported` in `watchParentLink`, `stopping` an
+`shutdown`), beide an der richtigen Stelle: Sie machen das Anhalten idempotent, statt den Wurf zu
+fangen.
+
+### 17.4 `WindowsUser` — die Entscheidung „abweisen" bewertet
+
+**Woher der Wert kommt, ist die Vorfrage, und sie ist gut beantwortet.**
+`apps/desktop/src-tauri/src/identity.rs` holt ihn unter Windows aus `GetUserNameW` und
+`GetUserNameExW(NameSamCompatible)` — **nicht** aus `USERNAME`, **nicht** aus `USERPROFILE`,
+**nicht** über einen Unterprozess `whoami`, und ohne Rückfall auf eine dieser Quellen, wenn der
+Systemaufruf scheitert („Ein Wert, der von jedem setzbar ist, wäre schlechter als gar keiner: Er
+sähe richtig aus."). Unter Unix `getpwuid(geteuid())` und `trusted: false`. Damit ist die Frage aus
+CLAUDE.md — Betriebssystem oder Benutzereingabe — für die Abrechnung eindeutig beantwortet: **kein
+vom Benutzer setzbares Feld.** Das ist die eigentliche Antwort auf B-8.1.
+
+**Die Entscheidung des Orchestrators — abweisen, nicht bereinigen und nicht markieren — ist
+richtig, und die tragende Begründung ist nicht die naheliegende.**
+
+- **Bereinigen** hieße, unter einem Namen abzurechnen, den es nicht gibt. **Markieren** hieße,
+  `U+FFFD` in die Abrechnungsdatei zu schreiben. Beides ergibt still eine Rechnung mit falschem
+  Urheber; beides ist schlechter als ein lauter Nichtstart.
+- **Der eigentliche Grund:** Auf Windows kann dieser Fall aus der genannten Quelle **nicht**
+  entstehen — ein SAM-Konto verbietet Steuerzeichen. Greift `user_invalid` je, hat nicht der
+  Benutzer einen ungewöhnlichen Namen, sondern **etwas hat in die Röhre geschrieben, was dort nicht
+  hingehört.** `user_invalid` ist damit kein Namensprüfer, sondern ein **Manipulationssignal**, und
+  ein Manipulationssignal beantwortet man nicht mit Weiterlaufen.
+- **Was die Prüfung ausdrücklich nicht leistet**, damit niemand mehr von ihr erwartet: Wer in die
+  Röhre schreiben kann, schreibt `kollege.mueller` und keine Richtungsmarke. Gegen die
+  Namensvertauschung aus B-8.1 hilft sie nicht — dagegen hilft, dass die Hülle `GetUserNameW`
+  liest. Sie deckt die **Anzeige- und Kodierungsfolgen** eines Namens mit Richtungszeichen ab, und
+  das ist eine kleinere, aber echte Klasse: Der Wert geht unverändert in die Exportdatei (A-8.5)
+  und steht in `GET /settings`.
+- **Wer die Röhre beschreiben kann**, ist allein die Hülle. Der Nichtstart eröffnet damit keinen
+  neuen Verweigerungsweg: Wer ihn auslösen kann, kann Takt ohnehin nicht starten lassen.
+- **Der Wert steht in keiner Meldung** (`main.ts`, dritte Meldung für `user_invalid`) — richtig,
+  denn er trägt genau die Zeichen, um die es geht (B-2.4, B-4.3 Punkt 5).
+
+**Die Folge, die der Auftrag nennt — der Benutzer kann seinen Windows-Namen nicht ändern —, ist
+real, aber die betroffene Menge ist auf Windows praktisch leer.** Auf einer
+Unix-Entwicklungsmaschine ist sie es nicht; dort wäre ein Konto mit einem C1-Zeichen konstruierbar,
+und Takt startete nicht. Das ist ein Entwicklungsfall und kein Auslieferungsfall.
+
+**Wo die Entscheidung an `c96a2b2` noch nicht ankam — Befund T-125-5.** Der ganze Grund für zwei
+getrennte Gründe war, dass der Benutzer an verschiedenen Stellen sucht (T-122). Die Hülle machte
+diesen Unterschied nicht: `explain_exit` (`apps/desktop/src-tauri/src/sidecar.rs:318-327`) hat
+**einen** Text für Code 78, und er lautet „Der Dienst hat Startgeheimnis oder
+Windows-Benutzernamen **nicht erhalten**". Für `user_invalid` ist das die falsche Auskunft — der
+Name ist angekommen und wurde **zurückgewiesen**. Der Benutzer wird an die Stelle geschickt, an der
+nichts fehlt, und ein Manipulationssignal verschwindet in einem Satz über etwas Fehlendes. Siehe
+17.9: T-124 hat das inzwischen von der anderen Seite beantwortet.
+
+### 17.5 Die Anzeige nach E-063 und die Flächen, die sie nicht deckt
+
+**Die Berichtigung aus T-119 ist die richtige und gehört ins Modell.** `unicode-bidi: isolate`
+allein reicht **nicht**: Es trennt den Block von seiner Umgebung, aber innerhalb des isolierten
+Blocks wirkt ein `U+202E` weiter (UBA X2–X5), und `bidi-override` öffnet nach denselben Regeln eine
+neue Ebene. **Keine CSS-Eigenschaft nimmt einem Text ein Zeichen weg.** Es gehören zwei Hälften
+zusammen, und beide stehen im Add-in: `<bdi>` schützt die **Umgebung** (`Foreign` in
+`Primitives.tsx`, `bdi { unicode-bidi: isolate }` in `addin.css`), `visibleText` nimmt dem
+**Inhalt** die Zeichen und setzt `U+FFFD` an ihre Stelle. Der Vorschlag aus T-114 („eine CSS-Zeile
+oder `<bdi>`") war die halbe Antwort und ist hiermit im Modell berichtigt.
+
+**Markieren statt streichen** ist die richtige Wahl: Ein ersatzlos entferntes Zeichen ergibt eine
+Anzeige, die harmlos aussieht und es nicht ist. Die Länge bleibt erhalten, weil jedes Zeichen genau
+eines wird. **Rechtsläufige Schrift bleibt unangetastet**, und das ist keine Nachlässigkeit,
+sondern die Grenze der Klasse: Arabisch und Hebräisch sind Text und kein Angriff.
+
+**Was die Anzeigeseite nicht deckt** — beides bewusst und beides ohne Befund:
+
+1. **`apps/web` hat kein `<bdi>` und kein `visibleText`** (über den ganzen Baum gemessen: null
+   Treffer). E-063 Punkt 1 ist an den Aufgabenbereich adressiert, und dort ist fremder Text der
+   Regelfall. In der Hauptanwendung sind Namen und Titel durch die Tür gegangen; die eine fremde
+   Fläche ist der **interne Vermerk**, der über das Add-in mit E-Mail-Text vorbelegt wird
+   (`prepareNote`) und die Zeichenprüfung bewusst nicht trägt (T-114 Punkt 4). Er steht in
+   `TodoDetailScreen.tsx` ausschließlich in einer `textarea` — also in einem Eingabefeld, und das
+   ist genau die Stelle, die E-063 Punkt 1 unangetastet lässt. Sollte der Vermerk je als Absatz
+   **angezeigt** werden, ist das die Stelle, an der `visibleText` gebraucht wird.
+2. **Der Altbestand.** Die Prüfung sitzt am Eingang, nicht am Bestand (`characters.ts` schreibt es
+   ausdrücklich hin). Titel, die vor T-114 über die Add-in-Tür angelegt wurden, können die Klasse
+   tragen und werden in `apps/web` roh angezeigt. Auf dieser Maschine ist ein solcher Bestand nicht
+   bekannt; die Anwendung ist nicht ausgeliefert.
+
+### 17.6 Repository-Hygiene
+
+Geprüft über den **ganzen** versionierten Baum (604 Dateien), nicht nur über den Diff.
+
+- **Zugangsdaten.** Muster aus Schlüsselwort, Zuweisung und mindestens 16 Zeichen Ausweis über den
+  Diff `71c6695..c96a2b2`: **null** Treffer. Semgrep `p/secrets` über die 54 geänderten
+  Quelldateien: null.
+- **Call-Nummern.** Im Diff nur `TCK-000042` und `TCK-0000…` — erfunden und als Zählwert erkennbar.
+- **E-Mail-Adressen.** Eine: `a.beispiel@beispiel.invalid`. `.invalid` ist die von RFC 2606 für
+  genau diesen Zweck reservierte Endung. Richtig gewählt.
+- **Lieferkette.** `pnpm-lock.yaml` im gesamten Diff **unverändert**. `package.json` ändert eine
+  Zeile: `typecheck:test` nimmt `apps/outlook-addin/tsconfig.test.json` mit auf. Kein neues Paket,
+  keine neue Fassung, keine neue Lieferkettenfläche.
+- **Unsichtbare Zeichen im Quelltext (Trojan Source).** Eigene Codepunktsuche über jede versionierte
+  Datei nach C0 ohne Tab/LF/CR, C1, `U+061C`, `U+200B`–`U+200F`, `U+202A`–`U+202E`,
+  `U+2066`–`U+2069`, `U+FEFF`. Ergebnis: die Symboldateien unter `apps/desktop/**/icons/`
+  (Bilddateien, erwartet) — und drei Textstellen:
+
+| Stelle | Was | Bewertung |
+|---|---|---|
+| `packages/storage/src/sqlite/paging.ts:40` | `const SEPARATOR = …;` mit einem **rohen `U+0000`** | **Befund T-125-6.** Git sieht die Datei als **Binärdatei** — sie taucht in `git grep -I` nicht auf, und ein `git diff` über sie zeigt keine Zeilen. Sie steht so seit dem allerersten Commit (`d9555d0`) und ist seither nie geändert worden; **kein Code-Review hat sie je lesen können.** Das ist die Klasse aus T-112-H2, diesmal in Produktivcode statt in einem Test. Fachlich harmlos: Der Trenner fügt Zeitstempel und Kennung zu einer Blättermarke, und keiner der beiden kann ein NUL tragen. Gegenmittel: die Escape-Folge `\u0000` schreiben und im Kommentar daneben das Zeichen beim Namen nennen. **Zuständig: domain-dev.** |
+| `.claude/team/reports/T-111-unit-tester.md:115` | rohes `U+0000` | **Hinweis T-125-H7.** Bericht, kein Code. |
+| `.claude/team/reports/T-121-unit-tester.md:64, 221, 288` | rohe `U+200D`, `U+202E`, `U+061C` | **Hinweis T-125-H7.** Bericht, kein Code — der Bericht sagt an `:288` selbst, ein Codepunktscan finde „keine rohen Exemplare"; das stimmt für die Testdatei und nicht für den Bericht. **Zuständig: unit-tester.** |
+
+**T-112-H2 ist erledigt.** `apps/local-api/test/http/input.test.ts` trägt kein rohes Zeichen mehr,
+Semgrep parst die Datei vollständig, und beides ist nachgemessen.
+
+**Eigenprobe, weil sie das Gewicht von T-125-6 besser belegt als jedes Argument.** Beim Schreiben
+dieses Abschnitts ist das rohe `U+0000` aus `paging.ts:40` **zweimal** in meine eigene Arbeit
+geraten: einmal beim Kopieren der Fundstelle in einen Shell-Befehl — der Befehl wurde abgewiesen,
+weil das Zeichen in der Bestätigung unsichtbar gewesen wäre — und einmal in den Fließtext dieser
+Datei, wo es erst die Gegenmessung gefunden hat. Beide Male stammte es aus einer `sed`-Ausgabe, in
+der es wie ein Leerzeichen aussah. Genau das ist der Schaden: Ein rohes Steuerzeichen im Quelltext
+verbreitet sich beim Zitieren weiter, und niemand sieht dabei etwas. Der Text steht jetzt als
+Escape-Folge da, und `docs/bedrohungsmodell.md` ist über eine Codepunktsuche als frei nachgewiesen.
+
+### 17.7 Befunde und Hinweise dieser Prüfung (Stand `c96a2b2`)
+
+| Kennung | Schwere | Ort | Zuständig |
+|---|---|---|---|
+| **T-125-1** | sollte | `takt-local-api.yaml`, `UnprocessableEntity.description` sagt, das Add-in lese die gemeinsame Fassung; `apps/outlook-addin/src/text/hidden.ts` hatte an `c96a2b2` keine `import`-Zeile und schrieb ab. Entweder der Vertrag aus T-122 Abschnitt 1 landet, oder der Satz wird berichtigt — eine zugesicherte Gleichheit, die es nicht gibt, ist der Grund, aus dem T-117 fünf Wellen überstanden hat. **Siehe 17.9: geschlossen.** | integration-dev |
+| **T-125-2** | sollte | `apps/local-api/scripts/proof-openapi.mjs` Abschnitt 16 las **eine von drei** Prosafassungen der Zeichenklasse. Ungewacht: `/addin/todos` → `title.description` und `tagNames.description` — genau die beiden, die T-119 von Hand nachtragen musste. Gegenmittel: den Wächter über **jede** Beschreibung laufen lassen, die die Klasse nennt, oder die beiden Add-in-Beschreibungen auf den einen Ort verweisen lassen, statt die Liste zu wiederholen. **Siehe 17.9: geschlossen, auf dem zweiten Weg.** | domain-dev (Wächter), integration-dev (Text, E-053) |
+| **T-125-3** | Hinweis | `proof-addin.mjs` Abschnitt 16: Seit T-114 sind beide Türen **dasselbe Schemaobjekt**; „beide Türen weisen dieselben 20 Zeichen ab" war damit tautologisch, und die abgeschriebene Liste konnte nur unvollständig werden, nie falsch. Ein Abschnitt, der wie ein Wächter aussieht und keiner ist, ist schlechter als keiner. **Siehe 17.9: geschlossen.** | integration-dev |
+| **T-125-4** | Hinweis | `apps/local-api/src/main.ts:275-281` — `shutdown()` hat keine Frist (17.3). Port und Datenbank sind zum Zeitpunkt des Wartens frei, die schweren Folgen aus 17.2 treten nicht ein, aber B-1.6 Punkt 3 gilt mit der Fußnote „es sei denn, ein lokaler Prozess entscheidet anders". Gegenmittel: `closeAllConnections()` und ein `setTimeout(…).unref()` als Boden; dazu ein `proof:access` 0e mit einer offenen Verbindung. **Offen.** | domain-dev |
+| **T-125-5** | Hinweis | `apps/desktop/src-tauri/src/sidecar.rs:318-327` — ein Text für Code 78, „nicht erhalten". Für `user_invalid` die falsche Auskunft; verdeckt ein Manipulationssignal (17.4). **Siehe 17.9: von der anderen Seite beantwortet, Rest klein.** | frontend-dev |
+| **T-125-6** | Hinweis | `packages/storage/src/sqlite/paging.ts:40` — rohes `U+0000` macht eine **Produktivdatei** für Git zur Binärdatei; seit `d9555d0` nie im Review lesbar. **Offen.** | domain-dev |
+| **T-125-H7** | Hinweis | rohe unsichtbare Zeichen in `T-111-unit-tester.md` und `T-121-unit-tester.md`. Berichte, kein Code. **Offen.** | unit-tester |
+| T-112-H1 | Hinweis, unverändert offen | `usecases/pool-movement.ts` — ein `resolveAxes` je Regel, keine Obergrenze für die Zahl der Regeln. In diesem Diff nicht verschlechtert. | Auftraggeber, Orchestrator |
+| T-112-H3 | Hinweis, halb offen | `apps/web/src/lib/errorText.ts` — die Namen stehen in **einem** zusammengefügten Satz statt als eigene Knoten. | frontend-dev |
+| S-1 (aus R-3a) | sollte, vor dem Push | Zweig `backup/status-als-regelterm-vor-filter`. Bis zur Bereinigung: ausschließlich benannte Zweige pushen, nie `--all`, nie `--mirror`. | Orchestrator |
+
+**Erledigt und nachgemessen:** T-112-1 (beide Türen benutzen dasselbe Schemaobjekt, der zusichernde
+Kommentar ist richtiggestellt), T-112-H2 (kein rohes Zeichen mehr in `input.test.ts`), B-1.6 Punkt 3
+im Startfenster (Ursache behoben, Nachweis 0d mit gefahrener Gegenprobe), der Beendigungscode 1 beim
+ordentlichen Anhalten.
+
+### 17.8 Urteil dieser Prüfung
+
+**Freigegeben für die Wellen J bis L.**
+
+Die Wellen verkleinern die Angriffsfläche deutlich: eine Zeichenklasse an einem Ort statt an
+zweien, vier Stellen, die lesen statt abzuschreiben, zwei abgeleitete Wächter, die eine Abweichung
+rot machen, der Windows-Benutzername unter derselben Klasse mit eigenem Grund, die Anzeigeseite
+nach E-063 vollständig gebaut, und ein verwaister Sidecar aus der Welt — an der Ursache und nicht
+am Symptom. Kein neuer Zugriffsweg, keine neue Route, keine neue Abhängigkeit, keine
+Lieferkettenänderung. Semgrep meldet über 54 geänderte Quelldateien null Befunde.
+
+Die beiden Auflagen der Stufe „sollte" waren **T-125-1** und **T-125-2**, und sie waren derselbe
+Satz zweimal: Die Lehre aus E-063 Punkt 4 war im Quelltext angekommen und in der Beschreibung noch
+nicht. Beide sind während dieser Prüfung geschlossen worden (17.9); die Freigabe steht damit ohne
+Auflage. Was offen bleibt, sind vier Hinweise, von denen keiner eine Vertrauensgrenze berührt.
+
+Das Tor aus Abschnitt 8 bleibt an zwei Stellen uneinlösbar: kein 42Crunch-Auditwert, und Semgrep
+Guardian zum **siebten** Mal nicht erreichbar. Beides ist eine Beschaffungsentscheidung und kein
+Befund dieses Branches.
+
+### 17.9 Nachmessung — was während dieser Prüfung zugefallen ist
+
+integration-dev und frontend-dev haben während der Prüfung abgelegt. Der Arbeitsbaum ist **nicht**
+der bewertete Stand; die folgenden Zahlen sind trotzdem gemessen und nicht angenommen, weil sie
+genau die drei Befunde betreffen, die oben stehen. Sie gehören formal in die nächste Runde.
+
+| Befund | Stand `c96a2b2` | Arbeitsbaum, gemessen |
+|---|---|---|
+| **T-125-1** | `hidden.ts` ohne jede `import`-Zeile, die Beschreibung sagt das Gegenteil | **geschlossen.** `apps/outlook-addin/src/text/hidden.ts` ist eine reine Wiederausfuhr: `export { HIDDEN_MARKER, dropHiddenCharacters as dropHidden, hasHiddenCharacter as hasHidden, visibleText } from '@takt/domain'`. Der Satz in `UnprocessableEntity.description` ist damit wahr. |
+| **T-125-2** | 3 Prosafassungen, 1 gewacht | **geschlossen, auf dem zweiten der beiden vorgeschlagenen Wege.** Erneute Auszählung über den YAML-Leser: **1 Prosafassung**, und es ist genau die, die Abschnitt 16 liest. Die beiden Add-in-Beschreibungen wiederholen die Liste nicht mehr. Der stehengebliebene Kommentar in `routes/addin/schema.ts:88-91` ist ebenfalls weg. |
+| **T-125-3** | `ABGEWIESENE_ZEICHEN`, 20 abgeschriebene Codepunkte | **geschlossen.** `proof-addin.mjs` führt `FORBIDDEN_NAME_CHARACTERS` aus `@takt/domain` ein (`:162`) und rollt die Bereiche aus (`:3401-3406`). Die Abschrift ist weg. `istLeerraum` (`:3411`) bleibt als Abschrift von `CONTROL_WHITESPACE` stehen — sie fällt bei einer Änderung laut aus und ist kein Befund. |
+| **T-125-5** | `explain_exit` sagt „nicht erhalten" | **von der anderen Seite beantwortet.** `apps/desktop/src-tauri/**` ist unverändert, `explain_exit` sagt weiter „nicht erhalten". T-124 hat den Fall stattdessen in der Oberfläche gelöst: `readUserNameFinding` (`apps/web/src/app/connection.ts`) fragt die Hülle nach dem Betriebssystembenutzer und wertet ihn mit **`hasForbiddenNameCharacter` aus `@takt/domain`** aus — keine zweite Fassung, ausdrücklich mit Verweis auf diese Regression. Der Name wird nicht behalten und steht in keiner Meldung (B-8.2 Punkt 1, B-4.3 Punkt 5), und `"unknown"` statt `"ok"`, wenn die Frage nicht beantwortet werden kann. Das ist die bessere Antwort als ein eigener Beendigungscode: Sie erklärt den Fehlschlag, statt ihn zu kodieren. **Rest:** Der Satz in `explain_exit` bleibt für `user_invalid` sachlich falsch; ob er neben der neuen Fläche überhaupt noch erscheint, ist eine Frage an spec-ux-reviewer und keine der Sicherheit. |
+
+**Die Bilanz aus 17.1 im Arbeitsbaum:** Jeder Träger der Zeichenklasse liest jetzt entweder
+(`input.ts`, `session-secret.ts`, `addin/schema.ts`, `hidden.ts`, `proof-addin.mjs`,
+`connection.ts`) oder wird gemessen (`UnprocessableEntity.description` durch `proof:openapi` 16;
+die Tür durch den BMP-Scan in `proof:addin` 17). Übrig bleiben die beiden Testdateien, die Ränder
+prüfen und sollen, und `istLeerraum`, das laut ausfällt. **Damit trägt die geteilte Fassung die
+Antwort — im Arbeitsbaum, nicht schon an `c96a2b2`.**

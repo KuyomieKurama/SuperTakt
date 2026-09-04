@@ -1,6 +1,12 @@
-import { countPoolRuleConditions, poolRuleIsEmpty, type PoolRuleAxes } from "@takt/domain";
+import {
+  countPoolRuleConditions,
+  enumerateGerman,
+  poolRuleIsEmpty,
+  type PoolRuleAxes,
+} from "@takt/domain";
 import type { Id, Pool, PoolResolution, PoolRuleTerm } from "../api/types";
-import { formatCount, joinGerman } from "./format";
+import { formatCount } from "./format";
+import { foreignText, quotedName } from "./foreign";
 import {
   POOL_EXPORT_EXPORTED_NOTE,
   POOL_EXPORT_LABEL,
@@ -516,10 +522,10 @@ function emptyFoldersOf(
 export function emptyFolderNames(folders: readonly EmptyRuleFolder[]): string {
   const named = folders
     .filter((folder) => folder.label !== null)
-    .map((folder) => `„${folder.label ?? ""}“`);
+    .map((folder) => quotedName(folder.label ?? ""));
   const unnamed = folders.length - named.length;
-  if (unnamed === 0) return joinGerman(named);
-  return joinGerman([
+  if (unnamed === 0) return enumerateGerman(named);
+  return enumerateGerman([
     ...named,
     unnamed === 1 ? "einem unbekannten Ordner" : `${formatCount(unnamed)} unbekannten Ordnern`,
   ]);
@@ -586,7 +592,10 @@ export function ruleSpoken(description: RuleDescription, reach: RuleReach | null
   }
 
   const conditions = description.axes
-    .map((axis) => `${axis.label} ${axis.text ?? axis.chips.map((chip) => chip.label).join(", ")}`)
+    .map(
+      (axis) =>
+        `${axis.label} ${axis.text ?? axis.chips.map((chip) => foreignText(chip.label)).join(", ")}`,
+    )
     .join("; ");
   const neutral =
     description.neutral.length === 0

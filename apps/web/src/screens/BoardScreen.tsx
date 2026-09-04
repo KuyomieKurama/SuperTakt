@@ -37,6 +37,7 @@ import {
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Takt — S-04, das Kanban-Board (A-5.1, A-5.3 bis A-5.6, E-054).
@@ -179,7 +180,7 @@ export function BoardScreen() {
           const unchanged = "Tags und Status ändern sich dadurch nicht.";
           toasts.show({
             tone: wasDone ? "info" : "success",
-            title: wasDone ? `„${todo.title}“ ist wieder offen.` : `„${todo.title}“ ist erledigt.`,
+            title: wasDone ? `${quotedName(todo.title)} ist wieder offen.` : `${quotedName(todo.title)} ist erledigt.`,
             body: withMovement(
               wasDone || movement !== null
                 ? unchanged
@@ -397,7 +398,7 @@ export function BoardScreen() {
                       setAnnouncement(
                         next === null
                           ? "Hervorhebung aufgehoben."
-                          : `„${todo.title}“ steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].join(", ")}.`,
+                          : `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].join(", ")}.`,
                       );
                     }}
                     isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
@@ -598,7 +599,7 @@ function BoardColumn({
         ? {}
         : {
             onAdd,
-            addLabel: `Todo in „${column.name}“ anlegen — mit den Tags dieser Regel`,
+            addLabel: `Todo in ${quotedName(column.name)} anlegen — mit den Tags dieser Regel`,
           })}
     >
       {view.todos.length === 0 ? (

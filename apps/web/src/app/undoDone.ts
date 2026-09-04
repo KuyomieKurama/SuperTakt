@@ -3,6 +3,7 @@ import { clearTodoDone } from "../api/endpoints";
 import type { Id } from "../api/types";
 import { doneMovementSentence, withMovement } from "../lib/movement";
 import type { ToastAction, ToastApi } from "./ToastContext";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Der Rückweg aus „Erledigt" — einmal, für alle drei Flächen (B-6 und B-7 aus
@@ -65,7 +66,7 @@ export function undoDoneAction(
           afterwards();
           toasts.show({
             tone: "info",
-            title: `„${todoTitle}“ ist wieder offen.`,
+            title: `${quotedName(todoTitle)} ist wieder offen.`,
             /*
               `cleared: true` — das Kennzeichen wird **aufgehoben**, also der
               Anlaß `'reopen'` („wieder"). Welcher Anlaß zu welcher Handlung

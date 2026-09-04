@@ -53,6 +53,8 @@ import {
   ResetExportDialog,
 } from "./BookingDialogs";
 import { TodoFormDialog } from "./TodoFormDialog";
+import { foreignText, quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-03, die Todo-Detailansicht.
@@ -157,7 +159,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           */
           toasts.show({
             tone: done ? "info" : "success",
-            title: done ? `„${title}“ ist wieder offen.` : `„${title}“ ist erledigt.`,
+            title: done ? `${quotedName(title)} ist wieder offen.` : `${quotedName(title)} ist erledigt.`,
             body: withMovement(
               "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
               doneMovementSentence(result.poolMovement, done),
@@ -296,11 +298,18 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           return (
             <>
               <ScreenHeader
-                title={todo.title}
+                title={<Foreign value={todo.title} />}
                 lead={
                   todo.callNumber === null
-                    ? `Status: ${structure.statusName(todo.statusId)}`
-                    : `Call ${todo.callNumber} · Status: ${structure.statusName(todo.statusId)}`
+                    ? `Status: ${foreignText(structure.statusName(todo.statusId))}`
+                    : /*
+                        Die Call-Nummer geht ungeschuetzt in den Satz, und das
+                        ist gemessen und nicht uebersehen: `checkCallNumber`
+                        laesst nur `A-Z a-z 0-9 . _ / -` durch (E-045), ein
+                        geschlossener Vorrat ohne jedes Richtungszeichen
+                        (T-119, Abschnitt 4).
+                      */
+                      `Call ${todo.callNumber} · Status: ${foreignText(structure.statusName(todo.statusId))}`
                 }
                 refreshing={refreshing}
                 actions={
@@ -446,7 +455,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                                     {entry.note.length === 0 ? (
                                       <span className="muted">Ohne Leistung</span>
                                     ) : (
-                                      entry.note
+                                      <Foreign value={entry.note} />
                                     )}
                                   </span>
                                   <span className="entry-row__source">
@@ -589,7 +598,9 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       */}
                       <dt>Status</dt>
                       <dd className="facts__with-action">
-                        <span>{structure.statusName(todo.statusId)}</span>
+                        <span>
+                          <Foreign value={structure.statusName(todo.statusId)} />
+                        </span>
                         <Button size="sm" variant="ghost" iconStart="pencil" onClick={() => setEditOpen(true)}>
                           Ändern
                         </Button>

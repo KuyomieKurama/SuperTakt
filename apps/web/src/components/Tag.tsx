@@ -1,4 +1,6 @@
 import { cx } from "../lib/cx";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 import { Icon } from "./Icon";
 
 /**
@@ -8,6 +10,16 @@ import { Icon } from "./Icon";
  * optional den Ordnerpfad als gedaempftes Praefix, damit "Nord" aus
  * "Kunden / Nord" nicht mit "Nord" aus "Standorte / Nord" verwechselt wird
  * (A-4.4).
+ *
+ * ## Name und Pfad sind fremder Text (E-063, T-124)
+ *
+ * Beide kommen aus dem Bestand und koennen aus dem Add-in stammen; Namen von
+ * vor T-101 koennen ausserdem Zeichen tragen, die `nameSchema` heute abweist
+ * (Altbestand, siehe `packages/domain/src/characters.ts`). Sie laufen deshalb
+ * ueber {@link Foreign} beziehungsweise `foreignText` — **hier**, im Baustein,
+ * und nicht an den ueber zwanzig Aufrufstellen. Ein Chip ist Anzeige und kein
+ * Eingabefeld; die eine Stelle, an der ein Tagname eingegeben wird, ist das
+ * Textfeld in `TagInput`, und das bleibt unangetastet.
  */
 export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
@@ -82,14 +94,16 @@ export function TagChip({
       )}
       {hasPath ? (
         <>
-          <span className="visually-hidden">{path.join(" / ")} / </span>
+          <span className="visually-hidden">
+            <Foreign value={path.join(" / ")} /> /{" "}
+          </span>
           <span className="chip__path" aria-hidden>
-            {visiblePath}
+            <Foreign value={visiblePath} />
             <span> / </span>
           </span>
         </>
       ) : null}
-      <span className="chip__label">{label}</span>
+      <Foreign className="chip__label" value={label} />
       {isNew ? (
         <span className="chip__badge chip__badge--new" title="Dieses Tag wird beim Speichern angelegt">
           <span className="visually-hidden">wird neu angelegt</span>
@@ -120,13 +134,20 @@ export function TagChip({
   }
 
   return (
-    <span className={classes} title={hasPath ? `${path.join(" / ")} / ${label}` : label}>
+    <span
+      className={classes}
+      title={
+        hasPath
+          ? `${foreignText(path.join(" / "))} / ${foreignText(label)}`
+          : foreignText(label)
+      }
+    >
       {content}
       {onRemove !== undefined ? (
         <button
           type="button"
           className="chip__remove"
-          aria-label={`Tag ${label} entfernen`}
+          aria-label={`Tag ${foreignText(label)} entfernen`}
           disabled={disabled}
           onClick={onRemove}
         >
@@ -156,12 +177,15 @@ export function TagPath({ segments, className }: TagPathProps) {
 
   return (
     <span className={cx("tag-path", className)}>
-      <span className="visually-hidden">Pfad: {segments.join(" / ")}</span>
+      <span className="visually-hidden">
+        Pfad: <Foreign value={segments.join(" / ")} />
+      </span>
       <span aria-hidden className="tag-path__inner">
         {visible.map((segment, index) => (
           <span key={`${segment}-${index}`} className="tag-path__segment">
             {index > 0 ? <span className="tag-path__separator">/</span> : null}
-            {segment}
+            {/* „…" ist von uns; `Foreign` laesst es unveraendert durch. */}
+            <Foreign value={segment} />
           </span>
         ))}
       </span>

@@ -278,32 +278,25 @@ export function plural(count: number, one: string, many: string): string {
 }
 
 /* ==================================================================== */
-/* Aufzählungen                                                         */
+/* Aufzählungen — sie stehen nicht mehr hier                            */
 /* ==================================================================== */
 
-/**
- * Zählt Textstücke deutsch auf: `A`, `A und B`, `A, B und C`.
- *
- * ## Wofür sie **nicht** mehr da ist (T-094)
- *
- * Bis T-094 zählte sie die Pools im Toast nach der Wiederaufnahme und im
- * Hinweis `ReactivationNotice` auf, zeichengleich mit `listPools` im
- * Outlook-Add-in — drei Stellen, an denen dieselbe Aufzählung entstand, und
- * bis T-045 eine davon mit `join(" und ")` und dem Ergebnis „A und B und C"
- * (Befund C-24).
- *
- * Alle drei sind weg. Der Satz über die Poolbewegung kommt seit E-058 fertig
- * aus `poolMovementSentence` in `@takt/domain`, und dort zählt die Domäne
- * selbst auf. Zeichengleichheit über Paketgrenzen zu **verabreden** war immer
- * die schwächere Fassung von „es gibt nur eine Stelle".
- *
- * ## Wofür sie geblieben ist
- *
- * Für Aufzählungen, die in der Oberfläche entstehen und nirgendwo sonst: die
- * leeren Regelordner in `lib/poolRule.ts` (`emptyFolderNames`, E-057). Ein
- * eigenes `join` dafür wäre die vierte Fassung derselben fünf Zeilen.
- */
-export function joinGerman(parts: readonly string[]): string {
-  if (parts.length <= 1) return parts[0] ?? "";
-  return `${parts.slice(0, -1).join(", ")} und ${parts[parts.length - 1] ?? ""}`;
-}
+/*
+  Bis T-124 stand hier `joinGerman`: fünf Zeilen, die „A", „A und B", „A, B
+  und C" ergaben. Sie waren die dritte Abschrift derselben Form — neben
+  `enumerateGerman` in `lib/errorText.ts` und `quoteList` in
+  `screens/TodoFormDialog.tsx`, und alle drei neben dem privaten `listPools`
+  in `packages/domain/src/pool-movement.ts`, aus dem sie stammten.
+
+  Seit T-122 führt die Domäne die Form aus: `enumerateGerman`, `quoteName`
+  und `enumerateNames` in `packages/domain/src/enumeration.ts`. Der einzige
+  Aufrufer in dieser Oberfläche — `emptyFolderNames` in `lib/poolRule.ts` —
+  liest sie jetzt dort.
+
+  Warum die Zeilen ersatzlos verschwinden und nicht als Weiterleitung
+  stehenbleiben: Eine Weiterleitung wäre ein zweiter Name für dieselbe
+  Funktion und damit die nächste Gelegenheit, sie an einer Stelle zu ändern.
+  `lib/errorText.ts` führt aus dem einen genannten Grund eine — dort hängt ein
+  Test des unit-testers am Namen, und dieser Bruch gehört nicht in diese
+  Aufgabe (siehe Bericht T-124).
+*/

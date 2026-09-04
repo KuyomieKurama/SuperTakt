@@ -33,6 +33,7 @@ import { bookingSentence, doneMovementSentence, withMovement } from "../lib/move
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
 import { useToasts, type ToastTone } from "./ToastContext";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Takt — der Timer, überall erreichbar (A-13.4, I-04, I-05).
@@ -233,7 +234,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             tone: "info",
             title: "Zurückgenommen.",
             body: withMovement(
-              `„${todoTitle}“ ist wieder erledigt, die eben entstandene Buchung wurde verworfen.`,
+              `${quotedName(todoTitle)} ist wieder erledigt, die eben entstandene Buchung wurde verworfen.`,
               doneMovementSentence(done.poolMovement, false),
             ),
           });
@@ -304,7 +305,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         toasts.show({
           tone: "success",
           title: "Timer gestartet.",
-          body: `Er läuft auf „${todoTitle}“.${movementSentence === null ? "" : ` ${movementSentence}`}`,
+          body: `Er läuft auf ${quotedName(todoTitle)}.${movementSentence === null ? "" : ` ${movementSentence}`}`,
         });
         return;
       }
@@ -402,7 +403,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         Rahmen — der Titel nennt das Todo, der Rumpf sagt, was mit ihm
         geschehen ist.
       */
-      const on = `Zeit gebucht auf „${todoTitle}“`;
+      const on = `Zeit gebucht auf ${quotedName(todoTitle)}`;
 
       interface StopMessage {
         readonly tone: ToastTone;
@@ -463,7 +464,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         toasts.show({
           tone: "info",
           title: "Nichts gebucht.",
-          body: `Der Timer auf „${current.todoTitle}“ lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.`,
+          body: `Der Timer auf ${quotedName(current.todoTitle)} lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.`,
         });
         return true;
       }
@@ -597,7 +598,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       /* Schritt 3 — der Start. Ab hier meldet nur noch der Stapel. */
       const failed = (detail: string) => {
         toasts.failure(
-          `Gebucht, aber der Timer auf „${pending.todoTitle}“ ließ sich nicht starten`,
+          `Gebucht, aber der Timer auf ${quotedName(pending.todoTitle)} ließ sich nicht starten`,
           `Die Zeit des vorigen Timers ist gebucht — daran ändert das nichts. ${detail}`,
         );
       };
@@ -651,7 +652,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             „Es".
           */
           toasts.success(
-            `Buchung auf „${pending.todoTitle}“ abgeschlossen.`,
+            `Buchung auf ${quotedName(pending.todoTitle)} abgeschlossen.`,
             withMovement(
               `Gebucht bis zum letzten Lebenszeichen: ${formatDuration(result.entry.durationSeconds)}.`,
               bookingSentence(result.poolMovement),
@@ -684,12 +685,12 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             ? {
                 tone: "info",
                 title: "Buchung verworfen.",
-                body: `Sie haben die unvollständige Buchung auf „${pending.todoTitle}“ verworfen. Es ist keine Zeit gebucht worden.`,
+                body: `Sie haben die unvollständige Buchung auf ${quotedName(pending.todoTitle)} verworfen. Es ist keine Zeit gebucht worden.`,
               }
             : {
                 tone: "info",
                 title: "Nichts zu buchen.",
-                body: `Zwischen dem Start und dem letzten Lebenszeichen liegt auf „${pending.todoTitle}“ weniger als eine Sekunde. Die unvollständige Buchung ist damit weg, gebucht wurde nichts.`,
+                body: `Zwischen dem Start und dem letzten Lebenszeichen liegt auf ${quotedName(pending.todoTitle)} weniger als eine Sekunde. Die unvollständige Buchung ist damit weg, gebucht wurde nichts.`,
               },
         );
       })
@@ -741,7 +742,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         description={
           running === null
             ? undefined
-            : `Läuft seit ${formatStopwatch(elapsedSeconds)} auf „${running.todoTitle}“.`
+            : `Läuft seit ${formatStopwatch(elapsedSeconds)} auf ${quotedName(running.todoTitle)}.`
         }
         submitLabel="Stoppen und buchen"
         cancelLabel="Weiterlaufen lassen"
@@ -772,7 +773,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         description={
           conflict === null
             ? undefined
-            : `Auf „${conflict.runningTitle}“ läuft ein Timer. Er wird gestoppt und die Zeit gebucht, dann startet der Timer auf „${conflict.todoTitle}“.`
+            : `Auf ${quotedName(conflict.runningTitle)} läuft ein Timer. Er wird gestoppt und die Zeit gebucht, dann startet der Timer auf ${quotedName(conflict.todoTitle)}.`
         }
         submitLabel="Stoppen und wechseln"
         cancelLabel="Abbrechen"
@@ -785,7 +786,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           scope="billing"
           value={conflictNote}
           onChange={setConflictNote}
-          label={conflict === null ? "Leistung" : `Leistung für „${conflict.runningTitle}“`}
+          label={conflict === null ? "Leistung" : `Leistung für ${quotedName(conflict.runningTitle)}`}
           rows={3}
           maxLength={8192}
           placeholder="Was wurde geleistet?"
@@ -798,7 +799,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         description={
           orphan === null
             ? undefined
-            : `Beim letzten Mal wurde Takt nicht ordentlich beendet. Auf „${orphan.todoTitle}“ lief ein Timer, der nie gestoppt wurde.`
+            : `Beim letzten Mal wurde Takt nicht ordentlich beendet. Auf ${quotedName(orphan.todoTitle)} lief ein Timer, der nie gestoppt wurde.`
         }
         submitLabel="Entscheiden"
         cancelLabel="Später entscheiden"

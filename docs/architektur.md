@@ -1295,6 +1295,25 @@ hier bewußt nicht (B-9, T-117):
    `user_missing` und `user_invalid`); die Meldung nennt den Grund und gibt den Wert nicht wieder.
    `pnpm proof:access` misst beides — die drei Bauarten am abgewiesenen Namen und die Gegenprobe,
    daß ein Name mit Umlaut, Leerzeichen und Punkt weiterhin startet.
+5. **Das Anhalten hat eine Frist** (T-126, Befund T-125-4). „Endet `stdin`, endet der Dienst"
+   galt bis dahin mit einer Fußnote: `server.close()` wartet auf offene Verbindungen, und eine
+   Verbindung mit einer **halben** Anfrage räumt Node nicht von selbst ab — sie läuft erst in
+   `headersTimeout` (60 s) oder `requestTimeout` (300 s). Ein beliebiger Prozess auf demselben
+   Rechner konnte das Ende des Dienstes damit verzögern, ohne ein Geheimnis zu kennen; eine
+   TCP-Verbindung und ein halber Anfragekopf genügten. Seit T-126 reißt `shutdown()` die
+   Verbindungen mit `closeAllConnections()` ab und hat mit `SHUTDOWN_DEADLINE_MS` einen Boden
+   darunter. Gemessen mit `proof:access` Abschnitt 0e: ohne die Behebung nach 20 s noch laufend,
+   mit ihr nach 8 ms beendet; legt man nur den Boden, sind es 2010 ms und eine Zeile im Protokoll
+   — der Abschnitt prüft ausdrücklich, daß sie im Normalfall nicht erscheint.
+
+   **Die Reihenfolge im Start ist Absicht.** `server.listen` steht vor `watchParentLink`, der
+   Dienst hört also auf `127.0.0.1`, bevor der Wächter angemeldet ist. Das ist seit T-122 kein
+   Fenster mehr, in dem eine Meldung verlorengeht: Der Handschlag hält `stdin` mit `pause()` an,
+   und der Wächter holt ein bereits liegendes Dateiende mit seinem `resume()` ab. Es wird nur
+   **später zugestellt** — nämlich dann, wenn der Dienst fertig gebaut ist. Genau darum steht der
+   Wächter dort: Ein Anhalten mitten im Start müßte sonst mit halbem Bestand umgehen, ohne
+   Datenbank, ohne Server, womöglich mitten in einer Migration. So gibt es einen Weg statt
+   mehrerer, und er läuft immer auf demselben vollständigen Zustand.
 
 **Port.** Fest vorgegeben (17843), gebunden ausschließlich auf `127.0.0.1`, exklusiv belegt. Ist
 er belegt, startet Takt nicht und weicht nicht aus. Der Port ist ausdrücklich kein Geheimnis: Ein

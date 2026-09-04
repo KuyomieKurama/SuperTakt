@@ -35,7 +35,9 @@ import { visibleText } from '../text/hidden.ts';
  *  2. **{@link visibleText}** nimmt dem Inhalt die Zeichen, die ihn umordnen,
  *     ohne sichtbar zu sein. Die Isolierung allein tut das **nicht**: Ein
  *     `U+202E` im Betreff dreht die Anzeige innerhalb des isolierten Blocks
- *     weiter um. Die Begründung steht in `../text/hidden.ts`.
+ *     weiter um. Die Begründung steht in `../text/hidden.ts` und ausführlich an
+ *     der Quelle, `packages/domain/src/characters.ts` (seit T-123 liest das
+ *     Add-in die Zeichenklasse dort, statt sie zu führen).
  *
  * Wo ein Element nicht möglich ist — in einem `title`, einem `aria-label`, in
  * einem Satz, der als Zeichenkette entsteht —, steht `visibleText` allein. Dann

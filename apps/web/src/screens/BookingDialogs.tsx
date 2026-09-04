@@ -32,6 +32,8 @@ import {
 } from "../lib/format";
 import { BILLING_NOTE_MAY_BE_EMPTY } from "../lib/labels";
 import { bookingSentence, withMovement } from "../lib/movement";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — Dialoge rund um eine Zeitbuchung.
@@ -123,7 +125,7 @@ export function BookingFormDialog({
         */
         const created = await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
         toasts.success(
-          `Zeit gebucht auf „${todoTitle}“.`,
+          `Zeit gebucht auf ${quotedName(todoTitle)}.`,
           withMovement(
             `Gebucht: ${formatDuration(created.durationSeconds)}.`,
             bookingSentence(created.poolMovement),
@@ -152,8 +154,8 @@ export function BookingFormDialog({
       title={entry === undefined ? "Zeit von Hand erfassen" : "Buchung bearbeiten"}
       description={
         entry === undefined
-          ? `Für „${todoTitle}“. Die Dauer ergibt sich aus Anfang und Ende; Takt rechnet sie aus.`
-          : `Für „${todoTitle}“. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
+          ? `Für ${quotedName(todoTitle)}. Die Dauer ergibt sich aus Anfang und Ende; Takt rechnet sie aus.`
+          : `Für ${quotedName(todoTitle)}. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
       }
       submitLabel={entry === undefined ? "Buchen" : "Speichern"}
       busy={mutation.busy}
@@ -311,7 +313,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf „${todoTitle}“ (${formatDuration(entry.durationSeconds)}) wird wieder als offen geführt.`
+          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird wieder als offen geführt.`
       }
       consequence={
         context ??
@@ -383,7 +385,7 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf „${todoTitle}“ (${formatDuration(entry.durationSeconds)}) wird als abgeschlossen geführt.`
+          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird als abgeschlossen geführt.`
       }
       consequence="Sie geht in keinen Export mehr ein. Exportiert wird sie nicht — Sie rechnen diese Zeit einfach nicht ab. Rückgängig machen lässt sich das über „Exportstatus zurücksetzen“."
       confirmLabel="Nicht abrechnen"
@@ -458,7 +460,7 @@ function BookingHistoryBody({
       title="Verlauf dieser Buchung"
       description={
         <>
-          {formatPeriod(entry.startedAt, entry.endedAt)} auf „{todoTitle}“ ·{" "}
+          {formatPeriod(entry.startedAt, entry.endedAt)} auf <Foreign value={quotedName(todoTitle)} /> ·{" "}
           {formatDuration(entry.durationSeconds)}
         </>
       }

@@ -32,29 +32,31 @@ export const MAX_TITLE_CHARACTERS = 500;
 
 /*
  * Die Zeichen, die aus einem übernommenen Betreff **fallen**, standen bis T-119
- * hier als eigener Ausdruck (`DROPPED_FROM_SUBJECT`, T-114).
+ * hier als eigener Ausdruck (`DROPPED_FROM_SUBJECT`, T-114) und bis T-122 als
+ * zweite Fassung in `../text/hidden.ts`.
  *
- * Sie stehen jetzt in `../text/hidden.ts`, und zwar aus dem Grund, an dem diese
- * Zeile beinahe gescheitert wäre: **Sie ist auseinandergelaufen.** T-117 hat
- * die Klasse an der Tür des Dienstes um `U+061C`, `U+200E` und `U+200F`
- * erweitert, der Ausdruck hier bekam es nicht mit — und ein Betreff mit einer
- * dieser drei Richtungsmarken ergab wieder genau die Sackgasse, die T-114
- * geschlossen hatte: ein 422 auf einem Feld, an dem nichts Falsches zu sehen
- * ist. Der Nachweispfad hat es nicht bemerkt, weil er die Klasse mit einer
- * **Liste abgeschriebener Zeichen** geprüft hat statt mit der Tür selbst.
+ * Sie stehen jetzt in `packages/domain/src/characters.ts` — einmal im ganzen
+ * Baum —, und zwar aus dem Grund, an dem diese Zeile zweimal beinahe
+ * gescheitert wäre: **Sie ist auseinandergelaufen.** T-117 hat die Klasse an
+ * der Tür des Dienstes um `U+061C`, `U+200E` und `U+200F` erweitert, der
+ * Ausdruck hier bekam es nicht mit — und ein Betreff mit einer dieser drei
+ * Richtungsmarken ergab wieder genau die Sackgasse, die T-114 geschlossen
+ * hatte: ein 422 auf einem Feld, an dem nichts Falsches zu sehen ist. Der
+ * Nachweispfad hat es nicht bemerkt, weil er die Klasse mit einer **Liste
+ * abgeschriebener Zeichen** geprüft hat statt mit der Quelle selbst.
  *
- * Beides ist mit T-119 anders:
+ * Seit T-123 gibt es hier nichts mehr abzugleichen: `../text/hidden.ts` reicht
+ * die Funktionen der Domäne durch, {@link dropHidden} *ist*
+ * `dropHiddenCharacters`. Eine Erweiterung der Klasse erreicht diese Zeile,
+ * ohne daß jemand daran denken muß, und der Nachweispfad mißt die
+ * Durchreichung als Gleichheit der Objekte statt als Gleichheit zweier
+ * Ergebnisse (Abschnitt 17, E-063 Punkt 4).
  *
- *  - Eine Fassung im Add-in (`text/hidden.ts`), die der Titelvorschlag und die
- *    Anzeige teilen.
- *  - Abschnitt 17 des Nachweispfads **fragt die Tür ab** — er geht die ganze
- *    BMP durch und hält jedes dort abgewiesene Zeichen gegen diese Fassung.
- *    Eine Erweiterung wie die aus T-117 wird damit rot und nicht übersehen.
- *
- * Warum überhaupt entfernt wird, obwohl der Dienst abweist, steht unverändert
- * in `text/hidden.ts`: Der Titelvorschlag ist keine Eingabe des Benutzers,
- * sondern ein Vorschlag aus fremder Quelle. Was der Benutzer selbst tippt oder
- * einfügt, geht unverändert an den Dienst und wird dort abgewiesen.
+ * Warum überhaupt entfernt wird, obwohl der Dienst abweist, steht in
+ * `../text/hidden.ts` und an der Quelle: Der Titelvorschlag ist keine Eingabe
+ * des Benutzers, sondern ein Vorschlag aus fremder Quelle. Was der Benutzer
+ * selbst tippt oder einfügt, geht unverändert an den Dienst und wird dort
+ * abgewiesen.
  */
 
 export interface MailFacts {

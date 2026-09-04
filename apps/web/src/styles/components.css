@@ -3423,6 +3423,101 @@
   color: var(--text-secondary);
 }
 
+/* -------------------------------------------------------------------- */
+/* „Takt beenden" hat nicht gewirkt — O-AF, T-124                        */
+/* -------------------------------------------------------------------- */
+/*
+ * Die Auskunft steht **im Feld selbst** und nicht im Meldungsstapel: Der liegt
+ * seit T-110 hinter der Abdunklung, sobald ein Dialog steht, und genau dort
+ * wird dieser Knopf gedrueckt.
+ *
+ * Der Behaelter `.quitfail__region` ist die Live-Region und steht immer da,
+ * auch leer — dieselbe Regel wie an `refusal` im Bestaetigungsdialog (B-5).
+ * Leer darf er deshalb keinen Platz einnehmen: kein `padding`, kein `gap`, und
+ * die Fusszeile darunter behaelt ihre Hoehe. `:empty` waere hier falsch, weil
+ * der Behaelter im Fehlerfall ein Kind bekommt und der Rand daran haengt.
+ */
+
+.quitfail__region {
+  inline-size: 100%;
+}
+
+.quitfail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--measure-prose);
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--danger-border);
+  /*
+     Die Randschiene ist nicht Zierde, sondern die Unterscheidung (SC 1.4.11):
+     In der Startmeldung liegt dieser Kasten auf `--danger-bg-subtle`, also auf
+     seiner eigenen Farbe — ohne die Schiene waere allein der helle Rand
+     (`--danger-border` auf `--danger-bg-subtle`) das Merkmal, und das traegt
+     nicht. `--danger-bg` auf `--danger-bg-subtle` ist im Kontrastnachweis mit
+     mindestens 3:1 gefuehrt (Gruppe „Startmeldung", Randschiene).
+  */
+  border-inline-start-width: 3px;
+  border-inline-start-color: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  background-color: var(--danger-bg-subtle);
+}
+
+.quitfail__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--danger-text);
+}
+
+.quitfail__body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-primary);
+}
+
+.quitfail__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  counter-reset: quitfail;
+}
+
+.quitfail__steps > li {
+  position: relative;
+  padding-inline-start: var(--space-6);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+  counter-increment: quitfail;
+}
+
+.quitfail__steps > li::before {
+  content: counter(quitfail);
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-inset);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.quitfail__foot {
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
 /* ==================================================================== */
 /* Exportordner — Auswahl, Befunde, Base64-Hinweis (T-036, Befund S-04) */
 /* ==================================================================== */

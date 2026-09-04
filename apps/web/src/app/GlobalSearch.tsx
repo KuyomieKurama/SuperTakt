@@ -11,6 +11,8 @@ import { Spinner } from "../components/Primitives";
 import { cx } from "../lib/cx";
 import { formatDate, formatDuration } from "../lib/format";
 import { navigate } from "./router";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — globale Suche (A-13.7, E-038).
@@ -208,8 +210,8 @@ export function GlobalSearch() {
                   <Icon name={entry.kind === "todo" ? "inbox" : "clock"} size={14} />
                 </span>
                 <span className="grow">
-                  <span className="gsearch__option-title truncate">{entry.title}</span>
-                  <span className="gsearch__option-detail">{entry.detail}</span>
+                  <Foreign className="gsearch__option-title truncate" value={entry.title} />
+                  <Foreign className="gsearch__option-detail" value={entry.detail} />
                 </span>
                 {entry.marker === null ? null : <ExportStatusMarker state={entry.marker} />}
               </li>
@@ -220,7 +222,7 @@ export function GlobalSearch() {
             <p className="gsearch__empty">
               {failed
                 ? "Die Suche ist fehlgeschlagen. Läuft der lokale Dienst noch?"
-                : `Kein Treffer für „${term.trim()}“. Gesucht wird in Titeln, Call-Nummern und Leistungstexten — nicht im Vermerk.`}
+                : `Kein Treffer für ${quotedName(term.trim())}. Gesucht wird in Titeln, Call-Nummern und Leistungstexten — nicht im Vermerk.`}
             </p>
           ) : null}
         </div>

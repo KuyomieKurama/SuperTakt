@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { listTimeEntries, listTodos } from "../api/endpoints";
-import { ShellStatus, type ShellStateSnapshot } from "../components/ShellStatus";
+import {
+  ShellStatus,
+  type ShellStateSnapshot,
+  type UserNameFinding,
+} from "../components/ShellStatus";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
 import { BoardScreen } from "../screens/BoardScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
@@ -95,6 +99,14 @@ function ConnectedApp({
 }) {
   const [state, setState] = useState<ConnectionState>({ kind: "connecting" });
   const [shell, setShell] = useState<ShellStateSnapshot | null>(null);
+  /*
+    Der Befund zum Windows-Benutzernamen (O-AJ). Er wird **einmal** beim
+    Verbinden geholt und danach nicht mehr: Der Anmeldename dieses Rechners
+    ändert sich während eines Laufs nicht, und die Antwort ist ein
+    Wahrheitswert und kein Wert, der veralten könnte. Aus demselben Grund steht
+    hier der Befund und nicht der Name — siehe `readUserNameFinding`.
+  */
+  const [userName, setUserName] = useState<UserNameFinding>("unknown");
 
   /*
     Der `catch` ist kein Zierat (B-6-Klasse aus T-116): `connect()` fängt heute
@@ -111,7 +123,10 @@ function ConnectedApp({
     void connect()
       .then((next) => {
         setState(next);
-        if (next.kind === "ready") setShell(next.shell);
+        if (next.kind === "ready") {
+          setShell(next.shell);
+          setUserName(next.userName);
+        }
       })
       .catch((cause: unknown) => {
         setState({
@@ -190,7 +205,12 @@ function ConnectedApp({
           */}
           <PreferencesProvider>
             <TimerProvider>
-              <Workspace route={route} revisit={revisit} shell={shell} />
+              <Workspace
+                route={route}
+                revisit={revisit}
+                shell={shell}
+                userName={userName}
+              />
             </TimerProvider>
           </PreferencesProvider>
         </StructureProvider>
@@ -233,10 +253,13 @@ function Workspace({
   route,
   revisit,
   shell,
+  userName,
 }: {
   readonly route: Route;
   readonly revisit: number;
   readonly shell: ShellStateSnapshot | null;
+  /** Der Befund zum Windows-Benutzernamen, kein Name (O-AJ). */
+  readonly userName: UserNameFinding;
 }) {
   const { version } = useRefresh();
 
@@ -267,7 +290,7 @@ function Workspace({
       </a>
 
       {shell === null ? null : (
-        <ShellStatus state={shell} onQuit={() => void quitApplication()} />
+        <ShellStatus state={shell} userName={userName} onQuit={quitApplication} />
       )}
 
       {/*

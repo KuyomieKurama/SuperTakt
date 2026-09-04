@@ -4,6 +4,7 @@ import { TimerDisplay } from "../components/Timer";
 import { formatStopwatch, formatTime } from "../lib/format";
 import { href, navigate } from "./router";
 import { useTimer } from "./TimerContext";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — der Timer in der Kopfleiste (A-13.4).
@@ -70,7 +71,7 @@ export function TimerBar() {
         trailing={
           <a className="timerbar__todo truncate" href={href("todo", running.entry.todoId)}>
             <span className="visually-hidden">Timer läuft auf: </span>
-            {running.todoTitle}
+            <Foreign value={running.todoTitle} />
           </a>
         }
         onStop={timer.requestStop}

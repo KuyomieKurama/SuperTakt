@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Button, IconButton } from "./Primitives";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Zeiterfassung — A-6.1, A-6.2, A-5.6, A-13.4.
@@ -89,8 +91,8 @@ export function TimerDisplay({
         ? "Timer stoppen"
         : "Timer starten"
       : running
-        ? `Timer für „${namedTitle}“ stoppen`
-        : `Timer für „${namedTitle}“ starten`;
+        ? `Timer für ${quotedName(namedTitle)} stoppen`
+        : `Timer für ${quotedName(namedTitle)} starten`;
   return (
     <div
       className={cx("timer", `timer--${size}`, running ? "timer--running" : "timer--idle", className)}
@@ -106,7 +108,11 @@ export function TimerDisplay({
         </output>
         {todoTitle !== undefined || detail !== undefined ? (
           <span className="timer__meta truncate">
-            {todoTitle !== undefined ? <strong>{todoTitle}</strong> : null}
+            {todoTitle !== undefined ? (
+              <strong>
+                <Foreign value={todoTitle} />
+              </strong>
+            ) : null}
             {todoTitle !== undefined && detail !== undefined ? <span aria-hidden> · </span> : null}
             {detail !== undefined ? <span>{detail}</span> : null}
           </span>

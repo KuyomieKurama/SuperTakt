@@ -19,6 +19,8 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
 import { errorMessageWithRules, ruleReferences } from "../lib/errorText";
 import { plural } from "../lib/format";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — die Statusstruktur verwalten (A-5.4), Bereich „Status“ in S-09.
@@ -207,7 +209,7 @@ export function StatusSettings() {
         await reorderTodoStatuses(order);
         structure.reload();
         setAnnouncement(
-          `„${status.name}“ steht jetzt an ${String(index + direction + 1)}. Stelle von ${String(order.length)}.`,
+          `${quotedName(status.name)} steht jetzt an ${String(index + direction + 1)}. Stelle von ${String(order.length)}.`,
         );
       });
     },
@@ -225,7 +227,7 @@ export function StatusSettings() {
         // zweimal vorlesen zu lassen.
         toasts.success(
           "Standard geändert.",
-          `Neue Todos bekommen ab sofort „${status.name}“. Vorhandene Todos ändern sich dadurch nicht.`,
+          `Neue Todos bekommen ab sofort ${quotedName(status.name)}. Vorhandene Todos ändern sich dadurch nicht.`,
         );
       });
     },
@@ -241,7 +243,7 @@ export function StatusSettings() {
         .then(() => {
           setRemoving(null);
           structure.reload();
-          toasts.success("Status gelöscht.", `„${status.name}“ steht nicht mehr zur Auswahl.`);
+          toasts.success("Status gelöscht.", `${quotedName(status.name)} steht nicht mehr zur Auswahl.`);
         })
         .catch((cause: unknown) => {
           /*
@@ -406,8 +408,8 @@ export function StatusSettings() {
           removing === null
             ? ""
             : removeError === null
-              ? `„${removing.name}“ steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
-              : `„${removing.name}“ steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+              ? `${quotedName(removing.name)} steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
+              : `${quotedName(removing.name)} steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
         }
         /*
           Drei Fassungen statt zweier (T-097). Der Zusatz „Zwischen dem Zählen
@@ -536,7 +538,9 @@ function StatusRow({
       </span>
 
       <div className="status-admin__body">
-        <p className="status-admin__name">{status.name}</p>
+        <p className="status-admin__name">
+          <Foreign value={status.name} />
+        </p>
         <p className="status-admin__meta">
           {count === "loading"
             ? "Todos werden gezählt …"
@@ -630,7 +634,7 @@ function StatusRow({
           }}
           icon="arrow-up"
           size="sm"
-          label={`„${status.name}“ nach oben`}
+          label={`${quotedName(status.name)} nach oben`}
           disabled={busy || index === 0}
           onClick={() => onMove(-1)}
         />
@@ -640,7 +644,7 @@ function StatusRow({
           }}
           icon="arrow-down"
           size="sm"
-          label={`„${status.name}“ nach unten`}
+          label={`${quotedName(status.name)} nach unten`}
           disabled={busy || last}
           onClick={() => onMove(1)}
         />
@@ -665,7 +669,7 @@ function StatusRow({
       <IconButton
         icon="trash"
         size="sm"
-        label={blocked ? `„${status.name}“ löschen — derzeit nicht möglich` : `„${status.name}“ löschen`}
+        label={blocked ? `${quotedName(status.name)} löschen — derzeit nicht möglich` : `${quotedName(status.name)} löschen`}
         disabled={busy || blocked}
         {...(blocked ? { "aria-describedby": reasonId } : {})}
         onClick={onRemove}
@@ -716,7 +720,7 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
   return (
     <FormDialog
       open={open}
-      title={status === undefined ? "Neuen Status anlegen" : `„${status.name}“ umbenennen`}
+      title={status === undefined ? "Neuen Status anlegen" : `${quotedName(status.name)} umbenennen`}
       description={
         status === undefined
           ? "Der neue Status steht danach in jeder Auswahl. Er bekommt keine Todos, solange keines darauf gestellt wird."
@@ -740,8 +744,8 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
           toasts.success(
             status === undefined ? "Status angelegt." : "Status umbenannt.",
             status === undefined
-              ? `„${saved.name}“ steht ab sofort zur Auswahl. Standard für neue Todos ist er dadurch nicht.`
-              : `Aus „${status.name}“ wurde „${saved.name}“.`,
+              ? `${quotedName(saved.name)} steht ab sofort zur Auswahl. Standard für neue Todos ist er dadurch nicht.`
+              : `Aus ${quotedName(status.name)} wurde ${quotedName(saved.name)}.`,
           );
           onClose();
         });

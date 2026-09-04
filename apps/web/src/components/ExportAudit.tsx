@@ -8,6 +8,7 @@ import {
 import type { ExportAuditEvent } from "../lib/labels";
 import { EXPORT_STATE } from "./ExportStatus";
 import { Icon } from "./Icon";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — das Exportprotokoll auf dem Bildschirm (R-10, E-012, E-047, C-01).
@@ -95,7 +96,7 @@ export function ExportAuditList({
             </span>
             {!showBooking || model.booking === null ? null : onOpenTodo === undefined ? (
               <span className="auditrow__open auditrow__open--static truncate">
-                {model.booking.todoTitle}
+                <Foreign value={model.booking.todoTitle} />
               </span>
             ) : (
               <button
@@ -152,7 +153,7 @@ export function ExportAuditList({
               <>
                 <Icon name="download" size={13} />
                 <span className="auditrow__file mono truncate" title={model.run.filePath}>
-                  {model.run.fileName}
+                  <Foreign value={model.run.fileName} />
                 </span>
                 <span className="auditrow__written">geschrieben {model.run.writtenAt}</span>
               </>

@@ -58,6 +58,7 @@ import {
 } from "../lib/format";
 import { AsyncBoundary, ExportTabs, ScreenHeader } from "./parts";
 import { BookingFormDialog } from "./BookingDialogs";
+import { foreignText } from "../lib/foreign";
 
 /**
  * Takt — S-07, die Export-Ansicht.
@@ -671,7 +672,9 @@ export function ExportScreen() {
                 templates.state.status === "ready"
                   ? templates.state.value.map((template) => ({
                       value: template.id,
-                      label: template.isBuiltin ? `${template.name} (mitgeliefert)` : template.name,
+                      label: template.isBuiltin
+                    ? `${foreignText(template.name)} (mitgeliefert)`
+                    : foreignText(template.name),
                     }))
                   : [{ value: "", label: "wird geladen …" }]
               }

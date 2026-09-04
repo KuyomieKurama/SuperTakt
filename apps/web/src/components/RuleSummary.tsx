@@ -9,6 +9,7 @@ import {
 } from "../lib/poolRule";
 import { Icon, type IconName } from "./Icon";
 import { TagChip } from "./Tag";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — die Regel einer Spalte oder eines Pools in Worten (T-076, T-079).
@@ -151,7 +152,7 @@ function ChipView({
     return (
       <span className="rule-summary__status">
         <Icon name="square" size={11} />
-        {chip.label}
+        <Foreign value={chip.label} />
       </span>
     );
   }
@@ -164,7 +165,7 @@ function ChipView({
         Unterscheidung auch vorgelesen ankommt.
       */}
       <Icon name={empty ? "alert-triangle" : "folder"} size={11} />
-      {chip.label}
+      <Foreign value={chip.label} />
       {empty ? (
         <span className="rule-summary__folder-note"> — kein Tag darin</span>
       ) : chip.withSubfolders === true ? (

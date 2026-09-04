@@ -61,7 +61,7 @@ bestehenden Randgruppen (letztes abgewiesenes und erstes wieder erlaubtes Zeiche
 
 - `U+061B` erlaubt, `U+061C` (ALM) abgewiesen, `U+061D` erlaubt.
 - `U+200B`/`U+200C`/`U+200D` (ZWSP/ZWNJ/ZWJ) erlaubt — in einer Schleife über alle drei.
-- **Ein ZWJ-Familien-Emoji** (`\u{1f468}‍\u{1f469}‍\u{1f467}‍\u{1f466}`) bleibt als
+- **Ein ZWJ-Familien-Emoji** (`\u{1f468}\u200d\u{1f469}\u200d\u{1f467}\u200d\u{1f466}`) bleibt als
   Titel erlaubt — das ist der Fall, den der Auftrag ausdrücklich verlangt, weil er die Grenze nach
   unten festnagelt: Ein Wächter, der `U+200D` mitnähme, verböte nebenbei zusammengesetzte Emoji.
 - `U+200E` (LRM) abgewiesen, `U+200F` (RLM) abgewiesen.
@@ -173,7 +173,7 @@ kürzer; der Base64-Weg sollte den gekürzten Wert angeblich verändern):
 ```
 Vorher (bewusst falsch):
  ❯ fällt das Limit MITTEN in ein Ersatzpaar …
-   AssertionError: expected 'AB' to be 'AB�'
+   AssertionError: expected 'AB' to be 'AB\ufffd'
  ❯ cutToCharacterBoundary an derselben Stelle übersteht den Hin- und Rückweg …
    AssertionError: expected 'AB' not to be 'AB'
  Tests  2 failed | 8 passed (10)
@@ -218,11 +218,11 @@ werden):
 ```
 Vorher (bewusst falsch):
  ❯ visibleText ersetzt das RLO durch die Marke …
-   Expected: "Rechnung‮gnp.exe"   Received: "Rechnung�gnp.exe"
+   Expected: "Rechnung\u202egnp.exe"   Received: "Rechnung\ufffdgnp.exe"
  ❯ U+061C (ALM), die Marke selbst: erkannt, gestrichen, markiert …
    expected true to be false
  ❯ visibleText macht aus dem C0-Leerraum GENAU EIN Leerzeichen, keine Marke
-   Expected: "Vor�Nach"   Received: "Vor Nach"
+   Expected: "Vor\ufffdNach"   Received: "Vor Nach"
  Tests  3 failed | 20 passed (23)
 
 Danach (richtiggestellt):
@@ -285,7 +285,7 @@ dem e2e-tester.
    Schreiben von `hidden.test.ts` ist mir zunächst genau der Fehler unterlaufen, den T-111 beheben
    musste: rohe unsichtbare/Bidi-Zeichen im Quelltext (die Datei war zwischenzeitlich laut `file`
    `data`, nicht Text). Behoben über eine Neufassung mit benannten Konstanten
-   (`ALM = "؜"` usw.); ein Codepunkt-Scan über die fertige Datei findet keine rohen Exemplare
+   (`ALM = "\u061c"` usw.); ein Codepunkt-Scan über die fertige Datei findet keine rohen Exemplare
    der gefährlichen Klasse mehr. Normale Schrift (Umlaute, Arabisch, Hebräisch, Emoji) steht als
    `\uXXXX`-Escape in Zeichenketten, die deutschen Kommentare selbst in normalem UTF-8 — das
    Ergebnis ist etwas strenger escaped als der Codebase-Stil an manchen Stellen, aber sicher

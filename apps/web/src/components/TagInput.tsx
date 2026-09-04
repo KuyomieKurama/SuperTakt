@@ -9,6 +9,8 @@ import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
 import { Button, InlineMessage, Spinner, type ControlSize } from "./Primitives";
 import { TagChip } from "./Tag";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — **die** Tag-Eingabe (A-4.1, A-4.4, I-06, E-052, T-059).
@@ -363,11 +365,11 @@ export function TagCombobox(props: TagComboboxProps) {
                         <Ark.ItemText className="combobox__option-label">
                           {item.path.length > 0 ? (
                             <span className="combobox__option-path">
-                              {item.path.join(" / ")}
+                              <Foreign value={item.path.join(" / ")} />
                               {" / "}
                             </span>
                           ) : null}
-                          {item.label}
+                          <Foreign value={item.label} />
                         </Ark.ItemText>
                         {item.isDefault ? (
                           <span className="combobox__option-hint">
@@ -400,7 +402,7 @@ export function TagCombobox(props: TagComboboxProps) {
                     </span>
                     <span className="combobox__option-text">
                       <Ark.ItemText className="combobox__option-label">
-                        „{pendingName}“ als neues Tag anlegen
+                        {quotedName(pendingName)} als neues Tag anlegen
                       </Ark.ItemText>
                       <span className="combobox__option-hint">
                         Dieses Tag gibt es noch nicht. Es entsteht auf der Wurzelebene, sobald
@@ -415,7 +417,7 @@ export function TagCombobox(props: TagComboboxProps) {
                 <p className="combobox__empty">
                   {allTags.length === 0
                     ? "Noch kein Tag angelegt."
-                    : `Kein Tag passt zu „${pendingName}“.`}{" "}
+                    : `Kein Tag passt zu ${quotedName(pendingName)}.`}{" "}
                   {allowCreate ? (
                     "Tippen Sie einen Namen — Takt bietet Ihnen dann an, ihn anzulegen."
                   ) : (

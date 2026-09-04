@@ -1,4 +1,6 @@
+import { enumerateGerman } from "@takt/domain";
 import { errorMessage, TaktApiError } from "../api/client";
+import { quotedName } from "./foreign";
 
 /**
  * Takt — die Fehlermeldung des Dienstes, um das ergänzt, was in `details`
@@ -58,18 +60,24 @@ import { errorMessage, TaktApiError } from "../api/client";
  * ---------------------------------------------------------------------------
  *
  * Keine zweite Fachlogik. Diese Datei entscheidet nichts über Regeln, sie
- * reiht Namen auf. Die Aufzählungsform ist die aus `poolMovementSentence`
- * (`packages/domain/src/pool-movement.ts`, `listPools`) — „A, B und C" —, weil
- * der Benutzer beide Aufzählungen am selben Tag liest und zwei verschiedene
- * Formen für dieselbe Sache eine Frage aufwerfen, die keine ist. Sie steht
- * hier abermals, weil `listPools` nicht ausgeführt wird; es ist bewußt die
- * **Form** und nicht die Funktion, die geteilt wird — `listPools` ist in
- * `@takt/domain` nicht ausgeführt und steht deshalb nicht zur Verfügung
- * (siehe „Offene Fragen" in T-110).
+ * reiht Namen auf. Die Aufzählungsform ist die aus `poolMovementSentence` —
+ * „A, B und C" —, weil der Benutzer beide Aufzählungen am selben Tag liest und
+ * zwei verschiedene Formen für dieselbe Sache eine Frage aufwerfen, die keine
+ * ist.
  *
- * Die Anführungszeichen um einen **Namen** setzt {@link ruleList} seit T-110
- * selbst, wie `listPools` es tut: `name` bringt keine mit. Um eine **Meldung**
- * setzt sie keine — dort stehen sie bereits im Text des Dienstes.
+ * **Seit T-124 ist es die Funktion und nicht mehr nur die Form.** Bis dahin
+ * stand die Aufzählung hier ein zweites Mal, weil `listPools` in
+ * `@takt/domain` privat war (T-110, offene Frage 1); T-122 hat sie als
+ * `enumerateGerman`/`quoteName`/`enumerateNames` in
+ * `packages/domain/src/enumeration.ts` ausgeführt, und diese Datei liest sie
+ * dort. Zeichengleichheit über Paketgrenzen zu **verabreden** war immer die
+ * schwächere Fassung von „es gibt nur eine Stelle" (B-11).
+ *
+ * Die Anführungszeichen um einen **Namen** setzt {@link ruleList} mit
+ * `quotedName` (`lib/foreign.ts`, das `quoteName` und `visibleText` aus der
+ * Domäne zusammensetzt): `name` bringt keine mit, und ein Name aus dem Bestand
+ * ist fremder Text (E-063). Um eine **Meldung** setzt sie keine — dort stehen
+ * sie bereits im Text des Dienstes.
  */
 
 /**
@@ -84,14 +92,19 @@ const RULE_REFERENCE_CODE = "pool_rule";
 /**
  * Reiht auf, wie `poolMovementSentence` es tut: „A", „A und B", „A, B und C".
  *
- * Ohne Anführungszeichen und ohne Gattungswort — beides bringen die Einträge
- * mit. Bei einer leeren Liste kommt die leere Zeichenkette zurück; die
- * Aufrufstelle fragt vorher, ob es überhaupt etwas aufzuzählen gibt.
+ * **Weitergereicht aus `@takt/domain`, nicht hier gebaut** (T-124, B-11). Die
+ * Zeilen standen bis T-124 an dieser Stelle; sie stehen jetzt in
+ * `packages/domain/src/enumeration.ts`, zusammen mit dem Satz über die
+ * Poolbewegung, der dieselbe Form trägt.
+ *
+ * Die Weiterleitung bleibt, und zwar aus einem genannten Grund und nicht aus
+ * Bequemlichkeit: `apps/web/test/lib/errorText.test.ts` prüft die Form unter
+ * diesem Namen an dieser Datei. Der Testordner gehört dem unit-tester; ihn im
+ * selben Zug zu brechen, um eine Ausfuhr zu sparen, wäre der teurere Tausch.
+ * Wer die Prüfung an die Domäne nachzieht, kann diese Zeile ersatzlos
+ * streichen — die Aufrufstelle darunter ruft ohnehin die Domänenfassung.
  */
-export function enumerateGerman(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} und ${items[items.length - 1] ?? ""}`;
-}
+export { enumerateGerman };
 
 /**
  * Die Regeln, die der Dienst als Grund genannt hat — als Anzeigetexte, und die
@@ -110,7 +123,13 @@ function ruleList(cause: unknown): { readonly items: readonly string[]; readonly
   if (!(cause instanceof TaktApiError)) return { items: [], named: false };
   const entries = cause.details.filter((entry) => entry.code === RULE_REFERENCE_CODE);
   return {
-    items: entries.map((entry) => (entry.name === undefined ? entry.message : `„${entry.name}“`)),
+    items: entries.map((entry) =>
+      // `quotedName` und nicht `quoteName`: Ein Regelname aus dem Bestand ist
+      // fremder Text und geht hier in einen Satz, der angezeigt wird (E-063,
+      // T-124). Die Meldung des Dienstes bleibt unveraendert — sie ist unser
+      // eigener Text und bringt ihre Anfuehrungszeichen selbst mit.
+      entry.name === undefined ? entry.message : quotedName(entry.name),
+    ),
     named: entries.length > 0 && entries.every((entry) => entry.name !== undefined),
   };
 }

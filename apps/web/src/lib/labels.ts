@@ -54,6 +54,7 @@ import type {
   Theme as ThemeSetting,
   TimeEntrySource,
 } from "@takt/domain";
+import { quotedName } from "./foreign";
 
 export type {
   ExportAuditEvent,
@@ -213,7 +214,7 @@ export function poolPlacementMessage(
 ): { readonly title: string; readonly body: string } {
   return {
     title: restored ? POOL_PLACEMENT_RESTORED_TITLE : POOL_PLACEMENT_TITLE[placement],
-    body: `„${name}“ — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+    body: `${quotedName(name)} — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
   };
 }
 
@@ -274,7 +275,7 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
  * erwarteten Wortlaut abschreibt, prueft nur sich selbst.
  */
 export function reactivationTitle(todoTitle: string): string {
-  return `Timer gestartet. „${todoTitle}“ ist wieder offen.`;
+  return `Timer gestartet. ${quotedName(todoTitle)} ist wieder offen.`;
 }
 
 /*

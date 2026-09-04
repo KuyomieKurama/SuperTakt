@@ -1,3 +1,4 @@
+import { dropHiddenCharacters } from "@takt/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -39,6 +40,8 @@ import {
   type DraftField,
 } from "./TemplateFields";
 import { TemplatePreviewCard } from "./TemplatePreview";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-14, der Editor für Exportvorlagen (A-8.7, E-005, E-017, I-15).
@@ -268,7 +271,16 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       if (source === undefined) return previous;
       const copy: DraftField = {
         key: nextFieldKey(),
-        field: { ...source.field, name: `${source.field.name} 2` },
+        /*
+          `dropHiddenCharacters` und nicht `visibleText` (E-063 Punkt 3): Der
+          Name landet in einem **Eingabefeld** und geht von dort an die Tür.
+          Eine Marke (`U+FFFD`) darin wäre ein Vorschlag, den `nameSchema`
+          annimmt und der dauerhaft ein Ersatzzeichen trüge; das Zeichen
+          stehenzulassen wäre ein Vorschlag, den die Tür abweist — die
+          Sackgasse aus T-114. Ein Vorschlag ist keine Eingabe des Benutzers
+          und darf deshalb bereinigt werden.
+        */
+        field: { ...source.field, name: `${dropHiddenCharacters(source.field.name)} 2` },
       };
       const fields = [...previous.fields];
       fields.splice(index + 1, 0, copy);
@@ -347,7 +359,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
           bump();
           toasts.success(
             "Vorlage angelegt.",
-            `„${created.name}“ steht jetzt in der Export-Ansicht zur Wahl.`,
+            `${quotedName(created.name)} steht jetzt in der Export-Ansicht zur Wahl.`,
           );
           navigate("templates", created.id);
         })
@@ -358,7 +370,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
             bump();
             toasts.success(
               "Vorlage gespeichert.",
-              `Bereits geschriebene Exportdateien ändern sich dadurch nicht — „${updated.name}“ gilt ab dem nächsten Lauf.`,
+              `Bereits geschriebene Exportdateien ändern sich dadurch nicht — ${quotedName(updated.name)} gilt ab dem nächsten Lauf.`,
             );
           });
 
@@ -404,7 +416,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       bump();
       toasts.success(
         "Kopie angelegt.",
-        `„${created.name}“ ist eine ganz gewöhnliche Vorlage: änderbar und löschbar.`,
+        `${quotedName(created.name)} ist eine ganz gewöhnliche Vorlage: änderbar und löschbar.`,
       );
     });
   };
@@ -437,7 +449,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       bump();
       toasts.success(
         "Vorlage aktiviert.",
-        `Der nächste Export benutzt „${template.name}“.`,
+        `Der nächste Export benutzt ${quotedName(template.name)}.`,
       );
     });
   };
@@ -480,7 +492,8 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
               selectedId={creating ? NEW_TEMPLATE_ID : (shown?.id ?? null)}
               activeTemplateId={activeTemplateId}
               onCopy={(template) => {
-                setCopyName(`Kopie von ${template.name}`);
+                // Vorschlag für ein Eingabefeld, siehe `copyField` oben.
+                setCopyName(`Kopie von ${dropHiddenCharacters(template.name)}`);
                 setCopyDialog(template);
               }}
               onDelete={setConfirmDelete}
@@ -522,7 +535,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           iconStart="copy"
                           onClick={() => {
                             if (shown === null) return;
-                            setCopyName(`Kopie von ${shown.name}`);
+                            setCopyName(`Kopie von ${dropHiddenCharacters(shown.name)}`);
                             setCopyDialog(shown);
                           }}
                         >
@@ -623,9 +636,13 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                         <p className="tpl-activate__text">
                           Aktiv ist derzeit{" "}
                           <strong>
-                            {list.find((template) => template.id === activeTemplateId)?.name ??
-                              builtin?.name ??
-                              "die Standardvorlage"}
+                            <Foreign
+                              value={
+                                list.find((template) => template.id === activeTemplateId)?.name ??
+                                builtin?.name ??
+                                "die Standardvorlage"
+                              }
+                            />
                           </strong>
                           . Änderungen an dieser Vorlage wirken sich erst auf einen Export aus,
                           wenn sie aktiv ist.
@@ -664,7 +681,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
 
       <ConfirmDialog
         open={confirmDelete !== null}
-        title={`Vorlage „${confirmDelete?.name ?? ""}“ löschen?`}
+        title={`Vorlage ${quotedName(confirmDelete?.name ?? "")} löschen?`}
         description="Die Vorlage verschwindet aus der Auswahl in der Export-Ansicht und in den Einstellungen."
         consequence={
           confirmDelete !== null && confirmDelete.id === activeTemplateId
@@ -766,7 +783,7 @@ function TemplateList({
                         <Icon name="lock" size={13} />
                       </span>
                     ) : null}
-                    {template.name}
+                    <Foreign value={template.name} />
                   </span>
                   <span className="tpl-item__badges">
                     {template.isBuiltin ? (
@@ -782,7 +799,7 @@ function TemplateList({
                 </a>
                 <div className="tpl-item__tools">
                   <IconButton
-                    label={`Vorlage „${template.name}“ kopieren`}
+                    label={`Vorlage ${quotedName(template.name)} kopieren`}
                     icon="copy"
                     size="sm"
                     onClick={() => onCopy(template)}
@@ -791,7 +808,7 @@ function TemplateList({
                     label={
                       template.isBuiltin
                         ? "Die Standardvorlage lässt sich nicht löschen"
-                        : `Vorlage „${template.name}“ löschen`
+                        : `Vorlage ${quotedName(template.name)} löschen`
                     }
                     icon="trash"
                     size="sm"
@@ -830,7 +847,7 @@ function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefini
           Diese Vorlage bildet die Struktur ab, die das Abrechnungstool erwartet:{" "}
           {fields.length === 0
             ? "die mitgelieferten Felder"
-            : fields.map((field) => `„${field.name}“`).join(", ")}
+            : fields.map((field) => `${quotedName(field.name)}`).join(", ")}
           . Sie ist mitgeliefert und lässt sich weder ändern noch löschen — genau deshalb ist sie
           der Stand, auf den Sie jederzeit zurückkommen können.
         </span>
@@ -858,7 +875,7 @@ function DeviationPanel({
 
   return (
     <Card
-      title={`Abgleich mit „${builtinName}“`}
+      title={`Abgleich mit ${quotedName(builtinName)}`}
       description="Was das Abrechnungstool erwartet, steht in der mitgelieferten Vorlage. Hier steht, worin diese davon abweicht."
     >
       {deviations.length === 0 ? (

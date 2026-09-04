@@ -168,6 +168,31 @@ function portFree(port) {
 }
 
 /**
+ * Öffnet eine Verbindung auf {@link PORT} und schickt einen Anfragekopf **ohne**
+ * die abschließende Leerzeile (T-126, Abschnitt 0e).
+ *
+ * Für Node ist die Anfrage damit unfertig: Die Verbindung gilt als eine, die
+ * gerade eine Anfrage sendet, und `server.close()` wartet auf sie. Genau das
+ * ist der Unterschied zu einer untätigen Verbindung — die schließt `close()`
+ * seit Node 19 von selbst.
+ *
+ * `error` wird abgefangen. Der Dienst reißt die Verbindung beim Anhalten ab,
+ * und ein unbehandeltes `error` auf einem Socket beendete den Nachweislauf mit
+ * einem Wurf, der nichts mit dem Gegenstand zu tun hätte.
+ */
+function openHalfRequest() {
+  return new Promise((done) => {
+    const socket = createConnection({ host: '127.0.0.1', port: PORT });
+    socket.on('error', () => undefined);
+    socket.once('connect', () => {
+      socket.write(`GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:${PORT}\r\n`);
+      done(socket);
+    });
+    setTimeout(() => done(null), 2000).unref();
+  });
+}
+
+/**
  * Wartet, statt sofort aufzugeben, bis Port {@link PORT} frei ist (T-029,
  * Risiko 5).
  *
@@ -397,6 +422,85 @@ try {
     }
     if (!(await waitForPortFree(PORT))) {
       throw new Error(`Nach Abschnitt 0d ist Port ${PORT} nicht frei.`);
+    }
+  }
+
+  section('0e. Ein fremder Prozess hält eine Verbindung offen, während die Hülle stirbt (T-125-4, T-126)');
+  {
+    /*
+     * 0c und 0d messen mit **stiller Leitung**: Wenn die Röhre endet, redet
+     * niemand mit dem Dienst, und dann hält `shutdown()` mühelos Wort. Hier
+     * redet jemand — halb.
+     *
+     * Der Abschnitt öffnet eine Verbindung auf 17843 und schickt einen
+     * Anfragekopf ohne die abschließende Leerzeile. Für Node ist das eine
+     * Anfrage, die noch kommt; `server.close()` wartet auf sie, bis
+     * `headersTimeout` greift (60 s Vorgabe) oder, bei stockendem Rumpf,
+     * `requestTimeout` (300 s). Bis T-126 führte der **einzige** Weg zu
+     * `process.exit(0)` durch diesen Rückruf — der Dienst überlebte die Hülle
+     * also so lange, wie ein fremder Prozess es wollte. Ein fremder Prozess auf
+     * demselben Rechner ist genau der Akteur, gegen den B-1.6 geschrieben ist
+     * (VG-1); er braucht dafür kein Geheimnis, nur eine TCP-Verbindung.
+     *
+     * Die Zeitgrenze aus B-1.7 hilft hier nicht: `timeout(REQUEST_TIMEOUT_MS)`
+     * ist Hono-Zwischenschicht und läuft erst, wenn Node den Kopf vollständig
+     * gelesen hat. Ein halber Kopf kommt dort nie an.
+     *
+     * Gemessen wird deshalb nicht nur **ob**, sondern **wann**. Ein Anhalten
+     * nach einer Minute wäre keines, das ein Benutzer abwartet — und ein
+     * Nachweis, der nur `code === 0` prüft, wäre auch ohne die Behebung grün,
+     * sofern man ihm 60 Sekunden Zeit ließe.
+     */
+    const GRENZE_MS = 5_000;
+
+    const gehalten = await startService(dataDir, { user: 'Jan-Peter Müller.adm' });
+    const oben = await waitForService();
+    check('Vorbedingung: der Dienst ist oben und antwortet', oben, gehalten.output().slice(-200));
+
+    const halbeAnfrage = await openHalfRequest();
+    check('Ein fremder Prozess hält eine Verbindung mit halbem Anfragekopf', halbeAnfrage !== null);
+
+    gehalten.child.stdin.end();
+    const begonnen = Date.now();
+    const code = await Promise.race([gehalten.exit, sleep(20_000).then(() => 'läuft weiter')]);
+    const dauer = Date.now() - begonnen;
+    halbeAnfrage?.destroy();
+
+    check(
+      'Der Sidecar überlebt die Hülle auch dann nicht, wenn eine Verbindung offen gehalten wird',
+      code === 0,
+      `Code ${code} nach ${dauer} ms`,
+    );
+    check(
+      `Und er hält binnen ${GRENZE_MS} ms an — der fremde Prozess bestimmt den Zeitpunkt nicht`,
+      code === 0 && dauer < GRENZE_MS,
+      `${dauer} ms`,
+    );
+    check(
+      'Er geht dabei den ordentlichen Weg und sagt, warum er anhält',
+      gehalten.output().includes('Die Verbindung zur Anwendung ist beendet'),
+      gehalten.output().slice(-200),
+    );
+    /*
+     * Die schärfste der sechs Prüfungen. `closeAllConnections()` ist das
+     * Mittel, die Frist aus `SHUTDOWN_DEADLINE_MS` ist nur der Boden darunter
+     * — und ein Boden, der jedes Mal trägt, verdeckt, dass das Mittel nicht
+     * mehr greift. Fiele der Aufruf eines Tages weg, wäre alles oben weiterhin
+     * grün: angehalten wird ja, und binnen zwei Sekunden auch. Diese Zeile
+     * fragt, **worüber**.
+     */
+    check(
+      'Und zwar über das Abräumen der Verbindungen, nicht erst über die Frist',
+      code === 0 && !gehalten.output().includes('Beim Anhalten waren noch Verbindungen offen'),
+      gehalten.output().slice(-200),
+    );
+
+    if (code !== 0) {
+      gehalten.child.kill('SIGKILL');
+      await Promise.race([gehalten.exit, sleep(2000)]);
+    }
+    if (!(await waitForPortFree(PORT))) {
+      throw new Error(`Nach Abschnitt 0e ist Port ${PORT} nicht frei.`);
     }
   }
 

@@ -24,7 +24,13 @@ import {
 } from '@takt/storage';
 
 import { compose } from './composition.ts';
-import { BIND_ADDRESS, DEFAULT_PORT, SESSION_SECRET_TIMEOUT_MS, TASKPANE_PORT } from './config.ts';
+import {
+  BIND_ADDRESS,
+  DEFAULT_PORT,
+  SESSION_SECRET_TIMEOUT_MS,
+  SHUTDOWN_DEADLINE_MS,
+  TASKPANE_PORT,
+} from './config.ts';
 import { createLogger } from './logger.ts';
 import { DIR_MODE, databaseFilePath, resolveAppDataDir, tokenFilePath } from './access/paths.ts';
 import { readStartupHandshake, watchParentLink } from './access/session-secret.ts';
@@ -277,9 +283,107 @@ export async function main(): Promise<void> {
     stopping = true;
     taskpane?.close();
     database?.close();
+
+    /*
+     * **Das Anhalten hat eine Frist, und ein fremder Prozess bestimmt sie
+     * nicht** (T-125-4).
+     *
+     * `server.close()` nimmt keine neuen Verbindungen mehr an und ruft zurück,
+     * wenn die bestehenden zu Ende sind. Untätige Verbindungen räumt Node
+     * dabei seit v19 selbst ab — eine Verbindung mit einer **halben** Anfrage
+     * aber nicht: Sie gilt als eine, die gerade sendet, und wird erst von
+     * `headersTimeout` (60 s) oder `requestTimeout` (300 s) beendet. Bis T-126
+     * führte der einzige Weg zu `process.exit(0)` durch diesen Rückruf. Ein
+     * beliebiger Prozess auf demselben Rechner konnte das Ende des Dienstes
+     * damit um bis zu fünf Minuten verzögern — ohne ein Geheimnis zu kennen,
+     * mit einer TCP-Verbindung und einem halben Anfragekopf. Genau dieser
+     * Prozess ist der Akteur, gegen den B-1.6 Punkt 3 geschrieben ist (VG-1).
+     *
+     * Die Zeitgrenze aus B-1.7 greift dort nicht: `timeout(REQUEST_TIMEOUT_MS)`
+     * ist Zwischenschicht und läuft erst, wenn Node den Kopf vollständig
+     * gelesen hat. Ein halber Kopf kommt dort nie an.
+     *
+     * **Erst schließen, dann abreißen.** Umgekehrt könnte zwischen den beiden
+     * Aufrufen noch eine Verbindung angenommen werden, die danach niemand mehr
+     * abräumt.
+     *
+     * **Warum keine Schonfrist für laufende Anfragen.** Der übliche Bau wäre:
+     * untätige Verbindungen sofort, laufenden Anfragen ein paar Sekunden,
+     * dann abreißen. Er trüge hier nichts. Der Bestand ist zwei Zeilen weiter
+     * oben bereits geschlossen; eine Anfrage, die jetzt noch läuft, kann nicht
+     * mehr erfolgreich enden, gleich wie lange man ihr Zeit ließe. Eine
+     * Schonfrist verlängerte also nur das Fenster, in dem ein fremder Prozess
+     * den Zeitpunkt bestimmt, und kaufte dafür nichts. Sie wäre erst dann eine
+     * Frage, wenn der Bestand zuletzt geschlossen würde — das ist eine andere
+     * Entscheidung als diese und keine, die dieser Fund verlangt.
+     *
+     * **Warum nicht stattdessen `headersTimeout` heruntersetzen.** Das
+     * verkürzte das Fenster, schlösse es nicht, und es wirkte auf jede Anfrage
+     * im Betrieb statt nur auf das Anhalten. Eine Frist am Anhalten trifft
+     * genau die Stelle, um die es geht.
+     */
     server.close(() => process.exit(0));
+    closeAllConnections(server);
+
+    /*
+     * Der Boden darunter. `closeAllConnections()` ist das Mittel, die Frist
+     * ist nicht dasselbe noch einmal: Sie deckt den Fall ab, in dem der
+     * Rückruf aus einem Grund ausbleibt, an den hier niemand gedacht hat —
+     * und dieser Fall ist es, der einen Prozess mit Datenbankzugriff und ohne
+     * Fenster zurückließe.
+     *
+     * `unref()`, weil eine Frist die Ereignisschleife nicht am Leben halten
+     * soll: Ist der Dienst auf dem ordentlichen Weg fertig, endet er, ohne auf
+     * sie zu warten.
+     *
+     * Code 0: Das Anhalten ist gewollt, auch wenn es über den Boden geht. Die
+     * Hülle liest den Code, um den Grund zu unterscheiden (74 Port, 78
+     * Konfiguration, sonst „unerwartet beendet"); eine andere Zahl wäre hier
+     * eine falsche Auskunft an den Benutzer. Die Zeile im Protokoll sagt
+     * stattdessen, was los war — und `proof:access` Abschnitt 0e prüft, dass
+     * sie im Normalfall **nicht** erscheint.
+     */
+    setTimeout(() => {
+      logger.lifecycle(
+        'warn',
+        'Beim Anhalten waren noch Verbindungen offen. Der lokale Dienst beendet sich trotzdem.',
+      );
+      process.exit(0);
+    }, SHUTDOWN_DEADLINE_MS).unref();
   };
 
+  /*
+   * **Der Wächter wird zuletzt angemeldet, und das ist die richtige
+   * Reihenfolge** — die Frage ist zweimal gestellt worden (T-122, T-125
+   * Abschnitt 2.1), hier steht die Antwort.
+   *
+   * Der Einwand: `server.listen` steht weiter oben, der Dienst hört also auf
+   * 127.0.0.1, bevor jemand über die Elternverbindung wacht. Stirbt die Hülle
+   * in diesem Fenster, bliebe ein Prozess mit Port und Datenbestand zurück.
+   * Genau das ist einmal passiert.
+   *
+   * Es ist aber nicht die Reihenfolge, die das verursacht hat, sondern ein
+   * verlorenes Ereignis: Der Handschlag las `stdin` im fließenden Zustand, das
+   * Dateiende ging an einen Strom ohne Zuhörer, und `once('end')` wartete
+   * danach auf etwas, das vorbei war. Seit T-122 hält `readStartupHandshake`
+   * den Strom mit `pause()` an, und `watchParentLink` holt das Dateiende mit
+   * seinem `resume()` ab — **auch wenn es längst da liegt**. Das Ende der
+   * Röhre geht in diesem Fenster nicht mehr verloren, es wird nur später
+   * zugestellt.
+   *
+   * Und genau das ist der Grund, warum der Wächter hier und nicht weiter oben
+   * steht. Zugestellt wird erst, wenn der Dienst fertig gebaut ist. Ein
+   * `shutdown()` mitten im Start müsste sonst mit halbem Bestand umgehen —
+   * ohne Datenbank, ohne Server, mitten in einer Migration — und jeder dieser
+   * Zweige wäre ein eigener Weg, den Prozess in einem undefinierten Zustand zu
+   * beenden. So gibt es genau einen Weg, und er läuft immer auf demselben
+   * vollständigen Zustand.
+   *
+   * Wer das umstellen will, verschiebt nicht drei Zeilen, sondern übernimmt
+   * die Verantwortung für das Anhalten eines halb gebauten Dienstes.
+   * `proof:access` Abschnitt 0d misst den Fall an seinem Anfang: Röhre zu,
+   * unmittelbar nach dem Handschlag.
+   */
   watchParentLink(process.stdin, () => {
     logger.lifecycle('info', 'Die Verbindung zur Anwendung ist beendet. Der lokale Dienst hält an.');
     shutdown();
@@ -287,6 +391,26 @@ export async function main(): Promise<void> {
 
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, shutdown);
+  }
+}
+
+/**
+ * `closeAllConnections()` — sofern dieser Server sie hat.
+ *
+ * `createAdaptorServer` gibt die Vereinigung `Server | Http2Server |
+ * Http2SecureServer` zurück. Ohne `serverOptions` bekommt Takt immer die
+ * erste, und nur die erste kennt `closeAllConnections`; die beiden
+ * HTTP/2-Fassungen erben von `net.Server` und haben sie nicht. Ein `as` würde
+ * die Zusage bloß behaupten — hier wird gefragt.
+ *
+ * Fiele der Zweig eines Tages weg, weil jemand auf HTTP/2 umstellt, bliebe nur
+ * noch die Frist aus {@link SHUTDOWN_DEADLINE_MS}, und `proof:access`
+ * Abschnitt 0e würde rot: Er prüft ausdrücklich, dass es **nicht** die Frist
+ * ist, die den Dienst beendet.
+ */
+function closeAllConnections(server: ReturnType<typeof createAdaptorServer>): void {
+  if ('closeAllConnections' in server) {
+    server.closeAllConnections();
   }
 }
 

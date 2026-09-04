@@ -48,6 +48,7 @@ import {
   type RuleAxes,
   type RuleReach,
 } from "../lib/poolRule";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Takt — eine Regel anlegen und ändern (S-11, I-13, E-054, E-055, T-076, T-079).
@@ -431,7 +432,7 @@ export function PoolFormDialog({
           ? defaultPlacement === "pool"
             ? "Neuen Pool anlegen"
             : "Neue Board-Spalte anlegen"
-          : `„${pool.name}“ bearbeiten`
+          : `${quotedName(pool.name)} bearbeiten`
       }
       description="Eine Regel nennt Bedingungen. Jede engt weiter ein: Erforderliche Tags müssen da sein, ausgeschlossene dürfen es nicht, und Status, Erledigt und Exportstatus grenzen weiter ab. Was auf „Alle“ steht, schränkt nicht ein."
       submitLabel={pool === undefined ? "Anlegen" : "Speichern"}
@@ -494,7 +495,7 @@ export function PoolFormDialog({
             toasts.show({
               tone: "warning",
               title,
-              body: `„${saved.name}“ trifft zurzeit nichts: In ${emptyFolderNames(savedFault.folders)} liegt kein Tag. Legen Sie dort ein Tag an, dann füllt sich ${isBoardColumn ? "die Spalte" : "der Pool"} von selbst.`,
+              body: `${quotedName(saved.name)} trifft zurzeit nichts: In ${emptyFolderNames(savedFault.folders)} liegt kein Tag. Legen Sie dort ein Tag an, dann füllt sich ${isBoardColumn ? "die Spalte" : "der Pool"} von selbst.`,
             });
           } else {
             toasts.show({
@@ -502,8 +503,8 @@ export function PoolFormDialog({
               title,
               body:
                 conditions === 0
-                  ? `„${saved.name}“ nennt noch keine Bedingung und bleibt deshalb leer. Ergänzen Sie eine, dann füllt sie sich von selbst.`
-                  : `„${saved.name}“ — ${plural(conditions, "Bedingung", "Bedingungen")}, Anzeigeort: ${POOL_PLACEMENT_LABEL[saved.placement]}.`,
+                  ? `${quotedName(saved.name)} nennt noch keine Bedingung und bleibt deshalb leer. Ergänzen Sie eine, dann füllt sie sich von selbst.`
+                  : `${quotedName(saved.name)} — ${plural(conditions, "Bedingung", "Bedingungen")}, Anzeigeort: ${POOL_PLACEMENT_LABEL[saved.placement]}.`,
             });
           }
           onSaved?.(saved);

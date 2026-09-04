@@ -6,6 +6,8 @@ import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
 import { IconButton } from "./Primitives";
 import { TagChip } from "./Tag";
+import { foreignText, quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Kanban-Board — A-5.1, A-5.3 bis A-5.6, E-054.
@@ -159,7 +161,7 @@ export function KanbanCard({
 
         <h4 className="kcard__title">
           <button type="button" className="kcard__open" onClick={onOpen}>
-            {card.title}
+            <Foreign value={card.title} />
           </button>
         </h4>
 
@@ -169,12 +171,12 @@ export function KanbanCard({
             className={cx("kcard__also", highlighted && "kcard__also--on")}
             aria-pressed={highlighted}
             onClick={onHighlight}
-            title={`Dieselbe Karte steht auch in: ${others.join(", ")}`}
+            title={`Dieselbe Karte steht auch in: ${others.map(foreignText).join(", ")}`}
           >
             <Icon name="copy" size={12} />
             <span>
               Steht auch in {others.length === 1 ? "" : `${String(others.length)} Spalten: `}
-              {others.map((name) => `„${name}“`).join(", ")}
+              {others.map((name) => `${quotedName(name)}`).join(", ")}
             </span>
           </button>
         ) : null}
@@ -205,7 +207,7 @@ export function KanbanCard({
             fuehrt dorthin. */}
         <p className="kcard__status">
           <span className="kcard__status-label">Status</span>
-          <span className="kcard__status-value">{card.statusName}</span>
+          <Foreign className="kcard__status-value" value={card.statusName} />
         </p>
       </div>
 
@@ -216,8 +218,8 @@ export function KanbanCard({
              Bereich. */
           label={
             card.timerRunning
-              ? `Timer für „${card.title}“ stoppen`
-              : `Timer für „${card.title}“ starten`
+              ? `Timer für ${quotedName(card.title)} stoppen`
+              : `Timer für ${quotedName(card.title)} starten`
           }
           icon={card.timerRunning ? "square" : "play"}
           size="sm"
@@ -226,7 +228,7 @@ export function KanbanCard({
         />
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Aktionen für ${card.title}`}
+          triggerLabel={`Aktionen für ${foreignText(card.title)}`}
           triggerClassName="kcard__menu"
           align="end"
           entries={entries}
@@ -309,7 +311,7 @@ export function KanbanColumn({
   const full = total ?? count;
   const partial = full > count;
   const accessibleName = [
-    `Spalte ${title}`,
+    `Spalte ${foreignText(title)}`,
     partial ? `${String(count)} von ${String(full)} Karten geladen` : `${String(full)} Karten`,
     doneCount === 0 ? null : `davon ${String(doneCount)} erledigt`,
   ]
@@ -320,7 +322,9 @@ export function KanbanColumn({
     <section className="kcolumn" aria-label={accessibleName}>
       <header className="kcolumn__head">
         <div className="kcolumn__heading">
-          <h3 className="kcolumn__title">{title}</h3>
+          <h3 className="kcolumn__title">
+            <Foreign value={title} />
+          </h3>
           {doneCount > 0 ? (
             <p className="kcolumn__done-count" aria-hidden>
               <Icon name="check" size={11} />
@@ -333,7 +337,7 @@ export function KanbanColumn({
         </span>
         {onAdd !== undefined ? (
           <IconButton
-            label={addLabel ?? `Todo in ${title} anlegen`}
+            label={addLabel ?? `Todo in ${foreignText(title)} anlegen`}
             icon="plus"
             size="sm"
             onClick={onAdd}
@@ -341,7 +345,7 @@ export function KanbanColumn({
         ) : null}
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Spalte ${title} verwalten`}
+          triggerLabel={`Spalte ${foreignText(title)} verwalten`}
           triggerClassName="kcolumn__menu"
           align="end"
           entries={entries}

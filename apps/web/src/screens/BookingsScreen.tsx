@@ -35,6 +35,8 @@ import {
   NotBilledDialog,
   ResetExportDialog,
 } from "./BookingDialogs";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-06, alle Zeitbuchungen (I-10).
@@ -356,7 +358,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                     setTodoSearch("");
                   }}
                 >
-                  {todo.title}
+                  <Foreign value={todo.title} />
                 </Button>
               </li>
             ))}
@@ -466,7 +468,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                     x,
                     y,
                     entries: rowMenu(row),
-                    label: `Aktionen für die Buchung ${row.todoTitle}`,
+                    label: `Aktionen für die Buchung ${foreignText(row.todoTitle)}`,
                   })
                 }
               />

@@ -3,6 +3,8 @@ import { Menu as Ark, useMenu } from "@ark-ui/react/menu";
 import { Portal } from "@ark-ui/react/portal";
 import { cx } from "../lib/cx";
 import { Icon, type IconName } from "./Icon";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Auswahlliste und Kontextmenü — Abschnitt 15, seit T-059 auf Ark UI (E-052).
@@ -88,7 +90,7 @@ function MenuItems({ entries }: { readonly entries: readonly MenuEntry[] }) {
             key={entry.id}
             value={entry.id}
             disabled={disabled}
-            valueText={entry.label}
+            valueText={foreignText(entry.label)}
             className={cx("menu__item", entry.tone === "danger" && "menu__item--danger")}
             {...(disabled && entry.disabledReason !== undefined
               ? { title: entry.disabledReason }
@@ -98,7 +100,14 @@ function MenuItems({ entries }: { readonly entries: readonly MenuEntry[] }) {
               {entry.icon !== undefined ? <Icon name={entry.icon} size={15} /> : null}
             </span>
             <span className="menu__item-label">
-              {entry.label}
+              {/*
+                Die Beschriftung eines Eintrags ist meist unsere eigene
+                („Bearbeiten"), manchmal aber ein Name aus dem Bestand
+                („Status: Ost"). `Foreign` laesst unseren Text unveraendert und
+                faengt den fremden — deshalb steht es hier am Baustein und
+                nicht an jeder zweiten Aufrufstelle (E-063, T-124).
+              */}
+              <Foreign value={entry.label} />
               {disabled && entry.disabledReason !== undefined ? (
                 <span className="menu__item-reason">{entry.disabledReason}</span>
               ) : null}

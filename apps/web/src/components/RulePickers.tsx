@@ -4,6 +4,7 @@ import { cx } from "../lib/cx";
 import { plural } from "../lib/format";
 import { Icon } from "./Icon";
 import { Button, InlineMessage, Spinner } from "./Primitives";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — die beiden Chip-Auswahlen des Regelformulars (S-11, A-4.4, E-055).
@@ -343,7 +344,7 @@ export function StatusPicker({ source, onRetry, value, onChange, hint }: StatusP
             }
           >
             <Icon name="square" size={12} />
-            {status.name}
+            <Foreign value={status.name} />
           </button>
         );
       })}

@@ -1398,3 +1398,12 @@ T-114.
    nicht, weil er gegen eine kopierte Liste hielt — die Sackgasse aus T-114 stand für drei Zeichen
    wieder offen. Wer zwei Stellen zusammenhalten will, fragt die maßgebliche ab und schreibt sie
    nicht ab.
+
+5. **Und er prüft, ob es zwei Fassungen gibt — nicht, ob sie dasselbe tun.** Nachsatz aus T-123,
+   mit einer Messung belegt: Setzt man die alte, **zeichengleiche** Fassung wieder ein, bleiben
+   163 Verhaltensprüfungen grün. Ein Ergebnisvergleich wird erst rot, wenn die Doppelung schon
+   falsch ist — er bewacht den Schaden, nicht die Ursache. Der Wächter fragt deshalb nach der
+   Gleichheit der Sache selbst (dieselbe Funktion, derselbe Ort) und danach, dass es keinen
+   zweiten Träger gibt: keine zweite Fassung im Quelltext, keine zweite Aufzählung in einer
+   Beschreibung. Eine Beschreibung, die eine Klasse aufzählt, ist eine Abschrift, die nur nicht
+   rot werden kann; sie verweist stattdessen auf den einen Ort.

@@ -25,6 +25,8 @@ import {
 } from "../lib/format";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
 import { BookingFormDialog } from "./BookingDialogs";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-05, die Zeiterfassung.
@@ -233,15 +235,15 @@ export function TimeScreen() {
                             <IconButton
                               label={
                                 running
-                                  ? `Timer für „${todo.title}“ stoppen`
-                                  : `Timer für „${todo.title}“ starten`
+                                  ? `Timer für ${quotedName(todo.title)} stoppen`
+                                  : `Timer für ${quotedName(todo.title)} starten`
                               }
                               icon={running ? "pause" : "play"}
                               variant={running ? "primary" : "secondary"}
                               onClick={() => timer.toggle(todo.id, todo.title)}
                             />
                             <a className="pick-row__title grow truncate" href={href("todo", todo.id)}>
-                              {todo.title}
+                              <Foreign value={todo.title} />
                             </a>
                             <DoneFlag state={doneFlagState(done, reactivated)} />
                             {todo.callNumber === null ? null : (
@@ -359,7 +361,11 @@ function TodayRow({ entry }: { readonly entry: TimeEntry }) {
       <span className="entry-row__period">{formatTimeRange(entry.startedAt, entry.endedAt)}</span>
       <span className="entry-row__duration tabular">{formatDuration(entry.durationSeconds)}</span>
       <span className="entry-row__note grow truncate">
-        {entry.note.length === 0 ? <span className="muted">Ohne Leistung</span> : entry.note}
+        {entry.note.length === 0 ? (
+          <span className="muted">Ohne Leistung</span>
+        ) : (
+          <Foreign value={entry.note} />
+        )}
       </span>
       <span className="entry-row__source">{TIME_ENTRY_SOURCE_LABEL[entry.source]}</span>
     </li>

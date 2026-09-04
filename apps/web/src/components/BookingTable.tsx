@@ -11,6 +11,8 @@ import {
 } from "./ExportStatus";
 import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Tabelle der Zeitbuchungen — S-06, S-07, A-6.6, A-8.6.
@@ -235,7 +237,7 @@ export function BookingTable({
                   <input
                     type="checkbox"
                     checked={selected}
-                    aria-label={`Buchung ${row.todoTitle} auswählen`}
+                    aria-label={`Buchung ${foreignText(row.todoTitle)} auswählen`}
                     onChange={() => onToggleRow(row.id)}
                   />
                 </td>
@@ -254,7 +256,7 @@ export function BookingTable({
                 </td>
                 <td className="table__period">
                   <span className="table__primary">{row.period}</span>
-                  <span className="table__secondary truncate">{row.todoTitle}</span>
+                  <Foreign className="table__secondary truncate" value={row.todoTitle} />
                 </td>
                 <td className="table__source">
                   <span className="table__secondary">
@@ -266,18 +268,25 @@ export function BookingTable({
                   <span className="table__primary">{row.duration}</span>
                 </td>
                 <td className="table__note">
-                  <span className="truncate" title={row.note}>
+                  <span className="truncate" title={foreignText(row.note)}>
                     {row.note === "" ? (
                       <span className="muted">— keine Leistung erfasst —</span>
                     ) : (
-                      row.note
+                      /*
+                        Die Leistung geht in die Abrechnung und ist fremder
+                        Text: `textSchema` prueft sie bewusst nicht auf
+                        Steuer- und Richtungszeichen (T-122 Annahme 6), und
+                        aus dem Add-in kann sie den Betreff einer E-Mail
+                        woertlich tragen.
+                      */
+                      <Foreign value={row.note} />
                     )}
                   </span>
                 </td>
                 <td className="table__cell--end">
                   <Menu
                     trigger={<Icon name="more-horizontal" size={16} />}
-                    triggerLabel={`Aktionen für die Buchung ${row.todoTitle}`}
+                    triggerLabel={`Aktionen für die Buchung ${foreignText(row.todoTitle)}`}
                     triggerClassName="table__row-menu"
                     align="end"
                     entries={rowMenu(row)}

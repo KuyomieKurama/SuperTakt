@@ -2929,17 +2929,30 @@ paths:
                   maxLength: 500
                   description: |
                     **Dasselbe Schema wie `TodoCreate.title`** (T-114): Der
-                    Wert wird getrimmt und darf keine Steuerzeichen
-                    (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
-                    bidirektionalen Zeichen enthalten — Einbettungen und
-                    Überschreibungen (`U+202A`–`U+202E`), Isolate
-                    (`U+2066`–`U+2069`) und die Marken (`U+200E`, `U+200F`,
-                    `U+061C`; seit T-117, hier mit T-119 nachgetragen). Sonst `422` mit
-                    `details[].field = "title"`. Der abgewiesene Wert steht
-                    **nicht** in der Meldung: Er stammt möglicherweise aus
-                    einer fremden E-Mail, und ein Text, der ein solches
-                    Zeichen wörtlich wiedergibt, richtet in der Fehlermeldung
-                    genau den Schaden an, den er verhindern soll.
+                    Wert wird getrimmt und darf keine Steuer- und keine
+                    bidirektionalen Formatierungszeichen enthalten; sonst `422`
+                    mit `details[].field = "title"`.
+
+                    **Welche Zeichen das sind, steht hier mit Absicht nicht.**
+                    Sie liegen seit T-122 an genau einer Stelle im Baum
+                    (`packages/domain/src/characters.ts`); der Dienst liest sie
+                    dort, und das Add-in seit T-123 ebenfalls. Aufgezählt sind
+                    sie in dieser Beschreibung genau einmal, nämlich bei der
+                    Antwort `422` (`UnprocessableEntity`), auf die dieser
+                    Vorgang unten verweist — und dort wird die Aufzählung gegen
+                    die Klasse **gemessen** (`proof:openapi` Abschnitt 16).
+
+                    Eine zweite Aufzählung an dieser Stelle wäre eine Abschrift,
+                    und Abschriften hinken nach: T-117 hat die Klasse um drei
+                    Richtungsmarken erweitert, hier stand danach zwei Wellen
+                    lang eine Liste, die sie nicht kannte (T-119, E-063
+                    Punkt 4).
+
+                    Der abgewiesene Wert steht **nicht** in der Meldung: Er
+                    stammt möglicherweise aus einer fremden E-Mail, und ein
+                    Text, der ein solches Zeichen wörtlich wiedergibt, richtet
+                    in der Fehlermeldung genau den Schaden an, den er
+                    verhindern soll.
 
                     Der Grund für die Prüfung ist an dieser Route ein anderer
                     als an der Hauptanwendung: Der Titel ist im
@@ -3011,13 +3024,13 @@ paths:
                     zwei Ergebnisse, je nachdem wo er geschieht (Befund C-03).
 
                     **Seit T-114 ist es nicht mehr nur wortgleich, sondern
-                    dasselbe Schema.** Ein Name darf keine Steuerzeichen
-                    (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
-                    bidirektionalen Zeichen enthalten — Einbettungen und
-                    Überschreibungen (`U+202A`–`U+202E`), Isolate
-                    (`U+2066`–`U+2069`) und die Marken (`U+200E`, `U+200F`,
-                    `U+061C`; seit T-117, hier mit T-119 nachgetragen); sonst `422` mit
-                    `details[].field = "tagNames.<Index>"`. Die
+                    dasselbe Schema.** Ein Name darf keine Steuer- und keine
+                    bidirektionalen Formatierungszeichen enthalten; sonst `422`
+                    mit `details[].field = "tagNames.<Index>"`. Es ist dieselbe
+                    Klasse wie am Titel, und sie ist aus demselben Grund auch
+                    hier nicht aufgezählt: Sie steht an einer Stelle im Baum
+                    (`packages/domain/src/characters.ts`) und in dieser
+                    Beschreibung einmal, bei `UnprocessableEntity`. Die
                     Namensgleichheit weiter unten beantwortet das **nicht**:
                     Sie sagt, wann zwei Namen derselbe sind, nicht welche
                     Zeichen in einem Namen vorkommen dürfen.

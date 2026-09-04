@@ -6,6 +6,7 @@ import {
   ShellStatus,
   type ShellServiceExit,
   type ShellStateSnapshot,
+  type UserNameFinding,
 } from "../components/ShellStatus";
 import { Section, SubHeading } from "./Section";
 
@@ -63,7 +64,10 @@ export function ShellStateSection() {
   const [syncFolder, setSyncFolder] = useState(false);
   const [serviceStopped, setServiceStopped] = useState(false);
   const [exitCase, setExitCase] = useState<ExitCase>("port");
+  const [userNameBlocked, setUserNameBlocked] = useState(false);
   const [quitDemo, setQuitDemo] = useState(false);
+
+  const userName: UserNameFinding = userNameBlocked ? "forbidden_characters" : "unknown";
 
   const state: ShellStateSnapshot = {
     directory: {
@@ -87,7 +91,7 @@ export function ShellStateSection() {
     serviceExit: serviceStopped ? DEMO_EXITS[exitCase] : null,
   };
 
-  const nothingToShow = !startupFailed && !syncFolder && !serviceStopped;
+  const nothingToShow = !startupFailed && !syncFolder && !serviceStopped && !userNameBlocked;
 
   return (
     <Section
@@ -118,6 +122,12 @@ export function ShellStateSection() {
             hint="sperrt die Anwendung — Ausgang ist „Takt beenden“"
             pressed={serviceStopped}
             onChange={setServiceStopped}
+          />
+          <FilterToggle
+            label="Der Windows-Benutzername ist nicht abrechenbar"
+            hint="O-AJ — steht vor dem Ausfall des Dienstes, weil er dessen Ursache ist"
+            pressed={userNameBlocked}
+            onChange={setUserNameBlocked}
           />
           {/* Bewusst immer sichtbar: Solange die Sperrmeldung steht, ist der
               Rest der Seite nicht bedienbar — eine Auswahl, die erst mit dem
@@ -160,8 +170,20 @@ export function ShellStateSection() {
         ) : (
           <ShellStatus
             state={state}
+            userName={userName}
+            /*
+              Auf der Musterseite beendet der Knopf nichts — er schaltet die
+              Zustaende zurueck. Er schaltet **alle** zurueck und nicht nur den
+              sperrenden: Seit T-124 wartet der Knopf fuenf Sekunden darauf,
+              dass Takt endet, und sagt danach, dass es nicht geklappt hat.
+              Bliebe hier eine Meldung mit „Takt beenden" stehen, zeigte die
+              Musterseite nach fuenf Sekunden eine Notfallanleitung fuer einen
+              Fehlschlag, den es nicht gibt.
+            */
             onQuit={() => {
               setServiceStopped(false);
+              setStartupFailed(false);
+              setUserNameBlocked(false);
               setQuitDemo(true);
             }}
           />
