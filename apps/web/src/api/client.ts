@@ -18,7 +18,7 @@
  * Anfrage mit 400 ab (`token_in_url`), und das ist die richtige Antwort.
  */
 
-import type { ApiError, Envelope, ErrorEnvelope, RunningTimeEntry } from "./types";
+import type { ApiError, ApiFieldError, Envelope, ErrorEnvelope, RunningTimeEntry } from "./types";
 
 /* ==================================================================== */
 /* Fehler                                                               */
@@ -34,7 +34,15 @@ import type { ApiError, Envelope, ErrorEnvelope, RunningTimeEntry } from "./type
 export class TaktApiError extends Error {
   readonly code: string;
   readonly status: number;
-  readonly details: ReadonlyArray<{ field: string; message: string; code: string }>;
+  /**
+   * Die Befunde des Dienstes, unverändert.
+   *
+   * Der Typ ist seit T-110 `ApiFieldError` und nicht mehr eine zweite,
+   * hier ausgeschriebene Fassung derselben drei Felder: Die zweite Fassung
+   * hätte das vierte Feld (`name`, W-11) nicht mitbekommen, und niemand wäre
+   * dabei rot geworden — sie war strukturell zuweisbar.
+   */
+  readonly details: readonly ApiFieldError[];
   /** Beim Timerstart mit laufendem Timer (A-6.8) gesetzt. */
   readonly running: RunningTimeEntry | null;
 

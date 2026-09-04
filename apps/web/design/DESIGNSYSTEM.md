@@ -545,6 +545,50 @@ nicht gleich aussehen.
 Zustandsänderung unter 100ms, Anzeiger ab etwa 300ms, Erfolgs- oder Fehlermeldung danach.
 Fehlermeldungen tragen `role="alert"`, alles andere `aria-live="polite"`.
 
+### 5.1 Ebenen — und die eine Ausnahme davon (T-110)
+
+Die Reihenfolge steht als Token-Leiter in `packages/ui-tokens/tokens.css`: Inhalt (0), klebende
+Leiste (10), Auswahlliste im Fluss (100), Karte am Zeiger (200), Abdunklung (300), Dialog (310),
+ausgelagerte Liste (320), Meldung (400). Sie besagt: Eine Meldung über den Ausgang einer Handlung
+darf verdecken, was unter ihr liegt.
+
+**Ein Dialog ist davon ausgenommen.** Solange einer offen ist, tritt der Meldungsstapel hinter die
+Abdunklung (`body:has(.scrim) .toast-layer`, `src/styles/app.css`).
+
+*Warum.* Beide sitzen in derselben Ecke: `.dialog__footer` ist rechtsbündig, der Stapel ebenso.
+Gemessen an den echten Stilblättern in Chromium, mit abgewarteter Einblendbewegung:
+
+| Fenster | Dialog | Meldungen | Mittelpunkt „Anlegen“ | `elementFromPoint` dort |
+|---|---|---|---|---|
+| 1280×720 | Regelformular (34 rem) | 1 | (854, 611) | **`li.toast`** |
+| 1024×768 | Regelformular (34 rem) | 2 | (726, 649) | **`li.toast`** |
+| 1280×720 | Buchung (52 rem) | 1 | (998, 611) | **`li.toast`** |
+| 1920×1080 | Regelformular | 1 bis 8 | (1174, 850) | der Knopf |
+
+Der Knopf ist also nicht immer verdeckt, sondern bei den beiden gängigen kleineren Fenstergrößen —
+und das erklärt, warum er in TP-KANBAN-02 einmal in eine 60-Sekunden-Zeitüberschreitung lief und
+in zwei Wiederholungen nicht: Eine Meldung ohne Rückweg geht nach acht Sekunden von selbst. Seit
+die Obergrenze von vier Meldungen für Rückwege nicht mehr gilt (Abschnitt 8), wird die verdeckte
+Fläche größer statt kleiner.
+
+*Warum die Meldung weicht und nicht der Dialog.* Ein Dialog ist modal: Er hält den Tabulator fest,
+alles andere wartet. Die Meldung war bis dahin die einzige Ausnahme — sichtbar über dem Dialog, mit
+der Maus bedienbar, mit der Tastatur nicht erreichbar. Das ist SC 2.1.1. Sie verschwindet nicht,
+sie wird abgedunkelt wie die ganze Anwendung hinter dem Dialog und steht danach unverändert da;
+eine Meldung mit Rückweg hat keine Frist, der Rückweg ist aufgeschoben und nicht verloren. Die
+Ansage für Vorlesehilfen hängt an `aria-live` und nicht an der Ebene.
+
+*Warum nicht anders.* Ein Versetzen des Stapels hilft nicht: Der Dialog steht mittig und ist bis
+52 rem breit, die Meldung ist 26 rem breit — bei 1024 px Fensterbreite überlappen sich beide in
+jeder Ecke, in der ein Knopf oder ein Ankreuzfeld stehen kann. Eine Ebene zwischen Abdunklung und
+Dialog nähme zwar die Überdeckung, ließe aber eine hell leuchtende, vom Dialog angeschnittene Karte
+auf abgedunkelter Seite stehen — und die Maus könnte sie weiter bedienen, die Tastatur weiter
+nicht. Eine freigehaltene Bahn am unteren Rand verlangt die gemessene Stapelhöhe als Variable und
+schöbe den Dialog bei mehreren Meldungen aus dem Fenster.
+
+**Regel für die Weiterarbeit:** Was über der Abdunklung liegt, gehört dem Dialog. Wer eine neue
+schwebende Fläche einführt, prüft sie gegen einen offenen Dialog, nicht nur gegen die Ansicht.
+
 ---
 
 ## 6. Tastatur und Hilfsmittel
@@ -649,6 +693,22 @@ Dasselbe gilt für die zweite umkehrbare Handlung dieses Abschnitts: **„Vom Bo
 nicht nach** (E-059), sondern meldet sich mit „Rückgängig“. Diese Meldung wird deshalb auch
 nicht verdrängt, wenn der Stapel seine Obergrenze erreicht — sie ist der einzige Rückweg, und
 ein Rückweg, der ohne Zutun verschwindet, ist keiner (`app/ToastContext.tsx`, SC 2.2.1).
+
+Der Stapel darf dadurch über vier Meldungen hinauswachsen. Wo er einem offenen Dialog begegnet,
+gilt Abschnitt 5.1. Eine eigene Bildschirmgrenze hat er **nicht**, und das ist eine offene Stelle
+(T-110). Gemessen bei 720 px Fensterhöhe, Meldungen mit Rückweg:
+
+| Meldungen | Stapelhöhe | oberer Rand |
+|---|---|---|
+| 4 | 458 px | y = 246 |
+| 6 | 691 px | y = 13 |
+| 7 | 807 px | y = −103 — die älteste ragt hinaus |
+| 8 | 924 px | y = −219 — die älteste ist ganz draußen |
+
+Ab der siebten Meldung verlässt die älteste den Bildschirm; ein fest positionierter Stapel lässt
+sich nicht hereinrollen, ihr „Rückgängig“ ist damit weg — genau das, was die Ausnahme von der
+Verdrängung verhindern wollte. Sieben umkehrbare Handlungen ohne eine einzige Quittung sind
+selten, aber erreichbar: Sieben Todos hintereinander abhaken genügt.
 
 ---
 

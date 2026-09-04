@@ -379,6 +379,22 @@
    * geoeffnete Liste verdecken, nicht umgekehrt.
    */
   --z-popover: 320;
+  /*
+   * Meldungsstapel.
+   *
+   * Hoeher als alles andere, weil eine Meldung ueber den Ausgang einer
+   * Handlung nichts verdecken darf, was der Benutzer gerade liest — und
+   * seit E-059 ist der Rueckweg in der Meldung der einzige Schutz vor
+   * "Vom Board nehmen".
+   *
+   * **Mit einer Ausnahme, die nicht hier steht** (T-110): Solange ein
+   * modaler Dialog offen ist, tritt der Stapel hinter die Abdunklung. Er
+   * lag sonst ueber dem Dialog, mit der Maus bedienbar und mit der
+   * Tastatur unerreichbar, und verdeckte bei 1280x720 bereits mit einer
+   * Meldung den Mittelpunkt eines Dialogknopfes. Die Regel dazu steht in
+   * `apps/web/src/styles/app.css`, weil sie eine Bedingung braucht und
+   * kein Merkmal ist.
+   */
   --z-toast: 400;
 
   /* ------------------------------------------------------------------ */

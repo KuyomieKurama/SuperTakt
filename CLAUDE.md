@@ -46,7 +46,7 @@ Zwei gleichzeitig laufende Agenten fassen nie dieselbe Datei an.
 |---|---|
 | `packages/domain/**`, `packages/storage/**` | domain-dev |
 | `apps/local-api/**` außer `src/routes/addin/` | domain-dev |
-| `apps/web/**`, `apps/desktop/**` | frontend-dev |
+| `apps/web/**`, `apps/desktop/**`, `packages/ui-tokens/**` | frontend-dev |
 | `packages/export/**`, `apps/outlook-addin/**`, `apps/local-api/src/routes/addin/**` | integration-dev |
 | `packages/*/test/**`, `apps/*/test/**` | unit-tester |
 | `tests/e2e/**`, `tests/fixtures/**`, `docs/testplan.md` | e2e-tester |

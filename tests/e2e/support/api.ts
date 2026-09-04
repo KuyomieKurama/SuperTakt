@@ -140,6 +140,38 @@ export async function createTimeEntry(input: {
   });
 }
 
+/**
+ * Vertrag von `POST /time-entries`, seit T-107 gemessen (E-061 Nachtrag,
+ * O-V): Die Buchung kommt **flach** zurück, `poolMovement` als zusätzliches
+ * Feld daneben — Anlass `'booking'`, `null`, wenn das Todo schon eine offene,
+ * abgeschlossene Buchung hatte. Gerechnet wird mit `closedEntryMovementStates`
+ * (`ENTRY_CLOSED_EFFECT`), derselben Rechnung wie am Stopp — eine Buchung von
+ * Hand hebt „Erledigt" **nicht** auf (A-2.5, nur der Timerstart tut das;
+ * `decisions.md` E-061, Nachtrag). Dieselbe Gestalt wie {@link TodoDoneResult}:
+ * kein `?` und kein `?? null`, siehe dortiger Kommentar zur Begründung.
+ */
+export interface CreatedTimeEntryResult extends TimeEntry {
+  readonly poolMovement: PoolMovementNames | null;
+}
+
+/** `POST /time-entries` mit `poolMovement` (E-061 Nachtrag, O-V, T-107). */
+export async function createTimeEntryWithMovement(input: {
+  todoId: string;
+  startedAt: string;
+  endedAt: string;
+  note?: string;
+}): Promise<CreatedTimeEntryResult> {
+  return call<CreatedTimeEntryResult>('/time-entries', {
+    method: 'POST',
+    body: JSON.stringify({
+      todoId: input.todoId,
+      startedAt: input.startedAt,
+      endedAt: input.endedAt,
+      note: input.note ?? '',
+    }),
+  });
+}
+
 export async function loadTimeEntry(id: string): Promise<TimeEntry> {
   return call<TimeEntry>(`/time-entries/${id}`);
 }

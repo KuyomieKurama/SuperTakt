@@ -620,6 +620,81 @@
   pointer-events: none;
 }
 
+/*
+ * Solange ein Dialog offen ist, tritt der Meldungsstapel hinter die
+ * Abdunklung (T-110, Risiko 1 aus T-109).
+ *
+ * ## Der gemessene Befund
+ *
+ * `.toast-layer` liegt auf `--z-toast` (400), der Dialog auf `--z-dialog`
+ * (310). Die Ebene selbst nimmt keine Zeigereingaben an, die einzelne Meldung
+ * dagegen schon (`pointer-events: auto`, sie trägt „Rückgängig" und
+ * „Schließen"). Beide sitzen in derselben unteren Ecke wie die Knopfzeile
+ * eines Dialogs — `.dialog__footer` ist rechtsbündig, der Stapel ebenso.
+ *
+ * Gemessen an den echten Stilblättern (Chromium, Auszeichnung aus
+ * `FormDialog.tsx` und `ToastContext.tsx`, Einblendbewegung abgewartet):
+ *
+ *   Fenster 1280x720, Regelformular, **eine** Meldung
+ *     Knopf „Anlegen"  x 814..895, y 595..627, Mittelpunkt (854, 611)
+ *     Meldung          x 848..1264, y 610..704
+ *     document.elementFromPoint(854, 611) -> li.toast
+ *
+ *   Fenster 1024x768: dasselbe ab der zweiten Meldung.
+ *   Fenster 1920x1080: keine Überdeckung — der Dialog steht dort weit genug
+ *     von der Ecke entfernt. Deshalb ist der Fehler unstet und nicht immer da.
+ *
+ * Das ist genau der Fehlschlag, den der e2e-tester in TP-KANBAN-02 einmal als
+ * 60-Sekunden-Zeitüberschreitung gesehen hat: Der Klick auf „Anlegen" traf die
+ * Meldung. Zwei Wiederholungen liefen grün, weil die Meldung nach acht
+ * Sekunden von selbst geht — die Überdeckung hängt an der Uhr, nicht am Zufall.
+ * Seit T-108 darf der Stapel über vier Meldungen hinauswachsen, wenn in ihm nur
+ * noch Rückwege stehen; die verdeckte Fläche wird damit größer, nicht kleiner.
+ *
+ * ## Warum die Meldung weicht und nicht der Dialog
+ *
+ * Ein Dialog ist modal: Er nimmt den Tabulator gefangen
+ * (`keepTabInside`), und alles andere wartet. Die Meldung war bis hierher die
+ * einzige Ausnahme — sichtbar über dem Dialog, mit der Maus bedienbar, mit der
+ * Tastatur **nicht** erreichbar. Das ist SC 2.1.1 (Tastatur): Was die Maus
+ * kann, muss die Tastatur auch können. Der Stapel tritt deshalb zurück,
+ * statt seine Sonderrolle zu behalten.
+ *
+ * Er verschwindet dabei nicht: Er wird abgedunkelt wie die ganze Anwendung
+ * hinter dem Dialog, und er bleibt stehen. Eine Meldung mit Rückweg hat keine
+ * Frist (Regel 1 in `ToastContext.tsx`) — der Rückweg ist nach dem Schließen
+ * des Dialogs unverändert da, nur aufgeschoben. Eine Meldung ohne Rückweg
+ * trägt nichts zu bedienen; ihre Frist läuft weiter wie bisher. Die Ansage für
+ * Vorlesehilfen hängt an `aria-live` und nicht an der Ebene; sie bleibt.
+ *
+ * ## Warum nicht anders
+ *
+ * *Stapel versetzen* geht nicht: Der Dialog steht mittig und ist bis 52 rem
+ * breit, die Meldung ist 26 rem breit und sitzt in der Ecke — bei 1024 px
+ * Fensterbreite überlappen die beiden waagerecht in jeder Ecke, in der ein
+ * Knopf oder ein Ankreuzfeld des Dialogs stehen kann.
+ * *Zwischen Abdunklung und Dialog legen* (z zwischen 300 und 310) nähme die
+ * Überdeckung ebenfalls, ließe aber eine hell leuchtende Karte auf einer
+ * abgedunkelten Seite stehen, die der Dialog anschneidet — und die Maus könnte
+ * sie weiterhin bedienen, die Tastatur weiterhin nicht.
+ * *Eine Bahn am unteren Rand freihalten* (Innenabstand in `.scrim`) verlangt
+ * die gemessene Stapelhöhe als Variable und schöbe den Dialog bei mehreren
+ * Meldungen aus dem Fenster.
+ *
+ * `:has()` steht bereits an vier Stellen dieser Oberfläche. Fehlt es einem
+ * Wirt, gilt wieder der heutige Zustand — kein neuer Schaden, nur die alte
+ * Überdeckung. `pointer-events: none` ist der zweite Riegel: Selbst wenn ein
+ * künftiger Stapelkontext die Ebene wieder nach vorn holte, schluckt sie
+ * keinen Klick mehr, der dem Dialog gilt.
+ */
+body:has(.scrim) .toast-layer {
+  z-index: calc(var(--z-scrim) - 1);
+}
+
+body:has(.scrim) .toast {
+  pointer-events: none;
+}
+
 .toast-stack {
   display: flex;
   flex-direction: column;

@@ -1341,3 +1341,26 @@ nichts und bleibt ohne `poolMovement`; das gilt auch, wenn der `PATCH` das `todo
 und damit die Achse an zwei Todos in entgegengesetzte Richtungen umlegt (offen als O-X).
 *(Richtiggestellt nach T-107, Frage 1: Die erste Fassung nannte `bookingMovementStates`; das war
 ein Versehen des Orchestrators.)*
+
+## E-062 — Bausteine der Oberfläche werden im Browser geprüft, nicht in einer Nachbildung
+
+**Befund (T-111 Frage 1, 2026-09-04).** `evict()` in `apps/web/src/app/ToastContext.tsx` ist die
+Regel, die seit W-10 eine Meldung mit Rückweg vor dem Verdrängen schützt — seit E-059 der
+einzige Schutz vor „Vom Board nehmen". Der unit-tester konnte sie nicht prüfen: Es gibt keinen
+Testrahmen für React-Bausteine im Baum, `evict` ist nicht ausgeführt, und beides zu ändern lag
+außerhalb seiner Hoheit.
+
+**Entscheidung.** Es kommt kein jsdom und keine Testing-Library dazu. Was eine Fläche tut, wird
+dort gemessen, wo sie steht: im Browser, über Playwright. T-108 hat fünf Erwartungen an
+`evict()` gegen den echten Baustein gemessen, T-113 legt den End-to-End-Fall daneben. Eine
+Nachbildung des Browsers würde eine zweite Wahrheit über Ereignisse, Zeit und Fokus aufmachen,
+und der Fall, der uns hier interessiert — eine Meldung überlebt vier andere und ihr Knopf ist
+bedienbar —, ist genau der, den eine Nachbildung am schlechtesten trifft (siehe T-110: Der
+Stapel lag über einem Dialog, mit der Maus bedienbar und mit der Tastatur unerreichbar; das
+sieht man nur im Browser).
+
+**Folge.** Reine Funktionen der Oberfläche (`lib/**`, Formatierer, Aufzählungen) prüft der
+unit-tester weiter mit Vitest. Alles, was einen Baum, ein Ereignis oder eine Zeit braucht,
+gehört dem e2e-tester. Sagt ein unit-tester „nicht prüfbar, kein Testrahmen", ist das kein
+Auftrag an den Orchestrator, einen zu beschaffen, sondern der Hinweis, dass der Fall in die
+End-to-End-Ebene gehört.

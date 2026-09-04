@@ -358,12 +358,44 @@ describe('toDefaultTag', () => {
  * Zeilen (keine Kürzung) gegen 21 Zeilen (Kürzung auf 20 plus Hinweistext).
  */
 describe('poolReference — ein einzelner Regelverweis für `details`', () => {
-  it('bildet { id, name } auf { field, code: "pool_rule", message: \'Regel „…“\' } ab', () => {
+  it('bildet { id, name } auf { field, code: "pool_rule", name, message: \'Regel „…“\' } ab (W-11, T-107)', () => {
     expect(poolReference({ id: 'pool-1', name: 'Abrechnung' })).toEqual({
       field: 'pool-1',
       code: 'pool_rule',
+      name: 'Abrechnung',
       message: 'Regel „Abrechnung“',
     });
+  });
+
+  /**
+   * Der vollständige Vertrag aus `reports/T-107-domain-dev.md` Abschnitt
+   * „Der Vertrag, den andere Hoheiten brauchen", Punkt 2: `field`, `code:
+   * 'pool_rule'`, `name` und `message` stehen alle vier da — kein fünftes
+   * Feld, keines der vier fehlt. `name` ist der BLOSSE Name (kein
+   * Gattungswort, keine Anführungszeichen), `message` bleibt zeichengleich
+   * mit der Fassung von vor W-11 (rein additiv, `errorText.ts` bleibt
+   * gültig).
+   *
+   * `name` ist NIE leer: `poolReference` bildet ihn direkt aus der
+   * Datenbankspalte `pool.name`, und die ist NOT NULL und über
+   * `nameSchema`/`ux_pool_name` UNIQUE NOCASE gegen den Leerstring
+   * abgesichert (`http/input.ts`, `packages/storage/src/sqlite/migrations`).
+   * Fehlt der Name, fehlt laut Vertrag das ganze Feld (`name?: string` an
+   * `TaktFieldError`) — `poolReference` hat aber keinen Zweig, der das Feld
+   * wegließe: Diese Funktion liefert es IMMER, und immer nicht-leer.
+   */
+  it('der vollständige Vertrag: field, code, name und message stehen alle da, name ist nie leer', () => {
+    const result = poolReference({ id: 'pool-2', name: 'Nord' });
+
+    expect(Object.keys(result).sort()).toEqual(['code', 'field', 'message', 'name']);
+    expect(result).toEqual({
+      field: 'pool-2',
+      code: 'pool_rule',
+      name: 'Nord',
+      message: 'Regel „Nord“',
+    });
+    expect(result.name).toBeTruthy();
+    expect(result.name).not.toBe('');
   });
 });
 

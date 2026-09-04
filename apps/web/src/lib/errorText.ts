@@ -19,17 +19,39 @@ import { errorMessage, TaktApiError } from "../api/client";
  * und wurden weggeworfen.
  *
  * ---------------------------------------------------------------------------
- * Warum der Name **unverändert** aus `message` kommt
+ * Woher der Name kommt — `details[].name`, nicht ein Schnitt in `message`
  * ---------------------------------------------------------------------------
  *
  * Der Vertrag steht in `packages/storage/src/sqlite/mappers.ts`
  * (`poolReference`) und in der Schnittstellenbeschreibung: **`code` ist
- * `pool_rule`, `field` ist die Kennung des Pools, `message` nennt ihn beim
- * Namen** — wörtlich `Regel „Ost“`, samt deutscher Anführungszeichen. Diese
- * Datei zerlegt den Text nicht, um „Ost" herauszuschneiden: Ein Ausdruck, der
- * heute das Wort „Regel" abschneidet, schneidet morgen die Hälfte des Namens
- * ab, und niemand wird dabei rot. Angezeigt wird, was der Dienst geschrieben
- * hat.
+ * `pool_rule`, `field` ist die Kennung des Pools, `message` nennt sie im Satz**
+ * — wörtlich `Regel „Ost“` —, **und `name` nennt den bloßen Namen**: `Ost`,
+ * ohne Gattungswort, ohne Anführungszeichen (seit T-107, W-11 aus R-2a).
+ *
+ * Diese Datei zerlegt `message` nicht, um „Ost" herauszuschneiden: Ein
+ * Ausdruck, der heute das Wort „Regel" abschneidet, schneidet morgen die Hälfte
+ * des Namens ab, und niemand wird dabei rot (T-097 Annahme 1, von R-2a
+ * ausdrücklich bestätigt). Das Feld `name` gibt es genau deshalb.
+ *
+ * **Fehlt `name`, gilt `message`** — und das ist der beschriebene Vertragsfall
+ * und kein stiller Rückfall: `name` ist freiwillig (`ApiFieldError.name?`),
+ * weil ein Befund über ein Eingabefeld nichts zu benennen hat. Ein
+ * `pool_rule`-Eintrag ohne Namen kommt heute von keiner der drei Sperren (Tag,
+ * Ordner, Status teilen sich `poolReference`); er käme von einem älteren
+ * Dienst, und dem gegenüber bleibt die Auskunft dieselbe wie vor T-110, Zeichen
+ * für Zeichen. Verschwiegen wird dabei nichts: Der Name steht dann im Satz des
+ * Dienstes.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das Gattungswort am Satz hängt und nicht am Eintrag
+ * ---------------------------------------------------------------------------
+ *
+ * Aus `name` wird „Betroffen sind die Regeln „Ost“, „Nord“ und „Abrechnung“."
+ * — einmal „Regel", vorn, statt dreimal mitten in der Aufzählung. Das setzt
+ * voraus, dass in der Aufzählung **nur** Namen stehen. Träfen beide Sorten
+ * zusammen, stünde dort „die Regeln Regel „Ost“ und „Nord“"; deshalb entscheidet
+ * {@link ruleList} für den ganzen Satz: Gattungswort vorn nur, wenn **jeder**
+ * Eintrag seinen Namen mitbringt, sonst der Satzbau von T-097.
  *
  * ---------------------------------------------------------------------------
  * Was hier **nicht** entsteht
@@ -41,9 +63,13 @@ import { errorMessage, TaktApiError } from "../api/client";
  * der Benutzer beide Aufzählungen am selben Tag liest und zwei verschiedene
  * Formen für dieselbe Sache eine Frage aufwerfen, die keine ist. Sie steht
  * hier abermals, weil `listPools` nicht ausgeführt wird; es ist bewußt die
- * **Form** und nicht die Funktion, die geteilt wird. Die Anführungszeichen
- * setzt sie im Unterschied zu `listPools` nicht selbst: Sie stehen im Text des
- * Dienstes bereits.
+ * **Form** und nicht die Funktion, die geteilt wird — `listPools` ist in
+ * `@takt/domain` nicht ausgeführt und steht deshalb nicht zur Verfügung
+ * (siehe „Offene Fragen" in T-110).
+ *
+ * Die Anführungszeichen um einen **Namen** setzt {@link ruleList} seit T-110
+ * selbst, wie `listPools` es tut: `name` bringt keine mit. Um eine **Meldung**
+ * setzt sie keine — dort stehen sie bereits im Text des Dienstes.
  */
 
 /**
@@ -68,19 +94,36 @@ export function enumerateGerman(items: readonly string[]): string {
 }
 
 /**
+ * Die Regeln, die der Dienst als Grund genannt hat — als Anzeigetexte, und die
+ * Auskunft, ob jede von ihnen ihren Namen mitgebracht hat.
+ *
+ * `items` ist leer, wenn der Fehlschlag keiner des Dienstes war, wenn er keine
+ * `details` trug oder wenn darin nichts steht, was eine Regel bezeichnet. Ein
+ * anderer Eintrag in `details` — etwa ein Feldfehler einer Prüfung — wird
+ * **nicht** mitgenommen: Er beantwortet eine andere Frage und gehört an das
+ * Feld, nicht in einen Löschdialog.
+ *
+ * Je Eintrag gilt: **erst `name`, sonst `message`.** Ein Name kommt in
+ * Anführungszeichen, eine Meldung unverändert — sie bringt ihre eigenen mit.
+ */
+function ruleList(cause: unknown): { readonly items: readonly string[]; readonly named: boolean } {
+  if (!(cause instanceof TaktApiError)) return { items: [], named: false };
+  const entries = cause.details.filter((entry) => entry.code === RULE_REFERENCE_CODE);
+  return {
+    items: entries.map((entry) => (entry.name === undefined ? entry.message : `„${entry.name}“`)),
+    named: entries.length > 0 && entries.every((entry) => entry.name !== undefined),
+  };
+}
+
+/**
  * Die Regeln, die der Dienst als Grund genannt hat — als Anzeigetexte.
  *
- * Leer, wenn der Fehlschlag keiner des Dienstes war, wenn er keine `details`
- * trug oder wenn darin nichts steht, was eine Regel bezeichnet. Ein anderer
- * Eintrag in `details` — etwa ein Feldfehler einer Prüfung — wird **nicht**
- * mitgenommen: Er beantwortet eine andere Frage und gehört an das Feld, nicht
- * in einen Löschdialog.
+ * Siehe {@link ruleList}. Aufrufer, die nur wissen wollen, **ob** der Dienst
+ * Regeln genannt hat, fragen `length`; der Satz für die Anzeige entsteht in
+ * {@link errorMessageWithRules} und nicht zweimal.
  */
 export function ruleReferences(cause: unknown): readonly string[] {
-  if (!(cause instanceof TaktApiError)) return [];
-  return cause.details
-    .filter((entry) => entry.code === RULE_REFERENCE_CODE)
-    .map((entry) => entry.message);
+  return ruleList(cause).items;
 }
 
 /**
@@ -88,8 +131,14 @@ export function ruleReferences(cause: unknown): readonly string[] {
  *
  * Ohne `details` ist es Wort für Wort `errorMessage(cause)` — die heutige
  * Auskunft, unverändert. Mit `details` kommt ein zweiter Satz dazu, und nur
- * einer: „Betroffen ist Regel „Ost“." beziehungsweise „Betroffen sind Regel
- * „Ost“, Regel „Nord“ und Regel „Abrechnung“."
+ * einer:
+ *
+ * * mit `name` (Regelfall seit T-107, Fassung aus W-11):
+ *   „Betroffen ist die Regel „Ost“." · „Betroffen sind die Regeln „Ost“,
+ *   „Nord“ und „Abrechnung“."
+ * * ohne `name` (älterer Dienst, siehe Dateikopf): „Betroffen ist Regel
+ *   „Ost“." · „Betroffen sind Regel „Ost“, Regel „Nord“ und Regel
+ *   „Abrechnung“." — der Wortlaut von T-097, unverändert.
  *
  * Der Satz sagt nicht, was zu tun ist. Das sagt bereits der Dienst („Nehmen
  * Sie ihn dort zuerst heraus."), und zweimal dieselbe Anweisung liest sich wie
@@ -97,8 +146,14 @@ export function ruleReferences(cause: unknown): readonly string[] {
  */
 export function errorMessageWithRules(cause: unknown): string {
   const base = errorMessage(cause);
-  const rules = ruleReferences(cause);
-  if (rules.length === 0) return base;
-  const verb = rules.length === 1 ? "Betroffen ist" : "Betroffen sind";
-  return `${base} ${verb} ${enumerateGerman(rules)}.`;
+  const { items, named } = ruleList(cause);
+  if (items.length === 0) return base;
+  const subject = named
+    ? items.length === 1
+      ? "ist die Regel"
+      : "sind die Regeln"
+    : items.length === 1
+      ? "ist"
+      : "sind";
+  return `${base} Betroffen ${subject} ${enumerateGerman(items)}.`;
 }

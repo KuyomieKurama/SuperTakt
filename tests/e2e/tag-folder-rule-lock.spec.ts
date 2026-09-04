@@ -56,6 +56,21 @@
  * „Abbrechen" → „Schließen") jetzt genauso wie `StatusSettings` — die beiden
  * Fälle unten schließen den Dialog seitdem über „Schließen", nicht mehr über
  * „Abbrechen".
+ *
+ * ## Nachtrag T-113 — Wortlaut nach T-110 (W-11 aus R-2a)
+ *
+ * `details[].name` trägt seit T-107 den **bloßen** Regelnamen neben `message`
+ * (`packages/storage/src/sqlite/mappers.ts#poolReference`). T-110 (frontend-dev,
+ * parallel zu diesem Auftrag) baut `apps/web/src/lib/errorText.ts` darauf um:
+ * ein Gattungswort **einmal** vorn statt einmal je Regel — „Betroffen ist die
+ * Regel „Ost“." bzw. „Betroffen sind die Regeln „Ost“ und „Nord“." — statt
+ * des bisherigen „Betroffen ist Regel „Ost“." bzw. „Betroffen sind Regel
+ * „Ost“, Regel „Nord“.". Die drei Einzel-Fälle unten (Ordner, Tag, Status)
+ * sind auf den neuen Wortlaut gestellt, weil alle drei dieselbe Funktion
+ * rufen; ein neuer vierter Fall prüft zusätzlich zwei Regeln an einem Tag
+ * („Betroffen sind die Regeln … und …."). **Läuft dieser Auftrag, bevor
+ * T-110 im Baum steht, sind alle vier Erwartungen rot — beabsichtigt, siehe
+ * Bericht zu T-113, nicht abgeschwächt auf den alten Wortlaut.**
  */
 import { test, expect } from '@playwright/test';
 
@@ -154,7 +169,9 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       // `remove()`) — und seit T-097 den Namen der betroffenen Regel wörtlich.
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText('wird in der Regel eines Pools verwendet');
-      await expect(dialog).toContainText(`Betroffen ist Regel „${pool.name}“.`);
+      // Wortlaut nach T-110 (W-11 aus R-2a, Nachtrag T-113 im Kopf dieser
+      // Datei) — vorher „Betroffen ist Regel „${pool.name}“.".
+      await expect(dialog).toContainText(`Betroffen ist die Regel „${pool.name}“.`);
 
       // Seit T-102 wechselt der Dialog nach der Absage Titel, Beschreibung
       // und beide Knöpfe wie `StatusSettings` — der Schließen-Knopf heißt
@@ -214,8 +231,11 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
        * (`ruleReferences`, T-097) verlässt. **T-101 hat `TagPort.remove` auf
        * denselben Vertrag gebracht** (R-1a Befund 1): Die Regel wird jetzt
        * genannt, wörtlich wie bei Ordner und Status.
+       *
+       * Wortlaut nach T-110 (W-11 aus R-2a, Nachtrag T-113 im Kopf dieser
+       * Datei) — vorher „Betroffen ist Regel „${pool.name}“.".
        */
-      await expect(dialog).toContainText(`Betroffen ist Regel „${pool.name}“.`);
+      await expect(dialog).toContainText(`Betroffen ist die Regel „${pool.name}“.`);
 
       // Seit T-102 wechselt der Dialog nach der Absage Titel, Beschreibung
       // und beide Knöpfe wie `StatusSettings` — der Schließen-Knopf heißt
@@ -227,6 +247,69 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       await expect(page.getByRole('treeitem', { name: lockedTag.name })).toBeVisible();
     } finally {
       await deletePoolByName(`E2E-TagSperre-UI-Regel-${run}`).catch(() => undefined);
+      await deleteTag(lockedTag.id).catch(() => undefined);
+    }
+  });
+
+  /*
+   * T-113, Punkt 3 (W-11 aus R-2a, Fassung nach T-110). Ein Tag in **zwei**
+   * Regeln ist der Fall, den `enumerateGerman` (`errorText.ts`) von einer
+   * einzelnen Regel unterscheidet: „A und B" statt „A". Die Reihenfolge der
+   * Aufzählung folgt der Abfrage in `repo-tags.ts` (`ORDER BY p.position,
+   * p.name`) — `position` wächst mit jedem `POST /pools` (`MAX(position) +
+   * 1`), zuerst angelegt heißt also zuerst genannt. Die beiden Regeln unten
+   * heißen deshalb absichtlich „…-Ost-…" und „…-Nord-…", in dieser
+   * Reihenfolge angelegt, damit die Erwartung nicht von einer zufälligen
+   * Sortierung lebt.
+   */
+  test('Tag, Oberfläche: in zwei Regeln — Dialogtext nennt beide Namen einmalig, „Betroffen sind die Regeln …“', async ({
+    page,
+  }) => {
+    const run = Date.now();
+    const lockedTag = await createTag(`E2E-TagZweiRegeln-UI-${run}`);
+    const poolOst = await createPool({
+      name: `E2E-TagZweiRegeln-UI-Ost-${run}`,
+      requiredTagIds: [lockedTag.id],
+    });
+    const poolNord = await createPool({
+      name: `E2E-TagZweiRegeln-UI-Nord-${run}`,
+      requiredTagIds: [lockedTag.id],
+    });
+
+    try {
+      await gotoTags(page);
+      const item = page.getByRole('treeitem', { name: lockedTag.name });
+      await expect(item).toBeVisible();
+      await item.click();
+      await expect(page.locator('.tags-detail__kind')).toHaveText('Tag');
+      await expect(page.locator('.tags-detail__name')).toHaveText(lockedTag.name);
+
+      await page.locator('.tags-detail__actions').getByRole('button', { name: 'Löschen' }).click();
+
+      const dialog = page.getByRole('alertdialog');
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: 'Löschen' }).click();
+
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText('wird in der Regel eines Pools verwendet');
+      // Fassung nach T-110 (W-11 aus R-2a): ein Gattungswort vorn, kein
+      // „Regel" je Namen — vorher „Betroffen sind Regel „${poolOst.name}“,
+      // Regel „${poolNord.name}“.". Frontend-dev arbeitet an dieser
+      // Umstellung parallel zu diesem Auftrag (T-110); steht der Baum noch
+      // auf dem alten Satz, ist dieser Fall rot, absichtlich (Kopf dieser
+      // Datei, Nachtrag T-113).
+      await expect(dialog).toContainText(
+        `Betroffen sind die Regeln „${poolOst.name}“ und „${poolNord.name}“.`,
+      );
+
+      await dialog.getByRole('button', { name: 'Schließen' }).click();
+      await expect(dialog).toBeHidden();
+
+      await gotoTags(page);
+      await expect(page.getByRole('treeitem', { name: lockedTag.name })).toBeVisible();
+    } finally {
+      await deletePool(poolOst.id).catch(() => undefined);
+      await deletePool(poolNord.id).catch(() => undefined);
       await deleteTag(lockedTag.id).catch(() => undefined);
     }
   });
@@ -258,7 +341,9 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
 
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText('Diesen Status benutzt noch die Regel eines Pools');
-      await expect(dialog).toContainText(`Betroffen ist Regel „${pool.name}“.`);
+      // Wortlaut nach T-110 (W-11 aus R-2a, Nachtrag T-113 im Kopf dieser
+      // Datei) — vorher „Betroffen ist Regel „${pool.name}“.".
+      await expect(dialog).toContainText(`Betroffen ist die Regel „${pool.name}“.`);
       // Der vierte Löschgrund (T-076: Status in einer Regel) ist kein
       // dazugekommenes Todo — der Zusatz „Zwischen dem Zählen und dem
       // Löschen ist offenbar ein Todo dazugekommen" gehört zum anderen Grund

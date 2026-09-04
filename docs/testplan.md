@@ -2678,3 +2678,139 @@ Port 17843/17844 (bzw. 17944 für die Add-in-Bauergebnis-Prüfung) war vor jedem
 liefen domain-dev und frontend-dev sichtbar an `apps/local-api/**`, `packages/domain/**`,
 `packages/storage/**` und `apps/web/**` (unverändert nicht angefasst) — kein voller
 `pnpm run test:e2e`, wie beauftragt.
+
+## 21. Nachtrag aus T-113 (Welle H — Buchung von Hand mit Poolbewegung, Toast-Verdrängung, Regelnamen nach T-110)
+
+Grundlage: `decisions.md` E-061 Nachtrag (auch `POST /time-entries` liefert `poolMovement`, mit
+derselben Rechnung wie der Timerstopp, `closedEntryMovementStates`, „Richtiggestellt nach
+T-107"), W-10 aus R-2a (eine Meldung mit Rückweg wird beim Verdrängen des Toast-Stapels
+übersprungen, `apps/web/src/app/ToastContext.tsx`, `evict()`) und W-11 aus R-2a (der Regelname als
+eigenes Feld `details[].name`, `apps/web/src/lib/errorText.ts`). T-107/T-108 haben die ersten
+beiden Punkte umgesetzt, T-110 den dritten — alle drei parallel zu diesem Auftrag, in derselben
+Welle H.
+
+### TP-EXPST-14 — Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)
+
+**Anforderungen:** A-2.4, A-2.5 (Abgrenzung — siehe Fall c), A-6.1, A-6.4, E-058, E-061
+**Ebene:** End-to-End (`tests/e2e/manual-booking-movement.spec.ts`, neu)
+**Vorbedingung:** Je Fall ein eigenes Tag und eine eigene Regel, damit sich die drei Fälle nicht
+gegenseitig beeinflussen.
+
+**Schritte und erwartetes Ergebnis, drei Fälle:**
+
+a. **Erste Buchung auf ein offenes Todo ohne jede Buchung.** Regel mit `exportState: 'open'` auf
+   dem Tag des Todos. Über den echten Dialog „Zeit von Hand erfassen" (Knopf „Zeit von Hand" auf
+   der Todo-Detailansicht) eine Buchung von 45 Minuten anlegen, mit Leistungstext. `POST
+   /time-entries` antwortet mit `poolMovement: { appears: [<Spalte>], enters: [<Spalte>], leaves:
+   [] }` — die erste abgeschlossene Buchung setzt „hat offene Buchungen", und die Regel fragt
+   genau danach. Der Toast trägt den Titel „Zeit gebucht auf „<Todo>“." und den Rumpf „Gebucht:
+   0:45 h. <Bewegungssatz>.", wobei der Bewegungssatz aus `poolMovementSentence(movement, 'past',
+   'booking')` gezogen wird (kein Literal).
+b. **Gegenprobe — Todo mit bereits offener Buchung.** Über die rohe API besteht schon eine
+   abgeschlossene, offene Buchung auf demselben Todo (reine Vorbereitung, kein Teil der geprüften
+   Bedienung). Eine zweite Buchung von Hand über denselben Dialog liefert `poolMovement: null` —
+   `movementOfBooking` (`apps/local-api/src/usecases/timer.ts`) löst dann keine Regel auf. Der
+   Toast trägt weiterhin Titel und „Gebucht: 0:15 h.", aber **keine** angehängte Zeile.
+c. **Erledigtes Todo.** Regel mit `completion: 'done'` (ohne Achse zum Exportstatus) auf dem Tag;
+   das Todo ist über `PUT /todos/{id}/done` bereits erledigt und steht folglich schon in dieser
+   Spalte. Eine Buchung von Hand liefert `poolMovement: { appears: [<Spalte>], enters: [], leaves:
+   [] }` — kein Verlassen, weil `closedEntryMovementStates` `completedAt` unverändert lässt
+   (**Abgrenzung zu A-2.5**: Anders als der Timerstart hebt die Buchung von Hand „Erledigt" nicht
+   auf; die Karte „Erledigt" bleibt auf der Todo-Detailansicht angehakt). `poolMovementSentence`
+   liefert für dieses Tripel `null` (nur `enters`/`leaves` zählen beim Anlass `'booking'`), der
+   Toast trägt entsprechend keine angehängte Zeile.
+
+**Ergebnis: bestanden**, 3/3, dreifach reproduziert (isoliert, im Verbund mit `toast-eviction.
+spec.ts` und im vollen `pnpm run test:e2e`).
+
+### TP-TOAST-01 — Meldung mit Rückweg wird beim Verdrängen des Stapels übersprungen (W-10 aus R-2a)
+
+**Anforderungen:** Abschnitt 16 (Rückmeldung je Interaktion), E-059 (kein Bestätigungsdialog vor
+„Vom Board nehmen", Rückweg im Toast selbst), SC 2.2.1 (genug Zeit, eine Aktion zu lesen und zu
+bedienen)
+**Ebene:** End-to-End (`tests/e2e/toast-eviction.spec.ts`, neu)
+**Vorbedingung:** Zwei eigene Regeln mit `placement: 'both'` — eine für den Rückweg-Toast (leer,
+keine Karten nötig), eine mit vier Todos für die vier Meldungen ohne Aktion. Getrennte Regeln,
+damit das Zurücknehmen der ersten die Karten der zweiten nicht vom Board entfernt.
+**Schritte:**
+1. Spaltenmenü der ersten Regel öffnen, „Vom Board nehmen" auslösen. Der Toast „Spalte vom Board
+   genommen." trägt den Knopf „Rückgängig" (`setPlacement`, `BoardScreen.tsx` — `action` gesetzt,
+   weil sich der Anzeigeort tatsächlich ändert und dies kein Rückweg-Aufruf ist).
+2. Nacheinander auf vier Karten der zweiten Regel „Als erledigt markieren" auslösen (Kartenmenü
+   „Aktionen für <Titel>"). Jede Meldung „„<Titel>“ ist erledigt." trägt **kein** `action`-Feld
+   (`toggleDone`, `BoardScreen.tsx`).
+**Erwartetes Ergebnis:** Fünf ausgelöste Meldungen, `MAX_TOASTS = 4` (`ToastContext.tsx`): Der
+Stapel zeigt danach genau vier. Die Meldung mit „Rückgängig" steht weiterhin, ihr Knopf ist
+sichtbar und bedienbar. Die älteste Meldung **ohne** Aktion — die zur ersten Karte — ist
+verschwunden; die drei jüngeren ohne Aktion stehen unverändert. „Schließen" entfernt die Meldung
+mit Rückweg anschließend trotzdem — genommen ist ihr nach `evict()` ausdrücklich nur das
+Verdrängen durch eine fremde Meldung, nicht der eigene Schließweg.
+**Ergebnis: bestanden**, 1/1, dreifach reproduziert (isoliert, im Verbund und im vollen `pnpm run
+test:e2e`).
+
+### TP-TAG-15 — Ein Tag in zwei Regeln: der Löschdialog nennt beide Namen mit einem Gattungswort (W-11 aus R-2a, Fassung nach T-110)
+
+**Anforderungen:** A-3.2, A-4.2, E-057 (dieselben wie TP-TAG-14, derselbe Löschweg, jetzt mit
+einem zweiten Regelbezug am selben Tag)
+**Ebene:** End-to-End (`tests/e2e/tag-folder-rule-lock.spec.ts`, neuer Fall in derselben
+`describe`-Gruppe wie TP-TAG-14)
+**Vorbedingung:** Ein Tag, das in **zwei** eigenen Regeln als erforderlicher Term steht, zuerst
+angelegt „…-Ost-…", danach „…-Nord-…" (die Reihenfolge in der Aufzählung folgt `ORDER BY
+p.position, p.name` in `repo-tags.ts`, `position` wächst mit jedem `POST /pools` — zuerst angelegt
+heißt zuerst genannt, nicht alphabetisch).
+**Schritte:** Wie TP-TAG-14, Schritt 6 (Tag-Fall): Löschen auslösen, im Bestätigungsdialog erneut
+„Löschen" bestätigen.
+**Erwartetes Ergebnis:** Der Dialog bleibt offen und nennt **beide** Regeln in einem Satz:
+„… Betroffen sind die Regeln „<Ost>“ und „<Nord>“." — ein Gattungswort vorn statt einmal je Name
+(`details[].name`, seit T-107; `errorText.ts#ruleList`/`errorMessageWithRules`, seit T-110). Nach
+„Schließen" ist das Tag weiterhin im Tag-Baum vorhanden.
+
+**Zusammenhang mit TP-TAG-14 — drei bestehende Erwartungen auf die Fassung nach T-110
+umgestellt.** Die drei Einzel-Fälle aus TP-TAG-14 (Ordner, Tag, Status — je eine Regel) prüften
+bislang „… Betroffen ist Regel „<Name>“." (Wortlaut von T-097). Seit T-110 lautet derselbe Satz
+„… Betroffen ist **die** Regel „<Name>“." — dasselbe Gattungswort-vorn-Prinzip wie oben, nur für
+genau eine Regel. `tests/e2e/tag-folder-rule-lock.spec.ts` ist an den drei betroffenen Stellen
+umgestellt (Ordner-Fall, Tag-Fall, Status-Fall); TP-TAG-14 selbst wird hier nicht neu geschrieben
+(wie an anderer Stelle in diesem Dokument gehalten: ein Nachtrag ergänzt, er schreibt die
+historische Fassung nicht um), der neue Wortlaut gilt ab jetzt für alle vier Fälle der Datei.
+
+**Zur Beobachtung während der Umsetzung.** T-110 lief parallel zu diesem Auftrag an genau dieser
+Datei (`apps/web/src/lib/errorText.ts`). Eine Quelltextprüfung während der laufenden Änderung
+zeigte kurzzeitig einen in sich widersprüchlichen Zwischenstand (der Dateikopf beschrieb bereits
+den neuen Vertrag, `ruleReferences`/`errorMessageWithRules` lasen zu diesem Zeitpunkt aber noch
+`message` und bildeten den alten Satz) — eine reine Beobachtung am Quelltext, kein Testlauf. Jeder
+tatsächlich ausgeführte Testlauf dieses Auftrags traf bereits die fertige Fassung aus T-110 und
+war grün; es gibt keinen eigenen, tatsächlich ausgeführten roten Lauf gegen den alten Wortlaut zu
+melden.
+
+**Ergebnis: bestanden**, 5/5 (alle vier Fälle der Datei, TP-TAG-14 und TP-TAG-15 zusammen),
+dreifach reproduziert (isoliert, zweimal im vollen `pnpm run test:e2e`).
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/manual-booking-movement.spec.ts --reporter=list --retries=0        3/3
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts --reporter=list --retries=0                 1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/tag-folder-rule-lock.spec.ts --reporter=list --retries=0           5/5 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/manual-booking-movement.spec.ts tests/e2e/toast-eviction.spec.ts \
+  --reporter=list --retries=0                                                 4/4
+
+pnpm run test:e2e --reporter=list --retries=0                                 56/56 (1,4 min) —
+                                                                                Vergleichsmarke
+                                                                                51/51 nach 4dd3171,
+                                                                                +5 neue Fälle
+```
+
+Port 17843/17844 war vor jedem Lauf frei. Parallel liefen frontend-dev sichtbar an
+`apps/web/src/lib/errorText.ts`/`api/client.ts`/`api/types.ts`/`app.css`, unit-tester an
+`apps/web/test/**`/`apps/local-api/test/**`/`packages/*/test/**` und security-checker an
+`docs/bedrohungsmodell.md` — keine dieser Dateien wurde von diesem Auftrag angefasst.

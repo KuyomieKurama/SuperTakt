@@ -82,10 +82,25 @@ export interface Page<T> {
 /* Fehler                                                               */
 /* ==================================================================== */
 
+/**
+ * Ein einzelner Befund in `error.details`.
+ *
+ * `name` ist der **bloße** Name des benannten Dings — „Ost“, nicht
+ * „Regel „Ost““, ohne Gattungswort und ohne Anführungszeichen (W-11 aus R-2a,
+ * geliefert seit T-107 von `poolReference` in `packages/storage`). Es ist
+ * freiwillig, und das ist eine Aussage und keine Lücke: Ein Befund über ein
+ * **Eingabefeld** hat nichts zu benennen und trägt deshalb keinen Namen. Es
+ * gibt auch keinen leeren Namen — fehlt der Name, fehlt das Feld.
+ *
+ * Wer `name` liest, muss `undefined` behandeln und dann `message` nehmen; das
+ * ist der beschriebene Vertragsfall und kein stiller Rückfall. Die eine Stelle,
+ * die das tut, ist `lib/errorText.ts`.
+ */
 export interface ApiFieldError {
   readonly field: string;
   readonly message: string;
   readonly code: string;
+  readonly name?: string;
 }
 
 /**

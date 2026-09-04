@@ -11,10 +11,11 @@
  *
  * Der Fall, der zählt und der vorher nicht geben konnte: Bei `todo_status`
  * stand eine Karte in genau einer Spalte, weil `status_id` ein einzelner Wert
- * war. Eine Spalte ist jetzt eine Regel über Tags — mehrere Regeln können
- * gleichzeitig zutreffen, und `boardAppearances` ist die einzige Stelle, die
- * das für die Oberfläche zusammenzieht. Eine falsche Umsetzung zeigt hier eine
- * von zwei Arten von Fehlern: Sie zählt zutreffende Regel-**Terme** statt
+ * war. Eine Spalte ist jetzt eine Regel mit fünf Achsen (E-055: erforderliche
+ * Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus) — mehrere Regeln
+ * können gleichzeitig zutreffen, und `boardAppearances` ist die einzige
+ * Stelle, die das für die Oberfläche zusammenzieht. Eine falsche Umsetzung
+ * zeigt hier eine von zwei Arten von Fehlern: Sie zählt zutreffende Regel-**Terme** statt
  * zutreffende **Spalten** und listet dieselbe Spalte mehrfach, sobald eine
  * Karte über mehr als ein Tag derselben Regel hineinpasst.
  *

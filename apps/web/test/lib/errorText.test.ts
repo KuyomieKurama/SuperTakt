@@ -42,6 +42,17 @@ function poolReferenceDetail(id: string, name: string): ApiFieldError {
   return { field: id, code: "pool_rule", message: `Regel „${name}“` };
 }
 
+/**
+ * Wie `poolReference` seit T-107 (W-11) einen Regelverweis schreibt: `name`
+ * ZUSÄTZLICH neben dem unveränderten `message` — additiv, siehe
+ * `reports/T-107-domain-dev.md` Abschnitt „Der Vertrag, den andere Hoheiten
+ * brauchen", Punkt 2. `ApiFieldError.name` ist seit T-110 Teil des Typs
+ * (`apps/web/src/api/types.ts`).
+ */
+function poolReferenceDetailWithName(id: string, name: string): ApiFieldError {
+  return { field: id, code: "pool_rule", name, message: `Regel „${name}“` };
+}
+
 const TAG_IN_USE_MESSAGE = "Dieser Ordner wird in der Regel eines Pools verwendet.";
 const STATUS_IN_USE_MESSAGE =
   "Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst heraus.";
@@ -230,5 +241,98 @@ describe("errorMessageWithRules — Dienstmeldung, um die betroffenen Regeln erg
     expect(errorMessageWithRules("irgendein Wert")).toBe(
       "Unbekannter Fehler. Bitte versuchen Sie es erneut.",
     );
+  });
+});
+
+/**
+ * T-111 — der Vertrag aus `reports/T-107-domain-dev.md` Abschnitt „Der
+ * Vertrag, den andere Hoheiten brauchen", Punkt 2, wie er im Auftrag zu T-111
+ * wörtlich vorgegeben ist:
+ *
+ *   „Eintrag mit code: 'pool_rule' und name → „Betroffen ist die Regel
+ *   „Ost“.“ / „Betroffen sind die Regeln „Ost“, „Nord“ und „Abrechnung“.“;
+ *   Eintrag mit code: 'pool_rule' ohne name → message wie bisher; Einträge
+ *   anderer code bleiben außen vor."
+ *
+ * `ApiFieldError.name` ist additiv (T-110, `apps/web/src/api/types.ts`) und
+ * bereits Teil des Typs. `errorText.ts` (`ruleReferences`,
+ * `errorMessageWithRules`) liest `name` zum Zeitpunkt dieses Commits jedoch
+ * noch NICHT — die Umstellung ist Auftrag von T-110 an frontend-dev, laut
+ * Aufgabenbeschreibung "gleichzeitig" mit dieser Datei entstanden. Die drei
+ * Fälle unten, die einen `name` tragen, sind deshalb zum Zeitpunkt dieses
+ * Commits ROT (siehe Bericht `T-111-unit-tester.md`, Abschnitt "Rotnachweis")
+ * — sie sind bewusst NICHT abgeschwächt, weil sie den Vertrag prüfen und
+ * nicht den heutigen Stand.
+ *
+ * Der Fall "ohne name" ändert sich nicht: Er ist Zeichen für Zeichen der
+ * bereits oben geprüfte Fall (`poolReferenceDetail`, ohne `name`) und bleibt
+ * grün — "message wie bisher" ist keine neue Anforderung.
+ */
+describe("errorMessageWithRules — details[].name (T-110-Vertrag aus T-107, W-11)", () => {
+  it("genau ein Eintrag MIT name: „Betroffen ist die Regel „Ost“.“ (bestimmter Artikel, Singular)", () => {
+    const error: ApiError = {
+      code: "tag_in_use",
+      message: TAG_IN_USE_MESSAGE,
+      details: [poolReferenceDetailWithName("pool-1", "Ost")],
+    };
+    const cause = new TaktApiError(409, error);
+    expect(errorMessageWithRules(cause)).toBe(
+      `${TAG_IN_USE_MESSAGE} Betroffen ist die Regel „Ost“.`,
+    );
+  });
+
+  it("drei Einträge MIT name: „Betroffen sind die Regeln „Ost“, „Nord“ und „Abrechnung“.“ (bestimmter Artikel, Plural, nur die Namen aufgezählt)", () => {
+    const error: ApiError = {
+      code: "status_in_use",
+      message: STATUS_IN_USE_MESSAGE,
+      details: [
+        poolReferenceDetailWithName("pool-1", "Ost"),
+        poolReferenceDetailWithName("pool-2", "Nord"),
+        poolReferenceDetailWithName("pool-3", "Abrechnung"),
+      ],
+    };
+    const cause = new TaktApiError(409, error);
+    expect(errorMessageWithRules(cause)).toBe(
+      `${STATUS_IN_USE_MESSAGE} Betroffen sind die Regeln „Ost“, „Nord“ und „Abrechnung“.`,
+    );
+  });
+
+  it("zwei Einträge MIT name: Plural, deutsche Aufzählung ohne Komma vor „und“", () => {
+    const error: ApiError = {
+      code: "tag_in_use",
+      message: TAG_IN_USE_MESSAGE,
+      details: [
+        poolReferenceDetailWithName("pool-1", "Ost"),
+        poolReferenceDetailWithName("pool-2", "Nord"),
+      ],
+    };
+    const cause = new TaktApiError(409, error);
+    expect(errorMessageWithRules(cause)).toBe(
+      `${TAG_IN_USE_MESSAGE} Betroffen sind die Regeln „Ost“ und „Nord“.`,
+    );
+  });
+
+  it("ein Eintrag OHNE name: message wie bisher — „Betroffen ist Regel „Ost“.“ ändert sich NICHT", () => {
+    const error: ApiError = {
+      code: "tag_in_use",
+      message: TAG_IN_USE_MESSAGE,
+      details: [poolReferenceDetail("pool-1", "Ost")],
+    };
+    const cause = new TaktApiError(409, error);
+    expect(errorMessageWithRules(cause)).toBe(
+      `${TAG_IN_USE_MESSAGE} Betroffen ist Regel „Ost“.`,
+    );
+  });
+
+  it("ein Eintrag anderen code (auch mit einem name-artigen Feld) bleibt aussen vor", () => {
+    const error: ApiError = {
+      code: "validation_error",
+      message: "Dieser Tagname kommt in mehreren Ordnern vor. Bitte wählen Sie das gemeinte Tag ausdrücklich aus.",
+      details: [
+        { field: "tagNames", code: "tag_name_ambiguous", message: "Mehrdeutiger Tagname." },
+      ],
+    };
+    const cause = new TaktApiError(422, error);
+    expect(errorMessageWithRules(cause)).toBe(error.message);
   });
 });
