@@ -1274,3 +1274,55 @@ kann (O-K), bleibt beim Auftraggeber.
   Regeldialog. Die Handlung ist umkehrbar und verliert nichts (die Regel bleibt als Pool
   bestehen); ein Bestätigungsdialog vor einer umkehrbaren Handlung ist Reibung ohne Schutz.
   Löschen einer Regel fragt weiterhin nach.
+
+## E-060 — Auch „Erledigt" setzen und aufheben von Hand liefern die Poolbewegung
+
+**Befund (O-U, aus T-093 und R-2a, 2026-09-04).** `PUT` und `DELETE /todos/{todoId}/done`
+liefern kein `poolMovement`; der Board-Toast nach „Erledigt" schweigt deshalb über Spalten,
+während derselbe Übergang über einen Timerstart angesagt wird. Die Begründung aus E-058 Punkt 6
+gilt wörtlich: Wer an einer Stelle Auskunft gibt und an der anderen schweigt, sagt die halbe
+Wahrheit — und seit E-055 ist „Erledigt" eine Achse, die Spalten entscheidet.
+
+**Entscheidung.**
+
+1. Beide Routen liefern `poolMovement: { appears, enters, leaves } | null`, gerechnet vom
+   selben Anwendungsfall `usecases/pool-movement.ts` aus dem Zustandspaar vor und nach der
+   Handlung, mit `list('all')`. `null`, wenn sich nichts bewegt.
+2. **Zwei Anlässe genügen.** `DELETE /done` (Aufheben) ist der Anlass `'reopen'`: Das Todo war
+   erledigt und kehrt zurück; „wieder" stimmt. `PUT /done` (Setzen) nimmt den Anlass `'booking'`.
+   Dessen Satz trägt kein Wort von Buchung — „Es steht jetzt in „Erledigt“ und ist aus „Offen“
+   verschwunden." — und nennt nur `enters` und `leaves`; das ist die neutrale Form für jede
+   Bewegung, die keine Rückkehr ist. Ein dritter Anlass hätte denselben Satz mit anderem Namen.
+3. Der Anlass wird **nicht** umbenannt. `'booking'` steht in Domäne, Dienst, Oberfläche, Add-in
+   und den End-to-End-Tests; ein treffenderer Name (`'plain'`) kostete vier Hoheiten und gewänne
+   nichts, was der Kommentar an `PoolMovementOccasion` nicht auch sagt. Der Kommentar dort nennt
+   künftig beide Anlässe, für die die neutrale Form steht.
+4. Die Oberfläche nutzt den Satz im Toast nach beiden Handlungen wie beim Stopp (E-058 Punkt 6):
+   Zeitform `'past'`, Zeile weglassen, wenn `null`. Die Sätze „Erledigt." und „Wieder offen."
+   bleiben Titel; der Bewegungssatz ist der Rumpf.
+
+## E-061 — Eine Rechnung, eine Wirkung, eine Form für die Poolbewegung
+
+**Befund (O-S, O-T, R-1a, 2026-09-04).** Das Zustandspaar „Wirkung einer Buchung"
+(`completedAt: null`, `hasOpenEntries: true`) wird an vier Stellen gebildet: zweimal in den
+Add-in-Routen, in `timer/start` und in `timer/stop` samt `orphaned/resolve`. Und die Bewegung
+hat zwei Formen: Die Add-in-Routen liefern `poolNames`/`enteringPoolNames`/`leavingPoolNames`,
+die Timer-Routen `poolMovement: { appears, enters, leaves }`. Zwei Hoheiten, eine OpenAPI.
+
+**Entscheidung.**
+
+1. **Die Wirkung liegt in der Domäne.** Was eine Buchung an einem Todo ändert — Kennzeichen
+   fällt, „hat offene Buchungen" wird wahr — ist Fachwissen und steht als benannte Konstante
+   bzw. reine Funktion in `packages/domain` (Arbeitstitel `BOOKING_EFFECT`, Name ist Sache von
+   domain-dev). Sie kennt weder Buchungen im Speicher noch Pools.
+2. **Die Rechnung liegt im Anwendungsfall.** `usecases/pool-movement.ts` bekommt eine Hilfsfunktion
+   (Arbeitstitel `bookingMovementStates(todo, entries)`), die das Zustandspaar aus dem Todo und
+   seinen Buchungen bildet, indem sie die Wirkung aus 1 anwendet. Alle vier Stellen rufen sie;
+   keine bildet das Paar selbst.
+3. **Eine Form.** `poolMovement: { appears, enters, leaves } | null` ist die einzige Form, in
+   der eine Bewegung über HTTP geht — auch an den Add-in-Routen. Die drei Namenslisten dort
+   entfallen; das Add-in liest `poolMovement` und ruft `poolMovementSentence` wie bisher.
+4. **Reihenfolge.** domain-dev baut 1 und 2 und stellt die Timer-Routen um (Welle E).
+   integration-dev stellt die Add-in-Routen, das Add-in und den Add-in-Abschnitt der OpenAPI um
+   (Welle F, nach E-053 getrennte Abschnitte, deshalb nicht dieselbe Welle). Bis dahin bleiben
+   die Add-in-Routen bei den drei Listen, mit Board-Eintrag.

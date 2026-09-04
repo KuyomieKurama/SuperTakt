@@ -1,0 +1,15 @@
+// Typprüfung der End-to-End-Tests. Playwright übersetzt die Spezifikationen
+// selbst, prüft dabei aber keine Typen — ein falsches Feld in `support/api.ts`
+// fällt sonst erst zur Laufzeit auf, wenn überhaupt (T-099, offene Frage 3).
+// Läuft in Node; `DOM` ist für die Rückrufe in `page.evaluate` nötig. Kein
+// `rootDir`: Die Erwartungen ziehen `poolMovementSentence` direkt aus
+// `packages/domain/src`, damit Wortlaut und Test dieselbe Quelle haben.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

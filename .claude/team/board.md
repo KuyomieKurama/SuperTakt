@@ -186,6 +186,24 @@ Stand `aca53df`: `pnpm check` Exitcode 0 (13 Nachweispfade 848/0, 648 Einheitent
 
 Danach documenter (D-1/D-2 Benutzerhandbuch, „Regel über Tags" in `docs/`).
 
+### Welle vom 2026-09-04, Welle E (Befunde aus Welle D) — läuft
+
+Stand `ece52a7` plus Orchestrator: `apps/desktop/tsconfig.test.json` (in `typecheck:test`),
+`tests/e2e/tsconfig.json` mit neuem Skript `typecheck:e2e` (noch **nicht** in `typecheck`, weil
+vier Typfehler offen sind — T-103), S-3 `sha256sum -c --strict` in `release.yml` auf
+`fix/windows-sidecar-bundle-check` (10556ad, gepusht, gemergt). Entscheidungen E-060 (O-U) und
+E-061 (O-S/O-T). Drei Agenten parallel, disjunkte Pfade; `proof:*` und `test:e2e` binden
+Port 17843 — warten, keine fremden Prozesse beenden.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| T-101 | Dienst und Domäne: (1) E-060 — `PUT`/`DELETE /todos/{todoId}/done` liefern `poolMovement` (`'reopen'` bei DELETE, `'booking'` bei PUT), OpenAPI dazu, Kommentar an `PoolMovementOccasion` nennt beide Anlässe der neutralen Form; (2) E-061 Punkte 1 und 2 — Wirkung in `packages/domain`, `bookingMovementStates` in `usecases/pool-movement.ts`, Timer-Routen darauf umgestellt (Add-in-Routen **nicht** anfassen, Welle F); (3) O-R — `usecases/timer.ts:511` gibt `orphan_discarded` aus der Domäne durch statt `timer_too_short` zu setzen, `timer.ts:294` und OpenAPI `:2043` dazu, **unterscheiden, nicht kürzen**; (4) `repo-tags.ts:213` `TagPort.remove` liefert `details` mit Regelnamen wie Ordner und Status (T-099 hat den Ausfall im Dialog gemessen); (5) Kommentare `repo-tags.ts:192`, `repo-statuses.ts:277` (CASCADE-Begründung), W-2 `time-entry.ts:111-112`, W-3 `repo-todos.ts:567`, W-1 OpenAPI `:2961-2963`, W-4 `docs/architektur.md:334-344` gegen `:105-111`; (6) H-2 `input.ts:57,58` Steuer- und Bidi-Zeichen in Namen abweisen, H-3 `details` mit Obergrenze, H-4 `migration-runner.ts:274` `legacy_alter_table` ins `finally`. Zeilennummern aus R-1a/R-2a/R-3a, Stand `aca53df` | domain-dev |
+| T-102 | Oberfläche und Hülle: (1) E-060 Punkt 4 — Toast nach „Erledigt" und „Wieder offen" trägt den Bewegungssatz aus `poolMovement` (`'past'`, Zeile weg bei `null`); Vertrag: beide Routen antworten mit `poolMovement: PoolMovement \| null`; (2) O-R — `StopTimerResult` in `types.ts:614` für `orphaned/resolve` um `orphan_discarded` erweitern, Toast-Text je Grund; (3) W-5 Stopp-/Orphan-Toast mit Todo-Namen im Titel („Zeit gebucht auf „X“.") statt „Es" ohne Bezug; (4) W-6 `BoardScreen.tsx:419-423` beide Knöpfe schließen den Dialog, Undo-Toast nicht außerhalb `aria-modal`; (5) W-7 Hilfssatz an `RuleSummary` bei `exported`; (6) R-1a (4) `labels.ts:86/239` Aufzählungen aus der Domäne importieren, (5) `verify-node-checksums.mjs:91` Untergrenze sechs, (6) `router.ts:134` `navigate()` löst den Wiederbesuch bei gleichem Ziel selbst aus, (7) `useDataFreshness.ts:73` `bump()` ohne Platzhalter; (7) H-5 `router.ts:93,106`/`useRoute.ts:75` `decodeURIComponent` mit Netz, H-6 Mindestabstand bei `visibilitychange`; (8) Ordner-Löschdialog wechselt nach Absage Titel/Knopf wie `StatusSettings` (T-097 Frage 1), `RefreshHint` auf die übrigen Ansichten (Frage 3). Zeilennummern Stand `aca53df` | frontend-dev |
+| T-103 | End-to-End-Pflege: (1) `pnpm run typecheck:e2e` auf 0 bringen — `support/services.ts:160`, `web-build-services.ts:170`, `global-setup-outlook-build.ts:90` (`ChildProcessByStdio<null, …>` gegen `ChildProcessWithoutNullStreams`), `tag-input.spec.ts:78` (Rückgabetyp `ReturnType<typeof expect>` statt `Promise<void>`); (2) H-7 `tag-folder-rule-lock.spec.ts` `new RegExp` aus Namen — maskieren oder ohne RegExp; (3) Testfälle für E-060 (Toast nach „Erledigt"/„Wieder offen" mit Bewegungssatz) und O-R (`orphan_discarded`) **vorbereiten**, laufen erst, wenn T-101/T-102 stehen — als `test.skip` mit Verweis nicht einchecken, sondern im Bericht als Entwurf; (4) `docs/testplan.md` | e2e-tester |
+
+Danach: integration-dev (E-061 Punkt 3, Add-in-Routen auf `poolMovement`; Welle F), unit-tester
+und e2e-tester Nachzieher, Reviewer-Wiedervorlage, zuletzt documenter.
+
 
 
 **Beim Auftraggeber:** `docs/spec.md` — Drag & Drop in Zeilen 84, 257, 306 seit E-054 aufgehoben;
@@ -211,10 +229,10 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 | ~~O-I~~ | erledigt mit T-089/T-093. Restfrage: `resolveRule`/`resolveExcluded` zugunsten von `resolveAxes` streichen? Kommentar an `packages/storage/src/ports.ts` begründete `resolveRule`/`resolveExcluded` mit einem Aufrufer in `routes/addin`, den es seit T-086 nicht mehr gibt; einziger Nutzer in `src` ist der Adapter, dazu `repo-tags.test.ts`. Entweder Kommentar richtigstellen oder beide zugunsten von `resolveAxes` streichen | domain-dev |
 | O-J | `resolved` trägt drei Wahrheitswerte (`isEmpty`, `unresolvedRequired`, `matchesNothing`); frontend-dev schlägt einen benannten Grund `matchesNothingReason: 'none' \| 'empty' \| 'unresolved-required'` vor, damit ein dritter Grund die Oberfläche rot statt still macht | domain-dev |
 | O-K | Das Add-in kann nicht sagen, *warum* ein Pool im Aufgabenbereich fehlt (bekommt nur Namen). Produktfrage: reicht das? | Auftraggeber |
-| O-S | Das Zustandspaar „Wirkung einer Buchung" (`completedAt: null`, `hasOpenEntries: true`) wird an vier Stellen gebildet (Add-in zweimal, `timer/start`, `timer/stop`+`orphaned/resolve`). Vorschlag T-092: `bookingMovementStates(todo, entries)` in `usecases/pool-movement.ts` | domain-dev |
-| O-T | Add-in-Routen liefern `poolNames`/`enteringPoolNames`/`leavingPoolNames`, Timer-Routen `poolMovement: {appears, enters, leaves}`. Eine Form, zwei Hoheiten plus OpenAPI | Orchestrator |
-| O-U | `PUT`/`DELETE /todos/{todoId}/done` liefern kein `poolMovement`; der Board-Toast nach „Erledigt" schweigt deshalb über Spalten. Begründung aus E-058 Punkt 6 gilt wörtlich — dritter Anlass oder Wiederverwendung von `'booking'` (Bewegung ohne „wieder")? | domain-dev |
-| O-R | `POST /timer/orphaned/resolve` verspricht `reason: [timer_too_short, orphan_discarded]`, der Dienst liefert ausnahmslos `timer_too_short` (T-093). Entweder unterscheiden oder Aufzählung kürzen | domain-dev |
+| O-S | **E-061, T-101.** Das Zustandspaar „Wirkung einer Buchung" (`completedAt: null`, `hasOpenEntries: true`) wird an vier Stellen gebildet (Add-in zweimal, `timer/start`, `timer/stop`+`orphaned/resolve`). Vorschlag T-092: `bookingMovementStates(todo, entries)` in `usecases/pool-movement.ts` | domain-dev |
+| O-T | **E-061 Punkt 3, Welle F (integration-dev).** Add-in-Routen liefern `poolNames`/`enteringPoolNames`/`leavingPoolNames`, Timer-Routen `poolMovement: {appears, enters, leaves}`. Eine Form, zwei Hoheiten plus OpenAPI | Orchestrator |
+| O-U | **E-060, T-101/T-102.** `PUT`/`DELETE /todos/{todoId}/done` liefern kein `poolMovement`; der Board-Toast nach „Erledigt" schweigt deshalb über Spalten. Begründung aus E-058 Punkt 6 gilt wörtlich — dritter Anlass oder Wiederverwendung von `'booking'` (Bewegung ohne „wieder")? | domain-dev |
+| O-R | **T-101 (unterscheiden).** `POST /timer/orphaned/resolve` verspricht `reason: [timer_too_short, orphan_discarded]`, der Dienst liefert ausnahmslos `timer_too_short` (T-093). Entweder unterscheiden oder Aufzählung kürzen | domain-dev |
 | O-L | `scripts/**/*.mjs` (Nachweispfade, Attrappen) sieht kein Übersetzer; ein `matchesPool`-Aufruf ohne Pflichtfeld bleibt dort still. Option: `checkJs` mit JSDoc-Typen für die Skripte | Orchestrator |
 
 ## Blockiert — braucht eine Umgebung, die hier nicht steht
