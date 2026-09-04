@@ -47,7 +47,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NODE_VERSION } from './sidecar-runtime.mjs';
@@ -166,6 +166,14 @@ process.stdout.write(
     `Quelle prüft wie der unter Linux — und nicht gegen einen Tippfehler.\n`,
 );
 
+/**
+ * Der Ort der Tabelle, kurz genannt.
+ *
+ * Über `relative` und nicht über `slice(repoRoot.length + 1)` (T-098): Ein Pfad
+ * ist keine Zeichenkette, an der man rechnet. Die Längenrechnung schneidet ein
+ * Zeichen zu viel ab, sobald `repoRoot` auf einen Trenner endet — unter Windows
+ * die Wurzel eines Laufwerks (`D:\`) —, und sie tut es still.
+ */
 function relativeHint() {
-  return `Die Tabelle steht in ${runtimeFile.slice(repoRoot.length + 1)}.`;
+  return `Die Tabelle steht in ${relative(repoRoot, runtimeFile)}.`;
 }

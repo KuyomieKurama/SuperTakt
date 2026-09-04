@@ -315,6 +315,10 @@ if (!existsSync(archivePath)) {
   );
 }
 
+// Der oberste Ordner **im Archiv**, nicht im Dateisystem: tar und ZIP trennen
+// mit dem Schrägstrich, auf jeder Plattform. `split('/')` ist hier deshalb
+// richtig, und `sep` wäre falsch (T-098). Auch `licenseMember` geht als
+// Archivmitglied an `tar` und wird erst unten von `join` zu einem Pfad.
 const prefix = archive.member.split('/')[0];
 const licenseMember = `${prefix}/LICENSE`;
 const scratch = join(runtimeCacheDir, '.lizenz');

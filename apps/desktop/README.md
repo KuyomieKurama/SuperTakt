@@ -77,6 +77,16 @@ Drei Dinge daran sind nicht beliebig:
    esbuild und bricht ab, wenn etwas anderes als `node:*` extern geblieben ist.
    Das ist R-04.
 
+   Dieselbe Stelle zählt danach, wie viele Dateien je Arbeitsbereichspaket
+   tatsächlich im Bündel stecken. Verglichen wird über `isInside` aus
+   `scripts/paths.mjs`, also über `path.relative` — **nicht** über
+   `startsWith(ordner + '/')`. Unter Windows traf dieser Vergleich nie, weil
+   `join` dort Rückstriche liefert: Der erste Auslieferungslauf zählte für alle
+   drei Pakete null und brach mit „Der lokale Dienst selbst ist nicht im
+   Bündel" ab, obwohl das Bündel in Ordnung war (T-098). `isInside` nimmt das
+   Pfadmodul als Parameter, damit `path.win32` sich auch von einem Linux-Rechner
+   aus prüfen lässt.
+
 2. **Die Laufzeit kommt mit und wird geprüft.** Die Node-Binärdatei wird von
    nodejs.org geladen und gegen eine Prüfsumme geprüft, die in
    `scripts/sidecar-runtime.mjs` **im Repository** steht. Grund dafür sind zwei
