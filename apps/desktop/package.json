@@ -13,10 +13,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "sidecar": "node scripts/build-sidecar.mjs",
     "sidecar:verify": "node scripts/verify-sidecar.mjs",
+    "sidecar:checksums": "node scripts/verify-node-checksums.mjs",
     "taskpane": "node scripts/build-taskpane.mjs",
     "taskpane:dev": "node scripts/build-taskpane.mjs --dev",
+    "licenses": "node scripts/collect-licenses.mjs",
+    "release:collect": "node scripts/collect-release.mjs",
     "app:dev": "node scripts/build-sidecar.mjs && node scripts/verify-sidecar.mjs && node scripts/build-taskpane.mjs --dev && tauri dev",
-    "app:build": "node scripts/build-sidecar.mjs && node scripts/verify-sidecar.mjs && node scripts/build-taskpane.mjs && node scripts/build-app.mjs",
+    "app:build": "node scripts/build-sidecar.mjs && node scripts/verify-sidecar.mjs && node scripts/build-taskpane.mjs && node scripts/collect-licenses.mjs && node scripts/build-app.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

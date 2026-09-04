@@ -119,7 +119,7 @@ jobs:
         name: Fassung aus Etikett oder Eingabe ableiten
         shell: bash
         env:
-          # Die Eingabe kommt über die Umgebung und nicht über `${{ }}` mittenł
+          # Die Eingabe kommt über die Umgebung und nicht über `${{ }}` mitten
           # in die Zeile: Sonst stünde ein vom Benutzer gewählter Text als
           # Befehl in der Shell.
           INPUT_VERSION: ${{ inputs.version }}

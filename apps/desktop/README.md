@@ -14,17 +14,24 @@ Fachlogik.** Sie lebt in TypeScript unter `packages/domain` und `apps/local-api`
 | `pnpm verify:bundle` | Baut die Sidecar-Binärdatei und führt den Nachweis gegen sie aus (Wurzel). |
 | `pnpm --filter @takt/desktop sidecar` | Baut nur die Sidecar-Binärdatei. |
 | `pnpm --filter @takt/desktop sidecar:verify` | Startet die gebaute Binärdatei und prüft sie. |
+| `pnpm --filter @takt/desktop sidecar:checksums` | Hält die sechs Node-Prüfsummen gegen nodejs.org (T-075). |
 | `pnpm --filter @takt/desktop taskpane` | Baut das Add-in und legt sein Bündel für `tauri build` bereit. |
 | `pnpm --filter @takt/desktop taskpane:dev` | Dasselbe für `tauri dev`, neben die Binärdatei im Bauordner. |
+| `pnpm --filter @takt/desktop licenses` | Erzeugt die Lizenzbeilage für das Paket (T-075). |
+| `pnpm --filter @takt/desktop release:collect` | Sammelt die gebauten Installationsdateien mit Prüfsummen ein. |
 | `cd apps/desktop/src-tauri && cargo test` | Die Rust-Tests der Hülle. |
 
-Beide Anwendungsbefehle sind seit T-054 vollständige Ketten:
+Beide Anwendungsbefehle sind seit T-054 vollständige Ketten, seit T-075 mit
+einem Glied mehr:
 
 ```
-build-sidecar.mjs   →   verify-sidecar.mjs   →   build-taskpane.mjs   →   tauri dev / build-app.mjs
-Binärdatei bauen        sie ausführen und        Aufgabenbereich          starten oder paketieren
-                        zwanzigmal befragen      danebenlegen
+build-sidecar.mjs → verify-sidecar.mjs → build-taskpane.mjs → collect-licenses.mjs → tauri dev / build-app.mjs
+Binärdatei bauen    sie ausführen und    Aufgabenbereich       Lizenztexte der        starten oder
+                    zwanzigmal befragen  danebenlegen          Fremdbestandteile      paketieren
 ```
+
+(`collect-licenses.mjs` läuft nur in `app:build`; im Entwicklungsbetrieb wird
+nichts weitergegeben.)
 
 Der Nachweis in der Mitte ist der eigentliche Befund aus T-053: Es gab ihn
 vorher, er stand nur in `app:build` und damit in keiner Kette, die jemand im
@@ -69,6 +76,16 @@ Drei Dinge daran sind nicht beliebig:
    mitübersetzen. `scripts/build-sidecar.mjs` liest das Metadatenblatt von
    esbuild und bricht ab, wenn etwas anderes als `node:*` extern geblieben ist.
    Das ist R-04.
+
+   Dieselbe Stelle zählt danach, wie viele Dateien je Arbeitsbereichspaket
+   tatsächlich im Bündel stecken. Verglichen wird über `isInside` aus
+   `scripts/paths.mjs`, also über `path.relative` — **nicht** über
+   `startsWith(ordner + '/')`. Unter Windows traf dieser Vergleich nie, weil
+   `join` dort Rückstriche liefert: Der erste Auslieferungslauf zählte für alle
+   drei Pakete null und brach mit „Der lokale Dienst selbst ist nicht im
+   Bündel" ab, obwohl das Bündel in Ordnung war (T-098). `isInside` nimmt das
+   Pfadmodul als Parameter, damit `path.win32` sich auch von einem Linux-Rechner
+   aus prüfen lässt.
 
 2. **Die Laufzeit kommt mit und wird geprüft.** Die Node-Binärdatei wird von
    nodejs.org geladen und gegen eine Prüfsumme geprüft, die in
@@ -228,3 +245,54 @@ dafür ist die Übersetzungskennzeichnung `config-json5` auf `tauri` und
 `tauri-build` gesetzt, denn reines JSON kennt keine Kommentare. Wer den
 Schalter doch umlegt, muss die Herkunft in `apps/local-api/src/config.ts`
 bewusst wieder aufnehmen und die CSP anpassen.
+
+## Auslieferung (T-075)
+
+Der Ablauf steht in `.github/workflows/release.yml` und heißt „Auslieferung".
+Er löst über ein Etikett aus:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Was dann passiert, in dieser Reihenfolge:
+
+1. **Fassung bestimmen** — `v0.1.0` wird zu `0.1.0`. Ein Etikett, das nicht
+   `X.Y.Z` oder `X.Y.Z-vorab` ist, hält den Ablauf hier an, zehn Minuten vor
+   dem ersten Bau.
+2. **Prüfen** — `pnpm check`, `pnpm verify:bundle` und der Abgleich der
+   Node-Prüfsummen gegen nodejs.org. Eine Auslieferung aus einem roten Baum ist
+   schlimmer als keine.
+3. **Bauen** — drei Läufer, `ubuntu-24.04`, `windows-2022`, `macos-15`. Jeder
+   fährt `pnpm desktop:build` mit gesetzter `TAKT_RELEASE_VERSION` und sammelt
+   seine Erzeugnisse ein.
+4. **Veröffentlichen** — **nur wenn alle drei fertig werden.** Der Text der
+   Fassungsbeschreibung ist der Vorspann aus `.github/release-preamble.md`, die
+   Prüfsummen und darunter „What's Changed", das GitHub aus den Commits seit dem
+   letzten Etikett erzeugt.
+
+Ein Probelauf ohne Veröffentlichung geht über „Run workflow" in der
+Oberfläche von GitHub Actions; er verlangt eine Fassungsangabe und baut alles,
+legt aber keine Fassung an.
+
+### Drei Dinge, die man dazu wissen muss
+
+**Die Fassung kommt aus dem Etikett, nicht aus `tauri.conf.json`.** Dort steht
+`0.0.0`, und das bleibt so: In der Datei stehen Kommentare, an denen E-043
+hängt, und ein Werkzeug, das sie neu schreibt, wirft sie weg. `build-app.mjs`
+legt Tauri stattdessen über `--config` eine zweite Datei mit der Fassung unter.
+Ohne `TAKT_RELEASE_VERSION` baut alles wie bisher mit `0.0.0`.
+
+**Die Erzeugnisse sind unsigniert.** Windows zeigt SmartScreen, macOS
+verweigert den Start ohne Umweg über die Systemeinstellungen. Ein Zertifikat
+kostet Geld und einen Antrag — das ist eine Entscheidung des Auftraggebers. Der
+Vorspann der Fassungsbeschreibung sagt es jedem, der eine Datei lädt, mit dem
+Weg drumherum.
+
+**Die Lizenzbeilage entsteht bei jedem Bau neu.** `collect-licenses.mjs` liest
+den Abhängigkeitsgraphen von Cargo und pnpm und den Lizenztext von Node aus
+demselben Archiv, aus dem die Laufzeit stammt. Sie ist eine **Obermenge** —
+warum, steht im Kopf der erzeugten Datei und im Kopf des Skripts. Ohne sie
+bricht `build-app.mjs` ab: Ein Paket, das ohne die Lizenztexte weitergegeben
+wird, sieht vollständig aus.

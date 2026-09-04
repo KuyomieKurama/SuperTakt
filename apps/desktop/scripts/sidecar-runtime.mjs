@@ -45,11 +45,34 @@ export const NODE_VERSION = '22.23.2';
  * SHA-256 der offiziellen Archive, abgeschrieben aus
  * `https://nodejs.org/dist/v22.23.2/SHASUMS256.txt`.
  *
+ * Öffentlich seit T-075, weil zwei Läufe außerhalb dieser Datei sie brauchen:
+ * `verify-node-checksums.mjs` hält die Prüfsummen gegen nodejs.org, und
+ * `collect-licenses.mjs` holt den Lizenztext von Node aus demselben Archiv, aus
+ * dem die Laufzeit stammt. Beide sollen die Tabelle **lesen** und keine zweite
+ * anlegen — eine zweite Liste wäre die nächste, die auseinanderdriftet.
+ *
  * Wer die Fassung erhöht, ersetzt **alle** Einträge und schreibt in den
  * Änderungshinweis, woher sie stammen. Ein einzelner nachgezogener Eintrag ist
  * genau der Fall, in dem später niemand mehr weiß, welche Zeile geprüft wurde.
+ *
+ * ## Nachprüfbar, nicht nur behauptet (T-075)
+ *
+ * Bis zum ersten Bau unter Windows oder macOS hat niemand fünf dieser sechs
+ * Zeilen je gegen etwas gehalten — ein Tippfehler darin sähe dort aus wie ein
+ * Angriff. Deshalb gibt es einen Lauf, der sie alle gegen die offizielle Datei
+ * hält, und zwar zu einem Zeitpunkt, den ein Mensch selbst wählt:
+ *
+ *     pnpm --filter @takt/desktop sidecar:checksums
+ *
+ * Er lädt `SHASUMS256.txt` der oben eingetragenen Fassung und vergleicht Zeile
+ * für Zeile. Er lädt keine Archive und ändert nichts. Zuletzt vollständig grün
+ * am 2026-09-03, alle sechs Einträge.
+ *
+ * Was er **nicht** prüft, steht in `scripts/verify-node-checksums.mjs`: die
+ * GPG-Signatur von `SHASUMS256.txt`. Die geht von Hand, und der Weg ist dort
+ * aufgeschrieben.
  */
-const ARCHIVES = Object.freeze({
+export const ARCHIVES = Object.freeze({
   'x86_64-unknown-linux-gnu': {
     file: `node-v${NODE_VERSION}-linux-x64.tar.xz`,
     sha256: 'd60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307',
@@ -89,6 +112,35 @@ const ARCHIVES = Object.freeze({
 });
 
 export class RuntimeError extends Error {}
+
+/**
+ * Welches `tar` gemeint ist — und warum das unter Windows eine Frage ist
+ * (T-075).
+ *
+ * Das Windows-Archiv ist ein **ZIP**. Lesen kann das nur `bsdtar`, und genau
+ * das liefert Windows seit 10/1803 unter
+ * `%SystemRoot%\System32\tar.exe` mit. Das GNU-`tar`, das Git für Windows unter
+ * `usr\bin` mitbringt, kann es **nicht**: Es meldet
+ * „This does not look like a tar archive" und bricht ab.
+ *
+ * Welches von beiden ein blankes `tar` trifft, hängt an der Reihenfolge in
+ * `PATH` — auf einem Läufer von GitHub steht Gits `usr\bin` mit drin. Damit
+ * wäre der Windows-Bau von einer Reihenfolge abhängig, die niemand hier setzt
+ * und die sich mit dem nächsten Läuferbild ändern kann.
+ *
+ * Deshalb wird der Pfad unter Windows ausgeschrieben. Fehlt die Datei wider
+ * Erwarten, fällt der Aufruf auf `tar` aus dem Pfad zurück — dann ist die
+ * Fehlermeldung von dort immer noch besser als eine über eine nicht gefundene
+ * Datei.
+ */
+export function tarBinary() {
+  if (process.platform !== 'win32') {
+    return 'tar';
+  }
+  const systemRoot = process.env['SystemRoot'] ?? process.env['SYSTEMROOT'] ?? 'C:\\Windows';
+  const bsdtar = join(systemRoot, 'System32', 'tar.exe');
+  return existsSync(bsdtar) ? bsdtar : 'tar';
+}
 
 /**
  * Legt die Laufzeit für ein Ziel-Tripel bereit und gibt den Pfad zurück.
@@ -141,13 +193,19 @@ export async function ensureRuntime(triple, cacheDir, log) {
     log(`      entpacke ${archive.member}`);
     // `tar` liegt auf allen drei Plattformen vor: unter Windows seit 10/1803
     // als bsdtar, das auch ZIP liest. Ein eigener Entpacker wäre mehr Code als
-    // Nutzen.
-    const extract = spawnSync('tar', ['-xf', archivePath, '-C', cacheDir, archive.member], {
+    // Nutzen. Welches `tar` unter Windows gemeint ist, entscheidet `tarBinary`
+    // — dort steht auch, warum das keine Kleinigkeit ist.
+    const extract = spawnSync(tarBinary(), ['-xf', archivePath, '-C', cacheDir, archive.member], {
       encoding: 'utf8',
     });
     if (extract.status !== 0) {
       throw new RuntimeError(`Entpacken ist fehlgeschlagen:\n${extract.stderr || extract.stdout}`);
     }
+    // `archive.member` ist ein **Archivmitglied** und kein Pfad des
+    // Betriebssystems: In tar wie in ZIP trennt dort immer der Schrägstrich,
+    // auch im Windows-Archiv. Deshalb ist `split('/')` hier richtig und
+    // `sep` wäre falsch (T-098). Erst `join` macht daraus einen Pfad — und
+    // normalisiert die Trenner dabei selbst.
     renameSync(join(cacheDir, archive.member), runtimePath);
     rmSync(join(cacheDir, archive.member.split('/')[0]), { recursive: true, force: true });
   }

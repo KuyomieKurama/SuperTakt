@@ -57,6 +57,7 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
+import { isInside } from './paths.mjs';
 import { NODE_VERSION, RuntimeError, ensureRuntime } from './sidecar-runtime.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -243,12 +244,24 @@ if (stray.length > 0) {
  * tatsächlich mit im Bündel, sobald der Dienst sie benutzt?
  *
  * Die erste Prüfung fängt „extern geblieben". Sie fängt **nicht** den Fall,
- * dass ein Paket nur Typen liefert und zur Laufzeit ganz verschwindet — das
- * ist heute bei `@takt/storage` so und in Ordnung. Deshalb wird hier nur
- * berichtet, nicht abgebrochen.
+ * dass ein Paket nur Typen liefert und zur Laufzeit ganz verschwindet. Das
+ * wäre kein Fehler, sondern eine Aussage über den Zuschnitt der Pakete —
+ * deshalb wird hier nur berichtet und nur für `@takt/local-api` abgebrochen.
+ *
+ * Gemessen unter Linux am 2026-09-04: `@takt/local-api` 40, `@takt/domain` 9,
+ * `@takt/storage` 19 Dateien. Alle drei sind also im Bündel. Steht hier eine
+ * Null, ist das ab jetzt eine Aussage über den Quelltext und nicht mehr über
+ * das Trennzeichen der Plattform (T-098).
  */
-// esbuild meldet Eingabepfade **relativ zum Arbeitsverzeichnis**. Erst absolut
-// gemacht lassen sie sich gegen die Ordner des Arbeitsbereichs prüfen.
+// esbuild meldet Eingabepfade **relativ zum Arbeitsverzeichnis** und immer mit
+// Schrägstrichen. Erst absolut gemacht lassen sie sich gegen die Ordner des
+// Arbeitsbereichs prüfen.
+//
+// Verglichen wird über `isInside` und nicht über `startsWith(folder + '/')`
+// (T-098): Unter Windows trägt `folder` Rückstriche, und der Vergleich gegen
+// einen Schrägstrich traf dort nie. Der Windows-Lauf des Auslieferungsablaufs
+// zählte deshalb für alle drei Pakete null Dateien und brach unten mit „Der
+// lokale Dienst selbst ist nicht im Bündel" ab, obwohl das Bündel stimmte.
 const inputs = Object.keys(result.metafile.inputs).map((input) => resolve(process.cwd(), input));
 const workspaceHits = new Map();
 for (const [name, folder] of [
@@ -256,7 +269,7 @@ for (const [name, folder] of [
   ['@takt/domain', join(repoRoot, 'packages', 'domain')],
   ['@takt/storage', join(repoRoot, 'packages', 'storage')],
 ]) {
-  workspaceHits.set(name, inputs.filter((input) => input.startsWith(`${folder}/`)).length);
+  workspaceHits.set(name, inputs.filter((input) => isInside(folder, input)).length);
 }
 for (const [name, count] of workspaceHits) {
   const mark = count > 0 ? 'im Bündel' : 'zur Laufzeit nicht benutzt (heute nur Typen)';
@@ -336,16 +349,94 @@ rmSync(outFile, { force: true });
 copyFileSync(runtime, outFile);
 chmodSync(outFile, 0o755);
 
+/**
+ * Der Einbau ist **nicht** auf allen drei Plattformen derselbe Aufruf (T-075).
+ *
+ * Das Ablageformat unterscheidet sich, und postject braucht das gesagt:
+ *
+ *   ELF   (Linux)    eine Notiz namens `NODE_SEA_BLOB`
+ *   PE    (Windows)  eine Ressource namens `NODE_SEA_BLOB`
+ *   Mach-O (macOS)   ein Abschnitt `NODE_SEA_BLOB` **im Segment `NODE_SEA`**
+ *
+ * Nur der letzte Fall braucht einen zusätzlichen Schalter. Fehlt er, legt
+ * postject den Abschnitt in ein Segment, in dem die Laufzeit ihn nicht sucht:
+ * Die Datei entsteht, sie startet, und sie führt das eingebaute Bündel nicht
+ * aus — sie verhält sich wie ein blankes `node` ohne Argumente. Das ist genau
+ * die Sorte Fehlschlag, die T-053 gekostet hat, nur eine Plattform weiter.
+ *
+ * Der Name des Segments ist vorgegeben und kein Wahlwert; er steht so in der
+ * Beschreibung des SEA-Verfahrens von Node.
+ */
+const MACHO_SEGMENT = 'NODE_SEA';
+const isMac = triple.includes('-apple-darwin');
+
+/**
+ * macOS unterschreibt jede ausführbare Datei, und auf Apple Silicon ist das
+ * keine Formalie: Ohne gültige Signatur beendet der Kernel den Prozess sofort
+ * mit SIGKILL. Die offizielle Node-Binärdatei bringt eine Signatur mit — und
+ * der Einbau des Blobs macht sie ungültig, weil er die Datei verändert.
+ *
+ * Deshalb zwei Schritte um den Einbau herum:
+ *
+ *   vorher   `codesign --remove-signature`  — sonst weigert sich das Werkzeug
+ *                                             oder erzeugt eine kaputte Datei
+ *   nachher  `codesign --sign -`            — eine Ad-hoc-Signatur, die genügt,
+ *                                             damit die Datei überhaupt läuft
+ *
+ * Eine Ad-hoc-Signatur (`-`) ist **kein** Entwicklerzertifikat. Sie macht die
+ * Datei ausführbar, sie macht sie nicht vertrauenswürdig: Gatekeeper hält die
+ * Anwendung beim ersten Start trotzdem an, weil sie nicht notariell beglaubigt
+ * ist. Das ist eine bewusste Grenze und gehört in die Release-Beschreibung, wo
+ * sie auch steht — nicht hierhin, wo sie niemand liest.
+ */
+function codesign(args, what) {
+  const result = spawnSync('codesign', args, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  if (result.error !== undefined) {
+    fail(
+      `\`codesign\` ist nicht aufrufbar (${what}): ${String(result.error.message)}\n` +
+        `Unter macOS gehört es zu den Befehlszeilenwerkzeugen von Xcode. Ohne\n` +
+        `Signatur beendet der Kernel die Binärdatei auf Apple Silicon sofort.`,
+    );
+  }
+  return result;
+}
+
+if (isMac) {
+  // Fehlt gar keine Signatur, meldet `--remove-signature` das und tut nichts.
+  // Das ist kein Fehler, deshalb wird der Rückgabewert hier nicht bewertet.
+  codesign(['--remove-signature', outFile], 'Signatur entfernen');
+}
+
 const require_ = createRequire(import.meta.url);
 const postjectCli = require_.resolve('postject/dist/cli.js');
 
 const inject = spawnSync(
   process.execPath,
-  [postjectCli, outFile, 'NODE_SEA_BLOB', blobFile, '--sentinel-fuse', SEA_FUSE],
+  [
+    postjectCli,
+    outFile,
+    'NODE_SEA_BLOB',
+    blobFile,
+    '--sentinel-fuse',
+    SEA_FUSE,
+    ...(isMac ? ['--macho-segment-name', MACHO_SEGMENT] : []),
+  ],
   { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' },
 );
 if (inject.status !== 0) {
   fail(`postject ist fehlgeschlagen:\n${inject.stderr || inject.stdout}`);
+}
+
+if (isMac) {
+  const signed = codesign(['--sign', '-', outFile], 'ad-hoc unterschreiben');
+  if (signed.status !== 0) {
+    fail(
+      `\`codesign --sign -\` ist fehlgeschlagen:\n${signed.stderr || signed.stdout}\n\n` +
+        `Ohne Signatur ist die Binärdatei auf Apple Silicon nicht startbar; der\n` +
+        `Kernel beendet sie vor der ersten Zeile. Ein Bau, der hier weiterliefe,\n` +
+        `lieferte ein Paket aus, das beim Öffnen nichts tut.`,
+    );
+  }
 }
 
 if (!existsSync(outFile)) {
