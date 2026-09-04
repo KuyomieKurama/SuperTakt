@@ -204,6 +204,26 @@ Port 17843 — warten, keine fremden Prozesse beenden.
 Danach: integration-dev (E-061 Punkt 3, Add-in-Routen auf `poolMovement`; Welle F), unit-tester
 und e2e-tester Nachzieher, Reviewer-Wiedervorlage, zuletzt documenter.
 
+### Auslieferung v0.1.0 — 2026-09-04
+
+Commit `1053346` auf `versionspruefung-gegen-github`, 99 Dateien, +13 428/-250. Gemessen vor dem
+Etikett: `pnpm check` Exitcode 0 und `pnpm test:e2e` 62/62 — der Auftraggeber hatte Takt beendet,
+damit standen 17843 und 17844 zur Verfügung (O-O).
+
+Etikett `v0.1.0` geschoben; damit läuft `.github/workflows/release.yml`: erst `pnpm check` und
+`verify:bundle`, dann drei Läufer je ein Installationsstück, und **nur wenn alle drei fertig
+werden**, entsteht eine Fassung auf GitHub.
+
+Zwei Dinge, die genannt gehören:
+
+* **Das Etikett hängt am Zweig, nicht an `main`.** `gh` ist auf diesem Rechner nicht installiert,
+  der Pull Request wird von Hand angelegt. Das Erzeugnis kommt aus genau diesem Commit; nach dem
+  Zusammenführen zeigt `main` auf denselben Baum.
+* **Das Qualitätstor steht noch aus.** Welle S: code-reviewer, spec-ux-reviewer, security-checker
+  mit der Wiedervorlage von `bedrohungsmodell.md` 18.9, dazu T-142 und zuletzt der Dokumentierer.
+  Eine Auslieferung vor dem Tor ist eine Entscheidung des Auftraggebers und keine des Ablaufs —
+  `0.1.0` sagt genau das aus.
+
 ### Welle vom 2026-09-04, Welle R (Prüffälle zur Versionsprüfung) — läuft
 
 | Nr | Aufgabe | Wer |
