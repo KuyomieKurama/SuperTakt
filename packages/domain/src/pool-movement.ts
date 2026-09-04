@@ -108,14 +108,29 @@ export type PoolMovementTense = 'future' | 'past';
  *                 „wieder". Beides ist hier richtig: In keinem dieser Pools war
  *                 das Todo zu sehen, solange es erledigt war, und die Aufhebung
  *                 ist eine Rückkehr.
- *   `'booking'` — **es war nicht erledigt, und trotzdem bewegt sich etwas.**
- *                 Die erste abgeschlossene Buchung setzt „hat offene
- *                 Buchungen", und jede Spalte, die nach noch nicht
- *                 abgerechneter Zeit fragt (`exportState: 'open'`), nimmt das
- *                 Todo damit auf. Hier wäre „wieder" eine erfundene
- *                 Vorgeschichte, und eine Aufzählung von `appears` wäre lauter
- *                 Unverändertes, in dem die eine Änderung untergeht. Der Satz
- *                 nennt deshalb `enters` und `leaves` — und nur sie.
+ *   `'booking'` — **jede Bewegung, die keine Rückkehr ist.** Hier wäre „wieder"
+ *                 eine erfundene Vorgeschichte, und eine Aufzählung von
+ *                 `appears` wäre lauter Unverändertes, in dem die eine Änderung
+ *                 untergeht. Der Satz nennt deshalb `enters` und `leaves` — und
+ *                 nur sie.
+ *
+ * **Der Name `'booking'` ist enger als das, wofür er steht** (E-060 Punkt 3).
+ * Diese neutrale Form trägt heute zwei Anlässe:
+ *
+ *   1. **Die Buchung.** Die erste abgeschlossene Buchung setzt „hat offene
+ *      Buchungen", und jede Spalte, die nach noch nicht abgerechneter Zeit
+ *      fragt (`exportState: 'open'`), nimmt das Todo damit auf. Das ist der
+ *      Anlaß, der dem Wert seinen Namen gegeben hat (`POST /timer/stop`,
+ *      `POST /timer/orphaned/resolve`, die Buchung aus dem Add-in).
+ *   2. **„Erledigt" von Hand setzen** (`PUT /todos/{todoId}/done`, E-060). Das
+ *      Todo verschwindet aus jeder Spalte mit `completion: 'open'` und
+ *      erscheint in jeder mit `completion: 'done'`. Sein Satz trägt kein Wort
+ *      von Buchung — „Es steht jetzt in „Erledigt“ und ist aus „Offen“
+ *      verschwunden." —, und genau deshalb paßt er.
+ *
+ * Ein dritter Anlaß bekäme denselben Satz unter anderem Namen, und ein
+ * treffenderer Name (`'plain'`) kostete vier Hoheiten. Der Wert bleibt deshalb,
+ * wie er heißt; er bezeichnet die **Form** der Auskunft und nicht die Route.
  */
 export type PoolMovementOccasion = 'reopen' | 'booking';
 

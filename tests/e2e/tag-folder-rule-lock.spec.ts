@@ -124,7 +124,7 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
 
     try {
       await gotoTags(page);
-      const item = page.getByRole('treeitem', { name: new RegExp(lockedFolder.name) });
+      const item = page.getByRole('treeitem', { name: lockedFolder.name });
       await expect(item).toBeVisible();
       await item.click();
       await expect(page.locator('.tags-detail__kind')).toHaveText('Ordner');
@@ -155,7 +155,7 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       // Der Ordner ist tatsächlich noch da — nicht nur der Dialog hat sich
       // beschwert, während im Hintergrund doch gelöscht wurde.
       await gotoTags(page);
-      await expect(page.getByRole('treeitem', { name: new RegExp(lockedFolder.name) })).toBeVisible();
+      await expect(page.getByRole('treeitem', { name: lockedFolder.name })).toBeVisible();
     } finally {
       await deletePool(pool.id).catch(() => undefined);
       await deleteTagFolder(lockedFolder.id).catch(() => undefined);
@@ -174,7 +174,7 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
 
     try {
       await gotoTags(page);
-      const item = page.getByRole('treeitem', { name: new RegExp(lockedTag.name) });
+      const item = page.getByRole('treeitem', { name: lockedTag.name });
       await expect(item).toBeVisible();
       await item.click();
       await expect(page.locator('.tags-detail__kind')).toHaveText('Tag');
@@ -214,7 +214,7 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       await expect(dialog).toBeHidden();
 
       await gotoTags(page);
-      await expect(page.getByRole('treeitem', { name: new RegExp(lockedTag.name) })).toBeVisible();
+      await expect(page.getByRole('treeitem', { name: lockedTag.name })).toBeVisible();
     } finally {
       await deletePoolByName(`E2E-TagSperre-UI-Regel-${run}`).catch(() => undefined);
       await deleteTag(lockedTag.id).catch(() => undefined);

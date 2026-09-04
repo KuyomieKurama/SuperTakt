@@ -53,7 +53,8 @@ import { integer, text, placeholders, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
 import {
-  poolReference,
+  RULE_REFERENCE_PROBE,
+  poolReferences,
   toPool,
   toPoolCompletion,
   toPoolExportState,
@@ -189,10 +190,23 @@ export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
      * A-4.5 — ein Tag, das an Todos oder in einer Pool-Regel hängt, wird nicht
      * gelöscht.
      *
-     * Die Fremdschlüssel stehen auf `ON DELETE CASCADE`: Das Löschen würde
-     * stillschweigend die Zuordnungen mitnehmen und eine Pool-Regel entkernen.
-     * Deshalb wird hier **vorher** gefragt, statt sich auf die Datenbank zu
-     * verlassen. Sie würde in diesem Fall nicht abweisen, sondern gehorchen.
+     * ---------------------------------------------------------------------
+     * Warum hier trotz RESTRICT vorher gefragt wird
+     * ---------------------------------------------------------------------
+     *
+     * Seit Migration 0012 steht `pool_rule.tag_id` auf `ON DELETE RESTRICT`;
+     * die Datenbank weist also selbst ab. Diese Prüfung nimmt ihr nur das Wort
+     * aus dem Mund: „Dieses Tag wird in der Regel eines Pools verwendet." statt
+     * „FOREIGN KEY constraint failed" — und sie kann sagen, **welche** Regel.
+     *
+     * `todo_tag.tag_id` und `default_tag.tag_id` stehen unverändert auf
+     * `ON DELETE CASCADE` (Migration 0001). Dort ist diese Prüfung die
+     * **einzige** Wache: Die Datenbank wiese nicht ab, sondern gehorchte und
+     * nähme die Zuordnungen stillschweigend mit.
+     *
+     * Bis T-101 behauptete der Kommentar an dieser Stelle das Gegenteil der
+     * Lage — er nannte alle drei Fremdschlüssel `CASCADE` und war für den
+     * Regelfall seit Migration 0012 falsch (R-1a Befund 3).
      */
     async remove(id) {
       if (loadOne(id) === null) return err(taktError('not_found', 'Dieses Tag gibt es nicht.'));
@@ -200,21 +214,47 @@ export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
       const usage = conn
         .prepare(
           `SELECT (SELECT COUNT(*) FROM todo_tag  WHERE tag_id = ?) AS todos,
-                  (SELECT COUNT(*) FROM pool_rule WHERE tag_id = ?) AS rules,
                   (SELECT COUNT(*) FROM default_tag WHERE tag_id = ?) AS defaults`,
         )
-        .get(id, id, id);
+        .get(id, id);
 
       if (usage !== undefined && integer(usage, 'todos') > 0) {
         return err(
           taktError('tag_in_use', 'Dieses Tag ist noch an Todos vergeben und wird nicht gelöscht.'),
         );
       }
-      if (usage !== undefined && integer(usage, 'rules') > 0) {
-        return err(
-          taktError('tag_in_use', 'Dieses Tag wird in der Regel eines Pools verwendet.'),
-        );
+
+      /*
+       * Die Regel beim **Namen** (R-1a Befund 1, T-099).
+       *
+       * Ordner und Status nennen die betroffene Regel seit T-089; das Tag tat
+       * es als einziges nicht, und der Löschdialog der Oberfläche stand
+       * deshalb ohne den Satz „Betroffen ist Regel „…"." da — gemessen in
+       * T-099. Die Oberfläche liest `details` bereits (`errorText.ts`); es
+       * fehlte allein die Antwort.
+       *
+       * Dieselbe Abfrage wie beim Ordner, mit `ix_pool_rule_tag` aus Migration
+       * 0011 und der Obergrenze aus {@link RULE_REFERENCE_PROBE}.
+       */
+      const usedIn = conn
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.tag_id = ?
+            ORDER BY p.position, p.name
+            LIMIT ${String(RULE_REFERENCE_PROBE)}`,
+        )
+        .all(id);
+
+      if (usedIn.length > 0) {
+        const { details, notice } = poolReferences(usedIn);
+        return err({
+          code: 'tag_in_use' as const,
+          message: `Dieses Tag wird in der Regel eines Pools verwendet.${notice}`,
+          details,
+        });
       }
+
       if (usage !== undefined && integer(usage, 'defaults') > 0) {
         return err(taktError('tag_in_use', 'Dieses Tag ist ein Standard-Tag.'));
       }
@@ -509,21 +549,24 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
 
       // Die Regel beim Namen: `pool_id` und `name` stehen der Abfrage ohnehin
       // zur Verfügung, und ohne sie ist die Sperre bei zwanzig Regeln eine
-      // Suche. `ix_pool_rule_folder` trägt die Frage (Migration 0011).
+      // Suche. `ix_pool_rule_folder` trägt die Frage (Migration 0011); die
+      // Obergrenze steht an {@link RULE_REFERENCE_PROBE} (R-3a H-3).
       const usedIn = conn
         .prepare(
           `SELECT DISTINCT p.id AS id, p.name AS name
              FROM pool_rule r JOIN pool p ON p.id = r.pool_id
             WHERE r.folder_id = ?
-            ORDER BY p.position, p.name`,
+            ORDER BY p.position, p.name
+            LIMIT ${String(RULE_REFERENCE_PROBE)}`,
         )
         .all(id);
 
       if (usedIn.length > 0) {
+        const { details, notice } = poolReferences(usedIn);
         return err({
           code: 'tag_in_use' as const,
-          message: 'Dieser Ordner wird in der Regel eines Pools verwendet.',
-          details: usedIn.map((row) => poolReference(row)),
+          message: `Dieser Ordner wird in der Regel eines Pools verwendet.${notice}`,
+          details,
         });
       }
 

@@ -733,6 +733,14 @@ Die Datenbank ist dabei die **zweite** Wache. `TagPort.remove`, `TagFolderPort.r
 `field`, Name in `message`). RESTRICT nimmt der Datenbank nur die Möglichkeit, still zu gehorchen,
 falls eines Tages jemand an der Prüfung vorbeischreibt.
 
+`TagPort.remove` nennt die Regeln seit T-101; bis dahin zählte er sie nur, und der Löschdialog der
+Oberfläche blieb ausgerechnet beim Tag ohne den Satz „Betroffen ist Regel „…"." (R-1a Befund 1,
+gemessen in T-099). Alle drei Abfragen tragen seitdem eine **Obergrenze**: Sie holen 21 Zeilen,
+nennen höchstens 20 und sagen im Meldungstext, wenn es mehr sind (`RULE_REFERENCE_LIMIT` in
+`sqlite/mappers.ts`, R-3a H-3). Ohne Grenze stünde bei 200 Zeichen je Name der ganze Bestand in
+einem Satz; mit stiller Grenze nähme der Benutzer zwanzig Regeln heraus und fände die Sperre
+unverändert vor.
+
 **Einen ausgeschlossenen Status gibt es nicht.** Er wäre eine vierte Rolle für eine Bedingung, die
 sich ohne sie ausdrücken lässt: Wer „alles außer Erledigt" meint, wählt die übrigen Status. Bei
 Tags ist das anders — dort sind es Tausende, und „alle außer diesem einen" ließe sich nicht
@@ -1634,6 +1642,15 @@ des Läufers eingespielt wird — von den Prüfpfaden, die das Schema selbst unt
 Bei einer Ausnahme: `ROLLBACK`. **SQLite führt auch DDL transaktional aus**, anders als etwa
 MySQL — geprüft: ein `CREATE TABLE` innerhalb einer zurückgerollten Transaktion hinterlässt
 nichts. Eine mittendrin abgebrochene Migration lässt also kein halb angelegtes Schema zurück.
+
+**Pragmas rollt `ROLLBACK` allerdings nicht zurück.** Ein Pragma ist eine Einstellung der
+Verbindung und nicht Teil der Transaktion. Der Läufer stellt deshalb seit T-101 **beide** Schalter
+in einem `finally` wieder her: `foreign_keys` (schon vorher) und `legacy_alter_table` (R-3a H-4).
+Den zweiten setzen sechs Migrationsdateien selbst — sie brauchen ihn, damit ein `RENAME` die
+`REFERENCES`-Klauseln der Nachbartabellen **nicht** nachzieht — und schalten ihn in ihrer letzten
+Zeile zurück. Wirft eine Migration davor, wird diese Zeile nie erreicht, und die Verbindung liefe
+mit einer Einstellung weiter, die niemand mehr gesetzt hat. Heute folgenlos, weil ein Fehlschlag
+den Start beendet; die Begründung für `foreign_keys` gilt trotzdem Wort für Wort.
 
 ### 8.3 Vorwärts
 

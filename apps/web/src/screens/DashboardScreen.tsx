@@ -96,13 +96,14 @@ export function DashboardScreen() {
       openEntryCount: openEntries.total,
       openSeconds: openEntries.items.reduce((sum, entry) => sum + entry.durationSeconds, 0),
     };
-  }, [today, version]);
+  }, [today], [version]);
 
   return (
     <section className="screen">
       <ScreenHeader
         title="Dashboard"
         lead="Was läuft, was heute erfasst wurde, was noch nicht abgerechnet ist."
+        refreshing={data.state.status === "ready" && data.state.refreshing}
         actions={
           <>
             <Button variant="primary" iconStart="plus" onClick={() => setFormOpen(true)}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { parseRoute, type Route } from "./router";
+import { parseRoute, subscribeRevisit, type Route } from "./router";
 
 /**
  * Die angezeigte Adresse — und wie oft sie **erneut** angesteuert wurde
@@ -45,9 +45,22 @@ import { parseRoute, type Route } from "./router";
  * `popstate`-Behandler in diesem Fall nichts und überläßt das Feld dem
  * `hashchange`-Behandler; sonst zählte jeder Wechsel doppelt.
  *
- * Der letzten Zeile der Tabelle wegen navigiert `router.navigate` seit T-097
- * über `location.assign` statt über `location.hash =`: Nur so löst auch eine
- * Navigation aus dem Programm auf die **eigene** Adresse noch etwas aus.
+ * ---------------------------------------------------------------------------
+ * Und warum das seit T-102 nicht mehr allein trägt
+ * ---------------------------------------------------------------------------
+ *
+ * Die Tabelle ist in **Chromium** gemessen; ausgeliefert wird unter Linux
+ * WebKitGTK und unter macOS WKWebView. Ob eine Navigation auf die identische
+ * Adresse dort `popstate` auslöst, ist nicht gemessen und spezifikationsseitig
+ * eine Kante (Befund 6 aus R-1a). Der Weg **aus dem Programm** hängt deshalb
+ * nicht mehr daran: `router.navigate` erkennt das gleiche Ziel selbst und
+ * meldet den Wiederbesuch über `subscribeRevisit` — ohne Navigation und damit
+ * ohne Ereignis. Beide Quellen können sich nicht überlagern; wo die eine
+ * meldet, findet die andere nicht statt.
+ *
+ * `popstate` bleibt als zweite Quelle, für die Wege, die nicht durch
+ * `navigate` gehen: `page.goto()` im End-zu-End-Test, ein Verweis im Dokument,
+ * „Zurück" auf denselben Eintrag.
  *
  * ---------------------------------------------------------------------------
  * Was hier ausdrücklich nicht steht
@@ -102,9 +115,19 @@ export function useRoute(): RouteVisit {
       setVisit((previous) => ({ route: previous.route, revisit: previous.revisit + 1 }));
     };
 
+    /*
+      Die zweite Quelle: der Router selbst. Sie trägt den Fall, in dem gar
+      nicht navigiert wird — `navigate` auf die eigene Adresse und der Klick
+      auf einen Verweis dorthin (`handleRouteLinkClick`).
+    */
+    const unsubscribe = subscribeRevisit(() => {
+      setVisit((previous) => ({ route: previous.route, revisit: previous.revisit + 1 }));
+    });
+
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("popstate", onPopState);
     return () => {
+      unsubscribe();
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("popstate", onPopState);
     };

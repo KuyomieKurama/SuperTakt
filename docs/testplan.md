@@ -2382,3 +2382,55 @@ orphaned/resolve` antwortet mit `kind: 'recorded'` und demselben `poolMovement`-
 gewöhnlichen Stopp; der Toast „Buchung abgeschlossen." trägt denselben Satz aus
 `poolMovementSentence(movement, 'past', 'booking')`.
 **Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
+
+## 18. Nachtrag aus T-103 (Welle E — Typprüfung für `tests/e2e/**`, H-7)
+
+### `pnpm run typecheck:e2e` — neuer Nachweispfad für die Typen der End-to-End-Dateien
+
+Seit `1019ffa` gibt es `tests/e2e/tsconfig.json` (Hoheit des Orchestrators) und das Skript
+`typecheck:e2e` (Antwort auf die mit T-099 offene Frage 3: `tests/e2e` steht außerhalb des
+pnpm-Arbeitsbereichs und hatte bis dahin keine eigene Typprüfung — Playwright übersetzt beim
+Ausführen nur mit `esbuild`, ohne Typen zu prüfen). Vier Fehler waren beim Einrichten offen, alle
+in T-103 behoben, ohne das Verhalten der betroffenen Testfälle zu ändern:
+
+- `tests/e2e/support/services.ts:160`, `tests/e2e/support/web-build-services.ts:170`,
+  `tests/e2e/support/global-setup-outlook-build.ts:90` — jeweils eine Funktion, die einen mit
+  `spawn(…, { stdio: ['ignore', 'pipe', 'pipe'] })` erzeugten Kindprozess als
+  `ChildProcessWithoutNullStreams` typisiert hatte. Dieser Typ verlangt ein beschreibbares
+  `stdin`; die tatsächliche `stdio`-Angabe liefert `stdin: null`. Unter
+  `exactOptionalPropertyTypes` (Wurzel-`tsconfig.base.json`) ist das ein echter Typfehler, kein
+  Formalismus. Behoben mit einem lokalen Typalias `ChildProcessByStdio<null, Readable, Readable>`
+  je Datei — genau der Typ, den `spawn` mit dieser `stdio`-Angabe tatsächlich liefert.
+- `tests/e2e/tag-input.spec.ts:78` — eine Hilfsfunktion `noCreateOffer` war mit
+  `ReturnType<typeof expect>` beschriftet; `expect(...)` liefert an dieser Stelle (Aufruf von
+  `.toHaveCount(0)`) ein `Promise<void>`, keinen `Matchers`-Wert. Beschriftung auf `Promise<void>`
+  geändert.
+
+**Ergebnis:** `pnpm run typecheck:e2e` — Exitcode 0. `typecheck:e2e` ist weiterhin **nicht** Teil
+von `typecheck`/`pnpm check` (Entscheidung liegt beim Orchestrator, siehe Bericht zu T-103).
+
+### H-7 (R-3a) — `new RegExp` aus Namen in `tag-folder-rule-lock.spec.ts` und `tags-folders.spec.ts`
+
+Sicherheitsbefund aus der Wiedervorlage R-3a: `tag-folder-rule-lock.spec.ts` baute
+`page.getByRole('treeitem', { name: new RegExp(lockedFolder.name) })` — ein `RegExp` aus einem zur
+Laufzeit erzeugten Namen, ohne die im Muster wirksamen Zeichen (`. * + ? ^ $ { } ( ) | [ ] \`) zu
+maskieren. Mit den heutigen, selbst erzeugten Testnamen (`E2E-…-${Date.now()}`) blieb das folgenlos
+— keines dieser Zeichen kommt darin vor —, ist als Bauart aber der falsche Weg: Ein Name mit einem
+dieser Zeichen hätte ein anderes Muster ergeben als gemeint, und im ungünstigsten Fall eines, das
+mehr trifft als beabsichtigt.
+
+Dieselbe Bauart stand außerdem, von R-3a nicht namentlich benannt, fünfmal in
+`tags-folders.spec.ts` (gefunden über `grep -rn "new RegExp(" tests/e2e/`).
+
+**Entscheidung für „ohne RegExp prüfen" statt Maskieren.** `page.getByRole(role, { name })`
+vergleicht bei einer Zeichenkette laut Playwright ohnehin „case-insensitive" und als Teilstring
+(„searches for a substring") — dieselbe Semantik, die ein unverankertes `new RegExp(name)` ohne
+Schalter auch hatte (nur zusätzlich `case-sensitive`), nur ohne dessen Sonderzeichen-Risiko. Alle
+neun Stellen (vier in `tag-folder-rule-lock.spec.ts`, fünf in `tags-folders.spec.ts`, davon eine
+in der gemeinsam genutzten Hilfsfunktion `expandFolder`) sind jetzt `{ name: lockedFolder.name }`
+bzw. `{ name }` — kein `RegExp`-Import mehr in beiden Dateien.
+
+**Ergebnis: bestanden.** `tag-folder-rule-lock.spec.ts` 4/4, `tag-input.spec.ts` 5/5 (isoliert
+über `--grep`), `tags-folders.spec.ts` 2/2 (isoliert; im Verbund mit `tag-input.spec.ts` einmal
+mit einem umgebungsbedingten Timeout auf einen UI-Knopf beim ersten Versuch — dreifach isoliert
+reproduziert, jedes Mal grün, kein Zusammenhang mit dieser Änderung, siehe Bericht zu T-103).

@@ -235,7 +235,7 @@ function Workspace({
     ]);
     return { openTodos: todos.total, openEntries: entries.total };
     // Zählt neu, sobald irgendwo etwas geschrieben wurde.
-  }, [version]);
+  }, [], [version]);
 
   const openTodoCount = counters.state.status === "ready" ? counters.state.value.openTodos : null;
   const openEntryCount = counters.state.status === "ready" ? counters.state.value.openEntries : null;

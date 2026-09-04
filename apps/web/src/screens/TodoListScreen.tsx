@@ -28,6 +28,7 @@ import { useAsync } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import { formatCount, plural } from "../lib/format";
 import { doneFlagState, type DoneFlagState } from "../lib/labels";
+import { doneMovementSentence, withMovement } from "../lib/movement";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { TodoFormDialog } from "./TodoFormDialog";
 
@@ -114,7 +115,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       showDone ? Promise.resolve(null) : listTodos({ ...filter, onlyOpen: false }, { limit: 1 }),
     ]);
     return { page, summaries, totalWithDone: all?.total ?? page.total };
-  }, [filter, limit, version, showDone]);
+  }, [filter, limit, showDone], [version]);
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];
@@ -173,7 +174,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     (todo: Todo) => {
       const wasDone = todo.completedAt !== null;
       void (wasDone ? clearTodoDone(todo.id) : markTodoDone(todo.id))
-        .then(() => {
+        .then((result) => {
           /*
             Der Anzeigezustand „Erledigt aufgehoben" endet, sobald der
             Benutzer das Kennzeichen selbst anfasst (A-2.5). Er erklaert eine
@@ -182,19 +183,35 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           */
           timer.clearReactivated(todo.id);
           bump();
+          /*
+            Der Bewegungssatz aus der Antwort (E-060 Punkt 4). Er nennt die
+            Pools und Spalten beim Namen und ersetzt damit die pauschale
+            Auskunft, die bis T-102 hier stand: „Es erscheint wieder in seinen
+            Pools und auf dem Board" beziehungsweise „Es verschwindet … aus
+            seinen Pools und vom Board". Beide Sätze rieten — eine Regel ohne
+            Erledigt-Achse behält das Todo, und welche Regel es überhaupt
+            trifft, weiß allein der Dienst. Meldet er keine Bewegung, bleibt es
+            bei der Auskunft über **diese Liste**, denn die hängt an der
+            Ansichtseinstellung und nicht an einer Regel.
+          */
+          const movement = doneMovementSentence(result.poolMovement, wasDone);
+          const unchanged = "Der Status bleibt unverändert.";
           if (wasDone) {
             toasts.show({
               tone: "info",
               title: `„${todo.title}“ ist wieder offen.`,
-              body: "Es erscheint wieder in seinen Pools und auf dem Board. Der Status bleibt unverändert.",
+              body: withMovement(unchanged, movement),
             });
           } else {
             toasts.show({
               tone: "success",
               title: `„${todo.title}“ ist erledigt.`,
-              body: showDone
-                ? "Der Status bleibt unverändert."
-                : "Es verschwindet damit aus dieser Liste, aus seinen Pools und vom Board. Der Status bleibt unverändert.",
+              body: withMovement(
+                showDone
+                  ? unchanged
+                  : `Es verschwindet damit aus dieser Liste, solange erledigte ausgeblendet sind. ${unchanged}`,
+                movement,
+              ),
               action: {
                 label: "Rückgängig",
                 onSelect: () => {

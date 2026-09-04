@@ -37,6 +37,7 @@ import type {
   PoolPatch,
   PoolSurfaceQuery,
   PoolWrite,
+  ResolveOrphanedTimerResult,
   RunningTimerView,
   SearchResult,
   SecurityNotice,
@@ -52,6 +53,7 @@ import type {
   Todo,
   TodoCreate,
   TodoDetail,
+  TodoDoneResult,
   TodoFilter,
   TodoCreated,
   TodoNote,
@@ -149,26 +151,37 @@ export function putTodoNote(id: Id, text: string): Promise<TodoNote> {
  *
  * Unverändert bleibt der Status, nicht die Spalte: Seit E-055 darf eine Regel
  * nach „Erledigt" fragen, und dann wechselt die Karte mit genau dieser
- * Handlung. Was diese Antwort **nicht** enthält, ist die Bewegung dazu — beide
- * Erledigt-Routen liefern nur das Todo. E-058 hat `poolMovement` an den Timer
- * gehängt (Start, mit T-093 auch Stopp und `orphaned/resolve`); für das Setzen
- * und Aufheben von Hand gibt es sie nicht. Die Oberfläche behauptet an dieser
- * Stelle deshalb nichts über Spalten und rechnet auch nichts nach.
+ * Handlung. Die Bewegung dazu steht seit E-060 **in der Antwort**
+ * ({@link TodoDoneResult}): `poolMovement`, gerechnet vom selben Anwendungsfall
+ * wie an den Timer-Routen, mit dem Anlaß `'booking'` — der neutralen Form, die
+ * kein Wort von Buchung trägt.
+ *
+ * Bis dahin stand hier: „Was diese Antwort **nicht** enthält, ist die Bewegung
+ * dazu … für das Setzen und Aufheben von Hand gibt es sie nicht." Das war die
+ * Lücke O-U und ist mit E-060 geschlossen; die Oberfläche rechnet weiterhin
+ * nichts nach, sie liest jetzt nur mehr.
  */
-export function markTodoDone(id: Id): Promise<Todo> {
-  return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "PUT", body: {} });
+export function markTodoDone(id: Id): Promise<TodoDoneResult> {
+  return request<TodoDoneResult>(`/todos/${encodeURIComponent(id)}/done`, {
+    method: "PUT",
+    body: {},
+  });
 }
 
 /**
  * A-2.5 — „Erledigt“ von Hand aufheben.
+ *
+ * Anlaß `'reopen'`: Das Todo war erledigt und kehrt in seine Pools zurück —
+ * derselbe Satz, den der Timerstart nach A-2.5 zeigt, und aus derselben
+ * Funktion (E-060 Punkt 2).
  *
  * Bis T-094 stand hier „Verschiebt keine Karte." Das war der Satz aus der Zeit
  * vor E-055 und aus demselben Irrtum wie `CARD_STAYS`: Eine Spalte, die nach
  * „Erledigt" fragt, verliert oder gewinnt das Todo mit dieser Handlung. Siehe
  * {@link markTodoDone}.
  */
-export function clearTodoDone(id: Id): Promise<Todo> {
-  return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "DELETE" });
+export function clearTodoDone(id: Id): Promise<TodoDoneResult> {
+  return request<TodoDoneResult>(`/todos/${encodeURIComponent(id)}/done`, { method: "DELETE" });
 }
 
 /* ==================================================================== */
@@ -509,8 +522,18 @@ export function getOrphanedTimer(): Promise<OrphanedTimerView | null> {
   return request<OrphanedTimerView | null>("/timer/orphaned");
 }
 
-export function resolveOrphanedTimer(resolution: OrphanResolution): Promise<StopTimerResult> {
-  return request<StopTimerResult>("/timer/orphaned/resolve", {
+/**
+ * E-036 — die Antwort des Benutzers auf die verwaiste Buchung.
+ *
+ * Eigener Rückgabetyp seit T-102 (O-R): Der verworfene Zweig nennt hier den
+ * **Grund**, und die beiden Gründe sind verschiedene Auskünfte — „Sie haben
+ * verworfen" gegen „es gab nichts zu buchen". Siehe
+ * {@link ResolveOrphanedTimerResult}.
+ */
+export function resolveOrphanedTimer(
+  resolution: OrphanResolution,
+): Promise<ResolveOrphanedTimerResult> {
+  return request<ResolveOrphanedTimerResult>("/timer/orphaned/resolve", {
     method: "POST",
     body: { resolution },
   });

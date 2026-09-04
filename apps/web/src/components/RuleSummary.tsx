@@ -81,6 +81,20 @@ import { TagChip } from "./Tag";
  * Musterseite, im Formularentwurf, den noch keine Route gesehen hat —, zeichnet
  * diese Fläche wie bisher. Sie **rät nicht**: Wie viele Tags in einem Ordner
  * liegen, weiß allein der Dienst.
+ *
+ * ## Der Hilfssatz an der Exportachse (W-7 aus R-2a, T-102)
+ *
+ * Eine Spalte „Abgerechnet" enthält Todos, an deren Buchungen „Nicht
+ * abgerechnet" stehen kann (E-047, E-050) — zwei fast gleiche Wörter mit
+ * entgegengesetzter Wirkung. Ausgesprochen wurde das bis T-102 nur im
+ * Regelformular, also dort, wo **gewählt** wird. Wer eine so benannte Spalte
+ * erbt oder nur ansieht, kam an der Stelle nie vorbei. Der Satz steht deshalb
+ * jetzt auch hier, wo **gelesen** wird; er kommt als `note` an der Achse aus
+ * `describeRule` und wird hier nicht formuliert.
+ *
+ * Im Formular selbst bleibt er weg (`showAxisNotes={false}`): Dort steht die
+ * ausführliche Fassung drei Zeilen darüber am Optionsknopf, und zweimal
+ * dasselbe in zwei Wortlauten ist genau der Fehler, den E-059 abgeschafft hat.
  */
 
 export interface RuleSummaryProps {
@@ -101,6 +115,13 @@ export interface RuleSummaryProps {
    * werden.
    */
   readonly reach?: RuleReach;
+  /**
+   * Hilfssätze an einzelnen Achsen mitzeichnen (W-7). Vorgabe: ja.
+   *
+   * `false` setzt, wer denselben Satz bereits an seiner Bedienfläche zeigt —
+   * heute allein das Regelformular.
+   */
+  readonly showAxisNotes?: boolean;
   readonly size?: "sm" | "md";
   readonly className?: string;
 }
@@ -158,6 +179,7 @@ export function RuleSummary({
   showNeutral = false,
   emptyText,
   reach,
+  showAxisNotes = true,
   size = "sm",
   className,
 }: RuleSummaryProps) {
@@ -211,6 +233,25 @@ export function RuleSummary({
           ))}
         </span>
       ))}
+
+      {/*
+        Die Hilfssätze der Achsen, als eigene Zeilen unter der Aufzählung
+        (W-7). Sie stehen nicht **in** der Achse: Dort läuft die Zeile aus
+        Symbol, Wort und Chips, und ein ganzer Satz darin risse sie
+        auseinander. Symbol `info` und nicht `alert-triangle` — das hier ist
+        kein Einrichtungsfehler wie der leere Ordner darunter, sondern eine
+        Auskunft.
+      */}
+      {showAxisNotes
+        ? description.axes.map((axis) =>
+            axis.note === undefined ? null : (
+              <p key={`note-${axis.id}`} className="rule-summary__note">
+                <Icon name="info" size={11} />
+                {axis.note}
+              </p>
+            ),
+          )
+        : null}
 
       {emptyFolders === null ? null : (
         <p className="rule-summary__unreachable">

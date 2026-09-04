@@ -19,6 +19,7 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync } from "../app/useAsync";
 import { formatDuration, formatTime, plural } from "../lib/format";
 import { POOL_PLACEMENT_SHORT, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
+import { doneMovementSentence, withMovement } from "../lib/movement";
 import {
   axesOf,
   describeRule,
@@ -125,7 +126,7 @@ export function BoardScreen() {
       loadExportSummaries(),
     ]);
     return { board, summaries };
-  }, [version, showDone, perColumn]);
+  }, [showDone, perColumn], [version]);
 
   const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
@@ -135,48 +136,52 @@ export function BoardScreen() {
       const wasDone = todo.completedAt !== null;
       timer.clearReactivated(todo.id);
       void (wasDone ? clearTodoDone(todo.id) : markTodoDone(todo.id))
-        .then(() => {
+        .then((result) => {
           bump();
           /*
-            Der Toast nennt das Faktum und behauptet nichts über die Spalten
-            (S-3 aus R-2).
+            Der Toast sagt das Faktum — und seit E-060 auch, wohin die Karte
+            gewandert ist.
 
             Bis T-091 stand hier „Die Regeln ihrer Spalten treffen unverändert
             zu" beziehungsweise „Sie bleibt in ihren Spalten stehen". Beide
             Sätze stammen aus der Zeit, in der eine Spalte nur an Tags hing.
             Seit E-055 kann eine Spalte ausdrücklich nach „Erledigt" fragen —
             dann wechselt die Karte mit genau dieser Handlung die Spalte, und
-            der Toast behauptete das Gegenteil.
+            der Toast behauptete das Gegenteil. Bis T-094 schwieg er deshalb
+            über die Spalten: Die beiden Erledigt-Routen antworteten mit dem
+            Todo und sonst nichts, und selbst zu rechnen wäre die zweite
+            Fassung einer Auskunft gewesen, die E-058 gerade auf eine
+            zusammengeführt hatte.
 
-            Gesagt wird deshalb nur, was ohne Kenntnis der eingerichteten
-            Regeln wahr ist: das Kennzeichen, die Sichtbarkeit und die
-            Nicht-Wirkung auf Tags und Status.
+            Seit E-060 liefern beide Routen `poolMovement`, gerechnet aus dem
+            Zustandspaar vor und nach der Handlung. Der Satz dazu kommt aus
+            derselben Funktion wie der nach einem Timerstart; `null` heißt
+            „keine Fläche bewegt sich", und dann steht keine Zeile da.
 
-            **Warum hier kein Bewegungssatz steht, der Timer-Toast aber einen
-            hat (Stand T-094).** Der Satz kommt aus `poolMovementSentence`, und
-            der braucht die drei Namenslisten aus einem Zustandspaar vor und
-            nach der Handlung. Die hat nur der Dienst, und er gibt sie nach
-            E-058 an den **Timer**-Routen heraus: `POST /timer/start` seit
-            T-089, Stopp und `orphaned/resolve` mit T-093. Die beiden
-            Erledigt-Routen (`PUT`/`DELETE /todos/{id}/done`) antworten mit dem
-            Todo und sonst nichts.
-
-            Hier selbst zu rechnen wäre die zweite Fassung einer Auskunft, die
-            E-058 gerade auf eine zusammengeführt hat — und sie wäre die
-            schlechtere: Nach dem Aufruf ist der Zustand davor weg, und ohne
-            ihn ist „erscheint neu" von „stand schon da" nicht zu
-            unterscheiden. Solange der Dienst an dieser Handlung schweigt,
-            schweigt der Toast über die Spalten mit. Als Vorschlag an den
-            Orchestrator im Bericht zu T-094 vermerkt.
+            **Warum die Zeile „Sie verschwindet vom Board" nur ohne
+            Bewegungssatz steht.** Sie ist die Auskunft über die
+            Ansichtseinstellung „Erledigte einblenden" und war immer dann
+            falsch, wenn eine Spalte selbst nach „Erledigt" fragt: Deren Regel
+            hat das letzte Wort, die Karte bleibt dort sichtbar
+            (`usecases/board.ts`, `showsCompleted`). Genau in diesem Fall
+            meldet der Dienst eine Bewegung — nur eine Regel mit einer
+            Erledigt-Achse kann durch diese Handlung gewonnen oder verloren
+            werden. Wo also der Bewegungssatz steht, ist er die genauere
+            Antwort auf dieselbe Frage, und die pauschale Zeile entfällt.
           */
+          const movement = doneMovementSentence(result.poolMovement, wasDone);
+          const unchanged = "Tags und Status ändern sich dadurch nicht.";
           toasts.show({
             tone: wasDone ? "info" : "success",
             title: wasDone ? `„${todo.title}“ ist wieder offen.` : `„${todo.title}“ ist erledigt.`,
-            body: wasDone
-              ? "Tags und Status ändern sich dadurch nicht."
-              : showDone
-                ? "Erledigte Karten sind eingeblendet, sie bleibt also sichtbar. Tags und Status ändern sich dadurch nicht."
-                : "Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. Tags und Status ändern sich dadurch nicht.",
+            body: withMovement(
+              wasDone || movement !== null
+                ? unchanged
+                : showDone
+                  ? `Erledigte Karten sind eingeblendet, sie bleibt also sichtbar. ${unchanged}`
+                  : `Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. ${unchanged}`,
+              movement,
+            ),
           });
         })
         .catch((cause: unknown) =>
@@ -416,7 +421,26 @@ export function BoardScreen() {
           setSetupOpen(false);
           setRuleForm({ pool });
         }}
-        onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
+        /*
+          Beide Knöpfe schließen den Dialog, und zwar **vor** der Meldung
+          (W-6 aus R-2a).
+
+          Bis T-102 tat das nur „Vom Board nehmen". „Als Spalte aufnehmen"
+          ließ den Dialog offen — und legte seinen Rückweg in einen Toast, der
+          außerhalb des `aria-modal="true"` mit Tabulatorschleife liegt
+          (`FormDialog`). Für Tastatur und Vorlesehilfe war „Rückgängig" damit
+          nicht vorhanden, und seit E-059 ist der Rückweg der einzige Schutz
+          vor dieser Handlung. Zwei Nachbarknöpfe mit zwei Verhalten lehren
+          außerdem, daß eines davon keine Bedeutung hat.
+
+          Die Reihenfolge stimmt von selbst: `setPlacement` zeigt die Meldung
+          erst, wenn der `PATCH` geantwortet hat — der Dialog ist dann längst
+          zu, und der Fokus steht wieder auf dem Knopf, der ihn geöffnet hat.
+        */
+        onAdopt={(pool) => {
+          setSetupOpen(false);
+          setPlacement(pool, "both", "Regel als Spalte aufgenommen.");
+        }}
         onRemove={(pool) => {
           setSetupOpen(false);
           setPlacement(pool, "pool", "Spalte vom Board genommen.");

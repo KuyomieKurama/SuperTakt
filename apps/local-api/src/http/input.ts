@@ -54,8 +54,73 @@ export const commaSeparatedIds = z.preprocess(
   z.array(idSchema).min(1).max(50),
 );
 
-export const titleSchema = z.string().trim().min(1).max(500);
-export const nameSchema = z.string().trim().min(1).max(200);
+/**
+ * Zeichen, die in einem **Namen** nichts zu suchen haben (R-3a H-2).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das jetzt zählt und vorher weniger
+ * ---------------------------------------------------------------------------
+ *
+ * Diese Namen reisen weiter als je zuvor: in den Bewegungssatz an **beiden**
+ * Flächen, in den Aufgabenbereich des Add-ins und in die Löschdialoge der
+ * Hauptanwendung (`details`, Regelnamen). Es ist kein Grenzübertritt - nur wer
+ * das Sitzungsgeheimnis hat, legt Pools an -, aber es ist eine Anzeige, die
+ * etwas anderes zeigt, als im Bestand steht.
+ *
+ * ---------------------------------------------------------------------------
+ * Die beiden Klassen, und warum es genau diese sind
+ * ---------------------------------------------------------------------------
+ *
+ *  - **C0 und C1** (`U+0000` bis `U+001F`, `U+007F` bis `U+009F`).
+ *    Steuerzeichen sind das, womit man eine Protokollzeile oder eine
+ *    Exportzelle von innen aufbricht. Dieselbe Klasse prüft
+ *    `access/session-secret.ts` am Windows-Benutzernamen, und aus demselben
+ *    Grund.
+ *  - **Bidirektionale Formatierungszeichen** (`U+202A` bis `U+202E`,
+ *    `U+2066` bis `U+2069`). Sie stehen in keinem geschriebenen Namen und
+ *    drehen den Rest der Zeile optisch um. React maskiert HTML; ein `U+202E`
+ *    macht es **nicht** unschädlich, weil es kein Markup ist, sondern Text mit
+ *    Wirkung auf die Darstellung. Ein Pool, dessen Name eines dieser Zeichen
+ *    trägt, liest sich in der Aufzählung eines Löschdialogs als etwas
+ *    anderes, als er heißt.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum abweisen und nicht entfernen
+ * ---------------------------------------------------------------------------
+ *
+ * Ein stilles Entfernen änderte den Namen, den der Benutzer eingegeben hat,
+ * und er erführe es nicht - er sähe seinen Namen ohne die Zeichen und hielte
+ * die Eingabe für angekommen. Eine Abweisung sagt, was los ist, an dem Feld,
+ * in dem es passiert ist (`toFieldErrors` setzt den Pfad).
+ *
+ * **Der Wert steht nicht in der Meldung.** Er stammt möglicherweise aus einer
+ * fremden E-Mail (B-4.3 Punkt 5) - und ein Text, der ein solches Zeichen
+ * wörtlich wiedergibt, richtet in der Fehlermeldung genau den Schaden an, den
+ * er verhindern soll.
+ *
+ * Leerzeichen und Tabulator sind zwei verschiedene Fälle: `U+0020` darf in
+ * einem Namen stehen und ist nicht erfasst, `U+0009` gehört zu C0 und wird
+ * abgewiesen. `.trim()` läuft davor und nimmt ihn am Rand ohnehin weg;
+ * abgewiesen wird er in der Mitte.
+ */
+// eslint-disable-next-line no-control-regex -- genau darum geht es hier
+const FORBIDDEN_IN_NAMES = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
+
+/**
+ * „Ein Name ohne Steuer- und Richtungszeichen" - die Prüfung, die
+ * {@link titleSchema} und {@link nameSchema} teilen.
+ *
+ * Eine Funktion und kein zweimal geschriebenes `.refine(...)`: Zwei Abschriften
+ * derselben Regel sind zwei Gelegenheiten, sie verschieden zu ändern, und der
+ * Titel eines Todos ist so sichtbar wie der Name eines Pools.
+ */
+const withoutControlCharacters = <T extends z.ZodType<string>>(schema: T) =>
+  schema.refine((value) => !FORBIDDEN_IN_NAMES.test(value), {
+    message: 'Steuerzeichen und Richtungszeichen sind in einem Namen nicht erlaubt.',
+  });
+
+export const titleSchema = withoutControlCharacters(z.string().trim().min(1).max(500));
+export const nameSchema = withoutControlCharacters(z.string().trim().min(1).max(200));
 /** Leistung und Vermerk. 1 MB Rumpfgrenze steht davor (B-1.7). */
 export const textSchema = z.string().max(20_000);
 export const colorSchema = z

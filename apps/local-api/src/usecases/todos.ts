@@ -10,6 +10,7 @@
 
 import type {
   DefaultTag,
+  PoolMovement,
   StatusId,
   Tag,
   TagId,
@@ -32,6 +33,7 @@ import {
 import type { Page, Pagination, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
+import { NO_ENTRIES, completionMovementStates, poolMovementNamer } from './pool-movement.ts';
 import { AbortTodoCreate, resolveTagNames } from './tag-names.ts';
 
 export interface CreateTodoInput {
@@ -256,10 +258,88 @@ export function removeTodo(context: AppContext, id: TodoId): Promise<UseCaseResu
   return context.transactions.inTransaction((unit) => unit.todos.remove(id));
 }
 
-/** A-2.4 — erledigt setzen. Die Kanban-Spalte bleibt (E-023). */
-export function markTodoDone(context: AppContext, id: TodoId): Promise<UseCaseResult<Todo>> {
+/**
+ * Das Todo nach dem Umlegen des Erledigt-Kennzeichens — und was das durch die
+ * Pools bewegt hat (E-060).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum diese beiden Routen überhaupt eine Bewegung melden
+ * ---------------------------------------------------------------------------
+ *
+ * Weil „Erledigt" seit E-055 eine **Achse** ist, nach der eine Regel fragen
+ * darf. Ein Todo auf „erledigt" zu setzen nimmt es aus jeder Spalte mit
+ * `completion: 'open'` heraus und trägt es in jede mit `completion: 'done'`
+ * ein — dieselbe Bewegung, die ein Timerstart in die andere Richtung auslöst
+ * und die `POST /timer/start` seit E-058 ansagt. Wer an einer Stelle Auskunft
+ * gibt und an der anderen schweigt, sagt die halbe Wahrheit (E-060).
+ *
+ * `poolMovement` ist `null`, wenn das Kennzeichen sich gar nicht geändert hat
+ * — zweimal „erledigt" hintereinander etwa. Dann ist nichts zu berichten, und
+ * es wird auch keine einzige Regel aufgelöst.
+ */
+export interface TodoDoneResult {
+  readonly todo: Todo;
+  /** Wie das Umlegen das Todo durch die Pools bewegt — oder `null` (E-060). */
+  readonly poolMovement: PoolMovement | null;
+}
+
+/**
+ * Das Umlegen des Erledigt-Kennzeichens, für beide Richtungen (A-2.4, A-2.5,
+ * E-060).
+ *
+ * Eine Funktion und nicht zwei: Setzen und Aufheben unterscheiden sich in
+ * genau einem Aufruf an den Port. Alles übrige — den Zustand vorher lesen, die
+ * Buchungslage lesen, das Zustandspaar bilden, die Bewegung rechnen — ist
+ * Zeichen für Zeichen dasselbe, und zweimal geschrieben wäre es die Stelle, an
+ * der die eine Richtung eines Tages etwas anderes meldet als die andere.
+ *
+ * **Beide Zustände sind gelesen und keiner geraten.** `before` kommt aus
+ * `load`, `after` aus dem Rückgabewert des Ports — der trägt den Zeitstempel,
+ * den die Speicherung wirklich geschrieben hat.
+ *
+ * Der Todo-Zugriff steht **vor** dem Schreiben. Danach wäre `completed_at`
+ * bereits umgelegt, und woraus das Todo verschwindet, ließe sich nicht mehr
+ * sagen — genau die Auskunft, die E-056 verlangt.
+ */
+async function switchTodoDone(
+  context: AppContext,
+  id: TodoId,
+  write: (unit: UnitOfWork, timestamp: Timestamp) => Promise<UseCaseResult<Todo>>,
+): Promise<UseCaseResult<TodoDoneResult>> {
   const timestamp = now(context);
-  return context.transactions.inTransaction((unit) => unit.todos.markDone(id, timestamp));
+
+  return context.transactions.inTransaction(async (unit) => {
+    const before = await unit.todos.load(id);
+    // Gibt es das Todo nicht, bildet der Port den Fehler — an genau einer
+    // Stelle. Hier wird deshalb nichts behauptet und nichts weiter gelesen.
+    const presence =
+      before === null ? null : ((await unit.timeEntries.exportPresence([id])).get(id) ?? NO_ENTRIES);
+
+    const written = await write(unit, timestamp);
+    if (!written.ok) return err(written.error);
+
+    const after = written.value;
+    // Das Kennzeichen stand schon so — `markDone` schreibt dann nichts
+    // (`AND completed_at IS NULL`). Nichts bewegt sich, und es wird keine
+    // einzige Regel über ihre Ordnerbäume aufgelöst.
+    if (before === null || presence === null || before.completedAt === after.completedAt) {
+      return ok({ todo: after, poolMovement: null });
+    }
+
+    const namer = await poolMovementNamer(unit);
+    return ok({
+      todo: after,
+      poolMovement: namer(completionMovementStates(before, presence, after.completedAt)),
+    });
+  });
+}
+
+/** A-2.4 — erledigt setzen. Die Kanban-Spalte bleibt (E-023), die Pools nicht (E-060). */
+export function markTodoDone(
+  context: AppContext,
+  id: TodoId,
+): Promise<UseCaseResult<TodoDoneResult>> {
+  return switchTodoDone(context, id, (unit, timestamp) => unit.todos.markDone(id, timestamp));
 }
 
 /**
@@ -267,12 +347,15 @@ export function markTodoDone(context: AppContext, id: TodoId): Promise<UseCaseRe
  *
  * Derselbe Vorgang, den der Timerstart auslöst, nur ohne Timer. Auch hier wird
  * keine Spalte wiederhergestellt und keine Pool-Zugehörigkeit geschrieben: Die
- * Zugehörigkeit ergibt sich aus den Tags (A-3.4), und die haben sich nicht
- * geändert.
+ * Zugehörigkeit ergibt sich aus der Regel (A-3.4, E-055) und ist nirgends
+ * gespeichert. Was daraus folgt, sagt trotzdem jemand — deshalb `poolMovement`
+ * (E-060).
  */
-export function clearTodoDone(context: AppContext, id: TodoId): Promise<UseCaseResult<Todo>> {
-  const timestamp = now(context);
-  return context.transactions.inTransaction((unit) => unit.todos.clearDone(id, timestamp));
+export function clearTodoDone(
+  context: AppContext,
+  id: TodoId,
+): Promise<UseCaseResult<TodoDoneResult>> {
+  return switchTodoDone(context, id, (unit, timestamp) => unit.todos.clearDone(id, timestamp));
 }
 
 /** Der interne Vermerk (A-7.1). Eigene Ressource, eigener Port, eigener Aufruf. */

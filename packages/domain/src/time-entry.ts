@@ -109,7 +109,16 @@ export type TimerStartResult =
        * A-2.5: war das Todo erledigt und wurde durch den Start wieder aktiv?
        *
        * Es gibt kein Feld für eine neue Spalte. Der Start hebt nur das
-       * Erledigt-Kennzeichen auf; die Karte bleibt, wo sie ist.
+       * Erledigt-Kennzeichen auf. **Ob die Karte dadurch eine Spalte wechselt,
+       * entscheidet die Regel** (E-055): Eine Kanban-Spalte fragt seit E-054
+       * auch nach „Erledigt" und nach dem Exportstatus, und genau diese beiden
+       * Achsen legt ein Start um. Die Bewegung, die daraus folgt, liefert
+       * `poolMovement` an der Route; der Satz dazu steht in
+       * `poolMovementSentence` (`pool-movement.ts`).
+       *
+       * Bis T-101 stand hier „die Karte bleibt, wo sie ist" — derselbe Satz,
+       * den E-058 an vier Flächen als falsch begraben hat, drei Dateien neben
+       * der Funktion, die ihn ersetzt (R-2a W-2).
        */
       readonly doneCleared: boolean;
     }
@@ -395,6 +404,96 @@ export type TimerStartDecision =
  * berührt die Zeile nicht ohne Grund.
  */
 export const determineReopen: DetermineReopen = ({ isDone }) => ({ clearDone: isDone });
+
+/**
+ * Was das **Abschließen** einer Buchung am Zustand eines Todos ändert (E-032).
+ *
+ * Eine Achse und nur eine: `export_status` ist zweiwertig und beginnt bei
+ * `open` (E-032). Sobald eine Buchung ein Ende hat, gibt es an diesem Todo
+ * etwas Abzurechnendes, und jede Regel mit `exportState: 'open'` — „was habe
+ * ich noch nicht abgerechnet" — nimmt es damit auf.
+ *
+ * **Ein laufender Timer zählt nicht.** Er trägt `ended_at IS NULL` und ist
+ * nichts, was man abrechnen könnte; `v_export_candidate` führt ausschließlich
+ * abgeschlossene Buchungen.
+ *
+ * Das ist die Wirkung von `POST /timer/stop` und von
+ * `POST /timer/orphaned/resolve` mit `book_until_heartbeat`: Beide schließen
+ * eine Buchung ab, die schon da war, und **beide fassen das
+ * Erledigt-Kennzeichen nicht an** — das tut allein der Start (A-2.5). Wer hier
+ * {@link BOOKING_EFFECT} nähme, behauptete eine Aufhebung, die nicht
+ * stattfindet: Ein Todo, das während des laufenden Timers von Hand auf erledigt
+ * gesetzt wurde, bliebe erledigt, und der Satz nennte trotzdem jede Spalte mit
+ * `completion: 'open'`.
+ */
+export interface EntryClosedEffect {
+  /** E-032 — es gibt jetzt mindestens eine abgeschlossene, offene Buchung. */
+  readonly hasOpenEntries: true;
+}
+
+/** Siehe {@link EntryClosedEffect}. Eingefroren, weil ein geteilter Wert nicht wandern darf. */
+export const ENTRY_CLOSED_EFFECT: EntryClosedEffect = Object.freeze({ hasOpenEntries: true });
+
+/**
+ * Was eine **Buchung auf ein Todo** an dessen Zustand ändert
+ * (A-2.5, E-032, E-061 Punkt 1).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das eine Größe der Domäne ist und nicht eine Zeile im Anwendungsfall
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-101 stand dieses Paar an **vier** Stellen ausgeschrieben: zweimal in
+ * den Add-in-Routen (Ankündigung und Bestätigung derselben Buchung), einmal in
+ * `timer/start` und einmal in `timer/stop` samt `orphaned/resolve`. Vier
+ * Abschriften einer Fachaussage sind vier Gelegenheiten, Verschiedenes über
+ * dieselbe Handlung zu behaupten — und die Ankündigung, die etwas anderes
+ * verspricht, als die Bestätigung berichtet, ist Befund C-03 aus T-025.
+ *
+ * Deshalb steht die **Wirkung** hier, in der Domäne, und die **Rechnung** im
+ * Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`). Diese
+ * Konstante kennt weder Buchungen im Speicher noch Pools noch Regeln; sie sagt
+ * allein, welche zwei Achsen eine Buchung umlegt.
+ *
+ * ---------------------------------------------------------------------------
+ * Die beiden Achsen, und warum es genau diese zwei sind
+ * ---------------------------------------------------------------------------
+ *
+ *  - `completedAt: null` — **Buchen hebt „Erledigt" auf** (A-2.5). Das gilt für
+ *    jeden Weg, auf dem eine Buchung auf einem Todo **entsteht**: der
+ *    Timerstart (`timer.start` schreibt `completed_at = NULL`) und die Buchung
+ *    aus dem Aufgabenbereich des Add-ins (`clearDone` in derselben
+ *    Transaktion). Seit T-038 gibt es keinen Schalter mehr, der das verhindern
+ *    könnte. War das Todo nicht erledigt, stand dort ohnehin `null`, und der
+ *    Wert ändert nichts.
+ *  - `hasOpenEntries: true` — {@link ENTRY_CLOSED_EFFECT}, siehe dort.
+ *
+ * **Nicht die Wirkung eines Stopps.** Der Stopp schließt eine Buchung ab, die
+ * schon da war; er legt nur die zweite Achse um. Dafür steht
+ * {@link ENTRY_CLOSED_EFFECT}, und der Unterschied ist keine Feinheit: Er ist
+ * der Fall „während des laufenden Timers von Hand auf erledigt gesetzt".
+ *
+ * **Nicht dabei sind Tags, Status und der Exportstatus vorhandener Buchungen.**
+ * Eine Buchung fasst keine davon an; wer sie hier aufnähme, behauptete eine
+ * Wirkung, die es nicht gibt. Das Spreizen über den Zustand von vorher
+ * (`{ ...before, ...BOOKING_EFFECT }`) ist deshalb der richtige Weg: Kommt eine
+ * sechste Achse hinzu, geht sie unverändert mit, statt still zu fehlen.
+ *
+ * **Nicht dasselbe wie „ein Timer läuft".** Ein laufender Timer trägt
+ * `ended_at IS NULL` und ist nichts, was man abrechnen könnte; er setzt
+ * `hasOpenEntries` **nicht**. Am Timerstart gilt diese Wirkung deshalb nur
+ * dann vollständig, wenn er einen Timer **desselben** Todos verdrängt und dabei
+ * eine Buchung abschließt; sonst fällt allein das Kennzeichen.
+ */
+export interface BookingEffect extends EntryClosedEffect {
+  /** A-2.5 — das Kennzeichen fällt. */
+  readonly completedAt: null;
+}
+
+/** Siehe {@link BookingEffect}. Eingefroren, weil ein geteilter Wert nicht wandern darf. */
+export const BOOKING_EFFECT: BookingEffect = Object.freeze({
+  ...ENTRY_CLOSED_EFFECT,
+  completedAt: null,
+});
 
 /**
  * Stopp-Regel (A-6.2, A-6.4).

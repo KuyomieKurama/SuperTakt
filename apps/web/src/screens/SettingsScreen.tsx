@@ -194,7 +194,16 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
 
   return (
     <section className="screen">
-      <ScreenHeader title="Einstellungen" lead={AREA_LEAD[active]} />
+      {/*
+        Der Kopf trägt den Nachladehinweis für den Aufbau (W-12): Fast jeder
+        Bereich der Einstellungen liest aus der Struktur, und die wird beim
+        erneuten Ansteuern und beim Fensterwechsel erneuert.
+      */}
+      <ScreenHeader
+        title="Einstellungen"
+        lead={AREA_LEAD[active]}
+        refreshing={structure.state.status === "ready" && structure.state.refreshing}
+      />
 
       <div className="settings-layout">
         <nav className="settings-rail" aria-label="Bereiche der Einstellungen">

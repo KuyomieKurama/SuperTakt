@@ -232,6 +232,58 @@ export function poolReference(row: SqlRow): TaktFieldError {
 }
 
 /**
+ * Wie viele Regelnamen eine Sperre höchstens nennt (R-3a H-3).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum es überhaupt eine Grenze gibt
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-101 hatte keine der drei Abfragen ein `LIMIT`, und für die Zahl der
+ * Pools gibt es nirgends eine Obergrenze. Der Kommentar dazu begründete den
+ * Verzicht damit, daß `pool_rule` „eine Handvoll von Hand eingerichteter
+ * Zeilen" hält — das ist die Annahme, die eine Grenze ersetzen soll, und
+ * Annahmen dieser Art altern. Bei 200 Zeichen je Name steht sonst der ganze
+ * Bestand in **einem** Satz eines Löschdialogs.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Kürzung im Text steht und nicht nur im `LIMIT`
+ * ---------------------------------------------------------------------------
+ *
+ * Eine Liste, die still bei zwanzig aufhört, ist die stille Kürzung aus Befund
+ * B-3b: Der Benutzer nimmt zwanzig Regeln heraus, versucht es wieder, und die
+ * Sperre steht immer noch. Die Abfrage holt deshalb **eine Zeile mehr** als sie
+ * zeigt; kam sie, sagt der Meldungstext es. Die Oberfläche braucht dafür keine
+ * Änderung — sie zeigt den Satz des Dienstes, wie er dasteht
+ * (`errorText.ts`, R-3a).
+ */
+export const RULE_REFERENCE_LIMIT = 20;
+
+/** Für `LIMIT` in der Abfrage: eine Zeile mehr, um die Kürzung zu **bemerken**. */
+export const RULE_REFERENCE_PROBE = RULE_REFERENCE_LIMIT + 1;
+
+/**
+ * Die Regelnamen für `details`, gekürzt und mit dem Hinweis dazu.
+ *
+ * `rows` kommt aus einer Abfrage mit `LIMIT RULE_REFERENCE_PROBE`. Sind es so
+ * viele, gibt es mindestens eine weitere Regel, und `notice` trägt den Satz,
+ * der an die Meldung gehängt wird. Sonst ist `notice` leer, und der Text bleibt
+ * Wort für Wort der von vorher.
+ */
+export function poolReferences(rows: readonly SqlRow[]): {
+  readonly details: readonly TaktFieldError[];
+  readonly notice: string;
+} {
+  const shown = rows.slice(0, RULE_REFERENCE_LIMIT);
+  return {
+    details: shown.map((row) => poolReference(row)),
+    notice:
+      rows.length > RULE_REFERENCE_LIMIT
+        ? ` Es sind mehr als ${String(RULE_REFERENCE_LIMIT)}; genannt werden die ersten ${String(RULE_REFERENCE_LIMIT)}.`
+        : '',
+  };
+}
+
+/**
  * Eine **abgeschlossene** Buchung.
  *
  * Wirft, wenn `ended_at` fehlt. Das ist Absicht: `TimeEntry` sagt per Vertrag

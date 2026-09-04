@@ -564,7 +564,24 @@ export function createTodoPort(
       return ok(undefined);
     },
 
-    /** A-2.4 — Erledigt setzen. Die Kanban-Spalte bleibt, wo sie ist (E-023). */
+    /**
+     * A-2.4 — Erledigt setzen.
+     *
+     * `status_id` bleibt unangetastet: Erledigt und Status sind zwei Achsen,
+     * und das Erledigen hat den Status nie verändert (E-023).
+     *
+     * **Die Karte bleibt deshalb trotzdem nicht, wo sie ist.** Seit E-054 ist
+     * eine Kanban-Spalte eine Regel, und seit E-055 darf diese Regel nach
+     * „Erledigt" fragen: Das Setzen nimmt das Todo aus jeder Spalte mit
+     * `completion: 'open'` heraus und trägt es in jede mit `completion: 'done'`
+     * ein. Welche das sind, rechnet der Anwendungsfall
+     * (`usecases/pool-movement.ts`) und meldet es als `poolMovement` an
+     * `PUT /todos/{todoId}/done` (E-060). Bis T-101 stand hier das Gegenteil
+     * (R-2a W-3).
+     *
+     * `AND completed_at IS NULL` macht den Aufruf mehrfach ausführbar: Ein
+     * zweites „erledigt" schreibt nichts und verschiebt den Zeitstempel nicht.
+     */
     async markDone(id, now) {
       const outcome = attempt(() =>
         conn

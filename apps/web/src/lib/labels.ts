@@ -24,28 +24,34 @@
  * fuer den neuen Wert auf `undefined`, wo ihr Typ `string` verspricht. Mit dem
  * Import wird stattdessen genau die Tabelle rot, der eine Beschriftung fehlt.
  *
- * **Sechs** Aufzaehlungen liegen deshalb in der Domaene und werden hier nur
+ * **Acht** Aufzaehlungen liegen deshalb in der Domaene und werden hier nur
  * beschriftet: {@link TimeEntrySource}, {@link RoundingMode},
- * {@link ExportAuditEvent}, {@link PoolPlacement}, {@link PoolCompletionFilter}
- * und {@link PoolExportFilter}.
+ * {@link ExportAuditEvent}, {@link PoolPlacement}, {@link PoolCompletionFilter},
+ * {@link PoolExportFilter}, {@link ThemeSetting} und {@link PoolMatchMode}.
  *
- * **Drei** bleiben hier definiert, jede aus einem genannten Grund:
+ * Die letzten beiden sind seit T-102 dabei. Bis dahin stand hier: „fuehrt die
+ * Domaene bis heute nur als Inline-Vereinigung an ihrem Feld an; es gibt dort
+ * keinen Namen zum Importieren. Sobald sie einen bekommen, gehoeren beide in
+ * die Liste darueber." Sie haben ihn mit T-093 bekommen — `Theme` in
+ * `packages/domain/src/settings.ts`, `PoolMatchMode` in `tag.ts`, beide ueber
+ * den Einstiegspunkt des Pakets ausgefuehrt —, und die Bedingung, die der
+ * Kommentar selbst genannt hat, ist damit eingetreten (R-1a, Befund 4).
+ * `Theme` heisst hier weiter {@link ThemeSetting}: Der Name steht an neun
+ * Stellen der Oberflaeche, und ein Alias beim Import kostet nichts.
  *
- *  - {@link DoneFlagState} ist ein **Anzeige**zustand ohne Entsprechung im
- *    Datenmodell — `reopened` steht in keiner Spalte.
- *  - {@link ThemeSetting} und {@link PoolMatchMode} fuehrt die Domaene bis
- *    heute nur als Inline-Vereinigung an ihrem Feld (`settings.ts:37`,
- *    `tag.ts:283`); es gibt dort keinen Namen zum Importieren. Sobald sie einen
- *    bekommen, gehoeren beide in die Liste darueber. Gemeldet an den
- *    domain-dev, T-091.
+ * **Eine** bleibt hier definiert, aus einem genannten Grund:
+ * {@link DoneFlagState} ist ein **Anzeige**zustand ohne Entsprechung im
+ * Datenmodell — `reopened` steht in keiner Spalte.
  */
 
 import type {
   ExportAuditEvent,
   PoolCompletionFilter,
   PoolExportFilter,
+  PoolMatchMode,
   PoolPlacement,
   RoundingMode,
+  Theme as ThemeSetting,
   TimeEntrySource,
 } from "@takt/domain";
 
@@ -53,8 +59,10 @@ export type {
   ExportAuditEvent,
   PoolCompletionFilter,
   PoolExportFilter,
+  PoolMatchMode,
   PoolPlacement,
   RoundingMode,
+  ThemeSetting,
   TimeEntrySource,
 };
 
@@ -78,13 +86,12 @@ export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> 
 /**
  * Farbmodus der Anwendung. Spalte `app_setting.theme`.
  *
- * Zweite Fassung: Die Domaene schreibt denselben Wertebereich inline an
- * `AppSettings.theme` (`packages/domain/src/settings.ts:37`) und gibt ihm
- * keinen Namen. Sobald sie einen vergibt, wird dieser Typ dagegen getauscht —
- * siehe den Kopf dieser Datei.
+ * Der Wertebereich steht seit T-093 als `Theme` in `@takt/domain`
+ * (`settings.ts`) und wird oben unter dem hiesigen Namen importiert. Die zweite
+ * Fassung, die bis T-102 hier stand, ist ersatzlos weg (R-1a, Befund 4):
+ * Bekommt die Domaene ein viertes Erscheinungsbild, wird jetzt diese Tabelle
+ * rot, statt still ein `undefined` zu liefern, wo ihr Typ `string` verspricht.
  */
-export type ThemeSetting = "system" | "light" | "dark";
-
 export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
   system: "Systemvorgabe",
   light: "Hell",
@@ -231,14 +238,10 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
  * keinen Bestand um — aber er legt neue Regeln anders an, als der Benutzer es
  * aus dem Bestand kennt.
  *
- * Zweite Fassung wie {@link ThemeSetting}: Die Domaene fuehrt denselben
- * Wertebereich inline an `Pool.matchMode` (`packages/domain/src/tag.ts:283`)
- * und gibt ihm keinen Namen. Sobald sie einen vergibt, wird dieser Typ dagegen
- * getauscht — siehe den Kopf dieser Datei.
- */
-export type PoolMatchMode = "any" | "all";
-
-/**
+ * Der Wertebereich steht seit T-093 als `PoolMatchMode` in `@takt/domain`
+ * (`tag.ts`) und wird oben importiert; die zweite Fassung an dieser Stelle ist
+ * mit T-102 entfallen (R-1a, Befund 4).
+ *
  * **„Alle" ist hier kein Wort mehr** (R-2, Sprache 2).
  *
  * Bis T-091 hiess der strengste Modus „Alle davon" — drei Zeilen unter einem
@@ -350,6 +353,25 @@ export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
  */
 export const POOL_EXPORT_NOT_BILLED_HINT =
   "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ (E-047) trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
+
+/**
+ * Derselbe Widerspruch, kurz — an der **Lese**flaeche (W-7 aus R-2a).
+ *
+ * {@link POOL_EXPORT_NOT_BILLED_HINT} steht dort, wo gewaehlt wird: im
+ * Regelformular, neben dem Optionsknopf. Wer eine Spalte „Abgerechnet" erbt
+ * oder sie nur ansieht, kommt an dieser Stelle nie vorbei — und liest am
+ * Spaltenkopf „Abgerechnet", waehrend an einer Buchung darin „Nicht
+ * abgerechnet" steht. Zwei fast gleiche Woerter mit entgegengesetzter Wirkung,
+ * und beide richtig: Das eine ist der Anzeigezustand einer Buchung (E-050), das
+ * andere der Wert `export_state = 'exported'`, den beide teilen (E-032).
+ *
+ * Deshalb ein zweiter, kuerzerer Satz und nicht derselbe: An der Leseflaeche
+ * ist Platz fuer eine Zeile, nicht fuer drei, und die Frage lautet dort nicht
+ * „was waehle ich", sondern „warum steht das hier". Umbenannt wird nichts —
+ * E-059 ist entschieden.
+ */
+export const POOL_EXPORT_EXPORTED_NOTE =
+  "„Abgerechnet“ meint den Exportstatus der Buchungen: Auch eine ausgebuchte Buchung, an der „Nicht abgerechnet“ steht, trägt ihn und zählt hier mit.";
 
 /**
  * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.

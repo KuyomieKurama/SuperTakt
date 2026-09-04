@@ -15,8 +15,9 @@
  * gestarteter Dienst wäre hier unbenutzte Vorsorge, keine Voraussetzung.
  */
 
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { rm } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 
 import type { FullConfig } from '@playwright/test';
@@ -29,6 +30,14 @@ import {
 } from './build-check-session';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Genau der Typ, den `spawn` mit `stdio: ['ignore', 'pipe', 'pipe']` liefert
+ * (`stdin` ist `null`) — nicht `ChildProcessWithoutNullStreams`, das ein
+ * beschreibbares `stdin` verlangt und unter `exactOptionalPropertyTypes`
+ * einen echten Typfehler ergibt.
+ */
+type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -49,7 +58,7 @@ async function buildOutlookAddin(): Promise<void> {
   }
 }
 
-async function startTaskpane(): Promise<ChildProcessWithoutNullStreams> {
+async function startTaskpane(): Promise<ChildProcessWithoutStdin> {
   await rm(OUTLOOK_TASKPANE_APP_DATA_DIR, { recursive: true, force: true });
 
   const child = spawn('node', ['tests/e2e/support/run-outlook-taskpane.mjs'], {

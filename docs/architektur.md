@@ -331,17 +331,32 @@ noch das Aufheben von Erledigt ändert den Status. Deshalb gibt es keine gemerkt
 konfigurierte Rückkehr-Spalte — es gäbe nichts wiederherzustellen, und `todo` führt kein Feld
 dafür.
 
-Seit E-054 gilt das doppelt: Die **Kanban-Spalte** ist ohnehin nicht mehr der Status, sondern
-eine Regel über Tags. Ein Timerstart, der „Erledigt" aufhebt, ändert weder Status noch Tags — die
-Karte steht danach in denselben Spalten wie zuvor, ohne dass etwas geschrieben worden wäre.
+Seit E-054 gilt das für den **Status**: Die Kanban-Spalte ist nicht mehr der Status, sondern eine
+Regel — und seit E-055 hat diese Regel fünf Achsen, nicht nur Tags: erforderliche Tags,
+ausgeschlossene Tags, Status, Erledigt und Exportstatus. Ein Timerstart schreibt weder Status noch
+Tags, und **trotzdem kann die Karte danach in anderen Spalten stehen**: Er hebt „Erledigt" auf
+(A-2.5), und stoppt er dabei einen Timer desselben Todos, entsteht die erste offene Buchung. Beides
+sind Achsen. Die Karte bleibt also genau so lange, wo sie ist, wie keine Regel nach „Erledigt" oder
+nach dem Exportstatus fragt.
 
-**Die Pool-Zugehörigkeit wird nicht angefasst.** Sie ist abgeleitet (A-3.4). Schritt 2 ändert
+**Was daraus folgt, wird berechnet und nicht geraten.** `apps/local-api/src/usecases/pool-movement.ts`
+hält jede Regel gegen den Zustand vor und nach der Handlung und liefert `{ appears, enters, leaves }`;
+die Routen geben das als `poolMovement` heraus (E-058, E-060), den Satz dazu bildet
+`poolMovementSentence` aus der Domäne. Bis T-101 stand an dieser Stelle „die Karte steht danach in
+denselben Spalten wie zuvor" — derselbe Irrtum, den :105-113 zweihundert Zeilen weiter oben als
+Irrtum beschreibt (R-2a W-4, D-3 aus R-2).
+
+**Die Pool-Zugehörigkeit wird nicht geschrieben.** Sie ist abgeleitet (A-3.4); Schritt 2 ändert
 allein `completed_at`. A-2.5 trägt die Sichtbarkeit: Erledigte Todos werden in Pool-Ansichten
-ausgeblendet (`IsVisibleInPool` in `packages/domain/src/tag.ts`), aktive nicht. Fällt das
-Kennzeichen, fällt die Ausblendung, und das Todo erscheint ohne weiteren Schritt wieder in
-seinen Pools, weil es sie nie verlassen hat. Nachgewiesen im Migrationstest: ein Todo bleibt
-Mitglied seines Pools, während es erledigt ist, und ist nach dem Timerstart sofort wieder in der
+ausgeblendet (`isVisibleInPool` in `packages/domain/src/tag.ts`), aktive nicht. Fällt das
+Kennzeichen, fällt die Ausblendung, und das Todo erscheint ohne einen einzigen Schreibvorgang
+wieder dort, wo seine Regel es hinstellt. Nachgewiesen im Migrationstest: ein Todo bleibt Mitglied
+seines Pools, während es erledigt ist, und ist nach dem Timerstart sofort wieder in der
 Ergebnisliste.
+
+Das gilt für das Umlegen des Kennzeichens **von Hand** genauso: `PUT` und
+`DELETE /todos/{todoId}/done` liefern seit E-060 dasselbe `poolMovement`. Wer an einer Stelle
+Auskunft gibt und an der anderen schweigt, sagt die halbe Wahrheit.
 
 **Der Timer hinterlässt im Betrieb ein Lebenszeichen** (E-036), mindestens jede Minute, in
 `timer_heartbeat` und nicht auf der Buchung selbst. Endet die Anwendung ungeordnet, findet der

@@ -569,6 +569,19 @@ paths:
       tags: [Todos]
       operationId: markTodoDone
       summary: Todo als erledigt markieren (A-2.4)
+      description: |
+        Der **Status** bleibt unangetastet: Erledigt und Status sind zwei
+        Achsen, und das Erledigen hat den Status nie verändert (E-023).
+
+        Die **Spalten und Pools** bleiben deswegen trotzdem nicht dieselben.
+        Seit E-054 ist eine Kanban-Spalte eine Regel, und seit E-055 darf diese
+        Regel nach „Erledigt" fragen: Das Setzen nimmt das Todo aus jeder Regel
+        mit `completion: open` heraus und trägt es in jede mit
+        `completion: done` ein. Welche das sind, sagt `poolMovement` (E-060).
+
+        Der Aufruf ist mehrfach ausführbar. Stand das Kennzeichen schon,
+        schreibt der Dienst nichts, der Zeitstempel bleibt, und `poolMovement`
+        ist `null`.
       responses:
         '200':
           description: Erledigt.
@@ -578,7 +591,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/Todo' }
+                  data: { $ref: '#/components/schemas/TodoAfterDone' }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -586,12 +599,24 @@ paths:
     delete:
       tags: [Todos]
       operationId: clearTodoDone
-      summary: Erledigt-Status aufheben
+      summary: Erledigt-Status aufheben (A-2.5)
       description: |
-        Das Todo kehrt in die Spalte zurück, in der es vor dem Erledigen lag,
-        ersatzweise in die Standardspalte. Seine Pools findet es ohne weiteres
-        Zutun wieder, weil die Zugehörigkeit aus den Tags abgeleitet und nicht
-        gespeichert ist (A-3.4).
+        Es fällt allein `completed_at`. Eine Spalte wird **nicht**
+        wiederhergestellt, weil das Erledigen nie eine verschoben hat (E-023) —
+        es gibt keine gemerkte und keine konfigurierte Rückkehr-Spalte, und
+        `todo` führt kein Feld dafür.
+
+        Seine Pools und Spalten findet das Todo ohne weiteres Zutun wieder, weil
+        die Zugehörigkeit aus der Regel folgt und nirgends gespeichert ist
+        (A-3.4, E-055). **Welche** das sind, sagt `poolMovement` (E-060) — und
+        das ist mehr als eine Bequemlichkeit: Eine Regel, die nach dem
+        Exportstatus oder nach „Erledigt" fragt, urteilt danach anders, und der
+        Benutzer sieht seine Karte an einer Stelle auftauchen, an der er sie
+        nicht gesucht hätte.
+
+        Bis T-101 stand hier, das Todo kehre „in die Spalte zurück, in der es
+        vor dem Erledigen lag, ersatzweise in die Standardspalte". Das war seit
+        E-023 falsch und seit E-054 doppelt.
       responses:
         '200':
           description: Wieder aktiv.
@@ -601,7 +626,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/Todo' }
+                  data: { $ref: '#/components/schemas/TodoAfterDone' }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -733,8 +758,19 @@ paths:
       operationId: deleteTag
       summary: Tag löschen
       description: |
-        Scheitert mit `409` (`tag_in_use`), solange das Tag an Todos oder in
-        einer Pool-Regel hängt.
+        Scheitert mit `409` (`tag_in_use`), solange das Tag an Todos hängt, in
+        der Regel eines Pools oder einer Kanban-Spalte steht oder ein
+        Standard-Tag ist (A-4.5, A-9.*).
+
+        Im **Regelfall** sagt `details`, welche Regeln betroffen sind: je
+        Eintrag `code: pool_rule`, in `field` die Kennung der Regel und in
+        `message` ihr Name — dieselbe Auskunft, die Ordner und Status seit
+        T-089 geben. Bis T-101 fehlte sie ausgerechnet beim Tag, und der
+        Löschdialog der Oberfläche nannte die Regel deshalb nicht (gemessen in
+        T-099).
+
+        Genannt werden höchstens 20 Regeln. Sind es mehr, sagt es der
+        Meldungstext; still gekürzt wird nicht (R-3a H-3).
       responses:
         '204': { description: Gelöscht. }
         '400': { $ref: '#/components/responses/TokenInUrl' }
@@ -835,7 +871,8 @@ paths:
         Derselbe Schlüssel wie beim Tag in einer Regel, weil es derselbe
         Sachverhalt ist; welches Ding gemeint ist, sagt die Route. **Welche**
         Regeln betroffen sind, sagt `details`: je Eintrag `code: pool_rule`, in
-        `field` die Kennung der Regel und in `message` ihr Name.
+        `field` die Kennung der Regel und in `message` ihr Name. Genannt werden
+        höchstens 20; sind es mehr, sagt es der Meldungstext (R-3a H-3).
       responses:
         '204': { description: Gelöscht. }
         '400': { $ref: '#/components/responses/TokenInUrl' }
@@ -1292,7 +1329,9 @@ paths:
         tun muss: den Status irgendwo herausnehmen. **Wo**, sagt `details`: Im
         Regelfall trägt jeder Eintrag `code: pool_rule`, in `field` die
         **Kennung** der Regel und in `message` ihren Namen. Bei zwanzig Regeln
-        ist das der Unterschied zwischen einer Sperre und einer Suche.
+        ist das der Unterschied zwischen einer Sperre und einer Suche. Genannt
+        werden höchstens 20; sind es mehr, sagt es der Meldungstext — still
+        gekürzt wird nicht (R-3a H-3).
 
         `default_status_locked` seit T-074. Bis dahin sperrte allein die
         Oberfläche diesen Fall; der Dienst ließ ihn durch und fiel danach
@@ -2041,6 +2080,30 @@ paths:
                           reason:
                             type: string
                             enum: [timer_too_short, orphan_discarded]
+                            description: |
+                              **Zwei Gründe, und sie sind nicht derselbe** (O-R,
+                              E-036).
+
+                              | Wert | Wann |
+                              |---|---|
+                              | `orphan_discarded` | Der Benutzer hat `discard` gewählt. Es gab etwas zu buchen, und er wollte es nicht. |
+                              | `timer_too_short` | Er hat `book_until_heartbeat` gewählt, aber die Zeit bis zum letzten Lebenszeichen lag unter der Mindestdauer — meist, weil nie eines geschrieben wurde. |
+
+                              Beide Ausgänge sind erreichbar, und der Grund
+                              gehört in die Meldung an den Benutzer: „Die
+                              Buchung war zu kurz" über eine Buchung, die er
+                              selbst verworfen hat, ist eine falsche Auskunft.
+
+                              Die Unterscheidung kommt aus der **Domäne**
+                              (`decideOrphanedTimer`, `TimerStopDecision` in
+                              `@takt/domain`). Bis T-101 schrieb der Dienst sie
+                              wieder weg und meldete immer `timer_too_short`;
+                              diese Beschreibung versprach seit T-093 etwas,
+                              das nie geliefert wurde.
+
+                              `POST /timer/stop` kennt weiterhin **nur**
+                              `timer_too_short`: Dort gibt es keine verwaiste
+                              Buchung zu verwerfen.
                           poolMovement:
                             type: 'null'
                             description: |
@@ -3434,7 +3497,23 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     UnprocessableEntity:
-      description: Die Anfrage ist wohlgeformt, aber fachlich unzulässig.
+      description: |
+        Die Anfrage ist wohlgeformt, aber fachlich unzulässig.
+
+        **Namen und Titel** (`name`, `title`) werden dabei nicht nur auf Länge
+        geprüft: Steuerzeichen (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und
+        bidirektionale Formatierungszeichen (`U+202A`–`U+202E`,
+        `U+2066`–`U+2069`) werden abgewiesen und nicht still entfernt (R-3a
+        H-2). Diese Namen reisen bis in den Bewegungssatz, in den
+        Aufgabenbereich des Add-ins und in die Löschdialoge; ein `U+202E` dreht
+        dort den Rest der Zeile optisch um, und React maskiert es nicht, weil es
+        kein Markup ist. Die Grenze steht nicht als `pattern` an jedem Feld —
+        ein regulärer Ausdruck über Steuerzeichen ist in einer Beschreibung
+        schwerer zu lesen als dieser Absatz, und die Prüfung liegt ohnehin an
+        einer Stelle (`http/input.ts`).
+
+        Der abgewiesene **Wert** steht nicht in der Meldung. Er stammt
+        möglicherweise aus einer fremden E-Mail (B-4.3 Punkt 5).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -3949,6 +4028,53 @@ components:
             `@takt/domain`. Die Oberfläche liest sie, statt `isEmpty` und
             `unresolvedRequired` selbst zu verknüpfen — das wäre die zweite
             Fassung derselben Bedingung.
+
+    TodoAfterDone:
+      description: |
+        Das Todo nach dem Umlegen des Erledigt-Kennzeichens, **plus** die
+        Bewegung, die daraus folgt (E-060).
+
+        **Das Todo steht flach darin und nicht unter `todo`.** Beide Routen
+        haben seit jeher das Todo selbst geliefert, und jeder Aufrufer liest es
+        so; `poolMovement` kommt hinzu und nimmt nichts weg. Ein Umbau nach
+        `{ todo, poolMovement }` hätte dieselbe Auskunft gegeben und jede
+        vorhandene Aufrufstelle gebrochen — für nichts. Die Gestalt ist damit
+        dieselbe wie an `POST /timer/start`: das Ergebnis der Handlung und die
+        Bewegung nebeneinander, nicht ineinander.
+      allOf:
+        - $ref: '#/components/schemas/Todo'
+        - type: object
+          required: [poolMovement]
+          properties:
+            poolMovement:
+              oneOf:
+                - { $ref: '#/components/schemas/PoolMovement' }
+                - { type: 'null' }
+              description: |
+                Wie das Umlegen des Kennzeichens das Todo durch die Pools und
+                Spalten bewegt — oder `null` (E-060).
+
+                `null` heißt „nachgesehen, nichts": Das Kennzeichen stand schon
+                so, der Dienst hat nichts geschrieben, und es wurde keine
+                einzige Regel über ihre Ordnerbäume aufgelöst.
+
+                **Der Anlaß für den Satz ist nicht an beiden Routen derselbe**
+                (E-060 Punkt 2):
+
+                | Route | Anlaß | warum |
+                |---|---|---|
+                | `DELETE` | `reopen` | Das Todo war erledigt und kehrt zurück; „wieder" stimmt, und `appears` ist die richtige Liste. |
+                | `PUT` | `booking` | Es gibt keine Vorgeschichte, „wieder" wäre erfunden, und eine Aufzählung von `appears` wäre lauter Unverändertes. Der Satz nennt `enters` und `leaves`. |
+
+                Der Wert `booking` trägt hier kein Wort von Buchung: Er
+                bezeichnet die **neutrale Form** der Auskunft und nicht die
+                Route (E-060 Punkt 3, `PoolMovementOccasion` in `@takt/domain`).
+                Der Satz lautet etwa „Es steht jetzt in „Erledigt" und ist aus
+                „Offen" verschwunden."
+
+                Wer den Satz bildet, ruft
+                `poolMovementSentence(movement, 'past', anlaß)` aus
+                `@takt/domain` und läßt die Zeile weg, wenn `null` herauskommt.
 
     PoolMovement:
       type: object

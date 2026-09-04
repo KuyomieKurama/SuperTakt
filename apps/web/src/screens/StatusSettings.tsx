@@ -141,7 +141,7 @@ export function StatusSettings() {
       }),
     );
     return new Map<Id, number>(entries);
-  }, [orderKey, version]);
+  }, [orderKey], [version]);
 
   /**
    * Die Zahl der Todos in einem Status — oder warum sie fehlt.

@@ -105,7 +105,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
       titles.set(todo.id, { title: todo.title, callNumber: todo.callNumber });
     }
     return { page, titles, todos: todos.items };
-  }, [filter, version]);
+  }, [filter], [version]);
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];

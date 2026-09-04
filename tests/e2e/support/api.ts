@@ -90,6 +90,38 @@ export async function clearTodoDone(id: string): Promise<Todo> {
   return call<Todo>(`/todos/${id}/done`, { method: 'DELETE' });
 }
 
+/**
+ * Vertrag von `PUT`/`DELETE /todos/:id/done`, **sobald T-101 steht**
+ * (E-060 Punkt 1): Beide Routen liefern zusätzlich `poolMovement` — Anlass
+ * `'booking'` beim Setzen, `'reopen'` beim Aufheben (E-060 Punkt 2), `null`,
+ * wenn sich nichts bewegt. Heute (vor T-101) antworten beide Routen noch mit
+ * dem blanken `Todo`, siehe {@link markTodoDone}/{@link clearTodoDone} oben —
+ * diese bleiben deshalb unverändert und in Benutzung, statt einer Lüge über
+ * den heutigen Stand ausgesetzt zu werden.
+ *
+ * Angenommen, nicht gemessen: `{ todo, poolMovement }` als Hülle um das
+ * Ergebnis, analog zu {@link StopTimerResult}, das eine Buchung ebenso neben
+ * `poolMovement` trägt. Keine `kind`-Marke — anders als beim Timer kennt
+ * weder das Setzen noch das Aufheben von „Erledigt" einen zweiten Ausgang
+ * (kein „unvollständig", kein „abgelehnt"). Sobald T-101 die tatsächliche
+ * Antwort liefert, ist diese Stelle die erste, die dagegen zu prüfen ist —
+ * siehe Bericht zu T-103, Abschnitt „Entwurf E-060/O-R".
+ */
+export interface TodoDoneResult {
+  readonly todo: Todo;
+  readonly poolMovement: PoolMovementNames | null;
+}
+
+/** `PUT /todos/:id/done` mit `poolMovement` (T-101/E-060 Punkt 1, Entwurf). */
+export async function setTodoDoneWithMovement(id: string): Promise<TodoDoneResult> {
+  return call<TodoDoneResult>(`/todos/${id}/done`, { method: 'PUT' });
+}
+
+/** `DELETE /todos/:id/done` mit `poolMovement` (T-101/E-060 Punkt 1, Entwurf). */
+export async function reopenTodoWithMovement(id: string): Promise<TodoDoneResult> {
+  return call<TodoDoneResult>(`/todos/${id}/done`, { method: 'DELETE' });
+}
+
 export async function createTimeEntry(input: {
   todoId: string;
   startedAt: string;
@@ -462,10 +494,22 @@ export async function stopTimer(note = ''): Promise<StopTimerResult> {
 /**
  * `POST /timer/orphaned/resolve` (T-099, E-058 Punkt 6). Dieselbe Gestalt wie
  * beim Stopp — auch hier ist `poolMovement` im verworfenen Zweig fest `null`.
+ *
+ * `reason` als geschlossene Aufzählung, nicht als `string` (Fund aus T-093,
+ * O-R): Die OpenAPI verspricht `timer_too_short` und `orphan_discarded`,
+ * vor T-101 liefert der Dienst aber ausnahmslos `timer_too_short` — die Wahl
+ * „verwerfen“ läuft heute unter derselben Kennung wie „zu kurz“. Die
+ * Aufzählung hier nennt bereits beide, weil kein heutiger Aufrufer den Wert
+ * ausliest (siehe `cleanupAnyTimer` unten); sobald T-101 unterscheidet, ist
+ * dieser Typ bereits der richtige, kein zweiter Umbau nötig.
  */
 export type ResolveOrphanedTimerResult =
   | { readonly kind: 'recorded'; readonly entry: TimeEntry; readonly poolMovement: PoolMovementNames | null }
-  | { readonly kind: 'discarded'; readonly reason: string; readonly poolMovement: null };
+  | {
+      readonly kind: 'discarded';
+      readonly reason: 'timer_too_short' | 'orphan_discarded';
+      readonly poolMovement: null;
+    };
 
 export async function resolveOrphanedTimer(
   resolution: 'book_until_heartbeat' | 'discard' = 'discard',

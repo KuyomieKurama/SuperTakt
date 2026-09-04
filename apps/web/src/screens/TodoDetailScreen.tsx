@@ -43,6 +43,7 @@ import {
   formatTimeRange,
   plural,
 } from "../lib/format";
+import { doneMovementSentence, withMovement } from "../lib/movement";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
 import {
   BookingFormDialog,
@@ -133,12 +134,12 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
       blockedDays,
       previewProblem: outcome.kind === "failed" ? outcome.message : null,
     };
-  }, [todoId, version]);
+  }, [todoId], [version]);
 
   const toggleDone = useCallback(
     (done: boolean, title: string) => {
       void (done ? clearTodoDone(todoId) : markTodoDone(todoId))
-        .then(() => {
+        .then((result) => {
           /*
             Der Anzeigezustand „Erledigt aufgehoben" endet, sobald der
             Benutzer das Kennzeichen selbst anfasst (A-2.5). Er erklaert eine
@@ -147,10 +148,19 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           */
           timer.clearReactivated(todoId);
           bump();
+          /*
+            Der Bewegungssatz aus der Antwort (E-060 Punkt 4). Diese Ansicht
+            zeigt kein Board und keine Pool-Liste — gerade deshalb steht hier,
+            wo das Todo nach der Handlung zu finden ist. Meldet der Dienst
+            keine Bewegung, bleibt es beim Satz über Status und Kennzeichen.
+          */
           toasts.show({
             tone: done ? "info" : "success",
             title: done ? `„${title}“ ist wieder offen.` : `„${title}“ ist erledigt.`,
-            body: "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
+            body: withMovement(
+              "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
+              doneMovementSentence(result.poolMovement, done),
+            ),
           });
         })
         .catch((cause: unknown) =>
@@ -259,7 +269,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
   return (
     <section className="screen">
       <AsyncBoundary state={detail.state} label="Todo wird geladen" rows={5} onRetry={detail.reload}>
-        {(value) => {
+        {(value, refreshing) => {
           const todo = value.todo.todo;
           const done = todo.completedAt !== null;
           /*
@@ -284,6 +294,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                     ? `Status: ${structure.statusName(todo.statusId)}`
                     : `Call ${todo.callNumber} · Status: ${structure.statusName(todo.statusId)}`
                 }
+                refreshing={refreshing}
                 actions={
                   <>
                     <Button

@@ -4002,6 +4002,31 @@
 }
 
 /*
+ * Hilfssatz an einer Achse (W-7 aus R-2a).
+ *
+ * Dieselbe Bauart wie `.rule-summary__unreachable` daneben, aber in `--text-
+ * muted` statt in `--warning-fg`: Der leere Ordner ist ein Einrichtungsfehler,
+ * dieser Satz ist eine Auskunft. Beide Farbpaare stehen in `contrast-check.mjs`
+ * (Gruppen „Text", „Board (E-054)"), fuer die Flaechen, auf denen die
+ * Zusammenfassung steht — Spaltenkopf (`--bg-subtle`) und Regelliste
+ * (`--bg-surface`).
+ */
+.rule-summary__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/*
  * Nur im Formular sichtbar (`showNeutral`). Dort wird gewaehlt, und dort muss
  * ausgesprochen werden, was „Alle" bedeutet — an den Flaechen, die eine
  * fertige Regel nur anzeigen, waere derselbe Satz Rauschen.

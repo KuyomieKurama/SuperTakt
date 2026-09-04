@@ -284,7 +284,7 @@ export function ExportScreen() {
     const byId = new Map<Id, TimeEntry>();
     for (const entry of entries) byId.set(entry.id, entry);
     return { entries, byId, titles, runs: runs.items };
-  }, [version]);
+  }, [], [version]);
 
   /*
    * Kennungen als Zeichenkette in den Abhängigkeiten und nicht als Feld: Ein
@@ -442,7 +442,7 @@ export function ExportScreen() {
     if (totalsState.kind !== "ready") setConfirmOpen(false);
   }, [totalsState.kind]);
 
-  const templates = useAsync(() => listExportTemplates(), [version]);
+  const templates = useAsync(() => listExportTemplates(), [], [version]);
 
   /*
    * Die Auswahlliste des Dienstes (E-049). Sie beschriftet Quelle und
@@ -588,6 +588,7 @@ export function ExportScreen() {
       <ScreenHeader
         title="Export"
         lead="Eine Zeile je Todo und Kalendertag. Was hier steht, steht auch in der Datei."
+        refreshing={data.state.status === "ready" && data.state.refreshing}
         /*
           Gesperrt, solange nicht feststeht, was geschrieben würde (A-8.6). Bis
           T-045 blieb der Lauf auslösbar, wenn die Gesamtvorschau fehlschlug —

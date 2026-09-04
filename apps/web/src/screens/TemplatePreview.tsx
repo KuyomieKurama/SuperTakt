@@ -171,7 +171,7 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
       total: entries.total,
       entryIds: entries.items.map((entry) => entry.id),
     };
-  }, [version]);
+  }, [], [version]);
 
   /*
    * Der Entwurf als Zeichenkette — genau der Rumpf, der über die Leitung geht.

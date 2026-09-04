@@ -74,7 +74,7 @@ test.describe('TAGINPUT-01 — Vorschläge folgen der Namensregel des Dienstes',
       // enthält denselben Satzteil wörtlich und träfe *immer*, unabhängig vom
       // tatsächlichen Angebot. Auf `role="option"` beschränkt trifft nur ein
       // wirklich gerendertes Angebot zum Anlegen.
-      const noCreateOffer = (): ReturnType<typeof expect> =>
+      const noCreateOffer = (): Promise<void> =>
         expect(page.getByRole('option', { name: /als neues Tag anlegen/ })).toHaveCount(0);
 
       // --- Kleinschreibung: derselbe Schlüssel, kein Angebot zum Anlegen ---

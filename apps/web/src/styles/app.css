@@ -742,6 +742,19 @@
   font-size: var(--text-xs);
 }
 
+/*
+ * Im Kopf einer Ansicht (W-12): Der Hinweis steht rechts neben dem Titel und
+ * vor den Aktionen, auf der Grundlinie der ersten Zeile. `flex: none`, damit er
+ * die Aktionen nicht schiebt, und `white-space: nowrap`, damit „Wird
+ * aktualisiert …" nicht umbricht und den Kopf höher macht — er soll auftauchen
+ * und verschwinden, ohne dass darunter etwas springt.
+ */
+.screen__headline > .refresh-hint {
+  flex: none;
+  align-self: center;
+  white-space: nowrap;
+}
+
 .refresh-hint--active::before {
   content: "";
   display: inline-block;

@@ -23,9 +23,10 @@
  * Entwicklungsserver, den T-055 gerade *nicht* prüfen soll.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessByStdio, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import type { Readable } from 'node:stream';
 
 import {
   API_BASE_URL,
@@ -38,6 +39,14 @@ import {
 } from './session';
 
 const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+
+/**
+ * Genau der Typ, den `spawn` mit `stdio: ['ignore', 'pipe', 'pipe']` liefert
+ * (`stdin` ist `null`, weil nichts hineingeschrieben wird) — nicht
+ * `ChildProcessWithoutNullStreams` (das verlangt ein beschreibbares `stdin`,
+ * unter `exactOptionalPropertyTypes` ein echter Typfehler, kein Formalismus).
+ */
+type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -132,7 +141,7 @@ export async function startLocalApi(): Promise<ChildProcessWithoutNullStreams> {
   );
 }
 
-async function startWeb(): Promise<ChildProcessWithoutNullStreams> {
+async function startWeb(): Promise<ChildProcessWithoutStdin> {
   const child = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
     cwd: `${REPO_ROOT}apps/web`,
     env: {
@@ -181,7 +190,7 @@ export async function configureExportDirectory(): Promise<void> {
 
 export interface RunningServices {
   readonly localApi: ChildProcessWithoutNullStreams;
-  readonly web: ChildProcessWithoutNullStreams;
+  readonly web: ChildProcessWithoutStdin;
 }
 
 export async function startServices(): Promise<RunningServices> {

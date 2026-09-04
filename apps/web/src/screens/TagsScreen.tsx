@@ -61,6 +61,11 @@ export function TagsScreen() {
       <ScreenHeader
         title="Tags"
         lead="Tags, Ordner und die Regeln darüber. Dieselbe Regel kann ein Pool sein, eine Spalte des Kanban-Boards oder beides (E-054)."
+        /*
+          Diese Ansicht liest allein aus der Struktur; ihr Nachladen ist
+          `structure.reload()` (W-12).
+        */
+        refreshing={structure.state.status === "ready" && structure.state.refreshing}
       />
 
       <AsyncBoundary
@@ -410,11 +415,42 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         />
       </FormDialog>
 
+      {/*
+        Nach einer Absage des Dienstes ist das hier kein Bestätigungsdialog
+        mehr, sondern eine Auskunft — und er sagt das auch (T-097 Frage 1,
+        R-2a Abschnitt 5.2).
+
+        Bis T-102 wechselte allein der Hinweistext, während der Titel weiter
+        „Ordner löschen?" fragte und die Hauptaktion weiter „Löschen" hieß: eine
+        Frage, die schon beantwortet ist, und als Antwort darauf genau die
+        Handlung, die eben gescheitert ist. `StatusSettings` macht es an
+        derselben Stelle seit T-097 richtig; zwei Muster für denselben Vorgang
+        lehren, daß eines davon keine Bedeutung hat.
+
+        Für Vorlesehilfen ist der Wechsel der **einzige** Weg, von der Absage
+        zu erfahren (SC 4.1.3): Der Hinweistext liegt in `aria-describedby` und
+        ist keine Statusmeldung; der Knopf dagegen trägt den Fokus, und ein
+        Namenswechsel unter dem Fokus wird angesagt.
+      */}
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title={pendingDelete?.kind === "folder" ? "Ordner löschen?" : "Tag löschen?"}
-        description={pendingDelete === null ? "" : `„${pendingDelete.name}“ wird entfernt.`}
+        title={
+          deleteError !== null
+            ? pendingDelete?.kind === "folder"
+              ? "Der Ordner wurde nicht gelöscht"
+              : "Das Tag wurde nicht gelöscht"
+            : pendingDelete?.kind === "folder"
+              ? "Ordner löschen?"
+              : "Tag löschen?"
+        }
+        description={
+          pendingDelete === null
+            ? ""
+            : deleteError === null
+              ? `„${pendingDelete.name}“ wird entfernt.`
+              : `„${pendingDelete.name}“ gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+        }
         /*
           Nach einer Absage steht hier die Meldung des Dienstes — mit den
           Regeln beim Namen, wenn er welche genannt hat (T-097). Vorher steht
@@ -428,10 +464,17 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
             ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht — und ein Ordner, den eine Regel nennt, ebenso wenig. Räumen Sie ihn vorher aus oder nehmen Sie ihn aus der Regel heraus."
             : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung.")
         }
-        confirmLabel="Löschen"
+        confirmLabel={deleteError === null ? "Löschen" : "Erneut versuchen"}
+        cancelLabel={deleteError === null ? "Abbrechen" : "Schließen"}
         onConfirm={() => {
           const target = pendingDelete;
           if (target === null) return;
+          /*
+            „Erneut versuchen" beginnt von vorn: Bliebe die alte Meldung
+            stehen, zeigte der Dialog beim zweiten Fehlschlag nicht, daß
+            überhaupt etwas geschehen ist.
+          */
+          setDeleteError(null);
           void (target.kind === "tag" ? deleteTag(target.id) : deleteTagFolder(target.id))
             .then(() => {
               setPendingDelete(null);
@@ -451,7 +494,10 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               setDeleteError(errorMessageWithRules(cause));
             });
         }}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => {
+          setPendingDelete(null);
+          setDeleteError(null);
+        }}
       />
     </>
   );

@@ -66,7 +66,7 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
 
   const loadMore = useCallback(() => setLimit((current) => current + AUDIT_PAGE_SIZE), []);
 
-  const data = useAsync(() => loadExportAuditPage({ limit }), [limit, version]);
+  const data = useAsync(() => loadExportAuditPage({ limit }), [limit], [version]);
 
   const rows = data.state.status === "ready" ? data.state.value.rows : [];
 

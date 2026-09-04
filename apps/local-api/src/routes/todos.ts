@@ -18,10 +18,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { PoolId, StatusId, TagId, TodoId } from '@takt/domain';
+import type { PoolId, PoolMovement, StatusId, TagId, Todo, TodoId } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
 import {
+  type TodoDoneResult,
   clearTodoDone,
   createTodo,
   listTodos,
@@ -238,12 +239,12 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
   // -------------------------------------------------------------------------
   routes.put('/:todoId/done', async (c) => {
     const result = await markTodoDone(context, c.req.param('todoId') as TodoId);
-    return result.ok ? data(c, result.value) : fail(c, result.error);
+    return result.ok ? data(c, doneBody(result.value)) : fail(c, result.error);
   });
 
   routes.delete('/:todoId/done', async (c) => {
     const result = await clearTodoDone(context, c.req.param('todoId') as TodoId);
-    return result.ok ? data(c, result.value) : fail(c, result.error);
+    return result.ok ? data(c, doneBody(result.value)) : fail(c, result.error);
   });
 
   return routes;
@@ -268,6 +269,30 @@ export function createSearchRoutes(context: AppContext): Hono<TaktEnv> {
   });
 
   return routes;
+}
+
+/**
+ * Der Antwortrumpf von `PUT` und `DELETE /todos/{todoId}/done` (E-060).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das Todo **flach** dasteht und nicht unter `todo`
+ * ---------------------------------------------------------------------------
+ *
+ * Weil beide Routen seit jeher das Todo selbst zurückgeben und jeder Aufrufer
+ * es so liest. `poolMovement` kommt hinzu, es nimmt nichts weg: Wer die Antwort
+ * heute als `Todo` liest, liest sie morgen unverändert weiter, und wer den
+ * Bewegungssatz will, liest ein Feld mehr. Ein Umbau nach `{ todo, poolMovement }`
+ * hätte dieselbe Auskunft gegeben und jede vorhandene Aufrufstelle gebrochen —
+ * für nichts.
+ *
+ * Die Gestalt ist damit dieselbe wie an `POST /timer/start`: das Ergebnis der
+ * Handlung und die Bewegung nebeneinander, nicht ineinander.
+ *
+ * Diese Datei entscheidet nichts Fachliches. Sie setzt zusammen, was der
+ * Anwendungsfall geliefert hat.
+ */
+function doneBody(result: TodoDoneResult): Todo & { poolMovement: PoolMovement | null } {
+  return { ...result.todo, poolMovement: result.poolMovement };
 }
 
 function toIssues(error: z.ZodError): { field: string; message: string; code: string }[] {

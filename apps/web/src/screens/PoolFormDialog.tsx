@@ -743,6 +743,14 @@ export function PoolFormDialog({
         <RuleSummary
           description={description}
           showNeutral
+          /*
+            Der Hilfssatz an der Exportachse (W-7) bleibt hier weg: Seine
+            ausfuehrliche Fassung steht drei Zeilen darueber am Optionsknopf
+            „Abgerechnet" ({@link POOL_EXPORT_NOT_BILLED_HINT}). Zweimal
+            dasselbe in zwei Wortlauten auf einem Formular ist genau der
+            Fehler, den E-059 abgeschafft hat.
+          */
+          showAxisNotes={false}
           size="md"
           {...(savedReach === null ? {} : { reach: savedReach })}
           emptyText={`Keine Bedingung — diese Regel trifft nichts. ${surface === "Spalte" ? "Die Spalte" : "Der Pool"} bleibt leer, bis eine Bedingung dazukommt.`}

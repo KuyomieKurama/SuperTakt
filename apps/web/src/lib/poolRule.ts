@@ -2,6 +2,7 @@ import { countPoolRuleConditions, poolRuleIsEmpty, type PoolRuleAxes } from "@ta
 import type { Id, Pool, PoolResolution, PoolRuleTerm } from "../api/types";
 import { formatCount, joinGerman } from "./format";
 import {
+  POOL_EXPORT_EXPORTED_NOTE,
   POOL_EXPORT_LABEL,
   POOL_MATCH_MODE_PREFIX,
   type PoolCompletionFilter,
@@ -110,6 +111,17 @@ export interface RuleAxis {
   readonly chips: readonly RuleChip[];
   /** Statt Chips ein Ausdruck, etwa „Nur erledigte". */
   readonly text: string | null;
+  /**
+   * Ein Satz, der einen absehbaren **Lesefehler** dieser Achse ausräumt —
+   * sonst nicht gesetzt (W-7 aus R-2a).
+   *
+   * Kein zweiter Platz für Beschriftungen: Der Wert der Achse steht in `text`.
+   * Hier steht ausschließlich, was jemand fragen würde, der den Wert schon
+   * gelesen hat. Heute gibt es genau einen solchen Fall, den Exportstatus
+   * „Abgerechnet" gegen den Anzeigezustand „Nicht abgerechnet" einer Buchung
+   * darin.
+   */
+  readonly note?: string;
 }
 
 /** Eine Achse, die auf ihrem Neutralwert steht — und deshalb nichts wegnimmt. */
@@ -299,6 +311,14 @@ export function describeRule(axes: RuleAxes, lookup: RuleLookup): RuleDescriptio
       label: "Exportstatus",
       chips: [],
       text: POOL_EXPORT_LABEL[axes.exportState],
+      /*
+        Nur bei „Abgerechnet" (W-7 aus R-2a). „Noch nicht abgerechnet" trägt
+        keinen Widerspruch in sich: Was darin steht, heißt an der Buchung
+        „Offen" oder „Erneut offen", und beides liest sich wie das Etikett der
+        Achse. Ein Satz an jeder der beiden Wahlen wäre die Sorte Hinweis, die
+        man nach dem dritten Mal überliest.
+      */
+      ...(axes.exportState === "exported" ? { note: POOL_EXPORT_EXPORTED_NOTE } : {}),
     });
   }
 

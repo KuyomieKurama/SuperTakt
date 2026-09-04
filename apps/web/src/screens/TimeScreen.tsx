@@ -93,7 +93,7 @@ export function TimeScreen() {
       blockedGroups: preview?.skipped.length ?? 0,
       previewProblem: outcome.kind === "failed" ? outcome.message : null,
     };
-  }, [today, version, showDone]);
+  }, [today, showDone], [version]);
 
   const runningTodoId = timer.running?.entry.todoId ?? null;
 
@@ -102,6 +102,7 @@ export function TimeScreen() {
       <ScreenHeader
         title="Zeiterfassung"
         lead="Timer starten und stoppen, heutige Buchungen ansehen, Zeit von Hand nachtragen."
+        refreshing={data.state.status === "ready" && data.state.refreshing}
       />
 
       <AsyncBoundary state={data.state} label="Zeiterfassung wird geladen" onRetry={data.reload}>

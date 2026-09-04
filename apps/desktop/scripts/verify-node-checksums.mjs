@@ -21,6 +21,12 @@
  * und vergleicht **alle** Einträge Zeile für Zeile. Er lädt keine Archive und
  * schreibt nichts; er ist ein Vergleich und sonst nichts.
  *
+ * Dass „alle" auch alle sind, prüft er seit T-102 selbst: Er hält die aus dem
+ * Quelltext gelesenen Einträge gegen `ARCHIVES` und gegen eine Untergrenze
+ * ({@link MIN_ARCHIVES}). Vorher fing er allein den Fall, dass er **gar keinen**
+ * Eintrag findet — eine auf vier geschrumpfte Tabelle hätte er als „4 von 4
+ * stimmen überein" grün gemeldet.
+ *
  * ---------------------------------------------------------------------------
  * Was er nicht prüft
  * ---------------------------------------------------------------------------
@@ -50,7 +56,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { NODE_VERSION } from './sidecar-runtime.mjs';
+import { ARCHIVES, NODE_VERSION } from './sidecar-runtime.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const runtimeFile = join(here, 'sidecar-runtime.mjs');
@@ -64,15 +70,33 @@ function fail(message) {
 }
 
 /**
- * Die Einträge werden aus dem Quelltext gelesen, nicht importiert.
+ * Untergrenze der Einträge, die dieser Lauf sehen muss.
  *
- * `ARCHIVES` ist in `sidecar-runtime.mjs` bewusst nicht ausgeführt — es ist ein
- * Wert, den nur diese Datei braucht. Ihn für einen Prüflauf öffentlich zu
- * machen hieße, die Schnittstelle für den Prüfer zu ändern; der Prüfer liest
- * stattdessen dieselben Zeilen, die auch ein Mensch liest. Findet er keine
- * sechs Einträge, ist das ein Fehler und keine Fußnote: Dann hat sich der
- * Aufbau der Datei geändert, und dieser Lauf prüfte still weniger als er
- * behauptet.
+ * Sechs, weil Takt für sechs Ziele gebaut wird — Linux, Windows und macOS, je
+ * x64 und arm64. Mehr ist erlaubt und wird geprüft; eine siebte Plattform soll
+ * diesen Lauf nicht bremsen, sondern von ihm erfasst werden. **Weniger ist ein
+ * Fehler**, und zwar auch dann, wenn die Tabelle selbst geschrumpft ist: Dann
+ * fehlt einem ausgelieferten Ziel die Prüfsumme, und das fällt sonst erst beim
+ * Bau auf jener Plattform auf.
+ *
+ * Dieselbe Bauart wie `MIN_EXPORT_SOURCES` in
+ * `packages/domain/scripts/check-export-boundary.mjs` und aus demselben Grund.
+ */
+const MIN_ARCHIVES = 6;
+
+/**
+ * Die Einträge werden aus dem Quelltext gelesen, **und danach gegen die Tabelle
+ * gehalten**, die `sidecar-runtime.mjs` ausführt.
+ *
+ * Gelesen wird der Quelltext, weil der Prüfer dieselben Zeilen ansehen soll,
+ * die auch ein Mensch liest: Ein Ausdruck, der an einer umformatierten Zeile
+ * vorbeigreift, ist genau der Fehler, den dieser Lauf finden soll. Verglichen
+ * wird gegen `ARCHIVES`, weil beides zusammen erst die Zusage einlöst — der
+ * Ausdruck darf keinen Eintrag übersehen, und die Tabelle darf nicht heimlich
+ * kürzer werden. Bis T-102 fing die Prüfung darunter allein den Fall **null**;
+ * eine Tabelle mit zwei Einträgen hätte „2 von 2 Einträgen stimmen überein"
+ * gemeldet, mit 0 geendet und dazu geschrieben, der Bau unter Windows und macOS
+ * prüfe gegen dieselbe Quelle (Befund 5 aus R-1a).
  */
 function readArchivesFromSource() {
   const source = readFileSync(runtimeFile, 'utf8');
@@ -96,9 +120,57 @@ if (entries.length === 0) {
   );
 }
 
+if (entries.length < MIN_ARCHIVES) {
+  fail(
+    `In ${runtimeFile} stehen ${entries.length} Archiveinträge, erwartet sind mindestens ${MIN_ARCHIVES}.\n` +
+      `Takt wird für sechs Ziele gebaut (Linux, Windows, macOS, je x64 und arm64).\n` +
+      `Entweder ist die Tabelle kürzer geworden — dann fehlt einem ausgelieferten\n` +
+      `Ziel die Prüfsumme —, oder der reguläre Ausdruck greift nach einer\n` +
+      `Umformatierung nur noch auf einen Teil der Zeilen. Beides ist ein Befund.\n` +
+      `${relativeHint()}`,
+  );
+}
+
+/*
+ * Der Abgleich mit der ausgeführten Tabelle. Verglichen wird nach Dateiname:
+ * Er ist der Schlüssel, unter dem gleich auch nodejs.org antwortet.
+ */
+const declared = new Map(Object.values(ARCHIVES).map((archive) => [archive.file, archive.sha256]));
+const found = new Map(entries.map((entry) => [entry.file, entry.sha256]));
+
+const missed = [...declared.keys()].filter((file) => !found.has(file));
+if (missed.length > 0) {
+  fail(
+    `Der Ausdruck in diesem Prüflauf hat ${missed.length} Eintrag/Einträge aus ARCHIVES nicht gefunden:\n` +
+      missed.map((file) => `  ${file}`).join('\n') +
+      `\nDie Tabelle führt sie, der Quelltextvergleich sieht sie nicht — dieser Lauf\n` +
+      `prüfte damit weniger, als sein Kopf zusagt. ${relativeHint()}`,
+  );
+}
+
+const surplus = [...found.keys()].filter((file) => !declared.has(file));
+if (surplus.length > 0) {
+  fail(
+    `Der Quelltext nennt ${surplus.length} Archiv, das ARCHIVES nicht führt:\n` +
+      surplus.map((file) => `  ${file}`).join('\n') +
+      `\nGeprüft würde dann etwas, das nie ausgeliefert wird. ${relativeHint()}`,
+  );
+}
+
+const drifted = [...declared.entries()].filter(([file, sha]) => found.get(file) !== sha);
+if (drifted.length > 0) {
+  fail(
+    `Quelltext und ausgeführte Tabelle nennen verschiedene Prüfsummen:\n` +
+      drifted.map(([file]) => `  ${file}`).join('\n') +
+      `\nDas kann nur ein Fehler im Ausdruck dieses Laufs sein. ${relativeHint()}`,
+  );
+}
+
 process.stdout.write(`Node-Fassung im Repository: v${NODE_VERSION}\n`);
 process.stdout.write(`Vergleichsquelle:           ${URL_SHASUMS}\n`);
-process.stdout.write(`Einträge in sidecar-runtime.mjs: ${entries.length}\n\n`);
+process.stdout.write(
+  `Einträge in sidecar-runtime.mjs: ${entries.length} (mindestens ${MIN_ARCHIVES}, deckungsgleich mit ARCHIVES)\n\n`,
+);
 
 let response;
 try {

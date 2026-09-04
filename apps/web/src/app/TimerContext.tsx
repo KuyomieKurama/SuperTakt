@@ -1,4 +1,3 @@
-import { poolMovementSentence } from "@takt/domain";
 import {
   createContext,
   useCallback,
@@ -29,6 +28,7 @@ import {
   formatQuarters,
   formatStopwatch,
 } from "../lib/format";
+import { bookingSentence, doneMovementSentence, withMovement } from "../lib/movement";
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
 import { useToasts, type ToastTone } from "./ToastContext";
@@ -103,36 +103,6 @@ export function useTimer(): TimerApi {
 
 const HEARTBEAT_MS = 45_000;
 const POLL_MS = 60_000;
-
-/**
- * Der Satz zu einer **Buchung** — oder `null` (E-058 Punkt 6, T-097).
- *
- * Der Anlaß steht hier fest und wird nicht durchgereicht: Ein Stopp hebt kein
- * „Erledigt" auf, das tut allein der Start (A-2.5). Beide Antworten, die diese
- * Funktion versorgen — `POST /timer/stop` und `POST /timer/orphaned/resolve` —
- * berichten deshalb ausnahmslos von einer Buchung.
- *
- * Zwei Wege führen zu `null`, und beide bedeuten dasselbe für die Anzeige:
- * Der Dienst hat gar nichts gerechnet (keine erste Buchung, kein Zweig, in dem
- * sich etwas bewegen könnte), oder er hat gerechnet und nichts gefunden. In
- * beiden Fällen steht **kein** Satz da — kein leerer Absatz, kein Rumpf mit
- * null Zeichen.
- */
-function bookingSentence(movement: PoolMovement | null): string | null {
-  return movement === null ? null : poolMovementSentence(movement, "past", "booking");
-}
-
-/**
- * Hängt den Bewegungssatz an einen Rumpf — oder läßt ihn weg.
- *
- * Dieselbe Form wie bei `announceStart`: ein Leerzeichen, dann der Satz aus
- * `@takt/domain`, unverändert. Damit sehen der Satz nach dem Start und der
- * Satz nach dem Stopp gleich aus, und der Wortlaut bleibt zeichengleich mit
- * dem, den der Aufgabenbereich des Add-ins zeigt.
- */
-function withMovement(body: string, sentence: string | null): string {
-  return sentence === null ? body : `${body} ${sentence}`;
-}
 
 interface Anchor {
   readonly atMs: number;
@@ -247,14 +217,24 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           */
           const stopped = await stopTimer("");
           if (stopped.kind === "recorded") await deleteTimeEntry(stopped.entry.id);
-          await markTodoDone(todoId);
+          /*
+            Diese Bewegung wird **gelesen**, anders als die des Stopps darüber
+            (E-060): Das Setzen des Kennzeichens ist der letzte Schritt dieser
+            Rücknahme, danach ändert sich nichts mehr. Der Satz beschreibt
+            damit den Zustand, in dem der Benutzer die Meldung liest, und er
+            ist das Gegenstück zu dem, den der Start eben gezeigt hat.
+          */
+          const done = await markTodoDone(todoId);
           clearReactivated(todoId);
           refresh();
           bump();
           toasts.show({
             tone: "info",
             title: "Zurückgenommen.",
-            body: `„${todoTitle}“ ist wieder erledigt, die eben entstandene Buchung wurde verworfen.`,
+            body: withMovement(
+              `„${todoTitle}“ ist wieder erledigt, die eben entstandene Buchung wurde verworfen.`,
+              doneMovementSentence(done.poolMovement, false),
+            ),
           });
         } catch (cause) {
           toasts.failure("Das Zurücknehmen hat nicht geklappt", errorMessage(cause));
@@ -317,10 +297,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
 
       if (doneCleared) setReactivated((previous) => new Set(previous).add(todoId));
 
-      const movementSentence =
-        poolMovement === null
-          ? null
-          : poolMovementSentence(poolMovement, "past", doneCleared ? "reopen" : "booking");
+      const movementSentence = doneMovementSentence(poolMovement, doneCleared);
 
       if (!doneCleared) {
         toasts.show({
@@ -404,12 +381,27 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const reportStopped = useCallback(
     async (
       todoId: Id,
+      todoTitle: string,
       startedAt: string,
       durationSeconds: number,
       movementSentence: string | null,
     ) => {
       const insight = await loadDayGroupInsight(todoId, calendarDayOf(startedAt));
       const booked = `Gebucht: ${formatDuration(durationSeconds)}.`;
+      /*
+        Der Name im Titel, nicht im Satz (W-5 aus R-2a).
+
+        Der Bewegungssatz beginnt mit „Es" und nennt das Todo nicht — er kommt
+        zeichengleich aus `@takt/domain` und wird gegen das Add-in gemessen; an
+        ihm ist nichts zu ändern. Ohne einen Bezug darüber stand das „Es"
+        allein, und beim Wechsel nach A-6.8 standen **zwei** Meldungen
+        übereinander, die beide mit „Es" begannen und verschiedene Todos
+        meinten. Der Aufgabenbereich des Add-ins hat diese Frage an beiden
+        eigenen Flächen mit einem Rahmen beantwortet; hier ist es derselbe
+        Rahmen — der Titel nennt das Todo, der Rumpf sagt, was mit ihm
+        geschehen ist.
+      */
+      const on = `Zeit gebucht auf „${todoTitle}“`;
 
       interface StopMessage {
         readonly tone: ToastTone;
@@ -418,7 +410,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       }
 
       const message = ((): StopMessage => {
-        if (insight === null) return { tone: "success", title: "Zeit gebucht.", body: booked };
+        if (insight === null) return { tone: "success", title: `${on}.`, body: booked };
         /*
           Die Vorschau hat nicht geantwortet. Gebucht ist trotzdem — das steht
           zuerst da. Was daraus beim Export wird, weiss Takt gerade nicht, und
@@ -428,21 +420,21 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         if (insight.previewProblem !== null) {
           return {
             tone: "warning",
-            title: "Zeit gebucht — der Exportwert ließ sich nicht abfragen.",
+            title: `${on} — der Exportwert ließ sich nicht abfragen.`,
             body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte Takt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
           };
         }
         if (insight.blockedReason !== null) {
           return {
             tone: "warning",
-            title: "Zeit gebucht — aber noch nicht abrechenbar.",
+            title: `${on} — aber noch nicht abrechenbar.`,
             body: `${booked} Für diesen Tag steht auf diesem Todo noch keine Leistung. Ohne sie bleibt die Tagesgruppe (${formatDuration(insight.seconds)}) beim Export stehen.`,
           };
         }
-        if (insight.quarters === null) return { tone: "success", title: "Zeit gebucht.", body: booked };
+        if (insight.quarters === null) return { tone: "success", title: `${on}.`, body: booked };
         return {
           tone: "success",
-          title: "Zeit gebucht.",
+          title: `${on}.`,
           body: `${booked} An diesem Tag sind für dieses Todo ${formatDuration(insight.seconds)} offen — das ergibt beim Export ${formatQuarters(insight.quarters)}.`,
         };
       })();
@@ -470,13 +462,14 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         toasts.show({
           tone: "info",
           title: "Nichts gebucht.",
-          body: "Der Timer lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.",
+          body: `Der Timer auf „${current.todoTitle}“ lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.`,
         });
         return true;
       }
 
       await reportStopped(
         current.entry.todoId,
+        current.todoTitle,
         result.entry.startedAt,
         result.entry.durationSeconds,
         bookingSentence(result.poolMovement),
@@ -530,8 +523,9 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
    * Nachgesehen, wie sich das überlagert (`ToastContext`): Meldungen stapeln
    * sich, es sind höchstens vier gleichzeitig, jede ohne Rückweg verschwindet
    * nach acht Sekunden. Der Stapel zeigt also beide untereinander, in der
-   * Reihenfolge, in der die Vorgänge gelaufen sind, und die Titel
-   * unterscheiden sie: „Zeit gebucht." gegen „Timer gestartet. …".
+   * Reihenfolge, in der die Vorgänge gelaufen sind, und **beide Titel nennen
+   * ihr Todo**: „Zeit gebucht auf „A“." gegen „Timer gestartet. …" mit „B" im
+   * Rumpf.
    *
    * **Entscheidung: beide bleiben stehen.** Einen davon zu unterdrücken hieße,
    * eine wahre Auskunft über ein Todo zu verschweigen, weil zufällig ein
@@ -539,11 +533,11 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
    * der Benutzer gerade verläßt und danach nicht mehr ansieht. Genau dort ist
    * eine unerklärte Bewegung am teuersten (E-056).
    *
-   * Was dabei offen bleibt und in den Bericht gehört: Beide Sätze beginnen mit
-   * „Es" und nennen das Todo nicht beim Namen — der Name steht im Titel des
-   * Start-Toasts, im Stopp-Toast steht keiner. Den Wortlaut zu ändern ist
-   * nicht Sache dieser Datei: Er kommt zeichengleich aus `@takt/domain` und
-   * wird in Welle D gegen das Add-in gemessen.
+   * Der Befund, der bis T-097 daran hing, ist mit T-102 behoben (W-5 aus
+   * R-2a): Beide Bewegungssätze beginnen mit „Es" und nennen das Todo nicht —
+   * sie kommen zeichengleich aus `@takt/domain`, an ihnen ist nichts zu
+   * ändern. Der Bezug steht deshalb im **Rahmen**, im Titel der Meldung, und
+   * damit hat jedes „Es" wieder eines, worauf es zeigt.
    */
   const confirmSwitch = useCallback(() => {
     const pending = conflict;
@@ -578,6 +572,13 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* ---------------------------------------------------------------- */
 
   const confirmOrphan = useCallback(() => {
+    /*
+      Der Name wird **vor** dem Auflösen festgehalten: `setOrphan(null)` steht
+      in derselben Kette, und ohne diese Zeile stünde in der Meldung danach
+      kein Todo mehr (W-5).
+    */
+    const pending = orphan;
+    if (pending === null) return;
     setBusy(true);
     setDialogError(null);
     void resolveOrphanedTimer(orphanChoice)
@@ -591,29 +592,58 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
             nimmt jede Spalte „noch nicht abgerechnet" das Todo damit auf. Der
             Weg hierher ist ein anderer, die Folge ist dieselbe — also auch der
             Satz, und aus derselben Funktion.
+
+            Das Todo steht im Titel und nicht im Satz (W-5): Zwischen dem
+            Ereignis und dieser Meldung liegt ein Programmabsturz, und wer
+            danach „Es steht jetzt in „Ost“." liest, hat keinen Bezug für das
+            „Es".
           */
           toasts.success(
-            "Buchung abgeschlossen.",
+            `Buchung auf „${pending.todoTitle}“ abgeschlossen.`,
             withMovement(
               `Gebucht bis zum letzten Lebenszeichen: ${formatDuration(result.entry.durationSeconds)}.`,
               bookingSentence(result.poolMovement),
             ),
           );
-        } else {
-          /*
-            Verworfen heißt: keine Buchung, keine Bewegung, kein Satz. Der
-            Dienst löst hier nicht einmal eine Regel auf.
-          */
-          toasts.show({
-            tone: "info",
-            title: "Buchung verworfen.",
-            body: "Es ist keine Zeit gebucht worden.",
-          });
+          return;
         }
+
+        /*
+          Verworfen heißt: keine Buchung, keine Bewegung, kein Satz — der
+          Dienst löst hier nicht einmal eine Regel auf. **Warum** nichts
+          gebucht wurde, sind aber zwei verschiedene Auskünfte (O-R, T-102):
+
+           - `'orphan_discarded'`: Der Benutzer hat „Verwerfen" gewählt. Die
+             Meldung bestätigt seine Entscheidung.
+           - `'timer_too_short'`: Er hat „bis zum letzten Lebenszeichen"
+             gewählt, und dort war nichts zu holen — kein Lebenszeichen oder
+             weniger als eine Sekunde bis dahin (A-6.2). Das ist keine
+             Bestätigung, sondern eine Auskunft über einen Fall, den er nicht
+             gewählt hat, und der Dialog hat ihn angekündigt („Gibt es kein
+             Lebenszeichen, gibt es nichts zu buchen").
+
+          Bis T-101 gab der Dienst in beiden Fällen `'timer_too_short'` aus;
+          die Oberfläche sagte deshalb an beiden Ausgängen dasselbe und
+          behauptete im zweiten Fall stillschweigend eine Entscheidung, die
+          niemand getroffen hatte.
+        */
+        toasts.show(
+          result.reason === "orphan_discarded"
+            ? {
+                tone: "info",
+                title: "Buchung verworfen.",
+                body: `Sie haben die unvollständige Buchung auf „${pending.todoTitle}“ verworfen. Es ist keine Zeit gebucht worden.`,
+              }
+            : {
+                tone: "info",
+                title: "Nichts zu buchen.",
+                body: `Zwischen dem Start und dem letzten Lebenszeichen liegt auf „${pending.todoTitle}“ weniger als eine Sekunde. Die unvollständige Buchung ist damit weg, gebucht wurde nichts.`,
+              },
+        );
       })
       .catch((cause: unknown) => setDialogError(errorMessage(cause)))
       .finally(() => setBusy(false));
-  }, [bump, orphanChoice, toasts]);
+  }, [bump, orphan, orphanChoice, toasts]);
 
   const isRunningFor = useCallback(
     (todoId: Id) => runningRef.current?.entry.todoId === todoId,

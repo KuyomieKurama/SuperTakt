@@ -120,7 +120,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   const editor = useAsync(async () => {
     const [templates, sources] = await Promise.all([listExportTemplates(), getExportSources()]);
     return { templates, catalog: readSourceCatalog(sources) };
-  }, [version]);
+  }, [], [version]);
 
   const loaded = editor.state.status === "ready" ? editor.state.value : null;
   const list = loaded?.templates ?? [];
@@ -453,6 +453,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
       <ScreenHeader
         title="Exportvorlagen"
         lead="Eine Vorlage bestimmt, welche Felder in die Datei gehen, in welcher Reihenfolge und unter welchem Namen."
+        refreshing={editor.state.status === "ready" && editor.state.refreshing}
         actions={
           <Button
             variant="primary"

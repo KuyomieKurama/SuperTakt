@@ -137,6 +137,34 @@ export interface Todo {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * Die Antwort von `PUT` und `DELETE /todos/{id}/done` (E-060).
+ *
+ * ## Warum das Todo hier ein Feld mehr trägt
+ *
+ * Seit E-055 entscheidet „Erledigt" über Spalten: Eine Regel darf nach dem
+ * Kennzeichen fragen, und dann wechselt die Karte mit genau dieser Handlung
+ * ihren Platz. Bis E-060 antworteten beide Routen mit dem Todo und sonst
+ * nichts — der Toast danach schwieg über die Spalten, während derselbe Übergang
+ * über einen Timerstart angesagt wurde (O-U). Wer an einer Stelle Auskunft gibt
+ * und an der anderen schweigt, sagt die halbe Wahrheit.
+ *
+ * ## Zwei Anlässe, zwei Sätze
+ *
+ * `DELETE` (Aufheben) ist der Anlaß `'reopen'` — das Todo war erledigt und
+ * kehrt zurück, „wieder" stimmt. `PUT` (Setzen) nimmt `'booking'`, die neutrale
+ * Form: Der Satz dazu trägt kein Wort von Buchung und nennt nur, was dazukommt
+ * und was wegfällt (E-060 Punkt 2). Umbenannt wird der Anlaß nicht; er steht in
+ * fünf Hoheiten.
+ *
+ * `null` heißt „keine Fläche bewegt sich", nicht „nichts geschehen": Das
+ * Kennzeichen ist in jedem Fall umgelegt, es trifft nur keine Regel darauf zu.
+ * Die Aufrufstelle läßt den Satz dann **ganz** weg.
+ */
+export interface TodoDoneResult extends Todo {
+  readonly poolMovement: PoolMovement | null;
+}
+
 /** `GET /todos/{id}` — das Todo samt seiner berechneten Summen, ohne Vermerk. */
 export interface TodoDetail {
   readonly todo: Todo;
@@ -582,11 +610,15 @@ export type StartTimerResult =
 /**
  * Der Ausgang eines Stopps — und was die Buchung bewegt hat (E-058 Punkt 6).
  *
- * Dieselbe Form beantwortet `POST /timer/stop` und
- * `POST /timer/orphaned/resolve`; beide tragen `poolMovement` **in beiden
- * Zweigen**, und der Anlaß ist stets `'booking'`. Ein Stopp hebt kein
- * „Erledigt" auf — das tut allein der Start (A-2.5) —, also gibt es hier
- * keinen Fall `'reopen'`.
+ * `POST /timer/stop`. Bis T-102 beantwortete dieser Typ auch
+ * `POST /timer/orphaned/resolve`; seit O-R unterscheiden sich die beiden in der
+ * Angabe, **warum** nichts gebucht wurde, und stehen deshalb getrennt (siehe
+ * {@link ResolveOrphanedTimerResult}). Der gebuchte Zweig ist derselbe
+ * geblieben und steht einmal.
+ *
+ * Beide tragen `poolMovement` **in beiden Zweigen**, und der Anlaß ist stets
+ * `'booking'`. Ein Stopp hebt kein „Erledigt" auf — das tut allein der Start
+ * (A-2.5) —, also gibt es hier keinen Fall `'reopen'`.
  *
  * **Warum das Feld auch im verworfenen Zweig steht.** Ein Stopp unter der
  * Mindestdauer erzeugt keine Buchung (A-6.2) und bewegt deshalb nichts; der
@@ -603,15 +635,56 @@ export type StartTimerResult =
  * `?? ""` zu füllen (`TimerContext.performStop`).
  */
 export type StopTimerResult =
-  | {
-      readonly kind: "recorded";
-      readonly entry: TimeEntry;
-      /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
-      readonly poolMovement: PoolMovement | null;
-    }
+  | RecordedStop
   | {
       readonly kind: "discarded";
+      /**
+       * Der einzige Grund, aus dem **dieser** Aufruf nichts bucht (A-6.2).
+       *
+       * `POST /timer/stop` kennt kein Verwerfen auf Wunsch: Wer stoppt, will
+       * buchen. Die zweite Route unten kennt beides — siehe
+       * {@link ResolveOrphanedTimerResult}.
+       */
       readonly reason: "timer_too_short";
+      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
+      readonly poolMovement: null;
+    };
+
+/** Der gebuchte Ausgang. Wortgleich an beiden Routen und deshalb einmal. */
+interface RecordedStop {
+  readonly kind: "recorded";
+  readonly entry: TimeEntry;
+  /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
+  readonly poolMovement: PoolMovement | null;
+}
+
+/**
+ * Der Ausgang von `POST /timer/orphaned/resolve` (E-036, O-R).
+ *
+ * **Ein eigener Typ und nicht mehr `StopTimerResult`** (T-102, Befund 2 aus
+ * R-1a). Die verworfene Hälfte unterscheidet sich, und zwar in der einen
+ * Angabe, die der Benutzer zu lesen bekommt:
+ *
+ *  - `'orphan_discarded'` — **er hat verworfen.** Die Antwort auf die Frage aus
+ *    E-036 lautete „Verwerfen"; es wurde nichts gebucht, weil er es so wollte.
+ *  - `'timer_too_short'` — **es gab nichts zu buchen.** Er hat „bis zum letzten
+ *    Lebenszeichen" gewählt, und zwischen Start und Lebenszeichen liegt weniger
+ *    als eine Sekunde (A-6.2) — oder es gibt gar kein Lebenszeichen.
+ *
+ * Bis T-101 gab der Dienst in beiden Fällen `'timer_too_short'` aus und
+ * überschrieb damit die Entscheidung der Domäne (`decideOrphanedTimer` liefert
+ * `'orphan_discarded'`). Die Oberfläche sagte deshalb an beiden Ausgängen
+ * dasselbe. Sie unterscheidet jetzt; welchen Satz sie je Grund zeigt, steht in
+ * `TimerContext.confirmOrphan`.
+ *
+ * `poolMovement` ist in beiden verworfenen Fällen fest `null` — es entsteht
+ * keine Buchung, und der Dienst löst dafür nicht einmal eine Regel auf.
+ */
+export type ResolveOrphanedTimerResult =
+  | RecordedStop
+  | {
+      readonly kind: "discarded";
+      readonly reason: "timer_too_short" | "orphan_discarded";
       /** Immer `null`: Ohne Buchung bewegt sich nichts. */
       readonly poolMovement: null;
     };

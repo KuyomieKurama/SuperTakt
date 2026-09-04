@@ -53,13 +53,49 @@ import { useStructure } from "./StructureContext";
  * Warum beide Quellen erneuert werden
  * ---------------------------------------------------------------------------
  *
- * `bump()` allein erneuert die Ansichten (jede hängt `version` in die
- * Abhängigkeiten ihres `useAsync`), aber nicht die Struktur — und eine
+ * `bump()` allein erneuert die Ansichten (jede führt `version` in der
+ * **Auffrischliste** ihres `useAsync`), aber nicht die Struktur — und eine
  * Kanban-Spalte ist seit E-054 eine **Regel** aus eben dieser Struktur. Ein
  * Board, dessen Karten frisch sind und dessen Spalten von gestern stammen,
- * wäre die halbe Reparatur. `reload()` behält dabei den vorhandenen Inhalt
- * stehen (`useAsync`, `refreshing`); es blinkt nichts.
+ * wäre die halbe Reparatur.
+ *
+ * **Und es blinkt tatsächlich nichts** (Befund 7 aus R-1a, behoben in T-102).
+ * Dieser Satz stand hier schon vorher, und er stimmte zur Hälfte: `reload()`
+ * behält den vorhandenen Inhalt stehen, `bump()` bis T-102 nicht. `version`
+ * lag in der gewöhnlichen Abhängigkeitsliste von `useAsync`, und der Weg
+ * dorthin verwirft den Wert. Jedes Zurückwechseln ins Takt-Fenster warf damit
+ * die gerade angesehene Liste auf ihre Platzhalterflächen zurück. Seit T-102
+ * hat `useAsync` eine zweite Liste für genau diesen Fall: derselbe Inhalt
+ * bleibt stehen, `refreshing` wird wahr, und die Ansicht zeigt „Wird
+ * aktualisiert …".
+ *
+ * ---------------------------------------------------------------------------
+ * Ein Mindestabstand, und warum er eine Sekunde ist (H-6 aus R-3a)
+ * ---------------------------------------------------------------------------
+ *
+ * Jeder Fensterwechsel löst `reload()` **und** `bump()` aus, also einen Schwung
+ * Anfragen gegen einen einfädigen Sidecar. Zwanzig Wechsel in zwanzig Sekunden
+ * sind zwanzig Schwünge. Eine Schleife ist das nicht — dahinter steht immer
+ * eine Handlung eines Menschen und keine Uhr —, aber ein Alt-Tab hin und
+ * zurück ist zwei Handlungen in weniger als einer Sekunde, und die zweite kann
+ * nichts Neues zutage fördern.
+ *
+ * Der Abstand gilt deshalb genau dort, wo er hingehört: am **Fensterwechsel**.
+ * Er ist eine Sekunde, und die Zahl ist keine Vorsicht, sondern eine Aussage:
+ * Wer in derselben Sekunde zweimal ins Fenster kommt, hat dazwischen nichts
+ * gebucht — weder im Aufgabenbereich des Add-ins noch in einem zweiten
+ * Fenster. Länger wäre falsch: Wer aus Outlook zurückkommt, ist nach zwei
+ * Sekunden zurück, und eine Anwendung, die dann den Stand von vorhin zeigt,
+ * hat genau das Loch wieder, das T-097 geschlossen hat.
+ *
+ * Ausdrücklich **nicht** gebremst wird das erneute Ansteuern (`revisit`): Das
+ * ist ein Klick auf einen Navigationseintrag, also die ausdrückliche Bitte
+ * „zeig mir das noch einmal". Eine Bitte, die zweimal gestellt und einmal
+ * beantwortet wird, ist eine Anwendung, die nicht reagiert.
  */
+
+/** Kleinster Abstand zwischen zwei Auffrischungen durch einen Fensterwechsel. */
+const VISIBILITY_MIN_GAP_MS = 1_000;
 export function useDataFreshness(revisit: number): void {
   const { bump } = useRefresh();
   const { reload } = useStructure();
@@ -70,7 +106,10 @@ export function useDataFreshness(revisit: number): void {
     diese hier dieselbe, und die Effekte darunter hängen ihre Zuhörer genau
     einmal ein statt bei jedem Zeichnen neu.
   */
+  const lastRefreshAt = useRef(0);
+
   const refreshAll = useCallback(() => {
+    lastRefreshAt.current = Date.now();
     reload();
     bump();
   }, [bump, reload]);
@@ -92,6 +131,11 @@ export function useDataFreshness(revisit: number): void {
   useEffect(() => {
     const onVisibilityChange = (): void => {
       if (document.visibilityState !== "visible") return;
+      // Der Abstand aus H-6. Gemessen wird gegen **jede** Auffrischung dieses
+      // Hakens, nicht nur gegen die letzte durch einen Fensterwechsel: Wer
+      // eben erst neu geladen hat, braucht es beim Zurückkommen nicht noch
+      // einmal.
+      if (Date.now() - lastRefreshAt.current < VISIBILITY_MIN_GAP_MS) return;
       refreshAll();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
