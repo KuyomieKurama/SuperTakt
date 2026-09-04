@@ -420,6 +420,14 @@ jobs:
           # Reihenfolge unabhängig davon, welcher Läufer zuerst fertig war.
           find eingegangen -type f -name 'SHA256SUMS' -exec cat {} + | sort > versand/SHA256SUMS
 
+          # Die Summen gegen die Dateien halten, die gleich hochgehen. Bis
+          # hierher lag die Liste nur *neben* den Dateien; wer sie später in
+          # der Beschreibung liest, verlässt sich darauf, dass sie zu genau
+          # diesen Dateien gehört. Eine fehlende oder unterwegs veränderte
+          # Datei fällt hier auf, nicht erst beim Benutzer. `--strict` lässt
+          # auch eine unlesbare Zeile in der Liste nicht durch.
+          ( cd versand && sha256sum -c --strict SHA256SUMS )
+
           echo "Eingegangen:"
           ls -l versand
 

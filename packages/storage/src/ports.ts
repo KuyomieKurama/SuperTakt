@@ -32,7 +32,10 @@ import type {
   NotBilledRequest,
   Pool,
   PoolId,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolPlacement,
+  PoolTagTerm,
   PoolSurface,
   QuarterHours,
   Result,
@@ -263,15 +266,37 @@ export interface TagFolderPort {
     now: Timestamp,
   ): Promise<Result<TagFolder, TaktError<'tag_folder_cycle' | 'name_conflict' | 'not_found'>>>;
 
-  remove(id: TagFolderId): Promise<Result<void, TaktError<'tag_folder_not_empty' | 'not_found'>>>;
+  /**
+   * Löschen. Zwei fachliche Gründe können es verhindern (A-4.5, E-057).
+   *
+   * `tag_folder_not_empty` — der Ordner enthält Unterordner oder Tags.
+   *
+   * `tag_in_use` — der Ordner steht in der Regel eines Pools oder einer
+   * Kanban-Spalte. Derselbe Schlüssel wie beim Tag in einer Regel, weil es
+   * derselbe Sachverhalt ist; welches Ding gemeint ist, sagt die Route. Bis
+   * T-089 fehlte dieser Grund, `pool_rule.folder_id` stand auf CASCADE, und
+   * das Löschen eines **leeren** Ordners entkernte die Regel still — sie traf
+   * danach mehr, als der Benutzer gesagt hatte. Seit Migration 0012 steht die
+   * Spalte auf RESTRICT; die Prüfung im Adapter nennt den fachlichen Grund,
+   * bevor die Datenbank ihn nennen muss.
+   *
+   * Die Antwort trägt in `details` je betroffener Regel einen Eintrag mit
+   * `code: 'pool_rule'`, der **Kennung** in `field`, dem bloßen **Namen** in
+   * `name` und demselben Namen im Satz `message` (W-11). Ohne sie ist die
+   * Sperre bei zwanzig Regeln eine Suche.
+   */
+  remove(
+    id: TagFolderId,
+  ): Promise<Result<void, TaktError<'tag_folder_not_empty' | 'tag_in_use' | 'not_found'>>>;
 }
 
 // ---------------------------------------------------------------------------
 // Pools **und** Kanban-Spalten (A-3.4, E-054)
 //
-// Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel über
-// Tags wie ein Pool; `Pool.placement` sagt, wo sie erscheint. Es gibt deshalb
-// keinen `BoardColumnPort` — er wäre dieser hier, noch einmal abgeschrieben.
+// Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel wie
+// ein Pool — seit E-055 über fünf Achsen und nicht allein über Tags;
+// `Pool.placement` sagt, wo sie erscheint. Es gibt deshalb keinen
+// `BoardColumnPort` — er wäre dieser hier, noch einmal abgeschrieben.
 //
 // Was für Pools gilt, gilt damit unverändert für Spalten: Gespeichert wird die
 // Regel, nie die Mitgliedschaft (A-3.4). Eine Karte kann in mehreren Spalten
@@ -283,6 +308,29 @@ export interface TagFolderPort {
 export interface PoolNameEntry {
   readonly id: PoolId;
   readonly name: string;
+}
+
+/**
+ * Eine Tagachse einer Regel, aufgelöst (E-057).
+ *
+ * `emptyFolderIds` sind die **genannten** Ordner, aus denen kein Tag geworden
+ * ist — in der Reihenfolge der Regel, ohne Doppelte. Sie sind der Unterschied
+ * zwischen „diese Achse sagt nichts" und „diese Achse verlangt etwas, das
+ * niemand hat"; beurteilt wird das in der Domäne (`tagAxisIsUnresolved`).
+ *
+ * Die Zahl der genannten Terme steht **nicht** darin: Wer sie braucht, hat die
+ * Regel in der Hand und zählt `rule.length`. Ein Feld dafür wäre eine zweite
+ * Fassung derselben Zahl.
+ */
+export interface ResolvedTagAxis {
+  readonly tagIds: readonly TagId[];
+  readonly emptyFolderIds: readonly TagFolderId[];
+}
+
+/** Beide Tagachsen einer Regel in einer Antwort. Siehe `PoolPort.resolveAxes`. */
+export interface PoolAxesResolution {
+  readonly required: ResolvedTagAxis;
+  readonly excluded: ResolvedTagAxis;
 }
 
 export interface PoolPort {
@@ -299,12 +347,39 @@ export interface PoolPort {
    *   `'board'` — die Spalten des Kanban-Boards (`board` oder `both`).
    *   `'all'`   — jede Regel, ungeachtet der Fläche.
    *
-   * **Ohne Argument gilt `'pool'`**, und das ist der Grund, warum das Argument
-   * überhaupt weglassbar ist: Jeder Aufrufer, den es vor E-054 gab, meinte
-   * „die Pools" — allen voran `poolNamer` in `routes/addin/service.ts`, der die
-   * Pools eines Todos beim Namen nennt. Der bekommt damit weiterhin Pools und
-   * nicht die Spalten eines Boards, ohne dass die Datei angefasst werden musste.
-   * Das Board fragt ausdrücklich.
+   * ---------------------------------------------------------------------------
+   * Warum es überhaupt eine Vorgabe gibt — richtiggestellt (T-093)
+   * ---------------------------------------------------------------------------
+   *
+   * **Ohne Argument gilt `'pool'`.** Hier stand bis T-093 als Zeuge dafür
+   * `poolNamer` in `routes/addin/service.ts`, „der die Pools eines Todos beim
+   * Namen nennt". Das war schon bei der Niederschrift kein guter Zeuge und ist
+   * seit T-090/T-092 gar keiner mehr: `poolNamer` fragte versehentlich ohne
+   * Argument und übersah damit jede **reine** Board-Spalte (R-1 Befund 3, R-2
+   * B-4); er ruft seit T-090 `list('all')` und ist seit T-092 durch
+   * `poolMovementNamer` ersetzt, den es hier nicht mehr gibt.
+   *
+   * Die Vorgabe bleibt trotzdem, und zwar mit den beiden Zeugen, die sie
+   * wirklich tragen — beide fragen nach einer **Auswahlliste für einen
+   * Menschen**, nicht nach einer Zugehörigkeit:
+   *
+   *   - `GET /pools` ohne `placement` — die Pool-Ansicht (`listPools` in
+   *     `usecases/structure.ts`). Sie zeigt die Pool-Liste, und eine reine
+   *     Board-Spalte gehört dort nicht hinein.
+   *   - `GET /addin/context` — der Aufgabenbereich des Add-ins. Er hat kein
+   *     Board; die Liste dient dort der Auswahl. Dass er bei `list()` bleibt,
+   *     ist ausdrücklich entschieden (E-058 Punkt 7).
+   *
+   * **Wer über Zugehörigkeit rechnet, fragt `'all'`** und nicht die Vorgabe:
+   * `poolMovementNamer` (`usecases/pool-movement.ts`, E-058 Absatz 1) will
+   * jede Regel sehen, gleich auf welcher Fläche sie erscheint — eine Bewegung
+   * aus einer reinen Board-Spalte heraus ist eine Bewegung. Das Board fragt
+   * ausdrücklich `'board'`.
+   *
+   * Die Lehre aus dem falschen Zeugen steht besser hier als in einem Bericht:
+   * Eine Vorgabe, die mit einem Aufrufer begründet wird, überlebt den Aufrufer.
+   * Diese hier ist mit der **Frage** begründet — Auswahlliste gegen
+   * Zugehörigkeit —, und die bleibt, auch wenn die Dateien wechseln.
    */
   list(shownOn?: PoolSurface | 'all'): Promise<readonly Pool[]>;
 
@@ -340,29 +415,119 @@ export interface PoolPort {
    * Pool; das war die einzige Bedeutung, die eine Regel vor E-054 haben konnte.
    */
   create(
-    pool: Omit<Pool, 'id' | 'createdAt' | 'updatedAt' | 'placement'> & {
+    pool: Omit<
+      Pool,
+      | 'id'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'placement'
+      | 'excludedTags'
+      | 'statusIds'
+      | 'completion'
+      | 'exportState'
+    > & {
       readonly placement?: PoolPlacement;
+      /**
+       * Die vier Achsen aus T-076 sind weglassbar und stehen dann auf ihrem
+       * **Neutralwert** — dieselbe Vorgabe, die auch das Schema setzt
+       * (Migration 0011), und dieselbe Bauart wie bei `placement`.
+       *
+       * Eine Regel, die nur `rule` nennt, ist damit Wort für Wort die Regel,
+       * die man vor T-076 anlegen konnte.
+       */
+      readonly excludedTags?: readonly PoolTagTerm[];
+      readonly statusIds?: readonly StatusId[];
+      readonly completion?: PoolCompletionFilter;
+      readonly exportState?: PoolExportFilter;
     },
     now: Timestamp,
   ): Promise<Pool>;
+  /**
+   * Teiländerung. Was fehlt, bleibt, wie es ist — **auch bei den drei Listen**
+   * der Regel: Wer nur `rule` schickt, ändert die erforderlichen Tags und
+   * behält seine Ausschlüsse und Status (T-076).
+   */
   update(id: PoolId, pool: Partial<Omit<Pool, 'id'>>, now: Timestamp): Promise<Result<Pool, TaktError>>;
   remove(id: PoolId): Promise<Result<void, TaktError<'not_found'>>>;
 
   /**
-   * Löst die Regel eines Pools zur vollständigen Tagmenge auf, einschließlich
-   * der Tags aus Unterordnern, wenn `includeSubfolders` gesetzt ist.
+   * Löst die **erforderlichen** Tags einer Regel zur vollständigen Tagmenge
+   * auf, einschließlich der Tags aus Unterordnern, wenn `includeSubfolders`
+   * gesetzt ist.
    *
    * Es gibt keine Methode, die Pool-Mitgliedschaft speichert. Sie wird bei
    * jeder Abfrage neu bestimmt (A-3.4).
+   *
+   * **Nur die erforderlichen.** Der Name ist der aus der Zeit, als es nur eine
+   * Liste gab; die zweite hat mit T-076 eine eigene Methode bekommen, statt
+   * dass diese hier zwei Dinge zurückgäbe.
+   *
+   * ---------------------------------------------------------------------------
+   * Wer diese beiden Methoden noch ruft — richtiggestellt (O-I, T-089)
+   * ---------------------------------------------------------------------------
+   *
+   * Hier stand bis T-089: „An dieser Signatur hängt ein Aufrufer in fremder
+   * Hoheit (`routes/addin/service.ts`)." Das stimmt seit T-086 nicht mehr —
+   * der Ausschnitt dort heißt `Pick<PoolPort, 'list' | 'resolveAxes'>`, und
+   * der Add-in-Dienst löst über {@link PoolPort.resolveAxes} auf, weil er seit
+   * E-057 wissen muss, **welcher** genannte Ordner nichts beigetragen hat.
+   *
+   * In `src` gibt es damit **keinen** Aufrufer mehr. Es rufen nur noch die
+   * Prüffälle (`packages/storage/test/repo-tags.test.ts`) und die Attrappe im
+   * Nachweispfad des Add-ins. Eine tote Portfläche mit einer Begründung, die
+   * nicht mehr stimmt, ist schlechter als tote Portfläche allein — beim
+   * nächsten Mal glaubt ihr jemand.
+   *
+   * Die Streichung selbst ist **nicht** hier entschieden: Sie zöge zwei
+   * Dateien in fremder Hoheit nach (der Prüffall und die Attrappe), und beide
+   * gehören nicht dem domain-dev. Der Vorschlag steht im Bericht zu T-089.
    */
   resolveRule(id: PoolId): Promise<readonly TagId[]>;
+
+  /**
+   * Löst die **ausgeschlossenen** Tags einer Regel auf (T-076).
+   *
+   * Dieselbe Auflösung wie `resolveRule`, dieselbe Tiefe, dasselbe
+   * `includeSubfolders`. Getrennt, weil die beiden Listen im Ergebnis
+   * Gegenteiliges bewirken und eine gemeinsame Rückgabe an jeder Aufrufstelle
+   * wieder auseinandergenommen werden müsste.
+   */
+  resolveExcluded(id: PoolId): Promise<readonly TagId[]>;
+
+  /**
+   * Beide Taglisten, aufgelöst — **und** die Ordner, aus denen nichts geworden
+   * ist (E-057).
+   *
+   * Der Zusatz gegenüber `resolveRule`/`resolveExcluded` ist die Auskunft, die
+   * eine Tagmenge nicht tragen kann: welcher **genannte Ordner** keinen Tag
+   * enthält. Ohne sie sieht ein leerer Ordner aus wie eine Achse, die schweigt
+   * — und steht daneben noch ein Tagterm, ist er in der Summe überhaupt nicht
+   * mehr zu sehen.
+   *
+   * **Eine Methode für beide Achsen**, obwohl die schmale Fassung darüber zwei
+   * hat: Die beiden Aufrufer dieser Fassung — die Pool-Liste und das Board —
+   * brauchen ausnahmslos beide Achsen und lösten schon vorher zweimal auf. Zwei
+   * Methoden wären hier zwei Aufrufe für eine Antwort.
+   *
+   * Die schmalen Methoden bleiben daneben stehen — für den, der nur die
+   * Tagmenge braucht, sind sie weiterhin die genügsamere Frage. Dass sie in
+   * `src` keinen Aufrufer mehr haben, steht an `resolveRule`; ob sie deshalb
+   * entfallen, entscheidet der Orchestrator (O-I).
+   */
+  resolveAxes(id: PoolId): Promise<PoolAxesResolution>;
 
   /** Mitglieder eines Pools. Abgeleitet, nicht gespeichert. */
   members(id: PoolId, filter?: TodoFilter, pagination?: Pagination): Promise<Page<Todo>>;
 }
 
 // ---------------------------------------------------------------------------
-// Kanban-Spalten (A-5.4) — Tabelle `todo_status`
+// Der Status eines Todos (A-5.3, A-5.4) — Tabelle `todo_status`
+//
+// **Keine Kanban-Spalte.** Seit E-054 ist eine Spalte eine Regel und liegt in
+// `pool`; der Status ist eine Eigenschaft am Todo und liegt hier. Seit T-076
+// lässt sich in einer Regel **nach** dem Status filtern (`Pool.statusIds`) —
+// das macht die Spalte nicht wieder zum Status: Eine Spalte kann mehrere
+// Status umfassen, keinen, oder Status und Tags mischen.
 // ---------------------------------------------------------------------------
 
 export interface TodoStatusPort {
@@ -394,9 +559,10 @@ export interface TodoStatusPort {
   /** Neuordnung in einem Zug, damit der eindeutige Index nicht zwischendrin bricht. */
   reorder(order: readonly StatusId[], now: Timestamp): Promise<Result<readonly TodoStatus[], TaktError>>;
   /**
-   * Löschen. Drei fachliche Gründe können es verhindern (T-074):
-   * `status_in_use`, `last_status_column` und — seit T-074 auch im Dienst und
-   * nicht mehr nur in der Oberfläche — `default_status_locked`.
+   * Löschen. Vier fachliche Gründe können es verhindern:
+   * `status_in_use` (Todos tragen ihn — oder, seit T-076, eine Regel benutzt
+   * ihn), `last_status_column` und — seit T-074 auch im Dienst und nicht mehr
+   * nur in der Oberfläche — `default_status_locked`.
    */
   remove(
     id: StatusId,
@@ -449,6 +615,28 @@ export interface TimeEntryPort {
   remove(id: TimeEntryId): Promise<Result<void, TaktError<'time_entry_locked' | 'not_found'>>>;
 
   sumSeconds(filter: TimeEntryFilter): Promise<number>;
+
+  /**
+   * Hat dieses Todo offene, hat es exportierte Buchungen? (T-076)
+   *
+   * Für die Exportstatus-Achse einer Regel. **Eine** Abfrage für alle
+   * genannten Todos, nicht eine je Todo: Das Board fragt für jede geladene
+   * Karte, und ein Aufruf je Karte wäre genau das N+1, das A-10.4 ausschließt.
+   *
+   * Zwei Wahrheitswerte und keine Summe: Gefragt ist, ob es solche Buchungen
+   * **gibt**. `sumSeconds` daneben beantwortet die andere Frage — wie viel —
+   * und braucht dafür je Todo einen eigenen Aufruf, weil sie eine Zahl je
+   * Filter liefert und keine Zuordnung.
+   *
+   * `open` zählt nur **abgeschlossene** Buchungen: Ein laufender Timer ist
+   * noch nichts, was man abrechnen könnte, und derselbe Zusatz steht seit
+   * jeher in `TodoFilter.onlyWithOpenEntries`. Ein Todo, das in keiner der
+   * beiden Mengen vorkommt, hat gar keine Buchungen; es fehlt dann in der
+   * Zuordnung, und der Aufrufer liest zweimal `false`.
+   */
+  exportPresence(
+    todoIds: readonly TodoId[],
+  ): Promise<ReadonlyMap<TodoId, { readonly hasOpen: boolean; readonly hasExported: boolean }>>;
 }
 
 /**

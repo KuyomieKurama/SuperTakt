@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { planExportRun, serializeExportRows } from '../src/plan.js';
 import type { ExportFieldDefinition } from '../src/model.js';
 import type { ExportGroup, ExportSystemContext } from '@takt/domain/export';
-import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain/export';
+import type { CalendarDay, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
 
 const todoId = (value: string) => value as unknown as TodoId;
 const timeEntryId = (value: string) => value as unknown as TimeEntryId;

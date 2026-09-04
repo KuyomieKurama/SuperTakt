@@ -1,5 +1,5 @@
 /**
- * TP-TIMER-01/02, I-05, E-023, TP-KANBAN-05/06 (docs/testplan.md, Abschnitt 5)
+ * TP-TIMER-01/02, I-05, E-023, TP-KANBAN-04 (docs/testplan.md, Abschnitt 5)
  *
  * Erledigtes Todo wiederbeleben: Todo anlegen, Zeit buchen, auf erledigt
  * setzen, Timer erneut starten. Erwartung: „Erledigt" ist weg, das Todo ist
@@ -12,10 +12,27 @@
  * (Zeiterfassung) aus Zeitgründen nicht fahren (Fälle 10/11 im damaligen
  * Bericht). T-040 hat I-05 seither ausdrücklich auf alle sechs Startpunkte
  * ausgeweitet (Befund C-04) — beide Fälle sind jetzt nachgeholt.
+ *
+ * **Nachtrag T-081 (E-054/E-055).** Seit eine Kanban-Spalte eine Regel ist,
+ * gibt es keine Standardspalten mehr — das Board ist leer, bis jemand
+ * eine Regel einrichtet. Der Fall "Startpunkt S-04 (Kanban-Karte)" legt sich
+ * deshalb selbst eine Spalte an, deren Achse "Erledigt" **neutral** bleibt
+ * ("Alle"): Genau das ist die Voraussetzung für die hier geprüfte Aussage
+ * ("die Kanban-Spalte bleibt unverändert"). Eine Spalte, die auf "Erledigt"
+ * filtert, verhält sich absichtlich anders — das prüft seither
+ * `tests/e2e/kanban.spec.ts`, TP-KANBAN-04, nicht diese Datei.
  */
 import { test, expect } from '@playwright/test';
 
-import { cleanupAnyTimer, createTodo } from './support/api';
+import {
+  cleanupAnyTimer,
+  createTag,
+  createTodo,
+  deletePoolByName,
+  deleteTag,
+  deleteTodo,
+} from './support/api';
+import { createBoardColumn } from './support/actions';
 import { gotoBoard, gotoDashboard, gotoTime, gotoTodo, gotoTodos } from './support/nav';
 
 const API_BASE_URL = 'http://127.0.0.1:17843/api/v1';
@@ -103,33 +120,55 @@ test.describe('I-05 — Timerstart auf einem erledigten Todo hebt Erledigt auf, 
   });
 
   test('Startpunkt S-04 (Kanban-Karte)', async ({ page }) => {
-    const todo = await createTodo({ title: `E2E-REVIVAL-S04-${Date.now()}` });
+    const run = Date.now();
+    // Seit E-054/E-055 ist eine Kanban-Spalte eine Regel; ohne
+    // eingerichtete Spalte gäbe es hier gar keine Karte zu sehen. Die Achse
+    // "Erledigt" bleibt bewusst auf ihrem Neutralwert "Alle" — genau das ist
+    // die Voraussetzung dafür, dass dieser Fall "die Kanban-Spalte bleibt
+    // unverändert" (E-023) überhaupt sinnvoll behaupten kann. Eine Spalte, die
+    // stattdessen auf "Erledigt" filtert, verhält sich absichtlich anders
+    // (TP-KANBAN-04, `kanban.spec.ts`).
+    const columnName = `E2E-Revival-Spalte-${run}`;
+    const tag = await createTag(`E2E-Revival-S04-${run}`);
+    const todo = await createTodo({ title: `E2E-REVIVAL-S04-${run}`, tagIds: [tag.id] });
     const statusBefore = await loadTodoStatusId(todo.id);
     await markDone(todo.id);
 
-    await gotoBoard(page);
-    await page.getByRole('button', { name: 'Erledigte einblenden' }).click();
-    const card = page.locator('.kcard', { hasText: todo.title });
-    await expect(card).toBeVisible();
-    await expect(card.locator('.kcard__flag')).toHaveText(/Erledigt/);
+    try {
+      await gotoBoard(page);
+      await createBoardColumn(page, columnName, { requiredTagNames: [tag.name] });
+      await page.getByRole('button', { name: 'Erledigte einblenden' }).click();
+      const card = page.locator('.kcard', { hasText: todo.title });
+      await expect(card).toBeVisible();
+      await expect(card.locator('.kcard__flag')).toHaveText(/Erledigt/);
 
-    // T-040, Befund C-17: "Zeiterfassung starten/stoppen" heißt überall
-    // "Timer für 'X' starten/stoppen" — auch auf der Kanban-Karte.
-    await card.getByRole('button', { name: /Timer für/ }).click();
+      // T-040, Befund C-17: "Zeiterfassung starten/stoppen" heißt überall
+      // "Timer für 'X' starten/stoppen" — auch auf der Kanban-Karte.
+      await card.getByRole('button', { name: /Timer für/ }).click();
 
-    // Die Karte bleibt bestehen (bleibt selektierbar unter demselben Titel)
-    // und zeigt jetzt "Erledigt aufgehoben" statt "Erledigt" (T-005n, Abschnitt 1).
-    await expect(card.locator('.kcard__flag')).toHaveText(/Erledigt aufgehoben/);
-    await expect(card.getByRole('button', { name: /Timer für/ })).toBeVisible();
+      // Die Karte bleibt bestehen (bleibt selektierbar unter demselben Titel)
+      // und zeigt jetzt "Erledigt aufgehoben" statt "Erledigt" (T-005n, Abschnitt 1).
+      await expect(card.locator('.kcard__flag')).toHaveText(/Erledigt aufgehoben/);
+      await expect(card.getByRole('button', { name: /Timer für/ })).toBeVisible();
 
-    expect(await loadTodoStatusId(todo.id)).toBe(statusBefore);
-    expect(await loadTodoDone(todo.id)).toBe(false);
+      expect(await loadTodoStatusId(todo.id)).toBe(statusBefore);
+      expect(await loadTodoDone(todo.id)).toBe(false);
 
-    // Aufräumen: Timer über die Karte selbst stoppen.
-    await card.getByRole('button', { name: /Timer für/ }).click();
-    const dialog = page.getByRole('dialog', { name: 'Timer stoppen' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
+      // Aufräumen: Timer über die Karte selbst stoppen.
+      await card.getByRole('button', { name: /Timer für/ }).click();
+      const dialog = page.getByRole('dialog', { name: 'Timer stoppen' });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
+    } finally {
+      // Reihenfolge wichtig (Löschschutz `tag_in_use`): erst die Spalte, dann
+      // das Todo, das das Tag noch trägt, erst danach das Tag selbst — anders
+      // als die übrigen vier Fälle in dieser Datei lässt dieser Fall nichts
+      // zurück, weil er als einziger eine Spalte und ein Tag anlegt, die es
+      // vor T-081 hier nicht gab.
+      await deletePoolByName(columnName).catch(() => undefined);
+      await deleteTodo(todo.id).catch(() => undefined);
+      await deleteTag(tag.id).catch(() => undefined);
+    }
   });
 
   test('Startpunkt S-02 (Todo-Liste, Zeilenaktion, E-027)', async ({ page }) => {

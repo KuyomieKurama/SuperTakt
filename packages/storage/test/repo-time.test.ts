@@ -8,7 +8,12 @@
  * einem erledigten Todo (A-2.5) und der verwaiste Timer (E-036).
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CalendarDay } from '@takt/domain';
 import { NOW, openTestDatabase, ts, type TestDatabase } from './support/setup.ts';
+
+// Dieselbe Marke wie in calendar-day-boundary.test.ts: `CalendarDay` ist eine
+// Marke aus der Domäne (`Branded<'CalendarDay'>`), kein eigener Testtyp.
+const day = (value: string): CalendarDay => value as CalendarDay;
 
 describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
   let db: TestDatabase;
@@ -129,7 +134,7 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
     const byTodo = await db.unit.timeEntries.search({ todoId: todo.id });
     expect(byTodo.total).toBe(3);
 
-    const byDay = await db.unit.timeEntries.search({ fromDay: '2026-08-30', toDay: '2026-08-30' });
+    const byDay = await db.unit.timeEntries.search({ fromDay: day('2026-08-30'), toDay: day('2026-08-30') });
     expect(byDay.total).toBe(1);
 
     const page = await db.unit.timeEntries.search({ todoId: todo.id }, { limit: 1 });
@@ -160,6 +165,45 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
 
     const filtered = await db.unit.timeEntries.search({ onlyPreviouslyExported: true });
     expect(filtered.items.map((e) => e.id)).toEqual([created.value.id]);
+  });
+
+  it('exportPresence liefert je Todo, ob es offene und ob es exportierte Buchungen gibt (T-076, Grundlage der Exportstatus-Achse)', async () => {
+    db = openTestDatabase();
+    const withOpen = await db.unit.todos.create(
+      { title: 'Mit offener Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+    const withExported = await db.unit.todos.create(
+      { title: 'Mit exportierter Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+    const withoutEntries = await db.unit.todos.create(
+      { title: 'Ohne Buchung', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+      [],
+    );
+
+    await db.unit.timeEntries.create(
+      { todoId: withOpen.id, startedAt: ts('2026-08-31T08:00:00Z'), endedAt: ts('2026-08-31T08:10:00Z'), note: '' },
+      NOW,
+    );
+    const exportedEntry = await db.unit.timeEntries.create(
+      { todoId: withExported.id, startedAt: ts('2026-08-31T09:00:00Z'), endedAt: ts('2026-08-31T09:10:00Z'), note: '' },
+      NOW,
+    );
+    expect(exportedEntry.ok).toBe(true);
+    if (!exportedEntry.ok) return;
+    db.conn
+      .prepare("UPDATE time_entry SET export_status = 'exported', export_count = 1 WHERE id = ?")
+      .run(exportedEntry.value.id);
+
+    const presence = await db.unit.timeEntries.exportPresence([withOpen.id, withExported.id, withoutEntries.id]);
+
+    expect(presence.get(withOpen.id)).toEqual({ hasOpen: true, hasExported: false });
+    expect(presence.get(withExported.id)).toEqual({ hasOpen: false, hasExported: true });
+    // Ein Todo ganz ohne Buchungen fehlt in der Zuordnung; der Aufrufer liest
+    // zweimal `false` (siehe Kommentar am Port).
+    expect(presence.get(withoutEntries.id)).toBeUndefined();
+    expect(await db.unit.timeEntries.exportPresence([])).toEqual(new Map());
   });
 
   it('sumSeconds summiert nur die Buchungen, die den Filter treffen', async () => {

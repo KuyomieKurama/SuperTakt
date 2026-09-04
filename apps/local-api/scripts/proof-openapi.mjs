@@ -91,6 +91,16 @@ import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
+import {
+  FORBIDDEN_NAME_CHARACTERS,
+  POOL_RULE_AXIS_IDS,
+  isForbiddenNameCharacter,
+  poolMovementSentence,
+  poolRuleIsEmpty,
+  poolRuleMatchesNothing,
+  tagAxisIsUnresolved,
+} from '@takt/domain';
+import { titleSchema } from '../src/http/input.ts';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
@@ -443,13 +453,17 @@ check(
 );
 
 const booking = doc.paths['/addin/todos/{todoId}/time-entries'].post;
+// Seit T-104 heißt das zweite Feld `poolMovement` und nicht mehr `poolNames`:
+// **eine** Form für jede Bewegung über HTTP (E-061 Punkt 3). Die Prüfung misst
+// unverändert, dass die Antwort die Wirkung ansagt — nur unter dem Namen, den
+// sie jetzt trägt.
 check(
-  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolNames',
+  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolMovement',
   (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
     'doneCleared',
   ) &&
     (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
-      'poolNames',
+      'poolMovement',
     ),
 );
 check(
@@ -979,6 +993,8 @@ check(
   `geliefert ${JSON.stringify(boardColumnRecord?.body?.data?.placement)}`,
 );
 
+// Der **erste** Durchgang: vier Spalten über Tags, dazu die Achsen aus T-076,
+// die ohne Buchungen und ohne erledigte Karte auskommen.
 const boardRecord = records.find((record) => record.operationId === 'getBoard');
 const board = boardRecord?.body?.data;
 const columnsByName = new Map(
@@ -986,7 +1002,7 @@ const columnsByName = new Map(
 );
 
 check(
-  `das Board führt die vier eingerichteten Spalten und nur die (${columnsByName.size})`,
+  `das Board führt die eingerichteten Spalten und nur die (${columnsByName.size})`,
   Object.values(BOARD_COLUMNS).every((name) => columnsByName.has(name)) &&
     columnsByName.size === Object.keys(BOARD_COLUMNS).length,
   [...columnsByName.keys()].join(', '),
@@ -1035,6 +1051,23 @@ check(
   doubled.join(', '),
 );
 
+/**
+ * Spaltenkennung → Spaltenname.
+ *
+ * Eine Abweichung, die nur Kennungen nennt, verlagert die Arbeit auf den
+ * Leser: Er muss erst herausfinden, **welche** Spalte streitet. Mit dem Namen
+ * steht der Befund fertig da.
+ */
+const columnName = new Map(
+  (board?.columns ?? []).map((entry) => [entry.column?.id, entry.column?.name]),
+);
+for (const entry of lateBoardColumnsForNames()) columnName.set(entry.id, entry.name);
+function lateBoardColumnsForNames() {
+  const late = records.filter((record) => record.operationId === 'getBoard').at(-1);
+  return (late?.body?.data?.columns ?? []).map((entry) => entry.column ?? {});
+}
+const named = (ids) => [...ids].map((id) => columnName.get(id) ?? id).sort().join(' / ') || '(keine)';
+
 /** Was die **Domäne** sagt: dieselbe Frage, über `matchesPool`. */
 const byDomain = new Map(
   (board?.appearances ?? []).map((entry) => [entry.todoId, entry.columnIds]),
@@ -1048,7 +1081,7 @@ for (const [todoId, columnIds] of multiple) {
     continue;
   }
   if ([...claimed].sort().join(',') !== [...columnIds].sort().join(',')) {
-    disagreements.push(`${todoId}: Abfrage [${columnIds}] gegen Regel [${claimed}]`);
+    disagreements.push(`${todoId}: Abfrage [${named(columnIds)}] gegen Regel [${named(claimed)}]`);
   }
 }
 for (const [todoId, columnIds] of byDomain) {
@@ -1061,6 +1094,1115 @@ check(
   disagreements.length === 0 && byDomain.size === multiple.length,
   disagreements.join(' | ') || `Regel ${byDomain.size}, Abfrage ${multiple.length}`,
 );
+
+// ---------------------------------------------------------------------------
+section('12  Die Regel ist eine Struktur mit benannten Feldern (T-076)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Auftraggeber wollte den Status als Regel — und hat, mit einem Vorbild vor
+ * Augen, mehr bestellt: „Nimm dir ein Beispiel daran. Das regelt das."
+ * Statt einer Liste gleichartiger Terme hat jede Bedingung ein eigenes Feld mit
+ * einem Neutralwert; die Felder sind mit „und" verbunden.
+ *
+ * Gemessen wird hier, dass jedes dieser Felder **wirkt** — und zwar an einem
+ * Bestand, in dem eine bloß durchgereichte Bedingung auffiele:
+ *
+ *   Karte A trägt `Beratung` und `Rückfrage`, Status 1.
+ *   Karte B trägt `Beratung`,                 Status 1.
+ *
+ * Damit ergibt jede Achse eine **andere** Menge, und keine davon ist zufällig
+ * gleich einer anderen:
+ *
+ *   nur Status        → A und B
+ *   Tag und Status    → nur A     (das „und": weniger als die Tagspalte, nicht mehr)
+ *   ausgeschlossen    → nur B     (die Bedingung, die eine Termliste nicht kann)
+ *   fremder Status    → leer      (die Gegenprobe: die Achse filtert wirklich)
+ *
+ * Die vier Prüfungen darunter fahren die drei Achsen an, die einen Bestand
+ * brauchen — Erledigt, offene und exportierte Buchungen —, und zwar am
+ * **zweiten** Board-Durchgang, nach Timer, Buchungen und Exportlauf.
+ */
+
+const idsIn = (name) =>
+  new Set((columnsByName.get(name)?.todos ?? []).map((todo) => todo.id));
+const asList = (set) => [...set].sort().join(', ') || '(leer)';
+
+const onlyStatus = idsIn(BOARD_COLUMNS.status);
+const mixedColumn = idsIn(BOARD_COLUMNS.mixed);
+const excludedColumn = idsIn(BOARD_COLUMNS.excluded);
+const foreignStatus = idsIn(BOARD_COLUMNS.otherStatus);
+const tagColumn = idsIn(BOARD_COLUMNS.tag);
+
+check(
+  `eine Spalte, die nur nach dem Status filtert, führt beide Karten (${onlyStatus.size})`,
+  onlyStatus.size === 2,
+  asList(onlyStatus),
+);
+
+check(
+  'eine Spalte über einen Status, den keine Karte trägt, ist leer — die Achse filtert wirklich',
+  foreignStatus.size === 0,
+  asList(foreignStatus),
+);
+
+check(
+  `Tag **und** Status ergibt weniger als das Tag allein (${mixedColumn.size} statt ${tagColumn.size})`,
+  mixedColumn.size === 1 &&
+    [...mixedColumn].every((id) => onlyStatus.has(id)) &&
+    mixedColumn.size < onlyStatus.size,
+  `gemischt ${asList(mixedColumn)} | nur Status ${asList(onlyStatus)}`,
+);
+
+check(
+  'ein ausgeschlossenes Tag nimmt genau die Karte heraus, die es trägt',
+  excludedColumn.size === 1 && [...excludedColumn].every((id) => !mixedColumn.has(id)),
+  `ausgeschlossen ${asList(excludedColumn)} | gemischt ${asList(mixedColumn)}`,
+);
+
+/*
+ * Und der Fall, um den es dem Auftraggeber ging: **eine Karte, die durch den
+ * Status in zwei Spalten steht.**
+ *
+ * Nicht „steht in zwei Spalten" allein — das gab es seit E-054. Gemessen wird,
+ * dass mindestens eine Karte in einer Spalte über Tags **und** in einer Spalte
+ * über den Status steht, dass also die beiden Arten von Bedingung dieselbe
+ * Karte treffen, ohne einander zu verdrängen.
+ */
+const inTagAndStatus = [...tagColumn].filter((id) => onlyStatus.has(id));
+check(
+  `eine Karte steht zugleich in einer Tag- und in einer Statusspalte (${inTagAndStatus.length})`,
+  inTagAndStatus.length >= 1,
+  `Tagspalte ${asList(tagColumn)} | Statusspalte ${asList(onlyStatus)}`,
+);
+
+// ---------------------------------------------------------------------------
+// Der zweite Durchgang: Erledigt und Exportstatus
+// ---------------------------------------------------------------------------
+
+const boardRecords = records.filter((record) => record.operationId === 'getBoard');
+const lateBoard = boardRecords[boardRecords.length - 1]?.body?.data;
+const lateColumns = new Map(
+  (lateBoard?.columns ?? []).map((entry) => [entry.column?.name, entry]),
+);
+const lateIdsIn = (name) =>
+  new Set((lateColumns.get(name)?.todos ?? []).map((todo) => todo.id));
+
+check(
+  `es gibt einen zweiten Board-Durchgang, nach Buchungen und Exportlauf (${boardRecords.length})`,
+  boardRecords.length >= 2 && lateBoard !== undefined,
+  `${boardRecords.length} Aufzeichnung(en)`,
+);
+
+/*
+ * Erledigt. Die Spalte fragt ausdrücklich nach erledigten Karten, die Ansicht
+ * steht auf `includeCompleted=false` — die Vorgabe. Wäre die
+ * Ansichtseinstellung stärker als die Regel, bliebe die Spalte leer, und der
+ * Benutzer sähe eine Spalte, die er eingerichtet hat und die nie etwas zeigt.
+ */
+const doneColumn = lateIdsIn(BOARD_COLUMNS.done);
+check(
+  `eine Spalte „nur Erledigt" zeigt die erledigte Karte, obwohl die Ansicht Erledigtes ausblendet (${doneColumn.size})`,
+  doneColumn.size >= 1,
+  asList(doneColumn),
+);
+
+/*
+ * Exportstatus. Die Erwartung wird nicht angenommen, sondern aus einem
+ * **zweiten, unabhängigen** Weg gelesen: der Liste der Buchungen. Laufen die
+ * beiden auseinander, zeigt das Board eine Spalte „noch nicht abgerechnet",
+ * die etwas anderes meint als die Buchungsliste.
+ */
+const entriesRecord = records
+  .filter((record) => record.operationId === 'searchTimeEntries')
+  .at(-1);
+const entries = entriesRecord?.body?.data?.items ?? [];
+const expectedOpen = new Set(
+  entries.filter((entry) => entry.exportStatus === 'open').map((entry) => entry.todoId),
+);
+const expectedExported = new Set(
+  entries.filter((entry) => entry.exportStatus === 'exported').map((entry) => entry.todoId),
+);
+
+const openColumn = lateIdsIn(BOARD_COLUMNS.openWork);
+const exportedColumn = lateIdsIn(BOARD_COLUMNS.exported);
+
+/*
+ * Die Erwartung wird um die **erledigten** Karten gekürzt, und das ist keine
+ * Nachgiebigkeit, sondern die zweite Hälfte der Messung.
+ *
+ * Beide Exportspalten lassen die Erledigt-Achse offen. Wo die Regel schweigt,
+ * gilt die Ansichtseinstellung — und die steht auf ihrer Vorgabe
+ * `includeCompleted=false`. Eine erledigte Karte mit offener Buchung gehört
+ * damit in die Spalte und wird trotzdem nicht gezeigt.
+ *
+ * Welche Karten erledigt sind, wird nicht angenommen: Es ist genau der Inhalt
+ * der Spalte `done` daneben, die ausdrücklich danach fragt.
+ */
+const visible = (set) => new Set([...set].filter((id) => !doneColumn.has(id)));
+
+check(
+  `„mit offener Buchung" trifft genau die Todos, die eine haben (${openColumn.size})`,
+  openColumn.size > 0 && asList(openColumn) === asList(visible(expectedOpen)),
+  `Spalte ${asList(openColumn)} | Buchungsliste ${asList(visible(expectedOpen))}`,
+);
+
+check(
+  `„mit exportierter Buchung" trifft genau die Todos, die eine haben (${exportedColumn.size})`,
+  exportedColumn.size > 0 && asList(exportedColumn) === asList(visible(expectedExported)),
+  `Spalte ${asList(exportedColumn)} | Buchungsliste ${asList(visible(expectedExported))}`,
+);
+
+check(
+  'die erledigte Karte hat eine offene Buchung und wird trotzdem nur in der Erledigt-Spalte gezeigt',
+  [...doneColumn].some((id) => expectedOpen.has(id)) &&
+    ![...doneColumn].some((id) => openColumn.has(id)),
+  `erledigt ${asList(doneColumn)} | offen laut Buchungsliste ${asList(expectedOpen)} | Spalte ${asList(openColumn)}`,
+);
+
+/*
+ * Und die Übereinstimmung von Abfrage und Domänenregel noch einmal — für den
+ * zweiten Durchgang, in dem alle fünf Achsen etwas zu sagen haben. Dieselbe
+ * Prüfung wie in Abschnitt 11, aber an dem Bestand, an dem sie am ehesten
+ * auseinanderlaufen: `matchesPool` entscheidet über Erledigt und Buchungen
+ * anhand von Angaben, die der Anwendungsfall erst zusammensuchen muss, die
+ * Abfrage anhand von SQL.
+ */
+const lateBySql = new Map();
+for (const entry of lateBoard?.columns ?? []) {
+  for (const todo of entry.todos ?? []) {
+    if (!lateBySql.has(todo.id)) lateBySql.set(todo.id, new Set());
+    lateBySql.get(todo.id).add(entry.column.id);
+  }
+}
+const lateByDomain = new Map(
+  (lateBoard?.appearances ?? []).map((entry) => [entry.todoId, new Set(entry.columnIds)]),
+);
+const lateProblems = [];
+for (const [todoId, columnIds] of lateBySql) {
+  const claimed = lateByDomain.get(todoId) ?? new Set();
+  if (columnIds.size > 1 && asList(claimed) !== asList(columnIds)) {
+    lateProblems.push(`${todoId}: Abfrage [${named(columnIds)}] gegen Regel [${named(claimed)}]`);
+  }
+  if (columnIds.size <= 1 && claimed.size > 0) {
+    lateProblems.push(`${todoId}: von der Regel mehrfach genannt, von der Abfrage einmal`);
+  }
+}
+check(
+  `auch mit allen fünf Achsen nennen Abfrage und Domänenregel dieselben Spalten (${lateByDomain.size})`,
+  lateProblems.length === 0 && lateByDomain.size > 0,
+  lateProblems.join(' | ') || 'keine Mehrfachnennung im zweiten Durchgang',
+);
+
+// ---------------------------------------------------------------------------
+section('13  Die Frage „ist diese Regel leer" steht einmal (T-080)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Bis T-080 stand die Bedingung „alle Achsen neutral" dreimal da: in
+ * `matchesPool`, in der Übersetzung nach SQL und in der Oberfläche, die sie
+ * für den Leerzustand einer frisch angelegten Spalte braucht und über keine
+ * Route erfragen konnte. Jetzt steht sie in `poolRuleIsEmpty`, und dieser
+ * Abschnitt hält sie gegen den laufenden Dienst.
+ *
+ * Die Aufzählung der Achsen kommt aus der **Domäne** und nicht aus dieser
+ * Datei (`POOL_RULE_AXIS_IDS`). Das ist der Punkt: Wer eine sechste Achse
+ * hinzufügt, macht diesen Abschnitt rot, bis sie beschrieben, annehmbar und
+ * ausgeliefert ist — und `tsc` hat ihn vorher schon in der Domäne, in
+ * `packages/storage` und im Dienst rot gemacht.
+ */
+
+const poolSchema = doc.components.schemas.Pool;
+const axisGaps = [];
+for (const axis of POOL_RULE_AXIS_IDS) {
+  if (poolSchema.properties?.[axis] === undefined) axisGaps.push(`Pool.${axis} fehlt`);
+  if (!(poolSchema.required ?? []).includes(axis)) axisGaps.push(`Pool.${axis} nicht Pflicht`);
+  for (const name of ['PoolCreate', 'PoolUpdate']) {
+    if (doc.components.schemas[name].properties?.[axis] === undefined) {
+      axisGaps.push(`${name}.${axis} fehlt`);
+    }
+  }
+}
+check(
+  `jede Achse der Domäne ist beschrieben — im Pool und in beiden Rümpfen (${POOL_RULE_AXIS_IDS.length})`,
+  axisGaps.length === 0,
+  axisGaps.join(', '),
+);
+
+const axisNotRead = [];
+for (const id of ['createPool', 'updatePool']) {
+  const properties = Object.keys(z.toJSONSchema(REQUEST_SCHEMAS[id], { io: 'input' }).properties ?? {});
+  for (const axis of POOL_RULE_AXIS_IDS) {
+    if (!properties.includes(axis)) axisNotRead.push(`${id}.${axis}`);
+  }
+}
+check(
+  'jede Achse wird von der Eingabeprüfung beider Routen angenommen',
+  axisNotRead.length === 0,
+  axisNotRead.join(', '),
+);
+
+/** Jede ausgelieferte Regel, gleich über welche Antwort sie kam. */
+const deliveredPools = [
+  ...records
+    .filter((record) => ['listPools', 'createPool', 'updatePool'].includes(record.operationId))
+    .flatMap((record) => (Array.isArray(record.body?.data) ? record.body.data : [record.body?.data])),
+  ...(board?.columns ?? []).map((entry) => entry.column),
+  ...(lateBoard?.columns ?? []).map((entry) => entry.column),
+].filter((pool) => pool !== undefined && pool !== null && typeof pool === 'object' && 'id' in pool);
+
+const deliveryGaps = [];
+for (const pool of deliveredPools) {
+  for (const axis of POOL_RULE_AXIS_IDS) {
+    if (pool[axis] === undefined) deliveryGaps.push(`${pool.name}.${axis}`);
+  }
+  const resolved = pool.resolved;
+  if (
+    typeof resolved?.tagCount !== 'number' ||
+    typeof resolved?.excludedTagCount !== 'number' ||
+    typeof resolved?.isEmpty !== 'boolean' ||
+    typeof resolved?.unresolvedRequired !== 'boolean' ||
+    typeof resolved?.unresolvedExcluded !== 'boolean' ||
+    typeof resolved?.matchesNothing !== 'boolean' ||
+    !Array.isArray(resolved?.emptyRuleFolderIds)
+  ) {
+    deliveryGaps.push(`${pool.name}.resolved`);
+  }
+}
+check(
+  `jede ausgelieferte Regel trägt alle Achsen und ihre Auflösung (${deliveredPools.length})`,
+  deliveryGaps.length === 0 && deliveredPools.length >= 15,
+  deliveryGaps.slice(0, 8).join(', '),
+);
+
+/*
+ * **Domäne gegen Dienst.** Wo keine Ordner im Spiel sind, muss die Antwort der
+ * Domäne auf die gespeicherte Regel dieselbe sein wie die des Dienstes auf die
+ * aufgelöste: Ein Tagterm löst sich zu genau einem Tag auf, ein Status zu sich
+ * selbst. Weichen die beiden hier ab, hat eine Seite ihre Achsen vergessen.
+ *
+ * Regeln **mit** Ordnertermen sind ausgenommen, und zwar nicht aus Nachsicht:
+ * Dort dürfen die Antworten auseinandergehen, und genau diese Lücke ist der
+ * Zustand, den die Zahl daneben benennbar macht (die Prüfung darunter).
+ */
+const hasFolderTerm = (pool) =>
+  [...(pool.rule ?? []), ...(pool.excludedTags ?? [])].some((term) => term.kind === 'folder');
+
+const emptinessProblems = [];
+for (const pool of deliveredPools.filter((entry) => !hasFolderTerm(entry))) {
+  if (poolRuleIsEmpty(pool) !== pool.resolved.isEmpty) {
+    emptinessProblems.push(
+      `${pool.name}: Domäne ${poolRuleIsEmpty(pool)}, Dienst ${pool.resolved.isEmpty}`,
+    );
+  }
+}
+check(
+  'ohne Ordnerterm sagen Domäne und Dienst dasselbe über die leere Regel',
+  emptinessProblems.length === 0,
+  emptinessProblems.join(' | '),
+);
+
+/*
+ * Und die fachliche Folge: Was leer ist, trifft nichts. Gemessen an der Zahl,
+ * die aus der **Abfrage** kommt und nicht aus der Domäne — das ist die dritte
+ * Fassung derselben Regel, die in `packages/storage` steht.
+ */
+const notEmptyButMatching = [];
+const emptyWithCards = [];
+for (const entry of board?.columns ?? []) {
+  if (entry.column.resolved.isEmpty && entry.total !== 0) {
+    emptyWithCards.push(`${entry.column.name}: ${entry.total} Karten`);
+  }
+  if (!entry.column.resolved.isEmpty && entry.total > 0) notEmptyButMatching.push(entry.column.name);
+}
+check(
+  `eine aufgelöst leere Regel hat keine Mitglieder — und das ist nicht leer gemessen (${notEmptyButMatching.length} Gegenproben)`,
+  emptyWithCards.length === 0 && notEmptyButMatching.length >= 3,
+  emptyWithCards.join(' | ') || `Gegenproben: ${notEmptyButMatching.join(', ')}`,
+);
+
+/*
+ * Der Fall, für den die Zahl überhaupt da ist: **ein Ordner, in dem kein Tag
+ * liegt.** Die Regel nennt eine Bedingung — `poolRuleIsEmpty` sagt also nein —
+ * und trifft trotzdem nichts. Ohne `resolved.tagCount` sähe das in jeder
+ * Ansicht aus wie „im Augenblick passt nichts", und der Benutzer wartete auf
+ * ein Todo, das nie erscheinen kann.
+ */
+const barren = columnsByName.get(BOARD_COLUMNS.emptyFolder);
+check(
+  'ein Ordner ohne Tags ist von einer Regel ohne Treffer unterscheidbar',
+  barren !== undefined &&
+    barren.column.rule.length === 1 &&
+    poolRuleIsEmpty(barren.column) === false &&
+    barren.column.resolved.tagCount === 0 &&
+    barren.column.resolved.isEmpty === true &&
+    barren.total === 0,
+  JSON.stringify({
+    regelterme: barren?.column?.rule?.length,
+    nenntBedingung: barren === undefined ? undefined : !poolRuleIsEmpty(barren.column),
+    aufgeloest: barren?.column?.resolved,
+    karten: barren?.total,
+  }),
+);
+
+/*
+ * Die Gegenprobe dazu: derselbe Aufbau mit einem Ordner, in dem Tags liegen.
+ * Ohne sie wäre die Prüfung darüber auch dann grün, wenn die Auflösung
+ * grundsätzlich null zählte.
+ */
+const filled = columnsByName.get(BOARD_COLUMNS.folder);
+check(
+  'ein Ordner **mit** Tags zählt sie auch',
+  filled !== undefined && filled.column.resolved.tagCount >= 1 && filled.column.resolved.isEmpty === false,
+  JSON.stringify(filled?.column?.resolved),
+);
+
+/*
+ * Und der Prüfer prüft sich selbst — sonst wäre `poolRuleIsEmpty` auch dann
+ * grün, wenn es immer dasselbe antwortete. Je Achse einmal, mit sonst
+ * neutralen Nachbarn: Jede einzelne muss die Regel aus der Leere holen.
+ */
+const neutral = {
+  rule: [],
+  excludedTags: [],
+  statusIds: [],
+  completion: 'any',
+  exportState: 'any',
+};
+const setTo = {
+  rule: [{ kind: 'tag', tagId: 'x' }],
+  excludedTags: [{ kind: 'tag', tagId: 'x' }],
+  statusIds: ['x'],
+  completion: 'done',
+  exportState: 'open',
+};
+const blind = POOL_RULE_AXIS_IDS.filter(
+  (axis) => poolRuleIsEmpty({ ...neutral, [axis]: setTo[axis] }) !== false,
+);
+check(
+  `jede einzelne Achse hebt die Leere auf, und keine ohne (${POOL_RULE_AXIS_IDS.join(', ')})`,
+  blind.length === 0 && poolRuleIsEmpty(neutral) === true,
+  blind.length > 0 ? `wirkungslos: ${blind.join(', ')}` : 'die neutrale Regel gilt nicht als leer',
+);
+
+// ---------------------------------------------------------------------------
+section('14  Ein Ordnerterm ohne Tags trifft nichts, statt zu verschwinden (E-057)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund aus T-080, den T-082 behebt.
+ *
+ * Eine leere Tagmenge war der **Neutralwert** der Achse: Wer nichts über Tags
+ * sagte, bekam sie übersprungen. Ein Ordner, in dem kein Tag liegt, löst
+ * ebenfalls auf die leere Menge auf — und verschwand damit aus der Regel.
+ * „Tags aus Ordner X **und** Status offen" wurde zu „Status offen". Die Regel
+ * traf **mehr**, als der Benutzer gesagt hatte, und das ist die Richtung, die
+ * niemandem auffällt: Eine Spalte, die zu viel zeigt, sieht aus wie eine volle
+ * Spalte.
+ *
+ * Bei einer Regel, die **nur** aus dem Ordnerterm besteht, fiel es nicht auf —
+ * sie ist nach dem Auflösen leer und trifft schon deshalb nichts (A-3.4,
+ * Abschnitt 13). Gemessen wird hier deshalb der **gemischte** Fall, und die
+ * Gegenprobe daneben ist die andere Hälfte von E-057: Ein Ausschluß über
+ * denselben leeren Ordner schließt nichts aus.
+ */
+
+const mixedBarren = columnsByName.get(BOARD_COLUMNS.emptyFolderAndStatus);
+check(
+  'ein leerer Ordner **neben** einer zweiten Achse läßt die Regel nichts treffen',
+  mixedBarren !== undefined &&
+    mixedBarren.column.rule.length === 1 &&
+    mixedBarren.column.statusIds.length === 1 &&
+    // Nach dem Auflösen bleibt die Statusachse stehen: Diese Regel ist **nicht**
+    // leer, und bis T-082 hätte sie deshalb nach dem Status gefiltert.
+    mixedBarren.column.resolved.isEmpty === false &&
+    mixedBarren.column.resolved.tagCount === 0 &&
+    mixedBarren.column.resolved.unresolvedRequired === true &&
+    mixedBarren.column.resolved.matchesNothing === true &&
+    mixedBarren.total === 0,
+  JSON.stringify({
+    terme: mixedBarren?.column?.rule?.length,
+    status: mixedBarren?.column?.statusIds?.length,
+    aufgeloest: mixedBarren?.column?.resolved,
+    karten: mixedBarren?.total,
+  }),
+);
+
+/*
+ * Und die Gegenprobe, ohne die die Prüfung darüber auch an einer Spalte grün
+ * wäre, deren Status ohnehin niemand trägt: **derselbe** Status, allein
+ * genannt, führt zwei Karten. Der leere Ordner ist also das einzige, was die
+ * Spalte darüber leer macht.
+ */
+const statusColumn = columnsByName.get(BOARD_COLUMNS.status);
+check(
+  `derselbe Status ohne den leeren Ordner führt Karten (${statusColumn?.total ?? 0})`,
+  statusColumn !== undefined &&
+    mixedBarren !== undefined &&
+    statusColumn.total >= 2 &&
+    JSON.stringify(statusColumn.column.statusIds) === JSON.stringify(mixedBarren.column.statusIds),
+  JSON.stringify({
+    nurStatus: statusColumn?.column?.statusIds,
+    mitLeeremOrdner: mixedBarren?.column?.statusIds,
+    karten: statusColumn?.total,
+  }),
+);
+
+/*
+ * Die andere Hälfte von E-057: **Ausgeschlossene** Tags über einen leeren
+ * Ordner schließen nichts aus. „Keiner davon" über nichts läßt in Ruhe, statt
+ * einzuengen — die Spalte führt deshalb genau dieselben Karten wie die Spalte
+ * über dasselbe Tag ohne den Ausschluß.
+ *
+ * Diese Prüfung ist die, die eine zu grobe Behebung fängt: Wer „eine Tagachse
+ * ohne Auflösung trifft nichts" auf **beide** Listen anwendet, macht diese
+ * Spalte leer, und dann steht hier eine Abweichung.
+ */
+const excludedBarren = columnsByName.get(BOARD_COLUMNS.excludedEmptyFolder);
+const idsOf = (entry) => [...new Set((entry?.todos ?? []).map((todo) => todo.id))].sort().join(', ');
+check(
+  `ein Ausschluß über einen leeren Ordner schließt nichts aus (${excludedBarren?.total ?? 0} Karten)`,
+  excludedBarren !== undefined &&
+    excludedBarren.column.excludedTags.length === 1 &&
+    excludedBarren.column.resolved.excludedTagCount === 0 &&
+    excludedBarren.column.resolved.unresolvedExcluded === true &&
+    excludedBarren.column.resolved.unresolvedRequired === false &&
+    excludedBarren.column.resolved.matchesNothing === false &&
+    excludedBarren.total >= 2 &&
+    idsOf(excludedBarren) === idsOf(columnsByName.get(BOARD_COLUMNS.tag)),
+  JSON.stringify({
+    aufgeloest: excludedBarren?.column?.resolved,
+    mitAusschluss: idsOf(excludedBarren),
+    ohneAusschluss: idsOf(columnsByName.get(BOARD_COLUMNS.tag)),
+  }),
+);
+
+/*
+ * **Der Fall, den die Achsensumme nicht sieht** (E-057, termweise).
+ *
+ * Ein Tagterm **neben** dem leeren Ordner, im Modus „mindestens eines davon":
+ * `resolved.tagCount` ist positiv, die Achse sieht also gesund aus, und der
+ * leere Ordner ist in der Summe nicht mehr zu erkennen. Achsenweise gemessen
+ * bliebe er unsichtbar — die Spalte zeigte die Tag-Karten, niemandem fiele auf,
+ * daß der Ordner leer ist, und sobald jemand einen Tag hineinlegt, änderte sich
+ * die Spalte ohne ersichtlichen Grund.
+ *
+ * `emptyRuleFolderIds` ist die Auskunft, mit der die Oberfläche **welcher**
+ * Ordner sagen kann und nicht nur **ein** Ordner. Geprüft wird deshalb auch,
+ * daß darin die Kennung aus der Regel steht und keine andere.
+ */
+const mixedTerms = columnsByName.get(BOARD_COLUMNS.tagOrEmptyFolder);
+const namedFolderIds = (pool) =>
+  (pool?.rule ?? []).filter((term) => term.kind === 'folder').map((term) => term.folderId);
+check(
+  'ein leerer Ordner **neben** einem Tagterm bleibt sichtbar und läßt die Regel nichts treffen',
+  mixedTerms !== undefined &&
+    mixedTerms.column.rule.length === 2 &&
+    mixedTerms.column.matchMode === 'any' &&
+    // Der Tagterm steuert seinen Tag bei: Die Achsensumme ist positiv, und
+    // genau deshalb taugt sie hier nicht als Erkennung.
+    mixedTerms.column.resolved.tagCount === 1 &&
+    mixedTerms.column.resolved.isEmpty === false &&
+    mixedTerms.column.resolved.unresolvedRequired === true &&
+    mixedTerms.column.resolved.matchesNothing === true &&
+    JSON.stringify(mixedTerms.column.resolved.emptyRuleFolderIds) ===
+      JSON.stringify(namedFolderIds(mixedTerms.column)) &&
+    mixedTerms.total === 0,
+  JSON.stringify({
+    terme: mixedTerms?.column?.rule?.length,
+    modus: mixedTerms?.column?.matchMode,
+    aufgeloest: mixedTerms?.column?.resolved,
+    genannteOrdner: namedFolderIds(mixedTerms?.column),
+    karten: mixedTerms?.total,
+  }),
+);
+
+/*
+ * Die Gegenprobe: **derselbe** Tagterm ohne den leeren Ordner führt Karten. Ohne
+ * sie wäre die Prüfung darüber auch dann grün, wenn das Tag niemandem gehörte.
+ */
+check(
+  `derselbe Tagterm ohne den leeren Ordner führt Karten (${columnsByName.get(BOARD_COLUMNS.tag)?.total ?? 0})`,
+  (columnsByName.get(BOARD_COLUMNS.tag)?.total ?? 0) >= 2 &&
+    JSON.stringify((columnsByName.get(BOARD_COLUMNS.tag)?.column?.rule ?? []).filter((t) => t.kind === 'tag')) ===
+      JSON.stringify((mixedTerms?.column?.rule ?? []).filter((t) => t.kind === 'tag')),
+  JSON.stringify({
+    nurTag: columnsByName.get(BOARD_COLUMNS.tag)?.column?.rule,
+    mitLeeremOrdner: mixedTerms?.column?.rule,
+  }),
+);
+
+/*
+ * Und die Ordner der **Ausschlußliste** stehen nicht darin — auch dann nicht,
+ * wenn sie leer sind (E-057). Sie schließen nichts aus, also folgt aus ihnen
+ * keine Handlung, und eine Kennung ohne Handlung wäre eine Anzeige ohne Sinn.
+ */
+check(
+  'ein leerer Ordner in der Ausschlußliste steht nicht bei den erforderlichen',
+  excludedBarren !== undefined && excludedBarren.column.resolved.emptyRuleFolderIds.length === 0,
+  JSON.stringify(excludedBarren?.column?.resolved),
+);
+
+/*
+ * **Domäne gegen Dienst**, über die Leitung. Die ausgelieferte Auflösung trägt
+ * alles, was `poolRuleMatchesNothing` braucht; die Antwort muß dieselbe sein.
+ * Läuft eine der beiden Seiten weg, steht es hier — für **jede** ausgelieferte
+ * Regel und nicht nur für die beiden von oben.
+ */
+const asResolvedAxes = (pool) => ({
+  // Die Länge ist alles, was die Frage von den Listen liest (siehe
+  // `PoolRuleAxes`), und die Länge steht in der Auflösung.
+  rule: Array.from({ length: pool.resolved.tagCount }, () => null),
+  excludedTags: Array.from({ length: pool.resolved.excludedTagCount }, () => null),
+  statusIds: pool.statusIds,
+  completion: pool.completion,
+  exportState: pool.exportState,
+  unresolvedRequired: pool.resolved.unresolvedRequired,
+});
+
+/** Dieselbe Achse, wie `tagAxisIsUnresolved` sie liest — termweise. */
+const asRequiredAxis = (pool) => ({
+  named: (pool.rule ?? []).length,
+  resolved: pool.resolved.tagCount,
+  emptyTerms: pool.resolved.emptyRuleFolderIds.length,
+});
+
+const verdictProblems = [];
+for (const pool of deliveredPools) {
+  const domain = poolRuleMatchesNothing(asResolvedAxes(pool));
+  if (domain !== pool.resolved.matchesNothing) {
+    verdictProblems.push(`${pool.name}: Domäne ${domain}, Dienst ${pool.resolved.matchesNothing}`);
+  }
+  const unresolved = tagAxisIsUnresolved(asRequiredAxis(pool));
+  if (unresolved !== pool.resolved.unresolvedRequired) {
+    verdictProblems.push(
+      `${pool.name}: ${JSON.stringify(asRequiredAxis(pool))}, geliefert ${pool.resolved.unresolvedRequired}`,
+    );
+  }
+  // Und die Kennungen selbst: Was als leer gemeldet wird, muß in der Regel
+  // stehen — sonst nennt die Oberfläche einen Ordner, den niemand gewählt hat.
+  const named = new Set(namedFolderIds(pool));
+  for (const folderId of pool.resolved.emptyRuleFolderIds) {
+    if (!named.has(folderId)) verdictProblems.push(`${pool.name}: fremder Ordner ${folderId}`);
+  }
+}
+check(
+  `Domäne und Dienst urteilen gleich über „trifft nichts" (${deliveredPools.length} Regeln)`,
+  verdictProblems.length === 0,
+  verdictProblems.slice(0, 6).join(' | '),
+);
+
+/*
+ * Und die fachliche Folge, gemessen an der Zahl aus der **Abfrage** — der
+ * dritten Fassung derselben Regel, die in `packages/storage` steht.
+ *
+ * Die zweite Bedingung ist der Grund, warum dieser Abschnitt auf dem Stand vor
+ * T-082 rot wäre und nicht nur grün ohne Aussage: Es muß mindestens eine Spalte
+ * geben, die nichts trifft, **obwohl** nach dem Auflösen noch eine Bedingung
+ * dasteht. Genau die gab es vorher nicht.
+ */
+const matchingNothingButFull = [];
+let unresolvedButNotEmpty = 0;
+for (const entry of board?.columns ?? []) {
+  const resolved = entry.column.resolved;
+  if (resolved.matchesNothing && entry.total !== 0) {
+    matchingNothingButFull.push(`${entry.column.name}: ${entry.total} Karten`);
+  }
+  if (resolved.matchesNothing && !resolved.isEmpty) unresolvedButNotEmpty += 1;
+}
+check(
+  `was nichts trifft, hat keine Mitglieder — und es gibt den Fall „nicht leer und trotzdem nichts" (${unresolvedButNotEmpty})`,
+  matchingNothingButFull.length === 0 && unresolvedButNotEmpty >= 1,
+  matchingNothingButFull.join(' | ') || 'kein gemischter Fall im Bestand — die Prüfung mißt nichts',
+);
+
+/*
+ * Der Prüfer prüft sich selbst. `named > 0 && resolved === 0` ist die Art
+ * Bedingung, die man beim zweiten Hinschreiben umdreht; hier stehen alle vier
+ * Ecken.
+ */
+check(
+  'die Ableitung „genannt, aber nichts daraus geworden" gilt in genau einer Ecke',
+  tagAxisIsUnresolved({ named: 1, resolved: 0, emptyTerms: 1 }) === true &&
+    tagAxisIsUnresolved({ named: 0, resolved: 0, emptyTerms: 0 }) === false &&
+    tagAxisIsUnresolved({ named: 1, resolved: 1, emptyTerms: 0 }) === false &&
+    tagAxisIsUnresolved({ named: 0, resolved: 3, emptyTerms: 0 }) === false &&
+    // Der termweise Fall: Die Summe ist positiv, ein Term trotzdem leer.
+    tagAxisIsUnresolved({ named: 2, resolved: 1, emptyTerms: 1 }) === true &&
+    // Und das Netz für eine Termart, die ins Leere zeigt, ohne ein Ordner zu
+    // sein: Die Achse geht leer aus, obwohl kein leerer Ordner gezählt wurde.
+    tagAxisIsUnresolved({ named: 1, resolved: 0, emptyTerms: 0 }) === true,
+  'die Ableitung urteilt nicht wie E-057',
+);
+
+// ---------------------------------------------------------------------------
+section('15  Die Poolbewegung bei Start, Stopp und verwaister Buchung (E-058) und die Sperre auf einem Ordner in einer Regel');
+// ---------------------------------------------------------------------------
+
+/*
+ * **Der Befund hinter E-058.** Der Satz „Die Karte bleibt, wo sie ist — die
+ * Spalte ändert sich dadurch nicht." stand zeichengleich in der Hauptanwendung
+ * und im Aufgabenbereich des Add-ins. Er stammt aus der Zeit, in der eine
+ * Spalte nur an Tags hing. Seit E-055 entscheidet eine Spalte auch über
+ * „Erledigt" und über den Exportstatus, und **beides ändert ein Timerstart**.
+ *
+ * Gemessen wird hier deshalb die Bewegung selbst, über die echte Route und an
+ * einem Bestand, in dem alle drei Antworten verschieden sind: Die Karte
+ * **verlässt** die Spalte `completion: 'done'`, sie **betritt** die Spalte
+ * `completion: 'open'`, und die Spalte über den **leeren Ordner** darf in
+ * keiner der drei Listen vorkommen (E-057).
+ */
+
+const startRecords = records.filter(
+  (record) => record.operationId === 'startTimer' && record.body?.data?.kind === 'started',
+);
+const reopening = startRecords.find((record) => record.body?.data?.doneCleared === true);
+const movement = reopening?.body?.data?.poolMovement;
+
+check(
+  `der Timerstart auf einem erledigten Todo liefert eine Bewegung (${startRecords.length} Starts aufgezeichnet)`,
+  reopening !== undefined && movement !== null && movement !== undefined,
+  JSON.stringify(reopening?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  `er **verlässt** die Spalte „${BOARD_COLUMNS.done}"`,
+  Array.isArray(movement?.leaves) && movement.leaves.includes(BOARD_COLUMNS.done),
+  JSON.stringify(movement?.leaves),
+);
+
+check(
+  `er **betritt** die Spalte „${BOARD_COLUMNS.openOnly}"`,
+  Array.isArray(movement?.enters) && movement.enters.includes(BOARD_COLUMNS.openOnly),
+  JSON.stringify(movement?.enters),
+);
+
+/*
+ * E-057 über die Bewegung: Eine Spalte, deren erforderlicher Ordnerterm auf
+ * keinen Tag auflöst, trifft nichts — vorher nicht und nachher nicht. Sie darf
+ * deshalb in **keiner** der drei Listen stehen. Stünde sie in `appears`, hätte
+ * der Aufrufer die Antwort von vor E-057 bekommen; stünde sie in `enters` oder
+ * `leaves`, behauptete der Dienst eine Bewegung, die die Abfrage nicht kennt.
+ */
+const barrenNames = [
+  BOARD_COLUMNS.emptyFolder,
+  BOARD_COLUMNS.emptyFolderAndStatus,
+  BOARD_COLUMNS.tagOrEmptyFolder,
+];
+const namedBarren = barrenNames.filter((name) =>
+  [...(movement?.appears ?? []), ...(movement?.enters ?? []), ...(movement?.leaves ?? [])].includes(
+    name,
+  ),
+);
+check(
+  'eine Spalte über einen leeren Ordner steht in keiner der drei Listen (E-057)',
+  movement !== undefined && movement !== null && namedBarren.length === 0,
+  namedBarren.join(', '),
+);
+
+/*
+ * Die zwei Invarianten des Wertepaares. Sie folgen aus dem Aufbau der Schleife
+ * und nicht aus einer Prüfung danach — hier steht, dass der Aufbau hält.
+ */
+check(
+  '`enters` ist eine Teilmenge von `appears`, und kein Pool steht zugleich in `enters` und `leaves`',
+  movement !== undefined &&
+    movement !== null &&
+    movement.enters.every((name) => movement.appears.includes(name)) &&
+    movement.enters.every((name) => !movement.leaves.includes(name)),
+  JSON.stringify(movement),
+);
+
+/*
+ * Die Gegenprobe, ohne die die Prüfungen darüber auch dann grün wären, wenn
+ * der Dienst **immer** eine Bewegung schickte: Derselbe Start auf einem Todo,
+ * das nicht erledigt ist und schon Buchungen hat, bewegt nichts — und
+ * `poolMovement` ist dann `null` und nicht ein Trio leerer Listen.
+ */
+const quietStart = startRecords.find((record) => record.body?.data?.doneCleared === false);
+check(
+  'ein Start, der nichts aufhebt und keine erste Buchung entstehen lässt, liefert `poolMovement: null`',
+  quietStart !== undefined && quietStart.body.data.poolMovement === null,
+  JSON.stringify(quietStart?.body?.data?.poolMovement),
+);
+
+/*
+ * **Der Satz kommt aus der Domäne** (E-058 Absatz 2). Gemessen wird an
+ * derselben Bewegung, die soeben über die Leitung kam: Was der Dienst liefert,
+ * muss die reine Funktion in einen Satz übersetzen können, und der Satz muss
+ * die Spalten nennen, um die es geht.
+ *
+ * Zugleich die eine Änderung gegenüber `reopen.ts`: „Poolregel" heißt jetzt
+ * „Regel", weil eine Regel fünf Achsen hat und nicht nur Tags.
+ */
+const futureSentence = poolMovementSentence(movement ?? { appears: [], enters: [], leaves: [] }, 'future', 'reopen');
+const pastSentence = poolMovementSentence(movement ?? { appears: [], enters: [], leaves: [] }, 'past', 'reopen');
+check(
+  'der Wiederöffnen-Satz nennt beide Richtungen und kommt aus der Domäne',
+  futureSentence.includes(BOARD_COLUMNS.openOnly) &&
+    futureSentence.includes(BOARD_COLUMNS.done) &&
+    futureSentence.startsWith('Es erscheint dann wieder in ') &&
+    pastSentence.startsWith('Es ist zurück in '),
+  `${futureSentence} || ${pastSentence}`,
+);
+
+check(
+  'der Satz für „keine Regel trifft" spricht von der **Regel** und nennt beide Flächen (E-058 Punkt 4)',
+  poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen') ===
+    'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool und in keiner Spalte.' &&
+    poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'past', 'reopen') ===
+      'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte.',
+  poolMovementSentence({ appears: [], enters: [], leaves: [] }, 'future', 'reopen'),
+);
+
+check(
+  'die reine Buchung bekommt einen eigenen Satz — ohne „wieder", und `null`, wenn nichts geschieht',
+  poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking') ===
+    'Es erscheint dann in „B“.' &&
+    poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'past', 'booking') ===
+      'Es steht jetzt in „B“.' &&
+    poolMovementSentence({ appears: ['A'], enters: [], leaves: [] }, 'future', 'booking') === null,
+  String(poolMovementSentence({ appears: ['A', 'B'], enters: ['B'], leaves: [] }, 'future', 'booking')),
+);
+
+/*
+ * **Kein Gattungswort, in keinem der vierzehn Sätze** (E-058 Punkt 4, T-093).
+ *
+ * Bis T-093 baute die Funktion „dem Pool „X“" beziehungsweise „den Pools „X“
+ * und „Y“" ein. Das war falsch, seit E-054 eine Kanban-Spalte dieselbe Entität
+ * ist wie ein Pool: Die drei Listen tragen Namen, aber keine Fläche. Ein Satz,
+ * der „der Pool „Ost“" sagt, wo eine reine Board-Spalte gemeint ist, schickt
+ * den Benutzer in die Pool-Liste, in der sie nicht steht.
+ *
+ * Gemessen wird über **alle** Zweige beider Anläße und beider Zeitformen, mit
+ * einem und mit zwei Namen — eine Stichprobe an einem Zweig ließe die übrigen
+ * elf offen, und genau so war der Fehler entstanden.
+ */
+const sentencesEverywhere = [];
+for (const occasion of ['reopen', 'booking']) {
+  for (const tense of ['future', 'past']) {
+    for (const movementCase of [
+      { appears: [], enters: [], leaves: [] },
+      { appears: [], enters: [], leaves: ['A'] },
+      { appears: ['A'], enters: ['A'], leaves: [] },
+      { appears: ['A', 'B'], enters: ['A', 'B'], leaves: ['C', 'D'] },
+    ]) {
+      const sentence = poolMovementSentence(movementCase, tense, occasion);
+      if (sentence !== null) sentencesEverywhere.push(sentence);
+    }
+  }
+}
+const withGenus = sentencesEverywhere.filter((sentence) =>
+  /\b(dem Pool|den Pools|der Spalte|den Spalten|die Spalte|der Pool)\b/u.test(sentence),
+);
+check(
+  `kein Satz nennt ein Gattungswort vor dem Namen (${sentencesEverywhere.length} Sätze geprüft)`,
+  sentencesEverywhere.length === 14 && withGenus.length === 0,
+  withGenus.join(' | ') || `${sentencesEverywhere.length} Sätze`,
+);
+
+/*
+ * Die Gegenprobe zur Gegenprobe: Der Name steht **überhaupt** im Satz, und die
+ * Aufzählung zweier Namen trennt sie mit „und". Ohne sie wäre die Prüfung
+ * darüber auch an einer Fassung grün, die die Namen ganz wegläßt.
+ */
+check(
+  'die Namen stehen in Anführungszeichen und werden mit „und" aufgezählt',
+  poolMovementSentence({ appears: ['A', 'B'], enters: [], leaves: [] }, 'future', 'reopen') ===
+    'Es erscheint dann wieder in „A“ und „B“.' &&
+    poolMovementSentence({ appears: ['A', 'B', 'C'], enters: [], leaves: [] }, 'past', 'reopen') ===
+      'Es ist zurück in „A“, „B“ und „C“.',
+  poolMovementSentence({ appears: ['A', 'B', 'C'], enters: [], leaves: [] }, 'past', 'reopen'),
+);
+
+/*
+ * **Auch der Stopp sagt, was er bewegt hat** (E-058 Punkt 6, T-093).
+ *
+ * Die erste abgeschlossene Buchung setzt „hat offene Buchungen", und jede
+ * Spalte mit `exportState: 'open'` nimmt das Todo damit auf. Bis T-093 gab nur
+ * der Start eine Auskunft — und ausgerechnet der ist der Sonderweg: Er läßt die
+ * erste Buchung nur dann entstehen, wenn er einen Timer **desselben** Todos
+ * verdrängt. Der Regelweg ist der Stopp.
+ *
+ * Gemessen wird an der echten Route, an vier Aufzeichnungen, die sich
+ * gegenseitig halten:
+ *
+ *   1. ein Stopp, der die erste offene Buchung erzeugt  → `enters`
+ *   2. ein Stopp unter der Mindestdauer (verworfen)      → `null`
+ *   3. ein Stopp auf einem Todo, das schon eine hat      → `null`
+ *   4. die verwaiste Buchung, gebucht                    → `enters`
+ *
+ * Ohne 3 wäre der Abschnitt auch an einer Fassung grün, die bei jedem Stopp
+ * alle Regeln auflöst und drei leere Listen schickt.
+ */
+const stopRecords = records.filter((record) => record.operationId === 'stopTimer');
+const bookedStops = stopRecords.filter((record) => record.body?.data?.kind === 'recorded');
+const movingStop = bookedStops.find((record) => record.body.data.poolMovement !== null);
+const quietStop = bookedStops.find((record) => record.body.data.poolMovement === null);
+const discardedStop = stopRecords.find((record) => record.body?.data?.kind === 'discarded');
+
+check(
+  `\`POST /timer/stop\` liefert eine Bewegung, wenn die erste offene Buchung entsteht (${bookedStops.length} gebuchte Stopps)`,
+  movingStop !== undefined &&
+    movingStop.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork) &&
+    movingStop.body.data.poolMovement.leaves.length === 0,
+  JSON.stringify(movingStop?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  'ein Stopp auf einem Todo, das schon eine offene Buchung hat, liefert `poolMovement: null`',
+  quietStop !== undefined,
+  bookedStops.map((record) => JSON.stringify(record.body.data.poolMovement)).join(' | '),
+);
+
+check(
+  'ein verworfener Stopp liefert `poolMovement: null` — ohne Buchung keine Bewegung',
+  discardedStop !== undefined && discardedStop.body.data.poolMovement === null,
+  JSON.stringify(discardedStop?.body?.data ?? null),
+);
+
+/*
+ * Und derselbe Weg über die verwaiste Buchung (E-036). Sie ist der zweite und
+ * einzige andere Weg, auf dem aus einem laufenden Timer eine Buchung wird —
+ * und `timer.stop` ist dort dieselbe Anweisung. Wenn hier nichts stünde, ließe
+ * sich der Zweig durch Verwerfen des `poolMovement` ersetzen, ohne dass etwas
+ * rot würde.
+ */
+const orphanResolutions = records.filter(
+  (record) => record.operationId === 'resolveOrphanedTimer' && record.body?.data?.kind === 'recorded',
+);
+check(
+  `\`POST /timer/orphaned/resolve\` liefert dieselbe Bewegung, wenn es bucht (${orphanResolutions.length} gebucht)`,
+  orphanResolutions.length >= 1 &&
+    orphanResolutions.every(
+      (record) =>
+        record.body.data.poolMovement !== null &&
+        record.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork),
+    ),
+  JSON.stringify(orphanResolutions[0]?.body?.data?.poolMovement ?? null),
+);
+
+/*
+ * Der Anlaß ist beim Stopp **immer** `'booking'` und nie `'reopen'`: Ein Stopp
+ * hebt kein „Erledigt" auf. Gemessen wird das am Satz, den die Domäne aus der
+ * gelieferten Bewegung bildet — er darf kein „wieder" tragen und keine
+ * Aufzählung von `appears` sein.
+ */
+const stopSentence =
+  movingStop === undefined
+    ? null
+    : poolMovementSentence(movingStop.body.data.poolMovement, 'past', 'booking');
+check(
+  'der Satz zum Stopp nennt die betretene Spalte, ohne „wieder" und ohne `appears`',
+  stopSentence === `Es steht jetzt in „${BOARD_COLUMNS.openWork}“.`,
+  String(stopSentence),
+);
+
+/*
+ * **Und derselbe Übergang ohne Timer** (E-061 Nachtrag, O-V).
+ *
+ * `POST /time-entries` trägt einen Zeitraum von Hand nach. Auch das kann die
+ * **erste** abgeschlossene Buchung eines Todos sein, und dann setzt sie „hat
+ * offene Buchungen" wie ein Stopp. Wer am Stopp Auskunft gibt und hier
+ * schweigt, sagt die halbe Wahrheit — nur über den anderen Knopf.
+ *
+ * Zwei Aufzeichnungen, und sie halten sich gegenseitig:
+ *
+ *   1. die Buchung auf ein Todo, das **keine** hatte  → `enters`
+ *   2. die Buchung auf ein Todo, das schon eine hat   → `null`
+ *
+ * Ohne 2 wäre der Abschnitt auch an einer Fassung grün, die bei jeder Buchung
+ * alle Regeln über ihre Ordnerbäume auflöst. Ohne 1 wäre er an einer grün, die
+ * nie etwas berichtet.
+ *
+ * **`leaves` ist leer, und das ist die Aussage.** Diese Route schreibt
+ * `completed_at` nicht; ein erledigtes Todo bleibt erledigt, und die Buchung
+ * nimmt es aus keiner Spalte heraus. Sie rechnet deshalb mit
+ * `closedEntryMovementStates` wie der Stopp und nicht mit `BOOKING_EFFECT`.
+ */
+const manualEntries = records.filter((record) => record.operationId === 'createTimeEntry');
+const movingEntry = manualEntries.find((record) => record.body?.data?.poolMovement !== null);
+const quietEntry = manualEntries.find((record) => record.body?.data?.poolMovement === null);
+
+check(
+  `\`POST /time-entries\` liefert eine Bewegung, wenn die erste offene Buchung entsteht (${manualEntries.length} Buchungen von Hand)`,
+  movingEntry !== undefined &&
+    movingEntry.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork) &&
+    movingEntry.body.data.poolMovement.leaves.length === 0,
+  JSON.stringify(movingEntry?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  'eine Buchung von Hand auf ein Todo, das schon eine offene Buchung hat, liefert `poolMovement: null`',
+  quietEntry !== undefined,
+  manualEntries.map((record) => JSON.stringify(record.body?.data?.poolMovement)).join(' | '),
+);
+
+check(
+  'die Buchung von Hand liefert die Buchung selbst weiterhin flach — `poolMovement` kommt hinzu',
+  manualEntries.every(
+    (record) =>
+      typeof record.body?.data?.id === 'string' &&
+      typeof record.body?.data?.durationSeconds === 'number' &&
+      record.body.data.source === 'manual' &&
+      'poolMovement' in record.body.data,
+  ),
+  JSON.stringify(Object.keys(manualEntries[0]?.body?.data ?? {})),
+);
+
+check(
+  'der Satz zur Buchung von Hand ist der des Stopps — derselbe Anlaß, derselbe Wortlaut',
+  movingEntry !== undefined &&
+    poolMovementSentence(movingEntry.body.data.poolMovement, 'past', 'booking') ===
+      `Es steht jetzt in „${BOARD_COLUMNS.openWork}“.`,
+  String(
+    movingEntry === undefined
+      ? null
+      : poolMovementSentence(movingEntry.body.data.poolMovement, 'past', 'booking'),
+  ),
+);
+
+/*
+ * **Ein Ordner in einer Regel wird nicht gelöscht** (R-1 Befund 1).
+ *
+ * Löschbar war ohnehin nur ein leerer Ordner — und der leere Ordner in einer
+ * erforderlichen Achse ist genau der Fall aus E-057. `pool_rule.folder_id`
+ * stand dabei auf CASCADE: Die Regel verlor ihren Term still und traf danach
+ * mehr, als der Benutzer gesagt hatte.
+ *
+ * Gemessen wird der Statuscode, der Schlüssel **und** die Auskunft darüber,
+ * welche Regeln betroffen sind — ohne sie ist die Sperre bei zwanzig Regeln
+ * eine Suche.
+ */
+const folderDeletes = records.filter((record) => record.operationId === 'deleteTagFolder');
+const blockedFolder = folderDeletes.find((record) => record.status === 409);
+const freeFolder = folderDeletes.find((record) => record.status === 204);
+
+check(
+  `ein Ordner, den eine Regel nennt, wird mit 409 \`tag_in_use\` abgewiesen (${folderDeletes.length} Löschversuche)`,
+  blockedFolder !== undefined && blockedFolder.body?.error?.code === 'tag_in_use',
+  `${blockedFolder?.status ?? '—'} ${JSON.stringify(blockedFolder?.body ?? null).slice(0, 200)}`,
+);
+
+const ruleDetails = (blockedFolder?.body?.error?.details ?? []).filter(
+  (entry) => entry.code === 'pool_rule',
+);
+check(
+  `die Abweisung nennt die Regeln beim Namen und mit Kennung (${ruleDetails.length})`,
+  ruleDetails.length >= 1 &&
+    ruleDetails.every((entry) => typeof entry.field === 'string' && entry.field.length > 0) &&
+    ruleDetails.some((entry) => String(entry.message).includes(BOARD_COLUMNS.emptyFolderAndStatus)),
+  JSON.stringify(ruleDetails),
+);
+
+/*
+ * **Der Name steht als eigenes Feld da und nicht nur im Satz** (W-11 aus R-2a).
+ *
+ * Die Oberfläche soll „die Regeln „Ost“, „Nord“ und „Abrechnung“" setzen
+ * können, ohne den Namen aus `message` herauszuschneiden — ein Schnitt im
+ * fremden Text ist eine ungeschriebene Abmachung über dessen Wortlaut und
+ * bricht still, sobald der Dienst seinen Satz ändert.
+ *
+ * Gemessen wird beides zugleich: daß `name` da ist **und** daß `message`
+ * unverändert daneben steht. Nur so bleibt die Änderung nachweislich additiv;
+ * eine Fassung, die den Namen aus `message` herausnimmt, wäre hier rot.
+ */
+check(
+  `jeder Regelverweis trägt den bloßen Namen in \`name\` und den Satz in \`message\` (${ruleDetails.length})`,
+  ruleDetails.length >= 1 &&
+    ruleDetails.every(
+      (entry) =>
+        typeof entry.name === 'string' &&
+        entry.name.length > 0 &&
+        !entry.name.includes('„') &&
+        !entry.name.startsWith('Regel') &&
+        entry.message === `Regel „${entry.name}“`,
+    ),
+  JSON.stringify(ruleDetails),
+);
+
+/*
+ * Die Gegenprobe: Ein Ordner, den keine Regel nennt, lässt sich weiterhin
+ * löschen. Ohne sie wäre die Prüfung darüber auch an einer Fassung grün, die
+ * **jeden** Ordner sperrt.
+ */
+check(
+  'ein Ordner ohne Regel und ohne Inhalt wird weiterhin gelöscht (204)',
+  freeFolder !== undefined,
+  folderDeletes.map((record) => record.status).join(', '),
+);
+
+// ---------------------------------------------------------------------------
+section('16  Die Zeichenklasse steht in der Domäne, und beide Türen sagen dasselbe (T-122, E-063)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Die Lehre aus T-119, eine Ebene höher angewandt.
+ *
+ * T-117 hat die Zeichenklasse an der Tür erweitert; die Abschrift im Add-in zog
+ * nicht nach, und der Nachweis dagegen prüfte gegen eine **kopierte Liste** und
+ * blieb grün (E-063 Punkt 4). Seit T-122 liegt die Klasse einmal im Baum
+ * (`packages/domain/src/characters.ts`), und beide Türen lesen sie. Damit ist
+ * die Abschrift im Quelltext weg — in der **Beschreibung** steht sie
+ * zwangsläufig weiter, denn eine Beschreibung ist Prosa. Also wird sie
+ * gemessen, statt gepflegt zu werden.
+ */
+const alsCodepunkt = (punkt) => `U+${punkt.toString(16).toUpperCase().padStart(4, '0')}`;
+
+const grenzen = new Set();
+for (const bereich of FORBIDDEN_NAME_CHARACTERS) {
+  grenzen.add(bereich.from);
+  grenzen.add(bereich.to);
+}
+
+check(
+  'die Klasse ist nicht leer — sonst prüfte alles Folgende die leere Menge',
+  grenzen.size >= 8,
+  `${String(grenzen.size)} Grenzen`,
+);
+
+{
+  const beschreibung = doc?.components?.responses?.UnprocessableEntity?.description ?? '';
+  const fehlend = [...grenzen].filter((punkt) => !beschreibung.includes(alsCodepunkt(punkt)));
+  check(
+    'jede Grenze der Zeichenklasse steht in der Beschreibung von 422',
+    fehlend.length === 0,
+    `nicht beschrieben: ${fehlend.map(alsCodepunkt).join(', ')}`,
+  );
+  check(
+    'und die Beschreibung nennt den einen Ort, an dem die Klasse liegt',
+    beschreibung.includes('packages/domain/src/characters.ts'),
+  );
+}
+
+{
+  /*
+   * Und die Tür selbst: Für jeden Codepunkt bis `U+20FF` — das deckt alle
+   * Bereiche und ihre Nachbarn — muss `titleSchema` genau dann abweisen, wenn
+   * die Domäne es sagt. Ein zweiter, örtlicher Ausdruck neben der gemeinsamen
+   * Funktion fiele hier auf, und genau so ist die Doppelung entstanden, die
+   * T-122 beseitigt.
+   */
+  const abweichend = [];
+  for (let punkt = 0; punkt <= 0x20ff; punkt += 1) {
+    if (punkt >= 0xd800 && punkt <= 0xdfff) continue;
+    const angenommen = titleSchema.safeParse(`Wartung${String.fromCodePoint(punkt)}Nord`).success;
+    if (angenommen === isForbiddenNameCharacter(punkt)) abweichend.push(punkt);
+  }
+  check(
+    'die Tür des Dienstes weist genau die Zeichen ab, die die Domäne nennt (0x0000–0x20FF)',
+    abweichend.length === 0,
+    abweichend.slice(0, 10).map(alsCodepunkt).join(', '),
+  );
+
+  // Gegenprobe: ein Zeichen, das ausdrücklich erlaubt bleibt (ZWJ hält
+  // zusammengesetzte Emoji zusammen), und eines, das abgewiesen wird.
+  check(
+    'U+200D (ZWJ) bleibt erlaubt, U+200E (LRM) nicht — die Grenze liegt dazwischen',
+    titleSchema.safeParse('Familie \u{1f468}\u200d\u{1f469}\u200d\u{1f467}').success &&
+      !titleSchema.safeParse('Wartung\u200eNord').success,
+  );
+}
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

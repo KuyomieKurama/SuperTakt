@@ -4,6 +4,8 @@ import { Select as Ark, createListCollection } from "@ark-ui/react/select";
 import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
 import type { ControlSize } from "./Primitives";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — Auswahlfeld (E-052, T-059).
@@ -132,7 +134,15 @@ export function Select<TValue extends string = string>({
       collection: createListCollection<SelectOption<TValue>>({
         items: flat,
         itemToValue: (item) => item.value,
-        itemToString: (item) => item.label,
+        /*
+          Fremder Text auch hier (E-063, T-124): Die Beschriftung einer Option
+          kann ein Vorlagen-, Status- oder Poolname sein. `itemToString` ist
+          die Zeichenkette, die `Ark.ValueText` im Ausloeser anzeigt und ueber
+          die die Tastatur anschreibt — sie kann kein Element sein, also bleibt
+          es bei der einen Haelfte: sichtbar machen ohne Isolierung. Die Liste
+          darunter bekommt beide Haelften ueber `Foreign`.
+        */
+        itemToString: (item) => foreignText(item.label),
         isItemDisabled: (item) => item.disabled === true,
       }),
     };
@@ -143,7 +153,9 @@ export function Select<TValue extends string = string>({
   const renderOption = (option: SelectOption<TValue>) => (
     <Ark.Item key={option.value} item={option} className="select__option">
       <span className="select__option-text">
-        <Ark.ItemText className="select__option-label">{option.label}</Ark.ItemText>
+        <Ark.ItemText className="select__option-label">
+          <Foreign value={option.label} />
+        </Ark.ItemText>
         {option.hint === undefined ? null : (
           <span className="select__option-hint">{option.hint}</span>
         )}
@@ -205,7 +217,7 @@ export function Select<TValue extends string = string>({
                 isGroup(entry) ? (
                   <Ark.ItemGroup key={`${entry.label}-${String(index)}`} className="select__group">
                     <Ark.ItemGroupLabel className="select__group-label">
-                      {entry.label}
+                      <Foreign value={entry.label} />
                     </Ark.ItemGroupLabel>
                     {entry.options.map(renderOption)}
                   </Ark.ItemGroup>

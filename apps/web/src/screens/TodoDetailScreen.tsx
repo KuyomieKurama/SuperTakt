@@ -9,7 +9,7 @@ import {
   putTodoNote,
 } from "../api/endpoints";
 import { errorMessage } from "../api/client";
-import type { Id, TimeEntry } from "../api/types";
+import type { ForeignText, Id, TimeEntry } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DoneFlag } from "../components/DoneFlag";
 import {
@@ -27,10 +27,10 @@ import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
+import { undoDoneAction } from "../app/undoDone";
 import { useAsync, useMutation } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import {
-  CARD_STAYS,
   DONE_FLAG_LABEL,
   doneFlagState,
   TIME_ENTRY_SOURCE_LABEL,
@@ -44,6 +44,7 @@ import {
   formatTimeRange,
   plural,
 } from "../lib/format";
+import { doneMovementSentence, withMovement } from "../lib/movement";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
 import {
   BookingFormDialog,
@@ -52,6 +53,8 @@ import {
   ResetExportDialog,
 } from "./BookingDialogs";
 import { TodoFormDialog } from "./TodoFormDialog";
+import { foreignText, quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-03, die Todo-Detailansicht.
@@ -134,12 +137,12 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
       blockedDays,
       previewProblem: outcome.kind === "failed" ? outcome.message : null,
     };
-  }, [todoId, version]);
+  }, [todoId], [version]);
 
   const toggleDone = useCallback(
-    (done: boolean, title: string) => {
+    (done: boolean, title: ForeignText) => {
       void (done ? clearTodoDone(todoId) : markTodoDone(todoId))
-        .then(() => {
+        .then((result) => {
           /*
             Der Anzeigezustand „Erledigt aufgehoben" endet, sobald der
             Benutzer das Kennzeichen selbst anfasst (A-2.5). Er erklaert eine
@@ -148,10 +151,26 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           */
           timer.clearReactivated(todoId);
           bump();
+          /*
+            Der Bewegungssatz aus der Antwort (E-060 Punkt 4). Diese Ansicht
+            zeigt kein Board und keine Pool-Liste — gerade deshalb steht hier,
+            wo das Todo nach der Handlung zu finden ist. Meldet der Dienst
+            keine Bewegung, bleibt es beim Satz über Status und Kennzeichen.
+          */
           toasts.show({
             tone: done ? "info" : "success",
-            title: done ? `„${title}“ ist wieder offen.` : `„${title}“ ist erledigt.`,
-            body: "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
+            title: done ? `${quotedName(title)} ist wieder offen.` : `${quotedName(title)} ist erledigt.`,
+            body: withMovement(
+              "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
+              doneMovementSentence(result.poolMovement, done),
+            ),
+            /*
+              Der Rückweg, seit T-118 an allen drei Flächen (B-7 aus T-116).
+              `done` ist hier der Zustand **vor** der Handlung: Wenn er wahr
+              war, hat der Benutzer gerade wieder geöffnet — das ist selbst
+              schon eine Rücknahme und braucht keine zweite.
+            */
+            ...(done ? {} : { action: undoDoneAction(todoId, title, toasts, bump) }),
           });
         })
         .catch((cause: unknown) =>
@@ -260,7 +279,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
   return (
     <section className="screen">
       <AsyncBoundary state={detail.state} label="Todo wird geladen" rows={5} onRetry={detail.reload}>
-        {(value) => {
+        {(value, refreshing) => {
           const todo = value.todo.todo;
           const done = todo.completedAt !== null;
           /*
@@ -279,12 +298,27 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
           return (
             <>
               <ScreenHeader
-                title={todo.title}
+                title={<Foreign value={todo.title} />}
                 lead={
                   todo.callNumber === null
-                    ? `Status: ${structure.statusName(todo.statusId)}`
-                    : `Call ${todo.callNumber} · Status: ${structure.statusName(todo.statusId)}`
+                    ? `Status: ${foreignText(structure.statusName(todo.statusId))}`
+                    : /*
+                        Die Call-Nummer geht seit T-129 durch dieselbe
+                        Behandlung wie jeder andere fremde Text — obwohl
+                        `checkCallNumber` nur `A-Z a-z 0-9 . _ / -` durchlaesst
+                        (E-045) und `visibleText` darauf die Identitaet ist.
+
+                        Zwei Gruende, und der zweite wiegt schwerer als der
+                        erste: Der Vorrat ist an der *heutigen* Tuer geschlossen,
+                        nicht im Bestand (T-124 R4 — was vor T-101 angelegt
+                        wurde, hat diese Tuer nie gesehen). Und eine Ausnahme
+                        waere eine Stelle, an der die Regel nicht gilt: Sie
+                        muesste im Nachweis stehen, gepflegt werden und koennte
+                        veralten. Eine Identitaet kostet nichts.
+                      */
+                      `Call ${foreignText(todo.callNumber)} · Status: ${foreignText(structure.statusName(todo.statusId))}`
                 }
+                refreshing={refreshing}
                 actions={
                   <>
                     <Button
@@ -333,12 +367,30 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                             <DoneFlag state={flagState} />
                           ) : null}
                         </span>
+                        {/*
+                          Drei Saetze, und keiner wertet eine Regel aus (E-058,
+                          T-094).
+
+                          Bis T-094 stand im mittleren „… erscheint erneut in
+                          jedem Pool, dessen Regel auf seine Tags passt. Die
+                          Karte bleibt, wo sie ist …" — doppelt falsch. Eine
+                          Regel hat seit E-055 fuenf Achsen, nicht nur Tags; und
+                          die Spalte aendert sich sehr wohl, wenn eine Regel
+                          nach „Erledigt" oder nach dem Exportstatus fragt.
+
+                          Rekonstruiert wird die Bewegung hier auch nicht
+                          nachtraeglich: Diese Ansicht weiss nicht, welcher
+                          Zustand vor dem Start galt. Wer es weiss, ist der
+                          Dienst, und er hat es beim Start gesagt (`poolMovement`
+                          an `POST /timer/start`). Der Satz verweist deshalb auf
+                          jene Meldung, statt eine zweite, schlechtere zu bauen.
+                        */}
                         <span className="done-switch__hint">
                           {flagState === "done"
                             ? `Erledigt am ${formatDateTime(todo.completedAt ?? todo.updatedAt)}. Das Todo ist aus seinen Pools ausgeblendet; ein Timerstart hebt das auf.`
                             : flagState === "reopened"
-                              ? `Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen und erscheint erneut in jedem Pool, dessen Regel auf seine Tags passt. ${CARD_STAYS} Setzen Sie den Haken, gilt wieder „Erledigt".`
-                              : "Erscheint in jedem Pool und in jeder Board-Spalte, deren Regel auf seine Tags passt."}
+                              ? 'Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen; welche Pools und Spalten das betrifft, hat die Meldung beim Start genannt. Setzen Sie den Haken, gilt wieder „Erledigt".'
+                              : "Es erscheint überall dort, wo eine Regel es aufnimmt — als Pool, als Board-Spalte oder beides."}
                         </span>
                       </span>
                     </label>
@@ -410,7 +462,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                                     {entry.note.length === 0 ? (
                                       <span className="muted">Ohne Leistung</span>
                                     ) : (
-                                      entry.note
+                                      <Foreign value={entry.note} />
                                     )}
                                   </span>
                                   <span className="entry-row__source">
@@ -472,10 +524,13 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
 
                   <Card
                     title="Tags"
-                    description="Aus ihnen leiten sich Pools und Kanban-Spalten ab (E-054) — sie sind der Griff, mit dem eine Karte die Spalte wechselt."
+                    description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt — aber nicht der einzige: Eine Regel fragt auch nach Status, „Erledigt“ und Exportstatus (E-055)."
                   >
                     {todo.tagIds.length === 0 ? (
-                      <p className="muted">Keine Tags. Damit passt auf dieses Todo keine Poolregel.</p>
+                      <p className="muted">
+                        Keine Tags. Regeln, die Tags verlangen, treffen dieses Todo damit nicht —
+                        Regeln über Status, „Erledigt“ oder den Exportstatus schon.
+                      </p>
                     ) : (
                       <div className="tag-row">
                         {todo.tagIds.map((id) => {
@@ -550,7 +605,9 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       */}
                       <dt>Status</dt>
                       <dd className="facts__with-action">
-                        <span>{structure.statusName(todo.statusId)}</span>
+                        <span>
+                          <Foreign value={structure.statusName(todo.statusId)} />
+                        </span>
                         <Button size="sm" variant="ghost" iconStart="pencil" onClick={() => setEditOpen(true)}>
                           Ändern
                         </Button>

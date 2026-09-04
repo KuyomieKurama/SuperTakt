@@ -1,6 +1,6 @@
 import { Icon, type IconName } from "../components/Icon";
 import { cx } from "../lib/cx";
-import { href, type RouteName } from "./router";
+import { handleRouteLinkClick, href, type RouteName } from "./router";
 
 /**
  * Takt — die globale Navigation (Abschnitt 14).
@@ -35,7 +35,7 @@ interface NavItem {
 const ITEMS: readonly NavItem[] = [
   { route: "dashboard", label: "Dashboard", icon: "monitor", hint: "Überblick und schnelle Aktionen" },
   { route: "todos", label: "Todos", icon: "inbox", hint: "Liste aller Todos mit Filtern" },
-  { route: "board", label: "Kanban", icon: "square", hint: "Board aus frei definierbaren Regeln über Tags" },
+  { route: "board", label: "Kanban", icon: "square", hint: "Board aus frei definierbaren Regeln" },
   { route: "time", label: "Zeiterfassung", icon: "clock", hint: "Timer, heutige Buchungen, Zeit von Hand erfassen" },
   { route: "bookings", label: "Buchungen", icon: "filter", hint: "Alle Zeitbuchungen, filterbar" },
   { route: "export", label: "Export", icon: "download", hint: "Vorschau, Lauf und Protokoll" },
@@ -78,6 +78,15 @@ export function Navigation({ active, openTodoCount, openEntryCount }: Navigation
                 href={href(item.route)}
                 aria-current={current ? "page" : undefined}
                 title={item.hint}
+                /*
+                  Ein Klick auf den Eintrag, auf dem man schon steht, ist keine
+                  Navigation, sondern die Bitte „zeig mir das noch einmal".
+                  Der Router beantwortet sie selbst, statt sie an ein Ereignis
+                  des Browsers zu hängen, das nur unter Chromium gemessen ist
+                  (T-102, Befund 6 aus R-1a). Jeder andere Klick — anderes
+                  Ziel, Zusatztaste, mittlere Maustaste — bleibt beim Browser.
+                */
+                onClick={(event) => handleRouteLinkClick(href(item.route), event)}
               >
                 <span className="nav__icon">
                   <Icon name={item.icon} size={16} />

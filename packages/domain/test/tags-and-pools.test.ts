@@ -74,6 +74,7 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
       todoTagIds: [tagId('t-support')],
       ruleTagIds: [tagId('t-support'), tagId('t-billing')],
       matchMode: 'any',
+      unresolvedRequired: false,
     });
     expect(result).toBe(true);
   });
@@ -83,6 +84,7 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
       todoTagIds: [tagId('t-internal')],
       ruleTagIds: [tagId('t-support'), tagId('t-billing')],
       matchMode: 'any',
+      unresolvedRequired: false,
     });
     expect(result).toBe(false);
   });
@@ -92,6 +94,7 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
       todoTagIds: [tagId('t-support'), tagId('t-billing')],
       ruleTagIds: [tagId('t-support'), tagId('t-billing')],
       matchMode: 'all',
+      unresolvedRequired: false,
     });
     expect(both).toBe(true);
 
@@ -99,6 +102,7 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
       todoTagIds: [tagId('t-support')],
       ruleTagIds: [tagId('t-support'), tagId('t-billing')],
       matchMode: 'all',
+      unresolvedRequired: false,
     });
     expect(onlyOne).toBe(false);
   });
@@ -111,9 +115,9 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
     // Kurzschluss-Zeile `if (ruleTagIds.length === 0) return false` in
     // matchesPool ungeprüft — ein `.every(...)` auf einem leeren Array liefert
     // in JavaScript `true`, genau die falsche, aber "mathematisch saubere" Lesart.
-    const withTagsOnTodo = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [], matchMode: 'all' });
-    const withoutTagsOnTodo = matchesPool({ todoTagIds: [], ruleTagIds: [], matchMode: 'all' });
-    const anyMode = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [], matchMode: 'any' });
+    const withTagsOnTodo = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [], matchMode: 'all', unresolvedRequired: false });
+    const withoutTagsOnTodo = matchesPool({ todoTagIds: [], ruleTagIds: [], matchMode: 'all', unresolvedRequired: false });
+    const anyMode = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [], matchMode: 'any', unresolvedRequired: false });
 
     expect(withTagsOnTodo).toBe(false);
     expect(withoutTagsOnTodo).toBe(false);
@@ -125,8 +129,8 @@ describe('TP-TAG-04 — Pool-Zugehörigkeit folgt Tags (A-3.2, A-3.4), Domänena
     // prüfen." Auf Domänenebene heißt das: derselbe Aufruf mit einer Tagliste
     // ohne das entfernte Tag liefert sofort false, ohne dass irgendwo eine
     // Mitgliedschaft "aufgeräumt" werden müsste (A-3.4).
-    const withTag = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [tagId('t-support')], matchMode: 'any' });
-    const withoutTag = matchesPool({ todoTagIds: [], ruleTagIds: [tagId('t-support')], matchMode: 'any' });
+    const withTag = matchesPool({ todoTagIds: [tagId('t-support')], ruleTagIds: [tagId('t-support')], matchMode: 'any', unresolvedRequired: false });
+    const withoutTag = matchesPool({ todoTagIds: [], ruleTagIds: [tagId('t-support')], matchMode: 'any', unresolvedRequired: false });
     expect(withTag).toBe(true);
     expect(withoutTag).toBe(false);
   });

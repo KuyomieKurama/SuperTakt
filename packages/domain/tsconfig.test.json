@@ -1,0 +1,15 @@
+// Typprüfung der Testdateien. `tsconfig.json` prüft nur `src`, damit der
+// Bau keine Tests ausliefert — Vitest wiederum prüft keine Typen. Ohne diese
+// Datei erzwingt ein Pflichtfeld (etwa `unresolvedRequired` an
+// `MatchesPoolRule`) in den Tests nichts: Wer es wegläßt, bekommt zur Laufzeit
+// `undefined` und damit stillschweigend die alte Antwort.
+//
+// Die Domänentests bleiben wie die Domäne ohne Umgebungstypen.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test"]
+}

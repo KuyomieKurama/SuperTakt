@@ -431,6 +431,12 @@ const NEVER_SENT = {
   // eigenes Feld führt, und `PoolWrite` trägt seitdem beide Schlüssel. Die
   // Zeilen sind deshalb weg statt fortgeschrieben — ein Zusatz, der nicht mehr
   // gilt, macht die Liste zum Rauschen.
+  //
+  // Die vier Achsen aus T-076 standen hier bis T-080 — ausgeschlossene Tags,
+  // Status, Erledigt, Exportstatus — als Übergabe an den frontend-dev. T-079
+  // hat das Regelformular gebaut, und `PoolWrite` schickt seitdem alle vier.
+  // Die Zeilen sind deshalb weg statt fortgeschrieben, aus demselben Grund wie
+  // oben: Ein Zusatz, der nicht mehr gilt, macht die Liste zum Rauschen.
 };
 const surprises = [];
 for (const [id, schema] of Object.entries(REQUEST_SCHEMAS)) {

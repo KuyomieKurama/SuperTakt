@@ -1,6 +1,42 @@
 /**
- * Takt — was der Benutzer erfährt, wenn eine Buchung „Erledigt" aufhebt
- * (A-2.5, I-05, Befund C-03 aus T-025).
+ * Takt — was der Benutzer erfährt, wenn eine Buchung sein Todo bewegt
+ * (A-2.5, I-05, E-056, E-058, Befund C-03 aus T-025).
+ *
+ * ## Warum die Datei weiterhin `reopen.ts` heißt
+ *
+ * Sie ist als Datei über das Wiederöffnen entstanden und stellt seit T-084 zwei
+ * Auskünfte zusammen: die über die Aufhebung von „Erledigt" und die über die
+ * **Bewegung**, die jede Buchung auslösen kann — auch auf einem Todo, an dem es
+ * nichts aufzuheben gibt. Beide gibt es in einer Fassung für vorher und einer
+ * für nachher, und beide dürfen sich nicht widersprechen. Getrennte Dateien
+ * wären zwei Orte für dieselbe Auskunft und damit zwei Gelegenheiten,
+ * Verschiedenes zu behaupten — genau der Grund, aus dem „vorher" und „nachher"
+ * hier schon immer nebeneinanderstehen.
+ *
+ * ## Was diese Datei seit T-092 **nicht** mehr tut (E-058)
+ *
+ * Sie formuliert den Satz über die Bewegung nicht mehr selbst. Bis T-092 stand
+ * er hier — `poolSentence` und `bookingPoolSentence`, dazu die beiden
+ * Bausteine `listPools` und `inPools` —, und zeichengleich noch einmal in der
+ * Hauptanwendung. Zwei Abschriften desselben Textes sind zwei Gelegenheiten,
+ * Verschiedenes zu sagen, und sie haben es zweimal getan: Der eine Satz kannte
+ * `leaves` nicht, der andere nannte eine reine Board-Spalte „Pool".
+ *
+ * Der Satz liegt jetzt in `packages/domain/src/pool-movement.ts`
+ * (`poolMovementSentence`), die **Rechnung** dahinter in
+ * `apps/local-api/src/usecases/pool-movement.ts`. Diese Datei ruft die eine und
+ * bekommt die andere über den Dienst; sie hält keine Abschrift und kann
+ * deshalb auch keine zweite Wahrheit entwickeln. Was hier bleibt, ist die
+ * **Anordnung**: welcher Satz in welcher Zeitform neben welchen anderen Zeilen
+ * steht.
+ *
+ * `CARD_STAYS` („Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch
+ * nicht.") ist mit derselben Auflage **ersatzlos** gestrichen (E-058 Absatz 2).
+ * Der Satz stammte aus der Zeit, in der eine Spalte nur an Tags hing; seit
+ * E-055 entscheidet sie auch über „Erledigt" und über den Exportstatus, und
+ * beides ändert eine Buchung. Er war also falsch. Es tritt nichts an seine
+ * Stelle: Wo sich etwas ändert, sagt `poolMovementSentence` was — und wo sich
+ * nichts ändert, ist Schweigen die richtige Auskunft.
  *
  * ## Warum es diese Datei gibt
  *
@@ -20,10 +56,6 @@
  *    unmittelbar über der Schaltfläche, und
  *  - **danach** in der Bestätigung.
  *
- * Die Sätze stehen hier und nicht in der Oberfläche, damit „vorher" und
- * „nachher" dieselbe Auskunft geben. Zwei Textbausteine an zwei Stellen wären
- * zwei Gelegenheiten, verschiedene Dinge zu behaupten.
- *
  * ## Warum kein „Rückgängig" wie in der Hauptanwendung
  *
  * Die Hauptanwendung bietet nach I-05 ein Rückgängig an, das die eben
@@ -42,83 +74,144 @@
  * Rein und ohne Outlook prüfbar: Werte herein, Sätze heraus.
  */
 
-/** Die drei Wirkungen und die eine Nicht-Wirkung, in anzeigbarer Form. */
+import { poolMovementSentence, type PoolMovement } from '@takt/domain';
+
+/**
+ * Was an die Stelle einer **fehlenden** Bewegung tritt (E-061 Punkt 3, T-104).
+ *
+ * Seit die Add-in-Routen `poolMovement: PoolMovement | null` liefern, gibt es
+ * zwei Auskünfte, die für die Anzeige dasselbe bedeuten: „nachgesehen und
+ * nichts gefunden" (drei leere Listen) und „hier war keine Bewegung möglich"
+ * (`null`, weil das Todo offen ist und schon eine offene Buchung hat). Für den
+ * Anlass `'booking'` fallen beide von selbst zusammen — `poolMovementSentence`
+ * gibt dort ohne Zu- und Abgang ohnehin `null`, und die Fläche entfällt.
+ *
+ * Für den Anlass `'reopen'` gibt es keinen leeren Satz: Er hat auch ohne jeden
+ * Treffer etwas zu sagen („Auf dieses Todo passt derzeit keine Regel …"), und
+ * genau deshalb ist er der ehrlichere. Der Dienst liefert für ein erledigtes
+ * Todo deshalb **immer** einen Wert: Die Buchung hebt „Erledigt" auf (A-2.5),
+ * das Zustandspaar ist verschieden, und es wird gerechnet. Diese Zeile ist die
+ * Vorsichtsfassung für den Fall, den es nicht geben soll — und sie ist die
+ * richtige Richtung: Der Satz daraus verspricht **kein** Wiederauftauchen und
+ * nennt keinen Namen, den niemand geprüft hat. Ein Todo, das nirgends
+ * angekündigt wird und dann doch auftaucht, sucht niemand vergeblich; umgekehrt
+ * schon.
+ */
+const NOTHING_MOVED: PoolMovement = Object.freeze({
+  appears: [],
+  enters: [],
+  leaves: [],
+});
+
+/**
+ * Die zwei Wirkungen einer Buchung auf ein **erledigtes** Todo, in anzeigbarer
+ * Form.
+ */
 export interface ReopenNotice {
   readonly title: string;
   /**
-   * Genau drei Sätze — Buchung, Kennzeichen, Pools.
+   * Genau drei Sätze — Buchung, Kennzeichen, Bewegung.
    *
    * Die Zahl ist Absicht und wird im Nachweispfad festgehalten. Fällt einer
    * weg, ist es wieder eine halbe Auskunft.
+   *
+   * Eine **vierte** Zeile für das, was sich *nicht* ändert, gab es bis T-092
+   * daneben (`aside`, mit `CARD_STAYS`). Sie ist weg, und zwar ersatzlos: Der
+   * dritte Satz sagt seit E-058 vollständig, was sich bewegt — eine Zeile
+   * daneben, die etwas anderes behauptet, war der Fehler und nicht die
+   * Ergänzung.
    */
   readonly effects: readonly [string, string, string];
-  /** Was **nicht** geschieht (E-023). Steht getrennt, weil es das Gegenteil ist. */
-  readonly aside: string;
 }
-
-/** „Die Karte bleibt, wo sie ist" — derselbe Satz wie in der Hauptanwendung. */
-export const CARD_STAYS = 'Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht.';
 
 /** Kurzform für die Trefferliste, wo eine Zeile Platz ist und keine drei. */
 export const REOPEN_HINT =
   'Dieses Todo ist erledigt. Eine Buchung darauf hebt das Kennzeichen automatisch auf.';
 
-/**
- * Zählt Pools **einzeln** auf, in deutschen Anführungszeichen.
- *
- * Keine Zusammenfassung wie „in 3 Pools": Der Benutzer soll die Namen lesen,
- * die er gleich in der Hauptanwendung wiederfindet. Eine Zahl wäre schneller
- * geschrieben und würde die Frage offenlassen, die sie beantworten soll.
- */
-const listPools = (poolNames: readonly string[]): string => {
-  const quoted = poolNames.map((name) => `„${name}“`);
-  if (quoted.length <= 1) return quoted[0] ?? '';
-  return `${quoted.slice(0, -1).join(', ')} und ${quoted[quoted.length - 1] ?? ''}`;
-};
+/** Die Bestätigung nach einer Buchung auf ein offenes Todo (T-084). */
+export interface BookingNotice {
+  /** Die Buchung selbst. Steht immer da. */
+  readonly booked: string;
+  /**
+   * Der Satz über die Bewegung — `null`, wenn die Buchung nichts bewegt hat.
+   *
+   * Zwei Felder und keine Liste von ein oder zwei Zeichenketten: Eine Liste
+   * ließe die Aufrufstelle über ihre Länge urteilen, und „Länge 1" ist eine
+   * schwächere Aussage als „hier ist kein Satz".
+   *
+   * `null` kommt aus `poolMovementSentence` mit dem Anlass `'booking'` und wird
+   * hier **nicht** in einen leeren String übersetzt. Ein leerer String ist ein
+   * Satz mit null Zeichen, und die Oberfläche baut ihm eine Zeile; `null`
+   * zwingt die Aufrufstelle, die Fläche ganz wegzulassen.
+   */
+  readonly pools: string | null;
+}
 
 /**
- * Der Satz über die Pools — vor oder nach der Buchung.
+ * Die Bestätigung nach einer Buchung auf ein **offenes** Todo (T-084).
  *
- * Eine leere Liste ist eine Aussage und kein Fehlen. „Es erscheint in keinem
- * Pool" ist die unangenehmere, aber die wahre Auskunft: Ein Todo ohne
- * passendes Tag ist nach der Aufhebung offen und trotzdem nirgends zu sehen,
- * außer in der Todo-Liste. Wer das verschweigt, schickt jemanden suchen.
+ * Das Gegenstück zu {@link reopenOutcome}, für den Fall, in dem nichts
+ * aufgehoben wird. Die Ankündigung davor ist kein eigener Bauplan, sondern
+ * derselbe Satz in der anderen Zeitform: `poolMovementSentence(movement,
+ * 'future', 'booking')`, gerufen im Aufgabenbereich. Über der Schaltfläche
+ * steht die Dauer als Eingabefeld daneben — eine Zeile „15 Minuten werden
+ * gebucht" wäre dort die Wiederholung eines Werts, den der Benutzer gerade
+ * selbst eingestellt hat.
+ *
+ * **Der Anlass ist `'booking'` und nicht `'reopen'`**, und das ist keine
+ * Feinheit: Der Anlass entscheidet, **welche Liste** aufgezählt wird. Beim
+ * Wiederöffnen ist es `appears` — das Todo war in keinem dieser Pools zu
+ * sehen —, hier ist es `enters`. Eine Aufzählung von `appears` wäre hier lauter
+ * Unverändertes, in dem die eine Änderung untergeht, und das Wort „wieder"
+ * behauptete eine Vorgeschichte, die es nicht gibt.
+ *
+ * **`booked` ist unverändert.** Der Satz stand bis T-084 im Aufgabenbereich als
+ * Text im JSX und ist Zeichen für Zeichen derselbe geblieben — hierher gezogen,
+ * damit der Nachweispfad ihn messen kann, ohne die Oberfläche zu rendern.
  */
-export const poolSentence = (poolNames: readonly string[], tense: 'future' | 'past'): string => {
-  if (poolNames.length === 0) {
-    return tense === 'future'
-      ? 'Auf seine Tags passt derzeit keine Poolregel — es erscheint danach in keinem Pool.'
-      : 'Auf seine Tags passt derzeit keine Poolregel, es erscheint also in keinem Pool.';
-  }
+export const bookingOutcome = (
+  minutes: number,
+  movement: PoolMovement | null,
+): BookingNotice => ({
+  booked: `${String(minutes)} Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.`,
+  // Zwei Wege zu `null`, und beide heißen für die Anzeige dasselbe: Der Dienst
+  // hat nichts gerechnet, oder er hat gerechnet und nichts gefunden. In beiden
+  // Fällen steht keine Zeile da.
+  pools: movement === null ? null : poolMovementSentence(movement, 'past', 'booking'),
+});
 
-  const where = `${poolNames.length === 1 ? 'dem Pool' : 'den Pools'} ${listPools(poolNames)}`;
-  return tense === 'future'
-    ? `Es erscheint dann wieder in ${where}.`
-    : `Es ist zurück in ${where}.`;
-};
-
-/** Was geschehen **wird** — steht über der Schaltfläche, nicht darunter. */
-export const reopenPreview = (minutes: number, poolNames: readonly string[]): ReopenNotice => ({
+/**
+ * Was geschehen **wird** — steht über der Schaltfläche, nicht darunter.
+ *
+ * `movement` ist ein Wert mit drei benannten Listen und keine drei Argumente
+ * hintereinander; die Begründung steht an `PoolMovement` in `@takt/domain`. Es
+ * ist ausdrücklich **nicht** freiwillig: Wer nur das Erscheinen mitgäbe, bekäme
+ * einen Satz, der sich vollständig liest und die Hälfte weglässt (E-056) —
+ * dieselbe Art Fehler, die T-078 im Dienst behoben hat.
+ *
+ * `null` nimmt es entgegen, weil die Antwort des Dienstes es so führt (E-061
+ * Punkt 3) — und **nicht**, weil der dritte Satz entfallen dürfte. Es sind drei,
+ * und drei bleiben es; die Begründung steht an {@link NOTHING_MOVED}.
+ */
+export const reopenPreview = (minutes: number, movement: PoolMovement | null): ReopenNotice => ({
   title: 'Dieses Todo ist erledigt. Mit dieser Buchung wird es wieder offen.',
   effects: [
     `${String(minutes)} Minuten werden gebucht.`,
     'Das Erledigt-Kennzeichen wird automatisch aufgehoben.',
-    poolSentence(poolNames, 'future'),
+    poolMovementSentence(movement ?? NOTHING_MOVED, 'future', 'reopen'),
   ],
-  aside: CARD_STAYS,
 });
 
 /** Was geschehen **ist**. Dieselben drei Wirkungen, dieselbe Reihenfolge. */
 export const reopenOutcome = (
   todoTitle: string,
   minutes: number,
-  poolNames: readonly string[],
+  movement: PoolMovement | null,
 ): ReopenNotice => ({
   title: `Gebucht. „${todoTitle}“ ist wieder offen.`,
   effects: [
     `${String(minutes)} Minuten sind gebucht.`,
     'Das Erledigt-Kennzeichen ist aufgehoben.',
-    poolSentence(poolNames, 'past'),
+    poolMovementSentence(movement ?? NOTHING_MOVED, 'past', 'reopen'),
   ],
-  aside: CARD_STAYS,
 });

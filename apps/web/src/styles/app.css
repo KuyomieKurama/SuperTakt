@@ -612,11 +612,134 @@
 /* Rückmeldungen                                                        */
 /* ==================================================================== */
 
+/*
+ * Der Meldungsstapel endet am Bildschirmrand (B-2 aus T-116, SC 2.4.7).
+ *
+ * ## Der gemessene Befund
+ *
+ * Eine Meldung mit Rückweg hat keine Frist (Regel 1 in `ToastContext.tsx`) und
+ * wird seit T-108 auch nicht verdrängt. Sieben Klicks auf „Erledigt" in der
+ * Todo-Liste erzeugen also sieben stehende Meldungen. Gemessen bei 720 px
+ * Fensterhöhe (T-110, Abschnitt 3): 807 px Stapel bei 704 px Platz — die
+ * älteste ragt oben hinaus. Ein `position: fixed`-Behälter läßt sich nicht
+ * hereinrollen; ihr „Rückgängig" bleibt tabulierbar, der Fokus landet
+ * außerhalb des Sichtbaren, und **es gibt keine Fokusanzeige zu sehen**. Das
+ * ist SC 2.4.7 (Fokus sichtbar, AA), nicht bloß eine Unschönheit.
+ *
+ * ## Die Lösung: eine Rollfläche, die dem Jüngsten folgt
+ *
+ * `max-block-size` plus `overflow-y: auto` machen aus dem Stapel eine
+ * Rollfläche. `ToastProvider` rollt nach jeder Änderung ans Ende, damit die
+ * jüngste Meldung — die einzige, die zur letzten Handlung gehört — immer
+ * sichtbar ist. Ältere sind dann nicht unerreichbar, sondern nur weiter oben:
+ * Wer hineintabuliert, wird vom Browser mitgerollt.
+ *
+ * **Kein `tabindex` an der Rollfläche.** Jede Meldung trägt ihren
+ * Schließknopf; ein Halt an einer `aria-live`-Region wäre ein Halt, an dem
+ * nichts zu tun ist (T-116, Abschnitt 3.2).
+ *
+ * **Keine harte Obergrenze für Meldungen mit Rückweg.** Das wäre W-10
+ * rückwärts — der Schutz aus {@link evict} fiele genau dort, wo er zählt.
+ *
+ * ## Warum Innenabstand statt Abstand von außen
+ *
+ * Vorher saß der Stapel mit `inset-*: var(--space-4)` in der Ecke. Eine
+ * Rollfläche schneidet an ihrer Kante ab — mit Außenabstand wäre der Schatten
+ * jeder Meldung an allen vier Seiten beschnitten. Jetzt sitzt der Behälter in
+ * der Ecke (`inset: 0`) und trägt denselben Abstand als **Innenabstand**: Die
+ * Meldungen stehen auf den Pixel genau dort, wo sie vorher standen, und der
+ * Schatten hat seine Luft. `box-sizing: border-box` (`base.css`) sorgt dafür,
+ * daß `100dvh` die Höhe **einschließlich** dieser beiden Abstände meint.
+ *
+ * `dvh` mit `vh` davor: Fehlt einem Wirt die dynamische Einheit, gilt die
+ * statische — auf dem Schreibtisch derselbe Wert.
+ */
 .toast-layer {
   position: fixed;
-  inset-block-end: var(--space-4);
-  inset-inline-end: var(--space-4);
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  padding: var(--space-4);
+  max-block-size: 100vh;
+  max-block-size: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+/*
+ * Solange ein Dialog offen ist, tritt der Meldungsstapel hinter die
+ * Abdunklung (T-110, Risiko 1 aus T-109).
+ *
+ * ## Der gemessene Befund
+ *
+ * `.toast-layer` liegt auf `--z-toast` (400), der Dialog auf `--z-dialog`
+ * (310). Die Ebene selbst nimmt keine Zeigereingaben an, die einzelne Meldung
+ * dagegen schon (`pointer-events: auto`, sie trägt „Rückgängig" und
+ * „Schließen"). Beide sitzen in derselben unteren Ecke wie die Knopfzeile
+ * eines Dialogs — `.dialog__footer` ist rechtsbündig, der Stapel ebenso.
+ *
+ * Gemessen an den echten Stilblättern (Chromium, Auszeichnung aus
+ * `FormDialog.tsx` und `ToastContext.tsx`, Einblendbewegung abgewartet):
+ *
+ *   Fenster 1280x720, Regelformular, **eine** Meldung
+ *     Knopf „Anlegen"  x 814..895, y 595..627, Mittelpunkt (854, 611)
+ *     Meldung          x 848..1264, y 610..704
+ *     document.elementFromPoint(854, 611) -> li.toast
+ *
+ *   Fenster 1024x768: dasselbe ab der zweiten Meldung.
+ *   Fenster 1920x1080: keine Überdeckung — der Dialog steht dort weit genug
+ *     von der Ecke entfernt. Deshalb ist der Fehler unstet und nicht immer da.
+ *
+ * Das ist genau der Fehlschlag, den der e2e-tester in TP-KANBAN-02 einmal als
+ * 60-Sekunden-Zeitüberschreitung gesehen hat: Der Klick auf „Anlegen" traf die
+ * Meldung. Zwei Wiederholungen liefen grün, weil die Meldung nach acht
+ * Sekunden von selbst geht — die Überdeckung hängt an der Uhr, nicht am Zufall.
+ * Seit T-108 darf der Stapel über vier Meldungen hinauswachsen, wenn in ihm nur
+ * noch Rückwege stehen; die verdeckte Fläche wird damit größer, nicht kleiner.
+ *
+ * ## Warum die Meldung weicht und nicht der Dialog
+ *
+ * Ein Dialog ist modal: Er nimmt den Tabulator gefangen
+ * (`keepTabInside`), und alles andere wartet. Die Meldung war bis hierher die
+ * einzige Ausnahme — sichtbar über dem Dialog, mit der Maus bedienbar, mit der
+ * Tastatur **nicht** erreichbar. Das ist SC 2.1.1 (Tastatur): Was die Maus
+ * kann, muss die Tastatur auch können. Der Stapel tritt deshalb zurück,
+ * statt seine Sonderrolle zu behalten.
+ *
+ * Er verschwindet dabei nicht: Er wird abgedunkelt wie die ganze Anwendung
+ * hinter dem Dialog, und er bleibt stehen. Eine Meldung mit Rückweg hat keine
+ * Frist (Regel 1 in `ToastContext.tsx`) — der Rückweg ist nach dem Schließen
+ * des Dialogs unverändert da, nur aufgeschoben. Eine Meldung ohne Rückweg
+ * trägt nichts zu bedienen; ihre Frist läuft weiter wie bisher. Die Ansage für
+ * Vorlesehilfen hängt an `aria-live` und nicht an der Ebene; sie bleibt.
+ *
+ * ## Warum nicht anders
+ *
+ * *Stapel versetzen* geht nicht: Der Dialog steht mittig und ist bis 52 rem
+ * breit, die Meldung ist 26 rem breit und sitzt in der Ecke — bei 1024 px
+ * Fensterbreite überlappen die beiden waagerecht in jeder Ecke, in der ein
+ * Knopf oder ein Ankreuzfeld des Dialogs stehen kann.
+ * *Zwischen Abdunklung und Dialog legen* (z zwischen 300 und 310) nähme die
+ * Überdeckung ebenfalls, ließe aber eine hell leuchtende Karte auf einer
+ * abgedunkelten Seite stehen, die der Dialog anschneidet — und die Maus könnte
+ * sie weiterhin bedienen, die Tastatur weiterhin nicht.
+ * *Eine Bahn am unteren Rand freihalten* (Innenabstand in `.scrim`) verlangt
+ * die gemessene Stapelhöhe als Variable und schöbe den Dialog bei mehreren
+ * Meldungen aus dem Fenster.
+ *
+ * `:has()` steht bereits an vier Stellen dieser Oberfläche. Fehlt es einem
+ * Wirt, gilt wieder der heutige Zustand — kein neuer Schaden, nur die alte
+ * Überdeckung. `pointer-events: none` ist der zweite Riegel: Selbst wenn ein
+ * künftiger Stapelkontext die Ebene wieder nach vorn holte, schluckt sie
+ * keinen Klick mehr, der dem Dialog gilt.
+ */
+body:has(.scrim) .toast-layer {
+  z-index: calc(var(--z-scrim) - 1);
+}
+
+body:has(.scrim) .toast {
   pointer-events: none;
 }
 
@@ -740,6 +863,19 @@
   min-height: 1rem;
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+/*
+ * Im Kopf einer Ansicht (W-12): Der Hinweis steht rechts neben dem Titel und
+ * vor den Aktionen, auf der Grundlinie der ersten Zeile. `flex: none`, damit er
+ * die Aktionen nicht schiebt, und `white-space: nowrap`, damit „Wird
+ * aktualisiert …" nicht umbricht und den Kopf höher macht — er soll auftauchen
+ * und verschwinden, ohne dass darunter etwas springt.
+ */
+.screen__headline > .refresh-hint {
+  flex: none;
+  align-self: center;
+  white-space: nowrap;
 }
 
 .refresh-hint--active::before {
@@ -942,6 +1078,142 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background-color: var(--bg-subtle);
+}
+
+/*
+ * Ein benannter Abschnitt in einem langen Formular (T-079).
+ *
+ * Das Regelformular hat seit T-076 fuenf Achsen und neun Bedienelemente.
+ * Untereinander waeren sie eine Liste; die Ueberschriften machen daraus die
+ * drei Fragen, die ein Benutzer wirklich stellt: was dazugehoeren muss, was
+ * nicht dazugehoeren darf, und woran das Todo sonst erkennbar ist.
+ *
+ * Die Trennlinie sitzt oben statt unten: So traegt sie den Abschnitt an, statt
+ * ihn abzuschliessen — und der letzte Abschnitt endet nicht mit einem Strich
+ * ins Leere.
+ */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.form-section__title {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.form-section__lead {
+  max-width: var(--measure-prose);
+  margin-top: calc(var(--space-3) * -1 + var(--space-1));
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* ==================================================================== */
+/* Optionszeile — wenige Werte nebeneinander (T-079)                    */
+/* ==================================================================== */
+
+/*
+ * Drei Werte, einer davon gewaehlt, alle drei sichtbar. Die Bauform kommt aus
+ * dem Vorbild des Auftraggebers und ist hier richtig: Ein Aufklappfeld
+ * verbaerge die Alternativen, und eine Achse mit einem Neutralwert wird dann
+ * zur Frage, die man erst stellen muss.
+ *
+ * `fieldset` und `legend` statt `div` und `span`: Die Gruppenbeschriftung
+ * gehoert zur Gruppe, nicht daneben — sonst hoert ein Bildschirmleser drei
+ * Knoepfe „Alle", „Erledigt", „Unerledigt" ohne die Frage dazu.
+ */
+.radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+}
+
+.radio-row__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/*
+ * Der gewaehlte Zustand haengt an drei Merkmalen und keines ist allein die
+ * Farbe (SC 1.4.1): gefuellter Optionsknopf, Akzentkontur, halbfette Schrift.
+ */
+.radio-row__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.radio-row__option:hover {
+  border-color: var(--border-strong);
+  background-color: var(--bg-hover);
+}
+
+.radio-row__option--on {
+  border-color: var(--border-accent);
+  background-color: var(--accent-bg-subtle);
+}
+
+.radio-row__option--on .radio-row__label {
+  font-weight: var(--weight-medium);
+}
+
+.radio-row__option input[type="radio"] {
+  accent-color: var(--accent-bg);
+  margin: 0;
+}
+
+/*
+ * Der Fokusring liegt an der Huelle und nicht am winzigen Optionsknopf: Wer
+ * mit den Pfeiltasten durch die Gruppe geht, soll sehen, wo er steht — und
+ * ein 13px breiter Ring ist an einer 36px hohen Flaeche kein Hinweis.
+ */
+.radio-row__option:has(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.radio-row__option input[type="radio"]:focus-visible {
+  outline: none;
+}
+
+/*
+ * Der Zusatz am Neutralwert. Er steht dauerhaft da und nicht erst nach der
+ * Wahl: „Alle" heisst „schraenkt nicht ein" und nicht „trifft alles" — die
+ * haeufigste Fehllesart dieses Formulars laesst sich nicht durch einen
+ * Hilfetext beheben, den man erst durch Auswaehlen sieht.
+ */
+.radio-row__neutral {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.radio-row:disabled .radio-row__option {
+  border-color: var(--border-default);
+  background-color: var(--bg-disabled);
+  color: var(--text-disabled);
+  cursor: not-allowed;
 }
 
 /* Dialog mit Formular ---------------------------------------------- */
@@ -2978,6 +3250,27 @@
   margin-top: 2px;
 }
 
+/*
+ * Ein Einrichtungsfehler in der Spaltenliste (E-057, T-083): Die Regel nennt
+ * Ordner, in denen kein Tag liegt. Eigene Zeile statt eines Anhaengsels an
+ * `.rule-row__meta` — die Meta-Zeile zaehlt auf, was ist; diese sagt, was
+ * nicht stimmt, und traegt deshalb Warnfarbe und Warndreieck.
+ */
+.rule-row__fault {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 2px;
+  color: var(--warning-fg);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-row__fault svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* Wo eine Regel erscheint (E-054). Das Wort traegt die Aussage; die Flaeche
    trennt sie nur vom Namen daneben. */
 .placement-badge {
@@ -3074,21 +3367,65 @@
   font-weight: var(--weight-medium);
 }
 
+/*
+ * Die Regel steht seit T-079 in `.rule-summary` — dieselbe Bauform wie unter
+ * jedem Spaltenkopf des Boards. Hier bleibt nur der Abstand: Wer hier wieder
+ * `display: flex` hinschreibt, kippt die Zeilenrichtung der Zusammenfassung
+ * und stellt fuenf Achsen nebeneinander.
+ */
 .pool-row__rule {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
   margin-top: var(--space-1);
+}
+
+/*
+ * Die Ladezeile einer Chip-Auswahl (T-091, B-5 aus R-2).
+ *
+ * Der Kasten bleibt in jedem Zustand stehen und behaelt seine Hoehe — ein
+ * Feld, das beim Laden verschwindet und danach wiederkommt, laesst das
+ * Formular springen.
+ */
+.tag-picker--busy {
+  align-items: center;
+  min-height: var(--control-height-md);
+}
+
+.tag-picker__waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
+  line-height: var(--leading-snug);
 }
 
-.pool-row__term {
+/*
+ * Das Suchfeld ueber der Ordnerauswahl (A-4.4, T-091).
+ *
+ * Das Lupensymbol liegt im Feld und ist `aria-hidden`: Der Name des Feldes
+ * steht im zugehoerigen `<label>`, das Symbol ist Zierrat und darf nicht
+ * zweimal vorgelesen werden.
+ */
+.picker-search {
+  position: relative;
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.picker-search > .field__input {
+  padding-left: calc(var(--space-3) + 1rem);
+}
+
+.picker-search__icon {
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
-.pool-row__folder,
 .folder-chip {
   display: inline-flex;
   align-items: center;
@@ -3100,9 +3437,6 @@
   background-color: var(--bg-surface);
   color: var(--text-secondary);
   font-size: var(--text-xs);
-}
-
-.folder-chip {
   cursor: pointer;
 }
 

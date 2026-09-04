@@ -17,10 +17,40 @@
  * die Oberfläche erzeugt keine davon selbst.
  */
 
+import type { PoolMovement } from "@takt/domain";
 import type { ExportStatus } from "../components/ExportStatus";
-import type { PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource } from "../lib/labels";
+import type {
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolPlacement,
+  RoundingMode,
+  ThemeSetting,
+  TimeEntrySource,
+} from "../lib/labels";
 
-export type { ExportStatus, PoolPlacement, RoundingMode, ThemeSetting, TimeEntrySource };
+/**
+ * `PoolMovement` kommt **unmittelbar** aus `@takt/domain` und nicht über
+ * `lib/labels.ts` wie die Aufzählungen daneben (E-058).
+ *
+ * Der Unterschied ist kein Zufall: `lib/labels.ts` gibt es, weil eine
+ * Aufzählung eine deutsche **Beschriftung** braucht, die die Domäne nicht
+ * kennt. `PoolMovement` braucht keine — der Satz dazu kommt fertig aus
+ * derselben Domäne (`poolMovementSentence`), und die Oberfläche hat an drei
+ * Namenslisten nichts zu beschriften. Ein Umweg über `labels.ts` wäre die
+ * Einladung, dort doch eine zweite Fassung des Satzes abzulegen.
+ */
+export type {
+  ExportStatus,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolMovement,
+  PoolPlacement,
+  RoundingMode,
+  ThemeSetting,
+  TimeEntrySource,
+};
 
 /** UUID Fassung 7, als Zeichenkette. */
 export type Id = string;
@@ -28,6 +58,86 @@ export type Id = string;
 export type Timestamp = string;
 /** Kalendertag ohne Zeitzone: `2026-03-02`. */
 export type CalendarDay = string;
+
+/* ==================================================================== */
+/* Herkunft als Typ (E-063, T-129)                                      */
+/* ==================================================================== */
+
+/**
+ * **Warum hier keine Zeichenkette mehr bloß `string` heißt.**
+ *
+ * Seit T-124 geht fremder Text vor der Anzeige durch `components/Foreign.tsx`,
+ * `quotedName` oder `foreignText`. Der Bericht dazu nennt die Schwäche dieser
+ * Lösung selbst (R3): Sitzt die Behandlung im Anzeigebaustein, ist sie an der
+ * Aufrufstelle **unsichtbar**. Wer morgen eine weitere Stelle baut und den
+ * Baustein vergisst, bekommt keinen Übersetzungsfehler und keinen roten Test —
+ * für gewöhnliche Namen ist jede dieser Behandlungen die Identität.
+ *
+ * Die Antwort darauf steht hier: Die **Herkunft** eines Textes ist keine
+ * Verabredung im Kopf des Entwicklers, sondern eine Eigenschaft seines Typs.
+ * `ForeignText` trägt eine Marke, die der Übersetzer durch Zuweisungen,
+ * Zerlegungen, Felder und Parameter mitführt — und `scripts/proof-foreign.mjs`
+ * fragt ihn danach, statt eine Liste von Feldnamen abzuschreiben. Eine
+ * abgeschriebene Liste ist der Fehler, den E-063 Punkt 4 benennt; sie kann nur
+ * hinterherhinken.
+ *
+ * **Kein Feld dieser Datei heißt darum noch bloß `string`.** Das ist die zweite
+ * Hälfte des Nachweises: Ein neues Feld zwingt zu einer Entscheidung, statt
+ * stillschweigend als „nicht fremd" zu gelten. Der Nachweis liest diese Datei
+ * und wird rot, sobald irgendwo wieder ein nacktes `string` steht.
+ */
+
+/**
+ * Text, den **jemand anderes** geschrieben hat und den der Dienst nur
+ * ausliefert: Titel und Vermerk eines Todos, die Leistung einer Buchung, die
+ * Namen von Tags, Ordnern, Pools, Status und Exportvorlagen, die Call-Nummer,
+ * der Windows-Benutzername.
+ *
+ * Vor der Anzeige gehört er durch `<Foreign>`, `quotedName` oder `foreignText`
+ * (E-063 Punkt 1 und 2). Die Marke ist **freiwillig und leer** — sie ändert
+ * nichts an der Zuweisbarkeit und nichts zur Laufzeit; sie ist ausschließlich
+ * dafür da, dass der Nachweis die Herkunft sehen kann.
+ */
+export type ForeignText = string & { readonly __foreignText?: undefined };
+
+/**
+ * Was der Benutzer **dieser** Oberfläche gerade selbst schreibt oder abschickt:
+ * der Inhalt eines Eingabefeldes, ein Suchbegriff, der Rumpf einer Anfrage.
+ *
+ * Er wird **nicht** behandelt. Den Inhalt eines Eingabefeldes zu verändern
+ * hieße, die Eingabe des Benutzers zu verändern — und sie ginge verändert
+ * zurück in die Datenbank (E-063 Punkt 1).
+ */
+export type DraftText = string & { readonly __draftText?: undefined };
+
+/**
+ * Deutscher Anzeigetext, den **unser eigener** Dienst geliefert hat: die
+ * Meldung zu einem Fehler, die Beschriftung einer Exportquelle, der Satz unter
+ * der Quellenauswahl.
+ *
+ * Er ist nicht fremd. `visibleText` darauf wäre die Identität, und der Aufruf
+ * behauptete eine Herkunft, die es nicht gibt.
+ */
+export type ServiceText = string;
+
+/** Ein englischer technischer Schlüssel: `code`, `field`, Gruppenkennung, Sprachkennzeichen. */
+export type TechnicalKey = string;
+
+/**
+ * Ein Pfad aus dem Dateisystem. Nicht fremd im Sinne von E-063, aber auch nicht
+ * unsere Beschriftung: Er wird nach eigenen Regeln geprüft
+ * (`lib/pathInspection.ts`) und nicht nach der Zeichenklasse für Namen.
+ */
+export type FileSystemPath = string;
+
+/** Ein Farbwert, wie ihn der Dienst führt: `#1f6feb`. */
+export type ColorValue = string;
+
+/** Die undurchsichtige Fortsetzungsmarke einer Liste. Wird nie selbst gebildet. */
+export type PageCursor = string;
+
+/** Ein Geheimnis. Steht in keiner Anzeige und in keinem Protokoll. */
+export type SecretText = string;
 
 /* ==================================================================== */
 /* Umschlag und Blätterung                                              */
@@ -44,7 +154,7 @@ export interface Envelope<T> {
  */
 export interface Page<T> {
   readonly items: readonly T[];
-  readonly nextCursor: string | null;
+  readonly nextCursor: PageCursor | null;
   readonly total: number;
 }
 
@@ -52,10 +162,25 @@ export interface Page<T> {
 /* Fehler                                                               */
 /* ==================================================================== */
 
+/**
+ * Ein einzelner Befund in `error.details`.
+ *
+ * `name` ist der **bloße** Name des benannten Dings — „Ost“, nicht
+ * „Regel „Ost““, ohne Gattungswort und ohne Anführungszeichen (W-11 aus R-2a,
+ * geliefert seit T-107 von `poolReference` in `packages/storage`). Es ist
+ * freiwillig, und das ist eine Aussage und keine Lücke: Ein Befund über ein
+ * **Eingabefeld** hat nichts zu benennen und trägt deshalb keinen Namen. Es
+ * gibt auch keinen leeren Namen — fehlt der Name, fehlt das Feld.
+ *
+ * Wer `name` liest, muss `undefined` behandeln und dann `message` nehmen; das
+ * ist der beschriebene Vertragsfall und kein stiller Rückfall. Die eine Stelle,
+ * die das tut, ist `lib/errorText.ts`.
+ */
 export interface ApiFieldError {
-  readonly field: string;
-  readonly message: string;
-  readonly code: string;
+  readonly field: TechnicalKey;
+  readonly message: ServiceText;
+  readonly code: TechnicalKey;
+  readonly name?: ForeignText;
 }
 
 /**
@@ -64,8 +189,8 @@ export interface ApiFieldError {
  * unverändert gezeigt, nicht durch einen eigenen ersetzt.
  */
 export interface ApiError {
-  readonly code: string;
-  readonly message: string;
+  readonly code: TechnicalKey;
+  readonly message: ServiceText;
   readonly details?: readonly ApiFieldError[];
 }
 
@@ -90,8 +215,8 @@ export interface ErrorEnvelope {
  */
 export interface Todo {
   readonly id: Id;
-  readonly title: string;
-  readonly callNumber: string | null;
+  readonly title: ForeignText;
+  readonly callNumber: ForeignText | null;
   /**
    * Der Status als **Eigenschaft** des Todos (A-5.4).
    *
@@ -107,6 +232,34 @@ export interface Todo {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * Die Antwort von `PUT` und `DELETE /todos/{id}/done` (E-060).
+ *
+ * ## Warum das Todo hier ein Feld mehr trägt
+ *
+ * Seit E-055 entscheidet „Erledigt" über Spalten: Eine Regel darf nach dem
+ * Kennzeichen fragen, und dann wechselt die Karte mit genau dieser Handlung
+ * ihren Platz. Bis E-060 antworteten beide Routen mit dem Todo und sonst
+ * nichts — der Toast danach schwieg über die Spalten, während derselbe Übergang
+ * über einen Timerstart angesagt wurde (O-U). Wer an einer Stelle Auskunft gibt
+ * und an der anderen schweigt, sagt die halbe Wahrheit.
+ *
+ * ## Zwei Anlässe, zwei Sätze
+ *
+ * `DELETE` (Aufheben) ist der Anlaß `'reopen'` — das Todo war erledigt und
+ * kehrt zurück, „wieder" stimmt. `PUT` (Setzen) nimmt `'booking'`, die neutrale
+ * Form: Der Satz dazu trägt kein Wort von Buchung und nennt nur, was dazukommt
+ * und was wegfällt (E-060 Punkt 2). Umbenannt wird der Anlaß nicht; er steht in
+ * fünf Hoheiten.
+ *
+ * `null` heißt „keine Fläche bewegt sich", nicht „nichts geschehen": Das
+ * Kennzeichen ist in jedem Fall umgelegt, es trifft nur keine Regel darauf zu.
+ * Die Aufrufstelle läßt den Satz dann **ganz** weg.
+ */
+export interface TodoDoneResult extends Todo {
+  readonly poolMovement: PoolMovement | null;
+}
+
 /** `GET /todos/{id}` — das Todo samt seiner berechneten Summen, ohne Vermerk. */
 export interface TodoDetail {
   readonly todo: Todo;
@@ -118,13 +271,13 @@ export interface TodoDetail {
 /** Der interne Vermerk (A-7.1, E-016). Eigene Ressource, eigener Aufruf. */
 export interface TodoNote {
   readonly todoId: Id;
-  readonly text: string;
+  readonly text: ForeignText;
   readonly updatedAt: Timestamp;
 }
 
 export interface TodoCreate {
-  readonly title: string;
-  readonly callNumber?: string | null;
+  readonly title: DraftText;
+  readonly callNumber?: DraftText | null;
   readonly statusId?: Id | null;
   readonly tagIds?: readonly Id[];
   /**
@@ -136,20 +289,20 @@ export interface TodoCreate {
    * nicht selbst an — wer den Dialog abbricht, hinterlässt sonst ein Tag ohne
    * Todo.
    */
-  readonly tagNames?: readonly string[];
-  readonly note?: string;
+  readonly tagNames?: readonly DraftText[];
+  readonly note?: DraftText;
 }
 
 export interface TodoUpdate {
-  readonly title?: string;
-  readonly callNumber?: string | null;
+  readonly title?: DraftText;
+  readonly callNumber?: DraftText | null;
   readonly statusId?: Id;
   readonly tagIds?: readonly Id[];
 }
 
 export interface TodoFilter {
-  readonly search?: string;
-  readonly callNumber?: string;
+  readonly search?: DraftText;
+  readonly callNumber?: DraftText;
   readonly statusIds?: readonly Id[];
   readonly tagIds?: readonly Id[];
   readonly poolIds?: readonly Id[];
@@ -166,8 +319,9 @@ export interface TodoFilter {
  * Ein Statuswert.
  *
  * **Keine Kanban-Spalte mehr.** Bis E-054 war beides dasselbe; seitdem ist eine
- * Spalte des Boards eine Regel über Tags (`Pool` mit `placement`), und der
- * Status ist eine Eigenschaft des Todos geblieben. Verwaltet wird er im Bereich
+ * Spalte des Boards eine Regel (`Pool` mit `placement`), und der Status ist
+ * eine Eigenschaft des Todos geblieben — eine von fünf Bedingungen, nach denen
+ * eine Regel fragen kann (E-055), und keine Ablagefläche mehr. Verwaltet wird er im Bereich
  * „Status" der Einstellungen (`screens/StatusSettings.tsx`).
  *
  * Er trägt kein Merkmal, das ihn als „Erledigt" auswiese — Erledigt hängt am
@@ -175,10 +329,10 @@ export interface TodoFilter {
  */
 export interface TodoStatus {
   readonly id: Id;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly position: number;
   readonly isDefault: boolean;
-  readonly color: string | null;
+  readonly color: ColorValue | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -190,8 +344,8 @@ export interface TodoStatus {
 export interface Tag {
   readonly id: Id;
   readonly folderId: Id | null;
-  readonly name: string;
-  readonly color: string | null;
+  readonly name: ForeignText;
+  readonly color: ColorValue | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -199,7 +353,7 @@ export interface Tag {
 export interface TagFolder {
   readonly id: Id;
   readonly parentId: Id | null;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -216,36 +370,195 @@ export interface TagTree {
   readonly rootTags: readonly Tag[];
 }
 
+/**
+ * Ein **Tagbestandteil** einer Regel: ein einzelnes Tag oder ein Ordner.
+ *
+ * Es gibt keinen Fall für den Status und keinen für „nicht" (T-076). Ein Term
+ * mit Vorzeichen wäre Aussagenlogik im Datenmodell; stattdessen gibt es zwei
+ * Listen derselben Terme — `rule` und `excludedTags` — und der Feldname sagt,
+ * was gemeint ist.
+ */
 export type PoolRuleTerm =
   | { readonly kind: "tag"; readonly tagId: Id }
   | { readonly kind: "folder"; readonly folderId: Id };
 
 /**
- * Eine benannte Regel über Tags — und seit E-054 zugleich die Bauform einer
+ * Eine benannte Regel — und seit E-054 zugleich die Bauform einer
  * **Kanban-Spalte**. Es gibt keine zweite Entität `BoardColumn`; was eine
  * Spalte von einem Pool unterscheidet, ist allein `placement`.
+ *
+ * ## Die Regel ist eine Struktur mit benannten Feldern, keine Liste (T-076)
+ *
+ * | Feld | Bedeutung | Neutralwert |
+ * |---|---|---|
+ * | `rule` + `matchMode` | erforderliche Tags: alle davon oder mindestens eines | `[]` |
+ * | `excludedTags` | ausgeschlossene Tags: **keines** davon | `[]` |
+ * | `statusIds` | Status: **einer** von diesen | `[]` = „Alle" |
+ * | `completion` | Erledigt: alle / nur erledigte / nur unerledigte | `"any"` |
+ * | `exportState` | Exportstatus: alle / mit offener / mit exportierter Buchung | `"any"` |
+ *
+ * **Zwischen** den Achsen gilt „und", jede engt weiter ein. Die Verknüpfung
+ * folgt damit aus dem Feldnamen und nicht aus einem Und/Oder-Schalter:
+ * „erforderlich" heißt und, „ausgeschlossen" heißt nicht (E-055).
+ *
+ * **Ein Neutralwert schränkt nicht ein — er trifft nicht alles.** Stehen alle
+ * Achsen neutral, trifft die Regel **nichts** (A-3.4). Das ist der Zustand
+ * unmittelbar nach dem Anlegen, und die Oberfläche sagt an jeder Fläche, dass
+ * die Spalte leer bleibt, bis eine Bedingung dazukommt.
  */
+/**
+ * Was eine Regel **nach dem Auflösen** ihrer Ordner ergibt (T-080, E-057).
+ *
+ * Ein Ordnerterm nennt keinen Tag, sondern einen Ort. Wie viele Tags dort
+ * liegen — mit `includeSubfolders` auch in allen Unterordnern, beliebig tief —
+ * weiß ausschließlich der Dienst; er steigt dafür über den Ordnerbaum ab. Die
+ * Oberfläche rechnet das nicht nach, sie liest die Zahl.
+ *
+ * **Wozu sie da ist.** Ohne sie sieht eine Regel, die einen leeren Ordner
+ * nennt, genauso aus wie eine Regel, auf die gerade nichts passt. Das sind
+ * zwei verschiedene Zustände: Der eine löst sich auf, sobald jemand ein
+ * passendes Todo anlegt, der andere nie — er ist ein Einrichtungsfehler, und
+ * nur der Benutzer kann ihn beheben. Erst mit dieser Auskunft lässt er sich
+ * benennen (siehe `describeRuleReach` in `lib/poolRule.ts`).
+ *
+ * **Termweise, nicht achsenweise (T-082, T-087).** Die beiden Zahlen sind
+ * Summen über eine ganze Achse und taugen deshalb **nicht** als Erkennung: Ein
+ * leerer Ordner neben einem Tagterm lässt `tagCount` positiv und ist trotzdem
+ * da. Gefragt wird deshalb `unresolvedRequired`, und **welcher** Ordner es ist,
+ * sagt `emptyRuleFolderIds`.
+ *
+ * **Nicht enthalten: ob die Regel überhaupt eine Bedingung nennt.** Diese
+ * Frage beantwortet `poolRuleIsEmpty` aus `@takt/domain` — für jeden, der die
+ * Felder in der Hand hat, also auch für den Entwurf im Formular, den noch
+ * keine Route gesehen hat.
+ *
+ * **Alle Felder sind Pflicht.** Ein freiwilliges Feld hieße `=== true` an jeder
+ * Leserstelle, und damit schaltete sich die Wache selbst ab: Ein Dienst, der
+ * die Auskunft eines Tages nicht mehr mitschickt, ließe die Oberfläche
+ * stillschweigend die Antwort von vor E-057 zeichnen. Alle Antworten, aus denen
+ * diese Oberfläche einen `Pool` bezieht, liefern sie mit (Schema
+ * `PoolResolution` in `takt-local-api.yaml`, `required` mit sieben Feldern).
+ */
+export interface PoolResolution {
+  /**
+   * Wie viele Tags die **erforderliche** Liste (`rule`) ergibt.
+   *
+   * Eine **Summe über die Achse**: `0` bei nicht leerem `rule` heißt zwar „die
+   * genannten Ordner enthalten kein Tag", ein positiver Wert heißt aber
+   * **nicht**, dass alle Terme auflösen. Für die Erkennung eines leeren
+   * Ordners ist `emptyRuleFolderIds` zuständig, nicht diese Zahl (E-057).
+   */
+  readonly tagCount: number;
+  /** Dasselbe für die **ausgeschlossene** Liste (`excludedTags`). */
+  readonly excludedTagCount: number;
+  /**
+   * Bleibt nach dem Auflösen **keine** Bedingung übrig?
+   *
+   * Seit E-057 **hinreichend, aber nicht notwendig** für „trifft nichts":
+   * Steht neben dem leeren Ordner noch eine Statusachse, bleibt eine Bedingung
+   * übrig, und die Regel trifft trotzdem nichts. Dieses Feld sagt, **warum**
+   * nicht; ob überhaupt etwas kommen kann, sagt `matchesNothing`.
+   */
+  readonly isEmpty: boolean;
+  /**
+   * Nennt die **erforderliche** Liste (`rule`) einen Term, der auf keinen
+   * einzigen Tag auflöst? (E-057)
+   *
+   * Das ist der Ordner ohne Tags, und **ein einziger genügt** — auch neben
+   * einem Tagterm, der Tags beisteuert. Die Regel trifft dann nichts,
+   * unabhängig von `matchMode` und den übrigen Achsen: Der Benutzer hat eine
+   * Zugehörigkeit verlangt, die niemand hat.
+   *
+   * Für die Anzeige die **wichtigere** der beiden Auskünfte und deshalb vor
+   * `isEmpty` zu lesen: „Der Ordner enthält kein Tag" ist ein anderer Satz —
+   * und eine andere Handlung — als „diese Regel ist noch nicht eingerichtet".
+   */
+  readonly unresolvedRequired: boolean;
+  /**
+   * Dasselbe für die **ausgeschlossene** Liste — und **ohne** Folgen für die
+   * Treffermenge (E-057).
+   *
+   * „Keiner davon" über nichts schließt nichts aus; ein Ausschluss über einen
+   * leeren Ordner lässt in Ruhe, statt einzuengen. Die Oberfläche zeigt ihn
+   * deshalb als **Hinweis** und nie als Warnung: Eine Warnung ohne Folge
+   * glaubt beim nächsten Mal niemand mehr.
+   */
+  readonly unresolvedExcluded: boolean;
+  /**
+   * **Welche** erforderlichen Ordner keinen Tag enthalten (E-057).
+   *
+   * Der Unterschied zwischen „ein Ordner ist leer" und „der Ordner **Ost** ist
+   * leer". In der Reihenfolge der Regel und ohne Doppelte — damit die
+   * Oberfläche sie in derselben Folge nennt, in der sie im Formular stehen.
+   *
+   * Die Namen dazu stehen im Ordnerbaum, den die Oberfläche ohnehin lädt.
+   * Ausgeschlossene Ordner stehen **nicht** darin: Aus ihnen folgt keine
+   * Handlung.
+   */
+  readonly emptyRuleFolderIds: readonly Id[];
+  /**
+   * Trifft diese Regel von vornherein nichts? (A-3.4, E-057)
+   *
+   * Die zusammengefasste Antwort der Domäne (`poolRuleMatchesNothing`) über
+   * den **gespeicherten** Stand: `isEmpty || unresolvedRequired`.
+   *
+   * Die Oberfläche liest sie bewusst **nicht als Ganzes**, sondern die beiden
+   * Gründe einzeln — und zwar aus verschiedenen Quellen, weil sie von
+   * Verschiedenem abhängen: `unresolvedRequired` hängt allein an den
+   * Regeltermen und `includeSubfolders` und kommt deshalb von hier;
+   * „nennt keine Bedingung" hängt an allen fünf Achsen und kommt aus
+   * `poolRuleIsEmpty` über die Felder, die gerade im Formular stehen. Ein
+   * Entwurf, der eine Statusachse ergänzt, ist eingerichtet — auch wenn der
+   * gespeicherte Stand daneben noch `matchesNothing: true` sagt.
+   */
+  readonly matchesNothing: boolean;
+}
+
 export interface Pool {
   readonly id: Id;
-  readonly name: string;
-  readonly matchMode: "any" | "all";
+  readonly name: ForeignText;
+  /** Gilt **nur** für `rule`. Ausgeschlossene Tags sind immer „keines davon". */
+  readonly matchMode: PoolMatchMode;
   readonly includeSubfolders: boolean;
   readonly placement: PoolPlacement;
   /** Reihenfolge, für beide Flächen dieselbe: Pool-Liste und Board. */
   readonly position: number;
+  /** Die erforderlichen Tags und Ordner. */
   readonly rule: readonly PoolRuleTerm[];
+  /** Die ausgeschlossenen Tags und Ordner (T-076). Keiner darf am Todo hängen. */
+  readonly excludedTags: readonly PoolRuleTerm[];
+  /** Die Status der Regel (T-076). Leer heißt „Alle" und schränkt nicht ein. */
+  readonly statusIds: readonly Id[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+  /**
+   * Die aufgelöste Regel (T-080). Pflicht, nicht freiwillig: Alle vier
+   * Antworten, aus denen diese Oberfläche einen `Pool` bezieht — `GET /pools`,
+   * `POST /pools`, `PATCH /pools/{id}` und `GET /board` —, liefern sie mit.
+   * Ein freiwilliges Feld hieße, den Leerzustand mit einem Vielleicht zu
+   * begründen.
+   */
+  readonly resolved: PoolResolution;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
 export interface PoolWrite {
-  readonly name: string;
-  readonly matchMode?: "any" | "all";
+  readonly name: DraftText;
+  readonly matchMode?: PoolMatchMode;
   readonly includeSubfolders?: boolean;
   /** Ohne Angabe legt der Dienst einen Pool an, keine Spalte. */
   readonly placement?: PoolPlacement;
   readonly position?: number;
   readonly rule: readonly PoolRuleTerm[];
+  /**
+   * Die vier Achsen aus T-076 sind alle weglassbar und stehen dann neutral.
+   * Ein Aufrufer aus der Zeit davor legt damit dieselbe Regel an wie zuvor.
+   */
+  readonly excludedTags?: readonly PoolRuleTerm[];
+  readonly statusIds?: readonly Id[];
+  readonly completion?: PoolCompletionFilter;
+  readonly exportState?: PoolExportFilter;
 }
 
 /**
@@ -278,7 +591,7 @@ export type PoolSurfaceQuery = "pool" | "board" | "all";
 export interface BoardColumnView {
   readonly column: Pool;
   readonly todos: readonly Todo[];
-  readonly nextCursor: string | null;
+  readonly nextCursor: PageCursor | null;
   readonly total: number;
 }
 
@@ -319,7 +632,7 @@ export interface TimeEntry {
   readonly endedAt: Timestamp;
   readonly durationSeconds: number;
   /** Leistung (A-7.3, E-016). Geht in die Abrechnung. */
-  readonly note: string;
+  readonly note: ForeignText;
   readonly exportStatus: ExportStatus;
   /**
    * `exportStatus === "open" && exportCount > 0` ist „schon einmal exportiert“
@@ -332,18 +645,58 @@ export interface TimeEntry {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * Die Antwort auf `POST /time-entries` — die Buchung **von Hand** (O-V,
+ * Nachtrag zu E-061).
+ *
+ * Flach wie {@link TodoDoneResult}: die Buchung selbst, `poolMovement` als Feld
+ * daneben. Dieselbe Gestalt an allen Routen, die eine Bewegung melden, ist die
+ * eine Form aus E-061 Punkt 3.
+ *
+ * **Warum die Buchung von Hand überhaupt etwas bewegt.** Sie kann die *erste*
+ * Buchung eines Todos sein und setzt damit „hat offene Buchungen" von falsch
+ * auf wahr. Ein Todo ohne jede Buchung erfüllt seit E-055 keine Regel mit
+ * `exportState: 'open'`; mit dieser Buchung erfüllt es sie. Der Dienst rechnet
+ * die Bewegung deshalb nach derselben Rechnung wie der Timerstopp
+ * (`closedEntryMovementStates`) und meldet sie mit demselben Anlaß `'booking'`.
+ *
+ * **Nicht `bookingMovementStates`** — die Buchung von Hand hebt „Erledigt"
+ * nicht auf (A-2.5 spricht vom **Starten** der Zeiterfassung, nicht vom
+ * Nachtragen eines Zeitraums). Mit `BOOKING_EFFECT` meldete diese Route für ein
+ * erledigtes Todo ein Verlassen jeder Spalte `completion: 'done'`, das nicht
+ * stattfindet: Der Benutzer läse „ist aus „Erledigt“ verschwunden." und sähe
+ * die Karte danebenstehen. Der Nachtrag zu E-061 nannte in seiner ersten
+ * Fassung `bookingMovementStates`; T-107 hat das gemeldet und richtiggestellt,
+ * und dieser Kommentar zog bis T-118 nach.
+ *
+ * **`PoolMovement | null` und nichts anderes.** Kein optionales Feld und kein
+ * `?? null` an der Aufrufstelle: Ein Feld, das fehlen *darf*, zwingt jede
+ * Aufrufstelle zu einer Fallunterscheidung vor der eigentlichen, und ein
+ * `?? null` verschwiege den Tag, an dem der Dienst es nicht mehr liefert.
+ * `null` heißt hier wie überall „hier war keine Bewegung möglich" — nicht
+ * „nicht geliefert".
+ *
+ * **Der `PATCH` hat kein Gegenstück.** Ein geänderter Zeitraum bewegt nichts:
+ * Die Buchung war schon da, „hat offene Buchungen" stand bereits (O-V,
+ * letzter Satz). `updateTimeEntry` liefert deshalb weiter die nackte
+ * {@link TimeEntry}.
+ */
+export interface CreateTimeEntryResult extends TimeEntry {
+  readonly poolMovement: PoolMovement | null;
+}
+
 /** Eine laufende Buchung: kein Ende, keine Dauer, nie exportierbar. */
 export interface RunningTimeEntry {
   readonly id: Id;
   readonly todoId: Id;
   readonly startedAt: Timestamp;
-  readonly note: string;
+  readonly note: ForeignText;
   readonly source: "timer";
 }
 
 export interface RunningTimerView {
   readonly entry: RunningTimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   /** Sekunden seit dem Start, zum Zeitpunkt der Anfrage. Vom Dienst gerechnet. */
   readonly elapsedSeconds: number;
 }
@@ -359,20 +712,121 @@ export type StartTimerResult =
       readonly stopped: TimeEntry | null;
       /** A-2.5: war das Todo erledigt und ist durch den Start wieder aktiv? */
       readonly doneCleared: boolean;
+      /**
+       * Wie dieser Start das Todo durch die Pools bewegt — oder `null` (E-058).
+       *
+       * `doneCleared` sagt, **was** geschehen ist; dieses Feld sagt, **wo** es
+       * sichtbar wird. Der Dienst rechnet es in genau zwei Fällen: Der Start
+       * hat „Erledigt" aufgehoben, oder die erste abgeschlossene Buchung ist
+       * entstanden. Sonst `null` — und `null` heißt „hier war keine Bewegung
+       * möglich", nicht „es hat sich nichts geändert".
+       *
+       * Die Oberfläche zählt die Namen **nicht** selbst auf. Den Satz bildet
+       * `poolMovementSentence` in `@takt/domain`, und zwar denselben, den der
+       * Aufgabenbereich des Add-ins zeigt. Bis T-094 fragte die Oberfläche
+       * stattdessen je Pool `/pools/{id}/todos` ab und setzte den Satz selbst
+       * zusammen — eine zweite Auskunft über dieselbe Handlung, die `leaves`
+       * nicht kannte und deshalb nur die halbe Bewegung berichtete.
+       *
+       * **Nicht mehr nur an dieser Antwort** (berichtigt in T-097). Seit T-093
+       * liefern `POST /timer/stop` und `POST /timer/orphaned/resolve` dasselbe
+       * Feld, mit festem Anlaß `'booking'` (E-058 Punkt 6) — siehe
+       * `StopTimerResult` weiter unten. Der Satz, den der Start hier bildet,
+       * und der Satz nach dem Stopp kommen aus derselben Funktion.
+       */
+      readonly poolMovement: PoolMovement | null;
     }
   | {
       readonly kind: "confirmation_required";
       readonly running: RunningTimeEntry;
-      readonly runningTodoTitle: string;
+      readonly runningTodoTitle: ForeignText;
     };
 
+/**
+ * Der Ausgang eines Stopps — und was die Buchung bewegt hat (E-058 Punkt 6).
+ *
+ * `POST /timer/stop`. Bis T-102 beantwortete dieser Typ auch
+ * `POST /timer/orphaned/resolve`; seit O-R unterscheiden sich die beiden in der
+ * Angabe, **warum** nichts gebucht wurde, und stehen deshalb getrennt (siehe
+ * {@link ResolveOrphanedTimerResult}). Der gebuchte Zweig ist derselbe
+ * geblieben und steht einmal.
+ *
+ * Beide tragen `poolMovement` **in beiden Zweigen**, und der Anlaß ist stets
+ * `'booking'`. Ein Stopp hebt kein „Erledigt" auf — das tut allein der Start
+ * (A-2.5) —, also gibt es hier keinen Fall `'reopen'`.
+ *
+ * **Warum das Feld auch im verworfenen Zweig steht.** Ein Stopp unter der
+ * Mindestdauer erzeugt keine Buchung (A-6.2) und bewegt deshalb nichts; der
+ * Dienst antwortet dort mit festem `null` (`usecases/timer.ts`,
+ * `stopTimer`/`resolveOrphanedTimer`), ohne eine einzige Regel aufzulösen. Das
+ * Feld fehlt trotzdem nicht: Ein Feld, das je nach `kind` da ist oder nicht,
+ * zwingt jede Aufrufstelle zu einer Fallunterscheidung, bevor sie die
+ * eigentliche treffen kann. Der Typ `null` — und nicht `PoolMovement | null` —
+ * sagt dem Übersetzer, daß dieser Zweig nichts zu erzählen hat.
+ *
+ * **`null` heißt: keine Fläche.** `poolMovementSentence(movement, 'past',
+ * 'booking')` gibt für eine Bewegung ohne Zu- und Abgang ebenfalls `null`
+ * zurück; die Aufrufstelle läßt die Zeile dann **ganz** weg statt sie mit
+ * `?? ""` zu füllen (`TimerContext.performStop`).
+ */
 export type StopTimerResult =
-  | { readonly kind: "recorded"; readonly entry: TimeEntry }
-  | { readonly kind: "discarded"; readonly reason: "timer_too_short" };
+  | RecordedStop
+  | {
+      readonly kind: "discarded";
+      /**
+       * Der einzige Grund, aus dem **dieser** Aufruf nichts bucht (A-6.2).
+       *
+       * `POST /timer/stop` kennt kein Verwerfen auf Wunsch: Wer stoppt, will
+       * buchen. Die zweite Route unten kennt beides — siehe
+       * {@link ResolveOrphanedTimerResult}.
+       */
+      readonly reason: "timer_too_short";
+      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
+      readonly poolMovement: null;
+    };
+
+/** Der gebuchte Ausgang. Wortgleich an beiden Routen und deshalb einmal. */
+interface RecordedStop {
+  readonly kind: "recorded";
+  readonly entry: TimeEntry;
+  /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
+  readonly poolMovement: PoolMovement | null;
+}
+
+/**
+ * Der Ausgang von `POST /timer/orphaned/resolve` (E-036, O-R).
+ *
+ * **Ein eigener Typ und nicht mehr `StopTimerResult`** (T-102, Befund 2 aus
+ * R-1a). Die verworfene Hälfte unterscheidet sich, und zwar in der einen
+ * Angabe, die der Benutzer zu lesen bekommt:
+ *
+ *  - `'orphan_discarded'` — **er hat verworfen.** Die Antwort auf die Frage aus
+ *    E-036 lautete „Verwerfen"; es wurde nichts gebucht, weil er es so wollte.
+ *  - `'timer_too_short'` — **es gab nichts zu buchen.** Er hat „bis zum letzten
+ *    Lebenszeichen" gewählt, und zwischen Start und Lebenszeichen liegt weniger
+ *    als eine Sekunde (A-6.2) — oder es gibt gar kein Lebenszeichen.
+ *
+ * Bis T-101 gab der Dienst in beiden Fällen `'timer_too_short'` aus und
+ * überschrieb damit die Entscheidung der Domäne (`decideOrphanedTimer` liefert
+ * `'orphan_discarded'`). Die Oberfläche sagte deshalb an beiden Ausgängen
+ * dasselbe. Sie unterscheidet jetzt; welchen Satz sie je Grund zeigt, steht in
+ * `TimerContext.confirmOrphan`.
+ *
+ * `poolMovement` ist in beiden verworfenen Fällen fest `null` — es entsteht
+ * keine Buchung, und der Dienst löst dafür nicht einmal eine Regel auf.
+ */
+export type ResolveOrphanedTimerResult =
+  | RecordedStop
+  | {
+      readonly kind: "discarded";
+      readonly reason: "timer_too_short" | "orphan_discarded";
+      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
+      readonly poolMovement: null;
+    };
 
 export interface OrphanedTimerView {
   readonly running: RunningTimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly heartbeatAt: Timestamp | null;
   /** Was gebucht würde, wenn „bis zum Lebenszeichen“ gewählt wird. */
   readonly bookableSeconds: number;
@@ -395,7 +849,7 @@ export interface TimeEntryFilter {
 
 export interface ExportTemplate {
   readonly id: Id;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly isBuiltin: boolean;
   readonly definition: unknown;
   readonly createdAt: Timestamp;
@@ -443,32 +897,32 @@ export type ExportConditionOperator = string;
 
 /** Fachliche Ebene, aus der eine Quelle stammt. Nur zur Gliederung der Liste. */
 export interface ExportSourceGroupInfo {
-  readonly id: string;
-  readonly label: string;
+  readonly id: TechnicalKey;
+  readonly label: ServiceText;
   /** Warum diese Ebene existiert. Steht als Erklärung über der Gruppe. */
-  readonly hint: string;
+  readonly hint: ServiceText;
 }
 
 export interface ExportSourceInfo {
   /** Der Wert, der in `definition.fields[].source` steht. Englisch (E-015). */
   readonly path: ExportSourcePath;
-  readonly group: string;
+  readonly group: TechnicalKey;
   /** Deutsche Beschriftung in der Auswahlliste. */
-  readonly label: string;
+  readonly label: ServiceText;
   /** Was diese Quelle liefert, in einem Satz. */
-  readonly description: string;
+  readonly description: ServiceText;
 }
 
 export interface ExportTransformationInfo {
   readonly value: ExportTransformation;
-  readonly label: string;
+  readonly label: ServiceText;
   /** Was die Transformation mit dem Wert macht, in einem Satz. */
-  readonly effect: string;
+  readonly effect: ServiceText;
 }
 
 export interface ExportConditionOperatorInfo {
   readonly value: ExportConditionOperator;
-  readonly label: string;
+  readonly label: ServiceText;
 }
 
 export interface ExportSourceCatalog {
@@ -484,11 +938,11 @@ export interface ExportSourceCatalog {
    * Wer die Liste ausliefert, liefert auch die Begründung dafür, was nicht
    * darauf steht.
    */
-  readonly noteBoundaryHint: string;
+  readonly noteBoundaryHint: ServiceText;
 }
 
 /** Ein Wert in einer Exportzeile. */
-export type ExportValue = string | number | null;
+export type ExportValue = ForeignText | number | null;
 
 /** Eine Exportzeile: genau die Felder der Vorlage, in ihrer Reihenfolge. */
 export type ExportRow = Readonly<Record<string, ExportValue>>;
@@ -555,7 +1009,7 @@ export interface ExportPreview {
   /** `null` im Entwurfsfall — eine ungespeicherte Vorlage hat keine Kennung. */
   readonly templateId: Id | null;
   /** `null` im Entwurfsfall. */
-  readonly templateName: string | null;
+  readonly templateName: ForeignText | null;
 }
 
 export interface ExportRunGroup {
@@ -571,13 +1025,13 @@ export interface ExportRunGroup {
 export interface ExportRun {
   readonly id: Id;
   readonly templateId: Id;
-  readonly filePath: string;
-  readonly fileSha256: string;
+  readonly filePath: FileSystemPath;
+  readonly fileSha256: TechnicalKey;
   readonly bytes: number;
   readonly entryCount: number;
   readonly totalQuarters: number;
   readonly roundingMode: RoundingMode;
-  readonly windowsUser?: string;
+  readonly windowsUser?: ForeignText;
   /**
    * **Vom Dienst heute nicht geliefert.** Die Beschreibung führt das Feld, die
    * Antwort von `POST /export/runs` enthält es nicht (nachgemessen gegen den
@@ -606,8 +1060,8 @@ export interface ExportAuditEntry {
   readonly newStatus: ExportStatus;
   readonly exportRunId: Id | null;
   readonly exportRunGroupId: Id | null;
-  readonly actor: string;
-  readonly reason: string;
+  readonly actor: ForeignText;
+  readonly reason: ForeignText;
   readonly occurredAt: Timestamp;
 }
 
@@ -617,19 +1071,19 @@ export interface ExportAuditEntry {
 
 export interface AppSettings {
   /** `null` heißt: noch nicht gewählt, Export nicht möglich (E-011). */
-  readonly exportDirectory: string | null;
+  readonly exportDirectory: FileSystemPath | null;
   readonly activeExportTemplateId: Id | null;
   readonly roundingMode: RoundingMode;
-  readonly locale: string;
+  readonly locale: TechnicalKey;
   readonly theme: ThemeSetting;
   readonly updatedAt: Timestamp;
 }
 
 export interface AppSettingsUpdate {
-  readonly exportDirectory?: string | null;
+  readonly exportDirectory?: FileSystemPath | null;
   readonly activeExportTemplateId?: Id | null;
   readonly roundingMode?: RoundingMode;
-  readonly locale?: string;
+  readonly locale?: TechnicalKey;
   readonly theme?: ThemeSetting;
 }
 
@@ -717,7 +1171,7 @@ export interface SettingsView {
    * er nur in `ExportRun.windowsUser` — also erst **nach** dem ersten Export,
    * im Protokoll. Der Moment, in dem man ihn wissen will, liegt davor.
    */
-  readonly windowsUser: string;
+  readonly windowsUser: ForeignText;
   /**
    * Wo der Bestand liegt (E-018, R-13). `null` bei einem Bestand im
    * Arbeitsspeicher — im Prüfbetrieb und auf der Musterseite.
@@ -739,7 +1193,7 @@ export interface SettingsView {
    * als beim Exportordner belegt der Dienst zu dieser Datei **keine** Merkmale;
    * kein Befund heißt deshalb nur „im Pfad steht nichts".
    */
-  readonly databasePath: string | null;
+  readonly databasePath: FileSystemPath | null;
 }
 
 /**
@@ -786,7 +1240,7 @@ export interface TokenStatus {
 }
 
 export interface IssuedToken {
-  readonly token: string;
+  readonly token: SecretText;
   readonly issuedAt: Timestamp;
   readonly generation: number;
 }

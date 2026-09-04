@@ -201,6 +201,11 @@ export async function ensureRuntime(triple, cacheDir, log) {
     if (extract.status !== 0) {
       throw new RuntimeError(`Entpacken ist fehlgeschlagen:\n${extract.stderr || extract.stdout}`);
     }
+    // `archive.member` ist ein **Archivmitglied** und kein Pfad des
+    // Betriebssystems: In tar wie in ZIP trennt dort immer der Schrägstrich,
+    // auch im Windows-Archiv. Deshalb ist `split('/')` hier richtig und
+    // `sep` wäre falsch (T-098). Erst `join` macht daraus einen Pfad — und
+    // normalisiert die Trenner dabei selbst.
     renameSync(join(cacheDir, archive.member), runtimePath);
     rmSync(join(cacheDir, archive.member.split('/')[0]), { recursive: true, force: true });
   }

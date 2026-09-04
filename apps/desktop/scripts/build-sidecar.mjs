@@ -57,6 +57,7 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
+import { isInside } from './paths.mjs';
 import { NODE_VERSION, RuntimeError, ensureRuntime } from './sidecar-runtime.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -243,12 +244,24 @@ if (stray.length > 0) {
  * tatsächlich mit im Bündel, sobald der Dienst sie benutzt?
  *
  * Die erste Prüfung fängt „extern geblieben". Sie fängt **nicht** den Fall,
- * dass ein Paket nur Typen liefert und zur Laufzeit ganz verschwindet — das
- * ist heute bei `@takt/storage` so und in Ordnung. Deshalb wird hier nur
- * berichtet, nicht abgebrochen.
+ * dass ein Paket nur Typen liefert und zur Laufzeit ganz verschwindet. Das
+ * wäre kein Fehler, sondern eine Aussage über den Zuschnitt der Pakete —
+ * deshalb wird hier nur berichtet und nur für `@takt/local-api` abgebrochen.
+ *
+ * Gemessen unter Linux am 2026-09-04: `@takt/local-api` 40, `@takt/domain` 9,
+ * `@takt/storage` 19 Dateien. Alle drei sind also im Bündel. Steht hier eine
+ * Null, ist das ab jetzt eine Aussage über den Quelltext und nicht mehr über
+ * das Trennzeichen der Plattform (T-098).
  */
-// esbuild meldet Eingabepfade **relativ zum Arbeitsverzeichnis**. Erst absolut
-// gemacht lassen sie sich gegen die Ordner des Arbeitsbereichs prüfen.
+// esbuild meldet Eingabepfade **relativ zum Arbeitsverzeichnis** und immer mit
+// Schrägstrichen. Erst absolut gemacht lassen sie sich gegen die Ordner des
+// Arbeitsbereichs prüfen.
+//
+// Verglichen wird über `isInside` und nicht über `startsWith(folder + '/')`
+// (T-098): Unter Windows trägt `folder` Rückstriche, und der Vergleich gegen
+// einen Schrägstrich traf dort nie. Der Windows-Lauf des Auslieferungsablaufs
+// zählte deshalb für alle drei Pakete null Dateien und brach unten mit „Der
+// lokale Dienst selbst ist nicht im Bündel" ab, obwohl das Bündel stimmte.
 const inputs = Object.keys(result.metafile.inputs).map((input) => resolve(process.cwd(), input));
 const workspaceHits = new Map();
 for (const [name, folder] of [
@@ -256,7 +269,7 @@ for (const [name, folder] of [
   ['@takt/domain', join(repoRoot, 'packages', 'domain')],
   ['@takt/storage', join(repoRoot, 'packages', 'storage')],
 ]) {
-  workspaceHits.set(name, inputs.filter((input) => input.startsWith(`${folder}/`)).length);
+  workspaceHits.set(name, inputs.filter((input) => isInside(folder, input)).length);
 }
 for (const [name, count] of workspaceHits) {
   const mark = count > 0 ? 'im Bündel' : 'zur Laufzeit nicht benutzt (heute nur Typen)';

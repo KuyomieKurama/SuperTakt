@@ -8,6 +8,7 @@ import {
 import type { ExportAuditEvent } from "../lib/labels";
 import { EXPORT_STATE } from "./ExportStatus";
 import { Icon } from "./Icon";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — das Exportprotokoll auf dem Bildschirm (R-10, E-012, E-047, C-01).
@@ -95,7 +96,7 @@ export function ExportAuditList({
             </span>
             {!showBooking || model.booking === null ? null : onOpenTodo === undefined ? (
               <span className="auditrow__open auditrow__open--static truncate">
-                {model.booking.todoTitle}
+                <Foreign value={model.booking.todoTitle} />
               </span>
             ) : (
               <button
@@ -106,7 +107,9 @@ export function ExportAuditList({
                   if (booking !== null) onOpenTodo(booking.todoId);
                 }}
               >
-                <span className="auditrow__open-title truncate">{model.booking.todoTitle}</span>
+                <span className="auditrow__open-title truncate">
+                  <Foreign value={model.booking.todoTitle} />
+                </span>
                 <Icon name="arrow-up-right" size={13} />
               </button>
             )}
@@ -127,7 +130,9 @@ export function ExportAuditList({
                   {model.booking.callNumber === null ? null : (
                     <>
                       <span aria-hidden> · </span>
-                      <span className="mono">Call {model.booking.callNumber}</span>
+                      <span className="mono">
+                        Call <Foreign value={model.booking.callNumber} />
+                      </span>
                     </>
                   )}
                 </>
@@ -152,7 +157,7 @@ export function ExportAuditList({
               <>
                 <Icon name="download" size={13} />
                 <span className="auditrow__file mono truncate" title={model.run.filePath}>
-                  {model.run.fileName}
+                  <Foreign value={model.run.fileName} />
                 </span>
                 <span className="auditrow__written">geschrieben {model.run.writtenAt}</span>
               </>
@@ -169,13 +174,15 @@ export function ExportAuditList({
           ) : (
             <p className="auditrow__reason">
               <span className="auditrow__reason-label">Begründung</span>
-              <span className="auditrow__reason-text">{model.reason}</span>
+              <span className="auditrow__reason-text">
+                <Foreign value={model.reason} />
+              </span>
             </p>
           )}
 
           <p className="auditrow__actor">
             <span className="visually-hidden">Ausgelöst von: </span>
-            {model.actor}
+            <Foreign value={model.actor} />
           </p>
         </li>
       ))}

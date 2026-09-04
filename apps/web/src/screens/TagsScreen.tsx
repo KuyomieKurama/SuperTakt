@@ -11,23 +11,35 @@ import {
   updatePool,
   updateTag,
 } from "../api/endpoints";
-import type { Id, Pool, PoolPlacement, TagFolderNode, TagTree as TagTreeData } from "../api/types";
+import type {
+  ForeignText,
+  Id,
+  Pool,
+  PoolPlacement,
+  TagFolderNode,
+  TagTree as TagTreeData,
+} from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Select } from "../components/Select";
 import { FormDialog, TextField } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { TagChip, TagPath } from "../components/Tag";
+import { RuleSummary } from "../components/RuleSummary";
+import { TagPath } from "../components/Tag";
 import { TagTree, type TagTreeNode } from "../components/TagTree";
 import { useRefresh } from "../app/RefreshContext";
 import { navigate } from "../app/router";
-import { useStructure } from "../app/StructureContext";
+import { useRuleLookup, useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
+import { errorMessageWithRules } from "../lib/errorText";
 import { flatFolders } from "../lib/folderPaths";
-import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../lib/labels";
+import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-08 (Tags und Ordner) und S-11 (Pools).
@@ -44,10 +56,15 @@ import { PoolFormDialog } from "./PoolFormDialog";
  * ## Pools sind Regeln, keine Zuordnungen (A-3.4)
  *
  * Ein Pool speichert nie, welche Todos in ihm liegen. Er speichert eine Regel
- * über Tags und Ordner, und die Zugehörigkeit wird bei jeder Abfrage neu
- * bestimmt. Genau deshalb funktioniert A-2.5 ohne Zusatzschritt: Ein Todo
- * kehrt in seine Pools zurück, weil es das nie verlassen hat — es war nur
- * ausgeblendet.
+ * — seit E-055 über fünf Achsen: erforderliche Tags, ausgeschlossene Tags,
+ * Status, „Erledigt“ und Exportstatus —, und die Zugehörigkeit wird bei jeder
+ * Abfrage neu bestimmt. Genau deshalb funktioniert A-2.5 ohne Zusatzschritt:
+ * Ein Todo kehrt in seine Pools zurück, weil es das nie verlassen hat — es war
+ * nur ausgeblendet.
+ *
+ * Bis T-108 stand hier „eine Regel über Tags und Ordner". Das war die halbe
+ * Wahrheit und der Grund für W-13: Drei der fünf Achsen ändern sich, ohne dass
+ * jemand ein Tag anfasst.
  */
 
 export function TagsScreen() {
@@ -58,6 +75,11 @@ export function TagsScreen() {
       <ScreenHeader
         title="Tags"
         lead="Tags, Ordner und die Regeln darüber. Dieselbe Regel kann ein Pool sein, eine Spalte des Kanban-Boards oder beides (E-054)."
+        /*
+          Diese Ansicht liest allein aus der Struktur; ihr Nachladen ist
+          `structure.reload()` (W-12).
+        */
+        refreshing={structure.state.status === "ready" && structure.state.refreshing}
       />
 
       <AsyncBoundary
@@ -82,8 +104,18 @@ export function TagsScreen() {
 /* ==================================================================== */
 
 type Selection =
-  | { readonly kind: "folder"; readonly id: Id; readonly name: string; readonly parentId: Id | null }
-  | { readonly kind: "tag"; readonly id: Id; readonly name: string; readonly folderId: Id | null }
+  | {
+      readonly kind: "folder";
+      readonly id: Id;
+      readonly name: ForeignText;
+      readonly parentId: Id | null;
+    }
+  | {
+      readonly kind: "tag";
+      readonly id: Id;
+      readonly name: ForeignText;
+      readonly folderId: Id | null;
+    }
   | null;
 
 function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
@@ -156,7 +188,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
           <EmptyState
             icon="tag"
             title="Noch kein Tag"
-            description="Tags ordnen Todos. Aus ihnen leiten sich die Pools ab — ohne Tag passt keine Poolregel."
+            description="Tags ordnen Todos, und die meisten Regeln fragen nach ihnen. Ohne ein einziges Tag bleibt von einer Regel nur, was sie über Status, „Erledigt“ und den Exportstatus sagt."
             action={
               <Button
                 variant="primary"
@@ -214,8 +246,8 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   const place =
                     targetFolderId === null
                       ? "auf der Wurzelebene"
-                      : `in „${folderName(tree, targetFolderId)}“`;
-                  toasts.success(`„${node.label}“ liegt jetzt ${place}.`);
+                      : `in ${quotedName(folderName(tree, targetFolderId))}`;
+                  toasts.success(`${quotedName(node.label)} liegt jetzt ${place}.`);
                 });
               }}
             />
@@ -230,7 +262,9 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   <p className="tags-detail__kind overline">
                     {selected.kind === "folder" ? "Ordner" : "Tag"}
                   </p>
-                  <h4 className="tags-detail__name">{selected.name}</h4>
+                  <h4 className="tags-detail__name">
+                    <Foreign value={selected.name} />
+                  </h4>
                   <p className="tags-detail__path">
                     <TagPath segments={pathOf(tree, selected.id)} />
                   </p>
@@ -407,21 +441,73 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         />
       </FormDialog>
 
+      {/*
+        Nach einer Absage des Dienstes ist das hier kein Bestätigungsdialog
+        mehr, sondern eine Auskunft — und er sagt das auch (T-097 Frage 1,
+        R-2a Abschnitt 5.2).
+
+        Bis T-102 wechselte allein der Hinweistext, während der Titel weiter
+        „Ordner löschen?" fragte und die Hauptaktion weiter „Löschen" hieß: eine
+        Frage, die schon beantwortet ist, und als Antwort darauf genau die
+        Handlung, die eben gescheitert ist. `StatusSettings` macht es an
+        derselben Stelle seit T-097 richtig; zwei Muster für denselben Vorgang
+        lehren, daß eines davon keine Bedeutung hat.
+
+        Für Vorlesehilfen ist der Wechsel der **einzige** Weg, von der Absage
+        zu erfahren (SC 4.1.3): Der Hinweistext liegt in `aria-describedby` und
+        ist keine Statusmeldung; der Knopf dagegen trägt den Fokus, und ein
+        Namenswechsel unter dem Fokus wird angesagt.
+      */}
       <ConfirmDialog
         open={pendingDelete !== null}
         tone="danger"
-        title={pendingDelete?.kind === "folder" ? "Ordner löschen?" : "Tag löschen?"}
-        description={pendingDelete === null ? "" : `„${pendingDelete.name}“ wird entfernt.`}
-        consequence={
-          deleteError ??
-          (pendingDelete?.kind === "folder"
-            ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht. Räumen Sie ihn vorher aus."
-            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht. Poolregeln, die ihn nennen, verlören sonst still ihre Bedeutung.")
+        title={
+          deleteError !== null
+            ? pendingDelete?.kind === "folder"
+              ? "Der Ordner wurde nicht gelöscht"
+              : "Das Tag wurde nicht gelöscht"
+            : pendingDelete?.kind === "folder"
+              ? "Ordner löschen?"
+              : "Tag löschen?"
         }
-        confirmLabel="Löschen"
+        description={
+          pendingDelete === null
+            ? ""
+            : deleteError === null
+              ? `${quotedName(pendingDelete.name)} wird entfernt.`
+              : `${quotedName(pendingDelete.name)} gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+        }
+        /*
+          Vorwarnung und Absage sind seit T-118 zwei Eigenschaften (B-5 aus
+          T-116, SC 4.1.3).
+
+          Bis dahin trugen beide dieselbe: `deleteError ?? Vorwarnung`. Das ist
+          sichtbar richtig und für eine Vorlesehilfe stumm — die Absage lag in
+          `aria-describedby`, und eine Beschreibung wird nicht erneut
+          vorgelesen, wenn sie sich ändert. Gehört hat sie nur den neuen
+          Knopfnamen „Erneut versuchen" und kein Wort davon, **warum**, obwohl
+          genau dieser Satz seit T-097 die Regeln beim Namen nennt.
+
+          Die Vorwarnung sagt, woran das Löschen scheitern kann; seit T-089 sind
+          das je zwei Gründe, der Inhalt und die Regel.
+        */
+        consequence={
+          pendingDelete?.kind === "folder"
+            ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht — und ein Ordner, den eine Regel nennt, ebenso wenig. Räumen Sie ihn vorher aus oder nehmen Sie ihn aus der Regel heraus."
+            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung."
+        }
+        {...(deleteError === null ? {} : { refusal: deleteError })}
+        confirmLabel={deleteError === null ? "Löschen" : "Erneut versuchen"}
+        cancelLabel={deleteError === null ? "Abbrechen" : "Schließen"}
         onConfirm={() => {
           const target = pendingDelete;
           if (target === null) return;
+          /*
+            „Erneut versuchen" beginnt von vorn: Bliebe die alte Meldung
+            stehen, zeigte der Dialog beim zweiten Fehlschlag nicht, daß
+            überhaupt etwas geschehen ist.
+          */
+          setDeleteError(null);
           void (target.kind === "tag" ? deleteTag(target.id) : deleteTagFolder(target.id))
             .then(() => {
               setPendingDelete(null);
@@ -430,12 +516,21 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               toasts.success("Gelöscht.");
             })
             .catch((cause: unknown) => {
-              setDeleteError(
-                cause instanceof Error ? cause.message : "Das ließ sich nicht löschen.",
-              );
+              /*
+                Mit den Regeln beim Namen (T-097). Der Dienst weist ein Tag und
+                einen Ordner mit demselben Schlüssel ab (`tag_in_use`) und legt
+                seit T-089 in `details` ab, **welche** Regeln ihn verwenden.
+                Bis T-097 stand hier nur `cause.message`, und die Namen fielen
+                unter den Tisch — bei zwanzig Regeln ist das der Unterschied
+                zwischen einer Auskunft und einer Suche.
+              */
+              setDeleteError(errorMessageWithRules(cause));
             });
         }}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => {
+          setPendingDelete(null);
+          setDeleteError(null);
+        }}
       />
     </>
   );
@@ -453,20 +548,45 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   const [form, setForm] = useState<{ readonly pool?: Pool } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Pool | null>(null);
 
-  const folders = useMemo(
-    () => (structure.state.status === "ready" ? flatFolders(structure.state.value.tagTree) : []),
-    [structure.state],
-  );
+  const lookup = useRuleLookup();
 
-  const setPlacement = (pool: Pool, placement: PoolPlacement): void => {
+  /**
+   * Den Anzeigeort einer Regel ändern — mit demselben Rückweg wie auf dem
+   * Board (S-5 aus R-2).
+   *
+   * Bis T-091 war „Vom Board nehmen" hier eine Sofortaktion ohne Rückweg und
+   * auf dem Board dieselbe Handlung hinter einem Bestätigungsdialog. Zwei
+   * Schutzniveaus für dieselbe Handlung lehren, dass eines davon bedeutungslos
+   * ist. Jetzt haben beide Flächen denselben: ein Toast, der sagt, dass nichts
+   * verlorengeht, und einen Knopf, mit dem man es ausprobieren kann.
+   *
+   * **Und seit T-108 denselben Wortlaut** (W-14 aus R-2a). Bis dahin meldete
+   * sich dieselbe Handlung hier als „Anzeigeort geändert." mit der Langform
+   * darunter, auf dem Board als „Spalte vom Board genommen." mit der Kurzform —
+   * und der Rückweg quittierte hier ein zweites Mal mit dem Titel der Handlung
+   * selbst. Wer „Rückgängig" drückte, las denselben Satz wie zuvor und konnte
+   * nicht erkennen, ob etwas geschehen war. Titel und Zeile kommen jetzt aus
+   * `poolPlacementMessage` (`lib/labels.ts`), aus **einem** Aufruf, damit das
+   * Paar nicht wieder auseinanderläuft.
+   */
+  const setPlacement = (pool: Pool, placement: PoolPlacement, restoring = false): void => {
+    const previous = pool.placement;
     void updatePool(pool.id, { placement })
       .then(() => {
         structure.reload();
         bump();
-        toasts.success(
-          "Anzeigeort geändert.",
-          `„${pool.name}“ — Anzeigeort: ${POOL_PLACEMENT_LABEL[placement]}.`,
-        );
+        toasts.show({
+          tone: "success",
+          ...poolPlacementMessage(pool.name, placement, restoring),
+          ...(!restoring && previous !== placement
+            ? {
+                action: {
+                  label: "Rückgängig",
+                  onSelect: () => setPlacement({ ...pool, placement }, previous, true),
+                },
+              }
+            : {}),
+        });
       })
       .catch((cause: unknown) =>
         toasts.failure("Der Anzeigeort ließ sich nicht ändern", errorMessage(cause)),
@@ -476,8 +596,8 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   return (
     <>
       <Card
-        title="Regeln über Tags"
-        description="Eine Regel bündelt Todos über ihre Tags. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
+        title="Regeln"
+        description="Eine Regel bündelt Todos — über Tags, Status, „Erledigt“ und den Exportstatus. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
         actions={
           <Button size="sm" variant="primary" iconStart="plus" onClick={() => setForm({})}>
             Neue Regel
@@ -489,7 +609,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
             compact
             icon="filter"
             title="Noch keine Regel"
-            description="Eine Regel bündelt Todos über ihre Tags — etwa alles unter dem Ordner „Kunden“. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
+            description="Eine Regel bündelt Todos — etwa alles unter dem Ordner „Kunden“ oder alles Erledigte, das noch nicht abgerechnet ist. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
             action={
               <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
                 Erste Regel anlegen
@@ -498,50 +618,38 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
           />
         ) : (
           <ul className="pool-list">
-            {rules.map((pool) => (
+            {rules.map((pool) => {
+              const poolDescription = describeRule(axesOf(pool), lookup);
+
+              return (
               <li key={pool.id} className="pool-row">
                 <div className="grow">
                   <p className="pool-row__name">
-                    {pool.name}
+                    <Foreign value={pool.name} />
                     <span className={`placement-badge placement-badge--${pool.placement}`}>
                       <Icon name={pool.placement === "pool" ? "filter" : "square"} size={11} />
                       {POOL_PLACEMENT_SHORT[pool.placement]}
                     </span>
                   </p>
-                  <p className="pool-row__rule">
-                    {pool.matchMode === "any" ? "Mindestens einer von" : "Alle von"}:{" "}
-                    {pool.rule.length === 0 ? (
-                      <span className="muted">keine Regel</span>
-                    ) : (
-                      pool.rule.map((term, index) => (
-                        <span key={index} className="pool-row__term">
-                          {term.kind === "tag" ? (
-                            <TagChip
-                              size="sm"
-                              label={structure.tagInfo(term.tagId)?.tag.name ?? "unbekannter Tag"}
-                              {...(structure.tagInfo(term.tagId) === undefined
-                                ? {}
-                                : { path: structure.tagInfo(term.tagId)?.path ?? [] })}
-                            />
-                          ) : (
-                            <span className="pool-row__folder">
-                              <Icon name="folder" size={12} />
-                              {folders.find((folder) => folder.id === term.folderId)?.path.join(" / ") ??
-                                "unbekannter Ordner"}
-                            </span>
-                          )}
-                        </span>
-                      ))
-                    )}
-                    {/* Der Zusatz gilt nur Ordnertermen. Bei einer Regel aus
-                        lauter Tags sagte er etwas ueber eine Bedingung aus,
-                        die es in dieser Regel gar nicht gibt. */}
-                    {pool.rule.some((term) => term.kind === "folder")
-                      ? pool.includeSubfolders
-                        ? " · mit Unterordnern"
-                        : " · ohne Unterordner"
-                      : null}
-                  </p>
+                  {/*
+                    Dieselbe Zusammenfassung wie unter jedem Spaltenkopf des
+                    Boards (T-079). Bis dahin stand hier eine zweite Fassung,
+                    die nur die Tagliste kannte — seit die Regel fuenf Achsen
+                    hat, haette sie eine Regel behauptet, die es nicht gibt.
+
+                    Und derselbe Befund: Ein erforderlicher Ordner ohne Tag ist
+                    ein Einrichtungsfehler und keine Regel ohne Treffer
+                    (E-057, T-083). Er gehoert auf jede Flaeche, die eine Regel
+                    zeigt, nicht nur auf das Board. `reach` kommt aus derselben
+                    Beschreibung, die die Chips zeichnet — der Ordner, den die
+                    Warnung nennt, ist der markierte Chip darueber.
+                  */}
+                  <RuleSummary
+                    className="pool-row__rule"
+                    description={poolDescription}
+                    reach={describeRuleReach(poolDescription, pool.resolved)}
+                    emptyText="Ohne Bedingung — dieser Pool bleibt leer."
+                  />
                 </div>
                 <Button
                   size="sm"
@@ -564,7 +672,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                   iconStart={pool.placement === "pool" ? "plus" : "x"}
                   onClick={() => setPlacement(pool, pool.placement === "pool" ? "both" : "pool")}
                 >
-                  {pool.placement === "pool" ? "Auf das Board" : "Vom Board nehmen"}
+                  {pool.placement === "pool" ? "Als Spalte aufnehmen" : "Vom Board nehmen"}
                 </Button>
                 <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => setForm({ pool })}>
                   Bearbeiten
@@ -578,7 +686,8 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                   Löschen
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -594,7 +703,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
         open={pendingDelete !== null}
         tone="danger"
         title="Regel löschen?"
-        description={pendingDelete === null ? "" : `Die Regel „${pendingDelete.name}“ wird entfernt.`}
+        description={pendingDelete === null ? "" : `Die Regel ${quotedName(pendingDelete.name)} wird entfernt.`}
         consequence={
           pendingDelete !== null && pendingDelete.placement !== "pool"
             ? "An den Todos ändert sich nichts — die Zugehörigkeit war nie gespeichert. Auf dem Board verschwindet die Spalte; ihre Karten stehen weiter in der Todo-Liste."

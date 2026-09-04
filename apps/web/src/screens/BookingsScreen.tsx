@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { listTimeEntries, listTodos, resetExportStatus } from "../api/endpoints";
-import type { ExportStatus, Id, TimeEntry } from "../api/types";
+import type { ExportStatus, ForeignText, Id, TimeEntry } from "../api/types";
 import { exportDisplayState, type ExportDisplayState } from "../components/ExportStatus";
 import {
   BookingTable,
@@ -35,6 +35,8 @@ import {
   NotBilledDialog,
   ResetExportDialog,
 } from "./BookingDialogs";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-06, alle Zeitbuchungen (I-10).
@@ -100,12 +102,12 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
       listTimeEntries(filter, { limit: PAGE_SIZE }),
       listTodos({}, { limit: 200 }),
     ]);
-    const titles = new Map<Id, { title: string; callNumber: string | null }>();
+    const titles = new Map<Id, { title: ForeignText; callNumber: ForeignText | null }>();
     for (const todo of todos.items) {
       titles.set(todo.id, { title: todo.title, callNumber: todo.callNumber });
     }
     return { page, titles, todos: todos.items };
-  }, [filter, version]);
+  }, [filter], [version]);
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];
@@ -356,7 +358,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                     setTodoSearch("");
                   }}
                 >
-                  {todo.title}
+                  <Foreign value={todo.title} />
                 </Button>
               </li>
             ))}
@@ -466,7 +468,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                     x,
                     y,
                     entries: rowMenu(row),
-                    label: `Aktionen für die Buchung ${row.todoTitle}`,
+                    label: `Aktionen für die Buchung ${foreignText(row.todoTitle)}`,
                   })
                 }
               />

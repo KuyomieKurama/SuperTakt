@@ -1,9 +1,10 @@
 /**
  * Takt — der **Status** eines Todos (A-5.3, A-5.4, E-023, E-054).
  *
- * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel über
- * Tags und liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist
- * eine Eigenschaft am Todo und liegt hier. Die Wörter in den Meldungen dieser
+ * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel und
+ * liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist seit
+ * E-055 eine ihrer fünf Achsen und nicht ihr Gegenstück — als Eigenschaft am
+ * Todo liegt er hier. Die Wörter in den Meldungen dieser
  * Datei sagen das seit T-074 auch — bis dahin sprachen fünf von ihnen von einer
  * „Spalte", und die erste davon erscheint im Einstellungsbereich *Status*, zwei
  * Absätze unter der Erklärung, dass beides zweierlei ist.
@@ -27,7 +28,7 @@ import { err, ok, taktError } from '@takt/domain';
 import { integer, text, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
-import { toTodoStatus } from './mappers.ts';
+import { RULE_REFERENCE_PROBE, poolReferences, toTodoStatus } from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 const COLUMNS = 'id, name, position, is_default, color, created_at, updated_at';
@@ -217,7 +218,7 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
     },
 
     /**
-     * Löschen. Drei Gründe, die es verhindern, und alle drei sind fachlich.
+     * Löschen. Vier Gründe, die es verhindern, und alle vier sind fachlich.
      *
      * Der Fremdschlüssel `todo.status_id` steht auf `ON DELETE RESTRICT` und
      * würde den zweiten Fall ohnehin abweisen. Die Prüfung hier davor liefert
@@ -267,6 +268,61 @@ export function createTodoStatusPort(conn: SqlConnection, ids: IdSource): TodoSt
             'Diesen Status tragen noch Todos. Geben Sie ihnen zuerst einen anderen.',
           ),
         );
+      }
+
+      /**
+       * Der vierte Grund, seit T-076: Der Status steht in der Regel eines Pools
+       * oder einer Kanban-Spalte.
+       *
+       * Wörtlich dieselbe Lage wie bei einem Tag in einer Regel (`tag_in_use`,
+       * A-4.5) — und seit Migration 0012 auch dieselbe Bauart: `pool_rule.tag_id`
+       * und `pool_rule.folder_id` stehen seitdem wie `status_id` auf ON DELETE
+       * **RESTRICT**. In allen drei Fällen weist die Datenbank selbst ab, und
+       * diese Prüfung nimmt ihr nur das Wort aus dem Mund: „Diesen Status
+       * benutzt noch eine Regel" statt „FOREIGN KEY constraint failed" — und
+       * sie kann sagen, **welche**.
+       *
+       * Bis T-101 stand hier, `tag_id` sei CASCADE und die Prüfung im
+       * Tag-Adapter deshalb die einzige Wache. Das war seit Migration 0012
+       * falsch (R-1a Befund 3). Für `todo_tag` und `default_tag` gilt es
+       * weiterhin — aber die stehen nicht in dieser Regel.
+       *
+       * Warum nicht kaskadieren: Eine Regel, der ihr letzter Statusterm
+       * stillschweigend entzogen wird, hat danach eine Achse weniger und trifft
+       * mehr Todos als vorher — oder, wenn es ihre einzige Achse war, gar
+       * keine. Beides fiele erst auf, wenn jemand auf das Board sieht und sich
+       * wundert.
+       */
+      /*
+       * Und die Regel steht mit **Namen** in der Antwort (R-3 H-2, T-089).
+       *
+       * Der Satz allein sagt nicht, **welche** Regel. Bei einer Handvoll ist
+       * das gleichgültig, bei zwanzig ist es eine Suche — und eine Sperre, aus
+       * der man nicht herausfindet, ist nur halb reversibel. Die Abfrage hat
+       * die `pool_id` ohnehin in der Hand; sie mitzugeben kostet nichts.
+       *
+       * `ix_pool_rule_status` trägt die Frage. Die Zahl der Namen ist seit
+       * T-101 begrenzt ({@link RULE_REFERENCE_PROBE}, R-3a H-3): Bis dahin
+       * stand hier, `pool_rule` halte „eine Handvoll von Hand eingerichteter
+       * Zeilen" und brauche deshalb keine Obergrenze — das ist die Annahme, die
+       * eine Grenze ersetzen soll, und Annahmen dieser Art altern.
+       */
+      const inRule = conn
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.status_id = ? AND r.role = 'status'
+            ORDER BY p.position, p.name
+            LIMIT ${String(RULE_REFERENCE_PROBE)}`,
+        )
+        .all(id);
+      if (inRule.length > 0) {
+        const { details, notice } = poolReferences(inRule);
+        return err({
+          code: 'status_in_use' as const,
+          message: `Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst heraus.${notice}`,
+          details,
+        });
       }
 
       const outcome = attempt(() => conn.prepare('DELETE FROM todo_status WHERE id = ?').run(id));

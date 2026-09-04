@@ -11,10 +11,11 @@
  *
  * Der Fall, der zählt und der vorher nicht geben konnte: Bei `todo_status`
  * stand eine Karte in genau einer Spalte, weil `status_id` ein einzelner Wert
- * war. Eine Spalte ist jetzt eine Regel über Tags — mehrere Regeln können
- * gleichzeitig zutreffen, und `boardAppearances` ist die einzige Stelle, die
- * das für die Oberfläche zusammenzieht. Eine falsche Umsetzung zeigt hier eine
- * von zwei Arten von Fehlern: Sie zählt zutreffende Regel-**Terme** statt
+ * war. Eine Spalte ist jetzt eine Regel mit fünf Achsen (E-055: erforderliche
+ * Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus) — mehrere Regeln
+ * können gleichzeitig zutreffen, und `boardAppearances` ist die einzige
+ * Stelle, die das für die Oberfläche zusammenzieht. Eine falsche Umsetzung
+ * zeigt hier eine von zwei Arten von Fehlern: Sie zählt zutreffende Regel-**Terme** statt
  * zutreffende **Spalten** und listet dieselbe Spalte mehrfach, sobald eine
  * Karte über mehr als ein Tag derselben Regel hineinpasst.
  *
@@ -57,16 +58,19 @@ describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig 
       columnId: poolId('col-beratung'),
       ruleTagIds: [tagId('beratung')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const columnMandant: BoardColumnRule = {
       columnId: poolId('col-mandant'),
       ruleTagIds: [tagId('mandant-a'), tagId('mandant-b')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const columnRueckfrage: BoardColumnRule = {
       columnId: poolId('col-rueckfrage'),
       ruleTagIds: [tagId('rueckfrage')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const columns = [columnBeratung, columnMandant, columnRueckfrage];
 
@@ -88,11 +92,13 @@ describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig 
       columnId: poolId('col-beratung'),
       ruleTagIds: [tagId('beratung')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const columnRueckfrage: BoardColumnRule = {
       columnId: poolId('col-rueckfrage'),
       ruleTagIds: [tagId('rueckfrage')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
 
     const card: BoardCard = { todoId: todoId('todo-2'), tagIds: [tagId('beratung')] };
@@ -112,16 +118,19 @@ describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig 
       columnId: poolId('col-a'),
       ruleTagIds: [tagId('x')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const second: BoardColumnRule = {
       columnId: poolId('col-b'),
       ruleTagIds: [tagId('y')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const third: BoardColumnRule = {
       columnId: poolId('col-c'),
       ruleTagIds: [tagId('z')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
 
     const card: BoardCard = { todoId: todoId('todo-3'), tagIds: [tagId('z'), tagId('x'), tagId('y')] };
@@ -140,11 +149,12 @@ describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig 
 
 describe('boardAppearances — eine Spalte ohne Regel zeigt nichts, nicht alles (T-009, A-3.4)', () => {
   it('eine leere Regel im Modus "any" trifft keine Karte', () => {
-    const emptyColumn: BoardColumnRule = { columnId: poolId('col-leer'), ruleTagIds: [], matchMode: 'any' };
+    const emptyColumn: BoardColumnRule = { columnId: poolId('col-leer'), ruleTagIds: [], matchMode: 'any', unresolvedRequired: false };
     const otherColumn: BoardColumnRule = {
       columnId: poolId('col-andere'),
       ruleTagIds: [tagId('t')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const card: BoardCard = { todoId: todoId('todo-4'), tagIds: [tagId('t')] };
 
@@ -158,11 +168,12 @@ describe('boardAppearances — eine Spalte ohne Regel zeigt nichts, nicht alles 
     // von Bedingungen ist per Definition immer erfüllt (vacuous truth). Genau
     // das verbietet matchesPool ausdrücklich (tag.ts: "if (ruleTagIds.length
     // === 0) return false" — vor der any/all-Verzweigung).
-    const emptyAllColumn: BoardColumnRule = { columnId: poolId('col-leer-all'), ruleTagIds: [], matchMode: 'all' };
+    const emptyAllColumn: BoardColumnRule = { columnId: poolId('col-leer-all'), ruleTagIds: [], matchMode: 'all', unresolvedRequired: false };
     const otherColumn: BoardColumnRule = {
       columnId: poolId('col-andere'),
       ruleTagIds: [tagId('t')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const card: BoardCard = { todoId: todoId('todo-5'), tagIds: [tagId('t'), tagId('irgendwas-anderes')] };
 
@@ -170,8 +181,8 @@ describe('boardAppearances — eine Spalte ohne Regel zeigt nichts, nicht alles 
   });
 
   it('zwei Spalten ohne Regel liefern für keine Karte eine Mehrfachnennung, auch wenn die Karte viele Tags trägt', () => {
-    const emptyOne: BoardColumnRule = { columnId: poolId('col-1'), ruleTagIds: [], matchMode: 'any' };
-    const emptyTwo: BoardColumnRule = { columnId: poolId('col-2'), ruleTagIds: [], matchMode: 'all' };
+    const emptyOne: BoardColumnRule = { columnId: poolId('col-1'), ruleTagIds: [], matchMode: 'any', unresolvedRequired: false };
+    const emptyTwo: BoardColumnRule = { columnId: poolId('col-2'), ruleTagIds: [], matchMode: 'all', unresolvedRequired: false };
     const card: BoardCard = {
       todoId: todoId('todo-6'),
       tagIds: [tagId('a'), tagId('b'), tagId('c')],
@@ -193,6 +204,7 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
       columnId: poolId('col-weit'),
       ruleTagIds: [tagId('t1'), tagId('t2'), tagId('t3'), tagId('t4'), tagId('t5')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     // Eine zweite Spalte, damit die Karte überhaupt als Mehrfachnennung
     // qualifiziert (Fall 1: ein einzelner Treffer erscheint nicht).
@@ -200,6 +212,7 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
       columnId: poolId('col-andere'),
       ruleTagIds: [tagId('other')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const card: BoardCard = {
       todoId: todoId('todo-7'),
@@ -223,11 +236,13 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
       columnId: poolId('col-all'),
       ruleTagIds: [tagId('a'), tagId('b'), tagId('c')],
       matchMode: 'all',
+      unresolvedRequired: false,
     };
     const otherColumn: BoardColumnRule = {
       columnId: poolId('col-andere'),
       ruleTagIds: [tagId('other')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const card: BoardCard = {
       todoId: todoId('todo-8'),
@@ -278,6 +293,7 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
       columnId: poolId('col-weit'),
       ruleTagIds: [tagId('t1'), tagId('t2'), tagId('t3')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const card: BoardCard = {
       todoId: todoId('todo-9'),
@@ -308,6 +324,7 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
       columnId: poolId('col-zweite'),
       ruleTagIds: [tagId('andere-marke')],
       matchMode: 'any',
+      unresolvedRequired: false,
     };
     const cardInBeiden: BoardCard = {
       todoId: todoId('todo-10'),
@@ -354,10 +371,10 @@ describe('boardAppearances — Übereinstimmung mit matchesPool (derselben Regel
     const { matchesPool } = await import('../src/tag.js');
 
     const columns: readonly BoardColumnRule[] = [
-      { columnId: poolId('c1'), ruleTagIds: [tagId('a')], matchMode: 'any' },
-      { columnId: poolId('c2'), ruleTagIds: [tagId('b'), tagId('c')], matchMode: 'all' },
-      { columnId: poolId('c3'), ruleTagIds: [], matchMode: 'any' },
-      { columnId: poolId('c4'), ruleTagIds: [tagId('a'), tagId('d')], matchMode: 'any' },
+      { columnId: poolId('c1'), ruleTagIds: [tagId('a')], matchMode: 'any', unresolvedRequired: false },
+      { columnId: poolId('c2'), ruleTagIds: [tagId('b'), tagId('c')], matchMode: 'all', unresolvedRequired: false },
+      { columnId: poolId('c3'), ruleTagIds: [], matchMode: 'any', unresolvedRequired: false },
+      { columnId: poolId('c4'), ruleTagIds: [tagId('a'), tagId('d')], matchMode: 'any', unresolvedRequired: false },
     ];
     const cards: readonly BoardCard[] = [
       { todoId: todoId('t1'), tagIds: [tagId('a')] }, // c1, c4 → Mehrfach
@@ -373,7 +390,7 @@ describe('boardAppearances — Übereinstimmung mit matchesPool (derselben Regel
     for (const card of cards) {
       const columnIds = columns
         .filter((column) =>
-          matchesPool({ todoTagIds: card.tagIds, ruleTagIds: column.ruleTagIds, matchMode: column.matchMode }),
+          matchesPool({ todoTagIds: card.tagIds, ruleTagIds: column.ruleTagIds, matchMode: column.matchMode, unresolvedRequired: column.unresolvedRequired }),
         )
         .map((column) => column.columnId);
       if (columnIds.length > 1) expected.push({ todoId: card.todoId, columnIds });
@@ -403,7 +420,7 @@ describe('boardAppearances — Randfälle', () => {
   });
 
   it('keine Karten ergibt keine Mehrfachnennung, ganz gleich wie viele Spalten', () => {
-    const column: BoardColumnRule = { columnId: poolId('c'), ruleTagIds: [tagId('t')], matchMode: 'any' };
+    const column: BoardColumnRule = { columnId: poolId('c'), ruleTagIds: [tagId('t')], matchMode: 'any', unresolvedRequired: false };
     expect(boardAppearances([column], [])).toEqual([]);
   });
 });

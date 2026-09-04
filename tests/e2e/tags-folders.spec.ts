@@ -52,7 +52,7 @@ import { gotoTags } from './support/nav';
 
 /** Klappt einen Ordnerknoten über sein Dreieck auf — wählt ihn nicht aus. */
 async function expandFolder(page: import('@playwright/test').Page, name: string): Promise<void> {
-  const item = page.getByRole('treeitem', { name: new RegExp(name) });
+  const item = page.getByRole('treeitem', { name });
   await expect(item).toBeVisible();
   await item.locator('.tree__twisty--active').click();
 }
@@ -88,20 +88,20 @@ test.describe('Tag-Ordner, vier Ebenen tief', () => {
     await gotoTags(page);
     await expandFolder(page, level1.name);
 
-    const l2Item = page.getByRole('treeitem', { name: new RegExp(level2.name) });
+    const l2Item = page.getByRole('treeitem', { name: level2.name });
     await expect(l2Item).toBeVisible();
     await expandFolder(page, level2.name);
 
-    const l3Item = page.getByRole('treeitem', { name: new RegExp(level3.name) });
+    const l3Item = page.getByRole('treeitem', { name: level3.name });
     await expect(l3Item).toBeVisible();
     await expandFolder(page, level3.name);
 
-    const l4Item = page.getByRole('treeitem', { name: new RegExp(level4.name) });
+    const l4Item = page.getByRole('treeitem', { name: level4.name });
     await expect(l4Item).toBeVisible();
     await expect(l4Item).toHaveAttribute('aria-level', '4');
     await expandFolder(page, level4.name);
 
-    const tagItem = page.getByRole('treeitem', { name: new RegExp(leafTag.name) });
+    const tagItem = page.getByRole('treeitem', { name: leafTag.name });
     await expect(tagItem).toBeVisible();
     await expect(tagItem).toHaveAttribute('aria-level', '5');
 

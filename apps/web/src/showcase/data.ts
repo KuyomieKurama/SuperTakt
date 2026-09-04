@@ -1,8 +1,10 @@
+import type { PoolResolution } from "../api/types";
 import type { ExportAuditRowModel } from "../app/exportAudit";
 import type { BookingRowData } from "../components/BookingTable";
 import type { ExportGroupData } from "../components/ExportGroups";
 import type { KanbanCardData } from "../components/Kanban";
 import type { TagTreeNode } from "../components/TagTree";
+import type { RuleAxes, RuleLookup } from "../lib/poolRule";
 
 /**
  * Beispieldaten der Musterseite.
@@ -77,31 +79,267 @@ export const BOOKING_ROWS: readonly BookingRowData[] = [
   },
 ];
 
+/* ==================================================================== */
+/* Regeln — die Namen hinter den Kennungen (T-079)                      */
+/* ==================================================================== */
+
+/*
+ * Die Musterseite loest keine Regel auf: Welche Karte eine Regel trifft,
+ * entscheidet der Dienst. Was sie braucht, sind **Namen** zu Kennungen — genau
+ * das, was `useRuleLookup` in der laufenden Anwendung aus dem Aufbau holt.
+ *
+ * Seit T-079 steht die Regel hier deshalb als `RuleAxes` und nicht mehr als
+ * fertiger Satz. Der Unterschied ist nicht Bequemlichkeit: Ein Satz haette die
+ * Musterseite von der Zusammenfassung entkoppelt, und genau ihre Zustaende —
+ * ausgeschlossene Tags, Statusachse, Exportachse, keine Bedingung — sind das,
+ * was hier abgenommen werden soll.
+ */
+const SHOWCASE_TAGS: Readonly<Record<string, { readonly name: string; readonly path: readonly string[] }>> = {
+  "tag-support": { name: "Support", path: [] },
+  "tag-wartet": { name: "Wartet", path: [] },
+  "tag-intern": { name: "Intern", path: [] },
+  "tag-eskalation": { name: "Eskalation", path: [] },
+  "tag-archiv": { name: "Archiv", path: ["Ablage"] },
+};
+
+const SHOWCASE_FOLDERS: Readonly<Record<string, readonly string[]>> = {
+  "folder-nord": ["Kunden", "Nord"],
+  /** Angelegt, aber noch ohne Tag — der Einrichtungsfehler aus E-057. */
+  "folder-ost": ["Kunden", "Ost"],
+};
+
+const SHOWCASE_STATUSES: Readonly<Record<string, string>> = {
+  "status-progress": "In Arbeit",
+  "status-review": "Prüfung",
+};
+
 /**
- * Eine Spalte des Boards — seit E-054 eine **Regel ueber Tags**, dieselbe
- * Entitaet wie ein Pool. `rule` steht hier als Text, weil die Musterseite
- * keine Regelaufloesung braucht: Welche Karte eine Regel trifft, entscheidet
- * der Dienst, und fuer die Darstellung genuegt die feste Zuordnung unten.
+ * Die Ordner als Liste, wie sie die Ordnerauswahl bekommt (T-091).
+ *
+ * Zwoelf statt zwei: Erst ab acht Eintraegen zeigt `FolderPicker` sein
+ * Suchfeld (A-4.4), und ein Zustand, den die Musterseite nicht erreicht, wird
+ * nicht abgenommen, sondern geglaubt. Die zusaetzlichen Namen sind erfunden und
+ * enthalten weder Kunden- noch Call-Daten.
+ */
+export const SHOWCASE_FOLDER_OPTIONS: ReadonlyArray<{
+  readonly id: string;
+  readonly path: readonly string[];
+}> = [
+  { id: "folder-nord", path: ["Kunden", "Nord"] },
+  { id: "folder-ost", path: ["Kunden", "Ost"] },
+  { id: "folder-sued", path: ["Kunden", "Süd"] },
+  { id: "folder-west", path: ["Kunden", "West"] },
+  { id: "folder-ost-wartung", path: ["Kunden", "Ost", "Wartung"] },
+  { id: "folder-ost-projekte", path: ["Kunden", "Ost", "Projekte"] },
+  { id: "folder-ablage", path: ["Ablage"] },
+  { id: "folder-ablage-alt", path: ["Ablage", "Altbestand"] },
+  { id: "folder-intern", path: ["Intern"] },
+  { id: "folder-intern-it", path: ["Intern", "IT"] },
+  { id: "folder-intern-hr", path: ["Intern", "Personal"] },
+  { id: "folder-lieferanten", path: ["Lieferanten", "Nord"] },
+];
+
+/** Die Statuswerte als Liste, wie sie die Statusauswahl bekommt (T-091). */
+export const SHOWCASE_STATUS_OPTIONS: ReadonlyArray<{
+  readonly id: string;
+  readonly name: string;
+}> = [
+  { id: "status-progress", name: "In Arbeit" },
+  { id: "status-review", name: "Prüfung" },
+  { id: "status-waiting", name: "Wartet auf Rückmeldung" },
+];
+
+export const SHOWCASE_RULE_LOOKUP: RuleLookup = {
+  tag: (id) => SHOWCASE_TAGS[id],
+  folder: (id) => SHOWCASE_FOLDERS[id],
+  status: (id) => SHOWCASE_STATUSES[id],
+};
+
+/** Eine Regel, deren Achsen alle neutral stehen — der Zustand nach dem Anlegen. */
+export const NEUTRAL_RULE: RuleAxes = {
+  matchMode: "any",
+  includeSubfolders: true,
+  rule: [],
+  excludedTags: [],
+  statusIds: [],
+  completion: "any",
+  exportState: "any",
+};
+
+/**
+ * Eine Spalte des Boards — seit E-054 eine **Regel** und dieselbe Entitaet wie
+ * ein Pool, seit E-055 eine Regel ueber fuenf Bedingungen.
  */
 export interface BoardColumn {
   readonly id: string;
   readonly title: string;
-  readonly rule: string;
+  readonly rule: RuleAxes;
+  /**
+   * Was die Regel nach dem Auflösen ihrer Ordner ergibt — im laufenden Betrieb
+   * die Auskunft des Dienstes (`pool.resolved`), hier von Hand gesetzt, weil
+   * die Musterseite keinen Dienst hat.
+   */
+  readonly resolved: PoolResolution;
 }
 
 /**
- * Fuenf Spalten, und keine davon ist ein Status.
+ * Die übliche Auflösung: Die genannten Ordner enthalten Tags.
  *
- * "Eskalation" bleibt leer: Eine Regel, die derzeit nichts trifft, ist der
- * haeufigste Zustand einer frisch eingerichteten Spalte und braucht deshalb
- * einen eigenen Leerzustand.
+ * Sieben Felder, alle Pflicht (T-087). Sie hier von Hand zu setzen ist die
+ * Aufgabe der Musterseite — im laufenden Betrieb kommen sie vom Dienst, und die
+ * Oberfläche rechnet keines davon nach.
+ */
+const RESOLVED_FULL: PoolResolution = {
+  tagCount: 4,
+  excludedTagCount: 0,
+  isEmpty: false,
+  unresolvedRequired: false,
+  unresolvedExcluded: false,
+  emptyRuleFolderIds: [],
+  matchesNothing: false,
+};
+
+/** Eine Regel, die keine Tagbedingung nennt — es gibt nichts aufzulösen. */
+const RESOLVED_NO_TAG_AXIS: PoolResolution = {
+  tagCount: 0,
+  excludedTagCount: 0,
+  isEmpty: false,
+  unresolvedRequired: false,
+  unresolvedExcluded: false,
+  emptyRuleFolderIds: [],
+  matchesNothing: false,
+};
+
+/**
+ * Sieben Spalten, und keine davon ist ein Status.
+ *
+ * Vier der sieben sind Leerzustaende, und es sind die drei aus T-083 plus der
+ * gemischte Fall aus T-087:
+ *
+ *   - "Eskalation" trifft **derzeit** nichts. Ihre Regel steht und ist
+ *     aufloesbar; morgen kann es anders sein. Der haeufigste Zustand einer
+ *     frisch eingerichteten Spalte.
+ *   - "Kunden Ost" nennt einen Ordner, in dem **kein Tag** liegt. Diese
+ *     Bedingung kann niemand erfuellen — ein Einrichtungsfehler, den nur der
+ *     Benutzer behebt (E-057).
+ *   - "Support oder Kunden Ost" nennt **zwei** Terme, und nur einer davon ist
+ *     leer. Die Achsensumme (`tagCount: 1`) sieht gesund aus, die Regel trifft
+ *     nach E-057 trotzdem nichts. Bis T-087 war das der stille Fall: Die
+ *     Oberflaeche zeigte "gerade passt nichts" und liess den Benutzer auf
+ *     Karten warten, die nie kommen.
+ *   - "Noch nicht eingerichtet" nennt **keine Bedingung**. Sie trifft nichts
+ *     und wird auch morgen nichts treffen (A-3.4).
+ *
+ * Sie stehen hier nebeneinander, weil sie sich nur im Text unterscheiden und
+ * niemand sie sonst auseinanderhaelt (T-079, T-083, T-087).
  */
 export const BOARD_COLUMNS: readonly BoardColumn[] = [
-  { id: "kunden-nord", title: "Kunden Nord", rule: "Ordner „Kunden / Nord“, mit Unterordnern" },
-  { id: "support", title: "Support", rule: "Tag „Support“" },
-  { id: "wartet", title: "Wartet auf Rückmeldung", rule: "Tag „Wartet“" },
-  { id: "intern", title: "Intern", rule: "Tag „Intern“" },
-  { id: "eskalation", title: "Eskalation", rule: "Tag „Eskalation“" },
+  {
+    id: "kunden-nord",
+    title: "Kunden Nord",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "folder", folderId: "folder-nord" }] },
+    resolved: RESOLVED_FULL,
+  },
+  {
+    id: "support",
+    title: "Support",
+    rule: {
+      ...NEUTRAL_RULE,
+      rule: [{ kind: "tag", tagId: "tag-support" }],
+      excludedTags: [{ kind: "tag", tagId: "tag-archiv" }],
+    },
+    resolved: RESOLVED_FULL,
+  },
+  {
+    id: "wartet",
+    title: "Wartet auf Rückmeldung",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "tag", tagId: "tag-wartet" }], completion: "open" },
+    resolved: RESOLVED_FULL,
+  },
+  {
+    id: "intern",
+    title: "Intern",
+    rule: { ...NEUTRAL_RULE, statusIds: ["status-progress", "status-review"] },
+    // Keine Tagbedingung, also nichts aufzuloesen — und trotzdem nicht leer:
+    // Die Statusachse steht.
+    resolved: RESOLVED_NO_TAG_AXIS,
+  },
+  {
+    id: "eskalation",
+    title: "Eskalation",
+    rule: { ...NEUTRAL_RULE, rule: [{ kind: "tag", tagId: "tag-eskalation" }], exportState: "open" },
+    resolved: {
+      tagCount: 1,
+      excludedTagCount: 0,
+      isEmpty: false,
+      unresolvedRequired: false,
+      unresolvedExcluded: false,
+      emptyRuleFolderIds: [],
+      matchesNothing: false,
+    },
+  },
+  {
+    id: "kunden-ost",
+    title: "Kunden Ost",
+    rule: {
+      ...NEUTRAL_RULE,
+      rule: [{ kind: "folder", folderId: "folder-ost" }],
+      statusIds: ["status-progress"],
+    },
+    // Der Ordner ist angelegt, aber leer: Die Regel nennt zwei Bedingungen und
+    // trifft trotzdem nichts (E-057). `emptyRuleFolderIds` nennt ihn beim
+    // Namen — daraus wird „Kunden / Ost" im Leerzustand (T-087).
+    resolved: {
+      tagCount: 0,
+      excludedTagCount: 0,
+      isEmpty: true,
+      unresolvedRequired: true,
+      unresolvedExcluded: false,
+      emptyRuleFolderIds: ["folder-ost"],
+      matchesNothing: true,
+    },
+  },
+  {
+    id: "support-oder-ost",
+    title: "Support oder Kunden Ost",
+    rule: {
+      ...NEUTRAL_RULE,
+      rule: [
+        { kind: "tag", tagId: "tag-support" },
+        { kind: "folder", folderId: "folder-ost" },
+      ],
+    },
+    /*
+     * Der Fall, den die Oberflaeche bis T-087 nicht sehen konnte: Die
+     * Achsensumme steht auf `1` — der Tagterm liefert ja einen Tag —, und die
+     * Regel trifft nach E-057 trotzdem nichts, weil ein genannter Ordner leer
+     * ist. Nur `emptyRuleFolderIds` verraet, welcher der beiden Chips gemeint
+     * ist; `tagCount` haette hier geschwiegen.
+     */
+    resolved: {
+      tagCount: 1,
+      excludedTagCount: 0,
+      isEmpty: false,
+      unresolvedRequired: true,
+      unresolvedExcluded: false,
+      emptyRuleFolderIds: ["folder-ost"],
+      matchesNothing: true,
+    },
+  },
+  {
+    id: "neu",
+    title: "Noch nicht eingerichtet",
+    rule: NEUTRAL_RULE,
+    resolved: {
+      tagCount: 0,
+      excludedTagCount: 0,
+      isEmpty: true,
+      unresolvedRequired: false,
+      unresolvedExcluded: false,
+      emptyRuleFolderIds: [],
+      matchesNothing: true,
+    },
+  },
 ];
 
 export interface BoardCard extends KanbanCardData {

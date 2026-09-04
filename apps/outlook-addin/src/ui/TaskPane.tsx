@@ -20,17 +20,33 @@
  * fremden E-Mail einfließt (B-12.3).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+
+/*
+ * Der Satz über die Bewegung kommt seit T-092 aus der Domäne und nicht mehr aus
+ * dem Add-in (E-058 Absatz 2). `PoolMovement` ist derselbe Typ, den der Dienst
+ * ausrechnet und den `poolMovementSentence` liest — eine Zweitschrift im
+ * Aufgabenbereich wäre der Anfang zweier verschiedener Sätze für dieselbe
+ * Handlung.
+ */
+import { poolMovementSentence, type PoolMovement } from '@takt/domain';
 
 import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
 import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
 import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
-import { reopenOutcome, reopenPreview, type ReopenNotice } from '../duplicate/reopen.ts';
+import {
+  bookingOutcome,
+  reopenOutcome,
+  reopenPreview,
+  type ReopenNotice,
+} from '../duplicate/reopen.ts';
 import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
 import type { ApiClient, ApiFailure } from '../api/client.ts';
 import type { AddinContextDto } from '../api/types.ts';
-import { Button, Callout, Field, Section, Skeleton } from './Primitives.tsx';
+import { cutToCharacterBoundary } from '../text/cut.ts';
+import { visibleText } from '../text/hidden.ts';
+import { Button, Callout, Field, Foreign, Section, Skeleton } from './Primitives.tsx';
 import { DuplicateOffer } from './DuplicateOffer.tsx';
 import { TagPicker } from './TagPicker.tsx';
 
@@ -76,8 +92,22 @@ type Done =
        * gäbe wieder einen Fall dazwischen.
        */
       readonly reopened: boolean;
-      /** Pools, in denen das Todo nach der Buchung steht — aus dem Dienst. */
-      readonly poolNames: readonly string[];
+      /**
+       * Wohin sich das Todo durch die Buchung bewegt — aus dem Dienst
+       * (E-056, T-084).
+       *
+       * Ein Wert und keine drei Listen nebeneinander: `appears`, `enters` und
+       * `leaves` sind gleich getippt, und vertauscht ergäben sie einen Satz,
+       * der sich richtig liest und das Gegenteil behauptet. Seit E-061 Punkt 3
+       * liefert der Dienst ihn bereits so; hier wird nichts zusammengesetzt.
+       *
+       * Steht unabhängig von `reopened` da, weil beide Fälle daraus einen Satz
+       * bauen — der erledigte den über die Rückkehr, der offene den über die
+       * Bewegung.
+       *
+       * `null` heißt: Die Buchung hat nichts bewegt. Dann bleibt die Zeile weg.
+       */
+      readonly movement: PoolMovement | null;
     };
 
 export function TaskPane({
@@ -322,21 +352,35 @@ export function TaskPane({
       title: offer.title,
       minutes,
       reopened: result.value.doneCleared,
-      poolNames: result.value.poolNames,
+      // Unverändert durchgereicht: Der Dienst rechnet die Bewegung, das Add-in
+      // sagt sie (E-058 Absatz 1, E-061 Punkt 3).
+      movement: result.value.poolMovement,
     });
   };
 
   return (
     <div className="pane">
       <Section title="Aus dieser E-Mail">
+        {/*
+          T-119: Diese drei Werte sind der fremdeste Text im ganzen Add-in — sie
+          stammen unmittelbar aus einer E-Mail, die jemand geschickt hat (A-06),
+          und sie gehen durch keine Tür, bevor sie hier stehen. Bis T-119 standen
+          sie roh im Bereich: Ein `U+202E` im Betreff drehte die Anzeige um, und
+          „Rechnung<RLO>gnp.exe" las sich als „Rechnung exe.png".
+        */}
         <dl className="mailfacts">
           <dt>Betreff</dt>
-          <dd>{mail.subject.length > 0 ? mail.subject : <em>ohne Betreff</em>}</dd>
+          <dd>{mail.subject.length > 0 ? <Foreign value={mail.subject} /> : <em>ohne Betreff</em>}</dd>
           <dt>Von</dt>
           <dd>
-            {mail.senderName.length > 0 ? mail.senderName : <em>unbekannt</em>}
+            {mail.senderName.length > 0 ? <Foreign value={mail.senderName} /> : <em>unbekannt</em>}
             {mail.senderAddress.length > 0 ? (
-              <span className="mailfacts__address"> &lt;{mail.senderAddress}&gt;</span>
+              <span className="mailfacts__address">
+                {' '}
+                &lt;
+                <Foreign value={mail.senderAddress} />
+                &gt;
+              </span>
             ) : null}
           </dd>
         </dl>
@@ -488,9 +532,17 @@ export function TaskPane({
             </Button>
           }
         >
-          {/* R-15: Titel und Call-Nummer stehen unmittelbar über der Schaltfläche. */}
+          {/*
+            R-15: Titel und Call-Nummer stehen unmittelbar über der Schaltfläche.
+
+            Der Titel kommt aus dem Bestand und ist damit fremder Text (T-119).
+            Die Call-Nummer nicht: Sie hat `checkCallNumber` passiert, und deren
+            Vorrat (`A-Z a-z 0-9 . _ / -`) ist geschlossen — ein Richtungszeichen
+            kann darin nicht vorkommen. Die `summary` daneben schreibt der
+            Aufgabenbereich selbst aus Zahlen.
+          */}
           <div className="offer__confirm">
-            <span className="offer__title">{booking.title}</span>
+            <Foreign className="offer__title" value={booking.title} />
             <span className="badge badge--call mono">{booking.callNumber}</span>
             <p className="offer__meta">{booking.summary}</p>
           </div>
@@ -548,8 +600,21 @@ export function TaskPane({
             hinter ihr.
           */}
           {booking.isDone ? (
-            <ReopenAnnouncement notice={reopenPreview(minutes, booking.poolNames)} tone="warning" />
-          ) : null}
+            <ReopenAnnouncement
+              notice={reopenPreview(minutes, booking.poolMovement)}
+              tone="warning"
+            />
+          ) : (
+            /*
+              T-084: Auch ohne Aufhebung kann eine Buchung das Todo bewegen —
+              die erste hebt es in jede Spalte, die nach offener, noch nicht
+              abgerechneter Zeit fragt. Der Hinweis steht an derselben Stelle
+              wie der andere, unmittelbar über der Schaltfläche, und er
+              erscheint nur, wenn es etwas zu berichten gibt: `MovementNote`
+              gibt sonst nichts zurück.
+            */
+            <MovementNote movement={booking.poolMovement} />
+          )}
 
           {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
 
@@ -567,7 +632,14 @@ export function TaskPane({
                 Wirkungen. Der Knopf ist das Letzte, was gelesen wird — was er
                 auslöst, gehört auf ihn und nicht nur darüber.
               */}
-              {String(minutes)} Minuten auf „{booking.title}“ buchen
+              {/*
+                T-119: Der Titel steht **in** dieser Beschriftung, und das ist
+                die Stelle, an der die Isolierung mehr ist als Sorgfalt. Ohne
+                sie ordnet ein Titel aus rechtsläufiger Schrift den Rest des
+                Satzes um — „und es wieder öffnen" landete vor dem Titel, und
+                der Knopf verspräche etwas anderes, als er tut.
+              */}
+              {String(minutes)} Minuten auf „<Foreign value={booking.title} />“ buchen
               {booking.isDone ? ' und es wieder öffnen' : ''}
             </Button>
           </div>
@@ -590,7 +662,12 @@ export function TaskPane({
 const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   title: 'Titel',
   callNumber: 'Call-Nummer',
-  statusId: 'Spalte',
+  // „Status" und nicht „Spalte" (E-054, R-2 S-4). Bis T-090 stand hier
+  // „Spalte", und das war einmal richtig: Der Status **war** die Spalte des
+  // Boards. Seit E-054 ist eine Spalte eine Regel und der Status eine
+  // Eigenschaft am Todo — wer nach einer abgewiesenen Eingabe „Spalte: …" liest,
+  // sucht auf dem Board nach einem Feld, das in diesem Formular steht.
+  statusId: 'Status',
   tagIds: 'Tags',
   tagNames: 'Neue Tags',
   note: 'Vermerk',
@@ -598,6 +675,34 @@ const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   endedAt: 'Ende',
   body: 'Eingabe',
 });
+
+/**
+ * Dieselbe Zuordnung, aber auch für einen Befund an **einem Eintrag einer
+ * Liste** (T-114).
+ *
+ * `toFieldIssues` bildet den Pfad mit `path.join('.')`; ein abgewiesener
+ * Tagname heißt deshalb `tagNames.0` und nicht `tagNames`. Die Tabelle darüber
+ * trifft das nicht, und der Benutzer las bis T-114 „tagNames.0" — einen
+ * technischen Schlüssel und dazu eine von null an gezählte Stelle.
+ *
+ * Der Anlass ist die Zeichenprüfung aus T-114: Vorher konnte ein Eintrag nur
+ * an seiner Länge scheitern, was im Aufgabenbereich kaum vorkommt; jetzt kann
+ * ein eingefügter Name daran scheitern, dass ein unsichtbares Zeichen daran
+ * hängt. Gezählt wird ab eins, weil die Zahl für einen Menschen ist.
+ *
+ * Ein unbekannter Schlüssel bleibt roh stehen — dieselbe Regel wie oben:
+ * lieber ein technischer Name als eine falsche Zuordnung.
+ */
+const fieldLabel = (field: string): string => {
+  const known = FIELD_LABEL[field];
+  if (known !== undefined) return known;
+
+  const indexed = /^(.+)\.(\d+)$/.exec(field);
+  if (indexed === null) return field;
+
+  const base = FIELD_LABEL[indexed[1] ?? ''];
+  return base === undefined ? field : `${base}, Eintrag ${String(Number(indexed[2]) + 1)}`;
+};
 
 function Failure({
   failure,
@@ -624,7 +729,7 @@ function Failure({
         <ul className="callout__list">
           {failure.details.map((detail) => (
             <li key={`${detail.field}-${detail.code}`}>
-              {FIELD_LABEL[detail.field] ?? detail.field}: {detail.message}
+              {fieldLabel(detail.field)}: {detail.message}
             </li>
           ))}
         </ul>
@@ -636,13 +741,78 @@ function Failure({
 }
 
 /**
- * Die drei Wirkungen einer Buchung auf ein erledigtes Todo — und die eine
- * Nicht-Wirkung (A-2.5, I-05, E-023).
+ * Der Satz über die Pools, wenn nichts aufgehoben wird (T-084).
+ *
+ * Gibt **nichts** zurück, wenn die Buchung das Todo in keinen Pool hinein und
+ * aus keinem herausbewegt. Das ist der häufigere Fall — jede zweite und jede
+ * weitere Buchung auf demselben Todo —, und dann bleibt die Fläche ganz weg:
+ * keine leere Hinweisfläche, kein Halbsatz, kein Abstand, der eine fehlende
+ * Zeile andeutet.
+ */
+function MovementNote({ movement }: { readonly movement: PoolMovement | null }) {
+  /*
+   * Anlass `'booking'` und nicht `'reopen'`: Hier wird nichts aufgehoben. Die
+   * Überladung gibt dafür `string | null` zurück — und dieses `null` ist die
+   * Auskunft, nicht ihr Fehlen.
+   *
+   * Zwei Wege führen hierher, und beide bedeuten dasselbe: Der Dienst hat
+   * nichts gerechnet (`movement === null`, weil sich nichts bewegen kann), oder
+   * er hat gerechnet und nichts gefunden. In beiden Fällen bleibt die Fläche
+   * ganz weg (E-061 Punkt 3).
+   */
+  const sentence = movement === null ? null : poolMovementSentence(movement, 'future', 'booking');
+  if (sentence === null) return null;
+
+  /*
+    Die Überschrift ist Rahmen und keine zweite Behauptung: Sie sagt, wovon
+    der Satz handelt, und nennt selbst weder Pool noch Wirkung. Ohne sie
+    begänne die Fläche mit „Es" — und zwischen dem Titel des Todos und dieser
+    Stelle liegen zwei Eingabefelder.
+  */
+  return (
+    <Callout tone="info" title="Was sich dadurch ändert">
+      {sentence}
+    </Callout>
+  );
+}
+
+/**
+ * Die Bestätigung nach einer Buchung, die nichts aufgehoben hat (T-084).
+ *
+ * Zwei Zeilen oder eine. Der Satz über die Pools steht als eigener Absatz
+ * darunter und nicht im selben: Er redet über etwas anderes als die gebuchte
+ * Zeit, und ein angehängter Nebensatz wäre die Art Zeile, die man zu
+ * überfliegen lernt.
+ */
+function BookedOutcome({
+  minutes,
+  movement,
+}: {
+  readonly minutes: number;
+  readonly movement: PoolMovement | null;
+}) {
+  const notice = bookingOutcome(minutes, movement);
+
+  return (
+    <>
+      {notice.booked}
+      {notice.pools !== null ? <p className="pane-note">{notice.pools}</p> : null}
+    </>
+  );
+}
+
+/**
+ * Die drei Wirkungen einer Buchung auf ein erledigtes Todo (A-2.5, I-05).
  *
  * **Eine** Darstellung für vorher und nachher. Der Aufgabenbereich ist schmal;
  * eine Aufzählung von drei kurzen Zeilen ist darin lesbarer als ein Absatz und
- * lässt vor allem sehen, dass es **drei** sind. Der Satz zur Spalte steht
- * abgesetzt darunter, weil er das Gegenteil sagt: Hier ändert sich nichts.
+ * lässt vor allem sehen, dass es **drei** sind.
+ *
+ * Unter der Aufzählung stand bis T-092 eine vierte Zeile über das, was sich
+ * **nicht** ändert („Die Karte bleibt, wo sie ist"). Sie ist ersatzlos weg
+ * (E-058 Absatz 2): Der dritte Punkt sagt vollständig, was sich bewegt, und
+ * eine Zeile daneben, die das Gegenteil behauptete, war seit E-055 schlicht
+ * falsch.
  */
 function ReopenAnnouncement({
   notice,
@@ -658,7 +828,6 @@ function ReopenAnnouncement({
           <li key={effect}>{effect}</li>
         ))}
       </ul>
-      <p className="effects__aside">{notice.aside}</p>
     </Callout>
   );
 }
@@ -686,13 +855,21 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
       {done.kind === 'booked' && done.reopened ? (
         <>
           <ReopenAnnouncement
-            notice={reopenOutcome(done.title, done.minutes, done.poolNames)}
+            /*
+              T-119: `reopenOutcome` setzt den Titel in einen Satz („Gebucht.
+              „X" ist wieder offen."). Ein Satz ist eine Zeichenkette, und in
+              eine Zeichenkette lässt sich kein `<bdi>` legen — hier bleibt das
+              Bereinigen. Es nimmt dem Titel die Zeichen, die den Satz umdrehen
+              könnten; die Stellung rechtsläufiger Schrift im Satz bleibt dem
+              Bidi-Algorithmus überlassen.
+            */
+            notice={reopenOutcome(visibleText(done.title), done.minutes, done.movement)}
             tone="success"
           />
           <p className="pane-note">Gerundet wird beim Export, auf die Tagessumme.</p>
         </>
       ) : (
-        <Callout tone="success" title={done.title}>
+        <Callout tone="success" title={<Foreign value={done.title} />}>
           {done.kind === 'created' ? (
             <>
               Das Todo ist in Takt angelegt.
@@ -709,16 +886,31 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
               {done.createdTagNames.length > 0 ? (
                 <p className="pane-note">
                   {done.createdTagNames.length === 1 ? 'Neues Tag: ' : 'Neue Tags: '}
-                  {done.createdTagNames.map((name) => `„${name}“`).join(', ')} — ab jetzt auch in
-                  Takt auswählbar.
+                  {/*
+                    T-119: je Name ein eigener isolierter Knoten. Als
+                    zusammengefügte Zeichenkette (`join(', ')`) konnte ein Name
+                    die Aufzählung umordnen — und in einer Liste von Namen ist
+                    „welcher gehört zu welchem Komma" genau die Frage, die
+                    niemand nachprüft.
+                  */}
+                  {done.createdTagNames.map((name, index) => (
+                    <Fragment key={name}>
+                      {index > 0 ? ', ' : ''}„<Foreign value={name} />“
+                    </Fragment>
+                  ))}{' '}
+                  — ab jetzt auch in Takt auswählbar.
                 </p>
               ) : null}
             </>
           ) : (
-            <>
-              {String(done.minutes)} Minuten sind gebucht. Gerundet wird beim Export, auf die
-              Tagessumme.
-            </>
+            /*
+              T-084: Derselbe Satz wie eben über der Schaltfläche, nur im
+              Perfekt — und wieder nur, wenn sich etwas bewegt hat. Der erste
+              Satz ist Zeichen für Zeichen der von vorher; er steht jetzt in
+              `bookingOutcome` statt hier, damit der Nachweispfad ihn messen
+              kann, ohne den Aufgabenbereich zu rendern.
+            */
+            <BookedOutcome minutes={done.minutes} movement={done.movement} />
           )}
         </Callout>
       )}
@@ -767,7 +959,14 @@ function describeDetection(detection: Detection | null): DetectionLine {
         help: REJECTION_LABEL[detection.reason],
         callout: (
           <Callout tone="warning" title="Gefunden, aber nicht übernommen">
-            Der Ausdruck hat <span className="mono">{clip(detection.raw)}</span> geliefert.{' '}
+            {/*
+              T-119: `detection.raw` ist ein Stück aus dem Betreff oder dem Text
+              der E-Mail — fremder Text, unmittelbar und ungeprüft, denn er ist
+              gerade deshalb hier, weil er **keine** Call-Nummer ist. Er steht
+              mitten in einem deutschen Satz; ohne Isolierung zöge er den Rest
+              des Satzes mit.
+            */}
+            Der Ausdruck hat <Foreign className="mono" value={clip(detection.raw)} /> geliefert.{' '}
             {REJECTION_LABEL[detection.reason]}
           </Callout>
         ),
@@ -807,8 +1006,17 @@ function describeDetection(detection: Detection | null): DetectionLine {
   }
 }
 
-/** Zeigt höchstens 40 Zeichen eines Rohwerts aus einer fremden E-Mail. */
-const clip = (value: string): string => (value.length <= 40 ? value : `${value.slice(0, 40)}…`);
+/**
+ * Zeigt höchstens 40 Zeichen eines Rohwerts aus einer fremden E-Mail.
+ *
+ * Der Schnitt läuft seit T-119 über `cutToCharacterBoundary` und nicht mehr
+ * über `slice`: Derselbe Fehler wie im Titelvorschlag, nur eine Stelle weiter —
+ * ein Emoji an Position 40 wurde halbiert, und die stehengebliebene Hälfte
+ * zeigte der Bereich als `U+FFFD`. Hier ginge davon nichts verloren, aber die
+ * Anzeige behauptete ein Zeichen, das der Ausdruck nie geliefert hat.
+ */
+const clip = (value: string): string =>
+  value.length <= 40 ? value : `${cutToCharacterBoundary(value, 40)}…`;
 
 /** `YYYY-MM-DDTHH:MM:SSZ` — die Form, die die Domäne führt. */
 const toTimestamp = (date: Date): string => `${date.toISOString().slice(0, 19)}Z`;

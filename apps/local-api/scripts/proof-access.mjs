@@ -25,6 +25,20 @@ import { createConnection } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
+/*
+ * Die drei Fristen des Betriebs kommen aus `config.ts` und stehen hier nicht
+ * als Zahlen (T-128, E-063 Punkt 4). Ein Nachweis, der seine Erwartung
+ * abschreibt, mißt seine eigene Abschrift: Setzte jemand `HEADERS_TIMEOUT_MS`
+ * wieder auf sechzig Sekunden, würde eine hier hingeschriebene 5000 rot — mit
+ * einer Meldung, die auf den Nachweis zeigt statt auf die Änderung. So zeigt
+ * sie auf die Änderung.
+ */
+import {
+  CONNECTION_CHECK_INTERVAL_MS,
+  HEADERS_TIMEOUT_MS,
+  REQUEST_RECEIVE_TIMEOUT_MS,
+} from '../src/config.ts';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY = join(HERE, '..', 'src', 'index.ts');
 const PORT = 17843;
@@ -54,7 +68,10 @@ function section(title) {
 // Dienst starten
 // ---------------------------------------------------------------------------
 
-async function startService(dataDir, { withSecret = true, withUser = true } = {}) {
+async function startService(
+  dataDir,
+  { withSecret = true, withUser = true, user = 'kerem', closeAfterHandshake = false } = {},
+) {
   const child = spawn(process.execPath, [ENTRY], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, XDG_DATA_HOME: dataDir },
@@ -77,7 +94,10 @@ async function startService(dataDir, { withSecret = true, withUser = true } = {}
   // fällt hier auf und nicht erst auf dem Rechner des Benutzers.
   const secret = withSecret ? `takt_${randomBytes(32).toString('base64url')}` : null;
   if (secret !== null) {
-    child.stdin.write(withUser ? `${secret}\nkerem\n` : `${secret}\n`);
+    child.stdin.write(withUser ? `${secret}\n${user}\n` : `${secret}\n`);
+    // Die Hülle stirbt unmittelbar nach dem Start des Sidecars — die
+    // schärfste Fassung von B-1.6 Punkt 3, siehe Abschnitt 0d.
+    if (closeAfterHandshake) child.stdin.end();
     if (!withUser) {
       // Nichts weiter: Der Dienst wartet auf die zweite Zeile und läuft in die
       // Zeitgrenze. Der Kanal bleibt offen, damit nicht `missing` statt
@@ -93,6 +113,39 @@ async function startService(dataDir, { withSecret = true, withUser = true } = {}
     output: () => stderr + stdout,
     exit: new Promise((resolve) => child.once('exit', (code) => resolve(code))),
   };
+}
+
+/**
+ * Beendet einen gestarteten Dienst **deterministisch** und gibt den Port frei.
+ *
+ * Dieselbe Abfolge wie im `finally`-Block am Dateiende, und aus demselben
+ * Grund (T-029, Risiko 5): Erst die Röhre schließen — so beendet sich der
+ * Dienst von selbst, wie unter der Hülle —, dann warten, dann `SIGTERM`, dann
+ * `SIGKILL`. Zum Schluß wird der Port **nachgesehen** und nicht angenommen.
+ *
+ * Wer hier ungeduldig ist, bezahlt es weiter unten: Ein noch laufender Dienst
+ * antwortet auf `/health`, der nächste Start scheitert still mit Code 74, und
+ * `waitForService()` hält den fremden Prozess für den eigenen — reihenweise
+ * Fehlschläge, die keine Regression sind, sondern ein falsch verstandener
+ * Zustand. Siehe {@link waitForPortFree}.
+ */
+async function stopService(handle) {
+  handle.child.stdin.end();
+  let code = await Promise.race([handle.exit, sleep(5000).then(() => null)]);
+  if (code === null && handle.child.exitCode === null) {
+    handle.child.kill('SIGTERM');
+    code = await Promise.race([handle.exit, sleep(3000).then(() => null)]);
+  }
+  if (code === null && handle.child.exitCode === null) {
+    handle.child.kill('SIGKILL');
+    await Promise.race([handle.exit, sleep(2000)]);
+  }
+  if (!(await waitForPortFree(PORT))) {
+    throw new Error(
+      `Der Dienst aus dem vorigen Abschnitt hat Port ${PORT} nicht freigegeben. ` +
+        'Alles Weitere liefe gegen einen fremden Prozess und wäre kein Nachweis.',
+    );
+  }
 }
 
 async function waitForService(deadlineMs = 8000) {
@@ -125,6 +178,31 @@ function portFree(port) {
       socket.destroy();
       done(true);
     }, 500).unref();
+  });
+}
+
+/**
+ * Öffnet eine Verbindung auf {@link PORT} und schickt einen Anfragekopf **ohne**
+ * die abschließende Leerzeile (T-126, Abschnitt 0e).
+ *
+ * Für Node ist die Anfrage damit unfertig: Die Verbindung gilt als eine, die
+ * gerade eine Anfrage sendet, und `server.close()` wartet auf sie. Genau das
+ * ist der Unterschied zu einer untätigen Verbindung — die schließt `close()`
+ * seit Node 19 von selbst.
+ *
+ * `error` wird abgefangen. Der Dienst reißt die Verbindung beim Anhalten ab,
+ * und ein unbehandeltes `error` auf einem Socket beendete den Nachweislauf mit
+ * einem Wurf, der nichts mit dem Gegenstand zu tun hätte.
+ */
+function openHalfRequest() {
+  return new Promise((done) => {
+    const socket = createConnection({ host: '127.0.0.1', port: PORT });
+    socket.on('error', () => undefined);
+    socket.once('connect', () => {
+      socket.write(`GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:${PORT}\r\n`);
+      done(socket);
+    });
+    setTimeout(() => done(null), 2000).unref();
   });
 }
 
@@ -254,6 +332,192 @@ try {
     );
   }
 
+  section('0b. Windows-Benutzername mit Steuer- oder Richtungszeichen (O-AE, T-122)');
+  {
+    /*
+     * Der Name geht **unverändert** als `WindowsUser` in die Exportdatei
+     * (A-8.5, E-010). Bis T-122 prüfte der Handschlag nur gegen C0 und DEL;
+     * ein `U+202E` drehte damit eine Zeile der Datei, die beim Abrechnungstool
+     * landet. Seit T-122 gilt hier dieselbe Klasse wie an der Haupttür
+     * (`hasForbiddenNameCharacter` in `@takt/domain`).
+     *
+     * Die Zeichen stehen als Escape-Folgen und nicht roh (T-112-H2). Geprüft
+     * werden die drei Bauarten und ausdrücklich **beide** Erweiterungen, die
+     * hier bis T-122 fehlten: C1 und die Richtungsmarken.
+     */
+    const abzuweisen = [
+      ['U+202E (RLO) — dreht die Zeile der Exportdatei um', 'kerem\u202egnp.exe'],
+      ['U+0085 (NEL) — C1, bis T-122 nicht erfasst', 'kerem\u0085admin'],
+      ['U+200F (RLM) — Richtungsmarke, bis T-122 nicht erfasst', 'kerem\u200fnord'],
+    ];
+
+    for (const [name, wert] of abzuweisen) {
+      const bent = await startService(dataDir, { user: wert });
+      const code = await Promise.race([bent.exit, sleep(12000).then(() => 'timeout')]);
+      const ausgabe = bent.output();
+      check(`${name}: der Dienst startet nicht (Code 78)`, code === 78, `Code ${code}`);
+      check(
+        `${name}: die Meldung nennt den Grund und gibt den Namen nicht wieder`,
+        ausgabe.includes('Steuer- oder Richtungszeichen') &&
+          !ausgabe.includes(wert) &&
+          !SECRET_SHAPE.test(ausgabe),
+        ausgabe.slice(0, 200),
+      );
+    }
+  }
+
+  section('0c. Ein gewöhnlicher Name bleibt gültig (Gegenprobe zu 0b)');
+  {
+    /*
+     * Eine Prüfung, die alles abweist, ist grün und nutzlos. Der Name unten
+     * trägt Umlaut, Leerzeichen, Punkt und Bindestrich — alles, was in einem
+     * Konto vorkommt und mit der Klasse nichts zu tun hat. Er ist erfunden.
+     */
+    const gewoehnlich = await startService(dataDir, { user: 'Jan-Peter Müller.adm' });
+    service = gewoehnlich;
+    const oben = await waitForService();
+    check('Ein Name mit Umlaut, Leerzeichen und Punkt lässt den Dienst starten', oben);
+    check(
+      'Und er ist es auch, der antwortet — der Dienst nennt seine Bindeadresse',
+      gewoehnlich.output().includes(`Takt lauscht auf 127.0.0.1:${PORT}`),
+      gewoehnlich.output().slice(0, 200),
+    );
+    /*
+     * Und die Probe auf B-1.6 Punkt 3 an der frühesten Stelle, an der sie
+     * möglich ist: Die Röhre wird geschlossen, sobald `/health` antwortet —
+     * also mitten im Start, während der Aufgabenbereich noch sein Zertifikat
+     * erzeugt. Bis T-122 überlebte der Dienst das: Der Handschlag ließ den
+     * Strom fließen, das Dateiende ging verloren, und `watchParentLink` meldete
+     * sich an einem Strom an, der schon zu Ende war. Gefunden wurde es an einem
+     * verwaisten Prozess, der den Port hielt.
+     */
+    gewoehnlich.child.stdin.end();
+    const ende = await Promise.race([gewoehnlich.exit, sleep(8000).then(() => 'timeout')]);
+    check(
+      'Endet die Röhre unmittelbar nach dem Start, hält der Dienst von selbst an (B-1.6 Punkt 3)',
+      ende === 0,
+      `Code ${ende}`,
+    );
+
+    await stopService(gewoehnlich);
+    service = null;
+  }
+
+  section('0d. Die Hülle stirbt während des Starts (B-1.6 Punkt 3, T-122)');
+  {
+    /*
+     * Der Fall, den es gegeben hat, und er ist beim Aufräumen dieser Aufgabe
+     * aufgefallen: ein verwaister Sidecar, der den Port hielt.
+     *
+     * Der Handschlag las `stdin` im fließenden Zustand und meldete danach nur
+     * seine Zuhörer ab — der Strom lief weiter. Zwischen diesem Augenblick und
+     * dem Anmelden von `watchParentLink` liegen Migration, Bestandssicherung
+     * und das Zertifikat des Aufgabenbereichs. Schloß die Hülle in diesem
+     * Fenster ihre Seite der Röhre, ging das Dateiende an einen Strom ohne
+     * Zuhörer, und der Wächter meldete sich danach an einem Strom an, der schon
+     * zu Ende war. Ergebnis: ein Prozess mit Datenbankzugriff, ohne Fenster,
+     * ohne Ende — gemessen 15 Sekunden und weiter laufend.
+     *
+     * Hier wird die Röhre **unmittelbar nach dem Handschlag** geschlossen, ohne
+     * auf `/health` zu warten. Damit hängt der Fall nicht am Zeitverhalten des
+     * Rechners: Der Dienst ist zu diesem Zeitpunkt mit Sicherheit noch im Start.
+     */
+    const fruehesEnde = await startService(dataDir, { closeAfterHandshake: true });
+    const code = await Promise.race([fruehesEnde.exit, sleep(15000).then(() => 'läuft weiter')]);
+    check('Der Sidecar überlebt die Hülle nicht, auch nicht mitten im Start', code === 0, `Code ${code}`);
+    check(
+      'Und er sagt, warum er anhält',
+      fruehesEnde.output().includes('Die Verbindung zur Anwendung ist beendet'),
+      fruehesEnde.output().slice(-200),
+    );
+    if (code !== 0) {
+      fruehesEnde.child.kill('SIGKILL');
+      await Promise.race([fruehesEnde.exit, sleep(2000)]);
+    }
+    if (!(await waitForPortFree(PORT))) {
+      throw new Error(`Nach Abschnitt 0d ist Port ${PORT} nicht frei.`);
+    }
+  }
+
+  section('0e. Ein fremder Prozess hält eine Verbindung offen, während die Hülle stirbt (T-125-4, T-126)');
+  {
+    /*
+     * 0c und 0d messen mit **stiller Leitung**: Wenn die Röhre endet, redet
+     * niemand mit dem Dienst, und dann hält `shutdown()` mühelos Wort. Hier
+     * redet jemand — halb.
+     *
+     * Der Abschnitt öffnet eine Verbindung auf 17843 und schickt einen
+     * Anfragekopf ohne die abschließende Leerzeile. Für Node ist das eine
+     * Anfrage, die noch kommt; `server.close()` wartet auf sie, bis
+     * `headersTimeout` greift (60 s Vorgabe) oder, bei stockendem Rumpf,
+     * `requestTimeout` (300 s). Bis T-126 führte der **einzige** Weg zu
+     * `process.exit(0)` durch diesen Rückruf — der Dienst überlebte die Hülle
+     * also so lange, wie ein fremder Prozess es wollte. Ein fremder Prozess auf
+     * demselben Rechner ist genau der Akteur, gegen den B-1.6 geschrieben ist
+     * (VG-1); er braucht dafür kein Geheimnis, nur eine TCP-Verbindung.
+     *
+     * Die Zeitgrenze aus B-1.7 hilft hier nicht: `timeout(REQUEST_TIMEOUT_MS)`
+     * ist Hono-Zwischenschicht und läuft erst, wenn Node den Kopf vollständig
+     * gelesen hat. Ein halber Kopf kommt dort nie an.
+     *
+     * Gemessen wird deshalb nicht nur **ob**, sondern **wann**. Ein Anhalten
+     * nach einer Minute wäre keines, das ein Benutzer abwartet — und ein
+     * Nachweis, der nur `code === 0` prüft, wäre auch ohne die Behebung grün,
+     * sofern man ihm 60 Sekunden Zeit ließe.
+     */
+    const GRENZE_MS = 5_000;
+
+    const gehalten = await startService(dataDir, { user: 'Jan-Peter Müller.adm' });
+    const oben = await waitForService();
+    check('Vorbedingung: der Dienst ist oben und antwortet', oben, gehalten.output().slice(-200));
+
+    const halbeAnfrage = await openHalfRequest();
+    check('Ein fremder Prozess hält eine Verbindung mit halbem Anfragekopf', halbeAnfrage !== null);
+
+    gehalten.child.stdin.end();
+    const begonnen = Date.now();
+    const code = await Promise.race([gehalten.exit, sleep(20_000).then(() => 'läuft weiter')]);
+    const dauer = Date.now() - begonnen;
+    halbeAnfrage?.destroy();
+
+    check(
+      'Der Sidecar überlebt die Hülle auch dann nicht, wenn eine Verbindung offen gehalten wird',
+      code === 0,
+      `Code ${code} nach ${dauer} ms`,
+    );
+    check(
+      `Und er hält binnen ${GRENZE_MS} ms an — der fremde Prozess bestimmt den Zeitpunkt nicht`,
+      code === 0 && dauer < GRENZE_MS,
+      `${dauer} ms`,
+    );
+    check(
+      'Er geht dabei den ordentlichen Weg und sagt, warum er anhält',
+      gehalten.output().includes('Die Verbindung zur Anwendung ist beendet'),
+      gehalten.output().slice(-200),
+    );
+    /*
+     * Die schärfste der sechs Prüfungen. `closeAllConnections()` ist das
+     * Mittel, die Frist aus `SHUTDOWN_DEADLINE_MS` ist nur der Boden darunter
+     * — und ein Boden, der jedes Mal trägt, verdeckt, dass das Mittel nicht
+     * mehr greift. Fiele der Aufruf eines Tages weg, wäre alles oben weiterhin
+     * grün: angehalten wird ja, und binnen zwei Sekunden auch. Diese Zeile
+     * fragt, **worüber**.
+     */
+    check(
+      'Und zwar über das Abräumen der Verbindungen, nicht erst über die Frist',
+      code === 0 && !gehalten.output().includes('Beim Anhalten waren noch Verbindungen offen'),
+      gehalten.output().slice(-200),
+    );
+
+    if (code !== 0) {
+      gehalten.child.kill('SIGKILL');
+      await Promise.race([gehalten.exit, sleep(2000)]);
+    }
+    if (!(await waitForPortFree(PORT))) {
+      throw new Error(`Nach Abschnitt 0e ist Port ${PORT} nicht frei.`);
+    }
+  }
+
   service = await startService(dataDir);
   const started = await waitForService();
   if (!started) {
@@ -266,6 +530,91 @@ try {
 
   const H = { host: `127.0.0.1:${PORT}` };
   const sessionHeaders = { ...H, 'X-Takt-Token': service.secret };
+
+  section('0f. Dieselbe halbe Anfrage im laufenden Betrieb (B-1.7, T-125-4 R2, T-128)');
+  {
+    /*
+     * 0e mißt das **Anhalten**, dieser Abschnitt den **Betrieb**. Es ist
+     * derselbe fremde Prozess mit derselben halben Anfrage, nur stirbt hier
+     * niemand: Der Dienst läuft weiter, und die Frage ist, wie lange er eine
+     * Verbindung hält, auf der nichts mehr kommt.
+     *
+     * Bis T-128 waren das die Vorgaben von Node — 60 Sekunden für den Kopf, 300
+     * für die ganze Anfrage, nachgesehen alle 30. Das sind Werte für einen
+     * Dienst hinter einem Gegenlager im Netz. Takt hat keins: Es ist selbst das
+     * erste, was die Verbindung sieht, und jeder Aufrufer sitzt auf demselben
+     * Rechner. Ein Prozess, der viele solche Verbindungen aufmacht, nimmt der
+     * eigenen Oberfläche die Betriebsmittel weg, und zwar ohne ein Geheimnis zu
+     * kennen (VG-1).
+     *
+     * Gemessen wird **wann** und **womit**: Die Verbindung muß binnen
+     * `HEADERS_TIMEOUT_MS + CONNECTION_CHECK_INTERVAL_MS` weg sein, und Node
+     * muß dabei mit 408 antworten. Ohne die zweite Hälfte wäre auch ein
+     * abgestürzter Dienst grün.
+     */
+    /*
+     * Die Summe der beiden Fristen ist die Zusicherung; die fünf Sekunden
+     * obendrauf sind Luft für den Takt und für einen ausgelasteten Rechner.
+     * Gemessen wurde 9975 ms — der Wert liegt an der Summe und nicht an der
+     * Luft. Was die Prüfung ausschließen soll, ist die Vorgabe von Node, und
+     * die schließt sie um den Faktor vier aus; ohne die Behebung ist die
+     * Verbindung nach 22 Sekunden noch da (Gegenprobe T-128).
+     */
+    const GRENZE_MS = HEADERS_TIMEOUT_MS + CONNECTION_CHECK_INTERVAL_MS + 5_000;
+
+    check(
+      'Die Fristen stehen unter den Vorgaben von Node (60 s Kopf, 300 s Anfrage)',
+      HEADERS_TIMEOUT_MS < 60_000 &&
+        REQUEST_RECEIVE_TIMEOUT_MS < 300_000 &&
+        HEADERS_TIMEOUT_MS < REQUEST_RECEIVE_TIMEOUT_MS &&
+        CONNECTION_CHECK_INTERVAL_MS < 30_000,
+      `Kopf ${HEADERS_TIMEOUT_MS} ms, Anfrage ${REQUEST_RECEIVE_TIMEOUT_MS} ms, Takt ${CONNECTION_CHECK_INTERVAL_MS} ms`,
+    );
+
+    const halbeAnfrage = await openHalfRequest();
+    check('Ein fremder Prozess hält eine Verbindung mit halbem Anfragekopf', halbeAnfrage !== null);
+
+    const begonnen = Date.now();
+    let antwort = '';
+    if (halbeAnfrage !== null) halbeAnfrage.on('data', (teil) => (antwort += teil.toString('utf8')));
+    const geschlossen = await new Promise((fertig) => {
+      if (halbeAnfrage === null) {
+        fertig(false);
+        return;
+      }
+      halbeAnfrage.once('close', () => fertig(true));
+      setTimeout(() => fertig(false), GRENZE_MS + 10_000).unref();
+    });
+    const dauer = Date.now() - begonnen;
+    halbeAnfrage?.destroy();
+
+    check(
+      `Der Dienst trennt sie binnen ${GRENZE_MS} ms — der fremde Prozess bestimmt nicht, wie lange`,
+      geschlossen && dauer < GRENZE_MS,
+      `${geschlossen ? `${dauer} ms` : 'nicht getrennt'}`,
+    );
+    // Die Zahl gehört auch in den grünen Lauf. Wer ihn liest, soll sehen, wie
+    // weit die Messung von der Grenze entfernt ist, und nicht nur, dass sie
+    // darunter liegt.
+    console.log(`        getrennt nach ${geschlossen ? `${dauer} ms` : 'gar nicht'}`);
+    /*
+     * Die Prüfung, die den Unterschied zwischen „behoben" und „zufällig weg"
+     * macht. Ein 408 ist Nodes Antwort auf genau diese Frist; eine Verbindung,
+     * die aus einem anderen Grund fällt, kommt ohne Antwort zurück.
+     */
+    check(
+      'Und zwar über die Frist: Node antwortet mit 408',
+      antwort.startsWith('HTTP/1.1 408'),
+      antwort.split('\r\n')[0] ?? '(keine Antwort)',
+    );
+
+    const nachher = await call('/api/v1/health', { headers: sessionHeaders });
+    check(
+      'Der Dienst selbst läuft weiter — getrennt wird die Verbindung, nicht der Dienst',
+      nachher.status === 200,
+      String(nachher.status),
+    );
+  }
 
   section('1. Bindeadresse (B-1.1 Punkt 3 und 4)');
   {

@@ -26,8 +26,10 @@ import type {
   ExportTemplateId,
   Pool,
   PoolId,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolPlacement,
-  PoolRuleTerm,
+  PoolTagTerm,
   RoundingMode,
   RunningTimeEntry,
   StatusId,
@@ -35,6 +37,7 @@ import type {
   TagFolder,
   TagFolderId,
   TagId,
+  TaktFieldError,
   TimeEntry,
   TimeEntryId,
   TimeEntrySource,
@@ -130,7 +133,42 @@ function toPoolPlacement(value: SqlValue | undefined): PoolPlacement {
   return value === 'board' || value === 'both' ? value : 'pool';
 }
 
-export function toPool(row: SqlRow, rule: readonly PoolRuleTerm[]): Pool {
+/**
+ * Die Erledigt-Achse einer Regel (T-076).
+ *
+ * Dieselbe Bauart wie `toPoolPlacement` daneben: Alles, was nicht wörtlich
+ * `done` oder `open` ist, wird zu `any` — dem **Neutralwert**. Ein Mapper
+ * urteilt nicht, er liest; und ein unbekannter Wert darf keine Bedingung
+ * erfinden, die niemand gesetzt hat. Ein Bestand vor Migration 0011 hat die
+ * Spalte gar nicht, und auch dann ist `any` die richtige Antwort.
+ */
+export function toPoolCompletion(value: SqlValue | undefined): PoolCompletionFilter {
+  return value === 'done' || value === 'open' ? value : 'any';
+}
+
+/** Die Exportstatus-Achse einer Regel (T-076). Siehe `toPoolCompletion`. */
+export function toPoolExportState(value: SqlValue | undefined): PoolExportFilter {
+  return value === 'open' || value === 'exported' ? value : 'any';
+}
+
+/**
+ * Die übrigen Regelachsen, die als eigene Zeilen in `pool_rule` stehen (T-076).
+ *
+ * Freiwillig und leer als Vorgabe: `toPool(row, [])` bleibt damit ein
+ * gültiger Aufruf, und ein Aufrufer, der nur die erforderlichen Tags kennt,
+ * bekommt eine Regel, die genau das sagt — statt eine, die eine Achse
+ * behauptet, die er nie gelesen hat.
+ */
+export interface PoolRuleParts {
+  readonly excludedTags?: readonly PoolTagTerm[];
+  readonly statusIds?: readonly StatusId[];
+}
+
+export function toPool(
+  row: SqlRow,
+  rule: readonly PoolTagTerm[],
+  parts: PoolRuleParts = {},
+): Pool {
   return {
     id: brand<PoolId>(text(row, 'id')),
     name: text(row, 'name'),
@@ -139,15 +177,130 @@ export function toPool(row: SqlRow, rule: readonly PoolRuleTerm[]): Pool {
     placement: toPoolPlacement(row['placement']),
     position: integer(row, 'position'),
     rule,
+    excludedTags: parts.excludedTags ?? [],
+    statusIds: parts.statusIds ?? [],
+    completion: toPoolCompletion(row['completion']),
+    exportState: toPoolExportState(row['export_state']),
     createdAt: asTimestamp(text(row, 'created_at')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
 }
 
-export function toPoolRuleTerm(row: SqlRow): PoolRuleTerm {
+/**
+ * Eine Zeile aus `pool_rule` mit `role` `required` oder `excluded`.
+ *
+ * Statuszeilen kommen hier **nicht** an: Sie tragen keinen Term, sondern eine
+ * Kennung, und `repo-tags.ts` liest sie als solche. Ein Mapper, der beides
+ * könnte, müsste einen dritten Rückgabefall haben, den kein Aufrufer je
+ * bekäme.
+ */
+export function toPoolRuleTerm(row: SqlRow): PoolTagTerm {
   const tagId = textOrNull(row, 'tag_id');
   if (tagId !== null) return { kind: 'tag', tagId: brand<TagId>(tagId) };
   return { kind: 'folder', folderId: brand<TagFolderId>(text(row, 'folder_id')) };
+}
+
+/**
+ * Eine Regel als Feldangabe in `details` (R-3 H-2, R-1 Befund 1, T-089).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Kennung in `field` steht
+ * ---------------------------------------------------------------------------
+ *
+ * `TaktFieldError` hat drei Felder: `field`, `code`, `message`. Bei einer
+ * Löschanfrage gibt es kein Eingabefeld, dem etwas vorzuwerfen wäre — die
+ * Anfrage besteht aus einem Pfadbestandteil und sonst nichts. `field` ist
+ * damit der einzige Platz in der Hülle, der eine maschinenlesbare Angabe
+ * tragen kann, und die Kennung der Regel ist genau das, was die Oberfläche
+ * braucht: Sie soll dorthin verweisen können, wo der Benutzer den Term
+ * herausnimmt.
+ *
+ * Der Vertrag lautet deshalb, und er steht so auch in der
+ * Schnittstellenbeschreibung: **`code` ist `pool_rule`, `field` ist die
+ * Kennung des Pools, `name` ist sein Name, `message` nennt ihn im Satz.** Ein
+ * Aufrufer liest `details.filter((d) => d.code === 'pool_rule')` und hat
+ * Kennung, Namen und Satz.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum der Name zweimal dasteht (W-11 aus R-2a)
+ * ---------------------------------------------------------------------------
+ *
+ * Weil er zwei verschiedene Aufgaben hat. `message` ist ein fertiger Satzteil
+ * für eine Oberfläche, die nichts weiter kann als ihn zeigen. `name` ist der
+ * bloße Name für eine, die einen eigenen Satz baut — „die Regeln „Ost“,
+ * „Nord“ und „Abrechnung“" statt dreimal „Regel „…“".
+ *
+ * Die Alternative wäre gewesen, die Oberfläche den Namen aus `message`
+ * herausschneiden zu lassen. Das ist eine ungeschriebene Abmachung über den
+ * Wortlaut eines fremden Textes, und sie bricht still, sobald dieser Text sich
+ * ändert (T-097 Annahme 1). Ein Feld bricht laut.
+ *
+ * **`message` bleibt Zeichen für Zeichen, wie es war.** Die Änderung nimmt
+ * nichts weg; wer `name` nicht kennt, merkt nichts.
+ *
+ * Der Name kommt aus dem eigenen Bestand und nicht aus der Anfrage; er verrät
+ * dem Aufrufer nichts, was ihm die Pool-Liste nicht ohnehin sagt (B-2.4).
+ */
+export function poolReference(row: SqlRow): TaktFieldError {
+  const name = text(row, 'name');
+  return {
+    field: text(row, 'id'),
+    code: 'pool_rule',
+    name,
+    message: `Regel „${name}“`,
+  };
+}
+
+/**
+ * Wie viele Regelnamen eine Sperre höchstens nennt (R-3a H-3).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum es überhaupt eine Grenze gibt
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-101 hatte keine der drei Abfragen ein `LIMIT`, und für die Zahl der
+ * Pools gibt es nirgends eine Obergrenze. Der Kommentar dazu begründete den
+ * Verzicht damit, daß `pool_rule` „eine Handvoll von Hand eingerichteter
+ * Zeilen" hält — das ist die Annahme, die eine Grenze ersetzen soll, und
+ * Annahmen dieser Art altern. Bei 200 Zeichen je Name steht sonst der ganze
+ * Bestand in **einem** Satz eines Löschdialogs.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Kürzung im Text steht und nicht nur im `LIMIT`
+ * ---------------------------------------------------------------------------
+ *
+ * Eine Liste, die still bei zwanzig aufhört, ist die stille Kürzung aus Befund
+ * B-3b: Der Benutzer nimmt zwanzig Regeln heraus, versucht es wieder, und die
+ * Sperre steht immer noch. Die Abfrage holt deshalb **eine Zeile mehr** als sie
+ * zeigt; kam sie, sagt der Meldungstext es. Die Oberfläche braucht dafür keine
+ * Änderung — sie zeigt den Satz des Dienstes, wie er dasteht
+ * (`errorText.ts`, R-3a).
+ */
+export const RULE_REFERENCE_LIMIT = 20;
+
+/** Für `LIMIT` in der Abfrage: eine Zeile mehr, um die Kürzung zu **bemerken**. */
+export const RULE_REFERENCE_PROBE = RULE_REFERENCE_LIMIT + 1;
+
+/**
+ * Die Regelnamen für `details`, gekürzt und mit dem Hinweis dazu.
+ *
+ * `rows` kommt aus einer Abfrage mit `LIMIT RULE_REFERENCE_PROBE`. Sind es so
+ * viele, gibt es mindestens eine weitere Regel, und `notice` trägt den Satz,
+ * der an die Meldung gehängt wird. Sonst ist `notice` leer, und der Text bleibt
+ * Wort für Wort der von vorher.
+ */
+export function poolReferences(rows: readonly SqlRow[]): {
+  readonly details: readonly TaktFieldError[];
+  readonly notice: string;
+} {
+  const shown = rows.slice(0, RULE_REFERENCE_LIMIT);
+  return {
+    details: shown.map((row) => poolReference(row)),
+    notice:
+      rows.length > RULE_REFERENCE_LIMIT
+        ? ` Es sind mehr als ${String(RULE_REFERENCE_LIMIT)}; genannt werden die ersten ${String(RULE_REFERENCE_LIMIT)}.`
+        : '',
+  };
 }
 
 /**

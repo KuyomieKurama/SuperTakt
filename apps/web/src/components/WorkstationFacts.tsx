@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import { useId, useMemo, useState } from "react";
 import { cx } from "../lib/cx";
 import {
@@ -7,6 +8,7 @@ import {
 } from "../lib/databaseLocationAdvice";
 import { Icon } from "./Icon";
 import { Button, InlineMessage } from "./Primitives";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — die zwei Auskünfte des Dienstes über diesen Arbeitsplatz (C-20).
@@ -53,7 +55,7 @@ import { Button, InlineMessage } from "./Primitives";
 
 export interface BillingUserFactProps {
   /** Wie der Dienst ihn meldet. Leer heißt: er meldet keinen. */
-  readonly user: string;
+  readonly user: ForeignText;
   readonly className?: string;
 }
 
@@ -92,8 +94,17 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
         </InlineMessage>
       ) : (
         <>
+          {/*
+            Der Windows-Benutzername steht hier als **Wert** und nicht in einem
+            Satz — und er geht unveraendert in jede Exportzeile (A-8.5, E-010).
+            Seit T-122 weist der lokale Dienst einen Namen mit Steuer- oder
+            Richtungszeichen beim Start ab; ein solcher Name kann diese Fassung
+            der Anwendung also gar nicht erreichen. `Foreign` steht trotzdem
+            hier: Die Anzeige eines Abrechnungswerts soll nicht davon abhaengen,
+            dass eine andere Schicht ihre Pruefung behaelt (E-063).
+          */}
           <p className="workstation__value mono" data-testid="billing-user">
-            {name}
+            <Foreign value={name} />
           </p>
           <p className="workstation__body">
             Dieser Name steht in <strong>jeder Zeile jeder Exportdatei</strong>. Er sagt der

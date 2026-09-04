@@ -74,7 +74,7 @@ test.describe('TAGINPUT-01 — Vorschläge folgen der Namensregel des Dienstes',
       // enthält denselben Satzteil wörtlich und träfe *immer*, unabhängig vom
       // tatsächlichen Angebot. Auf `role="option"` beschränkt trifft nur ein
       // wirklich gerendertes Angebot zum Anlegen.
-      const noCreateOffer = (): ReturnType<typeof expect> =>
+      const noCreateOffer = (): Promise<void> =>
         expect(page.getByRole('option', { name: /als neues Tag anlegen/ })).toHaveCount(0);
 
       // --- Kleinschreibung: derselbe Schlüssel, kein Angebot zum Anlegen ---
@@ -298,13 +298,19 @@ test.describe('TAGINPUT-05 — geschlossenes Auswahlfeld bleibt für Tastatur un
      * aber für Vorlesehilfe und Tabulator vorhanden. Behoben über eine
      * eigene `[hidden] { display: none !important }`-Regel in `base.css`.
      * Bisher nur behauptet, hier zum ersten Mal geprüft.
+     *
+     * Feld seit E-054/T-076 umbenannt: "Statusspalte" → "Status" — der Status
+     * ist keine Kanban-Spalte mehr, sondern eine Eigenschaft des Todos
+     * (`TodoFormDialog.tsx`). Der hier geprüfte Befund selbst (die
+     * `[hidden]`-Regel) ist davon unberührt, nur die Beschriftung des
+     * Auswahlfelds hat sich geändert (T-081).
      */
     await gotoTodos(page);
     await page.getByRole('button', { name: 'Neues Todo' }).click();
     const dialog = page.getByRole('dialog', { name: 'Neues Todo' });
     await expect(dialog).toBeVisible();
 
-    const statusTrigger = dialog.getByRole('combobox', { name: 'Statusspalte' });
+    const statusTrigger = dialog.getByRole('combobox', { name: 'Status' });
     await statusTrigger.focus();
     await expect(statusTrigger).toBeFocused();
 

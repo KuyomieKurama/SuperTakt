@@ -11,6 +11,7 @@ import {
   type ExportTransformation,
   type SourceCatalog,
 } from "../lib/exportTemplateModel";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Takt — die geordnete Feldliste einer Exportvorlage (S-14, I-15, A-8.7).
@@ -100,7 +101,7 @@ export function TemplateFields({
     if (target < 0 || target >= fields.length) return;
     onMove(key, delta);
     setAnnouncement(
-      `Feld „${name}“ steht jetzt an Position ${String(target + 1)} von ${String(fields.length)}.`,
+      `Feld ${quotedName(name)} steht jetzt an Position ${String(target + 1)} von ${String(fields.length)}.`,
     );
   };
 
@@ -397,7 +398,7 @@ function TemplateFieldRow({
             {emptyName
               ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
               : duplicate
-                ? `„${field.name}“ steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
+                ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
                 : rowError}
           </p>
         ) : null}
@@ -420,27 +421,27 @@ function TemplateFieldRow({
       {readOnly ? null : (
         <div className="tfield__tools" role="group" aria-label={`Feld ${String(index + 1)}`}>
           <IconButton
-            label={`Feld „${field.name}“ nach oben`}
+            label={`Feld ${quotedName(field.name)} nach oben`}
             icon="arrow-up"
             size="sm"
             disabled={index === 0}
             onClick={() => onMoveBy(-1)}
           />
           <IconButton
-            label={`Feld „${field.name}“ nach unten`}
+            label={`Feld ${quotedName(field.name)} nach unten`}
             icon="arrow-down"
             size="sm"
             disabled={index === total - 1}
             onClick={() => onMoveBy(1)}
           />
           <IconButton
-            label={`Feld „${field.name}“ verdoppeln`}
+            label={`Feld ${quotedName(field.name)} verdoppeln`}
             icon="copy"
             size="sm"
             onClick={() => onDuplicate(entry.key)}
           />
           <IconButton
-            label={`Feld „${field.name}“ entfernen`}
+            label={`Feld ${quotedName(field.name)} entfernen`}
             icon="trash"
             size="sm"
             className="tfield__remove"

@@ -23,9 +23,10 @@
  * `developmentFallback()`.
  */
 
-import type { DirectoryChoice } from "@takt/desktop/shell";
+import type { DirectoryChoice, OsUser } from "@takt/desktop/shell";
+import { hasForbiddenNameCharacter } from "@takt/domain";
 import { setConnection, type Connection } from "../api/client";
-import type { ShellStateSnapshot } from "../components/ShellStatus";
+import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellStatus";
 
 /**
  * Das Ergebnis des Ordnerauswahldialogs, unter dem Namen der Hülle.
@@ -38,7 +39,12 @@ export type ExportDirectoryChoice = DirectoryChoice;
 
 export type ConnectionState =
   | { readonly kind: "connecting" }
-  | { readonly kind: "ready"; readonly shell: ShellStateSnapshot | null }
+  | {
+      readonly kind: "ready";
+      readonly shell: ShellStateSnapshot | null;
+      /** Siehe {@link readUserNameFinding}. Ohne Huelle `"unknown"`. */
+      readonly userName: UserNameFinding;
+    }
   | { readonly kind: "no_shell" }
   | { readonly kind: "failed"; readonly message: string };
 
@@ -46,6 +52,7 @@ interface ShellModule {
   isShellAvailable(): boolean;
   serviceHandshake(): Promise<Connection>;
   shellState(): Promise<ShellStateSnapshot>;
+  osUser(): Promise<OsUser>;
   quit(): Promise<void>;
   chooseExportDirectory(current: string | null): Promise<ExportDirectoryChoice>;
 }
@@ -89,7 +96,7 @@ export async function connect(): Promise<ConnectionState> {
     const fallback = developmentFallback();
     if (fallback !== null) {
       setConnection(fallback);
-      return { kind: "ready", shell: null };
+      return { kind: "ready", shell: null, userName: "unknown" };
     }
     return { kind: "no_shell" };
   }
@@ -106,7 +113,64 @@ export async function connect(): Promise<ConnectionState> {
     };
   }
 
-  return { kind: "ready", shell: await readShellState() };
+  // Beide Fragen an die Huelle, nebeneinander: Sie haengen nicht voneinander
+  // ab, und der Start soll nicht zweimal auf denselben Kanal warten.
+  const [shellSnapshot, userName] = await Promise.all([
+    readShellState(),
+    readUserNameFinding(),
+  ]);
+  return { kind: "ready", shell: shellSnapshot, userName };
+}
+
+/**
+ * Traegt der Windows-Benutzername dieses Rechners ein Zeichen, das der lokale
+ * Dienst abweist? (O-AJ, T-124.)
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Oberflaeche diese Frage ueberhaupt stellt
+ * ---------------------------------------------------------------------------
+ *
+ * Nicht, um zu entscheiden — entschieden hat der Dienst, und zwar schon: Seit
+ * T-122 startet er nicht, wenn der Name aus der zweiten `stdin`-Zeile ein
+ * Steuer- oder Richtungszeichen traegt (Grund `user_invalid`, Code 78). Diese
+ * Funktion **erklaert** einen Fehlschlag, der bereits stattgefunden hat.
+ *
+ * Sie muss ihn erklaeren, weil aus dem Fehlschlag allein nicht hervorgeht,
+ * woran er lag: Der Beendigungscode 78 steht auch fuer ein fehlendes
+ * Startgeheimnis und fuer ein fehlendes Datenverzeichnis, und die Huelle faengt
+ * einen Teil der Faelle sogar vor dem Start ab — dann gibt es gar keinen Code,
+ * sondern nur einen Satz in `problems`. Ohne diese Frage steht der Benutzer
+ * vor einer stummen Tuer.
+ *
+ * ---------------------------------------------------------------------------
+ * Zwei Dinge, die hier nicht geschehen
+ * ---------------------------------------------------------------------------
+ *
+ * **Es wird nichts nachgerechnet.** Die Zeichenklasse kommt aus
+ * `packages/domain/src/characters.ts` — dieselbe Funktion, die der Dienst an
+ * seiner Tuer und am Handschlag ruft (T-122, E-063 Punkt 4). Eine zweite
+ * Fassung in der Oberflaeche koennte anderer Meinung sein als die Tuer, und
+ * genau diese Bauart hat in T-119 fuenf Wellen lang eine Regression getragen.
+ *
+ * **Der Name wird nicht behalten.** Er lebt in einer oertlichen Bindung, so
+ * lange die Frage dauert, und geht danach mit ihr. Heraus kommt der Befund,
+ * nicht der Wert: B-8.2 Punkt 1 verlangt, dass der Name zum Zeitpunkt des
+ * Exports gefragt wird und nirgends im Anwendungszustand liegt — und eine
+ * Meldung, die ihn wiedergaebe, richtete genau den Schaden an, den sie meldet
+ * (B-4.3 Punkt 5).
+ *
+ * Ohne Huelle und bei einem Fehlschlag der Abfrage kommt `"unknown"` zurueck
+ * und nicht `"ok"`: Eine unbeantwortete Frage ist keine Unbedenklichkeit.
+ */
+export async function readUserNameFinding(): Promise<UserNameFinding> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) return "unknown";
+  try {
+    const user = await shell.osUser();
+    return hasForbiddenNameCharacter(user.name) ? "forbidden_characters" : "ok";
+  } catch {
+    return "unknown";
+  }
 }
 
 /** Den Zustand der Hülle nachlesen. `null`, wenn es keine Hülle gibt. */
@@ -123,13 +187,34 @@ export async function readShellState(): Promise<ShellStateSnapshot | null> {
 /**
  * Beendet Takt über die Hülle.
  *
- * Nur aus der Sperrmeldung heraus aufgerufen: Steht `serviceExit`, gibt es
- * keinen laufenden Timer mehr, den E-036 klären müsste — der Dienst, der ihn
- * geführt hätte, ist weg.
+ * Nur aus den Sperrmeldungen und aus der Startmeldung heraus aufgerufen: Steht
+ * `serviceExit`, gibt es keinen laufenden Timer mehr, den E-036 klären müsste
+ * — der Dienst, der ihn geführt hätte, ist weg.
+ *
+ * **Seit T-124 schweigt sie nicht mehr** (O-AF). Bis dahin kehrte sie ohne
+ * Hülle wortlos zurück, und ein abgewiesenes `quit()` fiel durch ein `void`
+ * ins Leere. Beides sah an der Schaltfläche gleich aus: Es geschah nichts.
+ * „Takt beenden" ist nach E-036 aber der **einzige** Ausgang aus der
+ * Sperrmeldung, und ein Ausgang, der stumm nicht funktioniert, ist eine Tür
+ * ohne Klinke.
+ *
+ * Der Fall „keine Hülle" ist hier ein Fehlschlag und kein Normalfall: Der
+ * Knopf steht nur da, wenn die Hülle einen Zustand gemeldet hat. Wer ihn
+ * drückt und keine Hülle vorfindet, hat einen Widerspruch vor sich und soll
+ * ihn lesen können.
+ *
+ * Der **Erfolg** dieser Funktion ist nicht sichtbar: `takt_quit` ruft
+ * `app.exit(0)`, der Prozess endet, und die Zusage kommt nie zurück. Wer auf
+ * sie wartet, wartet deshalb mit einer Frist — siehe `useQuitAttempt` in
+ * `components/ShellStatus.tsx`.
  */
 export async function quitApplication(): Promise<void> {
   const shell = await loadShell();
-  if (shell === null || !shell.isShellAvailable()) return;
+  if (shell === null || !shell.isShellAvailable()) {
+    throw new Error(
+      "Takt läuft hier ohne seine Anwendungshülle. Den Befehl zum Beenden gibt es nur in der Takt-Anwendung.",
+    );
+  }
   await shell.quit();
 }
 

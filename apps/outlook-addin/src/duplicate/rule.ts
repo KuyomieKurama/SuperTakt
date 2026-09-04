@@ -22,8 +22,9 @@
  *     Vertrauensgrenze; zwei Fassungen derselben Regel waren ein Risiko.
  *  3. **Ein Treffer ist ein Angebot, kein Vollzug.** `describeOffer` liefert,
  *     was vor der Entscheidung sichtbar sein muss: Titel, Call-Nummer,
- *     Erledigt-Kennzeichen, die Pools und die Aufteilung der bereits gebuchten
- *     Zeit. Eine anonyme Ja/Nein-Frage beantwortet jeder mit Ja.
+ *     Erledigt-Kennzeichen, die Bewegung durch die Regeln — Pools wie
+ *     Board-Spalten — und die Aufteilung der bereits gebuchten Zeit. Eine
+ *     anonyme Ja/Nein-Frage beantwortet jeder mit Ja.
  *
  * Seit T-038 gehört zu Punkt 3 auch die **Folge** der Entscheidung: Ist das
  * gefundene Todo erledigt, wird es durch die Buchung automatisch wieder offen
@@ -31,7 +32,7 @@
  * dafür liegen in `reopen.ts`.
  */
 
-import { checkCallNumber, type CallNumberRejection } from '@takt/domain';
+import { checkCallNumber, type CallNumberRejection, type PoolMovement } from '@takt/domain';
 import type { TodoMatchDto } from '../api/types.ts';
 
 export type LookupDecision =
@@ -67,13 +68,25 @@ export interface OfferDescription {
    */
   readonly exportedSeconds: number;
   /**
-   * Die Pools, in denen dieses Todo Mitglied ist — beim Namen (I-05).
+   * Wohin die Buchung dieses Todo bewegen **würde** — oder `null` (I-05,
+   * E-056, T-084, E-061 Punkt 3).
    *
    * Gehört zum Angebot, weil ein erledigtes Todo mit dieser Buchung wieder
    * offen wird (A-2.5) und der Benutzer **vor** der Entscheidung wissen soll,
-   * wo es danach steht. Aus dem Dienst übernommen, nicht im Add-in gerechnet.
+   * wo es danach steht. Und für den häufigeren Fall — das gefundene Todo ist
+   * meistens nicht erledigt — steht in `enters` die einzige Auskunft, die es
+   * dort zu geben gibt: Die erste Buchung hebt das Todo in jede Regel, die
+   * nach offener, noch nicht abgerechneter Zeit fragt.
+   *
+   * Aus dem Dienst übernommen, nicht im Add-in gerechnet — und dort über alle
+   * fünf Achsen einer Regel gerechnet, nicht nur über die Tags (T-078). Der
+   * Wert wird unverändert an `poolMovementSentence` weitergereicht; das
+   * Add-in setzt ihn nicht zusammen und nimmt ihn nicht auseinander.
+   *
+   * `null` heißt: Diese Buchung bewegt nichts, und der Aufgabenbereich sagt
+   * dann kein Wort über Pools.
    */
-  readonly poolNames: readonly string[];
+  readonly poolMovement: PoolMovement | null;
   /** Ein Satz, der in S-12 unmittelbar über den Schaltflächen stehen kann. */
   readonly summary: string;
 }
@@ -115,7 +128,7 @@ export const describeOffer = (match: TodoMatchDto): OfferDescription | null => {
     isDone,
     openSeconds: match.openSeconds,
     exportedSeconds: match.exportedSeconds,
-    poolNames: match.poolNames,
+    poolMovement: match.poolMovement,
     summary: `${parts.join(' · ')}.`,
   };
 };
@@ -129,3 +142,19 @@ export const describeOffer = (match: TodoMatchDto): OfferDescription | null => {
  */
 export const describeOffers = (matches: readonly TodoMatchDto[]): readonly OfferDescription[] =>
   matches.map(describeOffer).filter((offer): offer is OfferDescription => offer !== null);
+
+/*
+ * Hier stand bis T-104 ein `offerMovement(offer)`, das die drei Listen des
+ * Angebots zu **einem** `PoolMovement` zusammensetzte (T-084, E-058).
+ *
+ * Es ist ersatzlos weg, und zwar weil sein Grund weggefallen ist: Die drei
+ * Listen waren gleich getippt, und wer sie zusammensetzte, hatte jedesmal die
+ * Gelegenheit, `enters` und `leaves` zu vertauschen — ein Satz, der sich
+ * fehlerfrei liest und das Gegenteil behauptet. Seit E-061 Punkt 3 liefert der
+ * Dienst den Wert bereits zusammengesetzt (`poolMovement`); es gibt nichts mehr
+ * zusammenzusetzen und damit auch nichts mehr zu vertauschen.
+ *
+ * Wer den Wert braucht, liest `offer.poolMovement` — denselben Typ, den
+ * `poolMovementSentence` entgegennimmt und den `usecases/pool-movement.ts`
+ * ausrechnet.
+ */

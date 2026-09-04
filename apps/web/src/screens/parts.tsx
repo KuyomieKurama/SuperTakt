@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Button, InlineMessage, LoadingBlock } from "../components/Primitives";
 import { cx } from "../lib/cx";
-import { href } from "../app/router";
+import { handleRouteLinkClick, href } from "../app/router";
 import type { AsyncState } from "../app/useAsync";
 
 /**
@@ -14,15 +14,40 @@ import type { AsyncState } from "../app/useAsync";
  */
 
 export interface ScreenHeaderProps {
-  readonly title: string;
+  /**
+   * Die Ueberschrift der Ansicht.
+   *
+   * Ein `ReactNode` und keine Zeichenkette (T-124): Die Detailansicht setzt
+   * hier den **Titel eines Todos** ein, und der ist fremder Text — er muss
+   * durch `<Foreign>` gehen (E-063). Jede bisherige Aufrufstelle bleibt
+   * gueltig; eine Zeichenkette **ist** ein `ReactNode`.
+   */
+  readonly title: ReactNode;
   /** Ein Satz darunter: was diese Ansicht beantwortet. */
   readonly lead?: string;
   readonly actions?: ReactNode;
+  /**
+   * Lädt diese Ansicht gerade im Hintergrund nach? (Abschnitt 15, W-12)
+   *
+   * Seit T-097 holt **jede** Ansicht ihre Daten neu, wenn dieselbe Adresse ein
+   * zweites Mal angesteuert wird oder das Fenster wieder sichtbar wird — auch
+   * die, die dafür kein Zeichen hatten. Dort änderte sich der Inhalt bis T-102
+   * ohne jeden Hinweis. Vier Ansichten trugen `RefreshHint` an einer eigenen
+   * Leiste (Board, Buchungen, Protokoll, Todo-Liste); die übrigen sieben haben
+   * keine solche Leiste, und eine je Ansicht zu erfinden hieße, denselben
+   * Zustand an elf Orten verschieden zu zeigen. Er steht deshalb hier, im Kopf,
+   * den jede Ansicht hat.
+   *
+   * **Keine Live-Region.** Abschnitt 15 verlangt eine **sichtbare** Rückmeldung,
+   * und eine Ansage, die es nur für Vorlesehilfen gibt, wäre eine zweite
+   * Anwendung (Antwort auf T-097 Frage 3, R-2a).
+   */
+  readonly refreshing?: boolean;
   /** Zusatzzeile unter dem Kopf, etwa eine Filterleiste. */
   readonly children?: ReactNode;
 }
 
-export function ScreenHeader({ title, lead, actions, children }: ScreenHeaderProps) {
+export function ScreenHeader({ title, lead, actions, refreshing, children }: ScreenHeaderProps) {
   return (
     <header className="screen__header">
       <div className="screen__headline">
@@ -30,6 +55,7 @@ export function ScreenHeader({ title, lead, actions, children }: ScreenHeaderPro
           <h1 className="screen__title">{title}</h1>
           {lead === undefined ? null : <p className="screen__lead">{lead}</p>}
         </div>
+        {refreshing === undefined ? null : <RefreshHint active={refreshing} />}
         {actions === undefined ? null : <div className="screen__actions">{actions}</div>}
       </div>
       {children}
@@ -76,6 +102,8 @@ export function ExportTabs({
               href={href(item.key)}
               aria-current={active === item.key ? "page" : undefined}
               title={item.hint}
+              /* Wie in der Hauptnavigation (T-102): der eigene Bereich noch einmal. */
+              onClick={(event) => handleRouteLinkClick(href(item.key), event)}
             >
               {item.label}
             </a>

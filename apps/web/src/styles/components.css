@@ -324,8 +324,8 @@
  * Abstand ihn behaelt.
  */
 .card__body
-  > :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker)
-  + :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker) {
+  > :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section)
+  + :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section) {
   margin-top: var(--space-4);
 }
 
@@ -929,35 +929,11 @@
 
 /* Die Regel der Spalte, direkt unter ihrem Kopf. Sie beantwortet die Frage,
    die eine Spalte aus Regeln als Erstes aufwirft: Warum steht diese Karte
-   hier? (E-054) */
+   hier? (E-054) — gezeichnet wird sie von `.rule-summary` weiter unten, seit
+   T-079 an allen drei Flaechen gleich. */
 .kcolumn__rule {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-.kcolumn__rule-text {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-2xs);
-  line-height: var(--leading-snug);
-}
-
-.kcolumn__rule-mode {
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-}
-
-.kcolumn__rule-folder {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
 }
 
 .kcolumn__body {
@@ -1320,55 +1296,11 @@
   font-size: var(--text-4xl);
 }
 
-/* Hinweis nach dem Aufheben von "Erledigt" (A-2.5, I-05) */
-.reactivation {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--timer-running-border);
-  border-inline-start: 3px solid var(--timer-running-pulse);
-  border-radius: var(--radius-lg);
-  background-color: var(--timer-running-bg);
-}
-
-.reactivation__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  flex: none;
-  border-radius: var(--radius-md);
-  background-color: var(--bg-surface);
-  color: var(--timer-running-fg);
-}
-
-.reactivation__title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  color: var(--timer-running-fg);
-}
-
-.reactivation__body {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.reactivation__hint {
-  margin-top: var(--space-1);
-  font-size: var(--text-xs);
-  line-height: var(--leading-relaxed);
-  color: var(--text-muted);
-  max-width: var(--measure-prose);
-}
-
-.reactivation__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
+/* Hier standen bis T-108 `.reactivation*` — die Huelle von
+   `ReactivationNotice`. Der Baustein ist mit W-9 entfallen: Keine Ansicht der
+   Anwendung hat ihn eingesetzt, den Fall A-2.5/I-05 tragen der Toast
+   (`.toast`) und das Etikett `.doneflag--reopened`. Die Begruendung steht in
+   `components/Timer.tsx` am selben Platz. */
 
 /* ==================================================================== */
 /* Vermerk und Leistung — die zwei Feldarten                            */
@@ -3491,6 +3423,101 @@
   color: var(--text-secondary);
 }
 
+/* -------------------------------------------------------------------- */
+/* „Takt beenden" hat nicht gewirkt — O-AF, T-124                        */
+/* -------------------------------------------------------------------- */
+/*
+ * Die Auskunft steht **im Feld selbst** und nicht im Meldungsstapel: Der liegt
+ * seit T-110 hinter der Abdunklung, sobald ein Dialog steht, und genau dort
+ * wird dieser Knopf gedrueckt.
+ *
+ * Der Behaelter `.quitfail__region` ist die Live-Region und steht immer da,
+ * auch leer — dieselbe Regel wie an `refusal` im Bestaetigungsdialog (B-5).
+ * Leer darf er deshalb keinen Platz einnehmen: kein `padding`, kein `gap`, und
+ * die Fusszeile darunter behaelt ihre Hoehe. `:empty` waere hier falsch, weil
+ * der Behaelter im Fehlerfall ein Kind bekommt und der Rand daran haengt.
+ */
+
+.quitfail__region {
+  inline-size: 100%;
+}
+
+.quitfail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--measure-prose);
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--danger-border);
+  /*
+     Die Randschiene ist nicht Zierde, sondern die Unterscheidung (SC 1.4.11):
+     In der Startmeldung liegt dieser Kasten auf `--danger-bg-subtle`, also auf
+     seiner eigenen Farbe — ohne die Schiene waere allein der helle Rand
+     (`--danger-border` auf `--danger-bg-subtle`) das Merkmal, und das traegt
+     nicht. `--danger-bg` auf `--danger-bg-subtle` ist im Kontrastnachweis mit
+     mindestens 3:1 gefuehrt (Gruppe „Startmeldung", Randschiene).
+  */
+  border-inline-start-width: 3px;
+  border-inline-start-color: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  background-color: var(--danger-bg-subtle);
+}
+
+.quitfail__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--danger-text);
+}
+
+.quitfail__body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-primary);
+}
+
+.quitfail__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  counter-reset: quitfail;
+}
+
+.quitfail__steps > li {
+  position: relative;
+  padding-inline-start: var(--space-6);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+  counter-increment: quitfail;
+}
+
+.quitfail__steps > li::before {
+  content: counter(quitfail);
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-inset);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.quitfail__foot {
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
 /* ==================================================================== */
 /* Exportordner — Auswahl, Befunde, Base64-Hinweis (T-036, Befund S-04) */
 /* ==================================================================== */
@@ -3874,4 +3901,200 @@
 .dbconcerns__impacts {
   color: var(--text-muted);
   font-size: var(--text-2xs);
+}
+
+/* ==================================================================== */
+/* Regelzusammenfassung (T-076, T-079)                                  */
+/* ==================================================================== */
+
+/*
+ * Eine Achse je Zeile statt einer langen Umbruchzeile. Der Grund ist die
+ * Kanban-Spalte: Sie ist rund 17rem breit, und fuenf Achsen nebeneinander
+ * braechen ohnehin um — nur an unvorhersehbaren Stellen, sodass „Ohne" mal
+ * hinter den erforderlichen Tags und mal davor steht.
+ *
+ * Was hier **nicht** steht, ist genauso wichtig: Eine Achse auf ihrem
+ * Neutralwert erscheint nicht. Die Leseregel dieser Flaeche lautet: Was
+ * dasteht, engt ein; was fehlt, laesst alles durch.
+ */
+.rule-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-summary--md {
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Die leere Regel ist ein Zustand und keine fehlende Angabe (A-3.4, T-079).
+ * Deshalb Warndreieck und ganzer Satz statt eines gedaempften Gedankenstrichs:
+ * Eine Spalte ohne Bedingung bleibt leer, bis jemand etwas daran aendert.
+ */
+.rule-summary--empty {
+  /*
+   * `flex-direction: row` steht hier ausdruecklich: `.rule-summary` setzt
+   * `column`, weil dort eine Achse je Zeile steht. Ohne diese Zeile ruecken
+   * Warndreieck und Satz untereinander, und das Dreieck steht mittig ueber
+   * dem Text — gemessen im Spaltenkopf und in der Formularvorschau.
+   */
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+}
+
+.rule-summary--empty svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.rule-summary--empty.rule-summary--md {
+  font-size: var(--text-xs);
+}
+
+.rule-summary__axis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/*
+ * Die Beschriftung traegt Symbol **und** Wort. Keine der fuenf Achsen
+ * unterscheidet sich allein durch Farbe (SC 1.4.1) — die Zusammenfassung ist
+ * durchgehend gedaempft, und ausgeschlossene Tags erkennt man am
+ * durchgestrichenen Kreis, am Wort „Ohne" und an der Randschiene.
+ */
+.rule-summary__axis-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.rule-summary__axis--excluded {
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-strong);
+}
+
+/* „Nur erledigte", „Nur unerledigte" — eine Auswahl, kein Tag. Deshalb eine
+   eigene Huelle: Als Chip gezeichnet sähe sie aus wie etwas, das am Todo
+   haengt. */
+.rule-summary__value,
+.rule-summary__status,
+.rule-summary__folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.rule-summary__folder-note {
+  color: var(--text-muted);
+}
+
+/*
+ * Ein erforderlicher Ordner, in dem kein Tag liegt (E-057, T-083).
+ *
+ * Das ist der einzige der drei Leerzustaende einer Regel, den ausschliesslich
+ * der Benutzer beheben kann — deshalb traegt er die Warnfarbe und nicht die
+ * gedaempfte Flaeche der uebrigen Chips. Erkennbar ist er aber auch ohne sie:
+ * Das Symbol wechselt vom Ordner zum Warndreieck, und der Zusatz „kein Tag
+ * darin" steht als Wort daneben (SC 1.4.1).
+ */
+.rule-summary__folder--empty {
+  /*
+   * Die Kontur traegt `--warning-fg` und nicht `--warning-border`: Gemessen
+   * gegen den Untergrund, auf dem der Chip liegt — den Spaltenkopf
+   * (`--bg-subtle`) und die Regelliste (`--bg-surface`) — kommt
+   * `--warning-border` auf 1,28:1 bzw. 1,44:1 und verfehlt SC 1.4.11 deutlich.
+   * Nachgemessen in `scripts/contrast-check.mjs`, nicht geschaetzt.
+   */
+  border-color: var(--warning-fg);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.rule-summary__folder--empty .rule-summary__folder-note {
+  color: var(--warning-fg);
+}
+
+/*
+ * Die Folge, einmal ausgesprochen. Welcher Ordner leer ist, steht am Chip
+ * darueber und wird hier nicht wiederholt: In einer 17rem breiten Kanban-Spalte
+ * waere derselbe Ordnerpfad zweimal drei Zeilen, und der Satz sagt etwas
+ * anderes als der Chip — der eine nennt den Befund, der andere die Folge.
+ */
+.rule-summary__unreachable {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  color: var(--warning-fg);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__unreachable svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/*
+ * Hilfssatz an einer Achse (W-7 aus R-2a).
+ *
+ * Dieselbe Bauart wie `.rule-summary__unreachable` daneben, aber in `--text-
+ * muted` statt in `--warning-fg`: Der leere Ordner ist ein Einrichtungsfehler,
+ * dieser Satz ist eine Auskunft. Beide Farbpaare stehen in `contrast-check.mjs`
+ * (Gruppen „Text", „Board (E-054)"), fuer die Flaechen, auf denen die
+ * Zusammenfassung steht — Spaltenkopf (`--bg-subtle`) und Regelliste
+ * (`--bg-surface`).
+ */
+.rule-summary__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/*
+ * Nur im Formular sichtbar (`showNeutral`). Dort wird gewaehlt, und dort muss
+ * ausgesprochen werden, was „Alle" bedeutet — an den Flaechen, die eine
+ * fertige Regel nur anzeigen, waere derselbe Satz Rauschen.
+ */
+.rule-summary__neutral {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: var(--measure-prose);
+  padding-top: var(--space-1);
+  border-top: 1px dashed var(--border-default);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.rule-summary__neutral svg {
+  flex: none;
+  margin-top: 2px;
 }

@@ -18,10 +18,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { StatusId, TagId, TodoId } from '@takt/domain';
+import type { PoolId, PoolMovement, StatusId, TagId, Todo, TodoId } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
 import {
+  type TodoDoneResult,
   clearTodoDone,
   createTodo,
   listTodos,
@@ -35,6 +36,7 @@ import {
 } from '../usecases/todos.ts';
 import { data, fail, failValidation } from '../http/problem.ts';
 import {
+  commaSeparatedIds,
   idSchema,
   nameSchema,
   readFlag,
@@ -76,6 +78,54 @@ const updateSchema = z.object({
 const noteSchema = z.object({ text: textSchema });
 
 /**
+ * Die drei kommagetrennten Kennungslisten von `GET /todos` (R-3 S-2).
+ *
+ * ---------------------------------------------------------------------------
+ * Was hier vorher stand und was es gekostet hat
+ * ---------------------------------------------------------------------------
+ *
+ * `poolIds.split(',') as never` — kein Schema, keine Anzahlgrenze, keine
+ * Prüfung gegen `idSchema`. Injektion war ausgeschlossen (die Übersetzung nach
+ * SQL setzt ausschließlich Platzhalter, R-3 Abschnitt 3), aber die Kosten
+ * standen frei: Der security-checker hat 200-mal dieselbe Poolkennung genannt
+ * und **8 370 ms** je Anfrage gemessen — bei einem einfädigen Sidecar sind das
+ * acht Sekunden stehende Oberfläche und ein Lebenszeichen des Timers, das nicht
+ * kommt (E-036). Ab 1 000 Kennungen überschritt die ODER-Verkettung
+ * `SQLITE_MAX_EXPR_DEPTH` und die Antwort war ein **500** — „bei mir ist etwas
+ * kaputt", wo „das geht so nicht" richtig gewesen wäre.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Grenze bei 50 liegt
+ * ---------------------------------------------------------------------------
+ *
+ * Weil sie **über** jedem Arbeitsablauf und **weit unter** der Schwelle liegt,
+ * an der die Antwort teuer wird.
+ *
+ * Darüber: Die Kennungen kommen aus einer Auswahl, nicht aus einem
+ * Eingabefeld. Fünfzig gleichzeitig gewählte Pools sind kein Filter mehr,
+ * sondern eine Liste ohne Filter; fünfzig Status gibt es in keinem Bestand,
+ * und für Tags ist die Auswahl in der Oberfläche eine Handvoll. Dieselbe Zahl
+ * steht schon bei `tagNames` beim Anlegen, mit derselben Begründung.
+ *
+ * Darunter: Die 8,4 Sekunden waren bei 200 Poolkennungen gemessen, und die
+ * Kosten wachsen mit der Zahl der Kennungen mal der Tiefe der Ordnerbäume. Bei
+ * 50 bleibt davon rund ein Viertel, und die 500 aus der Ausdrucksbaumgrenze ist
+ * um den Faktor 20 außer Reichweite.
+ *
+ * Die Antwort auf eine zu lange Liste ist damit `422` mit Feldangabe statt
+ * `500` — der Aufrufer erfährt, dass **er** zu viel verlangt hat.
+ *
+ * `.min(1)` je Eintrag steckt in `idSchema`: `?poolId=` allein ergäbe sonst
+ * eine Liste mit einer leeren Kennung, und die trifft nichts, kostet aber eine
+ * Abfrage.
+ */
+const idListSchema = z.object({
+  statusId: commaSeparatedIds.optional(),
+  tagId: commaSeparatedIds.optional(),
+  poolId: commaSeparatedIds.optional(),
+});
+
+/**
  * Die Rumpfschemata dieser Datei, nach `operationId` der OpenAPI-Beschreibung.
  *
  * Der einzige Leser ist `scripts/proof-openapi.mjs`: Er wandelt jedes Schema
@@ -100,18 +150,24 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.get('/', async (c) => {
     const query = c.req.query();
-    const statusIds = query['statusId'];
-    const tagIds = query['tagId'];
-    const poolIds = query['poolId'];
+
+    const filters = idListSchema.safeParse({
+      statusId: query['statusId'],
+      tagId: query['tagId'],
+      poolId: query['poolId'],
+    });
+    if (!filters.success) return failValidation(c, toIssues(filters.error));
+
+    const { statusId: statusIds, tagId: tagIds, poolId: poolIds } = filters.data;
 
     const page = await listTodos(
       context,
       {
         ...(query['search'] === undefined ? {} : { search: query['search'] }),
         ...(query['callNumber'] === undefined ? {} : { callNumber: query['callNumber'] }),
-        ...(statusIds === undefined ? {} : { statusIds: statusIds.split(',') as StatusId[] }),
-        ...(tagIds === undefined ? {} : { tagIds: tagIds.split(',') as TagId[] }),
-        ...(poolIds === undefined ? {} : { poolIds: poolIds.split(',') as never }),
+        ...(statusIds === undefined ? {} : { statusIds: statusIds as StatusId[] }),
+        ...(tagIds === undefined ? {} : { tagIds: tagIds as TagId[] }),
+        ...(poolIds === undefined ? {} : { poolIds: poolIds as PoolId[] }),
         ...(readFlag(query['onlyOpen']) ? { onlyOpen: true } : {}),
         ...(readFlag(query['onlyWithOpenEntries']) ? { onlyWithOpenEntries: true } : {}),
       },
@@ -183,12 +239,12 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
   // -------------------------------------------------------------------------
   routes.put('/:todoId/done', async (c) => {
     const result = await markTodoDone(context, c.req.param('todoId') as TodoId);
-    return result.ok ? data(c, result.value) : fail(c, result.error);
+    return result.ok ? data(c, doneBody(result.value)) : fail(c, result.error);
   });
 
   routes.delete('/:todoId/done', async (c) => {
     const result = await clearTodoDone(context, c.req.param('todoId') as TodoId);
-    return result.ok ? data(c, result.value) : fail(c, result.error);
+    return result.ok ? data(c, doneBody(result.value)) : fail(c, result.error);
   });
 
   return routes;
@@ -213,6 +269,30 @@ export function createSearchRoutes(context: AppContext): Hono<TaktEnv> {
   });
 
   return routes;
+}
+
+/**
+ * Der Antwortrumpf von `PUT` und `DELETE /todos/{todoId}/done` (E-060).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das Todo **flach** dasteht und nicht unter `todo`
+ * ---------------------------------------------------------------------------
+ *
+ * Weil beide Routen seit jeher das Todo selbst zurückgeben und jeder Aufrufer
+ * es so liest. `poolMovement` kommt hinzu, es nimmt nichts weg: Wer die Antwort
+ * heute als `Todo` liest, liest sie morgen unverändert weiter, und wer den
+ * Bewegungssatz will, liest ein Feld mehr. Ein Umbau nach `{ todo, poolMovement }`
+ * hätte dieselbe Auskunft gegeben und jede vorhandene Aufrufstelle gebrochen —
+ * für nichts.
+ *
+ * Die Gestalt ist damit dieselbe wie an `POST /timer/start`: das Ergebnis der
+ * Handlung und die Bewegung nebeneinander, nicht ineinander.
+ *
+ * Diese Datei entscheidet nichts Fachliches. Sie setzt zusammen, was der
+ * Anwendungsfall geliefert hat.
+ */
+function doneBody(result: TodoDoneResult): Todo & { poolMovement: PoolMovement | null } {
+  return { ...result.todo, poolMovement: result.poolMovement };
 }
 
 function toIssues(error: z.ZodError): { field: string; message: string; code: string }[] {

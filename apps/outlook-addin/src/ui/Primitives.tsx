@@ -15,6 +15,50 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
+import { visibleText } from '../text/hidden.ts';
+
+/**
+ * Fremder Text in der Anzeige (T-119).
+ *
+ * Der Aufgabenbereich zeigt fast nur Text, den ein anderer geschrieben hat:
+ * Betreff, Absender und Textkörper einer E-Mail (Akteur A-06), dazu Titel und
+ * Tagnamen aus dem Bestand. Das ist hier der Regelfall und nicht die Ausnahme —
+ * deshalb gibt es dafür einen Baustein und keine Regel, an die man sich erinnern
+ * muss.
+ *
+ * Zwei Dinge auf einmal, und beide sind nötig:
+ *
+ *  1. **`<bdi>`** isoliert den Text von seiner Umgebung. Ohne diese Klammer
+ *     ordnet ein von rechts nach links geschriebener Titel den deutschen Satz
+ *     um, in dem er steht — die Beschriftung „15 Minuten auf „…" buchen" ist
+ *     der Fall, an dem das am meisten wehtut.
+ *  2. **{@link visibleText}** nimmt dem Inhalt die Zeichen, die ihn umordnen,
+ *     ohne sichtbar zu sein. Die Isolierung allein tut das **nicht**: Ein
+ *     `U+202E` im Betreff dreht die Anzeige innerhalb des isolierten Blocks
+ *     weiter um. Die Begründung steht in `../text/hidden.ts` und ausführlich an
+ *     der Quelle, `packages/domain/src/characters.ts` (seit T-123 liest das
+ *     Add-in die Zeichenklasse dort, statt sie zu führen).
+ *
+ * Wo ein Element nicht möglich ist — in einem `title`, einem `aria-label`, in
+ * einem Satz, der als Zeichenkette entsteht —, steht `visibleText` allein. Dann
+ * fehlt die Isolierung, und das ist ausgesprochen: Der Inhalt kann nichts mehr
+ * umdrehen, aber ein hebräischer Titel steht in einem deutschen Satz weiterhin
+ * dort, wohin ihn der Bidi-Algorithmus setzt.
+ *
+ * **Nicht** hierdurch geht der Inhalt von Eingabefeldern. Was in einem `input`
+ * oder `textarea` steht, ist der Stand der Bearbeitung; ihn anzuzeigen wie
+ * geschrieben ist die Voraussetzung dafür, ihn ändern zu können.
+ */
+export function Foreign({
+  value,
+  className,
+}: {
+  readonly value: string;
+  readonly className?: string;
+}) {
+  return <bdi className={className}>{visibleText(value)}</bdi>;
+}
+
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -85,7 +129,16 @@ type CalloutTone = 'info' | 'warning' | 'danger' | 'success';
 
 interface CalloutProps {
   readonly tone: CalloutTone;
-  readonly title?: string;
+  /**
+   * Seit T-119 ein Knoten und keine Zeichenkette mehr.
+   *
+   * Zwei Überschriften tragen fremden Text: der Titel eines Todos nach einer
+   * Buchung und der eines Angebots. Als Zeichenkette ließe sich er nur
+   * bereinigen, nicht isolieren; als Knoten kann `<Foreign>` hinein. Jede
+   * bisherige Aufrufstelle bleibt gültig — eine Zeichenkette **ist** ein
+   * `ReactNode`.
+   */
+  readonly title?: ReactNode;
   readonly children: ReactNode;
   readonly action?: ReactNode;
 }
@@ -167,8 +220,16 @@ export function Chip({ label, path, tone = 'default', onRemove, removeLabel }: C
             : 'chip'
       }
     >
-      {path !== undefined && path.length > 0 ? <span className="chip__path">{path}</span> : null}
-      <span className="chip__label">{label}</span>
+      {/*
+        Tagname und Ordnerpfad sind fremder Text (T-119): Sie kommen aus dem
+        Bestand oder aus dem Suchfeld daneben, und ein Name mit einem
+        Richtungszeichen drehte sonst die ganze Chipzeile um — samt dem „×" des
+        Nachbarchips, das dann an einem anderen Chip zu hängen scheint.
+      */}
+      {path !== undefined && path.length > 0 ? (
+        <Foreign className="chip__path" value={path} />
+      ) : null}
+      <Foreign className="chip__label" value={label} />
       {note !== null ? (
         <span className="chip__note" title={note.title}>
           {note.label}
@@ -179,7 +240,9 @@ export function Chip({ label, path, tone = 'default', onRemove, removeLabel }: C
           type="button"
           className="chip__remove"
           onClick={onRemove}
-          aria-label={removeLabel ?? `${label} entfernen`}
+          // Eine Beschriftung für die Sprachausgabe ist ein Attribut und kein
+          // Element — hier bleibt nur das Bereinigen (T-119).
+          aria-label={removeLabel ?? `${visibleText(label)} entfernen`}
         >
           ×
         </button>

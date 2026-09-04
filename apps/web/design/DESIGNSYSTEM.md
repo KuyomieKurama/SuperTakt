@@ -321,10 +321,10 @@ nichts. Der Zähler steht dort mit Absicht — er ist das Merkmal, an dem die Da
 
 ### 3.4 Erledigt ist kein Spaltenzustand
 
-Die Statusspalten des Boards sind frei definierbar (A-5.4). Ein Kanban-Abschluss ist deshalb
-**kein** Erledigt: Ein Todo kann in einer Spalte namens „Erledigt“ stehen und offen sein, und es
-kann in „In Arbeit“ stehen und erledigt sein. Das Erledigt-Kennzeichen (A-2.4) hängt am Todo,
-nicht an der Phase.
+Die Spalten des Boards sind frei definierbar (A-5.4) — seit E-054 als **Regel** über fünf Achsen
+und nicht mehr als Statuswert. Ein Kanban-Abschluss ist deshalb **kein** Erledigt: Ein Todo kann
+in einer Spalte namens „Erledigt“ stehen und offen sein, und es kann in „In Arbeit“ stehen und
+erledigt sein. Das Erledigt-Kennzeichen (A-2.4) hängt am Todo, nicht am Spaltennamen.
 
 Für die Oberfläche folgt daraus eine Regel, die auf jeder Ansicht mit Karten oder Zeilen gilt:
 
@@ -346,13 +346,34 @@ in derselben Zeile ins Gehege. Symbol und gestrichelte Kontur tragen hier die Au
 Der Spaltenkopf zählt zusätzlich, wie viele seiner Todos erledigt sind — die Mischung wird damit
 schon vor dem Lesen der Karten sichtbar.
 
-**Was der Timerstart auf einem erledigten Todo tut** (A-2.5, I-05): Er hebt das Kennzeichen auf,
-und nur das. Das Todo erscheint dadurch wieder in seinen Pools, weil Pool-Ansichten erledigte
-Todos ausblenden und die Poolzugehörigkeit aus den Tags abgeleitet ist (A-3.4). **Die Spalte
-ändert sich nicht.** Der Hinweis danach (`ReactivationNotice`) sagt beides ausdrücklich — welche
-Pools, und dass die Karte stehen bleibt — und bietet „Rückgängig“ an. Er nennt auch, warum
-Rückgängig die eben entstandene Buchung verwirft: Wenige Sekunden stünden nach E-008 als
+**Was der Timerstart auf einem erledigten Todo tut** (A-2.5, I-05): Er hebt das Kennzeichen auf —
+und das ist seit E-055 mehr, als es klingt. Eine Regel darf nach „Erledigt“ und nach dem
+Exportstatus fragen, und ein Timerstart ändert beides: Das Kennzeichen fällt, die erste
+abgeschlossene Buchung setzt „hat offene Buchungen“. Die Karte kann dadurch eine Spalte
+gewinnen und eine andere verlieren.
+
+Gesagt wird das auf **zwei Flächen**, und keine davon ist eine eigene Hinweisfläche:
+
+| Fläche | Baustein | Was sie trägt |
+|---|---|---|
+| Meldung unten rechts | `app/ToastContext.tsx`, gefüllt aus `app/TimerContext.tsx` | Titel „Timer gestartet. „X“ ist wieder offen.“, als Rumpf der Bewegungssatz, dazu „Rückgängig“ |
+| Etikett an der Zeile und auf der Karte | `components/DoneFlag.tsx`, `DONE_FLAG_LABEL.reopened` | „Erledigt aufgehoben“, bis der Benutzer das Kennzeichen selbst anfasst |
+
+Den Bewegungssatz bildet `poolMovementSentence` in `@takt/domain` aus dem `poolMovement`, das
+`POST /timer/start` mitschickt (E-058) — dieselbe Funktion, die der Aufgabenbereich des
+Outlook-Add-ins aufruft. Meldet der Dienst keine Bewegung, trägt die Meldung **keinen** Rumpf;
+eine Zeile mit null Zeichen wird weggelassen und nicht mit einer Beruhigung gefüllt. Der Satz
+„Die Karte bleibt, wo sie ist“ ist mit E-058 ersatzlos entfallen, weil er seit E-055 falsch ist.
+
+Warum „Rückgängig“ die eben entstandene Buchung verwirft, sagt die Meldung nicht mehr eigens;
+der Grund steht in `TimerContext` und lautet unverändert: Wenige Sekunden stünden nach E-008 als
 0,25 Stunden in der Abrechnung.
+
+> **Entfallen mit T-108 (W-9).** Bis dahin stand hier `ReactivationNotice` — eine eigene
+> Hinweisfläche mit demselben Inhalt, die **keine** Ansicht der Anwendung je eingesetzt hat.
+> Sie lebte nur noch auf der Musterseite und zeigte damit eine Fläche, die es im Produkt nicht
+> gibt. Baustein, `.reactivation*` in `components.css` und beide Musterstellen sind entfernt;
+> die Musterseite zeigt jetzt Meldung und Etikett.
 
 ### 3.5 Die Exportvorschau gliedert nach Tagesgruppen (E-020, E-031, E-034)
 
@@ -494,8 +515,14 @@ Buchungsliste und eine Einstellungsseite unterschiedliche Ansprüche haben.
 ### 4.3 Radien und Erhebung
 
 Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: fünf Stufen von `--shadow-xs` (Karte in Ruhe) bis
-`--shadow-drag` (Karte am Zeiger, mit farbigem Ring). Im dunklen Modus sind die Schatten
+`--shadow-drag` (gezogenes Element, mit farbigem Ring). Im dunklen Modus sind die Schatten
 kräftiger, weil Schatten auf dunklem Grund sonst nicht wirken.
+
+`--shadow-drag` ist zurzeit **von keiner Fläche belegt**: Die Kartenbewegung, für die er gedacht
+war, ist mit E-054 entfallen (Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen
+sich anders aus — der gezogene Tag über `.tree__item--dragging`, das gezogene Feld über
+`.tfield--dragging` (Deckkraft) und `.tfield--drop` (Kante am Ablageziel). Er bleibt als Stufe
+stehen, damit die nächste Ziehfläche nicht ihren eigenen Schatten erfindet.
 
 ---
 
@@ -524,6 +551,71 @@ nicht gleich aussehen.
 Zustandsänderung unter 100ms, Anzeiger ab etwa 300ms, Erfolgs- oder Fehlermeldung danach.
 Fehlermeldungen tragen `role="alert"`, alles andere `aria-live="polite"`.
 
+### 5.1 Ebenen — und die eine Ausnahme davon (T-110)
+
+Die Reihenfolge steht als Token-Leiter in `packages/ui-tokens/tokens.css`: Inhalt (0), klebende
+Leiste (10), Auswahlliste im Fluss (100), gezogenes Element (200), Abdunklung (300), Dialog (310),
+ausgelagerte Liste (320), Meldung (400). Sie besagt: Eine Meldung über den Ausgang einer Handlung
+darf verdecken, was unter ihr liegt.
+
+**Ein Dialog ist davon ausgenommen.** Solange einer offen ist, tritt der Meldungsstapel hinter die
+Abdunklung (`body:has(.scrim) .toast-layer`, `src/styles/app.css`).
+
+*Warum.* Beide sitzen in derselben Ecke: `.dialog__footer` ist rechtsbündig, der Stapel ebenso.
+Gemessen an den echten Stilblättern in Chromium, mit abgewarteter Einblendbewegung:
+
+| Fenster | Dialog | Meldungen | Mittelpunkt „Anlegen“ | `elementFromPoint` dort |
+|---|---|---|---|---|
+| 1280×720 | Regelformular (34 rem) | 1 | (854, 611) | **`li.toast`** |
+| 1024×768 | Regelformular (34 rem) | 2 | (726, 649) | **`li.toast`** |
+| 1280×720 | Buchung (52 rem) | 1 | (998, 611) | **`li.toast`** |
+| 1920×1080 | Regelformular | 1 bis 8 | (1174, 850) | der Knopf |
+
+Der Knopf ist also nicht immer verdeckt, sondern bei den beiden gängigen kleineren Fenstergrößen —
+und das erklärt, warum er in TP-KANBAN-02 einmal in eine 60-Sekunden-Zeitüberschreitung lief und
+in zwei Wiederholungen nicht: Eine Meldung ohne Rückweg geht nach acht Sekunden von selbst. Seit
+die Obergrenze von vier Meldungen für Rückwege nicht mehr gilt (Abschnitt 8), wird die verdeckte
+Fläche größer statt kleiner.
+
+*Warum die Meldung weicht und nicht der Dialog.* Ein Dialog ist modal: Er hält den Tabulator fest,
+alles andere wartet. Die Meldung war bis dahin die einzige Ausnahme — sichtbar über dem Dialog, mit
+der Maus bedienbar, mit der Tastatur nicht erreichbar. Das ist SC 2.1.1. Sie verschwindet nicht,
+sie wird abgedunkelt wie die ganze Anwendung hinter dem Dialog und steht danach unverändert da;
+eine Meldung mit Rückweg hat keine Frist, der Rückweg ist aufgeschoben und nicht verloren. Die
+Ansage für Vorlesehilfen hängt an `aria-live` und nicht an der Ebene.
+
+*Warum nicht anders.* Ein Versetzen des Stapels hilft nicht: Der Dialog steht mittig und ist bis
+52 rem breit, die Meldung ist 26 rem breit — bei 1024 px Fensterbreite überlappen sich beide in
+jeder Ecke, in der ein Knopf oder ein Ankreuzfeld stehen kann. Eine Ebene zwischen Abdunklung und
+Dialog nähme zwar die Überdeckung, ließe aber eine hell leuchtende, vom Dialog angeschnittene Karte
+auf abgedunkelter Seite stehen — und die Maus könnte sie weiter bedienen, die Tastatur weiter
+nicht. Eine freigehaltene Bahn am unteren Rand verlangt die gemessene Stapelhöhe als Variable und
+schöbe den Dialog bei mehreren Meldungen aus dem Fenster.
+
+**Regel für die Weiterarbeit:** Was über der Abdunklung liegt, gehört dem Dialog. Wer eine neue
+schwebende Fläche einführt, prüft sie gegen einen offenen Dialog, nicht nur gegen die Ansicht.
+
+**Zweite Regel, seit T-118:** Was über der Abdunklung liegt, endet am Bildschirmrand. Der
+Meldungsstapel wächst nach oben, und eine Meldung mit Rückweg geht nicht von selbst — sieben
+Klicks auf „Erledigt“ genügten, um die älteste aus dem Fenster zu schieben. Ein
+`position: fixed`-Behälter lässt sich nicht hereinrollen; ihr „Rückgängig“ blieb tabulierbar, der
+Fokus landete außerhalb des Sichtbaren, und **es gab keine Fokusanzeige zu sehen** (SC 2.4.7).
+`.toast-layer` ist deshalb eine Rollfläche mit `max-block-size: 100dvh`, und `ToastProvider` rollt
+nach jeder Änderung ans Ende, damit die jüngste Meldung immer sichtbar ist.
+
+Gemessen in Chromium bei 1280×720 an den echten Stilblättern:
+
+| Meldungen | Stapel | oberer Rand des Behälters | älteste Meldung |
+|---|---|---|---|
+| 1 bis 4 | 151 bis 629 px | 59 px und tiefer | ganz sichtbar, kein Rollen |
+| 5 | 789 px | 0 px | Behälter rollt, jüngste sichtbar |
+| 10 | 1585 px | 0 px | über den Rollweg erreichbar |
+
+Der Fokus auf dem „Rückgängig“ der ältesten von zehn Meldungen rollt den Behälter selbsttätig
+zurück (`scrollTop` von 897 auf 0), der Knopf steht danach bei y = 130 im Fenster. Keine
+Fokusfalle, kein `tabindex` an der Rollfläche: Ein Halt an einer `aria-live`-Region wäre ein Halt,
+an dem nichts zu tun ist.
+
 ---
 
 ## 6. Tastatur und Hilfsmittel
@@ -535,15 +627,31 @@ Fehlermeldungen tragen `role="alert"`, alles andere `aria-live="polite"`.
 | Kontextmenü | zusätzlich über die Kontextmenü-Taste und Umschalt+F10, nicht nur über den rechten Mausklick |
 | Baumansicht | genau ein Tabulator-Halt, darin Pfeiltasten, Pos1, Ende, `*` klappt alles auf |
 | Dialog | Fokus springt hinein, Tabulator bleibt gefangen, Escape bricht ab, Fokus kehrt zum Auslöser zurück |
-| Kanban | Strg+Pfeil links/rechts verschiebt die Karte; jede Verschiebung wird über `aria-live` angesagt |
+| Kanban | Kein Verschieben und keine Sondertasten (E-054). Jede Karte ist über Tabulator erreichbar; ihr Kartenmenü führt zu Detailansicht, Timer und Status |
+| Tag-Baum | Ziehen ist die schnelle Art; die vollständige ist auswählen und „Verschieben“ (Dialog mit Zielordner) |
+| Exportvorlage | Ziehen ordnet die Felder um; dieselbe Umordnung leisten die Pfeilknöpfe „nach oben“ und „nach unten“ an jeder Feldzeile |
 | Tabelle | Sortierknöpfe mit `aria-sort`, Auswahlkästchen mit `indeterminate` für die Kopfzeile |
 | Suchfeld | Escape leert das Feld |
 
-**SC 2.5.7 Dragging Movements** ist die Anforderung, die beim Kanban-Board am leichtesten
-übersehen wird: Für jede Ziehbewegung muss es eine Alternative mit einem einzelnen Zeigerdruck
-geben. Takt löst das doppelt — über „Verschieben nach …“ im Kartenmenü und über Strg+Pfeil. Wer
-später eine weitere Ziehbewegung einführt (Tag in Ordner ziehen, Feld in der Exportvorlage
-sortieren), braucht dieselbe Alternative.
+**SC 2.5.7 Dragging Movements** verlangt für jede Ziehbewegung eine Alternative mit einem
+einzelnen Zeigerdruck. In Takt gibt es **zwei** Ziehbewegungen, und beide haben ihre Alternative:
+
+| Ziehbewegung | Alternative |
+|---|---|
+| Tag in einen Ordner ziehen (`TagTree`) | auswählen, dann „Verschieben“ — ein Dialog mit Zielordner |
+| Feld einer Exportvorlage umsortieren (`TemplateFields`) | die Pfeilknöpfe „Feld „X“ nach oben“ / „nach unten“ an der Feldzeile |
+
+**Auf dem Kanban-Board wird nichts mehr gezogen.** Bis E-054 war eine Spalte ein Statuswert, und
+Ziehen setzte diesen Wert; seit E-054 ist eine Spalte eine **Regel** über fünf Achsen (E-055).
+Eine Regel lässt sich nicht durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von
+sich aus Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit aufgehoben;
+`draggable`, die Ablageziele und die Tastaturalternative dazu stehen nicht mehr im Board
+(`components/Kanban.tsx`, `screens/BoardScreen.tsx`). Was es nicht gibt, braucht keine
+Ersatzbedienung. Der **Status** bleibt als Eigenschaft am Todo und wird dort geändert, wo er
+hingehört: in der Liste (S-02) und in der Detailansicht (S-03).
+
+Wer später eine dritte Ziehbewegung einführt, braucht wieder eine Alternative — und trägt sie in
+die Tabelle oben ein.
 
 Symbole sind grundsätzlich `aria-hidden`. Die Bedeutung trägt der Text daneben oder ein
 `aria-label` am Knopf. Es gibt keine Emoji und keine Rasterbilder.
@@ -618,10 +726,32 @@ wandert. Ohne Eingabe bleibt der Bestätigungsknopf gesperrt.
 
 Beim Start des Timers auf einem erledigten Todo (A-2.5, I-05) fragt die Anwendung **nicht** —
 die Spezifikation verlangt, dass „Erledigt“ automatisch aufgehoben wird. Sie sagt hinterher
-genau, was passiert ist, nennt die Pools, in denen das Todo jetzt wieder erscheint, sagt
-ausdrücklich, dass die Karte ihre Spalte behält, und bietet „Rückgängig“ an. Passt zu den Tags
-keine Poolregel, nennt sie keinen Pool, sondern spricht das aus — eine Meldung, die einen Pool
-erfindet, wäre schlimmer als keine.
+genau, was geschehen ist, nennt in einem Satz aus der Domäne, wo das Todo jetzt erscheint und
+woraus es verschwunden ist, und bietet „Rückgängig“ an (Abschnitt 3.4). Passt derzeit **keine
+Regel** auf das Todo — eine Regel hat seit E-055 fünf Achsen und hängt nicht mehr allein an den
+Tags —, dann nennt der Satz keinen Namen, sondern spricht genau das aus: „Auf dieses Todo passt
+derzeit keine Regel …“. Eine Meldung, die einen Pool erfindet, wäre schlimmer als keine.
+
+Dasselbe gilt für die zweite umkehrbare Handlung dieses Abschnitts: **„Vom Board nehmen“ fragt
+nicht nach** (E-059), sondern meldet sich mit „Rückgängig“. Diese Meldung wird deshalb auch
+nicht verdrängt, wenn der Stapel seine Obergrenze erreicht — sie ist der einzige Rückweg, und
+ein Rückweg, der ohne Zutun verschwindet, ist keiner (`app/ToastContext.tsx`, SC 2.2.1).
+
+Der Stapel darf dadurch über vier Meldungen hinauswachsen. Wo er einem offenen Dialog begegnet,
+gilt Abschnitt 5.1. Eine eigene Bildschirmgrenze hat er **nicht**, und das ist eine offene Stelle
+(T-110). Gemessen bei 720 px Fensterhöhe, Meldungen mit Rückweg:
+
+| Meldungen | Stapelhöhe | oberer Rand |
+|---|---|---|
+| 4 | 458 px | y = 246 |
+| 6 | 691 px | y = 13 |
+| 7 | 807 px | y = −103 — die älteste ragt hinaus |
+| 8 | 924 px | y = −219 — die älteste ist ganz draußen |
+
+Ab der siebten Meldung verlässt die älteste den Bildschirm; ein fest positionierter Stapel lässt
+sich nicht hereinrollen, ihr „Rückgängig“ ist damit weg — genau das, was die Ausnahme von der
+Verdrängung verhindern wollte. Sieben umkehrbare Handlungen ohne eine einzige Quittung sind
+selten, aber erreichbar: Sieben Todos hintereinander abhaken genügt.
 
 ---
 
@@ -698,7 +828,9 @@ Vollständig und aktuell auf der Musterseite, Abschnitt 11. Kurzfassung:
 | Tabelle, Tabellenrahmen | `BookingTable.tsx` | S-03, S-06, S-07 |
 | Tagesgruppenliste der Exportvorschau | `ExportGroups.tsx` | S-07 |
 | Kanban-Spalte, Kanban-Karte, Exportstand-Zusammenfassung | `Kanban.tsx` | S-02, S-03, S-04 |
-| Timer-Anzeige, Wiederaufnahme-Hinweis | `Timer.tsx` | global, S-01, S-03, S-04, S-05 |
+| Timer-Anzeige | `Timer.tsx` | global, S-01, S-03, S-04, S-05 |
+| Erledigt-Kennzeichen | `DoneFlag.tsx` | S-01, S-02, S-03, S-05 |
+| Meldung mit Rückweg (Toast) | `app/ToastContext.tsx` | global |
 | Vermerk- und Leistungsfeld | `NoteField.tsx` | S-03, S-05, S-06, S-12 |
 | Menü, Kontextmenü | `Menu.tsx` | S-02, S-04, S-06, S-08 |
 | Bestätigungsdialog | `ConfirmDialog.tsx` | S-03, S-04, S-06, S-07, S-08, S-09 |

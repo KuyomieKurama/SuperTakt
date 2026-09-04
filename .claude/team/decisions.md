@@ -1079,3 +1079,341 @@ beantwortet Fragen, die ein Statusboard nicht kann: alle Todos eines Kunden, all
 Priorität, alle ohne Zuordnung. Der Preis ist das Ziehen — und er hat ihn ausdrücklich in Kauf
 genommen, statt ihn sich durch stilles Tag-Setzen erschleichen zu lassen. Das ist die
 konsequentere Hälfte seiner Antwort.
+
+---
+
+## E-055 — Eine Regel ist eine Struktur mit benannten Feldern, keine Liste von Termen
+
+**Kontext.** Der Auftraggeber wollte den Status als Regelbedingung aufnehmen. Ich hatte das als
+dritten Termtyp neben `tag` und `folder` beauftragt und dem domain-dev die Frage überlassen, wie
+mehrere Terme verknüpft werden — „und" oder „oder".
+
+Dann schickte er ein Bildschirmfoto der Board-Konfiguration von **Super Productivity** mit dem
+Satz: „Nimm dir ein Beispiel daran. Das regelt das."
+
+**Was dort steht:** Erforderliche Tags. Ausgeschlossene Tags. Aufgabenstatus erledigt als
+Dreiwahl mit „Alle". Planungsstatus ebenso. Projekt als Auswahl. Und ein Kästchen für
+übergeordnete Aufgaben.
+
+**Entscheidung.** Eine Regel ist eine Struktur mit benannten Feldern:
+
+| Feld | Wirkung |
+|---|---|
+| Erforderliche Tags | alle müssen vorhanden sein |
+| Ausgeschlossene Tags | keiner darf vorhanden sein |
+| Status | Auswahl, „Alle" als Vorgabe, mehrere wählbar |
+| Erledigt | Alle / Erledigt / Unerledigt |
+| Exportstatus | Alle / Offen / Exportiert |
+
+**Begründung — die Frage nach der Verknüpfung stellt sich nicht mehr.** Sie folgt aus der
+Beschriftung: „Erforderlich" heißt und, „Ausgeschlossen" heißt nicht. Ein Und/Oder-Schalter
+verlangt vom Benutzer, Aussagenlogik zu lesen; zwei benannte Listen verlangen nichts.
+
+Zwei Dinge kann eine Liste gleichartiger Terme grundsätzlich nicht, und beide fehlen dadurch: Sie
+hat **keinen Platz für die Verneinung** — „alles außer in Bearbeitung" ist nicht ausdrückbar —,
+und ihre leere Fassung ist ein **Sonderfall**, den man eigens regeln muss. Mit „Alle" als
+Vorgabewert jeder Zeile ist der Neutralzustand je Achse der Normalfall statt einer Ausnahme.
+
+**Korrektur, 2026-09-03.** Ich hatte hier zusätzlich geschrieben, die vollständig leere Regel
+solle „alles treffen statt nichts". Der domain-dev hat in T-076 widersprochen, statt es
+umzusetzen — zu Recht. Es widerspricht dem Absatz weiter unten in derselben Entscheidung: Wenn
+eine Regel ohne Bedingungen alles trifft, trifft ein bestehender Pool nach der Migration eben
+nicht mehr dasselbe wie vorher. Und eine Regel ohne Bedingungen ist der Zustand **direkt nach dem
+Anlegen** — sie spränge von „kein Todo" auf „jedes Todo", und ein Pool, der alles enthält, ist
+kein Pool.
+
+Bei Super Productivity ist das stimmig, weil dort ausschließlich Boards konfiguriert werden. Bei
+uns sind Pool und Kanban-Spalte seit E-054 **dieselbe Entität**; was für die eine Fläche
+einleuchtet, wäre auf der anderen falsch.
+
+**Es bleibt also bei A-3.4 und E-054: Die leere Regel trifft nichts.** Der Neutralwert „Alle" je
+Achse bleibt davon unberührt — er sagt „diese Achse schränkt nicht ein", nicht „diese Regel
+trifft alles". Dass eine Spalte ohne jede Bedingung leer bleibt, gehört in den Leerzustand der
+Oberfläche, nicht ins Modell.
+
+**Was nicht übernommen wird.** Planungsstatus, Rückstandsaufgaben, Projekt und übergeordnete
+Aufgaben — die Begriffe gibt es in Takt nicht. „Sortieren nach" ist Anzeige, keine Regel.
+
+**Was dazukommt und im Vorbild fehlt.** Der **Exportstatus** als Dreiwahl. Er ist bei Takt die
+Unterscheidung, um die sich alles dreht, und beantwortet als Spalte die Frage „was habe ich noch
+nicht abgerechnet".
+
+**Konsequenz.** Bestehende Regeln müssen überführt werden. Ob eine heutige Tagliste „alle davon"
+oder „mindestens eines davon" bedeutet, entscheidet, ob ein Pool nach der Migration dasselbe
+trifft wie vorher — das ist nachzusehen, nicht zu raten.
+
+---
+
+## E-056 — Der Aufgabenbereich nennt auch, woraus ein Todo verschwindet
+
+**Frage aus T-078.** Eine Regel mit `completion: 'done'` kann das Add-in **nie** nennen: Das
+Buchen hebt „Erledigt" auf (A-2.5), also fällt das Todo aus jedem Pool heraus, der Erledigte
+sammelt. Soll der Aufgabenbereich das aussprechen, oder still bleiben?
+
+**Entscheidung: aussprechen** — ein Satz, und nur wenn es tatsächlich Pools betrifft.
+
+**Warum.** Der Satz erscheint ausschließlich im Wiederöffnen-Fall, also genau dann, wenn das Todo
+erledigt war. Sein Zweck ist, dem Benutzer die Folge seiner Handlung zu zeigen, bevor sie
+eintritt. Das Verschwinden ist dieselbe Folge wie das Erscheinen, nur in die andere Richtung —
+sie wegzulassen macht die Auskunft nicht kürzer, sondern halb.
+
+Entscheidend ist der Fall, für den man so eine Spalte überhaupt anlegt: **erledigt und noch nicht
+abgerechnet** (`completion: 'done'` mit `exportState: 'open'`). Wer dort arbeitet, benutzt die
+Spalte als Abrechnungsliste. Bucht er per Add-in auf eine Karte, verschwindet sie aus genau der
+Liste, in der er sie sucht — und das ist der Moment, in dem eine unerklärte Bewegung als
+Datenverlust gelesen wird.
+
+**Nicht** aussprechen, wenn keine Regel betroffen ist. Kein zweiter Absatz, keine zweite Liste;
+die Nennung gehört in denselben Satz wie das Erscheinen.
+
+---
+
+## E-057 — Ein Ordnerterm, der auf nichts auflöst, ist eine Bedingung ohne Treffer, kein Neutralwert
+
+**Befund aus T-080.** In `matchesPool` gilt eine leere Tagmenge als Neutralwert der Achse. Ein
+Ordnerterm über einen leeren Ordner löst auf eine leere Menge auf — und **verschwindet damit aus
+der Regel**. „Tags aus Ordner X **und** Status offen" wird zu „Status offen". Die Regel trifft
+mehr, als der Benutzer gesagt hat.
+
+Bei einer Regel, die nur aus diesem Term besteht, fällt es nicht auf: Sie ist dann leer und trifft
+nichts (A-3.4), und ein bestehender Prüffall belegt genau das. Sobald eine zweite Achse dazukommt,
+ist die Regel nicht mehr leer, die Ordnerachse aber still weg.
+
+**Entscheidung.** Ein Ordnerterm, der auf keinen Tag auflöst, ist keine neutrale Achse. Er ist
+eine **Einschränkung ohne Treffer** — und die Regel trifft damit nichts, unabhängig vom Modus und
+von den übrigen Achsen.
+
+**Warum.** Der Benutzer hat eine Einschränkung ausgesprochen. Dass sie sich ins Leere auflöst,
+macht sie nicht zur Nicht-Einschränkung; es macht sie zur Einschränkung, die niemand erfüllt.
+Die Alternative — die Achse fällt weg — ist der gefährliche Fehler in die falsche Richtung: Eine
+Spalte, die plötzlich mehr zeigt, wird nicht bemerkt. Eine, die leer bleibt, wird bemerkt, und
+seit T-080 steht die aufgelöste Tagzahl am Pool, sodass die Oberfläche sagen kann, **warum**.
+
+**Zum Modus.** Aussagenlogisch wäre „alle davon" über eine leere Menge wahr (Vakuum) und
+„mindestens eines davon" falsch. Diese Unterscheidung wird hier **nicht** nachgebaut: Der
+Benutzer meint mit „Ordner X" nicht die Menge, sondern die Zugehörigkeit zu X — und die hat
+niemand, wenn X leer ist. Beide Modi treffen nichts.
+
+**Nicht betroffen.** Ein Term, der auf mindestens einen Tag auflöst, verhält sich wie bisher.
+Ausgeschlossene Tags über einen leeren Ordner schließen nichts aus — das ist die richtige
+Lesart von „keiner davon" über nichts, und es engt nicht ein, sondern lässt in Ruhe.
+
+## E-058 — Die Poolbewegung wird einmal berechnet und an beiden Flächen in denselben Worten gesagt
+
+**Befund aus R-1 und R-2 (2026-09-03).** Der Satz `CARD_STAYS` („Die Karte bleibt, wo sie ist —
+die Spalte ändert sich dadurch nicht.") steht zeichengleich in `apps/web/src/lib/labels.ts` und
+`apps/outlook-addin/src/duplicate/reopen.ts`. Er stammt aus der Zeit, in der eine Spalte nur an
+Tags hing. Seit E-055 entscheidet eine Spalte auch über „Erledigt" und über den Exportstatus, und
+beides ändert ein Timerstart: Das Kennzeichen fällt, die erste Buchung setzt „hat offene
+Buchungen". Der Satz ist also falsch, und er ist es an vier Flächen gleichzeitig. Dazu berechnet
+das Add-in die Bewegung serverseitig (`bookingStates`, drei Listen), die Hauptanwendung fragt
+`poolsContaining` und kürzt bei zwölf — zwei Auskünfte für dieselbe Handlung, und die zweite
+kennt `leaves` nicht.
+
+**Entscheidung.**
+
+1. Die Bewegung eines Todos durch die Pools ist **ein** Anwendungsfall des lokalen Dienstes:
+   `apps/local-api/src/usecases/pool-movement.ts` nimmt das Zustandspaar vor und nach der
+   Handlung (Tags, Status, `completedAt`, offene und exportierte Buchungen) und alle Pools
+   (`list('all')`, auch reine Board-Spalten) und liefert `{ appears, enters, leaves }` mit den
+   Bedeutungen aus T-084: `appears` = gilt nachher, `enters` = gilt nachher und galt vorher nicht,
+   `leaves` = galt vorher und gilt nachher nicht. Der Add-in-Dienst benutzt ihn statt einer
+   eigenen Fassung; `POST /timer/start` liefert ihn als `poolMovement` mit, wenn der Start das
+   Kennzeichen aufgehoben hat oder die erste Buchung entsteht — sonst `null`.
+2. Der Satz dazu ist eine reine Funktion in `packages/domain` (`poolMovementSentence(movement,
+   tense)`), übernommen aus `reopen.ts` und in einer Hinsicht geändert: Er spricht nicht mehr von
+   „Poolregel auf seine Tags", sondern von „Regel", weil eine Regel fünf Achsen hat. Beide
+   Oberflächen rufen diese Funktion; keine hält eine eigene Abschrift. `CARD_STAYS` entfällt
+   ersatzlos — wo nichts hinzukommt und nichts wegfällt, sagt die Funktion das, und wo sich etwas
+   ändert, sagt sie was.
+3. Reihenfolge: domain-dev baut 1 und 2 (Welle A). integration-dev und frontend-dev stellen um,
+   sobald beides steht (Welle B). Bis dahin bleibt der falsche Satz stehen, mit Board-Eintrag,
+   nicht stillschweigend.
+
+**Warum die Funktion in der Domäne liegt.** Sie ist reine Abbildung von drei Listen auf einen
+Satz, ohne HTTP und ohne SQL. Ein Text, der an zwei Flächen zeichengleich sein muss, hat genau
+eine Quelle; `proof:addin` prüft die Gleichheit weiter, jetzt gegen die Funktion statt gegen eine
+Abschrift.
+
+**Nicht entschieden.** Ob der Aufgabenbereich des Add-ins den *Grund* einer fehlenden Spalte nennen
+kann (O-K), bleibt beim Auftraggeber.
+
+**Ergänzung (2026-09-03, nach Welle A).**
+
+4. **Kein Gattungswort im Satz.** Die drei Listen tragen Namen, aber keine Fläche, und die
+   Funktion darf nicht raten, ob ein Name einen Pool, eine Kanban-Spalte oder beides bezeichnet.
+   Der Satz nennt deshalb nur den Namen in Anführungszeichen: „Es erscheint dann wieder in
+   „Abrechnung“ und „Ost“.", nicht „in dem Pool „Abrechnung““. Die Zahl der Namen ändert nur die
+   Aufzählung, nicht den Artikel. Der Satz ohne Treffer lautet: „Auf dieses Todo passt derzeit
+   keine Regel — es erscheint danach in keinem Pool und in keiner Spalte." (Ankündigung) bzw.
+   „Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner
+   Spalte." (Bericht). „… und erscheint in keinem anderen" wird zu „… und erscheint sonst
+   nirgends", weil „anderen" ohne Gattungswort keinen Bezug mehr hat. Alle übrigen Sätze aus
+   T-089 bleiben, nur der Einschub `inPools` wird durch die reine Aufzählung ersetzt. Der
+   vollständige Wortlaut aller vierzehn Sätze steht in `.claude/team/board.md` bei T-093 und
+   ist die Vorlage für Domäne, Tests und beide Oberflächen.
+5. **Dritter Parameter `occasion`** (`'reopen' | 'booking'`) bleibt, wie in T-089 gebaut, ohne
+   Vorgabewert; die Überladungen (`'reopen'` gibt `string`, `'booking'` gibt `string | null`)
+   sind die Signatur, gegen die beide Oberflächen bauen.
+6. **Auch `POST /timer/stop` und `POST /timer/orphaned/resolve` liefern `poolMovement`**, mit
+   Anlass `'booking'`: Die erste abgeschlossene Buchung setzt „hat offene Buchungen", und jede
+   Spalte mit `exportState: 'open'` nimmt das Todo damit auf. Wer nur am Start eine Auskunft gibt
+   und am Stopp schweigt, sagt die halbe Wahrheit. `null`, wenn sich nichts bewegt.
+7. **`GET /addin/context` bleibt bei `list()`.** Der Aufgabenbereich hat kein Board; die Liste
+   dort dient der Auswahl. Reine Spalten erreichen das Add-in ausschließlich über den
+   Bewegungssatz.
+
+## E-059 — Zwei Wortlaute der Oberfläche, aus T-091
+
+- Der Exportstatus einer Spalte heißt in der Oberfläche **„Noch nicht abgerechnet"** und
+  **„Abgerechnet"**, nicht „Offen" und „Exportiert". „Offen" ist bereits das Gegenteil von
+  „Erledigt" (Achse Erledigt) und darf nicht zugleich das Gegenteil von „Exportiert" sein; ein
+  Wort mit zwei Bedeutungen auf demselben Dialog ist ein Fehler, den der Benutzer ausbadet.
+  Der Wert im Datenmodell (`export_state = 'open'`) bleibt.
+- **„Vom Board nehmen" fragt nicht nach**, sondern bietet „Rückgängig" an — auf dem Board und im
+  Regeldialog. Die Handlung ist umkehrbar und verliert nichts (die Regel bleibt als Pool
+  bestehen); ein Bestätigungsdialog vor einer umkehrbaren Handlung ist Reibung ohne Schutz.
+  Löschen einer Regel fragt weiterhin nach.
+
+## E-060 — Auch „Erledigt" setzen und aufheben von Hand liefern die Poolbewegung
+
+**Befund (O-U, aus T-093 und R-2a, 2026-09-04).** `PUT` und `DELETE /todos/{todoId}/done`
+liefern kein `poolMovement`; der Board-Toast nach „Erledigt" schweigt deshalb über Spalten,
+während derselbe Übergang über einen Timerstart angesagt wird. Die Begründung aus E-058 Punkt 6
+gilt wörtlich: Wer an einer Stelle Auskunft gibt und an der anderen schweigt, sagt die halbe
+Wahrheit — und seit E-055 ist „Erledigt" eine Achse, die Spalten entscheidet.
+
+**Entscheidung.**
+
+1. Beide Routen liefern `poolMovement: { appears, enters, leaves } | null`, gerechnet vom
+   selben Anwendungsfall `usecases/pool-movement.ts` aus dem Zustandspaar vor und nach der
+   Handlung, mit `list('all')`. `null`, wenn sich nichts bewegt.
+2. **Zwei Anlässe genügen.** `DELETE /done` (Aufheben) ist der Anlass `'reopen'`: Das Todo war
+   erledigt und kehrt zurück; „wieder" stimmt. `PUT /done` (Setzen) nimmt den Anlass `'booking'`.
+   Dessen Satz trägt kein Wort von Buchung — „Es steht jetzt in „Erledigt“ und ist aus „Offen“
+   verschwunden." — und nennt nur `enters` und `leaves`; das ist die neutrale Form für jede
+   Bewegung, die keine Rückkehr ist. Ein dritter Anlass hätte denselben Satz mit anderem Namen.
+3. Der Anlass wird **nicht** umbenannt. `'booking'` steht in Domäne, Dienst, Oberfläche, Add-in
+   und den End-to-End-Tests; ein treffenderer Name (`'plain'`) kostete vier Hoheiten und gewänne
+   nichts, was der Kommentar an `PoolMovementOccasion` nicht auch sagt. Der Kommentar dort nennt
+   künftig beide Anlässe, für die die neutrale Form steht.
+4. Die Oberfläche nutzt den Satz im Toast nach beiden Handlungen wie beim Stopp (E-058 Punkt 6):
+   Zeitform `'past'`, Zeile weglassen, wenn `null`. Der Bewegungssatz ist der Rumpf.
+
+   **Richtiggestellt nach T-116 (Auflage 1, 2026-09-04).** Dieser Punkt nannte als Titel die
+   Sätze „Erledigt." und „Wieder offen."; gebaut ist „„X“ ist erledigt." beziehungsweise
+   „„X“ ist wieder offen.". Der Code hat recht und die Entscheidung wird nachgezogen: E-060
+   verweist für die Form auf E-058 Punkt 6, und der Stopp-Toast trägt den Namen des Todos seit
+   R-2a W-5 im Titel. Ein Titel ohne Namen wäre in einer Liste von Meldungen nicht zuzuordnen —
+   genau der Grund, aus dem W-5 den Namen dort hineingeholt hat. Die jüngere Regel schlägt den
+   älteren Wortlaut.
+
+## E-061 — Eine Rechnung, eine Wirkung, eine Form für die Poolbewegung
+
+**Befund (O-S, O-T, R-1a, 2026-09-04).** Das Zustandspaar „Wirkung einer Buchung"
+(`completedAt: null`, `hasOpenEntries: true`) wird an vier Stellen gebildet: zweimal in den
+Add-in-Routen, in `timer/start` und in `timer/stop` samt `orphaned/resolve`. Und die Bewegung
+hat zwei Formen: Die Add-in-Routen liefern `poolNames`/`enteringPoolNames`/`leavingPoolNames`,
+die Timer-Routen `poolMovement: { appears, enters, leaves }`. Zwei Hoheiten, eine OpenAPI.
+
+**Entscheidung.**
+
+1. **Die Wirkung liegt in der Domäne.** Was eine Buchung an einem Todo ändert — Kennzeichen
+   fällt, „hat offene Buchungen" wird wahr — ist Fachwissen und steht als benannte Konstante
+   bzw. reine Funktion in `packages/domain` (Arbeitstitel `BOOKING_EFFECT`, Name ist Sache von
+   domain-dev). Sie kennt weder Buchungen im Speicher noch Pools.
+2. **Die Rechnung liegt im Anwendungsfall.** `usecases/pool-movement.ts` bekommt eine Hilfsfunktion
+   (Arbeitstitel `bookingMovementStates(todo, entries)`), die das Zustandspaar aus dem Todo und
+   seinen Buchungen bildet, indem sie die Wirkung aus 1 anwendet. Alle vier Stellen rufen sie;
+   keine bildet das Paar selbst.
+3. **Eine Form.** `poolMovement: { appears, enters, leaves } | null` ist die einzige Form, in
+   der eine Bewegung über HTTP geht — auch an den Add-in-Routen. Die drei Namenslisten dort
+   entfallen; das Add-in liest `poolMovement` und ruft `poolMovementSentence` wie bisher.
+4. **Reihenfolge.** domain-dev baut 1 und 2 und stellt die Timer-Routen um (Welle E).
+   integration-dev stellt die Add-in-Routen, das Add-in und den Add-in-Abschnitt der OpenAPI um
+   (Welle F, nach E-053 getrennte Abschnitte, deshalb nicht dieselbe Welle). Bis dahin bleiben
+   die Add-in-Routen bei den drei Listen, mit Board-Eintrag.
+
+**Nachtrag (O-V, 2026-09-04).** Auch `POST /time-entries` — die Buchung von Hand — kann die
+erste Buchung eines Todos sein und damit `hasOpenEntries` von falsch auf wahr setzen; ein Todo
+ohne Buchung erscheint dann in einer Spalte `exportState: 'open'`. Die Route liefert deshalb
+`poolMovement` nach derselben Rechnung wie der Timerstopp — `closedEntryMovementStates` mit
+`ENTRY_CLOSED_EFFECT`, denn eine Buchung von Hand hebt „Erledigt" nicht auf (A-2.5, nur der
+Timerstart tut das); `bookingMovementStates` wäre falsch, es meldete für ein erledigtes Todo ein
+Verlassen jeder `completion: 'done'`-Spalte, das nicht stattfindet — und mit demselben Anlaß
+`'booking'` wie der Timerstopp; `null` gilt wie überall, wenn keine Bewegung möglich war. Die
+Oberfläche nutzt den Satz im Toast „Zeit gebucht." wie beim Stopp (E-058 Punkt 6) und nennt
+das Todo in derselben Form wie dort. Ein Zeitraum, der die Buchung ändert (`PATCH`), bewegt
+nichts und bleibt ohne `poolMovement`; das gilt auch, wenn der `PATCH` das `todoId` umhängt
+und damit die Achse an zwei Todos in entgegengesetzte Richtungen umlegt (offen als O-X).
+*(Richtiggestellt nach T-107, Frage 1: Die erste Fassung nannte `bookingMovementStates`; das war
+ein Versehen des Orchestrators.)*
+
+## E-062 — Bausteine der Oberfläche werden im Browser geprüft, nicht in einer Nachbildung
+
+**Befund (T-111 Frage 1, 2026-09-04).** `evict()` in `apps/web/src/app/ToastContext.tsx` ist die
+Regel, die seit W-10 eine Meldung mit Rückweg vor dem Verdrängen schützt — seit E-059 der
+einzige Schutz vor „Vom Board nehmen". Der unit-tester konnte sie nicht prüfen: Es gibt keinen
+Testrahmen für React-Bausteine im Baum, `evict` ist nicht ausgeführt, und beides zu ändern lag
+außerhalb seiner Hoheit.
+
+**Entscheidung.** Es kommt kein jsdom und keine Testing-Library dazu. Was eine Fläche tut, wird
+dort gemessen, wo sie steht: im Browser, über Playwright. T-108 hat fünf Erwartungen an
+`evict()` gegen den echten Baustein gemessen, T-113 legt den End-to-End-Fall daneben. Eine
+Nachbildung des Browsers würde eine zweite Wahrheit über Ereignisse, Zeit und Fokus aufmachen,
+und der Fall, der uns hier interessiert — eine Meldung überlebt vier andere und ihr Knopf ist
+bedienbar —, ist genau der, den eine Nachbildung am schlechtesten trifft (siehe T-110: Der
+Stapel lag über einem Dialog, mit der Maus bedienbar und mit der Tastatur unerreichbar; das
+sieht man nur im Browser).
+
+**Folge.** Reine Funktionen der Oberfläche (`lib/**`, Formatierer, Aufzählungen) prüft der
+unit-tester weiter mit Vitest. Alles, was einen Baum, ein Ereignis oder eine Zeit braucht,
+gehört dem e2e-tester. Sagt ein unit-tester „nicht prüfbar, kein Testrahmen", ist das kein
+Auftrag an den Orchestrator, einen zu beschaffen, sondern der Hinweis, dass der Fall in die
+End-to-End-Ebene gehört.
+
+## E-063 — Fremder Text wird isoliert und markiert, Eingabefelder nicht
+
+**Befund (T-119, 2026-09-04).** Der Aufgabenbereich zeigt Text, den ein anderer geschrieben hat —
+Betreff, Absender, Textkörper. Das ist dort der Regelfall und nicht die Ausnahme. Ein `U+202E` im
+Betreff drehte die Anzeige um, ohne je durch die Tür zu gehen: Die Zeichenwache greift beim
+Anlegen, die Anzeige kommt davor. `unicode-bidi: isolate` allein reicht dagegen **nicht** — es
+schützt die Umgebung, aber innerhalb des isolierten Blocks dreht ein `U+202E` weiter um
+(UBA X2–X5); `bidi-override` hilft ebenfalls nicht. Das ist die Berichtigung des Vorschlags aus
+T-114.
+
+**Entscheidung.**
+
+1. **Anzeigen und Eingeben sind zwei verschiedene Dinge.** Fremder Text, der angezeigt wird, läuft
+   über einen Baustein, der ihn in ein `<bdi>` setzt und ihm die unsichtbaren Zeichen nimmt. Text
+   in einem Eingabefeld bleibt unangetastet: Seinen Inhalt zu ändern hieße, die Eingabe des
+   Benutzers zu ändern.
+2. **Markieren, nicht streichen.** Ein entferntes Zeichen ist eine Anzeige, die verschweigt, daß
+   etwas da war. Die Anzeige setzt `U+FFFD` an seine Stelle, sichtbar.
+3. **Der Vorschlag wird bereinigt, die Eingabe abgewiesen** (aus T-114, gilt weiter). Was der
+   Benutzer nicht selbst geschrieben hat, darf die Anwendung glattziehen; was er geschrieben hat,
+   weist sie zurück und sagt warum.
+4. **Ein Nachweis prüft gegen die Tür, nicht gegen eine Abschrift der Tür.** T-117 erweiterte die
+   Zeichenklasse um `U+061C`, `U+200E`, `U+200F` und der Nachweispfad des Add-ins bemerkte es
+   nicht, weil er gegen eine kopierte Liste hielt — die Sackgasse aus T-114 stand für drei Zeichen
+   wieder offen. Wer zwei Stellen zusammenhalten will, fragt die maßgebliche ab und schreibt sie
+   nicht ab.
+
+5. **Und er prüft, ob es zwei Fassungen gibt — nicht, ob sie dasselbe tun.** Nachsatz aus T-123,
+   mit einer Messung belegt: Setzt man die alte, **zeichengleiche** Fassung wieder ein, bleiben
+   163 Verhaltensprüfungen grün. Ein Ergebnisvergleich wird erst rot, wenn die Doppelung schon
+   falsch ist — er bewacht den Schaden, nicht die Ursache. Der Wächter fragt deshalb nach der
+   Gleichheit der Sache selbst (dieselbe Funktion, derselbe Ort) und danach, dass es keinen
+   zweiten Träger gibt: keine zweite Fassung im Quelltext, keine zweite Aufzählung in einer
+   Beschreibung. Eine Beschreibung, die eine Klasse aufzählt, ist eine Abschrift, die nur nicht
+   rot werden kann; sie verweist stattdessen auf den einen Ort.
+
+6. **Wo die Behandlung für den Normalfall die Identität ist, kann kein Verhaltenstest sie
+   vermissen.** Nachsatz aus T-129, wieder mit einer Zahl: 175 behandelte Stellen und 71 grüne
+   Tests haben **elf rohe Anzeigestellen** nicht bemerkt — darunter die Vorschau der Exportzeile,
+   also die Ansicht, an der ein Benutzer prüft, was er abrechnet. Für einen gewöhnlichen Namen
+   liefert die Behandlung denselben Text zurück; ein Test, der Namen einsetzt, sieht nie einen
+   Unterschied. Dann genügt es nicht, die Behandlung zu haben — die **Pflicht** muß im Typ
+   stehen und ein Wächter sie lesen. Die Herkunft eines Textes gehört deshalb in seinen Typ und
+   nicht in eine gepflegte Namensliste im Nachweis: Eine Liste ist wieder eine Abschrift, und
+   Punkt 4 gilt für sie wie für jede andere.

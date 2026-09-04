@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { PoolId, StatusId, TagFolderId, TagId } from '@takt/domain';
+import type { PoolId, PoolTagTerm, StatusId, TagFolderId, TagId } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
 import {
@@ -44,7 +44,15 @@ import {
   updateTag,
 } from '../usecases/structure.ts';
 import { data, fail, failValidation } from '../http/problem.ts';
-import { colorSchema, idSchema, nameSchema, readFlag, readJson, readPagination } from '../http/input.ts';
+import {
+  colorSchema,
+  idSchema,
+  nameSchema,
+  patchOf,
+  readFlag,
+  readJson,
+  readPagination,
+} from '../http/input.ts';
 import type { TaktEnv } from '../http/guards.ts';
 
 const tagCreateSchema = z.object({
@@ -66,12 +74,71 @@ const folderCreateSchema = z.object({ name: nameSchema, parentId: idSchema.nulli
 const folderRenameSchema = z.object({ name: nameSchema });
 const folderMoveSchema = z.object({ newParentId: idSchema.nullable() });
 
-const poolRuleSchema = z.array(
+/**
+ * Eine Tagliste einer Regel (T-076).
+ *
+ * Dieselbe Gestalt wie vor T-076 — ein Term ist ein Tag **oder** ein Ordner.
+ * Was sich geändert hat, ist nicht der Term, sondern dass es zwei solche
+ * Listen gibt: `rule` (erforderlich) und `excludedTags` (ausgeschlossen). Das
+ * ist der Grund, warum hier **kein** dritter Fall für den Status steht: Der
+ * Status ist keine Tagmenge und hat ein eigenes Feld.
+ */
+const poolTagListSchema = z.array(
   z.union([
     z.object({ kind: z.literal('tag'), tagId: idSchema }),
     z.object({ kind: z.literal('folder'), folderId: idSchema }),
   ]),
 ).max(200);
+
+/**
+ * Trägt die Marke an den Kennungen einer geprüften Termliste nach (T-089).
+ *
+ * Das Schema kennt nur `string`; `PoolTagTerm` verlangt `TagId` beziehungsweise
+ * `TagFolderId`. Zwischen beidem liegt genau diese Funktion — und sie liegt
+ * **außerhalb** der Routen, damit sie ihren Eingabetyp aus dem Schema ableiten
+ * kann (`z.infer`): Ändert sich die Gestalt von `poolTagListSchema`, wird diese
+ * Zeile rot, statt von einer Zusicherung überdeckt zu werden.
+ *
+ * Der Ersatz für `as never`. Eine Zusicherung auf `never` prüft nichts, weil
+ * `never` an alles zuweisbar ist; sie sieht aus wie eine Markierung und ist
+ * eine Abschaltung.
+ */
+const poolTerms = (terms: z.infer<typeof poolTagListSchema>): readonly PoolTagTerm[] =>
+  terms.map((term) =>
+    term.kind === 'tag'
+      ? { kind: 'tag', tagId: term.tagId as TagId }
+      : { kind: 'folder', folderId: term.folderId as TagFolderId },
+  );
+
+/**
+ * Dasselbe für die Statusachse: Marke je Kennung, nicht über die Liste.
+ *
+ * `as readonly StatusId[]` über die ganze Liste lehnt `tsc` ab („neither type
+ * sufficiently overlaps"), und das zu Recht — es wäre eine Aussage über eine
+ * Menge statt über ihre Elemente. Genau deshalb stand hier vorher `as never`:
+ * Die Zusicherung, die alles annimmt.
+ */
+const poolStatusIds = (ids: z.infer<typeof poolStatusListSchema>): readonly StatusId[] =>
+  ids.map((id) => id as StatusId);
+
+/**
+ * Die Erledigt- und die Exportstatus-Achse (T-076).
+ *
+ * Dreiwertig mit `any` als **Neutralwert**, nicht zwei Wahrheitswerte
+ * nebeneinander: Ein Feld, das „alle" sagen kann, braucht keinen zweiten, der
+ * sagt, ob das erste gilt.
+ */
+const completionSchema = z.enum(['any', 'done', 'open']);
+const exportStateSchema = z.enum(['any', 'open', 'exported']);
+
+/**
+ * Die Status einer Regel. Leer heißt „Alle" (T-076).
+ *
+ * Dieselbe Obergrenze wie bei den Taglisten, obwohl es nie mehr Status als
+ * eine Handvoll gibt: Die Grenze schützt nicht vor dem Benutzer, sondern vor
+ * einem Rumpf, der die Datenbank mit Fragezeichen überfährt.
+ */
+const poolStatusListSchema = z.array(idSchema).max(200);
 
 /**
  * Wo die Regel erscheint (E-054).
@@ -89,7 +156,11 @@ const poolCreateSchema = z.object({
   includeSubfolders: z.boolean().default(true),
   placement: placementSchema.default('pool'),
   position: z.number().int().min(0).default(0),
-  rule: poolRuleSchema.default([]),
+  rule: poolTagListSchema.default([]),
+  excludedTags: poolTagListSchema.default([]),
+  statusIds: poolStatusListSchema.default([]),
+  completion: completionSchema.default('any'),
+  exportState: exportStateSchema.default('any'),
 });
 
 const poolUpdateSchema = z.object({
@@ -98,7 +169,11 @@ const poolUpdateSchema = z.object({
   includeSubfolders: z.boolean().optional(),
   placement: placementSchema.optional(),
   position: z.number().int().min(0).optional(),
-  rule: poolRuleSchema.optional(),
+  rule: poolTagListSchema.optional(),
+  excludedTags: poolTagListSchema.optional(),
+  statusIds: poolStatusListSchema.optional(),
+  completion: completionSchema.optional(),
+  exportState: exportStateSchema.optional(),
 });
 
 /**
@@ -262,13 +337,36 @@ export function createStructureRoutes(context: AppContext): {
     const parsed = poolCreateSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
+    /*
+     * **Ein Wert statt zehn Zeilen** (R-1, T-089).
+     *
+     * Bis T-089 zählte diese Stelle jedes Feld einzeln auf, und in `PoolInput`
+     * sind die vier Achsen aus T-076 freiwillig. Eine Achse, die ins Schema und
+     * in `PoolInput` kommt, hier aber vergessen wird, verschwände damit
+     * **still**: nichts wird rot, die Spalte wird angelegt, sie trifft nur
+     * etwas anderes. Genau diese Bauart hat T-050 (`nurOffene`) und T-051 (die
+     * Farbe einer Spalte) gekostet — etwas wird gesendet, und niemand liest es.
+     *
+     * `PATCH` daneben reichte `parsed.data` seit jeher als Ganzes durch und
+     * kann nichts vergessen. Der `POST` tut es jetzt auch: Was das Schema
+     * annimmt, geht weiter, ohne dass es jemand abschreiben muss. Das ist eine
+     * Wache des Übersetzers statt einer des Nachweispfads — `proof:openapi`
+     * Abschnitt 12 bleibt trotzdem, es misst die andere Richtung (trifft die
+     * angelegte Spalte danach das Richtige).
+     *
+     * Die drei markierten Listen stehen daneben, weil das Schema Zeichenketten
+     * liefert und die Domäne markierte Kennungen erwartet. `as never` stand
+     * hier vorher: eine Zusicherung, die nicht die Markierung nachträgt,
+     * sondern **jede** Prüfung abschaltet — `never` ist an alles zuweisbar,
+     * also fiele auch eine geänderte Gestalt von `poolTagListSchema` niemandem
+     * auf. `poolTerms` und `as readonly StatusId[]` tun genau das eine, was
+     * nötig ist, und nichts sonst.
+     */
     const result = await createPool(context, {
-      name: parsed.data.name,
-      matchMode: parsed.data.matchMode,
-      includeSubfolders: parsed.data.includeSubfolders,
-      placement: parsed.data.placement,
-      position: parsed.data.position,
-      rule: parsed.data.rule as never,
+      ...parsed.data,
+      rule: poolTerms(parsed.data.rule),
+      excludedTags: poolTerms(parsed.data.excludedTags),
+      statusIds: poolStatusIds(parsed.data.statusIds),
     });
     // Bis T-074 stand hier ein `await createPool(...)` ohne Fehlerzweig: Der
     // eindeutige Index auf `pool.name` warf, niemand fing ihn, und die Antwort
@@ -283,7 +381,28 @@ export function createStructureRoutes(context: AppContext): {
     const parsed = poolUpdateSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
-    const result = await updatePool(context, c.req.param('poolId') as PoolId, parsed.data as never);
+    /*
+     * Dieselbe Markierung wie im `POST`, und aus demselben Grund kein
+     * `as never` mehr (R-1). Die drei Listen sind die einzigen Felder, deren
+     * Gestalt sich zwischen Schema und Domäne unterscheidet; alles andere geht
+     * durch, wie es dasteht.
+     *
+     * `Partial<PoolInput>`: Was fehlt, bleibt, wie es ist — auch bei den
+     * Listen. Deshalb wird jede von ihnen nur dann gesetzt, wenn sie im Rumpf
+     * stand; ein `poolTerms(undefined)` machte aus „nicht genannt" eine leere
+     * Liste und löschte damit die Regel, die der Aufrufer behalten wollte.
+     */
+    const { rule, excludedTags, statusIds, ...rest } = parsed.data;
+    const result = await updatePool(
+      context,
+      c.req.param('poolId') as PoolId,
+      patchOf({
+        ...rest,
+        ...(rule === undefined ? {} : { rule: poolTerms(rule) }),
+        ...(excludedTags === undefined ? {} : { excludedTags: poolTerms(excludedTags) }),
+        ...(statusIds === undefined ? {} : { statusIds: poolStatusIds(statusIds) }),
+      }),
+    );
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 

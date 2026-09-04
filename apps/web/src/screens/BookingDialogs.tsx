@@ -6,7 +6,7 @@ import {
   resetExportStatus,
   updateTimeEntry,
 } from "../api/endpoints";
-import type { Id, TimeEntry } from "../api/types";
+import type { ForeignText, Id, TimeEntry } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ExportAuditList } from "../components/ExportAudit";
 import { ExportStatusBadge, exportDisplayState } from "../components/ExportStatus";
@@ -30,6 +30,10 @@ import {
   plural,
   toLocalInputValue,
 } from "../lib/format";
+import { BILLING_NOTE_MAY_BE_EMPTY } from "../lib/labels";
+import { bookingSentence, withMovement } from "../lib/movement";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — Dialoge rund um eine Zeitbuchung.
@@ -64,7 +68,7 @@ export interface BookingFormDialogProps {
   readonly entry?: TimeEntry;
   /** Todo, auf das gebucht wird. Beim Ändern kommt es aus der Buchung. */
   readonly todoId: Id;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -103,9 +107,39 @@ export function BookingFormDialog({
 
     void mutation.run(async () => {
       if (entry === undefined) {
-        await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
-        toasts.success("Zeit gebucht.", `Die Buchung liegt auf „${todoTitle}“.`);
+        /*
+          Anlegen: derselbe Rahmen wie nach dem Timerstopp (O-V, Nachtrag zu
+          E-061; T-102 Frage 1).
+
+          **Der Titel nennt das Todo**, der Rumpf sagt, was mit ihm geschehen
+          ist. Bis T-108 stand hier „Zeit gebucht." mit dem Todo im Rumpf,
+          während der Stopp „Zeit gebucht auf „X“." im Titel führt — dieselbe
+          Handlung, zwei Formen. Der Bewegungssatz beginnt mit „Es" und nennt
+          das Todo nicht; ohne einen Bezug darüber stünde das „Es" allein
+          (W-5 aus R-2a).
+
+          **Der Bewegungssatz kommt vom Dienst**, nicht von hier: `bookingSentence`
+          holt ihn aus `poolMovementSentence` in `@takt/domain`, Anlaß
+          `'booking'`, Zeitform `'past'` — wie beim Stopp. Meldet der Dienst
+          keine Bewegung, entfällt die Zeile ganz (`withMovement`).
+        */
+        const created = await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
+        toasts.success(
+          `Zeit gebucht auf ${quotedName(todoTitle)}.`,
+          withMovement(
+            `Gebucht: ${formatDuration(created.durationSeconds)}.`,
+            bookingSentence(created.poolMovement),
+          ),
+        );
       } else {
+        /*
+          Ändern: **kein** Bewegungssatz, und das ist der Vertrag, keine
+          Auslassung. Ein geänderter Zeitraum bewegt nichts — die Buchung war
+          schon da, „hat offene Buchungen" stand bereits, und keine Achse einer
+          Regel fragt nach Anfang oder Ende (O-V, letzter Satz). `PATCH
+          /time-entries/{id}` liefert deshalb kein `poolMovement`, und hier ist
+          keines wegzulassen.
+        */
         await updateTimeEntry(entry.id, { startedAt: start, endedAt: end, note });
         toasts.success("Buchung geändert.", "Die Tagesgruppe dieses Todos ändert sich mit.");
       }
@@ -120,8 +154,8 @@ export function BookingFormDialog({
       title={entry === undefined ? "Zeit von Hand erfassen" : "Buchung bearbeiten"}
       description={
         entry === undefined
-          ? `Für „${todoTitle}“. Die Dauer ergibt sich aus Anfang und Ende; Takt rechnet sie aus.`
-          : `Für „${todoTitle}“. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
+          ? `Für ${quotedName(todoTitle)}. Die Dauer ergibt sich aus Anfang und Ende; Takt rechnet sie aus.`
+          : `Für ${quotedName(todoTitle)}. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
       }
       submitLabel={entry === undefined ? "Buchen" : "Speichern"}
       busy={mutation.busy}
@@ -155,6 +189,24 @@ export function BookingFormDialog({
         maxLength={8192}
         placeholder="Was wurde geleistet?"
       />
+
+      {/*
+        Derselbe Hinweis wie im Stoppdialog (B-4 aus T-116, E-034).
+
+        Eine Buchung ohne Leistung ist erfasst — aber die **Tagesgruppe** dieses
+        Todos geht ohne Text nicht in den Export. Der Stoppdialog sagt das seit
+        jeher und der Stopp-Toast warnt danach noch einmal; die Buchung von Hand
+        sagte bis T-118 weder das eine noch das andere. Sie ist der Weg, auf dem
+        Zeit **nachgetragen** wird, also der, auf dem eine Leistung am ehesten
+        vergessen wird.
+
+        Auch beim Ändern: Wer die Leistung hier leert, erzeugt denselben
+        Zustand. Ein Hinweis, der nur an einem der beiden Ausgänge stünde, wäre
+        derselbe Fehler eine Ebene tiefer.
+
+        Der Wortlaut steht in `lib/labels.ts` und nicht zweimal in der Ansicht.
+      */}
+      <p className="dialog__hint">{BILLING_NOTE_MAY_BE_EMPTY}</p>
     </FormDialog>
   );
 }
@@ -166,7 +218,7 @@ export function BookingFormDialog({
 export interface ResetExportDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -261,7 +313,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf „${todoTitle}“ (${formatDuration(entry.durationSeconds)}) wird wieder als offen geführt.`
+          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird wieder als offen geführt.`
       }
       consequence={
         context ??
@@ -285,7 +337,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
 export interface NotBilledDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -333,7 +385,7 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
       description={
         entry === null
           ? ""
-          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf „${todoTitle}“ (${formatDuration(entry.durationSeconds)}) wird als abgeschlossen geführt.`
+          : `Die Buchung vom ${formatDayLabel(calendarDayOf(entry.startedAt))} auf ${quotedName(todoTitle)} (${formatDuration(entry.durationSeconds)}) wird als abgeschlossen geführt.`
       }
       consequence="Sie geht in keinen Export mehr ein. Exportiert wird sie nicht — Sie rechnen diese Zeit einfach nicht ab. Rückgängig machen lässt sich das über „Exportstatus zurücksetzen“."
       confirmLabel="Nicht abrechnen"
@@ -352,7 +404,7 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
 export interface BookingHistoryDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -385,7 +437,7 @@ function BookingHistoryBody({
   onClose,
 }: {
   readonly entry: TimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }) {
   /*
@@ -408,7 +460,7 @@ function BookingHistoryBody({
       title="Verlauf dieser Buchung"
       description={
         <>
-          {formatPeriod(entry.startedAt, entry.endedAt)} auf „{todoTitle}“ ·{" "}
+          {formatPeriod(entry.startedAt, entry.endedAt)} auf <Foreign value={quotedName(todoTitle)} /> ·{" "}
           {formatDuration(entry.durationSeconds)}
         </>
       }

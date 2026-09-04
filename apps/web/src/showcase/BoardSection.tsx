@@ -1,11 +1,16 @@
+import { foreignText } from "../lib/foreign";
+import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
+import { useToasts } from "../app/ToastContext";
 import { FilterToggle } from "../components/FilterBar";
 import { KanbanCard, KanbanColumn } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Card, EmptyState, InlineMessage, Button } from "../components/Primitives";
-import { ReactivationNotice } from "../components/Timer";
-import { BoardEmptyState } from "../screens/BoardScreen";
-import { BOARD_CARDS, BOARD_COLUMNS, type BoardCard } from "./data";
+import { Card, InlineMessage, Button, LoadingBlock } from "../components/Primitives";
+import { RuleSummary } from "../components/RuleSummary";
+import { describeRule, describeRuleReach } from "../lib/poolRule";
+import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
+import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
+import { reactivationTitle, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -13,14 +18,26 @@ import { Section, SubHeading } from "./Section";
  *
  * ## Was diese Musterseite zeigt und warum
  *
- * Eine Spalte ist eine **Regel ueber Tags**, dieselbe Entitaet wie ein Pool.
- * Daraus folgen drei Zustaende, die es vor E-054 nicht gab und die hier
+ * Eine Spalte ist eine **Regel**, dieselbe Entitaet wie ein Pool — und seit
+ * E-055 eine Regel ueber fuenf Bedingungen: erforderliche Tags, ausgeschlossene
+ * Tags, Status, „Erledigt" und Exportstatus.
+ * Daraus folgen Zustaende, die es vor E-054 nicht gab und die hier
  * nebeneinander stehen, weil sie einzeln harmlos und zusammen verwirrend sind:
  *
  *   1. Dieselbe Karte in **zwei** Spalten ("Musterkunde Nord" steht in
  *      "Kunden Nord" und in "Support").
  *   2. Eine Spalte, deren Regel derzeit **nichts** trifft ("Eskalation").
  *   3. Ein **leeres Board** — der Zustand direkt nach der Umstellung.
+ *   4. Die **Leerzustaende einer Spalte** nebeneinander (T-083, T-087). Sie
+ *      unterscheiden sich nur im Text und in der angebotenen Handlung, und
+ *      genau einer von ihnen ist ein Einrichtungsfehler — er steht zweimal da,
+ *      einmal allein und einmal neben einer gesunden Bedingung, weil er in
+ *      dieser zweiten Form bis T-087 unsichtbar war.
+ *   5. **Laden und Scheitern** (T-091). Beides galt bis dahin als
+ *      selbstverstaendlich und stand deshalb nirgends — und was nirgends
+ *      steht, wird nicht abgenommen, sondern geglaubt. Beide gelten fuer die
+ *      **ganze** Seite und nicht je Spalte: Der Dienst liefert das Board in
+ *      einer Antwort.
  *
  * ## Was hier bewusst fehlt
  *
@@ -34,20 +51,73 @@ import { Section, SubHeading } from "./Section";
 /** Der Leerzustand ist ein eigener Bildschirm — hier zum Umschalten. */
 type Stage = "board" | "empty";
 
+/**
+ * Die vier Leerzustaende einer Spalte, in der Reihenfolge, in der sie zu lesen
+ * sind (T-083, T-087): erst der harmlose, dann der Fehler, dann derselbe
+ * Fehler neben einer gesunden Bedingung, dann der unfertige.
+ *
+ * Der dritte ist der Grund fuer T-087: Seine Achsensumme steht auf `1`, und
+ * bis dahin sah er aus wie der erste — "gerade passt nichts" statt "hier fehlt
+ * ein Tag". Er steht deshalb unmittelbar neben dem zweiten, damit beide
+ * denselben Satz sagen.
+ *
+ * Aus `BOARD_COLUMNS` gefiltert und nicht daneben getippt — sonst zeigte diese
+ * Aufstellung Regeln, die es im Board darueber nicht gibt.
+ */
+const EMPTY_COLUMN_IDS: readonly string[] = [
+  "eskalation",
+  "kunden-ost",
+  "support-oder-ost",
+  "neu",
+];
+
+const EMPTY_COLUMNS = EMPTY_COLUMN_IDS.flatMap((id) =>
+  BOARD_COLUMNS.filter((column) => column.id === id),
+);
+
+/**
+ * Die Bewegung, wie der Dienst sie beim Start gemeldet haette (E-058).
+ *
+ * In der Anwendung kommt sie als `poolMovement` mit `POST /timer/start`; auf
+ * dieser Seite gibt es keinen Dienst, also wird sie aus dem gestellt, was hier
+ * ohnehin sichtbar ist: den Spalten, in denen die Karte danach steht. Der
+ * **Satz** dazu entsteht auch hier in `poolMovementSentence` und wird nicht
+ * abgeschrieben.
+ *
+ * `leaves` bleibt leer, und das ist keine Bequemlichkeit — **keine** der
+ * Spalten dieser Musterseite fragt nach „Erledigt: nur erledigte", also gibt
+ * es hier nichts zu verlassen. Wie der Satz mit besetztem `leaves` klingt,
+ * steht in Abschnitt 6 neben den drei uebrigen Faellen.
+ */
+function movementOf(card: BoardCard, columnTitle: ReadonlyMap<string, string>): PoolMovement {
+  const names = card.columnIds
+    .map((id) => columnTitle.get(id))
+    .filter((title): title is string => title !== undefined);
+  return { appears: names, enters: names, leaves: [] };
+}
+
 export function BoardSection() {
+  const toasts = useToasts();
   const [cards, setCards] = useState<readonly BoardCard[]>(BOARD_CARDS);
   const [stage, setStage] = useState<Stage>("board");
   const [showDone, setShowDone] = useState(true);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [reactivatedCardId, setReactivatedCardId] = useState<string | null>(null);
 
   const columnTitle = useMemo(
     () => new Map(BOARD_COLUMNS.map((column) => [column.id, column.title])),
     [],
   );
 
-  /** Erledigt setzen und zuruecknehmen (I-03). Aendert keine Spalte — nur die Sichtbarkeit. */
+  /**
+   * Erledigt setzen und zuruecknehmen (I-03).
+   *
+   * Gesagt wird nur das Faktum. Bis T-094 stand hier „die Regeln treffen weiter
+   * zu" — eine Behauptung ueber Spalten, die seit E-055 falsch sein kann: Eine
+   * Regel darf nach „Erledigt" fragen, und dann wechselt die Karte mit genau
+   * dieser Handlung. Dieselbe Zurueckhaltung uebt der echte Board-Toast
+   * (S-3 aus R-2).
+   */
   const toggleDone = useCallback((cardId: string) => {
     setCards((previous) =>
       previous.map((candidate) => {
@@ -55,52 +125,23 @@ export function BoardSection() {
         const next = !candidate.done;
         setAnnouncement(
           next
-            ? `${candidate.title} ist jetzt erledigt. Die Tags bleiben, die Regeln treffen weiter zu.`
-            : `${candidate.title} ist wieder offen.`,
+            ? `${foreignText(candidate.title)} ist jetzt erledigt. Tags und Status ändern sich dadurch nicht.`
+            : `${foreignText(candidate.title)} ist wieder offen.`,
         );
         return { ...candidate, done: next, reactivated: false };
       }),
     );
-    setReactivatedCardId((current) => (current === cardId ? null : current));
   }, []);
 
   /**
-   * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
-   * (A-2.5). Die Tags aendern sich dabei nicht — die Karte erscheint deshalb
-   * genau dort wieder, wo sie vorher stand, sobald erledigte Karten
-   * ausgeblendet sind. Gefragt wird nicht; gesagt wird hinterher.
+   * Der Rueckweg aus der Meldung (I-05): Timer aus, „Erledigt" zurueck, die
+   * eben entstandene Buchung verworfen.
+   *
+   * Die Karte kommt als Argument und nicht aus einem Zustand: Die Meldung
+   * haelt ihren Bezug selbst, solange sie steht, und zwei Meldungen
+   * nebeneinander meinen dann auch zwei verschiedene Karten.
    */
-  const toggleTimer = useCallback((cardId: string) => {
-    setCards((previous) => {
-      const card = previous.find((candidate) => candidate.id === cardId);
-      if (card === undefined) return previous;
-      const starting = !card.timerRunning;
-      const reactivating = starting && card.done;
-
-      if (reactivating) {
-        setReactivatedCardId(cardId);
-        setAnnouncement(
-          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo erscheint wieder in seinen Pools und in denselben Spalten wie zuvor.`,
-        );
-      } else {
-        setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
-      }
-
-      return previous.map((candidate) => {
-        if (candidate.id !== cardId) return { ...candidate, timerRunning: false };
-        return {
-          ...candidate,
-          timerRunning: starting,
-          done: reactivating ? false : candidate.done,
-          reactivated: reactivating ? true : candidate.reactivated === true,
-        };
-      });
-    });
-  }, []);
-
-  const undoReactivation = useCallback(() => {
-    const cardId = reactivatedCardId;
-    if (cardId === null) return;
+  const undoReactivation = useCallback((cardId: string) => {
     setCards((previous) =>
       previous.map((candidate) =>
         candidate.id === cardId
@@ -108,11 +149,64 @@ export function BoardSection() {
           : candidate,
       ),
     );
-    setReactivatedCardId(null);
     setAnnouncement("Zurückgenommen. Das Todo ist wieder erledigt, die Buchung wurde verworfen.");
-  }, [reactivatedCardId]);
+  }, []);
 
-  const reactivatedCard = cards.find((card) => card.id === reactivatedCardId);
+  /**
+   * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
+   * (A-2.5). Gefragt wird nicht; gesagt wird hinterher — auf zwei Flaechen:
+   * dem Etikett „Erledigt aufgehoben" an der Karte und der **Meldung** unten
+   * rechts, mit dem Rueckweg darin.
+   *
+   * Bis T-108 stand an der Stelle der Meldung `ReactivationNotice`, eine
+   * eigene Hinweisflaeche unter dem Board — die keine Ansicht der Anwendung je
+   * eingesetzt hat (W-9 aus R-2a). Jetzt zeigt die Musterseite denselben
+   * Baustein wie das Produkt.
+   *
+   * **Der Zustand wird ausserhalb des Aktualisierers gerechnet.** Bis T-108
+   * riefen `setAnnouncement` und die Auswahl der Karte mitten in `setCards`;
+   * eine Meldung waere dort im Doppellauf des `StrictMode` **zweimal**
+   * erschienen. Der Aktualisierer bildet jetzt nur noch die neue Liste.
+   */
+  const toggleTimer = useCallback(
+    (cardId: string) => {
+      const card = cards.find((candidate) => candidate.id === cardId);
+      if (card === undefined) return;
+      const starting = !card.timerRunning;
+      const reactivating = starting && card.done;
+
+      setCards((previous) =>
+        previous.map((candidate) => {
+          if (candidate.id !== cardId) return { ...candidate, timerRunning: false };
+          return {
+            ...candidate,
+            timerRunning: starting,
+            done: reactivating ? false : candidate.done,
+            reactivated: reactivating ? true : candidate.reactivated === true,
+          };
+        }),
+      );
+
+      if (!reactivating) {
+        setAnnouncement(`Timer für ${foreignText(card.title)} ${starting ? "gestartet" : "gestoppt"}.`);
+        return;
+      }
+
+      /*
+        Titel aus `lib/labels.ts`, Rumpf aus `@takt/domain` — wie in der
+        Anwendung. Die Meldung sagt es damit selbst; eine zweite, versteckte
+        Ansage waere derselbe Satz ein zweites Mal, und der Toast liegt
+        ohnehin in einem `aria-live`-Bereich.
+      */
+      toasts.show({
+        tone: "success",
+        title: reactivationTitle(card.title),
+        body: poolMovementSentence(movementOf(card, columnTitle), "past", "reopen"),
+        action: { label: "Rückgängig", onSelect: () => undoReactivation(cardId) },
+      });
+    },
+    [cards, columnTitle, toasts, undoReactivation],
+  );
 
   const cardMenu = useCallback(
     (card: BoardCard, others: readonly string[]): readonly MenuEntry[] => [
@@ -120,19 +214,19 @@ export function BoardSection() {
         id: "open",
         label: "Todo öffnen",
         icon: "arrow-up-right",
-        onSelect: () => setAnnouncement(`${card.title} geöffnet.`),
+        onSelect: () => setAnnouncement(`${foreignText(card.title)} geöffnet.`),
       },
       {
         id: "tags",
         label: "Tags ändern — sie entscheiden die Spalte",
         icon: "tag",
-        onSelect: () => setAnnouncement(`Tags von ${card.title} bearbeiten.`),
+        onSelect: () => setAnnouncement(`Tags von ${foreignText(card.title)} bearbeiten.`),
       },
       {
         id: "status",
         label: "Status ändern",
         icon: "pencil",
-        onSelect: () => setAnnouncement(`Status von ${card.title} ändern.`),
+        onSelect: () => setAnnouncement(`Status von ${foreignText(card.title)} ändern.`),
       },
       { kind: "separator", id: "sep-done" },
       {
@@ -188,14 +282,14 @@ export function BoardSection() {
     <Section
       id="board"
       title="5 — Kanban-Board"
-      lead="Eine Spalte ist eine Regel über Tags, kein Status (E-054). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet."
+      lead={`${RULE_IS_A_RULE} Kein Status und kein Ablageort (E-054, E-055). Deshalb steht dieselbe Karte manchmal in mehreren Spalten, deshalb gibt es kein Ziehen mehr, und deshalb ist das Board nach der Umstellung leer, bis der Benutzer Spalten einrichtet.`}
       refs={["S-04", "S-11", "A-2.4", "A-2.5", "A-5.1", "A-5.3", "A-5.4", "A-5.6", "E-054", "I-03", "I-05"]}
     >
       <InlineMessage tone="info" title="Was an die Stelle des Ziehens getreten ist">
-        Welche Karte in welcher Spalte steht, entscheiden die Tags des Todos. Wer eine Karte
-        anderswohin bringen will, ändert ihre Tags — das Kartenmenü sagt das ausdrücklich. Der
-        Status bleibt als Eigenschaft am Todo und wird in der Liste und in der Detailansicht
-        geändert.
+        {RULE_WHAT_MOVES_A_CARD} Wer eine Karte anderswohin bringen will, ändert am Todo das,
+        wonach die Regel fragt — meist ein Tag, manchmal den Status; das Kartenmenü sagt das
+        ausdrücklich. Der Status bleibt dabei eine Eigenschaft des Todos und wird in der Liste und
+        in der Detailansicht geändert.
       </InlineMessage>
 
       <div className="showcase__switch">
@@ -237,6 +331,8 @@ export function BoardSection() {
             const inColumn = cards.filter((card) => card.columnIds.includes(column.id));
             const visible = showDone ? inColumn : inColumn.filter((card) => !card.done);
             const doneCount = visible.filter((card) => card.done).length;
+            const description = describeRule(column.rule, SHOWCASE_RULE_LOOKUP);
+            const reach = describeRuleReach(description, column.resolved);
 
             return (
               <KanbanColumn
@@ -245,17 +341,22 @@ export function BoardSection() {
                 count={visible.length}
                 total={visible.length}
                 doneCount={doneCount}
-                rule={<p className="kcolumn__rule-text">{column.rule}</p>}
+                rule={
+                  <RuleSummary
+                    description={description}
+                    reach={reach}
+                    emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+                  />
+                }
                 entries={columnMenu(column.title)}
                 onAdd={() => setAnnouncement(`Neues Todo mit den Tags von ${column.title}.`)}
                 addLabel={`Todo in „${column.title}“ anlegen — mit den Tags dieser Regel`}
               >
                 {visible.length === 0 ? (
-                  <EmptyState
-                    compact
-                    icon="inbox"
-                    title="Keine Karte trifft diese Regel"
-                    description="Sobald ein Todo die genannten Tags trägt, erscheint es hier von selbst."
+                  <BoardColumnEmpty
+                    reach={reach}
+                    onEditRule={() => setAnnouncement(`Regel von ${column.title} bearbeiten.`)}
+                    onOpenTags={() => setAnnouncement("Zu den Tags.")}
                   />
                 ) : (
                   visible.map((card) => {
@@ -273,7 +374,7 @@ export function BoardSection() {
                         }}
                         entries={cardMenu(card, others)}
                         highlighted={highlighted === card.id}
-                        onOpen={() => setAnnouncement(`${card.title} geöffnet.`)}
+                        onOpen={() => setAnnouncement(`${foreignText(card.title)} geöffnet.`)}
                         onToggleTimer={() => toggleTimer(card.id)}
                         {...(others.length === 0
                           ? {}
@@ -293,16 +394,92 @@ export function BoardSection() {
         </div>
       )}
 
-      {reactivatedCard === undefined ? null : (
-        <ReactivationNotice
-          todoTitle={reactivatedCard.title}
-          poolNames={reactivatedCard.columnIds
-            .map((id) => columnTitle.get(id))
-            .filter((title): title is string => title !== undefined)}
-          onUndo={undoReactivation}
-          onDismiss={() => setReactivatedCardId(null)}
-        />
-      )}
+      <SubHeading>Die Leerzustände einer Spalte</SubHeading>
+      <p className="section__lead">
+        Eine leere Spalte ist keine Auskunft, sondern eine Frage: <strong>warum</strong> ist sie
+        leer? Es gibt drei Antworten, sie verlangen drei verschiedene Handlungen, und nur die
+        mittlere ist ein Einrichtungsfehler. Sie stehen hier nebeneinander, weil sie sich allein im
+        Text unterscheiden — getrennt gepflegt liefen sie binnen einer Aufgabe auseinander. Der
+        Einrichtungsfehler steht zweimal: allein und neben einer gesunden Bedingung. Die zweite
+        Form sah bis T-087 aus wie die erste Spalte, weil die Achsensumme dort positiv bleibt —
+        seither entscheidet die Auflösung <strong>je Term</strong>, und die Spalte nennt den leeren
+        Ordner beim Namen.
+      </p>
+      <div className="board">
+        {EMPTY_COLUMNS.map((column) => {
+          const description = describeRule(column.rule, SHOWCASE_RULE_LOOKUP);
+          const reach = describeRuleReach(description, column.resolved);
+
+          return (
+            <KanbanColumn
+              key={column.id}
+              title={column.title}
+              count={0}
+              total={0}
+              doneCount={0}
+              rule={
+                <RuleSummary
+                  description={description}
+                  reach={reach}
+                  emptyText="Ohne Bedingung — diese Spalte bleibt leer."
+                />
+              }
+              entries={columnMenu(column.title)}
+            >
+              <BoardColumnEmpty
+                reach={reach}
+                onEditRule={() => setAnnouncement(`Regel von ${column.title} bearbeiten.`)}
+                onOpenTags={() => setAnnouncement("Zu den Tags.")}
+              />
+            </KanbanColumn>
+          );
+        })}
+      </div>
+      <SubHeading>Wie das Board lädt und wie es scheitert</SubHeading>
+      <p className="section__lead">
+        Die Leerzustände oben sind Auskünfte über eingerichtete Spalten. Davor stehen zwei
+        Zustände, die gar nichts über die Regeln sagen — und die bis T-091 auf dieser Seite
+        fehlten: Das Board <strong>lädt</strong>, und das Board <strong>ließ sich nicht laden</strong>.
+        Beide kommen aus <code>AsyncBoundary</code> und gelten für die ganze Seite, nicht je
+        Spalte: Der Dienst liefert das Board in einer Antwort, und eine Spalte, die für sich lädt,
+        gäbe es nirgends.
+      </p>
+      <div className="grid grid--2">
+        <Card title="Lädt" description="Vier Platzhalterzeilen, angesagt als „Board wird geladen“.">
+          <LoadingBlock label="Board wird geladen" rows={4} />
+        </Card>
+        <Card
+          title="Ließ sich nicht laden"
+          description="Die Meldung des Dienstes samt Fehlerschlüssel und ein Weg zurück — nie eine Sackgasse."
+        >
+          <InlineMessage
+            tone="danger"
+            title="Das ließ sich nicht laden"
+            action={
+              <Button
+                size="sm"
+                variant="secondary"
+                iconStart="rotate-ccw"
+                onClick={() => setAnnouncement("Erneut versucht.")}
+              >
+                Erneut versuchen
+              </Button>
+            }
+          >
+            Der lokale Dienst antwortet nicht.
+            <span className="message__code"> (service_unavailable)</span>
+          </InlineMessage>
+        </Card>
+      </div>
+
+      <InlineMessage tone="info" title="Warum der leere Ordner eigens dasteht">
+        Ein erforderlicher Ordner, in dem kein Tag liegt, löst sich <strong>nie</strong> von
+        selbst auf — im Unterschied zu „trifft gerade nichts", das mit dem nächsten passenden Todo
+        vorbei ist. Deshalb nennt dieser Zustand den Ordner beim Namen, markiert ihn in der
+        Zusammenfassung darüber und bietet den Weg an, auf dem er zu beheben ist. Ausgeschlossene
+        Ordner ohne Tag sind davon nicht betroffen: Was leer ist, schließt nichts aus, und eine
+        Warnung ohne Folge glaubt beim nächsten Mal niemand mehr (E-057).
+      </InlineMessage>
 
       <Card
         title="Dieselbe Karte in mehreren Spalten"
@@ -346,8 +523,11 @@ export function BoardSection() {
           <tbody>
             <tr>
               <td>Spalte</td>
-              <td>Eine Regel über Tags (`pool` mit Anzeigeort „Board“)</td>
-              <td>Die Tags des Todos — oder die Regel selbst</td>
+              <td>Eine Regel (`pool` mit Anzeigeort „Board“)</td>
+              <td>
+                Die fünf Bedingungen der Regel — Tags, Status, „Erledigt“, Exportstatus — oder
+                die Regel selbst
+              </td>
             </tr>
             <tr>
               <td>Status</td>
@@ -362,10 +542,18 @@ export function BoardSection() {
           </tbody>
         </table>
         <p className="section__lead">
-          Erledigt entscheidet über die <em>Sichtbarkeit</em>, nicht über die Zugehörigkeit: Ein
-          erledigtes Todo bleibt Mitglied jeder Regel, die auf seine Tags passt, und erscheint
-          wieder, sobald erledigte Karten eingeblendet werden oder ein Timerstart das Kennzeichen
-          aufhebt. Probieren Sie es an „Beispiel GmbH — Schnittstelle neu aufsetzen“.
+          <strong>Was „Erledigt“ entscheidet, hängt an der Regel</strong> (E-055). Steht ihre
+          Erledigt-Bedingung auf „Alle“, entscheidet das Kennzeichen nur über die{" "}
+          <em>Sichtbarkeit</em>: Das Todo bleibt Mitglied und erscheint wieder, sobald erledigte
+          Karten eingeblendet werden oder ein Timerstart das Kennzeichen aufhebt. Fragt die Regel
+          dagegen ausdrücklich nach „Erledigt“ oder „Unerledigt“, entscheidet das Kennzeichen
+          über die <em>Zugehörigkeit</em> — dann verlässt die Karte mit demselben Timerstart ihre
+          Spalte.
+        </p>
+        <p className="section__lead">
+          Bis T-091 stand hier der halbe Satz „Erledigt entscheidet über die Sichtbarkeit, nicht
+          über die Zugehörigkeit“. Er war die richtige Erklärung für E-054 und mit E-055 zur
+          halben geworden. Probieren Sie beides an „Beispiel GmbH — Schnittstelle neu aufsetzen“.
         </p>
       </Card>
     </Section>

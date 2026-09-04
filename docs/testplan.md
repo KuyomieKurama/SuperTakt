@@ -17,6 +17,21 @@ ausdrücklicher Richtigstellung des Auftraggebers während T-016 **nicht** um �
 Das ist ein möglicher Widerspruch zu `decisions.md`, der dort von der zuständigen Stelle zu
 klären ist; dieser Testplan kann `decisions.md` nicht selbst berichtigen.
 
+**Nachtrag T-081 — Abschnitt 8 ist durch E-054/E-055 abgelöst, nicht nur ergänzt.** Seit E-054
+ist eine Kanban-Spalte eine **Regel**, dieselbe Entität wie ein Pool — seit E-055 eine Struktur
+mit fünf Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus), nicht
+mehr allein über Tags definiert; Ziehen zwischen Spalten (A-5.2, I-14) gibt es nicht mehr, ebenso
+wenig die „Statusspalten"-Verwaltung, die
+Abschnitt 8 in der bis T-080 gültigen Fassung beschrieb. Seit E-055 ist die Regel eine Struktur
+mit fünf benannten Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt,
+Exportstatus) statt einer Liste von Termen. Abschnitt 8 ist deshalb vollständig neu geschrieben,
+nicht ergänzt — die vorherige Fassung prüfte eine Bedienung, die es nicht mehr gibt (Bericht
+`T-081-e2e-tester.md`). Die Korrektur aus T-016 in Abschnitt 5 („Erledigt ist unabhängig von der
+Kanban-Spalte") gilt fachlich fort, aber nur für eine Spalte, die zur Achse „Erledigt" neutral
+steht; für eine Spalte, die auf „Erledigt" oder „Unerledigt" filtert, ist das Gegenteil richtig
+und beabsichtigt (E-054, Abschnitt 8, TP-KANBAN-04) — das ist die einzige Art, wie eine Karte
+heute noch ohne Tag-Änderung die Spalte wechselt.
+
 **Begriffe.** Seit E-016 heißen die beiden Notizfelder in der Oberfläche, in diesem Dokument und
 im Review **Vermerk** (am Todo, ausschließlich intern, A-7.2) und **Leistung** (an der Buchung,
 geht in den Export, A-7.4). Der JSON-Schlüssel im Export bleibt `Notiz` (A-8.2) — das betrifft
@@ -604,9 +619,18 @@ konfigurierte Rückkehr-Spalte. Alle Rückkehr-Spalten-Zusicherungen sind unten 
 Stattdessen gilt: **A-2.5 löst sich ausschließlich über Sichtbarkeit.** Pools sind
 tag-abgeleitet (A-3.4); ein erledigtes Todo wird darin ausgeblendet. Hebt der Timerstart das
 Kennzeichen „Erledigt" auf, erscheint das Todo wieder im Pool — die Kanban-Spalte, in der es
-liegt, ändert sich dabei **nicht**. Neue Fälle `TP-KANBAN-05` und `TP-KANBAN-06` (Abschnitt 8)
-prüfen diese Unabhängigkeit ausdrücklich, weil sie die Stelle ist, an der eine Umsetzung gern
-eigenmächtig verschiebt.
+liegt, ändert sich dabei **nicht**.
+
+**Nachtrag T-081, seit E-054/E-055 zu ergänzen statt zu widerrufen.** Die vorstehende Aussage
+gilt unverändert für jede Spalte, deren Achse „Erledigt" auf ihrem Neutralwert „Alle" steht — das
+ist der Normalfall, und `TP-TIMER-04` bis `TP-TIMER-06` unten prüfen genau diesen. Seit eine
+Regel die Achse „Erledigt" ausdrücklich auf „Erledigt" oder „Unerledigt" stellen kann (E-055),
+gibt es die eine Ausnahme, für die das Gegenteil beabsichtigt ist: Eine solche Spalte **soll**
+die Karte verlieren bzw. bekommen, sobald der Timerstart das Kennzeichen aufhebt — sonst wäre die
+Achse wirkungslos. Das prüft `TP-KANBAN-04` (Abschnitt 8), nicht diese Fälle hier. Die früheren
+`TP-KANBAN-05`/`TP-KANBAN-06` aus T-016 sind mit dieser Überarbeitung in `TP-KANBAN-04`
+aufgegangen — sie beschrieben ein manuelles Verschieben zwischen Spalten, das es seit E-054 nicht
+mehr gibt (siehe Abschnitt 8).
 
 ### TP-TIMER-01 — Domänenregel: Start auf erledigtem Todo
 **Anforderungen:** A-2.5, A-3.4
@@ -617,7 +641,8 @@ notwendigerweise einer Abschlussspalte (siehe Korrektur oben: die beiden Zustän
 **Erwartetes Ergebnis:** Todo-Status wechselt zu „aktiv", Timer läuft. Die Tags des Todos bleiben
 unverändert — die Rückkehr in den Pool ergibt sich allein daraus, dass die abgeleitete
 Pool-Zugehörigkeit (A-3.4) das Todo nicht mehr als „erledigt" ausfiltert. Die Kanban-Spalte des
-Todos bleibt ebenfalls unverändert (Querverweis `TP-KANBAN-06`).
+Todos bleibt ebenfalls unverändert, sofern ihre Achse „Erledigt" neutral steht (Querverweis
+`TP-KANBAN-04`, Abschnitt 8, für die Spalte, die das ausdrücklich nicht tut).
 
 ### TP-TIMER-02 — Pool-Sichtbarkeit nach Wiederbelebung
 **Anforderungen:** A-2.5, A-3.2, A-3.4
@@ -802,95 +827,123 @@ Voraussetzung dafür, dass TP-DTAG-01 und TP-DTAG-02 dasselbe Ergebnis liefern k
 
 ---
 
-## 8. Kanban (A-5.1 bis A-5.6)
+## 8. Kanban (A-5.1, A-5.3 bis A-5.6, E-054, E-055)
 
-### TP-KANBAN-01 — Drag & Drop zwischen Spalten
-**Anforderungen:** A-5.2, A-5.3, I-14, S-04
-**Ebene:** End-to-End
-**Vorbedingung:** Kanban-Board mit Standardspalten (z. B. Backlog, In Progress, Waiting, Done),
-mindestens eine Karte in „Backlog".
-**Schritte:** Karte per Drag & Drop von „Backlog" nach „In Progress" ziehen. Seite neu laden.
-**Erwartetes Ergebnis:** Karte liegt nach dem Ziehen sofort in „In Progress" und bleibt es nach
-Neuladen — der Statuswechsel ist persistent, nicht nur visuell im Client.
+**Vollständig neu geschrieben in T-081.** Bis T-080 beschrieb dieser Abschnitt ein Kanban-Board,
+das es seit E-054 nicht mehr gibt: feste Statusspalten, Karten per Drag & Drop verschoben,
+Spalten in einem Dialog „Statusspalten" verwaltet. **A-5.2 und I-14 sind aufgehoben** — eine Regel
+lässt sich nicht durch Verschieben umkehren, ohne dass die Anwendung selbst Tags setzt, und genau
+das hat der Auftraggeber ausgeschlossen (`decisions.md`, E-054). Die frühere Fassung dieses
+Abschnitts prüfte diese Bedienung trotzdem weiter — ein Testfall, der grün blieb, obwohl er nichts
+mehr maß, das schlimmere Ergebnis als gar kein Test (Bericht `T-081-e2e-tester.md`).
 
-### TP-KANBAN-02 — Statusspalten umkonfigurieren
-**Anforderungen:** A-5.4
-**Ebene:** End-to-End
-**Vorbedingung:** Board wie in TP-KANBAN-01. **Annahme, zu bestätigen mit T-005:** Die
-Spezifikation weist die Konfiguration der Kanban-Spalten keinem der vierzehn benannten Screens
-eindeutig zu. Dieser Test geht davon aus, dass sie entweder Teil der Einstellungen (S-09) oder
-eines Bearbeitungsdialogs auf dem Board selbst (S-04) ist; der tatsächliche Ort ist mit dem
-spec-ux-reviewer zu klären.
+**Was seit E-054/E-055 gilt.** Eine Kanban-Spalte ist eine **Regel**, dieselbe Entität wie ein
+Pool (A-3.2, A-3.4); `placement` sagt, ob eine Regel im Pool-Bereich, auf dem Board oder an beiden
+Stellen erscheint. Seit E-055 ist die Regel eine Struktur mit fünf benannten Achsen, nicht eine
+Liste von Termen und nicht mehr allein über Tags definiert:
+
+| Achse | Wirkung | Neutralwert |
+|---|---|---|
+| Erforderliche Tags | alle bzw. mindestens eines müssen vorhanden sein (`matchMode`) | keiner genannt |
+| Ausgeschlossene Tags | keiner davon darf vorhanden sein | keiner genannt |
+| Status | einer der genannten Statuswerte | „Alle" |
+| Erledigt | nur erledigte / nur unerledigte | „Alle" |
+| Exportstatus | mindestens eine offene / mindestens eine exportierte Buchung | „Alle" |
+
+Zwischen den Achsen gilt „und"; eine Regel, in der jede Achse neutral steht, trifft **nichts**,
+nicht alles (A-3.4) — das ist der Zustand unmittelbar nach dem Anlegen einer Spalte. Daraus folgt,
+was diese vier Testfälle prüfen: Zugehörigkeit ist eine berechnete Antwort auf eine Regel, keine
+gespeicherte Position, und die Oberfläche muss das an drei Stellen ehrlich zeigen — eine Karte kann
+in mehreren Spalten zugleich stehen, eine Spalte ohne Bedingung ist etwas anderes als eine Spalte
+mit Bedingung ohne Treffer, und der einzige noch verbliebene Weg, wie eine Karte ohne
+Tag-Änderung die Spalte wechselt, ist ein Timerstart, der „Erledigt" aufhebt.
+
+### TP-KANBAN-01 — Zugehörigkeit folgt der Regel, nicht der Ablage
+**Anforderungen:** A-3.4, A-5.1, A-5.3, E-054, E-055
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein Tag existiert; ein Todo existiert, trägt dieses Tag zunächst **nicht**.
 **Schritte:**
-1. Eine Spalte umbenennen.
-2. Eine neue Spalte hinzufügen.
-3. Eine Spalte mit Karten löschen bzw. mit einer anderen zusammenführen.
-4. Spaltenreihenfolge ändern.
-**Erwartetes Ergebnis:** Board übernimmt die neue Konfiguration. Für Schritt 3 gilt: keine Karte
-geht verloren; die Anwendung bietet eine nachvollziehbare, nicht destruktive Lösung (z. B.
-Zuordnung zu einer Standardspalte). Das genaue Verhalten ist in der Spezifikation nicht
-festgelegt und wird bei Umsetzung präzisiert; der Test prüft in jedem Fall „keine Karte verloren",
-nicht ein bestimmtes Zielverhalten.
+1. Über die Oberfläche eine Board-Spalte anlegen, deren einzige Bedingung das Tag verlangt
+   („Spalten verwalten" → „Neue Spalte anlegen" → Regelformular, nicht über die API).
+2. Board betrachten: Spalte vorhanden, Karte fehlt, Leerzustand nennt eine gestellte, aber
+   unerfüllte Bedingung.
+3. Über die Todo-Liste (Menü „Bearbeiten") das Tag am Todo ergänzen und speichern.
+4. Board erneut betrachten.
+5. Über dieselbe Bedienung das Tag wieder entfernen und speichern.
+6. Board ein drittes Mal betrachten.
+**Erwartetes Ergebnis:** Nach Schritt 2 zeigt die Spalte „Keine Karte trifft diese Regel" (nicht
+„keine Bedingung"). Nach Schritt 4 steht die Karte in der Spalte, ohne dass irgendetwas an der
+Regel selbst geändert wurde. Nach Schritt 6 ist sie wieder verschwunden, und der ursprüngliche
+Leerzustand steht wieder da. Jede Änderung, die Zugehörigkeit herstellt oder aufhebt, geschieht an
+den **Tags des Todos**, nie an der Spalte — die Falle, die dieser Auftrag ausdrücklich benennt,
+ist ein Testaufbau, der Spalten an der Datenbank vorbei anlegt; dieser Fall tut es nicht.
 
-**Ausführungsstand (T-052).** Schritte 2 (anlegen), 3 (löschen ohne Karten) und 4 (Reihenfolge)
-sind gelaufen und bestanden, über die Oberfläche und mit Nachschau am Board selbst — siehe
-`tests/e2e/kanban.spec.ts`. **Schritt 1 (umbenennen) ist strukturell nicht prüfbar:**
-`StatusColumnsDialog` (`apps/web/src/screens/BoardScreen.tsx`) bietet dafür keine Bedienung —
-`column-row__name` ist eine reine `<span>`, `updateTodoStatus` wird dort ausschließlich mit
-`{ isDefault: true }` aufgerufen, nie mit `{ name }`. Das ist eine Lücke in der Umsetzung, keine
-im Testfall; ein e2e-Test kann eine Bedienung nicht ausführen, die es nicht gibt. Schritt 3
-(„mit einer anderen zusammenführen" bzw. Löschen einer Spalte **mit** Karten) ist ebenfalls noch
-offen — der gelaufene Fall deckt nur eine leere Spalte ab.
-
-### TP-KANBAN-03 — Todo direkt vom Board aus öffnen und bearbeiten
-**Anforderungen:** A-5.5
-**Ebene:** End-to-End
-**Vorbedingung:** Board mit mindestens einer Karte.
-**Schritte:** Karte anklicken/öffnen, Titel ändern, speichern.
-**Erwartetes Ergebnis:** Detailansicht öffnet sich aus dem Board heraus, Änderung wird
-gespeichert und auf der Karte sofort sichtbar (z. B. neuer Titel).
-
-### TP-KANBAN-04 — Timer direkt von der Karte starten und stoppen
-**Anforderungen:** A-5.6, S-04
-**Ebene:** End-to-End
-**Vorbedingung:** Karte für ein aktives Todo ohne laufenden Timer.
-**Schritte:** Timer über einen Bedienelement auf der Karte selbst starten, danach stoppen —
-ohne die Karte bzw. die Detailansicht zu öffnen.
-**Erwartetes Ergebnis:** Karte zeigt während der Laufzeit einen aktiven Timer-Indikator. Nach
-dem Stoppen entsteht eine Zeitbuchung mit plausibler Dauer, Indikator verschwindet. Querverweis:
-TP-TIMER-05 für den Sonderfall „Karte eines erledigten Todos".
-
-### TP-KANBAN-05 — Erledigt und Kanban-Spalte sind unabhängige Zustände (Auftraggeber-Klarstellung, neu in T-016)
-**Anforderungen:** A-2.4, A-2.5, A-5.3, I-05
-**Ebene:** End-to-End
-**Vorbedingung:** Kanban-Board mit frei konfigurierten Spalten, darunter eine, die als
-Abschlussspalte im Sinne von A-5.3 gilt (z. B. „Done"). Zwei Todos A und B.
+### TP-KANBAN-02 — Eine Karte in mehreren Spalten zugleich
+**Anforderungen:** A-5.1, A-5.3, E-054
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Zwei Tags; ein Todo, das **beide** trägt.
 **Schritte:**
-1. Todo A in die Abschlussspalte verschieben, ohne es als erledigt zu markieren.
-2. Todo B als erledigt markieren, ohne seine Kanban-Spalte zu ändern (es bleibt z. B. in „In
-   Progress").
-3. Beide Zustände in der Oberfläche betrachten (Kanban-Karte und Detailansicht).
-**Erwartetes Ergebnis:** Todo A liegt in der Abschlussspalte, trägt aber **kein**
-„Erledigt"-Kennzeichen. Todo B trägt „Erledigt", liegt aber weiterhin in „In Progress", nicht
-automatisch in der Abschlussspalte. Beide Kombinationen sind gültige, gleichzeitig darstellbare
-Zustände — wörtlich vom Auftraggeber festgestellt: „Erledigt ist etwas eigenes. Die Kanban Phase
-sind selbst definierbar. Daher ist Kanban-Abschluss nicht gleich Erledigt." Kein Automatismus
-verknüpft die beiden Zustände in irgendeine Richtung.
+1. Über die Oberfläche zwei Board-Spalten anlegen, jede mit genau einem der beiden Tags als
+   einziger Bedingung.
+2. Board betrachten.
+3. Auf das Etikett „Steht auch in …" einer der beiden Kartenvorkommen klicken.
+4. Ein zweites Mal klicken.
+**Erwartetes Ergebnis:** Die Karte erscheint in **beiden** Spalten, jedes Vorkommen trägt das
+Etikett „Steht auch in …" mit dem Namen der jeweils anderen Spalte. Nach Schritt 3 tragen **beide**
+Vorkommen die Hervorhebung, und eine Anwendungsmeldung (Live-Region) nennt Titel und beide
+Spaltennamen. Nach Schritt 4 ist die Hervorhebung an beiden Vorkommen wieder weg. Das ist der Fall,
+der vor E-054 unmöglich war (bei einem Statuswert trug ein Todo genau einen) und den der
+unit-tester in T-077 bereits auf der SQL-Seite mit vier Karten über sechs Spalten gemessen hat; an
+dieser Stelle wird dieselbe Mehrfachnennung erstmals durch die Oberfläche gemessen.
 
-### TP-KANBAN-06 — Erledigt setzen und aufheben ändert die Kanban-Spalte nicht (neu in T-016)
-**Anforderungen:** A-2.4, A-2.5, A-5.2
-**Ebene:** End-to-End
-**Vorbedingung:** Ein Todo liegt in einer beliebigen, nicht als Abschlussspalte konfigurierten
-Spalte, z. B. „In Progress".
+### TP-KANBAN-03 — Eine Spalte ohne Bedingung ist kein „keine Treffer"
+**Anforderungen:** A-3.4, E-055
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Keine.
+**Schritte:** Über die Oberfläche eine Board-Spalte anlegen, ohne irgendeine der fünf Achsen zu
+belegen — nur der Name wird ausgefüllt. Anlegen bestätigen.
+**Erwartetes Ergebnis:** Anlegen ist möglich (seit T-079 nicht mehr gesperrt); die
+Erfolgsmeldung ist ausdrücklich ein Warnton und sagt, dass die Spalte „noch keine Bedingung"
+nennt. Unter dem Spaltenkopf steht „Ohne Bedingung — diese Spalte bleibt leer." Der Leerzustand in
+der Spalte selbst trägt ein Warndreieck, die Überschrift „Diese Spalte hat noch keine Bedingung"
+und den primären Knopf „Bedingung ergänzen" — **nicht** dieselbe Formulierung wie bei einer Spalte
+mit Bedingung, die nur zufällig gerade nichts trifft (TP-KANBAN-01, Schritt 2). Der Knopf
+„Bedingung ergänzen" öffnet tatsächlich das Regelformular dieser Spalte.
+
+### TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt" auf und ändert dadurch die Spaltenzugehörigkeit
+**Anforderungen:** A-2.5, A-5.6, E-054, E-055, I-05
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein Tag existiert; ein erledigtes Todo trägt es.
 **Schritte:**
-1. Todo als erledigt markieren, Kanban-Spalte notieren.
-2. Todo wieder aktivieren (Timer erneut starten, siehe `TP-TIMER-04`), Kanban-Spalte erneut
-   notieren.
-**Erwartetes Ergebnis:** Die Kanban-Spalte ist nach Schritt 1 und nach Schritt 2 identisch mit der
-Ausgangsspalte. Weder das Setzen noch das Aufheben von „Erledigt" verschiebt die Karte in eine
-andere Spalte — insbesondere nicht in eine Abschlussspalte beim Erledigen und nicht in eine
-vermeintliche Rückkehr-Spalte beim Wiederbeleben, denn eine solche existiert laut ausdrücklicher
-Richtigstellung des Auftraggebers nicht.
+1. Über die Oberfläche zwei Board-Spalten anlegen, beide mit demselben Tag als Bedingung, eine
+   zusätzlich mit der Achse „Erledigt" auf „Erledigt", die andere auf „Unerledigt".
+2. Board betrachten.
+3. Auf der Karte in der „Erledigt"-Spalte direkt den Timer starten — ohne die Detailansicht zu
+   öffnen.
+4. Board erneut betrachten.
+5. Timer über dieselbe Karte wieder stoppen.
+**Erwartetes Ergebnis:** Vor Schritt 3 steht die Karte ausschließlich in der „Erledigt"-Spalte,
+unabhängig vom Schalter „Erledigte einblenden" — eine Regel, die selbst etwas über „Erledigt"
+sagt, hat das letzte Wort (T-076). Der Klick auf den Timer-Knopf hebt „Erledigt" automatisch auf
+(A-2.5); danach steht dieselbe Karte in der „Unerledigt"-Spalte und **nicht mehr** in der
+„Erledigt"-Spalte, ohne dass irgendjemand ihre Tags oder eine Regel angefasst hat. Das ist der
+**einzige** Weg, auf dem eine Karte heute noch ohne Regel- oder Tag-Änderung die Spalte wechselt
+(siehe Abschnitt 5, Nachtrag T-081). Nach dem Stoppen entsteht eine Zeitbuchung mit plausibler
+Dauer. Dieser Fall schließt zugleich das frühere `TP-KANBAN-04` (Timer direkt von der Karte
+starten/stoppen, A-5.6) ein — eine Karte ohne jede reale Spalte konnte diese Bedienung gar nicht
+sinnvoll prüfen, siehe Vorbedingung oben.
+
+**Aufgegangen in TP-KANBAN-04, nicht mehr eigenständig geführt:** die früheren `TP-KANBAN-05` und
+`TP-KANBAN-06` aus T-016 („Erledigt und Kanban-Spalte sind unabhängige Zustände"). Beide setzten
+ein manuelles Verschieben zwischen Spalten voraus, das es seit E-054 nicht mehr gibt; ihre
+fachliche Aussage — eine Spalte, die zur Achse „Erledigt" neutral steht, ändert sich durch Setzen
+oder Aufheben von „Erledigt" nicht — ist weiterhin durch `TP-TIMER-04` bis `TP-TIMER-06`
+(Abschnitt 5) geprüft, die ausschließlich neutrale Spalten voraussetzen.
+
+**TP-KANBAN-05 — Todo direkt vom Board aus öffnen und bearbeiten** (vormals TP-KANBAN-03,
+A-5.5): durch E-054/E-055 unberührt — das Öffnen einer Karte zur Detailansicht ist keine
+Bedienung, die sich an der Spaltendefinition ändert. **Noch nicht als eigene Datei unter
+`tests/e2e/**` automatisiert** (weder vor noch nach T-081); nicht Gegenstand dieses Auftrags.
 
 ---
 
@@ -1474,7 +1527,7 @@ stillschweigend übersprungen. Alle Fälle in diesem Abschnitt sind Ebene **End-
 | TP-STATE-01 | S-01 Dashboard | Erststart ohne Daten | Kennzahlen werden aggregiert | Schnellaktionen auf Karten | laufender Timer prominent markiert | Kennzahl konnte nicht geladen werden | n/a auf dieser Ebene, siehe TP-TIMER-07 falls Timer-Stopp vom Dashboard aus möglich ist |
 | TP-STATE-02 | S-02 Todo-Liste | keine Todos / kein Treffer bei Filter | Liste lädt | Zeilen-Hover zeigt Aktionen | aktiver Filter-Chip erkennbar | Liste konnte nicht geladen werden | Massenaktion (z. B. mehrere als erledigt markieren), sofern vorhanden — in Spezifikation nicht ausdrücklich benannt, als Annahme markiert |
 | TP-STATE-03 | S-03 Todo-Detail | Todo ohne Zeitbuchungen zeigt Empty-Hinweis im Buchungsteil | Detaildaten laden | Bearbeiten-Icons bei Hover | „Erledigt"-Umschalter aktiv, Timer läuft | Speichern fehlgeschlagen | Todo löschen; Exportstatus einer Buchung zurücksetzen (TP-EXPST-06) |
-| TP-STATE-04 | S-04 Kanban | Spalte ohne Karten | Board lädt | Drop-Ziel wird beim Ziehen hervorgehoben | Karte wird gerade gezogen | Verschieben konnte nicht gespeichert werden | Spalte mit Karten löschen (TP-KANBAN-02) |
+| TP-STATE-04 | S-04 Kanban | zwei Leerzustände (T-081): „keine Bedingung" gegen „Bedingung ohne Treffer" (TP-KANBAN-03) | Board lädt | Kartenmenü/Spaltenmenü bei Hover — kein Ziehen mehr, siehe Abschnitt 8 | Timer läuft auf einer Karte (TP-KANBAN-04) | Regel konnte nicht gespeichert werden | Spalte vom Board nehmen (Regel bleibt als Pool erhalten, kein Karten-Verlust möglich — anders als bei einer Statusspalte gibt es hier nichts, das an der Spalte selbst hängt) |
 | TP-STATE-05 | S-05 Time-Tracking | keine Buchungen im gewählten Zeitraum | Buchungen laden | Zeilenaktionen bei Hover | laufender Timer prominent (A-13.4) | Timer konnte nicht gestartet/gestoppt werden | Timer wechseln (TP-TIMER-07), Buchung löschen |
 | TP-STATE-06 | S-06 Übersicht Zeitbuchungen | keine Buchungen / Filter ohne Treffer | Liste lädt | Zeilen-Hover | Filter aktiv, Status-Badges sichtbar | Liste konnte nicht geladen werden | Exportstatus zurücksetzen (TP-EXPST-06) |
 | TP-STATE-07 | S-07 Export-Ansicht | keine offenen Buchungen (TP-EXPORT-03) | Export läuft | Vorlagenauswahl bei Hover | ausgewählte Vorlage hervorgehoben | Ordner ungültig/schreibgeschützt (TP-EXPORT-04/05) | in der Spezifikation kein eigener Bestätigungsdialog für den Exportvorgang selbst vorgesehen — nur für das Zurücksetzen (Abschnitt 4); nicht erfunden |
@@ -1666,18 +1719,18 @@ kein Dialog ausgelöst.
 
 | Anforderung/Interaktion | Testfälle |
 |---|---|
-| A-2.5 (Wiederbelebung) | TP-TIMER-01, -02, -04, -05, -06; TP-KANBAN-05, -06 (Unabhängigkeit von der Kanban-Spalte) |
+| A-2.5 (Wiederbelebung) | TP-TIMER-01, -02, -04, -05, -06 (neutrale Spalte bleibt unverändert); TP-KANBAN-04 (Spalte, die auf „Erledigt" filtert, ändert sich absichtlich) |
 | A-2.6 (`callNumber`) | TP-EXPORT-01, TP-TPL-05, TP-ADDIN-01, -02 |
 | A-3.4 (Pool abgeleitet) | TP-TIMER-02, TP-TAG-04 |
 | A-4.1–A-4.6 (Tags/Ordner) | TP-TAG-01 bis TP-TAG-06 |
-| A-5.1–A-5.6 (Kanban) | TP-KANBAN-01 bis TP-KANBAN-06 |
+| A-5.1, A-5.3–A-5.6 (Kanban, E-054/E-055) | TP-KANBAN-01 bis TP-KANBAN-06 — **A-5.2 entfällt** (Drag & Drop, aufgehoben durch E-054) |
 | A-6.4–A-6.9 (Zeitbuchung/Exportstatus) | TP-EXPST-01 bis TP-EXPST-09 |
 | A-7.2/A-7.4 (Vermerk/Leistung-Trennung) | TP-NOTE-01 bis TP-NOTE-04 |
 | A-8.1–A-8.6, A-8.9 (Export) | TP-EXPORT-01 bis TP-EXPORT-10, TP-EXPORT-11 bis -17 (Gruppierung, Abschnitt 9a), TP-ROUND-*, TP-B64-* |
 | A-8.7 (Vorlagen) | TP-TPL-01 bis TP-TPL-08, TP-NOTE-01/02/04 |
 | A-8.8 (Transaktion) | TP-EXPST-04 |
 | A-9.1–A-9.5 (Standard-Tags) | TP-DTAG-01 bis TP-DTAG-04, TP-ADDIN-09 |
-| A-10.4, A-10.8, A-10.9 (Add-in) | TP-ADDIN-01 bis TP-ADDIN-04, -06 bis -11, -13 |
+| A-10.4, A-10.8, A-10.9 (Add-in) | TP-ADDIN-01 bis TP-ADDIN-04, -06 bis -11, -13, TP-EXPST-12 |
 | E-008 (Rundung, bestätigt) | TP-ROUND-01 bis TP-ROUND-16, TP-EXPORT-09 |
 | E-009/R-02/R-09 (Token) | TP-ADDIN-06, -07, -08 |
 | E-011/R-11 (Exportordner) | TP-EXPORT-04, -05 |
@@ -1686,6 +1739,9 @@ kein Dialog ausgelöst.
 | E-018/R-13 (Ablageorte, nicht Roaming) | TP-EXPORT-10 |
 | E-019/R-12 (Token nicht in roamingSettings) | TP-ADDIN-13 |
 | E-020 (Gruppierung je Todo und Tag) | TP-EXPORT-11 bis TP-EXPORT-17 (Abschnitt 9a) |
+| E-036 (verwaiste Buchung) | TP-TIMER-10 |
+| E-056 (Aufgabenbereich nennt auch das Verschwinden) | TP-EXPST-12 |
+| E-058 (Bewegungssatz einmal berechnet, an beiden Flächen gleich) | TP-EXPST-12, TP-TIMER-08, -09, -10 |
 | R-06 (Vorlagen hebeln Trennung aus) | TP-NOTE-01 bis TP-NOTE-04, TP-TPL-08 |
 | R-08 (zwei Notizfelder verwechselbar) | TP-NOTE-03 (Sichtbarkeit in der UI) |
 | R-15 (zu weiter Add-in-Regex) | TP-ADDIN-02, -10, -11 |
@@ -1699,7 +1755,7 @@ kein Dialog ausgelöst.
 | I-11 (Daten exportieren) | TP-EXPORT-01 bis TP-EXPORT-06 |
 | I-12 (Standard-Tags konfigurieren) | TP-DTAG-01, -03 |
 | I-13 (Pools konfigurieren) | TP-TAG-06 |
-| I-14 (Drag & Drop) | TP-KANBAN-01 |
+| I-14 (Drag & Drop) | **aufgehoben durch E-054** (T-081) — es gibt seit E-054 keine Bedienung mehr, die dies prüfen könnte; `TP-KANBAN-01` bedeutet seit T-081 etwas anderes (siehe Abschnitt 8) |
 | I-15 (Exportvorlage anlegen/prüfen) | TP-TPL-01 bis TP-TPL-04 |
 | S-01 bis S-14 (alle Screens) | je einmal explizit in Abschnitt 12 (TP-STATE-01 bis -14), zusätzlich in den fachlichen Abschnitten 0–11 |
 
@@ -1713,8 +1769,10 @@ kein Dialog ausgelöst.
 - Für die als „End-to-End" markierten Fälle existiert auf dem aktuellen Board keine eigene
   Aufgabe, die sie tatsächlich als Playwright-Dateien unter `tests/e2e/**` anlegt — das ist
   ausdrücklich nicht Teil von T-002. Diese Lücke gehört in die Wellenplanung (siehe Bericht).
-- TP-KANBAN-02 markiert eine Annahme zum Ort der Kanban-Spaltenkonfiguration, die mit T-005
-  abzugleichen ist.
+- **Aus T-081, erledigt:** Die frühere `TP-KANBAN-02` markierte eine Annahme zum Ort der
+  Kanban-Spaltenkonfiguration, die mit T-005 abzugleichen war. Der Ort steht seit T-072 fest
+  (Dialog „Spalten des Boards" auf S-04 selbst, `BoardScreen.tsx`); die Frage ist damit
+  gegenstandslos, und Abschnitt 8 ist vollständig neu geschrieben (E-054/E-055).
 - Mehrere Zellen in der Zustandstabelle (Abschnitt 12) markieren Ermessensentscheidungen, die
   nicht wörtlich aus der Spezifikation folgen (z. B. Bestätigungsdialoge, die dort nicht
   ausdrücklich verlangt sind). Diese sind bewusst sichtbar gemacht, nicht heimlich als Vorgabe
@@ -2093,3 +2151,957 @@ Liste als Ziel. **Ergebnis: bestanden**, dreifach wiederholt. Siehe `tests/e2e/t
 (NVDA/JAWS/Orca) tatsächlich mitschneiden, ob sie die geschlossene Liste ansagt. Der Fall oben
 prüft den DOM-Zustand, von dem dieses Verhalten abhängt (`hidden`, keine Tab-Erreichbarkeit), nicht
 die Ansage selbst — das ist eine Grenze der Werkzeugausstattung, keine Auslassung im Test.
+
+---
+
+## 17. Nachträge aus T-096/T-097/T-099 (Wellen B bis D — Ordnersperre, Bewegungssatz, Stopp-Anzeige, `gotoBoard`)
+
+Grundlage: `decisions.md` E-057 (Ordnerterm ohne Treffer ist eine Einschränkung, kein
+Neutralwert) und der R-1-Befund aus der Review-Runde, behoben in T-089 (Migration 0012,
+`pool_rule.tag_id`/`folder_id` von `CASCADE` auf `RESTRICT`, `tag_in_use` mit `details`). Die
+beiden ersten Fälle unten (TP-KANBAN-06, TP-TAG-14) stammen aus Welle B; der von T-094 parallel
+umgebaute Bewegungssatz (Hauptanwendung gegen Add-in) war in Welle B ausdrücklich **nicht**
+enthalten — er wäre dort zwangsläufig rot gewesen, weil der Wortlaut aus E-058 Punkt 4 erst mit
+T-093/T-094 entstand. Welle D (T-099) holt ihn nach (TP-EXPST-12), bindet die Stopp-Antwort an
+(TP-TIMER-08 bis -10), schärft TP-TAG-14 um den seit T-097 sichtbaren Regelnamen und ersetzt in
+`kanban.spec.ts` die beiden verbliebenen `page.reload()`-Aufrufe. Alle Fälle unten sind **neu
+oder geschärft und bestanden**, mindestens zweifach nachgemessen über `pnpm run test:e2e`.
+
+### TP-KANBAN-06 — Ein leerer Ordner in der Regel: die Spalte trifft nichts und sagt es (E-057)
+**Anforderungen:** A-3.4, A-4.2, E-057
+**Ebene:** End-to-End (`tests/e2e/kanban.spec.ts`)
+**Vorbedingung:** Ein leerer Tag-Ordner (kein Tag darin); ein eigener Statuswert; ein Todo mit
+genau diesem Status, ohne Tags.
+**Schritte:**
+1. Über die Oberfläche eine Board-Spalte anlegen, deren Regel **zwei** Achsen kombiniert: den
+   leeren Ordner als „Erforderliche Ordner" und den Statuswert als „Status" — bewusst zwei
+   Achsen und nicht nur den Ordner allein, damit der Fall geprüft wird, den E-057 eigentlich
+   meint: Ein leerer Ordnerterm **neben** einer für sich genommen erfüllbaren Achse verschwindet
+   nicht als Neutralwert, sondern lässt die ganze Regel nichts treffen (`RulePickers.tsx`,
+   `FolderPicker`/`StatusPicker`, über `tests/e2e/support/actions.ts`, `createBoardColumn`).
+2. Spalte betrachten.
+3. Ein Tag im betroffenen Ordner anlegen und dem Todo zuweisen.
+4. Spalte erneut betrachten (nach Neuladen).
+**Erwartetes Ergebnis:** Nach Schritt 2 trifft die Spalte nichts — der Leerzustand
+(`BoardColumnEmpty`) zeigt „Der geforderte Ordner enthält kein Tag" und nennt den Ordner beim
+Namen, nicht den allgemeinen Zustand „keine Karte trifft diese Regel"; dieselbe Auskunft steht
+bereits unter dem Spaltenkopf an der Regelvorschau selbst (`RuleSummary`,
+`describeRuleReach`: „kein Tag darin" am Chip, „… trifft damit nichts" im Satz darunter). Das
+Todo mit dem passenden Status landet **trotzdem nicht** in der Spalte — der leere Ordner
+schränkt ein, unabhängig davon, dass die Statusachse erfüllt wäre. Nach Schritt 3 löst sich der
+Ordnerterm auf; die Karte erscheint, und der Leerzustand ist weg.
+
+**Befund während der Umsetzung (T-096), seither behoben (T-097/T-099).** Die Tag-Zuweisung an
+das Todo lief für diesen Fall bewusst über die API (`support/api.ts`, `setTodoTags`) und nicht
+über den Bearbeiten-Dialog — beides ist als Vorbereitung zulässig (das eigentliche Verhalten der
+Bearbeiten-Dialog-Zuweisung prüft bereits `TP-KANBAN-01`). Genau das deckte einen zweiten,
+unabhängigen Befund auf: Ein zweiter `page.goto()` auf **dieselbe** bereits offene Route
+(`#/kanban` → `#/kanban`, ohne zwischenzeitliche Navigation auf eine andere Route) löste
+**keine** neue Anfrage aus — dasselbe Muster wie in `TP-KANBAN-04`, wo `markTodoDone` über die
+API am `bump()`-Mechanismus der Oberfläche vorbeilief. Der Testfall benutzte deshalb in T-096
+nach der API-Zuweisung `page.reload()` statt eines zweiten `gotoBoard()`. T-097 hat die Ursache
+behoben (`popstate`/`useDataFreshness`, siehe „`tests/e2e/kanban.spec.ts` — `page.reload()`
+durch ein zweites `gotoBoard(page)` ersetzt" weiter unten in diesem Abschnitt), und T-099 hat den
+Testfall entsprechend auf ein zweites `gotoBoard()` umgestellt — kein `page.reload()` mehr an
+dieser Stelle.
+**Ergebnis: bestanden**, dreifach in T-096, seither zweifach je vollständigem Lauf wiederholt.
+
+### TP-TAG-14 — Ein Tag, ein Ordner oder ein Status in einer Regel ist nicht löschbar; Ordner und Status nennen die Regel beim Namen, das Tag (noch) nicht (409 `tag_in_use`/`status_in_use`, R-1 Befund 1 / T-089, T-097, T-099)
+**Anforderungen:** A-3.2, A-3.4, A-4.2, A-5.4, E-057
+**Ebene:** End-to-End (`tests/e2e/tag-folder-rule-lock.spec.ts`), ein Fall davon zusätzlich als
+Integrationsprobe direkt über die API (wie `TP-TPL-08`/`export-template-validation.spec.ts`)
+**Vorbedingung:** Ein Ordner, ein Tag und ein Status, die je einzeln in einer eigenen Regel
+(Pool oder Kanban-Spalte) stehen; zusätzlich ein zweiter Ordner ohne jeden Regelbezug, als
+Gegenprobe.
+**Schritte:**
+1. Über die API direkt `DELETE /tag-folders/{id}` auf dem in der Regel stehenden Ordner
+   aufrufen.
+2. Denselben Aufruf ein zweites Mal, ohne zwischenzeitliche Änderung.
+3. `DELETE /tag-folders/{id}` auf dem Ordner ohne Regelbezug.
+4. Über die Oberfläche (S-08): den in der Regel stehenden Ordner auswählen, „Löschen" auslösen,
+   im Bestätigungsdialog erneut „Löschen" bestätigen.
+5. Dialog mit „Abbrechen" schließen, Tags-Ansicht neu aufsuchen.
+6. Dieselben Schritte 4/5 für ein Tag, das in einer eigenen Regel als erforderlicher Term steht.
+7. Dieselben Schritte 4/5 für einen Status, der in einer eigenen Regel auf der Statusachse steht
+   (Einstellungen, Bereich „Status") — der Löschknopf ist dort **anklickbar**, weil die
+   Vorprüfung der Ansicht (`blocked` in `StatusSettings.tsx`) nur „letzter Status",
+   „ist Standard" und „trägt noch Todos" kennt, nicht aber eine Regelbindung; die Ablehnung
+   kommt daher erst vom Dienst, nach dem Bestätigen.
+**Erwartetes Ergebnis:** Schritt 1 und 2 antworten `409` mit dem Fehlerschlüssel `tag_in_use`;
+`details` enthält mindestens einen Eintrag mit `code: "pool_rule"`, der Kennung des Pools in
+`field` und seinem Namen in Anführungszeichen in `message` — beides maschinenlesbar und für die
+Oberfläche verwertbar. Schritt 3 antwortet mit Erfolg (204) — ein Ordner ohne Regelbezug bleibt
+löschbar, dieselbe Sperre trifft nicht jeden Ordner. Schritt 4: Der Bestätigungsdialog schließt
+**nicht** und zeigt den vom Dienst gelieferten Grund („Dieser Ordner wird in der Regel eines
+Pools verwendet.") **und seit T-097 wörtlich den Namen der betroffenen Regel** („… Betroffen ist
+Regel „<Name>“."). Nach Schritt 5 ist der Ordner weiterhin im Tag-Baum vorhanden — die Ablehnung
+hat nichts verändert. Schritt 7 zeigt für den Status dieselbe Auskunft samt Regelnamen
+(„Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte.") — **ohne** den
+Zusatz „Zwischen dem Zählen und dem Löschen ist offenbar ein Todo dazugekommen", der nur zum
+anderen der beiden `status_in_use`-Gründe gehört (T-097, Nebenbefund).
+
+**Schritt 6 (Tag) weicht ab — echter Fund, gemessen mit T-099, kein Testversehen.** Der
+Bestätigungsdialog zeigt beim Tag denselben allgemeinen Satz wie am Ordner („Dieses Tag wird in
+der Regel eines Pools verwendet.") — aber **ohne** den Regelnamen. Ursache in
+`packages/storage/src/sqlite/repo-tags.ts`: `createTagPort().remove()` zählt beim Grund „Regel"
+nur die Trefferzahl (`usage.rules > 0`) und antwortet mit `tag_in_use` **ohne** `details`.
+`createTagFolderPort().remove()` (dieselbe Datei, für den Ordner) und `TodoStatusPort.remove()`
+fragen dagegen `pool_id`/`name` mit ab und liefern `details: usedIn.map(poolReference)` — genau
+der Vertrag, auf dem `apps/web/src/lib/errorText.ts` (`ruleReferences`, T-097) aufbaut. Ohne
+`details` hat `errorMessageWithRules` beim Tag nichts anzuhängen; die Oberfläche zeigt korrekt die
+allgemeine Auskunft und keinen falschen Namen, aber eben auch keinen richtigen. Dieser Testfall
+prüft deshalb ausdrücklich, dass beim Tag **kein** „Betroffen ist Regel …" erscheint — eine
+Erwartung, die bei einer künftigen Behebung in `packages/storage/**` (domain-dev-Hoheit)
+bewusst rot werden soll, statt einer stillschweigend gelockerten Zusicherung zum Opfer zu fallen.
+Offene Frage an den Orchestrator/domain-dev, siehe Bericht zu T-099.
+
+**Nachtrag T-099 — die mit T-096 offene Erwartung „Regelname in der Oberfläche" ist zu zwei
+Dritteln eingelöst.** T-097 hat `apps/web/src/lib/errorText.ts` (`errorMessageWithRules`,
+`ruleReferences`, `enumerateGerman`) gebaut: Der Name kommt unzerlegt aus `details[].message` und
+wird an allen drei Löschdialogen angehängt, **wenn** der Dienst `details` liefert — das tut er für
+Ordner und Status, für das Tag (noch) nicht (siehe oben). Dieser Testfall prüft das jetzt wörtlich,
+für alle drei Flächen, statt wie in T-096 nur die stabile Teilmenge ohne jeden Namen zu belegen.
+
+**Selektor auf den Dialog, robust gemacht (T-099).** Der Ordner- und der Tag-Dialog wechseln nach
+einer Absage weder Titel noch Knopfbeschriftung (anders als der Status-Dialog, der zu „Der Status
+wurde nicht gelöscht"/„Erneut versuchen"/„Schließen" wechselt) — ein bis T-096 über den Titel
+`'Ordner löschen?'` greifender Selektor verdeckte diese Ungleichheit zufällig, weil der Titel eben
+nicht wechselt. Der Testfall greift den Dialog jetzt über die Rolle (`alertdialog`, ohne Namen)
+statt über den Titeltext; die Ungleichheit selbst ist damit nicht behoben (offene Frage an
+frontend-dev, siehe Bericht zu T-099), aber kein unbeabsichtigt bestehender Testfall mehr.
+
+**Ergebnis: bestanden**, gemessen über zwei vollständige Läufe von `pnpm run test:e2e`.
+
+### Nachgezogener Kommentar: `tests/e2e/support/actions.ts` (T-091, `RadioRow`-Umbau)
+
+Der Kommentar über der `completion`-Auswahl in `createBoardColumn` beschrieb noch die vor T-091
+gültige Bauform von `RadioRow` — der erklärende Hinweistext stand bis dahin **im** `<label>`,
+wodurch der zugängliche Name „Erledigt Nur erledigte Todos. …" statt schlicht „Erledigt" lautete.
+Seit T-091 hängt der Hinweis als Geschwister der Optionsliste über `aria-describedby` an jedem
+Knopf; der zugängliche Name ist wieder nur das Wort selbst. Der Kommentar ist berichtigt, das am
+Anfang verankerte Muster (`/^Erledigt\b/`) bleibt unverändert stehen — es traf schon vor T-091
+genau einen Knopf, weil „Unerledigt" nicht mit „Erledigt" **beginnt**, sondern nur damit endet,
+und trifft ihn nach der Berichtigung unverändert. Kein eigener Testfall, weil `TP-KANBAN-01` bis
+`TP-KANBAN-06` diesen Zugriff bei jedem Lauf mitprüfen.
+
+### `tests/e2e/kanban.spec.ts` — `page.reload()` durch ein zweites `gotoBoard(page)` ersetzt (T-097, T-099)
+
+TP-KANBAN-04 (Zeile ~312) und TP-KANBAN-06 (Zeile ~414) griffen nach einer Änderung an der
+Oberfläche vorbei (`markTodoDone`/`setTodoTags` über die API) zu `page.reload()`, weil ein
+zweites `gotoBoard(page)` auf die bereits offene Route `#/kanban` bis T-097 keine neue Anfrage
+auslöste (T-096-Fund). T-097 hat die Ursache behoben: `hashchange` feuert bei gleichem Anker
+nicht, `popstate` schon — `useRoute` liefert seitdem zusätzlich `revisit`, und
+`useDataFreshness(revisit)` lädt Struktur und Board bei jedem erneuten Ansteuern derselben Route
+frisch nach. Beide Stellen benutzen jetzt ein zweites `gotoBoard(page)` statt `page.reload()`; die
+Kommentare darüber sind entsprechend berichtigt. Das ist der bessere Test: Er prüft den Weg, den
+die Oberfläche beim erneuten Ansteuern derselben Adresse tatsächlich geht (z. B. nach einer
+Add-in-Buchung, über `visibilitychange`), statt eines vollständigen Neuladens, das dabei nie
+geschieht. **Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
+
+### TP-EXPST-12 — Bewegungssatz Hauptanwendung gegen Add-in, zeichengleich bis auf die Zeitform (E-056, E-058, T-099)
+**Anforderungen:** A-2.5, A-3.4, A-5.1–A-5.6, A-10.9, E-056, E-058
+**Ebene:** End-to-End (`tests/e2e/pool-movement-sentence.spec.ts`)
+**Vorbedingung:** Eine reine Board-Spalte (`placement: 'board'`, kein Pool) mit einer Regel über
+ein Tag; zwei erledigte Todos mit diesem Tag, eines für den Weg über die Hauptanwendung, eines
+für den Weg über das Add-in (mit einer erfundenen Call-Nummer).
+**Schritte:**
+1. Hauptanwendung: auf der Detailansicht (S-03) den Timer des erledigten Todos starten; die
+   Antwort von `POST /timer/start` (`poolMovement`) und den Toast danach festhalten.
+2. Aufgabenbereich: `GET /addin/todo-matches` mit der Call-Nummer des zweiten Todos abfragen
+   (Ankündigung, vor der Buchung) und danach `POST /addin/todos/{id}/time-entries` aufrufen
+   (Bestätigung, nach der Buchung).
+3. `poolMovement` aus beiden Add-in-Antworten direkt lesen — seit T-104 (E-061 Punkt 3) liefern
+   `GET /addin/todo-matches` und `POST /addin/todos/{id}/time-entries` dieselbe Form wie jede
+   andere Route (`{ appears, enters, leaves } | null`), es gibt nichts mehr aus drei Namenslisten
+   zusammenzusetzen. `poolMovementSentence` aus `@takt/domain` darauf anwenden — einmal mit
+   `'future'`, einmal mit `'past'`.
+4. Denselben Aufruf mit dem aus Schritt 1 protokollierten `poolMovement` der Hauptanwendung
+   wiederholen (`'past'`).
+**Erwartetes Ergebnis:** Die reine Board-Spalte erscheint im Bewegungssatz, obwohl
+`GET /addin/context` sie nie nennen würde (E-058 Punkt 7) — der in T-096 zurückgestellte Fall.
+Der aus der Add-in-Antwort **nach** der Buchung gebildete Satz (Vergangenheit) ist
+**zeichengleich** mit dem Satz, den die Hauptanwendung nach ihrem eigenen Timerstart zeigt — für
+dieselbe Regel, dieselbe reine Board-Spalte. Der Satz **vor** der Buchung (Zukunft, aus
+`GET /addin/todo-matches`) unterscheidet sich ausschließlich in der Zeitform vom Satz danach.
+Ergänzend geprüft: der Fall `leaves` (eine „Nur erledigt"-Spalte, die die Karte nach dem Aufheben
+verlässt, „Es ist aus „X“ verschwunden und erscheint sonst nirgends.") über die Hauptanwendung,
+und der Fall ohne jeden Treffer („Auf dieses Todo passt derzeit keine Regel …") über das Add-in,
+in beiden Zeitformen. Alle vier Sätze werden **aus der Domänenfunktion gezogen**, nicht als
+Literal im Testfall vorgegeben — dieselbe Bauart wie in
+`apps/outlook-addin/scripts/proof-addin.mjs`.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen, zusätzlich isoliert über
+`--grep`.
+
+### TP-EXPST-12a — Vorschau auf einem offenen Todo mit bereits offener Buchung: `poolMovement: null` (E-061 Punkt 3, T-104)
+**Anforderungen:** A-10.9, E-058, E-061
+**Ebene:** Dienstprüfung (`tests/e2e/pool-movement-sentence.spec.ts`), **nicht** End-to-End über
+den Aufgabenbereich — ohne echten Office.js-Wirt lässt sich dessen Oberfläche in dieser Suite
+nicht ansteuern (O-P, siehe `board.md`). Geprüft wird ausschließlich die HTTP-Antwort von
+`GET /addin/todo-matches`.
+**Vorbedingung:** Ein offenes (nicht erledigtes) Todo mit einer erfundenen Call-Nummer.
+**Schritte:**
+1. Über `POST /addin/todos/{id}/time-entries` eine erste Buchung anlegen (das Todo ist vorher
+   offen und ohne offene Buchung, die beiden Zustände unterscheiden sich also — hier wird noch
+   gerechnet).
+2. `GET /addin/todo-matches` mit derselben Call-Nummer erneut aufrufen.
+**Erwartetes Ergebnis:** Der Treffer aus Schritt 2 trägt `poolMovement: null` — die Regel aus
+T-104: `null` gilt genau dann, wenn das Todo schon offen ist und schon eine offene Buchung hat,
+weil eine weitere Buchung dann keine der fünf Achsen mehr ändert. Das ist der einzige Fall, in dem
+`null` statt dreier leerer Listen zurückkommt; ein Treffer, der keine Regel trifft, aber noch
+bewegt werden könnte (Beispiel: `TP-EXPST-12`, „Kein Treffer", dessen Todo erledigt ist), bekommt
+weiterhin `{ appears: [], enters: [], leaves: [] }`.
+**Nicht automatisiert geprüft (O-P):** Dass der Aufgabenbereich bei `poolMovement: null` die
+Fläche „Was sich dadurch ändert" ganz weglässt (`TaskPane.tsx`), ist ohne Office.js-Wirt nicht
+End-to-End prüfbar und bleibt eine manuelle beziehungsweise über T-104 gemessene Zusicherung.
+**Ergebnis: bestanden**, isoliert über `--grep` gemessen.
+
+### TP-TIMER-08 — Stopp-Antwort trägt den Bewegungssatz, Anlass „booking" (E-058 Punkt 6, T-097, T-099)
+**Anforderungen:** A-6.1, A-6.8, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Ein Pool mit `exportState: 'open'` über ein Tag; ein Todo mit diesem Tag ohne
+bisherige Buchung.
+**Schritte:**
+1. Timer über die Detailansicht starten, eine Leistung eintragen, real spürbar warten (mehr als
+   eine Sekunde), über den Bestätigungsdialog stoppen und buchen.
+2. Aus der Antwort von `POST /timer/stop` (`poolMovement`) den erwarteten Satz über
+   `poolMovementSentence(movement, 'past', 'booking')` bilden.
+**Erwartetes Ergebnis:** Der Toast „Zeit gebucht." trägt am Ende seines Rumpfs genau diesen Satz
+(„Es steht jetzt in „<Spalte>“." — die erste abgeschlossene Buchung setzt „hat offene Buchungen",
+und die Spalte nimmt das Todo damit auf), angehängt an den Buchungsrumpf, nicht an dessen Stelle.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
+
+### TP-TIMER-09 — `discarded` trägt keinen Satz (E-058 Punkt 6, T-099)
+**Anforderungen:** A-6.1, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Dieselbe Regel wie in TP-TIMER-08, damit es — anders als ohne jede zutreffende
+Regel — überhaupt etwas zu verschweigen gäbe.
+**Schritte:** Timer starten und ohne Wartezeit über den Bestätigungsdialog sofort wieder stoppen
+(Leistung bleibt leer), sodass die Dauer unter einer Sekunde bleibt
+(`MINIMUM_DURATION_SECONDS`, `packages/domain/src/time-entry.ts`).
+**Erwartetes Ergebnis:** `POST /timer/stop` antwortet mit `kind: 'discarded'` und `poolMovement:
+null` — der Dienst löst in diesem Zweig keine einzige Regel auf. Der Toast „Nichts gebucht."
+trägt ausschließlich seinen festen Text, keinen angehängten Satz.
+**Hinweis zur Zeitmessung:** Dieser Fall hängt von echter, unter einer Sekunde bleibender
+Klickzeit ab. Auf einer stark ausgelasteten Maschine (siehe Kopf von `playwright.config.ts`) kann
+das vereinzelt eine Sekunde überschreiten; der Testfall vermerkt das dann als Zeitmessungsbefund
+und wird nicht als bestandener Beweis für den `discarded`-Zweig gewertet (siehe Bericht zu
+T-099).
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen (kein Zeitüberschreitungsfall
+beobachtet).
+
+### TP-TIMER-10 — `POST /timer/orphaned/resolve` trägt denselben Bewegungssatz, ohne Prozessabschuss ausgelöst (E-036, E-058 Punkt 6, T-099)
+**Anforderungen:** A-6.1, E-036, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Dieselbe Art Regel wie in TP-TIMER-08.
+**Schritte:**
+1. Timer über die rohe API starten (`POST /timer/start`, an der Oberfläche vorbei).
+2. Über eine Sekunde real warten, danach ein Lebenszeichen setzen (`POST /timer/heartbeat`).
+3. Die Detailansicht des Todos zum ersten Mal in dieser (frischen) Seite aufsuchen.
+4. Im Dialog „Eine Buchung ohne Ende" die Vorgabe „Bis zum letzten Lebenszeichen buchen"
+   bestätigen.
+**Erwartetes Ergebnis:** `loadOrphanedTimer` (`usecases/timer.ts`) meldet **jeden** beim Laden
+unvollständigen Eintrag als verwaist, unabhängig vom Alter des Lebenszeichens — ein über die
+rohe API gestarteter Timer, den die erst startende Oberfläche noch nicht kennt, ist für sie
+ununterscheidbar von einem Timer, der einen Absturz der Hülle überlebt hat (E-036: „Hülle weg,
+stdin zu"). Der Dialog erscheint, ohne dass ein Prozess beendet werden musste. `POST /timer/
+orphaned/resolve` antwortet mit `kind: 'recorded'` und demselben `poolMovement`-Vertrag wie beim
+gewöhnlichen Stopp; der Toast „Buchung abgeschlossen." trägt denselben Satz aus
+`poolMovementSentence(movement, 'past', 'booking')`.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
+
+## 18. Nachtrag aus T-103 (Welle E — Typprüfung für `tests/e2e/**`, H-7)
+
+### `pnpm run typecheck:e2e` — neuer Nachweispfad für die Typen der End-to-End-Dateien
+
+Seit `1019ffa` gibt es `tests/e2e/tsconfig.json` (Hoheit des Orchestrators) und das Skript
+`typecheck:e2e` (Antwort auf die mit T-099 offene Frage 3: `tests/e2e` steht außerhalb des
+pnpm-Arbeitsbereichs und hatte bis dahin keine eigene Typprüfung — Playwright übersetzt beim
+Ausführen nur mit `esbuild`, ohne Typen zu prüfen). Vier Fehler waren beim Einrichten offen, alle
+in T-103 behoben, ohne das Verhalten der betroffenen Testfälle zu ändern:
+
+- `tests/e2e/support/services.ts:160`, `tests/e2e/support/web-build-services.ts:170`,
+  `tests/e2e/support/global-setup-outlook-build.ts:90` — jeweils eine Funktion, die einen mit
+  `spawn(…, { stdio: ['ignore', 'pipe', 'pipe'] })` erzeugten Kindprozess als
+  `ChildProcessWithoutNullStreams` typisiert hatte. Dieser Typ verlangt ein beschreibbares
+  `stdin`; die tatsächliche `stdio`-Angabe liefert `stdin: null`. Unter
+  `exactOptionalPropertyTypes` (Wurzel-`tsconfig.base.json`) ist das ein echter Typfehler, kein
+  Formalismus. Behoben mit einem lokalen Typalias `ChildProcessByStdio<null, Readable, Readable>`
+  je Datei — genau der Typ, den `spawn` mit dieser `stdio`-Angabe tatsächlich liefert.
+- `tests/e2e/tag-input.spec.ts:78` — eine Hilfsfunktion `noCreateOffer` war mit
+  `ReturnType<typeof expect>` beschriftet; `expect(...)` liefert an dieser Stelle (Aufruf von
+  `.toHaveCount(0)`) ein `Promise<void>`, keinen `Matchers`-Wert. Beschriftung auf `Promise<void>`
+  geändert.
+
+**Ergebnis:** `pnpm run typecheck:e2e` — Exitcode 0. `typecheck:e2e` ist weiterhin **nicht** Teil
+von `typecheck`/`pnpm check` (Entscheidung liegt beim Orchestrator, siehe Bericht zu T-103).
+
+### H-7 (R-3a) — `new RegExp` aus Namen in `tag-folder-rule-lock.spec.ts` und `tags-folders.spec.ts`
+
+Sicherheitsbefund aus der Wiedervorlage R-3a: `tag-folder-rule-lock.spec.ts` baute
+`page.getByRole('treeitem', { name: new RegExp(lockedFolder.name) })` — ein `RegExp` aus einem zur
+Laufzeit erzeugten Namen, ohne die im Muster wirksamen Zeichen (`. * + ? ^ $ { } ( ) | [ ] \`) zu
+maskieren. Mit den heutigen, selbst erzeugten Testnamen (`E2E-…-${Date.now()}`) blieb das folgenlos
+— keines dieser Zeichen kommt darin vor —, ist als Bauart aber der falsche Weg: Ein Name mit einem
+dieser Zeichen hätte ein anderes Muster ergeben als gemeint, und im ungünstigsten Fall eines, das
+mehr trifft als beabsichtigt.
+
+Dieselbe Bauart stand außerdem, von R-3a nicht namentlich benannt, fünfmal in
+`tags-folders.spec.ts` (gefunden über `grep -rn "new RegExp(" tests/e2e/`).
+
+**Entscheidung für „ohne RegExp prüfen" statt Maskieren.** `page.getByRole(role, { name })`
+vergleicht bei einer Zeichenkette laut Playwright ohnehin „case-insensitive" und als Teilstring
+(„searches for a substring") — dieselbe Semantik, die ein unverankertes `new RegExp(name)` ohne
+Schalter auch hatte (nur zusätzlich `case-sensitive`), nur ohne dessen Sonderzeichen-Risiko. Alle
+neun Stellen (vier in `tag-folder-rule-lock.spec.ts`, fünf in `tags-folders.spec.ts`, davon eine
+in der gemeinsam genutzten Hilfsfunktion `expandFolder`) sind jetzt `{ name: lockedFolder.name }`
+bzw. `{ name }` — kein `RegExp`-Import mehr in beiden Dateien.
+
+**Ergebnis: bestanden.** `tag-folder-rule-lock.spec.ts` 4/4, `tag-input.spec.ts` 5/5 (isoliert
+über `--grep`), `tags-folders.spec.ts` 2/2 (isoliert; im Verbund mit `tag-input.spec.ts` einmal
+mit einem umgebungsbedingten Timeout auf einen UI-Knopf beim ersten Versuch — dreifach isoliert
+reproduziert, jedes Mal grün, kein Zusammenhang mit dieser Änderung, siehe Bericht zu T-103).
+
+## 19. Nachtrag aus T-106 (Welle F — Wortlaute nach T-101/T-102 nachgezogen, E-060/O-R als echte Spezifikationen)
+
+Grundlage: `decisions.md` E-060 (auch „Erledigt" setzen und aufheben von Hand liefern die
+Poolbewegung) und O-R (`orphan_discarded` wird unterschieden, nicht auf `timer_too_short`
+gekürzt), beide mit T-101 (Dienst/Domäne) und T-102 (Oberfläche) umgesetzt. T-103 hatte fünf
+bestehende Erwartungen als „fremd rot" gemeldet (gemessene Wortlaute standen erst im Bericht zu
+T-102, nicht im Testfall) und zwei Entwürfe (TP-EXPST-13, TP-TIMER-11) vorbereitet, aber nicht
+eingecheckt. Beides wird hier nachgezogen.
+
+### Fünf rote Erwartungen auf die gemessenen Wortlaute umgestellt
+
+`tests/e2e/timer-stop-announcement.spec.ts` (Zeilenangaben aus dem Auftrag, Stand vor dieser
+Änderung):
+
+- **Zeile 103/104** — Der Toast-Titel nach `recorded` hieß bisher schlicht „Zeit gebucht.". Seit
+  T-102 (W-5) nennt er den Todo-Namen: „Zeit gebucht auf „<Todo>“.". Der Testfall filtert jetzt
+  auf den Teiltext „Zeit gebucht" (statt auf den vollen, jetzt falschen Satz) und erwartet den
+  vollen neuen Titel mit dem tatsächlich angelegten Todo-Titel.
+- **Zeile 173–176** — Der Titel „Nichts gebucht." bleibt (bestätigt gegen den Quelltext,
+  `TimerContext.tsx`), aber der Rumpf nennt jetzt das Todo: „Der Timer auf „<Todo>“ lief weniger
+  als eine Sekunde. …" statt „Der Timer lief weniger als eine Sekunde. …".
+- **Zeile 256** — Der Toast-Titel nach `orphaned/resolve` (`recorded`) hieß „Buchung
+  abgeschlossen.", heißt jetzt „Buchung auf „<Todo>“ abgeschlossen.".
+
+`tests/e2e/tag-folder-rule-lock.spec.ts`:
+
+- **Zeile 152** (Ordner-Fall) und **Zeile 213** (Tag-Fall) — nach der Absage im Löschdialog hieß
+  der schließende Knopf „Abbrechen". Seit T-102 wechseln Ordner- und Tag-Löschdialog nach einer
+  Absage Titel, Beschreibung und beide Knöpfe wie `StatusSettings` (T-097 Frage 1); der
+  schließende Knopf heißt jetzt „Schließen". Beide Testfälle klicken jetzt „Schließen".
+  Zusätzlich, weil dieselbe Datei betroffen ist und derselbe Umbau die Ursache war (nicht Teil der
+  fünf gemeldeten Zeilen, aber vom selben Fund erfasst): Der **Tag**-Fall behauptete bisher
+  ausdrücklich, dass der Regelname im Dialog **fehlt** (der in T-096/T-099 gemessene und
+  dokumentierte Fund, `repo-tags.ts`, `TagPort.remove()` ohne `details`). T-101 hat das behoben
+  (R-1a Befund 1); der Testfall erwartet den Regelnamen jetzt wörtlich, wie beim Ordner- und
+  Status-Fall.
+
+Für den Bewegungssatz gilt weiterhin: Die Erwartung wird aus `poolMovementSentence` gezogen, kein
+Wortlaut ist als Literal im Testfall abgeschrieben — nur die reinen Textbausteine, die nicht aus
+dieser Funktion stammen (feste Toast-Titel, der Rumpf-Grundsatz „Der Timer auf „X“ lief …" usw.),
+stehen als Literal, gegen den tatsächlichen Quelltext von `TimerContext.tsx` gegengelesen.
+
+**Ergebnis: bestanden.** Isoliert über `--grep "timer-stop-announcement|tag-folder-rule-lock|
+done-movement-announcement"`: 12/12, zweifach reproduziert.
+
+### TP-EXPST-13 — Toast nach „Erledigt"/„Wieder offen" trägt den Bewegungssatz (E-060 Punkt 4)
+
+**Anforderungen:** A-2.4, A-2.5, A-3.4, E-060
+**Ebene:** End-to-End (`tests/e2e/done-movement-announcement.spec.ts`, neu)
+**Vorbedingung:** Ein Tag, eine Regel mit `completion: 'done'` auf diesem Tag (`placement:
+'both'`), ein Todo mit dem Tag.
+**Schritte:**
+1. **Setzen.** Todo nicht erledigt, Detailansicht öffnen, Checkbox „Erledigt" anklicken; aus der
+   Antwort von `PUT /todos/{id}/done` (`poolMovement`) den erwarteten Satz über
+   `poolMovementSentence(movement, 'past', 'booking')` bilden.
+2. **Aufheben.** Ein über die rohe API bereits erledigtes Todo mit demselben Tag (steht also in
+   der Spalte); Checkbox aufheben; Satz über `poolMovementSentence(movement, 'past', 'reopen')`.
+3. **Kein Treffer.** Ein Todo ohne jeden Tag-/Regelbezug; Checkbox setzen. Der Dienst liefert
+   trotzdem das übliche, aber leere Tripel `{ appears: [], enters: [], leaves: [] }` — **nicht**
+   `null` (T-101 Annahme 3: `null` heißt „das Kennzeichen hat sich nicht geändert", nicht „keine
+   Regel trifft") —, und `poolMovementSentence` mit Anlass `'booking'` gibt für dieses leere
+   Tripel `null` zurück.
+**Erwartetes Ergebnis:** Der Toast-Titel nennt den Todo-Namen (`„<Titel>“ ist erledigt."` bzw.
+`„<Titel>“ ist wieder offen."`, gemessen gegen `TodoDetailScreen.tsx`); der Rumpf beginnt mit dem
+festen Satz „Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen." und
+trägt in Fall 1 und 2 den Bewegungssatz danach, durch ein Leerzeichen getrennt. In Fall 3 steht
+ausschließlich der feste Satz, ohne angehängte Zeile.
+
+**Fund während der Umsetzung, in dieser Datei selbst behoben.** Die Checkbox ist serverbestätigt,
+nicht optimistisch: `checked={done}` hängt an der Antwort des `PUT`/`DELETE`-Umlaufs, nicht an
+einer lokalen Zustandsänderung im selben Zug. `page.locator(...).check()`/`.uncheck()` prüfen den
+Haken **unmittelbar** nach dem Klick und werfen dabei reproduzierbar „Clicking the checkbox did
+not change its state" — nicht weil die Anwendung etwas falsch macht (die nachfolgende Anfrage kam
+in jeder Stichprobe mit dem richtigen Ergebnis zurück, belegt über Netzwerkmitschnitt und einen
+parallelen Aufruf ohne Playwright), sondern weil Playwrights eigene Prüfung innerhalb von
+`.check()` keine Zeit für den Netzwerkumlauf lässt, den ein serverbestätigtes Kontrollkästchen
+braucht. Behoben durch `.click()` plus ein eigenes, selbst wiederholendes `expect(checkbox)
+.toBeChecked()` danach — dieselbe Bauart, die jeder andere Testfall in `tests/e2e/**` für Knöpfe
+und Kontrollkästchen bereits verwendet (keiner davon benutzt `.check()`/`.uncheck()`).
+**Ergebnis: bestanden**, 3/3, dreifach reproduziert.
+
+### TP-TIMER-11 — `orphan_discarded` wird unterschieden und angesagt (O-R)
+
+**Anforderungen:** A-6.1, A-6.2, E-036
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`, neue `describe`-Gruppe)
+**Vorbedingung:** Ein über die rohe API gestarteter, beim ersten Aufsuchen der Detailansicht
+verwaister Timer (wie TP-TIMER-10).
+**Schritte:**
+1. **„Verwerfen".** Im Dialog „Eine Buchung ohne Ende" die Option „Verwerfen" wählen und
+   bestätigen.
+2. **„zu kurz".** Ohne Lebenszeichen und ohne Wartezeit die Vorgabe „Bis zum letzten
+   Lebenszeichen buchen" unverändert bestätigen — `now = heartbeatAt ?? startedAt`
+   (`decideOrphanedTimer`) bleibt unter der Mindestdauer.
+**Erwartetes Ergebnis:** Fall 1 antwortet `{ kind: 'discarded', reason: 'orphan_discarded',
+poolMovement: null }`, Toast „Buchung verworfen." mit dem Todo-Namen im Rumpf. Fall 2 antwortet
+`{ kind: 'discarded', reason: 'timer_too_short', poolMovement: null }`, Toast „Nichts zu buchen."
+mit einem **wörtlich anderen** Rumpf als Fall 1 — das ist die Gegenprobe zum O-R-Fund aus T-093:
+Vor T-101 lieferte der Dienst in beiden Fällen ausnahmslos `timer_too_short`, ein Rückfall darauf
+würde Fall 1 unmittelbar rot machen (`reason` stimmt nicht mit `orphan_discarded` überein). In
+keinem der beiden Fälle steht ein Bewegungssatz — `poolMovement` ist im verworfenen Zweig fest
+`null`, unverändert seit E-058 Punkt 6.
+**Ergebnis: bestanden**, 2/2, zweifach reproduziert.
+
+### `tests/e2e/support/api.ts` — `TodoDoneResult`/Helfer auf die gemessene Hülle gebracht
+
+Der T-103-Entwurf hatte `{ todo, poolMovement }` als Hülle **angenommen** (Analogie zu
+`StopTimerResult`), ausdrücklich als ungemessene Annahme gekennzeichnet. Gemessen mit T-101/T-102
+ist es anders: Das Todo steht **flach** wie bisher (`callNumber`, `completedAt`, `id`, …),
+`poolMovement` als zusätzliches Feld daneben — dieselbe Gestalt wie an `POST /timer/start`.
+`TodoDoneResult` ist jetzt `extends Todo` mit `poolMovement: PoolMovementNames | null` statt der
+angenommenen Hülle; `setTodoDoneWithMovement`/`reopenTodoWithMovement` (bislang ungenutzt, jetzt
+von `done-movement-announcement.spec.ts` indirekt bestätigt, weil dieselbe Route über die
+Oberfläche geprüft wird) sind entsprechend beschriftet. `markTodoDone`/`clearTodoDone` bleiben
+unverändert bei der Beschriftung `Todo` — bestehende Aufrufer (`kanban.spec.ts`,
+`pool-movement-sentence.spec.ts`) lesen weiterhin nur das Todo und sind von der Umstellung nicht
+berührt.
+
+### W-13 — Restvorkommen „Regel über Tags" in `docs/testplan.md`
+
+Zwei Stellen (`docs/testplan.md:21`, `:838`, Zeilenangaben Stand `aca53df`) beschrieben eine
+Kanban-Spalte noch als „Regel über Tags" — korrekt bis E-054, aber seit E-055 unvollständig: Eine
+Regel hat fünf Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus),
+nicht nur Tags. Beide Stellen sind jetzt auf „Regel" umformuliert, mit einem Nebensatz, der die
+fünf Achsen nennt (Abschnitt 8 zählt sie ohnehin unmittelbar danach auf) — der Sinn ändert sich
+nicht, nur die veraltete Verengung auf Tags fällt weg.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  --grep "timer-stop-announcement|tag-folder-rule-lock|done-movement-announcement" \
+  --reporter=list --retries=0                                                   12/12, zweifach
+```
+
+Nicht angefasst (fremde Hoheit, Umbau läuft noch): `tests/e2e/pool-movement-sentence.spec.ts` und
+die Add-in-Helfer in `support/api.ts` (`AddinTodoMatch`, `AddinBookResult`,
+`addinTodoMatches`/`addinBookOnTodo`) — integration-dev stellt die Add-in-Routen in Welle F von
+`poolNames`/`enteringPoolNames`/`leavingPoolNames` auf `poolMovement` um; das Nachziehen ist für
+Welle G vorgesehen (Board, Zeile nach der Welle-F-Tabelle).
+
+## 20. Nachtrag aus T-109 (Welle G — Add-in-Helfer und -Spezifikationen auf `poolMovement`, W-13 abgeschlossen)
+
+Grundlage: `decisions.md` E-061 Punkt 3 (die Add-in-Routen liefern seit T-104 `poolMovement`
+statt der drei Namenslisten) und der Befund F1 aus `reports/T-104-integration-dev.md`, der die
+fremden, dadurch rot gewordenen Stellen in `tests/e2e/**` benannt hat.
+
+**Punkt 1 — Vertragswechsel T-104 nachgezogen.**
+
+- `tests/e2e/support/api.ts`: `AddinTodoMatch` und `AddinBookResult` tragen jetzt
+  `poolMovement: PoolMovementNames | null` statt der drei Felder `poolNames`/
+  `enteringPoolNames`/`leavingPoolNames`. `PoolMovementNames` ist der schon vorhandene lokale Typ
+  (bewusst nicht aus `@takt/domain` importiert, siehe Kopfkommentar der Datei — diese Hoheit
+  braucht keine Domänenabhängigkeit).
+- `tests/e2e/pool-movement-sentence.spec.ts`: `previewMovement`/`bookedMovement` sind nicht mehr
+  von Hand aus drei Feldern zusammengesetzt, sondern `match.poolMovement` bzw. `booked.poolMovement`,
+  unverändert an `poolMovementSentence` weitergereicht — die Antwort trägt die Bewegung jetzt
+  direkt. Der Kommentar über der Add-in-Hälfte des ersten Testfalls ist entsprechend berichtigt.
+  Für die Erwartungen im Fall „Kein Treffer" galt es zu klären, ob dort `null` oder drei leere
+  Listen erwartet werden: Das Todo dieses Falls ist `markTodoDone`, also **erledigt** — die Regel
+  aus T-104 (`service.ts`: `if (todo.completedAt === null && entries.hasOpen) return null`) trifft
+  also nicht, und der Dienst liefert `{ appears: [], enters: [], leaves: [] }`, nicht `null`. Beide
+  Stellen (`:232-234`, `:243-245` im Ausgangsstand) prüfen jetzt genau das.
+- `docs/testplan.md` — TP-EXPST-12, Schritt 3: beschrieb bislang das Zusammensetzen der
+  `PoolMovement` aus den drei Namenslisten; umformuliert auf das direkte Lesen von `poolMovement`.
+
+**Punkt 2 — neuer Fall: Vorschau auf offenem Todo mit bereits offener Buchung.**
+
+Neuer Testfall in `pool-movement-sentence.spec.ts` (dokumentiert als **TP-EXPST-12a** oben, vor
+TP-TIMER-08): Ein offenes Todo bekommt eine erste Buchung über `POST /addin/todos/{id}/time-entries`,
+danach liefert `GET /addin/todo-matches` für dasselbe Todo `poolMovement: null` — die Bedingung
+aus T-104, gemessen gegen den tatsächlichen Quelltext (`apps/local-api/src/routes/addin/
+service.ts:232`). Als **Dienstprüfung** angelegt, nicht als Oberflächen-Test: Dass der
+Aufgabenbereich bei `poolMovement: null` die Fläche „Was sich dadurch ändert" ganz weglässt
+(`TaskPane.tsx`), ist ohne echten Office.js-Wirt in dieser Suite nicht ansteuerbar (**O-P**,
+`board.md`) und deshalb nicht automatisiert geprüft — nur die HTTP-Antwort ist es.
+
+**Punkt 3 — W-13 abgeschlossen.** T-106 hatte die beiden Stellen in `docs/testplan.md` (`:21`,
+`:838`) bereits berichtigt (Abschnitt 19). Die beiden verbliebenen Stellen in eigener Hoheit sind
+jetzt ebenfalls auf „Regel" statt „Regel über Tags" gestellt: `tests/e2e/kanban.spec.ts:16` und
+`tests/e2e/todo-revival.spec.ts:16`/`:124`. Beide Stellen standen bereits im Umfeld einer
+Erwähnung der fünf Achsen (`kanban.spec.ts` nennt sie zwei Sätze später, `todo-revival.spec.ts`
+spricht unmittelbar von der Achse „Erledigt") — kein zusätzlicher Nebensatz nötig, nur die
+Verengung auf Tags fällt weg. Damit ist W-13 vollständig geschlossen, soweit es in der Hoheit des
+e2e-testers liegt; die restlichen, dem domain-dev bzw. dem Dokumentierer zugewiesenen Stellen
+(OpenAPI, `docs/datenmodell.md`, `docs/architektur.md`, `packages/domain/**`,
+`apps/local-api/src/usecases/board.ts`) und die dem frontend-dev zugewiesenen
+(`Kanban.tsx`, `DESIGNSYSTEM.md`) bleiben außerhalb dieser Hoheit unverändert.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/pool-movement-sentence.spec.ts --reporter=list --retries=0          4/4
+
+pnpm exec playwright test -c tests/e2e/playwright.outlook-build.config.ts \
+  --reporter=list --retries=0                                                  2/2
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/done-movement-announcement.spec.ts \
+  tests/e2e/timer-stop-announcement.spec.ts --reporter=list --retries=0        8/8
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/kanban.spec.ts tests/e2e/todo-revival.spec.ts \
+  --reporter=list --retries=0            10/10 im zweiten Lauf; im ersten Lauf ein
+                                          Zeitüberschreitungsfall bei TP-KANBAN-02 (Klick auf
+                                          „Anlegen" hinter einem Toast, der Klicks abfing), isoliert
+                                          und im wiederholten Volllauf beide Male grün — siehe
+                                          „Risiken" im Bericht zu T-109
+```
+
+Port 17843/17844 (bzw. 17944 für die Add-in-Bauergebnis-Prüfung) war vor jedem Lauf frei. Parallel
+liefen domain-dev und frontend-dev sichtbar an `apps/local-api/**`, `packages/domain/**`,
+`packages/storage/**` und `apps/web/**` (unverändert nicht angefasst) — kein voller
+`pnpm run test:e2e`, wie beauftragt.
+
+## 21. Nachtrag aus T-113 (Welle H — Buchung von Hand mit Poolbewegung, Toast-Verdrängung, Regelnamen nach T-110)
+
+Grundlage: `decisions.md` E-061 Nachtrag (auch `POST /time-entries` liefert `poolMovement`, mit
+derselben Rechnung wie der Timerstopp, `closedEntryMovementStates`, „Richtiggestellt nach
+T-107"), W-10 aus R-2a (eine Meldung mit Rückweg wird beim Verdrängen des Toast-Stapels
+übersprungen, `apps/web/src/app/ToastContext.tsx`, `evict()`) und W-11 aus R-2a (der Regelname als
+eigenes Feld `details[].name`, `apps/web/src/lib/errorText.ts`). T-107/T-108 haben die ersten
+beiden Punkte umgesetzt, T-110 den dritten — alle drei parallel zu diesem Auftrag, in derselben
+Welle H.
+
+### TP-EXPST-14 — Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)
+
+**Anforderungen:** A-2.4, A-2.5 (Abgrenzung — siehe Fall c), A-6.1, A-6.4, E-058, E-061
+**Ebene:** End-to-End (`tests/e2e/manual-booking-movement.spec.ts`, neu)
+**Vorbedingung:** Je Fall ein eigenes Tag und eine eigene Regel, damit sich die drei Fälle nicht
+gegenseitig beeinflussen.
+
+**Schritte und erwartetes Ergebnis, drei Fälle:**
+
+a. **Erste Buchung auf ein offenes Todo ohne jede Buchung.** Regel mit `exportState: 'open'` auf
+   dem Tag des Todos. Über den echten Dialog „Zeit von Hand erfassen" (Knopf „Zeit von Hand" auf
+   der Todo-Detailansicht) eine Buchung von 45 Minuten anlegen, mit Leistungstext. `POST
+   /time-entries` antwortet mit `poolMovement: { appears: [<Spalte>], enters: [<Spalte>], leaves:
+   [] }` — die erste abgeschlossene Buchung setzt „hat offene Buchungen", und die Regel fragt
+   genau danach. Der Toast trägt den Titel „Zeit gebucht auf „<Todo>“." und den Rumpf „Gebucht:
+   0:45 h. <Bewegungssatz>.", wobei der Bewegungssatz aus `poolMovementSentence(movement, 'past',
+   'booking')` gezogen wird (kein Literal).
+b. **Gegenprobe — Todo mit bereits offener Buchung.** Über die rohe API besteht schon eine
+   abgeschlossene, offene Buchung auf demselben Todo (reine Vorbereitung, kein Teil der geprüften
+   Bedienung). Eine zweite Buchung von Hand über denselben Dialog liefert `poolMovement: null` —
+   `movementOfBooking` (`apps/local-api/src/usecases/timer.ts`) löst dann keine Regel auf. Der
+   Toast trägt weiterhin Titel und „Gebucht: 0:15 h.", aber **keine** angehängte Zeile.
+c. **Erledigtes Todo.** Regel mit `completion: 'done'` (ohne Achse zum Exportstatus) auf dem Tag;
+   das Todo ist über `PUT /todos/{id}/done` bereits erledigt und steht folglich schon in dieser
+   Spalte. Eine Buchung von Hand liefert `poolMovement: { appears: [<Spalte>], enters: [], leaves:
+   [] }` — kein Verlassen, weil `closedEntryMovementStates` `completedAt` unverändert lässt
+   (**Abgrenzung zu A-2.5**: Anders als der Timerstart hebt die Buchung von Hand „Erledigt" nicht
+   auf; die Karte „Erledigt" bleibt auf der Todo-Detailansicht angehakt). `poolMovementSentence`
+   liefert für dieses Tripel `null` (nur `enters`/`leaves` zählen beim Anlass `'booking'`), der
+   Toast trägt entsprechend keine angehängte Zeile.
+
+**Ergebnis: bestanden**, 3/3, dreifach reproduziert (isoliert, im Verbund mit `toast-eviction.
+spec.ts` und im vollen `pnpm run test:e2e`).
+
+### TP-TOAST-01 — Meldung mit Rückweg wird beim Verdrängen des Stapels übersprungen (W-10 aus R-2a)
+
+**Anforderungen:** Abschnitt 16 (Rückmeldung je Interaktion), E-059 (kein Bestätigungsdialog vor
+„Vom Board nehmen", Rückweg im Toast selbst), SC 2.2.1 (genug Zeit, eine Aktion zu lesen und zu
+bedienen)
+**Ebene:** End-to-End (`tests/e2e/toast-eviction.spec.ts`, neu)
+**Vorbedingung:** Zwei eigene Regeln mit `placement: 'both'` — eine für den Rückweg-Toast (leer,
+keine Karten nötig), eine mit vier Todos für die vier Meldungen ohne Aktion. Getrennte Regeln,
+damit das Zurücknehmen der ersten die Karten der zweiten nicht vom Board entfernt.
+**Schritte:**
+1. Spaltenmenü der ersten Regel öffnen, „Vom Board nehmen" auslösen. Der Toast „Spalte vom Board
+   genommen." trägt den Knopf „Rückgängig" (`setPlacement`, `BoardScreen.tsx` — `action` gesetzt,
+   weil sich der Anzeigeort tatsächlich ändert und dies kein Rückweg-Aufruf ist).
+2. Nacheinander auf vier Karten der zweiten Regel „Als erledigt markieren" auslösen (Kartenmenü
+   „Aktionen für <Titel>"). Jede Meldung „„<Titel>“ ist erledigt." trägt **kein** `action`-Feld
+   (`toggleDone`, `BoardScreen.tsx`).
+**Erwartetes Ergebnis:** Fünf ausgelöste Meldungen, `MAX_TOASTS = 4` (`ToastContext.tsx`): Der
+Stapel zeigt danach genau vier. Die Meldung mit „Rückgängig" steht weiterhin, ihr Knopf ist
+sichtbar und bedienbar. Die älteste Meldung **ohne** Aktion — die zur ersten Karte — ist
+verschwunden; die drei jüngeren ohne Aktion stehen unverändert. „Schließen" entfernt die Meldung
+mit Rückweg anschließend trotzdem — genommen ist ihr nach `evict()` ausdrücklich nur das
+Verdrängen durch eine fremde Meldung, nicht der eigene Schließweg.
+**Ergebnis: bestanden**, 1/1, dreifach reproduziert (isoliert, im Verbund und im vollen `pnpm run
+test:e2e`).
+
+### TP-TAG-15 — Ein Tag in zwei Regeln: der Löschdialog nennt beide Namen mit einem Gattungswort (W-11 aus R-2a, Fassung nach T-110)
+
+**Anforderungen:** A-3.2, A-4.2, E-057 (dieselben wie TP-TAG-14, derselbe Löschweg, jetzt mit
+einem zweiten Regelbezug am selben Tag)
+**Ebene:** End-to-End (`tests/e2e/tag-folder-rule-lock.spec.ts`, neuer Fall in derselben
+`describe`-Gruppe wie TP-TAG-14)
+**Vorbedingung:** Ein Tag, das in **zwei** eigenen Regeln als erforderlicher Term steht, zuerst
+angelegt „…-Ost-…", danach „…-Nord-…" (die Reihenfolge in der Aufzählung folgt `ORDER BY
+p.position, p.name` in `repo-tags.ts`, `position` wächst mit jedem `POST /pools` — zuerst angelegt
+heißt zuerst genannt, nicht alphabetisch).
+**Schritte:** Wie TP-TAG-14, Schritt 6 (Tag-Fall): Löschen auslösen, im Bestätigungsdialog erneut
+„Löschen" bestätigen.
+**Erwartetes Ergebnis:** Der Dialog bleibt offen und nennt **beide** Regeln in einem Satz:
+„… Betroffen sind die Regeln „<Ost>“ und „<Nord>“." — ein Gattungswort vorn statt einmal je Name
+(`details[].name`, seit T-107; `errorText.ts#ruleList`/`errorMessageWithRules`, seit T-110). Nach
+„Schließen" ist das Tag weiterhin im Tag-Baum vorhanden.
+
+**Zusammenhang mit TP-TAG-14 — drei bestehende Erwartungen auf die Fassung nach T-110
+umgestellt.** Die drei Einzel-Fälle aus TP-TAG-14 (Ordner, Tag, Status — je eine Regel) prüften
+bislang „… Betroffen ist Regel „<Name>“." (Wortlaut von T-097). Seit T-110 lautet derselbe Satz
+„… Betroffen ist **die** Regel „<Name>“." — dasselbe Gattungswort-vorn-Prinzip wie oben, nur für
+genau eine Regel. `tests/e2e/tag-folder-rule-lock.spec.ts` ist an den drei betroffenen Stellen
+umgestellt (Ordner-Fall, Tag-Fall, Status-Fall); TP-TAG-14 selbst wird hier nicht neu geschrieben
+(wie an anderer Stelle in diesem Dokument gehalten: ein Nachtrag ergänzt, er schreibt die
+historische Fassung nicht um), der neue Wortlaut gilt ab jetzt für alle vier Fälle der Datei.
+
+**Zur Beobachtung während der Umsetzung.** T-110 lief parallel zu diesem Auftrag an genau dieser
+Datei (`apps/web/src/lib/errorText.ts`). Eine Quelltextprüfung während der laufenden Änderung
+zeigte kurzzeitig einen in sich widersprüchlichen Zwischenstand (der Dateikopf beschrieb bereits
+den neuen Vertrag, `ruleReferences`/`errorMessageWithRules` lasen zu diesem Zeitpunkt aber noch
+`message` und bildeten den alten Satz) — eine reine Beobachtung am Quelltext, kein Testlauf. Jeder
+tatsächlich ausgeführte Testlauf dieses Auftrags traf bereits die fertige Fassung aus T-110 und
+war grün; es gibt keinen eigenen, tatsächlich ausgeführten roten Lauf gegen den alten Wortlaut zu
+melden.
+
+**Ergebnis: bestanden**, 5/5 (alle vier Fälle der Datei, TP-TAG-14 und TP-TAG-15 zusammen),
+dreifach reproduziert (isoliert, zweimal im vollen `pnpm run test:e2e`).
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/manual-booking-movement.spec.ts --reporter=list --retries=0        3/3
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts --reporter=list --retries=0                 1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/tag-folder-rule-lock.spec.ts --reporter=list --retries=0           5/5 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/manual-booking-movement.spec.ts tests/e2e/toast-eviction.spec.ts \
+  --reporter=list --retries=0                                                 4/4
+
+pnpm run test:e2e --reporter=list --retries=0                                 56/56 (1,4 min) —
+                                                                                Vergleichsmarke
+                                                                                51/51 nach 4dd3171,
+                                                                                +5 neue Fälle
+```
+
+Port 17843/17844 war vor jedem Lauf frei. Parallel liefen frontend-dev sichtbar an
+`apps/web/src/lib/errorText.ts`/`api/client.ts`/`api/types.ts`/`app.css`, unit-tester an
+`apps/web/test/**`/`apps/local-api/test/**`/`packages/*/test/**` und security-checker an
+`docs/bedrohungsmodell.md` — keine dieser Dateien wurde von diesem Auftrag angefasst.
+
+## 22. Nachtrag aus T-120 (Welle J — die Uhr im Meldungsstapel, A-6.8/B-1, SC 2.4.7)
+
+Grundlage: `reports/T-118-frontend-dev.md` (B-1: `setConflict(null)` liegt seit T-118 im selben
+Zustandsschritt wie die Meldung aus `performStop`, kein Netzumlauf mehr dazwischen; B-2/T-118-
+Risiko: Die Achtsekundenfrist läuft seit T-118 je Meldung ab ihrer eigenen Entstehung statt „acht
+Sekunden nach der letzten Änderung am Stapel"), `decisions.md` E-062 (Bausteine der Oberfläche
+werden im Browser geprüft) und E-063 (fremder Text wird isoliert und markiert).
+
+### TP-TOAST-01 — die Uhr entscheidet nicht mehr mit (Nachtrag zu Abschnitt 21)
+
+`tests/e2e/toast-eviction.spec.ts` prüfte den in Abschnitt 21 beschriebenen Fall bis T-118 nur
+deshalb richtig, weil ein Fehler in `ToastContext.tsx` die Achtsekundenfrist jeder stehenden
+Meldung bei jeder neuen zurücksetzte — mit dem Fehler behoben (T-118) hätte ein langsamer Lauf
+(mehrere Agenten parallel, siehe `playwright.config.ts`-Kopf) die zweite oder dritte Meldung von
+selbst verschwinden lassen können, bevor der Fall sie prüft. Zwei Änderungen, beide am Aufbau,
+keine an der geprüften Sache (W-10 bleibt unverändert richtig):
+
+1. **Die Uhr steht still.** `page.clock.install({ time: new Date() })` vor der Navigation,
+   `page.clock.pauseAt(new Date(Date.now() + 2000))` danach — mit angehaltener Uhr feuert
+   `setTimeout` in `ToastItem` überhaupt nicht, solange der Fall selbst nicht `fastForward`
+   aufruft. Der Sicherheitsabstand von zwei Sekunden ist nötig, weil `pauseAt` sonst reproduzierbar
+   mit `Cannot fast-forward to the past` scheitert: Zwischen dem Node-seitigen `new Date()` und der
+   tatsächlichen Ausführung im Browser vergeht die Zeit, in der die seit `install()` normal
+   mitlaufende Uhr bereits weiter ist als ein zu knapp bemessenes Argument.
+2. **Die vier aktionslosen Meldungen entstehen nicht mehr über eine zweite Board-Spalte.** Zwei
+   Befunde, im Zuge dieser Aufgabe gemessen, keiner davon eine Änderung der geprüften Sache:
+   - Seit B-7 aus T-118 trägt auch das **Setzen** von „Erledigt" auf dem Board ein `action`-Feld
+     (derselbe Rückweg an allen drei Flächen). Die alte Fassung („Als erledigt markieren" auf vier
+     Karten) lieferte dadurch fünf Meldungen, die **alle** ein `action`-Feld trugen — `evict()` fand
+     keine ohne und verdrängte nichts, der Stapel wuchs auf fünf statt auf vier. Ersetzt durch die
+     Gegenrichtung: vier zuvor per API erledigte Todos, dann über die Todo-Liste wieder geöffnet
+     (`toggleDone`, Zweig `wasDone`) — dieser Zweig trug schon vor T-118 kein `action`-Feld und tut
+     es weiterhin nicht („Die Gegenrichtung ‚wieder offen' bekommt keinen: Sie ist selbst schon die
+     Rücknahme.").
+   - Eine zunächst versuchte Fassung („Erledigt zurücknehmen" auf einer zweiten Board-Spalte, mit
+     denselben vier vorab erledigten Karten) scheiterte unter der angehaltenen Uhr zuverlässig an
+     einem zweiten, unabhängigen Fund: Jedes Kartenmenü ist ein Ark-UI-Popover, dessen
+     Schließ-Aufräumen an einem `setTimeout` hängt — unter einer angehaltenen Uhr feuert das nie,
+     ein zweites geöffnetes Kartenmenü trifft auf das nicht entfernte erste
+     (`… subtree intercepts pointer events`, 60 Sekunden Zeitüberschreitung). Die Todo-Liste löst
+     „Erledigt" über ein natives `<input type="checkbox">` ohne Popover, das bleibt auch unter einer
+     angehaltenen Uhr mehrfach hintereinander bedienbar. Die **einzige** Menü-Bedienung dieses Falls
+     (Board, „Vom Board nehmen") bleibt unverändert — der Bildschirm wird danach verlassen, bevor ein
+     zweites Popover nötig wäre.
+
+Beide Funde stehen ausführlich im Dateikopf von `toast-eviction.spec.ts`, damit sie nicht erneut
+gesucht werden müssen.
+
+**Ergebnis: bestanden**, 1/1, mehrfach reproduziert (isoliert, im Verbund mit den beiden neuen
+Fällen unten und im vollen `pnpm run test:e2e`).
+
+### TP-TIMER-12 — A-6.8/B-1: kein Bild mit Abdunklung und Meldung gleichzeitig beim Timerwechsel
+
+**Anforderungen:** A-6.8, E-062
+**Ebene:** End-to-End (`tests/e2e/timer-switch-scrim-toast.spec.ts`, neu)
+**Vorbedingung:** Zwei Todos ohne Tags und ohne Regel — kein `poolMovement` lenkt vom Befund ab.
+**Schritte:**
+1. Timer auf Todo A starten, die Start-Meldung schließen (sauberer Ausgangspunkt: der
+   Meldungsstapel ist nachweislich leer, bevor der eigentliche Wechsel beginnt).
+2. Timer auf Todo B starten. Es läuft bereits ein Timer — der Bestätigungsdialog „Es läuft bereits
+   ein Timer" erscheint (`.scrim`, kein Toast — dieser Zustand ist zulässig und wird nicht als
+   Treffer gezählt).
+3. Ein `MutationObserver` auf `document.body` protokolliert ab jetzt bei jeder Änderung, ob
+   `.scrim` und `.toast` gleichzeitig existieren (über `page.exposeFunction` an den Testfall
+   zurückgemeldet, E-062 — im Browser gemessen, nicht in einer Nachbildung).
+4. Leistungstext eintragen, „Stoppen und wechseln" bestätigen.
+**Erwartetes Ergebnis:** Nach dem Wechsel stehen zwei Meldungen — „Zeit gebucht auf „A“." und die
+zum Start auf B, der Dialog und seine Abdunklung sind verschwunden. Der Beobachter aus Schritt 3
+hat in keinem Zeitpunkt dazwischen `.scrim` und `.toast` gleichzeitig gesehen. Vor T-118 lag genau
+ein solcher Zustand vor (`setConflict(null)` erst nach dem zweiten Netzumlauf, `await
+startTimer(...)`, siehe `reports/T-118-frontend-dev.md` Abschnitt 2) — seit T-118 liegen
+`setConflict(null)` und die Meldung aus `performStop` im selben Zustandsschritt.
+
+**Ergebnis: bestanden**, 1/1, zweifach reproduziert (isoliert und im vollen `pnpm run test:e2e`).
+
+### TP-TOAST-02 — SC 2.4.7: die älteste von sieben „Erledigt“-Meldungen bleibt im Sichtbaren erreichbar
+
+**Anforderungen:** SC 2.4.7, B-2 aus T-116/T-118 (`.toast-layer` als Rollfläche,
+`docs/testplan.md` Abschnitt 21 hinaus fortgeführt)
+**Ebene:** End-to-End (`tests/e2e/toast-tab-order-scroll.spec.ts`, neu)
+**Vorbedingung:** Sieben eigene Todos, Todo-Liste gefiltert auf diese sieben, „Erledigte
+einblenden" eingeschaltet (sonst verschwindet eine Zeile beim Abhaken aus der Liste, E-039, und der
+Tab-Weg wäre nicht mehr der hier interessante kurze Ausschnitt).
+**Schritte:** Alle sieben Kontrollkästchen nacheinander anhaken. Die Todo-Liste zeigt beim Setzen
+von „Erledigt" eine Meldung **mit** Rückweg (`undoDoneAction`, B-6/B-7 aus T-116/T-118); `evict()`
+überspringt jede Meldung mit Aktion (W-10) — tragen alle sieben eine, wächst der Stapel über
+`MAX_TOASTS = 4` hinaus, keine wird verdrängt. Danach mit der echten Tabulatortaste (kein
+programmatisches `.focus()`) so lange weitertabulieren, bis der Fokus innerhalb einer `.toast`
+steht.
+**Erwartetes Ergebnis:** Der Stapel zeigt alle sieben Meldungen gleichzeitig. Die erste über Tab
+erreichte Meldung ist die älteste (DOM-Reihenfolge = Einfügereihenfolge = Tab-Reihenfolge,
+`evict()` verändert unter den Überlebenden nichts an dieser Reihenfolge). Ihre `boundingBox().y`
+ist nicht negativ — der Browser rollt `.toast-layer` beim Fokussieren sichtbar zurück, der Fokus
+landet nicht außerhalb des Sichtbaren (SC 2.4.7).
+
+**Ergebnis: bestanden**, 1/1, zweifach reproduziert (isoliert und im vollen `pnpm run test:e2e`).
+
+### Kommentarbefund — `outlook-addin-build.spec.ts:113`
+
+Seit T-119 ist das dort beschriebene Element ein `<bdi class="mono">` (Baustein `Foreign`,
+`unicode-bidi: isolate`, E-063), nicht mehr `<span class="mono">`. Der Locator sucht über die
+Klasse (`.mono`) und trifft beide Fassungen unverändert — nur der Kommentar nannte das falsche
+Element. Berichtigt, kein Verhalten geändert.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0 (mehrfach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts --reporter=list --retries=0                1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/timer-switch-scrim-toast.spec.ts --reporter=list --retries=0      1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-tab-order-scroll.spec.ts --reporter=list --retries=0        1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts tests/e2e/timer-switch-scrim-toast.spec.ts \
+  tests/e2e/toast-tab-order-scroll.spec.ts --reporter=list --retries=0        3/3 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.outlook-build.config.ts \
+  --reporter=list --retries=0                                                 2/2
+
+pnpm run test:e2e --reporter=list --retries=0                                 58/58 (1,5 min) —
+                                                                                Vergleichsmarke
+                                                                                56 Fälle (davon
+                                                                                einer rot) nach
+                                                                                Welle J, +2 neue
+                                                                                Fälle, der bis
+                                                                                dahin rote Fall
+                                                                                (`:84`) grün
+```
+
+Port 17843/17844 war vor jedem Lauf frei (`ss -ltnp` geprüft); kein fremder Prozess beendet, kein
+`git commit`/`stash`/`checkout`. Alle neuen Testdaten mit `E2E-`-Präfix, erfunden — keine echten
+Call-Nummern, keine echten Kundennamen.
+
+---
+
+## 23. Nachtrag aus T-130 (Welle L — drei Flächen, nur im Browser prüfbar: Beenden-Frist,
+Benutzername-Sperre, fremder Text im Titel)
+
+Grundlage: `reports/T-124-frontend-dev.md` (Abschnitt 2 O-AJ, Abschnitt 3 O-AF, Abschnitt 4/5
+O-AH, „Nächster Schritt" 1), `decisions.md` E-062 (Bausteine der Oberfläche werden im Browser
+geprüft, nicht in einer Nachbildung) und E-063 (fremder Text wird isoliert und markiert,
+Berichtigung aus T-119: `unicode-bidi: isolate` allein reicht gegen ein bidirektionales
+Formatierungszeichen nicht).
+
+Alle drei Fälle brauchen ein Ereignis oder eine Zeit (E-062) und waren deshalb auf der Musterseite
+nicht messbar — T-124, Abschnitt 5, „Was ich nicht im Browser gemessen habe". Zwei davon (O-AF,
+O-AJ) brauchen zusätzlich eine Momentaufnahme der Tauri-Hülle, die im reinen Entwicklungsbetrieb
+gar nicht existiert: `tests/e2e/support/shell-shim.ts` bildet dafür `__TAURI_INTERNALS__.invoke`
+für `takt_service_handshake`, `takt_os_user`, `takt_shell_state` und `takt_quit` konfigurierbar
+nach — anders als `support/tauri-shim.ts` (eine feste Antwort für das **gebaute** Bündel,
+TP-BUILD-02) mit dem echten Sitzungsnachweis dieses Testlaufs, damit jede sonstige Anfrage
+unverändert gegen den echten, laufenden Dienst aus `services.ts` geht.
+
+### TP-SHELL-01 — „Takt beenden" scheitert nicht mehr stumm
+
+**Anforderungen:** O-AF, F-15, E-036, E-062
+**Ebene:** End-to-End (`tests/e2e/shell-quit-failure.spec.ts`, neu)
+**Vorbedingung:** Hüllen-Nachbildung meldet einen Dienstausfall (`service_exit` gesetzt, ein
+unauffälliger Benutzername) und lässt `takt_quit` **nie** auflösen (`quit: 'hang'`) — die
+Nachbildung des Erfolgsfalls, bei dem `app.exit(0)` den Prozess beendet und die Zusage deshalb nie
+mehr ankommt.
+**Schritte:** `page.clock.install()` vor der Navigation. Die Sperrmeldung zum Dienstausfall
+(`role="alertdialog"`, „Takt kann im Moment nichts speichern") ist sichtbar; „Takt beenden"
+anklicken; `page.clock.fastForward('00:06')` — sechs virtuelle Sekunden gegen die Frist von
+`QUIT_GRACE_MS = 5000`.
+**Erwartetes Ergebnis:** `.quitfail` erscheint mit der Überschrift „Takt ließ sich so nicht
+beenden", dem Satz „Der Beenden-Befehl hat nicht gewirkt: Das Fenster steht noch." (kein
+erfundener Grund, weil nur die Frist ablief, nicht die Zusage abgewiesen wurde), genau **zwei**
+Handlungsschritten (Fenster schließen über Kreuz/`Alt+F4`, sonst `Strg+Umschalt+Esc` zum
+Task-Manager) und dem Satz zur Gefahrlosigkeit. Das Wort „Systembetreuung" kommt **nicht** vor
+(F-15) — wer allein mit Takt arbeitet, hat keine. Die Auskunft steht in der dauerhaft vorhandenen
+`role="status"`-Region (B-5-Regel wie bei `refusal` im Bestätigungsdialog). Der Knopf bleibt danach
+bedienbar (kein dauerhaftes Sperren).
+
+**Ergebnis: bestanden**, 1/1.
+
+### TP-SHELL-02 — der Windows-Name, den niemand ändern kann, sperrt über beide Startwege
+
+**Anforderungen:** O-AJ, B-4.3 Punkt 5, T-122, E-062
+**Ebene:** End-to-End (`tests/e2e/shell-username-lock.spec.ts`, neu, zwei Fälle)
+**Vorbedingung:** Hüllen-Nachbildung meldet `takt_os_user` mit einem erfundenen Namen, der ein RLM
+(U+200F) trägt (`e2e.te<RLM>st`, kein echter Benutzername) — je Fall einmal mit `service_exit:
+null` (Fall 1 aus T-124 Abschnitt 2: Steuerzeichen fangen die Hülle vor dem Start ab) und einmal
+mit `service_exit` gesetzt, Code 78 (Fall 2: der Dienst startet, weist den Namen erst an seiner
+eigenen Tür ab). `readUserNameFinding()` fragt unabhängig vom Sidecar-Zustand immer dieselbe eine
+Frage (`osUser()`) — von außen (ohne `apps/desktop` anzufassen) ist das der Umfang, in dem sich
+„beide Startwege" ohne echten Rust-Prozess unterscheiden lassen.
+**Schritte:** Seite laden; Sperrmeldung suchen; Fokus nach dem Öffnen prüfen; `Tab` und
+`Shift+Tab` drücken; sichtbaren Text des Dialogs auslesen.
+**Erwartetes Ergebnis, in beiden Fällen gleich:** `role="alertdialog"` mit der Überschrift „Takt
+kann unter diesem Windows-Benutzernamen nicht arbeiten", `aria-modal="true"`. Die Sperrmeldung zum
+Dienstausfall erscheint **nicht** daneben — die Meldung zum Benutzernamen hat Vorrang, weil sie
+dessen Ursache ist (`ShellStatus.tsx`, „Zusammenstellung"). Der Fokus liegt nach dem Öffnen auf dem
+einzigen Knopf „Takt beenden"; `Tab` und `Shift+Tab` verlassen den Dialog nicht (SC 2.4.3,
+`keepTabInside`). **Kein** Element im Dialog trägt den Namen, weder mit dem eingebetteten RLM noch
+ohne (er wird beschrieben, nicht angezeigt — Regel 1 im Kopf von `ShellStatus.tsx`). Der Text nennt
+zwei Wege, die jeder Benutzer gehen kann (anderes Konto, Anmeldenamen ändern lassen), die
+Weitergabe an die Systembetreuung steht als Zusatz daneben, nicht an ihrer Stelle (F-15, dieselbe
+Regel wie TP-SHELL-01).
+
+**Ergebnis: bestanden**, 2/2 (beide Startwege).
+
+### TP-BIDI-01 — fremder Text aus dem Bestand: eine Bidi-Überschreibung im Titel
+
+**Anforderungen:** O-AH, E-063, T-119 (Berichtigung), E-062
+**Ebene:** End-to-End (`tests/e2e/foreign-title-display.spec.ts`, neu)
+**Vorbedingung:** Ein Todo, dessen Titel **nicht** über die Tür entstanden ist — `POST /todos`
+weist `Rechnung<RLO>gnp.exe` (RLO = U+202E) mit 422 ab (`titleSchema`, T-122). Über die Tür ein
+sicherer Platzhalter mit `E2E-`-Präfix angelegt, danach der Titel direkt in der SQLite-Datei
+überschrieben (`tests/e2e/support/db.ts#overwriteTodoTitleDirectly`, an der Tür vorbei — der vom
+Auftrag genannte Weg). Der Wortlaut `Rechnung<RLO>gnp.exe` trägt bewusst kein `E2E`-Präfix: Er ist
+der Beleg aus dem Auftrag selbst und bereits eine erfundene Fixtur (die RLO-Tarnung, bei der eine
+`.exe` wie eine `.png` aussieht), kein echter Datei- oder Firmenname. Gefunden wird die Zeile über
+die Teilzeichenkette „gnp.exe" (`?q=gnp.exe`), die in keinem anderen Testtitel vorkommt.
+**Schritte:** Todo-Liste mit dieser Suche öffnen; die Zeile finden; ihren Titel-Baustein gegen den
+Rangetest aus `tests/e2e/support/bidi.ts#rendersLeftToRight` messen (Vorlage: T-124-Bericht,
+Abschnitt 5, Punkt 2 — je Zeichen ein `document.createRange()`, prüft, ob die x-Position mit dem
+logischen Index wächst).
+**Erwartetes Ergebnis:** Der Titel steht in einem `<bdi>` und lautet `Rechnung<U+FFFD>gnp.exe` —
+das RLO ist durch die sichtbare Marke ersetzt (`visibleText`, `@takt/domain`), nicht entfernt (die
+Länge bleibt erhalten). Der Rangetest bestätigt die **tatsächliche** Leserichtung links nach
+rechts — eine Prüfung, die nur das Vorhandensein eines `<bdi>` festgestellt hätte, hätte den
+ursprünglichen Fehler (T-114/T-119: `unicode-bidi: isolate` allein wirkt innerhalb des isolierten
+Blocks gegen ein RLO nicht, UBA X2–X5) nicht gefangen. Zur Gegenprobe außerhalb des Testlaufs
+(siehe Nachweis unten): dieselbe Messung gegen ein `<bdi>` mit dem rohen RLO statt der Marke ergibt
+`false`.
+
+**Ergebnis: bestanden**, 1/1.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/shell-quit-failure.spec.ts --reporter=list --retries=0             1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/shell-username-lock.spec.ts --reporter=list --retries=0            2/2
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/foreign-title-display.spec.ts --reporter=list --retries=0          1/1
+
+pnpm run test:e2e --reporter=list --retries=0                                  61/62, ein
+                                                                                 Fehlschlag in
+                                                                                 `toast-tab-order-
+                                                                                 scroll.spec.ts`
+                                                                                 (T-120, nicht von
+                                                                                 dieser Aufgabe
+                                                                                 angefasst) —
+                                                                                 isoliert erneut
+                                                                                 ausgeführt: 1/1,
+                                                                                 also derselbe
+                                                                                 Nebenläufigkeits-
+                                                                                 fund, den
+                                                                                 `playwright.
+                                                                                 config.ts` selbst
+                                                                                 mit `retries: 1`
+                                                                                 auffängt (Kopf-
+                                                                                 kommentar dort)
+
+pnpm test:e2e (Vorgabewert, retries: 1, zweifach)                               62/62, 62/62 —
+                                                                                 Vergleichsmarke
+                                                                                 58/58 nach
+                                                                                 3f45d51, +4 neue
+                                                                                 Fälle
+```
+
+Gegenprobe außerhalb des committeten Testlaufs (belegt die Trennschärfe des Rangetests, nicht
+Teil von `tests/e2e/**`): ein `<bdi style="unicode-bidi:isolate">` mit dem rohen
+`Rechnung<RLO>gnp.exe` ergibt unter derselben Messung `false`; dasselbe Markup mit
+`Rechnung�gnp.exe` (die Fassung, die `visibleText` erzeugt) ergibt `true`. Ausgeführt über ein
+Wegwerfskript gegen `chromium.launch()`, danach entfernt — im Arbeitsbaum liegt davon nichts
+(dieselbe Bauart wie T-124, Abschnitt 5).
+
+Port 17843/17844 war vor jedem Lauf frei (`ss -ltnp` geprüft); kein fremder Prozess beendet, kein
+`git commit`/`stash`/`checkout`. Ein während eines Laufs beobachteter, augenblicklich
+korrigierter Fehlstart des lokalen Dienstes (`packages/domain/src/characters.ts:187`, ein rohes
+U+202E mitten in der Zeile `export const HIDDEN_MARKER = …` durch eine parallel laufende Änderung
+von domain-dev) ist hier nur als Beobachtung vermerkt, nicht als Befund dieser Aufgabe — die Datei
+gehört nicht meiner Hoheit, ein erneuter Lauf unmittelbar danach war grün, und ich habe daran
+nichts verändert. Alle neuen Testdaten mit `E2E-`-Präfix erfunden, mit der einen im Abschnitt
+begründeten Ausnahme (`Rechnung<RLO>gnp.exe`, selbst eine erfundene Fixtur) — keine echten
+Call-Nummern, keine echten Kundennamen, keine echten Benutzernamen.

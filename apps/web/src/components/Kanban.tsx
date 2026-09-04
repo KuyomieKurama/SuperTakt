@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
 import { DONE_FLAG_LABEL, doneFlagState } from "../lib/labels";
 import { ExportStatusMarker, EXPORT_STATE, type ExportDisplayState } from "./ExportStatus";
@@ -6,6 +7,8 @@ import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
 import { IconButton } from "./Primitives";
 import { TagChip } from "./Tag";
+import { foreignText, quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Kanban-Board — A-5.1, A-5.3 bis A-5.6, E-054.
@@ -13,9 +16,11 @@ import { TagChip } from "./Tag";
  * ## Warum hier nichts mehr gezogen wird
  *
  * Bis E-054 war eine Spalte ein Statuswert, und Ziehen setzte diesen Wert. Seit
- * E-054 ist eine Spalte eine **Regel über Tags**. Eine Regel lässt sich nicht
- * durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von sich aus
- * Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit
+ * E-054 ist eine Spalte eine **Regel**, seit E-055 eine über fünf Bedingungen:
+ * erforderliche Tags, ausgeschlossene Tags, Status, „Erledigt" und
+ * Exportstatus. Eine Regel lässt sich nicht durch Verschieben umkehren, ohne
+ * Tags zu setzen — und dass Takt von sich aus Tags setzt, hat der Auftraggeber
+ * ausgeschlossen. A-5.2 und I-14 sind damit
  * aufgehoben; `draggable`, `DataTransfer` und die Tastaturalternative dazu
  * (SC 2.5.7) stehen deshalb nicht mehr in dieser Datei. Was es nicht gibt,
  * braucht keine Ersatzbedienung.
@@ -34,8 +39,8 @@ import { TagChip } from "./Tag";
  */
 
 export interface KanbanTagRef {
-  readonly label: string;
-  readonly path?: readonly string[];
+  readonly label: ForeignText;
+  readonly path?: readonly ForeignText[];
 }
 
 /**
@@ -65,8 +70,8 @@ export interface KanbanAppearance {
 
 export interface KanbanCardData {
   readonly id: string;
-  readonly title: string;
-  readonly callNumber: string | null;
+  readonly title: ForeignText;
+  readonly callNumber: ForeignText | null;
   readonly tags: readonly KanbanTagRef[];
   /** Bereits formatierte Gesamtdauer, zum Beispiel "4:15 h". */
   readonly trackedDisplay: string;
@@ -79,9 +84,12 @@ export interface KanbanCardData {
    */
   readonly statusName: string;
   /**
-   * Erledigt-Kennzeichen des Todos (A-2.4). Es haengt an keiner Spalte: Eine
-   * Spalte ist eine Regel ueber Tags, und Tags sagen nichts darueber, ob etwas
-   * fertig ist. Ein Todo kann in jeder Spalte stehen und erledigt sein.
+   * Erledigt-Kennzeichen des Todos (A-2.4).
+   *
+   * Es haengt an keiner Spalte — aber eine Spalte darf seit E-055 danach
+   * **fragen**. Steht die Erledigt-Bedingung einer Regel neutral, sagt das
+   * Kennzeichen nichts ueber die Zugehoerigkeit und nur etwas ueber die
+   * Sichtbarkeit; sagt sie etwas, entscheidet es die Zugehoerigkeit mit.
    */
   readonly done: boolean;
   /**
@@ -132,12 +140,17 @@ export function KanbanCard({
       <div className="kcard__main">
         <div className="kcard__top">
           {card.callNumber !== null ? (
-            <span className="kcard__call mono">{card.callNumber}</span>
+            <span className="kcard__call mono">
+              <Foreign value={card.callNumber} />
+            </span>
           ) : null}
           {/* Das Erledigt-Kennzeichen steht auf jeder Karte, auch wenn es
               "offen" lautet. Waere es nur bei "erledigt" da, muesste man es
-              aus der Spalte erschliessen — und eine Spalte ist eine Regel
-              ueber Tags, die darueber nichts sagt. */}
+              aus der Spalte erschliessen — und das geht nicht: Eine Spalte ist
+              eine Regel ueber fuenf Achsen (E-055), und nur **eine** davon
+              fragt nach "Erledigt". Ob diese Spalte es tut, steht der Karte
+              nicht an; in der weit ueberwiegenden Zahl der Faelle sagt die
+              Regel darueber nichts. */}
           <span className={cx("kcard__flag", `kcard__flag--${cardFlagState}`)}>
             <Icon
               name={card.done ? "check" : card.reactivated === true ? "rotate-ccw" : "circle"}
@@ -151,7 +164,7 @@ export function KanbanCard({
 
         <h4 className="kcard__title">
           <button type="button" className="kcard__open" onClick={onOpen}>
-            {card.title}
+            <Foreign value={card.title} />
           </button>
         </h4>
 
@@ -161,12 +174,12 @@ export function KanbanCard({
             className={cx("kcard__also", highlighted && "kcard__also--on")}
             aria-pressed={highlighted}
             onClick={onHighlight}
-            title={`Dieselbe Karte steht auch in: ${others.join(", ")}`}
+            title={`Dieselbe Karte steht auch in: ${others.map(foreignText).join(", ")}`}
           >
             <Icon name="copy" size={12} />
             <span>
               Steht auch in {others.length === 1 ? "" : `${String(others.length)} Spalten: `}
-              {others.map((name) => `„${name}“`).join(", ")}
+              {others.map((name) => `${quotedName(name)}`).join(", ")}
             </span>
           </button>
         ) : null}
@@ -197,7 +210,7 @@ export function KanbanCard({
             fuehrt dorthin. */}
         <p className="kcard__status">
           <span className="kcard__status-label">Status</span>
-          <span className="kcard__status-value">{card.statusName}</span>
+          <Foreign className="kcard__status-value" value={card.statusName} />
         </p>
       </div>
 
@@ -208,8 +221,8 @@ export function KanbanCard({
              Bereich. */
           label={
             card.timerRunning
-              ? `Timer für „${card.title}“ stoppen`
-              : `Timer für „${card.title}“ starten`
+              ? `Timer für ${quotedName(card.title)} stoppen`
+              : `Timer für ${quotedName(card.title)} starten`
           }
           icon={card.timerRunning ? "square" : "play"}
           size="sm"
@@ -218,7 +231,7 @@ export function KanbanCard({
         />
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Aktionen für ${card.title}`}
+          triggerLabel={`Aktionen für ${foreignText(card.title)}`}
           triggerClassName="kcard__menu"
           align="end"
           entries={entries}
@@ -263,7 +276,7 @@ export function ExportSummaryStrip({ summary, className }: ExportSummaryStripPro
 }
 
 export interface KanbanColumnProps {
-  readonly title: string;
+  readonly title: ForeignText;
   /** Geladene Karten dieser Spalte. */
   readonly count: number;
   /**
@@ -272,9 +285,10 @@ export interface KanbanColumnProps {
    */
   readonly total?: number;
   /**
-   * Wie viele der geladenen Todos erledigt sind. Die Spalte sagt darueber
-   * nichts aus — sie ist eine Regel ueber Tags, und Tags sagen nichts ueber
-   * Fertigsein.
+   * Wie viele der geladenen Todos erledigt sind. Ob das etwas ueber die Spalte
+   * aussagt, haengt an ihrer Regel: Nur wenn deren Erledigt-Bedingung etwas
+   * sagt, ist Fertigsein hier eine Bedingung und nicht bloss eine Eigenschaft
+   * der Karten (E-055).
    */
   readonly doneCount?: number;
   /** Die Regel in Worten: warum diese Karten hier stehen (E-054). */
@@ -300,7 +314,7 @@ export function KanbanColumn({
   const full = total ?? count;
   const partial = full > count;
   const accessibleName = [
-    `Spalte ${title}`,
+    `Spalte ${foreignText(title)}`,
     partial ? `${String(count)} von ${String(full)} Karten geladen` : `${String(full)} Karten`,
     doneCount === 0 ? null : `davon ${String(doneCount)} erledigt`,
   ]
@@ -311,7 +325,9 @@ export function KanbanColumn({
     <section className="kcolumn" aria-label={accessibleName}>
       <header className="kcolumn__head">
         <div className="kcolumn__heading">
-          <h3 className="kcolumn__title">{title}</h3>
+          <h3 className="kcolumn__title">
+            <Foreign value={title} />
+          </h3>
           {doneCount > 0 ? (
             <p className="kcolumn__done-count" aria-hidden>
               <Icon name="check" size={11} />
@@ -324,7 +340,7 @@ export function KanbanColumn({
         </span>
         {onAdd !== undefined ? (
           <IconButton
-            label={addLabel ?? `Todo in ${title} anlegen`}
+            label={addLabel ?? `Todo in ${foreignText(title)} anlegen`}
             icon="plus"
             size="sm"
             onClick={onAdd}
@@ -332,7 +348,7 @@ export function KanbanColumn({
         ) : null}
         <Menu
           trigger={<Icon name="more-horizontal" size={16} />}
-          triggerLabel={`Spalte ${title} verwalten`}
+          triggerLabel={`Spalte ${foreignText(title)} verwalten`}
           triggerClassName="kcolumn__menu"
           align="end"
           entries={entries}

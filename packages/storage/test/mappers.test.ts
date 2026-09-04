@@ -9,13 +9,19 @@
 import { describe, expect, it } from 'vitest';
 import type { SqlRow } from '../src/sqlite/database.ts';
 import {
+  RULE_REFERENCE_LIMIT,
+  RULE_REFERENCE_PROBE,
   asTimestamp,
+  poolReference,
+  poolReferences,
   toAppSettings,
   toDefaultTag,
   toExportAuditEntry,
   toExportRun,
   toExportTemplate,
   toPool,
+  toPoolCompletion,
+  toPoolExportState,
   toPoolRuleTerm,
   toRoundingMode,
   toRunningTimeEntry,
@@ -136,6 +142,39 @@ describe('toPool / toPoolRuleTerm', () => {
   it('toPoolRuleTerm: tag_id gesetzt ergibt einen Tag-Term, sonst einen Ordner-Term', () => {
     expect(toPoolRuleTerm({ tag_id: 'tag-1', folder_id: null })).toEqual({ kind: 'tag', tagId: 'tag-1' });
     expect(toPoolRuleTerm({ tag_id: null, folder_id: 'folder-1' })).toEqual({ kind: 'folder', folderId: 'folder-1' });
+  });
+});
+
+describe('toPoolCompletion / toPoolExportState — die Erledigt- und Exportstatus-Achse einer Regel (T-076)', () => {
+  it('toPoolCompletion: "done" und "open" bleiben, jeder andere Wert (auch undefined) wird zum Neutralwert "any"', () => {
+    expect(toPoolCompletion('done')).toBe('done');
+    expect(toPoolCompletion('open')).toBe('open');
+    expect(toPoolCompletion('garbage')).toBe('any');
+    expect(toPoolCompletion(undefined)).toBe('any');
+  });
+
+  it('toPoolExportState: "open" und "exported" bleiben, jeder andere Wert (auch undefined) wird zum Neutralwert "any"', () => {
+    expect(toPoolExportState('open')).toBe('open');
+    expect(toPoolExportState('exported')).toBe('exported');
+    expect(toPoolExportState('garbage')).toBe('any');
+    expect(toPoolExportState(undefined)).toBe('any');
+  });
+
+  it('toPool liest completion und exportState über genau diese beiden Funktionen (kein zweiter Übersetzungsweg)', () => {
+    const row: SqlRow = {
+      id: 'p',
+      name: 'Pool',
+      match_mode: 'any',
+      include_subfolders: 0,
+      position: 1,
+      completion: 'done',
+      export_state: 'exported',
+      created_at: 'a',
+      updated_at: 'b',
+    };
+    const pool = toPool(row, []);
+    expect(pool.completion).toBe('done');
+    expect(pool.exportState).toBe('exported');
   });
 });
 
@@ -304,5 +343,106 @@ describe('toAppSettings', () => {
 describe('toDefaultTag', () => {
   it('übersetzt Kennung und Position', () => {
     expect(toDefaultTag({ tag_id: 'tag-1', position: 3 })).toEqual({ tagId: 'tag-1', position: 3 });
+  });
+});
+
+/**
+ * T-105 (Auftrag aus `reports/T-101-domain-dev.md`, R-3a H-3): `poolReference`
+ * und `poolReferences` waren vor dieser Ergänzung von keinem Test benannt —
+ * nur über die echte Datenbank in `repo-tags-folder-in-rule.test.ts` indirekt
+ * mitgelaufen. Diese Datei prüft beide Funktionen rein, ohne SQL.
+ *
+ * `poolReferences` bekommt `rows` mit `LIMIT RULE_REFERENCE_PROBE`
+ * (`RULE_REFERENCE_LIMIT + 1`) übergeben — eine Zeile mehr, als sie zeigt, um
+ * die Kürzung zu BEMERKEN. Getestet wird deshalb genau an der Grenze: 20
+ * Zeilen (keine Kürzung) gegen 21 Zeilen (Kürzung auf 20 plus Hinweistext).
+ */
+describe('poolReference — ein einzelner Regelverweis für `details`', () => {
+  it('bildet { id, name } auf { field, code: "pool_rule", name, message: \'Regel „…“\' } ab (W-11, T-107)', () => {
+    expect(poolReference({ id: 'pool-1', name: 'Abrechnung' })).toEqual({
+      field: 'pool-1',
+      code: 'pool_rule',
+      name: 'Abrechnung',
+      message: 'Regel „Abrechnung“',
+    });
+  });
+
+  /**
+   * Der vollständige Vertrag aus `reports/T-107-domain-dev.md` Abschnitt
+   * „Der Vertrag, den andere Hoheiten brauchen", Punkt 2: `field`, `code:
+   * 'pool_rule'`, `name` und `message` stehen alle vier da — kein fünftes
+   * Feld, keines der vier fehlt. `name` ist der BLOSSE Name (kein
+   * Gattungswort, keine Anführungszeichen), `message` bleibt zeichengleich
+   * mit der Fassung von vor W-11 (rein additiv, `errorText.ts` bleibt
+   * gültig).
+   *
+   * `name` ist NIE leer: `poolReference` bildet ihn direkt aus der
+   * Datenbankspalte `pool.name`, und die ist NOT NULL und über
+   * `nameSchema`/`ux_pool_name` UNIQUE NOCASE gegen den Leerstring
+   * abgesichert (`http/input.ts`, `packages/storage/src/sqlite/migrations`).
+   * Fehlt der Name, fehlt laut Vertrag das ganze Feld (`name?: string` an
+   * `TaktFieldError`) — `poolReference` hat aber keinen Zweig, der das Feld
+   * wegließe: Diese Funktion liefert es IMMER, und immer nicht-leer.
+   */
+  it('der vollständige Vertrag: field, code, name und message stehen alle da, name ist nie leer', () => {
+    const result = poolReference({ id: 'pool-2', name: 'Nord' });
+
+    expect(Object.keys(result).sort()).toEqual(['code', 'field', 'message', 'name']);
+    expect(result).toEqual({
+      field: 'pool-2',
+      code: 'pool_rule',
+      name: 'Nord',
+      message: 'Regel „Nord“',
+    });
+    expect(result.name).toBeTruthy();
+    expect(result.name).not.toBe('');
+  });
+});
+
+describe('poolReferences — Obergrenze der genannten Regeln (R-3a H-3: 21 geholt, 20 genannt, Hinweis im Text)', () => {
+  const row = (n: number): SqlRow => ({ id: `pool-${String(n)}`, name: `Regel ${String(n)}` });
+
+  it('RULE_REFERENCE_LIMIT ist 20, RULE_REFERENCE_PROBE ist genau eins mehr (21)', () => {
+    expect(RULE_REFERENCE_LIMIT).toBe(20);
+    expect(RULE_REFERENCE_PROBE).toBe(21);
+  });
+
+  it('eine leere Liste ergibt keine details und keinen Hinweistext', () => {
+    expect(poolReferences([])).toEqual({ details: [], notice: '' });
+  });
+
+  it('fünf Zeilen: alle fünf erscheinen, kein Hinweistext', () => {
+    const rows = [row(1), row(2), row(3), row(4), row(5)];
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(5);
+    expect(result.notice).toBe('');
+  });
+
+  it('GENAU 20 Zeilen (die Grenze selbst): alle 20 erscheinen, noch KEIN Hinweistext — rows.length > LIMIT ist an dieser Stelle falsch', () => {
+    const rows = Array.from({ length: RULE_REFERENCE_LIMIT }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(20);
+    expect(result.notice).toBe('');
+  });
+
+  it('21 Zeilen (RULE_REFERENCE_PROBE, der Fall, für den die Abfrage eine Zeile mehr holt): genannt werden die ERSTEN 20, mit Hinweistext', () => {
+    const rows = Array.from({ length: RULE_REFERENCE_PROBE }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+
+    expect(result.details).toHaveLength(20);
+    // Die ersten 20 in der Reihenfolge der Zeilen — nicht die letzten 20 und
+    // nicht ungeordnet.
+    expect(result.details.map((entry) => entry.field)).toEqual(
+      Array.from({ length: 20 }, (_, i) => `pool-${String(i + 1)}`),
+    );
+    expect(result.details.some((entry) => entry.field === 'pool-21')).toBe(false);
+    expect(result.notice).toBe(' Es sind mehr als 20; genannt werden die ersten 20.');
+  });
+
+  it('22 Zeilen (mehr als die Probe) ergeben denselben Hinweistext wie 21 — der Text nennt die Grenze, nicht die tatsächliche Überzahl', () => {
+    const rows = Array.from({ length: 22 }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(20);
+    expect(result.notice).toBe(' Es sind mehr als 20; genannt werden die ersten 20.');
   });
 });

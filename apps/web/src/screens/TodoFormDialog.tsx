@@ -1,3 +1,4 @@
+import { enumerateNames } from "@takt/domain";
 import { useEffect, useState } from "react";
 import { createTag, createTodo, updateTodo } from "../api/endpoints";
 import type { Id, Tag, Todo } from "../api/types";
@@ -9,6 +10,7 @@ import { useMutation } from "../app/useAsync";
 import { useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useRefresh } from "../app/RefreshContext";
+import { quotedName } from "../lib/foreign";
 
 /**
  * Takt — Todo anlegen und ändern (I-01, I-02).
@@ -25,13 +27,6 @@ import { useRefresh } from "../app/RefreshContext";
  * vorzuwählen hieße, dieselbe Regel zweimal zu führen; der Hinweistext sagt
  * stattdessen, dass sie hinzukommen.
  */
-
-/** „A“, „A und B“, „A, B und C“ — eine Aufzählung, die man vorlesen kann. */
-function quoteList(names: readonly string[]): string {
-  const quoted = names.map((name) => `„${name}“`);
-  if (quoted.length <= 1) return quoted.join("");
-  return `${quoted.slice(0, -1).join(", ")} und ${quoted[quoted.length - 1] ?? ""}`;
-}
 
 export interface TodoFormDialogProps {
   readonly open: boolean;
@@ -120,13 +115,13 @@ export function TodoFormDialog({
         const fresh = (created.createdTags ?? []).map((tag) => tag.name);
 
         toasts.success("Todo angelegt.", [
-          `„${created.todo.title}“ ist gespeichert.`,
+          `${quotedName(created.todo.title)} ist gespeichert.`,
           fresh.length === 0
             ? null
-            : `Neu angelegt ${fresh.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${quoteList(fresh)}.`,
+            : `Neu angelegt ${fresh.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${enumerateNames(fresh)}.`,
           added.length === 0
             ? null
-            : `Als Standard-Tag ${added.length === 1 ? "kam" : "kamen"} ${quoteList(added)} hinzu.`,
+            : `Als Standard-Tag ${added.length === 1 ? "kam" : "kamen"} ${enumerateNames(added)} hinzu.`,
         ]
           .filter((part): part is string => part !== null)
           .join(" "));
@@ -160,8 +155,8 @@ export function TodoFormDialog({
       toasts.success(
         "Todo geändert.",
         freshTags.length === 0
-          ? `„${saved.title}“ ist gespeichert.`
-          : `„${saved.title}“ ist gespeichert. Neu angelegt ${freshTags.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${quoteList(freshTags.map((tag) => tag.name))}.`,
+          ? `${quotedName(saved.title)} ist gespeichert.`
+          : `${quotedName(saved.title)} ist gespeichert. Neu angelegt ${freshTags.length === 1 ? "wurde das Tag" : "wurden die Tags"} ${enumerateNames(freshTags.map((tag) => tag.name))}.`,
       );
       onSaved?.(saved);
       onClose();
@@ -206,7 +201,7 @@ export function TodoFormDialog({
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
-        hint="Der Status ist keine Kanban-Spalte — auf dem Board entscheiden die Tags. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
+        hint="Der Status ist keine Kanban-Spalte — eine Spalte ist eine Regel, und der Status ist eine von fünf Bedingungen, die sie abfragen kann. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
       />
 
       <TagInput

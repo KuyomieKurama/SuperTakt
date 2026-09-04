@@ -93,18 +93,135 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Erledigt aufheben beim Start | `time-entry.ts` → `determineReopen` | A-2.5, E-023 |
 | Verwaiste Buchung | `time-entry.ts` → `decideOrphanedTimer` | E-036 |
 | Zyklusprüfung beim Verschieben | `tag.ts` → `checkFolderMove` | A-4.6, E-022 |
-| Pool-Zugehörigkeit aus Tags | `tag.ts` → `matchesPool` | A-3.2, A-3.4 |
+| Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `tag.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
+| Nennt eine Regel überhaupt eine Bedingung? | `tag.ts` → `poolRuleIsEmpty` | A-3.4, E-055, T-080 |
+| Trifft eine Regel von vornherein nichts? | `tag.ts` → `poolRuleMatchesNothing` | A-3.4, E-057, T-082 |
+| Zeigt eine Tagachse nach dem Auflösen ins Leere? | `tag.ts` → `tagAxisIsUnresolved` | E-057, T-082 |
+| Was eine Regel nach dem Auflösen ergibt | `tag.ts` → `resolvePool` | T-080, E-057 |
 | Dieselbe Karte in mehreren Kanban-Spalten | `board.ts` → `boardAppearances` | E-054 |
 | Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
 | Plausibilisierung der Call-Nummer | `call-number.ts` → `checkCallNumber` | E-045, B-4.3, R-15 |
+| Der Satz über die Bewegung durch die Pools | `pool-movement.ts` → `poolMovementSentence` | E-056, E-058 |
+| Welche Zeichen in einem Namen nichts zu suchen haben | `characters.ts` → `hasForbiddenNameCharacter` | R-3a H-2, E-063 |
+| Fremden Text bereinigen und anzeigen | `characters.ts` → `dropHiddenCharacters`, `visibleText` | E-063 |
+| Namen deutsch aufzählen: „A“, „A und B“, „A, B und C“ | `enumeration.ts` → `enumerateNames` | E-058 Punkt 4 |
 
-Die letzte Zeile ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
+Die Zeile zum Bewegungssatz ist mit T-089 dazugekommen, und sie war die erste der Tabelle, die
+keine Fachregel enthält, sondern einen **Text**. Sie steht trotzdem hier und aus demselben Grund wie
+alles andere: Der Satz muss an zwei Flächen zeichengleich sein — in der Hauptanwendung und im
+Aufgabenbereich des Add-ins —, und er war es auf die schlechte Weise. „Die Karte bleibt, wo sie
+ist" stand als Abschrift in beiden und war seit E-055 falsch: Eine Kanban-Spalte ist eine Regel
+und entscheidet auch über „Erledigt" und über den Exportstatus, und beides ändert ein Timerstart.
+Ein Text, den zwei Flächen gleich sagen müssen, hat genau eine Quelle (E-058).
+
+Die Rechnung dazu — welche Pools ein Todo betritt und verlässt — ist **keine** Domänenfunktion,
+sondern ein Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`): Sie braucht die
+aufgelösten Regeln und damit den Port. Die Entscheidung selbst fällt trotzdem in `matchesPool`;
+der Anwendungsfall hält sie nur zweimal gegen dasselbe Todo, einmal für den Zustand davor und
+einmal für den danach.
+
+**Der Satz nennt Namen und kein Gattungswort** (E-058 Punkt 4, T-093): „Es erscheint dann wieder
+in „Ost“.", nicht „in dem Pool „Ost“". Die drei Listen tragen Namen, aber keine Fläche — und seit
+E-054 kann derselbe Name eine Kanban-Spalte bezeichnen, einen Pool oder bei `placement: both`
+beides. Eine Funktion, die das Gattungswort setzt, rät. Der Satz ohne jeden Treffer nennt
+folgerichtig **beide** Flächen: „… es erscheint danach in keinem Pool und in keiner Spalte."
+
+**Die Bewegung liefert nicht ein Vorgang, sondern jeder, der eine der fünf Achsen einer Regel
+umlegt** — die vollzogene Handlung ebenso wie die angekündigte im Aufgabenbereich des Add-ins
+(E-058 Punkt 6, E-060, E-061, T-093), jeweils als `poolMovement` oder `null`. Eine benannte
+Ausnahme gibt es, und sie steht weiter unten in diesem Abschnitt: `PATCH /time-entries/{id}`.
+
+**Eine Zahl steht hier bewusst nicht**, und auch keine Aufzählung: An dieser Stelle stand erst
+„drei", und sie wäre jetzt „acht" — zweimal ist ein Vorgang dazugekommen und hat die Zahl
+stehenlassen, wo sie war (B-9 aus T-116). Vollständig geführt wird die Aufzählung an **genau
+einer** Stelle, am Bauteil `PoolMovement` in `apps/local-api/openapi/takt-local-api.yaml`; wer
+einen Vorgang hinzufügt, hängt dort eine Zeile an. Diese Beschreibung nennt das Kriterium und
+zählt nicht mit.
+
+Zwei Wege führen zur ersten abgeschlossenen Buchung, und sie sind ungleich wichtig: Der Timerstart
+ist der Sonderweg — er lässt sie nur entstehen, wenn er einen Timer desselben Todos verdrängt. Der
+Regelweg ist der Stopp, und dort setzt die erste Buchung „hat offene Buchungen" von falsch auf
+wahr; jede Spalte mit `exportState: open` nimmt das Todo damit auf. Wer am Start eine Auskunft
+gibt und am Stopp schweigt, sagt die halbe Wahrheit. Gerechnet wird nur, wenn sich etwas bewegt
+haben **kann**: Sonst steht `null` da, und keine Ordnerauflösung läuft.
+
+Die Zeile davor ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
 entscheidet mit, ob das Duplikatangebot aus A-10.9 auf den **richtigen Kundenvorgang** zeigt.
 Trifft sie falsch, wird Arbeitszeit auf ein fremdes Todo gebucht und landet auf einer fremden
 Rechnung (R-15). Eine Regel, die über Geld entscheidet, existiert einmal und wird aufgerufen,
 statt nachgebaut zu werden. Bis T-019 stand sie zweimal — im Add-in als Bedienhilfe, im Dienst
 als Vertrauensgrenze — mit einem Wächter dagegen; E-045 hat das aufgelöst.
+
+**Die zweite und dritte Zeile sind mit T-080 dazugekommen, und der Grund ist derselbe.** „Ist
+diese Regel leer?" stand zu diesem Zeitpunkt dreimal da: in `matchesPool`, in der Übersetzung
+nach SQL (`repo-todos.ts`) und in `apps/web/src/lib/poolRule.ts`, wo der frontend-dev sie
+nachbilden musste, weil die Antwort über keine Route kam. Alle drei Fassungen waren richtig, und
+genau das war das Gefährliche: Solange sie übereinstimmen, merkt niemand, dass es drei sind.
+
+Jetzt stellt die Frage jeder an derselben Stelle. Die Oberfläche ruft `poolRuleIsEmpty`
+unmittelbar auf — auch für den **Entwurf** im Formular, den noch keine Route gesehen hat, und
+genau deshalb ist die Antwort **keine** Auskunft des Dienstes geworden: Ein Feld an der Antwort
+hätte den gespeicherten Pool beantwortet und den Entwurf nicht, und die Oberfläche hätte für den
+Entwurf doch wieder selbst gerechnet.
+
+Was der Aufrufer **nicht** selbst wissen kann, ist die Auflösung der Ordner. Sie steht deshalb
+als `resolved` an jeder ausgelieferten Regel (`PoolWithResolution`): zwei Zahlen und vier
+Wahrheitswerte. Ohne sie sieht ein Ordner ohne Tags aus wie eine Regel, auf die im Augenblick
+nichts passt — und nur der erste Fall ist ein Einrichtungsfehler, der von selbst nie vergeht.
+
+**Die vierte und fünfte Zeile sind mit T-082 dazugekommen, und sie beheben den Befund aus T-080.**
+Eine leere Tagmenge galt als Neutralwert der Achse. Ein Ordnerterm über einen leeren Ordner löste
+auf die leere Menge auf und **verschwand damit aus der Regel**: „Tags aus Ordner X **und** Status
+offen" wurde zu „Status offen", in `matchesPool` wie in der Übersetzung nach SQL. Die Regel traf
+mehr, als der Benutzer gesagt hatte — die Richtung, die niemandem auffällt.
+
+Seit E-057 ist ein solcher Term eine **Einschränkung ohne Treffer**: Die Regel trifft nichts,
+unabhängig vom Modus und von den übrigen Achsen. Entschieden wird das in
+`poolRuleMatchesNothing`, und beide Fassungen der Regel rufen es auf — die Domäne und die
+Übersetzung nach SQL, die dafür `0 = 1` setzt. Ausgeschlossene Tags über einen leeren Ordner
+schließen dagegen nichts aus; „keiner davon" über nichts lässt in Ruhe.
+
+Gefragt wird **termweise**: Ein leerer Ordner **neben** einem Tagterm bleibt eine Einschränkung
+ohne Treffer, obwohl die Achsensumme (`resolved.tagCount`) dann positiv ist. Dafür trägt die
+rekursive Auflösung die Wurzel mit, von der sie ausgegangen ist, und die Antwort nennt die leeren
+erforderlichen Ordner (`resolved.emptyRuleFolderIds`) — damit die Oberfläche **welcher** sagen
+kann, ohne die Ordnerrekursion ein zweites Mal zu schreiben.
+
+Die Absicherung dagegen, dass die beiden wieder auseinanderlaufen, ist der Typ:
+`ResolvedPoolRuleAxes` verlangt die Angabe `unresolvedRequired` ohne Vorgabewert, und wer eine
+aufgelöste Regel beurteilt, muss sie hersagen. `pnpm proof:openapi` Abschnitt 14 mißt die Folge am
+laufenden Dienst — eine Spalte „leerer Ordner **und** Status" bleibt leer, die Gegenprobe mit dem
+Ausschluß über denselben Ordner nicht.
+
+**Wodurch das rot wird.** `PoolRuleAxes` zählt die Achsen auf, und die Tabelle darüber ist über
+diesen Typ abgebildet: Eine sechste Achse lässt `tsc` in der Domäne, in `packages/storage` und im
+Dienst fehlschlagen — gemessen, nicht behauptet. `POOL_RULE_AXIS_OF_FIELD` schließt die
+Gegenrichtung: Ein neues Feld an der Regelseite von `matchesPool` verlangt die Angabe, zu welcher
+Achse es gehört. Und `pnpm proof:openapi` Abschnitt 13 hält die Aufzählung der Domäne gegen die
+Beschreibung, gegen die Eingabeprüfung beider Routen und gegen die ausgelieferten Antworten.
+
+**Die drei letzten Zeilen sind mit T-122 dazugekommen, und sie stehen aus derselben Begründung
+hier — eine Ebene tiefer.** Es sind eine Zeichenmenge und eine Aufzählungsform, keine Regeln über
+Zeit oder Geld. Beide waren mehrfach im Baum, und beide sind auseinandergelaufen:
+
+- **Die Zeichenklasse** stand an der Tür des Dienstes (`http/input.ts`) und als Abschrift im
+  Add-in. T-117 hat die eine um drei Richtungsmarken erweitert, die andere nicht — und der
+  Nachweis, der genau das verhindern sollte, prüfte gegen eine kopierte Liste und blieb grün
+  (E-063 Punkt 4, gefunden in T-119). Sie liegt jetzt in `characters.ts`; Dienst und Add-in lesen
+  sie dort. Denselben Ort teilen sich die drei Behandlungen derselben Menge, weil sie **eine**
+  Regel sind und nicht drei: Was der Benutzer eingegeben hat, wird abgewiesen; ein Vorschlag aus
+  fremder Quelle wird bereinigt; eine Anzeige markiert (E-063).
+- **Die Aufzählung** lag privat in `pool-movement.ts`, also unerreichbar, und war in der
+  Hauptanwendung zum dritten Mal nachgebaut. Eine frühere Abschrift hatte bei drei Namen „A und B
+  und C" ergeben.
+
+Eine Zeichenklasse in der Domäne ist kein Widerspruch zu E-001: Sie kennt weder HTTP noch SQL. Was
+**nicht** mitgezogen ist, ist die Bindung an zod — die bleibt im Dienst, weil sie eine Eigenschaft
+der Tür ist und keine der Regel. Dieselbe Grenze gilt in die andere Richtung: Der lokale Dienst
+prüft seit T-122 auch den Windows-Benutzernamen aus der `stdin`-Zeile der Hülle gegen diese Klasse
+(O-AE). Das ist eine andere Grenze — kein `422`, sondern ein Dienst, der nicht startet —, aber
+dieselbe Regel; der Name geht unverändert in die Exportdatei (A-8.5).
 
 **Die eine Ausnahme von der Reinheit, und wie sie eingehegt ist.** `toCalendarDay` braucht eine
 Zeitzone, denn der Kalendertag einer Buchung ist der Tag an der Wand des Benutzers und nicht der
@@ -249,17 +366,47 @@ noch das Aufheben von Erledigt ändert den Status. Deshalb gibt es keine gemerkt
 konfigurierte Rückkehr-Spalte — es gäbe nichts wiederherzustellen, und `todo` führt kein Feld
 dafür.
 
-Seit E-054 gilt das doppelt: Die **Kanban-Spalte** ist ohnehin nicht mehr der Status, sondern
-eine Regel über Tags. Ein Timerstart, der „Erledigt" aufhebt, ändert weder Status noch Tags — die
-Karte steht danach in denselben Spalten wie zuvor, ohne dass etwas geschrieben worden wäre.
+Seit E-054 gilt das für den **Status**: Die Kanban-Spalte ist nicht mehr der Status, sondern eine
+Regel — und seit E-055 hat diese Regel fünf Achsen, nicht nur Tags: erforderliche Tags,
+ausgeschlossene Tags, Status, Erledigt und Exportstatus. Ein Timerstart schreibt weder Status noch
+Tags, und **trotzdem kann die Karte danach in anderen Spalten stehen**: Er hebt „Erledigt" auf
+(A-2.5), und stoppt er dabei einen Timer desselben Todos, entsteht die erste offene Buchung. Beides
+sind Achsen. Die Karte bleibt also genau so lange, wo sie ist, wie keine Regel nach „Erledigt" oder
+nach dem Exportstatus fragt.
 
-**Die Pool-Zugehörigkeit wird nicht angefasst.** Sie ist abgeleitet (A-3.4). Schritt 2 ändert
+**Was daraus folgt, wird berechnet und nicht geraten.** `apps/local-api/src/usecases/pool-movement.ts`
+hält jede Regel gegen den Zustand vor und nach der Handlung und liefert `{ appears, enters, leaves }`;
+die Routen geben das als `poolMovement` heraus (E-058, E-060), den Satz dazu bildet
+`poolMovementSentence` aus der Domäne. Bis T-101 stand an dieser Stelle „die Karte steht danach in
+denselben Spalten wie zuvor" — derselbe Irrtum, den :105-113 zweihundert Zeilen weiter oben als
+Irrtum beschreibt (R-2a W-4, D-3 aus R-2).
+
+**Die Pool-Zugehörigkeit wird nicht geschrieben.** Sie ist abgeleitet (A-3.4); Schritt 2 ändert
 allein `completed_at`. A-2.5 trägt die Sichtbarkeit: Erledigte Todos werden in Pool-Ansichten
-ausgeblendet (`IsVisibleInPool` in `packages/domain/src/tag.ts`), aktive nicht. Fällt das
-Kennzeichen, fällt die Ausblendung, und das Todo erscheint ohne weiteren Schritt wieder in
-seinen Pools, weil es sie nie verlassen hat. Nachgewiesen im Migrationstest: ein Todo bleibt
-Mitglied seines Pools, während es erledigt ist, und ist nach dem Timerstart sofort wieder in der
+ausgeblendet (`isVisibleInPool` in `packages/domain/src/tag.ts`), aktive nicht. Fällt das
+Kennzeichen, fällt die Ausblendung, und das Todo erscheint ohne einen einzigen Schreibvorgang
+wieder dort, wo seine Regel es hinstellt. Nachgewiesen im Migrationstest: ein Todo bleibt Mitglied
+seines Pools, während es erledigt ist, und ist nach dem Timerstart sofort wieder in der
 Ergebnisliste.
+
+Das gilt für das Umlegen des Kennzeichens **von Hand** genauso: `PUT` und
+`DELETE /todos/{todoId}/done` liefern seit E-060 dasselbe `poolMovement`. Wer an einer Stelle
+Auskunft gibt und an der anderen schweigt, sagt die halbe Wahrheit.
+
+Und für die **Buchung von Hand** ebenso: `POST /time-entries` kann die erste abgeschlossene
+Buchung eines Todos sein und legt damit die Exportachse um — dieselbe Bewegung, die
+`POST /timer/stop` ansagt, nur über einen anderen Knopf ausgelöst (E-061 Nachtrag, O-V). Sie
+rechnet deshalb mit demselben Zustandspaar wie der Stopp (`closedEntryMovementStates`) und nicht
+mit dem der Add-in-Buchung: Diese Route schreibt `completed_at` nicht, ein erledigtes Todo bleibt
+also erledigt.
+
+`PATCH /time-entries/{id}` trägt das Feld **nicht** — die Begründung dafür ist aber nicht, dass die
+Route nur „einen Zeitraum oder eine Leistung" ändere. Sie nimmt auch `todoId` entgegen
+(`apps/local-api/src/routes/time.ts`) und hängt die Buchung damit um: Verliert das abgebende Todo
+seine letzte offene Buchung und bekommt das aufnehmende seine erste, bewegen sich **zwei** Todos,
+und zwar in entgegengesetzte Richtungen. Ein Feld für **eine** Bewegung kann das nicht tragen.
+Welche Antwort an diese Stelle gehört, ist offen (**O-X**, beim Auftraggeber); bis dahin schweigt
+die Route bewusst, statt die halbe Bewegung zu melden.
 
 **Der Timer hinterlässt im Betrieb ein Lebenszeichen** (E-036), mindestens jede Minute, in
 `timer_heartbeat` und nicht auf der Buchung selbst. Endet die Anwendung ungeordnet, findet der
@@ -790,6 +937,28 @@ T-039 — dort als Feld, das die *Beschreibung* führte und der Dienst nicht las
 damals, es aus der Beschreibung zu streichen. Dass zugleich die *Oberfläche* es sendete, hat
 niemand gesehen, weil niemand danach gesehen hat.
 
+### 5.0b Was im Baum steht, muss ein Mensch lesen können (T-128)
+
+`pnpm proof:codepoints` (`apps/local-api/scripts/proof-codepoints.mjs`) läuft über jede Datei,
+die Git führt oder als neu und nicht ausgeschlossen kennt, und beanstandet **rohe** Steuer- und
+Richtungszeichen. Der Anlass steht im Kopf der Datei: Fünf Aufgaben in fünf Wellen sind über
+dasselbe Zeichen gestolpert, zuletzt die, die es beheben sollte, und dann noch dieser Lauf beim
+ersten Durchgang über sich selbst — er fand drei rohe `U+0000` in seinem eigenen Quelltext.
+
+Der Schaden ist zweierlei und beides gemessen: Ein `U+0000` in den ersten 8000 Bytes macht die
+Datei für Git zu einer **Binärdatei**, und damit liegt sie in keinem Diff und in keinem Review
+mehr vor (`paging.ts` war zwischen `d9555d0` und T-126 genau in diesem Zustand). Ein `U+202E`
+dreht die Zeile um, die ein Mensch liest — dieselbe Bauart, gegen die `characters.ts` den
+Benutzer schützt, nur diesmal gegen den Prüfer.
+
+Die Klasse kommt aus `FORBIDDEN_NAME_CHARACTERS` in `@takt/domain` und wird nicht abgeschrieben
+(E-063 Punkt 4). Der Unterschied zur Namensklasse wird **gerechnet**: Tabulator und Zeilenumbruch
+ab, `U+200B`–`U+200D` und die Bytefolgenmarke dazu; der Wagenrücklauf ist erlaubt, wenn ein
+Zeilenumbruch folgt. Dass der Zusatz kein zweiter Träger derselben Aussage ist, prüft der Lauf,
+statt es zuzusichern. Ausnahmen nennen Pfad, Codepunkt, **Anzahl** und Grund — eine Ausnahme, die
+nicht mehr genau so oft zutrifft, wird rot, und eine, die gar nicht mehr zutrifft, ebenfalls. Die
+Liste ist leer.
+
 ### 5.1 Ressourcenschnitt
 
 Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein Verb im Pfad.
@@ -802,13 +971,13 @@ Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein 
 | `/tag-tree` | Ganzer Baum in einem Aufruf (A-10.4). Kein Aufruf je Ebene |
 | `/tags`, `/tag-folders` | |
 | `/tag-folders/{id}/move` | Eigene Route, weil eine fachliche Prüfung daran hängt und der Fehlerfall ein eigener ist (A-4.6) |
-| `/pools`, `/pools/{id}/todos` | Mitglieder abgeleitet (A-3.4). Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**: `placement` (`pool`/`board`/`both`) sagt, wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an; `GET /pools` liefert ohne Angabe die Pool-Liste |
+| `/pools`, `/pools/{id}/todos` | Mitglieder abgeleitet (A-3.4). Seit E-054 ist eine **Kanban-Spalte dieselbe Entität**: `placement` (`pool`/`board`/`both`) sagt, wo eine Regel erscheint. Wer eine Spalte anlegt, legt hier an; `GET /pools` liefert ohne Angabe die Pool-Liste. Jede ausgelieferte Regel trägt seit T-080 ihre Auflösung (`resolved`) |
 | `/board` | Das Kanban-Board, nur lesend (E-054). Die Spalten in ihrer Reihenfolge, je Spalte die erste Seite, und die Karten, die in **mehr als einer** Spalte stehen. Kein `PUT`, das eine Karte verschiebt: Ziehen ist mit E-054 entfallen, weil sich eine Regel nicht durch Verschieben umkehren lässt, ohne Tags zu setzen. Weiter geblättert wird je Spalte über `/pools/{id}/todos` — eine Spalte ist ein Pool |
 | `/todo-statuses`, `/todo-statuses/order` | Der **Status** eines Todos, seit E-054 nicht mehr die Kanban-Spalte. Reihenfolge vollständig, nicht in Teilstücken |
 | `/time-entries` | |
 | `/time-entries/{id}/export-status` | Nur nach `open` setzbar (E-012) |
 | `/time-entries/{id}/not-billed` | Ausbuchen ohne Abrechnung (E-047). Eigener Vorgang, eigener Ereignistyp im Protokoll — kein Export |
-| `/timer`, `/timer/start`, `/timer/stop` | Siehe unten |
+| `/timer`, `/timer/start`, `/timer/stop`, `/timer/orphaned/resolve` | Siehe unten. Jeder schreibende Vorgang dieser Zeile liefert `poolMovement` (E-058 Punkt 6) — und er ist damit nicht allein: Die vollständige Liste aller Routen, die das Feld tragen, steht am Bauteil `PoolMovement` der Schnittstellenbeschreibung |
 | `/export/templates`, `/export/runs` | |
 | `/export/audit` | Filter `timeEntryId` **und** `exportRunId` (T-042), einzeln oder zusammen. „Welche Buchungen waren in diesem Lauf?" ist damit vollständig beantwortbar; bis dahin siebte die Oberfläche die geladene Seite, und ein Lauf, der länger als eine Seite ist, verdrängte jeden älteren daraus |
 | `/export/sources` | Die geschlossene Auswahlliste als **Auskunft** des Dienstes (E-049). Die Oberfläche fragt, statt zu wissen — sonst stünde die Liste ein zweites Mal in `apps/web`, das `@takt/export` nicht einbinden darf |
@@ -827,6 +996,10 @@ aufheben, der Stopp liefert eine erzeugte Buchung oder verwirft sie. Ein `DELETE
 Datensatz zurückgibt, verschleiert das mehr, als die Form es einbringt. Die Regel „Verben
 sparsam" heißt sparsam, nicht nie.
 
+Seit T-093 tragen beide Antworten zusätzlich `poolMovement` — die Auskunft, welche Pools und
+Spalten das Todo durch diese Handlung betritt und verlässt. Sie ist kein Ersatz für `doneCleared`:
+Das eine sagt, **was geschehen ist**, das andere, **was daraus folgt**.
+
 **Blätterung mit Fortsetzungsmarke, nicht mit Seitenzahl.** Listen verschieben sich unter einem
 laufenden Timer. Eine Seitenzahl zeigt dann Einträge doppelt oder gar nicht. Der Aufwand ist
 derselbe, der Fehler entfällt.
@@ -844,7 +1017,7 @@ derselbe, der Fehler entfällt.
 | `404` | Nicht vorhanden |
 | `413` | Anfragerumpf über 1 MB |
 | `415` | Kein `application/json` auf einer zustandsändernden Route. Geprüft vor dem Lesen des Rumpfs |
-| `409` | Widerspruch zum Zustand: `timer_already_running`, `time_entry_locked`, `tag_folder_cycle`, `export_status_not_settable`, `export_nothing_to_do`, `status_in_use` |
+| `409` | Widerspruch zum Zustand: `timer_already_running`, `time_entry_locked`, `tag_folder_cycle`, `tag_folder_not_empty`, `tag_in_use`, `export_status_not_settable`, `export_nothing_to_do`, `status_in_use` |
 | `422` | Wohlgeformt, aber fachlich unzulässig: `validation_error`, `export_source_forbidden`, `export_directory_missing` |
 | `500` | Unerwartet. Immer derselbe Text, nie Innenleben |
 
@@ -874,7 +1047,17 @@ zu `401` zusammenlegen; die Zuordnung steht an genau einer Stelle im HTTP-Adapte
 - `code` ist der englische technische Schlüssel und die einzige Größe, gegen die ein Aufrufer
   verzweigt. `message` ist deutscher Anzeigetext (CLAUDE.md). Beide bleiben getrennt, damit ein
   Text sich ändern lässt, ohne Aufrufer zu brechen.
-- `details` nur bei Eingabefehlern, feldbezogen.
+- `details` trägt die Einzelbefunde: bei einer Eingabeprüfung je beanstandetem Feld einen, bei
+  einer **Sperre** je betroffenem Datensatz einen. Der zweite Fall hat kein Eingabefeld, dem
+  etwas vorzuwerfen wäre — eine Löschung besteht aus einem Pfadbestandteil —, und trägt deshalb
+  in `field` die **Kennung** des betroffenen Datensatzes.
+- Ein Befund darf zusätzlich `name` tragen: den bloßen Namen des betroffenen Dings, ohne
+  Gattungswort und ohne Anführungszeichen (`Ost`, nicht `Regel „Ost“`). Er steht da, **damit
+  niemand den Namen aus `message` herausschneidet** — ein Schnitt im fremden Text ist eine
+  ungeschriebene Abmachung über dessen Wortlaut und bricht still, sobald der Dienst seinen Satz
+  ändert (W-11 aus R-2a, T-097 Annahme 1). `message` bleibt daneben unverändert stehen; wer
+  `name` nicht kennt, verliert nichts. Genutzt wird es heute von den Sperren, die eine Regel
+  nennen (`code: "pool_rule"` beim Löschen von Tag, Ordner und Status).
 - **Nie enthalten:** Ablaufverfolgung, SQL-Meldung, Dateipfad außerhalb des gewählten
   Exportordners, das Token, Innenleben der Datenbank.
 - Ein unerwarteter Fehler wird vollständig ins lokale Protokoll geschrieben und nach außen als
@@ -1112,7 +1295,8 @@ B-2.9 Punkt 3 schlägt vor, den Oberflächenpfad vom Add-in-Token zu trennen. Um
 Beide gehen durch dieselbe Kopfzeile und denselben zeitkonstanten Vergleich; beide Vergleiche
 laufen bei jeder Anfrage, unabhängig vom Ergebnis des ersten.
 
-Das trägt drei Dinge auf einmal:
+Das trägt mehreres auf einmal; die Aufzählung darunter ist die vollständige, eine Zahl steht
+hier bewußt nicht (B-9, T-117):
 
 1. **Das Sitzungsgeheimnis berührt nie die Platte** und ist beim nächsten Start ein anderes. Ein
    Browser kann es nicht kennen.
@@ -1124,6 +1308,47 @@ Das trägt drei Dinge auf einmal:
    nicht über die Befehlszeile, weil Befehlszeilen für jeden Prozess im System sichtbar sind.
    Endet `stdin`, endet der Dienst — ein verwaister Sidecar mit Datenbankzugriff und ohne Fenster
    ist genau das, was hier verhindert wird.
+4. **Die zweite `stdin`-Zeile trägt den Windows-Benutzernamen** (E-042), und er wird geprüft, nicht
+   geglaubt. Seit T-122 gegen dieselbe Zeichenklasse wie jeder Name und jeder Titel
+   (`characters.ts` in `@takt/domain`, O-AE); bis dahin nur gegen C0 und DEL. Der Grund ist der
+   Weg des Wertes: Er geht **unverändert** als `WindowsUser` in die Exportdatei (A-8.5), und ein
+   Richtungszeichen darin dreht eine Zeile der Datei, die beim Abrechnungstool landet. Ist der
+   Name leer oder trägt er solche Zeichen, startet der Dienst nicht (Beendigungscode 78, Gründe
+   `user_missing` und `user_invalid`); die Meldung nennt den Grund und gibt den Wert nicht wieder.
+   `pnpm proof:access` misst beides — die drei Bauarten am abgewiesenen Namen und die Gegenprobe,
+   daß ein Name mit Umlaut, Leerzeichen und Punkt weiterhin startet.
+5. **Das Anhalten hat eine Frist** (T-126, Befund T-125-4). „Endet `stdin`, endet der Dienst"
+   galt bis dahin mit einer Fußnote: `server.close()` wartet auf offene Verbindungen, und eine
+   Verbindung mit einer **halben** Anfrage räumt Node nicht von selbst ab — sie läuft erst in
+   `headersTimeout` (60 s) oder `requestTimeout` (300 s). Ein beliebiger Prozess auf demselben
+   Rechner konnte das Ende des Dienstes damit verzögern, ohne ein Geheimnis zu kennen; eine
+   TCP-Verbindung und ein halber Anfragekopf genügten. Seit T-126 reißt `shutdown()` die
+   Verbindungen mit `closeAllConnections()` ab und hat mit `SHUTDOWN_DEADLINE_MS` einen Boden
+   darunter. Gemessen mit `proof:access` Abschnitt 0e: ohne die Behebung nach 20 s noch laufend,
+   mit ihr nach 8 ms beendet; legt man nur den Boden, sind es 2010 ms und eine Zeile im Protokoll
+   — der Abschnitt prüft ausdrücklich, daß sie im Normalfall nicht erscheint.
+
+   **Die Reihenfolge im Start ist Absicht.** `server.listen` steht vor `watchParentLink`, der
+   Dienst hört also auf `127.0.0.1`, bevor der Wächter angemeldet ist. Das ist seit T-122 kein
+   Fenster mehr, in dem eine Meldung verlorengeht: Der Handschlag hält `stdin` mit `pause()` an,
+   und der Wächter holt ein bereits liegendes Dateiende mit seinem `resume()` ab. Es wird nur
+   **später zugestellt** — nämlich dann, wenn der Dienst fertig gebaut ist. Genau darum steht der
+   Wächter dort: Ein Anhalten mitten im Start müßte sonst mit halbem Bestand umgehen, ohne
+   Datenbank, ohne Server, womöglich mitten in einer Migration. So gibt es einen Weg statt
+   mehrerer, und er läuft immer auf demselben vollständigen Zustand.
+6. **Und der Betrieb hat drei Fristen** (T-128, Risiko R2 aus T-126). Dieselbe halbe Anfrage
+   verzögert seit T-126 kein Anhalten mehr, aber sie band im laufenden Betrieb weiter ein
+   Betriebsmittel — 60 Sekunden für den Kopf, 300 für die ganze Anfrage, nachgesehen alle 30.
+   Das sind die Vorgaben von Node, gedacht für einen Dienst hinter einem Gegenlager im Netz.
+   Takt hat keins: Es ist selbst das erste, was eine Verbindung sieht. Seit T-128 stehen sie in
+   `config.ts` bei 5 s (`HEADERS_TIMEOUT_MS`), 10 s (`REQUEST_RECEIVE_TIMEOUT_MS`) und 5 s
+   (`CONNECTION_CHECK_INTERVAL_MS`). Der dritte Wert gehört dazu und ist keine Feinheit: Node
+   sieht die beiden Fristen nur in diesem Takt nach, und ein `headersTimeout` von fünf Sekunden
+   ohne ihn wäre eine Zahl, die im schlechtesten Fall erst nach fünfunddreißig greift. Kosten
+   entstehen keine — jeder Aufrufer sitzt auf demselben Rechner, und über die Rückschleife ist
+   ein Anfragekopf in Bruchteilen einer Millisekunde da. Gemessen mit `proof:access` Abschnitt
+   0f: Die Verbindung ist binnen der Summe der ersten und dritten Zahl weg, Node antwortet mit
+   408, und der Dienst läuft weiter.
 
 **Port.** Fest vorgegeben (17843), gebunden ausschließlich auf `127.0.0.1`, exklusiv belegt. Ist
 er belegt, startet Takt nicht und weicht nicht aus. Der Port ist ausdrücklich kein Geheimnis: Ein

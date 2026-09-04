@@ -21,6 +21,7 @@ import type {
   AppSettings,
   AppSettingsUpdate,
   CalendarDay,
+  CreateTimeEntryResult,
   DefaultTag,
   ExportAuditEntry,
   ExportPreview,
@@ -37,6 +38,7 @@ import type {
   PoolPatch,
   PoolSurfaceQuery,
   PoolWrite,
+  ResolveOrphanedTimerResult,
   RunningTimerView,
   SearchResult,
   SecurityNotice,
@@ -52,6 +54,7 @@ import type {
   Todo,
   TodoCreate,
   TodoDetail,
+  TodoDoneResult,
   TodoFilter,
   TodoCreated,
   TodoNote,
@@ -144,14 +147,42 @@ export function putTodoNote(id: Id, text: string): Promise<TodoNote> {
   });
 }
 
-/** A-2.4 — erledigt setzen. Der Status bleibt unverändert (E-023). */
-export function markTodoDone(id: Id): Promise<Todo> {
-  return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "PUT", body: {} });
+/**
+ * A-2.4 — erledigt setzen. Der **Status** bleibt unverändert (E-023).
+ *
+ * Unverändert bleibt der Status, nicht die Spalte: Seit E-055 darf eine Regel
+ * nach „Erledigt" fragen, und dann wechselt die Karte mit genau dieser
+ * Handlung. Die Bewegung dazu steht seit E-060 **in der Antwort**
+ * ({@link TodoDoneResult}): `poolMovement`, gerechnet vom selben Anwendungsfall
+ * wie an den Timer-Routen, mit dem Anlaß `'booking'` — der neutralen Form, die
+ * kein Wort von Buchung trägt.
+ *
+ * Bis dahin stand hier: „Was diese Antwort **nicht** enthält, ist die Bewegung
+ * dazu … für das Setzen und Aufheben von Hand gibt es sie nicht." Das war die
+ * Lücke O-U und ist mit E-060 geschlossen; die Oberfläche rechnet weiterhin
+ * nichts nach, sie liest jetzt nur mehr.
+ */
+export function markTodoDone(id: Id): Promise<TodoDoneResult> {
+  return request<TodoDoneResult>(`/todos/${encodeURIComponent(id)}/done`, {
+    method: "PUT",
+    body: {},
+  });
 }
 
-/** A-2.5 — „Erledigt“ von Hand aufheben. Verschiebt keine Karte. */
-export function clearTodoDone(id: Id): Promise<Todo> {
-  return request<Todo>(`/todos/${encodeURIComponent(id)}/done`, { method: "DELETE" });
+/**
+ * A-2.5 — „Erledigt“ von Hand aufheben.
+ *
+ * Anlaß `'reopen'`: Das Todo war erledigt und kehrt in seine Pools zurück —
+ * derselbe Satz, den der Timerstart nach A-2.5 zeigt, und aus derselben
+ * Funktion (E-060 Punkt 2).
+ *
+ * Bis T-094 stand hier „Verschiebt keine Karte." Das war der Satz aus der Zeit
+ * vor E-055 und aus demselben Irrtum wie `CARD_STAYS`: Eine Spalte, die nach
+ * „Erledigt" fragt, verliert oder gewinnt das Todo mit dieser Handlung. Siehe
+ * {@link markTodoDone}.
+ */
+export function clearTodoDone(id: Id): Promise<TodoDoneResult> {
+  return request<TodoDoneResult>(`/todos/${encodeURIComponent(id)}/done`, { method: "DELETE" });
 }
 
 /* ==================================================================== */
@@ -339,6 +370,14 @@ export function getBoard(
  * schickte diese Funktion `nurOffene`, einen Namen, den der Dienst nicht liest.
  * Ein Aufruf mit `includeCompleted: true` blieb damit wirkungslos — er lieferte
  * still die offenen Todos statt aller.
+ *
+ * **Ohne Aufrufer in der Oberfläche seit T-094**, und das ist eine gute
+ * Nachricht: Der letzte war `poolsContaining`, das je Pool einmal hier
+ * anklopfte, um nach einem Timerstart eine Pool-Aufzählung zusammenzusuchen.
+ * Diese Auskunft liefert der Dienst inzwischen fertig (E-058). Die Funktion
+ * bleibt als Abbildung der Route stehen — sie ist der Weiterblätterweg einer
+ * Board-Spalte ({@link getBoard}) und wird gebraucht, sobald eine Ansicht
+ * über die erste Seite hinausblättert.
  */
 export function listPoolTodos(
   id: Id,
@@ -390,16 +429,38 @@ export function getTimeEntry(id: Id): Promise<TimeEntry> {
   return request<TimeEntry>(`/time-entries/${encodeURIComponent(id)}`);
 }
 
+/**
+ * A-6.6 — Zeit von Hand erfassen.
+ *
+ * Die Antwort trägt seit O-V (Nachtrag zu E-061) die Poolbewegung neben der
+ * Buchung ({@link CreateTimeEntryResult}). Der Grund ist derselbe wie bei
+ * E-058 Punkt 6 für den Stopp: Diese Buchung kann die **erste** eines Todos
+ * sein, und dann nimmt jede Spalte mit `exportState: 'open'` das Todo auf. Wer
+ * am Timerstopp Auskunft gibt und an der Buchung von Hand schweigt, sagt die
+ * halbe Wahrheit.
+ *
+ * Die Oberfläche rechnet nichts nach: Sie reicht `poolMovement` an
+ * `bookingSentence` (`lib/movement.ts`) weiter, das den Satz aus
+ * `poolMovementSentence` in `@takt/domain` holt.
+ */
 export function createTimeEntry(body: {
   todoId: Id;
   startedAt: Timestamp;
   endedAt: Timestamp;
   note: string;
-}): Promise<TimeEntry> {
-  return request<TimeEntry>("/time-entries", { method: "POST", body });
+}): Promise<CreateTimeEntryResult> {
+  return request<CreateTimeEntryResult>("/time-entries", { method: "POST", body });
 }
 
-/** Eine exportierte Buchung ist gesperrt (A-6.9): `time_entry_locked`. */
+/**
+ * Eine exportierte Buchung ist gesperrt (A-6.9): `time_entry_locked`.
+ *
+ * **Ohne `poolMovement`, und das ist der Vertrag** (O-V, letzter Satz): Ein
+ * geänderter Zeitraum bewegt nichts. Die Buchung war schon da, „hat offene
+ * Buchungen" stand bereits, und keine Achse einer Regel fragt nach Anfang oder
+ * Ende. Die nackte {@link TimeEntry} ist deshalb hier die vollständige Antwort
+ * und keine Lücke.
+ */
 export function updateTimeEntry(
   id: Id,
   body: { todoId?: Id; startedAt?: Timestamp; endedAt?: Timestamp; note?: string },
@@ -484,8 +545,18 @@ export function getOrphanedTimer(): Promise<OrphanedTimerView | null> {
   return request<OrphanedTimerView | null>("/timer/orphaned");
 }
 
-export function resolveOrphanedTimer(resolution: OrphanResolution): Promise<StopTimerResult> {
-  return request<StopTimerResult>("/timer/orphaned/resolve", {
+/**
+ * E-036 — die Antwort des Benutzers auf die verwaiste Buchung.
+ *
+ * Eigener Rückgabetyp seit T-102 (O-R): Der verworfene Zweig nennt hier den
+ * **Grund**, und die beiden Gründe sind verschiedene Auskünfte — „Sie haben
+ * verworfen" gegen „es gab nichts zu buchen". Siehe
+ * {@link ResolveOrphanedTimerResult}.
+ */
+export function resolveOrphanedTimer(
+  resolution: OrphanResolution,
+): Promise<ResolveOrphanedTimerResult> {
+  return request<ResolveOrphanedTimerResult>("/timer/orphaned/resolve", {
     method: "POST",
     body: { resolution },
   });

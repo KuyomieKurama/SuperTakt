@@ -2,13 +2,15 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { Combobox as Ark, createListCollection } from "@ark-ui/react/combobox";
 import { Portal } from "@ark-ui/react/portal";
 import { normalizeTagName, tagNameKey } from "@takt/domain";
-import type { Id } from "../api/types";
+import type { ForeignText, Id } from "../api/types";
 import { useStructure, type TagInfo } from "../app/StructureContext";
 import { href } from "../app/router";
 import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
 import { Button, InlineMessage, Spinner, type ControlSize } from "./Primitives";
 import { TagChip } from "./Tag";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Takt — **die** Tag-Eingabe (A-4.1, A-4.4, I-06, E-052, T-059).
@@ -18,7 +20,7 @@ import { TagChip } from "./Tag";
  * Vor T-059 gab es an vier Stellen vier Arten, ein Tag zu wählen: ein
  * Suchfeld mit einer Chip-Wand darunter im Todo-Dialog, eine ungefilterte
  * Chip-Wand in den Standard-Tags, eine auf vierzig Stück gekappte Chip-Wand in
- * der Poolregel, und in der Todo-Liste **gar keine** — der Tag-Filter ließ
+ * der Regel eines Pools, und in der Todo-Liste **gar keine** — der Tag-Filter ließ
  * sich nur über einen Klick auf ein fremdes Chip setzen. Wer vierzig Tags hat,
  * für den war jede dieser Stellen eine andere Aufgabe.
  *
@@ -76,8 +78,8 @@ const EMPTY_IDS: ReadonlySet<string> = new Set<string>();
 
 interface Suggestion {
   readonly value: string;
-  readonly label: string;
-  readonly path: readonly string[];
+  readonly label: ForeignText;
+  readonly path: readonly ForeignText[];
   readonly isDefault: boolean;
 }
 
@@ -363,11 +365,11 @@ export function TagCombobox(props: TagComboboxProps) {
                         <Ark.ItemText className="combobox__option-label">
                           {item.path.length > 0 ? (
                             <span className="combobox__option-path">
-                              {item.path.join(" / ")}
+                              <Foreign value={item.path.join(" / ")} />
                               {" / "}
                             </span>
                           ) : null}
-                          {item.label}
+                          <Foreign value={item.label} />
                         </Ark.ItemText>
                         {item.isDefault ? (
                           <span className="combobox__option-hint">
@@ -400,7 +402,7 @@ export function TagCombobox(props: TagComboboxProps) {
                     </span>
                     <span className="combobox__option-text">
                       <Ark.ItemText className="combobox__option-label">
-                        „{pendingName}“ als neues Tag anlegen
+                        {quotedName(pendingName)} als neues Tag anlegen
                       </Ark.ItemText>
                       <span className="combobox__option-hint">
                         Dieses Tag gibt es noch nicht. Es entsteht auf der Wurzelebene, sobald
@@ -415,7 +417,7 @@ export function TagCombobox(props: TagComboboxProps) {
                 <p className="combobox__empty">
                   {allTags.length === 0
                     ? "Noch kein Tag angelegt."
-                    : `Kein Tag passt zu „${pendingName}“.`}{" "}
+                    : `Kein Tag passt zu ${quotedName(pendingName)}.`}{" "}
                   {allowCreate ? (
                     "Tippen Sie einen Namen — Takt bietet Ihnen dann an, ihn anzulegen."
                   ) : (

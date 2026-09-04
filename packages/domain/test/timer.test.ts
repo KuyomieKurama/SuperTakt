@@ -33,9 +33,15 @@
  * werden.
  */
 import { describe, expect, it } from 'vitest';
-import { determineReopen, decideTimerStart, decideOrphanedTimer } from '../src/time-entry.js';
+import {
+  determineReopen,
+  decideTimerStart,
+  decideOrphanedTimer,
+  BOOKING_EFFECT,
+  ENTRY_CLOSED_EFFECT,
+} from '../src/time-entry.js';
 import { isVisibleInPool } from '../src/tag.js';
-import type { RunningTimeEntry, TimerStartRequest, TimerStartResult } from '../src/time-entry.js';
+import type { RunningTimeEntry, TimerStartRequest } from '../src/time-entry.js';
 import type { Timestamp, TodoId } from '../src/kernel.js';
 
 const todoId = (value: string) => value as unknown as TodoId;
@@ -249,5 +255,59 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       const result = decideOrphanedTimer({ running, heartbeatAt: timestamp('2026-08-31T22:05:00Z'), resolution });
       expect(['recorded', 'discarded']).toContain(result.kind);
     }
+  });
+});
+
+/**
+ * T-105 (Auftrag aus `reports/T-101-domain-dev.md`, "Nächster Schritt" 2):
+ * `BOOKING_EFFECT` und `ENTRY_CLOSED_EFFECT` (E-061 Punkt 1,
+ * `usecases/pool-movement.ts` in `apps/local-api` verwendet sie als einzige
+ * Quelle für "was ändert eine Buchung an einem Todo"). Beide Konstanten sind
+ * bislang von keinem Test benannt (kein Treffer für "BOOKING_EFFECT" oder
+ * "ENTRY_CLOSED_EFFECT" unter `packages/domain/test`, `packages/storage/test`
+ * oder `apps/local-api/test` vor dieser Datei).
+ *
+ * Geprüft wird die eingefrorene GESTALT, nicht ihre Verwendung — die Wirkung
+ * auf ein echtes Zustandspaar prüft
+ * `apps/local-api/test/usecases/pool-movement-states.test.ts` gegen
+ * `bookingMovementStates`/`closedEntryMovementStates`. Hier zählt: genau zwei
+ * bzw. eine Achse, `BOOKING_EFFECT` baut sich wörtlich aus
+ * `ENTRY_CLOSED_EFFECT` auf (keine zweite, unabhängig gepflegte Kopie), und
+ * beide sind `Object.freeze`d — ein geteilter Wert, den ein Aufrufer
+ * versehentlich verändert, wäre ein Fehler, der an einer ganz anderen Stelle
+ * aufginge.
+ */
+describe('BOOKING_EFFECT / ENTRY_CLOSED_EFFECT — die Wirkung einer Buchung, eingefroren (E-061 Punkt 1)', () => {
+  it('ENTRY_CLOSED_EFFECT trägt GENAU eine Achse: hasOpenEntries: true', () => {
+    expect(ENTRY_CLOSED_EFFECT).toEqual({ hasOpenEntries: true });
+    expect(Object.keys(ENTRY_CLOSED_EFFECT)).toEqual(['hasOpenEntries']);
+  });
+
+  it('BOOKING_EFFECT trägt GENAU zwei Achsen: completedAt: null UND hasOpenEntries: true — nicht mehr, nicht weniger', () => {
+    expect(BOOKING_EFFECT).toEqual({ completedAt: null, hasOpenEntries: true });
+    expect(Object.keys(BOOKING_EFFECT).sort()).toEqual(['completedAt', 'hasOpenEntries']);
+  });
+
+  it('BOOKING_EFFECT baut sich aus ENTRY_CLOSED_EFFECT auf — keine zweite, unabhängige Fassung derselben Achse', () => {
+    // Nicht nur "beide Werte sind gleich" (das wäre auch bei zwei getrennt
+    // gepflegten Literalen zufällig wahr), sondern: das Spreizen von
+    // ENTRY_CLOSED_EFFECT plus der zusätzlichen Achse ergibt exakt
+    // BOOKING_EFFECT.
+    expect({ ...ENTRY_CLOSED_EFFECT, completedAt: null }).toEqual(BOOKING_EFFECT);
+  });
+
+  it('beide Konstanten sind eingefroren — ein Aufrufer kann den geteilten Wert nicht verändern', () => {
+    expect(Object.isFrozen(ENTRY_CLOSED_EFFECT)).toBe(true);
+    expect(Object.isFrozen(BOOKING_EFFECT)).toBe(true);
+
+    // ES-Module laufen im Strikt-Modus: die Zuweisung auf ein eingefrorenes
+    // Objekt wirft, statt still zu verpuffen (sonst bewiese ein grüner Test
+    // nicht, dass wirklich eingefroren wurde).
+    expect(() => {
+      (ENTRY_CLOSED_EFFECT as { hasOpenEntries: boolean }).hasOpenEntries = false;
+    }).toThrow();
+    expect(() => {
+      (BOOKING_EFFECT as { completedAt: string | null }).completedAt = '2026-08-31T08:00:00Z';
+    }).toThrow();
   });
 });

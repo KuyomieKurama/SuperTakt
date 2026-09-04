@@ -90,6 +90,27 @@ h4 {
   letter-spacing: var(--tracking-normal);
 }
 
+/*
+ * Fremder Text isoliert sich von seiner Umgebung (E-063 Punkt 1, T-124).
+ *
+ * `<bdi>` bringt `unicode-bidi: isolate` in jedem Browser mit, der das Element
+ * kennt. Die Regel steht trotzdem hier, und zwar aus zwei Gruenden: Sie haelt
+ * die Zusicherung an einer Stelle, an der ein Nachweis sie lesen kann, und sie
+ * traegt eine Sperre — wer `bdi` irgendwo mit `unicode-bidi: normal`
+ * ueberschreibt, faellt hier auf.
+ *
+ * **Was diese Regel nicht kann.** Sie schuetzt die **Umgebung** des Blocks,
+ * nicht seinen Inhalt: Ein `U+202E` im Text dreht die Anzeige innerhalb des
+ * isolierten Blocks weiter um (UBA X2–X5), und `bidi-override` hilft ebenfalls
+ * nicht — keine CSS-Eigenschaft entfernt ein Zeichen aus dem Text. Die andere
+ * Haelfte besorgt `visibleText` aus `@takt/domain`; beide zusammen sind der
+ * Baustein `Foreign` (`components/Foreign.tsx`). Das ist die Berichtigung aus
+ * T-119, und sie steht hier, damit sie niemand ein zweites Mal machen muss.
+ */
+bdi {
+  unicode-bidi: isolate;
+}
+
 /* Zeilenlaenge wird dort begrenzt, wo Fliesstext steht — nicht global.
    Eine globale Regel auf `p` wuerde auch Kopfbaender und Etiketten kuerzen. */
 .prose,

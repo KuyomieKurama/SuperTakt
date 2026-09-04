@@ -56,8 +56,12 @@ Migration 0001 legt 16 Tabellen, eine Sicht, 32 Indizes und 12 Trigger an. Migra
 `time_entry`; 0008 (T-058) zwei Indizes und zwei Trigger auf `tag`; 0009 (T-066, E-054) eine
 Spalte auf `pool` und **keinen** Index — die Begründung steht in der Migrationsdatei und in 8.4d.
 0010 (T-070, E-054) nimmt `todo.board_rank` und `ux_todo_rank` weg und verkürzt `ix_todo_status`
-auf eine Spalte; siehe 8.4e.
-Der Stand nach 0010 sind damit 17 Tabellen, eine Sicht, 33 Indizes und 17 Trigger (nachgezählt:
+auf eine Spalte; siehe 8.4e. 0011 (T-076) baut `pool_rule` um — zwei Spalten mehr an `pool`, eine
+Rolle und eine Statuskennung an `pool_rule`, ein Index dazu; siehe 3.5 und 8.4f. 0012 (T-089,
+R-1 Befund 1) baut dieselbe Tabelle ein zweites Mal um, ohne eine Spalte anzufassen: `tag_id` und
+`folder_id` gehen von ON DELETE CASCADE auf **RESTRICT**; siehe 3.5 und 8.4g. Tabellen, Sichten,
+Indizes und Trigger bleiben dabei in Zahl und Namen gleich.
+Der Stand nach 0012 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
 `sqlite_master` nach `migrateToLatest`, Node 22.23.2). Hinzu kommt `schema_migration`, die der Migrationsläufer selbst
 führt und die deshalb in keiner Migration steht.
 
@@ -77,7 +81,7 @@ führt und die deshalb in keiner Migration steht.
 | `todo.status_id_before_done` | Erledigt und Kanban-Spalte sind getrennt (siehe 3.1 und 3.2). Das Erledigen verschiebt die Karte nicht, also gibt es beim Wiederaufnehmen nichts wiederherzustellen. |
 | `app_setting.reopen_status_id` | Aus demselben Grund. Eine konfigurierbare Rückkehr-Spalte löst ein Problem, das es nicht gibt. |
 | `todo_status.is_done` | Die Abschlussspalte ist nicht das Erledigt-Kennzeichen. Eine Markierung, die beides verknüpft, würde genau die Verwechslung festschreiben, die der Auftraggeber ausgeschlossen hat. |
-| `board_column` / `board_column_rule` | E-054, T-066. Eine Kanban-Spalte ist eine Regel über Tags — also dasselbe wie ein Pool: Name, Position, Regelterme, Auflösung über Ordner samt Unterordnern, Mitglieder als Abfrage, leere Regel trifft nichts. Eine zweite Tabelle hätte `pool` Wort für Wort abgeschrieben und die rekursive Ordnerauflösung gleich mit. Stattdessen sagt `pool.placement`, auf welcher Fläche eine Regel erscheint. |
+| `board_column` / `board_column_rule` | E-054, T-066. Eine Kanban-Spalte ist eine Regel — seit E-055 über fünf Achsen und nicht allein über Tags — also dasselbe wie ein Pool: Name, Position, Regelterme, Auflösung über Ordner samt Unterordnern, Mitglieder als Abfrage, leere Regel trifft nichts. Eine zweite Tabelle hätte `pool` Wort für Wort abgeschrieben und die rekursive Ordnerauflösung gleich mit. Stattdessen sagt `pool.placement`, auf welcher Fläche eine Regel erscheint. |
 | `todo_board_column` | Aus demselben Grund wie `todo_pool`: Die Zugehörigkeit zu einer Spalte ergibt sich bei jeder Abfrage aus den Tags. Seit E-054 kann eine Karte dabei in **mehreren** Spalten zugleich stehen — eine gespeicherte Zuordnung müsste dieselbe Karte mehrfach führen und bei jeder Tagänderung nachgezogen werden. |
 | Token des Add-ins | E-009. Nur sein SHA-256-Abdruck liegt auf der Platte, in einer eigenen Datei außerhalb der Datenbank. Die Datenbankdatei wird kopiert — für eine Sicherung, zur Fehlersuche, in einen synchronisierten Ordner. Ein Token darin wanderte mit. Siehe `docs/architektur.md`, Abschnitt 6. |
 
@@ -226,8 +230,10 @@ Frei konfigurierbar. Die vier Werte aus A-5.3 sind Startbestand, keine feste Men
 #### Seit E-054 ist das **keine Kanban-Spalte** mehr
 
 Bis E-054 war diese Tabelle zweierlei zugleich: die Eigenschaft am Todo **und** die Spalte auf
-dem Board. Der Auftraggeber hat das getrennt — eine Kanban-Spalte ist seitdem eine **Regel über
-Tags** (3.5, 4.4a), frei konfigurierbar in Anzahl, Bezeichnung und Regel.
+dem Board. Der Auftraggeber hat das getrennt — eine Kanban-Spalte ist seitdem eine **Regel**
+(3.5, 4.4a), frei konfigurierbar in Anzahl, Bezeichnung und Regel. Seit E-055 fragt diese Regel
+über fünf Achsen: erforderliche Tags, ausgeschlossene Tags, Status, Erledigt und Exportstatus —
+der Status ist damit eine Achse der Spalte und nicht mehr ihr Gegenstück.
 
 Was das für diese Tabelle bedeutet: **nichts.** `todo_status` bleibt, `todo.status_id` bleibt,
 die vier Startwerte aus Migration 0002 bleiben, die Standardspalte für neue Todos bleibt. Nur ist
@@ -336,7 +342,15 @@ siehe „Erledigt und Abschlussspalte sind zwei Dinge" weiter unten.
 3. Es ist der **Standard** für neue Todos → `409 default_status_locked` (T-074, siehe oben).
 4. Todos tragen ihn noch → `409 status_in_use`, „Diesen Status tragen noch Todos. Geben Sie
    ihnen zuerst einen anderen."
-5. Sonst wird gelöscht.
+5. Die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn → `409 status_in_use`, „Diesen
+   Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst
+   heraus." Seit T-076, weil eine Spalte seitdem nach dem Status filtern kann; seit T-089 nennt
+   die Antwort in `details` auch **welche** Regeln (`code: pool_rule`, Kennung in `field`, Name in
+   `name`, derselbe Name im Satz `message`). Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
+6. Sonst wird gelöscht.
+
+Punkt 4 und 5 teilen sich einen Schlüssel, weil der Aufrufer dasselbe tun muss: den Status
+irgendwo herausnehmen. **Wo**, sagt `details`.
 
 Der Schlüssel `last_status_column` trägt aus der Zeit vor E-054 noch das Wort „column". Er
 bleibt, wie er ist: Ein Fehlerschlüssel ist eine Zusage an seine Aufrufer, und `tests/e2e` und
@@ -485,6 +499,20 @@ Beide Fremdschlüssel auf `tag_folder` stehen auf `ON DELETE RESTRICT`. Ein `CAS
 Löschen eines Ordners einen ganzen Tagbaum stillschweigend mitreißen, samt aller Zuordnungen an
 Todos.
 
+**Was beim Löschen eines Ordners geschieht.** Der Dienst weist in dieser Reihenfolge ab:
+
+1. Den Ordner gibt es nicht → `404 not_found`.
+2. Er enthält Unterordner oder Tags → `409 tag_folder_not_empty`, „Dieser Ordner ist nicht leer.
+   Verschieben oder löschen Sie zuerst seinen Inhalt."
+3. Die **Regel** eines Pools oder einer Kanban-Spalte nennt ihn → `409 tag_in_use`, „Dieser Ordner
+   wird in der Regel eines Pools verwendet.", mit den betroffenen Regeln in `details`.
+4. Sonst wird gelöscht.
+
+Punkt 3 ist seit T-089 da und ist der Fall, der lange durchrutschte: Löschbar ist ohnehin nur ein
+**leerer** Ordner — und der leere Ordner in einer erforderlichen Achse ist genau der Fall, um den
+es in E-057 geht (siehe 3.5). Derselbe Schlüssel wie beim Tag in einer Regel, weil es derselbe
+Sachverhalt ist; welches Ding gemeint ist, sagt die Route.
+
 ### 3.4 `time_entry` — Zeitbuchung (A-6.*, A-7.3)
 
 Die Tabelle trägt die meisten Zusicherungen des Modells.
@@ -620,18 +648,119 @@ andere wäre ein Fehler im Adapter und soll auffallen, statt stillschweigend Dat
 
 ### 3.5 `pool` und `pool_rule` (A-3.*) — und die Kanban-Spalten (E-054)
 
-Gespeichert wird die Regel, nie die Mitgliedschaft. Ein Regelteil verweist entweder auf ein
-einzelnes Tag (A-3.2) oder auf einen Ordner, dessen Tags samt Unterordnern zählen — genau eines
-von beidem, erzwungen über `CHECK ((tag_id IS NULL) <> (folder_id IS NULL))`.
+Gespeichert wird die Regel, nie die Mitgliedschaft.
 
-`match_mode` unterscheidet „mindestens ein Regel-Tag" von „alle Regel-Tags", `include_subfolders`
-steuert die Tiefe. Das deckt „flexibel konfigurieren" aus A-3.3, ohne eine Abfragesprache
-einzuführen, die man validieren und gegen Einschleusung absichern müsste.
+#### Die Regel ist eine Struktur mit benannten Feldern (T-076, Migration 0011)
+
+Bis T-076 war eine Regel **eine Liste gleichartiger Terme**: `pool_rule` mit `tag_id` **oder**
+`folder_id`, und `pool.match_mode` sagte, ob eines oder alle zutreffen müssen. Der Auftraggeber
+wollte den Status als Regel aufnehmen und hat dazu ein Vorbild gezeigt — die Board-Konfiguration
+von Super Productivity mit getrennten Feldern für erforderliche Tags, ausgeschlossene Tags und
+drei Optionsgruppen mit „Alle" als Vorgabe. „Nimm dir ein Beispiel daran. Das regelt das."
+
+Es regelt drei Dinge, die eine Liste gleichartiger Terme nicht kann:
+
+1. **„nicht".** Eine Liste hat keinen Platz für ein ausgeschlossenes Tag. Man müsste das
+   Vorzeichen an den Term hängen — und hätte danach zwei Sorten Term in einer Liste, deren
+   Verknüpfung man erklären muss, statt sie zu lesen.
+2. **Größen, die keine Tagmenge sind.** `tag` und `folder` lösen sich beide zu Tagkennungen an
+   `todo_tag` auf. Der Status tut das nicht: Er steht als `todo.status_id` **an der Zeile**,
+   genau einer je Todo. Ebenso „Erledigt" (`todo.completed_at`) und der Exportstatus, der an den
+   **Buchungen** hängt und nicht am Todo.
+3. **Einen Neutralwert je Bedingung.** In einer Liste ist „diese Bedingung ist nicht gesetzt"
+   dasselbe wie „die Liste ist leer" — die leere Regel war deshalb ein Sonderfall, den jede
+   Auswertung eigens abfangen musste.
+
+Seitdem hat jede Bedingung ihr eigenes Feld:
+
+| Achse | Wo sie steht | Verknüpfung | Neutralwert |
+|---|---|---|---|
+| erforderliche Tags | `pool_rule`, `role = 'required'` | `pool.match_mode`: alle oder mindestens eines | leere Liste |
+| ausgeschlossene Tags | `pool_rule`, `role = 'excluded'` | keines davon | leere Liste |
+| Status | `pool_rule`, `role = 'status'` | einer von diesen | leere Liste = „Alle" |
+| Erledigt | `pool.completion` | `any` / `done` / `open` | `any` |
+| Exportstatus | `pool.export_state` | `any` / `open` / `exported` | `any` |
+
+**Die Achsen sind mit „und" verbunden**, jede engt weiter ein; keine kann das Ergebnis
+vergrößern. Das ist keine Wahl, die man auch anders treffen könnte: Ein „oder" zwischen
+erforderlichen und ausgeschlossenen Tags wäre sinnlos, und eine zusätzlich genannte Bedingung,
+die **mehr** trifft, wäre in jeder Ansicht eine Überraschung.
+
+**Innerhalb** einer Achse steht die Verknüpfung an der Achse. Für die Status ist sie keine
+Entscheidung, sondern eine Tatsache: `todo.status_id` trägt genau einen Wert, ein „alle davon"
+über zwei Status wäre nicht streng, sondern unerfüllbar — eine Spalte, die garantiert leer bleibt.
+
+**Stehen alle Achsen neutral, trifft die Regel nichts** (A-3.4). Nicht „alle null Bedingungen sind
+erfüllt": Eine Regel, die noch nicht eingerichtet ist, hätte sonst schlagartig jedes Todo als
+Mitglied.
+
+**Was das an E-054 nicht ändert.** Status und Kanban-Spalte bleiben getrennt. Eine Spalte wird
+durch `role = 'status'` nicht wieder zum Status: Sie kann mehrere Status umfassen, keinen, oder
+Status und Tags mischen, und dieselbe Karte kann weiterhin in mehreren Spalten stehen.
+
+Das Schema erzwingt die Zuordnung Rolle → gefüllte Spalte erschöpfend:
+
+```sql
+CHECK (
+     (role IN ('required', 'excluded')
+      AND status_id IS NULL
+      AND ((tag_id IS NULL) <> (folder_id IS NULL)))
+  OR (role = 'status'
+      AND status_id IS NOT NULL AND tag_id IS NULL AND folder_id IS NULL)
+)
+```
+
+`ux_pool_rule` führt seitdem `role` und `status_id` mit. Beides ist notwendig: Ohne `status_id`
+kollidierten zwei **verschiedene** Statusterme derselben Regel miteinander; ohne `role` ließe sich
+dasselbe Tag nicht zugleich erfordern und ausschließen — eine unsinnige Regel, aber eine Eingabe
+des Benutzers und kein Datenbankfehler.
+
+**Alle drei Termspalten stehen auf ON DELETE RESTRICT** — `status_id` seit 0011, `tag_id` und
+`folder_id` seit 0012 (T-089). Nur `pool_id` kaskadiert: Die Regel geht, ihre Terme gehen mit, und
+ein Term ohne Regel wäre kein Datensatz, sondern Müll.
+
+Die Begründung ist für alle drei dieselbe: Eine Regel, der ein Term stillschweigend entzogen wird,
+träfe danach **mehr** Todos als vorher — oder, wenn es ihre einzige Achse war, gar keine. Beides
+fiele erst auf, wenn jemand auf das Board sieht.
+
+Bis T-089 galt das nur für den Status, und der Preis stand in R-1 Befund 1: Ein Ordner ist genau
+dann löschbar, wenn er **leer** ist — und der leere Ordner in einer erforderlichen Achse ist der
+Fall, um den es in E-057 geht. Aus „Tags aus Ordner Ost **und** Status offen" wurde beim Löschen
+von Ost still „Status offen". Die Oberfläche führte den Benutzer sogar dorthin: Der Leerzustand
+eines Ordners bietet „Ordner löschen" an.
+
+Die Datenbank ist dabei die **zweite** Wache. `TagPort.remove`, `TagFolderPort.remove` und
+`TodoStatusPort.remove` fragen vorher und antworten fachlich — `tag_in_use` beziehungsweise
+`status_in_use`, 409, mit den betroffenen Regeln in `details` (`code: pool_rule`, Kennung in
+`field`, Name in `name`, derselbe Name im Satz `message`). RESTRICT nimmt der Datenbank nur die
+Möglichkeit, still zu gehorchen, falls eines Tages jemand an der Prüfung vorbeischreibt.
+
+Das Feld `name` steht seit T-107 neben `message` und nicht statt seiner (W-11 aus R-2a). Eine
+Oberfläche, die „die Regeln „Ost“, „Nord“ und „Abrechnung“" setzen will, braucht den bloßen
+Namen; ihn aus dem Satz des Dienstes herauszuschneiden wäre eine ungeschriebene Abmachung über
+dessen Wortlaut und bräche still, sobald der Satz sich ändert.
+
+`TagPort.remove` nennt die Regeln seit T-101; bis dahin zählte er sie nur, und der Löschdialog der
+Oberfläche blieb ausgerechnet beim Tag ohne den Satz „Betroffen ist Regel „…"." (R-1a Befund 1,
+gemessen in T-099). Alle drei Abfragen tragen seitdem eine **Obergrenze**: Sie holen 21 Zeilen,
+nennen höchstens 20 und sagen im Meldungstext, wenn es mehr sind (`RULE_REFERENCE_LIMIT` in
+`sqlite/mappers.ts`, R-3a H-3). Ohne Grenze stünde bei 200 Zeichen je Name der ganze Bestand in
+einem Satz; mit stiller Grenze nähme der Benutzer zwanzig Regeln heraus und fände die Sperre
+unverändert vor.
+
+**Einen ausgeschlossenen Status gibt es nicht.** Er wäre eine vierte Rolle für eine Bedingung, die
+sich ohne sie ausdrücken lässt: Wer „alles außer Erledigt" meint, wählt die übrigen Status. Bei
+Tags ist das anders — dort sind es Tausende, und „alle außer diesem einen" ließe sich nicht
+aufzählen. Genau deshalb gibt es die Ausschlussliste für Tags und nicht für Status.
+
+`include_subfolders` steuert die Tiefe und gilt für **beide** Taglisten; eine getrennte Tiefe je
+Liste wäre eine zweite Wahrheit über denselben Baum. Das deckt „flexibel konfigurieren" aus A-3.3,
+ohne eine Abfragesprache einzuführen, die man validieren und gegen Einschleusung absichern müsste.
 
 #### `placement` — eine Entität, zwei Flächen (E-054, Migration 0009)
 
-Seit E-054 ist eine **Kanban-Spalte dasselbe wie ein Pool**: ein Name und eine Regel über Tags.
-`placement` sagt, wo eine Regel erscheint:
+Seit E-054 ist eine **Kanban-Spalte dasselbe wie ein Pool**: ein Name und eine Regel — seit
+E-055 über fünf Achsen und nicht allein über Tags. `placement` sagt, wo eine Regel erscheint:
 
 | Wert | Bedeutung |
 |---|---|
@@ -865,6 +994,36 @@ JOIN regel_tags r ON r.tag_id = tt.tag_id;
 Für `match_mode = 'all'` tritt eine `GROUP BY t.id HAVING count(DISTINCT r.tag_id) = :anzahl`
 hinzu.
 
+**Seit T-076 ist das die erste von fünf Achsen** (3.5). Die übrigen vier treten als weitere
+Bedingungen **derselben** WHERE-Klausel hinzu, mit UND verbunden; jede fällt weg, wenn sie neutral
+steht. `buildConditions` in `repo-todos.ts` setzt sie zusammen:
+
+| Achse | Bedingung | Zugriffspfad |
+|---|---|---|
+| ausgeschlossene Tags | `NOT EXISTS (SELECT 1 FROM todo_tag tt WHERE tt.todo_id = t.id AND tt.tag_id IN (…))` | `ix_todo_tag_reverse` |
+| Status | `t.status_id IN (…)` | Spalte an der Zeile, kein JOIN |
+| Erledigt | `t.completed_at IS NULL` bzw. `IS NOT NULL` | Spalte an der Zeile |
+| Exportstatus offen | `EXISTS (… te.export_status = 'open' AND te.ended_at IS NOT NULL)` | `ix_time_entry_queue` |
+| Exportstatus exportiert | `EXISTS (… te.export_status = 'exported')` | `ix_time_entry_todo` |
+
+Der Status ist der Grund, warum diese Übersetzung nicht durchweg über eine Verknüpfungstabelle
+gehen kann: Tags stehen in `todo_tag`, der Status steht als Spalte an `todo`. Die Abfrage muss
+beides in **einer** Bedingung können, und genau deshalb ist der Status ein eigenes Feld der Regel
+und kein weiterer Termtyp.
+
+Bleibt keine einzige Bedingung übrig, steht `0 = 1` — die leere Regel trifft nichts (A-3.4).
+**Ob das so ist, entscheidet seit T-080 die Domäne und nicht diese Übersetzung:**
+`buildConditions` ruft `poolRuleIsEmpty` mit den fünf Achsen auf, so wie sie hier vorliegen —
+die beiden Taglisten bereits aufgelöst. Die Bedingung stand vorher hier ausgeschrieben, ein
+zweites Mal in `matchesPool` und ein drittes Mal in der Oberfläche; ihre Übereinstimmung wird
+weiterhin gemessen (4.4a, `proof:openapi` Abschnitt 13).
+
+`axes.length === 0` steht daneben und nicht statt dessen. Es ist das Sicherheitsnetz für den
+Tag, an dem eine sechste Achse in der Domäne steht und in dieser Übersetzung noch nicht: Dann
+sagt die Domäne „schränkt ein", hier gäbe es keine einzige Bedingung, und `WHERE ()` wäre ein
+Syntaxfehler. Der Ausgang ist eine leere Spalte — falsch, aber sichtbar leer statt still zu
+weit.
+
 Gemessener Plan: `SEARCH pool_rule USING INDEX ux_pool_rule (pool_id=?)`,
 `SEARCH f USING INDEX ix_tag_folder_parent (parent_id=?)`,
 `SEARCH tt USING PRIMARY KEY (todo_id=?)`. Kein Basistabellenscan.
@@ -890,6 +1049,17 @@ Wer wo steht, entscheidet damit die Abfrage. **Wer mehrfach steht**, entscheidet
 das Add-in benutzt, um die Pools eines Todos zu benennen. Zwei Fassungen derselben Regel also:
 eine in SQL, eine in TypeScript.
 
+**Zugehörigkeit und Sichtbarkeit sind dabei zwei getrennte Fragen, in dieser Reihenfolge**
+(T-076). Ob eine Karte in eine Spalte gehört, entscheidet die Regel; ob sie gezeigt wird,
+entscheidet die Ansicht (`includeCompleted`, E-039). Die Sichtbarkeit als sechste Achse zu führen
+wäre falsch, und zwar messbar: Eine Spalte **ohne** Regel bekäme dadurch die Bedingung „alle
+unerledigten" und zeigte alles statt nichts. `boardAppearances` prüft deshalb erst `matchesPool`
+und danach `isVisibleInPool` — mit derselben Ausblendung, unter der die Abfrage gelaufen ist.
+
+**Sagt die Regel selbst etwas über „Erledigt", tritt die Ansichtseinstellung zurück.** Eine Spalte
+`completion = 'done'` wäre unter der Vorgabe `includeCompleted = false` sonst immer leer, und die
+zweite Bedingung hat der Benutzer nie für diese Spalte gesetzt, sondern für die Ansicht.
+
 Das ist eine bewusste Wiederholung mit einem Grund. Die Mehrfachnennung aus den **geladenen
 Seiten** zu zählen wäre falsch, sobald eine Spalte mehr Karten hat, als eine Seite fasst: Die
 Karte stünde in Spalte A auf Seite 1 und in Spalte B auf Seite 2, und die Antwort behauptete, sie
@@ -903,6 +1073,61 @@ gegen die Menge, die `matchesPool` auswählt, und wird rot, sobald sie sich unte
 Eine **leere Regel** trifft auch als Spalte nichts. Eine Spalte, die gerade eingerichtet wird,
 zeigt nichts statt alles — dieselbe Antwort wie beim Pool, und in der Abfrage dieselbe Zeile
 (`0 = 1` in `repo-todos.ts`).
+
+### 4.4b Zwei Arten von Leere, und warum die zweite über die Leitung muss (T-080, E-057)
+
+„Diese Spalte ist leer" hat zwei Ursachen, die sich für den Benutzer völlig verschieden anfühlen
+und in den Daten fast gleich aussehen:
+
+| | Woran man es erkennt | Wer es beheben kann |
+|---|---|---|
+| **Keine Bedingung genannt** | `poolRuleIsEmpty` über die fünf Achsen der Regel | nur der Benutzer, und zwar durch Ergänzen |
+| **Bedingung zeigt ins Leere** | `resolved.unresolvedRequired`, benannt in `emptyRuleFolderIds` | nur der Benutzer, durch ein Tag im Ordner |
+| **Regel trifft gerade nichts** | keines von beidem, `total = 0` | löst sich mit dem nächsten passenden Todo |
+
+Die ersten beiden Zeilen sind zusammen `resolved.matchesNothing`: Die Abfrage liefert nichts, und
+zwar unabhängig vom Bestand. Die dritte ist der Normalfall und geht vorbei.
+
+Die erste Zeile beantwortet jeder selbst: `poolRuleIsEmpty` aus `packages/domain` liest genau die
+Felder, die der Aufrufer ohnehin in der Hand hat. Sie ist deshalb **kein** Feld der Antwort — die
+Oberfläche braucht sie auch für den Entwurf im Formular, den noch keine Route gesehen hat, und
+ein Feld hätte nur den gespeicherten Stand beantwortet.
+
+Die zweite kann nur der Dienst beantworten; die Auflösung steigt über den Ordnerbaum ab
+(rekursive CTE, E-022). Sie steht deshalb als `resolved` an jeder ausgelieferten Regel:
+`tagCount`, `excludedTagCount`, `isEmpty`, `unresolvedRequired`, `unresolvedExcluded`,
+`emptyRuleFolderIds` und `matchesNothing`. Das Board zahlt dafür nichts — es löst jede Spalte für `boardAppearances`
+ohnehin einmal auf —, `GET /pools` zwei Abfragen je Regel, und `pool` hält eine Handvoll Zeilen.
+
+**Der Fall, der bis E-057 still war.** Ein Ordner ohne Tags löst sich zur leeren Tagmenge auf, und
+eine leere Tagmenge war der **Neutralwert** dieser Achse — `matchesPool` übersprang sie, und die
+Übersetzung nach SQL ließ sie aus dem `AND` heraus. Eine Regel „Tags aus diesem Ordner **und**
+Status offen" war damit faktisch „Status offen": Sie traf **mehr** als beabsichtigt, nicht
+weniger, und nichts an ihr sah danach aus.
+
+Seit E-057 ist ein solcher Term eine **Einschränkung ohne Treffer**: Die Regel trifft nichts,
+unabhängig vom Modus und von den übrigen Achsen. Entschieden wird das an genau einer Stelle
+(`poolRuleMatchesNothing` in `packages/domain`); die Abfrage in SQL setzt für eine solche Regel
+`0 = 1` und fragt dieselbe Funktion. `pnpm proof:openapi` Abschnitt 14 fährt beide Spalten an —
+den leeren Ordner **neben** einer Statusachse und die Gegenprobe.
+
+**Die Gegenrichtung gilt nicht.** Ausgeschlossene Tags über einen leeren Ordner schließen nichts
+aus: „keiner davon" über nichts läßt in Ruhe, statt einzuengen. `unresolvedExcluded` steht
+deshalb in der Antwort, wirkt aber auf keine Treffermenge.
+
+**Gefragt wird termweise, nicht achsenweise.** Nennt eine Regel „Tag Support **oder** Ordner Ost"
+und ist nur Ost leer, trifft sie trotzdem nichts — obwohl `tagCount` positiv ist. Achsenweise
+gemessen bliebe der leere Ordner unsichtbar: Die Spalte zeigte die Support-Karten, niemandem fiele
+auf, dass Ost leer ist, und sobald jemand einen Tag in Ost legt, änderte sich die Spalte ohne
+ersichtlichen Grund — dieselbe Falle, nur verzögert. Das gilt **in beiden Modi**, auch bei
+„mindestens eines davon".
+
+Damit die Oberfläche **welcher** Ordner sagen kann und nicht nur **ein** Ordner, steht die Liste
+der leeren erforderlichen Ordner in der Antwort: `resolved.emptyRuleFolderIds`. Die Auflösung
+kennt nur der Dienst, und sie wird nirgends nachgebaut; die rekursive Abfrage trägt dafür die
+Wurzel mit, von der sie ausgegangen ist — eine Abfrage, kein Aufruf je Ordner.
+
+Ausgeschlossene Ordner stehen nicht in dieser Liste: Aus ihnen folgt keine Handlung.
 
 ---
 
@@ -1425,6 +1650,15 @@ Bei einer Ausnahme: `ROLLBACK`. **SQLite führt auch DDL transaktional aus**, an
 MySQL — geprüft: ein `CREATE TABLE` innerhalb einer zurückgerollten Transaktion hinterlässt
 nichts. Eine mittendrin abgebrochene Migration lässt also kein halb angelegtes Schema zurück.
 
+**Pragmas rollt `ROLLBACK` allerdings nicht zurück.** Ein Pragma ist eine Einstellung der
+Verbindung und nicht Teil der Transaktion. Der Läufer stellt deshalb seit T-101 **beide** Schalter
+in einem `finally` wieder her: `foreign_keys` (schon vorher) und `legacy_alter_table` (R-3a H-4).
+Den zweiten setzen sechs Migrationsdateien selbst — sie brauchen ihn, damit ein `RENAME` die
+`REFERENCES`-Klauseln der Nachbartabellen **nicht** nachzieht — und schalten ihn in ihrer letzten
+Zeile zurück. Wirft eine Migration davor, wird diese Zeile nie erreicht, und die Verbindung liefe
+mit einer Einstellung weiter, die niemand mehr gesetzt hat. Heute folgenlos, weil ein Fehlschlag
+den Start beendet; die Begründung für `foreign_keys` gilt trotzdem Wort für Wort.
+
 ### 8.3 Vorwärts
 
 Beim Start ermittelt der Läufer den Stand und wendet fehlende Migrationen der Reihe nach an.
@@ -1577,11 +1811,12 @@ Sicherungskopie aus 8.3.
 `0009_pool_placement` hängt `pool.placement` an, mit `DEFAULT 'pool'` und einem CHECK auf die drei
 zulässigen Werte. Sonst nichts: kein Index, kein Trigger, kein UPDATE, keine Datenwanderung.
 
-**Sie rät nicht.** Nach E-054 ist eine Kanban-Spalte eine Regel über Tags. Es lag nahe, den
-Bestand zu übersetzen — die vier Statuswerte in vier Spalten, oder alle vorhandenen Pools auf
+**Sie rät nicht.** Nach E-054 ist eine Kanban-Spalte eine Regel; zum Zeitpunkt dieser Migration
+kannte sie allein die Tagachse (die vier weiteren kommen mit E-055 und Migration 0011). Es lag
+nahe, den Bestand zu übersetzen — die vier Statuswerte in vier Spalten, oder alle vorhandenen Pools auf
 `both`. Beides wäre falsch gewesen:
 
-* Eine Spalte ist eine Regel über **Tags**; „In Progress" ist kein Tag. Eine Migration, die dafür
+* Eine Spalte war damals eine Regel über **Tags**; „In Progress" ist kein Tag. Eine Migration, die dafür
   Tags anlegte und an Todos hängte, täte genau das, was der Auftraggeber ausgeschlossen hat
   („du darfst keine Tags setzen").
 * Alle vorhandenen Pools zu Spalten zu machen ergäbe ein Board, das eine Kopie der Pool-Liste ist
@@ -1627,6 +1862,58 @@ Die zurückgelegte Spalte trägt `DEFAULT ''`, weil SQLite eine über `ADD COLUM
 NOT-NULL-Spalte nur mit Vorgabewert annimmt. Folgenlos, weil `ux_todo_rank` danach wieder steht:
 Ein INSERT ohne `board_rank` liefe beim zweiten Mal in derselben Statusspalte in die
 Eindeutigkeitsbedingung. Die Wache überlebt, sie heißt nur anders.
+
+### 8.4f Migration 0011 — ein Tabellenumbau, und die Frage, die er nicht stellen muss (T-076)
+
+`0011_pool_rule_axes` hängt `completion` und `export_state` an `pool` und baut `pool_rule` um:
+`role`, `status_id`, ein erschöpfender CHECK, ein erweiterter eindeutiger Index, ein neuer
+Teilindex auf `status_id`. Die Gestalt der Regel steht in 3.5.
+
+**Warum ein Umbau und kein ALTER.** SQLite kennt kein ALTER TABLE für einen CHECK, und der CHECK
+aus 0001 — `(tag_id IS NULL) <> (folder_id IS NULL)` — ist genau die Bedingung, die eine Zeile mit
+`status_id` verböte. Der Weg ist der vorgeschriebene und derselbe wie in 0006: neue Tabelle,
+kopieren, alte weg, umbenennen, Indizes wieder anlegen, mit `-- takt: foreign_keys=off` und
+`PRAGMA legacy_alter_table = ON`. `pool_rule` hat keine Kindtabelle und kein Trigger hängt daran;
+der Umbau ist deshalb einfacher als der in 0006.
+
+**Die Frage, die diese Migration nicht stellen muss.** Bei einer Umstellung von „Liste" auf
+„erforderliche Tags" lautet die gefährliche Frage: Wird eine vorhandene Tagliste zu „alle davon"
+oder zu „mindestens eines davon"? Sie wird hier **nicht geraten**, weil die Antwort schon dasteht.
+`pool.match_mode` hält sie seit 0001, je Regel einzeln — `'any'` ist die Vorgabe der Spalte, der
+Route und der Oberfläche (die dort wörtlich „Mindestens eines von" anzeigt), `'all'` steht nur, wo
+jemand es ausdrücklich gewählt hat. Jede vorhandene Zeile wird zu `role = 'required'`, `match_mode`
+bleibt unangetastet, `completion` und `export_state` stehen neutral. **Jede bestehende Regel
+trifft nach der Migration genau dieselben Todos wie davor.**
+
+Migration 0002 legt keine Pools an; es gibt also auch keinen mitgelieferten Bestand, der umgedeutet
+werden könnte.
+
+**Der Rückweg ist nicht verlustfrei, und er sagt es.** Zurück bleibt die Form von 0001: eine Liste
+gleichartiger Tagterme und `match_mode`. Erforderliche Tags stehen unverändert da; ausgeschlossene
+Tags, Statusterme und die beiden Spalten fallen weg, weil die alte Form kein Feld für sie hat.
+Eine Regel, die **nur** aus solchen Bedingungen bestand, hat danach eine leere Regel und trifft
+nichts — sichtbar leer. Die Alternative, solche Regeln zu löschen, weil es sie vorher nicht gab,
+nähme dem Benutzer eine von Hand eingerichtete Regel samt Namen und Position weg, ohne zu fragen.
+Dieselbe Abwägung wie in 8.4d.
+
+### 8.4g Migration 0012 — dieselbe Tabelle, drei RESTRICT (T-089, R-1 Befund 1)
+
+`0012_pool_rule_restrict` ändert **keine Spalte und keinen Index**. Sie setzt `pool_rule.tag_id`
+und `pool_rule.folder_id` von ON DELETE CASCADE auf **RESTRICT** — der Stand, auf dem `status_id`
+seit 0011 steht. Die Begründung steht in 3.5; kurz: Ein Term, der beim Löschen eines Tags oder
+eines Ordners still mitgeht, ändert die Bedeutung einer Regel, ohne dass jemand sie angefasst hat,
+und in die gefährliche Richtung — die Regel trifft danach **mehr**.
+
+**Warum ein Umbau und kein ALTER.** SQLite kennt kein ALTER TABLE für eine REFERENCES-Klausel. Der
+Weg ist Zeile für Zeile der aus 0011: neue Tabelle, kopieren, alte weg, umbenennen, Indizes wieder
+anlegen, mit `-- takt: foreign_keys=off` und `PRAGMA legacy_alter_table = ON`.
+
+**Kein Datenverlust in beiden Richtungen.** Der Inhalt wird eins zu eins kopiert, vorwärts wie
+rückwärts; Spalten, CHECK, Indexnamen und Indexform bleiben gleich. Was der Rückweg zurücknimmt,
+ist allein das Verhalten beim Löschen — und er sagt es in seinem Kopf: Danach nimmt ein gelöschter
+Ordner seine Regelterme wieder still mit. Der Bestand ist dann nicht ungeschützt, sondern wieder
+auf **eine** Wache statt zweier zurückgesetzt: `TagPort.remove` und `TagFolderPort.remove` prüfen
+weiterhin vorher.
 
 ### 8.5 Nachgewiesen
 
@@ -1678,6 +1965,16 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | 0010, zwei Todos in derselben Statusspalte | zulässig — die Rangeindeutigkeit, die es nicht mehr zu sichern gibt, sichert nichts mehr |
 | 0010 rückwärts **mit Daten** | 10 → 9: `board_rank` wieder da und wieder gleich der Kennung, alle Todos und der interne Vermerk unverändert, beide Indizes wortgleich wie in 0001 |
 | 0010, die zurückgelegte Wache | doppelter Rang in derselben Statusspalte: `UNIQUE`; ausgelassener Rang beim zweiten INSERT: ebenfalls `UNIQUE` (die Folge des `DEFAULT ''`, siehe 8.4e) |
+| 0011 vorwärts (T-076) | 0 → 11 auf leerer Datei; `pool.completion`/`pool.export_state` da, `pool_rule` mit `role`/`status_id`, `ux_pool_rule` fünfspaltig, `ix_pool_rule_status` neu — Stand danach 17 Tabellen, 34 Indizes, 17 Trigger, 1 Sicht |
+| 0011, die sechs Wachen | Tag und Status in **einer** Zeile: `CHECK`; Rolle `status` ohne `status_id`: `CHECK`; unbekannte Rolle: `CHECK`; derselbe Term zweimal: `UNIQUE ux_pool_rule`; `completion = 'vielleicht'`: `CHECK`; `export_state = 'vielleicht'`: `CHECK` |
+| 0011, RESTRICT auf dem Status | Löschen eines Status, der in einer Regel steht: `FOREIGN KEY constraint failed` — und über die Route `409 status_in_use` mit dem fachlichen Satz |
+| 0011, dasselbe Tag erforderlich **und** ausgeschlossen | zulässig. Eine unsinnige Regel, aber eine Eingabe des Benutzers; sie trifft nichts, und die Antwort darauf gehört in die Oberfläche, nicht in einen 409 |
+| 0011 rückwärts **mit Daten** | 11 → 10 mit zwei Regeln, davon eine gemischte: die erforderlichen Tagterme unverändert da, ausgeschlossene und Statusterme weg, `completion`/`export_state` weg, `pool_rule` wortgleich wie in 0001 (drei Spalten, drei Indizes) |
+| 0011 wieder vorwärts | 10 → 11: die überlebende Zeile trägt `role = 'required'`, `pragma_foreign_key_check` leer |
+| 0012 vorwärts (T-089) | 0 → 12 auf leerer Datei: 17 Tabellen, 34 benannte Indizes, 17 Trigger, 1 Sicht — Zahl und Namen wie nach 0011; `pool_rule.tag_id` und `.folder_id` tragen `ON DELETE RESTRICT` |
+| 0012, die drei RESTRICT | Regel mit einem Ordnerterm, einem ausgeschlossenen Tagterm und einem Statusterm: Löschen des Ordners, des Tags und des Status je `FOREIGN KEY constraint failed`, alle drei Terme unversehrt. Über die Routen `409 tag_in_use` beziehungsweise `409 status_in_use`, mit den betroffenen Regeln in `details` |
+| 0012 rückwärts **mit Daten** | 12 → 11 mit drei Termen: alle drei unverändert da, `tag_id`/`folder_id` wieder auf CASCADE. Die Gegenprobe unmittelbar danach: Das Löschen des Ordners geht durch und nimmt seinen Term mit (3 → 2) — genau der Zustand, gegen den 0012 geschrieben ist |
+| 0012 wieder vorwärts | 11 → 12, `integrity_check` = ok, `foreign_key_check` leer, 81 Objekte in `sqlite_master` (Node 22.23.2, `node:sqlite`) |
 | 0010 erneut vorwärts mit Daten | 9 → 10: Spalte wieder weg, Todos und Vermerk unverändert, `integrity_check` = ok, `foreign_key_check` leer |
 | 0010 → 0000 rückwärts, dann erneut vorwärts | 10 → 0 → 10, `todo` verschwindet und steht danach wieder ohne `board_rank` (T-070, Node 22.23.2, `node:sqlite`, 25 Prüfungen) |
 | Der vollständige Stand, jeder eindeutige Index (T-074) | 0 → 10, dann jede der **14** `UNIQUE`-Verletzungen aus `sqlite_master` ausgelöst: jede ergibt einen eigenen Fehlerschlüssel und einen eigenen Satz, keine fällt auf „Dieser Wert ist bereits vergeben", keine Antwort nennt Index-, Tabellen- oder Spaltennamen (`proof:conflicts` 1) |

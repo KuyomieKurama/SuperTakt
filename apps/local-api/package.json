@@ -6,6 +6,7 @@
   "description": "Takt — lokaler Dienst (Node-Sidecar). Eingehender Adapter: HTTP, Token, Herkunft, JSON.",
   "license": "MIT",
   "scripts": {
+    "proof:codepoints": "node scripts/proof-codepoints.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "proof:access": "node scripts/proof-access.mjs",
     "proof:export": "node scripts/proof-export.mjs",

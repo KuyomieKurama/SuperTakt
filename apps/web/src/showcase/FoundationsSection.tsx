@@ -120,7 +120,12 @@ const SHADOWS: readonly { readonly token: string; readonly usage: string }[] = [
   { token: "--shadow-sm", usage: "Karte unter dem Zeiger" },
   { token: "--shadow-md", usage: "Auswahlliste" },
   { token: "--shadow-lg", usage: "Dialog, Kontextmenü" },
-  { token: "--shadow-drag", usage: "Karte am Zeiger" },
+  /*
+    Seit E-054 wird auf dem Board keine Karte mehr gezogen; dieser Schatten hat
+    zurzeit keine Fläche (Designsystem, Abschnitt 4.3). Die Beschriftung sagt
+    das, statt eine Bedienung zu behaupten, die es nicht gibt.
+  */
+  { token: "--shadow-drag", usage: "gezogenes Element — zurzeit unbelegt" },
 ];
 
 export function FoundationsSection() {

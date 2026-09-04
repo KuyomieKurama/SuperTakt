@@ -36,6 +36,9 @@ import type {
   TodoPort,
 } from '../ports.ts';
 import type {
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
   Result,
   StatusId,
   TagId,
@@ -48,7 +51,7 @@ import type {
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
-import { err, ok, taktError } from '@takt/domain';
+import { err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
 
 import { chunk, integer, placeholders, text, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
@@ -75,7 +78,7 @@ interface Condition {
  */
 function buildConditions(
   filter: TodoFilter,
-  resolvedPools: readonly { readonly tagIds: readonly TagId[]; readonly matchMode: 'any' | 'all' }[],
+  resolvedPools: readonly ResolvedPool[],
 ): readonly Condition[] {
   const conditions: Condition[] = [];
 
@@ -115,21 +118,126 @@ function buildConditions(
     // gewählten Pools liegt, gehört in das Ergebnis. Die Alternative — der
     // Schnitt — ließe die Auswahl zweier Pools regelmäßig leer ausgehen und
     // wäre für niemanden erklärbar.
+    //
+    // **Innerhalb** eines Pools ist es umgekehrt: Die Achsen einer Regel sind
+    // mit UND verbunden (T-076). Das ist dieselbe Verknüpfung, die
+    // `matchesPool` in der Domäne trifft — diese Übersetzung ist die zweite
+    // Fassung derselben Regel, und ihre Übereinstimmung wird gemessen
+    // (`proof:openapi`, Abschnitt 11), nicht angenommen.
     const parts: string[] = [];
     const params: SqlValue[] = [];
     for (const pool of resolvedPools) {
-      if (pool.tagIds.length === 0) {
-        // Ein Pool ohne aufgelöste Tags trifft nichts (matchesPool in tag.ts).
-        // `0 = 1` hält die Vereinigung formal richtig, ohne zu treffen.
+      const axes: string[] = [];
+      /**
+       * Die Werte **dieser** Regel, getrennt gesammelt (E-057).
+       *
+       * Bis T-082 gingen sie unmittelbar in `params`. Das war nur so lange
+       * richtig, wie der Ausgang „trifft nichts" ausschließlich bei einer Regel
+       * ohne jede Bedingung eintrat — dann war auch nichts gesammelt worden.
+       * Seit E-057 kann eine Regel **mit** Achsen nichts treffen: Der leere
+       * Ordner steht neben einer Statusachse, deren Kennungen bereits in
+       * `params` gelegen hätten, während ihr Fragezeichen mit `0 = 1`
+       * verschwindet. Danach steht ein Wert zu viel in der Liste, und **alle**
+       * folgenden Fragezeichen der Abfrage bekommen den falschen Wert — auch
+       * die der Suche und der Blätterung.
+       *
+       * Deshalb wandern die Werte erst dann hinüber, wenn feststeht, daß die
+       * Bedingungen dieser Regel auch im Text landen.
+       */
+      const poolParams: SqlValue[] = [];
+
+      if (pool.tagIds.length > 0) {
+        // Erforderliche Tags. `HAVING`-freie Zählung über eine Unterabfrage:
+        // ein Indexdurchlauf auf `ix_todo_tag_reverse`, kein GROUP BY.
+        const needed = pool.matchMode === 'all' ? pool.tagIds.length : 1;
+        axes.push(
+          `(SELECT COUNT(DISTINCT tt.tag_id) FROM todo_tag tt
+             WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(pool.tagIds.length)})) >= ?`,
+        );
+        poolParams.push(...pool.tagIds, needed);
+      }
+
+      const excluded = pool.excludedTagIds;
+      if (excluded.length > 0) {
+        // Ausgeschlossene Tags: **keines** davon. `NOT EXISTS` und nicht
+        // `COUNT(...) = 0` — die Abfrage bricht beim ersten Treffer ab, und
+        // „keines" ist genau das, was `NOT EXISTS` heißt.
+        axes.push(
+          `NOT EXISTS (SELECT 1 FROM todo_tag tt
+                        WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(excluded.length)}))`,
+        );
+        poolParams.push(...excluded);
+      }
+
+      const statusIds = pool.statusIds;
+      if (statusIds.length > 0) {
+        // Der Status steht **an der Zeile** und nicht in einer
+        // Verknüpfungstabelle: kein JOIN, kein EXISTS, ein Vergleich auf
+        // `todo.status_id`. Genau darin unterscheidet sich diese Achse von den
+        // beiden darüber, und genau deshalb ist sie ein eigenes Feld.
+        axes.push(`t.status_id IN (${placeholders(statusIds.length)})`);
+        poolParams.push(...statusIds);
+      }
+
+      if (pool.completion === 'open') axes.push('t.completed_at IS NULL');
+      if (pool.completion === 'done') axes.push('t.completed_at IS NOT NULL');
+
+      if (pool.exportState === 'open') {
+        // Dieselbe Bedingung wie `TodoFilter.onlyWithOpenEntries`, einschließlich
+        // `ended_at IS NOT NULL`: Ein laufender Timer ist noch nichts, was man
+        // abrechnen könnte. Trifft `ix_time_entry_queue`.
+        axes.push(
+          `EXISTS (SELECT 1 FROM time_entry te
+                    WHERE te.todo_id = t.id AND te.export_status = 'open' AND te.ended_at IS NOT NULL)`,
+        );
+      }
+      if (pool.exportState === 'exported') {
+        axes.push(
+          `EXISTS (SELECT 1 FROM time_entry te
+                    WHERE te.todo_id = t.id AND te.export_status = 'exported')`,
+        );
+      }
+
+      /**
+       * Trifft diese Regel von vornherein nichts? Zwei Gründe, und beide
+       * entscheidet seit T-080/T-082 die **Domäne** und nicht diese Datei
+       * (`poolRuleMatchesNothing`). `0 = 1` hält die Vereinigung formal
+       * richtig, ohne zu treffen.
+       *
+       *  1. **Keine Bedingung genannt** (A-3.4). Dann steht hier ohnehin keine
+       *     Achse im Text.
+       *  2. **Die erforderliche Tagachse zeigt ins Leere** (E-057) — der
+       *     Ordner ohne Tags. Das ist der Fall, den diese Übersetzung bis T-082
+       *     nicht kannte: Die aufgelöste Liste ist leer, die Achse fiel damit
+       *     aus dem `AND` heraus, und aus „Tags aus Ordner X **und** Status
+       *     offen" wurde in SQL „Status offen" — dieselbe stille Erweiterung
+       *     wie in `matchesPool`, nur an der Stelle, die zählt und blättert.
+       *
+       * `axes.length === 0` steht daneben und nicht statt dessen. Es ist das
+       * Sicherheitsnetz für den Tag, an dem eine sechste Achse in der Domäne
+       * steht und in dieser Übersetzung noch nicht: Dann sagt die Domäne
+       * „schränkt ein", hier gäbe es aber keine einzige Bedingung, und
+       * `WHERE ()` wäre ein Syntaxfehler. Der Ausgang ist dann eine leere
+       * Spalte — falsch, aber sichtbar leer statt still zu weit.
+       */
+      if (
+        poolRuleMatchesNothing({
+          rule: pool.tagIds,
+          excludedTags: pool.excludedTagIds,
+          statusIds: pool.statusIds,
+          completion: pool.completion,
+          exportState: pool.exportState,
+          unresolvedRequired: pool.unresolvedRequired,
+        }) ||
+        axes.length === 0
+      ) {
         parts.push('0 = 1');
         continue;
       }
-      const needed = pool.matchMode === 'all' ? pool.tagIds.length : 1;
-      parts.push(
-        `(SELECT COUNT(DISTINCT tt.tag_id) FROM todo_tag tt
-           WHERE tt.todo_id = t.id AND tt.tag_id IN (${placeholders(pool.tagIds.length)})) >= ?`,
-      );
-      params.push(...pool.tagIds, needed);
+      parts.push(`(${axes.join(' AND ')})`);
+      // Erst hier, und nur für die Regeln, deren Bedingungen wirklich im Text
+      // stehen. Siehe `poolParams` oben.
+      params.push(...poolParams);
     }
     conditions.push({ sql: `(${parts.join(' OR ')})`, params });
   }
@@ -153,10 +261,48 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+/**
+ * Eine Regel, so weit aufgelöst, wie die Abfrage sie braucht (T-076).
+ *
+ * Die beiden Taglisten kommen aufgelöst herein — dafür braucht es den
+ * Ordnerbaum, und das ist Sache von `resolvePoolRule`. Die übrigen drei Achsen
+ * stehen unaufgelöst da: Sie sind Werte an der Regel und nichts, was man
+ * auflösen könnte.
+ *
+ * **Jedes Feld ist Pflicht**, auch das leere. Der Auflöser hat sie alle in der
+ * Hand (`poolAxes` liefert für eine Regel, die es nicht gibt, lauter
+ * Neutralwerte); sie freiwillig zu machen hieße, an jeder Lesestelle ein
+ * `?? []` zu schreiben — eine Verzweigung je Achse, die nichts entscheidet und
+ * eine Vorgabe an einen zweiten Ort trüge. Der Neutralwert ist die leere Liste
+ * beziehungsweise `any`, und er steht an genau einer Stelle: bei dem, der
+ * auflöst.
+ */
+export interface ResolvedPool {
+  readonly tagIds: readonly TagId[];
+  readonly matchMode: PoolMatchMode;
+  readonly excludedTagIds: readonly TagId[];
+  /**
+   * Nennt die **erforderliche** Tagachse Terme, von denen keiner auf einen Tag
+   * auflöst? (E-057)
+   *
+   * Die eine Auskunft, die `tagIds` nicht tragen kann: Ein Ordner ohne Tags und
+   * eine Regel, die über Tags nichts sagt, ergeben beide `[]`. Das erste ist
+   * eine Einschränkung ohne Treffer und läßt die Abfrage nichts liefern, das
+   * zweite ein Neutralwert und läßt die übrigen Achsen entscheiden.
+   *
+   * **Pflicht wie alle anderen.** Wer auflöst, hat die Zahl der Terme in der
+   * Hand (`resolvePoolAxis`); sie freiwillig zu machen hieße, die Vorgabe
+   * `false` an jede Lesestelle zu tragen — und `false` ist hier die Antwort,
+   * die zu viel trifft.
+   */
+  readonly unresolvedRequired: boolean;
+  readonly statusIds: readonly StatusId[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+}
+
 /** Auflösung der Pool-Regeln. Wird von außen gereicht, damit `TodoPort` `PoolPort` nicht kennt. */
-export type PoolResolver = (
-  poolIds: readonly string[],
-) => readonly { readonly tagIds: readonly TagId[]; readonly matchMode: 'any' | 'all' }[];
+export type PoolResolver = (poolIds: readonly string[]) => readonly ResolvedPool[];
 
 export function createTodoPort(
   conn: SqlConnection,
@@ -418,7 +564,24 @@ export function createTodoPort(
       return ok(undefined);
     },
 
-    /** A-2.4 — Erledigt setzen. Die Kanban-Spalte bleibt, wo sie ist (E-023). */
+    /**
+     * A-2.4 — Erledigt setzen.
+     *
+     * `status_id` bleibt unangetastet: Erledigt und Status sind zwei Achsen,
+     * und das Erledigen hat den Status nie verändert (E-023).
+     *
+     * **Die Karte bleibt deshalb trotzdem nicht, wo sie ist.** Seit E-054 ist
+     * eine Kanban-Spalte eine Regel, und seit E-055 darf diese Regel nach
+     * „Erledigt" fragen: Das Setzen nimmt das Todo aus jeder Spalte mit
+     * `completion: 'open'` heraus und trägt es in jede mit `completion: 'done'`
+     * ein. Welche das sind, rechnet der Anwendungsfall
+     * (`usecases/pool-movement.ts`) und meldet es als `poolMovement` an
+     * `PUT /todos/{todoId}/done` (E-060). Bis T-101 stand hier das Gegenteil
+     * (R-2a W-3).
+     *
+     * `AND completed_at IS NULL` macht den Aufruf mehrfach ausführbar: Ein
+     * zweites „erledigt" schreibt nichts und verschiebt den Zeitstempel nicht.
+     */
     async markDone(id, now) {
       const outcome = attempt(() =>
         conn

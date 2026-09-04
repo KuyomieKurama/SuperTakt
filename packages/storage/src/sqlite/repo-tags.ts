@@ -31,8 +31,12 @@
 import type { PoolPort, TagFolderPort, TagPort, Page, Pagination } from '../ports.ts';
 import type {
   Pool,
+  PoolCompletionFilter,
+  PoolExportFilter,
   PoolId,
-  PoolRuleTerm,
+  PoolMatchMode,
+  PoolTagTerm,
+  StatusId,
   Tag,
   TagFolder,
   TagFolderId,
@@ -48,20 +52,30 @@ import { checkFolderMove, err, normalizeName, normalizeTagName, ok, tagNameKey, 
 import { integer, text, placeholders, type SqlConnection } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
-import { toPool, toPoolRuleTerm, toTag, toTagFolder } from './mappers.ts';
+import {
+  RULE_REFERENCE_PROBE,
+  poolReferences,
+  toPool,
+  toPoolCompletion,
+  toPoolExportState,
+  toPoolRuleTerm,
+  toTag,
+  toTagFolder,
+} from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 const TAG_COLUMNS = 'id, folder_id, name, color, created_at, updated_at';
 const FOLDER_COLUMNS = 'id, parent_id, name, created_at, updated_at';
 /**
- * Alle Spalten von `pool`, ausgeschrieben — `placement` seit E-054 darunter.
+ * Alle Spalten von `pool`, ausgeschrieben — `placement` seit E-054 darunter,
+ * `completion` und `export_state` seit T-076.
  *
  * Ausgeschrieben und nicht `SELECT *`, aus demselben Grund wie in
  * `repo-todos.ts`: Eine später ergänzte Spalte soll nicht von selbst in einem
  * Datensatz landen, den irgendein Pfad weiterreicht.
  */
 const POOL_COLUMNS =
-  'id, name, match_mode, include_subfolders, placement, position, created_at, updated_at';
+  'id, name, match_mode, include_subfolders, placement, position, completion, export_state, created_at, updated_at';
 
 export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
   const loadOne = (id: TagId): Tag | null => {
@@ -176,10 +190,23 @@ export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
      * A-4.5 — ein Tag, das an Todos oder in einer Pool-Regel hängt, wird nicht
      * gelöscht.
      *
-     * Die Fremdschlüssel stehen auf `ON DELETE CASCADE`: Das Löschen würde
-     * stillschweigend die Zuordnungen mitnehmen und eine Pool-Regel entkernen.
-     * Deshalb wird hier **vorher** gefragt, statt sich auf die Datenbank zu
-     * verlassen. Sie würde in diesem Fall nicht abweisen, sondern gehorchen.
+     * ---------------------------------------------------------------------
+     * Warum hier trotz RESTRICT vorher gefragt wird
+     * ---------------------------------------------------------------------
+     *
+     * Seit Migration 0012 steht `pool_rule.tag_id` auf `ON DELETE RESTRICT`;
+     * die Datenbank weist also selbst ab. Diese Prüfung nimmt ihr nur das Wort
+     * aus dem Mund: „Dieses Tag wird in der Regel eines Pools verwendet." statt
+     * „FOREIGN KEY constraint failed" — und sie kann sagen, **welche** Regel.
+     *
+     * `todo_tag.tag_id` und `default_tag.tag_id` stehen unverändert auf
+     * `ON DELETE CASCADE` (Migration 0001). Dort ist diese Prüfung die
+     * **einzige** Wache: Die Datenbank wiese nicht ab, sondern gehorchte und
+     * nähme die Zuordnungen stillschweigend mit.
+     *
+     * Bis T-101 behauptete der Kommentar an dieser Stelle das Gegenteil der
+     * Lage — er nannte alle drei Fremdschlüssel `CASCADE` und war für den
+     * Regelfall seit Migration 0012 falsch (R-1a Befund 3).
      */
     async remove(id) {
       if (loadOne(id) === null) return err(taktError('not_found', 'Dieses Tag gibt es nicht.'));
@@ -187,21 +214,47 @@ export function createTagPort(conn: SqlConnection, ids: IdSource): TagPort {
       const usage = conn
         .prepare(
           `SELECT (SELECT COUNT(*) FROM todo_tag  WHERE tag_id = ?) AS todos,
-                  (SELECT COUNT(*) FROM pool_rule WHERE tag_id = ?) AS rules,
                   (SELECT COUNT(*) FROM default_tag WHERE tag_id = ?) AS defaults`,
         )
-        .get(id, id, id);
+        .get(id, id);
 
       if (usage !== undefined && integer(usage, 'todos') > 0) {
         return err(
           taktError('tag_in_use', 'Dieses Tag ist noch an Todos vergeben und wird nicht gelöscht.'),
         );
       }
-      if (usage !== undefined && integer(usage, 'rules') > 0) {
-        return err(
-          taktError('tag_in_use', 'Dieses Tag wird in der Regel eines Pools verwendet.'),
-        );
+
+      /*
+       * Die Regel beim **Namen** (R-1a Befund 1, T-099).
+       *
+       * Ordner und Status nennen die betroffene Regel seit T-089; das Tag tat
+       * es als einziges nicht, und der Löschdialog der Oberfläche stand
+       * deshalb ohne den Satz „Betroffen ist Regel „…"." da — gemessen in
+       * T-099. Die Oberfläche liest `details` bereits (`errorText.ts`); es
+       * fehlte allein die Antwort.
+       *
+       * Dieselbe Abfrage wie beim Ordner, mit `ix_pool_rule_tag` aus Migration
+       * 0011 und der Obergrenze aus {@link RULE_REFERENCE_PROBE}.
+       */
+      const usedIn = conn
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.tag_id = ?
+            ORDER BY p.position, p.name
+            LIMIT ${String(RULE_REFERENCE_PROBE)}`,
+        )
+        .all(id);
+
+      if (usedIn.length > 0) {
+        const { details, notice } = poolReferences(usedIn);
+        return err({
+          code: 'tag_in_use' as const,
+          message: `Dieses Tag wird in der Regel eines Pools verwendet.${notice}`,
+          details,
+        });
       }
+
       if (usage !== undefined && integer(usage, 'defaults') > 0) {
         return err(taktError('tag_in_use', 'Dieses Tag ist ein Standard-Tag.'));
       }
@@ -434,7 +487,44 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
       return ok(moved);
     },
 
-    /** Ein Ordner mit Inhalt wird nicht gelöscht — weder mit Unterordnern noch mit Tags. */
+    /**
+     * Ein Ordner wird nicht gelöscht, solange er **Inhalt** hat oder in einer
+     * **Regel** steht (A-4.5, A-4.6, E-057, R-1 Befund 1).
+     *
+     * ---------------------------------------------------------------------------
+     * Warum die zweite Frage seit T-089 danebensteht
+     * ---------------------------------------------------------------------------
+     *
+     * Bis T-089 fragte diese Stelle nur nach dem Inhalt. Löschbar war also
+     * genau ein **leerer** Ordner — und der leere Ordner in einer
+     * erforderlichen Achse ist der Fall, um den es in E-057 geht. Die Wirkung
+     * war die, gegen die E-057 geschrieben ist, nur über die Hintertür: Die
+     * Regel „Ordner Ost **und** Status offen" verlor beim Löschen von Ost
+     * still ihren Term und hieß danach „Status offen". Sie traf **mehr**, als
+     * der Benutzer gesagt hatte, und eine Spalte, die zu viel zeigt, fällt
+     * niemandem auf.
+     *
+     * Zwei Funktionen weiter oben, bei `TagPort.remove`, stand dieselbe
+     * Überlegung längst ausgeschrieben; hier fehlte sie.
+     *
+     * Seit Migration 0012 steht `pool_rule.folder_id` zusätzlich auf
+     * ON DELETE **RESTRICT** — dieselbe Bauart wie bei `status_id` (0011): Die
+     * Datenbank weist ab, und diese Prüfung nimmt ihr das Wort aus dem Mund.
+     * „Dieser Ordner wird in der Regel eines Pools verwendet" statt
+     * „FOREIGN KEY constraint failed", und mit den Namen der Regeln in
+     * `details`, damit der Benutzer weiß, wo er nachsehen muss.
+     *
+     * ---------------------------------------------------------------------------
+     * Warum `tag_in_use` und kein eigener Schlüssel
+     * ---------------------------------------------------------------------------
+     *
+     * Es ist wörtlich derselbe Sachverhalt wie bei einem Tag in einer Regel,
+     * und dort heißt er `tag_in_use` — drei verschiedene Gründe teilen sich
+     * diesen Schlüssel bereits (Todos, Regel, Standard-Tag). Der Fehlerschlüssel
+     * ist eine Zusage an seine Aufrufer; ein vierter Schlüssel für denselben
+     * Satz hätte jede Fehleranzeige um einen Zweig verlängert, ohne dass
+     * jemand anders damit umgeht. Welches Ding gemeint ist, sagt die Route.
+     */
     async remove(id) {
       if (loadOne(id) === null) return err(taktError('not_found', 'Diesen Ordner gibt es nicht.'));
 
@@ -457,12 +547,36 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
         );
       }
 
+      // Die Regel beim Namen: `pool_id` und `name` stehen der Abfrage ohnehin
+      // zur Verfügung, und ohne sie ist die Sperre bei zwanzig Regeln eine
+      // Suche. `ix_pool_rule_folder` trägt die Frage (Migration 0011); die
+      // Obergrenze steht an {@link RULE_REFERENCE_PROBE} (R-3a H-3).
+      const usedIn = conn
+        .prepare(
+          `SELECT DISTINCT p.id AS id, p.name AS name
+             FROM pool_rule r JOIN pool p ON p.id = r.pool_id
+            WHERE r.folder_id = ?
+            ORDER BY p.position, p.name
+            LIMIT ${String(RULE_REFERENCE_PROBE)}`,
+        )
+        .all(id);
+
+      if (usedIn.length > 0) {
+        const { details, notice } = poolReferences(usedIn);
+        return err({
+          code: 'tag_in_use' as const,
+          message: `Dieser Ordner wird in der Regel eines Pools verwendet.${notice}`,
+          details,
+        });
+      }
+
       const outcome = attempt(() => conn.prepare('DELETE FROM tag_folder WHERE id = ?').run(id));
       if (!outcome.ok) return err(outcome.error as never);
       return ok(undefined);
     },
   };
 }
+
 
 /**
  * Pools (A-3.1 bis A-3.4).
@@ -477,8 +591,9 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
 /**
  * Pools **und** Kanban-Spalten (A-3.*, E-054).
  *
- * Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel über
- * Tags wie ein Pool; `pool.placement` sagt, wo sie erscheint. Es gibt deshalb
+ * Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel wie
+ * ein Pool — seit E-055 über fünf Achsen und nicht allein über Tags;
+ * `pool.placement` sagt, wo sie erscheint. Es gibt deshalb
  * keinen zweiten Adapter für Spalten — er wäre dieser hier, abgeschrieben samt
  * `resolvePoolRule` und der rekursiven Ordnerauflösung.
  *
@@ -492,24 +607,94 @@ export function createPoolPort(
   ids: IdSource,
   searchTodos: (filter: TodoFilter, pagination?: Pagination) => Promise<Page<Todo>>,
 ): PoolPort {
-  const ruleOf = (id: PoolId): readonly PoolRuleTerm[] =>
-    conn
-      .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ? ORDER BY COALESCE(tag_id, folder_id)')
-      .all(id)
-      .map(toPoolRuleTerm);
+  /**
+   * Alle drei Rollen einer Regel in **einer** Abfrage (T-076).
+   *
+   * Nicht drei Abfragen mit je einem `WHERE role = ?`: Es ist derselbe
+   * Indexzugriff auf `ux_pool_rule (pool_id, role, …)`, und drei Aufrufe je
+   * geladener Regel wären auf der Pool-Liste dreimal so viele wie nötig.
+   * Sortiert wird nach `role`, damit die Reihenfolge nicht davon abhängt, in
+   * welcher Folge SQLite die Zeilen zurückgibt.
+   */
+  const partsOf = (
+    id: PoolId,
+  ): {
+    readonly required: readonly PoolTagTerm[];
+    readonly excluded: readonly PoolTagTerm[];
+    readonly statusIds: readonly StatusId[];
+  } => {
+    const required: PoolTagTerm[] = [];
+    const excluded: PoolTagTerm[] = [];
+    const statusIds: StatusId[] = [];
+
+    const rows = conn
+      .prepare(
+        `SELECT role, tag_id, folder_id, status_id FROM pool_rule
+          WHERE pool_id = ?
+          ORDER BY role, COALESCE(tag_id, folder_id, status_id)`,
+      )
+      .all(id);
+
+    for (const row of rows) {
+      const role = text(row, 'role');
+      if (role === 'status') {
+        // `text` und nicht eine Prüfung auf `null`: Der CHECK des Schemas sagt
+        // zu, dass eine Zeile mit `role = 'status'` eine Kennung trägt. Eine
+        // Zeile, die das nicht tut, ist ein Fehler im Schema und soll auffallen
+        // — dieselbe Haltung wie in `toPoolRuleTerm` und `toTimeEntry`, wo ein
+        // stiller Rückfall eine halbe Regel beziehungsweise eine Buchung mit
+        // Dauer 0 ergäbe.
+        statusIds.push(text(row, 'status_id') as StatusId);
+        continue;
+      }
+      // Der CHECK des Schemas lässt nur `required`, `excluded` und `status` zu.
+      // Alles, was nicht `excluded` ist, ist deshalb `required` — und ein Wert,
+      // den es nicht geben kann, landet in der einschränkenderen der beiden
+      // Listen und nicht in der ausschließenden.
+      (role === 'excluded' ? excluded : required).push(toPoolRuleTerm(row));
+    }
+
+    return { required, excluded, statusIds };
+  };
 
   const loadOne = (id: PoolId): Pool | null => {
     const row = conn.prepare(`SELECT ${POOL_COLUMNS} FROM pool WHERE id = ?`).get(id);
-    return row === undefined ? null : toPool(row, ruleOf(id));
+    if (row === undefined) return null;
+    const parts = partsOf(id);
+    return toPool(row, parts.required, { excludedTags: parts.excluded, statusIds: parts.statusIds });
   };
 
-  const writeRule = (poolId: PoolId, rule: readonly PoolRuleTerm[]): void => {
+  /**
+   * Schreibt **alle** Achsen, die als Zeilen in `pool_rule` stehen (T-076).
+   *
+   * Erst löschen, dann schreiben — wie zuvor, und aus demselben Grund in einem
+   * Sicherungspunkt (siehe `update`). Neu ist, dass die drei Listen zusammen
+   * geschrieben werden: Eine Änderung, die nur die erforderlichen Tags
+   * ersetzte und die ausgeschlossenen stehen ließe, wäre eine halbe Regel, und
+   * welche Hälfte gemeint war, könnte hier niemand entscheiden.
+   */
+  const writeRule = (
+    poolId: PoolId,
+    required: readonly PoolTagTerm[],
+    excluded: readonly PoolTagTerm[],
+    statusIds: readonly StatusId[],
+  ): void => {
     conn.prepare('DELETE FROM pool_rule WHERE pool_id = ?').run(poolId);
-    const insert = conn.prepare('INSERT INTO pool_rule (pool_id, tag_id, folder_id) VALUES (?, ?, ?)');
-    for (const term of rule) {
-      if (term.kind === 'tag') insert.run(poolId, term.tagId, null);
-      else insert.run(poolId, null, term.folderId);
-    }
+    const insert = conn.prepare(
+      'INSERT INTO pool_rule (pool_id, role, tag_id, folder_id, status_id) VALUES (?, ?, ?, ?, ?)',
+    );
+    // **Eine** Schleife für beide Taglisten, mit der Rolle als Argument. Zwei
+    // Schleifen wären dieselbe Fallunterscheidung zweimal — und die zweite
+    // wäre die, die beim nächsten Termtyp vergessen wird.
+    const writeTerms = (role: 'required' | 'excluded', terms: readonly PoolTagTerm[]): void => {
+      for (const term of terms) {
+        if (term.kind === 'tag') insert.run(poolId, role, term.tagId, null, null);
+        else insert.run(poolId, role, null, term.folderId, null);
+      }
+    };
+    writeTerms('required', required);
+    writeTerms('excluded', excluded);
+    for (const statusId of statusIds) insert.run(poolId, 'status', null, null, statusId);
   };
 
   const nextPosition = (): number => {
@@ -539,7 +724,13 @@ export function createPoolPort(
                 `SELECT ${POOL_COLUMNS} FROM pool WHERE placement IN (?, 'both') ORDER BY position`,
               )
               .all(surface);
-      return rows.map((row) => toPool(row, ruleOf(text(row, 'id') as PoolId)));
+      return rows.map((row) => {
+        const parts = partsOf(text(row, 'id') as PoolId);
+        return toPool(row, parts.required, {
+          excludedTags: parts.excluded,
+          statusIds: parts.statusIds,
+        });
+      });
     },
 
     /**
@@ -558,10 +749,22 @@ export function createPoolPort(
 
     async create(pool, now) {
       const id = ids.next() as PoolId;
+      // Die Neutralwerte der vier Achsen aus T-076 an **einer** Stelle, als
+      // Vorspann statt als vier `??` weiter unten. Was der Aufrufer nennt,
+      // gewinnt; was er wegläßt, steht neutral — dieselbe Vorgabe, die auch das
+      // Schema setzt (Migration 0011).
+      const axes = {
+        excludedTags: [] as readonly PoolTagTerm[],
+        statusIds: [] as readonly StatusId[],
+        completion: 'any' as const,
+        exportState: 'any' as const,
+        ...pool,
+      };
       conn
         .prepare(
-          `INSERT INTO pool (id, name, match_mode, include_subfolders, placement, position, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO pool (id, name, match_mode, include_subfolders, placement, position,
+                             completion, export_state, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -580,10 +783,14 @@ export function createPoolPort(
           // Vorgabe: Die greift nur, wenn die Spalte gar nicht genannt wird.
           pool.placement ?? 'pool',
           pool.position > 0 ? pool.position : nextPosition(),
+          // Ohne genannte Achse der Neutralwert (T-076) — dieselbe Bauart und
+          // derselbe Grund wie bei `placement` eine Zeile darüber.
+          axes.completion,
+          axes.exportState,
           now,
           now,
         );
-      writeRule(id, pool.rule);
+      writeRule(id, pool.rule, axes.excludedTags, axes.statusIds);
       const created = loadOne(id);
       if (created === null) throw new Error('Der angelegte Pool ist nicht auffindbar.');
       return created;
@@ -622,10 +829,37 @@ export function createPoolPort(
           sets.push('position = ?');
           params.push(pool.position);
         }
+        if (pool.completion !== undefined) {
+          sets.push('completion = ?');
+          params.push(pool.completion);
+        }
+        if (pool.exportState !== undefined) {
+          sets.push('export_state = ?');
+          params.push(pool.exportState);
+        }
         sets.push('updated_at = ?');
         params.push(now, id);
         conn.prepare(`UPDATE pool SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-        if (pool.rule !== undefined) writeRule(id, pool.rule);
+
+        // Die drei Listen werden **gemeinsam** geschrieben, sobald eine von
+        // ihnen genannt ist: `writeRule` löscht alle Zeilen der Regel und legt
+        // sie neu an. Wer nur `rule` schickt, meint „diese erforderlichen Tags"
+        // und nicht „lösche meine Ausschlüsse"; deshalb wird für jede nicht
+        // genannte Liste der **vorhandene** Stand eingesetzt und nicht die
+        // leere Liste.
+        if (
+          pool.rule !== undefined ||
+          pool.excludedTags !== undefined ||
+          pool.statusIds !== undefined
+        ) {
+          const current = partsOf(id);
+          writeRule(
+            id,
+            pool.rule ?? current.required,
+            pool.excludedTags ?? current.excluded,
+            pool.statusIds ?? current.statusIds,
+          );
+        }
       });
       if (!outcome.ok) return err(outcome.error);
 
@@ -654,6 +888,31 @@ export function createPoolPort(
     },
 
     /**
+     * Dieselbe Auflösung für die **ausgeschlossenen** Tags (T-076).
+     *
+     * Ein Argument Unterschied, keine zweite Abfrage: Die rekursive
+     * Ordnerauflösung steht einmal da und wird von beiden Listen benutzt.
+     */
+    async resolveExcluded(id) {
+      return resolvePoolRule(conn, id, 'excluded');
+    },
+
+    /**
+     * Beide Achsen samt der Ordner, aus denen nichts geworden ist (E-057).
+     *
+     * Dieselbe Auflösung wie die beiden Methoden darüber — sie rufen dieselbe
+     * Funktion —, nur mit der Auskunft, die eine Tagmenge nicht tragen kann.
+     */
+    async resolveAxes(id) {
+      const required = resolvePoolAxis(conn, id);
+      const excluded = resolvePoolAxis(conn, id, 'excluded');
+      return {
+        required: { tagIds: required.tagIds, emptyFolderIds: required.emptyFolderIds },
+        excluded: { tagIds: excluded.tagIds, emptyFolderIds: excluded.emptyFolderIds },
+      };
+    },
+
+    /**
      * Mitglieder eines Pools — abgeleitet, nicht gespeichert.
      *
      * Die Abfrage geht über `TodoPort.search`, damit Pool-Ansicht und Liste
@@ -667,19 +926,69 @@ export function createPoolPort(
 }
 
 /**
- * Die Regel eines Pools als Tagmenge.
+ * Eine Tagliste einer Regel als aufgelöste Tagmenge.
  *
  * Steht außerhalb von `createPoolPort`, weil `TodoPort.search` sie ebenfalls
  * braucht und die beiden Ports sich sonst gegenseitig halten müssten.
+ *
+ * `role` sagt, **welche** der beiden Taglisten gemeint ist (T-076). Der
+ * Vorgabewert `'required'` ist die Liste, die es seit A-3.2 gibt: Jeder
+ * Aufrufer aus der Zeit davor bekommt damit unverändert das, was er meinte.
+ *
+ * Die Auflösung ist für beide Listen dieselbe — Ordner samt Unterordnern,
+ * beliebig tief, über eine rekursive Abfrage —, und das ist der Grund, warum es
+ * hier eine Funktion mit einem Argument gibt und nicht zwei Funktionen: Die
+ * zweite wäre die erste, abgeschrieben samt der rekursiven Abfrage.
  */
-export function resolvePoolRule(conn: SqlConnection, poolId: PoolId | string): readonly TagId[] {
+export function resolvePoolRule(
+  conn: SqlConnection,
+  poolId: PoolId | string,
+  role: 'required' | 'excluded' = 'required',
+): readonly TagId[] {
+  return resolvePoolAxis(conn, poolId, role).tagIds;
+}
+
+/**
+ * Was aus einer Tagachse geworden ist — die Tags, die Zahl der Terme **und**
+ * die Ordner, aus denen nichts geworden ist (E-057).
+ *
+ * Der Zusatz gegenüber {@link resolvePoolRule} ist der Grund für E-057: Aus
+ * `tagIds` allein läßt sich nicht ablesen, ob ein genannter Ordner etwas
+ * beigetragen hat. Zwei Zustände sehen dort gleich aus —
+ *
+ *   „über Tags sagt diese Regel nichts"      → Neutralwert, die übrigen Achsen
+ *                                              entscheiden
+ *   „Ordner Ost genannt, Ost ist leer"       → Einschränkung ohne Treffer, die
+ *                                              Regel trifft nichts
+ *
+ * — und der zweite verschwindet vollends, sobald daneben ein Tagterm steht:
+ * Dann ist `tagIds` gefüllt, und die achsenweise Summe verrät den leeren Ordner
+ * nicht mehr. Deshalb wird **je Ordnerterm** gezählt.
+ *
+ * Es kostet keine zweite Abfrage: Die Terme werden hier ohnehin gelesen, und
+ * die rekursive Auflösung trägt die Wurzel, von der sie ausgegangen ist, in
+ * derselben Zeile mit. Beurteilt wird nichts davon hier, sondern in der Domäne
+ * (`tagAxisIsUnresolved`) — diese Datei liest, sie entscheidet nicht.
+ */
+export function resolvePoolAxis(
+  conn: SqlConnection,
+  poolId: PoolId | string,
+  role: 'required' | 'excluded' = 'required',
+): {
+  readonly named: number;
+  readonly tagIds: readonly TagId[];
+  readonly emptyFolderIds: readonly TagFolderId[];
+} {
   const pool = conn.prepare('SELECT include_subfolders FROM pool WHERE id = ?').get(poolId);
-  if (pool === undefined) return [];
+  // Eine Regel, die es nicht gibt, nennt auch nichts: `named: 0`. Sie ist damit
+  // eine leere Regel und keine Einschränkung ohne Treffer — sie trifft nichts,
+  // aber aus dem Grund aus A-3.4 und nicht aus dem aus E-057.
+  if (pool === undefined) return { named: 0, tagIds: [], emptyFolderIds: [] };
   const includeSubfolders = integer(pool, 'include_subfolders') !== 0;
 
   const terms = conn
-    .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ?')
-    .all(poolId);
+    .prepare('SELECT tag_id, folder_id FROM pool_rule WHERE pool_id = ? AND role = ?')
+    .all(poolId, role);
 
   const tagIds = new Set<string>();
   const folderIds: string[] = [];
@@ -691,36 +1000,98 @@ export function resolvePoolRule(conn: SqlConnection, poolId: PoolId | string): r
       continue;
     }
     const folderId = term['folder_id'];
-    if (typeof folderId === 'string') folderIds.push(folderId);
+    // Zweimal derselbe Ordner ist ein Ordner: Sonst stünde er in der Auskunft
+    // an die Oberfläche doppelt.
+    if (typeof folderId === 'string' && !folderIds.includes(folderId)) folderIds.push(folderId);
   }
 
+  const emptyFolderIds: string[] = [];
+
   if (folderIds.length > 0) {
+    // `root` ist der Ordner **aus der Regel**, `id` der Tag, der über ihn
+    // hereinkommt — auch aus beliebig tiefen Unterordnern. Ohne diese Spalte
+    // wüßte der Aufrufer nur, wie viele Tags insgesamt herausgekommen sind,
+    // und ein leerer Ordner neben einem gefüllten bliebe unsichtbar.
     const rows = includeSubfolders
       ? conn
           .prepare(
-            `WITH RECURSIVE down(id, depth) AS (
-                 SELECT f.id, 0 FROM tag_folder f WHERE f.id IN (${placeholders(folderIds.length)})
+            `WITH RECURSIVE down(root, id, depth) AS (
+                 SELECT f.id, f.id, 0 FROM tag_folder f WHERE f.id IN (${placeholders(folderIds.length)})
                  UNION
-                 SELECT f.id, down.depth + 1
+                 SELECT down.root, f.id, down.depth + 1
                    FROM tag_folder f JOIN down ON f.parent_id = down.id
                   WHERE down.depth < 1000
                )
-               SELECT t.id FROM tag t JOIN down ON t.folder_id = down.id`,
+               SELECT down.root AS root, t.id AS id FROM tag t JOIN down ON t.folder_id = down.id`,
           )
           .all(...folderIds)
       : conn
-          .prepare(`SELECT id FROM tag WHERE folder_id IN (${placeholders(folderIds.length)})`)
+          .prepare(
+            `SELECT folder_id AS root, id FROM tag WHERE folder_id IN (${placeholders(folderIds.length)})`,
+          )
           .all(...folderIds);
-    for (const row of rows) tagIds.add(text(row, 'id'));
+
+    const filled = new Set<string>();
+    for (const row of rows) {
+      tagIds.add(text(row, 'id'));
+      filled.add(text(row, 'root'));
+    }
+    // Die Reihenfolge ist die der Regel und nicht die der Abfrage: Die
+    // Oberfläche nennt die Ordner in derselben Folge, in der sie im Formular
+    // stehen.
+    for (const folderId of folderIds) {
+      if (!filled.has(folderId)) emptyFolderIds.push(folderId);
+    }
   }
 
-  return [...tagIds] as TagId[];
+  // `named` zählt die **Terme**, nicht die Tags: Ein Ordnerterm ist eine
+  // genannte Bedingung, gleich wie viele Tags er ergibt — auch keinen.
+  return {
+    named: terms.length,
+    tagIds: [...tagIds] as TagId[],
+    emptyFolderIds: emptyFolderIds as TagFolderId[],
+  };
 }
 
 /** Der Modus einer Pool-Regel. Für die Filterübersetzung in `repo-todos.ts`. */
-export function poolMatchMode(conn: SqlConnection, poolId: string): 'any' | 'all' {
+export function poolMatchMode(conn: SqlConnection, poolId: string): PoolMatchMode {
   const row = conn.prepare('SELECT match_mode FROM pool WHERE id = ?').get(poolId);
   return row !== undefined && text(row, 'match_mode') === 'all' ? 'all' : 'any';
+}
+
+/**
+ * Die Achsen einer Regel, die **keine** Tagmenge sind (T-076).
+ *
+ * Für dieselbe Filterübersetzung wie `poolMatchMode` daneben. Eine Regel, die
+ * es nicht gibt, liefert lauter Neutralwerte — und trifft in Verbindung mit
+ * zwei leeren Taglisten damit nichts, so wie es `matchesPool` für sie
+ * entschiede.
+ */
+export function poolAxes(
+  conn: SqlConnection,
+  poolId: string,
+): {
+  readonly statusIds: readonly StatusId[];
+  readonly completion: PoolCompletionFilter;
+  readonly exportState: PoolExportFilter;
+} {
+  // Eine Regel, die es nicht gibt, liefert eine leere Zeile — und damit über
+  // die Mapper lauter Neutralwerte.
+  const row = conn.prepare('SELECT completion, export_state FROM pool WHERE id = ?').get(poolId) ?? {};
+
+  return {
+    statusIds: conn
+      .prepare("SELECT status_id FROM pool_rule WHERE pool_id = ? AND role = 'status'")
+      .all(poolId)
+      .map((entry) => text(entry, 'status_id') as StatusId),
+    // **Dieselben** Funktionen wie in `toPool`, nicht dieselbe Regel ein
+    // zweites Mal. Beide Wege — die geladene Regel und die Filterübersetzung —
+    // müssen aus demselben gespeicherten Wert dieselbe Achse lesen; zwei
+    // Fassungen davon wären zwei Boards, von denen die Oberfläche eines zeigt
+    // und die Abfrage das andere beantwortet.
+    completion: toPoolCompletion(row['completion']),
+    exportState: toPoolExportState(row['export_state']),
+  };
 }
 
 export type { Timestamp };

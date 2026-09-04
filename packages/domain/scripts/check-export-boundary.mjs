@@ -202,9 +202,31 @@ const forbiddenForExportPackage = [
   { prefix: '@takt/storage', reason: 'Der Exportmotor darf die Speicherung nicht kennen; er bekommt fertige ExportGroup-Werte übergeben.' },
 ];
 
+/**
+ * Untergrenzen — ein Nachweis, der über nichts läuft, meldet nicht grün
+ * (R-3 S-1, T-089).
+ *
+ * `collect` gibt eine leere Liste zurück, wenn es das Verzeichnis nicht gibt.
+ * Die beiden Schichten darunter meldeten ihre Zahl bisher als Fließtext und
+ * **prüften sie nicht**: Eine Umbenennung von `packages/export/src`, ein Umzug
+ * der Pakete oder ein Fehler in `collect` ergäbe „0 Quelldatei(en) geprüft",
+ * Exitcode 0 und die Schlußzeile „Notiz-Trennung: alle Schichten unverletzt."
+ * Ein Wächter, der das sagt, ohne hingesehen zu haben, ist schlimmer als
+ * keiner — er ersetzt das Nachsehen.
+ *
+ * Die Zahlen sind bewußt weit unter dem Bestand (8 und 298 zum Zeitpunkt von
+ * T-089): Sie sollen den **Wegfall** fangen, nicht das Wachstum bremsen.
+ * Dieselbe Bauart benutzt `proof:route-policy` mit `routes.length >= 60`.
+ */
+const MIN_EXPORT_SOURCES = 1;
+const MIN_DEEP_IMPORT_SOURCES = 50;
+
 async function checkExportPackage() {
   if (!(await exists(exportRoot))) {
-    note('packages/export existiert noch nicht (T-007). Die Prüfung greift, sobald das Paket angelegt ist.');
+    fail(
+      'packages/export gibt es nicht. Das Paket existiert seit T-007; fehlt es, ist die vierte Schicht ' +
+        'der Notiz-Trennung nicht geprüft, und dieser Lauf hätte sie stillschweigend übersprungen.',
+    );
     return;
   }
 
@@ -259,6 +281,14 @@ async function checkExportPackage() {
     }
   }
 
+  if (sources.length < MIN_EXPORT_SOURCES) {
+    fail(
+      `packages/export/src: ${sources.length} Quelldatei(en) gefunden, erwartet mindestens ` +
+        `${MIN_EXPORT_SOURCES}. Über null Dateien zu laufen und „unverletzt" zu melden ist keine Prüfung.`,
+    );
+    return;
+  }
+
   note(`packages/export: ${sources.length} Quelldatei(en) auf Importe geprüft.`);
 }
 
@@ -283,6 +313,14 @@ async function checkDeepImports() {
         }
       }
     }
+  }
+
+  if (checked < MIN_DEEP_IMPORT_SOURCES) {
+    fail(
+      `${checked} Quelldatei(en) außerhalb der Domäne gefunden, erwartet mindestens ` +
+        `${MIN_DEEP_IMPORT_SOURCES}. So wenige gibt es in diesem Baum nicht — gesucht wurde am falschen Ort.`,
+    );
+    return;
   }
 
   note(`${checked} Quelldatei(en) außerhalb der Domäne auf Tiefenzugriffe geprüft.`);

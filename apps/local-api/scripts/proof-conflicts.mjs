@@ -860,6 +860,58 @@ try {
     harmless.status === 200 || harmless.status === 404,
     `${String(harmless.status)} ${JSON.stringify(harmless.body)}`,
   );
+
+  // -------------------------------------------------------------------------
+  section('6  Ein Status, der in einer Regel steht, wird nicht weggelöscht (T-076)');
+  // -------------------------------------------------------------------------
+  //
+  // Seit T-076 kann eine Regel nach dem Status filtern. `pool_rule.status_id`
+  // steht deshalb auf ON DELETE **RESTRICT** — anders als `tag_id`, das
+  // kaskadiert. Der Unterschied ist der Grund für diesen Abschnitt: Bei einem
+  // gelöschten Tag entkernte die Datenbank die Regel stillschweigend, und nur
+  // eine Prüfung im Adapter verhinderte das (A-4.5). Beim Status weist auch die
+  // Datenbank ab — aber mit „FOREIGN KEY constraint failed", und das ist ein
+  // 4xx ohne Erklärung.
+  //
+  // Gemessen wird deshalb beides: dass abgewiesen wird, **und** dass der Satz
+  // aus dem Anwendungsfall kommt und nicht aus SQLite.
+
+  const ruleStatus = ((await get('/todo-statuses')).body?.data ?? []).find(
+    (entry) => entry.isDefault !== true,
+  );
+  const ruleColumn = await call('/pools', {
+    method: 'POST',
+    token: secret,
+    body: { name: 'Spalte über einen Status', placement: 'board', statusIds: [ruleStatus?.id] },
+  });
+  check(
+    'eine Spalte lässt sich mit einem Statusterm anlegen',
+    ruleColumn.status === 201 && ruleColumn.body?.data?.statusIds?.[0] === ruleStatus?.id,
+    `${String(ruleColumn.status)} ${JSON.stringify(ruleColumn.body?.data?.statusIds)}`,
+  );
+
+  const blocked = await call(`/todo-statuses/${ruleStatus?.id}`, { method: 'DELETE', token: secret });
+  rejects('DELETE /todo-statuses/{id} auf einen Status, den eine Regel benutzt', blocked, 'status_in_use');
+  check(
+    'und die Meldung nennt die Regel, nicht den Fremdschlüssel',
+    typeof blocked.body?.error?.message === 'string' &&
+      blocked.body.error.message.includes('Regel') &&
+      !blocked.body.error.message.includes('FOREIGN KEY'),
+    JSON.stringify(blocked.body?.error?.message),
+  );
+
+  // Die Gegenprobe: Ohne den Statusterm geht es wieder. Sonst wäre die Sperre
+  // eine Sackgasse — derselbe Punkt wie beim Standard-Status oben.
+  await patch(`/pools/${ruleColumn.body?.data?.id}`, { statusIds: [] });
+  const afterRelease = await call(`/todo-statuses/${ruleStatus?.id}`, {
+    method: 'DELETE',
+    token: secret,
+  });
+  check(
+    'nachdem der Statusterm aus der Regel genommen ist, lässt er sich löschen',
+    afterRelease.status === 204,
+    `${String(afterRelease.status)} ${JSON.stringify(afterRelease.body)}`,
+  );
 } finally {
   child.kill('SIGTERM');
   await sleep(300);

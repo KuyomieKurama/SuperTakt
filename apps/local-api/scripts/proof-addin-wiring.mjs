@@ -316,10 +316,20 @@ try {
       booked.body?.data?.doneCleared === false && booked.body?.data?.todoWasDone === false,
       JSON.stringify(booked.body?.data ?? {}).slice(0, 200),
     );
+    // Seit T-104 steht die Bewegung als **ein** Feld in der Antwort und nicht
+    // mehr als drei Listen (E-061 Punkt 3). Hier ist es die erste Buchung auf
+    // einem offenen Todo — die erste abgeschlossene Buchung entsteht, also wird
+    // gerechnet und `null` wäre falsch. Drei leere Listen wären dagegen eine
+    // gültige Aussage: Auf dieses Todo passt keine Regel.
+    const movement = booked.body?.data?.poolMovement;
     check(
-      'und sie nennt die Pools des Todos beim Namen (I-05, poolNames) — leer ist eine Aussage, nicht ein Fehlen',
-      Array.isArray(booked.body?.data?.poolNames),
-      JSON.stringify(booked.body?.data?.poolNames ?? null),
+      'und sie nennt die Bewegung durch die Regeln beim Namen (I-05, poolMovement) — leere Listen sind eine Aussage, nicht ein Fehlen',
+      movement !== null &&
+        typeof movement === 'object' &&
+        Array.isArray(movement.appears) &&
+        Array.isArray(movement.enters) &&
+        Array.isArray(movement.leaves),
+      JSON.stringify(movement ?? null),
     );
   }
 

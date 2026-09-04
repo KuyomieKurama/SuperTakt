@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import {
   useCallback,
   useEffect,
@@ -9,6 +10,7 @@ import {
 } from "react";
 import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
+import { Foreign } from "./Foreign";
 
 /**
  * Baumansicht der Tag-Ordner — A-4.2 bis A-4.4, S-08, I-07, I-08.
@@ -75,7 +77,7 @@ import { Icon } from "./Icon";
 
 export interface TagTreeNode {
   readonly id: string;
-  readonly label: string;
+  readonly label: ForeignText;
   readonly kind: "folder" | "tag";
   /** Anzahl der Tags im Teilbaum. Nur fuer Ordner sinnvoll. */
   readonly tagCount?: number;
@@ -453,7 +455,7 @@ export function TagTree({
                     E{row.level}
                   </span>
                 ) : null}
-                {row.node.label}
+                <Foreign value={row.node.label} />
               </span>
               {row.node.kind === "folder" && row.node.tagCount !== undefined ? (
                 <span className="tree__count">

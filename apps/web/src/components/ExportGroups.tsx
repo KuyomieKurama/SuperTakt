@@ -1,9 +1,12 @@
+import type { ForeignText } from "../api/types";
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../lib/labels";
 import { exportDisplayState, ExportStatusBadge } from "./ExportStatus";
 import { Icon } from "./Icon";
 import { Button, IconButton } from "./Primitives";
+import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Exportvorschau nach Tagesgruppen — S-07, A-8.6, E-020, E-025, E-031, E-034.
@@ -55,9 +58,9 @@ export interface ExportGroupEntryData {
 
 export interface ExportGroupData {
   readonly id: string;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   /** Call-Nummer des Todos (A-2.6). `null`, wenn nicht gesetzt. */
-  readonly callNumber: string | null;
+  readonly callNumber: ForeignText | null;
   /** Bereits formatierter Kalendertag der Startzeit (E-025). */
   readonly day: string;
   /** Buchungen der Gruppe, bereits nach Startzeit sortiert. */
@@ -192,7 +195,7 @@ function ExportGroupRow({
 
         <div className="egroup__identity">
           <p className="egroup__title" id={titleId}>
-            {group.todoTitle}
+            <Foreign value={group.todoTitle} />
           </p>
           <p className="egroup__meta">
             <span>{group.day}</span>
@@ -200,7 +203,9 @@ function ExportGroupRow({
             {group.callNumber === null ? (
               <span className="muted">ohne Call</span>
             ) : (
-              <span className="mono">{group.callNumber}</span>
+              <span className="mono">
+                <Foreign value={group.callNumber} />
+              </span>
             )}
             <span aria-hidden> · </span>
             <span>
@@ -278,11 +283,12 @@ function ExportGroupRow({
                 ) : (
                   <span className="eentry__spacer" aria-hidden />
                 )}
-                <span className="eentry__note truncate" title={entry.note}>
+                <span className="eentry__note truncate" title={foreignText(entry.note)}>
                   {entry.note === "" ? (
                     <span className="muted">— keine Leistung erfasst —</span>
                   ) : (
-                    entry.note
+                    /* Die Leistung geht in die Abrechnung — fremder Text, siehe `Foreign`. */
+                    <Foreign value={entry.note} />
                   )}
                 </span>
                 {onEditEntry === undefined ? null : entry.note === "" ? (

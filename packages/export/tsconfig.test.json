@@ -1,0 +1,13 @@
+// Typprüfung der Testdateien; siehe packages/domain/tsconfig.test.json.
+//
+// Anders als der Motor selbst dürfen die Tests `node` sehen: `Buffer` dient
+// dort als Vergleichsmaßstab für die handgeschriebene Base64-Kodierung.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test"]
+}

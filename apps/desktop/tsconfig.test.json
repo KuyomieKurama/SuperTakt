@@ -1,0 +1,13 @@
+// Typprüfung der Testdateien; siehe packages/domain/tsconfig.test.json.
+// `test/` prüft die Bauskripte unter `scripts/` (erstmals T-100, `isInside`).
+// Die Skripte selbst sind `.mjs` ohne Typen und bleiben ausgeschlossen; der
+// Import im Test trägt deshalb ein `@ts-expect-error`, das hier auch
+// nachgewiesen wird: Bekämen die Skripte einmal Typen, fiele es auf.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["sidecar", "src", "test"]
+}

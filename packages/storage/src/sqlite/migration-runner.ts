@@ -240,6 +240,12 @@ export function createMigrationRunner(
    * Gegenprobe oben läuft trotzdem und noch vor dem Festschreiben. Der
    * Schalter ist ausdrücklich und steht in der Datei, die ihn braucht — nicht
    * als Voreinstellung für alle.
+   *
+   * **Beide Schalter stellt das `finally` wieder her**, `foreign_keys` und
+   * `legacy_alter_table` (R-3a H-4). Ein Pragma ist eine Einstellung der
+   * Verbindung und nicht Teil der Transaktion; `ROLLBACK` nimmt es nicht
+   * zurück. Eine Migration, die mittendrin wirft, hinterließe sonst eine
+   * Verbindung mit einer Einstellung, die niemand mehr gesetzt hat.
    */
   const applyOne = (migration: Migration, direction: 'up' | 'down', now: Timestamp): void => {
     const sql = direction === 'up' ? migration.up : migration.down;
@@ -272,6 +278,30 @@ export function createMigrationRunner(
       // ganze Dienst danach ohne Fremdschlüsselprüfung — der teuerste
       // denkbare Nebeneffekt einer Migration.
       if (withoutForeignKeys) conn.exec('PRAGMA foreign_keys = ON;');
+
+      /*
+       * Dasselbe für `legacy_alter_table` (R-3a H-4).
+       *
+       * Sechs Migrationsdateien schalten ihn selbst ein und in ihrer letzten
+       * Zeile wieder aus, weil ein `RENAME` sonst die REFERENCES-Klauseln der
+       * Nachbartabellen nachzieht. Wirft eine Migration **mittendrin**, wird
+       * diese letzte Zeile nie ausgeführt: `ROLLBACK` nimmt die Daten zurück,
+       * aber kein Pragma — es ist eine Einstellung der Verbindung und nicht
+       * Teil der Transaktion. Die Verbindung behielte `legacy_alter_table = ON`,
+       * und ein späteres `RENAME` verhielte sich anders als gedacht.
+       *
+       * Heute folgenlos, weil ein Fehlschlag den Start beendet. Die Begründung
+       * für `foreign_keys` gilt trotzdem Wort für Wort, und eine Unsymmetrie,
+       * die nur wegen eines Umstands außerhalb dieser Datei nicht schadet, ist
+       * keine Bauart, sondern ein Zufall.
+       *
+       * **Ohne Bedingung** und anders als oben: Der Läufer schaltet diesen
+       * Schalter nie selbst ein, also gibt es keinen Vermerk in der Datei, an
+       * dem er es festmachen könnte. `OFF` ist die Vorgabe von SQLite; ihn nach
+       * jeder Migration wiederherzustellen kostet ein Pragma und kann keinen
+       * Fall verfehlen, den ein Textvergleich übersehen hätte.
+       */
+      conn.exec('PRAGMA legacy_alter_table = OFF;');
     }
   };
 

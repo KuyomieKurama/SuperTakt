@@ -13,15 +13,69 @@
  * Regel fuer alle Eintraege: Der Schluessel ist der Wert aus dem Datenmodell,
  * niemals ein hier erfundener. Wer eine Beschriftung braucht, deren Wert es im
  * Datenmodell nicht gibt, hat einen Modellfehler und keine Uebersetzungsluecke.
+ *
+ * ## Der Wertebereich kommt aus der Domaene, nicht von hier (R-1, T-091)
+ *
+ * Wo `@takt/domain` eine Aufzaehlung bereits als benannten Typ fuehrt, wird er
+ * hier **importiert und weitergereicht** — nicht ein zweites Mal getippt. Der
+ * Grund ist die Richtung, die weh tut: Eine hier abgeschriebene Fassung bliebe
+ * bei einem vierten Domaenenwert stillschweigend **enger**, jede Zuweisung
+ * bliebe gueltig, nichts wuerde rot — und die `Record`-Tabelle darunter liefe
+ * fuer den neuen Wert auf `undefined`, wo ihr Typ `string` verspricht. Mit dem
+ * Import wird stattdessen genau die Tabelle rot, der eine Beschriftung fehlt.
+ *
+ * **Acht** Aufzaehlungen liegen deshalb in der Domaene und werden hier nur
+ * beschriftet: {@link TimeEntrySource}, {@link RoundingMode},
+ * {@link ExportAuditEvent}, {@link PoolPlacement}, {@link PoolCompletionFilter},
+ * {@link PoolExportFilter}, {@link ThemeSetting} und {@link PoolMatchMode}.
+ *
+ * Die letzten beiden sind seit T-102 dabei. Bis dahin stand hier: „fuehrt die
+ * Domaene bis heute nur als Inline-Vereinigung an ihrem Feld an; es gibt dort
+ * keinen Namen zum Importieren. Sobald sie einen bekommen, gehoeren beide in
+ * die Liste darueber." Sie haben ihn mit T-093 bekommen — `Theme` in
+ * `packages/domain/src/settings.ts`, `PoolMatchMode` in `tag.ts`, beide ueber
+ * den Einstiegspunkt des Pakets ausgefuehrt —, und die Bedingung, die der
+ * Kommentar selbst genannt hat, ist damit eingetreten (R-1a, Befund 4).
+ * `Theme` heisst hier weiter {@link ThemeSetting}: Der Name steht an neun
+ * Stellen der Oberflaeche, und ein Alias beim Import kostet nichts.
+ *
+ * **Eine** bleibt hier definiert, aus einem genannten Grund:
+ * {@link DoneFlagState} ist ein **Anzeige**zustand ohne Entsprechung im
+ * Datenmodell — `reopened` steht in keiner Spalte.
  */
+
+import type { ForeignText } from "../api/types";
+import type {
+  ExportAuditEvent,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolPlacement,
+  RoundingMode,
+  Theme as ThemeSetting,
+  TimeEntrySource,
+} from "@takt/domain";
+import { quotedName } from "./foreign";
+
+export type {
+  ExportAuditEvent,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolPlacement,
+  RoundingMode,
+  ThemeSetting,
+  TimeEntrySource,
+};
 
 /* ==================================================================== */
 /* Zeitbuchung — Herkunft (`time_entry.source`, E-041)                  */
 /* ==================================================================== */
 
-/** Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`. */
-export type TimeEntrySource = "timer" | "manual";
-
+/**
+ * Wie eine Zeitbuchung entstanden ist. Spalte `time_entry.source`.
+ * Der Wertebereich steht in `@takt/domain` (`time-entry.ts`).
+ */
 export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> = {
   timer: "Timer",
   manual: "Von Hand",
@@ -31,9 +85,15 @@ export const TIME_ENTRY_SOURCE_LABEL: Readonly<Record<TimeEntrySource, string>> 
 /* Darstellung (`app_setting.theme`, E-041)                             */
 /* ==================================================================== */
 
-/** Farbmodus der Anwendung. Spalte `app_setting.theme`. */
-export type ThemeSetting = "system" | "light" | "dark";
-
+/**
+ * Farbmodus der Anwendung. Spalte `app_setting.theme`.
+ *
+ * Der Wertebereich steht seit T-093 als `Theme` in `@takt/domain`
+ * (`settings.ts`) und wird oben unter dem hiesigen Namen importiert. Die zweite
+ * Fassung, die bis T-102 hier stand, ist ersatzlos weg (R-1a, Befund 4):
+ * Bekommt die Domaene ein viertes Erscheinungsbild, wird jetzt diese Tabelle
+ * rot, statt still ein `undefined` zu liefern, wo ihr Typ `string` verspricht.
+ */
 export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
   system: "Systemvorgabe",
   light: "Hell",
@@ -44,9 +104,10 @@ export const THEME_LABEL: Readonly<Record<ThemeSetting, string>> = {
 /* Rundung (`app_setting.rounding_mode`, `export_run.rounding_mode`)    */
 /* ==================================================================== */
 
-/** Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008). */
-export type RoundingMode = "up" | "nearest";
-
+/**
+ * Rundungsverfahren vor dem Export. Bestaetigt ist `up` (E-008).
+ * Der Wertebereich steht in `@takt/domain` (`rounding.ts`).
+ */
 export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
   up: "aufwärts",
   nearest: "kaufmännisch",
@@ -64,8 +125,6 @@ export const ROUNDING_MODE_LABEL: Readonly<Record<RoundingMode, string>> = {
  * abgerechnet" und nirgends „als exportiert markiert" — exportiert wurde diese
  * Zeit nie.
  */
-export type ExportAuditEvent = "exported" | "reset" | "not_billed";
-
 export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>> = {
   exported: "exportiert",
   reset: "zurückgesetzt",
@@ -84,8 +143,6 @@ export const EXPORT_AUDIT_EVENT_LABEL: Readonly<Record<ExportAuditEvent, string>
  * **Flaechen** und nicht Typen: Es gibt nicht „Pool" und „Spalte", es gibt eine
  * Regel, die im Pool-Bereich steht, auf dem Board oder an beiden Stellen.
  */
-export type PoolPlacement = "pool" | "board" | "both";
-
 export const POOL_PLACEMENT_LABEL: Readonly<Record<PoolPlacement, string>> = {
   pool: "Nur in den Pools",
   board: "Nur auf dem Board",
@@ -98,6 +155,69 @@ export const POOL_PLACEMENT_SHORT: Readonly<Record<PoolPlacement, string>> = {
   board: "Board-Spalte",
   both: "Pool und Board",
 };
+
+/**
+ * Die Meldung nach einem Wechsel des Anzeigeorts — **eine** Fassung fuer beide
+ * Flaechen (W-14 aus R-2a).
+ *
+ * ## Was hier zusammengelegt wird
+ *
+ * Dieselbe Handlung meldete sich bis T-108 zweimal verschieden. Auf dem Board
+ * (S-04) hiess sie „Spalte vom Board genommen." mit der Kurzform darunter, in
+ * der Regelliste (S-11) „Anzeigeort geaendert." mit der Langform — und der
+ * Rueckweg quittierte dort ein zweites Mal mit demselben Titel wie die
+ * Handlung selbst. Wer „Rueckgaengig" drueckte, las also, was er schon
+ * gelesen hatte, und konnte nicht erkennen, ob etwas geschehen war.
+ *
+ * Uebernommen wird die **Board-Fassung**: Sie sagt die Handlung („vom Board
+ * genommen") statt der Feldaenderung („Anzeigeort geaendert"), und der
+ * Rueckweg hat mit „wiederhergestellt" ein eigenes Wort.
+ *
+ * ## Warum Titel und Zeile aus **einer** Funktion kommen
+ *
+ * Sie sind zwei Haelften einer Aussage: Der Titel nennt die Handlung, die
+ * Zeile nennt Namen und neuen Ort. Lagen sie als zwei Konstanten nebeneinander,
+ * liefen sie beim naechsten Mal wieder auseinander — genau so ist W-14
+ * entstanden. Ein Aufruf, ein Paar.
+ *
+ * ## Warum `board` und `both` denselben Titel tragen
+ *
+ * Der Titel spricht ueber die Fläche, die die beiden Bedienstellen umschalten:
+ * das Board. `board` und `both` heissen beide „steht ab jetzt auf dem Board";
+ * **wo genau**, sagt die Zeile darunter mit {@link POOL_PLACEMENT_SHORT}. Ein
+ * dritter Titel fuer einen Uebergang, den keine der beiden Flaechen anbietet,
+ * waere ein Wortlaut ohne Bedienstelle.
+ */
+const POOL_PLACEMENT_TITLE: Readonly<Record<PoolPlacement, string>> = {
+  pool: "Spalte vom Board genommen.",
+  board: "Regel als Spalte aufgenommen.",
+  both: "Regel als Spalte aufgenommen.",
+};
+
+/** Der Titel des Rueckwegs. Ein eigenes Wort, damit „Rueckgaengig" sichtbar wirkt. */
+const POOL_PLACEMENT_RESTORED_TITLE = "Anzeigeort wiederhergestellt.";
+
+/**
+ * Titel und Zeile der Meldung nach `PATCH /pools/{id}` mit neuem `placement`.
+ *
+ * `restored` ist wahr, wenn der Aufruf der **Rueckweg** ist — also der zweite
+ * Aufruf, den „Rueckgaengig" ausloest. Er bekommt einen eigenen Titel und
+ * seinerseits keinen Rueckweg mehr (das entscheidet die Aufrufstelle).
+ *
+ * Die Zeile sagt in beiden Faellen dasselbe: was die Handlung **nicht** tut.
+ * Das ist der Grund, aus dem E-059 den Bestaetigungsdialog davor gestrichen
+ * hat — die Regel bleibt vollstaendig, an den Todos aendert sich nichts.
+ */
+export function poolPlacementMessage(
+  name: ForeignText,
+  placement: PoolPlacement,
+  restored: boolean,
+): { readonly title: string; readonly body: string } {
+  return {
+    title: restored ? POOL_PLACEMENT_RESTORED_TITLE : POOL_PLACEMENT_TITLE[placement],
+    body: `${quotedName(name)} — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+  };
+}
 
 /* ==================================================================== */
 /* Erledigt-Kennzeichen — die drei Anzeigezustaende (A-2.5, E-023)      */
@@ -142,12 +262,258 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
 }
 
 /**
- * Was beim Aufheben des Kennzeichens **nicht** geschieht (E-023).
+ * Der Titel der Meldung, mit der die Anwendung A-2.5 ausspricht (I-05).
  *
- * Zeichengleich mit `CARD_STAYS` aus `apps/outlook-addin/src/duplicate/reopen.ts`.
- * Die Fassung des Add-ins gewinnt: Der Halbsatz zur Spalte macht E-023
- * aussprechbar, statt vorauszusetzen, dass der Benutzer weiss, was „die Karte"
- * mit „der Spalte" zu tun hat (Befund C-24). Wer den Satz hier aendert, muss
- * ihn dort mitaendern — sonst behaupten zwei Stellen dasselbe verschieden.
+ * Er sagt beides in einem Satz: **was** die Anwendung getan hat, ohne zu
+ * fragen (der Timer laeuft), und **was daraus folgt** (das Todo ist wieder
+ * offen). Was danach in den Rumpf gehoert, ist der Bewegungssatz aus
+ * `@takt/domain` — hier steht kein Wort davon.
+ *
+ * **Warum als Funktion und nicht getippt an der Aufrufstelle** (T-108, W-9):
+ * Seit die Musterseite den Toast zeigt statt einer eigenen Hinweisflaeche,
+ * gibt es zwei Stellen, die diesen Titel brauchen — `TimerContext` in der
+ * Anwendung und Abschnitt 6 der Musterseite. Eine Musterseite, die den
+ * erwarteten Wortlaut abschreibt, prueft nur sich selbst.
  */
-export const CARD_STAYS = "Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht.";
+export function reactivationTitle(todoTitle: ForeignText): string {
+  return `Timer gestartet. ${quotedName(todoTitle)} ist wieder offen.`;
+}
+
+/*
+ * Hier stand bis T-094 `CARD_STAYS`:
+ *
+ *     „Die Karte bleibt, wo sie ist — die Spalte ändert sich dadurch nicht."
+ *
+ * Der Satz ist **ersatzlos** entfallen (E-058 Absatz 2), und diese Notiz steht
+ * an seiner Stelle, damit ihn niemand aus bester Absicht neu erfindet.
+ *
+ * Er war falsch. Er stammte aus der Zeit, in der eine Spalte nur an Tags hing;
+ * seit E-055 fragt eine Regel auch nach „Erledigt" und nach dem Exportstatus,
+ * und **beides** ändert ein Timerstart — das Kennzeichen fällt (A-2.5), die
+ * erste abgeschlossene Buchung setzt „hat offene Buchungen". Die Karte bleibt
+ * also gerade nicht zwingend, wo sie ist.
+ *
+ * Ersetzt wird er nicht durch einen zweiten Kartensatz, sondern durch eine
+ * **Auskunft**: `POST /timer/start` liefert `poolMovement`, und
+ * `poolMovementSentence` aus `@takt/domain` macht daraus den Satz — denselben,
+ * den der Aufgabenbereich des Add-ins zeigt. Bewegt sich nichts, steht dort
+ * nichts; eine Fläche ohne Inhalt wird weggelassen und nicht mit einer
+ * Beruhigung gefüllt.
+ *
+ * Keine Beschriftung für diesen Satz in dieser Datei: Was aus der Domäne
+ * kommt, wird hier nicht noch einmal getippt.
+ */
+
+/* ==================================================================== */
+/* Die Achsen einer Regel (T-076, T-079)                                */
+/* ==================================================================== */
+
+/**
+ * Wie viele der **erforderlichen** Tags zutreffen muessen (`pool.match_mode`).
+ *
+ * Der Wert gilt ausschliesslich fuer die erforderlichen Tags. Ausgeschlossene
+ * Tags sind immer „keines davon", Status ist immer „einer von diesen" — beides
+ * folgt aus dem Feld und ist keine Einstellung (T-076, Abschnitt 2).
+ *
+ * **Die Vorgabe ist `any` und bleibt es.** Jede Regel, die es heute gibt,
+ * bedeutet „mindestens eines davon"; `pool.match_mode` haelt das seit Migration
+ * 0001 je Regel einzeln fest. Wer die Vorgabe hier auf `all` stellt, deutet
+ * keinen Bestand um — aber er legt neue Regeln anders an, als der Benutzer es
+ * aus dem Bestand kennt.
+ *
+ * Der Wertebereich steht seit T-093 als `PoolMatchMode` in `@takt/domain`
+ * (`tag.ts`) und wird oben importiert; die zweite Fassung an dieser Stelle ist
+ * mit T-102 entfallen (R-1a, Befund 4).
+ *
+ * **„Alle" ist hier kein Wort mehr** (R-2, Sprache 2).
+ *
+ * Bis T-091 hiess der strengste Modus „Alle davon" — drei Zeilen unter einem
+ * Neutralwert, der ebenfalls „Alle" heisst und das **Gegenteil** bedeutet:
+ * „schraenkt nicht ein". Dasselbe Wort fuer „engt am meisten ein" und „engt gar
+ * nicht ein", untereinander im selben Formular. Der Modus heisst deshalb
+ * „Jedes der genannten"; der Neutralwert behaelt „Alle", weil er der Wert des
+ * Vorbilds ist und an drei Achsen gleich lautet.
+ */
+export const POOL_MATCH_MODE_LABEL: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Mindestens eines davon",
+  all: "Jedes der genannten",
+};
+
+/** Dieselbe Aussage als Satzanfang vor der Tagliste einer Regelzusammenfassung. */
+export const POOL_MATCH_MODE_PREFIX: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Mindestens eines von",
+  all: "Jedes von",
+};
+
+export const POOL_MATCH_MODE_HINT: Readonly<Record<PoolMatchMode, string>> = {
+  any: "Ein Todo genügt schon mit einem der genannten Tags.",
+  all: "Ein Todo muss jeden genannten Tag tragen. Das trifft weniger als „mindestens eines davon“.",
+};
+
+/**
+ * Der Neutralwert der **Status**achse (H-3 aus R-2).
+ *
+ * Wortgleich mit `POOL_COMPLETION_LABEL.any`, und trotzdem eine eigene
+ * Konstante: Bis T-091 holte sich der Hilfssatz der Statusachse sein Wort aus
+ * der **Erledigt**-Achse. Wer dort eines Tages „Beliebig" schreibt, aendert
+ * stillschweigend eine Achse mit, die er gar nicht angefasst hat. Zwei Achsen,
+ * zwei Konstanten — auch wenn heute dasselbe darin steht.
+ */
+export const POOL_STATUS_LABEL: Readonly<Record<"any", string>> = {
+  any: "Alle",
+};
+
+/**
+ * Die Erledigt-Achse einer Regel (`pool.completion`).
+ *
+ * Nicht zu verwechseln mit „Erledigte einblenden": Diese Achse entscheidet
+ * ueber **Zugehoerigkeit**, jener Schalter ueber **Sichtbarkeit**. Steht die
+ * Achse neutral, entscheidet wie bisher der Schalter; sagt sie etwas, hat sie
+ * das letzte Wort — sonst waere eine Spalte „Erledigt" dauerhaft leer.
+ */
+export const POOL_COMPLETION_LABEL: Readonly<Record<PoolCompletionFilter, string>> = {
+  any: "Alle",
+  done: "Erledigt",
+  open: "Unerledigt",
+};
+
+/**
+ * Der Exportstatus-Achse einer Regel (`pool.export_state`).
+ *
+ * ## Die Woerter kommen aus E-059, nicht aus dem Datenmodell
+ *
+ * Der Wert heisst in der Datenbank weiter `open` beziehungsweise `exported`;
+ * in der Oberflaeche heisst er **„Noch nicht abgerechnet"** und
+ * **„Abgerechnet"**. Der Grund ist kein Geschmack: „Offen" ist auf der Karte
+ * bereits das Gegenteil von „Erledigt" ({@link DONE_FLAG_LABEL}), und
+ * dasselbe Wort im selben Dialog ein zweites Mal als Gegenteil von
+ * „Exportiert" zu verwenden ist ein Fehler, den der Benutzer ausbadet.
+ *
+ * Verworfen wurden in T-091 zwei naheliegende Ersatzwoerter: „Nicht
+ * exportiert" waere **falsch** — die Achse fragt „hat mindestens eine offene
+ * Buchung" und nicht „hat keine exportierte" —, und „Mit offener Buchung" war
+ * bereits die zweite Fassung derselben Zeichenkette in `lib/poolRule.ts`. Die
+ * gibt es seit T-094 nicht mehr: Die Regelvorschau nimmt genau diese
+ * Beschriftung.
+ *
+ * **`exported` heisst „hat mindestens eine exportierte Buchung"** und nicht
+ * „vollstaendig abgerechnet" — der Exportstatus gehoert der Buchung, nicht dem
+ * Todo (E-032). Ein Todo mit einer offenen und einer exportierten Buchung
+ * erfuellt beide Werte und steht in beiden Spalten. Ein Todo ohne jede Buchung
+ * erfuellt keinen von beiden.
+ *
+ * **Und `exported` schliesst die Ausbuchungen nach E-047 mit ein** (S-1 aus
+ * R-2). Eine Buchung, die der Benutzer ausdruecklich **nicht** abrechnen
+ * wollte, traegt denselben Statuswert `exported` — zweiwertig bleibt
+ * zweiwertig (E-032) —, und die Regelachse fragt genau diesen Wert ab. Eine
+ * vierte Option waere deshalb falsch; gesagt werden muss es trotzdem, sonst
+ * enthaelt eine Spalte „schon abgerechnet" genau die Zeit, die nie abgerechnet
+ * wurde. Der Satz dazu steht in {@link POOL_EXPORT_NOT_BILLED_HINT} und an der
+ * Stelle, an der gewaehlt wird.
+ */
+export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
+  any: "Alle",
+  open: "Noch nicht abgerechnet",
+  exported: "Abgerechnet",
+};
+
+/**
+ * Was „Abgerechnet" ausserdem mitnimmt (E-047, E-050, S-1 aus R-2).
+ *
+ * Steht an der Achse und nicht in einer Fussnote: Wer eine Spalte „schon
+ * abgerechnet" baut, soll vor dem Speichern lesen, dass die ausgebuchten
+ * Buchungen darin stehen — sie sind die einzige Auswertung, fuer die E-047
+ * ueberhaupt eingefuehrt wurde.
+ *
+ * **Seit E-059 muss dieser Satz mehr leisten als vorher.** Solange die Achse
+ * „Exportiert" hiess, war der Zusatz eine Praezisierung. Jetzt heisst sie
+ * „Abgerechnet", und eine Buchung, die als **„Nicht abgerechnet"** ausgebucht
+ * wurde, steht trotzdem darin — zwei Woerter, die sich zu widersprechen
+ * scheinen und beide richtig sind, weil das eine den Anzeigezustand einer
+ * Buchung meint (E-050) und das andere den Wert `export_state = 'exported'`,
+ * den beide teilen (E-032, zweiwertig). Der Satz spricht den Widerspruch
+ * deshalb aus, statt ihn zu ueberspielen.
+ */
+export const POOL_EXPORT_NOT_BILLED_HINT =
+  "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ (E-047) trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
+
+/**
+ * Derselbe Widerspruch, kurz — an der **Lese**flaeche (W-7 aus R-2a).
+ *
+ * {@link POOL_EXPORT_NOT_BILLED_HINT} steht dort, wo gewaehlt wird: im
+ * Regelformular, neben dem Optionsknopf. Wer eine Spalte „Abgerechnet" erbt
+ * oder sie nur ansieht, kommt an dieser Stelle nie vorbei — und liest am
+ * Spaltenkopf „Abgerechnet", waehrend an einer Buchung darin „Nicht
+ * abgerechnet" steht. Zwei fast gleiche Woerter mit entgegengesetzter Wirkung,
+ * und beide richtig: Das eine ist der Anzeigezustand einer Buchung (E-050), das
+ * andere der Wert `export_state = 'exported'`, den beide teilen (E-032).
+ *
+ * Deshalb ein zweiter, kuerzerer Satz und nicht derselbe: An der Leseflaeche
+ * ist Platz fuer eine Zeile, nicht fuer drei, und die Frage lautet dort nicht
+ * „was waehle ich", sondern „warum steht das hier". Umbenannt wird nichts —
+ * E-059 ist entschieden.
+ */
+export const POOL_EXPORT_EXPORTED_NOTE =
+  "„Abgerechnet“ meint den Exportstatus der Buchungen: Auch eine ausgebuchte Buchung, an der „Nicht abgerechnet“ steht, trägt ihn und zählt hier mit.";
+
+/**
+ * Was der Neutralwert bedeutet — der Satz, der ueberall danebensteht.
+ *
+ * „Alle" ist die haeufigste Fehllesart dieses Formulars: Es heisst **nicht**
+ * „trifft alles", sondern „diese Achse laesst alles durch, was die anderen
+ * uebrig lassen". Stehen alle Achsen neutral, bleibt nichts uebrig, das eine
+ * andere Achse ausgewaehlt haette — und die Regel trifft nichts (A-3.4).
+ */
+export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";
+
+/* ==================================================================== */
+/* Was eine Spalte ist — die eine Fassung (S-2 aus R-2, E-054, E-055)   */
+/* ==================================================================== */
+
+/**
+ * Bis T-091 stand an elf Oberflaechenstellen „eine Regel **ueber Tags**", und
+ * an mehreren daneben „welche Karte wo steht, entscheiden die Tags des Todos".
+ *
+ * Das war die richtige Erklaerung fuer E-054 und mit E-055 zur halben
+ * geworden: Eine Regel hat seither **fuenf** Achsen, und drei davon — Status,
+ * „Erledigt", Exportstatus — aendern sich, ohne dass jemand ein Tag anfasst.
+ * Wer den alten Satz gelesen hat, sucht die nach einem Timerstart verschwundene
+ * Karte bei den Tags. Dort ist sie nicht.
+ *
+ * Deshalb drei Fassungen, je nach Platz, und keine vierte:
+ *
+ *  - {@link RULE_IS_A_RULE} — der Satz, wo Platz fuer eine Aufzaehlung ist.
+ *  - {@link RULE_NOT_A_PLACE} — die Kurzform fuer Kopfzeilen und Menues.
+ *  - {@link RULE_WHAT_MOVES_A_CARD} — was eine Karte bewegt, statt „die Tags".
+ */
+export const RULE_IS_A_RULE =
+  "Eine Spalte ist eine Regel — über Tags, Status, „Erledigt“ und den Exportstatus.";
+
+/** Die Kurzform, wo der Platz fuer die Aufzaehlung fehlt. */
+export const RULE_NOT_A_PLACE = "Eine Spalte ist eine Regel, kein Ablageort.";
+
+/**
+ * Was eine Karte bewegt — die Nachfolge von „das entscheiden die Tags".
+ *
+ * Sie nennt die Bewegung und ihren Ausloeser, ohne eine der fuenf Achsen
+ * hervorzuheben: Was sich am Todo aendert, aendert seine Zugehoerigkeit.
+ */
+export const RULE_WHAT_MOVES_A_CARD =
+  "Welche Karte wo steht, entscheidet die Regel — nicht die Maus. Eine Karte wandert, wenn sich am Todo etwas ändert, das die Regel abfragt.";
+
+/**
+ * Der Hinweis unter dem Leistungsfeld — an **beiden** Buchungsflaechen (B-4
+ * aus T-116, E-034).
+ *
+ * Eine Buchung ohne Leistung ist erfasst, aber ihre Tagesgruppe geht nach
+ * E-034 nicht in den Export. Der Stoppdialog sagt das seit jeher; die Buchung
+ * von Hand sagte es bis T-118 nicht — und sie ist der Weg, auf dem Zeit
+ * **nachgetragen** wird, also der, auf dem eine Leistung am ehesten vergessen
+ * wird.
+ *
+ * Der Satz steht hier und nicht zweimal in den Ansichten: Zwei Abschriften
+ * desselben Hinweises laufen auseinander, sobald einer von beiden gepflegt
+ * wird (Regel 8 des Designsystems, Befund C-24).
+ */
+export const BILLING_NOTE_MAY_BE_EMPTY =
+  "Die Leistung darf leer bleiben. Dann ist die Buchung erfasst, aber die Tagesgruppe dieses Todos geht ohne Text nicht in den Export — die Exportvorschau sagt es und bietet an, den Text nachzutragen.";

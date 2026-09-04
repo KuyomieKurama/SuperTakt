@@ -1,3 +1,4 @@
+import { ToastProvider } from "../app/ToastContext";
 import { Icon, type IconName } from "../components/Icon";
 import { cx } from "../lib/cx";
 import { THEME_LABEL } from "../lib/labels";
@@ -13,6 +14,7 @@ import { FoundationsSection } from "./FoundationsSection";
 import { IntroSection } from "./IntroSection";
 import { InventorySection } from "./InventorySection";
 import { NotesSection } from "./NotesSection";
+import { RuleSection } from "./RuleSection";
 import { ShellStateSection } from "./ShellStateSection";
 import { TagsSection } from "./TagsSection";
 import { TimeSection } from "./TimeSection";
@@ -36,6 +38,7 @@ const NAV: readonly NavEntry[] = [
   { id: "exportordner", label: "↳ Exportordner (S-04)" },
   { id: "arbeitsplatz", label: "↳ Arbeitsplatz (C-20)" },
   { id: "board", label: "5 — Kanban-Board" },
+  { id: "regel", label: "↳ Die Regel einer Spalte (T-079)" },
   { id: "zeit", label: "6 — Zeiterfassung" },
   { id: "notizen", label: "7 — Vermerk und Leistung" },
   { id: "tags", label: "8 — Tags und Ordner" },
@@ -63,7 +66,24 @@ const DENSITIES: ReadonlyArray<{ readonly value: Density; readonly label: string
   { value: "compact", label: "Kompakt" },
 ];
 
+/**
+ * Die Musterseite zeigt Meldungen im **echten** Baustein (T-108, W-9).
+ *
+ * `ToastProvider` ist derselbe, den `App.tsx` um die Anwendung legt — mit
+ * derselben Vorlesestelle, derselben Obergrenze und derselben Regel, dass eine
+ * Meldung mit Rueckweg nicht von selbst verschwindet und nicht verdraengt wird.
+ * Bis T-108 zeigte Abschnitt 6 an dieser Stelle `ReactivationNotice`, eine
+ * eigene Hinweisflaeche, die keine Ansicht der Anwendung je benutzt hat.
+ */
 export function Showcase() {
+  return (
+    <ToastProvider>
+      <ShowcasePage />
+    </ToastProvider>
+  );
+}
+
+function ShowcasePage() {
   const [theme, setTheme] = useThemePreference("light");
   const [density, setDensity] = useDensity("comfortable");
 
@@ -139,6 +159,7 @@ export function Showcase() {
           <ExportDirectorySection />
           <WorkstationSection />
           <BoardSection />
+          <RuleSection />
           <TimeSection />
           <NotesSection />
           <TagsSection />

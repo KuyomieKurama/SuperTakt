@@ -8,10 +8,15 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
  * sie den Stand von vorhin, bis jemand neu lädt — und der Benutzer glaubte,
  * seine Buchung sei verlorengegangen.
  *
- * Absichtlich klein: eine Zahl, die hochgezählt wird. Ansichten hängen sie in
- * die Abhängigkeiten ihres `useAsync` und laden dadurch nach. Keine
- * Zwischenspeicherung, keine Ungültigkeitsregeln — bei einem lokalen Dienst
- * auf der Loopback-Adresse kostet ein erneuter Aufruf nichts.
+ * Absichtlich klein: eine Zahl, die hochgezählt wird. Ansichten führen sie in
+ * der **Auffrischliste** ihres `useAsync` — der dritten Angabe — und laden
+ * dadurch nach, **ohne** den vorhandenen Inhalt zu verwerfen. Bis T-102 stand
+ * sie in der gewöhnlichen Abhängigkeitsliste, und jedes Signal warf die Ansicht
+ * auf ihre Platzhalterflächen zurück (Befund 7 aus R-1a). Der Unterschied
+ * zwischen beiden Listen steht in `useAsync` ausgeschrieben.
+ *
+ * Keine Zwischenspeicherung, keine Ungültigkeitsregeln — bei einem lokalen
+ * Dienst auf der Loopback-Adresse kostet ein erneuter Aufruf nichts.
  */
 interface RefreshApi {
   readonly version: number;

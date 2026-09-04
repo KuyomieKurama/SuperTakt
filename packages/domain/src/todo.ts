@@ -2,8 +2,9 @@
  * Takt — Todo, Status und interner Vermerk (A-2.*, A-5.*, A-7.1, A-7.2, E-006).
  *
  * Die **Kanban-Spalte** steht seit E-054 nicht mehr hier, sondern in `board.ts`
- * und `tag.ts`: Sie ist eine Regel über Tags. `todo_status` ist geblieben, aber
- * als das, was es immer war — eine Eigenschaft des Todos.
+ * und `tag.ts`: Sie ist eine Regel. Tags sind darin eine Achse von fünf
+ * (E-055) — der Status ist eine weitere, und `todo_status` ist geblieben, aber
+ * als das, was es immer war: eine Eigenschaft des Todos.
  */
 
 import type { PoolId, StatusId, TagId, TodoId, Timestamp } from './kernel.ts';
@@ -17,7 +18,8 @@ import type { PoolId, StatusId, TagId, TodoId, Timestamp } from './kernel.ts';
  * A-5.3 sind Startbestand, keine feste Menge.
  *
  * **Seit E-054 ist das keine Kanban-Spalte mehr.** Eine Spalte ist eine Regel
- * über Tags (`Pool` mit `placement`, siehe `board.ts`); der Status bleibt als
+ * (`Pool` mit `placement`, siehe `board.ts`), und der Status ist seit E-055
+ * eine ihrer fünf Achsen, nicht ihr Gegenstück; der Status bleibt als
  * Eigenschaft am Todo und wird in Detailansicht und Liste geändert. Beides
  * nebeneinander ist Absicht und keine Doppelung: Der Status sagt, wie weit ein
  * Todo ist; die Spalte sagt, wonach das Board gerade fragt — und auf diese

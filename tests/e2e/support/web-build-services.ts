@@ -31,14 +31,23 @@
  * gemessen statt geglaubt haben wollte.
  */
 
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 
 import { REPO_ROOT, WEB_APP_DIST_DIR, WEB_BUILD_BASE_URL } from './build-check-session';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Genau der Typ, den `spawn` mit `stdio: ['ignore', 'pipe', 'pipe']` liefert
+ * (`stdin` ist `null`) — nicht `ChildProcessWithoutNullStreams`, das ein
+ * beschreibbares `stdin` verlangt und unter `exactOptionalPropertyTypes`
+ * einen echten Typfehler ergibt.
+ */
+type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,7 +152,7 @@ export function distContainsText(needle: string): boolean {
  * (Begründung in `build-check-session.ts`). `--port`/`--host` auf der
  * Befehlszeile überschreiben `preview.port` aus `vite.config.ts` (4173).
  */
-export async function startWebPreview(): Promise<ChildProcessWithoutNullStreams> {
+export async function startWebPreview(): Promise<ChildProcessWithoutStdin> {
   const child = spawn(
     'pnpm',
     ['exec', 'vite', 'preview', '--host', '127.0.0.1', '--port', '5173', '--strictPort'],
@@ -170,6 +179,6 @@ export async function startWebPreview(): Promise<ChildProcessWithoutNullStreams>
   return child;
 }
 
-export function stopChild(child: ChildProcessWithoutNullStreams): void {
+export function stopChild(child: ChildProcessWithoutStdin): void {
   child.kill('SIGTERM');
 }

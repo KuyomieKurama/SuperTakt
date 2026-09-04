@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { listTimeEntries, listTodos } from "../api/endpoints";
-import { ShellStatus, type ShellStateSnapshot } from "../components/ShellStatus";
+import {
+  ShellStatus,
+  type ShellStateSnapshot,
+  type UserNameFinding,
+} from "../components/ShellStatus";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
 import { BoardScreen } from "../screens/BoardScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
@@ -24,6 +28,7 @@ import { TimerBar } from "./TimerBar";
 import { TimerProvider } from "./TimerContext";
 import { ToastProvider } from "./ToastContext";
 import { useAsync } from "./useAsync";
+import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
 
 /**
@@ -76,24 +81,62 @@ import { useRoute } from "./useRoute";
  */
 
 export function App() {
-  const route = useRoute();
-  return <ConnectedApp route={route} />;
+  const { route, revisit } = useRoute();
+  return <ConnectedApp route={route} revisit={revisit} />;
 }
 
 /* ==================================================================== */
 /* Verbindung                                                           */
 /* ==================================================================== */
 
-function ConnectedApp({ route }: { readonly route: Route }) {
+function ConnectedApp({
+  route,
+  revisit,
+}: {
+  readonly route: Route;
+  /** Siehe `useRoute`: erneutes Ansteuern derselben Adresse (T-097). */
+  readonly revisit: number;
+}) {
   const [state, setState] = useState<ConnectionState>({ kind: "connecting" });
   const [shell, setShell] = useState<ShellStateSnapshot | null>(null);
+  /*
+    Der Befund zum Windows-Benutzernamen (O-AJ). Er wird **einmal** beim
+    Verbinden geholt und danach nicht mehr: Der Anmeldename dieses Rechners
+    ändert sich während eines Laufs nicht, und die Antwort ist ein
+    Wahrheitswert und kein Wert, der veralten könnte. Aus demselben Grund steht
+    hier der Befund und nicht der Name — siehe `readUserNameFinding`.
+  */
+  const [userName, setUserName] = useState<UserNameFinding>("unknown");
 
+  /*
+    Der `catch` ist kein Zierat (B-6-Klasse aus T-116): `connect()` fängt heute
+    alles ab, was es kennt, aber `setState({ kind: "connecting" })` steht bereits
+    da. Käme aus der Hülle je eine Zusage zurück, die niemand fängt, bliebe die
+    Anwendung für immer im Ladebild „Takt verbindet sich …" stehen — ohne
+    Meldung, ohne „Erneut versuchen", und einen globalen Auffänger für
+    abgewiesene Zusagen gibt es im Baum nicht. Der Sperrzustand `"failed"` hat
+    beides; er ist der richtige Ausgang für einen Fehler, den niemand vorhergesehen
+    hat.
+  */
   const attempt = useCallback(() => {
     setState({ kind: "connecting" });
-    void connect().then((next) => {
-      setState(next);
-      if (next.kind === "ready") setShell(next.shell);
-    });
+    void connect()
+      .then((next) => {
+        setState(next);
+        if (next.kind === "ready") {
+          setShell(next.shell);
+          setUserName(next.userName);
+        }
+      })
+      .catch((cause: unknown) => {
+        setState({
+          kind: "failed",
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
+        });
+      });
   }, []);
 
   useEffect(attempt, [attempt]);
@@ -162,7 +205,12 @@ function ConnectedApp({ route }: { readonly route: Route }) {
           */}
           <PreferencesProvider>
             <TimerProvider>
-              <Workspace route={route} shell={shell} />
+              <Workspace
+                route={route}
+                revisit={revisit}
+                shell={shell}
+                userName={userName}
+              />
             </TimerProvider>
           </PreferencesProvider>
         </StructureProvider>
@@ -203,12 +251,25 @@ function NoShellNotice() {
 
 function Workspace({
   route,
+  revisit,
   shell,
+  userName,
 }: {
   readonly route: Route;
+  readonly revisit: number;
   readonly shell: ShellStateSnapshot | null;
+  /** Der Befund zum Windows-Benutzernamen, kein Name (O-AJ). */
+  readonly userName: UserNameFinding;
 }) {
   const { version } = useRefresh();
+
+  /*
+    Hier und nur hier (T-097): Die Arbeitsfläche steht innerhalb beider
+    Zusammenhänge, die dabei erneuert werden — der Struktur und dem
+    Änderungssignal —, und sie überlebt jeden Ansichtswechsel. In einer Ansicht
+    stünde derselbe Haken einmal je Ansicht und liefe beim Wechsel neu an.
+  */
+  useDataFreshness(revisit);
 
   const counters = useAsync(async () => {
     const [todos, entries] = await Promise.all([
@@ -217,7 +278,7 @@ function Workspace({
     ]);
     return { openTodos: todos.total, openEntries: entries.total };
     // Zählt neu, sobald irgendwo etwas geschrieben wurde.
-  }, [version]);
+  }, [], [version]);
 
   const openTodoCount = counters.state.status === "ready" ? counters.state.value.openTodos : null;
   const openEntryCount = counters.state.status === "ready" ? counters.state.value.openEntries : null;
@@ -229,7 +290,7 @@ function Workspace({
       </a>
 
       {shell === null ? null : (
-        <ShellStatus state={shell} onQuit={() => void quitApplication()} />
+        <ShellStatus state={shell} userName={userName} onQuit={quitApplication} />
       )}
 
       {/*

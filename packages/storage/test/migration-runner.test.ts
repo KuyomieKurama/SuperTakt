@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Timestamp } from '@takt/domain';
 import { openConnection, type SqlConnection } from '../src/sqlite/database.ts';
 import { createMigrationRunner, loadMigrations } from '../src/sqlite/migration-runner.ts';
+import type { Migration } from '../src/migration.ts';
 
 const REAL_MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations');
 const fixedNow = (iso: string) => (): Timestamp => iso as Timestamp;
@@ -323,5 +324,101 @@ describe('createMigrationRunner — Sicherungskopie (die eigentliche Rückwärts
     });
     const result = await runner.migrateToLatest();
     expect(result.backup).toBeNull();
+  });
+});
+
+/** Liest den aktuellen Wert eines Pragmas, unabhängig vom genauen Spaltennamen der Antwortzeile. */
+function readPragma(conn: SqlConnection, name: string): number {
+  const row = conn.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
+  const value = row === undefined ? undefined : Object.values(row)[0];
+  return Number(value);
+}
+
+/**
+ * T-105 (R-3a H-4, Auftrag aus `reports/T-101-domain-dev.md` "Nächster
+ * Schritt" 2): `legacy_alter_table` wird laut Kopfkommentar von `applyOne` in
+ * `migration-runner.ts` "ohne Bedingung" im `finally` zurückgesetzt — auch im
+ * FEHLERPFAD, wenn eine Migration mittendrin wirft, NACHDEM sie das Pragma
+ * eingeschaltet hat. Vor dieser Datei prüfte kein Test den Fehlerpfad
+ * überhaupt (die vorhandenen Fälle oben prüfen ausschließlich erfolgreiche
+ * Migrationen).
+ *
+ * Wichtig für die Aussagekraft: Ein Pragma ist eine Einstellung der
+ * VERBINDUNG, kein Teil der Transaktion — `ROLLBACK` nimmt es nicht zurück
+ * (das ist der ganze Grund, warum ein `finally` überhaupt nötig ist). Die
+ * Migration unten schaltet das Pragma deshalb VOR dem fehlschlagenden
+ * Statement ein, damit die Verbindung den eingeschalteten Zustand tatsächlich
+ * einmal getragen hat, bevor geprüft wird, dass er danach wieder weg ist.
+ */
+describe('applyOne — legacy_alter_table wird auch im FEHLERPFAD zurückgesetzt (R-3a H-4)', () => {
+  let conn: SqlConnection;
+
+  afterEach(() => {
+    conn.close();
+  });
+
+  it('eine Migration, die NACH "PRAGMA legacy_alter_table = ON" scheitert, hinterlässt das Pragma trotzdem auf OFF', async () => {
+    conn = openConnection(':memory:');
+    const broken: Migration = {
+      version: 1,
+      name: 'kaputt_nach_legacy_alter_table',
+      up: `
+        PRAGMA legacy_alter_table = ON;
+        CREATE TABLE t (id INTEGER PRIMARY KEY);
+        INSERT INTO tabelle_die_es_nicht_gibt (x) VALUES (1);
+      `,
+      down: 'DROP TABLE IF EXISTS t;',
+      checksum: 'a'.repeat(64),
+    };
+    const runner = createMigrationRunner(conn, [broken], {
+      databasePath: null,
+      now: fixedNow('2026-08-31T08:00:00Z'),
+    });
+
+    await expect(runner.migrateToLatest()).rejects.toThrow();
+
+    // Die Migration ist NICHT angewendet — ROLLBACK hat die Transaktion
+    // zurückgenommen (die Tabelle "t" existiert nicht).
+    expect(() => conn.prepare('SELECT * FROM t').all()).toThrow();
+    // Das Pragma dagegen — nicht Teil der Transaktion — steht wieder auf OFF.
+    expect(readPragma(conn, 'legacy_alter_table')).toBe(0);
+  });
+
+  it('Gegenprobe: OHNE das fehlschlagende Statement bleibt dieselbe Migration erfolgreich und das Pragma steht ebenfalls wieder auf OFF', async () => {
+    conn = openConnection(':memory:');
+    const working: Migration = {
+      version: 1,
+      name: 'funktioniert',
+      up: `
+        PRAGMA legacy_alter_table = ON;
+        CREATE TABLE t (id INTEGER PRIMARY KEY);
+        PRAGMA legacy_alter_table = OFF;
+      `,
+      down: 'DROP TABLE IF EXISTS t;',
+      checksum: 'b'.repeat(64),
+    };
+    const runner = createMigrationRunner(conn, [working], {
+      databasePath: null,
+      now: fixedNow('2026-08-31T08:00:00Z'),
+    });
+
+    const result = await runner.migrateToLatest();
+
+    expect(result.to).toBe(1);
+    expect(conn.prepare('SELECT * FROM t').all()).toEqual([]);
+    expect(readPragma(conn, 'legacy_alter_table')).toBe(0);
+  });
+
+  it('eine gewöhnliche Migration, die legacy_alter_table NIE anfasst, hält es unverändert auf OFF (die Vorgabe von SQLite)', async () => {
+    conn = openConnection(':memory:');
+    const migrations = loadMigrations(REAL_MIGRATIONS_DIR);
+    const runner = createMigrationRunner(conn, migrations, {
+      databasePath: null,
+      now: fixedNow('2026-08-31T08:00:00Z'),
+    });
+
+    await runner.migrateToLatest();
+
+    expect(readPragma(conn, 'legacy_alter_table')).toBe(0);
   });
 });

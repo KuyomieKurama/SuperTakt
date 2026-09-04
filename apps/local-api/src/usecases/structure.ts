@@ -22,8 +22,12 @@ import type {
   Pool,
   PoolId,
   PoolPlacement,
-  PoolRuleTerm,
+  PoolCompletionFilter,
+  PoolExportFilter,
+  PoolMatchMode,
+  PoolResolution,
   PoolSurface,
+  PoolTagTerm,
   RoundingMode,
   StatusId,
   Tag,
@@ -31,6 +35,7 @@ import type {
   TagFolderId,
   TagId,
   TagTree,
+  Theme,
   TimeEntry,
   TimeEntryId,
   Todo,
@@ -45,9 +50,10 @@ import {
   err,
   nameKey,
   ok,
+  resolvePool,
   taktError,
 } from '@takt/domain';
-import type { ExportAuditFilter, Page, Pagination, UnitOfWork } from '@takt/storage';
+import type { ExportAuditFilter, Page, Pagination, PoolAxesResolution, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
 import { checkTemplateDefinition } from './export.ts';
@@ -175,6 +181,81 @@ export function removeTagFolder(
 // ---------------------------------------------------------------------------
 
 /**
+ * Eine Regel samt dem, was ihre Ordner ergeben (T-080).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Auflösung mitgeliefert wird und die Leere nicht
+ * ---------------------------------------------------------------------------
+ *
+ * Zwei Fragen, die gleich klingen und verschiedene Antworten brauchen:
+ *
+ *  1. **Nennt diese Regel eine Bedingung?** Das steht in den Feldern, die der
+ *     Aufrufer ohnehin in der Hand hat, und `poolRuleIsEmpty` aus der Domäne
+ *     beantwortet es für ihn — auch für einen Entwurf im Formular, den noch
+ *     keine Route gesehen hat. Ein Feld an dieser Antwort wäre die zweite
+ *     Fassung derselben Auskunft und für den Entwurf ohnehin nicht zu haben.
+ *  2. **Was ergeben ihre Ordner?** Das kann nur der Dienst sagen; die
+ *     Auflösung steigt über den Ordnerbaum ab. Deshalb steht sie hier.
+ *
+ * Ohne die zweite Zahl sieht ein Ordner, in dem kein Tag liegt, aus wie eine
+ * Regel ohne Treffer — und nur der erste Fall ist ein Einrichtungsfehler.
+ *
+ * `resolved.matchesNothing` (E-057) ist **kein** Rückfall in Frage 1. Es
+ * beantwortet „trifft diese Regel überhaupt etwas?" für die **aufgelöste**
+ * Regel, und dafür braucht es den Ordnerbaum: Der leere Ordner steht neben
+ * einer zweiten Achse, die Regel nennt also eine Bedingung und trifft trotzdem
+ * nichts. Für den Entwurf im Formular bleibt es bei `poolRuleIsEmpty` — dort
+ * gibt es keine Auflösung, die eine andere Antwort geben könnte.
+ */
+export interface PoolWithResolution extends Pool {
+  readonly resolved: PoolResolution;
+}
+
+/**
+ * Eine Regel mit **bereits aufgelösten** Taglisten zusammensetzen.
+ *
+ * Für Aufrufer, die ohnehin auflösen mussten — das Board tut es je Spalte, um
+ * die Mehrfachnennung zu bestimmen. Sie zahlen die Abfrage damit einmal und
+ * nicht zweimal.
+ *
+ * Herein kommt die Antwort des Ports (`PoolPort.resolveAxes`) unverändert: die
+ * beiden Tagmengen **und** die Ordner, aus denen nichts geworden ist. Diese
+ * Datei nimmt sie auseinander und urteilt nicht; das Urteil fällt in
+ * `resolvePool` (E-057).
+ */
+export function poolWithResolution(pool: Pool, axes: PoolAxesResolution): PoolWithResolution {
+  return {
+    ...pool,
+    resolved: resolvePool({
+      axes: pool,
+      ruleTagIds: axes.required.tagIds,
+      excludedTagIds: axes.excluded.tagIds,
+      emptyRuleFolderIds: axes.required.emptyFolderIds,
+      emptyExcludedFolderIds: axes.excluded.emptyFolderIds,
+    }),
+  };
+}
+
+/**
+ * Dasselbe für Regeln, deren Taglisten noch niemand aufgelöst hat.
+ *
+ * Zwei Abfragen je Regel, und das ist vertretbar: `pool` hält die Regeln, die
+ * ein Mensch von Hand eingerichtet hat — eine Handvoll Zeilen, in keinem
+ * denkbaren Bestand mehr als ein paar Dutzend (dieselbe Begründung wie an
+ * `PoolPort.listNames`). Die Auflösung selbst steht **einmal** im Adapter und
+ * wird hier nicht nachgebaut; eine zweite Fassung davon wäre genau die
+ * Doppelung, die T-080 beseitigt.
+ */
+async function withResolution(
+  unit: UnitOfWork,
+  pools: readonly Pool[],
+): Promise<readonly PoolWithResolution[]> {
+  return Promise.all(
+    pools.map(async (pool) => poolWithResolution(pool, await unit.pools.resolveAxes(pool.id))),
+  );
+}
+
+/**
  * Die Regeln einer Fläche (A-3.1, E-054).
  *
  * Seit E-054 ist eine Kanban-Spalte dieselbe Entität wie ein Pool. `shownOn`
@@ -184,18 +265,37 @@ export function removeTagFolder(
 export function listPools(
   context: AppContext,
   shownOn?: PoolSurface | 'all',
-): Promise<readonly Pool[]> {
-  return context.transactions.inTransaction((unit) => unit.pools.list(shownOn));
+): Promise<readonly PoolWithResolution[]> {
+  return context.transactions.inTransaction(async (unit) =>
+    withResolution(unit, await unit.pools.list(shownOn)),
+  );
 }
 
+/**
+ * Die Regel einer Fläche, wie eine Anfrage sie schickt (A-3.*, E-054, T-076).
+ *
+ * Fünf Achsen mit je einem Neutralwert. Alle außer `rule` sind weglassbar und
+ * stehen dann neutral — eine Anfrage aus der Zeit vor T-076 legt damit
+ * dieselbe Regel an wie zuvor.
+ */
 export interface PoolInput {
   readonly name: string;
-  readonly matchMode: 'any' | 'all';
+  /** Wie die **erforderlichen** Tags verknüpft sind. Gilt für keine andere Achse. */
+  readonly matchMode: PoolMatchMode;
   readonly includeSubfolders: boolean;
   /** Wo die Regel erscheint (E-054). Ohne Angabe ein Pool. */
   readonly placement?: PoolPlacement;
   readonly position: number;
-  readonly rule: readonly PoolRuleTerm[];
+  /** Erforderliche Tags. Leer: schränkt nicht ein. */
+  readonly rule: readonly PoolTagTerm[];
+  /** Ausgeschlossene Tags: keines davon (T-076). */
+  readonly excludedTags?: readonly PoolTagTerm[];
+  /** Status: einer von diesen. Leer heißt „Alle" (T-076). */
+  readonly statusIds?: readonly StatusId[];
+  /** Erledigt: alle / nur erledigte / nur unerledigte (T-076). */
+  readonly completion?: PoolCompletionFilter;
+  /** Exportstatus: alle / mit offener / mit exportierter Buchung (T-076). */
+  readonly exportState?: PoolExportFilter;
 }
 
 /**
@@ -251,7 +351,7 @@ function poolNameConflict(name: string): TaktError {
 export async function createPool(
   context: AppContext,
   input: PoolInput,
-): Promise<UseCaseResult<Pool>> {
+): Promise<UseCaseResult<PoolWithResolution>> {
   // Rein, und deshalb vor der Transaktion: Ein unbrauchbarer Name soll gar
   // keine Klammer öffnen. Dieselbe Reihenfolge wie in `createTag`.
   const checked = checkPoolName(input.name);
@@ -262,7 +362,11 @@ export async function createPool(
     if (await poolNameTaken(unit, checked.value.key)) {
       return err(poolNameConflict(checked.value.name));
     }
-    return ok(await unit.pools.create({ ...input, name: checked.value.name }, timestamp));
+    const created = await unit.pools.create({ ...input, name: checked.value.name }, timestamp);
+    // Die Antwort trägt dieselbe Auflösung wie die Liste. Eine Regel, die beim
+    // Anlegen anders aussieht als beim Lesen, wäre zwei Regeln (T-080).
+    const [view] = await withResolution(unit, [created]);
+    return view === undefined ? err(taktError('not_found', 'Diesen Pool gibt es nicht.')) : ok(view);
   });
 }
 
@@ -270,7 +374,7 @@ export async function updatePool(
   context: AppContext,
   id: PoolId,
   input: Partial<PoolInput>,
-): Promise<UseCaseResult<Pool>> {
+): Promise<UseCaseResult<PoolWithResolution>> {
   const checked = input.name === undefined ? null : checkPoolName(input.name);
   if (checked !== null && !checked.ok) return err(checked.error);
 
@@ -291,7 +395,10 @@ export async function updatePool(
       if (exists && taken) return err(poolNameConflict(checked.value.name));
     }
     const fields = checked === null ? input : { ...input, name: checked.value.name };
-    return unit.pools.update(id, fields, timestamp);
+    const updated = await unit.pools.update(id, fields, timestamp);
+    if (!updated.ok) return updated;
+    const [view] = await withResolution(unit, [updated.value]);
+    return view === undefined ? err(taktError('not_found', 'Diesen Pool gibt es nicht.')) : ok(view);
   });
 }
 
@@ -306,6 +413,12 @@ export function removePool(context: AppContext, id: PoolId): Promise<UseCaseResu
  * Todos sind in Pool-Ansichten ausgeblendet, aber einblendbar. Genau deshalb
  * erscheint ein Todo, dessen „Erledigt" ein Timerstart aufgehoben hat, ohne
  * einen einzigen Schreibvorgang wieder in seinem Pool.
+ *
+ * **Sagt die Regel selbst etwas über „Erledigt", entscheidet die Regel**
+ * (T-076). Dieselbe Abwägung wie auf dem Board, mit derselben Begründung: Ein
+ * Pool `completion: 'done'` wäre mit `onlyOpen` obendrauf immer leer, und die
+ * zweite Bedingung hat der Benutzer für die Ansicht gesetzt und nicht für
+ * diesen Pool. Steht die Achse neutral, bleibt alles wie zuvor.
  */
 export async function listPoolMembers(
   context: AppContext,
@@ -317,7 +430,8 @@ export async function listPoolMembers(
     const pool = await unit.pools.load(id);
     if (pool === null) return err(taktError('not_found', 'Diesen Pool gibt es nicht.'));
 
-    const filter: TodoFilter = includeCompleted ? {} : { onlyOpen: true };
+    const filter: TodoFilter =
+      pool.completion !== 'any' ? {} : includeCompleted ? {} : { onlyOpen: true };
     return ok(await unit.pools.members(id, filter, pagination));
   });
 }
@@ -610,7 +724,7 @@ export interface SettingsUpdate {
   readonly activeExportTemplateId?: ExportTemplateId | null;
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
-  readonly theme?: 'system' | 'light' | 'dark';
+  readonly theme?: Theme;
 }
 
 /**

@@ -14,7 +14,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrations:embed": "node scripts/embed-migrations.mjs",
-    "migrations:embed:check": "node scripts/embed-migrations.mjs --check"
+    "migrations:embed:check": "node scripts/embed-migrations.mjs --check",
+    "test": "pnpm -w exec vitest run packages/storage"
   },
   "dependencies": {
     "@takt/domain": "workspace:*"

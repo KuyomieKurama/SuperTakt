@@ -23,8 +23,27 @@ export interface ConfirmDialogProps {
   readonly title: string;
   /** Was der Dialog tut, in einem Satz. */
   readonly description: ReactNode;
-  /** Was danach anders ist. Erscheint hervorgehoben. */
+  /** Was danach anders ist. Erscheint hervorgehoben. Steht beim Oeffnen da. */
   readonly consequence?: ReactNode;
+  /**
+   * Die **Absage des Dienstes**, nachdem der Benutzer bestaetigt hat (B-5 aus
+   * T-116, SC 4.1.3).
+   *
+   * Getrennt von {@link consequence}, weil die beiden zu verschiedenen
+   * Zeitpunkten entstehen und deshalb verschieden angesagt werden muessen:
+   *
+   *  - Die **Vorwarnung** steht beim Oeffnen da. Sie liegt in
+   *    `aria-describedby` und wird zusammen mit dem Titel vorgelesen.
+   *  - Die **Absage** kommt danach, waehrend der Dialog steht. Eine
+   *    Beschreibung wird **nicht erneut** vorgelesen, wenn sie sich aendert —
+   *    bis T-118 hoerte eine Vorlesehilfe deshalb nur den neuen Knopfnamen
+   *    („Erneut versuchen") und kein Wort davon, **warum**. Der Satz mit den
+   *    Regelnamen aus W-11, der eigens dafuer gebaut wurde, kam bei ihr nie an.
+   *
+   * Ist `refusal` gesetzt, tritt sie an die Stelle der Vorwarnung: Zwei
+   * Kaesten, von denen einer nicht mehr gilt, sind schlechter als einer.
+   */
+  readonly refusal?: ReactNode;
   readonly confirmLabel: string;
   readonly cancelLabel?: string;
   readonly tone?: ConfirmTone;
@@ -47,6 +66,7 @@ export function ConfirmDialog({
   title,
   description,
   consequence,
+  refusal,
   confirmLabel,
   cancelLabel = "Abbrechen",
   tone = "default",
@@ -128,12 +148,38 @@ export function ConfirmDialog({
 
         <div className="dialog__body" id={descriptionId}>
           <p>{description}</p>
-          {consequence !== undefined ? (
+          {consequence !== undefined && refusal === undefined ? (
             <p className="dialog__consequence">
               <Icon name="arrow-up-right" size={14} />
               <span>{consequence}</span>
             </p>
           ) : null}
+
+          {/*
+            Die Live-Region steht **immer**, auch leer.
+
+            Ein `role="status"`, das erst zusammen mit seinem Inhalt in den Baum
+            kommt, wird von vielen Vorlesehilfen nicht angesagt: Sie melden
+            Aenderungen an einer Region, die sie kennen, und diese kennen sie in
+            dem Augenblick noch nicht. Deshalb steht der Behaelter vom Oeffnen
+            an da und bekommt seinen Inhalt spaeter — dann ist es eine Aenderung
+            und wird angesagt.
+
+            Umgekehrt darf die **Vorwarnung** nicht darin stehen: Sie liegt
+            bereits in `aria-describedby` und wuerde beim Oeffnen zweimal
+            vorgelesen (die Auflage aus B-5: „nicht dauerhaft").
+
+            Leer nimmt der Behaelter keinen Platz ein; `.dialog__consequence`
+            traegt seinen eigenen Abstand.
+          */}
+          <div role="status">
+            {refusal === undefined ? null : (
+              <p className="dialog__consequence">
+                <Icon name="alert-triangle" size={14} />
+                <span>{refusal}</span>
+              </p>
+            )}
+          </div>
           {reasonLabel !== undefined ? (
             <div className="dialog__reason">
               <label className="field__label" htmlFor={reasonId}>

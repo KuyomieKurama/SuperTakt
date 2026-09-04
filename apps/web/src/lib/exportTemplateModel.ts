@@ -7,6 +7,7 @@ import type {
   ExportTransformation,
   ExportTransformationInfo,
 } from "../api/types";
+import { quotedName } from "./foreign";
 
 export type {
   ExportConditionOperator,
@@ -289,13 +290,13 @@ export function parseTemplateDefinition(
     const source = candidate["source"];
     if (!catalog.hasSource(source)) {
       return fail(
-        `Feld ${String(position)} („${name}“) nennt eine Quelle, die diese Anwendung nicht kennt.`,
+        `Feld ${String(position)} (${quotedName(name)}) nennt eine Quelle, die diese Anwendung nicht kennt.`,
       );
     }
 
     const transformation = candidate["transformation"];
     if (!catalog.hasTransformation(transformation)) {
-      return fail(`Feld ${String(position)} („${name}“) nennt eine unbekannte Transformation.`);
+      return fail(`Feld ${String(position)} (${quotedName(name)}) nennt eine unbekannte Transformation.`);
     }
 
     const rawCondition = candidate["condition"];
@@ -304,19 +305,19 @@ export function parseTemplateDefinition(
       continue;
     }
     if (typeof rawCondition !== "object" || Array.isArray(rawCondition)) {
-      return fail(`Die Bedingung von Feld ${String(position)} („${name}“) ist kein Objekt.`);
+      return fail(`Die Bedingung von Feld ${String(position)} (${quotedName(name)}) ist kein Objekt.`);
     }
     const parts = rawCondition as Record<string, unknown>;
     const conditionSource = parts["source"];
     const operator = parts["op"];
     if (!catalog.hasSource(conditionSource)) {
       return fail(
-        `Die Bedingung von Feld ${String(position)} („${name}“) nennt eine unbekannte Quelle.`,
+        `Die Bedingung von Feld ${String(position)} (${quotedName(name)}) nennt eine unbekannte Quelle.`,
       );
     }
     if (!catalog.hasConditionOperator(operator)) {
       return fail(
-        `Die Bedingung von Feld ${String(position)} („${name}“) nennt einen unbekannten Vergleich.`,
+        `Die Bedingung von Feld ${String(position)} (${quotedName(name)}) nennt einen unbekannten Vergleich.`,
       );
     }
     fields.push({
@@ -393,7 +394,7 @@ export function describeDeviations(
       out.push({
         id: `missing-${expected.name}`,
         tone: "warning",
-        text: `Das Feld „${expected.name}“ der Standardvorlage fehlt. Das Abrechnungstool erwartet es.`,
+        text: `Das Feld ${quotedName(expected.name)} der Standardvorlage fehlt. Das Abrechnungstool erwartet es.`,
       });
       continue;
     }
@@ -401,14 +402,14 @@ export function describeDeviations(
       out.push({
         id: `source-${expected.name}`,
         tone: "warning",
-        text: `„${expected.name}“ liest ${catalog.sourceLabel(actual.source)} statt ${catalog.sourceLabel(expected.source)}.`,
+        text: `${quotedName(expected.name)} liest ${catalog.sourceLabel(actual.source)} statt ${catalog.sourceLabel(expected.source)}.`,
       });
     }
     if (actual.transformation !== expected.transformation) {
       out.push({
         id: `transformation-${expected.name}`,
         tone: "warning",
-        text: `„${expected.name}“ wird als ${catalog.transformationLabel(actual.transformation)} ausgegeben, die Standardvorlage benutzt ${catalog.transformationLabel(expected.transformation)}.`,
+        text: `${quotedName(expected.name)} wird als ${catalog.transformationLabel(actual.transformation)} ausgegeben, die Standardvorlage benutzt ${catalog.transformationLabel(expected.transformation)}.`,
       });
     }
     if (actual.condition !== undefined) {
@@ -419,7 +420,7 @@ export function describeDeviations(
         // einer Bedingung" laesst offen, unter welcher — und genau das ist
         // die Angabe, die man braucht, um zu beurteilen, ob eine Zeile im
         // Abrechnungstool ankommt.
-        text: `„${expected.name}“ steht nur in der Datei, wenn ${catalog.sourceLabel(actual.condition.source)} ${catalog.conditionOperatorLabel(actual.condition.op)}. Die Standardvorlage gibt das Feld immer aus.`,
+        text: `${quotedName(expected.name)} steht nur in der Datei, wenn ${catalog.sourceLabel(actual.condition.source)} ${catalog.conditionOperatorLabel(actual.condition.op)}. Die Standardvorlage gibt das Feld immer aus.`,
       });
     }
   }
@@ -430,7 +431,7 @@ export function describeDeviations(
     out.push({
       id: `extra-${field.name}`,
       tone: "info",
-      text: `Zusätzliches Feld „${field.name}“, das die Standardvorlage nicht kennt.`,
+      text: `Zusätzliches Feld ${quotedName(field.name)}, das die Standardvorlage nicht kennt.`,
     });
   }
 

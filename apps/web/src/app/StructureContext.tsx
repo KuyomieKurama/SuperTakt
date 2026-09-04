@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import {
   getTagTree,
-  listPoolTodos,
   listPools,
   listTodoStatuses,
   getSettings,
@@ -11,12 +10,15 @@ import type {
   DefaultTag,
   ExportDirectoryState,
   ExportDirectoryTrait,
+  ForeignText,
   Id,
   Pool,
   Tag,
   TagTree,
   TodoStatus,
 } from "../api/types";
+import { flatFolders } from "../lib/folderPaths";
+import type { RuleLookup } from "../lib/poolRule";
 import { useAsync, type AsyncState } from "./useAsync";
 
 /**
@@ -36,7 +38,7 @@ import { useAsync, type AsyncState } from "./useAsync";
 export interface TagInfo {
   readonly tag: Tag;
   /** Ordnerpfad ohne den Tag selbst, zum Beispiel `["Kunden", "Nord"]`. */
-  readonly path: readonly string[];
+  readonly path: readonly ForeignText[];
 }
 
 export interface Structure {
@@ -84,7 +86,7 @@ export interface Structure {
    * `/settings` für dieselbe Zeichenkette wäre eine zweite Wahrheit über
    * denselben Namen.
    */
-  readonly windowsUser: string;
+  readonly windowsUser: ForeignText;
   /** Wo der Bestand liegt (E-018, R-13). `null` im Arbeitsspeicher. */
   readonly databasePath: string | null;
 }
@@ -94,21 +96,31 @@ export interface StructureApi {
   readonly reload: () => void;
   /** Tag samt Ordnerpfad. `undefined`, wenn die Kennung unbekannt ist. */
   readonly tagInfo: (id: Id) => TagInfo | undefined;
-  readonly statusName: (id: Id) => string;
+  readonly statusName: (id: Id) => ForeignText;
   /** Name einer Regel, gleich auf welcher Fläche sie steht. */
-  readonly ruleName: (id: Id) => string | undefined;
+  readonly ruleName: (id: Id) => ForeignText | undefined;
   readonly allTags: readonly TagInfo[];
-  /**
-   * In welchen Pools liegt dieses Todo (A-3.4)?
-   *
-   * Die Frage beantwortet der **Dienst**, nicht die Oberfläche: je Pool ein
-   * Aufruf von `/pools/{id}/todos`. Die Regelauswertung liegt in
-   * `packages/domain`; sie hier nachzubauen hieße, zwei Wahrheiten über
-   * dieselbe Zugehörigkeit zu führen — und die eine davon fiele erst auf,
-   * wenn ein Todo nach A-2.5 im falschen Pool auftaucht.
-   */
-  readonly poolsContaining: (todoId: Id) => Promise<readonly string[]>;
 }
+
+/*
+ * Hier stand bis T-094 `poolsContaining(todoId)` — „in welchen Pools liegt
+ * dieses Todo?", beantwortet mit je einem Aufruf von `/pools/{id}/todos`.
+ *
+ * Es war ein **zweiter Weg zu einer Auskunft, die der Dienst laengst gibt**
+ * (E-058). Der einzige Aufrufer war der Toast nach dem Timerstart, und er
+ * bekommt die Bewegung seit T-094 als `poolMovement` mit der Startantwort:
+ * fertig gerechnet, aus demselben Zustandspaar, aus dem auch das Add-in
+ * seinen Satz bildet.
+ *
+ * Was der alte Weg nicht konnte, und zwar grundsaetzlich: Er lief **nach** der
+ * Handlung. Er sah damit nur den Zustand danach — was verschwunden war, stand
+ * in keiner Antwort mehr, und was vorher schon dastand, war von einem
+ * Neuzugang nicht zu unterscheiden. Kein Nachbessern haette daran etwas
+ * geaendert; dafuer braucht es beide Zustaende, und die hat nur der Dienst.
+ *
+ * Dazu entfaellt eine Abfrage je Pool bei jedem Timerstart auf einem
+ * erledigten Todo.
+ */
 
 const StructureContext = createContext<StructureApi | null>(null);
 
@@ -180,7 +192,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   }, [allTags]);
 
   const statusIndex = useMemo(() => {
-    const map = new Map<Id, string>();
+    const map = new Map<Id, ForeignText>();
     for (const status of value?.statuses ?? []) map.set(status.id, status.name);
     return map;
   }, [value]);
@@ -188,7 +200,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   const tagInfo = useCallback((id: Id) => tagIndex.get(id), [tagIndex]);
 
   const ruleIndex = useMemo(() => {
-    const map = new Map<Id, string>();
+    const map = new Map<Id, ForeignText>();
     for (const rule of value?.rules ?? []) map.set(rule.id, rule.name);
     return map;
   }, [value]);
@@ -200,30 +212,54 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
     [statusIndex],
   );
 
-  const pools = value?.pools ?? null;
-
-  const poolsContaining = useCallback(
-    async (todoId: Id): Promise<readonly string[]> => {
-      if (pools === null || pools.length === 0) return [];
-      const results = await Promise.all(
-        pools.slice(0, 12).map(async (pool) => {
-          try {
-            const page = await listPoolTodos(pool.id, { includeCompleted: false }, { limit: 200 });
-            return page.items.some((todo) => todo.id === todoId) ? pool.name : null;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return results.filter((name): name is string => name !== null);
-    },
-    [pools],
-  );
-
   const api = useMemo<StructureApi>(
-    () => ({ state, reload, tagInfo, statusName, ruleName, allTags, poolsContaining }),
-    [state, reload, tagInfo, statusName, ruleName, allTags, poolsContaining],
+    () => ({ state, reload, tagInfo, statusName, ruleName, allTags }),
+    [state, reload, tagInfo, statusName, ruleName, allTags],
   );
 
   return <StructureContext.Provider value={api}>{children}</StructureContext.Provider>;
+}
+
+
+/**
+ * Woher eine Regelzusammenfassung ihre Namen holt (T-079).
+ *
+ * Drei Ansichten stellen dieselbe Frage — das Board unter jedem Spaltenkopf,
+ * die Regelverwaltung in jeder Zeile und das Regelformular in seiner Vorschau:
+ * Wie heißt das Tag, der Ordner, der Status hinter dieser Kennung? Vor T-079
+ * beantworteten zwei davon sie getrennt, und die dritte gab es nicht.
+ *
+ * Der Nachschlag ist bewusst ein **Argument** von `describeRule` und kein
+ * Zusammenhang, den die Beschreibung sich selbst holt: Damit bleibt
+ * `lib/poolRule.ts` ohne laufenden Dienst prüfbar und auf der Musterseite des
+ * Designsystems zeigbar, wo es keinen `StructureProvider` gibt. Dieser Haken
+ * ist nur die Brücke dorthin.
+ */
+export function useRuleLookup(): RuleLookup {
+  const { state, tagInfo } = useStructure();
+  const value = state.status === "ready" ? state.value : null;
+
+  const folderPaths = useMemo(() => {
+    const map = new Map<Id, readonly string[]>();
+    if (value !== null) for (const entry of flatFolders(value.tagTree)) map.set(entry.id, entry.path);
+    return map;
+  }, [value]);
+
+  const statusNames = useMemo(() => {
+    const map = new Map<Id, ForeignText>();
+    for (const status of value?.statuses ?? []) map.set(status.id, status.name);
+    return map;
+  }, [value]);
+
+  return useMemo<RuleLookup>(
+    () => ({
+      tag: (id) => {
+        const info = tagInfo(id);
+        return info === undefined ? undefined : { name: info.tag.name, path: info.path };
+      },
+      folder: (id) => folderPaths.get(id),
+      status: (id) => statusNames.get(id),
+    }),
+    [tagInfo, folderPaths, statusNames],
+  );
 }

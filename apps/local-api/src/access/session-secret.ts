@@ -54,11 +54,13 @@
 
 import type { Readable } from 'node:stream';
 
+import { hasForbiddenNameCharacter } from '@takt/domain';
+
 export type StartupHandshake =
   | { readonly ok: true; readonly secret: string; readonly windowsUser: string }
   | {
       readonly ok: false;
-      readonly reason: 'missing' | 'timeout' | 'too_short' | 'user_missing';
+      readonly reason: 'missing' | 'timeout' | 'too_short' | 'user_missing' | 'user_invalid';
     };
 
 /** Kürzer als das nimmt der Dienst nicht an. */
@@ -76,13 +78,55 @@ const MAX_HANDSHAKE_BYTES = 8192;
 
 /**
  * Der Benutzername geht in die Abrechnung, also wird er geprüft und nicht
- * geglaubt. Steuerzeichen sind das, womit man eine Protokollzeile oder eine
- * Exportzelle von innen aufbricht.
+ * geglaubt.
+ *
+ * ---------------------------------------------------------------------------
+ * Dieselbe Klasse wie an der Haupttür (T-122, O-AE)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-122 stand hier `/[\u0000-\u001f\u007f]/` — C0 und DEL, **ohne** C1 und
+ * **ohne** die Richtungszeichen. Das war eine halbe Fassung der Regel, die
+ * `http/input.ts` an jedem Namen und jedem Titel anlegt, und die Lücke saß an
+ * der teuersten Stelle: Der Wert geht **unverändert** als `WindowsUser` in die
+ * Exportdatei (A-8.5, E-010) und steht in `GET /settings`. Ein `U+202E` darin
+ * dreht eine Zeile der Datei, die beim Abrechnungstool landet, und die Anzeige
+ * in den Einstellungen dazu.
+ *
+ * Geprüft wird deshalb gegen {@link hasForbiddenNameCharacter} aus
+ * `@takt/domain` — dieselbe Funktion, dieselben Zeichen. Es sind zwei Grenzen
+ * (dort eine Anfrage, hier die `stdin`-Zeile der Hülle), aber eine Regel; wer
+ * die Klasse erweitert, erweitert beide zugleich.
+ *
+ * ---------------------------------------------------------------------------
+ * Was das ändert, und was es kostet
+ * ---------------------------------------------------------------------------
+ *
+ * Es ist eine **Verhaltensänderung am Handschlag**: Ein Name, der bisher durchkam
+ * und jetzt nicht mehr, läßt den Dienst nicht starten (`user_invalid`, Code 78).
+ * Damit startet Takt nicht — und der Benutzer kann seinen Windows-Namen nicht
+ * ändern.
+ *
+ * Das ist mit Absicht die harte Variante, aber nicht die selbstverständliche.
+ * Zwei Dinge halten sie:
+ *
+ *  1. **Windows läßt solche Namen praktisch nicht zu.** Ein SAM-Konto verbietet
+ *     Steuerzeichen, ein UPN ist eine Adresse. Der Fall entsteht eher durch
+ *     einen Aufrufer, der etwas in die Röhre schreibt, als durch einen
+ *     Benutzer, der so heißt — und **das** ist der Fall, gegen den diese
+ *     Prüfung steht (B-8.1).
+ *  2. **Die Alternativen sind an dieser Grenze schlechter.** Bereinigen hieße,
+ *     unter einem Namen abzurechnen, den es nicht gibt; markieren hieße,
+ *     `U+FFFD` in die Abrechnungsdatei zu schreiben. Beides führte still zu
+ *     einer Rechnung mit falschem Urheber, während ein Nichtstart laut ist und
+ *     an der Stelle auffällt, an der jemand etwas tun kann.
+ *
+ * Ob das die richtige Wahl ist, ist eine Entscheidung und keine Zeile Code; sie
+ * steht als Frage im Bericht zu T-122. Ändert sie sich, ändert sich **diese**
+ * Funktion und nicht die Klasse.
  */
 function isPlausibleUserName(value: string): boolean {
   if (value.length === 0 || value.length > MAX_USER_LENGTH) return false;
-  // eslint-disable-next-line no-control-regex -- genau darum geht es hier
-  return !/[\u0000-\u001f\u007f]/.test(value);
+  return !hasForbiddenNameCharacter(value);
 }
 
 /**
@@ -113,6 +157,21 @@ export function readStartupHandshake(input: Readable, timeoutMs: number): Promis
       input.off('data', onData);
       input.off('end', onEnd);
       input.off('error', onEnd);
+      // **Anhalten, nicht nur zuhören aufhören** (T-122, gemessen).
+      //
+      // Einen `data`-Zuhörer abzumelden hält den Strom nicht an — er bleibt im
+      // fließenden Zustand und liest weiter. Zwischen diesem Augenblick und
+      // dem Anmelden von `watchParentLink` liegen aber Sekunden: Migration,
+      // Bestandssicherung, das Zertifikat des Aufgabenbereichs. Schließt die
+      // Hülle in genau diesem Fenster ihre Seite der Röhre, wird `end`
+      // ausgelöst, **während niemand zuhört** — und `watchParentLink` meldet
+      // sich danach an einem Strom an, der schon zu Ende ist. Das Ereignis
+      // kommt nie wieder, und der Sidecar läuft als verwaister Prozess mit
+      // Datenbankzugriff weiter: genau das, was B-1.6 Punkt 3 verhindern soll.
+      //
+      // `pause()` läßt das Dateiende **ungelesen** liegen. Der `resume()` in
+      // `watchParentLink` holt es dann nach, und der Dienst hält an.
+      input.pause();
       resolve(result);
     };
 
@@ -154,8 +213,17 @@ export function readStartupHandshake(input: Readable, timeoutMs: number): Promis
       }
 
       const windowsUser = buffer.slice(first + 1, second).trim();
-      if (!isPlausibleUserName(windowsUser)) {
+      // Zwei Gründe und nicht einer (T-122): Eine leere zweite Zeile ist ein
+      // Fehler der Hülle — sie hat den Namen nicht gelesen. Ein Name mit
+      // Steuer- oder Richtungszeichen ist etwas anderes: Er ist da, und er ist
+      // nicht abrechenbar. Der Benutzer sucht in beiden Fällen an verschiedenen
+      // Stellen, also sagt der Dienst, welcher der beiden vorliegt.
+      if (windowsUser === '') {
         finish({ ok: false, reason: 'user_missing' });
+        return;
+      }
+      if (!isPlausibleUserName(windowsUser)) {
+        finish({ ok: false, reason: 'user_invalid' });
         return;
       }
 
@@ -177,10 +245,36 @@ export function readStartupHandshake(input: Readable, timeoutMs: number): Promis
  *
  * Ohne das läuft ein verwaister Sidecar weiter, nachdem der Benutzer Takt
  * geschlossen hat — mit Datenbankzugriff und ohne Fenster (B-1.6 Punkt 3).
+ *
+ * **Die erste Zeile ist der Fall, den es schon gegeben hat** (T-122). Diese
+ * Funktion wird erst am Ende des Starts angemeldet; bis dahin kann die Röhre
+ * längst zu Ende sein. Ein `once('end')` auf einem beendeten Strom wird nie
+ * gerufen — der Wächter stünde da und wachte über nichts. Wer bereits zu Ende
+ * ist, wird deshalb sofort gemeldet, statt auf ein Ereignis zu warten, das
+ * schon vorbei ist. Zusammen mit dem `pause()` im Handschlag ist das Fenster
+ * geschlossen: Das eine verhindert den Verlust, das andere fängt ihn ab.
  */
 export function watchParentLink(input: Readable, onLost: () => void): void {
+  // **Einmal melden, nicht dreimal.** `end`, `close` und `error` treten
+  // nacheinander auf derselben Röhre auf — beim gewöhnlichen Ende sogar `end`
+  // und `close` unmittelbar hintereinander. Ohne diese Sperre liefe das
+  // Anhalten mehrfach, und der zweite Durchgang schließt eine bereits
+  // geschlossene Datenbank: ein Wurf aus einem Ereignisbehandler, und der
+  // Dienst endet mit Code 1 statt mit 0. Die Hülle liest diesen Code, um den
+  // Grund zu unterscheiden (T-122, in `proof:access` Abschnitt 15 beobachtet).
+  let reported = false;
+  const report = (): void => {
+    if (reported) return;
+    reported = true;
+    onLost();
+  };
+
+  if (input.readableEnded || input.destroyed) {
+    report();
+    return;
+  }
   input.resume();
-  input.once('end', onLost);
-  input.once('close', onLost);
-  input.once('error', onLost);
+  input.once('end', report);
+  input.once('close', report);
+  input.once('error', report);
 }

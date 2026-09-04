@@ -107,12 +107,60 @@ export const STATUS_COLOR = '#3f7fbf';
  *   `both`  — **zwei** zutreffende Regelterme in **einer** Spalte. Die Karte
  *             darf darin genau einmal stehen und nicht zweimal.
  *   `empty` — leere Regel. Trifft nichts, nicht alles (T-009).
+ *
+ * Und die fünf Achsen aus T-076, jede einzeln messbar:
+ *
+ *   `status`      — **nur** Status. Keine Tagbedingung; die Spalte steht und
+ *                   fällt mit `todo.status_id`, und das ist eine Spalte an der
+ *                   Zeile und kein Eintrag in einer Verknüpfungstabelle.
+ *   `otherStatus` — dieselbe Bauart mit einem Status, den kein Todo trägt. Die
+ *                   Gegenprobe: Ohne sie wäre `status` auch dann grün, wenn die
+ *                   Statusachse gar nicht filterte.
+ *   `mixed`       — Tag **und** Status. Die Verknüpfung der Achsen ist „und":
+ *                   Die Spalte muss weniger enthalten als die Tagspalte allein,
+ *                   nicht mehr.
+ *   `excluded`    — Tag erforderlich, anderes Tag ausgeschlossen. Die
+ *                   Bedingung, die eine Liste gleichartiger Terme nicht
+ *                   ausdrücken konnte.
+ *   `done`        — nur erledigte Karten. Sie misst zugleich, dass die Regel
+ *                   der Ansichtseinstellung vorgeht: Ohne das wäre die Spalte
+ *                   unter `includeCompleted=false` immer leer.
+ *   `openOnly`    — die Gegenrichtung derselben Achse, und die zweite Hälfte
+ *                   der E-058-Messung: Ein Timerstart auf einem erledigten
+ *                   Todo **verlässt** `done` und **betritt** `openOnly`. Ohne
+ *                   sie wäre nur das Verschwinden gemessen und das Erscheinen
+ *                   geraten.
+ *   `openWork`    — Todos mit offener Buchung („was habe ich noch nicht
+ *                   abgerechnet").
+ *   `exported`    — Todos mit exportierter Buchung. Beide zugleich sind
+ *                   möglich, und das ist der Punkt.
+ *
+ * Und der Fall, den man von außen nicht von einer treffelosen Regel
+ * unterscheiden kann, solange die Auflösung nicht mitkommt (T-080):
+ *
+ *   `emptyFolder` — Regel über einen Ordner, in dem **kein Tag** liegt. Sie
+ *                   nennt eine Bedingung und trifft trotzdem nichts:
+ *                   `resolved.tagCount` ist 0, `resolved.isEmpty` ist wahr.
+ *                   Abschnitt 13 misst daran, dass die Zahl ankommt und dass
+ *                   die Spalte leer ist.
  */
 export const BOARD_COLUMNS = Object.freeze({
   tag: 'Spalte über ein Tag',
   folder: 'Spalte über einen Ordner',
   both: 'Spalte über zwei Tags',
   empty: 'Spalte ohne Regel',
+  status: 'Spalte nur über den Status',
+  otherStatus: 'Spalte über einen unbenutzten Status',
+  mixed: 'Spalte über Tag und Status',
+  excluded: 'Spalte mit ausgeschlossenem Tag',
+  done: 'Spalte nur über Erledigt',
+  openOnly: 'Spalte nur über Unerledigt',
+  openWork: 'Spalte über offene Buchungen',
+  exported: 'Spalte über exportierte Buchungen',
+  emptyFolder: 'Spalte über einen leeren Ordner',
+  emptyFolderAndStatus: 'Spalte über einen leeren Ordner und den Status',
+  excludedEmptyFolder: 'Spalte mit Ausschluss über einen leeren Ordner',
+  tagOrEmptyFolder: 'Spalte über ein Tag oder einen leeren Ordner',
 });
 
 /**
@@ -296,6 +344,9 @@ export async function runScenario() {
     // -----------------------------------------------------------------------
     const statuses = await record('listTodoStatuses', 'GET', '/todo-statuses', '/todo-statuses');
     const statusId = statuses.body.data[0].id;
+    // Ein zweiter, den kein Todo dieses Durchlaufs trägt. Er ist die Gegenprobe
+    // zur Statusachse (T-076): Eine Spalte über ihn muss **leer** sein.
+    const unusedStatusId = statuses.body.data[1].id;
 
     // `color` geht mit (T-051): Die Route hat den Schlüssel bis dahin still
     // verworfen, während die Oberfläche ihn sendete. Der Durchlauf schickt ihn
@@ -410,6 +461,140 @@ export async function runScenario() {
       placement: 'board',
       position: 24,
       rule: [],
+    });
+
+    // -----------------------------------------------------------------------
+    // Die fünf Achsen aus T-076, jede als eigene Spalte
+    //
+    // Der Bestand ist so gewählt, dass die Antworten nicht zufällig richtig
+    // sein können: Beide Todos tragen `statusId`, aber nur eines trägt
+    // `boardTagId`. Damit muss `status` **beide** enthalten, `mixed` **eines**
+    // und `excluded` das **andere** — drei verschiedene Mengen aus demselben
+    // Bestand, und keine davon ist die Tagspalte.
+    // -----------------------------------------------------------------------
+    await record('createPool', 'POST', '/pools', '/pools', {
+      name: BOARD_COLUMNS.status,
+      placement: 'board',
+      position: 25,
+      rule: [],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.otherStatus,
+      placement: 'board',
+      position: 26,
+      rule: [],
+      statusIds: [unusedStatusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.mixed,
+      placement: 'board',
+      position: 27,
+      rule: [{ kind: 'tag', tagId: boardTagId }],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.excluded,
+      placement: 'board',
+      position: 28,
+      rule: [{ kind: 'tag', tagId }],
+      excludedTags: [{ kind: 'tag', tagId: boardTagId }],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.done,
+      placement: 'board',
+      position: 29,
+      rule: [],
+      completion: 'done',
+    });
+    // Dieselbe Achse in die andere Richtung (E-058). Sie ist die Spalte, die
+    // ein Timerstart auf einem erledigten Todo **betritt**, während er `done`
+    // verlässt — zwei Hälften einer Bewegung, und beide werden gemessen.
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.openOnly,
+      placement: 'board',
+      position: 36,
+      rule: [],
+      completion: 'open',
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.openWork,
+      placement: 'board',
+      position: 30,
+      rule: [],
+      exportState: 'open',
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.exported,
+      placement: 'board',
+      position: 31,
+      rule: [],
+      exportState: 'exported',
+    });
+
+    // Ein Ordner, in dem kein Tag liegt — und eine Spalte, die ihn nennt
+    // (T-080). Von außen sieht sie aus wie jede andere Regel; erst
+    // `resolved.tagCount` sagt, dass ihre einzige Bedingung ins Leere zeigt.
+    const barrenFolder = await quiet('POST', '/tag-folders', { name: 'Ordner ohne Tags' });
+    const barrenFolderId = barrenFolder.body.data.id;
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.emptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 32,
+      rule: [{ kind: 'folder', folderId: barrenFolderId }],
+    });
+
+    // -----------------------------------------------------------------------
+    // Derselbe leere Ordner, aber **nicht allein** (E-057)
+    //
+    // Die Spalte darüber besteht nur aus dem Ordnerterm; sie ist nach dem
+    // Auflösen leer und trifft schon deshalb nichts (A-3.4). Der Fall, um den
+    // es in T-082 geht, ist dieser hier: Der Ordnerterm steht **neben** einer
+    // zweiten Achse. Bis T-082 fiel er aus der Regel heraus — die aufgelöste
+    // Tagmenge war leer, und eine leere Tagmenge galt als Neutralwert —, und
+    // aus „Tags aus dem leeren Ordner **und** Status" wurde „Status": zwei
+    // Karten statt keiner, in der Abfrage wie in der Domäne.
+    //
+    // Die Gegenprobe steht daneben und ist die andere Hälfte von E-057: Ein
+    // **Ausschluß** über denselben leeren Ordner schließt nichts aus. Die
+    // Spalte führt deshalb genau dieselben Karten wie die Spalte über das Tag
+    // allein — „keiner davon" über nichts läßt in Ruhe, statt einzuengen.
+    // -----------------------------------------------------------------------
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.emptyFolderAndStatus,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 33,
+      rule: [{ kind: 'folder', folderId: barrenFolderId }],
+      statusIds: [statusId],
+    });
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.excludedEmptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      position: 34,
+      rule: [{ kind: 'tag', tagId }],
+      excludedTags: [{ kind: 'folder', folderId: barrenFolderId }],
+    });
+
+    // Der Fall, den die Achsensumme nicht sieht (E-057, termweise): ein
+    // **Tagterm neben** dem leeren Ordner, im Modus „mindestens eines davon".
+    // `resolved.tagCount` ist hier **1** — der Tagterm steuert seinen Tag bei —,
+    // und trotzdem trifft die Spalte nichts: Der Benutzer hat den Ordner
+    // genannt, weil er ihn meint. Achsenweise gemessen bliebe der leere Ordner
+    // unsichtbar, die Spalte zeigte die Tag-Karten, und sobald jemand einen Tag
+    // in den Ordner legt, änderte sie sich ohne ersichtlichen Grund.
+    await quiet('POST', '/pools', {
+      name: BOARD_COLUMNS.tagOrEmptyFolder,
+      placement: 'board',
+      includeSubfolders: true,
+      matchMode: 'any',
+      position: 35,
+      rule: [
+        { kind: 'tag', tagId },
+        { kind: 'folder', folderId: barrenFolderId },
+      ],
     });
 
     await record('getBoard', 'GET', '/board', '/board');
@@ -569,7 +754,10 @@ export async function runScenario() {
     const addinTodoId = addinTodo.body?.data?.todo?.id;
     if (addinTodoId !== undefined) {
       // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
-      // `doneCleared` und `poolNames` stehen dann nicht auf ihrem Ruhewert.
+      // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
+      // (Bis T-104 hießen die drei Listen `poolNames`, `enteringPoolNames`
+      // und `leavingPoolNames`; seit E-061 Punkt 3 ist es **ein** Feld in der
+      // Gestalt, die auch die Timer-Routen liefern.)
       await quiet('PUT', `/todos/${addinTodoId}/done`);
       await record(
         'createAddinTimeEntry',
@@ -579,6 +767,115 @@ export async function runScenario() {
         { startedAt: '2026-03-02T10:00:00Z', endedAt: '2026-03-02T10:30:00Z', note: 'Telefonat' },
       );
     }
+
+    // -----------------------------------------------------------------------
+    // Die Buchung von Hand, die **erste** eines Todos (E-061 Nachtrag, O-V)
+    //
+    // Der Aufruf oben bei „Zeitbuchungen" bucht auf `todoId`, und das Todo hat
+    // zu diesem Zeitpunkt längst eine abgeschlossene Buchung aus dem Timer.
+    // Dort ist `poolMovement` deshalb `null` — der Normalfall, und er ist
+    // gemessen. Was dort **nicht** zu messen war, ist der Fall, um den es geht:
+    // die erste Buchung überhaupt. Sie setzt „hat offene Buchungen", und jede
+    // Regel mit `exportState: 'open'` nimmt das Todo damit auf.
+    //
+    // Ein eigenes, frisches Todo dafür, und zwar hier und nicht weiter oben:
+    // Der Exportlauf ist vorbei, die neue offene Buchung verändert also keinen
+    // Bestand, über den bereits berichtet wurde. Der Bestand danach wird
+    // gelesen und nicht angenommen — `GET /time-entries` und `GET /board`
+    // stehen unmittelbar darunter.
+    // -----------------------------------------------------------------------
+    const untouched = await quiet('POST', '/todos', {
+      title: 'Akte 4714 — Nachtrag von Hand',
+      callNumber: 'C-4714-2026',
+      statusId,
+      tagIds: [],
+      note: '',
+    });
+    await record('createTimeEntry', 'POST', '/time-entries', '/time-entries', {
+      todoId: untouched.body.data.todo.id,
+      startedAt: '2026-03-02T14:00:00Z',
+      endedAt: '2026-03-02T14:20:00Z',
+      note: 'Nachgetragen',
+    });
+
+    // -----------------------------------------------------------------------
+    // Das Board ein **zweites** Mal — jetzt mit Buchungen und mit Erledigt
+    //
+    // Die drei Achsen `done`, `openWork` und `exported` (T-076) konnten beim
+    // ersten Lesen nichts zeigen: Zu diesem Zeitpunkt gab es weder eine
+    // Buchung noch eine erledigte Karte. Eine Spalte, die leer ist, weil es
+    // nichts zu zeigen gibt, misst nichts — sie sähe genauso aus wie eine
+    // Spalte, deren Achse gar nicht wirkt.
+    //
+    // Deshalb hier, nach Timer, Buchungen und Exportlauf, noch einmal. Und
+    // `secondTodoId` wird vorher erledigt: Ohne eine erledigte Karte bliebe
+    // `done` wieder leer, und der Fall, den diese Spalte trägt — die Regel
+    // geht der Ansichtseinstellung `includeCompleted=false` vor —, wäre
+    // ungemessen.
+    //
+    // Der Bestand der Buchungen wird nicht angenommen, sondern gelesen:
+    // `GET /time-entries` ist der zweite, unabhängige Weg zu derselben
+    // Auskunft, und `proof-openapi.mjs` hält die beiden gegeneinander.
+    // -----------------------------------------------------------------------
+    await quiet('PUT', `/todos/${secondTodoId}/done`);
+    await record('searchTimeEntries', 'GET', '/time-entries', '/time-entries?limit=100');
+    await record('getBoard', 'GET', '/board', '/board');
+
+    // -----------------------------------------------------------------------
+    // Die Bewegung durch die Pools, die ein Timerstart auslöst (E-058)
+    //
+    // Der Start hebt „Erledigt" auf (A-2.5). Seit E-055 ist das keine
+    // Nebensache mehr: Eine Spalte ist eine Regel, und eine Regel kann nach
+    // „Erledigt" fragen. Die Karte verlässt also eine Spalte und betritt eine
+    // andere — und bis E-058 stand an dieser Stelle in beiden Oberflächen der
+    // Satz „Die Karte bleibt, wo sie ist".
+    //
+    // Der Bestand ist so gewählt, dass die Antwort nicht zufällig richtig sein
+    // kann: `secondTodoId` ist **erledigt** (die Zeile darüber), es gibt eine
+    // Spalte `completion: 'done'` und eine `completion: 'open'`, und daneben
+    // steht eine Spalte über einen **leeren Ordner** (E-057), die in keiner der
+    // drei Listen vorkommen darf. Abschnitt 15 misst alle drei.
+    //
+    // Anschließend wird der Timer ohne vergehende Zeit gestoppt: Die Buchung
+    // ist kürzer als eine Sekunde und wird verworfen (A-6.2). Der Bestand steht
+    // danach wieder so da wie vorher, bis auf das aufgehobene Kennzeichen —
+    // und das ist die Wirkung, um die es geht.
+    // -----------------------------------------------------------------------
+    await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId: secondTodoId });
+    await quiet('POST', '/timer/stop', { note: '' });
+
+    // Die Gegenprobe zur Bewegung: derselbe Start ein zweites Mal, jetzt auf
+    // einem Todo, das **nicht** erledigt ist und schon Buchungen hat. Es hebt
+    // kein Kennzeichen auf und lässt keine erste Buchung entstehen — also
+    // `poolMovement: null` und nicht drei leere Listen.
+    await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId });
+
+    // Der **Stopp** bewegt ebenfalls (E-058 Punkt 6, T-093), und zwar an genau
+    // einer Achse: Die erste abgeschlossene, offene Buchung setzt „hat offene
+    // Buchungen", und die Spalte über offene Buchungen nimmt das Todo damit auf.
+    //
+    // Der Zeitpunkt ist mit Bedacht **nach** dem Exportlauf: Der hat die
+    // bisherigen Buchungen von `todoId` auf `exported` gesetzt, „hat offene
+    // Buchungen" steht also wieder auf falsch. Diese zwei Minuten sind damit
+    // erneut die erste offene Buchung — und die Karte betritt die Spalte.
+    tick(120);
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Rückfrage geklärt' });
+
+    // Und die Gegenprobe zum Stopp: **noch einmal dasselbe**, unmittelbar
+    // danach. Es entsteht wieder eine echte Buchung von zwei Minuten — kein
+    // Doppelklick, kein verworfener Stopp —, und trotzdem bewegt sich nichts:
+    // „hat offene Buchungen" steht seit der Zeile darüber auf wahr, und keine
+    // Regel urteilt anders als vorher. Die Antwort ist `null`.
+    //
+    // Ohne diese Aufzeichnung wäre Abschnitt 15 auch an einer Fassung grün, die
+    // die Sparsamkeitsbedingung wegläßt und bei **jedem** Stopp alle Regeln
+    // auflöst: Sie lieferte dann drei leere Listen statt `null`. Das ist der
+    // Unterschied zwischen „hier war keine Bewegung möglich" und „nachgesehen
+    // und nichts gefunden" — und die drei leeren Listen kosten die Auflösung
+    // jedes Ordnerbaums, für nichts.
+    await quiet('POST', '/timer/start', { todoId });
+    tick(120);
+    await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Nachtrag zur Akte' });
 
     // -----------------------------------------------------------------------
     // Löschen. Jeweils an einem eigens dafür angelegten Stück, damit der
@@ -670,6 +967,26 @@ export async function runScenario() {
 
     // 409 — der Bestand steht dagegen.
     await record('deleteTag', 'DELETE', '/tags/{tagId}', `/tags/${tagId}`);
+
+    /*
+     * Ein **leerer** Ordner, den eine Regel nennt (R-1 Befund 1, E-057).
+     *
+     * `barrenFolderId` enthält kein Tag — er wäre also nach der Inhaltsprüfung
+     * löschbar, und bis T-089 war er das auch. Drei Spalten nennen ihn; das
+     * Löschen nahm ihre Terme still mit, und aus „Tags aus dem leeren Ordner
+     * **und** Status" wurde „Status". Die Regel traf danach mehr, als der
+     * Benutzer gesagt hatte.
+     *
+     * Der erfolgreiche Ausgang derselben Route steht weiter oben an einem
+     * eigens angelegten Ordner: Beide Ausgänge werden gemessen, nicht nur der
+     * bequeme.
+     */
+    await record(
+      'deleteTagFolder',
+      'DELETE',
+      '/tag-folders/{folderId}',
+      `/tag-folders/${barrenFolderId}`,
+    );
     await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: '' });
 
     // Und der Gegenprobe halber: das Lebenszeichen **ohne** laufenden Timer.

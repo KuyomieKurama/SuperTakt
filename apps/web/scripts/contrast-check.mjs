@@ -215,6 +215,11 @@ const pairs = [
    * Versehen: hell 1.47:1, dunkel 1.74:1.
    */
   { group: "Timer", fg: "--timer-running-border", bg: "--timer-running-bg", min: 0, exempt: true, note: "Trennstrich vor dem Todo-Titel, rein gruppierend" },
+  // Bis T-108 stand dieses Paar unter "Erledigt" mit dem Beleg "Fussnote im
+  // Wiederaufnahme-Hinweis". Der Hinweis ist mit W-9 entfallen; das Paar bleibt,
+  // weil es andere Flaechen tragen (Call-Nummer und Symbol in einer Zeile mit
+  // laufendem Timer, `.pick-row--running`, `.timerbar__icon`).
+  { group: "Timer", fg: "--text-muted", bg: "--timer-running-bg", min: 4.5, note: "Nebentext in einer Zeile mit laufendem Timer" },
   { group: "Timer", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Timerleiste im Ruhezustand" },
 
   // Hinweise
@@ -240,7 +245,6 @@ const pairs = [
   { group: "Erledigt", fg: "--text-secondary", bg: "--bg-inset", min: 4.5, note: "Kennzeichen Erledigt aufgehoben" },
   { group: "Erledigt", fg: "--border-strong", bg: "--bg-inset", min: 3, note: "gestrichelte Kontur Erledigt aufgehoben" },
   { group: "Erledigt", fg: "--success-fg", bg: "--bg-subtle", min: 4.5, note: "Zaehler erledigter Todos im Spaltenkopf" },
-  { group: "Erledigt", fg: "--text-muted", bg: "--timer-running-bg", min: 4.5, note: "Fussnote im Wiederaufnahme-Hinweis" },
 
   // Kanban nach E-054: Eine Spalte ist eine Regel ueber Tags, dieselbe Karte
   // kann in mehreren Spalten stehen. Beides braucht eigene Flaechen — die
@@ -255,6 +259,38 @@ const pairs = [
   { group: "Board (E-054)", fg: "--border-accent", bg: "--bg-surface", min: 3, note: "Ring um ein hervorgehobenes Vorkommen, innen" },
   { group: "Board (E-054)", fg: "--border-accent", bg: "--bg-subtle", min: 3, note: "Ring um ein hervorgehobenes Vorkommen, gegen die Spalte" },
   { group: "Board (E-054)", fg: "--text-muted", bg: "--bg-surface", min: 4.5, note: "Anzeigeort-Etikett in der Regelliste" },
+
+  // Der leere Ordner (E-057, T-083). Ein erforderlicher Ordner ohne ein
+  // einziges Tag ist der einzige der drei Leerzustaende einer Spalte, den
+  // ausschliesslich der Benutzer beheben kann — deshalb traegt er Warnfarbe.
+  // Er erscheint auf drei Untergruenden: im Spaltenkopf (`--bg-subtle`), in
+  // der Regelliste und im Formular (`--bg-surface`) und in der Zeile des
+  // Spaltendialogs unter dem Zeiger (`--bg-hover`). Jeder gemessen, weil
+  // Warnfarben auf getoenten Flaechen gern knapp durchfallen.
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--warning-bg", min: 4.5, note: "Ordnerchip ohne Tag in der Regelzusammenfassung" },
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-subtle", min: 4.5, note: "Folgesatz im Spaltenkopf; zugleich Kontur des Chips, SC 1.4.11" },
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-surface", min: 4.5, note: "Folgesatz in Regelliste und Formular; zugleich Kontur des Chips, SC 1.4.11" },
+  /*
+   * `--warning-border` steht hier ausdruecklich **nicht** als Kontur: gemessen
+   * 1,28:1 gegen `--bg-subtle` und 1,44:1 gegen `--bg-surface` im hellen Modus,
+   * 2,47:1 und 2,71:1 im dunklen — alle vier unter 3:1. Der Chip nimmt deshalb
+   * `--warning-fg` als Kontur. Die Zeile steht hier als Merkposten, damit
+   * niemand die weichere Farbe „aus Konsistenz" zurueckholt.
+   */
+  { group: "Leerer Ordner", fg: "--warning-fg", bg: "--bg-hover", min: 4.5, note: "Befund in der Spaltenzeile unter dem Zeiger" },
+
+  // Regelformular (S-11, E-055, H-2 aus R-2). Die Flaechen des Formulars sind
+  // fast alle ueber bereits gemessene Farbpaare abgedeckt — bis auf eines: den
+  // **Optionsknopf** selbst auf der Flaeche der **gewaehlten** Optionszeile.
+  // `accent-color: --accent-bg` auf `--accent-bg-subtle` ist die Grenze eines
+  // Bedienelements nach SC 1.4.11, und beide Farben unterscheiden sich in den
+  // zwei Farbmodi verschieden stark. Der Fall ist harmlos; „gemessen statt
+  // behauptet" ist trotzdem der Massstab.
+  { group: "Regelformular", fg: "--accent-bg", bg: "--accent-bg-subtle", min: 3, note: "Optionsknopf auf der gewaehlten Optionszeile, SC 1.4.11" },
+  { group: "Regelformular", fg: "--accent-bg", bg: "--bg-surface", min: 3, note: "Optionsknopf auf der ungewaehlten Optionszeile, SC 1.4.11" },
+  { group: "Regelformular", fg: "--accent-bg", bg: "--bg-hover", min: 3, note: "Optionsknopf unter dem Zeiger, SC 1.4.11" },
+  // Die Ladezeile und das Suchfeld der Chip-Auswahlen (B-5, A-4.4, T-091).
+  { group: "Regelformular", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Ladezeile und Leersatz der Ordnerauswahl" },
 
   // Statusverwaltung (A-5.4, Bereich „Status" in S-09, T-073). Der Status hat
   // mit E-054 seine Spalte verloren und ist eine Stammgroesse geworden; seine

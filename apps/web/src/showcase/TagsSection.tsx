@@ -154,7 +154,7 @@ export function TagsSection() {
 
       <Card
         title="Tag-Eingabe — eine für alle Stellen"
-        description="Todo-Dialog, Standard-Tags, Poolregel und Todo-Filter benutzen denselben Baustein. Vorher waren es vier verschiedene Arten, ein Tag zu wählen — eine davon auf vierzig Tags gekappt, eine gar nicht vorhanden."
+        description="Todo-Dialog, Standard-Tags, Regelformular und Todo-Filter benutzen denselben Baustein. Vorher waren es vier verschiedene Arten, ein Tag zu wählen — eine davon auf vierzig Tags gekappt, eine gar nicht vorhanden."
       >
         <SubHeading>Mit Auto-Vervollständigung und Anlegen</SubHeading>
         <p className="demo-note">
@@ -191,7 +191,7 @@ export function TagsSection() {
             value={filterTags}
             onChange={setFilterTags}
             placeholder="Nach Tag filtern …"
-            hint="So steht sie in der Filterleiste und in der Poolregel. Findet sich nichts, verweist die Liste auf die Tag-Verwaltung, statt still leer zu bleiben."
+            hint="So steht sie in der Filterleiste und im Regelformular. Findet sich nichts, verweist die Liste auf die Tag-Verwaltung, statt still leer zu bleiben."
           />
 
           <TagCombobox

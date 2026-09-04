@@ -17,6 +17,7 @@ import { useAsync } from "../app/useAsync";
 import type { ExportAuditEvent } from "../lib/labels";
 import { formatCount, plural } from "../lib/format";
 import { AsyncBoundary, ExportTabs, RefreshHint, ScreenHeader, StatTile } from "./parts";
+import { foreignText } from "../lib/foreign";
 
 /**
  * Takt — S-07, Bereich „Protokoll" (R-10, E-012, E-047, Befund C-01).
@@ -66,7 +67,7 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
 
   const loadMore = useCallback(() => setLimit((current) => current + AUDIT_PAGE_SIZE), []);
 
-  const data = useAsync(() => loadExportAuditPage({ limit }), [limit, version]);
+  const data = useAsync(() => loadExportAuditPage({ limit }), [limit], [version]);
 
   const rows = data.state.status === "ready" ? data.state.value.rows : [];
 
@@ -74,7 +75,7 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
     const seen = new Map<string, string>();
     for (const row of rows) {
       if (row.run !== null && row.run.filePath.length > 0 && !seen.has(row.run.id)) {
-        seen.set(row.run.id, `${row.run.fileName} · ${row.run.writtenAt}`);
+        seen.set(row.run.id, `${foreignText(row.run.fileName)} · ${row.run.writtenAt}`);
       }
     }
     return [...seen].map(([value, label]) => ({ value, label }));

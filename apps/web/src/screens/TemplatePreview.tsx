@@ -31,6 +31,8 @@ import {
 } from "../lib/format";
 import { AsyncBoundary, RefreshHint } from "./parts";
 import { BookingFormDialog } from "./BookingDialogs";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — die Vorschau des Vorlageneditors (S-14, A-8.7, E-005, E-031, E-034).
@@ -171,7 +173,7 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
       total: entries.total,
       entryIds: entries.items.map((entry) => entry.id),
     };
-  }, [version]);
+  }, [], [version]);
 
   /*
    * Der Entwurf als Zeichenkette — genau der Rumpf, der über die Leitung geht.
@@ -394,7 +396,7 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
                   : "."}{" "}
                 {outcome.preview.templateSource === "draft"
                   ? "Gerendert aus Ihrem aktuellen Stand."
-                  : `Gerendert aus der gespeicherten Vorlage „${outcome.preview.templateName ?? ""}“.`}
+                  : `Gerendert aus der gespeicherten Vorlage ${quotedName(outcome.preview.templateName ?? "")}.`}
                 <RefreshHint active={pending} />
               </p>
 
@@ -477,7 +479,7 @@ function PreviewGroupRow({
           <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
         </span>
         <span className="tpgroup__identity">
-          <span className="tpgroup__title">{todo?.title ?? "Unbekanntes Todo"}</span>
+          <Foreign className="tpgroup__title" value={todo?.title ?? "Unbekanntes Todo"} />
           <span className="tpgroup__meta">
             {formatDayLabel(summary.day)}
             <span aria-hidden> · </span>
@@ -563,7 +565,7 @@ function PreviewGroupRow({
                   {entry.note.trim().length === 0 ? (
                     <span className="muted">— keine Leistung erfasst —</span>
                   ) : (
-                    entry.note
+                    <Foreign value={entry.note} />
                   )}
                 </span>
                 <Button

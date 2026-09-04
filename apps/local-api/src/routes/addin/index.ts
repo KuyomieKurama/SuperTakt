@@ -54,8 +54,15 @@ import {
 } from '@takt/domain';
 
 /*
- * Der **einzige** Import aus dem übrigen Dienst, und er holt genau eine Zahl:
- * den Statuscode zu einem fachlichen Fehlerschlüssel (T-061).
+ * Der einzige Import **dieser Datei** aus dem übrigen Dienst, und er holt genau
+ * eine Zahl: den Statuscode zu einem fachlichen Fehlerschlüssel (T-061).
+ *
+ * Bis T-114 stand hier „der **einzige** Import aus dem übrigen Dienst". Das
+ * gilt seither nicht mehr für das Modul als Ganzes: `schema.ts` holt
+ * `titleSchema` und `nameSchema` aus `http/input.ts`, damit die Add-in-Tür
+ * dieselben Zeichen abweist wie die Haupttür (Befund T-112-1). Der Satz steht
+ * berichtigt statt gestrichen da, weil eine zugesicherte Ausschließlichkeit,
+ * die niemand nachzählt, genau der Fehler ist, den T-114 behebt.
  *
  * Er steht hier, damit ein `name_conflict` über `POST /addin/todos` denselben
  * Code bekommt wie über `POST /todos` — 409 und nicht 422, weil diese Route
@@ -327,8 +334,9 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * **War das Todo erledigt, ist es danach offen** (A-2.5, seit T-038). Das ist
    * keine Option der Anfrage, sondern die Wirkung der Handlung — dieselbe wie
    * beim Timerstart in der Hauptanwendung (I-05). Die Antwort sagt beides:
-   * `doneCleared`, ob das Kennzeichen gefallen ist, und `poolNames`, in
-   * welchen Pools das Todo damit wieder steht. Beides steht in der Antwort,
+   * `doneCleared`, ob das Kennzeichen gefallen ist, und `poolMovement`, in
+   * welchen Pools und Spalten das Todo damit wieder steht, in welche es
+   * hineinkommt und aus welchen es verschwindet. Beides steht in der Antwort,
    * weil der Aufrufer es **anzeigen** soll und nicht, weil er daraus etwas
    * ableiten müsste.
    */
@@ -364,7 +372,16 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
           timeEntry: result.timeEntry satisfies { readonly id: TimeEntryId },
           todoWasDone: result.todoWasDone,
           doneCleared: result.doneCleared,
-          poolNames: result.poolNames,
+          // **Ein** Feld, drei Listen darin — dieselbe Gestalt wie an den
+          // Timer-Routen und an `PUT`/`DELETE /todos/{todoId}/done` (E-061
+          // Punkt 3). Bis T-104 standen hier `poolNames`, `enteringPoolNames`
+          // und `leavingPoolNames` einzeln, und genau daran hing die Falle aus
+          // T-076 Befund 1: Die Antwort zählt ihre Felder auf, ein neues Feld
+          // am Ergebnis kommt hier **nicht** von selbst an, und wer eines der
+          // drei vergaß, bekam eine Antwort, die wie Erfolg aussah, und einen
+          // Aufgabenbereich ohne die halbe Auskunft (E-056). Ein Wert kann
+          // nicht mehr zur Hälfte ankommen.
+          poolMovement: result.poolMovement,
         },
       },
       201,

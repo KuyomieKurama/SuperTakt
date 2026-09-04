@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
+import type { ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
-import { joinGerman } from "../lib/format";
-import { CARD_STAYS } from "../lib/labels";
-import { Icon } from "./Icon";
 import { Button, IconButton } from "./Primitives";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 
 /**
  * Zeiterfassung — A-6.1, A-6.2, A-5.6, A-13.4.
@@ -39,7 +39,7 @@ export interface TimerDisplayProps {
   /** Bereits formatierte Dauer, zum Beispiel "00:42:17". */
   readonly display: string;
   /** Titel des Todos, auf das gebucht wird. */
-  readonly todoTitle?: string;
+  readonly todoTitle?: ForeignText;
   /** Bereits formatierter Zusatz, zum Beispiel "seit 09:12 Uhr". */
   readonly detail?: string;
   readonly size?: "sm" | "md" | "lg";
@@ -56,7 +56,7 @@ export interface TimerDisplayProps {
    * Text der Anzeige steht, sondern daneben (`trailing`). Ohne Angabe gilt
    * `todoTitle`.
    */
-  readonly actionTitle?: string;
+  readonly actionTitle?: ForeignText;
   readonly onStart?: () => void;
   readonly onStop?: () => void;
   readonly disabled?: boolean;
@@ -92,8 +92,8 @@ export function TimerDisplay({
         ? "Timer stoppen"
         : "Timer starten"
       : running
-        ? `Timer für „${namedTitle}“ stoppen`
-        : `Timer für „${namedTitle}“ starten`;
+        ? `Timer für ${quotedName(namedTitle)} stoppen`
+        : `Timer für ${quotedName(namedTitle)} starten`;
   return (
     <div
       className={cx("timer", `timer--${size}`, running ? "timer--running" : "timer--idle", className)}
@@ -109,7 +109,11 @@ export function TimerDisplay({
         </output>
         {todoTitle !== undefined || detail !== undefined ? (
           <span className="timer__meta truncate">
-            {todoTitle !== undefined ? <strong>{todoTitle}</strong> : null}
+            {todoTitle !== undefined ? (
+              <strong>
+                <Foreign value={todoTitle} />
+              </strong>
+            ) : null}
             {todoTitle !== undefined && detail !== undefined ? <span aria-hidden> · </span> : null}
             {detail !== undefined ? <span>{detail}</span> : null}
           </span>
@@ -143,91 +147,30 @@ export function TimerDisplay({
 }
 
 /* ==================================================================== */
-/* Wiederaufnahme eines erledigten Todos — A-2.5, I-05                  */
+/* Was hier bis T-108 stand: `ReactivationNotice` (A-2.5, I-05)         */
 /* ==================================================================== */
 
-export interface ReactivationNoticeProps {
-  readonly todoTitle: string;
-  /**
-   * Namen aller Pools, in denen das Todo jetzt wieder liegt (A-3.4).
-   * Leer, wenn keine Poolregel auf seine Tags passt — dann darf die Meldung
-   * keinen Pool nennen (T-005, B-12).
-   */
-  readonly poolNames: readonly string[];
-  /** Setzt den Vorgang zurueck: Timer stoppen, Todo wieder auf "Erledigt". */
-  readonly onUndo?: () => void;
-  readonly onDismiss?: () => void;
-  readonly className?: string;
-}
-
-/**
- * Erklaert, was beim Start des Timers auf einem erledigten Todo passiert ist.
- * Die Anwendung hat den Erledigt-Status aufgehoben, ohne zu fragen (A-2.5);
- * deshalb muss sie es hinterher unmissverstaendlich sagen und einen Rueckweg
- * anbieten.
+/*
+ * Der Baustein ist **ersatzlos** entfallen (W-9 aus R-2a), und diese Notiz
+ * steht an seiner Stelle, damit ihn niemand aus bester Absicht neu baut.
  *
- * Der Satz nennt die drei Wirkungen aus A-2.5:
- *   1. "Erledigt" ist aufgehoben
- *   2. das Todo ist wieder aktiv
- *   3. es erscheint erneut in seinen Pools
+ * Er zeigte nach einem Timerstart auf einem erledigten Todo eine eigene
+ * Hinweisfläche: „„Erledigt“ wurde aufgehoben — der Timer läuft", darunter der
+ * Bewegungssatz und ein „Rückgängig". **Keine Ansicht der Anwendung hat ihn
+ * jemals eingesetzt.** Seit T-045 trägt diesen Fall der Toast
+ * (`TimerContext.announceStart`: Titel, Bewegungssatz, „Rückgängig") zusammen
+ * mit dem Etikett „Erledigt aufgehoben" an der Zeile ({@link DoneFlag},
+ * `DONE_FLAG_LABEL.reopened`) — zwei Flächen, die zusammen dasselbe leisten
+ * und dabei nicht mitten in der Liste Platz nehmen.
  *
- * Was er ausdruecklich **nicht** sagt: dass das Todo die Spalte gewechselt
- * habe. Das tut es nicht. Ein Timerstart fasst nur das Kennzeichen an — nicht
- * den Status und nicht die Tags. Seit E-054 haengt die Kanban-Spalte an den
- * Tags, das Todo steht also danach in denselben Spalten wie vorher; es war
- * nur ausgeblendet, solange es erledigt war.
+ * Übrig blieben die Musterseite und dieser Baustein. Damit zeigte die
+ * abgenommene visuelle Referenz (E-013, E-024) eine Fläche, die es im Produkt
+ * nicht gibt — der teuerste Fehler, den eine Musterseite machen kann, weil er
+ * genau dort steht, wo nachgesehen wird, was das Produkt tut. Die Musterseite
+ * zeigt jetzt den Toast und das Etikett.
  *
- * Dieser eine Satz steht zeichengleich in `lib/labels.ts` (`CARD_STAYS`), im
- * Toast der Hauptanwendung und im Outlook-Add-in. Bis T-045 stand hier
- * „Statusspalte" und dort „Spalte" — dieselbe Aussage in zwei Fassungen, und
- * genau das ist der Anfang zweier Bedeutungen (Befund C-24). Die
- * Aufzaehlung der Pools kommt aus demselben Grund aus `joinGerman`.
+ * Mit ihm entfallen sind `.reactivation*` in `styles/components.css`; das
+ * gemessene Farbpaar `--text-muted` auf `--timer-running-bg` bleibt, weil es
+ * andere Flächen ebenfalls tragen (Nebentext in einer Zeile mit laufendem
+ * Timer) — nur sein Beleg in `scripts/contrast-check.mjs` nennt jetzt diese.
  */
-export function ReactivationNotice({
-  todoTitle,
-  poolNames,
-  onUndo,
-  onDismiss,
-  className,
-}: ReactivationNoticeProps) {
-  const poolText = joinGerman(poolNames);
-  return (
-    <div className={cx("reactivation", className)} role="status" aria-live="polite">
-      <span className="reactivation__icon">
-        <Icon name="rotate-ccw" size={16} />
-      </span>
-      <div className="grow">
-        {/* E-030: Der **Timer** läuft. „Zeiterfassung" ist der Bereich. */}
-        <p className="reactivation__title">„Erledigt“ wurde aufgehoben — der Timer läuft</p>
-        <p className="reactivation__body">
-          <strong>{todoTitle}</strong> ist wieder offen
-          {poolNames.length > 0 ? (
-            <>
-              {" und erscheint erneut "}
-              {poolNames.length === 1 ? "im Pool " : "in den Pools "}
-              <strong>{poolText}</strong>.
-            </>
-          ) : (
-            ". Zu seinen Tags passt derzeit keine Poolregel, deshalb erscheint es in keinem Pool."
-          )}{" "}
-          {CARD_STAYS}
-        </p>
-        <p className="reactivation__hint">
-          „Rückgängig“ stoppt den Timer, verwirft die eben entstandene Buchung und setzt
-          „Erledigt“ zurück. Verworfen wird sie deshalb, weil wenige Sekunden sonst als
-          0,25 Stunden in der Abrechnung stünden.
-        </p>
-      </div>
-      <div className="reactivation__actions">
-        {onUndo !== undefined ? (
-          <Button variant="secondary" size="sm" onClick={onUndo}>
-            Rückgängig
-          </Button>
-        ) : null}
-        {onDismiss !== undefined ? (
-          <IconButton label="Hinweis schließen" icon="x" size="sm" onClick={onDismiss} />
-        ) : null}
-      </div>
-    </div>
-  );
-}

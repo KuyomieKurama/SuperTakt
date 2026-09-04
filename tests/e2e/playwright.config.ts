@@ -1,19 +1,13 @@
 // Takt — End-zu-Ende-Tests, Ausführungskonfiguration (T-012).
 //
-// Der Rahmen in der Wurzel (`playwright.config.ts`) gehört nicht dem
-// e2e-tester und hat ausdrücklich noch keinen `webServer`-Eintrag ("in Welle
-// 2 startet T-012 die Anwendung, ... ein geratener Startbefehl hier wäre ein
-// stiller Fehlstart"). Diese Datei liegt unter `tests/e2e/**` (Dateihoheit
-// e2e-tester) und übernimmt genau das: `globalSetup` startet den echten
+// Diese Datei ist der Rahmen für alle Playwright-E2E-Läufe (Dateihoheit
+// e2e-tester, `tests/e2e/**`). Der frühere Wurzel-`playwright.config.ts`
+// wurde in T-085 entfernt — zwei Konfigurationen nebeneinander waren eine
+// zu viel, und die falsche wurde benutzt. `globalSetup` startet den echten
 // lokalen Dienst und die echte Oberfläche (siehe `support/services.ts`),
 // `globalSetup` gibt die Abbaufunktion zurück.
 //
-// Aufruf: pnpm exec playwright test -c tests/e2e/playwright.config.ts
-//
-// Sobald der Orchestrator entscheidet, wie der Wurzel-Rahmen die Anwendung
-// startet, kann diese Datei entweder aufgehen (`globalSetup` dorthin
-// verschoben) oder bestehen bleiben — beides ändert nichts an den Testfällen
-// selbst.
+// Aufruf: pnpm test:e2e
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
@@ -47,6 +41,11 @@ export default defineConfig({
   retries: 1,
   timeout: 60_000,
   expect: { timeout: 15_000 },
+
+  // Ein vergessenes `test.only` soll im Bauserver rot sein, nicht still den
+  // Rest der Suite überspringen (T-085; stand vorher nur im inzwischen
+  // entfernten Wurzel-`playwright.config.ts`).
+  forbidOnly: process.env['CI'] !== undefined,
 
   globalSetup: './support/global-setup.ts',
 

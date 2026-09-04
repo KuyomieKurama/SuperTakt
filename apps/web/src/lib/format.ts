@@ -278,23 +278,25 @@ export function plural(count: number, one: string, many: string): string {
 }
 
 /* ==================================================================== */
-/* Aufzählungen                                                         */
+/* Aufzählungen — sie stehen nicht mehr hier                            */
 /* ==================================================================== */
 
-/**
- * Zählt Textstücke deutsch auf: `A`, `A und B`, `A, B und C`.
- *
- * Es gibt diese Funktion, weil dieselbe Aufzählung an drei Stellen entsteht —
- * im Toast nach der Wiederaufnahme (`app/TimerContext.tsx`), im Hinweis
- * `ReactivationNotice` und im Outlook-Add-in (`duplicate/reopen.ts`,
- * `listPools`). Bis T-045 hing an einer davon `join(" und ")`, was bei drei
- * Namen „A und B und C" ergab: dieselbe Auskunft in einer anderen Fassung,
- * und die schlechtere (Befund C-24).
- *
- * Zeichengleich mit `listPools` des Add-ins. Wer die eine ändert, ändert die
- * andere mit — sonst behaupten zwei Stellen dasselbe verschieden.
- */
-export function joinGerman(parts: readonly string[]): string {
-  if (parts.length <= 1) return parts[0] ?? "";
-  return `${parts.slice(0, -1).join(", ")} und ${parts[parts.length - 1] ?? ""}`;
-}
+/*
+  Bis T-124 stand hier `joinGerman`: fünf Zeilen, die „A", „A und B", „A, B
+  und C" ergaben. Sie waren die dritte Abschrift derselben Form — neben
+  `enumerateGerman` in `lib/errorText.ts` und `quoteList` in
+  `screens/TodoFormDialog.tsx`, und alle drei neben dem privaten `listPools`
+  in `packages/domain/src/pool-movement.ts`, aus dem sie stammten.
+
+  Seit T-122 führt die Domäne die Form aus: `enumerateGerman`, `quoteName`
+  und `enumerateNames` in `packages/domain/src/enumeration.ts`. Der einzige
+  Aufrufer in dieser Oberfläche — `emptyFolderNames` in `lib/poolRule.ts` —
+  liest sie jetzt dort.
+
+  Warum die Zeilen ersatzlos verschwinden und nicht als Weiterleitung
+  stehenbleiben: Eine Weiterleitung wäre ein zweiter Name für dieselbe
+  Funktion und damit die nächste Gelegenheit, sie an einer Stelle zu ändern.
+  `lib/errorText.ts` führt aus dem einen genannten Grund eine — dort hängt ein
+  Test des unit-testers am Namen, und dieser Bruch gehört nicht in diese
+  Aufgabe (siehe Bericht T-124).
+*/

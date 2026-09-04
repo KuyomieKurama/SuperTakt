@@ -24,9 +24,18 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { CalendarDay, ExportStatus, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
+import type {
+  CalendarDay,
+  ExportStatus,
+  PoolMovement,
+  TimeEntry,
+  TimeEntryId,
+  Timestamp,
+  TodoId,
+} from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
+import type { CreatedTimeEntry } from '../usecases/timer.ts';
 import {
   createTimeEntry,
   listTimeEntries,
@@ -143,8 +152,8 @@ export function createTimeEntryRoutes(context: AppContext): Hono<TaktEnv> {
     });
     if (!result.ok) return fail(c, result.error);
 
-    c.header('Location', `/api/v1/time-entries/${result.value.id}`);
-    return data(c, result.value, 201);
+    c.header('Location', `/api/v1/time-entries/${result.value.entry.id}`);
+    return data(c, entryAfterBooking(result.value), 201);
   });
 
   routes.get('/:timeEntryId', async (c) => {
@@ -262,6 +271,33 @@ export function createTimerRoutes(context: AppContext): Hono<TaktEnv> {
   });
 
   return routes;
+}
+
+/**
+ * Der Antwortrumpf von `POST /time-entries` (E-061 Nachtrag, O-V).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Buchung **flach** dasteht und nicht unter `entry`
+ * ---------------------------------------------------------------------------
+ *
+ * Weil die Route seit jeher die Buchung selbst zurückgibt und jeder Aufrufer
+ * sie so liest. `poolMovement` kommt hinzu, es nimmt nichts weg: Wer die
+ * Antwort heute als `TimeEntry` liest, liest sie morgen unverändert weiter,
+ * und wer den Bewegungssatz will, liest ein Feld mehr. Ein Umbau nach
+ * `{ entry, poolMovement }` hätte dieselbe Auskunft gegeben und jede
+ * vorhandene Aufrufstelle gebrochen — für nichts.
+ *
+ * Es ist dieselbe Gestalt wie an `PUT`/`DELETE /todos/{todoId}/done`
+ * (`doneBody` in `routes/todos.ts`) und an `POST /timer/start`: das Ergebnis
+ * der Handlung und die Bewegung nebeneinander, nicht ineinander.
+ *
+ * Diese Datei entscheidet nichts Fachliches. Sie setzt zusammen, was der
+ * Anwendungsfall geliefert hat.
+ */
+function entryAfterBooking(
+  result: CreatedTimeEntry,
+): TimeEntry & { poolMovement: PoolMovement | null } {
+  return { ...result.entry, poolMovement: result.poolMovement };
 }
 
 function issues(error: z.ZodError): { field: string; message: string; code: string }[] {

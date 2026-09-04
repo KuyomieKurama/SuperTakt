@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorCode, errorMessage } from "../api/client";
+import { errorCode } from "../api/client";
 import {
   createTodoStatus,
   deleteTodoStatus,
@@ -17,7 +17,10 @@ import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
+import { errorMessageWithRules, ruleReferences } from "../lib/errorText";
 import { plural } from "../lib/format";
+import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — die Statusstruktur verwalten (A-5.4), Bereich „Status“ in S-09.
@@ -25,10 +28,12 @@ import { plural } from "../lib/format";
  * ## Warum das hier steht und nicht auf dem Board
  *
  * Bis E-054 war der Status die Kanban-Spalte, und die Spalten wurden dort
- * verwaltet, wo man sie sah. Seit E-054 ist eine Spalte des Boards eine **Regel
- * über Tags**; der Status blieb, was er immer auch war: eine Eigenschaft des
- * Todos. Damit hat er kein Zuhause mehr auf dem Board — er ist eine Stammgröße
- * wie die Standard-Tags, und Stammgrößen stehen in den Einstellungen.
+ * verwaltet, wo man sie sah. Seit E-054 ist eine Spalte des Boards eine
+ * **Regel**, und seit E-055 hat eine Regel fuenf Bedingungen — der Status ist
+ * eine davon. Er blieb damit, was er immer auch war: eine Eigenschaft des
+ * Todos, die eine Spalte abfragen **kann**, aber nicht mehr **ist**. Ein
+ * Zuhause auf dem Board hat er deshalb nicht mehr; er ist eine Stammgroesse
+ * wie die Standard-Tags, und Stammgroessen stehen in den Einstellungen.
  *
  * Mit dem Board-Dialog ist in T-072 das letzte Bedienelement für
  * `POST/PATCH/DELETE /todo-statuses` und `PUT /todo-statuses/order`
@@ -105,6 +110,17 @@ export function StatusSettings() {
   const [form, setForm] = useState<{ readonly status?: TodoStatus } | null>(null);
   const [removing, setRemoving] = useState<TodoStatus | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  /**
+   * Hat der Dienst Regeln beim Namen genannt? (T-097)
+   *
+   * Es ist nicht dasselbe wie „`removeError` ist gesetzt". `status_in_use` hat
+   * seit T-076 **zwei** Gründe: Todos tragen den Status noch, oder eine Regel
+   * nennt ihn. Nur der erste ist der Fall, in dem „zwischen dem Zählen und dem
+   * Löschen ist ein Todo dazugekommen" stimmt; beim zweiten ist derselbe Satz
+   * schlicht falsch, und der Dialog schickte den Benutzer zum Nachzählen einer
+   * Zahl, die stimmt. Die Liste unterscheidet die beiden.
+   */
+  const [removeRules, setRemoveRules] = useState<readonly string[]>([]);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
@@ -127,7 +143,7 @@ export function StatusSettings() {
       }),
     );
     return new Map<Id, number>(entries);
-  }, [orderKey, version]);
+  }, [orderKey], [version]);
 
   /**
    * Die Zahl der Todos in einem Status — oder warum sie fehlt.
@@ -193,7 +209,7 @@ export function StatusSettings() {
         await reorderTodoStatuses(order);
         structure.reload();
         setAnnouncement(
-          `„${status.name}“ steht jetzt an ${String(index + direction + 1)}. Stelle von ${String(order.length)}.`,
+          `${quotedName(status.name)} steht jetzt an ${String(index + direction + 1)}. Stelle von ${String(order.length)}.`,
         );
       });
     },
@@ -211,7 +227,7 @@ export function StatusSettings() {
         // zweimal vorlesen zu lassen.
         toasts.success(
           "Standard geändert.",
-          `Neue Todos bekommen ab sofort „${status.name}“. Vorhandene Todos ändern sich dadurch nicht.`,
+          `Neue Todos bekommen ab sofort ${quotedName(status.name)}. Vorhandene Todos ändern sich dadurch nicht.`,
         );
       });
     },
@@ -222,11 +238,12 @@ export function StatusSettings() {
     (status: TodoStatus) => {
       setRemoveBusy(true);
       setRemoveError(null);
+      setRemoveRules([]);
       void deleteTodoStatus(status.id)
         .then(() => {
           setRemoving(null);
           structure.reload();
-          toasts.success("Status gelöscht.", `„${status.name}“ steht nicht mehr zur Auswahl.`);
+          toasts.success("Status gelöscht.", `${quotedName(status.name)} steht nicht mehr zur Auswahl.`);
         })
         .catch((cause: unknown) => {
           /*
@@ -234,8 +251,14 @@ export function StatusSettings() {
            * Grund kennt — und `status_in_use` heißt hier nicht „unerwarteter
            * Fehler", sondern „zwischen dem Zählen und dem Löschen ist ein Todo
            * dazugekommen". Deshalb wird zusätzlich neu gezählt.
+           *
+           * Seit T-097 mit den Regeln beim Namen, wenn der Dienst welche in
+           * `details` genannt hat (T-089). Neu gezählt wird trotzdem: Die
+           * Zählung ist auch dann nicht teuer, und der Bestand kann sich aus
+           * beiden Gründen geändert haben.
            */
-          setRemoveError(errorMessage(cause));
+          setRemoveError(errorMessageWithRules(cause));
+          setRemoveRules(ruleReferences(cause));
           if (errorCode(cause) === "status_in_use") counts.reload();
         })
         .finally(() => setRemoveBusy(false));
@@ -259,9 +282,11 @@ export function StatusSettings() {
         <InlineMessage tone="info" title="Der Status ist nicht die Kanban-Spalte">
           <p>
             Sie suchen die Statusspalten des Boards? Die gibt es dort nicht mehr. Eine Spalte des
-            Kanban-Boards ist seit der Umstellung eine <strong>Regel über Tags</strong> — welche
-            Karte wo steht, entscheiden die Tags des Todos. Diese Spalten richten Sie auf dem Board
-            selbst ein, unter „Spalten verwalten“.
+            Kanban-Boards ist seit der Umstellung eine <strong>Regel</strong> — über Tags, Status,
+            „Erledigt“ und den Exportstatus. Der Status kann also weiterhin eine Spalte
+            bestimmen; er ist nur nicht mehr <em>die</em> Spalte, sondern eine von fünf
+            Bedingungen. Diese Spalten richten Sie auf dem Board selbst ein, unter „Spalten
+            verwalten“.
           </p>
           <p>
             Der <strong>Status</strong> ist etwas anderes geblieben: eine Eigenschaft des Todos.
@@ -383,20 +408,41 @@ export function StatusSettings() {
           removing === null
             ? ""
             : removeError === null
-              ? `„${removing.name}“ steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
-              : `„${removing.name}“ steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
+              ? `${quotedName(removing.name)} steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
+              : `${quotedName(removing.name)} steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
         }
-        consequence={
-          removeError === null ? (
-            "Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
-          ) : (
-            <>
-              {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo dazugekommen.
-              Schließen Sie diesen Dialog: Die Zeile nennt jetzt, wie viele es sind, und führt zu
-              ihnen.
-            </>
-          )
-        }
+        /*
+          Drei Fassungen statt zweier (T-097). Der Zusatz „Zwischen dem Zählen
+          und dem Löschen ist offenbar ein Todo dazugekommen" gilt für den
+          Grund, für den er geschrieben wurde — Todos tragen den Status noch.
+          Hat der Dienst dagegen **Regeln** genannt, ist er falsch: Es ist kein
+          Todo dazugekommen, die Zeile wird auch nach dem Nachzählen null
+          nennen, und der Weg hinaus führt in die Regel und nicht in die Liste.
+          Dort steht deshalb nur die Meldung des Dienstes — sie nennt seit
+          T-097 die Regeln beim Namen und sagt selbst, was zu tun ist.
+        */
+        consequence="Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
+        {...(removeError === null
+          ? {}
+          : {
+              /*
+                Die Absage geht seit T-118 in `refusal` und nicht mehr in
+                `consequence` (B-5 aus T-116, SC 4.1.3): Dort lag sie in
+                `aria-describedby` und wurde einer Vorlesehilfe nie angesagt.
+                Die drei Fassungen bleiben, sie stehen nur eine Eigenschaft
+                weiter.
+              */
+              refusal:
+                removeRules.length > 0 ? (
+                  removeError
+                ) : (
+                  <>
+                    {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo
+                    dazugekommen. Schließen Sie diesen Dialog: Die Zeile nennt jetzt, wie viele es
+                    sind, und führt zu ihnen.
+                  </>
+                ),
+            })}
         confirmLabel={removeError === null ? "Status löschen" : "Erneut versuchen"}
         cancelLabel={removeError === null ? "Abbrechen" : "Schließen"}
         busy={removeBusy}
@@ -406,6 +452,7 @@ export function StatusSettings() {
         onCancel={() => {
           setRemoving(null);
           setRemoveError(null);
+          setRemoveRules([]);
         }}
       />
     </>
@@ -491,7 +538,9 @@ function StatusRow({
       </span>
 
       <div className="status-admin__body">
-        <p className="status-admin__name">{status.name}</p>
+        <p className="status-admin__name">
+          <Foreign value={status.name} />
+        </p>
         <p className="status-admin__meta">
           {count === "loading"
             ? "Todos werden gezählt …"
@@ -574,7 +623,7 @@ function StatusRow({
         />
         <span className="status-admin__default-text">
           Standard
-          <span className="visually-hidden"> für neue Todos — „{status.name}“</span>
+          <span className="visually-hidden"> für neue Todos — {quotedName(status.name)}</span>
         </span>
       </label>
 
@@ -585,7 +634,7 @@ function StatusRow({
           }}
           icon="arrow-up"
           size="sm"
-          label={`„${status.name}“ nach oben`}
+          label={`${quotedName(status.name)} nach oben`}
           disabled={busy || index === 0}
           onClick={() => onMove(-1)}
         />
@@ -595,7 +644,7 @@ function StatusRow({
           }}
           icon="arrow-down"
           size="sm"
-          label={`„${status.name}“ nach unten`}
+          label={`${quotedName(status.name)} nach unten`}
           disabled={busy || last}
           onClick={() => onMove(1)}
         />
@@ -620,7 +669,7 @@ function StatusRow({
       <IconButton
         icon="trash"
         size="sm"
-        label={blocked ? `„${status.name}“ löschen — derzeit nicht möglich` : `„${status.name}“ löschen`}
+        label={blocked ? `${quotedName(status.name)} löschen — derzeit nicht möglich` : `${quotedName(status.name)} löschen`}
         disabled={busy || blocked}
         {...(blocked ? { "aria-describedby": reasonId } : {})}
         onClick={onRemove}
@@ -671,7 +720,7 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
   return (
     <FormDialog
       open={open}
-      title={status === undefined ? "Neuen Status anlegen" : `„${status.name}“ umbenennen`}
+      title={status === undefined ? "Neuen Status anlegen" : `${quotedName(status.name)} umbenennen`}
       description={
         status === undefined
           ? "Der neue Status steht danach in jeder Auswahl. Er bekommt keine Todos, solange keines darauf gestellt wird."
@@ -695,8 +744,8 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
           toasts.success(
             status === undefined ? "Status angelegt." : "Status umbenannt.",
             status === undefined
-              ? `„${saved.name}“ steht ab sofort zur Auswahl. Standard für neue Todos ist er dadurch nicht.`
-              : `Aus „${status.name}“ wurde „${saved.name}“.`,
+              ? `${quotedName(saved.name)} steht ab sofort zur Auswahl. Standard für neue Todos ist er dadurch nicht.`
+              : `Aus ${quotedName(status.name)} wurde ${quotedName(saved.name)}.`,
           );
           onClose();
         });

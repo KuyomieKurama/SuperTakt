@@ -30,6 +30,7 @@ import { formatDateTime, plural } from "../lib/format";
 import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { StatusSettings } from "./StatusSettings";
+import { foreignText } from "../lib/foreign";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -194,7 +195,16 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
 
   return (
     <section className="screen">
-      <ScreenHeader title="Einstellungen" lead={AREA_LEAD[active]} />
+      {/*
+        Der Kopf trägt den Nachladehinweis für den Aufbau (W-12): Fast jeder
+        Bereich der Einstellungen liest aus der Struktur, und die wird beim
+        erneuten Ansteuern und beim Fensterwechsel erneuert.
+      */}
+      <ScreenHeader
+        title="Einstellungen"
+        lead={AREA_LEAD[active]}
+        refreshing={structure.state.status === "ready" && structure.state.refreshing}
+      />
 
       <div className="settings-layout">
         <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
@@ -446,7 +456,9 @@ function ExportSettings() {
           ...(templates.state.status === "ready"
             ? templates.state.value.map((template) => ({
                 value: template.id,
-                label: template.isBuiltin ? `${template.name} (mitgeliefert)` : template.name,
+                label: template.isBuiltin
+                    ? `${foreignText(template.name)} (mitgeliefert)`
+                    : foreignText(template.name),
               }))
             : []),
         ]}
@@ -614,7 +626,7 @@ function DefaultTagSettings() {
           placeholder="Tag suchen …"
           hint={
             value.length === 0
-              ? "Kein Standard-Tag gesetzt. Neue Todos entstehen ohne Tags — damit passt zunächst keine Poolregel auf sie."
+              ? "Kein Standard-Tag gesetzt. Neue Todos entstehen ohne Tags — Regeln, die Tags verlangen, treffen sie damit zunächst nicht."
               : `${plural(value.length, "Tag wird", "Tags werden")} an jedes neue Todo gehängt.`
           }
         />

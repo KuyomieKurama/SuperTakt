@@ -13,7 +13,22 @@
 
 import { z } from 'zod';
 
-import { MAX_TAG_NAME_LENGTH } from '@takt/domain';
+/*
+ * Die beiden **geprüften Namensformen der Hauptanwendung** (T-114, Befund
+ * T-112-1 aus der Sicherheitsprüfung).
+ *
+ * Bis T-114 stand hier für Titel und Tagname je eine eigene Abschrift
+ * (`z.string().trim().min(1).max(…)`), und ein Kommentar sagte zu, sie sei
+ * zeichengleich der aus `routes/todos.ts`. Seit T-101 stimmte das nicht mehr:
+ * Dort kam die Prüfung auf Steuer- und Richtungszeichen hinzu, hier nicht.
+ * Zwei Abschriften derselben Regel sind zwei Gelegenheiten, sie verschieden zu
+ * ändern — und genau das ist geschehen.
+ *
+ * Deshalb jetzt **dieselben Werte** und keine zweite Fassung. Der Bezug über
+ * die Modulgrenze ist derselbe wie der auf `http/problem.ts` in `index.ts`:
+ * Er holt eine Regel, die es genau einmal geben soll, und keinen Text.
+ */
+import { nameSchema, titleSchema } from '../../http/input.ts';
 
 /** UUID Fassung 7, wie `Id` in der OpenAPI-Beschreibung. */
 const id = z.string().uuid();
@@ -63,26 +78,123 @@ export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
 export const ADDIN_TAG_NAMES_MAX = 50;
 
 export const createTodoSchema = z.object({
-  title: z.string().trim().min(1).max(512),
+  /**
+   * Der Titel — **dasselbe Schema wie `POST /todos`** (T-114, Befund T-112-1).
+   *
+   * ---------------------------------------------------------------------------
+   * Was hier fehlte
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-114 stand hier `z.string().trim().min(1).max(512)`. Das sagt nichts
+   * über Steuerzeichen und nichts über die bidirektionalen
+   * Formatierungszeichen.
+   *
+   * **Welche Zeichen das sind, steht hier nicht** — sie stehen seit T-122 als
+   * `FORBIDDEN_NAME_CHARACTERS` in `packages/domain/src/characters.ts`, und
+   * `titleSchema` liest sie dort. Diese Zeilen haben sie bis T-123 aufgezählt
+   * und dabei genau den Fehler wiederholt, gegen den sie geschrieben sind: Als
+   * T-117 die Klasse um drei Richtungsmarken erweiterte, blieb die Aufzählung
+   * stehen und beschrieb die Tür zwei Wellen lang falsch (T-119 R1, E-063
+   * Punkt 4). Eine Beschreibung, die eine Regel nachzeichnet, ist eine
+   * Abschrift wie jede andere; sie kann nur nicht rot werden.
+   *
+   * **Die Fachregel schließt die Lücke nicht.** `checkName` in `@takt/domain`
+   * normalisiert nach NFC und zieht Leerraum zusammen — seine Menge
+   * `WHITESPACE` ist eine andere und für einen anderen Zweck gedacht: Sie sagt,
+   * was als Trennung zwischen zwei Wörtern gilt, und nicht, was in einem Namen
+   * nichts zu suchen hat. Beide überschneiden sich (der Leerraum aus C0), und
+   * keine ist in der anderen enthalten. Wer sich auf `checkName` verlässt,
+   * verlässt sich auf eine Prüfung, die eine andere Frage beantwortet.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum es ausgerechnet an dieser Tür zählt
+   * ---------------------------------------------------------------------------
+   *
+   * An der Hauptfläche gilt „nur wer das Sitzungsgeheimnis hat, tippt einen
+   * Titel". Hier gilt der Satz nicht: Der Titel ist im Aufgabenbereich mit dem
+   * **Betreff der E-Mail** vorbelegt (`TaskPane.tsx`, `suggestTitle`) und
+   * stammt damit von Akteur A-06. Eine Handlung des Benutzers genügt, und der
+   * Weg endet nicht in der Anzeige — `todo.title` ist eine zulässige
+   * Feldquelle einer Exportvorlage (`packages/export/src/sources.ts`).
+   *
+   * ---------------------------------------------------------------------------
+   * Der Deckel sinkt dabei von 512 auf 500, und das ist kein Beiwerk
+   * ---------------------------------------------------------------------------
+   *
+   * `titleSchema` trägt 500, `POST /todos` und `PATCH /todos/{todoId}` tragen
+   * dieselbe Zahl. Ein hier mit 512 Zeichen angelegtes Todo war in der
+   * Hauptanwendung **nicht mehr speicherbar**: Der Änderungsdialog schickt den
+   * Titel mit, und `titleSchema.optional()` weist ihn ab. Der Benutzer sah
+   * seinen eigenen, unveränderten Titel als unzulässige Eingabe — dieselbe
+   * Sackgasse aus derselben Ursache wie oben, nur über die Länge statt über
+   * ein Zeichen. Zwölf Zeichen kosten das nicht wert; ein Betreff, der sie
+   * braucht, ist kein Titel mehr.
+   *
+   * Das Add-in kürzt seinen Vorschlag auf denselben Wert (`suggestTitle`),
+   * und der Nachweispfad hält beide Zahlen gegeneinander.
+   */
+  title: titleSchema,
   callNumber: z.string().max(ADDIN_CALL_NUMBER_MAX_LENGTH).nullable().default(null),
   statusId: id.nullable().default(null),
   tagIds: z.array(id).max(200).default([]),
   /**
    * Tags über ihren **Namen** statt über eine Kennung (T-058, T-061).
    *
-   * Der Wortlaut des Schemas ist zeichengleich der aus `routes/todos.ts`
-   * (`nameSchema` = `z.string().trim().min(1).max(200)`), damit die
-   * Hauptanwendung und das Add-in dieselbe Eingabe annehmen und dieselbe
-   * abweisen. `MAX_TAG_NAME_LENGTH` kommt aus der Domäne und nicht als Zahl in
-   * diese Datei: Dort steht sie neben der Regel, die sie prüft.
+   * ---------------------------------------------------------------------------
+   * Es ist **dasselbe** Schema, nicht ein zeichengleiches (T-114)
+   * ---------------------------------------------------------------------------
+   *
+   * Hier stand bis T-114 `z.string().trim().min(1).max(MAX_TAG_NAME_LENGTH)`
+   * und darüber der Satz, dieser Wortlaut sei zeichengleich dem `nameSchema`
+   * aus `routes/todos.ts`, „damit die Hauptanwendung und das Add-in dieselbe
+   * Eingabe annehmen und dieselbe abweisen".
+   *
+   * **Seit T-101 war dieser Satz falsch.** `nameSchema` weist seither Steuer-
+   * und Richtungszeichen ab, diese Abschrift nicht — und der Kommentar sagte
+   * dem nächsten Leser ausdrücklich, er brauche nicht nachzusehen. Genau das
+   * ist der teure Teil einer Zusicherung, die nicht mehr stimmt.
+   *
+   * Der Wortlaut kann jetzt nicht mehr auseinanderlaufen, weil es keinen
+   * zweiten gibt. Was `nameSchema` heute und morgen abweist, weist diese Route
+   * mit ab.
+   *
+   * `MAX_TAG_NAME_LENGTH` aus der Domäne steht damit nicht mehr in dieser
+   * Datei; die Zahl kommt aus `nameSchema` wie an der Hauptfläche auch. Dass
+   * beide Zahlen dieselbe sind, prüft der Nachweispfad
+   * (`apps/outlook-addin/scripts/proof-addin.mjs`, Abschnitt 16) — eine
+   * Ungleichheit soll rot werden und nicht in einem Kommentar behauptet
+   * bleiben.
    *
    * **Das Schema ist der Transportdeckel, nicht die Fachregel.** Wann ein Name
    * zulässig ist und wann zwei Namen derselbe sind, sagt `checkTagNames` in
    * `@takt/domain`; es läuft in `service.ts`, nachdem dieses Schema gegriffen
    * hat. Der Unterschied ist derselbe wie bei `callNumber` weiter oben und aus
-   * demselben Grund ausgeschrieben.
+   * demselben Grund ausgeschrieben — und die Aufgabenteilung ist der Grund,
+   * warum die Zeichenprüfung **hier** stehen muss: `checkTagNames` prüft die
+   * Gleichheit von Namen, nicht ihre Unbedenklichkeit in einer Anzeige.
    */
-  tagNames: z.array(z.string().trim().min(1).max(MAX_TAG_NAME_LENGTH)).max(ADDIN_TAG_NAMES_MAX).default([]),
+  tagNames: z.array(nameSchema).max(ADDIN_TAG_NAMES_MAX).default([]),
+  /**
+   * Der interne Vermerk — **bewusst ohne die Zeichenprüfung von oben**
+   * (T-114 Punkt 4).
+   *
+   * Das ist keine vergessene Zeile, sondern dieselbe Grenze, die
+   * `http/input.ts` zwischen `nameSchema` und `textSchema` zieht, und sie
+   * verläuft entlang des Zwecks:
+   *
+   *  - Ein **Name** wird in fremde Sätze eingesetzt — in eine Aufzählung, in
+   *    eine Überschrift, in eine Zeile neben anderen Namen. Dort entscheidet
+   *    ein einzelnes Richtungszeichen darüber, was der Leser sieht.
+   *  - Ein **Vermerk** wird als eigener Absatz gezeigt. Er ist Text des
+   *    Benutzers beziehungsweise übernommener Text einer E-Mail, und ein Feld,
+   *    aus dem Zeichen entfernt oder wegen derer die Eingabe abgewiesen würde,
+   *    änderte oder verhinderte genau das, wofür es da ist.
+   *
+   * Der Vermerk verlässt den Dienst außerdem **nicht** über den Export: Er ist
+   * die interne Notiz (A-7.2) und in `packages/export/src/sources.ts` keine
+   * zulässige Feldquelle. Der Titel ist eine — das ist der Unterschied, der
+   * die Prüfung dort nötig macht und hier nicht.
+   */
   note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
 });
 
@@ -92,6 +204,11 @@ export const bookSchema = z.object({
   /**
    * Die Leistung. Sie geht in die Abrechnung (A-7.4) und ist deshalb hier —
    * anders als der Vermerk — nicht das Feld, in das E-Mail-Text vorbelegt wird.
+   *
+   * Auch sie trägt die Zeichenprüfung der Namen **nicht**, und aus demselben
+   * Grund wie der Vermerk: Sie ist Freitext des Benutzers, kein Name. Sie
+   * stammt zudem als einziges Feld dieser Tür ausschließlich aus dem
+   * Eingabefeld des Aufgabenbereichs und nicht aus der E-Mail (T-114 Punkt 4).
    */
   note: z.string().max(4000).default(''),
 });
@@ -109,7 +226,7 @@ export const bookSchema = z.object({
  * Ein `reopenIfDone: false` von einem älteren Aufrufer soll die Aufhebung
  * nicht verhindern — es kann sie nicht verhindern —, und ein 422 an dieser
  * Stelle würde eine Buchung scheitern lassen, die fachlich vollständig ist.
- * Was wirklich geschehen ist, sagt die Antwort (`doneCleared`, `poolNames`)
+ * Was wirklich geschehen ist, sagt die Antwort (`doneCleared`, `poolMovement`)
  * und nicht die Anfrage.
  */
 
