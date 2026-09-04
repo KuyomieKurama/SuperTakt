@@ -2310,9 +2310,10 @@ für den Weg über das Add-in (mit einer erfundenen Call-Nummer).
 2. Aufgabenbereich: `GET /addin/todo-matches` mit der Call-Nummer des zweiten Todos abfragen
    (Ankündigung, vor der Buchung) und danach `POST /addin/todos/{id}/time-entries` aufrufen
    (Bestätigung, nach der Buchung).
-3. Aus beiden Add-in-Antworten je eine `PoolMovement` bilden (`poolNames`/`enteringPoolNames`/
-   `leavingPoolNames` → `appears`/`enters`/`leaves`, wie `apps/outlook-addin/src/duplicate/
-   reopen.ts` es tut) und `poolMovementSentence` aus `@takt/domain` darauf anwenden — einmal mit
+3. `poolMovement` aus beiden Add-in-Antworten direkt lesen — seit T-104 (E-061 Punkt 3) liefern
+   `GET /addin/todo-matches` und `POST /addin/todos/{id}/time-entries` dieselbe Form wie jede
+   andere Route (`{ appears, enters, leaves } | null`), es gibt nichts mehr aus drei Namenslisten
+   zusammenzusetzen. `poolMovementSentence` aus `@takt/domain` darauf anwenden — einmal mit
    `'future'`, einmal mit `'past'`.
 4. Denselben Aufruf mit dem aus Schritt 1 protokollierten `poolMovement` der Hauptanwendung
    wiederholen (`'past'`).
@@ -2330,6 +2331,29 @@ Literal im Testfall vorgegeben — dieselbe Bauart wie in
 `apps/outlook-addin/scripts/proof-addin.mjs`.
 **Ergebnis: bestanden**, zweifach über die volle Suite gemessen, zusätzlich isoliert über
 `--grep`.
+
+### TP-EXPST-12a — Vorschau auf einem offenen Todo mit bereits offener Buchung: `poolMovement: null` (E-061 Punkt 3, T-104)
+**Anforderungen:** A-10.9, E-058, E-061
+**Ebene:** Dienstprüfung (`tests/e2e/pool-movement-sentence.spec.ts`), **nicht** End-to-End über
+den Aufgabenbereich — ohne echten Office.js-Wirt lässt sich dessen Oberfläche in dieser Suite
+nicht ansteuern (O-P, siehe `board.md`). Geprüft wird ausschließlich die HTTP-Antwort von
+`GET /addin/todo-matches`.
+**Vorbedingung:** Ein offenes (nicht erledigtes) Todo mit einer erfundenen Call-Nummer.
+**Schritte:**
+1. Über `POST /addin/todos/{id}/time-entries` eine erste Buchung anlegen (das Todo ist vorher
+   offen und ohne offene Buchung, die beiden Zustände unterscheiden sich also — hier wird noch
+   gerechnet).
+2. `GET /addin/todo-matches` mit derselben Call-Nummer erneut aufrufen.
+**Erwartetes Ergebnis:** Der Treffer aus Schritt 2 trägt `poolMovement: null` — die Regel aus
+T-104: `null` gilt genau dann, wenn das Todo schon offen ist und schon eine offene Buchung hat,
+weil eine weitere Buchung dann keine der fünf Achsen mehr ändert. Das ist der einzige Fall, in dem
+`null` statt dreier leerer Listen zurückkommt; ein Treffer, der keine Regel trifft, aber noch
+bewegt werden könnte (Beispiel: `TP-EXPST-12`, „Kein Treffer", dessen Todo erledigt ist), bekommt
+weiterhin `{ appears: [], enters: [], leaves: [] }`.
+**Nicht automatisiert geprüft (O-P):** Dass der Aufgabenbereich bei `poolMovement: null` die
+Fläche „Was sich dadurch ändert" ganz weglässt (`TaskPane.tsx`), ist ohne Office.js-Wirt nicht
+End-to-End prüfbar und bleibt eine manuelle beziehungsweise über T-104 gemessene Zusicherung.
+**Ergebnis: bestanden**, isoliert über `--grep` gemessen.
 
 ### TP-TIMER-08 — Stopp-Antwort trägt den Bewegungssatz, Anlass „booking" (E-058 Punkt 6, T-097, T-099)
 **Anforderungen:** A-6.1, A-6.8, E-058
@@ -2577,3 +2601,80 @@ die Add-in-Helfer in `support/api.ts` (`AddinTodoMatch`, `AddinBookResult`,
 `addinTodoMatches`/`addinBookOnTodo`) — integration-dev stellt die Add-in-Routen in Welle F von
 `poolNames`/`enteringPoolNames`/`leavingPoolNames` auf `poolMovement` um; das Nachziehen ist für
 Welle G vorgesehen (Board, Zeile nach der Welle-F-Tabelle).
+
+## 20. Nachtrag aus T-109 (Welle G — Add-in-Helfer und -Spezifikationen auf `poolMovement`, W-13 abgeschlossen)
+
+Grundlage: `decisions.md` E-061 Punkt 3 (die Add-in-Routen liefern seit T-104 `poolMovement`
+statt der drei Namenslisten) und der Befund F1 aus `reports/T-104-integration-dev.md`, der die
+fremden, dadurch rot gewordenen Stellen in `tests/e2e/**` benannt hat.
+
+**Punkt 1 — Vertragswechsel T-104 nachgezogen.**
+
+- `tests/e2e/support/api.ts`: `AddinTodoMatch` und `AddinBookResult` tragen jetzt
+  `poolMovement: PoolMovementNames | null` statt der drei Felder `poolNames`/
+  `enteringPoolNames`/`leavingPoolNames`. `PoolMovementNames` ist der schon vorhandene lokale Typ
+  (bewusst nicht aus `@takt/domain` importiert, siehe Kopfkommentar der Datei — diese Hoheit
+  braucht keine Domänenabhängigkeit).
+- `tests/e2e/pool-movement-sentence.spec.ts`: `previewMovement`/`bookedMovement` sind nicht mehr
+  von Hand aus drei Feldern zusammengesetzt, sondern `match.poolMovement` bzw. `booked.poolMovement`,
+  unverändert an `poolMovementSentence` weitergereicht — die Antwort trägt die Bewegung jetzt
+  direkt. Der Kommentar über der Add-in-Hälfte des ersten Testfalls ist entsprechend berichtigt.
+  Für die Erwartungen im Fall „Kein Treffer" galt es zu klären, ob dort `null` oder drei leere
+  Listen erwartet werden: Das Todo dieses Falls ist `markTodoDone`, also **erledigt** — die Regel
+  aus T-104 (`service.ts`: `if (todo.completedAt === null && entries.hasOpen) return null`) trifft
+  also nicht, und der Dienst liefert `{ appears: [], enters: [], leaves: [] }`, nicht `null`. Beide
+  Stellen (`:232-234`, `:243-245` im Ausgangsstand) prüfen jetzt genau das.
+- `docs/testplan.md` — TP-EXPST-12, Schritt 3: beschrieb bislang das Zusammensetzen der
+  `PoolMovement` aus den drei Namenslisten; umformuliert auf das direkte Lesen von `poolMovement`.
+
+**Punkt 2 — neuer Fall: Vorschau auf offenem Todo mit bereits offener Buchung.**
+
+Neuer Testfall in `pool-movement-sentence.spec.ts` (dokumentiert als **TP-EXPST-12a** oben, vor
+TP-TIMER-08): Ein offenes Todo bekommt eine erste Buchung über `POST /addin/todos/{id}/time-entries`,
+danach liefert `GET /addin/todo-matches` für dasselbe Todo `poolMovement: null` — die Bedingung
+aus T-104, gemessen gegen den tatsächlichen Quelltext (`apps/local-api/src/routes/addin/
+service.ts:232`). Als **Dienstprüfung** angelegt, nicht als Oberflächen-Test: Dass der
+Aufgabenbereich bei `poolMovement: null` die Fläche „Was sich dadurch ändert" ganz weglässt
+(`TaskPane.tsx`), ist ohne echten Office.js-Wirt in dieser Suite nicht ansteuerbar (**O-P**,
+`board.md`) und deshalb nicht automatisiert geprüft — nur die HTTP-Antwort ist es.
+
+**Punkt 3 — W-13 abgeschlossen.** T-106 hatte die beiden Stellen in `docs/testplan.md` (`:21`,
+`:838`) bereits berichtigt (Abschnitt 19). Die beiden verbliebenen Stellen in eigener Hoheit sind
+jetzt ebenfalls auf „Regel" statt „Regel über Tags" gestellt: `tests/e2e/kanban.spec.ts:16` und
+`tests/e2e/todo-revival.spec.ts:16`/`:124`. Beide Stellen standen bereits im Umfeld einer
+Erwähnung der fünf Achsen (`kanban.spec.ts` nennt sie zwei Sätze später, `todo-revival.spec.ts`
+spricht unmittelbar von der Achse „Erledigt") — kein zusätzlicher Nebensatz nötig, nur die
+Verengung auf Tags fällt weg. Damit ist W-13 vollständig geschlossen, soweit es in der Hoheit des
+e2e-testers liegt; die restlichen, dem domain-dev bzw. dem Dokumentierer zugewiesenen Stellen
+(OpenAPI, `docs/datenmodell.md`, `docs/architektur.md`, `packages/domain/**`,
+`apps/local-api/src/usecases/board.ts`) und die dem frontend-dev zugewiesenen
+(`Kanban.tsx`, `DESIGNSYSTEM.md`) bleiben außerhalb dieser Hoheit unverändert.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/pool-movement-sentence.spec.ts --reporter=list --retries=0          4/4
+
+pnpm exec playwright test -c tests/e2e/playwright.outlook-build.config.ts \
+  --reporter=list --retries=0                                                  2/2
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/done-movement-announcement.spec.ts \
+  tests/e2e/timer-stop-announcement.spec.ts --reporter=list --retries=0        8/8
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/kanban.spec.ts tests/e2e/todo-revival.spec.ts \
+  --reporter=list --retries=0            10/10 im zweiten Lauf; im ersten Lauf ein
+                                          Zeitüberschreitungsfall bei TP-KANBAN-02 (Klick auf
+                                          „Anlegen" hinter einem Toast, der Klicks abfing), isoliert
+                                          und im wiederholten Volllauf beide Male grün — siehe
+                                          „Risiken" im Bericht zu T-109
+```
+
+Port 17843/17844 (bzw. 17944 für die Add-in-Bauergebnis-Prüfung) war vor jedem Lauf frei. Parallel
+liefen domain-dev und frontend-dev sichtbar an `apps/local-api/**`, `packages/domain/**`,
+`packages/storage/**` und `apps/web/**` (unverändert nicht angefasst) — kein voller
+`pnpm run test:e2e`, wie beauftragt.

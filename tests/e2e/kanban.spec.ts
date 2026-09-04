@@ -13,7 +13,7 @@
  * bis jemand eine Regel einrichtet, und `createTodo({ title })` ohne Tags
  * landet in keiner.
  *
- * Seit **E-054** ist eine Kanban-Spalte eine **Regel über Tags**, dieselbe
+ * Seit **E-054** ist eine Kanban-Spalte eine **Regel**, dieselbe
  * Entität wie ein Pool (`Pool.placement`). Ziehen zwischen Spalten hat der
  * Auftraggeber ausdrücklich ausgeschlossen: Eine Regel lässt sich nicht durch
  * Verschieben umkehren, ohne dass die Anwendung selbst Tags setzt

@@ -1,7 +1,5 @@
-import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
-import { Icon } from "./Icon";
 import { Button, IconButton } from "./Primitives";
 
 /**
@@ -142,102 +140,30 @@ export function TimerDisplay({
 }
 
 /* ==================================================================== */
-/* Wiederaufnahme eines erledigten Todos — A-2.5, I-05                  */
+/* Was hier bis T-108 stand: `ReactivationNotice` (A-2.5, I-05)         */
 /* ==================================================================== */
 
-export interface ReactivationNoticeProps {
-  readonly todoTitle: string;
-  /**
-   * Wohin der Timerstart dieses Todo bewegt hat — so, wie der Dienst es
-   * gemeldet hat (`POST /timer/start`, Feld `poolMovement`, E-058).
-   *
-   * Drei Namenslisten und kein fertiger Satz: Den bildet
-   * `poolMovementSentence` aus `@takt/domain`, damit dieselbe Handlung hier
-   * und im Aufgabenbereich des Add-ins mit denselben Worten berichtet wird.
-   *
-   * `null` heisst, dass der Dienst keine Bewegung gemeldet hat. Dann steht
-   * hier **kein** Poolsatz — weder ein leerer noch ein beruhigender. Bis T-094
-   * stand an dieser Stelle eine Namensliste, die die Oberflaeche selbst
-   * zusammengesucht hatte, und dahinter der Satz „Die Karte bleibt, wo sie ist"
-   * (E-058: falsch, ersatzlos entfallen).
-   */
-  readonly movement: PoolMovement | null;
-  /** Setzt den Vorgang zurueck: Timer stoppen, Todo wieder auf "Erledigt". */
-  readonly onUndo?: () => void;
-  readonly onDismiss?: () => void;
-  readonly className?: string;
-}
-
-/**
- * Erklaert, was beim Start des Timers auf einem erledigten Todo passiert ist.
- * Die Anwendung hat den Erledigt-Status aufgehoben, ohne zu fragen (A-2.5);
- * deshalb muss sie es hinterher unmissverstaendlich sagen und einen Rueckweg
- * anbieten.
+/*
+ * Der Baustein ist **ersatzlos** entfallen (W-9 aus R-2a), und diese Notiz
+ * steht an seiner Stelle, damit ihn niemand aus bester Absicht neu baut.
  *
- * Der Hinweis nennt zwei Dinge, und sie kommen aus zwei Quellen:
- *   1. **Was geschehen ist** — "Erledigt" ist aufgehoben, das Todo ist wieder
- *      offen, der Timer laeuft. Das weiss diese Flaeche selbst.
- *   2. **Wo es sichtbar wird** — der Satz aus `poolMovementSentence`
- *      (`@takt/domain`), gebildet aus dem `poolMovement`, das der Dienst zum
- *      Start gemeldet hat.
+ * Er zeigte nach einem Timerstart auf einem erledigten Todo eine eigene
+ * Hinweisfläche: „„Erledigt“ wurde aufgehoben — der Timer läuft", darunter der
+ * Bewegungssatz und ein „Rückgängig". **Keine Ansicht der Anwendung hat ihn
+ * jemals eingesetzt.** Seit T-045 trägt diesen Fall der Toast
+ * (`TimerContext.announceStart`: Titel, Bewegungssatz, „Rückgängig") zusammen
+ * mit dem Etikett „Erledigt aufgehoben" an der Zeile ({@link DoneFlag},
+ * `DONE_FLAG_LABEL.reopened`) — zwei Flächen, die zusammen dasselbe leisten
+ * und dabei nicht mitten in der Liste Platz nehmen.
  *
- * Bis T-094 stand hier ein selbstgebauter Satz: eine Aufzaehlung der Pools,
- * die die Oberflaeche je Pool einzeln abgefragt hatte, und dahinter „Die Karte
- * bleibt, wo sie ist — die Spalte aendert sich dadurch nicht." Beides ist weg.
- * Die Aufzaehlung kannte nur, was **hinzukommt**, und schwieg darueber, was
- * verschwindet; der Kartensatz war seit E-055 schlicht falsch, weil eine Regel
- * nach "Erledigt" und nach dem Exportstatus fragen darf und ein Timerstart
- * beides anfasst (E-058).
+ * Übrig blieben die Musterseite und dieser Baustein. Damit zeigte die
+ * abgenommene visuelle Referenz (E-013, E-024) eine Fläche, die es im Produkt
+ * nicht gibt — der teuerste Fehler, den eine Musterseite machen kann, weil er
+ * genau dort steht, wo nachgesehen wird, was das Produkt tut. Die Musterseite
+ * zeigt jetzt den Toast und das Etikett.
  *
- * Jetzt gibt es **eine** Quelle fuer diesen Satz, und der Aufgabenbereich des
- * Add-ins liest dieselbe. Wer den Wortlaut aendern will, aendert ihn in der
- * Domaene; hier steht keine Abschrift.
+ * Mit ihm entfallen sind `.reactivation*` in `styles/components.css`; das
+ * gemessene Farbpaar `--text-muted` auf `--timer-running-bg` bleibt, weil es
+ * andere Flächen ebenfalls tragen (Nebentext in einer Zeile mit laufendem
+ * Timer) — nur sein Beleg in `scripts/contrast-check.mjs` nennt jetzt diese.
  */
-export function ReactivationNotice({
-  todoTitle,
-  movement,
-  onUndo,
-  onDismiss,
-  className,
-}: ReactivationNoticeProps) {
-  /*
-    `'past'`, weil der Start bereits gelaufen ist, und `'reopen'`, weil genau
-    dieser Hinweis den Fall A-2.5 begleitet. Beim Anlass `'reopen'` gibt die
-    Funktion immer einen Satz — auch den unangenehmen, dass gerade keine Regel
-    passt. Nur wenn der Dienst gar keine Bewegung gemeldet hat, bleibt die
-    Flaeche leer.
-  */
-  const movementSentence =
-    movement === null ? null : poolMovementSentence(movement, "past", "reopen");
-
-  return (
-    <div className={cx("reactivation", className)} role="status" aria-live="polite">
-      <span className="reactivation__icon">
-        <Icon name="rotate-ccw" size={16} />
-      </span>
-      <div className="grow">
-        {/* E-030: Der **Timer** läuft. „Zeiterfassung" ist der Bereich. */}
-        <p className="reactivation__title">„Erledigt“ wurde aufgehoben — der Timer läuft</p>
-        <p className="reactivation__body">
-          <strong>{todoTitle}</strong> ist wieder offen.
-          {movementSentence === null ? null : ` ${movementSentence}`}
-        </p>
-        <p className="reactivation__hint">
-          „Rückgängig“ stoppt den Timer, verwirft die eben entstandene Buchung und setzt
-          „Erledigt“ zurück. Verworfen wird sie deshalb, weil wenige Sekunden sonst als
-          0,25 Stunden in der Abrechnung stünden.
-        </p>
-      </div>
-      <div className="reactivation__actions">
-        {onUndo !== undefined ? (
-          <Button variant="secondary" size="sm" onClick={onUndo}>
-            Rückgängig
-          </Button>
-        ) : null}
-        {onDismiss !== undefined ? (
-          <IconButton label="Hinweis schließen" icon="x" size="sm" onClick={onDismiss} />
-        ) : null}
-      </div>
-    </div>
-  );
-}

@@ -754,7 +754,10 @@ export async function runScenario() {
     const addinTodoId = addinTodo.body?.data?.todo?.id;
     if (addinTodoId !== undefined) {
       // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
-      // `doneCleared` und `poolNames` stehen dann nicht auf ihrem Ruhewert.
+      // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
+      // (Bis T-104 hießen die drei Listen `poolNames`, `enteringPoolNames`
+      // und `leavingPoolNames`; seit E-061 Punkt 3 ist es **ein** Feld in der
+      // Gestalt, die auch die Timer-Routen liefern.)
       await quiet('PUT', `/todos/${addinTodoId}/done`);
       await record(
         'createAddinTimeEntry',
@@ -764,6 +767,36 @@ export async function runScenario() {
         { startedAt: '2026-03-02T10:00:00Z', endedAt: '2026-03-02T10:30:00Z', note: 'Telefonat' },
       );
     }
+
+    // -----------------------------------------------------------------------
+    // Die Buchung von Hand, die **erste** eines Todos (E-061 Nachtrag, O-V)
+    //
+    // Der Aufruf oben bei „Zeitbuchungen" bucht auf `todoId`, und das Todo hat
+    // zu diesem Zeitpunkt längst eine abgeschlossene Buchung aus dem Timer.
+    // Dort ist `poolMovement` deshalb `null` — der Normalfall, und er ist
+    // gemessen. Was dort **nicht** zu messen war, ist der Fall, um den es geht:
+    // die erste Buchung überhaupt. Sie setzt „hat offene Buchungen", und jede
+    // Regel mit `exportState: 'open'` nimmt das Todo damit auf.
+    //
+    // Ein eigenes, frisches Todo dafür, und zwar hier und nicht weiter oben:
+    // Der Exportlauf ist vorbei, die neue offene Buchung verändert also keinen
+    // Bestand, über den bereits berichtet wurde. Der Bestand danach wird
+    // gelesen und nicht angenommen — `GET /time-entries` und `GET /board`
+    // stehen unmittelbar darunter.
+    // -----------------------------------------------------------------------
+    const untouched = await quiet('POST', '/todos', {
+      title: 'Akte 4714 — Nachtrag von Hand',
+      callNumber: 'C-4714-2026',
+      statusId,
+      tagIds: [],
+      note: '',
+    });
+    await record('createTimeEntry', 'POST', '/time-entries', '/time-entries', {
+      todoId: untouched.body.data.todo.id,
+      startedAt: '2026-03-02T14:00:00Z',
+      endedAt: '2026-03-02T14:20:00Z',
+      note: 'Nachgetragen',
+    });
 
     // -----------------------------------------------------------------------
     // Das Board ein **zweites** Mal — jetzt mit Buchungen und mit Erledigt

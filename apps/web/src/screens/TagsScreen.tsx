@@ -27,7 +27,7 @@ import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
 import { errorMessageWithRules } from "../lib/errorText";
 import { flatFolders } from "../lib/folderPaths";
-import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
+import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../lib/labels";
 import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
@@ -47,10 +47,15 @@ import { PoolFormDialog } from "./PoolFormDialog";
  * ## Pools sind Regeln, keine Zuordnungen (A-3.4)
  *
  * Ein Pool speichert nie, welche Todos in ihm liegen. Er speichert eine Regel
- * über Tags und Ordner, und die Zugehörigkeit wird bei jeder Abfrage neu
- * bestimmt. Genau deshalb funktioniert A-2.5 ohne Zusatzschritt: Ein Todo
- * kehrt in seine Pools zurück, weil es das nie verlassen hat — es war nur
- * ausgeblendet.
+ * — seit E-055 über fünf Achsen: erforderliche Tags, ausgeschlossene Tags,
+ * Status, „Erledigt“ und Exportstatus —, und die Zugehörigkeit wird bei jeder
+ * Abfrage neu bestimmt. Genau deshalb funktioniert A-2.5 ohne Zusatzschritt:
+ * Ein Todo kehrt in seine Pools zurück, weil es das nie verlassen hat — es war
+ * nur ausgeblendet.
+ *
+ * Bis T-108 stand hier „eine Regel über Tags und Ordner". Das war die halbe
+ * Wahrheit und der Grund für W-13: Drei der fünf Achsen ändern sich, ohne dass
+ * jemand ein Tag anfasst.
  */
 
 export function TagsScreen() {
@@ -526,8 +531,17 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
    * Schutzniveaus für dieselbe Handlung lehren, dass eines davon bedeutungslos
    * ist. Jetzt haben beide Flächen denselben: ein Toast, der sagt, dass nichts
    * verlorengeht, und einen Knopf, mit dem man es ausprobieren kann.
+   *
+   * **Und seit T-108 denselben Wortlaut** (W-14 aus R-2a). Bis dahin meldete
+   * sich dieselbe Handlung hier als „Anzeigeort geändert." mit der Langform
+   * darunter, auf dem Board als „Spalte vom Board genommen." mit der Kurzform —
+   * und der Rückweg quittierte hier ein zweites Mal mit dem Titel der Handlung
+   * selbst. Wer „Rückgängig" drückte, las denselben Satz wie zuvor und konnte
+   * nicht erkennen, ob etwas geschehen war. Titel und Zeile kommen jetzt aus
+   * `poolPlacementMessage` (`lib/labels.ts`), aus **einem** Aufruf, damit das
+   * Paar nicht wieder auseinanderläuft.
    */
-  const setPlacement = (pool: Pool, placement: PoolPlacement, undoable = true): void => {
+  const setPlacement = (pool: Pool, placement: PoolPlacement, restoring = false): void => {
     const previous = pool.placement;
     void updatePool(pool.id, { placement })
       .then(() => {
@@ -535,13 +549,12 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
         bump();
         toasts.show({
           tone: "success",
-          title: "Anzeigeort geändert.",
-          body: `„${pool.name}“ — Anzeigeort: ${POOL_PLACEMENT_LABEL[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
-          ...(undoable && previous !== placement
+          ...poolPlacementMessage(pool.name, placement, restoring),
+          ...(!restoring && previous !== placement
             ? {
                 action: {
                   label: "Rückgängig",
-                  onSelect: () => setPlacement({ ...pool, placement }, previous, false),
+                  onSelect: () => setPlacement({ ...pool, placement }, previous, true),
                 },
               }
             : {}),

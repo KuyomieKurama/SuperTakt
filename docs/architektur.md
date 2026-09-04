@@ -358,6 +358,14 @@ Das gilt für das Umlegen des Kennzeichens **von Hand** genauso: `PUT` und
 `DELETE /todos/{todoId}/done` liefern seit E-060 dasselbe `poolMovement`. Wer an einer Stelle
 Auskunft gibt und an der anderen schweigt, sagt die halbe Wahrheit.
 
+Und für die **Buchung von Hand** ebenso: `POST /time-entries` kann die erste abgeschlossene
+Buchung eines Todos sein und legt damit die Exportachse um — dieselbe Bewegung, die
+`POST /timer/stop` ansagt, nur über einen anderen Knopf ausgelöst (E-061 Nachtrag, O-V). Sie
+rechnet deshalb mit demselben Zustandspaar wie der Stopp (`closedEntryMovementStates`) und nicht
+mit dem der Add-in-Buchung: Diese Route schreibt `completed_at` nicht, ein erledigtes Todo bleibt
+also erledigt. `PATCH /time-entries/{id}` ändert einen Zeitraum oder eine Leistung, berührt keine
+der fünf Achsen und trägt das Feld deshalb nicht.
+
 **Der Timer hinterlässt im Betrieb ein Lebenszeichen** (E-036), mindestens jede Minute, in
 `timer_heartbeat` und nicht auf der Buchung selbst. Endet die Anwendung ungeordnet, findet der
 nächste Start eine Buchung ohne Ende vor und fragt: bis zum letzten Lebenszeichen buchen oder
@@ -975,7 +983,17 @@ zu `401` zusammenlegen; die Zuordnung steht an genau einer Stelle im HTTP-Adapte
 - `code` ist der englische technische Schlüssel und die einzige Größe, gegen die ein Aufrufer
   verzweigt. `message` ist deutscher Anzeigetext (CLAUDE.md). Beide bleiben getrennt, damit ein
   Text sich ändern lässt, ohne Aufrufer zu brechen.
-- `details` nur bei Eingabefehlern, feldbezogen.
+- `details` trägt die Einzelbefunde: bei einer Eingabeprüfung je beanstandetem Feld einen, bei
+  einer **Sperre** je betroffenem Datensatz einen. Der zweite Fall hat kein Eingabefeld, dem
+  etwas vorzuwerfen wäre — eine Löschung besteht aus einem Pfadbestandteil —, und trägt deshalb
+  in `field` die **Kennung** des betroffenen Datensatzes.
+- Ein Befund darf zusätzlich `name` tragen: den bloßen Namen des betroffenen Dings, ohne
+  Gattungswort und ohne Anführungszeichen (`Ost`, nicht `Regel „Ost“`). Er steht da, **damit
+  niemand den Namen aus `message` herausschneidet** — ein Schnitt im fremden Text ist eine
+  ungeschriebene Abmachung über dessen Wortlaut und bricht still, sobald der Dienst seinen Satz
+  ändert (W-11 aus R-2a, T-097 Annahme 1). `message` bleibt daneben unverändert stehen; wer
+  `name` nicht kennt, verliert nichts. Genutzt wird es heute von den Sperren, die eine Regel
+  nennen (`code: "pool_rule"` beim Löschen von Tag, Ordner und Status).
 - **Nie enthalten:** Ablaufverfolgung, SQL-Meldung, Dateipfad außerhalb des gewählten
   Exportordners, das Token, Innenleben der Datenbank.
 - Ein unerwarteter Fehler wird vollständig ins lokale Protokoll geschrieben und nach außen als

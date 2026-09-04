@@ -946,8 +946,10 @@ paths:
       summary: Regeln listen — Pools, Spalten oder beides
       description: |
         Seit E-054 ist eine Kanban-Spalte dieselbe Entität wie ein Pool: ein
-        Name und eine Regel über Tags. `placement` sagt, wo eine Regel
-        erscheint, und dieser Filter sagt, wonach gefragt ist.
+        Name und eine Regel. Tags sind darin eine Achse von fünf — erforderliche
+        Tags, ausgeschlossene Tags, Status, Erledigt und Exportstatus (E-055).
+        `placement` sagt, wo eine Regel erscheint, und dieser Filter sagt,
+        wonach gefragt ist.
 
         **Ohne `placement` ist die Antwort die Pool-Liste** — also das, was
         diese Route vor E-054 lieferte. Eine Regel, die ausdrücklich nur auf dem
@@ -1119,8 +1121,9 @@ paths:
         je Spalte die erste Seite ihrer Karten, und die Karten, die in mehr als
         einer Spalte stehen.
 
-        **Eine Spalte ist eine Regel über Tags** (E-054), also ein `Pool` mit
-        `placement` `board` oder `both`. Eingerichtet wird sie deshalb über
+        **Eine Spalte ist eine Regel** (E-054) — seit E-055 über fünf Achsen
+        und nicht allein über Tags —, also ein `Pool` mit `placement` `board`
+        oder `both`. Eingerichtet wird sie deshalb über
         `POST /pools` und `PATCH /pools/{poolId}`; hier wird nur gelesen. Es
         gibt keine Route, die eine Karte in eine Spalte legt: Ziehen ist mit
         E-054 entfallen, weil sich eine Regel nicht durch Verschieben umkehren
@@ -1305,8 +1308,9 @@ paths:
       summary: Status löschen
       description: |
         Der **Status** ist eine Eigenschaft am Todo. Er ist seit E-054 nicht
-        dasselbe wie eine Kanban-Spalte; die ist eine Regel über Tags und steht
-        unter `/pools`.
+        dasselbe wie eine Kanban-Spalte; die ist eine Regel und steht unter
+        `/pools`. Seit E-055 ist der Status eine ihrer fünf Achsen — eine Regel
+        darf nach ihm fragen, sie ist aber nicht er.
 
         Vier Gründe können das Löschen mit `409` verhindern, und zwei davon
         teilen sich einen Schlüssel:
@@ -1416,6 +1420,24 @@ paths:
       tags: [Zeitbuchungen]
       operationId: createTimeEntry
       summary: Zeitbuchung von Hand anlegen
+      description: |
+        Trägt einen Zeitraum ohne Timer nach (A-6.1). Es gelten dieselben
+        Regeln wie für eine getimte Buchung: Ende nach Start, Dauer mindestens
+        eine Sekunde, `source` ist `manual` und hat auf den Export keinen
+        Einfluß.
+
+        **Die Antwort sagt, was die Buchung bewegt hat** (E-061 Nachtrag, O-V).
+        Sie kann die **erste** Buchung des Todos sein und setzt damit „hat
+        offene Buchungen"; jede Regel mit `exportState: 'open'` nimmt das Todo
+        auf. Das ist derselbe Übergang, den `POST /timer/stop` ansagt, nur über
+        einen anderen Knopf ausgelöst — siehe `poolMovement` im Antwortrumpf.
+
+        **Erledigt bleibt Erledigt.** Diese Route schreibt `completed_at`
+        nicht; A-2.5 spricht vom **Starten** der Zeiterfassung, nicht vom
+        Nachtragen eines Zeitraums. Wer auf ein erledigtes Todo bucht, findet
+        es danach unverändert unter den erledigten. (Die Buchung aus dem
+        Aufgabenbereich des Add-ins verhält sich anders und hebt das
+        Kennzeichen auf.)
       requestBody:
         required: true
         content:
@@ -1441,7 +1463,7 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/TimeEntry' }
+                  data: { $ref: '#/components/schemas/TimeEntryAfterBooking' }
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3600,13 +3622,57 @@ components:
                 Exportordners und niemals das Token.
             details:
               type: array
+              description: |
+                Einzelbefunde. Bei einer Eingabeprüfung je beanstandetes Feld
+                einer, bei einer Sperre je betroffenem Datensatz einer.
+
+                **Die Sperre einer Löschung nennt die Regeln, die sie
+                verursachen** (R-3 H-2, T-089, T-101): `code` ist `pool_rule`,
+                `field` die Kennung der Regel, `name` ihr Name, `message` der
+                fertige Satzteil „Regel „Ost“". Ein Aufrufer liest
+                `details.filter((d) => d.code === 'pool_rule')`.
+
+                Genannt werden höchstens **zwanzig** Regeln (R-3a H-3). Gibt es
+                mehr, sagt es der Satz in `message` der Hülle — eine Liste, die
+                still aufhört, ließe den Benutzer zwanzig Regeln aufräumen und
+                danach dieselbe Sperre vorfinden.
               items:
                 type: object
                 required: [field, message, code]
                 properties:
-                  field: { type: string }
-                  message: { type: string }
-                  code: { type: string }
+                  field:
+                    type: string
+                    description: |
+                      Das beanstandete Eingabefeld — oder, wo es keines gibt
+                      (eine Löschung besteht aus einem Pfadbestandteil), die
+                      **Kennung** des betroffenen Datensatzes.
+                  message:
+                    type: string
+                    description: Deutscher Anzeigetext dieses einen Befundes.
+                  code:
+                    type: string
+                    description: Englischer technischer Schlüssel dieses Befundes.
+                  name:
+                    type: string
+                    description: |
+                      Der bloße **Name** des betroffenen Dings, ohne
+                      Gattungswort und ohne Anführungszeichen — `Ost`, nicht
+                      `Regel „Ost“` (W-11 aus R-2a).
+
+                      **Freiwillig und rein additiv.** `message` bleibt Zeichen
+                      für Zeichen, wie es war, und bleibt der Text für eine
+                      Oberfläche, die dieses Feld nicht kennt. Wer es kennt,
+                      setzt seinen eigenen Satz — „die Regeln „Ost“, „Nord“ und
+                      „Abrechnung“" statt dreimal „Regel „…“".
+
+                      Es steht da, **damit niemand den Namen aus `message`
+                      herausschneidet.** Ein Schnitt im fremden Text ist eine
+                      ungeschriebene Abmachung über dessen Wortlaut und bricht
+                      still, sobald der Dienst seinen Satz ändert; ein fehlendes
+                      Feld bricht laut.
+
+                      Fehlt das Feld, trägt dieser Befund keinen Namen. Ein
+                      leerer Wert kommt nicht vor.
 
     Todo:
       type: object
@@ -4096,13 +4162,18 @@ components:
         nicht, um die es geht: Es ist fast immer besetzt, auch wenn sich nichts
         rührt. Ob überhaupt etwas zu sagen ist, steht in `enters` und `leaves`
         — sind beide leer, hat die Handlung an der Zugehörigkeit nichts
-        geändert. Und `enters` läßt sich nicht nachträglich ausrechnen: Der
-        Unterschied verlangt beide Zustände **derselben** Regel, und zwei Pools
-        dürfen denselben Namen tragen.
+        geändert. Und `enters` liefert allein, wer dieselbe Regel gegen **beide**
+        Zustände hält: Es ist eine Aussage über eine Regel und nicht über eine
+        Menge von Namen.
 
         **Es sind Namen und keine Kennungen**, weil ein Mensch sie liest und in
-        der Hauptanwendung wiederfindet. Die Rechnung dahinter vergleicht
-        Regeln und nie Namen.
+        der Hauptanwendung wiederfindet; der Name ist dafür tauglich, weil er
+        eindeutig ist (`ux_pool_name`, UNIQUE über `name COLLATE NOCASE`).
+        Die Rechnung dahinter vergleicht trotzdem Regeln und nie Namen — sonst
+        hinge ein Fachwert an einer Zusicherung der Speicherung, und jede Regel
+        müßte ihre Ordnerbäume zweimal auflösen. Bis T-107 stand an dieser
+        Stelle als Begründung, zwei Pools dürften denselben Namen tragen; das
+        ist falsch (W-8 aus R-2a).
 
         **Auch reine Kanban-Spalten stehen darin** (`placement: board`). Eine
         Bewegung ist eine Bewegung, gleich auf welcher Fläche die Regel
@@ -4120,11 +4191,36 @@ components:
         `placement: both` beides, steht nicht darin und darf nicht geraten
         werden. Wer die Fläche braucht, fragt `GET /pools`.
 
-        Geliefert wird die Bewegung von drei Vorgängen: `POST /timer/start`
-        (Anlaß `reopen`, wenn er „Erledigt" aufgehoben hat, sonst `booking`),
-        `POST /timer/stop` und `POST /timer/orphaned/resolve` (beide stets
-        `booking`). Überall gilt: `null` heißt „hier war keine Bewegung
-        möglich", drei leere Listen hießen „nachgesehen und nichts gefunden".
+        **Wer die Bewegung liefert, und mit welchem Anlaß.** Es waren einmal
+        drei Vorgänge; inzwischen sind es sieben, und die Aufzählung wird hier
+        vollständig geführt, weil eine unvollständige den Eindruck erweckt, die
+        übrigen schwiegen (T-104 F2):
+
+        | Vorgang | Anlaß | wodurch die Bewegung entsteht |
+        |---|---|---|
+        | `POST /timer/start` | `reopen`, wenn der Start „Erledigt" aufgehoben hat, sonst `booking` | A-2.5; verdrängt er einen Timer **desselben** Todos, entsteht dabei zusätzlich die erste offene Buchung |
+        | `POST /timer/stop` | `booking` | Aus dem laufenden Timer wird die erste abgeschlossene, offene Buchung (E-032) |
+        | `POST /timer/orphaned/resolve` | `booking` | dasselbe, mit `book_until_heartbeat`; `discard` bewegt nichts |
+        | `POST /time-entries` | `booking` | Die Buchung von Hand kann die erste des Todos sein (E-061 Nachtrag, O-V) |
+        | `PUT /todos/{todoId}/done` | `booking` | Das Kennzeichen wird gesetzt (E-060). Der Anlaß trägt hier kein Wort von Buchung — er bezeichnet die **neutrale** Form des Satzes |
+        | `DELETE /todos/{todoId}/done` | `reopen` | Das Todo war erledigt und kehrt zurück; „wieder" stimmt (E-060) |
+        | `GET /addin/todo-matches` | folgt dem Zustand: `reopen`, wenn das Todo erledigt ist, sonst `booking` | **Ankündigung** der Buchung aus dem Aufgabenbereich (E-061 Punkt 3) |
+        | `POST /addin/todos/{todoId}/time-entries` | ebenso, nach dem Zustand **vor** der Buchung | **Bestätigung** derselben Buchung |
+
+        Die beiden letzten stehen in den Add-in-Bauteilen ausführlich
+        beschrieben; sie benutzen dieselbe Rechnung und dieselbe Gestalt, seit
+        die drei Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames`
+        entfallen sind (E-061 Punkt 3, T-104).
+
+        **Wer nicht liefert, bewegt auch nichts.** `PATCH /time-entries/{id}`
+        ändert einen Zeitraum oder eine Leistung; an keiner der fünf Achsen
+        einer Regel ändert das etwas, und ein Feld, das immer `null` trägt,
+        wäre eine Frage, auf die es keine Antwort gibt.
+
+        Überall gilt: `null` heißt „hier war keine Bewegung möglich", drei leere
+        Listen hießen „nachgesehen und nichts gefunden". Der Unterschied ist
+        nicht kosmetisch — nur der erste Fall kostet keine einzige
+        Ordnerauflösung.
       required: [appears, enters, leaves]
       properties:
         appears:
@@ -4366,6 +4462,51 @@ components:
             der Exportwert ist `quarters / 4`.
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
+
+    TimeEntryAfterBooking:
+      description: |
+        Die von Hand angelegte Buchung, **plus** die Bewegung, die aus ihr
+        folgt (E-061 Nachtrag, O-V).
+
+        **Die Buchung steht flach darin und nicht unter `entry`.** Die Route
+        hat seit jeher die Buchung selbst geliefert, und jeder Aufrufer liest
+        sie so; `poolMovement` kommt hinzu und nimmt nichts weg. Ein Umbau nach
+        `{ entry, poolMovement }` hätte dieselbe Auskunft gegeben und jede
+        vorhandene Aufrufstelle gebrochen — für nichts. Es ist dieselbe Gestalt
+        wie an `PUT`/`DELETE /todos/{todoId}/done` (`TodoAfterDone`) und an
+        `POST /timer/start`: das Ergebnis der Handlung und die Bewegung
+        nebeneinander, nicht ineinander.
+      allOf:
+        - $ref: '#/components/schemas/TimeEntry'
+        - type: object
+          required: [poolMovement]
+          properties:
+            poolMovement:
+              oneOf:
+                - { $ref: '#/components/schemas/PoolMovement' }
+                - { type: 'null' }
+              description: |
+                Wie diese Buchung das Todo durch die Pools und Spalten bewegt
+                — oder `null`.
+
+                `null` heißt „hier war keine Bewegung möglich": Das Todo hatte
+                bereits eine abgeschlossene, offene Buchung, an der
+                Exportachse ändert sich also nichts. Das ist der Normalfall —
+                jede zweite und weitere Buchung —, und er kostet keine einzige
+                Ordnerauflösung. Drei leere Listen hießen dagegen „nachgesehen
+                und nichts gefunden".
+
+                Bewegt wird **eine** Achse: „hat offene Buchungen" von falsch
+                auf wahr (E-032). Tags, Status und das Erledigt-Kennzeichen
+                bleiben unberührt — diese Route schreibt `completed_at` nicht.
+                Es ist damit Zeichen für Zeichen dieselbe Rechnung wie an
+                `POST /timer/stop`.
+
+                Der Anlaß ist stets `booking`. Wer den Satz bildet, ruft
+                `poolMovementSentence(movement, 'past', 'booking')` aus
+                `@takt/domain` und läßt die Zeile weg, wenn `null`
+                herauskommt — im Toast „Zeit gebucht." wie beim Stopp
+                (E-058 Punkt 6).
 
     RunningTimeEntry:
       type: object

@@ -18,7 +18,12 @@ import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { useAsync } from "../app/useAsync";
 import { formatDuration, formatTime, plural } from "../lib/format";
-import { POOL_PLACEMENT_SHORT, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
+import {
+  POOL_PLACEMENT_SHORT,
+  poolPlacementMessage,
+  RULE_IS_A_RULE,
+  RULE_WHAT_MOVES_A_CARD,
+} from "../lib/labels";
 import { doneMovementSentence, withMovement } from "../lib/movement";
 import {
   axesOf,
@@ -209,9 +214,17 @@ export function BoardScreen() {
    * `previous` wird **vor** dem Aufruf gelesen und mitgegeben, nicht hinterher
    * aus dem neu geladenen Bestand geholt: Nach `structure.reload()` steht dort
    * bereits der neue Wert, und „Rückgängig" führte dann zurück auf sich selbst.
+   *
+   * **Der Wortlaut steht seit T-108 nicht mehr hier** (W-14 aus R-2a).
+   * `poolPlacementMessage` in `lib/labels.ts` bildet Titel und Zeile in einem
+   * Aufruf, und die Regelliste (S-11) ruft dieselbe Funktion. Bis dahin gab
+   * jede Aufrufstelle ihren Titel selbst mit (`spoken`) — vier Stellen auf
+   * dieser Fläche, eine weitere in der Regelliste mit anderem Wortlaut. Der
+   * Parameter ist damit entfallen: Was der Titel sagt, folgt aus dem Ziel und
+   * daraus, ob dies der Rückweg ist.
    */
   const setPlacement = useCallback<PlacementChange>(
-    (pool, placement, spoken, undoable = true) => {
+    (pool, placement, restoring = false) => {
       const previous = pool.placement;
       void updatePool(pool.id, { placement })
         .then(() => {
@@ -219,14 +232,13 @@ export function BoardScreen() {
           bump();
           toasts.show({
             tone: "success",
-            title: spoken,
-            body: `„${pool.name}“ — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
-            ...(undoable && previous !== placement
+            ...poolPlacementMessage(pool.name, placement, restoring),
+            ...(!restoring && previous !== placement
               ? {
                   action: {
                     label: "Rückgängig",
                     onSelect: () => {
-                      setPlacement({ ...pool, placement }, previous, "Anzeigeort wiederhergestellt.", false);
+                      setPlacement({ ...pool, placement }, previous, true);
                     },
                   },
                 }
@@ -282,7 +294,7 @@ export function BoardScreen() {
         label: "Vom Board nehmen",
         icon: "x",
         tone: "danger",
-        onSelect: () => setPlacement(column, "pool", "Spalte vom Board genommen."),
+        onSelect: () => setPlacement(column, "pool"),
       },
     ],
     [setPlacement],
@@ -331,7 +343,7 @@ export function BoardScreen() {
                 pools={pools}
                 poolsKnown={structure.state.status === "ready"}
                 onCreate={() => setRuleForm({})}
-                onAdopt={(pool) => setPlacement(pool, "both", "Regel als Spalte aufgenommen.")}
+                onAdopt={(pool) => setPlacement(pool, "both")}
               />
             );
           }
@@ -439,11 +451,11 @@ export function BoardScreen() {
         */
         onAdopt={(pool) => {
           setSetupOpen(false);
-          setPlacement(pool, "both", "Regel als Spalte aufgenommen.");
+          setPlacement(pool, "both");
         }}
         onRemove={(pool) => {
           setSetupOpen(false);
-          setPlacement(pool, "pool", "Spalte vom Board genommen.");
+          setPlacement(pool, "pool");
         }}
       />
 
@@ -487,9 +499,14 @@ export function BoardScreen() {
 type PlacementChange = (
   pool: Pool,
   placement: "pool" | "board" | "both",
-  spoken: string,
-  /** Bietet der Toast einen Rückweg an? Beim Rückweg selbst nicht. */
-  undoable?: boolean,
+  /**
+   * Ist dieser Aufruf der Rückweg selbst?
+   *
+   * Dann trägt die Meldung den Titel „Anzeigeort wiederhergestellt." und bietet
+   * keinen zweiten Rückweg an — sonst schöbe man den Anzeigeort im Toast hin
+   * und her, ohne je zu sehen, wo man steht.
+   */
+  restoring?: boolean,
 ) => void;
 
 interface BoardColumnProps {

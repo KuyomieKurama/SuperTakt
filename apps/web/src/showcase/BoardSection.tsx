@@ -1,15 +1,15 @@
-import type { PoolMovement } from "@takt/domain";
+import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
+import { useToasts } from "../app/ToastContext";
 import { FilterToggle } from "../components/FilterBar";
 import { KanbanCard, KanbanColumn } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
 import { Card, InlineMessage, Button, LoadingBlock } from "../components/Primitives";
 import { RuleSummary } from "../components/RuleSummary";
-import { ReactivationNotice } from "../components/Timer";
 import { describeRule, describeRuleReach } from "../lib/poolRule";
 import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
 import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
-import { RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
+import { reactivationTitle, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -74,13 +74,34 @@ const EMPTY_COLUMNS = EMPTY_COLUMN_IDS.flatMap((id) =>
   BOARD_COLUMNS.filter((column) => column.id === id),
 );
 
+/**
+ * Die Bewegung, wie der Dienst sie beim Start gemeldet haette (E-058).
+ *
+ * In der Anwendung kommt sie als `poolMovement` mit `POST /timer/start`; auf
+ * dieser Seite gibt es keinen Dienst, also wird sie aus dem gestellt, was hier
+ * ohnehin sichtbar ist: den Spalten, in denen die Karte danach steht. Der
+ * **Satz** dazu entsteht auch hier in `poolMovementSentence` und wird nicht
+ * abgeschrieben.
+ *
+ * `leaves` bleibt leer, und das ist keine Bequemlichkeit — **keine** der
+ * Spalten dieser Musterseite fragt nach „Erledigt: nur erledigte", also gibt
+ * es hier nichts zu verlassen. Wie der Satz mit besetztem `leaves` klingt,
+ * steht in Abschnitt 6 neben den drei uebrigen Faellen.
+ */
+function movementOf(card: BoardCard, columnTitle: ReadonlyMap<string, string>): PoolMovement {
+  const names = card.columnIds
+    .map((id) => columnTitle.get(id))
+    .filter((title): title is string => title !== undefined);
+  return { appears: names, enters: names, leaves: [] };
+}
+
 export function BoardSection() {
+  const toasts = useToasts();
   const [cards, setCards] = useState<readonly BoardCard[]>(BOARD_CARDS);
   const [stage, setStage] = useState<Stage>("board");
   const [showDone, setShowDone] = useState(true);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [reactivatedCardId, setReactivatedCardId] = useState<string | null>(null);
 
   const columnTitle = useMemo(
     () => new Map(BOARD_COLUMNS.map((column) => [column.id, column.title])),
@@ -109,46 +130,17 @@ export function BoardSection() {
         return { ...candidate, done: next, reactivated: false };
       }),
     );
-    setReactivatedCardId((current) => (current === cardId ? null : current));
   }, []);
 
   /**
-   * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
-   * (A-2.5). Gefragt wird nicht; gesagt wird hinterher — und **wo** die Karte
-   * danach steht, sagt in der Anwendung der Dienst (`poolMovement`, E-058),
-   * nicht diese Ansicht. Siehe `reactivatedMovement`.
+   * Der Rueckweg aus der Meldung (I-05): Timer aus, „Erledigt" zurueck, die
+   * eben entstandene Buchung verworfen.
+   *
+   * Die Karte kommt als Argument und nicht aus einem Zustand: Die Meldung
+   * haelt ihren Bezug selbst, solange sie steht, und zwei Meldungen
+   * nebeneinander meinen dann auch zwei verschiedene Karten.
    */
-  const toggleTimer = useCallback((cardId: string) => {
-    setCards((previous) => {
-      const card = previous.find((candidate) => candidate.id === cardId);
-      if (card === undefined) return previous;
-      const starting = !card.timerRunning;
-      const reactivating = starting && card.done;
-
-      if (reactivating) {
-        setReactivatedCardId(cardId);
-        setAnnouncement(
-          `Timer gestartet. „Erledigt“ wurde bei ${card.title} aufgehoben. Das Todo ist wieder offen.`,
-        );
-      } else {
-        setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
-      }
-
-      return previous.map((candidate) => {
-        if (candidate.id !== cardId) return { ...candidate, timerRunning: false };
-        return {
-          ...candidate,
-          timerRunning: starting,
-          done: reactivating ? false : candidate.done,
-          reactivated: reactivating ? true : candidate.reactivated === true,
-        };
-      });
-    });
-  }, []);
-
-  const undoReactivation = useCallback(() => {
-    const cardId = reactivatedCardId;
-    if (cardId === null) return;
+  const undoReactivation = useCallback((cardId: string) => {
     setCards((previous) =>
       previous.map((candidate) =>
         candidate.id === cardId
@@ -156,32 +148,64 @@ export function BoardSection() {
           : candidate,
       ),
     );
-    setReactivatedCardId(null);
     setAnnouncement("Zurückgenommen. Das Todo ist wieder erledigt, die Buchung wurde verworfen.");
-  }, [reactivatedCardId]);
-
-  const reactivatedCard = cards.find((card) => card.id === reactivatedCardId);
+  }, []);
 
   /**
-   * Die Bewegung, wie der Dienst sie beim Start gemeldet haette (E-058).
+   * I-05: Der Timerstart auf einem erledigten Todo hebt "Erledigt" auf
+   * (A-2.5). Gefragt wird nicht; gesagt wird hinterher — auf zwei Flaechen:
+   * dem Etikett „Erledigt aufgehoben" an der Karte und der **Meldung** unten
+   * rechts, mit dem Rueckweg darin.
    *
-   * In der Anwendung kommt sie als `poolMovement` mit `POST /timer/start`; auf
-   * dieser Seite gibt es keinen Dienst, also wird sie aus dem gestellt, was
-   * hier ohnehin sichtbar ist: den Spalten, in denen die Karte danach steht.
+   * Bis T-108 stand an der Stelle der Meldung `ReactivationNotice`, eine
+   * eigene Hinweisflaeche unter dem Board — die keine Ansicht der Anwendung je
+   * eingesetzt hat (W-9 aus R-2a). Jetzt zeigt die Musterseite denselben
+   * Baustein wie das Produkt.
    *
-   * `leaves` bleibt leer, und das ist keine Bequemlichkeit — **keine** der
-   * Spalten dieser Musterseite fragt nach „Erledigt: nur erledigte", also gibt
-   * es hier nichts zu verlassen. Wie der Satz mit besetztem `leaves` klingt,
-   * steht in Abschnitt 6 neben den drei uebrigen Faellen; er wird dort nicht
-   * abgeschrieben, sondern von derselben Funktion gebildet.
+   * **Der Zustand wird ausserhalb des Aktualisierers gerechnet.** Bis T-108
+   * riefen `setAnnouncement` und die Auswahl der Karte mitten in `setCards`;
+   * eine Meldung waere dort im Doppellauf des `StrictMode` **zweimal**
+   * erschienen. Der Aktualisierer bildet jetzt nur noch die neue Liste.
    */
-  const reactivatedMovement = useMemo((): PoolMovement | null => {
-    if (reactivatedCard === undefined) return null;
-    const names = reactivatedCard.columnIds
-      .map((id) => columnTitle.get(id))
-      .filter((title): title is string => title !== undefined);
-    return { appears: names, enters: names, leaves: [] };
-  }, [columnTitle, reactivatedCard]);
+  const toggleTimer = useCallback(
+    (cardId: string) => {
+      const card = cards.find((candidate) => candidate.id === cardId);
+      if (card === undefined) return;
+      const starting = !card.timerRunning;
+      const reactivating = starting && card.done;
+
+      setCards((previous) =>
+        previous.map((candidate) => {
+          if (candidate.id !== cardId) return { ...candidate, timerRunning: false };
+          return {
+            ...candidate,
+            timerRunning: starting,
+            done: reactivating ? false : candidate.done,
+            reactivated: reactivating ? true : candidate.reactivated === true,
+          };
+        }),
+      );
+
+      if (!reactivating) {
+        setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
+        return;
+      }
+
+      /*
+        Titel aus `lib/labels.ts`, Rumpf aus `@takt/domain` — wie in der
+        Anwendung. Die Meldung sagt es damit selbst; eine zweite, versteckte
+        Ansage waere derselbe Satz ein zweites Mal, und der Toast liegt
+        ohnehin in einem `aria-live`-Bereich.
+      */
+      toasts.show({
+        tone: "success",
+        title: reactivationTitle(card.title),
+        body: poolMovementSentence(movementOf(card, columnTitle), "past", "reopen"),
+        action: { label: "Rückgängig", onSelect: () => undoReactivation(cardId) },
+      });
+    },
+    [cards, columnTitle, toasts, undoReactivation],
+  );
 
   const cardMenu = useCallback(
     (card: BoardCard, others: readonly string[]): readonly MenuEntry[] => [
@@ -367,15 +391,6 @@ export function BoardSection() {
             );
           })}
         </div>
-      )}
-
-      {reactivatedCard === undefined ? null : (
-        <ReactivationNotice
-          todoTitle={reactivatedCard.title}
-          movement={reactivatedMovement}
-          onUndo={undoReactivation}
-          onDismiss={() => setReactivatedCardId(null)}
-        />
       )}
 
       <SubHeading>Die Leerzustände einer Spalte</SubHeading>

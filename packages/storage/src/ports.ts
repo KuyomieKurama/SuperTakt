@@ -281,8 +281,9 @@ export interface TagFolderPort {
    * bevor die Datenbank ihn nennen muss.
    *
    * Die Antwort trägt in `details` je betroffener Regel einen Eintrag mit
-   * `code: 'pool_rule'`, der **Kennung** in `field` und dem Namen in
-   * `message`. Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
+   * `code: 'pool_rule'`, der **Kennung** in `field`, dem bloßen **Namen** in
+   * `name` und demselben Namen im Satz `message` (W-11). Ohne sie ist die
+   * Sperre bei zwanzig Regeln eine Suche.
    */
   remove(
     id: TagFolderId,
@@ -292,9 +293,10 @@ export interface TagFolderPort {
 // ---------------------------------------------------------------------------
 // Pools **und** Kanban-Spalten (A-3.4, E-054)
 //
-// Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel über
-// Tags wie ein Pool; `Pool.placement` sagt, wo sie erscheint. Es gibt deshalb
-// keinen `BoardColumnPort` — er wäre dieser hier, noch einmal abgeschrieben.
+// Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel wie
+// ein Pool — seit E-055 über fünf Achsen und nicht allein über Tags;
+// `Pool.placement` sagt, wo sie erscheint. Es gibt deshalb keinen
+// `BoardColumnPort` — er wäre dieser hier, noch einmal abgeschrieben.
 //
 // Was für Pools gilt, gilt damit unverändert für Spalten: Gespeichert wird die
 // Regel, nie die Mitgliedschaft (A-3.4). Eine Karte kann in mehreren Spalten

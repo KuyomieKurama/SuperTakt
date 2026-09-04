@@ -81,7 +81,7 @@ führt und die deshalb in keiner Migration steht.
 | `todo.status_id_before_done` | Erledigt und Kanban-Spalte sind getrennt (siehe 3.1 und 3.2). Das Erledigen verschiebt die Karte nicht, also gibt es beim Wiederaufnehmen nichts wiederherzustellen. |
 | `app_setting.reopen_status_id` | Aus demselben Grund. Eine konfigurierbare Rückkehr-Spalte löst ein Problem, das es nicht gibt. |
 | `todo_status.is_done` | Die Abschlussspalte ist nicht das Erledigt-Kennzeichen. Eine Markierung, die beides verknüpft, würde genau die Verwechslung festschreiben, die der Auftraggeber ausgeschlossen hat. |
-| `board_column` / `board_column_rule` | E-054, T-066. Eine Kanban-Spalte ist eine Regel über Tags — also dasselbe wie ein Pool: Name, Position, Regelterme, Auflösung über Ordner samt Unterordnern, Mitglieder als Abfrage, leere Regel trifft nichts. Eine zweite Tabelle hätte `pool` Wort für Wort abgeschrieben und die rekursive Ordnerauflösung gleich mit. Stattdessen sagt `pool.placement`, auf welcher Fläche eine Regel erscheint. |
+| `board_column` / `board_column_rule` | E-054, T-066. Eine Kanban-Spalte ist eine Regel — seit E-055 über fünf Achsen und nicht allein über Tags — also dasselbe wie ein Pool: Name, Position, Regelterme, Auflösung über Ordner samt Unterordnern, Mitglieder als Abfrage, leere Regel trifft nichts. Eine zweite Tabelle hätte `pool` Wort für Wort abgeschrieben und die rekursive Ordnerauflösung gleich mit. Stattdessen sagt `pool.placement`, auf welcher Fläche eine Regel erscheint. |
 | `todo_board_column` | Aus demselben Grund wie `todo_pool`: Die Zugehörigkeit zu einer Spalte ergibt sich bei jeder Abfrage aus den Tags. Seit E-054 kann eine Karte dabei in **mehreren** Spalten zugleich stehen — eine gespeicherte Zuordnung müsste dieselbe Karte mehrfach führen und bei jeder Tagänderung nachgezogen werden. |
 | Token des Add-ins | E-009. Nur sein SHA-256-Abdruck liegt auf der Platte, in einer eigenen Datei außerhalb der Datenbank. Die Datenbankdatei wird kopiert — für eine Sicherung, zur Fehlersuche, in einen synchronisierten Ordner. Ein Token darin wanderte mit. Siehe `docs/architektur.md`, Abschnitt 6. |
 
@@ -230,8 +230,10 @@ Frei konfigurierbar. Die vier Werte aus A-5.3 sind Startbestand, keine feste Men
 #### Seit E-054 ist das **keine Kanban-Spalte** mehr
 
 Bis E-054 war diese Tabelle zweierlei zugleich: die Eigenschaft am Todo **und** die Spalte auf
-dem Board. Der Auftraggeber hat das getrennt — eine Kanban-Spalte ist seitdem eine **Regel über
-Tags** (3.5, 4.4a), frei konfigurierbar in Anzahl, Bezeichnung und Regel.
+dem Board. Der Auftraggeber hat das getrennt — eine Kanban-Spalte ist seitdem eine **Regel**
+(3.5, 4.4a), frei konfigurierbar in Anzahl, Bezeichnung und Regel. Seit E-055 fragt diese Regel
+über fünf Achsen: erforderliche Tags, ausgeschlossene Tags, Status, Erledigt und Exportstatus —
+der Status ist damit eine Achse der Spalte und nicht mehr ihr Gegenstück.
 
 Was das für diese Tabelle bedeutet: **nichts.** `todo_status` bleibt, `todo.status_id` bleibt,
 die vier Startwerte aus Migration 0002 bleiben, die Standardspalte für neue Todos bleibt. Nur ist
@@ -344,7 +346,7 @@ siehe „Erledigt und Abschlussspalte sind zwei Dinge" weiter unten.
    Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte. Nehmen Sie ihn dort zuerst
    heraus." Seit T-076, weil eine Spalte seitdem nach dem Status filtern kann; seit T-089 nennt
    die Antwort in `details` auch **welche** Regeln (`code: pool_rule`, Kennung in `field`, Name in
-   `message`). Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
+   `name`, derselbe Name im Satz `message`). Ohne sie ist die Sperre bei zwanzig Regeln eine Suche.
 6. Sonst wird gelöscht.
 
 Punkt 4 und 5 teilen sich einen Schlüssel, weil der Aufrufer dasselbe tun muss: den Status
@@ -730,8 +732,13 @@ eines Ordners bietet „Ordner löschen" an.
 Die Datenbank ist dabei die **zweite** Wache. `TagPort.remove`, `TagFolderPort.remove` und
 `TodoStatusPort.remove` fragen vorher und antworten fachlich — `tag_in_use` beziehungsweise
 `status_in_use`, 409, mit den betroffenen Regeln in `details` (`code: pool_rule`, Kennung in
-`field`, Name in `message`). RESTRICT nimmt der Datenbank nur die Möglichkeit, still zu gehorchen,
-falls eines Tages jemand an der Prüfung vorbeischreibt.
+`field`, Name in `name`, derselbe Name im Satz `message`). RESTRICT nimmt der Datenbank nur die
+Möglichkeit, still zu gehorchen, falls eines Tages jemand an der Prüfung vorbeischreibt.
+
+Das Feld `name` steht seit T-107 neben `message` und nicht statt seiner (W-11 aus R-2a). Eine
+Oberfläche, die „die Regeln „Ost“, „Nord“ und „Abrechnung“" setzen will, braucht den bloßen
+Namen; ihn aus dem Satz des Dienstes herauszuschneiden wäre eine ungeschriebene Abmachung über
+dessen Wortlaut und bräche still, sobald der Satz sich ändert.
 
 `TagPort.remove` nennt die Regeln seit T-101; bis dahin zählte er sie nur, und der Löschdialog der
 Oberfläche blieb ausgerechnet beim Tag ohne den Satz „Betroffen ist Regel „…"." (R-1a Befund 1,
@@ -752,8 +759,8 @@ ohne eine Abfragesprache einzuführen, die man validieren und gegen Einschleusun
 
 #### `placement` — eine Entität, zwei Flächen (E-054, Migration 0009)
 
-Seit E-054 ist eine **Kanban-Spalte dasselbe wie ein Pool**: ein Name und eine Regel über Tags.
-`placement` sagt, wo eine Regel erscheint:
+Seit E-054 ist eine **Kanban-Spalte dasselbe wie ein Pool**: ein Name und eine Regel — seit
+E-055 über fünf Achsen und nicht allein über Tags. `placement` sagt, wo eine Regel erscheint:
 
 | Wert | Bedeutung |
 |---|---|
@@ -1804,11 +1811,12 @@ Sicherungskopie aus 8.3.
 `0009_pool_placement` hängt `pool.placement` an, mit `DEFAULT 'pool'` und einem CHECK auf die drei
 zulässigen Werte. Sonst nichts: kein Index, kein Trigger, kein UPDATE, keine Datenwanderung.
 
-**Sie rät nicht.** Nach E-054 ist eine Kanban-Spalte eine Regel über Tags. Es lag nahe, den
-Bestand zu übersetzen — die vier Statuswerte in vier Spalten, oder alle vorhandenen Pools auf
+**Sie rät nicht.** Nach E-054 ist eine Kanban-Spalte eine Regel; zum Zeitpunkt dieser Migration
+kannte sie allein die Tagachse (die vier weiteren kommen mit E-055 und Migration 0011). Es lag
+nahe, den Bestand zu übersetzen — die vier Statuswerte in vier Spalten, oder alle vorhandenen Pools auf
 `both`. Beides wäre falsch gewesen:
 
-* Eine Spalte ist eine Regel über **Tags**; „In Progress" ist kein Tag. Eine Migration, die dafür
+* Eine Spalte war damals eine Regel über **Tags**; „In Progress" ist kein Tag. Eine Migration, die dafür
   Tags anlegte und an Todos hängte, täte genau das, was der Auftraggeber ausgeschlossen hat
   („du darfst keine Tags setzen").
 * Alle vorhandenen Pools zu Spalten zu machen ergäbe ein Board, das eine Kopie der Pool-Liste ist

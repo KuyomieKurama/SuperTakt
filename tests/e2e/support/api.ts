@@ -562,14 +562,21 @@ export async function cleanupAnyTimer(): Promise<void> {
  * daraus baut — dieselbe Auskunft, die auch ein echter Aufgabenbereich über
  * `fetch` bekäme.
  */
+/**
+ * Vertrag der beiden Add-in-Routen seit T-104 (E-061 Punkt 3): Eine Form für
+ * die Poolbewegung, dieselbe wie überall sonst — `poolMovement` statt der
+ * drei Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames`.
+ * `null` gilt hier wie an den Timer-Routen: kein Wert, wenn das Todo offen
+ * ist und schon eine offene Buchung hat (T-104, Annahme 1); für ein
+ * erledigtes Todo steht immer ein Wert da, sonst ginge der
+ * Wiederöffnen-Satz verloren.
+ */
 export interface AddinTodoMatch {
   readonly id: string;
   readonly title: string;
   readonly callNumber: string | null;
   readonly completedAt: string | null;
-  readonly poolNames: readonly string[];
-  readonly enteringPoolNames: readonly string[];
-  readonly leavingPoolNames: readonly string[];
+  readonly poolMovement: PoolMovementNames | null;
 }
 
 export type AddinTodoMatchesResult =
@@ -592,9 +599,7 @@ export interface AddinBookResult {
   readonly timeEntry: { readonly id: string };
   readonly todoWasDone: boolean;
   readonly doneCleared: boolean;
-  readonly poolNames: readonly string[];
-  readonly enteringPoolNames: readonly string[];
-  readonly leavingPoolNames: readonly string[];
+  readonly poolMovement: PoolMovementNames | null;
 }
 
 /**

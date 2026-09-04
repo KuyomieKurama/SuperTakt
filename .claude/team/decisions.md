@@ -1326,3 +1326,18 @@ die Timer-Routen `poolMovement: { appears, enters, leaves }`. Zwei Hoheiten, ein
    integration-dev stellt die Add-in-Routen, das Add-in und den Add-in-Abschnitt der OpenAPI um
    (Welle F, nach E-053 getrennte Abschnitte, deshalb nicht dieselbe Welle). Bis dahin bleiben
    die Add-in-Routen bei den drei Listen, mit Board-Eintrag.
+
+**Nachtrag (O-V, 2026-09-04).** Auch `POST /time-entries` — die Buchung von Hand — kann die
+erste Buchung eines Todos sein und damit `hasOpenEntries` von falsch auf wahr setzen; ein Todo
+ohne Buchung erscheint dann in einer Spalte `exportState: 'open'`. Die Route liefert deshalb
+`poolMovement` nach derselben Rechnung wie der Timerstopp — `closedEntryMovementStates` mit
+`ENTRY_CLOSED_EFFECT`, denn eine Buchung von Hand hebt „Erledigt" nicht auf (A-2.5, nur der
+Timerstart tut das); `bookingMovementStates` wäre falsch, es meldete für ein erledigtes Todo ein
+Verlassen jeder `completion: 'done'`-Spalte, das nicht stattfindet — und mit demselben Anlaß
+`'booking'` wie der Timerstopp; `null` gilt wie überall, wenn keine Bewegung möglich war. Die
+Oberfläche nutzt den Satz im Toast „Zeit gebucht." wie beim Stopp (E-058 Punkt 6) und nennt
+das Todo in derselben Form wie dort. Ein Zeitraum, der die Buchung ändert (`PATCH`), bewegt
+nichts und bleibt ohne `poolMovement`; das gilt auch, wenn der `PATCH` das `todoId` umhängt
+und damit die Achse an zwei Todos in entgegengesetzte Richtungen umlegt (offen als O-X).
+*(Richtiggestellt nach T-107, Frage 1: Die erste Fassung nannte `bookingMovementStates`; das war
+ein Versehen des Orchestrators.)*

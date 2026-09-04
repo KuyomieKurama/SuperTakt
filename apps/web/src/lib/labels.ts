@@ -154,6 +154,69 @@ export const POOL_PLACEMENT_SHORT: Readonly<Record<PoolPlacement, string>> = {
   both: "Pool und Board",
 };
 
+/**
+ * Die Meldung nach einem Wechsel des Anzeigeorts — **eine** Fassung fuer beide
+ * Flaechen (W-14 aus R-2a).
+ *
+ * ## Was hier zusammengelegt wird
+ *
+ * Dieselbe Handlung meldete sich bis T-108 zweimal verschieden. Auf dem Board
+ * (S-04) hiess sie „Spalte vom Board genommen." mit der Kurzform darunter, in
+ * der Regelliste (S-11) „Anzeigeort geaendert." mit der Langform — und der
+ * Rueckweg quittierte dort ein zweites Mal mit demselben Titel wie die
+ * Handlung selbst. Wer „Rueckgaengig" drueckte, las also, was er schon
+ * gelesen hatte, und konnte nicht erkennen, ob etwas geschehen war.
+ *
+ * Uebernommen wird die **Board-Fassung**: Sie sagt die Handlung („vom Board
+ * genommen") statt der Feldaenderung („Anzeigeort geaendert"), und der
+ * Rueckweg hat mit „wiederhergestellt" ein eigenes Wort.
+ *
+ * ## Warum Titel und Zeile aus **einer** Funktion kommen
+ *
+ * Sie sind zwei Haelften einer Aussage: Der Titel nennt die Handlung, die
+ * Zeile nennt Namen und neuen Ort. Lagen sie als zwei Konstanten nebeneinander,
+ * liefen sie beim naechsten Mal wieder auseinander — genau so ist W-14
+ * entstanden. Ein Aufruf, ein Paar.
+ *
+ * ## Warum `board` und `both` denselben Titel tragen
+ *
+ * Der Titel spricht ueber die Fläche, die die beiden Bedienstellen umschalten:
+ * das Board. `board` und `both` heissen beide „steht ab jetzt auf dem Board";
+ * **wo genau**, sagt die Zeile darunter mit {@link POOL_PLACEMENT_SHORT}. Ein
+ * dritter Titel fuer einen Uebergang, den keine der beiden Flaechen anbietet,
+ * waere ein Wortlaut ohne Bedienstelle.
+ */
+const POOL_PLACEMENT_TITLE: Readonly<Record<PoolPlacement, string>> = {
+  pool: "Spalte vom Board genommen.",
+  board: "Regel als Spalte aufgenommen.",
+  both: "Regel als Spalte aufgenommen.",
+};
+
+/** Der Titel des Rueckwegs. Ein eigenes Wort, damit „Rueckgaengig" sichtbar wirkt. */
+const POOL_PLACEMENT_RESTORED_TITLE = "Anzeigeort wiederhergestellt.";
+
+/**
+ * Titel und Zeile der Meldung nach `PATCH /pools/{id}` mit neuem `placement`.
+ *
+ * `restored` ist wahr, wenn der Aufruf der **Rueckweg** ist — also der zweite
+ * Aufruf, den „Rueckgaengig" ausloest. Er bekommt einen eigenen Titel und
+ * seinerseits keinen Rueckweg mehr (das entscheidet die Aufrufstelle).
+ *
+ * Die Zeile sagt in beiden Faellen dasselbe: was die Handlung **nicht** tut.
+ * Das ist der Grund, aus dem E-059 den Bestaetigungsdialog davor gestrichen
+ * hat — die Regel bleibt vollstaendig, an den Todos aendert sich nichts.
+ */
+export function poolPlacementMessage(
+  name: string,
+  placement: PoolPlacement,
+  restored: boolean,
+): { readonly title: string; readonly body: string } {
+  return {
+    title: restored ? POOL_PLACEMENT_RESTORED_TITLE : POOL_PLACEMENT_TITLE[placement],
+    body: `„${name}“ — ${POOL_PLACEMENT_SHORT[placement]}. Die Regel bleibt vollständig erhalten; gelöscht wird nichts, und an den Todos ändert sich nichts.`,
+  };
+}
+
 /* ==================================================================== */
 /* Erledigt-Kennzeichen — die drei Anzeigezustaende (A-2.5, E-023)      */
 /* ==================================================================== */
@@ -194,6 +257,24 @@ export const DONE_FLAG_LABEL: Readonly<Record<DoneFlagState, string>> = {
 export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagState {
   if (done) return "done";
   return reactivated ? "reopened" : "open";
+}
+
+/**
+ * Der Titel der Meldung, mit der die Anwendung A-2.5 ausspricht (I-05).
+ *
+ * Er sagt beides in einem Satz: **was** die Anwendung getan hat, ohne zu
+ * fragen (der Timer laeuft), und **was daraus folgt** (das Todo ist wieder
+ * offen). Was danach in den Rumpf gehoert, ist der Bewegungssatz aus
+ * `@takt/domain` — hier steht kein Wort davon.
+ *
+ * **Warum als Funktion und nicht getippt an der Aufrufstelle** (T-108, W-9):
+ * Seit die Musterseite den Toast zeigt statt einer eigenen Hinweisflaeche,
+ * gibt es zwei Stellen, die diesen Titel brauchen — `TimerContext` in der
+ * Anwendung und Abschnitt 6 der Musterseite. Eine Musterseite, die den
+ * erwarteten Wortlaut abschreibt, prueft nur sich selbst.
+ */
+export function reactivationTitle(todoTitle: string): string {
+  return `Timer gestartet. „${todoTitle}“ ist wieder offen.`;
 }
 
 /*

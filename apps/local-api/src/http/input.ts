@@ -63,9 +63,13 @@ export const commaSeparatedIds = z.preprocess(
  *
  * Diese Namen reisen weiter als je zuvor: in den Bewegungssatz an **beiden**
  * Flächen, in den Aufgabenbereich des Add-ins und in die Löschdialoge der
- * Hauptanwendung (`details`, Regelnamen). Es ist kein Grenzübertritt - nur wer
- * das Sitzungsgeheimnis hat, legt Pools an -, aber es ist eine Anzeige, die
- * etwas anderes zeigt, als im Bestand steht.
+ * Hauptanwendung (`details`, Regelnamen). Seit T-107 steht der Regelname dort
+ * zusätzlich als **eigenes Feld** (`details[].name`, W-11) und nicht nur
+ * eingebettet in einen Satz — also an einer Stelle, an der eine Oberfläche ihn
+ * ohne umgebenden Text setzt. Es ist kein Grenzübertritt - nur wer das
+ * Sitzungsgeheimnis hat, legt Pools an -, aber es ist eine Anzeige, die etwas
+ * anderes zeigt, als im Bestand steht, und diese Prüfung ist die einzige
+ * Stelle, an der das aufgehalten wird.
  *
  * ---------------------------------------------------------------------------
  * Die beiden Klassen, und warum es genau diese sind

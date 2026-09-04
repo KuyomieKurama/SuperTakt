@@ -28,6 +28,7 @@ import {
   formatQuarters,
   formatStopwatch,
 } from "../lib/format";
+import { reactivationTitle } from "../lib/labels";
 import { bookingSentence, doneMovementSentence, withMovement } from "../lib/movement";
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
@@ -320,7 +321,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       */
       toasts.show({
         tone: "success",
-        title: `Timer gestartet. „${todoTitle}“ ist wieder offen.`,
+        title: reactivationTitle(todoTitle),
         ...(movementSentence === null ? {} : { body: movementSentence }),
         action: { label: "Rückgängig", onSelect: () => undoReactivation(todoId, todoTitle) },
       });

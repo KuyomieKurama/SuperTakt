@@ -13,8 +13,8 @@
  * Bericht). T-040 hat I-05 seither ausdrücklich auf alle sechs Startpunkte
  * ausgeweitet (Befund C-04) — beide Fälle sind jetzt nachgeholt.
  *
- * **Nachtrag T-081 (E-054).** Seit einer Kanban-Spalte eine Regel über Tags
- * ist, gibt es keine Standardspalten mehr — das Board ist leer, bis jemand
+ * **Nachtrag T-081 (E-054/E-055).** Seit eine Kanban-Spalte eine Regel ist,
+ * gibt es keine Standardspalten mehr — das Board ist leer, bis jemand
  * eine Regel einrichtet. Der Fall "Startpunkt S-04 (Kanban-Karte)" legt sich
  * deshalb selbst eine Spalte an, deren Achse "Erledigt" **neutral** bleibt
  * ("Alle"): Genau das ist die Voraussetzung für die hier geprüfte Aussage
@@ -121,7 +121,7 @@ test.describe('I-05 — Timerstart auf einem erledigten Todo hebt Erledigt auf, 
 
   test('Startpunkt S-04 (Kanban-Karte)', async ({ page }) => {
     const run = Date.now();
-    // Seit E-054 ist eine Kanban-Spalte eine Regel über Tags; ohne
+    // Seit E-054/E-055 ist eine Kanban-Spalte eine Regel; ohne
     // eingerichtete Spalte gäbe es hier gar keine Karte zu sehen. Die Achse
     // "Erledigt" bleibt bewusst auf ihrem Neutralwert "Alle" — genau das ist
     // die Voraussetzung dafür, dass dieser Fall "die Kanban-Spalte bleibt

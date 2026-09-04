@@ -21,6 +21,7 @@ import type {
   AppSettings,
   AppSettingsUpdate,
   CalendarDay,
+  CreateTimeEntryResult,
   DefaultTag,
   ExportAuditEntry,
   ExportPreview,
@@ -428,16 +429,38 @@ export function getTimeEntry(id: Id): Promise<TimeEntry> {
   return request<TimeEntry>(`/time-entries/${encodeURIComponent(id)}`);
 }
 
+/**
+ * A-6.6 — Zeit von Hand erfassen.
+ *
+ * Die Antwort trägt seit O-V (Nachtrag zu E-061) die Poolbewegung neben der
+ * Buchung ({@link CreateTimeEntryResult}). Der Grund ist derselbe wie bei
+ * E-058 Punkt 6 für den Stopp: Diese Buchung kann die **erste** eines Todos
+ * sein, und dann nimmt jede Spalte mit `exportState: 'open'` das Todo auf. Wer
+ * am Timerstopp Auskunft gibt und an der Buchung von Hand schweigt, sagt die
+ * halbe Wahrheit.
+ *
+ * Die Oberfläche rechnet nichts nach: Sie reicht `poolMovement` an
+ * `bookingSentence` (`lib/movement.ts`) weiter, das den Satz aus
+ * `poolMovementSentence` in `@takt/domain` holt.
+ */
 export function createTimeEntry(body: {
   todoId: Id;
   startedAt: Timestamp;
   endedAt: Timestamp;
   note: string;
-}): Promise<TimeEntry> {
-  return request<TimeEntry>("/time-entries", { method: "POST", body });
+}): Promise<CreateTimeEntryResult> {
+  return request<CreateTimeEntryResult>("/time-entries", { method: "POST", body });
 }
 
-/** Eine exportierte Buchung ist gesperrt (A-6.9): `time_entry_locked`. */
+/**
+ * Eine exportierte Buchung ist gesperrt (A-6.9): `time_entry_locked`.
+ *
+ * **Ohne `poolMovement`, und das ist der Vertrag** (O-V, letzter Satz): Ein
+ * geänderter Zeitraum bewegt nichts. Die Buchung war schon da, „hat offene
+ * Buchungen" stand bereits, und keine Achse einer Regel fragt nach Anfang oder
+ * Ende. Die nackte {@link TimeEntry} ist deshalb hier die vollständige Antwort
+ * und keine Lücke.
+ */
 export function updateTimeEntry(
   id: Id,
   body: { todoId?: Id; startedAt?: Timestamp; endedAt?: Timestamp; note?: string },

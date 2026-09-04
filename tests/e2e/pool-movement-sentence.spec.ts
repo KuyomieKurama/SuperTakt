@@ -116,14 +116,12 @@ test.describe('Bewegungssatz — Hauptanwendung gegen Aufgabenbereich, dieselbe 
 
       // --- Aufgabenbereich: dieselbe Bewegung über die Add-in-Route ---------
       //
-      // `GET /addin/todo-matches` liefert je Treffer dieselbe Rechnung wie der
-      // Timerstart — `poolNames`/`enteringPoolNames`/`leavingPoolNames`, das
-      // Ergebnis von `poolMovementNamer` (`apps/local-api/src/usecases/
-      // pool-movement.ts`). `reopenPreview` (`duplicate/reopen.ts`) baut daraus
-      // `{ appears: poolNames, enters: enteringPoolNames, leaves:
-      // leavingPoolNames }` und ruft `poolMovementSentence(movement, 'future',
-      // 'reopen')` — das wird hier nachgebildet, ohne die Datei selbst zu
-      // importieren (fremde Hoheit).
+      // `GET /addin/todo-matches` liefert je Treffer seit T-104 (E-061 Punkt 3)
+      // dieselbe Form wie jede andere Route: `poolMovement`, gerechnet vom
+      // selben Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`)
+      // wie der Timerstart. Der Aufgabenbereich reicht den Wert unverändert an
+      // `poolMovementSentence` weiter (`duplicate/reopen.ts`, fremde Hoheit,
+      // hier nur gelesen) — es gibt nichts mehr zusammenzusetzen.
       const before = await addinTodoMatches(callNumber);
       if (!before.searched) {
         throw new Error(`Call-Nummer unerwartet nicht durchsucht: ${before.reason}`);
@@ -132,27 +130,24 @@ test.describe('Bewegungssatz — Hauptanwendung gegen Aufgabenbereich, dieselbe 
       expect(match).toBeDefined();
       if (match === undefined) throw new Error('unreachable');
 
-      const previewMovement: PoolMovement = {
-        appears: match.poolNames,
-        enters: match.enteringPoolNames,
-        leaves: match.leavingPoolNames,
-      };
-      const expectedFutureAddin = poolMovementSentence(previewMovement, 'future', 'reopen');
+      // Das Todo ist erledigt (`markTodoDone` oben), also nie `null` (T-104,
+      // Annahme 1): Für ein erledigtes Todo steht immer ein Wert da, sonst
+      // ginge der Wiederöffnen-Satz verloren.
+      const previewMovement = match.poolMovement;
+      expect(previewMovement).not.toBeNull();
+      const expectedFutureAddin = poolMovementSentence(previewMovement as PoolMovement, 'future', 'reopen');
 
       const booked = await addinBookOnTodo(addinTodo.id, {
         ...fifteenMinutesUntilNow(),
         note: 'E2E-Bewegungssatz-Notiz',
       });
       expect(booked.doneCleared).toBe(true);
-      const bookedMovement: PoolMovement = {
-        appears: booked.poolNames,
-        enters: booked.enteringPoolNames,
-        leaves: booked.leavingPoolNames,
-      };
+      const bookedMovement = booked.poolMovement;
+      expect(bookedMovement).not.toBeNull();
       // Ankündigung und Bestätigung reden über dieselbe Bewegung — dieselbe
       // Prüfung, die `proof:addin` seit T-092 Liste für Liste anstellt.
       expect(bookedMovement).toEqual(previewMovement);
-      const expectedPastAddin = poolMovementSentence(bookedMovement, 'past', 'reopen');
+      const expectedPastAddin = poolMovementSentence(bookedMovement as PoolMovement, 'past', 'reopen');
 
       // Die eigentliche Erwartung aus dem Auftrag: zeichengleich bis auf die
       // Zeitform. Nach der Buchung (Vergangenheit) sagen beide Flächen exakt
@@ -229,25 +224,61 @@ test.describe('Bewegungssatz — Hauptanwendung gegen Aufgabenbereich, dieselbe 
       const match = before.matches.find((entry) => entry.id === todo.id);
       expect(match).toBeDefined();
       if (match === undefined) throw new Error('unreachable');
-      expect(match.poolNames).toEqual([]);
-      expect(match.enteringPoolNames).toEqual([]);
-      expect(match.leavingPoolNames).toEqual([]);
-
+      // Das Todo ist erledigt (`markTodoDone` oben) und trifft keine Regel:
+      // nach T-104 (Annahme 1) ist das der Fall dreier leerer Listen, nicht
+      // `null` — `null` gilt ausschließlich für ein offenes Todo mit bereits
+      // offener Buchung (dort entstünde sonst nichts zu berichten).
       const nichts: PoolMovement = { appears: [], enters: [], leaves: [] };
+      expect(match.poolMovement).toEqual(nichts);
+
       const expectedFuture = poolMovementSentence(nichts, 'future', 'reopen');
       expect(expectedFuture).toBe(
         'Auf dieses Todo passt derzeit keine Regel — es erscheint danach in keinem Pool und in keiner Spalte.',
       );
 
       const booked = await addinBookOnTodo(todo.id, fifteenMinutesUntilNow());
-      expect(booked.poolNames).toEqual([]);
-      expect(booked.enteringPoolNames).toEqual([]);
-      expect(booked.leavingPoolNames).toEqual([]);
+      expect(booked.poolMovement).toEqual(nichts);
 
       const expectedPast = poolMovementSentence(nichts, 'past', 'reopen');
       expect(expectedPast).toBe(
         'Auf dieses Todo passt derzeit keine Regel, es erscheint also in keinem Pool und in keiner Spalte.',
       );
+    } finally {
+      await deleteTodo(todo.id).catch(() => undefined);
+    }
+  });
+
+  test('Vorschau auf offenem Todo mit bereits offener Buchung: `poolMovement: null` (Dienstprüfung, T-104)', async () => {
+    const run = Date.now();
+    const callNumber = `E2E-BEWEGUNG-OFFEN-${run}`;
+    const todo = await createTodo({ title: `E2E-BEWEGUNG-OFFEN-${run}`, callNumber });
+
+    try {
+      // Erste Buchung: Das Todo ist vorher offen und hat noch keine offene
+      // Buchung — die beiden Zustände des Paares unterscheiden sich, also
+      // rechnet `bookingMovement` (T-104). Über die API gebucht, nicht über
+      // den Aufgabenbereich selbst: Ohne echten Office.js-Wirt lässt sich
+      // dessen Oberfläche in dieser Suite nicht ansteuern (O-P).
+      await addinBookOnTodo(todo.id, fifteenMinutesUntilNow());
+
+      // Zweite Anfrage: Das Todo ist weiterhin offen und hat jetzt schon
+      // eine offene Buchung — dieselbe Bedingung, unter der
+      // `apps/local-api/src/routes/addin/service.ts` (`bookingMovement`,
+      // T-104) `poolMovement: null` liefert, statt jede Regel über
+      // beliebig tiefe Ordnerbäume aufzulösen.
+      const after = await addinTodoMatches(callNumber);
+      if (!after.searched) {
+        throw new Error(`Call-Nummer unerwartet nicht durchsucht: ${after.reason}`);
+      }
+      const match = after.matches.find((entry) => entry.id === todo.id);
+      expect(match).toBeDefined();
+      if (match === undefined) throw new Error('unreachable');
+      expect(match.poolMovement).toBeNull();
+
+      // Die Fläche „Was sich dadurch ändert" bleibt im Aufgabenbereich bei
+      // `poolMovement: null` ganz weg (`TaskPane.tsx`). Das ist ohne
+      // echten Office.js-Wirt nicht automatisiert prüfbar (O-P) — diese
+      // Datei belegt deshalb nur die Dienstantwort, siehe `docs/testplan.md`.
     } finally {
       await deleteTodo(todo.id).catch(() => undefined);
     }

@@ -8,8 +8,10 @@
  * Drei Dinge, und keines davon entscheidet er selbst:
  *
  *  1. **Welche Spalten es gibt** — `pools.list('board')`. Eine Spalte ist eine
- *     Regel über Tags, also ein `Pool` mit `placement` `board` oder `both`
- *     (E-054). Ihre Reihenfolge ist `position`.
+ *     Regel, also ein `Pool` mit `placement` `board` oder `both` (E-054), und
+ *     die Regel fragt seit E-055 über fünf Achsen: erforderliche Tags,
+ *     ausgeschlossene Tags, Status, Erledigt und Exportstatus. Ihre
+ *     Reihenfolge ist `position`.
  *  2. **Wer in einer Spalte steht** — `pools.members(...)`, dieselbe Abfrage
  *     wie bei einer Pool-Ansicht (datenmodell.md 4.4). Sie zählt und blättert;
  *     eine zweite Abfrage hier wäre eine zweite Wahrheit über dieselbe Menge.

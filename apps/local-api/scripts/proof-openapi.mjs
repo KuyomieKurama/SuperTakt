@@ -1996,6 +1996,70 @@ check(
 );
 
 /*
+ * **Und derselbe Übergang ohne Timer** (E-061 Nachtrag, O-V).
+ *
+ * `POST /time-entries` trägt einen Zeitraum von Hand nach. Auch das kann die
+ * **erste** abgeschlossene Buchung eines Todos sein, und dann setzt sie „hat
+ * offene Buchungen" wie ein Stopp. Wer am Stopp Auskunft gibt und hier
+ * schweigt, sagt die halbe Wahrheit — nur über den anderen Knopf.
+ *
+ * Zwei Aufzeichnungen, und sie halten sich gegenseitig:
+ *
+ *   1. die Buchung auf ein Todo, das **keine** hatte  → `enters`
+ *   2. die Buchung auf ein Todo, das schon eine hat   → `null`
+ *
+ * Ohne 2 wäre der Abschnitt auch an einer Fassung grün, die bei jeder Buchung
+ * alle Regeln über ihre Ordnerbäume auflöst. Ohne 1 wäre er an einer grün, die
+ * nie etwas berichtet.
+ *
+ * **`leaves` ist leer, und das ist die Aussage.** Diese Route schreibt
+ * `completed_at` nicht; ein erledigtes Todo bleibt erledigt, und die Buchung
+ * nimmt es aus keiner Spalte heraus. Sie rechnet deshalb mit
+ * `closedEntryMovementStates` wie der Stopp und nicht mit `BOOKING_EFFECT`.
+ */
+const manualEntries = records.filter((record) => record.operationId === 'createTimeEntry');
+const movingEntry = manualEntries.find((record) => record.body?.data?.poolMovement !== null);
+const quietEntry = manualEntries.find((record) => record.body?.data?.poolMovement === null);
+
+check(
+  `\`POST /time-entries\` liefert eine Bewegung, wenn die erste offene Buchung entsteht (${manualEntries.length} Buchungen von Hand)`,
+  movingEntry !== undefined &&
+    movingEntry.body.data.poolMovement.enters.includes(BOARD_COLUMNS.openWork) &&
+    movingEntry.body.data.poolMovement.leaves.length === 0,
+  JSON.stringify(movingEntry?.body?.data?.poolMovement ?? null),
+);
+
+check(
+  'eine Buchung von Hand auf ein Todo, das schon eine offene Buchung hat, liefert `poolMovement: null`',
+  quietEntry !== undefined,
+  manualEntries.map((record) => JSON.stringify(record.body?.data?.poolMovement)).join(' | '),
+);
+
+check(
+  'die Buchung von Hand liefert die Buchung selbst weiterhin flach — `poolMovement` kommt hinzu',
+  manualEntries.every(
+    (record) =>
+      typeof record.body?.data?.id === 'string' &&
+      typeof record.body?.data?.durationSeconds === 'number' &&
+      record.body.data.source === 'manual' &&
+      'poolMovement' in record.body.data,
+  ),
+  JSON.stringify(Object.keys(manualEntries[0]?.body?.data ?? {})),
+);
+
+check(
+  'der Satz zur Buchung von Hand ist der des Stopps — derselbe Anlaß, derselbe Wortlaut',
+  movingEntry !== undefined &&
+    poolMovementSentence(movingEntry.body.data.poolMovement, 'past', 'booking') ===
+      `Es steht jetzt in „${BOARD_COLUMNS.openWork}“.`,
+  String(
+    movingEntry === undefined
+      ? null
+      : poolMovementSentence(movingEntry.body.data.poolMovement, 'past', 'booking'),
+  ),
+);
+
+/*
  * **Ein Ordner in einer Regel wird nicht gelöscht** (R-1 Befund 1).
  *
  * Löschbar war ohnehin nur ein leerer Ordner — und der leere Ordner in einer
@@ -2025,6 +2089,32 @@ check(
   ruleDetails.length >= 1 &&
     ruleDetails.every((entry) => typeof entry.field === 'string' && entry.field.length > 0) &&
     ruleDetails.some((entry) => String(entry.message).includes(BOARD_COLUMNS.emptyFolderAndStatus)),
+  JSON.stringify(ruleDetails),
+);
+
+/*
+ * **Der Name steht als eigenes Feld da und nicht nur im Satz** (W-11 aus R-2a).
+ *
+ * Die Oberfläche soll „die Regeln „Ost“, „Nord“ und „Abrechnung“" setzen
+ * können, ohne den Namen aus `message` herauszuschneiden — ein Schnitt im
+ * fremden Text ist eine ungeschriebene Abmachung über dessen Wortlaut und
+ * bricht still, sobald der Dienst seinen Satz ändert.
+ *
+ * Gemessen wird beides zugleich: daß `name` da ist **und** daß `message`
+ * unverändert daneben steht. Nur so bleibt die Änderung nachweislich additiv;
+ * eine Fassung, die den Namen aus `message` herausnimmt, wäre hier rot.
+ */
+check(
+  `jeder Regelverweis trägt den bloßen Namen in \`name\` und den Satz in \`message\` (${ruleDetails.length})`,
+  ruleDetails.length >= 1 &&
+    ruleDetails.every(
+      (entry) =>
+        typeof entry.name === 'string' &&
+        entry.name.length > 0 &&
+        !entry.name.includes('„') &&
+        !entry.name.startsWith('Regel') &&
+        entry.message === `Regel „${entry.name}“`,
+    ),
   JSON.stringify(ruleDetails),
 );
 

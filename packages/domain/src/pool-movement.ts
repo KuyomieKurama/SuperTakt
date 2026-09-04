@@ -73,11 +73,18 @@
  * Dafür sorgt die Stelle, die rechnet (`usecases/pool-movement.ts`), und nicht
  * diese Datei — sie hat keine Regel und dürfte darüber auch nicht urteilen.
  *
- * **Namen und keine Kennungen**, obwohl zwei Pools denselben Namen tragen
- * dürfen. Der Satz ist für einen Menschen, der die Namen gleich in der
- * Hauptanwendung wiederfindet; eine Kennung im Satz wäre unlesbar. Die
- * Rechnung dahinter unterscheidet die beiden sehr wohl — sie vergleicht
- * Regeln, nicht Namen.
+ * **Namen und keine Kennungen.** Der Satz ist für einen Menschen, der die
+ * Namen gleich in der Hauptanwendung wiederfindet; eine Kennung im Satz wäre
+ * unlesbar. Der Name taugt dafür, weil er **eindeutig** ist:
+ * `packages/storage/migrations/0001_initial.up.sql` führt `ux_pool_name` als
+ * UNIQUE über `name COLLATE NOCASE`, und keine spätere Migration hebt das auf.
+ * Unter einem genannten Namen findet der Benutzer genau eine Regel.
+ *
+ * Bis T-107 stand hier als Begründung, zwei Pools dürften denselben Namen
+ * tragen. Das ist falsch — die Speicherung verbietet es (W-8 aus R-2a). Die
+ * Bauart bleibt trotzdem, wie sie ist; **warum**, steht an der Stelle, die
+ * rechnet (`usecases/pool-movement.ts`), und nicht hier: Diese Datei bekommt
+ * drei fertige Listen und hat keine Regel, über die sie urteilen könnte.
  */
 export interface PoolMovement {
   /** Pools, in denen das Todo **nach** der Handlung steht. */

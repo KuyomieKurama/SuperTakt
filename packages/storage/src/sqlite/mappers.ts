@@ -217,17 +217,37 @@ export function toPoolRuleTerm(row: SqlRow): PoolTagTerm {
  *
  * Der Vertrag lautet deshalb, und er steht so auch in der
  * Schnittstellenbeschreibung: **`code` ist `pool_rule`, `field` ist die
- * Kennung des Pools, `message` nennt ihn beim Namen.** Ein Aufrufer liest
- * `details.filter((d) => d.code === 'pool_rule')` und hat Kennung und Namen.
+ * Kennung des Pools, `name` ist sein Name, `message` nennt ihn im Satz.** Ein
+ * Aufrufer liest `details.filter((d) => d.code === 'pool_rule')` und hat
+ * Kennung, Namen und Satz.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum der Name zweimal dasteht (W-11 aus R-2a)
+ * ---------------------------------------------------------------------------
+ *
+ * Weil er zwei verschiedene Aufgaben hat. `message` ist ein fertiger Satzteil
+ * für eine Oberfläche, die nichts weiter kann als ihn zeigen. `name` ist der
+ * bloße Name für eine, die einen eigenen Satz baut — „die Regeln „Ost“,
+ * „Nord“ und „Abrechnung“" statt dreimal „Regel „…“".
+ *
+ * Die Alternative wäre gewesen, die Oberfläche den Namen aus `message`
+ * herausschneiden zu lassen. Das ist eine ungeschriebene Abmachung über den
+ * Wortlaut eines fremden Textes, und sie bricht still, sobald dieser Text sich
+ * ändert (T-097 Annahme 1). Ein Feld bricht laut.
+ *
+ * **`message` bleibt Zeichen für Zeichen, wie es war.** Die Änderung nimmt
+ * nichts weg; wer `name` nicht kennt, merkt nichts.
  *
  * Der Name kommt aus dem eigenen Bestand und nicht aus der Anfrage; er verrät
  * dem Aufrufer nichts, was ihm die Pool-Liste nicht ohnehin sagt (B-2.4).
  */
 export function poolReference(row: SqlRow): TaktFieldError {
+  const name = text(row, 'name');
   return {
     field: text(row, 'id'),
     code: 'pool_rule',
-    message: `Regel „${text(row, 'name')}“`,
+    name,
+    message: `Regel „${name}“`,
   };
 }
 

@@ -550,6 +550,37 @@ export interface TimeEntry {
   readonly updatedAt: Timestamp;
 }
 
+/**
+ * Die Antwort auf `POST /time-entries` — die Buchung **von Hand** (O-V,
+ * Nachtrag zu E-061).
+ *
+ * Flach wie {@link TodoDoneResult}: die Buchung selbst, `poolMovement` als Feld
+ * daneben. Dieselbe Gestalt an allen Routen, die eine Bewegung melden, ist die
+ * eine Form aus E-061 Punkt 3.
+ *
+ * **Warum die Buchung von Hand überhaupt etwas bewegt.** Sie kann die *erste*
+ * Buchung eines Todos sein und setzt damit „hat offene Buchungen" von falsch
+ * auf wahr. Ein Todo ohne jede Buchung erfüllt seit E-055 keine Regel mit
+ * `exportState: 'open'`; mit dieser Buchung erfüllt es sie. Der Dienst rechnet
+ * die Bewegung deshalb nach derselben Rechnung wie der Timerstopp
+ * (`bookingMovementStates`) und meldet sie mit demselben Anlaß `'booking'`.
+ *
+ * **`PoolMovement | null` und nichts anderes.** Kein optionales Feld und kein
+ * `?? null` an der Aufrufstelle: Ein Feld, das fehlen *darf*, zwingt jede
+ * Aufrufstelle zu einer Fallunterscheidung vor der eigentlichen, und ein
+ * `?? null` verschwiege den Tag, an dem der Dienst es nicht mehr liefert.
+ * `null` heißt hier wie überall „hier war keine Bewegung möglich" — nicht
+ * „nicht geliefert".
+ *
+ * **Der `PATCH` hat kein Gegenstück.** Ein geänderter Zeitraum bewegt nichts:
+ * Die Buchung war schon da, „hat offene Buchungen" stand bereits (O-V,
+ * letzter Satz). `updateTimeEntry` liefert deshalb weiter die nackte
+ * {@link TimeEntry}.
+ */
+export interface CreateTimeEntryResult extends TimeEntry {
+  readonly poolMovement: PoolMovement | null;
+}
+
 /** Eine laufende Buchung: kein Ende, keine Dauer, nie exportierbar. */
 export interface RunningTimeEntry {
   readonly id: Id;

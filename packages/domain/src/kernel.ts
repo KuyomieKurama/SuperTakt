@@ -126,10 +126,55 @@ export type TaktErrorCode =
   | 'conflict'
   | 'storage_error';
 
+/**
+ * Ein einzelner Befund innerhalb eines fachlichen Fehlers.
+ *
+ * ---------------------------------------------------------------------------
+ * Die drei Pflichtfelder
+ * ---------------------------------------------------------------------------
+ *
+ * `field` benennt, **woran** es liegt — ein Eingabefeld, oder dort, wo es
+ * keines gibt, die Kennung des betroffenen Datensatzes. `code` ist der
+ * englische technische Schlüssel und die einzige Größe, gegen die ein
+ * Aufrufer verzweigt. `message` ist der deutsche Anzeigetext (CLAUDE.md).
+ *
+ * ---------------------------------------------------------------------------
+ * `name` — der Name als eigenes Feld, nicht nur im Satz (W-11 aus R-2a)
+ * ---------------------------------------------------------------------------
+ *
+ * Sperrt der Dienst eine Löschung, weil eine Regel den Datensatz benutzt,
+ * nennt er die Regel: `message` lautet dann „Regel „Ost“". Die Oberfläche
+ * reiht solche Sätze aneinander und bekommt „Betroffen sind Regel „Ost“,
+ * Regel „Nord“ und Regel „Abrechnung“." — dreimal dasselbe Gattungswort, und
+ * besseres Deutsch wäre „die Regeln „Ost“, „Nord“ und „Abrechnung“".
+ *
+ * Der Weg dorthin führt **nicht** über einen Schnitt im fremden Text. Wer den
+ * Namen aus `message` herausschneidet, baut eine zweite, ungeschriebene
+ * Abmachung über dessen Wortlaut; sie bricht still, sobald der Dienst seinen
+ * Satz ändert (T-097 Annahme 1, von R-2a ausdrücklich bestätigt). Der Name
+ * steht deshalb **zusätzlich** als eigenes Feld da.
+ *
+ * **Rein additiv.** `message` bleibt Zeichen für Zeichen, wie es war, und
+ * bleibt der Text, den eine Oberfläche zeigen darf, die `name` nicht kennt.
+ * Wer `name` liest, setzt seinen eigenen Satz; wer es nicht liest, verliert
+ * nichts. `undefined` heißt „dieser Befund trägt keinen Namen" und nicht
+ * „der Name ist leer" — ein `''` wäre ein Name, den es nicht gibt.
+ *
+ * Der Name kommt aus dem eigenen Bestand und nie aus der Anfrage; er verrät
+ * dem Aufrufer nichts, was ihm die Liste derselben Dinge nicht ohnehin sagt
+ * (B-2.4).
+ */
 export interface TaktFieldError {
   readonly field: string;
   readonly message: string;
   readonly code: string;
+  /**
+   * Der bloße Name des betroffenen Dings, ohne Gattungswort und ohne
+   * Anführungszeichen — „Ost", nicht „Regel „Ost“" (W-11).
+   *
+   * Freiwillig: Ein Befund über ein Eingabefeld hat nichts zu benennen.
+   */
+  readonly name?: string;
 }
 
 /**

@@ -48,13 +48,21 @@
  *      | Paar                            | Wirkung               | Aufrufer |
  *      |---------------------------------|-----------------------|----------|
  *      | {@link bookingMovementStates}   | `BOOKING_EFFECT`      | Buchung aus dem Add-in (Ankündigung und Bestätigung), `POST /timer/start`, wenn er einen Timer desselben Todos verdrängt |
- *      | {@link closedEntryMovementStates} | `ENTRY_CLOSED_EFFECT` | `POST /timer/stop`, `POST /timer/orphaned/resolve` |
+ *      | {@link closedEntryMovementStates} | `ENTRY_CLOSED_EFFECT` | `POST /timer/stop`, `POST /timer/orphaned/resolve`, `POST /time-entries` (E-061 Nachtrag, O-V) |
  *      | {@link completionMovementStates} | Erledigt-Achse        | `PUT`/`DELETE /todos/{todoId}/done`, `POST /timer/start` sonst |
  *
  *    Daß es **drei** sind und nicht eines, ist keine Nachlässigkeit: Ein Stopp
  *    hebt kein „Erledigt" auf (A-2.5), und ein Start ohne verdrängten Timer
  *    schließt keine Buchung ab. Ein gemeinsames Paar für alle drei behauptete
  *    an zwei von drei Stellen eine Wirkung, die nicht eintritt.
+ *
+ *    **Die Buchung von Hand steht in der zweiten Zeile und nicht in der
+ *    ersten.** `POST /time-entries` legt eine abgeschlossene Buchung an und
+ *    faßt `todo.completed_at` nicht an — kein Trigger tut es, und A-2.5
+ *    spricht vom **Starten** der Zeiterfassung. Ihre Wirkung ist damit die des
+ *    Stopps und nicht die des Add-ins, dessen Buchungsroute „Erledigt"
+ *    ausdrücklich mit aufhebt (`clearDone` in derselben Transaktion). Der
+ *    **Anlaß** des Satzes ist bei allen dreien `'booking'`.
  *  - Die **Bewegung** rechnet `poolMovementNamer` aus, wie bisher.
  *
  * Keine Aufrufstelle bildet das Paar noch selbst.
@@ -85,11 +93,30 @@
  *
  * Die drei Listen tragen Pool**namen**, weil ein Mensch sie liest. Die
  * Rechnung vergleicht aber **Regeln mit sich selbst** und nie Namen mit Namen:
- * Zwei Pools dürfen denselben Namen tragen, und ein Vergleich über Namen ließe
- * den einen für den anderen einstehen. Jede Regel wird deshalb genau einmal
- * durchlaufen und in **einem** Durchgang gegen beide Zustände gehalten. Ein
- * `enters`, das man nachträglich aus `appears` und einer zweiten Abfrage
- * ausrechnet, wäre genau dieser Vergleich über Namen (T-084).
+ * Jede Regel wird genau einmal durchlaufen und in **einem** Durchgang gegen
+ * beide Zustände gehalten. Ein `enters`, das man nachträglich als Differenz
+ * zweier Namenslisten ausrechnet, wäre der Vergleich über Namen (T-084).
+ *
+ * **Der Grund ist nicht die Mehrdeutigkeit des Namens** (W-8 aus R-2a). Bis
+ * T-107 stand hier „Zwei Pools dürfen denselben Namen tragen" — sie dürfen
+ * nicht: `0001_initial.up.sql:181` führt `ux_pool_name` als UNIQUE über
+ * `name COLLATE NOCASE`, und keine spätere Migration hebt das auf. Eine
+ * Begründung, die auf einer falschen Zusicherung steht, hält den nächsten
+ * Umbau nicht auf; deshalb hier die drei, die tragen:
+ *
+ *  1. **`enters` ist eine Aussage über eine Regel, nicht über eine Menge.**
+ *     „Galt vorher nicht und gilt nachher" weiß allein, wer dieselbe Regel
+ *     gegen beide Zustände gehalten hat. Aus zwei fertigen Namenslisten
+ *     entsteht dieselbe Zahl nur mittelbar — über die Annahme, daß der Name
+ *     die Regel eindeutig bezeichnet. Die Bewegung hinge damit an einer
+ *     Zusicherung der Speicherung, und ein Fachwert, der von einem Index
+ *     abhängt, ist einen Indexnamen weit von seinem Fehler entfernt.
+ *  2. **Zwei Abfragen kosten doppelt.** Die teure Hälfte ist das Auflösen der
+ *     Ordner über beliebig tiefe Bäume; ein Durchgang gegen beide Zustände
+ *     löst jede Regel einmal auf, zwei Abfragen zweimal.
+ *  3. **Der Name ist Anzeige und darf sich ändern.** Er wird umbenannt, ohne
+ *     daß die Regel eine andere wird. Was gerechnet wird, soll nicht daran
+ *     hängen, wie es heißt.
  */
 
 import type { MatchesPoolRule, PoolMovement, StatusId, TagId, Timestamp } from '@takt/domain';

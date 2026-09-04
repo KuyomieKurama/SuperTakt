@@ -1,3 +1,4 @@
+import { ToastProvider } from "../app/ToastContext";
 import { Icon, type IconName } from "../components/Icon";
 import { cx } from "../lib/cx";
 import { THEME_LABEL } from "../lib/labels";
@@ -65,7 +66,24 @@ const DENSITIES: ReadonlyArray<{ readonly value: Density; readonly label: string
   { value: "compact", label: "Kompakt" },
 ];
 
+/**
+ * Die Musterseite zeigt Meldungen im **echten** Baustein (T-108, W-9).
+ *
+ * `ToastProvider` ist derselbe, den `App.tsx` um die Anwendung legt — mit
+ * derselben Vorlesestelle, derselben Obergrenze und derselben Regel, dass eine
+ * Meldung mit Rueckweg nicht von selbst verschwindet und nicht verdraengt wird.
+ * Bis T-108 zeigte Abschnitt 6 an dieser Stelle `ReactivationNotice`, eine
+ * eigene Hinweisflaeche, die keine Ansicht der Anwendung je benutzt hat.
+ */
 export function Showcase() {
+  return (
+    <ToastProvider>
+      <ShowcasePage />
+    </ToastProvider>
+  );
+}
+
+function ShowcasePage() {
   const [theme, setTheme] = useThemePreference("light");
   const [density, setDensity] = useDensity("comfortable");
 

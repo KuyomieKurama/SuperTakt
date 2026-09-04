@@ -1296,55 +1296,11 @@
   font-size: var(--text-4xl);
 }
 
-/* Hinweis nach dem Aufheben von "Erledigt" (A-2.5, I-05) */
-.reactivation {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--timer-running-border);
-  border-inline-start: 3px solid var(--timer-running-pulse);
-  border-radius: var(--radius-lg);
-  background-color: var(--timer-running-bg);
-}
-
-.reactivation__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  flex: none;
-  border-radius: var(--radius-md);
-  background-color: var(--bg-surface);
-  color: var(--timer-running-fg);
-}
-
-.reactivation__title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  color: var(--timer-running-fg);
-}
-
-.reactivation__body {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.reactivation__hint {
-  margin-top: var(--space-1);
-  font-size: var(--text-xs);
-  line-height: var(--leading-relaxed);
-  color: var(--text-muted);
-  max-width: var(--measure-prose);
-}
-
-.reactivation__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
+/* Hier standen bis T-108 `.reactivation*` — die Huelle von
+   `ReactivationNotice`. Der Baustein ist mit W-9 entfallen: Keine Ansicht der
+   Anwendung hat ihn eingesetzt, den Fall A-2.5/I-05 tragen der Toast
+   (`.toast`) und das Etikett `.doneflag--reopened`. Die Begruendung steht in
+   `components/Timer.tsx` am selben Platz. */
 
 /* ==================================================================== */
 /* Vermerk und Leistung — die zwei Feldarten                            */

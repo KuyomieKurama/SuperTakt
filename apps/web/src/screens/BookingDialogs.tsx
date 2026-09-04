@@ -30,6 +30,7 @@ import {
   plural,
   toLocalInputValue,
 } from "../lib/format";
+import { bookingSentence, withMovement } from "../lib/movement";
 
 /**
  * Takt — Dialoge rund um eine Zeitbuchung.
@@ -103,9 +104,39 @@ export function BookingFormDialog({
 
     void mutation.run(async () => {
       if (entry === undefined) {
-        await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
-        toasts.success("Zeit gebucht.", `Die Buchung liegt auf „${todoTitle}“.`);
+        /*
+          Anlegen: derselbe Rahmen wie nach dem Timerstopp (O-V, Nachtrag zu
+          E-061; T-102 Frage 1).
+
+          **Der Titel nennt das Todo**, der Rumpf sagt, was mit ihm geschehen
+          ist. Bis T-108 stand hier „Zeit gebucht." mit dem Todo im Rumpf,
+          während der Stopp „Zeit gebucht auf „X“." im Titel führt — dieselbe
+          Handlung, zwei Formen. Der Bewegungssatz beginnt mit „Es" und nennt
+          das Todo nicht; ohne einen Bezug darüber stünde das „Es" allein
+          (W-5 aus R-2a).
+
+          **Der Bewegungssatz kommt vom Dienst**, nicht von hier: `bookingSentence`
+          holt ihn aus `poolMovementSentence` in `@takt/domain`, Anlaß
+          `'booking'`, Zeitform `'past'` — wie beim Stopp. Meldet der Dienst
+          keine Bewegung, entfällt die Zeile ganz (`withMovement`).
+        */
+        const created = await createTimeEntry({ todoId, startedAt: start, endedAt: end, note });
+        toasts.success(
+          `Zeit gebucht auf „${todoTitle}“.`,
+          withMovement(
+            `Gebucht: ${formatDuration(created.durationSeconds)}.`,
+            bookingSentence(created.poolMovement),
+          ),
+        );
       } else {
+        /*
+          Ändern: **kein** Bewegungssatz, und das ist der Vertrag, keine
+          Auslassung. Ein geänderter Zeitraum bewegt nichts — die Buchung war
+          schon da, „hat offene Buchungen" stand bereits, und keine Achse einer
+          Regel fragt nach Anfang oder Ende (O-V, letzter Satz). `PATCH
+          /time-entries/{id}` liefert deshalb kein `poolMovement`, und hier ist
+          keines wegzulassen.
+        */
         await updateTimeEntry(entry.id, { startedAt: start, endedAt: end, note });
         toasts.success("Buchung geändert.", "Die Tagesgruppe dieses Todos ändert sich mit.");
       }

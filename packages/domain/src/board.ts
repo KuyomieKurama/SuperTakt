@@ -9,8 +9,15 @@
  * die Spalte auf dem Board. Ein Todo trug genau eine `status_id`, die Spalten
  * waren die Statuswerte, und eine Karte stand deshalb in genau einer Spalte.
  *
- * Seitdem ist eine Spalte eine **Regel über Tags**, wie ein Pool. Der Status
- * bleibt als Eigenschaft am Todo, er ist nur nicht mehr die Spalte. Daraus
+ * Seitdem ist eine Spalte eine **Regel**, wie ein Pool. Tags sind dabei eine
+ * Achse von fünf: erforderliche Tags, ausgeschlossene Tags, Status, Erledigt
+ * und Exportstatus (E-055). Bis dahin stand hier „eine Regel über Tags"; das
+ * war zur Zeit von E-054 vollständig und ist es seit E-055 nicht mehr — es
+ * legte dem Leser nahe, eine Spalte hinge allein an Tags, und genau daraus
+ * entstand der falsche Satz „Die Karte bleibt, wo sie ist" (E-058).
+ *
+ * Der Status bleibt als Eigenschaft am Todo, er ist nur nicht mehr die
+ * Spalte — er ist eine der fünf Achsen, nach denen eine Regel fragen darf. Daraus
  * folgt der Fall, den es vorher nicht geben konnte und der jetzt der Normalfall
  * ist: **Dieselbe Karte kann in mehreren Spalten stehen.** Bei Status war das
  * ausgeschlossen, bei Regeln ist es unvermeidlich — zwei Regeln, die beide

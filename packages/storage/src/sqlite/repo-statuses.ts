@@ -1,9 +1,10 @@
 /**
  * Takt — der **Status** eines Todos (A-5.3, A-5.4, E-023, E-054).
  *
- * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel über
- * Tags und liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist
- * eine Eigenschaft am Todo und liegt hier. Die Wörter in den Meldungen dieser
+ * **Seit E-054 ist das keine Kanban-Spalte.** Eine Spalte ist eine Regel und
+ * liegt in `pool` (`repo-tags.ts`, datenmodell.md 3.5); der Status ist seit
+ * E-055 eine ihrer fünf Achsen und nicht ihr Gegenstück — als Eigenschaft am
+ * Todo liegt er hier. Die Wörter in den Meldungen dieser
  * Datei sagen das seit T-074 auch — bis dahin sprachen fünf von ihnen von einer
  * „Spalte", und die erste davon erscheint im Einstellungsbereich *Status*, zwei
  * Absätze unter der Erklärung, dass beides zweierlei ist.

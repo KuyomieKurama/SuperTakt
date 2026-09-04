@@ -215,6 +215,11 @@ const pairs = [
    * Versehen: hell 1.47:1, dunkel 1.74:1.
    */
   { group: "Timer", fg: "--timer-running-border", bg: "--timer-running-bg", min: 0, exempt: true, note: "Trennstrich vor dem Todo-Titel, rein gruppierend" },
+  // Bis T-108 stand dieses Paar unter "Erledigt" mit dem Beleg "Fussnote im
+  // Wiederaufnahme-Hinweis". Der Hinweis ist mit W-9 entfallen; das Paar bleibt,
+  // weil es andere Flaechen tragen (Call-Nummer und Symbol in einer Zeile mit
+  // laufendem Timer, `.pick-row--running`, `.timerbar__icon`).
+  { group: "Timer", fg: "--text-muted", bg: "--timer-running-bg", min: 4.5, note: "Nebentext in einer Zeile mit laufendem Timer" },
   { group: "Timer", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Timerleiste im Ruhezustand" },
 
   // Hinweise
@@ -240,7 +245,6 @@ const pairs = [
   { group: "Erledigt", fg: "--text-secondary", bg: "--bg-inset", min: 4.5, note: "Kennzeichen Erledigt aufgehoben" },
   { group: "Erledigt", fg: "--border-strong", bg: "--bg-inset", min: 3, note: "gestrichelte Kontur Erledigt aufgehoben" },
   { group: "Erledigt", fg: "--success-fg", bg: "--bg-subtle", min: 4.5, note: "Zaehler erledigter Todos im Spaltenkopf" },
-  { group: "Erledigt", fg: "--text-muted", bg: "--timer-running-bg", min: 4.5, note: "Fussnote im Wiederaufnahme-Hinweis" },
 
   // Kanban nach E-054: Eine Spalte ist eine Regel ueber Tags, dieselbe Karte
   // kann in mehreren Spalten stehen. Beides braucht eigene Flaechen — die

@@ -591,8 +591,9 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
 /**
  * Pools **und** Kanban-Spalten (A-3.*, E-054).
  *
- * Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel über
- * Tags wie ein Pool; `pool.placement` sagt, wo sie erscheint. Es gibt deshalb
+ * Eine Entität, zwei Flächen. Seit E-054 ist eine Kanban-Spalte eine Regel wie
+ * ein Pool — seit E-055 über fünf Achsen und nicht allein über Tags;
+ * `pool.placement` sagt, wo sie erscheint. Es gibt deshalb
  * keinen zweiten Adapter für Spalten — er wäre dieser hier, abgeschrieben samt
  * `resolvePoolRule` und der rekursiven Ordnerauflösung.
  *

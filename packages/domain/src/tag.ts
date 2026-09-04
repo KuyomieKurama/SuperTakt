@@ -194,7 +194,8 @@ export type PoolExportFilter = 'any' | 'open' | 'exported';
  * Wo eine Regel erscheint (E-054).
  *
  * Seit E-054 ist eine Kanban-Spalte dasselbe wie ein Pool: ein Name und eine
- * Regel über Tags. Es gibt deshalb **eine** Entität und nicht zwei —
+ * Regel — seit E-055 über fünf Achsen und nicht allein über Tags. Es gibt
+ * deshalb **eine** Entität und nicht zwei —
  * `pool`/`pool_rule` mit allem, was daran hängt (Auflösung über Ordner,
  * Mitglieder als Abfrage, die leere Regel trifft nichts). Was eine Regel von
  * der anderen unterscheidet, ist allein die Fläche, auf der sie erscheint.

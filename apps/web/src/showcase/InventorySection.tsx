@@ -284,11 +284,20 @@ const INVENTORY: readonly InventoryEntry[] = [
     built: true,
   },
   {
-    name: "Wiederaufnahme-Hinweis",
-    file: "Timer.tsx",
-    purpose: "Sagt, dass „Erledigt“ aufgehoben wurde, in welchen Pools das Todo wieder erscheint und dass die Spalte gleich bleibt.",
-    states: "ein Pool · mehrere Pools · kein Pool · mit Rückweg",
-    screens: "S-01 · S-03 · S-04 · S-05",
+    /*
+      Bis T-108 stand hier „Wiederaufnahme-Hinweis" (`Timer.tsx`). Den Fall
+      A-2.5/I-05 tragen in der Anwendung die Meldung und das
+      Erledigt-Kennzeichen; die eigene Hinweisflaeche hat keine Ansicht je
+      eingesetzt und ist mit W-9 entfallen. An ihre Stelle tritt hier der
+      Baustein, der die Meldung wirklich zeigt — er fehlte in dieser
+      Aufstellung, obwohl ihn jede Ansicht benutzt.
+    */
+    name: "Meldung mit Rückweg",
+    file: "app/ToastContext.tsx",
+    purpose:
+      "Rückmeldung nach jeder Handlung (Abschnitt 16). Mit „Rückgängig“ bleibt sie stehen, bis jemand sie benutzt oder schließt — und sie wird auch nicht von jüngeren Meldungen verdrängt (SC 2.2.1).",
+    states: "info · erfolg · warnung · fehler; mit Rückweg · ohne · gestapelt",
+    screens: "global",
     built: true,
   },
   {
@@ -342,9 +351,15 @@ const INVENTORY: readonly InventoryEntry[] = [
     built: true,
   },
   {
-    name: "Meldung",
+    /*
+      „In der Ansicht" seit T-108: Der Nachbar oben heisst „Meldung mit
+      Rückweg" und meint den Toast. Zwei Eintraege, die beide „Meldung"
+      heissen, unterscheidet niemand — dieser hier steht **im** Inhalt, an der
+      Stelle, auf die er sich bezieht, und bleibt beim Blaettern stehen.
+    */
+    name: "Meldung in der Ansicht",
     file: "Primitives.tsx",
-    purpose: "Hinweis, Erfolg, Warnung, Fehler — Fehler immer mit Rückweg.",
+    purpose: "Hinweis, Erfolg, Warnung, Fehler an Ort und Stelle — Fehler immer mit einem Weg hinaus.",
     states: "info · erfolg · warnung · fehler; schließbar",
     screens: "alle",
     built: true,

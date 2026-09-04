@@ -141,8 +141,11 @@ export function KanbanCard({
           ) : null}
           {/* Das Erledigt-Kennzeichen steht auf jeder Karte, auch wenn es
               "offen" lautet. Waere es nur bei "erledigt" da, muesste man es
-              aus der Spalte erschliessen — und eine Spalte ist eine Regel
-              ueber Tags, die darueber nichts sagt. */}
+              aus der Spalte erschliessen — und das geht nicht: Eine Spalte ist
+              eine Regel ueber fuenf Achsen (E-055), und nur **eine** davon
+              fragt nach "Erledigt". Ob diese Spalte es tut, steht der Karte
+              nicht an; in der weit ueberwiegenden Zahl der Faelle sagt die
+              Regel darueber nichts. */}
           <span className={cx("kcard__flag", `kcard__flag--${cardFlagState}`)}>
             <Icon
               name={card.done ? "check" : card.reactivated === true ? "rotate-ccw" : "circle"}

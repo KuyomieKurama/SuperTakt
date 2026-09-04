@@ -346,13 +346,34 @@ in derselben Zeile ins Gehege. Symbol und gestrichelte Kontur tragen hier die Au
 Der Spaltenkopf zählt zusätzlich, wie viele seiner Todos erledigt sind — die Mischung wird damit
 schon vor dem Lesen der Karten sichtbar.
 
-**Was der Timerstart auf einem erledigten Todo tut** (A-2.5, I-05): Er hebt das Kennzeichen auf,
-und nur das. Das Todo erscheint dadurch wieder in seinen Pools, weil Pool-Ansichten erledigte
-Todos ausblenden und die Poolzugehörigkeit aus den Tags abgeleitet ist (A-3.4). **Die Spalte
-ändert sich nicht.** Der Hinweis danach (`ReactivationNotice`) sagt beides ausdrücklich — welche
-Pools, und dass die Karte stehen bleibt — und bietet „Rückgängig“ an. Er nennt auch, warum
-Rückgängig die eben entstandene Buchung verwirft: Wenige Sekunden stünden nach E-008 als
+**Was der Timerstart auf einem erledigten Todo tut** (A-2.5, I-05): Er hebt das Kennzeichen auf —
+und das ist seit E-055 mehr, als es klingt. Eine Regel darf nach „Erledigt“ und nach dem
+Exportstatus fragen, und ein Timerstart ändert beides: Das Kennzeichen fällt, die erste
+abgeschlossene Buchung setzt „hat offene Buchungen“. Die Karte kann dadurch eine Spalte
+gewinnen und eine andere verlieren.
+
+Gesagt wird das auf **zwei Flächen**, und keine davon ist eine eigene Hinweisfläche:
+
+| Fläche | Baustein | Was sie trägt |
+|---|---|---|
+| Meldung unten rechts | `app/ToastContext.tsx`, gefüllt aus `app/TimerContext.tsx` | Titel „Timer gestartet. „X“ ist wieder offen.“, als Rumpf der Bewegungssatz, dazu „Rückgängig“ |
+| Etikett an der Zeile und auf der Karte | `components/DoneFlag.tsx`, `DONE_FLAG_LABEL.reopened` | „Erledigt aufgehoben“, bis der Benutzer das Kennzeichen selbst anfasst |
+
+Den Bewegungssatz bildet `poolMovementSentence` in `@takt/domain` aus dem `poolMovement`, das
+`POST /timer/start` mitschickt (E-058) — dieselbe Funktion, die der Aufgabenbereich des
+Outlook-Add-ins aufruft. Meldet der Dienst keine Bewegung, trägt die Meldung **keinen** Rumpf;
+eine Zeile mit null Zeichen wird weggelassen und nicht mit einer Beruhigung gefüllt. Der Satz
+„Die Karte bleibt, wo sie ist“ ist mit E-058 ersatzlos entfallen, weil er seit E-055 falsch ist.
+
+Warum „Rückgängig“ die eben entstandene Buchung verwirft, sagt die Meldung nicht mehr eigens;
+der Grund steht in `TimerContext` und lautet unverändert: Wenige Sekunden stünden nach E-008 als
 0,25 Stunden in der Abrechnung.
+
+> **Entfallen mit T-108 (W-9).** Bis dahin stand hier `ReactivationNotice` — eine eigene
+> Hinweisfläche mit demselben Inhalt, die **keine** Ansicht der Anwendung je eingesetzt hat.
+> Sie lebte nur noch auf der Musterseite und zeigte damit eine Fläche, die es im Produkt nicht
+> gibt. Baustein, `.reactivation*` in `components.css` und beide Musterstellen sind entfernt;
+> die Musterseite zeigt jetzt Meldung und Etikett.
 
 ### 3.5 Die Exportvorschau gliedert nach Tagesgruppen (E-020, E-031, E-034)
 
@@ -618,10 +639,16 @@ wandert. Ohne Eingabe bleibt der Bestätigungsknopf gesperrt.
 
 Beim Start des Timers auf einem erledigten Todo (A-2.5, I-05) fragt die Anwendung **nicht** —
 die Spezifikation verlangt, dass „Erledigt“ automatisch aufgehoben wird. Sie sagt hinterher
-genau, was passiert ist, nennt die Pools, in denen das Todo jetzt wieder erscheint, sagt
-ausdrücklich, dass die Karte ihre Spalte behält, und bietet „Rückgängig“ an. Passt zu den Tags
-keine Poolregel, nennt sie keinen Pool, sondern spricht das aus — eine Meldung, die einen Pool
-erfindet, wäre schlimmer als keine.
+genau, was geschehen ist, nennt in einem Satz aus der Domäne, wo das Todo jetzt erscheint und
+woraus es verschwunden ist, und bietet „Rückgängig“ an (Abschnitt 3.4). Passt derzeit **keine
+Regel** auf das Todo — eine Regel hat seit E-055 fünf Achsen und hängt nicht mehr allein an den
+Tags —, dann nennt der Satz keinen Namen, sondern spricht genau das aus: „Auf dieses Todo passt
+derzeit keine Regel …“. Eine Meldung, die einen Pool erfindet, wäre schlimmer als keine.
+
+Dasselbe gilt für die zweite umkehrbare Handlung dieses Abschnitts: **„Vom Board nehmen“ fragt
+nicht nach** (E-059), sondern meldet sich mit „Rückgängig“. Diese Meldung wird deshalb auch
+nicht verdrängt, wenn der Stapel seine Obergrenze erreicht — sie ist der einzige Rückweg, und
+ein Rückweg, der ohne Zutun verschwindet, ist keiner (`app/ToastContext.tsx`, SC 2.2.1).
 
 ---
 
@@ -698,7 +725,9 @@ Vollständig und aktuell auf der Musterseite, Abschnitt 11. Kurzfassung:
 | Tabelle, Tabellenrahmen | `BookingTable.tsx` | S-03, S-06, S-07 |
 | Tagesgruppenliste der Exportvorschau | `ExportGroups.tsx` | S-07 |
 | Kanban-Spalte, Kanban-Karte, Exportstand-Zusammenfassung | `Kanban.tsx` | S-02, S-03, S-04 |
-| Timer-Anzeige, Wiederaufnahme-Hinweis | `Timer.tsx` | global, S-01, S-03, S-04, S-05 |
+| Timer-Anzeige | `Timer.tsx` | global, S-01, S-03, S-04, S-05 |
+| Erledigt-Kennzeichen | `DoneFlag.tsx` | S-01, S-02, S-03, S-05 |
+| Meldung mit Rückweg (Toast) | `app/ToastContext.tsx` | global |
 | Vermerk- und Leistungsfeld | `NoteField.tsx` | S-03, S-05, S-06, S-12 |
 | Menü, Kontextmenü | `Menu.tsx` | S-02, S-04, S-06, S-08 |
 | Bestätigungsdialog | `ConfirmDialog.tsx` | S-03, S-04, S-06, S-07, S-08, S-09 |
