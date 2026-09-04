@@ -18,8 +18,10 @@ Das ist ein möglicher Widerspruch zu `decisions.md`, der dort von der zuständi
 klären ist; dieser Testplan kann `decisions.md` nicht selbst berichtigen.
 
 **Nachtrag T-081 — Abschnitt 8 ist durch E-054/E-055 abgelöst, nicht nur ergänzt.** Seit E-054
-ist eine Kanban-Spalte eine **Regel über Tags**, dieselbe Entität wie ein Pool; Ziehen zwischen
-Spalten (A-5.2, I-14) gibt es nicht mehr, ebenso wenig die „Statusspalten"-Verwaltung, die
+ist eine Kanban-Spalte eine **Regel**, dieselbe Entität wie ein Pool — seit E-055 eine Struktur
+mit fünf Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus), nicht
+mehr allein über Tags definiert; Ziehen zwischen Spalten (A-5.2, I-14) gibt es nicht mehr, ebenso
+wenig die „Statusspalten"-Verwaltung, die
 Abschnitt 8 in der bis T-080 gültigen Fassung beschrieb. Seit E-055 ist die Regel eine Struktur
 mit fünf benannten Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt,
 Exportstatus) statt einer Liste von Termen. Abschnitt 8 ist deshalb vollständig neu geschrieben,
@@ -835,10 +837,10 @@ das hat der Auftraggeber ausgeschlossen (`decisions.md`, E-054). Die frühere Fa
 Abschnitts prüfte diese Bedienung trotzdem weiter — ein Testfall, der grün blieb, obwohl er nichts
 mehr maß, das schlimmere Ergebnis als gar kein Test (Bericht `T-081-e2e-tester.md`).
 
-**Was seit E-054/E-055 gilt.** Eine Kanban-Spalte ist eine **Regel über Tags**, dieselbe Entität
-wie ein Pool (A-3.2, A-3.4); `placement` sagt, ob eine Regel im Pool-Bereich, auf dem Board oder
-an beiden Stellen erscheint. Seit E-055 ist die Regel eine Struktur mit fünf benannten Achsen,
-nicht eine Liste von Termen:
+**Was seit E-054/E-055 gilt.** Eine Kanban-Spalte ist eine **Regel**, dieselbe Entität wie ein
+Pool (A-3.2, A-3.4); `placement` sagt, ob eine Regel im Pool-Bereich, auf dem Board oder an beiden
+Stellen erscheint. Seit E-055 ist die Regel eine Struktur mit fünf benannten Achsen, nicht eine
+Liste von Termen und nicht mehr allein über Tags definiert:
 
 | Achse | Wirkung | Neutralwert |
 |---|---|---|
@@ -2434,3 +2436,144 @@ bzw. `{ name }` — kein `RegExp`-Import mehr in beiden Dateien.
 über `--grep`), `tags-folders.spec.ts` 2/2 (isoliert; im Verbund mit `tag-input.spec.ts` einmal
 mit einem umgebungsbedingten Timeout auf einen UI-Knopf beim ersten Versuch — dreifach isoliert
 reproduziert, jedes Mal grün, kein Zusammenhang mit dieser Änderung, siehe Bericht zu T-103).
+
+## 19. Nachtrag aus T-106 (Welle F — Wortlaute nach T-101/T-102 nachgezogen, E-060/O-R als echte Spezifikationen)
+
+Grundlage: `decisions.md` E-060 (auch „Erledigt" setzen und aufheben von Hand liefern die
+Poolbewegung) und O-R (`orphan_discarded` wird unterschieden, nicht auf `timer_too_short`
+gekürzt), beide mit T-101 (Dienst/Domäne) und T-102 (Oberfläche) umgesetzt. T-103 hatte fünf
+bestehende Erwartungen als „fremd rot" gemeldet (gemessene Wortlaute standen erst im Bericht zu
+T-102, nicht im Testfall) und zwei Entwürfe (TP-EXPST-13, TP-TIMER-11) vorbereitet, aber nicht
+eingecheckt. Beides wird hier nachgezogen.
+
+### Fünf rote Erwartungen auf die gemessenen Wortlaute umgestellt
+
+`tests/e2e/timer-stop-announcement.spec.ts` (Zeilenangaben aus dem Auftrag, Stand vor dieser
+Änderung):
+
+- **Zeile 103/104** — Der Toast-Titel nach `recorded` hieß bisher schlicht „Zeit gebucht.". Seit
+  T-102 (W-5) nennt er den Todo-Namen: „Zeit gebucht auf „<Todo>“.". Der Testfall filtert jetzt
+  auf den Teiltext „Zeit gebucht" (statt auf den vollen, jetzt falschen Satz) und erwartet den
+  vollen neuen Titel mit dem tatsächlich angelegten Todo-Titel.
+- **Zeile 173–176** — Der Titel „Nichts gebucht." bleibt (bestätigt gegen den Quelltext,
+  `TimerContext.tsx`), aber der Rumpf nennt jetzt das Todo: „Der Timer auf „<Todo>“ lief weniger
+  als eine Sekunde. …" statt „Der Timer lief weniger als eine Sekunde. …".
+- **Zeile 256** — Der Toast-Titel nach `orphaned/resolve` (`recorded`) hieß „Buchung
+  abgeschlossen.", heißt jetzt „Buchung auf „<Todo>“ abgeschlossen.".
+
+`tests/e2e/tag-folder-rule-lock.spec.ts`:
+
+- **Zeile 152** (Ordner-Fall) und **Zeile 213** (Tag-Fall) — nach der Absage im Löschdialog hieß
+  der schließende Knopf „Abbrechen". Seit T-102 wechseln Ordner- und Tag-Löschdialog nach einer
+  Absage Titel, Beschreibung und beide Knöpfe wie `StatusSettings` (T-097 Frage 1); der
+  schließende Knopf heißt jetzt „Schließen". Beide Testfälle klicken jetzt „Schließen".
+  Zusätzlich, weil dieselbe Datei betroffen ist und derselbe Umbau die Ursache war (nicht Teil der
+  fünf gemeldeten Zeilen, aber vom selben Fund erfasst): Der **Tag**-Fall behauptete bisher
+  ausdrücklich, dass der Regelname im Dialog **fehlt** (der in T-096/T-099 gemessene und
+  dokumentierte Fund, `repo-tags.ts`, `TagPort.remove()` ohne `details`). T-101 hat das behoben
+  (R-1a Befund 1); der Testfall erwartet den Regelnamen jetzt wörtlich, wie beim Ordner- und
+  Status-Fall.
+
+Für den Bewegungssatz gilt weiterhin: Die Erwartung wird aus `poolMovementSentence` gezogen, kein
+Wortlaut ist als Literal im Testfall abgeschrieben — nur die reinen Textbausteine, die nicht aus
+dieser Funktion stammen (feste Toast-Titel, der Rumpf-Grundsatz „Der Timer auf „X“ lief …" usw.),
+stehen als Literal, gegen den tatsächlichen Quelltext von `TimerContext.tsx` gegengelesen.
+
+**Ergebnis: bestanden.** Isoliert über `--grep "timer-stop-announcement|tag-folder-rule-lock|
+done-movement-announcement"`: 12/12, zweifach reproduziert.
+
+### TP-EXPST-13 — Toast nach „Erledigt"/„Wieder offen" trägt den Bewegungssatz (E-060 Punkt 4)
+
+**Anforderungen:** A-2.4, A-2.5, A-3.4, E-060
+**Ebene:** End-to-End (`tests/e2e/done-movement-announcement.spec.ts`, neu)
+**Vorbedingung:** Ein Tag, eine Regel mit `completion: 'done'` auf diesem Tag (`placement:
+'both'`), ein Todo mit dem Tag.
+**Schritte:**
+1. **Setzen.** Todo nicht erledigt, Detailansicht öffnen, Checkbox „Erledigt" anklicken; aus der
+   Antwort von `PUT /todos/{id}/done` (`poolMovement`) den erwarteten Satz über
+   `poolMovementSentence(movement, 'past', 'booking')` bilden.
+2. **Aufheben.** Ein über die rohe API bereits erledigtes Todo mit demselben Tag (steht also in
+   der Spalte); Checkbox aufheben; Satz über `poolMovementSentence(movement, 'past', 'reopen')`.
+3. **Kein Treffer.** Ein Todo ohne jeden Tag-/Regelbezug; Checkbox setzen. Der Dienst liefert
+   trotzdem das übliche, aber leere Tripel `{ appears: [], enters: [], leaves: [] }` — **nicht**
+   `null` (T-101 Annahme 3: `null` heißt „das Kennzeichen hat sich nicht geändert", nicht „keine
+   Regel trifft") —, und `poolMovementSentence` mit Anlass `'booking'` gibt für dieses leere
+   Tripel `null` zurück.
+**Erwartetes Ergebnis:** Der Toast-Titel nennt den Todo-Namen (`„<Titel>“ ist erledigt."` bzw.
+`„<Titel>“ ist wieder offen."`, gemessen gegen `TodoDetailScreen.tsx`); der Rumpf beginnt mit dem
+festen Satz „Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen." und
+trägt in Fall 1 und 2 den Bewegungssatz danach, durch ein Leerzeichen getrennt. In Fall 3 steht
+ausschließlich der feste Satz, ohne angehängte Zeile.
+
+**Fund während der Umsetzung, in dieser Datei selbst behoben.** Die Checkbox ist serverbestätigt,
+nicht optimistisch: `checked={done}` hängt an der Antwort des `PUT`/`DELETE`-Umlaufs, nicht an
+einer lokalen Zustandsänderung im selben Zug. `page.locator(...).check()`/`.uncheck()` prüfen den
+Haken **unmittelbar** nach dem Klick und werfen dabei reproduzierbar „Clicking the checkbox did
+not change its state" — nicht weil die Anwendung etwas falsch macht (die nachfolgende Anfrage kam
+in jeder Stichprobe mit dem richtigen Ergebnis zurück, belegt über Netzwerkmitschnitt und einen
+parallelen Aufruf ohne Playwright), sondern weil Playwrights eigene Prüfung innerhalb von
+`.check()` keine Zeit für den Netzwerkumlauf lässt, den ein serverbestätigtes Kontrollkästchen
+braucht. Behoben durch `.click()` plus ein eigenes, selbst wiederholendes `expect(checkbox)
+.toBeChecked()` danach — dieselbe Bauart, die jeder andere Testfall in `tests/e2e/**` für Knöpfe
+und Kontrollkästchen bereits verwendet (keiner davon benutzt `.check()`/`.uncheck()`).
+**Ergebnis: bestanden**, 3/3, dreifach reproduziert.
+
+### TP-TIMER-11 — `orphan_discarded` wird unterschieden und angesagt (O-R)
+
+**Anforderungen:** A-6.1, A-6.2, E-036
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`, neue `describe`-Gruppe)
+**Vorbedingung:** Ein über die rohe API gestarteter, beim ersten Aufsuchen der Detailansicht
+verwaister Timer (wie TP-TIMER-10).
+**Schritte:**
+1. **„Verwerfen".** Im Dialog „Eine Buchung ohne Ende" die Option „Verwerfen" wählen und
+   bestätigen.
+2. **„zu kurz".** Ohne Lebenszeichen und ohne Wartezeit die Vorgabe „Bis zum letzten
+   Lebenszeichen buchen" unverändert bestätigen — `now = heartbeatAt ?? startedAt`
+   (`decideOrphanedTimer`) bleibt unter der Mindestdauer.
+**Erwartetes Ergebnis:** Fall 1 antwortet `{ kind: 'discarded', reason: 'orphan_discarded',
+poolMovement: null }`, Toast „Buchung verworfen." mit dem Todo-Namen im Rumpf. Fall 2 antwortet
+`{ kind: 'discarded', reason: 'timer_too_short', poolMovement: null }`, Toast „Nichts zu buchen."
+mit einem **wörtlich anderen** Rumpf als Fall 1 — das ist die Gegenprobe zum O-R-Fund aus T-093:
+Vor T-101 lieferte der Dienst in beiden Fällen ausnahmslos `timer_too_short`, ein Rückfall darauf
+würde Fall 1 unmittelbar rot machen (`reason` stimmt nicht mit `orphan_discarded` überein). In
+keinem der beiden Fälle steht ein Bewegungssatz — `poolMovement` ist im verworfenen Zweig fest
+`null`, unverändert seit E-058 Punkt 6.
+**Ergebnis: bestanden**, 2/2, zweifach reproduziert.
+
+### `tests/e2e/support/api.ts` — `TodoDoneResult`/Helfer auf die gemessene Hülle gebracht
+
+Der T-103-Entwurf hatte `{ todo, poolMovement }` als Hülle **angenommen** (Analogie zu
+`StopTimerResult`), ausdrücklich als ungemessene Annahme gekennzeichnet. Gemessen mit T-101/T-102
+ist es anders: Das Todo steht **flach** wie bisher (`callNumber`, `completedAt`, `id`, …),
+`poolMovement` als zusätzliches Feld daneben — dieselbe Gestalt wie an `POST /timer/start`.
+`TodoDoneResult` ist jetzt `extends Todo` mit `poolMovement: PoolMovementNames | null` statt der
+angenommenen Hülle; `setTodoDoneWithMovement`/`reopenTodoWithMovement` (bislang ungenutzt, jetzt
+von `done-movement-announcement.spec.ts` indirekt bestätigt, weil dieselbe Route über die
+Oberfläche geprüft wird) sind entsprechend beschriftet. `markTodoDone`/`clearTodoDone` bleiben
+unverändert bei der Beschriftung `Todo` — bestehende Aufrufer (`kanban.spec.ts`,
+`pool-movement-sentence.spec.ts`) lesen weiterhin nur das Todo und sind von der Umstellung nicht
+berührt.
+
+### W-13 — Restvorkommen „Regel über Tags" in `docs/testplan.md`
+
+Zwei Stellen (`docs/testplan.md:21`, `:838`, Zeilenangaben Stand `aca53df`) beschrieben eine
+Kanban-Spalte noch als „Regel über Tags" — korrekt bis E-054, aber seit E-055 unvollständig: Eine
+Regel hat fünf Achsen (erforderliche Tags, ausgeschlossene Tags, Status, Erledigt, Exportstatus),
+nicht nur Tags. Beide Stellen sind jetzt auf „Regel" umformuliert, mit einem Nebensatz, der die
+fünf Achsen nennt (Abschnitt 8 zählt sie ohnehin unmittelbar danach auf) — der Sinn ändert sich
+nicht, nur die veraltete Verengung auf Tags fällt weg.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  --grep "timer-stop-announcement|tag-folder-rule-lock|done-movement-announcement" \
+  --reporter=list --retries=0                                                   12/12, zweifach
+```
+
+Nicht angefasst (fremde Hoheit, Umbau läuft noch): `tests/e2e/pool-movement-sentence.spec.ts` und
+die Add-in-Helfer in `support/api.ts` (`AddinTodoMatch`, `AddinBookResult`,
+`addinTodoMatches`/`addinBookOnTodo`) — integration-dev stellt die Add-in-Routen in Welle F von
+`poolNames`/`enteringPoolNames`/`leavingPoolNames` auf `poolMovement` um; das Nachziehen ist für
+Welle G vorgesehen (Board, Zeile nach der Welle-F-Tabelle).

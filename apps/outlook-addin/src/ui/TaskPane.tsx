@@ -34,12 +34,7 @@ import { poolMovementSentence, type PoolMovement } from '@takt/domain';
 import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
 import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
-import {
-  decideLookup,
-  describeOffers,
-  offerMovement,
-  type OfferDescription,
-} from '../duplicate/rule.ts';
+import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
 import {
   bookingOutcome,
   reopenOutcome,
@@ -101,13 +96,16 @@ type Done =
        *
        * Ein Wert und keine drei Listen nebeneinander: `appears`, `enters` und
        * `leaves` sind gleich getippt, und vertauscht ergäben sie einen Satz,
-       * der sich richtig liest und das Gegenteil behauptet.
+       * der sich richtig liest und das Gegenteil behauptet. Seit E-061 Punkt 3
+       * liefert der Dienst ihn bereits so; hier wird nichts zusammengesetzt.
        *
        * Steht unabhängig von `reopened` da, weil beide Fälle daraus einen Satz
        * bauen — der erledigte den über die Rückkehr, der offene den über die
        * Bewegung.
+       *
+       * `null` heißt: Die Buchung hat nichts bewegt. Dann bleibt die Zeile weg.
        */
-      readonly movement: PoolMovement;
+      readonly movement: PoolMovement | null;
     };
 
 export function TaskPane({
@@ -352,11 +350,9 @@ export function TaskPane({
       title: offer.title,
       minutes,
       reopened: result.value.doneCleared,
-      movement: {
-        appears: result.value.poolNames,
-        enters: result.value.enteringPoolNames,
-        leaves: result.value.leavingPoolNames,
-      },
+      // Unverändert durchgereicht: Der Dienst rechnet die Bewegung, das Add-in
+      // sagt sie (E-058 Absatz 1, E-061 Punkt 3).
+      movement: result.value.poolMovement,
     });
   };
 
@@ -583,7 +579,7 @@ export function TaskPane({
           */}
           {booking.isDone ? (
             <ReopenAnnouncement
-              notice={reopenPreview(minutes, offerMovement(booking))}
+              notice={reopenPreview(minutes, booking.poolMovement)}
               tone="warning"
             />
           ) : (
@@ -595,7 +591,7 @@ export function TaskPane({
               erscheint nur, wenn es etwas zu berichten gibt: `MovementNote`
               gibt sonst nichts zurück.
             */
-            <MovementNote movement={offerMovement(booking)} />
+            <MovementNote movement={booking.poolMovement} />
           )}
 
           {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
@@ -696,13 +692,18 @@ function Failure({
  * keine leere Hinweisfläche, kein Halbsatz, kein Abstand, der eine fehlende
  * Zeile andeutet.
  */
-function MovementNote({ movement }: { readonly movement: PoolMovement }) {
+function MovementNote({ movement }: { readonly movement: PoolMovement | null }) {
   /*
    * Anlass `'booking'` und nicht `'reopen'`: Hier wird nichts aufgehoben. Die
    * Überladung gibt dafür `string | null` zurück — und dieses `null` ist die
    * Auskunft, nicht ihr Fehlen.
+   *
+   * Zwei Wege führen hierher, und beide bedeuten dasselbe: Der Dienst hat
+   * nichts gerechnet (`movement === null`, weil sich nichts bewegen kann), oder
+   * er hat gerechnet und nichts gefunden. In beiden Fällen bleibt die Fläche
+   * ganz weg (E-061 Punkt 3).
    */
-  const sentence = poolMovementSentence(movement, 'future', 'booking');
+  const sentence = movement === null ? null : poolMovementSentence(movement, 'future', 'booking');
   if (sentence === null) return null;
 
   /*
@@ -731,7 +732,7 @@ function BookedOutcome({
   movement,
 }: {
   readonly minutes: number;
-  readonly movement: PoolMovement;
+  readonly movement: PoolMovement | null;
 }) {
   const notice = bookingOutcome(minutes, movement);
 

@@ -450,13 +450,17 @@ check(
 );
 
 const booking = doc.paths['/addin/todos/{todoId}/time-entries'].post;
+// Seit T-104 heißt das zweite Feld `poolMovement` und nicht mehr `poolNames`:
+// **eine** Form für jede Bewegung über HTTP (E-061 Punkt 3). Die Prüfung misst
+// unverändert, dass die Antwort die Wirkung ansagt — nur unter dem Namen, den
+// sie jetzt trägt.
 check(
-  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolNames',
+  'die Buchungsroute sagt die Wirkung in ihrer Antwort an: doneCleared und poolMovement',
   (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
     'doneCleared',
   ) &&
     (booking.responses['201'].content['application/json'].schema.properties.data.required ?? []).includes(
-      'poolNames',
+      'poolMovement',
     ),
 );
 check(

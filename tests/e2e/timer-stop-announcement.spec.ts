@@ -1,6 +1,6 @@
 /**
  * Stopp-Anzeige trägt den Bewegungssatz (E-058 Punkt 6, T-097, T-099,
- * `docs/testplan.md` Abschnitt 17, Arbeitstitel TP-TIMER-08).
+ * `docs/testplan.md` Abschnitt 17/19, Arbeitstitel TP-TIMER-08/-11).
  *
  * Seit T-097 liefern `POST /timer/stop` und `POST /timer/orphaned/resolve`
  * `poolMovement` in beiden Zweigen (`recorded`/`discarded`), und die
@@ -14,6 +14,16 @@
  * `poolMovementSentence`), gebildet aus der tatsächlichen Antwort des
  * Dienstes — kein Literal, dieselbe Bauart wie in
  * `pool-movement-sentence.spec.ts` und in `scripts/proof-addin.mjs`.
+ *
+ * Seit T-101/T-102 trägt der Titel von Stopp- und Orphan-Meldungen den
+ * Todo-Namen statt „Es" ohne Bezug (W-5), und `POST /timer/orphaned/resolve`
+ * unterscheidet im verworfenen Zweig zwei Gründe (O-R,
+ * `reason: 'timer_too_short' | 'orphan_discarded'`), mit je einem eigenen
+ * Text — geprüft in der zweiten `describe`-Gruppe unten (Arbeitstitel
+ * TP-TIMER-11, aus dem Entwurf in `reports/T-103-e2e-tester.md`, jetzt gegen
+ * den tatsächlichen Wortlaut aus `reports/T-102-frontend-dev.md` Abschnitt 2).
+ * Kein Literal ohne Gegenlesen: die Wortlaute stehen auch in
+ * `apps/web/src/app/TimerContext.tsx#confirmOrphan`.
  */
 import { test, expect } from '@playwright/test';
 
@@ -100,8 +110,11 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
       // zuvor bereits „Timer gestartet." gezeigt, und Meldungen stapeln sich
       // bis zu acht Sekunden (`ToastContext.tsx`) — ein ungescopter Zugriff
       // auf `.toast__title` träfe deshalb zwei Elemente.
-      const toast = page.locator('.toast').filter({ hasText: 'Zeit gebucht.' });
-      await expect(toast.locator('.toast__title')).toHaveText('Zeit gebucht.');
+      //
+      // W-5 (T-102, gemessener Wortlaut in Abschnitt 2 des Berichts): Der
+      // Titel nennt jetzt den Todo-Namen statt „Es" ohne Bezug.
+      const toast = page.locator('.toast').filter({ hasText: 'Zeit gebucht' });
+      await expect(toast.locator('.toast__title')).toHaveText(`Zeit gebucht auf „${todo.title}“.`);
       const bodyText = (await toast.locator('.toast__body').textContent()) ?? '';
       // Der Satz steht **angehängt** an den Buchungsrumpf, nicht anstelle
       // davon — `withMovement` (`TimerContext.tsx`) hängt ihn genau einmal an.
@@ -170,10 +183,13 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
       // ebenfalls einen Toast („Timer gestartet."), der bis zu acht Sekunden
       // stehen bleibt (`ToastContext.tsx`) — ein ungescopter Zugriff auf
       // `.toast__title` träfe zwei Elemente.
+      // W-5 (T-102): Der Titel bleibt unverändert bei „Nichts gebucht.", der
+      // Rumpf nennt jetzt den Todo-Namen statt „Der Timer" ohne Bezug —
+      // gemessener Wortlaut in Abschnitt 2 des Berichts.
       const toast = page.locator('.toast').filter({ hasText: 'Nichts gebucht.' });
       await expect(toast.locator('.toast__title')).toHaveText('Nichts gebucht.');
       await expect(toast.locator('.toast__body')).toHaveText(
-        'Der Timer lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.',
+        `Der Timer auf „${todo.title}“ lief weniger als eine Sekunde. Das ist ein Doppelklick auf „Start“, keine geleistete Arbeit.`,
       );
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
@@ -253,12 +269,142 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
       if (expected === null) throw new Error('unreachable');
       expect(expected).toBe(`Es steht jetzt in „${columnName}“.`);
 
-      await expect(page.locator('.toast__title')).toHaveText('Buchung abgeschlossen.');
+      // W-5 (T-102): Der Titel nennt jetzt den Todo-Namen statt „Es" — der
+      // Absturz liegt zwischen Ereignis und Meldung, „Es" hätte hier keinen
+      // Bezug (gemessener Wortlaut in Abschnitt 2 des Berichts).
+      await expect(page.locator('.toast__title')).toHaveText(`Buchung auf „${todo.title}“ abgeschlossen.`);
       const bodyText = (await page.locator('.toast__body').textContent()) ?? '';
       expect(bodyText.trim().endsWith(expected)).toBe(true);
       expect(bodyText).toContain('Gebucht bis zum letzten Lebenszeichen');
     } finally {
       await deletePoolByName(columnName).catch(() => undefined);
+      await deleteTodo(todo.id).catch(() => undefined);
+      await deleteTag(tag.id).catch(() => undefined);
+    }
+  });
+});
+
+test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verworfenen Buchung (O-R)', () => {
+  /*
+   * Bis T-101 lieferte der Dienst in beiden verworfenen Zweigen
+   * `reason: 'timer_too_short'` — die Wahl „Verwerfen" und der Fall „kein
+   * Lebenszeichen, nichts zu buchen" waren serverseitig nicht zu
+   * unterscheiden, und die Oberfläche sagte an beiden Ausgängen dasselbe.
+   * Seit T-101/T-102 unterscheidet der Dienst (`orphan_discarded` gegenüber
+   * `timer_too_short`), und die Oberfläche trägt an beiden Stellen einen
+   * eigenen Text (`TimerContext.tsx`, `confirmOrphan`). Kein `poolMovement`
+   * in diesem Zweig — er steht in beiden Fällen fest auf `null`, es wird
+   * keine Regel aufgelöst (E-058 Punkt 6, unverändert). Die Wortlaute sind
+   * aus `reports/T-102-frontend-dev.md` Abschnitt 2 übernommen, gegen den
+   * tatsächlichen Quelltext von `TimerContext.tsx` gegengelesen.
+   */
+  test('„Verwerfen“ liefert `orphan_discarded`, mit eigenem Text', async ({ page }) => {
+    await cleanupAnyTimer();
+
+    const run = Date.now();
+    const tag = await createTag(`E2E-Stopp-Verworfen-Tag-${run}`);
+    const todo = await createTodo({ title: `E2E-T102-VERWORFEN-${run}`, tagIds: [tag.id] });
+
+    try {
+      const started = await startTimer(todo.id);
+      if (started.kind !== 'started') throw new Error('Timer konnte nicht gestartet werden.');
+
+      // Ein Lebenszeichen mit echtem Abstand zum Start, damit die Wahl
+      // „Bis zum letzten Lebenszeichen buchen" (falls sie versehentlich
+      // gewählt würde) tatsächlich etwas zu buchen fände — dieser Fall soll
+      // ausschließlich über die bewusste Wahl „Verwerfen" laufen, nicht über
+      // einen zu kurzen Timer (das wäre der andere Fall dieser Datei).
+      await page.waitForTimeout(1500);
+      await touchTimerHeartbeat();
+
+      await gotoTodo(page, todo.id);
+
+      const orphanDialog = page.getByRole('dialog', { name: 'Eine Buchung ohne Ende' });
+      await expect(orphanDialog).toBeVisible();
+
+      await orphanDialog.getByRole('radio', { name: 'Verwerfen' }).check();
+
+      const [resolveResponse] = await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.url().includes('/timer/orphaned/resolve') && response.request().method() === 'POST',
+        ),
+        orphanDialog.getByRole('button', { name: 'Entscheiden', exact: true }).click(),
+      ]);
+      await expect(orphanDialog).toBeHidden();
+
+      const resolveBody = (await resolveResponse.json()) as {
+        data: { kind: string; reason?: string; poolMovement: PoolMovement | null };
+      };
+      expect(resolveBody.data.kind).toBe('discarded');
+      expect(resolveBody.data.reason).toBe('orphan_discarded');
+      expect(resolveBody.data.poolMovement).toBeNull();
+
+      await expect(page.locator('.toast__title')).toHaveText('Buchung verworfen.');
+      await expect(page.locator('.toast__body')).toHaveText(
+        `Sie haben die unvollständige Buchung auf „${todo.title}“ verworfen. Es ist keine Zeit gebucht worden.`,
+      );
+    } finally {
+      await deleteTodo(todo.id).catch(() => undefined);
+      await deleteTag(tag.id).catch(() => undefined);
+    }
+  });
+
+  test('„zu kurz“ bleibt `timer_too_short`, mit einem anderen Text als „Verwerfen“', async ({ page }) => {
+    await cleanupAnyTimer();
+
+    const run = Date.now();
+    const tag = await createTag(`E2E-Stopp-ZuKurzVerwaist-Tag-${run}`);
+    const todo = await createTodo({ title: `E2E-T102-ZUKURZ-${run}`, tagIds: [tag.id] });
+
+    try {
+      const started = await startTimer(todo.id);
+      if (started.kind !== 'started') throw new Error('Timer konnte nicht gestartet werden.');
+
+      // Kein Lebenszeichen und keine Wartezeit — `now = heartbeatAt ??
+      // startedAt` (`decideOrphanedTimer`) bleibt unter einer Sekunde, die
+      // Vorgabe „Bis zum letzten Lebenszeichen buchen" findet nichts.
+      await gotoTodo(page, todo.id);
+
+      const orphanDialog = page.getByRole('dialog', { name: 'Eine Buchung ohne Ende' });
+      await expect(orphanDialog).toBeVisible();
+
+      // Vorgabe ist bereits „Bis zum letzten Lebenszeichen buchen"
+      // (`TimerContext.tsx`, `orphanChoice`-Anfangswert) — kein Umschalten,
+      // die Wahl „Verwerfen" würde hier `orphan_discarded` liefern statt
+      // des hier geprüften `timer_too_short`.
+      const [resolveResponse] = await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.url().includes('/timer/orphaned/resolve') && response.request().method() === 'POST',
+        ),
+        orphanDialog.getByRole('button', { name: 'Entscheiden', exact: true }).click(),
+      ]);
+      await expect(orphanDialog).toBeHidden();
+
+      const resolveBody = (await resolveResponse.json()) as {
+        data: { kind: string; reason?: string; poolMovement: PoolMovement | null };
+      };
+      expect(resolveBody.data.kind).toBe('discarded');
+      expect(resolveBody.data.reason).toBe('timer_too_short');
+      expect(resolveBody.data.poolMovement).toBeNull();
+
+      await expect(page.locator('.toast__title')).toHaveText('Nichts zu buchen.');
+      const bodyText = (await page.locator('.toast__body').textContent()) ?? '';
+      expect(bodyText).toBe(
+        `Zwischen dem Start und dem letzten Lebenszeichen liegt auf „${todo.title}“ weniger als eine Sekunde. Die unvollständige Buchung ist damit weg, gebucht wurde nichts.`,
+      );
+
+      // Die Gegenprobe aus dem O-R-Fund: Ein Rückfall auf „immer
+      // `timer_too_short`" wäre hier nicht sichtbar, weil dieser Fall es
+      // selbst erwartet — deshalb steht sie im ersten Fall dieser
+      // `describe`-Gruppe (`expect(reason).toBe('orphan_discarded')`) statt
+      // hier. Diese Zeile hält zusätzlich fest, dass die beiden Texte sich
+      // tatsächlich unterscheiden, nicht nur die Kennung:
+      expect(bodyText).not.toBe(
+        `Sie haben die unvollständige Buchung auf „${todo.title}“ verworfen. Es ist keine Zeit gebucht worden.`,
+      );
+    } finally {
       await deleteTodo(todo.id).catch(() => undefined);
       await deleteTag(tag.id).catch(() => undefined);
     }

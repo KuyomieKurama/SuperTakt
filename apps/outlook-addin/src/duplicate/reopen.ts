@@ -77,6 +77,33 @@
 import { poolMovementSentence, type PoolMovement } from '@takt/domain';
 
 /**
+ * Was an die Stelle einer **fehlenden** Bewegung tritt (E-061 Punkt 3, T-104).
+ *
+ * Seit die Add-in-Routen `poolMovement: PoolMovement | null` liefern, gibt es
+ * zwei Auskünfte, die für die Anzeige dasselbe bedeuten: „nachgesehen und
+ * nichts gefunden" (drei leere Listen) und „hier war keine Bewegung möglich"
+ * (`null`, weil das Todo offen ist und schon eine offene Buchung hat). Für den
+ * Anlass `'booking'` fallen beide von selbst zusammen — `poolMovementSentence`
+ * gibt dort ohne Zu- und Abgang ohnehin `null`, und die Fläche entfällt.
+ *
+ * Für den Anlass `'reopen'` gibt es keinen leeren Satz: Er hat auch ohne jeden
+ * Treffer etwas zu sagen („Auf dieses Todo passt derzeit keine Regel …"), und
+ * genau deshalb ist er der ehrlichere. Der Dienst liefert für ein erledigtes
+ * Todo deshalb **immer** einen Wert: Die Buchung hebt „Erledigt" auf (A-2.5),
+ * das Zustandspaar ist verschieden, und es wird gerechnet. Diese Zeile ist die
+ * Vorsichtsfassung für den Fall, den es nicht geben soll — und sie ist die
+ * richtige Richtung: Der Satz daraus verspricht **kein** Wiederauftauchen und
+ * nennt keinen Namen, den niemand geprüft hat. Ein Todo, das nirgends
+ * angekündigt wird und dann doch auftaucht, sucht niemand vergeblich; umgekehrt
+ * schon.
+ */
+const NOTHING_MOVED: PoolMovement = Object.freeze({
+  appears: [],
+  enters: [],
+  leaves: [],
+});
+
+/**
  * Die zwei Wirkungen einer Buchung auf ein **erledigtes** Todo, in anzeigbarer
  * Form.
  */
@@ -142,9 +169,15 @@ export interface BookingNotice {
  * Text im JSX und ist Zeichen für Zeichen derselbe geblieben — hierher gezogen,
  * damit der Nachweispfad ihn messen kann, ohne die Oberfläche zu rendern.
  */
-export const bookingOutcome = (minutes: number, movement: PoolMovement): BookingNotice => ({
+export const bookingOutcome = (
+  minutes: number,
+  movement: PoolMovement | null,
+): BookingNotice => ({
   booked: `${String(minutes)} Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.`,
-  pools: poolMovementSentence(movement, 'past', 'booking'),
+  // Zwei Wege zu `null`, und beide heißen für die Anzeige dasselbe: Der Dienst
+  // hat nichts gerechnet, oder er hat gerechnet und nichts gefunden. In beiden
+  // Fällen steht keine Zeile da.
+  pools: movement === null ? null : poolMovementSentence(movement, 'past', 'booking'),
 });
 
 /**
@@ -155,13 +188,17 @@ export const bookingOutcome = (minutes: number, movement: PoolMovement): Booking
  * ist ausdrücklich **nicht** freiwillig: Wer nur das Erscheinen mitgäbe, bekäme
  * einen Satz, der sich vollständig liest und die Hälfte weglässt (E-056) —
  * dieselbe Art Fehler, die T-078 im Dienst behoben hat.
+ *
+ * `null` nimmt es entgegen, weil die Antwort des Dienstes es so führt (E-061
+ * Punkt 3) — und **nicht**, weil der dritte Satz entfallen dürfte. Es sind drei,
+ * und drei bleiben es; die Begründung steht an {@link NOTHING_MOVED}.
  */
-export const reopenPreview = (minutes: number, movement: PoolMovement): ReopenNotice => ({
+export const reopenPreview = (minutes: number, movement: PoolMovement | null): ReopenNotice => ({
   title: 'Dieses Todo ist erledigt. Mit dieser Buchung wird es wieder offen.',
   effects: [
     `${String(minutes)} Minuten werden gebucht.`,
     'Das Erledigt-Kennzeichen wird automatisch aufgehoben.',
-    poolMovementSentence(movement, 'future', 'reopen'),
+    poolMovementSentence(movement ?? NOTHING_MOVED, 'future', 'reopen'),
   ],
 });
 
@@ -169,12 +206,12 @@ export const reopenPreview = (minutes: number, movement: PoolMovement): ReopenNo
 export const reopenOutcome = (
   todoTitle: string,
   minutes: number,
-  movement: PoolMovement,
+  movement: PoolMovement | null,
 ): ReopenNotice => ({
   title: `Gebucht. „${todoTitle}“ ist wieder offen.`,
   effects: [
     `${String(minutes)} Minuten sind gebucht.`,
     'Das Erledigt-Kennzeichen ist aufgehoben.',
-    poolMovementSentence(movement, 'past', 'reopen'),
+    poolMovementSentence(movement ?? NOTHING_MOVED, 'past', 'reopen'),
   ],
 });

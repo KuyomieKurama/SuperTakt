@@ -13,7 +13,20 @@
  *
  * Die Gestalt spiegelt `apps/local-api/src/routes/addin/`. Weicht sie ab, fällt
  * es im Nachweispfad auf: Er fährt den echten Router gegen diesen Client.
+ *
+ * **Eine Ausnahme, und sie ist begründet: `PoolMovement`.** Der Typ kommt seit
+ * T-104 aus `@takt/domain` statt als vierte Abschrift hierher. Beide Gründe
+ * oben treffen auf ihn nicht zu: Er trägt keine markierte Kennung, sondern drei
+ * Listen gewöhnlicher Zeichenketten, und er wird **unverändert** an
+ * `poolMovementSentence` weitergereicht — an dieselbe Funktion in derselben
+ * Domäne, die der Aufgabenbereich seit E-058 ohnehin aufruft. Ein `import type`
+ * bringt zur Laufzeit nichts ins Bündel. Eine eigene Fassung hier hätte sich
+ * stillschweigend von ihr entfernen können; das ist dieselbe Falle wie beim
+ * Satz selbst, eine Ebene tiefer. Die ausführliche Begründung steht in
+ * `duplicate/rule.ts` an der Stelle, an der bis T-104 `offerMovement` stand.
  */
+
+import type { PoolMovement } from '@takt/domain';
 
 export interface TagDto {
   readonly id: string;
@@ -74,45 +87,33 @@ export interface TodoMatchDto {
   readonly openSeconds: number;
   readonly exportedSeconds: number;
   /**
-   * Namen der Pools, in denen dieses Todo **nach einer Buchung darauf** stünde
-   * (I-05).
+   * Wie eine Buchung auf dieses Todo es durch die Pools und Spalten bewegen
+   * **würde** — oder `null` (I-05, E-056, T-084, E-061 Punkt 3).
    *
-   * Kommt aus dem Dienst und wird im Add-in **nicht** nachgerechnet: Die
-   * Poolregeln lösen Ordner beliebig tief auf (A-4.3) und urteilen seit T-076
-   * über fünf Achsen — erforderliche Tags, ausgeschlossene Tags, Status,
-   * Erledigt, Exportstatus. Eine zweite Fassung davon im Aufgabenbereich wäre
-   * eine zweite Wahrheit über die Frage, wo ein Todo auftaucht; sie liefe
-   * spätestens mit der sechsten Achse auseinander.
+   * Kommt aus dem Dienst und wird im Add-in **nicht** nachgerechnet: Die Regeln
+   * lösen Ordner beliebig tief auf (A-4.3) und urteilen seit T-076 über fünf
+   * Achsen — erforderliche Tags, ausgeschlossene Tags, Status, Erledigt,
+   * Exportstatus. Eine zweite Fassung davon im Aufgabenbereich wäre eine zweite
+   * Wahrheit über die Frage, wo ein Todo auftaucht; sie liefe spätestens mit
+   * der sechsten Achse auseinander. `enters` ließe sich hier ohnehin nicht
+   * nachbilden: Der Unterschied verlangt beide Zustände **derselben** Regel,
+   * und ein Vergleich über Namen ließe zwei gleichnamige Regeln füreinander
+   * einstehen.
    *
    * Der Zeitpunkt ist der **nach** der Buchung, weil der Satz daraus im Futur
    * steht (`duplicate/reopen.ts`). Für eine Regel über „Erledigt" oder den
    * Exportstatus ist das seit T-078 ein Unterschied.
-   */
-  readonly poolNames: readonly string[];
-  /**
-   * Namen der Pools, in die dieselbe Buchung das Todo **hineinbewegt**
-   * (T-084) — eine Teilmenge von `poolNames`.
    *
-   * `poolNames` sagt, wo das Todo **danach steht**; diese Liste sagt, was sich
-   * **dadurch ändert**. Für ein erledigtes Todo ist das Erste die Auskunft, für
-   * ein offenes das Zweite: Dort wird nichts aufgehoben, und die Pools, in
-   * denen es ohnehin schon steht, sind keine Nachricht. Die erste Buchung auf
-   * einem Todo ist eine — sie setzt „hat offene Buchungen" von falsch auf wahr,
-   * und eine Spalte über den Exportstatus nimmt es damit auf.
+   * `null` heißt: Diese Buchung bewegt nichts — das Todo ist offen und hat
+   * schon eine offene Buchung. Der Aufgabenbereich lässt die Zeile dann weg.
+   * Für ein **erledigtes** Todo steht hier immer ein Wert: Die Buchung hebt
+   * „Erledigt" auf (A-2.5), und der Satz über die Rückkehr braucht `appears`.
    *
-   * Der Unterschied wird im Dienst gerechnet und nicht hier: Er verlangt beide
-   * Zustände desselben Pools, und ein Vergleich über **Namen** ließe zwei
-   * gleichnamige Pools füreinander einstehen.
+   * Bis T-104 standen hier `poolNames`, `enteringPoolNames` und
+   * `leavingPoolNames`; die Namen leben in `PoolMovement` als `appears`,
+   * `enters` und `leaves` weiter (E-061 Punkt 3).
    */
-  readonly enteringPoolNames: readonly string[];
-  /**
-   * Namen der Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
-   *
-   * Die andere Hälfte derselben Auskunft, und aus demselben Grund aus dem
-   * Dienst übernommen statt hier gerechnet. Fast immer leer — nur eine Regel,
-   * die nach „Erledigt" fragt, kann ein Todo durch eine Buchung verlieren.
-   */
-  readonly leavingPoolNames: readonly string[];
+  readonly poolMovement: PoolMovement | null;
 }
 
 export type MatchResponseDto =
@@ -179,15 +180,13 @@ export interface BookResponseDto {
    * **Wirkung** benennt und nicht den Vorzustand.
    */
   readonly doneCleared: boolean;
-  /** Pools, in denen das Todo nach der Buchung steht — beim Namen (I-05). */
-  readonly poolNames: readonly string[];
   /**
-   * Pools, in die diese Buchung es **hineinbewegt** hat — beim Namen (T-084).
+   * Wie diese Buchung das Todo durch die Pools und Spalten bewegt hat — oder
+   * `null` (I-05, E-056, T-084, E-061 Punkt 3).
    *
-   * Teilmenge von `poolNames`. Leer heißt: Es steht danach in keinem Pool, in
-   * dem es nicht schon vorher stand.
+   * Aus derselben Rechnung und demselben Zustandspaar wie die Ankündigung in
+   * {@link TodoMatchDto.poolMovement}: Was der Aufgabenbereich vor der Buchung
+   * angekündigt hat, muss danach zutreffen.
    */
-  readonly enteringPoolNames: readonly string[];
-  /** Pools, aus denen die Buchung es entfernt hat — beim Namen (E-056). */
-  readonly leavingPoolNames: readonly string[];
+  readonly poolMovement: PoolMovement | null;
 }

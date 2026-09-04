@@ -327,8 +327,9 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * **War das Todo erledigt, ist es danach offen** (A-2.5, seit T-038). Das ist
    * keine Option der Anfrage, sondern die Wirkung der Handlung — dieselbe wie
    * beim Timerstart in der Hauptanwendung (I-05). Die Antwort sagt beides:
-   * `doneCleared`, ob das Kennzeichen gefallen ist, und `poolNames`, in
-   * welchen Pools das Todo damit wieder steht. Beides steht in der Antwort,
+   * `doneCleared`, ob das Kennzeichen gefallen ist, und `poolMovement`, in
+   * welchen Pools und Spalten das Todo damit wieder steht, in welche es
+   * hineinkommt und aus welchen es verschwindet. Beides steht in der Antwort,
    * weil der Aufrufer es **anzeigen** soll und nicht, weil er daraus etwas
    * ableiten müsste.
    */
@@ -364,19 +365,16 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
           timeEntry: result.timeEntry satisfies { readonly id: TimeEntryId },
           todoWasDone: result.todoWasDone,
           doneCleared: result.doneCleared,
-          poolNames: result.poolNames,
-          // Die Bewegung, nicht der Zustand (T-084). Ohne dieses Feld kann der
-          // Aufgabenbereich für ein **offenes** Todo nicht sagen, was die
-          // Buchung verändert hat — `poolNames` ist auch dann besetzt, wenn
-          // sich nichts gerührt hat, und wäre als Auskunft eine Behauptung
-          // über eine Bewegung, die nie stattfand.
-          enteringPoolNames: result.enteringPoolNames,
-          // Diese Zeile ist die Falle aus T-076 Befund 1: Die Antwort zählt
-          // ihre Felder einzeln auf, und ein neues Feld am Ergebnis kommt hier
-          // **nicht** von selbst an. Wer `leavingPoolNames` hier vergisst,
-          // bekommt eine Antwort, die wie Erfolg aussieht, und einen
-          // Aufgabenbereich, der die Hälfte der Auskunft nicht bekommt (E-056).
-          leavingPoolNames: result.leavingPoolNames,
+          // **Ein** Feld, drei Listen darin — dieselbe Gestalt wie an den
+          // Timer-Routen und an `PUT`/`DELETE /todos/{todoId}/done` (E-061
+          // Punkt 3). Bis T-104 standen hier `poolNames`, `enteringPoolNames`
+          // und `leavingPoolNames` einzeln, und genau daran hing die Falle aus
+          // T-076 Befund 1: Die Antwort zählt ihre Felder auf, ein neues Feld
+          // am Ergebnis kommt hier **nicht** von selbst an, und wer eines der
+          // drei vergaß, bekam eine Antwort, die wie Erfolg aussah, und einen
+          // Aufgabenbereich ohne die halbe Auskunft (E-056). Ein Wert kann
+          // nicht mehr zur Hälfte ankommen.
+          poolMovement: result.poolMovement,
         },
       },
       201,

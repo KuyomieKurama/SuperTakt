@@ -12,6 +12,7 @@ import type {
   CallNumberRejection,
   DefaultTag,
   Pool,
+  PoolMovement,
   Result,
   StatusId,
   Tag,
@@ -28,14 +29,28 @@ import { applyDefaultTags, checkCallNumber, checkTagNames, err, ok } from '@takt
 
 /*
  * Die Bewegung eines Todos durch die Pools kommt seit T-092 aus dem
- * Anwendungsfall und nicht mehr aus dieser Datei (E-058 Absatz 1).
+ * Anwendungsfall und nicht mehr aus dieser Datei (E-058 Absatz 1), und seit
+ * T-104 gilt dasselbe für das **Zustandspaar** davor (E-061 Punkt 2).
  *
  * `matchesPool` und `tagAxisIsUnresolved` sind mit `poolNamer` aus der
  * Importliste oben verschwunden — und das ist die eigentliche Aussage dieser
  * Zeile: Im Add-in-Dienst wird keine Poolregel mehr ausgewertet. Wer sie hier
  * wieder importiert, baut die zweite Fassung neu, die E-058 aufgehoben hat.
+ *
+ * `BOOKING_EFFECT` stand bis T-104 als eigener Wert in dieser Datei; die
+ * Konstante liegt jetzt in `packages/domain` und wird hier nicht mehr
+ * geschrieben, sondern angewendet. Was eine Buchung an einem Todo ändert, ist
+ * Fachwissen (E-061 Punkt 1); `bookingMovementStates` aus dem Anwendungsfall
+ * setzt es auf einen gelesenen Bestand um. Wer die zwei Achsen hier wieder
+ * hinschreibt, hat die vierte Abschrift, die E-061 aufgehoben hat.
  */
-import { poolMovementNamer, type PoolMovementState } from '../../usecases/pool-movement.ts';
+import {
+  bookingMovementStates,
+  poolMovementNamer,
+  type BookingPresenceBefore,
+  type MovingTodo,
+  type PoolMovementNamer,
+} from '../../usecases/pool-movement.ts';
 import { AbortTodoCreate, resolveTagNames } from '../../usecases/tag-names.ts';
 
 import type { AddinDeps } from './ports.ts';
@@ -115,11 +130,28 @@ export interface AddinTodoMatch {
   readonly openSeconds: number;
   readonly exportedSeconds: number;
   /**
-   * Die Pools, in denen dieses Todo **nach einer Buchung darauf** stünde —
-   * beim Namen genannt (I-05, T-038, T-078).
+   * Wie eine Buchung auf dieses Todo es durch die Pools bewegen **würde** —
+   * oder `null` (I-05, T-038, T-078, E-056, E-061 Punkt 3).
    *
-   * Steht **vor** der Entscheidung in der Antwort und nicht erst danach. Ist
-   * das Todo erledigt, hebt eine Buchung darauf das Kennzeichen automatisch
+   * ---------------------------------------------------------------------------
+   * Ein Wert statt dreier Listen (E-061 Punkt 3)
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-104 standen hier `poolNames`, `enteringPoolNames` und
+   * `leavingPoolNames` — dieselbe Auskunft in einer zweiten Gestalt, die es
+   * sonst nirgends über HTTP gab. `POST /timer/start`, `/timer/stop`,
+   * `/timer/orphaned/resolve` und seit E-060 auch `PUT`/`DELETE
+   * /todos/{todoId}/done` liefern `poolMovement`; zwei Formen für eine Sache
+   * heißt, dass jede Fläche beide kennen muss und die Umrechnung an vier Stellen
+   * steht. Die Bedeutungen sind unverändert: `appears` ist das alte
+   * `poolNames`, `enters` das alte `enteringPoolNames`, `leaves` das alte
+   * `leavingPoolNames` (siehe `PoolMovement` in `@takt/domain`).
+   *
+   * ---------------------------------------------------------------------------
+   * Steht **vor** der Entscheidung da, nicht erst danach
+   * ---------------------------------------------------------------------------
+   *
+   * Ist das Todo erledigt, hebt eine Buchung darauf das Kennzeichen automatisch
    * auf (A-2.5); der Aufgabenbereich kann damit vorher sagen, wo es danach
    * wieder auftaucht, statt den Benutzer hinterher suchen zu lassen.
    *
@@ -141,111 +173,69 @@ export interface AddinTodoMatch {
    * Todo **jetzt** und **nach** der Buchung nicht mehr; eine Spalte „Noch
    * nicht abgerechnet" (`exportState: 'open'`) umgekehrt. Genannt wird, was
    * der Benutzer nach seiner Entscheidung vorfindet.
+   *
+   * ---------------------------------------------------------------------------
+   * Wann `null` steht — und wann ausdrücklich nicht
+   * ---------------------------------------------------------------------------
+   *
+   * `null` heißt „hier war keine Bewegung möglich": Das Todo ist offen und hat
+   * schon eine offene Buchung, die Buchung ändert also keine der fünf Achsen.
+   * Dieselbe Bedeutung wie an den Timer-Routen, und aus demselben Grund keine
+   * drei leeren Listen — die hießen „nachgesehen und nichts gefunden" und
+   * kosteten das Auflösen jeder Regel über beliebig tiefe Ordnerbäume.
+   *
+   * Für ein **erledigtes** Todo steht hier deshalb immer ein Wert: Die Buchung
+   * hebt „Erledigt" auf, die beiden Zustände sind verschieden, und der Satz
+   * über die Rückkehr braucht `appears` (Anlass `'reopen'`, der auch ohne jeden
+   * Treffer etwas zu sagen hat).
    */
-  readonly poolNames: readonly string[];
-  /**
-   * Die Pools, in denen das Todo **vorher nicht** stand und nach der Buchung
-   * steht (T-084).
-   *
-   * Eine **Teilmenge** von `poolNames` und keine zweite Rechnung: Beide
-   * entstehen in einem Durchgang durch dieselben Regeln
-   * (`usecases/pool-movement.ts`).
-   * `poolNames` beantwortet „wo steht es danach", diese Liste „was ändert sich
-   * dadurch" — und das sind zwei verschiedene Fragen, seit eine Spalte über den
-   * Exportstatus urteilen kann (T-076).
-   *
-   * Wozu sie gebraucht wird: Für ein **erledigtes** Todo ist die Buchung eine
-   * Rückkehr, und der Aufgabenbereich nennt alle Pools, in denen es danach zu
-   * finden ist. Für ein **offenes** Todo ist sie das nicht — dort wäre eine
-   * Aufzählung der ohnehin schon zutreffenden Pools kein Hinweis, sondern
-   * Rauschen. Was der Benutzer dort erfährt, ist genau der Unterschied: Die
-   * erste Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte
-   * `exportState: 'open'` nimmt das Todo damit auf. Ohne diese Liste ließe sich
-   * „es erscheint neu in …" nicht von „es steht ohnehin schon in …"
-   * unterscheiden, ohne zwei Namenslisten gegeneinander zu halten — und Namen
-   * sind nicht eindeutig (siehe `usecases/pool-movement.ts`).
-   *
-   * Leer heißt: Diese Buchung bewegt das Todo in keinen Pool hinein. Zusammen
-   * mit einem leeren `leavingPoolNames` heißt es, dass sie es überhaupt nicht
-   * bewegt — und dann sagt der Aufgabenbereich kein Wort über Pools.
-   */
-  readonly enteringPoolNames: readonly string[];
-  /**
-   * Die Pools, aus denen dieselbe Buchung das Todo **entfernt** (E-056).
-   *
-   * Die andere Hälfte derselben Auskunft. Sie ist fast immer leer — nur eine
-   * Regel, die nach „Erledigt" fragt, kann ein Todo durch eine Buchung
-   * verlieren. Genau diese Regel ist aber die, für die man so eine Spalte
-   * anlegt: **erledigt und noch nicht abgerechnet**, benutzt als
-   * Abrechnungsliste. Wer dort bucht, sieht die Karte aus der Liste
-   * verschwinden, in der er sie gerade sucht; eine unerklärte Bewegung wird an
-   * dieser Stelle als Datenverlust gelesen.
-   *
-   * Ein Pool steht nie in beiden Listen: `poolNames` gewinnt, und diese hier
-   * trägt nur, was vorher zutraf und nachher nicht.
-   */
-  readonly leavingPoolNames: readonly string[];
+  readonly poolMovement: PoolMovement | null;
 }
 
 /**
- * Was eine Buchung am Zustand des Todos ändert — und sonst nichts (E-058).
+ * Die Bewegung, die eine Buchung auf dieses Todo auslöst — oder `null`
+ * (E-058, E-061 Punkt 2, T-104).
  *
  * ---------------------------------------------------------------------------
- * Warum diese zwei Werte hier stehen und die Rechnung nicht
+ * Warum beide Add-in-Routen durch **diese** Funktion gehen
  * ---------------------------------------------------------------------------
  *
- * Bis T-092 lagen an dieser Stelle vier Dinge: ein eigener Zustandstyp
- * (`PoolCandidate`), ein eigener Bewegungstyp (`AddinPoolMovement`), eine
- * eigene Regelwache (`NamedPoolRule`) und mit `poolNamer` eine **zweite**
- * Fassung der Rechnung, die die Hauptanwendung ebenfalls anstellt. E-058
- * Absatz 1 hebt das auf: Die Bewegung eines Todos durch die Pools ist **ein**
- * Anwendungsfall (`usecases/pool-movement.ts`), und der Add-in-Dienst benutzt
- * ihn, statt ihn nachzubauen. Alle vier sind ersatzlos weg; was hier bleibt,
- * ist das, was der Anwendungsfall ausdrücklich **nicht** weiß.
- *
- * Denn er entscheidet nicht, was eine Handlung am Zustand ändert — das steht
- * in seinem Kopf: „Wer das Paar bildet, weiß es; wer die Bewegung ausrechnet,
- * braucht es nicht zu wissen." Für die Buchung aus dem Aufgabenbereich sind es
- * genau zwei Achsen:
- *
- *  - `completedAt: null` — eine Buchung hebt „Erledigt" **automatisch** auf
- *    (A-2.5). Seit T-038 gibt es keinen Schalter mehr, der das verhindern
- *    könnte; die Aufhebung ist keine Vermutung, sondern die Wirkung der
- *    Handlung, um die es geht. Ist das Todo gar nicht erledigt, ändert der
- *    Wert nichts — er stand schon auf `null`.
- *  - `hasOpenEntries: true` — die entstehende Buchung ist abgeschlossen und
- *    **offen** (E-032: `export_status` ist zweiwertig und beginnt bei `open`).
- *    Ein Todo, auf das gebucht wird, hat danach in jedem Fall etwas
- *    Abzurechnendes.
+ * Weil sie über dieselbe Handlung reden: die Duplikatsuche als Ankündigung
+ * („Es erscheint dann …") und `bookOnTodo` als Bestätigung („Es steht jetzt
+ * …"). Sagten sie Verschiedenes über deren Wirkung, sagte die Ankündigung
+ * etwas anderes als die Bestätigung — Befund C-03 aus T-025, eine Ebene
+ * tiefer. Bis T-104 stand dafür ein `BOOKING_EFFECT` in dieser Datei und das
+ * Zustandspaar zweimal von Hand; beides ist mit E-061 in
+ * `packages/domain` beziehungsweise `usecases/pool-movement.ts` gewandert.
  *
  * ---------------------------------------------------------------------------
- * Warum die Wirkung **einmal** dasteht und die beiden Paare zweimal
+ * Die erste Zeile ist die ganze Sparsamkeit dieser Funktion
  * ---------------------------------------------------------------------------
  *
- * Zwei Stellen bilden das Paar: die Duplikatsuche (Ankündigung, „Es erscheint
- * dann …") und `bookOnTodo` (Bestätigung, „Es steht jetzt …"). Beide reden
- * über **dieselbe** Handlung, und wenn sie Verschiedenes über deren Wirkung
- * annähmen, sagten Ankündigung und Bestätigung Verschiedenes — der Befund
- * C-03 aus T-025, eine Ebene tiefer. Deshalb steht die Wirkung hier als **ein**
- * Wert, und beide Paare entstehen als `{ ...before, ...BOOKING_EFFECT }`.
+ * Ein offenes Todo mit einer offenen Buchung geht durch die Buchung in keiner
+ * Achse anders hervor, als es hineingeht: `completedAt` stand schon auf `null`,
+ * „hat offene Buchungen" schon auf wahr. Das Zustandspaar wäre zweimal
+ * derselbe Wert, die Antwort drei leere Listen — und der Weg dorthin führte
+ * über das Auflösen jeder Regel. Das ist der Normalfall, und er kostet hier
+ * nichts. Deshalb nimmt die Funktion den Namensgeber als **Versprechen** und
+ * nicht als Wert: Wo nichts zu rechnen ist, wird auch nichts aufgelöst.
  *
- * Das Spreizen ist der Punkt: Was der Anwendungsfall an Achsen verlangt, füllt
- * `before` — und alles, was die Buchung nicht anfasst, geht unverändert nach
- * `after`. Kommt eine sechste Achse hinzu, wird `before` rot (der Typ
- * {@link PoolMovementState} verlangt sie) und `after` bekommt die richtige
- * Vorgabe „durch diese Buchung unverändert", statt still zu fehlen. Eine
- * ausgeschriebene zweite Zustandsliste könnte das nicht.
- *
- * **`before` trägt den echten Zustand von jetzt.** Wer dort schon das Ergebnis
- * einsetzt, macht beide Zustände gleich; `leaves` ist dann für immer leer, ohne
- * dass etwas bricht — die stille Rückabwicklung von E-056.
- *
- * Die Kanban-Spalte geht durch beide Zustände unverändert mit: Erledigen und
- * Spalte sind zwei Achsen (E-023), und diese Buchung fasst die zweite nicht an.
+ * Umgekehrt ist der Zweig, der rechnet, genau der aus `movementOfStart` in
+ * `usecases/timer.ts`: „Erledigt" fällt, oder die erste abgeschlossene Buchung
+ * entsteht.
  */
-const BOOKING_EFFECT: Pick<PoolMovementState, 'completedAt' | 'hasOpenEntries'> = {
-  completedAt: null,
-  hasOpenEntries: true,
+const bookingMovement = async (
+  namer: () => Promise<PoolMovementNamer>,
+  todo: MovingTodo,
+  entries: BookingPresenceBefore,
+): Promise<PoolMovement | null> => {
+  if (todo.completedAt === null && entries.hasOpen) return null;
+
+  // Das Paar bildet der Anwendungsfall aus der Wirkung in der Domäne (E-061
+  // Punkte 1 und 2). `todo` trägt dabei den echten Zustand von **jetzt**; wer
+  // dort schon das Ergebnis einsetzte, bekäme zwei gleiche Zustände und damit
+  // für immer ein leeres `leaves` — die stille Rückabwicklung von E-056.
+  return (await namer())(bookingMovementStates(todo, entries));
 };
 
 export type AddinMatchResult =
@@ -285,10 +275,24 @@ export const findMatches = async (
 
   return deps.inTransaction(async (unit) => {
     const found = await unit.todos.findByCallNumber(callNumber);
-    // **Einmal** je Anfrage, nicht einmal je Treffer: Das Auflösen der Ordner
-    // über beliebig tiefe Bäume ist die teure Hälfte, das Urteil über ein
-    // einzelnes Todo die billige (`usecases/pool-movement.ts`).
-    const movementOf = await poolMovementNamer(unit);
+
+    /*
+     * Höchstens **einmal** je Anfrage, nicht einmal je Treffer, und seit T-104
+     * gar nicht, wenn sich kein Treffer bewegt.
+     *
+     * Das Auflösen der Ordner über beliebig tiefe Bäume ist die teure Hälfte,
+     * das Urteil über ein einzelnes Todo die billige
+     * (`usecases/pool-movement.ts`) — deshalb wird der Namensgeber geteilt.
+     * Gebaut wird er erst, wenn ihn der erste Treffer verlangt: Die häufigste
+     * Trefferliste besteht aus offenen Todos mit gebuchter Zeit, und für die
+     * gibt es nichts zu rechnen ({@link bookingMovement}).
+     *
+     * Das Zwischenergebnis ist das **Versprechen** und nicht der Wert: Die
+     * Treffer werden nebenläufig beurteilt, und eine Zuweisung nach einem
+     * `await` liefe zweimal. Die hier steht vor jedem `await`.
+     */
+    let namer: Promise<PoolMovementNamer> | null = null;
+    const movementNamer = (): Promise<PoolMovementNamer> => (namer ??= poolMovementNamer(unit));
 
     const matches = await Promise.all(
       found.map(async (todo): Promise<AddinTodoMatch> => {
@@ -304,20 +308,9 @@ export const findMatches = async (
         // ist gesperrt und kann nachträglich nicht auf null schrumpfen. Beide
         // Zahlen stehen ohnehin schon da — ein zweiter Port dafür wäre Fläche
         // am Add-in-Token ohne Zuwachs an Wahrheit.
-        // Das Zustandspaar: `before` ist der echte Zustand von jetzt, `after`
-        // derselbe mit der Wirkung der Handlung darüber ({@link BOOKING_EFFECT}).
-        // Wer in `before` schon das Ergebnis einsetzte, bekäme zwei gleiche
-        // Zustände und damit für immer ein leeres `leaves` — E-056 wäre still
-        // wieder abgeschafft.
-        const before: PoolMovementState = {
-          tagIds: todo.tagIds,
-          statusId: todo.statusId,
-          completedAt: todo.completedAt,
-          hasOpenEntries: openSeconds > 0,
-          hasExportedEntries: exportedSeconds > 0,
-        };
-        const movement = movementOf({ before, after: { ...before, ...BOOKING_EFFECT } });
-
+        //
+        // `todo` geht als Zustand von **jetzt** hinein; die Wirkung der Buchung
+        // legt {@link bookingMovement} darüber (E-061 Punkte 1 und 2).
         return {
           id: todo.id,
           title: todo.title,
@@ -327,9 +320,10 @@ export const findMatches = async (
           completedAt: todo.completedAt,
           openSeconds,
           exportedSeconds,
-          poolNames: movement.appears,
-          enteringPoolNames: movement.enters,
-          leavingPoolNames: movement.leaves,
+          poolMovement: await bookingMovement(movementNamer, todo, {
+            hasOpen: openSeconds > 0,
+            hasExported: exportedSeconds > 0,
+          }),
         };
       }),
     );
@@ -522,7 +516,7 @@ export interface AddinBookInput {
  * ändert damit nichts: Die Eingabeprüfung kennt es nicht mehr und wirft es
  * weg (siehe `schema.ts`). Sichtbar gemacht wird die Wirkung dort, wo sie
  * hingehört — **vor** der Entscheidung im Aufgabenbereich (A-10.9) und in der
- * Antwort dieser Route (`doneCleared`, `poolNames`).
+ * Antwort dieser Route (`doneCleared`, `poolMovement`).
  */
 
 export type AddinBookResult =
@@ -545,34 +539,21 @@ export type AddinBookResult =
        */
       readonly doneCleared: boolean;
       /**
-       * Die Pools, in denen das Todo nach dieser Buchung steht — beim Namen
-       * (I-05).
+       * Wie diese Buchung das Todo durch die Pools bewegt hat — oder `null`
+       * (I-05, E-056, T-084, E-061 Punkt 3).
        *
        * Aus derselben Quelle **und demselben Zustandspaar** wie in der
-       * Duplikatsuche — dieselbe Wirkung über demselben Vorzustand ({@link
-       * BOOKING_EFFECT}) —, damit der Satz vor der Buchung und der Satz danach
-       * nicht auseinandergehen. Eine leere Liste ist eine Aussage
-       * und kein Fehlen: Auf dieses Todo passt derzeit keine Poolregel.
-       */
-      readonly poolNames: readonly string[];
-      /**
-       * Die Pools, in die diese Buchung das Todo **hineinbewegt** hat (T-084).
+       * Duplikatsuche ({@link bookingMovement}), damit der Satz vor der Buchung
+       * und der Satz danach nicht auseinandergehen. `proof:addin` hält beide
+       * Liste für Liste gegeneinander.
        *
-       * Teilmenge von `poolNames`, aus demselben Zustandspaar. Sie ist der
-       * Unterschied zwischen „das Todo steht in diesen Pools" und „durch diese
-       * Buchung ist es dort neu" — und nur die zweite Aussage ist eine
-       * Nachricht wert, wenn das Todo gar nicht erledigt war und deshalb auch
-       * nichts aufgehoben wurde.
+       * Drei leere Listen sind eine Aussage und kein Fehlen: Auf dieses Todo
+       * passt derzeit keine Regel. `null` ist die andere Aussage — es war hier
+       * keine Bewegung möglich, weil das Todo offen war und schon eine offene
+       * Buchung hatte. Beide Fälle führen im Aufgabenbereich zu keiner Zeile,
+       * aber nur der zweite kostet keine Ordnerauflösung.
        */
-      readonly enteringPoolNames: readonly string[];
-      /**
-       * Die Pools, aus denen diese Buchung das Todo entfernt hat (E-056).
-       *
-       * Dieselbe Rechnung wie in der Duplikatsuche, damit die Ankündigung und
-       * die Bestätigung auch in dieser Hälfte übereinstimmen. Fast immer leer;
-       * der Aufgabenbereich sagt dann nichts darüber.
-       */
-      readonly leavingPoolNames: readonly string[];
+      readonly poolMovement: PoolMovement | null;
     };
 
 /**
@@ -676,8 +657,8 @@ export const bookOnTodo = async (deps: AddinDeps, input: AddinBookInput): Promis
        *
        * Nach `timeEntries.create` wäre die offene Summe unbrauchbar: Sie
        * enthielte die soeben entstandene Buchung und wäre damit der Zustand
-       * danach, nicht davor. Für `leavingPoolNames` (E-056) wird aber genau der
-       * Zustand davor gebraucht — sonst gibt es nichts, aus dem etwas
+       * danach, nicht davor. Für `poolMovement.leaves` (E-056) wird aber genau
+       * der Zustand davor gebraucht — sonst gibt es nichts, aus dem etwas
        * verschwinden könnte.
        *
        * Beide Summen in einem Zug und innerhalb derselben Transaktion: Ein
@@ -715,30 +696,27 @@ export const bookOnTodo = async (deps: AddinDeps, input: AddinBookInput): Promis
         if (!reopened.ok) throw new AbortBooking(reopened.error);
       }
 
-      // Innerhalb der Transaktion und nach dem Schreiben: Der Anwendungsfall
-      // liest nur, gehört aber in dieselbe Klammer wie die Handlung, über die
-      // er redet — sonst beurteilte er einen Bestand, den es zum Zeitpunkt der
-      // Handlung nicht mehr gab.
-      const movementOf = await poolMovementNamer(unit);
-
-      // `todo` ist der Stand **vor** der Buchung — `load` lief davor, und
-      // `clearDone` gibt seinen neuen Wert nicht hierher zurück. Genau so wird
-      // er gebraucht: `before` ist der Zustand von jetzt, `after` derselbe mit
-      // der Wirkung darüber. Wer hier den Stand von danach einsetzte, bekäme
-      // zwei gleiche Zustände und damit für immer ein leeres
-      // `leavingPoolNames` — E-056 wäre still wieder abgeschafft.
-      //
-      // Dasselbe Paar wie in der Duplikatsuche, aus derselben Wirkung gebildet:
-      // Die Ankündigung vor der Buchung und die Bestätigung danach reden über
-      // dieselbe Bewegung, und `proof:addin` hält sie Liste für Liste dagegen.
-      const before: PoolMovementState = {
-        tagIds: todo.tagIds,
-        statusId: todo.statusId,
-        completedAt: todo.completedAt,
-        hasOpenEntries: openBefore > 0,
-        hasExportedEntries: exportedBefore > 0,
-      };
-      const movement = movementOf({ before, after: { ...before, ...BOOKING_EFFECT } });
+      /*
+       * `todo` ist der Stand **vor** der Buchung — `load` lief davor, und
+       * `clearDone` gibt seinen neuen Wert nicht hierher zurück. Genau so wird
+       * er gebraucht: Der Zustand von jetzt geht hinein, die Wirkung legt
+       * {@link bookingMovement} darüber. Wer hier den Stand von danach
+       * einsetzte, bekäme zwei gleiche Zustände und damit für immer ein leeres
+       * `leaves` — E-056 wäre still wieder abgeschafft.
+       *
+       * Derselbe Aufruf wie in der Duplikatsuche: Die Ankündigung vor der
+       * Buchung und die Bestätigung danach reden über dieselbe Bewegung, und
+       * `proof:addin` hält sie Liste für Liste dagegen.
+       *
+       * Der Namensgeber entsteht innerhalb der Transaktion und nach dem
+       * Schreiben: Er liest nur, gehört aber in dieselbe Klammer wie die
+       * Handlung, über die er redet — sonst beurteilte er einen Bestand, den es
+       * zum Zeitpunkt der Handlung nicht mehr gab.
+       */
+      const poolMovement = await bookingMovement(() => poolMovementNamer(unit), todo, {
+        hasOpen: openBefore > 0,
+        hasExported: exportedBefore > 0,
+      });
 
       return {
         kind: 'booked',
@@ -746,9 +724,7 @@ export const bookOnTodo = async (deps: AddinDeps, input: AddinBookInput): Promis
         todoWasDone,
         // Es gibt keinen Weg mehr, auf dem diese beiden Werte auseinanderfallen.
         doneCleared: todoWasDone,
-        poolNames: movement.appears,
-        enteringPoolNames: movement.enters,
-        leavingPoolNames: movement.leaves,
+        poolMovement,
       };
     });
   } catch (error) {

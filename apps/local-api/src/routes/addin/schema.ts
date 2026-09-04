@@ -109,7 +109,7 @@ export const bookSchema = z.object({
  * Ein `reopenIfDone: false` von einem älteren Aufrufer soll die Aufhebung
  * nicht verhindern — es kann sie nicht verhindern —, und ein 422 an dieser
  * Stelle würde eine Buchung scheitern lassen, die fachlich vollständig ist.
- * Was wirklich geschehen ist, sagt die Antwort (`doneCleared`, `poolNames`)
+ * Was wirklich geschehen ist, sagt die Antwort (`doneCleared`, `poolMovement`)
  * und nicht die Anfrage.
  */
 

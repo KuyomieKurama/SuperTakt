@@ -229,13 +229,13 @@ describe('createTagPort — anlegen, verschieben, löschen mit Benutzungsprüfun
     expect(removed.error.code).toBe('tag_in_use');
   });
 
-  it('ein in einer Pool-Regel verwendetes Tag wird nicht gelöscht', async () => {
+  it('ein in einer Pool-Regel verwendetes Tag wird nicht gelöscht — und details nennt die Regel beim Namen (T-101, R-1a Befund 1)', async () => {
     db = openTestDatabase();
     const tag = await db.unit.tags.create(null, 'Tag', null, NOW);
     expect(tag.ok).toBe(true);
     if (!tag.ok) return;
-    await db.unit.pools.create(
-      { name: 'Pool', matchMode: 'any', includeSubfolders: false, position: 0, rule: [{ kind: 'tag', tagId: tag.value.id }] },
+    const pool = await db.unit.pools.create(
+      { name: 'Wartung Süd', matchMode: 'any', includeSubfolders: false, position: 0, rule: [{ kind: 'tag', tagId: tag.value.id }] },
       NOW,
     );
 
@@ -243,6 +243,87 @@ describe('createTagPort — anlegen, verschieben, löschen mit Benutzungsprüfun
     expect(removed.ok).toBe(false);
     if (removed.ok) return;
     expect(removed.error.code).toBe('tag_in_use');
+
+    // Bis T-101 lieferte `TagPort.remove` als EINZIGER der drei
+    // Sperr-Erzeuger (Ordner, Status, Tag) kein `details` — der Löschdialog
+    // der Oberfläche konnte die Regel deshalb nicht beim Namen nennen
+    // (gemessen im Bericht T-099). Dieselbe Gestalt wie bei
+    // `TagFolderPort.remove` (`repo-tags-folder-in-rule.test.ts`):
+    // `{ field: <Pool-Kennung>, code: 'pool_rule', message: 'Regel „…“' }`.
+    const details = removed.error.details;
+    expect(details).toBeDefined();
+    expect(details?.length).toBeGreaterThan(0);
+    expect(details?.[0]?.code).toBe('pool_rule');
+    expect(details?.[0]?.field).toBe(pool.id);
+    expect(details?.[0]?.message).toContain('Wartung Süd');
+    expect(removed.error.message).toContain('Dieses Tag wird in der Regel eines Pools verwendet.');
+  });
+
+  it('nennt MEHRERE Regeln, wenn dasselbe Tag in mehr als einer Regel steht', async () => {
+    db = openTestDatabase();
+    const tag = await db.unit.tags.create(null, 'Geteiltes Tag', null, NOW);
+    expect(tag.ok).toBe(true);
+    if (!tag.ok) return;
+
+    const first = await db.unit.pools.create(
+      { name: 'Erste Regel', matchMode: 'any', includeSubfolders: false, position: 0, rule: [{ kind: 'tag', tagId: tag.value.id }] },
+      NOW,
+    );
+    const second = await db.unit.pools.create(
+      { name: 'Zweite Regel', matchMode: 'any', includeSubfolders: false, position: 0, rule: [{ kind: 'tag', tagId: tag.value.id }] },
+      NOW,
+    );
+
+    const removed = await db.unit.tags.remove(tag.value.id);
+    expect(removed.ok).toBe(false);
+    if (removed.ok) return;
+
+    const details = removed.error.details;
+    expect(details?.map((entry) => entry.field).sort()).toEqual([first.id, second.id].sort());
+    const messages = details?.map((entry) => entry.message).join(' | ') ?? '';
+    expect(messages).toContain('Erste Regel');
+    expect(messages).toContain('Zweite Regel');
+  });
+
+  it('H-3 Obergrenze: 21 Regeln nennen dasselbe Tag — genannt werden nur die ersten 20, mit Hinweistext (R-3a H-3)', async () => {
+    db = openTestDatabase();
+    const tag = await db.unit.tags.create(null, 'Vielfach benutztes Tag', null, NOW);
+    expect(tag.ok).toBe(true);
+    if (!tag.ok) return;
+
+    const createdIds: string[] = [];
+    for (let index = 1; index <= 21; index += 1) {
+      const pool = await db.unit.pools.create(
+        {
+          name: `Regel ${String(index).padStart(2, '0')}`,
+          matchMode: 'any',
+          includeSubfolders: false,
+          // position: 0 — pools.create weist bei 0 selbst die nächste Position
+          // zu (O-B, siehe repo-tags-folder-in-rule.test.ts), damit die
+          // Reihenfolge der Anlage der Reihenfolge in `details` entspricht
+          // (die Abfrage sortiert `ORDER BY p.position, p.name`).
+          position: 0,
+          rule: [{ kind: 'tag', tagId: tag.value.id }],
+        },
+        NOW,
+      );
+      createdIds.push(pool.id);
+    }
+    expect(createdIds).toHaveLength(21);
+
+    const removed = await db.unit.tags.remove(tag.value.id);
+    expect(removed.ok).toBe(false);
+    if (removed.ok) return;
+    expect(removed.error.code).toBe('tag_in_use');
+
+    const details = removed.error.details;
+    expect(details).toHaveLength(20);
+    // Die ersten 20 der 21 angelegten Regeln — nicht die letzten 20.
+    expect(details?.map((entry) => entry.field)).toEqual(createdIds.slice(0, 20));
+    expect(details?.some((entry) => entry.field === createdIds[20])).toBe(false);
+    expect(removed.error.message).toBe(
+      'Dieses Tag wird in der Regel eines Pools verwendet. Es sind mehr als 20; genannt werden die ersten 20.',
+    );
   });
 
   it('ein als Standard-Tag gesetztes Tag wird nicht gelöscht (A-9.*)', async () => {

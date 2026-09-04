@@ -19,7 +19,7 @@
  * das ist die Gegenprobe im ersten Fall, ohne die dieser Test auch von einer
  * Fassung bestünde, die jeden Ordner sperrt.
  *
- * ## Was sich mit T-097/T-099 geändert hat — und wo es (noch) nicht gilt
+ * ## Was sich mit T-097/T-099 geändert hat — und was T-101/T-102 nachgezogen haben
  *
  * `apps/web/src/lib/errorText.ts` (`errorMessageWithRules`) liest seit T-097
  * `TaktApiError.details` und hängt die Regelnamen **wörtlich** an die
@@ -27,28 +27,35 @@
  * „Ost“, Regel „Nord“ und Regel „Abrechnung“." — vorher zeigte die
  * Oberfläche nur den allgemeinen Satz ohne Namen (siehe die ursprüngliche
  * Fassung dieser Datei, T-096). Alle drei Löschdialoge (Ordner, Tag, Status)
- * rufen dieselbe Funktion — **aber nur zwei der drei Dienstantworten liefern
- * überhaupt `details`, aus denen sie etwas anhängen könnte.** Gemessen mit
- * T-099: Ordner und Status nennen die Regel; **Tag nicht** — ein echter Fund
- * in `packages/storage/src/sqlite/repo-tags.ts` (`createTagPort().remove()`),
- * ausgeführt in der Einzelbegründung beim Tag-Fall unten. Dieser Testfall
- * prüft deshalb den tatsächlichen, gemessenen Stand an allen dreien: den
- * Regelnamen wörtlich bei Ordner und Status, seine **Abwesenheit** beim Tag.
+ * rufen dieselbe Funktion. Bis T-099/T-100 lieferten nur zwei der drei
+ * Dienstantworten überhaupt `details`: Ordner und Status nannten die Regel,
+ * **Tag nicht** — ein echter Fund in
+ * `packages/storage/src/sqlite/repo-tags.ts` (`createTagPort().remove()`),
+ * die beim Grund „Regel" nur die Trefferzahl zählte statt `pool_id`/`name`
+ * mitzufragen. **T-101 hat das behoben:** `TagPort.remove` liefert `details`
+ * jetzt wie Ordner und Status (R-1a Befund 1). Der Tag-Fall unten prüft
+ * seitdem dieselbe Zusicherung wie die anderen beiden — die Testdatei nennt
+ * ihn weiterhin einzeln, weil die Einzelbegründung dokumentiert, **warum**
+ * das früher fehlte und wodurch es behoben wurde, nicht weil er sich noch
+ * unterscheidet.
  *
- * ## Robuster Dialog-Selektor (T-099, offene Frage aus T-097)
+ * ## Robuster Dialog-Selektor (T-099, offene Frage aus T-097) — und der
+ * Knopfwechsel, den T-102 nachgezogen hat
  *
- * Der Ordner- und der Tag-Löschdialog wechseln nach einer Absage weder ihren
- * Titel noch ihre Knopfbeschriftung — anders als der Status-Dialog
- * (`StatusSettings.tsx`), der nach einer Absage zu „Der Status wurde nicht
+ * Bis T-102 wechselten der Ordner- und der Tag-Löschdialog nach einer Absage
+ * weder Titel noch Knopfbeschriftung — anders als der Status-Dialog
+ * (`StatusSettings.tsx`), der schon seit T-097 zu „Der Status wurde nicht
  * gelöscht"/„Erneut versuchen"/„Schließen" wechselt. Diese Datei griff den
  * Ordnerdialog bis T-096 über den Titel `'Ordner löschen?'` — das versteckte
- * die Ungleichheit zufällig, weil der Titel eben nicht wechselt. Der
- * Selektor ist jetzt die **Rolle** (`alertdialog`, ohne Namen: `ConfirmDialog`
- * ist zu jedem Zeitpunkt genau einmal offen), unabhängig vom Wortlaut davor
- * oder danach — ändert frontend-dev Titel oder Knopf eines der drei Dialoge
- * künftig, bleibt dieser Test unberührt. Die Ungleichheit selbst ist damit
- * nicht behoben, nur nicht mehr Bedingung für ein Bestehen dieses Tests
- * (siehe Bericht).
+ * die Ungleichheit zufällig, weil der Titel eben nicht wechselte. Der
+ * Selektor ist seit T-099 die **Rolle** (`alertdialog`, ohne Namen:
+ * `ConfirmDialog` ist zu jedem Zeitpunkt genau einmal offen), unabhängig vom
+ * Wortlaut davor oder danach. **T-102 hat die Ungleichheit selbst behoben:**
+ * `TagsScreen.tsx` wechselt Titel („Der Ordner“/„Das Tag wurde nicht
+ * gelöscht"), Beschreibung und beide Knöpfe („Löschen" → „Erneut versuchen",
+ * „Abbrechen" → „Schließen") jetzt genauso wie `StatusSettings` — die beiden
+ * Fälle unten schließen den Dialog seitdem über „Schließen", nicht mehr über
+ * „Abbrechen".
  */
 import { test, expect } from '@playwright/test';
 
@@ -149,7 +156,10 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       await expect(dialog).toContainText('wird in der Regel eines Pools verwendet');
       await expect(dialog).toContainText(`Betroffen ist Regel „${pool.name}“.`);
 
-      await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+      // Seit T-102 wechselt der Dialog nach der Absage Titel, Beschreibung
+      // und beide Knöpfe wie `StatusSettings` — der Schließen-Knopf heißt
+      // jetzt „Schließen", nicht mehr „Abbrechen" (Kopf dieser Datei).
+      await dialog.getByRole('button', { name: 'Schließen' }).click();
       await expect(dialog).toBeHidden();
 
       // Der Ordner ist tatsächlich noch da — nicht nur der Dialog hat sich
@@ -162,12 +172,12 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
     }
   });
 
-  test('Tag, Oberfläche: „Tag löschen“ wird abgelehnt, das Tag bleibt erhalten — Regelname fehlt (Fund, siehe unten)', async ({
+  test('Tag, Oberfläche: „Tag löschen“ wird abgelehnt, nennt seit T-101 die Regel beim Namen, das Tag bleibt erhalten', async ({
     page,
   }) => {
     const run = Date.now();
     const lockedTag = await createTag(`E2E-TagSperre-UI-${run}`);
-    await createPool({
+    const pool = await createPool({
       name: `E2E-TagSperre-UI-Regel-${run}`,
       requiredTagIds: [lockedTag.id],
     });
@@ -186,31 +196,31 @@ test.describe('Regelsperre — ein Tag, ein Ordner oder ein Status in einer Rege
       await expect(dialog).toBeVisible();
       await dialog.getByRole('button', { name: 'Löschen' }).click();
 
-      // Die Sperre greift, mit demselben allgemeinen Satz wie am Ordner.
+      // Die Sperre greift, mit demselben allgemeinen Satz wie am Ordner —
+      // und seit T-101 auch mit demselben Regelnamen.
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText('wird in der Regel eines Pools verwendet');
 
       /*
-       * Kein Regelname hier — echter Fund, nicht Nachlässigkeit dieses Tests
-       * (gemessen, nicht vermutet; siehe Bericht zu T-099).
-       *
+       * Bis T-099/T-100 fehlte hier der Regelname — ein echter Fund
+       * (gemessen, nicht vermutet; siehe Bericht zu T-099):
        * `packages/storage/src/sqlite/repo-tags.ts`, `createTagPort().remove()`
-       * zählt beim Grund „Regel" (`usage.rules > 0`) nur die Trefferzahl und
-       * gibt `taktError('tag_in_use', 'Dieses Tag wird in der Regel eines
-       * Pools verwendet.')` **ohne** `details` zurück. Das Gegenstück
+       * zählte beim Grund „Regel" (`usage.rules > 0`) nur die Trefferzahl und
+       * gab `taktError('tag_in_use', 'Dieses Tag wird in der Regel eines
+       * Pools verwendet.')` **ohne** `details` zurück, während das Gegenstück
        * `createTagFolderPort().remove()` (dieselbe Datei, für den Ordner)
-       * fragt stattdessen `pool_id`/`name` mit ab und liefert
-       * `details: usedIn.map(poolReference)` — das ist der Vertrag, auf den
-       * sich `apps/web/src/lib/errorText.ts` (`ruleReferences`,
-       * T-097) verlässt. Ohne `details` hat `errorMessageWithRules` nichts
-       * anzuhängen, und der Dialog bleibt bei der allgemeinen Auskunft.
-       * `TodoStatusPort.remove()` liefert `details` ebenso wie der Ordner
-       * (siehe den Status-Fall unten in dieser Datei) — der Tag-Pfad ist die
-       * einzige der drei Stellen, die zurückgeblieben ist.
+       * `pool_id`/`name` mitfragte und `details: usedIn.map(poolReference)`
+       * lieferte — der Vertrag, auf den sich `apps/web/src/lib/errorText.ts`
+       * (`ruleReferences`, T-097) verlässt. **T-101 hat `TagPort.remove` auf
+       * denselben Vertrag gebracht** (R-1a Befund 1): Die Regel wird jetzt
+       * genannt, wörtlich wie bei Ordner und Status.
        */
-      await expect(dialog).not.toContainText('Betroffen ist Regel');
+      await expect(dialog).toContainText(`Betroffen ist Regel „${pool.name}“.`);
 
-      await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+      // Seit T-102 wechselt der Dialog nach der Absage Titel, Beschreibung
+      // und beide Knöpfe wie `StatusSettings` — der Schließen-Knopf heißt
+      // jetzt „Schließen", nicht mehr „Abbrechen" (Kopf dieser Datei).
+      await dialog.getByRole('button', { name: 'Schließen' }).click();
       await expect(dialog).toBeHidden();
 
       await gotoTags(page);

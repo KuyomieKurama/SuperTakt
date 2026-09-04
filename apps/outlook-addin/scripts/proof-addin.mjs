@@ -42,7 +42,7 @@ import { PATTERN_CATALOG, DEFAULT_PATTERN } from '../src/callnumber/catalog.ts';
 import { createTimedEvaluator } from '../src/callnumber/evaluate.ts';
 import { detectCallNumber } from '../src/callnumber/detect.ts';
 import { runPattern } from '../src/callnumber/run.ts';
-import { decideLookup, describeOffers, offerMovement } from '../src/duplicate/rule.ts';
+import { decideLookup, describeOffers } from '../src/duplicate/rule.ts';
 import {
   REOPEN_HINT,
   bookingOutcome,
@@ -788,9 +788,7 @@ check('R-15: das Angebot trägt Titel und Call-Nummer, nicht nur eine Kennung', 
       completedAt: null,
       openSeconds: 2700,
       exportedSeconds: 3600,
-      poolNames: ['Wartung Nord'],
-      enteringPoolNames: [],
-      leavingPoolNames: [],
+      poolMovement: { appears: ['Wartung Nord'], enters: [], leaves: [] },
     },
   ]);
   assert.equal(offers.length, 1);
@@ -811,9 +809,7 @@ check('Ein Treffer ohne plausible Call-Nummer wird gar nicht erst angeboten', ()
       completedAt: null,
       openSeconds: 0,
       exportedSeconds: 0,
-      poolNames: [],
-      enteringPoolNames: [],
-      leavingPoolNames: [],
+      poolMovement: { appears: [], enters: [], leaves: [] },
     },
   ]);
   assert.deepEqual(offers, []);
@@ -830,17 +826,15 @@ check('Ein erledigtes Todo wird im Angebot als solches ausgewiesen (A-2.4)', () 
       completedAt: '2026-02-01T10:00:00Z',
       openSeconds: 0,
       exportedSeconds: 0,
-      poolNames: ['Wartung Nord'],
-      enteringPoolNames: [],
-      leavingPoolNames: [],
+      poolMovement: { appears: ['Wartung Nord'], enters: [], leaves: [] },
     },
   ]);
   assert.equal(offers[0].isDone, true);
   assert.match(offers[0].summary, /Erledigt/);
   assert.deepEqual(
-    offers[0].poolNames,
+    offers[0].poolMovement.appears,
     ['Wartung Nord'],
-    'ohne die Pools kann das Angebot nicht sagen, wo das Todo nach dem Buchen steht',
+    'ohne die Bewegung kann das Angebot nicht sagen, wo das Todo nach dem Buchen steht',
   );
 });
 
@@ -1372,18 +1366,40 @@ await checkAsync('A-2.5/C-03: die Duplikatsuche zeigt „erledigt" und die Pools
   const match = found.value.matches[0];
 
   assert.notEqual(match.completedAt, null, 'das erledigte Todo ist nicht als solches erkennbar');
-  assert.deepEqual(match.poolNames, ['Wartung Nord'], 'die Pools fehlen im Angebot');
+
+  /*
+   * E-061 Punkt 3: **eine** Form, und die drei Namenslisten sind weg.
+   *
+   * Der Schlüsselvergleich und nicht bloß „`poolMovement` ist da": Ein Treffer,
+   * der beides trüge, sähe an jeder Prüfung grün aus und ließe zwei Formen
+   * nebeneinander weiterleben — genau der Zustand, den E-061 aufhebt. Und
+   * `undefined` ist die ehrliche Antwort für einen Aufrufer, der noch
+   * `poolNames` liest: Er bekommt nichts, nicht die halbe Wahrheit.
+   */
+  assert.deepEqual(
+    Object.keys(match).sort(),
+    [
+      'callNumber',
+      'completedAt',
+      'exportedSeconds',
+      'id',
+      'openSeconds',
+      'poolMovement',
+      'statusId',
+      'tagIds',
+      'title',
+    ],
+    'die Gestalt des Treffers weicht von der Beschreibung ab (AddinTodoMatch)',
+  );
+
+  // Für ein erledigtes Todo steht immer eine Bewegung da: Die Buchung hebt das
+  // Kennzeichen auf, also sind die beiden Zustände verschieden (E-061 Punkt 3).
+  assert.notEqual(match.poolMovement, null, 'die Bewegung fehlt im Angebot');
+  assert.deepEqual(match.poolMovement.appears, ['Wartung Nord'], 'die Pools fehlen im Angebot');
 
   const offer = describeOffers(found.value.matches)[0];
   assert.equal(offer.isDone, true);
-  assert.deepEqual(
-    reopenPreview(15, {
-      appears: offer.poolNames,
-      enters: offer.enteringPoolNames,
-      leaves: offer.leavingPoolNames,
-    }).effects.length,
-    3,
-  );
+  assert.deepEqual(reopenPreview(15, offer.poolMovement).effects.length, 3);
 });
 
 await checkAsync('A-2.5: eine Buchung auf ein erledigtes Todo hebt „Erledigt" automatisch auf', async () => {
@@ -1399,19 +1415,23 @@ await checkAsync('A-2.5: eine Buchung auf ein erledigtes Todo hebt „Erledigt" 
   assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
   assert.equal(booked.value.todoWasDone, true);
   assert.equal(booked.value.doneCleared, true, 'das Kennzeichen ist stehen geblieben');
+
+  // Dieselbe Wache wie am Treffer: eine Form, keine Reste (E-061 Punkt 3).
+  assert.deepEqual(
+    Object.keys(booked.value).sort(),
+    ['doneCleared', 'poolMovement', 'timeEntry', 'todoWasDone'],
+    'die Gestalt der Buchungsantwort weicht von der Beschreibung ab',
+  );
   assert.equal(state.todos.get(ID.todoTurnus).completedAt, null);
 
   // E-023: Die Spalte ist die andere Achse. Sie bleibt.
   assert.equal(state.todos.get(ID.todoTurnus).statusId, ID.statusBacklog, 'die Spalte wurde verschoben (E-023)');
 
   // I-05: Der Dienst nennt die Pools, in denen das Todo jetzt wieder steht.
-  assert.deepEqual(booked.value.poolNames, ['Wartung Nord']);
+  assert.notEqual(booked.value.poolMovement, null, 'die Bewegung fehlt in der Bestätigung');
+  assert.deepEqual(booked.value.poolMovement.appears, ['Wartung Nord']);
   assert.match(
-    reopenOutcome('Turnuswartung Frühjahr', 15, {
-      appears: booked.value.poolNames,
-      enters: booked.value.enteringPoolNames,
-      leaves: booked.value.leavingPoolNames,
-    }).effects[2],
+    reopenOutcome('Turnuswartung Frühjahr', 15, booked.value.poolMovement).effects[2],
     /Wartung Nord/,
   );
 });
@@ -2287,23 +2307,41 @@ const WARTUNG_TAGS = flattenTagTree(buildTagTree())
 /**
  * Die Bewegung eines Todos, über die Route und nicht über den Dienst.
  *
- * Beide Hälften in einem Wert, wie sie auch in der Antwort stehen. Getrennt
- * abzufragen hieße, den Aufgabenbereich nachzubilden, statt ihn zu messen.
+ * Alle drei Listen in einem Wert, genau so, wie sie seit T-104 auch in der
+ * Antwort stehen (E-061 Punkt 3). Getrennt abzufragen hieße, den
+ * Aufgabenbereich nachzubilden, statt ihn zu messen — und seit der Dienst den
+ * Wert zusammengesetzt liefert, gäbe es hier auch nichts mehr
+ * zusammenzusetzen.
+ *
+ * `null` ist eine gültige Antwort und keine Panne: Ein offenes Todo mit einer
+ * offenen Buchung bewegt sich durch eine weitere nicht mehr. Die Prüfungen
+ * unten unterscheiden die beiden Fälle ausdrücklich.
  */
 const movementOf = async (callNumber) => {
   const result = await axisClient.findMatches(callNumber);
   assert.equal(result.ok, true, result.ok ? '' : result.message);
   assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  const match = result.value.matches[0];
-  return {
-    appears: match.poolNames,
-    enters: match.enteringPoolNames,
-    leaves: match.leavingPoolNames,
-  };
+  return result.value.matches[0].poolMovement;
+};
+
+/**
+ * Dieselbe Frage mit der Zusage, dass es etwas zu berichten gibt.
+ *
+ * Ohne sie liefe eine Prüfung, die `null` bekommt, in „lesen von null" statt in
+ * einen Satz, der sagt, welcher Fall gemessen werden sollte.
+ */
+const requireMovement = async (callNumber) => {
+  const movement = await movementOf(callNumber);
+  assert.notEqual(
+    movement,
+    null,
+    `${callNumber} bewegt sich durch eine Buchung nicht — dann misst diese Prüfung den falschen Fall`,
+  );
+  return movement;
 };
 
 /** Nur die genannten Pools — für die Prüfungen, die von T-078 stammen. */
-const poolsOf = async (callNumber) => (await movementOf(callNumber)).appears;
+const poolsOf = async (callNumber) => (await requireMovement(callNumber)).appears;
 
 /*
  * Die Wache gegen die **sechste** Achse, zweite Hälfte (R-1, T-090, T-092)
@@ -2488,8 +2526,8 @@ await checkAsync('Die vollständige Auskunft, in der Reihenfolge der Pools', asy
  * keine Regel betroffen ist.
  */
 
-await checkAsync('E-056: die Abrechnungsliste steht in `leavingPoolNames`, nicht in `poolNames`', async () => {
-  const turnus = await movementOf('TCK-000518');
+await checkAsync('E-056: die Abrechnungsliste steht in `poolMovement.leaves`, nicht in `appears`', async () => {
+  const turnus = await requireMovement('TCK-000518');
 
   assert.deepEqual(
     turnus.leaves,
@@ -2527,7 +2565,7 @@ await checkAsync('E-056: die Abrechnungsliste steht in `leavingPoolNames`, nicht
 });
 
 await checkAsync('E-056: wen keine solche Regel betrifft, dem bleibt kein Halbsatz', async () => {
-  const stoerung = await movementOf('TCK-000517');
+  const stoerung = await requireMovement('TCK-000517');
 
   // Das Todo ist nicht erledigt — durch eine Buchung verliert es keinen Pool.
   assert.deepEqual(stoerung.leaves, []);
@@ -2547,7 +2585,7 @@ await checkAsync('E-056: wen keine solche Regel betrifft, dem bleibt kein Halbsa
 });
 
 await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und keine zweite Liste', async () => {
-  const turnus = await movementOf('TCK-000518');
+  const turnus = await requireMovement('TCK-000518');
   const notice = reopenPreview(15, turnus);
 
   // Die Zahl der Wirkungen ist unverändert drei. Eine vierte Zeile wäre die
@@ -2577,7 +2615,7 @@ await checkAsync('E-056: ein Satz, dieselbe Aussage — kein zweiter Absatz und 
 });
 
 await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor — in beiden Hälften', async () => {
-  const davor = await movementOf('TCK-000518');
+  const davor = await requireMovement('TCK-000518');
 
   const booked = await axisClient.book({
     todoId: AXIS_TODO.turnus,
@@ -2593,9 +2631,14 @@ await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor —
   // Die Zusage aus T-038, jetzt über fünf Achsen statt über eine — und seit
   // E-056 über beide Hälften der Aussage: Der Satz vorher und der Satz nachher
   // reden über dieselbe Bewegung.
-  assert.deepEqual(booked.value.poolNames, davor.appears, 'vorher und nachher nennen verschiedene Pools');
+  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
   assert.deepEqual(
-    booked.value.leavingPoolNames,
+    booked.value.poolMovement.appears,
+    davor.appears,
+    'vorher und nachher nennen verschiedene Pools',
+  );
+  assert.deepEqual(
+    booked.value.poolMovement.leaves,
     davor.leaves,
     'die Ankündigung und die Bestätigung nennen Verschiedenes als verschwunden',
   );
@@ -2603,16 +2646,16 @@ await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor —
    * Die dritte Liste steht seit T-092 mit hier, und zwar aus einem neuen Grund.
    *
    * Bis dahin bildete **eine** Funktion (`bookingStates`) das Zustandspaar für
-   * beide Aufrufer. Seit E-058 bilden die Duplikatsuche und `bookOnTodo` es je
-   * selbst — die Rechnung ist eine, die Annahme über die Wirkung der Handlung
-   * steht an zwei Stellen. Sie ist als **ein** Wert ausgeschrieben
-   * (`BOOKING_EFFECT`), aber das ist eine Zusage im Quelltext; hier wird sie
-   * gemessen. Nähme eine der beiden Stellen etwas anderes an, sagten
-   * Ankündigung und Bestätigung Verschiedenes über dieselbe Handlung — der
-   * Befund C-03 aus T-025, eine Ebene tiefer.
+   * beide Aufrufer. Seit E-058 rechnet ein Anwendungsfall die Bewegung, und
+   * seit E-061 bildet er auch das Zustandspaar: `bookingMovementStates` aus
+   * `usecases/pool-movement.ts`, gerufen aus **einer** Stelle im Add-in-Dienst
+   * für beide Wege. Das ist eine Zusage im Quelltext; hier wird sie gemessen.
+   * Nähme eine der beiden Stellen etwas anderes an, sagten Ankündigung und
+   * Bestätigung Verschiedenes über dieselbe Handlung — der Befund C-03 aus
+   * T-025, eine Ebene tiefer.
    */
   assert.deepEqual(
-    booked.value.enteringPoolNames,
+    booked.value.poolMovement.enters,
     davor.enters,
     'die Ankündigung und die Bestätigung nennen Verschiedenes als hinzugekommen',
   );
@@ -2620,22 +2663,31 @@ await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor —
   /*
    * Und dieselbe Suche noch einmal, nachdem das Kennzeichen gefallen ist.
    *
-   * `appears` ist unverändert — das war die Zusage. `leaves` ist jetzt **leer**,
-   * und das ist keine Abweichung, sondern dieselbe Rechnung auf einem anderen
-   * Bestand: Das Todo ist nicht mehr erledigt, also nimmt eine **weitere**
-   * Buchung es aus keiner Erledigt-Regel mehr heraus. Stünde hier noch etwas,
-   * hätte der Aufgabenbereich eine Bewegung angekündigt, die schon geschehen
+   * Die Antwort ist jetzt `null`, und das ist keine Abweichung, sondern
+   * dieselbe Rechnung auf einem anderen Bestand: Das Todo ist nicht mehr
+   * erledigt und hat eine offene Buchung — eine **weitere** Buchung ändert
+   * keine der fünf Achsen, nimmt es also aus keiner Erledigt-Regel mehr heraus
+   * und hebt es in keine Exportregel mehr hinein. Stünde hier noch eine
+   * Bewegung, hätte der Aufgabenbereich eine angekündigt, die schon geschehen
    * ist.
+   *
+   * Bis T-104 kam an dieser Stelle `appears` unverändert und `leaves` leer
+   * zurück; seit E-061 Punkt 3 sagt `null` dasselbe kürzer — und ohne dass dafür
+   * eine einzige Regel über ihre Ordnerbäume aufgelöst würde.
    */
   const danach = await movementOf('TCK-000518');
-  assert.deepEqual(danach.appears, davor.appears);
-  assert.deepEqual(danach.leaves, [], 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
+  assert.equal(danach, null, 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
+  assert.equal(
+    bookingOutcome(15, danach).pools,
+    null,
+    'die Bestätigung trägt einen Satz über eine Bewegung, die nicht stattfand',
+  );
 });
 
 await checkAsync('Der Satz, den der Benutzer liest, nennt die richtigen Pools und den falschen nicht', async () => {
   const found = await axisClient.findMatches('TCK-000517');
   const offer = describeOffers(found.value.matches)[0];
-  const satz = reopenPreview(15, offerMovement(offer)).effects[2];
+  const satz = reopenPreview(15, offer.poolMovement).effects[2];
 
   assert.match(satz, /Wartung Nord/);
   assert.match(satz, /noch nicht abgerechnet/);
@@ -2675,7 +2727,7 @@ await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte �
     'das Todo ist erledigt — dann greift der andere Satz und diese Prüfung misst den falschen Fall',
   );
 
-  const stoerung = await movementOf('TCK-000517');
+  const stoerung = await requireMovement('TCK-000517');
 
   // Der Zustand danach ist unverändert der aus T-078 — und er allein hätte den
   // Fall nie sichtbar gemacht: „Wartung Nord" trifft vorher wie nachher zu.
@@ -2697,7 +2749,7 @@ await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte �
   const found = await axisClient.findMatches('TCK-000517');
   const offer = describeOffers(found.value.matches)[0];
   assert.equal(
-    poolMovementSentence(offerMovement(offer), 'future', 'booking'),
+    poolMovementSentence(offer.poolMovement, 'future', 'booking'),
     satz,
     'über das Angebot kommt ein anderer Satz heraus als über den Treffer',
   );
@@ -2731,7 +2783,7 @@ await checkAsync('T-084: die erste Buchung hebt ein offenes Todo in die Spalte �
 });
 
 await checkAsync('T-084: die Bestätigung nach der Buchung nennt dieselbe Spalte, im Perfekt', async () => {
-  const davor = await movementOf('TCK-000517');
+  const davor = await requireMovement('TCK-000517');
 
   const booked = await axisClient.book({
     todoId: AXIS_TODO.stoerung,
@@ -2749,17 +2801,14 @@ await checkAsync('T-084: die Bestätigung nach der Buchung nennt dieselbe Spalte
 
   // Ankündigung und Bestätigung reden über dieselbe Bewegung — die Zusage aus
   // I-05, jetzt auch für die dritte Liste.
+  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
   assert.deepEqual(
-    booked.value.enteringPoolNames,
+    booked.value.poolMovement.enters,
     davor.enters,
     'vorher und nachher nennen verschiedene Pools',
   );
 
-  const bewegung = {
-    appears: booked.value.poolNames,
-    enters: booked.value.enteringPoolNames,
-    leaves: booked.value.leavingPoolNames,
-  };
+  const bewegung = booked.value.poolMovement;
   const notice = bookingOutcome(15, bewegung);
   assert.equal(notice.booked, '15 Minuten sind gebucht. Gerundet wird beim Export, auf die Tagessumme.');
 
@@ -2781,14 +2830,27 @@ await checkAsync('T-084: dasselbe Todo mit bestehender Buchung — kein Satz, ke
 
   const danach = await movementOf('TCK-000517');
 
-  // Der Zustand ist unverändert. Nur die Bewegung ist weg — und genau daran
-  // hängt der Satz.
-  assert.deepEqual(danach.appears, ['Wartung Nord', 'Wartung, noch nicht abgerechnet']);
-  assert.deepEqual(danach.enters, [], 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
-  assert.deepEqual(danach.leaves, []);
+  /*
+   * Die Bewegung ist weg — und genau daran hängt der Satz.
+   *
+   * Seit T-104 sagt der Dienst das als `null` und nicht als drei leere Listen
+   * (E-061 Punkt 3). Beide Auskünfte führen zur selben Anzeige, aber nur diese
+   * kostet keine Ordnerauflösung — und sie ist die schärfere: „hier war keine
+   * Bewegung möglich" statt „nachgesehen und nichts gefunden". Der Zustand
+   * danach (`appears`) fehlt damit an dieser Stelle, und das ist Absicht: Der
+   * Aufgabenbereich zählt ihn für eine Buchung ohne Wirkung ohnehin nicht auf
+   * (Anlass `'booking'`), und was er nicht zeigt, muss er nicht bekommen.
+   */
+  assert.equal(danach, null, 'eine bereits geschehene Bewegung wird ein zweites Mal angekündigt');
 
+  /*
+   * Beide Wege zu „keine Zeile", einzeln gemessen: der `null` des Dienstes und
+   * der `null` der Domäne. Der zweite ist der Fall, in dem gerechnet **wurde**
+   * — er tritt an dieser Route seit T-104 nicht mehr auf, bleibt aber die
+   * Zusage, gegen die der Aufgabenbereich gebaut ist.
+   */
   assert.equal(
-    poolMovementSentence(danach, 'future', 'booking'),
+    poolMovementSentence({ appears: ['Wartung Nord'], enters: [], leaves: [] }, 'future', 'booking'),
     null,
     'über der Schaltfläche steht eine Ankündigung ohne Ereignis',
   );
@@ -2845,7 +2907,9 @@ const leerPoolsOf = async (callNumber) => {
   const result = await leerClient.findMatches(callNumber);
   assert.equal(result.ok, true, result.ok ? '' : result.message);
   assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  return result.value.matches[0].poolNames;
+  const movement = result.value.matches[0].poolMovement;
+  assert.notEqual(movement, null, `${callNumber} bewegt sich nicht — dann misst diese Prüfung nichts`);
+  return movement.appears;
 };
 
 await checkAsync('Die Ausgangslage: „Archiv" gibt es, und es liegt kein Tag darin', async () => {
@@ -3031,12 +3095,9 @@ const flaechenBewegung = async (callNumber) => {
   const result = await flaechenClient.findMatches(callNumber);
   assert.equal(result.ok, true, result.ok ? '' : result.message);
   assert.equal(result.value.matches.length, 1, `${callNumber} trifft nicht genau ein Todo`);
-  const match = result.value.matches[0];
-  return {
-    appears: match.poolNames,
-    enters: match.enteringPoolNames,
-    leaves: match.leavingPoolNames,
-  };
+  const movement = result.value.matches[0].poolMovement;
+  assert.notEqual(movement, null, `${callNumber} bewegt sich nicht — dann misst dieser Abschnitt nichts`);
+  return movement;
 };
 
 await checkAsync('Die Ausgangslage: die Attrappe unterscheidet die Flächen', async () => {
@@ -3128,8 +3189,9 @@ await checkAsync('I-05 über die Flächen: die Bestätigung sagt dasselbe wie di
   assert.equal(booked.ok, true, booked.ok ? '' : booked.message);
   assert.equal(booked.value.doneCleared, true, 'die Ausgangslage stimmt nicht — das Todo war erledigt');
 
-  assert.deepEqual(booked.value.leavingPoolNames, davor.leaves);
-  assert.deepEqual(booked.value.poolNames, davor.appears);
+  assert.notEqual(booked.value.poolMovement, null, 'die Bestätigung sagt nichts über die Bewegung');
+  assert.deepEqual(booked.value.poolMovement.leaves, davor.leaves);
+  assert.deepEqual(booked.value.poolMovement.appears, davor.appears);
 });
 
 // ===========================================================================

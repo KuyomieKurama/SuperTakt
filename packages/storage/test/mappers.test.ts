@@ -9,7 +9,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SqlRow } from '../src/sqlite/database.ts';
 import {
+  RULE_REFERENCE_LIMIT,
+  RULE_REFERENCE_PROBE,
   asTimestamp,
+  poolReference,
+  poolReferences,
   toAppSettings,
   toDefaultTag,
   toExportAuditEntry,
@@ -339,5 +343,74 @@ describe('toAppSettings', () => {
 describe('toDefaultTag', () => {
   it('übersetzt Kennung und Position', () => {
     expect(toDefaultTag({ tag_id: 'tag-1', position: 3 })).toEqual({ tagId: 'tag-1', position: 3 });
+  });
+});
+
+/**
+ * T-105 (Auftrag aus `reports/T-101-domain-dev.md`, R-3a H-3): `poolReference`
+ * und `poolReferences` waren vor dieser Ergänzung von keinem Test benannt —
+ * nur über die echte Datenbank in `repo-tags-folder-in-rule.test.ts` indirekt
+ * mitgelaufen. Diese Datei prüft beide Funktionen rein, ohne SQL.
+ *
+ * `poolReferences` bekommt `rows` mit `LIMIT RULE_REFERENCE_PROBE`
+ * (`RULE_REFERENCE_LIMIT + 1`) übergeben — eine Zeile mehr, als sie zeigt, um
+ * die Kürzung zu BEMERKEN. Getestet wird deshalb genau an der Grenze: 20
+ * Zeilen (keine Kürzung) gegen 21 Zeilen (Kürzung auf 20 plus Hinweistext).
+ */
+describe('poolReference — ein einzelner Regelverweis für `details`', () => {
+  it('bildet { id, name } auf { field, code: "pool_rule", message: \'Regel „…“\' } ab', () => {
+    expect(poolReference({ id: 'pool-1', name: 'Abrechnung' })).toEqual({
+      field: 'pool-1',
+      code: 'pool_rule',
+      message: 'Regel „Abrechnung“',
+    });
+  });
+});
+
+describe('poolReferences — Obergrenze der genannten Regeln (R-3a H-3: 21 geholt, 20 genannt, Hinweis im Text)', () => {
+  const row = (n: number): SqlRow => ({ id: `pool-${String(n)}`, name: `Regel ${String(n)}` });
+
+  it('RULE_REFERENCE_LIMIT ist 20, RULE_REFERENCE_PROBE ist genau eins mehr (21)', () => {
+    expect(RULE_REFERENCE_LIMIT).toBe(20);
+    expect(RULE_REFERENCE_PROBE).toBe(21);
+  });
+
+  it('eine leere Liste ergibt keine details und keinen Hinweistext', () => {
+    expect(poolReferences([])).toEqual({ details: [], notice: '' });
+  });
+
+  it('fünf Zeilen: alle fünf erscheinen, kein Hinweistext', () => {
+    const rows = [row(1), row(2), row(3), row(4), row(5)];
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(5);
+    expect(result.notice).toBe('');
+  });
+
+  it('GENAU 20 Zeilen (die Grenze selbst): alle 20 erscheinen, noch KEIN Hinweistext — rows.length > LIMIT ist an dieser Stelle falsch', () => {
+    const rows = Array.from({ length: RULE_REFERENCE_LIMIT }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(20);
+    expect(result.notice).toBe('');
+  });
+
+  it('21 Zeilen (RULE_REFERENCE_PROBE, der Fall, für den die Abfrage eine Zeile mehr holt): genannt werden die ERSTEN 20, mit Hinweistext', () => {
+    const rows = Array.from({ length: RULE_REFERENCE_PROBE }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+
+    expect(result.details).toHaveLength(20);
+    // Die ersten 20 in der Reihenfolge der Zeilen — nicht die letzten 20 und
+    // nicht ungeordnet.
+    expect(result.details.map((entry) => entry.field)).toEqual(
+      Array.from({ length: 20 }, (_, i) => `pool-${String(i + 1)}`),
+    );
+    expect(result.details.some((entry) => entry.field === 'pool-21')).toBe(false);
+    expect(result.notice).toBe(' Es sind mehr als 20; genannt werden die ersten 20.');
+  });
+
+  it('22 Zeilen (mehr als die Probe) ergeben denselben Hinweistext wie 21 — der Text nennt die Grenze, nicht die tatsächliche Überzahl', () => {
+    const rows = Array.from({ length: 22 }, (_, i) => row(i + 1));
+    const result = poolReferences(rows);
+    expect(result.details).toHaveLength(20);
+    expect(result.notice).toBe(' Es sind mehr als 20; genannt werden die ersten 20.');
   });
 });

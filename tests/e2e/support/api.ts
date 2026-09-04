@@ -91,33 +91,34 @@ export async function clearTodoDone(id: string): Promise<Todo> {
 }
 
 /**
- * Vertrag von `PUT`/`DELETE /todos/:id/done`, **sobald T-101 steht**
- * (E-060 Punkt 1): Beide Routen liefern zusätzlich `poolMovement` — Anlass
- * `'booking'` beim Setzen, `'reopen'` beim Aufheben (E-060 Punkt 2), `null`,
- * wenn sich nichts bewegt. Heute (vor T-101) antworten beide Routen noch mit
- * dem blanken `Todo`, siehe {@link markTodoDone}/{@link clearTodoDone} oben —
- * diese bleiben deshalb unverändert und in Benutzung, statt einer Lüge über
- * den heutigen Stand ausgesetzt zu werden.
+ * Vertrag von `PUT`/`DELETE /todos/:id/done`, seit T-101/T-102 gemessen
+ * (E-060 Punkt 1): Beide Routen liefern das Todo **flach** wie bisher,
+ * `poolMovement` als zusätzliches Feld daneben — Anlass `'booking'` beim
+ * Setzen, `'reopen'` beim Aufheben (E-060 Punkt 2), `null`, wenn sich nichts
+ * bewegt (kein Regelwechsel). Genau die Gestalt, die T-102 gegen die echte
+ * Route gelesen hat (`Felder: callNumber, completedAt, createdAt, id,
+ * poolMovement, statusId, tagIds, title, updatedAt`) und die
+ * `apps/web/src/api/types.ts` als `TodoDoneResult extends Todo` abbildet.
+ * **Keine** Hülle `{ todo, poolMovement }` — der T-103-Entwurf hatte das
+ * angenommen, gemessen ist es anders.
  *
- * Angenommen, nicht gemessen: `{ todo, poolMovement }` als Hülle um das
- * Ergebnis, analog zu {@link StopTimerResult}, das eine Buchung ebenso neben
- * `poolMovement` trägt. Keine `kind`-Marke — anders als beim Timer kennt
- * weder das Setzen noch das Aufheben von „Erledigt" einen zweiten Ausgang
- * (kein „unvollständig", kein „abgelehnt"). Sobald T-101 die tatsächliche
- * Antwort liefert, ist diese Stelle die erste, die dagegen zu prüfen ist —
- * siehe Bericht zu T-103, Abschnitt „Entwurf E-060/O-R".
+ * {@link markTodoDone}/{@link clearTodoDone} oben bleiben unverändert bei
+ * der Beschriftung `Todo`: Die zusätzlichen Felder der Antwort stören dort
+ * niemanden, sie werden nur nicht gelesen (kein Aufrufer dieser beiden
+ * Funktionen braucht den Bewegungssatz). Keine `kind`-Marke hier — anders
+ * als beim Timer kennt weder das Setzen noch das Aufheben von „Erledigt"
+ * einen zweiten Ausgang (kein „unvollständig", kein „abgelehnt").
  */
-export interface TodoDoneResult {
-  readonly todo: Todo;
+export interface TodoDoneResult extends Todo {
   readonly poolMovement: PoolMovementNames | null;
 }
 
-/** `PUT /todos/:id/done` mit `poolMovement` (T-101/E-060 Punkt 1, Entwurf). */
+/** `PUT /todos/:id/done` mit `poolMovement` — Anlass `'booking'` (E-060 Punkt 1/2, T-101/T-102). */
 export async function setTodoDoneWithMovement(id: string): Promise<TodoDoneResult> {
   return call<TodoDoneResult>(`/todos/${id}/done`, { method: 'PUT' });
 }
 
-/** `DELETE /todos/:id/done` mit `poolMovement` (T-101/E-060 Punkt 1, Entwurf). */
+/** `DELETE /todos/:id/done` mit `poolMovement` — Anlass `'reopen'` (E-060 Punkt 1/2, T-101/T-102). */
 export async function reopenTodoWithMovement(id: string): Promise<TodoDoneResult> {
   return call<TodoDoneResult>(`/todos/${id}/done`, { method: 'DELETE' });
 }
