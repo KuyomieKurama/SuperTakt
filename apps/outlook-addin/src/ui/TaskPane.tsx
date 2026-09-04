@@ -647,6 +647,34 @@ const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   body: 'Eingabe',
 });
 
+/**
+ * Dieselbe Zuordnung, aber auch für einen Befund an **einem Eintrag einer
+ * Liste** (T-114).
+ *
+ * `toFieldIssues` bildet den Pfad mit `path.join('.')`; ein abgewiesener
+ * Tagname heißt deshalb `tagNames.0` und nicht `tagNames`. Die Tabelle darüber
+ * trifft das nicht, und der Benutzer las bis T-114 „tagNames.0" — einen
+ * technischen Schlüssel und dazu eine von null an gezählte Stelle.
+ *
+ * Der Anlass ist die Zeichenprüfung aus T-114: Vorher konnte ein Eintrag nur
+ * an seiner Länge scheitern, was im Aufgabenbereich kaum vorkommt; jetzt kann
+ * ein eingefügter Name daran scheitern, dass ein unsichtbares Zeichen daran
+ * hängt. Gezählt wird ab eins, weil die Zahl für einen Menschen ist.
+ *
+ * Ein unbekannter Schlüssel bleibt roh stehen — dieselbe Regel wie oben:
+ * lieber ein technischer Name als eine falsche Zuordnung.
+ */
+const fieldLabel = (field: string): string => {
+  const known = FIELD_LABEL[field];
+  if (known !== undefined) return known;
+
+  const indexed = /^(.+)\.(\d+)$/.exec(field);
+  if (indexed === null) return field;
+
+  const base = FIELD_LABEL[indexed[1] ?? ''];
+  return base === undefined ? field : `${base}, Eintrag ${String(Number(indexed[2]) + 1)}`;
+};
+
 function Failure({
   failure,
   onOpenSettings,
@@ -672,7 +700,7 @@ function Failure({
         <ul className="callout__list">
           {failure.details.map((detail) => (
             <li key={`${detail.field}-${detail.code}`}>
-              {FIELD_LABEL[detail.field] ?? detail.field}: {detail.message}
+              {fieldLabel(detail.field)}: {detail.message}
             </li>
           ))}
         </ul>

@@ -1298,8 +1298,15 @@ Wahrheit — und seit E-055 ist „Erledigt" eine Achse, die Spalten entscheidet
    nichts, was der Kommentar an `PoolMovementOccasion` nicht auch sagt. Der Kommentar dort nennt
    künftig beide Anlässe, für die die neutrale Form steht.
 4. Die Oberfläche nutzt den Satz im Toast nach beiden Handlungen wie beim Stopp (E-058 Punkt 6):
-   Zeitform `'past'`, Zeile weglassen, wenn `null`. Die Sätze „Erledigt." und „Wieder offen."
-   bleiben Titel; der Bewegungssatz ist der Rumpf.
+   Zeitform `'past'`, Zeile weglassen, wenn `null`. Der Bewegungssatz ist der Rumpf.
+
+   **Richtiggestellt nach T-116 (Auflage 1, 2026-09-04).** Dieser Punkt nannte als Titel die
+   Sätze „Erledigt." und „Wieder offen."; gebaut ist „„X“ ist erledigt." beziehungsweise
+   „„X“ ist wieder offen.". Der Code hat recht und die Entscheidung wird nachgezogen: E-060
+   verweist für die Form auf E-058 Punkt 6, und der Stopp-Toast trägt den Namen des Todos seit
+   R-2a W-5 im Titel. Ein Titel ohne Namen wäre in einer Liste von Meldungen nicht zuzuordnen —
+   genau der Grund, aus dem W-5 den Namen dort hineingeholt hat. Die jüngere Regel schlägt den
+   älteren Wortlaut.
 
 ## E-061 — Eine Rechnung, eine Wirkung, eine Form für die Poolbewegung
 

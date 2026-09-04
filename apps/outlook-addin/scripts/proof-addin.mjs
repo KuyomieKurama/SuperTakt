@@ -57,7 +57,7 @@ import {
   describeNewTag,
   removePendingTagName,
 } from '../src/tags/new-name.ts';
-import { prepareNote, suggestTitle } from '../src/office/mail.ts';
+import { MAX_TITLE_CHARACTERS, prepareNote, suggestTitle } from '../src/office/mail.ts';
 
 // --- Prüflinge: die Add-in-Routen des lokalen Dienstes ---------------------
 // Bewusst über einen relativen Pfad und nicht über eine Paketabhängigkeit: Der
@@ -65,6 +65,27 @@ import { prepareNote, suggestTitle } from '../src/office/mail.ts';
 // führen. Ein Browserbündel, das den Dienst importieren kann, importiert ihn
 // irgendwann.
 import { mountAddinRoutes } from '../../local-api/src/routes/addin/index.ts';
+
+/*
+ * --- Prüflinge: die **beiden Türen** (T-114) -------------------------------
+ *
+ * Zwei Schemata, die dieser Nachweis bis T-114 nicht brauchte, und sie stehen
+ * hier aus genau dem Grund, den der security-checker in T-112 aufgeschrieben
+ * hat: „sonst läuft es beim nächsten Mal wieder auseinander."
+ *
+ * Zwischen T-101 und T-114 waren sie auseinander. Die Hauptanwendung wies
+ * Steuer- und Richtungszeichen ab, das Add-in nicht — und ein Kommentar in
+ * `routes/addin/schema.ts` sicherte die Gleichheit weiterhin zu. Eine
+ * Zusicherung, die niemand ausführt, ist eine Behauptung; sie war es fünf
+ * Wellen lang, ohne dass ein Lauf rot wurde.
+ *
+ * Geprüft wird deshalb nicht, ob beide Dateien dieselbe Zeile enthalten —
+ * das wäre wieder eine Aussage über den Wortlaut —, sondern ob beide Türen
+ * **dieselben Zeichenketten annehmen und dieselben abweisen**. Das bliebe auch
+ * dann richtig, wenn eine der beiden Seiten ihre Prüfung umbaut.
+ */
+import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/routes/todos.ts';
+import { createTodoSchema as addinCreateTodoSchema } from '../../local-api/src/routes/addin/schema.ts';
 
 /*
  * --- Prüflinge: die **echte** Speicherung und der **andere** Weg (T-061) ----
@@ -114,6 +135,7 @@ import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases
 // `@takt/domain` seit T-028 in seiner Abhängigkeitsliste, und derselbe
 // Bezeichner steht im Quelltext des Aufgabenbereichs.
 import {
+  MAX_TAG_NAME_LENGTH,
   POOL_RULE_AXIS_IDS,
   POOL_RULE_AXIS_OF_FIELD,
   checkCallNumber,
@@ -3302,6 +3324,326 @@ await checkAsync('Die Gegenprobe: ohne den Fehlschlag bucht derselbe Aufruf', as
     1,
   );
   assert.equal(heilStore.state.todos.get(AXIS_TODO.turnus).completedAt, null);
+});
+
+
+// ===========================================================================
+heading('16  Beide Türen weisen dieselben Zeichen ab (T-114, Befund T-112-1)');
+// ===========================================================================
+
+/*
+ * Der Befund, gegen den dieser Abschnitt steht.
+ *
+ * `apps/local-api/src/http/input.ts` weist seit T-101 Steuerzeichen (C0, C1)
+ * und die bidirektionalen Formatierungszeichen an Titeln und Namen ab. Die
+ * Add-in-Tür hatte ihre eigene Abschrift des Schemas und bekam die Prüfung
+ * nicht mit — ausgerechnet die Tür, deren Titel mit dem **Betreff einer
+ * E-Mail** vorbelegt ist und deren Kopfkommentar sagt, dass hier jede
+ * Zeichenkette eine fremde Quelle berührt hat.
+ *
+ * Die Zeichen stehen unten als **Zahlen** und nicht als Zeichen im Quelltext.
+ * Das ist kein Geschmack: Ein rohes `U+0000` in einer Quelldatei macht sie für
+ * Git zu einer Binärdatei — `git diff` zeigt dann „Bin 0 -> … bytes", und
+ * ausgerechnet der Nachweis einer Zeichenwache wäre der eine Teil, den ein
+ * Reviewer nicht lesen kann. `String.fromCodePoint` prüft dasselbe und lässt
+ * die Datei Text bleiben.
+ */
+
+/** Was beide Türen abweisen müssen. */
+const ABGEWIESENE_ZEICHEN = [
+  [0x0000, 'NUL — bricht Zeichenketten und Protokollzeilen von innen auf'],
+  [0x0001, 'C0, Anfang des Bereichs'],
+  [0x0008, 'Rückschritt — löscht in einer Konsole das Zeichen davor'],
+  [0x0009, 'Tabulator — C0, auch wenn er wie Leerraum aussieht'],
+  [0x000a, 'Zeilenvorschub — macht aus einem Titel zwei Zeilen'],
+  [0x000d, 'Wagenrücklauf'],
+  [0x001b, 'ESC — Anfang einer Terminalfolge'],
+  [0x001f, 'C0, Ende des Bereichs'],
+  [0x007f, 'DEL'],
+  [0x0080, 'C1, Anfang des Bereichs'],
+  [0x009f, 'C1, Ende des Bereichs'],
+  [0x202a, 'LRE'],
+  [0x202b, 'RLE'],
+  [0x202c, 'PDF — beendet eine Einbettung'],
+  [0x202d, 'LRO'],
+  [0x202e, 'RLO — dreht den Rest der Zeile optisch um'],
+  [0x2066, 'LRI'],
+  [0x2067, 'RLI'],
+  [0x2068, 'FSI'],
+  [0x2069, 'PDI'],
+];
+
+/**
+ * Was beide Türen **annehmen** müssen.
+ *
+ * Ohne diese Hälfte belegte der Abschnitt nur, dass irgendetwas abgewiesen
+ * wird — eine Tür, die alles abweist, bestünde jede Prüfung darüber. Umlaute,
+ * Eszett, Gedankenstrich, deutsche Anführungszeichen und ein Emoji stehen in
+ * echten Betreffzeilen; das geschützte und das schmale Leerzeichen stehen
+ * dicht neben der abgewiesenen Menge und gehören trotzdem nicht dazu.
+ */
+const ANGENOMMENE_ZEICHEN = [
+  [0x0020, 'Leerzeichen'],
+  [0x00e4, 'ä'],
+  [0x00df, 'ß'],
+  [0x00e9, 'é'],
+  [0x2014, 'Gedankenstrich'],
+  [0x201e, 'öffnendes deutsches Anführungszeichen'],
+  [0x00a0, 'geschütztes Leerzeichen'],
+  [0x202f, 'schmales geschütztes Leerzeichen — liegt zwischen den Bidi-Zeichen'],
+  [0x1f6e0, 'Emoji (außerhalb der BMP, zwei UTF-16-Einheiten)'],
+];
+
+const hauptTuer = MAIN_REQUEST_SCHEMAS.createTodo;
+const addinTuer = addinCreateTodoSchema;
+
+/** Nimmt diese Tür diesen Rumpf an? */
+const nimmtAn = (tuer, rumpf) => tuer.safeParse(rumpf).success;
+
+/** Welche Felder hat diese Tür beanstandet? */
+const beanstandet = (tuer, rumpf) => {
+  const geprueft = tuer.safeParse(rumpf);
+  return geprueft.success ? [] : geprueft.error.issues.map((issue) => issue.path.join('.'));
+};
+
+const alsTitel = (zeichen) => ({ title: `Wartung${zeichen}Nord` });
+const alsTagname = (zeichen) => ({ title: 'Wartung Nord', tagNames: [`Kunde${zeichen}Ost`] });
+
+check(`beide Türen weisen dieselben ${String(ABGEWIESENE_ZEICHEN.length)} Zeichen im Titel ab`, () => {
+  const abweichungen = [];
+  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
+    const zeichen = String.fromCodePoint(punkt);
+    const haupt = nimmtAn(hauptTuer, alsTitel(zeichen));
+    const addin = nimmtAn(addinTuer, alsTitel(zeichen));
+    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
+    if (haupt !== addin) {
+      abweichungen.push(`${name}: Haupttür ${haupt ? 'nimmt an' : 'weist ab'}, Add-in-Tür ${addin ? 'nimmt an' : 'weist ab'}`);
+    } else if (haupt) {
+      abweichungen.push(`${name}: **beide** Türen nehmen es an`);
+    }
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+check('beide Türen weisen dieselben Zeichen in einem Tagnamen ab', () => {
+  const abweichungen = [];
+  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
+    const zeichen = String.fromCodePoint(punkt);
+    const haupt = nimmtAn(hauptTuer, alsTagname(zeichen));
+    const addin = nimmtAn(addinTuer, alsTagname(zeichen));
+    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
+    if (haupt !== addin) abweichungen.push(`${name}: Haupttür ${haupt}, Add-in-Tür ${addin}`);
+    else if (haupt) abweichungen.push(`${name}: **beide** Türen nehmen es an`);
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+check('die Beanstandung nennt das Feld, in dem sie entstanden ist', () => {
+  const rlo = String.fromCodePoint(0x202e);
+  assert.deepEqual(beanstandet(addinTuer, alsTitel(rlo)), ['title']);
+  // `path.join('.')` ergibt bei einem Listeneintrag `tagNames.0`. Der
+  // Aufgabenbereich übersetzt das seit T-114 in „Neue Tags, Eintrag 1".
+  assert.deepEqual(beanstandet(addinTuer, alsTagname(rlo)), ['tagNames.0']);
+});
+
+check(`beide Türen nehmen dieselben ${String(ANGENOMMENE_ZEICHEN.length)} harmlosen Zeichen an`, () => {
+  const abweichungen = [];
+  for (const [punkt, was] of ANGENOMMENE_ZEICHEN) {
+    const zeichen = String.fromCodePoint(punkt);
+    for (const [feld, bauen] of [['Titel', alsTitel], ['Tagname', alsTagname]]) {
+      const haupt = nimmtAn(hauptTuer, bauen(zeichen));
+      const addin = nimmtAn(addinTuer, bauen(zeichen));
+      if (haupt !== addin || !haupt) {
+        abweichungen.push(`${feld} ${was}: Haupttür ${haupt ? 'nimmt an' : 'weist ab'}, Add-in-Tür ${addin ? 'nimmt an' : 'weist ab'}`);
+      }
+    }
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+check('die Länge läuft ebenfalls nicht auseinander', () => {
+  /*
+   * Die zweite Hälfte desselben Befunds, und sie stand länger im Baum als die
+   * erste: Die Add-in-Tür nahm 512 Zeichen an, die Hauptanwendung 500. Ein so
+   * angelegtes Todo ließ sich über `PATCH /todos/{todoId}` nie wieder
+   * speichern — der Änderungsdialog schickt den Titel mit.
+   */
+  const gerade = 'a'.repeat(MAX_TITLE_CHARACTERS);
+  const einsZuViel = 'a'.repeat(MAX_TITLE_CHARACTERS + 1);
+
+  assert.equal(nimmtAn(addinTuer, { title: gerade }), true, 'die Add-in-Tür nimmt ihren eigenen Deckel nicht an');
+  assert.equal(nimmtAn(hauptTuer, { title: gerade }), true, 'die Haupttür nimmt weniger als das Add-in');
+  assert.equal(nimmtAn(addinTuer, { title: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
+  assert.equal(nimmtAn(hauptTuer, { title: einsZuViel }), false, 'die Haupttür nimmt mehr als das Add-in');
+});
+
+check(`der Tagname bleibt an ${String(MAX_TAG_NAME_LENGTH)} Zeichen aus der Domäne gebunden`, () => {
+  /*
+   * Bis T-114 stand `MAX_TAG_NAME_LENGTH` als Zahl in `routes/addin/schema.ts`
+   * und band die Route damit sichtbar an die Domäne. Seit die Route
+   * `nameSchema` benutzt, kommt die Zahl aus dem Dienst — und die Bindung
+   * steht hier statt in einem Kommentar. Laufen beide auseinander, wird dieser
+   * Lauf rot; vorher wäre gar nichts geschehen.
+   */
+  const gerade = 'a'.repeat(MAX_TAG_NAME_LENGTH);
+  const einsZuViel = 'a'.repeat(MAX_TAG_NAME_LENGTH + 1);
+
+  for (const [wo, tuer] of [['Haupttür', hauptTuer], ['Add-in-Tür', addinTuer]]) {
+    assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [gerade] }), true, `${wo} nimmt ${String(MAX_TAG_NAME_LENGTH)} Zeichen nicht an`);
+    assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [einsZuViel] }), false, `${wo} nimmt mehr als ${String(MAX_TAG_NAME_LENGTH)} Zeichen an`);
+  }
+});
+
+check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () => {
+  /*
+   * Kein Versehen, sondern dieselbe Grenze, die `http/input.ts` zwischen
+   * `nameSchema` und `textSchema` zieht: Ein **Name** wird in fremde Sätze
+   * eingesetzt, ein **Vermerk** als eigener Absatz gezeigt. Ein Freitextfeld,
+   * das an einem Steuerzeichen scheitert, weist Text des Benutzers ab; der
+   * Vermerk geht außerdem nicht in den Export (A-7.2).
+   *
+   * Diese Zeile steht hier, damit die Entscheidung sichtbar ist und nicht
+   * ungeprüft. Wer sie ändern will, ändert sie hier mit — und trägt sie in
+   * `decisions.md` ein, statt sie im Vorbeigehen zu verschieben.
+   */
+  const nul = String.fromCodePoint(0x0000);
+  assert.equal(nimmtAn(addinTuer, { title: 'Wartung Nord', note: `Zeile${nul}zwei` }), true);
+  assert.equal(nimmtAn(hauptTuer, { title: 'Wartung Nord', note: `Zeile${nul}zwei` }), true);
+});
+
+check('der Titelvorschlag aus einem Betreff läuft nie in die Abweisung', () => {
+  /*
+   * Der Grund, aus dem die Abweisung allein an dieser Tür nicht genügt.
+   *
+   * Der Titel ist im Aufgabenbereich mit dem Betreff vorbelegt. Trüge der
+   * Betreff ein unsichtbares Zeichen, bekäme der Benutzer ein 422 auf ein
+   * Feld, an dem nichts Falsches zu sehen ist — und der einzige Ausweg wäre,
+   * den ganzen Titel neu zu tippen. `suggestTitle` nimmt die Zeichen deshalb
+   * schon aus dem Vorschlag heraus; was der Benutzer danach selbst einfügt,
+   * geht unverändert an den Dienst und wird dort abgewiesen.
+   */
+  const stehengeblieben = [];
+  for (const [punkt, was] of ABGEWIESENE_ZEICHEN) {
+    const zeichen = String.fromCodePoint(punkt);
+    const vorschlag = suggestTitle(`AW: Störung${zeichen}Lüftung`);
+    const name = `U+${punkt.toString(16).toUpperCase().padStart(4, '0')} (${was})`;
+
+    if (!nimmtAn(addinTuer, { title: vorschlag })) {
+      stehengeblieben.push(`${name}: der Vorschlag „${vorschlag}" wird abgewiesen`);
+      continue;
+    }
+    if (vorschlag.includes(zeichen)) stehengeblieben.push(`${name}: das Zeichen steht noch im Vorschlag`);
+    if (!vorschlag.startsWith('Störung')) stehengeblieben.push(`${name}: die Vorsilbe „AW:" ist stehengeblieben`);
+    if (!vorschlag.endsWith('Lüftung')) stehengeblieben.push(`${name}: der Text nach dem Zeichen fehlt`);
+  }
+  assert.deepEqual(stehengeblieben, [], stehengeblieben.join('; '));
+});
+
+check('Leerraum bleibt Leerraum, unsichtbare Zeichen verschwinden ersatzlos', () => {
+  // Die Unterscheidung, wegen der `U+0009` bis `U+000D` nicht in derselben
+  // Menge stehen wie das Übrige: Ein Tabulator trennt zwei Wörter, ein NUL
+  // nicht. Beide ersatzlos zu streichen klebte „Störung" und „Lüftung"
+  // zusammen.
+  assert.equal(suggestTitle(`Störung${String.fromCodePoint(0x0009)}Lüftung`), 'Störung Lüftung');
+  assert.equal(suggestTitle(`Störung${String.fromCodePoint(0x000a)}Lüftung`), 'Störung Lüftung');
+  assert.equal(suggestTitle(`Störung${String.fromCodePoint(0x0000)}Lüftung`), 'StörungLüftung');
+  assert.equal(suggestTitle(`Störung${String.fromCodePoint(0x202e)}Lüftung`), 'StörungLüftung');
+  // Kein doppeltes Leerzeichen, wo ein unsichtbares Zeichen zwischen zweien
+  // stand: Erst fallen die Zeichen, dann wird Leerraum zusammengezogen.
+  assert.equal(suggestTitle(`Störung ${String.fromCodePoint(0x0000)} Lüftung`), 'Störung Lüftung');
+});
+
+check('ein Betreff aus lauter unsichtbaren Zeichen ergibt einen sichtbar leeren Vorschlag', () => {
+  // Kein Rest, der wie ein Titel aussieht und keiner ist. Das leere Feld ist
+  // die ehrliche Anzeige: Der Benutzer sieht, dass er etwas eintragen muss,
+  // statt „Anlegen" zu drücken und eine Abweisung zu bekommen.
+  const nurUnsichtbar = ABGEWIESENE_ZEICHEN.map(([punkt]) => String.fromCodePoint(punkt)).join('');
+  assert.equal(suggestTitle(nurUnsichtbar), '');
+  assert.equal(nimmtAn(addinTuer, { title: '' }), false, 'ein leerer Titel darf nicht durchgehen');
+});
+
+check('ein überlanger Betreff wird auf den Deckel gekürzt, den der Dienst annimmt', () => {
+  const vorschlag = suggestTitle('a'.repeat(MAX_TITLE_CHARACTERS * 3));
+  assert.equal(vorschlag.length, MAX_TITLE_CHARACTERS);
+  assert.equal(nimmtAn(addinTuer, { title: vorschlag }), true);
+  assert.equal(nimmtAn(hauptTuer, { title: vorschlag }), true, 'der Vorschlag passt nicht durch die Haupttür');
+});
+
+const zeichenStore = createFakeStore();
+const zeichenApp = mountAddinRoutes(zeichenStore.deps);
+const zeichenClient = createApiClient({
+  baseUrl: 'http://127.0.0.1:17843',
+  token: () => 'takt_ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ',
+  fetch: (url, init) => zeichenApp.request(String(url), init),
+});
+
+await checkAsync('an der laufenden Route: 422 mit deutschem Satz, und nichts ist angelegt', async () => {
+  const rlo = String.fromCodePoint(0x202e);
+  const vorher = zeichenStore.state.todos.size;
+
+  const ergebnis = await zeichenClient.createTodo({
+    title: `Wartung${rlo}Nord`,
+    callNumber: null,
+    statusId: null,
+    tagIds: [],
+    tagNames: [],
+    note: '',
+  });
+
+  assert.equal(ergebnis.ok, false, 'die Route hat den Titel angenommen');
+  assert.equal(ergebnis.kind, 'invalid_input');
+  assert.equal(ergebnis.code, 'validation_error');
+  assert.equal(ergebnis.details?.[0]?.field, 'title');
+
+  const satz = ergebnis.details?.[0]?.message ?? '';
+  assert.match(satz, /Steuerzeichen/, `die Meldung ist nicht der deutsche Satz: „${satz}"`);
+  assert.equal(satz.includes(rlo), false, 'die Meldung gibt das Zeichen wörtlich wieder');
+
+  assert.equal(zeichenStore.state.todos.size, vorher, 'es ist trotz Abweisung ein Todo entstanden');
+});
+
+await checkAsync('an der laufenden Route: derselbe Titel ohne das Zeichen geht durch', async () => {
+  // Die Gegenprobe. Ohne sie stünde nur fest, dass die Route irgendetwas
+  // abweist — nicht, dass es das Zeichen war.
+  const ergebnis = await zeichenClient.createTodo({
+    title: 'WartungNord',
+    callNumber: null,
+    statusId: null,
+    tagIds: [],
+    tagNames: [],
+    note: '',
+  });
+
+  assert.equal(ergebnis.ok, true, ergebnis.ok ? '' : ergebnis.message);
+  assert.equal(ergebnis.value.todo.title, 'WartungNord');
+});
+
+await checkAsync('T-114 Punkt 4: die Call-Nummer braucht keine zweite Wache', async () => {
+  /*
+   * Sie hat schon eine, und eine engere: `checkCallNumber` lässt nur
+   * `A-Z a-z 0-9 . _ / -` durch (E-045, B-4.3). Ein geschlossener Vorrat
+   * schließt jedes Steuer- und Richtungszeichen mit ein, ohne es zu nennen.
+   * Geprüft wird das trotzdem, weil „ist schon abgedeckt" der Satz ist, mit
+   * dem T-112-1 fünf Wellen überlebt hat.
+   */
+  const rlo = String.fromCodePoint(0x202e);
+
+  const gesucht = await zeichenClient.findMatches(`TCK-0000${rlo}42`);
+  assert.equal(gesucht.ok, true, 'ein Normalfall darf kein 4xx sein');
+  assert.equal(gesucht.value.searched, false);
+  assert.equal(gesucht.value.reason, 'forbidden_characters');
+
+  const angelegt = await zeichenClient.createTodo({
+    title: 'Wartung Nord',
+    callNumber: `TCK-0000${rlo}42`,
+    statusId: null,
+    tagIds: [],
+    tagNames: [],
+    note: '',
+  });
+  assert.equal(angelegt.ok, false, 'die Route hat eine Call-Nummer mit Richtungszeichen angelegt');
+  assert.equal(angelegt.details?.[0]?.field, 'callNumber');
+  assert.equal(angelegt.details?.[0]?.code, 'forbidden_characters');
 });
 
 // ===========================================================================

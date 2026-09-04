@@ -2895,7 +2895,36 @@ paths:
               type: object
               required: [title]
               properties:
-                title: { type: string, minLength: 1, maxLength: 512 }
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                  description: |
+                    **Dasselbe Schema wie `TodoCreate.title`** (T-114): Der
+                    Wert wird getrimmt und darf keine Steuerzeichen
+                    (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
+                    bidirektionalen Formatierungszeichen (`U+202A`–`U+202E`,
+                    `U+2066`–`U+2069`) enthalten. Sonst `422` mit
+                    `details[].field = "title"`. Der abgewiesene Wert steht
+                    **nicht** in der Meldung: Er stammt möglicherweise aus
+                    einer fremden E-Mail, und ein Text, der ein solches
+                    Zeichen wörtlich wiedergibt, richtet in der Fehlermeldung
+                    genau den Schaden an, den er verhindern soll.
+
+                    Der Grund für die Prüfung ist an dieser Route ein anderer
+                    als an der Hauptanwendung: Der Titel ist im
+                    Aufgabenbereich mit dem **Betreff der E-Mail** vorbelegt
+                    und stammt damit von einem Absender. Das Add-in nimmt die
+                    genannten Zeichen deshalb schon aus seinem *Vorschlag*
+                    heraus (`suggestTitle`); abgewiesen wird hier, was danach
+                    noch hineingerät.
+
+                    **Bis T-114 lag die Grenze bei 512** und damit über der
+                    der Hauptanwendung. Ein so angelegtes Todo ließ sich über
+                    `PATCH /todos/{todoId}` nicht mehr speichern — der
+                    Änderungsdialog schickt den Titel mit, und dort galten
+                    schon immer 500. Dieselbe Handlung, zwei Ergebnisse, je
+                    nachdem wo sie geschieht (C-03).
                 callNumber:
                   oneOf: [{ type: string, maxLength: 128 }, { type: 'null' }]
                   default: null
@@ -2950,6 +2979,16 @@ paths:
                     wird nicht anders behandelt als in der Hauptanwendung. Bis
                     T-061 nahm diese Route nur Kennungen — derselbe Vorgang,
                     zwei Ergebnisse, je nachdem wo er geschieht (Befund C-03).
+
+                    **Seit T-114 ist es nicht mehr nur wortgleich, sondern
+                    dasselbe Schema.** Ein Name darf keine Steuerzeichen
+                    (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
+                    bidirektionalen Formatierungszeichen (`U+202A`–`U+202E`,
+                    `U+2066`–`U+2069`) enthalten; sonst `422` mit
+                    `details[].field = "tagNames.<Index>"`. Die
+                    Namensgleichheit weiter unten beantwortet das **nicht**:
+                    Sie sagt, wann zwei Namen derselbe sind, nicht welche
+                    Zeichen in einem Namen vorkommen dürfen.
 
                     Wann zwei Namen **derselbe** sind, sagt
                     `packages/domain/src/tag-name.ts`: NFC, Leerraum

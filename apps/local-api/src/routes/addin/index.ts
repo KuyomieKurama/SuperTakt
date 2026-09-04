@@ -54,8 +54,15 @@ import {
 } from '@takt/domain';
 
 /*
- * Der **einzige** Import aus dem übrigen Dienst, und er holt genau eine Zahl:
- * den Statuscode zu einem fachlichen Fehlerschlüssel (T-061).
+ * Der einzige Import **dieser Datei** aus dem übrigen Dienst, und er holt genau
+ * eine Zahl: den Statuscode zu einem fachlichen Fehlerschlüssel (T-061).
+ *
+ * Bis T-114 stand hier „der **einzige** Import aus dem übrigen Dienst". Das
+ * gilt seither nicht mehr für das Modul als Ganzes: `schema.ts` holt
+ * `titleSchema` und `nameSchema` aus `http/input.ts`, damit die Add-in-Tür
+ * dieselben Zeichen abweist wie die Haupttür (Befund T-112-1). Der Satz steht
+ * berichtigt statt gestrichen da, weil eine zugesicherte Ausschließlichkeit,
+ * die niemand nachzählt, genau der Fehler ist, den T-114 behebt.
  *
  * Er steht hier, damit ein `name_conflict` über `POST /addin/todos` denselben
  * Code bekommt wie über `POST /todos` — 409 und nicht 422, weil diese Route
