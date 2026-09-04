@@ -3,20 +3,36 @@
  * Richtungszeichen ab (`apps/local-api/src/http/input.ts`, Auftrag aus
  * `reports/T-101-domain-dev.md` "Nächster Schritt" 2 / R-3a H-2).
  *
+ * Erweitert um die Ränder der um drei Marken gewachsenen Klasse aus T-117
+ * (Auftrag T-121, Risiko R1 aus `reports/T-117-domain-dev.md`: "Der Kopf
+ * nennt „zwei Klassen … `U+202A`–`U+202E`, `U+2066`–`U+2069`". Es sind drei
+ * Bauarten … für die Marken fehlen die Fälle").
+ *
  * Bislang ohne eigene Testdatei: kein Test unter `apps/local-api/test` rief
  * `titleSchema` oder `nameSchema` je auf.
  *
- * Zwei Klassen sind abgewiesen (Kopfkommentar der Quelldatei):
+ * Zwei Klassen sind abgewiesen (Kopfkommentar der Quelldatei), die zweite in
+ * drei Bauarten:
  *
  *  - **C0/C1** — `U+0000`–`U+001F`, `U+007F`–`U+009F`.
- *  - **Bidirektionale Formatierungszeichen** — `U+202A`–`U+202E`,
- *    `U+2066`–`U+2069`.
+ *  - **Bidirektionale Formatierungszeichen**, alle drei Bauarten:
+ *      - **Einbettungen und Überschreibungen** — `U+202A`–`U+202E`.
+ *      - **Isolate** — `U+2066`–`U+2069`.
+ *      - **Marken** (seit T-117) — `U+061C` (ALM), `U+200E` (LRM),
+ *        `U+200F` (RLM).
  *
- * Genau an den Rändern dieser vier Bereiche wird hier geprüft: das letzte
+ * Genau an den Rändern dieser Bereiche wird hier geprüft: das letzte
  * abgewiesene und das erste wieder erlaubte Zeichen auf jeder Seite. Ein
  * Bereich, der beim Übertragen der Regel in einen anderen Vergleichsoperator
  * (`<` statt `<=`) um eins verrutscht, fällt hier auf — nicht bei einem Wert
- * mitten im Bereich.
+ * mitten im Bereich. Bei den Marken sind es zwei Ränder: `U+061C` steht
+ * allein zwischen `U+061B` und `U+061D`, `U+200E`/`U+200F` stehen als Paar
+ * zwischen dem Bereich `U+200B`–`U+200D` und `U+2010`.
+ *
+ * Ausdrücklich ERLAUBT und eigens geprüft: `U+200B`–`U+200D` (ZWSP, ZWNJ,
+ * ZWJ — das letzte davon hält zusammengesetzte Emoji zusammen; ein
+ * Familien-Emoji über ZWJ ist deshalb als eigener Fall dabei, er zieht die
+ * Grenze nach unten fest) und `U+2010`.
  *
  * Umlaute, Emoji und Leerzeichen INNERHALB des Namens sind ausdrücklich NICHT
  * erfasst (Kopfkommentar: "Leerzeichen und Tabulator sind zwei verschiedene
@@ -140,6 +156,59 @@ describe('titleSchema / nameSchema — Bidi-Steuerzeichen U+2066–U+2069: abgew
   it('U+206A, direkt nach dem Bereich, ist erlaubt', () => {
     const result = titleSchema.safeParse('Vor\u206aNach');
     expect(result.success).toBe(true);
+  });
+});
+
+describe('titleSchema / nameSchema — die Marken aus T-117 (ALM U+061C, LRM U+200E, RLM U+200F): abgewiesen, ihre Nachbarn bleiben erlaubt', () => {
+  it('U+061B (arabisches Semikolon), direkt vor der Marke, bleibt erlaubt', () => {
+    const result = titleSchema.safeParse('Vor\u061bNach');
+    expect(result.success).toBe(true);
+  });
+
+  it('U+061C (ALM — Arabic Letter Mark), die Marke selbst, wird abgewiesen', () => {
+    const result = titleSchema.safeParse('Vor\u061cNach');
+    expect(result.success).toBe(false);
+  });
+
+  it('U+061D, direkt nach der Marke, bleibt erlaubt', () => {
+    const result = titleSchema.safeParse('Vor\u061dNach');
+    expect(result.success).toBe(true);
+  });
+
+  it('U+200B (ZWSP), U+200C (ZWNJ) und U+200D (ZWJ) bleiben erlaubt — sie haben keine Richtungswirkung', () => {
+    expect(titleSchema.safeParse('Vor\u200bNach').success).toBe(true);
+    expect(titleSchema.safeParse('Vor\u200cNach').success).toBe(true);
+    expect(titleSchema.safeParse('Vor\u200dNach').success).toBe(true);
+  });
+
+  it('ein Familien-Emoji, über U+200D (ZWJ) zusammengehalten, bleibt als Titel erlaubt — der Wächter richtet sich gegen Richtungszeichen, nicht gegen Emoji', () => {
+    // Vier Personen-Emoji, je durch ein ZWJ verbunden (ein Familien-Emoji).
+    // Würde U+200D abgewiesen, könnte ein Todo mit diesem Titel nicht
+    // angelegt werden, obwohl kein Zeichen darin die Zeile umdreht.
+    const familyEmoji = '\u{1f468}\u200d\u{1f469}\u200d\u{1f467}\u200d\u{1f466}';
+    const result = titleSchema.safeParse(`Familientermin ${familyEmoji}`);
+    expect(result.success).toBe(true);
+  });
+
+  it('U+200E (LRM), die erste der beiden Richtungsmarken, wird abgewiesen', () => {
+    const result = titleSchema.safeParse('Vor\u200eNach');
+    expect(result.success).toBe(false);
+  });
+
+  it('U+200F (RLM), die zweite der beiden Richtungsmarken, wird abgewiesen', () => {
+    const result = titleSchema.safeParse('Vor\u200fNach');
+    expect(result.success).toBe(false);
+  });
+
+  it('U+2010 (Bindestrich), jenseits der beiden Marken, bleibt erlaubt', () => {
+    const result = titleSchema.safeParse('Vor\u2010Nach');
+    expect(result.success).toBe(true);
+  });
+
+  it('nameSchema weist dieselben drei Marken ab wie titleSchema (gemeinsame Prüfung, siehe Kopfkommentar der Quelldatei)', () => {
+    expect(nameSchema.safeParse('Regel\u061c').success).toBe(false);
+    expect(nameSchema.safeParse('Regel\u200e').success).toBe(false);
+    expect(nameSchema.safeParse('Regel\u200f').success).toBe(false);
   });
 });
 

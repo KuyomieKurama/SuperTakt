@@ -1,0 +1,21 @@
+// Typprüfung der Testdateien; siehe packages/domain/tsconfig.test.json.
+// Angelegt in T-121, als die ersten Tests des Aufgabenbereichs entstanden
+// (apps/outlook-addin/test/text/): Sie liefen unter `pnpm test` grün, aber
+// unter `typecheck:test` überhaupt nicht mit — der Pfad kannte das Paket nicht.
+//
+// Geprüft werden reine Bibliotheken (`src/text/**`), nicht die Bausteine der
+// Oberfläche: Was einen Baum, ein Ereignis oder eine Zeit braucht, gehört nach
+// E-062 dem e2e-tester, und `vitest` läuft hier ohne DOM.
+//
+// Ohne `rootDir`, anders als die übrigen Testkonfigurationen: `cut.test.ts`
+// misst den Base64-Weg des Exports gegen `packages/export/src/base64.ts` —
+// dieselbe Funktion, die die Abrechnungsdatei schreibt, und genau darin liegt
+// der Nachweis. Eine Abschrift hier wäre der Fehler, den E-063 Punkt 4
+// beschreibt. Dieselbe Begründung trägt `tests/e2e/tsconfig.json`.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

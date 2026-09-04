@@ -2814,3 +2814,142 @@ Port 17843/17844 war vor jedem Lauf frei. Parallel liefen frontend-dev sichtbar 
 `apps/web/src/lib/errorText.ts`/`api/client.ts`/`api/types.ts`/`app.css`, unit-tester an
 `apps/web/test/**`/`apps/local-api/test/**`/`packages/*/test/**` und security-checker an
 `docs/bedrohungsmodell.md` — keine dieser Dateien wurde von diesem Auftrag angefasst.
+
+## 22. Nachtrag aus T-120 (Welle J — die Uhr im Meldungsstapel, A-6.8/B-1, SC 2.4.7)
+
+Grundlage: `reports/T-118-frontend-dev.md` (B-1: `setConflict(null)` liegt seit T-118 im selben
+Zustandsschritt wie die Meldung aus `performStop`, kein Netzumlauf mehr dazwischen; B-2/T-118-
+Risiko: Die Achtsekundenfrist läuft seit T-118 je Meldung ab ihrer eigenen Entstehung statt „acht
+Sekunden nach der letzten Änderung am Stapel"), `decisions.md` E-062 (Bausteine der Oberfläche
+werden im Browser geprüft) und E-063 (fremder Text wird isoliert und markiert).
+
+### TP-TOAST-01 — die Uhr entscheidet nicht mehr mit (Nachtrag zu Abschnitt 21)
+
+`tests/e2e/toast-eviction.spec.ts` prüfte den in Abschnitt 21 beschriebenen Fall bis T-118 nur
+deshalb richtig, weil ein Fehler in `ToastContext.tsx` die Achtsekundenfrist jeder stehenden
+Meldung bei jeder neuen zurücksetzte — mit dem Fehler behoben (T-118) hätte ein langsamer Lauf
+(mehrere Agenten parallel, siehe `playwright.config.ts`-Kopf) die zweite oder dritte Meldung von
+selbst verschwinden lassen können, bevor der Fall sie prüft. Zwei Änderungen, beide am Aufbau,
+keine an der geprüften Sache (W-10 bleibt unverändert richtig):
+
+1. **Die Uhr steht still.** `page.clock.install({ time: new Date() })` vor der Navigation,
+   `page.clock.pauseAt(new Date(Date.now() + 2000))` danach — mit angehaltener Uhr feuert
+   `setTimeout` in `ToastItem` überhaupt nicht, solange der Fall selbst nicht `fastForward`
+   aufruft. Der Sicherheitsabstand von zwei Sekunden ist nötig, weil `pauseAt` sonst reproduzierbar
+   mit `Cannot fast-forward to the past` scheitert: Zwischen dem Node-seitigen `new Date()` und der
+   tatsächlichen Ausführung im Browser vergeht die Zeit, in der die seit `install()` normal
+   mitlaufende Uhr bereits weiter ist als ein zu knapp bemessenes Argument.
+2. **Die vier aktionslosen Meldungen entstehen nicht mehr über eine zweite Board-Spalte.** Zwei
+   Befunde, im Zuge dieser Aufgabe gemessen, keiner davon eine Änderung der geprüften Sache:
+   - Seit B-7 aus T-118 trägt auch das **Setzen** von „Erledigt" auf dem Board ein `action`-Feld
+     (derselbe Rückweg an allen drei Flächen). Die alte Fassung („Als erledigt markieren" auf vier
+     Karten) lieferte dadurch fünf Meldungen, die **alle** ein `action`-Feld trugen — `evict()` fand
+     keine ohne und verdrängte nichts, der Stapel wuchs auf fünf statt auf vier. Ersetzt durch die
+     Gegenrichtung: vier zuvor per API erledigte Todos, dann über die Todo-Liste wieder geöffnet
+     (`toggleDone`, Zweig `wasDone`) — dieser Zweig trug schon vor T-118 kein `action`-Feld und tut
+     es weiterhin nicht („Die Gegenrichtung ‚wieder offen' bekommt keinen: Sie ist selbst schon die
+     Rücknahme.").
+   - Eine zunächst versuchte Fassung („Erledigt zurücknehmen" auf einer zweiten Board-Spalte, mit
+     denselben vier vorab erledigten Karten) scheiterte unter der angehaltenen Uhr zuverlässig an
+     einem zweiten, unabhängigen Fund: Jedes Kartenmenü ist ein Ark-UI-Popover, dessen
+     Schließ-Aufräumen an einem `setTimeout` hängt — unter einer angehaltenen Uhr feuert das nie,
+     ein zweites geöffnetes Kartenmenü trifft auf das nicht entfernte erste
+     (`… subtree intercepts pointer events`, 60 Sekunden Zeitüberschreitung). Die Todo-Liste löst
+     „Erledigt" über ein natives `<input type="checkbox">` ohne Popover, das bleibt auch unter einer
+     angehaltenen Uhr mehrfach hintereinander bedienbar. Die **einzige** Menü-Bedienung dieses Falls
+     (Board, „Vom Board nehmen") bleibt unverändert — der Bildschirm wird danach verlassen, bevor ein
+     zweites Popover nötig wäre.
+
+Beide Funde stehen ausführlich im Dateikopf von `toast-eviction.spec.ts`, damit sie nicht erneut
+gesucht werden müssen.
+
+**Ergebnis: bestanden**, 1/1, mehrfach reproduziert (isoliert, im Verbund mit den beiden neuen
+Fällen unten und im vollen `pnpm run test:e2e`).
+
+### TP-TIMER-12 — A-6.8/B-1: kein Bild mit Abdunklung und Meldung gleichzeitig beim Timerwechsel
+
+**Anforderungen:** A-6.8, E-062
+**Ebene:** End-to-End (`tests/e2e/timer-switch-scrim-toast.spec.ts`, neu)
+**Vorbedingung:** Zwei Todos ohne Tags und ohne Regel — kein `poolMovement` lenkt vom Befund ab.
+**Schritte:**
+1. Timer auf Todo A starten, die Start-Meldung schließen (sauberer Ausgangspunkt: der
+   Meldungsstapel ist nachweislich leer, bevor der eigentliche Wechsel beginnt).
+2. Timer auf Todo B starten. Es läuft bereits ein Timer — der Bestätigungsdialog „Es läuft bereits
+   ein Timer" erscheint (`.scrim`, kein Toast — dieser Zustand ist zulässig und wird nicht als
+   Treffer gezählt).
+3. Ein `MutationObserver` auf `document.body` protokolliert ab jetzt bei jeder Änderung, ob
+   `.scrim` und `.toast` gleichzeitig existieren (über `page.exposeFunction` an den Testfall
+   zurückgemeldet, E-062 — im Browser gemessen, nicht in einer Nachbildung).
+4. Leistungstext eintragen, „Stoppen und wechseln" bestätigen.
+**Erwartetes Ergebnis:** Nach dem Wechsel stehen zwei Meldungen — „Zeit gebucht auf „A“." und die
+zum Start auf B, der Dialog und seine Abdunklung sind verschwunden. Der Beobachter aus Schritt 3
+hat in keinem Zeitpunkt dazwischen `.scrim` und `.toast` gleichzeitig gesehen. Vor T-118 lag genau
+ein solcher Zustand vor (`setConflict(null)` erst nach dem zweiten Netzumlauf, `await
+startTimer(...)`, siehe `reports/T-118-frontend-dev.md` Abschnitt 2) — seit T-118 liegen
+`setConflict(null)` und die Meldung aus `performStop` im selben Zustandsschritt.
+
+**Ergebnis: bestanden**, 1/1, zweifach reproduziert (isoliert und im vollen `pnpm run test:e2e`).
+
+### TP-TOAST-02 — SC 2.4.7: die älteste von sieben „Erledigt“-Meldungen bleibt im Sichtbaren erreichbar
+
+**Anforderungen:** SC 2.4.7, B-2 aus T-116/T-118 (`.toast-layer` als Rollfläche,
+`docs/testplan.md` Abschnitt 21 hinaus fortgeführt)
+**Ebene:** End-to-End (`tests/e2e/toast-tab-order-scroll.spec.ts`, neu)
+**Vorbedingung:** Sieben eigene Todos, Todo-Liste gefiltert auf diese sieben, „Erledigte
+einblenden" eingeschaltet (sonst verschwindet eine Zeile beim Abhaken aus der Liste, E-039, und der
+Tab-Weg wäre nicht mehr der hier interessante kurze Ausschnitt).
+**Schritte:** Alle sieben Kontrollkästchen nacheinander anhaken. Die Todo-Liste zeigt beim Setzen
+von „Erledigt" eine Meldung **mit** Rückweg (`undoDoneAction`, B-6/B-7 aus T-116/T-118); `evict()`
+überspringt jede Meldung mit Aktion (W-10) — tragen alle sieben eine, wächst der Stapel über
+`MAX_TOASTS = 4` hinaus, keine wird verdrängt. Danach mit der echten Tabulatortaste (kein
+programmatisches `.focus()`) so lange weitertabulieren, bis der Fokus innerhalb einer `.toast`
+steht.
+**Erwartetes Ergebnis:** Der Stapel zeigt alle sieben Meldungen gleichzeitig. Die erste über Tab
+erreichte Meldung ist die älteste (DOM-Reihenfolge = Einfügereihenfolge = Tab-Reihenfolge,
+`evict()` verändert unter den Überlebenden nichts an dieser Reihenfolge). Ihre `boundingBox().y`
+ist nicht negativ — der Browser rollt `.toast-layer` beim Fokussieren sichtbar zurück, der Fokus
+landet nicht außerhalb des Sichtbaren (SC 2.4.7).
+
+**Ergebnis: bestanden**, 1/1, zweifach reproduziert (isoliert und im vollen `pnpm run test:e2e`).
+
+### Kommentarbefund — `outlook-addin-build.spec.ts:113`
+
+Seit T-119 ist das dort beschriebene Element ein `<bdi class="mono">` (Baustein `Foreign`,
+`unicode-bidi: isolate`, E-063), nicht mehr `<span class="mono">`. Der Locator sucht über die
+Klasse (`.mono`) und trifft beide Fassungen unverändert — nur der Kommentar nannte das falsche
+Element. Berichtigt, kein Verhalten geändert.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0 (mehrfach)
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts --reporter=list --retries=0                1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/timer-switch-scrim-toast.spec.ts --reporter=list --retries=0      1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-tab-order-scroll.spec.ts --reporter=list --retries=0        1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/toast-eviction.spec.ts tests/e2e/timer-switch-scrim-toast.spec.ts \
+  tests/e2e/toast-tab-order-scroll.spec.ts --reporter=list --retries=0        3/3 (zweifach)
+
+pnpm exec playwright test -c tests/e2e/playwright.outlook-build.config.ts \
+  --reporter=list --retries=0                                                 2/2
+
+pnpm run test:e2e --reporter=list --retries=0                                 58/58 (1,5 min) —
+                                                                                Vergleichsmarke
+                                                                                56 Fälle (davon
+                                                                                einer rot) nach
+                                                                                Welle J, +2 neue
+                                                                                Fälle, der bis
+                                                                                dahin rote Fall
+                                                                                (`:84`) grün
+```
+
+Port 17843/17844 war vor jedem Lauf frei (`ss -ltnp` geprüft); kein fremder Prozess beendet, kein
+`git commit`/`stash`/`checkout`. Alle neuen Testdaten mit `E2E-`-Präfix, erfunden — keine echten
+Call-Nummern, keine echten Kundennamen.

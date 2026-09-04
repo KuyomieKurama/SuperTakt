@@ -3604,8 +3604,15 @@ components:
         Löschdialoge; ein `U+202E` dreht dort den Rest der Zeile optisch um, und
         React maskiert es nicht, weil es kein Markup ist. Die Grenze steht nicht
         als `pattern` an jedem Feld — ein regulärer Ausdruck über Steuerzeichen
-        ist in einer Beschreibung schwerer zu lesen als dieser Absatz, und die
-        Prüfung liegt ohnehin an einer Stelle (`http/input.ts`).
+        ist in einer Beschreibung schwerer zu lesen als dieser Absatz.
+
+        **Die Zeichen stehen an genau einer Stelle im Baum**, seit T-122 in
+        `packages/domain/src/characters.ts`. Der Dienst liest sie dort
+        (`http/input.ts` für Namen und Titel, `access/session-secret.ts` für den
+        Windows-Benutzernamen), und das Add-in liest dieselbe Fassung, statt sie
+        abzuschreiben. Der Grund ist eine Regression: T-117 hat die Klasse hier
+        erweitert, die Abschrift im Add-in zog nicht nach, und ein Nachweis, der
+        gegen eine kopierte Liste prüfte, blieb grün (E-063 Punkt 4).
 
         Die Prüfung sitzt am Eingang. Ein Name, der vor ihr angelegt wurde,
         bleibt lesbar und löschbar — aber ein `PATCH`, der ihn **unverändert**
@@ -4749,7 +4756,10 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         windowsUser:
           type: string
-          description: Vom Betriebssystem gelesen, keine Benutzereingabe (E-010, A-8.5).
+          description: |
+            Vom Betriebssystem gelesen, keine Benutzereingabe (E-010, A-8.5).
+            Beim Start gegen dieselbe Zeichenklasse geprüft wie jeder Name;
+            siehe `SystemInfo.windowsUser`.
         templateSnapshot:
           type: object
           additionalProperties: true
@@ -5090,6 +5100,15 @@ components:
             **keine** Route setzbar (B-8.1). Er steht hier und nicht in
             `AppSettings`, weil er keine Einstellung ist, sondern eine Auskunft
             über den angemeldeten Benutzer.
+
+            **Er ist geprüft, nicht geglaubt** (T-122). Seit T-122 gilt für ihn
+            dieselbe Zeichenklasse wie für jeden Namen und jeden Titel — siehe
+            die gemeinsame Antwort `UnprocessableEntity`. Der Unterschied ist
+            die Folge: Ein Name mit einem solchen Zeichen ergibt hier keine
+            `422`, sondern **der Dienst startet nicht** (Beendigungscode 78).
+            Es gibt keine Anfrage, die man abweisen könnte, und den Namen
+            unterwegs zu bereinigen hieße, unter einem Namen abzurechnen, den es
+            nicht gibt. Der Wert steht dabei in keiner Meldung.
 
             Bis T-042 war er ausschließlich in `ExportRun.windowsUser` zu
             sehen, also erst **nach** dem ersten Export. Genau davor will man

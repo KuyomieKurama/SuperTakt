@@ -12,7 +12,11 @@
 
 import { z } from 'zod';
 
-import type { TaktFieldError } from '@takt/domain';
+import {
+  FORBIDDEN_NAME_CHARACTER_MESSAGE,
+  hasForbiddenNameCharacter,
+  type TaktFieldError,
+} from '@takt/domain';
 
 /** Ein Zeitstempel in der einen Form, die das Schema annimmt. */
 export const timestampSchema = z
@@ -55,69 +59,47 @@ export const commaSeparatedIds = z.preprocess(
 );
 
 /**
- * Zeichen, die in einem **Namen** nichts zu suchen haben (R-3a H-2).
+ * „Ein Name ohne Steuer- und Richtungszeichen" — die Prüfung, die
+ * {@link titleSchema} und {@link nameSchema} teilen (R-3a H-2, E-063).
  *
  * ---------------------------------------------------------------------------
- * Warum das jetzt zählt und vorher weniger
+ * Die Klasse steht nicht hier, sondern in `@takt/domain`
  * ---------------------------------------------------------------------------
  *
- * Diese Namen reisen weiter als je zuvor: in den Bewegungssatz an **beiden**
- * Flächen, in den Aufgabenbereich des Add-ins und in die Löschdialoge der
- * Hauptanwendung (`details`, Regelnamen). Seit T-107 steht der Regelname dort
- * zusätzlich als **eigenes Feld** (`details[].name`, W-11) und nicht nur
- * eingebettet in einen Satz — also an einer Stelle, an der eine Oberfläche ihn
- * ohne umgebenden Text setzt. Es ist kein Grenzübertritt - nur wer das
- * Sitzungsgeheimnis hat, legt Pools an -, aber es ist eine Anzeige, die etwas
- * anderes zeigt, als im Bestand steht, und diese Prüfung ist die einzige
- * Stelle, an der das aufgehalten wird.
+ * Bis T-122 stand sie in dieser Datei, und das Add-in hielt eine Abschrift.
+ * T-117 hat die hiesige Fassung um die drei Richtungsmarken erweitert
+ * (`U+061C`, `U+200E`, `U+200F`), die Abschrift zog nicht nach, und die
+ * Sackgasse aus T-114 stand für drei Zeichen wieder offen: Ein Titelvorschlag
+ * aus einem Betreff mit einer dieser Marken lief hier in ein 422, an einem
+ * Feld, an dem nichts Falsches zu sehen war (T-119, E-063 Punkt 4).
+ *
+ * Seither ist `packages/domain/src/characters.ts` die maßgebliche Fassung —
+ * die Zeichen, die Begründung für jede der drei Bauarten und die Meldung. Dort
+ * steht auch, was ausdrücklich **erlaubt** bleibt (`U+200B`–`U+200D`, das ZWJ
+ * hält zusammengesetzte Emoji zusammen). Diese Datei liest sie und schreibt sie
+ * nicht ab.
+ *
+ * **Was hier bleibt, ist die Bindung an zod.** Sie ist eine Eigenschaft der
+ * Tür und keine der Regel: Die Domäne kennt kein HTTP und kein zod (E-001).
+ *
+ * Eine Funktion und kein zweimal geschriebenes `.refine(...)`: Zwei Abschriften
+ * derselben Regel sind zwei Gelegenheiten, sie verschieden zu ändern, und der
+ * Titel eines Todos ist so sichtbar wie der Name eines Pools.
  *
  * ---------------------------------------------------------------------------
- * Die beiden Klassen, und warum es genau diese sind
- * ---------------------------------------------------------------------------
- *
- *  - **C0 und C1** (`U+0000` bis `U+001F`, `U+007F` bis `U+009F`).
- *    Steuerzeichen sind das, womit man eine Protokollzeile oder eine
- *    Exportzelle von innen aufbricht. Aus demselben Grund prüft
- *    `access/session-secret.ts` den Windows-Benutzernamen — dort allerdings
- *    **enger** (`U+0000`–`U+001F` und `U+007F`, ohne C1 und ohne die
- *    Richtungszeichen). Das ist eine andere Prüfung an einer anderen Grenze:
- *    Der Name kommt über `stdin` von der Hülle, nicht aus einer Anfrage. Wer
- *    beide gleichziehen will, tut es dort und nicht hier.
- *  - **Bidirektionale Formatierungszeichen**, und zwar alle drei Bauarten:
- *    die **Einbettungen und Überschreibungen** (`U+202A` bis `U+202E`), die
- *    **Isolate** (`U+2066` bis `U+2069`) und die **Marken** (`U+200E` LRM,
- *    `U+200F` RLM, `U+061C` ALM). Sie stehen in keinem geschriebenen Namen und
- *    drehen den Rest der Zeile optisch um. React maskiert HTML; ein `U+202E`
- *    macht es **nicht** unschädlich, weil es kein Markup ist, sondern Text mit
- *    Wirkung auf die Darstellung. Ein Pool, dessen Name eines dieser Zeichen
- *    trägt, liest sich in der Aufzählung eines Löschdialogs als etwas
- *    anderes, als er heißt.
- *
- *    Die Marken sind mit T-117 dazugekommen (T-115). Sie wirken schwächer als
- *    die übrigen — eine Marke kehrt keinen Text um, sie setzt die Richtung des
- *    Textes daneben —, aber die Begründung eine Zeile höher gilt für sie
- *    wörtlich: Sie stehen in keinem geschriebenen Namen, und sie verändern, wie
- *    der Rest der Zeile aussieht. Eine halb erfasste Klasse ist die schlechteste
- *    Fassung: Sie liest sich wie eine Regel und ist eine Auswahl.
- *
- *    **Nicht** erfasst und ausdrücklich erlaubt bleiben die Zeichen ohne
- *    Richtungswirkung in derselben Nachbarschaft: `U+200B` bis `U+200D`. Das
- *    letzte davon (ZWJ) hält zusammengesetzte Emoji zusammen — `U+200D`
- *    abzuweisen hieße, einem Titel mit einem Familien-Emoji die Annahme zu
- *    verweigern, und dieser Wächter ist gegen Richtungszeichen gerichtet und
- *    nicht gegen Emoji.
- *
- * ---------------------------------------------------------------------------
- * Warum abweisen und nicht entfernen
+ * Warum die Tür abweist und nicht bereinigt (E-063 Punkt 3)
  * ---------------------------------------------------------------------------
  *
  * Ein stilles Entfernen änderte den Namen, den der Benutzer eingegeben hat,
- * und er erführe es nicht - er sähe seinen Namen ohne die Zeichen und hielte
+ * und er erführe es nicht — er sähe seinen Namen ohne die Zeichen und hielte
  * die Eingabe für angekommen. Eine Abweisung sagt, was los ist, an dem Feld,
- * in dem es passiert ist (`toFieldErrors` setzt den Pfad).
+ * in dem es passiert ist (`toFieldErrors` setzt den Pfad). Was der Benutzer
+ * **nicht** selbst geschrieben hat — ein Vorschlag aus einer fremden E-Mail,
+ * eine Anzeige —, darf die Anwendung glattziehen; dafür gibt es in derselben
+ * Domänendatei `dropHiddenCharacters` und `visibleText`.
  *
  * **Der Wert steht nicht in der Meldung.** Er stammt möglicherweise aus einer
- * fremden E-Mail (B-4.3 Punkt 5) - und ein Text, der ein solches Zeichen
+ * fremden E-Mail (B-4.3 Punkt 5) — und ein Text, der ein solches Zeichen
  * wörtlich wiedergibt, richtet in der Fehlermeldung genau den Schaden an, den
  * er verhindern soll.
  *
@@ -134,8 +116,8 @@ export const commaSeparatedIds = z.preprocess(
  * dieser Prüfung angelegt wurde, bleibt lesbar und löschbar — aber ein `PATCH`,
  * der ihn **unverändert** zurückschickt, wird mit 422 abgewiesen, und der
  * Benutzer sieht seinen eigenen, ungeänderten Namen als unzulässige Eingabe.
- * Jede Erweiterung dieser Zeichenklasse vergrößert diesen Altbestand; die
- * Marken tun es mit T-117.
+ * Jede Erweiterung der Zeichenklasse vergrößert diesen Altbestand; die Marken
+ * taten es mit T-117.
  *
  * Das wird **genannt und nicht still migriert** (T-101 Annahme 6, R3). Eine
  * Migration, die vorhandene Namen umschreibt, wäre dieselbe stille Änderung der
@@ -144,25 +126,19 @@ export const commaSeparatedIds = z.preprocess(
  * (`tests/fixtures/**` trägt keinen), und der Weg heraus ist derselbe wie für
  * jeden anderen unerwünschten Namen: ihn ändern.
  *
- * Die Zeichen stehen unten als **Escape-Folgen** und nicht als rohe Zeichen
- * (T-112-H2): Ein rohes Richtungszeichen in dieser Quelldatei drehte
- * ausgerechnet die Zeile um, die es abweist.
- */
-// eslint-disable-next-line no-control-regex -- genau darum geht es hier
-const FORBIDDEN_IN_NAMES =
-  /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
-
-/**
- * „Ein Name ohne Steuer- und Richtungszeichen" - die Prüfung, die
- * {@link titleSchema} und {@link nameSchema} teilen.
+ * ---------------------------------------------------------------------------
+ * Dieselbe Klasse an der zweiten Grenze
+ * ---------------------------------------------------------------------------
  *
- * Eine Funktion und kein zweimal geschriebenes `.refine(...)`: Zwei Abschriften
- * derselben Regel sind zwei Gelegenheiten, sie verschieden zu ändern, und der
- * Titel eines Todos ist so sichtbar wie der Name eines Pools.
+ * `access/session-secret.ts` prüft den Windows-Benutzernamen seit T-122 gegen
+ * **dieselbe** Funktion. Bis dahin prüfte er enger (C0 und DEL, ohne C1 und
+ * ohne die Richtungszeichen), und der Name geht unverändert als `WindowsUser`
+ * in die Exportdatei (A-8.5, E-010). Es sind zwei Grenzen — hier eine Anfrage,
+ * dort die `stdin`-Zeile der Hülle —, aber eine Regel.
  */
 const withoutControlCharacters = <T extends z.ZodType<string>>(schema: T) =>
-  schema.refine((value) => !FORBIDDEN_IN_NAMES.test(value), {
-    message: 'Steuerzeichen und Richtungszeichen sind in einem Namen nicht erlaubt.',
+  schema.refine((value) => !hasForbiddenNameCharacter(value), {
+    message: FORBIDDEN_NAME_CHARACTER_MESSAGE,
   });
 
 export const titleSchema = withoutControlCharacters(z.string().trim().min(1).max(500));

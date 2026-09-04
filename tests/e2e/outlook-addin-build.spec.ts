@@ -110,10 +110,13 @@ test.describe('TP-BUILD-04 — der Web Worker der Call-Nummer-Erkennung', () => 
     // `Callout`s Titel ist ein `<p class="callout__title">`, keine Überschrift
     // (`apps/outlook-addin/src/ui/Primitives.tsx`) — deshalb über die Klasse
     // und nicht über `getByRole('heading', …)` gesucht. Der übernommene Wert
-    // steht daneben als `<span class="mono">`; „TCK-000042" kommt außerdem im
-    // Musterkatalog (Auswahlliste) und im Beispieltext (Textfeld) vor — der
-    // Treffer wird deshalb bewusst auf den Erfolgs-Callout eingegrenzt, sonst
-    // träfe `getByText()` im Playwright-Strict-Mode mehrere Elemente.
+    // steht daneben als `<bdi class="mono">` (seit T-119; zuvor `<span
+    // class="mono">` — reiner Kommentarbefund aus T-119/T-120, der Locator
+    // sucht über die Klasse und traf beide Fassungen unverändert). „TCK-000042"
+    // kommt außerdem im Musterkatalog (Auswahlliste) und im Beispieltext
+    // (Textfeld) vor — der Treffer wird deshalb bewusst auf den
+    // Erfolgs-Callout eingegrenzt, sonst träfe `getByText()` im
+    // Playwright-Strict-Mode mehrere Elemente.
     const successCallout = page.locator('.callout--success', { hasText: 'Erkannt' });
     await expect(successCallout).toBeVisible();
     await expect(successCallout.locator('.mono')).toHaveText('TCK-000042');

@@ -92,12 +92,15 @@ import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
 import {
+  FORBIDDEN_NAME_CHARACTERS,
   POOL_RULE_AXIS_IDS,
+  isForbiddenNameCharacter,
   poolMovementSentence,
   poolRuleIsEmpty,
   poolRuleMatchesNothing,
   tagAxisIsUnresolved,
 } from '@takt/domain';
+import { titleSchema } from '../src/http/input.ts';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
@@ -2128,6 +2131,78 @@ check(
   freeFolder !== undefined,
   folderDeletes.map((record) => record.status).join(', '),
 );
+
+// ---------------------------------------------------------------------------
+section('16  Die Zeichenklasse steht in der Domäne, und beide Türen sagen dasselbe (T-122, E-063)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Die Lehre aus T-119, eine Ebene höher angewandt.
+ *
+ * T-117 hat die Zeichenklasse an der Tür erweitert; die Abschrift im Add-in zog
+ * nicht nach, und der Nachweis dagegen prüfte gegen eine **kopierte Liste** und
+ * blieb grün (E-063 Punkt 4). Seit T-122 liegt die Klasse einmal im Baum
+ * (`packages/domain/src/characters.ts`), und beide Türen lesen sie. Damit ist
+ * die Abschrift im Quelltext weg — in der **Beschreibung** steht sie
+ * zwangsläufig weiter, denn eine Beschreibung ist Prosa. Also wird sie
+ * gemessen, statt gepflegt zu werden.
+ */
+const alsCodepunkt = (punkt) => `U+${punkt.toString(16).toUpperCase().padStart(4, '0')}`;
+
+const grenzen = new Set();
+for (const bereich of FORBIDDEN_NAME_CHARACTERS) {
+  grenzen.add(bereich.from);
+  grenzen.add(bereich.to);
+}
+
+check(
+  'die Klasse ist nicht leer — sonst prüfte alles Folgende die leere Menge',
+  grenzen.size >= 8,
+  `${String(grenzen.size)} Grenzen`,
+);
+
+{
+  const beschreibung = doc?.components?.responses?.UnprocessableEntity?.description ?? '';
+  const fehlend = [...grenzen].filter((punkt) => !beschreibung.includes(alsCodepunkt(punkt)));
+  check(
+    'jede Grenze der Zeichenklasse steht in der Beschreibung von 422',
+    fehlend.length === 0,
+    `nicht beschrieben: ${fehlend.map(alsCodepunkt).join(', ')}`,
+  );
+  check(
+    'und die Beschreibung nennt den einen Ort, an dem die Klasse liegt',
+    beschreibung.includes('packages/domain/src/characters.ts'),
+  );
+}
+
+{
+  /*
+   * Und die Tür selbst: Für jeden Codepunkt bis `U+20FF` — das deckt alle
+   * Bereiche und ihre Nachbarn — muss `titleSchema` genau dann abweisen, wenn
+   * die Domäne es sagt. Ein zweiter, örtlicher Ausdruck neben der gemeinsamen
+   * Funktion fiele hier auf, und genau so ist die Doppelung entstanden, die
+   * T-122 beseitigt.
+   */
+  const abweichend = [];
+  for (let punkt = 0; punkt <= 0x20ff; punkt += 1) {
+    if (punkt >= 0xd800 && punkt <= 0xdfff) continue;
+    const angenommen = titleSchema.safeParse(`Wartung${String.fromCodePoint(punkt)}Nord`).success;
+    if (angenommen === isForbiddenNameCharacter(punkt)) abweichend.push(punkt);
+  }
+  check(
+    'die Tür des Dienstes weist genau die Zeichen ab, die die Domäne nennt (0x0000–0x20FF)',
+    abweichend.length === 0,
+    abweichend.slice(0, 10).map(alsCodepunkt).join(', '),
+  );
+
+  // Gegenprobe: ein Zeichen, das ausdrücklich erlaubt bleibt (ZWJ hält
+  // zusammengesetzte Emoji zusammen), und eines, das abgewiesen wird.
+  check(
+    'U+200D (ZWJ) bleibt erlaubt, U+200E (LRM) nicht — die Grenze liegt dazwischen',
+    titleSchema.safeParse('Familie \u{1f468}\u200d\u{1f469}\u200d\u{1f467}').success &&
+      !titleSchema.safeParse('Wartung\u200eNord').success,
+  );
+}
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

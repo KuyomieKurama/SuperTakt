@@ -24,7 +24,8 @@
  *
  * Rein: drei Listen herein, ein Satz heraus. Keine Uhr, kein Netz, keine
  * Datenbank, kein HTTP, kein SQL — und deshalb ohne laufenden Dienst prüfbar.
- * Diese Datei importiert nichts; sie braucht nichts.
+ * Der einzige Import ist die Aufzählung aus `enumeration.ts`, und sie ist
+ * ebenso rein; bis T-122 stand sie hier als private Funktion `listPools`.
  *
  * ---------------------------------------------------------------------------
  * Was gegenüber `reopen.ts` geändert ist — zwei Dinge, beide entschieden
@@ -37,13 +38,13 @@
  * dem Grund zu suchen, warum sein Todo nirgends auftaucht.
  *
  * **Zweitens: kein Gattungswort vor dem Namen** (E-058 Punkt 4, T-093). Der
- * Satz sagt „in „Ost“", nicht „in dem Pool „Ost“". Begründung an `listPools`:
- * Die drei Listen tragen Namen, aber keine Fläche, und seit E-054 kann
- * derselbe Name eine Spalte bezeichnen. Zwei Sätze ändern sich dadurch
- * mehr als nur im Einschub — der ohne jeden Treffer nennt jetzt **beide**
- * Flächen („in keinem Pool und in keiner Spalte"), und „erscheint in keinem
- * anderen" wird zu „erscheint sonst nirgends", weil „anderen" ohne
- * Gattungswort keinen Bezug mehr hat.
+ * Satz sagt „in „Ost“", nicht „in dem Pool „Ost“". Begründung an
+ * `enumerateNames` (`enumeration.ts`): Die drei Listen tragen Namen, aber keine
+ * Fläche, und seit E-054 kann derselbe Name eine Spalte bezeichnen. Zwei Sätze
+ * ändern sich dadurch mehr als nur im Einschub — der ohne jeden Treffer nennt
+ * jetzt **beide** Flächen („in keinem Pool und in keiner Spalte"), und
+ * „erscheint in keinem anderen" wird zu „erscheint sonst nirgends", weil
+ * „anderen" ohne Gattungswort keinen Bezug mehr hat.
  *
  * Alles Übrige ist Wort für Wort übernommen. Das ist Absicht: Die Sätze sind
  * an beiden Flächen erprobt, und eine Verbesserung nebenbei wäre eine
@@ -51,6 +52,8 @@
  * vierzehn Sätze steht in `.claude/team/board.md` bei T-093; die Tests messen
  * zeichengenau dagegen.
  */
+
+import { enumerateNames } from './enumeration.ts';
 
 /**
  * Die Bewegung eines Todos durch die Pools (E-056, T-084, E-058).
@@ -140,36 +143,6 @@ export type PoolMovementTense = 'future' | 'past';
  * wie er heißt; er bezeichnet die **Form** der Auskunft und nicht die Route.
  */
 export type PoolMovementOccasion = 'reopen' | 'booking';
-
-/**
- * Zählt die Namen **einzeln** auf, in deutschen Anführungszeichen — und sonst
- * nichts (E-058 Punkt 4).
- *
- * Zwei Entscheidungen stecken in diesen fünf Zeilen.
- *
- * **Namen statt Zahl.** Keine Zusammenfassung wie „in 3 Pools": Der Benutzer
- * soll die Namen lesen, die er gleich in der Hauptanwendung wiederfindet. Eine
- * Zahl wäre schneller geschrieben und ließe die Frage offen, die sie
- * beantworten soll.
- *
- * **Kein Gattungswort davor.** Bis T-093 stand hier ein zweiter Baustein
- * (`inPools`), der „dem Pool „X“" oder „den Pools „X“ und „Y“" daraus
- * machte. Er war falsch, seit E-054 eine Kanban-Spalte dieselbe Entität ist wie
- * ein Pool: Die drei Listen tragen Namen, aber keine Fläche. Ob „Ost" ein Pool
- * ist, eine Spalte oder — bei `placement: 'both'` — beides, steht in dieser
- * Datei nicht und darf hier auch nicht geraten werden. Ein Satz, der „der Pool
- * „Ost“" sagt, wo eine reine Board-Spalte gemeint ist, schickt den Benutzer in
- * die Pool-Liste, in der sie nicht steht.
- *
- * Der Nebengewinn: Die Zahl der Namen ändert nur die Aufzählung, nicht den
- * Artikel. Es gibt keinen Singular-Plural-Fall mehr, in dem der Satz stolpern
- * könnte.
- */
-const listPools = (poolNames: readonly string[]): string => {
-  const quoted = poolNames.map((name) => `„${name}“`);
-  if (quoted.length <= 1) return quoted[0] ?? '';
-  return `${quoted.slice(0, -1).join(', ')} und ${quoted[quoted.length - 1] ?? ''}`;
-};
 
 /**
  * Der Satz über die Bewegung — vor oder nach der Handlung (E-058).
@@ -267,19 +240,19 @@ export function poolMovementSentence(
 
     if (appears.length === 0) {
       return tense === 'future'
-        ? `Es verschwindet dann aus ${listPools(leaves)} und erscheint sonst nirgends.`
-        : `Es ist aus ${listPools(leaves)} verschwunden und erscheint sonst nirgends.`;
+        ? `Es verschwindet dann aus ${enumerateNames(leaves)} und erscheint sonst nirgends.`
+        : `Es ist aus ${enumerateNames(leaves)} verschwunden und erscheint sonst nirgends.`;
     }
 
     if (leaves.length === 0) {
       return tense === 'future'
-        ? `Es erscheint dann wieder in ${listPools(appears)}.`
-        : `Es ist zurück in ${listPools(appears)}.`;
+        ? `Es erscheint dann wieder in ${enumerateNames(appears)}.`
+        : `Es ist zurück in ${enumerateNames(appears)}.`;
     }
 
     return tense === 'future'
-      ? `Es erscheint dann wieder in ${listPools(appears)} und verschwindet aus ${listPools(leaves)}.`
-      : `Es ist zurück in ${listPools(appears)} und aus ${listPools(leaves)} verschwunden.`;
+      ? `Es erscheint dann wieder in ${enumerateNames(appears)} und verschwindet aus ${enumerateNames(leaves)}.`
+      : `Es ist zurück in ${enumerateNames(appears)} und aus ${enumerateNames(leaves)} verschwunden.`;
   }
 
   // Keine Bewegung, kein Satz. Diese Zeile ist die Auflage aus E-056 und steht
@@ -288,17 +261,17 @@ export function poolMovementSentence(
 
   if (leaves.length === 0) {
     return tense === 'future'
-      ? `Es erscheint dann in ${listPools(enters)}.`
-      : `Es steht jetzt in ${listPools(enters)}.`;
+      ? `Es erscheint dann in ${enumerateNames(enters)}.`
+      : `Es steht jetzt in ${enumerateNames(enters)}.`;
   }
 
   if (enters.length === 0) {
     return tense === 'future'
-      ? `Es verschwindet dann aus ${listPools(leaves)}.`
-      : `Es ist aus ${listPools(leaves)} verschwunden.`;
+      ? `Es verschwindet dann aus ${enumerateNames(leaves)}.`
+      : `Es ist aus ${enumerateNames(leaves)} verschwunden.`;
   }
 
   return tense === 'future'
-    ? `Es erscheint dann in ${listPools(enters)} und verschwindet aus ${listPools(leaves)}.`
-    : `Es steht jetzt in ${listPools(enters)} und ist aus ${listPools(leaves)} verschwunden.`;
+    ? `Es erscheint dann in ${enumerateNames(enters)} und verschwindet aus ${enumerateNames(leaves)}.`
+    : `Es steht jetzt in ${enumerateNames(enters)} und ist aus ${enumerateNames(leaves)} verschwunden.`;
 }

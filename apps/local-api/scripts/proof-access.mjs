@@ -54,7 +54,10 @@ function section(title) {
 // Dienst starten
 // ---------------------------------------------------------------------------
 
-async function startService(dataDir, { withSecret = true, withUser = true } = {}) {
+async function startService(
+  dataDir,
+  { withSecret = true, withUser = true, user = 'kerem', closeAfterHandshake = false } = {},
+) {
   const child = spawn(process.execPath, [ENTRY], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, XDG_DATA_HOME: dataDir },
@@ -77,7 +80,10 @@ async function startService(dataDir, { withSecret = true, withUser = true } = {}
   // fällt hier auf und nicht erst auf dem Rechner des Benutzers.
   const secret = withSecret ? `takt_${randomBytes(32).toString('base64url')}` : null;
   if (secret !== null) {
-    child.stdin.write(withUser ? `${secret}\nkerem\n` : `${secret}\n`);
+    child.stdin.write(withUser ? `${secret}\n${user}\n` : `${secret}\n`);
+    // Die Hülle stirbt unmittelbar nach dem Start des Sidecars — die
+    // schärfste Fassung von B-1.6 Punkt 3, siehe Abschnitt 0d.
+    if (closeAfterHandshake) child.stdin.end();
     if (!withUser) {
       // Nichts weiter: Der Dienst wartet auf die zweite Zeile und läuft in die
       // Zeitgrenze. Der Kanal bleibt offen, damit nicht `missing` statt
@@ -93,6 +99,39 @@ async function startService(dataDir, { withSecret = true, withUser = true } = {}
     output: () => stderr + stdout,
     exit: new Promise((resolve) => child.once('exit', (code) => resolve(code))),
   };
+}
+
+/**
+ * Beendet einen gestarteten Dienst **deterministisch** und gibt den Port frei.
+ *
+ * Dieselbe Abfolge wie im `finally`-Block am Dateiende, und aus demselben
+ * Grund (T-029, Risiko 5): Erst die Röhre schließen — so beendet sich der
+ * Dienst von selbst, wie unter der Hülle —, dann warten, dann `SIGTERM`, dann
+ * `SIGKILL`. Zum Schluß wird der Port **nachgesehen** und nicht angenommen.
+ *
+ * Wer hier ungeduldig ist, bezahlt es weiter unten: Ein noch laufender Dienst
+ * antwortet auf `/health`, der nächste Start scheitert still mit Code 74, und
+ * `waitForService()` hält den fremden Prozess für den eigenen — reihenweise
+ * Fehlschläge, die keine Regression sind, sondern ein falsch verstandener
+ * Zustand. Siehe {@link waitForPortFree}.
+ */
+async function stopService(handle) {
+  handle.child.stdin.end();
+  let code = await Promise.race([handle.exit, sleep(5000).then(() => null)]);
+  if (code === null && handle.child.exitCode === null) {
+    handle.child.kill('SIGTERM');
+    code = await Promise.race([handle.exit, sleep(3000).then(() => null)]);
+  }
+  if (code === null && handle.child.exitCode === null) {
+    handle.child.kill('SIGKILL');
+    await Promise.race([handle.exit, sleep(2000)]);
+  }
+  if (!(await waitForPortFree(PORT))) {
+    throw new Error(
+      `Der Dienst aus dem vorigen Abschnitt hat Port ${PORT} nicht freigegeben. ` +
+        'Alles Weitere liefe gegen einen fremden Prozess und wäre kein Nachweis.',
+    );
+  }
 }
 
 async function waitForService(deadlineMs = 8000) {
@@ -252,6 +291,113 @@ try {
       noUser.output().includes('Windows-Benutzernamen') && !SECRET_SHAPE.test(noUser.output()),
       noUser.output().slice(0, 200),
     );
+  }
+
+  section('0b. Windows-Benutzername mit Steuer- oder Richtungszeichen (O-AE, T-122)');
+  {
+    /*
+     * Der Name geht **unverändert** als `WindowsUser` in die Exportdatei
+     * (A-8.5, E-010). Bis T-122 prüfte der Handschlag nur gegen C0 und DEL;
+     * ein `U+202E` drehte damit eine Zeile der Datei, die beim Abrechnungstool
+     * landet. Seit T-122 gilt hier dieselbe Klasse wie an der Haupttür
+     * (`hasForbiddenNameCharacter` in `@takt/domain`).
+     *
+     * Die Zeichen stehen als Escape-Folgen und nicht roh (T-112-H2). Geprüft
+     * werden die drei Bauarten und ausdrücklich **beide** Erweiterungen, die
+     * hier bis T-122 fehlten: C1 und die Richtungsmarken.
+     */
+    const abzuweisen = [
+      ['U+202E (RLO) — dreht die Zeile der Exportdatei um', 'kerem\u202egnp.exe'],
+      ['U+0085 (NEL) — C1, bis T-122 nicht erfasst', 'kerem\u0085admin'],
+      ['U+200F (RLM) — Richtungsmarke, bis T-122 nicht erfasst', 'kerem\u200fnord'],
+    ];
+
+    for (const [name, wert] of abzuweisen) {
+      const bent = await startService(dataDir, { user: wert });
+      const code = await Promise.race([bent.exit, sleep(12000).then(() => 'timeout')]);
+      const ausgabe = bent.output();
+      check(`${name}: der Dienst startet nicht (Code 78)`, code === 78, `Code ${code}`);
+      check(
+        `${name}: die Meldung nennt den Grund und gibt den Namen nicht wieder`,
+        ausgabe.includes('Steuer- oder Richtungszeichen') &&
+          !ausgabe.includes(wert) &&
+          !SECRET_SHAPE.test(ausgabe),
+        ausgabe.slice(0, 200),
+      );
+    }
+  }
+
+  section('0c. Ein gewöhnlicher Name bleibt gültig (Gegenprobe zu 0b)');
+  {
+    /*
+     * Eine Prüfung, die alles abweist, ist grün und nutzlos. Der Name unten
+     * trägt Umlaut, Leerzeichen, Punkt und Bindestrich — alles, was in einem
+     * Konto vorkommt und mit der Klasse nichts zu tun hat. Er ist erfunden.
+     */
+    const gewoehnlich = await startService(dataDir, { user: 'Jan-Peter Müller.adm' });
+    service = gewoehnlich;
+    const oben = await waitForService();
+    check('Ein Name mit Umlaut, Leerzeichen und Punkt lässt den Dienst starten', oben);
+    check(
+      'Und er ist es auch, der antwortet — der Dienst nennt seine Bindeadresse',
+      gewoehnlich.output().includes(`Takt lauscht auf 127.0.0.1:${PORT}`),
+      gewoehnlich.output().slice(0, 200),
+    );
+    /*
+     * Und die Probe auf B-1.6 Punkt 3 an der frühesten Stelle, an der sie
+     * möglich ist: Die Röhre wird geschlossen, sobald `/health` antwortet —
+     * also mitten im Start, während der Aufgabenbereich noch sein Zertifikat
+     * erzeugt. Bis T-122 überlebte der Dienst das: Der Handschlag ließ den
+     * Strom fließen, das Dateiende ging verloren, und `watchParentLink` meldete
+     * sich an einem Strom an, der schon zu Ende war. Gefunden wurde es an einem
+     * verwaisten Prozess, der den Port hielt.
+     */
+    gewoehnlich.child.stdin.end();
+    const ende = await Promise.race([gewoehnlich.exit, sleep(8000).then(() => 'timeout')]);
+    check(
+      'Endet die Röhre unmittelbar nach dem Start, hält der Dienst von selbst an (B-1.6 Punkt 3)',
+      ende === 0,
+      `Code ${ende}`,
+    );
+
+    await stopService(gewoehnlich);
+    service = null;
+  }
+
+  section('0d. Die Hülle stirbt während des Starts (B-1.6 Punkt 3, T-122)');
+  {
+    /*
+     * Der Fall, den es gegeben hat, und er ist beim Aufräumen dieser Aufgabe
+     * aufgefallen: ein verwaister Sidecar, der den Port hielt.
+     *
+     * Der Handschlag las `stdin` im fließenden Zustand und meldete danach nur
+     * seine Zuhörer ab — der Strom lief weiter. Zwischen diesem Augenblick und
+     * dem Anmelden von `watchParentLink` liegen Migration, Bestandssicherung
+     * und das Zertifikat des Aufgabenbereichs. Schloß die Hülle in diesem
+     * Fenster ihre Seite der Röhre, ging das Dateiende an einen Strom ohne
+     * Zuhörer, und der Wächter meldete sich danach an einem Strom an, der schon
+     * zu Ende war. Ergebnis: ein Prozess mit Datenbankzugriff, ohne Fenster,
+     * ohne Ende — gemessen 15 Sekunden und weiter laufend.
+     *
+     * Hier wird die Röhre **unmittelbar nach dem Handschlag** geschlossen, ohne
+     * auf `/health` zu warten. Damit hängt der Fall nicht am Zeitverhalten des
+     * Rechners: Der Dienst ist zu diesem Zeitpunkt mit Sicherheit noch im Start.
+     */
+    const fruehesEnde = await startService(dataDir, { closeAfterHandshake: true });
+    const code = await Promise.race([fruehesEnde.exit, sleep(15000).then(() => 'läuft weiter')]);
+    check('Der Sidecar überlebt die Hülle nicht, auch nicht mitten im Start', code === 0, `Code ${code}`);
+    check(
+      'Und er sagt, warum er anhält',
+      fruehesEnde.output().includes('Die Verbindung zur Anwendung ist beendet'),
+      fruehesEnde.output().slice(-200),
+    );
+    if (code !== 0) {
+      fruehesEnde.child.kill('SIGKILL');
+      await Promise.race([fruehesEnde.exit, sleep(2000)]);
+    }
+    if (!(await waitForPortFree(PORT))) {
+      throw new Error(`Nach Abschnitt 0d ist Port ${PORT} nicht frei.`);
+    }
   }
 
   service = await startService(dataDir);

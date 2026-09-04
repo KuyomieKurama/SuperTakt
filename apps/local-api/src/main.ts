@@ -65,14 +65,22 @@ export async function main(): Promise<void> {
   // (B-1.6, E-042). Beide in einem Lesevorgang, siehe access/session-secret.ts.
   const handshake = await readStartupHandshake(process.stdin, SESSION_SECRET_TIMEOUT_MS);
   if (!handshake.ok) {
-    // Der Text nennt keinen Wert und keinen Pfad — nur, was zu tun ist. Der
-    // Grund wird unterschieden, weil „Benutzername fehlt" eine andere Nacharbeit
-    // verlangt als „von Hand gestartet".
+    // Der Text nennt keinen Wert und keinen Pfad — nur, was los ist. Der Grund
+    // wird unterschieden, weil die drei Fälle verschiedene Nacharbeit
+    // verlangen: von Hand gestartet, die Hülle hat den Namen nicht gelesen,
+    // oder der Name ist da und nicht abrechenbar (T-122).
+    //
+    // Der abgewiesene Name steht **nicht** in der Meldung. Er kann genau die
+    // Zeichen tragen, um die es geht — eine Meldung, die sie wörtlich
+    // wiedergibt, dreht die Protokollzeile um, die vom Angriff berichtet
+    // (B-2.4, B-4.3 Punkt 5).
     logger.lifecycle(
       'error',
       handshake.reason === 'user_missing'
         ? 'Der lokale Dienst hat keinen Windows-Benutzernamen empfangen. Er startet nicht: Ein Export ohne Urheber wäre nicht nachvollziehbar.'
-        : 'Der lokale Dienst wird von der Takt-Anwendung gestartet und nicht von Hand. Kein Startgeheimnis empfangen.',
+        : handshake.reason === 'user_invalid'
+          ? 'Der lokale Dienst hat einen Windows-Benutzernamen mit Steuer- oder Richtungszeichen empfangen. Er startet nicht: Dieser Name ginge unverändert in die Abrechnungsdatei.'
+          : 'Der lokale Dienst wird von der Takt-Anwendung gestartet und nicht von Hand. Kein Startgeheimnis empfangen.',
     );
     process.exit(EXIT_CONFIG);
   }
@@ -257,7 +265,16 @@ export async function main(): Promise<void> {
 
   // Ist die Hülle weg, endet der Dienst. Ein verwaister Sidecar mit
   // Datenbankzugriff und ohne Fenster ist genau das, was B-1.6 verhindert.
+  //
+  // **Genau einmal.** Zwei Wege führen hierher — das Ende der Röhre und ein
+  // Signal —, und beide können denselben Augenblick treffen. Der zweite
+  // Durchgang schlösse eine bereits geschlossene Datenbank; der Wurf daraus
+  // endete den Prozess mit Code 1, obwohl er ordentlich anhält. Die Hülle liest
+  // den Code, um den Grund zu unterscheiden (T-122).
+  let stopping = false;
   const shutdown = (): void => {
+    if (stopping) return;
+    stopping = true;
     taskpane?.close();
     database?.close();
     server.close(() => process.exit(0));

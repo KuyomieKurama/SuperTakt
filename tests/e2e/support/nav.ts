@@ -16,8 +16,20 @@ export async function gotoTodo(page: Page, todoId: string): Promise<void> {
   await page.goto(`/#/todos/${encodeURIComponent(todoId)}`);
 }
 
-export async function gotoTodos(page: Page): Promise<void> {
-  await page.goto('/#/todos');
+/**
+ * `query` ist optional und rückwärtskompatibel (`gotoTodos(page)` verhält
+ * sich unverändert) — nachgezogen in T-120, damit ein Fall die Liste auf
+ * seine eigenen Testdaten eingrenzen kann (`?q=…`, `TodoListScreen.tsx`,
+ * `query["q"]`), ohne bei jedem Aufruf sämtliche vorhandenen Todos im
+ * Tabulator-Weg zu haben. Der Name des Suchparameters ist wörtlich aus dem
+ * Quelltext übernommen, nicht geraten.
+ */
+export async function gotoTodos(page: Page, query?: Readonly<Record<string, string>>): Promise<void> {
+  if (query === undefined || Object.keys(query).length === 0) {
+    await page.goto('/#/todos');
+    return;
+  }
+  await page.goto(`/#/todos?${new URLSearchParams(query).toString()}`);
 }
 
 export async function gotoBoard(page: Page): Promise<void> {

@@ -103,9 +103,12 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
 | Plausibilisierung der Call-Nummer | `call-number.ts` → `checkCallNumber` | E-045, B-4.3, R-15 |
 | Der Satz über die Bewegung durch die Pools | `pool-movement.ts` → `poolMovementSentence` | E-056, E-058 |
+| Welche Zeichen in einem Namen nichts zu suchen haben | `characters.ts` → `hasForbiddenNameCharacter` | R-3a H-2, E-063 |
+| Fremden Text bereinigen und anzeigen | `characters.ts` → `dropHiddenCharacters`, `visibleText` | E-063 |
+| Namen deutsch aufzählen: „A“, „A und B“, „A, B und C“ | `enumeration.ts` → `enumerateNames` | E-058 Punkt 4 |
 
-Die letzte Zeile ist mit T-089 dazugekommen, und sie ist die einzige der Tabelle, die keine
-Fachregel enthält, sondern einen **Text**. Sie steht trotzdem hier und aus demselben Grund wie
+Die Zeile zum Bewegungssatz ist mit T-089 dazugekommen, und sie war die erste der Tabelle, die
+keine Fachregel enthält, sondern einen **Text**. Sie steht trotzdem hier und aus demselben Grund wie
 alles andere: Der Satz muss an zwei Flächen zeichengleich sein — in der Hauptanwendung und im
 Aufgabenbereich des Add-ins —, und er war es auf die schlechte Weise. „Die Karte bleibt, wo sie
 ist" stand als Abschrift in beiden und war seit E-055 falsch: Eine Kanban-Spalte ist eine Regel
@@ -197,6 +200,28 @@ Dienst fehlschlagen — gemessen, nicht behauptet. `POOL_RULE_AXIS_OF_FIELD` sch
 Gegenrichtung: Ein neues Feld an der Regelseite von `matchesPool` verlangt die Angabe, zu welcher
 Achse es gehört. Und `pnpm proof:openapi` Abschnitt 13 hält die Aufzählung der Domäne gegen die
 Beschreibung, gegen die Eingabeprüfung beider Routen und gegen die ausgelieferten Antworten.
+
+**Die drei letzten Zeilen sind mit T-122 dazugekommen, und sie stehen aus derselben Begründung
+hier — eine Ebene tiefer.** Es sind eine Zeichenmenge und eine Aufzählungsform, keine Regeln über
+Zeit oder Geld. Beide waren mehrfach im Baum, und beide sind auseinandergelaufen:
+
+- **Die Zeichenklasse** stand an der Tür des Dienstes (`http/input.ts`) und als Abschrift im
+  Add-in. T-117 hat die eine um drei Richtungsmarken erweitert, die andere nicht — und der
+  Nachweis, der genau das verhindern sollte, prüfte gegen eine kopierte Liste und blieb grün
+  (E-063 Punkt 4, gefunden in T-119). Sie liegt jetzt in `characters.ts`; Dienst und Add-in lesen
+  sie dort. Denselben Ort teilen sich die drei Behandlungen derselben Menge, weil sie **eine**
+  Regel sind und nicht drei: Was der Benutzer eingegeben hat, wird abgewiesen; ein Vorschlag aus
+  fremder Quelle wird bereinigt; eine Anzeige markiert (E-063).
+- **Die Aufzählung** lag privat in `pool-movement.ts`, also unerreichbar, und war in der
+  Hauptanwendung zum dritten Mal nachgebaut. Eine frühere Abschrift hatte bei drei Namen „A und B
+  und C" ergeben.
+
+Eine Zeichenklasse in der Domäne ist kein Widerspruch zu E-001: Sie kennt weder HTTP noch SQL. Was
+**nicht** mitgezogen ist, ist die Bindung an zod — die bleibt im Dienst, weil sie eine Eigenschaft
+der Tür ist und keine der Regel. Dieselbe Grenze gilt in die andere Richtung: Der lokale Dienst
+prüft seit T-122 auch den Windows-Benutzernamen aus der `stdin`-Zeile der Hülle gegen diese Klasse
+(O-AE). Das ist eine andere Grenze — kein `422`, sondern ein Dienst, der nicht startet —, aber
+dieselbe Regel; der Name geht unverändert in die Exportdatei (A-8.5).
 
 **Die eine Ausnahme von der Reinheit, und wie sie eingehegt ist.** `toCalendarDay` braucht eine
 Zeitzone, denn der Kalendertag einer Buchung ist der Tag an der Wand des Benutzers und nicht der
@@ -1248,7 +1273,8 @@ B-2.9 Punkt 3 schlägt vor, den Oberflächenpfad vom Add-in-Token zu trennen. Um
 Beide gehen durch dieselbe Kopfzeile und denselben zeitkonstanten Vergleich; beide Vergleiche
 laufen bei jeder Anfrage, unabhängig vom Ergebnis des ersten.
 
-Das trägt drei Dinge auf einmal:
+Das trägt mehreres auf einmal; die Aufzählung darunter ist die vollständige, eine Zahl steht
+hier bewußt nicht (B-9, T-117):
 
 1. **Das Sitzungsgeheimnis berührt nie die Platte** und ist beim nächsten Start ein anderes. Ein
    Browser kann es nicht kennen.
@@ -1260,6 +1286,15 @@ Das trägt drei Dinge auf einmal:
    nicht über die Befehlszeile, weil Befehlszeilen für jeden Prozess im System sichtbar sind.
    Endet `stdin`, endet der Dienst — ein verwaister Sidecar mit Datenbankzugriff und ohne Fenster
    ist genau das, was hier verhindert wird.
+4. **Die zweite `stdin`-Zeile trägt den Windows-Benutzernamen** (E-042), und er wird geprüft, nicht
+   geglaubt. Seit T-122 gegen dieselbe Zeichenklasse wie jeder Name und jeder Titel
+   (`characters.ts` in `@takt/domain`, O-AE); bis dahin nur gegen C0 und DEL. Der Grund ist der
+   Weg des Wertes: Er geht **unverändert** als `WindowsUser` in die Exportdatei (A-8.5), und ein
+   Richtungszeichen darin dreht eine Zeile der Datei, die beim Abrechnungstool landet. Ist der
+   Name leer oder trägt er solche Zeichen, startet der Dienst nicht (Beendigungscode 78, Gründe
+   `user_missing` und `user_invalid`); die Meldung nennt den Grund und gibt den Wert nicht wieder.
+   `pnpm proof:access` misst beides — die drei Bauarten am abgewiesenen Namen und die Gegenprobe,
+   daß ein Name mit Umlaut, Leerzeichen und Punkt weiterhin startet.
 
 **Port.** Fest vorgegeben (17843), gebunden ausschließlich auf `127.0.0.1`, exklusiv belegt. Ist
 er belegt, startet Takt nicht und weicht nicht aus. Der Port ist ausdrücklich kein Geheimnis: Ein
