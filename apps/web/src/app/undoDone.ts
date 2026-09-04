@@ -1,6 +1,6 @@
 import { errorMessage } from "../api/client";
 import { clearTodoDone } from "../api/endpoints";
-import type { Id } from "../api/types";
+import type { ForeignText, Id } from "../api/types";
 import { doneMovementSentence, withMovement } from "../lib/movement";
 import type { ToastAction, ToastApi } from "./ToastContext";
 import { quotedName } from "../lib/foreign";
@@ -54,7 +54,7 @@ const UNDO_FAILED_TITLE = "Das Zurücknehmen hat nicht geklappt";
  */
 export function undoDoneAction(
   todoId: Id,
-  todoTitle: string,
+  todoTitle: ForeignText,
   toasts: ToastApi,
   afterwards: () => void,
 ): ToastAction {

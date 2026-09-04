@@ -15,8 +15,11 @@ import { z } from 'zod';
 import {
   FORBIDDEN_NAME_CHARACTER_MESSAGE,
   hasForbiddenNameCharacter,
+  MAX_NAME_LENGTH,
+  MAX_TITLE_CHARACTERS,
   type TaktFieldError,
 } from '@takt/domain';
+import { MAX_PAGE_SIZE } from '@takt/storage';
 
 /** Ein Zeitstempel in der einen Form, die das Schema annimmt. */
 export const timestampSchema = z
@@ -141,8 +144,31 @@ const withoutControlCharacters = <T extends z.ZodType<string>>(schema: T) =>
     message: FORBIDDEN_NAME_CHARACTER_MESSAGE,
   });
 
-export const titleSchema = withoutControlCharacters(z.string().trim().min(1).max(500));
-export const nameSchema = withoutControlCharacters(z.string().trim().min(1).max(200));
+/**
+ * Die beiden Deckel stehen **nicht** hier, sondern in `@takt/domain` (T-128).
+ *
+ * Bis T-128 stand in dieser Zeile `.max(500)` und in
+ * `apps/outlook-addin/src/office/mail.ts` `MAX_TITLE_CHARACTERS = 500` — zwei
+ * Zahlen für einen Sachverhalt. Sie wurden zwar gegeneinander gehalten
+ * (`proof:addin` Abschnitt 16), aber ein Vergleich zweier Fassungen wird erst
+ * rot, wenn die Doppelung schon falsch ist (E-063 Punkt 5). Vor T-114 war sie
+ * es: Das Add-in kürzte auf 512, die Tür nahm 500, und der Benutzer bekam für
+ * einen Vorschlag, den er nicht geschrieben hatte, ein 422.
+ *
+ * Die 200 war derselbe Fall, nur unbemerkt: `MAX_NAME_LENGTH` in
+ * `packages/domain/src/tag-name.ts` trug seit jeher den Kommentar „dieselbe
+ * Zahl wie `nameSchema` im Dienst" — eine Verabredung, die niemand erzwang.
+ * Jetzt ist es dieselbe Zahl, weil es dieselbe Zahl **ist**.
+ *
+ * Die Zählweise ist die von zod, also UTF-16-Einheiten. Die Begründung, warum
+ * das die vorsichtigere von zwei Zählweisen ist, steht an der Konstanten.
+ */
+export const titleSchema = withoutControlCharacters(
+  z.string().trim().min(1).max(MAX_TITLE_CHARACTERS),
+);
+export const nameSchema = withoutControlCharacters(
+  z.string().trim().min(1).max(MAX_NAME_LENGTH),
+);
 /** Leistung und Vermerk. 1 MB Rumpfgrenze steht davor (B-1.7). */
 export const textSchema = z.string().max(20_000);
 export const colorSchema = z
@@ -196,9 +222,23 @@ export function patchOf<T extends object>(value: T): { [K in keyof T]?: Exclude<
   return patch as { [K in keyof T]?: Exclude<T[K], undefined> };
 }
 
+/**
+ * Fortsetzungsmarke und Seitengröße.
+ *
+ * Die Obergrenze ist `MAX_PAGE_SIZE` aus `@takt/storage` und nicht eine 200,
+ * die zufällig dieselbe ist (T-128). Dort steht sie neben `pageSize()`, das
+ * jede größere Angabe ohnehin auf sie herunterzieht; stünde sie hier ein
+ * zweites Mal, könnte die Tür eines Tages mehr annehmen, als der Adapter
+ * liefert — und die Anfrage bekäme klaglos weniger Zeilen, als sie erbeten hat.
+ *
+ * Die 512 der Marke ist keine solche Zahl. Sie ist kein zweiter Ausdruck einer
+ * Regel, die anderswo steht, sondern der Deckel über einer base64url-Kette, die
+ * der Dienst selbst ausgegeben hat: reichlich für jeden Sortierschlüssel und
+ * klein genug, dass niemand eine Abfragezeichenkette als Ablage benutzt.
+ */
 export const paginationSchema = z.object({
   cursor: z.string().max(512).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).optional(),
 });
 
 /**

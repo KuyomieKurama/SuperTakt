@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import {
   useCallback,
   useEffect,
@@ -76,7 +77,7 @@ import { Foreign } from "./Foreign";
 
 export interface TagTreeNode {
   readonly id: string;
-  readonly label: string;
+  readonly label: ForeignText;
   readonly kind: "folder" | "tag";
   /** Anzahl der Tags im Teilbaum. Nur fuer Ordner sinnvoll. */
   readonly tagCount?: number;

@@ -4,7 +4,13 @@ import {
   poolRuleIsEmpty,
   type PoolRuleAxes,
 } from "@takt/domain";
-import type { Id, Pool, PoolResolution, PoolRuleTerm } from "../api/types";
+import type {
+  ForeignText,
+  Id,
+  Pool,
+  PoolResolution,
+  PoolRuleTerm,
+} from "../api/types";
 import { formatCount } from "./format";
 import { foreignText, quotedName } from "./foreign";
 import {
@@ -70,9 +76,9 @@ import {
 /** Ein Tag, ein Ordner oder ein Status, wie er in der Zusammenfassung steht. */
 export interface RuleChip {
   readonly kind: "tag" | "folder" | "status";
-  readonly label: string;
+  readonly label: ForeignText;
   /** Ordnerpfad eines Tags, damit „Nord" aus zwei Ordnern unterscheidbar bleibt. */
-  readonly path: readonly string[];
+  readonly path: readonly ForeignText[];
   /**
    * Nur bei Ordnern: Zählen auch die Unterordner? `includeSubfolders` steht am
    * Pool und gilt für alle Ordnerterme; am Chip steht es, weil es dort etwas
@@ -154,9 +160,11 @@ export interface RuleDescription {
  * des Designsystems zeigbar, wo es keinen `StructureProvider` gibt.
  */
 export interface RuleLookup {
-  readonly tag: (id: Id) => { readonly name: string; readonly path: readonly string[] } | undefined;
-  readonly folder: (id: Id) => readonly string[] | undefined;
-  readonly status: (id: Id) => string | undefined;
+  readonly tag: (
+    id: Id,
+  ) => { readonly name: ForeignText; readonly path: readonly ForeignText[] } | undefined;
+  readonly folder: (id: Id) => readonly ForeignText[] | undefined;
+  readonly status: (id: Id) => ForeignText | undefined;
 }
 
 /* ==================================================================== */
@@ -366,7 +374,7 @@ export interface EmptyRuleFolder {
    * dafür „einem unbekannten Ordner" ein. Eine nackte Kennung im Fließtext
    * beantwortete die Frage des Benutzers nicht, sondern stellte eine neue.
    */
-  readonly label: string | null;
+  readonly label: ForeignText | null;
 }
 
 /**

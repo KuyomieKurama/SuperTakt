@@ -195,6 +195,48 @@ function inRanges(codePoint: number, ranges: readonly CodePointRange[]): boolean
 }
 
 /**
+ * Eine Zahl, die in keinem Bereich liegen kann und auch in keinem künftigen.
+ *
+ * Codepunkte sind nicht negativ. `-1` ist damit dauerhaft außerhalb jeder
+ * Klasse, die man hier eintragen könnte — anders als etwa `0`, das mitten in C0
+ * liegt und ein unbekanntes Segment stillschweigend zu einem Steuerzeichen
+ * machte.
+ */
+const NO_CODE_POINT = -1;
+
+/**
+ * Der Codepunkt eines Segments aus `for...of` über eine Zeichenkette.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum es diese vier Zeilen gibt
+ * ---------------------------------------------------------------------------
+ *
+ * `codePointAt(0)` ist mit `number | undefined` angegeben, weil eine **leere**
+ * Zeichenkette keinen Codepunkt an Stelle 0 hat. Aus `for...of` über eine
+ * Zeichenkette kommt aber nie ein leeres Segment: Jeder Durchgang liefert
+ * genau ein Zeichen, ein oder zwei UTF-16-Einheiten lang. Der Fall ist also
+ * unerreichbar — und stand bis T-128 trotzdem **viermal** in dieser Datei, in
+ * vier verschiedenen Schreibweisen (`code !== undefined &&`, `if (code ===
+ * undefined) continue;`, `code === undefined ||`). Der unit-tester hat sie in
+ * T-127 einzeln gemeldet: vier Zweige, die kein Test erreichen kann, ohne einen
+ * gefälschten Iterator zu bauen.
+ *
+ * Sie fallen zu lassen ginge nur mit `codePointAt(0)!` — einer Behauptung, die
+ * nichts prüft und die dieser Baum an keiner Stelle führt, an der er sie
+ * vermeiden kann. Also stehen sie **einmal** statt viermal, mit dem Grund
+ * dabei, und die vier Aufrufer lesen sich wieder wie das, was sie tun.
+ *
+ * `?? NO_CODE_POINT` und kein Wurf: Diese Datei ist rein und gibt für jede
+ * Eingabe eine Antwort. Ein Segment ohne Codepunkt ist kein Zeichen der Klasse
+ * — das ist die einzige Lesart, die zu allen drei Behandlungen passt, und sie
+ * ist wortgleich das, was die vier Zweige vorher taten: durchlassen,
+ * unverändert.
+ */
+function codePointOf(character: string): number {
+  return character.codePointAt(0) ?? NO_CODE_POINT;
+}
+
+/**
  * Gehört dieser Codepunkt zur Klasse?
  *
  * Die Frage einzeln beantwortet, damit ein Nachweis sie über eine Menge stellen
@@ -217,8 +259,7 @@ export function isForbiddenNameCharacter(codePoint: number): boolean {
  */
 export function hasForbiddenNameCharacter(value: string): boolean {
   for (const character of value) {
-    const code = character.codePointAt(0);
-    if (code !== undefined && isForbiddenNameCharacter(code)) return true;
+    if (isForbiddenNameCharacter(codePointOf(character))) return true;
   }
   return false;
 }
@@ -238,8 +279,7 @@ export function hasForbiddenNameCharacter(value: string): boolean {
  */
 export function hasHiddenCharacter(value: string): boolean {
   for (const character of value) {
-    const code = character.codePointAt(0);
-    if (code === undefined) continue;
+    const code = codePointOf(character);
     if (isForbiddenNameCharacter(code) && !inRanges(code, CONTROL_WHITESPACE)) return true;
   }
   return false;
@@ -260,10 +300,8 @@ export function hasHiddenCharacter(value: string): boolean {
 export function dropHiddenCharacters(value: string): string {
   let out = '';
   for (const character of value) {
-    const code = character.codePointAt(0);
-    if (code !== undefined && isForbiddenNameCharacter(code) && !inRanges(code, CONTROL_WHITESPACE)) {
-      continue;
-    }
+    const code = codePointOf(character);
+    if (isForbiddenNameCharacter(code) && !inRanges(code, CONTROL_WHITESPACE)) continue;
     out += character;
   }
   return out;
@@ -293,8 +331,8 @@ export function dropHiddenCharacters(value: string): string {
 export function visibleText(value: string): string {
   let out = '';
   for (const character of value) {
-    const code = character.codePointAt(0);
-    if (code === undefined || !isForbiddenNameCharacter(code)) {
+    const code = codePointOf(character);
+    if (!isForbiddenNameCharacter(code)) {
       out += character;
       continue;
     }

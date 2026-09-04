@@ -44,6 +44,7 @@
  * Datenmodell — `reopened` steht in keiner Spalte.
  */
 
+import type { ForeignText } from "../api/types";
 import type {
   ExportAuditEvent,
   PoolCompletionFilter,
@@ -208,7 +209,7 @@ const POOL_PLACEMENT_RESTORED_TITLE = "Anzeigeort wiederhergestellt.";
  * hat — die Regel bleibt vollstaendig, an den Todos aendert sich nichts.
  */
 export function poolPlacementMessage(
-  name: string,
+  name: ForeignText,
   placement: PoolPlacement,
   restored: boolean,
 ): { readonly title: string; readonly body: string } {
@@ -274,7 +275,7 @@ export function doneFlagState(done: boolean, reactivated: boolean): DoneFlagStat
  * Anwendung und Abschnitt 6 der Musterseite. Eine Musterseite, die den
  * erwarteten Wortlaut abschreibt, prueft nur sich selbst.
  */
-export function reactivationTitle(todoTitle: string): string {
+export function reactivationTitle(todoTitle: ForeignText): string {
   return `Timer gestartet. ${quotedName(todoTitle)} ist wieder offen.`;
 }
 

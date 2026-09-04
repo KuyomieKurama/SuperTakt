@@ -1,3 +1,4 @@
+import { foreignText } from "../lib/foreign";
 import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { useToasts } from "../app/ToastContext";
@@ -124,8 +125,8 @@ export function BoardSection() {
         const next = !candidate.done;
         setAnnouncement(
           next
-            ? `${candidate.title} ist jetzt erledigt. Tags und Status ändern sich dadurch nicht.`
-            : `${candidate.title} ist wieder offen.`,
+            ? `${foreignText(candidate.title)} ist jetzt erledigt. Tags und Status ändern sich dadurch nicht.`
+            : `${foreignText(candidate.title)} ist wieder offen.`,
         );
         return { ...candidate, done: next, reactivated: false };
       }),
@@ -187,7 +188,7 @@ export function BoardSection() {
       );
 
       if (!reactivating) {
-        setAnnouncement(`Timer für ${card.title} ${starting ? "gestartet" : "gestoppt"}.`);
+        setAnnouncement(`Timer für ${foreignText(card.title)} ${starting ? "gestartet" : "gestoppt"}.`);
         return;
       }
 
@@ -213,19 +214,19 @@ export function BoardSection() {
         id: "open",
         label: "Todo öffnen",
         icon: "arrow-up-right",
-        onSelect: () => setAnnouncement(`${card.title} geöffnet.`),
+        onSelect: () => setAnnouncement(`${foreignText(card.title)} geöffnet.`),
       },
       {
         id: "tags",
         label: "Tags ändern — sie entscheiden die Spalte",
         icon: "tag",
-        onSelect: () => setAnnouncement(`Tags von ${card.title} bearbeiten.`),
+        onSelect: () => setAnnouncement(`Tags von ${foreignText(card.title)} bearbeiten.`),
       },
       {
         id: "status",
         label: "Status ändern",
         icon: "pencil",
-        onSelect: () => setAnnouncement(`Status von ${card.title} ändern.`),
+        onSelect: () => setAnnouncement(`Status von ${foreignText(card.title)} ändern.`),
       },
       { kind: "separator", id: "sep-done" },
       {
@@ -373,7 +374,7 @@ export function BoardSection() {
                         }}
                         entries={cardMenu(card, others)}
                         highlighted={highlighted === card.id}
-                        onOpen={() => setAnnouncement(`${card.title} geöffnet.`)}
+                        onOpen={() => setAnnouncement(`${foreignText(card.title)} geöffnet.`)}
                         onToggleTimer={() => toggleTimer(card.id)}
                         {...(others.length === 0
                           ? {}

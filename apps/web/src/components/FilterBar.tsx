@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import { useId, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { Icon } from "./Icon";
@@ -84,7 +85,7 @@ export interface ActiveFilter {
   /** Name des Filters, zum Beispiel "Status". */
   readonly field: string;
   /** Gewaehlter Wert, zum Beispiel "Offen". */
-  readonly value: string;
+  readonly value: ForeignText;
   readonly onRemove: () => void;
 }
 

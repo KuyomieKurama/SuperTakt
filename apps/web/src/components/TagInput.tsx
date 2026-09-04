@@ -2,7 +2,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 import { Combobox as Ark, createListCollection } from "@ark-ui/react/combobox";
 import { Portal } from "@ark-ui/react/portal";
 import { normalizeTagName, tagNameKey } from "@takt/domain";
-import type { Id } from "../api/types";
+import type { ForeignText, Id } from "../api/types";
 import { useStructure, type TagInfo } from "../app/StructureContext";
 import { href } from "../app/router";
 import { cx } from "../lib/cx";
@@ -78,8 +78,8 @@ const EMPTY_IDS: ReadonlySet<string> = new Set<string>();
 
 interface Suggestion {
   readonly value: string;
-  readonly label: string;
-  readonly path: readonly string[];
+  readonly label: ForeignText;
+  readonly path: readonly ForeignText[];
   readonly isDefault: boolean;
 }
 

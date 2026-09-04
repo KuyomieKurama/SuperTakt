@@ -1,3 +1,4 @@
+import { foreignText } from "../lib/foreign";
 import { useCallback, useMemo, useState } from "react";
 import { ExportAuditList } from "../components/ExportAudit";
 import {
@@ -103,7 +104,7 @@ export function ExportPreviewSection() {
       setExcludedEntryIds(next);
       setAnnouncement(
         `${removing ? "Buchung ausgeschlossen" : "Buchung wieder aufgenommen"}. ` +
-          `${group?.todoTitle ?? ""} am ${group?.day ?? ""}: gerundete Exportzeit jetzt ${outcome.quarters} Stunden.`,
+          `${foreignText(group?.todoTitle ?? "")} am ${group?.day ?? ""}: gerundete Exportzeit jetzt ${outcome.quarters} Stunden.`,
       );
     },
     [excludedEntryIds],

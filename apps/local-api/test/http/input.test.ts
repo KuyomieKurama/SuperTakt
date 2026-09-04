@@ -3,46 +3,75 @@
  * Richtungszeichen ab (`apps/local-api/src/http/input.ts`, Auftrag aus
  * `reports/T-101-domain-dev.md` "Nächster Schritt" 2 / R-3a H-2).
  *
- * Erweitert um die Ränder der um drei Marken gewachsenen Klasse aus T-117
- * (Auftrag T-121, Risiko R1 aus `reports/T-117-domain-dev.md`: "Der Kopf
- * nennt „zwei Klassen … `U+202A`–`U+202E`, `U+2066`–`U+2069`". Es sind drei
- * Bauarten … für die Marken fehlen die Fälle").
+ * ---------------------------------------------------------------------------
+ * Umgebaut in T-131 — eine Gleichheitsprüfung statt einer dritten Randtabelle
+ * ---------------------------------------------------------------------------
  *
- * Bislang ohne eigene Testdatei: kein Test unter `apps/local-api/test` rief
- * `titleSchema` oder `nameSchema` je auf.
+ * Bis hierher stand die VOLLSTÄNDIGE Randtabelle der Zeichenklasse von Hand
+ * in dieser Datei — eine von drei unabhängig geschriebenen Abschriften
+ * derselben Grenzen (dieselbe Tabelle auch in
+ * `apps/outlook-addin/test/text/hidden.test.ts` und seit T-127 an der Quelle
+ * selbst, `packages/domain/test/characters.test.ts`). Das ist dasselbe
+ * Muster, das die T-117/T-119-Regression im Produktivcode möglich gemacht
+ * hat, nur eine Ebene tiefer, in den Tests: Erweitert die Domäne die Klasse,
+ * weiß diese Datei nichts davon, bis jemand die Abschrift von Hand
+ * nachträgt — und bis dahin bleibt sie grün, weil sie den neuen Codepunkt
+ * schlicht nie fragt (E-063 Punkt 5).
  *
- * Zwei Klassen sind abgewiesen (Kopfkommentar der Quelldatei), die zweite in
- * drei Bauarten:
- *
- *  - **C0/C1** — `U+0000`–`U+001F`, `U+007F`–`U+009F`.
- *  - **Bidirektionale Formatierungszeichen**, alle drei Bauarten:
- *      - **Einbettungen und Überschreibungen** — `U+202A`–`U+202E`.
- *      - **Isolate** — `U+2066`–`U+2069`.
- *      - **Marken** (seit T-117) — `U+061C` (ALM), `U+200E` (LRM),
- *        `U+200F` (RLM).
- *
- * Genau an den Rändern dieser Bereiche wird hier geprüft: das letzte
- * abgewiesene und das erste wieder erlaubte Zeichen auf jeder Seite. Ein
- * Bereich, der beim Übertragen der Regel in einen anderen Vergleichsoperator
- * (`<` statt `<=`) um eins verrutscht, fällt hier auf — nicht bei einem Wert
- * mitten im Bereich. Bei den Marken sind es zwei Ränder: `U+061C` steht
- * allein zwischen `U+061B` und `U+061D`, `U+200E`/`U+200F` stehen als Paar
- * zwischen dem Bereich `U+200B`–`U+200D` und `U+2010`.
- *
- * Ausdrücklich ERLAUBT und eigens geprüft: `U+200B`–`U+200D` (ZWSP, ZWNJ,
- * ZWJ — das letzte davon hält zusammengesetzte Emoji zusammen; ein
- * Familien-Emoji über ZWJ ist deshalb als eigener Fall dabei, er zieht die
- * Grenze nach unten fest) und `U+2010`.
+ * Die Randtabelle — WELCHE Codepunkte verboten sind — gehört jetzt an EINE
+ * Stelle: `packages/domain/test/characters.test.ts`. Was hier bleibt, ist
+ * eine andere Frage: nicht "ist die Klasse richtig", sondern "wendet DIESE
+ * Tür GENAU die Klasse der Domäne an, und keine eigene, angewachsene oder
+ * veraltete Fassung" — die zod-Bindung (`withoutControlCharacters` in
+ * `http/input.ts`). Das ist ein Verhalten und keine Abschrift: Die
+ * Codepunkte, gegen die unten geprüft wird, stehen nicht von Hand hier,
+ * sondern werden aus `FORBIDDEN_NAME_CHARACTERS`/`CONTROL_WHITESPACE`
+ * (`@takt/domain`) zur LAUFZEIT abgeleitet — jeder Bereich, seine beiden
+ * Grenzen und ihre unmittelbaren Nachbarn. Käme in der Domäne morgen ein
+ * vierter Bereich dazu (wie die drei Marken mit T-117), stünde er automatisch
+ * in der Liste unten, ohne dass diese Datei angefasst werden müsste — und
+ * `titleSchema` würde sofort daran gemessen, nicht erst, wenn jemand die
+ * Abschrift nachträgt.
  *
  * Umlaute, Emoji und Leerzeichen INNERHALB des Namens sind ausdrücklich NICHT
- * erfasst (Kopfkommentar: "Leerzeichen und Tabulator sind zwei verschiedene
- * Fälle"). Keine echten Call-Nummern, Kundennamen oder Zugangsdaten — alle
- * Namen unten sind erfunden.
+ * Teil der Klasse (Kopfkommentar der Quelldatei: "Leerzeichen und Tabulator
+ * sind zwei verschiedene Fälle"). Keine echten Call-Nummern, Kundennamen oder
+ * Zugangsdaten — alle Namen unten sind erfunden.
  */
+import { CONTROL_WHITESPACE, FORBIDDEN_NAME_CHARACTERS, isForbiddenNameCharacter } from '@takt/domain';
 import { describe, expect, it } from 'vitest';
 import { nameSchema, titleSchema } from '../../src/http/input.ts';
 
 const CONTROL_MESSAGE = 'Steuerzeichen und Richtungszeichen sind in einem Namen nicht erlaubt.';
+
+/**
+ * Randwerte, aus der Domäne ABGELEITET statt von Hand abgeschrieben (T-131):
+ * für jeden Bereich aus {@link FORBIDDEN_NAME_CHARACTERS} und aus
+ * {@link CONTROL_WHITESPACE} beide Grenzen und ihre beiden unmittelbaren
+ * Nachbarn. Das ist keine zweite Randtabelle — es ist dieselbe Tabelle,
+ * gelesen statt getippt.
+ */
+function boundaryCodePoints(): readonly number[] {
+  const codePoints = new Set<number>();
+  const note = (range: { readonly from: number; readonly to: number }) => {
+    codePoints.add(range.from);
+    codePoints.add(range.to);
+    if (range.from > 0) codePoints.add(range.from - 1);
+    if (range.to < 0x10ffff) codePoints.add(range.to + 1);
+  };
+  for (const range of FORBIDDEN_NAME_CHARACTERS) note(range);
+  for (const range of CONTROL_WHITESPACE) note(range);
+  return [...codePoints].sort((a, b) => a - b);
+}
+
+const codePointLabel = (codePoint: number): string =>
+  `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+
+const boundaryCases = boundaryCodePoints().map((codePoint) => ({
+  codePoint,
+  label: codePointLabel(codePoint),
+  forbidden: isForbiddenNameCharacter(codePoint),
+}));
 
 describe('titleSchema / nameSchema — gültige Namen mit Umlauten, Emoji und Leerzeichen innen', () => {
   it('Umlaute, scharfes ß und ein Emoji mitten im Text sind erlaubt', () => {
@@ -64,151 +93,45 @@ describe('titleSchema / nameSchema — gültige Namen mit Umlauten, Emoji und Le
     expect(result.success).toBe(true);
     if (result.success) expect(result.data).toBe('Ost');
   });
-
-  it('nameSchema erlaubt dieselben Zeichen wie titleSchema (gemeinsame Prüfung, siehe Kopfkommentar der Quelldatei)', () => {
-    const result = nameSchema.safeParse('Nord-Straße ü 🎉');
-    expect(result.success).toBe(true);
-  });
 });
 
-describe('titleSchema / nameSchema — C0 (U+0000–U+001F): abgewiesen, Grenze bei U+001F/U+0020', () => {
-  it('U+0000 (NUL) mitten im Namen wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u0000Nach');
-    expect(result.success).toBe(false);
-  });
+describe('titleSchema / nameSchema wenden GENAU die Zeichenklasse der Domäne an — die zod-Bindung, nicht die Klasse selbst (E-063 Punkt 5, T-131)', () => {
+  it.each(boundaryCases)(
+    '$label: titleSchema entscheidet wie isForbiddenNameCharacter aus @takt/domain (forbidden: $forbidden)',
+    ({ codePoint, forbidden }) => {
+      const value = `Vor${String.fromCodePoint(codePoint)}Nach`;
+      const result = titleSchema.safeParse(value);
+      expect(result.success).toBe(!forbidden);
+    },
+  );
 
-  it('U+0009 (Tabulator) INNERHALB des Namens wird abgewiesen — anders als das Leerzeichen', () => {
-    const result = titleSchema.safeParse('Vor\tNach');
-    expect(result.success).toBe(false);
-  });
+  it.each(boundaryCases)(
+    '$label: nameSchema entscheidet wie isForbiddenNameCharacter aus @takt/domain (forbidden: $forbidden)',
+    ({ codePoint, forbidden }) => {
+      const value = `Vor${String.fromCodePoint(codePoint)}Nach`;
+      const result = nameSchema.safeParse(value);
+      expect(result.success).toBe(!forbidden);
+    },
+  );
 
-  it('U+001F, das letzte C0-Zeichen, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u001fNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+0020 (Leerzeichen), das erste NICHT mehr erfasste Zeichen direkt danach, ist weiterhin erlaubt', () => {
-    const result = titleSchema.safeParse('Vor Nach');
-    expect(result.success).toBe(true);
-  });
-});
-
-describe('titleSchema / nameSchema — C1 (U+007F–U+009F): abgewiesen, Grenze bei U+007E/U+007F und U+009F/U+00A0', () => {
-  it('U+007E (Tilde), das letzte druckbare ASCII-Zeichen direkt davor, ist erlaubt', () => {
-    const result = titleSchema.safeParse('Vor~Nach');
-    expect(result.success).toBe(true);
-  });
-
-  it('U+007F (DEL), das erste C1-Zeichen, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u007fNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+009F, das letzte C1-Zeichen, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u009fNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+00A0 (geschütztes Leerzeichen), direkt nach dem C1-Bereich, ist erlaubt', () => {
-    const result = titleSchema.safeParse('Vor Nach');
-    expect(result.success).toBe(true);
-  });
-});
-
-describe('titleSchema / nameSchema — Bidi-Steuerzeichen U+202A–U+202E: abgewiesen, Grenze bei U+2029/U+202A und U+202E/U+202F', () => {
-  it('U+2029 (Absatztrenner), direkt vor dem Bidi-Bereich, ist NICHT erfasst und bleibt erlaubt', () => {
-    const result = titleSchema.safeParse('Vor Nach');
-    expect(result.success).toBe(true);
-  });
-
-  it('U+202A (LRE), das erste Zeichen des Bereichs, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u202aNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+202E (RLO) — das Zeichen, das eine Zeile optisch umdreht — wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u202eNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+202F (schmales geschütztes Leerzeichen), direkt nach dem Bereich, ist erlaubt', () => {
-    const result = titleSchema.safeParse('Vor Nach');
-    expect(result.success).toBe(true);
-  });
-});
-
-describe('titleSchema / nameSchema — Bidi-Steuerzeichen U+2066–U+2069: abgewiesen, Grenze bei U+2065/U+2066 und U+2069/U+206A', () => {
-  it('U+2065 , direkt vor dem Bereich, ist NICHT erfasst und bleibt erlaubt', () => {
-    const result = titleSchema.safeParse('Vor\u2065Nach');
-    expect(result.success).toBe(true);
-  });
-
-  it('U+2066 (LRI), das erste Zeichen des Bereichs, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u2066Nach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+2069 (PDI), das letzte Zeichen des Bereichs, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u2069Nach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+206A, direkt nach dem Bereich, ist erlaubt', () => {
-    const result = titleSchema.safeParse('Vor\u206aNach');
-    expect(result.success).toBe(true);
-  });
-});
-
-describe('titleSchema / nameSchema — die Marken aus T-117 (ALM U+061C, LRM U+200E, RLM U+200F): abgewiesen, ihre Nachbarn bleiben erlaubt', () => {
-  it('U+061B (arabisches Semikolon), direkt vor der Marke, bleibt erlaubt', () => {
-    const result = titleSchema.safeParse('Vor\u061bNach');
-    expect(result.success).toBe(true);
-  });
-
-  it('U+061C (ALM — Arabic Letter Mark), die Marke selbst, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u061cNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+061D, direkt nach der Marke, bleibt erlaubt', () => {
-    const result = titleSchema.safeParse('Vor\u061dNach');
-    expect(result.success).toBe(true);
-  });
-
-  it('U+200B (ZWSP), U+200C (ZWNJ) und U+200D (ZWJ) bleiben erlaubt — sie haben keine Richtungswirkung', () => {
-    expect(titleSchema.safeParse('Vor\u200bNach').success).toBe(true);
-    expect(titleSchema.safeParse('Vor\u200cNach').success).toBe(true);
-    expect(titleSchema.safeParse('Vor\u200dNach').success).toBe(true);
-  });
-
-  it('ein Familien-Emoji, über U+200D (ZWJ) zusammengehalten, bleibt als Titel erlaubt — der Wächter richtet sich gegen Richtungszeichen, nicht gegen Emoji', () => {
-    // Vier Personen-Emoji, je durch ein ZWJ verbunden (ein Familien-Emoji).
-    // Würde U+200D abgewiesen, könnte ein Todo mit diesem Titel nicht
-    // angelegt werden, obwohl kein Zeichen darin die Zeile umdreht.
+  it('ein Familien-Emoji (drei ZWJ), über mehrere Codepunkte hinweg, bleibt als Titel erlaubt — der Wächter richtet sich gegen Richtungszeichen, nicht gegen Emoji', () => {
+    // Ein realistischer Anwendungsfall statt eines Einzelzeichens: Die Tabelle
+    // oben bestätigt für U+200D (ZWJ) "erlaubt", aber erst diese ECHTE,
+    // mehrteilige Zeichenfolge zeigt, dass ein zusammengesetztes Emoji als
+    // Ganzes durchgeht und nicht in seine Bestandteile zerfällt oder
+    // abgewiesen wird.
     const familyEmoji = '\u{1f468}\u200d\u{1f469}\u200d\u{1f467}\u200d\u{1f466}';
     const result = titleSchema.safeParse(`Familientermin ${familyEmoji}`);
     expect(result.success).toBe(true);
   });
 
-  it('U+200E (LRM), die erste der beiden Richtungsmarken, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u200eNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+200F (RLM), die zweite der beiden Richtungsmarken, wird abgewiesen', () => {
-    const result = titleSchema.safeParse('Vor\u200fNach');
-    expect(result.success).toBe(false);
-  });
-
-  it('U+2010 (Bindestrich), jenseits der beiden Marken, bleibt erlaubt', () => {
-    const result = titleSchema.safeParse('Vor\u2010Nach');
-    expect(result.success).toBe(true);
-  });
-
-  it('nameSchema weist dieselben drei Marken ab wie titleSchema (gemeinsame Prüfung, siehe Kopfkommentar der Quelldatei)', () => {
-    expect(nameSchema.safeParse('Regel\u061c').success).toBe(false);
-    expect(nameSchema.safeParse('Regel\u200e').success).toBe(false);
-    expect(nameSchema.safeParse('Regel\u200f').success).toBe(false);
+  it('die abgeleitete Liste ist weder leer noch deckt sie jeden Codepunkt ab — sonst wäre jeder Vergleich oben sinnlos grün', () => {
+    // Wächter gegen eine Klasse, die durch einen Programmierfehler leer würde
+    // (jeder Vergleich oben bliebe grün, weil nie ein Zeichen abgewiesen
+    // wird) oder alles erfasste (jeder Vergleich bliebe grün, weil jedes
+    // Zeichen abgewiesen wird).
+    expect(boundaryCases.some((entry) => entry.forbidden)).toBe(true);
+    expect(boundaryCases.some((entry) => !entry.forbidden)).toBe(true);
   });
 });
 

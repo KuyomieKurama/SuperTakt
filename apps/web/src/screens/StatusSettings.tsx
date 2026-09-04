@@ -623,7 +623,7 @@ function StatusRow({
         />
         <span className="status-admin__default-text">
           Standard
-          <span className="visually-hidden"> für neue Todos — „{status.name}“</span>
+          <span className="visually-hidden"> für neue Todos — {quotedName(status.name)}</span>
         </span>
       </label>
 

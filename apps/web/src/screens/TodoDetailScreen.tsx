@@ -9,7 +9,7 @@ import {
   putTodoNote,
 } from "../api/endpoints";
 import { errorMessage } from "../api/client";
-import type { Id, TimeEntry } from "../api/types";
+import type { ForeignText, Id, TimeEntry } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DoneFlag } from "../components/DoneFlag";
 import {
@@ -140,7 +140,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
   }, [todoId], [version]);
 
   const toggleDone = useCallback(
-    (done: boolean, title: string) => {
+    (done: boolean, title: ForeignText) => {
       void (done ? clearTodoDone(todoId) : markTodoDone(todoId))
         .then((result) => {
           /*
@@ -303,13 +303,20 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                   todo.callNumber === null
                     ? `Status: ${foreignText(structure.statusName(todo.statusId))}`
                     : /*
-                        Die Call-Nummer geht ungeschuetzt in den Satz, und das
-                        ist gemessen und nicht uebersehen: `checkCallNumber`
-                        laesst nur `A-Z a-z 0-9 . _ / -` durch (E-045), ein
-                        geschlossener Vorrat ohne jedes Richtungszeichen
-                        (T-119, Abschnitt 4).
+                        Die Call-Nummer geht seit T-129 durch dieselbe
+                        Behandlung wie jeder andere fremde Text — obwohl
+                        `checkCallNumber` nur `A-Z a-z 0-9 . _ / -` durchlaesst
+                        (E-045) und `visibleText` darauf die Identitaet ist.
+
+                        Zwei Gruende, und der zweite wiegt schwerer als der
+                        erste: Der Vorrat ist an der *heutigen* Tuer geschlossen,
+                        nicht im Bestand (T-124 R4 — was vor T-101 angelegt
+                        wurde, hat diese Tuer nie gesehen). Und eine Ausnahme
+                        waere eine Stelle, an der die Regel nicht gilt: Sie
+                        muesste im Nachweis stehen, gepflegt werden und koennte
+                        veralten. Eine Identitaet kostet nichts.
                       */
-                      `Call ${todo.callNumber} · Status: ${foreignText(structure.statusName(todo.statusId))}`
+                      `Call ${foreignText(todo.callNumber)} · Status: ${foreignText(structure.statusName(todo.statusId))}`
                 }
                 refreshing={refreshing}
                 actions={

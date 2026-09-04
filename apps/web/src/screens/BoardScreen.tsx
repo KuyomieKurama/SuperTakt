@@ -38,6 +38,7 @@ import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { quotedName } from "../lib/foreign";
+import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-04, das Kanban-Board (A-5.1, A-5.3 bis A-5.6, E-054).
@@ -933,7 +934,9 @@ export function BoardEmptyState({
           <ul className="rule-list">
             {pools.map((pool) => (
               <li key={pool.id} className="rule-row">
-                <span className="rule-row__name grow truncate">{pool.name}</span>
+                <span className="rule-row__name grow truncate">
+                  <Foreign value={pool.name} />
+                </span>
                 <span className="rule-row__count">
                   {plural(countPoolRuleConditions(axesOf(pool)), "Bedingung", "Bedingungen")}
                 </span>
@@ -1038,7 +1041,9 @@ function BoardSetupDialog({
             return (
             <li key={view.column.id} className="rule-row">
               <div className="grow">
-                <p className="rule-row__name">{view.column.name}</p>
+                <p className="rule-row__name">
+                  <Foreign value={view.column.name} />
+                </p>
                 <p className="rule-row__meta">
                   {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
                   {plural(countPoolRuleConditions(axesOf(view.column)), "Bedingung", "Bedingungen")}{" "}
@@ -1075,7 +1080,9 @@ function BoardSetupDialog({
           <ul className="rule-list">
             {available.map((pool) => (
               <li key={pool.id} className="rule-row">
-                <span className="rule-row__name grow truncate">{pool.name}</span>
+                <span className="rule-row__name grow truncate">
+                  <Foreign value={pool.name} />
+                </span>
                 <Button size="sm" variant="ghost" iconStart="plus" onClick={() => onAdopt(pool)}>
                   Als Spalte aufnehmen
                 </Button>

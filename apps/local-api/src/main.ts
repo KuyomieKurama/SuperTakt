@@ -26,7 +26,10 @@ import {
 import { compose } from './composition.ts';
 import {
   BIND_ADDRESS,
+  CONNECTION_CHECK_INTERVAL_MS,
   DEFAULT_PORT,
+  HEADERS_TIMEOUT_MS,
+  REQUEST_RECEIVE_TIMEOUT_MS,
   SESSION_SECRET_TIMEOUT_MS,
   SHUTDOWN_DEADLINE_MS,
   TASKPANE_PORT,
@@ -203,7 +206,34 @@ export async function main(): Promise<void> {
     logger.lifecycle('info', 'Es ist noch kein Add-in-Token eingerichtet.');
   }
 
-  const server = createAdaptorServer({ fetch: app.fetch });
+  /*
+   * **Die drei Fristen des Betriebs stehen hier und nicht auf ihren Vorgaben**
+   * (T-128, offene Frage 2 aus T-126).
+   *
+   * Die Begründung für jede der drei Zahlen steht an ihrer Konstanten in
+   * `config.ts`; kurz: Node ist für den Betrieb hinter einem Gegenlager
+   * eingestellt (60 s Kopf, 300 s Anfrage, alle 30 s nachgesehen). Takt steht
+   * nicht dahinter — es ist selbst das erste, was eine Verbindung sieht, und
+   * jeder Aufrufer sitzt auf demselben Rechner.
+   *
+   * `serverOptions` und nicht drei Zuweisungen an den fertigen Server:
+   * `createAdaptorServer` reicht sie unverändert an `http.createServer` durch,
+   * und `connectionsCheckingInterval` **muss** dort stehen — der Takt wird beim
+   * Anlegen des Servers eingerichtet, eine spätere Zuweisung an die
+   * Eigenschaft käme zu spät und sähe trotzdem so aus, als wirke sie.
+   *
+   * Der Rückgabetyp bleibt `Server` aus `node:http` (ohne `createServer` nimmt
+   * der Adapter genau den), `closeAllConnections` bleibt also da, wo T-126 es
+   * gefunden hat.
+   */
+  const server = createAdaptorServer({
+    fetch: app.fetch,
+    serverOptions: {
+      headersTimeout: HEADERS_TIMEOUT_MS,
+      requestTimeout: REQUEST_RECEIVE_TIMEOUT_MS,
+      connectionsCheckingInterval: CONNECTION_CHECK_INTERVAL_MS,
+    },
+  });
 
   server.on('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
@@ -292,12 +322,13 @@ export async function main(): Promise<void> {
      * wenn die bestehenden zu Ende sind. Untätige Verbindungen räumt Node
      * dabei seit v19 selbst ab — eine Verbindung mit einer **halben** Anfrage
      * aber nicht: Sie gilt als eine, die gerade sendet, und wird erst von
-     * `headersTimeout` (60 s) oder `requestTimeout` (300 s) beendet. Bis T-126
-     * führte der einzige Weg zu `process.exit(0)` durch diesen Rückruf. Ein
-     * beliebiger Prozess auf demselben Rechner konnte das Ende des Dienstes
-     * damit um bis zu fünf Minuten verzögern — ohne ein Geheimnis zu kennen,
-     * mit einer TCP-Verbindung und einem halben Anfragekopf. Genau dieser
-     * Prozess ist der Akteur, gegen den B-1.6 Punkt 3 geschrieben ist (VG-1).
+     * `headersTimeout` oder `requestTimeout` beendet — bei den Vorgaben von
+     * Node nach 60 beziehungsweise 300 Sekunden. Bis T-126 führte der einzige
+     * Weg zu `process.exit(0)` durch diesen Rückruf. Ein beliebiger Prozess auf
+     * demselben Rechner konnte das Ende des Dienstes damit um bis zu fünf
+     * Minuten verzögern — ohne ein Geheimnis zu kennen, mit einer
+     * TCP-Verbindung und einem halben Anfragekopf. Genau dieser Prozess ist der
+     * Akteur, gegen den B-1.6 Punkt 3 geschrieben ist (VG-1).
      *
      * Die Zeitgrenze aus B-1.7 greift dort nicht: `timeout(REQUEST_TIMEOUT_MS)`
      * ist Zwischenschicht und läuft erst, wenn Node den Kopf vollständig
@@ -317,10 +348,14 @@ export async function main(): Promise<void> {
      * Frage, wenn der Bestand zuletzt geschlossen würde — das ist eine andere
      * Entscheidung als diese und keine, die dieser Fund verlangt.
      *
-     * **Warum nicht stattdessen `headersTimeout` heruntersetzen.** Das
-     * verkürzte das Fenster, schlösse es nicht, und es wirkte auf jede Anfrage
-     * im Betrieb statt nur auf das Anhalten. Eine Frist am Anhalten trifft
-     * genau die Stelle, um die es geht.
+     * **Und warum `headersTimeout` das hier nicht ersetzt.** Es steht seit
+     * T-128 bei fünf Sekunden statt bei sechzig (`config.ts`), aber es ist die
+     * Antwort auf eine andere Frage: Es verkürzt das Fenster im **Betrieb** und
+     * schließt es nicht, denn eine Verbindung, die gerade eine erlaubte Anfrage
+     * sendet, ist keine, die man abweisen will. Beim **Anhalten** ist sie genau
+     * das — der Bestand ist zu, die Anfrage kann nicht mehr gelingen, und der
+     * Zeitpunkt gehört nicht dem Absender. Zwei Stellen, zwei Mittel; keins
+     * davon macht das andere entbehrlich.
      */
     server.close(() => process.exit(0));
     closeAllConnections(server);

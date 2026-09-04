@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
 import { foreignText } from "../lib/foreign";
 import { Foreign } from "./Foreign";
@@ -24,7 +25,7 @@ import { Icon } from "./Icon";
 export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
 export interface TagChipProps {
-  readonly label: string;
+  readonly label: ForeignText;
   /** Ordnerpfad ohne den Tag selbst, zum Beispiel ["Kunden", "Nord"]. */
   readonly path?: readonly string[];
   readonly tone?: TagTone;
@@ -160,7 +161,7 @@ export function TagChip({
 
 export interface TagPathProps {
   /** Vollstaendiger Pfad einschliesslich des Tags am Ende. */
-  readonly segments: readonly string[];
+  readonly segments: readonly ForeignText[];
   readonly className?: string;
 }
 

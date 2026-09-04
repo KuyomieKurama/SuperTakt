@@ -19,7 +19,13 @@ import {
   stopTimer,
   touchTimerHeartbeat,
 } from "../api/endpoints";
-import type { Id, OrphanedTimerView, PoolMovement, RunningTimerView } from "../api/types";
+import type {
+  ForeignText,
+  Id,
+  OrphanedTimerView,
+  PoolMovement,
+  RunningTimerView,
+} from "../api/types";
 import { FormDialog } from "../components/FormDialog";
 import { NoteField } from "../components/NoteField";
 import {
@@ -73,11 +79,11 @@ export interface TimerApi {
   /** Läuft der Timer auf genau diesem Todo? */
   readonly isRunningFor: (todoId: Id) => boolean;
   /** I-04 — startet den Timer. Kümmert sich um A-6.8 und A-2.5 selbst. */
-  readonly start: (todoId: Id, todoTitle: string) => void;
+  readonly start: (todoId: Id, todoTitle: ForeignText) => void;
   /** I-04 — öffnet den Stoppdialog. Ohne Leistung wird nicht gestoppt. */
   readonly requestStop: () => void;
   /** Startet oder stoppt, je nachdem was gerade gilt. */
-  readonly toggle: (todoId: Id, todoTitle: string) => void;
+  readonly toggle: (todoId: Id, todoTitle: ForeignText) => void;
   readonly refresh: () => void;
   readonly orphan: OrphanedTimerView | null;
   /**
@@ -113,8 +119,8 @@ interface Anchor {
 
 interface StartConflict {
   readonly todoId: Id;
-  readonly todoTitle: string;
-  readonly runningTitle: string;
+  readonly todoTitle: ForeignText;
+  readonly runningTitle: ForeignText;
 }
 
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
@@ -207,7 +213,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* ---------------------------------------------------------------- */
 
   const undoReactivation = useCallback(
-    (todoId: Id, todoTitle: string) => {
+    (todoId: Id, todoTitle: ForeignText) => {
       void (async () => {
         try {
           /*
@@ -290,7 +296,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const announceStart = useCallback(
     (
       todoId: Id,
-      todoTitle: string,
+      todoTitle: ForeignText,
       doneCleared: boolean,
       poolMovement: PoolMovement | null,
     ) => {
@@ -335,7 +341,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* ---------------------------------------------------------------- */
 
   const start = useCallback(
-    (todoId: Id, todoTitle: string) => {
+    (todoId: Id, todoTitle: ForeignText) => {
       if (runningRef.current?.entry.todoId === todoId) return;
       void (async () => {
         try {
@@ -383,7 +389,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const reportStopped = useCallback(
     async (
       todoId: Id,
-      todoTitle: string,
+      todoTitle: ForeignText,
       startedAt: string,
       durationSeconds: number,
       movementSentence: string | null,
@@ -489,7 +495,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   }, []);
 
   const toggle = useCallback(
-    (todoId: Id, todoTitle: string) => {
+    (todoId: Id, todoTitle: ForeignText) => {
       if (runningRef.current?.entry.todoId === todoId) requestStop();
       else start(todoId, todoTitle);
     },

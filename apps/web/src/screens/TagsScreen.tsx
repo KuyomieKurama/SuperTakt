@@ -11,7 +11,14 @@ import {
   updatePool,
   updateTag,
 } from "../api/endpoints";
-import type { Id, Pool, PoolPlacement, TagFolderNode, TagTree as TagTreeData } from "../api/types";
+import type {
+  ForeignText,
+  Id,
+  Pool,
+  PoolPlacement,
+  TagFolderNode,
+  TagTree as TagTreeData,
+} from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Select } from "../components/Select";
 import { FormDialog, TextField } from "../components/FormDialog";
@@ -97,8 +104,18 @@ export function TagsScreen() {
 /* ==================================================================== */
 
 type Selection =
-  | { readonly kind: "folder"; readonly id: Id; readonly name: string; readonly parentId: Id | null }
-  | { readonly kind: "tag"; readonly id: Id; readonly name: string; readonly folderId: Id | null }
+  | {
+      readonly kind: "folder";
+      readonly id: Id;
+      readonly name: ForeignText;
+      readonly parentId: Id | null;
+    }
+  | {
+      readonly kind: "tag";
+      readonly id: Id;
+      readonly name: ForeignText;
+      readonly folderId: Id | null;
+    }
   | null;
 
 function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
@@ -245,7 +262,9 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                   <p className="tags-detail__kind overline">
                     {selected.kind === "folder" ? "Ordner" : "Tag"}
                   </p>
-                  <h4 className="tags-detail__name">{selected.name}</h4>
+                  <h4 className="tags-detail__name">
+                    <Foreign value={selected.name} />
+                  </h4>
                   <p className="tags-detail__path">
                     <TagPath segments={pathOf(tree, selected.id)} />
                   </p>

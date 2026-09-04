@@ -25,6 +25,7 @@ export * from './kernel.ts';
 export * from './rounding.ts';
 export * from './call-number.ts';
 export * from './characters.ts';
+export * from './text-length.ts';
 export * from './enumeration.ts';
 export * from './tag.ts';
 export * from './board.ts';

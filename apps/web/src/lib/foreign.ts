@@ -1,8 +1,10 @@
 import { quoteName, visibleText } from "@takt/domain";
 
+import type { ForeignText } from "../api/types";
+
 /**
  * Takt — fremder Text, der nur als Zeichenkette möglich ist (E-063, O-AH,
- * T-124).
+ * T-124, T-129).
  *
  * Das Gegenstück zu `components/Foreign.tsx` für die Stellen, an denen kein
  * Element steht: ein `aria-label`, ein `title`, die Überschrift oder der Rumpf
@@ -14,6 +16,15 @@ import { quoteName, visibleText } from "@takt/domain";
  * Beide Funktionen hier sind Zusammensetzungen aus `@takt/domain` und rechnen
  * nichts nach: `visibleText` und `quoteName` liegen in
  * `packages/domain/src/characters.ts` und `packages/domain/src/enumeration.ts`.
+ *
+ * **Beide nehmen `ForeignText` und geben `string` zurück** (T-129). Das ist
+ * keine Zierde, sondern der Vertrag, an dem `scripts/proof-foreign.mjs` sie
+ * erkennt: Eine Behandlung ist alles, was fremden Text annimmt und
+ * gewöhnlichen zurückgibt. Der Nachweis führt deshalb keine Liste von
+ * Funktionsnamen — wer eine vierte Behandlung baut und sie so deklariert, wird
+ * ohne Änderung am Nachweis anerkannt. Wer eine dieser beiden auf `string`
+ * verbreitert, macht ihn rot, weil ihre Aufrufstellen dann wieder als roh
+ * gelten.
  */
 
 /**
@@ -30,7 +41,7 @@ import { quoteName, visibleText } from "@takt/domain";
  * Oberfläche steht. Wer sie ruft, bekommt beides zugleich: die Form aus E-058
  * Punkt 4 und die Behandlung aus E-063.
  */
-export function quotedName(name: string): string {
+export function quotedName(name: ForeignText): string {
   return quoteName(visibleText(name));
 }
 
@@ -42,6 +53,6 @@ export function quotedName(name: string): string {
  * Aufrufstelle zu lesen ist, **warum** die Funktion dort steht: Der Wert ist
  * fremd. `visibleText` allein liest sich wie eine Formatierung.
  */
-export function foreignText(value: string): string {
+export function foreignText(value: ForeignText): string {
   return visibleText(value);
 }

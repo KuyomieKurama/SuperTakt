@@ -1,7 +1,21 @@
-import { visibleText } from "@takt/domain";
+import type { ForeignText } from "../api/types";
+import { foreignText } from "../lib/foreign";
 
 /**
- * Takt — fremder Text in der Anzeige (E-063, O-AH, T-124).
+ * Takt — fremder Text in der Anzeige (E-063, O-AH, T-124, T-129).
+ *
+ * ---------------------------------------------------------------------------
+ * Zwei Änderungen aus T-129, beide klein und beide mit einem Grund
+ * ---------------------------------------------------------------------------
+ *
+ *  1. `value` ist **`ForeignText`** und nicht `string`. Damit steht an jeder
+ *     Aufrufstelle im Typ, was übergeben werden soll — und der Nachweis
+ *     `scripts/proof-foreign.mjs` erkennt diesen Baustein als Behandlung, ohne
+ *     seinen Namen zu kennen. Er liest die Signatur.
+ *  2. Der Rumpf ruft `foreignText` statt unmittelbar `visibleText`. Das ist
+ *     dieselbe Funktion einen Schritt weiter (`lib/foreign.ts` reicht sie aus
+ *     `@takt/domain` durch): Die Oberfläche hat damit **eine** Stelle, an der
+ *     die Zeichenklasse der Domäne betreten wird, und nicht zwei.
  *
  * ---------------------------------------------------------------------------
  * Was „fremd" hier heißt
@@ -81,8 +95,8 @@ export function Foreign({
   value,
   className,
 }: {
-  readonly value: string;
+  readonly value: ForeignText;
   readonly className?: string;
 }) {
-  return <bdi className={className}>{visibleText(value)}</bdi>;
+  return <bdi className={className}>{foreignText(value)}</bdi>;
 }

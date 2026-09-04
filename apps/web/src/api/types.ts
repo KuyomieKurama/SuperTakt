@@ -60,6 +60,86 @@ export type Timestamp = string;
 export type CalendarDay = string;
 
 /* ==================================================================== */
+/* Herkunft als Typ (E-063, T-129)                                      */
+/* ==================================================================== */
+
+/**
+ * **Warum hier keine Zeichenkette mehr bloß `string` heißt.**
+ *
+ * Seit T-124 geht fremder Text vor der Anzeige durch `components/Foreign.tsx`,
+ * `quotedName` oder `foreignText`. Der Bericht dazu nennt die Schwäche dieser
+ * Lösung selbst (R3): Sitzt die Behandlung im Anzeigebaustein, ist sie an der
+ * Aufrufstelle **unsichtbar**. Wer morgen eine weitere Stelle baut und den
+ * Baustein vergisst, bekommt keinen Übersetzungsfehler und keinen roten Test —
+ * für gewöhnliche Namen ist jede dieser Behandlungen die Identität.
+ *
+ * Die Antwort darauf steht hier: Die **Herkunft** eines Textes ist keine
+ * Verabredung im Kopf des Entwicklers, sondern eine Eigenschaft seines Typs.
+ * `ForeignText` trägt eine Marke, die der Übersetzer durch Zuweisungen,
+ * Zerlegungen, Felder und Parameter mitführt — und `scripts/proof-foreign.mjs`
+ * fragt ihn danach, statt eine Liste von Feldnamen abzuschreiben. Eine
+ * abgeschriebene Liste ist der Fehler, den E-063 Punkt 4 benennt; sie kann nur
+ * hinterherhinken.
+ *
+ * **Kein Feld dieser Datei heißt darum noch bloß `string`.** Das ist die zweite
+ * Hälfte des Nachweises: Ein neues Feld zwingt zu einer Entscheidung, statt
+ * stillschweigend als „nicht fremd" zu gelten. Der Nachweis liest diese Datei
+ * und wird rot, sobald irgendwo wieder ein nacktes `string` steht.
+ */
+
+/**
+ * Text, den **jemand anderes** geschrieben hat und den der Dienst nur
+ * ausliefert: Titel und Vermerk eines Todos, die Leistung einer Buchung, die
+ * Namen von Tags, Ordnern, Pools, Status und Exportvorlagen, die Call-Nummer,
+ * der Windows-Benutzername.
+ *
+ * Vor der Anzeige gehört er durch `<Foreign>`, `quotedName` oder `foreignText`
+ * (E-063 Punkt 1 und 2). Die Marke ist **freiwillig und leer** — sie ändert
+ * nichts an der Zuweisbarkeit und nichts zur Laufzeit; sie ist ausschließlich
+ * dafür da, dass der Nachweis die Herkunft sehen kann.
+ */
+export type ForeignText = string & { readonly __foreignText?: undefined };
+
+/**
+ * Was der Benutzer **dieser** Oberfläche gerade selbst schreibt oder abschickt:
+ * der Inhalt eines Eingabefeldes, ein Suchbegriff, der Rumpf einer Anfrage.
+ *
+ * Er wird **nicht** behandelt. Den Inhalt eines Eingabefeldes zu verändern
+ * hieße, die Eingabe des Benutzers zu verändern — und sie ginge verändert
+ * zurück in die Datenbank (E-063 Punkt 1).
+ */
+export type DraftText = string & { readonly __draftText?: undefined };
+
+/**
+ * Deutscher Anzeigetext, den **unser eigener** Dienst geliefert hat: die
+ * Meldung zu einem Fehler, die Beschriftung einer Exportquelle, der Satz unter
+ * der Quellenauswahl.
+ *
+ * Er ist nicht fremd. `visibleText` darauf wäre die Identität, und der Aufruf
+ * behauptete eine Herkunft, die es nicht gibt.
+ */
+export type ServiceText = string;
+
+/** Ein englischer technischer Schlüssel: `code`, `field`, Gruppenkennung, Sprachkennzeichen. */
+export type TechnicalKey = string;
+
+/**
+ * Ein Pfad aus dem Dateisystem. Nicht fremd im Sinne von E-063, aber auch nicht
+ * unsere Beschriftung: Er wird nach eigenen Regeln geprüft
+ * (`lib/pathInspection.ts`) und nicht nach der Zeichenklasse für Namen.
+ */
+export type FileSystemPath = string;
+
+/** Ein Farbwert, wie ihn der Dienst führt: `#1f6feb`. */
+export type ColorValue = string;
+
+/** Die undurchsichtige Fortsetzungsmarke einer Liste. Wird nie selbst gebildet. */
+export type PageCursor = string;
+
+/** Ein Geheimnis. Steht in keiner Anzeige und in keinem Protokoll. */
+export type SecretText = string;
+
+/* ==================================================================== */
 /* Umschlag und Blätterung                                              */
 /* ==================================================================== */
 
@@ -74,7 +154,7 @@ export interface Envelope<T> {
  */
 export interface Page<T> {
   readonly items: readonly T[];
-  readonly nextCursor: string | null;
+  readonly nextCursor: PageCursor | null;
   readonly total: number;
 }
 
@@ -97,10 +177,10 @@ export interface Page<T> {
  * die das tut, ist `lib/errorText.ts`.
  */
 export interface ApiFieldError {
-  readonly field: string;
-  readonly message: string;
-  readonly code: string;
-  readonly name?: string;
+  readonly field: TechnicalKey;
+  readonly message: ServiceText;
+  readonly code: TechnicalKey;
+  readonly name?: ForeignText;
 }
 
 /**
@@ -109,8 +189,8 @@ export interface ApiFieldError {
  * unverändert gezeigt, nicht durch einen eigenen ersetzt.
  */
 export interface ApiError {
-  readonly code: string;
-  readonly message: string;
+  readonly code: TechnicalKey;
+  readonly message: ServiceText;
   readonly details?: readonly ApiFieldError[];
 }
 
@@ -135,8 +215,8 @@ export interface ErrorEnvelope {
  */
 export interface Todo {
   readonly id: Id;
-  readonly title: string;
-  readonly callNumber: string | null;
+  readonly title: ForeignText;
+  readonly callNumber: ForeignText | null;
   /**
    * Der Status als **Eigenschaft** des Todos (A-5.4).
    *
@@ -191,13 +271,13 @@ export interface TodoDetail {
 /** Der interne Vermerk (A-7.1, E-016). Eigene Ressource, eigener Aufruf. */
 export interface TodoNote {
   readonly todoId: Id;
-  readonly text: string;
+  readonly text: ForeignText;
   readonly updatedAt: Timestamp;
 }
 
 export interface TodoCreate {
-  readonly title: string;
-  readonly callNumber?: string | null;
+  readonly title: DraftText;
+  readonly callNumber?: DraftText | null;
   readonly statusId?: Id | null;
   readonly tagIds?: readonly Id[];
   /**
@@ -209,20 +289,20 @@ export interface TodoCreate {
    * nicht selbst an — wer den Dialog abbricht, hinterlässt sonst ein Tag ohne
    * Todo.
    */
-  readonly tagNames?: readonly string[];
-  readonly note?: string;
+  readonly tagNames?: readonly DraftText[];
+  readonly note?: DraftText;
 }
 
 export interface TodoUpdate {
-  readonly title?: string;
-  readonly callNumber?: string | null;
+  readonly title?: DraftText;
+  readonly callNumber?: DraftText | null;
   readonly statusId?: Id;
   readonly tagIds?: readonly Id[];
 }
 
 export interface TodoFilter {
-  readonly search?: string;
-  readonly callNumber?: string;
+  readonly search?: DraftText;
+  readonly callNumber?: DraftText;
   readonly statusIds?: readonly Id[];
   readonly tagIds?: readonly Id[];
   readonly poolIds?: readonly Id[];
@@ -249,10 +329,10 @@ export interface TodoFilter {
  */
 export interface TodoStatus {
   readonly id: Id;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly position: number;
   readonly isDefault: boolean;
-  readonly color: string | null;
+  readonly color: ColorValue | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -264,8 +344,8 @@ export interface TodoStatus {
 export interface Tag {
   readonly id: Id;
   readonly folderId: Id | null;
-  readonly name: string;
-  readonly color: string | null;
+  readonly name: ForeignText;
+  readonly color: ColorValue | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -273,7 +353,7 @@ export interface Tag {
 export interface TagFolder {
   readonly id: Id;
   readonly parentId: Id | null;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -436,7 +516,7 @@ export interface PoolResolution {
 
 export interface Pool {
   readonly id: Id;
-  readonly name: string;
+  readonly name: ForeignText;
   /** Gilt **nur** für `rule`. Ausgeschlossene Tags sind immer „keines davon". */
   readonly matchMode: PoolMatchMode;
   readonly includeSubfolders: boolean;
@@ -464,7 +544,7 @@ export interface Pool {
 }
 
 export interface PoolWrite {
-  readonly name: string;
+  readonly name: DraftText;
   readonly matchMode?: PoolMatchMode;
   readonly includeSubfolders?: boolean;
   /** Ohne Angabe legt der Dienst einen Pool an, keine Spalte. */
@@ -511,7 +591,7 @@ export type PoolSurfaceQuery = "pool" | "board" | "all";
 export interface BoardColumnView {
   readonly column: Pool;
   readonly todos: readonly Todo[];
-  readonly nextCursor: string | null;
+  readonly nextCursor: PageCursor | null;
   readonly total: number;
 }
 
@@ -552,7 +632,7 @@ export interface TimeEntry {
   readonly endedAt: Timestamp;
   readonly durationSeconds: number;
   /** Leistung (A-7.3, E-016). Geht in die Abrechnung. */
-  readonly note: string;
+  readonly note: ForeignText;
   readonly exportStatus: ExportStatus;
   /**
    * `exportStatus === "open" && exportCount > 0` ist „schon einmal exportiert“
@@ -610,13 +690,13 @@ export interface RunningTimeEntry {
   readonly id: Id;
   readonly todoId: Id;
   readonly startedAt: Timestamp;
-  readonly note: string;
+  readonly note: ForeignText;
   readonly source: "timer";
 }
 
 export interface RunningTimerView {
   readonly entry: RunningTimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   /** Sekunden seit dem Start, zum Zeitpunkt der Anfrage. Vom Dienst gerechnet. */
   readonly elapsedSeconds: number;
 }
@@ -659,7 +739,7 @@ export type StartTimerResult =
   | {
       readonly kind: "confirmation_required";
       readonly running: RunningTimeEntry;
-      readonly runningTodoTitle: string;
+      readonly runningTodoTitle: ForeignText;
     };
 
 /**
@@ -746,7 +826,7 @@ export type ResolveOrphanedTimerResult =
 
 export interface OrphanedTimerView {
   readonly running: RunningTimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly heartbeatAt: Timestamp | null;
   /** Was gebucht würde, wenn „bis zum Lebenszeichen“ gewählt wird. */
   readonly bookableSeconds: number;
@@ -769,7 +849,7 @@ export interface TimeEntryFilter {
 
 export interface ExportTemplate {
   readonly id: Id;
-  readonly name: string;
+  readonly name: ForeignText;
   readonly isBuiltin: boolean;
   readonly definition: unknown;
   readonly createdAt: Timestamp;
@@ -817,32 +897,32 @@ export type ExportConditionOperator = string;
 
 /** Fachliche Ebene, aus der eine Quelle stammt. Nur zur Gliederung der Liste. */
 export interface ExportSourceGroupInfo {
-  readonly id: string;
-  readonly label: string;
+  readonly id: TechnicalKey;
+  readonly label: ServiceText;
   /** Warum diese Ebene existiert. Steht als Erklärung über der Gruppe. */
-  readonly hint: string;
+  readonly hint: ServiceText;
 }
 
 export interface ExportSourceInfo {
   /** Der Wert, der in `definition.fields[].source` steht. Englisch (E-015). */
   readonly path: ExportSourcePath;
-  readonly group: string;
+  readonly group: TechnicalKey;
   /** Deutsche Beschriftung in der Auswahlliste. */
-  readonly label: string;
+  readonly label: ServiceText;
   /** Was diese Quelle liefert, in einem Satz. */
-  readonly description: string;
+  readonly description: ServiceText;
 }
 
 export interface ExportTransformationInfo {
   readonly value: ExportTransformation;
-  readonly label: string;
+  readonly label: ServiceText;
   /** Was die Transformation mit dem Wert macht, in einem Satz. */
-  readonly effect: string;
+  readonly effect: ServiceText;
 }
 
 export interface ExportConditionOperatorInfo {
   readonly value: ExportConditionOperator;
-  readonly label: string;
+  readonly label: ServiceText;
 }
 
 export interface ExportSourceCatalog {
@@ -858,11 +938,11 @@ export interface ExportSourceCatalog {
    * Wer die Liste ausliefert, liefert auch die Begründung dafür, was nicht
    * darauf steht.
    */
-  readonly noteBoundaryHint: string;
+  readonly noteBoundaryHint: ServiceText;
 }
 
 /** Ein Wert in einer Exportzeile. */
-export type ExportValue = string | number | null;
+export type ExportValue = ForeignText | number | null;
 
 /** Eine Exportzeile: genau die Felder der Vorlage, in ihrer Reihenfolge. */
 export type ExportRow = Readonly<Record<string, ExportValue>>;
@@ -929,7 +1009,7 @@ export interface ExportPreview {
   /** `null` im Entwurfsfall — eine ungespeicherte Vorlage hat keine Kennung. */
   readonly templateId: Id | null;
   /** `null` im Entwurfsfall. */
-  readonly templateName: string | null;
+  readonly templateName: ForeignText | null;
 }
 
 export interface ExportRunGroup {
@@ -945,13 +1025,13 @@ export interface ExportRunGroup {
 export interface ExportRun {
   readonly id: Id;
   readonly templateId: Id;
-  readonly filePath: string;
-  readonly fileSha256: string;
+  readonly filePath: FileSystemPath;
+  readonly fileSha256: TechnicalKey;
   readonly bytes: number;
   readonly entryCount: number;
   readonly totalQuarters: number;
   readonly roundingMode: RoundingMode;
-  readonly windowsUser?: string;
+  readonly windowsUser?: ForeignText;
   /**
    * **Vom Dienst heute nicht geliefert.** Die Beschreibung führt das Feld, die
    * Antwort von `POST /export/runs` enthält es nicht (nachgemessen gegen den
@@ -980,8 +1060,8 @@ export interface ExportAuditEntry {
   readonly newStatus: ExportStatus;
   readonly exportRunId: Id | null;
   readonly exportRunGroupId: Id | null;
-  readonly actor: string;
-  readonly reason: string;
+  readonly actor: ForeignText;
+  readonly reason: ForeignText;
   readonly occurredAt: Timestamp;
 }
 
@@ -991,19 +1071,19 @@ export interface ExportAuditEntry {
 
 export interface AppSettings {
   /** `null` heißt: noch nicht gewählt, Export nicht möglich (E-011). */
-  readonly exportDirectory: string | null;
+  readonly exportDirectory: FileSystemPath | null;
   readonly activeExportTemplateId: Id | null;
   readonly roundingMode: RoundingMode;
-  readonly locale: string;
+  readonly locale: TechnicalKey;
   readonly theme: ThemeSetting;
   readonly updatedAt: Timestamp;
 }
 
 export interface AppSettingsUpdate {
-  readonly exportDirectory?: string | null;
+  readonly exportDirectory?: FileSystemPath | null;
   readonly activeExportTemplateId?: Id | null;
   readonly roundingMode?: RoundingMode;
-  readonly locale?: string;
+  readonly locale?: TechnicalKey;
   readonly theme?: ThemeSetting;
 }
 
@@ -1091,7 +1171,7 @@ export interface SettingsView {
    * er nur in `ExportRun.windowsUser` — also erst **nach** dem ersten Export,
    * im Protokoll. Der Moment, in dem man ihn wissen will, liegt davor.
    */
-  readonly windowsUser: string;
+  readonly windowsUser: ForeignText;
   /**
    * Wo der Bestand liegt (E-018, R-13). `null` bei einem Bestand im
    * Arbeitsspeicher — im Prüfbetrieb und auf der Musterseite.
@@ -1113,7 +1193,7 @@ export interface SettingsView {
    * als beim Exportordner belegt der Dienst zu dieser Datei **keine** Merkmale;
    * kein Befund heißt deshalb nur „im Pfad steht nichts".
    */
-  readonly databasePath: string | null;
+  readonly databasePath: FileSystemPath | null;
 }
 
 /**
@@ -1160,7 +1240,7 @@ export interface TokenStatus {
 }
 
 export interface IssuedToken {
-  readonly token: string;
+  readonly token: SecretText;
   readonly issuedAt: Timestamp;
   readonly generation: number;
 }

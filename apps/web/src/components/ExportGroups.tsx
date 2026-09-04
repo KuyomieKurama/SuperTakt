@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import type { ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../lib/labels";
@@ -57,9 +58,9 @@ export interface ExportGroupEntryData {
 
 export interface ExportGroupData {
   readonly id: string;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   /** Call-Nummer des Todos (A-2.6). `null`, wenn nicht gesetzt. */
-  readonly callNumber: string | null;
+  readonly callNumber: ForeignText | null;
   /** Bereits formatierter Kalendertag der Startzeit (E-025). */
   readonly day: string;
   /** Buchungen der Gruppe, bereits nach Startzeit sortiert. */
@@ -202,7 +203,9 @@ function ExportGroupRow({
             {group.callNumber === null ? (
               <span className="muted">ohne Call</span>
             ) : (
-              <span className="mono">{group.callNumber}</span>
+              <span className="mono">
+                <Foreign value={group.callNumber} />
+              </span>
             )}
             <span aria-hidden> · </span>
             <span>

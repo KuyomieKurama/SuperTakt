@@ -1,3 +1,4 @@
+import type { ForeignText } from "../api/types";
 import { useId, useMemo, useState } from "react";
 import { cx } from "../lib/cx";
 import {
@@ -54,7 +55,7 @@ import { Foreign } from "./Foreign";
 
 export interface BillingUserFactProps {
   /** Wie der Dienst ihn meldet. Leer heißt: er meldet keinen. */
-  readonly user: string;
+  readonly user: ForeignText;
   readonly className?: string;
 }
 

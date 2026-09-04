@@ -937,6 +937,28 @@ T-039 — dort als Feld, das die *Beschreibung* führte und der Dienst nicht las
 damals, es aus der Beschreibung zu streichen. Dass zugleich die *Oberfläche* es sendete, hat
 niemand gesehen, weil niemand danach gesehen hat.
 
+### 5.0b Was im Baum steht, muss ein Mensch lesen können (T-128)
+
+`pnpm proof:codepoints` (`apps/local-api/scripts/proof-codepoints.mjs`) läuft über jede Datei,
+die Git führt oder als neu und nicht ausgeschlossen kennt, und beanstandet **rohe** Steuer- und
+Richtungszeichen. Der Anlass steht im Kopf der Datei: Fünf Aufgaben in fünf Wellen sind über
+dasselbe Zeichen gestolpert, zuletzt die, die es beheben sollte, und dann noch dieser Lauf beim
+ersten Durchgang über sich selbst — er fand drei rohe `U+0000` in seinem eigenen Quelltext.
+
+Der Schaden ist zweierlei und beides gemessen: Ein `U+0000` in den ersten 8000 Bytes macht die
+Datei für Git zu einer **Binärdatei**, und damit liegt sie in keinem Diff und in keinem Review
+mehr vor (`paging.ts` war zwischen `d9555d0` und T-126 genau in diesem Zustand). Ein `U+202E`
+dreht die Zeile um, die ein Mensch liest — dieselbe Bauart, gegen die `characters.ts` den
+Benutzer schützt, nur diesmal gegen den Prüfer.
+
+Die Klasse kommt aus `FORBIDDEN_NAME_CHARACTERS` in `@takt/domain` und wird nicht abgeschrieben
+(E-063 Punkt 4). Der Unterschied zur Namensklasse wird **gerechnet**: Tabulator und Zeilenumbruch
+ab, `U+200B`–`U+200D` und die Bytefolgenmarke dazu; der Wagenrücklauf ist erlaubt, wenn ein
+Zeilenumbruch folgt. Dass der Zusatz kein zweiter Träger derselben Aussage ist, prüft der Lauf,
+statt es zuzusichern. Ausnahmen nennen Pfad, Codepunkt, **Anzahl** und Grund — eine Ausnahme, die
+nicht mehr genau so oft zutrifft, wird rot, und eine, die gar nicht mehr zutrifft, ebenfalls. Die
+Liste ist leer.
+
 ### 5.1 Ressourcenschnitt
 
 Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein Verb im Pfad.
@@ -1314,6 +1336,19 @@ hier bewußt nicht (B-9, T-117):
    Wächter dort: Ein Anhalten mitten im Start müßte sonst mit halbem Bestand umgehen, ohne
    Datenbank, ohne Server, womöglich mitten in einer Migration. So gibt es einen Weg statt
    mehrerer, und er läuft immer auf demselben vollständigen Zustand.
+6. **Und der Betrieb hat drei Fristen** (T-128, Risiko R2 aus T-126). Dieselbe halbe Anfrage
+   verzögert seit T-126 kein Anhalten mehr, aber sie band im laufenden Betrieb weiter ein
+   Betriebsmittel — 60 Sekunden für den Kopf, 300 für die ganze Anfrage, nachgesehen alle 30.
+   Das sind die Vorgaben von Node, gedacht für einen Dienst hinter einem Gegenlager im Netz.
+   Takt hat keins: Es ist selbst das erste, was eine Verbindung sieht. Seit T-128 stehen sie in
+   `config.ts` bei 5 s (`HEADERS_TIMEOUT_MS`), 10 s (`REQUEST_RECEIVE_TIMEOUT_MS`) und 5 s
+   (`CONNECTION_CHECK_INTERVAL_MS`). Der dritte Wert gehört dazu und ist keine Feinheit: Node
+   sieht die beiden Fristen nur in diesem Takt nach, und ein `headersTimeout` von fünf Sekunden
+   ohne ihn wäre eine Zahl, die im schlechtesten Fall erst nach fünfunddreißig greift. Kosten
+   entstehen keine — jeder Aufrufer sitzt auf demselben Rechner, und über die Rückschleife ist
+   ein Anfragekopf in Bruchteilen einer Millisekunde da. Gemessen mit `proof:access` Abschnitt
+   0f: Die Verbindung ist binnen der Summe der ersten und dritten Zahl weg, Node antwortet mit
+   408, und der Dienst läuft weiter.
 
 **Port.** Fest vorgegeben (17843), gebunden ausschließlich auf `127.0.0.1`, exklusiv belegt. Ist
 er belegt, startet Takt nicht und weicht nicht aus. Der Port ist ausdrücklich kein Geheimnis: Ein

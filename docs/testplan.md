@@ -2953,3 +2953,155 @@ pnpm run test:e2e --reporter=list --retries=0                                 58
 Port 17843/17844 war vor jedem Lauf frei (`ss -ltnp` geprüft); kein fremder Prozess beendet, kein
 `git commit`/`stash`/`checkout`. Alle neuen Testdaten mit `E2E-`-Präfix, erfunden — keine echten
 Call-Nummern, keine echten Kundennamen.
+
+---
+
+## 23. Nachtrag aus T-130 (Welle L — drei Flächen, nur im Browser prüfbar: Beenden-Frist,
+Benutzername-Sperre, fremder Text im Titel)
+
+Grundlage: `reports/T-124-frontend-dev.md` (Abschnitt 2 O-AJ, Abschnitt 3 O-AF, Abschnitt 4/5
+O-AH, „Nächster Schritt" 1), `decisions.md` E-062 (Bausteine der Oberfläche werden im Browser
+geprüft, nicht in einer Nachbildung) und E-063 (fremder Text wird isoliert und markiert,
+Berichtigung aus T-119: `unicode-bidi: isolate` allein reicht gegen ein bidirektionales
+Formatierungszeichen nicht).
+
+Alle drei Fälle brauchen ein Ereignis oder eine Zeit (E-062) und waren deshalb auf der Musterseite
+nicht messbar — T-124, Abschnitt 5, „Was ich nicht im Browser gemessen habe". Zwei davon (O-AF,
+O-AJ) brauchen zusätzlich eine Momentaufnahme der Tauri-Hülle, die im reinen Entwicklungsbetrieb
+gar nicht existiert: `tests/e2e/support/shell-shim.ts` bildet dafür `__TAURI_INTERNALS__.invoke`
+für `takt_service_handshake`, `takt_os_user`, `takt_shell_state` und `takt_quit` konfigurierbar
+nach — anders als `support/tauri-shim.ts` (eine feste Antwort für das **gebaute** Bündel,
+TP-BUILD-02) mit dem echten Sitzungsnachweis dieses Testlaufs, damit jede sonstige Anfrage
+unverändert gegen den echten, laufenden Dienst aus `services.ts` geht.
+
+### TP-SHELL-01 — „Takt beenden" scheitert nicht mehr stumm
+
+**Anforderungen:** O-AF, F-15, E-036, E-062
+**Ebene:** End-to-End (`tests/e2e/shell-quit-failure.spec.ts`, neu)
+**Vorbedingung:** Hüllen-Nachbildung meldet einen Dienstausfall (`service_exit` gesetzt, ein
+unauffälliger Benutzername) und lässt `takt_quit` **nie** auflösen (`quit: 'hang'`) — die
+Nachbildung des Erfolgsfalls, bei dem `app.exit(0)` den Prozess beendet und die Zusage deshalb nie
+mehr ankommt.
+**Schritte:** `page.clock.install()` vor der Navigation. Die Sperrmeldung zum Dienstausfall
+(`role="alertdialog"`, „Takt kann im Moment nichts speichern") ist sichtbar; „Takt beenden"
+anklicken; `page.clock.fastForward('00:06')` — sechs virtuelle Sekunden gegen die Frist von
+`QUIT_GRACE_MS = 5000`.
+**Erwartetes Ergebnis:** `.quitfail` erscheint mit der Überschrift „Takt ließ sich so nicht
+beenden", dem Satz „Der Beenden-Befehl hat nicht gewirkt: Das Fenster steht noch." (kein
+erfundener Grund, weil nur die Frist ablief, nicht die Zusage abgewiesen wurde), genau **zwei**
+Handlungsschritten (Fenster schließen über Kreuz/`Alt+F4`, sonst `Strg+Umschalt+Esc` zum
+Task-Manager) und dem Satz zur Gefahrlosigkeit. Das Wort „Systembetreuung" kommt **nicht** vor
+(F-15) — wer allein mit Takt arbeitet, hat keine. Die Auskunft steht in der dauerhaft vorhandenen
+`role="status"`-Region (B-5-Regel wie bei `refusal` im Bestätigungsdialog). Der Knopf bleibt danach
+bedienbar (kein dauerhaftes Sperren).
+
+**Ergebnis: bestanden**, 1/1.
+
+### TP-SHELL-02 — der Windows-Name, den niemand ändern kann, sperrt über beide Startwege
+
+**Anforderungen:** O-AJ, B-4.3 Punkt 5, T-122, E-062
+**Ebene:** End-to-End (`tests/e2e/shell-username-lock.spec.ts`, neu, zwei Fälle)
+**Vorbedingung:** Hüllen-Nachbildung meldet `takt_os_user` mit einem erfundenen Namen, der ein RLM
+(U+200F) trägt (`e2e.te<RLM>st`, kein echter Benutzername) — je Fall einmal mit `service_exit:
+null` (Fall 1 aus T-124 Abschnitt 2: Steuerzeichen fangen die Hülle vor dem Start ab) und einmal
+mit `service_exit` gesetzt, Code 78 (Fall 2: der Dienst startet, weist den Namen erst an seiner
+eigenen Tür ab). `readUserNameFinding()` fragt unabhängig vom Sidecar-Zustand immer dieselbe eine
+Frage (`osUser()`) — von außen (ohne `apps/desktop` anzufassen) ist das der Umfang, in dem sich
+„beide Startwege" ohne echten Rust-Prozess unterscheiden lassen.
+**Schritte:** Seite laden; Sperrmeldung suchen; Fokus nach dem Öffnen prüfen; `Tab` und
+`Shift+Tab` drücken; sichtbaren Text des Dialogs auslesen.
+**Erwartetes Ergebnis, in beiden Fällen gleich:** `role="alertdialog"` mit der Überschrift „Takt
+kann unter diesem Windows-Benutzernamen nicht arbeiten", `aria-modal="true"`. Die Sperrmeldung zum
+Dienstausfall erscheint **nicht** daneben — die Meldung zum Benutzernamen hat Vorrang, weil sie
+dessen Ursache ist (`ShellStatus.tsx`, „Zusammenstellung"). Der Fokus liegt nach dem Öffnen auf dem
+einzigen Knopf „Takt beenden"; `Tab` und `Shift+Tab` verlassen den Dialog nicht (SC 2.4.3,
+`keepTabInside`). **Kein** Element im Dialog trägt den Namen, weder mit dem eingebetteten RLM noch
+ohne (er wird beschrieben, nicht angezeigt — Regel 1 im Kopf von `ShellStatus.tsx`). Der Text nennt
+zwei Wege, die jeder Benutzer gehen kann (anderes Konto, Anmeldenamen ändern lassen), die
+Weitergabe an die Systembetreuung steht als Zusatz daneben, nicht an ihrer Stelle (F-15, dieselbe
+Regel wie TP-SHELL-01).
+
+**Ergebnis: bestanden**, 2/2 (beide Startwege).
+
+### TP-BIDI-01 — fremder Text aus dem Bestand: eine Bidi-Überschreibung im Titel
+
+**Anforderungen:** O-AH, E-063, T-119 (Berichtigung), E-062
+**Ebene:** End-to-End (`tests/e2e/foreign-title-display.spec.ts`, neu)
+**Vorbedingung:** Ein Todo, dessen Titel **nicht** über die Tür entstanden ist — `POST /todos`
+weist `Rechnung<RLO>gnp.exe` (RLO = U+202E) mit 422 ab (`titleSchema`, T-122). Über die Tür ein
+sicherer Platzhalter mit `E2E-`-Präfix angelegt, danach der Titel direkt in der SQLite-Datei
+überschrieben (`tests/e2e/support/db.ts#overwriteTodoTitleDirectly`, an der Tür vorbei — der vom
+Auftrag genannte Weg). Der Wortlaut `Rechnung<RLO>gnp.exe` trägt bewusst kein `E2E`-Präfix: Er ist
+der Beleg aus dem Auftrag selbst und bereits eine erfundene Fixtur (die RLO-Tarnung, bei der eine
+`.exe` wie eine `.png` aussieht), kein echter Datei- oder Firmenname. Gefunden wird die Zeile über
+die Teilzeichenkette „gnp.exe" (`?q=gnp.exe`), die in keinem anderen Testtitel vorkommt.
+**Schritte:** Todo-Liste mit dieser Suche öffnen; die Zeile finden; ihren Titel-Baustein gegen den
+Rangetest aus `tests/e2e/support/bidi.ts#rendersLeftToRight` messen (Vorlage: T-124-Bericht,
+Abschnitt 5, Punkt 2 — je Zeichen ein `document.createRange()`, prüft, ob die x-Position mit dem
+logischen Index wächst).
+**Erwartetes Ergebnis:** Der Titel steht in einem `<bdi>` und lautet `Rechnung<U+FFFD>gnp.exe` —
+das RLO ist durch die sichtbare Marke ersetzt (`visibleText`, `@takt/domain`), nicht entfernt (die
+Länge bleibt erhalten). Der Rangetest bestätigt die **tatsächliche** Leserichtung links nach
+rechts — eine Prüfung, die nur das Vorhandensein eines `<bdi>` festgestellt hätte, hätte den
+ursprünglichen Fehler (T-114/T-119: `unicode-bidi: isolate` allein wirkt innerhalb des isolierten
+Blocks gegen ein RLO nicht, UBA X2–X5) nicht gefangen. Zur Gegenprobe außerhalb des Testlaufs
+(siehe Nachweis unten): dieselbe Messung gegen ein `<bdi>` mit dem rohen RLO statt der Marke ergibt
+`false`.
+
+**Ergebnis: bestanden**, 1/1.
+
+**Nachweis dieses Abschnitts:**
+
+```
+pnpm run typecheck:e2e                                                          Exitcode 0
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/shell-quit-failure.spec.ts --reporter=list --retries=0             1/1
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/shell-username-lock.spec.ts --reporter=list --retries=0            2/2
+
+pnpm exec playwright test -c tests/e2e/playwright.config.ts \
+  tests/e2e/foreign-title-display.spec.ts --reporter=list --retries=0          1/1
+
+pnpm run test:e2e --reporter=list --retries=0                                  61/62, ein
+                                                                                 Fehlschlag in
+                                                                                 `toast-tab-order-
+                                                                                 scroll.spec.ts`
+                                                                                 (T-120, nicht von
+                                                                                 dieser Aufgabe
+                                                                                 angefasst) —
+                                                                                 isoliert erneut
+                                                                                 ausgeführt: 1/1,
+                                                                                 also derselbe
+                                                                                 Nebenläufigkeits-
+                                                                                 fund, den
+                                                                                 `playwright.
+                                                                                 config.ts` selbst
+                                                                                 mit `retries: 1`
+                                                                                 auffängt (Kopf-
+                                                                                 kommentar dort)
+
+pnpm test:e2e (Vorgabewert, retries: 1, zweifach)                               62/62, 62/62 —
+                                                                                 Vergleichsmarke
+                                                                                 58/58 nach
+                                                                                 3f45d51, +4 neue
+                                                                                 Fälle
+```
+
+Gegenprobe außerhalb des committeten Testlaufs (belegt die Trennschärfe des Rangetests, nicht
+Teil von `tests/e2e/**`): ein `<bdi style="unicode-bidi:isolate">` mit dem rohen
+`Rechnung<RLO>gnp.exe` ergibt unter derselben Messung `false`; dasselbe Markup mit
+`Rechnung�gnp.exe` (die Fassung, die `visibleText` erzeugt) ergibt `true`. Ausgeführt über ein
+Wegwerfskript gegen `chromium.launch()`, danach entfernt — im Arbeitsbaum liegt davon nichts
+(dieselbe Bauart wie T-124, Abschnitt 5).
+
+Port 17843/17844 war vor jedem Lauf frei (`ss -ltnp` geprüft); kein fremder Prozess beendet, kein
+`git commit`/`stash`/`checkout`. Ein während eines Laufs beobachteter, augenblicklich
+korrigierter Fehlstart des lokalen Dienstes (`packages/domain/src/characters.ts:187`, ein rohes
+U+202E mitten in der Zeile `export const HIDDEN_MARKER = …` durch eine parallel laufende Änderung
+von domain-dev) ist hier nur als Beobachtung vermerkt, nicht als Befund dieser Aufgabe — die Datei
+gehört nicht meiner Hoheit, ein erneuter Lauf unmittelbar danach war grün, und ich habe daran
+nichts verändert. Alle neuen Testdaten mit `E2E-`-Präfix erfunden, mit der einen im Abschnitt
+begründeten Ausnahme (`Rechnung<RLO>gnp.exe`, selbst eine erfundene Fixtur) — keine echten
+Call-Nummern, keine echten Kundennamen, keine echten Benutzernamen.

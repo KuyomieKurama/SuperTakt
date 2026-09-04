@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { listTimeEntries, listTodos, resetExportStatus } from "../api/endpoints";
-import type { ExportStatus, Id, TimeEntry } from "../api/types";
+import type { ExportStatus, ForeignText, Id, TimeEntry } from "../api/types";
 import { exportDisplayState, type ExportDisplayState } from "../components/ExportStatus";
 import {
   BookingTable,
@@ -102,7 +102,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
       listTimeEntries(filter, { limit: PAGE_SIZE }),
       listTodos({}, { limit: 200 }),
     ]);
-    const titles = new Map<Id, { title: string; callNumber: string | null }>();
+    const titles = new Map<Id, { title: ForeignText; callNumber: ForeignText | null }>();
     for (const todo of todos.items) {
       titles.set(todo.id, { title: todo.title, callNumber: todo.callNumber });
     }

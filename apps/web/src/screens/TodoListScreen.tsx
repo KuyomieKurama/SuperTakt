@@ -589,7 +589,9 @@ function TodoRow({
         </a>
         <div className="todo-row__meta">
           {todo.callNumber === null ? null : (
-            <span className="todo-row__call">Call {todo.callNumber}</span>
+            <span className="todo-row__call">
+              Call <Foreign value={todo.callNumber} />
+            </span>
           )}
           <Foreign className="todo-row__status" value={statusName} />
           {/*

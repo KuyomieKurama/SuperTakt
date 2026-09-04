@@ -25,6 +25,20 @@ import { createConnection } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
+/*
+ * Die drei Fristen des Betriebs kommen aus `config.ts` und stehen hier nicht
+ * als Zahlen (T-128, E-063 Punkt 4). Ein Nachweis, der seine Erwartung
+ * abschreibt, mißt seine eigene Abschrift: Setzte jemand `HEADERS_TIMEOUT_MS`
+ * wieder auf sechzig Sekunden, würde eine hier hingeschriebene 5000 rot — mit
+ * einer Meldung, die auf den Nachweis zeigt statt auf die Änderung. So zeigt
+ * sie auf die Änderung.
+ */
+import {
+  CONNECTION_CHECK_INTERVAL_MS,
+  HEADERS_TIMEOUT_MS,
+  REQUEST_RECEIVE_TIMEOUT_MS,
+} from '../src/config.ts';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENTRY = join(HERE, '..', 'src', 'index.ts');
 const PORT = 17843;
@@ -516,6 +530,91 @@ try {
 
   const H = { host: `127.0.0.1:${PORT}` };
   const sessionHeaders = { ...H, 'X-Takt-Token': service.secret };
+
+  section('0f. Dieselbe halbe Anfrage im laufenden Betrieb (B-1.7, T-125-4 R2, T-128)');
+  {
+    /*
+     * 0e mißt das **Anhalten**, dieser Abschnitt den **Betrieb**. Es ist
+     * derselbe fremde Prozess mit derselben halben Anfrage, nur stirbt hier
+     * niemand: Der Dienst läuft weiter, und die Frage ist, wie lange er eine
+     * Verbindung hält, auf der nichts mehr kommt.
+     *
+     * Bis T-128 waren das die Vorgaben von Node — 60 Sekunden für den Kopf, 300
+     * für die ganze Anfrage, nachgesehen alle 30. Das sind Werte für einen
+     * Dienst hinter einem Gegenlager im Netz. Takt hat keins: Es ist selbst das
+     * erste, was die Verbindung sieht, und jeder Aufrufer sitzt auf demselben
+     * Rechner. Ein Prozess, der viele solche Verbindungen aufmacht, nimmt der
+     * eigenen Oberfläche die Betriebsmittel weg, und zwar ohne ein Geheimnis zu
+     * kennen (VG-1).
+     *
+     * Gemessen wird **wann** und **womit**: Die Verbindung muß binnen
+     * `HEADERS_TIMEOUT_MS + CONNECTION_CHECK_INTERVAL_MS` weg sein, und Node
+     * muß dabei mit 408 antworten. Ohne die zweite Hälfte wäre auch ein
+     * abgestürzter Dienst grün.
+     */
+    /*
+     * Die Summe der beiden Fristen ist die Zusicherung; die fünf Sekunden
+     * obendrauf sind Luft für den Takt und für einen ausgelasteten Rechner.
+     * Gemessen wurde 9975 ms — der Wert liegt an der Summe und nicht an der
+     * Luft. Was die Prüfung ausschließen soll, ist die Vorgabe von Node, und
+     * die schließt sie um den Faktor vier aus; ohne die Behebung ist die
+     * Verbindung nach 22 Sekunden noch da (Gegenprobe T-128).
+     */
+    const GRENZE_MS = HEADERS_TIMEOUT_MS + CONNECTION_CHECK_INTERVAL_MS + 5_000;
+
+    check(
+      'Die Fristen stehen unter den Vorgaben von Node (60 s Kopf, 300 s Anfrage)',
+      HEADERS_TIMEOUT_MS < 60_000 &&
+        REQUEST_RECEIVE_TIMEOUT_MS < 300_000 &&
+        HEADERS_TIMEOUT_MS < REQUEST_RECEIVE_TIMEOUT_MS &&
+        CONNECTION_CHECK_INTERVAL_MS < 30_000,
+      `Kopf ${HEADERS_TIMEOUT_MS} ms, Anfrage ${REQUEST_RECEIVE_TIMEOUT_MS} ms, Takt ${CONNECTION_CHECK_INTERVAL_MS} ms`,
+    );
+
+    const halbeAnfrage = await openHalfRequest();
+    check('Ein fremder Prozess hält eine Verbindung mit halbem Anfragekopf', halbeAnfrage !== null);
+
+    const begonnen = Date.now();
+    let antwort = '';
+    if (halbeAnfrage !== null) halbeAnfrage.on('data', (teil) => (antwort += teil.toString('utf8')));
+    const geschlossen = await new Promise((fertig) => {
+      if (halbeAnfrage === null) {
+        fertig(false);
+        return;
+      }
+      halbeAnfrage.once('close', () => fertig(true));
+      setTimeout(() => fertig(false), GRENZE_MS + 10_000).unref();
+    });
+    const dauer = Date.now() - begonnen;
+    halbeAnfrage?.destroy();
+
+    check(
+      `Der Dienst trennt sie binnen ${GRENZE_MS} ms — der fremde Prozess bestimmt nicht, wie lange`,
+      geschlossen && dauer < GRENZE_MS,
+      `${geschlossen ? `${dauer} ms` : 'nicht getrennt'}`,
+    );
+    // Die Zahl gehört auch in den grünen Lauf. Wer ihn liest, soll sehen, wie
+    // weit die Messung von der Grenze entfernt ist, und nicht nur, dass sie
+    // darunter liegt.
+    console.log(`        getrennt nach ${geschlossen ? `${dauer} ms` : 'gar nicht'}`);
+    /*
+     * Die Prüfung, die den Unterschied zwischen „behoben" und „zufällig weg"
+     * macht. Ein 408 ist Nodes Antwort auf genau diese Frist; eine Verbindung,
+     * die aus einem anderen Grund fällt, kommt ohne Antwort zurück.
+     */
+    check(
+      'Und zwar über die Frist: Node antwortet mit 408',
+      antwort.startsWith('HTTP/1.1 408'),
+      antwort.split('\r\n')[0] ?? '(keine Antwort)',
+    );
+
+    const nachher = await call('/api/v1/health', { headers: sessionHeaders });
+    check(
+      'Der Dienst selbst läuft weiter — getrennt wird die Verbindung, nicht der Dienst',
+      nachher.status === 200,
+      String(nachher.status),
+    );
+  }
 
   section('1. Bindeadresse (B-1.1 Punkt 3 und 4)');
   {

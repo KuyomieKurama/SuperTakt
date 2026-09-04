@@ -9,7 +9,7 @@ import {
   updateExportTemplate,
   updateSettings,
 } from "../api/endpoints";
-import type { ExportTemplate, Id } from "../api/types";
+import type { DraftText, ExportTemplate, ForeignText, Id } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FormDialog, TextField } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
@@ -90,7 +90,7 @@ import { Foreign } from "../components/Foreign";
 const NEW_TEMPLATE_ID = "neu";
 
 interface Draft {
-  readonly name: string;
+  readonly name: DraftText;
   readonly fields: readonly DraftField[];
 }
 
@@ -869,7 +869,7 @@ function DeviationPanel({
   builtinName,
 }: {
   readonly deviations: readonly TemplateDeviation[];
-  readonly builtinName: string;
+  readonly builtinName: ForeignText;
 }) {
   const warnings = deviations.filter((entry) => entry.tone === "warning");
 

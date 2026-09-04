@@ -11,7 +11,7 @@ import { Spinner } from "../components/Primitives";
 import { cx } from "../lib/cx";
 import { formatDate, formatDuration } from "../lib/format";
 import { navigate } from "./router";
-import { quotedName } from "../lib/foreign";
+import { foreignText, quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
 
 /**
@@ -49,7 +49,7 @@ function toEntries(result: SearchResult): readonly Entry[] {
         ? todo.completedAt === null
           ? "Todo"
           : "Todo · erledigt"
-        : `Call ${todo.callNumber}${todo.completedAt === null ? "" : " · erledigt"}`,
+        : `Call ${foreignText(todo.callNumber)}${todo.completedAt === null ? "" : " · erledigt"}`,
     marker: null,
   }));
 

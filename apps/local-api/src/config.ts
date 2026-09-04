@@ -150,3 +150,93 @@ export const SESSION_SECRET_TIMEOUT_MS = 5_000;
  * wird, und dass es nicht erst die Frist ist, die dafür sorgt.
  */
 export const SHUTDOWN_DEADLINE_MS = 2_000;
+
+/**
+ * Wie lange der Dienst im **Betrieb** auf einen unvollständigen Anfragekopf
+ * wartet (B-1.7, T-125-4 R2, T-128).
+ *
+ * ---------------------------------------------------------------------------
+ * Der Fund, und warum er nach T-126 offen blieb
+ * ---------------------------------------------------------------------------
+ *
+ * Ein beliebiger Prozess auf demselben Rechner kann eine TCP-Verbindung
+ * aufmachen, ein halbes `GET ` schicken und dann schweigen. Er braucht dafür
+ * kein Geheimnis — der Dienst hört auf 127.0.0.1 und ist damit für jeden
+ * Prozess des Benutzers erreichbar (VG-1). Bis T-126 verlängerte das die
+ * **Lebensdauer** des Dienstes um bis zu fünf Minuten; das ist behoben, das
+ * Anhalten reißt solche Verbindungen ab.
+ *
+ * Was blieb, ist der **Betrieb**: Node ließ eine solche Verbindung 60 Sekunden
+ * stehen (`headersTimeout`, Vorgabe), den Rumpf sogar 300 (`requestTimeout`,
+ * Vorgabe). Beides sind Zahlen, die niemand für Takt gewählt hat, sondern die
+ * Vorgaben eines Laufzeitsystems, das üblicherweise hinter einem Gegenlager im
+ * Netz steht. Takt steht nicht dahinter: Es ist selbst das erste, was die
+ * Verbindung sieht — genau der Fall, für den die Node-Beschreibung ausdrücklich
+ * einen eigenen Wert empfiehlt.
+ *
+ * Die Zeitgrenze aus B-1.7 hilft hier nicht. `timeout(REQUEST_TIMEOUT_MS)` ist
+ * Zwischenschicht und läuft erst, wenn der Kopf **vollständig** gelesen ist —
+ * ein halber Kopf kommt dort nie an.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das Herunterzusetzen hier nichts kostet
+ * ---------------------------------------------------------------------------
+ *
+ * Jeder Aufrufer ist ein Prozess auf demselben Rechner: die eigene Oberfläche,
+ * der Aufgabenbereich des Add-ins, ein Testlauf. Über die Rückschleife ist ein
+ * Anfragekopf in Bruchteilen einer Millisekunde da; es gibt keine langsame
+ * Mobilfunkverbindung, die fünf Sekunden brauchen könnte. Der Wert trennt
+ * deshalb nichts, was jemals ankommen wollte — er trennt das, was nicht ankommen
+ * **will**.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum drei Zahlen und nicht eine
+ * ---------------------------------------------------------------------------
+ *
+ * `headersTimeout` allein wäre eine halbe Antwort, und zwar gleich zweimal:
+ *
+ *  1. **Der Rumpf.** Wer eine Verbindung halten will, schickt einen
+ *     vollständigen Kopf mit `Content-Length` und tröpfelt dann den Rumpf. Dann
+ *     greift nicht `headersTimeout`, sondern `requestTimeout` — und das steht
+ *     ohne Zutun bei fünf Minuten. Nur den Kopf zu decken hieße, das Fenster zu
+ *     verschieben statt es zu schließen.
+ *  2. **Die Granularität.** Node prüft beide Fristen nicht laufend, sondern in
+ *     einem Takt: `connectionsCheckingInterval`, Vorgabe 30 Sekunden. Ein
+ *     `headersTimeout` von fünf Sekunden ohne diesen dritten Wert wäre eine
+ *     Zahl, die im schlechtesten Fall erst nach 35 greift. Sie stünde im
+ *     Quelltext und wäre trotzdem nicht wahr — die schlechteste Sorte
+ *     Einstellung.
+ *
+ * Zusammen ergibt sich die Zusicherung, die `proof:access` Abschnitt 0f misst:
+ * Eine Verbindung mit halbem Anfragekopf ist spätestens nach
+ * `HEADERS_TIMEOUT_MS + CONNECTION_CHECK_INTERVAL_MS` weg.
+ *
+ * Reihenfolge, wie die Node-Beschreibung sie verlangt:
+ * `headersTimeout` < `requestTimeout`. Und beide unter der Zeitgrenze aus
+ * B-1.7, damit die Antwort auf eine langsame Anfrage die Trennung ist und nicht
+ * ein halb gelaufener Anwendungsfall.
+ */
+export const HEADERS_TIMEOUT_MS = 5_000;
+
+/**
+ * Wie lange der Dienst im Betrieb auf eine **vollständige** Anfrage wartet
+ * (Kopf und Rumpf), siehe {@link HEADERS_TIMEOUT_MS}.
+ *
+ * Der Rumpf ist auf {@link MAX_BODY_BYTES} begrenzt, also ein Megabyte. Über
+ * die Rückschleife ist das eine Sache von Millisekunden; zehn Sekunden sind das
+ * Tausendfache und trennen keine Anfrage, die ankommen wollte. Node antwortet
+ * darauf mit 408 und schließt.
+ */
+export const REQUEST_RECEIVE_TIMEOUT_MS = 10_000;
+
+/**
+ * In welchem Takt Node die beiden Fristen oben überhaupt nachsieht.
+ *
+ * Ohne diesen Wert stünde er bei 30 Sekunden, und die fünf aus
+ * {@link HEADERS_TIMEOUT_MS} wären eine Angabe ohne Wirkung. Fünf Sekunden sind
+ * der Tausch: Der Takt bestimmt, wie genau die Frist greift, und er kostet
+ * einen Weckruf alle fünf Sekunden. Node hängt die Ereignisschleife nicht daran
+ * auf (`unref`), das Anhalten bleibt also so schnell wie in T-126 gemessen —
+ * `proof:access` Abschnitt 0e mißt es weiter.
+ */
+export const CONNECTION_CHECK_INTERVAL_MS = 5_000;

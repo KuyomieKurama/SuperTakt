@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
 import { Button, IconButton } from "./Primitives";
 import { quotedName } from "../lib/foreign";
@@ -38,7 +39,7 @@ export interface TimerDisplayProps {
   /** Bereits formatierte Dauer, zum Beispiel "00:42:17". */
   readonly display: string;
   /** Titel des Todos, auf das gebucht wird. */
-  readonly todoTitle?: string;
+  readonly todoTitle?: ForeignText;
   /** Bereits formatierter Zusatz, zum Beispiel "seit 09:12 Uhr". */
   readonly detail?: string;
   readonly size?: "sm" | "md" | "lg";
@@ -55,7 +56,7 @@ export interface TimerDisplayProps {
    * Text der Anzeige steht, sondern daneben (`trailing`). Ohne Angabe gilt
    * `todoTitle`.
    */
-  readonly actionTitle?: string;
+  readonly actionTitle?: ForeignText;
   readonly onStart?: () => void;
   readonly onStop?: () => void;
   readonly disabled?: boolean;

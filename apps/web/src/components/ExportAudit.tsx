@@ -107,7 +107,9 @@ export function ExportAuditList({
                   if (booking !== null) onOpenTodo(booking.todoId);
                 }}
               >
-                <span className="auditrow__open-title truncate">{model.booking.todoTitle}</span>
+                <span className="auditrow__open-title truncate">
+                  <Foreign value={model.booking.todoTitle} />
+                </span>
                 <Icon name="arrow-up-right" size={13} />
               </button>
             )}
@@ -128,7 +130,9 @@ export function ExportAuditList({
                   {model.booking.callNumber === null ? null : (
                     <>
                       <span aria-hidden> · </span>
-                      <span className="mono">Call {model.booking.callNumber}</span>
+                      <span className="mono">
+                        Call <Foreign value={model.booking.callNumber} />
+                      </span>
                     </>
                   )}
                 </>
@@ -170,13 +174,15 @@ export function ExportAuditList({
           ) : (
             <p className="auditrow__reason">
               <span className="auditrow__reason-label">Begründung</span>
-              <span className="auditrow__reason-text">{model.reason}</span>
+              <span className="auditrow__reason-text">
+                <Foreign value={model.reason} />
+              </span>
             </p>
           )}
 
           <p className="auditrow__actor">
             <span className="visually-hidden">Ausgelöst von: </span>
-            {model.actor}
+            <Foreign value={model.actor} />
           </p>
         </li>
       ))}

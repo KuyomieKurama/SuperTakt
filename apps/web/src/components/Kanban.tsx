@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
 import { DONE_FLAG_LABEL, doneFlagState } from "../lib/labels";
 import { ExportStatusMarker, EXPORT_STATE, type ExportDisplayState } from "./ExportStatus";
@@ -38,8 +39,8 @@ import { Foreign } from "./Foreign";
  */
 
 export interface KanbanTagRef {
-  readonly label: string;
-  readonly path?: readonly string[];
+  readonly label: ForeignText;
+  readonly path?: readonly ForeignText[];
 }
 
 /**
@@ -69,8 +70,8 @@ export interface KanbanAppearance {
 
 export interface KanbanCardData {
   readonly id: string;
-  readonly title: string;
-  readonly callNumber: string | null;
+  readonly title: ForeignText;
+  readonly callNumber: ForeignText | null;
   readonly tags: readonly KanbanTagRef[];
   /** Bereits formatierte Gesamtdauer, zum Beispiel "4:15 h". */
   readonly trackedDisplay: string;
@@ -139,7 +140,9 @@ export function KanbanCard({
       <div className="kcard__main">
         <div className="kcard__top">
           {card.callNumber !== null ? (
-            <span className="kcard__call mono">{card.callNumber}</span>
+            <span className="kcard__call mono">
+              <Foreign value={card.callNumber} />
+            </span>
           ) : null}
           {/* Das Erledigt-Kennzeichen steht auf jeder Karte, auch wenn es
               "offen" lautet. Waere es nur bei "erledigt" da, muesste man es
@@ -273,7 +276,7 @@ export function ExportSummaryStrip({ summary, className }: ExportSummaryStripPro
 }
 
 export interface KanbanColumnProps {
-  readonly title: string;
+  readonly title: ForeignText;
   /** Geladene Karten dieser Spalte. */
   readonly count: number;
   /**

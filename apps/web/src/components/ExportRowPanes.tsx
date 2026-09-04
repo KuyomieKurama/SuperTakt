@@ -1,3 +1,4 @@
+import { foreignText } from "../lib/foreign";
 import { cx } from "../lib/cx";
 import type { ExportRow, ExportValue } from "../api/types";
 import type { ExportFieldDefinition, SourceCatalog } from "../lib/exportTemplateModel";
@@ -105,7 +106,13 @@ export function ExportRowPanes({
 /** Der Wert einer Zelle, so wie er in der Datei steht. Nicht umgeformt. */
 function renderValue(value: ExportValue): string {
   if (value === null) return "null";
-  return typeof value === "number" ? String(value) : `"${value}"`;
+  /*
+   * Die Anzeige einer Zelle ist eine Anzeige und keine Datei: Was hier steht,
+   * ist der Wert der Zeile — und er kann den Titel eines Todos tragen, wenn die
+   * Vorlage ihn abbildet. `foreignText` macht die unsichtbaren Zeichen sichtbar
+   * (E-063 Punkt 2); die geschriebene Datei bleibt davon unberührt.
+   */
+  return typeof value === "number" ? String(value) : `"${foreignText(value)}"`;
 }
 
 /** Felder der Vorlage, die es nicht in diese Zeile geschafft haben (A-8.7). */

@@ -6,7 +6,7 @@ import {
   resetExportStatus,
   updateTimeEntry,
 } from "../api/endpoints";
-import type { Id, TimeEntry } from "../api/types";
+import type { ForeignText, Id, TimeEntry } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ExportAuditList } from "../components/ExportAudit";
 import { ExportStatusBadge, exportDisplayState } from "../components/ExportStatus";
@@ -68,7 +68,7 @@ export interface BookingFormDialogProps {
   readonly entry?: TimeEntry;
   /** Todo, auf das gebucht wird. Beim Ändern kommt es aus der Buchung. */
   readonly todoId: Id;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -218,7 +218,7 @@ export function BookingFormDialog({
 export interface ResetExportDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -337,7 +337,7 @@ export function ResetExportDialog({ open, entry, todoTitle, onClose }: ResetExpo
 export interface NotBilledDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -404,7 +404,7 @@ export function NotBilledDialog({ open, entry, todoTitle, onClose }: NotBilledDi
 export interface BookingHistoryDialogProps {
   readonly open: boolean;
   readonly entry: TimeEntry | null;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }
 
@@ -437,7 +437,7 @@ function BookingHistoryBody({
   onClose,
 }: {
   readonly entry: TimeEntry;
-  readonly todoTitle: string;
+  readonly todoTitle: ForeignText;
   readonly onClose: () => void;
 }) {
   /*

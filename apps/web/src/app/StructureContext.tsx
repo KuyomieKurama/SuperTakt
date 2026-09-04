@@ -10,6 +10,7 @@ import type {
   DefaultTag,
   ExportDirectoryState,
   ExportDirectoryTrait,
+  ForeignText,
   Id,
   Pool,
   Tag,
@@ -37,7 +38,7 @@ import { useAsync, type AsyncState } from "./useAsync";
 export interface TagInfo {
   readonly tag: Tag;
   /** Ordnerpfad ohne den Tag selbst, zum Beispiel `["Kunden", "Nord"]`. */
-  readonly path: readonly string[];
+  readonly path: readonly ForeignText[];
 }
 
 export interface Structure {
@@ -85,7 +86,7 @@ export interface Structure {
    * `/settings` für dieselbe Zeichenkette wäre eine zweite Wahrheit über
    * denselben Namen.
    */
-  readonly windowsUser: string;
+  readonly windowsUser: ForeignText;
   /** Wo der Bestand liegt (E-018, R-13). `null` im Arbeitsspeicher. */
   readonly databasePath: string | null;
 }
@@ -95,9 +96,9 @@ export interface StructureApi {
   readonly reload: () => void;
   /** Tag samt Ordnerpfad. `undefined`, wenn die Kennung unbekannt ist. */
   readonly tagInfo: (id: Id) => TagInfo | undefined;
-  readonly statusName: (id: Id) => string;
+  readonly statusName: (id: Id) => ForeignText;
   /** Name einer Regel, gleich auf welcher Fläche sie steht. */
-  readonly ruleName: (id: Id) => string | undefined;
+  readonly ruleName: (id: Id) => ForeignText | undefined;
   readonly allTags: readonly TagInfo[];
 }
 
@@ -191,7 +192,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   }, [allTags]);
 
   const statusIndex = useMemo(() => {
-    const map = new Map<Id, string>();
+    const map = new Map<Id, ForeignText>();
     for (const status of value?.statuses ?? []) map.set(status.id, status.name);
     return map;
   }, [value]);
@@ -199,7 +200,7 @@ export function StructureProvider({ children }: { readonly children: ReactNode }
   const tagInfo = useCallback((id: Id) => tagIndex.get(id), [tagIndex]);
 
   const ruleIndex = useMemo(() => {
-    const map = new Map<Id, string>();
+    const map = new Map<Id, ForeignText>();
     for (const rule of value?.rules ?? []) map.set(rule.id, rule.name);
     return map;
   }, [value]);
@@ -245,7 +246,7 @@ export function useRuleLookup(): RuleLookup {
   }, [value]);
 
   const statusNames = useMemo(() => {
-    const map = new Map<Id, string>();
+    const map = new Map<Id, ForeignText>();
     for (const status of value?.statuses ?? []) map.set(status.id, status.name);
     return map;
   }, [value]);

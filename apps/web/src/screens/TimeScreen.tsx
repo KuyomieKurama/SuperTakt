@@ -247,7 +247,9 @@ export function TimeScreen() {
                             </a>
                             <DoneFlag state={doneFlagState(done, reactivated)} />
                             {todo.callNumber === null ? null : (
-                              <span className="pick-row__call">Call {todo.callNumber}</span>
+                              <span className="pick-row__call">
+                                Call <Foreign value={todo.callNumber} />
+                              </span>
                             )}
                             <Button
                               size="sm"

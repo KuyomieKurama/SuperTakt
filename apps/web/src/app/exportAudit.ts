@@ -1,5 +1,12 @@
 import { getExportRun, getTimeEntry, getTodo, listExportAudit } from "../api/endpoints";
-import type { ExportAuditEntry, ExportRun, Id, TimeEntry, Todo } from "../api/types";
+import type {
+  ExportAuditEntry,
+  ExportRun,
+  ForeignText,
+  Id,
+  TimeEntry,
+  Todo,
+} from "../api/types";
 import { EXPORT_STATE, type ExportDisplayState } from "../components/ExportStatus";
 import { EXPORT_AUDIT_EVENT_LABEL, type ExportAuditEvent } from "../lib/labels";
 import { formatDateTime, formatDuration, formatPeriod } from "../lib/format";
@@ -63,15 +70,15 @@ export interface ExportAuditRowModel {
   /** Der Exportlauf. `null` bei „nicht abgerechnet" — dort gab es keinen. */
   readonly run: AuditRun | null;
   /** Freiwillige Begründung (E-047) oder Pflichtbegründung (E-012). Leer heißt: keine. */
-  readonly reason: string;
+  readonly reason: ForeignText;
   /** Wer den Vorgang ausgelöst hat (A-8.5, E-042). */
-  readonly actor: string;
+  readonly actor: ForeignText;
 }
 
 export interface AuditBooking {
   readonly todoId: Id;
-  readonly todoTitle: string;
-  readonly callNumber: string | null;
+  readonly todoTitle: ForeignText;
+  readonly callNumber: ForeignText | null;
   /** Zeitraum, bereits formatiert. */
   readonly period: string;
   /** Ungerundete Dauer, bereits formatiert. */

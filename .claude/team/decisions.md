@@ -1407,3 +1407,13 @@ T-114.
    zweiten Träger gibt: keine zweite Fassung im Quelltext, keine zweite Aufzählung in einer
    Beschreibung. Eine Beschreibung, die eine Klasse aufzählt, ist eine Abschrift, die nur nicht
    rot werden kann; sie verweist stattdessen auf den einen Ort.
+
+6. **Wo die Behandlung für den Normalfall die Identität ist, kann kein Verhaltenstest sie
+   vermissen.** Nachsatz aus T-129, wieder mit einer Zahl: 175 behandelte Stellen und 71 grüne
+   Tests haben **elf rohe Anzeigestellen** nicht bemerkt — darunter die Vorschau der Exportzeile,
+   also die Ansicht, an der ein Benutzer prüft, was er abrechnet. Für einen gewöhnlichen Namen
+   liefert die Behandlung denselben Text zurück; ein Test, der Namen einsetzt, sieht nie einen
+   Unterschied. Dann genügt es nicht, die Behandlung zu haben — die **Pflicht** muß im Typ
+   stehen und ein Wächter sie lesen. Die Herkunft eines Textes gehört deshalb in seinen Typ und
+   nicht in eine gepflegte Namensliste im Nachweis: Eine Liste ist wieder eine Abschrift, und
+   Punkt 4 gilt für sie wie für jede andere.

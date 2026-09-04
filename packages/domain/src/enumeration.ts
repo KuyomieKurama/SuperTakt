@@ -47,10 +47,24 @@
  *
  * Das Komma vor „und“ fehlt absichtlich: Es ist im Deutschen nicht üblich, und
  * die Sätze aus T-093 sind so abgenommen.
+ *
+ * **Zweimal `slice` und kein Indexzugriff** (T-128). Hier stand bis dahin
+ * `parts[parts.length - 1] ?? ''`. Der Indexzugriff gibt unter
+ * `noUncheckedIndexedAccess` `string | undefined`, das `?? ''` war deshalb
+ * nötig — und unerreichbar: Zwei Zeilen darüber ist `parts.length > 1`
+ * erzwungen, der letzte Index also belegt. Der unit-tester hat den Zweig in
+ * T-127 gemeldet, statt ihn mit einem lückenhaften Array künstlich zu decken.
+ * `slice(-1)` liefert für dieselbe Vorbedingung ein Feld mit genau einem
+ * Eintrag; `join('')` gibt ihn heraus, ohne dass es einen zweiten Ausgang gäbe.
+ * Am Wortlaut der vierzehn Sätze aus T-093 ändert das nichts — es ist derselbe
+ * Eintrag, nur ohne einen Zweig, den niemand betreten kann.
+ *
+ * Das `?? ''` in der Zeile darüber bleibt: Bei einer **leeren** Liste ist es
+ * der Weg, den die Funktion wirklich geht.
  */
 export function enumerateGerman(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} und ${parts[parts.length - 1] ?? ''}`;
+  return `${parts.slice(0, -1).join(', ')} und ${parts.slice(-1).join('')}`;
 }
 
 /**
