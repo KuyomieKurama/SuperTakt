@@ -498,3 +498,20 @@ export const RULE_NOT_A_PLACE = "Eine Spalte ist eine Regel, kein Ablageort.";
  */
 export const RULE_WHAT_MOVES_A_CARD =
   "Welche Karte wo steht, entscheidet die Regel — nicht die Maus. Eine Karte wandert, wenn sich am Todo etwas ändert, das die Regel abfragt.";
+
+/**
+ * Der Hinweis unter dem Leistungsfeld — an **beiden** Buchungsflaechen (B-4
+ * aus T-116, E-034).
+ *
+ * Eine Buchung ohne Leistung ist erfasst, aber ihre Tagesgruppe geht nach
+ * E-034 nicht in den Export. Der Stoppdialog sagt das seit jeher; die Buchung
+ * von Hand sagte es bis T-118 nicht — und sie ist der Weg, auf dem Zeit
+ * **nachgetragen** wird, also der, auf dem eine Leistung am ehesten vergessen
+ * wird.
+ *
+ * Der Satz steht hier und nicht zweimal in den Ansichten: Zwei Abschriften
+ * desselben Hinweises laufen auseinander, sobald einer von beiden gepflegt
+ * wird (Regel 8 des Designsystems, Befund C-24).
+ */
+export const BILLING_NOTE_MAY_BE_EMPTY =
+  "Die Leistung darf leer bleiben. Dann ist die Buchung erfasst, aber die Tagesgruppe dieses Todos geht ohne Text nicht in den Export — die Exportvorschau sagt es und bietet an, den Text nachzutragen.";

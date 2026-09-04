@@ -81,6 +81,26 @@ body {
   font-size: 0.95em;
 }
 
+/*
+ * Fremder Text steht in `<bdi>` (T-119, Baustein `Foreign`).
+ *
+ * Die Zeile ist die Voreinstellung des Browsers für dieses Element und steht
+ * trotzdem hier — aus zwei Gründen. Erstens setzt diese Datei einen Teil der
+ * Voreinstellungen selbst (`* { margin: 0 }` und weiter oben); wo das geschieht,
+ * gehört auch dazu, was ausdrücklich **bleiben** soll. Zweitens ist es die
+ * einzige Zeile Gestaltung im Bereich, die eine Sicherheitsfrage beantwortet:
+ * Ohne sie ordnet ein Titel aus rechtsläufiger Schrift den deutschen Satz um,
+ * in dem er steht.
+ *
+ * Was sie **nicht** kann: ein `U+202E` im Inhalt unwirksam machen. Die
+ * Isolierung trennt den Block von seiner Umgebung, der Bidi-Algorithmus läuft
+ * innerhalb weiter. Diese Hälfte erledigt `src/text/hidden.ts`, bevor der Text
+ * hierher kommt. Eine der beiden Hälften allein genügt nicht.
+ */
+bdi {
+  unicode-bidi: isolate;
+}
+
 /* ==================================================================== */
 /* Rahmen des Aufgabenbereichs                                          */
 /* ==================================================================== */

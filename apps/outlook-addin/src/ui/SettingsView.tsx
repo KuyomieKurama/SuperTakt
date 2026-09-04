@@ -27,7 +27,7 @@ import type { Evaluator } from '../callnumber/evaluate.ts';
 import { DEFAULT_BASE_URL, describeToken, isAcceptableBaseUrl, looksLikeToken } from '../settings/store.ts';
 import type { AddinSettings, SettingsStore } from '../settings/store.ts';
 import type { ApiClient } from '../api/client.ts';
-import { Button, Callout, Field, Section } from './Primitives.tsx';
+import { Button, Callout, Field, Foreign, Section } from './Primitives.tsx';
 
 export interface SettingsViewProps {
   readonly settings: AddinSettings;
@@ -399,6 +399,14 @@ export function SettingsView({
   );
 }
 
+/**
+ * Was der Ausdruck aus dem Beispieltext geholt hat.
+ *
+ * Beide Werte sind Ausschnitte aus dem Textfeld darüber (T-119). Das ist im
+ * Regelfall der eigene Beispieltext — aber genau dieses Feld füllt man, indem
+ * man eine echte E-Mail hineinkopiert, und dann steht hier fremder Text mitten
+ * in einem deutschen Satz.
+ */
 function SampleOutcome({ result }: { readonly result: SampleResult }) {
   switch (result.kind) {
     case 'idle':
@@ -406,13 +414,13 @@ function SampleOutcome({ result }: { readonly result: SampleResult }) {
     case 'match':
       return (
         <Callout tone="success" title="Erkannt">
-          Übernommen würde: <span className="mono">{result.value}</span>
+          Übernommen würde: <Foreign className="mono" value={result.value} />
         </Callout>
       );
     case 'implausible':
       return (
         <Callout tone="warning" title="Getroffen, aber nicht übernommen">
-          Der Ausdruck liefert <span className="mono">{result.raw}</span>. {result.message}
+          Der Ausdruck liefert <Foreign className="mono" value={result.raw} />. {result.message}
         </Callout>
       );
     case 'none':

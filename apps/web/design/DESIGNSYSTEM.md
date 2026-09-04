@@ -321,10 +321,10 @@ nichts. Der Zähler steht dort mit Absicht — er ist das Merkmal, an dem die Da
 
 ### 3.4 Erledigt ist kein Spaltenzustand
 
-Die Statusspalten des Boards sind frei definierbar (A-5.4). Ein Kanban-Abschluss ist deshalb
-**kein** Erledigt: Ein Todo kann in einer Spalte namens „Erledigt“ stehen und offen sein, und es
-kann in „In Arbeit“ stehen und erledigt sein. Das Erledigt-Kennzeichen (A-2.4) hängt am Todo,
-nicht an der Phase.
+Die Spalten des Boards sind frei definierbar (A-5.4) — seit E-054 als **Regel** über fünf Achsen
+und nicht mehr als Statuswert. Ein Kanban-Abschluss ist deshalb **kein** Erledigt: Ein Todo kann
+in einer Spalte namens „Erledigt“ stehen und offen sein, und es kann in „In Arbeit“ stehen und
+erledigt sein. Das Erledigt-Kennzeichen (A-2.4) hängt am Todo, nicht am Spaltennamen.
 
 Für die Oberfläche folgt daraus eine Regel, die auf jeder Ansicht mit Karten oder Zeilen gilt:
 
@@ -515,8 +515,14 @@ Buchungsliste und eine Einstellungsseite unterschiedliche Ansprüche haben.
 ### 4.3 Radien und Erhebung
 
 Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: fünf Stufen von `--shadow-xs` (Karte in Ruhe) bis
-`--shadow-drag` (Karte am Zeiger, mit farbigem Ring). Im dunklen Modus sind die Schatten
+`--shadow-drag` (gezogenes Element, mit farbigem Ring). Im dunklen Modus sind die Schatten
 kräftiger, weil Schatten auf dunklem Grund sonst nicht wirken.
+
+`--shadow-drag` ist zurzeit **von keiner Fläche belegt**: Die Kartenbewegung, für die er gedacht
+war, ist mit E-054 entfallen (Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen
+sich anders aus — der gezogene Tag über `.tree__item--dragging`, das gezogene Feld über
+`.tfield--dragging` (Deckkraft) und `.tfield--drop` (Kante am Ablageziel). Er bleibt als Stufe
+stehen, damit die nächste Ziehfläche nicht ihren eigenen Schatten erfindet.
 
 ---
 
@@ -548,7 +554,7 @@ Fehlermeldungen tragen `role="alert"`, alles andere `aria-live="polite"`.
 ### 5.1 Ebenen — und die eine Ausnahme davon (T-110)
 
 Die Reihenfolge steht als Token-Leiter in `packages/ui-tokens/tokens.css`: Inhalt (0), klebende
-Leiste (10), Auswahlliste im Fluss (100), Karte am Zeiger (200), Abdunklung (300), Dialog (310),
+Leiste (10), Auswahlliste im Fluss (100), gezogenes Element (200), Abdunklung (300), Dialog (310),
 ausgelagerte Liste (320), Meldung (400). Sie besagt: Eine Meldung über den Ausgang einer Handlung
 darf verdecken, was unter ihr liegt.
 
@@ -589,6 +595,27 @@ schöbe den Dialog bei mehreren Meldungen aus dem Fenster.
 **Regel für die Weiterarbeit:** Was über der Abdunklung liegt, gehört dem Dialog. Wer eine neue
 schwebende Fläche einführt, prüft sie gegen einen offenen Dialog, nicht nur gegen die Ansicht.
 
+**Zweite Regel, seit T-118:** Was über der Abdunklung liegt, endet am Bildschirmrand. Der
+Meldungsstapel wächst nach oben, und eine Meldung mit Rückweg geht nicht von selbst — sieben
+Klicks auf „Erledigt“ genügten, um die älteste aus dem Fenster zu schieben. Ein
+`position: fixed`-Behälter lässt sich nicht hereinrollen; ihr „Rückgängig“ blieb tabulierbar, der
+Fokus landete außerhalb des Sichtbaren, und **es gab keine Fokusanzeige zu sehen** (SC 2.4.7).
+`.toast-layer` ist deshalb eine Rollfläche mit `max-block-size: 100dvh`, und `ToastProvider` rollt
+nach jeder Änderung ans Ende, damit die jüngste Meldung immer sichtbar ist.
+
+Gemessen in Chromium bei 1280×720 an den echten Stilblättern:
+
+| Meldungen | Stapel | oberer Rand des Behälters | älteste Meldung |
+|---|---|---|---|
+| 1 bis 4 | 151 bis 629 px | 59 px und tiefer | ganz sichtbar, kein Rollen |
+| 5 | 789 px | 0 px | Behälter rollt, jüngste sichtbar |
+| 10 | 1585 px | 0 px | über den Rollweg erreichbar |
+
+Der Fokus auf dem „Rückgängig“ der ältesten von zehn Meldungen rollt den Behälter selbsttätig
+zurück (`scrollTop` von 897 auf 0), der Knopf steht danach bei y = 130 im Fenster. Keine
+Fokusfalle, kein `tabindex` an der Rollfläche: Ein Halt an einer `aria-live`-Region wäre ein Halt,
+an dem nichts zu tun ist.
+
 ---
 
 ## 6. Tastatur und Hilfsmittel
@@ -600,15 +627,31 @@ schwebende Fläche einführt, prüft sie gegen einen offenen Dialog, nicht nur g
 | Kontextmenü | zusätzlich über die Kontextmenü-Taste und Umschalt+F10, nicht nur über den rechten Mausklick |
 | Baumansicht | genau ein Tabulator-Halt, darin Pfeiltasten, Pos1, Ende, `*` klappt alles auf |
 | Dialog | Fokus springt hinein, Tabulator bleibt gefangen, Escape bricht ab, Fokus kehrt zum Auslöser zurück |
-| Kanban | Strg+Pfeil links/rechts verschiebt die Karte; jede Verschiebung wird über `aria-live` angesagt |
+| Kanban | Kein Verschieben und keine Sondertasten (E-054). Jede Karte ist über Tabulator erreichbar; ihr Kartenmenü führt zu Detailansicht, Timer und Status |
+| Tag-Baum | Ziehen ist die schnelle Art; die vollständige ist auswählen und „Verschieben“ (Dialog mit Zielordner) |
+| Exportvorlage | Ziehen ordnet die Felder um; dieselbe Umordnung leisten die Pfeilknöpfe „nach oben“ und „nach unten“ an jeder Feldzeile |
 | Tabelle | Sortierknöpfe mit `aria-sort`, Auswahlkästchen mit `indeterminate` für die Kopfzeile |
 | Suchfeld | Escape leert das Feld |
 
-**SC 2.5.7 Dragging Movements** ist die Anforderung, die beim Kanban-Board am leichtesten
-übersehen wird: Für jede Ziehbewegung muss es eine Alternative mit einem einzelnen Zeigerdruck
-geben. Takt löst das doppelt — über „Verschieben nach …“ im Kartenmenü und über Strg+Pfeil. Wer
-später eine weitere Ziehbewegung einführt (Tag in Ordner ziehen, Feld in der Exportvorlage
-sortieren), braucht dieselbe Alternative.
+**SC 2.5.7 Dragging Movements** verlangt für jede Ziehbewegung eine Alternative mit einem
+einzelnen Zeigerdruck. In Takt gibt es **zwei** Ziehbewegungen, und beide haben ihre Alternative:
+
+| Ziehbewegung | Alternative |
+|---|---|
+| Tag in einen Ordner ziehen (`TagTree`) | auswählen, dann „Verschieben“ — ein Dialog mit Zielordner |
+| Feld einer Exportvorlage umsortieren (`TemplateFields`) | die Pfeilknöpfe „Feld „X“ nach oben“ / „nach unten“ an der Feldzeile |
+
+**Auf dem Kanban-Board wird nichts mehr gezogen.** Bis E-054 war eine Spalte ein Statuswert, und
+Ziehen setzte diesen Wert; seit E-054 ist eine Spalte eine **Regel** über fünf Achsen (E-055).
+Eine Regel lässt sich nicht durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von
+sich aus Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit aufgehoben;
+`draggable`, die Ablageziele und die Tastaturalternative dazu stehen nicht mehr im Board
+(`components/Kanban.tsx`, `screens/BoardScreen.tsx`). Was es nicht gibt, braucht keine
+Ersatzbedienung. Der **Status** bleibt als Eigenschaft am Todo und wird dort geändert, wo er
+hingehört: in der Liste (S-02) und in der Detailansicht (S-03).
+
+Wer später eine dritte Ziehbewegung einführt, braucht wieder eine Alternative — und trägt sie in
+die Tabelle oben ein.
 
 Symbole sind grundsätzlich `aria-hidden`. Die Bedeutung trägt der Text daneben oder ein
 `aria-label` am Knopf. Es gibt keine Emoji und keine Rasterbilder.

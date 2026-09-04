@@ -30,6 +30,7 @@ import {
   plural,
   toLocalInputValue,
 } from "../lib/format";
+import { BILLING_NOTE_MAY_BE_EMPTY } from "../lib/labels";
 import { bookingSentence, withMovement } from "../lib/movement";
 
 /**
@@ -186,6 +187,24 @@ export function BookingFormDialog({
         maxLength={8192}
         placeholder="Was wurde geleistet?"
       />
+
+      {/*
+        Derselbe Hinweis wie im Stoppdialog (B-4 aus T-116, E-034).
+
+        Eine Buchung ohne Leistung ist erfasst — aber die **Tagesgruppe** dieses
+        Todos geht ohne Text nicht in den Export. Der Stoppdialog sagt das seit
+        jeher und der Stopp-Toast warnt danach noch einmal; die Buchung von Hand
+        sagte bis T-118 weder das eine noch das andere. Sie ist der Weg, auf dem
+        Zeit **nachgetragen** wird, also der, auf dem eine Leistung am ehesten
+        vergessen wird.
+
+        Auch beim Ändern: Wer die Leistung hier leert, erzeugt denselben
+        Zustand. Ein Hinweis, der nur an einem der beiden Ausgänge stünde, wäre
+        derselbe Fehler eine Ebene tiefer.
+
+        Der Wortlaut steht in `lib/labels.ts` und nicht zweimal in der Ansicht.
+      */}
+      <p className="dialog__hint">{BILLING_NOTE_MAY_BE_EMPTY}</p>
     </FormDialog>
   );
 }

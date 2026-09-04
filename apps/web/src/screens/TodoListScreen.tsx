@@ -24,6 +24,7 @@ import { href, navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
+import { undoDoneAction } from "../app/undoDone";
 import { useAsync } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import { formatCount, plural } from "../lib/format";
@@ -212,12 +213,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                   : `Es verschwindet damit aus dieser Liste, solange erledigte ausgeblendet sind. ${unchanged}`,
                 movement,
               ),
-              action: {
-                label: "Rückgängig",
-                onSelect: () => {
-                  void clearTodoDone(todo.id).then(bump);
-                },
-              },
+              action: undoDoneAction(todo.id, todo.title, toasts, bump),
             });
           }
         })

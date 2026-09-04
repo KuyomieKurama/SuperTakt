@@ -215,6 +215,26 @@ export async function startTimer(
  * `before` trägt in beiden Fällen den echten Zustand von vorher, `completedAt`
  * eingeschlossen. Ein `null` an dieser Stelle machte beide Zustände gleich und
  * `leaves` für immer leer — die stille Rückabwicklung von E-056.
+ *
+ * ---------------------------------------------------------------------------
+ * Was diese Funktion **nicht** berichtet: das verdrängte Todo (O-AB)
+ * ---------------------------------------------------------------------------
+ *
+ * `bookedOnThisTodo` ist die Frage „lief der verdrängte Timer auf **diesem**
+ * Todo?". Lief er auf einem anderen, entsteht dort möglicherweise die erste
+ * abgeschlossene Buchung — jenes Todo bewegt sich also auch, und hier steht
+ * darüber nichts.
+ *
+ * Das ist entschieden und keine Lücke (T-115, Orchestrator in T-117): **Eine
+ * Antwort trägt eine Bewegung.** Zwei Bewegungen in einem `PoolMovement` wären
+ * nicht auseinanderzuhalten, weil die drei Listen Namen tragen und keine
+ * Kennung des Todos, zu dem sie gehören (E-058 Punkt 4). Ein zweites Feld
+ * daneben verlangte von jeder Oberfläche eine Fallunterscheidung für einen Weg,
+ * den die Hauptanwendung nicht geht: `TimerContext.confirmSwitch` stoppt und
+ * startet in zwei Aufrufen, und der Stopp trägt seinen eigenen Satz
+ * ({@link movementOfBooking}). Betroffen ist allein der direkte Aufruf mit
+ * `stopRunning: true`, und für ihn gilt derselbe Weg: erst stoppen, dann
+ * starten.
  */
 async function movementOfStart(
   unit: UnitOfWork,

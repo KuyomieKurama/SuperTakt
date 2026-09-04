@@ -57,7 +57,14 @@ import {
   describeNewTag,
   removePendingTagName,
 } from '../src/tags/new-name.ts';
-import { MAX_TITLE_CHARACTERS, prepareNote, suggestTitle } from '../src/office/mail.ts';
+import {
+  MAX_TAKEOVER_CHARACTERS,
+  MAX_TITLE_CHARACTERS,
+  prepareNote,
+  suggestTitle,
+} from '../src/office/mail.ts';
+import { HIDDEN_MARKER, dropHidden, hasHidden, visibleText } from '../src/text/hidden.ts';
+import { cutToCharacterBoundary } from '../src/text/cut.ts';
 
 // --- Prüflinge: die Add-in-Routen des lokalen Dienstes ---------------------
 // Bewusst über einen relativen Pfad und nicht über eine Paketabhängigkeit: Der
@@ -3644,6 +3651,405 @@ await checkAsync('T-114 Punkt 4: die Call-Nummer braucht keine zweite Wache', as
   assert.equal(angelegt.ok, false, 'die Route hat eine Call-Nummer mit Richtungszeichen angelegt');
   assert.equal(angelegt.details?.[0]?.field, 'callNumber');
   assert.equal(angelegt.details?.[0]?.code, 'forbidden_characters');
+});
+
+// ===========================================================================
+heading('17  Fremder Text in der Anzeige und der Schnitt auf ganze Zeichen (T-119)');
+// ===========================================================================
+
+/*
+ * Zwei Befunde aus dem Bericht zu T-114, beide dort bewusst nicht behoben.
+ *
+ * ---------------------------------------------------------------------------
+ * 1. Der rohe Betreff im Aufgabenbereich
+ * ---------------------------------------------------------------------------
+ *
+ * `TaskPane.tsx` zeigte Betreff und Absender roh an. Ein `U+202E` im Betreff
+ * dreht die Anzeige dieses Blocks um, ohne je durch eine Tür zu gehen — die
+ * Wache aus T-114 sitzt am Anlegen, nicht an der Anzeige.
+ *
+ * Das Gegenmittel, das T-114 vorgeschlagen hat, war `unicode-bidi: isolate`.
+ * **Es genügt allein nicht**, und das ist hier die Berichtigung: Eine
+ * Isolierung trennt den Block von seiner Umgebung; innerhalb des Blocks wirkt
+ * ein RLO weiter, denn der Bidi-Algorithmus verarbeitet die Zeichen im Inhalt.
+ * Es gehören zwei Dinge dazu, und dieser Abschnitt prüft beide:
+ *
+ *   - `<bdi>` und `unicode-bidi: isolate`  — schützt die Umgebung
+ *   - `visibleText` aus `src/text/hidden.ts` — nimmt dem Inhalt die Zeichen
+ *
+ * Nachweisbar ist hier nur das Zweite als Verhalten; für das Erste steht eine
+ * statische Prüfung, weil ein Aufgabenbereich in `.tsx` von Node nicht
+ * gerendert werden kann (die Typentfernung kennt kein JSX). Das ist gesagt und
+ * nicht verschwiegen.
+ *
+ * ---------------------------------------------------------------------------
+ * 2. Der Schnitt auf UTF-16-Einheiten
+ * ---------------------------------------------------------------------------
+ *
+ * `suggestTitle` schnitt bei 500 mit `slice` und konnte ein Emoji halbieren.
+ * Die stehengebliebene Hälfte ist kein wohlgeformter Text: Auf dem Weg durch
+ * UTF-8 — in die Datenbank und in den Export — wird sie zu `U+FFFD`.
+ *
+ * ---------------------------------------------------------------------------
+ * Und die Lehre aus Abschnitt 16
+ * ---------------------------------------------------------------------------
+ *
+ * Abschnitt 16 prüft gegen eine **abgeschriebene Liste** von 20 Zeichen. Das
+ * hat einen Fall durchgelassen: T-117 hat die Klasse an der Tür um `U+061C`,
+ * `U+200E` und `U+200F` erweitert, die Liste blieb bei 20, der Titelvorschlag
+ * ließ die drei stehen — und ein Betreff mit einer dieser Richtungsmarken führte
+ * wieder in die Sackgasse, die T-114 geschlossen hatte. Dieser Abschnitt fragt
+ * deshalb **die Tür selbst**: Er geht die ganze BMP durch und sammelt, was sie
+ * abweist. Eine Erweiterung wie die aus T-117 wird damit rot, ohne dass jemand
+ * daran denken muss.
+ */
+
+/**
+ * Jedes Zeichen der BMP, das die Add-in-Tür in einem Titel abweist — gefragt,
+ * nicht abgeschrieben.
+ *
+ * Ersatzstellen (`U+D800` bis `U+DFFF`) bleiben ausgespart: Einzeln stehen sie
+ * für kein Zeichen, und die Frage nach ihnen ist die des Schnitts weiter unten,
+ * nicht die der Zeichenklasse.
+ */
+const TUERKLASSE = [];
+for (let punkt = 0; punkt <= 0xffff; punkt += 1) {
+  if (punkt >= 0xd800 && punkt <= 0xdfff) continue;
+  const zeichen = String.fromCodePoint(punkt);
+  if (!nimmtAn(addinTuer, { title: `Wartung${zeichen}Nord` })) TUERKLASSE.push(punkt);
+}
+
+/** `U+0009` bis `U+000D` — abgewiesen, aber Leerraum und deshalb kein Ausfall. */
+const istLeerraum = (punkt) => punkt >= 0x0009 && punkt <= 0x000d;
+
+const alsName = (punkt) => `U+${punkt.toString(16).toUpperCase().padStart(4, '0')}`;
+
+check(`die Tür weist in der BMP ${String(TUERKLASSE.length)} Zeichen ab — gefragt, nicht abgeschrieben`, () => {
+  // Der Scan muss etwas gefunden haben, sonst prüft alles Folgende die leere
+  // Menge und ist grün, ohne etwas zu sagen.
+  assert.ok(TUERKLASSE.length > 50, `nur ${String(TUERKLASSE.length)} Zeichen — der Scan greift ins Leere`);
+
+  // Und er muss dieselbe Tür gefragt haben wie Abschnitt 16: Jedes dort von
+  // Hand aufgeschriebene Zeichen steht in der gemessenen Menge.
+  const fehlend = ABGEWIESENE_ZEICHEN.map(([punkt]) => punkt).filter(
+    (punkt) => !TUERKLASSE.includes(punkt),
+  );
+  assert.deepEqual(fehlend.map(alsName), [], 'Abschnitt 16 nennt ein Zeichen, das die Tür annimmt');
+});
+
+check('kein Titelvorschlag läuft in die Abweisung — für jedes Zeichen der Tür', () => {
+  /*
+   * Dieselbe Prüfung wie in Abschnitt 16, aber über die **gemessene** Menge
+   * statt über die abgeschriebene. Genau hier wäre T-117 aufgefallen.
+   */
+  const stehengeblieben = [];
+  for (const punkt of TUERKLASSE) {
+    const zeichen = String.fromCodePoint(punkt);
+    const vorschlag = suggestTitle(`AW: Störung${zeichen}Lüftung`);
+
+    if (!nimmtAn(addinTuer, { title: vorschlag })) {
+      stehengeblieben.push(`${alsName(punkt)}: die Add-in-Tür weist den Vorschlag ab`);
+      continue;
+    }
+    if (!nimmtAn(hauptTuer, { title: vorschlag })) {
+      stehengeblieben.push(`${alsName(punkt)}: die Haupttür weist den Vorschlag ab`);
+      continue;
+    }
+    if (vorschlag.includes(zeichen)) stehengeblieben.push(`${alsName(punkt)}: steht noch im Vorschlag`);
+    if (!vorschlag.startsWith('Störung')) stehengeblieben.push(`${alsName(punkt)}: „AW:" blieb stehen`);
+    if (!vorschlag.endsWith('Lüftung')) stehengeblieben.push(`${alsName(punkt)}: der Text danach fehlt`);
+    if (istLeerraum(punkt) && vorschlag !== 'Störung Lüftung') {
+      stehengeblieben.push(`${alsName(punkt)}: Leerraum wurde nicht zu einem Leerzeichen`);
+    }
+  }
+  assert.deepEqual(stehengeblieben, [], stehengeblieben.join('; '));
+});
+
+check('Gegenprobe: die Fassung vor T-119 wäre an drei Zeichen gescheitert', () => {
+  /*
+   * Ohne diese Zeile wäre „grün" nur die Aussage, dass die Prüfung nichts
+   * findet. Nachgebaut ist die Klasse aus T-114 — dieselbe Zeile, die bis
+   * heute in `office/mail.ts` stand.
+   */
+  // Als Escape-Folgen und nicht roh (T-112-H2): Ein rohes Richtungszeichen
+  // drehte ausgerechnet die Zeile um, die von ihm handelt.
+  // eslint-disable-next-line no-control-regex -- die alte Fassung, wörtlich
+  const alteKlasse = new RegExp(
+    '[\\u0000-\\u0008\\u000e-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]',
+    'gu',
+  );
+  const alterVorschlag = (betreff) =>
+    betreff
+      .replace(/^(?:(?:AW|WG|RE|FW|FWD|ANTW)\s*:\s*)+/i, '')
+      .replace(alteKlasse, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const durchgefallen = TUERKLASSE.filter(
+    (punkt) => !nimmtAn(addinTuer, { title: alterVorschlag(`AW: Störung${String.fromCodePoint(punkt)}Lüftung`) }),
+  );
+
+  assert.deepEqual(
+    durchgefallen.map(alsName),
+    ['U+061C', 'U+200E', 'U+200F'],
+    'die alte Fassung fiel an anderen Zeichen durch als den drei aus T-117',
+  );
+});
+
+check('die Anzeige trägt kein Zeichen mehr, das sie umordnen kann', () => {
+  const uebrig = [];
+  for (const punkt of TUERKLASSE) {
+    const zeichen = String.fromCodePoint(punkt);
+    const angezeigt = visibleText(`Rechnung${zeichen}gnp.exe`);
+
+    if (hasHidden(angezeigt)) uebrig.push(`${alsName(punkt)}: steht noch in der Anzeige`);
+    if (angezeigt.includes(zeichen) && !istLeerraum(punkt)) {
+      uebrig.push(`${alsName(punkt)}: unverändert durchgereicht`);
+    }
+    if (istLeerraum(punkt) && angezeigt !== 'Rechnung gnp.exe') {
+      uebrig.push(`${alsName(punkt)}: Leerraum wurde nicht zu einem Leerzeichen`);
+    }
+    if (!istLeerraum(punkt) && angezeigt !== `Rechnung${HIDDEN_MARKER}gnp.exe`) {
+      uebrig.push(`${alsName(punkt)}: keine Marke an der Stelle des Zeichens`);
+    }
+  }
+  assert.deepEqual(uebrig, [], uebrig.join('; '));
+});
+
+check('der Trick, um den es geht: „Rechnung<RLO>gnp.exe" ist als solcher zu sehen', () => {
+  const rlo = String.fromCodePoint(0x202e);
+  const betreff = `Rechnung${rlo}gnp.exe`;
+
+  // Roh trägt der Betreff das Zeichen — sonst prüfte die Zeile darunter nichts.
+  assert.equal(hasHidden(betreff), true, 'der Prüftext trägt gar kein Richtungszeichen');
+  assert.equal(hasHidden(visibleText(betreff)), false);
+  assert.equal(visibleText(betreff), `Rechnung${HIDDEN_MARKER}gnp.exe`);
+
+  // Und die Länge bleibt: Eine Marke steht **an der Stelle** des Zeichens und
+  // nicht anstelle des ganzen Textes.
+  assert.equal(visibleText(betreff).length, betreff.length);
+});
+
+check('die Marke ist eine Marke: sichtbar, stabil, nicht selbst betroffen', () => {
+  assert.equal(hasHidden(HIDDEN_MARKER), false, 'die Marke müsste sich selbst markieren');
+  const einmal = visibleText(`a${String.fromCodePoint(0x202e)}b`);
+  assert.equal(visibleText(einmal), einmal, 'zweimal angewandt kommt etwas anderes heraus');
+});
+
+check('harmloser Text bleibt harmloser Text — auch rechtsläufiger', () => {
+  /*
+   * Die zweite Hälfte, ohne die der Abschnitt nur belegte, dass irgendetwas
+   * verschwindet. Besonders wichtig ist die letzte Zeile: Arabische und
+   * hebräische Schrift ist **kein** Angriff. Sie zu entfernen oder zu markieren
+   * wäre eine Anzeige, die einen Teil ihrer Benutzer nicht mehr lesen kann; sie
+   * ordnet die Umgebung um, und dagegen steht die Isolierung, nicht diese
+   * Funktion.
+   */
+  for (const text of [
+    'Störung Lüftung — Halle 3',
+    'Übergabe „Nord" · 15 %',
+    `Wartung ${String.fromCodePoint(0x1f6e0)} fällig`,
+    `12${String.fromCodePoint(0x00a0)}°C`,
+    'مرحبا بالعالم',
+    'שלום עולם',
+  ]) {
+    assert.equal(visibleText(text), text, `verändert: ${text}`);
+  }
+});
+
+check('Anzeige und Vorschlag behandeln dieselbe Klasse verschieden — und beide vollständig', () => {
+  /*
+   * Eine Klasse, drei Behandlungen (`src/text/hidden.ts`): Die Tür weist ab,
+   * der Vorschlag lässt fallen, die Anzeige macht sichtbar. Die Zeile hält die
+   * beiden Fassungen des Add-ins gegeneinander, damit sie nicht auseinander
+   * laufen wie zuvor die Fassung des Add-ins und die der Tür.
+   */
+  const abweichungen = [];
+  for (const punkt of TUERKLASSE) {
+    if (istLeerraum(punkt)) continue;
+    const zeichen = String.fromCodePoint(punkt);
+    if (dropHidden(`a${zeichen}b`) !== 'ab') abweichungen.push(`${alsName(punkt)}: fällt nicht`);
+    if (visibleText(`a${zeichen}b`) !== `a${HIDDEN_MARKER}b`) {
+      abweichungen.push(`${alsName(punkt)}: wird nicht markiert`);
+    }
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+// ---------------------------------------------------------------------------
+// Was sich in Node nicht rendern lässt: die statischen Prüfungen
+// ---------------------------------------------------------------------------
+
+/**
+ * Die Dateien des Aufgabenbereichs ohne Kommentare.
+ *
+ * Ohne diesen Schritt fände die Prüfung ihre eigenen Begründungen: In den
+ * Kommentaren stehen die Zeilen, um die es geht, absichtlich ausgeschrieben.
+ */
+const ohneKommentare = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const paneDateien = ['TaskPane.tsx', 'DuplicateOffer.tsx', 'TagPicker.tsx', 'SettingsView.tsx'].map(
+  (name) => ({ name, text: ohneKommentare(readFileSync(path.join(srcRoot, 'ui', name), 'utf8')) }),
+);
+
+check('kein fremder Wert steht mehr roh im JSX', () => {
+  /*
+   * Diese Liste ist **kein** Vollständigkeitsbeweis — sie ist die Aufzählung
+   * aus dem Bericht zu T-119, in ausführbarer Form. Sie hält die Stellen zu,
+   * die es gab; eine neue Anzeigestelle unter neuem Namen fängt sie nicht. Das
+   * ist gesagt und nicht behauptet.
+   */
+  const fremdeWerte = [
+    'mail.subject',
+    'mail.senderName',
+    'mail.senderAddress',
+    'offer.title',
+    'booking.title',
+    'done.title',
+    'offer.tag.name',
+    'offer.name',
+    'tag.name',
+    'tag.folderLabel',
+    'result.raw',
+    'result.value',
+  ];
+
+  /*
+   * Gesucht wird die **Inhaltsstelle** und nicht jedes Vorkommen: `{x}` als
+   * Kind eines Elements setzt den Text in die Anzeige, `attribut={x}` reicht
+   * ihn an einen Baustein weiter — und `value={mail.subject}` ist ab jetzt
+   * genau die richtige Zeile. Der Rückblick auf `=` trennt beides.
+   */
+  const alsInhalt = (wert) => new RegExp(`(?<!=)\\{${wert.replace(/\./g, '\\.')}\\}`);
+
+  /*
+   * Und die zweite Form, in der genau der Befund aus T-119 dastand:
+   * `{mail.subject.length > 0 ? mail.subject : <em>ohne Betreff</em>}`. Der
+   * Wert steht hier nicht in einer eigenen Klammer, sondern als Zweig einer
+   * Bedingung — ohne diese Zeile bliebe die Fundstelle, um die es in dieser
+   * Aufgabe geht, von der Prüfung unberührt.
+   */
+  const alsZweig = (wert) => new RegExp(`\\?\\s*${wert.replace(/\./g, '\\.')}\\s*:`);
+
+  const gefunden = [];
+  for (const { name, text } of paneDateien) {
+    for (const wert of fremdeWerte) {
+      if (alsInhalt(wert).test(text)) gefunden.push(`${name}: {${wert}}`);
+      if (alsZweig(wert).test(text)) gefunden.push(`${name}: ? ${wert} :`);
+    }
+    // Eine Überschrift ist ebenfalls Anzeige, auch wenn sie als Attribut
+    // dasteht. Seit T-119 nimmt `Callout` dort einen Knoten entgegen.
+    if (text.includes('title={done.title}')) gefunden.push(`${name}: title={done.title}`);
+  }
+  assert.deepEqual(gefunden, [], gefunden.join('; '));
+});
+
+check('jede Fläche, die fremden Text zeigt, benutzt den Baustein dafür', () => {
+  const ohne = paneDateien.filter(({ text }) => !text.includes('Foreign')).map(({ name }) => name);
+  assert.deepEqual(ohne, [], `ohne <Foreign>: ${ohne.join(', ')}`);
+
+  const bausteine = readFileSync(path.join(srcRoot, 'ui', 'Primitives.tsx'), 'utf8');
+  assert.match(bausteine, /<bdi/, 'der Baustein rendert kein <bdi>');
+  assert.match(bausteine, /visibleText/, 'der Baustein bereinigt den Inhalt nicht');
+});
+
+check('die Isolierung steht in der Gestaltung und nicht nur im Bericht', () => {
+  const css = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8');
+  const ohneKommentar = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(
+    ohneKommentar,
+    /bdi\s*\{[^}]*unicode-bidi:\s*isolate/,
+    'keine Regel `bdi { unicode-bidi: isolate }` in addin.css',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Der Schnitt auf ganze Zeichen
+// ---------------------------------------------------------------------------
+
+/** Ein Werkzeug-Emoji: zwei UTF-16-Einheiten, außerhalb der BMP. */
+const EMOJI = String.fromCodePoint(0x1f6e0);
+
+/** Steht am Ende eine einzelne hohe Ersatzstelle? */
+const halbesZeichen = (text) => {
+  const letzte = text.charCodeAt(text.length - 1);
+  return letzte >= 0xd800 && letzte <= 0xdbff;
+};
+
+/** Übersteht der Text den Weg durch UTF-8 unverändert? */
+const wohlgeformt = (text) => Buffer.from(text, 'utf8').toString('utf8') === text;
+
+check('ein Betreff aus lauter Emoji wird an einer Zeichengrenze gekürzt', () => {
+  const vorschlag = suggestTitle(`a${EMOJI.repeat(400)}`);
+
+  assert.equal(halbesZeichen(vorschlag), false, 'am Ende steht eine halbe Ersatzstelle');
+  assert.equal(wohlgeformt(vorschlag), true, 'der Vorschlag übersteht UTF-8 nicht');
+  assert.ok(
+    vorschlag.length === MAX_TITLE_CHARACTERS || vorschlag.length === MAX_TITLE_CHARACTERS - 1,
+    `Länge ${String(vorschlag.length)} — der Schnitt kostet höchstens eine Einheit`,
+  );
+  assert.equal(nimmtAn(addinTuer, { title: vorschlag }), true, 'die Add-in-Tür nimmt ihn nicht an');
+  assert.equal(nimmtAn(hauptTuer, { title: vorschlag }), true, 'die Haupttür nimmt ihn nicht an');
+});
+
+check('derselbe Titel kommt aus Base64 zurück, wie er hineinging (A-8.4)', () => {
+  /*
+   * Die Folge, an der sich die halbe Ersatzstelle als Datenfehler zeigt und
+   * nicht als Schönheitsfehler: Der Export kodiert nach UTF-8 und dann nach
+   * Base64. Für eine einzelne Ersatzstelle gibt es keine UTF-8-Folge.
+   */
+  const vorschlag = suggestTitle(`a${EMOJI.repeat(400)}`);
+  assert.equal(fromBase64(toBase64(vorschlag)), vorschlag);
+});
+
+check('Gegenprobe: der Schnitt vor T-119 hinterließ eine halbe Ersatzstelle', () => {
+  // Die alte Zeile, wörtlich: `collapsed.slice(0, MAX_TITLE_CHARACTERS)`.
+  const alt = `a${EMOJI.repeat(400)}`.slice(0, MAX_TITLE_CHARACTERS);
+
+  assert.equal(halbesZeichen(alt), true, 'der nachgebaute alte Schnitt zerteilt gar nichts');
+  assert.equal(wohlgeformt(alt), false);
+  assert.notEqual(fromBase64(toBase64(alt)), alt, 'der alte Wert überstand den Weg durch Base64');
+  // Und die Tür hätte ihn angenommen: `z.string().max(500)` zählt Einheiten und
+  // sieht eine halbe Ersatzstelle nicht an. Die Prüfung gehört also hierher und
+  // nicht an die Tür.
+  assert.equal(nimmtAn(addinTuer, { title: alt }), true);
+});
+
+check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
+  /*
+   * Derselbe Befund eine Funktion weiter. `prepareNote` schneidet bei 4000,
+   * wenn in der zweiten Hälfte keine Zeilengrenze liegt — ein Textkörper aus
+   * Emoji ist genau dieser Fall. Der Vermerk geht in die Datenbank; was dort
+   * ankäme, wäre dann nicht, was im Feld stand.
+   */
+  const vermerk = prepareNote({
+    subject: 'Störung',
+    body: EMOJI.repeat(3000),
+    senderName: 'A. Beispiel',
+    senderAddress: 'a.beispiel@beispiel.invalid',
+    receivedAt: null,
+  });
+
+  assert.equal(wohlgeformt(vermerk), true, 'der Vermerk übersteht UTF-8 nicht');
+  assert.equal(fromBase64(toBase64(vermerk)), vermerk);
+  assert.ok(
+    vermerk.length <= MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length,
+    `Länge ${String(vermerk.length)} — mehr als der Deckel und der Hinweis`,
+  );
+});
+
+check('cutToCharacterBoundary kostet höchstens eine Einheit und nur, wenn es muss', () => {
+  // Unter dem Deckel wird nichts angefasst — auch kein Emoji am Ende.
+  assert.equal(cutToCharacterBoundary(`ab${EMOJI}`, 10), `ab${EMOJI}`);
+  // Genau auf der Grenze: das Paar bleibt ganz.
+  assert.equal(cutToCharacterBoundary(`ab${EMOJI}cd`, 4), `ab${EMOJI}`);
+  // Mitten im Paar: die Hälfte fällt, der Rest bleibt.
+  assert.equal(cutToCharacterBoundary(`ab${EMOJI}cd`, 3), 'ab');
+  // Zwischen zwei ganzen Zeichen: nichts fällt zusätzlich.
+  assert.equal(cutToCharacterBoundary('abcd', 3), 'abc');
+  // Ein leerer Deckel ist kein Sonderfall mit eigener Antwort.
+  assert.equal(cutToCharacterBoundary(`${EMOJI}`, 0), '');
 });
 
 // ===========================================================================

@@ -7,6 +7,9 @@
  * ohne laufendes Outlook prüfbar.
  */
 
+import { cutToCharacterBoundary } from '../text/cut.ts';
+import { dropHidden } from '../text/hidden.ts';
+
 /** Obergrenze für übernommenen Text (B-12.3 Punkt 3). */
 export const MAX_TAKEOVER_CHARACTERS = 4000;
 
@@ -27,49 +30,32 @@ export const MAX_TAKEOVER_CHARACTERS = 4000;
  */
 export const MAX_TITLE_CHARACTERS = 500;
 
-/**
- * Zeichen, die aus einem übernommenen Betreff **fallen** (T-114, Befund
- * T-112-1).
+/*
+ * Die Zeichen, die aus einem übernommenen Betreff **fallen**, standen bis T-119
+ * hier als eigener Ausdruck (`DROPPED_FROM_SUBJECT`, T-114).
  *
- * ---------------------------------------------------------------------------
- * Warum das Add-in sie entfernt, obwohl der Dienst sie abweist
- * ---------------------------------------------------------------------------
+ * Sie stehen jetzt in `../text/hidden.ts`, und zwar aus dem Grund, an dem diese
+ * Zeile beinahe gescheitert wäre: **Sie ist auseinandergelaufen.** T-117 hat
+ * die Klasse an der Tür des Dienstes um `U+061C`, `U+200E` und `U+200F`
+ * erweitert, der Ausdruck hier bekam es nicht mit — und ein Betreff mit einer
+ * dieser drei Richtungsmarken ergab wieder genau die Sackgasse, die T-114
+ * geschlossen hatte: ein 422 auf einem Feld, an dem nichts Falsches zu sehen
+ * ist. Der Nachweispfad hat es nicht bemerkt, weil er die Klasse mit einer
+ * **Liste abgeschriebener Zeichen** geprüft hat statt mit der Tür selbst.
  *
- * Seit T-114 weist `POST /addin/todos` Steuerzeichen (C0, C1) und die
- * bidirektionalen Formatierungszeichen ab — dieselbe Prüfung wie an der
- * Hauptanwendung, und das ist die maßgebliche. Diese Zeile hier ersetzt sie
- * nicht; sie sorgt dafür, dass der Benutzer nie in sie hineinläuft.
+ * Beides ist mit T-119 anders:
  *
- * Der Unterschied liegt in der Herkunft des Textes. `http/input.ts` begründet
- * ausführlich, warum ein Name **abgewiesen** und nicht bereinigt wird: Ein
- * stilles Entfernen änderte, was der Benutzer eingegeben hat, und er erführe
- * es nicht. Der Titelvorschlag ist aber nichts, was der Benutzer eingegeben
- * hat — er ist ein **Vorschlag aus fremder Quelle**, den er vor dem Absenden
- * in einem Eingabefeld sieht und ändern kann. Ihn zu bereinigen ändert keine
- * Eingabe; ihn stehen zu lassen führte in eine Sackgasse: Eine E-Mail mit
- * einem unsichtbaren Zeichen im Betreff ergäbe ein 422 auf einem Feld, an dem
- * nichts Falsches zu sehen ist, und der einzige Ausweg wäre, den ganzen Titel
- * neu zu tippen.
+ *  - Eine Fassung im Add-in (`text/hidden.ts`), die der Titelvorschlag und die
+ *    Anzeige teilen.
+ *  - Abschnitt 17 des Nachweispfads **fragt die Tür ab** — er geht die ganze
+ *    BMP durch und hält jedes dort abgewiesene Zeichen gegen diese Fassung.
+ *    Eine Erweiterung wie die aus T-117 wird damit rot und nicht übersehen.
  *
- * Was ein Benutzer selbst tippt oder einfügt, geht unverändert an den Dienst
- * und wird dort abgewiesen — mit der Meldung an dem Feld, in dem es passiert
- * ist. Diese Zeile fasst es nicht an.
- *
- * ---------------------------------------------------------------------------
- * Warum `U+0009` bis `U+000D` **nicht** in dieser Menge stehen
- * ---------------------------------------------------------------------------
- *
- * Sie sind Leerraum. Der Dienst weist sie ab, weil sie zu C0 gehören; hier
- * werden sie eine Zeile weiter unten von `\s+` zu einem Leerzeichen — aus
- * „Störung\tLüftung" wird „Störung Lüftung" und nicht „StörungLüftung". Sie
- * ersatzlos zu streichen klebte zwei Wörter zusammen.
- *
- * Der Nachweispfad prüft nicht, ob diese Menge der des Dienstes gleicht,
- * sondern das, worauf es ankommt: dass **jedes** vom Dienst abgewiesene
- * Zeichen einen Vorschlag ergibt, den der Dienst annimmt.
+ * Warum überhaupt entfernt wird, obwohl der Dienst abweist, steht unverändert
+ * in `text/hidden.ts`: Der Titelvorschlag ist keine Eingabe des Benutzers,
+ * sondern ein Vorschlag aus fremder Quelle. Was der Benutzer selbst tippt oder
+ * einfügt, geht unverändert an den Dienst und wird dort abgewiesen.
  */
-// eslint-disable-next-line no-control-regex -- genau darum geht es hier
-const DROPPED_FROM_SUBJECT = /[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 
 export interface MailFacts {
   readonly subject: string;
@@ -99,21 +85,27 @@ export const EMPTY_MAIL: MailFacts = Object.freeze({
  * und fällt damit nicht unter B-4.1. Er hat keine verschachtelten Quantoren:
  * Die äußere Wiederholung steht über einer Alternative fester Wörter.
  *
- * Seit T-114 fallen außerdem die Zeichen aus {@link DROPPED_FROM_SUBJECT}
- * heraus, und der Vorschlag endet bei {@link MAX_TITLE_CHARACTERS} statt bei
- * 512. Beides aus demselben Grund: Was hier herauskommt, steht als Vorschlag im
- * Titelfeld — und ein Vorschlag, den der Dienst abweist, ist eine Sackgasse mit
- * einer Fehlermeldung an einem Feld, an dem nichts Falsches zu sehen ist.
+ * Seit T-114 fallen außerdem die unsichtbaren Zeichen heraus ({@link dropHidden}),
+ * und der Vorschlag endet bei {@link MAX_TITLE_CHARACTERS} statt bei 512. Beides
+ * aus demselben Grund: Was hier herauskommt, steht als Vorschlag im Titelfeld —
+ * und ein Vorschlag, den der Dienst abweist, ist eine Sackgasse mit einer
+ * Fehlermeldung an einem Feld, an dem nichts Falsches zu sehen ist.
  *
  * Die Reihenfolge ist nicht beliebig. Erst fallen die unsichtbaren Zeichen,
  * dann wird Leerraum zusammengezogen: Ein `U+0000` zwischen zwei Leerzeichen
  * ließe sonst zwei Leerzeichen zurück.
+ *
+ * **Der Schnitt am Ende trifft seit T-119 eine Zeichengrenze** und nicht mehr
+ * eine UTF-16-Einheit. Bis dahin konnte er ein Emoji halbieren und eine
+ * einzelne Ersatzstelle hinterlassen — keinen Buchstaben, sondern eine Hälfte
+ * davon, die auf dem Weg durch UTF-8 zu `U+FFFD` wird. Warum trotzdem in
+ * UTF-16-Einheiten gezählt wird, steht in `../text/cut.ts`: Die Tür zählt so.
  */
 export const suggestTitle = (subject: string): string => {
   const withoutPrefixes = subject.replace(/^(?:(?:AW|WG|RE|FW|FWD|ANTW)\s*:\s*)+/i, '');
-  const visible = withoutPrefixes.replace(DROPPED_FROM_SUBJECT, '');
+  const visible = dropHidden(withoutPrefixes);
   const collapsed = visible.replace(/\s+/g, ' ').trim();
-  return collapsed.length > MAX_TITLE_CHARACTERS ? collapsed.slice(0, MAX_TITLE_CHARACTERS) : collapsed;
+  return cutToCharacterBoundary(collapsed, MAX_TITLE_CHARACTERS);
 };
 
 /**
@@ -126,6 +118,21 @@ export const suggestTitle = (subject: string): string => {
  * Gekürzt wird auf 4000 Zeichen, und an einer Zeilengrenze, damit kein Satz
  * mitten im Wort abbricht. Leerzeilenfolgen fallen zusammen — ein Zitatverlauf
  * besteht zur Hälfte daraus.
+ *
+ * Findet sich keine Zeilengrenze in der zweiten Hälfte, bleibt der harte
+ * Schnitt — und der trifft seit T-119 eine Zeichengrenze. Es ist derselbe
+ * Befund wie bei {@link suggestTitle}, an derselben Art Zeile: Ein Text aus
+ * Emoji ergab hier einen Vermerk mit einer einzelnen Ersatzstelle am Ende,
+ * gemessen an Stelle 4000. Der Vermerk geht in die Datenbank; was dort ankommt,
+ * war dann nicht, was im Feld stand.
+ *
+ * Der **Inhalt** wird dagegen bewusst nicht angetastet: Anders als der Titel
+ * ist der Vermerk ein Freitextfeld, das der Dienst so annimmt, wie es kommt
+ * (T-114 Punkt 4). Er trägt den Text der E-Mail, und ein Text, aus dem
+ * unbemerkt Zeichen fehlen, wäre ein schlechterer Vermerk als einer mit ihnen.
+ * Was das für die **Anzeige** dieses Feldes bedeutet, steht im Bericht zu
+ * T-119: Ein Eingabefeld ist der eine Ort, an dem der Aufgabenbereich fremden
+ * Text unverändert zeigt.
  */
 export const prepareNote = (mail: MailFacts): string => {
   const head =
@@ -138,7 +145,7 @@ export const prepareNote = (mail: MailFacts): string => {
 
   if (combined.length <= MAX_TAKEOVER_CHARACTERS) return combined;
 
-  const cut = combined.slice(0, MAX_TAKEOVER_CHARACTERS);
+  const cut = cutToCharacterBoundary(combined, MAX_TAKEOVER_CHARACTERS);
   const lastBreak = cut.lastIndexOf('\n');
   const trimmed = lastBreak > MAX_TAKEOVER_CHARACTERS / 2 ? cut.slice(0, lastBreak) : cut;
   return `${trimmed}\n…(gekürzt)`;

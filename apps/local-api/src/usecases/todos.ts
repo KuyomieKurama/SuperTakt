@@ -334,7 +334,24 @@ async function switchTodoDone(
   });
 }
 
-/** A-2.4 — erledigt setzen. Die Kanban-Spalte bleibt (E-023), die Pools nicht (E-060). */
+/**
+ * A-2.4 — Erledigt setzen.
+ *
+ * **Der Status bleibt** (E-023): Erledigt und Status sind zwei Achsen, und das
+ * Erledigen hat den Status nie verändert. `markDone` schreibt allein
+ * `completed_at`.
+ *
+ * **Die Kanban-Spalte bleibt deshalb nicht.** Bis T-117 stand hier das
+ * Gegenteil — ein Einzeiler an derselben Funktion, die es ausrechnet. Seit
+ * E-054 ist eine Spalte eine Regel und seit E-055 darf diese Regel nach
+ * „Erledigt" fragen: Das Setzen nimmt das Todo aus jeder Spalte mit
+ * `completion: 'open'` heraus und trägt es in jede mit `completion: 'done'`
+ * ein. `switchTodoDone` rechnet genau das, über `list('all')` und damit über
+ * reine Board-Spalten mit, und gibt es als `poolMovement` heraus (E-060).
+ * Dieselbe Richtigstellung steht seit T-101 am Schreibpfad
+ * (`packages/storage/src/sqlite/repo-todos.ts`, `markDone`); hier war sie
+ * stehengeblieben (R-2a W-3, T-115).
+ */
 export function markTodoDone(
   context: AppContext,
   id: TodoId,

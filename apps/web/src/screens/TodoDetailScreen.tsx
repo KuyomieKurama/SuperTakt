@@ -27,6 +27,7 @@ import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
+import { undoDoneAction } from "../app/undoDone";
 import { useAsync, useMutation } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import {
@@ -161,6 +162,13 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
               "Der Status bleibt unverändert — Erledigt und Status sind zwei getrennte Größen.",
               doneMovementSentence(result.poolMovement, done),
             ),
+            /*
+              Der Rückweg, seit T-118 an allen drei Flächen (B-7 aus T-116).
+              `done` ist hier der Zustand **vor** der Handlung: Wenn er wahr
+              war, hat der Benutzer gerade wieder geöffnet — das ist selbst
+              schon eine Rücknahme und braucht keine zweite.
+            */
+            ...(done ? {} : { action: undoDoneAction(todoId, title, toasts, bump) }),
           });
         })
         .catch((cause: unknown) =>

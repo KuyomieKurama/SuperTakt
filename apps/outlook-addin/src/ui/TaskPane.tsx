@@ -20,7 +20,7 @@
  * fremden E-Mail einfließt (B-12.3).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 /*
  * Der Satz über die Bewegung kommt seit T-092 aus der Domäne und nicht mehr aus
@@ -44,7 +44,9 @@ import {
 import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
 import type { ApiClient, ApiFailure } from '../api/client.ts';
 import type { AddinContextDto } from '../api/types.ts';
-import { Button, Callout, Field, Section, Skeleton } from './Primitives.tsx';
+import { cutToCharacterBoundary } from '../text/cut.ts';
+import { visibleText } from '../text/hidden.ts';
+import { Button, Callout, Field, Foreign, Section, Skeleton } from './Primitives.tsx';
 import { DuplicateOffer } from './DuplicateOffer.tsx';
 import { TagPicker } from './TagPicker.tsx';
 
@@ -359,14 +361,26 @@ export function TaskPane({
   return (
     <div className="pane">
       <Section title="Aus dieser E-Mail">
+        {/*
+          T-119: Diese drei Werte sind der fremdeste Text im ganzen Add-in — sie
+          stammen unmittelbar aus einer E-Mail, die jemand geschickt hat (A-06),
+          und sie gehen durch keine Tür, bevor sie hier stehen. Bis T-119 standen
+          sie roh im Bereich: Ein `U+202E` im Betreff drehte die Anzeige um, und
+          „Rechnung<RLO>gnp.exe" las sich als „Rechnung exe.png".
+        */}
         <dl className="mailfacts">
           <dt>Betreff</dt>
-          <dd>{mail.subject.length > 0 ? mail.subject : <em>ohne Betreff</em>}</dd>
+          <dd>{mail.subject.length > 0 ? <Foreign value={mail.subject} /> : <em>ohne Betreff</em>}</dd>
           <dt>Von</dt>
           <dd>
-            {mail.senderName.length > 0 ? mail.senderName : <em>unbekannt</em>}
+            {mail.senderName.length > 0 ? <Foreign value={mail.senderName} /> : <em>unbekannt</em>}
             {mail.senderAddress.length > 0 ? (
-              <span className="mailfacts__address"> &lt;{mail.senderAddress}&gt;</span>
+              <span className="mailfacts__address">
+                {' '}
+                &lt;
+                <Foreign value={mail.senderAddress} />
+                &gt;
+              </span>
             ) : null}
           </dd>
         </dl>
@@ -518,9 +532,17 @@ export function TaskPane({
             </Button>
           }
         >
-          {/* R-15: Titel und Call-Nummer stehen unmittelbar über der Schaltfläche. */}
+          {/*
+            R-15: Titel und Call-Nummer stehen unmittelbar über der Schaltfläche.
+
+            Der Titel kommt aus dem Bestand und ist damit fremder Text (T-119).
+            Die Call-Nummer nicht: Sie hat `checkCallNumber` passiert, und deren
+            Vorrat (`A-Z a-z 0-9 . _ / -`) ist geschlossen — ein Richtungszeichen
+            kann darin nicht vorkommen. Die `summary` daneben schreibt der
+            Aufgabenbereich selbst aus Zahlen.
+          */}
           <div className="offer__confirm">
-            <span className="offer__title">{booking.title}</span>
+            <Foreign className="offer__title" value={booking.title} />
             <span className="badge badge--call mono">{booking.callNumber}</span>
             <p className="offer__meta">{booking.summary}</p>
           </div>
@@ -610,7 +632,14 @@ export function TaskPane({
                 Wirkungen. Der Knopf ist das Letzte, was gelesen wird — was er
                 auslöst, gehört auf ihn und nicht nur darüber.
               */}
-              {String(minutes)} Minuten auf „{booking.title}“ buchen
+              {/*
+                T-119: Der Titel steht **in** dieser Beschriftung, und das ist
+                die Stelle, an der die Isolierung mehr ist als Sorgfalt. Ohne
+                sie ordnet ein Titel aus rechtsläufiger Schrift den Rest des
+                Satzes um — „und es wieder öffnen" landete vor dem Titel, und
+                der Knopf verspräche etwas anderes, als er tut.
+              */}
+              {String(minutes)} Minuten auf „<Foreign value={booking.title} />“ buchen
               {booking.isDone ? ' und es wieder öffnen' : ''}
             </Button>
           </div>
@@ -826,13 +855,21 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
       {done.kind === 'booked' && done.reopened ? (
         <>
           <ReopenAnnouncement
-            notice={reopenOutcome(done.title, done.minutes, done.movement)}
+            /*
+              T-119: `reopenOutcome` setzt den Titel in einen Satz („Gebucht.
+              „X" ist wieder offen."). Ein Satz ist eine Zeichenkette, und in
+              eine Zeichenkette lässt sich kein `<bdi>` legen — hier bleibt das
+              Bereinigen. Es nimmt dem Titel die Zeichen, die den Satz umdrehen
+              könnten; die Stellung rechtsläufiger Schrift im Satz bleibt dem
+              Bidi-Algorithmus überlassen.
+            */
+            notice={reopenOutcome(visibleText(done.title), done.minutes, done.movement)}
             tone="success"
           />
           <p className="pane-note">Gerundet wird beim Export, auf die Tagessumme.</p>
         </>
       ) : (
-        <Callout tone="success" title={done.title}>
+        <Callout tone="success" title={<Foreign value={done.title} />}>
           {done.kind === 'created' ? (
             <>
               Das Todo ist in Takt angelegt.
@@ -849,8 +886,19 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
               {done.createdTagNames.length > 0 ? (
                 <p className="pane-note">
                   {done.createdTagNames.length === 1 ? 'Neues Tag: ' : 'Neue Tags: '}
-                  {done.createdTagNames.map((name) => `„${name}“`).join(', ')} — ab jetzt auch in
-                  Takt auswählbar.
+                  {/*
+                    T-119: je Name ein eigener isolierter Knoten. Als
+                    zusammengefügte Zeichenkette (`join(', ')`) konnte ein Name
+                    die Aufzählung umordnen — und in einer Liste von Namen ist
+                    „welcher gehört zu welchem Komma" genau die Frage, die
+                    niemand nachprüft.
+                  */}
+                  {done.createdTagNames.map((name, index) => (
+                    <Fragment key={name}>
+                      {index > 0 ? ', ' : ''}„<Foreign value={name} />“
+                    </Fragment>
+                  ))}{' '}
+                  — ab jetzt auch in Takt auswählbar.
                 </p>
               ) : null}
             </>
@@ -911,7 +959,14 @@ function describeDetection(detection: Detection | null): DetectionLine {
         help: REJECTION_LABEL[detection.reason],
         callout: (
           <Callout tone="warning" title="Gefunden, aber nicht übernommen">
-            Der Ausdruck hat <span className="mono">{clip(detection.raw)}</span> geliefert.{' '}
+            {/*
+              T-119: `detection.raw` ist ein Stück aus dem Betreff oder dem Text
+              der E-Mail — fremder Text, unmittelbar und ungeprüft, denn er ist
+              gerade deshalb hier, weil er **keine** Call-Nummer ist. Er steht
+              mitten in einem deutschen Satz; ohne Isolierung zöge er den Rest
+              des Satzes mit.
+            */}
+            Der Ausdruck hat <Foreign className="mono" value={clip(detection.raw)} /> geliefert.{' '}
             {REJECTION_LABEL[detection.reason]}
           </Callout>
         ),
@@ -951,8 +1006,17 @@ function describeDetection(detection: Detection | null): DetectionLine {
   }
 }
 
-/** Zeigt höchstens 40 Zeichen eines Rohwerts aus einer fremden E-Mail. */
-const clip = (value: string): string => (value.length <= 40 ? value : `${value.slice(0, 40)}…`);
+/**
+ * Zeigt höchstens 40 Zeichen eines Rohwerts aus einer fremden E-Mail.
+ *
+ * Der Schnitt läuft seit T-119 über `cutToCharacterBoundary` und nicht mehr
+ * über `slice`: Derselbe Fehler wie im Titelvorschlag, nur eine Stelle weiter —
+ * ein Emoji an Position 40 wurde halbiert, und die stehengebliebene Hälfte
+ * zeigte der Bereich als `U+FFFD`. Hier ginge davon nichts verloren, aber die
+ * Anzeige behauptete ein Zeichen, das der Ausdruck nie geliefert hat.
+ */
+const clip = (value: string): string =>
+  value.length <= 40 ? value : `${cutToCharacterBoundary(value, 40)}…`;
 
 /** `YYYY-MM-DDTHH:MM:SSZ` — die Form, die die Domäne führt. */
 const toTimestamp = (date: Date): string => `${date.toISOString().slice(0, 19)}Z`;

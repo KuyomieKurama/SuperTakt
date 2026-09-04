@@ -54,7 +54,8 @@ import {
   type NewTagOffer,
 } from '../tags/new-name.ts';
 import type { TagTreeDto } from '../api/types.ts';
-import { Chip } from './Primitives.tsx';
+import { visibleText } from '../text/hidden.ts';
+import { Chip, Foreign } from './Primitives.tsx';
 
 interface TagPickerProps {
   readonly tree: TagTreeDto;
@@ -145,7 +146,9 @@ export function TagPicker({
             key={`new-${name}`}
             label={name}
             tone="new-tag"
-            removeLabel={`Neues Tag „${name}“ verwerfen`}
+            // Ein `aria-label` ist ein Attribut: bereinigen, isolieren
+            // geht hier nicht (T-119).
+            removeLabel={`Neues Tag „${visibleText(name)}“ verwerfen`}
             onRemove={() => {
               onNewNamesChange(removePendingTagName(newNames, name));
             }}
@@ -266,18 +269,18 @@ function NewTagLine({
     case 'pending':
       return (
         <p className="tagpicker__hint" role="status">
-          „{offer.name}“ steht schon oben als neues Tag.
+          „<Foreign value={offer.name} />“ steht schon oben als neues Tag.
         </p>
       );
 
     case 'exists': {
-      const pfad = offer.tag.folderLabel.length > 0 ? `${offer.tag.folderLabel} › ` : '';
+      const pfad = offer.tag.folderLabel.length > 0 ? `${visibleText(offer.tag.folderLabel)} › ` : '';
 
       if (alreadyChosen) {
         return (
           <p className="tagpicker__hint" role="status">
             Gibt es schon und ist gewählt: {pfad}
-            {offer.tag.name}.
+            <Foreign value={offer.tag.name} />.
           </p>
         );
       }
@@ -293,7 +296,7 @@ function NewTagLine({
             }}
           >
             {pfad}
-            {offer.tag.name}
+            <Foreign value={offer.tag.name} />
           </button>{' '}
           — auswählen statt neu anlegen.
         </p>
@@ -313,7 +316,7 @@ function NewTagLine({
             +
           </span>
           <span className="tagpicker__create-text">
-            Neues Tag „{offer.name}“ — entsteht beim Anlegen des Todos
+            Neues Tag „<Foreign value={offer.name} />“ — entsteht beim Anlegen des Todos
           </span>
         </button>
       );
@@ -346,15 +349,18 @@ function TagRow({
         />
         <span className="tagrow__text">
           {tag.folderLabel.length > 0 ? (
-            <span className="tagrow__path" title={tag.folderLabel}>
-              {tag.folderLabel}
+            /* T-119: Der Kurzhinweis bleibt — er trägt den Pfad, wenn ihn die
+               Spalte abschneidet. Ein `title` ist ein Attribut, dort bleibt nur
+               das Bereinigen. */
+            <span className="tagrow__path" title={visibleText(tag.folderLabel)}>
+              <Foreign value={tag.folderLabel} />
             </span>
           ) : null}
           <span className="tagrow__name">
             {tag.color !== null ? (
               <span className="tagrow__dot" style={{ backgroundColor: tag.color }} aria-hidden="true" />
             ) : null}
-            {tag.name}
+            <Foreign value={tag.name} />
           </span>
         </span>
         {locked ? <span className="tagrow__lock">Standard</span> : null}

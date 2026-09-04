@@ -28,7 +28,7 @@ import {
   formatQuarters,
   formatStopwatch,
 } from "../lib/format";
-import { reactivationTitle } from "../lib/labels";
+import { BILLING_NOTE_MAY_BE_EMPTY, reactivationTitle } from "../lib/labels";
 import { bookingSentence, doneMovementSentence, withMovement } from "../lib/movement";
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
@@ -539,6 +539,37 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
    * sie kommen zeichengleich aus `@takt/domain`, an ihnen ist nichts zu
    * ändern. Der Bezug steht deshalb im **Rahmen**, im Titel der Meldung, und
    * damit hat jedes „Es" wieder eines, worauf es zeigt.
+   *
+   * ## Warum der Dialog zwischen den beiden Schritten schließt (B-1 aus T-116)
+   *
+   * Bis T-118 stand `setConflict(null)` **hinter** dem Start. Zwischen der
+   * Stopp-Meldung und dem Schließen des Dialogs lag damit ein **Netzumlauf**,
+   * und seit T-110 tritt der Meldungsstapel hinter die Abdunklung, solange ein
+   * Dialog steht (`body:has(.scrim) .toast-layer`). Die Meldung „Zeit gebucht
+   * auf „X“." entstand also abgedunkelt, mit `pointer-events: none`, außerhalb
+   * des `aria-modal="true"` — und ihre Achtsekundenfrist lief dabei. Sie ist
+   * die **einzige** Bestätigung dafür, daß die Zeit des verdrängten Timers
+   * gebucht wurde; A-6.8 macht das Verdrängen zu einer Handlung, die der
+   * Benutzer ausdrücklich bestätigt, also schuldet sie ihm eine Auskunft, die
+   * er auch lesen kann.
+   *
+   * Jetzt liegt das Schließen im selben Zustandsschritt wie die Meldung: Nach
+   * `await performStop(...)` folgt `setConflict(null)` ohne dazwischenliegenden
+   * Netzumlauf, beide Zustandsänderungen fallen in dieselbe Zeichnung. Damit
+   * ist diese Stelle so geordnet wie alle übrigen Aufrufstellen (geprüft in
+   * T-116, Abschnitt 3.1).
+   *
+   * ## Der Preis, und warum er der richtige ist
+   *
+   * Ein Start, der **danach** scheitert, kann seinen Fehler nicht mehr im
+   * Dialog zeigen — den gibt es dann nicht mehr. Er geht in eine Meldung, und
+   * die sagt zuerst, was gilt: **Gebucht ist gebucht.** Der Stopp *ist*
+   * geschehen, und ihn hinter einer Fehlerzeile im Dialog verschwinden zu
+   * lassen, wäre die unehrlichere Auskunft.
+   *
+   * Der Fehler des **Stopps** bleibt dagegen im Dialog: Bis dahin hat sich
+   * nichts geändert, kein Timer ist beendet, und der Dialog ist die Stelle, an
+   * der der Benutzer eben „Wechseln" gedrückt hat.
    */
   const confirmSwitch = useCallback(() => {
     const pending = conflict;
@@ -546,14 +577,36 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     setBusy(true);
     setDialogError(null);
     void (async () => {
+      /* Schritt 1 — der Stopp. Sein Fehler gehört noch in den Dialog. */
       try {
         await performStop(conflictNote);
+      } catch (cause) {
+        setDialogError(errorMessage(cause));
+        setBusy(false);
+        return;
+      }
+
+      /*
+        Schritt 2 — schließen, im selben Zustandsschritt wie die Meldung aus
+        `performStop`. Zwischen beiden liegt kein `await`, also keine
+        Zeichnung, in der die Meldung hinter der Abdunklung stünde.
+      */
+      setConflict(null);
+      setBusy(false);
+
+      /* Schritt 3 — der Start. Ab hier meldet nur noch der Stapel. */
+      const failed = (detail: string) => {
+        toasts.failure(
+          `Gebucht, aber der Timer auf „${pending.todoTitle}“ ließ sich nicht starten`,
+          `Die Zeit des vorigen Timers ist gebucht — daran ändert das nichts. ${detail}`,
+        );
+      };
+      try {
         const result = await startTimer(pending.todoId, false);
         if (result.kind === "confirmation_required") {
-          setDialogError("Es läuft weiterhin ein Timer. Bitte versuchen Sie es erneut.");
+          failed("Es läuft weiterhin ein Timer. Bitte starten Sie erneut.");
           return;
         }
-        setConflict(null);
         announceStart(
           pending.todoId,
           pending.todoTitle,
@@ -561,12 +614,10 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           result.poolMovement,
         );
       } catch (cause) {
-        setDialogError(errorMessage(cause));
-      } finally {
-        setBusy(false);
+        failed(errorMessage(cause));
       }
     })();
-  }, [announceStart, conflict, conflictNote, performStop]);
+  }, [announceStart, conflict, conflictNote, performStop, toasts]);
 
   /* ---------------------------------------------------------------- */
   /* E-036 — die verwaiste Buchung                                     */
@@ -707,11 +758,12 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           maxLength={8192}
           placeholder="Was wurde geleistet?"
         />
-        <p className="dialog__hint">
-          Die Leistung darf leer bleiben. Dann ist die Buchung erfasst, aber die Tagesgruppe
-          dieses Todos geht ohne Text nicht in den Export — die Exportvorschau sagt es
-          und bietet an, den Text nachzutragen.
-        </p>
+        {/*
+          Derselbe Satz steht seit T-118 auch im Dialog „Zeit von Hand
+          erfassen" (B-4). Er kommt aus `lib/labels.ts`, damit es ihn genau
+          einmal gibt.
+        */}
+        <p className="dialog__hint">{BILLING_NOTE_MAY_BE_EMPTY}</p>
       </FormDialog>
 
       <FormDialog

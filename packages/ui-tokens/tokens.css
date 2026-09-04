@@ -364,7 +364,7 @@
   --z-base: 0;
   --z-sticky: 10; /* Tabellenkopf, Werkzeugleiste */
   --z-dropdown: 100; /* Auswahlliste, Kontextmenue im Seitenfluss */
-  --z-drag: 200; /* Karte am Zeiger */
+  --z-drag: 200; /* gezogenes Element; seit E-054 keine Karte, siehe --shadow-drag */
   --z-scrim: 300;
   --z-dialog: 310;
   /*

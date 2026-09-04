@@ -419,19 +419,28 @@ export function StatusSettings() {
           Dort steht deshalb nur die Meldung des Dienstes — sie nennt seit
           T-097 die Regeln beim Namen und sagt selbst, was zu tun ist.
         */
-        consequence={
-          removeError === null ? (
-            "Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
-          ) : removeRules.length > 0 ? (
-            removeError
-          ) : (
-            <>
-              {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo dazugekommen.
-              Schließen Sie diesen Dialog: Die Zeile nennt jetzt, wie viele es sind, und führt zu
-              ihnen.
-            </>
-          )
-        }
+        consequence="Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
+        {...(removeError === null
+          ? {}
+          : {
+              /*
+                Die Absage geht seit T-118 in `refusal` und nicht mehr in
+                `consequence` (B-5 aus T-116, SC 4.1.3): Dort lag sie in
+                `aria-describedby` und wurde einer Vorlesehilfe nie angesagt.
+                Die drei Fassungen bleiben, sie stehen nur eine Eigenschaft
+                weiter.
+              */
+              refusal:
+                removeRules.length > 0 ? (
+                  removeError
+                ) : (
+                  <>
+                    {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo
+                    dazugekommen. Schließen Sie diesen Dialog: Die Zeile nennt jetzt, wie viele es
+                    sind, und führt zu ihnen.
+                  </>
+                ),
+            })}
         confirmLabel={removeError === null ? "Status löschen" : "Erneut versuchen"}
         cancelLabel={removeError === null ? "Abbrechen" : "Schließen"}
         busy={removeBusy}

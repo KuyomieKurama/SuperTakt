@@ -124,14 +124,24 @@ E-054 kann derselbe Name eine Kanban-Spalte bezeichnen, einen Pool oder bei `pla
 beides. Eine Funktion, die das Gattungswort setzt, rät. Der Satz ohne jeden Treffer nennt
 folgerichtig **beide** Flächen: „… es erscheint danach in keinem Pool und in keiner Spalte."
 
-**Drei Vorgänge liefern die Bewegung**, nicht einer (E-058 Punkt 6, T-093): `POST /timer/start`,
-`POST /timer/stop` und `POST /timer/orphaned/resolve`, jeweils als `poolMovement` oder `null`.
-Der Start ist dabei der Sonderweg — er lässt die erste abgeschlossene Buchung nur entstehen, wenn
-er einen Timer desselben Todos verdrängt. Der Regelweg ist der Stopp, und dort setzt die erste
-Buchung „hat offene Buchungen" von falsch auf wahr; jede Spalte mit `exportState: open` nimmt das
-Todo damit auf. Wer am Start eine Auskunft gibt und am Stopp schweigt, sagt die halbe Wahrheit.
-Gerechnet wird nur, wenn sich etwas bewegt haben **kann**: Sonst steht `null` da, und keine
-Ordnerauflösung läuft.
+**Die Bewegung liefert nicht ein Vorgang, sondern jeder, der eine der fünf Achsen einer Regel
+umlegt** — die vollzogene Handlung ebenso wie die angekündigte im Aufgabenbereich des Add-ins
+(E-058 Punkt 6, E-060, E-061, T-093), jeweils als `poolMovement` oder `null`. Eine benannte
+Ausnahme gibt es, und sie steht weiter unten in diesem Abschnitt: `PATCH /time-entries/{id}`.
+
+**Eine Zahl steht hier bewusst nicht**, und auch keine Aufzählung: An dieser Stelle stand erst
+„drei", und sie wäre jetzt „acht" — zweimal ist ein Vorgang dazugekommen und hat die Zahl
+stehenlassen, wo sie war (B-9 aus T-116). Vollständig geführt wird die Aufzählung an **genau
+einer** Stelle, am Bauteil `PoolMovement` in `apps/local-api/openapi/takt-local-api.yaml`; wer
+einen Vorgang hinzufügt, hängt dort eine Zeile an. Diese Beschreibung nennt das Kriterium und
+zählt nicht mit.
+
+Zwei Wege führen zur ersten abgeschlossenen Buchung, und sie sind ungleich wichtig: Der Timerstart
+ist der Sonderweg — er lässt sie nur entstehen, wenn er einen Timer desselben Todos verdrängt. Der
+Regelweg ist der Stopp, und dort setzt die erste Buchung „hat offene Buchungen" von falsch auf
+wahr; jede Spalte mit `exportState: open` nimmt das Todo damit auf. Wer am Start eine Auskunft
+gibt und am Stopp schweigt, sagt die halbe Wahrheit. Gerechnet wird nur, wenn sich etwas bewegt
+haben **kann**: Sonst steht `null` da, und keine Ordnerauflösung läuft.
 
 Die Zeile davor ist mit T-021 dazugekommen und hat dieselbe Begründung wie die erste: Die Regel
 entscheidet mit, ob das Duplikatangebot aus A-10.9 auf den **richtigen Kundenvorgang** zeigt.
@@ -363,8 +373,15 @@ Buchung eines Todos sein und legt damit die Exportachse um — dieselbe Bewegung
 `POST /timer/stop` ansagt, nur über einen anderen Knopf ausgelöst (E-061 Nachtrag, O-V). Sie
 rechnet deshalb mit demselben Zustandspaar wie der Stopp (`closedEntryMovementStates`) und nicht
 mit dem der Add-in-Buchung: Diese Route schreibt `completed_at` nicht, ein erledigtes Todo bleibt
-also erledigt. `PATCH /time-entries/{id}` ändert einen Zeitraum oder eine Leistung, berührt keine
-der fünf Achsen und trägt das Feld deshalb nicht.
+also erledigt.
+
+`PATCH /time-entries/{id}` trägt das Feld **nicht** — die Begründung dafür ist aber nicht, dass die
+Route nur „einen Zeitraum oder eine Leistung" ändere. Sie nimmt auch `todoId` entgegen
+(`apps/local-api/src/routes/time.ts`) und hängt die Buchung damit um: Verliert das abgebende Todo
+seine letzte offene Buchung und bekommt das aufnehmende seine erste, bewegen sich **zwei** Todos,
+und zwar in entgegengesetzte Richtungen. Ein Feld für **eine** Bewegung kann das nicht tragen.
+Welche Antwort an diese Stelle gehört, ist offen (**O-X**, beim Auftraggeber); bis dahin schweigt
+die Route bewusst, statt die halbe Bewegung zu melden.
 
 **Der Timer hinterlässt im Betrieb ein Lebenszeichen** (E-036), mindestens jede Minute, in
 `timer_heartbeat` und nicht auf der Buchung selbst. Endet die Anwendung ungeordnet, findet der
@@ -913,7 +930,7 @@ Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein 
 | `/time-entries` | |
 | `/time-entries/{id}/export-status` | Nur nach `open` setzbar (E-012) |
 | `/time-entries/{id}/not-billed` | Ausbuchen ohne Abrechnung (E-047). Eigener Vorgang, eigener Ereignistyp im Protokoll — kein Export |
-| `/timer`, `/timer/start`, `/timer/stop`, `/timer/orphaned/resolve` | Siehe unten. Alle drei schreibenden Vorgänge liefern `poolMovement` (E-058 Punkt 6) |
+| `/timer`, `/timer/start`, `/timer/stop`, `/timer/orphaned/resolve` | Siehe unten. Jeder schreibende Vorgang dieser Zeile liefert `poolMovement` (E-058 Punkt 6) — und er ist damit nicht allein: Die vollständige Liste aller Routen, die das Feld tragen, steht am Bauteil `PoolMovement` der Schnittstellenbeschreibung |
 | `/export/templates`, `/export/runs` | |
 | `/export/audit` | Filter `timeEntryId` **und** `exportRunId` (T-042), einzeln oder zusammen. „Welche Buchungen waren in diesem Lauf?" ist damit vollständig beantwortbar; bis dahin siebte die Oberfläche die geladene Seite, und ein Lauf, der länger als eine Seite ist, verdrängte jeden älteren daraus |
 | `/export/sources` | Die geschlossene Auswahlliste als **Auskunft** des Dienstes (E-049). Die Oberfläche fragt, statt zu wissen — sonst stünde die Liste ein zweites Mal in `apps/web`, das `@takt/export` nicht einbinden darf |

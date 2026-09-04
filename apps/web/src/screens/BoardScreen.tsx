@@ -16,6 +16,7 @@ import { navigate } from "../app/router";
 import { useRuleLookup, useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
+import { undoDoneAction } from "../app/undoDone";
 import { useAsync } from "../app/useAsync";
 import { formatDuration, formatTime, plural } from "../lib/format";
 import {
@@ -187,6 +188,14 @@ export function BoardScreen() {
                   : `Sie verschwindet vom Board, bis erledigte Karten eingeblendet werden. ${unchanged}`,
               movement,
             ),
+            /*
+              Der Rückweg, seit T-118 an allen drei Flächen (B-7 aus T-116).
+              Bis dahin bot ihn nur die Todo-Liste an — dieselbe Handlung mit
+              zwei Schutzniveaus, buchstäblich der Befund, aus dem E-059
+              entstanden ist. Die Gegenrichtung („wieder offen") bekommt keinen:
+              Sie ist selbst schon die Rücknahme.
+            */
+            ...(wasDone ? {} : { action: undoDoneAction(todo.id, todo.title, toasts, bump) }),
           });
         })
         .catch((cause: unknown) =>

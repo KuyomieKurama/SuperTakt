@@ -96,12 +96,32 @@ function ConnectedApp({
   const [state, setState] = useState<ConnectionState>({ kind: "connecting" });
   const [shell, setShell] = useState<ShellStateSnapshot | null>(null);
 
+  /*
+    Der `catch` ist kein Zierat (B-6-Klasse aus T-116): `connect()` fängt heute
+    alles ab, was es kennt, aber `setState({ kind: "connecting" })` steht bereits
+    da. Käme aus der Hülle je eine Zusage zurück, die niemand fängt, bliebe die
+    Anwendung für immer im Ladebild „Takt verbindet sich …" stehen — ohne
+    Meldung, ohne „Erneut versuchen", und einen globalen Auffänger für
+    abgewiesene Zusagen gibt es im Baum nicht. Der Sperrzustand `"failed"` hat
+    beides; er ist der richtige Ausgang für einen Fehler, den niemand vorhergesehen
+    hat.
+  */
   const attempt = useCallback(() => {
     setState({ kind: "connecting" });
-    void connect().then((next) => {
-      setState(next);
-      if (next.kind === "ready") setShell(next.shell);
-    });
+    void connect()
+      .then((next) => {
+        setState(next);
+        if (next.kind === "ready") setShell(next.shell);
+      })
+      .catch((cause: unknown) => {
+        setState({
+          kind: "failed",
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
+        });
+      });
   }, []);
 
   useEffect(attempt, [attempt]);

@@ -578,7 +578,16 @@ export interface TimeEntry {
  * auf wahr. Ein Todo ohne jede Buchung erfüllt seit E-055 keine Regel mit
  * `exportState: 'open'`; mit dieser Buchung erfüllt es sie. Der Dienst rechnet
  * die Bewegung deshalb nach derselben Rechnung wie der Timerstopp
- * (`bookingMovementStates`) und meldet sie mit demselben Anlaß `'booking'`.
+ * (`closedEntryMovementStates`) und meldet sie mit demselben Anlaß `'booking'`.
+ *
+ * **Nicht `bookingMovementStates`** — die Buchung von Hand hebt „Erledigt"
+ * nicht auf (A-2.5 spricht vom **Starten** der Zeiterfassung, nicht vom
+ * Nachtragen eines Zeitraums). Mit `BOOKING_EFFECT` meldete diese Route für ein
+ * erledigtes Todo ein Verlassen jeder Spalte `completion: 'done'`, das nicht
+ * stattfindet: Der Benutzer läse „ist aus „Erledigt“ verschwunden." und sähe
+ * die Karte danebenstehen. Der Nachtrag zu E-061 nannte in seiner ersten
+ * Fassung `bookingMovementStates`; T-107 hat das gemeldet und richtiggestellt,
+ * und dieser Kommentar zog bis T-118 nach.
  *
  * **`PoolMovement | null` und nichts anderes.** Kein optionales Feld und kein
  * `?? null` an der Aufrufstelle: Ein Feld, das fehlen *darf*, zwingt jede

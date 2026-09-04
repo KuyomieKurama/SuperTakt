@@ -612,10 +612,58 @@
 /* Rückmeldungen                                                        */
 /* ==================================================================== */
 
+/*
+ * Der Meldungsstapel endet am Bildschirmrand (B-2 aus T-116, SC 2.4.7).
+ *
+ * ## Der gemessene Befund
+ *
+ * Eine Meldung mit Rückweg hat keine Frist (Regel 1 in `ToastContext.tsx`) und
+ * wird seit T-108 auch nicht verdrängt. Sieben Klicks auf „Erledigt" in der
+ * Todo-Liste erzeugen also sieben stehende Meldungen. Gemessen bei 720 px
+ * Fensterhöhe (T-110, Abschnitt 3): 807 px Stapel bei 704 px Platz — die
+ * älteste ragt oben hinaus. Ein `position: fixed`-Behälter läßt sich nicht
+ * hereinrollen; ihr „Rückgängig" bleibt tabulierbar, der Fokus landet
+ * außerhalb des Sichtbaren, und **es gibt keine Fokusanzeige zu sehen**. Das
+ * ist SC 2.4.7 (Fokus sichtbar, AA), nicht bloß eine Unschönheit.
+ *
+ * ## Die Lösung: eine Rollfläche, die dem Jüngsten folgt
+ *
+ * `max-block-size` plus `overflow-y: auto` machen aus dem Stapel eine
+ * Rollfläche. `ToastProvider` rollt nach jeder Änderung ans Ende, damit die
+ * jüngste Meldung — die einzige, die zur letzten Handlung gehört — immer
+ * sichtbar ist. Ältere sind dann nicht unerreichbar, sondern nur weiter oben:
+ * Wer hineintabuliert, wird vom Browser mitgerollt.
+ *
+ * **Kein `tabindex` an der Rollfläche.** Jede Meldung trägt ihren
+ * Schließknopf; ein Halt an einer `aria-live`-Region wäre ein Halt, an dem
+ * nichts zu tun ist (T-116, Abschnitt 3.2).
+ *
+ * **Keine harte Obergrenze für Meldungen mit Rückweg.** Das wäre W-10
+ * rückwärts — der Schutz aus {@link evict} fiele genau dort, wo er zählt.
+ *
+ * ## Warum Innenabstand statt Abstand von außen
+ *
+ * Vorher saß der Stapel mit `inset-*: var(--space-4)` in der Ecke. Eine
+ * Rollfläche schneidet an ihrer Kante ab — mit Außenabstand wäre der Schatten
+ * jeder Meldung an allen vier Seiten beschnitten. Jetzt sitzt der Behälter in
+ * der Ecke (`inset: 0`) und trägt denselben Abstand als **Innenabstand**: Die
+ * Meldungen stehen auf den Pixel genau dort, wo sie vorher standen, und der
+ * Schatten hat seine Luft. `box-sizing: border-box` (`base.css`) sorgt dafür,
+ * daß `100dvh` die Höhe **einschließlich** dieser beiden Abstände meint.
+ *
+ * `dvh` mit `vh` davor: Fehlt einem Wirt die dynamische Einheit, gilt die
+ * statische — auf dem Schreibtisch derselbe Wert.
+ */
 .toast-layer {
   position: fixed;
-  inset-block-end: var(--space-4);
-  inset-inline-end: var(--space-4);
+  inset-block-end: 0;
+  inset-inline-end: 0;
+  padding: var(--space-4);
+  max-block-size: 100vh;
+  max-block-size: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   z-index: var(--z-toast);
   pointer-events: none;
 }

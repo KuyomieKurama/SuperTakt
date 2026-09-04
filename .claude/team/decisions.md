@@ -1371,3 +1371,30 @@ unit-tester weiter mit Vitest. Alles, was einen Baum, ein Ereignis oder eine Zei
 gehört dem e2e-tester. Sagt ein unit-tester „nicht prüfbar, kein Testrahmen", ist das kein
 Auftrag an den Orchestrator, einen zu beschaffen, sondern der Hinweis, dass der Fall in die
 End-to-End-Ebene gehört.
+
+## E-063 — Fremder Text wird isoliert und markiert, Eingabefelder nicht
+
+**Befund (T-119, 2026-09-04).** Der Aufgabenbereich zeigt Text, den ein anderer geschrieben hat —
+Betreff, Absender, Textkörper. Das ist dort der Regelfall und nicht die Ausnahme. Ein `U+202E` im
+Betreff drehte die Anzeige um, ohne je durch die Tür zu gehen: Die Zeichenwache greift beim
+Anlegen, die Anzeige kommt davor. `unicode-bidi: isolate` allein reicht dagegen **nicht** — es
+schützt die Umgebung, aber innerhalb des isolierten Blocks dreht ein `U+202E` weiter um
+(UBA X2–X5); `bidi-override` hilft ebenfalls nicht. Das ist die Berichtigung des Vorschlags aus
+T-114.
+
+**Entscheidung.**
+
+1. **Anzeigen und Eingeben sind zwei verschiedene Dinge.** Fremder Text, der angezeigt wird, läuft
+   über einen Baustein, der ihn in ein `<bdi>` setzt und ihm die unsichtbaren Zeichen nimmt. Text
+   in einem Eingabefeld bleibt unangetastet: Seinen Inhalt zu ändern hieße, die Eingabe des
+   Benutzers zu ändern.
+2. **Markieren, nicht streichen.** Ein entferntes Zeichen ist eine Anzeige, die verschweigt, daß
+   etwas da war. Die Anzeige setzt `U+FFFD` an seine Stelle, sichtbar.
+3. **Der Vorschlag wird bereinigt, die Eingabe abgewiesen** (aus T-114, gilt weiter). Was der
+   Benutzer nicht selbst geschrieben hat, darf die Anwendung glattziehen; was er geschrieben hat,
+   weist sie zurück und sagt warum.
+4. **Ein Nachweis prüft gegen die Tür, nicht gegen eine Abschrift der Tür.** T-117 erweiterte die
+   Zeichenklasse um `U+061C`, `U+200E`, `U+200F` und der Nachweispfad des Add-ins bemerkte es
+   nicht, weil er gegen eine kopierte Liste hielt — die Sackgasse aus T-114 stand für drei Zeichen
+   wieder offen. Wer zwei Stellen zusammenhalten will, fragt die maßgebliche ab und schreibt sie
+   nicht ab.

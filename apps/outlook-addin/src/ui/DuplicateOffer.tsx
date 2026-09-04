@@ -23,7 +23,7 @@
 
 import type { OfferDescription } from '../duplicate/rule.ts';
 import { REOPEN_HINT } from '../duplicate/reopen.ts';
-import { Button, Callout } from './Primitives.tsx';
+import { Button, Callout, Foreign } from './Primitives.tsx';
 
 interface DuplicateOfferProps {
   readonly offers: readonly OfferDescription[];
@@ -49,8 +49,18 @@ export function DuplicateOffer({ offers, onChoose, busyTodoId }: DuplicateOfferP
       <ul className="offer__list">
         {offers.map((offer) => (
           <li key={offer.todoId} className="offer__item">
+            {/*
+              T-119: Der Titel kommt aus dem Bestand und kann aus einer Zeit vor
+              T-114 stammen, als die Add-in-Tür Richtungszeichen noch annahm. In
+              dieser Karte entscheidet der Benutzer, ob er auf **dieses** Todo
+              bucht — eine Karte, die sich anders liest, als sie ist, ist genau
+              der Fehler, der beim Kunden ankommt.
+
+              Die Call-Nummer daneben braucht das nicht: Sie hat
+              `checkCallNumber` passiert, und der Vorrat dort ist geschlossen.
+            */}
             <div className="offer__head">
-              <span className="offer__title">{offer.title}</span>
+              <Foreign className="offer__title" value={offer.title} />
               <span className="badge badge--call mono">{offer.callNumber}</span>
             </div>
 

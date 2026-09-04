@@ -18,7 +18,7 @@ import { TagChip } from "./Tag";
  * Vor T-059 gab es an vier Stellen vier Arten, ein Tag zu wählen: ein
  * Suchfeld mit einer Chip-Wand darunter im Todo-Dialog, eine ungefilterte
  * Chip-Wand in den Standard-Tags, eine auf vierzig Stück gekappte Chip-Wand in
- * der Poolregel, und in der Todo-Liste **gar keine** — der Tag-Filter ließ
+ * der Regel eines Pools, und in der Todo-Liste **gar keine** — der Tag-Filter ließ
  * sich nur über einen Klick auf ein fremdes Chip setzen. Wer vierzig Tags hat,
  * für den war jede dieser Stellen eine andere Aufgabe.
  *

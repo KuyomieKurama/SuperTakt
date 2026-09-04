@@ -17,9 +17,10 @@ import type { PoolMovement } from "../api/types";
  *
  * Bis T-102 stand die Zuordnung an vier Stellen: zweimal in `TimerContext`
  * (Stopp, verwaiste Buchung) und — seit E-060 — an drei Flächen, die „Erledigt"
- * umlegen (Board, Todo-Liste, Detailansicht). Vier Stellen sind vier
- * Gelegenheiten, den Anlaß zu verwechseln, und die Verwechslung ist still: Der
- * falsche Anlaß liefert einen wohlgeformten, falschen Satz.
+ * umlegen (Board, Todo-Liste, Detailansicht). Seit T-108 wäre der Buchungsdialog
+ * die fünfte. Fünf Stellen wären fünf Gelegenheiten, den Anlaß zu verwechseln,
+ * und die Verwechslung ist still: Der falsche Anlaß liefert einen
+ * wohlgeformten, falschen Satz.
  *
  * ---------------------------------------------------------------------------
  * Die Zuordnung, einmal ausgeschrieben
@@ -30,6 +31,7 @@ import type { PoolMovement } from "../api/types";
  * | Timerstart, der „Erledigt" aufhebt | `'reopen'` | Das Todo kehrt zurück (A-2.5) |
  * | Timerstart ohne Aufhebung | `'booking'` | Erste abgeschlossene Buchung |
  * | Stopp, verwaiste Buchung | `'booking'` | Die Buchung setzt „hat offene Buchungen" |
+ * | `POST /time-entries` | `'booking'` | Die Buchung von Hand kann die erste sein (O-V) |
  * | `DELETE /todos/{id}/done` | `'reopen'` | Aufheben von Hand, „wieder" stimmt |
  * | `PUT /todos/{id}/done` | `'booking'` | Neutrale Form, kein Wort von Buchung (E-060) |
  *
@@ -71,11 +73,18 @@ export function doneMovementSentence(
 }
 
 /**
- * Der Satz zu einer **Buchung** — Stopp und verwaiste Buchung (E-058 Punkt 6).
+ * Der Satz zu einer **Buchung** — Stopp, verwaiste Buchung und Buchung von Hand
+ * (E-058 Punkt 6, O-V).
  *
- * Der Anlaß steht hier fest und wird nicht durchgereicht: Ein Stopp hebt kein
- * „Erledigt" auf, das tut allein der Start (A-2.5). Beide Antworten, die diese
- * Funktion versorgen, berichten deshalb ausnahmslos von einer Buchung.
+ * Der Anlaß steht hier fest und wird nicht durchgereicht: Keine dieser drei
+ * Handlungen hebt „Erledigt" auf, das tut allein der Timerstart (A-2.5). Alle
+ * drei Antworten, die diese Funktion versorgen, berichten deshalb ausnahmslos
+ * von einer Buchung.
+ *
+ * Die dritte ist seit T-108 dabei: `POST /time-entries`, die Buchung von Hand
+ * aus `screens/BookingDialogs.tsx`. Der Dienst rechnet sie nach derselben
+ * Rechnung wie den Stopp (`closedEntryMovementStates`) — die Begründung steht
+ * an `CreateTimeEntryResult` in `api/types.ts`.
  */
 export function bookingSentence(movement: PoolMovement | null): string | null {
   return movementSentence(movement, "booking");

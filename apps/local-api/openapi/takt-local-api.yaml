@@ -1499,6 +1499,14 @@ paths:
         Eine bereits exportierte Buchung ist gesperrt (A-6.9) und antwortet mit
         `409` und dem Code `time_entry_locked`. Erst nach dem ausdrücklichen
         Zurücksetzen des Exportstatus (E-012) ist sie wieder änderbar.
+
+        **`todoId` ist änderbar, und das ist mehr als ein Feld.** Wer es setzt,
+        hängt die Buchung an ein anderes Todo um — und damit auch ihre Zeit und
+        ihre Leistung, die in die Abrechnung geht (A-7.4). Die Antwort trägt
+        **kein** `poolMovement`: An dieser Handlung bewegen sich unter Umständen
+        zwei Todos in entgegengesetzte Richtungen, und ein Feld für eine
+        Bewegung kann das nicht tragen. Der Fall ist offen (**O-X**); die
+        Begründung steht ausführlich am Bauteil `PoolMovement`.
       requestBody:
         required: true
         content:
@@ -1796,6 +1804,26 @@ paths:
                           Tags und Status ändert der Start nichts (E-023). Es
                           gibt dann nichts zu berichten, und `null` sagt das,
                           statt drei leere Listen zu schicken.
+
+                          **Das Feld trägt die Bewegung des gestarteten Todos
+                          und nur diese** (O-AB). Beendet `stopRunning` einen
+                          Timer, der auf einem **anderen** Todo lief, kann dort
+                          die erste abgeschlossene Buchung entstehen; jenes
+                          Todo bewegt sich dann ebenfalls, und diese Antwort
+                          sagt darüber nichts.
+
+                          Das ist entschieden und kein Versehen: **Eine Antwort
+                          trägt eine Bewegung.** Zwei Bewegungen in einem Feld
+                          wären nicht auseinanderzuhalten — die Namenslisten
+                          tragen keine Kennung des Todos, zu dem sie gehören
+                          (E-058 Punkt 4) —, und ein zweites Feld verlangte von
+                          jeder Oberfläche eine Fallunterscheidung für einen
+                          Weg, den die Hauptanwendung nicht geht: Sie stoppt und
+                          startet in zwei Aufrufen, und der Stopp trägt seinen
+                          eigenen Satz. Wer die Bewegung des verdrängten Todos
+                          braucht, macht es genauso — erst
+                          `POST /timer/stop`, dann `POST /timer/start` ohne
+                          `stopRunning`.
 
                           `null` ist deshalb **nicht** dasselbe wie „drei leere
                           Listen": Das eine heißt „hier war keine Bewegung
@@ -2903,8 +2931,10 @@ paths:
                     **Dasselbe Schema wie `TodoCreate.title`** (T-114): Der
                     Wert wird getrimmt und darf keine Steuerzeichen
                     (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
-                    bidirektionalen Formatierungszeichen (`U+202A`–`U+202E`,
-                    `U+2066`–`U+2069`) enthalten. Sonst `422` mit
+                    bidirektionalen Zeichen enthalten — Einbettungen und
+                    Überschreibungen (`U+202A`–`U+202E`), Isolate
+                    (`U+2066`–`U+2069`) und die Marken (`U+200E`, `U+200F`,
+                    `U+061C`; seit T-117, hier mit T-119 nachgetragen). Sonst `422` mit
                     `details[].field = "title"`. Der abgewiesene Wert steht
                     **nicht** in der Meldung: Er stammt möglicherweise aus
                     einer fremden E-Mail, und ein Text, der ein solches
@@ -2983,8 +3013,10 @@ paths:
                     **Seit T-114 ist es nicht mehr nur wortgleich, sondern
                     dasselbe Schema.** Ein Name darf keine Steuerzeichen
                     (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und keine
-                    bidirektionalen Formatierungszeichen (`U+202A`–`U+202E`,
-                    `U+2066`–`U+2069`) enthalten; sonst `422` mit
+                    bidirektionalen Zeichen enthalten — Einbettungen und
+                    Überschreibungen (`U+202A`–`U+202E`), Isolate
+                    (`U+2066`–`U+2069`) und die Marken (`U+200E`, `U+200F`,
+                    `U+061C`; seit T-117, hier mit T-119 nachgetragen); sonst `422` mit
                     `details[].field = "tagNames.<Index>"`. Die
                     Namensgleichheit weiter unten beantwortet das **nicht**:
                     Sie sagt, wann zwei Namen derselbe sind, nicht welche
@@ -3563,15 +3595,23 @@ components:
 
         **Namen und Titel** (`name`, `title`) werden dabei nicht nur auf Länge
         geprüft: Steuerzeichen (`U+0000`–`U+001F`, `U+007F`–`U+009F`) und
-        bidirektionale Formatierungszeichen (`U+202A`–`U+202E`,
-        `U+2066`–`U+2069`) werden abgewiesen und nicht still entfernt (R-3a
-        H-2). Diese Namen reisen bis in den Bewegungssatz, in den
-        Aufgabenbereich des Add-ins und in die Löschdialoge; ein `U+202E` dreht
-        dort den Rest der Zeile optisch um, und React maskiert es nicht, weil es
-        kein Markup ist. Die Grenze steht nicht als `pattern` an jedem Feld —
-        ein regulärer Ausdruck über Steuerzeichen ist in einer Beschreibung
-        schwerer zu lesen als dieser Absatz, und die Prüfung liegt ohnehin an
-        einer Stelle (`http/input.ts`).
+        bidirektionale Formatierungszeichen werden abgewiesen und nicht still
+        entfernt (R-3a H-2). Bei den bidirektionalen Zeichen sind es alle drei
+        Bauarten — die Einbettungen und Überschreibungen (`U+202A`–`U+202E`),
+        die Isolate (`U+2066`–`U+2069`) und die Marken (`U+200E`, `U+200F`,
+        `U+061C`; seit T-117, davor fehlten sie). Diese Namen reisen bis in den
+        Bewegungssatz, in den Aufgabenbereich des Add-ins und in die
+        Löschdialoge; ein `U+202E` dreht dort den Rest der Zeile optisch um, und
+        React maskiert es nicht, weil es kein Markup ist. Die Grenze steht nicht
+        als `pattern` an jedem Feld — ein regulärer Ausdruck über Steuerzeichen
+        ist in einer Beschreibung schwerer zu lesen als dieser Absatz, und die
+        Prüfung liegt ohnehin an einer Stelle (`http/input.ts`).
+
+        Die Prüfung sitzt am Eingang. Ein Name, der vor ihr angelegt wurde,
+        bleibt lesbar und löschbar — aber ein `PATCH`, der ihn **unverändert**
+        zurückschickt, endet hier mit `422`. Das ist gewollt und nicht still
+        migriert (T-101 Annahme 6): Eine Migration, die vorhandene Namen
+        umschriebe, änderte Benutzereingaben, ohne es zu sagen.
 
         Der abgewiesene **Wert** steht nicht in der Meldung. Er stammt
         möglicherweise aus einer fremden E-Mail (B-4.3 Punkt 5).
@@ -3727,7 +3767,34 @@ components:
       required: [id, title, callNumber, statusId, completedAt, tagIds, createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
-        title: { type: string, minLength: 1, maxLength: 512 }
+        title:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: |
+            **Die 512 hier gegen die 500 an jeder Tür ist kein Versehen.**
+
+            Jeder Eingang nimmt seit T-114 höchstens 500 Zeichen an —
+            `POST /todos`, `PATCH /todos/{todoId}` und `POST /addin/todos`
+            teilen dieselbe Prüfung (`titleSchema` in `http/input.ts`).
+            Bis dahin ließ allein die Add-in-Tür 512 zu, und ein damit
+            angelegtes Todo steht weiter im Bestand: Die Prüfung sitzt am
+            Eingang, nicht am Bestand, und es gibt keine Migration, die
+            vorhandene Titel kürzt (T-101 Annahme 6 — nennen statt still
+            ändern; ein gekürzter Titel wäre eine geänderte Benutzereingabe
+            ohne jemanden, der es erfährt).
+
+            Diese Zahl sagt deshalb, was eine **Antwort** tragen kann, und
+            nicht, was eine Anfrage setzen darf. Wer sie auf 500 zieht,
+            behauptet über fremde Bestände etwas, das er nicht weiß — ein
+            solcher Titel ließe sich weiterhin lesen, aber nicht mehr gegen
+            diese Beschreibung prüfen.
+
+            Für den Benutzer hat das eine sichtbare Folge, und sie ist
+            dieselbe wie bei den Richtungszeichen: Ein solcher Titel lässt sich
+            **nicht unverändert speichern** — der Änderungsdialog schickt ihn
+            mit, und `PATCH /todos/{todoId}` weist ihn mit `422` ab (C-03).
+            Der Weg heraus ist, ihn zu kürzen.
         callNumber:
           oneOf: [{ type: string, maxLength: 128 }, { type: 'null' }]
           description: Aus dem Add-in erkannt (E-006, A-2.6). Darf leer bleiben.
@@ -4230,14 +4297,24 @@ components:
         `placement: both` beides, steht nicht darin und darf nicht geraten
         werden. Wer die Fläche braucht, fragt `GET /pools`.
 
-        **Wer die Bewegung liefert, und mit welchem Anlaß.** Es waren einmal
-        drei Vorgänge; inzwischen sind es sieben, und die Aufzählung wird hier
-        vollständig geführt, weil eine unvollständige den Eindruck erweckt, die
-        übrigen schwiegen (T-104 F2):
+        **Wer die Bewegung liefert, und mit welchem Anlaß.** Es liefert jeder
+        Vorgang, der eine der fünf Achsen einer Regel umlegt — der vollziehende
+        wie der ankündigende. Eine benannte Ausnahme steht unter der Tabelle.
+
+        **Die Tabelle ist die Aufzählung, und eine Zahl steht bewusst nicht
+        mehr daneben.** Hier stand erst „drei", dann „sieben", und beide Male
+        hat ein neuer Vorgang eine Zeile bekommen, ohne den Satz zu berühren —
+        genau die Sorte Zahl, an der ein Leser abliest, ob er alle hat, und
+        genau die Sorte, die dabei still falsch wird (B-9 aus T-116). Wer einen
+        Vorgang hinzufügt, hängt eine Zeile an; wer wissen will, wie viele es
+        sind, zählt sie.
+
+        Vollständig geführt wird sie, weil eine unvollständige Aufzählung den
+        Eindruck erweckt, die übrigen schwiegen (T-104 F2):
 
         | Vorgang | Anlaß | wodurch die Bewegung entsteht |
         |---|---|---|
-        | `POST /timer/start` | `reopen`, wenn der Start „Erledigt" aufgehoben hat, sonst `booking` | A-2.5; verdrängt er einen Timer **desselben** Todos, entsteht dabei zusätzlich die erste offene Buchung |
+        | `POST /timer/start` | `reopen`, wenn der Start „Erledigt" aufgehoben hat, sonst `booking` | A-2.5; verdrängt er einen Timer **desselben** Todos, entsteht dabei zusätzlich die erste offene Buchung. Verdrängt er einen Timer eines **anderen** Todos, bewegt sich auch jenes — die Antwort trägt das nicht (O-AB, Begründung an der Route) |
         | `POST /timer/stop` | `booking` | Aus dem laufenden Timer wird die erste abgeschlossene, offene Buchung (E-032) |
         | `POST /timer/orphaned/resolve` | `booking` | dasselbe, mit `book_until_heartbeat`; `discard` bewegt nichts |
         | `POST /time-entries` | `booking` | Die Buchung von Hand kann die erste des Todos sein (E-061 Nachtrag, O-V) |
@@ -4251,10 +4328,19 @@ components:
         die drei Namenslisten `poolNames`/`enteringPoolNames`/`leavingPoolNames`
         entfallen sind (E-061 Punkt 3, T-104).
 
-        **Wer nicht liefert, bewegt auch nichts.** `PATCH /time-entries/{id}`
-        ändert einen Zeitraum oder eine Leistung; an keiner der fünf Achsen
-        einer Regel ändert das etwas, und ein Feld, das immer `null` trägt,
-        wäre eine Frage, auf die es keine Antwort gibt.
+        **`PATCH /time-entries/{timeEntryId}` liefert das Feld nicht — und die
+        Begründung dafür ist nicht, dass nichts geschähe.** Ein geänderter
+        Zeitraum und eine geänderte Leistung berühren keine der fünf Achsen,
+        das stimmt. Die Route nimmt aber auch `todoId` entgegen und hängt die
+        Buchung damit um: Verliert das abgebende Todo seine letzte offene
+        Buchung und bekommt das aufnehmende seine erste, bewegen sich **zwei**
+        Todos, und zwar in entgegengesetzte Richtungen. Ein Feld für **eine**
+        Bewegung kann das nicht tragen.
+
+        Welche Antwort an diese Stelle gehört, ist offen (**O-X**) und liegt
+        beim Auftraggeber. Bis dahin schweigt die Route bewusst, statt die
+        halbe Bewegung zu melden — und diese Beschreibung sagt das, statt eine
+        Begründung zu geben, die den Fall gar nicht kennt.
 
         Überall gilt: `null` heißt „hier war keine Bewegung möglich", drei leere
         Listen hießen „nachgesehen und nichts gefunden". Der Unterschied ist

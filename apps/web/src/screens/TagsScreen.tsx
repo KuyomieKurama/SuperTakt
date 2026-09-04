@@ -457,18 +457,25 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               : `„${pendingDelete.name}“ gibt es weiterhin. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
         }
         /*
-          Nach einer Absage steht hier die Meldung des Dienstes — mit den
-          Regeln beim Namen, wenn er welche genannt hat (T-097). Vorher steht
-          da, woran das Löschen scheitern kann, und seit T-089 sind das je zwei
-          Gründe: der Inhalt und die Regel. Der zweite fehlte hier, obwohl er
-          derselbe ist, den der Dienst gleich nennt.
+          Vorwarnung und Absage sind seit T-118 zwei Eigenschaften (B-5 aus
+          T-116, SC 4.1.3).
+
+          Bis dahin trugen beide dieselbe: `deleteError ?? Vorwarnung`. Das ist
+          sichtbar richtig und für eine Vorlesehilfe stumm — die Absage lag in
+          `aria-describedby`, und eine Beschreibung wird nicht erneut
+          vorgelesen, wenn sie sich ändert. Gehört hat sie nur den neuen
+          Knopfnamen „Erneut versuchen" und kein Wort davon, **warum**, obwohl
+          genau dieser Satz seit T-097 die Regeln beim Namen nennt.
+
+          Die Vorwarnung sagt, woran das Löschen scheitern kann; seit T-089 sind
+          das je zwei Gründe, der Inhalt und die Regel.
         */
         consequence={
-          deleteError ??
-          (pendingDelete?.kind === "folder"
+          pendingDelete?.kind === "folder"
             ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht — und ein Ordner, den eine Regel nennt, ebenso wenig. Räumen Sie ihn vorher aus oder nehmen Sie ihn aus der Regel heraus."
-            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung.")
+            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung."
         }
+        {...(deleteError === null ? {} : { refusal: deleteError })}
         confirmLabel={deleteError === null ? "Löschen" : "Erneut versuchen"}
         cancelLabel={deleteError === null ? "Abbrechen" : "Schließen"}
         onConfirm={() => {
@@ -644,7 +651,7 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                   iconStart={pool.placement === "pool" ? "plus" : "x"}
                   onClick={() => setPlacement(pool, pool.placement === "pool" ? "both" : "pool")}
                 >
-                  {pool.placement === "pool" ? "Auf das Board" : "Vom Board nehmen"}
+                  {pool.placement === "pool" ? "Als Spalte aufnehmen" : "Vom Board nehmen"}
                 </Button>
                 <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => setForm({ pool })}>
                   Bearbeiten
