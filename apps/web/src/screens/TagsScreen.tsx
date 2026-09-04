@@ -25,6 +25,7 @@ import { navigate } from "../app/router";
 import { useRuleLookup, useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useMutation } from "../app/useAsync";
+import { errorMessageWithRules } from "../lib/errorText";
 import { flatFolders } from "../lib/folderPaths";
 import { POOL_PLACEMENT_LABEL, POOL_PLACEMENT_SHORT } from "../lib/labels";
 import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
@@ -414,11 +415,18 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         tone="danger"
         title={pendingDelete?.kind === "folder" ? "Ordner löschen?" : "Tag löschen?"}
         description={pendingDelete === null ? "" : `„${pendingDelete.name}“ wird entfernt.`}
+        /*
+          Nach einer Absage steht hier die Meldung des Dienstes — mit den
+          Regeln beim Namen, wenn er welche genannt hat (T-097). Vorher steht
+          da, woran das Löschen scheitern kann, und seit T-089 sind das je zwei
+          Gründe: der Inhalt und die Regel. Der zweite fehlte hier, obwohl er
+          derselbe ist, den der Dienst gleich nennt.
+        */
         consequence={
           deleteError ??
           (pendingDelete?.kind === "folder"
-            ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht. Räumen Sie ihn vorher aus."
-            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht. Poolregeln, die ihn nennen, verlören sonst still ihre Bedeutung.")
+            ? "Ein Ordner, in dem noch etwas liegt, wird nicht gelöscht — und ein Ordner, den eine Regel nennt, ebenso wenig. Räumen Sie ihn vorher aus oder nehmen Sie ihn aus der Regel heraus."
+            : "Ein Tag, der noch an einem Todo hängt, wird nicht gelöscht — und ein Tag, den eine Regel nennt, ebenso wenig. Die Regel verlöre sonst still ihre Bedeutung.")
         }
         confirmLabel="Löschen"
         onConfirm={() => {
@@ -432,9 +440,15 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               toasts.success("Gelöscht.");
             })
             .catch((cause: unknown) => {
-              setDeleteError(
-                cause instanceof Error ? cause.message : "Das ließ sich nicht löschen.",
-              );
+              /*
+                Mit den Regeln beim Namen (T-097). Der Dienst weist ein Tag und
+                einen Ordner mit demselben Schlüssel ab (`tag_in_use`) und legt
+                seit T-089 in `details` ab, **welche** Regeln ihn verwenden.
+                Bis T-097 stand hier nur `cause.message`, und die Namen fielen
+                unter den Tisch — bei zwanzig Regeln ist das der Unterschied
+                zwischen einer Auskunft und einer Suche.
+              */
+              setDeleteError(errorMessageWithRules(cause));
             });
         }}
         onCancel={() => setPendingDelete(null)}

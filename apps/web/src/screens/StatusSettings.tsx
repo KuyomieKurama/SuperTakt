@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorCode, errorMessage } from "../api/client";
+import { errorCode } from "../api/client";
 import {
   createTodoStatus,
   deleteTodoStatus,
@@ -17,6 +17,7 @@ import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
+import { errorMessageWithRules, ruleReferences } from "../lib/errorText";
 import { plural } from "../lib/format";
 
 /**
@@ -107,6 +108,17 @@ export function StatusSettings() {
   const [form, setForm] = useState<{ readonly status?: TodoStatus } | null>(null);
   const [removing, setRemoving] = useState<TodoStatus | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  /**
+   * Hat der Dienst Regeln beim Namen genannt? (T-097)
+   *
+   * Es ist nicht dasselbe wie „`removeError` ist gesetzt". `status_in_use` hat
+   * seit T-076 **zwei** Gründe: Todos tragen den Status noch, oder eine Regel
+   * nennt ihn. Nur der erste ist der Fall, in dem „zwischen dem Zählen und dem
+   * Löschen ist ein Todo dazugekommen" stimmt; beim zweiten ist derselbe Satz
+   * schlicht falsch, und der Dialog schickte den Benutzer zum Nachzählen einer
+   * Zahl, die stimmt. Die Liste unterscheidet die beiden.
+   */
+  const [removeRules, setRemoveRules] = useState<readonly string[]>([]);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
 
@@ -224,6 +236,7 @@ export function StatusSettings() {
     (status: TodoStatus) => {
       setRemoveBusy(true);
       setRemoveError(null);
+      setRemoveRules([]);
       void deleteTodoStatus(status.id)
         .then(() => {
           setRemoving(null);
@@ -236,8 +249,14 @@ export function StatusSettings() {
            * Grund kennt — und `status_in_use` heißt hier nicht „unerwarteter
            * Fehler", sondern „zwischen dem Zählen und dem Löschen ist ein Todo
            * dazugekommen". Deshalb wird zusätzlich neu gezählt.
+           *
+           * Seit T-097 mit den Regeln beim Namen, wenn der Dienst welche in
+           * `details` genannt hat (T-089). Neu gezählt wird trotzdem: Die
+           * Zählung ist auch dann nicht teuer, und der Bestand kann sich aus
+           * beiden Gründen geändert haben.
            */
-          setRemoveError(errorMessage(cause));
+          setRemoveError(errorMessageWithRules(cause));
+          setRemoveRules(ruleReferences(cause));
           if (errorCode(cause) === "status_in_use") counts.reload();
         })
         .finally(() => setRemoveBusy(false));
@@ -390,9 +409,21 @@ export function StatusSettings() {
               ? `„${removing.name}“ steht danach nicht mehr zur Auswahl — weder in der Liste noch in einem Formular.`
               : `„${removing.name}“ steht weiterhin zur Auswahl. Der Dienst hat das Löschen abgelehnt und dabei nichts verändert.`
         }
+        /*
+          Drei Fassungen statt zweier (T-097). Der Zusatz „Zwischen dem Zählen
+          und dem Löschen ist offenbar ein Todo dazugekommen" gilt für den
+          Grund, für den er geschrieben wurde — Todos tragen den Status noch.
+          Hat der Dienst dagegen **Regeln** genannt, ist er falsch: Es ist kein
+          Todo dazugekommen, die Zeile wird auch nach dem Nachzählen null
+          nennen, und der Weg hinaus führt in die Regel und nicht in die Liste.
+          Dort steht deshalb nur die Meldung des Dienstes — sie nennt seit
+          T-097 die Regeln beim Namen und sagt selbst, was zu tun ist.
+        */
         consequence={
           removeError === null ? (
             "Der Status ist leer: Kein Todo trägt ihn. Vorhandene Todos ändern sich durch das Löschen nicht, weil keines betroffen ist."
+          ) : removeRules.length > 0 ? (
+            removeError
           ) : (
             <>
               {removeError} Zwischen dem Zählen und dem Löschen ist offenbar ein Todo dazugekommen.
@@ -410,6 +441,7 @@ export function StatusSettings() {
         onCancel={() => {
           setRemoving(null);
           setRemoveError(null);
+          setRemoveRules([]);
         }}
       />
     </>

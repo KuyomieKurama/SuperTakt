@@ -119,11 +119,22 @@ export function parseRoute(hash: string): Route {
   }
 }
 
-/** Wechselt die Ansicht. Ein Eintrag im Verlauf, damit „Zurück“ wirkt. */
+/**
+ * Wechselt die Ansicht. Ein Eintrag im Verlauf, damit „Zurück“ wirkt.
+ *
+ * **Über `location.assign` und nicht mehr über `location.hash =`** (T-097).
+ * Der Verlauf verhält sich gleich — beide legen einen Eintrag an —, die
+ * Ereignisse nicht: Steht die Zieladresse bereits in der Zeile, tut
+ * `location.hash = <derselbe Wert>` **gar nichts**, während `location.assign`
+ * eine Navigation im selben Dokument auslöst und `popstate` feuert. Genau
+ * daran erkennt `useRoute`, daß dieselbe Ansicht ein zweites Mal angesteuert
+ * wurde, und `useDataFreshness` holt die Daten frisch. Beides ist gemessen
+ * und in `useRoute` mit der Ereignistabelle aufgeschrieben.
+ */
 export function navigate(
   name: RouteName,
   id?: string,
   query?: Readonly<Record<string, string>>,
 ): void {
-  window.location.hash = href(name, id, query);
+  window.location.assign(href(name, id, query));
 }

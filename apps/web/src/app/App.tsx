@@ -24,6 +24,7 @@ import { TimerBar } from "./TimerBar";
 import { TimerProvider } from "./TimerContext";
 import { ToastProvider } from "./ToastContext";
 import { useAsync } from "./useAsync";
+import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
 
 /**
@@ -76,15 +77,22 @@ import { useRoute } from "./useRoute";
  */
 
 export function App() {
-  const route = useRoute();
-  return <ConnectedApp route={route} />;
+  const { route, revisit } = useRoute();
+  return <ConnectedApp route={route} revisit={revisit} />;
 }
 
 /* ==================================================================== */
 /* Verbindung                                                           */
 /* ==================================================================== */
 
-function ConnectedApp({ route }: { readonly route: Route }) {
+function ConnectedApp({
+  route,
+  revisit,
+}: {
+  readonly route: Route;
+  /** Siehe `useRoute`: erneutes Ansteuern derselben Adresse (T-097). */
+  readonly revisit: number;
+}) {
   const [state, setState] = useState<ConnectionState>({ kind: "connecting" });
   const [shell, setShell] = useState<ShellStateSnapshot | null>(null);
 
@@ -162,7 +170,7 @@ function ConnectedApp({ route }: { readonly route: Route }) {
           */}
           <PreferencesProvider>
             <TimerProvider>
-              <Workspace route={route} shell={shell} />
+              <Workspace route={route} revisit={revisit} shell={shell} />
             </TimerProvider>
           </PreferencesProvider>
         </StructureProvider>
@@ -203,12 +211,22 @@ function NoShellNotice() {
 
 function Workspace({
   route,
+  revisit,
   shell,
 }: {
   readonly route: Route;
+  readonly revisit: number;
   readonly shell: ShellStateSnapshot | null;
 }) {
   const { version } = useRefresh();
+
+  /*
+    Hier und nur hier (T-097): Die Arbeitsfläche steht innerhalb beider
+    Zusammenhänge, die dabei erneuert werden — der Struktur und dem
+    Änderungssignal —, und sie überlebt jeden Ansichtswechsel. In einer Ansicht
+    stünde derselbe Haken einmal je Ansicht und liefe beim Wechsel neu an.
+  */
+  useDataFreshness(revisit);
 
   const counters = useAsync(async () => {
     const [todos, entries] = await Promise.all([

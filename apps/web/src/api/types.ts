@@ -565,9 +565,11 @@ export type StartTimerResult =
        * zusammen — eine zweite Auskunft über dieselbe Handlung, die `leaves`
        * nicht kannte und deshalb nur die halbe Bewegung berichtete.
        *
-       * **Nur an dieser Antwort.** `POST /timer/stop` und
-       * `POST /timer/orphaned/resolve` bekommen dasselbe Feld erst mit T-093;
-       * hier steht nichts, was der Dienst heute nicht liefert.
+       * **Nicht mehr nur an dieser Antwort** (berichtigt in T-097). Seit T-093
+       * liefern `POST /timer/stop` und `POST /timer/orphaned/resolve` dasselbe
+       * Feld, mit festem Anlaß `'booking'` (E-058 Punkt 6) — siehe
+       * `StopTimerResult` weiter unten. Der Satz, den der Start hier bildet,
+       * und der Satz nach dem Stopp kommen aus derselben Funktion.
        */
       readonly poolMovement: PoolMovement | null;
     }
@@ -577,9 +579,42 @@ export type StartTimerResult =
       readonly runningTodoTitle: string;
     };
 
+/**
+ * Der Ausgang eines Stopps — und was die Buchung bewegt hat (E-058 Punkt 6).
+ *
+ * Dieselbe Form beantwortet `POST /timer/stop` und
+ * `POST /timer/orphaned/resolve`; beide tragen `poolMovement` **in beiden
+ * Zweigen**, und der Anlaß ist stets `'booking'`. Ein Stopp hebt kein
+ * „Erledigt" auf — das tut allein der Start (A-2.5) —, also gibt es hier
+ * keinen Fall `'reopen'`.
+ *
+ * **Warum das Feld auch im verworfenen Zweig steht.** Ein Stopp unter der
+ * Mindestdauer erzeugt keine Buchung (A-6.2) und bewegt deshalb nichts; der
+ * Dienst antwortet dort mit festem `null` (`usecases/timer.ts`,
+ * `stopTimer`/`resolveOrphanedTimer`), ohne eine einzige Regel aufzulösen. Das
+ * Feld fehlt trotzdem nicht: Ein Feld, das je nach `kind` da ist oder nicht,
+ * zwingt jede Aufrufstelle zu einer Fallunterscheidung, bevor sie die
+ * eigentliche treffen kann. Der Typ `null` — und nicht `PoolMovement | null` —
+ * sagt dem Übersetzer, daß dieser Zweig nichts zu erzählen hat.
+ *
+ * **`null` heißt: keine Fläche.** `poolMovementSentence(movement, 'past',
+ * 'booking')` gibt für eine Bewegung ohne Zu- und Abgang ebenfalls `null`
+ * zurück; die Aufrufstelle läßt die Zeile dann **ganz** weg statt sie mit
+ * `?? ""` zu füllen (`TimerContext.performStop`).
+ */
 export type StopTimerResult =
-  | { readonly kind: "recorded"; readonly entry: TimeEntry }
-  | { readonly kind: "discarded"; readonly reason: "timer_too_short" };
+  | {
+      readonly kind: "recorded";
+      readonly entry: TimeEntry;
+      /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
+      readonly poolMovement: PoolMovement | null;
+    }
+  | {
+      readonly kind: "discarded";
+      readonly reason: "timer_too_short";
+      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
+      readonly poolMovement: null;
+    };
 
 export interface OrphanedTimerView {
   readonly running: RunningTimeEntry;

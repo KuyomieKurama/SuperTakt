@@ -31,7 +31,7 @@ import {
 } from "../lib/format";
 import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
-import { useToasts } from "./ToastContext";
+import { useToasts, type ToastTone } from "./ToastContext";
 
 /**
  * Takt — der Timer, überall erreichbar (A-13.4, I-04, I-05).
@@ -103,6 +103,36 @@ export function useTimer(): TimerApi {
 
 const HEARTBEAT_MS = 45_000;
 const POLL_MS = 60_000;
+
+/**
+ * Der Satz zu einer **Buchung** — oder `null` (E-058 Punkt 6, T-097).
+ *
+ * Der Anlaß steht hier fest und wird nicht durchgereicht: Ein Stopp hebt kein
+ * „Erledigt" auf, das tut allein der Start (A-2.5). Beide Antworten, die diese
+ * Funktion versorgen — `POST /timer/stop` und `POST /timer/orphaned/resolve` —
+ * berichten deshalb ausnahmslos von einer Buchung.
+ *
+ * Zwei Wege führen zu `null`, und beide bedeuten dasselbe für die Anzeige:
+ * Der Dienst hat gar nichts gerechnet (keine erste Buchung, kein Zweig, in dem
+ * sich etwas bewegen könnte), oder er hat gerechnet und nichts gefunden. In
+ * beiden Fällen steht **kein** Satz da — kein leerer Absatz, kein Rumpf mit
+ * null Zeichen.
+ */
+function bookingSentence(movement: PoolMovement | null): string | null {
+  return movement === null ? null : poolMovementSentence(movement, "past", "booking");
+}
+
+/**
+ * Hängt den Bewegungssatz an einen Rumpf — oder läßt ihn weg.
+ *
+ * Dieselbe Form wie bei `announceStart`: ein Leerzeichen, dann der Satz aus
+ * `@takt/domain`, unverändert. Damit sehen der Satz nach dem Start und der
+ * Satz nach dem Stopp gleich aus, und der Wortlaut bleibt zeichengleich mit
+ * dem, den der Aufgabenbereich des Add-ins zeigt.
+ */
+function withMovement(body: string, sentence: string | null): string {
+  return sentence === null ? body : `${body} ${sentence}`;
+}
 
 interface Anchor {
   readonly atMs: number;
@@ -208,6 +238,13 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     (todoId: Id, todoTitle: string) => {
       void (async () => {
         try {
+          /*
+            `stopped.poolMovement` bleibt hier absichtlich ungelesen (T-097):
+            Die Buchung, die dieser Stopp erzeugt, wird in der nächsten Zeile
+            gelöscht und das Kennzeichen gleich darauf wieder gesetzt. Der Satz
+            „Es steht jetzt in „X“." wäre schon falsch, während er vorgelesen
+            wird. Was hier gilt, sagt der Toast am Ende dieser Funktion.
+          */
           const stopped = await stopTimer("");
           if (stopped.kind === "recorded") await deleteTimeEntry(stopped.entry.id);
           await markTodoDone(todoId);
@@ -342,45 +379,75 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* Stoppen                                                           */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Was der Stopp gebucht hat — und wohin die Buchung das Todo bewegt hat
+   * (E-058 Punkt 6, T-097).
+   *
+   * ## Ein Toast, fünf Rümpfe, ein Anhang
+   *
+   * Welcher Rumpf gilt, entscheidet die Exportvorschau des Tages; sie ist der
+   * einzige Grund, warum diese Funktion überhaupt wartet. Der Bewegungssatz
+   * hängt an **allen** fünf: Ob die Vorschau geantwortet hat, ändert nichts
+   * daran, wo die Karte jetzt steht. Deshalb wird der Rumpf erst gebildet und
+   * dann **an einer Stelle** ergänzt — fünf Anhängestellen wären fünf
+   * Gelegenheiten, eine zu vergessen.
+   *
+   * ## Warum der Satz überhaupt hierher gehört
+   *
+   * Die **erste abgeschlossene Buchung** eines Todos setzt „hat offene
+   * Buchungen", und jede Regel mit `exportState: 'open'` — „was habe ich noch
+   * nicht abgerechnet" — nimmt das Todo damit auf. Bis T-097 sagte die
+   * Oberfläche das nur am Start (T-094, O-G). Am Start entsteht die erste
+   * Buchung aber nur in dem Sonderfall, in dem er einen Timer **desselben**
+   * Todos verdrängt; der Regelweg dorthin ist dieser hier.
+   */
   const reportStopped = useCallback(
-    async (todoId: Id, startedAt: string, durationSeconds: number) => {
+    async (
+      todoId: Id,
+      startedAt: string,
+      durationSeconds: number,
+      movementSentence: string | null,
+    ) => {
       const insight = await loadDayGroupInsight(todoId, calendarDayOf(startedAt));
       const booked = `Gebucht: ${formatDuration(durationSeconds)}.`;
 
-      if (insight === null) {
-        toasts.success("Zeit gebucht.", booked);
-        return;
+      interface StopMessage {
+        readonly tone: ToastTone;
+        readonly title: string;
+        readonly body: string;
       }
-      /*
-        Die Vorschau hat nicht geantwortet. Gebucht ist trotzdem — das steht
-        zuerst da. Was daraus beim Export wird, weiss Takt gerade nicht, und
-        dann steht das da statt eines Schweigens, das wie „nichts weiter zu
-        sagen" aussieht (Befund aus T-044, `dayGroup.ts`).
-      */
-      if (insight.previewProblem !== null) {
-        toasts.show({
-          tone: "warning",
-          title: "Zeit gebucht — der Exportwert ließ sich nicht abfragen.",
-          body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte Takt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
-        });
-        return;
-      }
-      if (insight.blockedReason !== null) {
-        toasts.show({
-          tone: "warning",
-          title: "Zeit gebucht — aber noch nicht abrechenbar.",
-          body: `${booked} Für diesen Tag steht auf diesem Todo noch keine Leistung. Ohne sie bleibt die Tagesgruppe (${formatDuration(insight.seconds)}) beim Export stehen.`,
-        });
-        return;
-      }
-      if (insight.quarters === null) {
-        toasts.success("Zeit gebucht.", booked);
-        return;
-      }
-      toasts.success(
-        "Zeit gebucht.",
-        `${booked} An diesem Tag sind für dieses Todo ${formatDuration(insight.seconds)} offen — das ergibt beim Export ${formatQuarters(insight.quarters)}.`,
-      );
+
+      const message = ((): StopMessage => {
+        if (insight === null) return { tone: "success", title: "Zeit gebucht.", body: booked };
+        /*
+          Die Vorschau hat nicht geantwortet. Gebucht ist trotzdem — das steht
+          zuerst da. Was daraus beim Export wird, weiss Takt gerade nicht, und
+          dann steht das da statt eines Schweigens, das wie „nichts weiter zu
+          sagen" aussieht (Befund aus T-044, `dayGroup.ts`).
+        */
+        if (insight.previewProblem !== null) {
+          return {
+            tone: "warning",
+            title: "Zeit gebucht — der Exportwert ließ sich nicht abfragen.",
+            body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte Takt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
+          };
+        }
+        if (insight.blockedReason !== null) {
+          return {
+            tone: "warning",
+            title: "Zeit gebucht — aber noch nicht abrechenbar.",
+            body: `${booked} Für diesen Tag steht auf diesem Todo noch keine Leistung. Ohne sie bleibt die Tagesgruppe (${formatDuration(insight.seconds)}) beim Export stehen.`,
+          };
+        }
+        if (insight.quarters === null) return { tone: "success", title: "Zeit gebucht.", body: booked };
+        return {
+          tone: "success",
+          title: "Zeit gebucht.",
+          body: `${booked} An diesem Tag sind für dieses Todo ${formatDuration(insight.seconds)} offen — das ergibt beim Export ${formatQuarters(insight.quarters)}.`,
+        };
+      })();
+
+      toasts.show({ ...message, body: withMovement(message.body, movementSentence) });
     },
     [toasts],
   );
@@ -394,6 +461,12 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       bump();
 
       if (result.kind === "discarded") {
+        /*
+          Kein Bewegungssatz, und zwar nicht aus Nachlässigkeit: Ohne Buchung
+          bewegt sich nichts, `poolMovement` ist in diesem Zweig fest `null`
+          (`usecases/timer.ts`, `stopTimer`), und der Typ sagt es hier ebenso.
+          Es gibt nichts wegzulassen.
+        */
         toasts.show({
           tone: "info",
           title: "Nichts gebucht.",
@@ -406,6 +479,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         current.entry.todoId,
         result.entry.startedAt,
         result.entry.durationSeconds,
+        bookingSentence(result.poolMovement),
       );
       return true;
     },
@@ -442,6 +516,35 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   /* A-6.8 — die Rückfrage                                             */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * A-6.8 — erst stoppen, dann starten.
+   *
+   * ## Zwei Buchungsereignisse, zwei Meldungen — und das bleibt so (T-097)
+   *
+   * Der Wechsel löst nacheinander zwei Vorgänge aus, und seit T-097 kann
+   * **jeder** von beiden einen Bewegungssatz tragen: der Stopp den über die
+   * Buchung auf dem alten Todo, der Start den über das Wiederöffnen oder die
+   * erste Buchung auf dem neuen. Beide Sätze sind wahr, und sie handeln von
+   * **verschiedenen** Todos.
+   *
+   * Nachgesehen, wie sich das überlagert (`ToastContext`): Meldungen stapeln
+   * sich, es sind höchstens vier gleichzeitig, jede ohne Rückweg verschwindet
+   * nach acht Sekunden. Der Stapel zeigt also beide untereinander, in der
+   * Reihenfolge, in der die Vorgänge gelaufen sind, und die Titel
+   * unterscheiden sie: „Zeit gebucht." gegen „Timer gestartet. …".
+   *
+   * **Entscheidung: beide bleiben stehen.** Einen davon zu unterdrücken hieße,
+   * eine wahre Auskunft über ein Todo zu verschweigen, weil zufällig ein
+   * zweites im Spiel ist — und die unterdrückte wäre die über das Todo, das
+   * der Benutzer gerade verläßt und danach nicht mehr ansieht. Genau dort ist
+   * eine unerklärte Bewegung am teuersten (E-056).
+   *
+   * Was dabei offen bleibt und in den Bericht gehört: Beide Sätze beginnen mit
+   * „Es" und nennen das Todo nicht beim Namen — der Name steht im Titel des
+   * Start-Toasts, im Stopp-Toast steht keiner. Den Wortlaut zu ändern ist
+   * nicht Sache dieser Datei: Er kommt zeichengleich aus `@takt/domain` und
+   * wird in Welle D gegen das Add-in gemessen.
+   */
   const confirmSwitch = useCallback(() => {
     const pending = conflict;
     if (pending === null) return;
@@ -482,11 +585,25 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         setOrphan(null);
         bump();
         if (result.kind === "recorded") {
+          /*
+            Dieselbe Auskunft wie nach jedem anderen Stopp (E-058 Punkt 6): Die
+            verwaiste Buchung ist eine Buchung, und wenn sie die erste ist,
+            nimmt jede Spalte „noch nicht abgerechnet" das Todo damit auf. Der
+            Weg hierher ist ein anderer, die Folge ist dieselbe — also auch der
+            Satz, und aus derselben Funktion.
+          */
           toasts.success(
             "Buchung abgeschlossen.",
-            `Gebucht bis zum letzten Lebenszeichen: ${formatDuration(result.entry.durationSeconds)}.`,
+            withMovement(
+              `Gebucht bis zum letzten Lebenszeichen: ${formatDuration(result.entry.durationSeconds)}.`,
+              bookingSentence(result.poolMovement),
+            ),
           );
         } else {
+          /*
+            Verworfen heißt: keine Buchung, keine Bewegung, kein Satz. Der
+            Dienst löst hier nicht einmal eine Regel auf.
+          */
           toasts.show({
             tone: "info",
             title: "Buchung verworfen.",
