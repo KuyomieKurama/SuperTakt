@@ -1,4 +1,4 @@
-import { dropHiddenCharacters } from "@takt/domain";
+import { dropHiddenCharacters, MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -573,7 +573,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           )
                         }
                         required
-                        maxLength={120}
+                        maxLength={MAX_NAME_LENGTH}
                         hint="Nur für Sie. In der Datei steht dieser Name nicht."
                         {...(draft.name.trim().length === 0
                           ? { error: "Ohne Namen lässt sich die Vorlage nicht wiederfinden." }
@@ -719,7 +719,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
           value={copyName}
           onChange={setCopyName}
           required
-          maxLength={120}
+          maxLength={MAX_NAME_LENGTH}
         />
       </FormDialog>
 

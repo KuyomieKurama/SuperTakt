@@ -33,6 +33,7 @@ export * from './pool-movement.ts';
 export * from './tag-name.ts';
 export * from './time-entry.ts';
 export * from './export.ts';
+export * from './version.ts';
 
 // Reine Typmodule. `export type *` haelt fest, dass hier kein Wert entsteht --
 // wer hier etwas Ausfuehrbares ergaenzt, sieht sofort, dass er die Absicht der

@@ -81,8 +81,28 @@
  * Ein Prüfer mit einem benannten blinden Fleck ist brauchbar, einer mit einem
  * unbenannten ist gefährlich.
  *
- * **d) Das Add-in.** `apps/outlook-addin` ruft dieselben Routen unter
- * `/addin/*` an und hat seinen eigenen Nachweis (`proof:addin-wiring`).
+ * **d) Was hinter der Tür geschieht.** Dieser Lauf misst Namen an der Tür, nicht
+ * das Verhalten dahinter. Ob eine Route tut, was sie verspricht, messen
+ * `proof:addin-wiring` (echter Dienst, echte Datenbank) und die Einheitentests.
+ *
+ * ===========================================================================
+ * Zwei Aufrufer, ein Dienst (T-132, O-M)
+ * ===========================================================================
+ *
+ * Hier stand bis T-132: „Das Add-in ruft dieselben Routen unter `/addin/*` an
+ * und hat seinen eigenen Nachweis (`proof:addin-wiring`)." Der Satz war
+ * richtig und die Schlussfolgerung falsch. `proof:addin-wiring` fährt den
+ * **Dienst** und prüft, dass die Kette hält; er sieht sich nicht an, welche
+ * Schlüssel `apps/outlook-addin/src/api/client.ts` in seine Rümpfe schreibt.
+ * Genau das ist die Frage, die T-050 an der Oberfläche gestellt und dreimal
+ * beantwortet bekommen hat — und sie war für die zweite Tür offen (O-M).
+ *
+ * Beide Aufrufer laufen deshalb durch **denselben** Leser mit demselben
+ * Urteil. Sie unterscheiden sich in der Gestalt ihres Aufrufs
+ * (`request(pfad, optionen)` gegen `call(methode, pfad, abfrage, rumpf)`) und
+ * in der Vorsilbe ihres Pfades; beides sagt `CALL_SHAPES` in
+ * `caller-scan.mjs`. Alles Weitere ist gleich, und das ist der Punkt: Ein
+ * Fehler, den der eine Nachweis findet, findet der andere auch.
  *
  * ===========================================================================
  * Und der Prüfer prüft sich selbst
@@ -100,16 +120,29 @@ import { z } from 'zod';
 
 import { parseYaml } from './openapi-reader.mjs';
 import { createMatcher } from './schema-match.mjs';
-import { buildTypeIndex, normalizePath, scanCallers } from './caller-scan.mjs';
+import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './caller-scan.mjs';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
+/*
+ * Die Eingabeschemata der Add-in-Tür (T-132, O-M).
+ *
+ * `routes/addin/**` gehört integration-dev und wird hier **gelesen**, nicht
+ * geändert. Anders als die vier Routendateien der Hauptfläche führt diese
+ * Datei keine Aufstellung `REQUEST_SCHEMAS`; die Zuordnung zu den
+ * Operationskennungen steht deshalb unten in `ADDIN_SCHEMAS` und nirgends
+ * sonst. Die Schemata selbst sind dieselben Werte, die die Routen benutzen —
+ * keine Abschrift.
+ */
+import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const CALLER_PATH = new URL('../../web/src/api/endpoints.ts', import.meta.url);
 const TYPES_PATH = new URL('../../web/src/api/types.ts', import.meta.url);
 const WEB_SOURCE_DIR = new URL('../../web/src/', import.meta.url);
+const ADDIN_CALLER_PATH = new URL('../../outlook-addin/src/api/client.ts', import.meta.url);
+const ADDIN_SOURCE_DIR = new URL('../../outlook-addin/src/', import.meta.url);
 
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
 
@@ -118,6 +151,12 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+};
+
+/** Die beiden Türen mit Rumpf unter `/addin/*`, nach Operationskennung. */
+const ADDIN_SCHEMAS = {
+  createAddinTodo: createTodoSchema,
+  createAddinTimeEntry: bookSchema,
 };
 
 let passed = 0;
@@ -200,9 +239,21 @@ const typeIndex = buildTypeIndex(readFileSync(TYPES_PATH, 'utf8'), 'types.ts');
  * Genau deshalb steht er hier und nicht verstreut: Abschnitt 6 setzt einen
  * verdorbenen Text ein und erwartet Beanstandungen. Ein Vergleich, der nur auf
  * der echten Datei läuft, kann sich nicht auf die Probe stellen lassen.
+ *
+ * Seit T-132 (O-M) nimmt er entgegen, **wessen** Text er ansieht: Aufstellung
+ * der Typen, Gestalt des Aufrufs, Zuordnung der Eingabeschemata. Das Urteil
+ * darunter ist für beide Aufrufer dasselbe — es gibt keine zweite Fassung, die
+ * milder sein könnte.
  */
-function inspect(text) {
-  const { functions, calls, unreadable } = scanCallers(text, typeIndex, 'endpoints.ts');
+const WEB_CALLER = {
+  fileName: 'endpoints.ts',
+  typeIndex,
+  shape: CALL_SHAPES.options,
+  schemas: REQUEST_SCHEMAS,
+};
+
+function inspect(text, who = WEB_CALLER) {
+  const { functions, calls, unreadable } = scanCallers(text, who.typeIndex, who.fileName, who.shape);
   const findings = [];
   const covered = new Set();
   const sentKeys = new Map();
@@ -231,7 +282,7 @@ function inspect(text) {
     }
 
     if (call.body !== null) {
-      const schema = REQUEST_SCHEMAS[operation.id];
+      const schema = who.schemas[operation.id];
       if (schema === undefined) {
         // Eine Route ohne Rumpfschema liest keinen Rumpf. `body: {}` ist dann
         // die leere Höflichkeitsform und schadet nicht; jeder Schlüssel darin
@@ -276,6 +327,23 @@ function inspect(text) {
 const callerText = readFileSync(CALLER_PATH, 'utf8');
 const result = inspect(callerText);
 const of = (kind) => result.findings.filter((finding) => finding.kind === kind);
+
+/**
+ * Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M).
+ *
+ * Seine Typaufstellung steht in **derselben** Datei — `CreateTodoRequest` und
+ * `BookRequest` sind dort deklariert, nicht in `types.ts`. Deshalb wird der
+ * Text einmal gelesen und zweimal benutzt.
+ */
+const addinText = readFileSync(ADDIN_CALLER_PATH, 'utf8');
+const ADDIN_CALLER = {
+  fileName: 'client.ts',
+  typeIndex: buildTypeIndex(addinText, 'client.ts'),
+  shape: CALL_SHAPES.addin,
+  schemas: ADDIN_SCHEMAS,
+};
+const addin = inspect(addinText, ADDIN_CALLER);
+const addinOf = (kind) => addin.findings.filter((finding) => finding.kind === kind);
 
 // ---------------------------------------------------------------------------
 section('0  Der Leser liest die Datei — sonst wäre alles Folgende wertlos');
@@ -362,7 +430,9 @@ check('kein Aufruf zeigt auf einen Weg, den der Dienst nicht führt', of('route'
  * ausgeschrieben und nicht als „meistens ruft sie alles an".
  */
 const NOT_CALLED_BY_UI = new Set([
-  // Die vier Add-in-Routen. Eigener Aufrufer, eigener Nachweis.
+  // Die vier Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
+  // O-M): Dass jede von ihnen im Aufgabenbereich einen Aufrufer hat, misst
+  // Abschnitt 7 — mit demselben Leser und demselben Urteil.
   'getAddinContext',
   'findAddinDuplicates',
   'createAddinTodo',
@@ -380,6 +450,17 @@ const NOT_CALLED_BY_UI = new Set([
   // entfernt, ohne dass die Oberfläche `/board` anruft, bekommt den Befund
   // zurück — so soll es sein.
   'getBoard',
+  // T-138, **Uebergabe an frontend-dev (T-139).** `GET /version` gibt heraus,
+  // was der Dienst zuletzt ueber die veroeffentlichte Fassung weiss (A-18.2,
+  // E-069). Der Aufrufer entsteht mit dem Dialog in T-139; T-138 und T-139
+  // laufen in derselben Welle, und `apps/web` gehoert einem anderen Agenten.
+  //
+  // Dieselbe Lage wie bei `getBoard`, und derselbe Umgang: Der Eintrag steht
+  // hier und nicht als roter Lauf, weil die Luecke **benannt** ist. Sobald
+  // `endpoints.ts` die Route anruft, ist die Zeile ueberfluessig -- der Lauf
+  // wird davon nicht rot, aber sie sagt dann etwas Falsches und gehoert
+  // entfernt.
+  'getVersionCheck',
 ]);
 const uncalled = [...operations.entries()]
   .filter(([key, operation]) => !result.covered.has(key) && !NOT_CALLED_BY_UI.has(operation.id))
@@ -570,6 +651,192 @@ check(
   'der unveränderte Text ergibt keine einzige Beanstandung',
   result.findings.length === 0,
   result.findings.map(label).join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('7  Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Dieselben vier Fragen wie oben, an derselben Stelle beantwortet: Liest der
+ * Leser überhaupt etwas, trifft jeder Aufruf eine Operation, wird jeder
+ * gesendete Schlüssel gelesen, und ist der Leser sich seiner blinden Flecken
+ * bewusst.
+ *
+ * Der Unterschied zu Abschnitt 0 bis 5 ist die Gestalt des Aufrufs und die
+ * Vorsilbe des Pfades. Das Urteil ist zeichengleich dasselbe.
+ */
+const addinRawCalls = [...addinText.matchAll(/\bcall\s*[<(]/g)].length;
+check(
+  `so viele Aufrufe gelesen wie im Rohtext stehen (${addinRawCalls})`,
+  addinRawCalls > 0 && addin.calls.length === addinRawCalls,
+  `gelesen ${addin.calls.length}`,
+);
+check(
+  `die Typaufstellung des Add-ins ist gelesen (${ADDIN_CALLER.typeIndex.size} Typen)`,
+  ADDIN_CALLER.typeIndex.has('CreateTodoRequest') && ADDIN_CALLER.typeIndex.has('BookRequest'),
+);
+check(
+  'jeder Aufruf ist als Ganzes lesbar — Methode, Pfad, Rumpf, Abfrage',
+  addin.unreadable.length === 0,
+  addin.unreadable.join(' | '),
+);
+
+/*
+ * Und die Zusicherung, ohne die das Lesen **einer** Datei nichts wert wäre:
+ * Es gibt im Add-in keinen zweiten Weg zum Dienst. `fetch` steht dort
+ * ausschließlich als Port — `options.fetch(...)` in `api/client.ts` —, und
+ * kein Bildschirm setzt selbst eine Anfrage zusammen.
+ */
+const addinSources = [];
+const walkAddin = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) walkAddin(child);
+    else if (/\.tsx?$/.test(entry.name) && !/\.d\.ts$/.test(entry.name)) addinSources.push(child);
+  }
+};
+walkAddin(ADDIN_SOURCE_DIR);
+
+const strayAddinFetch = [];
+for (const file of addinSources) {
+  const body = readFileSync(file, 'utf8');
+  const name = file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length);
+  if (/(?<![\w.])fetch\s*\(/.test(body) && name !== 'api/client.ts') strayAddinFetch.push(name);
+}
+check(
+  `\`fetch\` steht im Add-in nur in api/client.ts (${addinSources.length} Dateien durchgesehen)`,
+  strayAddinFetch.length === 0,
+  strayAddinFetch.join(', '),
+);
+
+check(
+  'kein Aufruf des Add-ins zeigt auf einen Weg, den der Dienst nicht führt',
+  addinOf('route').length === 0,
+  [...new Set(addinOf('route').map((finding) => finding.message))].join(' | '),
+);
+
+/*
+ * Die Gegenrichtung, und sie ist hier die wichtigere: Eine Add-in-Route ohne
+ * Aufrufer wäre eine Tür, die der Dienst offenhält und die niemand benutzt —
+ * genau die Sorte Fläche, die B-1.x nicht will. Die Liste steht in
+ * `NOT_CALLED_BY_UI` und wird hier eingelöst.
+ */
+const addinOperations = [...operations.entries()].filter(([key]) => key.includes(' /addin/'));
+const addinUncalled = addinOperations
+  .filter(([key]) => !addin.covered.has(key))
+  .map(([key, operation]) => `${key} (${operation.id})`);
+check(
+  `jede Operation unter /addin hat einen Aufrufer im Aufgabenbereich (${addinOperations.length})`,
+  addinOperations.length > 0 && addinUncalled.length === 0,
+  addinUncalled.join(', '),
+);
+
+check(
+  'kein Rumpfschlüssel, den die getroffene Add-in-Route nicht kennt',
+  addinOf('body').length === 0,
+  addinOf('body')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+
+/*
+ * Und die Umkehrung wie in Abschnitt 3: ein Feld, das die Add-in-Tür liest und
+ * das der Aufgabenbereich nie sendet. Die Ausnahmeliste ist **leer**, und das
+ * soll sie bleiben — wächst sie, gehört der Zusatz benannt.
+ */
+const ADDIN_NEVER_SENT = {};
+const addinSurprises = [];
+for (const [id, schema] of Object.entries(ADDIN_SCHEMAS)) {
+  const sent = addin.sentKeys.get(id);
+  if (sent === undefined) continue;
+  const allowed = ADDIN_NEVER_SENT[id] ?? [];
+  for (const name of fieldsOf(schema).names) {
+    if (sent.has(name) || allowed.includes(name)) continue;
+    addinSurprises.push(`${id}.${name}`);
+  }
+}
+check(
+  'kein Feld, das die Add-in-Tür liest und der Aufgabenbereich unerklärt nie sendet',
+  addinSurprises.length === 0,
+  addinSurprises.join(', '),
+);
+
+check(
+  'kein Abfrageschlüssel, den die getroffene Add-in-Operation nicht führt',
+  addinOf('query').length === 0,
+  addinOf('query')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+check(
+  'kein Rumpf und keine Abfrage des Add-ins, deren Schlüssel dieser Leser nicht kennt',
+  addinOf('blind').length === 0,
+  addinOf('blind')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('8  Und der Add-in-Leser prüft sich ebenfalls selbst');
+// ---------------------------------------------------------------------------
+
+/*
+ * Dieselbe Probe wie in Abschnitt 6, mit den Namen dieser Tür. Ohne sie wäre
+ * Abschnitt 7 grün, weil er nichts tut — und genau das ist der Zustand, in dem
+ * die Aufruferseite des Add-ins bis T-132 war.
+ */
+const ADDIN_REGRESSIONS = [
+  {
+    name: '`tagNamen` statt `tagNames` (die Tür legte keine neuen Tags an)',
+    pattern: /readonly tagNames: readonly string\[\];/,
+    replacement: 'readonly tagNamen: readonly string[];',
+    kind: 'body',
+  },
+  {
+    name: '`callNummer` statt `callNumber` (die Duplikatsuche fände nichts)',
+    pattern: /'\/api\/v1\/addin\/todo-matches', \{ callNumber \}/,
+    replacement: "'/api/v1/addin/todo-matches', { callNummer: callNumber }",
+    kind: 'query',
+  },
+  {
+    name: 'ein Weg, den es nicht gibt',
+    pattern: /'\/api\/v1\/addin\/context'/,
+    replacement: "'/api/v1/addin/kontext'",
+    kind: 'route',
+  },
+];
+
+const addinBaseline = new Set(addin.findings.map(label));
+for (const regression of ADDIN_REGRESSIONS) {
+  const spoiled = addinText.replace(regression.pattern, regression.replacement);
+  if (spoiled === addinText) {
+    check(`die Probe „${regression.name}" lässt sich anwenden`, false, 'die Stelle wurde nicht gefunden');
+    continue;
+  }
+  if (spoiled.split('\n').length !== addinText.split('\n').length) {
+    check(`die Probe „${regression.name}" bleibt einzeilig`, false, 'die Ersetzung verschiebt Zeilen');
+    continue;
+  }
+  const found = inspect(spoiled, {
+    ...ADDIN_CALLER,
+    // Die Typaufstellung wird mitverdorben: Die Anfragetypen stehen in
+    // derselben Datei, und ein Leser, der den alten Namen behielte, prüfte
+    // gegen eine Fassung, die es nicht mehr gibt.
+    typeIndex: buildTypeIndex(spoiled, 'client.ts'),
+  }).findings.filter((finding) => !addinBaseline.has(label(finding)));
+  check(
+    `${regression.name} wird gefunden`,
+    found.length === 1 && found[0].kind === regression.kind,
+    found.length === 0 ? 'nichts beanstandet' : found.map(label).join(' | '),
+  );
+  if (found.length === 1) console.log(`        → ${found[0].message}`);
+}
+
+check(
+  'der unveränderte Text des Add-ins ergibt keine einzige Beanstandung',
+  addin.findings.length === 0,
+  addin.findings.map(label).join(' | '),
 );
 
 // ---------------------------------------------------------------------------

@@ -3221,8 +3221,15 @@ body:has(.scrim) .toast {
   margin: 0;
 }
 
+/*
+ * Umbrechend, seit die Zeile drei Handlungen trägt (T-133, O-A): „Umbenennen",
+ * „Regel bearbeiten" und „Vom Board nehmen". Ohne den Umbruch schöbe die
+ * dritte Schaltfläche in einem schmalen Fenster den Namen aus der Zeile — und
+ * der Name ist das, wonach man hier sucht (A-13.2, A-13.8).
+ */
 .rule-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -3346,8 +3353,10 @@ body:has(.scrim) .toast {
   margin: 0;
 }
 
+/* Derselbe Grund wie bei `.rule-row`: fuenf Handlungen je Zeile (T-133). */
 .pool-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);

@@ -259,6 +259,16 @@ export async function runScenario() {
     // Zugriff und Auskunft
     // -----------------------------------------------------------------------
     await record('health', 'GET', '/health', '/health');
+    /*
+     * Die Versionspruefung (A-18.2, E-069).
+     *
+     * Sie antwortet hier `state: 'unknown'`, und das ist der Beleg fuer die
+     * tragende Eigenschaft: `compose()` baut den Pruefer, **startet** ihn aber
+     * nicht. Kein Nachweispfad und kein Pruefflauf schickt dadurch ein
+     * Lebenszeichen an GitHub (R-19 Punkt 3). Die Route loest ohnehin nie eine
+     * Anfrage aus (A-V-10) -- sie liest ab.
+     */
+    await record('getVersionCheck', 'GET', '/version-check', '/version-check');
     await record('getTokenStatus', 'GET', '/token', '/token');
     await record('rotateToken', 'POST', '/token', '/token');
     await record('getSecurityNotices', 'GET', '/security/notices', '/security/notices');
@@ -693,6 +703,9 @@ export async function runScenario() {
       roundingMode: 'up',
       locale: 'de-DE',
       theme: 'dark',
+      // A-18.10 — mit fuehrendem `v` hereingegeben. Zurueck kommt `9.9.9`:
+      // Das `v` faellt an genau einer Stelle, in `packages/domain`.
+      skippedVersion: 'v9.9.9',
     });
     await record('getSettings', 'GET', '/settings', '/settings');
     await record('setDefaultTags', 'PUT', '/settings/default-tags', '/settings/default-tags', {

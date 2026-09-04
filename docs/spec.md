@@ -318,6 +318,33 @@ Desktop-Erfahrung, weil die Anwendung primär für produktives Arbeiten am PC ge
 
 ---
 
+## 18. Versionsprüfung
+
+Nachtrag des Auftraggebers vom 2026-09-04. Takt bleibt eine lokale Anwendung (E-001); dieser
+Abschnitt beschreibt die **einzige** Verbindung nach außen, die sie kennt, und zwar in dem Umfang,
+in dem sie erlaubt ist.
+
+| ID | Anforderung |
+|---|---|
+| A-18.1 | Takt ermittelt die eigene installierte Fassung eindeutig aus einer einzigen Quelle im Erzeugnis. |
+| A-18.2 | Beim Start und danach regelmäßig prüft Takt, ob im offiziellen GitHub-Bestand eine neuere veröffentlichte Fassung vorliegt. |
+| A-18.3 | Gefragt wird die dafür vorgesehene offizielle Quelle: die Releases des Bestands. Die Adresse ist fest im Erzeugnis hinterlegt und weder einstellbar noch aus einer Antwort übernehmbar. |
+| A-18.4 | Verglichen wird die installierte Fassung mit der neuesten veröffentlichten. Der Vergleich folgt einer festgelegten Ordnung von Versionsnummern, nicht dem Zeichenkettenvergleich. |
+| A-18.5 | Liegt keine neuere Fassung vor, sagt Takt nichts und tut nichts. |
+| A-18.6 | Liegt eine neuere Fassung vor, zeigt Takt sie an, und zwar mindestens: die installierte Fassung, die verfügbare Fassung und den Verweis auf die offizielle Release-Seite dieser Fassung. |
+| A-18.7 | Takt fragt ausdrücklich, ob der Benutzer installieren oder überspringen möchte. Es gibt keine Vorauswahl, die eine der beiden Antworten für ihn trifft. |
+| A-18.8 | Wählt der Benutzer „Installieren", öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
+| A-18.9 | Takt lädt zu keinem Zeitpunkt eine Datei herunter und installiert zu keinem Zeitpunkt etwas. Herunterladen und Installieren löst ausschließlich der Benutzer aus, außerhalb von Takt. |
+| A-18.10 | Wählt der Benutzer „Überspringen", wird genau diese Fassung übersprungen. Für sie erscheint der Hinweis nicht wieder; eine spätere, neuere Fassung wird wieder gemeldet. |
+| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen im selben Lauf. Der Grund steht im Protokoll. |
+| A-18.12 | Die Prüfung überträgt nichts über den Benutzer, den Bestand oder die Nutzung. Sie stellt eine Frage und liest eine Antwort. |
+
+**Was diese Anforderung ausdrücklich nicht ist.** Kein Selbstaktualisierer, kein Hintergrundlader,
+keine Telemetrie. E-001 gilt unverändert für alles andere: Es gibt weiterhin keinen Cloud-Dienst,
+keinen Datenbankserver und keine Übertragung von Daten aus Takt heraus.
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

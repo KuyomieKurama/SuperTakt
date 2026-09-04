@@ -1,4 +1,4 @@
-import { countPoolRuleConditions } from "@takt/domain";
+import { countPoolRuleConditions, MAX_NAME_LENGTH } from "@takt/domain";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPool, updatePool } from "../api/endpoints";
 import type {
@@ -518,7 +518,7 @@ export function PoolFormDialog({
         value={name}
         onChange={setName}
         required
-        maxLength={128}
+        maxLength={MAX_NAME_LENGTH}
         placeholder={isBoardColumn ? "z. B. Wartet auf Rückmeldung" : "z. B. Kunden Nord"}
       />
 

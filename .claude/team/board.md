@@ -204,6 +204,183 @@ Port 17843 — warten, keine fremden Prozesse beenden.
 Danach: integration-dev (E-061 Punkt 3, Add-in-Routen auf `poolMovement`; Welle F), unit-tester
 und e2e-tester Nachzieher, Reviewer-Wiedervorlage, zuletzt documenter.
 
+### Welle vom 2026-09-04, Welle R (Prüffälle zur Versionsprüfung) — läuft
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-140~~ | **Fertig.** `pnpm test` 1027/1028 auf **1171/1171** (+143 Fälle, +6 Dateien), `cargo test --lib` 26/26 auf **31/31**. Der rote Fall zuerst rot gesehen (`expected version: 13 to equal version: 12`), dann auf `migrations.at(-1)?.version` gezogen — an **zwei** Stellen, nicht einer; die Suche nach derselben Bauart im ganzen Baum fand keine weitere. **O-BC** übernommen, `migration-failure-reason.test.ts` um fünf Fälle für die Wächterfunktionen erweitert, die vorher nur mittelbar liefen. Die Netzfälle laufen gegen einen **echten** lokalen `http.createServer()` statt gegen eine Attrappe von `fetch` — einschließlich einer echten Gzip-Bombe für A-V-6. A-V-12 gemessen (die Lücke, die T-138 selbst benannt hatte), A-V-10 auf Routenebene. Zwölf Mutationen gegengemessen, **darunter eine, bei der der eigene erste Entwurf eines A-V-7-Falls unter einer echten Mutation grün blieb** — vor der Abgabe gefunden und behoben. Abdeckung: Domäne 92,6 %, Export 98,0 %, Speicherung 90–100 %. Ursprünglich: Den einen roten Fall nachziehen (`migration-0012-…test.ts:63` fragt die letzte Migration statt eine Zahl zu wiederholen) und im Vorbeigehen dieselbe Bauart suchen; **O-BC** — die zwei Prüfdateien aus T-132 übernehmen und die neun Gründe wirklich **unterscheidbar** messen; die 23 Netzfälle, 28 Ordnungsfälle und zehn Ausbruchsversuche aus T-138/T-139 als dauerhafte Fälle, dazu A-V-10 und A-V-12 als Prüffall, `useUpdateNotice`, `foreignTextFrom`, `describeDeviations` | unit-tester |
+
+**Vom Orchestrator übernommen, weil es die Auslieferung blockierte:** `pnpm check` fiel nach
+T-140 an `proof:codepoints` aus — die neue Datei `apps/web/test/lib/foreign.test.ts` trug **sieben
+rohe** `U+202E`/`U+200B` im Quelltext. Genau die Klasse aus O-AP, jetzt zum vierten Mal, und
+diesmal in einer Datei, die das Verhalten gegen dieses Zeichen prüft. Auf `\u202E`/`\u200B`
+umgestellt; die Prüfdatei bleibt 17/17, `proof:codepoints` 45/0. **Der Wächter hat getan, wofür er
+da ist** — aber er hängt in `pnpm check`, und T-140 fährt `pnpm test` und `cargo test`, nicht
+`pnpm check`. Das ist der eigentliche Befund und gehört zu O-AP.
+
+**Messung nach Welle R (Orchestrator), Ports frei:** `pnpm check` **Exitcode 0** — 18
+Nachweispfade, 1171 Einheitentests in 66 Dateien, `verify:bundle` 20/20, Bau grün ·
+`pnpm test:e2e` **62/62** in 1,8 min. Damit ist der Baum vollständig gemessen, zum ersten Mal seit
+Welle N.
+
+Nicht gestartet: **T-142** (e2e-tester, die `TP-VER`-Fälle samt Nachbildung der GitHub-Antwort und
+den zwei neuen Befehlen in `shell-shim.ts`) — er bräuchte 17843 und 17844, und der Auftraggeber
+fährt Takt. Danach **Welle S**: Qualitätstor über T-132 bis T-142 (code-reviewer,
+spec-ux-reviewer, security-checker mit Wiedervorlage von `bedrohungsmodell.md` 18.9), zuletzt
+documenter. Für die Wiedervorlage vorgemerkt, von T-138 gemeldet: **A-V-14** nennt drei Felder,
+die Route gibt zwei heraus (die installierte Fassung kennt der Dienst nach E-069 nicht — enger
+als gefordert, aber eine Abweichung), und **A-V-1** erwartet bei `grep github.com` null Treffer.
+**A-V-6 bleibt halb offen:** Der Bestand hat noch keine Veröffentlichung, der echte Aufruf ergab
+404 mit 130 Bytes — die 64-KiB-Grenze steht auf einer Schätzung und ist nach der ersten Fassung
+nachzumessen.
+
+### Welle vom 2026-09-04, Welle Q (Versionsprüfung bauen) — läuft
+
+Ausgangspunkt: Welle O ist zurück und gemessen (typecheck 0, test 1028/1028, proof:all 0,
+verify:bundle 20/20, e2e 62/62). Damit sind `apps/web`, `apps/desktop`, `apps/local-api` und die
+Pakete wieder frei, und die Umsetzung aus Welle P kann beginnen.
+
+**Vorab durch den Orchestrator: E-069.** Auflage A-V-10 verbietet den Netzaufruf in einem
+eingehenden Anfragebehandler — sonst taktet jeder lokale Prozess mit dem Sitzungsgeheimnis (R-02)
+das Lebenszeichen aus R-19. Damit ist der naheliegende Entwurf „Oberfläche fragt Route, Route
+fragt GitHub" ausgeschlossen. Er war in E-064 nicht ausdrücklich verboten, und ohne den Eintrag
+hätte ihn jemand gebaut. Der Dienst prüft nach der Uhr (Start, danach höchstens alle 24 h), die
+Route liest nur ab; „noch nichts geprüft" ist eine gültige Antwort.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-138~~ | **Fertig, braucht Review.** `packages/domain/src/version.ts`: SemVer-Vorrang, numerisch, **ohne `Number` in der Vorabkennung**, das führende `v` fällt an genau einer Stelle; dazu `decideUpdateNotice`. Der Dienst fragt nach der Uhr — `compose()` baut den Prüfer und **startet ihn nicht**, `main.ts` startet ihn 10 s nach dem Hochfahren, danach höchstens einmal in 24 h; der Zeitgeber ist `unref()`t, damit ein Lauf, der keine Sitzung war, **gar kein Lebenszeichen** abgibt (Wirkung: `verify:bundle` startet den Sidecar viermal und sendet nichts). **101 Aufrufe der Route ergaben eine ausgehende Anfrage** — A-V-10 gemessen, nicht zugesagt. Aus der Antwort verlässt genau eine geprüfte Fassungsbezeichnung den Dienst; `html_url` steht bewusst **nicht** darin, obwohl es in der Antwort stünde. Übersprungene Fassung als Migration 0013, vorwärts und rückwärts gefahren, an drei Türen gegen dieselbe Form geprüft — **auch beim Lesen**. `proof:release-safety` misst über acht Quellordner mit einer Gegenprobe je Prüfung und einer Selbstprüfung des Kommentar-Entferners: 23 Prüfungen. Ursprünglich: `packages/domain`: Ordnung der Fassungen nach SemVer-Vorrang samt Vorabfassungen, führendes `v` an genau einer Stelle abgeschnitten, Regel „neuer **und** nicht übersprungen". Dienst: Prüfung nach der Uhr, fester Netzaufruf mit Frist, Obergrenze auf dem **entpackten** Strom und ohne Weiterleitung, aus der Antwort verlässt nur die geprüfte Fassungsbezeichnung den Dienst; Einstellung „übersprungene Fassung" als Benutzereingabe an ihrer Tür geprüft; stiller Fehlschlag mit unterscheidbarem Grund im Protokoll; OpenAPI. Dazu `proof:release-safety` mit Gegenproben | domain-dev |
+| ~~T-139~~ | **Fertig, braucht Review.** `takt_open_release(version: String)` nimmt **genau einen `String` aus dem Aufruf**, keine Adresse; die Bezeichnung wird gegen `^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$` geprüft und in eine feste Konstante eingesetzt, sonst `Err("version_rejected")` **ohne den abgewiesenen Wert**. Zehn `#[cfg(test)]`-Ausbruchsversuche neben dem Befehl. Neuer Nachweispfad `proof:shell-surface`: vier Prüfungen und zehn Gegenproben — keine Shell-Zeile in `capabilities/**`, die CSP zeichengleich, **ein** Aufrufort für `open`, und der Gleichlauf der angezeigten mit der geöffneten Adresse. Dialog mit beiden Antworten gleich gestaltet, Fokus auf dem Dialog statt auf einem Knopf; „Überspringen" schreibt über `PATCH /settings` in den Bestand; liegt nichts vor, entsteht **kein Element**. Verglichen wird ausschließlich über `decideUpdateNotice`/`normalizeVersion` aus `packages/domain`. Messungen: `typecheck` 0, `proof:foreign` 14/0, `contrast` 0/432, `cargo test --lib` 26/26, `cargo fmt --check` sauber, `vitest apps/web apps/desktop` 85/85. Ursprünglich: Hülle: Fassung aus den **einkompilierten** Angaben, Öffnen-Befehl **ohne** Adressparameter mit enger Formprüfung — nach T-136-1 die einzige Kontrolle zwischen GitHubs Antwort und `xdg-open`/`ShellExecuteW` —, keine Shell-Berechtigung in `capabilities/**`, zwei Wächter mit Gegenprobe. Oberfläche: Dialog mit installierter Fassung, neuer Fassung und Verweis als **Knopf** statt `<a href>`, „Installieren" öffnet nur, „Überspringen" gilt einer Fassung und liegt im Bestand; nichts erscheint, wenn nichts Neues da ist; die Fassungsbezeichnung ist fremder Text und geht durch `foreignTextFrom` | frontend-dev |
+
+**Nach T-139 durch den Orchestrator erledigt (gemeinsame Dateien):** `proof:shell-surface` steht
+in der Wurzel-`package.json` und in `proof:all` — einmal gefahren, 4 Prüfungen und 10 Gegenproben
+grün. **T-136-2 berichtigt:** `connect-src` trägt **vier** Marken (`'self'`, `ipc:`,
+`http://ipc.localhost`, `http://127.0.0.1:17843`), nicht drei; `CLAUDE.md` gibt sie jetzt
+vollständig an, und in `decisions.md` steht eine Berichtigung zu E-064 Punkt 2. Von Hand zählt
+das ab jetzt niemand mehr — der Wächter hält die Zusage zeichengleich gegen `tauri.conf.json`.
+
+**Die Naht hält — nachgesehen, nicht angenommen.** Beide Seiten sprechen `/version-check` unter
+demselben Anwendungsstamm, und `latestVersion` heißt auf beiden Seiten so. Der Dienst schickt
+zusätzlich `state`; die Oberfläche liest es nicht und muss es nicht — `latestVersion` ist dort
+`unknown` und geht durch die Behandlung fremden Textes. T-138 hat den Pfad aus demselben Grund so
+genannt: die Ressource ist das Prüfergebnis, nicht „die Fassung".
+
+**Nach Welle Q durch den Orchestrator erledigt:** `proof:release-safety` und `proof:shell-surface`
+stehen in `apps/local-api/package.json` beziehungsweise `apps/desktop/package.json`, in der
+Wurzel-`package.json` und in `proof:all`.
+
+**Messung nach Welle Q (Orchestrator):** `pnpm typecheck` **0** · `pnpm test` **1027/1028** — der
+eine rote Fall ist bekannt und gehört unit-tester: `packages/storage/test/migration-0012-pool-rule-restrict.test.ts:63`
+nimmt an, 0012 sei die letzte Migration; seit 0013 stimmt das nicht mehr (Ein-Zeilen-Nachzug über
+`migrations.at(-1)?.version`) · **16 der 18 Nachweispfade** einzeln gefahren, **alle 0 rot**,
+darunter die beiden neuen (`release-safety` 23, `shell-surface` 4 + 10 Gegenproben).
+
+**Nicht gemessen, und der Grund gehört genannt:** `proof:access`, `proof:taskpane`,
+`verify:bundle` und `pnpm test:e2e` brauchen die Ports **17843 und 17844 frei** (O-O). Der
+Auftraggeber hat Takt um 23:02 gestartet, und sein Dienst hält beide. Die Kette bleibt sauber
+stehen und nennt den Grund — sie fährt nicht gegen einen fremden Prozess und nennt das dann einen
+Nachweis. Nachzuholen, sobald die Anwendung beendet ist.
+
+Damit ist die Versionsprüfung gebaut. Was noch fehlt, steht in Welle R: die Prüffälle und das
+Qualitätstor.
+
+### Welle vom 2026-09-04, Welle P (Versionsprüfung gegen GitHub) — Vorarbeiten laufen, Bau wartet
+
+Nachtrag des Auftraggebers vom 2026-09-04: Takt soll beim Start und regelmäßig prüfen, ob auf
+GitHub eine neuere Fassung vorliegt, den Benutzer fragen und ihn zur Release-Seite führen — ohne
+eigenen Download, ohne eigene Installation.
+
+**Vorab durch den Orchestrator** (gemeinsame Dateien, deshalb nicht delegiert):
+
+* `docs/spec.md` Abschnitt 18, A-18.1 bis A-18.12. Ohne Anforderungs-ID keine Umsetzung — die ID
+  gab es vorher nicht.
+* **E-064** — die Versionsprüfung ist die einzige Verbindung nach außen, und sie darf nur fragen:
+  Adresse fest im Erzeugnis, die Frage stellt der Dienst und nicht die Oberfläche (die CSP der
+  Hülle lässt den Webview nur an `127.0.0.1:17843` und wird dafür **nicht** geöffnet), die
+  Ordnung der Fassungen liegt in `packages/domain`, die Hülle baut die Adresse zum Öffnen selbst,
+  „Überspringen" gilt einer Fassung, ein Fehlschlag ist still.
+* **E-065** — die Fassung steht an einer Stelle: `version` in `tauri.conf.json`. Heute `0.0.0`
+  überall; die erste echte Fassungsnummer zu vergeben ist Sache des Auftraggebers.
+* **R-19** (Takt bekommt einen Ausgang ins Netz) und **R-20** (eine Meldung, die man nicht
+  loswird, wird weggeklickt).
+* `CLAUDE.md`: Betriebsform um die eine Ausnahme ergänzt, neuer Abschnitt „Versionsprüfung" mit
+  den acht Regeln, Sicherheitsabschnitt um die neue Richtung ergänzt.
+
+**Warum der Bau nicht in dieser Welle beginnt.** Jeder Schreibpfad der Umsetzung liegt unter
+einer Hoheit, die Welle O gerade hält:
+
+| Teil der Umsetzung | Pfad | hält gerade |
+|---|---|---|
+| Route, Netzaufruf, Einstellung „übersprungene Fassung" | `apps/local-api/**`, `packages/storage/**` | T-132 (domain-dev) |
+| Ordnung der Fassungen, Regel „neu und nicht übersprungen" | `packages/domain/**` | T-132 (domain-dev) |
+| Dialog, „Installieren"/„Überspringen" | `apps/web/**` | T-133 (frontend-dev) |
+| Fassung auslesen, Release-Seite öffnen | `apps/desktop/**` | T-133 (frontend-dev) |
+
+Zwei Agenten an einer Datei ist die eine Regel, die dieses Vorhaben nicht bricht. Der Bau ist
+Welle Q, unmittelbar nach dem Rücklauf von T-132 und T-133.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-136~~ | **Fertig, Urteil freigegeben — mit zwanzig Auflagen als Bedingung.** `docs/bedrohungsmodell.md`: neue Vertrauensgrenze VG-10, zwei Akteure, Prüfungen 27–34, neuer Abschnitt 18 mit A-V-1 bis A-V-20 und sechs Befunden. Sieben eigene Messungen; drei haben eine Auflage verändert. **T-136-1 (muss):** `tauri-plugin-shell` prüft auf dem **Rust**-Weg gar nichts — `Shell::open` reicht durch an `open::open(None, …)`, der Prüfbereich wird nur bei Aufrufen aus JavaScript betreten. Die Formprüfung der Fassungsbezeichnung ist damit die **einzige** Kontrolle zwischen GitHubs Antwort und `xdg-open`/`ShellExecuteW`, und `shell:default` enthält `allow-open` mit einem Muster, das jede `https:`-Adresse durchlässt. **`content-length` ist keine Obergrenze:** 50 989 Bytes auf der Leitung wurden 52 428 800 Bytes im Speicher (Faktor 1 028) — die Grenze zählt den **entpackten** Strom beim Lesen, `response.json()` ist damit ausgeschlossen. **Der Netzaufruf darf nie in einem eingehenden Anfragebehandler liegen**, sonst taktet jeder lokale Prozess das Lebenszeichen. Drei Stellen im Bestand passen ohne Zutun: die CSP schließt den Weg über die Oberfläche, `requiredCredentialForPath` schließt die neue Route, bevor es sie gibt, `proof:route-policy` misst das von selbst. Beantwortet in **E-067** und **E-068**. Ursprünglich: **Bedrohungsmodell für den neuen Ausgang.** `docs/bedrohungsmodell.md`: die Verbindung nach außen als Vertrauensgrenze bewerten, bevor sie gebaut wird — die fremde Antwort im Prozess, der Weg einer Adresse aus dieser Antwort in den Browser des Benutzers, das Lebenszeichen bei jeder Anfrage, die Zusagen, die die Umsetzung einhalten muss. Auflagen so schreiben, dass sie prüfbar sind | security-checker |
+| ~~T-137~~ | **Fertig.** `docs/testplan.md` Abschnitt 24, 26 Fälle `TP-VER-01` bis `TP-VER-26` — reiner Anhang, nichts Bestehendes umgeschrieben. Deckt die Fehlschlagfamilie, Stille bei Gleichstand, den Dialog, Überspringen über einen echten Neustart mit geleertem Browserspeicher, „Installieren" ohne Download, eine dreiteilige Gegenprobe zu A-18.9 nach dem Vorbild der `proof:*`-Pfade und die Ordnung der Fassungen als parametrisierte Tabelle. Kein Fall gelaufen — es gibt nichts zu laufen. **Der tragende Befund:** 22 der 26 Fälle hängen an einer Nachbildung der GitHub-Antwort, und die bisherige Linie „keine Attrappen-Server" trägt hier zum ersten Mal nicht. Beantwortet in **E-066**. Ursprünglich: **Testplan für die Versionsprüfung.** `docs/testplan.md`: Fälle zu A-18.1 bis A-18.12 aus der Spezifikation ableiten, vor dem Bau — GitHub nicht erreichbar, unerwartete oder leere Antwort, fehlende oder unsinnige Fassungsangabe, keine Veröffentlichung, bereits aktuell, neuere Fassung, „Überspringen" über einen Neustart hinweg, „Installieren" ohne jeden Download. **Noch keine Prüfdateien** — das Ziel gibt es noch nicht | e2e-tester |
+
+Vorgesehen für Welle Q, nach dem Rücklauf von Welle O:
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| T-138 | **Gegen die zwanzig Auflagen aus `bedrohungsmodell.md` 18.9.** `packages/domain`: Ordnung der Fassungen und die Regel „neuer und nicht übersprungen"; Dienst: Route, fester Netzaufruf mit Frist und Obergrenze, keine Weiterleitung auf einen fremden Wirt, Einstellung „übersprungene Fassung" | domain-dev |
+| T-139 | **Gegen die zwanzig Auflagen aus `bedrohungsmodell.md` 18.9 und E-067.** Hülle: Fassung aus den einkompilierten Angaben des Erzeugnisses (nicht aus Datei, Umgebung oder Argument), Öffnen-Befehl **ohne** Adressparameter mit enger Formprüfung, **keine** Shell-Berechtigung in `capabilities/**`; zwei Wächter: Berechtigungsdateien ohne Shell-Zeile, und die zugesagten CSP-Einträge gegen `tauri.conf.json` (T-136-2: die Zusage nennt drei, die Datei trägt vier). Oberfläche: Dialog mit installierter Fassung, neuer Fassung, Verweis, „Installieren" und „Überspringen"; der Verweis ist ein Knopf, kein `<a href>`, Öffnen-Befehl **ohne** Adressparameter; Oberfläche: Dialog mit installierter Fassung, neuer Fassung, Verweis, „Installieren" und „Überspringen" | frontend-dev |
+| T-140 | Prüffälle zu T-138 und T-139, darunter die Gegenprobe, dass kein Weg zu einem Download führt | unit-tester |
+| T-142 | Die Prüfdateien zu `docs/testplan.md` Abschnitt 24 samt Nachbildung der GitHub-Antwort unter `tests/e2e/support/`. **Nicht vor T-138** — sie brauchen die Naht aus E-066 Punkt 1 | e2e-tester |
+| T-141 | Handbücher und Entwicklerdokumentation nachziehen | documenter |
+
+**Antworten des Orchestrators auf T-137 (E-066), damit T-138 nicht wartet:** die Naht ist die
+Abholfunktion im Zusammenbau, nicht die Zeichenkette — mit der Bedingung, dass ein Nachweis misst,
+dass im ausgelieferten Zusammenbau kein Weg zu einer anderen Adresse führt; gefragt wird
+`releases/latest` (Entwürfe und Vorabfassungen fallen damit von selbst weg, „keine Veröffentlichung"
+ist ein 404); die Ordnung folgt SemVer einschließlich der Vorrangregel für Vorabfassungen, ein
+führendes `v` wird an genau einer Stelle abgeschnitten; `proof:release-safety` baut T-138, den
+Eintrag in `proof:all` setzt der Orchestrator.
+
+### Welle vom 2026-09-04, Welle O (Takt startete nicht, drei Restpunkte) — läuft
+
+Anlass: `pnpm desktop` hat einmal nicht gestartet. Der Sidecar brach mit
+`Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht.`
+ab (Exitcode 78). Ein zweiter Anlauf lief. **Der Grund ist nicht bekannt, weil `main.ts:132`
+ihn wegwirft** — `catch { … }` ohne Bindung, die Meldung nennt nur die Folge.
+
+Messungen des Orchestrators vor der Welle (alle gegen den Bestand von 20:12 Uhr, Kopie in einem
+Prüfverzeichnis, nichts am echten Bestand angefasst):
+
+| Was gemessen | Ergebnis |
+|---|---|
+| `schema_migration` im echten Bestand | 12 Zeilen, 1 bis 12, Prüfsummen stimmen zeichengleich mit `packages/storage/migrations/*.up.sql` |
+| Eingebettete Fassung | alle 24 Dateien vorhanden, `describeDrift` ohne Befund |
+| `state()` + `migrateToLatest()` aus dem Quelltext gegen die Kopie | `{"kind":"current","version":12}`, `{from:12,to:12,backup:null}` |
+| Ausgelieferte Binärdatei gegen dieselbe Kopie | migriert sauber durch, scheitert erst am belegten Port 17843 |
+| Dieselbe Binärdatei gegen eine **gesperrte** Kopie (`BEGIN EXCLUSIVE` aus einem zweiten Prozess) | `Der lokale Dienst konnte nicht starten: database is locked` — **andere** Meldung, also nicht dieser Fall |
+
+Damit ist die Sperre ausgeschlossen und der Fehler mit den vorliegenden Mitteln nicht
+nachstellbar. Genau deshalb steht die Diagnosefähigkeit vor der Ursache.
+
+| Nr | Aufgabe | Wer |
+|---|---|---|
+| ~~T-132~~ | **Fertig, braucht Review.** Der Fehlschlag des Migrationsläufers ist ein Wert mit benannten Feldern: neun unterscheidbare Gründe, je mit Fassung, Richtung, Fehlerschlüssel und SQLite-Ergebniskennzeichen; neues `apps/local-api/src/startup.ts` macht daraus einen deutschen Satz für den Benutzer und einen technischen Schlüssel fürs Protokoll. **Der schwerere Fund war der zweite:** `compose()` stand in **gar keiner** Klammer — ein Wurf dort lief ins Auffangnetz des Bündels, das `error.message` samt Pfad nach `stderr` schreibt. Der Fall, gegen den B-2.4 geschrieben ist, war ausgerechnet der ungefangene. Ebenso der Aufgabenbereich, der „geht nicht" ohne Grund meldete. **O-C:** `GET /settings` führt den Datenbankpfad in der Form des Exportordners (`databaseTraits`, `databaseFilesTooPermissive` als **Zahl** statt Pfadliste). **O-M:** die Aufruferseite des Add-ins läuft durch **denselben** Leser wie die der Oberfläche, `proof:callers` 18 auf 32 Prüfungen, mit drei Selbstproben, die eingesetzte Fehler wirklich finden. Läufe: `typecheck` 0, `test` 1028/1028, `proof:all` 16 Läufe 0 rot, `verify:bundle` 20/20 gegen die neu gebaute Binärdatei. **Ursachensuche:** sieben Hypothesen gemessen ausgeschlossen — unter anderem die Sperre (im WAL-Betrieb sperrt `BEGIN EXCLUSIVE` keine Leser aus), liegengebliebene `-wal`, zerstörte `-shm`, beschädigte Datei, „eine Migration lief wirklich" (`applied_at` von Fassung 12 ist 01:47, keine Sicherungskopie von 18:57) und `checksum_mismatch` aus dem eingecheckten Baum. **Leithypothese, belegt aber nicht bewiesen:** ein unvollständiger Arbeitsbaum beim Neubau des Sidecars — nachgestellt gegen eine Kopie ergibt genau `database_too_new database=12 known=10`. Der echte Bestand wurde nicht angefasst. Ursprünglich: **Der Startabbruch nennt seinen Grund.** `apps/local-api/src/main.ts:131-140` verschluckt den Fehler vollständig. B-2.4 verbietet den Pfad in der Meldung, nicht den Grund. Gefordert: der Grund wird unterschieden und protokolliert, pfadfrei — `checksum_mismatch`, `database_too_new`, Sperre, Schreibfehler der Sicherungskopie, sonstiger Wurf — und die vier bekannten Fälle bekommen je einen Prüffall. Dazu **O-C** (`GET /settings` ohne Merkmale zum Datenbankpfad) und **O-M** (Aufruferseite des Add-ins von `proof:callers` nicht erfasst) | domain-dev |
+| ~~T-133~~ | **Fertig, braucht Review.** **O-A:** die API konnte das Umbenennen längst (`PATCH /pools/{poolId}`, `409 name_conflict`, `ux_pool_name` UNIQUE NOCASE) — es fehlte allein die Bedienung. Neuer `PoolRenameDialog.tsx` mit allen fünf Zuständen, erreichbar aus Spaltenmenü, Board-Verwaltung und Regelliste, mit Rückweg im Toast und `{ name }` statt aller fünf Achsen. **O-AF:** war durch T-124 bereits behoben (nachgemessen); die beauftragte Suche nach derselben Klasse fand über einen Übersetzerdurchlauf **zwei weitere stumme Ausgänge** im Exportordnerfeld — beide behoben. **O-AT:** die `unknown`-Grenze steht als erklärte Übergangsstelle `foreignTextFrom` im Typ, `proof:foreign` 10 auf 14 Prüfungen; dabei fielen **sechs rohe Anzeigestellen** an, die zwei schwersten in der Exportvorschau (die zusammengeführte Leistung einer Tagesgruppe und der Schlüssel jeder Zelle) — an jeder konnte ein `U+202E` die Anzeige umdrehen. Nebenbei: acht handgeschriebene Längengrenzen lesen jetzt aus `@takt/domain`, und dabei fiel `maxLength={512}` am Todo-Titel als **Defekt** auf — die Tür nimmt 500, das war ein vorbereitetes 422. **Sieben Gegenproben**, zwei davon (J, L) beim ersten Lauf grün: sie deckten je ein Loch **im Nachweis** auf, nicht im Code. Beide geschlossen. Ursprünglich: **O-A** Kanban-Spalten umbenennen (es gibt keine Bedienmöglichkeit, T-052), **O-AF** „Takt beenden" scheitert stumm (`App.tsx:250`, `ServiceStoppedPanel` — der einzige Ausgang aus der Sperrmeldung), **O-AT** die `unknown`-Grenze an `ExportTemplate.definition` in `lib/exportTemplateModel.ts` | frontend-dev |
+| ~~T-134~~ | **Fertig.** Das Add-in bezieht `MAX_TITLE_CHARACTERS` aus `@takt/domain`; `proof:addin` Abschnitt 16 fragt dreiteilig nach der **Herkunft** statt nach der Zahl — eine Zahl hat keine Kennung, `500 === 500` ist wahr, egal woher beide kommen, deshalb ließ sich T-131s `toBe`-Bewegung nicht übernehmen. Gemessen an drei Gegenproben; die tragende ist A: eine zweite Fassung mit **derselben** 500 lief unter dem alten Vergleich grün und ist unter dem neuen Nachweis rot. **Echter Fehler dabei gefunden und behoben:** `prepareNote` schnitt auf 4000 und hängte „…(gekürzt)" **danach** an — 4011 Zeichen gegen eine Tür, die 4000 nimmt. Jede lange Mail ohne Absätze gab dem Benutzer nach „Inhalt übernehmen" ein 422 auf einen Text, den er nicht geschrieben hat. Unentdeckt, weil die Erwartung in Abschnitt 17 den Fehler **nachrechnete** statt auf die Tür zu zeigen. Die zweite `4000` ist nach Prüfung **nicht** dieselbe Wahrheit wie ihr Namensvetter (Vermerk aus der E-Mail gegen Leistung in die Abrechnung) und steht mit eigener Konstante und Begründung. `proof:addin` 165 auf 169. Ursprünglich: **O-AS** `MAX_TITLE_CHARACTERS` aus `@takt/domain` beziehen (seit T-128 dort) und `proof:addin` Abschnitt 16 vom Zahlenvergleich auf die Herkunftsfrage umstellen; dazu der Add-in-Anteil von **O-AR**: die beiden `4000` in `routes/addin/schema.ts` samt der Doppelung innerhalb derselben Datei, `tagIds: max(200)` an der Add-in-Tür | integration-dev |
+
+Bewusst **nicht** in dieser Welle:
+
+* **e2e-tester (O-P)** und **spec-ux-reviewer (O-Q)** — beide messen `apps/web`, das T-133 währenddessen ändert. Ein Lauf gegen einen wandernden Baum belegt nichts. Sie kommen in Welle P.
+* **O-AJ** (die Hülle nennt den Grund bei `user_invalid`) — dieselbe Naht wie T-132: Sidecar-Meldungen und Exitcodes. Zwei Agenten an einer Naht.
+* **O-AN**, **O-AP**, **O-AQ**, **O-AR** (Rest bei domain-dev) — Warteschlange, nicht blockiert.
+
+**Messung nach Welle O (Orchestrator), gegen den vereinigten Baum aller drei Aufgaben:**
+`pnpm typecheck` 0 · `pnpm test` **1028/1028** in 60 Dateien · `pnpm run proof:all` Exitcode 0,
+15 Nachweispfade je „0 fehlgeschlagen" · `pnpm run verify:bundle` **20/20** gegen die neu gebaute
+Binärdatei · `pnpm test:e2e` **62/62** in 1,5 min. Die Sorge aus T-133 („zeichengenaue
+e2e-Erwartungen könnten rot werden") hat sich **nicht** bestätigt — gemessen, nicht angenommen.
+
 ### Welle vom 2026-09-04, Welle N (die letzten Doppelungen, drei Fälle aus T-124) — fertig
 
 | Nr | Aufgabe | Wer |
@@ -309,14 +486,14 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 
 | Nr | Punkt | Wer |
 |---|---|---|
-| O-A | Kanban-Spalten lassen sich nicht umbenennen — es gibt keine Bedienmöglichkeit dafür (T-052) | frontend-dev |
+| ~~O-A~~ | *erledigt in T-133.* Kanban-Spalten lassen sich nicht umbenennen — es gibt keine Bedienmöglichkeit dafür (T-052) | frontend-dev |
 | O-B | `PoolWrite` kennt kein `position`; jeder neue Pool entsteht auf 0. Fachliche Frage: sollen Pools sortierbar sein? | Auftraggeber |
-| O-C | `GET /settings` belegt keine Merkmale zum Datenbankpfad, anders als beim Exportordner | domain-dev |
+| ~~O-C~~ | *erledigt in T-132.* `GET /settings` belegt keine Merkmale zum Datenbankpfad, anders als beim Exportordner | domain-dev |
 | O-D | `Pool.rule` heißt weiter `rule`, enthält aber nur noch die erforderlichen Tags. Umbenennen berührt drei Hoheiten — eigene Aufgabe | Orchestrator |
 | ~~O-F~~ | *erledigt.* Alle 13 Nachweispfade laufen seit T-08x in `pnpm check` (`proof:all`), zuletzt gemessen nach T-088: 818 Prüfungen, 0 rot |
 | ~~O-G~~ | *erledigt in T-084.* Der Poolsatz erscheint nur im Wiederöffnen-Fall. Für ein **offenes** Todo liefert der Dienst `poolNames`, die niemand liest. Der Agent hielt das für vollständig gedeckt, weil nur dort etwas *verschwinden* kann — aber **erscheinen** kann auch ohne Wiederöffnen: Die erste Buchung auf einem Todo ohne Buchung setzt `hasOpenEntries` von falsch auf wahr, und eine Spalte `exportState: 'open'` nimmt es damit auf. `bookingStates` rechnet das bereits richtig; nur die Anzeige fehlt | frontend-dev |
 | O-E | Soll das **Ziehen für reine Status-Spalten** zurückkommen? Der Status ist eine Eigenschaft, kein Tag; das wäre umkehrbar, ohne E-054 zu verletzen | Auftraggeber |
-| O-M | Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
+| ~~O-M~~ | *erledigt in T-132.* Die Aufruferseite des Add-ins ist von `proof:callers` nicht erfasst | domain-dev |
 | O-N | Die Quellkarten des Add-ins gehen in die Auslieferung mit (1,1 MiB, über HTTPS abrufbar). Nichts wurde stillschweigend gefiltert — die Frage gehört entschieden. | Auftraggeber |
 | O-O | `pnpm desktop` braucht jetzt beide Ports frei (17843 und 17844). Verhaltensänderung durch den mitlaufenden Nachweis; die Kette bleibt sauber stehen und nennt den Grund. | — |
 | O-P | Neun End-to-End-Fälle nicht gelaufen: Add-in (kein Office.js-Wirt), drei Hüllenzustände (kein echter Tauri-Prozess), Stichprobe über die 19 Orte mit Exportstatus, Standard-Tags über die Oberfläche | e2e-tester |
@@ -340,7 +517,7 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 | O-AC | **T-115 Frage.** `TimerContext.undoReactivation` sind drei Aufrufe ohne gemeinsame Klammer: Meldung präzisieren oder eigene Route? | frontend-dev, dann domain-dev |
 | O-AD | `Todo.title` im **Haupt**abschnitt der OpenAPI (`takt-local-api.yaml:3691`) trägt weiter `maxLength: 512`, während `TodoCreate`/`TodoUpdate` 500 tragen. Die 512 gab es nur über die Add-in-Tür; seit T-114 an keinem Eingang mehr (T-114 Frage 2) | domain-dev |
 | O-AE | **Sicherheit (T-117 R2).** `apps/local-api/src/access/session-secret.ts:85` prüft den Windows-Benutzernamen nur gegen C0 und DEL — kein C1, keine Richtungszeichen. Der Name geht als `WindowsUser` **unverändert in die Exportdatei**. domain-dev hat ihn nicht geändert, weil es das Verhalten am stdin-Handschlag ändert und `proof:access` daran hängt; der irreführende Verweis in `input.ts` ist richtiggestellt. Entscheidung Orchestrator: **ja, Klasse übernehmen** — eigene kleine Aufgabe mit Prüffall in `proof:access`, Welle K | domain-dev |
-| O-AF | „Takt beenden" scheitert stumm (`apps/web/src/app/App.tsx:250`, `ServiceStoppedPanel`) — es ist der **einzige** Ausgang aus der Sperrmeldung, und die Auskunft müsste ins Feld selbst (T-118 Frage 2). Dieselbe Klasse wie B-6 | frontend-dev |
+| ~~O-AF~~ | *erledigt in T-133.* „Takt beenden" scheitert stumm (`apps/web/src/app/App.tsx:250`, `ServiceStoppedPanel`) — es ist der **einzige** Ausgang aus der Sperrmeldung, und die Auskunft müsste ins Feld selbst (T-118 Frage 2). Dieselbe Klasse wie B-6 | frontend-dev |
 | O-AG | B-11: `listPools` wartet auf den Export aus `@takt/domain`, damit die Aufzählungsform einen Ort hat (T-110 Frage 1, T-118 Frage 3) | domain-dev, dann frontend-dev |
 | O-AH | Die Anzeige der Todo-Notiz in `apps/web/**`: Der aus dem Add-in übernommene E-Mail-Text wird dort angezeigt und ist nicht isoliert — dieselbe Frage wie E-063, eine Fläche weiter (T-119 Frage 2) | frontend-dev |
 | O-AI | Soll die Zeichenklasse **einmal** im Baum liegen (`packages/domain`; das Add-in führt es bereits als Abhängigkeit)? integration-dev hält die gemessene Doppelung für tragbar, die geteilte Fassung für besser — nach der T-117-Regression spricht mehr für geteilt (T-119 Frage 1) | domain-dev |
@@ -352,9 +529,24 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 | O-AO | Gehört die Frage nach dem Windows-Namen in `apps/desktop/src/shell.ts` statt in `apps/web`? Dann bräuchte `@takt/desktop` eine Abhängigkeit auf `@takt/domain` (`package.json` = Orchestrator). Heute lebt der Name in `apps/web` nur für die Dauer eines Funktionsaufrufs (T-124 Frage 1) | Orchestrator |
 | O-AP | Soll ein Wächter rohe Steuerzeichen **dauerhaft** aus dem Produktivcode halten? Drei Agenten sind in drei Wellen über dasselbe Zeichen gestolpert, zuletzt der, der es beheben sollte, dreimal in einer Aufgabe. domain-dev hat ihn nicht gebaut, weil die Wahl des Nachweispfads Hoheitsfrage ist (T-126 Frage 1). Verwandt mit O-AM | domain-dev |
 | O-AQ | `headersTimeout` im Betrieb heruntersetzen oder hinnehmen? Ein halber Anfragekopf bleibt im laufenden Betrieb 60 s möglich — Betriebsmittel, nicht Lebensdauer (T-126 Frage 2) | domain-dev |
-| O-AR | Reste aus T-128: die drei `4000`-Zahlen (zwei bei integration-dev, eine davon eine Doppelung **innerhalb** von `routes/addin/schema.ts`), fehlendes `.gitattributes`, gleiche Fristen für den Aufgabenbereich auf 17844, `tagIds: max(200)` an zwei Türen, Homoglyphen vom Wächter nicht erfasst | domain-dev, integration-dev |
-| O-AS | `MAX_TITLE_CHARACTERS` im Add-in nachziehen (`export { MAX_TITLE_CHARACTERS } from '@takt/domain'`) und `proof:addin` Abschnitt 16 vom **Zahlenvergleich** auf die **Herkunftsfrage** umstellen (T-128 Nächster Schritt) | integration-dev |
-| O-AT | Die `unknown`-Grenze an `ExportTemplate.definition`: `lib/exportTemplateModel.ts` packt daraus Feldnamen aus, die ein Benutzer geschrieben hat und die angezeigt werden — der letzte Rest Anzeigefläche, den `proof:foreign` nicht erreicht (T-129 Frage 3) | frontend-dev |
+| O-AR | **Add-in-Anteil in T-134 erledigt** (die beiden `4000` benannt und getrennt begründet, `tagIds` an der Add-in-Tür). Offen bei domain-dev: Reste aus T-128 — die drei `4000`-Zahlen (zwei bei integration-dev, eine davon eine Doppelung **innerhalb** von `routes/addin/schema.ts`), fehlendes `.gitattributes`, gleiche Fristen für den Aufgabenbereich auf 17844, `tagIds: max(200)` an zwei Türen, Homoglyphen vom Wächter nicht erfasst | domain-dev, integration-dev |
+| ~~O-AS~~ | *erledigt in T-134.* `MAX_TITLE_CHARACTERS` im Add-in nachziehen (`export { MAX_TITLE_CHARACTERS } from '@takt/domain'`) und `proof:addin` Abschnitt 16 vom **Zahlenvergleich** auf die **Herkunftsfrage** umstellen (T-128 Nächster Schritt) | integration-dev |
+| O-BH | `apps/web/src/app/useUpdateNotice.ts` lässt sich als React-Haken **nicht** einzeln prüfen: kein `@testing-library/react`, kein `jsdom`/`happy-dom`, kein `react-test-renderer` im Baum. Eine Abhängigkeit dafür ist eine Lieferkettenentscheidung (`minimumReleaseAge`, `trustPolicy` in `pnpm-workspace.yaml`) und keine Beigabe — bewusst **nicht** unmittelbar vor einem Etikett getroffen (T-140 offene Frage) | Orchestrator |
+| O-BI | **O-AP, vierter Fall.** `proof:codepoints` hängt in `pnpm check`, aber ein Agent, der `pnpm test` und `cargo test` fährt, sieht ihn nicht. Die Frage ist nicht mehr, ob der Wächter greift — er greift —, sondern ob er an der Stelle hängt, an der gearbeitet wird | Orchestrator |
+| O-BE | **Entschieden: vorerst nicht.** Ein dauerhafter Wächter gegen die O-AF-Klasse (ein einziger Ausgang, dessen Scheitern niemand sieht). Der Durchlauf aus T-133 existiert (60 Zeilen), ist aber nicht eingecheckt: Er meldet heute 18 von 25 Fundstellen falsch, weil `void mutation.run(…)` und `void (async () => { try … })()` selbst fangen. **Ein Wächter mit 18 Fehltreffern wird abgeschaltet** — und dann ist er schlechter als keiner. Er wird zur Aufgabe, wenn die rekursive „wirft nie"-Herleitung entworfen ist; das ist eine Aufgabe von T-129-Größe und keine Beigabe | frontend-dev, wenn entworfen |
+| O-BF | Gehört der Umbenennen-Dialog auf die Musterseite (E-062)? Sie zeigt heute keinen einzigen Formulardialog — die Lücke ist größer als dieser eine Dialog (T-133 Frage 5) | frontend-dev |
+| O-BG | `docs/glossar.md` steht bei „Statusspalte" und „Pool" auf dem Stand vor E-054 (T-133 Frage 4) | documenter |
+| O-AZ | Ein eigener Beendigungscode für den Datenbestand. Code 78 unterscheidet weiterhin vier Ursachen nicht, und die Hülle erklärt ihn **falsch** für den Datenbestand. Gehört mit **O-AJ** in eine Aufgabe, weil es dieselbe Naht ist (T-132 Frage 1) | Orchestrator, dann domain-dev und frontend-dev |
+| O-BA | Soll S-09 die beiden neuen Merkmale zum Datenbankpfad anzeigen (`databaseTraits`, `databaseFilesTooPermissive`)? Die Route liefert sie seit T-132 (Frage 2) | frontend-dev |
+| O-BB | `REQUEST_SCHEMAS` auch in `routes/addin/schema.ts`, damit die Zuordnung an der Tür steht statt daneben. Von domain-dev gemeldet statt angefasst (T-132 Frage 3) | integration-dev |
+| O-BC | Zwei Prüfdateien aus T-132 übernehmen: `packages/storage/test/migration-failure-reason.test.ts` und `apps/local-api/test/startup.test.ts` — von domain-dev angelegt, damit die neun Gründe überhaupt gemessen sind | unit-tester |
+| O-BD | Zwei Zeilen fürs Bedrohungsmodell aus T-132: `sqlite` und `code` sind **neue Angaben in der Ausgabe**, und der Riegel im Protokollierer ist eine Gestalt-, keine Inhaltsprüfung | security-checker |
+| O-AU | `MAX_TAKEOVER_CHARACTERS` (4000) gehört nach `packages/domain/src/text-length.ts` — dieselbe Wahrheit wie `ADDIN_NOTE_MAX_LENGTH`, und auflösbar nur dort (T-134 Frage 1). **Dazu entschieden (T-133 Frage 3):** `maxLength={64}` der Call-Nummer (`routes/todos.ts:52,73`) wandert als vierte Zahl mit — dieselbe Klasse, ein Umzug statt vierer | domain-dev |
+| O-AV | `tagIds` (200) und `tagNames` (50) an der **zweiten** Tür nachziehen: `routes/todos.ts`, `createSchema` **und** `updateSchema` (T-134 Frage 2) | domain-dev |
+| O-AW | Soll die Add-in-Tür für die Leistung enger bleiben als `textSchema`? Dieselbe Spalte, zwei Wege, zwei Weiten — die Klasse Befund, die dieses Vorhaben wiederholt findet. Braucht die Zahlen und eine Begründung, dann eine Entscheidung (T-134 Frage 3) | domain-dev, dann Orchestrator |
+| O-AX | **Aus T-134, fremde Hoheit:** `maxLength={65536}` an den Notizfeldern (`apps/web/src/screens/TodoDetailScreen.tsx:559`, `TodoFormDialog.tsx:227`) gegen `textSchema` an der Tür — der Benutzer darf mehr tippen, als der Dienst annimmt. Dieselbe Klasse wie der `prepareNote`-Fehler, eine Fläche weiter | frontend-dev |
+| O-AY | Der Herkunftswächter aus T-134 sucht eine **Zahl**, nicht ihre Bedeutung: eine künftige unbeteiligte 500 im Add-in (etwa ein HTTP-Status) macht ihn rot. Beide Auflösungen stehen in der Meldung — hinnehmen oder schärfen? | integration-dev |
+| ~~O-AT~~ | *erledigt in T-133.* Die `unknown`-Grenze an `ExportTemplate.definition`: `lib/exportTemplateModel.ts` packt daraus Feldnamen aus, die ein Benutzer geschrieben hat und die angezeigt werden — der letzte Rest Anzeigefläche, den `proof:foreign` nicht erreicht (T-129 Frage 3) | frontend-dev |
 
 ## Blockiert — braucht eine Umgebung, die hier nicht steht
 
@@ -373,3 +565,5 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 | F-14 | `WindowsUser` im Export — nackter Name oder `DOMAIN\benutzer`? Die Hülle liefert beides, die Stelle ist beschriftet. |
 | F-15 | Was steht hinter „Wenden Sie sich an Ihre Systembetreuung"? Der Satz steht an vier Stellen. Arbeitest du allein mit Takt, ist er eine Sackgasse. |
 | F-17 | Sollen Pools sortierbar sein (siehe O-B)? |
+| F-18 | Soll die Versionsprüfung **abschaltbar** sein? Abschnitt 18 verlangt keinen Schalter, und ohne Anforderungs-ID wird nichts gebaut (E-068). In einer Anwendung, die für sich in Anspruch nimmt, ausschließlich lokal zu laufen, ist „darf ich das abstellen?" aber eine berechtigte Frage. |
+| ~~F-19~~ | **Beantwortet 2026-09-04: `0.1.0`.** Erste vorzeigbare Fassung, nicht als fertig erklärt — der Stand trägt sieben offene Fragen und eine ungeprüfte Windows-Liste (T-B05). Das Etikett `v0.1.0` löst den Ablauf aus; `tauri.conf.json` bleibt bei `0.0.0`, weil `build-app.mjs` die Fassung über `TAKT_RELEASE_VERSION` als zweite Datei überlegt und die kommentierte JSON5-Datei nicht neu schreibt. Ebenfalls entschieden: **direkt taggen**, der Ablauf fährt `pnpm check` und `verify:bundle` selbst und bricht bei Rot ab, ohne ein Release zu erzeugen. |

@@ -1076,6 +1076,21 @@ export interface AppSettings {
   readonly roundingMode: RoundingMode;
   readonly locale: TechnicalKey;
   readonly theme: ThemeSetting;
+  /**
+   * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20). `null`
+   * heißt: nichts übersprungen.
+   *
+   * **Fremder Text, obwohl er wie eine Zahl aussieht.** Der Wert stammt
+   * ursprünglich aus der Antwort von GitHub und liegt seitdem im Bestand, wo
+   * jeder Prozess mit dem Sitzungsgeheimnis ihn ändern kann (T-136-4, VG-6).
+   * Die Oberfläche **zeigt** ihn nirgends an; sie reicht ihn allein an
+   * `decideUpdateNotice` in `@takt/domain` weiter, und dort entscheidet die
+   * Formprüfung, ob er überhaupt etwas bedeutet. Ein unbrauchbarer Wert heißt
+   * „nichts übersprungen" und führt zu keinem Wurf.
+   *
+   * Ohne führendes `v`, wie jede Fassung nach der Domäne (E-066 Punkt 3).
+   */
+  readonly skippedVersion: ForeignText | null;
   readonly updatedAt: Timestamp;
 }
 
@@ -1085,6 +1100,50 @@ export interface AppSettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: TechnicalKey;
   readonly theme?: ThemeSetting;
+  /**
+   * `null` setzt „nichts übersprungen" zurück, ein Wert überspringt genau
+   * diese eine Fassung — nicht die Prüfung (E-064 Punkt 5).
+   *
+   * Geschrieben wird ausschließlich die Fassung, über die
+   * `decideUpdateNotice` gerade entschieden hat. Damit steht im Bestand
+   * dieselbe Schreibweise, die im Dialog stand.
+   */
+  readonly skippedVersion?: ForeignText | null;
+}
+
+/**
+ * Was der Dienst über die letzte Versionsprüfung weiß (A-18.2, E-069).
+ *
+ * ---------------------------------------------------------------------------
+ * Die Naht zu T-138, und warum sie so schmal ist
+ * ---------------------------------------------------------------------------
+ *
+ * **Die Route fragt GitHub nicht.** Sie gibt das Ergebnis heraus, das der
+ * Dienst nach der Uhr ermittelt hat — beim Start, danach höchstens einmal in
+ * 24 Stunden (E-069, Auflage A-V-10). Ein zweiter Abruf kostet deshalb nichts
+ * und taktet nichts; genau darum darf die Oberfläche hier nachsehen, so oft
+ * sie will.
+ *
+ * **Gelesen wird genau ein Feld.** Der Dienst liest aus GitHubs Antwort
+ * ausschließlich `tag_name` (A-V-7); die Oberfläche liest aus seiner Antwort
+ * ausschließlich `latestVersion`. Alles andere, was in der Antwort stehen mag,
+ * wird nicht gelesen, nicht abgelegt und nicht angezeigt.
+ *
+ * **Und das eine Feld hat keinen Typ.** `unknown` ist hier keine Bequemlichkeit,
+ * sondern die Aussage: Der Wert stammt aus einer fremden Antwort, und ein Typ
+ * am Rand wäre eine Behauptung statt einer Prüfung. Er geht über
+ * `foreignTextFrom` (E-063, T-133) in `decideUpdateNotice`, und erst die
+ * Formprüfung dort macht aus ihm eine Fassung. „Noch nichts geprüft",
+ * „nicht erreichbar" und „unbrauchbare Antwort" sehen für die Oberfläche
+ * gleich aus, und das ist der Sinn: Sie zeigt in allen drei Fällen nichts
+ * (A-18.11).
+ */
+export interface VersionCheckView {
+  /**
+   * Die zuletzt von GitHub gemeldete Fassung — oder etwas anderes, wenn nichts
+   * geprüft werden konnte. Ungeprüft, ohne Typ, nie unbehandelt angezeigt.
+   */
+  readonly latestVersion: unknown;
 }
 
 export interface DefaultTag {

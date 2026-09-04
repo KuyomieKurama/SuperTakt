@@ -246,7 +246,7 @@ const pairs = [
   { group: "Erledigt", fg: "--border-strong", bg: "--bg-inset", min: 3, note: "gestrichelte Kontur Erledigt aufgehoben" },
   { group: "Erledigt", fg: "--success-fg", bg: "--bg-subtle", min: 4.5, note: "Zaehler erledigter Todos im Spaltenkopf" },
 
-  // Kanban nach E-054: Eine Spalte ist eine Regel ueber Tags, dieselbe Karte
+  // Kanban nach E-054/E-055: Eine Spalte ist eine Regel ueber fuenf Achsen, dieselbe Karte
   // kann in mehreren Spalten stehen. Beides braucht eigene Flaechen — die
   // Regelzeile im Spaltenkopf, das Etikett "steht auch in", der Status auf der
   // Karte und die Hervorhebung aller Vorkommen.

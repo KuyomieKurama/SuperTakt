@@ -61,6 +61,7 @@ import type {
   TodoStatus,
   TodoUpdate,
   TokenStatus,
+  VersionCheckView,
 } from "./types";
 
 export interface Pagination {
@@ -732,6 +733,25 @@ export function setDefaultTags(tagIds: readonly Id[]): Promise<readonly DefaultT
     method: "PUT",
     body: { tagIds },
   });
+}
+
+/* ==================================================================== */
+/* Versionsprüfung (Abschnitt 18, E-069)                                */
+/* ==================================================================== */
+
+/**
+ * Was der Dienst zuletzt über die Fassungen auf GitHub erfahren hat.
+ *
+ * **Diese Anfrage löst keine Anfrage ins Netz aus** (Auflage A-V-10, E-069).
+ * Der Dienst prüft nach der Uhr und legt das Ergebnis ab; diese Route liest es
+ * nur. Läge der Netzaufruf im Anfragebehandler, taktete jeder lokale Prozess
+ * mit dem Sitzungsgeheimnis das Lebenszeichen aus R-19 Punkt 3.
+ *
+ * Ein Fehlschlag dieser Route ist **kein Ereignis**: Die Oberfläche zeigt dann
+ * dasselbe wie bei „alles aktuell", nämlich nichts (A-18.11).
+ */
+export function getVersionCheck(): Promise<VersionCheckView> {
+  return request<VersionCheckView>("/version-check");
 }
 
 /* ==================================================================== */

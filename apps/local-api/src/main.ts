@@ -18,12 +18,13 @@ import type { AddressInfo } from 'node:net';
 
 import {
   ensureDirectory,
+  errorCodeOf,
   inspectDatabasePermissions,
   secureDatabaseFiles,
   sweepTemporaryFiles,
 } from '@takt/storage';
 
-import { compose } from './composition.ts';
+import { compose, type Composition } from './composition.ts';
 import {
   BIND_ADDRESS,
   CONNECTION_CHECK_INTERVAL_MS,
@@ -38,6 +39,7 @@ import { createLogger } from './logger.ts';
 import { DIR_MODE, databaseFilePath, resolveAppDataDir, tokenFilePath } from './access/paths.ts';
 import { readStartupHandshake, watchParentLink } from './access/session-secret.ts';
 import { createFileTokenStore } from './access/token-store.ts';
+import { bringDatabaseUpToDate, describeStoreOpenFailure } from './startup.ts';
 import { startTaskpaneServer } from './taskpane/server.ts';
 
 /** Beendigungscodes, damit die Hülle den Grund unterscheiden kann. */
@@ -90,6 +92,9 @@ export async function main(): Promise<void> {
         : handshake.reason === 'user_invalid'
           ? 'Der lokale Dienst hat einen Windows-Benutzernamen mit Steuer- oder Richtungszeichen empfangen. Er startet nicht: Dieser Name ginge unverändert in die Abrechnungsdatei.'
           : 'Der lokale Dienst wird von der Takt-Anwendung gestartet und nicht von Hand. Kein Startgeheimnis empfangen.',
+      // Der Grund noch einmal als Schlüssel: Der Satz ist für den Menschen,
+      // dieser Wert für den, der die Zeile später auswertet (T-132).
+      `handshake_rejected reason=${handshake.reason}`,
     );
     process.exit(EXIT_CONFIG);
   }
@@ -105,6 +110,7 @@ export async function main(): Promise<void> {
       paths.reason === 'localappdata_missing'
         ? 'Das lokale Anwendungsdatenverzeichnis (%LOCALAPPDATA%) ist nicht gesetzt. Takt weicht bewusst nicht auf das Roaming-Profil aus.'
         : 'Kein Benutzerverzeichnis gefunden.',
+      `appdata_missing reason=${paths.reason}`,
     );
     process.exit(EXIT_CONFIG);
   }
@@ -115,14 +121,37 @@ export async function main(): Promise<void> {
   await ensureDirectory(paths.dir, DIR_MODE);
 
   const store = createFileTokenStore(tokenFilePath(paths.dir));
-  const { app, runtime, tokens, database, context } = compose({
-    port: DEFAULT_PORT,
-    store,
-    sessionSecret: handshake.secret,
-    windowsUser: handshake.windowsUser,
-    databaseLocation: databaseFilePath(paths.dir),
-    logger,
-  });
+
+  /*
+   * **Der Zusammenbau steht in einer Klammer, und das ist neu** (T-132).
+   *
+   * `compose()` öffnet den Bestand. Bis T-132 stand der Aufruf frei: Ein Wurf
+   * von dort — ein belegter Bestand, ein fehlendes Verzeichnis, eine
+   * beschädigte Datei — lief an dieser Datei vorbei und endete im Auffangnetz
+   * des gebündelten Sidecars, das `error.message` nach `stderr` schreibt.
+   * Ausgerechnet dort kann ein Pfad stehen (`ENOENT: … open '/home/…'`), und
+   * im Entwicklungsbetrieb kam obendrein der ganze Aufrufstapel dazu.
+   *
+   * Der Grund wird deshalb hier eingeordnet und **pfadfrei** protokolliert.
+   * Was der Benutzer liest, ist ein Satz; was im Protokoll danebensteht, ist
+   * ein Schlüssel aus einem geschlossenen Vorrat (`startup.ts`).
+   */
+  let composed: Composition;
+  try {
+    composed = compose({
+      port: DEFAULT_PORT,
+      store,
+      sessionSecret: handshake.secret,
+      windowsUser: handshake.windowsUser,
+      databaseLocation: databaseFilePath(paths.dir),
+      logger,
+    });
+  } catch (error) {
+    const diagnosis = describeStoreOpenFailure(error);
+    logger.lifecycle('error', diagnosis.sentence, diagnosis.key);
+    process.exit(EXIT_CONFIG);
+  }
+  const { app, runtime, tokens, database, context, versionCheck } = composed;
 
   // ---------------------------------------------------------------------------
   // Migration. Vorwärts bis zur höchsten bekannten Fassung, mit
@@ -130,31 +159,13 @@ export async function main(): Promise<void> {
   //
   // Schlägt sie fehl, startet der Dienst **nicht**. Ein Dienst auf einem
   // Schema, das er nicht kennt, schreibt in eine Abrechnung.
+  //
+  // **Der Grund wird unterschieden** (T-132). Hier stand bis dahin ein `catch`
+  // ohne Bindung; der Schritt selbst liegt jetzt in `startup.ts` und ist ohne
+  // laufenden Dienst prüfbar.
   // ---------------------------------------------------------------------------
-  if (database !== null) {
-    try {
-      const state = await database.migrations.state();
-      if (state.kind === 'pending') {
-        logger.lifecycle('info', `Der Bestand wird von Fassung ${state.from} auf ${state.to} gebracht.`);
-      }
-      const migrated = await database.migrations.migrateToLatest();
-      if (migrated.from !== migrated.to) {
-        logger.lifecycle(
-          'info',
-          migrated.backup === null
-            ? `Bestand auf Fassung ${migrated.to} gebracht.`
-            : `Bestand auf Fassung ${migrated.to} gebracht. Eine Sicherungskopie liegt daneben.`,
-        );
-      }
-    } catch {
-      // Der Grund steht nicht in der Meldung: Er kann einen Dateipfad
-      // enthalten (B-2.4). Was zu tun ist, steht drin.
-      logger.lifecycle(
-        'error',
-        'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht.',
-      );
-      process.exit(EXIT_CONFIG);
-    }
+  if (database !== null && !(await bringDatabaseUpToDate(database.migrations, logger))) {
+    process.exit(EXIT_CONFIG);
   }
 
   /**
@@ -178,6 +189,7 @@ export async function main(): Promise<void> {
         'warn',
         `${permissions.tooPermissive.length} Datei(en) des Datenbestands sind für andere Benutzer lesbar. ` +
           'Takt konnte die Rechte nicht enger setzen. Der Bestand enthält Kundendaten und interne Vermerke.',
+        `file_permissions_wide files=${permissions.tooPermissive.length}`,
       );
     }
   }
@@ -201,7 +213,11 @@ export async function main(): Promise<void> {
     // Bewusst kein neues Token: Das würde ein eingerichtetes Add-in ohne
     // Vorwarnung aussperren. Der Dienst läuft, weist Add-in-Anfragen aber ab,
     // bis der Benutzer in der Oberfläche ein neues erzeugt.
-    logger.lifecycle('warn', 'Die Tokendatei ist nicht lesbar. Bitte in den Einstellungen ein neues Token erzeugen.');
+    logger.lifecycle(
+      'warn',
+      'Die Tokendatei ist nicht lesbar. Bitte in den Einstellungen ein neues Token erzeugen.',
+      'token_unreadable',
+    );
   } else if (!status.configured) {
     logger.lifecycle('info', 'Es ist noch kein Add-in-Token eingerichtet.');
   }
@@ -243,10 +259,18 @@ export async function main(): Promise<void> {
       logger.lifecycle(
         'error',
         `Der Port ${DEFAULT_PORT} ist belegt. Takt startet nicht und weicht nicht auf einen anderen Port aus.`,
+        `port_in_use port=${DEFAULT_PORT}`,
       );
       process.exit(EXIT_BIND);
     }
-    logger.lifecycle('error', 'Der lokale Dienst konnte nicht gestartet werden.');
+    // Der Grund wird genannt, nicht verschluckt (T-132). `error.code` ist ein
+    // Schlüssel der Laufzeit (`EACCES`, `EADDRNOTAVAIL`), kein Pfad und kein
+    // Wert aus einer Anfrage; die **Meldung** des Wurfs geht nirgendwohin.
+    logger.lifecycle(
+      'error',
+      'Der lokale Dienst konnte nicht gestartet werden.',
+      `listen_failed${runtimeCode(error)}`,
+    );
     process.exit(EXIT_BIND);
   });
 
@@ -264,7 +288,11 @@ export async function main(): Promise<void> {
         // Der Dienst prüft beim Start, dass er tatsächlich nur auf Loopback
         // lauscht, und beendet sich sonst mit Fehler statt weiterzulaufen
         // (B-1.1 Punkt 4).
-        logger.lifecycle('error', 'Der lokale Dienst lauscht nicht ausschließlich auf 127.0.0.1. Abbruch.');
+        logger.lifecycle(
+          'error',
+          'Der lokale Dienst lauscht nicht ausschließlich auf 127.0.0.1. Abbruch.',
+          'not_loopback',
+        );
         server.close(() => process.exit(EXIT_BIND));
         return;
       }
@@ -292,12 +320,34 @@ export async function main(): Promise<void> {
       port: TASKPANE_PORT,
       logger,
     });
-  } catch {
+  } catch (error) {
+    // Mit Grund (T-132). Ohne ihn ist diese Zeile die zweite Stelle im
+    // Startpfad, an der nur die Folge im Protokoll steht: „geht nicht" — und
+    // ob ein Zertifikat fehlt, ein Recht oder der Platz auf dem Datenträger,
+    // ließ sich hinterher nicht mehr sagen.
     logger.lifecycle(
       'warn',
       'Der Aufgabenbereich des Add-ins konnte nicht bereitgestellt werden. Takt läuft weiter; das Add-in ist bis auf Weiteres nicht benutzbar.',
+      `taskpane_failed${runtimeCode(error)}`,
     );
   }
+
+  /*
+   * **Die einzige Stelle, an der Takt nach außen spricht** (A-18.2, E-064,
+   * E-069, R-19).
+   *
+   * Sie steht hier unten und nicht im Zusammenbau: `compose()` baut den
+   * Prüfer, startet ihn aber nicht. Damit stellt kein Nachweispfad, kein
+   * Prüffall und keine Messung eine Verbindung nach außen her — nur der echte
+   * Prozess tut das, und auch der erst ein paar Sekunden nach dem Start
+   * (Begründung in `version/checker.ts`).
+   *
+   * Was danach geschieht, ist wenig: eine Anfrage, eine geprüfte
+   * Fassungsbezeichnung im Arbeitsspeicher, danach höchstens eine Anfrage je
+   * 24 Stunden. Ein Fehlschlag ist still und wird im selben Lauf nicht
+   * wiederholt (A-18.11).
+   */
+  versionCheck.start();
 
   // Ist die Hülle weg, endet der Dienst. Ein verwaister Sidecar mit
   // Datenbankzugriff und ohne Fenster ist genau das, was B-1.6 verhindert.
@@ -311,6 +361,16 @@ export async function main(): Promise<void> {
   const shutdown = (): void => {
     if (stopping) return;
     stopping = true;
+    /*
+     * Zuerst die ausgehende Verbindung (A-V-12).
+     *
+     * Ein `fetch`, der auf eine Antwort wartet, hielte sonst die
+     * Ereignisschleife über die Abschaltfrist hinaus — und ein Prozess mit
+     * Datenbankzugriff und ohne Fenster ist genau das, was B-1.6 Punkt 3
+     * verhindert. `stop()` bricht den laufenden Aufruf ab und räumt den
+     * Zeitgeber weg; beides ist unabhängig davon, ob gerade eine Anfrage läuft.
+     */
+    versionCheck.stop();
     taskpane?.close();
     database?.close();
 
@@ -447,6 +507,20 @@ function closeAllConnections(server: ReturnType<typeof createAdaptorServer>): vo
   if ('closeAllConnections' in server) {
     server.closeAllConnections();
   }
+}
+
+/**
+ * Der Fehlerschlüssel einer Laufzeitstörung als Anhängsel eines Grundes
+ * (T-132) — oder nichts.
+ *
+ * `EADDRINUSE`, `EACCES`, `ENOENT`: Großbuchstaben, Ziffern, Unterstrich.
+ * `errorCodeOf` weist alles ab, was nicht so aussieht, und kleingeschrieben
+ * passt es in den Zeichenvorrat, den `logger.ts` durchlässt. Aus diesem Feld
+ * kann damit kein Pfad und kein Name werden (B-2.4).
+ */
+function runtimeCode(error: unknown): string {
+  const code = errorCodeOf(error);
+  return code === null ? '' : ` code=${code.toLowerCase()}`;
 }
 
 function isLoopback(address: string | AddressInfo | null): boolean {

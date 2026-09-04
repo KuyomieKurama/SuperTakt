@@ -1,6 +1,7 @@
 import { foreignText } from "../lib/foreign";
+import { Foreign } from "./Foreign";
 import { cx } from "../lib/cx";
-import type { ExportRow, ExportValue } from "../api/types";
+import type { ExportRow, ExportValue, ForeignText } from "../api/types";
 import type { ExportFieldDefinition, SourceCatalog } from "../lib/exportTemplateModel";
 
 /**
@@ -59,17 +60,35 @@ export function ExportRowPanes({
     <div className={cx("erow", className)}>
       <section className="erow__pane">
         <h4 className="erow__pane-title">So steht es in der Datei</h4>
-        <pre className="erow__json">{JSON.stringify(row, null, 2)}</pre>
+        {/*
+          Auch der Abzug der Zeile ist eine **Anzeige** und keine Datei (O-AT,
+          T-133). Er trägt zweierlei fremden Text: die Werte und die
+          **Schlüssel** — und ein Schlüssel ist der Feldname, den ein Benutzer
+          in die Vorlage geschrieben hat. `JSON.stringify` maskiert nur
+          Steuerzeichen unter `U+0020`; ein `U+202E` in einem Feldnamen bliebe
+          roh stehen und drehte den ganzen Abzug um, in dem er steht.
+
+          Die geschriebene Datei bleibt davon unberührt — sie entsteht im Motor
+          und nicht hier. Was auf dem Bildschirm steht, folgt derselben Regel
+          wie jede andere Fläche: markieren statt streichen (E-063 Punkt 2).
+        */}
+        <pre className="erow__json">
+          <Foreign value={JSON.stringify(row, null, 2)} />
+        </pre>
       </section>
 
       <section className="erow__pane">
         <h4 className="erow__pane-title">Feld für Feld</h4>
         <dl className="erow__fields">
-          {Object.entries(row).map(([key, value]) => {
+          {cellsOf(row).map(([key, value]) => {
             const field = fields.find((candidate) => candidate.name === key);
             return (
               <div className="erow__field" key={key}>
-                <dt className="erow__key">{key}</dt>
+                {/* Der Schlüssel ist der Feldname aus der Vorlage — fremder
+                    Text aus einem `unknown` (O-AT). */}
+                <dt className="erow__key">
+                  <Foreign value={key} />
+                </dt>
                 <dd className="erow__detail">
                   <span className="erow__value mono">{renderValue(value)}</span>
                   {field === undefined ? null : (
@@ -90,7 +109,8 @@ export function ExportRowPanes({
         </dl>
         {missing.length === 0 ? null : (
           <p className="erow__missing">
-            Nicht in dieser Zeile, weil die Bedingung nicht zutraf: {missing.join(", ")}. Der
+            Nicht in dieser Zeile, weil die Bedingung nicht zutraf:{" "}
+            {missing.map(foreignText).join(", ")}. Der
             Schlüssel fehlt vollständig, er steht nicht leer da.
           </p>
         )}
@@ -102,6 +122,25 @@ export function ExportRowPanes({
 /* ==================================================================== */
 /* Hilfen — Darstellung, keine Rechnung                                 */
 /* ==================================================================== */
+
+/**
+ * Die Zellen einer Zeile — **mit der Herkunft des Schlüssels im Typ** (O-AT,
+ * T-133).
+ *
+ * `ExportRow` ist ein `Record<string, ExportValue>`: Der Wert trägt seine
+ * Marke, der **Schlüssel** kann sie nicht tragen, weil ein Indexschlüssel in
+ * TypeScript keine eigene Art hat. Damit fiel der Feldname beim Auslesen aus
+ * jeder Herkunft heraus — gemessen in Gegenprobe L, die ohne diese Zeile grün
+ * blieb, obwohl der Schlüssel roh im `<dt>` stand.
+ *
+ * Diese Funktion ist die Stelle, an der ausgesprochen wird, was der Schlüssel
+ * **ist**: der Feldname aus der Vorlage, also fremder Text aus derselben
+ * Quelle wie `ExportFieldDefinition.name`. Ab hier führen die Abschnitte 2
+ * bis 4 von `scripts/proof-foreign.mjs` ihn wieder mit.
+ */
+function cellsOf(row: ExportRow): readonly (readonly [ForeignText, ExportValue])[] {
+  return Object.entries(row);
+}
 
 /** Der Wert einer Zelle, so wie er in der Datei steht. Nicht umgeformt. */
 function renderValue(value: ExportValue): string {
@@ -119,6 +158,6 @@ function renderValue(value: ExportValue): string {
 function missingFieldNames(
   fields: readonly ExportFieldDefinition[],
   row: ExportRow,
-): readonly string[] {
+): readonly ForeignText[] {
   return fields.filter((field) => !(field.name in row)).map((field) => field.name);
 }

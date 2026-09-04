@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useState } from "react";
+import { errorMessage } from "../api/client";
 import { chooseExportDirectory, isShellPresent } from "../app/connection";
 import { cx } from "../lib/cx";
 import type {
@@ -278,9 +279,26 @@ export function ExportDirectoryField({
 
   useEffect(() => {
     let live = true;
-    void isShellPresent().then((present) => {
-      if (live) setShell(present);
-    });
+    void isShellPresent().then(
+      (present) => {
+        if (live) setShell(present);
+      },
+      /*
+        **Auch die unbeantwortete Frage braucht einen Ausgang** (O-AF-Klasse,
+        T-133). Bleibt `shell` auf `null`, zeigt dieses Feld **weder** den
+        Knopf noch das Textfeld: Der Benutzer sieht eine Beschriftung ohne
+        Bedienelement und kann den Exportordner überhaupt nicht mehr ändern.
+        Es gäbe dann keinen Weg mehr aus dieser Fläche — dieselbe Bauart wie
+        „Takt beenden", das stumm scheiterte.
+
+        Der Rückfallweg ist das Textfeld, und `pickerFailure` ist der Schalter,
+        der es hervorholt und den Grund dazu nennt. Ein Pfad lässt sich
+        eintippen; der Dienst prüft ihn ohnehin selbst.
+      */
+      (cause: unknown) => {
+        if (live) setPickerFailure(errorMessage(cause));
+      },
+    );
     return () => {
       live = false;
     };
@@ -307,6 +325,18 @@ export function ExportDirectoryField({
         // Ansage zu stellen — `InlineMessage` ist selbst ein Meldebereich.
         setPickerFailure(choice.reason);
       })
+      /*
+        Der Fehlschlag darf nicht stumm bleiben (O-AF-Klasse, T-133). Bis T-133
+        stand hier `.then(…).finally(…)` ohne `catch`: Wirft der Aufruf — und
+        er läuft über die Hülle —, ging der Anzeiger aus, und **sonst geschah
+        nichts**. Der Benutzer sah einen Knopf, der auf nichts reagiert, und
+        das Textfeld erschien nie, weil `pickerFailure` ungesetzt blieb.
+
+        Jetzt ist der Fehlschlag genau das, was `pickerFailure` bedeutet: Der
+        Dialog steht hier nicht zur Verfügung. Das Textfeld tritt an seine
+        Stelle, und der Grund steht darunter.
+      */
+      .catch((cause: unknown) => setPickerFailure(errorMessage(cause)))
       .finally(() => setPicking(false));
   }, [onChange, value]);
 

@@ -23,6 +23,7 @@
 mod appdata;
 mod identity;
 mod menu;
+mod release;
 mod sidecar;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -179,7 +180,12 @@ pub fn run() {
             takt_service_handshake,
             takt_os_user,
             takt_shell_state,
-            takt_quit
+            takt_quit,
+            // Versionsprüfung (Abschnitt 18). Beide Befehle stehen in
+            // `release.rs`; die Begründung, warum der zweite **keine** Adresse
+            // entgegennimmt, steht dort und nicht hier.
+            release::takt_installed_version,
+            release::takt_open_release
         ])
         .on_window_event(|window, event| {
             // Auch beim harten Schließen — der Benutzer klickt auf das Kreuz,

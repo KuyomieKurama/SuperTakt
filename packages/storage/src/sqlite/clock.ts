@@ -20,6 +20,7 @@
  */
 
 import type { ClockPort, SystemPort } from '../ports.ts';
+import { inspectDatabasePermissions } from './database.ts';
 import type { Timestamp } from '@takt/domain';
 
 /** Wandelt ein Datum in die eine Form, die das Schema annimmt. */
@@ -53,5 +54,23 @@ export function createSystemPort(windowsUser: string, databasePath: string | nul
     // erfundener wäre schlimmer als keiner — er stünde in der Oberfläche als
     // Ort, an dem nichts liegt.
     databasePath: () => databasePath,
+
+    /*
+     * **Bei jedem Aufruf neu gemessen** (T-132, O-C).
+     *
+     * Ein einmal beim Start gemerkter Wert wäre binnen Minuten falsch: SQLite
+     * legt `-wal` und `-shm` im Betrieb wiederholt neu an, und der Modus einer
+     * neu angelegten Datei hängt an der `umask` des Prozesses. Genau deshalb
+     * setzt der Dienst sie (`main.ts`) — aber gemessen wird trotzdem, statt
+     * geglaubt.
+     *
+     * Drei `stat`-Aufrufe auf eine lokale Datei; das trägt eine Abfrage der
+     * Einstellungen ohne Weiteres.
+     */
+    databaseFilesTooPermissive: () => {
+      if (databasePath === null) return null;
+      const seen = inspectDatabasePermissions(databasePath);
+      return seen.checked ? seen.tooPermissive.length : null;
+    },
   };
 }

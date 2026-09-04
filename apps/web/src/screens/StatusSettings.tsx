@@ -1,3 +1,4 @@
+import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorCode } from "../api/client";
 import {
@@ -757,7 +758,7 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
         value={name}
         onChange={setName}
         required
-        maxLength={128}
+        maxLength={MAX_NAME_LENGTH}
         placeholder="z. B. Wartet auf Rückmeldung"
         {...(duplicate
           ? { error: "Diesen Namen gibt es schon. Zwei Statuswerte mit demselben Namen wären in jeder Auswahl nicht auseinanderzuhalten." }

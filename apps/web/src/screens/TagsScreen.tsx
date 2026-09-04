@@ -1,3 +1,4 @@
+import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -38,6 +39,7 @@ import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../lib/labels";
 import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { PoolRenameDialog } from "./PoolRenameDialog";
 import { quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
 
@@ -346,7 +348,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setTagDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField label="Name" value={name} onChange={setName} required maxLength={MAX_NAME_LENGTH} />
       </FormDialog>
 
       {/* Neuer Ordner */}
@@ -368,7 +370,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setFolderDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField label="Name" value={name} onChange={setName} required maxLength={MAX_NAME_LENGTH} />
       </FormDialog>
 
       {/* Umbenennen */}
@@ -393,7 +395,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setRenameDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField label="Name" value={name} onChange={setName} required maxLength={MAX_NAME_LENGTH} />
       </FormDialog>
 
       {/* Verschieben — I-07 und I-08 */}
@@ -546,6 +548,16 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   const { bump } = useRefresh();
 
   const [form, setForm] = useState<{ readonly pool?: Pool } | null>(null);
+  /**
+   * Die Regel, die gerade umbenannt wird (O-A).
+   *
+   * Sie steht hier aus demselben Grund wie auf dem Board: Dieselbe Handlung
+   * heißt an beiden Flächen gleich und tut an beiden dasselbe. Eine Fläche mit
+   * „Umbenennen" und eine ohne wäre wieder das Paar aus E-059 — zwei
+   * Schutzniveaus beziehungsweise zwei Bedienniveaus für eine Sache, und eines
+   * davon lehrt, dass es das andere nicht ernst meint.
+   */
+  const [renaming, setRenaming] = useState<Pool | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Pool | null>(null);
 
   const lookup = useRuleLookup();
@@ -674,8 +686,16 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                 >
                   {pool.placement === "pool" ? "Als Spalte aufnehmen" : "Vom Board nehmen"}
                 </Button>
-                <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => setForm({ pool })}>
-                  Bearbeiten
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  iconStart="pencil"
+                  onClick={() => setRenaming(pool)}
+                >
+                  Umbenennen
+                </Button>
+                <Button size="sm" variant="ghost" iconStart="filter" onClick={() => setForm({ pool })}>
+                  Regel bearbeiten
                 </Button>
                 <Button
                   size="sm"
@@ -697,6 +717,20 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
         {...(form?.pool === undefined ? {} : { pool: form.pool })}
         defaultPlacement="pool"
         onClose={() => setForm(null)}
+      />
+
+      {/*
+        `rules` ist hier bereits die vollständige Liste beider Flächen — die
+        Verwaltung in S-11 zeigt jede Regel. Damit ist die Vorabprüfung auf
+        einen vergebenen Namen genau so weit wie der eindeutige Index
+        `ux_pool_name`, der über die ganze Tabelle gilt.
+      */}
+      <PoolRenameDialog
+        open={renaming !== null}
+        pool={renaming}
+        existing={rules}
+        existingKnown
+        onClose={() => setRenaming(null)}
       />
 
       <ConfirmDialog

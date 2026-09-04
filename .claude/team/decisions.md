@@ -1417,3 +1417,207 @@ T-114.
    stehen und ein Wächter sie lesen. Die Herkunft eines Textes gehört deshalb in seinen Typ und
    nicht in eine gepflegte Namensliste im Nachweis: Eine Liste ist wieder eine Abschrift, und
    Punkt 4 gilt für sie wie für jede andere.
+
+---
+
+## E-064 — Die Versionsprüfung ist die einzige Verbindung nach außen, und sie darf nur fragen
+
+**Kontext.** Der Auftraggeber am 2026-09-04: Takt soll beim Start und regelmäßig prüfen, ob auf
+GitHub eine neuere Fassung vorliegt, den Benutzer fragen und ihn zur Release-Seite führen —
+ausdrücklich **ohne** eigenen Download und **ohne** eigene Installation. Aufgenommen als
+Abschnitt 18 der Spezifikation, A-18.1 bis A-18.12.
+
+**Entscheidung.**
+
+1. **E-001 gilt weiter, wird aber benannt eingeschränkt.** Takt kannte bisher keine Adresse
+   außerhalb von `127.0.0.1`. Ab hier kennt es genau eine: die Releases des offiziellen
+   Bestands. Sie steht fest im Erzeugnis, ist nicht einstellbar, und **keine Antwort kann sie
+   verlegen** — weder über einen Verweis in der Antwort noch über eine Umleitung. Alles andere
+   an E-001 bleibt unberührt: kein Cloud-Dienst, kein Datenbankserver, keine Telemetrie.
+
+2. **Die Frage stellt der lokale Dienst, nicht die Oberfläche.** Die CSP der Hülle erlaubt dem
+   Webview `connect-src` nur auf sich selbst, `ipc:` und `http://127.0.0.1:17843`
+   (`tauri.conf.json`). Die Oberfläche kann GitHub also gar nicht fragen, und das soll so
+   bleiben: Eine Liste, die man für eine Funktion aufmacht, bleibt für alles andere offen. Der
+   Dienst holt die Antwort, wirft alles weg, was er nicht braucht, und gibt der Oberfläche eine
+   Fassung, einen Verweis und sonst nichts.
+
+3. **Die Ordnung der Versionsnummern liegt in `packages/domain`.** Sie ist Fachlogik ohne HTTP
+   und ohne SQL, sie wird an drei Stellen gebraucht (Dienst, Oberfläche, Prüfungen), und ein
+   Zeichenkettenvergleich stellt `0.10.0` vor `0.9.0`. Dazu gehört die Regel, wann überhaupt
+   etwas gezeigt wird: neuer **und** nicht übersprungen.
+
+4. **Die Release-Seite öffnet die Hülle, und sie baut die Adresse selbst.** `tauri-plugin-shell`
+   liegt bereits vor. Der Befehl nimmt **keine** Adresse entgegen, sondern höchstens die
+   Fassungsbezeichnung, prüft sie gegen eine enge Form und setzt sie in eine im Erzeugnis
+   festgelegte Adresse ein. Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen
+   wäre dieselbe Bauart wie eine offene Weiterleitung — nur mit dem Browser des Benutzers als
+   Ziel.
+
+5. **Übersprungen wird eine Fassung, nicht die Prüfung.** Der übersprungene Wert steht als
+   Einstellung im Bestand, wie jede andere Einstellung. Eine spätere, höhere Fassung meldet sich
+   wieder. Es gibt keinen Schalter „nie wieder fragen", weil er nicht verlangt wurde.
+
+6. **Ein Fehlschlag ist kein Ereignis.** Nicht erreichbar, unerwartete Antwort, fehlende
+   Fassungsangabe, gar keine Veröffentlichung: Die Prüfung endet still, der Grund steht im
+   Protokoll, die Oberfläche zeigt nichts. Ein Hinweis „Aktualisierungsprüfung fehlgeschlagen"
+   wäre eine Fehlerfläche für ein Problem, das den Benutzer bei seiner Arbeit nicht behindert.
+
+**Konsequenz.** Der Dienst bekommt eine Route und einen Ausgang ins Netz; damit gehört die
+Verbindung ins Bedrohungsmodell (neues Risiko R-19) und in die Prüfung jeder künftigen Freigabe.
+Die Zeitüberschreitung, das Fehlen jeder Weiterleitung auf einen fremden Wirt und die Obergrenze
+der gelesenen Antwort sind Teil der Umsetzung und nicht Feinschliff.
+
+---
+
+## E-065 — Die Fassung von Takt steht an einer Stelle
+
+**Kontext.** `tauri.conf.json`, `apps/desktop/package.json`, `Cargo.toml` und jede
+Arbeitsbereichsdatei tragen heute `0.0.0`. Eine Prüfung gegen GitHub braucht eine Zahl, die
+etwas bedeutet, und A-18.1 verlangt sie aus **einer** Quelle.
+
+**Entscheidung.** Führende Quelle ist `version` in `apps/desktop/src-tauri/tauri.conf.json`. Die
+Hülle liest sie zur Laufzeit aus den Angaben des Erzeugnisses und gibt sie der Oberfläche; sie
+wird nicht abgeschrieben. Wo eine zweite Datei dieselbe Zahl führen muss, wird sie beim Bauen
+daraus abgeleitet und der Gleichlauf gemessen — dieselbe Regel wie bei den Zahlen aus T-128 und
+O-AS: nicht „hier steht dasselbe", sondern „das kommt von dort".
+
+**Konsequenz.** Solange `0.0.0` steht, ist jede veröffentlichte Fassung neuer, und die Prüfung
+meldet sich sofort. Das ist richtig so und keine Fehlfunktion; die erste echte Fassungsnummer zu
+vergeben ist eine Entscheidung des Auftraggebers und keine des Bauablaufs.
+
+---
+
+## E-066 — Die feste Adresse und die prüfbare Naht sind nicht dasselbe
+
+**Kontext.** T-137 hat den Testplan vor dem Bau geschrieben und dabei die Frage gestellt, an der
+er hängt: Wie zeigt der Dienst im Prüflauf auf eine Nachbildung von GitHub, ohne A-18.3 zu
+verletzen („Die Adresse ist fest im Erzeugnis hinterlegt und weder einstellbar noch aus einer
+Antwort übernehmbar")? 22 von 26 Fällen warten darauf. Dazu drei kleinere Fragen aus derselben
+Aufgabe.
+
+**Entscheidung.**
+
+1. **Einstellbar heißt: von außen veränderbar. Das ist die Grenze, und sie verläuft am Prozess.**
+   A-18.3 verbietet, dass irgendetwas **außerhalb** des Erzeugnisses die Adresse verlegt: keine
+   Route, keine Einstellung im Bestand, keine Umgebungsvariable, kein Argument der Befehlszeile,
+   keine Datei daneben, keine Antwort und keine Weiterleitung. Der Sidecar kennt schon heute
+   keine Argumente (B-1.6 Punkt 1); dieselbe Härte gilt hier.
+
+   Sie verbietet **nicht**, dass der Zusammenbau im selben Prozess eine andere Abholfunktion
+   einsetzt. Genau so hängt in diesem Bestand jeder andere Anschluss: `compose()` nimmt Ports,
+   der Adapter ist austauschbar (E-001, E-035), und der Prüflauf baut sich seinen eigenen
+   Zusammenbau. Die Adresse bleibt dabei eine Festlegung im Erzeugnis mit genau einem Ort; die
+   **Naht** ist die Abholfunktion, nicht die Zeichenkette.
+
+   Bedingung, ohne die diese Entscheidung nicht gilt: Es muss ein Nachweis messen, dass im
+   ausgelieferten Zusammenbau **kein** Weg zu einer anderen Adresse führt. Ohne diesen Nachweis
+   ist die Naht ein Schalter, den nur noch niemand gefunden hat.
+
+2. **Gefragt wird `GET /repos/<besitzer>/<bestand>/releases/latest`.** Ein Gegenstand statt einer
+   Liste, Entwürfe und Vorabfassungen sind darin von GitHub bereits ausgenommen, und „es gibt
+   keine Veröffentlichung" ist ein 404 und damit ein klarer, stiller Fall (A-18.11).
+
+3. **Die Ordnung folgt der Vorrangregel von SemVer**, einschließlich „Vorabfassung steht unter
+   der gleichnamigen Fassung". Sie wird gebraucht, obwohl Punkt 2 keine Vorabfassung liefern
+   kann: Die **installierte** Fassung kann eine sein, und dann muss `1.2.0-rc.1` unter `1.2.0`
+   stehen. Ein führendes `v` gehört zur Bezeichnung der Veröffentlichung, nicht zur Fassung, und
+   wird vor dem Vergleich abgeschnitten — an genau einer Stelle.
+
+4. **Der Nachweis `proof:release-safety` gehört zu T-138** (Skript unter
+   `apps/local-api/scripts/`, es sieht den ganzen Baum an). Der Eintrag in `proof:all` ist Sache
+   des Orchestrators. Er misst mindestens: genau eine Adresse im Baum, kein Weg von einer Antwort
+   zum Öffnen-Befehl, und nirgends ein Herunterladen einer Datei aus einer Veröffentlichung.
+
+**Konsequenz.** T-138 kann bauen. Die eigentlichen Prüfdateien unter `tests/e2e/**` samt der
+Nachbildung der GitHub-Antwort bekommen eine eigene Aufgabe (T-142) in derselben Welle wie die
+Umsetzung, nicht davor — sie brauchen die Naht aus Punkt 1.
+
+---
+
+## E-067 — Woher die Hülle die Fassung nimmt, und was sie dem Öffnen-Befehl nicht gibt
+
+**Kontext.** T-136 hat gemessen, was `tauri-plugin-shell` auf dem Rust-Weg prüft: **nichts.**
+`Shell::open` reicht durch an `open::open(None, …)`, und die Quelle sagt dort wörtlich, dass bei
+einem Aufruf aus Rust nicht geprüft werden muss; der Prüfbereich wird nur bei Aufrufen aus
+JavaScript betreten. Damit ist die Formprüfung der Fassungsbezeichnung die **einzige** Kontrolle
+zwischen der Antwort von GitHub und `xdg-open` beziehungsweise `ShellExecuteW`. Zweiter Befund:
+Die Vorgabeberechtigung `shell:default` enthält `allow-open` mit einem Muster, das **jede**
+`https:`-Adresse durchlässt — eine Zeile in `capabilities/default.json` wäre eine offene
+Weiterleitung in den Browser des Benutzers. Dazu die Frage aus T-136-3: E-065 sagt nicht genau
+genug, woher die Fassung zur Laufzeit kommt.
+
+**Entscheidung.**
+
+1. **Die Hülle liest die Fassung aus den einkompilierten Angaben des Erzeugnisses**
+   (`app.package_info().version`, gefüllt aus `tauri.conf.json` beim Bauen). **Nicht** aus einer
+   Datei neben der Binärdatei, nicht aus einer Umgebungsvariablen, nicht aus einem Argument.
+   Sonst hinge die Aussage „diese Fassung ist installiert" an etwas, das jeder Prozess auf dem
+   Rechner ändern kann — und an ihr hängt, ob ein Hinweis erscheint und welche Adresse geöffnet
+   wird.
+
+2. **In `apps/desktop/src-tauri/capabilities/**` steht keine Shell-Berechtigung.** Weder
+   `shell:default` noch `shell:allow-open`. Der Öffnen-Weg läuft ausschließlich über einen
+   eigenen Befehl in Rust, der die Fassungsbezeichnung gegen eine enge Form prüft und die Adresse
+   selbst zusammensetzt. Das ist keine Vorsicht mehr, sondern die einzige vorhandene Kontrolle.
+
+3. **Beides wird gemessen, nicht zugesagt.** Ein Nachweis hält fest, dass die Berechtigungsdateien
+   keine Shell-Zeile tragen und dass die zugesagten Einträge der CSP mit denen in
+   `tauri.conf.json` übereinstimmen (T-136-2: die Zusage nennt drei, die Datei trägt vier). Vor
+   dem Bau kostet das eine halbe Stunde, danach eine Wiedervorlage.
+
+**Konsequenz.** Auflagen für T-139. Die zwanzig Auflagen aus `docs/bedrohungsmodell.md`
+Abschnitt 18.9 sind die Bedingung der Freigabe von T-136 und werden dort Auflage für Auflage
+gegen den Code wiedervorgelegt, nicht gegen den Entwurf.
+
+---
+
+## E-068 — Kein Schalter, den niemand verlangt hat
+
+**Kontext.** T-136 fragt, ob die Versionsprüfung abschaltbar sein soll. Abschnitt 18 der
+Spezifikation verlangt keinen Schalter; E-064 verbietet nur ein „nie wieder fragen" für den
+Hinweis.
+
+**Entscheidung.** Vorerst kein Schalter. Ohne Anforderungs-ID wird nichts gebaut — das ist die
+Regel, und sie gilt auch, wenn die Erweiterung klein und plausibel wäre. Die Frage geht als
+**F-18** an den Auftraggeber, weil sie ihm gehört: In einer Anwendung, die für sich in Anspruch
+nimmt, ausschließlich lokal zu laufen, ist „darf ich das abstellen?" eine berechtigte Frage und
+keine Bequemlichkeit.
+
+**Konsequenz.** Wird der Schalter gewünscht, ist er eine Einstellung wie jede andere und keine
+Ausnahme im Startpfad.
+
+---
+
+## E-069 — Die Prüfung läuft nach der Uhr, die Route liest nur ab
+
+**Kontext.** Auflage A-V-10 aus `docs/bedrohungsmodell.md` 18.9: Der Netzaufruf darf **nie** in
+einem eingehenden Anfragebehandler liegen. Sonst taktet jeder lokale Prozess, der das
+Sitzungsgeheimnis hat (R-02), das Lebenszeichen aus R-19 Punkt 3 und verbraucht die
+Ratenbegrenzung von GitHub. Der naheliegende Entwurf — die Oberfläche fragt eine Route, die Route
+fragt GitHub — ist damit ausgeschlossen. Er war in E-064 nicht ausdrücklich verboten, und ohne
+diesen Eintrag hätte ihn jemand gebaut.
+
+**Entscheidung.** Der Dienst prüft **von sich aus**: einmal beim Start, danach höchstens einmal
+in 24 Stunden. Das Ergebnis liegt im Arbeitsspeicher des Dienstes. Die Route gibt genau dieses
+Ergebnis heraus und löst **nie** eine Anfrage aus — auch nicht, wenn noch keines vorliegt; dann
+antwortet sie „noch nichts geprüft", und das ist eine gültige Antwort und kein Fehler.
+
+Der Vergleich selbst bleibt in der Oberfläche, weil dort die installierte Fassung liegt (E-067
+Punkt 1): Die Hülle nennt sie, `packages/domain` ordnet, die Oberfläche entscheidet, ob etwas
+erscheint. Der Dienst weiß nur, was GitHub zuletzt gesagt hat.
+
+**Konsequenz.** Die Häufigkeit steht an einer Stelle und ist ablesbar. Ein zweiter Aufruf der
+Route kostet nichts. Und der Weg, auf dem ein fremder lokaler Prozess Takt zum Senden bringt,
+existiert nicht — statt nur unwahrscheinlich zu sein.
+
+---
+
+## Berichtigung zu E-064 Punkt 2 (T-136-2, gemessen in T-139)
+
+E-064 zählt für `connect-src` drei Marken auf. Die Datei trägt **vier**: `'self'`, `ipc:`,
+`http://ipc.localhost` und `http://127.0.0.1:17843`. Die Entscheidung ändert sich dadurch nicht —
+die Aufzählung war unvollständig, nicht die Absicht. Seit T-139 zählt niemand mehr von Hand:
+`proof:shell-surface` hält die Zusage zeichengleich gegen `tauri.conf.json`, und ein eingesetzter
+fünfter Eintrag macht den Nachweis rot.
+

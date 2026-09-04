@@ -65,7 +65,15 @@ export type ExportSummary = Readonly<Record<ExportDisplayState, number>>;
  * geladene Seite kennt, behauptete dann, sie stünde nur einmal da.
  */
 export interface KanbanAppearance {
-  readonly otherColumns: readonly string[];
+  /**
+   * **Fremder Text, Glied für Glied** (O-AT, T-133): Es sind die Namen von
+   * Regeln, und sie stehen auf der Karte. Bis T-133 hieß dieses Feld
+   * `readonly string[]` — die Behandlung an der Anzeigestelle war damit
+   * freiwillig, und `scripts/proof-foreign.mjs` konnte sie nicht einfordern.
+   * Die Marke sitzt am Element und nicht an der Reihe; der Nachweis liest sie
+   * dort (`declaresForeign`).
+   */
+  readonly otherColumns: readonly ForeignText[];
 }
 
 export interface KanbanCardData {
@@ -82,7 +90,7 @@ export interface KanbanCardData {
    * (E-054). Er steht auf der Karte, weil er sonst auf dem Board nirgends
    * mehr vorkäme und man ihn für abgeschafft hielte.
    */
-  readonly statusName: string;
+  readonly statusName: ForeignText;
   /**
    * Erledigt-Kennzeichen des Todos (A-2.4).
    *

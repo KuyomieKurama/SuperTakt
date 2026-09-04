@@ -151,6 +151,14 @@ tags:
       diese Fläche reicht.
   - name: Einstellungen
     description: Anwendungseinstellungen, Standard-Tags (A-9, E-011).
+  - name: Versionsprüfung
+    description: |
+      Die **einzige** Verbindung, die Takt nach außen kennt (A-18, E-064,
+      R-19). Sie fragt und liest, sonst nichts: kein Herunterladen, kein
+      Installieren, keine Übertragung über Benutzer, Bestand oder Nutzung.
+
+      Der Dienst stellt die Frage von sich aus und nach der Uhr; diese Route
+      gibt das Ergebnis heraus und löst nie eine Anfrage aus (E-069).
 
 paths:
 
@@ -335,6 +343,76 @@ paths:
                             count: { type: integer, minimum: 1 }
                             firstAt: { $ref: '#/components/schemas/Timestamp' }
                             lastAt: { $ref: '#/components/schemas/Timestamp' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+
+  # ---------------------------------------------------------------------------
+  /version-check:
+    get:
+      tags: [Versionsprüfung]
+      operationId: getVersionCheck
+      summary: Zuletzt bekannte veröffentlichte Fassung
+      description: |
+        **Diese Route liest ab, sie fragt nicht** (E-069, A-V-10). Sie gibt das
+        zuletzt vom Dienst ermittelte Ergebnis heraus und löst **nie** eine
+        ausgehende Anfrage aus. Der Dienst prüft von sich aus: einmal kurz nach
+        dem Start, danach höchstens einmal in 24 Stunden.
+
+        Läge der Netzaufruf in dieser Route, könnte jeder lokale Prozess mit dem
+        Sitzungsgeheimnis ihn in einer Schleife auslösen — und damit das
+        Lebenszeichen aus R-19 takten und die Anfragebegrenzung von GitHub in
+        Sekunden verbrauchen. Ein zweiter Aufruf dieser Route kostet dagegen
+        nichts.
+
+        **`state: unknown` ist eine gültige Antwort und kein Fehler.** Sie
+        bedeutet „nichts bekannt" und deckt vier Fälle ab, die von außen
+        gleich aussehen sollen (A-18.11): noch nichts geprüft, GitHub nicht
+        erreichbar, unerwartete Antwort, keine Veröffentlichung vorhanden. Es
+        gibt kein Fehlerfeld und keinen zweiten Antworttyp, den die Oberfläche
+        als Fehlermeldung anzeigen könnte. Der Grund steht im Protokoll des
+        Dienstes.
+
+        **Was hier nicht steht** (A-V-14): kein Verweis, keine
+        Fassungsbeschreibung, kein Name, kein Zeitpunkt — kein freier Text aus
+        der Antwort von GitHub. Und **nicht** die installierte Fassung: Die
+        kennt der Dienst nicht, sie kommt aus den eingeprägten Angaben des
+        Erzeugnisses und liegt damit in der Hülle (A-V-15). Der Vergleich fällt
+        deshalb in der Oberfläche, mit der Ordnung aus `packages/domain`
+        (A-18.4, E-064 Punkt 3).
+
+        Erreichbar ausschließlich mit dem Sitzungsgeheimnis. Das Add-in braucht
+        sie nicht: Es legt Todos an und bucht Zeiten, es aktualisiert Takt
+        nicht.
+      responses:
+        '200':
+          description: |
+            Was der Dienst zuletzt erfahren hat. Zwei Felder, beide immer
+            vorhanden.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [state, latestVersion]
+                    properties:
+                      state:
+                        type: string
+                        enum: [unknown, known]
+                        description: |
+                          `known`: `latestVersion` trägt eine geprüfte Fassung.
+                          `unknown`: nichts bekannt, `latestVersion` ist `null`.
+                      latestVersion:
+                        oneOf:
+                          - { $ref: '#/components/schemas/Version' }
+                          - { type: 'null' }
+                        description: |
+                          Die zuletzt veröffentlichte Fassung, **ohne**
+                          führendes `v` und bereits gegen die Form aus A-V-8
+                          geprüft. `null`, solange nichts bekannt ist.
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3062,9 +3140,12 @@ paths:
                     übernommene E-Mail-Text (B-12.3). Er geht nie in den Export
                     (A-7.2).
 
-                    4000 Zeichen und nicht 65536 wie über die Hauptanwendung
-                    (B-12.3): Was aus einer E-Mail übernommen wird, soll der
-                    Kontext sein und nicht ein ganzer Zitatverlauf.
+                    Enger als über die Hauptanwendung (B-12.3): Was aus einer
+                    E-Mail übernommen wird, soll der Kontext sein und nicht ein
+                    ganzer Zitatverlauf. Der Wert steht in `maxLength` und
+                    nirgends sonst — bis T-134 nannte dieser Absatz die Grenze
+                    der Hauptanwendung als Zahl, und sie war seit langem falsch
+                    (E-063 Punkt 5).
       responses:
         '201':
           description: Angelegt.
@@ -3165,6 +3246,15 @@ paths:
                     (A-7.4) und ist deshalb — anders als der Vermerk beim
                     Anlegen — nicht das Feld, in das E-Mail-Text vorbelegt
                     wird.
+
+                    Der Deckel ist **enger als der derselben Spalte über die
+                    Hauptanwendung** (`POST /time-entries`). Dass er zufällig
+                    so groß ist wie der des Vermerks eine Route weiter oben,
+                    ist kein Zusammenhang: Der eine begrenzt übernommenen
+                    E-Mail-Text (B-12.3), dieser eine Eingabe des Benutzers,
+                    die in die Abrechnungsdatei geht. Ob die beiden Türen für
+                    dieses Feld verschieden bleiben sollen, ist mit T-134 als
+                    offene Frage vermerkt.
       responses:
         '201':
           description: |
@@ -3300,6 +3390,27 @@ paths:
                 roundingMode: { $ref: '#/components/schemas/RoundingMode' }
                 locale: { type: string, minLength: 2, maxLength: 35 }
                 theme: { type: string, enum: [system, light, dark] }
+                skippedVersion:
+                  oneOf:
+                    - type: string
+                      maxLength: 95
+                      pattern: '^v?[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$'
+                    - type: 'null'
+                  description: |
+                    „Überspringen" für genau diese Fassung (A-18.10, R-20).
+                    `null` setzt die Einstellung zurück; ein fehlendes Feld
+                    lässt sie unverändert.
+
+                    Ein führendes `v` ist erlaubt und wird abgeschnitten —
+                    gespeichert und zurückgegeben wird die Fassung ohne `v`
+                    (`Version`). Deshalb ist die Obergrenze hier um genau ein
+                    Zeichen höher als dort.
+
+                    Der Wert ist **Benutzereingabe** und wird an dieser Tür
+                    gegen dieselbe Form geprüft, mit der auch die Antwort von
+                    GitHub geprüft wird (T-136-4). Er geht in **keine** Adresse;
+                    die Adresse zur Release-Seite baut die Hülle selbst
+                    (A-V-16).
       responses:
         '200':
           description: Geändert.
@@ -5072,6 +5183,8 @@ components:
         - defaultTags
         - windowsUser
         - databasePath
+        - databaseTraits
+        - databaseFilesTooPermissive
       properties:
         settings: { $ref: '#/components/schemas/AppSettings' }
         exportDirectoryState:
@@ -5147,12 +5260,57 @@ components:
             hat — das Add-in-Token erreicht `/settings` nicht —, und derselbe
             Rumpf führt mit `settings.exportDirectory` bereits einen Pfad
             desselben Rechners.
+        databaseTraits:
+          type: array
+          items: { $ref: '#/components/schemas/ExportDirectoryTrait' }
+          description: |
+            Was am **Ort des Bestands** belegbar ist (T-132, O-C).
+
+            Derselbe Vorrat wie bei `exportDirectoryTraits` und aus demselben
+            Grund — nur wiegt er hier schwerer. Der Exportordner enthält, was
+            exportiert wurde; der Bestand enthält alles, einschließlich der
+            internen Vermerke (A-7.2). Liegt er in einem Synchronisierungsordner
+            oder auf einem Netzdateisystem, verlässt die Kundendatenbank den
+            Rechner — genau der Schaden, gegen den E-018 die Ablage unter
+            `%LOCALAPPDATA%` gesetzt hat, und bei WAL-Dateien obendrein ein Weg,
+            den Bestand zu beschädigen (R-13, B-5.3).
+
+            Bis T-132 lieferte diese Antwort dazu **nur den Pfad**: Der Benutzer
+            musste ihn ansehen und raten. Der Exportordner bekam seit T-039
+            einen Beleg, der Bestand keinen.
+
+            Leer heißt „nichts belegt" und nicht „unbedenklich" — dieselbe
+            Nichtaussage wie oben.
+        databaseFilesTooPermissive:
+          oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+          description: |
+            Wie viele Dateien des Bestands weiter liegen als `0600`
+            (B-7.2, T-132/O-C). Gemeint sind `takt.db`, `takt.db-wal` und
+            `takt.db-shm`.
+
+            Eine **Zahl** und keine Pfadliste: Der Aufrufer soll sagen können
+            „zwei Dateien liegen offen", nicht welche.
+
+            `null` heißt „nicht messbar" — unter Windows, wo der POSIX-Modus
+            nichts sagt und die geerbte ACL die Grenze trägt, und bei einem
+            Bestand im Arbeitsspeicher. `null` ist ausdrücklich nicht `0`.
+
+            Der Dienst meldet dieselbe Zahl beim Start ins Protokoll und merkt
+            sie als Vorfall vor (`GET /security/notices`). Hier steht sie, damit
+            sie auch dann sichtbar ist, wenn niemand das Startprotokoll gelesen
+            hat — und weil sie sich im Betrieb ändert: SQLite legt `-wal` und
+            `-shm` wiederholt neu an.
 
     ExportDirectoryTrait:
       type: string
       enum: [unc, network, sync_folder, system_dir]
       description: |
-        Ein belegter Befund über einen Exportordner (B-5.2, B-5.3 Punkt 3).
+        Ein belegter Befund über einen **Ort** — den Exportordner oder den des
+        Datenbestands (B-5.2, B-5.3 Punkt 3, T-132/O-C).
+
+        Der Name stammt aus T-039, als es nur den Exportordner gab. Er bleibt,
+        weil er an mehreren Flächen steht; gemeint ist der Ort, nicht sein
+        Zweck.
 
         Die Oberfläche warnt zusätzlich aus dem Pfad heraus. Das ist eine
         Auslegung von Zeichenketten und sagt es auch so („liegt in", nicht
@@ -5382,11 +5540,30 @@ components:
             Kennzeichen auf, und der Satz über die Rückkehr (Anlaß `reopen`)
             hat auch ohne jeden Treffer etwas zu sagen.
 
+    Version:
+      type: string
+      maxLength: 94
+      pattern: '^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$'
+      description: |
+        Eine Fassungsbezeichnung **ohne** führendes `v` (A-V-8, E-066 Punkt 3).
+
+        Der Zeichenvorrat ist `0-9`, `A-Z`, `a-z`, `.` und `-` — und das ist
+        keine Formsache: Er ist die Zusicherung, aus der die Hülle ihre Adresse
+        zusammensetzt (A-V-16). `/`, `\`, `?`, `#`, `:`, `@`, `%`, Leerzeichen
+        und Zeilenumbruch sind darin nicht möglich, ein Punktsegment ebenso
+        wenig, weil jede Kernkomponente mit einer Ziffer beginnt.
+
+        Die Ordnung ist der Vorrang von SemVer und **kein**
+        Zeichenkettenvergleich: `0.10.0` steht über `0.9.0` (A-18.4). Eine
+        Vorabfassung steht unter der gleichnamigen Fassung. Beides liegt in
+        `packages/domain` und nirgends sonst.
+
     AppSettings:
       type: object
       description: |
         Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
-      required: [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, updatedAt]
+      required:
+        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, skippedVersion, updatedAt]
       properties:
         exportDirectory:
           oneOf: [{ type: string }, { type: 'null' }]
@@ -5395,6 +5572,21 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         locale: { type: string }
         theme: { type: string, enum: [system, light, dark] }
+        skippedVersion:
+          oneOf: [{ $ref: '#/components/schemas/Version' }, { type: 'null' }]
+          description: |
+            Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20).
+            `null` heißt: nichts übersprungen.
+
+            Sie steht im Bestand und nicht im Arbeitsspeicher und nicht im
+            Browserspeicher — sonst meldete sich der Hinweis beim nächsten
+            Start wieder, und ein Hinweis, den man nicht loswird, wird ungelesen
+            weggeklickt.
+
+            Übersprungen wird **eine Fassung, nicht die Prüfung**: Eine später
+            erschienene, höhere Fassung meldet sich wieder. Ein unbrauchbarer
+            gespeicherter Wert wird beim Lesen zu `null` — „nichts
+            übersprungen" (T-136-4).
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
 
 # -----------------------------------------------------------------------------

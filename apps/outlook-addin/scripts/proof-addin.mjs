@@ -109,7 +109,15 @@ import { parseYaml } from '../../local-api/scripts/openapi-reader.mjs';
  * folgt daraus, statt gemessen zu werden.
  */
 import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/routes/todos.ts';
-import { createTodoSchema as addinCreateTodoSchema } from '../../local-api/src/routes/addin/schema.ts';
+import {
+  ADDIN_NOTE_MAX_LENGTH,
+  ADDIN_TAG_IDS_MAX,
+  ADDIN_BOOKING_NOTE_MAX_LENGTH,
+  ADDIN_TAG_NAMES_MAX,
+  bookSchema as addinBookSchema,
+  createTodoSchema as addinCreateTodoSchema,
+} from '../../local-api/src/routes/addin/schema.ts';
+import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/routes/time.ts';
 
 /*
  * --- Prüflinge: die **echte** Speicherung und der **andere** Weg (T-061) ----
@@ -163,6 +171,7 @@ import {
   FORBIDDEN_NAME_CHARACTERS,
   HIDDEN_MARKER as DOMAENE_MARKE,
   MAX_TAG_NAME_LENGTH,
+  MAX_TITLE_CHARACTERS as DOMAENE_MAX_TITEL,
   POOL_RULE_AXIS_IDS,
   POOL_RULE_AXIS_OF_FIELD,
   checkCallNumber,
@@ -3611,20 +3620,113 @@ check(`beide Türen nehmen dieselben ${String(ANGENOMMENE_ZEICHEN.length)} harml
   assert.deepEqual(abweichungen, [], abweichungen.join('; '));
 });
 
-check('die Länge läuft ebenfalls nicht auseinander', () => {
+check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigene', () => {
   /*
-   * Die zweite Hälfte desselben Befunds, und sie stand länger im Baum als die
-   * erste: Die Add-in-Tür nahm 512 Zeichen an, die Hauptanwendung 500. Ein so
-   * angelegtes Todo ließ sich über `PATCH /todos/{todoId}` nie wieder
-   * speichern — der Änderungsdialog schickt den Titel mit.
+   * ---------------------------------------------------------------------------
+   * Warum hier keine Zahlen mehr verglichen werden (T-128, T-134, E-063 Punkt 5)
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-134 stand an dieser Stelle ein Vergleich: Das Add-in trug seine eigene
+   * `MAX_TITLE_CHARACTERS = 500`, der Dienst seine, und dieser Abschnitt hielt
+   * beide gegeneinander. Der Vergleich war ehrlich gemeint und trotzdem die
+   * schwächste Sorte Prüfung, die es hier geben kann: **Er wird erst rot, wenn
+   * die Doppelung schon falsch ist.** Führen beide Seiten dieselbe falsche Zahl,
+   * bleibt er grün — er misst die Doppelung nicht, er verträgt sie. Genau so hat
+   * die Zeichenklasse fünf Wellen überlebt (T-117 bis T-123).
+   *
+   * Gefragt ist deshalb nicht mehr „steht hier und dort dasselbe?", sondern
+   * **„kommt der Wert an dieser Stelle aus `@takt/domain`?"**.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum das bei einer Zahl anders gemessen werden muss als bei einer Funktion
+   * ---------------------------------------------------------------------------
+   *
+   * Für die Zeichenklasse genügt `assert.equal(dropHidden, dropHiddenCharacters)`
+   * (Abschnitt 17): Zwei Funktionen sind genau dann dieselbe Sache, wenn sie
+   * dasselbe Objekt sind. Eine **Zahl** hat keine Kennung. `500 === 500` ist
+   * wahr, gleichgültig, wo die beiden Fünfhundert herkommen — die Frage nach der
+   * Herkunft lässt sich zur Laufzeit an einem Zahlenwert überhaupt nicht
+   * stellen.
+   *
+   * Sie lässt sich am **Quelltext** stellen, und zwar in drei Teilen, die
+   * einzeln nichts und zusammen alles sagen:
+   *
+   *  1. Kein Quelltext des Aufgabenbereichs **trägt** die Zahl. Das Muster dafür
+   *     wird aus der Domäne **erzeugt** und nicht hingeschrieben — änderte die
+   *     Domäne ihren Wert, suchte dieser Lauf im selben Durchgang nach dem
+   *     neuen. Ein Wächter, der seine eigene Zahl abschriebe, wäre wieder genau
+   *     das Muster, gegen das er steht.
+   *  2. Die eine Datei, die den Namen ausführt, holt ihn aus `@takt/domain`.
+   *  3. Der Wert, den der Aufgabenbereich tatsächlich herausgibt, ist der der
+   *     Domäne. Ohne diesen dritten Teil bestünde die Prüfung auch dann, wenn
+   *     jemand `MAX_NAME_LENGTH as MAX_TITLE_CHARACTERS` ausführte — ein Import
+   *     aus der richtigen Datei mit der falschen Bedeutung.
+   *
+   * Teil 1 allein bemerkt eine daneben angelegte Kopie, Teil 2 allein eine
+   * Umleitung, Teil 3 allein eine Verwechslung. Erst zusammen sind sie die
+   * Aussage „eine Quelle" — dieselbe Bauart wie das Paar in Abschnitt 17, nur
+   * für einen Wert ohne Kennung.
    */
-  const gerade = 'a'.repeat(MAX_TITLE_CHARACTERS);
-  const einsZuViel = 'a'.repeat(MAX_TITLE_CHARACTERS + 1);
 
-  assert.equal(nimmtAn(addinTuer, { title: gerade }), true, 'die Add-in-Tür nimmt ihren eigenen Deckel nicht an');
-  assert.equal(nimmtAn(hauptTuer, { title: gerade }), true, 'die Haupttür nimmt weniger als das Add-in');
-  assert.equal(nimmtAn(addinTuer, { title: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
-  assert.equal(nimmtAn(hauptTuer, { title: einsZuViel }), false, 'die Haupttür nimmt mehr als das Add-in');
+  // Teil 1 — erzeugt, nicht abgeschrieben.
+  const zahl = new RegExp(`(?<![\\d_])${String(DOMAENE_MAX_TITEL)}(?![\\d_])`);
+  const traeger = files
+    .filter((datei) => /\.tsx?$/.test(datei))
+    .filter((datei) => zahl.test(sourceWithoutComments(datei)))
+    .map((datei) => path.relative(srcRoot, datei));
+  assert.deepEqual(
+    traeger,
+    [],
+    `der Aufgabenbereich führt die Zahl ${String(DOMAENE_MAX_TITEL)} selbst, in: ${traeger.join(', ')} — ` +
+      'kommt sie aus der Domäne, gehört der Name hin; bedeutet sie etwas anderes, gehört ihr ein eigener Name',
+  );
+
+  // Teil 2 — die Datei, die den Namen ausführt, liest ihn.
+  const deckel = sourceWithoutComments(path.join(srcRoot, 'office', 'mail.ts'));
+  assert.match(deckel, /from '@takt\/domain'/, 'mail.ts liest die Domäne nicht');
+  assert.match(
+    deckel,
+    /\bMAX_TITLE_CHARACTERS\b[\s\S]*?from '@takt\/domain'|from '@takt\/domain'[\s\S]*?\bMAX_TITLE_CHARACTERS\b/,
+    'mail.ts holt MAX_TITLE_CHARACTERS nicht aus @takt/domain',
+  );
+  assert.equal(
+    /(?:const|let|var)\s+MAX_TITLE_CHARACTERS\b/.test(deckel),
+    false,
+    'mail.ts erklärt MAX_TITLE_CHARACTERS wieder selbst',
+  );
+
+  // Teil 3 — und es ist auch der richtige Name aus der Domäne.
+  assert.equal(
+    MAX_TITLE_CHARACTERS,
+    DOMAENE_MAX_TITEL,
+    'der Aufgabenbereich führt einen anderen Wert aus der Domäne unter diesem Namen',
+  );
+});
+
+check('beide Türen wenden den Deckel wirklich an — die Bindung, nicht die Zahl', () => {
+  /*
+   * Was vom alten Zahlenvergleich bleibt und **nicht** tautologisch ist: Dass
+   * die Zahl aus einer Quelle kommt, sagt nichts darüber, ob `zod` sie an
+   * diesem Feld tatsächlich anwendet. Die Bindung kann jemand lösen, ohne die
+   * Zahl anzufassen — genauso wie bei der Zeichenklasse eine Zeile weiter oben.
+   *
+   * Gemessen wird deshalb **jede Tür einzeln gegen die Domäne** und keine gegen
+   * die andere (T-123): Zwei Türen, die einander gleichen, können gemeinsam
+   * falsch liegen. Dass sie einander gleichen, folgt jetzt, statt gemessen zu
+   * werden.
+   *
+   * Der Befund dahinter stand länger im Baum als der der Zeichenklasse: Die
+   * Add-in-Tür nahm 512 Zeichen an, die Hauptanwendung 500. Ein so angelegtes
+   * Todo ließ sich über `PATCH /todos/{todoId}` nie wieder speichern — der
+   * Änderungsdialog schickt den Titel mit.
+   */
+  const gerade = 'a'.repeat(DOMAENE_MAX_TITEL);
+  const einsZuViel = 'a'.repeat(DOMAENE_MAX_TITEL + 1);
+
+  for (const [wo, tuer] of [['die Add-in-Tür', addinTuer], ['die Haupttür', hauptTuer]]) {
+    assert.equal(nimmtAn(tuer, { title: gerade }), true, `${wo} nimmt den Deckel der Domäne nicht an`);
+    assert.equal(nimmtAn(tuer, { title: einsZuViel }), false, `${wo} nimmt mehr an als die Domäne sagt`);
+  }
 });
 
 check(`der Tagname bleibt an ${String(MAX_TAG_NAME_LENGTH)} Zeichen aus der Domäne gebunden`, () => {
@@ -3642,6 +3744,160 @@ check(`der Tagname bleibt an ${String(MAX_TAG_NAME_LENGTH)} Zeichen aus der Dom�
     assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [gerade] }), true, `${wo} nimmt ${String(MAX_TAG_NAME_LENGTH)} Zeichen nicht an`);
     assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [einsZuViel] }), false, `${wo} nimmt mehr als ${String(MAX_TAG_NAME_LENGTH)} Zeichen an`);
   }
+});
+
+/** Erfundene Kennungen in UUID-Form — beide Türen nehmen dieselbe Form an. */
+const kennungen = (anzahl) =>
+  Array.from(
+    { length: anzahl },
+    (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+  );
+
+/** Erfundene Tagnamen, jeder für sich zulässig und von den anderen verschieden. */
+const namen = (anzahl) => Array.from({ length: anzahl }, (_, index) => `Ost ${String(index)}`);
+
+check('die Listengrenzen sagen an beiden Türen dasselbe (O-AR)', () => {
+  /*
+   * O-AR, der Add-in-Anteil — und die ehrliche Auskunft dazu, was diese Zeilen
+   * können und was nicht.
+   *
+   * `tagIds` und `tagNames` tragen ihre Obergrenze an **zwei** Türen:
+   * `routes/addin/schema.ts` (hier gemessen, T-134 hat ihr einen Namen gegeben)
+   * und `routes/todos.ts`, gleich zweimal. Es ist dieselbe Wahrheit — „wie viele
+   * Tags darf ein Todo in einer Anfrage bekommen" — und sie steht heute an drei
+   * Stellen unabhängig geschrieben. Der Kommentar an `ADDIN_TAG_NAMES_MAX` sagte
+   * das bis T-134 zu, ohne dass es jemand erzwang: E-063 Punkt 5 in seiner
+   * mildesten Form.
+   *
+   * **Das hier ist ein Zahlenvergleich, und ein Zahlenvergleich ist die
+   * schwächere Prüfung** — genau die, die zwei Zeilen weiter oben für den
+   * Titeldeckel abgelöst wurde. Er bleibt hier trotzdem stehen, weil die
+   * stärkere Frage noch nicht gestellt werden **kann**: Solange es keine
+   * gemeinsame Quelle gibt, gibt es keine Herkunft zu prüfen. Die zweite Tür
+   * liegt außerhalb der Hoheit dieser Aufgabe (E-053); T-134 meldet sie, statt
+   * die Zahl halb umzustellen — eine halb umgestellte Zahl sieht aus wie
+   * erledigt.
+   *
+   * Bis dahin gilt: Laufen die Türen auseinander, wird dieser Lauf rot. Vorher
+   * wäre gar nichts geschehen.
+   */
+  const titel = { title: 'Wartung Nord' };
+
+  for (const [was, grenze, bauen] of [
+    ['tagIds', ADDIN_TAG_IDS_MAX, (anzahl) => ({ ...titel, tagIds: kennungen(anzahl) })],
+    ['tagNames', ADDIN_TAG_NAMES_MAX, (anzahl) => ({ ...titel, tagNames: namen(anzahl) })],
+  ]) {
+    for (const [wo, tuer] of [['Add-in-Tür', addinTuer], ['Haupttür', hauptTuer]]) {
+      assert.equal(
+        nimmtAn(tuer, bauen(grenze)),
+        true,
+        `${wo}: ${was} nimmt ${String(grenze)} Einträge nicht an`,
+      );
+      assert.equal(
+        nimmtAn(tuer, bauen(grenze + 1)),
+        false,
+        `${wo}: ${was} nimmt mehr als ${String(grenze)} Einträge an`,
+      );
+    }
+  }
+});
+
+check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-12.3, T-134)', () => {
+  /*
+   * **Der Fund dieser Aufgabe, und er war keine Aufräumarbeit.**
+   *
+   * `prepareNote` schnitt bis T-134 auf `MAX_TAKEOVER_CHARACTERS` und hängte den
+   * Hinweis „(gekürzt)" **danach** an. Der Vermerk war damit elf Zeichen länger
+   * als der Deckel, den `ADDIN_NOTE_MAX_LENGTH` an derselben Tür durchsetzt —
+   * und zwar in jedem Fall, in dem die zweite Hälfte des Textes keinen
+   * Zeilenumbruch trägt: eine lange Mail ohne Absätze, ein Zitatverlauf aus
+   * einer Zeile, ein Textkörper aus Emoji.
+   *
+   * Der Benutzer drückt „Inhalt der E-Mail übernehmen", dann „Anlegen" — und
+   * bekommt ein 422 auf ein Feld, dessen Inhalt er nicht geschrieben hat.
+   * Dieselbe Sackgasse wie T-114 beim Titel, nur elf Zeichen weiter.
+   *
+   * **Warum ihn niemand gefunden hat:** Der Nachweis prüfte den Vermerk gegen
+   * eine **Rechnung** (`Deckel + Länge des Hinweises`, Abschnitt 17) statt gegen
+   * die **Tür**. Eine Erwartung, die den Fehler nachrechnet, bestätigt ihn.
+   * Diese Zeile fragt deshalb das Schema, das den Vermerk wirklich annimmt.
+   */
+  const emoji = String.fromCodePoint(0x1f6e0);
+
+  for (const [was, body] of [
+    ['ein Textkörper aus Emoji', emoji.repeat(3000)],
+    ['ein langer Fließtext ohne Absatz', 'a'.repeat(9000)],
+    ['ein Zitatverlauf mit Absätzen', 'Zeile mit etwas Text\n'.repeat(400)],
+  ]) {
+    const vermerk = prepareNote({
+      subject: 'Störung Lüftung',
+      body,
+      senderName: 'A. Beispiel',
+      senderAddress: 'a.beispiel@example.org',
+      receivedAt: null,
+    });
+
+    assert.ok(
+      vermerk.length <= ADDIN_NOTE_MAX_LENGTH,
+      `${was}: der Vermerk ist ${String(vermerk.length)} Zeichen lang, die Tür nimmt ${String(ADDIN_NOTE_MAX_LENGTH)}`,
+    );
+    assert.equal(
+      nimmtAn(addinTuer, { title: 'Wartung Nord', note: vermerk }),
+      true,
+      `${was}: die Tür weist den übernommenen Vermerk ab`,
+    );
+  }
+
+  // Die Gegenprobe zur Behebung: Die alte Rechnung — voll ausschneiden, Hinweis
+  // danach anhängen — ergibt einen Vermerk, den die Tür abweist. Ohne sie stünde
+  // nur fest, dass es heute passt, und nicht, dass es je ein Problem war.
+  const alt = `${'a'.repeat(ADDIN_NOTE_MAX_LENGTH)}\n…(gekürzt)`;
+  assert.equal(
+    nimmtAn(addinTuer, { title: 'Wartung Nord', note: alt }),
+    false,
+    'die alte Rechnung ginge durch — dann misst diese Prüfung nichts',
+  );
+});
+
+check('die Leistung: was die Add-in-Tür annimmt, nimmt die Haupttür auch an (O-AR)', () => {
+  /*
+   * Die zweite der beiden `4000` in `routes/addin/schema.ts` — und sie ist
+   * **nicht** dieselbe Wahrheit wie die erste. Der Vermerk begrenzt übernommenen
+   * E-Mail-Text (B-12.3 Punkt 3, geht nie in den Export); die Leistung ist eine
+   * Eingabe des Benutzers und geht in die Abrechnungsdatei (A-7.4). Gleiche
+   * Zahl, andere Bedeutung — die Begründung steht an der Konstante, nicht hier.
+   *
+   * Was hier zu messen ist, ist die **eine Richtung, in der eine Abweichung
+   * weh tut**: Eine Buchung, die über den Aufgabenbereich entsteht, muss in der
+   * Hauptanwendung bearbeitbar bleiben. Das ist der Befund C-03 in seiner
+   * allgemeinen Form — dieselbe Handlung, zwei Ergebnisse —, und er hängt nicht
+   * daran, dass beide Deckel gleich sind, sondern daran, dass der engere im
+   * Add-in liegt.
+   *
+   * Diese Zeile bleibt deshalb auch dann grün, wenn der Orchestrator die offene
+   * Frage andersherum entscheidet und beide Türen gleichzieht. Sie wird rot,
+   * wenn das Add-in eines Tages **mehr** annimmt als die Hauptanwendung — genau
+   * der Zustand, der zwischen T-101 und T-114 zwei Wellen lang bestand.
+   */
+  const gerade = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH);
+  const einsZuViel = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH + 1);
+  const buchung = { startedAt: '2026-09-04T08:00:00Z', endedAt: '2026-09-04T08:30:00Z' };
+
+  // Die Bindung an der Add-in-Tür: Der Deckel wirkt wirklich.
+  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: gerade }), true, 'die Add-in-Tür nimmt ihren Deckel nicht an');
+  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
+
+  // Und die Richtung, auf die es ankommt: Die Haupttür nimmt alles an, was hier
+  // durchgeht. Derselbe Text, dieselbe Spalte, zwei Wege.
+  assert.equal(
+    nimmtAn(MAIN_TIME_SCHEMAS.createTimeEntry, {
+      todoId: ID.todoStoerung,
+      ...buchung,
+      note: gerade,
+    }),
+    true,
+    'eine über den Aufgabenbereich gebuchte Leistung ist in der Hauptanwendung nicht mehr speicherbar (C-03)',
+  );
 });
 
 check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () => {
@@ -4151,9 +4407,20 @@ check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
 
   assert.equal(wohlgeformt(vermerk), true, 'der Vermerk übersteht UTF-8 nicht');
   assert.equal(fromBase64(toBase64(vermerk)), vermerk);
+
+  /*
+   * **Hier stand bis T-134 die Erwartung, die den Fehler nachrechnete:**
+   * `MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length`. Sie war grün, und der
+   * Vermerk war trotzdem elf Zeichen zu lang für die Tür, die ihn annehmen soll
+   * — weil die Erwartung dieselbe Rechnung anstellte wie der Fehler. Eine
+   * Prüfung, die den Prüfling nachbaut, bestätigt ihn.
+   *
+   * Der Deckel steht jetzt allein da, und die Frage nach der Tür stellt
+   * Abschnitt 16 („der übernommene Vermerk passt durch die Tür").
+   */
   assert.ok(
-    vermerk.length <= MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length,
-    `Länge ${String(vermerk.length)} — mehr als der Deckel und der Hinweis`,
+    vermerk.length <= MAX_TAKEOVER_CHARACTERS,
+    `Länge ${String(vermerk.length)} — mehr als der Deckel`,
   );
 });
 

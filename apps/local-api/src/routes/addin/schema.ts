@@ -39,10 +39,28 @@ const timestamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
 /**
  * Der interne Vermerk aus der E-Mail (A-7.1, B-12.3 Punkt 3).
  *
- * 4000 Zeichen, nicht 65536 wie bei der Hauptanwendung. Der Vorschlag stammt
- * aus B-12.3: Was aus einer E-Mail übernommen wird, soll der Kontext sein und
- * nicht ein ganzer Zitatverlauf. Wer mehr braucht, schreibt es in der
- * Hauptanwendung dazu.
+ * Enger als an der Tür der Hauptanwendung, wo `textSchema` gilt. Der Vorschlag
+ * stammt aus B-12.3 Punkt 3: Was aus einer E-Mail übernommen wird, soll der
+ * Kontext sein und nicht ein ganzer Zitatverlauf. Wer mehr braucht, schreibt es
+ * in der Hauptanwendung dazu.
+ *
+ * **Die Gegenzahl steht bis heute im Add-in** als `MAX_TAKEOVER_CHARACTERS`
+ * (`apps/outlook-addin/src/office/mail.ts`), und sie muss dieselbe sein: Der
+ * Knopf „Inhalt der E-Mail übernehmen" füllt das Feld, bevor der Benutzer es
+ * gelesen hat. Kürzte das Add-in großzügiger, als diese Zeile annimmt, bekäme
+ * er ein 422 für einen Text, den nicht er geschrieben hat — dieselbe Sackgasse
+ * wie bei der Titellänge vor T-114. Auflösen lässt sich das nur in
+ * `@takt/domain`, weil ein Browserbündel `@takt/local-api` nicht einbinden darf;
+ * T-134 meldet es, statt es halb zu tun. Bis dahin hält
+ * `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16 beide Seiten
+ * gegeneinander — ein Vergleich, der den Schaden bewacht und nicht die Ursache
+ * (E-063 Punkt 5), aber einer, der rot wird.
+ *
+ * **Der Wortlaut hier nannte bis T-134 „65536" als Zahl der Hauptanwendung.**
+ * Sie war seit langem falsch — `textSchema` nimmt weniger —, und sie war es
+ * unbemerkt, weil eine Beschreibung, die eine fremde Zahl abschreibt, dieselbe
+ * Abschrift ist wie eine im Quelltext, nur ohne die Möglichkeit, rot zu werden
+ * (E-063 Punkt 5). Sie zeigt jetzt auf den Namen statt auf einen Wert.
  */
 export const ADDIN_NOTE_MAX_LENGTH = 4000;
 
@@ -67,6 +85,28 @@ export const ADDIN_NOTE_MAX_LENGTH = 4000;
 export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
 
 /**
+ * Wie viele **Kennungen** eine Anfrage höchstens mitgeben darf (T-058, T-134).
+ *
+ * Bis T-134 stand die Zahl als `.max(200)` mitten im Schema, ohne Namen und
+ * ohne Grund — und ohne einen Hinweis darauf, dass sie nicht allein steht.
+ *
+ * **Sie steht an zwei Türen.** `routes/todos.ts` führt dieselbe Zahl an
+ * `createSchema` und an `updateSchema`; es ist dieselbe Wahrheit („wie viele
+ * Tags darf ein Todo in einer Anfrage bekommen") und nicht bloß derselbe Wert.
+ * Aufgelöst ist sie damit **nicht**: Der andere Weg liegt außerhalb dieser Datei
+ * (E-053), und eine halb umgestellte Zahl ist schlechter als eine ganz
+ * doppelte — sie sieht aus wie erledigt. T-134 gibt ihr deshalb hier einen
+ * Namen, meldet die zweite Tür und lässt sie messen
+ * (`apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16): Laufen die beiden
+ * Türen auseinander, wird der Lauf rot, statt dass ein Kommentar es hofft.
+ *
+ * Warum überhaupt eine Grenze: Ohne sie nimmt die Tür eine Liste beliebiger
+ * Länge entgegen und legt sie in eine Transaktion. Warum 200 und nicht 50 wie
+ * bei den Namen, steht eine Zeile weiter unten.
+ */
+export const ADDIN_TAG_IDS_MAX = 200;
+
+/**
  * Wie viele **Namen** eine Anfrage höchstens benennen darf (T-058, T-061).
  *
  * Dieselbe Zahl wie in `routes/todos.ts`, und aus demselben Grund: Kennungen
@@ -74,6 +114,10 @@ export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
  * einer Anfrage sind kein Arbeitsablauf, sondern ein Skript. Zwei verschiedene
  * Zahlen an den beiden Wegen wären die Art Unterschied, die niemand bemerkt,
  * bis eine Anfrage über den einen Weg durchgeht und über den anderen nicht.
+ *
+ * Dieser Satz war bis T-134 eine Zusicherung, die niemand ausführt — genau die
+ * Bauart, an der T-114 gescheitert ist. Seither hält Abschnitt 16 des
+ * Add-in-Nachweises beide Türen gegeneinander, für `tagIds` wie für `tagNames`.
  */
 export const ADDIN_TAG_NAMES_MAX = 50;
 
@@ -136,7 +180,7 @@ export const createTodoSchema = z.object({
   title: titleSchema,
   callNumber: z.string().max(ADDIN_CALL_NUMBER_MAX_LENGTH).nullable().default(null),
   statusId: id.nullable().default(null),
-  tagIds: z.array(id).max(200).default([]),
+  tagIds: z.array(id).max(ADDIN_TAG_IDS_MAX).default([]),
   /**
    * Tags über ihren **Namen** statt über eine Kennung (T-058, T-061).
    *
@@ -198,6 +242,53 @@ export const createTodoSchema = z.object({
   note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
 });
 
+/**
+ * Die **Leistung** einer Buchung aus dem Aufgabenbereich (A-7.3, A-7.4).
+ *
+ * ---------------------------------------------------------------------------
+ * Gleiche Zahl, andere Bedeutung — und deshalb ein eigener Name (T-134)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-134 stand hier `z.string().max(4000)` als nackte Zahl, zwei Bildschirme
+ * unter `ADDIN_NOTE_MAX_LENGTH`, das denselben Wert trägt. Von außen sah das aus
+ * wie eine Doppelung innerhalb einer Datei; nachgesehen ist es **keine**:
+ *
+ * | | `ADDIN_NOTE_MAX_LENGTH` | diese Zahl |
+ * |---|---|---|
+ * | Feld | der interne Vermerk des Todos (A-7.1) | die Leistung der Buchung (A-7.3) |
+ * | Herkunft des Textes | vorbelegt aus der E-Mail (B-12.3) | getippt im Aufgabenbereich |
+ * | Weg nach draußen | keiner — nie im Export (A-7.2) | **in die Abrechnungsdatei** (A-7.4) |
+ * | Grund für die Grenze | B-12.3 Punkt 3: kein Zitatverlauf | keiner, der aufgeschrieben wäre |
+ *
+ * Die beiden Zahlen zusammenzulegen hieße zu behaupten, ein übernommener
+ * E-Mail-Kontext und eine abgerechnete Leistung seien dieselbe Sache und
+ * änderten sich gemeinsam. Sie sind es nicht: Fiele die Grenze des Vermerks
+ * morgen aus B-12.3-Gründen auf 2000, hätte das mit der Leistung nichts zu tun.
+ * Gleiche Zahl ist nicht gleiche Bedeutung — deshalb steht sie hier mit eigenem
+ * Namen und eigenem Grund, statt in einer gemeinsamen Konstante zu verschwinden.
+ *
+ * ---------------------------------------------------------------------------
+ * Ihr wirklicher Namensvetter ist ein anderer — und er sagt etwas anderes
+ * ---------------------------------------------------------------------------
+ *
+ * Dieselbe Spalte wird über die Hauptanwendung mit `textSchema` gefüllt
+ * (`POST /time-entries`, `PATCH /time-entries/{id}`, der Stopp des Timers), und
+ * `textSchema` nimmt **mehr** an als diese Zeile. Dieselbe Leistung geht also
+ * über den einen Weg durch und über den anderen nicht — dieselbe Bauart wie der
+ * Befund C-03, nur an einem Freitextfeld statt an einem Titel.
+ *
+ * Eine Sackgasse ist es heute nicht: Der Aufgabenbereich belegt dieses Feld
+ * nicht vor (anders als den Vermerk), und er bearbeitet keine bestehende
+ * Buchung — abgewiesen würde nur ein Text, den der Benutzer selbst getippt hat,
+ * und das ist der zulässige Fall (B-4.3). Die Entscheidung, ob die Add-in-Tür
+ * enger bleiben **soll** als die der Hauptanwendung, ist trotzdem eine
+ * Entscheidung und keine Aufräumarbeit: Sie ändert eine Zusage der Schnittstelle
+ * und gehört deshalb nach `decisions.md` und nicht in diese Zeile. T-134 meldet
+ * sie als offene Frage und lässt den engeren Deckel bis dahin stehen — mit
+ * diesem Grund an Ort und Stelle statt ohne einen.
+ */
+export const ADDIN_BOOKING_NOTE_MAX_LENGTH = 4000;
+
 export const bookSchema = z.object({
   startedAt: timestamp,
   endedAt: timestamp,
@@ -209,8 +300,12 @@ export const bookSchema = z.object({
    * Grund wie der Vermerk: Sie ist Freitext des Benutzers, kein Name. Sie
    * stammt zudem als einziges Feld dieser Tür ausschließlich aus dem
    * Eingabefeld des Aufgabenbereichs und nicht aus der E-Mail (T-114 Punkt 4).
+   *
+   * Warum ihr Deckel {@link ADDIN_BOOKING_NOTE_MAX_LENGTH} heißt und nicht
+   * {@link ADDIN_NOTE_MAX_LENGTH}, obwohl beide heute dieselbe Zahl tragen,
+   * steht an der Konstante.
    */
-  note: z.string().max(4000).default(''),
+  note: z.string().max(ADDIN_BOOKING_NOTE_MAX_LENGTH).default(''),
 });
 
 /*

@@ -6,8 +6,9 @@ import type {
   ExportSourcePath,
   ExportTransformation,
   ExportTransformationInfo,
+  ForeignText,
 } from "../api/types";
-import { quotedName } from "./foreign";
+import { foreignText, foreignTextFrom, quotedName } from "./foreign";
 
 export type {
   ExportConditionOperator,
@@ -74,9 +75,20 @@ export interface ExportFieldCondition {
   readonly op: ExportConditionOperator;
 }
 
-/** Ein Feld einer Exportvorlage, so wie es in der Datenbank liegt. */
+/**
+ * Ein Feld einer Exportvorlage, so wie es in der Datenbank liegt.
+ *
+ * **`name` ist fremder Text** (O-AT, T-133). Er kommt aus `definition`, also
+ * aus einem `unknown`, und ein Benutzer hat ihn geschrieben — im Editor S-14
+ * oder, bei einer alten Vorlage, vor Jahren. Angezeigt wird er an sechs
+ * Stellen: im Editor, in der Abweichungsliste, in der Warnung vor doppelten
+ * Feldnamen, in den Beschriftungen der Umordnungsknöpfe, in der Vorschau der
+ * Exportzeile und in der Liste der Felder, die eine Zeile nicht erreicht
+ * haben. Solange dieses Feld `string` hieß, war jede dieser Stellen für
+ * `scripts/proof-foreign.mjs` unsichtbar.
+ */
 export interface ExportFieldDefinition {
-  readonly name: string;
+  readonly name: ForeignText;
   readonly source: ExportSourcePath;
   readonly transformation: ExportTransformation;
   readonly condition?: ExportFieldCondition;
@@ -215,16 +227,37 @@ export function readSourceCatalog(response: ExportSourceCatalog): SourceCatalog 
     noteBoundaryHint: response.noteBoundaryHint,
     sourcesOfGroup: (groupId) => byGroup.get(groupId) ?? [],
     sourceInfo: (path) => sourceByPath.get(path),
-    sourceLabel: (path) => sourceByPath.get(path)?.label ?? path,
+    /*
+     * Der **Rückfall** ist fremder Text und wird behandelt (O-AT, T-133): Steht
+     * die Quelle nicht mehr auf der Liste des Dienstes, zeigt die Ansicht den
+     * gespeicherten Pfad — und der stammt aus `definition`, also aus einem
+     * `unknown`, in das ein Benutzer geschrieben hat. Die Beschriftung des
+     * Dienstes daneben ist `ServiceText` und bleibt unangetastet.
+     */
+    sourceLabel: (path) => sourceByPath.get(path)?.label ?? foreignText(path),
     transformationInfo: (value) => transformationByValue.get(value),
-    transformationLabel: (value) => transformationByValue.get(value)?.label ?? value,
-    conditionOperatorLabel: (value) => operatorByValue.get(value) ?? value,
-    hasSource: (value): value is ExportSourcePath =>
-      typeof value === "string" && sourceByPath.has(value),
-    hasTransformation: (value): value is ExportTransformation =>
-      typeof value === "string" && transformationByValue.has(value),
-    hasConditionOperator: (value): value is ExportConditionOperator =>
-      typeof value === "string" && operatorByValue.has(value),
+    transformationLabel: (value) => transformationByValue.get(value)?.label ?? foreignText(value),
+    conditionOperatorLabel: (value) => operatorByValue.get(value) ?? foreignText(value),
+    /*
+     * Die drei Wächter lesen den Wert über `foreignTextFrom` und nicht über ein
+     * eigenes `typeof … === "string"` (O-AT, T-133). Sie bekommen `unknown` —
+     * die Werte stammen aus `definition`, das der Dienst als `unknown` liefert —
+     * und der Nachweis verlangt, dass es genau **eine** erklärte Stelle gibt, an
+     * der aus einem Wert ohne Typ Text wird. Fachlich ändert sich nichts: Was
+     * nicht auf der geholten Liste steht, wird abgewiesen wie zuvor.
+     */
+    hasSource: (value): value is ExportSourcePath => {
+      const text = foreignTextFrom(value);
+      return text !== null && sourceByPath.has(text);
+    },
+    hasTransformation: (value): value is ExportTransformation => {
+      const text = foreignTextFrom(value);
+      return text !== null && transformationByValue.has(text);
+    },
+    hasConditionOperator: (value): value is ExportConditionOperator => {
+      const text = foreignTextFrom(value);
+      return text !== null && operatorByValue.has(text);
+    },
     rejectedNoteSources,
     firstSource: sources[0]?.path ?? null,
     firstTransformation: response.transformations[0]?.value ?? null,
@@ -282,8 +315,16 @@ export function parseTemplateDefinition(
     }
     const candidate = rawField as Record<string, unknown>;
 
-    const name = candidate["name"];
-    if (typeof name !== "string" || name.trim().length === 0) {
+    /*
+     * **Hier verlässt fremder Text das `unknown`** (O-AT, T-133). Der Name
+     * eines Exportfeldes hat ein Benutzer geschrieben, und die Oberfläche zeigt
+     * ihn an sechs Stellen. `foreignTextFrom` ist die erklärte Übergangsstelle:
+     * `unknown` hinein, `ForeignText` heraus. Ab hier führen die Abschnitte 2
+     * bis 4 von `scripts/proof-foreign.mjs` die Herkunft mit — vor T-133 fiel
+     * sie an genau dieser Zeile lautlos ab.
+     */
+    const name = foreignTextFrom(candidate["name"]);
+    if (name === null || name.trim().length === 0) {
       return fail(`Feld ${String(position)} hat keinen Namen.`);
     }
 
@@ -362,6 +403,16 @@ export function toDefinitionBody(fields: readonly ExportFieldDefinition[]): unkn
 export type DeviationTone = "warning" | "info";
 
 export interface TemplateDeviation {
+  /**
+   * Ein technischer Schlüssel für die Liste, **kein** Text und schon gar kein
+   * fremder (O-AT, T-133).
+   *
+   * Bis T-133 stand der Feldname darin (`missing-Notiz`). Der Schlüssel wurde
+   * nie angezeigt — er ist der React-`key` der Zeile —, aber er trug fremden
+   * Text durch eine Zeichenkette, und damit war an dieser Stelle nicht mehr zu
+   * sehen, ob er irgendwo landet, wo ihn jemand liest. Die **Stelle** in der
+   * Standardvorlage leistet dasselbe und trägt nichts.
+   */
   readonly id: string;
   readonly tone: DeviationTone;
   readonly text: string;
@@ -388,11 +439,12 @@ export function describeDeviations(
   const byName = new Map<string, ExportFieldDefinition>();
   for (const field of draft) byName.set(field.name, field);
 
-  for (const expected of builtin) {
+  for (const [index, expected] of builtin.entries()) {
+    const at = String(index);
     const actual = byName.get(expected.name);
     if (actual === undefined) {
       out.push({
-        id: `missing-${expected.name}`,
+        id: `missing-${at}`,
         tone: "warning",
         text: `Das Feld ${quotedName(expected.name)} der Standardvorlage fehlt. Das Abrechnungstool erwartet es.`,
       });
@@ -400,21 +452,21 @@ export function describeDeviations(
     }
     if (actual.source !== expected.source) {
       out.push({
-        id: `source-${expected.name}`,
+        id: `source-${at}`,
         tone: "warning",
         text: `${quotedName(expected.name)} liest ${catalog.sourceLabel(actual.source)} statt ${catalog.sourceLabel(expected.source)}.`,
       });
     }
     if (actual.transformation !== expected.transformation) {
       out.push({
-        id: `transformation-${expected.name}`,
+        id: `transformation-${at}`,
         tone: "warning",
         text: `${quotedName(expected.name)} wird als ${catalog.transformationLabel(actual.transformation)} ausgegeben, die Standardvorlage benutzt ${catalog.transformationLabel(expected.transformation)}.`,
       });
     }
     if (actual.condition !== undefined) {
       out.push({
-        id: `condition-${expected.name}`,
+        id: `condition-${at}`,
         tone: "warning",
         // Die Bedingung wird **benannt**, nicht nur erwaehnt: „steht unter
         // einer Bedingung" laesst offen, unter welcher — und genau das ist
@@ -426,10 +478,10 @@ export function describeDeviations(
   }
 
   const expectedNames = new Set(builtin.map((field) => field.name));
-  for (const field of draft) {
+  for (const [index, field] of draft.entries()) {
     if (expectedNames.has(field.name)) continue;
     out.push({
-      id: `extra-${field.name}`,
+      id: `extra-${String(index)}`,
       tone: "info",
       text: `Zusätzliches Feld ${quotedName(field.name)}, das die Standardvorlage nicht kennt.`,
     });
@@ -447,7 +499,14 @@ export function describeDeviations(
     out.push({
       id: "order",
       tone: "info",
-      text: `Die Felder stehen in einer anderen Reihenfolge als in der Standardvorlage (${sharedBuiltin.join(", ")}).`,
+      /*
+       * Jeder Name einzeln behandelt und nicht die fertige Zeichenkette
+       * (O-AT): `join` auf einer Reihe fremden Textes ergibt gewöhnlichen Text
+       * und verliert dabei die Herkunft — dieselbe Falle wie ein Feld, das
+       * `string` heißt, nur eine Ebene tiefer. Abschnitt 6 des Nachweises
+       * misst genau das.
+       */
+      text: `Die Felder stehen in einer anderen Reihenfolge als in der Standardvorlage (${sharedBuiltin.map(foreignText).join(", ")}).`,
     });
   }
 

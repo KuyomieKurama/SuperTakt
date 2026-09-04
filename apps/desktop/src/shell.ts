@@ -1,16 +1,21 @@
 /**
  * Takt — die Schnittstelle der Hülle zur Oberfläche (E-004, E-010, E-018).
  *
- * Vier eigene Befehle und ein Systemdialog, mehr gibt die Hülle nicht heraus.
+ * Sechs eigene Befehle und ein Systemdialog, mehr gibt die Hülle nicht heraus.
  * Sie liegen hier und nicht in `apps/web`, damit es genau eine Stelle gibt, an
  * der die Namen der Befehle und die Gestalt ihrer Antworten stehen — die
  * Rust-Seite und diese Datei müssen zusammenpassen, `apps/web` soll das nicht
  * wissen müssen.
  *
- * Der fünfte, `chooseExportDirectory()`, ist kein `takt_`-Befehl, sondern der
+ * Der siebte, `chooseExportDirectory()`, ist kein `takt_`-Befehl, sondern der
  * Ordnerauswahldialog von `tauri-plugin-dialog` (Befund S-04, B-5.1 Punkt 1).
  * Er steht am Ende dieser Datei und erklärt dort, was die Rust-Seite dafür
  * mitbringen muss.
+ *
+ * Die beiden jüngsten — `installedVersion()` und `openReleasePage()` — gehören
+ * zur Versionsprüfung (Spezifikation Abschnitt 18, E-064, E-067). Sie stehen
+ * am Ende dieser Datei, und dort steht auch, warum der zweite **keine** Adresse
+ * entgegennimmt.
  *
  * ## Wie sich die Oberfläche gegenüber dem lokalen Dienst ausweist
  *
@@ -383,6 +388,91 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
     return { outcome: 'chosen', path: selection };
   }
   return { outcome: 'cancelled' };
+}
+
+/* ==================================================================== */
+/* Versionsprüfung (Spezifikation Abschnitt 18)                         */
+/* ==================================================================== */
+
+/**
+ * Die installierte Fassung von Takt (A-18.1, Auflage A-V-15).
+ *
+ * Sie kommt aus den **eingeprägten** Angaben des Erzeugnisses
+ * (`app.package_info().version` in `src-tauri/src/release.rs`) und nicht aus
+ * einer Datei neben der ausführbaren Datei, nicht aus einer Umgebungsvariablen
+ * und nicht vom lokalen Dienst. An ihr hängt, ob ein Hinweis erscheint und
+ * welche Adresse geöffnet wird; läge sie daneben, könnte jeder Prozess im
+ * Benutzerkonto sie herabsetzen und Takt dauerhaft eine
+ * Aktualisierungsaufforderung zeigen lassen (T-136-3).
+ *
+ * Ohne Hülle gibt es sie nicht — dann wirft diese Funktion wie jede andere hier
+ * und die Oberfläche zeigt schlicht nichts (A-18.11).
+ */
+export async function installedVersion(): Promise<string> {
+  requireShell();
+  return await invoke<string>('takt_installed_version');
+}
+
+/**
+ * Was beim Öffnen der Release-Seite herauskam. Vier Ausgänge, alle vier
+ * gehören behandelt — wie bei {@link DirectoryChoice} und aus demselben Grund:
+ * Ein `try`/`catch` an der Aufrufstelle verwischte den Unterschied zwischen
+ * „keine Hülle", „abgewiesen" und „ließ sich nicht öffnen".
+ *
+ * `rejected` ist der Fall, der zählt: Die Fassungsbezeichnung hat die
+ * Formprüfung in `release.rs` nicht bestanden. Der abgewiesene Wert kommt
+ * **nicht** mit — er ist fremder Text, und ein abgewiesener Wert in einer
+ * Meldung wäre derselbe fremde Text an einer neuen Stelle (B-18.2).
+ */
+export type ReleasePageResult =
+  | { readonly outcome: 'opened' }
+  | { readonly outcome: 'rejected' }
+  | { readonly outcome: 'failed' }
+  | { readonly outcome: 'unavailable'; readonly reason: string };
+
+/**
+ * Öffnet die Release-Seite einer Fassung im Browser des Benutzers (A-18.8).
+ *
+ * ## Der Parameter ist **keine** Adresse, und das ist die ganze Absicherung
+ *
+ * Übergeben wird die Fassungsbezeichnung ohne führendes `v` — kein Schema,
+ * kein Wirt, kein Pfad. Die Adresse setzt die Rust-Seite aus einer bei ihr fest
+ * hinterlegten Zeichenkette zusammen, nachdem sie die Bezeichnung gegen
+ * `^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$` geprüft hat
+ * (E-064 Punkt 4, Auflage A-V-16).
+ *
+ * **Hier wird die Form nicht ein zweites Mal geprüft.** T-136 hat gemessen,
+ * dass `tauri-plugin-shell` auf dem Rust-Weg gar nichts prüft; die eine
+ * Kontrolle steht deshalb dort, wo die Adresse entsteht, und nicht davor. Eine
+ * zweite Fassung derselben Regel in TypeScript wäre eine zweite Meinung
+ * darüber, was eine Fassung ist — genau die Bauart, die in T-119 fünf Wellen
+ * lang eine Regression getragen hat.
+ *
+ * ## Was **nicht** geschieht
+ *
+ * Nichts wird geladen und nichts installiert (A-18.9). `open` startet den
+ * eingestellten Browser mit einer Adresse; alles Weitere entscheidet der
+ * Benutzer außerhalb von Takt.
+ */
+export async function openReleasePage(version: string): Promise<ReleasePageResult> {
+  if (!isShellAvailable()) {
+    return {
+      outcome: 'unavailable',
+      reason:
+        'Die Release-Seite öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.',
+    };
+  }
+
+  try {
+    await invoke<null>('takt_open_release', { version });
+    return { outcome: 'opened' };
+  } catch (cause) {
+    // `release.rs` gibt bei Nichtbestehen der Form `Err("version_rejected")`
+    // zurück — ein technischer Schlüssel ohne den abgewiesenen Wert. Er wird
+    // hier in einen Ausgang übersetzt und nirgends angezeigt; den deutschen
+    // Satz dazu schreibt die Oberfläche.
+    return cause === 'version_rejected' ? { outcome: 'rejected' } : { outcome: 'failed' };
+  }
 }
 
 /**

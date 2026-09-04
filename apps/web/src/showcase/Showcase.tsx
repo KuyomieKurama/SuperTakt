@@ -18,6 +18,7 @@ import { RuleSection } from "./RuleSection";
 import { ShellStateSection } from "./ShellStateSection";
 import { TagsSection } from "./TagsSection";
 import { TimeSection } from "./TimeSection";
+import { UpdateNoticeSection } from "./UpdateNoticeSection";
 
 interface NavEntry {
   readonly id: string;
@@ -45,6 +46,7 @@ const NAV: readonly NavEntry[] = [
   { id: "bausteine", label: "9 — Bedienelemente und Zustände" },
   { id: "huelle", label: "10 — Wenn Takt nicht startet" },
   { id: "inventar", label: "11 — Komponenteninventar" },
+  { id: "fassung", label: "12 — Neuere Fassung (A-18)" },
 ];
 
 /**
@@ -166,6 +168,7 @@ function ShowcasePage() {
           <ControlsSection />
           <ShellStateSection />
           <InventorySection />
+          <UpdateNoticeSection />
         </main>
       </div>
     </div>

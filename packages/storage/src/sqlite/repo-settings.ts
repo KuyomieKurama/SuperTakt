@@ -145,7 +145,7 @@ export function createExportTemplatePort(conn: SqlConnection, ids: IdSource): Ex
  */
 export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
   const COLUMNS =
-    'export_directory, active_export_template_id, rounding_mode, locale, theme, updated_at';
+    'export_directory, active_export_template_id, rounding_mode, locale, theme, skipped_version, updated_at';
 
   const read = (): AppSettings => {
     const row = conn.prepare(`SELECT ${COLUMNS} FROM app_setting WHERE id = 1`).get();
@@ -183,6 +183,19 @@ export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
         if (input.theme !== undefined) {
           sets.push('theme = ?');
           params.push(input.theme);
+        }
+        /*
+         * A-18.10 — die übersprungene Fassung.
+         *
+         * Der Wert kommt bereits geprüft und ohne führendes `v` an (die Tür ist
+         * `updateSettings` im Dienst, die Form steht in `packages/domain`); der
+         * CHECK der Spalte ist die zweite Wache. `null` heißt ausdrücklich
+         * „nichts übersprungen" und ist damit ein Wert und keine fehlende
+         * Angabe — deshalb `!== undefined` und nicht `!= null`.
+         */
+        if (input.skippedVersion !== undefined) {
+          sets.push('skipped_version = ?');
+          params.push(input.skippedVersion);
         }
         sets.push('updated_at = ?');
         params.push(input.now);

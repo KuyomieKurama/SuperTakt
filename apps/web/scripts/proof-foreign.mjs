@@ -1,5 +1,6 @@
 /**
- * Takt — der ausführbare Nachweis über fremden Text in der Oberfläche (T-129).
+ * Takt — der ausführbare Nachweis über fremden Text in der Oberfläche
+ * (T-129, erweitert um Abschnitt 6 und die Reihen in T-133).
  *
  * ===========================================================================
  * Warum es diese Datei gibt
@@ -61,11 +62,23 @@
  *  - jeden fremden Wert, der in einen Satz eingebaut wird (Zeichenkette mit
  *    `${…}` oder `+`) — auch in `.ts`-Dateien, die gar kein JSX enthalten;
  *  - jede Stelle, an der die Herkunft unterwegs **verlorengeht**: ein fremder
- *    Wert, der in ein Feld, in eine getypte Bindung oder in den Parameter einer
+ *    Wert, der in ein Feld — auch in **Kurzform** (`{ name }`) —, in eine
+ *    getypte Bindung, in den **Rückgabewert** oder in den Parameter einer
  *    **eigenen** Funktion ohne Herkunftstyp geschrieben wird. Ohne diese
  *    Prüfung wäre das Grün der anderen hohl — man müsste den Wert nur einmal
  *    durch ein Zwischenmodell reichen, und der Nachweis wäre blind. Genau so
- *    lagen vier rohe Anzeigestellen in `ExportAudit.tsx`.
+ *    lagen vier rohe Anzeigestellen in `ExportAudit.tsx`; die Kurzform und die
+ *    Rückgabe kamen in T-133 dazu und fanden den Feldnamen einer Exportvorlage
+ *    und die **zusammengeführte Leistung** einer Tagesgruppe;
+ *  - seit T-133 auch die **Reihe**: `[name, ...namen].join(", ")` ergibt eine
+ *    gewöhnliche Zeichenkette, und die Marke fällt an der Sammlung ab statt an
+ *    der Naht. Trägt die Elementart die Marke, gilt das Zusammenfügen als
+ *    fremder Wert und läuft durch dieselben Prüfungen wie er
+ *    ({@link isForeignJoin});
+ *  - seit T-133 die **Grenze zum Wert ohne Typ** (Abschnitt 6, O-AT): Aus einem
+ *    `unknown` darf Text nur über eine erklärte Übergangsstelle fallen — eine
+ *    Funktion, die `unknown` nimmt und fremden Text zurückgibt. Ein
+ *    `typeof x === "string"` an einem `unknown` außerhalb davon ist ein Fund.
  *
  * **Er sieht nicht:**
  *
@@ -75,14 +88,20 @@
  *    für fertige Sätze aus `@takt/domain` (`poolMovementSentence`) — die
  *    Behandlung gehört dort an die Quelle und nicht hier an das Ergebnis
  *    (T-124 offene Frage 2, unverändert offen).
- *  - Werte, die über eine `unknown`-Grenze laufen. `ExportTemplate.definition`
- *    ist `unknown` und wird in `lib/exportTemplateModel.ts` ausgepackt; was
- *    dabei herauskommt, hat keine Herkunft mehr. Die Feldnamen einer Vorlage
- *    sind damit für diesen Nachweis nicht fremd.
- *  - Umwege über `String(x)`, `JSON.stringify`, `as string` oder eine
- *    Bindung, die ausdrücklich `: string` heißt. Die ersten drei sind
- *    absichtliche Umgehungen und stehen als solche im Quelltext; die letzte
- *    findet Abschnitt 4.
+ *  - `any` aus **fremden** Deklarationen. `import.meta.env[...]` ist `any`
+ *    (Vite), und `app/connection.ts` liest daraus Grundadresse und
+ *    Sitzungsnachweis. Beides ist keine Anzeige. Abschnitt 6 misst `unknown`,
+ *    weil das die Grenze ist, die **wir** ziehen; im eigenen Quelltext kommt
+ *    `any` nicht vor.
+ *  - **Formzusicherungen** auf die Antwort des eigenen Dienstes
+ *    (`parsed as Partial<ErrorEnvelope>`, `request<T>`). Sie behaupten die
+ *    Gestalt aus `api/types.ts` und sind der Vertrag mit dem lokalen Dienst,
+ *    keine fremde Eingabe.
+ *  - Umwege über `String(x)`, `JSON.stringify` oder eine Bindung, die
+ *    ausdrücklich `: string` heißt. Die ersten beiden sind absichtliche
+ *    Umgehungen und stehen als solche im Quelltext; die letzte findet
+ *    Abschnitt 4. `as string` **aus einem `unknown`** findet seit T-133
+ *    Abschnitt 6.
  *  - Alles außerhalb von `apps/web/src`. Der Aufgabenbereich des Add-ins hat
  *    seinen eigenen Nachweis (`proof:addin`, Abschnitt 17).
  *  - Ob die Anzeige **richtig** behandelt. Dass `visibleText` die richtigen
@@ -183,6 +202,47 @@ const declaresForeign = (type) => {
   const index = checker.getIndexTypeOfType?.(type, ts.IndexKind.Number);
   return index !== undefined && isForeign(index);
 };
+
+/**
+ * Trägt die **Elementart** einer Sammlung die Marke? (T-133)
+ *
+ * `readonly ForeignText[]` ist eine Reihe fremden Textes; die Marke sitzt am
+ * Glied und nicht an der Reihe. Wer danach fragt, kann `join` verfolgen.
+ */
+const elementIsForeign = (type) => {
+  if (type === undefined || type === null) return false;
+  if (type.isUnion() || type.isIntersection()) return type.types.some(elementIsForeign);
+  const args = checker.getTypeArguments?.(type);
+  if (args?.[0] !== undefined && isForeign(args[0])) return true;
+  const index = checker.getIndexTypeOfType?.(type, ts.IndexKind.Number);
+  return index !== undefined && isForeign(index);
+};
+
+/**
+ * Fügt dieser Ausdruck eine **Reihe** fremden Textes zusammen? (T-133)
+ *
+ * Der Weg, den die Abschnitte 2 bis 4 sonst nicht sehen:
+ * `[view.column.name, ...columns].join(", ")` liefert eine gewöhnliche
+ * Zeichenkette, und die Marke fällt an der **Sammlung** ab, nicht an der Naht.
+ * Für jede Prüfung, die nach dem Typ des eingesetzten Ausdrucks fragt, ist der
+ * Satz danach unverdächtig — obwohl er drei fremde Namen trägt. Gefunden in
+ * genau dieser Gestalt in `BoardScreen` (Ansage der Mehrfachvorkommen) und in
+ * `describeDeviations` (Reihenfolge der Exportfelder).
+ */
+const isForeignJoin = (node) =>
+  ts.isCallExpression(node) &&
+  ts.isPropertyAccessExpression(node.expression) &&
+  node.expression.name.getText() === "join" &&
+  elementIsForeign(checker.getTypeAtLocation(node.expression.expression));
+
+/**
+ * Kommt aus diesem Ausdruck fremder Text — unmittelbar oder aus einer Reihe?
+ *
+ * Die eine Frage, die die Abschnitte 2 bis 4 stellen. Sie steht hier und nicht
+ * dreimal dort, damit ein weiterer Träger an **einer** Stelle dazukommt.
+ */
+const yieldsForeign = (node) =>
+  node !== undefined && (isForeign(checker.getTypeAtLocation(node)) || isForeignJoin(node));
 
 /** Ist der Typ Text? Auch als Bestandteil einer Vereinigung oder Verschneidung. */
 const isTextType = (type) => {
@@ -480,6 +540,16 @@ const scanExpression = (node, kind, note) => {
     scanExpression(node.right, kind, note);
     return;
   }
+  /*
+   * Die zusammengefügte Reihe wird wie ein Atom behandelt und **vor** dem
+   * Zweig für Aufrufe geprüft: Sie **ist** ein Aufruf, und ohne diese Zeile
+   * liefe der Durchlauf in ihre Argumente statt in sie selbst (T-133).
+   */
+  if (isForeignJoin(node)) {
+    rawInDisplay.push(`${where(node)}  ${kind}  ${shortText(node)}${note}`);
+    return;
+  }
+
   if (ts.isCallExpression(node)) {
     for (const argument of node.arguments) {
       if (parameterTakesForeign(node, argument)) {
@@ -621,7 +691,7 @@ for (const file of sourceFiles) {
         ? [node.left, node.right]
         : [];
     for (const part of parts) {
-      if (!isForeign(checker.getTypeAtLocation(part))) continue;
+      if (!yieldsForeign(part)) continue;
       if (isInsideReactInternalAttribute(part)) continue; // `key` erscheint nie.
       rawInSentence.push(`${where(part)}  ${shortText(part)}`);
     }
@@ -633,6 +703,30 @@ for (const file of sourceFiles) {
 check("kein fremder Wert steht roh in einer zusammengesetzten Zeichenkette", () => {
   const found = [...new Set(rawInSentence)].sort();
   assert.deepEqual(found, [], `roh in einem Satz:\n        ${found.join("\n        ")}`);
+});
+
+/*
+ * Eine eigene Zählung, unabhängig davon, welche Prüfung eine Reihe zuerst
+ * anfasst: Wird sie ordentlich behandelt, sieht `scanExpression` sie gar nicht
+ * erst, weil die Übergabe schon vorher als Senke anerkannt ist.
+ */
+let foreignJoins = 0;
+for (const file of sourceFiles) {
+  const walk = (node) => {
+    if (isForeignJoin(node)) foreignJoins += 1;
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+}
+
+check("und die Prüfung hat auch Reihen fremden Textes gesehen", () => {
+  /*
+   * Die Gegenprobe zu {@link isForeignJoin}: Sähe der Durchlauf keine einzige
+   * zusammengefügte Reihe mehr, wären die Prüfungen darüber wieder blind für
+   * den Weg, den T-133 gefunden hat — und zwar lautlos. Dieselbe Bauart wie
+   * „der Durchlauf ist nicht leer gelaufen" eine Prüfung weiter oben.
+   */
+  assert.ok(foreignJoins > 2, `nur ${String(foreignJoins)} Reihen fremden Textes gesehen`);
 });
 
 /* ==================================================================== */
@@ -684,7 +778,7 @@ for (const file of sourceFiles) {
         declaration.getSourceFile().fileName.startsWith(srcRoot + path.sep);
       if (signature !== undefined && own) {
         node.arguments.forEach((argument, index) => {
-          if (!isForeign(checker.getTypeAtLocation(argument))) return;
+          if (!yieldsForeign(argument)) return;
           const parameters = signature.parameters;
           const symbol = parameters[index] ?? parameters[parameters.length - 1];
           if (symbol === undefined) return;
@@ -698,15 +792,60 @@ for (const file of sourceFiles) {
       }
     }
     if (ts.isPropertyAssignment(node) && node.initializer !== undefined) {
-      if (isForeign(checker.getTypeAtLocation(node.initializer))) {
+      if (yieldsForeign(node.initializer)) {
         const target = checker.getContextualType(node.initializer);
         if (target !== undefined && isTextType(target) && !isForeign(target) && !isDraft(target)) {
           lostOrigin.push(`${where(node)}  ${shortText(node)}`);
         }
       }
     }
+    /*
+     * **Die Kurzform zählt genauso** (T-133). `fields.push({ name, source })`
+     * ist keine `PropertyAssignment`, und bis T-133 lief sie an dieser Prüfung
+     * vorbei: Ein Feld `readonly name: string` nahm dort fremden Text
+     * entgegen, ohne dass irgendetwas rot wurde. Gemessen in Gegenprobe J —
+     * sie blieb grün, obwohl der Feldname eines Exportfeldes seine Herkunft
+     * verlor.
+     *
+     * Der Zieltyp steht nicht am Bezeichner, sondern an der Eigenschaft des
+     * Objekts, in dem er liegt; deshalb der Umweg über die Gestalt des
+     * umgebenden Literals.
+     */
+    if (ts.isShorthandPropertyAssignment(node)) {
+      if (yieldsForeign(node.name)) {
+        const literal = node.parent;
+        const shape = ts.isObjectLiteralExpression(literal)
+          ? checker.getContextualType(literal)
+          : undefined;
+        const property = shape?.getProperty(node.name.getText());
+        const target =
+          property === undefined
+            ? undefined
+            : checker.getTypeOfSymbolAtLocation(property, node);
+        if (target !== undefined && isTextType(target) && !isForeign(target) && !isDraft(target)) {
+          lostOrigin.push(`${where(node)}  { ${shortText(node)} }`);
+        }
+      }
+    }
+    /*
+     * **Und die Rückgabe** (T-133). Derselbe Verlust, nur an der anderen Seite
+     * einer Funktion: `previewNote(entries): string` fügte die Leistungstexte
+     * einer Tagesgruppe zusammen und gab sie als gewöhnlichen Text zurück —
+     * von dort an war die zusammengeführte Leistung für jede Prüfung
+     * unverdächtig, und `ExportGroups.tsx` zeigte sie roh, im Absatz **und**
+     * im `title`. Gefunden erst, als die Reihe (siehe {@link isForeignJoin})
+     * als fremder Wert galt.
+     */
+    if (ts.isReturnStatement(node) && node.expression !== undefined) {
+      if (yieldsForeign(node.expression)) {
+        const target = checker.getContextualType(node.expression);
+        if (target !== undefined && isTextType(target) && !isForeign(target) && !isDraft(target)) {
+          lostOrigin.push(`${where(node)}  ${shortText(node)}`);
+        }
+      }
+    }
     if (ts.isVariableDeclaration(node) && node.type !== undefined && node.initializer !== undefined) {
-      if (isForeign(checker.getTypeAtLocation(node.initializer))) {
+      if (yieldsForeign(node.initializer)) {
         const target = checker.getTypeFromTypeNode(node.type);
         if (isTextType(target) && !isForeign(target) && !isDraft(target)) {
           lostOrigin.push(`${where(node)}  ${shortText(node)}`);
@@ -780,10 +919,190 @@ check("kein Eingabefeld zeigt behandelten Text", () => {
 });
 
 /* ==================================================================== */
+/* 6  Die Grenze zum Wert ohne Typ                                      */
+/* ==================================================================== */
+
+heading("6  Was aus einem Wert ohne Typ als Text herausfällt, trägt eine Herkunft");
+
+/*
+ * ---------------------------------------------------------------------------
+ * Der letzte Rest Anzeigefläche, den die Abschnitte 1 bis 5 nicht erreichen
+ * ---------------------------------------------------------------------------
+ *
+ * T-129 hat ihn selbst benannt (Risiko R1, offene Frage 3), und der Auftrag
+ * O-AT hat ihn beauftragt: `ExportTemplate.definition` ist `unknown`. Das ist
+ * richtig so — das Vorlagenformat gehört dem Motor in `packages/export`, nicht
+ * der Schnittstelle. Nur packt `lib/exportTemplateModel.ts` daraus **Feldnamen**
+ * aus, die ein Benutzer geschrieben hat, und die Oberfläche zeigt sie: im
+ * Editor, in der Abweichungsliste, in den Beschriftungen der Umordnungsknöpfe
+ * und in der Vorschau der Exportzeile — also in der Ansicht, an der jemand
+ * prüft, was er gleich abrechnet.
+ *
+ * Ein `typeof x === "string"` an dieser Stelle macht daraus **gewöhnlichen**
+ * Text. Die Herkunft, die Abschnitt 1 in den Typ gehoben hat, entsteht dort gar
+ * nicht erst; die Abschnitte 2 bis 4 können nur finden, was als fremd bekannt
+ * ist. Genau das misst E-063 Punkt 5: nicht „liefern zwei Wege dasselbe?",
+ * sondern „gibt es den zweiten Weg?"
+ *
+ * ---------------------------------------------------------------------------
+ * Wie gemessen wird — an der Signatur, nicht am Namen
+ * ---------------------------------------------------------------------------
+ *
+ * Eine **Übergangsstelle** ist alles, was `unknown` annimmt und fremden Text
+ * zurückgibt. Dieser Abschnitt kennt keinen Funktionsnamen, genau wie
+ * Abschnitt 1 keine Behandlung beim Namen kennt: Wer eine zweite baut und sie
+ * so deklariert, wird ohne Änderung an dieser Datei anerkannt. Wer die
+ * vorhandene auf `string` verbreitert, macht diesen Abschnitt rot.
+ *
+ * ---------------------------------------------------------------------------
+ * Was dieser Abschnitt ausdrücklich **nicht** sieht
+ * ---------------------------------------------------------------------------
+ *
+ *  - **`any` aus fremden Deklarationen.** `import.meta.env[...]` ist `any`, und
+ *    aus ihm werden Grundadresse und Sitzungsnachweis gelesen
+ *    (`app/connection.ts`). Beides ist keine Anzeige, und die Deklaration
+ *    gehört Vite. Gemessen wird `unknown`, weil das die Grenze ist, die **wir**
+ *    ziehen. Im eigenen Quelltext kommt `any` nicht vor.
+ *  - **Formzusicherungen** (`parsed as Partial<ErrorEnvelope>`, `request<T>`).
+ *    Sie behaupten die Gestalt einer Antwort des **eigenen** Dienstes; das ist
+ *    der Vertrag aus `api/types.ts` und keine fremde Eingabe. Sie stehen
+ *    sichtbar im Quelltext und sind eine Handlung, kein Versehen.
+ */
+
+/** Übergangsstellen: nehmen `unknown`, geben fremden Text. */
+const crossings = [];
+for (const file of sourceFiles) {
+  const walk = (node) => {
+    const isFunctionLike =
+      ts.isFunctionDeclaration(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isMethodDeclaration(node);
+    if (isFunctionLike) {
+      const signature = checker.getSignatureFromDeclaration(node);
+      const first = signature?.parameters[0];
+      if (signature !== undefined && first !== undefined) {
+        const parameter = checker.getTypeOfSymbolAtLocation(first, node);
+        if (
+          (parameter.flags & ts.TypeFlags.Unknown) !== 0 &&
+          isForeign(signature.getReturnType())
+        ) {
+          crossings.push(node);
+        }
+      }
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+}
+
+/** Liegt dieser Knoten im Rumpf einer Übergangsstelle? */
+const insideCrossing = (node) => {
+  for (let p = node.parent; p !== undefined; p = p.parent) {
+    if (crossings.includes(p)) return true;
+  }
+  return false;
+};
+
+check("es gibt eine erklärte Übergangsstelle vom Wert ohne Typ zu fremdem Text", () => {
+  /*
+   * Der Wächter über den Wächter, dieselbe Bauart wie in Abschnitt 1: Nähme
+   * jemand der Übergangsstelle ihren Rückgabetyp, ginge die Prüfung darunter
+   * auf einen Schlag grün — und zwar lautlos, weil sie dann keine einzige
+   * Stelle mehr zu vergleichen hätte.
+   */
+  assert.ok(
+    crossings.length > 0,
+    "keine Funktion nimmt `unknown` und gibt fremden Text zurück — wo wird `definition` jetzt ausgepackt?",
+  );
+  for (const crossing of crossings) {
+    const signature = checker.getSignatureFromDeclaration(crossing);
+    const returned = signature.getReturnType();
+    assert.equal(isTextType(returned), true, `${where(crossing)} gibt keinen Text zurück`);
+    assert.equal(isDraft(returned), false, `${where(crossing)} macht aus einem Wert ohne Typ einen Entwurf`);
+  }
+});
+
+const rawFromUnknown = [];
+for (const file of sourceFiles) {
+  const walk = (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+        node.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken)
+    ) {
+      const probe = ts.isTypeOfExpression(node.left)
+        ? { test: node.left, other: node.right }
+        : ts.isTypeOfExpression(node.right)
+          ? { test: node.right, other: node.left }
+          : null;
+      if (
+        probe !== null &&
+        ts.isStringLiteral(probe.other) &&
+        probe.other.text === "string" &&
+        (checker.getTypeAtLocation(probe.test.expression).flags & ts.TypeFlags.Unknown) !== 0 &&
+        !insideCrossing(node)
+      ) {
+        rawFromUnknown.push(`${where(node)}  ${shortText(node)}`);
+      }
+    }
+
+    /*
+     * Die zweite Gestalt derselben Handlung: `x as string`. Eine Zusicherung
+     * auf einen **Objekttyp** bleibt außen vor — sie behauptet eine Gestalt,
+     * und der Zugriff darauf liefert wieder `unknown`, das durch diese Prüfung
+     * muss.
+     */
+    if (ts.isAsExpression(node) && !insideCrossing(node)) {
+      const from = checker.getTypeAtLocation(node.expression);
+      const to = checker.getTypeFromTypeNode(node.type);
+      if ((from.flags & ts.TypeFlags.Unknown) !== 0 && isTextType(to)) {
+        rawFromUnknown.push(`${where(node)}  ${shortText(node)}`);
+      }
+    }
+
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+}
+
+check("kein anderer Weg macht aus einem Wert ohne Typ Text", () => {
+  const found = [...new Set(rawFromUnknown)].sort();
+  assert.deepEqual(
+    found,
+    [],
+    `Text ohne Herkunft aus einem Wert ohne Typ:\n        ${found.join("\n        ")}`,
+  );
+});
+
+/** Wie oft eine Übergangsstelle tatsächlich gerufen wird. */
+let crossingCalls = 0;
+for (const file of sourceFiles) {
+  const walk = (node) => {
+    if (ts.isCallExpression(node)) {
+      const declaration = checker.getResolvedSignature(node)?.declaration;
+      if (declaration !== undefined && crossings.includes(declaration)) crossingCalls += 1;
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(file);
+}
+
+check("und sie wird auch benutzt", () => {
+  /*
+   * Ohne diese Zeile wäre die Prüfung darüber am billigsten dadurch zu
+   * befriedigen, dass niemand mehr auspackt — und dann stünde die Vorlage gar
+   * nicht mehr da. Gezählt werden die Aufrufe, nicht die Zeilen.
+   */
+  assert.ok(crossingCalls > 3, `nur ${String(crossingCalls)} Aufrufe der Übergangsstelle gesehen`);
+});
+
+/* ==================================================================== */
 
 process.stdout.write(
   `\n${"═".repeat(58)}\n${String(passed)} bestanden, ${String(failed)} fehlgeschlagen.\n` +
     `${String(sourceFiles.length)} Quelldateien, ${String(treatedCount)} behandelte Übergaben, ` +
-    `${String(inputCount)} Eingabefelder.\n`,
+    `${String(inputCount)} Eingabefelder, ${String(foreignJoins)} Reihen, ` +
+    `${String(crossings.length)} Übergangsstellen mit ${String(crossingCalls)} Aufrufen.\n`,
 );
 process.exit(failed === 0 ? 0 : 1);

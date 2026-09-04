@@ -2,7 +2,7 @@ import { countPoolRuleConditions } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { clearTodoDone, markTodoDone, getBoard, updatePool } from "../api/endpoints";
-import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types";
+import type { BoardColumnView, ForeignText, Id, Pool, PoolRuleTerm, Todo } from "../api/types";
 import { FilterToggle } from "../components/FilterBar";
 import { FormDialog } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
@@ -36,6 +36,7 @@ import {
 } from "../lib/poolRule";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { PoolRenameDialog } from "./PoolRenameDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
@@ -123,6 +124,15 @@ export function BoardScreen() {
   const [setupOpen, setSetupOpen] = useState(false);
   /** Offener Regel-Dialog: `null` zu, sonst anlegen (`pool` fehlt) oder ändern. */
   const [ruleForm, setRuleForm] = useState<{ readonly pool?: Pool } | null>(null);
+  /**
+   * Die Spalte, die gerade umbenannt wird (O-A).
+   *
+   * Ein **eigener** Zustand neben `ruleForm` und nicht dessen Sonderfall: Die
+   * beiden Dialoge tun Verschiedenes. Der eine ändert eine Regel über fünf
+   * Achsen, der andere ein Wort — und wer nur das Wort ändern will, soll nicht
+   * versehentlich die ganze Regel neu schreiben.
+   */
+  const [renaming, setRenaming] = useState<Pool | null>(null);
   const [createIn, setCreateIn] = useState<Pool | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [highlighted, setHighlighted] = useState<Id | null>(null);
@@ -138,6 +148,12 @@ export function BoardScreen() {
 
   const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
+  /*
+   * **Alle** Regeln, nicht nur die der Pool-Fläche: Der eindeutige Index
+   * `ux_pool_name` gilt über die ganze Tabelle, also kollidiert der Name einer
+   * Spalte auch mit dem einer Regel, die nur in den Pools steht (O-A).
+   */
+  const allRules = structure.state.status === "ready" ? structure.state.value.rules : [];
 
   const toggleDone = useCallback(
     (todo: Todo) => {
@@ -287,16 +303,33 @@ export function BoardScreen() {
             icon: "plus",
             onSelect: () => setCreateIn(column),
           },
+      /*
+       * „Umbenennen" steht **vor** „Regel bearbeiten" und trägt den Stift
+       * (O-A). Bis T-133 gab es den Eintrag nicht: Wer eine Spalte umbenennen
+       * wollte, musste erraten, dass der Name im Regelformular steht — und
+       * schrieb beim Speichern alle fünf Achsen neu, um ein Wort zu ändern.
+       *
+       * Die Reihenfolge folgt der Häufigkeit, das Symbol der Bedeutung: Der
+       * Stift ist an jeder anderen Fläche das Umbenennen (S-08, S-09), und das
+       * Regelformular bekommt dafür den Trichter — eine Regel **ist** ein
+       * Filter (E-055), und der Weg in die Liste zeigt seitdem hinaus.
+       */
+      {
+        id: "rename",
+        label: "Umbenennen",
+        icon: "pencil",
+        onSelect: () => setRenaming(column),
+      },
       {
         id: "edit",
         label: "Regel bearbeiten",
-        icon: "pencil",
+        icon: "filter",
         onSelect: () => setRuleForm({ pool: column }),
       },
       {
         id: "list",
         label: "Alle Todos dieser Regel in der Liste",
-        icon: "filter",
+        icon: "arrow-up-right",
         onSelect: () => navigate("todos", undefined, { pool: column.id }),
       },
       { kind: "separator", id: "sep" },
@@ -399,7 +432,15 @@ export function BoardScreen() {
                       setAnnouncement(
                         next === null
                           ? "Hervorhebung aufgehoben."
-                          : `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].join(", ")}.`,
+                          : /*
+                               Jeder Name einzeln behandelt (O-AT): `join` auf
+                               einer Reihe fremden Textes ergibt gewöhnlichen
+                               Text — die Herkunft fällt dabei ab, und mit ihr
+                               die Pflicht. Der Satz wird angesagt; ein
+                               Richtungszeichen in einem Regelnamen drehte
+                               ihn um.
+                             */
+                            `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].map(quotedName).join(", ")}.`,
                       );
                     }}
                     isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
@@ -444,6 +485,10 @@ export function BoardScreen() {
           setSetupOpen(false);
           setRuleForm({ pool });
         }}
+        onRename={(pool) => {
+          setSetupOpen(false);
+          setRenaming(pool);
+        }}
         /*
           Beide Knöpfe schließen den Dialog, und zwar **vor** der Meldung
           (W-6 aus R-2a).
@@ -475,6 +520,21 @@ export function BoardScreen() {
         {...(ruleForm?.pool === undefined ? {} : { pool: ruleForm.pool })}
         defaultPlacement="board"
         onClose={() => setRuleForm(null)}
+      />
+
+      {/*
+        Umbenennen (O-A). Die Liste für die Vorabprüfung sind **alle** Regeln
+        und nicht die Spalten dieses Boards: `ux_pool_name` ist eindeutig über
+        die ganze Tabelle, also kollidiert eine Spalte auch mit einem Pool, der
+        hier gar nicht steht. `rules` liegt in der Struktur; ist sie noch nicht
+        geladen, sagt `existingKnown` das, statt einen Bestand zu behaupten.
+      */}
+      <PoolRenameDialog
+        open={renaming !== null}
+        pool={renaming}
+        existing={allRules}
+        existingKnown={structure.state.status === "ready"}
+        onClose={() => setRenaming(null)}
       />
 
       {/*
@@ -522,7 +582,13 @@ type PlacementChange = (
 
 interface BoardColumnProps {
   readonly view: BoardColumnView;
-  readonly columnName: ReadonlyMap<Id, string>;
+  /**
+   * Spaltenname je Kennung — **fremder Text** (O-AT, T-133). Bis dahin
+   * `ReadonlyMap<Id, string>`: Die Namen fielen beim Eintritt in die Karte aus
+   * ihrer Herkunft, und die Behandlung weiter unten stand nur noch da, weil
+   * jemand daran gedacht hatte.
+   */
+  readonly columnName: ReadonlyMap<Id, ForeignText>;
   readonly appearances: ReadonlyMap<Id, readonly Id[]>;
   readonly summaries: {
     readonly byTodo: ReadonlyMap<Id, typeof EMPTY_SUMMARY>;
@@ -538,10 +604,10 @@ interface BoardColumnProps {
   readonly onEditTodo: (todo: Todo) => void;
   readonly onToggleDone: (todo: Todo) => void;
   readonly onToggleTimer: (todo: Todo) => void;
-  readonly onHighlight: (todo: Todo, otherColumns: readonly string[]) => void;
+  readonly onHighlight: (todo: Todo, otherColumns: readonly ForeignText[]) => void;
   readonly isTimerRunning: (todo: Todo) => boolean;
   readonly isReactivated: (todo: Todo) => boolean;
-  readonly statusName: (todo: Todo) => string;
+  readonly statusName: (todo: Todo) => ForeignText;
 }
 
 function BoardColumn({
@@ -610,7 +676,7 @@ function BoardColumn({
           const others = (appearances.get(todo.id) ?? [])
             .filter((id) => id !== column.id)
             .map((id) => columnName.get(id))
-            .filter((name): name is string => name !== undefined);
+            .filter((name): name is ForeignText => name !== undefined);
 
           return (
             <KanbanCard
@@ -811,10 +877,10 @@ function toCard(
     readonly secondsByTodo: ReadonlyMap<Id, number>;
   },
   structure: ReturnType<typeof useStructure>,
-  statusName: string,
+  statusName: ForeignText,
   timerRunning: boolean,
   reactivated: boolean,
-  otherColumns: readonly string[],
+  otherColumns: readonly ForeignText[],
 ): KanbanCardData {
   return {
     id: todo.id,
@@ -966,6 +1032,7 @@ function BoardSetupDialog({
   onClose,
   onCreate,
   onEdit,
+  onRename,
   onAdopt,
   onRemove,
 }: {
@@ -986,6 +1053,8 @@ function BoardSetupDialog({
   readonly onClose: () => void;
   readonly onCreate: () => void;
   readonly onEdit: (pool: Pool) => void;
+  /** Nur den Namen ändern (O-A). Der zweite Weg neben dem Spaltenmenü. */
+  readonly onRename: (pool: Pool) => void;
   readonly onAdopt: (pool: Pool) => void;
   readonly onRemove: (pool: Pool) => void;
 }) {
@@ -1057,13 +1126,29 @@ function BoardSetupDialog({
                   </p>
                 ) : null}
               </div>
+              {/*
+                Zwei getrennte Knöpfe, weil es zwei Handlungen sind (O-A):
+                „Umbenennen" schickt `{ name }`, „Regel bearbeiten" schreibt
+                alle fünf Achsen. Die Beschriftung sagt seit T-133, **was**
+                bearbeitet wird — „Bearbeiten" allein ließ offen, ob damit der
+                Name gemeint ist, und genau daran ist das Umbenennen bisher
+                gescheitert.
+              */}
               <Button
                 size="sm"
                 variant="secondary"
                 iconStart="pencil"
+                onClick={() => onRename(view.column)}
+              >
+                Umbenennen
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                iconStart="filter"
                 onClick={() => onEdit(view.column)}
               >
-                Bearbeiten
+                Regel bearbeiten
               </Button>
               <Button size="sm" variant="ghost" iconStart="x" onClick={() => onRemove(view.column)}>
                 Vom Board nehmen

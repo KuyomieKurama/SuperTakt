@@ -21,7 +21,6 @@ import type {
   ExportAuditEntry,
   ExportCandidate,
   ExportDirectoryCheck,
-  ExportDirectoryTrait,
   ExportGroup,
   ExportRun,
   ExportRunId,
@@ -29,6 +28,7 @@ import type {
   ExportStatusResetRequest,
   ExportTemplateEnvelope,
   ExportTemplateId,
+  LocationTrait,
   NotBilledRequest,
   Pool,
   PoolId,
@@ -981,7 +981,7 @@ export interface FilePort {
 }
 
 /**
- * Was für ein Ordner das ist — belegt, nicht geraten (T-039, B-5.2,
+ * Was für ein Ort das ist — belegt, nicht geraten (T-039, B-5.2,
  * B-5.3 Punkt 3).
  *
  * Ein eigener Port neben `FilePort`, weil es eine andere Frage ist. Ob
@@ -989,6 +989,13 @@ export interface FilePort {
  * ist, hängt nicht daran. Ein Systemverzeichnis bleibt eines, ob es nun
  * beschreibbar ist oder nicht, und eine Netzfreigabe bleibt eine, auch wenn sie
  * gerade nicht antwortet.
+ *
+ * **Nicht nur der Exportordner** (T-132, O-C). Bis dahin hieß die eine Frage
+ * dieses Ports `describeExportDirectory`, und der Ort des Datenbestands bekam
+ * gar keine Antwort — obwohl an ihm mehr hängt: Der Exportordner enthält, was
+ * exportiert wurde, der Bestand enthält **alles**, einschließlich der internen
+ * Vermerke (A-7.2). Liegt er in einem Synchronisierungsordner, verlässt die
+ * Kundendatenbank den Rechner, und genau davor steht E-018.
  *
  * Der Adapter dazu liegt **nicht** in diesem Paket, sondern in
  * `apps/local-api/src/access/export-directory.ts` — bei den übrigen
@@ -998,6 +1005,8 @@ export interface FilePort {
  */
 export interface DirectoryInsightPort {
   /**
+   * Merkmale eines Ortes — eines Ordners oder einer Datei.
+   *
    * `mayAskFileSystem` ist `false`, wenn die Prüfung eben in eine Zeitgrenze
    * gelaufen ist. Dann wird das Dateisystem nicht noch einmal gefragt — es liefe
    * in dieselbe Wand und verdoppelte die Wartezeit, die gerade abgebrochen
@@ -1006,10 +1015,10 @@ export interface DirectoryInsightPort {
    *
    * Eine leere Liste ist **keine** Entwarnung, sondern eine Nichtaussage.
    */
-  describeExportDirectory(
+  describeLocation(
     path: string | null,
     options: { readonly mayAskFileSystem: boolean },
-  ): Promise<readonly ExportDirectoryTrait[]>;
+  ): Promise<readonly LocationTrait[]>;
 }
 
 /** Windows-Benutzername (A-8.5, E-010). Kommt aus der Tauri-Hülle, nie aus einer Eingabe. */
@@ -1029,4 +1038,19 @@ export interface SystemPort {
    * damit nachsehen, statt es zu vermuten.
    */
   databasePath(): string | null;
+  /**
+   * Wie viele der drei Dateien des Bestands weiter liegen als `0600`
+   * (B-7.2, T-132/O-C).
+   *
+   * Eine **Zahl** und keine Pfadliste: Der Aufrufer soll sagen können „zwei
+   * Dateien liegen offen", nicht welche. Der Dienst protokolliert dieselbe Zahl
+   * beim Start und merkt sie als Vorfall vor; über die Einstellungen ist sie
+   * damit auch dann noch sichtbar, wenn niemand das Startprotokoll gelesen hat.
+   *
+   * `null` heißt „nicht messbar": unter Windows, wo der POSIX-Modus nichts
+   * sagt und die geerbte ACL die Grenze trägt, und bei einem Bestand im
+   * Arbeitsspeicher. `null` ist ausdrücklich **nicht** `0` — eine
+   * Nichtaussage ist keine Entwarnung, genauso wie bei den Merkmalen oben.
+   */
+  databaseFilesTooPermissive(): number | null;
 }

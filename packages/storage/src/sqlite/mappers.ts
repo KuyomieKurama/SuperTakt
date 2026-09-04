@@ -46,6 +46,7 @@ import type {
   TodoNote,
   TodoStatus,
 } from '@takt/domain';
+import { normalizeVersion } from '@takt/domain';
 
 import { boolean, integer, text, textOrNull, type SqlRow, type SqlValue } from './database.ts';
 
@@ -434,6 +435,21 @@ export function toAppSettings(row: SqlRow): AppSettings {
     roundingMode: toRoundingMode(text(row, 'rounding_mode')),
     locale: text(row, 'locale'),
     theme: toTheme(text(row, 'theme')),
+    /*
+     * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).
+     *
+     * Sie ist Benutzereingabe und steht in einer Datei, die kopiert, gesichert
+     * und aus einer fremden Quelle mitgebracht werden kann. Ein unbrauchbarer
+     * Wert heißt hier „nichts übersprungen" — kein Wurf, keine Fehlermeldung,
+     * kein Wert, der weitergereicht wird. Schaden im schlimmsten Fall: ein
+     * unterdrückter Hinweis.
+     *
+     * `normalizeVersion` schneidet dabei ein führendes `v` ab. Damit steht in
+     * dieser Eigenschaft dieselbe Schreibweise wie in der Antwort der
+     * Versionsprüfung, und die Gleichheitsprüfung in `decideUpdateNotice`
+     * vergleicht nicht `v1.2.3` gegen `1.2.3`.
+     */
+    skippedVersion: normalizeVersion(textOrNull(row, 'skipped_version')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
 }

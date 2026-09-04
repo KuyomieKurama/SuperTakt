@@ -45,6 +45,8 @@ import { createExportRoutes, createSettingsRoutes } from './routes/export.ts';
 import { createStructureRoutes } from './routes/structure.ts';
 import { createTimeEntryRoutes, createTimerRoutes } from './routes/time.ts';
 import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
+import { createVersionRoutes } from './routes/version.ts';
+import type { VersionCheckState } from './version/checker.ts';
 
 /**
  * Der fachliche Teil ist **auswechselbar leer**.
@@ -56,6 +58,17 @@ import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
  */
 export interface AppOptions {
   readonly context?: AppContext;
+  /**
+   * Was der Dienst zuletzt über die veröffentlichte Fassung weiß (E-069).
+   *
+   * Eine **Funktion** und kein Wert: Die Route soll den Stand zum Zeitpunkt der
+   * Anfrage lesen und nicht den zum Zeitpunkt des Zusammenbaus. Ohne Angabe
+   * lautet die Antwort „noch nichts geprüft" — die Route gibt es damit immer,
+   * auch ohne Datenbank und ohne laufenden Prüfer. Das ist Absicht: Eine
+   * Route, die je nach Zusammenbau vorhanden ist oder nicht, wäre an
+   * `proof:route-policy` Abschnitt 4 und `proof:openapi` vorbei.
+   */
+  readonly versionState?: () => VersionCheckState;
 }
 
 export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hono<TaktEnv> {
@@ -170,6 +183,22 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
   api.get('/security/notices', requireCredential('session'), (c) =>
     c.json({ data: { notices: runtime.notices.list() } }),
   );
+
+  /**
+   * Die Versionsprüfung (A-18.2, E-069, A-V-19).
+   *
+   * Hier oben und **nicht** im Block der Fachrouten: Sie hängt an keiner
+   * Datenbank. Damit gibt es sie in jedem Zusammenbau, und
+   * `proof:route-policy` Abschnitt 4 wie `proof:openapi` sehen immer dieselbe
+   * Routenliste. Sie liest ab und fragt nicht — die Begründung steht in
+   * `routes/version.ts`.
+   *
+   * Kein `requireCredential('session')` daneben: Das steht schon oben in der
+   * Kette für **jeden** Pfad, der nicht unter `/addin` liegt und nicht in
+   * `SHARED_PATHS` steht (`credentialPolicy()`). Eine zweite Angabe je Route
+   * wäre die Aufzählung, aus der B-2.10 entstanden ist.
+   */
+  api.route('/version-check', createVersionRoutes(options.versionState ?? (() => ({ state: 'unknown' }))));
 
   // ---------------------------------------------------------------------------
   // Fachrouten (T-021). Alle **hinter** der Kette oben, keine daneben.

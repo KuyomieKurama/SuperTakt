@@ -491,7 +491,7 @@ try {
   }
 
   // -------------------------------------------------------------------------
-  section('10  Was am Ordner belegbar ist, und was nicht (T-039, B-5.2)');
+  section('10  Was an einem Ort belegbar ist, und was nicht (T-039, B-5.2)');
   // -------------------------------------------------------------------------
   {
     const port = createFilePort();
@@ -499,7 +499,7 @@ try {
 
     const asked = { mayAskFileSystem: true };
 
-    const good = await insight.describeExportDirectory(workDir, asked);
+    const good = await insight.describeLocation(workDir, asked);
     check(
       'an einem gewöhnlichen Arbeitsordner ist nichts belegt — die Liste ist leer',
       Array.isArray(good) && good.length === 0,
@@ -512,8 +512,8 @@ try {
     const systemPath = process.platform === 'win32' ? (process.env.SystemRoot ?? 'C:\\Windows') : '/etc';
     check(
       `ein Systemverzeichnis (${systemPath}) wird als solches belegt`,
-      (await insight.describeExportDirectory(systemPath, asked)).includes('system_dir'),
-      JSON.stringify(await insight.describeExportDirectory(systemPath, asked)),
+      (await insight.describeLocation(systemPath, asked)).includes('system_dir'),
+      JSON.stringify(await insight.describeLocation(systemPath, asked)),
     );
 
     // …und zwar unabhängig davon, wie die Prüfung ausgeht. Genau dafür sind es
@@ -533,13 +533,13 @@ try {
     await mkdir(lookalike, { recursive: true });
     check(
       'ein Ordner, der nur „OneDrive" heißt, gilt nicht als Synchronisierungsordner',
-      !(await insight.describeExportDirectory(lookalike, asked)).includes('sync_folder'),
-      JSON.stringify(await insight.describeExportDirectory(lookalike, asked)),
+      !(await insight.describeLocation(lookalike, asked)).includes('sync_folder'),
+      JSON.stringify(await insight.describeLocation(lookalike, asked)),
     );
 
     check(
       'ohne Pfad gibt es nichts einzuordnen',
-      (await insight.describeExportDirectory(null, asked)).length === 0,
+      (await insight.describeLocation(null, asked)).length === 0,
     );
 
     // Die Gestalt der vorhandenen Ergebnisse bleibt unverändert. Das ist der

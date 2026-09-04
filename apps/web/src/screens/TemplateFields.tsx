@@ -1,4 +1,5 @@
 import { useId, useState, type DragEvent } from "react";
+import type { ForeignText } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, IconButton, InlineMessage } from "../components/Primitives";
 import { Select, type SelectEntry, type SelectOptionGroup } from "../components/Select";
@@ -96,7 +97,14 @@ export function TemplateFields({
   /** Was zuletzt geschah — wird angesagt, nicht nur gezeigt (SC 4.1.3). */
   const [announcement, setAnnouncement] = useState("");
 
-  const move = (key: string, delta: number, index: number, name: string): void => {
+  /*
+   * `name` heißt `ForeignText` und nicht `string` (O-AT, T-133): Der Feldname
+   * kommt aus `definition`, also aus einem `unknown`, in das ein Benutzer
+   * geschrieben hat — und er geht hier in einen **angesagten Satz**. Steht am
+   * Parameter `string`, ist an der Aufrufstelle nicht mehr zu sehen, was mit
+   * dem Wert geschieht.
+   */
+  const move = (key: string, delta: number, index: number, name: ForeignText): void => {
     const target = index + delta;
     if (target < 0 || target >= fields.length) return;
     onMove(key, delta);
@@ -149,7 +157,16 @@ export function TemplateFields({
       </p>
 
       <ol className="tfield-list">
-        {fields.map((entry, index) => (
+        {fields.map((entry, index) => {
+          /*
+           * Der Nachschlagewert steht **vor** dem JSX und nicht darin (O-AT):
+           * `entry.field.name.trim()` ist fremder Text, der hier nachgeschlagen
+           * und nicht gezeigt wird. Im Attribut sähe das aus wie eine Anzeige —
+           * für einen Leser wie für `scripts/proof-foreign.mjs`.
+           */
+          const duplicate = duplicates.has(entry.field.name.trim());
+
+          return (
           <TemplateFieldRow
             key={entry.key}
             entry={entry}
@@ -157,7 +174,7 @@ export function TemplateFields({
             total={fields.length}
             catalog={catalog}
             builtinFields={builtinFields}
-            duplicate={duplicates.has(entry.field.name.trim())}
+            duplicate={duplicate}
             {...(errorIndex === index && errorMessage !== null ? { rowError: errorMessage } : {})}
             readOnly={readOnly}
             dragging={dragIndex === index}
@@ -174,7 +191,8 @@ export function TemplateFields({
             }}
             onDropHere={() => finishDrag(index)}
           />
-        ))}
+          );
+        })}
       </ol>
 
       <p className="tfields__boundary">

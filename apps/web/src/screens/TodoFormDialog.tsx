@@ -1,4 +1,4 @@
-import { enumerateNames } from "@takt/domain";
+import { enumerateNames, MAX_TITLE_CHARACTERS } from "@takt/domain";
 import { useEffect, useState } from "react";
 import { createTag, createTodo, updateTodo } from "../api/endpoints";
 import type { Id, Tag, Todo } from "../api/types";
@@ -183,7 +183,7 @@ export function TodoFormDialog({
         value={title}
         onChange={setTitle}
         required
-        maxLength={512}
+        maxLength={MAX_TITLE_CHARACTERS}
         {...(titleError === undefined ? {} : { error: titleError })}
         placeholder="Wofür wird Zeit erfasst?"
       />

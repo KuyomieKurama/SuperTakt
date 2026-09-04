@@ -23,7 +23,7 @@
  * `developmentFallback()`.
  */
 
-import type { DirectoryChoice, OsUser } from "@takt/desktop/shell";
+import type { DirectoryChoice, OsUser, ReleasePageResult } from "@takt/desktop/shell";
 import { hasForbiddenNameCharacter } from "@takt/domain";
 import { setConnection, type Connection } from "../api/client";
 import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellStatus";
@@ -55,6 +55,8 @@ interface ShellModule {
   osUser(): Promise<OsUser>;
   quit(): Promise<void>;
   chooseExportDirectory(current: string | null): Promise<ExportDirectoryChoice>;
+  installedVersion(): Promise<string>;
+  openReleasePage(version: string): Promise<ReleasePageResult>;
 }
 
 let shellModule: ShellModule | null = null;
@@ -216,6 +218,54 @@ export async function quitApplication(): Promise<void> {
     );
   }
   await shell.quit();
+}
+
+/* ==================================================================== */
+/* Versionsprüfung (Abschnitt 18)                                       */
+/* ==================================================================== */
+
+/**
+ * Die installierte Fassung, aus den eingeprägten Angaben des Erzeugnisses
+ * (A-18.1, Auflage A-V-15). `null`, wenn es keine Hülle gibt.
+ *
+ * `null` ist hier keine Notlage, sondern ein vollständiger Zustand: Ohne
+ * installierte Fassung gibt es nichts zu vergleichen, und die Oberfläche zeigt
+ * nichts (A-18.5, A-18.11). Der Wert wird **nicht** zwischengespeichert und
+ * nicht in einer Einstellung abgelegt — er kommt aus der Binärdatei, und das
+ * ist die einzige Quelle, an der er etwas bedeutet.
+ */
+export async function readInstalledVersion(): Promise<string | null> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) return null;
+  try {
+    return await shell.installedVersion();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Öffnet die Release-Seite einer Fassung (A-18.8).
+ *
+ * **Weitergereicht wird die Fassungsbezeichnung, nie eine Adresse.** Die
+ * Adresse baut die Hülle aus einer bei ihr fest hinterlegten Zeichenkette,
+ * nachdem sie die Bezeichnung gegen eine enge Form geprüft hat — nach der
+ * Messung aus T-136 ist das die einzige Kontrolle zwischen der Antwort von
+ * GitHub und dem Browser des Benutzers (E-064 Punkt 4, B-18.2).
+ *
+ * Ohne Hülle wird nichts geöffnet und nichts geworfen: Der Rückgabewert sagt
+ * es, wie beim Ordnerauswahldialog.
+ */
+export async function openReleasePage(version: string): Promise<ReleasePageResult> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) {
+    return {
+      outcome: "unavailable",
+      reason:
+        "Die Release-Seite öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.",
+    };
+  }
+  return shell.openReleasePage(version);
 }
 
 /**

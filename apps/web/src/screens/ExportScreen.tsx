@@ -14,6 +14,7 @@ import type {
   ExportPreview,
   ExportRow,
   ExportRunResult,
+  ForeignText,
   Id,
   SkippedExportGroup,
   TimeEntry,
@@ -1263,7 +1264,7 @@ async function collectOpenEntries(): Promise<readonly TimeEntry[]> {
  * (E-028, T-005n 4.2) — genau dort fällt auch ein Text auf, der selbst ein
  * Semikolon enthält.
  */
-function previewNote(entries: readonly TimeEntry[]): string {
+function previewNote(entries: readonly TimeEntry[]): ForeignText {
   return [...entries]
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
     .map((entry) => entry.note)

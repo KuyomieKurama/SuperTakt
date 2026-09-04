@@ -183,6 +183,7 @@ Rechner ist. Siehe Abschnitt 9, Grundannahmen.
 | VG-7 | Lieferkette → ausgeliefertes Binärprogramm | npm-Pakete, crates, Tauri-Vorlagen, vorgebaute native Module, die Sidecar-Bündelung. |
 | VG-8 | E-Mail → Add-in | Der Absender einer E-Mail kontrolliert Betreff und Inhalt vollständig. Diese Zeichenkette wird vom regulären Ausdruck verarbeitet und landet über `callNumber` in der Abrechnung. |
 | VG-9 | Webview → Rust-Kern | Tauri-Befehle und -Fähigkeiten. Ein XSS im Webview ist hier deutlich schwerer als im Web, weil dahinter Dateisystem und Prozessstart liegen. |
+| VG-10 | Lokaler Dienst → GitHub (Versionsprüfung) | **Neu am 2026-09-04 (A-18.*, E-064, R-19).** Die erste und einzige Grenze, an der Takt den Rechner verlässt. Sie trägt in **zwei** Richtungen: hinaus geht ein Lebenszeichen (Quelladresse, Zeitpunkt, SNI `api.github.com`), herein kommt eine Antwort beliebiger Größe und Gestalt, aus der Text in die Oberfläche und — wenn man es zulässt — eine Adresse in den Browser des Benutzers wandern kann. Bewertet in Abschnitt 18, **bevor** sie gebaut wird. |
 
 ---
 
@@ -199,6 +200,8 @@ Rechner ist. Siehe Abschnitt 9, Grundannahmen.
 | A-07 | Ein Paketautor in der Lieferkette | Führt Code beim Installieren und zur Laufzeit aus | Übernommene npm-Konten sind der Regelfall, nicht die Ausnahme |
 | A-08 | Wer den Rechner in die Hand bekommt | Offline-Zugriff auf die Datenträgerinhalte | Diebstahl, Reparatur, Ausmusterung |
 | A-09 | Das Abrechnungstool als Empfänger | Verarbeitet, was Takt liefert | Kein Angreifer, aber eine Senke: Was Takt falsch exportiert, wird dort zu Geld. |
+| A-10 | **Wer die Antwort auf der Strecke zu GitHub bestimmt** | Kontrolliert Rumpf, Kopfzeilen, Statuscode, Weiterleitungsziel, Größe und Dauer der Antwort. Umfasst drei sehr verschiedene Lagen: ein übernommenes GitHub-Konto oder eine böswillige Fassungsbeschreibung im eigenen Bestand; ein TLS-abschließender Unternehmens-Proxy mit eigenem Wurzelzertifikat; ein Angreifer im Netzweg ohne gültiges Zertifikat (kommt nur bis zum TLS-Fehler). **Kann nicht:** die Zieladresse verlegen, solange A-V-1 und A-V-3 gelten. | Den Benutzer auf eine fremde Seite führen, von der er „Takt“ herunterlädt — er ist an dieser Stelle darauf vorbereitet, eine Datei zu holen und auszuführen. Das ist das größte Motiv an dieser Grenze und der Grund für B-18.2. |
+| A-11 | GitHub als Beobachter | Sieht Quelladresse, Zeitpunkt und Wiederholung jeder Anfrage sowie den abgefragten Bestand | Kein Angreifer. Eine **Senke** wie A-09: Was Takt mitschickt, ist mitgeteilt und nicht zurückzuholen (A-18.12, 18.6). |
 
 ---
 
@@ -1723,6 +1726,33 @@ Gegenmittel; ohne sie ist das Gegenmittel eine Absichtserklärung.
     Sicherungskopie des Migrationsläufers den Modus `0600`; ein zu weiter Modus führt beim Start
     zu einer sichtbaren Warnung. (B-7.2)
 
+**Nachtrag T-136 — die Versionsprüfung (Abschnitt 18).** Diese acht Prüfungen sind **vor** dem Bau
+geschrieben. Sie sind die Bedingung für die Abnahme von T-138 und T-139, nicht ihr Nachklang.
+
+27. **Weiterleitung.** Ein Prüfserver antwortet `302` auf ein zweites Ziel. Erwartet: stiller
+    Fehlschlag der Versionsprüfung **und null** eingegangene Anfragen am Umleitungsziel. Die
+    zweite Hälfte ist die Aussage. (B-18.3, A-V-3)
+28. **Obergrenze gegen die entpackte Größe.** Eine gzip-Antwort mit rund 51 KiB auf der Leitung
+    und 50 MiB Inhalt führt zum Abbruch vor 65 537 gelesenen Bytes und zu **keinem** `JSON.parse`.
+    Eine Prüfung, die nur `content-length` liest, muss an diesem Fall rot werden. (B-18.1, A-V-6)
+29. **Frist über den ganzen Vorgang.** Ein Prüfserver schreibt `{"a":` und schweigt. Erwartet:
+    Ende nach höchstens 5 500 ms, still, ohne Wurf nach außen. (B-18.1, A-V-5)
+30. **Gestalt der Antwort.** `tag_name` als `null`, `42`, `{}`, `[]`, `true`, fehlend, leer, mit
+    60 000 Zeichen, als `../../evil`, als `1.2.3?x=1`; dazu ein tief verschachtelter Rumpf. Jeder
+    Fall ergibt einen stillen Fehlschlag ohne Wurf und ohne Anzeige. (B-18.1, A-V-7, A-V-8)
+31. **Die Adresse entsteht nicht aus der Antwort.** Der Rust-Befehl `takt_open_release` wird mit
+    den zehn Ausbruchsversuchen aus 18.3 gefahren und gibt jedes Mal `Err` zurück, ohne zu
+    öffnen. Gegenprobe: `capabilities/**` enthält kein `shell:`, und `apps/web/src` enthält kein
+    `href` auf github.com. (B-18.2, A-V-16, A-V-17, A-V-18)
+32. **Kein Netzaufruf aus einem Anfragebehandler.** Die Route wird 100-mal aufgerufen; am
+    Prüfserver kommt **eine** ausgehende Anfrage an. (B-18.4, A-V-10)
+33. **Die Kopfzeilen gegen eine feste Liste.** Ein Prüfserver zeichnet **alle** eingegangenen
+    Kopfzeilen auf; der Vergleich läuft gegen eine geschlossene Liste und wird rot, sobald eine
+    hinzukommt. Gegenprobe: die installierte Fassung kommt als Zeichenkette in keiner Kopfzeile
+    und in keinem Teil der Adresse vor. (B-18.5, A-V-13)
+34. **Kein Weg führt zu einem Download.** Über den gesamten Vorgang — Dienst, Oberfläche, Hülle —
+    entsteht keine Datei und startet kein Prozess außer dem Öffnen des Browsers. (A-18.9)
+
 ---
 
 ## 8. Sicherheitstor je Aufgabe
@@ -1742,6 +1772,8 @@ Gegenmittel; ohne sie ist das Gegenmittel eine Absichtserklärung.
 | Nachfolgeaufgabe zu B-2.10 | Prüfung 24. Ohne sie ist die Trennung der beiden Geheimnisse eine Absichtserklärung im Kommentar. |
 | Nacharbeit zu T-007 | Prüfungen 25 (B-3.2) und die Ordnerwahl aus B-5.1 Punkt 1 samt der Rückfragen aus B-5.2. |
 | Nacharbeit zu T-008 | Prüfung 26 (B-7.2 auf der Datenbank), `PRAGMA trusted_schema = OFF`, `cargo audit` im Prüfablauf. |
+| **T-138 Dienst und Domäne (Versionsprüfung)** | B-18.1, B-18.3, B-18.4, B-18.6, B-18.7 und die Auflagen A-V-1 bis A-V-14, A-V-19, A-V-20 aus 18.9. Prüfungen 27, 28, 29, 30, 32, 33. Zusätzlich: `proof:route-policy` Abschnitt 4 prüft **eine Route mehr** als vorher und bleibt grün; `pnpm-lock.yaml` wächst nicht. |
+| **T-139 Hülle und Oberfläche (Versionsprüfung)** | B-18.2 und die Auflagen A-V-15 bis A-V-18. Prüfungen 31 und 34. Ohne die Ausbruchsliste als Prüffälle **neben** dem Rust-Befehl gibt es keine Freigabe — nach T-136-1 ist diese Prüfung die Vertrauensgrenze und nicht ihre Bestätigung. |
 | T-011, Torbedingung 42Crunch | **Derzeit nicht einlösbar** (Abschnitt 0). Der Orchestrator entscheidet: Zugang beschaffen oder das Tor durch eine benannte Ersatzprüfung ersetzen. Als erfüllt geführt werden darf es nicht. |
 
 ---
@@ -3546,3 +3578,533 @@ genau die drei Befunde betreffen, die oben stehen. Sie gehören formal in die n�
 die Tür durch den BMP-Scan in `proof:addin` 17). Übrig bleiben die beiden Testdateien, die Ränder
 prüfen und sollen, und `istLeerraum`, das laut ausfällt. **Damit trägt die geteilte Fassung die
 Antwort — im Arbeitsbaum, nicht schon an `c96a2b2`.**
+
+---
+
+## 18. Vorabbewertung T-136 (2026-09-04) — der Ausgang ins Netz, bevor er gebaut wird
+
+Dieser Abschnitt bewertet eine Vertrauensgrenze, die es **noch nicht gibt**. Das ist sein Sinn:
+Die Anforderungen A-18.1 bis A-18.12 stehen seit heute in der Spezifikation, E-064 legt die
+Bauform fest, gebaut wird in Welle Q (T-138, T-139). Alles, was hier als **Auflage** steht, ist
+damit keine Nachforderung an fertigen Code, sondern die Vorgabe, gegen die gebaut und geprüft
+wird.
+
+Bis heute galt der stärkste einzelne Satz dieses Entwurfs: Takt kennt keine Adresse außerhalb
+von `127.0.0.1` (E-001). Er gilt ab jetzt mit **einer** benannten Ausnahme. Eine Ausnahme ist
+kein Zustand, sondern ein Ort — und dieser Ort heißt VG-10.
+
+### 18.0 Werkzeugstand
+
+| Werkzeug | Ergebnis |
+|---|---|
+| Semgrep, lokal (`p/nodejsscan`, `p/typescript`) über `apps/*/src`, `apps/desktop/src-tauri/src`, `packages` | 188 Regeln, 193 Dateien, **9 Befunde**, alle in den seit T-023 bekannten Klassen: 3× `regex_dos` an Ausdrücken über *eigene* Konstanten (`origin-policy.ts:175,182`, `migration-runner.ts:305`), 4× `node_timing_attack` an React-Kontextvergleichen (`===` auf Zustandsmarken, kein Geheimnis), 1× `node_secret` an `redactSecrets` (die Funktion heißt so, sie enthält keins), 1× `node_username` in `showcase/ShellStateSection.tsx` (Anschauungsdaten). **Kein Befund hoher Schwere.** Zwei Parse-Warnungen an `export type *` in `packages/domain/src/index.ts` — TS-5-Syntax, die der Semgrep-Parser nicht kennt, kein Befund. |
+| Semgrep Guardian (SAST, Geheimnisse, Lieferkette) | **Nicht erreichbar — „Not logged into Semgrep Guardian".** Zum **achten** Mal in Folge. Beschaffungsentscheidung, kein Befund dieses Zweigs. |
+| 42Crunch Audit gegen `apps/local-api/openapi/takt-local-api.yaml` | **Nicht gelaufen.** Kein `42c-ci-cli`, kein Token, kein `~/.42crunch`. Unverändert die Lücke aus 12.4, 13, 14.1, 15.1, 16.1 und 17.0. Ersatz: die Auflagen A-V-19 und A-V-20 beschreiben, was die neue Route in der Beschreibung leisten muss. |
+| Eigene Messungen gegen Node 22.23.2 und `tauri-plugin-shell 2.3.6` | Sechs Messungen, alle unten mit Zahl belegt (18.2, 18.3, 18.4, 18.5, 18.6). Sie sind der Grund, warum drei der Auflagen anders lauten, als man sie ohne Messung geschrieben hätte. |
+| Repository-Hygiene über die geänderten Dateien | Keine Zugangsdaten, keine Kundendaten, keine echten Call-Nummern. `github.com` kommt im Produktivcode **an keiner Stelle** vor — die Zählung aus A-V-1 startet damit bei null und ist ab dem ersten Commit von T-138 aussagekräftig. |
+
+### 18.1 Was hier bewertet wird
+
+Der Aufbau nach E-064, in der Reihenfolge, in der die Daten laufen:
+
+```text
+  GitHub (api.github.com)
+        │  (1) Antwort: beliebig groß, beliebig geformt, fremder Text
+        ▼
+  Lokaler Dienst  apps/local-api   ← VG-10, hier liegt die ganze Prüfung
+        │  (2) heraus: eine geprüfte Fassungsbezeichnung, sonst nichts
+        ▼
+  Oberfläche  apps/web             ← CSP: darf GitHub gar nicht fragen
+        │  (3) Knopf „Installieren" → takt_open_release(version)
+        ▼
+  Hülle  apps/desktop/src-tauri    ← baut die Adresse selbst
+        │  (4) app.shell().open(feste Adresse + geprüfte Fassung)
+        ▼
+  Browser des Benutzers            ← VG-9 hinaus; kein Weg zurück
+```
+
+Vier Wege, vier Bedrohungen, und die Reihenfolge ist absteigend nach Schaden: (2) und (3) sind
+die Stellen, an denen ein Fehler den Benutzer auf eine fremde Seite führt, von der er eine Datei
+holt und ausführt.
+
+**Zwei Eigenschaften der Bauform, die vorab festzuhalten sind, weil sie später tragen.**
+
+1. **Die Oberfläche kann GitHub nicht fragen, und das ist gemessen, nicht angenommen.** Die CSP
+   in `apps/desktop/src-tauri/tauri.conf.json` setzt `default-src 'none'` und
+   `connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:17843`. Ein `fetch` aus dem
+   Webview nach `api.github.com` scheitert an der Richtlinie, nicht an einer Verabredung. Solange
+   diese Zeile so bleibt, ist ein XSS im Webview kein Weg ins Netz — und **deshalb** darf sie
+   nicht geöffnet werden. Siehe Befund T-136-2 zur Beschreibung dieser Zeile.
+2. **Die Route ist von selbst geschlossen.** `requiredCredentialForPath`
+   (`apps/local-api/src/access/route-policy.ts:111`) verlangt `session` für **alles**, was nicht
+   unter `/api/v1/addin` liegt oder wörtlich in `SHARED_PATHS` steht. Eine neu registrierte Route
+   muss nirgends eingetragen werden, um geschlossen zu sein; sie müsste eingetragen werden, um
+   offen zu sein. Das ist die Richtung aus B-2.10, und sie trägt hier zum ersten Mal, ohne dass
+   jemand daran gedacht hat.
+
+---
+
+### 18.2 B-18.1 — Die fremde Antwort im Prozess
+**Schwere:** hoch. **Betrifft:** W-01 bis W-05, die Verfügbarkeit des Dienstes. **Akteure:** A-10.
+**Bezug:** A-18.3, A-18.11, E-063, E-064 Punkt 2, R-19 Punkt 1. **Grenze:** VG-10.
+
+**Auswirkung.** Die Antwort ist ein Datenblock, den der Dienst nicht kontrolliert. Vier Dinge
+können daran falsch sein, und sie sind verschieden schlimm:
+
+1. **Größe.** Die Antwort ist unbegrenzt. Wird sie vollständig gelesen, entscheidet der
+   Absender über den Arbeitsspeicher des Sidecars.
+2. **Dauer.** Die Antwort kann anfangen und nie enden. Wird sie ohne Frist gelesen, hält sie
+   einen Zeitgeber, eine Verbindung und beim Anhalten die Ereignisschleife.
+3. **Gestalt.** `tag_name` kann fehlen, `null`, eine Zahl, ein Objekt oder eine 60 000 Zeichen
+   lange Zeichenkette sein. Der Rumpf kann tief verschachtelt sein.
+4. **Inhalt.** `body` (die Fassungsbeschreibung), `name` und `html_url` sind Text, den jemand
+   anderes geschrieben hat. Er kann Steuer- und Richtungszeichen tragen, Markdown, HTML, eine
+   fremde Adresse.
+
+**Was die bestehende Behandlung leistet — und was sie hier ausdrücklich nicht leistet.**
+
+E-063 ist die richtige Klasse, aber sie deckt diesen Fall nur zur Hälfte. `<Foreign>`
+(`apps/web/src/components/Foreign.tsx`) setzt fremden Text in ein `<bdi>` und ersetzt unsichtbare
+Zeichen durch `U+FFFD`; `proof:foreign` erzwingt über den Typ `ForeignText`, dass keine
+Anzeigestelle daran vorbeikommt. Das greift, **sobald** ein Text in der Oberfläche steht.
+
+Es greift **nicht** für:
+
+* **Alles vor der Anzeige.** Die Größe der Antwort, die Frist, die Verschachtelung des JSON und
+  der Speicher des Sidecars sind vor `<Foreign>`. Ein Dienst, der beim Lesen der Antwort stirbt,
+  hat kein Anzeigeproblem.
+* **Adressen.** `<Foreign>` behandelt Text zur *Anzeige*. Ein Wert, der in ein `href`, in eine
+  `URL` oder in einen Öffnen-Befehl geht, ist keine Anzeige, und die Behandlung wäre dort
+  wirkungslos: `U+FFFD` an der Stelle eines Steuerzeichens macht eine Adresse nicht sicher, es
+  macht sie kaputt. Das ist B-18.2 und ein eigener Weg.
+* **Markdown und HTML.** Die Fassungsbeschreibung ist Markdown. `<Foreign>` nimmt ihr keine
+  Auszeichnung; es setzt sie als Text. Solange sie **nicht angezeigt** wird, ist das kein Thema —
+  und genau deshalb ist „wird nicht angezeigt" die Auflage und nicht „wird behandelt".
+* **Zahlen.** `0.10.0` gegen `0.9.0` ist kein Anzeige-, sondern ein Ordnungsproblem (A-18.4).
+  Eine Fassungskomponente mit 30 Ziffern verlässt den genauen Bereich von `Number`.
+
+**Die einfachste falsche Lösung, und warum sie falsch ist.** `const daten = await antwort.json()`
+liest den Rumpf **vollständig**, bevor irgendeine Grenze greifen kann. Eine Prüfung von
+`content-length` hilft dagegen nicht — siehe die Messung unten.
+
+**Gemessen (Node 22.23.2, lokaler Prüfserver).** Eine Antwort mit
+`content-encoding: gzip` und `content-length: 50989` ergab nach dem automatischen Auspacken durch
+undici **52 428 800 Bytes** im Speicher. Faktor **1 028**. Wer die Obergrenze aus `content-length`
+liest, hat keine Obergrenze; wer `response.json()`, `response.text()` oder
+`response.arrayBuffer()` ruft, ebenfalls nicht.
+
+**Gemessen.** `JSON.parse('['.repeat(50000))` wirft `SyntaxError`, ebenso
+`JSON.parse('{"a":'.repeat(20000) + '1')`. Ein Wurf ist hier kein Schutz, sondern eine Pflicht:
+Er muss gefangen werden, sonst ist die unerwartete Antwort aus A-18.11 ein Absturz statt eines
+stillen Fehlschlags.
+
+**Gegenmittel.** Die Auflagen A-V-5 bis A-V-9 und A-V-14 (18.9).
+
+**Zuständig:** domain-dev (T-138) für Frist, Grenze, Auswertung und Ordnung; frontend-dev (T-139)
+für die Anzeige. **Prüfung:** unit-tester (T-140) gegen einen lokalen Prüfserver, der die
+Antworten aus A-V-6 bis A-V-8 nachstellt.
+
+---
+
+### 18.3 B-18.2 — Der Weg einer Adresse in den Browser des Benutzers
+**Schwere:** hoch — **die höchste in diesem Vorhaben.** **Akteure:** A-10, A-02 (über ein XSS im
+Webview), A-03. **Bezug:** A-18.8, A-18.9, E-064 Punkt 4, R-19 Punkt 2. **Grenzen:** VG-9, VG-10.
+
+**Auswirkung.** Der Benutzer klickt „Installieren", weil Takt ihm sagt, es gebe eine neue Fassung.
+Er ist in diesem Moment darauf eingestellt, eine Datei zu holen und auszuführen — die Erzeugnisse
+sind **unsigniert** (`.github/release-preamble.md` sagt es ausdrücklich), SmartScreen und Gatekeeper
+warnen also ohnehin, und er ist darauf vorbereitet, die Warnung wegzuklicken. Führt der Klick auf
+eine fremde Seite, ist das keine Phishing-Mail, der er misstrauen könnte, sondern seine eigene
+Anwendung, die ihn hinschickt. Der Schaden ist Codeausführung im Benutzerkonto, und damit alles:
+die SQLite-Datei, die Exportdateien, das Add-in-Token, W-01 bis W-05 vollständig.
+
+**Zwei Bauformen, und der Unterschied ist die ganze Aufgabe.**
+
+*Die naheliegende:* Die Antwort trägt `html_url`. Die Oberfläche bekommt sie, reicht sie an einen
+Öffnen-Befehl, fertig. Zwei Zeilen weniger, und in der Fähigkeitenliste steht dafür `shell:default`
+oder `shell:allow-open`.
+
+*Die festgelegte (E-064 Punkt 4):* Der Befehl nimmt **keine Adresse** entgegen, sondern die
+Fassungsbezeichnung, prüft sie und setzt sie in eine fest hinterlegte Adresse ein.
+
+**Warum die naheliegende Form nicht trägt — gemessen an `tauri-plugin-shell 2.3.6`, nicht
+vermutet:**
+
+1. **`shell:default` enthält `allow-open`.** In `permissions/default.toml` steht
+   `permissions = ["allow-open"]`. Wer den Vorgabesatz aufnimmt, um „nur das Nötige" zu erlauben,
+   erlaubt das Öffnen.
+2. **Die Vorgabeprüfung von `open` lässt jede `https:`-Adresse durch.** Der Ausdruck steht in
+   `src/open.rs:107`: `^((mailto:\w+)|(tel:\w+)|(https?://\w+)).+`. Er prüft das Schema und
+   sonst nichts — kein Wirt, kein Pfad, und er ist am Ende nicht verankert. Ein XSS im Webview
+   oder ein aus der Antwort übernommenes `html_url` öffnet damit **jede** Seite im Browser des
+   Benutzers. Das ist eine offene Weiterleitung, deren Ziel nicht ein Reiter, sondern der Browser
+   des Benutzers ist.
+3. Ein selbstgeschriebener Prüfausdruck in `tauri.conf.json > plugins > shell > scope > open`
+   verlagert das Problem nur: Ein fehlendes `$`, ein unmaskierter Punkt, ein `.*` an der falschen
+   Stelle, und `https://github.com.evil.example/...` besteht. Das ist wörtlich dieselbe Falle, die
+   `ALLOWED_ORIGINS` (`config.ts:70-75`) mit „Zeichengleichheit, kein `startsWith`" vermeidet und
+   die B-5.1 Punkt 3 für Pfade beschreibt.
+
+**Und der Befund, der die festgelegte Form von einer Vorsichtsmaßnahme zur Grenze selbst macht:**
+
+> **Auf dem Rust-Weg prüft `tauri-plugin-shell` gar nichts.** `Shell::open` (`src/lib.rs:76-78`)
+> ruft `open::open(None, path, with)`, und `open::open` (`src/open.rs:122-136`) sagt im eigenen
+> Quelltext: *„when running directly from Rust code we don't need to validate the path"*. Der
+> `OpenScope` mit dem Prüfausdruck wird ausschließlich betreten, wenn der Aufruf aus JavaScript
+> kommt (`scope.rs:207-224`).
+
+Für den Befehl aus E-064 Punkt 4 heißt das: **Es gibt kein zweites Netz.** Zwischen der Antwort
+von GitHub und `ShellExecuteW` beziehungsweise `xdg-open` steht genau eine Kontrolle, und das ist
+die Formprüfung, die T-139 schreibt. Sie ist deshalb keine Sorgfalt, sondern die Vertrauensgrenze.
+Geführt als Befund **T-136-1**.
+
+**Was die Prüfung der Fassungsbezeichnung leisten muss.**
+
+| Frage | Antwort, prüfbar |
+|---|---|
+| Welche Form? | `^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$`, angewandt auf die Bezeichnung **ohne** führendes `v`. |
+| Welche Zeichen? | Ausschließlich `0-9`, `A-Z`, `a-z`, `.` und `-`. **Nicht** enthalten und damit nicht möglich: `/`, `\`, `?`, `#`, `:`, `@`, `%`, Leerzeichen, Zeilenumbruch, `..` als vollständiges Segment (jedes Segment beginnt mit `v` und einer Ziffer). Das ist der Grund, warum die Zusammensetzung sicher ist — nicht eine Meinung über die Adresse, sondern der Zeichenvorrat. |
+| Welche Länge? | Höchstens 94 Zeichen (9+1+9+1+9+1+64). Der Ausdruck bindet jede Komponente; ohne die Schranken wäre er in der Länge unbegrenzt. |
+| Woher die Form? | Sie ist die Regel aus `.github/workflows/release.yml` (`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`) und `apps/desktop/scripts/build-app.mjs:161` — **um Ziffern- und Längenschranken verengt**. Die Tür ist damit enger als der Erzeuger. Folge, die benannt gehört: Ein Etikett mit einer Vorabkennung von mehr als 64 Zeichen würde stillschweigend nicht gemeldet. Das ist der bessere Fehlschlag, aber es ist einer. |
+| Was bei Nichtbestehen? | **Kein Aufruf, kein Öffnen, keine Anzeige, kein zweiter Versuch** (A-18.11). Der Rust-Befehl gibt `Err` mit einem technischen Schlüssel zurück und **ohne** den abgelehnten Wert; der Dienst protokolliert einen Schlüssel und keinen Inhalt. Ein abgewiesener Wert in einer Meldung wäre derselbe fremde Text an einer neuen Stelle. |
+
+**Gemessen.** 500 000 erzeugte Zeichenketten aus dem erlaubten Vorrat, jede an die feste Adresse
+`https://github.com/KuyomieKurama/SuperTakt/releases/tag/v` angehängt und durch den URL-Parser
+geschickt: **null Ausbrüche.** In jedem Fall blieb `origin` gleich `https://github.com`, der Pfad
+begann mit `/KuyomieKurama/SuperTakt/releases/tag/v`, und `search` und `hash` blieben leer.
+Gegenprobe mit `../../../evil`, `1.2.3/../../evil`, `1.2.3?x=1`, `1.2.3#a`, `1.2.3@evil.example`,
+`1.2.3\evil`, `1.2.3%2f..%2f..%2fevil`, `1.2.3 evil`, `1.2.3\n` und
+`999999999999999999999.0.0`: **jeder** von der Form abgewiesen, keiner erreichte die
+Zusammensetzung.
+
+**Gegenmittel.** Die Auflagen A-V-15 bis A-V-18 (18.9).
+
+**Zuständig:** frontend-dev (T-139). **Prüfung:** unit-tester (T-140) — die Ausbruchsliste oben
+als Prüffälle in `#[cfg(test)]` neben dem Befehl, jeder mit erwartetem `Err`; dazu die Gegenprobe,
+dass **kein** Weg im ganzen Vorhaben zu einem Download führt (A-18.9).
+
+---
+
+### 18.4 B-18.3 — Weiterleitung auf einen fremden Wirt
+**Schwere:** hoch. **Akteure:** A-10. **Bezug:** A-18.3, E-064 Punkt 1, R-19. **Grenze:** VG-10.
+
+**Auswirkung.** Eine Antwort mit `302` und `location: https://evil.example/…` verlegt die Adresse,
+die laut A-18.3 „weder einstellbar noch aus einer Antwort übernehmbar" ist — und zwar über den
+einen Weg, den man beim Lesen der Anforderung übersieht, weil er nicht wie eine Übernahme
+aussieht. Der Wirt am anderen Ende bestimmt danach alles aus B-18.1 und kann eine Fassung
+melden, die es nicht gibt. Er sieht außerdem die Anfrage, die für GitHub gedacht war.
+
+**Die Zusage, die der Netzaufruf halten muss:** Es wird **genau eine** Verbindung aufgebaut,
+und zwar zu `api.github.com`. Eine Antwort mit einem Statuscode 3xx wird nicht ausgewertet; ihre
+`location`-Kopfzeile wird nicht gelesen und nicht angesteuert.
+
+**Woran sie messbar ist.** `fetch(…, { redirect: 'error' })`.
+
+**Gemessen (Node 22.23.2).** Mit der Vorgabe `redirect: 'follow'` folgt Node bis zu 20
+Weiterleitungen, ohne etwas zu melden — das ist der Zustand, den man bekommt, wenn man die Option
+nicht setzt. Mit `redirect: 'manual'` liefert undici die 302 samt lesbarem
+`location: http://127.0.0.1:1/evil` zurück; die Zusage hinge dann daran, dass der Aufrufer sie
+nicht liest. Mit `redirect: 'error'` wirft `fetch` einen `TypeError` mit
+`cause: Error: unexpected redirect`, die `location` wird nie gelesen und nie verbunden. Nur die
+letzte Form ist eine Zusage und keine Verabredung.
+
+**Der Prüffall, und er hat zwei Hälften.** Ein lokaler Prüfserver antwortet mit `302` auf einen
+zweiten lokalen Prüfserver. Erwartet wird (1) ein stiller Fehlschlag der Versionsprüfung **und**
+(2) **null** eingegangene Anfragen am Umleitungsziel. Die zweite Hälfte ist die eigentliche
+Aussage; ohne sie belegt der Prüffall nur, dass etwas schiefging.
+
+**Und die Wahl der Adresse folgt daraus.** `https://github.com/…/releases/latest` ist die
+HTML-Seite und antwortet mit `302` auf die Seite des Etiketts. Unter `redirect: 'error'` wäre sie
+damit **nie** benutzbar. Die maschinenlesbare Quelle
+`https://api.github.com/repos/KuyomieKurama/SuperTakt/releases/latest` antwortet unmittelbar und
+liefert `tag_name`. Sie schließt außerdem Entwürfe und Vorabfassungen aus, was A-18.2
+(„veröffentlichte Fassung") genau trifft. Die Verengung aus A-V-3 wählt damit die Adresse aus
+A-V-1 mit aus — das ist kein Zufall, sondern der Nutzen einer Auflage, die früh genug steht.
+
+**Was gegen einen Angreifer im Netzweg schützt, ist nicht diese Auflage, sondern TLS.** Deshalb
+A-V-4: `https:` ausschließlich, keine eigene Zertifikatsprüfung, kein `dispatcher`, kein
+`ProxyAgent`, kein `NODE_TLS_REJECT_UNAUTHORIZED`. Nachgesehen: Keine dieser Zeichenketten kommt
+heute irgendwo in `apps/**` oder `packages/**` vor. Die Auflage hält einen Zustand, sie stellt
+ihn nicht her.
+
+**Zuständig:** domain-dev (T-138). **Prüfung:** unit-tester (T-140), beide Hälften.
+
+---
+
+### 18.5 B-18.4 — Betriebsmittel: Frist, Größe, Häufigkeit, Anhalten
+**Schwere:** mittel. **Akteure:** A-10, A-03. **Bezug:** A-18.11, E-064. **Grenze:** VG-10.
+
+**Auswirkung.** Ohne Zahlen ist jede der folgenden Größen vom Absender bestimmt: wie lange der
+Dienst wartet, wie viel Speicher er belegt, wie oft er hinausgeht und ob er sich noch beenden
+lässt. Der letzte Punkt ist der, der in diesem Bestand schon einmal weh getan hat: 17.2
+(verwaister Sidecar) und T-125-4 (`shutdown()` ohne Frist) sind dieselbe Klasse.
+
+**Die Zahlen, und jede mit ihrem Grund.**
+
+| Größe | Wert | Grund |
+|---|---|---|
+| Gesamtfrist | **5 000 ms** | Deckt Verbindung, Kopfzeilen **und** das Lesen des Rumpfes in **einer** Frist. Die eingehende Frist des Dienstes ist 15 000 ms (`REQUEST_TIMEOUT_MS`); die ausgehende muss deutlich darunter liegen, weil sie im Hintergrund läuft und niemanden warten lässt. **Gemessen:** `AbortSignal.timeout(700)` bricht eine Antwort, die `{"a":` schreibt und dann schweigt, nach **703 ms** ab (`TimeoutError`). Die Frist greift also auch beim Rumpf und nicht nur beim Verbindungsaufbau. |
+| Obergrenze der gelesenen Antwort | **65 536 Bytes des entpackten Stroms** | Beim Lesen gezählt, nicht aus `content-length` und nicht aus `content-encoding` abgeleitet (Messung in 18.2: Faktor 1 028). Die echte Antwort von `releases/latest` liegt für diesen Bestand bei rund 15 KiB (Vorspann, Prüfsummen, erzeugte Beschreibung, acht Erzeugnisse); 64 KiB gibt das Vierfache. **Auflage an T-138:** die tatsächliche Größe einmal gegen die echte Adresse messen und in den Bericht schreiben. Liegt sie über 32 KiB, wird die Zahl **bewusst** angehoben und nicht stillschweigend. |
+| Antwort, die nie endet | fällt unter die Gesamtfrist | Der bis dahin gelesene Teil wird **verworfen**, nicht geparst. Ein halbes JSON ist keine Antwort. |
+| Häufigkeit | **eine** ausgehende Anfrage je Start, danach höchstens eine je **24 h**; harter Boden von **60 min** zwischen zwei Anfragen desselben Laufs | A-18.2 verlangt „beim Start und danach regelmäßig". 24 h ist für ein Werkzeug, das ein paar Mal im Jahr eine Fassung bekommt, reichlich. Der Boden schützt gegen einen Zeitgeber, der aus irgendeinem Grund öfter feuert. |
+| Nach einem Fehlschlag | **kein zweiter Versuch im selben Lauf** | Wörtlich A-18.11. Der Zeitgeber wird nach einem Fehlschlag **nicht** neu gestellt. Das ist strenger, als man es von selbst bauen würde, und es ist die Anforderung. |
+| Zeitgeber und laufender Aufruf beim Anhalten | Zeitgeber `unref()`t, `fetch` an einem `AbortController`, den `shutdown()` auslöst | Sonst hält ein Netzaufruf, der auf eine Antwort wartet, die Ereignisschleife über die Abschaltfrist hinaus — genau der Weg zu 17.2. `main.ts:420` macht es beim Abschalt-Zeitgeber bereits vor. |
+
+**Und die Auflage, die man ohne den lokalen Bedrohungsraum nicht schriebe.**
+
+> **Der Netzaufruf läuft nie innerhalb eines eingehenden Anfragebehandlers.** Die Route gibt das
+> zuletzt ermittelte Ergebnis zurück; sie löst keine ausgehende Anfrage aus.
+
+Grund: Der Dienst ist für jeden lokalen Prozess erreichbar (R-02, VG-1). Ein Prozess mit dem
+Sitzungsgeheimnis — A-03, und ein Prozess im Benutzerkonto kommt an eine Datei, die die Hülle
+gelesen hat — könnte die Route sonst in einer Schleife aufrufen und Takt beliebig viele Anfragen
+von der Adresse des Benutzers an GitHub schicken lassen. Drei Folgen, alle unerwünscht: Takt wird
+zum Anfragegenerator; das Lebenszeichen aus B-18.5 wird von einem Dritten getaktet statt von Takt;
+und die 60 Anfragen je Stunde und Quelladresse, die GitHub nicht angemeldeten Aufrufern zugesteht,
+sind in Sekunden verbraucht. **Prüffall:** die Route 100-mal aufrufen und am Prüfserver **eine**
+ausgehende Anfrage zählen.
+
+**Zuständig:** domain-dev (T-138). **Prüfung:** unit-tester (T-140); das Anhalten gehört in
+`proof:access` neben die Messung aus T-125-4.
+
+---
+
+### 18.6 B-18.5 — Das Lebenszeichen
+**Schwere:** mittel. **Akteure:** A-11 (Senke), A-10. **Bezug:** A-18.12, R-19 Punkt 3.
+**Grenze:** VG-10.
+
+**Auswirkung.** Jede Anfrage teilt mit, dass an dieser Adresse zu dieser Zeit jemand Takt fährt.
+A-18.12 verbietet, mehr mitzuschicken als nötig — und die ehrliche Lesart ist: „mehr", nicht
+„etwas". Die Anfrage selbst ist nicht wegzukürzen; die Frage ist, was **zusätzlich** darin steht.
+
+**Was ohne Zutun drinsteht — gemessen, Node 22.23.2, `fetch` ohne jede Option:**
+
+```text
+host: 127.0.0.1:43137          ← der Wirt, unvermeidlich
+connection: keep-alive
+accept: */*                    ← wird von A-V-13 überschrieben
+accept-language: *             ← wörtlich der Stern, NICHT die Sprache des Benutzers
+sec-fetch-mode: cors
+user-agent: node               ← wird von A-V-13 überschrieben
+accept-encoding: gzip, deflate ← der Grund für die Messung in 18.2
+```
+
+Der Befund dieser Messung ist ein guter: **Keine dieser Kopfzeilen trägt den Benutzer, den
+Rechnernamen, die Sprache des Systems, eine Kennung oder die Fassung.** `accept-language` ist
+wörtlich `*` und nicht `de-DE` — hätte Node hier die Systemsprache eingesetzt, wäre das ein
+Merkmal gewesen, das man erst bemerkt, wenn man nachsieht. Der Prüffall dazu ist deshalb kein
+Vorwand: Er hält diesen Zustand fest, damit eine spätere Node-Fassung ihn nicht stillschweigend
+ändert.
+
+**Was gesetzt werden darf, und mehr nicht:**
+
+* `accept: application/vnd.github+json` — der Vertrag mit der Quelle.
+* `x-github-api-version: 2022-11-28` — nagelt die Antwortgestalt fest, sagt nichts über den
+  Benutzer.
+* `user-agent: Takt` — **ohne Fassungsnummer.** GitHub verlangt eine Kennung; die Adresse nennt
+  den Bestand ohnehin, die Kennung fügt also nichts hinzu, was nicht schon dasteht. Die
+  Fassungsnummer wäre dagegen genau die Angabe aus R-19 Punkt 3, und sie ist für die Anfrage
+  nicht nötig: **Der Vergleich der Fassungen findet auf diesem Rechner statt.** Wer die
+  installierte Fassung in die Anfrage schreibt, verschenkt die einzige Zurückhaltung, die diese
+  Bauform überhaupt erlaubt.
+
+**Und ausdrücklich nicht:** `authorization`, `cookie`, eine Kennung der Installation, der
+Windows-Benutzername, der Rechnername, die Anzahl der Todos, irgendein Wert aus dem Bestand.
+Kein Rumpf, kein Abfrageparameter, keine `POST`-Methode.
+
+**Was bleibt und nicht wegzuverhandeln ist (Restrisiko, 18.11):** Quelladresse, Zeitpunkt,
+Wiederholungsmuster, der TLS-Namenshinweis `api.github.com` und die Tatsache, dass **dieser**
+Bestand abgefragt wird. GitHub protokolliert das; ein TLS-abschließender Unternehmens-Proxy sieht
+zusätzlich den Inhalt. Das ist der Preis von A-18.2 und gehört ins Benutzerhandbuch, nicht in eine
+Fußnote.
+
+**Zuständig:** domain-dev (T-138), documenter (T-141) für den Satz im Handbuch.
+**Prüfung:** unit-tester (T-140) — die Prüfung läuft gegen einen Prüfserver, der **alle**
+Kopfzeilen aufzeichnet; die Behauptung wird gegen eine **feste Liste** gehalten und wird rot,
+sobald eine Kopfzeile hinzukommt. Zusätzlich die Gegenprobe, dass die installierte Fassung als
+Zeichenkette in keiner Kopfzeile und in keinem Teil der Adresse vorkommt.
+
+---
+
+### 18.7 B-18.6 — Die neue Route und die Vertrauensgrenze zum Add-in
+**Schwere:** mittel. **Akteure:** A-02, A-03. **Bezug:** B-2.10, R-02, R-09. **Grenzen:** VG-1, VG-2.
+
+**Auswirkung.** Eine neue Route ist eine neue Tür. Steht sie offen, liest jeder lokale Prozess
+und jede Webseite im Browser des Benutzers ab, dass hier Takt in Fassung X läuft — eine Angabe,
+die `GET /health` seit B-1.1 Punkt 2 bewusst **nicht** herausgibt, damit ein Angreifer ohne
+Nachweis nicht einmal erfährt, dass Takt läuft.
+
+**Der Bestand trägt das bereits, und zwar ohne Zutun.** `requiredCredentialForPath`
+(`route-policy.ts:111-131`) gibt `session` für jeden Pfad zurück, der nicht unter
+`${API_BASE_PATH}/addin` liegt und nicht wörtlich in `SHARED_PATHS` steht — heute ist das genau
+`/api/v1/health`. Eine Route `/api/v1/version` fällt damit in den `session`-Zweig, ohne dass
+jemand sie eintragen muss. Ein Add-in-Token bekommt dort **401** und erfährt nicht einmal, dass es
+die Route gibt.
+
+**Darf das Add-in sie sehen? Nein.** Es braucht sie nicht: Es legt Todos an und bucht Zeiten, es
+aktualisiert Takt nicht. Und es weist sich mit dem **dauerhaften** Token aus, das im
+`localStorage` eines von Microsoft gehosteten Webviews liegt (E-009, E-019, R-09, VG-2). Jede
+Angabe, die dieses Token erreicht, ist eine Angabe, die ein entwendetes Token erreicht. Die Fläche
+aus T-019 bleibt bei vier Routen.
+
+**Drei Auflagen, damit das so bleibt und gemessen ist:**
+
+1. Die Route wird an **derselben** Hono-Anwendung registriert wie alle anderen. Dann erfasst sie
+   `proof:route-policy` Abschnitt 4 von selbst — der Lauf fragt den zusammengebauten Dienst nach
+   **seiner eigenen** Routenliste (`Hono#routes`) und fährt jede Route außerhalb von `/addin`
+   einmal mit dem Add-in-Token an, erwartet 401. Eine Route auf einem eigenen Server oder einem
+   eigenen Port wäre an diesem Nachweis vorbei.
+2. Sie kommt **nicht** in `SHARED_PATHS` und **nicht** unter `/api/v1/addin`.
+3. `GET /addin/context` bekommt **kein** Feld zur Fassung.
+
+**Nachweis, den es schon gibt und der zählt:** Nach dem Bau von T-138 muss die Zahl der von
+`proof:route-policy` Abschnitt 4 geprüften Routen um genau eins steigen, und der Lauf muss grün
+bleiben. Steigt sie nicht, ist die Route an der Aufzählung vorbei registriert — und das ist der
+Befund, nicht der 401.
+
+**Zuständig:** domain-dev (T-138). **Prüfung:** `proof:route-policy`, dazu ein Prüffall „Route
+ohne Nachweis ergibt 401" und „mit Add-in-Token ergibt 401".
+
+---
+
+### 18.8 B-18.7 — Zulieferung
+**Schwere:** mittel. **Akteure:** A-07. **Bezug:** VG-7, 5.10. **Grenze:** VG-7.
+
+**Die Frage.** Braucht der Netzaufruf eine neue Abhängigkeit? Eine neue Abhängigkeit **an dieser
+Stelle** wäre besonders unangenehm: Sie liefe im Prozess, der als Einziger nach außen spricht,
+und sie sähe die Antwort vor jeder Prüfung.
+
+**Die Antwort: nein, auf beiden Seiten.**
+
+* **Node.** Der Arbeitsbereich verlangt `node >= 22.5.0` (Wurzel-`package.json`), der
+  Auslieferungsablauf nagelt `22.23.2` fest (`release.yml`, `NODE_VERSION`). Globales `fetch` ist
+  dort vorhanden und stabil; `AbortSignal.timeout`, `redirect: 'error'` und der Lesestrom über
+  `response.body` ebenfalls — alle vier in 18.2 bis 18.5 auf genau dieser Fassung gemessen.
+  **Auflage:** `apps/local-api/package.json` bekommt für die Versionsprüfung **keine** neue
+  Abhängigkeit. Kein `node-fetch`, kein `axios`, kein `got`, kein `undici` als unmittelbare
+  Abhängigkeit, und **keine Bibliothek für die Ordnung der Fassungen** — sie liegt nach E-064
+  Punkt 3 als Fachlogik in `packages/domain`, wo sie ohne Netz und ohne Paket prüfbar ist.
+  Messbar: `pnpm-lock.yaml` wächst durch T-138 nicht, und `dependencies` von `@takt/local-api`
+  bleibt bei sechs Einträgen.
+* **Rust.** `tauri-plugin-shell` steht bereits in `Cargo.toml:37` — dort allerdings für den
+  Sidecar (`ShellExt` in `sidecar.rs:50`), nicht für das Öffnen. Das Öffnen braucht **kein**
+  weiteres Paket: `app.shell().open(...)` ist dieselbe Kiste. **Auflage:** kein
+  `tauri-plugin-opener`, keine HTTP-Kiste in der Hülle. Die Hülle spricht nicht mit dem Netz;
+  das tut der Dienst.
+
+**Ein Hinweis, der dazugehört.** `Shell::open` trägt
+`#[deprecated(since = "2.1.0", note = "Use tauri-plugin-opener instead.")]`. Der Aufruf braucht
+also ein `#[allow(deprecated)]`. Das ist die richtige Wahl: Ein neues Paket in VG-7 aufzunehmen,
+um eine Abkündigungswarnung loszuwerden, tauscht eine Warnung gegen einen Lieferanten. Das
+`#[allow]` gehört mit genau diesem Satz kommentiert, damit die nächste Aufräumaufgabe es nicht
+für Nachlässigkeit hält.
+
+**Zuständig:** domain-dev (T-138), frontend-dev (T-139). **Prüfung:** `pnpm-lock.yaml` und
+`Cargo.lock` im Review; `pnpm install --frozen-lockfile` im Auslieferungsablauf.
+
+---
+
+### 18.9 Die Auflagen — die Vorgabe für T-138 und T-139
+
+Zwanzig Auflagen. Jede ist so geschrieben, dass sie entweder eine Zahl oder eine Gegenprobe hat.
+„Sorgfältig behandelt" steht in keiner.
+
+**An T-138 (domain-dev): der Dienst und die Domäne**
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-V-1** | Die Adresse ist **eine** Konstante im Quelltext: `https://api.github.com/repos/KuyomieKurama/SuperTakt/releases/latest`. Nicht aus einer Umgebungsvariablen, nicht aus einer Einstellung, nicht aus der Datenbank, nicht zusammengesetzt aus einem gelesenen Wert. | `grep -rn "api\.github\.com" apps/local-api/src` liefert **genau eine** Fundstelle. Heute liefert `grep -rn "github\.com"` über den gesamten Produktivcode **null** — die Zählung beginnt sauber. |
+| **A-V-2** | Nur `GET`. Kein Rumpf, kein Abfrageparameter, kein `authorization`, kein `cookie`. | Prüfserver zeichnet Methode und Adresse auf. |
+| **A-V-3** | `redirect: 'error'`. | Prüfserver antwortet 302 auf ein zweites Ziel: stiller Fehlschlag **und** null Anfragen am Ziel. |
+| **A-V-4** | Ausschließlich `https:`. Kein `dispatcher`, kein `Agent`, kein `ProxyAgent`, kein `NODE_USE_ENV_PROXY`, kein `NODE_TLS_REJECT_UNAUTHORIZED`, keine eigene Zertifikatsprüfung. | `grep` über `apps/**` und `packages/**` findet keine dieser Zeichenketten. Heute: keine. |
+| **A-V-5** | **Eine** Gesamtfrist von **5 000 ms** über `AbortSignal.timeout`, an `fetch` **und** an das Lesen des Rumpfes. | Prüfserver schreibt `{"a":` und schweigt: Ende nach ≤ 5 500 ms, still. |
+| **A-V-6** | Obergrenze **65 536 Bytes des entpackten Stroms**, beim Lesen gezählt. Nicht `content-length`, nicht `response.json()`, nicht `response.text()`, nicht `response.arrayBuffer()`. | gzip-Bombe (50 989 Bytes → 52 428 800 Bytes, gemessen): Abbruch vor 65 537 gelesenen Bytes, **kein** `JSON.parse`. Dazu: die echte Antwortgröße einmal messen und in den Bericht schreiben. |
+| **A-V-7** | Aus dem geparsten Objekt wird **ein** Feld gelesen: `tag_name`. `body`, `name`, `html_url`, `assets`, `author`, `upload_url` und jedes weitere werden nicht gelesen, nicht protokolliert, nicht gespeichert, nicht weitergereicht. | Genau ein Feldzugriff im Quelltext. |
+| **A-V-8** | `tag_name` muss `typeof === 'string'` sein; ohne führendes `v` muss es `^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$` erfüllen. Sonst stiller Fehlschlag. | Prüffälle: `null`, `42`, `{}`, `[]`, `true`, fehlend, `""`, 60 000 Zeichen, `../../evil`, `1.2.3?x=1` — jeder ergibt einen stillen Fehlschlag ohne Wurf. |
+| **A-V-9** | Die Ordnung liegt in `packages/domain`, zerlegt in drei Zahlen und vergleicht numerisch. `0.10.0 > 0.9.0`. Eine Vorabkennung gilt als **kleiner** als dieselbe Fassung ohne (sonst meldete sich `1.2.3` gegenüber installiertem `1.2.3-rc.1` nicht). Jede Komponente ≤ 999 999 999. | Tabellenprüfung in `packages/domain/test`; kein `localeCompare`, kein `<` auf Zeichenketten. |
+| **A-V-10** | **Kein Netzaufruf in einem eingehenden Anfragebehandler.** Die Route gibt das zuletzt ermittelte Ergebnis zurück. | Route 100-mal aufrufen, am Prüfserver **eine** ausgehende Anfrage zählen. |
+| **A-V-11** | Eine Anfrage je Start, danach höchstens eine je 24 h, harter Boden 60 min. Nach einem Fehlschlag **kein** zweiter Versuch im selben Lauf. | Zeitgeberprüfung mit gestellter Uhr; nach einem erzwungenen Fehlschlag bleibt die Zahl der ausgehenden Anfragen bei eins. |
+| **A-V-12** | Zeitgeber `unref()`t, laufender `fetch` an einem `AbortController`, den `shutdown()` auslöst. | `proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft. |
+| **A-V-13** | Gesetzte Kopfzeilen: `accept: application/vnd.github+json`, `x-github-api-version: 2022-11-28`, `user-agent: Takt` — **ohne Fassungsnummer**. Sonst keine. | Prüfserver zeichnet **alle** Kopfzeilen auf; Vergleich gegen eine feste Liste, rot bei jeder zusätzlichen. Gegenprobe: die installierte Fassung kommt als Zeichenkette in keiner Kopfzeile und in keinem Teil der Adresse vor. |
+| **A-V-14** | Was den Dienst verlässt: die geprüfte Fassungsbezeichnung, die installierte Fassung, ein Kennzeichen (neuer / nicht neuer / unbekannt). **Kein** Text aus der Antwort, **kein** `html_url`, **keine** Fassungsbeschreibung. | Antwortschema der Route hat drei Felder; kein Feld vom Typ „freier Text aus der Antwort". |
+| **A-V-19** | Die Route steht in `openapi/takt-local-api.yaml`, wird von `proof:openapi` erfasst und ist an derselben Hono-Anwendung registriert. Nicht in `SHARED_PATHS`, nicht unter `/addin`. `GET /addin/context` bekommt kein Fassungsfeld. | `proof:route-policy` Abschnitt 4 prüft **eine Route mehr** als vorher und bleibt grün; `proof:openapi` bleibt grün. |
+| **A-V-20** | Der Grund eines Fehlschlags geht als **technischer Schlüssel** aus einer geschlossenen Aufzählung ins Protokoll — etwa `version_check_unreachable`, `version_check_redirect`, `version_check_too_large`, `version_check_timeout`, `version_check_malformed`, `version_check_no_release`. **Nie** ein Ausschnitt der Antwort, nie die Meldung des Wurfs, nie eine Adresse aus einer `location`-Kopfzeile. | `logger.lifecycle(level, message, reason)` mit festem `reason`; im Quelltext keine Zeichenkettenverkettung aus einem Wert der Antwort. Der dritte Parameter entsteht gerade in T-132 (`src/logger.ts:79`, im Arbeitsbaum, nicht in `d9555d0`); landet T-132 nicht, gilt dieselbe Auflage für den zweiten. |
+
+**An T-139 (frontend-dev): die Hülle und die Oberfläche**
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-V-15** | Die installierte Fassung kommt aus `app.package_info().version` — den in die Binärdatei eingeprägten Angaben. **Nicht** aus einer Datei neben der ausführbaren Datei, nicht aus `tauri.conf.json` zur Laufzeit, nicht vom Sidecar. | Genau ein Rust-Aufruf; kein Lesen einer Datei für die Fassung; die Hülle liefert, der Dienst fragt nicht zurück. |
+| **A-V-16** | `#[tauri::command] takt_open_release(version: String)` — **kein** Parameter, der Adresse, Schema, Wirt oder Pfad trägt. Prüft `version` gegen A-V-8, setzt sie in `https://github.com/KuyomieKurama/SuperTakt/releases/tag/v{version}` ein, ruft `app.shell().open(url, None)`. Bei Nichtbestehen: kein Aufruf, `Err` mit technischem Schlüssel **ohne** den abgelehnten Wert. | Signatur trägt genau einen `String`. `#[cfg(test)]` fährt die zehn Ausbruchsversuche aus 18.3 und erwartet jedes Mal `Err`. |
+| **A-V-17** | `capabilities/default.json` bekommt **keinen** Eintrag `shell:*` — weder `shell:default` (das `allow-open` enthält) noch `shell:allow-open`, `shell:allow-execute`, `shell:allow-spawn`, `shell:allow-kill`, `shell:allow-stdin-write`. Auch **kein** `plugins > shell > scope > open` in `tauri.conf.json`. | `grep -n "shell:" apps/desktop/src-tauri/capabilities/*.json` bleibt leer; heute ist es leer, die Liste trägt `core:default`, `core:window:allow-start-dragging`, `dialog:allow-open`. |
+| **A-V-18** | Die CSP wird **nicht** geöffnet: `connect-src` bleibt `'self' ipc: http://ipc.localhost http://127.0.0.1:17843`. Kein `https://api.github.com`, kein `*`. Der Verweis in der Oberfläche ist ein **Knopf**, der `takt_open_release` ruft, **kein** `<a href>`: Ein Anker würde den Webview selbst zu github.com navigieren und den Benutzer aus seiner Anwendung tragen — es gibt keinen `on_navigation`-Wächter, der das abfinge. Die Adresse darf als **Text** danebenstehen; sie ist lokal gebaut. | Zeichengleicher Vergleich der `csp`-Zeichenkette; `grep` über `apps/web/src` findet kein `href` mit `github`. |
+
+---
+
+### 18.10 Befunde dieser Vorabbewertung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-136-1** | **muss** | **`tauri-plugin-shell` prüft auf dem Rust-Weg nichts.** `Shell::open` (`lib.rs:76-78`) → `open::open(None, …)`, und `open.rs:122-136` sagt selbst: *„when running directly from Rust code we don't need to validate the path"*. Der `OpenScope` wird nur bei Aufrufen aus JavaScript betreten. Damit ist die Formprüfung aus A-V-16 die **einzige** Kontrolle zwischen der Antwort von GitHub und `xdg-open`/`ShellExecuteW` — kein zweites Netz, keine Vorgabeprüfung, die im Zweifel greift. Gegenmittel: A-V-16 und A-V-17 zusammen, und die Ausbruchsliste als Prüffälle **neben** dem Befehl, nicht in einer fernen Testdatei. | frontend-dev (T-139), unit-tester (T-140) |
+| **T-136-2** | Hinweis | **Die Zusage über die CSP beschreibt die Datei nicht genau.** `CLAUDE.md` (Abschnitt „Versionsprüfung") und E-064 Punkt 2 nennen drei Einträge — „sich selbst, `ipc:` und `http://127.0.0.1:17843`". `tauri.conf.json` trägt vier: `'self' ipc: http://ipc.localhost http://127.0.0.1:17843`. Der vierte ist die IPC-Herkunft unter Windows und völlig berechtigt; die Zusage ist trotzdem eine Abschrift, die nicht stimmt, und sie wird ab jetzt bei jeder Freigabe geprüft. Zwei Wege, und der zweite ist der aus E-063 Punkt 4/5: (a) den Eintrag in den Satz aufnehmen, oder (b) ein Wächter liest die `csp`-Zeichenkette aus `tauri.conf.json` und prüft, dass `connect-src` genau diese vier Marken trägt und **kein** `api.github.com`. (b) ist die Antwort, die nicht wieder veraltet. | Orchestrator (Text), frontend-dev (Wächter) |
+| **T-136-3** | Hinweis | **E-065 sagt nicht ganz, woher die Zahl im Erzeugnis kommt.** „Führende Quelle ist `version` in `tauri.conf.json`" gilt für den Entwicklungsbau; dort steht `0.0.0`. Im ausgelieferten Erzeugnis kommt die Zahl aus `TAKT_RELEASE_VERSION` — also aus dem Git-Etikett —, und `apps/desktop/scripts/build-app.mjs:153-170` legt sie beim Bauen als Überlagerung über `tauri.conf.json`. Sicherheitsrelevant ist daran nur eines, und das steht als A-V-15: Die Zahl muss zur Laufzeit aus den **eingeprägten** Angaben kommen. Läse die Hülle sie aus einer Datei neben der ausführbaren Datei, könnte A-03 sie herabsetzen und Takt dauerhaft eine Aktualisierungsaufforderung zeigen lassen — auf einen Knopf, bei dem der Benutzer darauf eingestellt ist, eine unsignierte Datei zu holen und auszuführen. Das ist B-18.2 von der anderen Seite. | Orchestrator (E-065 präzisieren), frontend-dev (A-V-15) |
+| **T-136-4** | Hinweis | **Die übersprungene Fassung ist Benutzereingabe** (VG-6). Sie steht als Einstellung im Bestand und ist damit für jeden schreibbar, der das Sitzungsgeheimnis hat. Auflage: Beim **Lesen** gegen die Form aus A-V-8 prüfen; ein ungültiger gespeicherter Wert heißt „nichts übersprungen", führt zu keinem Wurf und geht in **keine** Adresse. Schaden im schlimmsten Fall: ein unterdrückter Hinweis. Angenommen, aber benannt. | domain-dev (T-138) |
+| **T-136-5** | Hinweis | **Die Anfragebegrenzung von GitHub ist geteilt.** Nicht angemeldete Aufrufer haben 60 Anfragen je Stunde **und Quelladresse**. In einem Haus hinter einer Adresse teilen sich alle Takt-Installationen dieses Kontingent. Folge: `403`, stiller Fehlschlag nach A-18.11 — das Verhalten ist richtig, die Zuverlässigkeit sinkt mit der Verbreitung. Ein weiteres Argument für A-V-11 und gegen jeden Wiederholungsversuch. Kein Gegenmittel nötig, aber es gehört ins Entwicklerhandbuch. | documenter (T-141) |
+| **T-136-6** | Hinweis | **Semgrep Guardian zum achten Mal nicht erreichbar, 42Crunch zum siebten Mal ohne Werkzeug.** Das Tor aus Abschnitt 8 ist an zwei von vier Stellen weiterhin nicht einlösbar. Der lokale Semgrep-Lauf deckt SAST ab; Lieferkette und OpenAPI-Bewertung bleiben ungemessen — und die Lieferkette ist bei einem Vorhaben, das erstmals nach außen spricht, die Lücke, die man am wenigsten möchte. Beschaffungsentscheidung. | Auftraggeber, Orchestrator |
+
+---
+
+### 18.11 Restrisiko dieser Grenze
+
+Vier Punkte bleiben, und keiner ist durch eine Auflage zu schließen.
+
+1. **Die Anfrage ist das Lebenszeichen.** Auch mit A-V-13 erfährt GitHub Quelladresse, Zeitpunkt
+   und Wiederholung. A-18.12 („überträgt nichts über den Benutzer, den Bestand oder die Nutzung")
+   ist damit über den Inhalt einlösbar und über die Existenz der Anfrage nicht. Das ist keine
+   Schwäche der Umsetzung, sondern der Preis von A-18.2, und es gehört als Satz ins
+   Benutzerhandbuch — die Zusage „alles bleibt auf diesem Rechner" braucht ab jetzt einen
+   Nachsatz.
+2. **Ein TLS-abschließender Unternehmens-Proxy sieht alles.** Wo ein eigenes Wurzelzertifikat im
+   Systemspeicher liegt, ist die Verbindung für den Betreiber offen. Takt kann das weder
+   verhindern noch bemerken, ohne selbst eine Zertifikatsbindung mitzubringen — und die wäre eine
+   eigene, größere Entscheidung.
+3. **Der Bestand selbst ist die Quelle der Wahrheit.** Wer das GitHub-Konto übernimmt, kann eine
+   Fassung veröffentlichen, auf die Takt zeigt. Die Erzeugnisse sind **unsigniert**; die einzige
+   Kontrolle sind die Prüfsummen in der Fassungsbeschreibung, und die stammen aus derselben
+   Quelle. Alle Auflagen dieses Abschnitts schützen den Weg, nicht das Ziel. Eine Signatur wäre
+   das Gegenmittel und ist eine Beschaffungsentscheidung (siehe `release.yml`, „Keine Signatur").
+4. **Es gibt keinen Schalter, der die Prüfung abstellt.** A-18 verlangt keinen, E-064 verbietet
+   nur ein „nie wieder fragen" für den **Hinweis**. Ein Benutzer ohne Internet merkt nichts (der
+   Fehlschlag ist still); ein Benutzer, der aus Datenschutzgründen keine ausgehende Verbindung
+   möchte, hat keine Möglichkeit. Das ist eine Produktfrage und keine Sicherheitsentscheidung, die
+   dieser Abschnitt trifft — siehe offene Frage unten.
+
+### 18.12 Urteil dieser Vorabbewertung
+
+**Freigegeben für den Bau — mit den zwanzig Auflagen aus 18.9 als Bedingung.**
+
+Es gibt nichts abzunehmen: T-138 und T-139 sind nicht geschrieben. Das Urteil bezieht sich auf die
+**Bauform** aus E-064, und sie trägt. Die entscheidende Wahl — der Öffnen-Befehl nimmt keine
+Adresse entgegen — ist nach der Messung an `tauri-plugin-shell 2.3.6` nicht bloß die vorsichtigere
+Variante, sondern die einzige, die überhaupt eine Kontrolle hat: Der Prüfausdruck des Plugins wird
+auf dem Rust-Weg nie betreten (T-136-1), und der Vorgabesatz `shell:default` ließe im
+JavaScript-Weg jede `https:`-Adresse durch. Wer hier die naheliegende Form gebaut hätte, hätte eine
+offene Weiterleitung in den Browser des Benutzers gebaut und es an keiner Stelle gemerkt.
+
+Zwei Auflagen lauten anders, als man sie ohne Messung geschrieben hätte, und beide sind der
+Ertrag dieser Vorabbewertung: **A-V-6** (die Obergrenze zählt entpackte Bytes — 50 989 auf der
+Leitung ergaben 52 428 800 im Speicher, Faktor 1 028; eine Prüfung von `content-length` ist keine
+Grenze) und **A-V-10** (kein Netzaufruf in einem Anfragebehandler — sonst taktet ein beliebiger
+lokaler Prozess das Lebenszeichen aus R-19 Punkt 3).
+
+Der Bestand passt zu diesem Entwurf, und zwar an drei Stellen ohne Zutun: Die CSP schließt den
+Weg über die Oberfläche, `requiredCredentialForPath` schließt die neue Route, bevor sie existiert,
+und `proof:route-policy` Abschnitt 4 misst das von selbst. Ein Befund der Stufe „muss"
+(T-136-1) und fünf Hinweise; keiner davon blockiert den Bau, alle sind vor der Abnahme von T-138
+und T-139 zu schließen.
+
+Das Tor aus Abschnitt 8 bleibt an zwei Stellen uneinlösbar (T-136-6). Semgrep, lokal gefahren:
+neun Befunde, alle in bekannten Falschmeldungsklassen, **kein Befund hoher Schwere**.
+
+**Wiedervorlage:** nach dem Rücklauf von T-138 und T-139. Dann wird gegen Code gemessen, was hier
+gegen einen Entwurf gefordert ist — Auflage für Auflage, mit den Zahlen aus 18.9.

@@ -76,8 +76,15 @@ export interface ExportGroupViewModel {
    * "0,75". Kommt aus der Fachlogik (E-008, E-020).
    */
   readonly quarters: string;
-  /** Zusammengefuehrte Leistung der enthaltenen Buchungen (E-026, E-028). */
-  readonly mergedNote: string;
+  /**
+   * Zusammengefuehrte Leistung der enthaltenen Buchungen (E-026, E-028).
+   *
+   * **Fremder Text** (T-133): Es sind die Leistungstexte der Buchungen, mit
+   * `"; "` verbunden. Bis T-133 hiess das Feld `string` — die Herkunft fiel im
+   * `join` ab, und der Text stand hier roh im Absatz **und** im `title`. Das
+   * ist die Zeile, an der ein Benutzer liest, was er gleich abrechnet.
+   */
+  readonly mergedNote: ForeignText;
   /**
    * Grund, warum diese Gruppe nicht exportiert werden kann — zum Beispiel
    * fehlende Leistung (E-034). `null`, wenn sie exportierbar ist.
@@ -215,11 +222,11 @@ function ExportGroupRow({
           </p>
         </div>
 
-        <p className="egroup__note truncate" title={mergedNote}>
+        <p className="egroup__note truncate" title={foreignText(mergedNote)}>
           {mergedNote === "" ? (
             <span className="muted">— keine Leistung erfasst —</span>
           ) : (
-            mergedNote
+            <Foreign value={mergedNote} />
           )}
         </p>
 

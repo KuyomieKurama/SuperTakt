@@ -3105,3 +3105,388 @@ gehört nicht meiner Hoheit, ein erneuter Lauf unmittelbar danach war grün, und
 nichts verändert. Alle neuen Testdaten mit `E2E-`-Präfix erfunden, mit der einen im Abschnitt
 begründeten Ausnahme (`Rechnung<RLO>gnp.exe`, selbst eine erfundene Fixtur) — keine echten
 Call-Nummern, keine echten Kundennamen, keine echten Benutzernamen.
+
+---
+
+## 24. Versionsprüfung — Plan vor dem Bau (T-137, Welle P)
+
+Grundlage: `docs/spec.md` Abschnitt 18 (A-18.1 bis A-18.12, heute vom Auftraggeber nachgetragen),
+`.claude/team/decisions.md` E-064 (die Versionsprüfung ist die einzige Verbindung nach außen, und
+sie darf nur fragen) und E-065 (die Fassung von Takt steht an einer Stelle: `version` in
+`apps/desktop/src-tauri/tauri.conf.json`), `.claude/team/risks.md` R-19 (Takt bekommt einen
+Ausgang ins Netz) und R-20 (eine Meldung, die man nicht loswird, wird weggeklickt), `CLAUDE.md`
+Abschnitt „Versionsprüfung" und `board.md` „Welle vom 2026-09-04, Welle P".
+
+**Ausführungsstand, wie beim gesamten übrigen Dokument, hier zusätzlich verschärft.** Gebaut ist
+nichts: weder die Ordnung der Fassungen in `packages/domain` noch die Route des Dienstes noch der
+Dialog der Oberfläche noch der Öffnen-Befehl der Hülle (T-138/T-139 stehen noch aus). Kein Fall
+unten wurde ausgeführt. Anders als bei den ursprünglichen Abschnitten 0–13 fehlt hier zusätzlich
+zur Fachlogik selbst noch eine zweite Sache, bevor überhaupt ausgeführt werden kann: eine
+Nachbildung der fremden Antwort aus dem Netz. Diese Lücke ist unten eigens benannt, nicht nur
+unterstellt.
+
+### Die zweite Lücke: die fremde Antwort selbst, und warum die bisherige Linie hier nicht reicht
+
+Jeder bisherige Testfall dieses Dokuments läuft — sobald ausführbar — gegen den echten lokalen
+Dienst, die echte SQLite-Datei und, seit T-130, eine konfigurierbare Nachbildung der Tauri-Hülle
+(`tests/e2e/support/shell-shim.ts`), ausdrücklich **ohne** Attrappen-Server für irgendeine erste
+Partei (`support/services.ts`, Kopfkommentar: „kein Attrappen-Server, kein gestubbtes `fetch`").
+Diese Linie hielt bislang, weil Takt keine zweite Gegenstelle kannte (E-001). Mit A-18.2 ändert
+sich das: Der Dienst spricht jetzt mit einer echten dritten Partei, deren Antwort weder
+deterministisch noch wiederholbar noch — ohne bei jedem Testlauf ein Lebenszeichen an das
+tatsächliche GitHub zu senden (R-19 Punkt 3) — überhaupt verantwortbar ist. **Für diesen einen
+Fall muss die bisherige Linie durchbrochen werden; das steht hier als Begründung, nicht als
+stillschweigende Ausnahme.**
+
+Damit TP-VER-01 bis TP-VER-26 unten überhaupt ausführbar werden, braucht es drei Dinge, von denen
+keines in dieser Aufgabe entsteht (Dateihoheit dieser Welle: ausschließlich `docs/testplan.md` und
+der Bericht):
+
+1. **Eine lokale Attrappe für die GitHub-Antwort.** Vergleichbare Bauart wie `shell-shim.ts`, aber
+   auf Netzwerkebene statt auf `__TAURI_INTERNALS__`-Ebene: ein kleiner `http.createServer()`,
+   konfigurierbar in Statuscode, Kopfzeilen (u. a. `Location` für Umleitungsfälle), Antworttext und
+   Verzögerung. Voraussichtlicher Ort für die End-to-End-Fälle: `tests/e2e/support/github-releases-stub.ts`.
+   Für die Integrationsfälle (`apps/local-api/test/**`, Hoheit unit-tester) genügt vermutlich ein
+   einfacherer, gleich gebauter Testserver ohne Playwright-Anbindung, dort angesiedelt.
+2. **Eine Art, den laufenden Dienst in Tests auf diese Attrappe statt auf das echte GitHub zu
+   lenken, ohne A-18.3 („Adresse … weder einstellbar noch aus einer Antwort übernehmbar") für den
+   Produktivbetrieb aufzuweichen.** Das ist eine Entscheidung, die in `packages/domain`/
+   `apps/local-api` fällt (T-138, domain-dev) und die ich als Testerin nicht treffen kann — siehe
+   „Offene Fragen" im Bericht. Naheliegend und mit E-064 vereinbar wäre eine Portschnittstelle nach
+   dem Vorbild von `packages/storage`: Die Produktiv-Verdrahtung hält die feste Adresse als
+   Konstante; ein Konstruktionsparameter erlaubt ausschließlich dem Testaufbau, vor dem Start eine
+   andere Quelle einzusetzen — kein Regler, keine Einstellung, kein zur Laufzeit lesbarer
+   Umgebungswert, den ein anderer Prozess auf `127.0.0.1` umlegen könnte. Bis diese Entscheidung
+   fällt, bleiben alle netzwerkbezogenen Fälle unten auf „geplant, nicht ausführbar" stehen.
+3. **Für TP-VER-13/-14c (der Öffnen-Befehl):** `shell-shim.ts` kennt heute vier Befehle
+   (`takt_service_handshake`, `takt_os_user`, `takt_shell_state`, `takt_quit`); der Öffnen-Befehl
+   für die Release-Seite (Name aus T-139, voraussichtlich ein `invoke('plugin:shell|open', …)` über
+   `tauri-plugin-shell` oder ein eigener Tauri-Befehl) ist darin **nicht** nachgebildet — ein
+   Klick auf „Installieren" würde gegen die heutige Nachbildung mit „kennt den Befehl nicht"
+   scheitern. Diese Erweiterung liegt in `tests/e2e/support/**`, also meiner eigenen Hoheit, ist
+   aber nicht Teil dieser Aufgabe (keine `.spec.ts`, kein Support-Code in T-137) und gehört in die
+   Aufgabe, die die tatsächlichen Playwright-Dateien dieses Abschnitts anlegt.
+
+**Einzige Ausnahme von alldem: die Ordnung der Fassungen selbst (`TP-VER-15` bis `TP-VER-23`).**
+Sie kennt kein HTTP, keine Hülle, kein Netzwerk — reine Fachlogik mit zwei Zeichenketten als
+Eingabe. Dieser eine Teil ist ab T-138 sofort lauffähig, ohne jede Attrappe.
+
+### Testdaten für diesen Abschnitt (Konvention, keine Dateien angelegt)
+
+GitHub-Antworten der Attrappe verwenden einen erfundenen Bestandsnamen (z. B.
+`beispiel-organisation/takt-testfixture`, niemals den tatsächlichen Namen des Takt-Bestands) und
+erfundene Fassungsbezeichnungen. Die installierte Fassung in Testfällen ist ebenfalls erfunden und
+folgt nicht notwendig der tatsächlichen Zahl in `tauri.conf.json` zum jeweiligen Zeitpunkt (laut
+E-065 heute `0.0.0`). Vorgeschlagener Ordner, sobald Fixtures entstehen: `tests/fixtures/github-releases/`.
+
+---
+
+### TP-VER-01 bis TP-VER-06 — Die Fehlschlag-Familie: still, mit Grund im Protokoll (A-18.11)
+
+**Anforderungen (für alle sechs):** A-18.11. **Ebene:** Integration (`apps/local-api/test/**`,
+Hoheit unit-tester, Teil von T-140). **Lauffähigkeit:** wartet auf die Attrappen-Entscheidung oben.
+
+**Gemeinsame Vorbedingung:** Lokaler Dienst läuft gegen die konfigurierbare GitHub-Attrappe statt
+gegen das echte GitHub. Protokollausgabe des Dienstes wird mitgeschnitten.
+
+**Gemeinsame Schritte:**
+1. Attrappe auf die in der Tabelle beschriebene Antwort einstellen.
+2. Versionsprüfung auslösen (Start des Dienstes oder der wiederkehrende Prüflauf, je nachdem, wie
+   T-138 den Auslöser baut).
+3. Antwort der Prüf-Route an die Oberfläche und mitgeschnittenes Protokoll beobachten.
+
+**Gemeinsame Erwartung:** Die Prüf-Route liefert an die Oberfläche dasselbe wie „keine neuere
+Fassung" (kein von außen sichtbarer Unterschied zu `TP-VER-08`) — **kein** Fehlerfeld, **kein**
+zweiter Antworttyp, den die Oberfläche als Fehlermeldung rendern könnte. Das Protokoll enthält
+genau einen Eintrag mit dem jeweiligen Grund. Kein zweiter Versuch läuft im selben Aufruf (dazu
+gesondert `TP-VER-07`).
+
+| ID | Antwort der Attrappe | Grund im Protokoll (Beispieltext, Wortlaut ist T-138) |
+|---|---|---|
+| TP-VER-01 | Verbindung abgelehnt bzw. Zeitüberschreitung (Attrappe antwortet nicht) | „GitHub nicht erreichbar" |
+| TP-VER-02 | `200 OK`, Körper `<html>Service Unavailable</html>` (kein JSON) | „Antwort nicht auswertbar" |
+| TP-VER-03 | `200 OK`, leerer Körper (0 Bytes) | „Antwort leer" |
+| TP-VER-04 | `200 OK`, gültiges JSON-Objekt ohne jedes Fassungsfeld (`{"id": 1}`) | „Fassungsangabe fehlt" |
+| TP-VER-05 | `200 OK`, Fassungsfeld vorhanden, aber unsinnig — je ein Unterfall: `"banana"`, `""`, `null`, `42` (Zahl statt Zeichenkette), `"1.2.3.4.5.6.7"` | „Fassungsangabe ungültig" |
+| TP-VER-06 | `404 Not Found` auf die Einzelabfrage bzw. `200 OK` mit leerer Liste `[]` auf die Listenabfrage — **welche Form zutrifft, hängt davon ab, ob T-138 `/releases/latest` oder `/releases` befragt; offene Frage an den Orchestrator, siehe Bericht** | „keine Veröffentlichung vorhanden" |
+
+### TP-VER-07 — Kein wiederholter Versuch im selben Lauf
+**Anforderungen:** A-18.11 („kein wiederholtes Nachfragen im selben Lauf"). **Ebene:** Integration
+(T-140). **Lauffähigkeit:** wie oben.
+**Vorbedingung:** Attrappe wie `TP-VER-01` (nicht erreichbar), zusätzlich zählt sie jede
+eingehende Anfrage.
+**Schritte:** Prüfung auslösen; anschließend, ohne die Anwendung neu zu starten, ein zweites
+Ereignis auslösen, das in einer normalen Sitzung ebenfalls eine Prüfung anstoßen könnte (genauer
+Auslöser ist T-138/T-139 — hier zählt nur: irgendein Ereignis, das **kein** ausdrücklicher
+Neustart ist).
+**Erwartetes Ergebnis:** Die Attrappe zählt genau **einen** Aufruf für den gesamten Lauf. Der in
+A-18.2 gemeinte wiederkehrende Prüfrhythmus ist etwas anderes als ein Retry nach einem
+Fehlschlag; dieser Fall prüft ausdrücklich nur Letzteres.
+
+---
+
+### TP-VER-08 — Bereits aktuell: Takt sagt nichts (A-18.5, Gleichstand)
+**Anforderungen:** A-18.4, A-18.5. **Ebene:** Integration (Dienstantwort), mit **Ergänzendem
+End-to-End-Spotcheck**. **Lauffähigkeit:** wartet auf die Attrappen-Entscheidung; der
+End-to-End-Teil zusätzlich auf einen laufenden Dienst im Playwright-Aufbau (kein Öffnen-Befehl
+im Spiel, `shell-shim.ts` muss dafür nicht erweitert werden).
+**Vorbedingung:** Attrappe meldet exakt dieselbe Fassung wie die installierte (z. B. beide
+`0.4.0`).
+**Schritte:** Prüfung auslösen; Antwort der Prüf-Route lesen; danach die Oberfläche vollständig
+laden.
+**Erwartetes Ergebnis:** Die Prüf-Route liefert kein „neuere Fassung verfügbar"-Signal. In der
+Oberfläche erscheint **kein** Dialog, **kein** Badge, **kein** Toast, **keine** Konsolenmeldung —
+buchstäblich keine sichtbare oder messbare Spur (das ist der Fall, „in dem am leichtesten
+unbemerkt eine Meldung erscheint"). Der End-to-End-Spotcheck prüft das über Negativ-Zusicherungen
+(`expect(page.getByRole('dialog')).toHaveCount(0)` bzw. äquivalent für `alertdialog`, plus eine
+Zugriffsbaum-Momentaufnahme vor und nach dem Prüflauf, die exakt gleich sein muss) — nicht über
+das bloße Fehlen eines erwarteten Elements, das ein falsches Selektor-Ziel verdecken könnte.
+
+### TP-VER-09 — Installierte Fassung ist neuer als jede veröffentlichte: ebenfalls Stille
+**Anforderungen:** A-18.4, A-18.5, E-065. **Ebene:** Integration. **Lauffähigkeit:** wie `TP-VER-08`.
+**Vorbedingung:** Attrappe meldet eine **niedrigere** Fassung als die installierte (z. B.
+installiert `1.3.0`, Attrappe meldet `1.2.0`) — der Fall einer lokalen Entwicklungs- oder
+Vorabfassung, die noch nicht veröffentlicht ist.
+**Schritte:** wie `TP-VER-08`.
+**Erwartetes Ergebnis:** wie `TP-VER-08`. Eigener Fall, weil ein Vergleich, der nur auf
+Ungleichheit statt auf „neuer als" prüft, hier fälschlich anschlagen würde — „nicht gleich" ist
+nicht dasselbe wie „neuer". Gegenstück zu E-065s Feststellung, dass `0.0.0` als installierte
+Fassung jede veröffentlichte Fassung als neuer erscheinen lässt: Wo E-065 die eine Richtung
+beschreibt, prüft dieser Fall die andere.
+
+---
+
+### TP-VER-10 — Neuere Fassung vorhanden: der Dialog nennt alle drei Angaben (A-18.6, A-18.7)
+**Anforderungen:** A-18.6, A-18.7. **Ebene:** End-to-End. **Lauffähigkeit:** bevorzugt gegen den
+echten Dienst und die echte Attrappe (Konsistenz mit der übrigen „kein Attrappen-Server"-Linie,
+siehe oben); geht das in der bauenden Welle aus Zeitgründen nicht auf, ist als schwächere
+Ausweichlösung eine `page.route()`-Abfangung der **ersten** Partei denkbar (Browser ↔
+`127.0.0.1:17843`, nicht Dienst ↔ GitHub) — das prüft dann nur noch den Dialog selbst, nicht mehr
+den Weg dorthin; als Notlösung benannt, nicht empfohlen.
+**Vorbedingung:** Attrappe/Route meldet eine höhere Fassung als installiert, inklusive Verweis auf
+die Release-Seite dieser Fassung.
+**Schritte:** Prüfung auslösen; Dialog öffnet sich; Text und Struktur lesen; Fokusziel beim Öffnen
+feststellen; prüfen, ob einer der beiden Knöpfe „Installieren"/„Überspringen" optisch oder über
+den Standard-Fokus bereits als gewählt erscheint.
+**Erwartetes Ergebnis:** Der Dialog zeigt mindestens: die installierte Fassung, die verfügbare
+Fassung, den Verweis auf die offizielle Release-Seite dieser (neuen) Fassung — als lesbaren Text
+oder Verweisziel, nicht nur implizit über den Knopf „Installieren". Beide Knöpfe sind vorhanden
+und gleichrangig dargestellt; **keiner** trägt eine Vorauswahl (A-18.7 wörtlich: „keine
+Vorauswahl, die eine der beiden Antworten für ihn trifft") — weder über eine hervorgehobene
+Standardfarbe noch über einen Fokus, der ein bloßes `Enter` bereits zur Installation machen würde.
+
+### TP-VER-11 — „Überspringen": stumm, auch nach geleertem Browserspeicher und Neustart (A-18.10, R-20)
+**Anforderungen:** A-18.10, R-20. **Ebene:** End-to-End. **Lauffähigkeit:** braucht zusätzlich zur
+Attrappe eine Neustart-Fähigkeit, die es in `tests/e2e/support/**` heute nicht gibt (kein
+`restart`/`relaunch`-Helfer — geprüft, kein Treffer im Bestand). Muss beim Schreiben der
+tatsächlichen `.spec.ts`-Datei ergänzt werden.
+**Vorbedingung:** Dialog aus `TP-VER-10` ist offen für Fassung `9.9.9` (erfunden).
+**Schritte:**
+1. „Überspringen" klicken. Dialog schließt sich.
+2. **Stufe 1, Mindestnachweis:** Browserspeicher vollständig leeren (`localStorage.clear()`,
+   `sessionStorage.clear()`, Cookies löschen), danach die Seite neu laden (`page.reload()`), ohne
+   den Dienst neu zu starten, Attrappe unverändert auf Fassung `9.9.9`.
+3. **Stufe 2, starker Nachweis:** zusätzlich den lokalen Dienst selbst beenden und neu starten
+   (echter Prozess-Neustart über eine um Stop/Start erweiterte `services.ts` — noch nicht
+   vorhanden), damit auch ausgeschlossen ist, dass „übersprungen" nur im Arbeitsspeicher des
+   Dienstes stand (CLAUDE.md: „nicht im Arbeitsspeicher und nicht im Browserspeicher").
+**Erwartetes Ergebnis:** Nach beiden Stufen erscheint der Dialog für Fassung `9.9.9` **nicht**
+wieder — weder unmittelbar nach dem Leeren des Browserspeichers (Stufe 1, schließt den
+Browserspeicher als Träger aus) noch nach dem Prozess-Neustart (Stufe 2, schließt zusätzlich den
+Arbeitsspeicher des Dienstes aus). Dieser Fall misst ausdrücklich **nicht** nur das Schließen des
+Dialogs — genau die Verwechslung, vor der die Aufgabenstellung warnt.
+
+### TP-VER-12 — Eine später erschienene, höhere Fassung meldet sich trotz Überspringens (A-18.10)
+**Anforderungen:** A-18.10. **Ebene:** End-to-End. **Lauffähigkeit:** wie `TP-VER-11`.
+**Vorbedingung:** wie `TP-VER-11` nach Stufe 2 (Fassung `9.9.9` übersprungen, Dienst neu
+gestartet).
+**Schritte:** Attrappe auf eine höhere Fassung umstellen (z. B. `9.10.0` — bewusst der
+Ziffernlängen-Fall aus `TP-VER-15`, nicht `10.0.0`, damit ein Zeichenkettenvergleich auch hier
+hätte scheitern können); Prüfung erneut auslösen.
+**Erwartetes Ergebnis:** Der Dialog erscheint jetzt für `9.10.0`, mit derselben Erwartung wie
+`TP-VER-10`. Das Überspringen einer Fassung überspringt nicht die Prüfung selbst (E-064 Punkt 5
+wörtlich).
+
+### TP-VER-13 — „Installieren": Release-Seite öffnet sich, nichts wird geladen (A-18.8, A-18.9)
+**Anforderungen:** A-18.8, A-18.9. **Ebene:** End-to-End. **Lauffähigkeit:** braucht die
+Erweiterung von `shell-shim.ts` um den Öffnen-Befehl (siehe oben) — heute nicht vorhanden.
+**Vorbedingung:** Dialog wie `TP-VER-10` offen für eine erfundene Fassung mit erfundener
+Release-Adresse (z. B. `https://github.com/beispiel-organisation/takt-testfixture/releases/tag/v9.9.9`).
+**Schritte:** `context.on('download', …)` und `context.on('page', …)` (neue Tabs/Fenster)
+registrieren, bevor geklickt wird; „Installieren" klicken; die von der Hüllen-Nachbildung
+aufgezeichnete Aufruf-Nutzlast des Öffnen-Befehls lesen.
+**Erwartetes Ergebnis:** Die Hüllen-Nachbildung zeichnet genau einen Aufruf des Öffnen-Befehls auf,
+dessen Adresse mit der erwarteten Release-Adresse übereinstimmt. Über die gesamte Interaktion
+feuert **kein** `download`-Ereignis und öffnet sich **keine** neue Seite im von Playwright
+kontrollierten Kontext (die eigentliche Öffnung geht — korrekt — an der Webview-Ebene vorbei über
+die Hülle; die Aufzeichnung der Hüllen-Nachbildung ist deshalb der eigentliche Nachweis, die
+Ereigniswache nur die Gegenprobe, dass innerhalb des Webviews zusätzlich nichts passiert).
+
+---
+
+### TP-VER-14 — Gegenprobe zu A-18.9: der Nachweis, dass **kein** Weg zu einem Download führt
+
+Die Aufgabenstellung benennt die Lücke selbst: „Ein Fall, der nur zeigt, dass der eine Knopf
+nichts lädt, beweist das nicht." `TP-VER-13` zeigt genau das — einen bekannten Knopf, beobachtet.
+Der Nachweis für die Abwesenheit jedes **anderen**, heute noch nicht existierenden Weges kann kein
+Verhaltenstest gegen eine einzelne Bedienung sein; er braucht einen Blick auf **jede** Stelle im
+Quelltext, die technisch in der Lage wäre, etwas herunterzuladen oder auszuführen — genau die
+Bauart, die der Bestand mit `proof:*` bereits kennt (`proof:route-policy`, `proof:db-permissions`,
+`proof:addin` u. a.: je ein Skript, das eine Untergrenze oder eine Vollständigkeitsaussage über den
+**gesamten** Baum misst, nicht eine Stichprobe). Vorschlag, drei sich ergänzende Nachweise, keinen
+davon baue ich selbst — außerhalb meiner Hoheit dieser Welle, zwei der drei ohnehin unter
+`apps/desktop/**` (Hoheit frontend-dev):
+
+**a) Statischer Nachweis** (empfohlen: `proof:release-safety`, Ort `apps/desktop/scripts/` oder
+Wurzel, Hoheit frontend-dev/Orchestrator). Durchsucht `apps/desktop/src-tauri/src/**`,
+`apps/desktop/src/**` und den mit der Versionsprüfung befassten Teil von `apps/web/**` nach jedem
+Aufruf des Tauri-`shell`-Plugins (`open`, `execute`, `spawn`, `Command::new` im Rust-Anteil) und
+zählt sie. Erwartung: genau **ein** Aufrufort für `open` (der Öffnen-Befehl aus T-139), **null**
+für `execute`/`spawn`/`Command::new` im gesamten geprüften Teilbaum. Ein neuer, zweiter Aufrufort —
+gleich zu welchem Zweck — lässt den Nachweis rot werden, **bevor** ein Verhaltenstest ihn bemerken
+müsste. Zusätzlich: Der eine erlaubte Aufrufort nimmt nachweislich **keine** freie Zeichenkette
+entgegen, die aus einer Netzwerk-Antwort stammen könnte, sondern ausschließlich das Ergebnis einer
+eng geprüften Fassungsbezeichnung, die in eine im Erzeugnis fest hinterlegte Adresse eingesetzt
+wird (E-064 Punkt 4 wörtlich: „Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen ist
+verboten") — dieselbe Prüfbauart wie `proof:addin` Abschnitt 17, das die eine erlaubte Rohquelle im
+ganzen Baum sucht.
+
+**b) Dynamischer Aufrufzähler über den gesamten Testlauf** (Ebene Integration, T-140,
+unit-tester). Eine Attrappe des `shell`-Plugins zählt über **alle** TP-VER-Fälle hinweg (nicht nur
+`TP-VER-13`), wie oft `open` bzw. `execute`/`spawn` aufgerufen wird. Erwartung am Ende des gesamten
+Laufs: `execute`/`spawn` **nie**, `open` **höchstens einmal je tatsächlichem Klick auf
+„Installieren"** — insbesondere **nicht** bei den Fehlschlag-Fällen (`TP-VER-01` bis `-07`),
+**nicht** bei Stille (`TP-VER-08`/`-09`) und **nicht** beim bloßen Öffnen des Dialogs (`TP-VER-10`)
+vor jedem Klick.
+
+**c) Netzwerk- und Ereigniswache über den gesamten End-to-End-Lauf dieses Abschnitts** (Ebene
+End-to-End, künftige e2e-Aufgabe). `context.on('download', …)` wird **einmal** für die gesamte
+Testdatei registriert, nicht je Fall — jeder Treffer über die gesamte Laufzeit lässt die Datei
+fehlschlagen. Ergänzend gehört hierher, sobald T-138 die genaue Obergrenze der gelesenen Antwort
+(E-064 Punkt 6) festlegt, ein eigener Integrationsfall (**„TP-VER-14c-Obergrenze"**, keine eigene
+Nummer, weil er dieselbe Vorbedingung wie `TP-VER-01`–`06` teilt und in deren Familie gehört): die
+Attrappe bietet absichtlich eine überlange Antwort an, und der Dienst muss bei der Obergrenze
+abschneiden statt sie vollständig zu lesen.
+
+**Ebene (Gesamtfall):** gemischt, siehe a/b/c. **Erwartetes Ergebnis (Gesamtfall):** Alle drei
+Nachweise bestehen gemeinsam. Keiner allein genügt — a) beweist die strukturelle Abwesenheit,
+findet aber nichts, was zur Laufzeit falsch verdrahtet ist; b) und c) beweisen das
+Laufzeitverhalten für die tatsächlich gebauten und geprüften Fälle, finden aber nichts, was nur in
+einem hier nicht geprüften Pfad passiert.
+
+---
+
+### TP-VER-15 bis TP-VER-22 — Die Ordnung der Fassungen (A-18.4): Zeichenkettenvergleich muss scheitern
+
+**Anforderungen (für alle acht):** A-18.4, E-065. **Ebene:** Unit (`packages/domain/test/**`,
+Hoheit unit-tester, Teil von T-140). **Lauffähigkeit:** als einziger Fall dieses gesamten
+Abschnitts **ohne** jede Attrappe lauffähig, sobald T-138 die Ordnungsfunktion liefert — reine
+Fachlogik, kein HTTP, kein Netzwerk, keine Hülle.
+
+**Gemeinsame Vorbedingung:** Ordnungsfunktion der Fachlogik ist aufrufbar (z. B.
+`vergleicheFassungen(a: string, b: string): -1 | 0 | 1` oder gleichwertige Signatur, Name aus
+T-138) und liefert zusätzlich — oder eine zweite Funktion tut das — die Regel aus E-064 Punkt 3:
+„neuer **und** nicht übersprungen".
+
+**Gemeinsame Schritte:** Ordnungsfunktion mit dem Paar aus der Tabelle aufrufen; Ergebnis mit der
+Erwartung vergleichen. Zusätzlich, wo sinnvoll: dieselbe Prüfung mit vertauschten Argumenten, um
+auszuschließen, dass die Funktion nur in einer Richtung korrekt implementiert ist.
+
+| ID | Installiert | Veröffentlicht | Erwartung | Warum ein Zeichenkettenvergleich hier scheitert |
+|---|---|---|---|---|
+| TP-VER-15 | `0.9.0` | `0.10.0` | veröffentlicht ist neuer | `"0.10.0" < "0.9.0"` als Zeichenkette (`1` vor `9`) — der Fall aus der Aufgabenstellung wörtlich |
+| TP-VER-16 | `0.10.0` | `0.9.0` | installiert ist neuer (keine Meldung) | Umkehrung von `TP-VER-15`, prüft dieselbe Falle in der anderen Richtung |
+| TP-VER-17 | `1.2.3` | `1.2.3` | gleich, **keine** Meldung | Gleichheit ist ein eigener, dritter Ausgang, kein Sonderfall einer der beiden Richtungen |
+| TP-VER-18 | `1.2.3` | `v1.2.3` | gleich trotz führendem `v`, **keine** Meldung | GitHub-Tags tragen häufig ein führendes `v`; ein reiner Zeichenkettenvergleich sieht zwei verschiedene Werte |
+| TP-VER-19 | `v1.9.0` | `v1.10.0` | veröffentlicht ist neuer | derselbe Ziffernlängen-Fall wie `TP-VER-15`, zusätzlich mit führendem `v` auf beiden Seiten |
+| TP-VER-20 | `1.0.0` | `1.0.0-beta.1` | installiert ist neuer (keine Meldung) | eine Vorabfassung derselben Kernversion gilt als älter als die fertige Fassung — **Annahme, nicht wörtlich durch A-18.4 festgelegt**, siehe „Offene Fragen" im Bericht |
+| TP-VER-21 | `1.0.0-beta.2` | `1.0.0-beta.10` | veröffentlicht ist neuer | derselbe Ziffernlängen-Fall wie `TP-VER-15`, diesmal innerhalb der Vorab-Kennzeichnung selbst |
+| TP-VER-22 | `0.0.0` | `0.4.1` | veröffentlicht ist neuer | Regressionsanker zu E-065: „Solange `0.0.0` steht, ist jede veröffentlichte Fassung neuer … das ist richtig so und keine Fehlfunktion" — wörtliches Zitat als Testerwartung, kein erfundener Wert |
+
+### TP-VER-23 — Unsinnige Eingaben in die Ordnungsfunktion selbst
+**Anforderungen:** A-18.4, A-18.11. **Ebene:** Unit. **Lauffähigkeit:** wie oben, kein
+Sonderfall — eigener Fall statt einer weiteren Tabellenzeile, weil er keine Ordnung, sondern eine
+Ablehnung prüft.
+**Vorbedingung:** wie oben.
+**Schritte:** Ordnungsfunktion mit `"banana"`, `""`, `"1.2.3.4.5.6"`, `null`/`undefined` (je nach
+Typsignatur) als eine oder beide Seiten aufrufen.
+**Erwartetes Ergebnis:** Die Funktion wirft nicht unkontrolliert und liefert kein falsches
+„neuer"/„älter" — entweder ein drittes, ausdrückliches Ergebnis „nicht vergleichbar" oder einen
+kontrollierten Fehler, den der Aufrufer (die Route aus T-138) als „Fassungsangabe unsinnig"
+(`TP-VER-05`) in denselben stillen Fehlschlagpfad überführt wie jede andere unbrauchbare Antwort.
+Dieser Fall ist die Brücke zwischen `TP-VER-05` (Ebene Integration, prüft den Weg durch die Route)
+und der Ordnungsfunktion selbst (Ebene Unit): Er sorgt dafür, dass `TP-VER-05` überhaupt still
+bleiben kann, statt die Route abstürzen zu lassen.
+
+---
+
+### Drei ergänzende Fälle zur vollständigen Abdeckung von A-18.1, A-18.3 und A-18.12
+
+Nicht Teil der zehn in der Aufgabenstellung benannten Mindestfälle, aber Teil der zwölf
+Anforderungen aus Abschnitt 18 der Spezifikation — ohne sie fehlt A-18.1, A-18.3 und A-18.12 jede
+eigene Prüfung in diesem Dokument.
+
+### TP-VER-24 — Die installierte Fassung kommt aus genau einer Quelle (A-18.1, E-065)
+**Anforderungen:** A-18.1, E-065. **Ebene:** Build-Nachweis, kein Playwright — dieselbe Bauart wie
+`proof:migrations` (E-065 wörtlich: „wird sie beim Bauen abgeleitet und der Gleichlauf gemessen"),
+ergänzt um einen End-to-End-Spotcheck. **Lauffähigkeit:** wartet auf T-139 (Hülle liest
+`tauri.conf.json` zur Laufzeit); der Build-Nachweis selbst braucht keine laufende Anwendung.
+**Vorbedingung:** `apps/desktop/src-tauri/tauri.conf.json` trägt eine erfundene Testfassung
+(z. B. `9.9.9-e2e`), von einem anderen Wert als in jeder zweiten Datei, die eine Versionszahl
+führen könnte (`package.json`, `Cargo.toml`).
+**Schritte:** Anwendung starten; die in der Oberfläche angezeigte installierte Fassung (Dialog aus
+`TP-VER-10` oder eine andere Anzeigestelle, falls T-139 eine solche vorsieht) mit dem Wert aus
+`tauri.conf.json` vergleichen.
+**Erwartetes Ergebnis:** Der angezeigte Wert stimmt exakt mit `tauri.conf.json` überein, auch wenn
+`package.json`/`Cargo.toml` einen anderen (z. B. veralteten) Wert trügen — das beweist, dass die
+Oberfläche tatsächlich von dort liest und nicht von einer zweiten, mitgepflegten Stelle.
+
+### TP-VER-25 — Eine Umleitung auf einen fremden Wirt wird nicht gefolgt (A-18.3, E-064 Punkt 2, R-19)
+**Anforderungen:** A-18.3, A-18.11. **Ebene:** Integration (T-140). **Lauffähigkeit:** wartet auf
+die Attrappen-Entscheidung oben; die Attrappe muss zusätzlich `3xx`-Antworten mit einer
+`Location`-Kopfzeile ausgeben können.
+**Vorbedingung:** Attrappe antwortet mit `302 Found` und `Location: https://boesartig.example/payload`
+(erfundener Name).
+**Schritte:** Prüfung auslösen; beobachten, ob eine zweite ausgehende Anfrage an den fremden Wirt
+entsteht (z. B. über einen zweiten, unerwarteten Server, der jede Anfrage protokolliert und mit
+einem Fehler beantwortet, oder über eine Instrumentierung des HTTP-Clients).
+**Erwartetes Ergebnis:** Keine zweite Anfrage verlässt den Dienst. Die Umleitung wird nicht
+verfolgt; der Vorgang endet wie ein gewöhnlicher Fehlschlag (still, Grund im Protokoll — dieselbe
+Familie wie `TP-VER-01` bis `-06`).
+
+### TP-VER-26 — Die Anfrage überträgt nichts über Benutzer, Bestand oder Nutzung (A-18.12)
+**Anforderungen:** A-18.12. **Ebene:** Integration (T-140), dieselbe Bauart wie `TP-SEC-06`
+(Abschnitt 13), hier auf die ausgehende statt die eingehende Seite angewandt. **Lauffähigkeit:**
+wartet auf die Attrappen-Entscheidung oben; die Attrappe muss die vollständige eingehende Anfrage
+(Kopfzeilen und Körper) mitschneiden.
+**Vorbedingung:** Ein Testlauf mit realistischen Daten (Todos, Tags, ein Windows-Testbenutzername
+nach der Konvention im Kopf dieses Dokuments) im selben Bestand, aus dem heraus die Prüfung läuft.
+**Schritte:** Prüfung auslösen; die von der Attrappe mitgeschnittene Anfrage — Methode, Pfad,
+sämtliche Kopfzeilen, Körper — vollständig auf das Vorkommen des Windows-Testbenutzernamens, einer
+Todo- oder Tag-Bezeichnung, einer `callNumber` oder einer sonstigen aus dem Bestand stammenden
+Zeichenkette durchsuchen.
+**Erwartetes Ergebnis:** Kein Treffer. Die Anfrage enthält ausschließlich, was zum Abrufen der
+Veröffentlichungsliste nötig ist (Methode, Pfad, ein allgemeiner `User-Agent`, keine
+Kennung, die zwei Anfragen desselben Rechners miteinander verknüpfbar machen würde, über das für
+HTTP unvermeidliche Minimum hinaus).
+
+---
+
+### Zusammenfassung: Lauffähigkeit dieses Abschnitts
+
+| Fälle | Zusätzlich zu T-138/T-139 nötig | Wer baut die fehlende Voraussetzung |
+|---|---|---|
+| `TP-VER-15` bis `-23` (Ordnung, Unit) | nichts | — bereit, sobald T-138 die Funktion liefert |
+| `TP-VER-01`–`07`, `-25`, `-26` (Fehlschlagfamilie, Umleitung, Minimalität) | GitHub-Attrappe + Entscheidung, wie der Dienst im Test darauf zeigt | domain-dev (T-138) entscheidet, unit-tester (T-140) baut den Testserver |
+| `TP-VER-08`, `-09` (Stille), Integrationsteil | wie oben | wie oben |
+| `TP-VER-08`, `-09`, End-to-End-Spotcheck | wie oben, zusätzlich Playwright gegen den echten Dienst | e2e-tester, künftige Aufgabe |
+| `TP-VER-10` (Dialog) | wie oben | wie oben |
+| `TP-VER-11`, `-12` (Überspringen über Neustart) | wie oben, zusätzlich ein Neustart-Helfer in `tests/e2e/support/**` | e2e-tester, künftige Aufgabe |
+| `TP-VER-13` (Installieren) | Erweiterung von `shell-shim.ts` um den Öffnen-Befehl | e2e-tester, künftige Aufgabe |
+| `TP-VER-14a` (statischer Nachweis) | neues `proof:release-safety` | frontend-dev/Orchestrator |
+| `TP-VER-14b` (Aufrufzähler) | Attrappe des `shell`-Plugins, Integrationsebene | unit-tester (T-140) |
+| `TP-VER-14c` (Ereigniswache) | wie `TP-VER-13` | e2e-tester, künftige Aufgabe |
+| `TP-VER-24` (eine Quelle) | Build-Nachweis, kein Playwright | frontend-dev (T-139) |
+
+Kein einziger Fall dieses Abschnitts ist heute ausführbar. Das ist keine Lücke dieses Plans,
+sondern der erwartete Zustand einer Aufgabe, die ausdrücklich vor dem Bau steht.

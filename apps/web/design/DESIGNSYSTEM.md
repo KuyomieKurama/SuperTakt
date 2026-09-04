@@ -66,6 +66,16 @@ Zustand; die Einleitung oben auf der Seite erklärt sie ohne Vorwissen.
   auf 272px. Neue Regel 11.
 * Kein Token geändert, keine Typografie: 376 Kontrastpaare, 0 durchgefallen.
 
+**Was T-139 geändert hat**
+
+* **Der Hinweis auf eine neuere Fassung hat eine Darstellung** — mit einem Dialog, der keine
+  seiner beiden Antworten im Voraus trifft, und mit einem Zustand, der ausdrücklich nichts
+  zeigt — Abschnitt 12.
+* **Der Verweis ist ein Knopf, kein `<a href>`.** Ein Anker trüge den Webview selbst nach
+  github.com; einen Wächter über Navigationen gibt es in der Hülle nicht. Neue Regel 15.
+* Kein Token geändert, keine Typografie, keine neue CSS-Klasse: 432 Kontrastpaare, 0
+  durchgefallen.
+
 ```
 pnpm install      # an der Wurzel des Arbeitsbereichs, nicht in apps/web
 pnpm dev          # http://127.0.0.1:5173
@@ -628,6 +638,7 @@ an dem nichts zu tun ist.
 | Baumansicht | genau ein Tabulator-Halt, darin Pfeiltasten, Pos1, Ende, `*` klappt alles auf |
 | Dialog | Fokus springt hinein, Tabulator bleibt gefangen, Escape bricht ab, Fokus kehrt zum Auslöser zurück |
 | Kanban | Kein Verschieben und keine Sondertasten (E-054). Jede Karte ist über Tabulator erreichbar; ihr Kartenmenü führt zu Detailansicht, Timer und Status |
+| Kanban-Spaltenkopf | Ein Menü je Spalte („Spalte „X“ verwalten“): Todo anlegen, **Umbenennen**, Regel bearbeiten, Todos in der Liste, vom Board nehmen. Dieselben fünf Einträge stehen als Schaltflächen im Dialog „Spalten des Boards“ (T-133, O-A) |
 | Tag-Baum | Ziehen ist die schnelle Art; die vollständige ist auswählen und „Verschieben“ (Dialog mit Zielordner) |
 | Exportvorlage | Ziehen ordnet die Felder um; dieselbe Umordnung leisten die Pfeilknöpfe „nach oben“ und „nach unten“ an jeder Feldzeile |
 | Tabelle | Sortierknöpfe mit `aria-sort`, Auswahlkästchen mit `indeterminate` für die Kopfzeile |
@@ -793,7 +804,7 @@ damit der einzige, in dem eine modale Sperre richtig ist. Der Dialog hat eine be
 Schaltfläche, die den Zustand auflöst („Takt beenden“); ohne sie wäre er eine Tastaturfalle
 (SC 2.1.2). Escape schließt ihn nicht.
 
-**Drei Regeln, die daraus folgen:**
+**Fünf Regeln, die daraus folgen:**
 
 1. **Kein Wert aus `osUser()` gehört in eine dieser Meldungen.** Die Hülle prüft ausdrücklich,
    dass ihre Sätze den Benutzernamen nicht wiedergeben; eine Oberfläche, die ihn danebenschreibt,
@@ -809,6 +820,14 @@ Schaltfläche, die den Zustand auflöst („Takt beenden“); ohne sie wäre er 
    trägt den Grund als Nutzlast. Eine Sperrmeldung, die auf den nächsten Abruf wartet, sperrt
    nichts — sie beschreibt hinterher, und dazwischen arbeitet der Benutzer weiter, ohne dass
    etwas gespeichert wird.
+5. **Der einzige Ausgang sagt es, wenn er nicht wirkt** (O-AF, T-124; nachgemessen in T-133).
+   „Takt beenden“ ist der einzige Weg aus der Sperrmeldung. Sein Erfolgsfall ist das Ende des
+   eigenen Prozesses — die Zusage aus `takt_quit` kommt danach **nie** zurück. Ein Fehlschlag
+   ist deshalb nicht „die Zusage wird abgewiesen“, sondern „es geschieht nichts“, und auf nichts
+   kann man nicht warten. `useQuitAttempt` macht mit einer Frist von fünf Sekunden aus dem
+   Ausbleiben ein Ereignis, und die Auskunft steht **im Feld selbst** (`.quitfail`,
+   `role="status"`, immer im Baum) und nicht im Meldungsstapel: Der liegt seit T-110 hinter der
+   Abdunklung, solange ein Dialog steht — die Sperrmeldung würde ihn also gar nicht zeigen.
 
 Lebend nachvollziehbar auf der Musterseite, Abschnitt 10: Jeder Zustand lässt sich einzeln und
 in Kombination einschalten.
@@ -835,7 +854,8 @@ Vollständig und aktuell auf der Musterseite, Abschnitt 11. Kurzfassung:
 | Menü, Kontextmenü | `Menu.tsx` | S-02, S-04, S-06, S-08 |
 | Bestätigungsdialog | `ConfirmDialog.tsx` | S-03, S-04, S-06, S-07, S-08, S-09 |
 | Filterleiste, Suchfeld, Auswahlliste, Filterschalter | `FilterBar.tsx` | global, S-02, S-06, S-07, S-09, S-14 |
-| Startmeldung, Datenordner-Hinweis, Sperrmeldung | `ShellStatus.tsx` | global, vor jeder Ansicht |
+| Startmeldung, Datenordner-Hinweis, Sperrmeldung, „Takt beenden“ samt Auskunft bei Fehlschlag | `ShellStatus.tsx` | global, vor jeder Ansicht |
+| Exportordnerfeld: Auswahldialog mit Textfeld als Rückfallweg | `ExportDirectoryField.tsx` | S-09 |
 | Fokusführung modaler Flächen (keine Darstellung) | `lib/focus.ts` | `ConfirmDialog.tsx`, `ShellStatus.tsx` |
 | Wert zu Beschriftung (keine Darstellung) | `lib/labels.ts` | alle |
 | Symbolsatz | `Icon.tsx` | alle |
@@ -882,3 +902,115 @@ Seitennavigation (global).
 12. **Ein Bedienweg je Einstellung.** Dieselbe Einstellung an zwei Stellen bedienbar zu machen
    kostet zweimal Pflege und stiftet einmal Zweifel, welche der beiden gilt. Wenn ein zweiter
    Weg unvermeidlich ist, teilen sich beide **einen** Zustand — nie zwei (T-057, T-065).
+
+   *Benannte Ausnahme, T-133:* Der **Name einer Regel** lässt sich an zwei Stellen ändern — im
+   Regelformular (`PoolFormDialog`, zusammen mit den fünf Achsen) und im eigenen Dialog
+   `PoolRenameDialog`. Der Zustand ist trotzdem **einer**: Beide lesen `pool.name` aus der
+   Struktur und schreiben über `PATCH /pools/{poolId}`; es gibt keinen zwischengespeicherten
+   zweiten Wert. Der zweite Weg ist nicht Bequemlichkeit, sondern die Behebung von O-A: Bis
+   T-133 war der einzige Weg zum Namen ein Formular mit acht Abschnitten, das beim Speichern
+   **alle** Achsen neu schreibt — für die Änderung eines Wortes. Wer nur umbenennt, schickt
+   jetzt `{ name }` und sonst nichts.
+
+13. **Ein Ausgang, dessen Scheitern niemand sieht, ist kein Ausgang** (T-133, O-AF-Klasse).
+   Wo eine Fläche genau **einen** Weg nach vorne hat, gehört der Fehlschlag dieses Weges auf
+   dieselbe Fläche — nicht in eine Meldung daneben, die die Fläche womöglich verdeckt oder gar
+   nicht zeigt. Betroffen sind drei Stellen, und alle drei tragen ihre Auskunft heute selbst:
+   die Sperrmeldung und die Meldung zum Benutzernamen („Takt beenden“, Abschnitt 9 Regel 5), der
+   Dialog zur verwaisten Buchung (`dialogError`) und das **Exportordnerfeld**: Scheitert der
+   Auswahldialog des Betriebssystems, tritt das Textfeld an seine Stelle und nennt den Grund.
+   Bis T-133 lief dort eine Zusage ohne `catch` ins Leere — der Knopf reagierte auf nichts, und
+   das Textfeld erschien nie. Wer eine Zusage mit `void` verwirft, beantwortet vorher die Frage:
+   *Was sieht der Benutzer, wenn sie abgewiesen wird?*
+
+14. **Die Herkunft eines Textes steht in seinem Typ, auch hinter einem `unknown`** (E-063
+   Punkt 6, T-129; erweitert in T-133 um O-AT). `api/types.ts` kennt kein nacktes `string`
+   mehr: Jedes Feld heißt `ForeignText`, `DraftText`, `ServiceText`, `TechnicalKey`,
+   `FileSystemPath`, `ColorValue`, `PageCursor` oder `SecretText`. Wo ein Feld ausdrücklich
+   `unknown` ist — `ExportTemplate.definition`, weil das Vorlagenformat dem Motor gehört, und
+   seit T-139 `VersionCheckView.latestVersion`, weil dieser Wert aus der Antwort von GitHub
+   stammt —, führt der Weg zu angezeigtem Text über **eine** erklärte Übergangsstelle
+   (`foreignTextFrom` in `lib/foreign.ts`): `unknown` hinein, fremder Text heraus. Und die
+   Marke überlebt auch eine **Sammlung**: `namen.join(", ")` gilt als fremder Wert, weil sie
+   sonst genau dort abfiele, wo niemand hinsieht. Gemessen wird das alles von
+   `scripts/proof-foreign.mjs` — vierzehn Prüfungen in sechs Abschnitten, keine davon mit einer
+   Liste von Feld- oder Funktionsnamen.
+
+15. **Ein Verweis nach außen ist ein Knopf, kein `<a href>`** (T-139, A-V-18). Die Oberfläche
+   läuft im Webview der Hülle, und über Navigationen wacht dort **niemand**: Ein Anker auf
+   github.com trüge den Benutzer aus seiner Anwendung in ein Fenster ohne Adresszeile. Der
+   einzige Weg nach außen führt über einen Befehl der Hülle, und der nimmt **keine Adresse**
+   entgegen, sondern die Fassungsbezeichnung (Abschnitt 12). Die Adresse darf danebenstehen —
+   als Text, damit man sie liest, bevor man klickt.
+
+---
+
+## 12. Wenn eine neuere Fassung vorliegt (A-18, T-139)
+
+Takt fragt bei GitHub nach neueren Fassungen und **fragt den Benutzer**, was geschehen soll. Es
+lädt nichts herunter und installiert nichts, zu keinem Zeitpunkt (A-18.9). Der Dialog ist die
+einzige Fläche dieser Funktion.
+
+### 12.1 Der Zustand, der nichts zeigt — und das ist der Normalfall
+
+Sechs Lagen führen zu genau demselben Bild, nämlich zu keinem:
+
+| Lage | Was erscheint |
+|---|---|
+| Die installierte Fassung ist aktuell | nichts |
+| Die installierte Fassung ist neuer als die veröffentlichte | nichts |
+| Diese Fassung wurde übersprungen | nichts |
+| Es wurde noch nicht geprüft | nichts |
+| GitHub war nicht erreichbar oder antwortete unbrauchbar | nichts |
+| Takt läuft ohne seine Anwendungshülle | nichts |
+
+Kein Abzeichen, keine Meldung, keine Fehlerfläche, kein „Prüfung fehlgeschlagen“ (A-18.5,
+A-18.11). Der Grund steht im Protokoll des Dienstes, und dort gehört er hin: Ein Fehlschlag, der
+den Benutzer bei seiner Arbeit nicht behindert, ist keine Meldung wert — und wer gelernt hat,
+eine Meldung ungelesen wegzuklicken, klickt auch die weg, die zählt (R-20).
+
+Umgesetzt ist das an einer Stelle: `app/UpdateNotice.tsx` gibt `null` zurück, wenn nichts zu
+melden ist. Es gibt keinen leeren Behälter, der auf Inhalt wartet.
+
+### 12.2 Der Dialog — drei Angaben, zwei Antworten, keine Vorauswahl
+
+Er nennt **die installierte Fassung, die verfügbare Fassung und die Release-Seite dieser
+Fassung** (A-18.6), letztere als lesbaren Text in Festbreitenschrift. Darunter stehen zwei
+Knöpfe: „Installieren“ und „Überspringen“.
+
+Beide tragen dieselbe Gestalt (`secondary`), und der Fokus liegt beim Öffnen **auf dem Dialog**
+und nicht auf einem der Knöpfe. Das ist die eine Stelle, an der dieser Dialog bewusst von
+Abschnitt 8 abweicht: Der Bestätigungsdialog hebt seinen rechten Knopf hervor und stellt den
+Fokus hinein — hier wäre genau das die Vorauswahl, die A-18.7 verbietet, und zwar für die
+Antwort, die den Benutzer aus der Anwendung heraus zu einer **unsignierten** Datei führt.
+
+Escape und der Schließknopf beantworten nichts. Sie stellen den Hinweis für diesen Lauf zurück;
+beim nächsten Start steht er wieder da. Nur „Überspringen“ wird gespeichert — im Bestand, nicht
+im Browserspeicher —, und es gilt genau dieser einen Fassung: Eine spätere, höhere meldet sich
+wieder (A-18.10).
+
+### 12.3 Was nach der Antwort passiert
+
+| Antwort | Sichtbares Ergebnis |
+|---|---|
+| „Installieren“, Seite geht auf | Dialog schließt, Meldung: „Die Release-Seite ist im Browser geöffnet.“ |
+| „Installieren“, Bezeichnung abgewiesen | Dialog bleibt offen, Meldung im Dialog; die Adresse steht weiter zum Lesen da |
+| „Installieren“, kein Browser | Dialog bleibt offen, Meldung im Dialog |
+| „Überspringen“ | Knopf zeigt den Ladezustand, danach Dialog zu und Meldung mit der Fassungsnummer |
+| „Überspringen“ scheitert | Dialog bleibt offen, Meldung im Dialog, nichts ist gespeichert |
+
+Die Fehlermeldungen stehen **im** Dialog und nicht als Toast daneben: Der Dialog ist modal
+(`aria-modal`), und eine Meldung außerhalb erreicht den Benutzer dort nicht — dieselbe Lehre wie
+in Abschnitt 8 beim Undo-Toast.
+
+### 12.4 Die Fassungsnummer ist fremder Text
+
+Sie kommt aus der Antwort von GitHub. Sie betritt die Oberfläche als `unknown`
+(`VersionCheckView.latestVersion`), geht durch `foreignTextFrom` (Regel 14) und danach durch die
+Formprüfung der Domäne. Erst was dort besteht, wird angezeigt — und dieselbe geprüfte
+Zeichenkette geht in den Öffnen-Befehl der Hülle, die sie ein zweites Mal prüft, bevor sie eine
+Adresse daraus baut.
+
+Die Ordnung der Fassungen liegt in `packages/domain` und nicht hier: `0.10.0` steht über
+`0.9.0`, was ein Zeichenkettenvergleich umdreht. Die Musterseite benutzt genau dieses Paar als
+Beispiel (Abschnitt 12 der Musterseite).

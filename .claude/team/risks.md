@@ -248,3 +248,43 @@ Standardvorlage benutzt. Der Test wäre grün und die Grenze trotzdem gebrochen.
 
 **Umgang:** Der Eigenschaftstest sucht den Text im Ergebnis **im Klartext und base64-kodiert**,
 über beliebige Vorlagen. Auflage für T-010.
+
+---
+
+## R-19 — Takt bekommt einen Ausgang ins Netz
+
+**Schwere:** hoch. **Betrifft:** security-checker, domain-dev, frontend-dev. Neu am 2026-09-04.
+
+Bis heute kannte Takt keine Adresse außerhalb von `127.0.0.1`; das war die stärkste einzelne
+Zusage des Entwurfs. Mit A-18.2 stellt der lokale Dienst eine Anfrage ins offene Netz. Vier
+Dinge ändern sich damit auf einmal:
+
+1. **Eine fremde Antwort betritt den Prozess.** Sie ist unbegrenzt groß, beliebig geformt und
+   trägt Text, der am Ende in der Oberfläche steht — dieselbe Klasse wie E-063, nur aus einer
+   neuen Richtung.
+2. **Eine Adresse aus dieser Antwort kann zum Öffnen-Befehl der Hülle wandern.** Von dort öffnet
+   sie den Browser des Benutzers. Das ist der gefährlichste Weg in diesem Vorhaben.
+3. **Jede Anfrage ist ein Lebenszeichen.** Wer sie sieht, weiß, dass dieser Rechner Takt in
+   dieser Fassung fährt. A-18.12 verbietet, mehr mitzuschicken als nötig.
+4. **Der Ausgang steht offen, auch wenn niemand ihn braucht.** Er gehört bei jeder künftigen
+   Freigabe geprüft, nicht nur bei dieser Aufgabe.
+
+**Umgang:** Festgelegt in E-064: Adresse fest im Erzeugnis, keine Weiterleitung auf einen fremden
+Wirt, Zeitüberschreitung, Obergrenze der gelesenen Antwort, aus der Antwort verlässt nur eine
+geprüfte Fassungsbezeichnung den Dienst, und der Öffnen-Befehl der Hülle nimmt keine Adresse
+entgegen. Das Bedrohungsmodell bewertet die Grenze, bevor gebaut wird.
+
+---
+
+## R-20 — Eine Aktualisierungsmeldung, die man nicht loswird, wird weggeklickt
+
+**Schwere:** niedrig. **Betrifft:** frontend-dev, spec-ux-reviewer. Neu am 2026-09-04.
+
+A-18.10 sagt, dass eine übersprungene Fassung nicht wiederkommt. Wird das Überspringen nur für
+die Sitzung gemerkt oder nur an einer von mehreren Flächen, meldet sich der Hinweis beim
+nächsten Start wieder — und der Benutzer lernt, ihn ungelesen zu schließen. Danach übersieht er
+auch die Meldung, die zählt.
+
+**Umgang:** Der übersprungene Wert steht im Bestand, nicht im Arbeitsspeicher und nicht im
+Browserspeicher. Der Prüffall dazu misst einen Neustart und nicht nur das Schließen des Dialogs.
+

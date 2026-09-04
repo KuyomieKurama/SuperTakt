@@ -49,6 +49,7 @@ sind gegen diese Dateien geprüft, nicht daneben geschrieben.
     default_tag ────► tag        Standard-Tags (A-9)
     export_template              Vorlagen, Standardvorlage unlöschbar (A-8.7)
     app_setting                  eine Zeile, u. a. Exportordner (E-011)
+                                 und die übersprungene Fassung (A-18.10)
 ```
 
 Migration 0001 legt 16 Tabellen, eine Sicht, 32 Indizes und 12 Trigger an. Migration 0003
@@ -60,8 +61,9 @@ auf eine Spalte; siehe 8.4e. 0011 (T-076) baut `pool_rule` um — zwei Spalten m
 Rolle und eine Statuskennung an `pool_rule`, ein Index dazu; siehe 3.5 und 8.4f. 0012 (T-089,
 R-1 Befund 1) baut dieselbe Tabelle ein zweites Mal um, ohne eine Spalte anzufassen: `tag_id` und
 `folder_id` gehen von ON DELETE CASCADE auf **RESTRICT**; siehe 3.5 und 8.4g. Tabellen, Sichten,
-Indizes und Trigger bleiben dabei in Zahl und Namen gleich.
-Der Stand nach 0012 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
+Indizes und Trigger bleiben dabei in Zahl und Namen gleich. 0013 (T-138, A-18.10) hängt
+`app_setting.skipped_version` an — eine Spalte, kein Index, kein Trigger; siehe 3.7 und 8.4h.
+Der Stand nach 0013 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
 `sqlite_master` nach `migrateToLatest`, Node 22.23.2). Hinzu kommt `schema_migration`, die der Migrationsläufer selbst
 führt und die deshalb in keiner Migration steht.
 
@@ -878,6 +880,40 @@ Das Add-in-Token steht **nicht** hier — und mit T-011 steht sein Klartext auch
 Auf der Platte liegt ausschließlich der SHA-256-Abdruck, in einer eigenen Datei neben der
 Datenbank, mit den Rechten `0600`. Begründung in `docs/architektur.md`, Abschnitt 6.
 
+**`skipped_version` — die übersprungene Fassung (A-18.10, R-20, T-138).** Seit Migration 0013
+trägt die Zeile eine weitere Spalte: die Fassung, für die der Benutzer „Überspringen" gewählt hat.
+`NULL` heißt „nichts übersprungen".
+
+Sie steht **hier** und nicht im Arbeitsspeicher des Dienstes und nicht im Browserspeicher der
+Oberfläche, und der Grund ist R-20: Ein nur für die Sitzung gemerktes Überspringen bringt den
+Hinweis beim nächsten Start wieder, und einen Hinweis, den man nicht loswird, klickt der Benutzer
+ungelesen weg — danach auch den, der zählt. Der zugehörige Prüffall misst deshalb einen Neustart
+und nicht das Schließen eines Dialogs.
+
+Übersprungen wird **eine Fassung, nicht die Prüfung**: Verglichen wird auf Gleichheit, eine
+später erschienene, höhere Fassung meldet sich wieder. Die Regel dazu steht als
+`decideUpdateNotice` in `packages/domain` und an keiner Anzeigestelle.
+
+Der Wert ist **Benutzereingabe** (T-136-4): Jeder Prozess mit dem Sitzungsgeheimnis kann ihn über
+`PATCH /settings` setzen. Er wird deshalb an drei Stellen gehalten, und jede hat eine andere
+Aufgabe:
+
+| Stelle | Was sie tut |
+|---|---|
+| `settingsSchema` in `routes/export.ts` | Weist ab, was nicht die Form aus A-V-8 hat — mit **dem** Ausdruck aus `packages/domain`, nicht mit einer Abschrift. Ergibt 422. |
+| `updateSettings` in `usecases/structure.ts` | Prüft noch einmal mit `checkVersion` und **normalisiert**: gespeichert wird ohne führendes `v`. Sonst stünde in derselben Spalte je nach Aufrufer `1.2.3` oder `v1.2.3`, und die Gleichheitsprüfung fände das eine nicht neben dem anderen. |
+| `toAppSettings` in `sqlite/mappers.ts` | Prüft beim **Lesen**. Ein unbrauchbarer gespeicherter Wert heißt „nichts übersprungen" — kein Wurf, keine Fehlermeldung, kein Wert, der weitergereicht wird. Ein Bestand kann kopiert, gesichert und aus fremder Quelle mitgebracht sein. |
+
+Der CHECK auf der Spalte ist die **zweite Wache**, nicht die erste: Länge zwischen 5 und 94,
+Beginn mit einer Ziffer, zwei Punkte, und kein Zeichen außerhalb von `0-9`, `A-Z`, `a-z`, `.`
+und `-`. Er kann die vollständige Form nicht ausdrücken — SQLite kennt ohne Erweiterung kein
+REGEXP —, und das ist Absicht: Die vollständige Form hat einen Ort, und dieser Ort ist die Domäne.
+Was der CHECK trägt, ist der Zeichenvorrat, und der ist der sicherheitsrelevante Teil (B-18.2).
+
+Der Wert geht in **keine** Adresse. Die Adresse zur Release-Seite baut die Hülle aus der Fassung,
+die sie selbst geprüft hat (A-V-16); die übersprungene Fassung entscheidet nur darüber, ob ein
+Hinweis erscheint. Schaden im schlimmsten Fall: ein unterdrückter Hinweis.
+
 ---
 
 ## 4. Der Tag-Ordnerbaum
@@ -1680,6 +1716,51 @@ Beobachtung mit der falschen Erklärung: Die eine Meldung schickt den Benutzer z
 die richtige zum Aktualisieren. Erst wenn der Bestand **nicht** neuer ist, ist eine unbekannte
 oder abweichende Zeile tatsächlich eine geänderte Migrationsdatei.
 
+### 8.2a Der Fehlschlag nennt seinen Grund — pfadfrei (T-132)
+
+Am 2026-09-04 um 18:57 startete Takt nicht. Im Protokoll stand genau eine Zeile: „Der
+Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht."
+Ein zweiter Anlauf lief durch, und der Grund war für immer weg — der Startpfad fing den Wurf mit
+`catch {` ohne Bindung ab und sah den Fehlerwert nie an. Die Begründung dafür stand daneben: Der
+Grund könne einen Dateipfad enthalten, und B-2.4 verbiete das.
+
+Der Satz ist richtig, die Schlussfolgerung war es nicht. **B-2.4 verbietet den Pfad, nicht den
+Grund.** Ein Grund lässt sich so bauen, dass er gar keinen Pfad tragen kann.
+
+Der Läufer hängt deshalb an jeden Wurf einen **Wert** mit benannten Feldern
+(`MigrationFailureReason` in `packages/storage/src/migration.ts`). Jeder Zweig trägt genau das,
+was ihn vom Nachbarn unterscheidet:
+
+| Grund | Trägt | Bedeutet |
+|---|---|---|
+| `checksum_mismatch` | Fassung | Eine bereits gelaufene Migrationsdatei sieht heute anders aus |
+| `database_too_new` | Fassung des Bestands, höchste bekannte | Eine ältere Fassung von Takt öffnet einen migrierten Bestand |
+| `database_busy` | Ergebniskennzeichen von SQLite | Ein zweiter Zugriff hält den Bestand (SQLITE_BUSY, SQLITE_LOCKED) |
+| `state_unreadable` | Fehlerschlüssel, Ergebniskennzeichen | Der Stand ließ sich nicht lesen; geschrieben wurde nichts |
+| `backup_failed` | Ausgangsfassung, Fehlerschlüssel | Die Sicherungskopie entstand nicht; **es wurde nicht migriert** |
+| `migration_failed` | Fassung, Richtung, Fehlerschlüssel | Eine einzelne Migration ist gescheitert; ihre Transaktion ist zurückgenommen |
+| `no_way_back` | Fassung | Rückwärts: zu einer gelaufenen Migration gibt es keine Datei mehr |
+| `embedded_drift` | — | Die eingebetteten Migrationen weichen vom Verzeichnis ab (T-053) |
+| `unknown` | Fehlerschlüssel, Ergebniskennzeichen | Etwas anderes |
+
+**Drei Riegel halten den Pfad draußen**, und keiner davon ist Sorgfalt:
+
+1. Der Grund ist ein Wert und keine Meldung. Seine Felder sind Zahlen und ein Fehlerschlüssel der
+   Laufzeit (`ENOENT`, `ERR_SQLITE_ERROR`), den `errorCodeOf` auf Großbuchstaben, Ziffern und
+   Unterstrich begrenzt.
+2. Die Sätze, die der Benutzer liest, sind Konstanten (`apps/local-api/src/startup.ts`). In
+   keinen wird etwas eingesetzt.
+3. Der Protokollierer weist einen Grund ab, der nicht in seinen Zeichenvorrat passt, und schreibt
+   `unclassified` — ein Pfad enthält zwangsläufig einen Trenner und kommt dort nicht durch.
+
+Die **Meldung** des zugrunde liegenden Wurfs bleibt im Wurf. Sie ist im Debugger lesbar und geht
+in keine Ausgabe. Deshalb konnten die Prüffälle, die auf `RAISE(ABORT, 'rollback_0006_…')`
+messen, unverändert bleiben.
+
+Gemessen wird beides: die Unterscheidung über den vollständigen Vorrat der Gründe in den
+Einheitentests, und die ganze Kette — echter Bestand, echter Läufer, echter Sidecar, echtes
+`stderr` — in `proof:access` Abschnitt 0g.
+
 ### 8.4 Rückwärts
 
 Jede Migration hat ihre Gegenrichtung. 0001 löscht in umgekehrter Abhängigkeitsreihenfolge: erst
@@ -1914,6 +1995,28 @@ ist allein das Verhalten beim Löschen — und er sagt es in seinem Kopf: Danach
 Ordner seine Regelterme wieder still mit. Der Bestand ist dann nicht ungeschützt, sondern wieder
 auf **eine** Wache statt zweier zurückgesetzt: `TagPort.remove` und `TagFolderPort.remove` prüfen
 weiterhin vorher.
+
+### 8.4h Migration 0013 — eine Spalte, die eine Anwendung still hält (T-138, A-18.10)
+
+`0013_skipped_version` hängt `app_setting.skipped_version` an. Sie ist die kleinste Migration
+dieses Bestands und die erste seit 0009, die weder eine Tabelle umbaut noch einen Index anfasst:
+ein `ALTER TABLE … ADD COLUMN` vorwärts, ein `ALTER TABLE … DROP COLUMN` rückwärts.
+
+**Warum kein Umbau.** Es ändert sich keine bestehende Spalte, keine REFERENCES-Klausel und kein
+bestehender CHECK. `app_setting` trägt weder Trigger noch Sicht; die einzige
+Fremdschlüsselbeziehung (`active_export_template_id`) bleibt unberührt. Ein Umbau nach dem Muster
+von 0011 und 0012 wäre hier mehr Bewegung als Änderung, und jede kopierte Zeile ist eine
+Gelegenheit, etwas zu verlieren.
+
+**Warum DROP COLUMN hier zulässig ist.** SQLite verweigert es, wenn die Spalte in einem Index,
+einer Sicht, einem Trigger, einem Fremdschlüssel oder einem **anderen** CHECK vorkommt. Sie kommt
+in keinem davon vor; ihr eigener CHECK fällt mit ihr. Gemessen an SQLite 3.51.3: vorwärts auf 13,
+rückwärts auf 12, rückwärts auf 0, wieder vorwärts auf 13 — der Bestand steht danach wie vorher.
+
+**Ein Datenverlust, und er ist benannt.** Der Rückweg nimmt die übersprungene Fassung mit. Der
+Hinweis auf genau diese Fassung erscheint danach wieder. Das ist die richtige Richtung — die
+Anwendung meldet zu viel statt zu wenig, und der Benutzer kann erneut überspringen —, aber es ist
+keine verlustfreie Rücknahme, und der Kopf der Rückwärtsdatei sagt es.
 
 ### 8.5 Nachgewiesen
 
