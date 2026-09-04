@@ -287,7 +287,11 @@ export async function createPool(input: {
   requiredTagIds?: readonly string[];
   /** Ordnerterme der erforderlichen Achse (E-057, T-096). */
   requiredFolderIds?: readonly string[];
+  /** Die Statusachse einer Regel (E-055, T-099) — leer heißt „Alle". */
+  statusIds?: readonly string[];
   completion?: 'any' | 'done' | 'open';
+  /** Die Exportstatus-Achse einer Regel (E-055, T-099) — Vorgabe „Alle". */
+  exportState?: 'any' | 'open' | 'exported';
 }): Promise<Pool> {
   return call<Pool>('/pools', {
     method: 'POST',
@@ -298,7 +302,9 @@ export async function createPool(input: {
         ...(input.requiredTagIds ?? []).map((tagId) => ({ kind: 'tag', tagId })),
         ...(input.requiredFolderIds ?? []).map((folderId) => ({ kind: 'folder', folderId })),
       ],
+      statusIds: input.statusIds ?? [],
       completion: input.completion ?? 'any',
+      exportState: input.exportState ?? 'any',
     }),
   });
 }
@@ -390,11 +396,24 @@ export async function deleteTodoStatus(id: string): Promise<void> {
 }
 
 /* ==================================================================== */
-/* Timer — nur für Testaufräumung (T-048)                                */
+/* Timer (T-048 — Aufräumung; T-099 — Bewegungssatz und Exportstatus)    */
 /* ==================================================================== */
 
 export interface RunningTimer {
   readonly todoId: string;
+}
+
+/**
+ * Die Bewegung eines Todos durch die Pools, so wie der Dienst sie an den
+ * Timer-Routen mitgibt (`PoolMovement` aus `@takt/domain`, E-058). Drei
+ * Namenslisten und kein fertiger Satz — den bildet `poolMovementSentence`
+ * aus derselben Domäne, hier bewusst noch als reine JSON-Gestalt gehalten,
+ * damit diese Datei keine Domänenabhängigkeit braucht.
+ */
+export interface PoolMovementNames {
+  readonly appears: readonly string[];
+  readonly enters: readonly string[];
+  readonly leaves: readonly string[];
 }
 
 /** `GET /timer` — `null`, wenn keiner läuft. */
@@ -407,12 +426,59 @@ export async function getOrphanedTimer(): Promise<RunningTimer | null> {
   return call<RunningTimer | null>('/timer/orphaned');
 }
 
-export async function stopTimer(note = ''): Promise<unknown> {
-  return call('/timer/stop', { method: 'POST', body: JSON.stringify({ note }) });
+/**
+ * `POST /timer/start` (T-099). `poolMovement` steht nur im Zweig `started`
+ * und ist dort `null`, wenn der Start nichts bewegt hat (E-058 Punkt 1) —
+ * derselbe Vertrag wie in `apps/web/src/api/types.ts` (`StartTimerResult`).
+ */
+export type StartTimerResult =
+  | {
+      readonly kind: 'started';
+      readonly doneCleared: boolean;
+      readonly poolMovement: PoolMovementNames | null;
+    }
+  | { readonly kind: 'confirmation_required' };
+
+export async function startTimer(todoId: string, stopRunning = false): Promise<StartTimerResult> {
+  return call<StartTimerResult>('/timer/start', {
+    method: 'POST',
+    body: JSON.stringify({ todoId, stopRunning }),
+  });
 }
 
-export async function resolveOrphanedTimer(resolution: 'book_until_heartbeat' | 'discard' = 'discard'): Promise<unknown> {
-  return call('/timer/orphaned/resolve', { method: 'POST', body: JSON.stringify({ resolution }) });
+/**
+ * `POST /timer/stop` (T-099, E-058 Punkt 6). Im Zweig `discarded` steht
+ * `poolMovement` fest auf `null` — der Timer lief unter einer Sekunde, und
+ * ohne Buchung bewegt sich nichts.
+ */
+export type StopTimerResult =
+  | { readonly kind: 'recorded'; readonly entry: TimeEntry; readonly poolMovement: PoolMovementNames | null }
+  | { readonly kind: 'discarded'; readonly poolMovement: null };
+
+export async function stopTimer(note = ''): Promise<StopTimerResult> {
+  return call<StopTimerResult>('/timer/stop', { method: 'POST', body: JSON.stringify({ note }) });
+}
+
+/**
+ * `POST /timer/orphaned/resolve` (T-099, E-058 Punkt 6). Dieselbe Gestalt wie
+ * beim Stopp — auch hier ist `poolMovement` im verworfenen Zweig fest `null`.
+ */
+export type ResolveOrphanedTimerResult =
+  | { readonly kind: 'recorded'; readonly entry: TimeEntry; readonly poolMovement: PoolMovementNames | null }
+  | { readonly kind: 'discarded'; readonly reason: string; readonly poolMovement: null };
+
+export async function resolveOrphanedTimer(
+  resolution: 'book_until_heartbeat' | 'discard' = 'discard',
+): Promise<ResolveOrphanedTimerResult> {
+  return call<ResolveOrphanedTimerResult>('/timer/orphaned/resolve', {
+    method: 'POST',
+    body: JSON.stringify({ resolution }),
+  });
+}
+
+/** Setzt das Lebenszeichen des laufenden Timers — Vorbereitung für E-036-Fälle (T-099). */
+export async function touchTimerHeartbeat(): Promise<void> {
+  await call<unknown>('/timer/heartbeat', { method: 'POST' });
 }
 
 /**
@@ -431,4 +497,72 @@ export async function cleanupAnyTimer(): Promise<void> {
   if (orphaned !== null) {
     await resolveOrphanedTimer('discard').catch(() => undefined);
   }
+}
+
+/* ==================================================================== */
+/* Outlook-Add-in — die Routen unter /addin direkt (T-099)               */
+/* ==================================================================== */
+
+/**
+ * `credentialPolicy` (`apps/local-api/src/http/guards.ts`) senkt die
+ * Anforderung nur unter `/api/v1/addin` auf „irgendein Nachweis" — das
+ * Sitzungsgeheimnis dieses Testlaufs erfüllt das ebenso wie ein eigenes
+ * Add-in-Token. Ein zweites, eigens ausgestelltes Token ist deshalb für
+ * diese Aufrufe nicht nötig.
+ *
+ * Diese Datei ruft die Add-in-Routen absichtlich **direkt** über HTTP an,
+ * nicht über den Aufgabenbereich selbst (Office.js): T-099 vergleicht den
+ * Bewegungssatz gegen das, was `POST /addin/...` liefert und was
+ * `apps/outlook-addin/src/duplicate/reopen.ts` (fremde Hoheit, nur gelesen)
+ * daraus baut — dieselbe Auskunft, die auch ein echter Aufgabenbereich über
+ * `fetch` bekäme.
+ */
+export interface AddinTodoMatch {
+  readonly id: string;
+  readonly title: string;
+  readonly callNumber: string | null;
+  readonly completedAt: string | null;
+  readonly poolNames: readonly string[];
+  readonly enteringPoolNames: readonly string[];
+  readonly leavingPoolNames: readonly string[];
+}
+
+export type AddinTodoMatchesResult =
+  | {
+      readonly searched: false;
+      readonly reason: string;
+      readonly message: string;
+      readonly matches: readonly [];
+    }
+  | { readonly searched: true; readonly callNumber: string; readonly matches: readonly AddinTodoMatch[] };
+
+/** `GET /addin/todo-matches` — die Ankündigung, vor jeder Buchung (A-10.9). */
+export async function addinTodoMatches(callNumber: string): Promise<AddinTodoMatchesResult> {
+  return call<AddinTodoMatchesResult>(
+    `/addin/todo-matches?${new URLSearchParams({ callNumber }).toString()}`,
+  );
+}
+
+export interface AddinBookResult {
+  readonly timeEntry: { readonly id: string };
+  readonly todoWasDone: boolean;
+  readonly doneCleared: boolean;
+  readonly poolNames: readonly string[];
+  readonly enteringPoolNames: readonly string[];
+  readonly leavingPoolNames: readonly string[];
+}
+
+/**
+ * `POST /addin/todos/:todoId/time-entries` — die Bestätigung, nach der
+ * Buchung (A-6.1, A-10.9). `startedAt`/`endedAt` im Format
+ * `YYYY-MM-DDTHH:MM:SSZ` (Sekundengenauigkeit, `schema.ts` der Add-in-Routen).
+ */
+export async function addinBookOnTodo(
+  todoId: string,
+  input: { startedAt: string; endedAt: string; note?: string },
+): Promise<AddinBookResult> {
+  return call<AddinBookResult>(`/addin/todos/${todoId}/time-entries`, {
+    method: 'POST',
+    body: JSON.stringify({ startedAt: input.startedAt, endedAt: input.endedAt, note: input.note ?? '' }),
+  });
 }

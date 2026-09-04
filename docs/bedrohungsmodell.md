@@ -2579,3 +2579,242 @@ Add-in-Grenze ist enger geworden, die Notiz-Trennung hält, und die Migration is
 Richtungen mit engen Dateirechten gefahren. Die Auflage betrifft den **Baum**, nicht den Code: Die
 186 MB aus 14.4 sind vor dem Push zu entfernen. Bis dahin gilt die Aussage aus Abschnitt 13 — „der
 Baum, der veröffentlicht würde, ist geprüft" — für diesen Branch nicht.
+
+---
+
+## 15. Wiedervorlage R-3a (2026-09-04) — was aus den Befunden geworden ist
+
+Anlass: `git diff 3240dcc..HEAD`, die Wellen A bis C und der eingemergte Zweig
+`fix/windows-sidecar-bundle-check`; 113 geänderte Dateien. Abschnitt 14 bleibt stehen, wie er ist —
+hier steht nur, was sich an seiner **Bewertung** ändert. Der vollständige Befundbericht liegt in
+`.claude/team/reports/R-3a-security-checker.md`.
+
+### 15.1 Werkzeugstand
+
+| Werkzeug | Lief | Ergebnis |
+|---|---|---|
+| Semgrep CLI 1.166.0, `p/secrets p/security-audit p/typescript p/owasp-top-ten` über die 85 geänderten Quelldateien | **ja** | 156 Regeln, **4 Befunde**, sämtlich in `apps/desktop/scripts/verify-sidecar.mjs` und sämtlich Fehlalarme (15.6). Keiner in Produktivcode. |
+| Semgrep Guardian — SAST, Geheimnisse, Lieferkette | **nein** | `Not logged into Semgrep Guardian.` Zum **fünften** Mal. Offene Frage 8 bleibt offen. |
+| 42Crunch-Audit und -Scan | **nein** | `42c-ast` nicht auffindbar, `~/.42crunch` existiert nicht. Unverändert seit T-023. Es gibt weiterhin keinen Auditwert. |
+| `pnpm run boundaries` | **ja** | grün, und diesmal mit belastbaren Zahlen: 8 Quelldateien in `packages/export`, 312 außerhalb der Domäne — beide über den neuen Untergrenzen. |
+| `pnpm run typecheck` | **ja** | grün über neun Konfigurationen einschließlich `typecheck:test`. |
+| `pnpm --filter @takt/storage migrations:embed:check` | **ja** | aktuell, 24 Datei(en). Eigener Vergleich: 24 zu 24, **null** inhaltliche Unterschiede, Schlüssel aufsteigend sortiert. |
+| Nachweisläufe `proof:*`, `pnpm check`, `test:e2e` | **nein** | Port 17843 gehörte in diesem Zeitraum dem e2e-tester. Der Stand ist die Messung des Orchestrators zu `aca53df` (848/0, 648 Einheitentests, e2e 37/37) und **nicht** meine eigene. |
+
+### 15.2 Die Auflage aus 14.4 ist erledigt — mit einem Rest
+
+`3240dcc` ist **kein Vorfahr von `HEAD`** mehr; die Historie ist umgeschrieben worden
+(`git filter-branch`, vermerkt im Board vor Welle A). Nachgemessen statt geglaubt: Der größte Blob
+in der Historie von `HEAD` ist `apps/local-api/openapi/takt-local-api.yaml` mit 224 426 Bytes. Die
+beiden Bündel kommen darin nicht mehr vor, und `apps/desktop/.gitignore:40` schließt `release/`
+jetzt aus, mit ausgeschriebener Begründung wie bei allen Nachbarregeln. Die Aussage aus Abschnitt 13
+— „der Baum, der veröffentlicht würde, ist geprüft" — gilt für diesen Branch damit wieder.
+
+**Was übrig ist und in dieses Dokument gehört:** Der Sicherungszweig
+`backup/status-als-regelterm-vor-filter` liegt weiterhin lokal und trägt die 186 MB. Er ist der
+**einzige** Verweis in diesem Bestand, über den die Blobs noch erreichbar sind — daher auch die
+181 MB im Paket und die 182 MB unter `.git`. `git push origin status-als-regelterm` veröffentlicht
+ihn nicht; `git push --all` und `git push --mirror` tun es. B-11.4 („der erste Commit ist die
+Veröffentlichung") ist damit nicht aufgehoben, sondern an eine Aufrufform verschoben. Er gehört
+gelöscht, sobald die Wiedervorlagen angenommen sind, und danach `git reflog expire --expire=now
+--all && git gc --prune=now` — sonst bleibt die Größe im Klon jedes Mitarbeiters, der ihn einmal
+hatte.
+
+### 15.3 VG-2 fortgeschrieben — die reine Board-Spalte hat die Grenze überschritten
+
+Abschnitt 14.2 sagt, die Add-in-Fläche wachse künftig nicht über eine fünfte Route, sondern über
+ein neues Feld an einer der vier bestehenden Antworten, und die Wache dagegen sei der
+Port-Ausschnitt in `routes/addin/ports.ts`. Beides hat sich in dieser Welle bewährt und beides ist
+zugleich vorgeführt worden:
+
+- **Der Port-Ausschnitt ist unverändert.** `AddinUnit.pools` steht weiter auf
+  `Pick<PoolPort, 'list' | 'resolveAxes'>` (`apps/local-api/src/routes/addin/ports.ts:146`); die
+  Datei ist im ganzen Diff nicht angefasst worden. Neue Routen gibt es keine, und
+  `apps/local-api/src/access/**`, `app.ts`, `config.ts` und `composition.ts` sind ebenfalls
+  unberührt.
+- **Und trotzdem sieht das Add-in seit dieser Welle etwas Neues.**
+  `apps/local-api/src/usecases/pool-movement.ts:152` fragt `pools.list('all')`, also einschließlich
+  der Regeln mit `placement: 'board'`. Der Add-in-Dienst benutzt genau diesen Anwendungsfall
+  (`routes/addin/service.ts:291`, `:722`) und gibt seine drei Namenslisten als `poolNames`,
+  `enteringPoolNames` und `leavingPoolNames` heraus (`routes/addin/index.ts:367`, `:373`, `:379`).
+  Die **Namen reiner Kanban-Spalten** verlassen den Dienst damit erstmals über das Add-in-Token.
+  `GET /addin/context` bleibt bei `list()` (E-058 Punkt 7) — die Vordertür ist zu, die Seitentür
+  steht auf.
+
+**Bewertung: begründet, dokumentiert, und dennoch eine Grenzverschiebung.** Sie ist die
+unvermeidliche Folge von E-056: Der Fall, für den der Satz geschrieben wurde, **ist** die reine
+Board-Spalte „erledigt und noch nicht abgerechnet". Wer die Bewegung aus ihr heraus verschweigt,
+sagt die halbe Wahrheit — dagegen ist der Zuwachs an Kenntnis gering. Die Datenklasse bleibt
+dieselbe wie in 14.2: Namen von Regeln, die der Benutzer selbst angelegt hat. Sie sagen, wonach
+gefiltert wird, nicht was in der Spalte steht. Die Regelfelder reiner Spalten
+(`excludedTags`, `statusIds`, `completion`, `exportState`) bleiben draußen, weil `list()` sie gar
+nicht erst liefert; `emptyFolderIds` bleibt wie bisher im Dienst und wird nur zu
+`unresolvedRequired` verrechnet.
+
+**Kein Bedrohungseintrag, wohl aber eine Festlegung für den nächsten Leser.** Ein entwendetes
+Add-in-Token (B-2.8, B-2.9) kann über wiederholtes Anlegen und Bebuchen von Todos einen Teil der
+Spaltennamen aufzählen. Das ist der Preis von E-056, er ist bewusst gezahlt, und die
+OpenAPI-Beschreibung sagt es an ihrem Schema ausdrücklich („**Auch reine Kanban-Spalten stehen
+darin**", `PoolMovement`). Was daraus folgt: **Die Add-in-Grenze wird ab jetzt nicht mehr allein an
+`ports.ts` beurteilt.** Der Port-Ausschnitt ist gleich geblieben, während die Fläche wuchs — weil
+die Ausweitung nicht in einer neuen Methode lag, sondern in einem **Argument** an einer alten
+(`list()` gegen `list('all')`). Wer diese Grenze künftig prüft, liest den Ausschnitt **und** die
+Argumente, mit denen er gerufen wird.
+
+### 15.4 Zwei Nachweispfade, die es gibt und die niemand ruft
+
+14.7 hat die allgemeine Gestalt beschrieben: Nachweisskripte scheitern laut, wenn sie werfen, und
+still, wenn ihre Grundmenge leer ist. Der Grenzwächter ist repariert
+(`packages/domain/scripts/check-export-boundary.mjs:221-222`, Untergrenzen 1 und 50, dazu ein
+`fail()`, wenn `packages/export` fehlt). Zwei Prüfungen derselben Familie fehlen jedoch nicht in
+ihrer Aussage, sondern in ihrer **Aufrufkette**:
+
+1. **`migrations:embed:check` steht in keiner Kette.** `packages/storage/package.json:17` kennt ihn,
+   `pnpm check` und `proof:all` rufen ihn nicht. `migrations.embedded.ts` ist erzeugter Code und die
+   einzige Fassung der Migrationen, die im Node-SEA überhaupt vorhanden ist — was nicht durch den
+   Bündler geht, gibt es in der ausgelieferten Anwendung nicht. Heute stimmen die 24 Dateien Zeichen
+   für Zeichen mit `packages/storage/migrations/` überein; das habe ich gemessen. Nichts hält das
+   fest. Ein Auseinanderlaufen hat zwei Ausgänge, und beide sind teuer: Entweder führt die
+   ausgelieferte Fassung anderes DDL aus, als das Repository zeigt, oder — häufiger —
+   `schema_migration.checksum` weicht ab und der Dienst verweigert den vorhandenen Bestand des
+   Kunden („Die bereits gelaufene Migration N unterscheidet sich von der mitgelieferten Datei. Es
+   wird nichts migriert."). Das ist ein Verfügbarkeitsausfall beim Kunden aus einem vergessenen
+   Befehl. Eine Zeile in `proof:all`.
+2. **Die veröffentlichte `SHA256SUMS` prüft niemand.** `.github/workflows/release.yml:421` legt die
+   Prüfsummendateien der drei Läufer zusammen, `:506` veröffentlicht sie neben den Erzeugnissen —
+   dazwischen steht kein `sha256sum -c`. Die Datei behauptet also etwas über Dateien, die im selben
+   Auftrag heruntergeladen und nie dagegen gehalten wurden. Das ist wörtlich der Vorwurf aus 14.4
+   Punkt 2 („sieht aus wie eine beglaubigte Auslieferung und ist eine Selbstauskunft"), nur eine
+   Ebene weiter: Er trifft jetzt nicht mehr eingecheckte Binärdateien, sondern die tatsächliche
+   Auslieferung. `cd versand && sha256sum -c SHA256SUMS` vor dem `gh release create` macht aus der
+   Selbstauskunft eine Prüfung. Nebenbei: `cp -n` im selben Schritt verschluckt eine
+   Namenskollision lautlos, und die Vollzähligkeitsprüfung zählt nur „mindestens eine je Muster".
+
+**Was am Auslieferungsablauf ausdrücklich in Ordnung ist**, weil er neu in diesem Baum liegt und
+sonst niemand ihn gegen VG-7 gehalten hat: Alle Aktionen sind auf vollständige Commit-Hashes
+festgenagelt, mit der Fassung als Kommentar daneben. `permissions` steht oben auf `contents: read`
+und nur der Veröffentlichungsauftrag hebt es auf `contents: write`. Es gibt kein `pull_request_target`
+und kein langlebiges Zugangsmerkmal — allein `secrets.GITHUB_TOKEN`. Die vom Benutzer wählbare
+Fassungsangabe geht über `env:` in die Shell und nicht mitten in eine Zeile, sie wird gegen
+`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$` geprüft **bevor** sie nach `$GITHUB_OUTPUT` geschrieben
+wird, und `gh release create --verify-tag` legt kein Etikett an, das es nicht gibt. Das ist mehr
+Sorgfalt, als dieser Punkt gewöhnlich bekommt.
+
+### 15.5 Neu bewertet: Regelnamen als Text, und der Anker der Oberfläche
+
+Beides ist in Welle C hinzugekommen und beides ist die richtige Frage.
+
+**Regelnamen in Fehlertexten (`details[]`).** Der Dienst legt seit T-089 die blockierenden Regeln
+beim Namen in `details` ab (`packages/storage/src/sqlite/mappers.ts:226` `poolReference`, gerufen in
+`repo-tags.ts:522` und `repo-statuses.ts:310`), und `apps/web/src/lib/errorText.ts:98` baut daraus
+einen zweiten Satz. **Kein XSS-Weg:** Im gesamten Diff steht kein `dangerouslySetInnerHTML`, kein
+`innerHTML`, kein `eval` und kein `new Function`; die Texte gehen als Kinder in React-Elemente
+(`StatusSettings.tsx:422-434`, `TagsScreen.tsx:425-430`) und werden dort maskiert. Zwei Kanten
+bleiben, beide ohne Angreifer und beide billig zu schließen:
+
+- **Steuer- und Richtungszeichen sind erlaubt.** `nameSchema`
+  (`apps/local-api/src/http/input.ts:58`) ist `z.string().trim().min(1).max(200)` — ohne Aussage
+  über U+0000 bis U+001F, U+007F oder die bidirektionalen Steuerzeichen U+202A bis U+202E und
+  U+2066 bis U+2069. React maskiert HTML; es macht ein U+202E nicht unschädlich, und das dreht den
+  Rest der Zeile optisch um. Diese Namen reisen seit dieser Welle weiter als je zuvor: in den
+  Bewegungssatz an **beiden** Flächen, in den Aufgabenbereich des Add-ins und in die Löschdialoge.
+  `apps/local-api/src/access/session-secret.ts:85` trägt die passende Prüfung bereits ausgeschrieben.
+- **`details` ist der Zahl nach unbegrenzt.** Die beiden Abfragen liefern eine Zeile je verweisender
+  Regel, ohne `LIMIT`, und eine Obergrenze für die Zahl der Pools gibt es nirgends. Bei zweihundert
+  Zeichen je Name steht der ganze Bestand in einem Satz. Kein Grenzübertritt — Pools legt nur an,
+  wer das Sitzungsgeheimnis hat —, aber der Dialog wird unlesbar, lange bevor er teuer wird.
+
+**Der Anker (`navigate` über `location.assign`).** Ausdrücklich geprüft, weil ein `location.assign`
+mit fremdem Text der klassische Weg zu `javascript:` und zum Protokollwechsel ist: **Hier ist er es
+nicht.** `href()` (`apps/web/src/app/router.ts:54-59`) setzt den Anker aus drei Teilen zusammen, und
+keiner davon ist frei: das Segment aus `SEGMENT`, einem festen `Record<RouteName, string>`, die
+Kennung durch `encodeURIComponent` und die Abfragezeichenkette durch `URLSearchParams.toString()`.
+Das Ergebnis beginnt bauartbedingt mit `#/`; ein `javascript:`, ein `//host` oder ein
+Protokollwechsel ist daraus nicht herstellbar, auch nicht aus einer Kennung, die aus einer Antwort
+des Dienstes stammt. Die Gegenrichtung hat eine Kante: `parseRoute` ruft `decodeURIComponent` ohne
+Netz (`router.ts:93`, `:106`), und `#/todos/%` ist ein `URIError`. In `useRoute.ts:75` fällt der in
+den Aufbau des Zustands, die Oberfläche entsteht dann gar nicht. Erreichbar ist das nur, wenn jemand
+den Anker von Hand setzt — die Anwendung selbst erzeugt ihn nie.
+
+**Das Neuladen (`useDataFreshness`).** Kein Zeitgeber, keine Schleife, keine Wiederholung nach einem
+Fehlschlag: Die Zahl steigt ausschließlich durch eine Navigation (`useRoute.ts:96-103`), und
+`visibilitychange` hängt an einer Handlung des Benutzers. Ein abgelaufenes oder ungültiges
+Sitzungsgeheimnis erzeugt deshalb **keinen** Anfragesturm — die 401 wird zum Fehlerzustand der
+Ansicht und bleibt dort stehen. Ein Neuanmelden gibt es nicht; der Weg zurück ist der Neustart der
+Anwendung, und das ist bei einem Geheimnis, das nur im Arbeitsspeicher lebt, die richtige Antwort.
+Was fehlt, ist eine Bremse: Jeder Fensterwechsel löst `reload()` **und** `bump()` aus, also einen
+Schwung Anfragen gegen einen einfädigen Sidecar. Bei zwanzig Wechseln in zwanzig Sekunden sind das
+zwanzig Schwünge. Wettläufe entstehen dabei nicht — `useAsync` verwirft veraltete Antworten über
+seinen Generationenzähler (`useAsync.ts:36`, `:45`).
+
+### 15.6 Migration 0012 und die vier Semgrep-Meldungen
+
+**Migration 0012 ist sauber gebaut.** Der Tabellenumbau ist Zeile für Zeile der aus 0011, die Marke
+`-- takt: foreign_keys=off` steht in beiden Richtungen, der Läufer setzt das Pragma **vor** `BEGIN`
+(`migration-runner.ts:248`), führt `pragma_foreign_key_check` über den **ganzen** Bestand aus, bevor
+er festschreibt (`:354`), und stellt die Prüfung in einem `finally` wieder her (`:274`). Die
+Rückwärtsrichtung verliert **nichts**: dieselben fünf Spalten, derselbe CHECK, derselbe Inhalt; sie
+setzt allein `tag_id` und `folder_id` auf CASCADE zurück und sagt in ihrem eigenen Kopf, was sie
+damit wieder aufmacht. `RESTRICT` auf allen drei Termspalten ist die Fortsetzung von 14.5 und aus
+demselben Grund richtig.
+
+Eine Unsymmetrie bleibt: `legacy_alter_table` wird **nicht** im `finally` zurückgesetzt, sondern nur
+von der letzten Zeile der Migrationsdatei (`0012_pool_rule_restrict.up.sql:122`). Wirft eine
+Migration mittendrin, läuft `ROLLBACK`, und die Verbindung behält `legacy_alter_table = ON` — eine
+Einstellung, unter der ein `RENAME` die Verweise der Nachbartabellen nicht mehr nachzieht. Heute
+folgenlos, weil ein Fehlschlag den Start beendet. Der Schalter gehört trotzdem in dieselbe Klammer
+wie `foreign_keys`, aus demselben ausgeschriebenen Grund.
+
+**Die vier Semgrep-Meldungen** stehen alle in `apps/desktop/scripts/verify-sidecar.mjs`, einem
+Prüfskript der Bauzeit, das nie ausgeliefert wird. Dreimal `react-insecure-request` (`:467`, `:472`,
+`:487`) trifft `fetch('http://127.0.0.1:…')` — das ist die Architektur dieses Projekts und keine
+Nachlässigkeit; die Begründung, warum die Schleife ohne TLS auskommt, steht in Abschnitt 5. Einmal
+`unknown-value-with-script-tag` (`:212`) trifft ein `<script src="./assets/taskpane.js">` in einer
+festen Zeichenkette, in die nichts eingesetzt wird; die Regel stört sich an der Variablen
+`taskpaneDir` daneben, die ein Dateipfad ist. Alle vier: kein Befund.
+
+Zwei Einschränkungen dieses Laufs, damit sie niemand überliest: Semgrep hat
+`apps/local-api/openapi/takt-local-api.yaml` (ab Zeile 4141) und `packages/domain/src/index.ts`
+(Zeile 37) nur **teilweise** geparst. Die Aussage „100 % geparst" aus 14.1 gilt für diesen Lauf
+nicht.
+
+### 15.7 Was in dieser Welle nachweislich gehalten hat
+
+- **Die Notiz-Trennung (VG-5)** — und diesmal mit einem Wächter, der nicht mehr über nichts grün
+  werden kann. `packages/export` ist im ganzen Diff **unberührt**; `usecases/pool-movement.ts` und
+  `packages/domain/src/pool-movement.ts` kennen kein Notizfeld. Die drei Listen tragen Namen und
+  sonst nichts.
+- **Die Eingabeprüfung von `GET /todos`.** `commaSeparatedIds`
+  (`apps/local-api/src/http/input.ts:52`) zerlegt **vor** der Prüfung und hält dann
+  `z.array(idSchema).min(1).max(50)`; `todos.ts:122-124` schickt alle drei Kennungslisten hindurch.
+  Aus dem `500` von 14.3 ist ein `422` mit Feldangabe geworden, und die dort gemessenen 8,4 Sekunden
+  sind auf ein Viertel gedeckelt. `as never` ist an dieser Stelle verschwunden.
+- **Die Vertrauensgrenze selbst.** `access/**`, `app.ts`, `config.ts`, `composition.ts` und
+  `taskpane/server.ts` sind nicht angefasst. Die Pfadprüfung des Aufgabenbereichs
+  (`taskpane/server.ts:236-239`) hat weiterhin ihre **eigene** Fassung und ist nicht durch das neue
+  `isInside` aus `apps/desktop/scripts/paths.mjs` ersetzt worden — richtig so: Das eine ist
+  Laufzeit an einer Vertrauensgrenze, das andere zählt zur Bauzeit Dateien in einem Bündel.
+- **Die Lieferkette.** `pnpm-lock.yaml` ist im gesamten Diff unverändert, kein neues Paket.
+  `verify-node-checksums.mjs` ist ein reiner Vergleich ohne Schreibzugriff und benennt seine Grenze
+  selbst: Er prüft die **Signatur** von `SHASUMS256.txt` nicht und sagt das im Kopf, statt es zu
+  verschweigen.
+- **Repository-Hygiene.** Keine Zugangsdaten, keine Schlüssel in versionierten Dateien. Die
+  Call-Nummern sind durchweg erfunden und als solche erkennbar (`TCK-000042`, `TCK-000815`,
+  `SVC-4711`, `TCK-999999`). Die neuen End-zu-End-Fälle arbeiten mit `E2E-…-${run}`-Namen. Die
+  einzigen echten E-Mail-Adressen im Arbeitsbaum stehen in
+  `apps/desktop/src-tauri/licenses/THIRD-PARTY-LICENSES.txt` — Autorenangaben fremder Pakete, und
+  die Datei ist seit `3240dcc` ignoriert und nicht versioniert.
+- **Der konfigurierbare reguläre Ausdruck des Add-ins** (`apps/outlook-addin/src/callnumber/**`) ist
+  im ganzen Diff nicht angefasst. B-4.2 bleibt, wie es war.
+
+### 15.8 Urteil dieser Wiedervorlage
+
+**Freigegeben.** Alle Befunde aus R-3, die eine Nacharbeit verlangten, sind erledigt und
+nachgemessen: die 186 MB aus der Historie, die Untergrenzen im Grenzwächter, die Prüfung der drei
+Kennungslisten, der 409 mit dem Namen der Regel und die Laufzeitwache in `matchesPool`. Kein
+blockierender Befund. Die drei Punkte aus 15.2 bis 15.4 — der Sicherungszweig, der ungerufene
+`migrations:embed:check` und die ungeprüfte `SHA256SUMS` — sind Gates und Hygiene, keine Löcher im
+laufenden Erzeugnis; sie gehören vor den Push beziehungsweise vor die erste Auslieferung erledigt.
+Das Tor aus Abschnitt 8 bleibt an einer Stelle uneinlösbar: Für inzwischen über 44 Pfade gibt es
+weiterhin keinen 42Crunch-Auditwert, und Semgrep Guardian war zum fünften Mal nicht erreichbar.
+Beides ist eine Beschaffungsentscheidung und kein Befund dieses Branches.

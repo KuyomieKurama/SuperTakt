@@ -1728,7 +1728,7 @@ kein Dialog ausgelöst.
 | A-8.7 (Vorlagen) | TP-TPL-01 bis TP-TPL-08, TP-NOTE-01/02/04 |
 | A-8.8 (Transaktion) | TP-EXPST-04 |
 | A-9.1–A-9.5 (Standard-Tags) | TP-DTAG-01 bis TP-DTAG-04, TP-ADDIN-09 |
-| A-10.4, A-10.8, A-10.9 (Add-in) | TP-ADDIN-01 bis TP-ADDIN-04, -06 bis -11, -13 |
+| A-10.4, A-10.8, A-10.9 (Add-in) | TP-ADDIN-01 bis TP-ADDIN-04, -06 bis -11, -13, TP-EXPST-12 |
 | E-008 (Rundung, bestätigt) | TP-ROUND-01 bis TP-ROUND-16, TP-EXPORT-09 |
 | E-009/R-02/R-09 (Token) | TP-ADDIN-06, -07, -08 |
 | E-011/R-11 (Exportordner) | TP-EXPORT-04, -05 |
@@ -1737,6 +1737,9 @@ kein Dialog ausgelöst.
 | E-018/R-13 (Ablageorte, nicht Roaming) | TP-EXPORT-10 |
 | E-019/R-12 (Token nicht in roamingSettings) | TP-ADDIN-13 |
 | E-020 (Gruppierung je Todo und Tag) | TP-EXPORT-11 bis TP-EXPORT-17 (Abschnitt 9a) |
+| E-036 (verwaiste Buchung) | TP-TIMER-10 |
+| E-056 (Aufgabenbereich nennt auch das Verschwinden) | TP-EXPST-12 |
+| E-058 (Bewegungssatz einmal berechnet, an beiden Flächen gleich) | TP-EXPST-12, TP-TIMER-08, -09, -10 |
 | R-06 (Vorlagen hebeln Trennung aus) | TP-NOTE-01 bis TP-NOTE-04, TP-TPL-08 |
 | R-08 (zwei Notizfelder verwechselbar) | TP-NOTE-03 (Sichtbarkeit in der UI) |
 | R-15 (zu weiter Add-in-Regex) | TP-ADDIN-02, -10, -11 |
@@ -2149,15 +2152,18 @@ die Ansage selbst — das ist eine Grenze der Werkzeugausstattung, keine Auslass
 
 ---
 
-## 17. Nachträge aus T-096 (Welle B nach R-1/R-3 — Ordnersperre, leerer Ordner in einer Regel)
+## 17. Nachträge aus T-096/T-097/T-099 (Wellen B bis D — Ordnersperre, Bewegungssatz, Stopp-Anzeige, `gotoBoard`)
 
 Grundlage: `decisions.md` E-057 (Ordnerterm ohne Treffer ist eine Einschränkung, kein
 Neutralwert) und der R-1-Befund aus der Review-Runde, behoben in T-089 (Migration 0012,
-`pool_rule.tag_id`/`folder_id` von `CASCADE` auf `RESTRICT`, `tag_in_use` mit `details`). Beide
-Fälle unten sind **neu und bestanden**, dreifach nachgemessen über `pnpm run test:e2e` (37/37,
-Exitcode 0). Der von T-094 parallel umgebaute Bewegungssatz (Hauptanwendung gegen Add-in) ist
-ausdrücklich **nicht** Teil dieser Welle — er wäre hier zwangsläufig rot, siehe „Für Welle C
-zurückgestellt" am Ende dieses Abschnitts.
+`pool_rule.tag_id`/`folder_id` von `CASCADE` auf `RESTRICT`, `tag_in_use` mit `details`). Die
+beiden ersten Fälle unten (TP-KANBAN-06, TP-TAG-14) stammen aus Welle B; der von T-094 parallel
+umgebaute Bewegungssatz (Hauptanwendung gegen Add-in) war in Welle B ausdrücklich **nicht**
+enthalten — er wäre dort zwangsläufig rot gewesen, weil der Wortlaut aus E-058 Punkt 4 erst mit
+T-093/T-094 entstand. Welle D (T-099) holt ihn nach (TP-EXPST-12), bindet die Stopp-Antwort an
+(TP-TIMER-08 bis -10), schärft TP-TAG-14 um den seit T-097 sichtbaren Regelnamen und ersetzt in
+`kanban.spec.ts` die beiden verbliebenen `page.reload()`-Aufrufe. Alle Fälle unten sind **neu
+oder geschärft und bestanden**, mindestens zweifach nachgemessen über `pnpm run test:e2e`.
 
 ### TP-KANBAN-06 — Ein leerer Ordner in der Regel: die Spalte trifft nichts und sagt es (E-057)
 **Anforderungen:** A-3.4, A-4.2, E-057
@@ -2183,26 +2189,28 @@ Todo mit dem passenden Status landet **trotzdem nicht** in der Spalte — der le
 schränkt ein, unabhängig davon, dass die Statusachse erfüllt wäre. Nach Schritt 3 löst sich der
 Ordnerterm auf; die Karte erscheint, und der Leerzustand ist weg.
 
-**Befund während der Umsetzung, behoben.** Die Tag-Zuweisung an das Todo lief für diesen Fall
-bewusst über die API (`support/api.ts`, `setTodoTags`) und nicht über den Bearbeiten-Dialog —
-beides ist als Vorbereitung zulässig (das eigentliche Verhalten der Bearbeiten-Dialog-Zuweisung
-prüft bereits `TP-KANBAN-01`). Genau das deckte einen zweiten, unabhängigen Befund auf: Ein
-zweiter `page.goto()` auf **dieselbe** bereits offene Route (`#/kanban` → `#/kanban`, ohne
-zwischenzeitliche Navigation auf eine andere Route) löst in dieser Oberfläche **keine** neue
-Anfrage aus — dasselbe Muster wie in `TP-KANBAN-04`, wo `markTodoDone` über die API am
-`bump()`-Mechanismus der Oberfläche vorbeiläuft. Der Testfall benutzt deshalb nach der
-API-Zuweisung `page.reload()` statt eines zweiten `gotoBoard()`. Das ist eine Eigenschaft der
-Testvorbereitung (eine Änderung an der Oberfläche vorbei verlangt ein ausdrückliches Neuladen),
-keine Regression der geprüften Funktion selbst — mit der echten Bearbeiten-Dialog-Zuweisung
-(`TP-KANBAN-01`) navigiert die Oberfläche ohnehin über eine andere Route und lädt frisch.
-**Ergebnis: bestanden**, dreifach wiederholt.
+**Befund während der Umsetzung (T-096), seither behoben (T-097/T-099).** Die Tag-Zuweisung an
+das Todo lief für diesen Fall bewusst über die API (`support/api.ts`, `setTodoTags`) und nicht
+über den Bearbeiten-Dialog — beides ist als Vorbereitung zulässig (das eigentliche Verhalten der
+Bearbeiten-Dialog-Zuweisung prüft bereits `TP-KANBAN-01`). Genau das deckte einen zweiten,
+unabhängigen Befund auf: Ein zweiter `page.goto()` auf **dieselbe** bereits offene Route
+(`#/kanban` → `#/kanban`, ohne zwischenzeitliche Navigation auf eine andere Route) löste
+**keine** neue Anfrage aus — dasselbe Muster wie in `TP-KANBAN-04`, wo `markTodoDone` über die
+API am `bump()`-Mechanismus der Oberfläche vorbeilief. Der Testfall benutzte deshalb in T-096
+nach der API-Zuweisung `page.reload()` statt eines zweiten `gotoBoard()`. T-097 hat die Ursache
+behoben (`popstate`/`useDataFreshness`, siehe „`tests/e2e/kanban.spec.ts` — `page.reload()`
+durch ein zweites `gotoBoard(page)` ersetzt" weiter unten in diesem Abschnitt), und T-099 hat den
+Testfall entsprechend auf ein zweites `gotoBoard()` umgestellt — kein `page.reload()` mehr an
+dieser Stelle.
+**Ergebnis: bestanden**, dreifach in T-096, seither zweifach je vollständigem Lauf wiederholt.
 
-### TP-TAG-14 — Ein Ordner in einer Regel ist nicht löschbar (409 `tag_in_use`, R-1 Befund 1 / T-089)
-**Anforderungen:** A-3.2, A-3.4, A-4.2, E-057
+### TP-TAG-14 — Ein Tag, ein Ordner oder ein Status in einer Regel ist nicht löschbar; Ordner und Status nennen die Regel beim Namen, das Tag (noch) nicht (409 `tag_in_use`/`status_in_use`, R-1 Befund 1 / T-089, T-097, T-099)
+**Anforderungen:** A-3.2, A-3.4, A-4.2, A-5.4, E-057
 **Ebene:** End-to-End (`tests/e2e/tag-folder-rule-lock.spec.ts`), ein Fall davon zusätzlich als
 Integrationsprobe direkt über die API (wie `TP-TPL-08`/`export-template-validation.spec.ts`)
-**Vorbedingung:** Ein Ordner, der als erforderlicher Term in einer Regel (Pool oder
-Kanban-Spalte) steht; ein zweiter Ordner ohne jeden Regelbezug, als Gegenprobe.
+**Vorbedingung:** Ein Ordner, ein Tag und ein Status, die je einzeln in einer eigenen Regel
+(Pool oder Kanban-Spalte) stehen; zusätzlich ein zweiter Ordner ohne jeden Regelbezug, als
+Gegenprobe.
 **Schritte:**
 1. Über die API direkt `DELETE /tag-folders/{id}` auf dem in der Regel stehenden Ordner
    aufrufen.
@@ -2211,30 +2219,56 @@ Kanban-Spalte) steht; ein zweiter Ordner ohne jeden Regelbezug, als Gegenprobe.
 4. Über die Oberfläche (S-08): den in der Regel stehenden Ordner auswählen, „Löschen" auslösen,
    im Bestätigungsdialog erneut „Löschen" bestätigen.
 5. Dialog mit „Abbrechen" schließen, Tags-Ansicht neu aufsuchen.
+6. Dieselben Schritte 4/5 für ein Tag, das in einer eigenen Regel als erforderlicher Term steht.
+7. Dieselben Schritte 4/5 für einen Status, der in einer eigenen Regel auf der Statusachse steht
+   (Einstellungen, Bereich „Status") — der Löschknopf ist dort **anklickbar**, weil die
+   Vorprüfung der Ansicht (`blocked` in `StatusSettings.tsx`) nur „letzter Status",
+   „ist Standard" und „trägt noch Todos" kennt, nicht aber eine Regelbindung; die Ablehnung
+   kommt daher erst vom Dienst, nach dem Bestätigen.
 **Erwartetes Ergebnis:** Schritt 1 und 2 antworten `409` mit dem Fehlerschlüssel `tag_in_use`;
 `details` enthält mindestens einen Eintrag mit `code: "pool_rule"`, der Kennung des Pools in
 `field` und seinem Namen in Anführungszeichen in `message` — beides maschinenlesbar und für die
 Oberfläche verwertbar. Schritt 3 antwortet mit Erfolg (204) — ein Ordner ohne Regelbezug bleibt
 löschbar, dieselbe Sperre trifft nicht jeden Ordner. Schritt 4: Der Bestätigungsdialog schließt
 **nicht** und zeigt den vom Dienst gelieferten Grund („Dieser Ordner wird in der Regel eines
-Pools verwendet."). Nach Schritt 5 ist der Ordner weiterhin im Tag-Baum vorhanden — die Ablehnung
-hat nichts verändert.
+Pools verwendet.") **und seit T-097 wörtlich den Namen der betroffenen Regel** („… Betroffen ist
+Regel „<Name>“."). Nach Schritt 5 ist der Ordner weiterhin im Tag-Baum vorhanden — die Ablehnung
+hat nichts verändert. Schritt 7 zeigt für den Status dieselbe Auskunft samt Regelnamen
+(„Diesen Status benutzt noch die Regel eines Pools oder einer Kanban-Spalte.") — **ohne** den
+Zusatz „Zwischen dem Zählen und dem Löschen ist offenbar ein Todo dazugekommen", der nur zum
+anderen der beiden `status_in_use`-Gründe gehört (T-097, Nebenbefund).
 
-**Zur Erwartung „Regelname in der Oberfläche" aus dem Auftrag — abweichend gemessen, nicht
-stillschweigend gelockert.** Der Auftrag benannte die Erwartung „die Oberfläche zeigt den
-Regelnamen in der Fehlermeldung (wie bei `status_in_use`)". Nachgesehen im Quelltext:
-`TaktApiError.details` (`apps/web/src/api/client.ts`) wird im gesamten `apps/web`-Baum an keiner
-einzigen Stelle gelesen — weder für `tag_in_use` (`TagsScreen.tsx`, `deleteError` ist schlicht
-`cause.message`) noch für das namensgleiche Vorbild `status_in_use`
-(`StatusSettings.tsx`, `errorMessage(cause)`, ebenfalls nur die allgemeine Dienstmeldung ohne
-Namen). Beide Flächen zeigen heute denselben generischen Satz ihres jeweiligen Fehlerschlüssels,
-aber **nicht** den konkreten Regelnamen aus `details` — die Auskunft liegt seit T-089 vollständig
-vor (Kennung und Name je Regel), nur die Oberfläche liest sie noch nicht. Dieser Testfall prüft
-deshalb genau den tatsächlichen, stabilen Stand (Sperre greift sichtbar, Grund wird genannt,
-Ordner bleibt erhalten) und behauptet nicht mehr, als der Quelltext hergibt — ein wissentlich
-rot geschriebener Fall widerspräche dem Auftrag „nur die stabilen Fälle". Die Lücke ist eine
-offene Frage an den Orchestrator/frontend-dev, keine Auslassung dieses Testfalls.
-**Ergebnis: bestanden**, dreifach wiederholt.
+**Schritt 6 (Tag) weicht ab — echter Fund, gemessen mit T-099, kein Testversehen.** Der
+Bestätigungsdialog zeigt beim Tag denselben allgemeinen Satz wie am Ordner („Dieses Tag wird in
+der Regel eines Pools verwendet.") — aber **ohne** den Regelnamen. Ursache in
+`packages/storage/src/sqlite/repo-tags.ts`: `createTagPort().remove()` zählt beim Grund „Regel"
+nur die Trefferzahl (`usage.rules > 0`) und antwortet mit `tag_in_use` **ohne** `details`.
+`createTagFolderPort().remove()` (dieselbe Datei, für den Ordner) und `TodoStatusPort.remove()`
+fragen dagegen `pool_id`/`name` mit ab und liefern `details: usedIn.map(poolReference)` — genau
+der Vertrag, auf dem `apps/web/src/lib/errorText.ts` (`ruleReferences`, T-097) aufbaut. Ohne
+`details` hat `errorMessageWithRules` beim Tag nichts anzuhängen; die Oberfläche zeigt korrekt die
+allgemeine Auskunft und keinen falschen Namen, aber eben auch keinen richtigen. Dieser Testfall
+prüft deshalb ausdrücklich, dass beim Tag **kein** „Betroffen ist Regel …" erscheint — eine
+Erwartung, die bei einer künftigen Behebung in `packages/storage/**` (domain-dev-Hoheit)
+bewusst rot werden soll, statt einer stillschweigend gelockerten Zusicherung zum Opfer zu fallen.
+Offene Frage an den Orchestrator/domain-dev, siehe Bericht zu T-099.
+
+**Nachtrag T-099 — die mit T-096 offene Erwartung „Regelname in der Oberfläche" ist zu zwei
+Dritteln eingelöst.** T-097 hat `apps/web/src/lib/errorText.ts` (`errorMessageWithRules`,
+`ruleReferences`, `enumerateGerman`) gebaut: Der Name kommt unzerlegt aus `details[].message` und
+wird an allen drei Löschdialogen angehängt, **wenn** der Dienst `details` liefert — das tut er für
+Ordner und Status, für das Tag (noch) nicht (siehe oben). Dieser Testfall prüft das jetzt wörtlich,
+für alle drei Flächen, statt wie in T-096 nur die stabile Teilmenge ohne jeden Namen zu belegen.
+
+**Selektor auf den Dialog, robust gemacht (T-099).** Der Ordner- und der Tag-Dialog wechseln nach
+einer Absage weder Titel noch Knopfbeschriftung (anders als der Status-Dialog, der zu „Der Status
+wurde nicht gelöscht"/„Erneut versuchen"/„Schließen" wechselt) — ein bis T-096 über den Titel
+`'Ordner löschen?'` greifender Selektor verdeckte diese Ungleichheit zufällig, weil der Titel eben
+nicht wechselt. Der Testfall greift den Dialog jetzt über die Rolle (`alertdialog`, ohne Namen)
+statt über den Titeltext; die Ungleichheit selbst ist damit nicht behoben (offene Frage an
+frontend-dev, siehe Bericht zu T-099), aber kein unbeabsichtigt bestehender Testfall mehr.
+
+**Ergebnis: bestanden**, gemessen über zwei vollständige Läufe von `pnpm run test:e2e`.
 
 ### Nachgezogener Kommentar: `tests/e2e/support/actions.ts` (T-091, `RadioRow`-Umbau)
 
@@ -2248,20 +2282,103 @@ genau einen Knopf, weil „Unerledigt" nicht mit „Erledigt" **beginnt**, sonde
 und trifft ihn nach der Berichtigung unverändert. Kein eigener Testfall, weil `TP-KANBAN-01` bis
 `TP-KANBAN-06` diesen Zugriff bei jedem Lauf mitprüfen.
 
-### Für Welle C zurückgestellt (nicht in dieser Welle geschrieben, absichtlich)
+### `tests/e2e/kanban.spec.ts` — `page.reload()` durch ein zweites `gotoBoard(page)` ersetzt (T-097, T-099)
 
-Zwei Fälle sind im Auftrag zu T-096 ausdrücklich ausgenommen, weil sie mit dem Wortlaut aus
-E-058 Punkt 4 arbeiten, den `T-093`/`T-094` zum Zeitpunkt dieser Welle erst umbauen — ein hier
-geschriebener Fall wäre zwangsläufig rot, keine Auslassung:
+TP-KANBAN-04 (Zeile ~312) und TP-KANBAN-06 (Zeile ~414) griffen nach einer Änderung an der
+Oberfläche vorbei (`markTodoDone`/`setTodoTags` über die API) zu `page.reload()`, weil ein
+zweites `gotoBoard(page)` auf die bereits offene Route `#/kanban` bis T-097 keine neue Anfrage
+auslöste (T-096-Fund). T-097 hat die Ursache behoben: `hashchange` feuert bei gleichem Anker
+nicht, `popstate` schon — `useRoute` liefert seitdem zusätzlich `revisit`, und
+`useDataFreshness(revisit)` lädt Struktur und Board bei jedem erneuten Ansteuern derselben Route
+frisch nach. Beide Stellen benutzen jetzt ein zweites `gotoBoard(page)` statt `page.reload()`; die
+Kommentare darüber sind entsprechend berichtigt. Das ist der bessere Test: Er prüft den Weg, den
+die Oberfläche beim erneuten Ansteuern derselben Adresse tatsächlich geht (z. B. nach einer
+Add-in-Buchung, über `visibilitychange`), statt eines vollständigen Neuladens, das dabei nie
+geschieht. **Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
 
-- **TP-EXPST-12 (Arbeitstitel) — Bewegungssatz Hauptanwendung gegen Add-in.** Derselbe
-  Timerstart, einmal über die Hauptanwendung (`Timer.tsx`/`TimerContext.tsx`,
-  `poolMovementSentence(movement, 'past', …)`) und einmal über das Add-in
-  (`duplicate/reopen.ts`), muss zeichengleich denselben Satz melden — die Eigenschaft, für die
-  E-058 überhaupt geschrieben wurde. Geplant für Welle C, nach T-094 (`docs/testplan.md`,
-  Board-Eintrag T-096).
-- **TP-TIMER-08 (Arbeitstitel) — Stopp-Antwort trägt `poolMovement`.** `POST /timer/stop` und
-  `POST /timer/orphaned/resolve` liefern seit T-093 `poolMovement` mit Anlass `booking`
-  (E-058 Punkt 6); die Oberfläche bindet die Stopp-Antwort laut Board-Eintrag T-094 aber
-  „noch **nicht**" an — das ist Gegenstand von Welle C. Ein Testfall, der die Anzeige nach dem
-  Stoppen prüft, wäre bis dahin zwangsläufig rot.
+### TP-EXPST-12 — Bewegungssatz Hauptanwendung gegen Add-in, zeichengleich bis auf die Zeitform (E-056, E-058, T-099)
+**Anforderungen:** A-2.5, A-3.4, A-5.1–A-5.6, A-10.9, E-056, E-058
+**Ebene:** End-to-End (`tests/e2e/pool-movement-sentence.spec.ts`)
+**Vorbedingung:** Eine reine Board-Spalte (`placement: 'board'`, kein Pool) mit einer Regel über
+ein Tag; zwei erledigte Todos mit diesem Tag, eines für den Weg über die Hauptanwendung, eines
+für den Weg über das Add-in (mit einer erfundenen Call-Nummer).
+**Schritte:**
+1. Hauptanwendung: auf der Detailansicht (S-03) den Timer des erledigten Todos starten; die
+   Antwort von `POST /timer/start` (`poolMovement`) und den Toast danach festhalten.
+2. Aufgabenbereich: `GET /addin/todo-matches` mit der Call-Nummer des zweiten Todos abfragen
+   (Ankündigung, vor der Buchung) und danach `POST /addin/todos/{id}/time-entries` aufrufen
+   (Bestätigung, nach der Buchung).
+3. Aus beiden Add-in-Antworten je eine `PoolMovement` bilden (`poolNames`/`enteringPoolNames`/
+   `leavingPoolNames` → `appears`/`enters`/`leaves`, wie `apps/outlook-addin/src/duplicate/
+   reopen.ts` es tut) und `poolMovementSentence` aus `@takt/domain` darauf anwenden — einmal mit
+   `'future'`, einmal mit `'past'`.
+4. Denselben Aufruf mit dem aus Schritt 1 protokollierten `poolMovement` der Hauptanwendung
+   wiederholen (`'past'`).
+**Erwartetes Ergebnis:** Die reine Board-Spalte erscheint im Bewegungssatz, obwohl
+`GET /addin/context` sie nie nennen würde (E-058 Punkt 7) — der in T-096 zurückgestellte Fall.
+Der aus der Add-in-Antwort **nach** der Buchung gebildete Satz (Vergangenheit) ist
+**zeichengleich** mit dem Satz, den die Hauptanwendung nach ihrem eigenen Timerstart zeigt — für
+dieselbe Regel, dieselbe reine Board-Spalte. Der Satz **vor** der Buchung (Zukunft, aus
+`GET /addin/todo-matches`) unterscheidet sich ausschließlich in der Zeitform vom Satz danach.
+Ergänzend geprüft: der Fall `leaves` (eine „Nur erledigt"-Spalte, die die Karte nach dem Aufheben
+verlässt, „Es ist aus „X“ verschwunden und erscheint sonst nirgends.") über die Hauptanwendung,
+und der Fall ohne jeden Treffer („Auf dieses Todo passt derzeit keine Regel …") über das Add-in,
+in beiden Zeitformen. Alle vier Sätze werden **aus der Domänenfunktion gezogen**, nicht als
+Literal im Testfall vorgegeben — dieselbe Bauart wie in
+`apps/outlook-addin/scripts/proof-addin.mjs`.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen, zusätzlich isoliert über
+`--grep`.
+
+### TP-TIMER-08 — Stopp-Antwort trägt den Bewegungssatz, Anlass „booking" (E-058 Punkt 6, T-097, T-099)
+**Anforderungen:** A-6.1, A-6.8, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Ein Pool mit `exportState: 'open'` über ein Tag; ein Todo mit diesem Tag ohne
+bisherige Buchung.
+**Schritte:**
+1. Timer über die Detailansicht starten, eine Leistung eintragen, real spürbar warten (mehr als
+   eine Sekunde), über den Bestätigungsdialog stoppen und buchen.
+2. Aus der Antwort von `POST /timer/stop` (`poolMovement`) den erwarteten Satz über
+   `poolMovementSentence(movement, 'past', 'booking')` bilden.
+**Erwartetes Ergebnis:** Der Toast „Zeit gebucht." trägt am Ende seines Rumpfs genau diesen Satz
+(„Es steht jetzt in „<Spalte>“." — die erste abgeschlossene Buchung setzt „hat offene Buchungen",
+und die Spalte nimmt das Todo damit auf), angehängt an den Buchungsrumpf, nicht an dessen Stelle.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen.
+
+### TP-TIMER-09 — `discarded` trägt keinen Satz (E-058 Punkt 6, T-099)
+**Anforderungen:** A-6.1, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Dieselbe Regel wie in TP-TIMER-08, damit es — anders als ohne jede zutreffende
+Regel — überhaupt etwas zu verschweigen gäbe.
+**Schritte:** Timer starten und ohne Wartezeit über den Bestätigungsdialog sofort wieder stoppen
+(Leistung bleibt leer), sodass die Dauer unter einer Sekunde bleibt
+(`MINIMUM_DURATION_SECONDS`, `packages/domain/src/time-entry.ts`).
+**Erwartetes Ergebnis:** `POST /timer/stop` antwortet mit `kind: 'discarded'` und `poolMovement:
+null` — der Dienst löst in diesem Zweig keine einzige Regel auf. Der Toast „Nichts gebucht."
+trägt ausschließlich seinen festen Text, keinen angehängten Satz.
+**Hinweis zur Zeitmessung:** Dieser Fall hängt von echter, unter einer Sekunde bleibender
+Klickzeit ab. Auf einer stark ausgelasteten Maschine (siehe Kopf von `playwright.config.ts`) kann
+das vereinzelt eine Sekunde überschreiten; der Testfall vermerkt das dann als Zeitmessungsbefund
+und wird nicht als bestandener Beweis für den `discarded`-Zweig gewertet (siehe Bericht zu
+T-099).
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen (kein Zeitüberschreitungsfall
+beobachtet).
+
+### TP-TIMER-10 — `POST /timer/orphaned/resolve` trägt denselben Bewegungssatz, ohne Prozessabschuss ausgelöst (E-036, E-058 Punkt 6, T-099)
+**Anforderungen:** A-6.1, E-036, E-058
+**Ebene:** End-to-End (`tests/e2e/timer-stop-announcement.spec.ts`)
+**Vorbedingung:** Dieselbe Art Regel wie in TP-TIMER-08.
+**Schritte:**
+1. Timer über die rohe API starten (`POST /timer/start`, an der Oberfläche vorbei).
+2. Über eine Sekunde real warten, danach ein Lebenszeichen setzen (`POST /timer/heartbeat`).
+3. Die Detailansicht des Todos zum ersten Mal in dieser (frischen) Seite aufsuchen.
+4. Im Dialog „Eine Buchung ohne Ende" die Vorgabe „Bis zum letzten Lebenszeichen buchen"
+   bestätigen.
+**Erwartetes Ergebnis:** `loadOrphanedTimer` (`usecases/timer.ts`) meldet **jeden** beim Laden
+unvollständigen Eintrag als verwaist, unabhängig vom Alter des Lebenszeichens — ein über die
+rohe API gestarteter Timer, den die erst startende Oberfläche noch nicht kennt, ist für sie
+ununterscheidbar von einem Timer, der einen Absturz der Hülle überlebt hat (E-036: „Hülle weg,
+stdin zu"). Der Dialog erscheint, ohne dass ein Prozess beendet werden musste. `POST /timer/
+orphaned/resolve` antwortet mit `kind: 'recorded'` und demselben `poolMovement`-Vertrag wie beim
+gewöhnlichen Stopp; der Toast „Buchung abgeschlossen." trägt denselben Satz aus
+`poolMovementSentence(movement, 'past', 'booking')`.
+**Ergebnis: bestanden**, zweifach über die volle Suite gemessen.

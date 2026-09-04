@@ -307,9 +307,12 @@ test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ a
       });
 
       // `markTodoDone` lief über die API, am `bump()`-Mechanismus der
-      // Oberfläche vorbei — ohne Neuladen zeigte das Board noch den Stand vor
-      // dem Erledigen.
-      await page.reload();
+      // Oberfläche vorbei. Bis T-097 löste ein zweites `gotoBoard(page)` auf
+      // die bereits offene Route `#/kanban` keine neue Anfrage aus (T-096-
+      // Fund); seitdem hört `useRoute` auf `popstate`, das auch beim erneuten
+      // Ansteuern derselben Adresse feuert, und `useDataFreshness` lädt dann
+      // frisch nach — ein zweites `gotoBoard(page)` genügt jetzt.
+      await gotoBoard(page);
 
       const doneColumn = boardColumn(page, doneColumnName);
       const openColumn = boardColumn(page, openColumnName);
@@ -408,10 +411,11 @@ test.describe('TP-KANBAN-06 — Ein leerer Ordner in der Regel trifft nichts und
 
       // Die Zuweisung lief über die API, am `bump()`-Mechanismus der
       // Oberfläche vorbei — genau das Muster aus TP-KANBAN-04
-      // (`markTodoDone` über die API): Ohne Neuladen zeigt das Board noch
-      // den Stand von vor der Zuweisung, weil `gotoBoard` allein auf einer
-      // bereits offenen Seite keine neue Anfrage auslöst.
-      await page.reload();
+      // (`markTodoDone` über die API). Seit T-097 lädt ein zweites
+      // `gotoBoard(page)` auf dieselbe, bereits offene Route trotzdem frisch
+      // nach (`popstate`/`useDataFreshness`, siehe dort) — kein `page.reload()`
+      // mehr nötig.
+      await gotoBoard(page);
       const columnAfter = boardColumn(page, columnName);
       await expect(columnAfter.locator('.kcard', { hasText: todo.title })).toBeVisible();
       await expect(columnAfter.getByText('Der geforderte Ordner enthält kein Tag')).toHaveCount(0);
