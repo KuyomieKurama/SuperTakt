@@ -210,6 +210,27 @@ jobs:
           npm install --global "$manager"
           pnpm --version
 
+      # Seit T-145 fährt `pnpm check` auch `cargo test --lib` (Auflage A-V-23):
+      # In `release.rs` liegt die einzige Kontrolle zwischen einer fremden
+      # Zeichenkette und einem Prozeßstart, und sie hing in keinem Ablauf.
+      # Dafür braucht dieser Auftrag dieselben Systemkisten wie der Bau — die
+      # Kiste übersetzt gegen webkit2gtk.
+      - name: Systemabhängigkeiten für Tauri
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            file
+
       - name: Rust-Toolchain zeigen
         shell: bash
         run: |
@@ -336,6 +357,29 @@ jobs:
       - name: Abhängigkeiten installieren
         shell: bash
         run: pnpm install --frozen-lockfile
+
+      # A-A-10, zweite Hälfte (T-147), berichtigt nach T-164 (A-A-32):
+      #
+      # Die Prüfung im Öffnen-Befehl verhält sich unter Windows anders als
+      # unter Linux — der nachgestellte Punkt und das nachgestellte Leerzeichen
+      # fallen dort vor der Dateiauflösung weg, und die `#[cfg(windows)]`-Fälle
+      # in `attachment.rs` werden nur auf einem Windows-Läufer überhaupt
+      # übersetzt. **Nicht** gemessen wird hier, was der frühere Wortlaut
+      # behauptet hat: Die `Prefix`-Zweige von `is_unc` sind konstruktiv
+      # unerreichbar, weil jedes der vier Präfixe zwangsläufig mit zwei
+      # Trennern beginnt und die Prüfung davor schon greift. Eine Zusage, die
+      # einen unerreichbaren Zweig als geprüft ausgibt, ist schlimmer als
+      # keine.
+      #
+      # Und dieser Auftrag ist seit `pruefung.yml` **nicht mehr der einzige**
+      # Ort, an dem die Windows-Fälle laufen — dort laufen sie bei jedem
+      # Anstoß, hier noch einmal vor dem Bau. Vor dem Bau, nicht danach: Ein
+      # Erzeugnis, dessen einzige Kontrolle zwischen fremder Zeichenkette und
+      # Prozeßstart ungeprüft ist, soll gar nicht erst entstehen.
+      - name: Rust-Prüffälle auf dieser Plattform
+        shell: bash
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib
 
       - name: Anwendung bauen
         shell: bash

@@ -1,0 +1,140 @@
+# Prüfung — der Auftrag, der bei jedem Anstoß läuft.
+#
+# Anlaß: T-164 (A-A-32). `release.yml` behauptete, die einzigen Prüffälle, die
+# unter Windows überhaupt übersetzt werden, würden „gemessen" — sie werden es,
+# aber nur beim Bau einer Veröffentlichung, also frühestens dann, wenn niemand
+# mehr etwas ändern will. Zwischen zwei Etiketten liegt jede `#[cfg(windows)]`-
+# Zusage brach: Ein Prüffall, der nur auf einem Läufer übersetzt wird, den man
+# einmal im Quartal startet, ist eine Absichtserklärung.
+#
+# Dieser Auftrag hat deshalb genau zwei Aufgaben, und beide sind Aufgaben, die
+# der Entwicklungsrechner hier nicht erledigen kann:
+#
+#   1. Die Rust-Prüffälle auf **Windows** übersetzen und fahren. Sie sind die
+#      letzte Kontrolle zwischen einer fremden Zeichenkette und `ShellExecuteW`
+#      (R-21), und ihre Windows-Zweige — nachgestellter Punkt, nachgestelltes
+#      Leerzeichen, `Prefix`-Formen — verhalten sich unter Linux anders oder
+#      gar nicht. Ein grüner Lauf auf dem falschen Betriebssystem ist eine
+#      Aussage über den Läufer, nicht ein Nachweis (Nachtrag zu R-21).
+#   2. Die **Lieferkette** messen (E-079). `pnpm audit` läuft auch hier, aber
+#      `cargo audit` gibt es auf diesem Rechner nicht — und 498 Kisten in
+#      `Cargo.lock` sind bisher nie auf Warnungen gesehen worden (T-B07).
+#
+# Was hier **nicht** steht: `pnpm check` in voller Länge und der Bau des
+# Erzeugnisses. Beides tut `release.yml` bereits, und beides doppelt zu fahren
+# kostet Minuten je Anstoß, ohne eine Frage zu beantworten, die hier nicht
+# schon beantwortet wird.
+name: Prüfung
+
+on:
+  # `branches` allein schließt Etikett-Anstöße schon aus — die Auslieferung
+  # hängt an ihnen und soll nicht doppelt laufen.
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Ein zweiter Anstoß auf denselben Zweig macht den ersten gegenstandslos.
+# Anders als bei der Auslieferung darf hier abgebrochen werden: Es entsteht
+# nichts, was halbfertig zurückbliebe.
+concurrency:
+  group: pruefung-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # Die Kontrolle vor dem Prozeßstart, auf beiden Betriebssystemen
+  # =========================================================================
+  rust:
+    name: Rust-Prüffälle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Kein `fail-fast`: Wenn Linux und Windows unterschiedlich urteilen, ist
+      # genau **das** die Auskunft, und sie geht verloren, sobald der eine Lauf
+      # den anderen abbricht.
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Die Kiste hängt an Tauri, und Tauri hängt unter Linux an WebKit und
+      # GTK — auch dann, wenn nur die Prüffälle übersetzt werden. Unter Windows
+      # ist nichts nachzuinstallieren.
+      - name: Systemabhängigkeiten für Tauri
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev
+
+      - name: Rust-Toolchain zeigen
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc -vV
+          cargo --version
+
+      - name: Rust-Prüffälle auf dieser Plattform
+        shell: bash
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib
+
+  # =========================================================================
+  # Die Lieferkette (E-079)
+  # =========================================================================
+  lieferkette:
+    name: Lieferkette (pnpm audit, cargo audit)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+
+      - name: pnpm bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm --version
+
+      # Ohne `--frozen-lockfile` prüfte der Lauf eine Auflösung, die es hier
+      # nie gab.
+      - name: Abhängigkeiten installieren
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Lieferkette Node
+        shell: bash
+        run: pnpm audit
+
+      # `--locked` heißt: die Fassungen aus dem Lockfile von cargo-audit
+      # selbst. Sonst zöge der Prüfschritt sich seine eigene Lieferkette frisch
+      # aus der Registry — ausgerechnet dieser.
+      - name: cargo-audit bereitstellen
+        shell: bash
+        run: cargo install cargo-audit --locked
+
+      - name: Lieferkette Rust
+        shell: bash
+        working-directory: apps/desktop/src-tauri
+        run: cargo audit

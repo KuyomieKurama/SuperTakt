@@ -1269,6 +1269,52 @@ und liegt im vierten Fall daneben. Das gehört zusammen mit O-AJ entschieden und
 
 ---
 
+### 5.6a Was der Start aufräumt — und was er dabei nie anfasst (T-168, A-A-18)
+
+Zwei Sorten Kundenmaterial bleiben liegen, wenn ein Vorgang abbricht, und beide gehören dem
+Benutzer, nicht Takt:
+
+* eine **halbe Exportdatei** (`.takt-*.tmp`), wenn der Dienst zwischen Schreiben und Umbenennen
+  endet. Sie enthält Kundendaten (A-8.9, R-05) und belegt nichts — die Transaktion ist
+  zurückgenommen.
+* eine **Bildkopie ohne Anhang**, wenn das Entfernen scheitert (unter Windows genügt ein
+  geöffneter Betrachter, `EBUSY`) oder wenn Migration 0015 zurückgeht. SQL kennt kein
+  Dateisystem; der Rückweg nimmt die Zeilen mit und die Dateien nicht.
+
+Beides räumt der Start auf, jedes mit einer Zeile im Protokoll und nur dann, wenn es etwas
+gefunden hat. Bis T-168 war die Gegenmaßnahme für den zweiten Fall ein Satz in der Migration, der
+einen Menschen bittet, einen Ordner von Hand zu leeren — das ist keine Maßnahme, sondern eine
+Hoffnung.
+
+**Drei Bedingungen, und die erste trägt die anderen beiden.**
+
+1. **Entfernt wird nur, was nachweislich zu keinem Bestand gehört.** Im Zweifel bleibt es liegen.
+   Der Nachweis besteht aus drei Riegeln, von denen jeder einzelne eine Datei verschont:
+   `listImages` nennt nur Namen, die der Adapter erzeugt haben könnte (32 Hexziffern, vier
+   Endungen) und nur Dateien — ein Unterordner, eine fremde Datei, eine halbe Kopie bleiben
+   unsichtbar; `knownImageTargets` wird **gefragt**, und nur eine Antwort ohne den Namen macht
+   ihn zum Waisen; bleibt die Antwort aus, wird gar nichts entfernt; `removeImage` misst die Form
+   noch einmal und verlässt sich nicht auf den Aufrufer.
+2. **Still, wenn nichts liegt.** Der Regelfall schreibt keine Zeile. Gemeldet wird eine Zahl, und
+   nur, wenn wirklich etwas fort ist. Ein Lauf, der bei jedem Start seine Untätigkeit meldet,
+   wird nach dem dritten Mal nicht mehr gelesen.
+3. **Er hält den Start nicht auf.** Ein Verzeichniseintrag (5 000 Dateien: knapp 4 ms gemessen)
+   und eine Abfrage in Blöcken über den Teilindex `ix_todo_attachment_image` aus Migration 0015.
+   Die Tabelle wird nicht in den Speicher geladen.
+
+**Die Reihenfolge ist Teil des Nachweises, nicht eine Frage des Geschmacks:** erst das
+Verzeichnis lesen, dann den Bestand fragen. Eine Kopie, die zwischen beiden Schritten entsteht,
+steht in der Antwort und überlebt. Umgekehrt fiele genau die frische Kopie dem Aufräumen zum
+Opfer, deren Zeile eine Sekunde später geschrieben wird. Aus demselben Grund läuft der Schritt
+**vollständig, bevor der Dienst zuhört**, und nicht nebenher im Hintergrund: Solange keine Route
+erreichbar ist, gibt es dieses Rennen nicht.
+
+**Und was er nicht anfasst:** den Startabbruch aus 5.6. Er läuft nach der Migration, sein
+Rückgabewert wird von niemandem gelesen, und es gibt keinen Ausgang, an dem er den Dienst am
+Starten hindern könnte. Ein Aufräumen, das den Start verhindert, hätte den Zweck verfehlt.
+
+---
+
 ### 5.7 Die eine Verbindung nach außen (T-138, A-18, E-064, E-066, E-069, R-19)
 
 Bis T-138 galt der stärkste einzelne Satz dieses Entwurfs: Takt kennt keine Adresse außerhalb von

@@ -1,7 +1,7 @@
 # Takt — Datenmodell
 
-Stand: 2026-09-01, Aufgaben T-001 und T-013. Verbindlich für `packages/storage` und für alles,
-was über die Ports darauf zugreift.
+Stand: 2026-09-05, Aufgaben T-001 und T-013, nachgeführt bis Migration 0015 (T-146, eingetragen
+mit T-159). Verbindlich für `packages/storage` und für alles, was über die Ports darauf zugreift.
 
 T-013 hat die TypeScript-Bezeichner auf Englisch umbenannt (E-015, R-16), die Rundung von „je
 Buchung" auf „je Todo und Kalendertag" umgestellt und die Kopplung zwischen dem
@@ -26,7 +26,8 @@ sind gegen diese Dateien geprüft, nicht daneben geschrieben.
                     ┌──────┴───────┐         ┌──────────────┐
                     │     todo     │────1:1──│  todo_note   │ Vermerk, intern
                     │  call_number │         │   (A-7.1)    │        (A-7.2)
-                    └──┬────────┬──┘         └──────────────┘
+                    │  due_date    │         └──────────────┘  Frist (A-19.1),
+                    └──┬────────┬──┘                           ein Tag, keine Uhrzeit
                        │        │
                   n:m  │        │  1:n
               ┌────────┴──┐  ┌──┴─────────────┐
@@ -64,12 +65,21 @@ R-1 Befund 1) baut dieselbe Tabelle ein zweites Mal um, ohne eine Spalte anzufas
 Indizes und Trigger bleiben dabei in Zahl und Namen gleich. 0013 (T-138, A-18.10) hängt
 `app_setting.skipped_version` an — eine Spalte, kein Index, kein Trigger; siehe 3.7 und 8.4h.
 Der Stand nach 0013 sind damit 17 Tabellen, eine Sicht, 34 Indizes und 17 Trigger (nachgezählt:
-`sqlite_master` nach `migrateToLatest`, Node 22.23.2). Hinzu kommt `schema_migration`, die der Migrationsläufer selbst
-führt und die deshalb in keiner Migration steht.
+`sqlite_master` nach `migrateToLatest`, Node 22.23.2). 0014 (T-146, A-19.1) hängt `todo.due_date`
+an — eine Spalte und **ein** Teilindex, kein Trigger; siehe 3.2 und 8.4i. 0015 (T-146, A-19.8)
+legt `todo_attachment` und die Wertetabelle `todo_attachment_kind` an, dazu zwei Indizes und
+wieder keinen Trigger; siehe 3.8 und 8.4j. Der Stand nach 0015 sind damit **19 Tabellen, eine
+Sicht, 37 Indizes und 17 Trigger** (nachgezählt: `sqlite_master` nach allen Vorwärtsdateien,
+`PRAGMA integrity_check` = ok, Node 22.23.2, T-159). Hinzu kommt `schema_migration`, die der
+Migrationsläufer selbst führt und die deshalb in keiner Migration steht.
 
 ```
     time_entry ──1:0..1── timer_heartbeat    Lebenszeichen des laufenden
                                              Timers (E-036), höchstens eine Zeile
+
+    todo ──1:n── todo_attachment ──► todo_attachment_kind
+                 (A-19.8 ff.)        Verweis | Datei | Bild — eine Wertetabelle,
+                 position je Todo    kein CHECK (Begründung in 3.8)
 ```
 
 ### Was bewusst *keine* Tabelle ist
@@ -83,6 +93,9 @@ führt und die deshalb in keiner Migration steht.
 | `todo.status_id_before_done` | Erledigt und Kanban-Spalte sind getrennt (siehe 3.1 und 3.2). Das Erledigen verschiebt die Karte nicht, also gibt es beim Wiederaufnehmen nichts wiederherzustellen. |
 | `app_setting.reopen_status_id` | Aus demselben Grund. Eine konfigurierbare Rückkehr-Spalte löst ein Problem, das es nicht gibt. |
 | `todo_status.is_done` | Die Abschlussspalte ist nicht das Erledigt-Kennzeichen. Eine Markierung, die beides verknüpft, würde genau die Verwechslung festschreiben, die der Auftraggeber ausgeschlossen hat. |
+| `todo.due_state` | A-19.5, E-070 Punkt 3. „Überfällig", „heute fällig" und „später fällig" werden **gerechnet**, nicht gespeichert. Eine solche Spalte wäre über Nacht falsch, ohne dass jemand etwas angefasst hat — und niemand hätte einen Anlass, sie neu zu schreiben. Die Regel liegt als `dueState` in `packages/domain/src/due-date.ts`, und dort allein. |
+| `todo_attachment.blob` | E-071 Punkt 2. Die Bytes eines Bildanhangs liegen als Datei neben dem Bestand, nicht in ihm: Eine BLOB-Spalte wanderte in jede Sicherung, bliese die WAL bei jedem Schreibvorgang auf und machte aus `takt.db` eine Datei, deren Größe niemand mehr erklären kann. Siehe 3.8. |
+| `todo_attachment.source_path` | A-A-17. Bei einem Bild wird der **erzeugte** Name der Kopie gespeichert und nie der Pfad, aus dem sie stammt. Ein Quellpfad ist fremder Text, er verriete etwas über den Kunden, und niemand liest ihn je wieder. |
 | `board_column` / `board_column_rule` | E-054, T-066. Eine Kanban-Spalte ist eine Regel — seit E-055 über fünf Achsen und nicht allein über Tags — also dasselbe wie ein Pool: Name, Position, Regelterme, Auflösung über Ordner samt Unterordnern, Mitglieder als Abfrage, leere Regel trifft nichts. Eine zweite Tabelle hätte `pool` Wort für Wort abgeschrieben und die rekursive Ordnerauflösung gleich mit. Stattdessen sagt `pool.placement`, auf welcher Fläche eine Regel erscheint. |
 | `todo_board_column` | Aus demselben Grund wie `todo_pool`: Die Zugehörigkeit zu einer Spalte ergibt sich bei jeder Abfrage aus den Tags. Seit E-054 kann eine Karte dabei in **mehreren** Spalten zugleich stehen — eine gespeicherte Zuordnung müsste dieselbe Karte mehrfach führen und bei jeder Tagänderung nachgezogen werden. |
 | Token des Add-ins | E-009. Nur sein SHA-256-Abdruck liegt auf der Platte, in einer eigenen Datei außerhalb der Datenbank. Die Datenbankdatei wird kopiert — für eine Sicherung, zur Fehlersuche, in einen synchronisierten Ordner. Ein Token darin wanderte mit. Siehe `docs/architektur.md`, Abschnitt 6. |
@@ -399,6 +412,20 @@ bedeutet".
 | `call_number` | E-006, A-2.6. Nullbar. Teilindex `WHERE call_number IS NOT NULL` für die Duplikatsuche des Add-ins (A-10.9). **Nicht eindeutig:** A-10.9 verlangt, dass der Benutzer entscheidet, ob er auf ein vorhandenes Todo bucht oder bewusst ein zweites anlegt. Eine erzwungene Eindeutigkeit nähme ihm diese Wahl. |
 | `completed_at` | A-2.4. `NULL` bedeutet aktiv. Ein Zeitstempel statt eines Ja-Nein-Werts, weil das Dashboard „heute erledigt" zeigen soll. Unabhängig von `status_id`. |
 | `status_id` | Die Kanban-Spalte. Wird vom Erledigen und vom Wiederaufnehmen **nicht** angefasst. |
+| `due_date` | A-19.1, seit Migration 0014. Nullbar; `NULL` heißt „keine Frist", und ein Todo ohne Frist ist in jeder Hinsicht ein gültiges Todo. `YYYY-MM-DD` als Text, **ein Tag und keine Uhrzeit** (E-070 Punkt 1) — derselbe Tagesbegriff wie bei der Tagesgruppierung des Exports (E-025). Teilindex `WHERE due_date IS NOT NULL`. |
+
+**Die Frist ist keine Achse.** Sie geht nicht in `pool_rule` und in keine Exportvorlage (A-19.7,
+A-19.17, E-070 Punkt 4). `ExportSourcePath` bleibt bei zwölf Werten; `v_export_candidate` schreibt
+seine Spalten aus und wird von `due_date` nicht berührt — genau die Eigenschaft, die A-19.17
+strukturell hält statt durch Sorgfalt.
+
+**Der CHECK auf `due_date` ist die zweite Wache, nicht die erste.** Er trägt die *Form* — vier
+Ziffern, Bindestrich, zwei Ziffern, Bindestrich, zwei Ziffern, als GLOB, weil SQLite ohne
+Erweiterung kein REGEXP kennt. Was er nicht leistet: `2026-02-30` besteht ihn, `0000-01-01` auch.
+Die *Existenz* des Tages prüft `isCalendarDay` in `packages/domain/src/due-date.ts`, und beide
+Türen — `routes/todos.ts` und die Add-in-Tür (A-19.21) — lesen dieselbe Bindung, keine Abschrift.
+Der CHECK steht trotzdem da, weil der Wert Benutzereingabe ist (VG-6) und jeder Prozess im
+Benutzerkonto mit `sqlite3` an der Tür vorbeischreiben kann (VG-3).
 
 Kein Feld `board_rank` mehr. Er war der Sortierschlüssel für Drag & Drop (A-5.2, A-13.6); mit
 E-054 ist das Ziehen entfallen. **Migration 0010** hat ihn zusammen mit `ux_todo_rank` entfernt und
@@ -913,6 +940,80 @@ Was der CHECK trägt, ist der Zeichenvorrat, und der ist der sicherheitsrelevant
 Der Wert geht in **keine** Adresse. Die Adresse zur Release-Seite baut die Hülle aus der Fassung,
 die sie selbst geprüft hat (A-V-16); die übersprungene Fassung entscheidet nur darüber, ob ein
 Hinweis erscheint. Schaden im schlimmsten Fall: ein unterdrückter Hinweis.
+
+### 3.8 `todo_attachment` und `todo_attachment_kind` (A-19.8 bis A-19.15, E-071)
+
+Seit Migration 0015. Ein Todo kann beliebig viele Anhänge tragen; es gibt drei Arten — Verweis,
+Datei, Bild. Sie hängen am **bestehenden** Todo und sind keine zweite Struktur daneben.
+
+| Spalte | Zweck |
+|---|---|
+| `todo_id` | `ON DELETE CASCADE` wie `todo_note` und `todo_tag`. Ein gelöschtes Todo lässt keine Anhänge zurück. |
+| `kind` | Fremdschlüssel auf `todo_attachment_kind`, `ON DELETE RESTRICT ON UPDATE RESTRICT`. |
+| `title` | Frei gewählte Bezeichnung (A-19.10). `NULL` heißt „nicht gesetzt". |
+| `target` | Der Wert. Was darin steht, hängt an der Art — siehe die Tabelle unten. |
+| `position` | Reihenfolge des Hinzufügens, je Todo ab 0 (A-19.8). Bestimmt der Adapter, nicht der Aufrufer. |
+| `created_at` | Zeitstempel wie überall: Text, UTC, sekundengenau (2.2). |
+
+#### Warum die Art eine eigene Tabelle ist und kein CHECK
+
+Die Auflage lautete: Eine **vierte Art** darf keine Migration mit Tabellenumbau verlangen. Drei
+Entwürfe standen zur Wahl, und nur der dritte erfüllt sie.
+
+| Entwurf | Was eine vierte Art kostet |
+|---|---|
+| Drei Spalten — `url`, `file_path`, `image_name` | Eine vierte Spalte. Drei von vier wären in jeder Zeile leer, und jede Abfrage müsste wissen, welche sie lesen darf. Verworfen. |
+| Eine Wertspalte mit `CHECK (kind IN (…))` | Einen Tabellenumbau. SQLite kann einen CHECK nicht ändern; ihn zu erweitern heißt, die Tabelle neu zu bauen und die Zeilen zu kopieren. Genau das schließt die Auflage aus. Verworfen. |
+| Eine Wertspalte und eine Nachschlagetabelle | Ein INSERT und einen Zweig in `packages/domain/src/attachment.ts`. **Gewählt.** |
+
+Der Preis ist eine Tabelle mit drei Zeilen und eine Verknüpfung, die niemand liest. Der Gegenwert:
+Die Menge der Arten ist **Daten** und keine Schemaklausel — und die Datenbank lässt eine unbekannte
+Art trotzdem nicht still durch. `ON DELETE RESTRICT` und `ON UPDATE RESTRICT` machen daraus einen
+Fehlschlag beim Schreiben statt eine Zeile, die niemand anzeigen kann. Dieselbe Rolle wie die
+RESTRICT-Klauseln aus 0011 und 0012: die zweite Wache, nicht die erste.
+
+Die erste Wache steht in der Leserichtung: `toAttachments` in
+`packages/storage/src/sqlite/repo-attachments.ts` übergeht eine Zeile, deren Art die Domäne nicht
+kennt, statt sie zu werfen — ein Bestand aus einer neueren Fassung ist damit lesbar, und die
+Zeile bleibt dabei physisch stehen.
+
+#### Was `target` je Art enthält (E-071 Punkt 1 und 2)
+
+| Art | Inhalt von `target` |
+|---|---|
+| `link` | Die **Normalform** der Adresse (A-A-3). Was hier steht, ist genau das, was angezeigt und was geöffnet wird. Normalisiert wird einmal, beim Anlegen, in der Domäne — und nirgends sonst (A-A-13). |
+| `file` | Der absolute Pfad, unverändert. Takt kopiert nichts und verwaltet nichts davon; verschwindet die Datei, sagt der Anhang das (A-19.15). |
+| `image` | Der **erzeugte** Name der Kopie im Bildverzeichnis (A-A-17) — nie Name oder Pfad der Quelle. |
+
+Der CHECK `length(target) <= 4096` zählt **Zeichen**, die Domäne zählt **Bytes**
+(`MAX_ATTACHMENT_PATH_BYTES`). Er ist damit die weitere von beiden und genau das, was er sein
+soll: ein Deckel gegen einen Roman im Feld, keine zweite Meinung über die Form.
+
+#### Keine Bytes in der Datenbank
+
+Ein Bild liegt als Datei im Anwendungsdatenverzeichnis neben dem Bestand, unter denselben Rechten
+(`0700`/`0600`, E-018, A-A-17), und nicht als BLOB. Ein BLOB wanderte in jede Sicherung der
+Datenbankdatei, bliese die WAL bei jedem Schreibvorgang auf und machte aus `takt.db` eine Datei,
+deren Größe niemand mehr erklären kann.
+
+Die Folge trägt der Anwendungsfall und nicht das Schema: `ON DELETE CASCADE` nimmt die **Zeilen**
+mit, die **Dateien** nicht — SQL kennt kein Dateisystem. Wer ein Todo löscht, liest deshalb zuerst
+`imageTargets(todoId)` und entfernt danach die Dateien; die Reihenfolge steht in
+`usecases/todos.ts` und ist der Grund, warum das Löschen eines Todos den Bildport überhaupt
+anfasst. Von den beiden möglichen Halbzuständen ist „Zeile weg, Datei liegt noch" der behebbare.
+
+Seit T-159 ist dieser Fehlschlag außerdem nicht mehr stumm: `removeImage` meldet ihn als Wert
+(`removed` | `unknown_name` | `failed`) und schreibt eine Protokollzeile mit dem **erzeugten**
+Namen. Die Antwort an den Benutzer bleibt `ok` — der Anhang **ist** entfernt —, aber eine
+Bildkopie ohne Eigentümer verschwindet nicht länger unbemerkt (A-A-18).
+
+#### Keine Verbindung zum Export
+
+Es gibt keine Sicht und keinen Trigger, der diese Tabelle mit `v_export_candidate` oder
+`export_run_entry` verbindet, und es wird nie einen geben (A-19.17). Der Schutz ist derselbe wie
+beim internen Vermerk und liegt aus demselben Grund im **Typ** und nicht in einer Filterliste:
+`ExportSourcePath` bleibt bei zwölf Werten, `ExportCandidate` und `ExportGroup` tragen kein
+Anhangsfeld (R-06, A-A-20). Siehe Abschnitt 7.
 
 ---
 
@@ -1623,6 +1724,14 @@ Zusicherung, `TodoSourcesAreCovered`, stellt sicher, dass jeder `todo.`-Pfad ein
 `ExportCandidate` trifft — so kann die Liste nicht um einen Pfad wachsen, für den der Wert
 anderswo nachgeladen werden müsste.
 
+**Frist und Anhänge stehen unter derselben Sperre** (A-19.17, A-19.19, seit T-146). `due_date`,
+`todo_attachment` und `todo_attachment_kind` haben keinen Pfad in `ExportSourcePath` — die Liste
+ist bei zwölf Werten geblieben — und `ExportCandidate` und `ExportGroup` tragen kein Feld dafür.
+Das ist derselbe Schutz und aus demselben Grund am selben Ort: Der **Typ** trägt die Grenze, nicht
+eine Filterliste, die jemand beim nächsten Feld zu ergänzen vergisst. Ein Anhang ist außerdem
+strukturell schwerer als ein Vermerk — ein Dateipfad in einer Abrechnungsdatei verriete, wo der
+Benutzer seine Unterlagen hält.
+
 ---
 
 ## 8. Migrationsverfahren
@@ -2018,6 +2127,55 @@ Hinweis auf genau diese Fassung erscheint danach wieder. Das ist die richtige Ri
 Anwendung meldet zu viel statt zu wenig, und der Benutzer kann erneut überspringen —, aber es ist
 keine verlustfreie Rücknahme, und der Kopf der Rückwärtsdatei sagt es.
 
+### 8.4i Migration 0014 — eine Spalte mit Index, und die Reihenfolge, die daraus folgt (T-146, A-19.1)
+
+`0014_todo_due_date` hängt `todo.due_date` an und legt den Teilindex `ix_todo_due_date` darüber.
+Vorwärts also zwei Anweisungen, rückwärts ebenfalls zwei — **und ihre Reihenfolge ist Inhalt.**
+
+**Erst der Index, dann die Spalte.** SQLite lehnt `DROP COLUMN` ab, solange die Spalte in einem
+Index vorkommt; die Meldung lautet dann „error in index ix_todo_due_date". Das ist kein Kunstgriff,
+sondern die Bedingung, unter der `DROP COLUMN` überhaupt zulässig ist. Sie steht auch im Kopf der
+Rückwärtsdatei, damit der Nächste, der eine Spalte mit Index anlegt, sie nicht neu herausfindet.
+
+**Warum kein Tabellenumbau.** Es ändert sich keine bestehende Spalte, keine REFERENCES-Klausel und
+kein bestehender CHECK. Auf `todo` stehen keine Trigger; `v_export_candidate` liest `todo`, wird
+aber von einer neuen Spalte nicht berührt, weil die Sicht ihre Spalten ausschreibt — genau die
+Eigenschaft, die A-19.17 hier strukturell hält. Der Vorgabewert ist `NULL`, also „keine Frist", und
+das ist der Zustand, in dem jeder bestehende Bestand nach dieser Migration steht (A-19.16).
+
+**Der Teilindex.** `WHERE due_date IS NOT NULL`, weil der überwiegende Teil der Todos keine Frist
+trägt und ein Index über lauter `NULL`-Werte Platz kostet, ohne etwas zu treffen — dieselbe Bauart
+wie `ix_todo_call_number` aus 0001. Die Kennung steht als zweite Spalte darin: Die Blätterung
+sortiert `(due_date, id)` und bekommt beide Schlüssel aus einem Durchlauf.
+
+**Ein Datenverlust, und er ist benannt.** Der Rückweg nimmt **jede gesetzte Frist** mit; es gibt
+keinen Ort, an dem sie zwischenläge. Das ist die ehrlichere von zwei Möglichkeiten — die
+Alternative wäre eine Nebentabelle, die das Schema der Vorgängerfassung nicht kennt, und dann
+stünde Kundenmaterial in einer Tabelle, die niemand liest und niemand löscht. Nicht betroffen: das
+Todo selbst, seine Tags, seine Buchungen, sein Vermerk und sein Exportstatus. Die Frist war nie
+eine Achse (A-19.7), deshalb hängt an ihr nichts.
+
+### 8.4j Migration 0015 — zwei Tabellen, und ein Rückweg, der Dateien liegen lässt (T-146, A-19.8)
+
+`0015_todo_attachment` legt `todo_attachment_kind` (drei Zeilen), `todo_attachment` und zwei
+Indizes an. Die Formwahl — Wertspalte plus Nachschlagetabelle statt CHECK — steht in 3.8; hier
+steht, was das Verfahren angeht.
+
+**Reihenfolge.** Vorwärts von der Wurzel zum Blatt: erst die Wertetabelle, dann die Tabelle, die
+auf sie verweist. Rückwärts umgekehrt, wie in 0001.
+
+**Der Rückweg lässt die Bildkopien liegen — und das ist die Stelle, die genannt gehört.** Die
+Zeilen verschwinden, die Dateien im Bildverzeichnis nicht. SQL kennt kein Dateisystem, und ein
+Rückweg, der Dateien löschte, täte etwas, das man ihm nicht ansieht. Nach diesem Rückweg bleibt
+damit Kundenmaterial ohne Eigentümer liegen — genau der Zustand, den A-A-18 im laufenden Betrieb
+ausschließt. **Wer diesen Rückweg fährt, räumt das Verzeichnis `attachments` neben `takt.db` von
+Hand.** Der Satz steht im Kopf der Rückwärtsdatei, weil er sonst niemandem auffiele, bis jemand die
+Datenmenge erklären soll.
+
+Nicht betroffen: `todo` selbst, seine Tags, seine Buchungen, sein Vermerk, sein Exportstatus. Keine
+Sicht, kein Trigger und kein CHECK außerhalb dieser beiden Tabellen nennt sie — insbesondere
+`v_export_candidate` nicht, und das ist keine Fügung, sondern A-19.17.
+
 ### 8.5 Nachgewiesen
 
 Alle Migrationen wurden gegen SQLite 3.51.3 ausgeführt und in T-013 gegen SQLite 3.53.4 sowie
@@ -2083,6 +2241,13 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | Der vollständige Stand, jeder eindeutige Index (T-074) | 0 → 10, dann jede der **14** `UNIQUE`-Verletzungen aus `sqlite_master` ausgelöst: jede ergibt einen eigenen Fehlerschlüssel und einen eigenen Satz, keine fällt auf „Dieser Wert ist bereits vergeben", keine Antwort nennt Index-, Tabellen- oder Spaltennamen (`proof:conflicts` 1) |
 | Der Standard-Status, ohne die Oberfläche (T-074) | `DELETE` auf den Standard und `PATCH … isDefault:false` auf den Standard ergeben beide `409 default_status_locked`; der Standard steht danach unverändert da; Weitergeben und anschließendes Löschen gehen (`proof:conflicts` 5) |
 | Der Bestand der Indizes gegen die Übersetzung | die Liste aus `sqlite_master` und `UNIQUE_INDEX_CATALOG` sind in **beide** Richtungen deckungsgleich, und jeder Indexname bringt genau seinen eigenen Satz zurück — ein neuer Index ohne Eintrag, ein Eintrag ohne Index und ein Name, der in einem anderen steckt, werden alle drei rot (`proof:conflicts` 1) |
+| 0014 vorwärts (T-146) | 13 → 14: `todo.due_date` da, `ix_todo_due_date` als Teilindex; 35 benannte Indizes, Tabellen und Trigger unverändert |
+| 0014, die Form am Adapter vorbei | `UPDATE todo SET due_date = '2026-9-3'`: `CHECK constraint failed`. `'2026-02-30'` besteht den CHECK — die **Existenz** des Tages prüft die Domäne, nicht der GLOB, siehe 3.2 |
+| 0015 vorwärts (T-146) | 14 → 15: `todo_attachment` und `todo_attachment_kind` mit drei Zeilen, `ix_todo_attachment_todo` und `ix_todo_attachment_image`. Stand danach **19 Tabellen, 37 benannte Indizes, 17 Trigger, 1 Sicht**; `integrity_check` = ok |
+| 0015, die zweite Wache auf der Art | `INSERT` mit `kind = 'video'`: `FOREIGN KEY constraint failed`. `DELETE FROM todo_attachment_kind` für eine **benutzte** Art: ebenso (RESTRICT); für eine unbenutzte: geht durch |
+| 0015, `ON DELETE CASCADE` | Todo gelöscht: seine Anhangszeilen gehen mit. Die **Dateien** nicht — das leistet der Anwendungsfall, siehe 3.8 |
+| 0014/0015, die Zugriffspfade (T-159) | `EXPLAIN QUERY PLAN`: die Fristsortierung nimmt `ix_todo_due_date` als **covering index**; `imageTargets` und die Anhangsliste eines Todos nehmen beide `ix_todo_attachment_todo`; die Suche nach einem Bildnamen nimmt `ix_todo_attachment_image`. Kein `SCAN` in den vier Abfragen |
+| **0 → 15 → 13 → 15 auf einem Bestand mit Inhalt** (T-159, Node 22.23.2, `node:sqlite`) | vorher: ein Todo mit Frist `2026-09-30`, internem Vermerk, einer Buchung und drei Anhängen (Verweis, Datei, Bild). Nach 15 → 13: **kein** Rest von `todo_attachment*` in `sqlite_master`, keine Spalte `due_date`, Todo, Vermerk und Buchung unversehrt. Nach 13 → 15: beide Tabellen wieder da, `todo_attachment_kind` wieder mit drei Zeilen, Frist `NULL` und Anhänge 0 — genau der angesagte Verlust, nicht mehr; Vermerk und Todo unverändert. Danach 19/37/17/1, `integrity_check` = ok, `foreign_key_check` leer |
 
 **Seit T-021 läuft das Verfahren nicht mehr von Hand, sondern über den Läufer**
 (`packages/storage/src/sqlite/migration-runner.ts`). Er ist Teil von
@@ -2130,6 +2295,9 @@ Drei Eigenschaften des Läufers, die eine Erwähnung wert sind:
 | `ix_tag_name_key` | „gibt es diesen Tagnamen irgendwo?" — die ordnerübergreifende Suche beim Anlegen eines Todos mit neuem Tag |
 | `ix_todo_status` | Filter über `TodoFilter.statusIds` und die ON-DELETE-RESTRICT-Prüfung von `todo_status`. Seit Migration 0010 einspaltig: Das zweite Feld war `board_rank`, und das gibt es nicht mehr |
 | `ix_todo_call_number` (partiell) | A-10.9: Duplikaterkennung im Add-in |
+| `ix_todo_due_date` (partiell, `(due_date, id) WHERE due_date IS NOT NULL`) | A-19.6: Sortieren und Filtern nach Frist. Beide Schlüssel der Blätterung aus einem Durchlauf |
+| `ix_todo_attachment_todo` (`(todo_id, position, id)`) | A-19.8: die Anhänge eines Todos in stabiler Ordnung — und `listMany` für mehrere Todos in **einer** Abfrage, kein N+1 in der Liste |
+| `ix_todo_attachment_image` (partiell, `(target) WHERE kind = 'image'`) | „Gibt es zu dieser Datei im Bildverzeichnis noch einen Eigentümer?" — die Gegenrichtung von A-A-18, für ein Aufräumen ohne Tabellendurchlauf. Er bedient **nicht** `imageTargets(todoId)`; das tut `ix_todo_attachment_todo` |
 | `ix_todo_open`, `ix_todo_completed` (partiell) | Dashboard: offene und erledigte Todos |
 | `ix_todo_tag_reverse` | „Welche Todos tragen dieses Tag" — Grundlage der Pool-Abfrage |
 | `ux_todo_status_default` (partiell, Konstante) | genau eine Standardspalte für neu angelegte Todos |

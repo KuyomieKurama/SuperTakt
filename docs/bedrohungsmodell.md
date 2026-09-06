@@ -1,9 +1,35 @@
 # Bedrohungsmodell — Takt
 
-Stand: **2026-09-03, Aufgabe R-3** — Nachprüfung des Branches `status-als-regelterm`.
+Stand: **2026-09-05, Aufgabe T-156** — Wiedervorlage der vierundzwanzig Auflagen aus Abschnitt 20
+gegen den gebauten Code für Frist und Anhänge (Abschnitt **21**), mit acht eigenen Messungen, den
+zwei Zeilen zu `sqlite`/`code` und dem Riegel im Protokollierer (O-BD) und der Prüfung der einen
+Verbindung nach außen (R-19, O-CI, E-077).
+Vorstand: 2026-09-05, Aufgabe T-145 — Wiedervorlage der zwanzig Auflagen aus 18.9 gegen den
+ausgelieferten Code (Abschnitt **19**) und Vorabbewertung der Grenze VG-11 für Frist und Anhänge,
+bevor sie gebaut wird (Abschnitt **20**).
+Davor: 2026-09-04, Aufgabe T-136 — Vorabbewertung des Ausgangs ins Netz (Abschnitt 18).
+Davor: 2026-09-04, Aufgaben T-112 und T-125 (Abschnitte 16 und 17).
+Davor: 2026-09-03, Aufgabe R-3 — Nachprüfung des Branches `status-als-regelterm`.
 Vorstand: 2026-09-02, Aufgabe T-067 — Prüfung vor der Veröffentlichung.
 Davor: 2026-09-01, Aufgabe T-023, Welle 8 — Gegenprobe gegen den fertigen Code.
 Erstfassung: 2026-08-31, Aufgabe T-003, Welle 1. Verantwortlich: security-checker.
+
+Was T-156 geändert hat: der neue **Abschnitt 21** (die vierundzwanzig Auflagen A-A-1 bis A-A-24
+gegen den gebauten Code, Auflage für Auflage, mit acht eigenen Messungen), die berichtigten
+Fassungen **A-A-5′**, **A-A-15′**, **A-A-20′** und die neuen **A-A-25** bis **A-A-27**, die zwei
+Zeilen aus T-132 in 21.5 (samt Berichtigung einer eigenen Zahl aus T-145: 576 statt 336) und die
+Prüfung von R-19 bei dieser Freigabe in 21.6. Am Katalog B-1.1 bis B-19.x ist nichts umnummeriert
+und nichts umgeschrieben. **Drei Befunde der Stufe „muss"** (T-156-1, T-156-2, T-156-3); Urteil:
+**Nacharbeit**.
+
+Was T-145 geändert hat: die neue Grenze **VG-11** in der Tabelle in Abschnitt 3, der neue
+**Abschnitt 19** (die zwanzig Auflagen aus 18.9, Auflage für Auflage gegen den Code gemessen,
+mit sieben eigenen Messungen und den berichtigten Fassungen A-V-1′, A-V-4′, A-V-6′, A-V-12′,
+A-V-14′ sowie den neuen A-V-21 bis A-V-23) und der neue **Abschnitt 20** (Frist und Anhänge,
+bewertet **bevor** sie gebaut werden, mit vierundzwanzig Auflagen A-A-1 bis A-A-24). Am Katalog
+B-1.1 bis B-12.x ist nichts umnummeriert; die neuen Bedrohungen heißen B-19.1 bis B-19.6.
+Zwei Befunde der Stufe „muss" gegen den ausgelieferten Stand (T-145-1, T-145-2) und zwei gegen
+den Entwurf der Anhänge (T-145-7, T-145-8).
 
 Was R-3 geändert hat: der neue **Abschnitt 14**. Er schreibt **VG-2** (was das Add-in seit
 T-076/T-084/T-086 zusätzlich bekommt), **B-1.7** (zwei gemessene Zahlen) und **B-11.4** samt
@@ -51,6 +77,24 @@ Abrechnungsintegrität.
 
 Fortgeschrieben in **T-023** (2026-09-01, Welle 8). Die Tabelle aus T-003 steht darunter, damit
 der Unterschied sichtbar bleibt. Damit niemand ein Prüfergebnis annimmt, das es nicht gibt:
+
+### Stand T-156 (2026-09-05) — Frist und Anhänge, gegen den gebauten Code
+
+| Werkzeug | Lief | Ergebnis |
+|---|---|---|
+| Semgrep CLI, lokal, `p/nodejsscan p/typescript p/javascript` | **ja** | 188 Regeln, 288 Ziele, **24 Befunde**, sämtlich in bekannten Falschmeldungsklassen: `react-insecure-request` auf `http://127.0.0.1:17843` (das **ist** die Architektur, E-001), `node_secret` auf `redactSecrets` selbst, `node_timing_attack` auf Vergleichen ohne Geheimnis, `regex_dos` auf festen Ausdrücken aus dem eigenen Baum, `node_insecure_random_generator` und `node_username` in Nachweis- und Musterflächen. **Kein Befund hoher Schwere, und kein einziger im neuen Code für Frist und Anhänge.** |
+| Semgrep Guardian | **nein** | `Not logged into Semgrep Guardian.` **Zehntes** Mal. |
+| **42Crunch-Audit / -Scan** | **nein** | Kein `42c-ci-cli`, kein `~/.42crunch`, keine Berechtigung. **Neuntes** Mal. Ersatz bleibt `proof:openapi` (110/0). **Es existiert weiterhin kein Auditwert.** |
+| `cargo test --lib` | **ja** | **31/0 — unverändert gegenüber T-145.** Kein Prüffall in `attachment.rs` (Befund T-156-2). |
+| `pnpm test` (Vitest) | **ja** | 69 Dateien, **1 359/0**. |
+| Dreizehn Nachweisläufe einzeln | **teils** | Acht grün; fünf (`conflicts`, `tags`, `access`, `export-api`, `addin-wiring`) **nicht gemessen**, weil `127.0.0.1:17843` belegt war. |
+| `ss -tnp` alle 0,2 s während `proof:all`, elf Einzelläufen und `pnpm test` | **ja** | **Null** Verbindungen außerhalb `127.0.0.1`. A-V-22 gehalten, T-145-1 behoben. |
+| Eigene Messungen gegen den geschnittenen Prüfteil von `attachment.rs` und gegen den Bildspeicher | **ja** | Acht, in 21.3. Sie stehen in keinem Ablauf. |
+| Repository-Hygiene über 154 geänderte Dateien | **ja** | Sauber. Keine Zugangsdaten, kein Schlüsselmaterial, keine echten Call-Nummern (`TCK-000042`, `TCK-000815`, `TCK-000517/518` — erfunden), keine echten Adressen (`example.org`, `.example`, `.invalid` sind reserviert). `/Export/` ist ignoriert, die dort liegende Datei trägt `0600`. |
+
+**Folge für die Definition of Done:** „Semgrep ohne offene Befunde hoher Schwere" ist **erfüllt**.
+„42Crunch-Audit über der Schwelle" ist **unverändert nicht erfüllbar**, seit neun Aufgaben, aus
+demselben Grund.
 
 ### Stand T-067 (2026-09-02) — der Baum, der veröffentlicht würde
 
@@ -184,6 +228,7 @@ Rechner ist. Siehe Abschnitt 9, Grundannahmen.
 | VG-8 | E-Mail → Add-in | Der Absender einer E-Mail kontrolliert Betreff und Inhalt vollständig. Diese Zeichenkette wird vom regulären Ausdruck verarbeitet und landet über `callNumber` in der Abrechnung. |
 | VG-9 | Webview → Rust-Kern | Tauri-Befehle und -Fähigkeiten. Ein XSS im Webview ist hier deutlich schwerer als im Web, weil dahinter Dateisystem und Prozessstart liegen. |
 | VG-10 | Lokaler Dienst → GitHub (Versionsprüfung) | **Neu am 2026-09-04 (A-18.*, E-064, R-19).** Die erste und einzige Grenze, an der Takt den Rechner verlässt. Sie trägt in **zwei** Richtungen: hinaus geht ein Lebenszeichen (Quelladresse, Zeitpunkt, SNI `api.github.com`), herein kommt eine Antwort beliebiger Größe und Gestalt, aus der Text in die Oberfläche und — wenn man es zulässt — eine Adresse in den Browser des Benutzers wandern kann. Bewertet in Abschnitt 18, **bevor** sie gebaut wird. |
+| VG-11 | Anhang im Bestand → Öffnen-Befehl der Hülle | **Neu am 2026-09-05 (A-19.8 bis A-19.19, E-071, E-072, R-21, R-22).** Die schwerere Schwester von VG-10. Dort war die Zeichenkette eine Fassungsbezeichnung aus einer bekannten Quelle; hier ist sie eine **Adresse oder ein Pfad aus dem Bestand**, und „öffnen" heißt beim Typ Datei: die Standardanwendung starten. Wer in den Bestand schreiben kann (VG-1, VG-3), schreibt damit einen Öffnen-Befehl auf den Rechner des Benutzers. Bewertet in Abschnitt **20**, bevor sie gebaut wurde; gegen den gebauten Code gemessen in Abschnitt **21**. |
 
 ---
 
@@ -4108,3 +4153,3427 @@ neun Befunde, alle in bekannten Falschmeldungsklassen, **kein Befund hoher Schwe
 
 **Wiedervorlage:** nach dem Rücklauf von T-138 und T-139. Dann wird gegen Code gemessen, was hier
 gegen einen Entwurf gefordert ist — Auflage für Auflage, mit den Zahlen aus 18.9.
+
+---
+
+## 19. Wiedervorlage T-145 (2026-09-05) — die zwanzig Auflagen gegen den Code
+
+Abschnitt 18 hat gegen einen **Entwurf** freigegeben: T-138 und T-139 waren nicht geschrieben,
+die zwanzig Auflagen aus 18.9 waren die Bedingung. Jetzt liegt der Code vor, und der Stand ist
+als `v0.1.0` ausgeliefert. Diese Wiedervorlage kommt damit **nach** der Auslieferung; was hier
+gefunden wird, geht in `0.1.1`.
+
+Prüfumfang: `git diff 0635aea..HEAD` auf dem Zweig `versionspruefung-gegen-github`, 99 Dateien.
+Gemessen wurde gegen den Baum, nicht gegen die Berichte.
+
+### 19.0 Werkzeugstand
+
+| Werkzeug | Ergebnis |
+|---|---|
+| Semgrep, lokal (`p/nodejsscan`, `p/typescript`) über `apps/*/src`, `apps/desktop/src-tauri/src`, `packages` | 188 Regeln, 231 Dateien, **10 Befunde**, alle in den seit T-023 bekannten Klassen: 3× `regex_dos` an Ausdrücken über *eigene* Konstanten (`origin-policy.ts:175,182`, `migration-runner.ts:305`), 5× `node_timing_attack` an `=== null`-Vergleichen (vier React-Kontexte, dazu `outlook-addin/src/api/client.ts:167` — die fünfte ist neu **im Prüfumfang**, nicht im Code: die Datei steht nicht im Diff), 1× `node_secret` an `redactSecrets` (`token.ts:110` — die Funktion heißt so, sie enthält keins), 1× `node_username` in `showcase/ShellStateSection.tsx` (Anschauungsdaten). **Kein Befund hoher Schwere.** Der neue Code der Versionsprüfung erzeugt **keinen einzigen** Befund; insbesondere kein `regex_dos` an `VERSION_SHAPE` — der Ausdruck ist linear und in jeder Komponente in der Länge gebunden. |
+| Semgrep Guardian (SAST, Geheimnisse, Lieferkette) | **Nicht erreichbar — „Not logged into Semgrep Guardian".** Zum **neunten** Mal in Folge. Beschaffungsentscheidung, kein Befund dieses Zweigs. |
+| 42Crunch Audit gegen `apps/local-api/openapi/takt-local-api.yaml` | **Nicht gelaufen.** Kein `42c-ci-cli`, kein Token, kein `~/.42crunch`. Achtes Mal. Ersatz: `proof:openapi`, 110 Prüfungen, grün. |
+| `pnpm proof:release-safety` | 23 bestanden, 0 fehlgeschlagen — davon 6 **Gegenproben**, in denen ein eingesetzter Verstoß den Lauf rot machen muss. |
+| `pnpm proof:shell-surface` | 4 Prüfungen und 10 Gegenproben bestanden. |
+| `pnpm proof:route-policy` | 40 bestanden; **61 Routen**, keine davon nimmt das Add-in-Token an. |
+| `pnpm proof:openapi` | 110 bestanden. |
+| `pnpm proof:access` | 105 bestanden — **und dabei eine Verbindung nach `api.github.com` aufgebaut**, siehe Befund T-145-1. |
+| `vitest` über `apps/local-api/test/version`, `apps/local-api/test/routes/version.test.ts`, `apps/local-api/test/startup.test.ts`, `packages/domain/test/version.test.ts` | 124 Prüffälle, alle grün. |
+| `cargo test` in `apps/desktop/src-tauri` | 31 Prüffälle, alle grün — **von Hand gefahren**. Kein Ablauf ruft ihn, siehe Befund T-145-2. |
+| Eigene Messungen gegen Node 22.23.2, `url 2.5.8` und die echte Antwort von `releases/latest` | Sieben Messungen, alle unten mit Zahl belegt. Zwei davon ziehen eine Zahl aus 18.9 gerade. |
+| Repository-Hygiene über die 99 geänderten Dateien | Keine Zugangsdaten, keine Kundendaten. Die einzigen Treffer der Mustersuche sind `TCK-4711` (die erfundene Call-Nummer dieses Vorhabens), `a.beispiel@example.org` und `1.2.3@evil.example` — letzteres ein Ausbruchsversuch in `release.rs`. `example.org` und `example` sind nach RFC 2606 reserviert. |
+
+### 19.1 Die zwanzig Auflagen, einzeln
+
+**Legende.** *erfüllt* — die Sache **und** die Messung stimmen. *abweichend erfüllt* — die Sache
+ist gewahrt, die Messung in 18.9 beschreibt sie falsch oder sie ist enger ausgefallen als
+gefordert. *nicht erfüllt* — die Sache fehlt.
+
+| ID | Urteil | Woran gemessen |
+|---|---|---|
+| **A-V-1** | **abweichend erfüllt** | Die Adresse steht als Konstante in `apps/local-api/src/version/source.ts:91` und sonst nirgends; `proof:release-safety` Abschnitt 2 misst das mit einer Gegenprobe. **Die Messung aus 18.9 stimmt nicht mehr:** `grep -rn "api\.github\.com" apps/local-api/src` liefert **zwei** Zeilen — 91 (die Konstante) und 83 (ein Kommentar, der begründet, warum es `api.github.com` und nicht `github.com` ist). Und `grep -rn "github\.com"` über den ganzen Produktivcode liefert **sechs** statt der in 18.9 als Ausgangspunkt genannten null: drei Zeichenketten (`source.ts:91`, `web/src/lib/releasePage.ts:43`, `src-tauri/src/release.rs:55`), eine Prüffallerwartung (`release.rs:260`) und zwei Kommentare. Alle sechs sind erklärt und alle sechs werden gemessen. Eine Zählung über rohen Text ist an dieser Stelle nicht mehr die richtige Messung; die richtige ist `proof:release-safety`, das Kommentare vorher wegschneidet (`stripComments`, mit fünf eigenen Gegenproben). **Auflage neu formuliert als A-V-1′ in 19.5.** |
+| **A-V-2** | erfüllt | `source.ts:237-248`: `method: 'GET'`, kein `body`, kein Abfrageparameter, kein `authorization`, kein `cookie`. Gegen einen Prüfserver gemessen (19.2, Messung 3): `GET /`, sonst nichts. |
+| **A-V-3** | erfüllt | `redirect: 'error'` (`source.ts:246`). Zwei Prüffälle in `source.test.ts` fahren 302 und 301 gegen einen Prüfserver und messen, daß am Ziel **nichts** ankommt. |
+| **A-V-4** | **abweichend erfüllt** | Kein `dispatcher`, kein `Agent`, kein `ProxyAgent`, kein `NODE_USE_ENV_PROXY`, kein `NODE_TLS_REJECT_UNAUTHORIZED`, kein `rejectUnauthorized` — als **Code**. Die Messung „`grep` findet keine dieser Zeichenketten" trifft nicht mehr: `dispatcher`, `ProxyAgent` und `undici` stehen je einmal in `source.ts` (Zeilen 66, 67, 219) — in dem Kommentar, der erklärt, daß sie dort nicht stehen. Auch das ist ein Fall für `stripComments`. **A-V-4′ in 19.5.** |
+| **A-V-5** | erfüllt | `AbortSignal.timeout(5_000)`, über `AbortSignal.any` mit dem Abbruchsignal des Dienstes verbunden und an `fetch` übergeben. **Gemessen** (19.2, Messung 4): Ein Prüfserver, der Kopfzeilen sendet und dann `{"a":` schreibt und schweigt, endet nach **5 007 ms** mit `timeout` — die Frist deckt das Lesen des Rumpfes mit ab. Verlangt waren ≤ 5 500 ms. |
+| **A-V-6** | **abweichend erfüllt** | Der Strom wird gelesen und dabei gezählt (`readBounded`, `source.ts:280-347`); kein `response.json()`, kein `.text()`, kein `.arrayBuffer()`, kein Blick auf `content-length`. Die gzip-Bombe aus 18.2 (50 989 Bytes auf der Leitung → 52 428 800 entpackt) ergibt `too_large` in 17 ms, ohne `JSON.parse`. **Die Zahl in der Messung ist trotzdem falsch:** „Abbruch vor 65 537 gelesenen Bytes". Gezählt wird **nach** dem Anfügen einer Leseeinheit, und die Leseeinheit ist bei Node 22 **16 384 Bytes**. Gemessen wurden **81 920 gelesene Bytes**, also 65 536 + 16 384. Die Sache ist gewahrt (die Obergrenze ist eine Obergrenze, 52 MB landen nie im Speicher), die Zusage muß die Leseeinheit nennen. Dazu die zweite Hälfte dieser Auflage — „die echte Antwortgröße einmal messen" — in 19.2, Messung 1. **A-V-6′ in 19.5.** |
+| **A-V-7** | erfüllt | Ein Feldzugriff, hinter `Object.hasOwn`, über eine Konstante `TAG_FIELD`. `proof:release-safety` Abschnitt 2 zählt `'tag_name'` im ganzen Baum: genau eins, und `.tag_name` als Punktzugriff ist **überall** verboten, auch an der erlaubten Stelle. `html_url`, `browser_download_url`, `upload_url`, `assets_url`, `zipball_url`, `tarball_url`, `body_html` sind als Zeichenketten im Code verboten. Mit Gegenprobe. Ein Prüffall mißt, daß bei fehlendem `tag_name` **nicht** auf `name` ausgewichen wird. |
+| **A-V-8** | erfüllt | `VERSION_SHAPE` in `packages/domain/src/version.ts:91`, zeichengleich mit der Form aus 18.9, beidseitig verankert, ohne `g`. `checkVersion` nimmt `unknown` und wirft nicht. Die zehn geforderten Fälle stehen als Prüffälle; `null`, `42`, `{}`, `[]`, `true`, fehlend, `""`, 60 000 Zeichen, `../../evil`, `1.2.3?x=1` ergeben je einen stillen Fehlschlag. |
+| **A-V-9** | erfüllt | `comparePrecedence` zerlegt in drei Zahlen und vergleicht numerisch; `0.10.0 > 0.9.0` ist ein Prüffall. Eine Vorabkennung gilt als kleiner als dieselbe Fassung ohne. Kein `localeCompare`, kein `<` auf Zeichenketten. Jede Komponente ≤ 999 999 999, in der Form gebunden. |
+| **A-V-10** | erfüllt | `routes/version.ts:81` gibt `current()` heraus und ruft nichts. Der Prüffall „`current()` löst niemals eine Anfrage aus, auch nicht nach 100 Aufrufen" zählt am Port **null** ausgehende Anfragen. Die Entscheidung dazu ist E-069 und sie ist **nach** 18.9 gefallen — sie ist der Grund für die Abweichung bei A-V-14. |
+| **A-V-11** | erfüllt | Eine Anfrage je Start (nach `START_DELAY_MS`), danach `intervalMs` = 24 h, harter Boden `minIntervalMs` = 60 min, geprüft an einer gestellten Uhr. Nach einem Fehlschlag wird **nicht** neu geplant — ein eigener Prüffall mißt, daß auch bei einer sehr kurzen „Regelfrist" die Zahl bei eins bleibt. |
+| **A-V-12** | **abweichend erfüllt** | Der Zeitgeber ist `unref()`t (`checker.ts:160`), `stop()` löst einen `AbortController` aus, und `main.ts:373` ruft `stop()` als **ersten** Schritt des Anhaltens, vor `taskpane.close()` und `database.close()`. Prüffälle messen `stop()` während einer ausstehenden Antwort und `start()` gefolgt von sofortigem `stop()`. **Die Messung aus 18.9 ist es nicht:** „`proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft" — `proof:access` mißt das nicht. Es mißt in Abschnitt 0e den umgekehrten Fall (ein fremder Prozeß hält eine **eingehende** Verbindung), und der Fall „ausgehende Anfrage läuft" tritt dort zufällig ein oder nicht, je nachdem, wie lange ein einzelner Dienst lebt. Was trägt, ist die harte Abschaltfrist aus T-126: Der Prozeß endet auch dann, wenn `stop()` nichts bewirkte. **A-V-12′ in 19.5.** |
+| **A-V-13** | erfüllt | **Gegen einen Prüfserver gemessen** (19.2, Messung 3), nicht gegen den Quelltext. Hinaus gehen acht Kopfzeilen: die drei gesetzten (`accept: application/vnd.github+json`, `x-github-api-version: 2022-11-28`, `user-agent: Takt`) und fünf, die Node selbst anhängt (`accept-encoding: gzip, deflate`, `accept-language: *`, `connection: keep-alive`, `host`, `sec-fetch-mode: cors`). Keine davon trägt Benutzer, Rechnernamen, Sprache oder Fassung. Die Gegenprobe aus 18.9 hält: Die installierte Fassung kommt in keiner Kopfzeile und in keinem Teil der Adresse vor — der Dienst kennt sie überhaupt nicht (E-069). |
+| **A-V-14** | **abweichend erfüllt, enger als gefordert** | Die Route gibt **zwei** Felder heraus: `state` (`unknown` \| `known`) und `latestVersion` (`string \| null`). Gefordert waren drei; das dritte war die installierte Fassung, und die kennt der Dienst seit E-069 nicht mehr. Der **Kern** der Auflage — „kein Text aus der Antwort, kein `html_url`, keine Fassungsbeschreibung" — ist gewahrt und wird von `proof:release-safety` mit einer Gegenprobe gemessen. Die Auflage nannte eine Zahl, wo sie eine Verbotsliste hätte nennen müssen: Eine Zahl wird bei jeder Entwurfsänderung falsch, eine Verbotsliste nicht. **A-V-14′ in 19.5.** |
+| **A-V-15** | erfüllt | `release.rs:157-159`: `app.package_info().version.to_string()`, ein Aufruf, kein Zweig, keine Datei. `proof:shell-surface` mißt, daß die Oberfläche die Hülle ausschließlich über `@takt/desktop/shell` erreicht — ein eigenes `invoke` in `apps/web/src` macht den Lauf rot (Gegenprobe vorhanden). |
+| **A-V-16** | **abweichend erfüllt** | Die Signatur trägt genau einen `String` (`release.rs:173`), prüft ihn gegen die Form aus A-V-8, setzt ihn in eine hier fest stehende Adresse ein und gibt bei Nichtbestehen `Err("version_rejected")` **ohne** den abgewiesenen Wert zurück. Die zehn Ausbruchsversuche aus 18.3 stehen wörtlich als `AUSBRUCHSVERSUCHE` **neben** dem Befehl, dazu fünf weitere aus T-140. Alle 31 Rust-Prüffälle sind grün. **Aber sie laufen nirgends von selbst:** `cargo test` kommt in `package.json`, in `apps/desktop/package.json` und in `.github/workflows/release.yml` **kein einziges Mal** vor. Die Messung dieser Auflage ist damit vorhanden und nicht in Kraft — Befund T-145-2. |
+| **A-V-17** | erfüllt | `capabilities/default.json` trägt `core:default`, `core:window:allow-start-dragging`, `dialog:allow-open` und keine `shell:`-Zeile; `tauri.conf.json` hat kein `plugins > shell > scope > open`. `proof:shell-surface` mißt beides und wird von fünf eingesetzten Verletzungen rot — darunter `shell:default` und eine **leere** Fähigkeitenliste (ein Wächter, der bei leerer Eingabe grün wäre, misst nichts). |
+| **A-V-18** | erfüllt | `connect-src` trägt zeichengleich `'self' ipc: http://ipc.localhost http://127.0.0.1:17843`; `proof:shell-surface` hält die vier Marken gegen die Datei und wird von `https://api.github.com` **und** von einer gestrichenen Marke rot. `grep` über `apps/web/src` findet kein `href` mit `github`; `UpdateDialog.tsx` benutzt einen Knopf. Zusätzlich, über die Auflage hinaus: Prüfung 4 des Laufs hält die **angezeigte** Adresse zeichengleich gegen die **geöffnete**. Damit ist T-136-2 geschlossen, und zwar auf dem Weg (b) — gemessen statt nachgezogen. |
+| **A-V-19** | erfüllt | Die Route hängt an derselben Hono-Anwendung, steht in `openapi/takt-local-api.yaml`, nicht in `SHARED_PATHS` und nicht unter `/addin`. `proof:route-policy` fährt jetzt **61** Routen mit dem Add-in-Token an; keine nimmt es an. `GET /addin/context` hat kein Fassungsfeld. |
+| **A-V-20** | erfüllt | Acht Schlüssel aus einem geschlossenen Vorrat (`ReleaseLookupFailure`), übersetzt in `describeVersionCheckFailure` — eine reine Funktion, Schlüssel herein, Satz und Grund heraus. Keine Zeichenkettenverkettung aus einem Wert der Antwort; der einzige eingesetzte Wert ist ein Statuscode, und der ist auf ganzzahlig 100–599 geprüft. `classifyNetworkError` liest die Meldung eines Wurfs **nicht** — es fragt nach `name` und danach, **ob** das Wort `redirect` in `cause.message` vorkommt, und übernimmt daraus nichts. Der dritte Parameter von `logger.lifecycle` ist aus T-132 tatsächlich gekommen. |
+
+**Zwischenstand: keine Auflage nicht erfüllt.** Sechs sind *abweichend erfüllt*, und fünf davon
+sind Fehler in der **Messung**, nicht im Code — 18.9 hat an fünf Stellen eine Zahl oder eine
+Zählung genannt, wo eine Eigenschaft gemeint war. Das ist derselbe Fehler, den T-136-2 an einer
+Zusage über die CSP gefunden hat, nur diesmal im eigenen Text. Die sechste (A-V-16) ist keine
+Textfrage: dort läuft eine vorhandene Messung nicht.
+
+### 19.2 Die sieben Messungen
+
+**Messung 1 — die echte Antwort von `releases/latest`, jetzt mit `v0.1.0`.** T-138 hat gegen
+einen Bestand ohne Veröffentlichung gemessen: 404 mit 130 Bytes. Seit gestern gibt es eine, und
+die Zahl sieht anders aus.
+
+| Größe | Wert |
+|---|---|
+| Status | 200 |
+| `content-encoding` | `gzip` |
+| Auf der Leitung (`content-length`) | **4 126 Bytes** |
+| **Entpackt** | **21 683 Bytes** |
+| `tag_name` | `v0.1.0` |
+| Felder im Rumpf | 21 |
+| davon `assets` | **14 996 Bytes** für 9 Anhänge — **1 666 Bytes je Anhang** |
+| davon `body` (die Fassungsbeschreibung) | 4 734 Bytes |
+| davon `author` | 1 102 Bytes |
+| Rest | 851 Bytes |
+
+Die Obergrenze von 65 536 Bytes ist damit **kein** Vierfaches der echten Antwort, wie der
+Kommentar an `VERSION_CHECK_MAX_BYTES` sagt („rund 15 KiB … das Vierfache"), sondern das
+**3,02-fache**. Die Zahl selbst bleibt richtig; ihre Begründung im Quelltext ist um ein Drittel
+zu großzügig und gehört berichtigt.
+
+Wichtiger ist, **woran** die Antwort wächst: an den Anhängen, mit 1 666 Bytes je Stück. Bei
+gleichbleibender Fassungsbeschreibung ist die Grenze bei rund **35 Anhängen** erreicht
+((65 536 − 851 − 1 102 − 4 734) / 1 666). Heute sind es neun: vier Erzeugnisse, drei
+Lizenzdateien, `LICENSE.txt`, `SHA256SUMS`. Eine Auslieferung, die macOS Intel, Linux arm64,
+eine `.msi` neben der `.exe`, eine `.rpm` und je eine Signaturdatei dazunimmt, liegt bei zwanzig
+bis fünfundzwanzig. Der Abstand ist real, aber er ist kein Faktor zehn — und der Ausgang beim
+Überschreiten ist der **stille** Fehlschlag aus A-18.11: Die Versionsprüfung hörte auf zu
+arbeiten, und niemand außer einer Protokollzeile `version_check_too_large` sagte es. Das ist
+Befund T-145-3.
+
+**Messung 2 — die gzip-Bombe gegen den echten Leser.** 50 989 Bytes auf der Leitung, 52 428 800
+entpackt. Ergebnis `too_large` nach 17 ms, kein `JSON.parse`. **Tatsächlich gelesen: 81 920
+Bytes** — die Grenze plus genau eine Leseeinheit von 16 384. Die Sache hält, die Zahl in A-V-6
+hält nicht.
+
+**Messung 3 — was wirklich hinausgeht.** Der echte `createGithubReleaseSource`, gelenkt auf
+einen Prüfserver, der jede Kopfzeile mitschreibt. Methode `GET`, Pfad `/`, acht Kopfzeilen
+(oben unter A-V-13 aufgezählt). Keine Kennung, keine Sprache außer `*`, keine Fassung.
+
+**Messung 4 — die Frist deckt den Rumpf.** Antwort beginnt, endet nie: `timeout` nach 5 007 ms.
+
+**Messung 5 — die ganze Kette gegen die echte Quelle.** Ein Dienst wurde gestartet wie die Hülle
+ihn startet (Geheimnis und Benutzername über `stdin`), und die Route wurde zweimal gefragt:
+
+```text
+nach  4 s: 200 {"data":{"state":"unknown","latestVersion":null}}
+nach 14 s: 200 {"data":{"state":"known","latestVersion":"0.1.0"}}
+```
+
+Die Kette trägt: feste Adresse, echte Antwort, geprüfte Fassungsbezeichnung ohne `v`, zwei
+Felder heraus, keine Protokollzeile. Und sie zeigt zugleich Befund T-145-1, siehe unten.
+
+**Messung 6 — `proof:access` spricht mit GitHub.** Während `pnpm run proof:access` lief, wurde
+`ss -tnp` im Viertelsekundentakt abgefragt. Ergebnis:
+
+```text
+ESTAB 192.168.11.45:43256  140.82.121.6:443  users:(("node",pid=1385648,fd=27))
+```
+
+`140.82.121.6` ist `api.github.com` (Rückwärtsauflösung: `lb-140-82-121-6-fra.github.com`).
+Befund T-145-1.
+
+**Messung 7 — `cargo test`.** 31 Prüffälle in `apps/desktop/src-tauri`, alle grün, Laufzeit nach
+dem Übersetzen 0,00 s. Es gibt keinen Ablauf, der sie ruft. Befund T-145-2.
+
+### 19.3 Die beiden Zeilen, um die T-132 gebeten hat
+
+**`sqlite` und `code` sind neue Angaben in der Ausgabe des Dienstes.** Bewertet als das, was sie
+sind: zwei zusätzliche Felder in einer Zeile auf `stderr`, die die Hülle mitliest.
+
+* Woher sie kommen, ist beschränkt und nicht beliebig. `errorCodeOf`
+  (`packages/storage/src/migration.ts:166`) nimmt `error.code` nur an, wenn es
+  `^[A-Z][A-Z0-9_]{0,31}$` erfüllt — also ein Laufzeitschlüssel wie `ENOENT` oder `EACCES` und
+  höchstens 32 Zeichen. `sqliteResultCodeOf` nimmt `error.errcode` nur als ganze Zahl. `pair()`
+  in `startup.ts:88` schreibt eine Zahl nur, wenn sie eine nicht negative sichere Ganzzahl ist,
+  und einen Text nur kleingeschrieben.
+* Ein Pfad kommt dort nicht durch: Er trägt Trennzeichen und Kleinbuchstaben und fällt an
+  `^[A-Z]`. Ein Windows-Benutzername kommt nicht durch: Er steht in keiner `.code`-Eigenschaft
+  eines Wurfs aus `node:sqlite` oder `node:fs`.
+* Was sie **preisgeben**, ist der Grund eines Startabbruchs — 5 belegt, 11 beschädigt, 26 keine
+  Datenbank, 10 Ein-/Ausgabefehler. Das ist eine Aussage über den Zustand des Rechners, auf dem
+  der Leser ohnehin sitzt, und sie ist genau die Angabe, deren Fehlen T-132 ausgelöst hat.
+
+**Urteil: unbedenklich.** Beide Felder erweitern die Ausgabe um Werte aus geschlossenen
+beziehungsweise formgebundenen Vorräten und um nichts sonst.
+
+**Der Riegel im Protokollierer ist eine Gestalt-, keine Inhaltsprüfung — und das ist richtig so,
+solange man weiß, was er nicht kann.** `REASON_SHAPE` (`logger.ts:63`) verlangt einen Schlüssel
+aus höchstens 48 Kleinbuchstaben, gefolgt von höchstens acht Paaren `name=wert` mit höchstens 32
+Zeichen aus `[a-z0-9_]` je Wert. Gemessen, was durchkommt und was nicht:
+
+| Eingabe | Riegel |
+|---|---|
+| `version_check_timeout`, `version_check_status code=403`, `port_in_use port=17843` | durch — die vorgesehenen Fälle |
+| `C:\Users\Kerem` | abgewiesen (Rückstriche, Großbuchstaben) |
+| `/home/kerem/.local/share/takt/takt.sqlite3` | abgewiesen (Schrägstriche, Punkte) |
+| `x user=kerem` | **durch** |
+| `x tag=kunde_mueller` | **durch** |
+| `x n=tck4711` | **durch** |
+| ein neunter Wert im selben Grund | abgewiesen |
+| ein Wert mit 33 Zeichen | abgewiesen |
+
+Die größte Zeile, die durchkommt, ist 336 Zeichen lang, davon **256 Zeichen Wertinhalt**. Damit
+ist die ehrliche Formulierung: Der Riegel begrenzt **Gestalt und Menge**, nicht **Herkunft**. Ein
+kleingeschriebener Wert aus dem Bestand — ein Tag-Name ohne Großbuchstaben, ein Benutzername in
+Kleinschreibung, eine Call-Nummer ohne Bindestrich — käme durch, wenn eine künftige Aufrufstelle
+ihn übergäbe. Was ihn davon abhält, ist heute nicht der Riegel, sondern die Tatsache, daß alle
+Aufrufstellen Konstanten übergeben.
+
+Ein Sonderfall ist geschlossen: Ein Sitzungsgeheimnis paßt zwar der Länge nach in den
+Schlüsselteil (48 Zeichen), aber `redactSecrets` läuft **danach** über die ganze Zeile und
+ersetzt `takt_[A-Za-z0-9_-]{43}` unabhängig von der Schreibweise. Zwei Schichten, und die zweite
+trägt genau den Fall, den die erste nicht sieht.
+
+**Auflage daraus (A-V-21 in 19.5):** Der dritte Parameter von `lifecycle` soll kein `string`
+sein, sondern eine geschlossene Vereinigung — dann trüge der Übersetzer, was heute der Riegel
+auffängt, und der Riegel bliebe als Boden darunter.
+
+### 19.4 Befunde dieser Wiedervorlage
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-145-1** | **muss** | **Die Nachweisläufe sprechen mit GitHub.** `main.ts` sagt im Kommentar zu `versionCheck.start()`: „Damit stellt kein Nachweispfad, kein Prüffall und keine Messung eine Verbindung nach außen her — nur der echte Prozess tut das." Gemessen ist das Gegenteil: `proof:access` startet den echten Einstiegspunkt `src/index.ts` mit `spawn`, der Lauf dauert 28 s, mehrere Dienste leben über die 10 s Startverzögerung hinaus — und während des Laufs stand eine ESTAB-Verbindung nach `140.82.121.6:443` (= `api.github.com`) offen. Folgen: (a) Jeder `pnpm check`, auch der im Auslieferungstor auf `ubuntu-24.04`, gibt das Lebenszeichen aus R-19 Punkt 3 ab — mit der Quelladresse des Läufers oder des Entwicklers. (b) Die 60 Anfragen je Stunde und Quelladresse (T-136-5) werden von der Prüfinfrastruktur mitverbraucht. (c) Der Satz im Quelltext ist eine Zusage, die nicht stimmt — dieselbe Klasse wie T-136-2. Gegenmittel: Der Aufruf von `versionCheck.start()` gehört hinter eine Bedingung, die im Prüfbetrieb nicht zutrifft, **und** der Nachweis muß messen, daß im Prüfbetrieb keine ausgehende Verbindung entsteht. Ein Kommentar allein ist es nach E-063 Punkt 5 nicht. **Das Muster liegt bereits vor:** T-142 hat für den End-zu-Ende-Lauf einen zweiten, nie ausgelieferten Einstiegspunkt gebaut (`tests/e2e/support/version-check-entry.ts`), der `compose({ releaseSource })` mit einer Attrappe füttert und dabei Frist, `redirect: 'error'`, Lesestrom und Auswertung unverändert aus `version/source.ts` fährt. `proof:access` startet dagegen unverändert `apps/local-api/src/index.ts` — also den echten Einstiegspunkt ohne Naht. Dieselbe Naht dort zu benutzen ist der kürzeste Weg. | domain-dev, Orchestrator |
+| **T-145-2** | **muss** | **`cargo test` läuft nirgends.** Die 31 Rust-Prüffälle — darunter die fünfzehn Ausbruchsversuche gegen `is_release_version`, die Längengrenzen, die `v`/`V`-Fälle und `release_url_ist_wirklich_none_und_keine_teiladresse` — sind die **einzige** Kontrolle zwischen einer Fassungsbezeichnung und `xdg-open`/`ShellExecuteW` (T-136-1). Sie werden von keinem Ablauf gerufen: `cargo test` steht nicht in `package.json`, nicht in `apps/desktop/package.json` und nicht in `.github/workflows/release.yml`. Von Hand gefahren sind sie grün und brauchen nach dem Übersetzen 0,00 s. A-V-16 ist damit formal erfüllt und faktisch ungesichert — und mit den Anhängen aus Abschnitt 20 wächst genau dieses Modul um die **gesamte** Adress- und Pfadprüfung. Gegenmittel: `cargo test` in `pnpm check` einhängen, vor `pnpm build`. | Orchestrator, frontend-dev |
+| **T-145-3** | Hinweis | **Die 64-KiB-Grenze hat drei Fach Luft, nicht vier — und ihr Ausgang ist still.** Gemessen: 21 683 Bytes entpackt, davon 14 996 in `assets` bei 1 666 Bytes je Anhang. Rechnerisch ist die Grenze bei rund 35 Anhängen erreicht; heute sind es neun. Wird sie überschritten, ist der Ausgang `too_large`, also ein stiller Fehlschlag ohne Wiederholung im selben Lauf — die Versionsprüfung stellte den Betrieb ein, und die einzige Spur wäre eine Protokollzeile. Zwei Gegenmittel, und sie schließen sich nicht aus: (a) die Grenze auf 262 144 Bytes anheben (immer noch eine Grenze, immer noch weit unter jeder Bombe) und (b) im Auslieferungsablauf messen, daß die entpackte Antwort von `releases/latest` unter der Grenze bleibt — dort, wo die Anhänge entstehen. Dazu die Berichtigung des Kommentars an `VERSION_CHECK_MAX_BYTES` („rund 15 KiB … das Vierfache" → 21,2 KiB, Faktor 3,02). | domain-dev |
+| **T-145-4** | Hinweis | **Fünf der zwanzig Auflagen aus 18.9 nennen eine Zählung, wo sie eine Eigenschaft meinen** (A-V-1, A-V-4, A-V-6, A-V-12, A-V-14). Eine Zählung über rohen Text zählt Kommentare mit; eine Zählung über Felder wird von der nächsten Entwurfsentscheidung falsch (E-069 hat A-V-14 überholt). Die Neufassungen stehen in 19.5 und sind ab sofort die geltende Formulierung. Das ist derselbe Befund wie T-136-2, nur gegen den eigenen Text. | security-checker (erledigt in 19.5) |
+| **T-145-5** | Hinweis | **`logger.lifecycle` nimmt `string`.** Der Riegel `REASON_SHAPE` begrenzt Gestalt und Menge (höchstens 256 Zeichen Wertinhalt), nicht Herkunft; ein kleingeschriebener Wert aus dem Bestand käme durch. Heute übergeben alle Aufrufstellen Konstanten. Gegenmittel: eine geschlossene Vereinigung als Typ des dritten Parameters, der Riegel bleibt als Boden. Siehe A-V-21. | domain-dev |
+| **T-145-6** | Hinweis | **Semgrep Guardian zum neunten Mal nicht erreichbar, 42Crunch zum achten Mal ohne Werkzeug.** Das Tor aus Abschnitt 8 ist an zwei von vier Stellen weiterhin nicht einlösbar. Der lokale Semgrep-Lauf deckt SAST ab; **Lieferkette** bleibt ungemessen — und der Baum hat mit `v0.1.0` zum ersten Mal etwas ausgeliefert. Beschaffungsentscheidung, unverändert seit T-023. | Auftraggeber, Orchestrator |
+
+### 19.5 Die berichtigten Auflagen
+
+Diese Fassungen gelten ab sofort und ersetzen die gleichnamigen aus 18.9. Sie sind ebenso
+prüfbar und zählen nicht mehr, was Kommentare mitzählen.
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-V-1′** | Die Abfrageadresse steht **im Code** an genau einer Stelle: `apps/local-api/src/version/source.ts`. Die Adresse der Release-Seite steht **im Code** an genau zwei Stellen, `src-tauri/src/release.rs` und `apps/web/src/lib/releasePage.ts`, und beide sind zeichengleich. Eine dritte Adresse auf `github.com` gibt es nicht. | `proof:release-safety` Abschnitt 2 und 3, gemessen **nach** `stripComments` und mit Gegenprobe. Eine rohe `grep`-Zählung ist ausdrücklich **nicht** mehr die Messung. |
+| **A-V-4′** | Im **Code** — nicht in Kommentaren — kommt keine der Zeichenketten `dispatcher`, `Agent`, `ProxyAgent`, `NODE_USE_ENV_PROXY`, `NODE_TLS_REJECT_UNAUTHORIZED`, `rejectUnauthorized` vor, und `undici` ist keine unmittelbare Abhängigkeit. | `proof:release-safety` Prüfung „nirgends ein Herunterladen, kein Installieren, kein zweiter Netzweg", gemessen nach `stripComments`, mit Gegenprobe. |
+| **A-V-6′** | Die Zahl der **gelesenen entpackten Bytes** ist begrenzt auf `VERSION_CHECK_MAX_BYTES` **plus höchstens eine Leseeinheit**. Die Leseeinheit ist bei Node 22 16 384 Bytes; die messbare Obergrenze ist damit 81 920. Es wird nichts geparst, was oberhalb der Grenze gelesen wurde. Die Begründung der Zahl im Quelltext nennt die zuletzt gemessene echte Antwortgröße. | Ein Prüffall zählt die gelesenen Bytes am Strom und erwartet ≤ 81 920 bei einer 50-MiB-Bombe. Die Zahl im Kommentar wird bei jeder Wiedervorlage neu gemessen. |
+| **A-V-12′** | Nach `stop()` geht keine weitere Anfrage hinaus, ein laufender Aufruf endet als `aborted`, und der Prozeß endet innerhalb der Abschaltfrist **auch dann, wenn `stop()` nichts bewirkte**. | Die Prüffälle in `checker.test.ts` messen das erste und zweite; die harte Abschaltfrist aus T-126 (`proof:access` Abschnitt 0e) trägt das dritte. `proof:access` mißt **nicht** den Fall „ausgehende Anfrage läuft" und soll das auch nicht vorgeben. |
+| **A-V-14′** | Was den Dienst verläßt, ist **ausschließlich** die geprüfte Fassungsbezeichnung und ein Kennzeichen, ob überhaupt etwas bekannt ist. Verboten und einzeln gemessen: `html_url`, `browser_download_url`, `upload_url`, `assets_url`, `zipball_url`, `tarball_url`, `body_html`, `body`, `name`, `author` und jedes Feld vom Typ „freier Text aus der Antwort". Die Zahl der Felder im Antwortschema ist **kein** Maß. | `proof:release-safety` Abschnitt 2, Prüfung „aus der Antwort wird ein Feld gelesen", mit Gegenprobe. |
+| **A-V-21** | Der Grund einer Lebenslaufzeile ist ein Wert aus einer **geschlossenen Vereinigung** und kein freier `string`. `REASON_SHAPE` bleibt als Boden darunter. | Der Typ des dritten Parameters von `Logger.lifecycle`; `tsc` bricht ab, wenn eine Aufrufstelle etwas anderes übergibt. |
+| **A-V-22** | Kein Nachweislauf und kein Prüffall baut eine Verbindung nach außen auf. | Ein Lauf beobachtet die ausgehenden Verbindungen des Prüfbetriebs und ist rot, sobald eine davon nicht auf `127.0.0.1` zeigt. Bis dahin gilt: `versionCheck.start()` steht hinter einer Bedingung, die im Prüfbetrieb nicht zutrifft. |
+| **A-V-23** | `cargo test` läuft in `pnpm check`. | Der Befehl steht in `package.json` und ist Teil des Auslieferungstors. |
+
+### 19.6 Urteil der Wiedervorlage
+
+**Nacharbeit für `0.1.1` — der ausgelieferte Stand ist tragfähig, die Nachweise sind es an zwei
+Stellen nicht.**
+
+Zur Sache: **Keine der zwanzig Auflagen ist nicht erfüllt.** Der Weg, den 18.9 beschrieben hat,
+ist gebaut worden, und zwar an den beiden Stellen genau so, wo eine bequemere Umsetzung nahegelegen
+hätte: Der Öffnen-Befehl nimmt keine Adresse entgegen, und der Netzaufruf liegt in keinem
+Anfragebehandler. Die Kette wurde in dieser Prüfung **gegen die echte Quelle** gefahren und
+liefert `0.1.0` — geprüft, ohne `v`, zwei Felder, keine Protokollzeile.
+
+Zu den Nachweisen: Zwei Befunde der Stufe „muss". Der erste (T-145-1) ist der Beweis dafür, daß
+eine Zusage im Quelltext nicht dasselbe ist wie eine Messung — der Satz „kein Nachweispfad stellt
+eine Verbindung nach außen her" steht im Code und ist gemessen falsch. Der zweite (T-145-2) ist
+der schwerere: Die **einzige** Kontrolle zwischen einer fremden Zeichenkette und dem
+Prozeßstart auf dem Rechner des Benutzers ist durch Prüffälle abgesichert, die kein Ablauf ruft.
+Das war für die Versionsprüfung schon zu viel Vertrauen; mit den Anhängen aus Abschnitt 20 wird
+dieselbe Datei um die gesamte Adreß- und Pfadprüfung wachsen, und dann ist es keine Frage mehr.
+
+Vier Hinweise, davon einer (T-145-4) gegen den eigenen Text dieses Dokuments: Fünf Auflagen haben
+gezählt, wo sie hätten beschreiben sollen. Die Neufassungen stehen in 19.5.
+
+Semgrep, lokal gefahren: zehn Befunde, alle in bekannten Falschmeldungsklassen, **kein Befund
+hoher Schwere**. Guardian zum neunten, 42Crunch zum achten Mal nicht verfügbar (T-145-6).
+
+**Wiedervorlage:** mit `0.1.1`, gegen T-145-1, T-145-2, T-145-3 und A-V-21 bis A-V-23.
+
+---
+
+## 20. Vorabbewertung T-145 (2026-09-05) — Frist und Anhänge, bevor sie gebaut werden
+
+Dieser Abschnitt bewertet eine Vertrauensgrenze, die es **noch nicht gibt**. `docs/spec.md`
+Abschnitt 19 (A-19.1 bis A-19.19) steht seit heute, E-070, E-071 und E-072 legen die Bauform
+fest, R-21 und R-22 benennen die Risiken. Gebaut ist davon **nichts**: `grep` über
+`packages/storage/migrations`, `packages/domain/src` und `apps/local-api/src` findet weder
+`attachment` noch `due_date`. Alles, was hier als **Auflage** steht, ist damit die Vorgabe, gegen
+die gebaut und wiedervorgelegt wird.
+
+Dasselbe Vorgehen wie bei T-136 — und dort hat es den Befund T-136-1 zutage gefördert, also den
+einen, der den Entwurf gerettet hat.
+
+**Das ist die schwerere Grenze von beiden.** Bei VG-10 war die Zeichenkette eine
+Fassungsbezeichnung aus einer bekannten Quelle, in einem Zeichenvorrat ohne `/`, `:`, `\`, `?`,
+`#` und Leerzeichen — sieben Zeilen von Hand geschriebene Formprüfung reichten aus. Hier ist die
+Zeichenkette eine **Adresse oder ein Pfad aus dem Bestand**, sie darf all diese Zeichen tragen,
+und „öffnen" heißt beim Typ Datei: die Standardanwendung starten. Das ist ein Doppelklick im
+Dateimanager, ausgelöst von einem Wert, den Takt gespeichert hat.
+
+### 20.0 Was hier bewertet wird
+
+```text
+  Benutzer  ──▶  Eingabefeld (Adresse / Dateipfad / Bilddatei)
+                        │
+                        ▼
+  Lokaler Dienst  apps/local-api          ← VG-1: jeder lokale Prozeß schreibt hier auch hin
+                        │
+                        ▼
+  SQLite  attachment                      ← VG-3: jeder Prozeß im Benutzerkonto schreibt hier auch hin
+                        │  (1) die Zeichenkette liegt jetzt im Bestand
+                        ▼
+  Oberfläche  apps/web                    ← zeigt Titel und Ersatzbeschriftung an (A-19.12)
+                        │  (2) Knopf „Öffnen" → Rückfrage → takt_open_*
+                        ▼
+  Hülle  apps/desktop/src-tauri           ← VG-11, hier liegt die ganze Prüfung
+                        │  (3) app.shell().open(…)
+                        ▼
+  Browser  /  Standardanwendung des Systems
+```
+
+Zwischen (1) und (2) liegt der Bestand, und das ist der ganze Unterschied zu einer Prüfung im
+Eingabefeld. Drei Wege führen an einem Eingabefeld vorbei in den Bestand, und alle drei
+existieren heute schon: die Routen des Dienstes (VG-1, jeder lokale Prozeß mit dem
+Sitzungsgeheimnis), die Datei selbst (VG-3, jeder Prozeß im Benutzerkonto, `sqlite3` genügt) und
+jede künftige Migration.
+
+**Zwei Eigenschaften des Bestands, die hier tragen, ohne daß jemand sie dafür gebaut hätte.**
+
+1. **Die Fähigkeitenliste ist leer, was die Shell angeht** (A-V-17, gemessen von
+   `proof:shell-surface`). Der Öffnen-Weg aus JavaScript ist zu; er bleibt zu. Aber: T-136-1 gilt
+   unverändert — auf dem **Rust**-Weg prüft `tauri-plugin-shell` gar nichts
+   (`open::open(None, …)`, „when running directly from Rust code we don't need to validate the
+   path"). Was in `release.rs` die Formprüfung war, muß hier die Adreß- und Pfadprüfung sein, und
+   sie ist wieder die **einzige** Kontrolle.
+2. **`dialog:allow-open` steht bereits in der Liste** und liefert den Ordnerauswahldialog für den
+   Exportordner (Befund S-04). Derselbe Dialog gibt mit `directory: false` einen **Dateipfad**
+   zurück, ohne zu lesen und ohne zu schreiben. Der Zuwachs an Fläche für den Typ Datei ist damit
+   null — vorausgesetzt, der Pfad kommt aus dem Dialog und nicht aus einem Textfeld.
+
+---
+
+### 20.1 B-19.1 — Der Dateianhang ist ein Startknopf
+**Schwere:** hoch. **Betrifft:** A-19.9, A-19.10, A-19.15, A-19.18. **Akteure:** A-02 (Prozeß im
+Benutzerkonto), A-06 (Absender einer E-Mail, mittelbar), A-03. **Bezug:** R-21, E-072 Punkt 2
+und 3, T-136-1. **Grenze:** VG-11.
+
+**Auswirkung.** „Mit der Standardanwendung öffnen" ist bei einer `.txt` ein Editor und bei einer
+`.bat`, `.cmd`, `.exe`, `.scr`, `.hta`, `.vbs`, `.ps1`, `.msi`, `.jar`, `.reg`, `.cpl`, `.msc`
+oder `.pif` eine **Ausführung** — mit den Rechten des Benutzers, ohne Rückfrage des
+Betriebssystems, ohne Mark-of-the-Web-Warnung, denn Takt lädt nichts herunter und setzt deshalb
+auch keine Zone. Der Weg ist kurz: Wer in den Bestand schreiben kann, schreibt einen Pfad; wer
+den Benutzer dazu bringt, auf „Öffnen" zu klicken, hat einen Prozeßstart.
+
+**Welche Prüfung trägt.**
+
+| Prüfung | Trägt sie? |
+|---|---|
+| Der Pfad kommt aus dem **Systemdialog** (`dialog:allow-open`, `directory: false`) und nicht aus einem Textfeld | **Ja, und sie ist die wirksamste von allen** — der Benutzer hat die Datei gesehen und ausgewählt, bevor sie im Bestand steht. Sie trägt aber **nur beim Anlegen**; zwischen Anlegen und Öffnen liegt der Bestand (E-072 Punkt 2). |
+| **Absoluter** Pfad | Ja, aber sie ist eine Hygienemaßnahme, keine Grenze: Ein relativer Pfad würde gegen das Arbeitsverzeichnis der Hülle aufgelöst, und das ist ein Ort, den niemand bewußt gewählt hat. |
+| **Kein UNC-Pfad** | Ja — und sie ist unter Windows **nicht** aus `Path::is_absolute()` ableitbar: `\\server\freigabe\datei.exe` ist absolut. Sie braucht einen ausdrücklichen Test auf das Präfix (`std::path::Prefix::UNC`, `VerbatimUNC`, `Verbatim`, `DeviceNS`) **und** auf die Schreibweise mit Schrägstrichen (`//server/freigabe`), die Windows ebenso auflöst. Ohne sie ist jedes Öffnen einer Datei zugleich ein Anmeldeversuch gegen einen fremden Rechner (dieselbe Sache wie in R-22, nur über den anderen Typ). |
+| Die Datei **existiert** | Nein, nicht als Sicherheitsprüfung. Sie ist die Voraussetzung für A-19.15 („sagt das an Ort und Stelle") und nichts weiter — zwischen `exists()` und `open()` liegt ein Wettlauf, den niemand gewinnt. |
+| **Endungs-Verbotsliste** | **Nein, sie ist keine Grenze.** Begründung unten. |
+
+**Zur Verbotsliste, ausdrücklich.** Sie ist erfahrungsgemäß schwach, und hier ist sie es aus drei
+nachrechenbaren Gründen. Erstens ist die Menge unter Windows nicht fest: `PATHEXT` bestimmt, was
+ohne Endung startbar ist, und `PATHEXT` ist **eine Umgebungsvariable, die der Benutzer setzen
+kann**. Zweitens ist die Menge auch bei fester `PATHEXT` nicht abzählbar — neben den Klassikern
+starten `.lnk`, `.url`, `.scf`, `.chm`, `.msc`, `.jar`, `.iso` (wird eingehängt), `.docm`
+(Makros), `.desktop` (Linux) und je nach installierter Software ein Dutzend weitere. Drittens
+lehrt eine Liste, die blockiert, den Benutzer das Umbenennen — und eine Datei, die der Benutzer
+selbst umbenannt hat, öffnet er danach ohne jedes Zögern.
+
+**Trotzdem trägt sie an genau einer Stelle etwas bei, und zwar an einer anderen als der
+erwarteten.** Fünf Endungen sind nicht „gefährlich, weil ausführbar", sondern **Umleitungen**:
+`.lnk`, `.url`, `.pif`, `.scf` (Windows) und `.desktop` (Linux). Bei ihnen zeigt der Pfad, den
+die Rückfrage nennt, **nicht** auf das, was startet — eine `rechnung.lnk` kann jedes Ziel und
+jedes Symbol tragen. Für sie ist die Rückfrage aus E-072 Punkt 3 nicht bloß schwach, sie ist
+**aktiv irreführend**: Sie sagt die Wahrheit über die Datei und lügt über die Wirkung. Diese fünf
+gehören hart abgewiesen, und zwar mit genau dieser Begründung. Alles andere ist eine Liste, die
+beruhigt.
+
+**Was die Rückfrage zeigen muß, damit sie kein Wegklicker ist.** E-072 Punkt 3 verlangt sie; hier
+steht, woran sie zu messen ist.
+
+1. **Der volle Pfad, ungekürzt, und der Dateiname davon abgesetzt.** Eine Kürzung in der Mitte
+   (`C:\Users\…\rechnung.exe`) verbirgt genau das Stück, an dem man erkennt, wo die Datei
+   herkommt.
+2. **Durch die Behandlung für fremden Text.** Der Dateiname ist fremder Text — er stammt aus dem
+   Bestand, in den geschrieben werden kann, und im Zweifel aus einer E-Mail. Ohne `visibleText`
+   zeigt eine Datei namens `rechnung\u{202e}cod.exe` in der Rückfrage `rechnungexe.doc` an. Takt
+   hat die Behandlung seit E-063, sie ist typgebunden (`ForeignText`) und `proof:foreign` mißt
+   ihre Anwendung. **Das ist die wichtigste einzelne Anforderung an diesen Dialog**, und sie
+   kostet nichts, weil sie existiert.
+3. **Die Wirkung im Satz, nicht die Handlung.** Nicht „Datei öffnen?", sondern: die Datei wird
+   mit der Standardanwendung des Systems geöffnet — dasselbe wie ein Doppelklick.
+4. **Keine Vorauswahl.** Derselbe Grundsatz wie A-18.7: keiner der beiden Knöpfe ist
+   vorbelegt, keiner hat den Anfangsfokus, `Enter` löst nichts aus.
+5. **Kein „nicht mehr fragen".** Ein Haken, der die Rückfrage abschaltet, macht sie zu einer
+   Rückfrage, die genau einmal gestellt wird — und der Benutzer schaltet sie beim ersten
+   harmlosen Anhang ab. R-20 beschreibt denselben Mechanismus von der anderen Seite.
+6. **Sie steht in der Hülle-Anwendung, nicht im Webview-`confirm()`.** `confirm()` ist eine
+   Zeile, die ein eingeschleustes Skript nachbauen kann; und sie kann Punkt 2 nicht.
+
+---
+
+### 20.2 B-19.2 — Der Verweis ist alles, was wie eine Adresse aussieht
+**Schwere:** hoch. **Betrifft:** A-19.9, A-19.10, A-19.12. **Akteure:** A-02, A-03.
+**Bezug:** R-22, E-072 Punkt 2. **Grenze:** VG-11.
+
+**Auswirkung.** `javascript:`, `file:///`, `data:`, `vbscript:`, `ms-msdt:`, `search-ms:` und vor
+allem der UNC-Pfad `\\server\freigabe` — ein Eingabefeld für eine Adresse nimmt alles davon
+widerspruchslos entgegen, und beim Öffnen tut jedes davon etwas anderes als „eine Seite im
+Browser zeigen". Der UNC-Pfad ist der unauffälligste und der schlimmste: Unter Windows ist er ein
+**Anmeldeversuch gegen einen fremden Rechner**, und was dabei über die Leitung geht, ist der
+NTLM-Handshake des angemeldeten Benutzers.
+
+**Reicht eine Positivliste aus `http` und `https`?** Gemessen, nicht vermutet. Der Zerleger ist
+`url 2.5.8` — er liegt bereits im Baum (`Cargo.lock:4286`, transitiv über `tauri`) und ist im
+lokalen Zwischenspeicher, eine unmittelbare Abhängigkeit wäre also **kein Zuwachs in der
+Lieferkette** (VG-7, B-18.7). Drei Fassungen wurden gegen die **22** Zeichenketten der
+folgenden Tabelle gefahren (bis T-164 stand hier „28“; nachgezählt in 22.2):
+`naiv` (`to_lowercase().starts_with("http://" | "https://")`), `geparst` (`Url::parse` +
+Positivliste auf `scheme()`) und `streng` (dazu: keine Steuerzeichen, Wirt vorhanden).
+
+| Eingabe | naiv | geparst | streng | Schema laut Zerleger |
+|---|---|---|---|---|
+| `https://example.org/seite` | ✓ | ✓ | ✓ | `https`, Wirt `example.org` |
+| `HTTP://example.org/` | ✓ | ✓ | ✓ | `http` — das Schema wird kleingeschrieben |
+| `javascript:alert(1)` | ✗ | ✗ | ✗ | `javascript` |
+| `file:///etc/passwd` | ✗ | ✗ | ✗ | `file` |
+| `file:///C:/Windows/System32/calc.exe` | ✗ | ✗ | ✗ | `file` |
+| `data:text/html,<script>…` | ✗ | ✗ | ✗ | `data` |
+| `vbscript:msgbox(1)` | ✗ | ✗ | ✗ | `vbscript` |
+| `ms-msdt:/id PCWDiagnostic` | ✗ | ✗ | ✗ | `ms-msdt` |
+| `search-ms:query=x&crumb=location:\\server\f` | ✗ | ✗ | ✗ | `search-ms` |
+| **`\\server\freigabe\datei.txt`** | ✗ | ✗ | ✗ | **läßt sich gar nicht zerlegen** |
+| **`file://server/freigabe/datei.txt`** | ✗ | ✗ | ✗ | **`file`, Wirt `server`** — der UNC-Pfad **in Adreßform** |
+| `//server/freigabe` | ✗ | ✗ | ✗ | läßt sich nicht zerlegen |
+| `http:/\example.org/` | ✗ | **✓** | **✓** | `http`, Wirt `example.org` |
+| `␣https://example.org` (führendes Leerzeichen) | ✗ | **✓** | **✓** | `https` |
+| `ht<TAB>tps://example.org` | ✗ | **✓** | ✗ | **`https`** — der Zerleger entfernt Tabulator und Zeilenumbruch |
+| `java<LF>script:alert(1)` | ✗ | ✗ | ✗ | `javascript` — dieselbe Entfernung, hier zu unseren Gunsten |
+| `http<NUL>s://example.org` | ✗ | ✗ | ✗ | läßt sich nicht zerlegen |
+| `https://exаmple.org/` (kyrillisches а) | ✓ | ✓ | ✓ | **`https`, Wirt `xn--exmple-4nf.org`** |
+| `https://evil.example@gutartig.example/` | ✓ | ✓ | ✓ | `https`, Wirt **`gutartig.example`** |
+| `https:///pfad` | ✓ | ✓ | ✓ | `https`, Wirt **`pfad`** |
+| `https://example.org/<RLO>gpj.exe` | ✓ | ✓ | ✓ | `https` |
+| `https://exam<ZWSP>ple.org/` | ✓ | ✓ | ✓ | **`https`, Wirt `example.org`** — das Zeichen verschwindet |
+
+**Die Antwort ist: ja, eine Positivliste aus `http` und `https` reicht gegen die Schemata — und
+sie reicht gegen den UNC-Pfad in beiden Schreibweisen.** Das ist das erste belastbare Ergebnis:
+`\\server\freigabe` zerfällt am Zerleger, und `file://server/freigabe` fällt an der Positivliste.
+Eine **eigene** UNC-Regel braucht der Typ *Verweis* damit **nicht** — sie braucht der Typ
+*Datei*, wo es keine Adresse und kein Schema gibt (20.1).
+
+**Was an einer naiven Fassung vorbeikommt, ist etwas anderes als erwartet.** Die naive Fassung
+ist nicht durchlässiger, sondern **strenger** — und genau daraus entsteht die Gefahr. Der
+Zerleger **normalisiert**: Er macht aus `http:/\example.org/` ein `http://example.org/`, schneidet
+führenden Leerraum weg, entfernt Tabulator und Zeilenumbruch **an jeder Stelle**, wandelt
+Homoglyphen nach Punycode und läßt eine Nullbreite im Wirtsnamen verschwinden. Daraus folgt der
+eigentliche Befund dieses Abschnitts:
+
+> **Der geprüfte Wert und der geöffnete Wert müssen dieselbe Zeichenkette sein.**
+
+Wird die **Rohfassung** gespeichert und angezeigt, aber die **Normalform** geprüft und geöffnet,
+dann liest der Benutzer `ht<TAB>tps://exam<ZWSP>ple.org` und Takt öffnet `https://example.org/`.
+Vier der obigen Zeilen sind genau dieser Fall. Es ist dieselbe Regel, die der Add-in-Zweig schon
+kennt: *„Geprüft wird der beschnittene Wert, also genau der, der gespeichert würde. Über die
+Rohfassung zu urteilen und die beschnittene zu schreiben hieße, etwas anderes zu prüfen als
+abzulegen."* (`routes/addin/index.ts:284`).
+
+**Die messbare Form davon ist ein Festpunkt.** Gemessen, ob die Normalform idempotent ist:
+
+```text
+https://example.org/seite        -> https://example.org/seite            idempotent
+http://example.org               -> http://example.org/                  idempotent
+HTTP://Example.ORG/Pfad          -> http://example.org/Pfad              idempotent
+http:/\example.org/              -> http://example.org/                  idempotent
+␣https://example.org             -> https://example.org/                 idempotent
+ht<TAB>tps://example.org         -> https://example.org/                 idempotent
+https://exam<ZWSP>ple.org/       -> https://example.org/                 idempotent
+https://example.org/a b          -> https://example.org/a%20b            idempotent
+https://example.org/<RLO>gpj.exe -> https://example.org/%E2%80%AEgpj.exe idempotent
+https://exаmple.org/             -> https://xn--exmple-4nf.org/          idempotent
+https://evil.example@gutartig…   -> <abgewiesen>                         —
+alle idempotent: true
+```
+
+Damit ist die Auflage schreibbar und nicht lästig: **Beim Anlegen wird einmal normalisiert und
+die Normalform gespeichert; der Öffnen-Befehl verlangt, daß der gespeicherte Wert bereits ein
+Festpunkt ist** (`Url::parse(gespeichert).as_str() == gespeichert`). Ein Wert, den jemand
+nachträglich in den Bestand geschrieben hat, ist es in aller Regel nicht — und wenn doch, ist er
+bereits die Form, die der Benutzer liest.
+
+Drei Nebenwirkungen dieser Bauform, alle erwünscht:
+
+* Der **RLO** im Pfad wird zu `%E2%80%AE` — er kann die Anzeige nicht mehr umdrehen.
+* Der **Homoglyph** wird zu `xn--exmple-4nf.org` — der Benutzer sieht, wohin es geht. Die
+  Homoglyphenfrage selbst ist **nicht** Takts Grenze; sie gehört dem Browser und seiner
+  IDN-Anzeige. Takts Aufgabe endet damit, daß Anzeige und Ziel dieselbe Zeichenkette sind.
+* **Zugangsdaten im Wirt** (`https://evil.example@gutartig.example/`) müssen abgewiesen werden,
+  nicht normalisiert: Die Normalform behält sie, und die Anzeige liest sich dann wie ein anderer
+  Wirt, als sie ansteuert. Das ist die klassische Verwechslung, und sie kostet eine Zeile
+  (`username().is_empty() && password().is_none()`).
+
+Und einer, der bleibt: `https:///pfad` wird zu `https://pfad/`. Harmlos — es ist ein `https`-Ziel
+wie jedes andere —, aber es zeigt, daß ein leerer Wirtsteil das erste Pfadstück zum Wirt
+befördert. Der Wirt muß deshalb vorhanden **und** nicht leer sein.
+
+---
+
+### 20.3 B-19.3 — Die Prüfung sitzt im Öffnen-Befehl, und der Nachweis muß mehr können als zählen
+**Schwere:** hoch. **Betrifft:** A-19.18. **Bezug:** E-072 Punkt 2 und Punkt 5, T-136-1,
+T-145-2. **Grenze:** VG-11.
+
+**Warum der Prüfort nicht verhandelbar ist.** Eine Prüfung im Eingabefeld prüft, was der Benutzer
+tippt. Geöffnet wird, was im Bestand steht. Zwischen beidem liegen heute schon drei Wege, und
+keiner davon führt durch das Eingabefeld:
+
+1. **VG-1.** Der Dienst hört auf `127.0.0.1`. Jeder Prozeß im Benutzerkonto, der an das
+   Sitzungsgeheimnis kommt — und ein Prozeß im Benutzerkonto kommt an eine Datei, die die Hülle
+   gelesen hat (R-02) —, schreibt über die Route in den Bestand.
+2. **VG-3.** Die SQLite-Datei liegt im Anwendungsdatenverzeichnis mit `0700`/`0600`. Das hält
+   andere **Benutzer** ab, nicht andere **Prozesse desselben Benutzers**. `sqlite3` und ein
+   `UPDATE` genügen.
+3. **Jede künftige Migration und jeder zweite Schreibpfad.** Der Import einer Sicherung, eine
+   Zusammenführung, ein Reparaturlauf — alles davon schreibt am Eingabefeld vorbei.
+
+Eine Prüfung im Eingabefeld ist deshalb eine Bequemlichkeit für den Benutzer (er erfährt sofort,
+daß seine Eingabe nichts taugt) und **keine** Kontrolle. Die Kontrolle sitzt an der letzten
+Stelle, hinter der nichts mehr kommt: dem Öffnen-Befehl. Das ist dieselbe Begründung wie bei
+A-V-16, und sie wiegt hier schwerer, weil die Wirkung nicht ein Reiter im Browser ist, sondern
+ein Prozeßstart.
+
+**Was `proof:shell-surface` können muß.** Heute mißt der Lauf: *„Es gibt `1` Aufrufort für
+`open`; erlaubt ist genau einer."* Die Zahl steht in `checkOpenCallSites`
+(`proof-shell-surface.mjs:340`), und die Datei ist auf `release.rs` festgenagelt. Mit den
+Anhängen kommen mindestens zwei Aufruforte dazu (Verweis und Datei), womöglich drei. **Ein
+Nachweis, der nur zählt, trägt das nicht mehr** — und er würde beim ersten Bauschritt rot, ohne
+etwas über Sicherheit zu sagen, was der sicherste Weg ist, ihn abzuschalten.
+
+Der Umbau, der trägt, ist nicht „die Zahl auf 3 setzen", sondern eine **namentliche Liste mit
+Bedingung**:
+
+* Jeder Aufrufort für `.open(` steht in einer eingetragenen Datei **und** in einer eingetragenen
+  Funktion. Die Liste ist im Nachweislauf ausgeschrieben; ein vierter Aufrufort, gleich wo, macht
+  ihn rot.
+* Für **jeden** Aufrufort gilt: Im selben Funktionsrumpf steht ein Aufruf der zugehörigen
+  Prüffunktion, und der Aufruf des Öffnens ist von ihrem Ergebnis abhängig. Gemessen als Text:
+  Zwischen dem Beginn der Funktion und dem `.open(` steht ein `?`/`ok_or`/`if !…{ return Err`
+  über genau eine der eingetragenen Prüffunktionen.
+* Jede Prüffunktion hat **neben sich** — nicht in einer fernen Datei — eine Fallliste, und die
+  Fallliste enthält die Zeichenketten aus 20.2 und 20.1.
+* Und, weil ein Wächter, der nie rot war, eine Behauptung über einen Wächter ist: für jede dieser
+  drei Prüfungen eine **Gegenprobe** im selben Lauf, so wie die zehn, die es heute schon gibt.
+
+Dazu kommt die Bedingung, ohne die das alles nichts mißt: **`cargo test` muß laufen**
+(T-145-2, A-V-23). Solange es das nicht tut, ist die gesamte Prüfung dieses Abschnitts eine
+Datei, die niemand ausführt.
+
+---
+
+### 20.4 B-19.4 — Die Vertrauensgrenze zum Add-in
+**Schwere:** mittel (die Folge ist hoch, der Weg ist heute zu). **Betrifft:** A-19.19.
+**Akteure:** A-06 (Absender einer E-Mail), A-09 (Inhaber eines entwendeten Tokens).
+**Bezug:** E-072 Punkt 1, R-06, R-09, VG-2, VG-8. **Grenze:** VG-11 ∩ VG-2.
+
+**Auswirkung.** Ein Anhang, den eine E-Mail anlegt, ist ein **von außen geschriebener
+Öffnen-Befehl** auf den Rechner des Benutzers. Der Absender kontrolliert Betreff und Inhalt
+vollständig (VG-8); käme daraus ein Dateipfad oder eine Adresse in den Bestand, hinge alles an
+der Rückfrage aus 20.1 — und die ist die letzte Verteidigung, nicht die einzige, die man haben
+möchte.
+
+**Kann diese Grenze im Bestand so gebaut werden, wie sie gemeint ist?** Nachgesehen. Ja, und
+zwar in drei Stufen, von denen die dritte die eigentliche ist.
+
+1. **Heute schon strukturell, aber nur zufällig.** `createTodoSchema`
+   (`routes/addin/schema.ts:124`) ist ein `z.object()` ohne `.strict()`; ein unbekanntes Feld
+   `attachments` wird von Zod **stillschweigend entfernt**. Das ist wirksam und trotzdem die
+   schwächste der drei Formen: Sie ist eine Voreinstellung der Bibliothek, kein Entwurf, und sie
+   sagt nichts, wenn jemand doch etwas schickt.
+2. **Der Aufrufort ist bereits explizit.** `routes/addin/index.ts:305-312` baut die Eingabe des
+   Anwendungsfalls **Feld für Feld** aus sechs benannten Werten. Ein `attachments` an
+   `createTodo` würde hier nicht von selbst mitwandern. Das ist gut und hängt an der Disziplin
+   des nächsten, der die Datei anfaßt.
+3. **Das Vorbild ist der Exportmotor, und es ist übertragbar.** `packages/export/src/sources.ts`
+   hält die Datenklassifikationsgrenze VG-5 nicht mit einer Filterliste, sondern mit einem Typ:
+   `ExportSourcePath` ist eine geschlossene Vereinigung in der Domäne,
+   `SOURCE_PRESENCE: Record<ExportSourcePath, true>` erzwingt Vollständigkeit beim Übersetzen,
+   und der Auflöser ist ein `switch` und **kein** `get(objekt, "a.b.c")`. Der Kommentar dort sagt
+   den Satz, um den es geht: *„Was keinen Zweig hat, hat keinen Wert."* Dazu ist
+   `ExportCandidate` (`packages/domain/src/export.ts:62`) eine eigene Projektion mit elf
+   Feldern — die Todo-Notiz steht dort nicht, weil der **Typ** sie nicht hat, nicht weil jemand
+   sie herausfiltert.
+
+**Die übertragene Form ist die stärkste und zugleich die billigste: Anhänge entstehen über eine
+eigene Route, und die liegt außerhalb von `/addin`.** Dann trägt die Grenze ohne einen einzigen
+neuen Wächter, weil `requiredCredentialForPath` (`access/route-policy.ts:111`) alles außerhalb
+von `/addin` und `SHARED_PATHS` von selbst schließt — und `proof:route-policy` Abschnitt 4 fährt
+**jede** Route der zusammengebauten Anwendung mit dem Add-in-Token an. Heute sind das 61 Routen,
+und keine nimmt es an. Kommt eine Anhangsroute dazu, wird sie automatisch mitgemessen; niemand
+muß daran denken.
+
+**Was gemessen werden muß, damit sie hält.** Vier Dinge, und sie sind alle billig:
+
+* `proof:route-policy` bleibt grün, und die Zahl der geprüften Routen wächst um die
+  Anhangsrouten. Keine davon steht in `SHARED_PATHS`, keine unter `/addin`.
+* Die Eingabetypen der Add-in-Anwendungsfälle tragen **kein** Anhangsfeld — und zwar als Typ,
+  nicht als Prüfung. Ein `tsc`, der beim Hinzufügen abbricht, ist der Nachweis.
+* Ein Prüffall schickt einen vollständigen Anhang an `POST /api/v1/addin/todos` und mißt danach
+  am Bestand: **null** Anhänge. Nicht „422" — das wäre die Bibliothek, die antwortet, und nicht
+  die Grenze, die hält. Gemessen wird die Wirkung, nicht die Antwort.
+* `GET /api/v1/addin/context` bekommt **kein** Anhangsfeld — dieselbe Auflage wie A-V-19 für die
+  Fassung, aus demselben Grund (R-09: was das dauerhafte Token erreicht, erreicht ein
+  entwendetes Token auch).
+
+---
+
+### 20.5 B-19.5 — Das Bild ist eine fremde Datei, die Takt liest und ausliefert
+**Schwere:** mittel. **Betrifft:** A-19.9, A-19.13, A-19.15. **Bezug:** E-071 Punkt 2 und 3,
+E-018, VG-3. **Grenze:** VG-11.
+
+**Auswirkung.** E-071 macht aus dem Bild etwas anderes als aus Verweis und Datei: Takt **kopiert**
+es und **liest** es danach bei jeder Anzeige. Damit übernimmt Takt drei Rollen, die es bisher
+nicht hatte — es liest eine fremde Datei, es hält eine Kopie, und es liefert Bytes an den Webview
+aus. Vier Fragen daran, und die dritte ist die, die man beim ersten Entwurf übersieht.
+
+1. **Größe.** Ohne Obergrenze entscheidet die gewählte Datei über den Arbeitsspeicher — beim
+   Kopieren, beim Lesen, beim Kodieren nach Base64 (Faktor 4/3) und im Webview noch einmal. Ein
+   30-MB-Foto aus einer Handykamera ist nicht bösartig und trotzdem ein Problem. E-071 Punkt 3
+   nennt „eine Obergrenze für die Bildgröße, und sie steht an einer Stelle" — sie braucht eine
+   **Zahl**, und sie muß **beim Lesen gezählt** werden, nicht aus `stat` gelesen: dieselbe
+   Begründung wie bei A-V-6, wo `content-length` keine Grenze war.
+2. **Typ.** Eine Datei, die vorgibt, ein Bild zu sein, ist der Regelfall und nicht die Ausnahme.
+   Die Endung sagt nichts. Was trägt, ist die **Kopfsignatur** (`\x89PNG`, `\xFF\xD8\xFF`,
+   `RIFF…WEBP`, `GIF8`) und eine Positivliste daraus. Was **nicht** trägt: der `content-type`,
+   den irgendwer angibt, und `image/*` als Klasse.
+3. **SVG ist kein Bild wie die anderen.** Ein `.svg` in einem `<img>`-Element führt in keinem
+   heutigen Browser Skripte aus — insofern ist es im Vorschaubild harmlos. Aber dieselbe Datei,
+   über den Typ **Datei** mit der Standardanwendung geöffnet, landet im Browser oder im Editor,
+   und **dort** laufen die Skripte. SVG gehört deshalb nicht in die Positivliste der
+   Kopfsignaturen: Es ist Text, es hat keine, und die Ausnahme dafür wäre genau die Ausnahme, die
+   man später bereut.
+4. **Die Kopie liegt im Anwendungsdatenverzeichnis.** Das ist richtig (E-018: `0700`, dieselben
+   Rechte wie der Bestand) und hat eine Folge, die in die Dokumentation gehört: Die Bilder
+   **wachsen** dort, sie werden von jedem Sicherungs- und Synchronisierungsagenten mitgenommen
+   (VG-3, dieselbe Sache wie B-11.4), und sie müssen beim Entfernen eines Anhangs und beim
+   Löschen eines Todos **mitgehen**. Eine verwaiste Kopie ist Kundenmaterial ohne Eigentümer.
+
+**Ist die `data:`-Lösung wirklich billiger als eine erweiterte CSP — oder nur anders?** Die
+Begründung in E-071 Punkt 3 lautet: Die Positivliste bleibt unverändert, denn `img-src 'self'
+data:` steht ohnehin schon in `tauri.conf.json`. Das stimmt (nachgesehen: Zeile 59) und ist
+trotzdem das **schwächere** der beiden Argumente. Die Alternative wäre ein Eintrag
+`http://127.0.0.1:17843` in `img-src`, und weil `connect-src` denselben Eintrag bereits trägt,
+wäre der Zuwachs an Fläche nach außen null.
+
+Das **stärkere** Argument ist ein anderes, und es entscheidet die Frage:
+
+> Ein `<img src="http://127.0.0.1:17843/…">` trägt **kein** `X-Takt-Token`. Der Browser setzt bei
+> einem Bildabruf keine eigenen Kopfzeilen.
+
+Damit hätte die CSP-Variante nur zwei Wege: eine **unauthentifizierte** Byte-Route auf einem Port,
+den jeder lokale Prozeß erreicht (VG-1) — also Kundenmaterial ohne Nachweis herausgeben —, oder
+ein **Geheimnis in der Adresse**. Letzteres ist genau das, wogegen `stripQuery` im Protokollierer
+geschrieben ist (B-2.4), und es stünde danach im Verlauf, im Speicher des Webviews und in jeder
+Fehlermeldung.
+
+**Urteil: `data:` ist wirklich billiger, aber aus dem Grund, den E-071 nicht nennt.** Der Preis
+ist benannt und tragbar: Base64 kostet ein Drittel mehr Arbeitsspeicher, das ganze Bild liegt als
+Zeichenkette im Webview, und `img-src data:` bleibt offen — was es ohnehin ist. Die
+Größenobergrenze aus Punkt 1 ist deshalb keine Nebensache, sondern die Bedingung, unter der
+dieser Entwurf trägt. E-071 Punkt 3 sollte um den Satz über die fehlende Kopfzeile ergänzt
+werden; ohne ihn liest sich die Entscheidung wie eine Geschmacksfrage, und die nächste Welle
+macht `img-src` auf.
+
+---
+
+### 20.6 B-19.6 — Die Frist
+**Schwere:** niedrig. **Betrifft:** A-19.1 bis A-19.7, A-19.17. **Bezug:** E-070.
+
+Erwartungsgemäß harmlos, und hier steht warum, statt daß es stillschweigend übergangen wird.
+
+Die Frist ist **ein Tag ohne Uhrzeit**, sie wird **nicht gespeichert als Zustand**, sondern aus
+dem gespeicherten Tag und heute gerechnet (E-070 Punkt 3), und sie steuert **nichts**: keinen
+Pool, keine Spalte, keine Zeitbuchung, keinen Export (A-19.7). Damit ist sie kein Fall von VG-6
+— sie ist Konfiguration, die kein Verhalten steuert. Sie eröffnet keinen neuen Datenpfad nach
+außen, sie erreicht keinen Öffnen-Befehl, und sie ist kein fremder Text: Ein Tag ist ein Tag.
+
+Drei Kleinigkeiten bleiben, alle eine Zeile wert:
+
+* **Die Form ist zu prüfen wie jede andere Eingabe.** `YYYY-MM-DD`, und der Wert muß ein
+  **existierender** Tag sein — `2026-02-30` paßt auf die Form und ist keiner. Sonst entsteht in
+  der Berechnung „überfällig / heute / später" ein `Invalid Date`, und der wird an einer Stelle
+  auftauchen, an der ihn niemand erwartet. Dasselbe gilt für die Bandbreite: Ein Jahr `0000` oder
+  `999999` ist keine Frist, sondern eine Eingabe, die die Anzeige zerlegen soll.
+* **Der Tag ist der aus E-025**, also derselbe wie der der Tagesgruppierung des Exports. Das ist
+  eine Richtigkeitsfrage und keine Sicherheitsfrage, aber sie wird zu einer, wenn zwei
+  Tagesbegriffe im selben Programm entstehen: Dann ist „welcher Tag" eine Frage mit zwei
+  Antworten, und Fragen mit zwei Antworten sind die Stellen, an denen später etwas durchrutscht.
+* **A-19.17, geprüft.** Weder Frist noch Anhang gelangen in einen Export — und das ist im Bestand
+  **strukturell** gesichert und nicht durch Sorgfalt. Nachgesehen: `ExportSourcePath` in
+  `packages/domain/src/export.ts:172` ist eine geschlossene Vereinigung mit zwölf Werten
+  (`todo.callNumber`, `todo.title`, `todo.tags`, `group.day`, `group.quarters`,
+  `group.durationSeconds`, `group.bookingNotes`, `group.startedAt`, `group.endedAt`,
+  `group.entryCount`, `system.windowsUser`, `system.exportedAt`); `SOURCE_PRESENCE` erzwingt
+  Vollständigkeit beim Übersetzen; der Auflöser ist ein `switch`; und `isExportSourcePath`
+  vergleicht **wörtlich**, ohne jede Normalisierung. Solange `ExportSourcePath` nicht wächst,
+  kann eine Vorlage — **beliebige** Vorlage, nicht nur die Standardvorlage — weder eine Frist
+  noch einen Anhang auflösen. Die messbare Auflage daraus ist deshalb keine Filterprüfung,
+  sondern eine **Zahl**: zwölf Quellen, wörtlich aufgezählt, und der Prüffall wird rot, wenn eine
+  dreizehnte dazukommt.
+
+---
+
+### 20.7 Die Auflagen — die Vorgabe für die Bauaufgaben der nächsten Welle
+
+Vierundzwanzig Auflagen. Jede ist so geschrieben, daß sie eine Zahl, eine Liste oder eine
+Gegenprobe hat. Aus T-145-4 gelernt: Wo eine Zählung über rohen Text stünde, steht stattdessen
+die Eigenschaft und der Lauf, der sie mißt.
+
+**An frontend-dev: die Hülle — hier liegt die ganze Kontrolle (VG-11)**
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-A-1** | Es gibt **genau zwei** Öffnen-Befehle: `takt_open_attachment_link(url: String)` und `takt_open_attachment_file(path: String)`. Beide nehmen **einen** `String` und keinen zweiten Parameter, der Schema, Wirt, Pfad, Anwendung oder Argumente trüge. Ein gemeinsamer Befehl mit einem Typkennzeichen ist ausgeschlossen: Ein falsch gesetztes Kennzeichen wäre der Weg, eine Adresse durch die Pfadprüfung zu schicken. | Die beiden Signaturen tragen je genau einen `String`. `proof:shell-surface` führt die Aufruforte namentlich (A-A-9). |
+| **A-A-2** | **Verweis:** Positivliste `http` und `https` auf dem **geparsten** Schema, nicht auf einem Präfix der Rohfassung. Zusätzlich: Wirt vorhanden und nicht leer; **keine** Zugangsdaten (`username()` leer **und** `password()` ist `None`); Gesamtlänge ≤ 2 048 Bytes; kein Zeichen mit `char::is_control()` **vor** dem Zerlegen. | `#[cfg(test)]` **neben** dem Befehl fährt die **22** Zeichenketten aus 20.2 und erwartet für jede genau das dort gemessene Ergebnis. (Bis T-164 stand hier „28“ — eine Zahl, die es in 20.2 nie gab; berichtigt in 22.2.) |
+| **A-A-3** | **Der geprüfte Wert ist der geöffnete Wert.** Der Öffnen-Befehl verlangt, daß die gespeicherte Adresse bereits ein **Festpunkt** der Normalform ist: `Url::parse(gespeichert)?.as_str() == gespeichert`. Trifft das nicht zu, wird nicht normalisiert und nicht geöffnet, sondern abgewiesen. Normalisiert wird **einmal**, beim Anlegen, und gespeichert wird die Normalform. | Prüffälle: die zehn Zeilen der Festpunkttabelle aus 20.2; jede Rohfassung wird abgewiesen, jede Normalform angenommen, und `norm(norm(x)) == norm(x)` gilt für alle. |
+| **A-A-4** | **Datei:** absoluter Pfad; **kein UNC** — weder `\\server\…` noch `//server/…` noch ein Windows-Präfix der Art `UNC`, `VerbatimUNC`, `Verbatim` oder `DeviceNS`; kein Zeichen mit `char::is_control()`; Länge ≤ 4 096 Bytes. `Path::is_absolute()` allein genügt **nicht** und darf nicht als Begründung stehen: Unter Windows ist ein UNC-Pfad absolut. | `#[cfg(test)]` neben dem Befehl, und die Fallliste läuft auf **Windows** (`#[cfg(windows)]` für die Präfixfälle). A-A-10 sorgt dafür, daß sie dort auch gefahren wird. |
+| **A-A-5** | **Fünf Endungen werden hart abgewiesen**, und zwar mit der Begründung „die Rückfrage kann über sie nicht die Wahrheit sagen": `.lnk`, `.url`, `.pif`, `.scf`, `.desktop`. Vergleich ohne Rücksicht auf Groß- und Kleinschreibung, auf dem letzten Punktsegment des Dateinamens. **Eine darüber hinausgehende Verbotsliste ausführbarer Endungen gibt es nicht** — sie wäre unter Windows über `PATHEXT` ohnehin benutzerbestimmt und lehrte das Umbenennen. | Prüffälle: `x.lnk`, `X.LNK`, `x.url`, `x.pif`, `x.scf`, `x.desktop` werden abgewiesen; `x.exe`, `x.bat`, `x.ps1` werden **nicht** hier abgewiesen, sondern gehen durch die Rückfrage (A-A-6). |
+| **A-A-6** | **Vor dem Öffnen einer Datei fragt Takt in seiner eigenen Oberfläche**, und die Rückfrage erfüllt sechs Eigenschaften: (1) voller Pfad, ungekürzt, Dateiname abgesetzt; (2) jeder angezeigte Teil geht durch die Behandlung für fremden Text (`visibleText`, Typ `ForeignText`); (3) der Satz nennt die **Wirkung** („wird mit der Standardanwendung des Systems geöffnet — dasselbe wie ein Doppelklick"); (4) keiner der beiden Knöpfe ist vorbelegt, keiner hat den Anfangsfokus, `Enter` löst nichts aus; (5) **kein** „nicht mehr fragen"; (6) kein `window.confirm`. | `proof:foreign` erkennt die Anzeigestellen an ihrem Typ und wird rot, wenn eine roh ist. Ein Prüffall legt einen Anhang mit `rechnung\u{202e}cod.exe` an und mißt die **angezeigte** Zeichenkette. Ein E2E-Fall mißt, daß `Enter` auf dem Dialog nichts öffnet. |
+| **A-A-7** | **Bei einem Verweis genügt die Handlung selbst** — keine Rückfrage. Ein Browser ist der erwartete Ausgang, und eine Rückfrage, die immer erscheint, ist die Rückfrage, die weggeklickt wird und danach auch bei der Datei weggeklickt wird. | Ein E2E-Fall öffnet einen Verweis ohne Zwischendialog. |
+| **A-A-8** | Bei Nichtbestehen: **kein** Aufruf von `open`, `Err` mit einem technischen Schlüssel aus einer geschlossenen Aufzählung, **ohne** den abgewiesenen Wert — etwa `link_scheme_rejected`, `link_not_normalized`, `link_userinfo`, `path_not_absolute`, `path_unc`, `path_indirect_extension`, `path_control_character`. | Prüffälle vergleichen die Rückgabe gegen die Aufzählung; kein Prüffall findet einen abgewiesenen Wert in der Meldung. |
+| **A-A-9** | `proof:shell-surface` führt die Aufruforte für `.open(` **namentlich** (Datei **und** Funktion) statt sie zu zählen, und für jeden Aufrufort mißt es, daß im selben Funktionsrumpf die zugehörige Prüffunktion aufgerufen wird und das Öffnen von ihrem Ergebnis abhängt. Ein nicht eingetragener Aufrufort macht den Lauf rot. | Drei neue Gegenproben im selben Lauf: ein vierter Aufrufort; ein Aufrufort ohne Prüfung davor; eine Prüfung, deren Ergebnis nicht verwendet wird. |
+| **A-A-10** | `cargo test` läuft in `pnpm check` (A-V-23) **und** die Pfadfälle aus A-A-4 laufen auf einem Windows-Läufer. | Der Befehl steht in `package.json`; der Auslieferungsablauf hat bereits einen `windows-2022`-Läufer. |
+| **A-A-11** | `capabilities/default.json` bekommt **keine** `shell:`-Zeile (A-V-17 gilt unverändert). Für die Dateiauswahl wird `dialog:allow-open` mit `directory: false` benutzt; **kein** `dialog:allow-save`, **kein** `fs:*`. | `proof:shell-surface`, Prüfung 1 samt ihren Gegenproben, unverändert. |
+| **A-A-12** | Die CSP wird **nicht** geöffnet: `img-src` bleibt `'self' data:`, `connect-src` bleibt bei seinen vier Marken. Kein `http://127.0.0.1:17843` in `img-src`. | `proof:shell-surface`, Prüfung 2, um `img-src` erweitert, mit Gegenprobe. |
+
+**An domain-dev: der Dienst, die Domäne, der Bestand**
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-A-13** | Der Dienst nimmt eine Adresse **nur in Normalform** entgegen und speichert sie so. Die Normalisierung liegt an **einer** Stelle in `packages/domain` — nicht im Dienst, nicht in der Oberfläche, nicht in der Hülle —, so wie das führende `v` der Fassung an genau einer Stelle fällt (E-066 Punkt 3). | Ein Prüffall in `packages/domain/test`; `grep` findet keine zweite Normalisierung. |
+| **A-A-14** | Die Tür des Dienstes weist für Adresse, Pfad und Titel dieselbe Zeichenklasse ab wie jede andere Tür: `FORBIDDEN_NAME_CHARACTERS` aus `packages/domain/src/characters.ts`. Zusätzlich für die **Adresse**: `U+200B` (Nullbreite) und `U+FEFF`, weil der Zerleger sie stillschweigend entfernt und damit Anzeige und Ziel auseinanderfallen läßt (gemessen in 20.2). | `proof:codepoints`; ein Prüffall mit `https://exam\u{200b}ple.org/`. |
+| **A-A-15** | **Bild:** Obergrenze der Bildgröße als **eine** Konstante, gezählt **beim Lesen** und nicht aus `stat`; Vorschlag **8 388 608 Bytes**. Überschreitung ist ein benannter Fehlschlag und kein Wurf. | Ein Prüffall legt eine Datei knapp über der Grenze vor und mißt, daß nichts kopiert und nichts kodiert wurde. |
+| **A-A-16** | **Bild:** Positivliste auf der **Kopfsignatur** — PNG (`89 50 4E 47`), JPEG (`FF D8 FF`), GIF (`47 49 46 38`), WebP (`52 49 46 46 … 57 45 42 50`). **Kein** SVG, **kein** Vertrauen auf die Endung, **kein** Vertrauen auf einen angegebenen `content-type`. | Prüffälle: eine als `.png` benannte `.exe`, eine `.svg`, eine leere Datei, eine Datei mit gültiger Signatur und beschädigtem Rest. Jede wird abgewiesen oder als „nicht lesbar" nach A-19.15 angezeigt, keine wirft. |
+| **A-A-17** | Die Bildkopie liegt im Anwendungsdatenverzeichnis unter `0700` (Verzeichnis) und `0600` (Datei), ausdrücklich gesetzt und nicht der `umask` überlassen (E-018). Der Dateiname der Kopie wird **erzeugt** und nicht aus dem Namen der Quelle übernommen. | `proof:db-permissions`, um das Bildverzeichnis erweitert. |
+| **A-A-18** | Wird ein Anhang entfernt oder ein Todo gelöscht, geht die Bildkopie **mit**. Eine verwaiste Kopie ist Kundenmaterial ohne Eigentümer. | Ein Prüffall zählt die Dateien im Bildverzeichnis vor und nach dem Löschen. |
+| **A-A-19** | **Frist:** `YYYY-MM-DD`, ein **existierender** Tag (kein `2026-02-30`), Jahr zwischen 1970 und 2999. Der Tagesbegriff ist der aus E-025 und steht an **einer** Stelle. Der Zustand (überfällig / heute / später) wird gerechnet und nicht gespeichert. | Prüffälle für `2026-02-30`, `0000-01-01`, `2026-2-3`, `2026-02-30T00:00:00Z`; ein Prüffall stellt die Uhr über Mitternacht und mißt den Wechsel des Zustands ohne Schreibvorgang. |
+| **A-A-20** | **A-19.17, strukturell:** `ExportSourcePath` bleibt bei **zwölf** Werten, wörtlich aufgezählt. Weder Frist noch Anhang wird eine Feldquelle. `ExportCandidate` und `ExportGroup` bekommen **kein** Frist- und **kein** Anhangsfeld. | Ein Prüffall vergleicht `EXPORT_SOURCE_PATHS` gegen die ausgeschriebene Liste der zwölf und wird rot bei einer dreizehnten. `proof:export` fährt **beliebige** Vorlagen, nicht nur die Standardvorlage (R-06). |
+
+**An integration-dev: die Add-in-Tür**
+
+| ID | Auflage | Woran messbar |
+|---|---|---|
+| **A-A-21** | **Über das Add-in entstehen keine Anhänge** (A-19.19) — strukturell. Anhänge entstehen über eigene Routen **außerhalb** von `/api/v1/addin`; sie stehen nicht in `SHARED_PATHS`. Die Eingabetypen der Add-in-Anwendungsfälle tragen kein Anhangsfeld, und zwar als **Typ**, nach dem Vorbild von `ExportCandidate` (R-06). | `proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit; `tsc` bricht ab, wenn ein Anhangsfeld in einen Add-in-Eingabetyp gerät. |
+| **A-A-22** | Ein Prüffall schickt einen vollständig ausgefüllten Anhang an `POST /api/v1/addin/todos` und mißt danach **am Bestand**: null Anhänge. Gemessen wird die **Wirkung**, nicht der Statuscode — ein 422 wäre die Bibliothek, die antwortet, und nicht die Grenze, die hält. | Der Prüffall liest nach dem Aufruf die Anhangstabelle. |
+| **A-A-23** | `GET /api/v1/addin/context` bekommt **kein** Anhangs- und **kein** Fristfeld. | `proof:addin` und die OpenAPI-Beschreibung. |
+| **A-A-24** | Kein Anhang öffnet sich als Nebenwirkung (A-19.18): nicht beim Laden einer Liste, nicht beim Öffnen eines Todos, nicht als Vorabholen, nicht als Vorschau, die im Hintergrund etwas startet. Das Vorschaubild ist die **einzige** Anzeige, die ohne Handlung des Benutzers entsteht, und es startet nichts. | Ein E2E-Fall lädt eine Liste mit je einem Anhang jeder Art und zählt die Aufrufe der Öffnen-Befehle: **null**. |
+
+---
+
+### 20.8 Befunde dieser Vorabbewertung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-145-7** | **muss** | **`proof:shell-surface` zählt, wo es benennen muß.** Der Lauf mißt heute *„genau ein Aufrufort für `open`"* (`proof-shell-surface.mjs:340`) und nagelt die Datei auf `release.rs` fest. Mit den Anhängen kommen zwei bis drei Aufruforte dazu; die Zahl auf 3 zu setzen wäre der Nachweis, der grün wird, ohne etwas geprüft zu haben (14.7). Er braucht eine namentliche Liste **und** die Bedingung „im selben Funktionsrumpf steht die zugehörige Prüfung, und das Öffnen hängt von ihrem Ergebnis ab", mit drei neuen Gegenproben. Vor dem Bau der Anhänge zu erledigen, nicht danach — sonst wächst der Lauf mit dem Code mit und ist am Ende eine Zahl, die jemand angepaßt hat. | frontend-dev |
+| **T-145-8** | **muss** | **Die einzige Kontrolle liegt wieder in Rust, und Rust wird nicht geprüft.** T-145-2 hat gemessen, daß `cargo test` in keinem Ablauf steht. Für die Versionsprüfung war das eine Nachlässigkeit; für die Anhänge ist es die Bedingung, unter der überhaupt etwas geprüft wird: Nach E-072 Punkt 2 liegt die **gesamte** Adreß- und Pfadprüfung im Öffnen-Befehl, also in `src-tauri`. Ohne `cargo test` in `pnpm check` ist jede Auflage dieses Abschnitts eine Datei, die niemand ausführt. **Die Bauaufgaben der nächsten Welle dürfen nicht beginnen, bevor A-V-23 steht.** | Orchestrator |
+| **T-145-9** | Hinweis | **E-071 Punkt 3 begründet die richtige Entscheidung mit dem schwächeren Argument.** „Die Positivliste bleibt unverändert" trifft zu, wiegt aber wenig: `img-src` um `http://127.0.0.1:17843` zu erweitern brächte keinen Zuwachs an Fläche nach außen, weil `connect-src` denselben Eintrag schon trägt. Das Argument, das die Frage entscheidet, ist ein anderes: **Ein `<img src>` trägt kein `X-Takt-Token`.** Die CSP-Variante bräuchte deshalb eine unauthentifizierte Byte-Route auf `127.0.0.1` (VG-1) oder ein Geheimnis in der Adresse (B-2.4) — beides schlechter als ein Drittel mehr Arbeitsspeicher. E-071 Punkt 3 sollte um diesen Satz ergänzt werden; sonst liest sich die Entscheidung wie eine Geschmacksfrage und die nächste Welle macht `img-src` auf. | Orchestrator |
+| **T-145-10** | Hinweis | **E-072 Punkt 2 nennt „kein UNC-Pfad" beim Verweis, und dort braucht man ihn nicht.** Gemessen (20.2): `\\server\freigabe` läßt sich gar nicht zu einer Adresse zerlegen, und `file://server/freigabe` fällt an der Positivliste `http`/`https`. Die UNC-Regel gehört zum Typ **Datei**, wo es kein Schema gibt und `Path::is_absolute()` unter Windows für UNC `true` liefert. Die Entscheidung ist nicht falsch, nur an der falschen Stelle betont — und wer sie so liest, wie sie dasteht, baut sie beim Verweis ein und beim Pfad nicht. | Orchestrator |
+| **T-145-11** | Hinweis | **Der Zerleger normalisiert, und darin liegt der eigentliche Angriff dieses Abschnitts.** Nicht das durchgelassene Schema, sondern die auseinanderfallende Anzeige: `ht<TAB>tps://exam<ZWSP>ple.org` wird zu `https://example.org/`, ein Homoglyph zu `xn--exmple-4nf.org`, ein RLO zu `%E2%80%AE`. Wer die Rohfassung anzeigt und die Normalform öffnet, hat einen Verweis gebaut, der etwas anderes tut, als er sagt. Die Antwort ist A-A-3 (Festpunkt), und sie ist gemessen idempotent. Gehört in die Bauaufgabe **und** in das Entwicklerhandbuch, weil es die Art Falle ist, die beim zweiten Anlauf wiederkommt. | frontend-dev, documenter |
+| **T-145-12** | Hinweis | **`url 2.5.8` liegt bereits im Baum** (`Cargo.lock:4286`, transitiv über `tauri`, im lokalen Zwischenspeicher vorhanden). Eine unmittelbare Abhängigkeit darauf ist **kein** Zuwachs in der Lieferkette (VG-7) — es wird ohnehin übersetzt. Damit entfällt das Argument, das bei `is_release_version` für die handgeschriebene Prüfung sprach („eine Ausdrucksbibliothek wäre für sieben Zeilen mehr Fläche als Gewinn"). Eine Adresse von Hand zu zerlegen wäre hier die schlechtere Wahl: Die Fälle in 20.2 zeigen, wie viele Regeln man dabei nachbauen müßte. | frontend-dev |
+
+### 20.9 Restrisiko dieser Grenze
+
+Vier Punkte, und keiner ist durch eine Auflage zu schließen.
+
+1. **Ein geöffneter Verweis ist ein geöffneter Verweis.** `https://` sagt nichts darüber, was auf
+   der anderen Seite steht. Takt garantiert nach diesen Auflagen, daß die geöffnete Adresse die
+   angezeigte ist und daß sie im Browser landet — nicht, daß die Seite dahinter harmlos ist. Das
+   ist der Punkt, an dem Takts Zuständigkeit endet und die des Browsers beginnt, und er gehört
+   als Satz ins Benutzerhandbuch.
+2. **Die Rückfrage ist die letzte Verteidigung, und sie ist ein Mensch.** Alle sechs
+   Eigenschaften aus A-A-6 zusammen machen aus ihr eine gute Rückfrage; sie machen aus ihr keine
+   Kontrolle. Wer den Benutzer dazu bringt, eine Datei anzulegen und danach zu öffnen, hat
+   gewonnen — genauso wie im Dateimanager. Der Unterschied zu vorher ist, daß Takt diesen Weg
+   vorher nicht hatte.
+3. **Die Bildkopie ist Kundenmaterial an einem zweiten Ort.** Bisher lag alles in einer Datei
+   (VG-3, B-11.4). Ab jetzt liegen Bilder daneben, werden von Sicherungs- und
+   Synchronisierungsagenten mitgenommen und tragen im Zweifel Namen, die etwas verraten. A-A-17
+   verlangt deshalb einen **erzeugten** Dateinamen; die Rechte tragen den Rest, und mehr ist ohne
+   Verschlüsselung nicht zu haben — die wäre eine eigene, größere Entscheidung.
+4. **Der Pfad zeigt auf eine Datei, über die Takt nichts weiß.** Zwischen dem Anlegen und dem
+   Öffnen kann der Inhalt der Datei ein anderer geworden sein; `exists()` ist kein Versprechen
+   über den Inhalt. Das ist der Preis dafür, daß Verweis und Datei eine Zeichenkette speichern
+   und kein Byte (E-071 Punkt 1), und es ist der richtige Preis: Die Alternative wäre, jede
+   angehängte Datei zu kopieren.
+
+### 20.10 Urteil dieser Vorabbewertung
+
+**Freigegeben für den Bau — mit den vierundzwanzig Auflagen aus 20.7 als Bedingung und mit einer
+Vorbedingung, die vor der ersten Bauaufgabe steht.**
+
+Die Bauform aus E-070, E-071 und E-072 trägt. Die entscheidende Wahl — die Prüfung sitzt im
+Öffnen-Befehl und nicht im Eingabefeld — ist nach dem Blick auf die drei Schreibwege in den
+Bestand nicht die vorsichtigere Variante, sondern die einzige, die überhaupt eine Kontrolle ist.
+Und die zweite Wahl, Anhänge aus der Add-in-Tür strukturell auszuschließen, ist im Bestand nicht
+nur baubar, sondern billiger als ihre Alternative: Eine Route außerhalb von `/addin` ist von
+selbst geschlossen, und `proof:route-policy` mißt sie, ohne daß jemand daran denkt.
+
+Zwei Messungen haben Auflagen erzeugt, die man ohne sie anders geschrieben hätte. **Erstens:** Die
+Positivliste aus `http` und `https` reicht — auch gegen den UNC-Pfad, in beiden Schreibweisen
+(20.2). Die Gefahr liegt nicht bei den Schemata, sondern bei der **Normalisierung**: Der Zerleger
+entfernt Tabulatoren, Nullbreiten und führenden Leerraum und wandelt Homoglyphen, und wer die
+Rohfassung anzeigt und die Normalform öffnet, hat einen Verweis gebaut, der lügt. Die Antwort ist
+der Festpunkt aus A-A-3, und er ist gemessen idempotent. **Zweitens:** Die `data:`-Lösung für das
+Vorschaubild ist wirklich billiger als eine erweiterte CSP — aber aus dem Grund, den E-071 nicht
+nennt: Ein `<img src>` trägt kein Token.
+
+Zur Endungs-Verbotsliste, weil danach ausdrücklich gefragt war: Sie ist **keine Grenze** und darf
+nicht als eine verkauft werden. Sie trägt an genau einer Stelle etwas bei, und das ist eine
+andere als die erwartete — bei den fünf **Umleitungen** (`.lnk`, `.url`, `.pif`, `.scf`,
+`.desktop`), über die die Rückfrage nicht die Wahrheit sagen kann. Für die stehen sie in A-A-5.
+Alles darüber hinaus beruhigt und lehrt das Umbenennen.
+
+**Die Vorbedingung.** Nach E-072 Punkt 2 liegt die gesamte Adreß- und Pfadprüfung in
+`src-tauri`. T-145-2 hat gemessen, daß `cargo test` in **keinem** Ablauf steht — nicht in
+`package.json`, nicht in `apps/desktop/package.json`, nicht in `.github/workflows/release.yml`.
+Damit wäre jede Auflage dieses Abschnitts eine Datei, die niemand ausführt. **A-V-23 (`cargo test`
+in `pnpm check`) und T-145-7 (`proof:shell-surface` benennt statt zu zählen) sind vor der ersten
+Bauaufgabe zu erledigen**, nicht mit ihr und nicht danach.
+
+Sechs Befunde: zwei der Stufe „muss" (T-145-7, T-145-8), vier Hinweise. Drei davon betreffen den
+Wortlaut von E-071 und E-072 und keinen Code — sie sind billig und sie verhindern, daß die
+nächste Welle die richtige Entscheidung aus dem falschen Grund umsetzt.
+
+**Wiedervorlage:** nach dem Rücklauf der Bauaufgaben zu Abschnitt 19 der Spezifikation. Dann wird
+gegen Code gemessen, was hier gegen einen Entwurf gefordert ist — Auflage für Auflage, mit den
+Zahlen aus 20.7, und diesmal ohne Zählungen über rohen Text.
+
+---
+
+## 21. Wiedervorlage T-156 (2026-09-05) — die vierundzwanzig Auflagen gegen den gebauten Code
+
+Abschnitt 20 hat Frist und Anhänge bewertet, **bevor** sie gebaut wurden, und den Bau mit
+vierundzwanzig Auflagen und einer Vorbedingung freigegeben. T-146, T-147 und T-149 haben gebaut.
+Dieser Abschnitt mißt das Ergebnis — **gegen den Code, nicht gegen die Berichte.** Wo Bericht und
+Baum auseinandergehen, gilt der Baum.
+
+Dasselbe Vorgehen wie in Abschnitt 19, und mit derselben Trennung: Eine Auflage, deren **Sache**
+gewahrt ist und deren **Messung** fehlt oder falsch beschrieben war, heißt *abweichend erfüllt*.
+In Abschnitt 19 waren fünf der sechs Abweichungen Fehler in der Messung und nicht im Code. Hier
+ist das Verhältnis ein anderes: **acht Abweichungen, davon sieben fehlende Messungen und eine
+Lücke in der Regel selbst.**
+
+### 21.1 Was gemessen wurde und was nicht
+
+| Lauf | Ergebnis |
+|---|---|
+| `cargo test --lib` in `apps/desktop/src-tauri` | **31/0** — Zahl **unverändert** gegenüber T-145. Kein einziger neuer Prüffall in `attachment.rs`. |
+| `pnpm test` (Vitest) | 69 Dateien, **1 359/0**. |
+| `proof:shell-surface` | 6 Prüfungen + **20** Gegenproben, grün. Drei der Gegenproben sind wörtlich die aus A-A-9. |
+| `proof:addin` | **187/0**, darunter A-A-21, A-A-22 samt Gegenprobe und A-A-23. |
+| `proof:route-policy` | 40/0 — **70 Operationen**, 4 Add-in-Routen, **65 Routen außerhalb `/addin` ergeben mit dem Add-in-Token 401**. |
+| `proof:release-safety` | 31/0. |
+| `proof:openapi` | 110/0. |
+| `proof:codepoints` | 45/0. |
+| `proof:foreign` | 14/0 — 114 Quelldateien, **164 behandelte Übergaben**. |
+| `proof:db-permissions` | 17/0 — **und keine einzige davon betrifft das Bildverzeichnis** (Befund T-156-4). |
+| `proof:export`, `proof:taskpane`, `proof:template-fields` | 97/0, 25/0, 30/0. |
+| `proof:conflicts`, `proof:tags`, `proof:access`, `proof:export-api`, `proof:addin-wiring` | **nicht gemessen.** Auf `127.0.0.1:17843` lauschte während dieser Aufgabe der Dienst eines gleichzeitig laufenden Prüflaufs (T-153). Kein Ergebnis, weder positiv noch negativ. |
+| Playwright | **nicht gefahren** (Auflage der Aufgabe: die Ports sind belegt). Die E2E-Fälle sind gelesen, nicht ausgeführt. |
+| Semgrep CLI lokal, `p/nodejsscan p/typescript p/javascript` | 188 Regeln, 288 Ziele, **24 Befunde**, alle in bekannten Falschmeldungsklassen (21.6). **Kein Befund hoher Schwere, und keiner im neuen Code für Frist und Anhänge.** |
+| Semgrep Guardian | **Nicht erreichbar** — „Not logged into Semgrep Guardian", **zehntes** Mal. |
+| 42Crunch Audit / Scan | **Nicht gelaufen** — kein `42c-ci-cli`, kein `~/.42crunch`, keine Berechtigung. **Neuntes** Mal. Ersatz bleibt `proof:openapi`. |
+| Eigene Messungen | Acht, siehe 21.3. |
+
+### 21.2 Die vierundzwanzig Auflagen, Auflage für Auflage
+
+| Urteil | Auflagen |
+|---|---|
+| erfüllt (15) | A-A-1, A-A-7, A-A-8, A-A-9, A-A-11, A-A-12, A-A-13, A-A-14, A-A-15, A-A-16, A-A-19, A-A-21, A-A-22, A-A-23, A-A-24 |
+| abweichend erfüllt (8) | A-A-2, A-A-3, A-A-4, A-A-6, A-A-10, A-A-17, A-A-18, A-A-20 |
+| nicht erfüllt (1) | **A-A-5** — in der Sache, nicht im Wortlaut. Siehe T-156-1. |
+
+**A-A-1 — erfüllt.** `attachment.rs:317` und `:345`: `takt_open_attachment_link(app, url: String)`
+und `takt_open_attachment_file(app, path: String)`. Je genau ein aufrufbarer Parameter; der
+`AppHandle` wird von Tauri gestellt und nicht vom Aufrufer. Kein gemeinsamer Befehl, kein
+Typkennzeichen. Gemessen: `proof:shell-surface` führt **drei** Aufruforte namentlich, mit Datei,
+Funktion und Prüffunktion.
+
+**A-A-2 — abweichend erfüllt.** Der Code hält alle fünf Bedingungen und in der verlangten
+Reihenfolge (`attachment.rs:183-212`): leer, Länge (2 048 Bytes, vor dem Zerlegen), Steuerzeichen
+**vor** dem Zerlegen, Positivliste auf `parsed.scheme()`, Wirt vorhanden und nicht leer, keine
+Zugangsdaten. **Die verlangte Messung fehlt vollständig:** Es gibt keinen `#[cfg(test)]`-Block in
+`attachment.rs`, und `cargo test` zählt dieselben 31 Fälle wie vor der Bauwelle. Ich habe die 22
+Zeichenketten deshalb selbst gefahren (21.3, Messung 1) — der Code besteht sie. (Hier stand bis
+T-164 „28“; berichtigt in 22.2.)
+
+**A-A-3 — abweichend erfüllt.** Der Festpunkt steht wörtlich da
+(`if parsed.as_str() != value { return Err(Rejection::LinkNotNormalized) }`), und geöffnet wird
+`checked.as_str()` und nicht die Rohfassung. Normalisiert wird an **einer** Stelle
+(`packages/domain/src/attachment.ts:406`), und die Hülle normalisiert nicht, sie prüft. Gemessen
+in `packages/domain/test/attachment.test.ts` (105 Fälle, Idempotenz eingeschlossen) — **in Rust
+nicht.** Ich habe die zehn Zeilen der Festpunkttabelle selbst gefahren (21.3, Messung 2).
+
+**A-A-4 — abweichend erfüllt, und das ist die Abweichung mit dem längsten Schatten.** Der Code
+ist richtig und begründet: `is_unc` trägt **beide** Hälften — die Schreibweise (`\\`, `//`), die
+auf jeder Plattform greift, und das Präfix (`UNC`, `VerbatimUNC`, `Verbatim`, `DeviceNS`), das
+nur unter Windows entsteht; die UNC-Prüfung steht **vor** `is_absolute()`, mit der richtigen
+Begründung im Quelltext. **Die Auflage verlangte die Fallliste auf Windows.** Es gibt keine
+Fallliste, also auch keine auf Windows. Auf einem Linux-Läufer habe ich gemessen, daß die erste
+Hälfte alle vier Schreibweisen fängt (21.3, Messung 3); der Zweig `Component::Prefix` und der
+Fall „`C:\…` ist absolut" sind **nicht gemessen** und auf diesem Läufer auch nicht meßbar.
+
+**A-A-5 — nicht erfüllt in der Sache.** Der Wortlaut ist umgesetzt: fünf Endungen, ohne Rücksicht
+auf Groß- und Kleinschreibung, auf dem letzten Punktsegment; `.exe`, `.bat`, `.ps1` fallen hier
+**nicht**. Gemessen (21.3, Messung 4). Aber die Regel greift an einem Namen vorbei, den Windows
+selbst erzeugt: **ein nachgestellter Punkt oder ein nachgestelltes Leerzeichen.** Siehe
+**T-156-1**.
+
+**A-A-6 — abweichend erfüllt.** Alle sechs Eigenschaften stehen in
+`apps/web/src/components/AttachmentOpenDialog.tsx`, jede an einer benennbaren Stelle: voller
+ungekürzter Pfad in Festbreitenschrift mit abgesetztem Dateinamen; `foreignText` auf Pfad,
+Dateiname **und** Endung; die Wirkung im Satz („dasselbe wie ein Doppelklick im Dateimanager"),
+bei ausführbarer Endung ein zweiter Satz und die Knopfbeschriftung „Ausführen"; Anfangsfokus auf
+dem Dialog selbst (`tabIndex={-1}`), keine Vorbelegung, beide Knöpfe in derselben Gestalt; kein
+Kontrollkästchen; kein `window.confirm`. Der Dialog bekommt `pendingOpen.target` — **denselben**
+Wert, der an den Öffnen-Befehl geht; Anzeige und Ziel sind zeichengleich. `proof:foreign` ist
+grün. **Zwei der drei verlangten Messungen fehlen:** der Prüffall mit `rechnung\u{202e}cod.exe`
+und der E2E-Fall, der mißt, daß `Enter` auf dem Dialog nichts öffnet.
+
+**A-A-7 — erfüllt.** Ein Verweis geht ohne Rückfrage (`Attachments.tsx:531-537`), eine Datei
+über den Dialog. E2E-Fall TP-ANH-05 vorhanden (gelesen, nicht gefahren).
+
+**A-A-8 — erfüllt.** `Rejection` ist eine geschlossene Aufzählung mit fünfzehn Fällen und einer
+`key()`-Abbildung; kein Zweig trägt den abgewiesenen Wert. `shell.ts` reicht den Schlüssel
+durch, ohne eine zweite Liste zu führen. Die Schlüssel sind wortgleich mit `LinkRejection` und
+`PathRejection` in der Domäne — Dienst und Hülle sagen über denselben Fall dasselbe.
+
+**A-A-9 — erfüllt, und das ist die sauberste Umsetzung dieser Welle.** `proof:shell-surface` führt
+`OPEN_CALL_SITES` mit Datei, Funktion, Prüffunktion und Begründung; `rustFunctions` zerlegt das
+kommentar- und zeichenkettenfreie Gerüst in Funktionsrümpfe; `guardCarriesTheOpen` verlangt, daß
+der Aufruf der Prüffunktion **vor** dem `.open(` steht **und** in einer Anweisung endet, die `?`,
+`ok_or` oder `return Err` trägt. Gelesen wird rekursiv, über alle drei Fähigkeitenendungen. Die
+drei geforderten Gegenproben laufen wörtlich mit: ein vierter Aufrufort in einem Untermodul; ein
+eingetragener Aufrufort ohne seine Prüfung; eine Prüfung, deren Ergebnis das Öffnen nicht trägt.
+Befund T-145-7 ist damit geschlossen.
+
+**A-A-10 — abweichend erfüllt: der Ablauf steht, die Fälle fehlen.** `pnpm check` fährt
+`test:rust` (`cargo test --lib`), und `.github/workflows/release.yml:372` fährt `cargo test --lib`
+auf allen drei Läufern, **vor** dem Bau, mit der richtigen Begründung im Kommentar. Damit ist
+A-V-23 erfüllt und die Vorbedingung T-145-8 formal eingelöst. Nur: Der Windows-Läufer fährt
+dieselben 31 Fälle wie der Linux-Läufer, und keiner davon berührt einen Pfad. Die Rohrleitung
+liegt; es fließt nichts hindurch.
+
+**A-A-11 — erfüllt.** `capabilities/default.json` trägt `core:default`,
+`core:window:allow-start-dragging` und `dialog:allow-open`. Keine `shell:`-Zeile, kein
+`dialog:allow-save`, kein `fs:*`. Gemessen mit vier Gegenproben, darunter eine `shell.toml` in
+einem Unterordner und eine `.json5` mit einer Shell-Zeile.
+
+**A-A-12 — erfüllt.** `img-src 'self' data:` unverändert, `connect-src` bei seinen vier Marken.
+Gegenprobe „`http://127.0.0.1:17843` in img-src" wird rot.
+
+**A-A-13 — erfüllt.** `normalizeAttachmentLink` ist im ganzen Baum genau einmal definiert und hat
+genau zwei Aufrufer: den Anwendungsfall beim Anlegen (`usecases/attachments.ts:179`) und
+`attachmentLabel`, das nur liest. Weder Dienst noch Oberfläche noch Hülle normalisieren.
+
+**A-A-14 — erfüllt.** `checkAttachmentPath` und `normalizeAttachmentLink` rufen beide
+`hasForbiddenNameCharacter`; für die Adresse kommt `INVISIBLE_IN_ADDRESS` (`U+200B`, `U+FEFF`)
+hinzu, und die Zeichen werden **abgewiesen und nicht entfernt** — die richtige Richtung, weil
+eine stillschweigend geänderte Eingabe die zweite Hälfte desselben Fehlers wäre. `proof:codepoints`
+45/0, ein Domänenprüffall mit `https://exam\u{200b}ple.org/`.
+
+**A-A-15 — erfüllt.** `MAX_ATTACHMENT_IMAGE_BYTES = 8_388_608`, eine Konstante, und gezählt wird
+an den **gelesenen** Bytes (`attachment-store.ts:205-215`), nicht an `stat`. Der Abbruch ist ein
+benannter Fehlschlag (`too_large`) und kein Wurf. Selbst gemessen (21.3, Messung 5): nichts
+kopiert, nichts kodiert. **Nuance wie bei A-V-6′:** Der Abbruch geschieht, nachdem bis zu
+Grenze + eine Leseeinheit (65 536 Bytes) gelesen wurden. Als Zahl ist die Grenze also
+8 454 144, als Sache ist sie 8 388 608.
+
+**A-A-16 — erfüllt.** Positivliste auf der Kopfsignatur, zwölf Bytes, PNG/JPEG/GIF/WebP, kein
+SVG, und die Signatur wird **beim Lesen erneut** gemessen statt dem Namen zu glauben. Selbst
+gemessen (21.3, Messung 6): eine `MZ`-Datei unter dem Namen `.png` und eine SVG-Datei ergeben
+beide `not_an_image`, ein leeres Feld `empty`.
+
+**A-A-17 — abweichend erfüllt.** Der Code ist richtig: `mkdir` mit `0700` **und** ein
+nachgezogenes `chmod` (weil `mkdir` den Modus nur bei neu angelegten Ebenen setzt und die `umask`
+ihn filtert), `open(…, 'w', 0o600)` **und** ein nachgezogenes `chmod`, erzeugter Name aus
+`randomUUID` ohne Bindestriche, Nachbardatei und Umbenennen. Der Name wird beim Lesen **erneut**
+gegen `^[0-9a-f]{32}\.(png|jpg|gif|webp)$` gehalten und danach der aufgelöste Pfad verglichen —
+zwei Riegel, wo die Auflage einen verlangte. **Die verlangte Messung fehlt:**
+`proof:db-permissions` ist **nicht** um das Bildverzeichnis erweitert worden; seine 17 Prüfungen
+betreffen ausschließlich `takt.db`, `-wal`, `-shm` und die Sicherungskopie. Selbst gemessen
+(21.3, Messung 7), unter `umask 000`: Verzeichnis `700`, Datei `600`, Quellrechte `666` werden
+nicht geerbt.
+
+**A-A-18 — abweichend erfüllt.** Die Kopie geht an **drei** Stellen mit: bei einem gescheiterten
+`insert` (`usecases/attachments.ts:212`), beim Entfernen eines Anhangs (`:263`) und beim Löschen
+des Todos (`usecases/todos.ts:362`), dort mit der richtigen Reihenfolge — erst lesen, dann
+löschen, dann die Dateien — und einer ausgeschriebenen Begründung, warum `ON DELETE CASCADE` das
+nicht erledigt. Gemessen ist `imageTargets` auf Portebene; **die verlangte Zählung der Dateien im
+Bildverzeichnis vor und nach dem Löschen fehlt.** Selbst gemessen (21.3, Messung 8): 2 → 1 → 0,
+und `removeImage` mit einem Ausbruchsnamen wirft nicht und ändert nichts.
+
+**A-A-19 — erfüllt.** `DUE_DATE_SHAPE`, Jahresbandbreite 1970–2999 und der Existenztest über
+`Date.UTC` und den Rückweg. Der Zustand wird gerechnet (`dueState`) und nirgends gespeichert;
+Migration 0014 legt ausdrücklich **keine** Spalte `due_state` an und begründet es. Der CHECK in
+SQL ist bewußt weiter als die Domäne und sagt das auch. Gemessen: Domänenprüffälle einschließlich
+lokaler Mitternacht in einer echten Zeitzone, und `proof:addin` weist `2026-02-30` mit 422 ab —
+„und kein halbes Todo".
+
+**A-A-20 — abweichend erfüllt.** `ExportSourcePath` steht bei zwölf Werten, `SOURCE_PRESENCE`
+erzwingt Vollständigkeit beim Übersetzen, `isExportSourcePath` vergleicht wörtlich ohne
+Normalisierung, und weder `ExportCandidate` noch `ExportGroup` tragen ein Frist- oder Anhangsfeld.
+**Die verlangte Messung trägt nicht:** Es gibt keinen Prüffall, der `EXPORT_SOURCE_PATHS` gegen
+die ausgeschriebene Liste der zwölf hält. Und der Übersetzer ersetzt ihn **nicht** — er wird rot,
+wenn jemand `SOURCE_PRESENCE` und den Typ auseinanderlaufen läßt, aber **grün**, wenn jemand eine
+dreizehnte Quelle ordentlich an beiden Stellen einträgt. Genau der Fall, den die Auflage
+abfangen wollte, ist der einzige, den sie nicht abfängt.
+
+**A-A-21 — erfüllt.** Anhänge hängen als Unterressource am Todo
+(`/api/v1/todos/{todoId}/attachments`), stehen nicht in `SHARED_PATHS` und liegen damit
+**strukturell** außerhalb der Add-in-Tür. `AddinUnit` führt keinen `AttachmentPort`; die
+Portauswahl ist weiterhin `Pick<…>` und benennt jede erlaubte Methode einzeln. Gemessen:
+`proof:route-policy` fährt **alle 65 Routen außerhalb `/addin`** mit dem Add-in-Token an und
+bekommt 401; `proof:addin` mißt die **Form der Tür** (`Object.keys(addinTuer.shape)` enthält kein
+Feld, das auf `attach|anhang|file|image|url` paßt) und zusätzlich, daß `dueDate` da ist — sonst
+mäße der Fall daneben nichts.
+
+**A-A-22 — erfüllt, und die Gegenprobe ist die richtige.** Ein voll ausgefüllter Anhang in **vier**
+Schreibweisen (`attachments`, `attachment`, `attachmentUrl`, `attachmentPath`) an
+`POST /addin/todos` ergibt 201, die Frist kommt an, und `SELECT COUNT(*) FROM todo_attachment`
+zählt **null**. Danach prüft derselbe Fall, daß keiner der Werte in Titel, Call-Nummer oder
+Vermerk gewandert ist. Die Gegenprobe schreibt per `INSERT` an der Tür vorbei und verlangt, daß
+die Zählung dann **eins** sagt — ohne sie wäre die Null die schlimmste Sorte grün.
+
+**A-A-23 — erfüllt.** `GET /addin/context` liefert `tagTree`, `pools`, `statuses`,
+`defaultStatusId`, `defaultTagIds` — kein Anhangs- und kein Fristfeld, in der Beschreibung wie im
+Prüflauf.
+
+**A-A-24 — erfüllt.** Kein Anhang öffnet sich als Nebenwirkung: `openAttachmentLink` und
+`openAttachmentFile` haben im ganzen Oberflächenbaum genau **zwei** Aufrufstellen, beide in
+`Attachments.tsx` und beide an einem Klick. Das Vorschaubild entsteht aus Bytes über
+`readAttachmentImage` — Bytes zu lesen ist kein Öffnen-Befehl. E2E-Fall TP-ANH-14 zählt null
+Aufrufe über Listenladen, Todo öffnen, erneut öffnen und Neuladen.
+
+### 21.3 Die acht eigenen Messungen
+
+Sie stehen hier, weil sie das ersetzen, was die Auflagen als Prüffälle verlangt hatten. Ein
+Ersatz ist keine Erfüllung: Diese Messungen laufen in **keinem** Ablauf und sind beim nächsten
+Umbau weg.
+
+Für die Messungen 1 bis 4 habe ich den geprüften Teil von `attachment.rs` **mechanisch**
+geschnitten (von `use std::path::` bis zum Ende von `check_file`, ohne die
+`tauri_plugin_shell`-Zeile) und gegen `url 2.5.8` in einer Wegwerf-Kiste übersetzt. Der Schnitt
+ist zeichengleich mit dem Original — geprüft, nicht angenommen. Gemessen wird damit der
+ausgelieferte Text und nicht eine Abschrift.
+
+**1 — die 22 Zeichenketten aus 20.2 gegen `check_link`.** (Hier stand bis T-164 „28“ im selben
+Satz, der zwei Sätze später „22“ sagte; berichtigt in 22.2.) Von den 22 Zeilen der Tabelle wird
+**genau eine** angenommen: `https://example.org/seite`, die einzige, die bereits Normalform ist.
+Alle übrigen fallen, und sie fallen an der Stelle, an der sie fallen sollen:
+`javascript:`, `file:`, `data:`, `vbscript:`, `ms-msdt:`, `search-ms:` an `link_scheme_rejected`;
+`\\server\freigabe` und `//server/freigabe` an `link_unparsable`; `file://server/freigabe` an der
+Positivliste; `ht<TAB>tps://`, `java<LF>script:` und `http<NUL>s://` an
+`link_control_character` **vor** dem Zerlegen; `https://evil.example@gutartig.example/` an
+`link_userinfo`; und `HTTP://example.org/`, `http:/\example.org/`, `␣https://example.org`,
+`https:///pfad`, der Homoglyph, der RLO und die Nullbreite alle an **`link_not_normalized`**.
+
+Das ist der eigentliche Beleg dieser Wiedervorlage: **Die Gefahr lag bei der Normalisierung, und
+der Festpunkt fängt sie.** Nicht das Schema hat die vier lügenden Zeilen abgewiesen, sondern die
+Forderung, daß der geprüfte Wert der geöffnete ist.
+
+**2 — die Festpunkttabelle.** Alle sechs Normalformen werden angenommen, alle fünf zugehörigen
+Rohfassungen abgewiesen. `norm(norm(x)) == norm(x)` für alle zehn Zeilen: **idempotent**. Die
+Auflage ist also streng und trotzdem erfüllbar — genau das, was 20.2 versprochen hatte.
+
+**3 — UNC gegen `check_file`, auf Linux.** `\\server\freigabe\datei.exe`,
+`//server/freigabe/datei.exe`, `\\?\C:\x.txt` und `\\.\pipe\x` ergeben alle vier `path_unc`. Die
+Hälfte über die Schreibweise trägt also allein, und sie trägt auf einem Läufer, auf dem
+`Component::Prefix` nie entsteht. `C:\Windows\System32\calc.exe` ergibt hier
+`path_not_absolute` — **unter Windows wäre dieser Pfad absolut**, und was dann geschieht, ist auf
+diesem Läufer nicht meßbar.
+
+**4 — die fünf Umleitungen.** `.lnk`, `.LNK`, `.url`, `.pif`, `.scf`, `.desktop` ergeben
+`path_indirect_extension`, und zwar **vor** der Existenzprüfung. `.exe`, `.bat`, `.ps1` fallen
+hier **nicht**: Eine wirklich angelegte `/tmp/…exe` wird angenommen und geht damit an die
+Rückfrage, wie A-A-5 es will. Eine wirklich angelegte `/tmp/….lnk` wird abgewiesen.
+
+**5 — die Bildgrenze.** Eine Datei von 8 MiB + 8 Bytes mit gültiger PNG-Signatur ergibt
+`too_large`; im Bildverzeichnis liegt danach **eine** Datei, nämlich die von vorher. Nichts
+kopiert, nichts kodiert.
+
+**6 — die Kopfsignatur.** `4D 5A` (`MZ`, eine Windows-Binärdatei) unter dem Namen `bild.png`
+ergibt `not_an_image`. Ein SVG mit `<script>` darin ergibt `not_an_image`. Beim **Lesen** ergibt
+ein Name in Ausbruchsform (`../../takt.db`, `..%2Ftakt.db`) `bad_name`, ein wohlgeformter, aber
+unbekannter Name `unreadable` — kein Wurf, keine Auskunft über das Dateisystem.
+
+**7 — die Rechte, unter `umask 000`.** Bildverzeichnis `0700`, Bildkopie `0600`, während die
+Quelldatei `0666` trägt. Die Kopie erbt die Rechte der Quelle also nicht, und die weite `umask`
+schlägt nicht durch. Der Name der Kopie ist 32 Hexziffern plus Endung und trägt nichts vom Namen
+der Quelle; zwei Kopien derselben Quelle tragen verschiedene Namen.
+
+**8 — die Kopie geht mit.** Zwei Kopien → `removeImage` → 1 → `removeImage` → 0. `removeImage`
+mit `../../takt.db` und mit einem unbekannten Namen wirft nicht und ändert nichts.
+
+### 21.4 Befunde
+
+| Kennung | Schwere | Sache |
+|---|---|---|
+| **T-156-1** | **muss** | **Ein nachgestellter Punkt oder ein nachgestelltes Leerzeichen hebt A-A-5 auf.** Gemessen: `/…/rechnung.lnk.` und `/…/rechnung.lnk ` bestehen `check_file` — `Path::extension()` liefert `""` beziehungsweise `"lnk "`, und keines davon steht in `INDIRECT_EXTENSIONS`. Unter Windows schneidet die Win32-Pfadauflösung nachgestellte Punkte und Leerzeichen vom letzten Namensbestandteil ab, **bevor** die Datei aufgelöst wird: `is_file()` bejaht, weil es dieselbe Abkürzung nimmt, und `ShellExecuteW` öffnet danach die Verknüpfung. Genau der Fall, für den die fünf Endungen dastehen — der Pfad, den die Rückfrage nennt, zeigt nicht auf das, was startet. **Und die Rückfrage lügt mit:** `extensionOf` in `apps/web/src/lib/attachmentLabel.ts:113` gibt für `…exe.` und `…exe ` ebenfalls „keine Endung" zurück, also sagt der Dialog „Diese Datei wird geöffnet" statt „wird ausgeführt". Der Weg dahin ist der, für den die Prüfung im Öffnen-Befehl überhaupt existiert: VG-1 oder VG-3 schreiben den Wert in `todo_attachment.target`, der Benutzer klickt. **Auf Windows nicht gemessen** — der Läufer war Linux; die Mechanik ist die dokumentierte Win32-Namensnormalisierung. **Gegenmittel:** vor dem Endungsvergleich nachgestellte `.` und Leerzeichen vom letzten Namensbestandteil abschneiden und **auf dem beschnittenen Namen** vergleichen — oder, strenger und billiger, einen Pfad abweisen, dessen letzter Bestandteil auf `.` oder Leerzeichen endet. Dieselbe Änderung in `extensionOf`. Zuständig: frontend-dev. |
+| **T-156-2** | **muss** | **`attachment.rs` hat keinen einzigen Prüffall.** `cargo test` zählt 31 — dieselben 31 wie in T-145, alle in `release.rs`, `sidecar.rs`, `identity.rs`, `appdata.rs`. A-A-2, A-A-3, A-A-4, A-A-5 und A-A-8 verlangten die Fälle ausdrücklich **neben dem Befehl**; A-A-10 verlangte sie auf Windows. Die Rohrleitung dafür ist gebaut (`test:rust` in `pnpm check`, `cargo test --lib` auf allen drei Läufern **vor** dem Bau), aber sie führt nichts. Damit ist die einzige Kontrolle zwischen einer Zeichenkette aus dem Bestand und `ShellExecuteW` weiterhin ungesichert — dieselbe Sache wie T-145-2, nur an der schwereren Grenze. **Und T-156-1 ist der Beleg, daß das nicht theoretisch ist:** Ein Prüffall `x.lnk.` hätte ihn beim Schreiben gefunden. Zuständig: unit-tester (benannte Ausnahme in `CLAUDE.md`), Windows-Fälle unter `#[cfg(windows)]`. |
+| **T-156-3** | **muss** | **Die E2E-Hauptreihe spricht bei jedem Lauf mit `api.github.com` (O-CI).** `tests/e2e/support/services.ts:86` startet `node apps/local-api/src/index.ts`; `index.ts` ruft `main()` **ohne** Argument, `main()` baut den Prüfer mit `createGithubReleaseSource()` und ruft `versionCheck.start()` (`main.ts:448`). Belegt am laufenden Prozeß: `node apps/local-api/src/index.ts` (PID 2289990) hört auf 17843 und 17844. Dieselbe Überschreitung wie T-145-1, nur an der anderen Reihe — und die Naht dagegen liegt seit T-146 fertig daneben: `proof-access-entry.ts` reicht eine Abholfunktion, die nirgendwohin geht, an `main({ releaseSource })`. Folgen unverändert: ein Lebenszeichen je Lauf (R-19 Punkt 3), Mitverbrauch der 60 Anfragen je Stunde und Quelladresse, und — neu und schlimmer — **ein zeitabhängiger modaler Dialog vor der Oberfläche** (E-077, T-150). Ein Prüflauf, dessen Ergebnis davon abhängt, wann er läuft, ist kein Prüflauf. Zuständig: e2e-tester. |
+| **T-156-4** | Hinweis | **Sieben verlangte Messungen fehlen, bei richtigem Code.** A-A-2/A-A-3/A-A-4/A-A-5/A-A-8 (Rust, siehe T-156-2), A-A-6 (RLO-Anzeige, `Enter`), A-A-17 (`proof:db-permissions` um das Bildverzeichnis), A-A-18 (Dateizahl vor und nach), A-A-20 (die zwölf gegen die ausgeschriebene Liste). Ich habe fünf davon selbst nachgemessen (21.3) — aber eine Messung, die in keinem Ablauf steht, ist eine Momentaufnahme und keine Zusage. |
+| **T-156-5** | Hinweis | **A-A-20 fängt den Fall nicht, für den sie geschrieben wurde.** `Record<ExportSourcePath, true>` hält Typ und Laufzeitliste zusammen; es hält die **Zahl** nicht fest. Wer `'todo.dueDate'` sauber an beiden Stellen einträgt, übersetzt grün. Die Auflage verlangte eine ausgeschriebene Liste der zwölf in einem Prüffall, und genau die fehlt. Neufassung als **A-A-20′**. |
+| **T-156-6** | Hinweis | **Die Bildgrenze ist als Zahl 8 454 144, nicht 8 388 608.** Gezählt wird nach dem Lesen eines Blocks von 65 536 Bytes, der Abbruch geschieht also frühestens danach. Als Sache ist die Auflage erfüllt (nichts wird kopiert, nichts kodiert); als Zahl ist sie wie A-V-6 zu berichtigen. Neufassung als **A-A-15′**. |
+| **T-156-7** | Hinweis | **`logger.lifecycle` nimmt weiterhin `string`** (A-V-21 aus T-145, unerledigt). Der Riegel ist eine Gestaltprüfung, siehe 21.5. |
+| **T-156-8** | Hinweis | **Die erste Zeile eines Verweises zeigt das Schema nicht.** `attachmentLabel` schneidet `https://` beziehungsweise `http://` weg; eine Herabstufung von `https` auf `http` steht damit nur in der zweiten, kleineren Zeile. Bei einem Verweis gibt es keine Rückfrage (A-A-7, richtig so), also ist die Liste die einzige Anzeige vor dem Klick. Kein Fund im Sinne von R-22 — Anzeige und Ziel bleiben zeichengleich, es wird nur weniger angezeigt —, aber die Verkürzung nimmt genau das Stück weg, an dem man eine Herabstufung sähe. |
+| **T-156-9** | Hinweis | **Semgrep Guardian zum zehnten, 42Crunch zum neunten Mal ohne Werkzeug.** Die Lieferkette ist weiterhin nie gemessen worden, und seit `v0.1.0` sind Binärdateien draußen. Beschaffungsentscheidung, unverändert. |
+| **T-156-10** | Hinweis | **Fünf Nachweisläufe konnten nicht laufen**, weil der Port belegt war (21.1). Sie stehen hier als *nicht gemessen* und nicht als grün. |
+
+**Was aus T-145 geschlossen ist:** T-145-1 (`proof:access` greift nach draußen) — behoben und
+nachgemessen, in drei Läufen keine einzige `node`-Verbindung außerhalb `127.0.0.1`. T-145-2 und
+T-145-8 (`cargo test` in keinem Ablauf) — der Ablauf steht; der Inhalt fehlt, siehe T-156-2.
+T-145-7 (`proof:shell-surface` zählt statt zu benennen) — vollständig behoben.
+
+### 21.5 Die zwei Zeilen für das Bedrohungsmodell aus T-132 (O-BD)
+
+**`sqlite` und `code` als neue Angaben in der Ausgabe: unbedenklich, und hier steht warum.**
+`errorCodeOf` (`packages/storage/src/migration.ts:166`) nimmt `error.code` nur an, wenn es
+`^[A-Z][A-Z0-9_]{0,31}$` erfüllt — ein Pfad fällt an `^[A-Z]`, ein Benutzername an derselben
+Stelle, eine Meldung von SQLite an der Länge oder am Leerzeichen. `sqliteResultCodeOf` nimmt nur
+eine sichere ganze Zahl. `pair()` (`apps/local-api/src/startup.ts:88`) schreibt Zahlen nur, wenn
+sie nicht negative sichere Ganzzahlen sind, und Text nur kleingeschrieben; ein `null` verschwindet
+rückstandsfrei. Die Ausgabe ist damit auf zwei Wegen verengt: an der Quelle nach Gestalt, an der
+Zusammensetzung nach Typ. **Es gibt keine `.code`-Eigenschaft in einem Wurf aus `node:sqlite` oder
+`node:fs`, die einen Benutzernamen oder einen Pfad trüge** — `code` ist dort durchweg `ENOENT`,
+`EACCES`, `ENOSPC`, `ERR_SQLITE_ERROR`; der Pfad steht in `path`, und `path` wird nicht gelesen.
+
+**Der Riegel im Protokollierer ist eine Gestalt-, keine Inhaltsprüfung — und das ist die richtige
+Bauart, solange man weiß, was er nicht kann.** `REASON_SHAPE`
+(`apps/local-api/src/logger.ts:63`) verlangt eine kleingeschriebene Wortmarke von höchstens 48
+Zeichen, gefolgt von bis zu acht Paaren `name=wert` mit je höchstens 32 Zeichen. Gemessen:
+
+```text
+state_unreadable code=enoent sqlite=14        durch    (der erwartete Regelfall)
+C:\Users\Kerem                                abgewiesen
+/home/kerem/.local/share/takt/takt.sqlite3    abgewiesen
+x user=kerem                                  durch
+x tag=kunde_mueller                           durch
+x n=tck4711                                   durch
+x p=c_users_kerem_desktop_rechnung            durch
+größte durchkommende Zeile: 576 Zeichen, davon 256 Zeichen Wertinhalt (8 Paare × 32)
+```
+
+Er begrenzt **Gestalt und Menge**, nicht **Herkunft**. Ein Pfad mit Schrägstrichen fällt; derselbe
+Pfad mit Unterstrichen käme durch, wenn ihn jemand so zusammensetzte. Die Zusage lautet deshalb
+nicht „hier steht nichts Persönliches", sondern „hier steht nichts, was nicht wie ein technischer
+Schlüssel aussieht" — und die zweite Zusage ist die, die ein Aufrufer einhalten muß, nicht der
+Protokollierer. Der Sonderfall Sitzungsgeheimnis ist unabhängig davon von `redactSecrets`
+geschlossen, das auf der fertigen Zeile arbeitet.
+**Kein ReDoS:** Der Ausdruck ist nicht geschachtelt; gegen 2 000 Paare mit anschließendem
+Fehlschlag läuft er in 0,007 ms.
+
+**Berichtigung meiner eigenen Zahl aus T-145:** Dort steht „336 Zeichen, davon 256 Zeichen
+Wertinhalt". Die 256 stimmen, die 336 nicht — bei voll ausgeschöpften Namen sind es **576**
+(48 + 8 × 66). Dieselbe Sorte Fehler, die T-145-4 an fünf anderen Auflagen beschrieben hat, hier
+im eigenen Text.
+
+Die Auflage **A-V-21** (dritter Parameter von `lifecycle` als geschlossene Vereinigung statt
+`string`) bleibt damit offen und bleibt richtig: Sie verlegte die Zusage von der Gestalt auf die
+Herkunft, und das ist die einzige Stelle, an der sie zu halten ist.
+
+### 21.6 Die eine Verbindung nach außen (R-19), bei dieser Freigabe geprüft
+
+Drei Aussagen, jede gemessen:
+
+1. **Kein Nachweislauf spricht nach außen** (A-V-22). Während `proof:all`, während elf einzelnen
+   Nachweisläufen und während `pnpm test` habe ich alle fünftel Sekunden `ss -tnp` gelesen und auf
+   Verbindungen außerhalb `127.0.0.1` gefiltert: **null Zeilen** in allen drei Läufen. Befund
+   T-145-1 ist behoben, und der Riegel ist der richtige — ein ausdrücklicher Parameter an `main()`,
+   keine Umgebungsvariable, die von außerhalb des Prozesses setzbar wäre.
+2. **Die E2E-Hauptreihe spricht nach außen.** Siehe T-156-3. Das ist der offene Rest von O-CI.
+3. **Die Adresse steht weiterhin an genau einer Stelle.** `proof:release-safety` 31/0, darunter
+   sechs Gegenproben; `api.github.com` steht im Produktivcode nur in
+   `apps/local-api/src/version/source.ts`.
+
+Zu **E-077**: Daß in Prüfläufen zeitabhängig ein modaler Dialog vor der Oberfläche springt, ist
+kein Bedienfehler der Prüfreihe, sondern die **Wirkung** von Punkt 2. Die Umkehr der Vorgabe im
+Hüllen-Ersatz (`installedVersion: '9999.0.0'`) behebt das Symptom in jeder einzelnen Datei; die
+Ursache behebt nur der Riegel an der Quelle. Beide sind richtig, und die Reihenfolge ist:
+erst der Riegel, dann darf die Vorgabe bleiben, wo sie ist.
+
+### 21.7 Berichtigte und neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-5′** | Die fünf Umleitungsendungen werden auf dem **beschnittenen** letzten Namensbestandteil verglichen: nachgestellte `.` und Leerzeichen fallen vorher weg, weil Windows sie vor der Dateiauflösung ebenfalls abschneidet. Gleichwertig zulässig: Ein Pfad, dessen letzter Bestandteil auf `.` oder ein Leerzeichen endet, wird als Ganzes abgewiesen. Dieselbe Regel gilt für `extensionOf` in der Oberfläche, weil dieselbe Zeichenkette dort über das Wort „Öffnen" oder „Ausführen" entscheidet. | Prüffälle `x.lnk.`, `x.lnk<SP>`, `x.lnk..`, `x.LNK.`, `x.url.`, `x.desktop.`, `x.exe.`, `x.exe<SP>` — die ersten sechs abgewiesen, die letzten beiden im Dialog als **Ausführung** beschriftet. Unter `#[cfg(windows)]` zusätzlich gegen eine wirklich angelegte Datei. |
+| **A-A-15′** | Die Bildgrenze ist eine Zahl (8 388 608) **und** eine Zusage über das Verhalten: Es wird abgebrochen, bevor mehr als Grenze + eine Leseeinheit gelesen ist, und nichts wird kopiert oder kodiert. Die Leseeinheit ist zu messen und nicht anzunehmen. | Die gelesenen Bytes zählen, nicht nur den Ausgang prüfen. |
+| **A-A-20′** | Ein Prüffall hält `EXPORT_SOURCE_PATHS` gegen eine im Prüffall **ausgeschriebene** Liste der zwölf Werte und gegen die Zahl 12. Er wird rot, wenn eine dreizehnte Quelle hinzukommt — auch dann, wenn sie ordentlich in Typ **und** `SOURCE_PRESENCE` eingetragen ist. | Der Prüffall selbst; `proof:export` fährt weiterhin beliebige Vorlagen. |
+| **A-A-25** | Die Prüffälle zu A-A-2 bis A-A-5 und A-A-8 stehen in einem `#[cfg(test)]`-Block **in `attachment.rs`**, nicht in einer fernen Datei — dieselbe Begründung wie für `release.rs` (T-136-1, benannte Ausnahme in `CLAUDE.md`). Die Pfadfälle laufen zusätzlich unter `#[cfg(windows)]`. | `cargo test --lib` zählt danach mehr als 31 Fälle, und der Windows-Läufer fährt Fälle, die auf Linux nicht laufen. |
+| **A-A-26** | Kein Prüflauf und kein Nachweispfad startet den Dienst so, daß die Versionsprüfung nach außen greift — auch die E2E-Reihe nicht. Die Naht ist `main({ releaseSource })`, und sie ist ein **Parameter** und keine Umgebungsvariable. | `ss -tnp` während der vollständigen E2E-Reihe: keine `node`-Verbindung außerhalb `127.0.0.1`. Dieselbe Messung, die A-V-22 für die Nachweisläufe verlangt. |
+| **A-A-27** | `proof:db-permissions` mißt das Bildverzeichnis mit: `0700` für das Verzeichnis, `0600` für jede Kopie, unter absichtlich weiter `umask`, im **echten** Startpfad des Dienstes. | Derselbe Abschnitt 4, um zwei Zeilen erweitert, mit Gegenprobe. |
+
+### 21.8 Urteil dieser Wiedervorlage
+
+**Der Entwurf aus Abschnitt 20 hat gehalten, und er hat an der Stelle gehalten, an der es darauf
+ankam.** Der Festpunkt aus A-A-3 ist die tragende Erfindung dieser Grenze: Gemessen weist er
+**vier** Zeichenketten ab, die jede Schemaprüfung passiert hätten und deren Anzeige danach etwas
+anderes gesagt hätte als ihr Ziel. Die Bildbehandlung ist strenger gebaut als verlangt — zwei
+Riegel auf dem Namen statt einem, die Signatur beim Lesen **erneut** gemessen. Die Add-in-Grenze
+ist strukturell und nicht per Voreinstellung, und ihre Messung hat die Gegenprobe, die sie
+braucht. `proof:shell-surface` benennt jetzt, statt zu zählen.
+
+**Freigegeben wird trotzdem nicht.** Drei Befunde der Stufe „muss" stehen, und sie hängen
+zusammen: Es gibt keinen Prüffall in `attachment.rs` (T-156-2), deshalb ist eine Lücke in der
+Endungsregel zwei Wellen lang unbemerkt geblieben (T-156-1), und die Reihe, die das hätte finden
+können, hat ein eigenes Problem, das ihre Ergebnisse vom Zeitpunkt abhängig macht (T-156-3).
+
+Der Rest ist Buchführung: sieben verlangte Messungen fehlen bei richtigem Code. Das ist derselbe
+Befund wie T-145-4 und T-136-2, zum dritten Mal — **eine Auflage, die einen Prüffall nennt, ist
+erst erfüllt, wenn der Prüffall in einem Ablauf steht.** Fünf davon habe ich in dieser Aufgabe
+selbst nachgemessen; sie stehen in 21.3, und sie sind mit dem Ende dieser Aufgabe weg.
+
+**Urteil: Nacharbeit.** Nach Behebung von T-156-1, T-156-2 und T-156-3 und Eintragen der
+Messungen aus 21.7 ist diese Grenze freigabefähig.
+
+---
+
+## 22. Prüfung T-164 (2026-09-05) — vier Punkte, eine Wiedervorlage und eine Zahl, die nie gestimmt hat
+
+Vier zugewiesene Punkte (O-DF, O-DI, O-DD, O-BD) und die Wiedervorlage von V-01/T-156-2 gegen die
+Fallliste aus T-160. Kein Produktivcode angefasst; die Befunde stehen hier und im Bericht, die
+Behebung gehört den zuständigen Programmierern.
+
+### 22.0 Werkzeugstand
+
+| Werkzeug | Ergebnis |
+|---|---|
+| `cargo test --lib` (Linux, `apps/desktop/src-tauri`) | **50/50**, davon 19 in `attachment::tests`. Die drei `#[cfg(windows)]`-Fälle werden auf diesem Läufer **nicht einmal übersetzt**. |
+| Semgrep (lokal, `p/rust` + `p/typescript` + `p/javascript`, 85 Regeln, 263 Dateien) | **8 Befunde, alle INFO**, keiner hoher Schwere: sieben `unsafe-usage` (`identity.rs` 77/82/105/109/156/162, `appdata.rs:372` — die bekannten Win32- und `getpwuid`-Aufrufe) und ein `temp-dir` in `attachment.rs:461`, dem Prüfhelfer aus T-160. |
+| Semgrep Guardian (Plattform) | **Nicht gelaufen, elftes Mal.** Kein Zugang; die lokale Regelmenge ist die ohne Anmeldung erreichbare (85 statt mehrerer hundert Regeln). Die Lieferkette ist damit weiterhin **nie** gemessen worden. |
+| 42Crunch Audit / Scan | **Nicht gelaufen, zehntes Mal.** Kein `42c-ci-cli`, keine Berechtigung. Ersatz bleibt `proof:openapi`. |
+| Eigene Messung: mechanischer Schnitt aus `attachment.rs` | `attachment.rs:116-359` ohne die `ShellExt`-Zeile, gegen `url 2.5.8` in einer Wegwerf-Kiste übersetzt. Der Schnitt ist mit `diff` als zeichengleich bestätigt, bevor gemessen wurde. |
+
+### 22.1 O-DF — die zwei Nachbarn des nachgestellten Punktes, einzeln beurteilt
+
+**Ausgangslage.** T-157 hat zwei weitere Windows-Namensfragen benannt und ausdrücklich nicht
+angefasst: alternative Datenströme und 8.3-Kurznamen. Beide gehören derselben Klasse an wie
+T-156-1 — **der Name, den `Path` sieht, ist nicht der Name, den Windows auflöst**. Die Klasse ist
+richtig benannt; die beiden Fälle gehen aber verschieden aus.
+
+#### 22.1.1 Alternative Datenströme — **trägt.** Gemessen, nicht vermutet.
+
+Der Weg, den T-157 vermutet hat (`…\rechnung.txt:evil.lnk`), ist **nicht** der gefährliche.
+`has_indirect_extension` (`attachment.rs:269-280`) zerlegt den **ganzen** letzten
+Namensbestandteil und nimmt dessen letztes Punktsegment; bei `bericht.txt:evil.lnk` ist das `lnk`,
+und der Pfad fällt. Die Prüfung ist in dieser Richtung strenger als Windows, nicht schwächer.
+
+Gefährlich ist die **umgekehrte** Schreibweise, und sie ist erreichbar. Gemessen gegen den
+zeichengleichen Schnitt aus `attachment.rs`, auf Linux, gegen wirklich angelegte Dateien
+(auf ext4 ist der Doppelpunkt ein gewöhnliches Namenszeichen):
+
+```text
+rechnung.lnk:harmlos.txt   existiert=true    -> ANGENOMMEN
+rechnung.lnk::$DATA        existiert=true    -> ANGENOMMEN
+bericht.txt:evil.lnk       existiert=true    -> abgewiesen: path_indirect_extension
+rechnung.lnk               existiert=true    -> abgewiesen: path_indirect_extension
+bericht.txt                existiert=true    -> ANGENOMMEN
+rechnung.lnk:harmlos.txt   existiert=false   -> abgewiesen: path_missing
+rechnung.lnk::$DATA        existiert=false   -> abgewiesen: path_missing
+```
+
+Und die Zerlegung dazu, ebenfalls gemessen:
+
+```text
+/x/rechnung.lnk::$DATA   file_name="rechnung.lnk::$DATA"   letztes Punktsegment "lnk::$DATA"  -> keine Umleitung
+/x/rechnung.LNK::$DATA   file_name="rechnung.LNK::$DATA"   letztes Punktsegment "LNK::$DATA"  -> keine Umleitung
+/x/verweis.url::$DATA    file_name="verweis.url::$DATA"    letztes Punktsegment "url::$DATA"  -> keine Umleitung
+/x/rechnung.lnk::$DATA   mit nachgestelltem Punkt oder Leerzeichen: die Beschneidung greift, die Endung bleibt trotzdem unerkannt
+```
+
+**Der Angriffsweg, Schritt für Schritt.**
+
+1. Ein Prozeß im Benutzerkonto legt irgendwo eine Verknüpfung `rechnung.lnk` an — oder benutzt
+   eine, die es schon gibt. Eine `.lnk` trägt jedes Ziel, jedes Argument und jedes Symbol.
+2. Derselbe Prozeß schreibt in `todo_attachment.target` den Wert
+   `C:\…\rechnung.lnk::$DATA`. Zwei Wege stehen dafür offen und keiner führt durch ein
+   Eingabefeld: die Route des Dienstes mit dem Sitzungsgeheimnis (VG-1) oder ein `UPDATE` über
+   `sqlite3` auf die Bestandsdatei (VG-3). Das ist genau die Begründung, aus der die Prüfung im
+   Öffnen-Befehl sitzt und nicht im Feld (20.3).
+3. Der Benutzer klickt den Anhang an. Die Oberfläche zeigt die Rückfrage mit dem vollen Pfad —
+   und `extensionOf` (`apps/web/src/lib/attachmentLabel.ts`) liest dort dasselbe letzte
+   Punktsegment, also weder `lnk` noch eine Endung von der Liste `RUNS_WHEN_OPENED`. Der Dialog
+   sagt „wird geöffnet".
+4. `check_file` (`attachment.rs:332-359`) läuft: kein UNC, absolut (unter Windows ist
+   `C:\…` absolut), **keine** Umleitungsendung (siehe Messung), und `is_file()` — NTFS löst
+   `datei::$DATA` auf den unbenannten Datenstrom von `datei` auf, die Prüfung bejaht.
+   Der Wert kommt als `Ok` zurück.
+5. `takt_open_attachment_file` (`attachment.rs:402-409`) reicht ihn weiter. Der Aufrufpfad,
+   nachgemessen im Quelltext der Kisten im lokalen Zwischenspeicher:
+   `app.shell().open(…)` → `tauri_plugin_shell::Shell::open` (`tauri-plugin-shell-2.3.6/src/lib.rs:77`)
+   → `tauri_plugin_shell::open::open(None, …)` (`…/src/open.rs:122-137`, Kommentar wörtlich:
+   *„when running directly from Rust code we don't need to validate the path"*)
+   → `::open::that_detached` (`open 5.4.2`) → unter Windows
+   `powershell.exe -NoProfile -NonInteractive -Command "Start-Process -FilePath $env:OPEN_RS_TARGET"`
+   und, wenn das fehlschlägt, `explorer.exe <Pfad>` (`open-5.4.2/src/windows.rs:66-92`).
+
+**Was an diesem Weg gemessen ist und was nicht.** Gemessen ist Schritt 4 bis einschließlich
+`check_file`: Der Wert wird angenommen, und zwar auch dann, wenn die Datei wirklich existiert.
+Gemessen ist außerdem, daß die Endungsprüfung `lnk::$DATA` nicht als `lnk` sieht.
+**Nicht gemessen** ist, ob `Start-Process` beziehungsweise `explorer.exe` die Verknüpfung dann
+auch wirklich ausführt: Die Klassenauflösung von ShellExecute geht über die Endung der ganzen
+Zeichenkette, und was sie mit `.lnk::$DATA` tut, ist auf einem Linux-Läufer nicht zu messen.
+
+**Warum das an der Bewertung nichts ändert.** Die Datei sagt über sich selbst
+(`attachment.rs:87-114`): *„geprüft wird der Name, den Windows auflöst, nicht der gespeicherte"*.
+Diese Zusage ist gemessen falsch, sobald ein Doppelpunkt im Namen steht — `is_file()` nimmt die
+Win32-Auflösung, `has_indirect_extension` nimmt die Zeichenkette, und die beiden reden über
+verschiedene Dateien. Eine Kontrolle, deren Voraussetzung nachweislich nicht gilt, ist zu
+schließen; der Nachweis, daß der Rest der Kette daraus einen Prozeßstart macht, ist nicht die
+Bedingung dafür. Es ist derselbe Satz wie im Nachtrag zu R-21: Der Läufer ist Linux, und die
+Zweige, die nur unter Windows etwas anderes tun, sind die, die niemand betritt.
+
+**Das Gegenmittel, so genau, daß es ohne Rückfrage baubar ist.** Neue Auflage **A-A-28**:
+
+* Ein neuer Ablehnungsgrund `Rejection::PathStreamSeparator` mit dem Schlüssel
+  `path_stream_separator`, eingetragen in die Aufzählung (`attachment.rs:148-165`) und in
+  `key()` (`attachment.rs:169-187`). Der deutsche Satz dazu gehört in dieselbe Zuordnung der
+  Oberfläche, in der die vierzehn anderen Schlüssel schon stehen.
+* Eine eigene Funktion neben `has_indirect_extension`:
+
+  ```rust
+  /// Trägt der letzte Namensbestandteil einen Doppelpunkt? (A-A-28.)
+  ///
+  /// Unter Windows ist der Doppelpunkt der Trenner eines alternativen
+  /// Datenstroms: `datei::$DATA` löst NTFS auf den unbenannten Datenstrom von
+  /// `datei` auf, `datei:strom` auf einen benannten. `Path` weiß davon nichts
+  /// und behandelt ihn als gewöhnliches Zeichen — womit die Endungsprüfung
+  /// über einen anderen Namen urteilt als den, den das Betriebssystem öffnet.
+  ///
+  /// Gefragt wird nur der **letzte** Bestandteil, damit der Laufwerksbuchstabe
+  /// (`C:`) nicht mitfällt; er ist ein Präfix und kein Namensbestandteil.
+  fn has_stream_separator(path: &Path) -> bool {
+      match path.file_name().and_then(|name| name.to_str()) {
+          Some(name) => name.contains(':'),
+          None => false,
+      }
+  }
+  ```
+
+* Aufgerufen in `check_file` **nach** `is_absolute` und **vor** `has_indirect_extension`. Nach
+  `is_absolute`, weil sonst unter Linux ein Windows-Laufwerkspfad (`C:\…`) mit dem neuen Grund
+  statt mit `path_not_absolute` abgewiesen würde und die Meldung in die Irre führte. Vor
+  `has_indirect_extension`, weil ein Name mit Doppelpunkt ohnehin nicht mehr beurteilt werden
+  kann — welche Endung er trägt, ist dann keine sinnvolle Frage mehr.
+* **Auf jeder Plattform**, nicht unter `#[cfg(windows)]`. Dieselbe Begründung wie bei `is_unc`
+  und `effective_file_name` (A-A-10): Ein Zweig, der nur auf einem Betriebssystem etwas tut, ist
+  auf dem Läufer der Reihe unmeßbar.
+* **Der Preis, ausgeschrieben.** Unter Linux und macOS ist der Doppelpunkt ein zulässiges
+  Namenszeichen, und `Besprechung 10:30.pdf` ist kein erfundener Name. Takt öffnet eine solche
+  Datei danach nicht mehr; sie bleibt als Anhang sichtbar, der Pfad steht weiter da, und der
+  Benutzer öffnet sie über seinen Dateimanager. Unter Windows — der Plattform, für die Takt
+  gebaut ist (`WindowsUser` im Export, Outlook-Add-in) — kostet die Regel **nichts**: Ein
+  Doppelpunkt kann dort in keinem gültigen Dateinamen vorkommen.
+* **Dieselbe Regel in `extensionOf`** (`apps/web/src/lib/attachmentLabel.ts`), aus demselben
+  Grund wie bei A-A-5′: Ein Bestandteil mit Doppelpunkt hat keine beurteilbare Endung, und der
+  Dialog darf für ihn nicht „wird geöffnet" sagen. Da `check_file` den Wert ohnehin abweist, ist
+  das Bequemlichkeit und nicht Grenze — es kostet eine Zeile und hält die beiden Seiten
+  zusammen.
+
+**Und wie das auf Linux nachweisbar ist — der Kern der Auflage.** Vier Fälle, alle unter Linux
+lauffähig, drei davon **rot vor der Behebung**:
+
+| Fall | Vorher | Nachher |
+|---|---|---|
+| Wirklich angelegte Datei `rechnung.lnk:harmlos.txt`, absoluter Pfad | **`Ok`** — gemessen | `path_stream_separator` |
+| Wirklich angelegte Datei `rechnung.lnk::$DATA`, absoluter Pfad | **`Ok`** — gemessen | `path_stream_separator` |
+| Wirklich angelegte Datei `bericht.txt:evil.lnk` | `path_indirect_extension` | `path_stream_separator` |
+| Nicht vorhandener Pfad `/…/rechnung.lnk::$DATA` | `path_missing` | `path_stream_separator` (die Regel steht vor der Existenzprüfung) |
+| Gegenprobe: `bericht.txt`, `programm.exe` — wirklich angelegt | `Ok` | `Ok` (unverändert) |
+
+Die ersten beiden Zeilen sind der Beleg: Sie fallen **heute** durch die Kontrolle, auf dem
+Läufer, den es gibt, ohne Windows und ohne Mutmaßung. Ein Prüffall, der sie mißt, mißt die
+Behebung und nicht eine ohnehin schon richtige Eigenschaft — das ist die Forderung, die T-160
+für A-A-5′ mit seiner Gegenprobe erfüllt hat, und sie gilt hier genauso.
+
+Zusätzlich, unter `#[cfg(windows)]` und damit erst auf dem Windows-Läufer: eine wirklich
+angelegte `x.lnk` und die Zusicherung, daß `Path::new("…x.lnk::$DATA").is_file()` **wahr** ist.
+Dieser eine Fall belegt die Win32-Auflösung selbst und damit die gebrochene Voraussetzung; er ist
+das Gegenstück zu den drei Fällen, die T-160 für den nachgestellten Punkt geschrieben hat.
+
+#### 22.1.2 8.3-Kurznamen — **trägt hier nicht.** Und hier steht, warum.
+
+Gemessen an derselben Zerlegung:
+
+```text
+/x/RECHNU~1.LNK    -> Umleitung erkannt
+/x/VERWEI~1.URL    -> Umleitung erkannt
+/x/START~1.PIF     -> Umleitung erkannt
+/x/ORDNER~1.SCF    -> Umleitung erkannt
+/x/APP~1.DESKTOP   -> Umleitung erkannt
+/x/APP~1.DES       -> NICHT erkannt
+```
+
+Drei Gründe, und der erste trägt allein:
+
+1. **Vier der fünf Umleitungsendungen sind genau drei Zeichen lang.** `lnk`, `url`, `pif`, `scf`
+   überstehen die 8.3-Verkürzung unverändert; verglichen wird ohnehin ohne Rücksicht auf Groß-
+   und Kleinschreibung (`attachment.rs:278`). Der Kurzname eines Umleiters trägt dieselbe Endung
+   wie sein Langname und fällt an derselben Zeile.
+2. **Nur `desktop` verkürzt sich** — zu `DES`, und das wird nicht erkannt. Ein `.desktop` tut
+   unter Windows aber nichts; es steht auf der Liste für den XDG-Fall unter Linux, und unter
+   Linux gibt es keine 8.3-Namen. Es gibt damit kein Paar aus Plattform und Endung, bei dem der
+   Kurzname zugleich durchkommt **und** etwas bewirkt.
+3. Nachrangig und nicht tragend: Auf aktuellen Windows-Installationen ist die Erzeugung von
+   8.3-Namen nicht mehr überall eingeschaltet. Darauf stützt sich diese Bewertung nicht — sie
+   stützt sich auf Punkt 1.
+
+**Was trotzdem festzuhalten ist:** Punkt 1 ist eine Eigenschaft der *heutigen* Liste und keine
+der Prüfung. Trüge `INDIRECT_EXTENSIONS` eines Tages einen Windows-Umleiter mit mehr als drei
+Zeichen — `appref-ms` etwa, der ClickOnce-Starter —, wäre der Kurzname (`.APP`) sofort ein
+Vorbeiweg. Deshalb neue Auflage **A-A-30**: Ein Prüffall hält fest, daß jeder Eintrag in
+`INDIRECT_EXTENSIONS` außer `desktop` höchstens drei Zeichen lang ist, mit dem Grund im Text des
+Prüffalls; und die vier gemessenen Kurznamen oben stehen als Fälle daneben. Beides läuft auf
+Linux, beides kostet zehn Zeilen, und beides wird rot, wenn jemand die Liste erweitert, ohne an
+8.3 zu denken.
+
+### 22.2 O-DI — 28 gegen 22: **22 stimmte.**
+
+Nachgezählt: Die Tabelle in 20.2 trägt **22** Datenzeilen (`docs/bedrohungsmodell.md`, Kopfzeile
+plus Trennzeile plus 22). Die Zahl **28 hat in diesem Dokument nie einen Gegenstand gehabt** —
+auch nicht als Vereinigung mit der Festpunkttabelle darunter: Von deren elf Zeilen sind acht
+Wiederholungen aus der Tabelle, drei sind neu (`http://example.org`, `HTTP://Example.ORG/Pfad`,
+`https://example.org/a b`), macht 25. Es gibt keine Menge von 28 Zeichenketten in 20.2.
+
+**T-160 hat richtig gemessen**, gegen die 22, und die Abweichung gemeldet statt sie zu übergehen.
+`attachment.rs:479` fährt eine `[( &str, Option<Rejection>); 22]` — die Zahl steht dort im Typ,
+was der beste Ort dafür ist.
+
+Berichtigt wurden vier Stellen in diesem Dokument, jede mit einer Marke, damit die Änderung
+sichtbar bleibt und nicht als stille Umschreibung des Protokolls durchgeht:
+
+| Stelle | Vorher | Jetzt |
+|---|---|---|
+| 20.2, Fließtext über der Tabelle | „gegen 28 Zeichenketten gefahren" | „gegen die **22** Zeichenketten der folgenden Tabelle" |
+| **A-A-2**, Spalte Messung (20.7) | „fährt die 28 Zeichenketten aus 20.2" | „fährt die **22** Zeichenketten aus 20.2" |
+| 21.2, A-A-2 abweichend erfüllt | „Ich habe die 28 Zeichenketten selbst gefahren" | „die 22" |
+| 21.3, Messung 1 | „die 28 Zeichenketten aus 20.2" (und zwei Sätze später „von den 22 Zeilen") | „die 22 Zeichenketten aus 20.2" |
+
+Eine fünfte Stelle steht außerhalb meiner Hoheit und bleibt als Befund T-164-5:
+`apps/desktop/src-tauri/src/attachment.rs:41` sagt im Dateikopf ebenfalls „T-145 hat 28
+Zeichenketten gegen drei Fassungen gefahren".
+
+**Wie so etwas künftig auffällt — und warum es diesmal nicht aufgefallen ist.** Der Fehler ist
+harmlos, seine Bauart nicht: Eine Auflage nennt eine Zahl, die Quelle trägt eine andere, und ein
+Nachweis kann gegen *beide* grün sein — gegen 22, weil es 22 sind, und gegen „alle 28", weil
+niemand nachzählt. T-156 hat im selben Satz „28" und „von den 22 Zeilen" geschrieben, und der
+Widerspruch stand vier Absätze lang unbemerkt in einem Dokument, das sonst jede Zahl belegt. Das
+ist nicht Unachtsamkeit, sondern die vorhersehbare Folge davon, daß eine Zahl **abgeschrieben**
+statt **abgefragt** wird — dieselbe Sache, an der `proof:codepoints` seinerzeit gescheitert wäre
+und die es heute verhindert, indem es die Klasse aus der Domäne liest.
+
+Die Gegenmaßnahme ist deshalb dieselbe Bauart und nicht mehr Sorgfalt: **Eine Auflage soll keine
+Zahl nennen, die sie nicht selbst zählt.** Wo eine Menge gemeint ist, ist die Menge zu benennen
+(„die Zeichenketten der Tabelle in 20.2") und die Zahl höchstens in Klammern dahinter. Im Code
+gehört sie in den Typ, wie T-160 es getan hat — `[( &str, Option<Rejection>); 22]` wird rot, wenn
+jemand eine Zeile hinzufügt oder wegnimmt, und niemand muß dafür ein Dokument gelesen haben.
+Diese Regel ist der einzige dauerhafte Ertrag von O-DI und steht deshalb hier und nicht nur im
+Bericht.
+
+### 22.3 O-DD — der Dateiname in der Protokollzeile: **bestätigt**, mit einer Berichtigung der Begründung
+
+**Bewertet, nicht angenommen.** Die Zeile steht in
+`apps/local-api/src/access/attachment-store.ts:404-408` und lautet im Kern
+`…liegt weiter im Anwendungsdatenverzeichnis: ${name}`.
+
+Der Wert `name` ist gegenstandslos für den Kunden, und der Grund ist **stärker** als der im
+Kommentar genannte:
+
+1. Der Kommentar sagt: „Er ist nach A-A-17 erzeugt und hat keinen Bezug zur Quelldatei."
+   Das stimmt für Namen, die dieser Adapter erzeugt hat (`attachment-store.ts:295`,
+   `randomUUID().replaceAll('-','')` plus eine feste Endung; T-156 hat in 21.3 Messung 7
+   nachgemessen, daß zwei Kopien derselben Quelle verschiedene Namen tragen und keiner etwas vom
+   Namen der Quelle enthält). Als **Zusage** trägt es nicht: `removeImage` bekommt seinen Namen
+   aus `todo_attachment.target`, und in diese Spalte kann geschrieben werden, ohne durch diesen
+   Adapter zu gehen (VG-1, VG-3) — genau das begründet an anderer Stelle in derselben Datei die
+   erneute Prüfung beim Lesen.
+2. Was tatsächlich trägt, steht drei Zeilen über der Protokollzeile:
+   `removeImage` ruft zuerst `pathOf(name)` (`attachment-store.ts:380-381`) und verläßt die
+   Methode mit `unknown_name`, wenn der Name nicht `GENERATED_NAME_SHAPE`
+   (`attachment-store.ts:132`, `/^[0-9a-f]{32}\.(?:png|jpg|gif|webp)$/`) erfüllt. **Die
+   Protokollzeile ist unerreichbar für jeden Namen, der nicht 32 Kleinhexziffern plus eine von
+   vier festen Endungen ist.** Das ist eine Formzusage am Aufrufort, kein Vertrauen in den
+   Erzeuger — und sie hält auch dann, wenn jemand `todo_attachment.target` mit einem Kundennamen
+   überschreibt.
+
+**Ergebnis: unbedenklich.** Was die Zeile preisgibt, ist die Tatsache, daß ein Bildanhang
+existierte und seine Kopie liegengeblieben ist, plus 38 oder 39 Zeichen ohne Wortinhalt. Wer das
+Protokoll lesen kann, läuft im selben Benutzerkonto und kann das Bildverzeichnis ohnehin
+auflisten (VG-3); ein Zuwachs an Auskunft entsteht nicht. Der Nutzen — die liegengebliebene Datei
+ist ohne den Namen nicht wiederzufinden — ist der, den T-159 beschrieben hat.
+
+**Die Berichtigung, und sie gehört zu O-BD.** Der Kommentar an der Stelle stützt sich auf die
+falsche Hälfte. Wer ihn liest und daraus schließt, ein Wert im Protokoll sei schon deshalb
+harmlos, weil Takt ihn erzeugt hat, baut die nächste Zeile ohne den Riegel. Der Satz müßte
+lauten: *„Der Name darf in die Zeile, weil die Methode für jeden anderen Namen vorher mit
+`unknown_name` verlassen wird."* Als Befund geführt: **T-164-4**, Hinweis, zuständig domain-dev.
+
+### 22.4 O-BD — die zwei Zeilen aus T-132, und die Hälfte, die in 21.5 fehlte
+
+Beide Aussagen sind in **21.5** eingetragen und gegen den heutigen Code nachgeprüft:
+`errorCodeOf` (`packages/storage/src/migration.ts:166`) und `pair()`
+(`apps/local-api/src/startup.ts:88`) verengen `sqlite` und `code` an der Quelle nach Gestalt und
+an der Zusammensetzung nach Typ; `REASON_SHAPE` (`apps/local-api/src/logger.ts:63`) begrenzt
+Gestalt und Menge, nicht Herkunft. Damit ist O-BD sachlich erledigt.
+
+**Eine Hälfte fehlte dort, und sie ist die wichtigere.** 21.5 beschreibt den Riegel, ohne zu
+sagen, **worauf** er liegt. Er liegt auf `reason` und auf nichts sonst:
+
+* `lifecycle` (`logger.ts:99-105`) prüft `reason` gegen `REASON_SHAPE` und ersetzt ihn durch
+  `unclassified`, wenn die Gestalt nicht paßt.
+* `message` — der deutsche Satz — geht **ungeprüft** in die Zeile. Das einzige, was ihn berührt,
+  ist `redactSecrets` auf der fertigen Zeile (`logger.ts:85`), und das ist ein Riegel gegen genau
+  ein Geheimnis, keine Gestaltprüfung.
+
+Die Zusage lautet also nicht „im Protokoll steht nichts, was nicht wie ein technischer Schlüssel
+aussieht", sondern: **„im Feld `reason` steht nichts, was nicht wie ein technischer Schlüssel
+aussieht; für `message` bürgt allein die Aufrufstelle."** Das ist die richtige Bauart — aber sie
+verlangt, daß jede Aufrufstelle es weiß, und drei Stellen setzen heute schon Werte in `message`
+ein:
+
+| Stelle | Eingesetzter Wert | Bewertung |
+|---|---|---|
+| `apps/local-api/src/access/attachment-store.ts:404` | der erzeugte Bildname | unbedenklich, siehe 22.3 — die Form ist am Aufrufort erzwungen |
+| `apps/local-api/src/app.ts:317` | `c.req.method`, `c.req.path`, `stored.code` | **Anfragetext im Protokoll.** Der Pfad kommt aus der Anfrage und damit von jedem lokalen Prozeß (VG-1) |
+| `apps/local-api/src/app.ts:328` | `c.req.method`, `c.req.path` | dieselbe Sache im Netz für unerwartete Würfe |
+
+Zu den beiden Zeilen in `app.ts`, damit die Bewertung vollständig ist und nicht größer wird, als
+sie ist: Die Zeile entsteht über `JSON.stringify` (`logger.ts:84`), ein Steuerzeichen kann sie
+also nicht aufbrechen — eine Protokoll-Einschleusung ist ausgeschlossen. `stripQuery` läuft hier
+nicht, wird aber auch nicht gebraucht, weil `c.req.path` den Abfrageteil nicht enthält. Erreichbar
+sind beide Stellen nur, wenn eine bestehende Route wirklich wirft; ein erfundener Pfad ergibt
+einen 404 und keine Zeile. Was bleibt, ist ein Pfadbestandteil aus fremder Hand — eine Kennung,
+die jemand frei wählen kann — in einem Protokoll, das ein Benutzer im Fehlerfall weitergibt.
+Schwere: gering, **Hinweis T-164-6**, zuständig domain-dev. Das Gegenmittel ist eine Zeile: den
+Pfad durch das gematchte Routenmuster ersetzen (`c.req.routePath`) statt durch den tatsächlichen
+Pfad. Der Nutzen für die Fehlersuche ist derselbe, der fremde Text ist weg.
+
+Die Auflage **A-V-21** (dritter Parameter von `lifecycle` als geschlossene Vereinigung) bleibt
+offen und wird durch diesen Abschnitt eher dringender: Sie verlegt die Zusage für `reason` von
+der Gestalt auf die Herkunft. Für `message` gibt es keine entsprechende Auflage, und mit drei
+Einsetzstellen ist es Zeit für eine — als **A-A-31** geführt, siehe 22.7.
+
+### 22.5 Wiedervorlage V-01 / T-156-2 — mißt die Fallliste etwas?
+
+**Der Ausgangsbefund ist behoben.** `attachment.rs` hatte keinen einzigen `#[cfg(test)]`-Block;
+sie hat jetzt einen, und er steht **in** der Datei, wie A-A-25 es verlangt.
+`cargo test --lib` nachgemessen: **50 bestanden, 0 fehlgeschlagen** auf diesem Läufer, davon 19
+in `attachment::tests`. Mit den drei `#[cfg(windows)]`-Fällen sind es 53.
+
+**Und er mißt etwas.** T-160 hat den Nachweis nicht behauptet, sondern geführt: eine Testhilfe,
+die die Fassung **vor** T-157 nachbaut (`attachment.rs:771-776`), und ein Fall, der verlangt, daß
+alt und neu bei genau neun Eingaben auseinanderfallen (`attachment.rs:779-822`). Ein Fall, der
+vor der Behebung ebenfalls grün gewesen wäre, ist damit ausgeschlossen — und die reinen
+Positivfälle, die tatsächlich nichts über die Behebung sagen, stehen ausdrücklich **nicht** in
+der Gegenprobe, sondern daneben. Das ist genau die Trennung, die T-156-2 verlangt hat.
+
+Auflage für Auflage gegen meine eigene Forderung aus T-156-2:
+
+| Verlangt | Gemessen | Urteil |
+|---|---|---|
+| **A-A-2** — fünf Bedingungen, Steuerzeichen **vor** dem Zerlegen | `schema_und_normalform_gegen_die_22_zeilen_aus_20_2` (alle 22 mit dem erwarteten Grund), `leerer_und_zu_langer_verweis` (2 048 genau und 2 049), `steuerzeichen_werden_vor_dem_zerlegen_erkannt_nicht_erst_danach`, `leerer_wirt_wird_nicht_zum_ersten_pfadstueck`, `zugangsdaten_im_wirt_…` | **erfüllt.** Der Reihenfolge-Fall mißt wirklich die Reihenfolge: Liefe die Steuerzeichenprüfung erst nach dem Zerlegen, ergäbe `java<LF>script:` den Grund `link_scheme_rejected` statt `link_control_character`. |
+| **A-A-3** — Festpunkt, idempotent | `festpunkttabelle_rohfassung_abgewiesen_normalform_angenommen_und_idempotent`, alle zehn Zeilen | **erfüllt** |
+| **A-A-4** — UNC, absolut, Länge, Steuerzeichen | `unc_ueber_die_schreibweise_auf_jeder_plattform` (vier Schreibweisen), `ein_windows_laufwerkspfad_ist_unter_linux_nicht_absolut_…`, `leerer_zu_langer_und_steuerzeichenbehafteter_pfad`, `relativer_pfad_ist_path_not_absolute` | **erfüllt mit einer Einschränkung**, siehe T-164-3 |
+| **A-A-5 / A-A-5′** — die fünf Umleitungen, am beschnittenen Namen | zehn Positivfälle, sechs Gegenfälle, zwei Reihenfolgefälle, ein Fall gegen eine wirklich angelegte `.lnk`, die Gegenprobe | **erfüllt, und es ist die beste Stelle des Blocks** |
+| **A-A-8** — der abgewiesene Wert steht in **keiner** Meldung | **nichts.** Kein Prüffall berührt `Rejection::key()`; die Aufzählung und ihre fünfzehn Schlüssel sind ungemessen | **nicht erfüllt** — Befund T-164-2 |
+| **A-A-10** — die Pfadfälle laufen auf Windows | drei Fälle unter `#[cfg(windows)]`, geschrieben und plausibel | **bedingt erfüllt** — Befund T-164-3 |
+
+#### T-164-2 — A-A-8 ist ungemessen geblieben
+
+`Rejection::key()` (`attachment.rs:169-187`) ist die Schnittstelle zwischen der Hülle und der
+Oberfläche: Was hier zurückkommt, entscheidet, welchen deutschen Satz der Benutzer liest. Beide
+Befehle reichen ihn wörtlich weiter (`attachment.rs:375` und `attachment.rs:403`). Kein Prüffall
+berührt ihn. Zwei Dinge sind damit ungesichert, und beide sind still:
+
+* **Ein vertauschter Schlüssel** — `Rejection::PathUnc => "path_not_absolute"` — bliebe grün.
+  Der Benutzer bekäme bei einem UNC-Pfad den Satz für einen relativen Pfad zu sehen, und die
+  einzige Stelle, an der jemand von dem Anmeldeversuch gegen einen fremden Rechner erfährt, sagt
+  etwas anderes.
+* **Die Zusage selbst** — „ohne den abgewiesenen Wert" — steht nur im Kommentar
+  (`attachment.rs:142-147`). Sie ist heute wahr, weil `key()` `&'static str` zurückgibt; sie wäre
+  in dem Augenblick nicht mehr wahr, in dem jemand aus Hilfsbereitschaft ein `format!` daraus
+  macht.
+
+Auflage **A-A-29**: Ein Prüffall hält jede Ausprägung von `Rejection` gegen ihren Schlüssel, in
+einer im Prüffall **ausgeschriebenen** Liste von fünfzehn Paaren, und prüft zusätzlich, daß die
+Schlüssel paarweise verschieden sind. Ein sechzehnter Ablehnungsgrund — etwa der aus A-A-28 —
+macht ihn rot, auch wenn er ordentlich eingetragen ist. Dieselbe Bauart wie A-A-20′, und aus
+demselben Grund: Eine geschlossene Aufzählung, deren Vollständigkeit niemand mißt, ist eine
+Verabredung und keine Zusage. Der Prüffall läuft auf Linux und braucht kein Dateisystem.
+
+#### T-164-3 — zwei Zusagen über die Windows-Fälle, die nicht halten
+
+**Erstens: die Windows-Bahn geht erst am Etikett auf.** `release.yml` ist der **einzige** Ablauf
+in `.github/workflows/`, und er löst nur auf `v[0-9]+.[0-9]+.[0-9]+` oder von Hand aus
+(`release.yml:68-80`). `cargo test --lib` auf `windows-2022` steht im Bau-Auftrag
+(`release.yml:372`). Die drei `#[cfg(windows)]`-Fälle aus T-160 werden auf keinem anderen Läufer
+**auch nur übersetzt**: Ein Tippfehler darin fällt frühestens bei der nächsten Auslieferung auf,
+und dann in dem Auftrag, der das Erzeugnis baut. Das ist wörtlich der Zustand, vor dem der
+Nachtrag zu R-21 warnt, eine Ebene höher: Es gibt keinen grünen Lauf auf dem falschen
+Betriebssystem, es gibt gar keinen.
+
+**Zweitens: `release.yml:361-368` sagt die Unwahrheit über das, was es mißt.** Dort steht,
+`Prefix::UNC` und seine drei Geschwister gebe es nur unter Windows und dieser Auftrag sei „der
+einzige Ort, an dem sie gemessen werden". Sie werden auch dort nicht gemessen. `is_unc`
+(`attachment.rs:301-312`) kehrt vorher zurück: Jede Zeichenkette, die eines dieser vier Präfixe
+erzeugt — `\\server\…`, `\\?\…`, `\\?\UNC\…`, `\\.\…` und dieselben mit Schrägstrichen —, beginnt
+zwangsläufig mit zwei Trennern und fällt schon an `value.starts_with("\\\\") || starts_with("//")`.
+Der `match`-Zweig über `Component::Prefix` kann das Ergebnis **auf keiner Plattform** ändern. Das
+ist kein Fehler in der Sache — die Prüfung ist richtig und die Doppelung mit Absicht dokumentiert
+(`attachment.rs:290-300`) —, aber die Zusage im Ablauf beschreibt eine Messung, die es nicht
+gibt.
+
+Auflage **A-A-32**: `cargo test --lib` läuft auf `windows-2022` in einem Ablauf, der bei jedem
+Stand aufgeht und nicht erst am Etikett; und der Kommentar in `release.yml` sagt, was der
+Windows-Läufer wirklich mißt, nämlich die **Namensauflösung** (nachgestellter Punkt, Leerzeichen,
+Doppelpunkt nach A-A-28) und nicht `Component::Prefix`.
+
+#### Urteil der Wiedervorlage
+
+**V-01 / T-156-2: freigegeben mit Auflage.** Der Block existiert, er steht am richtigen Ort, er
+deckt vier der fünf benannten Auflagen, und er mißt die Behebung nachweislich statt sie zu
+wiederholen — die Gegenprobe ist die beste Arbeit an dieser Grenze bisher. Die zwei Auflagen sind
+**A-A-29** (A-A-8, unit-tester, Linux, klein) und **A-A-32** (die Windows-Bahn, Orchestrator).
+Keine der beiden hindert die Freigabe des Prüfblocks; beide verhindern, daß daraus wieder eine
+Zusage wird, die niemand einlöst.
+
+### 22.6 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-164-1** | **muß** | **Ein Doppelpunkt im Dateinamen hebt A-A-5 auf.** Gemessen gegen den zeichengleichen Schnitt aus `attachment.rs`, gegen wirklich angelegte Dateien: `…/rechnung.lnk:harmlos.txt` und `…/rechnung.lnk::$DATA` werden **angenommen**. Unter NTFS löst `datei::$DATA` auf den unbenannten Datenstrom von `datei` auf; `is_file()` folgt dieser Auflösung, `has_indirect_extension` nicht. Weg in den Bestand: VG-1 oder VG-3, wie bei T-156-1. Gegenmittel und Nachweis vollständig in 22.1.1, Auflage **A-A-28**. | frontend-dev |
+| **T-164-2** | **muß** | **A-A-8 ist ungemessen.** `Rejection::key()` hat keinen Prüffall; ein vertauschter Schlüssel bliebe grün und zeigte dem Benutzer bei einem UNC-Pfad den Satz für einen relativen. Auflage **A-A-29**. | unit-tester |
+| **T-164-3** | **muß** | **Die Windows-Prüffälle laufen in keinem Ablauf, der vor der Auslieferung aufgeht**, und `release.yml:361-368` sagt, es messe `Component::Prefix` — was `is_unc` konstruktiv nie erreicht. Auflage **A-A-32**. | Orchestrator |
+| **T-164-4** | Hinweis | **Die Begründung im Kommentar von `attachment-store.ts:399-402` stützt sich auf die falsche Hälfte.** Der Name ist nicht deshalb harmlos, weil Takt ihn erzeugt hat, sondern weil `pathOf` die Methode für jeden anderen Namen vorher verläßt. Die Bewertung selbst ist **bestätigt** (22.3). | domain-dev |
+| **T-164-5** | Hinweis | **`attachment.rs:41` trägt die falsche Zahl 28** (siehe 22.2). Ein Satz im Dateikopf. | frontend-dev |
+| **T-164-6** | Hinweis | **`app.ts:317` und `app.ts:328` setzen `c.req.path` in `message` ein** — fremder Text in einem Protokoll, das ein Benutzer weitergibt. Kein Einschleusen möglich (`JSON.stringify`), Erreichbarkeit setzt einen echten Wurf voraus. Gegenmittel: `c.req.routePath` statt `c.req.path`. Auflage **A-A-31**. | domain-dev |
+| **T-164-7** | Hinweis | **Semgrep Guardian zum elften, 42Crunch zum zehnten Mal ohne Werkzeug.** Die Lieferkette ist nie gemessen worden, und seit `v0.1.0` liegen unsignierte Binärdateien in einer Veröffentlichung. Beschaffungsentscheidung. | Auftraggeber |
+| **T-164-8** | Hinweis | **`temp-dir` in `attachment.rs:461`** (Semgrep, INFO): Der Prüfhelfer aus T-160 legt Verzeichnisse unter dem System-Temp mit vorhersagbarem Namen an (Prozeßkennung plus Zähler) und räumt nicht auf. In einem Prüflauf harmlos, in einem geteilten Läufer eine Fläche für einen Wettlauf. Kein Produktivcode. | unit-tester, bei Gelegenheit |
+
+### 22.7 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-28** | `check_file` weist jeden Pfad ab, dessen **letzter Namensbestandteil** einen Doppelpunkt trägt — auf jeder Plattform, mit eigenem Ablehnungsgrund `path_stream_separator`, nach der Absolutheitsprüfung und **vor** der Endungsprüfung. Der Doppelpunkt ist unter Windows der Trenner eines alternativen Datenstroms; `Path` kennt ihn nicht, und damit urteilt die Endungsprüfung über einen anderen Namen als den, den das Betriebssystem öffnet. Dieselbe Regel für `extensionOf` in der Oberfläche. | Auf **Linux**, gegen wirklich angelegte Dateien: `rechnung.lnk:harmlos.txt` und `rechnung.lnk::$DATA` — heute `Ok`, danach abgewiesen; `bericht.txt:evil.lnk` — heute `path_indirect_extension`, danach `path_stream_separator`; ein nicht vorhandener Pfad mit Doppelpunkt fällt **vor** der Existenzprüfung; `bericht.txt` und `programm.exe` bleiben angenommen. Unter `#[cfg(windows)]` zusätzlich: eine wirklich angelegte `x.lnk`, und `Path::new("…x.lnk::$DATA").is_file()` ist **wahr**. |
+| **A-A-29** | Ein Prüffall hält jede Ausprägung von `Rejection` gegen ihren Schlüssel, in einer im Prüffall **ausgeschriebenen** Liste, und prüft die Schlüssel auf paarweise Verschiedenheit. Ein neuer Ablehnungsgrund macht ihn rot, auch wenn er ordentlich eingetragen ist. | Der Prüffall selbst, in `attachment.rs`, ohne Dateisystem. |
+| **A-A-30** | Ein Prüffall hält fest, daß jeder Eintrag in `INDIRECT_EXTENSIONS` außer `desktop` höchstens **drei** Zeichen lang ist, und nennt im Text den Grund: Ein längerer Windows-Umleiter wäre über seinen 8.3-Kurznamen erreichbar. Die vier gemessenen Kurznamen stehen als Fälle daneben. | `RECHNU~1.LNK`, `VERWEI~1.URL`, `START~1.PIF`, `ORDNER~1.SCF` werden erkannt; die Längenprüfung über die Liste selbst. Beides auf Linux. |
+| **A-A-31** | Kein Aufruf von `lifecycle` setzt einen Wert aus einer **Anfrage** in `message` ein. Wo ein Ort in der Meldung gebraucht wird, steht das gematchte Routenmuster und nicht der tatsächliche Pfad. `message` trägt keinen Riegel — die Zusage liegt bei der Aufrufstelle, und das gehört an der Aufrufstelle geprüft. | Ein Nachweislauf über die Aufrufe von `.lifecycle(` prüft, daß keine Vorlagenzeichenkette `c.req.path` oder einen anderen Anfragewert einsetzt. Dieselbe Bauart wie `proof:callers`. |
+| **A-A-32** | `cargo test --lib` läuft auf `windows-2022` in einem Ablauf, der bei jedem Stand aufgeht und nicht erst an einem Etikett. Der Kommentar im Ablauf benennt, was der Windows-Läufer wirklich mißt: die **Namensauflösung** (nachgestellter Punkt, Leerzeichen, Doppelpunkt), nicht `Component::Prefix`. | Der Ablauf; und eine Gegenprobe, die einen absichtlich falschen `#[cfg(windows)]`-Fall rot werden läßt, bevor irgendetwas gebaut wird. |
+
+### 22.8 Urteil dieser Prüfung
+
+**Die Grenze VG-11 hat sich seit T-156 an drei von vier Stellen verbessert, und die vierte war
+schon vorher da.** Der Prüfblock in `attachment.rs` ist geschrieben, er steht am richtigen Ort,
+und er mißt die Behebung statt sie zu wiederholen — die Gegenprobe von T-160 ist der Nachweis, den
+T-156-2 verlangt hat, und nicht sein Ersatz. Die Zahl aus O-DI stimmte auf der Seite, auf der
+gemessen wurde. Der Wert in der neuen Protokollzeile ist unbedenklich, und er ist es aus einem
+besseren Grund als dem, der danebensteht.
+
+**Freigegeben wird trotzdem nicht.** Der nachgestellte Punkt hatte einen Nachbarn, und der
+Nachbar ist gemessen offen: Zwei Zeichenketten, die auf einem Linux-Läufer gegen den
+ausgelieferten Code laufen, kommen heute durch eine Kontrolle, deren einziger Zweck es ist, sie
+aufzuhalten. Daneben stehen zwei Zusagen, die nicht halten — A-A-8 ist ungemessen, und die
+Windows-Bahn geht erst an einem Etikett auf.
+
+Der wiederkehrende Satz dieses Dokuments gilt zum vierten Mal, und er hat diesmal eine schärfere
+Fassung: **Eine Auflage, die einen Prüffall nennt, ist erst erfüllt, wenn der Prüffall in einem
+Ablauf steht — und der Ablauf muß auf dem Betriebssystem laufen, über das die Auflage etwas
+behauptet.**
+
+**Urteil: Nacharbeit.** Nach Behebung von T-164-1, T-164-2 und T-164-3 ist diese Grenze
+freigabefähig. **V-01 / T-156-2 einzeln: freigegeben mit Auflage** (A-A-29 und A-A-32).
+
+## 23. Prüfung T-176 (2026-09-05) — die verkleinerte Schranke, der Doppelpunkt in gebauter Form, und der einzige Lauf, der ohne Klick löscht
+
+**Anlaß.** Drei Nachschauen vor der Abnahme von Welle Z, alle drei an Stellen, an denen in
+Welle Y etwas an einer Sicherheitsgrenze **kleiner** oder **selbsttätig** geworden ist:
+
+1. **O-ET, erste Hälfte.** `proof:shell-surface` schließt seit T-173 `#[cfg(test)] mod`-Blöcke
+   von der Prüfung „keine zweite fremde Adresse im Rust-Anteil" aus. E-082 Punkt 4 verlangt
+   dafür ausdrücklich den Blick dieser Rolle.
+2. **O-ET, zweite Hälfte.** A-A-28 (Doppelpunkt im Dateinamen) ist gebaut. Zu prüfen ist nicht,
+   ob die Funktion existiert, sondern ob **Reihenfolge** und **Plattformunabhängigkeit** die
+   der Auflage sind — und ob der dritte Zustand der Rückfrage aus T-167 dieselbe Wahrheit sagt
+   wie die Hülle oder eine zweite daneben aufmacht.
+3. **O-EN.** `sweepOrphanedImages` ist die **einzige** Stelle in Takt, die Kundenmaterial ohne
+   einen Klick des Benutzers löscht.
+
+### 23.0 Stand der Werkzeuge
+
+**Semgrep Guardian und 42Crunch wurden nicht erneut versucht** (E-079 Punkt 3, T-B06). Ein
+elfter Fehlversuch erzeugte keinen Erkenntnisgewinn; die Beschaffungsfrage steht seit T-164-7
+beim Auftraggeber und ist keine, die eine Prüfrolle durch Wiederholung löst.
+
+**Der neue Prüfauftrag ist die Antwort auf A-A-32, und er ist die richtige.**
+`.github/workflows/pruefung.yml` fährt `cargo test --lib` in einer Matrix aus `ubuntu-24.04` und
+`windows-2022`, bei jedem Anstoß und nicht am Etikett, mit `fail-fast: false` — die Auskunft
+„Linux und Windows urteilen verschieden" geht damit nicht verloren, und genau sie ist der Zweck
+des zweiten Läufers. Dazu die Lieferkette (`cargo audit` über 498 Kisten, `pnpm audit` über 271).
+**A-A-32 gilt als erfüllt.** Damit laufen die `#[cfg(windows)]`-Fälle zu A-A-28 zum ersten Mal
+auf dem Betriebssystem, über das sie etwas behaupten. Der wiederkehrende Satz aus 22.8 ist an
+dieser Stelle eingelöst.
+
+**Örtlich gemessen:** `cargo test --lib` in `apps/desktop/src-tauri` — 60 Prüffälle, 0 Fehler,
+darunter sechs mit dem Namenspräfix `a_a_28_`. `proof:shell-surface` grün (6 Prüfungen, 23
+Gegenproben, 0 blind). `proof:all` **nicht** gefahren (E-083 Punkt 3, Port 17843).
+
+### 23.1 O-ET, erste Hälfte — der Ausschluß der Prüfmodule (E-082 Punkt 4)
+
+Gemessen wurde nicht am Text der Änderung, sondern an ihrem Verhalten: Eine Kopie von
+`apps/desktop/scripts/proof-shell-surface.mjs` mit umgehängter Wurzel liegt außerhalb des
+Bestands, ihre Prüffunktionen sind exportiert, und gegen sie liefen zehn Kunstquellen und sieben
+Verstümmelungen der eigenen Umsetzung. Der Bestand selbst wurde dabei nicht angefaßt.
+
+#### 23.1.1 (a) Ist der Ausschluß blockgenau?
+
+Für alles, was heute im Baum steht: **ja**, und für die zwei Fallen, die E-082 Punkt 2 nennt,
+nachweislich. Die Grenze wird auf dem Gerüst gezogen (`proof-shell-surface.mjs:379`), Kommentare
+und Zeichenkettenrümpfe sind längentreu geleert, die Tiefenzählung endet an der **zugehörigen**
+Klammer (`:396-406`), und ein Block ohne schließende Klammer wird gar nicht ausgeschlossen
+(`:406`). Zehn Kunstquellen, jede mit einer Adresse an der Stelle, an der sie sichtbar bleiben
+muß — `}` im Kommentar, `}` in einer Zeichenkette, verschachtelter Block, Adresse **vor** dem
+Block, `'{'` und `'}'` als Zeichenliteral, Attribut zwischen `#[cfg(test)]` und `mod` —, wurden
+**alle zehn** gemeldet.
+
+**Und dann die elfte.** `stripRustComments` und `stripRustStrings` kennen die **rohe
+Zeichenkette** von Rust nicht (`r"…"`, `r#"…"#`). Enthält sie ein Anführungszeichen, laufen beide
+Zustandsautomaten aus dem Takt, die Klammerzählung zählt an der falschen Stelle, und der
+Ausschluß endet **hinter** dem Modul statt an ihm. Gemessen, in der schärfsten Form, die diese
+Datei prüft:
+
+```rust
+#[cfg(test)]
+mod tests {
+    const S: &str = r#"a"b"#;
+}
+
+#[tauri::command]
+pub fn takt_heimlich(app: AppHandle, url: String) -> Result<(), String> {
+    app.shell().open(url, None).map_err(|e| e.to_string())?;
+    let _ = "https://boese.example/x";
+    Ok(())
+}
+```
+
+Diese Datei in `src-tauri/src/` gelegt, alles übrige unverändert: **`proof:shell-surface` bleibt
+grün, Beendigungscode 0.** Ein vierter Aufrufort für `open` — der Fall, für den es diesen Lauf
+laut Kopfkommentar überhaupt gibt (`:28-34`) — und eine zweite fremde Adresse sind zugleich
+unsichtbar.
+
+Zwei Einordnungen gehören dazu, und beide sind für das Urteil wichtig:
+
+- **Es ist keine Verschlechterung durch T-173.** Dieselbe Kunstquelle gegen die Fassung **vor**
+  dem Ausschluß gefahren (`stripRustComments(source.text)` statt
+  `stripRustComments(stripCfgTestModules(source.text))`): ebenfalls **null Befunde**. Die
+  Blindheit steckt in den beiden Textwerkzeugen und ist so alt wie sie; T-173 hat sie geerbt,
+  nicht erzeugt.
+- **Die Zusage darüber stimmt trotzdem nicht.** `:372-373` sagt wörtlich: „Im Zweifel misst
+  dieser Lauf zu viel, nie zu wenig." Für die rohe Zeichenkette ist es umgekehrt, und ein Satz
+  in einem Wächter, der das Gegenteil dessen behauptet, was er tut, ist die schlechtere Hälfte
+  eines Meßfehlers — er nimmt der nächsten Prüfrolle den Anlaß nachzusehen.
+
+Heute steht keine rohe Zeichenkette im Rust-Anteil (`grep -n 'r#"' src-tauri/src/*.rs` — leer),
+und `attachment.rs` ist die Datei, in der die nächste am ehesten entstünde: Ein Prüffall über
+Windows-Pfade schreibt sich mit `r"C:\Users\…"` erheblich angenehmer als mit doppelten
+Rückstrichen. Der Befund ist damit nicht theoretisch, sondern einen bequemen Prüffall entfernt.
+
+**Gegenmittel — Auflage A-A-33, eine Zeile, kein Zerleger.** Der Lauf soll nicht lernen, rohe
+Zeichenketten zu lesen; er soll sich weigern, eine Datei zu beurteilen, die er nicht lesen kann.
+Ein Befund je Rust-Quelle, deren Text `/\br#*"/` trifft, mit dem Satz, daß die Textwerkzeuge
+diese Form nicht kennen und die Aussage über die Datei deshalb keine ist. Das ist dieselbe
+Bauart wie der Längenwächter in `:382` und dieselbe Richtung: im Zweifel rot.
+
+#### 23.1.2 (b) Bleibt gemessen, was nicht die ausgeschlossene Form ist?
+
+**Ja, an jeder der vier verlangten Stellen, gemessen und nicht gelesen.** `#[cfg(test)]` vor
+einem `use`, vor einer einzelnen Funktion, `#[cfg(any(test, …))]` und `#[cfg(test)] mod tests;`
+mit dem Modul in einer eigenen Datei: In allen vier Fällen scheitert entweder der Attributausdruck
+(`:384`, er verlangt zeichengenau `cfg(test)`) oder der Kopfausdruck (`:393`, er verlangt die
+Modulzeile **mit** öffnender Klammer), der Ausschluß unterbleibt, und die eingesetzte Adresse
+wird gemeldet. Das Attribut zwischen `#[cfg(test)]` und `mod` (`:393`, `(?:\s|#\[[^\]]*\])*`)
+öffnet nichts: Ein `mod`, das ein `#[cfg(test)]` trägt, ist test-gebunden, gleich was sonst
+danebensteht.
+
+#### 23.1.3 (c) Tragen die Gegenproben, oder sind sie blind?
+
+**Die vier Verstümmelungen aus T-173 sind nachgemessen; die Behauptung darüber ist zu
+berichtigen.** Jede Verstümmelung als eigene Kopie des Laufs, alle drei Gegenproben aktiv:
+
+| Verstümmelung | Prüfungen rot | Gegenproben blind | ohne die dritte Gegenprobe |
+|---|---|---|---|
+| A — Ausschluß bis Dateiende | 0 | 2 | **bemerkt** (Sonde 2 bleibt blind) |
+| B — Ende an der ersten schließenden Klammer | 1 | 1 | **bemerkt** (Prüfung 3 rot) |
+| C — Klammern in Zeichenketten zählen mit | 0 | 1 | **unbemerkt** |
+| D — Klammern in Kommentaren zählen mit | 1 | 1 | **bemerkt** (Prüfung 3 rot) |
+
+T-173 berichtet, ohne die dritte Gegenprobe blieben **C und D** unbemerkt. Gemessen ist es
+**C allein**. Das ist kein Streit um eine Zahl, sondern eine Einordnung, die in die andere
+Richtung geht: B und D machen eine **Prüfung** rot, aber nur deshalb, weil im Baum gerade
+Prüffälle mit `https://example.org/…` liegen. Verschwänden sie morgen, wären B und D genauso
+still wie C. Die dritte Gegenprobe ist damit **mehr** wert als der Bericht sagt: Sie ist die
+einzige der drei, deren Aussage nicht am zufälligen Inhalt des Baums hängt.
+
+**Die fünfte Verstümmelung, die alle drei überlebt.** Der Attributausdruck in `:384` wird
+geweitet, so daß auch `#[cfg(any(test, …))]` den Ausschluß auslöst:
+
+```js
+const attribute = /#\s*\[\s*cfg\s*\(\s*(?:test|any\([^)]*\))\s*\)\s*\]/g;
+```
+
+Gegen den Bestand gefahren: **6 Prüfungen grün, 23 Gegenproben bestanden, 0 blind.** Keine der
+drei E-082-Gegenproben bemerkt etwas, weil alle drei mit `#[cfg(test)]` arbeiten. Der Unterschied
+ist trotzdem der ganze Punkt der Entscheidung: Ein Modul unter `#[cfg(any(test, feature = "dev"))]`
+**wird** übersetzt, sobald das Merkmal gesetzt ist, und steht dann im ausgelieferten Erzeugnis.
+Gemessen mit einer Kunstquelle genau dieser Form, die einen vierten Aufrufort für `open` enthält:
+unveränderter Lauf **Beendigungscode 1**, verstümmelter Lauf **Beendigungscode 0**.
+
+E-082 Punkt 1 begründet den Ausschluß damit, daß `#[cfg(test)]` in kein ausgeliefertes Erzeugnis
+übersetzt wird. Diese Begründung trägt genau so weit wie die Form, auf die sie sich stützt — und
+daß die Form eng bleibt, ist heute unbewacht. **Auflage A-A-34:** eine vierte Gegenprobe, die den
+geweiteten Attributausdruck einsetzt und verlangt, daß eine Adresse unter
+`#[cfg(any(test, feature = "…"))]` **gemeldet** wird.
+
+#### 23.1.4 Bewertung des Ausschlusses selbst
+
+**Die Entscheidung ist richtig, und die Umsetzung ist die sichere Richtung — mit einer
+gemessenen Ausnahme.** Was in einem `#[cfg(test)] mod` steht, ist keine Fläche der Hülle; ein
+Wächter, der es mitzählt, mißt etwas anderes als das, worüber er urteilt, und ein Wächter, der
+aus diesem Grund dauerhaft rot steht, wird abgeschaltet — das ist die teuerste aller Lockerungen.
+Die Grenze ist eng gezogen, sie ist gegengeprobt, und sechs von sieben Verstümmelungen fallen
+auf. Die Ausnahme ist die rohe Zeichenkette, und sie ist älter als diese Änderung.
+
+### 23.2 O-ET, zweite Hälfte — A-A-28 in gebauter Form
+
+#### 23.2.1 Die Hülle: Reihenfolge und Plattformunabhängigkeit
+
+**Beides entspricht der Auflage, zeichengenau.** `check_file` (`attachment.rs:387-417`) prüft in
+dieser Reihenfolge: leer, Länge, Steuerzeichen, `is_unc` (`:400`), `is_absolute` (`:403`),
+`has_stream_separator` (`:406`), `has_indirect_extension` (`:409`), `is_file` (`:412`). A-A-28
+verlangt „nach der Absolutheitsprüfung und **vor** der Endungsprüfung" — genau das steht dort.
+
+`has_stream_separator` (`:301-306`) trägt **kein** `#[cfg(windows)]`. Es fragt
+`path.file_name()` und damit nur den letzten Bestandteil, womit der Laufwerksbuchstabe nicht
+mitfällt; der eigene Ablehnungsgrund `Rejection::PathStreamSeparator` steht in der Aufzählung
+(`:188`) und trägt seinen eigenen Schlüssel (`:210`).
+
+Drei Nachfragen, alle drei geprüft:
+
+- **Warum nach `is_absolute` und nicht davor?** Weil `C:\datei.txt` unter Linux sonst mit
+  `path_stream_separator` statt mit `path_not_absolute` zurückkäme und die Meldung in die Irre
+  führte. Sicherheitlich ist die Stelle gleichwertig — beide Zweige weisen ab —, und ein
+  Prüffall hält die Unterscheidung fest
+  (`a_a_28_windows_laufwerksbuchstabe_ist_kein_doppelpunkt_im_dateinamen`).
+- **Warum der rohe Name und nicht der aus `effective_file_name`?** Die Beschneidung dort nimmt
+  nachgestellte Punkte und Leerzeichen weg und kann einen Doppelpunkt nicht entfernen; beide
+  Wege liefern dieselbe Antwort. Bestätigt.
+- **Fällt der Doppelpunkt vor der Existenzprüfung?** Ja (`:406` vor `:412`), und der Prüffall
+  `a_a_28_doppelpunkt_faellt_vor_der_existenzpruefung_nicht_path_missing` mißt es.
+
+**Sechs Prüffälle mit dem Präfix `a_a_28_` laufen** — auf Linux örtlich, auf `windows-2022` seit
+`pruefung.yml` bei jedem Anstoß. Darunter die Gegenprobe
+`gegenprobe_a_a_28_die_fassung_vor_t_167_war_bei_drei_faellen_anders`, die die alte Fassung
+nachbaut und verlangt, daß sie bei genau drei Fällen anders urteilt. Das ist der Nachweis der
+Behebung und nicht ihre Wiederholung.
+
+**T-164-1 ist behoben. A-A-28 gilt in der Hülle als erfüllt.**
+
+#### 23.2.2 Die Oberfläche: ist der dritte Zustand dieselbe Wahrheit?
+
+Der Vorwurf, gegen den zu prüfen war: Eine Oberfläche, die die Prüfung der Hülle **vorwegnimmt**,
+ist eine zweite Wahrheit über dieselbe Frage, und die erste, die veraltet, ist immer die
+abgeschriebene.
+
+**Hier ist sie es nicht, und der Grund ist die Richtung.** `foreseeableRefusalOf`
+(`apps/web/src/lib/attachmentLabel.ts:270-274`) kann die Rückfrage nur **enger** machen:
+Steht ein Satz in `foreseenRefusal`, entfällt der Öffnen-Knopf
+(`AttachmentOpenDialog.tsx:236`, `:364-368`); steht keiner, läuft der Klick unverändert über
+`openAttachmentFile` in `check_file`. Es gibt keinen Zweig, in dem die Vorhersage etwas
+**öffnet** — die Kontrolle bleibt die Hülle, und sie läuft bei jedem Aufruf neu.
+
+Damit bleiben zwei Abweichungsrichtungen, und beide wurden durchgerechnet:
+
+- **Oberfläche milder als Hülle** (sagt „wird geöffnet", Hülle weist ab): möglich für UNC, nicht
+  absolut, zu lang, Steuerzeichen, fehlende Datei. Ausgang ist der Fehlerzustand **im** Dialog,
+  also genau das Verhalten von vor T-167. Kein Zuwachs an Fläche.
+- **Oberfläche strenger als Hülle** (verweigert, was die Hülle öffnete): wäre ein Verlust an
+  Bedienbarkeit, keine Lücke — und sie ist konstruktiv ausgeschlossen. `lastSeparator`
+  (`attachmentLabel.ts:148-150`) schneidet an `/` **und** `\`, `Path::file_name()` unter Linux
+  nur an `/`. Der Name der Oberfläche ist damit stets ein **Suffix** des Namens der Hülle;
+  enthält das Suffix einen Doppelpunkt, enthält ihn der längere Name auch. Unter Windows sind
+  beide gleich.
+
+Die fünf Umleitungsendungen holt die Oberfläche aus `@takt/domain` (`INDIRECT_EXTENSIONS`) statt
+sie abzuschreiben, und `extensionOf` (`:218-232`) gibt für einen Namen mit Doppelpunkt
+ausdrücklich nichts zurück — dieselbe Aussage wie die Reihenfolge in `check_file`, an derselben
+Stelle im Ablauf. `runsWhenOpened` ist zusätzlich hinter `blocked` gehängt (`:237`), so daß der
+Dialog nicht zugleich „wird nicht geöffnet" und „wird ausgeführt" sagt.
+
+**Eine Auflage bleibt.** Die Reihenfolge in `foreseeableRefusalOf` und die in `check_file` sind
+heute dieselbe, weil zwei Menschen sie gleich geschrieben haben. Fällt eine dritte Vorhersage
+dazu — und Abschnitt 19 hat noch Ablehnungsgründe übrig —, bemerkt es niemand.
+**Auflage A-A-35:** ein Prüffall hält die Liste `ForeseeableRefusal` gegen `Rejection::key()`,
+so wie A-A-29 es für die Schlüssel selbst tut, und mißt für eine ausgeschriebene Fallliste, daß
+Oberfläche und Hülle für denselben Pfad denselben Schlüssel liefern.
+
+### 23.3 O-EN — der Aufräumlauf beim Start
+
+`apps/local-api/src/usecases/image-sweep.ts` entfernt Bildkopien ohne Anhang. Es ist die einzige
+Stelle in Takt, an der Kundenmaterial ohne einen Klick verschwindet — die Prüfung dafür ist
+deshalb nicht „räumt er genug auf", sondern **„fällt jeder Zweifel auf die Seite des
+Liegenlassens"**.
+
+#### 23.3.1 Die Reihenfolge und das Rennen
+
+Der Code hält, was der Kopf zusagt: `listImages()` (`:102`), dann `knownImageTargets(found)`
+(`:105`), dann die Schleife (`:107-112`); und der Aufruf steht in `main.ts:315-325`, also
+**vor** `listen`. Eine Kopie, die zwischen beiden Schritten entsteht, ist in der Antwort des
+Bestands enthalten und überlebt.
+
+**Der Beleg dafür liegt aber nicht dort, wo der Kommentar ihn sucht.** „Solange keine Route
+zuhört, kann zwischen beiden Schritten kein Anhang entstehen" gilt für **diesen** Prozeß. Ein
+zweiter Prozeß auf derselben Datenbank wäre ein Schreiber, den der Aufräumlauf nicht sieht: Er
+läge in seinem Zeitfenster zwischen Kopie und Zeile, und die frische Kopie fiele. Daß es diesen
+zweiten Prozeß im Erzeugnis nicht gibt, hängt an einer Zeile in einer anderen Sprache in einem
+anderen Verzeichnis — `tauri_plugin_single_instance` in
+`apps/desktop/src-tauri/src/lib.rs:105`, registriert als **erstes** Plugin und damit vor dem
+`setup`, in dem der Sidecar entsteht. Der Anschlag auf den Port (`main.ts:373`, `EADDRINUSE`)
+trüge es **nicht**: Er greift erst beim Lauschen, also nach dem Aufräumen.
+
+Das ist kein Befund am Code, sondern einer an der Begründung: Eine Zusage, deren Träger in einem
+anderen Erzeugnis steht, gehört benannt, sonst fällt sie mit dem ersten Umbau, den niemand mit
+ihr in Verbindung bringt. **Auflage A-A-36**, erste Hälfte.
+
+Im Entwicklungsbetrieb (`apps/local-api` von Hand gestartet, ohne Hülle) gibt es die Einzigkeit
+nicht. Das Fenster ist schmal und die Folge ist eine verlorene Bildkopie, kein Datenabfluß; es
+gehört trotzdem in den Satz.
+
+#### 23.3.2 Jede Verzweigung, einzeln
+
+| Fall | Verhalten | fällt der Zweifel richtig? |
+|---|---|---|
+| Verzeichnis nicht lesbar, nicht vorhanden, kein Datenträger | `listImages` fängt und gibt `[]` (`attachment-store.ts:427-445`), der Lauf endet bei `:103` | **ja** — es wird nichts entfernt |
+| Datei mit fremder Form im Bildverzeichnis | `GENERATED_NAME_SHAPE` (`:132`) läßt sie nicht in die Liste; sie ist für den Lauf unsichtbar | **ja** |
+| Unterordner, halbe Kopie, Symlink | `entry.isFile()` schließt aus, was keine Datei ist | **ja** |
+| `knownImageTargets` wirft (Tabelle fehlt nach Rückweg 0015) | äußeres `catch` (`:113`), eine Warnzeile, **kein** Entfernen | **ja** |
+| ein Abfrageblock wirft | dieselbe Klammer, die Schleife hat noch nicht begonnen | **ja** |
+| `removeImage` liefert `unknown_name` | `pathOf` hat die Form erneut gemessen; nicht gezählt, Datei bleibt | **ja** |
+| `removeImage` liefert `failed` (`EBUSY`) | eigene Protokollzeile im Adapter, nicht gezählt | **ja** |
+| `removeImage` wirft | äußeres `catch`, Rest der Liste bleibt liegen | **ja** |
+| Bestand wächst zwischen den Schritten | siehe 23.3.1 — getragen von der Einzigkeit des Prozesses | **ja, aber der Träger steht anderswo** |
+| **Antwort kommt, ist aber leer** | jede gefundene Datei gilt als Waise und wird entfernt | **nein — siehe unten** |
+
+#### 23.3.3 Die eine Verzweigung, an der der Zweifel falsch fällt
+
+Der Kopf der Datei sagt: „Bleibt die Antwort aus, wird nichts entfernt." Das stimmt. Eine
+**leere** Antwort ist aber keine ausbleibende, und sie wird als Beweis der Verwaistheit gelesen.
+
+Die Abfrage lautet
+`WHERE a.kind = 'image' AND a.target IN (…)` (`repo-attachments.ts:187-215`). Der Filter ist
+nötig, weil `ix_todo_attachment_image` ein **Teilindex** über `WHERE kind = 'image'` ist
+(Migration 0015). Zugleich ist die Menge der Arten in dieser Datenbank ausdrücklich **Daten und
+keine Schemaklausel** — der ganze Grund, aus dem 0015 eine Nachschlagetabelle
+`todo_attachment_kind` anlegt, ist, daß eine vierte Art ein `INSERT` sein soll und kein Umbau.
+
+Damit steht hier eine hart eingetragene Annahme über eine Menge, die absichtlich wachsen kann:
+Bekäme ein Bild je eine zweite Art — ein Bildschirmabzug, eine eingebettete Zeichnung, was auch
+immer —, zählte diese Abfrage die zugehörigen Zeilen nicht mit, und der nächste Start entfernte
+**Kundenmaterial, das einen Eigentümer hat**. Kein Angriff, kein fremder Prozeß; ein Datenverlust
+durch eine Migration, die an einer ganz anderen Stelle geschrieben wird.
+
+**Gegenmittel — Auflage A-A-36, zweite Hälfte, billig und in der richtigen Richtung.** Der Lauf
+fragt vor dem Aufräumen, ob die Arten noch die drei bekannten sind — `todo_attachment_kind` hat
+drei Zeilen —, und **räumt gar nicht auf**, wenn es mehr sind; eine Protokollzeile sagt, warum.
+Eine Abfrage über eine Tabelle mit drei Zeilen, keine Schemaänderung, kein Verlust des
+Teilindex. Genau die Regel, die der Kopf dieser Datei für sich in Anspruch nimmt: Im Zweifel
+bleibt es liegen.
+
+#### 23.3.4 Zwei Beobachtungen ohne Auflage
+
+- **Groß- und Kleinschreibung.** `GENERATED_NAME_SHAPE` läßt nur Kleinbuchstaben zu; eine Datei
+  `AB…png` ist für `listImages` unsichtbar und wird nie entfernt. Der umgekehrte Fall — Zeile
+  mit `AB…png`, Datei `ab…png`, auf einem Dateisystem ohne Unterscheidung — setzt eine von Hand
+  geschriebene Zeile voraus (VG-3) und ist damit ein Fall, in dem der Bestand ohnehin fremd ist.
+  Vermerkt, nicht bewertet.
+- **Der Lauf schweigt bei einem unlesbaren Verzeichnis vollständig.** Das ist bewußt und richtig
+  für den Regelfall der frischen Einrichtung. Für den seltenen Fall „es liegt etwas, und es ließ
+  sich nicht lesen" bleibt es damit still — aber es wird auch nichts entfernt, und A-A-18
+  verlangt keine Meldung, sondern kein verwaistes Material.
+
+### 23.4 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-176-1** | **muß** | **Eine rohe Zeichenkette mit Anführungszeichen macht den Rest einer Rust-Datei für `proof:shell-surface` unsichtbar.** Gemessen: eine Datei mit `#[cfg(test)] mod tests { const S: &str = r#"a"b"#; }` und danach einem vierten Aufrufort für `open` samt fremder Adresse — der Lauf bleibt **grün, Beendigungscode 0**. Die Blindheit steckt in `stripRustComments`/`stripRustStrings` und ist älter als T-173 (gegen die Fassung davor ebenfalls null Befunde); die Zusage in `:372-373` („nie zu wenig") sagt dazu das Gegenteil. Gegenmittel: **A-A-33**. | frontend-dev |
+| **T-176-2** | soll | **Der Ausschluß ist an seiner Form unbewacht.** Eine Weitung des Attributausdrucks auf `#[cfg(any(test, …))]` überlebt alle 23 Gegenproben (0 blind, 0 rot), obwohl ein solches Modul mit gesetztem Merkmal ausgeliefert wird. Gemessen: unveränderter Lauf Beendigungscode 1, verstümmelter Lauf 0. Gegenmittel: **A-A-34**. | frontend-dev |
+| **T-176-3** | soll | **Der Aufräumlauf liest eine leere Antwort als Beweis der Verwaistheit.** `knownImageTargets` filtert auf `kind = 'image'`; die Menge der Arten ist nach Migration 0015 ausdrücklich erweiterbar. Eine vierte Bildart ließe den nächsten Start Kundenmaterial mit Eigentümer entfernen. Gegenmittel: **A-A-36**, zweite Hälfte. | domain-dev |
+| **T-176-4** | Hinweis | **Die Reihenfolge-Zusage des Aufräumlaufs wird von `tauri_plugin_single_instance` getragen, nicht vom fehlenden Lauscher.** `lib.rs:105`, ein anderes Erzeugnis, eine andere Sprache. Der Portanschlag (`main.ts:373`) trägt sie nicht — er greift nach dem Aufräumen. Gegenmittel: **A-A-36**, erste Hälfte. | domain-dev |
+| **T-176-5** | Hinweis | **Die Behauptung in `T-173-frontend-dev.md`, ohne die dritte Gegenprobe blieben C und D unbemerkt, ist zu berichtigen: es ist C allein.** B und D machen eine Prüfung rot — aber nur, weil im Baum gerade Prüffälle mit `https://example.org/…` liegen. Die dritte Gegenprobe ist damit die einzige, deren Aussage nicht am Inhalt des Baums hängt, und wertvoller als der Bericht sagt. | keine Behebung, Einordnung |
+| **T-176-6** | Hinweis | **Vorhersage und Kontrolle sind heute zufällig gleich sortiert.** `foreseeableRefusalOf` und `check_file` prüfen den Doppelpunkt vor der Endung, weil zwei Menschen es gleich geschrieben haben. Gegenmittel: **A-A-35**. | unit-tester |
+
+### 23.5 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-33** | `proof:shell-surface` **weigert sich**, eine Rust-Quelle zu beurteilen, deren Text eine rohe Zeichenkette (`/\br#*"/`) enthält, und meldet das als Befund. Der Satz dazu nennt den Grund: Die Textwerkzeuge dieses Laufs kennen die Form nicht, und eine Aussage über eine Datei, die sie nicht lesen können, ist keine. Zugleich wird die Zusage in `:372-373` auf das berichtigt, was der Lauf wirklich leistet. | Eine Gegenprobe mit der Kunstquelle aus 23.1.1 (`r#"a"b"#` im Prüfmodul, vierter Aufrufort dahinter): Sie muß einen Befund erzeugen. Heute erzeugt sie keinen. |
+| **A-A-34** | Eine vierte Gegenprobe zu E-082 setzt den **geweiteten Attributausdruck** ein — `#[cfg(any(test, …))]` löst den Ausschluß mit aus — und verlangt, daß eine Adresse in einem so bezeichneten Modul weiterhin gemeldet wird. Der Ausschluß bleibt an die Form `#[cfg(test)] mod name { … }` gebunden, und daß er es bleibt, ist gemessen. | Die Gegenprobe selbst, im vorhandenen Gegenprobenteil, ohne zweiten Lauf. |
+| **A-A-35** | Ein Prüffall mißt für eine im Prüffall **ausgeschriebene** Fallliste, daß `foreseeableRefusalOf` in der Oberfläche und `check_file` in der Hülle für denselben Pfad denselben Schlüssel liefern — oder die Oberfläche `null` und die Hülle einen Grund, der sich vor dem Klick nicht wissen läßt. Ein neuer vorhersagbarer Ablehnungsgrund macht ihn rot. | Vitest über `attachmentLabel.ts` gegen die Fallliste; die Rust-Seite steht als erwarteter Schlüssel im Prüffall, wie in A-A-29. |
+| **A-A-36** | Erste Hälfte: Der Kopf von `image-sweep.ts` **benennt** `tauri_plugin_single_instance` als Träger der Reihenfolge-Zusage und sagt, daß der Portanschlag sie nicht trägt. Zweite Hälfte: Der Lauf prüft vor dem Aufräumen, daß `todo_attachment_kind` genau die drei bekannten Arten führt, und räumt bei jeder Abweichung **gar nicht** auf; eine Protokollzeile nennt den Grund. | Ein Prüffall mit einer vierten Art in der Nachschlagetabelle: Es wird **nichts** entfernt, und die Zeile steht. Ein zweiter mit den drei bekannten Arten: unverändertes Verhalten. |
+
+### 23.6 Urteil dieser Prüfung
+
+**Punkt 1 — E-082, der Ausschluß der Prüfmodule: Nacharbeit.** Die Entscheidung ist richtig, die
+Grenze ist eng gezogen, sie ist blockgenau für alles, was heute im Baum steht, und sechs von
+sieben Verstümmelungen fallen auf. Freigegeben wird trotzdem nicht: Es gibt eine gemessene
+Zeichenfolge, mit der dieser Wächter grün bleibt, während ein vierter Aufrufort für `open` und
+eine fremde Adresse in der Datei stehen. Daß der Fehler älter ist als die Änderung, ändert am
+Zustand nichts — er ist jetzt gemessen, und er kostet eine Zeile (A-A-33). Dazu A-A-34, damit
+die Form, auf der die ganze Begründung ruht, bewacht ist.
+
+**Punkt 2 — A-A-28 in gebauter Form: freigegeben.** Reihenfolge und Plattformunabhängigkeit sind
+die der Auflage, zeichengenau und mit sechs Prüffällen samt Gegenprobe belegt; seit
+`pruefung.yml` laufen die Windows-Zweige bei jedem Anstoß. **T-164-1 ist behoben, A-A-32
+erfüllt.** Der dritte Zustand der Rückfrage ist **keine** zweite Wahrheit: Er kann nur enger
+sein als die Hülle, nie weiter, und der Klick geht unverändert durch `check_file`. Die Auflage
+A-A-35 hält das für die Zukunft fest und hindert die Freigabe nicht.
+
+**Punkt 3 — der Aufräumlauf: freigegeben mit Auflage.** Neun von zehn Verzweigungen lassen im
+Zweifel liegen, und sie tun es aus Konstruktion und nicht aus Vorsicht: drei Riegel, von denen
+jeder einzelne genügt. Die zehnte ist die leere Antwort, und sie hängt an einer Annahme über
+eine Menge, die dieselbe Migration ausdrücklich zum Wachsen gebaut hat. Dazu die Zusage, deren
+Träger in einem anderen Erzeugnis steht. Beides ist A-A-36, beides ist klein, und keines
+verhindert die Auslieferung dieser Welle.
+
+**Der Satz dieser Prüfung.** Drei Wächter standen zur Nachschau, und alle drei waren an der
+Stelle richtig, an der man sie liest. Blind waren sie an der Stelle, an der jemand etwas
+schreibt, das es heute noch nicht gibt: eine rohe Zeichenkette, ein zweites Merkmal, eine vierte
+Anhangsart. **Ein Wächter ist so weit gültig wie die Form, die er annimmt — und die Form ist der
+Teil, den niemand prüft, solange sie stimmt.**
+
+## 24. Prüfung T-183 (2026-09-06) — die nachgemessene Weigerung, zwei weitere Wächter und der Doppelpunkt als Produktfrage
+
+**Anlaß.** Drei Punkte, und der erste ist eine Nachmessung an der eigenen Auflage:
+
+1. **O-FH.** A-A-33 und A-A-34 sind gebaut (T-173-2). Der Erbauer ist an zwei Stellen bewußt vom
+   Wortlaut abgewichen und hat beide Abweichungen begründet. Beide gehören von dieser Rolle
+   bestätigt oder verworfen — und die tragende Begründung der ersten ist ein Satz, der sich messen
+   läßt.
+2. **O-FD.** `proof:foreign` und `proof:callers` sind auf die Blindheit aus T-176-1 nie geprüft
+   worden.
+3. **O-FO.** Der Doppelpunkt an der Tür — eine Produktfrage, zu der diese Rolle sagt, was die
+   Sicherheit verlangt, und was sie nicht verlangt.
+
+### 24.0 Stand der Werkzeuge
+
+**Semgrep Guardian und 42Crunch wurden nicht erneut versucht** (E-079 Punkt 3, T-B06). Der zwölfte
+Fehlversuch erzeugte keinen Erkenntnisgewinn; die Beschaffungsfrage steht seit T-164-7 beim
+Auftraggeber.
+
+**Örtlich gemessen:** `cargo test --lib` in `apps/desktop/src-tauri` — **60 Prüffälle, 0 Fehler**,
+unverändert gegenüber T-176. `proof:shell-surface` grün (6 Prüfungen, 25 Gegenproben, 0 blind).
+`proof:foreign` grün (14 bestanden, 114 Quelldateien). `proof:callers` grün (32 bestanden).
+`proof:all` **nicht** gefahren (E-083 Punkt 3, Port 17843).
+
+**Wie gemessen wurde.** Wie in T-176: nicht am Text, sondern am Verhalten, und außerhalb des
+Bestands. Für `proof:shell-surface` liegt der Rust-Anteil samt Fähigkeitenliste, `tauri.conf.json`,
+`apps/web/src` und `packages/domain/src/version.ts` als Spiegel unter `/tmp`; der Lauf dort ist
+zeichengleich derselbe und liefert dieselbe Ausgabe (6/25/0). Für `proof:foreign` liegt
+`apps/web` als Spiegel unter `/tmp` mit einem Verweis auf die echten Modulbestände; der Lauf dort
+liefert dieselben Zahlen wie im Bestand (14 bestanden, 114 Quelldateien, 165 behandelte Übergaben,
+20 Eingabefelder, 8 Reihen, 1 Übergangsstelle mit 5 Aufrufen). **Der Bestand wurde nicht
+angefaßt** — kein Produktivcode, keine Prüfdatei, keine Kunstquelle im Baum.
+
+### 24.1 O-FH — die zwei Abweichungen vom Wortlaut, einzeln beurteilt
+
+#### 24.1.1 Abweichung 1 — der Anlaß stimmt, der tragende Satz nicht
+
+Die Weigerung sucht auf dem **Gerüst** (`proof-shell-surface.mjs:727`,
+`RAW_STRING_OPENER.test(stripRustStrings(stripRustComments(source.text)))`) und nicht im Urtext.
+
+**Der Anlaß ist nachgemessen und richtig.** `apps/desktop/src-tauri/src/appdata.rs:241` trägt
+`.arg("/inheritance:r")`. Der Ausdruck aus A-A-33 trifft dort auf `:r"` — `:` ist kein Wortzeichen,
+`r` ist eines, also greift `\b`. Wörtlich über den Urtext angewandt ist der Lauf **heute rot, und
+zwar falsch**. Die Abweichung hat einen Gegenstand.
+
+**Der Satz, auf dem sie ruht, ist falsch.** T-173-2 begründet sie so: „Die **erste** rohe
+Zeichenkette einer Datei steht immer noch im Takt beider Werkzeuge und ist dort sichtbar — aus dem
+Takt laufen sie erst **an** ihr." Die Frage dieser Prüfung war genau diese: Gibt es eine Datei, in
+der die erste rohe Zeichenkette nicht mehr im Takt steht? **Es gibt sie, und sie ist keine Exotik.**
+
+Der Grund steht in den beiden Werkzeugen selbst. `stripRustComments` kennt das **Zeichenliteral**
+und hat dafür seit je eine eigene Zeile (`:285`, mit dem Ausdruck `^'(\\.|[^'\\])'`, der die
+Lebenszeit `&'a str` davon unterscheidet). `stripRustStrings` kennt es **nicht**: Diese Funktion
+verfolgt ausschließlich `"` (`:341`). Und das Gerüst wird gebaut, indem
+`stripRustStrings` **außen** läuft. Ein `'"'` — ein Zeichenliteral, das ein Anführungszeichen
+enthält — öffnet dort also eine Zeichenkette, die nie zugeht, und ab dieser Stelle ist im Gerüst
+Code geleert und Zeichenkettenrumpf sichtbar. Das `r#` der ersten rohen Zeichenkette fällt damit
+weg, bevor der Ausdruck es sehen kann.
+
+#### 24.1.2 Die Kunstquelle, die die Weigerung überlebt
+
+Gemessen gegen den Spiegel, alles übrige unverändert:
+
+```rust
+/// Trennt an Anfuehrungszeichen — ein ganz gewoehnliches Zeichenliteral.
+pub fn trenner() -> char {
+    '"'
+}
+
+#[cfg(test)]
+mod tests {
+    const ROH: &str = r#"a"b"#;
+    const Z: char = '"';
+}
+
+#[tauri::command]
+pub fn takt_heimlich(app: AppHandle, url: String) -> Result<(), String> {
+    app.shell().open(url, None).map_err(|e| e.to_string())?;
+    Ok(())
+}
+```
+
+Diese Datei in `src-tauri/src/` gelegt: **`proof:shell-surface` bleibt grün, Beendigungscode 0,
+6 Prüfungen und 25 Gegenproben, 0 blind.** Die Schlußzeile des Laufs sagt dabei wörtlich, der
+Rust-Anteil habe „genau diese Aufruforte für `open`" und zählt drei auf, während ein **vierter**,
+ungeprüfter daneben steht. Die Zwischenwerte, einzeln gemessen: `RAW_STRING_OPENER` trifft den
+Urtext (`true`), das Gerüst nicht (`false`); `stripCfgTestModules` schließt gar nichts aus, weil
+das Attribut im Gerüst mit geleert ist; und `rustFunctions` sieht `takt_heimlich` nicht, weil die
+Signatur im Gerüst in einem vermeintlichen Zeichenkettenrumpf liegt.
+
+Dieselbe Bauart ohne das zweite Zeichenliteral, dafür mit einer fremden Adresse statt des
+Aufruforts, ergibt ebenfalls **null Befunde**: Die Adresse `https://evil.example/holen` ist
+unsichtbar, weil `stripRustComments` an der rohen Zeichenkette aus dem Takt läuft und das `//` in
+`https://` danach als Zeilenkommentar liest.
+
+**Wie nah das am Bestand ist.** Der Rust-Anteil trägt heute **elf** Zeichenliterale — `':'`
+(`appdata.rs:363`, `attachment.rs:303`), `'.'`, `' '`, `'-'`, `'?'`, `'#'`. Keines davon ist `'"'`.
+Ein `'"'` entsteht bei der nächsten Frage, ob ein Name ein Anführungszeichen trägt — in
+`attachment.rs`, der Datei, die Namensbestandteile zerlegt, ist das kein weit hergeholter Gedanke.
+Dieselbe Wirkung haben `b'"'` und `'\"'`.
+
+#### 24.1.3 Ein zweiter Weg zum selben Ergebnis — der geschachtelte Blockkommentar
+
+Damit nicht ein einzelner Fall für eine Klasse gehalten wird: Rust **schachtelt** Blockkommentare,
+`stripRustComments` zählt sie aber nicht, sondern führt eine Fahne (`:261`, `:301`). Ein Kommentar
+der Form `/* aussen /* innen */ er sagte " */` endet für das Werkzeug am ersten `*/`; das `"`
+danach öffnet eine Zeichenkette, und die erste rohe Zeichenkette hinter dem Kommentar ist im
+Gerüst wieder unsichtbar. Gemessen: `RAW_STRING_OPENER` auf dem Urtext `true`, auf dem Gerüst
+`false`.
+
+**Die Klasse ist damit benannt, und sie ist nicht „rohe Zeichenkette".** Sie ist: *jede
+Erscheinung, die eines der beiden Textwerkzeuge vor der ersten rohen Zeichenkette aus dem Takt
+bringt.* Eine Aufzählung dieser Erscheinungen ist genau die Bauart, die in diesem Vorhaben schon
+zweimal versagt hat (E-063 Punkt 4). Deshalb steht im Gegenmittel nicht nur die Behebung der zwei
+gemessenen Wege, sondern auch eine Gegenprobe für den Satz selbst.
+
+#### 24.1.4 Abweichung 2 — `b?` statt des Wortlauts: **bestätigt, und tragend**
+
+`RAW_STRING_OPENER = /\bb?r#*"/` (`:360`) statt `/\br#*"/`. Die Begründung — dieselbe Form,
+dieselbe Blindheit, strengere Richtung — trifft zu, und die Abweichung ist **nicht** kosmetisch.
+Gemessen: Wird `b?` gestrichen, also der Wortlaut der Auflage hergestellt, dann trifft der Ausdruck
+`br#"a"b"#` nicht mehr — zwischen `b` und `r` steht keine Wortgrenze. Eine Kunstquelle mit
+`br#"a"b"#` im Prüfmodul und einem vierten Aufrufort dahinter ergibt dann **null Befunde**, und der
+Lauf bleibt bei 6 Prüfungen und 25 Gegenproben, 0 blind. **Die Abweichung ist bestätigt; der
+Wortlaut von A-A-33 wird hiermit auf sie berichtigt.**
+
+Der Hinweis des Erbauers, kein `g`-Merker am Ausdruck zu setzen, ist ebenfalls richtig und ebenfalls
+tragend: Ein globaler Ausdruck behielte zwischen zwei `test`-Aufrufen `lastIndex` und übersähe jede
+zweite Datei.
+
+#### 24.1.5 Die vierte Verstümmelung, die die 25 überlebt — es sind zwei
+
+Gefragt war, ob es eine Verstümmelung gibt, die auch die neuen 25 Gegenproben überlebt. Es gibt
+zwei, beide an derselben Zeile, beide gemessen:
+
+| Verstümmelung | Änderung | Bestand | Kunstquelle |
+|---|---|---|---|
+| **H** | `/\bb?r#+"/` statt `#*` — mindestens ein Gatter verlangt | 6 Prüfungen, 25 Gegenproben, **0 blind**, Code 0 | `r"C:\Users\Public\"` mit viertem Aufrufort und fremder Adresse dahinter: **0 Befunde** |
+| **I** | `/\br#*"/` — der **Wortlaut der Auflage**, `b?` gestrichen | 6 Prüfungen, 25 Gegenproben, **0 blind**, Code 0 | `br#"a"b"#` mit viertem Aufrufort dahinter: **0 Befunde** |
+
+Verstümmelung H ist die ernstere, und zwar aus einem Grund, der im Bericht des Erbauers selbst
+steht: Er sagt voraus, die nächste rohe Zeichenkette entstehe als `r"C:\Users\…"` in einem Prüffall
+über Windows-Pfade. **Die Gegenprobe, die er dazu geschrieben hat, benutzt `r#"a"b"#`** — die
+Form mit Gatter. Gemessen ist damit die Form, die er gewählt hat, und nicht die, die er
+vorhergesagt hat. Genau derselbe Satz stand in T-176 über die vier Verstümmelungen aus T-173, und
+er ist derselbe hier: **Eine Gegenprobe, die die Lücke des Nachweises nicht trifft, ist keine** —
+so wie es `proof-release-safety.mjs:625-638` für den Ausgang ins Netz bereits ausbuchstabiert.
+
+#### 24.1.6 Die Berichtigung T-176-5 — nachgezogen und gegen die 25 bestätigt
+
+T-173-2 hat die Berichtigung angenommen. Sie ist gegen den heutigen Stand **nachgemessen**:
+Verstümmelung C (die Klammerzählung läuft auf `stripRustComments(text)` statt auf dem Gerüst, also
+zählen Klammern in Zeichenketten mit) ergibt gegen den unveränderten Bestand
+**0 Prüfungen rot, 1 Gegenprobe blind** — und die blinde ist die dritte
+(„E-082: der Ausschluss endet an der zugehörigen Klammer, nicht an der ersten"). Nichts anderes
+fällt auf. Die Einordnung aus 23.1.3 gilt unverändert und ist jetzt auch gegen die 25 belegt.
+
+#### 24.1.7 Das Gegenmittel — gemessen, nicht vorgeschlagen
+
+Beide Behebungen wurden am Spiegel gebaut und gemessen. Sie sind klein, sie erzeugen **keinen**
+falschen Alarm auf dem Bestand, und sie stellen den Satz her, auf dem die Abweichung ruht:
+
+1. **`stripRustStrings` lernt das Zeichenliteral** — dieselbe Zeile, die `stripRustComments` bei
+   `:285` schon trägt. Der Rumpf des Literals wird längentreu geleert.
+2. **`stripRustComments` zählt Blockkommentare, statt eine Fahne zu führen** — `inBlock` wird zu
+   `blockDepth`, ein `/*` im Kommentar erhöht, ein `*/` senkt.
+
+Gemessen nach beiden Änderungen: Bestand **grün** (6/25/0, Code 0, kein Befund über `appdata.rs`);
+die Kunstquelle aus 24.1.2 erzeugt die **Weigerung**; die Kunstquelle mit der fremden Adresse
+ebenso; die Kunstquelle mit dem geschachtelten Kommentar ebenso.
+
+Dazu, und das ist der Teil, der nicht an einer Aufzählung hängt: **eine Gegenprobe für den Satz
+selbst.** Die Kunstquelle aus 24.1.2 gehört in den Gegenprobenteil, damit die Behauptung „die erste
+rohe Zeichenkette ist im Gerüst sichtbar" nicht wieder Prosa ist. Das ist A-A-37.
+
+### 24.2 O-FD — dieselbe Frage an `proof:foreign` und `proof:callers`
+
+**Die Voraussetzung des Auftrags trifft für beide nicht zu, und das ist die erste Auskunft.** Weder
+`proof:foreign` noch `proof:callers` liest Text und nimmt eine Form an. `proof-foreign.mjs:166`
+baut ein **Übersetzerprogramm** (`ts.createProgram`) samt Typprüfer aus derselben `tsconfig.json`,
+mit der die Oberfläche gebaut wird; `caller-scan.mjs:59` und `:362` bauen einen **Syntaxbaum**
+(`ts.createSourceFile`). Die Klasse aus T-176-1 — zwei handgeschriebene Zustandsautomaten, die aus
+dem Takt laufen — gibt es dort strukturell nicht. Der Ausdruck über den Urtext ist in beiden Läufen
+die Ausnahme und nicht die Regel; wo er vorkommt, ist er gemessen worden (24.2.4).
+
+Damit verschiebt sich die Frage, aber sie verschwindet nicht: Ein AST-Leser ist nicht blind für die
+Form, sondern für das, was **außerhalb seines Programms** liegt und für das, was seine Regel nicht
+nennt.
+
+#### 24.2.1 `proof:foreign` — die Kunstquelle wird gefunden
+
+Gegen den Spiegel gemessen. Eine Kunstquelle `src/screens/KunstRoh.tsx`, die einen fremden Titel
+roh anzeigt:
+
+```tsx
+export function KunstRoh({ todo }: { readonly todo: Todo }): ReactElement {
+  return <span title={todo.title}>{todo.title}</span>;
+}
+```
+
+Ergebnis: **rot, zwei Befunde** — `Attribut todo.title (<span title>)` und `Inhalt todo.title`.
+Der Lauf trifft, wofür es ihn gibt.
+
+Und er hat Untergrenzen, die ihn davor bewahren, leer zu laufen: `sourceFiles.length > 60`
+(`:663`), `treatedCount > 80` (`:664`), `foreignJoins > 2` (`:735`), `inputCount > 5` (`:923`),
+`crossings.length > 0` (`:1020`), `crossingCalls > 3` (`:1103`). Das ist mehr, als die meisten
+Wächter dieses Vorhabens tragen, und es ist die richtige Bauart.
+
+#### 24.2.2 Was `proof:foreign` nicht sieht — und wo er es nicht sagt
+
+Drei Kunstquellen, jede eine Zeile lang, jede gegen den Spiegel gemessen:
+
+| Kunstquelle | Ergebnis |
+|---|---|
+| **A** `const titel: string = todo.title;` dann `{titel}` | **rot** — „kein fremder Wert wird in ein Feld ohne Herkunft geschrieben" |
+| **B** `const titel = todo.title as string;` dann `{titel}` | **grün**, 14 bestanden, 0 fehlgeschlagen |
+| **C** `const teile: string[] = []; teile.push(todo.title);` dann `{teile[0]}` | **grün**, 14 bestanden, 0 fehlgeschlagen |
+
+**A ist genau der Fall, den der Kopf des Laufs für sich in Anspruch nimmt** (`:101-104`:
+„Umwege über `String(x)`, `JSON.stringify` oder eine Bindung, die ausdrücklich `: string` heißt.
+… die letzte findet Abschnitt 4"). Er findet sie. **B unterscheidet sich von A um ein Schlüsselwort
+und wird nicht gefunden**, und der Kopf nennt ihn nicht: Dort steht nur, daß `as string` **aus einem
+`unknown`** seit T-133 in Abschnitt 6 gefunden wird — aus einem *fremden* Wert wird es nirgends
+gefunden und nirgends behauptet. **C** ist derselbe Verlust an einem Parameter, der keiner eigenen
+Funktion gehört: Abschnitt 4 mißt eigene Funktionen, `Array.prototype.push` ist keine.
+
+Wichtig für die Einordnung: **Beide gehen durch `pnpm typecheck`.** Es sind gültige
+TypeScript-Programme; es gibt keinen zweiten Lauf, der sie auffinge.
+
+Und die vierte Kunstquelle, die die Frage „merkt der Lauf, daß er blind ist" beantwortet: Dieselbe
+Datei wie oben, aber mit **verschriebener Einfuhr** (`from "../api/typen"`). Der Titel steht dann
+roh im Inhalt **und** im `title`-Attribut, `todo` ist ein Fehlertyp, `isForeign` sagt `false` —
+**der Lauf bleibt grün, 14 bestanden, 0 fehlgeschlagen**, und `tsc` meldet dazu
+`error TS2307: Cannot find module '../api/typen'`. Der Lauf liest keine Übersetzerbefunde und
+behauptet trotzdem eine Aussage über den Typ jeder Anzeigestelle. Sein Grün ist damit an einen Lauf
+gebunden, den er weder nennt noch mißt.
+
+Das ist milder als T-176-1 — `pnpm typecheck` **fängt** diesen Fall, im Gegensatz zu B und C —,
+aber es ist dieselbe Bauart: Eine Zusage, deren Träger woanders steht und nicht benannt ist
+(vergleiche 23.3.1 und A-A-36 erste Hälfte).
+
+#### 24.2.3 `proof:callers` — der einzige Lauf dieses Vorhabens, der seine Zählung zweimal herleitet
+
+`proof:callers` ist in dieser Frage **vorbildlich**, und das gehört genauso festgehalten wie eine
+Lücke:
+
+- **Abschnitt 0 leitet die Zahl der Aufrufe zweimal her** — einmal aus dem Syntaxbaum, einmal aus
+  dem Rohtext (`proof-callers.mjs:358-362`) — und verlangt Gleichheit. Das ist genau die Antwort
+  auf die Frage „merkt der Lauf, daß er blind ist", und sie steht dort seit T-051.
+- **Was der Leser nicht auflösen kann, wird gezählt und macht den Lauf rot** (`:277-281`,
+  Abschnitt 5). Der Kopf sagt es wörtlich: rot „nicht, weil der Aufruf falsch wäre, sondern weil
+  niemand mehr sagen kann, ob er richtig ist". Das ist die Regel aus A-A-33, drei Wellen älter.
+- **Er hat echte Gegenproben, nicht nur Untergrenzen** (`:571-655` und der Add-in-Teil): die drei
+  Namen aus T-050 und ein Weg, den es nicht gibt, in den **echten** Text eingesetzt, im
+  Arbeitsspeicher, gemessen als **Zuwachs** gegenüber dem unveränderten Lauf, mit einer Prüfung,
+  daß die Ersetzung überhaupt gegriffen hat, und einer Umkehrung, daß der unveränderte Text nichts
+  ergibt. Gemessen: **32 bestanden, 0 fehlgeschlagen.**
+
+#### 24.2.4 Die eine Zusage von `proof:callers`, die niemand mißt
+
+Der ganze Lauf liest **eine** Datei je Fläche, und der Kopf sagt selbst, was diese Beschränkung
+wert ist: „Diese Beschränkung ist nur so viel wert wie die Zusicherung, daß es keine zweite gibt.
+Also wird sie gemessen und nicht geglaubt." Gemessen wird sie mit diesem Ausdruck, zweimal:
+
+```js
+if (/(?<![\w.])fetch\s*\(/.test(body) && name !== 'api/client.ts') strayFetch.push(name);
+```
+
+`proof-callers.mjs:406` für `apps/web/src`, `:707` für `apps/outlook-addin/src`.
+
+**Das ist zeichengleich der Ausdruck, den T-143 S-1 als blind gemessen hat.** Gemessen, hier
+erneut:
+
+```text
+gesehen     fetch(url)
+UNSICHTBAR  window.fetch(url)
+UNSICHTBAR  globalThis.fetch(url)
+UNSICHTBAR  self.fetch(url)
+UNSICHTBAR  const { fetch: holen } = globalThis
+```
+
+Der negative Rückblick `(?<![\w.])` ist gewollt — er soll `options.fetch(...)` als Port
+durchlassen —, und genau deshalb läßt er auch `globalThis.fetch(` durch. `proof-release-safety.mjs`
+hat diese Lücke nach T-143 behoben und führt seither **vier** Gegenproben für den Ausgang
+(`:659-678`): nacktes `fetch(`, `globalThis.fetch(`, `window.fetch(` und eine Zerlegung. Die
+Behebung ist in diesem Bestand also bereits einmal geschrieben; `proof:callers` hat sie nicht
+geerbt.
+
+Dazu kommt: **Für diese Zusage gibt es in `proof:callers` keine einzige Gegenprobe.** Die
+Selbstproben in Abschnitt 6 und 8 setzen Rumpfschlüssel, Abfrageschlüssel und Wege ein — nie einen
+zweiten Weg zum Dienst. Der Wächter über den Wächter sieht dieselbe Stelle nicht, genau wie damals.
+
+**Und die Lücke steht heute im Baum.** `apps/outlook-addin/src/ui/App.tsx:58` trägt
+`fetch: window.fetch.bind(window)`. Das ist zulässig und richtig — es ist die Einspeisung des Ports,
+die der Kopf bei `:686-689` ausdrücklich beschreibt. Aber der Lauf sieht sie nicht: Sein Grün ist
+identisch, ob diese Zeile dort steht oder nicht.
+
+**Wie schwer das wiegt.** Nicht als Abflußweg: Die CSP der Hülle bindet `connect-src` an vier
+Marken, die des Add-ins (`apps/outlook-addin/index.html:34`) an den lokalen Dienst und
+`appsforoffice.microsoft.com`. Ein zweiter `fetch` in der Oberfläche käme also nicht nach draußen.
+Was verlorenginge, ist der **Vertrag**: Ein Aufruf, der an `endpoints.ts` vorbei zusammengesetzt
+wird, ist von diesem Lauf nicht gemessen — und das ist genau die Klasse aus T-050, drei stille
+Namen, zwei davon wochenlang unbenutzbare Funktionen. Deshalb **soll** und nicht **muß**.
+
+### 24.3 O-FO — der Doppelpunkt an der Tür: was die Sicherheit verlangt, und was nicht
+
+**Die Frage.** Seit T-178 weist auch die Tür (`checkAttachmentPath`,
+`packages/domain/src/attachment.ts:832`) einen Doppelpunkt im letzten Namensbestandteil ab, auf
+jeder Plattform. Unter Linux und macOS ist `:` ein gewöhnliches Namenszeichen;
+`Besprechung 10:30.pdf` läßt sich seither weder eintragen noch öffnen. Muß die Tür dieselbe Strenge
+tragen wie die Hülle?
+
+**Die Antwort in einem Satz: Nein — aber die Folgerung daraus ist nicht „die Tür warnt nur".**
+
+#### 24.3.1 Warum die Hülle streng bleiben muß, ohne Ausnahme
+
+Die Begründung aus 22.1.1 gilt unverändert und ist an die **Hülle** gebunden, nicht an die Tür:
+
+- Der Doppelpunkt ist gefährlich, weil `is_file()` die Win32-Auflösung nimmt und
+  `has_indirect_extension` die Zeichenkette — bei `rechnung.lnk::$DATA` reden die beiden über
+  verschiedene Dateien. Das ist die einzige Kontrolle zwischen einem gespeicherten Wert und
+  `Start-Process` beziehungsweise `explorer.exe`.
+- **Der Wert kommt an der Tür vorbei in den Bestand.** VG-1: die Routen des Dienstes mit dem
+  Sitzungsgeheimnis — jeder Prozeß im Benutzerkonto, der das Geheimnis liest, schreibt
+  `todo_attachment.target`. VG-3: ein `UPDATE` mit `sqlite3` auf die Bestandsdatei, ganz ohne
+  Dienst. Beide Wege stehen seit 20.3 im Modell, und beide sind der Grund, aus dem die Kontrolle
+  überhaupt im Öffnen-Befehl sitzt.
+- Ein Angreifer, der einen Doppelpunktpfad einschleusen will, benutzt also **nie** die Tür. Für ihn
+  ist die Strenge der Tür wirkungslos — heute wie nach jeder Lockerung.
+
+Daraus folgt unmittelbar: **Die Strenge der Tür trägt gegen diesen Angriff nichts bei.** Was sie
+beiträgt, steht ausgeschrieben in ihrer eigenen Erklärung
+(`apps/local-api/src/usecases/attachments.ts`): Sie hält den Wert aus dem Bestand heraus, **solange
+er über die Tür kommt**, und sie nennt dem Benutzer den Grund **im Augenblick der Eingabe** statt
+nach einem Klick auf einen Anhang, den er schon angelegt hat.
+
+#### 24.3.2 Was die Sicherheit an der Tür verlangt — und was nicht
+
+**Sie verlangt nicht:** die Doppelpunktregel an der Tür. Nachgerechnet über jede Verwendung, die
+ein gespeicherter Pfad in Takt hat:
+
+| Verwendung | Trägt ein Doppelpunkt ein Risiko? |
+|---|---|
+| Öffnen (`takt_open_attachment_file`) | **ja** — und dort steht `check_file`, unverändert streng |
+| Ein anderer Öffnen-Weg | es gibt keinen; `proof:shell-surface` mißt genau drei Aufruforte — **mit dem Vorbehalt aus 24.1** |
+| Anzeige (Beschriftung, Rückfrage) | nein — der Pfad läuft als fremder Text durch `Foreign` |
+| Protokoll | nein — `REASON_SHAPE` (`apps/local-api/src/logger.ts:64`) läßt keinen Doppelpunkt zu und macht jeden Grund in falscher Gestalt zu `unclassified`; Werte stehen dort ohnehin nicht |
+| Export | nein — Anhänge gelangen in keinen Export (A-19, E-070) |
+| Bilddatei im Anwendungsdatenverzeichnis | nein — der Name wird von Takt erzeugt (`GENERATED_NAME_SHAPE`) und nicht übernommen |
+
+**Sie verlangt sehr wohl:** daß die Tür **nie milder ist als die Hülle in einer Weise, die einen
+Wert in den Bestand läßt, den die Hülle später öffnet.** Das ist die Richtung, die E-085 Punkt 2
+bereits als Regel führt — die Hülle darf strenger sein, die Domäne nie — und sie bleibt gewahrt,
+gleich wie diese Frage ausgeht.
+
+#### 24.3.3 Die drei Wege, und was jeder kostet
+
+**Weg 1 — alles bleibt.** Ein Satz, eine Regel, auf beiden Seiten dieselbe, auf dem Läufer meßbar,
+`proof:attachment-parity` (E-085) hat nichts zu unterscheiden. Preis: `Besprechung 10:30.pdf` ist
+unter Linux und macOS nicht als Anhang verwendbar. Unter Windows — der Plattform, für die Takt
+gebaut ist — kostet die Regel nichts, weil ein Doppelpunkt dort in keinem gültigen Dateinamen
+vorkommt.
+
+**Weg 2 — die Tür warnt nur, die Hülle bleibt streng.** Sicherheitlich unbedenklich, und **trotzdem
+rate ich davon ab.** Er kauft eine kleine Bequemlichkeit mit einer größeren Unbequemlichkeit: Der
+Benutzer legt unter Linux `Besprechung 10:30.pdf` an, sieht den Anhang in der Liste, klickt ihn —
+und **dann** weist die Hülle ab. Die Absage wandert vom Augenblick der Eingabe, wo sie einen Satz
+mit einem Grund hat, hinter einen Klick, wo sie wie ein Fehler aussieht. Dazu käme der Zustand, den
+23.2.2 als den teuren beschreibt: zwei Wahrheiten über dieselbe Frage, hier auch noch mit der
+milderen an der Stelle, die zuerst gelesen wird.
+
+**Weg 3 — die Regel wird plattformabhängig, an beiden Stellen, aus einer Entscheidung.** Der
+Doppelpunkt fällt dort, wo das Betriebssystem, das die Datei öffnet, ihn als Stromtrenner auflöst
+— also unter Windows. Sicherheitlich ist das **vertretbar**: Auf ext4 und APFS ist der Doppelpunkt
+ein gewöhnliches Zeichen, `Path::file_name()` und das Betriebssystem sind sich einig, und die
+Voraussetzung des ganzen Befundes („der Name, den `Path` sieht, ist nicht der, den Windows
+auflöst") gilt dort nicht. Ein unter Linux eingetragener Pfad ist unter Windows ohnehin nicht
+absolut und fällt dort mit `path_not_absolute`; ein mitgenommener Bestand macht daraus also keine
+Lücke.
+
+Sein Preis ist keiner an der Sicherheit, sondern an der **Meßbarkeit**, und der ist heute konkret:
+
+- A-A-28 steht ausdrücklich **ohne** `#[cfg(windows)]` da, mit derselben Begründung wie `is_unc`
+  und `effective_file_name` (A-A-10): ein Zweig, der nur auf einem Betriebssystem etwas tut, ist
+  auf dem Läufer der Reihe unmeßbar. Dieses Argument ist seit `pruefung.yml` **halb** entkräftet —
+  `cargo test --lib` läuft auf `windows-2022` bei jedem Anstoß. Nur eben `cargo test --lib`: Die
+  pnpm-Nachweise, und damit `proof:attachment-parity` aus E-085, laufen dort **nicht**
+  (`.github/workflows/pruefung.yml`, Auftrag `rust`, und der Kopf sagt ausdrücklich, `pnpm check`
+  in voller Länge stehe hier nicht).
+- Damit entstünden vier Kombinationen (Tür/Hülle mal Linux/Windows), von denen der Nachweis aus
+  E-085 nur zwei je Läufer messen könnte — und die Domäne bekäme eine Plattformfrage, obwohl sie
+  „kein Dateisystem kennt" (ihre eigene Erklärung bei `checkAttachmentPath`).
+
+#### 24.3.4 Empfehlung an den Orchestrator — keine Entscheidung
+
+1. **Die Hülle bleibt, wie sie ist**: `has_stream_separator` ohne `#[cfg]`, nach `is_absolute`,
+   vor der Endungsprüfung. Das ist nicht verhandelbar und unabhängig von jedem der drei Wege.
+2. **Weg 2 nicht.** Er ist sicherheitlich unbedenklich und produkttechnisch der schlechteste der
+   drei.
+3. **Zwischen Weg 1 und Weg 3 entscheidet nicht die Sicherheit, sondern das Produkt.** Meine
+   Empfehlung ist **Weg 1, vorerst**: Takt ist für Windows gebaut (`WindowsUser` im Export, das
+   Outlook-Add-in), dort kostet die Regel nichts, und Weg 3 kostet eine zweite Meßfläche, die es
+   heute nicht gibt.
+4. **Wenn Weg 3 gewählt wird**, dann mit drei Bedingungen, und alle drei sind meßbar:
+   (a) **eine** Entscheidung, die die Plattformfrage an **einer** Stelle beantwortet, aus der beide
+   Seiten sie beziehen; (b) `proof:attachment-parity` (E-085) trägt die Plattform als Fall und mißt
+   für **jede** Plattform beide Richtungen, nicht nur die des Läufers; (c) der Nachweis läuft auch
+   auf `windows-2022` — sonst ist die Windows-Hälfte der neuen Regel eine Absichtserklärung, und
+   das ist genau der Zustand, den A-A-32 beendet hat.
+5. **Und die Reihenfolge.** Weg 3 gehört **nicht** vor die Behebung aus 24.1 gebaut. Der Satz
+   „es gibt genau drei Aufruforte für `open`, und deshalb ist `check_file` die einzige Kontrolle"
+   ist die halbe Begründung dafür, daß die Tür überhaupt gelockert werden darf — und dieser Satz
+   ruht heute auf einem Wächter, von dem in 24.1.2 gemessen ist, daß er grün bleibt, während ein
+   vierter danebensteht.
+
+### 24.4 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-183-1** | **muß** | **Die Weigerung aus A-A-33 ist mit einem gewöhnlichen Zeichenliteral zu umgehen.** `stripRustStrings` (`proof-shell-surface.mjs:321-350`) kennt `'"'` nicht, obwohl `stripRustComments` es bei `:285` kennt; das Gerüst wird aber mit `stripRustStrings` **außen** gebaut. Gemessen: Kunstquelle aus 24.1.2 im Baum, Lauf **grün, Code 0, 6/25/0**, während ein vierter, ungeprüfter Aufrufort für `open` danebensteht. Zweiter Weg zum selben Ergebnis: geschachtelter Blockkommentar (`:261`, `:301`). Der tragende Satz aus T-173-2 („die erste rohe Zeichenkette steht noch im Takt") ist damit **widerlegt**. Gegenmittel: **A-A-37**. | frontend-dev |
+| **T-183-2** | soll | **Zwei Verstümmelungen überleben alle 25 Gegenproben.** H: `#+` statt `#*` — `r"C:\Users\Public\"` wird nicht mehr gemeldet, und genau diese Form sagt der Bericht des Erbauers als nächste voraus. I: `b?` gestrichen, also der **Wortlaut von A-A-33** — `br#"…"#` wird nicht mehr gemeldet. Beide: 6/25/0, Code 0. Gegenmittel: **A-A-38**. | frontend-dev |
+| **T-183-3** | soll | **`proof:foreign` verliert die Herkunft an zwei Stellen still, die `pnpm typecheck` nicht fängt.** `todo.title as string` und `teile.push(todo.title)` in ein `string[]`: beide grün (14/0). Die eine Zeile daneben — `const titel: string = todo.title` — ist rot, und der Kopf des Laufs nennt genau sie als abgedeckt (`:101-104`). Gegenmittel: **A-A-39**. | frontend-dev |
+| **T-183-4** | Hinweis | **`proof:foreign` liest keine Übersetzerbefunde.** Eine verschriebene Typeinfuhr macht jede Anzeigestelle der Datei zu `any`, der Lauf bleibt **grün**, `tsc` meldet `TS2307`. Gefangen wird das von `pnpm typecheck` — einem Lauf, den `proof:foreign` weder nennt noch mißt. Gegenmittel: **A-A-39**, zweite Hälfte. | frontend-dev |
+| **T-183-5** | soll | **`proof:callers` mißt seine tragende Zusage mit dem Ausdruck, den T-143 S-1 als blind gemessen hat.** `/(?<![\w.])fetch\s*\(/` (`:406`, `:707`) sieht `globalThis.fetch(`, `window.fetch(`, `self.fetch(` und eine Zerlegung nicht; für diese Zusage gibt es **keine** Gegenprobe. Die Behebung steht in diesem Bestand bereits (`proof-release-safety.mjs:659-678`). Belegt am Baum: `apps/outlook-addin/src/ui/App.tsx:58` trägt `window.fetch.bind(window)` und ist unsichtbar. Kein Abflußweg (CSP beidseitig), aber der Vertrag aus T-050 wäre unbewacht. Gegenmittel: **A-A-40**. | frontend-dev |
+| **T-183-6** | Hinweis | **`proof:callers` ist im übrigen der Maßstab.** Zwei Herleitungen derselben Zahl (`:358-362`), unauflösbares macht rot (`:277-281`), echte Gegenproben mit Zuwachsmessung, Anwendbarkeitsprüfung und Umkehrung (`:571-655`). Wer für einen neuen Wächter eine Vorlage sucht, nimmt diese. | Einordnung |
+| **T-183-7** | Hinweis | **Berichtigung T-176-5 ist angenommen und gegen die 25 nachgemessen**: Verstümmelung C ergibt 0 Prüfungen rot und **1** blinde Gegenprobe, und es ist die dritte. Unverändert gültig. | Einordnung |
+| **T-183-8** | Produktfrage | **Der Doppelpunkt an der Tür ist keine Sicherheitsanforderung.** Die tragende Kontrolle ist und bleibt `check_file`; ein eingeschleuster Wert nimmt die Tür nie (VG-1, VG-3). Empfehlung: Weg 1 vorerst, Weg 2 **nicht**, Weg 3 nur mit den drei Bedingungen aus 24.3.4 und **nach** T-183-1. | Orchestrator |
+
+### 24.5 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-37** | Der Satz, auf dem die Weigerung ruht — „die erste rohe Zeichenkette einer Datei ist im Gerüst sichtbar" —, wird **hergestellt und gemessen**, statt behauptet. Erste Hälfte: `stripRustStrings` lernt das Zeichenliteral, mit derselben Zeile, die `stripRustComments` bei `:285` schon trägt, und leert seinen Rumpf längentreu. Zweite Hälfte: `stripRustComments` führt für Blockkommentare einen **Zähler** statt einer Fahne, weil Rust sie schachtelt. Dritte Hälfte: der Absatz „Was diese Grenze nicht leistet" nennt beides und sagt, daß die Weigerung nur so weit trägt wie das Gerüst. | Zwei Gegenproben, beide heute blind: (1) die Kunstquelle aus 24.1.2 — Zeichenliteral `'"'`, dann `r#"a"b"#`, dann ein vierter Aufrufort — **muß** die Weigerung erzeugen; heute erzeugt sie **null Befunde**. (2) dieselbe Quelle mit `/* aussen /* innen */ er sagte " */` statt des Zeichenliterals. Beide Behebungen sind am Spiegel gebaut und gemessen: Bestand danach grün (6/25/0), beide Kunstquellen rot. |
+| **A-A-38** | Die Gegenprobe zu A-A-33 mißt **alle vier Formen** der rohen Zeichenkette und nicht eine: `r"…"`, `r#"…"#`, `br"…"`, `br#"…"#`. Zugleich wird der Wortlaut von A-A-33 auf `/\bb?r#*"/` berichtigt — das `b?` ist gemessen tragend und nicht kosmetisch. | Verstümmelung H (`#+` statt `#*`) und Verstümmelung I (`b?` gestrichen) müssen je eine Gegenprobe rot machen. Heute überleben beide alle 25. Als Kunstquelle für H eignet sich `r"C:\Users\Public\"` — die Form, die T-173-2 selbst als die nächste vorhersagt. |
+| **A-A-39** | Erste Hälfte: `proof:foreign` bekommt eine Prüfung über den Weg, an dem die Herkunft heute still abfällt — eine Zusicherung `as`, die einen fremden Wert auf einen Texttyp **ohne** Marke bringt, ist ein Fund; ebenso ein fremder Wert als Argument einer Funktion, deren Parameter Text ohne Marke ist, auch wenn die Funktion nicht die eigene ist. Zweite Hälfte, unabhängig davon und billiger: Der Lauf fragt `ts.getPreEmitDiagnostics` und wird **rot**, wenn das Programm nicht fehlerfrei übersetzt — mit dem Satz, daß eine Aussage über Typen in einem Programm mit Typfehlern keine ist. Das ist dieselbe Regel wie A-A-33, eine Sprache weiter. | Drei Gegenproben im Lauf, alle drei heute grün: `const titel = todo.title as string`, `teile.push(todo.title)` in ein `string[]`, und eine verschriebene Typeinfuhr. Jede muß den Lauf rot machen. Die Kunstquellen können wie in `proof:callers` im Arbeitsspeicher entstehen (ein `CompilerHost` mit einer überlagerten Datei); `apps/web/src` wird dafür nicht angefaßt. |
+| **A-A-40** | Der Ausdruck, mit dem `proof:callers` „es gibt keinen zweiten Weg zum Dienst" mißt (`:406` und `:707`), wird durch den ersetzt, den `proof-release-safety.mjs` nach T-143 S-1 schon trägt — er erkennt `fetch(`, `globalThis.fetch(`, `window.fetch(`, `self.fetch(` und die Zerlegung —, und die zulässige Ausnahme wird **benannt** statt durch einen Rückblick erschlichen: `options.fetch(` als Port in `api/client.ts` und die Einspeisung in `apps/outlook-addin/src/ui/App.tsx`. Dazu **vier Gegenproben** in beiden Selbstprobenteilen (Abschnitt 6 und 8), je eine Schreibweise. | Die vier Gegenproben selbst, aufgebaut wie die vorhandenen: der echte Text im Arbeitsspeicher, Zuwachs gegen den unveränderten Lauf, Anwendbarkeit geprüft. Vorlage steht in `proof-release-safety.mjs:659-678`. Heute gibt es für diese Zusage **null** Gegenproben. |
+
+### 24.6 Urteil dieser Prüfung
+
+**Punkt 1 — O-FH: Nacharbeit.** Abweichung 2 (`b?`) ist **bestätigt** und tragend; der Wortlaut von
+A-A-33 wird auf sie berichtigt. Abweichung 1 hat einen echten Anlaß — `appdata.rs:241` macht die
+wörtliche Umsetzung falsch rot —, aber der Satz, mit dem sie ihre Schärfe behauptet, ist gemessen
+falsch. Ein gewöhnliches `'"'` genügt, und die Weigerung schweigt; dahinter steht ein vierter,
+ungeprüfter Aufrufort für `open`, und der Lauf sagt in seiner Schlußzeile, es gebe genau drei.
+Die Behebung ist zwei kleine Änderungen groß, beide sind gemessen, beide erzeugen keinen falschen
+Alarm (A-A-37). Dazu A-A-38, weil zwei Verstümmelungen alle 25 Gegenproben überleben und die
+ernstere genau die Form trifft, die der Erbauer selbst als nächste erwartet.
+
+**Punkt 2 — O-FD: freigegeben mit Auflage, für beide Läufe.** Die Voraussetzung des Auftrags trifft
+nicht zu: Beide lesen einen Syntaxbaum, nicht Text mit angenommener Form; die Klasse aus T-176-1
+gibt es dort nicht. `proof:callers` ist darüber hinaus der **Maßstab** dieses Vorhabens für die
+Frage „merkt der Lauf, daß er blind ist" — zwei Herleitungen derselben Zahl, Unauflösbares macht
+rot, echte Gegenproben mit Zuwachsmessung. Beide haben trotzdem je eine Stelle, an der eine
+ausgesprochene Zusage nicht gemessen wird: bei `proof:foreign` der Verlust der Herkunft an einer
+Zusicherung und an einem fremden Parameter, bei `proof:callers` die Zusage, daß es keinen zweiten
+Weg zum Dienst gibt — gemessen mit dem Ausdruck, der in dieser Werkstatt schon einmal als blind
+befunden und anderswo bereits ersetzt wurde. Keiner der beiden Punkte hindert die Auslieferung.
+
+**Punkt 3 — O-FO: Empfehlung, keine Entscheidung.** Die Sicherheit verlangt die Doppelpunktregel
+**an der Hülle**, auf jeder Plattform, unverändert. Sie verlangt sie **nicht an der Tür**: Wer
+einen solchen Pfad einschleusen will, nimmt VG-1 oder VG-3 und damit nie die Tür. Was die Tür
+beiträgt, ist die Auskunft im Augenblick der Eingabe — und genau deshalb rate ich von „die Tür
+warnt nur" ab: Das verlegt die Absage hinter einen Klick und macht aus einer Regel zwei Wahrheiten.
+Empfohlen ist, es vorerst zu lassen; wird gelockert, dann an beiden Stellen aus einer Entscheidung,
+mit `proof:attachment-parity` als Messung, auf beiden Läufern — und **nach** T-183-1.
+
+**Der Satz dieser Prüfung.** Eine Auflage, die an einer Stelle abweicht, ist nicht deshalb falsch,
+weil sie abweicht — beide Abweichungen hier hatten einen Anlaß, und eine ist besser als der
+Wortlaut. Aber eine Abweichung ruht auf einem Satz, und dieser Satz ist ab dem Augenblick, in dem
+er im Quelltext steht, eine **Zusage über die Zukunft**. Zweimal in drei Wellen war er falsch, und
+beide Male stand er da, wo niemand ihn messen konnte, weil er wie eine Begründung aussah.
+**Wo ein Wächter etwas begründet, statt es zu messen, gehört die Begründung in die nächste
+Gegenprobe.**
+
+---
+
+## 25. Prüfung T-189 (2026-09-06) — die dritte und die vierte Umgehung derselben Weigerung, und ein Wächter der Barrierefreiheit, der die Hälfte nicht ansieht
+
+**Auftrag.** Zwei Punkte. Erstens die Nachmessung der Auflagen **A-A-37** und **A-A-38**, die
+T-183 gestellt und T-173-3 gebaut hat — sie entscheidet die Abnahme von Punkt 1 der Prüfung T-183.
+Zweitens **O-GH**: Wie viele der 480 Farbpaare aus `apps/web/scripts/contrast-check.mjs` prüfen
+einen Wert, den keine Klasse zeichnet — und, die gefährlichere Richtung, wie viele Klassen zeichnen
+eine Farbe, die kein Paar prüft.
+
+### 25.0 Stand der Werkzeuge
+
+Wie in T-176 und T-183: gemessen am Verhalten, außerhalb des Bestands. Der Spiegel liegt unter
+`/tmp/t189-spiegel` mit derselben Verzeichnisform, die `proof-shell-surface.mjs` erwartet
+(`apps/desktop/scripts`, `src-tauri/src` als echte Kopie, `capabilities`, `tauri.conf.json`,
+`apps/web/src`, `build-app.mjs` und `packages/domain/src/version.ts` als Verweise). Er liefert
+**zeichengleich** dieselben 44 Zeilen wie der Bestand — `diff` ohne Ausgabe, beide Code 0, beide
+**6 Prüfungen und 28 Gegenproben, 0 blind**. Das ist der Beleg, daß er dasselbe mißt.
+
+Alle Kunstquellen und alle elf Verstümmelungen sind dort entstanden und dort geblieben; im Baum
+wurde **keine** Datei angefaßt. `proof:all` nicht gefahren (E-083 Punkt 3). Guardian und 42Crunch
+nicht erneut versucht (E-079 Punkt 3). Die Lieferkette nicht erneut gemessen (E-079, T-B06).
+
+### 25.1 A-A-37 und A-A-38 — jede Zahl des Erbauers nachgemessen
+
+#### 25.1.1 Die elf Verstümmelungen, einzeln gegen den unveränderten Bestand
+
+Jede als Textersatz an genau einer Stelle, jede einzeln gefahren, danach die unveränderte Fassung
+zurückgestellt. Die Spalte „gemeldet" ist die Tabelle aus `.claude/team/reports/T-173-3-frontend-dev.md`.
+
+| Verstümmelung | gemeldet | **gemessen** |
+|---|---|---|
+| A — Ausschluß bis Dateiende | 0 rot, 2 blind | **0 rot, 2 blind** ✓ |
+| B — Ende an der ersten Klammer | 1 rot, 1 blind | **1 rot, 1 blind** ✓ |
+| C — Klammern in Zeichenketten zählen mit | 0 rot, 1 blind | **0 rot, 1 blind** ✓ |
+| D — Klammern in Kommentaren zählen mit | 1 rot, 1 blind | **1 rot, 1 blind** ✓ |
+| E — Weigerung ausgebaut | 0 rot, 3 blind | **0 rot, 3 blind** ✓ |
+| F — Attributausdruck auf `any(test, …)` geweitet | 0 rot, 1 blind | **0 rot, 1 blind** ✓ |
+| G — Weigerung auf dem Urtext statt auf dem Gerüst | 1 rot (falscher Alarm) | **1 rot, 0 blind** ✓ |
+| **H — `#+` statt `#*`** | 0 rot, 1 blind (A-A-38) | **0 rot, 1 blind — A-A-38** ✓ |
+| **I — `b?` gestrichen** | 0 rot, 1 blind (A-A-38) | **0 rot, 1 blind — A-A-38** ✓ |
+| **J — `stripRustStrings` ohne Zeichenliteral** | 0 rot, 2 blind (A-A-37) | **0 rot, 2 blind** — es sind die Gegenproben „ein Zeichenliteral `'"'` nimmt der Weigerung nicht die Sicht" und „Zeichenliteral und geschachtelter Kommentar verstecken keinen Aufrufort" ✓ |
+| **K — `stripRustComments` mit Fahne statt Zähler** | 0 rot, 2 blind (A-A-37) | **0 rot, 2 blind** — „ein geschachtelter Blockkommentar nimmt ihr die Sicht ebenso wenig" und dieselbe letzte ✓ |
+
+**Elf von elf stimmen, Zahl für Zahl und Gegenprobe für Gegenprobe.** J und K sind der Kern: Sie
+stellen genau den Zustand her, in dem T-183 den Lauf grün gemessen hat, und er ist jetzt rot — ohne
+daß eine Kunstquelle im Bestand liegen muß. Die Behauptung des Erbauers, der tragende Satz stehe
+jetzt im Gegenprobenteil statt in der Prosa, ist damit **hergestellt und belegt**.
+
+#### 25.1.2 Die drei Kunstquellen aus 24.1.2 und 24.1.3
+
+Je einzeln als `src-tauri/src/kunst.rs` in den Spiegel gelegt:
+
+| Kunstquelle | vor T-173-3 (T-183 gemessen) | **jetzt gemessen** |
+|---|---|---|
+| 24.1.2 — `'"'`, `r#"a"b"#`, vierter Aufrufort | grün, Code 0, 6/25/0 | **Code 1, Weigerung** ✓ |
+| 24.1.2 — dieselbe Bauart mit fremder Adresse | grün, Code 0 | **Code 1, Weigerung** ✓ |
+| 24.1.3 — geschachtelter Blockkommentar | grün, Code 0 | **Code 1, Weigerung** ✓ |
+
+Kein falscher Alarm auf `appdata.rs`; der Bestand bleibt grün.
+
+**A-A-37 und A-A-38 sind damit erfüllt, in dem Umfang, in dem sie gestellt waren.**
+
+### 25.2 Die Frage zum dritten Mal — und es sind zwei weitere Wege
+
+Gefragt war, ob ein **dritter** Weg aus dem Takt der beiden Textwerkzeuge existiert, den auch die
+28 Gegenproben nicht sehen. Der Erbauer schließt ihn ausdrücklich nicht aus. **Es gibt zwei, beide
+gemessen, beide ohne jede Änderung am Lauf.**
+
+#### 25.2.1 Weg 3 — die rohe **C**-Zeichenkette `cr"…"` / `cr#"…"#`
+
+Rust kennt seit 1.77 C-Zeichenketten (`c"…"`) und ihre rohe Form (`cr"…"`, `cr#"…"#`). Die
+Weigerung sucht mit `RAW_STRING_OPENER = /\bb?r#*"/` (`proof-shell-surface.mjs:395`). Der Ausdruck
+verlangt eine Wortgrenze **vor** `b?r`. Vor dem `r` in `cr` steht mit `c` ein Wortzeichen — **es
+gibt dort keine Grenze, und der Ausdruck trifft nicht.** Beide Textwerkzeuge kennen die rohe Form
+ohnehin nicht und laufen an ihr aus dem Takt.
+
+Kunstquelle, in `src-tauri/src/` gelegt:
+
+```rust
+#[cfg(test)]
+mod tests {
+    const ROH: &std::ffi::CStr = cr#"a"b"#;
+}
+
+#[tauri::command]
+pub fn takt_heimlich(app: AppHandle, url: String) -> Result<(), String> {
+    app.shell().open(url, None).map_err(|e| e.to_string())?;
+    let _ = "https://boese.example/x";
+    Ok(())
+}
+```
+
+**Gemessen: `proof:shell-surface` bleibt grün, Beendigungscode 0, 6 Prüfungen und 28 Gegenproben,
+0 blind** — und die Schlußzeile zählt wieder genau drei Aufruforte auf, während ein vierter samt
+fremder Adresse danebensteht. Die Zwischenwerte: `RAW_STRING_OPENER` trifft **weder** den Urtext
+(`false`) **noch** das Gerüst (`false`); im Gerüst ist alles ab `cr#"` Zeichenkettenrumpf:
+
+```
+    const ROH: &std::ffi::CStr = cr#" "b"
+                 ← ab hier geleert, die ganze Funktion samt open()
+            "https:
+    Ok(())
+```
+
+Dieselbe Wirkung hat `cr"C:\Users\Public\"` (ebenfalls gemessen, Code 0, grün): Der abschließende
+Rückstrich frißt für das Werkzeug die schließende Anführung, weil es in einer **rohen**
+Zeichenkette keine Fluchtfolgen gibt — der Fall aus Verstümmelung H, nur mit dem Präfix, das
+niemand aufgezählt hat.
+
+**Das ist zeichengenau dieselbe Bauart wie Befund T-183-2, einen Buchstaben weiter.** Dort war es
+`b?`, das im Wortlaut fehlte; hier ist es `c`, das in keiner Fassung je stand.
+
+#### 25.2.2 Weg 4 — das Zeichenliteral mit Fluchtfolge, **ganz ohne rohe Zeichenkette**
+
+Beide Werkzeuge erkennen das Zeichenliteral mit `/^'(\\.|[^'\\])'/` (`:285`, `:365`). Der Ausdruck
+kennt genau zwei Rümpfe: ein Zeichen, oder ein Rückstrich und ein Zeichen. Rusts Fluchtfolgen sind
+länger: `'\x22'` und `'\u{22}'` sind gültige Schreibweisen für dasselbe Anführungszeichen, und
+**keine von beiden trifft der Ausdruck.** Beide Apostrophe bleiben dann stehen und gelten als
+Lebenszeit — und der schließende paart sich mit dem nächsten Apostroph zu einem **Scheinliteral**.
+Danach öffnet die folgende Anführung eine Zeichenkette, die nie zugeht.
+
+Kunstquelle, vollständig — mehr steht nicht darin:
+
+```rust
+pub const TRENNER: [char; 2] = ['\u{22}','"'];
+
+#[tauri::command]
+pub fn takt_heimlich(app: AppHandle, url: String) -> Result<(), String> {
+    app.shell().open(url, None).map_err(|e| e.to_string())?;
+    let _ = "https://boese.example/x";
+    Ok(())
+}
+```
+
+Das Werkzeug liest `','` als Zeichenliteral (Komma), verschiebt sich damit um ein Zeichen und
+nimmt die Anführung des echten `'"'` als Beginn einer Zeichenkette. **Gemessen: grün, Code 0,
+6/28/0** — vierter Aufrufort und fremde Adresse unsichtbar, im Gerüst nachgeprüft.
+
+**Warum dieser Weg schwerer wiegt als Weg 3:** In der Datei steht **keine rohe Zeichenkette**. Die
+Weigerung aus A-A-33 kann hier gar nicht greifen, gleich wie ihr Ausdruck lautet — sie schaut nur
+auf rohe Zeichenketten. Der ganze Riegel A-A-33/A-A-37/A-A-38 liegt neben der Tür.
+
+**Der Auslöser, genau bestimmt** (je gemessen): Es genügt nicht die Fluchtfolge allein. Nötig ist,
+daß hinter dem schließenden Apostroph mit **genau einem** Zeichen Abstand ein weiterer Apostroph
+folgt.
+
+| Schreibweise | Wirkung |
+|---|---|
+| `['\u{22}','"']` | **blind** |
+| `['\u{22}', '"']` (mit Leerzeichen) | sichtbar |
+| `matches!(c, '\u{201C}'\|'"')` | **blind** |
+| `matches!(c, '\u{201C}' \| '"')` | sichtbar |
+| `['\x22','"']` | **blind** |
+| `const A: char = '\u{22}';` allein | sichtbar |
+
+Ein Formatierer setzte das Leerzeichen und nähme dem Weg die Wirkung — **`cargo fmt` wird in
+diesem Vorhaben nirgends erzwungen**, weder in `package.json` noch in den Arbeitsläufen unter
+`.github/workflows/`. Auf diese Abwesenheit läßt sich keine Zusage stützen.
+
+**Nähe zum Bestand.** Zeichenliterale mit Fluchtfolge gibt es heute keine; die elf vorhandenen sind
+`'.'`, `':'`, `'-'`, `'\n'`, `'\0'`, `'?'`, `'#'`, `' '` und alle vom Ausdruck gedeckt.
+`attachment.rs` schreibt aber bereits `"https://exam\u{200b}ple.org/"` und
+`"https://example.org/\u{202e}gpj.exe"` (`:594` und die Zeilen darunter) — dieselbe Fluchtfolge, nur
+in einer Zeichenkette statt in einem Zeichenliteral. Die Datei, die unsichtbare Zeichen aus Namen
+entfernt, ist genau die, in der `'\u{202e}'` als Zeichenliteral als nächstes entsteht.
+
+#### 25.2.3 Was daraus folgt, und was ausdrücklich nicht
+
+Was **nicht** folgt: daß A-A-37 falsch war oder schlecht gebaut. Beide Auflagen sind vollständig
+und sauber erfüllt, die elf Verstümmelungen sitzen, die drei Kunstquellen sind rot.
+
+Was folgt: **Die Aufzählung ist als Verfahren am Ende.** Drei Wellen, vier Wege, jeder einzeln
+behoben, jeder einzeln gegengeprobt — und der jeweils nächste stand schon daneben. Genau das sagt
+E-063 Punkt 4 über diese Bauart, und 24.1.3 hat es für diese Klasse ausdrücklich vorhergesagt.
+
+**Eine allgemeine Eigenschaft statt einer Aufzählung habe ich gesucht und gemessen — sie trägt
+nicht.** Die naheliegende Fassung lautet: Weigere dich, wenn eines der Werkzeuge die Datei nicht
+im neutralen Zustand verläßt (offene Zeichenkette, `blockDepth > 0`). Gemessen über alle acht
+Rust-Dateien des Bestands und über alle sechs Kunstquellen: **Der Bestand ist neutral — und alle
+sechs Kunstquellen sind es auch.** Die Anführungen gehen in jedem der Fälle zufällig gerade auf.
+Die Eigenschaft findet nichts und steht deshalb hier als **gemessener Fehlschlag** und nicht als
+Vorschlag.
+
+Was trägt, sind zwei kleine, je gemessene Berichtigungen und eine offene Entscheidung
+(**A-A-41**, **A-A-42**, **A-A-43** in 25.5).
+
+### 25.3 O-GH — die 480 Farbpaare gegen die Klassen, die sie zu bewachen behaupten
+
+**Anlaß.** Beim Nachtrag zu T-181 trug `contrast-check.mjs` ein Paar unter dem Namen
+„Einstellungsschiene", das `--border-accent` maß, während die Fläche `--accent-border-subtle`
+zeichnete. Der Lauf war grün und sagte über das Produkt nichts. Das ist die Klasse aus A-A-33 und
+A-A-37 — ein Wächter, der etwas zusichert, was er nicht mißt —, nur in der Barrierefreiheit.
+
+**Wie gemessen wurde.** Die Paarliste wird aus `apps/web/scripts/contrast-check.mjs` als Literal
+ausgewertet (240 Paare, mal zwei Farbmodi = **480**). Dagegen gehalten: jede Deklaration in
+`apps/web/src/styles/{app,base,components,showcase}.css` und jedes `var(--…)` in den `.ts`/`.tsx`
+unter `apps/web/src`, aufgeteilt danach, ob der Token in einer **Vordergrund**-Eigenschaft steht
+(`color`, `border*-color`, `outline-color`, `fill`, `stroke`, `accent-color`, Kurzformen) oder in
+einer **Flächen**-Eigenschaft (`background*`). Farbtoken werden von Maßtoken über ihren Wert in
+`packages/ui-tokens/tokens.css` getrennt.
+
+Grundzahlen: **222** Token deklariert, **69** von Paaren genannt (48 als Vordergrund, 30 als
+Fläche), **143** von den Klassen gezeichnet.
+
+#### 25.3.1 Erste Richtung — Paare, die einen Wert prüfen, den keine Klasse zeichnet: **null**
+
+**0 von 480.** Alle 69 Token, die die Paarliste nennt, werden von mindestens einer Klasse
+gezeichnet. Der Anlaßfall ist behoben: `--accent-border-subtle` steht seit dem Nachtrag selbst in
+der Liste (`contrast-check.mjs:400`, als `exempt`, „Rahmen der Exportkopfzeile, rein abgrenzend").
+
+**Und genau hier gehört die Einschränkung hin, damit die Null nicht mehr behauptet, als sie
+trägt.** Diese Messung ist **tokengenau, nicht flächengenau**. Der Anlaßfall war ein Fehler der
+zweiten Art: Der Token `--border-accent` **wird** gezeichnet, nur nicht auf der Fläche, für die das
+Paar ihn maß. Eine tokengenaue Messung hätte ihn nie gefunden, und sie findet auch heute keinen
+seinesgleichen. Wer wissen will, ob ein Paar die richtige Fläche mißt, braucht die aufgelöste
+Kaskade — und die hat niemand. **Die Null ist eine Untergrenze, nicht die Antwort.**
+
+#### 25.3.2 Zweite Richtung — Klassen, die eine Farbe zeichnen, die kein Paar prüft: **15 Token**
+
+Die gefährlichere Richtung, weil dort ein zu geringer Kontrast unbemerkt bleibt. Von den 15 sind
+vier ohne Kontrastfrage: `--shadow-xs`, `--shadow-sm`, `--shadow-lg` (je `box-shadow`) und
+`--bg-scrim` (die Abdunklung hinter dem Dialog). **Elf bleiben, und ich habe jede in ihrer
+gezeichneten Umgebung gemessen**, hell und dunkel, mit derselben Rechnung, die der Lauf benutzt:
+
+| Token, wo gezeichnet | gemessen gegen | hell | dunkel | Einordnung |
+|---|---|---:|---:|---|
+| `--danger-bg-hover` — `.btn--danger:hover` (`components.css:100`) | `--text-on-solid` | 9,00 | 11,45 | ausreichend |
+| `--danger-bg-active` — `.btn--danger:active` (`:105`) | `--text-on-solid` | 11,52 | 14,84 | ausreichend |
+| `--focus-ring-contrast` — `.on-solid:focus-visible` (`base.css:186`) | `--accent-bg` | 5,98 | 6,26 | ausreichend |
+| `--note-billing-bg` — `.note--billing .note__frame` (`:1387`) | `--text-primary` | 15,76 | 14,64 | ausreichend |
+| `--status-exported-border` — `.badge--exported` (`:397`) | `--bg-surface` | 8,93 | 11,41 | ausreichend |
+| `--success-border` — `.chip--success` (`:538`) | `--bg-surface` | 1,50 | 2,04 | trägt keine Grenze |
+| `--danger-border` — `.chip--danger` (`:548`) | `--bg-surface` | 1,66 | 1,79 | trägt keine Grenze |
+| `--note-internal-border` — `.note` (`:1319`) | `--bg-surface` | 1,46 | 1,57 | trägt keine Grenze |
+| `--note-billing-border` — `.note--billing` (`:1325`) | `--bg-surface` | 1,53 | 1,98 | trägt keine Grenze |
+| `--timer-idle-border` — `.timer` (`:1201`) | `--bg-surface` / `--bg-subtle` | 1,46 / 1,30 | 1,57 / 1,43 | trägt keine Grenze |
+| **`--status-reopened-hatch`** — `.badge--reopened` (`:409`) | `--status-reopened-bg` | **1,24** | **1,45** | **Befund** |
+
+**Die fünf „trägt keine Grenze" sind kein Fehler, aber eine Lücke im Vertrag.** Ein Rahmen, dessen
+Aussage schon in Füllung und Schrift steht — und beide sind gemessen —, ist Zierde und fällt nicht
+unter SC 1.4.11. Das ist bei allen fünf so. Der Punkt ist ein anderer: **Für zwei Geschwister
+derselben Bauart ist diese Entscheidung aufgeschrieben, für die fünf nicht.** `--warning-border`
+steht als Merkposten im Lauf, mit den vier Zahlen und dem Satz, damit niemand die weichere Farbe
+„aus Konsistenz" zurückholt; `--accent-border-subtle` steht als `exempt`-Paar. Die fünf stehen
+nirgends. Wer morgen `.chip--danger` den Rahmen zur einzigen Unterscheidung macht, bekommt von
+keinem Lauf ein Wort.
+
+#### 25.3.3 Der Befund — die Schraffur, die ihre eigene Zusage nicht hält
+
+`components.css:401` sagt über das Etikett „Erneut offen" wörtlich:
+
+> *Erneut offen: Kontur plus Schraffur. Die Schraffur traegt die Unterscheidung auch dann, wenn
+> Farbe nicht wahrgenommen wird.*
+
+Eine Schraffur, die eine Unterscheidung **trägt**, ist ein grafisches Objekt, das zum Verständnis
+nötig ist — SC 1.4.11, 3:1. Gemessen: **1,24:1 hell, 1,45:1 dunkel** gegen ihre eigene Fläche,
+1,25:1 und 1,41:1 gegen die Karte. Ein Kontrastverhältnis von 1,24 ist eine Aussage über die
+Leuchtdichte: **In Graustufen ist diese Schraffur so gut wie nicht vorhanden.** Der Satz im
+Quelltext behauptet genau das Gegenteil, und **kein Paar mißt ihn.**
+
+**Und derselbe Fall ein zweites Mal**, mit einem Unterschied, der ihn schlimmer macht.
+`components.css:1329-1331` sagt über die gestreifte Randschiene des Leistungsfeldes:
+
+> *Zweites Merkmal neben der Farbe: Die Schiene des Leistungsfelds ist gestreift, die des Vermerks
+> einfarbig. Der Unterschied bleibt in Graustufen und bei Farbfehlsichtigkeit bestehen (R-08,
+> SC 1.4.1).*
+
+| gemessen | hell | dunkel |
+|---|---:|---:|
+| `--note-billing-rail-stripe` gegen `--note-billing-rail` (der Streifen gegen die Schiene) | **1,76** | **1,98** |
+| `--note-billing-rail` gegen `--note-internal-rail` (die zwei Schienen gegeneinander) | **1,71** | **1,31** |
+
+Hier sind **beide** Token in der Paarliste — aber beide nur gegen `--bg-surface`, also gegen die
+Karte. **Gegen einander, und das ist die Frage, für die sie zitiert werden, mißt sie niemand.**
+Das Ergebnis: Die Farbe unterscheidet die zwei Feldarten mit 1,71:1 und 1,31:1, das zweite Merkmal
+mit 1,76:1 und 1,98:1. Beide Träger sind schwach, und der Satz über Graustufen und
+Farbfehlsichtigkeit hält gemessen nicht.
+
+**Warum das nicht kosmetisch ist.** Die Unterscheidung zwischen **Leistung** und **Vermerk** ist
+die zwischen einem Feld, das in die Abrechnung geht, und einem, das intern bleibt (E-016). Sie
+gehört zu den wenigen Stellen der Oberfläche, an denen Verwechslung Kundendaten in einen Export
+trägt oder eine Leistung nicht abgerechnet läßt. Ein Wächter, der zwei Farben je gegen eine dritte
+mißt und nie gegeneinander, sagt über diese Unterscheidung nichts.
+
+#### 25.3.4 Dritte Richtung, gemessen und verworfen — die Rolle
+
+Elf Token werden in einer Rolle gezeichnet, in der kein Paar sie mißt. **Zehn davon sind ein
+Fehler meiner Einteilung, kein Befund:** Marker und Punkte (`--status-*-marker`,
+`--timer-running-pulse`) werden mit `background-color` gezeichnet, weil sie kleine gefüllte Flächen
+sind; ihre Füllung **ist** ihr Vordergrund, und die Paare messen sie richtig als solchen. Ebenso
+`--accent-bg-*` als `border-color`. Bleibt `--border-subtle` als Trennlinienfläche
+(`components.css:2312`) — Zierde. **Diese Richtung ergibt keinen Befund; sie steht hier, damit
+niemand sie ein zweites Mal fährt.**
+
+### 25.4 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-189-1** | **muß** | **Dritter Weg an der Weigerung vorbei: die rohe C-Zeichenkette.** `cr"…"` und `cr#"…"#` (Rust ≥ 1.77) bringen beide Textwerkzeuge aus dem Takt, und `RAW_STRING_OPENER = /\bb?r#*"/` (`proof-shell-surface.mjs:395`) trifft sie nicht, weil vor dem `r` in `cr` keine Wortgrenze steht. Gemessen: Kunstquelle im Baum, Lauf **grün, Code 0, 6/28/0**, vierter Aufrufort für `open` und fremde Adresse unsichtbar, `RAW_STRING_OPENER` auf Urtext **und** Gerüst `false`. Zeichengleiche Bauart wie T-183-2. Gegenmittel: **A-A-41**. | frontend-dev |
+| **T-189-2** | **muß** | **Vierter Weg, und er braucht gar keine rohe Zeichenkette.** `/^'(\\.\|[^'\\])'/` (`:285`, `:365`) kennt Rusts Fluchtfolgen `\x22` und `\u{22}` nicht; beide Apostrophe bleiben stehen, der schließende paart sich mit dem nächsten zu einem Scheinliteral, die folgende Anführung öffnet eine Zeichenkette, die nie zugeht. Gemessen mit `['\u{22}','"']` als **einziger** Zutat: **grün, Code 0, 6/28/0**. Der Riegel A-A-33/37/38 liegt hier neben der Tür, weil er nur auf rohe Zeichenketten schaut. `cargo fmt` wird nirgends erzwungen. Gegenmittel: **A-A-42**. | frontend-dev |
+| **T-189-3** | Hinweis | **A-A-37 und A-A-38 sind erfüllt.** Elf von elf Verstümmelungen nachgemessen, jede Zahl und jede blinde Gegenprobe stimmt; die drei Kunstquellen aus 24.1.2/24.1.3 erzeugen die Weigerung, Code 1; kein falscher Alarm auf `appdata.rs`; Spiegel und Bestand zeichengleich. | Einordnung |
+| **T-189-4** | Hinweis | **Die allgemeine Eigenschaft trägt nicht.** „Weigere dich, wenn ein Werkzeug die Datei nicht neutral verläßt" findet über alle acht Rust-Dateien und alle sechs Kunstquellen **nichts** — die Anführungen gehen jedes Mal zufällig auf. Gemessener Fehlschlag, kein Vorschlag. Was bleibt, ist ein voller Zerleger (**A-A-43**) — eine Entscheidung, keine Zeile. | Orchestrator |
+| **T-189-5** | **soll** | **Die Schraffur hält ihre eigene Zusage nicht.** `components.css:401` sagt, die Schraffur trage die Unterscheidung auch ohne Farbwahrnehmung; gemessen **1,24:1** hell und **1,45:1** dunkel gegen ihre eigene Fläche. Kein Paar prüft `--status-reopened-hatch`. Gegenmittel: **A-A-44**. | frontend-dev / ui-designer |
+| **T-189-6** | **soll** | **Die gestreifte Schiene ebenso, und sie trennt Leistung von Vermerk (E-016).** `components.css:1329-1331` beruft sich auf Graustufen und Farbfehlsichtigkeit. Gemessen: Streifen gegen Schiene **1,76 / 1,98**, die zwei Schienen gegeneinander **1,71 / 1,31**. Beide Token stehen in der Paarliste — aber nur gegen `--bg-surface`, nie gegeneinander. Gegenmittel: **A-A-44**. | frontend-dev / ui-designer |
+| **T-189-7** | soll | **Fünfzehn gezeichnete Farben ohne jedes Paar**, elf davon mit Kontrastfrage (25.3.2). Fünf Rahmen liegen zwischen 1,30 und 2,04:1 und tragen deshalb keine Grenze — richtig, aber **nirgends aufgeschrieben**, während dieselbe Entscheidung für `--warning-border` und `--accent-border-subtle` im Lauf steht. `--focus-ring-contrast` ist die zugänglichkeitskritischste Farbe des Systems und hat kein Paar (mißt 5,98/6,26, also ausreichend). Gegenmittel: **A-A-45**. | frontend-dev |
+| **T-189-8** | Hinweis | **Erste Richtung: null von 480** — kein Paar nennt einen Token, den keine Klasse zeichnet. Die Zahl ist tokengenau und damit eine **Untergrenze**: Der Anlaßfall (richtiger Token, falsche Fläche) wäre von ihr nicht gefunden worden. Wer die Frage flächengenau beantworten will, braucht die aufgelöste Kaskade. | Einordnung |
+
+### 25.5 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-41** | Die Weigerung erkennt die rohe Zeichenkette **an ihrer Bauart statt an einer Liste von Präfixen**. In Rust berührt ein Bezeichner eine Anführung nur als Literalpräfix; die rohe Form ist genau die, deren Präfix auf `r` endet. Der Ausdruck lautet deshalb `/(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*?r#*"\|(?<![A-Za-z0-9_])r#*"/` — er deckt `r`, `br`, `cr` und **jedes künftige Präfix**; `b"…"` und `c"…"` bleiben unberührt, weil sie gewöhnliche Zeichenketten mit gewöhnlichen Fluchtfolgen sind. Kein `g`-Merker, aus dem Grund, der bei `:395` schon steht. | Gemessen, beide Richtungen: **kein falscher Alarm** über alle acht Rust-Dateien des Bestands (auch nicht auf `attachment.rs:531`/`:594`, die `b""` tragen), und **alle sechs** Formen werden getroffen — `r"…"`, `r#"…"#`, `br"…"`, `br#"…"#`, `cr"…"`, `cr#"…"#`. Gegenproben: die vier aus A-A-38 plus **zwei neue** für `cr"…"` und `cr#"…"#`. Verstümmelungsprobe: Wer `r` aus dem Ausdruck streicht oder die Rückschau entfernt, muß eine Gegenprobe blind machen. |
+| **A-A-42** | Der Ausdruck für das Zeichenliteral kennt **Rusts vollständige Fluchtfolgen-Grammatik**. Sie ist geschlossen und kurz, also ist das eine vollständige Aufzählung und keine offene: `/^'(\\u\{[0-9a-fA-F]{1,6}\}\|\\x[0-9a-fA-F]{2}\|\\.\|[^'\\\n])'/`. Er tritt an **beiden** Stellen an die Stelle des heutigen (`:285` und `:365`), damit die zwei Werkzeuge nicht wieder auseinanderlaufen. Das `\n` in der letzten Alternative hält die Lebenszeit weiterhin draußen. | Gemessen: `'a'`, `'\n'`, `'\0'`, `'\''`, `'\"'` unverändert getroffen; `'\x22'`, `'\u{22}'`, `'\u{1F600}'` **neu** getroffen; ein unabgeschlossenes `'a` weiterhin **nicht**. Zwei Gegenproben, beide heute blind: die Kunstquelle `['\u{22}','"']` mit viertem Aufrufort und fremder Adresse (verlangt: beide gefunden), und dieselbe mit `'\x22'`. Verstümmelungsprobe: Wer den Ausdruck auf die alte Fassung zurücksetzt, macht beide blind. |
+| **A-A-43** | **Entscheidung, keine Zeile:** Ob `proof:shell-surface` einen vollen Zerleger für Rust bekommt. Vier Wege in drei Wellen, jeder einzeln behoben und einzeln gegengeprobt, der jeweils nächste stand daneben; die allgemeine Eigenschaft ist gemessen und trägt nicht (T-189-4). Solange nicht entschieden ist, steht im Kopf des Laufs, **daß** die Reichweite an einer Aufzählung hängt und daß diese Aufzählung viermal unvollständig war — dort, wo heute die Begründung steht. | Keine Messung; eine Entscheidung des Orchestrators. Die Kosten der Alternative sind bekannt: A-A-41 und A-A-42 sind zusammen zwei Ausdrücke und vier Gegenproben. |
+| **A-A-44** | `contrast-check.mjs` bekommt die vier Paare, für die sich der Quelltext auf Graustufen und Farbfehlsichtigkeit beruft: `--status-reopened-hatch` gegen `--status-reopened-bg` (min 3), `--note-billing-rail-stripe` gegen `--note-billing-rail` (min 3), `--note-billing-rail` gegen `--note-internal-rail` (min 3) und `--focus-ring-contrast` gegen `--accent-bg` (min 3). Fällt eines durch, wird **entweder** der Tokenwert berichtigt **oder** der Satz im Quelltext zurückgenommen, der die Zusage macht — beides ist zulässig, keines von beiden stillschweigend. | Vier Paare, drei davon heute unter dem Mindestwert: 1,24/1,45 · 1,76/1,98 · 1,71/1,31. Das vierte (5,98/6,26) besteht und wird aufgenommen, weil der Fokusring die zugänglichkeitskritischste Farbe des Systems ist. |
+| **A-A-45** | `contrast-check.mjs` mißt **seine eigene Vollständigkeit**. Der Lauf liest `apps/web/src/styles/**`, sammelt jeden Token, der dort in einer farbtragenden Eigenschaft steht, und wird **rot**, sobald einer davon in keinem Paar vorkommt — es sei denn, er steht in einer Ausnahmeliste **mit Grund**, wie sie `--warning-border` und `--accent-border-subtle` heute schon haben. Damit heißt „480 Paare bestanden" nicht mehr nur „diese 480 stimmen", sondern „und es wird nichts gezeichnet, das keines von ihnen ansieht". Das ist A-A-33 eine Sprache weiter: lieber verweigern als still durchgehen. | Zwei Gegenproben: (1) ein Token in eine Klasse geschrieben, den kein Paar nennt → der Lauf muß rot werden; (2) ein Paar aus der Liste gestrichen → derselbe Token wird unbedeckt, der Lauf muß rot werden. Die Ausgangslage ist gemessen: **15 Token** sind heute unbedeckt, davon vier ohne Kontrastfrage (drei Schatten, ein Scrim). Die Grenze der Messung gehört in den Kopf des Laufs: Sie ist **tokengenau, nicht flächengenau** — der Fall aus dem Nachtrag zu T-181 (richtiger Token, falsche Fläche) bliebe unentdeckt. |
+
+### 25.6 Urteil dieser Prüfung
+
+**Punkt 1 — die Nachmessung von A-A-37 und A-A-38: abnahmefähig.** Elf von elf Verstümmelungen
+liefern gegen meinen Spiegel Zahl für Zahl das, was der Erbauer berichtet, bis hinunter zu der
+Frage, **welche** Gegenprobe blind wird; die drei Kunstquellen aus 24.1.2 und 24.1.3 erzeugen die
+Weigerung; der Bestand bleibt grün und `appdata.rs` löst nichts aus. Der Satz, auf dem die
+Abweichung von T-173-2 ruhte, steht nicht mehr in der Prosa, sondern in vier Gegenproben — und J
+und K zeigen, daß er rot wird, sobald ihn jemand wieder aufgibt. **Punkt 1 der Prüfung T-183 ist
+damit abgenommen.**
+
+**Punkt 2 — die Frage zum dritten Mal: die Antwort ist zum dritten Mal ja, und diesmal zweimal.**
+`cr"…"` geht an der Weigerung vorbei, weil ihr Ausdruck ein Präfix aufzählt statt eine Bauart zu
+beschreiben. `['\u{22}','"']` geht an ihr vorbei, weil sie nur rohe Zeichenketten ansieht und in
+der Datei keine steht. Beide sind gemessen, beide lassen den Lauf **grün, Code 0, 6/28/0**, und
+beide lassen einen vierten Aufrufort für `open` samt fremder Adresse im Baum stehen, während die
+Schlußzeile drei aufzählt. Das sind zwei neue Befunde der Schwere **muß** — **nicht** eine Rücknahme
+der Abnahme aus Punkt 1.
+
+**Und deshalb ausdrücklich zu E-088 Punkt 4: die Wiedervorlage wird nicht frei.** Die Bedingung
+dort lautet nicht „A-A-37 ist gebaut", sondern: der Satz „`check_file` ist die einzige Kontrolle vor
+dem Prozeßstart" darf nicht länger auf einem Wächter ruhen, der nachweislich grün bleibt, während
+ein vierter Aufrufort danebensteht. **Diese Bedingung ist heute noch nicht erfüllt** — sie ist
+zweimal neu verletzt, mit zwei Kunstquellen, die diesen Bericht gemessen begleiten. Die
+Wiedervorlage wird frei, wenn A-A-41 und A-A-42 gebaut sind und ihre sechs Gegenproben stehen; das
+ist zusammen weniger Arbeit als A-A-37 war. Bis dahin gilt E-088 Punkt 1 unverändert weiter, und
+das kostet nichts als einen Doppelpunkt in einem Dateinamen unter Linux.
+
+**Punkt 3 — O-GH: Nacharbeit, in der zweiten Richtung.** Die erste Richtung ist null, und die Null
+ist ehrlich nur als Untergrenze zu haben. Die zweite trägt: **15 gezeichnete Farben ohne Paar**,
+und zweimal darunter beruft sich der Quelltext ausdrücklich auf eine Wirkung — die Schraffur des
+Etiketts „Erneut offen" und der Streifen der Leistungsschiene —, die **gemessen 1,24:1 und 1,76:1**
+beträgt und die er deshalb nicht hat. Der zweite Fall trennt Leistung von Vermerk und damit das,
+was in die Abrechnung geht, von dem, was intern bleibt.
+
+**Der Satz dieser Prüfung.** Ein Wächter, der eine Klasse durch Aufzählung deckt, ist so weit
+verläßlich, wie jemand die Klasse überblickt hat — und dieser Überblick wird in dem Augenblick zur
+Zusage, in dem der Wächter grün leuchtet. Viermal in drei Wellen war er unvollständig, und jedes
+Mal war die nächste Lücke einen Buchstaben entfernt: `b`, dann `#`, dann `c`, dann `\u`. **Wo ein
+Wächter aufzählt, gehört die Aufzählung selbst in eine Gegenprobe — oder an ihre Stelle die
+Bauart.**
+
+---
+
+## 26. Nachmessung T-189/2 (2026-09-06) — A-A-41 und A-A-42 in gebauter Form, der fünfte Weg, und ein Kriterium statt eines Berichts
+
+**Auftrag.** Nachmessung der Auflagen A-A-41 und A-A-42 (gebaut in T-173-4), Beurteilung der
+Gegenprobe mit `9r"x"`, und die Frage nach einem fünften Weg. Spiegel wie in 25.0; nach dem
+Einspielen der neuen Fassung liefert er `diff`-frei dieselbe Ausgabe wie der Bestand, beide Code 0,
+beide **6 Prüfungen und 31 Gegenproben, 0 blind**. `proof:all` nicht gefahren (E-083 Punkt 3),
+Guardian und 42Crunch nicht erneut versucht (E-079 Punkt 3).
+
+### 26.1 A-A-41 und A-A-42 sind erfüllt
+
+**Fünfzehn Verstümmelungen, fünfzehn Treffer**, und zwar nicht nur nach Zahl, sondern nach
+**welcher** Gegenprobe blind wird: L2 (Rückschau entfernt) → „A-A-41: die Rückschau"; M (Ausdruck
+zurück auf T-173-3) → „alle sechs Formen"; N (Zeichenliteral zurück) → „A-A-42: Fluchtfolgen";
+J (`stripRustStrings` ohne Zeichenliteral) → **drei** blind, die zwei aus A-A-37 und die aus A-A-42.
+L1 (`r` aus dem Ausdruck gestrichen) → 1 rot und 8 blind.
+
+**Sieben Kunstquellen, je Code 1.** Die fünf mit roher Zeichenkette über die Weigerung; die zwei
+Fluchtfolgen-Quellen (`['\u{22}','"']`, `['\x22','"']`) über den **gefundenen** vierten Aufrufort
+samt fremder Adresse — dort kann die Weigerung strukturell nicht greifen, der Lauf mußte die Datei
+also richtig lesen. Beide Ausdrücke sind zeichengleich aus A-A-41 und A-A-42 übernommen
+(`proof-shell-surface.mjs:291` und `:467`).
+
+### 26.2 Die Gegenprobe `9r"x"` — ehrlich benannt, aber keine Verhaltens-Gegenprobe
+
+Die Rückschau `(?<![A-Za-z0-9_])` ist gegen **gültiges** Rust wirkungslos. Gemessen: mit und ohne
+sie verglichen über alle acht Rust-Dateien des Bestands, je im Urtext und im Gerüst, und über 23
+gültige Schreibweisen — **null Unterschiede**. Der Unterschied entsteht nur, wenn dem `r` eine
+reine Ziffernfolge unmittelbar vorangeht, und genau das lehnt der Übersetzer ab: `rustc --edition
+2021` meldet für `9r"x"` einen Syntaxfehler und für `a9r"x"` ``prefix `a9r` is unknown``; `cr"x"`
+dagegen lexiert sauber (nur `E0308`). Hinzu kommt: Ohne die Rückschau trifft der Ausdruck **mehr**
+Texte, der Lauf verweigert also **mehr** Dateien — er wird strenger, nie milder, und ein falscher
+Alarm auf dem Bestand entsteht nicht (L2: 0 Prüfungen rot).
+
+**Folgerung.** L2 war nie eine Schwächung. Eine Verstümmelung, die an keiner Eingabe etwas ändert,
+welche die Sprache erzeugen kann, **soll** die Gegenproben überleben. Sie mit `9r"x"` zu beantworten
+macht aus einer Verhaltens-Gegenprobe eine **Festschreibung des Quelltextes** — sie sagt nur noch,
+daß diese Zeichen im Ausdruck noch stehen —, und sie zählt ununterschieden in „31 Gegenproben, 0
+blind". Der Wert dieser Liste hängt daran, daß jeder Eintrag mit „ja, und hier ist der Verstoß, den
+sie gefangen hätte" beantwortbar ist. **Hinweis, keine Nacharbeit**: Die Anmerkung im Quelltext
+nennt die Quelle ausdrücklich künstlich, und damit ist der Maßstab aus T-183 („die zulässige
+Ausnahme wird benannt statt erschlichen") gewahrt. Berichtigt wird die Einordnung, nicht die
+Absicht (**A-A-48**).
+
+### 26.3 Der fünfte Weg — das Zeichenliteral außerhalb der BMP
+
+`CHAR_LITERAL` (`:291`) trägt keinen `u`-Merker; ohne ihn trifft `[^'\\\n]` genau **eine
+UTF-16-Einheit**. Ein Zeichen oberhalb von U+FFFF steht als Ersatzpaar, also als zwei — der Rumpf
+paßt nicht, beide Apostrophe bleiben als vermeintliche Lebenszeit stehen, der schließende paart
+sich mit dem nächsten zu einem Scheinliteral, und die folgende Anführung öffnet eine Zeichenkette,
+die nie zugeht. **Derselbe Mechanismus wie T-189-2, eine Kodierungsebene tiefer.**
+
+Die ganze Kunstquelle:
+
+```rust
+pub const TRENNER: [char; 2] = ['😀','"'];
+```
+
+Dahinter ein vierter Aufrufort für `open` und `https://boese.example/x`. **Gemessen: grün,
+Beendigungscode 0, 6 Prüfungen und 31 Gegenproben, 0 blind**, und Prüfung 3 meldet wörtlich
+„3 namentliche Aufruforte für `open`, jeder mit seiner Prüfung".
+
+**Die Kontrollprobe:** dieselbe Datei, dasselbe Zeichen, andere Schreibweise. `['\u{1F600}','"']`
+→ **Code 1**, Aufrufort und Adresse gefunden. Ein Zeichen, zwei Schreibweisen, entgegengesetzte
+Ergebnisse.
+
+**Nähe zum Bestand: geringer als bei allen vier Vorgängern.** Der Rust-Anteil trägt heute kein
+einziges Zeichen oberhalb der BMP; das Nicht-ASCII dort ist durchweg BMP. Der Befund bleibt
+trotzdem **muß**, weil das Ergebnis dasselbe ist — ein grüner Lauf, der drei Aufruforte zusichert,
+während vier dastehen — und weil die Behebung **ein Zeichen** kostet (A-A-46, gemessen: Bestand
+grün ohne falschen Alarm, drei Kunstquellen rot, Längentreue erhalten).
+
+### 26.4 Neunzehn Formen, achtzehn gefangen — die Klasse ist erstmals begrenzt
+
+Damit die Frage nach dem sechsten Weg nicht wieder an der Vorstellungskraft des Prüfers hängt, ist
+die lexikalische Grammatik der Rust-Referenz **vollständig** durch den Lauf gefahren worden, je
+eine Kunstquelle mit einer Anführung im Rumpf und demselben vierten Aufrufort dahinter:
+Zeichenliteral (`'"'`, `'\u{22}'`, `'\x22'`, `'😀'` allein), Byteliteral (`b'"'`, `b'\x22'`),
+Zeichenkette, Bytezeichenkette, C-Zeichenkette, die drei rohen Formen, Zeilen-, Block- und
+geschachtelter Blockkommentar, Lebenszeit, Fortsetzungszeile und `['\u{22}','"']`.
+
+**Achtzehn rot, eine grün** — und die eine ist `['😀','"']`. Damit ist „gibt es einen sechsten
+Weg?" erstmals eine **begrenzte** Frage.
+
+### 26.5 Befunde
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-189-9** | **muß** | Fünfter Weg: `['😀','"']`. Lauf **grün, Code 0, 6/31/0**, Prüfung 3 sichert drei Aufruforte zu, während vier dastehen. Kontrollprobe mit derselben Zeichenkodierung als Fluchtfolge: Code 1. Gegenmittel **A-A-46**. | frontend-dev |
+| **T-189-10** | Hinweis | `9r"x"` mißt den Ausdruck, nicht die Sprache; null Unterschiede über acht Dateien und 23 Schreibweisen, `rustc` lehnt den Unterschiedsfall ab. Gegenmittel **A-A-48**. | frontend-dev |
+| **T-189-11** | Hinweis | A-A-41 und A-A-42 erfüllt; fünfzehn von fünfzehn und sieben von sieben nachgemessen. | Einordnung |
+| **T-189-12** | Hinweis | Neunzehn lexikalische Formen gefahren, achtzehn gefangen. Gegenmittel **A-A-47**. | frontend-dev |
+
+### 26.6 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-46** | `CHAR_LITERAL` bekommt den `u`-Merker (oder `[\uD800-\uDBFF][\uDC00-\uDFFF]` als weitere Alternative), damit ein Zeichen oberhalb der BMP als **ein** Zeichen gilt. | Gemessen: Bestand grün ohne falschen Alarm (6/31/0); `['😀','"']` mit und ohne fremde Adresse **rot**; `['\u{1F600}','"']` unverändert rot; `'a'`, `'ä'`, `'字'`, `'\n'`, `'\0'`, `'\''`, `'\x22'`, `'\u{22}'` unverändert getroffen; `'a`, `'a str`, `'static` unverändert nicht. Längentreue erhalten (`'😀'` → UTF-16-Länge 4). Eine Gegenprobe, heute blind: `['😀','"']` mit viertem Aufrufort **und** fremder Adresse. |
+| **A-A-47** | Die Reichweite wird an einer **geschlossenen** Liste gemessen statt an der Erfindungskraft des jeweiligen Prüfers: je eine Kunstquelle für **jede** lexikalische Form der Rust-Referenz, in der eine Anführung vorkommen kann. Der Kopf des Laufs nennt diese Liste als das, woran seine Reichweite gemessen ist — an die Stelle der Aufzählung der bisher gefundenen Wege. | Die neunzehn Läufe aus 26.4 sind die Ausgangsmessung: achtzehn gefangen, eine blind. Die Liste ist der Referenz entnommen und damit endlich und nachprüfbar. |
+| **A-A-48** | Die Gegenprobe „A-A-41: die Rückschau" wird aus der Zählung genommen — eigene Rubrik oder ersatzlos. Die Rückschau selbst **bleibt**. Daneben steht das hier Gemessene. | 26.2. |
+
+### 26.7 Urteil
+
+**Punkt 1 aus T-183 bleibt abgenommen.** A-A-41 und A-A-42 sind vollständig und sauber erfüllt;
+an der Arbeit aus T-173-4 ist nichts zu beanstanden.
+
+**Die Wiedervorlage aus E-088 Punkt 4 wird nicht frei.** Die Bedingung dort lautet wörtlich: der
+Satz „`check_file` ist die einzige Kontrolle vor dem Prozeßstart" darf nicht länger auf einem
+Wächter ruhen, *der nachweislich grün bleibt, während ein vierter Aufrufort danebensteht*. Mit
+`['😀','"']` bleibt er nachweislich grün, Code 0, und sagt dabei „3 namentliche Aufruforte". Die
+Bedingung ist wörtlich verletzt.
+
+**Und damit das nicht ein viertes Mal so ausgeht, gehört der Ausweg in dieselbe Zeile.** Eine
+Bedingung, die an einem Negativbeweis hängt — „dem Prüfer ist nichts mehr eingefallen" —, kann
+niemand erfüllen. **Vorschlag an den Orchestrator, als Entscheidung:** Die Wiedervorlage wird frei,
+wenn **A-A-46 gebaut und A-A-47 erfüllt** ist. Das ist geschlossen und abhakbar; erfüllt ist es
+heute zu 18 von 19, und es fehlt ein Zeichen im Ausdruck sowie die Aufnahme der neunzehn Quellen
+in den Gegenprobenteil.
+
+**Der Satz dieser Nachmessung.** Fünf Wege in vier Wellen, jeder gefunden, jeder behoben, jeder
+gegengeprobt — und jedes Mal war die Antwort auf „gibt es noch einen?" ein Bericht statt eines
+Kriteriums. **Eine Aufzählung hört erst dann auf, ein Risiko zu sein, wenn sie von außen kommt:
+nicht aus dem, was ein Prüfer sich vorstellen konnte, sondern aus der Grammatik der Sprache, die
+der Wächter zu lesen behauptet.**
+
+---
+
+## 27. Nachmessung T-189/3 (2026-09-06) — der Wächter ist zu
+
+**Auftrag.** Nachmessung von A-A-46, A-A-47 und A-A-48 (gebaut in T-173-5) und die Entscheidung
+über E-088 Punkt 4 in der Fassung von E-089. Spiegel wie in 25.0; er liefert `diff`-frei dieselbe
+Ausgabe wie der Bestand, beide Code 0, beide **6 Prüfungen und 49 Gegenproben, 0 blind**.
+`proof:all` nicht gefahren; Guardian und 42Crunch nicht erneut versucht.
+
+### 27.1 A-A-47 ist erfüllt — neunzehn zu neunzehn
+
+Die Ausgabe trägt **19** Zeilen `A-A-47: <Form>`, eins zu eins mit der Aufstellung aus 26.4, ohne
+Rest. Die Kunstquellen sind die **echten**: `RUST_LEXICAL_FORMS` setzt für die entscheidende Form
+`['😀','"']` **ohne Leerzeichen nach dem Komma**, also mit genau der Apostrophpaarung, die den Takt
+bricht — ein Leerzeichen hätte die Probe trivial bestehen lassen. `lexicalFormProbe` hängt an jeden
+Kopf denselben vierten Aufrufort für `open` samt fremder Adresse und verlangt bei sechzehn Formen
+**beide** Befunde, bei den drei rohen die Weigerung.
+
+**Eine blinde Zeile nennt die Form.** Verstümmelung **O** (`u`-Merker gestrichen) macht **genau
+eine** Gegenprobe blind, und sie lautet `A-A-47: Apostrophpaarung mit einem Zeichen oberhalb
+U+FFFF`. **L2** (Rückschau entfernt) ergibt Code 0, 0 rot, 0 blind — wie A-A-48 es erwartet.
+Einundzwanzig Verstümmelungen gefahren, alle gemeldeten bestätigt; E, I, M, J, K und N nennen die
+gefallene Form beim Namen. Neun Kunstquellen, neun rot, darunter der fünfte Weg mit und ohne
+fremde Adresse und die Kontrollprobe `['\u{1F600}','"']`.
+
+### 27.2 Beißen alle neunzehn? Dreizehn ja, sechs nicht — und das ist kein Mangel
+
+Sechs weitere Verstümmelungen eigens für diese Frage: **Q** (Zeilenkommentar-Zweig entfernt) und
+**T** (Blockkommentar-Zweig entfernt) machen die zugehörige Formprobe blind; **R** (Fluchtzeichen
+in `stripRustStrings` entfernt) macht Zeichenkette, Bytezeichenkette und C-Zeichenkette zugleich
+blind; **P** (Zeichenliteral überbreit) macht eine **Prüfung rot** statt einer Probe blind.
+
+Sechs Proben habe ich unter keiner der 21 Verstümmelungen blind bekommen: die drei
+Zeichenliteral-Formen **allein** (`\u{…}`, `\x…`, oberhalb U+FFFF), das Byteliteral mit `\x…`, die
+Fortsetzungszeile und die Lebenszeit. **Für vier ist der Grund gemessen:** Ein alleinstehendes,
+unverstandenes Zeichenliteral hinterläßt zwei lose Apostrophe und **keine Anführung** — es bricht
+nichts. N nimmt dem Ausdruck `\u{…}` und `\x…`, O nimmt ihm das Zeichen oberhalb U+FFFF, und keine
+der drei „allein"-Proben wird blind, wohl aber die zugehörigen **Apostrophpaarungen**. Jeder
+Mechanismus der Liste ist damit von mindestens einer beißenden Probe gedeckt; die Lebenszeit
+schützt die Gegenrichtung und ist über P gedeckt.
+
+**Einordnung, kein Befund:** „49 Gegenproben, 0 blind" führt jetzt Proben unterschiedlicher Kraft
+in einer Zahl. Anders als bei A-A-48, wo eine Probe **nie** beißen konnte, können hier sechs es
+**derzeit** nicht — der Unterschied ist erheblich und wird nicht eingeebnet. Empfehlung: in der
+Kopfzeile vermerken, welche Form eine paarige beißende Probe hat (T-189-14).
+
+### 27.3 Die Liste stammt aus der Referenz, nicht aus der Sprache
+
+Der Erbauer hat das selbst benannt und in den Kopf des Laufs geschrieben. **Ein Satz im Kopf reicht
+nicht ganz** — das ist genau die Bauart, die in diesem Faden fünfmal nachgegeben hat, und ich bin
+an 24.6 gebunden: *wo ein Wächter etwas begründet, statt es zu messen, gehört die Begründung in die
+nächste Gegenprobe.*
+
+`apps/desktop/src-tauri/Cargo.toml:5-6` erklärt `edition = "2021"` und `rust-version = "1.82"`.
+Eine `rust-toolchain.toml` gibt es nicht, die Arbeitsläufe legen keine Fassung fest, örtlich läuft
+`rustc 1.89.0` — und **nirgends steht, gegen welches Rust die Liste gelesen wurde**. Der billige
+Wächter darüber ist **A-A-49**. Die Referenz zur Laufzeit zu holen ist ausgeschlossen: das wäre
+eine zweite Adresse außerhalb `127.0.0.1` und damit eine Aufhebung von E-001.
+
+**Größenordnung, damit das nicht überzeichnet wird:** Rust hat in einem Jahrzehnt **eine** neue
+Literalform bekommen (`c"…"` / `cr"…"`, stabil seit 1.77). Das Restrisiko ist echt, aber langsam,
+und seine Folge ist genau die Klasse, die diese Liste findbar macht. Deshalb **soll**, nicht muß.
+
+### 27.4 Befunde und Auflage
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-189-13** | Hinweis | A-A-46, A-A-47, A-A-48 erfüllt und nachgemessen: 19 von 19 Formen als eigene, namentlich benannte Probe; O macht genau eine blind und nennt sie; L2 wie erwartet Code 0/0/0; 21 Verstümmelungen, 9 Kunstquellen. | Einordnung |
+| **T-189-14** | Hinweis | Sechs der 19 Proben unter keiner Verstümmelung blind; für vier ist der Grund gemessen und harmlos. Empfehlung: paarige Deckung in der Kopfzeile vermerken. | frontend-dev |
+| **T-189-15** | soll | Die Bindung der Liste an die Referenz ist ein Satz, keine Messung; nirgends steht, gegen welches Rust sie gelesen wurde. Gegenmittel **A-A-49**. | frontend-dev |
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-49** | Der Lauf liest `edition` und `rust-version` aus `apps/desktop/src-tauri/Cargo.toml` und wird **rot**, sobald einer der Werte von dem abweicht, gegen den `RUST_LEXICAL_FORMS` geprüft ist; daneben steht die `rustc`-Fassung, mit der die Referenz gelesen wurde, und die Grenze: `rust-version` ist die untere Schranke, nicht die Baufassung. Die Referenz zur Laufzeit zu holen ist **ausgeschlossen** (E-001). | Zwei Gegenproben: `edition` auf `2024` → rot; `rust-version` auf `1.90` → rot. Ausgangslage: `2021` / `1.82`, örtlich `rustc 1.89.0`, keine Toolchain-Festlegung. |
+
+### 27.5 Urteil
+
+**A-A-46, A-A-47 und A-A-48 sind erfüllt.**
+
+**Die Wiedervorlage aus E-088 Punkt 4 in der Fassung von E-089 wird frei.** E-089 Punkt 1 nennt die
+Bedingung — A-A-46 gebaut, A-A-47 erfüllt —, und beides ist nachgemessen. Von der Sicherheitsseite
+steht der Doppelpunktfrage als Entscheidungsvorlage nichts mehr im Weg. **T-189-14 und T-189-15
+sind Hinweise für die nächste Welle und ausdrücklich kein Vorbehalt gegen diese Freigabe**; ich
+habe das Kriterium selbst vorgeschlagen und hänge keine Bedingung daran, die vorher nicht dastand.
+
+**Der Satz dieser Nachmessung.** Fünf Wege in fünf Wellen, und was den Faden beendet hat, war nicht
+der sechste Fund, sondern der Wechsel der Frage: von „ist jemandem noch etwas eingefallen" zu
+„steht jede Form der Referenz da". Die erste kann niemand beantworten, die zweite war in einer
+Welle abgehakt. **Ein Wächter wird nicht dadurch vollständig, daß man länger sucht, sondern
+dadurch, daß sein Maßstab von außerhalb kommt.**
+
+---
+
+## 28. Prüfung T-206 (2026-09-06) — eine Abnahme, die nie stattgefunden hat, und drei Läufe an derselben Frage
+
+**Auftrag.** Zwei Punkte. **O-HF:** SP-09 aus `docs/design/textbestand.md` wartet seit T-177 auf
+eine Stellungnahme von dieser Seite, und es gibt keine — die Abnahme in T-189/3 betraf den
+Codepunkt-Wächter im Rust-Anteil, nicht `NoteField`. **O-GV:** Gilt die Weigerungsregel aus A-A-33
+sinngemäß auch für `proof:openapi`, `proof:route-policy` und `proof:template-fields`? Die Frage
+steht seit T-183 offen; ich hatte sie selbst gestellt und nur die zwei beauftragten Läufe geprüft.
+
+### 28.0 Wie gemessen wurde
+
+Wie in T-176, T-183 und T-189: am Verhalten, außerhalb des Bestands. Ein Spiegel unter `/tmp` mit
+dem vollständigen Baum, ein Verweis auf den echten Modulbestand, die drei Läufe zuerst dort gegen
+den unveränderten Baum. **Die Prüfzeilen des Spiegels sind zeichengleich mit denen des Bestands**
+(gemessen über eine Prüfsumme aller `ok`/`FEHL`-Zeilen: `proof:template-fields` 30/0,
+`proof:route-policy` 40/0, `proof:openapi` 110/0 — beide Seiten dieselbe Summe). Kunstquellen und
+Verstümmelungen sind im Spiegel entstanden und dort geblieben; nach jeder Messung ist der Spiegel
+zurückgesetzt und gegen die Ausgangszahlen nachgefahren worden.
+
+**`proof:all` nicht gefahren** (E-083 Punkt 3), Guardian und 42Crunch **nicht** erneut versucht
+(E-079 Punkt 3) — **elftes** Mal ohne Werkzeug. Gesucht wurde über die versionierten Dateien
+(`git grep`), weil im Arbeitsbaum Bauergebnisse mit veralteten Abschriften liegen.
+
+---
+
+### 28.1 O-HF — SP-09, und was von ihm fallen darf
+
+**Was SP-09 heute ist.** Sechs Texte in `apps/web/src/components/NoteField.tsx`, drei je Feldart:
+Kopfband, Marke (nur für Vorlesehilfen, im `<label>`), Fußnote (`help`, über `aria-describedby`
+verbunden).
+
+| Träger | Wortlaut | Zeichen |
+|---|---|---|
+| Kopfband Leistung | „Verlässt Takt · steht in der Abrechnung" | 39 |
+| Marke Leistung | „Wird exportiert" | 15 |
+| Fußnote Leistung | „Wird beim Export an das Abrechnungstool übertragen und steht dort auf der Rechnung des Kunden. Standardvorlage: Feld „Notiz“." | **125** |
+| Kopfband Vermerk | „Bleibt in Takt" | 14 |
+| Marke Vermerk | „Wird nicht exportiert" | 21 |
+| Fußnote Vermerk | „Bleibt in Takt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage." | **80** |
+
+Die vorgemerkte Kürzung gilt der **Fußnote der Leistung**; die Aufnahme führt sie als
+„**SP-09 Kürzung** `NoteField.tsx:50` (falls gewollt) | spec-ux-reviewer **und**
+security-checker | E-016, R-06, R-08". Die Zeilennummer ist veraltet, gemeint ist der Satz mit 125
+Zeichen. Anlaß ist Regel S-05: „**Höchstens 80 Zeichen, solange er dauerhaft sichtbar ist.** Alles
+darüber ist entweder zustandsgebunden (T1) oder es fällt."
+
+#### 28.1.1 Was die Zusicherung des Vermerks wirklich trägt
+
+Bevor über den Satz zu urteilen ist, war zu messen, ob er allein steht. Er steht nicht allein —
+die Grenze selbst ist **sechsfach** gebaut, und fünf der sechs Schichten sind gemessen:
+
+1. **Typ der Domäne.** `ExportSourcePath` kennt keinen Notizpfad; `ExportGroup` und
+   `ExportCandidate` tragen das Feld nicht.
+2. **Zweiter Typwächter am Katalog.** `apps/local-api/src/usecases/export-catalog.ts` führt
+   `NoteSourceIsNotPublished` als `Assert<…>` — „Übersetzungsfehler, sobald ein Notizpfad wählbar
+   würde."
+3. **Die Auswahlliste, wörtlich verglichen.** `packages/export/src/sources.ts`: „**Ohne jede
+   Normalisierung.**" Gemessen an der gebauten Funktion: `todo.note` und `todo.internalNote`
+   ergeben `export_source_forbidden`, ebenso `Todo.CallNumber` und `" todo.callNumber "`; nur die
+   wörtliche Form kommt durch.
+4. **Der Renderer, wenn man die Prüfung umgeht.** Mit einer Gruppe, der ich das Feld `todoNote`
+   angehängt habe, und der Quelle `todo.note` liefert `renderExportGroup`
+   `{"Notiz":null,"Call":"TCK-000009"}` — kein Wert, nicht der Vermerk.
+5. **Durch den HTTP-Stapel.** `proof:export-api`: „der Vermerk als Quelle ergibt
+   `export_source_forbidden`".
+6. **In der geschriebenen Datei.** `proof:export`: „der interne Vermerk steht nirgends in der Datei
+   (A-7.2, R-06)", dazu `packages/export/test/note-boundary-property.test.ts`.
+
+**Daraus folgt für die Fußnote des Vermerks: Sie sagt die Wahrheit, und die Wahrheit ist
+durchgesetzt.** Das ist kein Grund, sie zu streichen — es ist der Grund, warum sie stehenbleiben
+darf, ohne eine Zusage zu machen, die der Code nicht hält.
+
+#### 28.1.2 Welcher Satz von SP-09 die Grenze allein trägt
+
+Über die versionierten Dateien gesucht, im **Produkt** (die Musterseite unter `showcase/**` zeigt
+ein Beispiel und ist kein Träger):
+
+- **„Rechnung des Kunden"** kommt in der Oberfläche genau **einmal** vor: in dieser Fußnote. Kein
+  anderer Text im Produkt nennt den **Empfänger** des Leistungstextes.
+- **„Wird nie exportiert — auch nicht über eine eigene Exportvorlage"** kommt genau **einmal** vor.
+  Kein anderer Text im Produkt sagt dem Benutzer, daß die Zusicherung eine selbstgebaute
+  Exportvorlage überlebt.
+- **Kein Prüffall und kein Nachweispfad hält heute einen dieser sechs Texte fest.** Weder
+  `tests/e2e/**` noch ein `proof:`-Lauf nennt „Verlässt Takt", „Bleibt in Takt", „Rechnung des
+  Kunden" oder „eigene Exportvorlage".
+
+#### 28.1.3 Urteil zu SP-09
+
+**SP-09 bleibt. Von den sechs Texten darf genau einer gekürzt werden, und zwar um genau einen
+Satz.**
+
+| Träger | Urteil von dieser Seite |
+|---|---|
+| Kopfband beider Feldarten | **muß stehen.** Das Paar Sicht/Gehör; die Datei selbst begründet bei „Merkmal 1 und 4 tragen auch dann, wenn das Kopfband abgeschnitten ist" |
+| Marke beider Feldarten | **muß stehen.** Sie ist der einzige Träger im **Namen** des Feldes und damit das, was eine Vorlesehilfe vor der Eingabe ansagt |
+| Fußnote Vermerk, ganz | **muß stehen, unverändert.** 80 Zeichen, also innerhalb von S-05; der zweite Halbsatz ist die einzige Antwort des Produkts auf R-06 |
+| Fußnote Leistung, Satz 1 („… und steht dort auf der Rechnung des Kunden.") | **muß stehen, einschließlich der Empfängerangabe** |
+| Fußnote Leistung, Satz 2 („Standardvorlage: Feld „Notiz“.") | **darf fallen** — unter drei Bedingungen |
+
+**Warum Satz 1 nicht angetastet werden darf.** Er ist eine **Folge**, keine Mechanik. Streicht man
+„und steht dort auf der Rechnung des Kunden", bleibt „wird übertragen" — eine Aussage über einen
+Vorgang innerhalb der Werkzeugkette. Genau die Verwechslung, die R-08 „der wahrscheinlichste
+Bedienfehler in diesem Produkt" nennt und die „erst in der Abrechnung sichtbar" wird, hängt daran,
+daß der Benutzer beim Tippen weiß, wer mitliest. Es ist außerdem die **einzige** Stelle im Produkt,
+an der das dasteht, und sie steht am Ort der Eingabe — die Warnung des Exportbildschirms (SP-10)
+kommt an, wenn der Text längst geschrieben ist.
+
+**Warum Satz 2 fallen darf.** Er nennt eine **Zuordnung**, keine Grenze: daß der Schlüssel `Notiz`
+in der Datei die Leistung meint (A-8.2, E-016). Ein Irrtum darüber kann **keinen** Vermerk
+exportieren — das verhindern die sechs Schichten aus 28.1.1 —, er kann nur eine falsche Vorstellung
+darüber erzeugen, was in einer Datei steht, die man ohnehin lesen kann. Und die Zuordnung steht
+bereits dort, wo sie gebraucht wird: `export-catalog.ts` gibt zur Quelle `group.bookingNotes` den
+Satz „Die Leistungstexte aller enthaltenen Buchungen, vom Dienst zu einem Text zusammengeführt.
+**Die Quelle für das Feld „Notiz“ der Standardvorlage.**" aus, und `TemplateFields.tsx` zeigt ihn
+im Vorlageneditor als `hint` beziehungsweise als `sourceInfo(...)?.description`. Am Notizfeld ist
+der Satz damit ein **D** zum Editor, nicht ein **F** an seinem Ort.
+
+**Die drei Bedingungen.** Ich lege hier keine Fassung vor; verfassen und genehmigen in einer Hand
+geht nach E-078 Punkt 3 nicht. Ich nenne, woran eine Fassung zu messen ist:
+
+- **B-1 — die Kürzung stellt S-05 nicht her, und das ist offen zu sagen.** Ohne Satz 2 bleiben
+  **94** Zeichen, die Grenze liegt bei 80. Wer die Kürzung vorlegt, sagt dazu, welchen der drei
+  Ausgänge von S-05 er nimmt. Eine weitere Kürzung **zu Lasten der Empfängerangabe** ist von dieser
+  Zustimmung **nicht** gedeckt.
+- **B-2 — der Ausgang „zustandsgebunden" ist für dieses Feld versperrt.** S-05 sagt: „Ein Hinweis,
+  der nur in einem Zustand gilt, steht nur in diesem Zustand — und dann **auch** nicht in
+  `aria-describedby`." Für die Fußnote der Leistung hieße das: Der einzige hörbare Träger vor der
+  Eingabe wäre die Marke „Wird exportiert" — sie sagt **daß**, nicht **wohin**. **UM-01 darf auf
+  `NoteField` nicht angewendet werden**, solange die Empfängerangabe nur in der Fußnote steht.
+- **B-3 — Satz 2 darf nur fallen, solange der Editor die Zuordnung nennt.** Der Satz in
+  `export-catalog.ts` ist heute durch nichts festgehalten. Fällt er, ist die Zuordnung nirgends
+  mehr im Produkt. Dazu die Auflage **A-A-50**.
+
+**Nicht berührt:** die Fußnote des Vermerks, beide Kopfbänder, beide Marken, `NoteField.required`
+(das ist O-FX/T-184 und gehört nicht hierher) und die Reihenfolge der sechs Merkmale.
+
+---
+
+### 28.2 O-GV — dieselbe Frage an drei weitere Läufe
+
+**Die Regel, um die es geht.** A-A-33: Ein Lauf, der über einen Bestand urteilt, **weigert sich**,
+wenn er den Bestand nicht lesen kann, und meldet das als Befund — statt grün zu bleiben über etwas,
+das er nicht gesehen hat. Für die drei Läufe hier ist die Regel zu übersetzen, denn keiner von
+ihnen liest Quelltext als Text: Alle drei **führen** den zusammengebauten Dienst aus. Die
+sinngemäße Fassung lautet deshalb:
+
+> **Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat.** Eine Aufzählung,
+> die still schrumpfen kann, eine Menge, die leer sein darf, und ein Angriff, der nicht ankommt,
+> sind dieselbe Blindheit wie ein Zerleger, der aus dem Takt gerät.
+
+Gemessen wurde nach diesem Maßstab, mit Kunstquelle und Verstümmelung, wie fünfmal zuvor.
+
+#### 28.2.1 Befund: eine Route, die beide Läufe nicht sehen (T-206-1)
+
+`proof-route-policy.mjs` und `proof-openapi.mjs` fragen den Dienst nach seiner eigenen Routenliste
+und filtern beide mit **derselben Zeile** und beinahe demselben Kommentar:
+
+- `proof-route-policy.mjs`: „`Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*` und
+  sind keine Endpunkte — alles mit konkreter Methode ist einer." → `if (route.method === 'ALL') continue;`
+- `proof-openapi.mjs`: „`Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*`." →
+  `if (route.method === 'ALL') continue;`
+
+Der Satz stimmt für Kettenglieder. Er stimmt **nicht** für `app.all(...)` und `app.on('ALL', …)` —
+Hono trägt beides mit derselben Methode ein, und der Filter wirft es mit weg.
+
+**Kunstquelle, im Spiegel gemessen.** Eine Zeile in `app.ts`, unmittelbar vor
+`app.route(API_BASE_PATH, api)`:
+
+```ts
+api.all('/addin/leak', (c) => c.json({ data: { leak: 'GEHEIMER-INTERNER-VERMERK' } }));
+```
+
+Gemessen mit dem echten Add-in-Token durch die vollständige Kette:
+
+| Aufruf | Ergebnis |
+|---|---|
+| `GET /api/v1/addin/leak` mit **Add-in-Token** | **200**, `{"data":{"leak":"GEHEIMER-INTERNER-VERMERK"}}` |
+| dasselbe mit Sitzungsgeheimnis | 200 |
+| dasselbe ohne gültigen Nachweis | 401 |
+
+**Und beide Läufe bleiben grün.** `proof:route-policy` **40 bestanden, 0 fehlgeschlagen, Code 0**;
+`proof:openapi` **110/0, Code 0**. Dabei stehen vier Zusicherungen im Klartext da, und alle vier
+sind in diesem Augenblick falsch:
+
+- „die Routenliste des Dienstes ist auslesbar und vollständig (70 Operationen)" — es sind 71.
+- „die Add-in-Fläche sind genau vier Routen (4)" — es sind fünf.
+- „keine Route gibt es nur im Dienst" — eine schon.
+- „beide Seiten führen dieselbe Zahl (70)" — sie führen sie nicht.
+
+**Warum das die schwerste der vier Beobachtungen ist.** `proof:route-policy` existiert wegen
+B-2.10 und schreibt sich selbst zu: „Wer künftig eine Route registriert, ohne sie unter `/addin` zu
+hängen, bekommt sie hier automatisch mitgeprüft — und wenn sie offen steht, wird dieser Lauf rot,
+ohne dass jemand daran gedacht haben muss." Genau das leistet er für eine ganze Registrierungsart
+nicht. Die Fläche des Add-in-Tokens ist die Fläche, die ein **entwendetes** Token erreicht (R-09);
+sie zu vermessen ist der einzige Zweck des Laufs. Daß `proof:openapi` an derselben Stelle blind ist,
+nimmt die zweite Chance: Die Route stünde auch in keiner Beschreibung, und 42Crunch — sobald es je
+läuft — liest die Beschreibung.
+
+**Heute liegt keine solche Route im Bestand.** Gemessen: der unveränderte Baum führt **10**
+`ALL`-Einträge, und **jeder** trägt einen Platzhalter im Pfad. Der Befund ist also kein Leck,
+sondern ein Wächter, an dem man vorbeigehen kann — dieselbe Art wie T-176-1, T-183-1, T-189-1.
+
+**Gegenmittel: A-A-51**, gebaut und in beide Richtungen gemessen (siehe 28.4).
+
+#### 28.2.2 Befund: die Zusicherung über den Vermerk prüft die leere Menge (T-206-2)
+
+`proof-openapi.mjs`, Abschnitt 6, prüft die Notiz-Grenze am gesamten Durchlauf:
+
+> „A-7.2, R-06 — der interne Vermerk verlässt seine eigene Route nicht. Der Durchlauf hat ihn beim
+> Anlegen zweier Todos mitgegeben. Er darf in genau zwei Antworten stehen: in der der Vermerksroute
+> selbst. Diese Probe kostet nichts, weil ohnehin jede Antwort eingesammelt wird — und sie misst
+> eine Zusicherung, die sonst nur behauptet wird."
+
+Der Test lautet `noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote')`. **Über
+der leeren Liste ist `every` wahr.** Die Zahl zwei, die der Kommentar nennt, wird nirgends geprüft.
+
+**Verstümmelung, gemessen.** Im Spiegel schreibt `service-scenario.mjs` an seinen drei Stellen
+statt `INTERNAL_NOTE` eine andere Zeichenkette — genau das, was passiert, wenn jemand den
+Durchlauf umbaut, ein Todo streicht oder die Vermerksroute den Text nicht mehr zurückgibt. Ergebnis:
+
+| Zustand | Antworten mit dem Vermerk | Lauf |
+|---|---|---|
+| Bestand | 2 (`getTodoNote`, `putTodoNote`) | 110/0 |
+| eine der drei Stellen umgeschrieben | 1 | **110/0** |
+| alle drei umgeschrieben | **0** | **110/0, Code 0** |
+
+Die Zeile sagt weiterhin „der interne Vermerk steht in keiner Antwort außer der Vermerksroute
+(A-7.2)" und hat nichts gemessen.
+
+**Das Gegenmittel steht im selben Lauf schon zweimal**, und dort ist es ausgeschrieben: Abschnitt 16
+prüft „die Klasse ist nicht leer — sonst prüfte alles Folgende die leere Menge", Abschnitt 8 prüft
+„es wurden genug Antworten verglichen (105, mindestens 60)". Für diese Zeile fehlt es.
+**Gegenmittel: A-A-52.**
+
+Einordnung: Die Grenze selbst ist damit **nicht** offen — 28.1.1 zählt sechs Schichten, fünf davon
+gemessen. Offen ist die Zusage dieses Laufs über sie. Deshalb **soll** und nicht **muß**.
+
+#### 28.2.3 Befund: die Aufzählung wird nur geprüft, wenn beide Seiten eine haben (T-206-3)
+
+`proof-openapi.mjs`, Abschnitt 3, hält jedes Rumpffeld der Beschreibung gegen das zod-Schema des
+Dienstes. Für die Zahlengrenzen zieht er ausdrücklich die einseitige Grenze:
+
+> „Eine Grenze, die der Dienst zieht, muss beschrieben sein — sonst läuft ein gültig aussehender
+> Aufruf in ein 422, das niemand angekündigt hat."
+
+Für die Aufzählung fehlt derselbe Satz. Der Vergleich beginnt mit
+`if (describedEnum !== undefined && enforcedEnum !== undefined)` — fehlt eine Seite, geschieht
+nichts.
+
+**Zwei Messungen, beide im Spiegel:**
+
+1. **Verstümmelung des Lesers.** Läßt der YAML-Leser jeden Schlüssel `enum` fallen, bleibt der Lauf
+   bei **110/0**. Zum Vergleich, derselbe Eingriff auf `maxLength`: **108/2**, und Abschnitt 0
+   nennt die Zahl („gelesen 39" statt 55). Auf `required`: **105/5**. Von den drei Facetten ist
+   allein die Aufzählung unverankert.
+2. **Kunstquelle in der Beschreibung.** In `takt-local-api.yaml` aus
+   `theme: { type: string, enum: [system, light, dark] }` ein `theme: { type: string }` gemacht —
+   der Dienst erzwingt weiter drei Werte, die Beschreibung sagt „irgendeine Zeichenkette". Lauf:
+   **110/0**. Umgekehrt, ein erfundener vierter Wert in der Beschreibung: **109/1**, „updateSettings.theme:
+   Aufzählung [dark|gestohlen|light|system] gegen [dark|light|system]".
+
+Die Aufzählung ist die **geschlossene Werteliste** einer Schnittstelle. Eine Beschreibung, die sie
+verschweigt, ist genau der Fehlertyp, gegen den dieser Lauf gebaut wurde (T-022, T-029, T-039), und
+sie ist zugleich das, was ein Prüfwerkzeug von außen — 42Crunch — als einzige Quelle hat.
+**Gegenmittel: A-A-53**, gebaut und in beide Richtungen gemessen.
+
+#### 28.2.4 Befund: drei Zusicherungen, die auch ohne den Angriff bestehen (T-206-4)
+
+`proof-template-fields.mjs`, Abschnitt 5, ist der wichtigste Teil des Laufs: die Vorlage wird per
+`INSERT` **an Oberfläche und Route vorbei** in die Datenbank gesetzt, danach der Dienst neu
+aufgebaut. Drei Zusicherungen dort halten nicht, was sie sagen:
+
+- `check('die Vorlage steckt an jeder Prüfung vorbei in der Datenbank', true);` — die Bedingung ist
+  wörtlich `true`. Es wird nichts nachgesehen.
+- „die Vorschau gegen die eingeschmuggelte Vorlage bricht ab" — Bedingung `preview.status >= 400`.
+- „der Exportlauf bricht ab, statt das Feld still auszulassen (B-3.1 Punkt 4)" — Bedingung
+  `run.status >= 400`.
+
+**Verstümmelung, gemessen.** Im Spiegel unterbleibt der `INSERT`; alles andere bleibt. Ergebnis:
+Die Vorlage existiert nicht, Vorschau und Lauf antworten **404** mit
+`{"error":{"code":"not_found","message":"Diese Exportvorlage gibt es nicht."}}` — und **alle drei
+Zusicherungen bestehen**. Der Lauf endet trotzdem rot (28/2, Code 1), aber an zwei ganz anderen
+Zeilen: den beiden Prüfungen über `error.details`, die T-046 aus einem anderen Anlaß hinzugefügt
+hat. **Der Lauf wird durch einen Zufall der Geschichte gerettet, nicht durch seine Anlage.**
+
+Zur Einordnung, ebenfalls gemessen: der Lauf hat sonst kräftige Zähne. Nimmt man im Spiegel die
+Feldnamenprüfung in `packages/export/src/template.ts` außer Kraft, wird er **17/13** — auf allen
+drei Ebenen, bis hin zu „es liegt keine Exportdatei im Ordner —
+takt-export-20260906-121504.json". Der Befund betrifft allein die Verankerung des fünften
+Abschnitts. **Gegenmittel: A-A-54**, gebaut und in beide Richtungen gemessen.
+
+#### 28.2.5 Wo ich nichts gefunden habe — und das ist ein Ergebnis
+
+Vier Stellen, an denen ich einen Befund erwartet und **keinen** bekommen habe. Sie stehen hier, weil
+ein gemessener Fehlschlag genauso zählt wie ein Fund:
+
+1. **Der YAML-Leser weigert sich bereits, und zwar seit T-039.** `openapi-reader.mjs` sagt es im
+   Kopf: „Er versteht sie streng und **wirft**, wo er etwas nicht kennt. Das ist der wichtige Teil
+   — ein Leser, der Unbekanntes überspringt, macht einen Nachweispfad grün, der nichts mehr misst.
+   Genau diese Sorte Grün ist der Grund, warum es T-039 gibt." Anker, Verweise, Dokumenttrenner,
+   mehrzeilige Flußausdrücke, Kommentare hinter einem Wert: allesamt ein Wurf. **Das ist die Regel
+   aus A-A-33, drei Wellen älter als A-A-33.**
+2. **Abschnitt 0 von `proof:openapi` prüft den Leser gegen den Rohtext**, nicht gegen eine
+   niedergeschriebene Zahl: Pfade, benannte Bauteile, `maxLength`, `$ref`. Gemessen: jede
+   Verstümmelung, die eine dieser vier Sorten verschluckt, wird rot, und der Text nennt die
+   Differenz. Eine doppelte Pfadzeile oder ein doppeltes Bauteil fällt aus demselben Grund auf.
+3. **Die Untergrenzen sind da, wo sie gebraucht werden.** `proof:route-policy` prüft
+   „die Routenliste des Dienstes ist auslesbar und vollständig", Bedingung `routes.length >= 60`,
+   und fährt in Abschnitt 5 die Gegenprobe: **keine** der Routen weist das Sitzungsgeheimnis ab.
+   Eine leere Aufzählung erfüllt beides nicht. `proof:openapi` prüft „es wurden genug Antworten
+   verglichen (105, mindestens 60)" und „jede der 70 beschriebenen Operationen wird mindestens
+   einmal angefahren".
+4. **Die Vermerksmessung in `proof:route-policy` ist positiv verankert** — anders als die in
+   `proof:openapi`. Sie legt ein Todo mit Vermerk an, prüft, daß die Oberfläche ihn liest, und erst
+   danach, daß das Add-in-Token ihn nicht bekommt. Fehlte der Vermerk, wäre der Lauf rot, bevor die
+   Sicherheitsaussage überhaupt drankommt. **So sieht die Zeile aus, die A-A-52 in `proof:openapi`
+   herstellen soll.**
+
+**Antwort auf O-GV.** Ja — sinngemäß, in der Fassung aus 28.2, und nicht als neue Bauart, sondern
+als drei benannte Löcher in vorhandenen Läufen. Als **allgemeine** Regel gilt sie in allen drei
+Läufen bereits an den meisten Stellen; ausgesprochen ist sie in keinem. Dazu **A-A-55**.
+
+---
+
+### 28.3 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-206-1** | **muß** | **Eine mit `all` registrierte Route ist für `proof:route-policy` und `proof:openapi` unsichtbar.** Beide filtern `if (route.method === 'ALL') continue;` mit der Begründung, `ALL` seien Kettenglieder. Gemessen: `api.all('/addin/leak', …)` im Baum — mit dem Add-in-Token **200** samt Rumpf, `proof:route-policy` **40/0 Code 0**, `proof:openapi` **110/0 Code 0**, dabei vier namentliche Zusicherungen falsch („genau vier Routen (4)", „(70 Operationen)", „keine Route gibt es nur im Dienst", „beide Seiten führen dieselbe Zahl (70)"). Im unveränderten Baum: 10 `ALL`-Einträge, alle mit Platzhalter — die Behebung kostet heute keinen falschen Alarm. Gegenmittel: **A-A-51**. | domain-dev |
+| **T-206-2** | soll | **Die Notiz-Grenze in `proof:openapi` besteht über der leeren Menge.** `noteBearing.every(…)` ohne Untergrenze; der Kommentar nennt „genau zwei Antworten", geprüft wird die Zahl nicht. Gemessen: Durchlauf ohne den Vermerk → 0 Treffer, Lauf **110/0, Code 0**. Der Lauf führt das Gegenmittel an zwei anderen Stellen selbst („die Klasse ist nicht leer — sonst prüfte alles Folgende die leere Menge"). Gegenmittel: **A-A-52**. | domain-dev |
+| **T-206-3** | soll | **Eine Aufzählung, die der Dienst erzwingt und die Beschreibung verschweigt, fällt nicht auf.** `if (describedEnum !== undefined && enforcedEnum !== undefined)`; für `maxLength` zieht derselbe Abschnitt die einseitige Grenze ausdrücklich. Gemessen: `enum` aus `theme` entfernt → **110/0**; Leser ohne `enum` → **110/0**; dieselbe Verstümmelung auf `maxLength` → 108/2, auf `required` → 105/5. Gegenmittel: **A-A-53**. | domain-dev |
+| **T-206-4** | soll | **`proof:template-fields` Abschnitt 5 besteht auch dann, wenn der Angriff nicht ankommt.** `check('die Vorlage steckt an jeder Prüfung vorbei in der Datenbank', true)`, dazu zweimal `status >= 400`. Gemessen: ohne den `INSERT` antworten Vorschau und Lauf **404 `not_found`**, alle drei Zusicherungen bestehen; rot wird der Lauf nur an den zwei `details`-Zeilen aus T-046. Gegenmittel: **A-A-54**. | domain-dev |
+| **T-206-5** | Hinweis | **SP-09 ist durch nichts festgehalten.** Keiner der sechs Texte kommt in `tests/e2e/**` oder in einem `proof:`-Lauf vor. Zwei davon tragen eine Grenze **allein** — die Empfängerangabe „Rechnung des Kunden" und der Halbsatz „auch nicht über eine eigene Exportvorlage"; beide stehen im Produkt genau einmal. Nach dem Kriterium, mit dem `proof:addin` seine drei Zusicherungen begründet (E-090), gehören genau diese zwei gemessen — die Liste als ganze **nicht**. Gegenmittel: **A-A-50**. | frontend-dev, unit-tester |
+
+### 28.4 Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-50** | Drei Sätze, die je **allein** eine Grenze tragen, bekommen je eine Zusicherung — **nicht** die Sperrliste, nach E-090: die Empfängerangabe der Fußnote „Leistung" (`NoteField.tsx`), der Halbsatz „auch nicht über eine eigene Exportvorlage" der Fußnote „Vermerk" und der Satz „Die Quelle für das Feld „Notiz“ der Standardvorlage." in `export-catalog.ts`. Der dritte ist die Bedingung, unter der Satz 2 der Fußnote „Leistung" fallen darf (28.1.3 B-3). | Je eine Gegenprobe: Satz entfernt → rot. Die Zusicherungen prüfen den **Satz**, nicht den ganzen Text; eine Umformulierung, die die Aussage behält, darf nicht rot werden. |
+| **A-A-51** | `proof:route-policy` und `proof:openapi` **weigern sich**, über die Routenliste zu urteilen, solange ein `ALL`-Eintrag ohne Platzhalter im Pfad darunter ist. Begründung im Text: Hono trägt Kettenglieder und `app.all(…)` mit derselben Methode ein; ein Eintrag ohne Platzhalter ist von einer Route nicht zu unterscheiden, und eine Aussage über eine Liste, aus der etwas herausfällt, ist keine. Wer künftig ein Kettenglied auf einen genauen Pfad legt, schreibt es mit Platzhalter oder nennt es hier. | Gebaut und im Spiegel gemessen, **beide Richtungen**: unveränderter Baum **41/0** und **111/0** — kein falscher Alarm; mit `api.all('/addin/leak', …)` beide **rot, Code 1**, und die Meldung nennt den Pfad `/api/v1/addin/leak`. |
+| **A-A-52** | Vor der Zeile „der interne Vermerk steht in keiner Antwort außer der Vermerksroute (A-7.2)" steht die Untergrenze, die der Kommentar ohnehin behauptet: der Durchlauf trägt den Vermerk in **genau zwei** Antworten, und es sind `getTodoNote` und `putTodoNote`. Dasselbe Muster wie Abschnitt 16 und wie `proof:route-policy` Abschnitt 1. | Gebaut und im Spiegel gemessen, beide Richtungen: unveränderter Baum **111/0**; Durchlauf ohne den Vermerk **rot**, Meldung „0: ". |
+| **A-A-53** | Die Aufzählung wird wie die Zahlengrenzen behandelt: Erzwingt der Dienst eine und beschreibt die Beschreibung keine, ist das ein Befund; beschreibt die Beschreibung eine, die der Dienst nicht erzwingt, ebenso. Dieselbe Ausnahme wie bei den Facetten für Felder, die auf ein benanntes Bauteil zeigen. | Gebaut und im Spiegel gemessen, beide Richtungen: unveränderter Baum **110/0** — kein falscher Alarm über alle 29 Rumpfschemata; `enum` aus `theme` entfernt → **109/1**, „updateSettings.theme: Aufzaehlung [dark\|light\|system] wird erzwungen, aber nicht beschrieben". |
+| **A-A-54** | `proof:template-fields` Abschnitt 5 verankert seinen Angriff: (1) statt `check(…, true)` wird die eingeschmuggelte Zeile **zurückgelesen** und ihre Definition zeichengleich verglichen; (2) Vorschau und Lauf müssen nicht bloß `>= 400` antworten, sondern mit dem Schlüssel `validation_error` — dem Schlüssel des Feldnamens, nicht dem eines fehlenden Datensatzes. | Gebaut und im Spiegel gemessen, beide Richtungen: unveränderter Baum **30/0**; ohne den `INSERT` **25/5**, und die drei bisher stillen Zeilen sind jetzt die roten („keine Zeile", zweimal „Status 404 … not_found"). |
+| **A-A-55** | Der Satz aus 28.2 steht **einmal** ausgeschrieben — im Kopf von `proof-route-policy.mjs`, weil dort schon die Begründung der Aufzählung steht —, und die anderen Läufe verweisen darauf: *Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat.* Wer eine Zusicherung über eine Menge schreibt, schreibt die Untergrenze dieser Menge daneben. | Keine Messung; ein Satz. Seine Wirkung ist an A-A-51 bis A-A-54 ablesbar: alle vier Behebungen sind Anwendungen davon. |
+
+### 28.5 Urteil
+
+**Nacharbeit.** Ein Befund der Stufe **muß** (T-206-1), drei der Stufe **soll**, ein Hinweis.
+
+**Zu O-HF: SP-09 bleibt**, ein Satz von sechs Texten darf fallen, und die Bedingung dafür steht in
+28.1.3. Eine Fassung lege ich nicht vor.
+
+**Zu O-GV: ja, sinngemäß** — und die Antwort hat drei Löcher zutage gefördert, von denen zwei
+(T-206-1 und T-206-2) unmittelbar an der Notiz-Grenze und an der Fläche des Add-in-Tokens liegen.
+
+**Der Satz dieser Prüfung.** Sechsmal in sechs Wellen war die Antwort auf dieselbe Frage „ja", und
+sechsmal lag die Blindheit nicht in dem, was der Lauf prüft, sondern in dem, was er **vorher für
+selbstverständlich hält**: daß die Datei lesbar ist, daß die Liste vollständig ist, daß der Angriff
+angekommen ist, daß die Menge nicht leer ist. **Ein Wächter irrt sich selten über sein Urteil. Er
+irrt sich über seinen Gegenstand.**

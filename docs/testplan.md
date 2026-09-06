@@ -1851,8 +1851,12 @@ mittleren Zeile. Siehe `tests/e2e/export-audit-and-locks.spec.ts`.
 **Schritte:** „Nicht abrechnen" ohne Eintrag im Feld „Grund (freiwillig)" bestätigen; danach
 „Verlauf dieser Buchung" öffnen.
 **Erwartetes Ergebnis:** Exportstatus `exported`, `exportCount` bleibt 0. Im Verlauf steht „Ohne
-Begründung ausgebucht. Das Feld ist freiwillig (E-047) …", nicht eine leere Begründungszeile.
-Siehe `tests/e2e/export-mixed-status-and-billing.spec.ts`.
+Begründung ausgebucht. Das Feld ist freiwillig — protokolliert ist trotzdem, dass hier jemand Zeit
+ohne Abrechnung abgehakt hat, und wann.", nicht eine leere Begründungszeile. Der Prüffall vergleicht
+dabei nur den Teil bis „freiwillig" (`toContainText`, siehe Abschnitt 27, O-GJ) — die interne
+Kennung `(E-047)`, mit der dieser Satz früher endete, ist seit T-197 aus der Oberfläche gefallen und
+stand hier bis zur Berichtigung (T-205) noch im Zitat. Siehe
+`tests/e2e/export-mixed-status-and-billing.spec.ts`.
 
 ### TP-TAG-07 — Zyklus-Ablehnung im Verschieben-Dialog der Oberfläche, an einem Ordner mit Inhalt
 **Anforderungen:** A-4.6, I-08. **Ebene:** End-to-End.
@@ -3171,6 +3175,36 @@ der Bericht):
 Sie kennt kein HTTP, keine Hülle, kein Netzwerk — reine Fachlogik mit zwei Zeichenketten als
 Eingabe. Dieser eine Teil ist ab T-138 sofort lauffähig, ohne jede Attrappe.
 
+**Nachtrag T-166 (O-CI, E-077) — die Naht aus Punkt 2 stand, wurde aber nicht überall benutzt.**
+T-142 hat die Naht `tests/e2e/support/version-check-entry.ts` gebaut und für die eigene Reihe
+(`version-check-live.spec.ts`, `playwright.version-check.config.ts`) auch benutzt. Was fehlte: Die
+**Hauptreihe** (`tests/e2e/playwright.config.ts`, über `support/services.ts#spawnLocalApi`) startete
+bis hierhin unverändert `apps/local-api/src/index.ts` — denselben `main()` ohne jeden Parameter,
+den ein echter Benutzer startet, samt der echten `createGithubReleaseSource()`. Seit T-146/T-147 die
+Versionsprüfung wirklich baut, hieß das: **jeder** Lauf der Hauptreihe, der länger als zehn Sekunden
+dauert (praktisch: jeder), griff wirklich nach `https://api.github.com` — dieselbe Überschreitung,
+die T-145 an `proof:access` gefunden hatte (O-BU), hier als O-CI und von T-156-3 am laufenden
+Prozess bestätigt (O-CV). Gemessen (T-166, `globalThis.fetch`-Mitschnitt über `--import`, 16 s
+Lauf): Der Aufruf feuert zuverlässig, unabhängig davon, ob ein einzelner Testfall überhaupt nach der
+Versionsprüfung fragt.
+
+Behoben, nicht neu geplant: `spawnLocalApi` startet seit T-166 dieselbe Naht wie die eigene Reihe
+(`version-check-entry.ts`) gegen eine lokale, stumm bleibende Attrappe (`github-releases-stub.ts`,
+Vorgabe `404`/„keine Veröffentlichung"). Die Hauptreihe braucht dafür keine zweite `.spec.ts` und
+keinen zweiten Fall — sie fragt nirgends nach der Versionsprüfung selbst, das bleibt bei
+`TP-VER-10` bis `-13`. Gegenprobe mit gesperrtem Ausgang (jeder Aufruf an eine fremde Adresse wirft
+sofort, statt still zu scheitern): die vollständige Hauptreihe bleibt grün, siehe Bericht zu T-166.
+
+**Dieselbe Welle, ein zweiter Fund an derselben Naht: E-077.** `installShellShim`
+(`tests/e2e/support/shell-shim.ts`) lieferte `takt_installed_version` ohne ausdrückliche Angabe als
+`"0.0.0"` — vor `v0.1.0` folgenlos, seither zeitabhängig gefährlich, weil ein tatsächlich
+durchgelaufener Prüflauf jede Fläche mit einem modalen Aktualisierungsdialog überzog, die selbst gar
+nicht nach der Versionsprüfung fragte. Seit T-166 ist die Vorgabe umgedreht (`"9999.0.0"`, höher als
+jede reale Veröffentlichung); wer den Dialog messen will, gibt eine echte, niedrigere Fassung
+ausdrücklich an. Die Gegenprobe in beide Richtungen — mit Angabe erscheint der Dialog, ohne Angabe
+bleibt er trotz einer tatsächlich bekannten, neueren Fassung aus — steht als eigener, fünfter Fall
+in `version-check-live.spec.ts`; Messprotokoll im Bericht zu T-166.
+
 ### Testdaten für diesen Abschnitt (Konvention, keine Dateien angelegt)
 
 GitHub-Antworten der Attrappe verwenden einen erfundenen Bestandsnamen (z. B.
@@ -3490,3 +3524,806 @@ HTTP unvermeidliche Minimum hinaus).
 
 Kein einziger Fall dieses Abschnitts ist heute ausführbar. Das ist keine Lücke dieses Plans,
 sondern der erwartete Zustand einer Aufgabe, die ausdrücklich vor dem Bau steht.
+
+---
+
+## 25. Frist und Anhänge — Plan vor dem Bau (T-142, Welle S)
+
+Grundlage: `docs/spec.md` Abschnitt 19 (A-19.1 bis A-19.19, Nachtrag des Auftraggebers vom
+2026-09-05), `.claude/team/decisions.md` E-070 bis E-072, `.claude/team/risks.md` R-21 und R-22,
+`CLAUDE.md` Abschnitt „Frist und Anhänge". Beides hängt am **bestehenden** Todo und ist keine
+zweite Struktur daneben (spec.md, Kopf von Abschnitt 19).
+
+**Ausführungsstand bei der Planung (T-142): Gebaut ist davon nichts.** Weder das Datenmodell für
+die Frist noch für Anhänge, weder eine Route noch ein Eingabefeld, weder der Öffnen-Befehl der
+Hülle noch seine Formprüfung. Es gibt **keine** `.spec.ts`-Datei zu diesem Abschnitt — es gibt kein
+Ziel, gegen das sie liefe, und eine Datei ohne lauffähigen Inhalt wäre nur eine zweite Form dieses
+Plans. Jeder Fall unten trägt eine Anforderungs-ID, eine Vorbedingung, einen Schritt, eine
+beobachtbare Erwartung und die Ebene, auf der er **gehört**, sobald gebaut ist — dieselbe Bauart
+wie Abschnitt 24 vor T-138/T-139.
+
+**Nachtrag T-150 — gebaut und gegen die echte Kette gefahren, dieser Abschnitt bleibt als
+Planungsstand stehen.** T-146/T-147 haben Abschnitt 19 gebaut; T-150 hat die Fälle unten gegen
+Oberfläche, Dienst und Speicherung gefahren. Zwei Stellen wichen dabei vom hier notierten Plan ab
+— beide sind **an ihrer jeweiligen Fallbeschreibung unten** vermerkt, nicht hier gesammelt:
+
+- **TP-FRIST-08** nannte die Dashboard-Kachel „Zuletzt bearbeitet" als dritte Anzeigestelle.
+  Gebaut ist stattdessen eine eigene Kachel „Überfällig" mit einer **Zahl**, die nur bei einem Wert
+  größer null erscheint (`DashboardScreen.tsx`) — A-19.4 ist damit erfüllt, aber anders, als der
+  Plan es vorwegnahm.
+- **TP-ANH-20** nahm an, eine `.lnk`-Datei erreiche die Rückfrage vor dem Öffnen. Gebaut ist
+  strenger: Die fünf Umleitungsendungen (`.lnk`, `.url`, `.pif`, `.scf`, `.desktop`) werden bereits
+  **beim Anlegen** des Anhangs abgewiesen (`checkAttachmentPath`,
+  `packages/domain/src/attachment.ts`) und erreichen die Rückfrage nie.
+
+Die laufenden Fälle liegen unter `tests/e2e/*.spec.ts` mit dem Präfix `deadline-*` bzw.
+`attachment-*`; jede Datei nennt in ihrem Kopf, welche `TP-FRIST-*`/`TP-ANH-*`-Fälle sie trägt.
+Zahlen und Einzelheiten stehen im Bericht `.claude/team/reports/T-150-e2e-tester.md`.
+
+**Namensvorrat der Fälle:** `TP-FRIST-*` für Abschnitt 19.1 (A-19.1 bis A-19.7), `TP-ANH-*` für
+Abschnitt 19.2 (A-19.8 bis A-19.15) und Abschnitt 19.3 (A-19.16 bis A-19.19). Bezeichner, Ort von
+Feldern und Namen von Funktionen sind **Annahmen dieses Plans**, keine Zusagen aus dem Bau — sie
+dienen dazu, Fälle konkret genug zu formulieren, um sie später eins zu eins zu übernehmen (wie
+T-138 es mit den `TP-VER`-Fällen aus T-137 tat), nicht dazu, dem Bau vorzugreifen.
+
+### Testdaten für diesen Abschnitt (Konvention, keine Dateien angelegt)
+
+Erfundene Adressen (`https://beispiel.example/anhang`), erfundene Dateipfade
+(`/home/beispiel/Dokumente/anhang.pdf` bzw. testlaufeigene temporäre Pfade, die der Testaufbau
+selbst anlegt und wieder entfernt — kein Verweis auf einen echten Pfad des Entwicklungsrechners),
+erfundene Bilddaten (ein minimales, im Testaufbau selbst erzeugtes PNG). Kein echter Kundenname,
+keine echte Adresse. Vorgeschlagener Ordner, sobald Fixtures entstehen: `tests/fixtures/anhaenge/`.
+
+---
+
+### 25.1 Frist — setzen, ändern, entfernen, die drei Zustände
+
+#### TP-FRIST-01 bis TP-FRIST-03 — Setzen, Ändern, Entfernen (A-19.1, A-19.3)
+
+**Ebene:** E2E (die Bedienung selbst; die Feldvalidierung „ist das ein Tag" gehört zusätzlich als
+Integrationsfall an die Tür der Anwendungsfälle, analog zu `titleSchema`).
+
+| ID | Schritt | Erwartung |
+|---|---|---|
+| TP-FRIST-01 | Todo anlegen, dabei eine Frist auf ein Datum setzen | Todo trägt die gesetzte Frist; A-19.1 („optional") bleibt gewahrt, weil ein zweites Todo **ohne** Frist im selben Fall genauso gültig angelegt wird |
+| TP-FRIST-02 | Bestehendes Todo öffnen (mit oder ohne Frist), Frist auf ein anderes Datum ändern, speichern | Die Frist zeigt danach ausschließlich das neue Datum, an jeder Stelle, an der sie sichtbar ist (siehe TP-FRIST-08) |
+| TP-FRIST-03 | Bestehendes Todo mit Frist öffnen, Frist entfernen (Rückstellfeld/„Frist entfernen"), speichern | Das Todo trägt danach keine Frist mehr **und** keinen der drei Zustände aus A-19.5 (siehe TP-FRIST-07) |
+
+**Feldbezeichnung (A-19.2), eigener Mikrofall ohne eigene Nummer:** Das Eingabefeld und jede
+Anzeige heißen ausschließlich **„Frist"**. Ein Nachweis dafür ist eine Positivliste-Prüfung wie
+`proof:foreign`/`proof:route-policy` es für andere Begriffe schon tun: eine Suche im gebauten
+`apps/web/dist` nach „Fälligkeitsdatum", „fällig am" und „Deadline" mit erwarteter Trefferzahl
+null — Bauart wie `distContainsText` aus `support/web-build-services.ts` (T-055), hier umgekehrt
+als Abwesenheitsprüfung. Ebene: Build-Nachweis, `web-build-smoke.spec.ts`-Familie.
+
+#### TP-FRIST-04 bis TP-FRIST-07 — Die drei Zustände, und der vierte, der keiner ist (A-19.5, A-19.6)
+
+**Ebene:** Unit (`packages/domain/test/**`) für die reine Zuordnungsfunktion, sobald sie existiert
+— **Annahme:** eine Funktion in der Form `dueState(day: CalendarDay | null, today: CalendarDay):
+'overdue' | 'due_today' | 'due_later' | null`, analog zu `decideUpdateNotice` als reine, geprüfte
+Fachlogik ohne HTTP und ohne SQL. Diese vier Fälle sind **ohne jede Attrappe** lauffähig, sobald es
+sie gibt — kein Netzwerk, keine Hülle, kein Datenbestand, dieselbe Lage wie `TP-VER-15` bis `-23`.
+
+| ID | `day` | `today` | Erwartung | Warum eigener Fall |
+|---|---|---|---|---|
+| TP-FRIST-04 | gestern | heute | `overdue` | A-19.5, erster benannter Zustand |
+| TP-FRIST-05 | heute | heute | `due_today` | Gleichheit ist ein eigener, dritter Ausgang und kein Sonderfall von „gestern" oder „morgen" — dieselbe Warnung wie bei `TP-VER-17` |
+| TP-FRIST-06 | morgen | heute | `due_later` | dritter benannter Zustand |
+| TP-FRIST-07 | `null` | heute | `null` (kein Zustand) | A-19.5 wörtlich: „Ein Todo ohne Frist hat keinen dieser Zustände." Eine Funktion, die hier `due_later` oder einen leeren Text zurückgäbe, behauptete einen Zustand, den es nicht gibt — der Unterschied zwischen „keine Angabe" und „ein Wert, der zufällig nichts anzeigt" (dieselbe Sorte Fehler wie `exactOptionalPropertyTypes` in diesem Bestand an jeder anderen Stelle verhindert) |
+
+#### TP-FRIST-08 — Die Frist ist sichtbar, ohne dass man das Todo öffnet (A-19.4)
+
+**Gemessen (T-150), mit einer Abweichung vom Plan:** Gebaut ist die Dashboard-Kachel „Zuletzt
+bearbeitet" **ohne** Frist — dort steht ausdrücklich kein `DeadlineFlag`
+(`DashboardScreen.tsx`, Kommentar wörtlich: „es steht hier kein `DeadlineFlag`"). Statt dessen
+zeigt eine eigene Kachel „Überfällig" eine **Zahl**, nur wenn sie größer als null ist. A-19.4 ist
+damit erfüllt — Todo-Liste (S-02), Kanban-Karte (S-04) und Detailansicht (S-03) zeigen die Frist
+ohne zu öffnen —, aber die dritte Stelle unten (Dashboard) ist anders gebaut, als hier vorweggenommen.
+Geprüft in `tests/e2e/deadline-lifecycle.spec.ts`.
+
+**Ebene:** E2E, an **jeder** Stelle, an der ein Todo als Zeile oder Karte erscheint — dieselbe
+Breite, die dieses Dokument schon für den Exportstatus verlangt (`T-005-spec-ux-reviewer.md`
+Abschnitt 4, 19 Orte) und für die Wiederbelebung erledigter Todos (Abschnitt „Erledigtes Todo
+wiederbeleben", jede Stelle, an der ein Timer startbar ist). Mindestens: Todo-Liste (S-02),
+Kanban-Karte (S-05), Dashboard-Kachel „Zuletzt bearbeitet" (S-01) — eine Stelle, die die Frist
+nur in der Detailansicht zeigt, verfehlt A-19.4 wörtlich.
+
+**Schritt:** Je Zustand aus TP-FRIST-04 bis -06 ein Todo anlegen, jede der drei Ansichten öffnen,
+**ohne** das Todo zu öffnen.
+**Erwartung:** Frist und Zustand sind lesbar (Datum plus ein unterscheidbares Merkmal je Zustand —
+Text, Farbe oder Symbol, geprüft am Text und nicht allein an der Farbe, wegen SC 1.4.1). Ein Todo
+ohne Frist zeigt an derselben Stelle **nichts**, keinen leeren Platzhalter (dieselbe Falle wie
+A-18.5/`TP-VER-08`: eine Fläche, die für „nichts" trotzdem ein Element reserviert).
+
+#### TP-FRIST-09 — Der Zustand wird **gerechnet**, nicht gespeichert (E-070 Punkt 3)
+
+**Ebene:** zweigleisig, absichtlich — ein einzelner Unit-Fall (Aufruf derselben reinen Funktion
+mit zwei verschiedenen `today`-Werten bei gleichem `day`, siehe TP-FRIST-04/-06) zeigt nur, dass
+die **Funktion** rein ist. Er zeigt nicht, dass das **System** sie bei jeder Anfrage neu aufruft,
+statt einen Zustand irgendwo zwischenzuspeichern — und genau das ist der Fund, um den es hier
+geht. Der überzeugende Fall braucht deshalb einen echten Ablauf ohne jede Änderung am Todo:
+
+**Vorbedingung:** Ein Todo mit Frist = heute (Ortszeit des Testlaufs, wie in
+`calendar-day-boundary.spec.ts` über die Systemzeit der Testmaschine bestimmt, nicht erfunden).
+**Schritt:** Zustand lesen (Erwartung: „heute fällig") — **ohne das Todo anzufassen** — die Uhr,
+die der Zustand befragt, um einen Tag vorstellen, danach den Zustand erneut lesen.
+**Erwartung:** „heute fällig" wird zu „überfällig", ohne dass eine Schreiboperation am Todo
+stattgefunden hat.
+
+**Offene Frage, die dieser Plan nicht entscheiden kann:** Wird der Zustand serverseitig berechnet
+(dann ist „die Uhr vorstellen" ein Integrationsfall gegen eine austauschbare Uhr im Zusammenbau —
+`compose({ clock })` existiert für andere Zwecke bereits, dieselbe Naht wie bei `checker.test.ts`
+in T-140) oder clientseitig aus einem gespeicherten Datum plus `Date.now()` (dann ist es ein
+E2E-Fall mit `page.clock.install()`/`fastForward`, wie `shell-quit-failure.spec.ts` es für die
+Fünf-Sekunden-Frist von „Takt beenden" schon vormacht)? Beide Wege sind hier beschrieben, damit
+der spätere Bau nicht neu überlegen muss, welcher Nachweis zu seiner Entscheidung passt — **welcher
+der beiden Fälle tatsächlich läuft, entscheidet sich erst mit der Umsetzung.**
+
+#### TP-FRIST-10 — Derselbe Tagesbegriff wie die Tagesgruppierung des Exports (E-070 Punkt 2, E-025)
+
+**Ebene:** E2E, unmittelbar auf `calendar-day-boundary.spec.ts` aufgesetzt — dieselbe Maschine,
+dieselbe Ortszeit, derselbe Kniff (eine Buchung kurz nach Mitternacht Ortszeit, wo UTC- und Ortstag
+auseinanderfallen).
+
+**Vorbedingung:** Ein Todo mit einer Zeitbuchung um 00:10 Ortszeit (`todayAt(0, 10)`, exakt wie in
+`calendar-day-boundary.spec.ts`) **und** einer Frist, gesetzt auf denselben Kalendertag wie diese
+Buchung.
+**Schritt:** In der Todo-Ansicht den Fristzustand lesen; unabhängig davon (wie in
+`calendar-day-boundary.spec.ts` bereits geprüft) die Buchung über den Tagesfilter „Ab Tag"/„Bis
+Tag" der Zeitbuchungsübersicht suchen.
+**Erwartung:** Beides — der Fristzustand „heute fällig" **und** die Zuordnung der 00:10-Buchung zum
+laufenden Ortstag — meinen denselben Kalendertag, gerechnet in derselben Zeitzone. Ein Fall, in dem
+eine der beiden Stellen UTC und die andere Ortszeit verwendet, zeigt in diesem Fenster zwei
+verschiedene Tage bei ein und demselben Ereignis — genau der Fund, gegen den `toCalendarDay`
+(`packages/domain/src/kernel.ts`, bereits vorhanden, Wiederverwendung durch die künftige
+Frist-Berechnung ist E-070 Punkt 2 wörtlich) bereits für den Export steht. **Annahme:** Die
+künftige Umsetzung ruft dieselbe Funktion; ein zweiter, eigens für die Frist geschriebener
+Tagesbegriff wäre der Fund, den dieser Fall aufdecken soll.
+
+#### TP-FRIST-11 — Die Frist ist keine Achse (A-19.7, Regressionsfall)
+
+**Ebene:** E2E. **Vorbedingung:** Ein Todo, das über eine Kanban-Regel einem bestimmten Pool und
+einer bestimmten Spalte zugeordnet ist (Achsen: Tags, Status, Erledigt, Exportstatus — keine
+davon nennt die Frist). **Schritt:** Die Frist auf „überfällig" setzen bzw. ändern.
+**Erwartung:** Pool-Zugehörigkeit, Kanban-Spalte und jede vorhandene Zeitbuchung bleiben
+unverändert; keine Regel, die die Frist nicht ausdrücklich nennt (sie kann es nicht, es gibt kein
+Feld dafür), reagiert auf die Änderung. Ergänzend: `POST`/`PATCH` gegen die Regel-Route mit einem
+Term, der die Frist referenziert, wird mit 422 abgewiesen (Integrationsfall, sobald das
+Regelschema existiert) — A-19.7 verbietet nicht nur die Bedienung, sondern die Achse selbst.
+
+---
+
+### 25.2 Anhänge — hinzufügen, öffnen, entfernen
+
+#### TP-ANH-01 bis TP-ANH-03 — Je Art das passende Eingabefeld (A-19.9, A-19.10)
+
+**Ebene:** E2E für die Bedienung, Integration für die Feldpflicht an der Tür (Verweis/Bild ohne
+Adresse bzw. Bilddatei → 422, Datei ohne Pfad → 422, Titel in allen drei Fällen optional).
+
+| ID | Art | Schritt | Erwartung |
+|---|---|---|---|
+| TP-ANH-01 | Verweis | „Anhang hinzufügen" → Art „Verweis" wählen | Eingabefeld zeigt **Adresse** (Pflicht) und **Titel** (optional) — **kein** Dateiauswahlfeld, **kein** Bildfeld |
+| TP-ANH-02 | Bild | Art „Bild" wählen | Eingabefeld zeigt **Bild** (Pflicht, Dateiauswahl oder Einfügen) und **Titel** (optional) — **kein** Adressfeld |
+| TP-ANH-03 | Datei | Art „Datei" wählen | Eingabefeld zeigt **Dateipfad** (Pflicht) und **Titel** (optional) — **kein** Adressfeld, **kein** Bildfeld |
+
+**Zusatzfall (derselbe Nummernblock):** Zwischen zwei Arten hin- und herwechseln, **bevor**
+gespeichert wird — das jeweils andere Eingabefeld darf keinen Rest des vorherigen Werts anzeigen
+(eine Adresse, die im Feld „Dateipfad" landet, wäre ein Fund, kein Sonderfall).
+
+#### TP-ANH-04 — Mehrere Anhänge je Todo, gemischter Art (A-19.8)
+
+**Ebene:** E2E. **Schritt:** An ein Todo nacheinander einen Verweis, ein Bild und eine Datei
+anhängen. **Erwartung:** Alle drei sind gleichzeitig sichtbar, in der Reihenfolge des Hinzufügens
+oder einer erkennbaren, stabilen Ordnung (nicht zufällig bei jedem Laden neu gemischt).
+
+#### TP-ANH-05 — Öffnen eines Verweises (A-19.9, A-19.11)
+
+**Ebene:** E2E, mit derselben Nachbildungsbauart wie `TP-VER-13`: Der Öffnen-Befehl der Hülle nimmt
+keine Adresse aus der Oberfläche unmittelbar entgegen, ohne dass die Hülle sie prüft (E-072 Punkt
+2) — die Nachbildung `shell-shim.ts` braucht dafür einen neuen Befehl (Arbeitsname
+`takt_open_attachment_link`), analog zu `takt_open_release`, mit derselben Aufzeichnungsbauart
+(`window.__taktOpenAttachmentCalls__`).
+**Vorbedingung:** Anhang vom Typ Verweis mit einer `https://`-Adresse.
+**Schritt:** „Öffnen" am Anhang klicken.
+**Erwartung:** Der Öffnen-Befehl wird genau einmal mit genau dieser Adresse aufgerufen; kein
+`download`-Ereignis, keine neue Seite innerhalb des von Playwright kontrollierten Kontexts (dieselbe
+Gegenprobe wie `TP-VER-13`) — die eigentliche Öffnung liegt an der Hülle vorbei außerhalb.
+
+#### TP-ANH-06 — Öffnen einer Datei fragt zuerst, und die Frage nennt den vollen Pfad (A-19.11, E-072 Punkt 3)
+
+**Ebene:** E2E. **Vorbedingung:** Anhang vom Typ Datei mit einem Pfad auf eine tatsächlich
+vorhandene, harmlose Testdatei (`.txt`, vom Testaufbau selbst angelegt und danach entfernt).
+**Schritt:** „Öffnen" am Anhang klicken.
+**Erwartung:** Eine Rückfrage erscheint **vor** jedem Öffnen-Befehl an die Hülle, und ihr Text
+enthält den **vollständigen** Pfad (nicht nur den Dateinamen — der Benutzer soll sehen, **welche**
+Datei mit demselben Namen an welchem Ort gemeint ist). Erst nach Bestätigung geht der
+Öffnen-Befehl hinaus, mit genau diesem Pfad.
+
+#### TP-ANH-07 — Entfernen (A-19.11)
+
+**Ebene:** E2E. Anhang beliebiger Art entfernen; Erwartung: verschwindet aus der Liste, ein
+erneutes Laden des Todos zeigt ihn nicht wieder (siehe auch TP-ANH-10).
+
+#### TP-ANH-08 — Fehlender Titel ergibt eine lesbare Bezeichnung, nie eine leere Zeile (A-19.12)
+
+**Ebene:** Unit für die reine Ableitungsfunktion (**Annahme:** `attachmentLabel(kind, title,
+addressOrPath): string`, analog zu `foreignTextFrom`/`quotedName` aus T-133), ergänzt um einen
+E2E-Spotcheck.
+
+| ID | Art | Titel | Adresse/Pfad | Erwartung |
+|---|---|---|---|---|
+| TP-ANH-08a | Verweis | leer | `https://beispiel.example/ordner/seite` | etwas Lesbares aus der Adresse (z. B. der Wirtsname `beispiel.example`), nie eine leere Zeichenkette |
+| TP-ANH-08b | Datei | leer | `/pfad/zu/bericht.pdf` | der Dateiname (`bericht.pdf`), nie der volle Pfad als Bezeichnung und nie leer |
+| TP-ANH-08c | Verweis | gesetzt (`„Mein Verweis"`) | beliebig | der Titel steht, unverändert — A-19.12 gilt nur für den fehlenden Fall |
+
+**Grenzfall, eigens zu prüfen:** ein Titel, der nur aus Leerzeichen besteht, zählt als „fehlt" und
+nicht als gesetzt — dieselbe Regel wie `titleSchema` sie für den Todo-Titel schon durchsetzt
+(`length(trim(title)) > 0`).
+
+#### TP-ANH-09 — Ein Bild wird als Vorschaubild dargestellt (A-19.13)
+
+**Ebene:** E2E. **Vorbedingung:** Anhang vom Typ Bild mit einer im Testaufbau erzeugten, minimalen
+PNG-Datei. **Erwartung:** Ein `<img>`-Element (oder gleichwertig) mit einer `data:`-Adresse ist
+sichtbar (E-071 Punkt 3: das Vorschaubild kommt als `data:`-Adresse in die Oberfläche, die CSP
+bleibt unverändert `img-src 'self' data:`) — kein `<a href>` auf einen Pfad, kein externer
+Bildverweis. Gegenprobe: Netzwerkmitschnitt der Seite zeigt **keine** Anfrage an eine externe
+Adresse für dieses Bild.
+
+#### TP-ANH-10 — Anhänge und Frist überstehen einen Neustart unverändert (A-19.14)
+
+**Ebene:** E2E, mit einem echten Prozess-Neustart des Dienstes — **dieselbe Bauart wie
+`TP-VER-11`/`-12`**, hier ohne Attrappe (kein Netzwerk beteiligt), aber mit demselben Grund: Eine
+Prüfung, die nur die Seite neu lädt, beweist Persistenz im Bestand nicht von einer Persistenz im
+Arbeitsspeicher des Dienstes zu unterscheiden.
+**Vorbedingung:** Ein Todo mit einer Frist und mindestens einem Anhang je Art (Verweis, Bild,
+Datei).
+**Schritt:** Browserspeicher leeren und neu laden (Stufe 1), danach den lokalen Dienst beenden und
+neu starten, mit demselben Datenbestand (Stufe 2).
+**Erwartung:** Frist, alle drei Anhänge (samt Titeln, Adresse/Pfad und — beim Bild — demselben
+Vorschauinhalt) stehen nach beiden Stufen unverändert da.
+
+#### TP-ANH-11 — Bestehende Todos ohne Frist und ohne Anhang funktionieren unverändert (A-19.16)
+
+**Ebene:** E2E, Regressionsfall. **Vorbedingung:** Ein Todo, angelegt **vor** dieser Erweiterung
+(im Testaufbau: ein Todo ohne jede Angabe zu Frist/Anhang, über den bestehenden Weg angelegt).
+**Erwartung:** Öffnen, Bearbeiten, Zeit buchen, Erledigt setzen, Export — jeder bestehende Ablauf
+aus den Abschnitten 1 bis 24 dieses Dokuments — funktioniert unverändert; die neuen Felder zeigen
+sich als „nicht gesetzt" und nicht als Fehler oder Platzhalter.
+
+#### TP-ANH-12 — Weder Frist noch Anhang erscheinen in einem Export, in beliebiger Vorlage (A-19.17, dieselbe Anspruchshöhe wie R-06)
+
+**Ebene:** Integration, gebaut nach dem Vorbild von `note-separation.spec.ts` (TP-NOTE-02/03) —
+dort wird die Todo-Notiz gegen **mehrere** Vorlagen geprüft (Standard/base64, roh, „möglichst viele
+Quellenpfade"), nicht nur gegen die Standardvorlage. Der hier verlangte Fall ist strukturell
+derselbe, mit Frist und Anhang statt Vermerk.
+
+**Vorbedingung:** Ein Todo mit einer auffälligen, erfundenen Frist (z. B. weit in der Zukunft, um
+sie im Exporttext unverwechselbar zu machen) und einem Anhang mit einer auffälligen, erfundenen
+Adresse/einem auffälligen Titel, offene Buchung auf demselben Todo. Mehrere Exportvorlagen wie in
+TP-NOTE-02/03: die Standardvorlage, eine mit roher (nicht base64-kodierter) `Notiz`, eine mit
+„möglichst vielen Quellenpfaden" (jede Quelle, die der Vorlagen-Editor anbietet, einmal
+verwendet).
+**Schritt:** Export mit jeder Vorlage ausführen; Ergebnisdatei vollständig als Text durchsuchen
+(nicht nur die erwarteten Felder lesen — dieselbe Methode wie TP-NOTE-02/03) nach dem
+Fristdatum, der Anhangsadresse und dem Anhangstitel.
+**Erwartung:** Kein Treffer, in keiner der Vorlagen. **Strukturelle Bedingung, nicht nur eine
+Prüfung:** Frist und Anhänge dürfen im Vorlagen-Editor als Feldquelle gar nicht erst auswählbar
+sein — derselbe Nachweis wie `TP-NOTE-01` („die Quellenauswahl im Vorlageneditor listet niemals
+‚Vermerk‘"), hier auf zwei neue Felder angewandt.
+
+#### TP-ANH-13 — Über das Add-in entstehen keine Anhänge (A-19.19, E-072 Punkt 1)
+
+**Ebene:** Integration (`apps/local-api/test/routes/addin/**`, Hoheit unit-tester/integration-dev),
+ergänzt um einen E2E-Spotcheck über das Add-in-Taskpane (wie
+`outlook-addin-build.spec.ts`/`run-outlook-taskpane.mjs`).
+
+**Schritt 1 (Integration):** `POST /addin/todos` (oder die zuständige Route, Name aus dem Bau) mit
+einem zusätzlichen Feld, das einen Anhang beschreiben würde (z. B. `attachments: [...]` oder
+`attachmentUrl`), im Rumpf mitschicken.
+**Erwartung:** Die Antwort ist entweder eine Ablehnung des unbekannten Felds (422, falls die Route
+mit `.strict()`/gleichwertig geschützt ist) oder ein stillschweigendes Verwerfen — **so oder so**
+entsteht **kein** Anhang am angelegten oder gebuchten Todo (Nachschau über die reguläre Tür).
+**Schritt 2 (E2E-Spotcheck):** Eine simulierte E-Mail mit erkennbarer Call-Nummer über das
+Add-in-Taskpane verarbeiten; das Taskpane selbst bietet an keiner Stelle ein Eingabefeld für einen
+Anhang.
+**Strukturelle Bedingung (E-072 Punkt 1 wörtlich: „nicht per Voreinstellung, sondern
+strukturell"):** Ein Nachweis nach dem Vorbild von `proof:addin`/`proof:route-policy` — die
+Add-in-Türen (`apps/local-api/src/routes/addin/**`, `apps/outlook-addin/**`) enthalten **keinen**
+Code-Pfad, der ein Anhangsfeld liest oder schreibt. Dieselbe Prüfbauart wie R-06 für die
+Todo-Notiz im Exportmotor: nicht „das Eingabefeld fehlt heute", sondern „es gibt keine Leitung,
+über die es entstehen könnte".
+
+#### TP-ANH-14 — Nichts öffnet sich von selbst (A-19.18)
+
+**Ebene:** E2E. Der Auftrag warnt ausdrücklich davor, das nur zu behaupten — hier die Messung:
+
+**Vorbedingung:** Ein Todo mit je einem Anhang jeder Art (Verweis, Bild, Datei mit vorhandenem
+Pfad).
+**Schritt:** `context.on('download', …)` **und** einen Zähler für Aufrufe von
+`takt_open_attachment_link`/dem Datei-Öffnen-Befehl **registrieren, bevor** irgendetwas
+geschieht. Danach, **ohne auf einen Anhang zu klicken**: die Todo-Liste laden, das Todo öffnen, die
+Anhangsliste innerhalb des Todos sehen, das Todo schließen und erneut öffnen, die Seite neu laden.
+**Erwartung:** Über die gesamte Abfolge löst **kein** dieser Schritte einen Öffnen-Befehl aus — der
+Zähler bleibt bei null, bis zum ersten Mal, dass der Testfall selbst auf „Öffnen" klickt (was
+dieser Fall ausdrücklich **nicht** tut). Das Bild-Vorschaubild ist davon ausgenommen: Es **wird**
+beim Laden angezeigt (A-19.13), aber „anzeigen" ist nach E-072 Punkt 2 kein Öffnen-Befehl nach
+draußen — der Zähler für den Öffnen-Befehl bleibt trotzdem bei null, weil das Anzeigen selbst nicht
+darüber läuft.
+
+---
+
+### 25.3 Die gefährlichen Eingaben (R-21, R-22)
+
+Erwartung ist in jedem der folgenden Fälle **nicht** „es passiert nichts Schlimmes", sondern eine
+**benannte Abweisung** — eine Meldung, die der Benutzer liest, mit einem erkennbaren Grund, nicht
+nur ein Knopf, der wirkungslos bleibt. Ein Fall, der nur zeigt, dass kein Schaden entstand, ohne zu
+zeigen, dass die Anwendung die Eingabe **erkannt und benannt** abgewiesen hat, unterscheidet nicht
+zwischen „geprüft und abgelehnt" und „zufällig ins Leere gelaufen" (dieselbe Unterscheidung, die
+`TP-VER-14` für den Öffnen-Befehl der Versionsprüfung schon verlangt).
+
+**Grenze dieser Umgebung, vorweg benannt statt stillschweigend ausgelassen:** Diese Maschine ist
+Linux, ohne echten Tauri-Prozess (`shell-shim.ts` bildet die Hülle nach, T-B08: „Playwright hat auf
+Linux keinen Anknüpfungspunkt für Tauris Webview"). Was hier **nicht** gemessen werden kann: dass
+ein UNC-Pfad unter echtem Windows tatsächlich einen SMB-Anmeldeversuch auslöst, dass
+`ShellExecuteW` eine `.bat`/`.lnk`/`.exe` tatsächlich ausführt, oder dass `xdg-open`/`ShellExecuteW`
+mit einer abgewiesenen Eingabe überhaupt nie aufgerufen wird — dieser letzte Nachweis ist nach dem
+Vorbild von T-136/T-139 ein **Rust-Einheitentest neben dem Öffnen-Befehl** (`#[cfg(test)]`, wie
+`release.rs`), nicht browserseitig zu erbringen. Was diese Umgebung **kann**: dass die Formprüfung
+die Eingabe erkennt und ablehnt, **bevor** sie die Hülle überhaupt erreicht (an der Tür — Route
+oder Eingabefeld) und dass die Oberfläche eine benannte Meldung zeigt. Jeder Fall unten nennt beide
+Hälften getrennt.
+
+#### TP-ANH-15 bis TP-ANH-17 — Ein Verweis, der keiner ist (R-22, E-072 Punkt 2)
+
+**Ebene:** zweigleisig — Integration/Formprüfung an der Tür (in dieser Umgebung vollständig
+messbar) **und** ein Rust-Einheitentest neben dem Öffnen-Befehl für „wird nie an `open` gereicht"
+(nicht browserseitig messbar, siehe oben).
+
+| ID | Eingabe als „Adresse" | Erwartung an der Tür | Erwartung im Öffnen-Befehl (Rust-Einheitentest) |
+|---|---|---|---|
+| TP-ANH-15 | `javascript:alert(1)` | 422, benannte Meldung („nur http/https") | `is_attachment_link(...)` (Arbeitsname, analog `is_release_version`) liefert `false`, kein Aufruf von `open` |
+| TP-ANH-16 | `file:///etc/passwd` | 422, dieselbe Meldung | dieselbe Ablehnung — **kein** Schema außer `http`/`https` |
+| TP-ANH-17 | `\\server\freigabe` (UNC) | 422, dieselbe Meldung, ausdrücklich **nicht** stillschweigend als „ungültige Adresse" ohne erkennbaren Grund — der UNC-Pfad ist der unauffälligste der drei (R-22) und braucht eine Meldung, die ihn nicht mit einem Tippfehler verwechselbar macht | dieselbe Ablehnung; Gegenprobe: kein Aufruf, der `\\` unverändert an die Hülle weiterreicht |
+
+**Doppelte Prüfung, wie bei der Fassungsbezeichnung (E-072 Punkt 2 wörtlich: „Eine Prüfung beim
+Eingeben allein trägt nicht"):** Jeder der drei Fälle wird **zweimal** verlangt — einmal an der
+Eingabetür (damit ein offensichtlich falscher Wert erst gar nicht gespeichert wird) und einmal
+**erneut** im Öffnen-Befehl selbst, unmittelbar vor dem Aufruf an die Hülle. Ein Testfall, der nur
+die Tür prüft, deckt nicht den Weg ab, auf dem ein Wert **an der Tür vorbei** in den Bestand
+gelangt (eine künftige Migration, ein zweiter Schreibpfad) — genau die Lücke, die E-072 Punkt 2
+benennt.
+
+#### TP-ANH-18 — Ein UNC-Pfad als Datei (R-21, E-072 Punkt 2)
+
+**Ebene:** wie oben, Formprüfung des Dateipfads statt der Adresse. **Eingabe:**
+`\\server\freigabe\datei.txt` als Dateipfad. **Erwartung an der Tür:** 422, benannte Meldung
+(„kein Netzwerkpfad" oder gleichwertig, nicht bloß „ungültig"). **Erwartung im Öffnen-Befehl:**
+derselbe Rust-Einheitentest wie oben, mit `\\`-Präfix als eigenem Ausbruchsversuch in der Liste
+(vergleichbar mit der Ausbruchsliste aus 18.3/`release.rs`, hier um UNC-Pfade erweitert).
+
+#### TP-ANH-19 und TP-ANH-20 — Ein Pfad auf eine `.bat`- bzw. `.lnk`-Datei (R-21, E-072 Punkt 3)
+
+**Gemessen (T-150), TP-ANH-20 abweichend vom Plan.** `.bat` verhält sich wie hier beschrieben und
+ist als `tests/e2e/attachment-open-commands.spec.ts` gelaufen. `.lnk` erreicht die Rückfrage
+tatsächlich **nie**: `checkAttachmentPath` (`packages/domain/src/attachment.ts`) weist alle fünf
+Umleitungsendungen (`.lnk`, `.url`, `.pif`, `.scf`, `.desktop`) bereits **beim Anlegen** des
+Anhangs mit 422 ab — ein Anhang mit einer solchen Endung kommt nie in den Bestand. TP-ANH-20 ist
+deshalb als Türprüfung gelaufen (`tests/e2e/attachment-dangerous-input.spec.ts`), nicht als
+Rückfrage-Fall. In der Sache ist das die schärfere, nicht die schwächere Kontrolle.
+
+**Ebene:** E2E für die Rückfrage (in dieser Umgebung messbar: die Oberfläche fragt tatsächlich,
+bevor sie den Öffnen-Befehl ruft — das ist ein Verhalten der Web-Oberfläche, kein
+Betriebssystemverhalten), ergänzt um denselben Rust-Einheitentest für die Absicherung, dass die
+Endung selbst **nicht** über eine Positivliste gefiltert wird (die Prüfung gilt nach E-072 Punkt 2
+für **jede** Datei gleich — die Rückfrage ist die eigentliche Sicherung, nicht ein zusätzlicher
+Filter nach Endung, der sich umgehen ließe).
+
+| ID | Datei | Vorbedingung | Schritt | Erwartung |
+|---|---|---|---|---|
+| TP-ANH-19 | `starte.bat` (vom Testaufbau angelegt, keine echte Wirkung — Inhalt z. B. eine Kommentarzeile) | Anhang vom Typ Datei mit diesem Pfad | „Öffnen" klicken | Rückfrage erscheint, nennt den vollen Pfad **und** die Datei wird **nicht** geöffnet, solange nicht bestätigt wurde — Gegenprobe: kein Aufruf des Öffnen-Befehls vor der Bestätigung |
+| TP-ANH-20 | `verknüpfung.lnk` (leere Testdatei, kein echtes Verknüpfungsziel) | wie oben | wie oben | wie oben — dieselbe Rückfrage, keine Ausnahme für `.lnk`, obwohl der Windows-Explorer eine `.lnk` optisch anders als eine `.bat` behandelt (das ist kein Grund, hier zwei verschiedene Wege zu bauen: E-072 Punkt 3 nennt beide in einem Satz) |
+
+---
+
+### Zusammenfassung: Lauffähigkeit dieses Abschnitts
+
+| Fälle | Ebene | Zusätzlich zum Bau nötig | Grenze dieser Umgebung |
+|---|---|---|---|
+| `TP-FRIST-01` bis `-03`, `-08`, `-11` | E2E | Frist-Feld, Anzeige an den drei benannten Stellen | keine |
+| `TP-FRIST-04` bis `-07` | Unit | reine Zuordnungsfunktion in `packages/domain` | keine — sofort lauffähig, sobald die Funktion existiert |
+| `TP-FRIST-09` | Integration **oder** E2E, abhängig vom Bau | eine austauschbare Uhr im Zusammenbau **oder** `page.clock` auf einer clientseitig berechneten Anzeige | keine, sobald klar ist, welcher der beiden Wege gebaut wird |
+| `TP-FRIST-10` | E2E | Wiederverwendung von `toCalendarDay` durch die Frist-Berechnung | keine |
+| Feldbezeichnung „Frist" (Mikrofall) | Build-Nachweis | Positivliste-Skript nach Vorbild `distContainsText` | keine |
+| `TP-ANH-01` bis `-04`, `-07`, `-09`, `-11` | E2E | Anhangsverwaltung am Todo | keine |
+| `TP-ANH-05`, `-06` | E2E | Erweiterung von `shell-shim.ts` um einen Öffnen-Befehl für Anhänge (wie `TP-VER-13` für den Öffnen-Befehl der Versionsprüfung) | keine für die Rückfrage/den Aufruf; die tatsächliche Ausführung durch das Betriebssystem ist außerhalb dieser Umgebung (T-B08) |
+| `TP-ANH-08` | Unit + E2E-Spotcheck | reine Ableitungsfunktion für die Bezeichnung | keine |
+| `TP-ANH-10` | E2E, mit Prozess-Neustart | Neustart-Fähigkeit (liegt seit T-142 in `tests/e2e/support/**`, hier auf Frist/Anhänge statt Versionsprüfung angewandt) | keine |
+| `TP-ANH-12` | Integration | Frist/Anhang testweise über mehrere Vorlagen exportieren | keine |
+| `TP-ANH-13` | Integration + E2E-Spotcheck + struktureller Nachweis | Add-in-Route baut, ohne ein Anhangsfeld zu kennen | keine |
+| `TP-ANH-14` | E2E | Ereigniswache über eine ganze Interaktionsfolge | keine |
+| `TP-ANH-15` bis `-18` | Integration (Tür) + Rust-Einheitentest (Öffnen-Befehl) | Formprüfung an beiden Stellen | die **tatsächliche** Ablehnung durch `open`/`ShellExecuteW` selbst (jenseits der Formprüfung) ist unter Linux nicht messbar |
+| `TP-ANH-19`, `-20` | E2E (Rückfrage) + Rust-Einheitentest | Rückfrage-Dialog, Formprüfung | die tatsächliche Ausführung einer `.bat`/`.lnk` durch das Betriebssystem ist unter Linux nicht messbar und wird hier nicht behauptet |
+
+Kein einziger Fall dieses Abschnitts ist heute ausführbar — derselbe erwartete Zustand wie bei
+Abschnitt 24 vor dem Bau. Zwei Klassen von Grenzen sind vorweg benannt statt stillschweigend
+ausgelassen: die Wahl zwischen Integration und E2E bei `TP-FRIST-09`, die erst der Bau auflöst, und
+die Betriebssystemebene bei `TP-ANH-15` bis `-20`, die diese Umgebung grundsätzlich nicht erreicht
+(T-B08) und die ein Rust-Einheitentest neben dem jeweiligen Öffnen-Befehl tragen muss, so wie
+`release.rs` es für die Versionsprüfung bereits vormacht.
+
+---
+
+## 26. Nachtrag aus T-170 (Welle Y — die Reihe, die den Fokusfall selbst misst, O-CY-2/O-CY-3)
+
+O-CY-2 stand zweimal auf dem Board, weil zweimal eine Zusage gemacht wurde, die keine Prüfung
+hielt: T-157 hat `focusTriggerFirst` in `Menu.tsx` eingebaut und als Behebung gemeldet; T-161 hat
+im Browser gemessen, dass der Fokus nach Escape trotzdem auf `<body>` fiel. T-162 hat die Ursache
+geklärt (`focusMenu` aus `@zag-js/menu` holt den Fokus per `requestAnimationFrame` zurück, bevor
+die Fokusfalle des Dialogs scharfstellt) und mit `finalFocusEl` aus einem `useLayoutEffect` in
+`DialogSurface.tsx` behoben. Für **diesen** Fall trägt keine Einheitenprüfung — er ist eine
+Wettlaufbedingung zwischen einem echten Browser-Frame und React, die eine Komponentenprüfung mit
+gefälschten Zeitgebern nicht sieht. Neu: `tests/e2e/focus-return-after-dialog.spec.ts`.
+
+### TP-FOCUS-01 bis TP-FOCUS-06 — der Menü-Auslöser hält den Fokus nach dem Schließen, mit vollem Namen, auch später gemessen
+
+**Anforderungen:** SC 2.4.3 (Fokusreihenfolge), E-076 (Zustandsmaschine unter `DialogSurface`)
+**Ebene:** End-to-End (`tests/e2e/focus-return-after-dialog.spec.ts`, neu)
+**Vorbedingung je Fall:** ein eigenes Todo (TP-FOCUS-05 zusätzlich zwei eigene Status), damit kein
+Fall von der Reihenfolge oder dem Bestand eines anderen abhängt (dieselbe SQLite-Datei über den
+ganzen `test:e2e`-Lauf, `support/services.ts`).
+**Gemessen wird** `document.activeElement` bei t+0/100/300/600 ms nach dem Schließen — nicht nur
+unmittelbar danach: Genau in der Lücke zwischen t+0 und einigen hundert Millisekunden lag der
+Fehler, den T-157 übersehen und T-161 gefunden hat (die Rückholung griff zunächst, wurde dann aber
+von `focusMenu` rückgängig gemacht). Geprüft wird dabei der **zugängliche Name** des fokussierten
+Elements (`aria-label`, sonst sichtbarer Text; `<body>` wird als solches benannt), nicht nur „hat
+irgendwas den Fokus" — der Fehlschlag aus T-161 fiel auf `<body>`, und `<body>` ist auch ein
+Element.
+
+| ID | Schritte | Erwartung |
+|---|---|---|
+| TP-FOCUS-01 | Zeilenmenü der Todo-Liste **mit der Maus** öffnen, „Bearbeiten", der Formulardialog „Todo bearbeiten" erscheint, Escape | der Zeilenmenü-Auslöser hält den Fokus, bei allen vier Meßpunkten |
+| TP-FOCUS-02 | Auslöser fokussieren, Eingabe öffnet das Menü (`@zag-js/menu` bildet `Enter` auf dasselbe Ereignis wie `ArrowDown` ab und markiert den ersten Eintrag), **ohne Pause** ein Pfeil ab (markiert „Bearbeiten") **unmittelbar gefolgt von** Eingabe (löst aus), Escape | dasselbe — der historische Fehlerfall: mit einer Pause zwischen Pfeil und Eingabe verdeckte sich der Fehler bereits in T-157/T-161 |
+| TP-FOCUS-03 | Zeilenmenü mit der Maus, „Löschen" — `role="alertdialog"` statt `role="dialog"`, der andere der beiden von O-CY-2 betroffenen Dialogbausteine (`ConfirmDialog.tsx`) —, Escape | dasselbe |
+| TP-FOCUS-04 | Zeilenmenü mit der Maus, „Bearbeiten", Abschluss über einen Klick auf „Abbrechen" statt über Escape | dasselbe — ein eigener Weg zu `onDismiss`, keine bloße zweite Escape-Probe |
+| TP-FOCUS-05 | Zeilenmenü mit der Maus, ein Eintrag **ohne** Dialog (Statuswechsel „Status: …", O-CY-3) — die Zeile bleibt stehen, das Menü schließt sich selbst | dasselbe, ohne dass je ein Dialog offen war |
+| TP-FOCUS-06 | Gegenprobe: Dashboard, „Neues Todo" — **kein** Menü davor —, der Dialog „Neues Todo" erscheint, Escape | dasselbe; dieser Weg stimmte laut `Menu.tsx`-Kopfkommentar bereits vor T-162 |
+
+**Nicht abgedeckt und benannt statt weggelassen:** „Löschen" und der Statuswechsel über die
+Tastatur. Beide ließen sich nur mit einer festen Anzahl `ArrowDown`-Tastendrücke erreichen, und
+diese Zahl hängt von der Zahl der im gemeinsamen Testbestand zum jeweiligen Zeitpunkt bereits
+vorhandenen Status ab — ein fester Zähler wäre entweder falsch oder ein Zufallstreffer gewesen. Der
+Tastaturweg selbst ist mit TP-FOCUS-02 bereits gemessen; der Fehler sitzt in `@zag-js/menu` und
+kennt keinen Unterschied zwischen Eintragstypen.
+
+**Ergebnis: bestanden**, 6/6, isoliert und im vollen `pnpm run test:e2e` (99/99 insgesamt: 93
+Hauptreihe, 5 Versionsprüfung, 1 Neustart). Ein erster Entwurf von TP-FOCUS-02 prüfte
+`toBeFocused()` auf dem einzelnen Menüeintrag und wäre unabhängig vom hier geprüften Fehler immer
+falsch gewesen: Der echte Fokus liegt am Menükasten (`role="menu"`, `tabIndex: 0`), die Markierung
+eines Eintrags läuft über `aria-activedescendant`/`data-highlighted` (`@zag-js/menu`,
+`menu.connect.mjs`, `getItemProps`) — ein klassisches zusammengesetztes Widget mit virtueller
+Fokusverwaltung. Am echten Lauf gemessen und korrigiert, bevor der Fall grün war.
+
+### Befund — die Live-Region eines `TextField` war ungemessen (O-DY, Risiko aus T-162)
+
+`role="alert"` liegt seit T-162 (Befund O-DA) in **jedem** `TextField` der Hauptanwendung von
+Anfang an im Baum, auch leer — genau damit eine Vorlesehilfe eine spätere Änderung überhaupt als
+Änderung einer ihr bereits bekannten Region ansieht. Gemessen hat das bislang keine Reihe:
+`export-audit-and-locks.spec.ts:151` zählt `[role="alert"]`, aber in einem `InfoDialog` ohne
+`TextField` — dort geht es um die Abwesenheit einer `InlineMessage`, nicht um die Live-Region eines
+Eingabefelds.
+
+Neu: `tests/e2e/field-live-region-announcement.spec.ts`. Geprüft wird die **DOM-Bauart**, die eine
+Vorlesehilfe für eine Ansage braucht — nicht die Ansage selbst (dafür bräuchte es einen echten
+Screenreader, siehe O-EA, dort ausdrücklich visual-qa mit dieser Begründung zugewiesen). Im offen
+bleibenden „Neues Todo"-Dialog: Die Fläche mit `role="alert"` existiert bereits vor dem Fehler,
+leer; nach einem Klick auf „Anlegen" trägt **derselbe** Knoten (über eine Markierung nachgewiesen)
+den Fehlertext — kein neu eingehängtes `role="alert"` an anderer Stelle, das eine Vorlesehilfe
+verpassen würde.
+
+**Ergebnis: bestanden**, 1/1. **Nebenfund beim Bau des Falls, gemeldet statt behoben** (außerhalb
+der eigenen Hoheit, `apps/web/**` gehört frontend-dev): Ein **wirklich** leeres Pflichtfeld
+erreicht `TodoFormDialog.tsx` nie — kein `<form>` der Anwendung trägt `noValidate`, und Chromiums
+eigene Formularprüfung fängt den Klick auf „Anlegen" vorher ab (unlokalisierte englische
+Sprechblase „Please fill out this field.", keine deutsche `role="alert"`-Meldung). Der Testfall
+umgeht das wie im Auftrag zu O-EA vorgezeichnet mit einem Titel aus lauter Leerzeichen (nicht
+leer, aber `trim()`t zu leer) — dieselbe Bauart dürfte an jedem `required`-Feld der Anwendung
+gelten, nicht nur am Titel. Siehe Bericht `.claude/team/reports/T-170-e2e-tester.md`.
+
+## 27. Nachtrag aus T-187 (Welle AB — ein Prüffall, der seinen Fall nicht erreichen konnte, und zwei ungeschützte Ketten)
+
+### TP-ANH-21 — der Aufräumlauf entfernt eine verwaiste Bildkopie beim echten Neustart (A-A-18, O-FI)
+
+**Anlaß.** O-FI (aus T-179 B-2): `attachment-persistence-live.spec.ts` (TP-ANH-10 Stufe 2) war der
+einzige Fall im Bestand, der ein Löschen durch `usecases/image-sweep.ts` (`sweepOrphanedImages`,
+A-A-18) hätte sehen können — ein echter Prozeß-Neustart mit Bildanhang —, startete dafür aber
+`tests/e2e/support/version-check-entry.ts`, das den Aufräumlauf **nicht** ausführte (eigener,
+handgeschriebener Nachbau von `main()` statt desselben Starts). Der Fall konnte seinen eigenen
+Anlaß nicht erreichen; ein grüner Nachweis über nichts.
+
+**Behebung, in zwei Teilen.**
+
+1. `version-check-entry.ts` fährt seit T-187 **denselben** `main()` aus `apps/local-api/src/main.ts`
+   wie die ausgelieferte Anwendung, mit derselben Naht, die dort für `proof:access` bereits besteht
+   (`MainOptions.releaseSource`, T-146) — Antwort auf die Naht-Frage aus O-FJ: ja, wie
+   `proof-access-entry.ts`. Der äußere Vertrag (Aufruf, Umgebungsvariablen, `stdin`-Handschlag,
+   Port) bleibt unverändert; `services.ts` und `version-check-services.ts` brauchten keine Änderung.
+2. Neuer Fall in `attachment-persistence-live.spec.ts`: Ein Bildanhang wird angelegt, seine
+   Anhangszeile **an der Tür vorbei** entfernt (`support/db.ts#deleteAttachmentRowDirectly`, neu) —
+   dieselbe Endlage wie ein gescheitertes Entfernen (T-159) oder eine zurückgehende Migration —, die
+   Bilddatei bleibt als Waise liegen. Nach einem echten Neustart (`restartLocalApi`) ist sie fort.
+
+**Gegenprobe (Auftrag: „ein Fall, der auch vorher grün gewesen wäre, mißt nichts").** Der neue Fall
+wurde gegen die **alte** Fassung von `version-check-entry.ts` gefahren: rot, Waise überlebt den
+Neustart — derselbe Fehlschlag, den O-FI beschrieben hat. Gegen die **behobene** Fassung: grün,
+Waise entfernt. TP-ANH-10 Stufe 2 blieb in beiden Läufen grün — die Gegenprobe trifft gezielt den
+neuen Fall und nicht die Persistenzprüfung daneben.
+
+**Ergebnis: bestanden**, 2/2 in `playwright.attachment-persistence.config.ts` (mit Gegenprobe
+zusätzlich einmal absichtlich rot gefahren und zurückgesetzt).
+
+### TP-KANBAN-08 — Board-Leerzustand: „Erste Spalte einrichten" (Z-07 Punkt 1, O-FV) — **rot, echter Fund**
+
+**Anlaß.** O-FV (aus T-181 Risiko 3): Die Freigabe des Textdurchgangs (UM-03) hängt an einer Kette
+ohne Prüffall — Board-Leerzustand → Knopf „Erste Spalte einrichten" → ein Dialog, der die
+Spalten-Definition (`RULE_IS_A_RULE`, `apps/web/src/lib/labels.ts`) nennt. Der T-181-Bericht
+behauptet das wörtlich: „dieser Knopf öffnet den Einrichtungsdialog, dessen `description`
+`RULE_IS_A_RULE` ist."
+
+**Gemessen, nicht nur gelesen (T-187).** Der gebaute Fall — echter Browser, echter Klick auf „Erste
+Spalte einrichten" im leeren Board — zeigt etwas anderes: Der Knopf ruft `onCreate={() =>
+setRuleForm({})}` in `BoardScreen.tsx` und öffnet **`PoolFormDialog`** (Titel „Neue Board-Spalte
+anlegen", Beschreibung „Eine Regel nennt Bedingungen. …") — **nicht** `BoardSetupDialog` (Titel
+„Spalten des Boards", `description={RULE_IS_A_RULE}`). Diesen zweiten Dialog erreicht ausschließlich
+der Kopf-Knopf „Spalten verwalten" (`support/actions.ts#createBoardColumn`, der etablierte Weg jedes
+anderen Falls in diesem Bestand, der eine Spalte anlegt). Die Kette aus Z-07 Punkt 1 war zum
+Zeitpunkt dieser Prüfung **nicht erfüllt** — anders als O-FV und der T-181-Bericht annahmen.
+
+**Das ist kein Fehler im Prüffall.** `tests/e2e/board-empty-state-rule-chain.spec.ts` bleibt mit der
+Erwartung aus Z-07 Punkt 1 stehen (RULE_IS_A_RULE wörtlich, ohne Import aus `apps/web/src/**` —
+Dateihoheit-Trennung) und damit **rot**, bis frontend-dev entweder den Knopf über
+`BoardSetupDialog` führt oder Z-07 Punkt 1 neu entschieden wird. Ein grüner Prüffall an dieser
+Stelle wäre der zweite „Nachweis über nichts" in derselben Aufgabe gewesen.
+
+**Ergebnis: gebaut, 0/1 — echter, neu gefundener Fehlschlag, kein Fremdbefund aus dieser Welle.**
+
+### TP-FRIST-11 bis TP-FRIST-13 — der Mitternachtswechsel als feste Reihe (O-ER, nach T-172)
+
+**Anlaß.** O-ER: visual-qa hat den Mitternachtswechsel in T-172 erstmals wirklich mit `page.clock`
+**gesehen** (Fälle M1/M2, M4/M5, M6/M7 in `.claude/team/reports/T-172-visual-qa.md`), nicht nur am
+Code abgeleitet. Ohne eine eingecheckte Reihe hätte die Behebung aus O-CO/O-DG (vollständige
+Abhängigkeitslisten in `TodoListScreen.tsx`, `TimeScreen.tsx`, `DashboardScreen.tsx` statt eines
+eingefrorenen `useMemo`) beim nächsten Umbau still zurückfallen können, ohne daß etwas rot wird.
+
+**Neu: `tests/e2e/midnight-redraw.spec.ts`**, dieselbe Bauart wie `deadline-computed-state.spec.ts`
+(TP-FRIST-09/-10): `page.clock.install()` auf 23:59 Ortszeit vor der Navigation, `fastForward` über
+Mitternacht danach, ohne jedes `page.reload()`.
+
+| ID | Fläche | Vorher | Nachher (ohne Neuladen) |
+|---|---|---|---|
+| TP-FRIST-11 | Zeilen-Marke der Todo-Liste (`DeadlineFlag`) | „Heute fällig" | „Überfällig" |
+| TP-FRIST-12 | „Erfasst"-Kachel/„Buchungen von heute" der Zeiterfassung | Buchung sichtbar | Buchung verschwunden, Kachel auf 0 |
+| TP-FRIST-13 | „Heute erfasst"-Kachel/„Buchungen von heute" des Dashboards | Buchung sichtbar | Buchung verschwunden; Kontrollkachel „Noch nicht exportiert" **unverändert** |
+
+**Die Grenze, mitgemessen statt nur behauptet (T-172 Fall M3).** TP-FRIST-11 wählt nach dem
+gefälschten Übergang zusätzlich den Fristfilter „Überfällig" (geht als `dueStates` an den
+**Dienst**, E-070 Punkt 3) und erwartet **weiterhin keinen Treffer**: Der Dienst rechnet gegen seine
+eigene, echte Systemuhr, nicht gegen die gefälschte Browser-Uhr dieses Tests. Das ist Architektur
+und keine Lücke — derselbe Fall hält die Zeilen-Marke (client-seitig, wechselt) und den Filter
+(serverseitig, wechselt nicht) nebeneinander, damit die Grenze eingecheckt bleibt und nicht nur in
+einem Bericht steht, der irgendwann verblaßt.
+
+**Ergebnis: bestanden**, 3/3.
+
+### `tests/e2e/export-mixed-status-and-billing.spec.ts:128` — Kennung aus dem Prüffall genommen (O-GJ, E-087)
+
+**Anlaß.** O-GJ: `apps/web/src/components/ExportAudit.tsx:170` trug zum Zeitpunkt dieser Aufgabe die
+interne Kennung `(E-047)` im Oberflächentext — die sechste von sechs verbliebenen Kennungen (`S-19`
+hatte nur fünf gezählt) und die einzige mit Prüffall. Sie sollte aus dem Wortlaut verschwinden; das
+war frontend-devs Zug, nicht dieser Aufgabe.
+
+**Was hier geändert wurde.** Der Vergleich in `export-mixed-status-and-billing.spec.ts` endet seither
+vor der Kennung: `toContainText('Ohne Begründung ausgebucht. Das Feld ist freiwillig')` statt
+`… freiwillig (E-047)`. Ein reiner Teilzeichenkettenvergleich (`toContainText`) — dieser kürzere
+Text steckte **sowohl** im damaligen Satz (mit `(E-047)`) **als auch** im geplanten (ohne die
+Kennung) und hängt damit an keiner internen Kennung mehr. Die Oberfläche selbst war zum Zeitpunkt
+dieser Aufgabe unverändert: Die Streichung blieb frontend-devs Zug in einer eigenen Welle.
+
+**Nachtrag (T-197, berichtigt in T-205):** Die Streichung ist inzwischen erfolgt — `ExportAudit.tsx`
+trägt `(E-047)` nicht mehr, der Satz endet seitdem anders („… freiwillig — protokolliert ist
+trotzdem, dass hier jemand Zeit ohne Abrechnung abgehakt hat, und wann."). Der hier geänderte
+Teilzeichenkettenvergleich trägt genau deshalb unverändert, ohne Anpassung — die Vorhersage oben hat
+gehalten.
+
+## 28. Nachtrag aus T-192 (Welle AC — ein ungemessener Torwächter, ein Wortlaut für zwei Hoheiten, eine dritte reale Bauplan-Stelle)
+
+### TP-EXPST-15 — Der `aria-disabled`-Torwächter beim Zurücksetzen: die Meldung erscheint, die Handlung bleibt aus (O-GZ)
+
+**Anforderungen:** A-6.9, E-012, R-10, SC 3.3.1, SC 2.4.3
+**Ebene:** End-to-End (`tests/e2e/export-audit-and-locks.spec.ts`, neuer Fall)
+**Anlaß.** T-186 hat den Bestätigungsknopf des Zurücksetzen-Dialogs mit Pflichtbegründung von
+`disabled` auf `aria-disabled` umgestellt (O-GP), damit er mit der Tastatur erreichbar bleibt und
+ein Klick sagen kann, was fehlt (P-9). Er ist damit **anklickbar** — die einzige Sicherung gegen
+die Handlung ist seither der Torwächter im `onClick` (`ConfirmDialog.tsx#confirmOrExplain`), und
+der war ungemessen. T-186 hat das selbst benannt, statt es zu verschweigen (O-GZ).
+
+**Playwright-Falle, hier dokumentiert und nicht nur im Fall — sonst hält der nächste Prüffall den
+Knopf für kaputt.** Playwright hält ein `aria-disabled="true"`-Element für nicht bedienbar und
+verweigert einen gewöhnlichen `.click()`. Ein Klick auf den gesperrten Knopf braucht deshalb
+`{ force: true }` — das überspringt ausschließlich Playwrights eigene Erreichbarkeitsprüfung
+(sichtbar, nicht verdeckt), löst aber weiterhin ein echtes, vertrauenswürdiges Klickereignis über
+die Eingabe-Pipeline des Browsers aus, auf das React genauso reagiert wie auf einen gewöhnlichen
+Klick.
+
+**Schritte:**
+1. Eine Buchung exportieren (Vorbereitung wie `TP-EXPST-06`).
+2. „Exportstatus zurücksetzen" öffnen, ohne die Begründung auszufüllen und ohne das
+   Kontrollkästchen zu setzen.
+3. Vor dem Klick: die Meldefläche der Begründung (`.field__live` unter `.dialog__reason`) zählen
+   (`toHaveCount(1)`) und auf Leere prüfen (`toBeEmpty()`) — der Bauplan aus T-186 (Abschnitt 26),
+   danach den Knoten markieren.
+4. Auf den gesperrten Bestätigungsknopf klicken (`{ force: true }`, siehe oben).
+5. **Gegenprobe:** prüfen, daß der Dialog offen bleibt und Exportstatus/-zähler der Buchung
+   unverändert sind — die Handlung ist **nicht** gelaufen. Ein Fall, der nur die Meldung aus
+   Schritt 4 prüft, mißt die Hälfte dieses Dialogs, hinter dem eine mögliche Doppelabrechnung
+   liegt.
+6. Begründung eintragen, Kontrollkästchen setzen, denselben Knopf **ohne** `force` klicken.
+
+**Erwartetes Ergebnis:** Nach Schritt 4 trägt **derselbe** markierte Live-Region-Knoten den Satz
+„Begründung für das Protokoll fehlt.", kein neues, zweites `role="alert"` an anderer Stelle. Nach
+Schritt 5 bleibt die Buchung „exportiert" mit unverändertem `exportCount`. Nach Schritt 6 läuft die
+Handlung: Der Dialog schließt, der Status wird „offen", `exportCount` bleibt unverändert (E-047/
+R-10: die Historie sinkt beim Zurücksetzen nicht).
+
+**Ergebnis: bestanden**, 5/5 in `export-audit-and-locks.spec.ts` (1 neu, 4 unverändert).
+
+**Nebenfund beim Bau dieses Falls.** Eine Buchung mit Exportprotokoll läßt sich über die API nicht
+mehr löschen (`DELETE /time-entries/{id}` antwortet `422 validation_error`, „Ein verwiesener
+Datensatz existiert … oder wird noch benutzt") — das Protokoll verweist auf sie. Dieser Fall räumt
+seine zurückgesetzte Buchung deshalb bewußt **nicht** weg, aus demselben Grund, aus dem `TP-SEC-13`
+seine exportierte Buchung unbereinigt im gemeinsamen Bestand läßt: keine Lücke des Falls, sondern
+dieselbe Regel wie dort.
+
+### `tests/e2e/outlook-addin-build.spec.ts:65` — von der Anrede gelöst, statt an ihr zu hängen (O-GE, E-080, E-087)
+
+**Anlaß.** `apps/outlook-addin/src/ui/App.tsx` duzt an einer einzigen verbliebenen Stelle
+("Öffne eine E-Mail, um daraus ein Todo anzulegen.", Zustand `no_item`), obwohl E-080 seit T-165
+verbindlich sagt: Takt siezt, überall. Der Grund, warum diese eine Zeile die sechs anderen
+Add-in-Stellen aus E-080 überlebt hat: Dieser Prüffall hielt den Satz **wörtlich** fest
+(`getByText('Öffne eine E-Mail, um daraus ein Todo anzulegen.', …)`). T-190 hat dazu den
+Anredewächter (`proof-addin.mjs`, `ANREDE_IMPERATIV`) um echte Imperativformen geschärft, die eine
+gefundene Stelle als benannte, einzelne Ausnahme (`IMPERATIV_AUSNAHME`) geduldet und einen eigenen
+Prüffall verlangt, der sicherstellt, daß die Ausnahme verschwindet, sobald der Satz sich ändert —
+zwei Hoheiten (`tests/e2e/**` und `apps/outlook-addin/**`), die ohne abgestimmte Reihenfolge
+gegeneinander liefen: Wird nur eine Seite geändert, geht ein Prüffall rot.
+
+**Was hier geändert wurde.** Der Vergleich hängt jetzt an dem Teil des Satzes, der in der heutigen
+Du-Form und der vorgesehenen, gesiezten Fassung wörtlich gleich bleibt:
+`getByText('eine E-Mail, um daraus ein Todo anzulegen.', { exact: false })` statt des vollen Satzes
+mit `Öffne`. Dieselbe Bauart wie bei O-GJ (Abschnitt 27, oben): ein Teilzeichenkettenvergleich, der
+beide Fassungen trägt, statt an einer Kennung oder einer Anrede zu hängen.
+
+**Der erwartete Wortlaut für die nächste Welle (integration-dev, ohne Rückfrage):**
+„**Öffnen Sie eine E-Mail, um daraus ein Todo anzulegen.**" — die unveränderte Aussage, nur mit
+`Öffne` → `Öffnen Sie`. Mit diesem Wortlaut bleibt der hier geänderte Prüffall unverändert grün;
+`IMPERATIV_AUSNAHME` in `proof-addin.mjs` erkennt danach keinen Treffer mehr (der Wächter prüft
+Verbstämme mit optionalem `-e`, „Öffnen" mit `-en` fällt nicht mehr darunter) und wird durch den
+eigenen Selbstauflösungs-Prüffall aus T-190 **rot** — das ist die vorgesehene, nicht zu heilende
+Reaktion, das Signal für integration-dev, die Ausnahme zu löschen statt sie anzupassen.
+
+**Ergebnis: bestanden**, 2/2 in `playwright.outlook-build.config.ts`, unverändert gegen den
+damaligen Wortlaut gemessen.
+
+**Nachtrag (T-199, berichtigt in T-205):** Die vorhergesagte Reihenfolge ist eingetreten. Der Satz
+in `src/ui/App.tsx` steht seit T-199 gesiezt („Öffnen Sie eine E-Mail, um daraus ein Todo
+anzulegen."), der hier geänderte Teilzeichenkettenvergleich trägt dadurch unverändert weiter, und
+`IMPERATIV_AUSNAHME` **gibt es seitdem nicht mehr** — T-199 hat sie aus `proof-addin.mjs` gelöscht,
+wie oben vorgesehen. Der Wächter kennt den alten Wortlaut seither nur noch als Beispiel
+(`IMPERATIV_VORHER`/`IMPERATIV_NACHHER`), nicht mehr als Ausnahme, die aus einer Messung
+herausgerechnet würde. Wo oben im Präsens von der Ausnahme die Rede ist, beschreibt das den Stand
+zum Zeitpunkt dieser Aufgabe (T-192) — nicht den heutigen.
+
+### Zusatz zu O-GZ — die Bauart der Meldefläche im Leistungsfeld, an einer dritten realen Stelle (`timer-stop-announcement.spec.ts`)
+
+**Anlaß.** T-186 (Bericht, Nächster Schritt Punkt 3) hat für die Meldefläche des Leistungsfeldes
+(`NoteField`, `.note__live`) den Bauplan aus Abschnitt 26 benannt und den Timer-Stopp als
+natürlichen Ort vorgeschlagen, weil dort der Leistungstext entsteht. Der Defekt „Live-Region
+entsteht mit ihrem Inhalt" ist in drei Wellen dreimal aufgetreten und wurde von fünf bestehenden
+Prüfläufen nicht gesehen; frontend-dev baut zum Zeitpunkt dieser Aufgabe an vier weiteren Stellen
+in derselben Bauart.
+
+**Befund dieser Aufgabe, nicht behoben (`apps/web/**` gehört frontend-dev).** `NoteField.error`
+wird im echten Produkt an keiner Stelle tatsächlich gesetzt — weder beim Timer-Stopp
+(`TimerContext.tsx`, die Leistung ist dort frei, `BILLING_NOTE_MAY_BE_EMPTY`) noch bei „Zeit von
+Hand erfassen" (`BookingDialogs.tsx`) reicht ein Aufrufer `error=` an ein `NoteField` herein.
+Einzig die Musterseite (`showcase/NotesSection.tsx:135`) zeigt den Fehlerzustand fest verdrahtet,
+ohne eigenen Übergang, und eignet sich deshalb nicht für den vollen Bauplan (Übergang von leer zu
+befüllt, am selben markierten Knoten). Der volle Bauplan ließe sich am Timer-Stopp nur über einen
+erfundenen Fehlerweg nachstellen, den es im Produkt nicht gibt.
+
+**Was gemessen wird.** Die erste Hälfte des Bauplans, an einer real erreichbaren, dritten Stelle
+derselben Bauart (neben der Titelmeldung des „Neues Todo"-Dialogs, Abschnitt 26, und der
+Begründung des Zurücksetzen-Dialogs, `TP-EXPST-15` oben): `.note__live[role="alert"]` existiert
+mit `toHaveCount(1)` und ist `toBeEmpty()`, sobald der Stopp-Dialog erscheint — bevor er überhaupt
+etwas zu melden hätte. Die Marke bleibt am Knoten stehen, für einen späteren, zweiten Prüffall,
+sobald `NoteField.error` an dieser Stelle einmal wirklich gesetzt wird.
+
+**Ergebnis: bestanden**, 6/6 in `timer-stop-announcement.spec.ts` (1 neu, 5 unverändert). Diese
+Messung schließt den Defekt „Live-Region entsteht mit ihrem Inhalt" an dieser Stelle strukturell
+aus, ohne einen Übergang zeigen zu können — der Rest bleibt ein offener Befund, siehe Bericht
+`.claude/team/reports/T-192-e2e-tester.md`.
+
+## 29. Nachtrag aus T-205 (Welle AE — die Rückführung bekommt ihren Prüffall, zwei Zitate berichtigt)
+
+### `tests/e2e/field-live-region-announcement.spec.ts` — zweiter Testfall: Rückführung nach gescrolltem Absendeversuch (O-IE)
+
+**Anlaß.** T-202 hat behoben, was `visual-qa` in T-198 gemessen hatte (Befund O-FR 4.3): In einem
+**gescrollten** Formulardialog blieb nach gescheitertem Absenden das erste ungültige Feld samt
+seiner Fehlermeldung außerhalb des Sichtbereichs — für einen sehenden Tastaturbenutzer geschah
+scheinbar nichts. Der T-202-Bericht hat selbst benannt, dass die Behebung dafür **keinen** Prüffall
+hatte, und auf die naheliegende Stelle verwiesen: diese Datei öffnet bereits den richtigen Dialog.
+
+**Die Falle, die einen naiven Fall trivial grün gemacht hätte.** Der bestehende erste Testfall
+dieser Datei klickt „Anlegen" über einen Playwright-Locator direkt an. Der Absendeknopf steht im
+`.dialog__footer`, außerhalb des rollenden Rumpfes (`.dialog__body--form`, `max-height: 60vh`) —
+ein Klick dorthin braucht keinen Bildlauf, und `scrollTop` bleibt vor und nach dem Klick bei `0`,
+gemessen. Zwei Messungen einfach an diesen Fall angehängt hätten deshalb **unabhängig davon, ob die
+Behebung existiert**, bestanden — ein Nachweis über nichts, dieselbe Art Fehlschlag wie in
+Abschnitt 27 (O-FZ) benannt.
+
+**Der neue, zweite Testfall** erreicht den Absendeknopf stattdessen über die echte Tabulatortaste
+(dieselbe Bauart wie `toast-tab-order-scroll.spec.ts`, SC 2.4.7): Der Fokus läuft durch die Felder
+des Formulars, unter anderem durch den mehrzeiligen Vermerk nahe dem unteren Rand, und der Browser
+holt jedes fokussierte Feld selbst in den sichtbaren Ausschnitt — das schiebt den Rumpf tatsächlich
+nach unten. Gemessen, bevor abgesendet wird: `scrollTop=107`, der Titelblock endet bei `98,6`
+oberhalb des sichtbaren Rumpfes (der bei `149,8` beginnt) — der Titelblock ist wirklich außerhalb
+des Bildes, nicht nur behauptet, und der Fall trägt eine eigene Prüfung genau dieser Vorbedingung.
+Nach dem Absenden über die Eingabetaste: `scrollTop=0` und `document.activeElement` ist das
+Titelfeld mit `aria-invalid="true"` — dieselbe Größenordnung, die der T-202-Bericht für die eigene
+Musterseite nennt (`scrollTop=67`→`0`, Fokus „Anlegen"→Titelfeld).
+
+**Wäre der Fall vor T-202 rot gewesen?** Ja, geprüft über `git show HEAD:apps/web/src/components/
+FormDialog.tsx` — der Stand vor den zum Zeitpunkt dieser Aufgabe noch unversionierten T-202-
+Änderungen: Dort existiert `revealFirstInvalidWithin` nicht, und die einzige `scrollIntoView`/
+`focus`-Stelle jener Fassung gilt dem **Server**-Fehler (`errorRef`, aus `mutation.error`) und dem
+ersten Feld beim **Öffnen** des Dialogs — keine von beiden greift bei einem rein clientseitig
+abgewiesenen, leeren Pflichtfeld wie hier (`TodoFormDialog.tsx` bricht vor jedem Netzwerkaufruf ab,
+`mutation.error` bleibt `null`). Ohne die Behebung bliebe der Fokus auf dem Absendeknopf stehen und
+`scrollTop` bei `107` — beide neuen Messungen schlügen fehl. Ein tatsächlicher Umbau der beiden
+betroffenen Dateien auf den alten Stand, um das im selben Lauf vorzuführen, wurde nicht
+vorgenommen: Beide gehören der Dateihoheit von `frontend-dev`, nicht von `e2e-tester`.
+
+**Ergebnis: bestanden**, 2/2 in `field-live-region-announcement.spec.ts` (1 neu, 1 unverändert).
+
+### Zwei Zitate berichtigt (O-HU, O-HW)
+
+Über den Wortlaut gesucht (`git grep`, E-087), nicht über den rohen Arbeitsbaum — dort liegen
+Bauergebnisse mit veralteten Kopien, die denselben Suchbegriff träfen, ohne eine Quelle zu sein.
+
+**O-HU.** Zwei Stellen zitierten den alten Wortlaut aus `ExportAudit.tsx`, einmal davon noch mit der
+internen Kennung `(E-047)`, die seit T-197 aus der Oberfläche gefallen ist (Abschnitt 27, O-GJ hatte
+die Streichung nur als frontend-devs künftigen Zug angekündigt, nicht als bereits erfolgt
+beschrieben — sie ist es inzwischen). Berichtigt: der Wortlaut in TP-EXPST-11 (Abschnitt „Nicht
+abrechnen' ohne Grund") auf den heutigen, vollständigen Satz ohne Kennung, und die Einordnung in
+Abschnitt 27 (O-GJ) um einen Nachtrag, der die eingetretene Streichung und den weiterhin tragenden
+Teilzeichenkettenvergleich festhält.
+
+**O-HW.** Der Abschnitt zu O-GE (`outlook-addin-build.spec.ts:65`, Abschnitt 28) nannte
+`IMPERATIV_AUSNAHME` im Präsens, als gäbe es sie noch. T-199 hat sie aus `proof-addin.mjs` gelöscht,
+genau wie der damalige Text es als vorgesehene, nicht zu heilende Reaktion beschrieben hatte — die
+Vorhersage hat gehalten. Berichtigt um einen Nachtrag, der das festhält; die ursprüngliche
+Beschreibung bleibt als Stand von T-192 stehen, weil sie das zum damaligen Zeitpunkt korrekt
+beschreibt.
+
+**Keine dieser beiden Berichtigungen ändert einen Prüffall oder seinen Ausgang** — beide betreffen
+ausschließlich Fließtext dieser Datei. Genau deshalb brach kein Lauf, und genau deshalb blieb es
+sonst stehen (Auftrag zu T-205).
+
+### Zur Bauart mit gesperrtem Absendeknopf (O-GZ-Nachbar, kein eigener Fund dieser Aufgabe)
+
+Der T-202-Bericht zählt neun Formulardialoge, die ihren Absendeknopf sperren (`submitDisabled`),
+statt beim Absenden zu prüfen — dort greift die Rückführung aus O-IE **nicht**, weil es keinen
+Absendeversuch gibt, gegen den sie laufen könnte. Diese Aufgabe hat beim Bau des neuen Testfalls
+keinen dieser neun Dialoge berührt (der neue Fall bleibt beim „Neues Todo"-Dialog, der seit T-175
+seine eigene, clientseitige Prüfung beim Absenden führt). Ob ein gesperrter Knopf die bessere
+Antwort ist als eine Absage mit Rückführung, bleibt eine offene Produktfrage bei
+`spec-ux-reviewer`, nicht Gegenstand dieser Aufgabe.

@@ -345,6 +345,57 @@ keinen Datenbankserver und keine Übertragung von Daten aus Takt heraus.
 
 ---
 
+## 19. Frist und Anhänge am Todo
+
+Nachtrag des Auftraggebers vom 2026-09-05, mit der Anhangfunktion von Super Productivity als
+Vorbild für Bedienung und Verhalten. Beides hängt am **bestehenden** Todo und ist keine zweite
+Struktur daneben.
+
+### 19.1 Frist
+
+| ID | Anforderung |
+|---|---|
+| A-19.1 | Ein Todo kann eine Frist tragen. Sie ist **optional**; ein Todo ohne Frist bleibt in jeder Hinsicht ein gültiges Todo. |
+| A-19.2 | In der Oberfläche heißt sie ausschließlich **„Frist"**. Nicht „Fälligkeitsdatum", nicht „fällig am", nicht „Deadline". |
+| A-19.3 | Die Frist wird beim Anlegen und beim Bearbeiten eines Todos gesetzt, geändert und wieder entfernt. |
+| A-19.4 | Die Frist ist in der Todo-Ansicht sichtbar, ohne dass man das Todo öffnen muss. |
+| A-19.5 | Drei Zustände sind unterscheidbar und benannt: **überfällig**, **heute fällig**, **später fällig**. Ein Todo ohne Frist hat keinen dieser Zustände. |
+| A-19.6 | Die Frist ist ein Tag, keine Uhrzeit. Die drei Zustände aus A-19.5 sind Tagesvergleiche. |
+| A-19.7 | Die Frist ändert nichts an Pools, Spalten, Zeitbuchungen oder Export. Sie ist eine Eigenschaft des Todos, keine neue Achse. |
+
+### 19.2 Anhänge
+
+| ID | Anforderung |
+|---|---|
+| A-19.8 | Ein Todo kann **beliebig viele** Anhänge tragen. |
+| A-19.9 | Es gibt drei Arten: **Verweis** (öffnet im Browser), **Bild** (wird als Vorschaubild angezeigt), **Datei** (öffnet mit der Standardanwendung des Systems). |
+| A-19.10 | Beim Hinzufügen bestimmt die gewählte Art das Eingabefeld: Verweis → **Adresse** (Pflicht) und **Titel** (optional); Bild → **Bild** (Pflicht) und **Titel** (optional); Datei → **Dateipfad** (Pflicht) und **Titel** (optional). |
+| A-19.11 | Anhänge sind unmittelbar am Todo sichtbar und dort verwaltbar: hinzufügen, öffnen, entfernen. |
+| A-19.12 | Bei Verweis und Datei steht der Titel als Bezeichnung; fehlt er, steht dort etwas Lesbares aus Adresse beziehungsweise Pfad und nie eine leere Zeile. |
+| A-19.13 | Ein Bild wird als Vorschaubild dargestellt. |
+| A-19.14 | Anhänge und Frist werden gespeichert und stehen beim erneuten Öffnen des Todos unverändert wieder da. |
+| A-19.15 | Ein Anhang, der sich nicht öffnen lässt — Datei verschwunden, Adresse unbrauchbar, Bild nicht mehr lesbar —, sagt das an Ort und Stelle. Er verschwindet nicht und er wirft nicht. |
+
+### 19.3 Sortieren, Filtern und das Add-in
+
+Nachtrag des Auftraggebers vom 2026-09-05, als Antwort auf F-20.
+
+| ID | Anforderung |
+|---|---|
+| A-19.20 | Die Todo-Liste lässt sich nach der Frist **sortieren** und nach ihr **filtern**. |
+| A-19.21 | Das Outlook-Add-in kann beim Anlegen eines Todos eine **Frist** setzen. |
+
+### 19.4 Was dabei nicht geschehen darf
+
+| ID | Anforderung |
+|---|---|
+| A-19.16 | Bestehende Todos funktionieren unverändert weiter. Frist und Anhänge sind Ergänzungen, keine Umstellung. |
+| A-19.17 | Die Notiz-Trennung bleibt: Weder Frist noch Anhang gelangen in einen Export. |
+| A-19.18 | Ein Anhang wird **nur auf ausdrückliche Handlung des Benutzers** geöffnet. Nichts öffnet sich beim Anzeigen einer Liste, beim Laden eines Todos oder als Nebenwirkung. |
+| A-19.19 | Über das Outlook-Add-in entstehen **keine** Anhänge. Es legt Todos an und bucht Zeiten; ein Anhang, der aus einer E-Mail stammt, wäre ein von außen geschriebener Öffnen-Befehl. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht
