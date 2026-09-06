@@ -76,6 +76,17 @@ Zustand; die Einleitung oben auf der Seite erklärt sie ohne Vorwissen.
 * Kein Token geändert, keine Typografie, keine neue CSS-Klasse: 432 Kontrastpaare, 0
   durchgefallen.
 
+**Was T-226 geändert hat**
+
+* **Ein Knopf, der einen Dialog öffnet, wird nicht gegen einen anderen Baustein getauscht** —
+  U-5, R-0 bis R-6 und N-1 bis N-4 stehen als Hausregeln in Abschnitt 5.2. Vier Flächen tragen
+  denselben Satz: die Buchungszeile der Exportvorschau, die Buchungszeile und die Sperrmeldung der
+  Vorlagenvorschau und die Liste der ausgelassenen Gruppen. Neue Regel 16.
+* **Der Zeilenbezug im zugänglichen Namen steht im Knopf**, als verborgener Zusatz hinter der
+  sichtbaren Beschriftung, und nicht als `aria-label` — Abschnitt 5.2, letzter Absatz.
+* Kein Token geändert, keine Typografie, keine neue CSS-Klasse: 259 Kontrastpaare, 0
+  durchgefallen.
+
 ```
 pnpm install      # an der Wurzel des Arbeitsbereichs, nicht in apps/web
 pnpm dev          # http://127.0.0.1:5173
@@ -596,6 +607,12 @@ Animiert werden nur `transform`, `opacity` und Farben.
 einen Anzeiger; ein deaktivierter Knopf wird grau. „Arbeitet gerade“ und „geht nicht“ dürfen
 nicht gleich aussehen.
 
+**Und `loading` gehört nicht an den Auslöser eines Dialogs** (T-218, B-18). Wer einem Knopf „zur
+Sicherheit“ `loading` gibt, während der Dialog dahinter arbeitet, sperrt ihn — `Button` setzt bei
+`loading` das echte `disabled` —, und ein gesperrter Knoten nimmt keinen Fokus auf. Die
+Fokusrückkehr fiele auf `<body>`, und es sähe wie Sorgfalt aus. Die Arbeit wird an **einem** Ort
+gezeigt, und es ist der Ort des Fokus: der Absendeknopf **im** Dialog. Siehe 5.2.
+
 **Rückmeldung.** Jede Interaktion aus Abschnitt 16 hat eine sichtbare Rückmeldung: sofortige
 Zustandsänderung unter 100ms, Anzeiger ab etwa 300ms, Erfolgs- oder Fehlermeldung danach.
 Fehlermeldungen tragen `role="alert"`, alles andere `aria-live="polite"`.
@@ -664,6 +681,86 @@ Der Fokus auf dem „Rückgängig“ der ältesten von zehn Meldungen rollt den 
 zurück (`scrollTop` von 897 auf 0), der Knopf steht danach bei y = 130 im Fenster. Keine
 Fokusfalle, kein `tabindex` an der Rollfläche: Ein Halt an einer `aria-live`-Region wäre ein Halt,
 an dem nichts zu tun ist.
+
+### 5.2 Knöpfe, die einen Dialog öffnen — U-5, R-1 bis R-6, N-1 bis N-4 (T-218, T-222, T-226)
+
+Ein Knopf, der einen Dialog öffnet, ist zugleich das **Rückkehrziel** dieses Dialogs:
+`DialogSurface` gibt den Fokus beim Schließen an den Auslöser zurück. Damit ist jede Handlung, die
+den Auslöser verändert, auch eine Handlung am Fokus. Die folgenden Regeln sind Hausregeln und
+nicht Befund einer Aufgabe.
+
+**Die Frage vor dem Bauen (R-5).** *Überlebt dieses Bedienelement seinen eigenen Erfolg?* Es gibt
+drei Antworten und je genau eine Bauform. Eine vierte gibt es nicht, und „zwei Bausteine an einer
+Stelle“ ist keine davon.
+
+| Antwort | Bauform |
+|---|---|
+| Ja, unverändert | nichts zu tun |
+| Ja, aber anders beschriftet | **ein Baustein, zwei Beschriftungen** (U-5) |
+| Nein, es fällt | Ersatzkette nach N-1 bis N-4, am Aufrufer benannt (R-4) |
+
+**Regel U-5 — ein Bedienelement ist auch ein Fach.** Wechselt an einer Stelle nicht der Text,
+sondern der **Zustand eines Bedienelements**, bleibt der Baustein derselbe und nur seine
+Eigenschaften wechseln — Beschriftung, Sinnbild, Ausprägung. Zwei verschiedene Bausteine an einer
+Stelle, umgeschaltet durch einen Wert, der sich **zur Laufzeit** ändert, hängt React aus und baut
+neu auf; der Knoten, der den Dialog geöffnet hat, existiert danach nicht mehr. Gebaut ist das
+zweimal an derselben Zeile (`ExportGroups.tsx`, `TemplatePreview.tsx`) und seit jeher richtig am
+`Timer.tsx`: ein Knoten, wechselndes `icon` und `variant`.
+
+**Regel R-6 — woran man den Fall ohne Browser erkennt.** Verdächtig ist nicht „zwei Bausteine in
+einer Bedingung“, sondern die Verbindung dreier Merkmale: (a) an einer Stelle stehen zwei
+**verschiedene** Bausteinarten, (b) die Bedingung dazwischen kann sich ändern, **während die
+Fläche steht**, und (c) einer der beiden öffnet einen Dialog oder ein Menü. Fehlt (b) — die
+Bedingung ist eine feste Eigenschaft der Aufrufstelle —, ist die Stelle harmlos.
+
+**Regel R-1 — wann ein Rückkehrziel gültig ist.** Ein Ziel taugt nur, wenn es zum Zeitpunkt der
+Rückkehr **alle drei** Bedingungen erfüllt: es hängt im Dokument (`isConnected`), es ist nicht
+gesperrt (`disabled`, `inert`), und es ist nicht verborgen (`hidden`, `display: none`). Daraus
+folgt unmittelbar: *ein Rückkehrziel wird nicht gesperrt, solange der Dialog steht, der zu ihm
+zurückkehren soll* — siehe den Absatz zu `loading` oben.
+
+**Regel R-0 — eine Fläche, aus der Dialoge geöffnet werden, wird beim Auffrischen nicht
+ausgetauscht.** Auffrischen heißt `refreshDeps` und `refreshing`, nicht `deps` und Skelett. Ein
+Skelett ist der richtige Zustand beim **ersten** Laden und der falsche nach jeder Handlung — es
+nähme jedes Rückkehrziel auf dem Bildschirm mit.
+
+**Regel R-3 — ein Ersatz ohne zugänglichen Namen wird übersprungen.** Ein Sprung auf einen
+namenlosen Kasten ist für den, der hört, ununterscheidbar von dem Fall auf `<body>`, den die Kette
+gerade vermeiden soll. Eine eigene Ansage braucht die Kette nicht: Die Folge ist ohnehin gemeldet
+— unter der Bedingung, daß die Meldung den **Gegenstand** nennt und nicht nur die Handlung.
+„Gelöscht.“ erklärt einen Sprung nicht, „Todo „X“ gelöscht.“ erklärt ihn.
+
+**Regel R-4 — den Ersatz nennt der Aufrufer, nicht der Dialog.** `DialogSurface` weiß, **wer**
+geöffnet hat; welche Zeile nachrückt, weiß allein die Liste.
+
+**N-1 bis N-4 — wohin der Fokus geht, wenn das Ziel zu Recht fällt.** *Der Fokus folgt der
+Arbeit, nicht dem Baum:* Er geht auf das Bedienelement, mit dem der Benutzer die begonnene Arbeit
+**fortsetzt** — und wo es keines mehr gibt, auf die kleinste Fläche, die die **Folge** seiner
+Handlung zeigt. Vier Stufen, erster Treffer gewinnt.
+
+| # | Lage | Ziel |
+|---|---|---|
+| **N-1** | Der Gegenstand lebt, nur woanders (verschoben, umsortiert, in eine andere Spalte gewandert) | **seine neue Darstellung** — dasselbe Bedienelement am selben Gegenstand |
+| **N-2** | Der Gegenstand ist fort, die Liste bleibt | **der Nachfolger in der sichtbaren Reihenfolge** — nach Filter und Sortierung, nicht nach den Daten; war es der letzte, der Vorgänger |
+| **N-3** | Der Gegenstand war der letzte, die Liste ist danach leer | **die eine Aktion des Leerzustands**; trägt er keine, sein **Titel** mit `tabindex="-1"`. Ein leerer Behälter mit `tabindex="-1"` ist eine Sackgasse mit Namen |
+| **N-4** | Die Fläche selbst ist fort | **`.screen__title`** der Ansicht, die jetzt steht, `tabindex="-1"` |
+
+Was **nie** gilt: `<body>`. `<body>` ist kein Ziel, sondern die Meldung, daß keines gewählt wurde.
+
+**Der Zeilenbezug im Namen gehört in den Knopf, nicht in ein `aria-label`.** Trägt ein Knopf
+sichtbaren Text und braucht er zusätzlich den Bezug auf seine Zeile (SC 2.4.6), steht der Bezug
+als `visually-hidden`-Zusatz **hinter** der Beschriftung, im selben Knopf, mit Komma davor. Ein
+`aria-label` wäre nach SC 2.5.3 zwar erlaubt, solange es die sichtbare Beschriftung wörtlich und
+am Anfang enthält — es ist trotzdem die schlechtere Bauform, weil es die Beschriftung ein
+**zweites Mal** aufschreibt: Wer später ein Wort ändert und die zweite Stelle übersieht, bricht
+2.5.3, ohne daß irgendetwas rot wird. Der Zusatz kann das nicht, denn er enthält die Beschriftung
+gar nicht. Er schreibt außerdem die **sichtbare** Zeichenkette der Zeile zeichengleich ab; eine
+zweite Formatierung desselben Wertes wäre dieselbe Abschrift eine Ebene tiefer.
+
+**Und jede Prüfung des Fokus nach einer ändernden Handlung mißt zweimal** (B-19): einmal sofort
+und einmal **nach dem Eintreffen der Auffrischung**. Zwischen Rückkehr und Austausch liegt ein
+Netzweg; eine Messung bei t+0 besteht auch dann, wenn der Auslöser einen Wimpernschlag später
+ausgehängt wird. Der Prüffall dazu heißt `TP-FOCUS-07`.
 
 ---
 
@@ -988,6 +1085,15 @@ Seitennavigation (global).
    einzige Weg nach außen führt über einen Befehl der Hülle, und der nimmt **keine Adresse**
    entgegen, sondern die Fassungsbezeichnung (Abschnitt 12). Die Adresse darf danebenstehen —
    als Text, damit man sie liest, bevor man klickt.
+
+16. **Ein Auslöser eines Dialogs überlebt seinen eigenen Erfolg — als *derselbe* Knoten**
+   (T-218, T-222, T-226). Wer an einer Stelle zwei verschiedene Bausteine anbringt und zwischen
+   ihnen mit einem Wert umschaltet, den der Dialog dahinter selbst ändert, zerstört die
+   Fokusrückkehr: React hängt den Auslöser aus, und der Fokus fällt auf `<body>`. Die Bauform ist
+   **ein** Baustein mit wechselnden Eigenschaften (U-5); wo das Ziel zu Recht fällt, gilt die
+   Ersatzkette N-1 bis N-4. Alles dazu in Abschnitt 5.2, einschließlich der Regel, daß ein
+   Rückkehrziel nicht `loading` bekommt, und der Regel, daß der Zeilenbezug im Knopf steht und
+   nicht in einem `aria-label`. Geprüft wird **nach** der Auffrischung, nie nur bei t+0.
 
 ---
 

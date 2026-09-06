@@ -116,6 +116,87 @@ gekennzeichnet und beide sind so gefaßt, daß ein Lauf sie widerlegen kann.
 
 ---
 
+## Nachtrag T-222 (Welle AH) — zwei Beschriftungen für einen Knopf, und eine Regel für den Fokus
+
+Drei Nachträge. Der erste ist die Antwort auf **F-10** und damit die Vorbedingung eines Auftrags,
+der sonst mit einer Rückfallfassung fährt; der zweite ist eine Regel über die **Stelle** eines
+Zeilenbezugs im zugänglichen Namen; der dritte ist die Antwort auf eine Frage, die ui-designer
+ausdrücklich als Frage der Informationsarchitektur an mich weitergereicht hat.
+
+| # | Was | Wo in diesem Papier | Anlaß |
+|---|---|---|---|
+| 1 | **Der Knopf, der beim Gelingen seine Beschriftung wechselt, bekommt seine zwei Sätze.** Ich nehme ui-designers Fassungen — „Leistung nachtragen" und „Leistung bearbeiten" —, aber nicht stillschweigend: Abschnitt 15 prüft sie gegen S-07, E-078, E-080 und die drei Bedingungen aus 11.4, verwirft sechs Gegenvorschläge mit Grund und schreibt den **verborgenen Zusatz** und den **vollen Namen je Zustand** aus | **Abschnitt 15** (neu) | **F-10** aus `traeger-und-zusage.md` 11.11, T-200 Z-59, Board O-IH |
+| 2 | **Wo ein Zeilenbezug steht, hängt daran, ob das Bedienelement sichtbaren Text trägt.** Vorn mit Doppelpunkt, hinten mit Komma — und in derselben Buchungszeile stehen beide Formen nebeneinander. Als **Regel S-15a** | Abschnitt 4 (S-15), 15.4 | SC 2.5.3, eigene Messung an `ExportGroups.tsx` |
+| 3 | **Die Regel, wohin der Fokus geht, wenn sein Ziel zu Recht verschwindet.** Ein Satz und vier Stufen — **N-1 bis N-4**. Sie folgen der **Arbeit** und nicht dem Baum, und sie berichtigen die Ersatzkette aus 11.6 an zwei Stellen | **15.8** (neu) | ui-designers Frage in `traeger-und-zusage.md` 11.6, F-11 |
+
+**Was sich nicht geändert hat:** Streich-, Umbau- und Sperrliste bleiben bei **zehn**, **acht** und
+**zweiundzwanzig** Einträgen. Abschnitt 15 ist **kein** dreiundzwanzigster Sperreintrag und kein
+elfter Streicheintrag.
+
+**Und ausdrücklich keine Vorlage nach E-078 Punkt 3.** Die beiden Sätze aus Abschnitt 13 und 14
+liegen bei spec-ux-reviewer, weil sie Sätze **ersetzen oder erfinden**, die ein Prüfer verlangt hat.
+Abschnitt 15 tut das nicht: „Leistung nachtragen" bleibt zeichengleich stehen, „Leistung bearbeiten"
+tritt an die Stelle von „Bearbeiten" und einer Namensform, die **derselbe** Prüfer in **T-200 Z-59**
+als Befund benannt hat. Ein Wortlaut, der die Auflage eines Prüfers erfüllt, braucht nicht dessen
+Genehmigung gegen sich selbst. Wer das anders sieht, sagt es in dieser Welle und nicht nach dem Bau.
+
+**Zur Messung in diesem Nachtrag (E-087).** Gesucht und gelesen wurde am **2026-09-06** mit ripgrep
+über den Arbeitsbaum; ein `git grep` war auch in diesem Durchgang **nicht** möglich — dieser Lauf
+hatte keine Schale. Zwei Aussagen sind **aus der Kaskade gelesen und nicht im Browser gemessen**
+(15.6 und der Nebensatz zur Namensbildung in 15.4); beide sind an ihrer Stelle gekennzeichnet und
+beide sind so gefaßt, daß ein Lauf sie widerlegen kann. Was ein Hörender hört, ist in diesem
+Nachtrag durchgehend **abgeleitet** — hier läuft kein Vorleseprogramm (T-B09).
+
+---
+
+## Nachtrag T-228 (Welle AI) — eine freie Nummer, ein entschiedener Kanal, eine zurückgenommene Begründung und ein Satz, der zweimal dasteht
+
+Sechs Nachträge. Die ersten vier erledigen die Auflagen aus **T-221**, die dem Verfasser dieses
+Papiers gehören; die letzten zwei entscheiden die Textfrage, die der Bau aufgeworfen hat (**O-KD**).
+
+**Kein freigegebener Wortlaut ändert sich.** Weder 13.3 noch 14.3 verlieren ein Zeichen — T-221 hat
+beide zeichengleich freigegeben und ausdrücklich keine neue Fassung verlangt. Was sich ändert, sind
+**eine Nummer, ein Kanal, zwei Begründungen, eine Grenzfrage und die Akzeptanzkriterien**.
+
+| # | Was | Wo in diesem Papier | Anlaß |
+|---|---|---|---|
+| 1 | **Die Regel heißt ab sofort S-12a — und sie stand außerdem am falschen Ort.** „S-15" war im selben Papier vergeben, an die **vertragliche** Regel über zugängliche Namen. Beim Umhängen kam der zweite, größere Befund heraus: Die Kurzfassung lag seit T-211 **mitten zwischen dem Befund und der Regel von S-10** — also in einer fremden Textsorte, wo sie mitgelesen und nicht gefunden wird. Neue Nummer **und** neuer Ort: bei **S-12** (Dialoge: … **Absage** …), dieselbe Bauart wie S-13a und S-15a | **13.3**, Abschnitt 4 (**S-10** und **S-12**), Abschnitt 14 (Grundlagenzeile) | T-221 **Z-72** (blockierend), E-092 |
+| 2 | **Der Kanal ist entschieden und gebaut: Statusfläche, kein Fehlerkanal.** Damit fällt AK 4 in der Fassung, in der sie dastand — der Fokus bleibt am Knopf —, und AK 5 nennt einen anderen Wirt. Das Papier wird an den Bau herangezogen, nicht umgekehrt | **13.4**, **13.5** | **E-093 Punkt 5**, T-221 **Z-73**, gebaut in **T-220** |
+| 3 | **Die Zeichengrenze ist entschieden, statt sie zu verschweigen.** **P-1 gilt der Feldmeldung**, nicht jeder Absage — und die Länge dieses Satzes ist ohnehin nicht frei, sondern **gebaut**: ein eigener Satz plus ein vorhandener Hinweis, der schon unter S-05 steht | **13.3** (S-12a) | T-221 **Z-76** |
+| 4 | **Zwei Begründungen sind zurückgenommen.** „»Bitte« steht nirgends im Produkt" ist falsch: gemessen **17** Stellen im Oberflächentext, davon vier im Produkt und elf im Dienst, den wir selbst wörtlich durchreichen. **Beide Urteile tragen ohne die Begründung** — und die Messung bringt zwei Befunde ein, die die Aufnahme nicht hatte | **13.3**, **14.4**, S-06, S-07 | T-221 **Z-77**, E-087 |
+| 5 | **Der Satz steht zweimal auf dem Bild — der Hinweis weicht, die Absage bleibt zeichengleich.** Entschieden, nicht offengelassen: die Absage ist der Satz, der auf den Druck antwortet, und sie steht dort, wo der Benutzer nach dem Druck hinsieht | **13.7** (neu) | **O-KD**, T-220 Abschnitt 7.1, E-078 Punkt 1 und 4 |
+| 6 | **Der zweite Sperrgrund desselben Dialogs bekommt seine Antwort — im anderen Kanal.** Das leere Feld ist **ungültig**; dort ist der Fehlerkanal die Wahrheit und nicht die Behauptung. Ein eigener Wortlaut ist dafür nicht zu erfinden: er steht dreimal im Produkt | **13.8** (neu) | **O-KD** zweite Hälfte, T-220 Abschnitt 7.2, P-3, P-8, P-9 |
+
+**Was sich nicht geändert hat:** Streich-, Umbau- und Sperrliste bleiben bei **zehn**, **acht** und
+**zweiundzwanzig** Einträgen. **S-12a ist keine neue Textsorte**, sondern eine Unterregel zu S-12 —
+dieselbe Bauart wie S-13a (T-211) und S-15a (T-222), und aus demselben Grund: Eine Regel, die für
+**eine Lage innerhalb** einer Textsorte gilt, bekommt keine eigene Sorte, sonst wächst die
+Bestandsaufnahme um Nummern statt um Erkenntnis.
+
+**Zur Messung in diesem Nachtrag (E-087, in der Fassung, die heute in `CLAUDE.md` steht).** Gesucht
+wurde am **2026-09-06** über den **Wortlaut** und über die **Quellverzeichnisse** (ripgrep,
+`.gitignore` geachtet). Die zweite vorgeschriebene Hälfte — `git grep` über die versionierten
+Dateien — war **auch in diesem Durchgang nicht möglich**; dieser Lauf hatte keine Schale. Neu ist,
+daß die Lücke diesmal **eingegrenzt** statt nur benannt wird:
+
+- Der Baum führt **drei** Ausschlußlisten (`/.gitignore`, `apps/web/.gitignore`,
+  `apps/desktop/.gitignore`). Sie nennen ausschließlich **Abhängigkeiten, Bauergebnisse, erzeugte
+  Bündel, lokale Daten, Geheimnisse, Prüfartefakte und Werkzeugstände** — darunter
+  `apps/desktop/src-tauri/taskpane/`, also genau die veralteten Zweitkopien, die `CLAUDE.md` vom
+  Lauf über den Arbeitsbaum **ausgeschlossen** haben will. Der Lauf hat sie ausgeschlossen.
+- Was die fehlende Hälfte allein zeigen könnte, ist damit **eine** Klasse: eine **versionierte
+  Quelldatei, die unter einem dieser Namen liegt** (also mit `-f` hinzugefügt wurde). Ob es eine
+  gibt, ist ohne Schale nicht entscheidbar — das ist eine Schranke und kein Beweis, und sie steht
+  hier, statt zu fehlen.
+
+**Am Code gelesen und nicht laufen gesehen:** die Bedingung der Absagefläche
+(`FormDialog.tsx#refusalShown`), die Verdrängung des Hinweises durch die Feldmeldung an der
+Aufrufstelle und die Reihenfolge, in der ein Absendeversuch `touched` setzt. Alle drei sind so
+gefaßt, daß ein Lauf sie widerlegen kann. **Was ein Hörender hört, ist wieder abgeleitet** — hier
+läuft kein Vorleseprogramm (T-B09).
+
+---
+
 ## 1. Was gemessen wurde, und wie groß der Bestand ist
 
 Gezählt in `apps/web/src` **ohne** `showcase/**`:
@@ -137,7 +218,11 @@ schneidet: **Die lange Prosa ist frei, die kurzen Namen sind vertraglich.**
 
 ### Geltungsbereich
 
-- **Produkt:** `apps/web/src/app/**`, `components/**`, `screens/**`, `lib/**`. Hier gilt E-078.
+- **Produkt:** `apps/web/src/app/**`, `components/**`, `screens/**`, `lib/**` **und `api/**`**.
+  Hier gilt E-078. **`api/**` ist mit dem Nachtrag T-228 hinzugekommen** — nicht weil sich der
+  Geltungsbereich geändert hätte, sondern weil die Aufzählung ihn nie enthielt und `api/client.ts`
+  vier Sätze trägt, die jeder Benutzer liest (1.2, sechster Träger). Eine Aufzählung, die einen
+  Textträger nicht nennt, nimmt ihn aus dem Durchgang, ohne daß jemand es beschließt.
 - **Musterseite:** `apps/web/src/showcase/**` und `designsystem.html`. Seit T-057 nicht mehr aus
   dem Produkt erreichbar; ihre `lead`-Texte sind **Prüfdokumentation**, nicht Produktoberfläche.
   E-078 gilt dort **nicht** — aber die Musterseite zeigt Produkttexte und muss nachgezogen
@@ -215,7 +300,9 @@ Derselbe Filter, auf den eigenen Geltungsbereich angewandt — denn eine Methode
 Haus prüft und das eigene nicht, ist keine. Die Aufnahme aus Abschnitt 4 lief über die
 **Namen der Eigenschaften** (`label`, `title`, `hint`, …) und hat `.ts`-Dateien deshalb dort erfaßt, wo sie
 diese Namen benutzen: `lib/labels.ts`, `lib/errorText.ts`, `lib/exportDirectoryAdvice.ts`,
-`lib/databaseLocationAdvice.ts`, `app/undoDone.ts`. **Fünf weitere Träger sind ihr entgangen:**
+`lib/databaseLocationAdvice.ts`, `app/undoDone.ts`. **Sechs weitere Träger sind ihr entgangen** —
+der sechste ist mit dem Nachtrag T-228 dazugekommen, und er ist der schwerste, weil er außerdem
+außerhalb der Aufzählung des Geltungsbereichs lag:
 
 | Datei | Was sie trägt | Vorläufiges Urteil |
 |---|---|---|
@@ -224,8 +311,9 @@ diese Namen benutzen: `lib/labels.ts`, `lib/errorText.ts`, `lib/exportDirectoryA
 | `lib/exportTemplateModel.ts` | Absagen beim Lesen einer Vorlage und die Abweichungen gegen die Standardvorlage („Das Feld „X" der Standardvorlage fehlt. Das Abrechnungstool erwartet es.") | **B** — Absage mit Begründung, Bezug A-7.x |
 | `lib/poolRule.ts` | die Regelzusammenfassung samt Achsenbeschriftungen und den Sätzen „Diese Regel nennt keine Bedingung und trifft nichts." | trägt die **Kompensation** für ST-05 (T-171 Abschnitt 3.5) — **nicht anfassen, solange ST-05 offen ist** |
 | `lib/attachmentLabel.ts` | Artbezeichnungen und die Absagegründe in Wortgleichheit mit `attachment.rs` | **B**, Bezug R-22 — Geschwistertext zu SP-13 |
+| `api/client.ts` **(sechster Träger, Nachtrag T-228)** | **vier** Sätze, darunter der **Rückfallsatz** jeder Absage ohne eigenen Grund („Unbekannter Fehler. Bitte versuchen Sie es erneut.") und die zwei Sätze zum nicht erreichbaren Dienst | **B** — und der meistgelesene Satz des Produkts, sobald etwas schiefgeht. **Vorläufig gesperrt**, und mit einer offenen Frage: 12.10 reicht ihn wörtlich durch (siehe 13.3a) |
 
-**Ausdrücklich: keiner dieser fünf Einträge ist ein Streichvorschlag.** Sie sind **aufgenommen und
+**Ausdrücklich: keiner dieser sechs Einträge ist ein Streichvorschlag.** Sie sind **aufgenommen und
 noch nicht beurteilt**. „Vorläufig gesperrt" heißt: bis zum Urteil wird an ihnen nichts gekürzt —
 die Sperre ist die vorsichtige Richtung, nicht die bequeme. Das Urteil gehört in den Durchgang,
 der noch nicht gelaufen ist; die Liste wächst in dieser Welle nicht.
@@ -276,6 +364,27 @@ und weitere; grob gezählt am 2026-09-06, ohne Trennung von Kommentar und Fläch
 Verstoß gegen S-19 und wird nicht nachgezogen:** Nach dem Geltungsbereich in Abschnitt 1 sind die
 Texte der Musterseite **Prüfdokumentation**, und dort ist die Kennung die Auskunft, um die es
 geht. Wer sie in einem späteren Textdurchgang „aufräumt", nimmt der Musterseite ihren Zweck.
+
+### Der zweite Durchgang am selben Tag (Nachtrag T-228) — und er hat eine eigene Zahl widerlegt
+
+**Sechsmal in dieser Sitzung war eine Papierzahl die Fehlerquelle, zweimal eine aus diesem Papier.**
+Der Nachtrag T-228 hat deshalb nicht nur seine eigenen Behauptungen gemessen, sondern die drei
+Aussagen dieses Abschnitts noch einmal — **am selben Tag**, an dem sie geschrieben wurden. Zwei
+davon haben sich verschoben, eine ist falsch.
+
+| Aussage | Stand oben | T-228, 2026-09-06 | Urteil |
+|---|---|---|---|
+| `getByRole` in `tests/e2e` | **315 in 32 Dateien** | **319 in 31 Dateien** | **verschoben innerhalb desselben Tages.** Vier mehr, eine Datei weniger. Die Richtung ist dieselbe wie 222 → 286 → 315 → 319, und der Satz, den die Zahl trägt, ist von ihr unabhängig. **Dazu ein Meßvorbehalt, der bisher fehlte:** gezählt werden **Zeilen mit Treffer**, nicht Aufrufe — eine Zeile mit zwei `getByRole` zählt einmal. Das Papier nennt sie „Zugriffe"; das ist eine Untergrenze, keine Zahl |
+| Kennungen im Oberflächentext (**S-19**) | **null im Produkt** | **mindestens drei** | **falsch, und es ist meine Zahl von heute morgen.** Gefunden: `components/ExportDirectoryField.tsx` zweimal (*„… ohne halbe Datei (A-8.8)."* und *„… lesbare Kundennotizen (A-8.9);"*, beide in `TRAIT_TEXT`, beide sichtbarer Rumpf einer Meldung) und `screens/TemplatesScreen.tsx` einmal (*„… geht in keinen Export (A-7.2). Melden Sie das bitte —"*). **Aufgenommen in S-19; kein Streichauftrag in diesem Nachtrag** |
+| Geltungsbereich (Abschnitt 1) | vier Verzeichnisse | **fünf** | **unvollständig.** `api/**` fehlte, und dort liegt der Rückfallsatz jeder Absage. Berichtigt in Abschnitt 1 und 1.2 |
+
+**Warum die zweite Zeile mehr wiegt als ihre Zahl.** Die Messung von heute morgen hat über die
+**bekannten** Kennungen gesucht (E-054, E-055, E-047, R-10) und daraus „null" geschlossen. Das ist
+derselbe Fehler wie der Zeichenfilter aus 1.1: **ein Filter, der nur findet, was man schon kennt,
+bestätigt die eigene Liste.** Gesucht werden muß nach der **Form** einer Kennung, nicht nach ihren
+bekannten Werten — und in `apps/web/src` steht sie in JSX-Text und in `Record<…, string>`-Trägern,
+also genau in den beiden Bauarten, die 1.1 Lauf 2 und Lauf 3 beschreiben. **Regel M-01 gilt auch
+für Nachmessungen:** wer eine Zahl auf null berichtigt, nennt, wonach er gesucht hat.
 
 ### Was ausdrücklich **nicht** nachgemessen ist
 
@@ -490,6 +599,12 @@ Fristhinweis spricht eine Abwesenheit aus (E-074 Punkt 4), der Leistungshinweis 
 `TodoDetailScreen.tsx:613` überschreibt denselben Platzhalter mit einer **„Sie"**-Fassung. Zwei
 Anreden für dasselbe Feld.
 
+**Nachtrag T-228: es sind drei, und der dritte ist ein Vorgabewert.** `Select.tsx` trägt als
+Vorgabe den Platzhalter **„Bitte wählen"** — eine **Aufforderung**, also weder Beispiel noch Form.
+Er ist bei der Aufnahme durchgerutscht, weil die Sorte über die Aufrufstellen gezählt wurde und
+dieser hier in der **Voreinstellung des Bausteins** steht. Gefunden hat ihn nicht ein Textdurchgang,
+sondern die Messung zu einer ganz anderen Behauptung (13.3a).
+
 **Regel S-06.**
 - Beispiel oder Form, **nie** Anweisung, **nie** Anrede, **nie** Wiederholung der Beschriftung.
 - Höchstens 40 Zeichen.
@@ -501,6 +616,7 @@ Anreden für dasselbe Feld.
 | `NoteField.tsx:59` „Nur für dich. …" | **D** zum Banner „Bleibt in Takt" + Bruch der Anrede — ST-09 |
 | `TodoDetailScreen.tsx:613` „Notiz für Sie selbst — …" | **D** zum Banner — ST-09 |
 | `NoteField.tsx:51`, `TimerContext.tsx:766, 798` „Was wurde geleistet?" | bleibt |
+| `Select.tsx` **Vorgabeplatzhalter „Bitte wählen"** (Nachtrag T-228) | **Anweisung statt Beispiel oder Form** — der dritte Ausreißer dieser Sorte, und der schwerste: Er ist der **Vorgabewert** und steht damit an **jeder** Auswahl ohne eigenen Platzhalter. **Aufgenommen, nicht beurteilt** — er ist zugleich der einzige sichtbare Zustand einer Auswahl ohne Wert, und was dort stattdessen steht, ist eine eigene Frage (ui-designer) |
 
 ### S-07 Knopftexte
 
@@ -564,12 +680,13 @@ Abschnitt 15). `ShellStatus.tsx:313-316` hält ausdrücklich fest, warum die Mel
 nicht zu „Ein Fehler ist aufgetreten (Code 3)" eingedampft wird. Das ist keine Länge, die man
 kürzt.
 
-**Regel S-15 — die Absage einer Handlung ohne Gegenstand (Nachtrag T-211).** Ist eine Handlung
-nicht falsch, sondern **gegenstandslos** (der Name ist unverändert, es ist nichts ausgewählt, die
-Liste ist bereits so sortiert), sagt die Absage das in den Worten des Knopfes: „Es gibt nichts zu
-〈Wort des Absendeknopfes〉." Sie behauptet keinen Fehler, keine Leere und keinen Verstoß, sie tadelt
-nicht, und sie läßt den Weg hinaus stehen. Sie ist ein **B**. Vollständige Fassung, verworfene
-Alternativen und Akzeptanzkriterien: **Abschnitt 13**.
+**Hier stand bis zum 2026-09-06 die Regel über die Absage einer gegenstandslosen Handlung** — unter
+der Nummer **S-15** und mitten zwischen dem Befund und der Regel von S-10. Sie steht jetzt als
+**S-12a** bei S-12, wohin sie gehört: Sie gilt der **Absage in einem Dialog**, nicht der
+Fehlermeldung im Seitenfluß. Der Nachtrag T-228 hat sie dort gefunden, nicht dort gesucht — das
+war die eigentliche Ansteckung aus Z-72, und sie war schlimmer als die falsche Nummer: **eine
+Regel, die den Befund einer anderen Regel von deren Regel trennt**, wird beim Lesen der einen
+mitgelesen und beim Suchen der anderen nicht gefunden (E-092).
 
 **Regel S-10.**
 - **Titel:** was nicht ging, ohne das Wort „Fehler", ohne Code, höchstens sechs Wörter.
@@ -628,6 +745,25 @@ Sperrliste, nicht auf die Streichliste.
 - **Nie ein „Nicht mehr fragen".** `AttachmentOpenDialog.tsx:55-62` begründet das für R-21; die
   Begründung gilt allgemein.
 
+**Regel S-12a — die Absage einer Handlung ohne Gegenstand (Nachtrag T-228).** Antwortet ein Dialog
+auf einen Absendeversuch, der **nichts zu tun** hat — nicht weil eine Eingabe falsch ist, sondern
+weil die Handlung keinen Gegenstand hat —, dann gilt:
+
+- **Form:** `„Es gibt nichts zu 〈Wort des Absendeknopfes〉. " + 〈der vorhandene Hinweis zu dieser
+  Sperre〉`. Sie nennt in den Worten des Knopfes, daß nichts geschehen ist, behauptet **keinen**
+  Fehler, **keine** Leere und **keinen** Verstoß, tadelt nicht und läßt den Weg hinaus stehen.
+- **Kanal:** die **Statusfläche des Dialogs**, nicht der Fehlerkanal des Feldes. Kein
+  `aria-invalid`, keine Fehlerfarbe am Feld — der Wert ist gültig (E-093 Punkt 5).
+- **Länge:** keine eigene Zahl. Sie ergibt sich: ein Satz nach S-07 plus ein Feldhinweis nach S-05.
+  **P-1 gilt ihr nicht** — P-1 ist die Form der **Feldmeldung**.
+- **Sie ist ein B** und damit nach E-078 nicht streichbar.
+- **Sie gilt nicht** für einen Sperrgrund, bei dem etwas zu tun ist — der gehört in die
+  Feldmeldung (P-3, P-8, P-9).
+
+Herleitung, Wortlaut, verworfene Fassungen und die Akzeptanzkriterien stehen in **13.3**, die
+Abgrenzung zum leeren Pflichtfeld in **13.8**. **Diese Regel hieß bis zum 2026-09-06 „S-15"** —
+eine Nummer, die im Bestandsteil bereits vergeben ist (T-221 Z-72).
+
 ### S-13 Meldungen (Toast)
 
 **Befund.** Titel durchgängig gut: „Todo gelöscht.", „Export geschrieben.", „Anhang
@@ -685,7 +821,36 @@ Zwei Punkte:
 - Ein Element trägt **einen** Zusatztext, nicht zwei. `title` **und** `visually-hidden` an
   derselben Marke ist eine Verdopplung mit zwei Wortlauten.
 - **Vertraglich (E-076 Punkt 3).** 286 `getByRole`-Zugriffe. Jede Änderung hier ist eine
-  Änderung an Prüffällen und geht nur zusammen mit unit-tester und e2e-tester.
+  Änderung an Prüffällen und geht nur zusammen mit unit-tester und e2e-tester. **Die Zahl altert
+  schneller als dieses Papier — Stand und Meßvorbehalt in 1.3; die Aussage trägt unabhängig von
+  ihr.**
+
+**Diese Nummer bleibt bei dieser Regel (Nachtrag T-228).** T-211 hat unter „S-15" eine zweite,
+gänzlich andere Regel angelegt; sie heißt seit T-228 **S-12a** und steht bei ihrer Textsorte
+(S-12). Die vertragliche S-15 ist die ältere und die, an der eine Verwechslung Prüffälle kostet —
+deshalb weicht nicht sie, sondern die neue (T-221 **Z-72**).
+
+**Regel S-15a — die Stelle des Zeilenbezugs (Nachtrag T-222).** Steht ein Bedienelement oder ein
+Wert in einer **Wiederholung** — einer Liste, einer Tabelle, einer Zeile —, braucht sein
+zugänglicher Name den Bezug auf die Zeile. Wo dieser Bezug steht, entscheidet **nicht** der
+Geschmack, sondern die sichtbare Beschriftung:
+
+| Fall | Form | Beispiel aus derselben Buchungszeile |
+|---|---|---|
+| Das Element trägt **keinen** sichtbaren Text (ein Wert, ein Kontrollkästchen, ein Sinnbild) | Bezug **davor**, mit **Doppelpunkt** | „Ungerundete Dauer: 1 h 20 min", „Herkunft: Timer", „In der Tagesgruppe berücksichtigen: 09:00–10:20" |
+| Das Element trägt **sichtbaren** Text | Bezug **dahinter**, mit **Komma** | „Leistung nachtragen, Buchung 09:00–10:20" |
+
+**Der Grund für die zweite Zeile ist SC 2.5.3 und nicht Wohlklang.** Ein vorangestellter Bezug
+schöbe sich zwischen den Anfang des Namens und die sichtbare Beschriftung; diese Regel verlangt
+oben, daß die Beschriftung **wörtlich und am Anfang** steht. Beide Formen stehen heute in derselben
+Zeile nebeneinander (`ExportGroups.tsx`), und das ist kein Widerspruch, sondern genau diese
+Unterscheidung.
+
+**Und der Bezug wird nicht neu formuliert, sondern abgeschrieben.** Er nennt den Wert, der
+**sichtbar in derselben Zeile** steht, zeichengleich und aus derselben Quelle — nicht eine zweite
+Formatierung desselben Zeitpunkts. Zwei Formatierungen eines Wertes sind zwei Wahrheiten, sobald
+eine von beiden gepflegt wird; das ist derselbe Satz wie in 12.4 über den Stoppdialog, eine Ebene
+tiefer.
 
 ### S-16 Titelattribute (native Tooltips)
 
@@ -750,6 +915,26 @@ der Benutzer eine interne Kennung:
 Befundnummer. Sie gehört in den Quelltextkommentar, wo sie bereits steht. Für den Benutzer ist
 sie Zeichenrauschen; sie kostet Platz und verspricht eine Nachschlagemöglichkeit, die es nicht
 gibt.
+
+**Nachtrag T-228 — die fünf sind erledigt, aber es sind nicht null.** T-203 hat gemessen, daß die
+fünf oben genannten Stellen gefallen sind (ST-03 ausgeführt), und daraus „null im Produkt"
+geschlossen. **Gemessen am 2026-09-06 stehen mindestens drei weitere:**
+
+| Ort | Wortlaut (Anfang) | Sorte |
+|---|---|---|
+| `components/ExportDirectoryField.tsx`, `TRAIT_TEXT.unc` | „Der Pfad ist in UNC-Schreibweise geschrieben. … ohne halbe Datei **(A-8.8)**." | sichtbarer Rumpf einer Meldung |
+| `components/ExportDirectoryField.tsx`, `TRAIT_TEXT.sync_folder` | „Sein Client meldet ihn selbst so … lesbare Kundennotizen **(A-8.9)**; …" | sichtbarer Rumpf einer Meldung |
+| `screens/TemplatesScreen.tsx` | „… Der interne Vermerk eines Todos geht in keinen Export **(A-7.2)**. Melden Sie das bitte — …" | sichtbarer Rumpf einer Meldung |
+
+**Sie sind aufgenommen und nicht beauftragt.** Alle drei sind **B** (sie begründen eine Warnung oder
+eine Absage) und stehen zustandsgebunden; **es fällt hier nichts als der Klammerausdruck**, und auch
+der erst in einem Auftrag, der den heutigen Wortlaut vorher in `tests/**` sucht (E-087 Punkt 1,
+1.3 Punkt 3). Die zwei in `ExportDirectoryField.tsx` sind zudem Geschwistertexte zu **S-18** und
+tragen Anforderungen von security-checker — wer sie anfaßt, faßt einen Beratungstext an.
+
+**Und der Befund über die Messung ist der wichtigere:** Diese drei sind der Zählung entgangen, weil
+über die **bekannten** Kennungen gesucht wurde statt über die **Form** einer Kennung (1.3). Eine
+Regel, die nur ihre eigenen Beispiele prüft, meldet Vollzug, solange niemand ein neues erfindet.
 
 ---
 
@@ -2214,11 +2399,48 @@ Umbenennen gibt es in Takt an Tags, Ordnern, Status, Vorlagen und Regeln:
 
 > **„Es gibt nichts zu 〈Wort des Absendeknopfes〉. " + 〈der vorhandene Hinweis zu dieser Sperre〉**
 
-**Regel S-15 — die Absage einer Handlung ohne Gegenstand.** Sie nennt in den Worten des
+**Regel S-12a — die Absage einer Handlung ohne Gegenstand.** Sie nennt in den Worten des
 Absendeknopfes, daß nichts geschehen ist; sie behauptet **keinen** Fehler, **keine** Leere und
 **keinen** Verstoß; sie tadelt den Benutzer nicht; und sie läßt den Weg hinaus stehen. Sie ist ein
 **B** und damit nach E-078 nicht streichbar — kürzbar allein um den Teil, den ein zweiter Träger
-schon sagt.
+schon sagt. **Ihr Kanal ist die Statusfläche des Dialogs und nicht der Fehlerkanal des Feldes**
+(13.4, E-093 Punkt 5).
+
+**Berichtigung der Nummer (Nachtrag T-228, T-221 Z-72).** Diese Regel hieß bis heute **S-15**, und
+diese Nummer war im selben Papier bereits vergeben: **S-15 Zugängliche Namen** in Abschnitt 4 —
+ausdrücklich **vertraglich**, weil an ihr die `getByRole`-Zugriffe der Prüfläufe hängen. Zwei
+verbindliche Regeln unter einer Nummer sind schlimmer als eine ohne: Wer „nach S-15" schreibt, meint
+eines von beidem, und niemand kann entscheiden, welches. **Die vertragliche S-15 behält ihre
+Nummer** — sie ist die ältere, sie steht im Bestandsteil, und sie ist diejenige, an der eine
+Verwechslung Prüffälle kostet. Die neue Nummer hängt an der Textsorte, in der die Regel greift
+(**S-12**, „Dialoge: Titel, Beschreibung, Folge, **Absage**, Bestätigungshaken"); das ist die
+Bauart, die S-13a in T-211 und S-15a in T-222 vorgemacht haben. Die Regel steht ab sofort **auch**
+in Abschnitt 4 unter S-12, damit sie dort gefunden wird, wo jemand nach ihrer Sorte sucht (E-092).
+**Wer „S-15" für diese Regel zitiert findet, liest eine Fassung vor dem 2026-09-06** — es gab genau
+eine solche Stelle, die Grundlagenzeile von Abschnitt 14, und sie ist berichtigt.
+
+**Die Länge, und warum sie hier nicht frei ist (Nachtrag T-228, T-221 Z-76).** Der Satz ist **102
+Zeichen** und drei Sätze; **P-1** setzt 60 beziehungsweise 80 und verlangt **einen** Satz. Beides
+steht nebeneinander, und die Auflösung ist keine Ausnahme, sondern ein Geltungsbereich:
+
+1. **P-1 gilt der Feldmeldung.** Sie ist als *„Form der Pflichtfeldmeldung"* verfaßt (T-177, E-084,
+   E-092) und regelt den Kanal, in dem eine Meldung **an einem Feld** über **dessen Wert** steht.
+   Die Absage nach S-12a steht seit E-093 Punkt 5 nicht dort, sondern in der **Statusfläche des
+   Dialogs** — dem Kanal, für den S-12 die Form setzt und für den `consequence` ausdrücklich
+   **keine** Längengrenze trägt.
+2. **Trotzdem ist die Länge nicht frei, und sie braucht keine neue Zahl.** Der Satz ist nach S-12a
+   **gebaut** und nicht formuliert: ein eigener erster Satz plus der **vorhandene** Hinweis. Der
+   erste Satz nimmt das Wort des Absendeknopfes und bleibt damit im Rahmen von S-07 (hier 28
+   Zeichen); der zweite Teil ist ein dauerhaft sichtbarer Feldhinweis und steht schon unter der
+   **80-Zeichen-Grenze aus S-05** (hier 73). **Die Obergrenze ist damit 80 plus ein Satz** und
+   ergibt sich aus zwei Regeln, die bereits gelten — sie ist gerechnet, nicht gesetzt.
+3. **Was daraus folgt, wenn jemand die Grenze reißt:** Nicht die Absage wird gekürzt, sondern der
+   **Hinweis** — denn er ist der Teil, für den eine Grenze gilt, und er wird an beiden Stellen
+   gelesen. Eine Absage, die länger ist als ihr Hinweis plus ein Satz, ist keine Absage nach S-12a
+   mehr, sondern eine zweite Fassung.
+
+**Damit ist Z-76 beantwortet und nicht überschwiegen.** Die nächste Absage dieser Bauart wird nicht
+mit 102 Zeichen gebaut, „weil diese es durfte", sondern mit der Länge ihres eigenen Hinweises.
 
 **Was der Satz ausdrücklich nicht sagt, mit Begründung je verworfener Fassung:**
 
@@ -2227,45 +2449,126 @@ schon sagt.
 | „Name fehlt." / „Pflichtfeld leer" | **falsch.** Das Feld ist gefüllt. Es ist der Satz des Nachbarzustands, und ihn hier zu benutzen hieße, zwei Zustände gleich zu benennen — dieselbe Verwechslung, die 12.4 an „gesperrt" auseinanderhält |
 | „Ungültiger Name." | **falsch.** Er ist gültig; er ist der gespeicherte. Eine Anwendung, die den eigenen Bestand für ungültig erklärt, ist an dieser Stelle nicht mehr glaubwürdig |
 | „Sie haben nichts geändert." | **Tadel für etwas, das kein Fehler ist.** Die zweite Person im Vorwurf steht in Takt an keiner Stelle, und der Benutzer hat den Dialog vielleicht bewußt geöffnet, um nachzusehen |
-| „Bitte ändern Sie den Namen." | „Bitte" steht nirgends im Produkt (S-07 hält das für Knopftexte fest, und für Sätze gilt es genauso). Außerdem macht es aus einer Absage eine Aufforderung — der Benutzer **darf** auch schließen |
+| „Bitte ändern Sie den Namen." | **verworfen; die Begründung ist berichtigt (T-228).** ~~„Bitte" steht nirgends im Produkt (S-07 hält das für Knopftexte fest, und für Sätze gilt es genauso).~~ **Das ist gemessen falsch** — siehe unten. Es bleibt der zweite Grund, und er trägt allein: Der Satz macht aus einer **Absage** eine **Aufforderung** und nennt damit nur noch **einen** der beiden Ausgänge. Der Benutzer **darf** auch schließen |
 | „Keine Änderung erkannt." | „erkannt" klingt nach einer Messung, die schiefgehen kann, und lädt zum zweiten Versuch ein. Takt vergleicht zwei Zeichenketten; da gibt es nichts zu erkennen |
 | „Speichern nicht möglich." | **falsch in der Richtung.** Möglich wäre es; es gibt nur nichts zu speichern. Dieselbe Begründung wie in 12.4 gegen „Speichern nicht möglich" beim Nachtragsweg |
 | „Der Name ist unverändert." **allein**, als Meldung | sagt den Zustand, aber nicht, was der Druck bewirkt hat. Der Benutzer drückt und liest **denselben Satz wie vorher** — und kann nicht wissen, ob sein Druck überhaupt angekommen ist. Das ist der stille Zustandswechsel in seiner mildesten und häufigsten Form |
 
+### 13.3a Die zurückgenommene Begründung: „Bitte" steht sehr wohl im Produkt (Nachtrag T-228, Z-77)
+
+**Ich habe zweimal begründet, ein Wort stehe „nirgends im Produkt" — hier und in 14.4. Beide Male
+war es falsch, und beide Male hätte ich es messen können, statt es zu behaupten.** Es steht im
+Nachtrag und nicht in einer stillen Ersetzung, weil eine Begründung, die verschwindet, dieselbe
+Falle ein zweites Mal stellt (E-087 Punkt 4, dieselbe Form wie die Berichtigung an 12.10).
+
+**Gemessen am 2026-09-06 über die Quellverzeichnisse — 17 Stellen im Oberflächentext:**
+
+| Bereich | Zahl | Beispiele |
+|---|---|---|
+| **Produkt** (`apps/web/src`, Geltungsbereich E-078) | **4** | `api/client.ts` „Unbekannter Fehler. **Bitte** versuchen Sie es erneut." · `app/TimerContext.tsx` „Es läuft weiterhin ein Timer. **Bitte** starten Sie erneut." · `components/Select.tsx` Platzhalter **„Bitte wählen"** (Vorgabewert, gilt an jeder Auswahl ohne eigenen Platzhalter) · `screens/TemplatesScreen.tsx` „Melden Sie das **bitte** — …" |
+| **Lokaler Dienst** (`apps/local-api/src`) | **11** | `startup.ts` (5), `errors.ts` (2), `usecases/export.ts` (2), `main.ts`, `usecases/tag-names.ts` |
+| **Add-in** (`apps/outlook-addin/src`) | **2** | `ui/TagPicker.tsx`, `ui/TaskPane.tsx` |
+| *Musterseite* (Prüfdokumentation, nicht Produkt) | *3* | *`showcase/IntroSection.tsx` — Bedienanweisungen an den Prüfer* |
+
+**Und die unangenehmste Zeile ist die erste.** `api/client.ts` trägt den **Rückfallsatz** von
+`errorMessage` — den Satz, den jede Absage des Dienstes ohne eigenen Grund bekommt. **12.10 dieses
+Papiers verlangt, den Satz des Dienstes „immer, wörtlich und ungekürzt" durchzureichen.** Eine
+Regel „»Bitte« steht nirgends" und eine Regel „reiche wörtlich durch" stehen gegeneinander, sobald
+die erste als Regel gelesen wird — und sie war nie eine, sondern nur eine falsche Begründung.
+Dieselbe Kollision hätte SP-11 getroffen: Die Sätze der Hülle kommen fertig aus `problems` und
+werden **unverändert** durchgereicht, und elf davon führen „Bitte".
+
+**Was richtig ist, in der engen Fassung:**
+
+- **S-07 sagt es richtig** und handelt von **Knopftexten**: *„Nirgends »OK«, nirgends »Ja«, nirgends
+  »Bitte«."* **Nachgemessen und bestätigt** — kein Knopftext des Produkts führt eines der drei
+  Wörter. Die Verallgemeinerung auf „das Produkt" ist in 13.3 und 14.4 hinzugekommen und fällt.
+- **P-1 sagt es richtig** und handelt von der **Feldmeldung**: dort ist „Bitte" ausdrücklich
+  verboten. Für 14.4 trägt dieser Grund weiter (dort steht der Satz am Feld); **für 13.3 trägt er
+  seit E-093 Punkt 5 nicht mehr**, weil die Absage den Feldkanal verlassen hat. Das ist der Grund,
+  aus dem 13.3 seinen zweiten Grund braucht — und ihn hat.
+- **Ein fremder Satz, den wir zitieren, fällt unter keine dieser Regeln.** Eine Regel über unsere
+  eigene Wortwahl kann nicht über Text herrschen, den wir wörtlich weitergeben; sonst kürzten wir
+  den Grund des Dienstes, um unsere Hausregel zu retten (12.10, SP-11).
+
+**Trägt das Urteil ohne die Begründung? Ja — und beide Fassungen stehen danach besser da.**
+
+| Verworfene Fassung | Was nach der Rücknahme trägt |
+|---|---|
+| **13.3** „Bitte ändern Sie den Namen." | Sie macht aus einer Absage eine **Aufforderung** und nennt nur **einen** der beiden Ausgänge. Das ist ein **Ablaufgrund** am selben Zustand — und es ist genau die Eigenschaft, für die Z-71 die freigegebene Fassung mit ihrem vierten Grund genommen hat („Er nennt beide Ausgänge"). Der Grund ist damit **stärker** als der gefallene, weil er aus dem Fluß kommt und nicht aus einer Zählung |
+| **14.4** „Leistung: länger, als der Dienst annimmt — bitte kürzen." | **Zwei** Gründe standen dort, und der zweite ist unberührt: Der Halbsatz nennt die **Handlung**, und **P-4** läßt ihn nur für die **Folge** zu. Dazu gilt **P-1** hier weiterhin, denn dieser Satz steht am **Feld**. Die Verwerfung stand nie auf der falschen Behauptung allein |
+
+**Zwei Befunde, die die Aufnahme nicht hatte — sie sind der Gewinn dieser Messung.** Beide sind
+**neu aufgenommen und nicht beurteilt**; keiner ist ein Streichvorschlag (dieselbe Zurückhaltung
+wie in 1.2):
+
+1. **`Select.tsx` hat als Vorgabeplatzhalter „Bitte wählen".** Nach **S-06** ist ein Platzhalter
+   *„Beispiel oder Form, **nie** Anweisung"* — „Bitte wählen" ist eine Aufforderung und weder das
+   eine noch das andere. Die Sorte S-06 nennt heute zwei Ausreißer; dies ist der dritte, und er
+   wiegt schwerer als beide, weil er ein **Vorgabewert** ist und damit an jeder Auswahl ohne
+   eigenen Platzhalter steht. **Aufgenommen in S-06.**
+2. **`api/client.ts` liegt außerhalb des Geltungsbereichs, den Abschnitt 1 aufzählt** — und trägt
+   vier Sätze, die jeder Benutzer liest. Siehe 1.2, sechster Träger.
+
 ### 13.4 Fluß, Fokus und Ansage
+
+**Berichtigt am 2026-09-06 (Nachtrag T-228).** Der Kanal ist seit **E-093 Punkt 5** entschieden und
+seit **T-220** gebaut: Die Absage steht in einer **Statusfläche** zwischen Rumpf und Fußzeile
+(`role="status"`, ohne `aria-invalid`, ohne Fehlerfarbe am Feld), nicht in der Meldefläche des
+Feldes. Die Tabelle stand vorher auf dem Feldkanal und ist an drei Zeilen unrichtig geworden; sie
+steht hier in der Fassung, die dem Bau entspricht. **Was der Kanal ändert, steht in 13.5; was er
+für den doppelten Satz bedeutet, in 13.7.**
 
 | Schritt | Was | Was der Benutzer sieht und hört |
 |---|---|---|
-| **Start** | Dialog „„X" umbenennen" offen, Feld mit dem heutigen Namen vorbelegt | Unter dem Feld steht der Hinweis. Der Absendeknopf sieht gesperrt aus |
+| **Start** | Dialog „„X" umbenennen" offen, Feld mit dem heutigen Namen vorbelegt | Unter dem Feld steht der Hinweis. Der Absendeknopf sieht gesperrt aus — er ist es **weich** (`aria-disabled`): erreichbar, tabulierbar, drückbar |
 | **Aktion** | „Speichern" mit Maus oder Tastatur, oder Eingabetaste im Feld | — |
-| **Feedback** | Die Absage tritt an die Stelle des Hinweises, der Fokus geht ins Feld | Der Satz aus 13.3, sichtbar an derselben Stelle und angesagt |
-| **Erfolg** | Der Benutzer tippt | Mit dem ersten geänderten Zeichen fällt die Absage; der Hinweis wechselt auf „Der neue Name erscheint sofort überall, wo diese Regel genannt wird.", der Knopf wird bedienbar |
+| **Feedback** | Die Absage erscheint **über den Knöpfen**, dort, wo der Druck stattgefunden hat. **Der Hinweis unter dem Feld weicht, solange sie steht** (13.7). Der Fokus bleibt, wo er ist | Der Satz aus 13.3, sichtbar neben dem Knopf und **angesagt** (Statusfläche, sie steht auch leer im Baum) |
+| **Erfolg** | Der Benutzer tippt | Mit dem ersten geänderten Zeichen fällt die Absage; der Hinweis kehrt zurück, jetzt als „Der neue Name erscheint sofort überall, wo diese Regel genannt wird.", der Knopf wird bedienbar |
 | **Zweiter Weg hinaus** | „Abbrechen" oder Esc | Der Dialog schließt, der Fokus kehrt auf den Auslöser zurück. **Der Satz nennt diesen Weg selbst** |
 | **Fehlerpfad** | keiner. Es wurde nichts gesendet, also kann nichts scheitern | — |
 | **Sackgasse** | keine — zwei Ausgänge, beide im Satz genannt und beide sichtbar | — |
 
+**Warum der Fokus jetzt am Knopf bleibt, und warum das kein Verlust ist.** Im Feldkanal holte
+`revealFirstInvalidWithin` das beanstandete Feld in den Fokus; in der Statusfläche gibt es kein
+beanstandetes Feld, weil nichts ungültig ist — die Funktion findet nichts, und das ist richtig so.
+Den Fokus **trotzdem** ins Feld zu schieben hieße, dem Benutzer die Stelle zu nehmen, an der er
+gerade steht, ohne ihm eine bessere zu geben: Er steht auf „Speichern", er hat gerade „Speichern"
+gedrückt, und die Antwort steht unmittelbar daneben. Eine Statusfläche sagt sich außerdem selbst
+an. **Der Weg ins Feld bleibt ein Tabulatorschritt**, und der Satz sagt, wozu (SC 2.4.3 unberührt;
+was ein Hörender hört, ist hier abgeleitet — T-B09).
+
 **Was dabei ausdrücklich nicht geschieht:** kein Toast (nichts ist geschehen, und S-13 gilt der
 vollzogenen Handlung), keine zweite Meldung im Fehlerbereich des Dialogs (der gehört der Absage des
-Dienstes, S-10), kein Schließen, kein Zurücksetzen des Feldes.
+Dienstes, S-10), **kein `aria-invalid` und keine Fehlerfarbe am Feld** (der Wert ist gültig; er ist
+der gespeicherte), kein Schließen, kein Zurücksetzen des Feldes.
 
-### 13.5 Akzeptanzkriterien für frontend-dev — **erst gültig, wenn der Umbau beschlossen ist**
+### 13.5 Akzeptanzkriterien für frontend-dev — ~~erst gültig, wenn der Umbau beschlossen ist~~ **beschlossen (E-093), gebaut (T-220), hier nachgezogen**
 
-1. **Der Hinweis bleibt zeichengleich** und bleibt **ein** Baustein. Die Absage setzt ihren ersten
-   Satz davor; sie schreibt ihn nicht ab.
-2. **Die Absage erscheint erst nach einem Absendeversuch**, nie beim Öffnen. Ein Dialog, der beim
-   Öffnen tadelt, ist der Befund O-FY, den T-186 gerade behoben hat.
-3. **Sie tritt an die Stelle des Hinweises**, nicht daneben. Zwei Sätze übereinander, die dasselbe
-   sagen, sind **D**.
-4. **Der Fokus geht in das Feld**, das die Sperre trägt (`revealFirstInvalidWithin` ist gebaut). Er
-   bleibt nie auf einem Knopf stehen, der nichts getan hat.
-5. **Die Ansage kommt aus der vorhandenen Meldefläche des Feldes**, nicht aus einer zweiten
-   Live-Region. Der Wirt ist der, den `TextField` ohnehin führt.
-6. **Der Absendeknopf behält seinen zugänglichen Namen** („Speichern") und seinen Zustand als
-   `aria-disabled`. Der Name trägt die Sperre nicht mit; sie steht im Zustand und der Grund am Feld.
-7. **Der Riegel im Formular bleibt.** Ein `aria-disabled`-Knopf ist anklickbar, und die
-   Eingabetaste im Formular löst `submit` weiterhin aus — es wird **kein** `PATCH` gesendet
-   (T-207 Abschnitt 3.2, O-GZ). Das gehört gemessen, nicht angenommen.
-8. **Kein Toast, kein Dialogfehler, kein Schließen.**
+**Warum diese Liste berichtigt und nicht abgehakt wird.** Sie ist am **Feldkanal** geschrieben.
+E-093 Punkt 5 hat den Kanal gewechselt, und damit sind zwei Kriterien nicht etwa unerfüllt, sondern
+**gegenstandslos** — sie verlangen etwas, das im neuen Kanal falsch wäre. Eine Liste, die nach dem
+Bau das Gegenteil des Gebauten verlangt, ist genau die Falle aus E-092: Der nächste, der sie liest,
+baut den Rückschritt und hält ihn für die Auflage. **Die alte Fassung bleibt lesbar, damit niemand
+sie für nie dagewesen hält.**
+
+| # | Stand | Kriterium in der heute gültigen Fassung |
+|---|---|---|
+| **1** | **erfüllt** | **Der Hinweis bleibt zeichengleich** und bleibt **ein** Baustein. Die Absage setzt ihren ersten Satz davor; sie schreibt ihn nicht ab. **Ergänzt nach Z-74:** Der Hinweis ist in derselben Änderung eine **benannte Konstante** geworden, aus der beide Fälle lesen — gebaut als `UNCHANGED_HINT`. Zwei Abschriften desselben Satzes laufen beim nächsten Sprachdurchgang auseinander |
+| **2** | **erfüllt** | **Die Absage erscheint erst nach einem Absendeversuch**, nie beim Öffnen (Befund O-FY). Gebaut als Bedingung aus drei Teilen: es gibt eine Absage, die Sperre steht **noch**, und es hat einen Versuch gegeben |
+| **3** | **berichtigt, offen** | **Sie tritt an die Stelle des Hinweises, nicht daneben.** Im Feldkanal geschah das von selbst; in der Statusfläche **nicht** — der Hinweis steht seit T-220 gleichzeitig darunter. Das Kriterium bleibt **wörtlich gültig** und ist der Auftrag aus **13.7** |
+| **4** | ~~**Der Fokus geht in das Feld**, das die Sperre trägt~~ | **gegenstandslos und ersetzt.** Kein Feld ist ungültig, also findet `revealFirstInvalidWithin` nichts — und soll nichts finden. **Neu:** Der Fokus **bleibt am Absendeknopf**; die Absage steht neben ihm und sagt sich selbst an (Begründung in 13.4) |
+| **5** | ~~**Die Ansage kommt aus der Meldefläche des Feldes**~~ | **gegenstandslos und ersetzt.** **Neu:** Die Ansage kommt aus der **Statusfläche des Dialogs** — `role="status"`, nicht `alert`; hier ist nichts falsch, die Handlung hat nur nichts zu tun. Die Fläche steht **immer** im Baum, auch leer (O-GQ). Es bleibt bei **einer** Live-Region je Meldung |
+| **6** | **erfüllt** | **Der Absendeknopf behält seinen zugänglichen Namen** („Speichern") und seinen Zustand als `aria-disabled`. Der Name trägt die Sperre nicht mit |
+| **7** | **berichtigt (Z-75), erfüllt** | ~~Der Riegel im Formular **bleibt**.~~ **Der Riegel hält die Handlung auf, nicht den Versuch.** Ein gesperrter Absendeversuch **zählt weiter**, stellt die Meldeflächen still und löst die Rückführung aus; allein der Aufruf des Dienstes unterbleibt. Wörtlich genommen hätte die alte Fassung dafür gesorgt, daß der freigegebene Satz **nie erscheint** — der Knopf wäre klickbar und stumm. **Gemessen wird beides:** daß die Absage erscheint **und** daß kein `PATCH` läuft |
+| **8** | **erfüllt** | **Kein Toast, kein Dialogfehler, kein Schließen.** Und **kein `aria-invalid`** am Feld — das ist seit E-093 Punkt 5 die tragende Zusage dieses Abschnitts |
+
+**Zwei Kriterien kommen hinzu, beide aus O-KD**, und beide stehen ausformuliert in 13.7 und 13.8:
+
+| # | Kriterium |
+|---|---|
+| **9** | **Der Hinweis unter dem Feld weicht, solange die Absage steht**, und kehrt zurück, sobald sie fällt. Er wird dabei nicht gelöscht, sondern **gelesen** — dieselbe Konstante, ein Ort statt zwei (13.7) |
+| **10** | **Der Sperrgrund „leer" antwortet auf den Druck, aber im Feldkanal**, mit dem Wortlaut, der dafür dreimal im Produkt steht. Die Absage nach S-12a wird dort **nicht** verwendet; sie wäre falsch (13.8) |
 
 ### 13.6 Was dieser Abschnitt nicht entscheidet — und ein Hinweis, der dazugehört
 
@@ -2288,6 +2591,236 @@ er kostet keinen Knopfzustand — und er erzeugt vor allem keine Meldung, die ni
 Ein Wortlaut dafür steht in `PoolRenameDialog` bereits und ist übertragbar; er wäre pro Feld zu
 verfassen und ist **nicht** Gegenstand dieses Abschnitts.
 
+**Berichtigung zu diesem Absatz (Nachtrag T-228).** Die Sortierung ist überholt: **E-093 hat alle
+neun umgebaut**, nicht fünf, und damit gibt es die Lage „Sorte C, Knopf hart gesperrt, dauerhafter
+Hinweis genügt" im Produkt nicht mehr. Was von dem Absatz trägt, ist der Satz über den **Träger**
+(ein dauerhafter Hinweis unter dem blanken Pflichtfeld ist richtig und bleibt); was fällt, ist der
+Schluß, damit sei der Druck beantwortet. **Er ist es nicht** — und für den einen Sperrgrund dieses
+Dialogs, an dem das heute noch offensteht, verfaßt **13.8** die Antwort.
+
+### 13.7 Der Satz steht zweimal auf dem Bild — welcher weicht (Nachtrag T-228, O-KD)
+
+**Der Befund, gemessen von frontend-dev am gebauten Bild (T-220 Abschnitt 7.1).** Nach einem
+Absendeversuch im Zustand „unverändert" steht unter dem Feld
+
+> „Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog."
+
+und darüber, über den Knöpfen,
+
+> „**Es gibt nichts zu speichern.** Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie
+> den Dialog."
+
+**Zwei Sätze gleichzeitig, von denen der zweite den ersten vollständig enthält.** Nach dem Raster in
+Abschnitt 2 ist das **D** in seiner reinsten Form: dieselbe Aussage, derselbe Benutzer, derselbe
+Blick. E-078 Punkt 1 verlangt, daß so etwas fällt. **Welcher von beiden, ist eine Textentscheidung
+(E-078 Punkt 4), und sie wird hier getroffen.**
+
+**Entstanden ist es nicht durch einen Fehler, sondern durch den Kanalwechsel.** Im Feldkanal
+verdrängte die Meldung den Hinweis von selbst — eine Fläche, zwei Zustände. In der Statusfläche
+liegen sie an zwei Orten, und beide Orte sind besetzt. Das ist der Preis der richtigen
+Entscheidung, nicht ihr Gegenargument.
+
+#### Die Entscheidung
+
+> **Der Hinweis unter dem Feld weicht, solange die Absage steht. Die Absage bleibt zeichengleich.**
+
+**Fünf Gründe, in dieser Rangfolge:**
+
+1. **Es ist keine neue Entscheidung, sondern dieselbe in einem neuen Kanal.** **AK 3 sagt es seit
+   T-211 wörtlich:** *„Sie tritt an die Stelle des Hinweises, nicht daneben. Zwei Sätze
+   übereinander, die dasselbe sagen, sind D."* Der Kanalwechsel hat nicht die Absicht geändert,
+   sondern nur den Mechanismus: Was vorher von selbst geschah, muß jetzt gebaut werden.
+2. **Der freigegebene Wortlaut bleibt unangetastet.** Die Gegenlösung — die Absage auf ihren ersten
+   Satz kürzen — änderte einen Satz, den spec-ux-reviewer **zeichengleich** freigegeben hat (Z-71),
+   und nähme ihm ausgerechnet den vierten Grund seiner Freigabe: *„Er nennt beide Ausgänge, und der
+   zweite („schließen") ist der, den eine Absage sonst verschweigt."* Eine Absage, die den Weg
+   hinaus in einen anderen Bildschirmbereich auslagert, ist nach **S-12a** keine mehr.
+3. **Die Antwort gehört dorthin, wo gedrückt wurde.** Der Benutzer hat auf „Speichern" gedrückt;
+   sein Blick und sein Fokus sind am Knopf. Die Statusfläche liegt zwischen Rumpf und Fußzeile,
+   also unmittelbar daneben — und der Hinweis steht am anderen Ende des Rumpfes. In einem
+   **gescrollten** Dialog ist dieser Unterschied kein Feinschliff: Dort kann das Feld samt Hinweis
+   außerhalb des Bildes stehen, während die Absage sichtbar ist (Z-63, gemessen an einem Dialog mit
+   1599 px Inhalt in einem Ausschnitt von 492 px). Ein Satz, der nur die Hälfte der Auskunft trägt,
+   wäre genau dort eine Sackgasse.
+4. **Es fällt eine Anzeige, kein Satz.** Der Wortlaut existiert genau **einmal** im Bestand, als
+   benannte Konstante, und beide Stellen lesen aus ihr. Was hier weicht, ist die **zweite
+   gleichzeitige Anzeige** desselben Bausteins — nicht der Baustein. Damit greift auch die Regel
+   aus Abschnitt 2 („es fällt die Kopie, nicht das Original") in ihrem Sinn und nicht in ihrem
+   Buchstaben: Es gibt keine Kopie, es gibt eine Doppelanzeige.
+5. **Der Hinweis verliert seine Aufgabe für die Dauer der Absage, nicht seinen Platz.** Er ist der
+   Grund für eine sichtbare Sperre, solange niemand gedrückt hat. Sobald gedrückt wurde, ist die
+   Absage der bessere Träger derselben Auskunft — sie sagt zusätzlich, was der Druck bewirkt hat.
+   Fällt die Absage, ist der Hinweis wieder der einzige Träger und steht wieder da.
+
+#### Die drei verworfenen Auflösungen, je mit Grund
+
+| Verworfen | Warum |
+|---|---|
+| **Die Absage auf „Es gibt nichts zu speichern." kürzen, der Hinweis bleibt** | Sie verlöre den **Weg hinaus** an der Stelle, an der die Antwort steht — und im gescrollten Fall ganz. Außerdem ändert sie einen **freigegebenen** Wortlaut und brauchte eine neue Genehmigung für eine Fassung, die schlechter ist als die genehmigte |
+| **Den Hinweis für diesen Zustand ganz streichen** | Er ist der Grund einer **sichtbaren** Sperre, und der Grund ist nicht sichtbar. Nach dem Umbau auf einen weich gesperrten Knopf **ließe P-9 es zu** (der Auslöser folgt dem Knopf, und der Knopf läßt sich drücken) — aber der Benutzer müßte dann drücken, um zu erfahren, warum er nicht drücken soll. Dazu käme ein Bruch in der Fläche selbst: Das Feld trägt in seinen drei anderen Zuständen einen Hinweis; ausgerechnet dem mittleren keinen zu geben, sieht aus wie ein Versehen |
+| **Beides stehen lassen** | Das ist der heutige Zustand und der Anlaß dieses Abschnitts. Er sagt nichts Falsches — und genau deshalb ist er die Sorte Doppelung, die bleibt, wenn niemand sie entscheidet (E-078 Punkt 1) |
+
+#### Wann genau der Hinweis weicht — und wann er wiederkommt
+
+**Die Bedingung ist die der Absage, und keine zweite.** Der Hinweis zu diesem Zustand steht
+**nicht**, solange die Absage steht; sonst steht er. Damit gibt es **einen** Zustand und nicht zwei,
+die auseinanderlaufen können.
+
+| Lage | Hinweis unter dem Feld | Absage über den Knöpfen |
+|---|---|---|
+| Dialog frisch geöffnet, Name unverändert | **steht** | — |
+| Nach dem Absendeversuch, Name weiter unverändert | — | **steht** |
+| Der Benutzer tippt: Name geändert | **steht** (jetzt „Der neue Name erscheint sofort überall …") | — |
+| Der Benutzer tippt zurück auf den alten Namen | — | **steht wieder** |
+
+**Die letzte Zeile ist gemessen und ausdrücklich gewollt** (`refusalShown` hängt an der Sperre und
+am Versuch, nicht an der letzten Eingabe). Sie sieht auf den ersten Blick nach einer Absage ohne
+Druck aus und ist es nicht: Der Druck **war**, der Zustand ist derselbe wie damals, und der Satz ist
+in diesem Zustand wahr. Wollte man sie beseitigen, müßte die Absage vergessen, daß gedrückt wurde —
+und dann wäre ein zweiter Druck ohne Änderung dazwischen wieder stumm. **Das wäre der teurere
+Tausch**; deshalb bleibt es, wie es ist, und steht hier, statt beim nächsten Prüfer als Befund
+aufzutauchen.
+
+#### Eine gemessene Warnung an den Umsetzenden: es ist **nicht** eine Zeile an der Aufrufstelle
+
+frontend-dev hat die Behebung als *„eine Zeile (`fieldHint` unterdrücken, solange die Absage
+steht)"* beschrieben. **Am Baum nachgelesen trägt das so nicht:** Die Bedingung der Absage kennt
+**nur der Formulardialog** (sie besteht aus der Sperre **und** dem Versuchszähler), und der
+Versuchszähler steht den **Kindern** des Dialogs zur Verfügung, nicht seinem Aufrufer. Die
+Aufrufstelle, die den Hinweis heute setzt, ist der **Aufrufer**. Wer die Zeile dort schreibt, hat
+nur die Sperre zur Hand — und unterdrückte den Hinweis dann **von der ersten Sekunde an**, also
+genau die Auskunft, die vor dem Druck die einzige ist (P-9). **Das ist der Rückschritt, der wie die
+Behebung aussieht.**
+
+**Wie es stattdessen gebaut wird, entscheidet frontend-dev** (E-078 Punkt 4: der Wortlaut ist
+meiner, die Zeile ist seine). Was das Kriterium verlangt, ist eine Bedingung, die **dieselbe** ist
+wie die der Absage — nicht eine zweite, die ihr ähnlich sieht. Zwei Bedingungen für einen Zustand
+sind die Bauart, an der dieses Papier in dieser Sitzung viermal etwas gelernt hat.
+
+#### Was ein Hörender davon hat — abgeleitet, nicht gemessen
+
+Der Hinweis steht in der Beschreibung des Feldes (`aria-describedby`), die Absage in einer
+Statusfläche. **Doppelt angesagt wird heute nichts**, weil der Fokus nach dem Druck am Knopf bleibt
+und die Feldbeschreibung dort niemand liest. Wer danach ins Feld geht, hört heute den Hinweis, nach
+dieser Änderung nicht mehr — **dieselben Worte hat er dann eine Handlung zuvor aus der Statusfläche
+gehört**, und er ist gerade dabei, den Zustand zu verlassen. Das ist der einzige Punkt, an dem diese
+Entscheidung etwas kostet, und er ist damit benannt. **Hier läuft kein Vorleseprogramm (T-B09); wer
+eines hat, mißt diesen einen Weg und widerlegt oder bestätigt den Absatz.**
+
+#### Akzeptanzkriterien für frontend-dev
+
+1. **Der Hinweis zum Zustand „unverändert" steht nicht, solange die Absage steht**, und steht
+   wieder, sobald sie fällt. **Dieselbe** Bedingung wie die Absage, nicht eine zweite.
+2. **Vor dem ersten Absendeversuch ändert sich nichts.** Der Hinweis steht von der ersten Sekunde
+   an da (P-9, zweite Hälfte). Ein Lauf, der den Dialog nur öffnet, sieht denselben Bildschirm wie
+   heute.
+3. **Der Wortlaut der Absage bleibt zeichengleich** — beide Anzeigen lesen weiterhin aus der einen
+   Konstante. Es entsteht **keine** zweite Fassung und **keine** gekürzte Absage.
+4. **Die beiden anderen Hinweise des Feldes bleiben unberührt** („Ohne Namen geht es nicht: …" und
+   „Der neue Name erscheint sofort überall, wo diese Regel genannt wird.").
+5. **Gemessen wird der Wechsel in beide Richtungen:** nach dem Druck steht der Satz **einmal** auf
+   dem Bild, nach dem ersten geänderten Zeichen steht der Hinweis wieder und die Absage ist weg.
+   Ein Lauf, der nur die erste Hälfte mißt, übersieht einen Hinweis, der nie zurückkommt.
+
+### 13.8 Der zweite Sperrgrund desselben Dialogs: das leere Feld (Nachtrag T-228, O-KD zweite Hälfte)
+
+**Die Lage.** `PoolRenameDialog` sperrt aus **drei** Gründen: der Name ist **vergeben**, der Name
+ist **unverändert**, das Feld ist **leer**. Zwei davon antworten seit T-220 auf einen Druck. Der
+dritte nicht: **Wer den Namen löscht und drückt, liest denselben Satz wie vorher** — dieselbe Lücke,
+die 13.3 für „unverändert" geschlossen hat, nur an einem Zustand, in dem sehr wohl etwas zu tun ist.
+
+**Und der freigegebene Satz wäre dort falsch.** „Es gibt nichts zu speichern." trifft eine Aussage
+über den **Gegenstand** der Handlung: es gibt keinen. Bei einem leeren Feld gibt es einen — er ist
+nur **ungültig**. Das ist nicht dieselbe Lage in einer anderen Farbe, sondern die Nachbarlage, die
+13.1 ausdrücklich auseinanderhält.
+
+#### Die Entscheidung: eigener Satz, aber im anderen Kanal
+
+> **Der leere Name antwortet auf den Druck mit einer Feldmeldung — nicht mit einer Absage nach
+> S-12a. Der Wortlaut ist „Name fehlt.", und er ist nicht zu erfinden: er steht dreimal im
+> Produkt.**
+
+**Vier Gründe:**
+
+1. **Hier ist der Fehlerkanal die Wahrheit und nicht die Behauptung.** Der ganze Grund, aus dem die
+   Absage bei „unverändert" den Fehlerkanal verlassen hat, ist, daß `aria-invalid="true"` über einen
+   **gültigen, gespeicherten** Wert eine falsche Aussage ist (E-093 Punkt 5). Bei einem leeren
+   Pflichtfeld ist dieselbe Aussage **richtig**. **Die zwei Sperrgründe eines Dialogs benutzen also
+   zwei Kanäle — und das ist kein Bruch, sondern genau die Unterscheidung, für die die Kanäle da
+   sind.** Wer sie hier gleichmacht, hebt die Entscheidung von gestern wieder auf.
+2. **Der Fokus muß hier ans Feld, und er kann es nur so.** Es gibt etwas zu tun, und zwar an einer
+   bestimmten Stelle. Erklärt sich das Feld für ungültig, führt die vorhandene Rückführung von
+   selbst dorthin und holt es ins Bild — bei „unverändert" fand sie zu Recht nichts (13.4).
+3. **P-9 ist erfüllt, und zwar in seiner ersten Hälfte.** Seit dem Umbau läßt sich der Absendeknopf
+   drücken; *„läßt sich der Absendeknopf drücken, kommt die Meldung beim Absendeversuch."* Nach
+   **P-8** setzt ein Absendeversuch `touched` ohnehin immer. Beides ist gebaut und kostet an dieser
+   Stelle keine neue Bauart — **drei** Geschwisterfelder im Produkt machen es genau so.
+4. **Die Absage nach S-12a wäre auch der Form nach falsch.** Zusammengesetzt ergäbe sie „Es gibt
+   nichts zu speichern." plus einen Hinweis von 101 Zeichen — **130 Zeichen**, und damit über der
+   Grenze, die 13.3 gerade hergeleitet hat. Der Bau nach S-12a scheitert hier an der Regel selbst,
+   nicht erst am Inhalt.
+
+#### Der Wortlaut — und warum er keine Vorlage nach E-078 Punkt 3 braucht
+
+> **Name fehlt.**
+
+**Er ist nicht neu.** Er steht **zeichengleich** an drei Stellen im Produkt
+(`PoolFormDialog.tsx`, `TagsScreen.tsx`, `StatusSettings.tsx`), und der Formulardialog nennt ihn in
+seinem eigenen Kopfkommentar als **das** Beispiel für diesen Weg: *„Das ist der Weg für „Name
+fehlt." und seinesgleichen."* Damit ist es die **Anwendung** eines vorhandenen Wortlauts auf eine
+vierte Stelle derselben Sorte und nicht die Erfindung eines neuen — dieselbe Einordnung wie in 15.2
+für „Leistung nachtragen". **Eine neue Fassung, die ein Prüfer genehmigen müßte, entsteht hier
+nicht; entstünde eine, stünde sie hier als Vorlage.**
+
+Form geprüft: **P-3** (die Grundform), **P-1** (ein Satz, mit Punkt, 12 Zeichen, kein „Bitte", kein
+„Sie müssen"), **P-2** (das erste Wort ist die Feldbeschriftung — das Feld heißt „Name").
+
+| Verworfen | Warum |
+|---|---|
+| „Es gibt nichts zu speichern. Ohne Namen geht es nicht: …" | **falsch in der Sache** (es gäbe etwas zu speichern) und **130 Zeichen**. Der Satz nach S-12a gilt der Handlung **ohne Gegenstand**; hier ist der Gegenstand da und untauglich |
+| „Ohne Namen geht es nicht: …" als **Meldung** statt als Hinweis | **101 Zeichen in der Feldmeldung** — P-1 setzt 60. Und es wäre derselbe Satz, den der Benutzer schon liest: **D**, und zwar genau die Doppelung, die 13.7 gerade beseitigt |
+| „Der Name fehlt." | **P-2.** Das erste Wort ist die Feldbeschriftung, wörtlich und ohne Artikel — so, wie es an den drei Geschwisterstellen steht. Ein vierter, leicht abweichender Wortlaut wäre die zweite Fassung derselben Meldung |
+| „Bitte geben Sie einen Namen ein." | **P-1** verbietet „Bitte" in der Feldmeldung — und dieser Grund trägt hier, anders als in 13.3, weil der Satz **am Feld** steht (13.3a) |
+| gar nichts, der Hinweis genügt | **Er genügt nicht.** Er sagt, warum ein Name nötig ist; er sagt nicht, daß der Druck angekommen ist. Das ist der stille Zustandswechsel, gegen den dieser ganze Abschnitt geschrieben ist — und seit dem Umbau ist der Knopf drückbar, also fällt auch die alte Entschuldigung weg, er sei ohnehin nicht erreichbar |
+
+#### Trägt der dauerhafte Hinweis? Nein — aber er wird auch nicht gelöscht
+
+**Die Frage aus T-220 lautet, ob der Hinweis reicht. Er reicht für die Auskunft und nicht für die
+Antwort.** Er bleibt trotzdem, und zwar unverändert: Er steht, solange keine Meldung steht, und
+weicht ihr, solange sie steht — **dieselbe Verdrängung, die dieser Dialog für den Zustand
+„vergeben" bereits macht**, und dieselbe Bewegung wie in 13.7, nur im anderen Kanal. Was der
+Benutzer dabei verliert, ist die **Begründung** („Er ist das, woran diese Regel … erkennbar ist");
+was er gewinnt, ist die Auskunft, daß sein Druck angekommen ist, und der Fokus an der Stelle, an
+der er etwas tun kann. **Sobald er ein Zeichen tippt, ist die Begründung wieder da.**
+
+#### Fluß, Fokus und Ansage
+
+| Schritt | Was | Was der Benutzer sieht und hört |
+|---|---|---|
+| **Start** | Dialog offen, der Benutzer löscht den Namen | Unter dem Feld: „Ohne Namen geht es nicht: …". „Speichern" sieht gesperrt aus und ist weich gesperrt |
+| **Aktion** | „Speichern" oder die Eingabetaste | — |
+| **Feedback** | Das Feld erklärt sich für ungültig, der Fokus geht **in das Feld** und holt es ins Bild | „Name fehlt." in der Meldefläche des Feldes, **angesagt**; der Hinweis weicht ihr |
+| **Erfolg** | Der Benutzer tippt einen Namen | Die Meldung fällt, der Hinweis steht wieder — je nach Wert „Der neue Name erscheint sofort überall …" oder, bei Rückkehr zum alten Namen, die Absage aus 13.7 |
+| **Zweiter Weg hinaus** | „Abbrechen" oder Esc | Der Dialog schließt, der Fokus kehrt auf den Auslöser zurück |
+| **Fehlerpfad** | keiner. Es wurde nichts gesendet | — |
+| **Sackgasse** | keine — tippen oder abbrechen, beides erreichbar und beides sichtbar | — |
+
+#### Akzeptanzkriterien für frontend-dev
+
+1. **Der leere Name erzeugt beim Absendeversuch die Feldmeldung `Name fehlt.`** — zeichengleich zu
+   den drei vorhandenen Stellen, **kein** vierter Wortlaut.
+2. **Sie erscheint nicht beim Öffnen**, sondern nach dem Absendeversuch oder nach einer Eingabe mit
+   anschließendem Verlassen (**P-8**, **P-9** erste Hälfte). Der frisch geöffnete Dialog eines
+   Benutzers, der das Feld nur ansieht, tadelt nicht.
+3. **Der Fokus geht in das Feld**, über die vorhandene Rückführung. Hier ist etwas ungültig, also
+   findet sie etwas — anders als bei „unverändert".
+4. **Die Absage nach S-12a wird für diesen Zustand nicht gesetzt.** Es bleibt bei **einer** Antwort
+   je Druck: entweder die Feldmeldung oder die Absage, nie beide.
+5. **Der Hinweis „Ohne Namen geht es nicht: …" bleibt zeichengleich** und weicht der Meldung,
+   solange sie steht.
+6. **Gemessen wird, daß der Druck etwas bewirkt:** Meldung sichtbar, Fokus im Feld, **und** kein
+   `PATCH`. Dieselbe Doppelmessung wie am Riegel.
+
 ---
 
 ## 14. Der Musterblock des Leistungsfelds — der Satz, den `error` wirklich trägt (Nachtrag T-219)
@@ -2295,8 +2828,15 @@ verfassen und ist **nicht** Gegenstand dieses Abschnitts.
 **Grundlage:** T-212 **Z-69** samt **Z-47** (`required` fällt ersatzlos) und **Z-48** (`error`
 bleibt), Board **O-IY** und **O-AX**, **E-034**, **SP-08**, SP-09, die Feldmeldungsregeln **P-1 bis
 P-7** aus T-177 Abschnitt 7.1 (P-1, P-8 und P-9 im Wortlaut in `decisions.md` unter **E-092**),
-Regel **S-15**, Raster Abschnitt 2, E-078 Punkt 3 und Punkt 4, **T-186** (was eine Musterseite
-anrichtet, wenn sie eine falsche Bauart vorführt).
+Regel **S-15 (Zugängliche Namen)**, Raster Abschnitt 2, E-078 Punkt 3 und Punkt 4, **T-186** (was
+eine Musterseite anrichtet, wenn sie eine falsche Bauart vorführt).
+
+**Berichtigung dieser Zeile (Nachtrag T-228, T-221 Z-72).** Sie nannte „Regel S-15" ohne Zusatz, zu
+einem Zeitpunkt, als diese Nummer im Papier **zweimal** vergeben war. Gemeint war und ist die
+**vertragliche** S-15 über zugängliche Namen — der Beleg steht in diesem Abschnitt selbst, in
+**AK 6**: *„Im Produkt fällt kein zugänglicher Name."* Die Regel, die T-211 unter derselben Nummer
+angelegt hatte, heißt seit heute **S-12a** und wird hier **nicht** gebraucht. Die Zeile sagt es ab
+sofort dazu, statt es den Leser raten zu lassen.
 
 **Wofür dieser Abschnitt da ist.** Ein Auftrag an frontend-dev steht bereit und kann nicht fahren,
 weil ihm ein Satz fehlt. Dieser Abschnitt verfaßt ihn. Er ist eine **Vorlage** und wird genehmigt,
@@ -2395,7 +2935,7 @@ Sorten — und keine davon behauptet, das Feld sei Pflicht.
 | „Leistung: zu lang." | **verschweigt den Absagenden.** Ohne „Dienst" liest es sich wie ein Stilurteil über den geschriebenen Text. Takt beurteilt nicht, wie jemand seine Leistung formuliert |
 | „Leistung: mehr als 20 000 Zeichen." | **eine abgeschriebene Konstante der Tür**, auf der Seite, von der abgeschrieben wird (E-063 Punkt 4, T-128). Sie wäre binnen einer Welle die zweite Wahrheit über dieselbe Zahl |
 | „Leistung: der Dienst hat diesen Text abgewiesen." | nennt den **Vorgang** statt der Regel — genau der Unterschied, um den es in **P-3** geht („Das Anlegen ist fehlgeschlagen" gegen „Titel fehlt."). Und er sagt nicht, was zu tun ist |
-| „Leistung: länger, als der Dienst annimmt — bitte kürzen." | „Bitte" steht im Produkt an keiner Stelle (S-07, P-1). Der zweite Halbsatz nennt außerdem die **Handlung**, und **P-4** läßt ihn nur für die **Folge** zu |
+| „Leistung: länger, als der Dienst annimmt — bitte kürzen." | **verworfen; die Begründung ist berichtigt (T-228).** ~~„Bitte" steht im Produkt an keiner Stelle (S-07, P-1).~~ Der erste Teil ist gemessen falsch (13.3a: 17 Stellen). **Was trägt, sind zwei Gründe, und beide sind unberührt:** **P-1** verbietet „Bitte" in der **Feldmeldung** — und dieser Satz steht am Feld, anders als der aus 13.3 —, und der zweite Halbsatz nennt die **Handlung**, während **P-4** ihn nur für die **Folge** zuläßt |
 | „Leistung: nicht gespeichert — der Dienst hat nicht geantwortet." | **falscher Träger.** Ein Fehlschlag des Vorgangs gehört an den Dialog (`FormDialog.error`, S-10), nicht an das Feld. Am Feld steht, was mit **diesem Wert** nicht geht |
 | „Der Text ist länger, als der Dienst annimmt." | **P-2 verletzt.** Ohne den Feldnamen hat niemand einen Bezug, der die Meldung **hört** statt sie zu sehen — und bei zwei gleichzeitig beanstandeten Feldern auch niemand, der sieht |
 
@@ -2515,3 +3055,351 @@ falsch, wenn es beim heutigen Zustand bleibt.
    `errorMessage(cause)` und wirft damit `errorCode(cause)` weg, den `api/client.ts` selbst
    *„die einzige Größe zum Verzweigen"* nennt. Wer O-II baut, entscheidet damit ohnehin, ob der
    Schlüssel mitkommt — und **das** ist der Auslöser der Wiedervorlage aus 12.9.
+
+---
+
+## 15. Ein Knopf, zwei Beschriftungen — und wohin der Fokus geht, wenn sein Ziel zu Recht fällt (Nachtrag T-222)
+
+**Grundlage:** **F-10** aus `docs/design/traeger-und-zusage.md` 11.11 (ui-designer, T-218), dessen
+Abschnitte 11.2 bis 11.8 als bindende Vorgabe für alles außer dem Wortlaut; T-200 **Z-59**;
+**E-034**, **E-078** Punkt 1 und 5, **E-080** Punkt 4, **E-081** Punkt 2, **E-087**; eigene Regeln
+**S-07**, **S-08**, **S-13**, **S-15**, **S-15a**; WCAG 2.2 SC 2.4.3, 2.4.6, 2.5.3, 2.5.8, 3.2.4.
+Gelesen am 2026-09-06: `components/ExportGroups.tsx`, `components/Primitives.tsx`,
+`components/Icon.tsx`, `screens/TemplatePreview.tsx`, `screens/ExportScreen.tsx`,
+`screens/BookingDialogs.tsx`, `styles/components.css`, `styles/app.css`, `lib/format.ts`,
+`showcase/ExportPreviewSection.tsx`.
+
+**Was hier entschieden wird.** Der **Wortlaut** der zwei Beschriftungen, der **Wortlaut** des
+verborgenen Zusatzes, der **volle zugängliche Name je Zustand** — und die Regel, um die
+ui-designer in 11.6 gebeten hat.
+
+**Was hier nicht entschieden wird.** Baustein, Sinnbild, Ausprägung, Größe, Bewegung und Dichte
+stehen in 11.3 und 11.7 und sind ui-designers Feder; ich fasse sie nicht an. Eine Ausnahme, und
+sie ist eine Berichtigung und keine Übernahme: der **Rechenweg** der Dichte (15.6). Ich nenne den
+gemessenen Widerspruch und gebe die Zahl an ihn und an visual-qa zurück, statt eine eigene
+Gestaltentscheidung daraus zu machen.
+
+### 15.1 Nutzerziel und Erfolgskriterium
+
+**Nutzerziel.** Eine Tagesgruppe, die ohne Leistungstext beim Export stehenbleibt, soll mitgehen.
+Der Benutzer trägt die Leistung an der Buchung nach, an der sie fehlt.
+
+**Erfolgskriterium, dreiteilig — alle drei müssen zutreffen:**
+
+1. Die Leistung steht an der Buchung, und die Fläche zeigt sie.
+2. Der Benutzer steht **weiterhin an seiner Buchung** — der Fokus liegt auf demselben
+   Bedienelement, von dem aus er losgegangen ist, nie auf `<body>` (11.1).
+3. **Was das Auge sieht, sagt das Ohr.** Der Knopf hieß „nachtragen" und heißt danach
+   „bearbeiten"; wer die Zeile hört, hört denselben Wechsel wie der, der sie sieht.
+
+Punkt 3 ist der Grund, aus dem der Wortlaut zu dieser Aufgabe gehört und nicht nachgereicht werden
+kann: Die Beschriftung **ist** in diesem Fluß die Rückmeldung (11.3), nicht ihre Beschriftung.
+
+### 15.2 Die zwei Beschriftungen: ich nehme ui-designers Fassungen
+
+> **Leistung fehlt:** „Leistung nachtragen"
+> **Leistung ist da:** „Leistung bearbeiten"
+
+**Beide je 19 Zeichen, je zwei Wörter, je Verb mit Objekt.** Sie halten S-07 (höchstens drei
+Wörter, höchstens 24 Zeichen) mit Abstand, und sie halten die drei Bedingungen, die ui-designer in
+11.4 an jeden Gegenvorschlag stellt: gleiches erstes Wort (a), gleiche Länge (b), Zusatz mit Komma
+(c). Ich nehme sie nicht aus Bequemlichkeit, sondern weil sie die Prüfung bestehen:
+
+| Prüfung | Ergebnis |
+|---|---|
+| **S-07** — Handlung, nicht Zustimmung | Verb + Objekt in beiden. Kein „OK", kein „Ändern?", kein Zustand als Knopfname |
+| **E-078 Punkt 1** — was steht doppelt? | Nichts. Der Knopf ist kein Satz über die Fläche, er **ist** die Handlung. Das Wort „Leistung" steht im leeren Fall ein zweites Mal in derselben Zeile („— keine Leistung erfasst —"), aber als **Zustand** und nicht als Aussage; ein geteiltes Substantiv ist keine doppelte Auskunft, sondern der gemeinsame Gegenstand |
+| **E-080 Punkt 4** — die beste Anrede ist keine | Beide Fassungen kommen ohne Anrede aus, und keine kürzere sagt dasselbe. Der Vorrang der anredefreien Fassung ist hier baulich erfüllt, nicht abgewogen |
+| **E-034** — kein Pflichtcharakter | „nachtragen" sagt: es fehlte zu Recht, und es kommt jetzt dazu. Es sagt **nicht** „fehlt", „erforderlich", „Pflichtfeld". Das ist derselbe Maßstab, an dem in 14.4 sechs Fassungen gescheitert sind, und dieser besteht ihn |
+| **Hausvokabular** | „Leistung" ist das Wort der Spezifikation für den abrechnungsrelevanten Text der Buchung (A-7.3) und steht so in der Zeile, im Feld und im Hinweis. „bearbeiten" ist das Wort, das der Dialog dahinter selbst führt: sein Titel lautet „Buchung bearbeiten". Der Knopf verspricht damit wörtlich, was er öffnet |
+| **SC 2.4.6** in beiden Zweigen | erst mit dem Zusatz aus 15.4. Die sichtbare Beschriftung allein steht in einer Liste von acht Buchungen achtmal gleich da — das ist die Lücke, und sie wird dort geschlossen, nicht hier |
+
+**Der Punkt, an dem die Wahl mehr ist als Geschmack: der Wechsel ist die Rückmeldung.** „nachtragen"
+und „bearbeiten" unterscheiden sich in **einem** Wort und stimmen im ersten überein. Wer den Knopf
+gesehen hat, erkennt ihn wieder; wer ihn hört, hört genau die eine Silbe, die sich geändert hat.
+Zwei Fassungen, die sich vollständig unterscheiden („Leistung nachtragen" gegen „Buchung ändern"),
+wären an derselben Stelle zwei Gegenstände — und dann wäre der überlebende Knoten aus 11.2 zwar
+gebaut, aber nicht mehr erkennbar.
+
+### 15.3 Verworfene Fassungen, je mit Grund
+
+| Verworfen | Warum |
+|---|---|
+| „Nachtragen" / „Bearbeiten" | **kürzer, und dafür gegenstandslos.** Der zugängliche Name lautete dann „Nachtragen, Buchung 09:00–10:20" — nachgetragen **was**? In einer Buchungszeile gibt es drei Werte, die man nachtragen könnte. E-078 kürzt die Menge, nicht den Gegenstand. Dazu: „Bearbeiten" ist wörtlich die heutige Fassung in `TemplatePreview.tsx`, und **genau sie** hat T-200 als Befund benannt |
+| „Leistung erfassen" / „Leistung bearbeiten" | **„erfassen" ist im Produkt vergeben** und meint das Anlegen einer Buchung („Zeit von Hand erfassen"). Der Knopf legt nichts an — die Buchung besteht, leer ist nur ihr Text (11.3). Dazu bricht das Paar Bedingung (b): acht Buchstaben gegen zehn |
+| „Leistung ergänzen" / „Leistung ändern" | **„ergänzen" heißt: zu etwas Vorhandenem hinzu.** Vorhanden ist nichts — die Zeile sagt daneben „— keine Leistung erfasst —". Und „ändern" ist im selben Fluß bereits als **Meldung** vergeben („Buchung geändert.", 12.3); derselbe Stamm für den Knopf und für die Bestätigung seiner Wirkung macht aus zwei Auskünften eine |
+| „Leistung nachtragen" in **beiden** Zuständen | **hielte die Spalte vollkommen still und wäre nach dem ersten Gelingen falsch.** Ein Knopf, der nach getaner Arbeit weiter zum Nachtragen auffordert, ist die stille Variante desselben Fehlers, den O-HX behoben hat: eine Aussage, die ihren Gegenstand verloren hat |
+| „Leistung fehlt" | **ein Zustand als Knopfname** (S-07) — und er erklärt das Feld zur Pflicht, die E-034 ausdrücklich nicht kennt. Dieselbe Verwechslung ist in 14.4 schon einmal einem Wortlaut zum Verhängnis geworden |
+| „Leistung eintragen" / „Leistung bearbeiten" | **nah dran und trotzdem schwächer.** „eintragen" ist der neutrale Vorgang, „nachtragen" die Lage: etwas, das später kommt als der Rest, und zwar erlaubterweise. Genau diese Lage ist E-034. Außerdem stünde „Leistung nachtragen" danach an drei Flächen und „Leistung eintragen" an einer — vier Stellen, zwei Wörter, ein vermeidbarer Unterschied |
+| „Leistung der Buchung 09:00–10:20 bearbeiten" als sichtbarer Text | die heutige **Namensform**, sichtbar gemacht: 43 Zeichen, weit über S-07. Sie war nie als Beschriftung gedacht und taugt auch nicht dazu |
+
+### 15.4 Der verborgene Zusatz und der volle Name
+
+**Wortlaut.**
+
+> `, Buchung ` + der Zeitraum der Zeile, **zeichengleich aus derselben Quelle**, aus der die Zeile
+> ihn sichtbar zeigt.
+
+In `ExportGroups.tsx` ist das `entry.period`, in `TemplatePreview.tsx`
+`formatTimeRange(entry.startedAt, entry.endedAt)` — die Zeichenkette, die 40 px weiter links
+ohnehin steht. **Keine zweite Formatierung**, kein „von 09:00 bis 10:20", keine ausgeschriebene
+Uhrzeit: Was die Vorlesehilfe aus „09:00–10:20" macht, macht sie an beiden Stellen gleich, und ein
+zweiter Wortlaut für denselben Zeitpunkt wäre die Abschrift, die S-15a im letzten Absatz verbietet.
+
+**Die volle Fassung je Zustand:**
+
+| Zustand | sichtbar | verborgen | zugänglicher Name |
+|---|---|---|---|
+| Leistung fehlt | `Leistung nachtragen` | `, Buchung 09:00–10:20` | **„Leistung nachtragen, Buchung 09:00–10:20"** |
+| Leistung ist da | `Leistung bearbeiten` | `, Buchung 09:00–10:20` | **„Leistung bearbeiten, Buchung 09:00–10:20"** |
+
+**Warum hinten und mit Komma:** Regel **S-15a**. Vorn stünde der Bezug zwischen dem Anfang des
+Namens und der sichtbaren Beschriftung, und S-15 verlangt sie wörtlich **und am Anfang**
+(SC 2.5.3).
+
+**Warum das keine Textzugabe im Sinne von E-078 ist.** Der Zusatz trägt **keine neue Auskunft**. Er
+schreibt einen Wert ab, den das Auge aus der Nachbarschaft nimmt und das Ohr in einer Liste von
+acht Zeilen nicht. Genau diese Richtung ist in **E-081 Punkt 2** entschieden: Nachtrag 8 zu E-078
+gilt gegen **Verluste**, nicht gegen **Zugaben** — das Gehör darf mehr bekommen, wenn die Bauart es
+begründet. Hier begründet sie es, und dieselbe Bauart steht in derselben Zeile bereits dreimal
+(„In der Tagesgruppe berücksichtigen: ", „Ungerundete Dauer: ", „Herkunft: ").
+
+**Eine Berichtigung an 11.4, die nichts am Ergebnis ändert und trotzdem hingehört.** ui-designer
+verwirft `aria-label` mit der Begründung, es verstieße gegen SC 2.5.3. Das trifft auf die **alte**
+Namensform zu („Leistung der Buchung 09:00–10:20 bearbeiten" enthält „Leistung bearbeiten" nicht am
+Stück) — auf die **neue** nicht: „Leistung bearbeiten, Buchung 09:00–10:20" enthält die sichtbare
+Beschriftung wörtlich und am Anfang, als `aria-label` wie als Inhalt. Der Weg über `aria-label`
+wäre nach 2.5.3 also erlaubt. **Er bleibt trotzdem verworfen, und der Grund ist ein anderer:** Ein
+`aria-label` schreibt die sichtbare Beschriftung ein zweites Mal auf. Wer später „bearbeiten" in
+„ändern" ändert und die zweite Stelle übersieht, bricht 2.5.3, **ohne daß irgendetwas rot wird**.
+Der verborgene Zusatz kann das nicht: Er enthält die Beschriftung gar nicht, sondern hängt sich an
+sie an. Das ist die Bauart, in der die Zusage eine Eigenschaft ist und keine Zusage — dasselbe
+Argument, mit dem 11.2 zwischen einem und zwei Bausteinen entschieden hat. **Der richtige Grund
+gehört in den Kommentar, nicht der naheliegende**, sonst kommt der Weg beim nächsten Durchgang mit
+dem Hinweis zurück, 2.5.3 sei doch erfüllt.
+
+**Ein Nebenwirkung der Bauart, die in die Prüffälle gehört (aus der Namensbildung abgeleitet, nicht
+gemessen).** Der Name entsteht hier aus **zwei** Knoten. Namensbildende Verfahren fügen die Teile
+mit einem Leerzeichen zusammen; je nach Vorlesehilfe und Browser kann der gemessene Name deshalb
+„Leistung nachtragen , Buchung 09:00–10:20" lauten — mit Leerraum vor dem Komma. Das ist für den
+Hörenden folgenlos und für einen zeichengleichen Vergleich in einem Prüffall nicht. **Daraus die
+Auflage in 15.9 Punkt 7:** Der Prüffall mißt **Enthaltensein** zweier Teile, nicht Gleichheit einer
+ganzen Zeichenkette. Ein Vergleich, der an einem Leerzeichen bricht, mißt die Namensbildung des
+Browsers und nicht unseren Text.
+
+### 15.5 Es sind vier Stellen, nicht drei — und die vierte kannten wir schon
+
+Die Übergabe in 11.8 nennt drei Flächen. Gemessen am 2026-09-06 trägt „Leistung nachtragen" **vier**
+Knöpfe; dieselbe Zahl steht seit T-203 in 12.2 dieses Papiers. Fehlend ist die **Gruppenebene** in
+`TemplatePreview.tsx`: der Knopf in der Sperrmeldung, der den Dialog an der **ersten** Buchung der
+Gruppe öffnet.
+
+Das ist kein Schönheitsfehler, sondern derselbe Befund eine Ebene höher: Bekommen die Zeilenknöpfe
+einen Zeilenbezug und der Gruppenknopf keinen, dann steht in **derselben** aufgeklappten Gruppe ein
+Knopf, dessen Name der **Anfang** der Namen aller anderen ist und der etwas anderes tut. Wer eine
+Knopfliste durchgeht, hat danach genau die Verwechslung, die der Zusatz beseitigen sollte.
+
+| # | Fläche | sichtbar | verborgener Zusatz | zugänglicher Name | was der Knopf erreicht |
+|---|---|---|---|---|---|
+| 1 | `ExportGroups.tsx`, Buchungszeile | „Leistung nachtragen" / „Leistung bearbeiten" | `, Buchung <entry.period>` | „… , Buchung 09:00–10:20" | den Dialog **an dieser Buchung** |
+| 2 | `TemplatePreview.tsx`, Buchungszeile | dieselben zwei | `, Buchung <formatTimeRange(…)>` | ebenso | den Dialog **an dieser Buchung** |
+| 3 | `TemplatePreview.tsx`, **Sperrmeldung der Gruppe** | „Leistung nachtragen", **ein Zustand, kein Wechsel** | `, Tagesgruppe <formatDayLabel(day)>` | „Leistung nachtragen, Tagesgruppe So., 30.08.2026" | den Dialog an der **ersten** Buchung dieser Gruppe |
+| 4 | `ExportScreen.tsx`, `SkippedRow` | „Leistung nachtragen", **ein Zustand, kein Wechsel** | `, <formatDayLabel(day)>` | „Leistung nachtragen, So., 30.08.2026" | **das Todo** — nicht die Buchung |
+
+**Zu 3, und warum der Zusatz dort die Gruppe nennt und nicht die Buchung.** Der Knopf steht in der
+Meldung „Diese Tagesgruppe ist nicht exportierbar" und gehört zu deren Gegenstand. Daß er den
+Dialog an der ersten Buchung öffnet, ist der einzige Weg, an dieser Stelle anzufangen — und
+harmlos, weil `blocked` dort heißt, daß **keine** Buchung der Gruppe Text trägt. Ein Zusatz, der
+„Buchung 09:00–10:20" sagte, verspräche eine Auswahl, die der Benutzer nicht getroffen hat; ein
+Zusatz, der die Gruppe nennt, sagt die Wahrheit über den Gegenstand. **Der Knopf bekommt keine
+zweite Beschriftung** — an ihm wechselt nichts, denn mit dem Nachtragen verschwindet die Meldung,
+in der er steht.
+
+**Zu 4, und der Befund bleibt der aus 12.6 (a).** Dieser Knopf springt über `navigate` auf das
+Todo; dort muß der Benutzer die richtige Buchung des richtigen Tages erst suchen. Der Zusatz macht
+das **nicht schlimmer**, aber er macht es **sichtbarer**: Ein Name, der den Tag nennt, verspricht
+präziser als vorher, was der Knopf nicht auf demselben Weg einlöst. Ich bleibe bei meinem Urteil
+von T-203 — **Fluß-, kein Wortlautbefund**, gehört mit dem Ergebnisblock entschieden und nicht
+nebenbei. Bis dahin gilt: der Zusatz nennt den Tag, weil der Tag das ist, was die Zeile sichtbar
+zeigt (S-15a).
+
+**Und ein Befund, den ich beim Messen von 4 gefunden habe** (aus dem Quelltext gelesen, nicht am
+laufenden Fenster): Die Liste der ausgelassenen Gruppen ist über `${todoId}-${day}` verschlüsselt,
+zeigt aber **nur** Tag, Anzahl und Dauer. Zwei ausgelassene Gruppen **verschiedener Todos am selben
+Tag** ergeben damit zwei Zeilen mit gleichem sichtbarem Text und — nach dieser Änderung — gleichem
+zugänglichem Namen. Der Zusatz kann das nicht heilen, weil er abschreibt, was dasteht.
+**Vorschlag, nicht Auflage:** Die Zeile zeigt den Titel des Todos, auf das ihr Knopf springt (durch
+`Foreign`, E-063); der Zusatz nimmt ihn dann mit. Das gehört in denselben Auftrag wie 12.6 (a) und
+nicht in diesen.
+
+### 15.6 Berichtigung an 11.7: das Raster gilt je Zeile, nicht je Liste
+
+**Der Satz in 11.7 lautet:** *„Rasterspalten gelten für alle Zeilen zugleich: Ein beschrifteter
+Knopf verbreitert Spalte 7 für die ganze Liste, nicht je Zeile."* Daraus folgt dort der Schluß, der
+Preis sei in jeder Gruppe, die schon heute eine Buchung ohne Leistung enthält, **bereits bezahlt**.
+
+**Gemessen an der Kaskade stimmt das nicht** (`components.css`, gelesen am 2026-09-06):
+
+```css
+.eentries { display: flex; flex-direction: column; … }
+.eentry   { display: grid; grid-template-columns: auto auto auto auto auto minmax(0, 1fr) auto; … }
+```
+
+Die Liste ist ein **Flex-Stapel**, und **jede Zeile ist ihr eigenes Raster**. Kein `subgrid`, keine
+gemeinsame Spaltenachse. Dasselbe gilt in der Vorschau: `.tpsegment-list` ist Flex,
+`.tpsegment` ist je Zeile ein Raster mit vier Spalten (`app.css`). Daraus folgt dreierlei, und
+alles drei geht in die Gegenrichtung des Schlusses in 11.7:
+
+1. **Die Spalten der Zeilen sind schon heute nicht bündig.** Eine Zeile mit `Button` und die
+   nächste mit `IconButton` haben verschieden breite letzte Spalten. Was 11.7 als bereits bezahlten
+   Preis beschreibt, ist in Wahrheit ein bereits vorhandener **Riß** — und die Vereinheitlichung
+   auf **einen** Baustein macht die Liste an dieser Stelle ruhiger, nicht unruhiger.
+2. **Der neue Preis fällt je Zeile an, und er fällt in jeder Zeile mit Leistung.** Heute trägt eine
+   gefüllte Zeile 28 px Sinnbildknopf, künftig einen beschrifteten. Der Verlust an Leseraum trifft
+   damit **alle** gefüllten Zeilen, nicht nur die Gruppen, in denen jede Buchung ihre Leistung hat.
+   Das ist mehr als 11.7 veranschlagt, und es ist die Zahl, an der der dort vorab entschiedene
+   Rückfall hängt.
+3. **Der Wechsel der Beschriftung bewegt nur seine eigene Zeile.** Bedingung (b) aus 11.4 —
+   gleiche Länge, damit die Spalte sich nicht bewegt — trägt also weiter, aber aus einem engeren
+   Grund: Gleiche Buchstabenzahl ist nicht gleiche Breite; die Differenz zwischen „nachtragen" und
+   „bearbeiten" ist in einer proportionalen Schrift nicht null. Sie bewegt aber **eine** Zeile um
+   wenige Pixel und nicht die Liste.
+
+**Was ich daraus nicht mache: eine Gestaltentscheidung.** Der Auftrag an visual-qa in 11.7 ist
+richtig gestellt und bekommt von mir nur einen Satz mehr: **gemessen wird an einer Gruppe, in der
+jede Buchung ihre Leistung trägt** — das ist nach dieser Berichtigung der teure Fall und nicht der
+harmlose. Der dort vorab entschiedene Rückfall (Sinnbildknopf in **beiden** Zuständen, `label`
+gleich den Namen aus 15.4) bleibt unberührt; er kostet keinen meiner Wortlaute, weil die Namen
+zeichengleich bleiben. Das ist der Vorzug daran, den Namen und nicht die Erscheinung festzuschreiben.
+
+**Ein Nebenbefund zugunsten der Entscheidung.** In `TemplatePreview.tsx` wechselt die Beschriftung
+heute zwischen „Leistung nachtragen" (19 Zeichen) und „Bearbeiten" (10). Nach dieser Aufgabe
+wechselt sie zwischen 19 und 19. Die Zeile wird dort also **ruhiger**, und zwar an der einzigen
+Fläche, an der man das heute schon sehen kann.
+
+### 15.7 Der Fluß am Knopf: Start, Aktion, Rückmeldung, Erfolg, Fehlerpfad
+
+Der Fluß des Nachtragswegs steht vollständig in 12.2. Hier steht der Ausschnitt, den **dieser
+Knopf** trägt — vollständig, damit frontend-dev nichts ableiten muß.
+
+| Schritt | Was | Was der Benutzer sieht | Was der Benutzer hört |
+|---|---|---|---|
+| **Start** | Zeile ohne Leistung | „— keine Leistung erfasst —", daneben „Leistung nachtragen" in der festeren Ausprägung (11.3) | „Leistung nachtragen, Buchung 09:00–10:20", Knopf |
+| **Aktion** | Klick oder Eingabetaste | Dialog öffnet, Fokus hinein, Titel „Buchung bearbeiten" | Titel und Feld des Dialogs |
+| **Wartezeit** | Dialog arbeitet | **an der Zeile ändert sich nichts** — kein Wartezustand, keine Sperre (11.5). Die Arbeit steht am Absendeknopf des Dialogs | nichts aus der Zeile |
+| **Rückmeldung** | Dialog schließt | Fokus kehrt auf **denselben** Knopf zurück; Meldung nach der Lage (12.3) | die Meldung |
+| **Erfolg** | Auffrischung trifft ein | die Leistung steht in der Zeile; der Knopf heißt „Leistung bearbeiten" und ist leiser geworden; der Fokusring steht unverändert auf ihm | **abgeleitet, nicht gemessen:** der Namenswechsel am fokussierten Knoten wird nicht von jeder Vorlesehilfe von selbst gemeldet. Die verläßliche Ansage ist die Meldung aus 12.3 |
+| **Fehlerpfad Dienst** | Absage beim Speichern | Dialog **bleibt offen**, Eingaben stehen, Grund wörtlich in der Fehlerfläche (S-10). Die Zeile ist unberührt, der Knopf heißt weiter „nachtragen" | die Fehlerfläche des Dialogs |
+| **Fehlerpfad Auffrischung** | Speichern gelingt, die Liste lädt nicht nach | die Zeile zeigt den alten Stand, der Knopf heißt weiter „nachtragen" — **und das ist richtig**: die Zeile zeigt, was Takt gerade weiß. Die Meldung hat die Buchung bereits als geändert gemeldet (L4, 12.3) | die Meldung |
+| **Abbruch** | „Abbrechen" oder Esc | Dialog schließt, Fokus zurück auf denselben Knopf, unverändert | nichts Zusätzliches |
+| **Sackgasse** | keine | Der Rückweg steht in jeder Lage an derselben Stelle: der Knopf, auf dem der Fokus liegt | — |
+
+**Tastatur und Fokus.** Die Zeile hat vor und nach der Änderung **dieselben zwei** Haltepunkte im
+Tabulatorlauf: das Kontrollkästchen und den Knopf. Aus einem `IconButton` wird ein `Button` — ein
+Bedienelement bleibt ein Bedienelement, die Reihenfolge ändert sich nicht, es kommt keiner hinzu
+und keiner fällt weg. Die Klickfläche wächst (11.3, SC 2.5.8).
+
+**Was ausdrücklich nicht geschieht:** keine Ansage über eine eigene Live-Region für den
+Namenswechsel. Sie wäre die zweite Auskunft über dasselbe Ereignis neben der Meldung aus 12.3 und
+damit die Verdopplung, die E-078 Punkt 5 meint. **Die Meldung ist die Ansage** — das ist die
+Entscheidung, und sie ist dieselbe wie in 11.4 („dasselbe Ereignis, zwei Kanäle, eine Quelle").
+
+### 15.8 Die Regel, um die ui-designer gebeten hat: wohin der Fokus gehört, wenn das Ziel zu Recht fällt
+
+Die Frage aus 11.6 ist ausdrücklich keine Frage über diesen Knopf — hier fällt nach 11.2 nichts.
+Sie ist die allgemeine: **Wohin gehört der Fokus, wenn das Rückkehrziel legitim verschwindet?**
+ui-designers Ersatzkette R-2 beantwortet sie als **Weg durch den Baum**: Nachfolger, Behälter,
+Bereichsüberschrift, `<h1>`. Das ist als Bauform richtig und als Regel unvollständig, weil ein Baum
+nicht weiß, was der Benutzer vorhatte.
+
+> **Der Satz.** Der Fokus folgt der **Arbeit**, nicht dem Baum: Er geht auf das Bedienelement, mit
+> dem der Benutzer die begonnene Arbeit **fortsetzt** — und wo es keines mehr gibt, auf die
+> kleinste Fläche, die die **Folge** seiner Handlung zeigt. Nie auf `<body>`; `<body>` ist kein
+> Ziel, sondern die Meldung, daß keines gewählt wurde.
+
+Vier Stufen, erster Treffer gewinnt. Sie ordnen sich nach der Frage *was ist von der Arbeit übrig*,
+nicht nach der Entfernung im Baum:
+
+| # | Lage | Ziel | Warum |
+|---|---|---|---|
+| **N-1** | Der Gegenstand lebt, nur woanders (die Zeile ist verschoben, umsortiert, in eine andere Spalte gewandert) | **seine neue Darstellung** — dasselbe Bedienelement am selben Gegenstand | Die Arbeit geht weiter, nur an einem anderen Ort. Ein Sprung in die Liste wäre hier ein Verlust und keine Rettung |
+| **N-2** | Der Gegenstand ist fort, die Liste bleibt | **der Nachfolger in der sichtbaren Reihenfolge**; war es der letzte, der Vorgänger | Der Benutzer arbeitet eine Liste ab. **„Sichtbar" ist die Verschärfung gegenüber R-2:** gemeint ist die Reihenfolge nach Filter und Sortierung, die er vor sich hat, nicht die der Daten. In Takt ist das der Unterschied zwischen der gefilterten Liste und dem, was der Dienst geliefert hat |
+| **N-3** | Der Gegenstand war der letzte — die Liste ist danach leer | **die eine Aktion des Leerzustands** (S-08: „genau eine Aktion"); trägt der Leerzustand keine, sein **Titel** mit `tabindex="-1"` | **Die zweite Verschärfung gegenüber R-2.** Ein leerer Behälter mit `tabindex="-1"` ist eine Sackgasse mit Namen: Der Benutzer landet auf einer Fläche, die nichts kann, und muß den nächsten Schritt suchen. Takt zeichnet diesen Schritt bereits — der Leerzustand trägt ihn als Knopf. Er ist das Ziel |
+| **N-4** | Die Fläche selbst ist fort (die Ansicht hat gewechselt, der Bereich ist verschwunden) | **`.screen__title`** der Ansicht, die jetzt steht, `tabindex="-1"` | die Untergrenze. Von hier ist jeder Weg wieder erreichbar. Dieselbe Stufe wie R-2 Nummer 4 |
+
+**Was von ui-designers Regeln unverändert gilt und hier nicht wiederholt, sondern bestätigt wird:**
+R-1 (ein Ziel taugt nur, wenn es hängt, nicht gesperrt und nicht verborgen ist), R-3 (eine Stufe
+ohne zugänglichen Namen wird übersprungen), R-4 (den Ersatz nennt der Aufrufer, nicht der Dialog),
+R-5 (die Frage vor dem Bauen) und R-6 (die drei Merkmale, an denen ein Prüfer den Fall erkennt).
+N-1 bis N-4 treten an die Stelle der **Tabelle** in R-2, nicht an die der Regeln daneben.
+
+**Die Ansage.** R-3 sagt, die Kette brauche keine eigene: Die Folge ist ohnehin gemeldet
+(„Buchung gelöscht"). Das trägt, und ich ergänze die Bedingung, unter der es trägt: **Die Meldung
+muß den Gegenstand nennen**, nicht nur die Handlung. „Gelöscht." erklärt einen Sprung nicht;
+„Todo „X" gelöscht." erklärt ihn. Das steht ohnehin in S-13 (Handlung + Gegenstand) — die Kette
+verläßt sich darauf und darf es.
+
+**Wo diese Regel hingehört und wo nicht.** Sie ist eine Regel und kein Auftrag. Gebaut wird sie mit
+dem Ersatzweg aus **F-11**, und ich teile ui-designers Empfehlung: nicht in dieser Welle, sondern
+mit der ersten Fläche, die sie braucht. **Ich habe nicht gemessen**, welche Flächen in Takt heute
+diese Gestalt haben; wer den Auftrag schneidet, mißt es (E-087) und nimmt N-1 bis N-4 als Maßstab
+mit hinein. Die Regel gehört in `DESIGNSYSTEM.md` neben R-1 bis R-6 (11.8) — an eine Stelle, an der
+sie beim Bauen gelesen wird, und nicht nur hierher.
+
+### 15.9 Akzeptanzkriterien für frontend-dev
+
+Gültig für den Auftrag aus **O-IH**. Punkt 1 bis 6 betreffen den Wortlaut, 7 den Prüffall, 8 den
+Kommentar. Alles Übrige — Baustein, Ausprägung, Sinnbild, Wartezustand, Reihenfolge der Dateien —
+steht in 11.8 und gilt unverändert daneben.
+
+1. **Die zwei sichtbaren Beschriftungen lauten zeichengleich:** `Leistung nachtragen`, solange
+   `entry.note` leer ist, und `Leistung bearbeiten`, sobald sie es nicht mehr ist. Kein Punkt, kein
+   Ausrufezeichen, keine Anrede.
+2. **Der verborgene Zusatz lautet** `, Buchung ` gefolgt von **derselben Zeichenkette**, die die
+   Zeile sichtbar als Zeitraum zeigt — `entry.period` in `ExportGroups.tsx`,
+   `formatTimeRange(entry.startedAt, entry.endedAt)` in `TemplatePreview.tsx`. **Keine zweite
+   Formatierung** desselben Zeitpunkts.
+3. **Der Zusatz steht hinter der sichtbaren Beschriftung**, im selben Knopf, als
+   `visually-hidden`. **Kein `aria-label`** — der Grund steht in 15.4 und gehört in den Kommentar,
+   und zwar der richtige: nicht 2.5.3, sondern die zweite Abschrift, die still auseinanderläuft.
+4. **Die Gruppenebene in `TemplatePreview.tsx` wird mitgeändert** (15.5, Zeile 3): Der Knopf in der
+   Sperrmeldung behält seine Beschriftung `Leistung nachtragen` und bekommt den Zusatz
+   `, Tagesgruppe ` mit dem Tag der Gruppe, wie er darüber sichtbar steht. **Ohne diesen Punkt ist
+   der Auftrag unvollständig**, und die Verwechslung, die er beseitigen soll, steht eine Ebene
+   höher wieder da.
+5. **`SkippedRow` in `ExportScreen.tsx`** behält `Leistung nachtragen` und bekommt den Zusatz `, `
+   mit dem Tag der Gruppe (`formatDayLabel(skipped.group.day)`). Der Zusatz nennt dort **keine
+   Buchung** — der Knopf erreicht keine.
+6. **Kein `title` an diesen Knöpfen** (S-16) und **kein zweiter Zusatztext** neben dem verborgenen
+   (S-15).
+7. **Der Prüffall mißt Enthaltensein, nicht Gleichheit.** Erwartet wird, daß der zugängliche Name
+   `Leistung bearbeiten` **und** `Buchung 09:00–10:20` enthält — nicht, daß er einer festen
+   Zeichenkette gleicht. Grund in 15.4, letzter Absatz: Der Name entsteht aus zwei Knoten, und der
+   Leerraum an der Naht gehört dem Browser, nicht uns.
+8. **Der Kopfkommentar an der Stelle nennt beides:** warum **ein** Baustein steht (11.8) und warum
+   der Zeilenbezug **im** Knopf steht und nicht als `aria-label` (15.4). Zwei Sätze, und ohne sie
+   ist die nächste Aufräumung die Wiederherstellung des Fehlers.
+
+### 15.10 Was dieser Abschnitt nicht entscheidet — und drei Sätze für das Board
+
+**Nicht entschieden:**
+
+* **Die Erscheinung.** Ob am Ende der beschriftete Knopf oder ui-designers Rückfall (Sinnbildknopf
+  in beiden Zuständen) steht, entscheidet die Messung aus 11.7 mit der Berichtigung aus 15.6. Meine
+  Wortlaute gelten in beiden Bauformen unverändert — im Rückfall als `label`.
+* **Der Fluß von `SkippedRow`** (12.6 (a)). Er bleibt offen, wie er offen war.
+* **Ob `fallbackFocus` gebaut wird** (F-11). 15.8 sagt, was die Kette tun soll, wenn sie gebaut
+  wird, nicht wann.
+
+**Drei Sätze für das Board:**
+
+1. **An ui-designer, zur Kenntnis und ohne Auftrag:** 11.7 rechnet mit einer gemeinsamen
+   Spaltenachse, die es in der Kaskade nicht gibt (15.6). Der Preis ist höher als dort
+   veranschlagt, die Entscheidung deswegen nicht falsch — aber der Meßauftrag an visual-qa
+   braucht den **teuren** Fall, und der ist die Gruppe, in der **jede** Buchung ihre Leistung hat.
+2. **An den Orchestrator:** 11.8 nennt drei Flächen, es sind vier (15.5). Wer den Auftrag
+   schneidet, nimmt die vierte mit hinein — ui-designers eigene Begründung für „eine Aufgabe, eine
+   Hand" gilt für sie genauso.
+3. **An frontend-dev, klein und außerhalb dieses Auftrags:** Die Liste der ausgelassenen Gruppen
+   kann zwei Zeilen mit gleichem sichtbarem Text zeigen (15.5, letzter Absatz). Gehört zu 12.6 (a)
+   und nicht hierher.

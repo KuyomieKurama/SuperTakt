@@ -2452,3 +2452,41 @@ liegt — alle neun laufen hindurch.
    Browser gesehen, und sie trägt einen Teil dieses Urteils.
 4. **Nicht parallel zu Bündel 0.** Beide fassen `FormDialog.tsx` an; sie laufen nacheinander, und
    die Reihenfolge entscheidet der Orchestrator, nicht der Zufall.
+5. **Nachtrag vom 2026-09-06 (T-221), und er ist blockierend — beide Punkte standen bis eben nur
+   in einem Bericht, also genau dort, wogegen E-092 geschrieben wurde.**
+   - **Der Riegel steht an der falschen Stelle.** `if (busy || submitDisabled) return;` liegt in
+     `FormDialog.tsx` **vor** dem Setzen des Zustands, an dem die Rückführung und die Meldung
+     hängen. Wörtlich gebaut **erschiene der freigegebene Satz nie** — der Knopf bliebe stumm, und
+     alle Prüffälle der Sorte „es wird nichts geschickt" wären grün. Der Riegel muß den
+     **Versuch** zählen und **dann** abbrechen.
+   - **Der Satz gehört nicht in den Fehlerkanal.** `TextField.error` setzt `aria-invalid="true"`
+     und die Fehlerfarbe — das erklärt einen **gültigen, gespeicherten** Wert für ungültig. Das
+     Vorbild steht im Bestand: die Absage im Bestätigungsdialog liegt in einer Statusfläche
+     **ohne** `aria-invalid`. Es ist der einzige Befund dieser Runde, der einer Vorlesehilfe
+     etwas **Falsches sagt**.
+
+## E-094 — Eine Selbstprobe geht denselben Weg wie ihr Prüfgegenstand, oder sie sagt, welchen sie ausläßt
+
+**Anlaß.** T-230, die achte Anwendung derselben Frage — diesmal in **vier Läufen von vier**. Der
+schwerste Fall zeigt die Bauart: `proof:callers` meldet `ok` mit **„0 Dateien durchgesehen"** und
+bleibt **45/0, Code 0**, wenn sein Sammler nichts einsammelt. Und seine **sechs** Gegenproben
+können das **strukturell nicht sehen**, weil die Kunstquelle der **Liste hinzugefügt** wird: Sie
+prüfen damit das **Sieb**, nie die **Ernte**.
+
+Dieselbe Sitzung hat davon acht Ausprägungen gesehen — ein Wächter, der grün blieb, während ein
+vierter Aufrufort danebenstand; ein Ausdruck, der zwanzig Zeilen unter seiner eigenen
+Blindheitswarnung wieder benutzt wird; eine Zusicherung über **30 Namen** nach **null** verglichenen
+Zeilen; ein Farbpaar, das nie eine sichtbare Fläche hatte.
+
+**Entscheidung.**
+
+1. **Eine Gegenprobe muß denselben Weg nehmen wie das, was sie prüft.** Wird die eingesetzte
+   Verletzung an dem Schritt **vorbei** eingespeist, den sie prüfen soll, mißt sie sich selbst.
+2. **Wo das nicht geht, sagt der Lauf es** — im Kopf, nicht im Bericht: *welchen Schritt diese
+   Probe ausläßt und was deshalb ungemessen bleibt*. Ein benannter Rest ist tragbar, ein
+   unbenannter nicht.
+3. **Und der Zähler gehört zur Aussage.** „0 Dateien durchgesehen" darf nicht `ok` sein. Wo ein
+   Lauf über eine Menge urteilt, prüft er **zuerst**, daß die Menge nicht leer ist — dieselbe
+   Regel, die T-215 für eine Zusicherung über der leeren Menge schon einmal gebaut hat.
+4. **Der Vorschlag kam von security-checker, die Entscheidung ist meine** — er hat sie ausdrücklich
+   nicht selbst getroffen, weil verfassen und genehmigen in einer Hand nicht geht.

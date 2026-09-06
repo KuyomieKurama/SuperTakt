@@ -243,6 +243,29 @@ const NAMES = [
 
   const rows = db.prepare('SELECT id, name, name_key FROM tag ORDER BY created_at').all();
 
+  /*
+   * Die Vorbedingung, bevor über die Schlüssel geurteilt wird (T-231, A-A-63).
+   *
+   * Bis T-231 kam die Zahl im Text der Zusicherung aus `NAMES.length` — der
+   * **Erwartung** —, die Schleife lief über `rows` — die **Messung** —, und
+   * verglichen wurden die beiden nie. Security-checker hat es in T-230
+   * gemessen (Bedrohungsmodell 30.2): Ein Leser, der keine Zeile sieht
+   * (`… WHERE 0 …`), ließ die Zeile „die Migration errechnet für alle 30 Namen
+   * denselben Schlüssel" grün stehen, und der ganze Lauf blieb bei Code 0.
+   * Gelangten die Vorlagen gar nicht erst in den Bestand, wurde nicht dieser
+   * Abschnitt rot, sondern der nächste — mit dem falschen Grund.
+   *
+   * Die Bauart steht zwei Abschnitte weiter im selben Lauf: `after.length === 6`
+   * („kein Tag geht verloren"). Hier ist sie eine eigene Zeile **und** eine
+   * Bedingung der beiden Zusicherungen darunter: Eine Aussage über dreißig
+   * Namen darf nicht über der leeren Menge grün sein.
+   */
+  check(
+    `es sind alle ${String(NAMES.length)} Vorlagen durch die Migration gekommen (${String(rows.length)} gelesen)`,
+    rows.length === NAMES.length,
+    `${String(rows.length)} statt ${String(NAMES.length)} Zeilen — die Zusicherung darunter spricht über ${String(NAMES.length)}`,
+  );
+
   const keyMismatch = [];
   const nameMismatch = [];
   rows.forEach((row, index) => {
@@ -257,13 +280,17 @@ const NAMES = [
 
   check(
     `die Migration errechnet für alle ${String(NAMES.length)} Namen denselben Schlüssel wie die Domäne`,
-    keyMismatch.length === 0,
-    keyMismatch.slice(0, 3).join(' | '),
+    rows.length === NAMES.length && keyMismatch.length === 0,
+    keyMismatch.length === 0
+      ? `nur ${String(rows.length)} von ${String(NAMES.length)} Zeilen verglichen`
+      : keyMismatch.slice(0, 3).join(' | '),
   );
   check(
     'und dieselbe Anzeigeform',
-    nameMismatch.length === 0,
-    nameMismatch.slice(0, 3).join(' | '),
+    rows.length === NAMES.length && nameMismatch.length === 0,
+    nameMismatch.length === 0
+      ? `nur ${String(rows.length)} von ${String(NAMES.length)} Zeilen verglichen`
+      : nameMismatch.slice(0, 3).join(' | '),
   );
 
   // Die Regel, die der Auftraggeber hören will, an ihren beiden Enden.

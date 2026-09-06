@@ -13,8 +13,10 @@ import { Dialog } from "@ark-ui/react/dialog";
 import { cx } from "../lib/cx";
 import { FieldMessageQuietContext, useFieldMessageLive } from "../lib/fieldMessages";
 import { revealFirstInvalidWithin } from "../lib/focus";
+import { SubmitAttemptContext, useSubmitAttempt } from "../lib/submitAttempt";
 import { touchedOnBlur } from "../lib/touched";
 import { DialogSurface } from "./DialogSurface";
+import { Icon } from "./Icon";
 import { Button, IconButton, InlineMessage } from "./Primitives";
 
 /**
@@ -74,6 +76,50 @@ import { Button, IconButton, InlineMessage } from "./Primitives";
  * nichts. Seit T-202 holt {@link revealFirstInvalidWithin} das erste ungültige
  * Feld in den Fokus und seinen Block ins Bild — die Begründung und die Meßwerte
  * stehen an jener Funktion.
+ *
+ * ## Der gesperrte Absendeknopf ist weich gesperrt (E-093, T-220)
+ *
+ * `submitDisabled` sperrte den Absendeknopf bis T-220 **hart**, mit dem
+ * `disabled`-Attribut. Das nahm ihm dreierlei auf einmal: den Platz im
+ * Tabulatorlauf, den Klick — und, weil er zugleich der einzige `type="submit"`
+ * und damit der **Standardknopf** dieses Formulars ist, die stillschweigende
+ * Absendung über die Eingabetaste.
+ *
+ * Der letzte Punkt ist der schwerste, und er ist gemessen: In Chromium, gegen
+ * die laufende Anwendung, war Enter im frisch geöffneten Dialog ein **stummer
+ * Leerlauf** — kein Netzaufruf, kein Text in einer Meldefläche, keine
+ * Änderung am Bild (visual-qa, T-217). Die Gegenprobe mit gefülltem Feld löste
+ * sofort aus; die Sperre war die alleinige Ursache.
+ *
+ * Seit T-220 gilt hier dieselbe Bauart wie im {@link ConfirmDialog} seit T-186:
+ * `aria-disabled` statt `disabled`. Der Knopf sieht unverändert gesperrt aus
+ * (`components.css` fasst beide Sperren in **einem** Selektor), ist aber
+ * erreichbar, fokussierbar und anklickbar. Abgefangen wird die **Handlung**,
+ * nicht das Ereignis — zentral in {@link submit}, einmal für alle neun
+ * Aufrufstellen mit `submitDisabled`.
+ *
+ * **`busy` bleibt hart gesperrt.** Da gibt es nichts zu erklären, und ein
+ * zweiter Klick wäre ein zweiter Auftrag an den Dienst.
+ *
+ * ## Zwei Antworten auf einen abgewiesenen Versuch, und sie sind nicht dieselbe
+ *
+ * Wer den weich gesperrten Knopf drückt, bekommt eine von zwei Antworten, und
+ * welche, hängt daran, **ob an einem Feld etwas nicht stimmt**:
+ *
+ *  1. **Ein Feld ist ungültig** — dann führt {@link revealFirstInvalidWithin}
+ *     dorthin, und der Satz steht in dessen Meldefläche. Das ist der Weg für
+ *     „Name fehlt." und seinesgleichen.
+ *  2. **Kein Feld ist ungültig, und die Handlung hat trotzdem nichts zu tun** —
+ *     etwa ein Umbenennen auf denselben Namen. Dafür ist {@link submitRefusal}
+ *     da, und sie geht **nicht** durch den Fehlerkanal: `TextField.error` setzt
+ *     `aria-invalid="true"`, die Fehlerfarbe am Rand und einen Fehlertext, und
+ *     erklärte damit einen **gültigen, gespeicherten** Wert für ungültig — eine
+ *     Aussage, die einer Vorlesehilfe etwas Falsches sagt (E-093 Punkt 5,
+ *     T-221 Z-73).
+ *
+ * Die Absage der zweiten Art liegt deshalb in einer Statusfläche, gebaut nach
+ * dem Vorbild, das die Entscheidung benennt: `ConfirmDialog#refusal` —
+ * `role="status"`, `.dialog__consequence`, **kein** `aria-invalid`.
  */
 export interface FormDialogProps {
   readonly open: boolean;
@@ -87,6 +133,21 @@ export interface FormDialogProps {
   readonly busy?: boolean;
   /** Sperrt den Absendeknopf, etwa bei leerem Pflichtfeld. */
   readonly submitDisabled?: boolean;
+  /**
+   * Die Antwort auf einen abgewiesenen Absendeversuch, den **kein Feld**
+   * beantwortet (E-093 Punkt 5).
+   *
+   * Zu setzen dort, wo `submitDisabled` an einem Zustand hängt, der kein Feld
+   * ungültig macht — der Musterfall ist ein Umbenennen auf denselben Namen:
+   * Der Wert ist da, er ist gültig, er ist der gespeicherte; die Handlung hat
+   * nur nichts zu tun.
+   *
+   * Der Satz erscheint **erst nach dem ersten Versuch** und verschwindet,
+   * sobald die Sperre fällt. Er ist damit die Antwort auf einen Druck und kein
+   * dauerhafter Hinweis — den führt die Aufrufstelle weiterhin selbst, von der
+   * ersten Sekunde an (Regel P-9, zweite Hälfte).
+   */
+  readonly submitRefusal?: string;
   /** Fehler aus dem letzten Versuch. Bleibt stehen, bis er behoben ist. */
   readonly error?: string | null;
   readonly onSubmit: () => void;
@@ -120,6 +181,7 @@ export function FormDialog({
   tone = "default",
   busy = false,
   submitDisabled = false,
+  submitRefusal,
   error = null,
   onSubmit,
   onCancel,
@@ -143,10 +205,20 @@ export function FormDialog({
   const [submitAttempt, setSubmitAttempt] = useState(0);
   const [quiet, setQuiet] = useState(false);
 
+  /**
+   * Der zweite Durchlauf der Rückführung — trägt die Nummer seines Versuchs.
+   *
+   * Warum es ihn braucht, steht am Weg zur Absage weiter unten. Der Wert ist die
+   * Versuchsnummer und kein Schalter, damit ein **zweiter** Versuch ohne
+   * Änderung dazwischen wieder einen zweiten Durchlauf bekommt.
+   */
+  const [revealPass, setRevealPass] = useState(0);
+
   /* Ein geschlossener Dialog hat keinen Versuch hinter sich. */
   useEffect(() => {
     if (open) return;
     setSubmitAttempt(0);
+    setRevealPass(0);
     setQuiet(false);
   }, [open]);
 
@@ -164,36 +236,94 @@ export function FormDialog({
     errorRef.current?.scrollIntoView({ block: "nearest" });
   }, [error]);
 
+  /**
+   * Der eine Riegel für alle neun Dialoge mit `submitDisabled` (E-093, T-220).
+   *
+   * **Die Reihenfolge ist die Zusicherung dieser Funktion.** Sie hat seit T-220
+   * drei Stufen, und jede beantwortet eine eigene Frage:
+   *
+   *  1. **`busy` — hart, und ohne jede Buchführung.** Während der Dialog
+   *     speichert, ist der Knopf `disabled`; hier steht der Riegel ein zweites
+   *     Mal, für den Fall, dass ein anderer Weg (Eingabetaste an einem Feld,
+   *     ein Fremdbaustein) doch ein `submit` erzeugt. Ein zweiter Auftrag an
+   *     den Dienst ist kein Fortschritt, und es gibt dabei auch nichts zu
+   *     erklären: Der Ladeanzeiger sagt es bereits.
+   *  2. **Zählen und stillstellen — für **jeden** Versuch, auch den
+   *     abgewiesenen.** Der Zähler treibt zweierlei: die Rückführung zum ersten
+   *     ungültigen Feld (der Weg zur Absage, unten) und, über
+   *     {@link SubmitAttemptContext}, die Berührung der Felder darin (Regel
+   *     P-8: „Ein Absendeversuch setzt `touched` weiterhin immer"). Genau das
+   *     war vor T-220 unerreichbar — der gesperrte Knopf ließ das Ereignis nie
+   *     entstehen, und der Versuch blieb ohne jede Rückmeldung.
+   *  3. **`submitDisabled` — weich: der Versuch ist gezählt, die Handlung läuft
+   *     nicht.** `onSubmit` bleibt aus, und zwar bevor irgendetwas den Dienst
+   *     erreicht. Der Knopf ist ein sichtbar gesperrter Knopf und kein
+   *     halboffener (dieselbe Formulierung wie `ConfirmDialog#confirmOrExplain`,
+   *     dieselbe Sache).
+   *
+   * Beide Zustandsänderungen und die des Formulars fallen in denselben
+   * Durchlauf: Wenn die Meldung erscheint, trägt die Meldefläche bereits
+   * `aria-live="off"`, und der Satz kommt vom Fokuswechsel.
+   */
   const submit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (busy || submitDisabled) return;
-      /*
-        Erst zählen und stillstellen, dann absenden. Beide Zustandsänderungen
-        und die des Formulars fallen in denselben Durchlauf: Wenn die Meldung
-        erscheint, trägt die Meldefläche bereits `aria-live="off"`, und die
-        Rückführung darunter findet ein Feld, das sich schon für ungültig
-        erklärt hat.
-      */
+      if (busy) return;
       setSubmitAttempt((count) => count + 1);
       setQuiet(true);
+      if (submitDisabled) return;
       onSubmit();
     },
     [busy, submitDisabled, onSubmit],
   );
 
   /**
-   * Der Weg zur Absage (T-198, Befund O-FR 4.3).
+   * Der Weg zur Absage (T-198, Befund O-FR 4.3) — in **zwei** Durchläufen.
    *
    * Läuft nach dem Zeichnen und vor dem Bild, damit kein Sprung sichtbar wird.
    * Findet sich kein ungültiges Feld, ist der Versuch durchgegangen oder die
-   * Absage kam vom Dienst — dann greift der Ruf darüber, der die Meldung des
-   * Dienstes ins Bild holt.
+   * Absage kam vom Dienst — dann greift der Ruf weiter oben, der die Meldung
+   * des Dienstes ins Bild holt.
+   *
+   * **Warum ein Durchlauf seit T-220 nicht mehr genügt.** Bei einem
+   * abgewiesenen Versuch ist das Pflichtfeld im Augenblick des Klicks noch
+   * gar nicht ungültig: Es wird es erst dadurch, dass es seine Berührung
+   * meldet — `TextField` liest den Zähler, ruft `onTouched`, und der Zustand
+   * dahinter liegt in der **aufrufenden Ansicht**. Deren Neuzeichnung landet
+   * einen Durchlauf später. Wer nur einmal sucht, sucht zu früh und findet
+   * nichts.
+   *
+   * Deshalb: erster Durchlauf sofort; findet er nichts, vermerkt er die Nummer
+   * seines Versuchs, und der zweite sieht denselben Rumpf noch einmal — dann
+   * mit den Feldern, die sich inzwischen für ungültig erklärt haben. Zwei
+   * Durchläufe und nicht mehr: Was auch beim zweiten Mal nichts findet, hat
+   * nichts zu finden.
    */
   useLayoutEffect(() => {
     if (submitAttempt === 0) return;
-    revealFirstInvalidWithin(bodyRef.current);
+    if (revealFirstInvalidWithin(bodyRef.current) !== null) return;
+    setRevealPass(submitAttempt);
   }, [submitAttempt]);
+
+  /**
+   * Der Satz für den Versuch, den kein Feld beantwortet — sichtbar erst nach
+   * dem ersten Versuch, und nur solange die Sperre steht.
+   */
+  const refusalShown = submitRefusal !== undefined && submitDisabled && submitAttempt > 0;
+
+  useLayoutEffect(() => {
+    if (revealPass === 0) return;
+    /*
+      Findet auch der zweite Durchlauf kein ungültiges Feld, gibt es nichts, in
+      das der Fokus geführt werden könnte. Dann trägt die Absagefläche unter dem
+      Rumpf — und die braucht weder Fokus noch Bildlauf: Sie steht ausserhalb
+      des scrollenden Ausschnitts, unmittelbar über dem Knopf, der eben gedrückt
+      wurde, und ein `role="status"` sagt sich selbst an. Ihm den Fokus
+      hinterherzuschicken nähme dem Benutzer die Stelle, an der er gerade steht,
+      ohne ihm eine bessere zu geben.
+    */
+    revealFirstInvalidWithin(bodyRef.current);
+  }, [revealPass]);
 
   /*
     Sobald der Benutzer wieder tippt, sagen die Meldeflächen wieder selbst an:
@@ -247,11 +377,21 @@ export function FormDialog({
 
         <div className="dialog__body dialog__body--form" ref={bodyRef}>
           {/*
-            Während eines Absendeversuchs schweigen die Meldeflächen der Felder
-            darin — den Satz trägt dann der Fokuswechsel. Begründung und Grenze
-            der Aussage stehen an {@link FieldMessageQuietContext}.
+            Zwei Zusagen an die Felder darin, und beide sind Zusammenhang und
+            keine Eigenschaft je Dialog:
+
+              * **Stillstellen** — während eines Absendeversuchs schweigen die
+                Meldeflächen; den Satz trägt dann der Fokuswechsel. Begründung
+                und Grenze der Aussage stehen an {@link FieldMessageQuietContext}.
+              * **Zählen** — jedes Feld erfährt, dass abgesendet wurde, und gilt
+                damit als berührt (Regel P-8). Begründung an
+                {@link SubmitAttemptContext}. Das kostet an den neun
+                Aufrufstellen **null** Zeilen; ein Rückruf je Dialog hätte neun
+                Gelegenheiten geschaffen, die zehnte anders zu schreiben.
           */}
-          <FieldMessageQuietContext.Provider value={quiet}>{children}</FieldMessageQuietContext.Provider>
+          <FieldMessageQuietContext.Provider value={quiet}>
+            <SubmitAttemptContext.Provider value={submitAttempt}>{children}</SubmitAttemptContext.Provider>
+          </FieldMessageQuietContext.Provider>
           {error === null ? null : (
             <div ref={errorRef}>
               <InlineMessage tone="danger" title="Das hat nicht geklappt">
@@ -259,17 +399,68 @@ export function FormDialog({
               </InlineMessage>
             </div>
           )}
+
+        </div>
+
+        {/*
+          Die Absage an einen Versuch, den kein Feld beantwortet — Bauart
+          zeichengleich zu `ConfirmDialog#refusal` und `UpdateDialog` (E-093
+          Punkt 5, T-221 Z-73).
+
+          **Sie steht ausserhalb des scrollenden Rumpfes**, und zwar aus zwei
+          Gruenden. Der eine ist die Sache: Sie ist die Antwort auf einen Druck
+          auf den Absendeknopf, und sie gehoert neben diesen Knopf, nicht an das
+          Ende eines Ausschnitts, den der Benutzer erst zurueckscrollen muesste
+          (im Pool-Dialog gemessen: 1599 px Inhalt gegen 492 px Ausschnitt).
+          Der andere ist gemessen und waere sonst ein stiller Schaden: Der Rumpf
+          ist ein `flex`-Behaelter mit `gap`, und ein leerer Behaelter darin ist
+          trotzdem ein Element — er kostete an **jedem** der sechzehn
+          Formulardialoge einen Abstand von 16 px, auch wenn nie eine Absage
+          erscheint (1599 → 1615 px, gemessen vor der Verschiebung).
+
+          **Die Flaeche steht immer da, auch leer.** Ein `role="status"`, das
+          erst zusammen mit seinem Inhalt in den Baum kommt, wird von vielen
+          Vorlesehilfen uebergangen: Sie melden Aenderungen an einer Region, die
+          sie kennen, und diese kennen sie in dem Augenblick noch nicht.
+          Dieselbe Regel und derselbe Grund wie an jeder anderen Meldeflaeche
+          seit T-162 (O-GQ/O-FX).
+
+          **`status` und nicht `alert`:** Hier ist nichts falsch. Der Wert ist
+          gueltig, die Handlung hat nur nichts zu tun. Ein `alert` waere die
+          Ansage einer Absage an eine Eingabe — und genau diese Behauptung soll
+          hier nicht fallen.
+        */}
+        <div className={cx("dialog__refusal", refusalShown && "dialog__refusal--shown")} role="status">
+          {refusalShown ? (
+            <p className="dialog__consequence">
+              <Icon name="alert-triangle" size={14} />
+              <span>{submitRefusal}</span>
+            </p>
+          ) : null}
         </div>
 
         <div className="dialog__footer">
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </Button>
+          {/*
+            **Gesperrt, aber erreichbar** (E-093, T-220). `aria-disabled` statt
+            `disabled`: Der Knopf bleibt im Tabulatorlauf, nimmt den Klick
+            entgegen — und bleibt vor allem der **Standardknopf** dieses
+            Formulars, so dass die Eingabetaste weiter durchkommt. Abgefangen
+            wird die Handlung, nicht das Ereignis; der Riegel steht zentral in
+            `submit` darüber.
+
+            `busy` bleibt bei `loading` und damit bei der **harten** Sperre: Da
+            gibt es nichts zu erklären, und ein zweiter Klick wäre ein zweiter
+            Auftrag an den Dienst. Dieselbe Aufteilung wie am
+            Bestätigungsknopf des {@link ConfirmDialog} seit T-186.
+          */}
           <Button
             type="submit"
             variant={tone === "danger" ? "danger" : "primary"}
             loading={busy}
-            disabled={submitDisabled}
+            ariaDisabled={submitDisabled}
           >
             {submitLabel}
           </Button>
@@ -410,6 +601,44 @@ export function TextField({
     SC 3.3.1).
   */
   const [edited, setEdited] = useState(false);
+
+  /**
+   * Der zweite Auslöser für „berührt": der Absendeversuch (P-8, E-093, T-220).
+   *
+   * Regel P-8 hat zwei Sätze, und bis T-220 war nur der erste gebaut. Der
+   * zweite lautet wörtlich: *„Ein Absendeversuch setzt `touched` weiterhin
+   * **immer**."* Er war unerreichbar, solange ein leeres Pflichtfeld den
+   * Absendeknopf hart sperrte — dann entstand gar kein Versuch (gemessen in
+   * T-217: Enter im frisch geöffneten Dialog tat nichts und sagte nichts).
+   *
+   * Der Zählerstand kommt aus dem Zusammenhang und nicht aus einer Eigenschaft:
+   * {@link SubmitAttemptContext}, gesetzt von {@link FormDialog}. Damit kostet
+   * dieser Auslöser an den neun Aufrufstellen keine Zeile — und es gibt keine
+   * neunte Abschrift derselben Bedingung, die still anders sein könnte.
+   *
+   * **Der Rückruf steht in einer Referenz und nicht in der Abhängigkeitsliste.**
+   * `onTouched` ist an jeder Aufrufstelle eine an Ort und Stelle geschriebene
+   * Pfeilfunktion; sie wechselt bei jedem Zeichnen ihre Kennung. Stünde sie in
+   * der Liste, liefe der Effekt bei jedem Zeichnen und meldete eine Berührung,
+   * die niemand ausgelöst hat. Der Abgleich läuft **vor** dem Effekt darunter,
+   * weil Effekte in der Reihenfolge ihrer Notierung laufen.
+   *
+   * `useLayoutEffect` und nicht `useEffect`: Die Rückführung zum ersten
+   * ungültigen Feld läuft im Elternteil ebenfalls in dieser Phase. So fällt die
+   * Meldung der Berührung in denselben Durchlauf, und der zweite Durchlauf der
+   * Rückführung findet das Feld verlässlich (Begründung dort).
+   */
+  const onTouchedRef = useRef(onTouched);
+  useLayoutEffect(() => {
+    onTouchedRef.current = onTouched;
+  });
+
+  const submitAttempt = useSubmitAttempt();
+  useLayoutEffect(() => {
+    if (submitAttempt === 0) return;
+    onTouchedRef.current?.();
+  }, [submitAttempt]);
+
   const incompleteRule = incomplete ? INCOMPLETE_INPUT_RULE[type] : undefined;
   const shownError = (incompleteRule === undefined ? undefined : `${label}: ${incompleteRule}`) ?? error;
 

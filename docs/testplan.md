@@ -4154,6 +4154,16 @@ verweigert einen gewöhnlichen `.click()`. Ein Klick auf den gesperrten Knopf br
 die Eingabe-Pipeline des Browsers aus, auf das React genauso reagiert wie auf einen gewöhnlichen
 Klick.
 
+**Geprüft in T-227: gilt unverändert, jetzt zusätzlich an neun weiteren Stellen.** `ConfirmDialog`
+und `FormDialog` sind zwei verschiedene Bausteine mit zwei verschiedenen Torwächtern
+(`confirmOrExplain` hier, das zentrale `submit` in `FormDialog.tsx` dort) — dieser Absatz bleibt
+also wörtlich richtig und exklusiv für diesen Dialog. Seit T-220 (E-093) trägt aber auch jeder der
+neun `FormDialog`-Absendeknöpfe mit `submitDisabled` dieselbe Falle: `aria-disabled` statt
+`disabled`, also derselbe `{ force: true }`-Bedarf für einen Klick auf den gesperrten Zustand. Der
+eigene Prüffall dafür steht nicht hier, sondern in `tests/e2e/form-dialog-submit-guard.spec.ts`
+(O-KC, Abschnitt 31) — eine eigene Datei, weil ein eigener Baustein mit einem eigenen Riegel
+dahinter steht, nicht dieselbe Route.
+
 **Schritte:**
 1. Eine Buchung exportieren (Vorbereitung wie `TP-EXPST-06`).
 2. „Exportstatus zurücksetzen" öffnen, ohne die Begründung auszufüllen und ohne das
@@ -4327,3 +4337,181 @@ keinen dieser neun Dialoge berührt (der neue Fall bleibt beim „Neues Todo"-Di
 seine eigene, clientseitige Prüfung beim Absenden führt). Ob ein gesperrter Knopf die bessere
 Antwort ist als eine Absage mit Rückführung, bleibt eine offene Produktfrage bei
 `spec-ux-reviewer`, nicht Gegenstand dieser Aufgabe.
+
+**Berichtigt in T-227 (Welle AI): Der erste Satz gilt nicht mehr.** T-220 hat genau diese neun
+Dialoge von `disabled` auf `aria-disabled` umgestellt — seither entsteht bei ihnen sehr wohl ein
+Absendeversuch (der Knopf ist klickbar, Enter erreicht den Standardknopf), und die Rückführung aus
+O-IE läuft dort **mit**: `FormDialog.tsx#submit` zählt den Versuch und stellt ihn erst danach ab
+(`if (submitDisabled) return;`), `useLayoutEffect` sucht anschließend über `revealFirstInvalidWithin`
+nach einem ungültigen Feld — wörtlich derselbe Mechanismus, den O-IE für den „Neues Todo"-Dialog
+geprüft hat, jetzt auch an den neun `submitDisabled`-Dialogen wirksam. Die zweite Aussage („offene
+Produktfrage, ob gesperrter Knopf oder Absage mit Rückführung") ist damit ebenfalls beantwortet:
+E-093 (T-220) hat sich für **beides gleichzeitig** entschieden — der Knopf bleibt sichtbar gesperrt
+**und** ein Versuch führt zum ungültigen Feld zurück. Diese Absätze bleiben oben unverändert stehen,
+weil sie den Stand zum Zeitpunkt von T-205 korrekt wiedergeben; diese Berichtigung hält den Bruch
+fest, ohne den historischen Text zu verfälschen (dieselbe Vorgehensweise wie bei O-HU/O-HW oben).
+Der neue Prüffall, der den seither einzigen Riegel gegen die Handlung mißt, steht in Abschnitt 31.
+
+## 30. Nachtrag aus T-224 (Welle AH — ein Prüffall mit zwei Messungen, ein Zitat vor der Titeländerung bewahrt)
+
+### TP-FOCUS-07 — „Leistung nachtragen" im Export: der Fokus überlebt das Schließen, aber nicht die eigene Auffrischung (O-JP, T-218 Abschnitt 11)
+
+**Anlaß.** ui-designer hat in T-218 (`docs/design/traeger-und-zusage.md`, Abschnitt 11) dieselbe
+Fehlerklasse wie O-CY-2/O-DY an einer zweiten Stelle gefunden: In einer aufgeklappten Tagesgruppe
+des Exports wechselt der Knopf hinter einer Buchung ohne Leistung
+(`apps/web/src/components/ExportGroups.tsx:303-319`) zwischen einem beschrifteten `Button`
+("Leistung nachtragen") und einem `IconButton` ("Leistung der Buchung … bearbeiten"), gesteuert von
+`entry.note` — demselben Wert, den der Dialog dieses Knopfes ändert. Der Ablauf aus
+`BookingDialogs.tsx` (`await updateTimeEntry(…)` → Toast → `bump()` → `onClose()`) schließt den
+Dialog, **bevor** die durch `bump()` ausgelöste Auffrischung zurück sein kann: Der Fokus kommt beim
+Schließen zunächst korrekt auf dem alten Knopf an und wird erst **von der eintreffenden Antwort**
+wieder weggenommen, sobald React ihn gegen den `IconButton` tauscht. Eine Messung unmittelbar nach
+dem Schließen (t+0) besteht deshalb immer — das ist der Grund, aus dem dieser Fehler unentdeckt
+blieb.
+
+**Zwei Messungen, wie im Auftrag verlangt, und ein Meßproblem, live gefunden.** Ein erster Versuch,
+beide Messungen einfach direkt nach `await expect(dialog).toBeHidden()` zu setzen, zeigte auf dieser
+Maschine **bei beiden Messungen** den bereits ausgehängten Knoten — die Anfrage aus `bump()` läuft
+gegen den lokalen Dienst so schnell, dass sie regelmäßig schon vor der ersten Messung zurück ist
+(Playwright sitzt als externer Prozeß über CDP mit eigener Rundlaufzeit davor). Ein fester
+Zeitwert hätte dieses Wettrennen nicht entschieden, sondern nur seine Wahrscheinlichkeit verschoben
+(dieselbe Lehre wie T-187 — "ein Fall, der auch vorher grün gewesen wäre, mißt nichts" — und T-205 —
+ein Klick statt der echten Tabulatortaste hätte denselben Fall unabhängig von der Behebung immer
+bestehen lassen). Die gebaute Lösung hält stattdessen die eine GET-Anfrage, die `bump()` erneut
+auslöst (`ExportScreen.tsx:278-289`, Filter `exportStatus=open`), über `page.route` an einem
+selbst gesetzten Zügel fest, nimmt Messung 1, löst den Zügel, und wartet auf das **sichtbare**
+Ereignis der Auffrischung (die Zeile zeigt die neu eingetragene Leistung statt „— keine Leistung
+erfasst —", über Playwrights selbst nachziehendes `toContainText`) statt auf eine Wartezeit, bevor
+Messung 2 folgt. Damit ist "t+0" ein vom Test gewählter Augenblick an einer echten, im Produkt
+ablaufenden Anfrage, kein Zufallstreffer der Maschine.
+
+**Was genau gemessen wird.** Nicht der künftige Wortlaut aus T-218 Abschnitt 11.4 (er hängt an einer
+offenen Frage an ux-designer, F-10, und ist eine separate, noch nicht gebaute Änderung) — sondern
+die Eigenschaft, um die es bei diesem Fehler tatsächlich geht: Ist es nach der Auffrischung noch
+**derselbe Knoten**, auf den der Fokus unmittelbar nach dem Schließen gefallen ist
+(`page.evaluateHandle` auf `document.activeElement`, verglichen zu beiden Zeitpunkten)? Ergänzend
+dieselbe Namensprobe wie bei O-DY: nach der Auffrischung nie `<body>`.
+
+**Ergebnis, gemessen (echter Chromium):** Messung 1 besteht heute. Messung 2 schlägt heute
+erwartungsgemäß fehl — `sameNodeAfterRefresh: false`, zugänglicher Name des fokussierten Elements
+`<body>` (per Zusatzmessung bestätigt). Der Fall ist **rot**, weil das Produkt an dieser Stelle noch
+nicht umgebaut ist (T-218 Abschnitt 11.2/11.8, spätere Welle); er wird grün, sobald `ExportGroups.tsx`
+den Knopf auf einen einzigen, überlebenden Baustein umstellt.
+
+### Ein Zitat vor der nächsten Titeländerung bewahrt (O-IW)
+
+**Anlaß.** `timer-stop-announcement.spec.ts` begründete eine Auswahl unter drei Stellen derselben
+Bauart ("`role="alert"` steht von Anfang an im Baum") mit einem im Wortlaut zitierten Dialogtitel
+("Titelmeldung des „Neues Todo"-Dialogs"), ohne dass diese Datei selbst etwas gegen diesen Titel
+prüft — die Bindung lag allein in `field-live-region-announcement.spec.ts`. Eine künftige
+Titeländerung hätte diesen Kommentar **still falsch** gemacht, nicht rot: dieselbe Klasse Befund,
+die in der Sitzung mehrfach aufgefallen ist (ein Kommentar, der etwas anderes begründet, als
+danebensteht). Berichtigt auf eine Bindung über die Befundkennungen (O-DA, O-GZ) und die jeweilige
+Datei statt über den Wortlaut — beide Kennungen bleiben unabhängig von einer Titeländerung gültig.
+Kein Prüffall und kein Ausgang geändert, reiner Kommentartext; 6/6 unverändert grün.
+
+### R-6 (T-218) — geprüft, ob sich daraus ein klassenweiter Prüffall bauen lässt
+
+ui-designer hat für die Fehlerklasse "zwei verschiedene Bausteine an einer Stelle, deren Bedingung
+sich zur Laufzeit ändert, wobei einer der beiden einen Dialog oder ein Menü öffnet" (Regel R-6) den
+Bestand durchsucht und **eine** lebende Stelle gefunden (`ExportGroups.tsx:303`, oben behoben) sowie
+zwei ähnliche, aber unbedenkliche Stellen ausdrücklich ausgeschlossen (`Timer.tsx:123`: Bedingung
+aus einem zur Laufzeit festen Wert; `BookingsScreen.tsx:396`: beide Zweige sind derselbe Baustein).
+Ein Prüffall, der diese **Klasse** hält statt der einen Stelle, bräuchte eine strukturelle Suche über
+den Quelltext (in der Art von `contrast-check.mjs` oder `caller-scan.mjs`) — R-6 verlangt aber drei
+zusammenwirkende Merkmale, von denen zwei (eine zur Laufzeit veränderliche Bedingung; einer der
+beiden Zweige öffnet etwas) sich ohne echte Programmablauf-Analyse nicht zuverlässig aus reinem
+Quelltext lesen lassen, ohne entweder unbedenkliche Stellen wie `Timer.tsx:123` fälschlich zu
+melden oder echte Treffer zu übersehen. Ein solcher Wächter gehört zudem strukturell nicht in
+`tests/e2e/**` (Dateihoheit e2e-tester), sondern neben die übrigen `proof:*`-Läufe unter
+`apps/web/scripts/**` (Dateihoheit frontend-dev) — dieselbe Art Wächter, die bei den Live-Regionen
+zu `proof:surface` geführt hat. Vorschlag an den Orchestrator: ein `proof:dual-widget-swap` (oder
+gleichwertig benannter) Lauf, der jeden JSX-Ternär mit zwei verschiedenen Bausteinnamen an
+derselben Stelle auflistet und mit einer begründeten, benannten Ausnahmeliste abgleicht — mechanisch
+wie R-1 in Abschnitt 0 von `traeger-und-zusage.md` ("ein Merkmal darf nur zählen, wenn ein Paar es
+mißt"), nur für Bausteine statt Farben. Diese Aufgabe hat dafür keinen Code gebaut, weil er außerhalb
+der eigenen Dateihoheit liegt; die Beurteilung selbst ist hier festgehalten.
+
+**Nachweis:** `pnpm test:e2e` vollständig, siehe Bericht `.claude/team/reports/T-224-e2e-tester.md`.
+
+## 31. Nachtrag aus T-227 (Welle AI — der eine Riegel an neun Dialogen, ein Zwilling des O-IW-Befunds)
+
+### O-KC — `tests/e2e/form-dialog-submit-guard.spec.ts` (neue Datei): der Riegel in `FormDialog.tsx#submit`
+
+**Anforderungen:** E-093, SC 3.3.1, SC 2.4.3
+**Ebene:** End-to-End (`tests/e2e/form-dialog-submit-guard.spec.ts`, neue Datei, zwei Fälle)
+**Anlaß.** T-220 hat alle neun Formulardialoge mit `submitDisabled` von `disabled` auf
+`aria-disabled` umgestellt (E-093) — der Absendeknopf ist seither tabulierbar und klickbar, und die
+einzige Sicherung gegen die Handlung ist seither **eine Zeile** im gemeinsamen `submit` von
+`FormDialog.tsx` (`if (submitDisabled) return;`, nach dem Zählen des Versuchs). T-220 hat das selbst
+als den dringlichsten Folgeauftrag benannt (Bericht, Abschnitt 9, Risiko 1, wörtlich: „Wer sie
+umstellt […], macht acht Dialoge still, und alle heutigen Prüffälle blieben grün").
+
+**Warum eine neue Datei und nicht ein Fall in einer bestehenden.** Der Riegel steht zentral für alle
+neun Aufrufstellen; ein einziger, an einer realen Stelle gemessener Fall bewacht ihn für alle neun
+(dieselbe Überlegung wie beim strukturell verwandten, aber eigenständigen Torwächter in
+`ConfirmDialog.tsx#confirmOrExplain`, TP-EXPST-15 oben). Gewählt: `TagsScreen` „Neuen Tag anlegen"
+— das einfachste der neun Formulare und dieselbe Stelle, an der T-220 im Browser selbst gemessen
+hat.
+
+**Drei Messungen je Weg (Klick und Eingabetaste), nicht zwei.** Ein Fall, der nur zeigt, daß die
+Meldung erscheint **und** daß die Handlung ausbleibt, mißt einen Knopf, der **niemals** auslöst,
+nicht von einem funktionierenden Riegel unterscheidbar — beide bestünden die ersten zwei Messungen
+identisch. Erst die dritte Messung („mit gefülltem Feld läuft dieselbe Handlung sofort, mit
+demselben Knopf") macht daraus einen Nachweis. Die Handlung selbst wird **nicht** am Augenschein
+geprüft, sondern an zwei unabhängigen Stellen: keine Anfrage an die anlegende Route
+(`page.on('request', …)`, gefiltert auf `POST` und `/api/v1/tags`) **und** ein unveränderter Bestand
+(`listTags()` vor/nach Vergleich der ID-Mengen).
+
+**Zwei Fälle, ein Riegel, zwei Wege zu ihm:**
+
+1. **Klick.** Gesperrter Knopf → `{ force: true }` (Playwright hält `aria-disabled="true"` für nicht
+   bedienbar, siehe TP-EXPST-15/T-192, jetzt zum ersten Mal an einem `FormDialog`-Absendeknopf
+   angewendet) → Meldung „Name fehlt." am selben, vorher leeren `role="alert"`-Knoten → kein
+   Netzaufruf, unveränderter Bestand, Dialog bleibt offen → Feld gefüllt → `aria-disabled` fällt →
+   Klick ohne `force` → Anfrage läuft, Dialog schließt, Bestand trägt das neue Tag.
+2. **Eingabetaste.** Fokus liegt beim Öffnen bereits auf dem einzigen Feld (`FIRST_FIELD_SELECTOR`)
+   — kein Tabulatorschritt nötig, um „frisch geöffnet" zu treffen. Enter auf dem leeren Pflichtfeld:
+   dieselbe Meldung, derselbe leere Netzverkehr, derselbe unveränderte Bestand, derselbe offene
+   Dialog. Feld gefüllt, dieselbe Taste: dieselbe Handlung läuft sofort.
+
+**Was hier bewußt nicht erneut behauptet wird.** T-217 hat am **damaligen** Bauzustand (hartes
+`disabled`) gemessen, daß Enter im frisch geöffneten Dialog ein stummer Leerlauf war — kein
+Netzaufruf, leere Meldefläche, bitgleiches Bild. Dieser Bauzustand existiert im heutigen Quelltext
+nicht mehr und läßt sich ohne einen Rückbau von `FormDialog.tsx` (fremde Dateihoheit) nicht erneut
+herstellen; er wird im Kopf der neuen Datei als historischer Befund zitiert, nicht nachgestellt. Was
+automatisiert gemessen wird, ist die **heutige** Umkehrung: Enter greift jetzt sofort in denselben
+Riegel wie ein Klick — genau die Hälfte von E-093, die ein Benutzer an der Tastatur tatsächlich
+bemerkt, und vor dieser Datei an keinem `submitDisabled`-Dialog geprüft (`field-live-region-
+announcement.spec.ts` prüft Enter nur am „Neues Todo"-Dialog, der kein `submitDisabled` führt).
+
+**Ergebnis:** siehe Nachweis-Abschnitt unten (T-227-Lauf, eigener Fund dieser Aufgabe).
+
+### O-KB — derselbe Wortlaut-Fund wie O-IW, jetzt an seinem zweiten Fundort behoben
+
+**Anlaß.** T-224 hat beim Bau von O-IW (Abschnitt 30) denselben Befund ein zweites Mal gefunden —
+`export-audit-and-locks.spec.ts:318` band eine Meßentscheidung („eine zweite, im Produkt tatsächlich
+erreichbare Stelle derselben Bauart") an den im Wortlaut zitierten Titel des „Neues Todo"-Dialogs,
+statt an eine Befundkennung, obwohl diese Datei den Titel selbst nirgends prüft. T-224 hat das
+damals ausdrücklich außerhalb des eigenen Auftrags belassen („Nachbarfund, nicht behoben"). T-227
+macht das nach: der Verweis auf den Dialogtitel im Wortlaut ist auf die Befundkennung O-DA und die
+tatsächlich prüfende Datei (`field-live-region-announcement.spec.ts`) umgestellt — dieselbe
+Berichtigung, dieselbe Begründung wie bei O-IW. Reiner Kommentartext, kein Prüffall und kein Ausgang
+geändert.
+
+### Der Playwright-Falle-Hinweis aus T-192 geprüft, um einen Verweis ergänzt
+
+Der Hinweis zu `{ force: true }` in TP-EXPST-15 (Abschnitt 28) beschreibt weiterhin ausschließlich
+den Bestätigungsknopf des Zurücksetzen-Dialogs (`ConfirmDialog`) korrekt — er wird durch die neun
+`FormDialog`-Dialoge nicht falsch, weil er nie Exklusivität behauptet hat. Ergänzt um einen Verweis
+auf `form-dialog-submit-guard.spec.ts`, damit sichtbar ist, daß dieselbe Falle inzwischen an einer
+zweiten, eigenständigen Bauart gilt und dort einen eigenen Prüffall hat.
+
+### Die stale Aussage in Abschnitt 29 berichtigt
+
+„Zur Bauart mit gesperrtem Absendeknopf" (Abschnitt 29, O-GZ-Nachbar) beschrieb den Stand vor T-220:
+Die neun `submitDisabled`-Dialoge hätten keinen Absendeversuch und die Rückführung aus O-IE griffe
+dort nicht. Seit T-220 stimmt das nicht mehr — beide Absätze sind dort um eine Berichtigung ergänzt,
+der historische Text bleibt unverändert stehen (dieselbe Vorgehensweise wie bei O-HU/O-HW).
+
+**Nachweis:** `pnpm test:e2e` vollständig, siehe Bericht `.claude/team/reports/T-227-e2e-tester.md`.

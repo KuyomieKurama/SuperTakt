@@ -7577,3 +7577,1103 @@ sechsmal lag die Blindheit nicht in dem, was der Lauf prüft, sondern in dem, wa
 selbstverständlich hält**: daß die Datei lesbar ist, daß die Liste vollständig ist, daß der Angriff
 angekommen ist, daß die Menge nicht leer ist. **Ein Wächter irrt sich selten über sein Urteil. Er
 irrt sich über seinen Gegenstand.**
+
+---
+
+## 29. Prüfung T-223 (2026-09-06) — eine Abnahme, ein Rest, der keiner bleiben darf, und dieselbe Frage an drei weitere Läufe
+
+**Auftrag.** Vier Punkte. **Abnahme** von A-A-51 bis A-A-55, gebaut in T-215. **Entscheidung**
+über den Rest, den der Erbauer bewußt offengelassen und ausdrücklich mir überlassen hat: ein
+Endpunkt, der selbst auf einem Platzhalter liegt. **Berichtigung** einer Zahl in meinem eigenen
+Papier — 28.2.2 zählt drei tragende Stellen, gemessen sind zwei. Und **O-JV**: Gilt die
+Weigerungsregel sinngemäß auch für `proof:export`, `proof:export-api` und `proof:access`? Die
+Frage steht seit 28.2.5; ich hatte angekündigt, sie zu stellen.
+
+### 29.0 Stand der Werkzeuge und wie gemessen wurde
+
+**Guardian und 42Crunch: zwölftes Mal ohne Werkzeug** (E-079 Punkt 3, nicht erneut versucht). Die
+Feststellung aus 28.0 bleibt stehen und wird durch diese Prüfung nicht besser, sondern
+unbequemer: **Die Aussage über die OpenAPI-Beschreibung ruht vollständig auf `proof:openapi` —
+auf einem Lauf, in dem zwei der vier Befunde von T-206 saßen.** Ein zweites, fremdes Augenpaar auf
+dieselbe Datei gibt es nicht, und der einzige Ersatz dafür ist, den Lauf selbst regelmäßig gegen
+Verstümmelungen zu fahren. Genau das ist der Grund, warum O-GV und O-JV überhaupt gestellt werden.
+
+**`proof:all` nicht gefahren** (E-083 Punkt 3), einzelne Pfade schon.
+
+**Gemessen wurde am Verhalten, außerhalb des Bestands** — wie in T-176, T-183, T-189 und T-206.
+Der Spiegel liegt unter `/tmp/t223/root/apps/local-api` und trägt **die Gestalt des
+Arbeitsbereichs**, nicht nur die des Pakets: `packages` und `node_modules` sind Verweise auf die
+echten, damit die relativen Verknüpfungen von pnpm auflösen. Ohne das läuft kein einziger
+Nachweispfad, und ein Spiegel, in dem nichts läuft, mißt nichts.
+
+**Die Prüfzeilen des Spiegels sind zeichengleich mit denen des Bestands.** Belegt zweifach: über
+`diff -rq` gegen `src`, `scripts` und `openapi` — ohne Unterschied — und über eine Prüfsumme aller
+`ok`/`FEHL`-Zeilen, vor der ersten und nach der letzten Messung:
+
+| Lauf | Prüfsumme vorher | Prüfsumme nachher | Zahlen |
+|---|---|---|---|
+| `proof:route-policy` | `f0030ef14f0f9722` | `f0030ef14f0f9722` | **41/0** |
+| `proof:openapi` | `f8e9e839d7906fe9` | `f8e9e839d7906fe9` | **112/0** |
+| `proof:template-fields` | `96f7112191785dcb` | `96f7112191785dcb` | **30/0** |
+
+Kunstquellen und Verstümmelungen sind ausschließlich im Spiegel entstanden. Der versionierte
+Bestand führt weder `verifier-teil2` noch `t223`; die Zeichenkette `addin/leak` steht dort an genau
+zwei Stellen, und beide sind Kommentare in `proof-route-policy.mjs` und `proof-openapi.mjs`, die
+den gemessenen Befund festhalten — so soll es sein.
+
+**Ein Nachweispfad ließ sich nicht fahren, und das steht hier statt zu fehlen.** Die
+Aufspaltungs-Gegenprobe zu Abschnitt 13 von `proof:access` (29.4.4, zweite Fassung) ist **fünfmal**
+angesetzt und fünfmal an `Auf 127.0.0.1:17843 lauscht bereits etwas` gescheitert. Das ist der Fall
+aus **E-083 Punkt 2**: In dieser Welle laufen portgebundene Nachweispfade — `proof:access` und
+`proof:export-api` gehören zu meiner Messung — **neben** dem e2e-Lauf. Die erste Fassung derselben
+Gegenprobe ist durchgekommen und trägt den Befund; die zweite fehlt. Ein Nachweis, der nicht lief,
+ist kein grüner Nachweis.
+
+---
+
+### 29.1 Abnahme A-A-51 bis A-A-55 — **abnahmefähig**, jede Zahl nachgemessen
+
+Nicht abgeschrieben. Jede der zehn Gegenproben des Erbauers ist hier eigenständig gefahren.
+
+#### 29.1.1 Der Befund, von mir nachgestellt
+
+Kunstquelle im Spiegel, eine Zeile in `src/app.ts` unmittelbar vor `app.route(API_BASE_PATH, api)`:
+`api.all('/addin/leak', (c) => c.json({ data: { leak: 'GEHEIMER-INTERNER-VERMERK' } }));`
+
+Durch die vollständige Kette gefahren, mit `Host: 127.0.0.1:17843` und der Herkunft des Add-ins:
+
+| Aufruf | gemessen |
+|---|---|
+| `GET /api/v1/addin/leak` mit **Add-in-Token** | **200**, `{"data":{"leak":"GEHEIMER-INTERNER-VERMERK"}}` |
+| dasselbe mit Sitzungsgeheimnis | **200**, derselbe Rumpf |
+| dasselbe ohne gültigen Nachweis | **401**, `unauthorized` |
+
+Deckungsgleich mit 28.2.1 und mit dem Bericht zu T-215. **Der Befund war echt, und er ist
+nachstellbar geblieben.**
+
+#### 29.1.2 Die fünf Auflagen, einzeln
+
+| Auflage | Urteil | Meine Messung |
+|---|---|---|
+| **A-A-51** | **erfüllt** | Unveränderter Baum **41/0** und **112/0**, Code 0 — kein falscher Alarm. Mit der Kunstquelle: `proof:route-policy` **40/1, Code 1**, `proof:openapi` **111/1, Code 1**, beide mit derselben Zeile `FEHL kein ALL-Eintrag ohne Platzhalter … — mit ALL registriert und damit aus der Liste gefallen: /api/v1/addin/leak`. Die Bedingung ist in beiden Dateien zeichengleich. |
+| **A-A-52** | **erfüllt** | Stelle 1 ersetzt → **111/1**, Meldung `1: putTodoNote`. Stelle 2 ersetzt → **111/1**, `1: getTodoNote`. Alle drei → **111/1**, `0: `. Jede mit Code 1. |
+| **A-A-53** | **erfüllt** | `enum` aus `theme` in der Beschreibung entfernt → **111/1**, „wird erzwungen, aber nicht beschrieben". `z.enum([…])` → `z.string()` in `src/routes/export.ts` → **111/1**, „ist beschrieben, aber wird nicht erzwungen". YAML-Leser läßt jeden Schlüssel `enum` fallen → **111/1** mit **fünf** Fundstellen über fünf verschiedene Rumpfschemata (`createPool.matchMode`, `updatePool.matchMode`, `resetExportStatus.status`, `resolveOrphanedTimer.resolution`, `updateSettings.theme`). |
+| **A-A-54** | **erfüllt** | Ohne den `INSERT` → **25/5, Code 1**, und die drei bisher stillen Zeilen sind jetzt die roten: „keine Zeile", zweimal `Status 404 … not_found`. Mit unverdächtiger Definition → **22/8, Code 1**, Meldung `gelesen: {"version":1,"fields":[{"name":"Call",…}]}`. |
+| **A-A-55** | **erfüllt** | Der Satz steht einmal ausgeschrieben im Kopf von `proof-route-policy.mjs`: *„**Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat.** Wer eine Zusicherung über eine Menge schreibt, schreibt die Untergrenze dieser Menge daneben."* `proof-openapi.mjs` verweist darauf und nennt seine drei Anwendungen; `proof-template-fields.mjs` ebenso. |
+
+**Die dritte Gegenprobe zu A-A-53 ist die aussagekräftigste, und ich bestätige die Einschätzung des
+Erbauers:** Derselbe Eingriff, der vor der Behebung 110/0 ergab, findet jetzt fünf verschwiegene
+Aufzählungen über fünf verschiedene Rumpfschemata. Der Wächter hängt nicht an `theme`.
+
+#### 29.1.3 Eine Beobachtung zur Bauart der Weigerung — kein Befund, aber sie gehört gesagt
+
+Die Weigerung steht **vor** den Zusicherungen, die sie schützt; das ist gemessen und richtig. Was
+sie **nicht** tut: die geschützten Zeilen anhalten. Mit der Kunstquelle liest sich die Ausgabe von
+`proof:route-policy` so:
+
+```
+FEHL  kein ALL-Eintrag ohne Platzhalter … : /api/v1/addin/leak
+ok    die Routenliste des Dienstes ist auslesbar und vollständig (70 Operationen)
+ok    die Add-in-Fläche sind genau vier Routen (4)
+```
+
+Die beiden `ok`-Zeilen sind in diesem Augenblick **falsch**, und in `proof:openapi` gilt dasselbe
+für „keine Route gibt es nur im Dienst" und „beide Seiten führen dieselbe Zahl (70)". Der Erbauer
+hat das als Annahme 2 offengelegt und begründet: „Ein harter Abbruch hätte die restliche Messung
+verschluckt, und damit die Frage ‚was noch?'."
+
+**Ich stimme zu, und zwar aus einem Grund, den er nicht nennt:** Wer eine `ALL`-Route findet, will
+als nächstes wissen, was der Rest des Laufs sagt — ein Abbruch nähme ihm das. Der Beendigungscode
+ist 1, die Zusammenfassung nennt die Zeile, und beide Läufe sind rot. Das trägt. **Bedingung:** Die
+vier `ok`-Zeilen dürfen nicht einzeln zitiert werden, solange die Weigerung rot ist. Wer aus einem
+roten Lauf eine grüne Zeile herausschneidet, hat den Lauf nicht gelesen — dagegen hilft keine
+Bauart.
+
+---
+
+### 29.2 Der offene Rest — **entschieden: er braucht eine eigene Auflage**
+
+Die Frage des Erbauers (T-215, Offene Frage 1): Reicht A-A-51 in der gebauten Fassung, oder braucht
+der Rest eine eigene Auflage? Er hat sie ausdrücklich nicht für mich entschieden, und seine
+Begründung ist die interessantere Hälfte.
+
+#### 29.2.1 Der Rest ist größer, als er beschrieben ist — gemessen
+
+Er nennt einen Fall: `api.all('/addin/*', …)`. Gemessen sind **drei**, und alle drei sind erreichbar,
+während **beide** Wächter voll grün bleiben:
+
+| Kunstquelle | Aufruf | Add-in-Token | Sitzung | ohne Nachweis | `route-policy` | `openapi` |
+|---|---|---|---|---|---|---|
+| `api.all('/addin/leak/:id', …)` | `/addin/leak/42` | **200** samt Rumpf | 200 | 401 | **41/0, Code 0** | **112/0, Code 0** |
+| `api.all('/addin/*', …)` | `/addin/beliebig` | **200** samt Rumpf | 200 | 401 | **41/0, Code 0** | **112/0, Code 0** |
+| `api.all('/*', …)` | `/beliebig` | 401 | **200** samt Rumpf | 401 | **41/0, Code 0** | **112/0, Code 0** |
+
+Zwei der drei liegen **auf der Fläche des Add-in-Tokens** — also auf der Fläche, die ein
+entwendetes Token erreicht (R-09), und damit auf genau der Fläche, deren Vermessung der einzige
+Zweck von `proof:route-policy` ist. Das ist derselbe Befund wie T-206-1, nur eine Schreibweise
+weiter. **Die Stufe des Befunds ändert sich nicht dadurch, daß seine Behebung schwerer ist.**
+
+#### 29.2.2 Die verworfene Verschärfung: er hat recht, und ich habe es nachgemessen
+
+Die Stelligkeit trägt tatsächlich — und tatsächlich nicht. Gemessen an
+`probe.app.routes.filter(r => r.method === 'ALL').map(r => r.handler.length)`:
+
+- alle **zehn** Kettenglieder des Bestands: Stelligkeit **2**
+- der eingesetzte Endpunkt: Stelligkeit **1**
+
+Die Angabe des Erbauers stimmt. Sein Urteil auch: `api.all('/x', async (c, next) => …)` hebt sie
+auf, ebenso `(...args) =>` (Stelligkeit 0) und jede Bequemlichkeit, die einen zweiten Parameter
+mitschreibt, ohne ihn zu benutzen. **Eine Unterscheidung, die von der Schreibweise abhängt und
+nicht vom Verhalten, ist in einem Sicherheitswächter schlechter als gar keine** — sie erzeugt
+Vertrauen ohne Deckung. Der Satz *„eine unsichere Heuristik in diesem Wächter wäre schlechter als
+ein benannter Rest"* ist richtig, und ich übernehme ihn.
+
+#### 29.2.3 Aber die Wahl war nicht „Liste oder nichts" — es gibt eine dritte Form, und sie ist eine Zahl
+
+Der Erbauer stellt die Alternative als **gepflegte Aufstellung der erlaubten Kettenglieder** dar
+und verwirft sie, weil sie „genau das ist, wogegen dieser Lauf gebaut ist". Die Begründung dafür
+steht im Kopf von `proof-route-policy.mjs`: *„Eine von Hand gepflegte Liste hätte genau den Fehler,
+aus dem B-2.10 entstanden ist: Die nächste hinzugefügte Fachroute ist die vergessene."*
+
+**Dieses Argument gilt für Routen. Es gilt nicht für Kettenglieder, und der Unterschied ist
+gemessen:**
+
+1. **Eine Fachroute wird nie unter `ALL` registriert.** Der Bestand führt heute kein einziges
+   `.all(` als Routenregistrierung — gesucht über `git grep` und über die Quellverzeichnisse.
+   Die Liste, um die es hier geht, wächst also nicht mit dem Produkt.
+2. **Alle zehn Kettenglieder stehen an einer Stelle**, in einem zusammenhängenden Block in
+   `apps/local-api/src/app.ts`, und zwar wörtlich als `app.use('*', …)`:
+   `securityHeaders`, `requestLog`, `hostGuard`, `originGuard`, `urlSecretGuard`,
+   `contentTypeGuard`, der Rumpfgrößenwächter, `timeout`, `authGuard`, `credentialPolicy`. Der
+   Kopf der Datei sagt selbst: *„Wer einen Router ergänzt, hängt ihn **hinter** `app.use(...)`."*
+3. **Diese zehn sind nicht irgendeine Liste — sie sind die Vertrauensgrenze selbst.** Herkunft,
+   Wirt, Nachweis, Inhaltstyp, Rumpfgröße, Frist. Eine Änderung daran soll auffallen. Das ist der
+   Unterschied zu einer Fachroute, deren Hinzufügung Alltag ist.
+
+Gemessen habe ich deshalb **drei** Regeln gegen **fünf** Kunstquellen. Regel 1 ist die gebaute.
+
+| Kunstquelle | R1: „Platzhalter genügt" (gebaut) | R2: „Pfad ist genau `/*`" | R3: „Anzahl ist **10**" |
+|---|---|---|---|
+| *unveränderter Baum* | **grün** | **grün** | **grün** |
+| `api.all('/addin/leak', …)` | rot | rot | rot |
+| `api.all('/addin/leak/:id', …)` | **grün** | rot | rot |
+| `api.all('/addin/*', …)` | **grün** | rot | rot |
+| `api.all('/*', …)` | **grün** | rot | rot |
+| `app.all('/*', …)` auf der Wurzel-App | **grün** | **grün** | rot |
+
+**R3 ist auf allen fünf rot und auf dem unveränderten Baum grün.** Sie kostet **eine ganze Zahl**,
+keine Aufstellung von Pfaden. R2 kostet nichts, weil der Bestand ohnehin nur diese eine Form
+benutzt, und fängt vier der fünf — sie ist die Verschärfung von R1, die der Erbauer nicht geprüft
+hat.
+
+**Und das ist die Schreibweise, die dieses Papier und diese Läufe längst benutzen.** „die
+Add-in-Fläche sind genau vier Routen (4)", „genau zwei Antworten führen ihn", „die Routenliste …
+(70 Operationen)", „In allen 55 Antwortkörpern stehen genau 2 Tokens". Eine benannte Zahl ist hier
+kein Fremdkörper, sondern die Hausform. Der Erbauer hat die Alternative als Liste gedacht und die
+Liste zu Recht verworfen; als **Zahl** ist sie billiger als der Rest, den sie ersetzt.
+
+#### 29.2.4 Die Durchgriffsprobe — gemessen, wirksam, und trotzdem nicht die Auflage
+
+Weil eine Verhaltensmessung einer Formmessung vorzuziehen wäre, habe ich eine gebaut und gefahren:
+Jeder `ALL`-Eintrag wird in einen konkreten, nirgends registrierten Pfad übersetzt (`:name` → eine
+formgültige Kennung, `*` → ein Wegabschnitt, den es nicht gibt) und mit gültigem Sitzungsgeheimnis
+und gültiger Herkunft aufgerufen. **Ein Kettenglied reicht durch, und am Ende antwortet 404. Ein
+Endpunkt antwortet selbst.**
+
+| Zustand | Ergebnis der Durchgriffsprobe |
+|---|---|
+| unveränderter Baum, alle zehn Kettenglieder | **404** `not_found` — durchgereicht, kein falscher Alarm |
+| `api.all('/addin/leak/:id', …)` | **200** samt Rumpf — gefangen |
+| `api.all('/addin/*', …)` | **200** samt Rumpf — gefangen |
+| `api.all('/*', …)` | **200** samt Rumpf — gefangen |
+| `api.all('/addin/notes/:noteId', …)`, dessen Handler für eine unbekannte Kennung 404 antwortet | **404** — **nicht** gefangen, obwohl die Route mit dem Add-in-Token 200 samt Rumpf liefert |
+
+**Die letzte Zeile ist der Grund, warum ich sie nicht zur Auflage mache.** Ein Endpunkt, der einen
+Datensatz nachschlägt, antwortet auf eine erfundene Kennung genauso wie ein durchreichendes
+Kettenglied — und das ist keine Bosheit, sondern die gewöhnlichste Bauart, die es gibt. Die
+Durchgriffsprobe ist eine echte Verbesserung und keine Schließung. Sie gehört als **Hilfe**
+genannt, nicht als Bedingung: Wer die Zahl aus R3 anhebt, kann mit ihr in einem Zug beantworten, ob
+der neue Eintrag durchreicht oder antwortet. Steht in **A-A-56** als zweiter Satz.
+
+#### 29.2.5 Entscheidung
+
+**Der benannte Rest reicht nicht. Er bekommt eine eigene Auflage: A-A-56.**
+
+Nicht, weil der Erbauer falsch geurteilt hätte — sein Urteil über die Stelligkeit ist richtig und
+ist hier nachgemessen. Sondern weil ein **benannter** Rest an dieser Stelle das ist, was A-A-51
+selbst über eine unvollständige Liste sagt: *„Eine Aussage über eine Liste, aus der etwas
+herausfällt, ist keine."* Nach der Behebung fällt weiter etwas heraus, nur leiser. Ein Kommentar ist
+kein Wächter, und die Fläche, um die es geht, ist die des entwendeten Add-in-Tokens.
+
+**Die Auflage verlangt ausdrücklich nicht die Aufstellung, gegen die er zu Recht argumentiert hat.**
+
+---
+
+### 29.3 Zahl gegen Zahl, zum zweiten Mal in meinem eigenen Papier — **zwei stimmte**
+
+Der Erbauer meldet (T-215, Offene Frage 2): Die Tabelle in 28.2.2 zählt drei tragende Stellen,
+gemessen sind es zwei. **Nachgemessen, jede der drei Stellen einzeln, im Spiegel:**
+
+| ersetzt | Antworten mit dem Vermerk | `proof:openapi` | Code |
+|---|---|---|---|
+| Stelle 1 — `note: INTERNAL_NOTE` bei `createTodo` | **1** (`putTodoNote`) | 111/1 | 1 |
+| Stelle 2 — `text: INTERNAL_NOTE` bei `putTodoNote` | **1** (`getTodoNote`) | 111/1 | 1 |
+| **Stelle 3 — `note: INTERNAL_NOTE` bei `createAddinTodo`** | **2**, unverändert | **112/0** | **0** |
+| alle drei | **0** | 111/1 | 1 |
+
+**Der Erbauer hat recht. Die Zahl, die stimmte, ist die Zwei.**
+
+Die Berichtigung, mit Marke, damit sie nicht als stille Umschreibung durchgeht:
+
+| Stelle | Vorher | Jetzt |
+|---|---|---|
+| 28.2.2, Tabelle „Verstümmelung, gemessen" | „eine der drei Stellen umgeschrieben → 1" | **gilt für Stelle 1 und Stelle 2. Stelle 3 umgeschrieben → weiterhin 2.** Tragend sind **zwei** der drei Stellen |
+| 28.2.2, Fließtext | „genau das, was passiert, wenn jemand den Durchlauf umbaut" | unverändert richtig — aber nur für die zwei Stellen, die eine **Antwort** speisen |
+
+**Was die dritte Stelle wirklich ist, und warum sie stehenbleiben soll.** Sie ist kein Beiwerk und
+kein Fehler: Sie schreibt einen internen Vermerk **über die Add-in-Route** in den Bestand
+(`POST /addin/todos` nimmt `note` entgegen, `apps/local-api/src/routes/addin/schema.ts`:
+`note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default('')`). Daß dieser Vermerk in **keiner**
+Antwort auftaucht, ist eine Aussage über die Add-in-Fläche und damit ein **negativer** Beitrag zur
+Zusicherung — im Gegensatz zu den zwei **positiven**, die je eine Antwort speisen. Die Zusicherung
+mißt Antworten, nicht Eingaben; deshalb ändert ihr Wegfall die Zahl nicht, und deshalb ist sie
+trotzdem nicht überflüssig.
+
+**Die Regel aus 22.2, auf mich selbst angewandt.** Sie lautet: *„Eine Auflage soll keine Zahl
+nennen, die sie nicht selbst zählt."* Zum zweiten Mal ist die Verletzung nicht in einer Auflage
+aufgetreten, sondern in der **Beschreibung eines Befunds** — und beide Male hat sie nicht der
+Prüfer gefunden, der sie geschrieben hat, sondern der Erbauer, der danach gebaut hat. Das ist die
+brauchbare Hälfte der Beobachtung: **Der Bau ist die Nachzählung.** Wer eine Zahl in ein Papier
+schreibt, bekommt sie geprüft, sobald jemand danach baut — und nur dann. Für A-A-52 ist die Sache
+folgenlos: Die Behebung mißt Antworten und hat mit der Zahl der Eingabestellen nichts zu tun.
+
+---
+
+### 29.4 O-JV — dieselbe Frage an `proof:export`, `proof:export-api` und `proof:access`
+
+**Die Regel, in der Fassung aus 28.2:** *Keine Zusicherung darf bestehen, ohne daß das Geprüfte
+stattgefunden hat.* Gemessen wurde nach diesem Maßstab, mit Kunstquelle und Verstümmelung, zum
+siebten Mal. Ausgangszahlen im Spiegel: `proof:export` **97/0**, `proof:export-api` **69/0**,
+`proof:access` **105/0**, alle Code 0.
+
+**Das Ergebnis ist unangenehmer als bei den drei Läufen aus T-206**, weil drei der vier Befunde
+nicht irgendeine Zusicherung betreffen, sondern **die Notiz-Grenze** (A-7.2, R-06) und **die
+Geheimnisgrenze im Protokoll** (B-2.4).
+
+#### 29.4.1 T-223-1 — die Notiz-Grenze in `proof:export` besteht über einem Bestand ohne Vermerk
+
+`proof-export.mjs` legt in `freshContext()` ein Todo mit
+`note: 'Interner Vermerk — darf nie in den Export'` an und prüft nach dem Exportlauf:
+
+> `'der interne Vermerk steht nirgends in der Datei (A-7.2, R-06)'`
+
+Die Bedingung sucht die Zeichenkette `'Interner Vermerk'` in der geschriebenen Datei und im
+Base64-Rumpf des Feldes `Notiz`. **Nichts prüft, daß der Vermerk je im Bestand war.** Die beiden
+Zeichenketten sind außerdem nicht dasselbe Literal — angelegt wird mit dem vollen Satz, gesucht
+wird nach dem Präfix.
+
+**Verstümmelung, gemessen:** `note: ''` statt des Vermerks, alles andere unverändert.
+
+| Zustand | Lauf | Code | Die Zeile |
+|---|---|---|---|
+| Bestand | 97/0 | 0 | `ok` |
+| **der Vermerk gelangt gar nicht erst in den Bestand** | **97/0** | **0** | **`ok`** |
+
+Die Zusicherung sagt weiterhin „der interne Vermerk steht nirgends in der Datei (A-7.2, R-06)" und
+hat nichts gemessen. **Das ist die sechste der sechs Schichten aus 28.1.1** — diejenige, die ich
+dort als „in der geschriebenen Datei" geführt und als gemessen gezählt habe.
+
+#### 29.4.2 T-223-2 — dieselbe Blindheit in `proof:export-api`, Abschnitt 8
+
+`proof-export-api.mjs` schreibt `VERMERK` **einmal** in den Bestand — `note: VERMERK` beim Anlegen
+des Todos — und prüft in Abschnitt 8:
+
+> `'weder in der Auswahlliste noch in einer Vorschau'` — Bedingung `!seenBodies.some((text) => text.includes(VERMERK))`
+
+`some` über einer leeren Menge ist falsch, die Verneinung also wahr; und selbst über einer vollen
+Menge ist die Zusicherung leer, wenn der gesuchte Text nie in den Bestand kam. **Nichts liest ihn
+zurück.**
+
+**Verstümmelung, gemessen:** `note: 'harmlos, kein Vermerk'` statt `note: VERMERK`.
+
+| Zustand | Lauf | Code | Die Zeilen |
+|---|---|---|---|
+| Bestand | 69/0 | 0 | `ok` |
+| **der Vermerk gelangt gar nicht erst in den Bestand** | **69/0** | **0** | **`ok`**, beide |
+
+Zum Vergleich, und das ist der Maßstab: `proof:route-policy` macht es an derselben Grenze richtig —
+es legt ein Todo mit Vermerk an, prüft, **daß die Oberfläche ihn liest**, und erst danach, daß das
+Add-in-Token ihn nicht bekommt (28.2.5 Punkt 4). Genau diese Zeile fehlt in beiden Exportläufen.
+
+#### 29.4.3 T-223-3 — zwei Zusicherungen über eine Ausgabe, die nicht angekommen sein muß
+
+Im selben Abschnitt 8 stehen zwei weitere Zeilen, und die zweite ist eine Geheimnisgrenze:
+
+> `'auch nicht in der Ausgabe des Dienstes'` — `!` `${stdout}\n${stderr}` `.includes(VERMERK)`
+> `'und kein Token steht in der Protokollausgabe (B-2.4)'` — `!/takt_[A-Za-z0-9_-]{43}/.test(…)`
+
+`stdout` und `stderr` werden aufgesammelt und **nur durchsucht, nie auf Inhalt geprüft**.
+
+**Verstümmelung, gemessen:** die beiden Sammler werden unmittelbar vor Abschnitt 8 geleert — das
+Modell für „die Ausgabe des Kindes ist nicht angekommen", etwa weil der Sidecar sein Protokoll
+künftig in eine Datei schreibt.
+
+| Zustand | Lauf | Code | Die Zeilen |
+|---|---|---|---|
+| Bestand | 69/0 | 0 | `ok` |
+| **die Ausgabe des Kindes ist leer** | **69/0** | **0** | **`ok`**, beide |
+
+**B-2.4 ist damit in diesem Lauf eine Zusicherung ohne Gegenstand**, sobald der Dienst schweigt.
+Die Untergrenze ist trivial zu haben: Der Dienst protokolliert im Betrieb je Anfrage eine
+JSON-Zeile; eine Mindestzahl davon ist eine Zeile Code.
+
+#### 29.4.4 T-223-4 — die vier durchsuchten Dateien in `proof:access` sind eine gepflegte Liste
+
+`proof-access.mjs`, Abschnitt 13, ist der einzige **statische** Teil eines sonst durchweg
+verhaltensmessenden Laufs — und damit die A-A-33-Klasse selbst. Er durchsucht vier Dateien nach
+einem Vergleich von Geheimnismaterial mit `===`:
+
+```
+const sources = ['src/access/verifier.ts', 'src/access/crypto.ts',
+                 'src/http/guards.ts', 'src/access/token-service.ts'];
+```
+
+und schließt: `check('Kein === auf Tokenmaterial im Nachweispfad', offending.length === 0, …)`.
+
+`src/access/` führt **dreizehn** Dateien. Was der Nachweispfad ist, entscheidet diese Aufstellung —
+und nichts mißt, ob sie noch stimmt.
+
+**Kunstquelle, gemessen:** eine Zeile
+`export const t223Vergleich = (presented: string, secret: string): boolean => presented === secret;`
+in `src/access/token-store.ts` — dieselbe Schublade, nicht auf der Liste.
+
+| Zustand | Lauf | Code | Die Zeile |
+|---|---|---|---|
+| Bestand | 105/0 | 0 | `ok` |
+| **`===` auf Geheimnismaterial eine Datei weiter** | **105/0** | **0** | **`ok Kein === auf Tokenmaterial im Nachweispfad`** |
+
+Die zweite, schärfere Fassung derselben Gegenprobe — `verifier.ts` in zwei Dateien aufgeteilt, der
+Vergleich in der neuen — **ließ sich nicht fahren** (29.0, Port belegt). Sie hätte den Fall belegt,
+in dem die Aufstellung nicht durch Nachlässigkeit veraltet, sondern durch eine gewöhnliche
+Umgliederung. Der Befund steht ohne sie, weil die erste Fassung ihn trägt.
+
+#### 29.4.5 Wo ich nichts gefunden habe — vier gemessene Fehlschläge
+
+Wie in 28.2.5: Ein Fehlschlag zählt so viel wie ein Fund, und er zählt nur, wenn er aufgeschrieben
+wird.
+
+1. **`proof:access` weigert sich bereits, wenn eine durchsuchte Datei fehlt.** Erwartet hatte ich
+   ein stilles Überspringen. Gemessen: `verifier.ts` in der Aufstellung umbenannt → der Lauf hält an
+   mit `ENOENT: no such file or directory, open '…/src/access/verifier-umbenannt.ts'` und **Code
+   1**. Das ist die Weigerung, und sie ist nicht gebaut worden, sondern ergibt sich daraus, daß der
+   Lauf `readFile` ohne Auffangnetz benutzt. **Der Rest von 29.4.4 bleibt trotzdem stehen:** Eine
+   Aufstellung, die merkt, wenn ein Eintrag verschwindet, merkt nicht, wenn ein Eintrag **fehlt**.
+2. **Die Auswahlliste in `proof:export-api` ist sauber verankert.** Die Zusicherung „keine
+   ausgelieferte Quelle heißt nach einer Notiz (R-06, B-3.1)" ist `paths.every(…)` und damit dem
+   Muster nach verdächtig — aber unmittelbar darüber stehen zwei Zeilen, die die Menge festnageln:
+   `paths.length === EXPORT_SOURCE_PATHS.length` und der wörtliche Mengenvergleich „die gelieferte
+   Menge ist wörtlich die des Motors (EXPORT_SOURCE_PATHS)". **Über der leeren Menge kann sie nicht
+   bestehen.** Das ist die Bauart, die A-A-52 herstellen soll, und hier war sie schon da.
+3. **Die `every`-Zusicherungen in `proof:export` sind durch Zählungen daneben verankert.** Abschnitt
+   1: `before.entries.length === 3` vor dem Lauf, `after.auditCount === 3` und
+   `after.openCandidates === 0` danach. Abschnitt 4 und 5: `alle drei Buchungen sind weiterhin
+   Kandidaten` mit `after.openCandidates === 3` neben jedem `every`. Der Abbruchfall ist über
+   `check('der Lauf bricht ab', threw)` verankert — **der Angriff, der nicht ankommt, kommt hier
+   nicht durch.** Zwei schwächere Stellen (der Fall „verschwundener Ordner" und der Fall
+   „dieselbe Tagesgruppe zweimal") tragen keinen eigenen Anker, hängen aber am selben
+   `freshContext()` wie Abschnitt 1 und fielen mit ihm.
+4. **`proof:access` Abschnitt 12 trägt die Regel bereits ausgeschrieben**, drei Wellen vor ihrer
+   Formulierung — wie der YAML-Leser in 28.2.5 Punkt 1: „In allen 55 Antwortkörpern stehen genau **2**
+   Tokens — die beiden Erzeugungen". Eine Zusicherung über eine Menge, mit der Untergrenze **und**
+   der Obergrenze daneben, und die Zahl der Menge im Text. **So sieht die Zeile aus, die A-A-57 und
+   A-A-58 in den beiden Exportläufen herstellen sollen — im selben Lauf, in dem A-A-59 fehlt.**
+
+#### 29.4.6 Antwort auf O-JV
+
+**Ja — sinngemäß, in derselben Fassung, und diesmal härter als bei den drei Läufen aus T-206.**
+
+Von den drei Läufen ist keiner frei. Und anders als in T-206, wo die schwerste Blindheit an einer
+Routenliste lag, liegen hier **drei von vier** Befunden an einer **Grenze, die dieses Papier
+mehrfach als tragend geführt hat**: zweimal die Notiz-Grenze, einmal B-2.4.
+
+**Was das für 28.1.1 heißt, und ich schreibe es gegen mein eigenes Papier.** Dort habe ich sechs
+Schichten der Notiz-Grenze gezählt und fünf davon als gemessen ausgewiesen. Nach dieser Prüfung
+sind es **vier**:
+
+| Schicht aus 28.1.1 | Stand nach T-223 |
+|---|---|
+| 1 Typ der Domäne (`ExportSourcePath`) | steht, strukturell |
+| 2 Typwächter am Katalog (`NoteSourceIsNotPublished`) | steht, strukturell |
+| 3 Auswahlliste, wörtlich verglichen | **gemessen**, und in `proof:export-api` sauber verankert (29.4.5 Punkt 2) |
+| 4 Renderer bei umgangener Prüfung | **gemessen** (28.1.1) |
+| 5 durch den HTTP-Stapel (`proof:export-api`) | die Quellen-Zusicherung trägt; **Abschnitt 8 desselben Laufs trägt nicht** (T-223-2) |
+| 6 in der geschriebenen Datei (`proof:export`) | **trägt nicht** (T-223-1) |
+
+**Die Grenze selbst ist damit nicht offen** — die Schichten 1 bis 4 sind strukturell oder gemessen,
+und `packages/export/test/note-boundary-property.test.ts` liegt daneben. Offen ist, wie oft dieses
+Papier gesagt hat, sie sei gemessen. Das ist genau die Sorte Irrtum, gegen die A-A-55 geschrieben
+ist, und sie ist mir selbst unterlaufen.
+
+---
+
+### 29.5 Befunde dieser Prüfung
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-223-0** | **Abnahme** | **A-A-51 bis A-A-55 sind erfüllt.** Alle zehn Gegenproben eigenständig nachgefahren, dazu der Befund selbst nachgestellt (200/200/401). Zahlen bestätigt: `route-policy` **41/0**, `openapi` **112/0**, `template-fields` **30/0**, alle Code 0; jede Verletzung rot mit Code 1 und mit der Meldung, die die Auflage vorhersagt. Kein falscher Alarm. | — |
+| **T-223-1** | **muß** | **Ein `ALL`-Endpunkt auf einem Platzhalter ist für beide Wächter weiterhin unsichtbar.** Gemessen in **drei** Formen, nicht in einer: `api.all('/addin/leak/:id', …)`, `api.all('/addin/*', …)` und `api.all('/*', …)` — je **200 samt Rumpf**, zwei davon mit dem **Add-in-Token**, und beide Läufe bleiben **41/0** und **112/0, Code 0**. Die Stelligkeit trägt nicht (nachgemessen: zehn Kettenglieder Stelligkeit 2, Endpunkt 1 — und durch die Schreibweise aushebelbar); das Urteil des Erbauers darüber ist richtig. Die Wahl war aber nicht Liste oder nichts: **„Pfad ist genau `/*`" fängt vier der fünf Formen, „die Anzahl ist eine benannte Zahl" fängt alle fünf** — kein falscher Alarm auf dem unveränderten Baum. Gegenmittel: **A-A-56**. | domain-dev |
+| **T-223-2** | **muß** | **Die Notiz-Grenze in `proof:export` besteht über einem Bestand ohne Vermerk.** `'der interne Vermerk steht nirgends in der Datei (A-7.2, R-06)'` sucht eine Zeichenkette, die nichts in den Bestand geschrieben haben muß. Gemessen: `note: ''` statt des Vermerks → **97/0, Code 0**, Zeile grün. Dies ist Schicht 6 der sechs aus 28.1.1. Gegenmittel: **A-A-57**. | domain-dev |
+| **T-223-3** | **muß** | **Dieselbe Blindheit in `proof:export-api`, Abschnitt 8.** `!seenBodies.some(…)` ohne Untergrenze und ohne Rücklesung; der Vermerk wird einmal geschrieben und nie gelesen. Gemessen: `note: 'harmlos, kein Vermerk'` → **69/0, Code 0**, beide Zeilen grün. `proof:route-policy` macht es an derselben Grenze richtig (positiv verankert) — die Bauart ist im Baum vorhanden. Gegenmittel: **A-A-57**. | domain-dev |
+| **T-223-4** | soll | **Zwei Zusicherungen über die Protokollausgabe des Dienstes bestehen ohne Protokollausgabe**, eine davon B-2.4 („und kein Token steht in der Protokollausgabe"). `stdout`/`stderr` werden gesammelt und nur durchsucht. Gemessen: beide Sammler leer → **69/0, Code 0**, beide Zeilen grün. Gegenmittel: **A-A-58**. | domain-dev |
+| **T-223-5** | soll | **Die vier durchsuchten Dateien in `proof:access` Abschnitt 13 sind eine gepflegte Aufstellung ohne Anker.** `src/access/` führt dreizehn Dateien. Gemessen: ein `===` auf Geheimnismaterial in `src/access/token-store.ts` → **105/0, Code 0**, Zeile „Kein === auf Tokenmaterial im Nachweispfad" grün. Eine **fehlende** Datei fällt auf (harter Abbruch, Code 1); eine **hinzugekommene** nicht. Die schärfere Gegenprobe (Aufspaltung von `verifier.ts`) ließ sich nicht fahren — Port belegt, E-083 Punkt 2. Gegenmittel: **A-A-59**. | domain-dev |
+| **T-223-6** | Berichtigung | **28.2.2 zählte drei tragende Stellen; es sind zwei — die Zwei stimmte.** Einzeln nachgemessen: Stelle 1 → `1: putTodoNote`, Stelle 2 → `1: getTodoNote`, **Stelle 3 → unverändert 2, Lauf 112/0, Code 0**. Berichtigt in 29.3, mit Marke. Die dritte Stelle bleibt: Sie schreibt einen Vermerk über die **Add-in-Route** und ist damit ein negativer Beitrag, kein Fehler. A-A-52 ist davon unberührt. | — |
+| **T-223-7** | Hinweis | **28.1.1 hat sechs Schichten der Notiz-Grenze gezählt und fünf als gemessen ausgewiesen; nach T-223-2 und T-223-3 sind es vier.** Die Grenze ist nicht offen — die Schichten 1 bis 4 sind strukturell oder gemessen. Berichtigt in 29.4.6. Ein Papier, das zählt, was es nicht selbst nachgezählt hat, ist derselbe Fehler wie ein Wächter, der über eine Menge urteilt, die er nicht gesehen hat. | — |
+
+### 29.6 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-56** | Der offene Rest von A-A-51 wird geschlossen, und zwar **ohne** eine Aufstellung der erlaubten Pfade. Zwei Sätze, beide in `proof:route-policy` und `proof:openapi`, beide **vor** den Zusicherungen über die Routenliste: (1) **Jeder `ALL`-Eintrag trägt den Pfad `/*`** — die eine Form, die der Bestand benutzt; jede engere oder andere Form ist ein Befund. (2) **Die Zahl der `ALL`-Einträge ist eine benannte Zahl im Lauf** (heute zehn) und wird mit ihr verglichen. Wer ein Kettenglied hinzufügt oder entfernt, ändert die Zahl und sagt im selben Zug, welches — genau das ist der Zweck: Diese zehn sind die Vertrauensgrenze und kein Alltagsbestand. Die Begründung dafür, daß dies **keine** gepflegte Liste im Sinne von B-2.10 ist, gehört in den Kommentar: eine Fachroute wird nie unter `ALL` registriert, und alle zehn stehen als `app.use('*', …)` in einem Block in `app.ts`. **Als Hilfe, nicht als Bedingung:** Wer die Zahl anhebt, kann mit der Durchgriffsprobe aus 29.2.4 belegen, ob der neue Eintrag durchreicht oder antwortet. | In **beide** Richtungen: unveränderter Baum grün, kein falscher Alarm über die zehn Einträge; je eine Gegenprobe mit `api.all('/addin/leak/:id', …)`, `api.all('/addin/*', …)`, `api.all('/*', …)` und `app.all('/*', …)` auf der Wurzel-App — **alle vier rot, Code 1**, und die Meldung nennt den Pfad beziehungsweise die geänderte Zahl. Die Zahlen aus 29.2.3 sind die Erwartung. |
+| **A-A-57** | Die Notiz-Grenze wird in `proof:export` und in `proof:export-api` **positiv verankert**, nach dem Muster, das `proof:route-policy` Abschnitt 1 bereits fährt: Der Vermerk wird über die reguläre Route **zurückgelesen** und muß dort **stehen**, bevor die Zusicherung urteilt, daß er anderswo fehlt. In `proof:export` außerdem: angelegt und gesucht wird **dasselbe Literal**, nicht ein Satz und sein Präfix. | In beide Richtungen: unveränderter Baum **97/0** und **69/0** — kein falscher Alarm; der Vermerk nicht in den Bestand geschrieben → **beide rot, Code 1**, und die Meldung sagt, daß er im Bestand fehlt, nicht daß er in der Datei steht. |
+| **A-A-58** | Vor den beiden Zusicherungen über die Ausgabe des Dienstes in `proof:export-api` steht die Untergrenze, die sie voraussetzen: Die Ausgabe des Kindprozesses ist **nicht leer** und trägt mindestens die Protokollzeilen, die die gefahrenen Anfragen erzeugt haben. Ohne sie ist B-2.4 in diesem Lauf eine Zusicherung ohne Gegenstand. | In beide Richtungen: unveränderter Baum **69/0**; die Sammler leer → **rot, Code 1**, Meldung nennt die gemessene Länge. |
+| **A-A-59** | Die Aufstellung der durchsuchten Dateien in `proof:access` Abschnitt 13 bekommt einen Anker. Zwei tragfähige Formen stehen zur Wahl, und die Entscheidung darüber gehört zum Bau: entweder **die Aufstellung entfällt** und der Lauf durchsucht `src/access/**` und `src/http/**` vollständig, oder sie bleibt und der Lauf **weigert sich**, solange es in diesen Verzeichnissen eine Datei gibt, die er nicht angesehen hat. Die zweite Form ist die billigere und die genauere; sie verlangt eine benannte Zahl der ausgenommenen Dateien mit je einem Wort dazu, warum. | In beide Richtungen: unveränderter Baum **105/0** — kein falscher Alarm; ein `===` auf Geheimnismaterial in `src/access/token-store.ts` → **rot, Code 1**, und die Meldung nennt Datei und Zeile. Zusätzlich die Gegenprobe, die ich nicht fahren konnte: `verifier.ts` in zwei Dateien aufgeteilt, der Vergleich in der neuen → **rot**. |
+| **A-A-60** | Die Regel aus A-A-55 gilt **für alle** Nachweispfade dieses Baums und nicht nur für die sechs, an denen sie bisher gemessen wurde. Wer einen neuen `proof:`-Lauf baut oder einen bestehenden um eine Zusicherung erweitert, schreibt neben jede Aussage über eine **Menge** deren Untergrenze und neben jede Aussage über einen **Angriff** den Nachweis, daß er angekommen ist. Der Satz steht bereits im Kopf von `proof-route-policy.mjs`; diese Auflage macht ihn von einer Beobachtung zu einer Bedingung der Abnahme. | Keine eigene Messung. Ihre Wirkung ist an A-A-51 bis A-A-54 und A-A-56 bis A-A-59 ablesbar: **neun** Behebungen in zwei Wellen sind Anwendungen desselben Satzes. |
+
+### 29.7 Urteil dieser Prüfung
+
+**Zur Abnahme von T-215: freigegeben.** A-A-51 bis A-A-55 sind erfüllt, jede Zahl ist eigenständig
+nachgemessen, der behobene Befund ist vorher nachgestellt worden. Der Erbauer hat den Weg
+genommen, den diese Seite fünfmal vorgemacht hat — den Befund erst nachstellen, dann beheben,
+dann in beide Richtungen messen —, und er hat den Rest, den er nicht schließen konnte, benannt
+statt ihn zu verschweigen. **Das ist der Grund, warum diese Abnahme so kurz sein konnte.**
+
+**Zur Prüfung insgesamt: Nacharbeit.** Drei Befunde der Stufe **muß**, zwei der Stufe **soll**,
+eine Berichtigung, ein Hinweis. Fünf neue Auflagen, dazu eine sechste, die keine Bauarbeit ist,
+sondern eine Bedingung der Abnahme.
+
+**Zur Entscheidung, um die ich gebeten wurde:** Der benannte Rest reicht nicht. Nicht weil das
+Urteil des Erbauers falsch war — es war richtig, und es ist hier nachgemessen —, sondern weil er
+die Alternative als **Liste** gedacht hat. Als **Zahl** kostet sie eine Zeile und fängt jede der
+fünf Formen. Ein Wächter, dessen ganzer Zweck Sicherheit ist, darf keine unsichere Heuristik
+tragen; er darf aber auch nicht bei der ersten verworfenen Heuristik stehenbleiben.
+
+**Der Satz dieser Prüfung.** Siebenmal in sieben Wellen war die Antwort auf dieselbe Frage „ja",
+und diesmal traf sie die Grenze, die dieses Papier am häufigsten als gesichert geführt hat. Zwei
+Läufe sagen seit Wellen, der interne Vermerk stehe nicht in der Exportdatei und in keiner Antwort —
+und beide sagen es genauso, wenn es ihn gar nicht gibt. In 28.1.1 habe ich sie als zwei von sechs
+Schichten gezählt und nicht nachgesehen, was sie messen. **Der Wächter irrt sich über seinen
+Gegenstand; der Prüfer, der ihn zählt, ohne ihn zu fahren, irrt sich mit ihm.**
+
+---
+
+## 30. Prüfung T-230 (2026-09-06) — A-A-60 an vier weiteren Läufen, und ein Wächter, der 0 Dateien durchsieht und es „ok" nennt
+
+**Auftrag.** Zwei Punkte. **Erstens A-A-60** an vier Nachweispfaden, die diesen Maßstab noch nicht
+gesehen haben: `proof:tags`, `proof:conflicts`, `proof:callers`, `proof:db-permissions`. Die Frage
+ist dieselbe wie sechsmal zuvor — **weiß der Lauf, wenn er blind ist, und prüft eine Zusicherung
+ihre eigene Vorbedingung?** **Zweitens** die Entscheidung über den Rest, den domain-dev in T-225
+zu A-A-56 benannt hat: Wer ein Kettenglied entfernt und im selben Zug einen Endpunkt unter `ALL`
+auf `/*` legt, ergibt wieder die richtige Zahl und die richtige Form.
+
+### 30.0 Stand der Werkzeuge, was gemessen wurde und was nicht
+
+**Guardian und 42Crunch: dreizehntes Mal ohne Werkzeug** (E-079 Punkt 3, nicht erneut versucht).
+Neu ist der Grund: Der Auftraggeber hat auf Nachfrage bestätigt, daß es **keinen Zugang gibt**.
+Damit ist das ein **Zustand** und keine Warteposition mehr, und die Feststellung aus 28.0 und 29.0
+wiegt entsprechend schwerer: **Die Aussage über die OpenAPI-Beschreibung ruht vollständig auf
+`proof:openapi`.** Ein zweites, fremdes Augenpaar auf dieselbe Datei wird es nicht geben. Der
+einzige Ersatz ist, die eigenen Läufe regelmäßig gegen Verstümmelungen zu fahren — und genau das
+ist, was A-A-60 zur Bedingung macht.
+
+**`proof:all` nicht gefahren** (E-083 Punkt 3).
+
+**Der Port gehörte in dieser Welle e2e-tester** (E-083 Punkt 2). Das ist keine Nebenbemerkung,
+sondern der Zuschnitt dieser Prüfung, und deshalb steht er hier vollständig:
+
+| Lauf | portgebunden? | gemessen |
+|---|---|---|
+| `proof:callers` | **nein** | **vollständig**, 45 Zeilen |
+| `proof:tags` | ab Abschnitt 4 | **Abschnitte 1 bis 3**, 16 Zeilen |
+| `proof:conflicts` | ab Abschnitt 2 | **Abschnitt 1**, 61 Zeilen |
+| `proof:db-permissions` | Abschnitt 4 | **Abschnitte 1 bis 3**, 11 Zeilen |
+
+Die Portbindung ist nicht umgehbar: `PORT = 17843` steht fest in `proof-tags.mjs` und
+`proof-conflicts.mjs`, und der Dienst nimmt `DEFAULT_PORT` aus
+`apps/local-api/src/config.ts` — dort ausdrücklich als „**im Code festgelegt und zur Laufzeit
+nicht änderbar**", weil „B-1.1 Punkt 3 verlangt, dass die Bindeadresse nicht aus Konfiguration
+oder Umgebungsvariable ableitbar ist". Ein Ausweichport wäre eine Aufhebung von B-1.1 gewesen und
+kommt nicht in Frage. **Was nicht lief, steht hier als Vorhersage (30.6) und nicht als grüner
+Haken.**
+
+**Gemessen wurde am Verhalten, außerhalb des Bestands** — wie in T-176, T-183, T-189, T-206 und
+T-223. Der Spiegel liegt unter `/tmp/t230/root` und trägt die Gestalt des Arbeitsbereichs:
+`apps/local-api`, `apps/web` und `apps/outlook-addin` als Kopien, `packages` ebenfalls als Kopie
+(anders als in T-223 — die Messung an `proof:db-permissions` verlangt eine Verstümmelung in
+`packages/storage`, und die durfte den echten Baum nicht berühren), `node_modules` als Verweis auf
+den echten.
+
+Die portgebundenen Teile sind nicht abgeschaltet, sondern **abgeschnitten**: `tags-teil1.mjs` ist
+zeichengleich Zeile 1 bis 410 von `proof-tags.mjs`, `conflicts-teil1.mjs` Zeile 1 bis 532 von
+`proof-conflicts.mjs`, `dbperm-teil13.mjs` Zeile 1 bis 206 und 269 bis Ende von
+`proof-db-permissions.mjs`, je mit der unveränderten Schlußauswertung. Keiner der drei Schnitte
+enthält `spawn(process.execPath` oder `waitForPortFree(PORT)` — nachgezählt, je **0**. Dieselbe
+Bauart, die domain-dev in T-225 benutzt hat.
+
+**Zeichengleichheit doppelt belegt.** `diff -rq` über `apps/web/src`, `apps/outlook-addin/src`,
+`apps/local-api/scripts` und `packages/storage/src/sqlite/database.ts` ohne Unterschied, und eine
+Prüfsumme über alle `ok`/`FEHL`-Zeilen vor der ersten und nach der letzten Messung:
+
+| Lauf | vorher | nachher | Zahlen |
+|---|---|---|---|
+| `proof:callers` | `3479464283` | `3479464283` | **45/0** |
+| `proof:tags` Abschnitte 1–3 | `181362322` | `181362322` | **16/0** |
+| `proof:conflicts` Abschnitt 1 | `2453847206` | `2453847206` | **61/0** |
+| `proof:db-permissions` Abschnitte 1–3 | `3239101755` | `3239101755` | **11/0** |
+
+`proof:callers` ist zusätzlich **im Bestand selbst** gefahren, portfrei, und ergibt dieselbe
+Prüfsumme `3479464283`. Der Spiegel bildet also nicht nur sich selbst ab.
+
+Alle Kunstquellen und Verstümmelungen sind ausschließlich im Spiegel entstanden und mit ihm
+gelöscht. Der versionierte Bestand führt weder `Zweitweg` noch `teil1` noch `t230`.
+
+---
+
+### 30.1 `proof:callers` — drei Befunde an derselben Zusage
+
+Dieser Lauf ist der bestbewachte der vier, und das ist der Grund, warum er hier zuerst steht: Er
+prüft sich in **zwei** Abschnitten selbst (6 und 8), er hat in T-188 mit A-A-40 eine
+Blindheitsmessung eingebaut bekommen, und sein Abschnitt 0 ist die Vorlage, die dieses Papier seit
+T-206 zitiert. Die drei Befunde sitzen alle an **einer** Zusage — der aus Abschnitt 1 und 7, ohne
+die der ganze Lauf nichts wert wäre:
+
+> Dieser Lauf liest **eine** Datei. Diese Beschränkung ist nur so viel wert wie die Zusicherung,
+> dass es keine zweite gibt. Also wird sie gemessen und nicht geglaubt.
+
+#### 30.1.1 T-230-1 (muß) — „0 Dateien durchgesehen" ist eine grüne Zeile
+
+`proof-callers.mjs` sammelt die zu durchsuchenden Dateien selbst:
+
+```js
+const webSources = [];
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) walk(child);
+    else if (/\.tsx?$/.test(entry.name)) webSources.push(child);
+  }
+};
+walk(WEB_SOURCE_DIR);
+```
+
+Die Zahl der eingesammelten Dateien geht in den **Namen** der Zusicherung und in keine Bedingung:
+
+```js
+check(
+  `\`fetch\` steht nur in api/client.ts (${webSources.length} Dateien durchgesehen)`,
+  strayFetch.length === 0,
+  strayFetch.map(describeStray).join(' | '),
+);
+```
+
+**Verstümmelung** (nur der Sammler, die Dateien bleiben auf der Platte): `/\.tsx?$/` →
+`/\.KEINETREFFER$/`.
+
+**Ergebnis: `45 bestanden, 0 fehlgeschlagen`, Code 0.** Die Zeile lautet dann wörtlich:
+
+```
+  ok    `fetch` steht nur in api/client.ts (0 Dateien durchgesehen)
+```
+
+Dieselbe Verstümmelung am Sammler des Add-ins (`walkAddin`) ergibt ebenso **45/0, Code 0** mit
+
+```
+  ok    `fetch` steht im Add-in nur in api/client.ts (0 Dateien durchgesehen)
+```
+
+**Warum die sechs Gegenproben das nicht sehen — und strukturell nicht sehen können.** Der Lauf hat
+seit T-188 für genau diese Zusage eine Selbstprobe, `proveFetchGuard`, mit fünf Schreibweisen und
+einer Umkehrprobe. In beiden Verstümmelungen bleiben **alle sechs grün**. Der Grund steht in ihr
+selbst:
+
+```js
+const probe = (source) =>
+  strayGlobalFetch([...files, { name: INJECTED, source }], allowed)
+    .map((finding) => finding.name)
+    .filter((name) => !baseline.includes(name));
+```
+
+Die eingesetzte Datei wird der **Liste** hinzugefügt und nicht der Platte. Damit prüft
+`proveFetchGuard` das **Sieb** und nie die **Ernte**. Ein Sieb, durch das nichts geschüttet wird,
+ist tadellos.
+
+**Auswirkung.** Die Zusage „es gibt keinen zweiten Weg zum Dienst" ist die Vorbedingung der
+Abschnitte 2 bis 5 und 7 — also von 41 der 45 Zeilen. Fällt der Sammler aus (ein umbenanntes
+Verzeichnis, eine Umstellung auf ein anderes Werkzeug, eine Änderung an der Endung), meldet der
+Lauf nicht, daß er blind ist. Er meldet 45/0.
+
+**Gegenmittel: A-A-61.**
+
+#### 30.1.2 T-230-2 (muß) — der Ausdruck, den derselbe Lauf drei Absätze weiter oben verurteilt
+
+Unmittelbar unter der `fetch`-Zusicherung steht ihre Zwillingszeile:
+
+```js
+const strayRequest = [];
+for (const file of webFiles) {
+  if (
+    /(?<![\w.])request\s*[<(]/.test(file.source) &&
+    file.name !== 'api/endpoints.ts' &&
+    file.name !== 'api/client.ts'
+  ) {
+    strayRequest.push(file.name);
+  }
+}
+check('`request(` steht nur in api/endpoints.ts', strayRequest.length === 0, strayRequest.join(', '));
+```
+
+Der Kommentar zwanzig Zeilen darüber sagt über **denselben** Ausdruck in seiner `fetch`-Fassung:
+
+> Hier stand `/(?<![\w.])fetch\s*\(/`. Das ist **zeichengleich** der Ausdruck, den T-143 als S-1 an
+> einem anderen Wächter als blind gemessen und den T-146 dort ersetzt hat: Der Rückblick auf `.`
+> schließt **jedes** `.fetch` aus, um zwei Fälle durchzulassen — und läßt damit `globalThis.fetch(`,
+> `window.fetch(`, `self.fetch(` und jede Zerlegung durch. Für diese Zusage gab es außerdem **null**
+> Gegenproben; sie stehen jetzt in Abschnitt 6.
+
+Für die `request`-Fassung steht der Ausdruck unverändert da, und Gegenproben gibt es für sie
+**null** — auch nach A-A-40.
+
+**Kunstquelle**, eine Datei in `apps/web/src/app/Zweitweg.tsx` im Spiegel:
+
+```ts
+import * as client from "../api/client";
+
+export async function alleTodosLoeschen(): Promise<void> {
+  await client.request("/todos/00000000-0000-4000-8000-000000000000", { method: "DELETE" });
+}
+```
+
+**Ergebnis: `45 bestanden, 0 fehlgeschlagen`, Code 0.** Beide Zeilen grün, die Zahl steigt
+klaglos von 117 auf 118 Dateien.
+
+**Gegenprobe** (dieselbe Datei, benannte Einfuhr statt Namensraum): `import { request } from
+"../api/client";` → **`44 bestanden, 1 fehlgeschlagen`, Code 1**, mit
+
+```
+  FEHL  `request(` steht nur in api/endpoints.ts — app/Zweitweg.tsx
+```
+
+Der Wächter hat also Zähne; er sieht nur eine von zwei Schreibweisen derselben Sache.
+
+**Warum das ein Weg ist und keine Spitzfindigkeit.** `request` ist ausgeführt exportiert —
+`apps/web/src/api/client.ts` führt `export async function request<T>(path: string, options:
+RequestOptions = {}): Promise<T>`. Eine Ansicht, die ihn über den Namensraum ruft, spricht den
+Dienst mit **demselben Sitzungsgeheimnis und derselben Grundadresse** an wie `endpoints.ts` und
+geht dabei an Abschnitt 2 bis 5 dieses Laufs vorbei — an der Wegprüfung, an der Rumpfprüfung, an
+der Abfrageprüfung und an der Zählung der blinden Flecken. **Der `fetch`-Wächter fängt sie
+ebensowenig**: Diese Ansicht ruft kein `fetch`, sie benutzt das eine, das erlaubt ist.
+
+**Auswirkung.** Genau der Fehler aus T-050 — ein Schlüssel, den niemand liest, 422 oder stilles
+Verwerfen, wochenlang unbemerkt — wäre in einer so geschriebenen Ansicht wieder unsichtbar. Der
+Lauf, der dagegen gebaut wurde, sagt dazu „ok".
+
+**Gegenmittel: A-A-62.**
+
+#### 30.1.3 T-230-3 (soll) — der Sammler sieht zwei Endungen, der Bündler fünf mehr
+
+Dieselbe Kunstquelle — ein nacktes `fetch(` auf `http://127.0.0.1:17843/api/v1/…` in einer neuen
+Datei unter `apps/web/src/app/` — in sieben Schreibweisen der Dateiendung, sonst zeichengleich:
+
+| Endung | Lauf | Code | Zeile |
+|---|---|---|---|
+| `.tsx` | **44/1** | **1** | `FEHL … (118 Dateien durchgesehen) — app/Zweitweg.tsx:2 — await fetch(…` |
+| `.ts` | **44/1** | **1** | `FEHL … (118 Dateien durchgesehen) — app/Zweitweg.ts:2 — await fetch(…` |
+| `.jsx` | **45/0** | 0 | `ok … (117 Dateien durchgesehen)` |
+| `.js` | **45/0** | 0 | `ok … (117 Dateien durchgesehen)` |
+| `.mts` | **45/0** | 0 | `ok … (117 Dateien durchgesehen)` |
+| `.cts` | **45/0** | 0 | `ok … (117 Dateien durchgesehen)` |
+| `.mjs` | **45/0** | 0 | `ok … (117 Dateien durchgesehen)` |
+
+Fünf von sieben sind unsichtbar, und die Zahl im Text bleibt bei 117 stehen — der Lauf bemerkt
+nicht, daß es eine 118. Datei gibt. Vite löst alle fünf auf; keine von ihnen ist eine
+Verlegenheitsform.
+
+Dies ist derselbe Befund wie T-230-1 aus der anderen Richtung: Dort war die Ernte **leer**, hier
+ist sie **schmaler als der Bau**. Die Stufe ist niedriger, weil heute keine solche Datei im Baum
+liegt und die Behebung in einem Zeichen besteht.
+
+**Gegenmittel: A-A-61**, zweiter Satz.
+
+---
+
+### 30.2 T-230-4 (muß) — `proof:tags` Abschnitt 1: dreißig Namen, null Zeilen
+
+Der Abschnitt legt dreißig Tagnamen an Kanten der Faltungsregel an, fährt Migration 0008 darüber
+und vergleicht das Ergebnis mit der Domänenfunktion:
+
+```js
+const rows = db.prepare('SELECT id, name, name_key FROM tag ORDER BY created_at').all();
+…
+rows.forEach((row, index) => {
+  const original = NAMES[index];
+  if (row.name_key !== tagNameKey(original)) { keyMismatch.push(…); }
+  if (row.name !== normalizeTagName(original)) { nameMismatch.push(…); }
+});
+
+check(
+  `die Migration errechnet für alle ${String(NAMES.length)} Namen denselben Schlüssel wie die Domäne`,
+  keyMismatch.length === 0,
+  keyMismatch.slice(0, 3).join(' | '),
+);
+```
+
+Die Zahl im Text kommt aus `NAMES.length` — der **Erwartung**. Die Schleife läuft über `rows` —
+die **Messung**. Verglichen werden die beiden nie.
+
+**Verstümmelung A — der Leser sieht keine Zeile** (`SELECT … WHERE 0 ORDER BY created_at`):
+**`16 bestanden, 0 fehlgeschlagen`, Code 0.** Die Zeile lautet unverändert
+
+```
+  ok    die Migration errechnet für alle 30 Namen denselben Schlüssel wie die Domäne
+```
+
+und `und dieselbe Anzeigeform` ebenso. Kein einziger anderer Haken wird rot.
+
+**Verstümmelung B — die Vorlagen gelangen nicht in den Bestand** (der `insert.run(…)` der
+Anlegeschleife entfällt): **`15 bestanden, 1 fehlgeschlagen`, Code 1** — aber beide Zeilen von
+Abschnitt 1 bleiben **grün**, und rot wird eine Zeile **einen Abschnitt später** und aus einem
+anderen Anlaß:
+
+```
+  FEHL  ein zweites Tag mit demselben Schlüssel wird abgewiesen — am Adapter vorbei — durchgekommen
+```
+
+Der Lauf wird also gerettet, aber nicht von seiner Zusicherung, sondern davon, daß Abschnitt 2
+zufällig auf demselben Bestand aufsetzt — und er nennt den falschen Grund. Wer die Meldung liest,
+sucht am eindeutigen Index und nicht an den fehlenden Vorlagen.
+
+**Das Gegenmittel steht zwei Abschnitte weiter im selben Lauf.** Abschnitt 3 macht es richtig:
+
+```js
+check(
+  'kein Tag geht verloren',
+  after.length === 6,
+  `${String(after.length)} statt 6`,
+);
+```
+
+Eine Zeile derselben Bauart in Abschnitt 1 — `rows.length === NAMES.length` neben
+`keyMismatch.length === 0` — schließt den Befund.
+
+**Auswirkung.** Migration 0008 setzt den Vergleichsschlüssel für Tags. Sie ist die Stelle, an der
+aus zwei Schreibweisen ein Tag wird, und ihre Richtigkeit hängt daran, daß SQL und Domäne
+dieselbe Faltung rechnen. Rechnete eine künftige Fassung von 0008 anders — oder ließe sie Zeilen
+aus —, sagte dieser Abschnitt weiterhin, sie rechne für alle dreißig Namen richtig.
+
+**Gegenmittel: A-A-63.**
+
+---
+
+### 30.3 T-230-5 (muß) — `proof:conflicts` Abschnitt 1: die Verletzung tritt ein, aber nicht die benannte
+
+Der Abschnitt löst vierzehn Verletzungen eindeutiger Indizes aus und übersetzt sie mit der
+Funktion, die auch der Dienst benutzt. Der Auslöser prüft seine Vorbedingung — **im Wortlaut**:
+
+```js
+check(
+  `${indexName}: die Verletzung tritt ein`,
+  translated !== null,
+  raw === '' ? 'kein Wurf — die Vorbedingung stimmt nicht' : raw,
+);
+if (translated === null) return;
+```
+
+Was er nicht prüft: **welche** Verletzung eingetreten ist. `raw` enthält die Meldung von SQLite und
+damit den Indexnamen; sie wird als Erläuterung mitgeführt und in keiner Bedingung benutzt.
+
+**Kunstquelle.** Der Block für `ux_tag_name` legt heute bewußt einen Schlüssel ohne Zwilling an —
+der Kommentar daneben sagt warum: „`ux_tag_name` lässt sich nur isoliert auslösen, wenn der
+Vergleichsschlüssel **nicht** kollidiert — sonst schlägt `ux_tag_name_key` mit zu." Genau das ist
+die Kunstquelle: `'ein schluessel ohne zwilling'` → `nameKey('Alpha')`.
+
+**Ergebnis: `61 bestanden, 0 fehlgeschlagen`, Code 0.** Alle vier Zeilen des `ux_tag_name`-Blocks
+bleiben grün. Mit ausgegebenem `raw` sieht man, was tatsächlich geschah:
+
+```
+        ROH ux_tag_name: UNIQUE constraint failed: index 'ux_tag_name_key'
+        ROH ux_tag_name_key: UNIQUE constraint failed: index 'ux_tag_name_key'
+```
+
+Zwei der vierzehn Blöcke messen denselben Index. `ux_tag_name` ist in diesem Lauf **überhaupt
+nicht** geprüft, und der Lauf sagt 61/0.
+
+**Warum das dieselbe Gefahr ist, die der Abschnitt drei Blöcke früher benennt.** Er tut es
+ausführlich, und er tut es an der richtigen Stelle für den **Übersetzer**:
+
+> `ux_tag_name` ist eine Teilzeichenkette von `ux_tag_name_key`. Ein Zuordner, der blank nach
+> Teilzeichenketten sucht, ordnet die Meldung des einen dem Eintrag des anderen zu. Heute wäre das
+> folgenlos — beide tragen denselben Satz —, morgen nicht mehr.
+
+Er geht sogar einen Schritt weiter als jeder andere Lauf dieses Baums und prüft, daß seine eigene
+Gegenprobe nicht über der leeren Menge steht:
+
+```js
+const nested = mapped.filter((name) => mapped.some((other) => other !== name && other.includes(name)));
+check(
+  `es gibt überhaupt einen Indexnamen, der in einem anderen steckt (${nested.join(', ') || 'keinen'})`,
+  nested.length > 0,
+  'ohne einen solchen Fall sagt die Prüfung darüber nichts',
+);
+```
+
+**Und dann fällt die Wachsamkeit genau dort aus, wo sie zum zweiten Mal gebraucht wird** — bei der
+**Provokation** statt bei der Übersetzung. Die Behebung ist eine Bedingung mehr in einer Zeile,
+die es schon gibt: `raw.includes(indexName)` neben `translated !== null`.
+
+**Auswirkung.** Die vierzehn Blöcke sind die Zusage, daß jede Verletzung eines eindeutigen Index
+im Dienst zu einem eigenen, deutschen Satz wird und **nicht** zur allgemeinen Auskunft — und daß
+die Meldung von SQLite nicht in der Antwort steht (B-2.4). Ein Block, der einen anderen Index
+trifft, prüft B-2.4 zweimal für denselben Index und für einen gar nicht. Solange beide Indizes
+dieselbe Kennung tragen, bleibt es folgenlos; der Abschnitt selbst schreibt „morgen nicht mehr".
+
+**Gegenmittel: A-A-64.**
+
+---
+
+### 30.4 T-230-6 (soll, mit Berichtigung) — `proof:db-permissions`: welcher Abschnitt mißt das `chmod`?
+
+Der Kopf der Datei sagt:
+
+> Damit Abschnitt 1 und 2 wirklich das `chmod` messen und nicht die `umask`, setzt dieser Prüfpfad
+> seine eigene `umask` ausdrücklich **weit** (`0o000`) — und der Kindprozess in Abschnitt 4 erbt
+> sie.
+
+Gesetzt wird sie in einer Zeile: `const vorherigeUmask = process.umask(0o000);`. **Gemessen wird
+sie nirgends.**
+
+Zwei Verstümmelungen, beide in `packages/storage/src/sqlite/database.ts` beziehungsweise im
+Prüfpfad, beide nur im Spiegel:
+
+| Verstümmelung | Lauf | Code | Abschnitt 1 | Abschnitt 2 | Abschnitt 3 |
+|---|---|---|---|---|---|
+| — (unverändert) | **11/0** | 0 | grün | grün | grün |
+| **M1** `secureDatabaseFiles` fällt aus, `umask` weit (`0o000`) | **6/5** | **1** | **3× rot** (`0644`) | **rot** | **rot** |
+| **M2** `secureDatabaseFiles` fällt aus, `umask` eng (`0o077`) | **10/1** | 1 | **3× grün** | **rot** | **grün** |
+
+**M1 belegt, daß die Abschnitte Zähne haben.** Das ist die Gegenprobe, ohne die der Befund nichts
+wert wäre.
+
+**M2 ist der Befund.** Mit ausgeschalteter Maßnahme des Produkts melden Abschnitt 1 („takt.db
+liegt mit 0600 (war: 0644)", dreimal) und Abschnitt 3 („die Sicherungskopie liegt mit 0600") **ok**
+— sie messen dann die `umask` und nicht das `chmod`, also genau das, was der Kopf ausschließt.
+
+**Und der einzige Abschnitt, der M2 überlebt, ist der einzige, der seine Vorbedingung mißt.**
+Abschnitt 2 stellt die Ausgangslage nicht nur her, er behauptet sie als eigene Zeile:
+
+```js
+check('Ausgangslage hergestellt: takt.db liegt mit 0644', mode(path) === 0o644, octal(mode(path)));
+
+const second = openConnection(path);
+check(
+  'nach dem Öffnen liegt sie mit 0600',
+  mode(path) === DATABASE_FILE_MODE,
+  octal(mode(path)),
+);
+```
+
+Vorher `0644`, nachher `0600`, in zwei Zeilen desselben Laufs — das ist eine Aussage über die
+**Wirkung** und nicht über den Zustand. Sie ist gegen jede `umask` immun.
+
+**Berichtigung.** Der Satz im Kopf der Datei ist zu weit: Es ist **Abschnitt 2**, der das `chmod`
+mißt, nicht Abschnitt 1 und 2. Abschnitt 1 mißt das Ergebnis beider Maßnahmen und kann sie nicht
+auseinanderhalten. Die Behebung kostet eine Zeile — `check('die umask dieses Laufs ist weit',
+process.umask() === 0o000, …)` vor Abschnitt 1 —, und dann stimmt der Satz.
+
+**Stufe soll und nicht muß**, weil der Lauf als Ganzes in M2 rot wird. Er wird es aber nur wegen
+Abschnitt 2, und er nennt dabei drei grüne Zeilen, die falsch sind.
+
+**Gegenmittel: A-A-65.**
+
+---
+
+### 30.5 Wo ich nichts gefunden habe — sechs Erwartungen, die sich nicht bestätigt haben
+
+Dieser Abschnitt ist so wichtig wie die fünf davor. „Hier ist nichts" ist nur dann eine Aussage,
+wenn dabeisteht, wonach gesucht wurde.
+
+1. **`proof:conflicts` Abschnitt 1 trägt A-A-60 in drei Formen — und im Wortlaut.** Er hat eine
+   **Untergrenze** (`inSchema.length > 0`, „das Schema führt N eindeutige Indizes"), er prüft
+   **beide Richtungen** (jeder Index hat einen Eintrag, kein Eintrag ist verwaist), und er prüft,
+   daß seine eigene Gegenprobe nicht leer läuft (`nested.length > 0`, „ohne einen solchen Fall
+   sagt die Prüfung darüber nichts"). Der Erläuterungstext seines Auslösers lautet buchstäblich
+   „kein Wurf — **die Vorbedingung stimmt nicht**". Das ist die Regel aus A-A-55, ausgeschrieben
+   in einem Lauf, der Wellen vor ihrer Formulierung entstanden ist — dieselbe Beobachtung wie zu
+   `proof:access` Abschnitt 12 in T-223. Der Befund T-230-5 sitzt **neben** dieser Sorgfalt und
+   nicht statt ihrer.
+2. **`proof:db-permissions` Abschnitt 2 ist die sauberste Vorbedingungsmessung dieses Baums.** Sie
+   ist oben belegt: der einzige Abschnitt, der M2 überlebt.
+3. **`proof:db-permissions` Abschnitt 4 fängt seine Blindheit ausdrücklich** — gelesen, nicht
+   gemessen (Port). `check('der Dienst legt seinen Bestand an', appeared, stderr.slice(-300));`
+   steht **vor** allen Rechteaussagen, und die Durchsicht des ganzen Verzeichnisses liegt
+   **innerhalb** von `if (appeared)`. Erwartet hatte ich hier eine Zusicherung über eine
+   Verzeichnisliste, die leer sein darf; sie ist es nicht.
+4. **`proof:callers` Abschnitt 0 ist die Vorlage, die dieses Papier zitiert, und er hält.** Die
+   Zahl der Aufrufe wird auf **zwei** Wegen ermittelt — aus dem Syntaxbaum und aus dem Rohtext —
+   und gegeneinander gehalten (`rawCalls > 0 && result.calls.length === rawCalls`), dazu eine
+   Untergrenze (`>= 45`), dazu `unreadable.length === 0`. Abschnitt 5 trägt
+   `withBody >= 25 && withQuery >= 5`. Abschnitt 7 hat dieselbe Doppelermittlung für den zweiten
+   Aufrufer. Ich habe an drei Stellen eine fehlende Untergrenze erwartet und keine gefunden.
+5. **Eine Selbstprobe, die ins Leere greift, wird rot gemeldet.** `proof:callers` Abschnitt 6 und
+   8: `if (spoiled === callerText) { check('die Probe „…" lässt sich anwenden', false, 'die Stelle
+   wurde nicht gefunden'); continue; }`, dazu die Prüfung, daß die Ersetzung einzeilig bleibt.
+   Erwartet hatte ich ein stilles Überspringen — wie in T-223 an `proof:access` erwartet und
+   ebenfalls nicht gefunden.
+6. **`proof:tags` Abschnitt 3 bis 8 sind positiv verankert.** `after.length === 6` („kein Tag geht
+   verloren"), `creators.length === 1`, `responses.length - creators.length === 7`,
+   `(todosOnTag?.items ?? []).length === 8`, `theTag !== undefined &&` vor der Aussage über die
+   acht Todos. Die Blindheit dieses Laufs sitzt in Abschnitt 1 und **nur** dort — was den Befund
+   T-230-4 schärfer macht, nicht milder.
+
+---
+
+### 30.6 Was der Port verhindert hat — drei Vorhersagen statt drei Auslassungen
+
+Nicht gemessen: `proof:tags` Abschnitte 4 bis 9, `proof:conflicts` Abschnitte 2 bis 6,
+`proof:db-permissions` Abschnitt 4. Sie stehen hier als benannte Erwartungen mit der Verstümmelung,
+die sie prüfen würde, damit die nächste portfreie Welle sie nachfahren kann statt sie neu zu
+suchen.
+
+**V-1 — `proof:tags` Abschnitt 9: ein Status ohne einen Grund.**
+
+```js
+check('mehr als fünfzig Namen werden abgewiesen', tooMany.status === 422, `Status ${String(tooMany.status)}`);
+…
+check('ein Name aus lauter Leerzeichen wird abgewiesen', blank.status === 422, `Status ${String(blank.status)}`);
+```
+
+Dieselbe Klasse wie T-230-5: Die Zusicherung sagt „abgewiesen **weil**", gemessen wird
+„abgewiesen". Der Nachbarabschnitt 8 macht es richtig — `(ambiguous.body?.error?.details ??
+[]).some((entry) => entry.code === 'tag_name_ambiguous')`. **Erwartung:** Eine Kunstquelle, die
+die Anfrage aus einem anderen Grund auf 422 bringt (etwa ein zu langer Titel), läßt beide Zeilen
+grün.
+
+**V-2 — `proof:tags` Abschnitt 5: die Zusage ist die Transaktion, gemessen wird die Zahl.**
+Die Überschrift lautet „Kein Tag ohne sein Todo — die achte Stelle aus T-047", und der Kommentar
+nennt die gemeinsame Transaktion als das Geprüfte. Gemessen wird
+`afterFailure.length === beforeFailure`. Das ist wahr, wenn die Transaktion zurückrollt — **und
+ebenso**, wenn das Tag nie entstanden ist, weil die Anfrage schon an der Eingabeprüfung
+gescheitert ist. **Erwartung:** Eine Kunstquelle, die den Fehlschlag **vor** die Tag-Anlage legt,
+läßt alle drei Zeilen grün, und die Zusage über die Transaktion steht dann über der leeren Menge.
+Unterscheidbar wäre es an der Fehlerkennung der Antwort.
+
+**V-3 — `proof:db-permissions` Abschnitt 4 hat als einziger der drei keine Portmeldung.**
+`proof:tags` und `proof:conflicts` beginnen ihren Dienstteil mit `waitForPortFree(PORT)` und einer
+Meldung im Klartext („Auf 127.0.0.1:17843 lauscht bereits etwas, auch nach 5 s Warten. Läuft Takt
+oder ein anderer Prüfpfad noch?"). `proof:db-permissions` hat weder das eine noch das andere,
+sondern eine Annahme im Kommentar:
+
+> Er wird den Port 17843 möglicherweise nicht bekommen — die Anwendung oder ein anderer Prüfpfad
+> kann laufen. Das macht nichts: Verzeichnis, Datenbank und Migration entstehen im Start **vor**
+> dem Binden.
+
+**Erwartung:** Stimmt der Satz, ist alles gut. Stimmt er nicht, wird der Lauf bei belegtem Port
+rot mit der **falschen** Begründung — „der Dienst legt seinen Bestand an" statt „der Port ist
+belegt" —, und der nächste Leser sucht an den Dateirechten. Der Satz ist eine unbelegte Zusage
+über eine Reihenfolge im Startpfad, und er ist ausgerechnet in der Welle nicht prüfbar, in der er
+gebraucht wird. **Zu messen in einer portfreien Welle:** einmal mit belegtem Port fahren und die
+Meldung lesen.
+
+---
+
+### 30.7 Der Rest von A-A-56 — er trägt, und hier ist der Satz, der ihn trägt
+
+domain-dev hat ihn in T-225 benannt statt ihn zu verschweigen, und die Frage ist an mich gegangen.
+Die Antwort lautet: **Ja, der Rest ist tragbar. Er bleibt benannt, und er bekommt keine weitere
+Auflage.** Dieser Absatz ist der Satz, den der nächste Prüfer lesen soll, bevor er ihn für ein
+Versehen hält.
+
+**Der Rest.** Wer ein Kettenglied **entfernt** und im selben Zug einen Endpunkt unter `ALL` auf
+`/*` legt, ergibt wieder die Zahl zehn und wieder die Form `/*`. Beide Sätze von A-A-56 bleiben
+grün.
+
+**Erstens: A-A-56 fängt das nicht, und sie soll es nicht fangen.** Die Zahl ist ein Wächter gegen
+eine **Route, die dem Leser entgeht** — gegen `if (route.method === 'ALL') continue;`, den Filter,
+der T-206-1 und T-223-1 möglich gemacht hat. Sie ist kein Wächter gegen ein **Kettenglied, das
+jemand entfernt**. Das zweite ist keine Frage einer Aufstellung, sondern des Verhaltens: Ein
+fehlender Herkunftswächter, ein fehlender Tokenwächter, eine fehlende `Host`-Prüfung sind an einer
+**Antwort** erkennbar und nicht an einer Zahl. Gemessen wird das an den Läufen, die den Dienst
+fahren — `proof:access` (**106/0**) und `proof:route-policy` (**43/0**) —, und dort gehört es hin.
+Wer die Zahl zum Wächter über die Kettenglieder macht, verlegt eine Verhaltensfrage in einen
+Zeichenvergleich; das ist genau der Fehler, gegen den B-2.10 geschrieben ist.
+
+**Zweitens: die Reichweite des getarnten Sammelpfads ist gemessen, und sie ist klein.** Zweimal
+unabhängig — von mir in 29.2.2 und von domain-dev in T-225 — antwortet ein `ALL`-Eintrag auf `/*`
+dem **Add-in-Token mit 401** und nur dem **Sitzungsgeheimnis** mit 200. Die Tür, die von außen
+erreichbar ist, ist die des Add-ins; sie öffnet dieser Weg nicht. Und der Rest verlangt **zwei**
+gleichzeitige Änderungen in **derselben** Datei — `apps/local-api/src/app.ts` —, von denen die
+erste eine Sicherheitsschicht entfernt. Wer so weit ist, braucht keinen getarnten Sammelpfad mehr.
+
+**Drittens, und das ist der Teil, der ohne Begründung wie ein Versehen aussieht: die
+Durchgriffsprobe aus 29.2.4 wird ausdrücklich nicht zur Bedingung gemacht.** Das ist kein
+Vergessen und keine Bequemlichkeit, sondern ein **gemessenes** Ergebnis. In T-223 habe ich sie
+gefahren: Jeden `ALL`-Eintrag in einen nirgends registrierten Pfad übersetzen und mit gültigem
+Nachweis aufrufen — die zehn Kettenglieder antworten 404 (sie reichen durch), drei der vier
+Endpunktformen antworten 200 (sie werden gefangen). **Die vierte nicht:** Ein Endpunkt, dessen
+Handler einen Datensatz nachschlägt und für eine erfundene Kennung 404 antwortet, ist von einem
+Kettenglied nicht zu unterscheiden — obwohl derselbe Endpunkt mit einer echten Kennung 200 samt
+Rumpf liefert. **Eine Bedingung, die falsch negativ ist und dabei jeden Lauf um einen Dienststart
+teurer macht, ist schlechter als eine Hilfe, die man bewußt zieht.** Wer sie zur Bedingung machen
+will, löst zuerst diesen Fall; solange er offen ist, wäre die Verschärfung eine Zusicherung, die
+ihre eigene Vorbedingung nicht prüft — und damit ausgerechnet ein Verstoß gegen A-A-60.
+
+**Was stattdessen gilt.** Der Rest steht als benannter Rest in diesem Papier und in A-A-56 unter
+„als Hilfe, nicht als Bedingung". Wer die Zahl `MIDDLEWARE_COUNT` **senkt**, sagt im selben Zug,
+welches Kettenglied wegfällt und warum — das ist keine Prüfregel, sondern eine Reviewfrage, und
+sie ist bei einer Zweizeilenänderung an der Vertrauensgrenze die richtige Stelle.
+
+---
+
+### 30.8 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-230-1** | **muß** | **`proof:callers` sagt „ok", wenn er 0 Dateien durchgesehen hat.** Die Zahl der eingesammelten Dateien steht im Namen der Zusicherung und in keiner Bedingung. Gemessen: Sammler verstümmelt → **45/0, Code 0**, Zeile „`fetch` steht nur in api/client.ts (**0 Dateien durchgesehen**)"; dasselbe für den Add-in-Sammler. **Die sechs Gegenproben aus A-A-40 können das strukturell nicht sehen**, weil `proveFetchGuard` die eingesetzte Datei der **Liste** hinzufügt (`[...files, { name: INJECTED, source }]`) und damit das Sieb prüft, nie die Ernte. Betrifft die Vorbedingung von 41 der 45 Zeilen. Gegenmittel: **A-A-61**. | domain-dev |
+| **T-230-2** | **muß** | **Ein zweiter Weg zum Dienst über den Namensraum ist für beide Wächter unsichtbar.** `/(?<![\w.])request\s*[<(]/` — zeichengleich der Ausdruck, den derselbe Lauf zwanzig Zeilen darüber als blind ausweist und für `fetch` seit T-188 ersetzt hat; für `request` steht er unverändert und hat **null** Gegenproben. Gemessen: `import * as client …; client.request('/todos/…', { method: 'DELETE' })` in einer Ansicht → **45/0, Code 0**; benannte Einfuhr → **44/1, Code 1** mit Dateinamen. `request` ist exportiert (`apps/web/src/api/client.ts`), der Weg benutzt das erlaubte `fetch` und geht an Abschnitt 2 bis 5 vorbei. Gegenmittel: **A-A-62**. | domain-dev |
+| **T-230-3** | soll | **Der Sammler sieht `.ts` und `.tsx`; der Bündler löst fünf Endungen mehr auf.** Dieselbe Kunstquelle in sieben Schreibweisen: `.tsx`/`.ts` → **44/1, Code 1**; `.jsx`, `.js`, `.mts`, `.cts`, `.mjs` → je **45/0, Code 0**, und die Zahl bleibt bei 117 stehen. Gegenmittel: **A-A-61**, zweiter Satz. | domain-dev |
+| **T-230-4** | **muß** | **`proof:tags` Abschnitt 1 vergleicht dreißig Namen über null Zeilen.** Die Zahl im Text kommt aus `NAMES.length`, die Schleife läuft über `rows`; verglichen werden sie nie. Gemessen: Leser sieht keine Zeile → **16/0, Code 0**, beide Zeilen grün; Vorlagen gelangen nicht in den Bestand → **15/1**, Abschnitt 1 grün, rot wird Abschnitt 2 mit dem falschen Grund. Das Gegenmittel steht zwei Abschnitte weiter im selben Lauf (`after.length === 6`). Gegenmittel: **A-A-63**. | domain-dev |
+| **T-230-5** | **muß** | **`proof:conflicts` prüft, daß *eine* Verletzung eintritt, nicht daß es *die benannte* ist.** `raw` trägt den Indexnamen und geht in keine Bedingung. Gemessen: der Block `ux_tag_name` mit kollidierendem Schlüssel → SQLite meldet `index 'ux_tag_name_key'`, alle vier Zeilen grün, Lauf **61/0, Code 0**; zwei der vierzehn Blöcke messen denselben Index, einer gar keinen. Der Abschnitt benennt genau diese Gefahr drei Blöcke früher für den **Übersetzer** und sichert dort sogar seine Gegenprobe gegen die leere Menge — bei der **Provokation** fällt sie aus. Behebung: `raw.includes(indexName)`. Gegenmittel: **A-A-64**. | domain-dev |
+| **T-230-6** | soll | **`proof:db-permissions` Abschnitt 1 und 3 messen die `umask`, nicht das `chmod`.** Die Vorbedingung „weite `umask`" wird gesetzt und nie gemessen. Gemessen: Maßnahme aus + weite `umask` → **6/5, Code 1** (Zähne belegt); Maßnahme aus + enge `umask` (`0o077`) → **10/1**, Abschnitt 1 dreimal **grün**, Abschnitt 3 **grün**, rot allein Abschnitt 2. **Berichtigung:** Der Kopf der Datei sagt „Abschnitt 1 und 2"; es ist Abschnitt 2. Behebung: eine Zeile `process.umask() === 0o000`. Gegenmittel: **A-A-65**. | domain-dev |
+| **T-230-7** | Feststellung | **Sechs Erwartungen haben sich nicht bestätigt** (30.5), darunter `proof:conflicts` Abschnitt 1, der A-A-60 in drei Formen und im Wortlaut trägt („kein Wurf — die Vorbedingung stimmt nicht"), und `proof:db-permissions` Abschnitt 2, die sauberste Vorbedingungsmessung dieses Baums. **Drei Vorhersagen (30.6) sind portbedingt ungemessen** und stehen als Erwartung mit ihrer Verstümmelung da. | — |
+
+### 30.9 Neue Auflagen
+
+| Auflage | Was zu tun ist | Wie geprüft wird |
+|---|---|---|
+| **A-A-61** | `proof:callers` bekommt in Abschnitt 1 und 7 die Untergrenze, die seine Zusage voraussetzt, **vor** der Zusage: Der Sammler hat eine benannte Mindestzahl an Dateien eingesammelt, **und** die Datei, um die es geht (`api/client.ts`), ist nachweislich darin — eine Zahl allein ließe einen Sammler durch, der irgendetwas sammelt. Zweiter Satz: Die Endungen werden auf die erweitert, die der Bündler auflöst (`.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`), oder die Beschränkung wird als **gemessene** Zusage geführt („in diesen Bäumen gibt es keine solche Datei"). | In beide Richtungen: unveränderter Baum **45/0**, kein falscher Alarm; Sammler verstümmelt → **rot, Code 1**, und die Meldung nennt die gemessene Zahl; die Kunstquelle aus 30.1.3 in `.js` → **rot** mit Dateinamen. |
+| **A-A-62** | Die Zusage „`request(` steht nur in `api/endpoints.ts`" wird mit derselben Bauart gemessen wie die `fetch`-Zusage seit T-188: eine Regel, die den Zugriff über Namensraum, `globalThis.`, `window.`, `self.` und eine Zerlegung mitsieht, und **eigene Gegenproben** nach dem Muster von `FETCH_FORMS` — fünf Schreibweisen, die gefunden werden müssen, und eine harmlose, die nicht anschlagen darf. Ein Ausdruck, den derselbe Lauf zwanzig Zeilen darüber als blind ausweist, darf nicht in seiner Zwillingszeile stehenbleiben. | In beide Richtungen: unveränderter Baum **45/0**; die Kunstquelle aus 30.1.2 (`client.request(…)`) → **rot, Code 1**, Meldung nennt `app/Zweitweg.tsx`; die benannte Einfuhr bleibt rot wie heute; kein falscher Alarm auf Prosa und auf `options.request(`-artige Portaufrufe. |
+| **A-A-63** | `proof:tags` Abschnitt 1 vergleicht die **gemessene** Zeilenzahl mit der **erwarteten**, bevor er über die Schlüssel urteilt: `rows.length === NAMES.length` als Bedingung derselben Zeile oder als eigene Zeile davor. Die Bauart steht zwei Abschnitte weiter im selben Lauf. | In beide Richtungen: unveränderter Baum **16/0** im Schnitt der Abschnitte 1 bis 3 (voller Lauf unverändert); Leser sieht keine Zeile → **rot, Code 1**; Vorlagen gelangen nicht in den Bestand → **rot in Abschnitt 1**, nicht erst in Abschnitt 2. |
+| **A-A-64** | `provoke` in `proof:conflicts` prüft, daß die eingetretene Verletzung **die benannte** ist. Der Wert liegt bereits vor: `raw` enthält die Meldung von SQLite. Eine Bedingung mehr in einer Zeile, die es gibt. | In beide Richtungen: unveränderter Baum **61/0** im Schnitt von Abschnitt 1 (voller Lauf unverändert); die Kunstquelle aus 30.3 (`nameKey('Alpha')` als Schlüssel im `ux_tag_name`-Block) → **rot, Code 1**, und die Meldung nennt beide Indexnamen. |
+| **A-A-65** | `proof:db-permissions` mißt seine eigene Vorbedingung: Die `umask` dieses Laufs ist weit, geprüft **vor** Abschnitt 1. Und der Kopf der Datei wird berichtigt — es ist **Abschnitt 2**, der das `chmod` mißt. | In beide Richtungen: unveränderter Baum **11/0** im Schnitt der Abschnitte 1 bis 3; `process.umask(0o077)` statt `0o000` → **rot, Code 1**, Meldung nennt den gemessenen Wert. Zusätzlich M1 und M2 aus 30.4 als Beleg, daß die Abschnitte danach das `chmod` messen. |
+
+### 30.10 Urteil dieser Prüfung
+
+**Nacharbeit.** Vier Befunde der Stufe **muß**, zwei der Stufe **soll**, eine Berichtigung, eine
+Feststellung. Fünf neue Auflagen, alle fünf in `apps/local-api/scripts/**`, keine berührt
+Produktivcode.
+
+**Zum Rest von A-A-56: er trägt** (30.7). Der Satz, der ihn trägt, steht dort ausgeschrieben,
+einschließlich der Begründung dafür, warum die Durchgriffsprobe keine Bedingung wird — sie ist
+**gemessen** falsch negativ, und sie zur Bedingung zu machen wäre selbst ein Verstoß gegen A-A-60.
+
+**Zur Bilanz an dieser Frage.** Achtmal in acht Wellen war die Antwort auf dieselbe Frage „ja",
+und diesmal in vier Läufen von vier. Bemerkenswert ist nicht mehr, **daß** es Befunde gibt,
+sondern **wo** sie sitzen: nicht in nachlässigen Läufen, sondern jedesmal einen Schritt neben
+einer Sorgfalt, die derselbe Lauf an anderer Stelle vorbildlich übt. `proof:conflicts` sichert
+seine Gegenprobe gegen die leere Menge und läßt die Provokation ungeprüft. `proof:tags` zählt in
+Abschnitt 3 jede Zeile und in Abschnitt 1 keine. `proof:db-permissions` mißt in Abschnitt 2 die
+Wirkung und in Abschnitt 1 den Zustand. Und `proof:callers`, der Lauf mit **zwei**
+Selbstprüfungsabschnitten, hat eine Selbstprobe, die ihre eigene Ernte umgeht.
+
+**Der Satz dieser Prüfung.** Eine Selbstprobe, die den Prüfgegenstand an der Sammelstelle vorbei
+einspeist, prüft den Prüfer und nicht die Prüfung. Sie ist deshalb nicht wertlos — sie hat in
+T-188 vier echte Lücken gefunden —, aber sie ist keine Antwort auf die Frage, ob der Lauf weiß,
+wann er blind ist. **Sie ist der Grund, warum er es nicht weiß.**

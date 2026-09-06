@@ -192,6 +192,75 @@ function hasPlaceholder(path) {
 }
 
 /**
+ * ===========================================================================
+ * A-A-56 — die Form und die Zahl der Kettenglieder
+ * ===========================================================================
+ *
+ * A-A-51 ließ einen Rest offen und benannte ihn: Ein Endpunkt, der **selbst**
+ * auf einem Platzhalter liegt, ist am Pfad allein von einem Kettenglied nicht
+ * zu unterscheiden. T-223 hat den Rest in **drei** Formen nachgemessen, und
+ * alle drei waren erreichbar, während dieser Lauf und `proof:openapi` grün
+ * blieben:
+ *
+ * | Kunstquelle                     | Aufruf                  | mit Add-in-Token |
+ * |---------------------------------|-------------------------|------------------|
+ * | `api.all('/addin/leak/:id', …)` | `/addin/leak/42`        | **200 samt Rumpf** |
+ * | `api.all('/addin/*', …)`        | `/addin/beliebig`       | **200 samt Rumpf** |
+ * | `api.all('/*', …)`              | `/beliebig`             | 401, mit Sitzung 200 |
+ *
+ * Zwei davon liegen auf der Fläche des Add-in-Tokens — also auf genau der
+ * Fläche, deren Vermessung der einzige Zweck dieses Laufs ist (R-09).
+ *
+ * **Die Unterscheidung nach Bauart trägt nicht**, und das ist nachgemessen:
+ * Alle zehn Kettenglieder des Bestands haben Stelligkeit 2, ein eingesetzter
+ * Endpunkt 1 — aber `api.all('/x', async (c, next) => …)` hebt das auf, und
+ * `(...args) =>` ebenso. Eine Unterscheidung, die von der Schreibweise abhängt
+ * und nicht vom Verhalten, ist in einem Sicherheitswächter schlechter als gar
+ * keine.
+ *
+ * Geschlossen wird der Rest deshalb über **Form und Zahl**, und ausdrücklich
+ * **nicht** über eine Aufstellung der erlaubten Pfade:
+ *
+ * 1. **Jeder `ALL`-Eintrag trägt den Pfad `/*`.** Das ist die eine Form, die
+ *    der Bestand benutzt; jede engere oder andere Form ist ein Befund.
+ * 2. **Die Zahl der `ALL`-Einträge ist eine benannte Zahl** — heute zehn. Wer
+ *    ein Kettenglied ergänzt oder entfernt, ändert die Zahl und sagt im selben
+ *    Zug, welches.
+ *
+ * **Warum das keine gepflegte Liste im Sinne von B-2.10 ist.** Der Einwand
+ * gegen eine Liste lautet: „Die nächste hinzugefügte Fachroute ist die
+ * vergessene." Er gilt für Routen und nicht für Kettenglieder:
+ *
+ * - Eine **Fachroute wird nie unter `ALL` registriert**. Der Bestand führt kein
+ *   einziges `.all(` als Routenregistrierung. Diese Menge wächst nicht mit dem
+ *   Produkt.
+ * - **Alle zehn stehen an einer Stelle**, als `app.use('*', …)` in einem
+ *   zusammenhängenden Block in `src/app.ts`: `securityHeaders`, `requestLog`,
+ *   `hostGuard`, `originGuard`, `urlSecretGuard`, `contentTypeGuard`, der
+ *   Rumpfgrößenwächter (`bodyLimit`), `timeout`, `authGuard`,
+ *   `credentialPolicy`.
+ * - **Diese zehn sind die Vertrauensgrenze selbst** — Herkunft, Wirt, Nachweis,
+ *   Inhaltstyp, Rumpfgröße, Frist. Eine Änderung daran **soll** auffallen. Das
+ *   ist der Unterschied zu einer Fachroute, deren Hinzufügung Alltag ist.
+ *
+ * Es kostet eine Zeichenkette und eine ganze Zahl, keine Aufstellung von
+ * Pfaden — und es ist die Hausform dieses Baums: „die Add-in-Fläche sind genau
+ * vier Routen", „beide Seiten führen dieselbe Zahl".
+ *
+ * **Als Hilfe, nicht als Bedingung** (29.2.4): Wer {@link MIDDLEWARE_COUNT}
+ * anhebt, kann mit der Durchgriffsprobe belegen, ob der neue Eintrag
+ * durchreicht oder antwortet — den Platzhalter in einen nirgends registrierten
+ * Pfad übersetzen und mit gültigem Sitzungsgeheimnis aufrufen: Ein Kettenglied
+ * endet in 404, ein Endpunkt antwortet selbst. Sie ist keine Bedingung, weil
+ * ein Endpunkt, der einen Datensatz nachschlägt, auf eine erfundene Kennung
+ * ebenfalls 404 antwortet.
+ */
+const MIDDLEWARE_PATH = '/*';
+
+/** Die Zahl der Kettenglieder aus `src/app.ts` — siehe {@link MIDDLEWARE_PATH}. */
+const MIDDLEWARE_COUNT = 10;
+
+/**
  * Baut den Dienst ein zweites Mal, nur um ihn nach seinen Routen zu fragen.
  *
  * Derselbe `compose` mit denselben Bausteinen — die Liste ist deshalb dieselbe
@@ -205,6 +274,7 @@ function collectRoutes() {
   const probe = build(':memory:');
   const unique = new Map();
   const opaque = [];
+  const allEntries = [];
   for (const route of probe.app.routes) {
     // `Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*` und
     // sind keine Endpunkte — alles mit konkreter Methode ist einer.
@@ -228,16 +298,19 @@ function collectRoutes() {
     // alle auf `/*` und alle Kettenglieder; die Unterscheidung nach Bauart
     // (ein Kettenglied nimmt `(c, next)`, ein Endpunkt `(c)`) trägt nicht, weil
     // sie sich durch die Schreibweise des Handlers aushebeln lässt. Wer einen
-    // Endpunkt unter `ALL` auf einen Platzhalter legt, umgeht diesen Wächter
-    // weiterhin — gemeldet als offener Rest von T-215.
+    // Endpunkt unter `ALL` auf einen Platzhalter legt, umgeht **diese**
+    // Weigerung weiterhin — das war der offene Rest von T-215, und er ist in
+    // T-223 in drei Formen nachgemessen worden. Geschlossen wird er nicht
+    // hier, sondern über Form und Zahl: siehe {@link MIDDLEWARE_PATH}.
     if (route.method === 'ALL') {
+      allEntries.push(route.path);
       if (!hasPlaceholder(route.path)) opaque.push(route.path);
       continue;
     }
     unique.set(`${route.method} ${route.path}`, { method: route.method, path: route.path });
   }
   probe.database.close();
-  return { routes: [...unique.values()], opaque };
+  return { routes: [...unique.values()], opaque, allEntries };
 }
 
 /** Ein Platzhalter im Pfad wird zu einer formgültigen, nirgends vorhandenen Kennung. */
@@ -442,7 +515,7 @@ try {
   // ---------------------------------------------------------------------------
   section('4  Prüfung 24 — jede registrierte Route außerhalb von /addin ergibt 401');
   // ---------------------------------------------------------------------------
-  const { routes, opaque } = collectRoutes();
+  const { routes, opaque, allEntries } = collectRoutes();
   const foreign = routes.filter((r) => requiredCredentialForPath(r.path) === 'session');
   const own = routes.filter((r) => requiredCredentialForPath(r.path) === 'any');
 
@@ -453,6 +526,20 @@ try {
     'kein ALL-Eintrag ohne Platzhalter — sonst urteilt dieser Lauf über eine unvollständige Liste (A-A-51)',
     opaque.length === 0,
     `mit ALL registriert und damit aus der Liste gefallen: ${opaque.join(', ')}`,
+  );
+
+  // A-A-56 — Form und Zahl der Kettenglieder, beide vor jedem Urteil über die
+  // Liste. Begründung ausgeschrieben bei MIDDLEWARE_PATH.
+  const wrongShape = allEntries.filter((path) => path !== MIDDLEWARE_PATH);
+  check(
+    `jeder ALL-Eintrag trägt den Pfad ${MIDDLEWARE_PATH} — jede engere Form ist ein Endpunkt und kein Kettenglied (A-A-56)`,
+    wrongShape.length === 0,
+    `unter ALL registriert, aber nicht ${MIDDLEWARE_PATH}: ${wrongShape.join(', ')}`,
+  );
+  check(
+    `die Kettenglieder sind die benannten ${MIDDLEWARE_COUNT} — gezählt ${allEntries.length} (A-A-56)`,
+    allEntries.length === MIDDLEWARE_COUNT,
+    `Wer eines ergänzt oder entfernt, ändert MIDDLEWARE_COUNT und sagt dort, welches. Gezählt: ${allEntries.join(', ')}`,
   );
 
   check(

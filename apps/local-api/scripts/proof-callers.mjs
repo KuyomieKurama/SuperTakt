@@ -69,8 +69,9 @@
  * gemessene Zusicherung: `apps/web/src/api/client.ts` ist die einzige Stelle
  * mit `fetch`, und außerhalb von `endpoints.ts` setzt keine Ansicht einen
  * Rumpf zusammen (T-050, Punkt 6). Abschnitt 1 misst das nach, statt es zu
- * glauben: Kein `fetch` und kein `request(`-Aufruf außerhalb dieser beiden
- * Dateien.
+ * glauben: kein Zugriff auf das globale `fetch` und keiner auf die
+ * Anfragefunktion `request` außerhalb dieser beiden Dateien — **und** dass der
+ * Sammler, der das misst, überhaupt etwas eingesammelt hat (T-231, A-A-61).
  *
  * **c) Was der Leser nicht auflösen kann.** Ein berechneter Schlüsselname,
  * eine Verbreitung aus einer Variablen ohne Typangabe, ein Rumpf aus einem
@@ -120,6 +121,27 @@
  * zweiten Wegs ein — nackt, über `globalThis.`, über `window.`, über `self.`
  * und aus einer Zerlegung — und verlangen je einen Zuwachs; eine sechste Probe
  * verlangt das Gegenteil, damit der Wächter nicht auf Prosa anspringt.
+ *
+ * ===========================================================================
+ * Was T-231 daran geändert hat (A-A-61, A-A-62)
+ * ===========================================================================
+ *
+ * Security-checker hat in T-230 drei Löcher in genau dieser Zusage gemessen
+ * (Bedrohungsmodell 30.1), und alle drei sagten **45/0, Code 0**:
+ *
+ *  - Der **Sammler** konnte ins Leere greifen, und der Lauf meldete es als
+ *    „(0 Dateien durchgesehen)" in grün. Die Selbstproben aus T-188 können das
+ *    strukturell nicht sehen, weil sie ihre Kunstquelle der **Aufstellung**
+ *    hinzufügen und damit das Sieb prüfen, nie die Ernte. Deshalb misst
+ *    `proveHarvest` die Ernte jetzt eigens — Untergrenze **und** benannte
+ *    Datei, **vor** der Zusage (A-A-61).
+ *  - Der Sammler sah **zwei** Endungen; der Bündler löst **acht** auf. Die
+ *    Liste steht jetzt in `BUNDLED_EXTENSIONS` (A-A-61, zweiter Satz).
+ *  - Die **Zwillingszeile** für `request` trug unverändert den Ausdruck, den
+ *    dieser Lauf zwanzig Zeilen weiter unten selbst als blind ausweist, und
+ *    hatte null Gegenproben. `client.request(…)` war ein offener zweiter Weg
+ *    zum Dienst. Die Regel kommt jetzt aus `request-scan.mjs` und hat sechs
+ *    eigene Proben in Abschnitt 6 (A-A-62).
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -138,6 +160,7 @@ import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './calle
  * Die Herleitung steht dort; die Gegenproben stehen unten in Abschnitt 6 und 8.
  */
 import { BLIND_FETCH_CALL, describeStray, strayGlobalFetch } from './fetch-scan.mjs';
+import { BLIND_REQUEST_CALL, strayRequestAccess } from './request-scan.mjs';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
@@ -419,13 +442,71 @@ section('1  Es gibt keinen zweiten Weg zum Dienst als diese Datei');
  * Die Regel kommt aus `fetch-scan.mjs` und ist damit dieselbe, die
  * `proof:release-safety` fährt (E-086 Punkt 1). Kommentare zählen nicht mit:
  * Eine Datei darf in ihrer Beschreibung sagen, daß sie `fetch` **nicht** ruft.
+ *
+ * ===========================================================================
+ * Was der Sammler sieht — und daß er überhaupt etwas sieht (T-231, A-A-61)
+ * ===========================================================================
+ *
+ * Zwei Befunde aus T-230 sitzen nicht an der Regel, sondern an der **Ernte**:
+ *
+ *  - Die Zahl der eingesammelten Dateien stand im **Namen** der Zusicherung
+ *    und in keiner Bedingung. Ein Sammler, der ins Leere greift, meldete
+ *    „`fetch` steht nur in api/client.ts (**0 Dateien durchgesehen**)" — grün,
+ *    45/0, Code 0 (Bedrohungsmodell 30.1.1). Deshalb steht die Untergrenze
+ *    jetzt **vor** der Zusage, und zwar als Zahl **und** als benannte Datei:
+ *    Eine Zahl allein ließe einen Sammler durch, der irgendetwas sammelt.
+ *  - Der Sammler sah `.ts` und `.tsx`; Vite löst fünf Endungen mehr auf. Eine
+ *    Kunstquelle mit nacktem `fetch(` als `.js`, `.jsx`, `.mts`, `.cts` oder
+ *    `.mjs` war unsichtbar, und die Zahl im Text blieb stehen (30.1.3).
+ *    Deshalb steht die Endungsliste jetzt ausgeschrieben und deckt das ab,
+ *    was der Bündler auflöst.
  */
+
+/**
+ * Die Endungen, die der Bündler auflöst — ausgeschrieben (A-A-61).
+ *
+ * Ausgeschrieben und nicht als Ausdruck: Wer eine Endung hinzunimmt, soll sie
+ * eintragen und dabei merken, daß er sie eintragen mußte. `.cjs` steht mit
+ * darin, obwohl heute keine solche Datei im Baum liegt — die Liste ist gegen
+ * das gebaut, was auflösbar **wäre**, nicht gegen das, was zufällig daliegt.
+ */
+const BUNDLED_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
+
+const isBundledSource = (name) =>
+  BUNDLED_EXTENSIONS.some((extension) => name.endsWith(extension)) && !name.endsWith('.d.ts');
+
+/**
+ * Die Ernte eines Sammlers, bevor über sie geurteilt wird (A-A-61).
+ *
+ * Zwei Zeilen, und beide sind Vorbedingungen und keine Aussagen über den Baum:
+ * Eine **Untergrenze** — der Sammler hat nicht ins Leere gegriffen — und die
+ * **benannte Datei**, ohne die die Zusage darunter über die leere Menge stünde.
+ *
+ * Die Untergrenze ist bewußt weit unter dem heutigen Stand. Sie ist kein
+ * Zensus: Sie soll rot werden, wenn ein Verzeichnis umbenannt, eine Endung
+ * geändert oder ein Werkzeug getauscht wurde — nicht, wenn jemand eine Ansicht
+ * löscht.
+ */
+function proveHarvest(who, files, minimum, mustContain) {
+  check(
+    `${who}: der Sammler hat mindestens ${String(minimum)} Dateien eingesammelt (${String(files.length)})`,
+    files.length >= minimum,
+    `${String(files.length)} statt mindestens ${String(minimum)} — der Sammler greift ins Leere`,
+  );
+  const missing = mustContain.filter((name) => !files.some((file) => file.name === name));
+  check(
+    `${who}: und ${mustContain.join(' und ')} ${mustContain.length === 1 ? 'ist' : 'sind'} darunter`,
+    missing.length === 0,
+    files.length === 0 ? 'die Ernte ist leer' : `nicht eingesammelt: ${missing.join(', ')}`,
+  );
+}
+
 const webSources = [];
 const walk = (dir) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
     if (entry.isDirectory()) walk(child);
-    else if (/\.tsx?$/.test(entry.name)) webSources.push(child);
+    else if (isBundledSource(entry.name)) webSources.push(child);
   }
 };
 walk(WEB_SOURCE_DIR);
@@ -434,6 +515,8 @@ const webFiles = webSources.map((file) => ({
   name: file.pathname.slice(WEB_SOURCE_DIR.pathname.length),
   source: readFileSync(file, 'utf8'),
 }));
+
+proveHarvest('die Oberfläche', webFiles, 100, ['api/client.ts', 'api/endpoints.ts']);
 
 /**
  * Wo der Zugriff auf das globale `fetch` seinen Platz hat — ausgeschrieben.
@@ -444,23 +527,36 @@ const webFiles = webSources.map((file) => ({
  */
 const WEB_FETCH_HOME = ['api/client.ts'];
 
+/**
+ * Wo der Zugriff auf die Anfragefunktion seinen Platz hat — ausgeschrieben.
+ *
+ * `api/endpoints.ts` ruft sie, `api/client.ts` führt sie. Beide stehen als
+ * **Datei** da und nicht als Form, aus demselben Grund wie oben.
+ */
+const WEB_REQUEST_HOME = ['api/endpoints.ts', 'api/client.ts'];
+
 const strayFetch = strayGlobalFetch(webFiles, WEB_FETCH_HOME);
-const strayRequest = [];
-for (const file of webFiles) {
-  if (
-    /(?<![\w.])request\s*[<(]/.test(file.source) &&
-    file.name !== 'api/endpoints.ts' &&
-    file.name !== 'api/client.ts'
-  ) {
-    strayRequest.push(file.name);
-  }
-}
+
+/*
+ * Bis T-231 stand hier `/(?<![\w.])request\s*[<(]/` — zeichengleich der
+ * Ausdruck, den der Absatz oben für `fetch` als blind ausweist. Er sah
+ * `client.request(` nicht, und der Lauf sagte dazu 45/0 (Bedrohungsmodell
+ * 30.1.2). Die Regel kommt jetzt aus `request-scan.mjs` und hat dieselbe
+ * Bauart wie die `fetch`-Regel: die bekannten Nicht-Aufrufe namentlich, danach
+ * jedes verbliebene `request` als Wort. Die Gegenproben stehen in Abschnitt 6.
+ */
+const strayRequest = strayRequestAccess(webFiles, WEB_REQUEST_HOME);
+
 check(
-  `\`fetch\` steht nur in api/client.ts (${webSources.length} Dateien durchgesehen)`,
+  `\`fetch\` steht nur in api/client.ts (${String(webFiles.length)} Dateien durchgesehen)`,
   strayFetch.length === 0,
   strayFetch.map(describeStray).join(' | '),
 );
-check('`request(` steht nur in api/endpoints.ts', strayRequest.length === 0, strayRequest.join(', '));
+check(
+  '`request` steht nur in api/endpoints.ts und in api/client.ts, wo es entsteht',
+  strayRequest.length === 0,
+  strayRequest.map(describeStray).join(' | '),
+);
 
 // ---------------------------------------------------------------------------
 section('2  Jeder Aufruf trifft eine Operation, die es gibt');
@@ -801,6 +897,112 @@ check(
   blindForms.map((form) => form.name).join(', '),
 );
 
+/*
+ * ===========================================================================
+ * Und dieselben Proben für die Zwillingszeile (T-231, A-A-62)
+ * ===========================================================================
+ *
+ * Die `request`-Zusage in Abschnitt 1 hatte bis T-231 **null** Gegenproben und
+ * wurde mit genau dem Ausdruck gemessen, den der Absatz über den `fetch`-Proben
+ * als blind ausweist. Security-checker hat den offenen Weg in T-230 gegangen
+ * (Bedrohungsmodell 30.1.2): eine Ansicht mit `import * as client` und
+ * `client.request('/todos/…', { method: 'DELETE' })` — der Lauf sagte 45/0.
+ * Der `fetch`-Wächter fängt sie nicht, denn sie ruft kein `fetch`; sie benutzt
+ * das eine, das erlaubt ist.
+ *
+ * ===========================================================================
+ * Welchen Weg diese Proben auslassen — und wer ihn geht
+ * ===========================================================================
+ *
+ * Das ist der Satz aus T-230, und er gilt für die sechs oben genauso wie für
+ * die sechs hier: Beide Reihen setzen ihre Kunstquelle als Eintrag in eine
+ * **Aufstellung** ein und nie auf die Platte. Damit prüfen sie das **Sieb** und
+ * niemals die **Ernte** — ein Sammler, der nichts einsammelt, ließe alle zwölf
+ * grün. Das ist keine Nachlässigkeit, sondern eine benannte Auslassung: Die
+ * Ernte misst `proveHarvest` in Abschnitt 1 und 7, mit einer Untergrenze und
+ * einer benannten Datei, **vor** der Zusage (A-A-61). Erst beide Hälften
+ * zusammen sind die Aussage; eine allein ist keine.
+ */
+const REQUEST_FORMS = [
+  {
+    name: 'nacktes `request<T>(` aus einer benannten Einfuhr',
+    source: "import { request } from '../api/client';\nexport const laden = async () => request<Todo[]>(WEG);\n",
+  },
+  {
+    name: '`client.request(` über den Namensraum — die Lücke aus T-230-2',
+    source: "import * as client from '../api/client';\nexport const laden = async () => client.request(WEG);\n",
+  },
+  {
+    name: '`globalThis.request(` — dieselbe Lücke, anderer Träger',
+    source: 'export const laden = async () => globalThis.request(WEG);\n',
+  },
+  {
+    name: "der Name als Zeichenkette: `client['request'](`",
+    source: "import * as client from '../api/client';\nexport const laden = async () => client['request'](WEG);\n",
+  },
+  {
+    name: 'eine Zerlegung: `const { request: senden } = client`',
+    source: "import * as client from '../api/client';\nconst { request: senden } = client;\nexport const laden = async () => senden(WEG);\n",
+  },
+];
+
+/**
+ * Die Umkehrung, und sie ist hier so wichtig wie die fünf oben.
+ *
+ * Ein Wächter, der auf jedes Vorkommen der Zeichenfolge `request` anspringt,
+ * bestünde die fünf Proben und wäre unbrauchbar: Er meldete `requestStop`,
+ * `requestAnimationFrame`, den Typnamen `RequestOptions`, die Kopfzeile
+ * `x-request-id` und den Portaufruf `options.request(` — und der nächste, der
+ * ihn liest, lockerte ihn an der Stelle, an der er richtig ist.
+ */
+const REQUEST_HARMLESS = {
+  name: 'Prosa, `requestStop`, `x-request-id` und der Port sind kein zweiter Weg',
+  source: [
+    '// Diese Ansicht ruft request(…) niemals selbst auf.',
+    '/* Auch client.request steht hier nur in einem Absatz. */',
+    'const stoppen = () => timer.requestStop();',
+    'window.requestAnimationFrame(() => stoppen());',
+    "const kennung = kopfzeilen.get('x-request-id');",
+    'const antwort = await options.request(WEG);',
+    'const feld: RequestOptions = {};',
+    '',
+  ].join('\n'),
+};
+
+function proveRequestGuard(who, files, allowed) {
+  const baseline = strayRequestAccess(files, allowed).map((finding) => finding.name);
+  const probe = (source) =>
+    strayRequestAccess([...files, { name: INJECTED, source }], allowed)
+      .map((finding) => finding.name)
+      .filter((name) => !baseline.includes(name));
+
+  for (const form of REQUEST_FORMS) {
+    const found = probe(form.source);
+    check(
+      `${who}: ${form.name} wird gefunden`,
+      found.length === 1 && found[0] === INJECTED,
+      found.length === 0 ? 'nichts beanstandet' : found.join(', '),
+    );
+  }
+
+  const harmless = probe(REQUEST_HARMLESS.source);
+  check(`${who}: ${REQUEST_HARMLESS.name}`, harmless.length === 0, harmless.join(', '));
+}
+
+proveRequestGuard('die Oberfläche', webFiles, WEB_REQUEST_HOME);
+
+/*
+ * Und die Begründung als Messung, wie oben: Der Ausdruck, der bis T-231 in
+ * Abschnitt 1 stand, sieht vier dieser fünf Schreibweisen nicht. Setzt ihn
+ * jemand zurück, fallen mit ihm vier Proben — und diese Zeile sagt, warum.
+ */
+const blindRequestForms = REQUEST_FORMS.filter((form) => !BLIND_REQUEST_CALL.test(form.source));
+check(
+  `der Ausdruck aus T-230-2 sieht vier der fünf Schreibweisen nicht (${blindRequestForms.length})`,
+  blindRequestForms.length === 4,
+  blindRequestForms.map((form) => form.name).join(', '),
+);
+
 // ---------------------------------------------------------------------------
 section('7  Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M)');
 // ---------------------------------------------------------------------------
@@ -841,7 +1043,7 @@ const walkAddin = (dir) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
     if (entry.isDirectory()) walkAddin(child);
-    else if (/\.tsx?$/.test(entry.name) && !/\.d\.ts$/.test(entry.name)) addinSources.push(child);
+    else if (isBundledSource(entry.name)) addinSources.push(child);
   }
 };
 walkAddin(ADDIN_SOURCE_DIR);
@@ -850,6 +1052,8 @@ const addinFiles = addinSources.map((file) => ({
   name: file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length),
   source: readFileSync(file, 'utf8'),
 }));
+
+proveHarvest('das Add-in', addinFiles, 25, ['api/client.ts']);
 
 /**
  * Wie {@link WEB_FETCH_HOME}, und aus demselben Grund ausgeschrieben.
@@ -867,7 +1071,7 @@ const ADDIN_FETCH_HOME = ['api/client.ts'];
 
 const strayAddinFetch = strayGlobalFetch(addinFiles, ADDIN_FETCH_HOME);
 check(
-  `\`fetch\` steht im Add-in nur in api/client.ts (${addinSources.length} Dateien durchgesehen)`,
+  `\`fetch\` steht im Add-in nur in api/client.ts (${String(addinFiles.length)} Dateien durchgesehen)`,
   strayAddinFetch.length === 0,
   strayAddinFetch.map(describeStray).join(' | '),
 );

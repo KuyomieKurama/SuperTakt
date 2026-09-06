@@ -536,6 +536,18 @@ function PreviewGroupRow({
               </p>
             </div>
             {group.entries[0] === undefined ? null : (
+              /*
+                Der Zusatz nennt hier die **Tagesgruppe** und nicht eine
+                Buchung (T-222 Abschnitt 15.5, O-JX). Der Knopf steht in der
+                Meldung über die Gruppe und gehört zu deren Gegenstand; daß er
+                den Dialog an der ersten Buchung öffnet, ist der einzige Weg,
+                hier anzufangen, und harmlos, weil `blocked` gerade heißt, daß
+                keine Buchung der Gruppe Text trägt. Ein Zusatz mit einer
+                Uhrzeit verspräche eine Auswahl, die der Benutzer nicht
+                getroffen hat. Ohne den Zusatz wäre der Name dieses Knopfes der
+                **Anfang** der Namen aller Zeilenknöpfe derselben Gruppe — die
+                Verwechslung, die der Zusatz beseitigen soll, eine Ebene höher.
+              */
               <Button
                 size="sm"
                 variant="secondary"
@@ -546,6 +558,9 @@ function PreviewGroupRow({
                 }}
               >
                 Leistung nachtragen
+                <span className="visually-hidden">
+                  , Tagesgruppe {formatDayLabel(summary.day)}
+                </span>
               </Button>
             )}
           </div>
@@ -571,32 +586,48 @@ function PreviewGroupRow({
             </span>
           </h4>
           <ul className="tpsegment-list">
-            {group.entries.map((entry) => (
-              <li className="tpsegment" key={entry.id}>
-                <span className="tpsegment__period tabular">
-                  {formatTimeRange(entry.startedAt, entry.endedAt)}
-                </span>
-                <span className="tpsegment__duration tabular">
-                  <span className="visually-hidden">Ungerundete Dauer: </span>
-                  {formatDuration(entry.durationSeconds)}
-                </span>
-                <span className="tpsegment__note">
-                  {entry.note.trim().length === 0 ? (
-                    <span className="muted">— keine Leistung erfasst —</span>
-                  ) : (
-                    <Foreign value={entry.note} />
-                  )}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  iconStart="pencil"
-                  onClick={() => onEditEntry(entry)}
-                >
-                  {entry.note.trim().length === 0 ? "Leistung nachtragen" : "Bearbeiten"}
-                </Button>
-              </li>
-            ))}
+            {group.entries.map((entry) => {
+              /*
+                Zeichengleich dieselbe Zeichenkette, die die Zeile links
+                sichtbar zeigt — **keine zweite Formatierung** desselben
+                Zeitpunkts (T-222 Abschnitt 15.4). Deshalb einmal gerechnet und
+                zweimal benutzt und nicht zweimal gerechnet.
+              */
+              const period = formatTimeRange(entry.startedAt, entry.endedAt);
+              const missing = entry.note.trim().length === 0;
+              return (
+                <li className="tpsegment" key={entry.id}>
+                  <span className="tpsegment__period tabular">{period}</span>
+                  <span className="tpsegment__duration tabular">
+                    <span className="visually-hidden">Ungerundete Dauer: </span>
+                    {formatDuration(entry.durationSeconds)}
+                  </span>
+                  <span className="tpsegment__note">
+                    {missing ? (
+                      <span className="muted">— keine Leistung erfasst —</span>
+                    ) : (
+                      <Foreign value={entry.note} />
+                    )}
+                  </span>
+                  {/*
+                    Dieselbe Bauform wie in `ExportGroups.tsx`: **ein** Baustein,
+                    zwei Beschriftungen, der Zeilenbezug als verborgener Zusatz
+                    im Knopf und nicht als `aria-label` (T-218 Abschnitt 11.2,
+                    T-222 Abschnitt 15.4). Die Ausprägung folgt dem Mangel —
+                    `secondary`, solange die Leistung fehlt, danach `ghost`.
+                  */}
+                  <Button
+                    size="sm"
+                    variant={missing ? "secondary" : "ghost"}
+                    iconStart="pencil"
+                    onClick={() => onEditEntry(entry)}
+                  >
+                    {missing ? "Leistung nachtragen" : "Leistung bearbeiten"}
+                    <span className="visually-hidden">, Buchung {period}</span>
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>

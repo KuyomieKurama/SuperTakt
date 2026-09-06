@@ -434,13 +434,21 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
  * am Timer-Stopp deshalb nur über einen erfundenen Fehlerweg nachstellen,
  * den es im Produkt nicht gibt; das würde einen Vorgang prüfen, der nicht
  * existiert. Gemessen wird deshalb die **erste** Hälfte, an einer real
- * erreichbaren, dritten Stelle derselben Bauart (neben der Titelmeldung des
- * „Neues Todo"-Dialogs und der Begründung des Zurücksetzen-Dialogs, siehe
- * O-GZ in `export-audit-and-locks.spec.ts`): Die Fläche mit `role="alert"`
- * existiert bereits, bevor der Dialog überhaupt etwas zu melden hätte — der
- * Defekt „Live-Region entsteht mit ihrem Inhalt" ist an dieser Stelle also
- * mindestens strukturell ausgeschlossen, auch ohne dass ein Übergang gezeigt
- * werden kann. Siehe Bericht.
+ * erreichbaren, dritten Stelle derselben Bauart — neben der Titelmeldung des
+ * Anlegen-Dialogs (Befund O-DA, geprüft in
+ * `field-live-region-announcement.spec.ts`) und der Begründung des
+ * Zurücksetzen-Dialogs (Befund O-GZ, geprüft in
+ * `export-audit-and-locks.spec.ts`). Bewusst über die Befundkennung und die
+ * Datei benannt, nicht über den heutigen Dialogtitel im Wortlaut: Ein Zitat
+ * des Titels wäre hier unangebunden — diese Datei prüft ihn nicht selbst —
+ * und würde bei der nächsten Titeländerung still falsch, statt mit den
+ * jeweils dort stehenden Prüffällen rot zu werden (dieselbe Klasse Befund
+ * wie in T-224, „ein Kommentar, der etwas anderes begründet, als
+ * danebensteht"). Die Fläche mit `role="alert"` existiert bereits, bevor der
+ * Dialog überhaupt etwas zu melden hätte — der Defekt „Live-Region entsteht
+ * mit ihrem Inhalt" ist an dieser Stelle also mindestens strukturell
+ * ausgeschlossen, auch ohne dass ein Übergang gezeigt werden kann. Siehe
+ * Bericht.
  */
 test.describe('Bauart der Meldefläche im Leistungsfeld beim Timer-Stopp (Zusatz zu O-GZ, Bauplan aus T-186)', () => {
   test('`.note__live[role="alert"]` steht von Anfang an im Baum, leer, bevor der Dialog etwas zu melden hätte', async ({

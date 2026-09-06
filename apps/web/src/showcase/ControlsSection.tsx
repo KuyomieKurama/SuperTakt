@@ -290,6 +290,13 @@ export function ControlsSection() {
           während „Wird gespeichert“. Ist die Auswahlliste aufgeklappt, schließt Escape
           <em> nur die Liste</em> und nicht den Dialog dahinter.
         </p>
+        <p className="muted" style={{ marginTop: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+          Im Zustand „Gesperrt“ ist der Absendeknopf <strong>weich</strong> gesperrt: Er sieht
+          gesperrt aus, steht aber im Tabulatorlauf und nimmt die Eingabetaste entgegen. Der
+          Versuch führt zum beanstandeten Feld zurück; gespeichert wird nichts. Während „Wird
+          gespeichert“ ist die Sperre dagegen <strong>hart</strong> — dort gibt es nichts zu
+          erklären.
+        </p>
       </Card>
 
       <Card
@@ -427,6 +434,13 @@ export function ControlsSection() {
           wie im Produkt — sonst zeigte sie einen Dialog, der leere Pflichtfelder
           stillschweigend annimmt, und genau das gibt es in Takt nicht mehr.
           „blocked" ist der bereits vorhandene Zustand mit der Meldung am Feld.
+
+          Seit T-220 (E-093) fuehrt der Weg dorthin zweimal: aus „ready" ueber
+          diesen Ruf — und **im** Zustand „blocked" ueber den weich gesperrten
+          Knopf selbst. Dort laeuft `onSubmit` gar nicht mehr; der Riegel in
+          `FormDialog.tsx` faengt die Handlung ab und fuehrt statt dessen zum
+          beanstandeten Feld zurueck. Der Zustand bleibt „blocked", und genau
+          das ist die Vorfuehrung.
         */
         onSubmit={() => setForm(formTitle.trim().length === 0 ? "blocked" : "none")}
         onCancel={() => setForm("none")}

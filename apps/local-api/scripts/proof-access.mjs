@@ -1033,24 +1033,77 @@ try {
   section('13. Zeitkonstanter Vergleich (B-2.5)');
   {
     // Statisch: Im Nachweispfad wird kein Geheimnis mit === verglichen.
-    const sources = [
+    //
+    // ===================================================================
+    // A-A-59 — die Aufstellung ist entfallen
+    // ===================================================================
+    //
+    // Bis T-223 standen hier vier Dateinamen: `verifier.ts`, `crypto.ts`,
+    // `guards.ts`, `token-service.ts`. `src/access/` führt dreizehn Dateien.
+    // Was der „Nachweispfad" ist, entschied damit die Aufstellung, und nichts
+    // maß, ob sie noch stimmt: Eine Zeile
+    // `… (presented: string, secret: string) => presented === secret` in
+    // `src/access/token-store.ts` — dieselbe Schublade, nicht auf der Liste —
+    // ließ diesen Lauf bei 105/0 und Code 0, und die Zeile blieb grün
+    // (T-223-5). Eine **fehlende** Datei fiel auf (`readFile` ohne Auffangnetz,
+    // harter Abbruch); eine **hinzugekommene** nicht.
+    //
+    // A-A-59 stellte zwei Formen zur Wahl. Gebaut ist die erste — die
+    // Aufstellung entfällt, durchsucht werden `src/access/**` und
+    // `src/http/**` vollständig —, und zwar aus einem gemessenen Grund: Der
+    // vollständige Durchlauf über alle 16 Dateien findet heute **null**
+    // Treffer. Die zweite Form („die Liste bleibt, der Lauf weigert sich bei
+    // einer ungesehenen Datei") hätte eine benannte Zahl ausgenommener Dateien
+    // verlangt und damit genau die Pflege wieder eingeführt, deren Ausbleiben
+    // der Befund ist. Ohne Ausnahmen ist die erste Form die billigere.
+    //
+    // Anders als bei den Kettengliedern (A-A-56) wird die **Zahl** der Dateien
+    // hier nicht festgeschrieben: `src/access/` ist Alltagsbestand und wächst
+    // mit dem Produkt (`attachment-store.ts`, `notices.ts`). Festgeschrieben
+    // wird die **Untergrenze** — die Menge ist nicht leer, und die vier
+    // Dateien, die B-2.5 tragen, sind darin. Sonst urteilte die Zusicherung
+    // über eine Menge, die es nicht mehr gibt (A-A-55, A-A-60).
+    const scanRoots = ['src/access', 'src/http'];
+    const scanned = [];
+    for (const root of scanRoots) {
+      for (const entry of readdirSync(join(HERE, '..', root), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+        const relative = join(root, entry.parentPath.slice(join(HERE, '..', root).length), entry.name);
+        scanned.push(relative);
+      }
+    }
+
+    // Die Untergrenze der Menge, vor jedem Urteil über sie.
+    const TRAGENDE_DATEIEN = [
       'src/access/verifier.ts',
       'src/access/crypto.ts',
       'src/http/guards.ts',
       'src/access/token-service.ts',
     ];
+    const fehlend = TRAGENDE_DATEIEN.filter((name) => !scanned.includes(name));
+    check(
+      `Der Nachweispfad ist vollständig durchsucht — ${scanned.length} Dateien unter ${scanRoots.join(' und ')} (A-A-59)`,
+      scanned.length >= TRAGENDE_DATEIEN.length && fehlend.length === 0,
+      fehlend.length === 0
+        ? `nur ${scanned.length} Dateien gefunden`
+        : `nicht angesehen, obwohl B-2.5 daran hängt: ${fehlend.join(', ')}`,
+    );
+
     let offending = [];
-    for (const relative of sources) {
+    for (const relative of scanned) {
       const text = await readFile(join(HERE, '..', relative), 'utf8');
-      for (const line of text.split('\n')) {
+      text.split('\n').forEach((line, index) => {
         // Gesucht wird der Vergleich von **Geheimnismaterial**. Zwei
         // gespeicherte Abdrücke mit !== zu vergleichen (Buchführung im
         // token-service) ist ausdrücklich in Ordnung: Ein Abdruck ist kein
         // Geheimnis, und der Aufrufer liefert ihn nicht.
         if (/(presented|candidate|material|secret)\s*[!=]==/i.test(line) && !line.trimStart().startsWith('*') && !line.trimStart().startsWith('//')) {
-          offending.push(`${relative}: ${line.trim()}`);
+          offending.push(`${relative}:${index + 1}: ${line.trim()}`);
         }
-      }
+      });
     }
     check('Kein === auf Tokenmaterial im Nachweispfad', offending.length === 0, offending.join(' | '));
 

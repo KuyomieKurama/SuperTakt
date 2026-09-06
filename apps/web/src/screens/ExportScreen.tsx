@@ -1226,13 +1226,27 @@ function RunResult({
 }
 
 function SkippedRow({ skipped }: { readonly skipped: SkippedExportGroup }) {
+  /*
+    Zeichengleich dieselbe Zeichenkette, die die Zeile links sichtbar zeigt —
+    einmal gerechnet, zweimal benutzt. Eine zweite Formatierung desselben
+    Tages wäre die Abschrift, die still auseinanderläuft (T-222 Abschnitt
+    15.4).
+  */
+  const day = formatDayLabel(skipped.group.day);
   return (
     <li className="skipped-row">
-      <span className="skipped-row__day">{formatDayLabel(skipped.group.day)}</span>
+      <span className="skipped-row__day">{day}</span>
       <span className="skipped-row__meta">
         {plural(skipped.group.entryCount, "Buchung", "Buchungen")} ·{" "}
         {formatDuration(skipped.group.seconds)}
       </span>
+      {/*
+        Der Zusatz nennt den **Tag** und keine Buchung: Dieser Knopf springt
+        auf das Todo und erreicht gar keine Buchung (T-222 Abschnitt 15.5,
+        Zeile 4). Ohne ihn heißt jede ausgelassene Gruppe dieser Liste
+        gleich. Verborgener Zusatz im Knopf und kein `aria-label` — der Grund
+        steht im Kopfkommentar von `ExportGroups.tsx`.
+      */}
       <Button
         size="sm"
         variant="secondary"
@@ -1240,6 +1254,7 @@ function SkippedRow({ skipped }: { readonly skipped: SkippedExportGroup }) {
         onClick={() => navigate("todo", skipped.group.todoId)}
       >
         Leistung nachtragen
+        <span className="visually-hidden">, {day}</span>
       </Button>
     </li>
   );

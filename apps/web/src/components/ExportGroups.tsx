@@ -4,7 +4,7 @@ import { cx } from "../lib/cx";
 import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../lib/labels";
 import { exportDisplayState, ExportStatusBadge } from "./ExportStatus";
 import { Icon } from "./Icon";
-import { Button, IconButton } from "./Primitives";
+import { Button } from "./Primitives";
 import { foreignText } from "../lib/foreign";
 import { Foreign } from "./Foreign";
 
@@ -36,6 +36,38 @@ import { Foreign } from "./Foreign";
  * **Der Baustein rechnet nichts.** Gerundete Zeit, zusammengefuehrte Leistung
  * und der Grund einer Sperre kommen fertig von aussen; gerundet wird in
  * `packages/domain`.
+ *
+ * ---------------------------------------------------------------------
+ * Warum am Ende der Buchungszeile **ein** Knopf steht und nicht zwei
+ * (O-IH/O-JR, T-218 Abschnitt 11.2, T-222 Abschnitt 15)
+ * ---------------------------------------------------------------------
+ *
+ * Dieser Knopf ist das **Rueckkehrziel** des Dialogs, den er oeffnet:
+ * `DialogSurface` gibt den Fokus beim Schliessen an den Ausloeser zurueck.
+ * Er ueberlebt seine eigene Wirkung nur als **derselbe** Knoten — bis T-226
+ * standen hier zwei verschiedene Bausteine an einer Stelle, umgeschaltet von
+ * `entry.note`, also von genau dem Wert, den dieser Dialog eintraegt; nach dem
+ * Gelingen hing React den Ausloeser aus und der Fokus fiel auf `<body>`.
+ * **Die Auspraegung darf wechseln, der Baustein nicht** — `secondary`, solange
+ * die Leistung fehlt, danach `ghost`, und das ist zugleich die leiseste
+ * Rueckmeldung, die es gibt. Wer hier wieder einen `IconButton` einsetzt oder
+ * die Zweige nach Baustein trennt, stellt den Fehler wieder her; gemessen wird
+ * er von `TP-FOCUS-07` in `tests/e2e/focus-return-after-dialog.spec.ts`, und
+ * zwar **nach** dem Eintreffen der Auffrischung, weil jede Messung davor
+ * besteht.
+ *
+ * Der **Zeilenbezug steht im Knopf** als verborgener Zusatz und nicht als
+ * `aria-label`. Der Grund ist nicht SC 2.5.3 — mit dieser Namensform
+ * („Leistung bearbeiten, Buchung 09:00–10:20") waere ein `aria-label` erlaubt,
+ * weil es die sichtbare Beschriftung woertlich und am Anfang enthaelt. Der
+ * Grund ist die **zweite Abschrift, die still auseinanderlaeuft**: Ein
+ * `aria-label` schriebe die sichtbare Beschriftung ein zweites Mal auf, und
+ * wer spaeter „bearbeiten" aendert und die zweite Stelle uebersieht, bricht
+ * 2.5.3, **ohne dass irgendetwas rot wird**. Der Zusatz kann das nicht — er
+ * enthaelt die Beschriftung gar nicht, sondern haengt sich an sie an. Er
+ * schreibt `entry.period` zeichengleich ab, also dieselbe Zeichenkette, die
+ * die Zeile 40 px weiter links sichtbar zeigt; eine zweite Formatierung
+ * desselben Zeitpunkts waere genau die Abschrift, die hier vermieden wird.
  */
 
 export interface ExportGroupEntryData {
@@ -300,22 +332,23 @@ function ExportGroupRow({
                     <Foreign value={entry.note} />
                   )}
                 </span>
-                {onEditEntry === undefined ? null : entry.note === "" ? (
+                {/*
+                  **Ein** Baustein, zwei Beschriftungen — nie zwei Bausteine
+                  (O-JR, T-218 Abschnitt 11.2). Der aeussere Zweig
+                  `onEditEntry === undefined` bleibt: Er haengt an einer festen
+                  Eigenschaft der Aufrufstelle und nicht an einem Wert, der
+                  sich zur Laufzeit aendert.
+                */}
+                {onEditEntry === undefined ? null : (
                   <Button
-                    variant="secondary"
+                    variant={entry.note === "" ? "secondary" : "ghost"}
                     size="sm"
                     iconStart="pencil"
                     onClick={() => onEditEntry(group.id, entry.id)}
                   >
-                    Leistung nachtragen
+                    {entry.note === "" ? "Leistung nachtragen" : "Leistung bearbeiten"}
+                    <span className="visually-hidden">, Buchung {entry.period}</span>
                   </Button>
-                ) : (
-                  <IconButton
-                    label={`Leistung der Buchung ${entry.period} bearbeiten`}
-                    icon="pencil"
-                    size="sm"
-                    onClick={() => onEditEntry(group.id, entry.id)}
-                  />
                 )}
               </li>
             );

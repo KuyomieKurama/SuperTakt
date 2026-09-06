@@ -1327,6 +1327,40 @@ body:has(.scrim) .toast {
   overflow-y: auto;
 }
 
+/*
+  Die Absagefläche eines Formulardialogs — zwischen dem scrollenden Rumpf und
+  der Fußzeile (T-220, E-093 Punkt 5).
+
+  Sie liegt bewusst **nicht** in `.dialog__body--form`. Zwei Gründe, und beide
+  sind gemessen:
+
+  1. Sie antwortet auf einen Druck auf den Absendeknopf und gehört neben diesen
+     Knopf. Im Rumpf stünde sie am Ende eines Ausschnitts, der 60vh hoch ist und
+     im Pool-Dialog 1599 px Inhalt trägt — der Benutzer sähe sie nicht.
+  2. Der Rumpf ist ein `flex`-Behälter mit `gap`. Eine Fläche, die dauerhaft im
+     Baum steht (das muss sie, sonst sagt keine Vorlesehilfe sie an), wäre dort
+     auch leer ein Element und kostete an jedem der sechzehn Formulardialoge
+     16 px Abstand.
+
+  Waagerecht bündig zum Rumpf; senkrecht trägt `.dialog__consequence` seinen
+  eigenen Abstand nach oben, die Fußzeile ihren nach unten. Leer hat die Fläche
+  keine Höhe: Sie ist ein Blockbehälter ohne Inhalt.
+*/
+.dialog__refusal {
+  padding-inline: var(--space-4);
+}
+
+/*
+  Der Abstand nach unten kommt über einen Zustandsnamen und nicht über `:empty`
+  oder `:has()`: Beide beantworten dieselbe Frage, aber die Antwort hinge dann
+  an einer Zeichnungsregel der Engine — und zwei von drei ausgelieferten
+  Erzeugnissen zeichnen mit WebKit, für das hier nichts gemessen ist (T-207
+  Abschnitt 4). Die Klasse sagt dasselbe, und sie sagt es überall gleich.
+*/
+.dialog__refusal--shown {
+  padding-block-end: var(--space-3);
+}
+
 .dialog__hint {
   max-width: var(--measure-prose);
   color: var(--text-muted);

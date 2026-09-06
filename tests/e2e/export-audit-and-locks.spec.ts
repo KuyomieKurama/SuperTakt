@@ -315,7 +315,15 @@ test('Fehlschlag der Vorschau, während der Bestätigungsdialog bereits offen is
  * vorher, Marke am Knoten, derselbe Knoten nachher —
  * `field-live-region-announcement.spec.ts` ist die Vorlage) läuft hier
  * gleich mit: eine zweite, im Produkt tatsächlich erreichbare Stelle
- * derselben Bauart, neben der Titelmeldung des „Neues Todo"-Dialogs.
+ * derselben Bauart — neben der Titelmeldung des Anlegen-Dialogs (Befund
+ * O-DA, geprüft in `field-live-region-announcement.spec.ts`). Bewusst über
+ * die Befundkennung und die Datei benannt, nicht über den heutigen
+ * Dialogtitel im Wortlaut (O-KB, T-227): Ein Zitat des Titels wäre hier
+ * unangebunden — diese Datei prüft ihn nicht selbst — und würde bei der
+ * nächsten Titeländerung still falsch, statt mit dem dort stehenden
+ * Prüffall rot zu werden. Dieselbe Berichtigung wie in T-205 an O-IW
+ * (`timer-stop-announcement.spec.ts`), hier nachgezogen, wo T-224 sie
+ * ausdrücklich außerhalb des eigenen Auftrags belassen hatte.
  */
 test('O-GZ — Klick auf den gesperrten Bestätigungsknopf beim Zurücksetzen: die Meldung erscheint, doch die Handlung bleibt aus; erst mit Begründung läuft sie', async ({
   page,

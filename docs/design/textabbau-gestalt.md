@@ -877,10 +877,21 @@ trägt die **Rolle**. Der Baustein darin zeichnet sie dann nicht mehr.
 **Wie `InlineMessage` erfährt, dass es schweigen soll: über einen Zusammenhang, nicht über eine
 Eigenschaft am Aufruf.** `MessageSlot` legt `MessageHostContext` über seinen Teilbaum;
 `InlineMessage` liest ihn und lässt `role` und `aria-live` weg, wenn er gesetzt ist. Damit bleiben
-**alle 76 Aufrufstellen zeichengleich**, und eine Live-Region in einer Live-Region ist nicht mehr
-eine Frage der Sorgfalt, sondern baulich ausgeschlossen. Die Bauart steht bereits im Bestand:
-`FieldMessageQuietContext` (T-202) macht dasselbe für die Feldflächen eines Formulars — ein Wirt
-legt eine Eigenschaft über seinen Teilbaum, statt sie an jedem Kind zu wiederholen.
+**alle 76 Aufrufstellen zeichengleich**, und die Verschachtelung **Wirt über Meldebaustein** ist
+nicht mehr eine Frage der Sorgfalt, sondern baulich ausgeschlossen.
+
+> **Und weiter reicht der Ausschluss nicht — das ist seit T-213 gemessen und gehört hierher, nicht
+> ans Ende des Papiers (Regel T-7).** `MessageSlot` stellt `InlineMessage` still. Er stellt **keine
+> von Hand geschriebene Rolle in einem Kind der Meldung** still. Genau die steht heute im Bestand:
+> Die Kopier-Rückmeldung der Tokenmeldung in `SettingsScreen` trägt ein eigenes `role="status"` an
+> einem `span` **innerhalb** der `InlineMessage`. Dort ist also **heute schon** eine Live-Region in
+> einer Live-Region, und ein Wirt darüber verschärft sie, statt sie zu beseitigen. Herleitung und
+> Folgen: 9.11.
+
+**Die Bauart des Wirts** steht bereits im Bestand: `FieldMessageQuietContext` (T-202) macht dasselbe
+für die Feldflächen eines Formulars — ein Wirt legt eine Eigenschaft über seinen Teilbaum, statt sie
+an jedem Kind zu wiederholen. Und sie hat dieselbe Reichweite: über den Teilbaum der Bausteine, die
+den Zusammenhang **lesen**, nicht über jeden Knoten darin.
 
 **Die Dringlichkeit gehört dem Platz, nicht der Meldung.** `MessageSlot` bekommt
 `urgency: "polite" | "assertive"`, Vorgabe `"polite"`; `InlineMessage` behält `tone` für das
@@ -896,8 +907,12 @@ dasteht. `.field__live` führt seit T-162 aus demselben Grund ein dauerhaftes `r
    Merkzeichen für den Wächter und für den Leser, kein Bauteil mit Erscheinung. Wer ihr eine
    Mindesthöhe, einen Rahmen, eine Tönung oder ein „alles in Ordnung" gibt, baut das Loch, das
    dieser Abschnitt vermeiden soll.
-2. **Kein zweiter Meldebaustein.** `InlineMessage` bleibt der einzige. Der Wirt umschließt ihn, er
-   ersetzt ihn nicht.
+2. **Kein zweiter Meldebaustein — und keine zweite Rolle in einem Kind.** `InlineMessage` bleibt der
+   einzige Meldebaustein; der Wirt umschließt ihn, er ersetzt ihn nicht. **Und in seinem Inneren
+   steht keine zweite Live-Region** (T-213, verbindlich seit dort): Wer in einem Meldebaustein eine
+   Rückmeldung ansagen will, benutzt die Fläche, die der Wirt ohnehin trägt — nicht ein eigenes
+   `role="status"` daneben. Der Wirt reicht nicht bis in die Kinder; was dort steht, steht dort
+   gegen ihn.
 3. **Kein Ersatz für den Blick.** Der Wirt sorgt dafür, dass eine Meldung **angesagt** wird. Dass
    sie auch **gesehen** wird, ist eine zweite Sache und hängt am Bildlauf. Siehe 9.5.
 
@@ -1138,7 +1153,7 @@ lesbar, solange die Liste sie nennt.
 |---|---|---|
 | **0** | **Der Bau selbst plus die erste Stelle plus Regel E — ein Auftrag** | `MessageSlot`, `MessageHostContext`, die Rücknahme der Rolle in `InlineMessage`, die `:empty`-Zeile für `.dialog__body--form`, `FormDialog` als erste Stelle, Regel E mit zwei Gegenproben. **Ein Wirt ohne ersten Benutzer ist ungeprüft; ein erster Benutzer ohne Wirt ist die zweite Fassung.** Das ist Z-53a, erledigt |
 | **1** | `TagsScreen` — die Absage des Ziehens | Der einzige Rückweg ohne Dialog, dazu die Selbstverschiebung (Pflichtklickpfad). Bringt P2 als Muster mit: Wirt **vor** dem Ternär, im Kartenrumpf |
-| **2** | `SettingsScreen` — die drei Stellen | Eine Datei, ein Agent (dieselbe Begründung wie 6.5 in `traeger-und-zusage.md`). Darunter die einmalige Tokenmeldung, die folgenreichste des Bereichs |
+| **2** | `SettingsScreen` — die drei Stellen | Eine Datei, ein Agent (dieselbe Begründung wie 6.5 in `traeger-und-zusage.md`). Darunter die einmalige Tokenmeldung, die folgenreichste des Bereichs. **Zwei verbindliche Zusätze aus T-213, hierher gezogen:** (a) Der Wirt **und** das Entfernen des inneren `role="status"` der Kopier-Rückmeldung sind **eine** Änderung — wer nur den Wirt setzt, verschärft die Verschachtelung (9.8 Punkt 2). (b) Diese eine Fläche bekommt `urgency="polite"`, **nicht** `assertive`: Das Token steht einmalig da und muss **gelesen** werden; eine dringliche Ansage unterbricht genau den Vorgang, um den es geht (abschreiben, kopieren). Dieser Platz ist eine Auskunft, keine Absage |
 | **3** | `TodoDetailScreen` — „Der Vermerk wurde nicht gespeichert" | Der einzige Rückweg eines gescheiterten Speicherns am internen Vermerk. **O-AX wird hier nicht mitgenommen** — eine Längengrenze ist keine Meldefläche |
 | **4** | `UpdateNotice` — die Sitzungsleiste | Berührt `.app` und damit das Hüllenraster (9.6). Getrennt, weil dort eine Rasterzeile entsteht und ein Verdacht zu messen ist |
 | **5** | `ExportScreen` — die zwei Vorschaufehler | Sie sind die sichtbare Begründung der gesperrten Exportschaltfläche. Zuletzt, weil hier zusätzlich zu entscheiden ist, was der Toast bereits ansagt |
@@ -1151,14 +1166,21 @@ Toast bereits ansagt (`ToastContext` hat den dauerhaften Wirt seit je).
 
 ---
 
-## 9.8 Was der Wirt **nicht** leistet — drei Grenzen, damit niemand mehr erwartet
+## 9.8 Was der Wirt **nicht** leistet — vier Grenzen, damit niemand mehr erwartet
 
 1. **Er sagt eine Meldung an, wenn sie erscheint. Er sagt sie nicht erneut an, wenn sie unverändert
    stehen bleibt.** Das ist der Kern von Z-49 aus T-200: „da sich ihr Text nicht ändert, wird sie
    auch nicht erneut angesagt". Wer will, dass eine unveränderte Absage nach einer neuen Handlung
    wieder gehört wird, braucht dafür etwas anderes — und zwar eine Entscheidung, nicht einen Wirt.
-2. **Er ersetzt keinen Bildlauf und keinen Fokus.** 9.5, zweitletzter Punkt.
-3. **Er ist nicht gemessen, sondern abgeleitet.** In dieser Umgebung läuft kein Vorleseprogramm
+2. **Er reicht nicht bis in die Kinder.** Er stellt `InlineMessage` still, nicht eine von Hand
+   geschriebene Rolle **innerhalb** einer Meldung. Steht dort ein eigenes `role="status"` oder
+   `aria-live`, so ist die Verschachtelung nicht beseitigt, sondern verschärft: eine dringliche
+   äußere und eine höfliche innere Region ineinander. Der Bestand hat genau einen solchen Fall
+   (Kopier-Rückmeldung der Tokenmeldung in `SettingsScreen`); er wird **mit** dem Wirt entfernt und
+   nicht danach — beides ist **eine** Änderung. Herleitung: 9.11, Punkte 1 und 2. Vierte Grenze seit
+   T-213, hierher gezogen in T-229.
+3. **Er ersetzt keinen Bildlauf und keinen Fokus.** 9.5, zweitletzter Punkt.
+4. **Er ist nicht gemessen, sondern abgeleitet.** In dieser Umgebung läuft kein Vorleseprogramm
    (T-B09). Was gemessen werden kann, ist die **Bauart** — dass die Region beim Aufbau der Fläche
    im Baum steht und nicht mit ihrem Inhalt entsteht. Das misst `proof:surface`. Was ein Hörender
    hört, bleibt eine Ableitung, und sie steht so auch im Kopf des Laufs.
@@ -1206,6 +1228,15 @@ wo allein `tone="danger"` `alert` erzeugt. ~~Betroffen ist im Bestand keine Stel
 ## 9.11 Nachtrag T-213 (Welle AF) — F-7 ist beantwortet, und meine Voraussetzung war falsch
 
 **Vorlage:** `.claude/team/reports/T-212-spec-ux-reviewer.md`, Urteile Z-65 und Z-66; E-087.
+
+> **Eingezogen in T-229 (O-JZ). Dieser Abschnitt ist ab hier die Herleitung, nicht der Ort.** Die
+> drei verbindlichen Sätze unten stehen seither dort, wo sie gelesen werden: Satz 1 in **9.1
+> Punkt 2** und als **9.8 Punkt 2** (der Wirt reicht nicht bis in die Kinder), Sätze 2 und 3 in der
+> **Bündelzeile 2 von 9.7** (eine Änderung, nicht zwei; `polite` und nicht `assertive`). Wer nur
+> 9.1 oder nur 9.7 liest, hat sie trotzdem. Der Grund für dieses Verfahren steht als **Regel T-7**
+> in `docs/design/traeger-und-zusage.md` Abschnitt 0: Ein Nachtrag am Papierende wird beim nächsten
+> Lesen überlesen — und genau das ist hier über drei Wellen hinweg (AF bis AI) geschehen, bis
+> spec-ux-reviewer es in T-221 gefunden hat.
 
 **Zur Sache: bestätigt.** Die Dringlichkeit gehört dem Platz und nicht der Meldung; Z-65 nimmt die
 Begründung aus 9.1 wörtlich an. Daran ändert sich nichts.

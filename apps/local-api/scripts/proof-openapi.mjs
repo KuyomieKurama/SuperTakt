@@ -273,9 +273,31 @@ const probe = compose({
  */
 const hasPlaceholder = (path) => path.includes('*') || /:[A-Za-z0-9_]/.test(path);
 
+/**
+ * A-A-56 — Form und Zahl der Kettenglieder, in beiden Läufen zeichengleich.
+ *
+ * Die Begründung steht **einmal** ausgeschrieben, im Kopf von
+ * `proof-route-policy.mjs` bei `MIDDLEWARE_PATH`, weil dort schon die
+ * Begründung der Aufzählung steht. In Kürze: A-A-51 fängt einen `ALL`-Eintrag
+ * **ohne** Platzhalter; ein Endpunkt, der selbst auf einem Platzhalter liegt
+ * (`api.all('/addin/leak/:id', …)`, `api.all('/addin/*', …)`,
+ * `api.all('/*', …)`), bleibt ihr unsichtbar und war in allen drei Formen
+ * erreichbar, während dieser Lauf 112/0 blieb (T-223-1). Die Unterscheidung
+ * nach Stelligkeit trägt nicht — sie hängt an der Schreibweise des Handlers
+ * und nicht am Verhalten. Es bleiben Form und Zahl, und beide kosten keine
+ * Aufstellung von Pfaden: eine Fachroute wird nie unter `ALL` registriert, und
+ * alle zehn Einträge stehen als `app.use('*', …)` in einem Block in
+ * `src/app.ts`.
+ */
+const MIDDLEWARE_PATH = '/*';
+
+/** Die Zahl der Kettenglieder aus `src/app.ts` — siehe {@link MIDDLEWARE_PATH}. */
+const MIDDLEWARE_COUNT = 10;
+
 const serviceRoutes = new Set();
 const outside = [];
 const opaqueRoutes = [];
+const allEntries = [];
 for (const route of probe.app.routes) {
   // `Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*`.
   //
@@ -287,10 +309,12 @@ for (const route of probe.app.routes) {
   // dieselbe Zahl" waren in diesem Augenblick falsch. Ein `ALL`-Eintrag ohne
   // Platzhalter wird deshalb festgehalten und unten gemeldet (A-A-51, A-A-55).
   //
-  // Was die Weigerung nicht deckt, steht ausgeschrieben in
+  // Was diese Weigerung nicht deckt, steht ausgeschrieben in
   // `proof-route-policy.mjs`: Ein Endpunkt, der selbst auf einem Platzhalter
-  // liegt, bleibt am Pfad allein ununterscheidbar.
+  // liegt, bleibt am Pfad allein ununterscheidbar. Dafür Form und Zahl —
+  // A-A-56, unten.
   if (route.method === 'ALL') {
+    allEntries.push(route.path);
     if (!hasPlaceholder(route.path)) opaqueRoutes.push(route.path);
     continue;
   }
@@ -316,6 +340,19 @@ check(
   'kein ALL-Eintrag ohne Platzhalter — sonst urteilt dieser Lauf über eine unvollständige Liste (A-A-51)',
   opaqueRoutes.length === 0,
   `mit ALL registriert und damit aus der Liste gefallen: ${opaqueRoutes.join(', ')}`,
+);
+
+// A-A-56 — Form und Zahl, ebenfalls vor jedem Urteil über die Liste.
+const wrongShape = allEntries.filter((path) => path !== MIDDLEWARE_PATH);
+check(
+  `jeder ALL-Eintrag trägt den Pfad ${MIDDLEWARE_PATH} — jede engere Form ist ein Endpunkt und kein Kettenglied (A-A-56)`,
+  wrongShape.length === 0,
+  `unter ALL registriert, aber nicht ${MIDDLEWARE_PATH}: ${wrongShape.join(', ')}`,
+);
+check(
+  `die Kettenglieder sind die benannten ${MIDDLEWARE_COUNT} — gezählt ${allEntries.length} (A-A-56)`,
+  allEntries.length === MIDDLEWARE_COUNT,
+  `Wer eines ergänzt oder entfernt, ändert MIDDLEWARE_COUNT und sagt dort, welches. Gezählt: ${allEntries.join(', ')}`,
 );
 
 check(

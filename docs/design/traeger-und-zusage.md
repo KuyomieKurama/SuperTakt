@@ -63,6 +63,36 @@ Zahl; es verlangt nur, daß Farbe nicht das einzige Mittel ist. Takt braucht abe
 nur eine Zahl in den Lauf paßt. Ich setze dafür dieselbe 3:1 an, die das Haus schon für
 Zustandsgrenzen benutzt. Wer eine andere Zahl will, ändert sie an einer Stelle, hier.
 
+### 0.1 Die übrigen Regeln dieses Papiers, und wo sie stehen
+
+**T-4** (die drei Nahtstellen eines Doppelrings) steht in 10.1, **T-5** (eine Graustufenzusage ist
+eine Kontrastzusage) in 10.8 — beide dort, wo sie hergeleitet sind. Die zwei folgenden hängen an
+keinem einzelnen Befund, sondern an **jeder** Messung und an **jedem** Papier dieses Ordners.
+Deshalb stehen sie hier vorn und nicht am Ende eines Nachtrags.
+
+> **Regel T-6 — nach einem Themenwechsel wird gewartet, sonst mißt man den Übergang.**
+> `components.css` legt Übergänge auf die Farben. Wer `data-theme` umsetzt und sofort abzieht oder
+> ausliest, mißt eine **Zwischenfarbe**. Das ist keine Vermutung: T-216 hat im ersten Lauf
+> `--accent-bg` dunkel als `#5b8cf6` statt `#6091f8` gemessen. **600 ms Wartezeit lösen es**, und
+> sie gehören in die Fixtur jeder künftigen Pixel- oder Farbmessung, nicht in die Sorgfalt des
+> Messenden. Eine so entstandene Zahl ist nicht falsch abgeschrieben, sondern falsch **entstanden**
+> — sie ist von einer richtigen nicht zu unterscheiden und überlebt jede Gegenprobe, die dieselbe
+> Fixtur benutzt. Wo eine ältere Messung die Wartezeit nicht hatte, gilt ihr **dunkler** Teil als
+> ungeprüft; der helle ist unberührt, weil beim Laden im hellen Thema kein Übergang läuft.
+> **Nicht betroffen sind Maße:** Breiten, Höhen und Abstände hängen an keinem Themenblock — dort
+> genügt ein Thema (11.7).
+
+> **Regel T-7 — eine Berichtigung steht an der Stelle, die sie berichtigt.** Ein Nachtrag am Ende
+> eines Papiers ist die **Herleitung**, nicht der **Ort**. Was verbindlich wird, wird in den
+> berichtigten Abschnitt eingetragen; die alte Zahl und der alte Satz verschwinden **dort**. Der
+> Nachtrag behält den Zeiger und die Begründung, damit niemand die Berichtigung ein zweites Mal
+> herleiten muß. Der Grund ist gemessen und nicht vermutet: Der Nachtrag in
+> `textabbau-gestalt.md` 9.11 hat drei verbindliche Sätze gezogen und die zwei Abschnitte, die sie
+> berichtigen, drei Wellen lang unberührt gelassen — beide Stellen sagten weiter das Widerlegte
+> (O-JZ). **Ein Papier wird abschnittsweise gelesen, nie von vorn.** Dieselbe Bauart wie 2.6 („Fünf
+> Stellen sagen denselben Satz. Alle fünf müssen mit"), nur auf das Papier selbst angewandt statt
+> auf den Quelltext.
+
 ---
 
 ## 1. O-GU, erste Stelle — die Schraffur am Etikett „Erneut offen"
@@ -902,8 +932,10 @@ der Maßstab, der in Abschnitt 0 noch fehlte, und er wird hier nachgetragen.
 > Stelle, an der ohnehin die Kante des Bedienelements erwartet wird, liest sich als Größenänderung
 > und nicht als Zustand.
 
-An diesem Maßstab gemessen sieht der Bestand so aus (alle Zahlen von Hand gerechnet, die 1,00 und
-1,00 des ersten Falls von T-210 an Pixeln bestätigt):
+An diesem Maßstab sah der Bestand **vor dem Tausch** so aus (alle Zahlen von Hand gerechnet, die
+1,00 und 1,00 des ersten Falls von T-210 an Pixeln bestätigt). Die Tabelle bleibt als Befund
+stehen; sie beschreibt seit T-216 nicht mehr das Erzeugnis, sondern das, was behoben wurde — die
+Zahlen danach stehen in 10.4, und die 1,13 der zweiten Zeile ist dort **6,76**:
 
 | Fall | Füllung \| innen | innen \| außen | außen \| Fläche | begrenztes Band? |
 |---|---:|---:|---:|---|
@@ -1031,24 +1063,38 @@ zuletzt in T-194 losgeworden (`--note-billing-rail-stripe`). Kein Grund, sich ei
 
 ## 10.4 Was danach gemessen ist — alle drei Nahtstellen, beide Themen, beide Knopfarten
 
-| Nahtstelle | Paar | hell | dunkel |
-|---|---|---:|---:|
-| Füllung Primär \| Gegenband | `--focus-ring-contrast` / `--accent-bg` | **5,99** | **6,27** |
-| Füllung Gefahr \| Gegenband | `--focus-ring-contrast` / `--danger-bg` | **6,75** | **7,98** |
-| Gegenband \| Kontur | `--focus-ring-contrast` / `--focus-ring-color` | **5,99** | **~9,2** |
-| Kontur \| Karte | `--focus-ring-color` / `--bg-surface` | **5,99** | **8,34** |
-| Kontur \| Hintergrund | `--focus-ring-color` / `--bg-canvas` | **5,63** | **9,07** |
-| Kontur \| Werkzeugleiste, Spalte, Tabellenkopf | `--focus-ring-color` / `--bg-subtle` | **5,33** | **7,63** |
-| Kontur \| Zebrazeile | `--focus-ring-color` / `--bg-surface-alt` | **5,83** | (Paar vorhanden) |
+**Gebaut und gemessen in T-216. Die Spalten „Lauf" und „Pixel" ersetzen meine Handrechnung; wo sie
+auseinandergingen, gilt der Lauf (E-087).**
 
-**Der kleinste Wert der ganzen Tabelle ist 5,33 — knapp das Doppelte der Forderung.** Alle vier
-Zeilen der unteren Hälfte sind **heute schon** Paare im Lauf und heute schon grün; sie werden durch
-den Tausch nicht angefasst, sie werden nur zum ersten Mal zu der Naht, die sie messen. Neu sind
-allein die beiden ersten Zeilen.
+| Nahtstelle | Paar | hell (Lauf) | hell (Pixel) | dunkel (Lauf) | dunkel (Pixel) |
+|---|---|---:|---:|---:|---:|
+| Füllung Primär \| Gegenband | `--focus-ring-contrast` / `--accent-bg` | **5,98** | 5,99 | **6,26** | 6,27 |
+| Füllung Gefahr \| Gegenband | `--focus-ring-contrast` / `--danger-bg` | **6,75** | **6,76** | **7,98** | 7,98 |
+| Gegenband \| Kontur | `--focus-ring-contrast` / `--focus-ring-color` | 5,99 | 5,99 | **9,23** | 9,24 |
+| Kontur \| Karte | `--focus-ring-color` / `--bg-surface` | 5,99 | 5,99 | 8,34 | 8,34 |
+| Kontur \| Hintergrund | `--focus-ring-color` / `--bg-canvas` | **5,63** | — | **9,07** | — |
+| Kontur \| Werkzeugleiste, Spalte, Tabellenkopf | `--focus-ring-color` / `--bg-subtle` | **5,33** | — | **7,63** | — |
+| Kontur \| Zebrazeile | `--focus-ring-color` / `--bg-surface-alt` | **5,83** | — | (Paar vorhanden) | — |
 
-Zur Zahl **~9,2**: T-204 hatte 9,14 von Hand gerechnet, ich komme auf 9,24. Das Paar läuft seit
-T-209 im Lauf, und der Lauf weist den Wert aus — meine Handrechnung ist hier weder die Quelle noch
-die Entscheidungsgrundlage, beide Zahlen liegen weit über 3.
+**Der kleinste Wert der ganzen Tabelle ist 5,33 — knapp das Doppelte der Forderung; T-216 bestätigt
+ihn als kleinste Zahl der ganzen Reihe.** Alle vier Zeilen der unteren Hälfte sind **heute schon**
+Paare im Lauf und heute schon grün; sie werden durch den Tausch nicht angefasst, sie werden nur zum
+ersten Mal zu der Naht, die sie messen. Neu sind allein die beiden ersten Zeilen.
+
+**Drei meiner Zahlen sind vom Erbauer berichtigt worden, und die Abweichungen sagen etwas.** Aus
+„~9,2" wurde **9,23** im Lauf; aus meinen 5,99 / 6,27 wurden **5,98 / 6,26**. Das ist keine
+Rundungspedanterie, sondern die Trennung zweier Meßarten: Der Lauf flächt Token, der Browser liest
+Pixel, und beide dürfen um eine Hundertstelstelle auseinanderliegen — **welche Zahl in welchen
+Kommentar gehört, hängt davon ab, was der Kommentar behauptet.** Steht dort eine Zusage über die
+gezeichnete Naht, ist es die Pixelzahl; steht dort ein Paar, ist es die Zahl des Laufs. Die dritte
+Berichtigung ist keine Abweichung, sondern ein Fehler von mir; sie steht in 10.11.2.
+
+**Die Vorhersage aus 10.1 ist eingetroffen und ist die eigentliche Nachricht dieser Messung:** Alle
+vier Kombinationen zeigen nach dem Tausch **drei Zonen mit zwei deutlichen Übergängen** — vorher
+war in keiner ein Band beidseits begrenzt (T-4). Der Gefahrenknopf im hellen Thema, den T-210 als
+unbetroffen führte, geht an seiner Füllungsnaht von **1,13 auf 6,76**. Das ist der Fall, dessen
+Ring bis dahin allein am Farbton Blau gegen Rot hing, und er ist der Beleg dafür, daß die
+Entscheidung für **alle vier** und nicht für den einen sichtbar kaputten Fall richtig war.
 
 ---
 
@@ -1060,11 +1106,11 @@ Die Frage aus O-JA Punkt (c), Art für Art. `.on-solid` wird an genau zwei Stell
 
 | Art | Trägt `.on-solid`? | Nach dem Tausch | Eigener Wert nötig? |
 |---|---|---|---|
-| `primary` (Knopf und Symbolknopf) | ja | 5,99 / 5,99 / 5,99 hell, 6,27 / ~9,2 / 8,34 dunkel | **nein** |
-| `danger` (Knopf und Symbolknopf) | ja | 6,75 / 5,99 / 5,99 hell, 7,98 / ~9,2 / 8,34 dunkel | **nein** — der Gegenton ist gegen Rot sogar **stärker** als gegen Blau |
+| `primary` (Knopf und Symbolknopf) | ja | 5,99 / 5,99 / 5,99 hell, 6,27 / 9,24 / 8,34 dunkel (an Pixeln, T-216) | **nein** |
+| `danger` (Knopf und Symbolknopf) | ja | **6,76** / 5,99 / 5,99 hell, 7,98 / 9,24 / 8,34 dunkel (an Pixeln, T-216) | **nein** — der Gegenton ist gegen Rot sogar **stärker** als gegen Blau |
 | `secondary` | nein | unverändert: ein Ring, beide Nachbarn sind die Fläche, 5,33 bis 5,99 hell | **nein** |
 | `ghost` | nein | dito, die Füllung ist durchsichtig | **nein** |
-| `primary`/`danger` **weich gesperrt** (`aria-disabled`) | ja, die Klasse bleibt | Füllung wird `--bg-disabled`; Gegenband trägt dort **nicht** (1,12 / 1,21), die Kontur außen trägt mit 5,33 bis 5,99 | **nein**, aber eine benannte Ausnahme — siehe 10.12 |
+| `primary`/`danger` **weich gesperrt** (`aria-disabled`) | ja, die Klasse bleibt | Füllung wird `--bg-disabled`; Gegenband trägt dort **nicht** (Tokenpaar 1,12 / 1,21; an Pixeln gegen die Kante des gesperrten Knopfes 1,46 / 1,74 — T-216), die Kontur außen trägt mit 5,33 bis 5,99 | **nein**, aber eine benannte Ausnahme — siehe 10.12 |
 | `primary`/`danger` unter dem Zeiger und gedrückt | ja | Füllung wird dunkler (hell) beziehungsweise heller (dunkel); der Grundzustand ist in beiden Themen der **schlechteste** Fall | **nein**, zwei Paare genügen |
 | `.skip-link` | **nein**, und das bleibt so | gefüllt und fokussierbar, aber ohne Schatten: die 2 px Versatz zeigen die Seite, der Ring ist beidseits von ihr begrenzt | **nein** — und ausdrücklich **nicht** „aus Konsistenz" `.on-solid` nachrüsten |
 
@@ -1429,8 +1475,19 @@ nicht nur in diesem Papier.
 // Ihre **Obergrenze** braucht kein eigenes Paar: Sie steht in den drei
 // Textpaaren auf `--danger-bg-subtle` (Gruppen "Startmeldung" und
 // "Anwendung") — wer die Flaeche dunkler macht, faellt dort durch.
-{ group: "Anwendung", fg: "--danger-bg-subtle", bg: "--bg-canvas", min: 0, exempt: true, note: "Flaeche der Kachel Ueberfaellig gegen den Hintergrund — 1,04 hell, 1,11 dunkel; Verstaerkung, getragen wird von der Randschiene" },
+{ group: "Anwendung", fg: "--danger-bg-subtle", bg: "--bg-canvas", min: 0, exempt: true, note: "Flaeche der Kachel Ueberfaellig gegen den Hintergrund — 1,04 hell, 1,15 dunkel; Verstaerkung, getragen wird von der Randschiene" },
 ```
+
+> **Berichtigt in T-216, und der Fehler war meiner.** Hier stand als dunkler Wert **1,11**. Das ist
+> der Wert von `--danger-bg-subtle` gegen **`--bg-surface`** im **hellen** Thema — meine eigene
+> Gegenprobe aus 9.3, beim Abschreiben in den dunklen Slot gerutscht. Gegen die Leinwand mißt der
+> Lauf dunkel **1,15**; oben steht seit T-216 die gemessene Zahl, im Quelltext ebenso, mit dem
+> Grund daneben, damit die 1,11 nicht als „Berichtigung" zurückkommt. Die Einordnung ändert sich
+> nicht — beide Zahlen liegen weit unter 3, die Fläche bleibt Verstärkung. **Die Lehre ist die
+> Bauart des Fehlers, nicht seine Größe:** Eine Zahl, die in einer Tabelle mit vier Feldern (zwei
+> Themen, zwei Bezugsflächen) eine Zelle nach rechts rutscht, bleibt plausibel und wird von keiner
+> Rechnung gefangen. Wer eine Zahl in einen Kommentar schreibt, schreibt **Thema und Bezugsfläche
+> daneben** — dann ist der Rutsch lesbar statt unsichtbar.
 
 ### 10.11.3 Zum Feld `over` — es bleibt bei allen sechs Zeilen draußen
 
@@ -1873,30 +1930,106 @@ nähme die Blende bei `prefers-reduced-motion` ohnehin weg — eine Bewegung, di
 darf, hat nie getragen (U-3 aus T-171). Auch kein Aufblitzen der Zeile: Die Rückmeldung sind
 Meldung, Beschriftung und der Ring, der stehen bleibt. Drei sind genug.
 
-**Dichte — der einzige Preis dieser Entscheidung, und er ist bezifferbar.** `.eentry` ist ein
-Raster mit sieben Spalten, `auto auto auto auto auto minmax(0, 1fr) auto` (`components.css:3127-3135`).
-Spalte 7 ist der Knopf, Spalte 6 die Leistung und die **einzige** bewegliche. Rasterspalten gelten
-für alle Zeilen zugleich: Ein beschrifteter Knopf verbreitert Spalte 7 für die ganze Liste, nicht
-je Zeile. In einer Gruppe, in der schon heute **eine** Buchung ohne Leistung steht, ist dieser Preis
-bereits bezahlt; neu ist er allein in Gruppen, in denen jede Buchung ihre Leistung hat.
+**Dichte — der einzige Preis dieser Entscheidung. Mein erster Rechenweg dazu war falsch; hier steht
+der berichtigte.** `.eentry` ist ein Raster mit sieben Spalten,
+`auto auto auto auto auto minmax(0, 1fr) auto` (`components.css:3127-3135`). Spalte 7 ist der
+Knopf, Spalte 6 die Leistung und die **einzige** bewegliche.
 
-Das ist vertretbar, und zwar aus einem Grund, der in derselben Fläche steht: **Die vollständige
+> **Was hier stand und widerlegt ist:** *„Rasterspalten gelten für alle Zeilen zugleich: Ein
+> beschrifteter Knopf verbreitert Spalte 7 für die ganze Liste, nicht je Zeile. In einer Gruppe, in
+> der schon heute eine Buchung ohne Leistung steht, ist dieser Preis bereits bezahlt."* Das setzt
+> eine **gemeinsame Spaltenachse** voraus. Die gibt es nicht. ux-designer hat die Kaskade
+> nachgemessen (T-222, `textbestand.md` 15.6), und ich habe es gegengelesen:
+> `.eentries` ist `display: flex; flex-direction: column`, **jede** `.eentry` ist ihr **eigenes**
+> Raster; kein `subgrid`, keine geteilte Achse. Dasselbe in der Vorschau: `.tpsegment-list` ist
+> Flex, `.tpsegment` je Zeile ein Raster mit vier Spalten (`app.css:3589-3608`). Der Fehler ist
+> derselben Art wie der in `textabbau-gestalt.md` 9.11: Ich habe eine **Eigenschaft angenommen**,
+> statt sie zu lesen — und Rasterspalten teilen sich nur über eine gemeinsame Achse, die genau
+> **eine** Zeile CSS herstellt und die hier nicht dasteht.
+
+**Der berichtigte Rechenweg, und er kehrt die alte Aussage um.** Der Preis fällt **je Zeile** an,
+und er fällt **ausschließlich in den gefüllten** Zeilen:
+
+| Zeile | vorher (Spalte 7) | nachher | Preis in dieser Zeile |
+|---|---|---|---|
+| ohne Leistung | beschrifteter `Button` (~150 px) | derselbe | **null** — er war schon da |
+| mit Leistung | `IconButton`, 28 px | beschrifteter `Button` | **die volle Differenz**, rund 120 px weniger für die Leistung |
+
+Damit ist die alte Aussage nicht nur ungenau, sondern **umgekehrt**: Die Zeilen, von denen ich
+sagte, sie hätten den Preis „bereits bezahlt", sind die einzigen, die **gar nichts** zahlen. Und
+die Gruppen, die ich für den Normalfall hielt, gibt es als Rechengröße nicht — die
+Zusammensetzung einer Gruppe ist für die Breite jeder einzelnen Zeile **belanglos**.
+
+**Was dieselbe Messung zugunsten der Entscheidung ergibt, gehört daneben.** Die Zeilen sind schon
+heute nicht bündig: eine Zeile mit `Button` neben einer mit `IconButton` hat eine andere letzte
+Spalte. Die Vereinheitlichung auf **einen** Baustein macht die Liste an dieser Stelle also
+ruhiger, nicht unruhiger — und der Wechsel der Beschriftung bewegt nach dem Speichern nur seine
+**eigene** Zeile um wenige Pixel, nie die Liste. Bedingung (b) aus 11.4 (gleiche Länge) trägt
+weiter, aber aus dem engeren Grund.
+
+Vertretbar bleibt der Preis aus dem Grund, der in derselben Fläche steht: **Die vollständige
 Leistung steht unmittelbar darüber.** `renderRowDetail` zeichnet vor der Buchungsliste die
 Exportzeile, die geschrieben wird (`ExportGroups.tsx:255-260`) — „Erst was geschrieben wird, danach
 woraus es entsteht". Die Spalte in der Buchungsliste ist die Herkunftsansicht, nicht die Lesefläche;
-darum trägt sie heute schon `truncate` und einen Zeigertext.
+darum trägt sie heute schon `truncate` und einen Zeigertext. **Aber ob sie noch etwas zeigt, das
+diesen Namen verdient, ist jetzt eine Messung an einer Zeile und nicht mehr eine Schätzung über
+eine Liste.**
 
-**Auftrag an visual-qa, mit vorab entschiedenem Rückfall.** Zu messen bei 1280×720 **und** 1024×640,
-beide Themen: Wie breit bleibt Spalte 6 in einer Gruppe mit vier Buchungen, in der jede eine
-Leistung trägt? **Rückfall, falls dort weniger als etwa zwanzig Zeichen der Leistung übrig
-bleiben:** dieselbe Entscheidung mit `IconButton` in **beiden** Zuständen, `label` gleich den
-zugänglichen Namen aus 11.4 (Wortlaut und Namensform bleiben zeichengleich, damit die Prüffälle
-nicht zweimal wandern). Das ist weiterhin **ein** Baustein und weiterhin ein überlebender Knoten —
-die Kernentscheidung wird durch den Rückfall nicht berührt, nur ihre Erscheinung. Beide Bauformen
-sind hiermit benannt; der Bauende hat nichts zu erfinden.
+### 11.7.1 Der Meßauftrag an visual-qa — berichtigt, weil der teure Fall ein anderer ist
+
+**Gemessen wird eine Zeile, keine Gruppe.** Spalte 6 einer `.eentry` ist
+`Zeilenbreite − (Spalten 1–5 + Spalte 7) − 6 × var(--space-3) − Polsterung`. Alles darin ist
+zeilenlokal. Der Auftrag lautet deshalb:
+
+1. **Der teure Fall ist die *gefüllte* Zeile in ihrer breitesten Ausprägung**, nicht „eine Gruppe,
+   in der jede Buchung ihre Leistung hat". Konkret: `source = "Von Hand"` (9 Zeichen statt 5 bei
+   „Timer"), Status **`reopened`**, denn dann steht in Spalte 5 das Etikett statt des
+   `.eentry__spacer`, und der ist `width: 0` (`components.css:3169-3172`) — die reopened-Zeile ist
+   die schmalste Lesefläche der Liste, und sie ist es **nur** in ihrer eigenen Zeile. Dazu eine
+   lange Leistung aus `tests/fixtures/`.
+2. **Zu messen bei 1280×720 und 1024×640** — beides bleibt. **Ein Thema genügt:** Breiten hängen an
+   keinem Themenblock (Regel T-6, letzter Satz). Wer beide misst, misst dieselbe Zahl zweimal; wer
+   dabei umschaltet, wartet trotzdem 600 ms, sonst mißt er nebenbei eine Zwischenfarbe.
+3. **Festzuhalten sind zwei Zahlen je Fenster:** die Pixelbreite von `.eentry__note` und die Zahl
+   der Zeichen, die vor dem `truncate` stehen bleiben.
+4. **Die Schwelle bleibt, ihr Ort ändert sich:** Bleiben in der Zeile aus Punkt 1 **weniger als
+   etwa zwanzig Zeichen** der Leistung übrig, gilt der Rückfall. Gelesen wird sie am schlechtesten
+   Fall, nicht am Mittel — bei zeilenlokalen Rastern gibt es kein Mittel, das etwas bedeutet.
+5. **Dieselbe Messung für `.tpsegment`** (`TemplatePreview`, vier Spalten, eine bewegliche). Dort
+   ist die Rechnung eine andere und kleiner: Der Knopf war schon beschriftet, die Beschriftung
+   wächst von „Bearbeiten" (10 Zeichen) auf „Leistung bearbeiten" (19). Gemessen wird trotzdem,
+   weil auch dort jede Zeile ihr eigenes Raster ist.
+
+**Der vorab entschiedene Rückfall — unverändert, und ja: wahrscheinlicher.** `IconButton` in
+**beiden** Zuständen, `label` gleich den zugänglichen Namen aus 11.4 (Wortlaut und Namensform
+bleiben zeichengleich, damit die Prüffälle nicht zweimal wandern). Weiterhin **ein** Baustein,
+weiterhin ein überlebender Knoten; die Kernentscheidung aus 11.2 wird davon nicht berührt, nur ihre
+Erscheinung. Zur Wahrscheinlichkeit, mit Begründung statt Gefühl:
+
+* **Betroffen sind statt seltener Gruppen fast alle Zeilen.** Eine Buchung ohne Leistung ist der
+  Ausnahmefall — sie ist der eine Grund, aus dem eine Tagesgruppe nicht exportiert wird (E-034).
+  Die Regel ist die gefüllte Zeile, und genau sie zahlt. Die Menge der betroffenen Flächen ist
+  damit um ein Vielfaches größer als in meiner ersten Rechnung.
+* **Der Rückfall kostet weniger, als 11.3 befürchten ließ.** Er nimmt den sichtbaren Text auch dem
+  Mangelzweig. Der Mangel steht aber **in derselben Zeile schon in Worten**: Spalte 6 zeigt dort
+  „— keine Leistung erfasst —" (`ExportGroups.tsx:328-329`), und die Ausprägung `secondary` gegen
+  `ghost` bleibt. Es fällt also ein drittes Zeichen für einen Zustand weg, der zwei behält — und es
+  fällt in der einzigen Zeilenart, deren Spalte 6 nichts Lesenswertes enthält.
+* **Ich halte den Rückfall danach für den wahrscheinlicheren Ausgang** und sage das vor der
+  Messung, damit es keine nachträgliche Erklärung wird. Entschieden wird er trotzdem erst von der
+  Zahl aus Punkt 4.
+
+**Was der Rückfall ausdrücklich nicht ist, und die Berichtigung lädt genau dazu ein.** Wer liest,
+daß der Preis je Zeile anfällt, kommt auf den nächstliegenden Gedanken: *dann eben `IconButton` nur
+in den gefüllten Zeilen und `Button` in den leeren.* **Das ist der Fehler aus O-JR, wörtlich.**
+`Button` und `IconButton` sind zwei Bausteine; ein Zweig, der zwischen ihnen umschaltet, tauscht
+beim Speichern den Knoten aus, auf den der Dialog den Fokus zurückgibt — der Befund, den dieser
+ganze Abschnitt behebt. Zulässig wäre allein **ein** `Button`, dessen Beschriftung im gefüllten
+Zweig verborgen wird; das braucht eine eigene Klasse für die Innenlücke und eine eigene
+Entscheidung, und es steht hier als **nicht gewählt**, nicht als dritter Weg.
 
 **Responsiv.** Keine Umbruchmarke wird berührt. `.eentry` bricht nicht um; die bewegliche Spalte
-nimmt die Breitenänderung auf. Wird der Rückfall gezogen, ändert sich auch dort nichts.
+nimmt die Breitenänderung auf — je Zeile. Wird der Rückfall gezogen, ändert sich auch dort nichts.
 
 ---
 
@@ -1908,6 +2041,7 @@ nimmt die Breitenänderung auf. Wird der Rückfall gezogen, ändert sich auch do
 | `apps/web/src/components/ExportGroups.tsx`, Kopfkommentar | Vier Sätze, warum hier **ein** Baustein steht: der Knopf ist das Rückkehrziel des Dialogs, den er öffnet; er überlebt die eigene Wirkung nur als derselbe Knoten; die Ausprägung darf wechseln, der Baustein nicht; Verweis auf O-IH und diesen Abschnitt. Ohne diesen Kommentar ist die nächste „Aufräumung" die Wiederherstellung des Fehlers |
 | `apps/web/src/screens/TemplatePreview.tsx:590-597` | **Zweite Stelle desselben Satzes.** Baustein und Bedingung stimmen bereits; zu berichtigen sind die Beschriftung („Bearbeiten" → „Leistung bearbeiten") und der fehlende Zeilenbezug im Namen — derselbe verborgene Zusatz, dieselbe Form. Die Ausprägung dort ist `ghost`; nach 11.3 wird sie `secondary`, solange die Leistung fehlt |
 | `apps/web/src/screens/ExportScreen.tsx:1236-1243` (`SkippedRow`) | **Dritte Stelle desselben Satzes.** Sie führt aus der Ansicht heraus, hat also kein Rückkehrziel — aber denselben Namen ohne Unterscheidung, je ausgelassener Tagesgruppe einmal. Derselbe verborgene Zusatz mit dem Tag der Gruppe (`formatDayLabel(skipped.group.day)` steht sichtbar daneben, `:1231`). Ausprägung `secondary` bleibt |
+| `apps/web/src/screens/TemplatePreview.tsx`, **Sperrmeldung der Gruppe** | **Vierte Stelle, in dieser Tabelle nachgetragen.** Sie fehlte hier; ux-designer hat sie in T-222 gemessen, der Orchestrator hat sie als O-JX zugeschlagen. Ohne sie stünde die Verwechslung, die der verborgene Zusatz beseitigt, eine Ebene höher unverändert da — **eine Behebung, die an drei von vier Flächen greift, sieht geschlossen aus und ist es nicht** (die Fehlerart aus T-195). Derselbe Zusatz, dieselbe Namensform, Bezug ist die Gruppe und nicht die Buchung |
 | `apps/web/src/showcase/ExportPreviewSection.tsx` | Die Musterseite zeigt beide Zustände dieser Zeile. Nach der Änderung sind es zwei Beschriftungen eines Knopfes und nicht zwei Knöpfe; die Bildunterschrift dort ist entsprechend zu berichtigen |
 | `apps/web/design/DESIGNSYSTEM.md` | **Regel U-5 und R-1 bis R-6** gehören in den Abschnitt über Knöpfe und Dialoge. Sie sind ab jetzt Hausregeln und nicht Befund einer Aufgabe |
 
@@ -1916,9 +2050,11 @@ Erweiterung, die diese Behebung **nicht braucht** — nach 11.2 fällt hier kein
 Welle zu bauen hieße, den Kern der Fokusrückkehr anzufassen, ohne dass ein Befund es verlangt. Als
 eigener Auftrag richtig, siehe F-11.
 
-**Reihenfolge.** Die drei Stellen (`ExportGroups`, `TemplatePreview`, `SkippedRow`) tragen denselben
-Satz und gehören in **eine** Aufgabe und in eine Hand — sonst heißt dieselbe Handlung im selben
-Produkt drei verschiedene Dinge, und der nächste Durchgang findet die Abweichung als neuen Befund.
+**Reihenfolge.** Die **vier** Stellen (`ExportGroups`, `TemplatePreview` — Zeile **und**
+Sperrmeldung —, `SkippedRow`) tragen denselben Satz und gehören in **eine** Aufgabe und in eine
+Hand — sonst heißt dieselbe Handlung im selben Produkt vier verschiedene Dinge, und der nächste
+Durchgang findet die Abweichung als neuen Befund. *(Bis T-222 standen hier drei; die vierte ist
+oben nachgetragen und nicht ans Ende gehängt — Regel T-7.)*
 
 ---
 
@@ -2003,3 +2139,46 @@ Bau am Kern der Fokusrückkehr; das ist bei O-CY-2 zweimal schiefgegangen.
 `SkippedRow` benutzen `secondary`. Ich habe in 11.8 die Angleichung an `secondary` vorgegeben, weil
 zwei von drei Stellen sie schon tragen und weil der Mangel dort dieselbe Folge hat. Wer widerspricht,
 widerspricht jetzt und nicht nach dem Bau.
+
+---
+
+# 12. Nachtrag T-229 (Welle AI) — nur das Verzeichnis, der Inhalt steht oben
+
+**Vorlage:** Board O-JZ; `.claude/team/reports/T-221-spec-ux-reviewer.md`;
+`.claude/team/reports/T-222-ux-designer.md` samt `docs/design/textbestand.md` 15.6;
+`.claude/team/reports/T-216-frontend-dev.md` Abschnitte 2 bis 4 und Annahme 4; E-087.
+
+**Dieser Abschnitt ist absichtlich kurz und trägt keine Entscheidung.** Regel T-7 (0.1) ist in
+derselben Aufgabe entstanden, in der sie angewandt wurde: Jede Berichtigung dieser Welle steht
+**in** dem Abschnitt, den sie berichtigt. Hier steht nur, wohin — damit ein Leser, der nach „was hat
+T-229 gemacht" sucht, nicht zweimal sucht.
+
+| Was | Wohin es gezogen wurde | Was dort verschwunden ist |
+|---|---|---|
+| Der Wirt reicht nicht bis in die Kinder (aus `textabbau-gestalt.md` 9.11) | dort 9.1 Punkt 2 **und** 9.8 als vierter Punkt | „baulich ausgeschlossen" ohne Grenze; „drei Grenzen" |
+| Innere Rolle fällt **mit** dem Wirt; diese Fläche ist `polite` | dort 9.7, Bündelzeile 2 | — (der Auftrag war stumm) |
+| Fokusring: Lauf- und Pixelzahlen aus T-216 | 10.4, 10.5 | „~9,2"; 5,99 / 6,27 als Laufwerte |
+| Die Kachelzahl im dunklen Slot | 10.11.2 | **1,11** → **1,15**, mit dem Grund daneben |
+| Der Dichterechenweg | 11.7 samt neuem 11.7.1 | die gemeinsame Spaltenachse und der „bereits bezahlte" Preis |
+| Die vierte Fläche desselben Satzes | 11.8, Tabelle und Reihenfolge | „drei Stellen" |
+
+**Zwei Regeln sind dabei entstanden und stehen vorn in 0.1, nicht hier:** **T-6** (nach einem
+Themenwechsel 600 ms warten, sonst mißt man den Übergang — aus T-216 Annahme 4) und **T-7** (eine
+Berichtigung steht an der Stelle, die sie berichtigt — aus O-JZ).
+
+**B-20 — die Fehlerart hinter beiden Befunden dieser Welle ist dieselbe, und sie hat einen Namen.**
+Beide Male habe ich eine **Eigenschaft angenommen, statt sie zu lesen**: einmal, daß ein Wirt in
+seine Kinder reicht, einmal, daß Rasterspalten sich über Zeilen teilen. Beide Annahmen sind
+plausibel, beide sind mit **einer** Zeile Beleg zu prüfen (`MessageHostContext` liest nur
+`InlineMessage`; `.eentries` ist Flex), und beide haben eine Zusage getragen, die danach falsch war.
+Das ist E-087 auf Bauformen statt auf Farben angewandt: **Wer eine Bauform behauptet, zitiert die
+Zeile, die sie herstellt.** Für Farben tut das der Lauf; für Bauformen gibt es keinen Lauf, nur das
+Zitat. Ich nehme das als Auflage an mich selbst und nicht als Vorschlag für einen Wächter — eine
+Prüfung, die „behauptete Bauformen" fände, müßte Prosa verstehen.
+
+**F-13 — offen an den Orchestrator, klein und nicht dringend:** `textabbau-gestalt.md` 9.1 nennt
+**76 Aufrufstellen** von `InlineMessage`. Diese Zahl stammt aus T-204 und ist von mir in dieser
+Aufgabe **nicht** nachgemessen worden (in diesem Lauf keine Schale, kein `git grep`); die Zahlen in
+der Vorlage desselben Abschnitts lauten 42 und 42. Sie trägt keine Entscheidung — der Satz gilt für
+„alle" Aufrufstellen, gleich wie viele es sind —, aber sie ist genau die Sorte Zahl, die beim
+nächsten Lesen als Beleg benutzt wird. Wer eine Schale hat, zählt sie in zwei Minuten nach.

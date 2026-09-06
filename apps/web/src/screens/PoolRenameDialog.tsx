@@ -84,6 +84,17 @@ import { POOL_PLACEMENT_SHORT } from "../lib/labels";
  * T-091, die auch „Vom Board nehmen" trägt (E-059).
  */
 
+/**
+ * Der Hinweis zum Zustand „unverändert" — **einmal**, für zwei Leser.
+ *
+ * Er stand bis T-220 als Zeichenkette in der Ternärkette von `fieldHint`. Seit
+ * die Absage auf einen Absendeversuch denselben Satz weiterführt, hat er zwei
+ * Leser, und zwei Abschriften desselben Satzes laufen beim nächsten
+ * Sprachdurchgang auseinander — die eine wird geändert, die andere übersehen
+ * (T-221 Z-74).
+ */
+const UNCHANGED_HINT = "Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog.";
+
 export interface PoolRenameDialogProps {
   readonly open: boolean;
   /** Die Regel, die umbenannt wird. `null` heißt: Es steht kein Dialog. */
@@ -157,8 +168,38 @@ export function PoolRenameDialog({
       : trimmed.length === 0
         ? "Ohne Namen geht es nicht: Er ist das, woran diese Regel auf dem Board und in den Pools erkennbar ist."
         : unchanged
-          ? "Der Name ist unverändert. Ändern Sie ihn — oder schließen Sie den Dialog."
+          ? UNCHANGED_HINT
           : "Der neue Name erscheint sofort überall, wo diese Regel genannt wird.";
+
+  /**
+   * Die Antwort auf einen Druck, den kein Feld beantwortet (T-211 Abschnitt
+   * 13.3, freigegeben in T-221 Z-71; E-093 Punkt 5).
+   *
+   * Seit T-220 ist „Speichern" hier **weich** gesperrt: anklickbar, tabulierbar,
+   * und die Eingabetaste kommt durch. Von den drei Sperrgründen dieses Dialogs
+   * beantworten zwei den Versuch aus sich heraus:
+   *
+   *  - **vergeben** — {@link fieldError} steht, das Feld erklärt sich für
+   *    ungültig, und der Versuch führt dorthin zurück;
+   *  - **leer** — {@link fieldHint} sagt von der ersten Sekunde an, warum es
+   *    ohne Namen nicht geht. Das ist P-9s zweite Hälfte, zustandsgebunden.
+   *
+   * Der dritte, **unverändert**, hatte bis hier einen Hinweis und keine Antwort:
+   * Wer drückt und denselben Satz wie vorher liest, weiß nicht, ob der Druck
+   * angekommen ist — der stille Zustandswechsel in seiner mildesten Form.
+   *
+   * **Ein Baustein, kein zweiter Satz.** Die Absage setzt ihren ersten Satz vor
+   * {@link UNCHANGED_HINT} und schreibt ihn nicht ab; deshalb ist der Hinweis
+   * seit dieser Änderung eine benannte Konstante und keine Zeichenkette in einer
+   * Ternärkette (T-221 Z-74). Zwei Fassungen desselben Satzes liefen sonst beim
+   * nächsten Sprachdurchgang auseinander.
+   *
+   * **Nicht durch den Fehlerkanal.** `TextField.error` setzte `aria-invalid` und
+   * die Fehlerfarbe — an einem Wert, der gültig und der gespeicherte ist. Der
+   * Satz geht deshalb an {@link FormDialogProps.submitRefusal} und von dort in
+   * eine Statusfläche ohne `aria-invalid` (E-093 Punkt 5, T-221 Z-73).
+   */
+  const submitRefusal = unchanged ? `Es gibt nichts zu speichern. ${UNCHANGED_HINT}` : undefined;
 
   /**
    * Der `PATCH` samt Meldung und Rückweg.
@@ -227,6 +268,7 @@ export function PoolRenameDialog({
       description={describeSurfaces(pool)}
       submitLabel="Speichern"
       submitDisabled={blocked}
+      {...(submitRefusal === undefined ? {} : { submitRefusal })}
       busy={mutation.busy}
       error={mutation.error}
       onSubmit={() => {
