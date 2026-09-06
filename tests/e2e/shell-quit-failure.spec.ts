@@ -44,6 +44,11 @@ const SHIM_ARGS: ShellShimArgs = {
   },
   // Die Zusage kommt nie an — genau der Fall, den die Frist behandelt.
   quit: 'hang',
+  // Kein `installedVersion` mehr nötig (E-077, T-166): Die Vorgabe von
+  // `installShellShim` ist umgedreht und löst ohne ausdrückliche Angabe
+  // nie mehr den Versionsdialog aus. Die Zeile, die T-150 hier gegen den
+  // damals zeitabhängigen Fehlschlag gesetzt hatte, war der Verband, nicht
+  // die Heilung — siehe `shell-shim.ts`, `installedVersion`.
 };
 
 test.describe('O-AF — „Takt beenden" scheitert nicht mehr stumm', () => {

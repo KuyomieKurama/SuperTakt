@@ -6,6 +6,7 @@ import { useDensity, useThemePreference, type Density, type ThemePreference } fr
 import { BoardSection } from "./BoardSection";
 import { ControlsSection } from "./ControlsSection";
 import { DataSection } from "./DataSection";
+import { DeadlineSection } from "./DeadlineSection";
 import { ExportDirectorySection } from "./ExportDirectorySection";
 import { WorkstationSection } from "./WorkstationSection";
 import { ExportPreviewSection } from "./ExportPreviewSection";
@@ -47,6 +48,7 @@ const NAV: readonly NavEntry[] = [
   { id: "huelle", label: "10 — Wenn Takt nicht startet" },
   { id: "inventar", label: "11 — Komponenteninventar" },
   { id: "fassung", label: "12 — Neuere Fassung (A-18)" },
+  { id: "frist", label: "13 — Frist und Anhänge (A-19)" },
 ];
 
 /**
@@ -169,6 +171,7 @@ function ShowcasePage() {
           <ShellStateSection />
           <InventorySection />
           <UpdateNoticeSection />
+          <DeadlineSection />
         </main>
       </div>
     </div>

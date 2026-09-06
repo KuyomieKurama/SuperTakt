@@ -41,12 +41,70 @@ import { readStartupHandshake, watchParentLink } from './access/session-secret.t
 import { createFileTokenStore } from './access/token-store.ts';
 import { bringDatabaseUpToDate, describeStoreOpenFailure } from './startup.ts';
 import { startTaskpaneServer } from './taskpane/server.ts';
+import { sweepOrphanedImages } from './usecases/image-sweep.ts';
+import type { ReleaseSourcePort } from './version/source.ts';
+import { VERSION_CHECK_START_DELAY_MS } from './version/checker.ts';
 
 /** Beendigungscodes, damit die Hülle den Grund unterscheiden kann. */
 const EXIT_CONFIG = 78;
 const EXIT_BIND = 74;
 
-export async function main(): Promise<void> {
+/**
+ * Was der **Aufrufer im selben Prozeß** an diesem Start noch bestimmen darf.
+ *
+ * ===========================================================================
+ * Warum es diesen Parameter gibt (Befund T-145-1)
+ * ===========================================================================
+ *
+ * Der Kopf dieser Datei sagte bis T-146: „Damit stellt kein Nachweispfad, kein
+ * Prüffall und keine Messung eine Verbindung nach außen her." Gemessen war das
+ * **Gegenteil**: `proof:access` startet `src/index.ts`, also genau diesen
+ * Start, wartet länger als {@link VERSION_CHECK_START_DELAY_MS} — und
+ * `ss -tnp` zeigte während des Laufs `ESTAB … 140.82.121.6:443`, also
+ * `api.github.com`.
+ *
+ * Drei Folgen, alle unerwünscht: ein **Lebenszeichen** (R-19 Punkt 3) aus
+ * jedem `pnpm check` und damit auch aus dem Auslieferungstor; der Mitverbrauch
+ * der 60 Anfragen je Stunde und Quelladresse (T-136-5); und eine Zusage im
+ * Quelltext, die nicht stimmt. **Der Nachweis, der die Vertrauensgrenze mißt,
+ * überschritt sie selbst.**
+ *
+ * ===========================================================================
+ * Warum ein Parameter und ausdrücklich **keine** Umgebungsvariable
+ * ===========================================================================
+ *
+ * Eine Umgebungsvariable wäre von außerhalb des Prozesses setzbar — und genau
+ * das verbietet A-18.3: „nicht aus einer Umgebungsvariablen, nicht aus einem
+ * Argument der Befehlszeile". Wer Takt mit gesetzter Variable startete, hätte
+ * die Adresse verlegt, gegen die geprüft wird; das ist derselbe Schaden wie
+ * `set USERNAME=fremder` bei B-8.1.
+ *
+ * Ein **Parameter dieser Funktion** ist es nicht. Er liegt im Prozeß, wie
+ * jeder andere Port dieses Zusammenbaus, und der ausgelieferte Einstiegspunkt
+ * `src/index.ts` ruft `main()` **ohne Argument**. Es gibt damit keinen Weg von
+ * außen zu einer anderen Adresse: nicht über eine Route, nicht über eine
+ * Einstellung, nicht über eine Datei daneben.
+ *
+ * Das ist dieselbe Naht, die E-066 Punkt 1 beschreibt („der Prüflauf baut sich
+ * seinen eigenen Zusammenbau") und die T-142 in
+ * `tests/e2e/support/version-check-entry.ts` schon benutzt. Der Unterschied
+ * hier ist, daß **nicht** ein zweiter Start nachgebaut wird: Der Prüflauf
+ * fährt denselben `main()` — dieselbe Migration, dieselbe Rechteprüfung,
+ * dasselbe Aufräumen, denselben Aufgabenbereich —, und der einzige Unterschied
+ * ist der eingesetzte Port. Ein nachgebauter Start wäre ein zweiter Weg, der
+ * vom echten abweichen kann, ohne daß ein Fall es mißt.
+ */
+export interface MainOptions {
+  /**
+   * Woher die zuletzt veröffentlichte Fassung kommt (E-066 Punkt 1).
+   *
+   * Ohne Angabe: die feste Adresse im Erzeugnis (A-V-1). `src/index.ts` gibt
+   * nichts an — deshalb ist das Erzeugnis von diesem Parameter unberührt.
+   */
+  readonly releaseSource?: ReleaseSourcePort;
+}
+
+export async function main(options: MainOptions = {}): Promise<void> {
   const logger = createLogger();
 
   /**
@@ -144,7 +202,16 @@ export async function main(): Promise<void> {
       sessionSecret: handshake.secret,
       windowsUser: handshake.windowsUser,
       databaseLocation: databaseFilePath(paths.dir),
+      // Die Bildkopien der Anhänge liegen neben dem Bestand (E-018, E-071
+      // Punkt 2, A-A-17) — derselbe Ort, dieselben Rechte, und beide kommen
+      // aus derselben Auflösung und nicht aus einer Anfrage.
+      appDataDir: paths.dir,
       logger,
+      // Ohne Angabe bleibt die feste Adresse aus `version/source.ts` die
+      // einzige (A-V-1). `src/index.ts` gibt nichts an; wer hier etwas
+      // einsetzt, tut es im selben Prozeß und nicht von außen — siehe
+      // {@link MainOptions}.
+      ...(options.releaseSource === undefined ? {} : { releaseSource: options.releaseSource }),
     });
   } catch (error) {
     const diagnosis = describeStoreOpenFailure(error);
@@ -192,6 +259,28 @@ export async function main(): Promise<void> {
         `file_permissions_wide files=${permissions.tooPermissive.length}`,
       );
     }
+    /*
+     * **Nicht messbar ist ein eigener Satz** (T-146, Befund T-143 S-4).
+     *
+     * Bis dahin verschwand jeder gescheiterte `stat` in einem `catch {}`, und
+     * das Protokoll schwieg genauso wie die Einstellungen: null zu weite
+     * Dateien, also alles in Ordnung. Auf einer eingehängten Freigabe oder in
+     * einem Container mit engem `x`-Recht auf dem Elternordner war das eine
+     * Entwarnung, für die niemand nachgesehen hatte.
+     *
+     * Der Fall ist **kein** `warn`: Es ist nicht bekannt, daß etwas offen
+     * liegt — es ist bekannt, daß man es nicht weiß. Deshalb `info`, mit dem
+     * Grund im Schlüssel und ohne Pfad im Text (B-2.4 Punkt 4). Sichtbar wird
+     * derselbe Zustand in den Einstellungen als `null` und nicht als `0`.
+     */
+    if (permissions.unmeasured.length > 0) {
+      logger.lifecycle(
+        'info',
+        `Die Rechte von ${permissions.unmeasured.length} Datei(en) des Datenbestands ließen sich nicht lesen. ` +
+          'Takt sagt darüber nichts — weder dass sie eng liegen noch dass sie offen liegen.',
+        `file_permissions_unmeasured files=${permissions.unmeasured.length}`,
+      );
+    }
   }
 
   // Liegengebliebene Nachbardateien eines abgebrochenen Exportlaufs entfernen.
@@ -205,6 +294,45 @@ export async function main(): Promise<void> {
         logger.lifecycle('info', `${swept} unvollständige Exportdatei(en) aus einem Abbruch entfernt.`);
       }
     }
+  }
+
+  /*
+   * Bildkopien ohne Eigentümer entfernen (A-A-18).
+   *
+   * Derselbe Anlass wie eine Zeile höher — etwas ist liegengeblieben, und es
+   * ist Kundenmaterial —, nur die andere Hälfte: Dort eine halbe Exportdatei,
+   * hier eine Bildkopie, deren Anhang es nicht mehr gibt. Sie entsteht, wenn
+   * das Entfernen scheitert (T-159) oder eine Migration zurückgeht.
+   *
+   * **Hier und nicht später:** Der Lauf liest erst das Verzeichnis und fragt
+   * dann den Bestand. Solange keine Route zuhört, kann zwischen beiden
+   * Schritten kein Anhang entstehen — im Hintergrund neben laufenden Anfragen
+   * hätte er ein Rennen, das eine frische Kopie kosten könnte. Die ganze
+   * Begründung steht in `usecases/image-sweep.ts`.
+   *
+   * **Und der Anschlag auf den Port trägt diese Zusage nicht** (A-A-36): Das
+   * `EADDRINUSE` weiter unten greift erst beim Lauschen, also nach dieser
+   * Stelle. Getragen wird sie von `tauri_plugin_single_instance` in der Hülle,
+   * einem anderen Erzeugnis — nachzulesen im Kopf von `image-sweep.ts`, damit
+   * beide Seiten dieselbe Begründung führen.
+   *
+   * Er kann den Start nicht verhindern: Sein Rückgabewert wird nicht gelesen,
+   * und ohne Antwort des Bestands fasst er nichts an.
+   */
+  if (context !== null) {
+    await sweepOrphanedImages(
+      {
+        attachmentKinds: () =>
+          context.transactions.inTransaction((unit) => unit.attachments.knownKinds()),
+        listImages: () => context.attachmentBlobs.listImages(),
+        knownImageTargets: (names) =>
+          context.transactions.inTransaction((unit) => unit.attachments.knownImageTargets(names)),
+        imageCount: () =>
+          context.transactions.inTransaction((unit) => unit.attachments.imageCount()),
+        removeImage: (name) => context.attachmentBlobs.removeImage(name),
+      },
+      logger,
+    );
   }
 
   await tokens.load(new Date());
@@ -337,10 +465,20 @@ export async function main(): Promise<void> {
    * E-069, R-19).
    *
    * Sie steht hier unten und nicht im Zusammenbau: `compose()` baut den
-   * Prüfer, startet ihn aber nicht. Damit stellt kein Nachweispfad, kein
-   * Prüffall und keine Messung eine Verbindung nach außen her — nur der echte
-   * Prozess tut das, und auch der erst ein paar Sekunden nach dem Start
-   * (Begründung in `version/checker.ts`).
+   * Prüfer, startet ihn aber nicht. Wer den Dienst nur **zusammenbaut** —
+   * `proof:openapi`, `proof:route-policy`, jeder Prüffall mit `compose()` —
+   * schickt damit kein Lebenszeichen (R-19 Punkt 3).
+   *
+   * **Wer `main()` ruft, schickt eines** — und bis T-146 stand hier die
+   * unzutreffende Behauptung, das täte niemand außer dem echten Prozeß.
+   * `proof:access` startet `src/index.ts`, also genau diesen Start, und
+   * `ss -tnp` hat die Verbindung nach `api.github.com` während des Laufs
+   * gemessen (T-145-1). Die Naht dafür ist jetzt benannt: {@link MainOptions}
+   * nimmt den Port entgegen, `src/index.ts` gibt keinen an, und der Prüflauf
+   * setzt eine Abholfunktion ein, die den Prozeß nicht verläßt.
+   *
+   * Der Takt bleibt unverändert: die erste Anfrage ein paar Sekunden nach dem
+   * Start (Begründung in `version/checker.ts`).
    *
    * Was danach geschieht, ist wenig: eine Anfrage, eine geprüfte
    * Fassungsbezeichnung im Arbeitsspeicher, danach höchstens eine Anfrage je

@@ -15,7 +15,7 @@ import {
   type ButtonVariant,
 } from "../components/Primitives";
 import { Select, type SelectEntry } from "../components/Select";
-import { TextField } from "../components/FormDialog";
+import { FormDialog, TextField } from "../components/FormDialog";
 import { Section, SubHeading } from "./Section";
 
 const SAMPLE_OPTIONS = [
@@ -52,6 +52,27 @@ const GROUPED_OPTIONS: readonly SelectEntry[] = [
 
 const VARIANTS: readonly ButtonVariant[] = ["primary", "secondary", "ghost", "danger"];
 
+/**
+ * Die Zustände des Formulardialogs, die diese Seite vorführt (O-BF, T-152).
+ *
+ * Bis T-152 zeigte die Musterseite **keinen** Formulardialog — obwohl er die
+ * meistbenutzte modale Fläche des Produkts ist: Todo anlegen, Timer stoppen,
+ * Spalte anlegen, Vorlage bearbeiten. Wer das Aussehen abnehmen sollte, musste
+ * die Anwendung dafür starten.
+ *
+ * Vorgeführt wird nicht der Dialog, sondern seine **Zustände** (Abschnitt 15):
+ * bedienbar, mit gesperrter Absendung, arbeitend und nach einer Absage des
+ * Dienstes. Leer gibt es hier nicht — ein Formulardialog ohne Feld wäre keiner.
+ */
+type FormDemo = "none" | "ready" | "blocked" | "busy" | "error";
+
+const FORM_DEMO_LABEL: Record<Exclude<FormDemo, "none">, string> = {
+  ready: "Bedienbar",
+  blocked: "Pflichtfeld leer",
+  busy: "Wird gespeichert",
+  error: "Dienst hat abgelehnt",
+};
+
 const DEMO_MENU: readonly MenuEntry[] = [
   { id: "new", label: "Neues Todo", icon: "plus", shortcut: "Strg+N", onSelect: () => undefined },
   { id: "export", label: "Export starten", icon: "download", shortcut: "Strg+E", onSelect: () => undefined },
@@ -70,9 +91,12 @@ const DEMO_MENU: readonly MenuEntry[] = [
 export function ControlsSection() {
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<"none" | "default" | "danger">("none");
+  const [form, setForm] = useState<FormDemo>("none");
   const [sample, setSample] = useState<"alle" | "offen" | "exportiert">("alle");
   const [grouped, setGrouped] = useState("entry.callNumber");
   const [text, setText] = useState("Nord AG — Rollout Standort 3");
+  const [formTitle, setFormTitle] = useState("Rollout Standort 3 abnehmen");
+  const [formStatus, setFormStatus] = useState("entry.callNumber");
 
   return (
     <Section
@@ -248,6 +272,27 @@ export function ControlsSection() {
       </div>
 
       <Card
+        title="Formulardialog"
+        description="Die meistbenutzte modale Fläche des Produkts: Todo anlegen, Timer stoppen, Spalte anlegen. Vier Zustände, jeder einzeln aufrufbar — der Dialog ist derselbe, nur seine Antwort auf den Dienst wechselt."
+      >
+        <div className="demo-row">
+          {(Object.keys(FORM_DEMO_LABEL) as ReadonlyArray<Exclude<FormDemo, "none">>).map(
+            (state) => (
+              <Button key={state} variant="secondary" onClick={() => setForm(state)}>
+                {FORM_DEMO_LABEL[state]}
+              </Button>
+            ),
+          )}
+        </div>
+        <p className="muted" style={{ marginTop: "var(--space-3)", fontSize: "var(--text-xs)" }}>
+          Mit der Tastatur zu prüfen: Beim Öffnen steht der Fokus im <strong>ersten Feld</strong>,
+          nicht auf dem Schließkreuz. Der Tabulator bleibt im Dialog. Escape schließt — außer
+          während „Wird gespeichert“. Ist die Auswahlliste aufgeklappt, schließt Escape
+          <em> nur die Liste</em> und nicht den Dialog dahinter.
+        </p>
+      </Card>
+
+      <Card
         title="Ladezustände"
         description="Ab etwa 300 Millisekunden bekommt jede Aktion eine Rückmeldung. Platzhalterflächen belegen genau den Platz des späteren Inhalts, damit nichts springt."
       >
@@ -353,6 +398,56 @@ export function ControlsSection() {
         onCancel={() => setDialog("none")}
         onConfirm={() => setDialog("none")}
       />
+
+      {/*
+        Ein Dialog für alle vier Zustände (O-BF, T-152).
+
+        Vier eigene Dialoge nebeneinander hätten vorgeführt, wie vier Dialoge
+        aussehen — nicht, wie **einer** auf vier Lagen antwortet. Das
+        Auswahlfeld steht mit im Rumpf, weil die aufgeklappte Liste im Portal
+        hängt und der einzige Weg ist, die Ebenenfrage zu sehen: Escape gehört
+        der Liste, solange sie offen ist.
+      */}
+      <FormDialog
+        open={form !== "none"}
+        title="Neues Todo"
+        description="Titel und Status sind Pflicht. Alles Weitere lässt sich später ergänzen."
+        submitLabel="Anlegen"
+        busy={form === "busy"}
+        submitDisabled={form === "blocked"}
+        error={
+          form === "error"
+            ? "Ein Todo mit diesem Titel gibt es schon. Es wurde nichts angelegt."
+            : null
+        }
+        /*
+          Seit T-175 traegt das Formular `noValidate` (E-084): Ein wirklich leeres
+          Pflichtfeld faengt Chromium nicht mehr ab, der Absendeversuch erreicht die
+          Anwendung. Auf der Musterseite muss er deshalb dieselbe Antwort bekommen
+          wie im Produkt — sonst zeigte sie einen Dialog, der leere Pflichtfelder
+          stillschweigend annimmt, und genau das gibt es in Takt nicht mehr.
+          „blocked" ist der bereits vorhandene Zustand mit der Meldung am Feld.
+        */
+        onSubmit={() => setForm(formTitle.trim().length === 0 ? "blocked" : "none")}
+        onCancel={() => setForm("none")}
+      >
+        <TextField
+          label="Titel"
+          required
+          value={form === "blocked" ? "" : formTitle}
+          onChange={setFormTitle}
+          {...(form === "blocked"
+            ? { error: "Ein Titel ist Pflicht. Ohne ihn lässt sich das Todo nicht wiederfinden." }
+            : {})}
+        />
+        <Select
+          label="Feld der Vorlage"
+          value={formStatus}
+          onChange={setFormStatus}
+          options={GROUPED_OPTIONS}
+          hint="Aufklappen und Escape drücken: Es schließt die Liste, nicht den Dialog."
+        />
+      </FormDialog>
     </Section>
   );
 }

@@ -73,6 +73,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/*
+ * Der Leser und die Regel liegen seit T-188 in `fetch-scan.mjs`, weil
+ * `proof:callers` sie ebenfalls braucht und sie dort bis dahin in einer
+ * **blinden** zweiten Fassung stand (A-A-40). Eine Regel, zwei Läufe, zwei
+ * Gegenprobenreihen — E-086 Punkt 1.
+ */
+import { mentionsGlobalFetch, stripComments } from './fetch-scan.mjs';
+
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 
 let passed = 0;
@@ -147,78 +155,15 @@ function walk(directory, out) {
   }
 }
 
-/**
- * Entfernt Kommentare, läßt Zeichenketten stehen.
- *
- * Ein Zeichenschritt statt eines regulären Ausdrucks: Ein Ausdruck kann nicht
- * unterscheiden, ob `//` in einer Zeichenkette steht — und genau dort steht es
- * in jeder Adresse dieses Vorhabens. Behandelt werden `//`, `/* … *\/`,
- * `'…'`, `"…"`, Vorlagenzeichenketten und Rusts `r"…"` und `r#"…"#`.
- *
- * Was übrig bleibt, ist **Code**. Die Beschreibung einer Datei kann damit
- * nennen, wogegen sie geschrieben ist, ohne den Nachweis rot zu machen.
+/*
+ * `stripComments` stand bis T-188 hier. Sie liegt jetzt in `fetch-scan.mjs`,
+ * zusammen mit der Regel über das globale `fetch`: `proof:callers` braucht
+ * beides und trug bis dahin eine eigene, blinde Fassung (A-A-40). Sie ist
+ * dabei **längen- und zeilentreu** geworden — ein entfernter Kommentar
+ * hinterläßt Leerzeichen statt gar nichts —, damit ein Befund die Zeile
+ * nennen kann. Für die Prüfungen hier ändert das nichts: Sie fragen nach
+ * Vorkommen, nicht nach Abständen.
  */
-export function stripComments(text) {
-  let out = '';
-  let index = 0;
-  const length = text.length;
-
-  while (index < length) {
-    const char = text[index];
-    const next = text[index + 1];
-
-    if (char === '/' && next === '/') {
-      while (index < length && text[index] !== '\n') index += 1;
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      index += 2;
-      while (index < length && !(text[index] === '*' && text[index + 1] === '/')) index += 1;
-      index += 2;
-      continue;
-    }
-    // Rust: r"…" und r#…"…"#…
-    if (char === 'r' && (next === '"' || next === '#')) {
-      let hashes = 0;
-      let cursor = index + 1;
-      while (text[cursor] === '#') {
-        hashes += 1;
-        cursor += 1;
-      }
-      if (text[cursor] === '"') {
-        const closing = `"${'#'.repeat(hashes)}`;
-        const end = text.indexOf(closing, cursor + 1);
-        const stop = end === -1 ? length : end + closing.length;
-        out += text.slice(index, stop);
-        index = stop;
-        continue;
-      }
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      out += char;
-      index += 1;
-      while (index < length) {
-        const inner = text[index];
-        out += inner;
-        index += 1;
-        if (inner === '\\') {
-          if (index < length) {
-            out += text[index];
-            index += 1;
-          }
-          continue;
-        }
-        if (inner === char) break;
-      }
-      continue;
-    }
-
-    out += char;
-    index += 1;
-  }
-
-  return out;
-}
 
 function collectTree() {
   const files = [];
@@ -489,21 +434,32 @@ function checkNoDownload(files) {
  * Abholfunktion — läge sie dort, wäre der Netzaufruf eine Anfrage weit von
  * jedem lokalen Prozess entfernt.
  */
-/**
- * Das globale `fetch` als **Wert**, nicht als Wortbestandteil.
+/*
+ * ===========================================================================
+ * Wo die Regel steht, und was sie bis T-146 nicht sah (Befund T-143 S-1)
+ * ===========================================================================
  *
- * Ausgenommen sind drei Schreibweisen, die kein Ausgang sind und im Bestand
- * vorkommen: `app.fetch` und `options.fetch` (ein Feld, kein globales
- * `fetch`), `fetch:` als Schlüssel eines Objektliterals (so übergibt `main.ts`
- * die Kette an den Adaptor-Server) und `sec-fetch-site` in einer Kopfzeile.
- * Ohne diese Ausnahmen zählte der Nachweis Wörter statt Ausgänge.
+ * `mentionsGlobalFetch` liegt seit T-188 in `fetch-scan.mjs`; dort steht auch
+ * die ganze Herleitung. Kurz, damit dieser Lauf ohne Sprung lesbar bleibt:
+ *
+ * Bis T-146 stand hier `/(?<![\w.$-])fetch\b(?!\s*:)/` — ein Ausdruck mit
+ * zwei Ausnahmen, und beide waren zu breit. Der Punkt in der Rückschau schloß
+ * **jedes** `.fetch` aus, um `app.fetch` und `options.fetch` durchzulassen;
+ * damit war `globalThis.fetch(u)` und `window.fetch(u)` blind. Die Vorausschau
+ * auf `:` schloß jedes `fetch:` aus, um **einen** Eintrag in `main.ts`
+ * durchzulassen; damit war auch `const { fetch: f } = globalThis` blind. Und
+ * die Gegenprobe deckte die Lücke nicht ab: Sie benutzte `fetch(` — genau die
+ * Schreibweise, die ohnehin erkannt wurde.
+ *
+ * Derselbe Ausdruck stand bis T-188 ein zweites Mal in `proof-callers.mjs`
+ * und war dort **noch** blind, mit null Gegenproben (A-A-40). Deshalb liegt
+ * die Regel jetzt einmal und wird von beiden Läufen geholt.
  */
-const FETCH_MENTION = /(?<![\w.$-])fetch\b(?!\s*:)/;
 
 function checkSingleExit(files) {
   const findings = [];
   const callers = files.filter(
-    (file) => file.path.startsWith('apps/local-api/src/') && FETCH_MENTION.test(file.code),
+    (file) => file.path.startsWith('apps/local-api/src/') && mentionsGlobalFetch(file.code),
   );
   for (const file of callers) {
     if (file.path !== API_URL_FILE) findings.push(`${file.path}: nennt \`fetch\` außerhalb der einen Stelle`);
@@ -556,12 +512,28 @@ const CHECKS = [
 ];
 
 /**
- * Zu jeder Prüfung ein Verstoß, der sie rot machen **muß**.
+ * Zu jeder Prüfung mindestens ein Verstoß, der sie rot machen **muß**.
  *
  * Der Verstoß ist jeweils der, den jemand versehentlich bauen würde: die
  * Adresse ein zweites Mal, `html_url` „weil es praktisch ist", die Adresse an
  * den Öffnen-Befehl gereicht, ein Aktualisierungs-Zusatz, der Netzaufruf in
  * einer Route, `response.json()` statt des Lesestroms.
+ *
+ * ===========================================================================
+ * Warum „ausgang" **vier** Gegenproben hat und nicht eine (Befund T-143 S-1)
+ * ===========================================================================
+ *
+ * Weil eine Gegenprobe, die die Lücke des Nachweises nicht trifft, keine ist.
+ *
+ * Bis T-146 stand hier für „ausgang" genau ein Verstoß, und er benutzte
+ * `fetch(` — die eine Schreibweise, die der alte Ausdruck ohnehin erkannte.
+ * Die drei, die er **nicht** erkannte (`globalThis.fetch`, `window.fetch`,
+ * eine Zerlegung), standen in keiner Gegenprobe. Der Wächter war blind, und
+ * sein Wächter sah dieselbe Stelle nicht.
+ *
+ * Deshalb steht jetzt jede der vier Schreibweisen als eigener Verstoß da. Sie
+ * sind nicht Vollständigkeit um ihrer selbst willen: Es sind genau die vier,
+ * die T-143 gegen den alten Ausdruck gemessen hat.
  */
 const COUNTER_PROOFS = {
   adressen: {
@@ -580,10 +552,28 @@ const COUNTER_PROOFS = {
     path: 'apps/desktop/src/eingesetzt.ts',
     source: `import { downloadAndInstall } from '@tauri-apps/plugin-updater';\n`,
   },
-  ausgang: {
-    path: 'apps/local-api/src/routes/eingesetzt.ts',
-    source: `export const laden = () => fetch('https://beispiel.invalid/x');\n`,
-  },
+  ausgang: [
+    {
+      name: 'nacktes `fetch(`',
+      path: 'apps/local-api/src/routes/eingesetzt.ts',
+      source: `export const laden = () => fetch('https://beispiel.invalid/x');\n`,
+    },
+    {
+      name: '`globalThis.fetch(` — die Lücke aus T-143 S-1',
+      path: 'apps/local-api/src/routes/eingesetzt.ts',
+      source: `export const laden = () => globalThis.fetch('https://beispiel.invalid/x');\n`,
+    },
+    {
+      name: '`window.fetch(`',
+      path: 'apps/local-api/src/routes/eingesetzt.ts',
+      source: `export const laden = () => window.fetch('https://beispiel.invalid/x');\n`,
+    },
+    {
+      name: 'eine Zerlegung: `const { fetch: holen } = globalThis`',
+      path: 'apps/local-api/src/routes/eingesetzt.ts',
+      source: `const { fetch: holen } = globalThis;\nexport const laden = () => holen('https://beispiel.invalid/x');\n`,
+    },
+  ],
   optionen: {
     path: API_URL_FILE,
     // Dieselbe Datei, aber ohne ihre Zusagen: der Verstoß ist die Auslassung.
@@ -636,17 +626,38 @@ try {
   // -------------------------------------------------------------------------
 
   for (const definition of CHECKS) {
-    const injection = COUNTER_PROOFS[definition.id];
-    const dirty = [
-      ...tree.filter((file) => file.path !== injection.path),
-      { path: injection.path, source: injection.source, code: stripComments(injection.source) },
-    ];
-    const findings = definition.run(dirty);
-    check(
-      `„${definition.name}" wird rot, wenn man den Verstoß einsetzt`,
-      findings.length > 0,
-      'der eingesetzte Verstoß blieb unbemerkt',
-    );
+    const entry = COUNTER_PROOFS[definition.id];
+    // Eine Prüfung darf mehr als einen Verstoß haben. `ausgang` hat vier, und
+    // die Begründung steht bei COUNTER_PROOFS.
+    const injections = Array.isArray(entry) ? entry : [entry];
+    for (const injection of injections) {
+      const dirty = [
+        ...tree.filter((file) => file.path !== injection.path),
+        { path: injection.path, source: injection.source, code: stripComments(injection.source) },
+      ];
+      const findings = definition.run(dirty);
+      const label =
+        injection.name === undefined
+          ? `„${definition.name}" wird rot, wenn man den Verstoß einsetzt`
+          : `„${definition.name}" wird rot bei: ${injection.name}`;
+      check(label, findings.length > 0, 'der eingesetzte Verstoß blieb unbemerkt');
+    }
+  }
+
+  /*
+   * Und die andere Richtung: Die drei Nicht-Ausgänge dürfen **nicht** rot
+   * machen. Ohne diese Hälfte wäre ein Ausdruck, der auf jedes Vorkommen von
+   * `fetch` anspringt, ebenfalls grün in Abschnitt 1 — und rot in Abschnitt 2,
+   * an einer Stelle, die niemand geändert hat.
+   */
+  for (const [name, code] of [
+    ['`app.fetch` in einem Objektliteral', 'const server = { fetch: app.fetch };'],
+    ['`app.fetch` als Wert', 'const handler = app.fetch;'],
+    ['`options.fetch` als Port', 'const call = options.fetch ?? undefined;'],
+    ['`sec-fetch-site` als Kopfzeile', "const v = c.req.header('sec-fetch-site');"],
+    ['`fetch_context_not_allowed` als Schlüssel', "return { reason: 'fetch_context_not_allowed' };"],
+  ]) {
+    check(`kein Ausgang, und wird auch nicht dafür gehalten: ${name}`, !mentionsGlobalFetch(code), code);
   }
 
   // -------------------------------------------------------------------------

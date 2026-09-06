@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { Dialog } from "@ark-ui/react/dialog";
 import { cx } from "../lib/cx";
-import { focusFirstWithin, keepTabInside } from "../lib/focus";
+import { DialogSurface } from "./DialogSurface";
 import { Button, IconButton } from "./Primitives";
 
 /**
@@ -14,7 +15,12 @@ import { Button, IconButton } from "./Primitives";
  *
  * Was er mit den beiden anderen teilt, ist alles, was zugänglich sein muss:
  * `role="dialog"`, `aria-modal`, Fokus beim Öffnen hinein und beim Schließen
- * zurück zum Auslöser, Tabulatorschleife (SC 2.4.3), Escape schließt.
+ * zurück zum Auslöser, Tabulatorschleife (SC 2.4.3), Escape schließt. Seit
+ * T-152 kommt das aus der Zustandsmaschine unter {@link DialogSurface}
+ * (E-076 Stufe 1) und nicht mehr aus eigener Tastaturbehandlung.
+ *
+ * Ohne eigene Angabe nimmt sie das erste tabulierbare Element im Kasten, und
+ * das ist hier das Schließkreuz — dieselbe Wahl wie vorher.
  */
 export interface InfoDialogProps {
   readonly open: boolean;
@@ -39,79 +45,34 @@ export function InfoDialog({
   wide = false,
   onClose,
 }: InfoDialogProps) {
-  const titleId = useId();
-  const descriptionId = `${titleId}-description`;
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    openerRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    focusFirstWithin(dialogRef.current);
-    return () => {
-      openerRef.current?.focus();
-    };
-  }, [open]);
-
-  const onKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      /*
-       * Eine Taste, die eine aufgeklappte Liste schon behandelt hat, gehört
-       * nicht mehr dem Dialog (T-059).
-       *
-       * Die Listen von Ark UI hängen im Portal am Dokumentkörper, stehen im
-       * React-Baum aber unter diesem Dialog — ihre Tastenanschläge laufen
-       * deshalb hier vorbei. Zag behandelt Escape in der Erfassungsphase und
-       * setzt `preventDefault`; ohne diese Abfrage schlösse ein Escape in der
-       * offenen Liste **beides**: die Liste und den Dialog dahinter.
-       */
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      keepTabInside(dialogRef.current, event);
-    },
-    [onClose],
-  );
-
-  if (!open) return null;
-
   return (
-    <div className="scrim" onKeyDown={onKeyDown}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        {...(description === undefined ? {} : { "aria-describedby": descriptionId })}
-        className={cx("dialog", "dialog--form", wide && "dialog--wide")}
-      >
-        <div className="dialog__head dialog__head--form">
-          <div className="grow">
-            <h2 className="dialog__title" id={titleId}>
-              {title}
-            </h2>
-            {description === undefined ? null : (
-              <p className="dialog__lead" id={descriptionId}>
-                {description}
-              </p>
-            )}
-          </div>
-          <IconButton label="Dialog schließen" icon="x" size="sm" onClick={onClose} />
+    <DialogSurface
+      open={open}
+      onDismiss={onClose}
+      className={cx("dialog", "dialog--form", wide && "dialog--wide")}
+    >
+      <div className="dialog__head dialog__head--form">
+        <div className="grow">
+          <Dialog.Title className="dialog__title">{title}</Dialog.Title>
+          {description === undefined ? null : (
+            <Dialog.Description asChild>
+              <p className="dialog__lead">{description}</p>
+            </Dialog.Description>
+          )}
         </div>
-
-        <div className="dialog__body dialog__body--form">{children}</div>
-
-        <div className="dialog__footer">
-          {actions}
-          <Button variant="primary" onClick={onClose}>
-            {closeLabel}
-          </Button>
-        </div>
+        <Dialog.CloseTrigger asChild>
+          <IconButton label="Dialog schließen" icon="x" size="sm" />
+        </Dialog.CloseTrigger>
       </div>
-    </div>
+
+      <div className="dialog__body dialog__body--form">{children}</div>
+
+      <div className="dialog__footer">
+        {actions}
+        <Button variant="primary" onClick={onClose}>
+          {closeLabel}
+        </Button>
+      </div>
+    </DialogSurface>
   );
 }

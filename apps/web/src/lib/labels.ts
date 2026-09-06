@@ -435,7 +435,7 @@ export const POOL_EXPORT_LABEL: Readonly<Record<PoolExportFilter, string>> = {
  * deshalb aus, statt ihn zu ueberspielen.
  */
 export const POOL_EXPORT_NOT_BILLED_HINT =
-  "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ (E-047) trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
+  "Ausgebuchte Buchungen zählen mit: Eine Buchung im Anzeigezustand „Nicht abgerechnet“ trägt denselben Exportstatus wie eine exportierte und steht deshalb in dieser Spalte, obwohl sie nie in einer Datei war.";
 
 /**
  * Derselbe Widerspruch, kurz — an der **Lese**flaeche (W-7 aus R-2a).
@@ -480,17 +480,24 @@ export const POOL_AXIS_NEUTRAL_HINT = "Schränkt nicht ein";
  * Wer den alten Satz gelesen hat, sucht die nach einem Timerstart verschwundene
  * Karte bei den Tags. Dort ist sie nicht.
  *
- * Deshalb drei Fassungen, je nach Platz, und keine vierte:
+ * Seit T-181 (ST-05) stehen es **zwei** Fassungen an **zwei** Stellen, und
+ * das ist die ganze Aufklaerung im Produkt:
  *
- *  - {@link RULE_IS_A_RULE} — der Satz, wo Platz fuer eine Aufzaehlung ist.
- *  - {@link RULE_NOT_A_PLACE} — die Kurzform fuer Kopfzeilen und Menues.
- *  - {@link RULE_WHAT_MOVES_A_CARD} — was eine Karte bewegt, statt „die Tags".
+ *  - {@link RULE_IS_A_RULE} — die **Definition**, im Einrichtungsdialog des
+ *    Boards. Dort entsteht eine Spalte; dorthin gehoert, was eine ist.
+ *  - {@link RULE_WHAT_MOVES_A_CARD} — das **Verhalten**, als `lead` des
+ *    Boards. Dort wird beobachtet, dass sich nichts ziehen laesst.
+ *
+ * Die Kurzfassung `RULE_NOT_A_PLACE` ist mit T-181 ersatzlos entfallen: Sie
+ * hatte keinen Aufrufer mehr, und eine Kurzfassung ist die Einladung, den
+ * Satz wieder ueberall hinzuschreiben, wo der Platz fuer die lange fehlt
+ * (Auflage Z-04 aus T-177). Wo der Platz fehlt, steht die Regelzeile —
+ * `RuleSummary` zeigt unter jedem Spaltenkopf die Achsen **dieser** Spalte
+ * und beantwortet damit die haeufigere Frage: nicht „was ist eine Spalte",
+ * sondern „warum steht **diese** Karte **hier**".
  */
 export const RULE_IS_A_RULE =
   "Eine Spalte ist eine Regel — über Tags, Status, „Erledigt“ und den Exportstatus.";
-
-/** Die Kurzform, wo der Platz fuer die Aufzaehlung fehlt. */
-export const RULE_NOT_A_PLACE = "Eine Spalte ist eine Regel, kein Ablageort.";
 
 /**
  * Was eine Karte bewegt — die Nachfolge von „das entscheiden die Tags".

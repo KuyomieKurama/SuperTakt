@@ -148,6 +148,81 @@ export const checkCallNumber = (value: unknown): CallNumberCheck => {
 export const mayLookUpDuplicates = (value: unknown): boolean => checkCallNumber(value).ok;
 
 /**
+ * Warum eine **eingetragene** Call-Nummer nicht angenommen wird — einmal für
+ * beide Türen (T-188, O-GC).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum ein Anzeigetext hier steht, wo die Datei oben das Gegenteil sagt
+ * ---------------------------------------------------------------------------
+ *
+ * E-045 hat Regel und Text getrennt: Die Regel lebt hier, der Satz im
+ * Aufgabenbereich. Diese Trennung trägt, solange der Satz **an einer** Fläche
+ * steht. Er stand an zweien — in `apps/outlook-addin/src/callnumber/labels.ts`
+ * als `INPUT_REJECTION_LABEL` und in `apps/local-api/src/routes/addin/index.ts`
+ * als `CALL_NUMBER_INPUT_TEXT` —, und beide Flächen liegen in **verschiedenen
+ * Paketen mit verschiedenen Eigentümern**. Genau dort endet die Trennung:
+ * Zwei Fassungen einer Aussage laufen auseinander, sobald jemand eine davon
+ * anfaßt, und keiner der beiden Eigentümer kann das bemerken.
+ *
+ * Es war schon geschehen, als T-188 nachgemessen hat: Drei der fünf Sätze
+ * waren zeichengleich, **zwei nicht**. Das ist derselbe Befund wie bei
+ * `checkAttachmentPath` gegen `check_file` (E-085), nur eine Ebene höher — und
+ * der billigere Weg ist hier nicht ein Wächter, der zwei Listen gegeneinander
+ * hält, sondern eine Liste. `DUE_DATE_MESSAGE` macht es zwei Dateien weiter
+ * vor.
+ *
+ * Was **nicht** hierher gehört und im Aufgabenbereich bleibt: `REJECTION_LABEL`
+ * und `NO_CALL_NUMBER_FOUND`. Sie sprechen über einen Wert, den das Add-in in
+ * einer E-Mail **gefunden und nicht übernommen** hat. Diese Lage gibt es an der
+ * Tür nicht, und ihr Gegenstück dort (`REJECTION_TEXT`) sagt mit Absicht etwas
+ * anderes.
+ *
+ * ---------------------------------------------------------------------------
+ * Welche der beiden auseinandergelaufenen Fassungen gilt
+ * ---------------------------------------------------------------------------
+ *
+ * `empty`: „Die Call-Nummer ist leer. Sie darf leer bleiben." Die zweite
+ * Fassung lautete „Lassen Sie das Feld frei, wenn es keine gibt." und fällt aus
+ * zwei Gründen: Sie redet den Benutzer an, wo es ohne geht (E-080 Punkt 4,
+ * ausdrücklich am Beispiel der Call-Nummer), und sie nennt ein **Feld** — die
+ * Tür hat keines. Ein Satz für beide Flächen darf nichts voraussetzen, was nur
+ * eine von ihnen hat.
+ *
+ * `too_long`: mit dem Nachsatz „Länger findet die Duplikatsuche sie nicht
+ * wieder." Er ist kein Beiwerk, sondern die **Folge** (E-078 Punkt 1, das
+ * ausdrückliche Gegenteil einer Streichung): Genau daran hängt R-15 — zwei
+ * Todos zum selben Kundenvorgang, Zeit auf zwei Rechnungen. Eine Zahl ohne
+ * ihren Grund ist an einem Eingabefeld eine Schikane.
+ *
+ * ---------------------------------------------------------------------------
+ * Vollständig, und das ist eine Zusage an den Übersetzer
+ * ---------------------------------------------------------------------------
+ *
+ * `Record<CallNumberRejection, string>` statt `Record<string, string>`: Nimmt
+ * diese Datei einen Ablehnungsgrund auf, fehlt hier ein Schlüssel und `tsc`
+ * bricht ab. Sonst fiele der neue Grund in einen Ersatztext, und der Benutzer
+ * läse etwas, das nicht zu seiner Eingabe paßt.
+ *
+ * `empty` ist an der Tür heute **unerreichbar** — dort wird nur geprüft, was
+ * `normalizeCallNumber` nicht schon zu `null` gemacht hat. Der Schlüssel steht
+ * trotzdem: Die Vollständigkeit ist die Zusage, nicht die Benutzung.
+ *
+ * Der abgelehnte **Wert** kommt in keinem dieser Sätze vor. Er stammt aus einer
+ * fremden E-Mail (B-4.3 Punkt 5, A-19.21), und eine Meldung ist der falsche
+ * Ort, um fremden Text weiterzureichen — dieselbe Regel wie bei
+ * `DUE_DATE_MESSAGE`.
+ */
+export const CALL_NUMBER_INPUT_MESSAGE: Readonly<Record<CallNumberRejection, string>> =
+  Object.freeze({
+    empty: 'Die Call-Nummer ist leer. Sie darf leer bleiben.',
+    too_short: `Eine Call-Nummer braucht mindestens ${String(CALL_NUMBER_MIN_LENGTH)} Zeichen.`,
+    too_long: `Eine Call-Nummer darf höchstens ${String(CALL_NUMBER_MAX_LENGTH)} Zeichen haben. Länger findet die Duplikatsuche sie nicht wieder.`,
+    forbidden_characters:
+      'Erlaubt sind Buchstaben, Ziffern, Punkt, Schrägstrich, Bindestrich und Unterstrich — keine Leerzeichen.',
+    formula_start: 'Eine Call-Nummer darf nicht mit =, +, - oder @ beginnen.',
+  });
+
+/**
  * Die Form, in der eine Call-Nummer gespeichert wird: der beschnittene Wert
  * oder `null`.
  *

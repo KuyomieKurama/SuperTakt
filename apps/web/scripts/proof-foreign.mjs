@@ -1,6 +1,7 @@
 /**
  * Takt — der ausführbare Nachweis über fremden Text in der Oberfläche
- * (T-129, erweitert um Abschnitt 6 und die Reihen in T-133).
+ * (T-129, erweitert um Abschnitt 6 und die Reihen in T-133, um die zwei stillen
+ * Ausgänge, den Übersetzer selbst und die Gegenproben in T-186).
  *
  * ===========================================================================
  * Warum es diese Datei gibt
@@ -79,6 +80,21 @@
  *    `unknown` darf Text nur über eine erklärte Übergangsstelle fallen — eine
  *    Funktion, die `unknown` nimmt und fremden Text zurückgibt. Ein
  *    `typeof x === "string"` an einem `unknown` außerhalb davon ist ein Fund.
+ *  - seit T-186 die zwei **stillen Ausgänge** aus A-A-39 (Abschnitt 7): eine
+ *    Zusicherung `as`, die einem fremden Wert seine Marke nimmt, und die
+ *    **Ablage in eine Reihe**, deren Elementart Text ohne Marke ist
+ *    (`teile.push(todo.title)` mit `teile: string[]`). Beide bestanden bis
+ *    dahin `pnpm typecheck` **und** diesen Lauf, während die Zeile daneben —
+ *    `const titel: string = todo.title` — rot war.
+ *  - seit T-186 die **Befunde des Übersetzers selbst** (Abschnitt 7, dritte
+ *    Prüfung). Eine verschriebene Typeinfuhr macht jede Anzeigestelle ihrer
+ *    Datei zu `any`; `any` trägt keine Marke, also findet dieser Lauf nichts
+ *    und meldet grün. Eine Aussage über Typen in einem Programm mit Typfehlern
+ *    ist keine.
+ *  - **seine eigene Blindheit** (Abschnitt 8, A-A-39): drei eingesetzte
+ *    Verletzungen in einer Quelle, die es auf der Platte nicht gibt. Bemerkt
+ *    eine Prüfung ihre nicht, endet der Lauf rot — auch wenn der Bestand in
+ *    Ordnung ist.
  *
  * **Er sieht nicht:**
  *
@@ -97,11 +113,16 @@
  *    (`parsed as Partial<ErrorEnvelope>`, `request<T>`). Sie behaupten die
  *    Gestalt aus `api/types.ts` und sind der Vertrag mit dem lokalen Dienst,
  *    keine fremde Eingabe.
- *  - Umwege über `String(x)`, `JSON.stringify` oder eine Bindung, die
- *    ausdrücklich `: string` heißt. Die ersten beiden sind absichtliche
- *    Umgehungen und stehen als solche im Quelltext; die letzte findet
- *    Abschnitt 4. `as string` **aus einem `unknown`** findet seit T-133
- *    Abschnitt 6.
+ *  - Umwege über `String(x)` und `JSON.stringify`. Beide sind absichtliche
+ *    Umgehungen und stehen als solche im Quelltext. Eine Bindung, die
+ *    ausdrücklich `: string` heißt, findet Abschnitt 4; `as string` findet
+ *    Abschnitt 6 (aus einem `unknown`, seit T-133) und Abschnitt 7 (aus einem
+ *    fremden Wert, seit T-186).
+ *  - einen fremden Wert als Argument einer **fremden** Funktion, deren
+ *    Parameter Text ohne Marke ist. A-A-39 verlangt es; wörtlich gebaut ergibt
+ *    es am heutigen Baum 27 Fundstellen, darunter `visibleText(…)` und
+ *    `dropHiddenCharacters(…)` — also die Behandlung selbst. Die Begründung
+ *    und die Zahl stehen bei Abschnitt 7.
  *  - Alles außerhalb von `apps/web/src`. Der Aufgabenbereich des Add-ins hat
  *    seinen eigenen Nachweis (`proof:addin`, Abschnitt 17).
  *  - Ob die Anzeige **richtig** behandelt. Dass `visibleText` die richtigen
@@ -163,13 +184,32 @@ if (rawConfig.error !== undefined) {
   throw new Error(`tsconfig.json nicht lesbar: ${String(rawConfig.error.messageText)}`);
 }
 const parsedConfig = ts.parseJsonConfigFileContent(rawConfig.config, ts.sys, appRoot);
-const program = ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
-const checker = program.getTypeChecker();
 
-/** Die Quelldateien der Oberfläche — ohne Deklarationen und ohne `vite.config.ts`. */
-const sourceFiles = program
-  .getSourceFiles()
-  .filter((file) => !file.isDeclarationFile && file.fileName.startsWith(srcRoot + path.sep));
+/**
+ * Ein Programm aus **derselben** Konfiguration — wahlweise mit einer Datei, die
+ * es auf der Platte nicht gibt.
+ *
+ * Die Überlagerung ist der Preis dafür, dass die Gegenproben in Abschnitt 8
+ * echte Verletzungen messen können, ohne `apps/web/src` anzufassen (A-A-39).
+ * Ein Nachweis, der seine eigene Verletzung in den Bestand schreiben müsste,
+ * wäre in einem abgebrochenen Lauf ein Fund, den niemand bestellt hat.
+ *
+ * @param {{ path: string, source: string } | null} overlay
+ * @returns {ts.Program}
+ */
+const buildProgram = (overlay = null) => {
+  if (overlay === null) return ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
+  const target = path.resolve(overlay.path);
+  const host = ts.createCompilerHost(parsedConfig.options, true);
+  const readOriginal = host.getSourceFile.bind(host);
+  host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
+    path.resolve(name) === target
+      ? ts.createSourceFile(name, overlay.source, languageVersion, true)
+      : readOriginal(name, languageVersion, onError, shouldCreate);
+  host.fileExists = (name) => path.resolve(name) === target || ts.sys.fileExists(name);
+  host.readFile = (name) => (path.resolve(name) === target ? overlay.source : ts.sys.readFile(name));
+  return ts.createProgram([...parsedConfig.fileNames, target], parsedConfig.options, host);
+};
 
 /** Die Marken der beiden Herkunftstypen. Sie stehen in `api/types.ts`. */
 const FOREIGN_MARK = "__foreignText";
@@ -184,6 +224,73 @@ const carries = (type, mark) => {
 
 const isForeign = (type) => carries(type, FOREIGN_MARK);
 const isDraft = (type) => carries(type, DRAFT_MARK);
+
+/**
+ * Die Fragen, die einen **Typprüfer** brauchen — gebündelt an einem Programm.
+ *
+ * Bis T-186 standen sie unmittelbar am einen Programm dieses Laufs. Das ging,
+ * solange es nur eines gab; die Gegenproben in Abschnitt 8 brauchen dieselben
+ * Fragen an einem **zweiten** (Abschnitt 0, {@link buildProgram}). Die
+ * Alternative wäre eine zweite Abschrift von „kommt aus diesem Ausdruck fremder
+ * Text" gewesen — in genau der Datei, die das Abschreiben von Herkunftswissen
+ * für den Ursprung allen Übels hält.
+ *
+ * @param {ts.Program} program
+ */
+const lensFor = (program) => {
+  const checker = program.getTypeChecker();
+
+  /** Die Quelldateien der Oberfläche — ohne Deklarationen und ohne `vite.config.ts`. */
+  const sourceFiles = program
+    .getSourceFiles()
+    .filter((file) => !file.isDeclarationFile && file.fileName.startsWith(srcRoot + path.sep));
+
+  /**
+   * Trägt die **Elementart** einer Sammlung die Marke? (T-133)
+   *
+   * `readonly ForeignText[]` ist eine Reihe fremden Textes; die Marke sitzt am
+   * Glied und nicht an der Reihe. Wer danach fragt, kann `join` verfolgen.
+   */
+  const elementIsForeign = (type) => {
+    if (type === undefined || type === null) return false;
+    if (type.isUnion() || type.isIntersection()) return type.types.some(elementIsForeign);
+    const args = checker.getTypeArguments?.(type);
+    if (args?.[0] !== undefined && isForeign(args[0])) return true;
+    const index = checker.getIndexTypeOfType?.(type, ts.IndexKind.Number);
+    return index !== undefined && isForeign(index);
+  };
+
+  /**
+   * Fügt dieser Ausdruck eine **Reihe** fremden Textes zusammen? (T-133)
+   *
+   * Der Weg, den die Abschnitte 2 bis 4 sonst nicht sehen:
+   * `[view.column.name, ...columns].join(", ")` liefert eine gewöhnliche
+   * Zeichenkette, und die Marke fällt an der **Sammlung** ab, nicht an der Naht.
+   * Für jede Prüfung, die nach dem Typ des eingesetzten Ausdrucks fragt, ist der
+   * Satz danach unverdächtig — obwohl er drei fremde Namen trägt. Gefunden in
+   * genau dieser Gestalt in `BoardScreen` (Ansage der Mehrfachvorkommen) und in
+   * `describeDeviations` (Reihenfolge der Exportfelder).
+   */
+  const isForeignJoin = (node) =>
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.getText() === "join" &&
+    elementIsForeign(checker.getTypeAtLocation(node.expression.expression));
+
+  /**
+   * Kommt aus diesem Ausdruck fremder Text — unmittelbar oder aus einer Reihe?
+   *
+   * Die eine Frage, die die Abschnitte 2 bis 4 und 7 stellen. Sie steht hier und
+   * nicht viermal dort, damit ein weiterer Träger an **einer** Stelle dazukommt.
+   */
+  const yieldsForeign = (node) =>
+    node !== undefined && (isForeign(checker.getTypeAtLocation(node)) || isForeignJoin(node));
+
+  return { program, checker, sourceFiles, elementIsForeign, isForeignJoin, yieldsForeign };
+};
+
+const lens = lensFor(buildProgram());
+const { program, checker, sourceFiles, elementIsForeign, isForeignJoin, yieldsForeign } = lens;
 
 /**
  * Sagt dieser Typ „ich nehme fremden Text an"? Auch als **Reihe** davon.
@@ -202,47 +309,6 @@ const declaresForeign = (type) => {
   const index = checker.getIndexTypeOfType?.(type, ts.IndexKind.Number);
   return index !== undefined && isForeign(index);
 };
-
-/**
- * Trägt die **Elementart** einer Sammlung die Marke? (T-133)
- *
- * `readonly ForeignText[]` ist eine Reihe fremden Textes; die Marke sitzt am
- * Glied und nicht an der Reihe. Wer danach fragt, kann `join` verfolgen.
- */
-const elementIsForeign = (type) => {
-  if (type === undefined || type === null) return false;
-  if (type.isUnion() || type.isIntersection()) return type.types.some(elementIsForeign);
-  const args = checker.getTypeArguments?.(type);
-  if (args?.[0] !== undefined && isForeign(args[0])) return true;
-  const index = checker.getIndexTypeOfType?.(type, ts.IndexKind.Number);
-  return index !== undefined && isForeign(index);
-};
-
-/**
- * Fügt dieser Ausdruck eine **Reihe** fremden Textes zusammen? (T-133)
- *
- * Der Weg, den die Abschnitte 2 bis 4 sonst nicht sehen:
- * `[view.column.name, ...columns].join(", ")` liefert eine gewöhnliche
- * Zeichenkette, und die Marke fällt an der **Sammlung** ab, nicht an der Naht.
- * Für jede Prüfung, die nach dem Typ des eingesetzten Ausdrucks fragt, ist der
- * Satz danach unverdächtig — obwohl er drei fremde Namen trägt. Gefunden in
- * genau dieser Gestalt in `BoardScreen` (Ansage der Mehrfachvorkommen) und in
- * `describeDeviations` (Reihenfolge der Exportfelder).
- */
-const isForeignJoin = (node) =>
-  ts.isCallExpression(node) &&
-  ts.isPropertyAccessExpression(node.expression) &&
-  node.expression.name.getText() === "join" &&
-  elementIsForeign(checker.getTypeAtLocation(node.expression.expression));
-
-/**
- * Kommt aus diesem Ausdruck fremder Text — unmittelbar oder aus einer Reihe?
- *
- * Die eine Frage, die die Abschnitte 2 bis 4 stellen. Sie steht hier und nicht
- * dreimal dort, damit ein weiterer Träger an **einer** Stelle dazukommt.
- */
-const yieldsForeign = (node) =>
-  node !== undefined && (isForeign(checker.getTypeAtLocation(node)) || isForeignJoin(node));
 
 /** Ist der Typ Text? Auch als Bestandteil einer Vereinigung oder Verschneidung. */
 const isTextType = (type) => {
@@ -325,6 +391,12 @@ const VOCABULARY = new Set([
   "ColorValue",
   "PageCursor",
   "SecretText",
+  // Bytes, die der Dienst bereits kodiert ausliefert (das Vorschaubild eines
+  // Bildanhangs, A-19.13). Kein Anzeigetext: Der Wert geht in ein `src` und nie
+  // in einen Satz. Er heißt bewusst nicht `ForeignText` — dieser Nachweis
+  // forderte an jeder Verwendung eine Behandlung ein, die es für Bytes nicht
+  // gibt — und nicht `string`, dann wäre er unsichtbar.
+  "EncodedBytes",
   "ExportSourcePath",
   "ExportTransformation",
   "ExportConditionOperator",
@@ -1098,9 +1170,257 @@ check("und sie wird auch benutzt", () => {
 });
 
 /* ==================================================================== */
+/* 7  Zwei stille Ausgaenge und der Uebersetzer selbst                  */
+/* ==================================================================== */
+
+heading("7  Zwei stille Ausgänge, und der Übersetzer wird selbst gefragt");
+
+/*
+ * ---------------------------------------------------------------------------
+ * Was T-183 an diesem Lauf gemessen hat (A-A-39)
+ * ---------------------------------------------------------------------------
+ *
+ * Der Kopf dieser Datei sagte bis T-186, eine Bindung, die ausdrücklich
+ * `: string` heißt, finde Abschnitt 4. Das stimmt — und **daneben** standen
+ * zwei Wege, die dasselbe tun und die niemand sah:
+ *
+ *   const titel: string = todo.title;   // rot, seit T-129
+ *   const titel = todo.title as string; // grün
+ *   teile.push(todo.title);             // grün, `teile: string[]`
+ *
+ * Beide bestehen `pnpm typecheck`, weil die Marke `__foreignText?: undefined`
+ * **freiwillig** ist: `ForeignText` ist `string` zuweisbar und umgekehrt. Genau
+ * darauf beruht die ganze Bauart — und genau deshalb muss der Verlust hier
+ * gemessen werden statt vom Übersetzer erwartet.
+ *
+ * Und der dritte Befund war der billigste: Eine **verschriebene Typeinfuhr**
+ * macht jede Anzeigestelle ihrer Datei zu `any`; `isForeign` an einem `any`
+ * ist falsch, der Lauf bleibt grün und meldet 14 bestandene Prüfungen, während
+ * `tsc` `TS2307` sagt. Eine Aussage über Typen in einem Programm mit
+ * Typfehlern ist keine.
+ *
+ * ---------------------------------------------------------------------------
+ * Was hier **nicht** steht, und warum es gemessen ist
+ * ---------------------------------------------------------------------------
+ *
+ * A-A-39 nennt auch „ein fremder Wert als Argument einer Funktion, deren
+ * Parameter Text ohne Marke ist, **auch wenn die Funktion nicht die eigene
+ * ist**". Wörtlich gebaut ergibt das am heutigen Baum **27** Fundstellen, und
+ * keine davon ist eine Anzeige: `RUNS_WHEN_OPENED.includes(…)`,
+ * `a.name.localeCompare(b.name)`, `byName.has(…)`, `setName(…)` an einem
+ * Zustandssetzer, und — die Pointe — `visibleText(…)` und
+ * `dropHiddenCharacters(…)`, also die **Behandlung selbst**, die aus
+ * `@takt/domain` kommt und dort `string` nimmt.
+ *
+ * Ein Wächter, der die Behandlung als Verlust meldet, ist kein Wächter. Die
+ * Frage „speichert dieser Aufruf oder fragt er nur" beantwortet kein Typ; sie
+ * bräuchte ein Modell der Senken, und das ist ein Umbau und keine Prüfung.
+ * Gebaut ist deshalb der Teil, der ohne Modell auskommt und den A-A-39 als
+ * Gegenprobe nennt: die **Ablage in eine Sammlung**, deren Elementart Text
+ * ohne Marke ist. Der Rest steht als offener Punkt im Bericht T-186 — mit der
+ * Zahl daneben, nicht als Vermutung.
+ */
+
+/**
+ * Die zwei stillen Ausgänge, an einem beliebigen Programm gemessen.
+ *
+ * Als Funktion und nicht als Schleife im Dateirumpf, weil Abschnitt 8 dieselbe
+ * Messung an einer **überlagerten** Quelle braucht. Eine Prüfung, die sich nur
+ * am Bestand ausführen lässt, kann ihre eigene Blindheit nicht bemerken.
+ *
+ * @param {ReturnType<typeof lensFor>} lens
+ */
+const scanSilentExits = (lens) => {
+  const assertions = [];
+  const stores = [];
+  for (const file of lens.sourceFiles) {
+    const walk = (node) => {
+      /*
+       * **Die Zusicherung.** `todo.title as string` sagt dem Übersetzer, er
+       * solle die Marke vergessen — und er tut es wortlos. Abschnitt 6 kennt
+       * dieselbe Gestalt bereits, aber nur aus einem `unknown`; von einem
+       * fremden Wert aus war sie unbewacht.
+       *
+       * Ein Ziel **mit** Marke ist keine Zusicherung, sondern eine Erklärung
+       * (`x as ForeignText`), und `DraftText` ist der eine erlaubte Ausstieg
+       * (E-063 Punkt 1) — dieselben zwei Ziele wie in Abschnitt 4.
+       */
+      if (ts.isAsExpression(node) && lens.yieldsForeign(node.expression)) {
+        const to = lens.checker.getTypeFromTypeNode(node.type);
+        if (isTextType(to) && !isForeign(to) && !isDraft(to)) {
+          assertions.push(`${where(node)}  ${shortText(node)}`);
+        }
+      }
+
+      /*
+       * **Die Ablage in eine Sammlung.** `teile.push(todo.title)` mit
+       * `teile: string[]`: Der Wert liegt danach in einer Reihe gewöhnlichen
+       * Textes, und ab dort ist er für jede Prüfung unverdächtig — dieselbe
+       * Wirkung wie ein Feld ohne Herkunft, nur eine Klammer weiter.
+       *
+       * Gefragt wird die **Elementart des Empfängers**, nicht der Name der
+       * Methode: Eine Liste von Methodennamen wäre die abgeschriebene
+       * Aufzählung, die E-063 Punkt 4 verboten hat.
+       *
+       * Ausgenommen ist, was eine **Frage** stellt statt abzulegen — erkennbar
+       * daran, dass die Antwort ein Wahrheitswert ist (`includes`, `some`).
+       * Das ist eine Heuristik und steht als solche da; `indexOf` fiele
+       * darunter, käme es vor. Sammlungen mit Schlüssel (`Map`, `Set`) sind
+       * **nicht** erfasst: Dort steht die Elementart am Schlüssel wie am Wert,
+       * und die sechs heutigen Treffer wären zu je einer eigenen Entscheidung
+       * geworden (Bericht T-186).
+       */
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const receiver = lens.checker.getTypeAtLocation(node.expression.expression);
+        const isArray =
+          lens.checker.isArrayType?.(receiver) === true ||
+          lens.checker.isArrayLikeType?.(receiver) === true;
+        const element =
+          lens.checker.getTypeArguments?.(receiver)?.[0] ??
+          lens.checker.getIndexTypeOfType?.(receiver, ts.IndexKind.Number);
+        const answersAQuestion =
+          (lens.checker.getTypeAtLocation(node).flags & ts.TypeFlags.BooleanLike) !== 0;
+        if (
+          isArray &&
+          !answersAQuestion &&
+          element !== undefined &&
+          isTextType(element) &&
+          !isForeign(element) &&
+          !isDraft(element)
+        ) {
+          for (const argument of node.arguments) {
+            if (lens.yieldsForeign(argument)) {
+              stores.push(`${where(argument)}  ${shortText(node)}`);
+            }
+          }
+        }
+      }
+
+      ts.forEachChild(node, walk);
+    };
+    walk(file);
+  }
+  return { assertions, stores };
+};
+
+/**
+ * Was der Übersetzer selbst zu diesem Programm sagt.
+ *
+ * Dieselbe Regel wie A-A-33, eine Sprache weiter: Wo ein Wächter etwas
+ * voraussetzt, misst er die Voraussetzung.
+ *
+ * @param {ts.Program} program
+ */
+const compilerFindings = (program) =>
+  ts.getPreEmitDiagnostics(program).map((finding) => {
+    const text = ts.flattenDiagnosticMessageText(finding.messageText, " ");
+    if (finding.file === undefined || finding.start === undefined) return `TS${String(finding.code)}: ${text}`;
+    const { line } = finding.file.getLineAndCharacterOfPosition(finding.start);
+    const name = path.relative(appRoot, finding.file.fileName);
+    return `${name}:${String(line + 1)}  TS${String(finding.code)}: ${text}`;
+  });
+
+const silentExits = scanSilentExits(lens);
+
+check("keine Zusicherung nimmt einem fremden Wert seine Herkunft", () => {
+  const found = [...new Set(silentExits.assertions)].sort();
+  assert.deepEqual(found, [], `Herkunft an einer Zusicherung verloren:\n        ${found.join("\n        ")}`);
+});
+
+check("kein fremder Wert wird in eine Reihe ohne Herkunft abgelegt", () => {
+  const found = [...new Set(silentExits.stores)].sort();
+  assert.deepEqual(found, [], `Herkunft an einer Sammlung verloren:\n        ${found.join("\n        ")}`);
+});
+
+check("und das Programm, über das hier geurteilt wird, übersetzt fehlerfrei", () => {
+  const found = compilerFindings(program);
+  assert.deepEqual(
+    found,
+    [],
+    `Der Übersetzer meldet ${String(found.length)} Befund(e). Jede Aussage dieses Laufs\n` +
+      `        über Typen ist damit hinfällig — eine verschriebene Typeinfuhr genügt,\n` +
+      `        um eine ganze Datei zu \`any\` zu machen, und \`any\` trägt keine Marke:\n        ` +
+      found.slice(0, 10).join("\n        "),
+  );
+});
+
+/* ==================================================================== */
+/* 8  Die Gegenprobe                                                    */
+/* ==================================================================== */
+
+heading("8  Gegenprobe — jede eingesetzte Verletzung muss auffallen");
+
+/*
+ * Drei Verletzungen, drei Programme, keine Zeile im Bestand.
+ *
+ * Die Kunstquelle liegt unter einem Pfad, den es nicht gibt; sie entsteht im
+ * Arbeitsspeicher und wird über einen `CompilerHost` untergeschoben
+ * ({@link buildProgram}). Dieselbe Bauart wie in `proof:callers` und
+ * `proof-release-safety.mjs` — und aus demselben Grund: Ein Wächter, der seine
+ * eigene Blindheit nicht messen kann, sagt nur, dass er nichts gefunden hat.
+ *
+ * Warum je ein eigenes Programm und nicht eines mit drei Verstößen: Die dritte
+ * Quelle **übersetzt nicht**. In einem gemeinsamen Programm stünde neben jedem
+ * Fund ein Typfehler, und dann wäre nicht mehr zu unterscheiden, ob die Prüfung
+ * den Verstoß gesehen hat oder ihn geraten hat.
+ */
+const COUNTER_PROOF_PATH = path.join(srcRoot, "lib", "eingesetzt.ts");
+
+const COUNTER_PROOFS = [
+  {
+    title: "`todo.title as string` — die Zusicherung",
+    source:
+      'import type { Todo } from "../api/types";\n' +
+      "export const titelVon = (todo: Todo) => todo.title as string;\n",
+    findings: (lens) => scanSilentExits(lens).assertions,
+  },
+  {
+    title: "`teile.push(todo.title)` in ein `string[]` — die Ablage",
+    source:
+      'import type { Todo } from "../api/types";\n' +
+      "export function teileVon(todo: Todo): readonly string[] {\n" +
+      "  const teile: string[] = [];\n" +
+      "  teile.push(todo.title);\n" +
+      "  return teile;\n" +
+      "}\n",
+    findings: (lens) => scanSilentExits(lens).stores,
+  },
+  {
+    title: "eine verschriebene Typeinfuhr — der Lauf urteilt sonst über `any`",
+    source:
+      'import type { Todo } from "../api/typen";\n' +
+      "export const titelVon = (todo: Todo) => todo.title;\n",
+    findings: (lens) => compilerFindings(lens.program),
+  },
+];
+
+for (const probe of COUNTER_PROOFS) {
+  check(`Gegenprobe: ${probe.title}`, () => {
+    const found = probe.findings(
+      lensFor(buildProgram({ path: COUNTER_PROOF_PATH, source: probe.source })),
+    );
+    /*
+      Nicht `found.length > 0`, sondern **diese** Quelle: Ein Fund aus dem
+      Bestand wäre kein Beleg dafür, dass die Prüfung die eingesetzte Verletzung
+      sieht — er wäre der Beleg dafür, dass der Bestand rot ist. Heute sind alle
+      drei Reihen am Bestand leer; morgen vielleicht nicht.
+    */
+    const mine = found.filter((finding) => finding.includes("eingesetzt.ts"));
+    assert.ok(
+      mine.length > 0,
+      `blind — die eingesetzte Verletzung ist unbemerkt geblieben (${String(found.length)} andere\n` +
+        "        Fund(e)). Die Prüfung darüber bewacht damit nichts, auch wenn der\n" +
+        "        Bestand grün ist.",
+    );
+  });
+}
+
+/* ==================================================================== */
 
 process.stdout.write(
   `\n${"═".repeat(58)}\n${String(passed)} bestanden, ${String(failed)} fehlgeschlagen.\n` +
+    `Darunter ${String(COUNTER_PROOFS.length)} Gegenproben: eine eingesetzte Verletzung je Prüfung ` +
+    `aus Abschnitt 7.\n` +
     `${String(sourceFiles.length)} Quelldateien, ${String(treatedCount)} behandelte Übergaben, ` +
     `${String(inputCount)} Eingabefelder, ${String(foreignJoins)} Reihen, ` +
     `${String(crossings.length)} Übergangsstellen mit ${String(crossingCalls)} Aufrufen.\n`,

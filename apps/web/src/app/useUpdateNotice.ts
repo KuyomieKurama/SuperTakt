@@ -1,5 +1,5 @@
 import { decideUpdateNotice, normalizeVersion } from "@takt/domain";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVersionCheck, updateSettings } from "../api/endpoints";
 import type { ForeignText } from "../api/types";
 import { foreignTextFrom } from "../lib/foreign";
@@ -87,8 +87,21 @@ export type UpdateNoticeView =
       readonly url: string;
     };
 
+/**
+ * Wann der Hinweis entstanden ist (Befund T-144 U-01).
+ *
+ * `start` — beim ersten Ladevorgang, also bevor der Benutzer etwas getan hat.
+ * Ein modaler Dialog unterbricht dann nichts.
+ *
+ * `session` — mitten in der Arbeit, beim regelmäßigen Nachsehen. Ein modaler
+ * Dialog nähme dann den Fokus aus einem Feld, in das gerade jemand tippt.
+ */
+export type UpdateArrival = "start" | "session";
+
 export interface UpdateNoticeApi {
   readonly view: UpdateNoticeView;
+  /** Siehe {@link UpdateArrival}. Entscheidet über die **Fläche**, nicht über den Inhalt. */
+  readonly arrival: UpdateArrival;
   /** „Überspringen" läuft gerade. Der Knopf zeigt es an und sperrt. */
   readonly busy: boolean;
   /**
@@ -153,6 +166,47 @@ export function useUpdateNotice(): UpdateNoticeApi {
     [facts, skipped],
   );
 
+  /*
+    **Kam der Hinweis beim Start oder mitten in der Arbeit?** (Befund T-144 U-01.)
+
+    `useAsync` läuft beim Aufbau einmal und danach alle sechs Stunden. Meldet der
+    Dienst beim zweiten oder dritten Mal eine neue Fassung, entstand bis T-147
+    der modale Dialog **mitten in der Sitzung** — über allem, und
+    `UpdateDialog` zog den Fokus auf sich. Wer gerade einen Vermerk tippte,
+    verlor den Fokus aus dem Textfeld, ohne etwas getan zu haben (SC 2.4.3,
+    SC 3.2.5: Änderung des Kontextes ohne Anforderung).
+
+    Drei Folgen, und die dritte ist die schlimme: Die Eingabe bricht ohne Anlass
+    des Benutzers ab; der Vermerk in S-03 hat dafür bis heute keine Rückfrage
+    (Befund C-15); und **ein Dialog, der einen bei der Arbeit überfällt, wird
+    weggeklickt**. Genau das ist R-20 aus der anderen Richtung — nicht die
+    Wiederkehr macht ihn zur Formsache, sondern der falsche Zeitpunkt. Ein
+    Dialog, der zur Formsache geworden ist, hat faktisch die Vorauswahl, die
+    A-18.7 verbietet: nämlich die, die am schnellsten geht.
+
+    A-18.2 verlangt, dass Takt **prüft**, nicht dass es **unterbricht**. A-18.6
+    verlangt, dass Takt die Fassung **anzeigt** — nicht, dass es dafür den Fokus
+    nimmt.
+
+    Deshalb merkt sich dieser Wert, ob der erste Ladevorgang schon vorbei war,
+    als der Hinweis entstand. `UpdateNotice` macht daraus zwei Flächen: beim
+    Start den modalen Dialog wie bisher, mitten in der Sitzung eine ruhige,
+    nicht-modale Leiste, die niemandem den Fokus nimmt und aus der heraus der
+    Benutzer den Dialog **selbst** öffnet. Dann ist der Fokuswechsel von ihm
+    angefordert und keine Nebenwirkung.
+  */
+  const settled = useRef(false);
+  const [arrival, setArrival] = useState<UpdateArrival>("start");
+  useEffect(() => {
+    if (state.status === "loading") return;
+    if (!settled.current) {
+      settled.current = true;
+      return;
+    }
+    // Ab hier ist jede weitere Antwort eine, die während der Arbeit eintrifft.
+    setArrival("session");
+  }, [state]);
+
   const view = useMemo<UpdateNoticeView>(() => {
     if (!notice.show) return { kind: "silent" };
     if (notice.version === postponed) return { kind: "silent" };
@@ -194,7 +248,7 @@ export function useUpdateNotice(): UpdateNoticeApi {
           return;
         case "rejected":
           setOpenProblem(
-            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite. Die Release-Seite lässt sich über den angezeigten Verweis von Hand aufrufen.",
+            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite.",
           );
           return;
         case "failed":
@@ -238,6 +292,13 @@ export function useUpdateNotice(): UpdateNoticeApi {
 
   return {
     view,
+    /*
+      `arrival` gilt für den **Hinweis**, nicht für die Antwort, in der er kam:
+      Wer den Dialog beim Start wegklickt und ihn sechs Stunden später erneut
+      bekäme, bekäme dann die ruhige Leiste — und das ist richtig so. Der
+      lauteste Weg steht dem ersten Mal zu, nicht dem vierten.
+    */
+    arrival,
     busy: skipping.busy,
     problem: openProblem ?? skipping.error,
     install,

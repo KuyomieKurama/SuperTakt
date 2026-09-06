@@ -139,6 +139,27 @@ export type PageCursor = string;
 /** Ein Geheimnis. Steht in keiner Anzeige und in keinem Protokoll. */
 export type SecretText = string;
 
+/**
+ * Bytes, die der Dienst **bereits kodiert** ausliefert: das Vorschaubild eines
+ * Bildanhangs, Base64 (A-19.13, E-071 Punkt 3).
+ *
+ * **Kein Anzeigetext.** Er geht in ein `src` und nie in einen Satz, nie in ein
+ * `title`, nie in ein `aria-label`. `visibleText` darauf wäre sinnlos — es gibt
+ * nichts sichtbar zu machen —, und `<Foreign>` darum wäre eine Zeichenkette von
+ * einigen Megabyte im Textknoten.
+ *
+ * **Warum er hier einen eigenen Namen bekommt.** Weil er sonst `ForeignText`
+ * hieße und der Nachweis an jeder Verwendung eine Behandlung einforderte, die
+ * es für Bytes nicht gibt — oder `string`, und dann wäre er unsichtbar. Ein
+ * eigener Name zwingt an jeder neuen Stelle zu derselben Entscheidung, die hier
+ * getroffen ist (E-063 Punkt 4).
+ *
+ * **Kodiert wird er nicht in der Oberfläche.** Base64 ist A-8.4 und liegt in
+ * der Domäne; die Oberfläche setzt aus `mediaType` und diesem Wert eine
+ * `data:`-Adresse zusammen und rechnet dabei nichts.
+ */
+export type EncodedBytes = string;
+
 /* ==================================================================== */
 /* Umschlag und Blätterung                                              */
 /* ==================================================================== */
@@ -228,6 +249,22 @@ export interface Todo {
   /** `null` heißt aktiv, ein Zeitstempel heißt erledigt (A-2.4). */
   readonly completedAt: Timestamp | null;
   readonly tagIds: readonly Id[];
+  /**
+   * Die **Frist** (A-19.1 bis A-19.7, E-070). `null` heißt: keine, und das ist
+   * in jeder Hinsicht ein gültiges Todo.
+   *
+   * **Ein Tag, keine Uhrzeit** (E-070 Punkt 1), und es ist derselbe Tagesbegriff
+   * wie bei der Tagesgruppierung des Exports (E-070 Punkt 2, E-025). Die drei
+   * Zustände — überfällig, heute fällig, später fällig — stehen **nicht** hier:
+   * Sie werden gerechnet, nicht gespeichert (E-070 Punkt 3), sonst wären sie
+   * über Nacht falsch, ohne dass jemand etwas angefasst hat. Die Rechnung steht
+   * in `lib/deadline.ts`.
+   *
+   * **Keine Achse** (E-070 Punkt 4, A-19.7): nicht in Pools, nicht in Spalten,
+   * nicht im Export (A-19.17). Sortieren und Filtern der Liste sind Anzeige und
+   * etwas anderes als ein Regelterm (E-074 Punkt 1).
+   */
+  readonly dueDate: CalendarDay | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
@@ -291,6 +328,17 @@ export interface TodoCreate {
    */
   readonly tagNames?: readonly DraftText[];
   readonly note?: DraftText;
+  /**
+   * Die Frist beim Anlegen (A-19.3). `null` und ein fehlendes Feld sind
+   * dasselbe: keine Frist.
+   *
+   * Geprüft wird die Form an der **Tür des Dienstes** (Auflage A-A-19):
+   * `YYYY-MM-DD`, ein **existierender** Tag — `2026-02-30` passt auf die Form
+   * und ist keiner —, Jahr zwischen 1970 und 2999. Das Eingabefeld benutzt
+   * `type="date"` und kann von sich aus nichts anderes liefern; das ist
+   * Bedienkomfort und keine Kontrolle.
+   */
+  readonly dueDate?: CalendarDay | null;
 }
 
 export interface TodoUpdate {
@@ -298,7 +346,39 @@ export interface TodoUpdate {
   readonly callNumber?: DraftText | null;
   readonly statusId?: Id;
   readonly tagIds?: readonly Id[];
+  /**
+   * Frist setzen, ändern und **entfernen** (A-19.3). Drei Fälle, und sie sind
+   * hier alle drei erreichbar: Das Feld fehlt → unverändert. `null` → entfernen.
+   * Ein Tag → setzen. Ohne die Unterscheidung gäbe es keinen Weg, eine gesetzte
+   * Frist wieder loszuwerden.
+   */
+  readonly dueDate?: CalendarDay | null;
 }
+
+/**
+ * Wonach die Todo-Liste geordnet wird (A-19.20, E-074 Punkt 1).
+ *
+ * `recent` ist die bisherige Ordnung des Dienstes und bleibt die Voreinstellung
+ * — eine Liste, die sich beim ersten Öffnen anders sortiert als gestern, ist
+ * eine Umstellung und keine Ergänzung (A-19.16).
+ *
+ * **Ein Todo ohne Frist steht in beiden Richtungen am Ende** (E-074 Punkt 2).
+ * Es hat keinen Wert, keinen frühesten und keinen spätesten; ein leeres Feld
+ * als „01.01.1970" zu sortieren ist die Sorte Bequemlichkeit, die niemandem
+ * auffällt, bis sie in einer Abrechnung steht. Die Regel gilt im Dienst und
+ * nicht hier — die Oberfläche schickt nur den Namen.
+ */
+export type DueSortDirection = "asc" | "desc";
+
+/**
+ * Nach der Frist filtern (A-19.20).
+ *
+ * Die drei Werte sind die drei Zustände aus A-19.5, dazu `none` für „ohne
+ * Frist". Gerechnet wird auch hier im Dienst: Er kennt den Tagesbegriff aus
+ * E-025, und ein zweiter im Filter wäre der zweite Tagesbegriff, den E-070
+ * Punkt 2 ausschließt.
+ */
+export type DueState = "overdue" | "due_today" | "due_later" | "no_due_date";
 
 export interface TodoFilter {
   readonly search?: DraftText;
@@ -309,6 +389,105 @@ export interface TodoFilter {
   /** Erledigte ausblenden (E-039). */
   readonly onlyOpen?: boolean;
   readonly onlyWithOpenEntries?: boolean;
+  /**
+   * Nach dem Zustand der Frist filtern (A-19.20). Mehrere sind zugelassen; der
+   * Dienst nimmt sie als kommagetrennte Liste unter `dueState` entgegen.
+   */
+  readonly dueStates?: readonly DueState[];
+  /** `sortByDueDate` am Dienst. Fehlt es, bleibt die bisherige Ordnung. */
+  readonly sortByDueDate?: DueSortDirection;
+}
+
+/* ==================================================================== */
+/* Anhänge (A-19.8 bis A-19.15, E-071, E-072)                           */
+/* ==================================================================== */
+
+/**
+ * Die drei Arten, und sie unterscheiden sich nicht nur im Etikett, sondern
+ * darin, **was Takt eigentlich hält** (E-071).
+ *
+ *  - `link` — eine Adresse. Takt speichert eine Zeichenkette, kein Byte, und
+ *    öffnet sie im Browser des Benutzers.
+ *  - `file` — ein Pfad. Ebenfalls eine Zeichenkette; verschwindet die Datei,
+ *    sagt der Anhang das (A-19.15), statt sie wiederherstellen zu wollen.
+ *  - `image` — eine **Kopie** im Anwendungsdatenverzeichnis, unter denselben
+ *    Rechten wie der Bestand (E-018). Sie **öffnet nichts nach draußen**
+ *    (E-072 Punkt 2): Sie wird angezeigt, und das ist der ganze Umfang.
+ */
+export type AttachmentKind = "link" | "image" | "file";
+
+/**
+ * Ein Anhang, wie der Dienst ihn liefert (A-19.8).
+ *
+ * **`title` und `value` sind fremder Text**, und das ist keine Förmlichkeit.
+ * Beide kommen aus einer Benutzereingabe, ein Pfad zusätzlich aus dem
+ * Dateisystem, und beide stehen an einer Zeile, deren Klick ein Programm
+ * startet. Ohne die Behandlung aus E-063 zeigt eine Datei namens
+ * `rechnung\u{202e}cod.exe` sich als `rechnungexe.doc` — in der Liste **und**
+ * in der Rückfrage davor (Auflage A-A-6 Punkt 2).
+ */
+export interface Attachment {
+  readonly id: Id;
+  readonly todoId: Id;
+  readonly kind: AttachmentKind;
+  /** Die Beschriftung, wenn der Benutzer eine gesetzt hat (A-19.10). */
+  readonly title: ForeignText | null;
+  /**
+   * Adresse oder Pfad. Bei einem **Bild** der erzeugte Name der Kopie — er
+   * steht in keiner Anzeige (Auflage A-A-17: der Name wird erzeugt und nicht
+   * aus der Quelle übernommen).
+   *
+   * Bei einem Verweis ist dieser Wert bereits die **Normalform**: Normalisiert
+   * wird einmal, beim Anlegen, in `packages/domain` (Auflage A-A-13). Der
+   * Öffnen-Befehl der Hülle verlangt genau das und weist alles andere ab — sonst
+   * läse der Benutzer eine Adresse und Takt öffnete eine andere (A-A-3).
+   */
+  readonly target: ForeignText;
+  /** Reihenfolge am Todo, vom Dienst vergeben. */
+  readonly position: number;
+  readonly createdAt: Timestamp;
+}
+
+/**
+ * Was beim Hinzufügen mitgeht (A-19.10) — eine **unterschiedene Vereinigung**
+ * und kein Objekt mit drei freiwilligen Feldern.
+ *
+ * A-19.10 sagt es schon: „Beim Hinzufügen bestimmt die gewählte Art das
+ * Eingabefeld." Drei Felder nebeneinander hießen, dass ein Aufrufer zwei davon
+ * füllen könnte — und dann entschiede die Reihenfolge im Code, welches gilt.
+ * Der Dienst nimmt genau diese Gestalt entgegen; `tsc` bricht hier ab, bevor
+ * eine Anfrage überhaupt entsteht.
+ *
+ * Beim **Bild** geht der Pfad der **Quelle** mit und nicht ihre Bytes: Der
+ * Rumpf einer Anfrage ist auf ein Megabyte begrenzt (B-1.7), ein Bild darf
+ * acht Mebibyte groß sein. Der Dienst liest die Datei selbst und legt eine
+ * Kopie an (E-071 Punkt 2); gespeichert wird der erzeugte Name der Kopie und
+ * nie der Name der Quelle (Auflage A-A-17).
+ */
+export type AttachmentCreate =
+  | { readonly kind: "link"; readonly url: DraftText; readonly title?: DraftText | null }
+  | { readonly kind: "file"; readonly path: DraftText; readonly title?: DraftText | null }
+  | { readonly kind: "image"; readonly sourcePath: DraftText; readonly title?: DraftText | null };
+
+/**
+ * Das Vorschaubild eines Bildanhangs (A-19.13, E-071 Punkt 3).
+ *
+ * **Warum nicht `<img src="http://127.0.0.1:17843/…">`.** Weil ein `<img src>`
+ * **kein** `X-Takt-Token` trägt — der Browser setzt bei einem Bildabruf keine
+ * eigenen Kopfzeilen. Der Weg über die CSP bräuchte deshalb entweder eine
+ * unauthentifizierte Byte-Route auf einem Port, den jeder lokale Prozess
+ * erreicht (VG-1), oder ein Geheimnis in der Adresse, das danach im Verlauf und
+ * in jeder Fehlermeldung stünde (B-2.4, T-145-9).
+ *
+ * Stattdessen: Der Dienst liefert die Bytes über die schon erlaubte Verbindung,
+ * **fertig kodiert**, und die Oberfläche setzt daraus eine `data:`-Adresse
+ * zusammen. `img-src 'self' data:` bleibt unverändert; die Positivliste wird
+ * dafür nicht geöffnet (Auflage A-A-12).
+ */
+export interface AttachmentImage {
+  /** `image/png`, `image/jpeg`, `image/gif`, `image/webp` (Auflage A-A-16). */
+  readonly mediaType: TechnicalKey;
+  readonly base64: EncodedBytes;
 }
 
 /* ==================================================================== */

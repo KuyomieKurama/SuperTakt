@@ -65,7 +65,12 @@
  */
 
 import type { Logger } from '../logger.ts';
-import { createGithubReleaseSource, type ReleaseLookupFailure, type ReleaseSourcePort } from './source.ts';
+import {
+  VERSION_CHECK_MAX_BYTES,
+  createGithubReleaseSource,
+  type ReleaseLookupFailure,
+  type ReleaseSourcePort,
+} from './source.ts';
 
 /** Abstand zwischen zwei Anfragen im Regelfall (A-V-11). */
 export const VERSION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
@@ -82,6 +87,16 @@ export const VERSION_CHECK_MIN_INTERVAL_MS = 60 * 60 * 1_000;
 
 /** Abstand der ersten Anfrage zum Start (Begründung im Kopf dieser Datei). */
 export const VERSION_CHECK_START_DELAY_MS = 10_000;
+
+/**
+ * Die längste Frist, die Node einem `setTimeout` glaubt.
+ *
+ * Alles darüber wird **auf 1 ms gekürzt** und mit einer
+ * `TimeoutOverflowWarning` quittiert — gemessen: `setTimeout(3.15e10)` feuert
+ * nach 2 ms. Die Zahl steht hier als Begründung für den Deckel in
+ * {@link createVersionChecker}, nicht als Wert, den jemand einstellt.
+ */
+const NODE_MAX_TIMEOUT_MS = 2_147_483_647;
 
 /**
  * Was der Dienst über die zuletzt veröffentlichte Fassung weiß.
@@ -148,15 +163,76 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   let lastRequestAt: number | null = null;
   const control = new AbortController();
 
+  /**
+   * Stellt den Zeitgeber — **gedeckelt** und nie kürzer als ein Herzschlag
+   * (T-143 S-3).
+   *
+   * ===========================================================================
+   * Was ohne den Deckel geschah, und warum es ausgerechnet hier geschah
+   * ===========================================================================
+   *
+   * `run()` rechnet `elapsed = jetzt − lastRequestAt` und plant bei zu kurzem
+   * Abstand auf `minIntervalMs − elapsed`. Springt die **Wanduhr zurück** —
+   * leere CMOS-Batterie, wiederhergestellter Schnappschuß einer virtuellen
+   * Maschine, ein von Hand verstelltes Datum —, wird `elapsed` negativ, und
+   * die Frist wächst um denselben Betrag.
+   *
+   * Bei einem Rücksprung über rund 25 Tage überschreitet sie `2^31−1`
+   * Millisekunden. Node **kürzt dann auf 1 ms** und schreibt eine
+   * `TimeoutOverflowWarning` — gemessen: `setTimeout(3.15e10)` feuert nach
+   * **2 ms**. `run()` rechnet dasselbe noch einmal aus, plant wieder auf 1 ms,
+   * und der Sidecar läuft mit rund tausend Durchgängen je Sekunde, jeder mit
+   * einer Warnung auf `stderr` — also auf dem Kanal, auf dem das Protokoll
+   * liegt.
+   *
+   * Ausgehende Anfragen gingen dabei **keine** hinaus; der Boden aus A-V-11
+   * hielt. Aber das war Glück und keine Bauart: Der Kommentar an
+   * {@link VERSION_CHECK_MIN_INTERVAL_MS} nennt „eine zurückgestellte
+   * Systemuhr" ausdrücklich als den Fall, gegen den der Boden geschrieben ist,
+   * und genau dort verhielt er sich falsch.
+   *
+   * ===========================================================================
+   * Zwei Grenzen, und beide sind hier und nicht bei den Aufrufern
+   * ===========================================================================
+   *
+   * **Nach oben die längste Frist, die dieser Prüfer selbst kennt** — also der
+   * Takt oder der Boden, je nachdem, welcher größer ist. Beide sind
+   * einstellbar, und ein Prüffall setzt den Boden durchaus **über** den Takt
+   * („die Uhr steht"); der Deckel darf ihm das nicht wegnehmen, sonst
+   * verhinderte er genau die Wirkung, die er messen soll.
+   *
+   * Jede Zahl über dieser Grenze ist ein Rechenfehler oder eine verstellte
+   * Uhr, und {@link NODE_MAX_TIMEOUT_MS} ist damit unerreichbar, solange
+   * niemand einen Takt von 24 Tagen einstellt.
+   *
+   * **Nach unten nur die Null.** Ein Boden auf eine Sekunde wäre die
+   * naheliegende zweite Grenze und die falsche: Er machte aus jedem
+   * eingestellten Startabstand unter einer Sekunde einen von einer Sekunde und
+   * bräche damit jede Messung, die kurze Fristen setzt — eine Grenze, die den
+   * Prüffall verstellt, statt den Fehler zu verhindern. Der Fehler selbst
+   * entsteht nicht unten, sondern **oben**, und die Ursache dafür — ein
+   * negatives `elapsed` — ist in `run()` beseitigt, wo sie entsteht.
+   *
+   * Der Deckel steht **hier**, an der einen Stelle, durch die jede Planung
+   * geht. An den vier Aufrufern stünde er viermal, und der fünfte hätte ihn
+   * nicht.
+   */
   function schedule(delayMs: number): void {
     if (stopped) return;
     if (timer !== null) clearTimeout(timer);
+    /*
+     * Der zweite Deckel ist nicht Zierrat: Ein Takt von 30 Tagen ist
+     * einstellbar und überschritte `2^31−1` von selbst — ohne verstellte Uhr,
+     * ohne Rechenfehler, und mit demselben Ausgang (Kürzung auf 1 ms).
+     */
+    const ceiling = Math.min(Math.max(intervalMs, minIntervalMs), NODE_MAX_TIMEOUT_MS);
+    const bounded = Math.min(Math.max(delayMs, 0), ceiling);
     // `unref()`: Eine anstehende Prüfung hält die Ereignisschleife nicht am
     // Leben. Ist der Dienst fertig, endet er, ohne auf sie zu warten.
     timer = setTimeout(() => {
       timer = null;
       void run();
-    }, delayMs);
+    }, bounded);
     timer.unref();
   }
 
@@ -167,6 +243,45 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
     // dann, wenn der Zeitgeber aus einem Grund früher feuert, den hier niemand
     // vorhergesehen hat.
     const elapsed = lastRequestAt === null ? Infinity : options.now().getTime() - lastRequestAt;
+
+    /*
+     * **Die Uhr ist zurückgesprungen** (T-143 S-3).
+     *
+     * `elapsed < 0` heißt nicht „die letzte Anfrage liegt in der Zukunft",
+     * sondern „die Wanduhr sagt jetzt etwas anderes als vorhin". Der gemerkte
+     * Zeitpunkt ist damit **wertlos**: Er bezieht sich auf eine Uhr, die es
+     * nicht mehr gibt.
+     *
+     * Ihn stehenzulassen und `minIntervalMs − elapsed` zu warten hieße, den
+     * Rücksprung abzuwarten — bei einem Sprung auf 2015 also zehn Jahre, was
+     * nach dem Deckel in {@link schedule} zwar keine Endlosschleife mehr wäre,
+     * aber eine Versionsprüfung, die in diesem Lauf nichts mehr täte, ohne daß
+     * es jemand erführe.
+     *
+     * Also wird der Bezugspunkt **neu genommen** und der volle Boden gewartet.
+     * Der Boden aus A-V-11 bleibt damit gewahrt: Zwischen zwei ausgehenden
+     * Anfragen liegt weiterhin mindestens `minIntervalMs` **nach der Uhr, die
+     * gerade gilt**. Mehr ist gegen eine verstellte Uhr nicht zu haben — eine
+     * monotone Quelle wäre die richtige Antwort und ist hier keine: `now()`
+     * ist der Port, an dem der Boden prüfbar ist, und `performance.now()`
+     * überlebt keinen Neustart.
+     *
+     * Der Rücksprung steht im Protokoll, weil er sonst als Fehlen einer
+     * Prüfung auffiele und nicht als das, was er ist. Der Schlüssel gehört zu
+     * demselben geschlossenen Vorrat wie jeder andere; ein Wert aus der Uhr
+     * steht nicht darin.
+     */
+    if (elapsed < 0) {
+      options.logger.lifecycle(
+        'info',
+        'Die Systemuhr ist zurückgestellt worden. Die Versionsprüfung nimmt ihren Bezugspunkt neu.',
+        'version_check_clock_moved_backwards',
+      );
+      lastRequestAt = options.now().getTime();
+      schedule(minIntervalMs);
+      return;
+    }
+
     if (elapsed < minIntervalMs) {
       schedule(minIntervalMs - elapsed);
       return;
@@ -268,8 +383,21 @@ export function describeVersionCheckFailure(
       };
     case 'too_large':
       return {
+        /*
+         * Der Satz nennt seit T-146 die **Folge** und nicht nur den Vorgang
+         * (Befund T-145-3): Wer „wurde verworfen. Takt läuft unverändert
+         * weiter" liest, hält das für eine Kleinigkeit. Tatsächlich ist die
+         * Versionsprüfung dieses Erzeugnisses damit **dauerhaft** ohne
+         * Ergebnis — jeder Lauf liest dieselbe zu große Antwort, und
+         * „unbekannt" sieht von außen genauso aus wie „alles aktuell".
+         *
+         * Der Wert steht nicht darin, die Grenze schon: Sie ist eine
+         * Konstante dieses Erzeugnisses und kein Ausschnitt einer fremden
+         * Antwort (B-2.4).
+         */
         sentence:
-          'Die Antwort der Versionsprüfung war größer als zulässig und wurde verworfen. Takt läuft unverändert weiter.',
+          `Die Antwort der Versionsprüfung war größer als ${String(VERSION_CHECK_MAX_BYTES)} Bytes und wurde verworfen. ` +
+          'Die Versionsprüfung liefert damit dauerhaft kein Ergebnis; Takt läuft unverändert weiter.',
         key: 'version_check_too_large',
       };
     case 'malformed':

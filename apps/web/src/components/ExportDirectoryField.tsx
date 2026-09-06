@@ -213,6 +213,18 @@ export function Base64Notice({ className }: { readonly className?: string }) {
 /* ==================================================================== */
 
 /** Der geprüfte Zustand des Ordners beim Dienst, in einem Satz (R-11). */
+/**
+ * Wie lange die Hülle auf die Frage nach dem Ordnerauswahldialog antworten
+ * darf, bevor die Oberfläche auf das Textfeld zurückfällt (Befund T-144 U-02).
+ *
+ * Zwei Sekunden. `isShellPresent()` lädt ein Modul und liest eine Eigenschaft
+ * am Fenster; das dauert Millisekunden. Wer hier länger misst, lässt den
+ * Benutzer vor einem Knopf sitzen, der nichts tut — und ein Knopf, der auf
+ * nichts reagiert, ist genau der Zustand, den T-133 für „Takt beenden"
+ * geschlossen hat.
+ */
+const SHELL_ANSWER_GRACE_MS = 2_000;
+
 const DIRECTORY_STATE_TEXT: Readonly<Record<Exclude<ExportDirectoryState, "ok">, string>> = {
   not_set: "Noch nicht gewählt. Ohne Exportordner ist kein Export möglich.",
   missing: "Dieser Ordner ist nicht erreichbar. Takt legt ihn nicht von sich aus an.",
@@ -279,6 +291,35 @@ export function ExportDirectoryField({
 
   useEffect(() => {
     let live = true;
+    /*
+      **Die Frist auf die Hüllenfrage** (Befund T-144 U-02).
+
+      Bis T-147 stand der Auswahlknopf gesperrt da, solange `shell === null`
+      war — ohne Anzeiger, ohne Text, ohne Frist. Für das Auge war das ein toter
+      Knopf, für eine Vorlesehilfe ein „nicht verfügbar" ohne Grund. Und
+      **„es geschieht nichts" ist kein Ereignis**: Bleibt die Zusage einfach
+      aus — weil das Hüllenmodul hängt, nicht weil es wirft —, gäbe es keinen
+      Ausgang aus diesem Zustand.
+
+      T-133 hat für dieselbe Klasse bei „Takt beenden" eine Frist gebaut
+      (`QUIT_GRACE_MS`), und der Mechanismus steht seither in dieser Datei
+      daneben. Hier ist er angewandt: Nach Ablauf gilt der Dialog als nicht
+      verfügbar, das Textfeld tritt an seine Stelle, und der Grund steht
+      darunter. Zwei Sekunden, nicht fünf: `isShellPresent()` lädt ein Modul und
+      liest eine Eigenschaft; das dauert Millisekunden. Fünf Sekunden vor einem
+      gesperrten Knopf sind hier keine Vorsicht, sondern eine Zumutung.
+    */
+    const grace = window.setTimeout(() => {
+      if (!live) return;
+      setShell((current) => {
+        if (current !== null) return current;
+        setPickerFailure(
+          "Die Anwendungshülle hat auf die Frage nach dem Ordnerauswahldialog nicht geantwortet.",
+        );
+        return false;
+      });
+    }, SHELL_ANSWER_GRACE_MS);
+
     void isShellPresent().then(
       (present) => {
         if (live) setShell(present);
@@ -301,6 +342,7 @@ export function ExportDirectoryField({
     );
     return () => {
       live = false;
+      window.clearTimeout(grace);
     };
   }, []);
 
@@ -385,8 +427,15 @@ export function ExportDirectoryField({
             <Button
               variant="secondary"
               iconStart="folder-open"
-              loading={picking}
-              disabled={disabled || shell === null}
+              /*
+                „arbeitet gerade" darf nicht wie „geht nicht" aussehen
+                (Designsystem Regel 13, Befund T-144 U-02). Solange die
+                Hüllenfrage läuft, trägt der Knopf den Anzeiger statt einer
+                stummen Sperre — und die Frist oben sorgt dafür, dass dieser
+                Zustand endet.
+              */
+              loading={picking || shell === null}
+              disabled={disabled}
               aria-describedby={`${pathId} ${hintId}`}
               onClick={pick}
             >
@@ -398,9 +447,23 @@ export function ExportDirectoryField({
             geschriebene Datei liegt immer innerhalb dieses Ordners — Takt schreibt niemals
             daneben.
           </p>
-          {serviceProblem === null ? null : (
-            <p className="field__error">{serviceProblem}</p>
-          )}
+          {/*
+            Dieselbe Meldefläche wie im `TextField` des anderen Zweiges — und
+            aus demselben Grund immer im Baum (B-5, T-162; Befund O-GQ, T-191).
+            Hier stand bis T-191 ein Absatz **ganz ohne Rolle**: Der Zweig ohne
+            Hülle sagte den Befund des Dienstes an, dieser hier gar nicht,
+            obwohl beide denselben Satz zeigen und beide ihn erst bekommen,
+            während das Feld schon steht.
+
+            `.field__live` und nicht der nackte Absatz: `.field` ist eine
+            Spalte mit `gap`, und die leere Fläche nähme sonst einen Abstand
+            mit — die Regel dafür steht seit T-162 in `app.css`.
+          */}
+          <div className="field__live" role="alert">
+            {serviceProblem === null ? null : (
+              <p className="field__error">{serviceProblem}</p>
+            )}
+          </div>
         </div>
       )}
 

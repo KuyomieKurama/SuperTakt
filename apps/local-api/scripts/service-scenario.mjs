@@ -53,7 +53,7 @@
  * Bestand liegt im Arbeitsspeicher und überlebt den Lauf nicht.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -82,6 +82,23 @@ const memoryStore = () => ({
  * Lauf, der ohnehin jede Antwort einsammelt, kann sie nebenbei messen.
  */
 export const INTERNAL_NOTE = 'VERMERK-INTERN-A72-nicht-exportierbar';
+
+/**
+ * Frist und Anhangsangaben dieses Durchlaufs (A-19.1, A-19.8, A-19.17).
+ *
+ * **Auffällig gewählt und deshalb brauchbar.** Sie sind so unverwechselbar wie
+ * {@link INTERNAL_NOTE}: Ein Prüfpfad, der eine Exportdatei als Text
+ * durchsucht, findet sie sofort — und A-19.17 verlangt, daß er sie **nicht**
+ * findet, in **keiner** Vorlage. Dasselbe Vorgehen wie bei der Notiz-Trennung
+ * (TP-NOTE-02/03), mit Frist und Anhang statt Vermerk.
+ *
+ * Erfunden, wie jede Testangabe dieses Baums: keine echte Adresse, kein echter
+ * Kundenname (`CLAUDE.md`, Abschnitt Sicherheit).
+ */
+export const DUE_DATE = '2029-11-27';
+export const DUE_DATE_CHANGED = '2029-12-24';
+export const ATTACHMENT_LINK_MARKER = 'beispiel.example';
+export const ATTACHMENT_TITLE_MARKER = 'Beispielverweis';
 
 /**
  * Die Farbe, mit der der Durchlauf eine Kanban-Spalte anlegt (T-051).
@@ -174,6 +191,29 @@ export const BOARD_COLUMNS = Object.freeze({
 export async function runScenario() {
   const directory = mkdtempSync(join(tmpdir(), 'takt-proof-openapi-'));
 
+  /*
+   * Zwei Dateien für die Anhänge, vom Durchlauf selbst angelegt und mit ihm
+   * gelöscht — kein Verweis auf einen Pfad des Entwicklungsrechners
+   * (`docs/testplan.md` Abschnitt 25, Testdaten).
+   *
+   * Das PNG ist das kleinste gültige: acht Bytes Signatur, danach eine
+   * Kopfeinheit. Es muß nicht anzeigbar sein — geprüft wird die
+   * **Kopfsignatur** (A-A-16), und genau die trägt es.
+   */
+  const filePath = join(directory, 'beispiel-anhang.txt');
+  writeFileSync(filePath, 'Beispieltext eines Dateianhangs.\n');
+
+  const imagePath = join(directory, 'beispiel-bild.png');
+  writeFileSync(
+    imagePath,
+    Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG-Signatur
+      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00,
+    ]),
+  );
+
   // Eine gestellte Uhr. Der Timer braucht vergehende Zeit, und eine echte Uhr
   // machte den Lauf entweder langsam oder von der Maschine abhängig.
   let clockMs = Date.parse('2026-03-02T09:00:00Z');
@@ -189,6 +229,17 @@ export async function runScenario() {
     databaseLocation: ':memory:',
     clock: () => new Date(clockMs),
     timeZone: 'Europe/Berlin',
+    /*
+     * Der Ort der Bildkopien (E-071 Punkt 2, A-A-17). Ohne ihn gäbe es keine
+     * Bildanhänge, und `getTodoAttachmentImage` bliebe im Durchlauf ohne
+     * Erfolgsfall — Abschnitt 6 würde rot, und zwar zu Recht: Eine Operation,
+     * die niemand anfährt, ist eine, deren Gestalt niemand mißt.
+     *
+     * Es ist derselbe Wegwerfordner wie für den Export. Beide werden am Ende
+     * gelöscht; der Bestand liegt im Arbeitsspeicher und überlebt den Lauf
+     * ohnehin nicht.
+     */
+    appDataDir: directory,
     // Die Protokollzeilen dieses Laufs gehören nicht in die Ausgabe des
     // Nachweispfads; sie sind hier kein Befund, sondern Rauschen.
     logger: { request: () => {}, lifecycle: () => {} },
@@ -396,13 +447,74 @@ export async function runScenario() {
       statusId,
       tagIds: [tagId],
       note: INTERNAL_NOTE,
+      // Die Frist (A-19.1). Ein erfundener Tag weit genug in der Zukunft, daß
+      // er sich in einer Exportdatei sofort erkennen ließe — genau das ist der
+      // Punkt: A-19.17 verlangt, daß er dort **nicht** auftaucht.
+      dueDate: DUE_DATE,
     });
     const todoId = todo.body.data.todo.id;
 
     await record('getTodo', 'GET', '/todos/{todoId}', `/todos/${todoId}`);
     await record('updateTodo', 'PATCH', '/todos/{todoId}', `/todos/${todoId}`, {
       title: 'Akte 4711 — Schriftsatz (überarbeitet)',
+      // Die Frist ändern. `null` an dieser Stelle hieße „entfernen" (A-19.3);
+      // der Unterschied zwischen den beiden ist der Grund, warum das Feld
+      // `nullable` und nicht bloß freiwillig ist.
+      dueDate: DUE_DATE_CHANGED,
     });
+
+    /*
+     * -----------------------------------------------------------------------
+     * Anhänge (A-19.8 bis A-19.15)
+     * -----------------------------------------------------------------------
+     *
+     * Alle drei Arten, weil sie sich nicht nur im Etikett unterscheiden:
+     * Verweis und Datei speichern eine Zeichenkette, ein Bild wird kopiert
+     * (E-071 Punkt 1 und 2). Die Adresse geht **roh** hinein und kommt
+     * **normalisiert** zurück — `HTTP://Beispiel.EXAMPLE/…` wird zu
+     * `http://beispiel.example/…` (A-A-3); der Durchlauf mißt damit
+     * nebenbei, daß die Normalisierung überhaupt greift.
+     */
+    const linkAttachment = await record(
+      'addTodoAttachment',
+      'POST',
+      '/todos/{todoId}/attachments',
+      `/todos/${todoId}/attachments`,
+      { kind: 'link', url: 'HTTP://Beispiel.EXAMPLE/Anhang', title: 'Beispielverweis' },
+    );
+
+    // Ohne Titel — dann trägt `label` etwas Lesbares aus dem Pfad (A-19.12).
+    await quiet('POST', `/todos/${todoId}/attachments`, {
+      kind: 'file',
+      path: filePath,
+    });
+
+    const imageAttachment = await quiet('POST', `/todos/${todoId}/attachments`, {
+      kind: 'image',
+      sourcePath: imagePath,
+      title: 'Beispielbild',
+    });
+
+    await record(
+      'listTodoAttachments',
+      'GET',
+      '/todos/{todoId}/attachments',
+      `/todos/${todoId}/attachments`,
+    );
+
+    await record(
+      'getTodoAttachmentImage',
+      'GET',
+      '/todos/{todoId}/attachments/{attachmentId}/image',
+      `/todos/${todoId}/attachments/${imageAttachment.body.data.id}/image`,
+    );
+
+    await record(
+      'removeTodoAttachment',
+      'DELETE',
+      '/todos/{todoId}/attachments/{attachmentId}',
+      `/todos/${todoId}/attachments/${linkAttachment.body.data.id}`,
+    );
     await record('getTodoNote', 'GET', '/todos/{todoId}/note', `/todos/${todoId}/note`);
     await record('putTodoNote', 'PUT', '/todos/{todoId}/note', `/todos/${todoId}/note`, {
       text: INTERNAL_NOTE,

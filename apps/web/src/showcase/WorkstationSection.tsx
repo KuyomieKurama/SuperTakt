@@ -132,7 +132,7 @@ export function WorkstationSection() {
       </Card>
 
       <Card
-        title="Dieser Arbeitsplatz (S-09)"
+        title="Arbeitsplatz (S-09)"
         description="So steht die Karte in den Einstellungen — ohne Speichern-Knopf, weil es nichts zu speichern gibt."
       >
         <div className="workstation">

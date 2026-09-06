@@ -28,7 +28,7 @@ type DemoCase = "plain" | "rejected" | "busy";
 const PROBLEMS: Readonly<Record<DemoCase, string | null>> = {
   plain: null,
   rejected:
-    "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite. Die Release-Seite lässt sich über den angezeigten Verweis von Hand aufrufen.",
+    "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite.",
   busy: null,
 };
 

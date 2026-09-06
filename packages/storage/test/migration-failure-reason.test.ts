@@ -29,11 +29,12 @@
  * `apps/local-api/test/startup.test.ts`.
  *
  * ---------------------------------------------------------------------------
- * Übergabe an unit-tester (T-132)
+ * Übernahme durch unit-tester (T-132, vollzogen mit T-148)
  * ---------------------------------------------------------------------------
- * Diese Datei liegt in seiner Hoheit und wurde vom domain-dev angelegt, weil
- * die Aufgabe die Prüffälle ausdrücklich verlangt. Sie ist als Übernahme
- * gedacht, nicht als Doppelung.
+ * Diese Datei liegt in der Hoheit von unit-tester und wurde vom domain-dev
+ * angelegt, weil die Aufgabe T-132 die Prüffälle ausdrücklich verlangte. Der
+ * Auftrag T-148 macht die Übernahme förmlich: Pflege und Erweiterung dieser
+ * Datei liegen ab jetzt hier, nicht mehr beim domain-dev.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -411,15 +411,34 @@ function TemplateFieldRow({
           {catalog.transformationInfo(field.transformation)?.effect ?? ""}
         </p>
 
-        {emptyName || duplicate || rowError !== undefined ? (
-          <p className="tfield__error" id={errorId}>
-            {emptyName
-              ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
-              : duplicate
-                ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
-                : rowError}
-          </p>
-        ) : null}
+        {/*
+          Die Meldefläche der Zeile steht **immer** im Baum, auch leer (B-5,
+          T-162, T-186; Befund O-GQ, T-191). Bis dahin trug dieser Absatz
+          **gar keine Rolle**: Er erschien, während der Vorlageneditor schon
+          stand — beim Tippen eines doppelten Schlüssels und beim Rückschlag
+          des Dienstes —, und keine Vorlesehilfe sagte ihn an.
+
+          Der Behälter trägt die Rolle, der Absatz den Text: `.tfield__error`
+          bleibt damit **bedingt**, und wer nach ihm greift, findet weiter nur
+          die Zeilen mit einem Befund. Ein `role`-Attribut am Absatz selbst
+          hätte dieselbe Ansage, aber eine leere Meldung in jeder Zeile.
+
+          Ohne Klasse und ohne eigene Regel: Der Behälter ist leer ein Block
+          ohne Höhe und ohne Rand, und der obere Rand von `.tfield__error`
+          fällt durch ihn hindurch — dieselbe Bauart wie `role="status"` im
+          Bestätigungsdialog.
+        */}
+        <div role="alert">
+          {emptyName || duplicate || rowError !== undefined ? (
+            <p className="tfield__error" id={errorId}>
+              {emptyName
+                ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
+                : duplicate
+                  ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
+                  : rowError}
+            </p>
+          ) : null}
+        </div>
 
         <ConditionEditor
           idPrefix={id}

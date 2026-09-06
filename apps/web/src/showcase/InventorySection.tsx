@@ -259,6 +259,21 @@ const INVENTORY: readonly InventoryEntry[] = [
     built: true,
   },
   {
+    /*
+      Bis T-152 fehlte hier der Baustein, den fast jede Ansicht oeffnet
+      (O-BF, T-133 Frage 5). Er stand weder in dieser Aufstellung noch in
+      Abschnitt 9 — wer sein Aussehen abnehmen wollte, musste die Anwendung
+      starten. Seit T-152 steht er in Abschnitt 9 mit seinen vier Zustaenden.
+    */
+    name: "Formulardialog",
+    file: "FormDialog.tsx",
+    purpose:
+      "Modaler Dialog, der Eingaben entgegennimmt. Der Fokus geht beim Öffnen in das erste Feld, die Fehlermeldung des Dienstes holt sich selbst ins Sichtfeld.",
+    states: "bedienbar · Absendung gesperrt · arbeitend · nach Absage des Dienstes · breit",
+    screens: "S-01 · S-03 · S-04 · S-05 · S-06 · S-08 · S-09 · global (Timer)",
+    built: true,
+  },
+  {
     name: "Auskunftsdialog",
     file: "InfoDialog.tsx",
     purpose:

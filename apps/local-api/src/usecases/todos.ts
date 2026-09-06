@@ -9,6 +9,7 @@
  */
 
 import type {
+  CalendarDay,
   DefaultTag,
   PoolMovement,
   StatusId,
@@ -28,12 +29,15 @@ import {
   err,
   normalizeCallNumber,
   ok,
+  resolveTimeZone,
   taktError,
+  toCalendarDay,
 } from '@takt/domain';
 import type { Page, Pagination, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from './context.ts';
 import { NO_ENTRIES, completionMovementStates, poolMovementNamer } from './pool-movement.ts';
+import { type AttachmentView, toAttachmentView } from './attachments.ts';
 import { AbortTodoCreate, resolveTagNames } from './tag-names.ts';
 
 export interface CreateTodoInput {
@@ -57,6 +61,16 @@ export interface CreateTodoInput {
   readonly tagNames?: readonly string[];
   /** Der interne Vermerk (A-7.1). Geht **nie** in den Export (A-7.2). */
   readonly note: string;
+  /**
+   * Die Frist (A-19.1, A-19.3). `null` heißt „ohne Frist".
+   *
+   * Sie kommt **geprüft** herein: `checkDueDate` in der Domäne läuft an der
+   * Tür, und zwar an jeder — auch an der des Add-ins (A-19.21, E-074 Punkt 4).
+   * Dieser Anwendungsfall urteilt nicht noch einmal darüber, was ein Tag ist;
+   * eine zweite, abweichende Fassung wäre genau das, was E-045 für die
+   * Call-Nummer beseitigt hat.
+   */
+  readonly dueDate: CalendarDay | null;
 }
 
 export interface CreateTodoResult {
@@ -151,6 +165,7 @@ export async function createTodo(
           // Argument — siehe den Vertrag von `TodoPort.create`.
           tagIds: selected,
           note: input.note,
+          dueDate: input.dueDate,
           now: timestamp,
         },
         effective,
@@ -184,6 +199,12 @@ export interface UpdateTodoInput {
   readonly callNumber?: string | null;
   readonly statusId?: StatusId;
   readonly tagIds?: readonly TagId[];
+  /**
+   * Drei Fälle (A-19.3): Das Feld **fehlt** heißt „unverändert", `null` heißt
+   * „Frist entfernen", ein Tag heißt „setzen". Die Unterscheidung ist der
+   * Grund für `exactOptionalPropertyTypes` in diesem Baum.
+   */
+  readonly dueDate?: CalendarDay | null;
 }
 
 export async function updateTodo(
@@ -210,6 +231,7 @@ export async function updateTodo(
         : { callNumber: normalizeCallNumber(input.callNumber) }),
       ...(input.statusId === undefined ? {} : { statusId: input.statusId }),
       ...(input.tagIds === undefined ? {} : { tagIds: input.tagIds }),
+      ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
       now: timestamp,
     }),
   );
@@ -237,6 +259,54 @@ export interface TodoDetail {
   readonly totalSeconds: number;
   /** Offene, noch nicht exportierte Sekunden. Für die Kennzeichnung in der Liste. */
   readonly openSeconds: number;
+  /** Die Anhänge (A-19.8, A-19.11). Leer, wenn es keine gibt. */
+  readonly attachments: readonly AttachmentView[];
+}
+
+/*
+ * ===========================================================================
+ * Warum in dieser Antwort **kein** `dueState` steht
+ * ===========================================================================
+ *
+ * Weil er sonst zweimal existierte, und die zweite Fassung wäre die falsche.
+ *
+ * E-073 Punkt 2 legt fest, **wann** der Zustand gerechnet wird: bei jedem
+ * Zeichnen, zusätzlich bei `visibilitychange` und über einen Zeitgeber auf die
+ * nächste Mitternacht. Das ist eine Eigenschaft der **Anzeige** — eine
+ * Anwendung, die über Nacht offen bleibt, soll nicht bis zum nächsten Klick
+ * „heute fällig" zeigen.
+ *
+ * Ein Feld in dieser Antwort trüge den Zustand zum Zeitpunkt der **Anfrage**.
+ * Es wäre um 23:59 richtig und um 00:01 falsch, und die Oberfläche hätte
+ * daneben ihren eigenen, jüngeren Wert. Zwei Werte über dieselbe Sache, von
+ * denen einer altert — das ist die Doppelung, die dieser Bestand an sechs
+ * Stellen bereits beseitigt hat (Rundung, Kalendertag, Quellenliste, …).
+ *
+ * Also: Der Dienst gibt den **Tag** heraus (`todo.dueDate`), und wer ihn
+ * anzeigt, ruft `dueState(todo.dueDate, heute)` aus `@takt/domain`. Es gibt
+ * genau eine Regel, sie liegt in der Domäne, und beide Flächen lesen sie.
+ *
+ * Serverseitig gerechnet wird der Zustand an genau einer Stelle, und dort muß
+ * es sein: beim **Filtern** (`listTodos`). Eine Abfrage kann nicht jede Zeile
+ * laden und die Oberfläche fragen; sie braucht den Vergleich in SQL. Auch dort
+ * kommt er aus der Domäne (`dueComparison`), und `heute` entsteht in derselben
+ * Funktion wie hier: {@link today}.
+ */
+
+/**
+ * Der heutige Kalendertag — **derselbe** wie bei der Tagesgruppierung des
+ * Exports (E-025, E-070 Punkt 2).
+ *
+ * Eine Funktion und keine Konstante: Sie liest die Uhr des Zusammenbaus bei
+ * jedem Aufruf. Genau das ist die Umsetzung von „gerechnet, nicht gespeichert"
+ * — und die Zeitzone kommt aus derselben Quelle wie überall sonst.
+ *
+ * `resolveTimeZone()` ohne Argument ist die Zone des Rechners. Sie steht hier
+ * nicht als Einstellung: Eine zweite, abweichend eingestellte Zone wäre eine
+ * Fehlerquelle ohne Nutzen (`kernel.ts`).
+ */
+export function today(context: AppContext): CalendarDay {
+  return toCalendarDay(context.clock.now(), resolveTimeZone());
 }
 
 export async function loadTodo(
@@ -249,13 +319,60 @@ export async function loadTodo(
 
     const sums = await unit.todos.sumSeconds([id]);
     const openSeconds = await unit.timeEntries.sumSeconds({ todoId: id, exportStatus: 'open' });
+    const attachments = await unit.attachments.list(id);
 
-    return ok({ todo, totalSeconds: sums.get(id) ?? 0, openSeconds });
+    return ok({
+      todo,
+      totalSeconds: sums.get(id) ?? 0,
+      openSeconds,
+      attachments: attachments.map(toAttachmentView),
+    });
   });
 }
 
-export function removeTodo(context: AppContext, id: TodoId): Promise<UseCaseResult<void>> {
-  return context.transactions.inTransaction((unit) => unit.todos.remove(id));
+/**
+ * Ein Todo löschen — und seine Bildkopien nehmen den Weg mit (A-A-18).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das nicht `ON DELETE CASCADE` erledigt
+ * ---------------------------------------------------------------------------
+ *
+ * Weil SQL kein Dateisystem kennt. Die **Zeilen** in `todo_attachment`
+ * verschwinden von selbst (Migration 0015); die **Dateien** im
+ * Bildverzeichnis nicht. Eine verwaiste Kopie ist Kundenmaterial ohne
+ * Eigentümer — sie taucht in keiner Anzeige mehr auf, wandert aber in jede
+ * Sicherung und in jeden Synchronisierungsordner (VG-3).
+ *
+ * Die Reihenfolge ist Inhalt: **erst lesen, dann löschen, dann die Dateien.**
+ * Nach dem `COMMIT` ließen sich die Namen nicht mehr lesen; vor dem `COMMIT`
+ * die Dateien zu entfernen hieße, sie bei einem Abbruch verloren zu haben,
+ * während das Todo noch dasteht. Von den beiden möglichen Halbzuständen ist
+ * „Zeile weg, Datei liegt noch" der behebbare.
+ */
+export async function removeTodo(context: AppContext, id: TodoId): Promise<UseCaseResult<void>> {
+  const outcome = await context.transactions.inTransaction(async (unit) => {
+    const images = await unit.attachments.imageTargets(id);
+    const removed = await unit.todos.remove(id);
+    if (!removed.ok) return err(removed.error);
+    return ok(images);
+  });
+
+  if (!outcome.ok) return err(outcome.error);
+  for (const name of outcome.value) {
+    /*
+     * Der Rückgabewert wird bewußt nicht in die Antwort getragen (T-159): Das
+     * Todo **ist** gelöscht, und daran ändert eine liegengebliebene Kopie
+     * nichts. Ein Abbruch mitten in dieser Schleife wäre der schlechtere
+     * Ausgang — er ließe die übrigen Kopien liegen und meldete zugleich einen
+     * Fehlschlag für einen Vorgang, der stattgefunden hat.
+     *
+     * Still ist er trotzdem nicht: `removeImage` schreibt den Fehlschlag mit
+     * dem erzeugten Namen ins Protokoll, und der Wert steht hier für den, der
+     * daraus später mehr machen will (etwa ein Aufräumen beim nächsten Start).
+     */
+    await context.attachmentBlobs.removeImage(name);
+  }
+  return ok(undefined);
 }
 
 /**

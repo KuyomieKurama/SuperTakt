@@ -111,6 +111,16 @@ const ENTRY_PAGE_SIZE = 200;
  */
 const DRAFT_DEBOUNCE_MS = 400;
 
+/**
+ * Woher die Vorschau kommt — **eine** Fassung fuer alle drei Faelle und fuer
+ * die Karte darum (T-181, ST-07).
+ *
+ * Bis dahin standen vier Abschriften desselben Satzes untereinander und
+ * nebeneinander. Zwei Abschriften laufen auseinander, sobald eine gepflegt
+ * wird; vier laufen schneller auseinander.
+ */
+const PREVIEW_SOURCE = "Vom selben Renderer wie die Exportdatei, an Ihren offenen Buchungen.";
+
 export interface TemplatePreviewProps {
   /** Die Felder, die der Benutzer gerade vor sich hat. Sie werden gerendert. */
   readonly fields: readonly ExportFieldDefinition[];
@@ -295,15 +305,22 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           Seit E-051 zeigt die Vorschau **immer** den Stand im Editor. Der
           frühere Satz „zeigt den gespeicherten Stand" ist damit ersatzlos weg;
           was bleibt, ist die Auskunft, ob dieser Stand schon gespeichert ist.
+
+          Seit T-181 (ST-07) steht die Herkunft in **einer** Fassung statt in
+          vier: Der Satz über den Renderer stand dreimal hier und ein viertes
+          Mal in der Kartenbeschreibung darum. Was bleibt, ist der Zusatz, der
+          die drei Fälle unterscheidet — er ist eine **Abwesenheit** („noch
+          nicht gespeichert", „gespeichert wird dabei nichts") und fällt
+          deshalb nicht.
         */}
         <p className="tpreview__lead">
           <Icon name={stale || unsaved ? "pencil" : "check-circle"} size={14} />
           <span>
             {unsaved
-              ? "Ihr noch nicht gespeicherter Entwurf, gerendert vom selben Renderer, der auch die Datei schreibt — an Ihren tatsächlich offenen Buchungen."
+              ? `Noch nicht gespeicherter Entwurf. ${PREVIEW_SOURCE}`
               : stale
-                ? "Ihr geänderter, noch nicht gespeicherter Stand — gerendert vom selben Renderer, der auch die Datei schreibt. Gespeichert wird dabei nichts."
-                : "Erzeugt vom selben Renderer, der auch die Datei schreibt — an Ihren tatsächlich offenen Buchungen."}
+                ? `Geänderter Stand, noch nicht gespeichert — die Vorschau speichert nichts. ${PREVIEW_SOURCE}`
+                : PREVIEW_SOURCE}
           </span>
         </p>
       </div>
@@ -503,35 +520,37 @@ function PreviewGroupRow({
         </span>
       </button>
 
-      {blocked ? (
-        <div className="tpgroup__blocked" role="status">
-          <span className="tpgroup__blocked-icon" aria-hidden>
-            <Icon name="alert-triangle" size={14} />
-          </span>
-          <div className="tpgroup__blocked-body">
-            <p className="tpgroup__blocked-title">Diese Tagesgruppe ist nicht exportierbar</p>
-            <p className="tpgroup__blocked-text">
-              Keine ihrer Buchungen trägt einen Leistungstext, und eine leere Notiz nimmt das
-              Abrechnungstool nicht an. Der übrige Export läuft trotzdem; diese Gruppe bleibt offen
-              und erscheint beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann geht sie
-              mit.
-            </p>
+      <div className="live-region" role="status">
+        {blocked ? (
+          <div className="tpgroup__blocked">
+            <span className="tpgroup__blocked-icon" aria-hidden>
+              <Icon name="alert-triangle" size={14} />
+            </span>
+            <div className="tpgroup__blocked-body">
+              <p className="tpgroup__blocked-title">Diese Tagesgruppe ist nicht exportierbar</p>
+              <p className="tpgroup__blocked-text">
+                Keine ihrer Buchungen trägt einen Leistungstext, und eine leere Notiz nimmt das
+                Abrechnungstool nicht an. Der übrige Export läuft trotzdem; diese Gruppe bleibt
+                offen und erscheint beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann
+                geht sie mit.
+              </p>
+            </div>
+            {group.entries[0] === undefined ? null : (
+              <Button
+                size="sm"
+                variant="secondary"
+                iconStart="pencil"
+                onClick={() => {
+                  const first = group.entries[0];
+                  if (first !== undefined) onEditEntry(first);
+                }}
+              >
+                Leistung nachtragen
+              </Button>
+            )}
           </div>
-          {group.entries[0] === undefined ? null : (
-            <Button
-              size="sm"
-              variant="secondary"
-              iconStart="pencil"
-              onClick={() => {
-                const first = group.entries[0];
-                if (first !== undefined) onEditEntry(first);
-              }}
-            >
-              Leistung nachtragen
-            </Button>
-          )}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="tpgroup__body" id={bodyId} hidden={!expanded}>
         {/*
@@ -592,10 +611,11 @@ function PreviewGroupRow({
 /** Die Karte um die Vorschau, damit sie auf jedem Bildschirm gleich sitzt. */
 export function TemplatePreviewCard(props: TemplatePreviewProps) {
   return (
-    <Card
-      title="Vorschau"
-      description="An Ihren offenen Buchungen, erzeugt vom selben Renderer wie die Exportdatei."
-    >
+    /*
+      Ohne Beschreibung (T-181, ST-07): Sie war die vierte Abschrift des
+      Satzes, der unmittelbar darunter im Banner der Vorschau steht.
+    */
+    <Card title="Vorschau">
       <TemplatePreview {...props} />
     </Card>
   );

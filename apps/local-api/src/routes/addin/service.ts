@@ -9,6 +9,7 @@
  */
 
 import type {
+  CalendarDay,
   CallNumberRejection,
   DefaultTag,
   Pool,
@@ -359,6 +360,18 @@ export interface AddinCreateTodoInput {
   readonly tagNames?: readonly string[];
   /** Der **interne Vermerk** (A-7.1, A-7.2). Nicht die Leistung. */
   readonly note: string;
+  /**
+   * Die **Frist** (A-19.21, E-074, T-149). Bereits geprüft; `null` heißt
+   * „ohne Frist" und ist der Regelfall.
+   *
+   * Kein `?`: An dieser Tür gibt es nur zwei Zustände, und der Aufrufer soll
+   * sie benennen. Beim **Ändern** wären „fehlt" und `null` zwei verschiedene
+   * Anweisungen (A-19.3) — diese Tür ändert nichts, sie legt an, und ein
+   * freiwilliges Feld würde die Unterscheidung nur nachbilden, ohne sie zu
+   * haben. `tagNames` darüber ist freiwillig aus dem umgekehrten Grund: Dort
+   * ist die Abwesenheit eine leere Liste und keine Aussage.
+   */
+  readonly dueDate: CalendarDay | null;
 }
 
 export interface AddinCreateTodoResult {
@@ -461,6 +474,12 @@ export const createTodo = async (
           // die Art Annahme, die man erst in einer Abrechnung bemerkt.
           tagIds: effectiveTagIds,
           note: input.note,
+          // A-19.21: Der Tag geht unverändert an denselben Port, den auch
+          // `usecases/todos.ts` benutzt. Es gibt keine zweite Schreibstelle
+          // für die Frist und keine Umrechnung dazwischen — der Adapter
+          // schreibt `dueDate ?? null`, und `null` ist hier bereits der Wert
+          // und kein fehlendes Feld.
+          dueDate: input.dueDate,
           now,
         },
         effectiveTagIds,

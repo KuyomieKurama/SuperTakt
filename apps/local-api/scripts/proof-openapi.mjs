@@ -73,6 +73,13 @@
  * Fehlerfall, den niemand herbeiführt, bleibt unbeschrieben messbar falsch.
  * Deshalb führt der Durchlauf auch Abweisungen herbei und nicht nur
  * Erfolgsfälle.
+ *
+ * **Die Regel über allen Nachweispfaden** steht ausgeschrieben im Kopf von
+ * `proof-route-policy.mjs` (A-A-55, T-206): *Keine Zusicherung darf bestehen,
+ * ohne daß das Geprüfte stattgefunden hat.* Drei Stellen dieses Laufs sind
+ * ihre Anwendung — die Weigerung über die Routenliste in Abschnitt 2
+ * (A-A-51), die einseitige Aufzählung in Abschnitt 3 (A-A-53) und die
+ * Untergrenze der Vermerksmessung in Abschnitt 6 (A-A-52).
  */
 
 import { readFileSync } from 'node:fs';
@@ -90,7 +97,7 @@ import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
-import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
+import { REQUEST_SCHEMAS as ADDIN_SCHEMAS } from '../src/routes/addin/schema.ts';
 import {
   FORBIDDEN_NAME_CHARACTERS,
   POOL_RULE_AXIS_IDS,
@@ -259,11 +266,34 @@ const probe = compose({
   databaseLocation: ':memory:',
 });
 
+/**
+ * Trägt der Pfad einen Platzhalter — `*` oder `:name`? Daran, und nur daran,
+ * unterscheidet sich unter der Methode `ALL` ein Kettenglied von einem
+ * Endpunkt (A-A-51).
+ */
+const hasPlaceholder = (path) => path.includes('*') || /:[A-Za-z0-9_]/.test(path);
+
 const serviceRoutes = new Set();
 const outside = [];
+const opaqueRoutes = [];
 for (const route of probe.app.routes) {
   // `Hono#routes` führt auch die Kettenglieder. Sie stehen als `ALL /*`.
-  if (route.method === 'ALL') continue;
+  //
+  // T-206-1: für `app.all('/x', …)` und `app.on('ALL', …)` stimmt das nicht —
+  // Hono trägt sie mit derselben Methode ein. Eine so registrierte Route wäre
+  // hier weder beschrieben noch vermißt worden: Gemessen mit einer Zeile
+  // `api.all('/addin/leak', …)` blieb dieser Lauf bei 110/0, und die
+  // Zusicherungen „keine Route gibt es nur im Dienst" und „beide Seiten führen
+  // dieselbe Zahl" waren in diesem Augenblick falsch. Ein `ALL`-Eintrag ohne
+  // Platzhalter wird deshalb festgehalten und unten gemeldet (A-A-51, A-A-55).
+  //
+  // Was die Weigerung nicht deckt, steht ausgeschrieben in
+  // `proof-route-policy.mjs`: Ein Endpunkt, der selbst auf einem Platzhalter
+  // liegt, bleibt am Pfad allein ununterscheidbar.
+  if (route.method === 'ALL') {
+    if (!hasPlaceholder(route.path)) opaqueRoutes.push(route.path);
+    continue;
+  }
   if (!route.path.startsWith(API_BASE_PATH)) {
     outside.push(`${route.method} ${route.path}`);
     continue;
@@ -279,6 +309,14 @@ for (const [path, item] of Object.entries(doc.paths)) {
     if (item[method] !== undefined) specRoutes.add(`${method.toUpperCase()} ${path}`);
   }
 }
+
+// A-A-51 — die Weigerung steht vor jedem Urteil über die Liste, in beiden
+// Läufen mit derselben Bedingung und derselben Begründung.
+check(
+  'kein ALL-Eintrag ohne Platzhalter — sonst urteilt dieser Lauf über eine unvollständige Liste (A-A-51)',
+  opaqueRoutes.length === 0,
+  `mit ALL registriert und damit aus der Liste gefallen: ${opaqueRoutes.join(', ')}`,
+);
 
 check(
   'keine Route steht nur in der Beschreibung',
@@ -310,10 +348,13 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
-  // Die Add-in-Routen liegen in fremder Hoheit und führen kein
-  // `REQUEST_SCHEMAS`; ihre beiden Schemata sind einzeln ausgeführt.
-  createAddinTodo: createTodoSchema,
-  createAddinTimeEntry: bookSchema,
+  // Seit T-149 führt auch die Add-in-Tür ihre eigene Aufstellung. Bis dahin
+  // standen hier zwei Einzelimporte mit dem Vermerk „liegen in fremder Hoheit
+  // und führen kein `REQUEST_SCHEMAS`" — er stimmte seit jener Aufgabe nicht
+  // mehr und ist mit T-159 gefallen. Die Messung hing nie daran, der nächste
+  // Leser schon: Eine neue Add-in-Route mit Rumpf wäre hier stumm geblieben,
+  // weil ihr Verfasser diese Datei nicht anfaßt.
+  ...ADDIN_SCHEMAS,
 };
 
 /** Folgt `$ref` bis zum Bauteil. */
@@ -426,10 +467,43 @@ for (const [label, operation] of bodyOperations) {
     }
     const describedEnum = described.enum ?? (described.const === undefined ? undefined : [described.const]);
     const enforcedEnum = enforced.enum ?? (enforced.const === undefined ? undefined : [enforced.const]);
+    const list = (values) => [...values].sort().join('|');
     if (describedEnum !== undefined && enforcedEnum !== undefined) {
-      const a = [...describedEnum].sort().join('|');
-      const b = [...enforcedEnum].sort().join('|');
+      const a = list(describedEnum);
+      const b = list(enforcedEnum);
       if (a !== b) facetProblems.push(`${id}.${name}: Aufzählung [${a}] gegen [${b}]`);
+    } else if (!isNamed(specSchema.properties[name])) {
+      /*
+       * A-A-53 (T-206-3) — die Aufzählung wird behandelt wie die Zahlengrenzen
+       * darüber, und aus demselben Grund.
+       *
+       * Bis dahin verglich diese Stelle nur, wenn **beide** Seiten eine
+       * Aufzählung hatten. Gemessen: `enum` aus `theme` in der Beschreibung
+       * entfernt — der Dienst erzwang weiter drei Werte, die Beschreibung sagte
+       * „irgendeine Zeichenkette", der Lauf blieb bei 110/0. Dieselbe
+       * Verstümmelung auf `maxLength` ergab 108/2. Von den drei Facetten war
+       * allein die Aufzählung unverankert.
+       *
+       * Die Aufzählung ist die geschlossene Werteliste einer Schnittstelle.
+       * Verschweigt die Beschreibung sie, läuft ein gültig aussehender Aufruf
+       * in ein 422, das niemand angekündigt hat; verspricht sie eine, die der
+       * Dienst nicht erzwingt, baut jemand einen Fehlerfall, den es nicht gibt.
+       * Und sie ist das, was ein Prüfwerkzeug von außen — 42Crunch — als
+       * einzige Quelle hat.
+       *
+       * Dieselbe Ausnahme wie bei den Facetten: Zeigt die Beschreibung an
+       * dieser Stelle auf ein benanntes Bauteil, steht die Aussage dort und
+       * nicht am Feld.
+       */
+      if (enforcedEnum !== undefined) {
+        facetProblems.push(
+          `${id}.${name}: Aufzählung [${list(enforcedEnum)}] wird erzwungen, aber nicht beschrieben`,
+        );
+      } else if (describedEnum !== undefined) {
+        facetProblems.push(
+          `${id}.${name}: Aufzählung [${list(describedEnum)}] ist beschrieben, aber wird nicht erzwungen`,
+        );
+      }
     }
   }
 }
@@ -494,6 +568,7 @@ const goodPage = {
         callNumber: null,
         statusId: 's',
         completedAt: null,
+        dueDate: null,
         tagIds: [],
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-01T00:00:00Z',
@@ -610,10 +685,24 @@ check(
  * genau zwei Antworten stehen: in der der Vermerksroute selbst. Diese Probe
  * kostet nichts, weil ohnehin jede Antwort eingesammelt wird — und sie misst
  * eine Zusicherung, die sonst nur behauptet wird.
+ *
+ * A-A-52 (T-206-2): Die Zahl **zwei** muss dabei geprüft werden und nicht nur
+ * im Kommentar stehen. `every` ist über der leeren Liste wahr — gemessen mit
+ * einem Durchlauf, der den Vermerk nirgends mehr mitgab: null Treffer, Lauf
+ * grün, Zeile bestanden, nichts gemessen. Die Untergrenze steht deshalb
+ * daneben, so wie sie in Abschnitt 16 („die Klasse ist nicht leer") und in
+ * `proof-route-policy.mjs` Abschnitt 1 schon steht (A-A-55).
  */
 const noteBearing = records
   .filter((record) => (record.text ?? '').includes(INTERNAL_NOTE))
   .map((record) => record.operationId);
+check(
+  'der Durchlauf trägt den Vermerk überhaupt — genau zwei Antworten führen ihn (A-A-52)',
+  noteBearing.length === 2 &&
+    noteBearing.includes('getTodoNote') &&
+    noteBearing.includes('putTodoNote'),
+  `${noteBearing.length}: ${noteBearing.join(', ')}`,
+);
 check(
   'der interne Vermerk steht in keiner Antwort außer der Vermerksroute (A-7.2)',
   noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote'),

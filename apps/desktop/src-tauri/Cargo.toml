@@ -44,6 +44,14 @@ tauri-plugin-single-instance = "2"
 # Dateiauswahldialog kann nichts lesen und nichts schreiben; er gibt einen
 # Pfad zurueck. Das ist der ganze Zuwachs an Flaeche.
 tauri-plugin-dialog = "2"
+# Der Zerleger fuer Anhang-Adressen (A-A-2, A-A-3, T-145-12). Er liegt bereits
+# transitiv ueber `tauri` im Baum und ist im lokalen Zwischenspeicher — eine
+# unmittelbare Abhaengigkeit ist damit **kein** Zuwachs in der Lieferkette
+# (VG-7). Von Hand zu zerlegen waere hier die schlechtere Wahl: Die 28
+# gemessenen Faelle in Bedrohungsmodell 20.2 zeigen, wie viele Regeln man dabei
+# nachbauen muesste — und der eigentliche Angriff ist die Normalisierung, nicht
+# das Schema.
+url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Der einzige Ort mit Zufall in der Hülle. Betriebssystemquelle, kein

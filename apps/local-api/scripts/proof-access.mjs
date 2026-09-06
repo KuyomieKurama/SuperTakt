@@ -42,7 +42,24 @@ import {
 } from '../src/config.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY = join(HERE, '..', 'src', 'index.ts');
+/**
+ * **Nicht `src/index.ts`** (T-146, Befund T-145-1).
+ *
+ * `src/index.ts` ruft `main()` ohne Argument, und `main()` startet die
+ * Versionsprüfung. Dieser Lauf dauert länger als deren Startabstand — `ss -tnp`
+ * hat währenddessen `ESTAB … 140.82.121.6:443` gezeigt, also `api.github.com`.
+ * Der Nachweis, der die Vertrauensgrenze mißt, überschritt sie selbst: ein
+ * Lebenszeichen (R-19 Punkt 3) aus jedem `pnpm check`, Mitverbrauch der 60
+ * Anfragen je Stunde und Quelladresse (T-136-5).
+ *
+ * `proof-access-entry.ts` ruft **denselben** `main()` — dieselbe Migration,
+ * dieselbe Rechteprüfung, denselben Aufgabenbereich, dieselben
+ * Beendigungscodes — und setzt als einziges eine Abholfunktion ein, die den
+ * Prozeß nicht verläßt. Ein ausdrücklicher Parameter am Zusammenbau und keine
+ * Umgebungsvariable: Eine Variable wäre von außen setzbar und damit genau das,
+ * was A-18.3 verbietet.
+ */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
 const PORT = 17843;
 const BASE = `http://127.0.0.1:${PORT}/api/v1`;
 const SECRET_SHAPE = /takt_[A-Za-z0-9_-]{43}/;

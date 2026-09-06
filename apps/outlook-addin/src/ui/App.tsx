@@ -4,13 +4,21 @@
  * Alles, was von außen kommt, wird hier **einmal** erzeugt und weitergereicht:
  * die Ablage der Einstellungen, der Zugang zum Dienst, der Auswerter für die
  * Call-Nummer. Kein Baustein weiter unten greift selbst auf `localStorage`,
- * `fetch`, `Worker` oder `Office` zu — deshalb lässt sich jeder von ihnen ohne
- * Outlook und ohne laufenden Dienst prüfen.
+ * `Worker` oder `Office` zu — deshalb lässt sich jeder von ihnen ohne Outlook
+ * und ohne laufenden Dienst prüfen.
+ *
+ * **Eine Ausnahme, und sie ist seit T-190 eine Zusage.** Die Abholfunktion des
+ * Browsers wird hier *nicht* mehr eingesetzt. `createBrowserApiClient` setzt
+ * sie in `api/client.ts` ein — in derselben Datei, in der der Zugang wohnt und
+ * über die `proof:callers` zusichert, daß es keinen zweiten Weg zum Dienst
+ * gibt. Am Port ändert das nichts: `createApiClient` verlangt seine
+ * Abholfunktion weiterhin ohne Ersatzwert, und jeder Prüflauf reicht seine
+ * eigene herein.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { createApiClient } from '../api/client.ts';
+import { createBrowserApiClient, type ApiClient } from '../api/client.ts';
 import { createTimedEvaluator, type Evaluator } from '../callnumber/evaluate.ts';
 import { spawnBrowserChannel, supportsWorker } from '../callnumber/browser-channel.ts';
 import { detectCallNumber, type Detection } from '../callnumber/detect.ts';
@@ -52,10 +60,9 @@ export function App() {
 
   const api = useMemo(
     () =>
-      createApiClient({
+      createBrowserApiClient({
         baseUrl: settings.baseUrl,
         token: () => store.readToken(),
-        fetch: window.fetch.bind(window),
       }),
     [settings.baseUrl, store],
   );
@@ -159,7 +166,7 @@ function Body({
   readonly host: HostState | null;
   readonly detection: Detection | null;
   readonly settings: AddinSettings;
-  readonly api: ReturnType<typeof createApiClient>;
+  readonly api: ApiClient;
   readonly onOpenSettings: () => void;
   readonly onConnected: () => void;
 }) {
@@ -188,7 +195,7 @@ function Body({
   if (host.kind === 'no_item') {
     return (
       <Section title="Keine E-Mail geöffnet">
-        <Callout tone="info" title="Öffne eine E-Mail, um daraus ein Todo anzulegen." >
+        <Callout tone="info" title="Öffnen Sie eine E-Mail, um daraus ein Todo anzulegen.">
           Der Aufgabenbereich übernimmt Betreff, Absender und den Text der geöffneten E-Mail.
         </Callout>
       </Section>

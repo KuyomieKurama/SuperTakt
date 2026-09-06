@@ -454,6 +454,47 @@ paths:
           in: query
           description: Nur Todos mit mindestens einer noch nicht exportierten Buchung.
           schema: { type: boolean, default: false }
+        - name: dueState
+          in: query
+          description: |
+            Nach der **Frist** filtern (A-19.20). Kommagetrennt; mehrere Werte
+            wirken als **Vereinigung** — „überfällig oder heute fällig" ist die
+            Frage, die jemand stellt, der Schnitt wäre immer leer.
+
+            Gerechnet gegen den heutigen Tag in der Zeitzone des Rechners,
+            derselben, in der die Tagesgruppierung des Exports rechnet (E-025,
+            E-070 Punkt 2).
+
+            Ein unbekannter Wert ist ein `422` mit Feldangabe und **kein**
+            stillschweigend übergangener Filter: Ein Filter, der nicht greift,
+            sieht aus wie eine Liste ohne Treffer, und der Aufrufer sucht den
+            Fehler bei seinen Daten.
+
+            **Anzeige, keine Achse** (E-074 Punkt 1): Es gibt bewußt keinen
+            entsprechenden Term in einer Pool-Regel und keine Feldquelle im
+            Vorlageneditor.
+          schema:
+            type: array
+            maxItems: 4
+            items: { type: string, enum: [overdue, due_today, due_later, no_due_date] }
+          style: form
+          explode: false
+        - name: sortByDueDate
+          in: query
+          description: |
+            Nach der Frist **sortieren** (A-19.20). Ohne Angabe bleibt es bei
+            der einen Ordnung, die es seit Migration 0010 gibt: zuletzt
+            geändert, absteigend.
+
+            **Ein Todo ohne Frist steht in beiden Richtungen am Ende**
+            (E-074 Punkt 2) und bekommt kein Platzhalterdatum. Ein leeres Feld
+            als `1970-01-01` zu sortieren ist die Sorte Bequemlichkeit, die
+            niemandem auffällt, bis sie in einer Abrechnung steht.
+
+            Die Blätterung (`cursor`) gilt für die gewählte Ordnung. Wer
+            mitten in einer Liste die Ordnung wechselt, beginnt neu — die
+            Fortsetzungsmarke der einen Ordnung trifft in der anderen nicht.
+          schema: { type: string, enum: [asc, desc] }
       responses:
         '200':
           description: Trefferliste.
@@ -584,6 +625,170 @@ paths:
         '403': { $ref: '#/components/responses/OriginRejected' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /todos/{todoId}/attachments:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    get:
+      tags: [Anhänge]
+      operationId: listTodoAttachments
+      summary: Anhänge eines Todos lesen
+      description: |
+        Unterressource des Todos, nicht eine eigene Sammlung daneben: Ein
+        Anhang ohne sein Todo ist nichts (spec.md, Kopf von Abschnitt 19).
+
+        **Es öffnet sich dabei nichts** (A-19.18). Diese Route liest Zeilen.
+        Das Öffnen liegt in der Hülle, hinter einer Formprüfung, die bei jedem
+        Aufruf neu läuft (E-072 Punkt 2) — nicht in der Oberfläche und nicht
+        hier.
+
+        **Für ein Add-in-Token ist diese Route unerreichbar** (A-19.19,
+        A-A-21). Sie liegt außerhalb von `/addin` und steht nicht in
+        `SHARED_PATHS`; damit schließt `requiredCredentialForPath` sie von
+        selbst, ohne einen einzigen neuen Wächter. Das ist die stärkere und
+        zugleich billigere Form von „über das Add-in entstehen keine Anhänge":
+        nicht ein Feld, das dort fehlt, sondern **keine Leitung**, über die es
+        entstehen könnte.
+      responses:
+        '200':
+          description: Die Anhänge, in stabiler Reihenfolge. Leer, wenn es keine gibt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [items]
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Anhänge]
+      operationId: addTodoAttachment
+      summary: Anhang hinzufügen
+      description: |
+        Drei Arten, und die gewählte bestimmt das Feld (A-19.10). Der Rumpf ist
+        eine unterschiedene Vereinigung über `kind`; ein Rumpf, der Felder
+        zweier Arten mischt, wird mit `422` abgewiesen und nicht ausgewertet.
+
+        Bei `image` liest der Dienst die Datei unter `sourcePath`, zählt die
+        Bytes **beim Lesen**, prüft die **Kopfsignatur** und legt eine Kopie im
+        Anwendungsdatenverzeichnis an — unter `0700`/`0600`, mit einem
+        **erzeugten** Namen (A-A-15 bis A-A-17). Schlägt danach das Schreiben
+        der Zeile fehl, wird die Kopie wieder entfernt: Eine verwaiste Kopie
+        ist Kundenmaterial ohne Eigentümer (A-A-18).
+
+        Bei `link` wird die Adresse **einmal** normalisiert und die Normalform
+        gespeichert (A-A-3, A-A-13). Der geprüfte Wert und der geöffnete Wert
+        sind damit dieselbe Zeichenkette.
+
+        Bei `file` läuft die Formprüfung der Domäne in derselben Folge wie
+        `check_file` in der Hülle: kein UNC, absolut, **kein Doppelpunkt im
+        letzten Namensbestandteil** (A-A-28) und keine der fünf
+        Umleitungsendungen (A-A-5). Ein `422` nennt dabei den Grund und **nie
+        den abgewiesenen Wert** (A-A-8).
+
+        Diese Tür ist der **zweite** Riegel und nicht der einzige: Die tragende
+        Kontrolle bleibt der Öffnen-Befehl der Hülle, weil zwischen dieser Route
+        und dem Öffnen der Bestand liegt und man dorthin auch an dieser Route
+        vorbeikommt (VG-1, VG-3, E-072 Punkt 2).
+
+        **Nichts wird geöffnet** (A-19.18).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentCreate' }
+      responses:
+        '201':
+          description: Angelegt.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Adresse des neuen Anhangs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Attachment' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /todos/{todoId}/attachments/{attachmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/TodoId' }
+      - { $ref: '#/components/parameters/AttachmentId' }
+    delete:
+      tags: [Anhänge]
+      operationId: removeTodoAttachment
+      summary: Anhang entfernen
+      description: |
+        Bei einem Bild geht die **Kopie mit** (A-A-18). Die Reihenfolge ist
+        Inhalt: erst die Zeile, dann die Datei — von den beiden möglichen
+        Halbzuständen ist „Zeile weg, Datei liegt noch" der behebbare.
+
+        Ein Anhang, der zu einem **anderen** Todo gehört, ist unter dieser
+        Adresse `404` und nicht `403`: Die Antwort soll nicht verraten, daß es
+        ihn anderswo gibt.
+      responses:
+        '204': { description: Entfernt. }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /todos/{todoId}/attachments/{attachmentId}/image:
+    parameters:
+      - { $ref: '#/components/parameters/TodoId' }
+      - { $ref: '#/components/parameters/AttachmentId' }
+    get:
+      tags: [Anhänge]
+      operationId: getTodoAttachmentImage
+      summary: Vorschaubild eines Bildanhangs lesen
+      description: |
+        Liefert die Bytes base64-kodiert; die Oberfläche baut daraus eine
+        `data:`-Adresse (E-071 Punkt 3, A-19.13). **Die CSP wird dafür nicht
+        geöffnet.**
+
+        Eigene Route und kein Feld an der Anhangsliste: Ein Todo mit fünf
+        Bildern trüge sonst rund 33 MiB in jeder Antwort, auch wenn niemand sie
+        sehen will.
+
+        Ist die Kopie nicht mehr lesbar — gelöscht, verschoben, beschädigt —,
+        antwortet der Dienst mit `404` und einem lesbaren Satz. Der Anhang
+        selbst **bleibt** in der Liste (A-19.15: „Er verschwindet nicht und er
+        wirft nicht"), und das fehlende Vorschaubild wird an Ort und Stelle
+        gesagt.
+
+        Der Name der Kopie wird dabei **erneut** gegen seine Form geprüft und
+        die Kopfsignatur **erneut** gemessen: Zwischen Erzeugen und Lesen liegt
+        der Bestand, und in den kann geschrieben werden, ohne durch diese Route
+        zu gehen (VG-1, VG-3) — dieselbe Begründung wie bei E-072 Punkt 2.
+      responses:
+        '200':
+          description: Die Bilddaten.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AttachmentImage' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /todos/{todoId}/note:
     parameters: [{ $ref: '#/components/parameters/TodoId' }]
@@ -2993,6 +3198,11 @@ paths:
 
         Die Standard-Tags (A-9) kommen im Anwendungsfall dazu, nicht im Add-in
         — deshalb gelten sie über beide Wege gleichermaßen (A-9.5).
+
+        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074) —
+        und **nur** sie. Über diese Route entsteht weiterhin **kein Anhang**
+        (A-19.19): Der Rumpf hat kein Anhangsfeld, und die Anhangsrouten
+        liegen außerhalb von `/addin`. Siehe `dueDate` unten.
       requestBody:
         required: true
         content:
@@ -3146,6 +3356,61 @@ paths:
                     nirgends sonst — bis T-134 nannte dieser Absatz die Grenze
                     der Hauptanwendung als Zahl, und sie war seit langem falsch
                     (E-063 Punkt 5).
+                dueDate:
+                  oneOf: [{ $ref: '#/components/schemas/CalendarDay' }, { type: 'null' }]
+                  default: null
+                  description: |
+                    Die **Frist** (A-19.21, E-074, seit T-149). Freiwillig;
+                    ohne Angabe hat das Todo keine, und das ist der Regelfall.
+
+                    „Fehlt" und `null` bedeuten hier dasselbe: ohne Frist. Der
+                    dritte Fall aus `TodoUpdate` — `null` heißt **entfernen**
+                    (A-19.3) — kommt an dieser Tür nicht vor, weil sie nichts
+                    ändert. Sie legt an und bucht.
+
+                    **Sie wird eingetragen, nicht erkannt.** Der Wert stammt
+                    aus einem Feld, das der Benutzer im Aufgabenbereich
+                    ausfüllt, und **nicht** aus einem Muster über dem Betreff
+                    oder dem Text der E-Mail (E-074 Punkt 4). Das ist der
+                    Unterschied zu `callNumber` weiter oben: Die kommt aus
+                    einem regulären Ausdruck über fremdem Text, die Frist aus
+                    einer Eingabe.
+
+                    Geprüft wird sie trotzdem wie jedes andere Feld dieser Tür,
+                    und mit **derselben** Prüfung wie an `POST /todos`
+                    (`dueDateSchema`, darunter `isCalendarDay` aus
+                    `@takt/domain`): Form `JJJJ-MM-TT`, Jahr zwischen 1970 und
+                    2999 und ein Tag, den es wirklich gibt. `2026-02-30`
+                    besteht die Form und ist keiner; `2026-09-30T00:00:00Z`,
+                    `30.09.2026` und `bis Freitag` sind keine Tagesangaben in
+                    dieser Form. Alle vier ergeben `422` mit
+                    `details[].field = "dueDate"`.
+
+                    Der abgewiesene Wert steht **nicht** in der Meldung —
+                    dieselbe Regel wie beim Titel und bei der Call-Nummer.
+
+                    Die Frist ist **keine Achse** (A-19.7, E-070 Punkt 4,
+                    E-074 Punkt 1): Sie ändert nichts an Pools, Spalten,
+                    Buchungen oder Export. Sie ordnet und filtert die
+                    Todo-Liste, und das tut sie in der Hauptanwendung.
+
+                    **Ein Anhang kommt hier nicht dazu** (A-19.19, E-074
+                    Punkt 3, A-A-21). Diese Anfrage hat kein Anhangsfeld, und
+                    das ist strukturell und nicht per Voreinstellung: Anhänge
+                    entstehen ausschließlich über
+                    `POST /todos/{todoId}/attachments`, außerhalb von `/addin`
+                    und für das Add-in-Token unerreichbar. Ein trotzdem
+                    mitgeschicktes `attachments`, `attachment` oder
+                    `attachmentUrl` wird von der Eingabeprüfung still
+                    verworfen und hat keine Wirkung: Die Antwort ist `201`,
+                    und die Anhangstabelle bleibt leer (gemessen in
+                    `proof:addin` Abschnitt 18, A-A-22).
+
+                    Der Grund ist Art und nicht Vorsicht: Eine Frist ist ein
+                    Tag, den die Anwendung **anzeigt**. Ein Anhang ist eine
+                    Adresse oder ein Pfad, den sie auf Klick **öffnet** — aus
+                    einer E-Mail geschrieben wäre er ein von außen gesetzter
+                    Öffnen-Befehl auf den Rechner des Benutzers (R-21, R-22).
       responses:
         '201':
           description: Angelegt.
@@ -3573,6 +3838,11 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
     TagId:
       name: tagId
       in: path
@@ -3774,6 +4044,47 @@ components:
       description: UTC, sekundengenau. Lexikographische Sortierung ist chronologisch.
       examples: ['2026-03-02T09:00:00Z']
 
+    CalendarDay:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      description: |
+        Ein Kalendertag in **Ortszeit**, Form `JJJJ-MM-TT`. Keine Uhrzeit, keine
+        Zeitzone.
+
+        Der Tagesbegriff ist der aus E-025 — derselbe, in dem die
+        Tagesgruppierung des Exports rechnet. Es gibt in Takt genau einen; ein
+        zweiter hieße, daß „heute fällig" und „heute gebucht" an einem
+        Reisetag verschiedene Tage meinen (E-070 Punkt 2).
+
+        **Die Form allein genügt nicht.** Wo dieser Typ eine Eingabe
+        beschreibt, wird zusätzlich geprüft, daß es den Tag **gibt**:
+        `2026-02-30` besteht das Muster und ist keiner. Ebenso muß das Jahr
+        zwischen 1970 und 2999 liegen. Beides steht in
+        `packages/domain/src/due-date.ts` und nirgends sonst; ein Muster kann
+        es nicht ausdrücken, und ein `Invalid Date` taucht sonst an einer
+        Stelle auf, an der ihn niemand erwartet.
+      examples: ['2026-09-30']
+
+    AttachmentKind:
+      type: string
+      enum: [link, image, file]
+      description: |
+        Die drei Arten aus A-19.9. Auf dem Bildschirm heißen sie **Verweis**,
+        **Bild** und **Datei**.
+
+        | Wert | Was Takt hält | Was „öffnen" heißt |
+        |---|---|---|
+        | `link` | eine Adresse in Normalform | der Browser |
+        | `file` | einen Pfad | die Standardanwendung des Systems |
+        | `image` | eine Kopie im Anwendungsdatenverzeichnis | **nichts** |
+
+        Verweis und Datei speichern eine Zeichenkette, kein Byte (E-071
+        Punkt 1). Ein Bild wird kopiert (E-071 Punkt 2).
+
+        Die Menge ist im Bestand **Daten** und keine Schemaklausel
+        (`todo_attachment_kind`, Migration 0015): Eine vierte Art kostet einen
+        Eintrag und einen Zweig in der Domäne — und keinen Tabellenumbau.
+
     Color:
       oneOf:
         - { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
@@ -3895,7 +4206,7 @@ components:
         **Entfallen mit Migration 0010:** `boardRank`, der Sortierschlüssel aus
         der Zeit des Ziehens (A-5.2). Kein Aufrufer hat ihn je gesetzt, keine
         Ansicht sortiert mehr danach.
-      required: [id, title, callNumber, statusId, completedAt, tagIds, createdAt, updatedAt]
+      required: [id, title, callNumber, statusId, completedAt, dueDate, tagIds, createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         title:
@@ -3933,6 +4244,30 @@ components:
         completedAt:
           oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
           description: '`null` bedeutet aktiv (A-2.4).'
+        dueDate:
+          oneOf: [{ $ref: '#/components/schemas/CalendarDay' }, { type: 'null' }]
+          description: |
+            Die **Frist** (A-19.1 bis A-19.7, E-070). Ein Kalendertag in
+            Ortszeit, **keine Uhrzeit**; `null` heißt „keine Frist" und ist ein
+            vollwertiger Zustand.
+
+            **Der Zustand steht hier nicht.** „Überfällig", „heute fällig" und
+            „später fällig" (A-19.5) werden gerechnet und nie gespeichert
+            (E-070 Punkt 3) — und sie werden auch nicht mitgeliefert: Ein Feld
+            in dieser Antwort trüge den Zustand zum Zeitpunkt der Anfrage und
+            wäre um Mitternacht falsch, während die Oberfläche daneben ihren
+            eigenen, jüngeren Wert hätte. Wer den Zustand braucht, ruft
+            `dueState(todo.dueDate, heute)` aus `@takt/domain`; die vier Werte
+            heißen `overdue`, `due_today`, `due_later` und `no_due_date`.
+
+            Der Tagesbegriff ist **derselbe** wie bei der Tagesgruppierung des
+            Exports (E-025, E-070 Punkt 2). Ein zweiter hieße, daß „heute
+            fällig" und „heute gebucht" an einem Reisetag verschiedene Tage
+            meinen.
+
+            Die Frist ist **keine Achse** (A-19.7, E-074 Punkt 1): kein Pool,
+            keine Spalte, kein Export. Sie ordnet und filtert die Todo-Liste,
+            und das ist etwas anderes als ein Regelterm.
         tagIds: { type: array, items: { $ref: '#/components/schemas/Id' } }
         sumSeconds:
           type: integer
@@ -3988,6 +4323,19 @@ components:
           maxLength: 20000
           default: ''
           description: Persönliche Todo-Notiz (A-7.1). Bleibt intern (A-7.2).
+        dueDate:
+          oneOf: [{ $ref: '#/components/schemas/CalendarDay' }, { type: 'null' }]
+          description: |
+            Die Frist (A-19.1, A-19.3). Freiwillig.
+
+            Beim **Anlegen** bedeuten „fehlt" und `null` dasselbe: ohne Frist.
+            Ein Todo, das es noch nicht gibt, hat keine, die man ihm nehmen
+            könnte. Beim **Ändern** sind die beiden verschieden — siehe
+            `TodoUpdate`.
+
+            Geprüft wird auf einen **existierenden** Tag: `2026-02-30` besteht
+            die Form und ist keiner und wird mit `422` abgewiesen. Das Jahr
+            liegt zwischen 1970 und 2999.
 
     TodoUpdate:
       type: object
@@ -3996,6 +4344,224 @@ components:
         callNumber: { oneOf: [{ type: string, maxLength: 64 }, { type: 'null' }] }
         statusId: { $ref: '#/components/schemas/Id' }
         tagIds: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Id' } }
+        dueDate:
+          oneOf: [{ $ref: '#/components/schemas/CalendarDay' }, { type: 'null' }]
+          description: |
+            Die Frist ändern **oder entfernen** (A-19.3).
+
+            Drei Fälle, und sie sind hier alle drei erreichbar:
+
+            | Rumpf | Wirkung |
+            |---|---|
+            | Feld fehlt | die Frist bleibt, wie sie ist |
+            | `"dueDate": null` | die Frist wird **entfernt** |
+            | `"dueDate": "2026-09-30"` | die Frist wird gesetzt |
+
+            Ohne die zweite Zeile gäbe es keinen Weg, eine gesetzte Frist
+            wieder loszuwerden. Wer „fehlt" und `null` verwechselt, macht aus
+            einer Löschung ein Weglassen.
+
+    Attachment:
+      type: object
+      description: |
+        Ein Anhang eines Todos (A-19.8 bis A-19.14).
+
+        **Er hängt am Todo und ist keine zweite Struktur daneben** (spec.md,
+        Kopf von Abschnitt 19). Deshalb gibt es keine Adresse, unter der ein
+        Anhang ohne seinen Eigentümer erreichbar wäre.
+
+        **Die Ersatzbeschriftung steht nicht darin** (A-19.12). Fehlt `title`,
+        rechnet die anzeigende Fläche sie aus `kind` und `target` —
+        `attachmentLabel` in `@takt/domain`, an einer Stelle und für jede
+        Fläche dieselbe. Ein Feld dafür wäre ein zweiter Wert über dieselbe
+        Sache, und er altert, sobald jemand den Titel ändert. Dasselbe Muster
+        wie beim Fristzustand: **gespeichert wird geliefert, abgeleitet wird
+        gerechnet.**
+
+        **Weder Anhang noch Frist gelangen in einen Export** (A-19.17).
+        Der Schutz ist ein **Typ** und keine Filterliste: `ExportCandidate` und
+        `ExportGroup` tragen kein Anhangsfeld, und `ExportSourcePath` bleibt
+        bei zwölf Werten. Eine Vorlage — auch eine beliebige, nicht nur die
+        Standardvorlage — kann einen Anhang deshalb gar nicht auflösen (R-06).
+      required: [id, todoId, kind, title, target, position, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        todoId: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/AttachmentKind' }
+        title:
+          oneOf: [{ type: string, minLength: 1, maxLength: 200 }, { type: 'null' }]
+          description: |
+            Frei gewählte Bezeichnung (A-19.10). `null` heißt „nicht gesetzt";
+            dann steht am Anhang `label`.
+        target:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: |
+            Die eine Zeichenkette, deren Bedeutung `kind` bestimmt:
+
+            * `link` — die **Normalform** der Adresse. Was hier steht, ist
+              genau das, was angezeigt und was geöffnet wird (A-A-3).
+              Normalisiert wird **einmal**, beim Anlegen, an einer Stelle in
+              `packages/domain` (A-A-13). Der Öffnen-Befehl der Hülle
+              normalisiert nicht — er verlangt einen Festpunkt und weist sonst
+              ab. Wer die Rohfassung anzeigt und die Normalform öffnet, hat
+              einen Verweis gebaut, der etwas anderes tut, als er sagt.
+            * `file` — der absolute Pfad, unverändert wie eingegeben.
+            * `image` — der **erzeugte** Name der Kopie im Bildverzeichnis
+              (A-A-17). Nie der Name und nie der Pfad der Quelldatei: Der
+              verriete, wo der Benutzer seine Dateien hält, und niemand
+              braucht ihn nach dem Kopieren. Er ist **kein** Pfad und taugt
+              nicht zum Öffnen; die Bytes holt
+              `GET /todos/{todoId}/attachments/{attachmentId}/image`.
+        position:
+          type: integer
+          minimum: 0
+          description: |
+            Reihenfolge des Hinzufügens (A-19.8). Der Dienst vergibt sie; kein
+            Aufrufer setzt sie. Zwei Anhänge auf derselben Stelle machten die
+            Reihenfolge wieder zu der der Datenbank.
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+
+    AttachmentCreate:
+      description: |
+        Eine **unterschiedene Vereinigung** über `kind` und kein Objekt mit
+        drei freiwilligen Feldern (A-19.10: „Beim Hinzufügen bestimmt die
+        gewählte Art das Eingabefeld").
+
+        Ein Rumpf mit `url`, `path` und `sourcePath` nebeneinander ließe zu,
+        alle drei zu schicken — und dann entschiede eine Verzweigung, welches
+        gilt. Genau das schließt A-A-1 für die Öffnen-Befehle der Hülle aus,
+        und aus demselben Grund: Ein falsch gesetztes Kennzeichen wäre der Weg,
+        eine Adresse durch die Pfadprüfung zu schicken. `{ "kind": "file",
+        "url": "…" }` wird mit `422` abgewiesen und nicht ausgewertet.
+      oneOf:
+        - type: object
+          required: [kind, url]
+          properties:
+            kind: { type: string, enum: [link] }
+            url:
+              type: string
+              minLength: 1
+              maxLength: 2048
+              description: |
+                Die Adresse. Zulässig sind ausschließlich `http` und `https`,
+                geprüft am **zerlegten** Schema und nicht an einem Präfix der
+                Rohfassung (A-A-2). Zusätzlich: Wirt vorhanden und nicht leer,
+                **keine** Zugangsdaten im Wirtsteil
+                (`https://evil.example@gutartig.example/` liest sich wie ein
+                anderer Wirt, als es ansteuert), keine Steuer- und
+                Richtungszeichen, kein `U+200B` und kein `U+FEFF` (A-A-14 — der
+                Zerleger entfernt sie stillschweigend und läßt damit Anzeige
+                und Ziel auseinanderfallen).
+
+                Ein UNC-Pfad braucht **keine** eigene Regel: `\\server\freigabe`
+                läßt sich gar nicht zu einer Adresse zerlegen, und
+                `file://server/freigabe` fällt an der Positivliste (gemessen,
+                Bedrohungsmodell 20.2).
+
+                Gespeichert wird die **Normalform**, nicht der eingegebene
+                Wert. `HTTP://Example.ORG/Pfad` wird zu
+                `http://example.org/Pfad`, `https://exаmple.org/` mit
+                kyrillischem а zu `https://xn--exmple-4nf.org/`. Das ist
+                Absicht: Der geprüfte Wert und der geöffnete Wert müssen
+                dieselbe Zeichenkette sein.
+            title: { oneOf: [{ type: string, maxLength: 200 }, { type: 'null' }] }
+        - type: object
+          required: [kind, path]
+          properties:
+            kind: { type: string, enum: [file] }
+            path:
+              type: string
+              minLength: 1
+              maxLength: 4096
+              description: |
+                Ein **absoluter** Pfad, kein UNC-Pfad (A-A-4). Weder
+                `\\server\…` noch `//server/…`: Unter Windows ist beides ein
+                Anmeldeversuch gegen einen fremden Rechner, und was dabei über
+                die Leitung geht, ist der NTLM-Handschlag des angemeldeten
+                Benutzers (R-22). Daß der Pfad absolut ist, genügt dafür
+                **nicht** — ein UNC-Pfad ist absolut.
+
+                **Fünf Endungen werden hart abgewiesen** (A-A-5): `.lnk`,
+                `.url`, `.pif`, `.scf`, `.desktop`. Nicht weil sie ausführbar
+                wären — `.exe`, `.bat` und `.ps1` sind es auch und gehen
+                durch —, sondern weil sie **Umleitungen** sind: Bei ihnen zeigt
+                der Pfad, den die Rückfrage vor dem Öffnen nennt, nicht auf
+                das, was startet. Eine weitergehende Verbotsliste gibt es
+                nicht; sie wäre unter Windows über `PATHEXT` benutzerbestimmt
+                und lehrte das Umbenennen.
+
+                Der Wert wird **nicht beschnitten**: Geprüft werden muß der
+                Wert, der gespeichert wird, und ein Pfad darf am Rand ein
+                Leerzeichen tragen.
+
+                Ob die Datei **existiert**, prüft der Dienst nicht. Zwischen
+                `exists()` und `open()` liegt ein Wettlauf, den niemand
+                gewinnt; ein verschwundener Anhang sagt das an Ort und Stelle
+                (A-19.15).
+            title: { oneOf: [{ type: string, maxLength: 200 }, { type: 'null' }] }
+        - type: object
+          required: [kind, sourcePath]
+          properties:
+            kind: { type: string, enum: [image] }
+            sourcePath:
+              type: string
+              minLength: 1
+              maxLength: 4096
+              description: |
+                Der Pfad der **Quelldatei**. Der Dienst liest sie, prüft sie
+                und legt eine **Kopie** im Anwendungsdatenverzeichnis an
+                (E-071 Punkt 2); der Quellpfad wird danach **nicht**
+                gespeichert.
+
+                Warum ein Pfad und keine Bytes: Der Rumpf ist auf ein Megabyte
+                begrenzt (B-1.7), ein Bild darf acht Mebibyte groß sein. Die
+                Grenze zu heben, damit Bilder durch die Tür passen, hieße sie
+                für **jede** Route zu heben. Stattdessen wählt der Benutzer die
+                Datei im Systemdialog der Hülle (`dialog:allow-open` mit
+                `directory: false`) — und das ist zugleich die wirksamste
+                Prüfung, die es hier gibt: Er hat die Datei gesehen und
+                ausgewählt, bevor irgendetwas im Bestand steht.
+
+                Geprüft wird **beim Lesen**, nicht aus `stat` (A-A-15): Eine
+                angekündigte Größe ist keine Grenze. Obergrenze **8 388 608
+                Bytes**; wird sie überschritten, bricht der Lauf ab — nichts
+                kopiert, nichts kodiert.
+
+                Erkannt wird das Bild an seiner **Kopfsignatur** und nicht an
+                seiner Endung (A-A-16): PNG, JPEG, GIF, WebP. **Kein SVG** —
+                es ist Text, es hat keine Signatur, und dieselbe Datei über die
+                Art `file` mit der Standardanwendung geöffnet landet im
+                Browser, wo die Skripte darin laufen.
+            title: { oneOf: [{ type: string, maxLength: 200 }, { type: 'null' }] }
+
+    AttachmentImage:
+      type: object
+      description: |
+        Die Bytes eines Bildanhangs, base64-kodiert (E-071 Punkt 3).
+
+        Die Oberfläche setzt daraus `data:<mediaType>;base64,<base64>` und
+        zeigt das Vorschaubild. **Die CSP wird dafür nicht geöffnet**:
+        `img-src` bleibt `'self' data:` (A-A-12).
+
+        Warum nicht ein `<img src="http://127.0.0.1:17843/…">` und ein Eintrag
+        mehr in `img-src`? Weil ein `<img src>` **kein** `X-Takt-Token` trägt —
+        der Browser setzt bei einem Bildabruf keine eigenen Kopfzeilen. Eine
+        unmittelbar einbindbare Byte-Route bräuchte deshalb entweder gar keinen
+        Nachweis (Kundenmaterial für jeden lokalen Prozeß) oder ein Geheimnis
+        in der Adresse. Beides ist schlechter als ein Drittel mehr
+        Arbeitsspeicher.
+      required: [mediaType, base64]
+      properties:
+        mediaType:
+          type: string
+          enum: [image/png, image/jpeg, image/gif, image/webp]
+          description: |
+            Aus der **Kopfsignatur** der gelesenen Datei, nicht aus der Endung
+            des gespeicherten Namens. Der Name ist eine Ansage, die Signatur
+            eine Messung.
+        base64: { type: string }
 
     TodoNote:
       type: object
@@ -5353,9 +5919,25 @@ components:
 
         Der interne Vermerk steht hier nicht (A-7.2, R-06). Er hat eine eigene
         Ressource, und der Aufruf dorthin ist im Quelltext auffindbar.
-      required: [todo, totalSeconds, openSeconds]
+      required: [todo, totalSeconds, openSeconds, attachments]
       properties:
         todo: { $ref: '#/components/schemas/Todo' }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+          description: |
+            Die Anhänge dieses Todos (A-19.8, A-19.11), in stabiler
+            Reihenfolge. Leer, wenn es keine gibt.
+
+            Sie stehen hier **und** unter `GET /todos/{todoId}/attachments`.
+            Das ist Absicht und keine Doppelung: Die Detailansicht braucht sie
+            ohne zweiten Aufruf, und die eigene Ressource ist der Ort, an dem
+            hinzugefügt und entfernt wird.
+
+            **Die Bytes eines Bildes stehen nicht darin.** Ein Todo mit fünf
+            Bildern trüge sonst rund 33 MiB in jeder Antwort, auch wenn niemand
+            sie sehen will — sie kommen einzeln über
+            `GET /todos/{todoId}/attachments/{attachmentId}/image`.
         totalSeconds:
           type: integer
           minimum: 0

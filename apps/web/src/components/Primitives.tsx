@@ -17,6 +17,27 @@ export interface ButtonProps
   readonly iconEnd?: IconName;
   /** Zeigt einen Ladeanzeiger und sperrt den Knopf, ohne die Breite zu aendern. */
   readonly loading?: boolean;
+  /**
+   * **Gesperrt, aber erreichbar** — `aria-disabled` statt `disabled` (T-186).
+   *
+   * Der Unterschied ist nicht kosmetisch. Ein `disabled`-Knopf ist aus dem
+   * Tabulatorlauf **entfernt**, nimmt keinen Klick entgegen und loest kein
+   * Ereignis aus. Damit ist er fuer einen Benutzer mit der Tastatur nicht
+   * vorhanden, und ein Klick darauf ist ein Ereignis, das nie ankommt — der
+   * Knopf kann nicht einmal sagen, warum er nicht geht.
+   *
+   * Ein `aria-disabled`-Knopf ist erreichbar, fokussierbar und anklickbar; er
+   * sieht genauso gesperrt aus (`components.css` fasst beide Zustaende in
+   * einem Selektor), und eine Vorlesehilfe sagt „nicht verfuegbar". **Die
+   * Handlung abzufangen ist dann Sache des `onClick`** — und genau dort
+   * gehoert der Satz hin, der sagt, was fehlt (SC 3.3.1, Regel P-9).
+   *
+   * Wer diese Eigenschaft setzt und im `onClick` nichts abfaengt, hat einen
+   * Knopf gebaut, der aussieht wie gesperrt und trotzdem handelt. Deshalb
+   * steht sie neben `disabled` und ersetzt es nicht: `disabled` bleibt
+   * richtig, wo es nichts zu erklaeren gibt.
+   */
+  readonly ariaDisabled?: boolean;
   readonly fullWidth?: boolean;
   readonly className?: string;
   readonly children: ReactNode;
@@ -28,6 +49,7 @@ export function Button({
   iconStart,
   iconEnd,
   loading = false,
+  ariaDisabled = false,
   fullWidth = false,
   className,
   children,
@@ -49,6 +71,13 @@ export function Button({
         className,
       )}
       disabled={disabled === true || loading}
+      /*
+        Nur `true` oder gar nicht. `aria-disabled="false"` an jedem Knopf waere
+        eine Aussage ueber jeden Knopf zu jedem Zeitpunkt — und die Vorgabe
+        eines Knopfes ohne dieses Attribut ist bereits „verfuegbar". Dieselbe
+        Regel wie an `aria-invalid` im Aufgabenbereich des Add-ins.
+      */
+      aria-disabled={ariaDisabled || undefined}
       aria-busy={loading || undefined}
       {...rest}
     >
@@ -319,7 +348,11 @@ export function InlineMessage({
         {action !== undefined ? <div className="message__action">{action}</div> : null}
       </div>
       {onDismiss !== undefined ? (
-        <IconButton label="Meldung schliessen" icon="x" size="sm" onClick={onDismiss} />
+        /* Rechtschreibung berichtigt (T-181, ST-09): „schliessen" → „schließen".
+           Der Wert ist ein **zugaenglicher Name** und damit vertraglich
+           (E-076 Punkt 3) — gemessen kommt er in `tests/**` nicht vor, aber
+           unit-tester und e2e-tester ziehen in der naechsten Welle nach. */
+        <IconButton label="Meldung schließen" icon="x" size="sm" onClick={onDismiss} />
       ) : null}
     </div>
   );

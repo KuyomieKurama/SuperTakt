@@ -123,6 +123,45 @@ function resolveTypeNode(node, index, seen = new Set()) {
     return names;
   }
 
+  /**
+   * Eine **unterschiedene Vereinigung** (T-146).
+   *
+   * ---------------------------------------------------------------------------
+   * Warum die Vereinigung der Schlüssel die richtige Antwort ist
+   * ---------------------------------------------------------------------------
+   *
+   * Die Frage dieses Lesers lautet: „Welche Schlüssel **kann** dieser Aufruf
+   * schreiben?" Bei einer Vereinigung ist die Antwort die Vereinigung — jeder
+   * Zweig ist ein möglicher Rumpf, und jeder seiner Schlüssel kann über die
+   * Leitung gehen.
+   *
+   * Das ist **nicht** dieselbe Frage wie „welche Schlüssel stehen zusammen in
+   * einem Rumpf?". Die beantwortet dieser Leser nicht und soll er nicht: Sie ist
+   * die Frage der Schemaprüfung an der Tür, und dort steht mit
+   * `z.discriminatedUnion` genau die Antwort — ein Rumpf
+   * `{ kind: 'file', url: '…' }` wird abgewiesen und nicht ausgewertet.
+   *
+   * Anlaß: `AttachmentCreate` aus T-146 (A-19.10). Der Rumpf von
+   * `createAttachment` war damit unauflösbar, und der Lauf meldete gleich
+   * dreierlei — einen blinden Fleck, fünf angeblich nie gesendete Felder und
+   * den Selbsttest. Dieselbe Lage wie `Partial<PoolWrite>` in T-074, und
+   * dieselbe Behebung: Der Leser lernt die eine Form dazu, statt daß jemand
+   * die Meldung wegerklärt.
+   *
+   * **Ein Zweig, der sich nicht auflösen läßt, macht die ganze Vereinigung
+   * unauflösbar.** Der Leser rät nicht: `string | { a: 1 }` ist keine Menge von
+   * Schlüsseln, und eine geratene Antwort wäre schlimmer als „weiß ich nicht".
+   */
+  if (ts.isUnionTypeNode(node)) {
+    const names = new Set();
+    for (const part of node.types) {
+      const resolved = resolveTypeNode(part, index, seen);
+      if (resolved === null) return null;
+      for (const name of resolved) names.add(name);
+    }
+    return [...names];
+  }
+
   if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
     /**
      * Die drei eingebauten Hilfstypen, die die **Feldnamen unverändert**

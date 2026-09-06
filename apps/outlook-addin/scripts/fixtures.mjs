@@ -330,6 +330,19 @@ export const createFakeStore = (options = {}) => {
           statusId: input.statusId,
           boardRank: 'm',
           completedAt: null,
+          /*
+           * Die Frist (A-19.21, T-149).
+           *
+           * `?? null` wie im echten Adapter: `TodoCreateInput.dueDate` ist
+           * freiwillig, und „fehlt" heißt beim Anlegen dasselbe wie `null`
+           * (siehe `TodoCreateInput` in `@takt/domain`). Eine Attrappe, die
+           * das Feld gar nicht schriebe, lieferte `undefined` — und ein
+           * Prüffall auf `null` wäre dann rot, obwohl der Dienst richtig
+           * arbeitet. Eine Attrappe, die es anders schriebe als der Adapter,
+           * wäre schlimmer: Sie machte den Prüffall zu einer Aussage über sich
+           * selbst.
+           */
+          dueDate: input.dueDate ?? null,
           tagIds: [...tagIds],
           createdAt: now,
           updatedAt: now,

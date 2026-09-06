@@ -106,10 +106,47 @@ export const VERSION_CHECK_TIMEOUT_MS = 5_000;
 /**
  * Obergrenze des **entpackten** Stroms (A-V-6).
  *
- * Die echte Antwort dieses Bestands liegt bei rund 15 KiB; 64 KiB geben das
- * Vierfache. Die Zahl gilt für gelesene Bytes, nicht für angekündigte.
+ * Die Zahl gilt für **gelesene** Bytes, nicht für angekündigte: `content-length`
+ * ist eine Ansage des anderen und keine Grenze.
+ *
+ * ===========================================================================
+ * Warum 256 KiB und nicht mehr 64 (T-146, Befund T-145-3)
+ * ===========================================================================
+ *
+ * Die 64 KiB standen mit der Begründung da, die echte Antwort liege bei rund
+ * 15 KiB und 64 gäben „das Vierfache". T-145 hat nachgerechnet, und das
+ * Verhältnis war das falsche Maß: Der Rumpf wächst **mit der Zahl der
+ * Anhänge** an der Veröffentlichung, und das sind heute neun. Rund 1,7 KiB je
+ * Anhang, dazu ein knappes Kilobyte Grundgerüst — die 64 KiB sind damit bei
+ * etwa **35 Anhängen** erreicht. Drei Fach Luft, nicht vier.
+ *
+ * Fünfunddreißig ist keine unerreichbare Zahl: Eine Baumatrix, die je
+ * Plattform ein Installationspaket, eine Signatur und eine Prüfsumme ablegt,
+ * kommt bei vier Plattformen schon auf zwölf.
+ *
+ * **Und der Ausgang beim Überschreiten ist still.** `too_large` ist ein
+ * Fehlschlag wie jeder andere: kein Hinweis, keine Fehlerfläche, kein zweiter
+ * Versuch im selben Lauf (A-18.11). Die Versionsprüfung stellte damit den
+ * Betrieb ein — sichtbar an genau einer Protokollzeile, die niemand liest.
+ * Das ist der eigentliche Befund: nicht daß die Grenze knapp ist, sondern daß
+ * ihr Überschreiten aussieht wie „alles aktuell".
+ *
+ * 262 144 Bytes reichen nach derselben Rechnung für rund **140 Anhänge**, also
+ * das Fünfzehnfache des heutigen Standes. Was die Grenze **leisten** soll,
+ * leistet sie unverändert: Sie hält eine fremde Antwort davon ab, den
+ * Arbeitsspeicher des Sidecars zu füllen. Der Unterschied zwischen 64 KiB und
+ * 256 KiB ist dafür bedeutungslos — der Unterschied zwischen 256 KiB und
+ * „unbegrenzt" ist es nicht.
+ *
+ * **Was diese Zahl nicht leistet**, gehört dazugesagt: Sie ist eine Annahme
+ * über eine fremde Antwort, und Annahmen altern. Die zweite Hälfte der
+ * Behebung ist eine **Messung im Auslieferungsablauf** — die tatsächliche
+ * Größe von `releases/latest` gegen diese Konstante gehalten, bei jeder
+ * Veröffentlichung. Sie liegt in `.github/workflows/release.yml` und damit
+ * nicht in dieser Datei; sie ist im Bericht zu T-146 als Vorschlag an den
+ * Orchestrator benannt.
  */
-export const VERSION_CHECK_MAX_BYTES = 65_536;
+export const VERSION_CHECK_MAX_BYTES = 262_144;
 
 /**
  * Warum eine Prüfung ohne Ergebnis geblieben ist (A-V-20).

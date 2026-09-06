@@ -1,21 +1,27 @@
 /**
  * Takt — die Schnittstelle der Hülle zur Oberfläche (E-004, E-010, E-018).
  *
- * Sechs eigene Befehle und ein Systemdialog, mehr gibt die Hülle nicht heraus.
+ * Acht eigene Befehle und ein Systemdialog in zwei Ausprägungen, mehr gibt die
+ * Hülle nicht heraus.
  * Sie liegen hier und nicht in `apps/web`, damit es genau eine Stelle gibt, an
  * der die Namen der Befehle und die Gestalt ihrer Antworten stehen — die
  * Rust-Seite und diese Datei müssen zusammenpassen, `apps/web` soll das nicht
  * wissen müssen.
  *
- * Der siebte, `chooseExportDirectory()`, ist kein `takt_`-Befehl, sondern der
- * Ordnerauswahldialog von `tauri-plugin-dialog` (Befund S-04, B-5.1 Punkt 1).
- * Er steht am Ende dieser Datei und erklärt dort, was die Rust-Seite dafür
- * mitbringen muss.
+ * `chooseExportDirectory()` und `chooseAttachmentFile()` sind keine
+ * `takt_`-Befehle, sondern derselbe Systemdialog von `tauri-plugin-dialog`
+ * (Befund S-04, B-5.1 Punkt 1) — einmal mit `directory: true`, einmal mit
+ * `directory: false`. Die Fähigkeitenliste gibt davon ausschließlich
+ * `dialog:allow-open` frei; der Zuwachs an Fläche für den zweiten ist **null**.
  *
- * Die beiden jüngsten — `installedVersion()` und `openReleasePage()` — gehören
- * zur Versionsprüfung (Spezifikation Abschnitt 18, E-064, E-067). Sie stehen
- * am Ende dieser Datei, und dort steht auch, warum der zweite **keine** Adresse
- * entgegennimmt.
+ * `installedVersion()` und `openReleasePage()` gehören zur Versionsprüfung
+ * (Spezifikation Abschnitt 18, E-064, E-067); dort steht auch, warum der zweite
+ * **keine** Adresse entgegennimmt.
+ *
+ * `openAttachmentLink()` und `openAttachmentFile()` gehören zu den Anhängen
+ * (Abschnitt 19, E-072). Sie nehmen sehr wohl eine Adresse und einen Pfad
+ * entgegen — und deshalb steht in `src-tauri/src/attachment.rs` erheblich mehr
+ * Prüfung als in `release.rs`.
  *
  * ## Wie sich die Oberfläche gegenüber dem lokalen Dienst ausweist
  *
@@ -320,6 +326,21 @@ interface OpenDialogOptions {
   readonly defaultPath?: string;
 }
 
+/** Ein Vorschlag für die Dateiauswahl. Eine Bequemlichkeit, keine Prüfung. */
+interface DialogFilter {
+  readonly name: string;
+  readonly extensions: readonly string[];
+}
+
+/** Dasselbe für die Auswahl einer **Datei** statt eines Ordners (A-19.10). */
+interface OpenFileDialogOptions {
+  readonly title: string;
+  readonly directory: false;
+  readonly multiple: false;
+  readonly recursive: false;
+  readonly filters?: readonly DialogFilter[];
+}
+
 /**
  * Der Ordnerauswahldialog des Betriebssystems (B-5.1 Punkt 1, Befund S-04).
  *
@@ -473,6 +494,164 @@ export async function openReleasePage(version: string): Promise<ReleasePageResul
     // Satz dazu schreibt die Oberfläche.
     return cause === 'version_rejected' ? { outcome: 'rejected' } : { outcome: 'failed' };
   }
+}
+
+/* ==================================================================== */
+/* Anhänge (Spezifikation Abschnitt 19, E-072)                          */
+/* ==================================================================== */
+
+/**
+ * Was beim Öffnen eines Anhangs herauskam.
+ *
+ * Vier Ausgänge, alle vier gehören behandelt — dieselbe Bauart wie
+ * {@link ReleasePageResult} und aus demselben Grund: Ein `try`/`catch` an der
+ * Aufrufstelle verwischte den Unterschied zwischen „keine Hülle",
+ * „abgewiesen" und „ließ sich nicht öffnen".
+ *
+ * `rejected` trägt hier **einen Schlüssel** und nicht nur den Ausgang: Die
+ * Prüfung in `src-tauri/src/attachment.rs` unterscheidet fünfzehn Fälle, und
+ * die Oberfläche soll „diese Datei ist nicht mehr da" (`path_missing`) anders
+ * sagen können als „Takt öffnet nur `http` und `https`"
+ * (`link_scheme_rejected`) — das eine ist eine Beobachtung, das andere eine
+ * Regel (A-19.15).
+ *
+ * Der **abgewiesene Wert** kommt nicht mit. Er ist fremder Text, und ein
+ * abgewiesener Wert in einer Meldung wäre derselbe fremde Text an einer neuen
+ * Stelle (Auflage A-A-8).
+ */
+export type AttachmentOpenResult =
+  | { readonly outcome: 'opened' }
+  | { readonly outcome: 'rejected'; readonly reason: string }
+  | { readonly outcome: 'failed' }
+  | { readonly outcome: 'unavailable'; readonly reason: string };
+
+/** Der Satz für den reinen Browserbetrieb. Wortgleich an beiden Stellen. */
+const NO_SHELL_FOR_ATTACHMENTS =
+  'Anhänge öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.';
+
+/**
+ * Übersetzt den technischen Schlüssel aus der Hülle in einen Ausgang.
+ *
+ * Die Liste steht **nicht** hier, sondern in `attachment.rs` als `Rejection`.
+ * Diese Funktion prüft nur, ob überhaupt ein Schlüssel kam: Alles andere —
+ * ein geworfenes Objekt, ein abgebrochener Aufruf — ist `failed`.
+ */
+function attachmentOutcome(cause: unknown): AttachmentOpenResult {
+  if (typeof cause === 'string' && cause.length > 0 && cause !== 'open_failed') {
+    return { outcome: 'rejected', reason: cause };
+  }
+  return { outcome: 'failed' };
+}
+
+/**
+ * Öffnet einen Verweis im Browser des Benutzers (A-19.9).
+ *
+ * **Hier wird die Adresse nicht geprüft, und das ist Absicht.** T-136 hat
+ * gemessen, dass `tauri-plugin-shell` auf dem Rust-Weg gar nichts prüft; die
+ * eine Kontrolle steht deshalb dort, wo geöffnet wird — in `attachment.rs`,
+ * bei **jedem** Aufruf. Eine zweite Fassung derselben Regel in TypeScript wäre
+ * eine zweite Meinung darüber, was eine Adresse ist, und zwischen dieser Zeile
+ * und dem Öffnen liegt ohnehin nichts, was sie retten könnte.
+ *
+ * Die Prüfung im **Eingabefeld** ist etwas anderes: Sie ist Bedienkomfort und
+ * sagt dem Benutzer sofort, dass seine Eingabe nichts taugt. Sie ist keine
+ * Kontrolle — zwischen Eingabe und Öffnen liegen der Bestand, eine Migration
+ * und jeder künftige zweite Schreibpfad (E-072 Punkt 2).
+ *
+ * **Ohne Rückfrage** (Auflage A-A-7). Ein Browser ist der erwartete Ausgang.
+ */
+export async function openAttachmentLink(url: string): Promise<AttachmentOpenResult> {
+  if (!isShellAvailable()) {
+    return { outcome: 'unavailable', reason: NO_SHELL_FOR_ATTACHMENTS };
+  }
+  try {
+    await invoke<null>('takt_open_attachment_link', { url });
+    return { outcome: 'opened' };
+  } catch (cause) {
+    return attachmentOutcome(cause);
+  }
+}
+
+/**
+ * Öffnet eine Datei mit der Standardanwendung des Systems (A-19.9).
+ *
+ * **Vor diesem Aufruf steht die Rückfrage der Oberfläche** (E-072 Punkt 3,
+ * Auflage A-A-6). Eine Datei mit der Standardanwendung zu öffnen ist dasselbe
+ * wie ein Doppelklick im Dateimanager — bei einer `.bat`, einer `.exe` oder
+ * einer `.ps1` ist es eine Ausführung, mit den Rechten des Benutzers und ohne
+ * Rückfrage des Betriebssystems.
+ *
+ * Diese Funktion stellt die Frage **nicht**. Sie gehört in die Oberfläche,
+ * weil sie dort den vollen Pfad durch die Behandlung für fremden Text schicken
+ * kann und weil ein `window.confirm` das nicht könnte.
+ */
+export async function openAttachmentFile(path: string): Promise<AttachmentOpenResult> {
+  if (!isShellAvailable()) {
+    return { outcome: 'unavailable', reason: NO_SHELL_FOR_ATTACHMENTS };
+  }
+  try {
+    await invoke<null>('takt_open_attachment_file', { path });
+    return { outcome: 'opened' };
+  } catch (cause) {
+    return attachmentOutcome(cause);
+  }
+}
+
+/**
+ * Der Dateiauswahldialog des Betriebssystems für einen Anhang (A-19.10).
+ *
+ * Derselbe Dialog wie {@link chooseExportDirectory}, nur mit
+ * `directory: false`. Der Zuwachs an Fläche ist **null**: `dialog:allow-open`
+ * steht bereits in der Fähigkeitenliste, der Dialog liest nichts und schreibt
+ * nichts, er gibt einen Pfad zurück (Auflage A-A-11).
+ *
+ * Und er ist zugleich die wirksamste Prüfung, die es hier gibt — allerdings
+ * nur beim **Anlegen**: Der Benutzer hat die Datei gesehen und ausgewählt,
+ * bevor sie im Bestand steht (Bedrohungsmodell 20.1). Zwischen Anlegen und
+ * Öffnen liegt trotzdem der Bestand, und deshalb steht die Kontrolle im
+ * Öffnen-Befehl und nicht hier.
+ *
+ * @param kind `image` schlägt Bilddateien vor, `file` jede Datei. Der
+ *   Vorschlag ist eine Bequemlichkeit und **keine** Prüfung: Was ein Bild ist,
+ *   entscheidet die Kopfsignatur im Dienst (Auflage A-A-16), nicht die Endung
+ *   und nicht dieser Filter.
+ */
+export async function chooseAttachmentFile(kind: 'file' | 'image'): Promise<DirectoryChoice> {
+  if (!isShellAvailable()) {
+    return {
+      outcome: 'unavailable',
+      reason: 'Der Dateiauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.',
+    };
+  }
+
+  const options: OpenFileDialogOptions = {
+    title: kind === 'image' ? 'Bild wählen' : 'Datei wählen',
+    directory: false,
+    multiple: false,
+    recursive: false,
+    ...(kind === 'image'
+      ? {
+          filters: [
+            { name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+          ],
+        }
+      : {}),
+  };
+
+  let selection: unknown;
+  try {
+    selection = await invoke<unknown>('plugin:dialog|open', { options });
+  } catch {
+    return {
+      outcome: 'unavailable',
+      reason: 'Diese Fassung von Takt kann den Dateiauswahldialog des Betriebssystems nicht öffnen.',
+    };
+  }
+
+  if (typeof selection === 'string' && selection.length > 0) {
+    return { outcome: 'chosen', path: selection };
+  }
+  return { outcome: 'cancelled' };
 }
 
 /**

@@ -70,6 +70,21 @@ export function createSystemPort(windowsUser: string, databasePath: string | nul
     databaseFilesTooPermissive: () => {
       if (databasePath === null) return null;
       const seen = inspectDatabasePermissions(databasePath);
+      /*
+       * `checked` ist seit T-146 (Befund T-143 S-4) nur dann `true`, wenn
+       * **jede** der drei Dateien eine Antwort gegeben hat — nicht mehr schon
+       * dann, wenn wir überhaupt nachgesehen haben.
+       *
+       * Vorher lief jeder gescheiterte `stat` in ein `catch {}`, die Liste
+       * blieb leer, und diese Funktion gab **0** zurück: „alle drei liegen
+       * eng", obwohl nichts gemessen wurde. `ports.ts` schließt genau das
+       * aus — „`null` ist ausdrücklich **nicht** `0`, eine Nichtaussage ist
+       * keine Entwarnung" —, und seit T-132 steht die Zahl in `GET /settings`
+       * und wird gelesen.
+       *
+       * Der Ausdruck bleibt derselbe; was sich geändert hat, ist die Bedeutung
+       * von `checked`, und sie steht bei `inspectDatabasePermissions`.
+       */
       return seen.checked ? seen.tooPermissive.length : null;
     },
   };

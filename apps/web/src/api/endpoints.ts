@@ -52,6 +52,9 @@ import type {
   TimeEntryFilter,
   Timestamp,
   Todo,
+  Attachment,
+  AttachmentCreate,
+  AttachmentImage,
   TodoCreate,
   TodoDetail,
   TodoDoneResult,
@@ -111,6 +114,18 @@ export function listTodos(filter: TodoFilter, page: Pagination = {}): Promise<Pa
       ...(filter.poolIds === undefined ? {} : { poolId: filter.poolIds }),
       ...(filter.onlyOpen === true ? { onlyOpen: "true" } : {}),
       ...(filter.onlyWithOpenEntries === true ? { onlyWithOpenEntries: "true" } : {}),
+      // Frist: filtern und ordnen (A-19.20, E-074). Beides ist **Anzeige** und
+      // keine Achse — die Frist geht weiterhin nicht in Pools, nicht in
+      // Spalten und nicht in den Export (E-070 Punkt 4, A-19.17). Gerechnet
+      // wird im Dienst: Er kennt den Tagesbegriff aus E-025, und ein zweiter
+      // hier wäre der zweite Tagesbegriff im selben Programm.
+      // `dueState` ist eine **kommagetrennte Liste** von Zuständen; der Dienst
+      // zerlegt sie selbst (`dueStateListSchema`). Der Name ist seiner, nicht
+      // unserer — dieselbe Regel wie bei `search` und `onlyOpen`.
+      ...(filter.dueStates === undefined || filter.dueStates.length === 0
+        ? {}
+        : { dueState: filter.dueStates.join(",") }),
+      ...(filter.sortByDueDate === undefined ? {} : { sortByDueDate: filter.sortByDueDate }),
       ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
       ...(page.limit === undefined ? {} : { limit: page.limit }),
     },
@@ -135,6 +150,68 @@ export function updateTodo(id: Id, body: TodoUpdate): Promise<Todo> {
 
 export function deleteTodo(id: Id): Promise<void> {
   return request<void>(`/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/* ==================================================================== */
+/* Anhänge (A-19.8 bis A-19.15)                                         */
+/* ==================================================================== */
+
+/**
+ * `GET /todos/{id}/attachments`.
+ *
+ * **Eigene Routen außerhalb von `/addin`**, und das ist die Grenze aus A-19.19
+ * (Auflage A-A-21). Sie trägt ohne einen einzigen neuen Wächter:
+ * `requiredCredentialForPath` schließt alles außerhalb von `/addin` und
+ * `SHARED_PATHS` von selbst, und `proof:route-policy` fährt jede Route der
+ * zusammengebauten Anwendung mit dem Add-in-Token an — die neuen werden
+ * mitgemessen, ohne dass jemand daran denken muss.
+ *
+ * **Das Laden einer Liste öffnet nichts** (A-19.18, Auflage A-A-24). Diese
+ * Funktion holt Beschreibungen; Bytes holt {@link getAttachmentImage}, und
+ * geöffnet wird ausschließlich auf Klick über die Hülle.
+ */
+export function listAttachments(todoId: Id): Promise<{ items: readonly Attachment[] }> {
+  return request<{ items: readonly Attachment[] }>(
+    `/todos/${encodeURIComponent(todoId)}/attachments`,
+  );
+}
+
+/** `POST /todos/{id}/attachments` (A-19.10, A-19.11). */
+export function createAttachment(todoId: Id, body: AttachmentCreate): Promise<Attachment> {
+  return request<Attachment>(`/todos/${encodeURIComponent(todoId)}/attachments`, {
+    method: "POST",
+    body,
+  });
+}
+
+/**
+ * `DELETE /todos/{id}/attachments/{attachmentId}` (A-19.11).
+ *
+ * Bei einem **Bild** geht die Kopie im Anwendungsdatenverzeichnis mit
+ * (Auflage A-A-18). Eine verwaiste Kopie ist Kundenmaterial ohne Eigentümer;
+ * das zu besorgen ist Sache des Dienstes und nicht der Oberfläche.
+ */
+export function deleteAttachment(todoId: Id, attachmentId: Id): Promise<void> {
+  return request<void>(
+    `/todos/${encodeURIComponent(todoId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * `GET /todos/{id}/attachments/{attachmentId}/image` — die Bytes des
+ * Vorschaubildes, **fertig kodiert** (A-19.13, E-071 Punkt 3).
+ *
+ * Die Kodierung liegt in der Domäne (A-8.4) und nicht hier; die Oberfläche
+ * setzt aus `mediaType` und `base64` eine `data:`-Adresse zusammen und rechnet
+ * dabei nichts. Der Umweg über diese Route statt über ein
+ * `<img src="http://127.0.0.1:17843/…">` hat einen Grund, und er steht bei
+ * {@link AttachmentImage}: Ein `<img src>` trägt kein `X-Takt-Token`.
+ */
+export function getAttachmentImage(todoId: Id, attachmentId: Id): Promise<AttachmentImage> {
+  return request<AttachmentImage>(
+    `/todos/${encodeURIComponent(todoId)}/attachments/${encodeURIComponent(attachmentId)}/image`,
+  );
 }
 
 export function getTodoNote(id: Id): Promise<TodoNote> {

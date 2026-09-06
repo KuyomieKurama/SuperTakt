@@ -68,6 +68,11 @@ export function TodoFormDialog({
   const [tagIds, setTagIds] = useState<readonly Id[]>([]);
   const [newTagNames, setNewTagNames] = useState<readonly string[]>([]);
   const [note, setNote] = useState("");
+  /**
+   * Die Frist (A-19.3). Leer heißt: keine — ein Todo ohne Frist bleibt in jeder
+   * Hinsicht ein gültiges Todo (A-19.1).
+   */
+  const [dueDate, setDueDate] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
 
   useEffect(() => {
@@ -78,6 +83,7 @@ export function TodoFormDialog({
     setTagIds(todo?.tagIds ?? presetTagIds ?? []);
     setNewTagNames([]);
     setNote("");
+    setDueDate(todo?.dueDate ?? "");
     setTitleTouched(false);
   }, [open, todo, defaultStatusId, presetTagIds]);
 
@@ -102,6 +108,8 @@ export function TodoFormDialog({
           // Tag zurückzulassen, das niemand bestellt hat.
           tagNames: newTagNames,
           note,
+          // Leeres Feld heißt „keine Frist" und nicht „leerer Tag" (A-19.1).
+          dueDate: dueDate.length === 0 ? null : dueDate,
         });
         structure.reload();
         bump();
@@ -149,6 +157,8 @@ export function TodoFormDialog({
         callNumber: callNumber.trim().length === 0 ? null : callNumber.trim(),
         statusId,
         tagIds: [...tagIds, ...freshTags.map((tag) => tag.id)],
+        // Ein geleertes Feld **entfernt** die Frist (A-19.3, drittes Verb).
+        dueDate: dueDate.length === 0 ? null : dueDate,
       });
       if (freshTags.length > 0) structure.reload();
       bump();
@@ -196,12 +206,48 @@ export function TodoFormDialog({
         hint="Aus dem Ticketsystem. Darf leer bleiben; das Add-in trägt sie beim Buchen aus einer E-Mail ein."
       />
 
+      {/*
+        Die **Frist** (A-19.2, A-19.3). Sie heißt in der Oberfläche ausschließlich
+        so — nicht „Fälligkeitsdatum", nicht „fällig am", nicht „Deadline".
+
+        `type="date"` und nicht `datetime-local`: Die Frist ist ein Tag, keine
+        Uhrzeit (E-070 Punkt 1). Eine Uhrzeit brächte einen vierten Zustand
+        („in zwei Stunden fällig"), und der ist ohne Erinnerung sinnlos.
+
+        Das Feld liefert von sich aus `YYYY-MM-DD` und nichts anderes. Das ist
+        Bedienkomfort und **keine** Kontrolle: Geprüft wird die Form an der Tür
+        des Dienstes — existierender Tag, Jahr zwischen 1970 und 2999
+        (Auflage A-A-19).
+      */}
+      <TextField
+        label="Frist"
+        type="date"
+        value={dueDate}
+        onChange={setDueDate}
+        hint="Ein Tag, keine Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export."
+      />
+
+      {/*
+        Ein **Wegweiser**, kein Vortrag (T-181, ST-05 mit Auflage Z-02 aus
+        T-177). Der Unterschied zwischen Status und Kanban-Spalte stand hier
+        bei **jedem** Oeffnen des Dialogs — an der Stelle, an der niemand
+        diese Frage hat. Er steht jetzt an den zwei Stellen, an denen sie
+        gestellt wird: am Board und in dessen Einrichtungsdialog.
+
+        Kein `›` und kein anderes Pfadzeichen: Ein Sonderzeichen, das nur an
+        einer Stelle vorkommt, ist eine eigene kleine Sprache. Das Produkt
+        schreibt den Weg aus, und zwar so, wie es ihn an vier Stellen schon
+        schreibt („in den Einstellungen unter „Status““).
+
+        Es bleibt ein `hint` und wird kein Verweis: Ein anklickbarer Verweis
+        fuehrte aus einem Dialog mit ungesicherten Eingaben heraus.
+      */}
       <Select
         label="Status"
         value={statusId}
         onChange={(next) => setStatusId(next)}
         options={statuses.map((status) => ({ value: status.id, label: status.name }))}
-        hint="Der Status ist keine Kanban-Spalte — eine Spalte ist eine Regel, und der Status ist eine von fünf Bedingungen, die sie abfragen kann. Welche Statuswerte es gibt, legen Sie in den Einstellungen unter „Status“ fest."
+        hint="Die Werte stehen in den Einstellungen unter „Status“."
       />
 
       <TagInput
@@ -225,7 +271,12 @@ export function TodoFormDialog({
           onChange={setNote}
           rows={2}
           maxLength={65536}
-          placeholder="Notiz für Sie selbst — Zugangsdaten, Ansprechpartner, Zwischenstand."
+          /*
+            Kein eigener Platzhalter mehr (T-181, ST-09). Dieselbe Ueberschrift
+            stand woertlich auch in der Detailansicht; T-163 hat nur diese
+            zweite Stelle gezaehlt, die Bauart ist dieselbe. Das Feld nimmt den
+            Vorgabewert aus `NoteField`.
+          */
         />
       ) : null}
     </FormDialog>

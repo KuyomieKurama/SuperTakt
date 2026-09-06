@@ -13,8 +13,13 @@
 import { z } from 'zod';
 
 import {
+  DUE_DATE_MESSAGE,
   FORBIDDEN_NAME_CHARACTER_MESSAGE,
   hasForbiddenNameCharacter,
+  isCalendarDay,
+  MAX_ATTACHMENT_LINK_BYTES,
+  MAX_ATTACHMENT_PATH_BYTES,
+  MAX_ATTACHMENT_TITLE_CHARACTERS,
   MAX_NAME_LENGTH,
   MAX_TITLE_CHARACTERS,
   type TaktFieldError,
@@ -28,6 +33,44 @@ export const timestampSchema = z
 
 /** Ein Kalendertag in Ortszeit. */
 export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Erwartet wird YYYY-MM-DD.');
+
+/**
+ * Eine **Frist** (A-19.1, A-19.6, A-A-19).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das nicht `daySchema` ist
+ * ---------------------------------------------------------------------------
+ *
+ * `daySchema` prüft die **Form** und wird für Filtergrenzen benutzt
+ * (`fromDay`/`toDay`), wo ein Tag, den es nicht gibt, höchstens nichts trifft.
+ * Eine Frist wird **angezeigt** und **verglichen**: `2026-02-30` ergäbe in der
+ * Rechnung „überfällig / heute / später" ein Datum, das der Kalender nicht
+ * kennt, und `0000-01-01` eine Anzeige, die niemand erwartet.
+ *
+ * Deshalb geht diese Prüfung durch `isCalendarDay` aus `@takt/domain`: Form,
+ * Bandbreite des Jahres (1970 bis 2999) und **Existenz** des Tages. Die Regel
+ * steht dort und nicht hier — hier steht ihre Bindung an zod, wie bei
+ * `titleSchema` und der Zeichenklasse (T-122, E-063 Punkt 5).
+ *
+ * ---------------------------------------------------------------------------
+ * `nullable`, und was das von „fehlt" unterscheidet
+ * ---------------------------------------------------------------------------
+ *
+ * `null` heißt **„Frist entfernen"** (A-19.3). Das Feld wegzulassen heißt
+ * „unverändert". Beides ist etwas anderes, und `exactOptionalPropertyTypes`
+ * hält es am Übersetzer fest — wer die zwei verwechselt, macht aus einer
+ * Löschung ein Weglassen.
+ *
+ * **Dieselbe Prüfung gilt an der Add-in-Tür** (A-19.21, E-074 Punkt 4). Was
+ * dort ankommen darf, ist ein Tag in dieser Form: kein freier Text, keine
+ * Uhrzeit, kein Zeitstempel mit Zone, kein aus einem Betreff errechnetes
+ * Datum. Der Wert kommt aus einem Feld, das der Benutzer im Aufgabenbereich
+ * ausfüllt, und nicht aus einem erkannten Muster im Text.
+ */
+export const dueDateSchema = z
+  .string()
+  .refine((value) => isCalendarDay(value), { message: DUE_DATE_MESSAGE })
+  .nullable();
 
 /**
  * Eine Kennung.
@@ -171,6 +214,60 @@ export const nameSchema = withoutControlCharacters(
 );
 /** Leistung und Vermerk. 1 MB Rumpfgrenze steht davor (B-1.7). */
 export const textSchema = z.string().max(20_000);
+
+/**
+ * Die Bezeichnung eines Anhangs (A-19.10). **Freiwillig** — fehlt sie, steht
+ * am Anhang etwas Lesbares aus Adresse beziehungsweise Pfad (A-19.12), und das
+ * rechnet `attachmentLabel` in der Domäne.
+ *
+ * Dieselbe Zeichenklasse wie jede andere Tür (A-A-14): Steuer- und
+ * Richtungszeichen werden abgewiesen. Der Titel steht in der Rückfrage vor dem
+ * Öffnen einer Datei (A-A-6) — ein `U+202E` darin drehte genau den Satz um,
+ * der den Benutzer warnen soll.
+ *
+ * Ein Titel aus lauter Leerzeichen zählt als **fehlend**: `.trim()` läuft
+ * davor, und die Domäne behandelt `''` wie `null`.
+ */
+export const attachmentTitleSchema = withoutControlCharacters(
+  z.string().trim().max(MAX_ATTACHMENT_TITLE_CHARACTERS),
+);
+
+/**
+ * Die **Adresse** eines Verweis-Anhangs (A-19.10, A-A-2, A-A-14).
+ *
+ * Was hier steht, ist ausschließlich ein **Deckel und die Zeichenklasse**. Die
+ * eigentliche Prüfung — Zerlegen, Positivliste `http`/`https`, Wirt vorhanden,
+ * keine Zugangsdaten — und die **Normalisierung** stehen an genau einer Stelle
+ * in `packages/domain/src/attachment.ts` (A-A-13) und laufen im
+ * Anwendungsfall. Sie hier zu wiederholen wäre die zweite Fassung derselben
+ * Regel, und der Zerleger normalisiert: Zwei Fassungen ergäben zwei
+ * Normalformen, und die eine würde angezeigt, die andere geöffnet (A-A-3).
+ *
+ * Die Länge steht in **Zeichen** und die Domäne zählt **Bytes**; dieser Deckel
+ * ist damit der weitere von beiden und genau das, was er sein soll — ein Halt
+ * gegen einen Rumpf, den niemand tippt, und keine zweite Meinung.
+ */
+export const attachmentUrlSchema = withoutControlCharacters(
+  z.string().trim().min(1).max(MAX_ATTACHMENT_LINK_BYTES),
+);
+
+/**
+ * Der **Pfad** eines Datei-Anhangs (A-19.10, A-A-4, A-A-14).
+ *
+ * **Kein `.trim()`.** Das ist der Unterschied zu jeder anderen Zeichenkette an
+ * dieser Tür, und er ist Absicht: Geprüft werden muß der Wert, der
+ * **gespeichert** wird (dieselbe Regel wie im Add-in-Zweig,
+ * `routes/addin/index.ts`). Ein Pfad darf am Rand ein Leerzeichen tragen —
+ * unter Windows sogar in einem Ordnernamen —, und ihn stillschweigend zu
+ * beschneiden hieße, einen anderen Pfad zu speichern als den, den der
+ * Dateiauswahldialog geliefert hat.
+ *
+ * Die eigentliche Prüfung — absolut, kein UNC, keine der fünf Umleitungen —
+ * steht in `packages/domain/src/attachment.ts` und läuft im Anwendungsfall.
+ */
+export const attachmentPathSchema = withoutControlCharacters(
+  z.string().min(1).max(MAX_ATTACHMENT_PATH_BYTES),
+);
 export const colorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Erwartet wird eine Farbe der Form #rrggbb.')

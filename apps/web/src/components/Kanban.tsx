@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import type { ForeignText } from "../api/types";
+import type { CalendarDay, ForeignText } from "../api/types";
 import { cx } from "../lib/cx";
 import { DONE_FLAG_LABEL, doneFlagState } from "../lib/labels";
+import { DeadlineFlag } from "./DeadlineFlag";
 import { ExportStatusMarker, EXPORT_STATE, type ExportDisplayState } from "./ExportStatus";
 import { Icon } from "./Icon";
 import { Menu, type MenuEntry } from "./Menu";
@@ -106,6 +107,15 @@ export interface KanbanCardData {
    * das Kennzeichen selbst wieder setzt — sonst wirkt der Wechsel unerklaert.
    */
   readonly reactivated?: boolean;
+  /**
+   * Die **Frist** des Todos (A-19.4). `null` heißt: keine — dann steht auf der
+   * Karte dazu **nichts** (A-19.5).
+   *
+   * Eine Karte ist das Todo, ohne es zu öffnen; das ist der Fall, den A-19.4
+   * meint. A-5.5 macht die Karte zur Arbeitsfläche, und eine Frist, die man auf
+   * dem Board nicht sieht, wird auf dem Board nicht eingehalten.
+   */
+  readonly dueDate: CalendarDay | null;
   /** Gesetzt, wenn diese Karte in mehr als einer Spalte steht. */
   readonly appearance?: KanbanAppearance;
 }
@@ -122,6 +132,12 @@ export interface KanbanCardProps {
   readonly onHighlight?: () => void;
   /** Dieses Vorkommen gehoert zur gerade hervorgehobenen Karte. */
   readonly highlighted?: boolean;
+  /**
+   * Heute, im Tagesbegriff aus E-025 — **einer je Ansicht** und nicht einer je
+   * Karte. So wechseln alle Karten des Boards um Mitternacht im selben
+   * Augenblick, und es läuft ein Zeitgeber statt einem je Spalte.
+   */
+  readonly today: CalendarDay;
 }
 
 export function KanbanCard({
@@ -131,6 +147,7 @@ export function KanbanCard({
   onToggleTimer,
   onHighlight,
   highlighted = false,
+  today,
 }: KanbanCardProps) {
   const cardFlagState = doneFlagState(card.done, card.reactivated === true);
   const others = card.appearance?.otherColumns ?? [];
@@ -168,6 +185,14 @@ export function KanbanCard({
                 etwas anderes sagt als die Zeile daneben (Befund C-23). */}
             {DONE_FLAG_LABEL[cardFlagState]}
           </span>
+          {/*
+            Die dritte Marke, und sie ist die einzige, die **fehlen** darf: Ein
+            Todo ohne Frist hat keinen dieser Zustände (A-19.5). Damit trägt die
+            Mehrzahl der Karten weiterhin zwei Marken und nicht drei — die
+            Auflage, unter der T-144 die dritte Sorte überhaupt für tragbar
+            hält.
+          */}
+          <DeadlineFlag dueDate={card.dueDate} today={today} className="kcard__deadline" />
         </div>
 
         <h4 className="kcard__title">

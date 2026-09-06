@@ -239,15 +239,17 @@ function ExportGroupRow({
         </output>
       </div>
 
-      {blocked ? (
-        <p className="egroup__blocked" role="status">
-          <Icon name="alert-triangle" size={14} />
-          <span>
-            <strong>Nicht exportierbar.</strong> {blockedReason} Der übrige Export läuft trotzdem;
-            diese Gruppe bleibt offen und erscheint beim nächsten Mal wieder.
-          </span>
-        </p>
-      ) : null}
+      <div className="live-region" role="status">
+        {blocked ? (
+          <p className="egroup__blocked">
+            <Icon name="alert-triangle" size={14} />
+            <span>
+              <strong>Nicht exportierbar.</strong> {blockedReason} Der übrige Export läuft trotzdem;
+              diese Gruppe bleibt offen und erscheint beim nächsten Mal wieder.
+            </span>
+          </p>
+        ) : null}
+      </div>
 
       <div className="egroup__body" id={bodyId} hidden={!expanded}>
         {/*

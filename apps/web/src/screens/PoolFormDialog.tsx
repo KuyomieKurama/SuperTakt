@@ -292,10 +292,21 @@ export function PoolFormDialog({
   const [statusIds, setStatusIds] = useState<readonly Id[]>([]);
   const [completion, setCompletion] = useState<PoolCompletionFilter>("any");
   const [exportState, setExportState] = useState<PoolExportFilter>("any");
+  /**
+   * Wurde das Namensfeld schon einmal verlassen? (Befund O-DZ, T-167.)
+   *
+   * Bei leerem Namen ist „Anlegen“ gesperrt — `onSubmit` läuft also nie, und
+   * eine dort entstehende Meldung sähe niemand. Sie entsteht deshalb beim
+   * Verlassen des Feldes und nicht beim Tippen (SC 3.3.1). Seit E-084 ist sie
+   * die einzige, die es hier gibt: `noValidate` nimmt dem Formular Chromiums
+   * eigene, englische Sprechblase.
+   */
+  const [nameTouched, setNameTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(pool?.name ?? "");
+    setNameTouched(false);
     setPlacement(pool?.placement ?? defaultPlacement);
     // Die Vorgabe ist `any` und bleibt es — Punkt 1 im Kopf dieser Datei.
     setMatchMode(pool?.matchMode ?? "any");
@@ -308,6 +319,9 @@ export function PoolFormDialog({
   }, [open, pool, defaultPlacement]);
 
   const trimmed = name.trim();
+  /* Grundform aus T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). */
+  const nameError = nameTouched && trimmed.length === 0 ? "Name fehlt." : undefined;
+
   const isBoardColumn = placement !== "pool";
   const surface = isBoardColumn ? "Spalte" : "Pool";
 
@@ -517,9 +531,11 @@ export function PoolFormDialog({
         label="Name"
         value={name}
         onChange={setName}
+        onTouched={() => setNameTouched(true)}
         required
         maxLength={MAX_NAME_LENGTH}
         placeholder={isBoardColumn ? "z. B. Wartet auf Rückmeldung" : "z. B. Kunden Nord"}
+        {...(nameError === undefined ? {} : { error: nameError })}
       />
 
       <Select
@@ -787,12 +803,18 @@ export function PoolFormDialog({
         </InlineMessage>
       ) : null}
 
-      <InlineMessage tone="info" title="Nichts wird gespeichert außer der Regel">
-        Eine Regel merkt sich keine Todos. Ändern sich die Tags, der Status oder die Buchungen eines
-        Todos, ändert sich seine Zugehörigkeit von selbst — und ein erledigtes Todo kehrt beim
-        Timerstart ohne Zutun zurück. Auf dem Board heißt das: Karten wandern, wenn sich etwas an
-        ihnen ändert, nicht wenn man sie schiebt.
-      </InlineMessage>
+      {/*
+        Der Kasten „Nichts wird gespeichert ausser der Regel" ist mit T-181
+        (ST-05) entfallen — vier Saetze, dauerhaft, unabhaengig vom Zustand.
+        Was er sagte, steht am Board in `RULE_WHAT_MOVES_A_CARD` und in
+        diesem Formular als **Reihenfolge**: Der Abschnitt „Diese Regel
+        trifft" ist damit das letzte Element vor der Fusszeile. Er sagte in
+        vier Saetzen, dass nichts gespeichert wird ausser der Regel — die
+        Vorschau **zeigt** die Regel und zeigt sonst nichts.
+
+        Damit ist dieses Formular durchgehend zustandsgebunden: Jede
+        verbleibende Flaeche darin erscheint nur bei ihrem Befund.
+      */}
     </FormDialog>
   );
 }

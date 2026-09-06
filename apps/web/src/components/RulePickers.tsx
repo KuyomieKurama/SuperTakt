@@ -153,18 +153,27 @@ function PickerField({
           aria-labelledby={labelId}
           aria-busy={source.status === "loading"}
         >
-          {source.status === "loading" ? (
-            /*
-              Der Spinner bleibt ohne `label`: Der Satz steht sichtbar
-              daneben, und ein zweiter versteckter darueber liesse eine
-              Vorlesehilfe „Ordner werden geladen" zweimal sagen. Die
-              Ansage uebernimmt die Zeile selbst.
-            */
-            <p className="tag-picker__waiting" role="status">
-              <Spinner size={14} />
-              {loadingText}
-            </p>
-          ) : isEmpty ? (
+          {/*
+            Der Spinner bleibt ohne `label`: Der Satz steht sichtbar daneben,
+            und ein zweiter versteckter darueber liesse eine Vorlesehilfe
+            „Ordner werden geladen" zweimal sagen. Die Ansage uebernimmt die
+            Zeile selbst.
+
+            Der Wirt darum steht **immer** im Baum, auch leer (B-5, T-191):
+            Bis dahin trug die Zeile ihr `role="status"` selbst — und entstand
+            damit zusammen mit ihm. Angesagt wurde deshalb nichts, obwohl
+            genau hier eine Aenderung ansteht, waehrend das Formular schon
+            offen ist: Die Liste laedt nach.
+          */}
+          <div className="live-region" role="status">
+            {source.status === "loading" ? (
+              <p className="tag-picker__waiting">
+                <Spinner size={14} />
+                {loadingText}
+              </p>
+            ) : null}
+          </div>
+          {source.status === "loading" ? null : isEmpty ? (
             <p className="field__hint">{emptyText}</p>
           ) : (
             children

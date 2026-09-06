@@ -950,9 +950,15 @@ export function ExportScreen() {
                 )}
               />
 
+              /*
+                Nur noch der erste Satz (T-181, ST-07). Wie der Lauffilter im
+                Protokoll wirkt, steht am Knopf „Buchungen dieses Laufs" und
+                im Leerzustand des Protokolls selbst — dort, wo man davor
+                steht, und nicht im Vorspann einer Liste von Läufen.
+              */
               <Card
                 title="Letzte Exportläufe"
-                description="Was wann geschrieben wurde. Welche Buchungen darin waren, steht im Protokoll — dort wirkt der Lauffilter über die geladenen Zeilen, ältere Läufe brauchen deshalb ein „Weitere laden“."
+                description="Was wann geschrieben wurde."
                 actions={
                   <Button
                     size="sm"
@@ -1171,9 +1177,14 @@ function RunResult({
   readonly onDismiss: () => void;
 }) {
   return (
+    /*
+      Die vollstaendige Fassung steht als **Folge** im Bestaetigungsdialog
+      davor (SP-17) — dort, wo sie noch etwas aendern kann. Danach ist sie
+      eine Feststellung, und die kommt mit vier Woertern aus (T-181, ST-07).
+    */
     <Card
       title="Export abgeschlossen"
-      description="Datei geschrieben und jede enthaltene Buchung markiert — in einer Transaktion."
+      description="In einer Transaktion geschrieben."
       actions={
         <Button size="sm" variant="ghost" onClick={onDismiss}>
           Ausblenden

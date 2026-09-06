@@ -17,6 +17,7 @@
 
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { routePath } from 'hono/route';
 import { timeout } from 'hono/timeout';
 import { HTTPException } from 'hono/http-exception';
 
@@ -285,6 +286,28 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       return c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large'));
     }
 
+    /*
+     * **Der gemusterte Pfad und nicht der angefragte** (T-164, Auflage A-A-31).
+     *
+     * Hier stand bis T-168 `c.req.path`. Das ist der Weg, den der Aufrufer
+     * geschickt hat, und damit fremder Text in einem Protokoll, das ein
+     * Benutzer weitergibt. Der Riegel des Protokollierers liegt auf `reason`
+     * und auf nichts sonst (`logger.ts`); für `message` bürgt allein die
+     * Aufrufstelle — also diese hier.
+     *
+     * `routePath` liefert stattdessen den **registrierten** Pfad
+     * (`/todos/:id`). Er stammt aus dem Erzeugnis und nicht aus der Anfrage;
+     * damit kann diese Zeile gar keinen fremden Wert mehr tragen, statt keinen
+     * zu tragen, weil bisher keiner vorbeikam.
+     *
+     * Der zweite Parameter `-1` ist der **zuletzt** getroffene Eintrag, also
+     * der Routeneintrag selbst. Ohne ihn stünde bei einem Wurf aus einem der
+     * Wächter nur `*` da — die Kette hängt an `app.use('*', …)`, und die
+     * Wächter laufen vor der Route. Gibt es überhaupt keinen Treffer, ist die
+     * Zeichenkette leer; dann steht `?` da und keine leere Stelle.
+     */
+    const where = `${c.req.method} ${routePath(c, -1) || '?'}`;
+
     /**
      * Das letzte Netz unter der Speicherung (T-074).
      *
@@ -312,10 +335,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      */
     const stored = asStorageFailure(error);
     if (stored !== null) {
-      runtime.logger.lifecycle(
-        'warn',
-        `Regel der Speicherung in ${c.req.method} ${c.req.path}: ${stored.code}`,
-      );
+      runtime.logger.lifecycle('warn', `Regel der Speicherung in ${where}: ${stored.code}`);
       return fail(c, stored);
     }
     // Hier stand bis T-058 ein `console.error('DEBUG-T041', …, error)` — eine
@@ -325,7 +345,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     // in der Hülle zusammen und geht bei einer Fehlermeldung mit; damit war der
     // Innenbau der Datenbank in einem Protokoll, das ein Benutzer weitergibt.
     c.set('outcome', 'internal_error');
-    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${c.req.method} ${c.req.path}`);
+    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${where}`);
     return c.json(errorEnvelope('internal_error'), errorStatus('internal_error'));
   });
 

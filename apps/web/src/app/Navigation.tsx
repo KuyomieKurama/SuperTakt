@@ -28,19 +28,23 @@ interface NavItem {
   readonly route: RouteName;
   readonly label: string;
   readonly icon: IconName;
-  /** Was der Punkt tut, für den Fall, dass der Name allein zu knapp ist. */
-  readonly hint: string;
 }
 
+/*
+  Kein `hint` und kein `title` (T-181, ST-01). Die acht Zusätze sagten, was
+  die Beschriftung sagt, und ein natives Titelattribut ist weder mit der
+  Tastatur erreichbar noch abweisbar noch überfahrbar (SC 1.4.13). Trägt eine
+  Beschriftung nicht, ist sie falsch — nicht zu kurz (Regel S-01).
+*/
 const ITEMS: readonly NavItem[] = [
-  { route: "dashboard", label: "Dashboard", icon: "monitor", hint: "Überblick und schnelle Aktionen" },
-  { route: "todos", label: "Todos", icon: "inbox", hint: "Liste aller Todos mit Filtern" },
-  { route: "board", label: "Kanban", icon: "square", hint: "Board aus frei definierbaren Regeln" },
-  { route: "time", label: "Zeiterfassung", icon: "clock", hint: "Timer, heutige Buchungen, Zeit von Hand erfassen" },
-  { route: "bookings", label: "Buchungen", icon: "filter", hint: "Alle Zeitbuchungen, filterbar" },
-  { route: "export", label: "Export", icon: "download", hint: "Vorschau, Lauf und Protokoll" },
-  { route: "tags", label: "Tags", icon: "tag", hint: "Tags, Ordner und Pools" },
-  { route: "settings", label: "Einstellungen", icon: "shield", hint: "Export, Darstellung, Add-in" },
+  { route: "dashboard", label: "Dashboard", icon: "monitor" },
+  { route: "todos", label: "Todos", icon: "inbox" },
+  { route: "board", label: "Kanban", icon: "square" },
+  { route: "time", label: "Zeiterfassung", icon: "clock" },
+  { route: "bookings", label: "Buchungen", icon: "filter" },
+  { route: "export", label: "Export", icon: "download" },
+  { route: "tags", label: "Tags", icon: "tag" },
+  { route: "settings", label: "Einstellungen", icon: "shield" },
 ];
 
 export interface NavigationProps {
@@ -77,7 +81,6 @@ export function Navigation({ active, openTodoCount, openEntryCount }: Navigation
                 className={cx("nav__item", current && "nav__item--current")}
                 href={href(item.route)}
                 aria-current={current ? "page" : undefined}
-                title={item.hint}
                 /*
                   Ein Klick auf den Eintrag, auf dem man schon steht, ist keine
                   Navigation, sondern die Bitte „zeig mir das noch einmal".

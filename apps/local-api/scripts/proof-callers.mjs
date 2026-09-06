@@ -112,6 +112,14 @@
  * im Arbeitsspeicher, die Datei bleibt unberührt — und verlangt, dass jeder
  * einzelne genau eine Beanstandung auslöst. Ohne das wäre dieser Lauf, was
  * `pnpm contrast` vor T-011 war: grün, weil er nichts tut.
+ *
+ * **Und seit T-188 auch die Zusage, auf der Punkt b) ruht** (A-A-40). Sie war
+ * die einzige tragende Aussage dieses Laufs ohne Gegenprobe, und gemessen
+ * wurde sie mit einem Ausdruck, den T-143 an anderer Stelle bereits als blind
+ * befunden hatte. Abschnitt 6 und 8 setzen jetzt je fünf Schreibweisen eines
+ * zweiten Wegs ein — nackt, über `globalThis.`, über `window.`, über `self.`
+ * und aus einer Zerlegung — und verlangen je einen Zuwachs; eine sechste Probe
+ * verlangt das Gegenteil, damit der Wächter nicht auf Prosa anspringt.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -121,6 +129,15 @@ import { z } from 'zod';
 import { parseYaml } from './openapi-reader.mjs';
 import { createMatcher } from './schema-match.mjs';
 import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './caller-scan.mjs';
+/*
+ * Die Regel „hier geht etwas ins Netz" (T-188, A-A-40).
+ *
+ * Sie stand bis T-188 hier als eigener Ausdruck, und er war **zeichengleich**
+ * der, den T-143 als S-1 als blind gemessen hat. Jetzt kommt sie aus
+ * `fetch-scan.mjs` — derselben Datei, aus der `proof:release-safety` sie holt.
+ * Die Herleitung steht dort; die Gegenproben stehen unten in Abschnitt 6 und 8.
+ */
+import { BLIND_FETCH_CALL, describeStray, strayGlobalFetch } from './fetch-scan.mjs';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
@@ -387,6 +404,21 @@ section('1  Es gibt keinen zweiten Weg zum Dienst als diese Datei');
  *
  * Fällt das eines Tages, ist die richtige Antwort nicht, diese Prüfung zu
  * lockern, sondern die neue Stelle in die Aufstellung aufzunehmen.
+ *
+ * ===========================================================================
+ * Womit gemessen wird — und womit bis T-188 gemessen wurde (A-A-40)
+ * ===========================================================================
+ *
+ * Hier stand `/(?<![\w.])fetch\s*\(/`. Das ist **zeichengleich** der Ausdruck,
+ * den T-143 als S-1 an einem anderen Wächter als blind gemessen und den T-146
+ * dort ersetzt hat: Der Rückblick auf `.` schließt **jedes** `.fetch` aus, um
+ * zwei Fälle durchzulassen — und läßt damit `globalThis.fetch(`,
+ * `window.fetch(`, `self.fetch(` und jede Zerlegung durch. Für diese Zusage
+ * gab es außerdem **null** Gegenproben; sie stehen jetzt in Abschnitt 6.
+ *
+ * Die Regel kommt aus `fetch-scan.mjs` und ist damit dieselbe, die
+ * `proof:release-safety` fährt (E-086 Punkt 1). Kommentare zählen nicht mit:
+ * Eine Datei darf in ihrer Beschreibung sagen, daß sie `fetch` **nicht** ruft.
  */
 const webSources = [];
 const walk = (dir) => {
@@ -398,20 +430,35 @@ const walk = (dir) => {
 };
 walk(WEB_SOURCE_DIR);
 
-const strayFetch = [];
+const webFiles = webSources.map((file) => ({
+  name: file.pathname.slice(WEB_SOURCE_DIR.pathname.length),
+  source: readFileSync(file, 'utf8'),
+}));
+
+/**
+ * Wo der Zugriff auf das globale `fetch` seinen Platz hat — ausgeschrieben.
+ *
+ * Eine Liste von **Dateien** und keine Ausnahme für eine **Form**: Wer
+ * `window.fetch` allgemein durchließe, hätte den blinden Ausdruck von vorhin
+ * unter anderem Namen zurück.
+ */
+const WEB_FETCH_HOME = ['api/client.ts'];
+
+const strayFetch = strayGlobalFetch(webFiles, WEB_FETCH_HOME);
 const strayRequest = [];
-for (const file of webSources) {
-  const body = readFileSync(file, 'utf8');
-  const name = file.pathname.slice(WEB_SOURCE_DIR.pathname.length);
-  if (/(?<![\w.])fetch\s*\(/.test(body) && name !== 'api/client.ts') strayFetch.push(name);
-  if (/(?<![\w.])request\s*[<(]/.test(body) && name !== 'api/endpoints.ts' && name !== 'api/client.ts') {
-    strayRequest.push(name);
+for (const file of webFiles) {
+  if (
+    /(?<![\w.])request\s*[<(]/.test(file.source) &&
+    file.name !== 'api/endpoints.ts' &&
+    file.name !== 'api/client.ts'
+  ) {
+    strayRequest.push(file.name);
   }
 }
 check(
   `\`fetch\` steht nur in api/client.ts (${webSources.length} Dateien durchgesehen)`,
   strayFetch.length === 0,
-  strayFetch.join(', '),
+  strayFetch.map(describeStray).join(' | '),
 );
 check('`request(` steht nur in api/endpoints.ts', strayRequest.length === 0, strayRequest.join(', '));
 
@@ -653,6 +700,107 @@ check(
   result.findings.map(label).join(' | '),
 );
 
+/*
+ * ===========================================================================
+ * Und die Zusage aus Abschnitt 1 prüft sich ebenfalls selbst (T-188, A-A-40)
+ * ===========================================================================
+ *
+ * Bis T-188 stand für „es gibt keinen zweiten Weg zum Dienst" **keine**
+ * Gegenprobe da. Vier der Selbstproben oben decken den Vergleich der
+ * Schlüssel; die Zusage, ohne die dieser Vergleich gar nichts wert wäre —
+ * daß nämlich eine Datei genügt —, wurde mit einem Ausdruck gemessen, den
+ * dieselbe Werkstatt an anderer Stelle schon als blind befunden hatte.
+ *
+ * Gemessen wird wie bei den Regressionen oben: der **echte** Dateibestand im
+ * Arbeitsspeicher, eine eingesetzte Datei dazu, und verlangt ist genau **ein**
+ * Zuwachs gegenüber dem unveränderten Lauf. Damit stehen diese Proben auch
+ * dann noch, wenn der Bestand einen echten Fund enthält.
+ *
+ * `apps/web` und `apps/outlook-addin` werden dabei nicht angefaßt; die
+ * eingesetzte Datei entsteht als Eintrag in einer Aufstellung und nie auf der
+ * Platte.
+ */
+const FETCH_FORMS = [
+  {
+    name: 'nacktes `fetch(`',
+    source: 'export const laden = async () => fetch(ZIEL);\n',
+  },
+  {
+    name: '`globalThis.fetch(` — die Lücke aus T-143 S-1',
+    source: 'export const laden = async () => globalThis.fetch(ZIEL);\n',
+  },
+  {
+    name: '`window.fetch(` — die Schreibweise, die am Baum steht',
+    source: 'export const laden = async () => window.fetch(ZIEL);\n',
+  },
+  {
+    name: '`self.fetch(`',
+    source: 'export const laden = async () => self.fetch(ZIEL);\n',
+  },
+  {
+    name: 'eine Zerlegung: `const { fetch: holen } = globalThis`',
+    source: 'const { fetch: holen } = globalThis;\nexport const laden = async () => holen(ZIEL);\n',
+  },
+];
+
+/**
+ * Die Umkehrung, und sie ist hier so wichtig wie die fünf oben.
+ *
+ * Ein Wächter, der auf **jedes** Vorkommen von `fetch` anspringt, bestünde die
+ * fünf Proben und wäre trotzdem unbrauchbar: Er meldete die Beschreibung einer
+ * Datei, die Kopfzeile `sec-fetch-site` und den Port selbst. Der nächste, der
+ * ihn liest, lockerte ihn — und zwar an der Stelle, an der er richtig ist.
+ */
+const FETCH_HARMLESS = {
+  name: 'Prosa, `sec-fetch-site` und der Port sind kein zweiter Weg',
+  source: [
+    '// Diese Ansicht ruft fetch(…) niemals selbst auf.',
+    '/* Auch globalThis.fetch steht hier nur in einem Absatz. */',
+    "const seite = kopfzeilen.get('sec-fetch-site');",
+    'const antwort = await options.fetch(ZIEL);',
+    "const grund = 'fetch_context_not_allowed';",
+    '',
+  ].join('\n'),
+};
+
+const INJECTED = 'ui/Eingesetzt.tsx';
+
+function proveFetchGuard(who, files, allowed) {
+  const baseline = strayGlobalFetch(files, allowed).map((finding) => finding.name);
+  const probe = (source) =>
+    strayGlobalFetch([...files, { name: INJECTED, source }], allowed)
+      .map((finding) => finding.name)
+      .filter((name) => !baseline.includes(name));
+
+  for (const form of FETCH_FORMS) {
+    const found = probe(form.source);
+    check(
+      `${who}: ${form.name} wird gefunden`,
+      found.length === 1 && found[0] === INJECTED,
+      found.length === 0 ? 'nichts beanstandet' : found.join(', '),
+    );
+  }
+
+  const harmless = probe(FETCH_HARMLESS.source);
+  check(`${who}: ${FETCH_HARMLESS.name}`, harmless.length === 0, harmless.join(', '));
+}
+
+proveFetchGuard('die Oberfläche', webFiles, WEB_FETCH_HOME);
+
+/*
+ * Und die Begründung selbst als Messung: Der Ausdruck, der bis T-188 in
+ * Abschnitt 1 und 7 stand, sieht vier dieser fünf Schreibweisen nicht. Der
+ * Satz stand bisher in einem Bericht; ein Satz in einem Bericht altert, eine
+ * Zahl in einem Lauf nicht. Setzt ihn jemand zurück, fallen mit ihm vier
+ * Proben oben — und diese Zeile sagt, warum.
+ */
+const blindForms = FETCH_FORMS.filter((form) => !BLIND_FETCH_CALL.test(form.source));
+check(
+  `der Ausdruck aus T-143 S-1 sieht vier der fünf Schreibweisen nicht (${blindForms.length})`,
+  blindForms.length === 4,
+  blindForms.map((form) => form.name).join(', '),
+);
+
 // ---------------------------------------------------------------------------
 section('7  Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M)');
 // ---------------------------------------------------------------------------
@@ -698,16 +846,30 @@ const walkAddin = (dir) => {
 };
 walkAddin(ADDIN_SOURCE_DIR);
 
-const strayAddinFetch = [];
-for (const file of addinSources) {
-  const body = readFileSync(file, 'utf8');
-  const name = file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length);
-  if (/(?<![\w.])fetch\s*\(/.test(body) && name !== 'api/client.ts') strayAddinFetch.push(name);
-}
+const addinFiles = addinSources.map((file) => ({
+  name: file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length),
+  source: readFileSync(file, 'utf8'),
+}));
+
+/**
+ * Wie {@link WEB_FETCH_HOME}, und aus demselben Grund ausgeschrieben.
+ *
+ * **`ui/App.tsx` steht hier nicht** (T-188). Die Datei speist mit
+ * `fetch: window.fetch.bind(window)` die Abholfunktion des Ports ein — kein
+ * zweiter Weg zum Dienst, aber ein Zugriff auf das globale `fetch` außerhalb
+ * von `api/client.ts`, und bis T-188 war er für diesen Wächter unsichtbar.
+ * Sie einzutragen wäre eine Entscheidung über eine fremde Datei
+ * (`apps/outlook-addin/**` gehört integration-dev) und nicht die Aufgabe
+ * dieses Laufs. Er sagt, was er sieht; wo die Einspeisung hingehört,
+ * entscheidet der Orchestrator.
+ */
+const ADDIN_FETCH_HOME = ['api/client.ts'];
+
+const strayAddinFetch = strayGlobalFetch(addinFiles, ADDIN_FETCH_HOME);
 check(
   `\`fetch\` steht im Add-in nur in api/client.ts (${addinSources.length} Dateien durchgesehen)`,
   strayAddinFetch.length === 0,
-  strayAddinFetch.join(', '),
+  strayAddinFetch.map(describeStray).join(' | '),
 );
 
 check(
@@ -838,6 +1000,17 @@ check(
   addin.findings.length === 0,
   addin.findings.map(label).join(' | '),
 );
+
+/*
+ * Dieselben sechs Proben wie in Abschnitt 6, an der zweiten Tür (A-A-40).
+ *
+ * Sie sind hier **nicht** die Wiederholung der ersten: Der Bestand ist ein
+ * anderer, die Ausnahmeliste ist eine andere, und der Zuwachs wird gegen einen
+ * Grundstand gemessen, der heute nicht leer ist. Genau das ist der Fall, für
+ * den die Zuwachsmessung gebaut ist — ein Wächter, der erst wieder proben darf,
+ * wenn alles grün ist, probt nie dann, wenn es darauf ankommt.
+ */
+proveFetchGuard('der Aufgabenbereich', addinFiles, ADDIN_FETCH_HOME);
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

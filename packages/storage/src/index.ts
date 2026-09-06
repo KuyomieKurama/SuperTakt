@@ -56,6 +56,8 @@ export {
 } from './sqlite/file-port.ts';
 export type { TimeBudgetResult } from './sqlite/file-port.ts';
 
+export { createAttachmentPort } from './sqlite/repo-attachments.ts';
+
 export { createTransactionPort, createUnitOfWork } from './sqlite/unit-of-work.ts';
 export type { UnitOptions } from './sqlite/unit-of-work.ts';
 

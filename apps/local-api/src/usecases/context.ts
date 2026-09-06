@@ -25,6 +25,7 @@
  */
 
 import type {
+  AttachmentBlobPort,
   ClockPort,
   DirectoryInsightPort,
   FilePort,
@@ -56,6 +57,18 @@ export interface AppContext {
    * eines, ob es beschreibbar ist oder nicht.
    */
   readonly directories: DirectoryInsightPort;
+  /**
+   * Die **Bytes** eines Bildanhangs (E-071 Punkt 2 und 3).
+   *
+   * Getrennt von `files`, weil es der entgegengesetzte Ordner ist: `files`
+   * schreibt in einen Ordner, den der **Benutzer** einstellt, und seine ganze
+   * Aufgabe ist, nicht daneben zu schreiben (R-11). Dieser Port schreibt in
+   * einen, den **niemand** einstellen kann — das Anwendungsdatenverzeichnis,
+   * neben dem Bestand, unter denselben Rechten (E-018, A-A-17). Zwei Ordner
+   * mit zwei entgegengesetzten Regeln in einem Port wären die Gelegenheit, den
+   * einen für den anderen zu halten.
+   */
+  readonly attachmentBlobs: AttachmentBlobPort;
   /**
    * Der Windows-Benutzername (E-010, E-042).
    *

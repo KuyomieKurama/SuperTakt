@@ -14,8 +14,8 @@
 import { z } from 'zod';
 
 /*
- * Die beiden **geprüften Namensformen der Hauptanwendung** (T-114, Befund
- * T-112-1 aus der Sicherheitsprüfung).
+ * Die **geprüften Eingabeformen der Hauptanwendung** (T-114, Befund T-112-1
+ * aus der Sicherheitsprüfung; seit T-149 auch die Frist).
  *
  * Bis T-114 stand hier für Titel und Tagname je eine eigene Abschrift
  * (`z.string().trim().min(1).max(…)`), und ein Kommentar sagte zu, sie sei
@@ -27,8 +27,17 @@ import { z } from 'zod';
  * Deshalb jetzt **dieselben Werte** und keine zweite Fassung. Der Bezug über
  * die Modulgrenze ist derselbe wie der auf `http/problem.ts` in `index.ts`:
  * Er holt eine Regel, die es genau einmal geben soll, und keinen Text.
+ *
+ * `dueDateSchema` kam mit T-149 dazu (A-19.21, E-074 Punkt 4) und ist
+ * derselbe Handgriff ein drittes Mal — diesmal **vor** dem Auseinanderlaufen
+ * statt danach. Die Regel selbst liegt noch eine Ebene tiefer: `isCalendarDay`
+ * und `DUE_DATE_MESSAGE` stehen in `packages/domain/src/due-date.ts` (T-146),
+ * `http/input.ts` bindet sie an zod, und diese Tür liest die Bindung. Eine
+ * eigene `z.string().regex(/^\d{4}-\d{2}-\d{2}$/)` hier wäre die vierte
+ * Abschrift der Klasse, die T-122, T-128 und T-134 dreimal aufgeräumt haben —
+ * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
-import { nameSchema, titleSchema } from '../../http/input.ts';
+import { dueDateSchema, nameSchema, titleSchema } from '../../http/input.ts';
 
 /** UUID Fassung 7, wie `Id` in der OpenAPI-Beschreibung. */
 const id = z.string().uuid();
@@ -240,6 +249,58 @@ export const createTodoSchema = z.object({
    * die Prüfung dort nötig macht und hier nicht.
    */
   note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
+  /**
+   * Die **Frist** (A-19.21, E-074 Punkt 3 und 4, T-149).
+   *
+   * ---------------------------------------------------------------------------
+   * Sie wird eingetragen, nicht erkannt
+   * ---------------------------------------------------------------------------
+   *
+   * Das ist der Unterschied zur `callNumber` eine Bildschirmhöhe weiter oben,
+   * und er ist der Kern von E-074 Punkt 4. Die Call-Nummer kommt aus einem
+   * regulären Ausdruck über dem **Text der E-Mail** und damit von Akteur A-06;
+   * die Frist kommt aus einem Feld, das der Benutzer im Aufgabenbereich
+   * ausfüllt. Es gibt kein Muster, das sie aus einem Betreff liest, und es
+   * soll keines geben: „bis Freitag" in einer fremden E-Mail ist eine
+   * Behauptung des Absenders über den Kalender des Empfängers.
+   *
+   * Geprüft wird sie trotzdem wie jedes andere Feld dieser Tür. Ein Feld im
+   * Aufgabenbereich ist keine Zusicherung über das, was hier ankommt — der
+   * Aufgabenbereich ist ein Browsersteuerelement, und diese Route hört auf
+   * `127.0.0.1`.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum `.default(null)` und nicht `.optional()`
+   * ---------------------------------------------------------------------------
+   *
+   * An der Haupttür stehen zwei Schemata nebeneinander: `createSchema` faßt
+   * „fehlt" und `null` zusammen, `updateSchema` hält sie auseinander, weil
+   * `null` dort **entfernen** heißt (A-19.3). Diese Tür kennt das Ändern
+   * nicht — sie legt an und bucht, mehr nicht. Es gibt hier also nur zwei
+   * Zustände, und `.default(null)` schreibt das einmal hin, statt es an der
+   * Aufrufstelle mit `?? null` nachzuholen. Derselbe Handgriff wie bei
+   * `callNumber` und `statusId` darüber.
+   *
+   * Der **Wert** der Prüfung steht in `dueDateSchema` und nicht hier: Form
+   * `JJJJ-MM-TT`, Jahr zwischen 1970 und 2999 und ein Tag, den es wirklich
+   * gibt. `2026-02-30` besteht die Form und wird abgewiesen; eine Uhrzeit und
+   * ein Zeitzonenanhang ebenso.
+   *
+   * ---------------------------------------------------------------------------
+   * Was an dieser Stelle **nicht** dazukommt
+   * ---------------------------------------------------------------------------
+   *
+   * Ein Anhang. A-19.19 bleibt unangetastet, und zwar strukturell: Diese Tür
+   * hat kein Anhangsfeld, und Anhänge hängen als Unterressource unter
+   * `/api/v1/todos/{todoId}/attachments` — außerhalb von `/addin` und für das
+   * Add-in-Token unerreichbar (A-A-21). Der Unterschied ist Art und nicht
+   * Vorsicht (E-074 Punkt 3): Eine Frist ist ein Tag, den die Anwendung
+   * **anzeigt**; ein Anhang ist eine Adresse, die sie auf Klick **öffnet**
+   * (R-21, R-22). Ein `attachments` im Rumpf dieser Anfrage fällt in zod
+   * still weg — gemessen wird das trotzdem, und zwar an der Wirkung
+   * (`proof:addin` Abschnitt 18: null Zeilen in `todo_attachment`).
+   */
+  dueDate: dueDateSchema.default(null),
 });
 
 /**
@@ -327,6 +388,54 @@ export const bookSchema = z.object({
 
 export type CreateTodoBody = z.infer<typeof createTodoSchema>;
 export type BookBody = z.infer<typeof bookSchema>;
+
+/**
+ * Die Rumpfschemata dieser Tür, nach `operationId` der OpenAPI-Beschreibung
+ * (O-BB, T-149).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Zuordnung hier steht und nicht im Nachweispfad
+ * ---------------------------------------------------------------------------
+ *
+ * `scripts/proof-openapi.mjs` hält jedes Rumpfschema des Dienstes gegen das,
+ * was die Beschreibung über denselben Rumpf behauptet — Feldnamen,
+ * Pflichtfelder, Obergrenzen. Die vier Türen der Hauptfläche
+ * (`routes/todos.ts`, `structure.ts`, `time.ts`, `export.ts`) führen dafür je
+ * eine Aufstellung `REQUEST_SCHEMAS` **neben ihren Routen**. Der Grund steht
+ * dort ausgeschrieben: Wer eine Route mit Rumpf hinzufügt, sieht die Zuordnung
+ * neben seiner Arbeit und nicht in einem Skript, von dem er nichts weiß.
+ *
+ * Diese Tür war bis T-149 die Ausnahme. Ihre beiden Schemata standen als zwei
+ * einzelne Importe im Nachweispfad selbst, mit dem Vermerk „liegt in fremder
+ * Hoheit und führt kein `REQUEST_SCHEMAS`" — die Hoheitsgrenze aus E-053 war
+ * zur Begründung einer Sonderform geworden. Das ist genau die Stelle, an der
+ * eine neue Add-in-Route mit Rumpf unbemerkt bliebe: Sie entstünde in **dieser**
+ * Datei, und der Eintrag, der sie messbar macht, läge in einer, die ihr
+ * Verfasser nicht anfaßt.
+ *
+ * Die Aufstellung ist deshalb weder eine Bequemlichkeit noch eine Doppelung —
+ * sie ist die Wache. Ein Schlüssel ohne Gegenstück in der Beschreibung und
+ * eine beschriebene Route ohne Schlüssel machen den Lauf rot.
+ *
+ * **Wer sie liest.** `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 18
+ * hält diese Aufstellung gegen den Add-in-Abschnitt der Beschreibung, in
+ * beiden Richtungen, und prüft dabei ausdrücklich, dass die Einträge
+ * **dieselben** Objekte sind, die die Route benutzt.
+ *
+ * `apps/local-api/scripts/proof-openapi.mjs` führt daneben weiterhin zwei
+ * Einzelimporte derselben beiden Schemata. Das ist keine Doppelung der Regel —
+ * beide Seiten zeigen auf dieselben zwei Objekte, nicht auf zwei Abschriften
+ * davon —, aber der Vermerk dort („liegen in fremder Hoheit und führen kein
+ * `REQUEST_SCHEMAS`") stimmt seit dieser Zeile nicht mehr. `scripts/` gehört
+ * domain-dev (E-053); der Austausch der beiden Zeilen gegen ein
+ * `...ADDIN_SCHEMAS` ist als Abweichung gemeldet und nicht hier gemacht
+ * worden. Bis dahin trägt die Wache oben, und sie hängt an keiner fremden
+ * Datei.
+ */
+export const REQUEST_SCHEMAS = Object.freeze({
+  createAddinTodo: createTodoSchema,
+  createAddinTimeEntry: bookSchema,
+});
 
 export interface FieldIssue {
   readonly field: string;

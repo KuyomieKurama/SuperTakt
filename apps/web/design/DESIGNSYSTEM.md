@@ -79,7 +79,7 @@ Zustand; die Einleitung oben auf der Seite erklärt sie ohne Vorwissen.
 ```
 pnpm install      # an der Wurzel des Arbeitsbereichs, nicht in apps/web
 pnpm dev          # http://127.0.0.1:5173
-pnpm --filter @takt/web contrast    # Kontrastnachweis, 376 Paare
+pnpm --filter @takt/web contrast    # Kontrastnachweis samt Vollstaendigkeitswaechter
 ```
 
 ---
@@ -177,10 +177,25 @@ pnpm contrast          # Klartext
 pnpm contrast:md       # Markdown-Tabelle
 ```
 
-Stand 2026-09-01: **124 Paare geprüft, 0 durchgefallen** (62 je Modus, davon 2 je Modus als
-dekorativ ausgenommen). Gegenüber T-006 sind 15 Paare je Modus dazugekommen: die gestreifte
-Randschiene des Leistungsfelds, die Marken vor beiden Beschriftungen, die drei Ausprägungen des
+Stand 2026-09-06 (gemessen in T-209): **253 Paare, 506 Messungen, 0 durchgefallen**, dazu
+**9 Gegenproben** und **83 gezeichnete Farbtoken, 0 davon ohne Nachweis**. Gegenüber T-006 sind
+seinerzeit 15 Paare je Modus dazugekommen: die Randschiene des Leistungsfelds — damals gestreift,
+seit T-202 durchgezogen —, die Marken vor beiden Beschriftungen, die drei Ausprägungen des
 Erledigt-Kennzeichens und die Flächen der Einleitung.
+
+**Der Lauf misst seit T-209 auch seine eigene Vollständigkeit** (Auflage A-A-45 aus T-189, Zeilen
+je Token aus T-204 Abschnitt 9). Bis dahin sagte er, daß die Paare in seiner Liste halten — nicht,
+daß seine Liste die gezeichneten Farben abdeckt; vierzehn Farbtoken wurden gezeichnet und von
+keinem Paar gemessen, und der Lauf blieb grün. Jedes farbtragende Token aus `tokens.css`, das eine
+Klasse oder Komponente unter `apps/web/src` zeichnet, braucht jetzt eine von drei Aussagen: ein
+Paar, eine benannte Ausnahme (`exempt`) oder einen Eintrag in `noContrastQuestion` **mit dem
+Grund, warum es ein Paar hier nicht geben kann**. Die Gegenrichtung gilt auch: Ein Paar auf eine
+Farbe, die keine Klasse mehr zeichnet, macht den Lauf rot. Die Prüfung ist **tokengenau, nicht
+flächengenau** — sie findet ein Token ohne Paar, nicht ein Paar, das die falsche Fläche mißt.
+
+Vier davon stellen keine Kontrastfrage und sind namentlich ausgenommen: `--shadow-xs`,
+`--shadow-sm` und `--shadow-lg` sind Schattenkurzschriften und keine Farben, und `--bg-scrim` hat
+die Aufgabe, Kontrast zu **nehmen** — ein Mindestwert wäre die Umkehrung ihres Zwecks.
 
 Zwei Token mussten dafür nachgezogen werden, weil sie gemessen durchfielen:
 `--note-internal-rail` von `#a8b2c3` auf `#7e8a9e` (2,13:1 → 3,49:1) und die Kontur des
@@ -524,15 +539,24 @@ Buchungsliste und eine Einstellungsseite unterschiedliche Ansprüche haben.
 
 ### 4.3 Radien und Erhebung
 
-Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: fünf Stufen von `--shadow-xs` (Karte in Ruhe) bis
-`--shadow-drag` (gezogenes Element, mit farbigem Ring). Im dunklen Modus sind die Schatten
-kräftiger, weil Schatten auf dunklem Grund sonst nicht wirken.
+Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: drei Stufen — `--shadow-xs` (Karte in Ruhe),
+`--shadow-sm` (Karte unter dem Zeiger) und `--shadow-lg` (Auswahlliste, Menü, Dialog, globale
+Suche, Toast), dazu `--shadow-none`. Im dunklen Modus sind die Schatten kräftiger, weil Schatten
+auf dunklem Grund sonst nicht wirken.
 
-`--shadow-drag` ist zurzeit **von keiner Fläche belegt**: Die Kartenbewegung, für die er gedacht
-war, ist mit E-054 entfallen (Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen
-sich anders aus — der gezogene Tag über `.tree__item--dragging`, das gezogene Feld über
-`.tfield--dragging` (Deckkraft) und `.tfield--drop` (Kante am Ablageziel). Er bleibt als Stufe
-stehen, damit die nächste Ziehfläche nicht ihren eigenen Schatten erfindet.
+**Es waren fünf Stufen, und zwei davon zeichnete nichts** (T-214, O-IT). `--shadow-drag` war seit
+E-054 ausdrücklich unbelegt — die Kartenbewegung, für die er gedacht war, ist entfallen
+(Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen sich anders aus: der gezogene Tag
+über `.tree__item--dragging`, das gezogene Feld über `.tfield--dragging` (Deckkraft) und
+`.tfield--drop` (Kante am Ablageziel). `--shadow-md` war unbemerkt unbelegt: Die Musterseite
+schrieb ihm die Auswahlliste zu, und die trägt `--shadow-lg`.
+
+Die Begründung, die `--shadow-drag` bis dahin trug — „bleibt als Stufe stehen, damit die nächste
+Ziehfläche nicht ihren eigenen Schatten erfindet" —, ist damit gefallen. Sie hielt einen Wert
+gegen einen Fall, den es nicht gibt; wer eine Ziehfläche baut, misst ihren Schatten dann und
+schreibt ihn hierher. Der vierte Wächter der Kontrastprüfung hält die Liste seither ehrlich:
+**Ein farbtragendes Token der semantischen Ebene, das keine Fläche zeichnet, macht `pnpm contrast`
+rot.**
 
 ---
 
@@ -542,9 +566,24 @@ Für jeden Baustein sind dieselben Zustände in derselben Reihenfolge definiert:
 normal, `:hover`, `:active`, `:focus-visible`, `[disabled]`, Fehler.
 
 **Fokus.** `:focus-visible` erzeugt einen 2px-Ring in `--focus-ring-color` mit 2px Abstand. Der
-Ring liegt außerhalb des Elements, damit ihn nichts verdeckt (SC 2.4.11 Focus Not Obscured). Auf
-gefüllten Flächen kommt über die Klasse `on-solid` ein heller Gegenring dazu. `outline: none`
-ohne Ersatz gibt es nirgends. Bei `prefers-contrast: more` wächst der Ring auf 3px.
+Ring liegt außerhalb des Elements, damit ihn nichts verdeckt (SC 2.4.11 Focus Not Obscured).
+`outline: none` ohne Ersatz gibt es nirgends. Bei `prefers-contrast: more` wächst der Ring auf
+3px.
+
+Auf gefüllten Flächen kommt über die Klasse `on-solid` ein Gegenband dazu, und es liegt **innen,
+an der Füllung** — 0 bis 2px `--focus-ring-contrast` als Schatten, darüber 2 bis 4px
+`--focus-ring-color` als Kontur gegen die Fläche. Der Doppelring hat damit drei Nahtstellen, und
+alle drei sind gemessen: Füllung gegen Gegenband **5,98** hell / **6,26** dunkel am Primärknopf und
+**6,75** / **7,98** am Gefahrenknopf, Gegenband gegen Kontur **5,98** / **9,23**, Kontur gegen die
+Fläche **5,33** bis **5,98** / **7,62** bis **9,07**. Der kleinste Wert der Reihe ist 5,33 — knapp
+das Doppelte dessen, was SC 1.4.11 fordert.
+
+Bis T-213 lagen die beiden Bänder andersherum. Dann berührte das Gegenband die Füllung gar nicht,
+und am Primärknopf im hellen Thema fielen **beide** Bänder mit ihrem Nachbarn zusammen — 1,00:1 an
+beiden Kanten, sichtbar blieb ein Knopf, der beim Tabulieren um 2px wächst (T-210, SC 2.4.7 und
+SC 1.4.11). Der Tausch hat keinen Farbwert geändert; er hat die Aufgaben der beiden Token an die
+Plätze gebracht, an die sie gehören. Zurückdrehen geht nicht: Für die alte Anordnung existiert im
+dunklen Thema kein gültiger Wert.
 
 **Klickfläche.** Symbolknöpfe sind mindestens 28×28px und erfüllen damit SC 2.5.8 (24×24) mit
 Reserve. `--hit-target-min` hält den Mindestwert als Token fest.
@@ -692,7 +731,7 @@ Diese zweite Hälfte trägt die Gestaltung. Sechs Merkmale, von denen nur eines 
 
 | Merkmal | `scope="billing"` — Leistung | `scope="internal"` — Vermerk |
 |---|---|---|
-| Randschiene links | 4px, **gestreift**, Akzentfarbe | 4px, einfarbig, Grau |
+| Randschiene links | 4px, **durchgezogen**, Akzentfarbe | 4px, **unterbrochen**, Grau |
 | Kopfband | „Verlässt Takt · steht in der Abrechnung“, Pfeil nach außen | „Bleibt in Takt“, Schloss |
 | Marke vor der Beschriftung | gefülltes Quadrat mit Pfeil nach außen | gestrichelte Kontur mit Schloss |
 | Schreibfläche | hell, wirkt wie ein Ausgabefeld | gedämpft, wirkt wie ein Notizzettel |
@@ -701,10 +740,17 @@ Diese zweite Hälfte trägt die Gestaltung. Sechs Merkmale, von denen nur eines 
 
 Zwei dieser Merkmale sind in T-015 dazugekommen und lösen jeweils einen konkreten Ausfall:
 
-* **Die gestreifte Randschiene** trägt auch dann, wenn Farbe wegfällt. Zwei 4px-Schienen, die
-  sich nur im Farbton unterscheiden, sind in Graustufen und bei Deuteranopie nahezu gleich.
-  Gestreift gegen einfarbig ist es nicht. Die Musterseite hat dafür in Abschnitt 7 eine eigene
-  **Graustufenprobe**.
+* **Die unterbrochene Randschiene am Vermerk** trägt auch dann, wenn Farbe wegfällt. Zwei
+  4px-Schienen, die sich nur im Farbton unterscheiden, sind in Graustufen und bei Deuteranopie
+  nahezu gleich — gemessen liegen diese beiden bei **1,71:1** hell und **1,31:1** dunkel
+  auseinander. Durchgezogen gegen unterbrochen ist es nicht: In der Lücke sieht man die Karte,
+  also ist Balken gegen Lücke dasselbe Verhältnis wie Schiene gegen Karte, **3,49:1** hell und
+  **4,31:1** dunkel (`apps/web/scripts/contrast-check.mjs`, Gruppe „Feldart"). Bis T-202 stand
+  hier eine **gestreifte** Schiene; ihr Streifen unterschied sich von seiner Schiene wieder nur
+  im Farbton, und visual-qa hat in T-198 an echten Pixeln gemessen, dass `overflow: hidden` sie
+  auf keinem Bildschirm sichtbar werden ließ. Die Musterseite hat für den Vergleich in
+  Abschnitt 7 eine eigene **Graustufenprobe** — sie zeigt das Bauteil als Ganzes und kann ein
+  einzelnes Merkmal nicht freisprechen.
 * **Die Marke unmittelbar vor der Beschriftung** trägt auch dann, wenn das Kopfband nicht im
   Blickfeld ist — in einem schmalen Dialog, in einer gescrollten Liste, im Outlook-Add-in.
 

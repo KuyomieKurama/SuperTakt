@@ -1,0 +1,89 @@
+-- Takt — Migration 0014 "todo_due_date", Vorwärtsrichtung
+-- Deckt: A-19.1, A-19.3, A-19.6, A-19.7, A-19.20, E-070, E-074, A-A-19
+-- Der Migrationsläufer setzt PRAGMA foreign_keys vor BEGIN und öffnet die Transaktion selbst.
+--
+-- ===========================================================================
+-- Wozu
+-- ===========================================================================
+--
+-- A-19.1: „Ein Todo kann eine Frist tragen. Sie ist optional; ein Todo ohne
+-- Frist bleibt in jeder Hinsicht ein gültiges Todo."
+--
+-- Ein Tag, keine Uhrzeit (E-070 Punkt 1). Die Spalte trägt deshalb `YYYY-MM-DD`
+-- und keinen Zeitstempel — der Unterschied ist nicht Sparsamkeit: Eine Uhrzeit
+-- brächte einen vierten Zustand („in zwei Stunden fällig"), und der ist ohne
+-- Erinnerung sinnlos.
+--
+-- ===========================================================================
+-- Was hier ausdrücklich NICHT steht
+-- ===========================================================================
+--
+-- **Kein Zustand.** „Überfällig", „heute fällig" und „später fällig" (A-19.5)
+-- werden gerechnet und nie gespeichert (E-070 Punkt 3). Eine Spalte
+-- `due_state` wäre über Nacht falsch, ohne daß jemand etwas angefaßt hat — und
+-- niemand hätte einen Anlaß, sie neu zu schreiben. Sie steht in
+-- `packages/domain/src/due-date.ts` als reine Funktion, und dort allein.
+--
+-- **Keine Achse.** Die Frist geht nicht in `pool_rule` und nicht in eine
+-- Exportvorlage (A-19.7, A-19.17, E-070 Punkt 4, E-074 Punkt 1). Diese
+-- Migration ergänzt deshalb weder einen `pool_rule.kind` noch eine Feldquelle;
+-- `ExportSourcePath` bleibt bei zwölf Werten (A-A-20).
+--
+-- ===========================================================================
+-- Warum ein CHECK, obwohl die Tür ohnehin prüft
+-- ===========================================================================
+--
+-- Aus demselben Grund wie bei `skipped_version` in 0013: Der Wert ist
+-- **Benutzereingabe** (VG-6). Jeder Prozeß mit dem Sitzungsgeheimnis kann ihn
+-- über `POST`/`PATCH /todos` setzen, seit A-19.21 auch über die Add-in-Tür, und
+-- jeder Prozeß im Benutzerkonto kann mit `sqlite3` an der Tür vorbeischreiben
+-- (VG-3). Geprüft wird er deshalb an seiner Tür — und hier noch einmal.
+--
+-- Der CHECK ist bewußt **enger als nichts und weiter als die Domäne**: SQLite
+-- kennt ohne Erweiterung kein REGEXP. Was GLOB trägt, ist die **Form**:
+-- vier Ziffern, Bindestrich, zwei Ziffern, Bindestrich, zwei Ziffern.
+--
+-- Was er **nicht** leistet: `2026-02-30` besteht ihn, `0000-01-01` ebenso. Die
+-- vollständige Prüfung — existierender Tag, Jahr zwischen 1970 und 2999
+-- (A-A-19) — steht in `packages/domain/src/due-date.ts` und läuft an jeder Tür.
+-- Diese Spalte soll keine zweite, abweichende Meinung darüber führen, was ein
+-- Tag ist; sie soll verhindern, daß etwas hineingerät, das nicht einmal wie
+-- einer aussieht.
+--
+-- ===========================================================================
+-- Der Index, und warum er partiell ist
+-- ===========================================================================
+--
+-- A-19.20 verlangt Sortieren und Filtern. Beides läuft über `due_date`, und
+-- beides muß ohne einen vollständigen Tabellendurchlauf auskommen — dieselbe
+-- Auflage wie bei den Tag-Ordnern.
+--
+-- `WHERE due_date IS NOT NULL`, weil der überwiegende Teil der Todos keine
+-- Frist trägt (A-19.1: sie ist optional) und ein Index über lauter NULL-Werte
+-- Platz kostet, ohne etwas zu treffen. Dieselbe Bauart wie
+-- `ix_todo_call_number` aus 0001.
+--
+-- Die Kennung steht als zweite Spalte darin: Die Blätterung sortiert
+-- `(due_date, id)` und bekommt damit beide Schlüssel aus einem Durchlauf.
+--
+-- ===========================================================================
+-- Warum ALTER TABLE ADD COLUMN und kein Tabellenumbau
+-- ===========================================================================
+--
+-- Es ändert sich keine bestehende Spalte, keine REFERENCES-Klausel und kein
+-- bestehender CHECK. Auf `todo` stehen keine Trigger und keine Sicht;
+-- `v_export_candidate` liest `todo` (siehe 0001) und wird von einer neuen
+-- Spalte nicht berührt, weil sie ihre Spalten ausschreibt — genau die
+-- Eigenschaft, die A-19.17 hier strukturell hält.
+--
+-- Der Vorgabewert ist NULL: „keine Frist". Das ist der Zustand, in dem jeder
+-- bestehende Bestand nach dieser Migration steht, und er ist richtig (A-19.16:
+-- bestehende Todos funktionieren unverändert weiter).
+
+ALTER TABLE todo ADD COLUMN due_date TEXT
+  CHECK (
+    due_date IS NULL
+    OR due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+  );
+
+CREATE INDEX ix_todo_due_date ON todo (due_date, id) WHERE due_date IS NOT NULL;
