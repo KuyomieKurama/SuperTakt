@@ -111,6 +111,16 @@ const ENTRY_PAGE_SIZE = 200;
  */
 const DRAFT_DEBOUNCE_MS = 400;
 
+/**
+ * Woher die Vorschau kommt — **eine** Fassung fuer alle drei Faelle und fuer
+ * die Karte darum (T-181, ST-07).
+ *
+ * Bis dahin standen vier Abschriften desselben Satzes untereinander und
+ * nebeneinander. Zwei Abschriften laufen auseinander, sobald eine gepflegt
+ * wird; vier laufen schneller auseinander.
+ */
+const PREVIEW_SOURCE = "Vom selben Renderer wie die Exportdatei, an Ihren offenen Buchungen.";
+
 export interface TemplatePreviewProps {
   /** Die Felder, die der Benutzer gerade vor sich hat. Sie werden gerendert. */
   readonly fields: readonly ExportFieldDefinition[];
@@ -295,15 +305,22 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
           Seit E-051 zeigt die Vorschau **immer** den Stand im Editor. Der
           frühere Satz „zeigt den gespeicherten Stand" ist damit ersatzlos weg;
           was bleibt, ist die Auskunft, ob dieser Stand schon gespeichert ist.
+
+          Seit T-181 (ST-07) steht die Herkunft in **einer** Fassung statt in
+          vier: Der Satz über den Renderer stand dreimal hier und ein viertes
+          Mal in der Kartenbeschreibung darum. Was bleibt, ist der Zusatz, der
+          die drei Fälle unterscheidet — er ist eine **Abwesenheit** („noch
+          nicht gespeichert", „gespeichert wird dabei nichts") und fällt
+          deshalb nicht.
         */}
         <p className="tpreview__lead">
           <Icon name={stale || unsaved ? "pencil" : "check-circle"} size={14} />
           <span>
             {unsaved
-              ? "Ihr noch nicht gespeicherter Entwurf, gerendert vom selben Renderer, der auch die Datei schreibt — an Ihren tatsächlich offenen Buchungen."
+              ? `Noch nicht gespeicherter Entwurf. ${PREVIEW_SOURCE}`
               : stale
-                ? "Ihr geänderter, noch nicht gespeicherter Stand — gerendert vom selben Renderer, der auch die Datei schreibt. Gespeichert wird dabei nichts."
-                : "Erzeugt vom selben Renderer, der auch die Datei schreibt — an Ihren tatsächlich offenen Buchungen."}
+                ? `Geänderter Stand, noch nicht gespeichert — die Vorschau speichert nichts. ${PREVIEW_SOURCE}`
+                : PREVIEW_SOURCE}
           </span>
         </p>
       </div>
@@ -503,35 +520,52 @@ function PreviewGroupRow({
         </span>
       </button>
 
-      {blocked ? (
-        <div className="tpgroup__blocked" role="status">
-          <span className="tpgroup__blocked-icon" aria-hidden>
-            <Icon name="alert-triangle" size={14} />
-          </span>
-          <div className="tpgroup__blocked-body">
-            <p className="tpgroup__blocked-title">Diese Tagesgruppe ist nicht exportierbar</p>
-            <p className="tpgroup__blocked-text">
-              Keine ihrer Buchungen trägt einen Leistungstext, und eine leere Notiz nimmt das
-              Abrechnungstool nicht an. Der übrige Export läuft trotzdem; diese Gruppe bleibt offen
-              und erscheint beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann geht sie
-              mit.
-            </p>
+      <div className="live-region" role="status">
+        {blocked ? (
+          <div className="tpgroup__blocked">
+            <span className="tpgroup__blocked-icon" aria-hidden>
+              <Icon name="alert-triangle" size={14} />
+            </span>
+            <div className="tpgroup__blocked-body">
+              <p className="tpgroup__blocked-title">Diese Tagesgruppe ist nicht exportierbar</p>
+              <p className="tpgroup__blocked-text">
+                Keine ihrer Buchungen trägt einen Leistungstext, und eine leere Notiz nimmt das
+                Abrechnungstool nicht an. Der übrige Export läuft trotzdem; diese Gruppe bleibt
+                offen und erscheint beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann
+                geht sie mit.
+              </p>
+            </div>
+            {group.entries[0] === undefined ? null : (
+              /*
+                Der Zusatz nennt hier die **Tagesgruppe** und nicht eine
+                Buchung (T-222 Abschnitt 15.5, O-JX). Der Knopf steht in der
+                Meldung über die Gruppe und gehört zu deren Gegenstand; daß er
+                den Dialog an der ersten Buchung öffnet, ist der einzige Weg,
+                hier anzufangen, und harmlos, weil `blocked` gerade heißt, daß
+                keine Buchung der Gruppe Text trägt. Ein Zusatz mit einer
+                Uhrzeit verspräche eine Auswahl, die der Benutzer nicht
+                getroffen hat. Ohne den Zusatz wäre der Name dieses Knopfes der
+                **Anfang** der Namen aller Zeilenknöpfe derselben Gruppe — die
+                Verwechslung, die der Zusatz beseitigen soll, eine Ebene höher.
+              */
+              <Button
+                size="sm"
+                variant="secondary"
+                iconStart="pencil"
+                onClick={() => {
+                  const first = group.entries[0];
+                  if (first !== undefined) onEditEntry(first);
+                }}
+              >
+                Leistung nachtragen
+                <span className="visually-hidden">
+                  , Tagesgruppe {formatDayLabel(summary.day)}
+                </span>
+              </Button>
+            )}
           </div>
-          {group.entries[0] === undefined ? null : (
-            <Button
-              size="sm"
-              variant="secondary"
-              iconStart="pencil"
-              onClick={() => {
-                const first = group.entries[0];
-                if (first !== undefined) onEditEntry(first);
-              }}
-            >
-              Leistung nachtragen
-            </Button>
-          )}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="tpgroup__body" id={bodyId} hidden={!expanded}>
         {/*
@@ -552,32 +586,48 @@ function PreviewGroupRow({
             </span>
           </h4>
           <ul className="tpsegment-list">
-            {group.entries.map((entry) => (
-              <li className="tpsegment" key={entry.id}>
-                <span className="tpsegment__period tabular">
-                  {formatTimeRange(entry.startedAt, entry.endedAt)}
-                </span>
-                <span className="tpsegment__duration tabular">
-                  <span className="visually-hidden">Ungerundete Dauer: </span>
-                  {formatDuration(entry.durationSeconds)}
-                </span>
-                <span className="tpsegment__note">
-                  {entry.note.trim().length === 0 ? (
-                    <span className="muted">— keine Leistung erfasst —</span>
-                  ) : (
-                    <Foreign value={entry.note} />
-                  )}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  iconStart="pencil"
-                  onClick={() => onEditEntry(entry)}
-                >
-                  {entry.note.trim().length === 0 ? "Leistung nachtragen" : "Bearbeiten"}
-                </Button>
-              </li>
-            ))}
+            {group.entries.map((entry) => {
+              /*
+                Zeichengleich dieselbe Zeichenkette, die die Zeile links
+                sichtbar zeigt — **keine zweite Formatierung** desselben
+                Zeitpunkts (T-222 Abschnitt 15.4). Deshalb einmal gerechnet und
+                zweimal benutzt und nicht zweimal gerechnet.
+              */
+              const period = formatTimeRange(entry.startedAt, entry.endedAt);
+              const missing = entry.note.trim().length === 0;
+              return (
+                <li className="tpsegment" key={entry.id}>
+                  <span className="tpsegment__period tabular">{period}</span>
+                  <span className="tpsegment__duration tabular">
+                    <span className="visually-hidden">Ungerundete Dauer: </span>
+                    {formatDuration(entry.durationSeconds)}
+                  </span>
+                  <span className="tpsegment__note">
+                    {missing ? (
+                      <span className="muted">— keine Leistung erfasst —</span>
+                    ) : (
+                      <Foreign value={entry.note} />
+                    )}
+                  </span>
+                  {/*
+                    Dieselbe Bauform wie in `ExportGroups.tsx`: **ein** Baustein,
+                    zwei Beschriftungen, der Zeilenbezug als verborgener Zusatz
+                    im Knopf und nicht als `aria-label` (T-218 Abschnitt 11.2,
+                    T-222 Abschnitt 15.4). Die Ausprägung folgt dem Mangel —
+                    `secondary`, solange die Leistung fehlt, danach `ghost`.
+                  */}
+                  <Button
+                    size="sm"
+                    variant={missing ? "secondary" : "ghost"}
+                    iconStart="pencil"
+                    onClick={() => onEditEntry(entry)}
+                  >
+                    {missing ? "Leistung nachtragen" : "Leistung bearbeiten"}
+                    <span className="visually-hidden">, Buchung {period}</span>
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
@@ -592,10 +642,11 @@ function PreviewGroupRow({
 /** Die Karte um die Vorschau, damit sie auf jedem Bildschirm gleich sitzt. */
 export function TemplatePreviewCard(props: TemplatePreviewProps) {
   return (
-    <Card
-      title="Vorschau"
-      description="An Ihren offenen Buchungen, erzeugt vom selben Renderer wie die Exportdatei."
-    >
+    /*
+      Ohne Beschreibung (T-181, ST-07): Sie war die vierte Abschrift des
+      Satzes, der unmittelbar darunter im Banner der Vorschau steht.
+    */
+    <Card title="Vorschau">
       <TemplatePreview {...props} />
     </Card>
   );

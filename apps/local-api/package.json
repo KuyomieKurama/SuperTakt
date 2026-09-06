@@ -13,6 +13,7 @@
     "proof:export-api": "node scripts/proof-export-api.mjs",
     "proof:taskpane": "node scripts/proof-taskpane.mjs",
     "proof:addin-wiring": "node scripts/proof-addin-wiring.mjs",
+    "proof:release-safety": "node scripts/proof-release-safety.mjs",
     "proof:route-policy": "node scripts/proof-route-policy.mjs",
     "proof:template-fields": "node scripts/proof-template-fields.mjs",
     "proof:db-permissions": "node scripts/proof-db-permissions.mjs",

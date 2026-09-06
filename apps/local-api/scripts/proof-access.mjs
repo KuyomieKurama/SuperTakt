@@ -17,13 +17,15 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, stat, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, readFile } from 'node:fs/promises';
 import { tmpdir, networkInterfaces } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createConnection } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 
 /*
  * Die drei Fristen des Betriebs kommen aus `config.ts` und stehen hier nicht
@@ -40,10 +42,38 @@ import {
 } from '../src/config.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY = join(HERE, '..', 'src', 'index.ts');
+/**
+ * **Nicht `src/index.ts`** (T-146, Befund T-145-1).
+ *
+ * `src/index.ts` ruft `main()` ohne Argument, und `main()` startet die
+ * Versionsprüfung. Dieser Lauf dauert länger als deren Startabstand — `ss -tnp`
+ * hat währenddessen `ESTAB … 140.82.121.6:443` gezeigt, also `api.github.com`.
+ * Der Nachweis, der die Vertrauensgrenze mißt, überschritt sie selbst: ein
+ * Lebenszeichen (R-19 Punkt 3) aus jedem `pnpm check`, Mitverbrauch der 60
+ * Anfragen je Stunde und Quelladresse (T-136-5).
+ *
+ * `proof-access-entry.ts` ruft **denselben** `main()` — dieselbe Migration,
+ * dieselbe Rechteprüfung, denselben Aufgabenbereich, dieselben
+ * Beendigungscodes — und setzt als einziges eine Abholfunktion ein, die den
+ * Prozeß nicht verläßt. Ein ausdrücklicher Parameter am Zusammenbau und keine
+ * Umgebungsvariable: Eine Variable wäre von außen setzbar und damit genau das,
+ * was A-18.3 verbietet.
+ */
+const ENTRY = join(HERE, 'proof-access-entry.ts');
 const PORT = 17843;
 const BASE = `http://127.0.0.1:${PORT}/api/v1`;
 const SECRET_SHAPE = /takt_[A-Za-z0-9_-]{43}/;
+
+/**
+ * Wie viele Migrationen diese Fassung kennt — **gezählt, nicht abgeschrieben**
+ * (T-132, Abschnitt 0g).
+ *
+ * Die Zahl wächst mit jeder neuen Migration. Stünde sie hier als Ziffer, würde
+ * dieser Nachweis bei der nächsten Migration rot — mit einer Meldung, die auf
+ * den Nachweis zeigt statt auf die Änderung.
+ */
+const MIGRATION_COUNT = readdirSync(join(HERE, '..', '..', '..', 'packages', 'storage', 'migrations'))
+  .filter((name) => name.endsWith('.up.sql')).length;
 
 let passed = 0;
 let failed = 0;
@@ -401,6 +431,101 @@ try {
 
     await stopService(gewoehnlich);
     service = null;
+  }
+
+  section('0g. Der Startabbruch nennt seinen Grund, und zwar pfadfrei (T-132, B-2.4)');
+  {
+    /*
+     * ---------------------------------------------------------------------
+     * Warum dieser Abschnitt hier steht und nicht nur in den Einheitentests
+     * ---------------------------------------------------------------------
+     *
+     * Am 2026-09-04 um 18:57 startete Takt nicht, und im Protokoll stand ein
+     * Satz, der die Folge nannte und nicht die Ursache: `main.ts` fing den
+     * Wurf mit `catch {` ohne Bindung ab. Der Grund war damit für immer weg.
+     *
+     * Die Einheitentests (`apps/local-api/test/startup.test.ts`) messen die
+     * Übersetzung von Grund zu Zeile über den vollständigen Vorrat. Was sie
+     * **nicht** messen können, ist die Kette: echter Bestand, echter Läufer,
+     * echter Sidecar, echtes `stderr`. Genau die ist am 2026-09-04 gerissen,
+     * und genau die steht hier — zwei Gründe, die sich ohne Zutun eines
+     * Menschen herstellen lassen.
+     *
+     * Zwei Zusagen werden gemessen, und die zweite ist die aus B-2.4: Die
+     * Zeile nennt den **Grund** und trägt **keinen Pfad**. Der Bestand liegt
+     * dabei in einem Wegwerfordner, dessen Name im Lauf bekannt ist — käme er
+     * durch, stünde er hier.
+     */
+    const startAbbruch = async (name, prepare, erwarteterGrund) => {
+      const eigener = await mkdtemp(join(tmpdir(), 'takt-proof-abbruch-'));
+      try {
+        const appDir = join(eigener, 'takt');
+        await mkdir(appDir, { recursive: true, mode: 0o700 });
+        const db = new DatabaseSync(join(appDir, 'takt.db'));
+        db.exec(
+          'CREATE TABLE schema_migration (version INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL, ' +
+            'checksum TEXT NOT NULL, applied_at TEXT NOT NULL);',
+        );
+        prepare(db);
+        db.close();
+
+        const abbruch = await startService(eigener);
+        const code = await Promise.race([abbruch.exit, sleep(15000).then(() => 'timeout')]);
+        const ausgabe = abbruch.output();
+        if (code === 'timeout') await stopService(abbruch);
+
+        check(`${name}: der Dienst beendet sich mit Code 78`, code === 78, `Code ${code}`);
+        check(
+          `${name}: die Protokollzeile nennt den Grund „${erwarteterGrund}"`,
+          ausgabe.includes(`"reason":"${erwarteterGrund}"`),
+          ausgabe.slice(-400),
+        );
+        check(
+          `${name}: die Ausgabe trägt weder Ordner noch Dateinamen des Bestands`,
+          !ausgabe.includes(eigener) && !ausgabe.includes('takt.db') && !ausgabe.includes(tmpdir()),
+          ausgabe.slice(-400),
+        );
+        check(
+          `${name}: und auch keine Meldung von SQLite oder einen Aufrufstapel`,
+          !ausgabe.includes('\n    at ') &&
+            !ausgabe.includes('database is locked') &&
+            !ausgabe.includes('SQLITE_'),
+          ausgabe.slice(-400),
+        );
+      } finally {
+        await rm(eigener, { recursive: true, force: true });
+      }
+    };
+
+    /*
+     * Der Bestand ist neuer als diese Fassung. Fassung 4711 gibt es nicht und
+     * wird es nie geben — die Zahl ist damit gegen jede künftige Migration
+     * stabil, und `known` steht bewusst **nicht** hier: Sie wächst mit jeder
+     * neuen Migration, und ein Nachweis, der sie abschreibt, mißt seine eigene
+     * Abschrift (T-128).
+     */
+    await startAbbruch(
+      'Bestand aus einer neueren Fassung',
+      (db) =>
+        db
+          .prepare('INSERT INTO schema_migration VALUES (?, ?, ?, ?)')
+          .run(4711, 'aus_der_zukunft', 'x'.repeat(64), '2026-09-04T18:57:44Z'),
+      'database_too_new database=4711 known=' + MIGRATION_COUNT,
+    );
+
+    /*
+     * Eine bereits gelaufene Migration sieht heute anders aus. Fassung 1 gibt
+     * es, ihre Prüfsumme hier ist erfunden — der Läufer muß das bemerken und
+     * darf nicht migrieren.
+     */
+    await startAbbruch(
+      'nachträglich geänderte Migration',
+      (db) =>
+        db
+          .prepare('INSERT INTO schema_migration VALUES (?, ?, ?, ?)')
+          .run(1, 'initial', 'nicht die echte pruefsumme', '2026-09-04T18:57:44Z'),
+      'checksum_mismatch version=1',
+    );
   }
 
   section('0d. Die Hülle stirbt während des Starts (B-1.6 Punkt 3, T-122)');
@@ -908,24 +1033,146 @@ try {
   section('13. Zeitkonstanter Vergleich (B-2.5)');
   {
     // Statisch: Im Nachweispfad wird kein Geheimnis mit === verglichen.
-    const sources = [
+    //
+    // ===================================================================
+    // A-A-59 — die Aufstellung ist entfallen
+    // ===================================================================
+    //
+    // Bis T-223 standen hier vier Dateinamen: `verifier.ts`, `crypto.ts`,
+    // `guards.ts`, `token-service.ts`. `src/access/` führt dreizehn Dateien.
+    // Was der „Nachweispfad" ist, entschied damit die Aufstellung, und nichts
+    // maß, ob sie noch stimmt: Eine Zeile
+    // `… (presented: string, secret: string) => presented === secret` in
+    // `src/access/token-store.ts` — dieselbe Schublade, nicht auf der Liste —
+    // ließ diesen Lauf bei 105/0 und Code 0, und die Zeile blieb grün
+    // (T-223-5). Eine **fehlende** Datei fiel auf (`readFile` ohne Auffangnetz,
+    // harter Abbruch); eine **hinzugekommene** nicht.
+    //
+    // A-A-59 stellte zwei Formen zur Wahl. Gebaut ist die erste — die
+    // Aufstellung entfällt, durchsucht werden `src/access/**` und
+    // `src/http/**` vollständig —, und zwar aus einem gemessenen Grund: Der
+    // vollständige Durchlauf über alle 16 Dateien findet heute **null**
+    // Treffer. Die zweite Form („die Liste bleibt, der Lauf weigert sich bei
+    // einer ungesehenen Datei") hätte eine benannte Zahl ausgenommener Dateien
+    // verlangt und damit genau die Pflege wieder eingeführt, deren Ausbleiben
+    // der Befund ist. Ohne Ausnahmen ist die erste Form die billigere.
+    //
+    // Anders als bei den Kettengliedern (A-A-56) wird die **Zahl** der Dateien
+    // hier nicht festgeschrieben: `src/access/` ist Alltagsbestand und wächst
+    // mit dem Produkt (`attachment-store.ts`, `notices.ts`). Festgeschrieben
+    // wird die **Untergrenze** — die Menge ist nicht leer, und die vier
+    // Dateien, die B-2.5 tragen, sind darin. Sonst urteilte die Zusicherung
+    // über eine Menge, die es nicht mehr gibt (A-A-55, A-A-60).
+    //
+    // ===================================================================
+    // A-A-68 — die Untergrenze sagte nichts, und die Zeile sagte
+    // „vollständig"
+    // ===================================================================
+    //
+    // Bis T-235 lautete die Vorbedingung
+    // `scanned.length >= TRAGENDE_DATEIEN.length`, also „mindestens vier" —
+    // die Länge genau der Liste, die zwei Zeilen weiter ohnehin einzeln
+    // geprüft wird. Sie schützte gegen die **leere** Ernte und gegen nichts
+    // darüber hinaus, während die Zeile „**vollständig** durchsucht" behauptet.
+    //
+    // Gemessen (T-234, 31.1.1; in T-235 zeichengleich nachgestellt):
+    // `src/access/unter/verifier-match.ts` mit `const gleich = presented ===
+    // secret;`, und aus dem Sammler fällt **ein Wort** — `recursive: true`.
+    // Der Lauf sagt dann **106/0, Code 0** und „vollständig durchsucht —
+    // 16 Dateien", während sechzehn von siebzehn durchsucht sind und die
+    // siebzehnte die einzige ist, auf die es ankommt.
+    //
+    // Zwei Zeilen schließen das, und sie messen **Verschiedenes**:
+    //
+    //  1. **Eine benannte Zahl**, nach dem Muster von A-A-61 (dort 100 und 25
+    //     bei 117 und 31). Sie fängt den Zusammenbruch der Ernte — „0
+    //     durchgesehen" darf nie `ok` sein (E-094 Punkt 3).
+    //  2. **Eine zweite, unabhängige Aufnahme derselben Menge**, von Hand und
+    //     ohne `recursive`. Sie fängt die **übersehene** Datei, und das kann
+    //     eine Zahl allein nicht: Nach dem Streichen von `recursive: true`
+    //     stehen heute weiterhin 16 Dateien in der Ernte, weil es heute keinen
+    //     Unterordner gibt — jede Untergrenze bliebe grün. Erst der Vergleich
+    //     zweier Wege macht das Wort „vollständig" verdient (E-094 Punkt 1).
+    const scanRoots = ['src/access', 'src/http'];
+    const scanned = [];
+    for (const root of scanRoots) {
+      for (const entry of readdirSync(join(HERE, '..', root), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+        const relative = join(root, entry.parentPath.slice(join(HERE, '..', root).length), entry.name);
+        scanned.push(relative);
+      }
+    }
+
+    /**
+     * Die benannte Untergrenze (A-A-68).
+     *
+     * Heute liegen 16 Dateien unter den beiden Wurzeln. 14 lässt zwei
+     * verschwinden, ohne rot zu werden — dasselbe Verhältnis, das A-A-61 mit
+     * 100 bei 117 gewählt hat (rund 85 Prozent) —, und liegt mit dem Faktor
+     * dreieinhalb deutlich über den vier tragenden Dateien. Fällt die Ernte
+     * darunter, ist nicht der Bestand geschrumpft, sondern der Sammler kaputt.
+     */
+    const MINDESTENS_DURCHSUCHT = 14;
+    check(
+      `Der Sammler hat mindestens ${String(MINDESTENS_DURCHSUCHT)} Dateien eingesammelt (${String(scanned.length)}) (A-A-68)`,
+      scanned.length >= MINDESTENS_DURCHSUCHT,
+      `${String(scanned.length)} statt mindestens ${String(MINDESTENS_DURCHSUCHT)} — der Sammler greift ins Leere`,
+    );
+
+    /**
+     * Dieselbe Menge ein zweites Mal, auf einem anderen Weg (A-A-68).
+     *
+     * Von Hand abgestiegen statt `recursive: true`, mit eigener Endungsprüfung.
+     * Zwei Wege, ein Ergebnis — sonst ist die Ernte nicht die Menge, über die
+     * geurteilt wird, und „vollständig" wäre ein Wort ohne Deckung.
+     */
+    const vonHand = (absolute, prefix) => {
+      const out = [];
+      for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+        if (entry.isDirectory()) out.push(...vonHand(join(absolute, entry.name), join(prefix, entry.name)));
+        else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(join(prefix, entry.name));
+      }
+      return out;
+    };
+    const vorhanden = scanRoots.flatMap((root) => vonHand(join(HERE, '..', root), root));
+    const uebersehen = vorhanden.filter((name) => !scanned.includes(name));
+    check(
+      `Der Nachweispfad ist vollständig durchsucht — ${String(scanned.length)} von ${String(vorhanden.length)} Dateien unter ${scanRoots.join(' und ')}, zweiter Weg (A-A-68)`,
+      uebersehen.length === 0 && scanned.length === vorhanden.length,
+      uebersehen.length === 0
+        ? `${String(scanned.length)} eingesammelt, ${String(vorhanden.length)} vorhanden`
+        : `übersehen: ${uebersehen.join(', ')}`,
+    );
+
+    // Die vier Dateien, die B-2.5 tragen, vor jedem Urteil über die Menge.
+    const TRAGENDE_DATEIEN = [
       'src/access/verifier.ts',
       'src/access/crypto.ts',
       'src/http/guards.ts',
       'src/access/token-service.ts',
     ];
+    const fehlend = TRAGENDE_DATEIEN.filter((name) => !scanned.includes(name));
+    check(
+      'Und die vier Dateien, an denen B-2.5 hängt, sind darunter (A-A-59)',
+      fehlend.length === 0,
+      `nicht angesehen, obwohl B-2.5 daran hängt: ${fehlend.join(', ')}`,
+    );
+
     let offending = [];
-    for (const relative of sources) {
+    for (const relative of scanned) {
       const text = await readFile(join(HERE, '..', relative), 'utf8');
-      for (const line of text.split('\n')) {
+      text.split('\n').forEach((line, index) => {
         // Gesucht wird der Vergleich von **Geheimnismaterial**. Zwei
         // gespeicherte Abdrücke mit !== zu vergleichen (Buchführung im
         // token-service) ist ausdrücklich in Ordnung: Ein Abdruck ist kein
         // Geheimnis, und der Aufrufer liefert ihn nicht.
         if (/(presented|candidate|material|secret)\s*[!=]==/i.test(line) && !line.trimStart().startsWith('*') && !line.trimStart().startsWith('//')) {
-          offending.push(`${relative}: ${line.trim()}`);
+          offending.push(`${relative}:${index + 1}: ${line.trim()}`);
         }
-      }
+      });
     }
     check('Kein === auf Tokenmaterial im Nachweispfad', offending.length === 0, offending.join(' | '));
 

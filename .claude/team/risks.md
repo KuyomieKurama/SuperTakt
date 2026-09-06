@@ -248,3 +248,90 @@ Standardvorlage benutzt. Der Test wäre grün und die Grenze trotzdem gebrochen.
 
 **Umgang:** Der Eigenschaftstest sucht den Text im Ergebnis **im Klartext und base64-kodiert**,
 über beliebige Vorlagen. Auflage für T-010.
+
+---
+
+## R-19 — Takt bekommt einen Ausgang ins Netz
+
+**Schwere:** hoch. **Betrifft:** security-checker, domain-dev, frontend-dev. Neu am 2026-09-04.
+
+Bis heute kannte Takt keine Adresse außerhalb von `127.0.0.1`; das war die stärkste einzelne
+Zusage des Entwurfs. Mit A-18.2 stellt der lokale Dienst eine Anfrage ins offene Netz. Vier
+Dinge ändern sich damit auf einmal:
+
+1. **Eine fremde Antwort betritt den Prozess.** Sie ist unbegrenzt groß, beliebig geformt und
+   trägt Text, der am Ende in der Oberfläche steht — dieselbe Klasse wie E-063, nur aus einer
+   neuen Richtung.
+2. **Eine Adresse aus dieser Antwort kann zum Öffnen-Befehl der Hülle wandern.** Von dort öffnet
+   sie den Browser des Benutzers. Das ist der gefährlichste Weg in diesem Vorhaben.
+3. **Jede Anfrage ist ein Lebenszeichen.** Wer sie sieht, weiß, dass dieser Rechner Takt in
+   dieser Fassung fährt. A-18.12 verbietet, mehr mitzuschicken als nötig.
+4. **Der Ausgang steht offen, auch wenn niemand ihn braucht.** Er gehört bei jeder künftigen
+   Freigabe geprüft, nicht nur bei dieser Aufgabe.
+
+**Umgang:** Festgelegt in E-064: Adresse fest im Erzeugnis, keine Weiterleitung auf einen fremden
+Wirt, Zeitüberschreitung, Obergrenze der gelesenen Antwort, aus der Antwort verlässt nur eine
+geprüfte Fassungsbezeichnung den Dienst, und der Öffnen-Befehl der Hülle nimmt keine Adresse
+entgegen. Das Bedrohungsmodell bewertet die Grenze, bevor gebaut wird.
+
+---
+
+## R-20 — Eine Aktualisierungsmeldung, die man nicht loswird, wird weggeklickt
+
+**Schwere:** niedrig. **Betrifft:** frontend-dev, spec-ux-reviewer. Neu am 2026-09-04.
+
+A-18.10 sagt, dass eine übersprungene Fassung nicht wiederkommt. Wird das Überspringen nur für
+die Sitzung gemerkt oder nur an einer von mehreren Flächen, meldet sich der Hinweis beim
+nächsten Start wieder — und der Benutzer lernt, ihn ungelesen zu schließen. Danach übersieht er
+auch die Meldung, die zählt.
+
+**Umgang:** Der übersprungene Wert steht im Bestand, nicht im Arbeitsspeicher und nicht im
+Browserspeicher. Der Prüffall dazu misst einen Neustart und nicht nur das Schließen des Dialogs.
+
+---
+
+## R-21 — Ein Dateianhang ist ein Startknopf
+
+**Schwere:** hoch. **Betrifft:** security-checker, frontend-dev, domain-dev. Neu am 2026-09-05.
+
+„Mit der Standardanwendung öffnen" ist bei einer `.txt` ein Editor und bei einer `.bat`, `.lnk`,
+`.exe` oder `.scr` eine Ausführung. Der Pfad kommt aus dem Bestand; jeder Weg, auf dem etwas in
+den Bestand gelangt, ist damit ein Weg zu einem Programmstart auf dem Rechner des Benutzers.
+
+**Umgang:** E-072 — keine Anhänge über das Add-in, Prüfung im Öffnen-Befehl bei jedem Aufruf und
+nach Art getrennt, kein UNC-Pfad, und eine Rückfrage, die den vollen Pfad nennt, bevor eine Datei
+startet. Das Bedrohungsmodell bewertet die Grenze vor dem Bau.
+
+---
+
+## R-22 — Ein Verweis kann alles sein, was wie eine Adresse aussieht
+
+**Schwere:** hoch. **Betrifft:** security-checker, frontend-dev. Neu am 2026-09-05.
+
+`file:///etc/passwd`, `javascript:…`, `\\server\freigabe` — alles drei nimmt ein Eingabefeld
+für eine Adresse widerspruchslos entgegen, und alles drei tut beim Öffnen etwas anderes als „eine
+Seite im Browser zeigen". Der UNC-Pfad ist der unauffälligste und der schlimmste: Unter Windows
+ist er ein Anmeldeversuch gegen einen fremden Rechner.
+
+**Umgang:** E-072 Punkt 2 — ausschließlich `http` und `https`, geprüft im Öffnen-Befehl und nicht
+nur im Eingabefeld. Dieselbe Bauart wie bei der Fassungsbezeichnung in T-139, und aus demselben
+Grund: Zwischen Eingabe und Öffnen liegt der Bestand.
+
+
+**Nachtrag zu R-21 vom 2026-09-05 (T-156-1, gemessen).** Die Endung ist nicht das, was sie zu sein
+scheint. `/…/rechnung.lnk.` und `/…/rechnung.lnk ` bestehen die Prüfung, weil `Path::extension()`
+in Rust `""` bzw. `"lnk "` liefert — **Windows aber schneidet nachgestellte Punkte und Leerzeichen
+ab, bevor es die Datei auflöst**. `is_file()` bejaht, `ShellExecuteW` folgt der Verknüpfung. Der
+Angriff braucht kein besonderes Zeichen und keine Kodierung, nur ein Zeichen mehr am Ende des
+Namens.
+
+Zwei Dinge daran gehören festgehalten, weil sie über diesen einen Fall hinausreichen:
+
+1. **Die Rückfrage lügt mit.** Dieselbe Blindheit steckt in der Beschriftung
+   (`attachmentLabel.ts:113`): `…exe.` gilt dort als endungslos, und der Dialog sagt „wird
+   geöffnet" statt „wird ausgeführt". Eine Rückfrage, die den vollen Pfad nennt, ist nur so viel
+   wert wie ihre Auskunft darüber, **was** beim Bestätigen geschieht.
+2. **Der Läufer war Linux.** Auf Linux ist der nachgestellte Punkt Teil des Namens und die Prüfung
+   damit scheinbar richtig. Genau dafür stehen A-A-4 und A-A-10 — die Zweige, die nur unter
+   Windows etwas anderes tun, sind die, die niemand betritt. Ein grüner Lauf auf dem falschen
+   Betriebssystem ist bei dieser Klasse kein Nachweis, sondern eine Aussage über den Läufer.

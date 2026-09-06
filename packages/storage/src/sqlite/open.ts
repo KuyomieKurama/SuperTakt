@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Migration, MigrationRunnerPort, TransactionPort } from '../index.ts';
+import { migrationFailure } from '../migration.ts';
 import type { Timestamp } from '@takt/domain';
 
 import { openConnection, type SqlConnection } from './database.ts';
@@ -130,7 +131,13 @@ function bundledMigrations(): readonly Migration[] {
 
   const drift = describeDrift(onDisk, EMBEDDED_MIGRATION_FILES);
   if (drift !== null) {
-    throw new Error(
+    // Mit Grund geworfen (T-132). Der Wurf verlässt `openDatabase` und landet
+    // im Zusammenbau des Dienstes; ohne Kennzeichen wäre er dort einer von
+    // vielen und bekäme dieselbe nichtssagende Auskunft wie jeder andere.
+    // Die **Meldung** bleibt, wie sie war — sie nennt den Behebungsbefehl und
+    // wird im Entwicklungsbetrieb gelesen, nicht beim Benutzer.
+    throw migrationFailure(
+      { kind: 'embedded_drift' },
       `Die eingebetteten Migrationen weichen von packages/storage/migrations ab (${drift}). ` +
         'Ohne Abgleich enthielte die ausgelieferte Binärdatei einen anderen Stand als der Quelltext. ' +
         'Behebung: pnpm --filter @takt/storage migrations:embed',

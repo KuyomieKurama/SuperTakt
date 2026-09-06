@@ -16,6 +16,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { ExportRunId, ExportTemplateId, TimeEntryId } from '@takt/domain';
+import { RELEASE_TAG_SHAPE, VERSION_MAX_LENGTH } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
 import { previewExport, runExport, type ExportPreviewTemplate } from '../usecases/export.ts';
@@ -78,6 +79,20 @@ const settingsSchema = z.object({
   roundingMode: z.enum(['up', 'nearest']).optional(),
   locale: z.string().min(2).max(35).optional(),
   theme: z.enum(['system', 'light', 'dark']).optional(),
+  /**
+   * Die übersprungene Fassung (A-18.10, R-20). `null` setzt sie zurück.
+   *
+   * Die Form kommt aus `packages/domain` und wird hier **nicht** abgeschrieben:
+   * `RELEASE_TAG_SHAPE` ist derselbe Ausdruck, mit dem `checkVersion` urteilt,
+   * nur mit erlaubtem führendem `v`. Ein eigener Ausdruck an dieser Tür wäre
+   * eine zweite Meinung darüber, was eine Fassung ist — und die eine, die
+   * versehentlich weiter wäre als die andere.
+   *
+   * Die Länge ist hier ausdrücklich beschrieben, weil ein Aufrufer sonst in
+   * ein 422 liefe, das niemand angekündigt hat (`proof:openapi` Abschnitt 3
+   * misst genau das).
+   */
+  skippedVersion: z.string().max(VERSION_MAX_LENGTH + 1).regex(RELEASE_TAG_SHAPE).nullish(),
 });
 
 const defaultTagsSchema = z.object({ tagIds: z.array(idSchema).max(100) });
@@ -305,6 +320,11 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.roundingMode === undefined ? {} : { roundingMode: parsed.data.roundingMode }),
       ...(parsed.data.locale === undefined ? {} : { locale: parsed.data.locale }),
       ...(parsed.data.theme === undefined ? {} : { theme: parsed.data.theme }),
+      // `null` heißt „nichts übersprungen" und ist damit ein Wert; nur ein
+      // fehlendes Feld heißt „unverändert" (A-18.10).
+      ...(parsed.data.skippedVersion === undefined
+        ? {}
+        : { skippedVersion: parsed.data.skippedVersion ?? null }),
     });
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });

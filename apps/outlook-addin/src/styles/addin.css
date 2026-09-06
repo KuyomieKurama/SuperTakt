@@ -393,7 +393,16 @@ bdi {
   gap: var(--space-1);
 }
 
-.field__label {
+/*
+  Beschriftung und Überschrift sehen gleich aus und sind es nicht (X-02,
+  T-169). `.field__label` gehört zu einem `<label for>` und damit zu einem
+  Bedienelement. `.field__heading` steht dort, wo es in diesem Zustand keines
+  gibt — an der Tagauswahl, solange sie lädt oder keine Verbindung hat. Die
+  Gestalt bleibt dieselbe, damit die Fläche beim Wechsel nicht springt; die
+  Bedeutung nicht, damit keine Beschriftung ins Leere zeigt.
+*/
+.field__label,
+.field__heading {
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
@@ -409,6 +418,22 @@ bdi {
   font-size: var(--text-xs);
   line-height: var(--leading-relaxed);
   color: var(--danger-text);
+}
+
+/*
+  Die Meldefläche eines Feldes steht **immer** im Baum, auch ohne Meldung
+  (T-158). Ein `role="alert"`, das erst zusammen mit seinem Inhalt entsteht,
+  wird von vielen Vorlesehilfen nicht angesagt — sie melden Änderungen an einer
+  Region, die sie schon kennen.
+
+  Sie darf deshalb weder ausgeblendet (`display: none` nähme sie aus dem
+  Baum und damit die ganze Wirkung) noch sichtbar sein, solange sie leer ist.
+  Leer hat sie die Höhe null; übrig bleibt der `gap` der Feldspalte, und
+  genau den nimmt diese Zeile zurück. Wer den Abstand in `.field` ändert,
+  ändert ihn hier mit.
+*/
+.field__live:empty {
+  margin-block-start: calc(-1 * var(--space-1));
 }
 
 .input {

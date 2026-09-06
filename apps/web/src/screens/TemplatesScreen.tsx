@@ -1,4 +1,4 @@
-import { dropHiddenCharacters } from "@takt/domain";
+import { dropHiddenCharacters, MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -149,6 +149,29 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   const [confirmDelete, setConfirmDelete] = useState<ExportTemplate | null>(null);
   const [copyDialog, setCopyDialog] = useState<ExportTemplate | null>(null);
   const [copyName, setCopyName] = useState("");
+  /**
+   * Wurde das Namensfeld der Kopie schon einmal verlassen? (Befund O-DZ.)
+   *
+   * Bei leerem Namen ist „Kopie anlegen“ gesperrt — `onSubmit` läuft also nie.
+   * Die Meldung entsteht deshalb beim Verlassen des Feldes und nicht beim
+   * Tippen (SC 3.3.1); seit E-084 ist sie die einzige, die es hier gibt.
+   */
+  const [copyNameTouched, setCopyNameTouched] = useState(false);
+  /**
+   * Der eine Einstieg in den Kopierdialog.
+   *
+   * Bis T-186 standen die drei Setzungen zweimal nebeneinander — in der Liste
+   * und am Knopf der Standardvorlage. Zwei Abschriften sind zwei Gelegenheiten,
+   * bei der nächsten Änderung eine zu vergessen; der Vorschlagstext selbst war
+   * bereits zeichengleich doppelt geschrieben.
+   */
+  const beginCopy = (template: ExportTemplate): void => {
+    // Vorschlag für ein Eingabefeld, siehe `copyField` oben.
+    setCopyName(`Kopie von ${dropHiddenCharacters(template.name)}`);
+    setCopyNameTouched(false);
+    setCopyDialog(template);
+  };
+
 
   /**
    * Der Entwurf wird neu aufgesetzt, sobald eine andere Vorlage gewählt wird
@@ -491,11 +514,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
               templates={list}
               selectedId={creating ? NEW_TEMPLATE_ID : (shown?.id ?? null)}
               activeTemplateId={activeTemplateId}
-              onCopy={(template) => {
-                // Vorschlag für ein Eingabefeld, siehe `copyField` oben.
-                setCopyName(`Kopie von ${dropHiddenCharacters(template.name)}`);
-                setCopyDialog(template);
-              }}
+              onCopy={beginCopy}
               onDelete={setConfirmDelete}
             />
 
@@ -535,8 +554,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           iconStart="copy"
                           onClick={() => {
                             if (shown === null) return;
-                            setCopyName(`Kopie von ${dropHiddenCharacters(shown.name)}`);
-                            setCopyDialog(shown);
+                            beginCopy(shown);
                           }}
                         >
                           Kopie anlegen
@@ -573,7 +591,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                           )
                         }
                         required
-                        maxLength={120}
+                        maxLength={MAX_NAME_LENGTH}
                         hint="Nur für Sie. In der Datei steht dieser Name nicht."
                         {...(draft.name.trim().length === 0
                           ? { error: "Ohne Namen lässt sich die Vorlage nicht wiederfinden." }
@@ -581,15 +599,17 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                       />
                     )}
 
-                    {dirty ? (
-                      <p className="tpl-dirty" role="status">
-                        <Icon name="pencil" size={13} />
-                        <span>
-                          Ungespeicherte Änderungen. Die Vorschau rechts zeigt sie bereits — auf
-                          den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
-                        </span>
-                      </p>
-                    ) : null}
+                    <div className="live-region" role="status">
+                      {dirty ? (
+                        <p className="tpl-dirty">
+                          <Icon name="pencil" size={13} />
+                          <span>
+                            Ungespeicherte Änderungen. Die Vorschau rechts zeigt sie bereits — auf
+                            den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
 
                     {unreadable === null ? null : (
                       <InlineMessage tone="danger" title="Diese Vorlage lässt sich nicht anzeigen">
@@ -718,8 +738,13 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
           label="Name der Kopie"
           value={copyName}
           onChange={setCopyName}
+          onTouched={() => setCopyNameTouched(true)}
           required
-          maxLength={120}
+          maxLength={MAX_NAME_LENGTH}
+          {...(copyNameTouched && copyName.trim().length === 0
+            ? /* Grundform T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). */
+              { error: "Name der Kopie fehlt." }
+            : {})}
         />
       </FormDialog>
 

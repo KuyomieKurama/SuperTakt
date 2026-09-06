@@ -105,14 +105,23 @@ export function TagChip({
         </>
       ) : null}
       <Foreign className="chip__label" value={label} />
+      {/*
+        Kein `title` mehr an den beiden Marken (T-181, ST-09). Eine Marke trug
+        zwei Texte mit zwei Wortlauten („Dieses Tag wird beim Speichern
+        angelegt" gegen „wird neu angelegt"), und auf einem `<span>` ist ein
+        Titelattribut ohnehin nicht zugaenglich: nicht mit der Tastatur
+        erreichbar, nicht abweisbar, nicht ueberfahrbar (SC 1.4.13). Der
+        `visually-hidden`-Text bleibt zeichengleich — er ist der zugaengliche
+        Text und damit vertraglich.
+      */}
       {isNew ? (
-        <span className="chip__badge chip__badge--new" title="Dieses Tag wird beim Speichern angelegt">
+        <span className="chip__badge chip__badge--new">
           <span className="visually-hidden">wird neu angelegt</span>
           <span aria-hidden>neu</span>
         </span>
       ) : null}
       {isDefault ? (
-        <span className="chip__badge" title="Standard-Tag">
+        <span className="chip__badge">
           <span className="visually-hidden">Standard-Tag</span>
           <span aria-hidden>S</span>
         </span>

@@ -21,10 +21,42 @@
  *
  * Für den Entwicklungsbetrieb gibt es eine eng gefasste Ausnahme, siehe
  * `developmentFallback()`.
+ *
+ * ## Was diese Datei an Text trägt — und warum er nicht zählt
+ *
+ * Sechs Sätze stehen hier, alle über dasselbe: was **ohne Anwendungshülle**
+ * nicht geht. Fünf hängen an `shell === null || !shell.isShellAvailable()` —
+ * Beenden, Release-Seite, Ordnerauswahl, Anhänge, Dateiauswahl; der sechste
+ * ist der Rückfalltext von `kind: "failed"`.
+ *
+ * **Keiner dieser sechs Sätze darf je als Träger einer Aussage gezählt
+ * werden** (Auflage aus T-195, Z-38 und Z-29). Der Grund ist gemessen und
+ * nicht übernommen: Liegt keine Hülle vor, ersetzt `App.tsx` mit
+ * `NoShellNotice` bereits die **ganze** Fläche (SP-20) — an einen Knopf, der
+ * einen der fünf auslösen könnte, kommt dort niemand. Und der Zweig, über den
+ * die Oberfläche ohne Hülle überhaupt weiterläuft, fällt im
+ * Auslieferungsbündel mit `import.meta.env.DEV` weg.
+ *
+ * **Eine Einschränkung, hier nachgemessen:** Der Rückfalltext von
+ * `kind: "failed"` ist der einzige, den ein ausgeliefertes Bündel zeigen kann
+ * — `App.tsx` gibt `state.message` aus, und dieser Zweig läuft auch **mit**
+ * Hülle. Er erscheint allerdings nur, wenn `serviceHandshake()` etwas wirft,
+ * das kein `Error` ist; sonst steht dort die Meldung der Hülle. Auch er zählt
+ * nicht als Träger — er sagt nichts, was die Fläche um ihn herum nicht schon
+ * sagt.
+ *
+ * Wer hier einen Satz streicht oder hinzufügt, ändert deshalb keinen
+ * Textbestand. Er ändert eine Notlage.
  */
 
-import type { DirectoryChoice, OsUser } from "@takt/desktop/shell";
+import type {
+  AttachmentOpenResult,
+  DirectoryChoice,
+  OsUser,
+  ReleasePageResult,
+} from "@takt/desktop/shell";
 import { hasForbiddenNameCharacter } from "@takt/domain";
+import type { ForeignText } from "../api/types";
 import { setConnection, type Connection } from "../api/client";
 import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellStatus";
 
@@ -36,6 +68,14 @@ import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellSta
  * irgendwann anders zu füllen.
  */
 export type ExportDirectoryChoice = DirectoryChoice;
+
+/**
+ * Das Ergebnis eines Öffnen-Versuchs, unter dem Namen der Hülle (Abschnitt 19).
+ *
+ * Aus demselben Grund ein Alias: Ein zweiter Name für dieselbe Sache lädt dazu
+ * ein, ihn irgendwann anders zu füllen.
+ */
+export type AttachmentOpen = AttachmentOpenResult;
 
 export type ConnectionState =
   | { readonly kind: "connecting" }
@@ -55,6 +95,22 @@ interface ShellModule {
   osUser(): Promise<OsUser>;
   quit(): Promise<void>;
   chooseExportDirectory(current: string | null): Promise<ExportDirectoryChoice>;
+  installedVersion(): Promise<string>;
+  openReleasePage(version: string): Promise<ReleasePageResult>;
+  /*
+    **Fremder Text bis zur Hülle.** Adresse und Pfad kommen aus dem Bestand und
+    behalten ihre Herkunft bis an die Grenze; erst dahinter, in
+    `src-tauri/src/attachment.rs`, wird über sie geurteilt. Die Marke hier ist
+    keine Zierde: `proof:foreign` misst an ihr, dass niemand unterwegs einen
+    gewöhnlichen `string` daraus macht und die Herkunft damit verliert.
+
+    Behandelt wird der Wert auf diesem Weg **nicht** — `visibleText` verändert
+    Zeichen, und was hier durchgeht, muss zeichengleich das sein, was geprüft
+    und geöffnet wird (Auflage A-A-3, der Festpunkt).
+  */
+  openAttachmentLink(url: ForeignText): Promise<AttachmentOpenResult>;
+  openAttachmentFile(path: ForeignText): Promise<AttachmentOpenResult>;
+  chooseAttachmentFile(kind: "file" | "image"): Promise<DirectoryChoice>;
 }
 
 let shellModule: ShellModule | null = null;
@@ -218,6 +274,54 @@ export async function quitApplication(): Promise<void> {
   await shell.quit();
 }
 
+/* ==================================================================== */
+/* Versionsprüfung (Abschnitt 18)                                       */
+/* ==================================================================== */
+
+/**
+ * Die installierte Fassung, aus den eingeprägten Angaben des Erzeugnisses
+ * (A-18.1, Auflage A-V-15). `null`, wenn es keine Hülle gibt.
+ *
+ * `null` ist hier keine Notlage, sondern ein vollständiger Zustand: Ohne
+ * installierte Fassung gibt es nichts zu vergleichen, und die Oberfläche zeigt
+ * nichts (A-18.5, A-18.11). Der Wert wird **nicht** zwischengespeichert und
+ * nicht in einer Einstellung abgelegt — er kommt aus der Binärdatei, und das
+ * ist die einzige Quelle, an der er etwas bedeutet.
+ */
+export async function readInstalledVersion(): Promise<string | null> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) return null;
+  try {
+    return await shell.installedVersion();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Öffnet die Release-Seite einer Fassung (A-18.8).
+ *
+ * **Weitergereicht wird die Fassungsbezeichnung, nie eine Adresse.** Die
+ * Adresse baut die Hülle aus einer bei ihr fest hinterlegten Zeichenkette,
+ * nachdem sie die Bezeichnung gegen eine enge Form geprüft hat — nach der
+ * Messung aus T-136 ist das die einzige Kontrolle zwischen der Antwort von
+ * GitHub und dem Browser des Benutzers (E-064 Punkt 4, B-18.2).
+ *
+ * Ohne Hülle wird nichts geöffnet und nichts geworfen: Der Rückgabewert sagt
+ * es, wie beim Ordnerauswahldialog.
+ */
+export async function openReleasePage(version: string): Promise<ReleasePageResult> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) {
+    return {
+      outcome: "unavailable",
+      reason:
+        "Die Release-Seite öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.",
+    };
+  }
+  return shell.openReleasePage(version);
+}
+
 /**
  * Läuft die Oberfläche in der Hülle?
  *
@@ -250,4 +354,74 @@ export async function chooseExportDirectory(
     };
   }
   return shell.chooseExportDirectory(current);
+}
+
+/* ==================================================================== */
+/* Anhänge (Spezifikation Abschnitt 19, E-072)                          */
+/* ==================================================================== */
+
+/**
+ * Der Satz für den reinen Browserbetrieb, an **einer** Stelle.
+ *
+ * Wortgleich zu dem in `@takt/desktop/shell` — die Hülle antwortet ihn, wenn
+ * sie geladen ist und `__TAURI_INTERNALS__` fehlt; hier steht er für den Fall,
+ * dass das Modul selbst nicht geladen werden konnte. Zwei Lagen, eine Auskunft.
+ */
+const NO_SHELL_FOR_ATTACHMENTS =
+  "Anhänge öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.";
+
+/**
+ * Öffnet einen Verweis im Browser (A-19.9, A-19.18).
+ *
+ * **Nur auf ausdrückliche Handlung des Benutzers.** Nichts an diesem Weg wird
+ * von einer Liste, einem Ladevorgang oder einer Vorschau ausgelöst
+ * (Auflage A-A-24).
+ *
+ * Geprüft wird die Adresse **nicht hier**, sondern im Öffnen-Befehl der Hülle,
+ * bei jedem Aufruf (E-072 Punkt 2). Zwischen dem Eingabefeld und diesem Aufruf
+ * liegt der Bestand.
+ */
+export async function openAttachmentLink(url: ForeignText): Promise<AttachmentOpen> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) {
+    return { outcome: "unavailable", reason: NO_SHELL_FOR_ATTACHMENTS };
+  }
+  return shell.openAttachmentLink(url);
+}
+
+/**
+ * Öffnet eine Datei mit der Standardanwendung des Systems (A-19.9).
+ *
+ * **Erst rufen, wenn die Rückfrage beantwortet ist** (E-072 Punkt 3,
+ * Auflage A-A-6). Sie steht in `components/AttachmentOpenDialog.tsx`, nennt den
+ * vollen Pfad und wählt ihre Wörter nach der Endung.
+ */
+export async function openAttachmentFile(path: ForeignText): Promise<AttachmentOpen> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) {
+    return { outcome: "unavailable", reason: NO_SHELL_FOR_ATTACHMENTS };
+  }
+  return shell.openAttachmentFile(path);
+}
+
+/**
+ * Der Dateiauswahldialog des Betriebssystems für einen Anhang (A-19.10).
+ *
+ * Ohne Hülle gibt es ihn nicht, und die Oberfläche fällt dann auf ein Textfeld
+ * zurück — mit denselben Prüfungen, nur ohne Systemdialog. Dieselbe Bauart wie
+ * beim Exportordner und aus demselben Grund: Der Dialog ist dafür da, dass der
+ * Benutzer die Datei **sieht**, bevor er sie anhängt.
+ */
+export async function chooseAttachmentFile(
+  kind: "file" | "image",
+): Promise<ExportDirectoryChoice> {
+  const shell = await loadShell();
+  if (shell === null || !shell.isShellAvailable()) {
+    return {
+      outcome: "unavailable",
+      reason:
+        "Der Dateiauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.",
+    };
+  }
+  return shell.chooseAttachmentFile(kind);
 }

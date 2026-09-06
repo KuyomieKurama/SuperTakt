@@ -64,6 +64,7 @@ import { createAppSettingsPort, createDefaultTagPort, createExportTemplatePort }
 import { createTodoStatusPort } from './repo-statuses.ts';
 import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatchMode, resolvePoolAxis } from './repo-tags.ts';
 import { createTimeEntryPort, createTimerHeartbeatPort, createTimerPort } from './repo-time.ts';
+import { createAttachmentPort } from './repo-attachments.ts';
 import { createTodoNotePort, createTodoPort, type PoolResolver } from './repo-todos.ts';
 import type { Page, Pagination } from '../ports.ts';
 import type { Todo } from '@takt/domain';
@@ -129,6 +130,12 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
   return {
     todos,
     notes: createTodoNotePort(conn),
+    /*
+     * Anhänge (A-19.8). Ein eigener Port neben `notes` und aus demselben
+     * Grund: Kein Wert vom Typ `Todo` trägt sie, wer sie will, benennt ihn —
+     * und der Exportmotor bekommt überhaupt keine Ports (A-19.17, R-06).
+     */
+    attachments: createAttachmentPort(conn, ids),
     tags: createTagPort(conn, ids),
     folders: createTagFolderPort(conn, ids),
     pools: createPoolPort(conn, ids, searchTodos),

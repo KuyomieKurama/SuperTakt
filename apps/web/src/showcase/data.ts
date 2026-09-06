@@ -351,6 +351,16 @@ export interface BoardCard extends KanbanCardData {
   readonly columnIds: readonly string[];
 }
 
+/**
+ * Der Tag, gegen den die Musterseite ihre Fristen rechnet (A-19.5).
+ *
+ * **Fest und nicht `heute`.** Die drei Zustände — überfällig, heute fällig,
+ * später fällig — sind Tagesvergleiche; mit der Systemuhr sähe die Musterseite
+ * an jedem zweiten Tag anders aus, und ein Abgleich gegen einen Prototyp wäre
+ * nicht wiederholbar. Die Beispieldaten daneben sind aus demselben Grund fest.
+ */
+export const SHOWCASE_TODAY = "2026-09-05";
+
 export const BOARD_CARDS: readonly BoardCard[] = [
   {
     id: "t-1",
@@ -366,6 +376,8 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     timerRunning: false,
     statusName: "Backlog",
     done: false,
+    /* Überfällig: zwei Tage vor SHOWCASE_TODAY. */
+    dueDate: "2026-09-03",
   },
   {
     /* Die Karte, die zweimal dasteht: Ihre Tags treffen zwei Regeln. */
@@ -382,6 +394,8 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     timerRunning: true,
     statusName: "In Progress",
     done: false,
+    /* Heute fällig. */
+    dueDate: SHOWCASE_TODAY,
   },
   {
     /* Erledigt und trotzdem in einer Spalte: Das Kennzeichen haengt am Todo,
@@ -396,6 +410,8 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     timerRunning: false,
     statusName: "In Progress",
     done: true,
+    /* Später fällig — die ruhige Ausprägung. */
+    dueDate: "2026-09-19",
   },
   {
     id: "t-4",
@@ -408,6 +424,8 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     timerRunning: false,
     statusName: "Waiting",
     done: false,
+    /* Ohne Frist: Es steht **nichts** da (A-19.5). */
+    dueDate: null,
   },
   {
     id: "t-5",
@@ -420,6 +438,7 @@ export const BOARD_CARDS: readonly BoardCard[] = [
     timerRunning: false,
     statusName: "Done",
     done: true,
+    dueDate: null,
   },
 ];
 

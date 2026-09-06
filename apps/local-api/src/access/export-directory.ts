@@ -1,5 +1,12 @@
 /**
- * Takt — was für ein Ordner der Exportordner ist (T-039, B-5.2, B-5.3 Punkt 3).
+ * Takt — was für ein Ort ein Ort ist (T-039, B-5.2, B-5.3 Punkt 3).
+ *
+ * Seit T-132 (O-C) beantwortet diese Datei die Frage für **zwei** Orte: den
+ * Exportordner und den des Datenbestands. Sie unterscheidet die beiden nicht,
+ * und das ist der Punkt — ein Synchronisierungsordner bleibt einer, gleich was
+ * darin liegt. Die Folgen sind allerdings verschieden: Im Exportordner liegt,
+ * was exportiert wurde, im Bestand liegt **alles**, einschließlich der internen
+ * Vermerke (A-7.2, E-018, R-13).
  *
  * ===========================================================================
  * Diese Datei ist der Beleg, nicht die Warnung — und nicht die Grenze
@@ -49,7 +56,7 @@
 import { statfs } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-import type { ExportDirectoryTrait } from '@takt/domain';
+import type { LocationTrait } from '@takt/domain';
 import { DIRECTORY_CHECK_BUDGET_MS, within, type DirectoryInsightPort } from '@takt/storage';
 
 /**
@@ -143,12 +150,12 @@ function syncDirectories(): readonly string[] {
  */
 export function createDirectoryInsightPort(): DirectoryInsightPort {
   return {
-    async describeExportDirectory(path, options): Promise<readonly ExportDirectoryTrait[]> {
+    async describeLocation(path, options): Promise<readonly LocationTrait[]> {
       if (path === null || path.trim() === '') return [];
 
       const original = path.trim();
       const resolved = resolve(original);
-      const traits = new Set<ExportDirectoryTrait>();
+      const traits = new Set<LocationTrait>();
 
       // UNC ist aus der Form ableitbar und damit sicher — aber nur dort, wo die
       // Form etwas bedeutet. Unter POSIX ist `\\a\b` ein Dateiname mit

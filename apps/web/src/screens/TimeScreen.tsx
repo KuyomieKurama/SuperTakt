@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { listTimeEntries, listTodos } from "../api/endpoints";
 import type { TimeEntry, Todo } from "../api/types";
 import { FilterToggle, SearchField } from "../components/FilterBar";
@@ -12,6 +12,7 @@ import { useRefresh } from "../app/RefreshContext";
 import { href } from "../app/router";
 import { useTimer } from "../app/TimerContext";
 import { useAsync } from "../app/useAsync";
+import { useToday } from "../app/useToday";
 import { cx } from "../lib/cx";
 import { doneFlagState, TIME_ENTRY_SOURCE_LABEL } from "../lib/labels";
 import {
@@ -21,7 +22,6 @@ import {
   formatTime,
   formatTimeRange,
   plural,
-  todayCalendarDay,
 } from "../lib/format";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
 import { BookingFormDialog } from "./BookingDialogs";
@@ -63,7 +63,23 @@ export function TimeScreen() {
   const [showDone, setShowDone] = useState(false);
   const [manualFor, setManualFor] = useState<Todo | null>(null);
 
-  const today = useMemo(() => todayCalendarDay(), []);
+  /*
+    **Der Tag kommt aus `useToday` und nicht aus einem eingefrorenen `useMemo`**
+    (T-154 O-CO, dritte Stelle nachgezogen in T-162 O-DG).
+
+    Er steht in genau einer Frage an den Dienst: „was wurde heute erfasst"
+    (`fromDay`/`toDay`). Ein `useMemo` mit leerer Abhängigkeitsliste hielt ihn
+    bis zum nächsten Zeichnen fest — ein über Nacht offenes Takt zeigte am
+    Morgen unter „Heute" die Buchungen von gestern, und die Kachel darüber
+    zählte deren Summe.
+
+    `useToday` beantwortet genau das: ein Zeitgeber auf die **nächste
+    Mitternacht** und ein zweiter Anlaß, wenn das Fenster wieder sichtbar wird
+    (E-073 Punkt 2). Der Wert wechselt einmal je Tag; die Abfrage unten hängt an
+    ihm und läuft dann von selbst neu. Kein Filtervorschlag hängt daran — die
+    Auswahl „letzte 7 Tage" gehört S-06, nicht dieser Ansicht.
+  */
+  const today = useToday();
 
   const data = useAsync(async () => {
     const [entries, todos, all] = await Promise.all([
@@ -101,9 +117,18 @@ export function TimeScreen() {
 
   return (
     <section className="screen">
+      {/*
+        Kein `lead` (T-181, ST-10). Zwei der drei Glieder waren Kartentitel
+        („Timer", „Buchungen von heute"), das dritte ein Knopf in jeder Zeile
+        der Auswahlliste („Von Hand").
+
+        Diese Ansicht hat keine Aktion im Kopf; der Gewinn ist ein anderer:
+        Die Karte „Timer" rueckt nach oben, und Start und Stopp stehen
+        unmittelbar unter dem Titel — die richtige Reihenfolge fuer eine
+        Ansicht, deren einzige Aufgabe das Laufenlassen einer Uhr ist.
+      */}
       <ScreenHeader
         title="Zeiterfassung"
-        lead="Timer starten und stoppen, heutige Buchungen ansehen, Zeit von Hand nachtragen."
         refreshing={data.state.status === "ready" && data.state.refreshing}
       />
 

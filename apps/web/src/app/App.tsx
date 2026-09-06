@@ -27,6 +27,7 @@ import { StructureProvider } from "./StructureContext";
 import { TimerBar } from "./TimerBar";
 import { TimerProvider } from "./TimerContext";
 import { ToastProvider } from "./ToastContext";
+import { UpdateNotice } from "./UpdateNotice";
 import { useAsync } from "./useAsync";
 import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
@@ -292,6 +293,18 @@ function Workspace({
       {shell === null ? null : (
         <ShellStatus state={shell} userName={userName} onQuit={quitApplication} />
       )}
+
+      {/*
+        Der Hinweis auf eine neuere Fassung (Abschnitt 18). Er steht hier, weil
+        er zur Anwendung gehört und nicht zu einer Ansicht: Ein Dialog, den nur
+        das Dashboard zeigte, erschiene nicht, wenn Takt auf dem Board startet.
+
+        **Nicht, solange die Sperrmeldung steht.** Ist der lokale Dienst weg,
+        speichert Takt nichts mehr; ein Dialog über der Sperrmeldung nähme
+        genau die Meldung den Blick, die den Benutzer zum Neustart bringt — und
+        „Überspringen" könnte in diesem Zustand ohnehin nichts ablegen.
+      */}
+      {shell?.serviceExit == null ? <UpdateNotice /> : null}
 
       {/*
         Seitenleiste, Kopf und Inhalt sind Geschwister im Raster von `.app` und

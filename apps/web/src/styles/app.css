@@ -56,10 +56,12 @@
 
 /*
  * Die aeussere Struktur steht fest, unabhaengig von der aktiven Ansicht
- * (T-057). Ein Raster mit zwei Spalten und drei Zeilen:
+ * (T-057). Ein Raster mit zwei Spalten und vier Zeilen:
  *
  *   ┌──────────────────────────────────────────────┐
  *   │ Meldungen der Huelle (ueber beide Spalten)   │
+ *   ├──────────────────────────────────────────────┤
+ *   │ Hinweis auf eine neue Fassung (beide Spalten)│
  *   ├─────────┬────────────────────────────────────┤
  *   │ Sidebar │ Fester Kopf                        │
  *   │         ├────────────────────────────────────┤
@@ -77,13 +79,22 @@
  *     `auto`, und `auto` heisst „mindestens so breit wie der Inhalt". Ohne die
  *     Null als Untergrenze druecken eine breite Tabelle oder ein Kanban mit
  *     zwoelf Spalten das Raster auseinander, und die Sidebar wandert.
+ *
+ * **Jedes Kind steht in einer benannten Flaeche** (T-214, O-JB). Die Zeile
+ * `update` gibt es, seit gemessen wurde, was ohne sie geschieht: `.updatebar`
+ * war das einzige selbstplatzierte Kind, und die Selbstplatzierung setzte es
+ * ohne Huellenmeldung in Zeile 1/Spalte 1 (240 px breit, in der Spur der
+ * Seitenleiste) und mit Huellenmeldung in eine implizite Zeile **unter** dem
+ * Inhalt. Eine `auto`-Zeile ohne Kind ist 0 px hoch — `.app` hat kein `gap`,
+ * die leere Zeile kostet also nichts.
  */
 .app {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   grid-template-areas:
     "notice notice"
+    "update update"
     "side   head"
     "side   main";
   height: 100%;
@@ -134,6 +145,21 @@
   overflow-y: auto;
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/*
+ * Der Hinweis auf eine neue Fassung, eine Zeile unter den Meldungen der Huelle
+ * (T-214, O-JB; Vorgabe `textabbau-gestalt.md` 9.6). **Zwei** Zeilen und nicht
+ * eine geteilte: Zwei Kinder in derselben Rasterflaeche laegen uebereinander,
+ * und die Meldung der Huelle ist die dringendere — sie steht oben.
+ *
+ * Das Aussehen der Leiste steht bei `.updatebar`; hier steht nur, wo sie im
+ * Huellenraster sitzt. Dieselbe Teilung wie bei `.shellnotes` darueber, und sie
+ * hat einen Grund: Wer die Zeilen von `.app` liest, muss jedes Kind
+ * wiederfinden, ohne 1700 Zeilen weiter zu blaettern.
+ */
+.app > .updatebar {
+  grid-area: update;
 }
 
 .app__sidebar {
@@ -841,6 +867,14 @@ body:has(.scrim) .toast {
   gap: var(--space-4);
 }
 
+/* Ohne `lead` steht neben der Titelzeile nur noch die Aktion, und `flex-start`
+   setzt sie sichtbar zu hoch (T-181, textabbau-gestalt 2.1). Mit `lead` bleibt
+   `flex-start`, sonst wandern die Knoepfe bei zwei Zeilen in dessen Mitte und
+   loesen sich vom Titel. Keine Farbe, kein neues Token, kein neues Kontrastpaar. */
+.screen__headline--bare {
+  align-items: center;
+}
+
 .screen__title {
   font-size: var(--text-2xl);
 }
@@ -919,6 +953,38 @@ body:has(.scrim) .toast {
 .stat--warning {
   border-color: var(--warning-border);
   background-color: var(--warning-bg);
+}
+
+/* Die Kachel "Ueberfaellig" (A-19.4). Lauteste Auspraegung dieser Reihe und
+   bewusst die einzige in Rot.
+
+   Ohne Farbe traegt die **Randschiene**: 4px an der Startkante, und keine
+   andere Kachel dieser Reihe hat eine. Gemessen 6,07 hell / 6,79 dunkel
+   gegen die eigene Flaeche und 6,34 / 7,84 gegen den Hintergrund
+   (`contrast-check.mjs`, Gruppe "Anwendung"). Bauform zeichengleich mit
+   `.shellnote--startup`. Dazu tragen die Beschriftung und der Umstand, dass
+   die Kachel gar nicht erst erscheint, wenn ihre Zahl null ist
+   (`DashboardScreen.tsx`).
+
+   Flaeche und Rahmen sind **Verstaerkungen, keine Traeger**: die Flaeche
+   liegt bei 1,01 bis 1,13 gegen jede Nachbarflaeche (T-210, in Graustufen
+   an Pixeln gemessen) und bei 1,04 hell / 1,15 dunkel gegen die Leinwand
+   (der Lauf), der Rahmen bei 1,66 / 1,79 (T-189). Der Satz, der
+   hier bis T-213 stand, hat beides behauptet und traf auf keines von
+   beidem zu. Ein besserer Flaechenwert loest es nicht: 3:1 gegen den
+   Hintergrund verlangt L <= 0,279 statt heute 0,894 — das waere ein
+   gefuelltes Meldeband und faerbte Startmeldung, Sperrdialog und
+   Fehlerchips mit um (T-213 Abschnitt 10.7).
+
+   Das `padding-inline-start` gleicht die 3px aus, die die breitere Kante
+   dem Inhalt nimmt: nebeneinander sieht das niemand, untereinander — unter
+   14rem bricht `.stat-grid` in eine Spalte — jeder. */
+.stat--danger {
+  border-color: var(--danger-border);
+  border-inline-start-width: 4px;
+  border-inline-start-color: var(--danger-bg);
+  padding-inline-start: calc(var(--space-4) - 3px);
+  background-color: var(--danger-bg-subtle);
 }
 
 .stat__label {
@@ -1018,6 +1084,22 @@ body:has(.scrim) .toast {
 .field__error {
   color: var(--danger-text);
   font-size: var(--text-xs);
+}
+
+/*
+  Die Meldeflaeche eines Feldes steht **immer** im Baum, auch ohne Meldung
+  (T-162, Befund O-DA; dieselbe Bauart wie im Add-in seit T-158). Ein
+  `role="alert"`, das erst zusammen mit seinem Inhalt entsteht, wird von vielen
+  Vorlesehilfen nicht angesagt.
+
+  Sie darf deshalb weder ausgeblendet (`display: none` naehme sie aus dem Baum
+  und damit die ganze Wirkung) noch sichtbar sein, solange sie leer ist. Leer
+  hat sie die Hoehe null; uebrig bleibt der `gap` der Feldspalte
+  (`components.css`, `.field`), und genau den nimmt diese Zeile zurueck. Wer
+  den Abstand in `.field` aendert, aendert ihn hier mit.
+*/
+.field__live:empty {
+  margin-block-start: calc(-1 * var(--space-1));
 }
 
 .field-row {
@@ -1243,6 +1325,40 @@ body:has(.scrim) .toast {
   gap: var(--space-4);
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/*
+  Die Absagefläche eines Formulardialogs — zwischen dem scrollenden Rumpf und
+  der Fußzeile (T-220, E-093 Punkt 5).
+
+  Sie liegt bewusst **nicht** in `.dialog__body--form`. Zwei Gründe, und beide
+  sind gemessen:
+
+  1. Sie antwortet auf einen Druck auf den Absendeknopf und gehört neben diesen
+     Knopf. Im Rumpf stünde sie am Ende eines Ausschnitts, der 60vh hoch ist und
+     im Pool-Dialog 1599 px Inhalt trägt — der Benutzer sähe sie nicht.
+  2. Der Rumpf ist ein `flex`-Behälter mit `gap`. Eine Fläche, die dauerhaft im
+     Baum steht (das muss sie, sonst sagt keine Vorlesehilfe sie an), wäre dort
+     auch leer ein Element und kostete an jedem der sechzehn Formulardialoge
+     16 px Abstand.
+
+  Waagerecht bündig zum Rumpf; senkrecht trägt `.dialog__consequence` seinen
+  eigenen Abstand nach oben, die Fußzeile ihren nach unten. Leer hat die Fläche
+  keine Höhe: Sie ist ein Blockbehälter ohne Inhalt.
+*/
+.dialog__refusal {
+  padding-inline: var(--space-4);
+}
+
+/*
+  Der Abstand nach unten kommt über einen Zustandsnamen und nicht über `:empty`
+  oder `:has()`: Beide beantworten dieselbe Frage, aber die Antwort hinge dann
+  an einer Zeichnungsregel der Engine — und zwei von drei ausgelieferten
+  Erzeugnissen zeichnen mit WebKit, für das hier nichts gemessen ist (T-207
+  Abschnitt 4). Die Klasse sagt dasselbe, und sie sagt es überall gleich.
+*/
+.dialog__refusal--shown {
+  padding-block-end: var(--space-3);
 }
 
 .dialog__hint {
@@ -1759,6 +1875,408 @@ body:has(.scrim) .toast {
   border-color: var(--border-strong);
   background-color: var(--bg-inset);
   color: var(--text-secondary);
+}
+
+/* ==================================================================== */
+/* Hinweis auf eine neue Fassung, mitten in der Sitzung (T-144 U-01)    */
+/* ==================================================================== */
+
+/*
+ * Die **nicht-modale** Fassung des Versionshinweises. Sie erscheint nur, wenn
+ * der Hinweis waehrend der Arbeit eintrifft, und sie tut drei Dinge nicht:
+ * Sie nimmt keinen Fokus, sie legt sich ueber nichts, und sie sperrt nichts.
+ *
+ * Sie steht im Fluss ueber dem Inhalt und schiebt ihn nach unten, statt ihn zu
+ * verdecken — eine schwebende Leiste verdeckt genau die Zeile, an der jemand
+ * gerade arbeitet. Ein Ruck im Layout ist der kleinere Schaden als ein
+ * verdecktes Feld.
+ *
+ * **Der Satz darueber war bis T-214 eine Absicht und keine Beschreibung.** Ohne
+ * eigene Rasterzeile setzte die Selbstplatzierung die Leiste in die Spur der
+ * Seitenleiste — 240 px breit statt 1280, ohne Huellenmeldung oben links, mit
+ * Huellenmeldung unter dem Inhalt, den sie nach unten schieben sollte. Wo sie
+ * sitzt, steht seither bei `.app > .updatebar`; hier steht, wie sie aussieht.
+ */
+.updatebar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--info-border);
+  background-color: var(--info-bg);
+  color: var(--info-fg);
+  font-size: var(--text-sm);
+}
+
+.updatebar__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.updatebar__text {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+/* ==================================================================== */
+/* Die Frist am Todo (A-19.2 bis A-19.6)                                */
+/* ==================================================================== */
+
+/*
+ * Die **dritte** Sorte Marke am Todo, neben `DoneFlag` und dem Exportstatus.
+ * Sie traegt nur unter drei Auflagen (T-144 Abschnitt 8.2), und alle drei
+ * stehen im Baustein `components/DeadlineFlag.tsx`:
+ *
+ *   1. Ein Element, nicht drei — der Zustand bestimmt die Lautstaerke.
+ *   2. Abwesend, wenn keine Frist gesetzt ist. Anders als `DoneFlag`, das nach
+ *      Designsystem 3.4 immer dasteht. A-19.5: "Ein Todo ohne Frist hat keinen
+ *      dieser Zustaende."
+ *   3. Nur zwei der drei Zustaende sind laut. "Spaeter faellig" ist eine ruhige
+ *      Datumsangabe ohne Zustandswort — sonst waere die dritte Marke auf jedem
+ *      Todo mit Frist voll sichtbar, und das ist der Punkt, an dem A-13.2 kippt.
+ *
+ * **Sechs Merkmale, nur eines davon Farbe** (SC 1.4.1): Wortlaut, absolutes
+ * Datum, Symbol, Fuellung, Schriftschnitt, Farbe. Fuenf tragen ohne Farbe; die
+ * Graustufenprobe der Musterseite bekommt den Fall deshalb mit.
+ *
+ * Farbwahl: Rot und Bernstein sind hier **nicht** frei gewaehlt, sondern die
+ * bereits gemessenen Rampen (`contrast`). Ein fuenfter Farbcode neben
+ * Exportstatus und Timer waere genau die Wand aus Etiketten, die T-144
+ * ausschliesst — deshalb traegt "spaeter faellig" gar keine.
+ */
+.deadline {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+}
+
+.deadline__word {
+  white-space: nowrap;
+}
+
+/* Ueberfaellig: voll gefuellt, halbfett, Warndreieck. Die lauteste der drei. */
+.deadline--overdue {
+  /* Kontur in **Textstaerke** und nicht in der zarten Rahmenfarbe — dieselbe
+     Begruendung wie bei `.doneflag--done`: Erst so erreicht die Grenze des
+     Kennzeichens die 3:1 aus SC 1.4.11 gegen die helle Karte. Gemessen von
+     `pnpm --filter @takt/web contrast`. */
+  border-color: var(--danger-text);
+  background-color: var(--danger-bg-subtle);
+  color: var(--danger-text);
+  font-weight: var(--weight-semibold);
+}
+
+/* Heute faellig: Kontur mit kraeftigem Rahmen, halbfett, Kalender mit Zeiger.
+   Laut, aber ohne die volle Flaeche — der Unterschied zu "ueberfaellig" ist
+   auch ohne Farbe zu sehen. */
+.deadline--due_today {
+  /* Ebenfalls Textstaerke, siehe oben. */
+  border-color: var(--warning-fg);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+  font-weight: var(--weight-semibold);
+}
+
+/* Spaeter faellig: keine Flaeche, kein Rahmen, normale Schrift — nur Symbol und
+   Datum. Auf einer Karte mit Frist ist das der Regelfall, und der Regelfall
+   fluestert (dasselbe Mittel wie bei `DoneFlag--open`). */
+.deadline--due_later {
+  color: var(--text-secondary);
+}
+
+/* Auf der Kanban-Karte steht sie in der Kopfzeile neben dem
+   Erledigt-Kennzeichen und darf umbrechen, statt die Zeile zu sprengen. */
+.kcard__deadline {
+  max-width: 100%;
+}
+
+/* ==================================================================== */
+/* Anhaenge am Todo (A-19.8 bis A-19.15)                                */
+/* ==================================================================== */
+
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Eine Zeile. Das Oeffnen **ist** die Zeile (Flaeche C); das Entfernen steht
+   rechts und erscheint erst beim Ueberfahren oder bei Fokus — es ist die
+   seltenere Handlung und soll die Zeile nicht dominieren. */
+.attachment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.attachment:hover {
+  border-color: var(--border-subtle);
+  background-color: var(--bg-subtle);
+}
+
+/* Der Fokusring liegt am ganzen Zeilenelement, nicht nur am Text darin
+   (SC 2.4.11): Wer mit der Tastatur hier steht, soll sehen, welche Zeile
+   gemeint ist — bei einer Zeile, deren Klick ein Programm startet, ist das
+   keine Feinheit. */
+.attachment:focus-within {
+  border-color: var(--border-strong);
+  background-color: var(--bg-subtle);
+}
+
+/* Der Anhang, der sich nicht oeffnen liess (A-19.15). Er **verschwindet
+   nicht** — er bekommt eine Kontur und einen Satz, und beides bleibt stehen. */
+.attachment--failed {
+  /* Textstaerke: Diese Kontur ist die Grenze eines Bereichs, der eine Aussage
+     traegt (A-19.15) — sie faellt unter SC 1.4.11. */
+  border-color: var(--danger-text);
+  background-color: var(--danger-bg-subtle);
+}
+
+.attachment__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.attachment__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Ein Knopf und kein Anker: Ein `<a href>` im Webview fuehrte am Oeffnen-Befehl
+   der Huelle vorbei, und die CSP kennt fuer ihn ohnehin kein Ziel. Er sieht
+   trotzdem aus wie ein Verweis, weil er sich wie einer verhaelt. */
+.attachment__open {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attachment__open:hover {
+  text-decoration: underline;
+}
+
+.attachment__open:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.attachment__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+/* Der volle Wert in einer zweiten, kleineren Zeile. Bei einer Datei ist der
+   Pfad die einzige Auskunft darueber, was gleich startet. */
+.attachment__value {
+  font-size: var(--text-xs);
+}
+
+/* Flaeche E: der Grund steht **in der Zeile** und nicht im Meldungsstapel —
+   der liegt seit T-110 hinter der Abdunklung, solange ein Dialog steht. */
+.attachment__failure {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Der Fehlschlag haengt in seinem dauerhaften Wirt (`.live-region`,
+ * `components.css`, T-191). `.attachment__main` ist eine Spalte mit `gap: 2px`,
+ * und der leere Wirt zaehlt dort als Kind — diese Zeile nimmt genau diesen
+ * einen Abstand zurueck. Wer den `gap` oben aendert, aendert ihn hier mit.
+ */
+.attachment__main > .live-region:empty {
+  margin-block-start: -2px;
+}
+
+.attachment__remove {
+  flex: none;
+  opacity: 0;
+}
+
+.attachment:hover .attachment__remove,
+.attachment:focus-within .attachment__remove,
+.attachment__remove:focus-visible {
+  opacity: 1;
+}
+
+/* Ohne Zeigergeraet gibt es kein Ueberfahren — dort steht das Entfernen
+   dauerhaft da, statt unerreichbar zu sein. */
+@media (hover: none) {
+  .attachment__remove {
+    opacity: 1;
+  }
+}
+
+/* Flaeche D — das Vorschaubild (A-19.13).
+
+   Die Flaeche steht in ihrer Groesse da, **bevor** das Bild kommt: Sonst
+   springt das Layout, wenn die Bytes eintreffen. **Kein** Vergroessern beim
+   Ueberfahren — A-19.18 verlangt, dass nichts als Nebenwirkung geschieht, und
+   eine Lupe beim Ueberfahren ist genau das. */
+.attachment__preview {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 3rem;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-inset);
+}
+
+.attachment__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment__preview--broken {
+  flex-direction: column;
+  gap: 2px;
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.attachment__preview-note {
+  font-size: var(--text-2xs);
+  text-align: center;
+}
+
+/* Flaeche B — Pflichtfeld und Auswahlknopf nebeneinander. Der Knopf steht
+   unten buendig zum Feld, damit er nicht ueber der Beschriftung schwebt. */
+.attachment-pick {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.attachment-pick > .field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.attachment-pick__button {
+  flex: none;
+  margin-bottom: 2px;
+}
+
+.attachment-pick__note {
+  min-height: 1rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 40rem) {
+  .attachment-pick {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ==================================================================== */
+/* Die Rueckfrage vor dem Oeffnen einer Datei (A-A-6)                   */
+/* ==================================================================== */
+
+/*
+ * Der Pfad steht **voll, in Festbreitenschrift, umbrechend und nie gekuerzt**.
+ * Ein Pfad mit Auslassungszeichen ist genau der, den ein Angreifer sich
+ * wuenscht: `C:\Users\…\rechnung.exe` verbirgt das Stueck, an dem man
+ * erkennt, wo die Datei herkommt (Bedrohungsmodell 20.1, Punkt 1).
+ */
+.dialog--open-file .openfile {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-inset);
+}
+
+.openfile__label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.openfile__name {
+  margin: 0 0 var(--space-3);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * X-05: Weicht der Name, den Windows aufloest, vom angezeigten ab, stehen die
+ * beiden **untereinander in derselben Spalte**. Der Unterschied ist dann zu
+ * sehen und nicht zu erschliessen — das ist der ganze Zweck des Paares. Es
+ * erscheint nur bei Abweichung; sonst ist hier nichts.
+ */
+.openfile__name--diverging {
+  /* Der Abstand nach unten faellt weg: Es folgt unmittelbar das zweite Paar. */
+  margin-bottom: var(--space-2);
+}
+
+.openfile__name--resolved {
+  /* Vor der Erlaeuterung steht weniger Luft als vor der naechsten Beschriftung. */
+  margin-bottom: var(--space-1);
+}
+
+.openfile__note {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.openfile__path {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  /* Umbrechen statt kuerzen. `anywhere` und nicht `break-word`: Ein Pfad hat
+     keine Wortgrenzen, an denen sich sinnvoll trennen liesse. */
+  overflow-wrap: anywhere;
 }
 
 /* ==================================================================== */
@@ -3180,36 +3698,19 @@ body:has(.scrim) .toast {
   font-size: var(--text-xs);
 }
 
-/* Der Leerzustand nach der Umstellung. Er erklaert und fuehrt weiter; er ist
-   kein "keine Daten". */
+/* Der Leerzustand des Boards. Er erklaert und fuehrt weiter; er ist kein
+   "keine Daten".
+
+   Mit T-209 sind `.board-setup__points`, `.board-setup__points strong` und
+   `.board-setup__actions` gefallen: Ihre einzige Flaeche war die Karte "Was
+   sich geaendert hat" (UM-08). Eine Klasse, die keine Flaeche mehr zeichnet,
+   ist kein harmloser Rest — sie laedt den naechsten Durchgang dazu ein, eine
+   neue Flaeche daran zu haengen, weil sie schon dasteht. */
 .board-setup {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   max-width: 56rem;
-}
-
-.board-setup__points {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding-inline-start: var(--space-4);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  list-style: disc;
-}
-
-.board-setup__points strong {
-  color: var(--text-primary);
-}
-
-.board-setup__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
 }
 
 /* Eine Regel in einer Verwaltungsliste — Board-Spalte wie Pool, weil es
@@ -3221,8 +3722,15 @@ body:has(.scrim) .toast {
   margin: 0;
 }
 
+/*
+ * Umbrechend, seit die Zeile drei Handlungen trägt (T-133, O-A): „Umbenennen",
+ * „Regel bearbeiten" und „Vom Board nehmen". Ohne den Umbruch schöbe die
+ * dritte Schaltfläche in einem schmalen Fenster den Namen aus der Zeile — und
+ * der Name ist das, wonach man hier sucht (A-13.2, A-13.8).
+ */
 .rule-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -3346,8 +3854,10 @@ body:has(.scrim) .toast {
   margin: 0;
 }
 
+/* Derselbe Grund wie bei `.rule-row`: fuenf Handlungen je Zeile (T-133). */
 .pool-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3);
@@ -3387,6 +3897,17 @@ body:has(.scrim) .toast {
 .tag-picker--busy {
   align-items: center;
   min-height: var(--control-height-md);
+}
+
+/*
+ * Die Wartezeile haengt in ihrem dauerhaften Wirt (`.live-region`,
+ * `components.css`, T-191). `.tag-picker` ist ein umbrechender Fluss mit
+ * `gap: var(--space-1)`; leer zaehlt der Wirt dort als Kind und schoebe die
+ * erste Marke um genau diesen Abstand nach hinten. Diese Zeile nimmt ihn
+ * zurueck — voll steht der Wirt allein in der Zeile und braucht sie nicht.
+ */
+.tag-picker > .live-region:empty {
+  margin-inline-end: calc(-1 * var(--space-1));
 }
 
 .tag-picker__waiting {
@@ -3506,8 +4027,26 @@ body:has(.scrim) .toast {
   background-color: var(--bg-active);
 }
 
+/* Die Kontur traegt `--border-accent` statt `--accent-border-subtle`
+   (T-181, Ausgleich fuer ST-04; Vorgabe aus
+   `docs/design/textabbau-gestalt.md` 1.2).
+
+   Mit dem Wegfall von `AREA_LEAD` ist die Schiene die **einzige** Flaeche, die
+   den gewaehlten Bereich zeigt, bevor man den Kartentitel liest. Der aktuelle
+   Eintrag unterschied sich an drei Merkmalen, und alle drei sind Farbe; die
+   Kontur trug dabei den schwaechsten Akzentwert der Palette. Ein Wert, eine
+   Zeile, keine neue Klasse, kein neues Token.
+
+   Kein Balken an der Startkante und keine Verschiebung: Bei 60 rem und
+   schmaler kippt die Schiene in eine umbrechende Zeile
+   (`.settings-rail__list` weiter unten); ein Balken waere dort falsch
+   orientiert. Eine Kontur traegt in beiden Ausrichtungen.
+
+   Kontrast: `--border-accent` gegen `--accent-bg-subtle`, Mindestwert 3:1
+   (SC 1.4.11 — die Kontur kennzeichnet einen Zustand). Das Paar steht unter
+   eigenem Namen in `scripts/contrast-check.mjs`. */
 .settings-rail__item--current {
-  border-color: var(--accent-border-subtle);
+  border-color: var(--border-accent);
   background-color: var(--accent-bg-subtle);
   color: var(--accent-text);
 }
@@ -3788,15 +4327,6 @@ body:has(.scrim) .toast {
   gap: 2px;
 }
 
-/* Die beiden Verweise unter der Erklaerung, warum Status und Spalte zwei
-   verschiedene Dinge sind. */
-.status-admin__links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-}
-
 .status-admin__rules {
   display: flex;
   flex-direction: column;
@@ -3841,14 +4371,17 @@ body:has(.scrim) .toast {
  * Schmales Fenster: aus zwei Spalten wird eine, die Seitenleiste legt sich als
  * Band über den Kopf. Das Raster wird dabei **umgeschrieben und nicht
  * aufgelöst** — `minmax(0, 1fr)` in der letzten Zeile bleibt, und damit bleibt
- * auch die Zusicherung, dass nur `.app__main` scrollt.
+ * auch die Zusicherung, dass nur `.app__main` scrollt. Die Zeile `update`
+ * wird hier mitgeschrieben; fehlte sie, stünde `.updatebar` im schmalen
+ * Fenster wieder implizit unter dem Inhalt (T-214, O-JB).
  */
 @media (max-width: 52rem) {
   .app {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
     grid-template-areas:
       "notice"
+      "update"
       "side"
       "head"
       "main";

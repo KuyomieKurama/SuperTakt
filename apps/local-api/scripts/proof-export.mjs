@@ -34,8 +34,39 @@ const { openDatabase, createClockPort, createFilePort, createSystemPort, uuidv7,
   await import('@takt/storage');
 const { createDirectoryInsightPort } = await import('../src/access/export-directory.ts');
 const { runExport, previewExport } = await import('../src/usecases/export.ts');
-const { createTodo } = await import('../src/usecases/todos.ts');
+const { createTodo, loadTodoNote } = await import('../src/usecases/todos.ts');
 const { setExportStatus } = await import('../src/usecases/structure.ts');
+
+/**
+ * Der interne Vermerk des Todos (A-7.2, R-06) — **ein** Literal.
+ *
+ * A-A-57. Bis T-223 wurde mit dem vollen Satz angelegt und nach dem Präfix
+ * „Interner Vermerk" gesucht; zwei Zeichenketten für eine Aussage sind zwei
+ * Stellen, an denen sie auseinanderlaufen können. Wichtiger noch: Nichts hat
+ * geprüft, daß der Vermerk je im Bestand war. Gemessen mit `note: ''` blieb
+ * dieser Lauf bei 97/0 und Code 0 — die Zusicherung „der interne Vermerk steht
+ * nirgends in der Datei" hatte nichts gemessen.
+ *
+ * Deshalb der positive Anker in Abschnitt 1, nach dem Muster, das
+ * `proof-route-policy.mjs` an derselben Grenze bereits fährt: Der Vermerk wird
+ * über den regulären Weg (`loadTodoNote`) **zurückgelesen** und muß dort
+ * stehen, bevor irgendeine Zusicherung urteilt, daß er anderswo fehlt.
+ *
+ * > Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat
+ * > (A-A-55, A-A-60; ausgeschrieben im Kopf von `proof-route-policy.mjs`).
+ */
+const INTERNER_VERMERK = 'Interner Vermerk — darf nie in den Export';
+
+/**
+ * Der vordere Teil desselben Literals, **abgeleitet** statt zweitgeschrieben.
+ *
+ * Gesucht wird damit, angelegt wird mit {@link INTERNER_VERMERK}: Eine
+ * Ausleitung, die den Vermerk kürzt, fiele einer Suche nach dem vollen Satz
+ * durch — und zwei nebeneinander geschriebene Zeichenketten wären genau die
+ * Stelle, an der die Aussage auseinanderläuft. Die Ableitung schließt beides
+ * aus, weil sie sich mit dem Literal ändert.
+ */
+const VERMERK_MARKE = INTERNER_VERMERK.split(' — ')[0];
 
 let passed = 0;
 let failed = 0;
@@ -93,7 +124,7 @@ async function freshContext(faults) {
     callNumber: 'TCK-000042',
     statusId: null,
     tagIds: [],
-    note: 'Interner Vermerk — darf nie in den Export',
+    note: INTERNER_VERMERK,
   });
   if (!created.ok) throw new Error('Todo konnte nicht angelegt werden.');
   const todoId = created.value.todo.id;
@@ -153,11 +184,23 @@ try {
   section('1  Der gute Fall — Datei geschrieben und alle Buchungen markiert');
   // -------------------------------------------------------------------------
   {
-    const { database, context, entries } = await freshContext();
+    const { database, context, entries, todoId } = await freshContext();
 
     const before = await stateOf(context);
     check('vorher: drei offene Buchungen', before.entries.length === 3 && before.entries.every((e) => e.status === 'open'));
     check('vorher: drei Kandidaten in v_export_candidate', before.openCandidates === 3);
+
+    // A-A-57 — der positive Anker vor jeder Aussage über das Fehlen des
+    // Vermerks. Ohne ihn bestünde die Zusicherung weiter unten auch über einem
+    // Bestand, in dem nie ein Vermerk stand (T-223-2, gemessen: 97/0, Code 0).
+    const vermerkImBestand = await loadTodoNote(context, todoId);
+    check(
+      'vorher: der interne Vermerk steht im Bestand und ist über den regulären Weg lesbar (A-A-57)',
+      vermerkImBestand.ok && vermerkImBestand.value.text === INTERNER_VERMERK,
+      vermerkImBestand.ok
+        ? `gelesen: ${JSON.stringify(vermerkImBestand.value.text)} statt ${JSON.stringify(INTERNER_VERMERK)}`
+        : `nicht lesbar: ${vermerkImBestand.error.code}`,
+    );
 
     const preview = await previewExport(context, { kind: 'stored', templateId: null }, []);
     check('Vorschau gelingt', preview.ok, preview.ok ? '' : preview.error.code);
@@ -196,8 +239,8 @@ try {
     );
     check(
       'der interne Vermerk steht nirgends in der Datei (A-7.2, R-06)',
-      !JSON.stringify(written).includes('Interner Vermerk') &&
-        !Buffer.from(String(written[0]?.Notiz ?? ''), 'base64').toString('utf8').includes('Interner Vermerk'),
+      !JSON.stringify(written).includes(VERMERK_MARKE) &&
+        !Buffer.from(String(written[0]?.Notiz ?? ''), 'base64').toString('utf8').includes(VERMERK_MARKE),
     );
 
     const noteBack = Buffer.from(String(written[0]?.Notiz ?? ''), 'base64').toString('utf8');
@@ -491,7 +534,7 @@ try {
   }
 
   // -------------------------------------------------------------------------
-  section('10  Was am Ordner belegbar ist, und was nicht (T-039, B-5.2)');
+  section('10  Was an einem Ort belegbar ist, und was nicht (T-039, B-5.2)');
   // -------------------------------------------------------------------------
   {
     const port = createFilePort();
@@ -499,7 +542,7 @@ try {
 
     const asked = { mayAskFileSystem: true };
 
-    const good = await insight.describeExportDirectory(workDir, asked);
+    const good = await insight.describeLocation(workDir, asked);
     check(
       'an einem gewöhnlichen Arbeitsordner ist nichts belegt — die Liste ist leer',
       Array.isArray(good) && good.length === 0,
@@ -512,8 +555,8 @@ try {
     const systemPath = process.platform === 'win32' ? (process.env.SystemRoot ?? 'C:\\Windows') : '/etc';
     check(
       `ein Systemverzeichnis (${systemPath}) wird als solches belegt`,
-      (await insight.describeExportDirectory(systemPath, asked)).includes('system_dir'),
-      JSON.stringify(await insight.describeExportDirectory(systemPath, asked)),
+      (await insight.describeLocation(systemPath, asked)).includes('system_dir'),
+      JSON.stringify(await insight.describeLocation(systemPath, asked)),
     );
 
     // …und zwar unabhängig davon, wie die Prüfung ausgeht. Genau dafür sind es
@@ -533,13 +576,13 @@ try {
     await mkdir(lookalike, { recursive: true });
     check(
       'ein Ordner, der nur „OneDrive" heißt, gilt nicht als Synchronisierungsordner',
-      !(await insight.describeExportDirectory(lookalike, asked)).includes('sync_folder'),
-      JSON.stringify(await insight.describeExportDirectory(lookalike, asked)),
+      !(await insight.describeLocation(lookalike, asked)).includes('sync_folder'),
+      JSON.stringify(await insight.describeLocation(lookalike, asked)),
     );
 
     check(
       'ohne Pfad gibt es nichts einzuordnen',
-      (await insight.describeExportDirectory(null, asked)).length === 0,
+      (await insight.describeLocation(null, asked)).length === 0,
     );
 
     // Die Gestalt der vorhandenen Ergebnisse bleibt unverändert. Das ist der

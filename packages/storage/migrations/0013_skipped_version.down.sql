@@ -1,0 +1,22 @@
+-- Takt — Migration 0013 "skipped_version", Rückwärtsrichtung
+--
+-- ===========================================================================
+-- Was der Rückweg zurücknimmt — und was dabei verloren geht
+-- ===========================================================================
+--
+-- Die Spalte fällt, und mit ihr der CHECK, der an ihr hängt.
+--
+-- **Ein Datenverlust, und er gehört benannt:** Eine übersprungene Fassung ist
+-- danach nicht mehr übersprungen. Der Hinweis auf genau diese Fassung
+-- erscheint beim nächsten Lauf wieder. Das ist die richtige Richtung — die
+-- Anwendung meldet zu viel statt zu wenig, und der Benutzer kann erneut
+-- überspringen —, aber es ist keine verlustfreie Rücknahme, und wer sie fährt,
+-- soll das wissen.
+--
+-- Keine andere Spalte, kein Fremdschlüssel und kein bestehender CHECK ist
+-- betroffen: Die Spalte kommt in keinem Index, keiner Sicht, keinem Trigger
+-- und keinem anderen CHECK vor. Genau das ist die Bedingung, unter der SQLite
+-- ein DROP COLUMN überhaupt zulässt — hier ist sie erfüllt, und deshalb reicht
+-- eine Zeile statt eines Tabellenumbaus.
+
+ALTER TABLE app_setting DROP COLUMN skipped_version;

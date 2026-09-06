@@ -60,7 +60,7 @@ describe('Migration 0012 "pool_rule_restrict" — vorwärts und rückwärts, mit
     //    Anwendung benutzt, nicht per Hand zusammengesetztes SQL.
     // ---------------------------------------------------------------------
     await runner.migrateToLatest();
-    expect(await runner.state()).toEqual({ kind: 'current', version: restrictMigration.version });
+    expect(await runner.state()).toEqual({ kind: 'current', version: migrations.at(-1)?.version });
 
     const unit = createUnitOfWork(conn, { ids: fakeIds('mig12') });
     const folder = await unit.folders.create(null, 'Ost', NOW);
@@ -120,7 +120,7 @@ describe('Migration 0012 "pool_rule_restrict" — vorwärts und rückwärts, mit
     //    Fremdschlüsselverweise, keine Beschädigung durch den Hin- und Rückweg.
     // ---------------------------------------------------------------------
     const up = await runner.migrateToLatest();
-    expect(up.to).toBe(restrictMigration.version);
+    expect(up.to).toBe(migrations.at(-1)?.version);
     const integrity = conn.prepare('PRAGMA integrity_check').get();
     expect(integrity?.['integrity_check']).toBe('ok');
     expect(conn.prepare('PRAGMA foreign_key_check').all()).toEqual([]);

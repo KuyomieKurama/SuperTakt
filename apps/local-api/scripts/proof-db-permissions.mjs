@@ -34,11 +34,31 @@
  *   zu weit **entstehen** — SQLite legt sie im Betrieb wiederholt neu an, ein
  *   einmaliges `chmod` reicht dafür nicht (Abschnitt 4).
  *
- * Damit Abschnitt 1 und 2 wirklich das `chmod` messen und nicht die `umask`,
+ * Damit die folgenden Abschnitte das `chmod` messen und nicht die `umask`,
  * setzt dieser Prüfpfad seine eigene `umask` ausdrücklich **weit** (`0o000`) —
  * und der Kindprozess in Abschnitt 4 erbt sie. Abschnitt 4 misst deshalb das
  * Ergebnis beider Maßnahmen im echten Startpfad und nicht eine von beiden
- * einzeln; getrennt gemessen ist das `chmod` in Abschnitt 1 und 2.
+ * einzeln.
+ *
+ * ===========================================================================
+ * Berichtigung und Vorbedingung (T-231, A-A-65)
+ * ===========================================================================
+ *
+ * Hier stand „getrennt gemessen ist das `chmod` in Abschnitt **1 und 2**". Der
+ * Satz war zu weit, und security-checker hat es in T-230 gemessen
+ * (Bedrohungsmodell 30.4): Mit ausgeschaltetem `secureDatabaseFiles` und einer
+ * **engen** `umask` (`0o077`) blieben Abschnitt 1 dreimal grün, Abschnitt 3
+ * grün und sogar Abschnitt 4 grün — rot wurde allein Abschnitt 2.
+ *
+ * Der Grund: Abschnitt 1, 3 und 4 messen den **Zustand** einer frisch
+ * entstandenen Datei, und den setzt bei enger `umask` schon das Betriebssystem.
+ * Abschnitt 2 misst die **Wirkung** — vorher `0644`, nachher `0600`, in zwei
+ * Zeilen desselben Laufs — und ist damit gegen jede `umask` immun. Getrennt
+ * gemessen ist das `chmod` also in **Abschnitt 2**.
+ *
+ * Die weite `umask` wurde gesetzt und nirgends gemessen. Sie ist die
+ * Vorbedingung von Abschnitt 1, 3 und 4; deshalb steht sie jetzt als erste
+ * Zeile dieses Laufs, **vor** Abschnitt 1, und nicht als Zusage im Kopf.
  */
 
 import { spawn } from 'node:child_process';
@@ -99,6 +119,23 @@ if (process.platform === 'win32') {
 // Weit gesetzt, damit die folgenden Abschnitte das ausdrückliche `chmod` messen
 // und nicht versehentlich die `umask` dieses Prüfprozesses.
 const vorherigeUmask = process.umask(0o000);
+
+// ---------------------------------------------------------------------------
+section('0  Die Vorbedingung dieses Laufs: die eigene umask ist weit');
+// ---------------------------------------------------------------------------
+//
+// `process.umask()` ohne Wert liest, ohne zu setzen. Steht hier etwas anderes
+// als `0o000`, sind die Zeilen in Abschnitt 1, 3 und 4 keine Aussage über das
+// `chmod` des Produkts mehr, sondern über das Betriebssystem — und dann soll
+// dieser Lauf rot sein und nicht grün (A-A-65).
+{
+  const gesetzt = process.umask();
+  check(
+    'die umask dieses Laufs ist weit (0000)',
+    gesetzt === 0o000,
+    `gemessen: 0${gesetzt.toString(8).padStart(3, '0')} — Abschnitt 1, 3 und 4 messen dann die umask und nicht das chmod`,
+  );
+}
 
 const dirs = [];
 async function scratch(prefix) {

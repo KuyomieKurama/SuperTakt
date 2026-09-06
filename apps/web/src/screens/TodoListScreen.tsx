@@ -7,8 +7,9 @@ import {
   updateTodo,
 } from "../api/endpoints";
 import { errorMessage } from "../api/client";
-import type { Todo, TodoStatus } from "../api/types";
+import type { DueSortDirection, DueState, Todo, TodoStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DeadlineFlag } from "../components/DeadlineFlag";
 import { DoneFlag } from "../components/DoneFlag";
 import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../components/FilterBar";
 import { Select } from "../components/Select";
@@ -26,9 +27,11 @@ import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { undoDoneAction } from "../app/undoDone";
 import { useAsync } from "../app/useAsync";
+import { useToday } from "../app/useToday";
 import { cx } from "../lib/cx";
 import { formatCount, plural } from "../lib/format";
 import { doneFlagState, type DoneFlagState } from "../lib/labels";
+import type { CalendarDay } from "../api/types";
 import { doneMovementSentence, withMovement } from "../lib/movement";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { TodoFormDialog } from "./TodoFormDialog";
@@ -59,6 +62,41 @@ import { Foreign } from "../components/Foreign";
 
 const PAGE_SIZE = 100;
 
+/**
+ * Die Wörter für den Fristfilter (A-19.5, T-144 Abschnitt 8.5).
+ *
+ * „Überfällig", „Heute fällig", „Später fällig" — nicht „in Verzug", nicht
+ * „abgelaufen", nicht „geplant". „Ohne Frist" ist **kein** vierter Zustand,
+ * sondern die Auswahl derer, die keinen haben; an der Zeile selbst steht dafür
+ * weiterhin nichts.
+ */
+const DEADLINE_FILTER_LABEL: Readonly<Record<DueState, string>> = {
+  overdue: "Überfällig",
+  due_today: "Heute fällig",
+  due_later: "Später fällig",
+  no_due_date: "Ohne Frist",
+};
+
+/**
+ * Der Wert aus der Adresse, geprüft.
+ *
+ * Was in der Adresszeile steht, hat niemand geprüft — ein `as DeadlineFilter`
+ * darauf wäre eine Behauptung über einen Wert, den ein Benutzer selbst tippt.
+ * Ein unbekannter Wert bedeutet hier schlicht „kein Filter": Die Liste zeigt
+ * dann alles, statt eine Fehlerfläche für eine verrutschte Adresse zu bauen.
+ */
+function asDueState(value: string | undefined): DueState | "" {
+  if (value === undefined) return "";
+  return value in DEADLINE_FILTER_LABEL ? (value as DueState) : "";
+}
+
+/** Die Wörter für die Ordnung (A-19.20). */
+const TODO_SORT_LABEL: Readonly<Record<DueSortDirection | "", string>> = {
+  "": "Zuletzt bearbeitet",
+  asc: "Frist, früheste zuerst",
+  desc: "Frist, späteste zuerst",
+};
+
 export interface TodoListScreenProps {
   readonly query: Readonly<Record<string, string>>;
 }
@@ -87,7 +125,27 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     initialTag === undefined || initialTag.length === 0 ? [] : [initialTag],
   );
   const [showDone, setShowDone] = useState(false);
+  /*
+    Frist: filtern und ordnen (A-19.20, E-074 Punkt 1). Beides ist **Anzeige**
+    und keine Achse — die Frist geht weiterhin nicht in Pools, nicht in Spalten
+    und nicht in den Export.
+
+    `sort` steht auf `recent`, also der bisherigen Ordnung des Dienstes. Eine
+    Liste, die sich beim ersten Öffnen anders sortiert als gestern, wäre eine
+    Umstellung und keine Ergänzung (A-19.16).
+  */
+  const [deadlineFilter, setDeadlineFilter] = useState<DueState | "">(() =>
+    asDueState(query["frist"]),
+  );
+  const [sort, setSort] = useState<DueSortDirection | "">("");
   const [limit, setLimit] = useState(PAGE_SIZE);
+
+  /*
+    Der heutige Tag, der von selbst aktuell bleibt (E-073 Punkt 2). **Einer je
+    Ansicht** und nicht einer je Zeile: So wechseln alle Zeilen im selben
+    Augenblick, und es läuft ein Zeitgeber statt hundert.
+  */
+  const today = useToday();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Todo | undefined>(undefined);
@@ -105,8 +163,10 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       ...(poolId.length === 0 ? {} : { poolIds: [poolId] }),
       ...(tagIds.length === 0 ? {} : { tagIds }),
       ...(showDone ? {} : { onlyOpen: true }),
+      ...(deadlineFilter === "" ? {} : { dueStates: [deadlineFilter] }),
+      ...(sort === "" ? {} : { sortByDueDate: sort }),
     }),
-    [search, statusId, poolId, tagIds, showDone],
+    [search, statusId, poolId, tagIds, showDone, deadlineFilter, sort],
   );
 
   const list = useAsync(async () => {
@@ -118,7 +178,22 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
       showDone ? Promise.resolve(null) : listTodos({ ...filter, onlyOpen: false }, { limit: 1 }),
     ]);
     return { page, summaries, totalWithDone: all?.total ?? page.total };
-  }, [filter, limit, showDone], [version]);
+    /*
+      `today` steht in dieser Liste, obwohl es im Rumpf nicht vorkommt — und
+      genau deshalb (T-154, Befund O-CO).
+
+      Der Fristfilter geht als `dueStates` an den Dienst, und **dort** wird
+      „überfällig" gegen den heutigen Tag gerechnet, bei jeder Antwort neu
+      (E-070 Punkt 3). Die Antwort altert also, ohne dass sich eine der
+      übrigen Abhängigkeiten rührt: Um Mitternacht wandert ein Todo von „heute
+      fällig" nach „überfällig", die gefilterte Liste zeigt aber weiter den
+      Stand von gestern. Die Marken an den Zeilen wechseln in diesem Augenblick
+      (sie hängen an demselben `today`) — die Liste, in der sie stehen, tut es
+      ohne diese Zeile nicht, und die beiden widersprächen sich.
+
+      Es kostet einen Lauf je Tag. Ohne Fristfilter kommt dieselbe Seite zurück.
+    */
+  }, [filter, limit, showDone, today], [version]);
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];
@@ -162,8 +237,30 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         onRemove: () => setShowDone(false),
       });
     }
+    if (deadlineFilter !== "") {
+      entries.push({
+        id: "frist",
+        field: "Frist",
+        value: DEADLINE_FILTER_LABEL[deadlineFilter],
+        onRemove: () => setDeadlineFilter(""),
+      });
+    }
+    /*
+      Die **Ordnung** steht als eigener Eintrag in der Leiste, obwohl sie kein
+      Filter ist. Grund: Sie ändert, welches Todo oben steht, und wer eine
+      Liste in ungewohnter Reihenfolge vorfindet, sucht den Grund zuerst bei
+      den Filtern. Ein Eintrag, der ihn nennt und zurücksetzt, spart das.
+    */
+    if (sort !== "") {
+      entries.push({
+        id: "sort",
+        field: "Ordnung",
+        value: TODO_SORT_LABEL[sort],
+        onRemove: () => setSort(""),
+      });
+    }
     return entries;
-  }, [search, statusId, poolId, tagIds, showDone, statuses, pools, structure]);
+  }, [search, statusId, poolId, tagIds, showDone, deadlineFilter, sort, statuses, pools, structure]);
 
   const resetAll = useCallback(() => {
     setSearch("");
@@ -171,6 +268,8 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
     setPoolId("");
     setTagIds([]);
     setShowDone(false);
+    setDeadlineFilter("");
+    setSort("");
   }, []);
 
   const toggleDone = useCallback(
@@ -210,9 +309,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
               tone: "success",
               title: `${quotedName(todo.title)} ist erledigt.`,
               body: withMovement(
-                showDone
-                  ? unchanged
-                  : `Es verschwindet damit aus dieser Liste, solange erledigte ausgeblendet sind. ${unchanged}`,
+                showDone ? unchanged : `Aus dieser Liste ausgeblendet. ${unchanged}`,
                 movement,
               ),
               action: undoDoneAction(todo.id, todo.title, toasts, bump),
@@ -381,6 +478,29 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                 onChange={setTagIds}
                 placeholder="Nach Tag filtern …"
               />
+              <Select
+                label="Frist"
+                value={deadlineFilter}
+                onChange={(next) => setDeadlineFilter(asDueState(next))}
+                options={[
+                  { value: "", label: "Jede Frist" },
+                  { value: "overdue", label: DEADLINE_FILTER_LABEL.overdue },
+                  { value: "due_today", label: DEADLINE_FILTER_LABEL.due_today },
+                  { value: "due_later", label: DEADLINE_FILTER_LABEL.due_later },
+                  { value: "no_due_date", label: DEADLINE_FILTER_LABEL.no_due_date },
+                ]}
+              />
+              <Select
+                label="Ordnung"
+                value={sort}
+                onChange={(next) => setSort(next === "asc" || next === "desc" ? next : "")}
+                options={[
+                  { value: "", label: TODO_SORT_LABEL[""] },
+                  { value: "asc", label: TODO_SORT_LABEL.asc },
+                  { value: "desc", label: TODO_SORT_LABEL.desc },
+                ]}
+                hint="Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten."
+              />
               <FilterToggle
                 label="Erledigte einblenden"
                 pressed={showDone}
@@ -457,6 +577,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                       todo.completedAt !== null,
                       timer.reactivated.has(todo.id),
                     )}
+                    today={today}
                     onToggleDone={() => toggleDone(todo)}
                     onToggleTimer={() => timer.toggle(todo.id, todo.title)}
                     menu={rowMenu(todo)}
@@ -553,6 +674,8 @@ interface TodoRowProps {
    * reicht ihn die Liste herein, statt ihn hier aus `completedAt` zu raten.
    */
   readonly doneState: DoneFlagState;
+  /** Heute, aus `useToday` der Ansicht — nicht je Zeile geholt. */
+  readonly today: CalendarDay;
   readonly onToggleDone: () => void;
   readonly onToggleTimer: () => void;
   readonly menu: readonly MenuEntry[];
@@ -565,6 +688,7 @@ function TodoRow({
   statusName,
   running,
   doneState,
+  today,
   onToggleDone,
   onToggleTimer,
   menu,
@@ -602,6 +726,13 @@ function TodoRow({
             Etikett hier als einziger Listenansicht nicht (Befund C-23).
           */}
           <DoneFlag state={doneState} />
+          {/*
+            Die Frist (A-19.4): sichtbar, ohne dass man das Todo öffnen muss.
+            Sie steht zwischen dem Erledigt-Kennzeichen und den Tags — und sie
+            steht **gar nicht** da, wenn keine gesetzt ist (A-19.5). Damit
+            trägt die Mehrzahl der Zeilen weiterhin zwei Marken und nicht drei.
+          */}
+          <DeadlineFlag dueDate={todo.dueDate} today={today} />
         </div>
       </div>
 

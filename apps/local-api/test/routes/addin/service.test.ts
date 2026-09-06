@@ -122,6 +122,7 @@ const baseTodo = (overrides: Partial<Todo> = {}): Todo => ({
   callNumber: CALL_NUMBER,
   statusId: statusId('status-1'),
   completedAt: null,
+  dueDate: null,
   tagIds: [tagId('irrelevant')],
   createdAt: timestamp('2026-08-31T07:00:00Z'),
   updatedAt: timestamp('2026-08-31T07:00:00Z'),

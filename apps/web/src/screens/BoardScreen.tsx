@@ -2,7 +2,15 @@ import { countPoolRuleConditions } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import { clearTodoDone, markTodoDone, getBoard, updatePool } from "../api/endpoints";
-import type { BoardColumnView, Id, Pool, PoolRuleTerm, Todo } from "../api/types";
+import type {
+  BoardColumnView,
+  CalendarDay,
+  ForeignText,
+  Id,
+  Pool,
+  PoolRuleTerm,
+  Todo,
+} from "../api/types";
 import { FilterToggle } from "../components/FilterBar";
 import { FormDialog } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
@@ -18,6 +26,7 @@ import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { undoDoneAction } from "../app/undoDone";
 import { useAsync } from "../app/useAsync";
+import { useToday } from "../app/useToday";
 import { formatDuration, formatTime, plural } from "../lib/format";
 import {
   POOL_PLACEMENT_SHORT,
@@ -36,6 +45,7 @@ import {
 } from "../lib/poolRule";
 import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { PoolRenameDialog } from "./PoolRenameDialog";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
@@ -115,6 +125,13 @@ function seedTagsOf(column: Pool): readonly Id[] {
 export function BoardScreen() {
   const structure = useStructure();
   const timer = useTimer();
+  /*
+    Der heutige Tag, **einmal je Ansicht** (E-073 Punkt 2). Er wandert durch
+    `BoardColumn` bis an die Karte; ein `useToday` je Karte wäre ein Zeitgeber
+    je Karte, und bei achtzig Karten hätte das Board achtzig Zeitgeber auf
+    dieselbe Mitternacht.
+  */
+  const today = useToday();
   const toasts = useToasts();
   const { version, bump } = useRefresh();
 
@@ -123,6 +140,15 @@ export function BoardScreen() {
   const [setupOpen, setSetupOpen] = useState(false);
   /** Offener Regel-Dialog: `null` zu, sonst anlegen (`pool` fehlt) oder ändern. */
   const [ruleForm, setRuleForm] = useState<{ readonly pool?: Pool } | null>(null);
+  /**
+   * Die Spalte, die gerade umbenannt wird (O-A).
+   *
+   * Ein **eigener** Zustand neben `ruleForm` und nicht dessen Sonderfall: Die
+   * beiden Dialoge tun Verschiedenes. Der eine ändert eine Regel über fünf
+   * Achsen, der andere ein Wort — und wer nur das Wort ändern will, soll nicht
+   * versehentlich die ganze Regel neu schreiben.
+   */
+  const [renaming, setRenaming] = useState<Pool | null>(null);
   const [createIn, setCreateIn] = useState<Pool | null>(null);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [highlighted, setHighlighted] = useState<Id | null>(null);
@@ -138,6 +164,12 @@ export function BoardScreen() {
 
   const lookup = useRuleLookup();
   const pools = structure.state.status === "ready" ? structure.state.value.pools : [];
+  /*
+   * **Alle** Regeln, nicht nur die der Pool-Fläche: Der eindeutige Index
+   * `ux_pool_name` gilt über die ganze Tabelle, also kollidiert der Name einer
+   * Spalte auch mit dem einer Regel, die nur in den Pools steht (O-A).
+   */
+  const allRules = structure.state.status === "ready" ? structure.state.value.rules : [];
 
   const toggleDone = useCallback(
     (todo: Todo) => {
@@ -287,16 +319,33 @@ export function BoardScreen() {
             icon: "plus",
             onSelect: () => setCreateIn(column),
           },
+      /*
+       * „Umbenennen" steht **vor** „Regel bearbeiten" und trägt den Stift
+       * (O-A). Bis T-133 gab es den Eintrag nicht: Wer eine Spalte umbenennen
+       * wollte, musste erraten, dass der Name im Regelformular steht — und
+       * schrieb beim Speichern alle fünf Achsen neu, um ein Wort zu ändern.
+       *
+       * Die Reihenfolge folgt der Häufigkeit, das Symbol der Bedeutung: Der
+       * Stift ist an jeder anderen Fläche das Umbenennen (S-08, S-09), und das
+       * Regelformular bekommt dafür den Trichter — eine Regel **ist** ein
+       * Filter (E-055), und der Weg in die Liste zeigt seitdem hinaus.
+       */
+      {
+        id: "rename",
+        label: "Umbenennen",
+        icon: "pencil",
+        onSelect: () => setRenaming(column),
+      },
       {
         id: "edit",
         label: "Regel bearbeiten",
-        icon: "pencil",
+        icon: "filter",
         onSelect: () => setRuleForm({ pool: column }),
       },
       {
         id: "list",
         label: "Alle Todos dieser Regel in der Liste",
-        icon: "filter",
+        icon: "arrow-up-right",
         onSelect: () => navigate("todos", undefined, { pool: column.id }),
       },
       { kind: "separator", id: "sep" },
@@ -318,9 +367,23 @@ export function BoardScreen() {
 
   return (
     <section className="screen">
+      {/*
+        Nur noch das **Verhalten** (T-181, ST-05). Die Definition steht im
+        Einrichtungsdialog, dort, wo eine Spalte entsteht; hier steht die
+        Frage, die vor dem Board tatsaechlich gestellt wird: warum laesst
+        sich nichts ziehen, warum ist die Karte weg. Der Satz bleibt
+        ungekuerzt — er ist die einzige Stelle, an der Takt erklaert, warum
+        A-5.2 seit E-054 nicht mehr gilt (Auflage aus T-177 Abschnitt 1.1).
+
+        Was die haeufigere Frage beantwortet — „warum steht **diese** Karte
+        **hier**" —, ist die `RuleSummary` unter jedem Spaltenkopf. Sie ist
+        seit T-181 als Definition der Spalte gezeichnet und nicht mehr als
+        Fussnote: `.kcolumn__head` ohne Trennlinie, `.rule-summary` in
+        `--text-secondary` (`components.css`).
+      */}
       <ScreenHeader
         title="Kanban"
-        lead={`${RULE_IS_A_RULE} ${RULE_WHAT_MOVES_A_CARD}`}
+        lead={RULE_WHAT_MOVES_A_CARD}
         actions={
           <>
             <FilterToggle
@@ -353,7 +416,7 @@ export function BoardScreen() {
               <BoardEmptyState
                 pools={pools}
                 poolsKnown={structure.state.status === "ready"}
-                onCreate={() => setRuleForm({})}
+                onOpenSetup={() => setSetupOpen(true)}
                 onAdopt={(pool) => setPlacement(pool, "both")}
               />
             );
@@ -399,11 +462,20 @@ export function BoardScreen() {
                       setAnnouncement(
                         next === null
                           ? "Hervorhebung aufgehoben."
-                          : `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].join(", ")}.`,
+                          : /*
+                               Jeder Name einzeln behandelt (O-AT): `join` auf
+                               einer Reihe fremden Textes ergibt gewöhnlichen
+                               Text — die Herkunft fällt dabei ab, und mit ihr
+                               die Pflicht. Der Satz wird angesagt; ein
+                               Richtungszeichen in einem Regelnamen drehte
+                               ihn um.
+                             */
+                            `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].map(quotedName).join(", ")}.`,
                       );
                     }}
                     isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
                     isReactivated={(todo) => timer.reactivated.has(todo.id)}
+                    today={today}
                     statusName={(todo) => structure.statusName(todo.statusId)}
                   />
                 ))}
@@ -444,6 +516,10 @@ export function BoardScreen() {
           setSetupOpen(false);
           setRuleForm({ pool });
         }}
+        onRename={(pool) => {
+          setSetupOpen(false);
+          setRenaming(pool);
+        }}
         /*
           Beide Knöpfe schließen den Dialog, und zwar **vor** der Meldung
           (W-6 aus R-2a).
@@ -475,6 +551,21 @@ export function BoardScreen() {
         {...(ruleForm?.pool === undefined ? {} : { pool: ruleForm.pool })}
         defaultPlacement="board"
         onClose={() => setRuleForm(null)}
+      />
+
+      {/*
+        Umbenennen (O-A). Die Liste für die Vorabprüfung sind **alle** Regeln
+        und nicht die Spalten dieses Boards: `ux_pool_name` ist eindeutig über
+        die ganze Tabelle, also kollidiert eine Spalte auch mit einem Pool, der
+        hier gar nicht steht. `rules` liegt in der Struktur; ist sie noch nicht
+        geladen, sagt `existingKnown` das, statt einen Bestand zu behaupten.
+      */}
+      <PoolRenameDialog
+        open={renaming !== null}
+        pool={renaming}
+        existing={allRules}
+        existingKnown={structure.state.status === "ready"}
+        onClose={() => setRenaming(null)}
       />
 
       {/*
@@ -522,7 +613,13 @@ type PlacementChange = (
 
 interface BoardColumnProps {
   readonly view: BoardColumnView;
-  readonly columnName: ReadonlyMap<Id, string>;
+  /**
+   * Spaltenname je Kennung — **fremder Text** (O-AT, T-133). Bis dahin
+   * `ReadonlyMap<Id, string>`: Die Namen fielen beim Eintritt in die Karte aus
+   * ihrer Herkunft, und die Behandlung weiter unten stand nur noch da, weil
+   * jemand daran gedacht hatte.
+   */
+  readonly columnName: ReadonlyMap<Id, ForeignText>;
   readonly appearances: ReadonlyMap<Id, readonly Id[]>;
   readonly summaries: {
     readonly byTodo: ReadonlyMap<Id, typeof EMPTY_SUMMARY>;
@@ -538,10 +635,12 @@ interface BoardColumnProps {
   readonly onEditTodo: (todo: Todo) => void;
   readonly onToggleDone: (todo: Todo) => void;
   readonly onToggleTimer: (todo: Todo) => void;
-  readonly onHighlight: (todo: Todo, otherColumns: readonly string[]) => void;
+  readonly onHighlight: (todo: Todo, otherColumns: readonly ForeignText[]) => void;
   readonly isTimerRunning: (todo: Todo) => boolean;
   readonly isReactivated: (todo: Todo) => boolean;
-  readonly statusName: (todo: Todo) => string;
+  readonly statusName: (todo: Todo) => ForeignText;
+  /** Heute, aus `useToday` der Ansicht (E-073 Punkt 2). */
+  readonly today: CalendarDay;
 }
 
 function BoardColumn({
@@ -563,6 +662,7 @@ function BoardColumn({
   isTimerRunning,
   isReactivated,
   statusName,
+  today,
 }: BoardColumnProps) {
   const structure = useStructure();
   const column = view.column;
@@ -610,7 +710,7 @@ function BoardColumn({
           const others = (appearances.get(todo.id) ?? [])
             .filter((id) => id !== column.id)
             .map((id) => columnName.get(id))
-            .filter((name): name is string => name !== undefined);
+            .filter((name): name is ForeignText => name !== undefined);
 
           return (
             <KanbanCard
@@ -631,6 +731,7 @@ function BoardColumn({
                 highlight: () => onHighlight(todo, others),
               })}
               highlighted={highlighted === todo.id}
+              today={today}
               onOpen={() => onOpenTodo(todo)}
               onToggleTimer={() => onToggleTimer(todo)}
               {...(others.length === 0 ? {} : { onHighlight: () => onHighlight(todo, others) })}
@@ -811,10 +912,10 @@ function toCard(
     readonly secondsByTodo: ReadonlyMap<Id, number>;
   },
   structure: ReturnType<typeof useStructure>,
-  statusName: string,
+  statusName: ForeignText,
   timerRunning: boolean,
   reactivated: boolean,
-  otherColumns: readonly string[],
+  otherColumns: readonly ForeignText[],
 ): KanbanCardData {
   return {
     id: todo.id,
@@ -830,6 +931,7 @@ function toCard(
     statusName,
     done: todo.completedAt !== null,
     reactivated,
+    dueDate: todo.dueDate,
     ...(otherColumns.length === 0 ? {} : { appearance: { otherColumns } }),
   };
 }
@@ -841,12 +943,17 @@ function toCard(
 /**
  * Kein Board heißt hier **nicht** „nichts zu tun".
  *
- * Nach der Umstellung auf E-054 ist das Board leer, und zwar aus einem Grund,
- * den der Benutzer kennen muss: Es gab keine ehrliche Übersetzung der alten
- * Statusspalten in Tag-Regeln, und Takt setzt keine Tags von sich aus. Ein
- * Leerzustand, der nur „keine Daten" sagt, ließe ihn glauben, seine Arbeit sei
- * verschwunden. Deshalb steht hier, was geschehen ist, wo seine Todos geblieben
- * sind und wie er in zwei Klicks eine Spalte bekommt.
+ * Das Board ist leer, weil Takt keine Spalte von sich aus einrichtet (E-054,
+ * E-055) — nicht, weil nichts zu tun wäre, und nicht, weil etwas verlorenging.
+ * Ein Leerzustand, der nur „keine Daten" sagt, wäre hier die teuerste Auskunft
+ * der Anwendung. Deshalb steht hier die **Abwesenheit**, genau eine primäre
+ * Aktion, und ein Weg zur Definition: „Erste Spalte einrichten" führt über den
+ * Einrichtungsdialog, in dem `RULE_IS_A_RULE` steht.
+ *
+ * Bis T-209 stand darunter zusätzlich die Karte „Was sich geändert hat". Sie
+ * erklärte eine Umstellung, die kein ausgelieferter Bestand erlebt hat, und ist
+ * mit UM-08 gefallen — wohin ihre vier Punkte gegangen sind, steht als
+ * Kommentar an der Stelle, an der sie stand.
  */
 export interface BoardEmptyStateProps {
   /** Vorhandene Pool-Regeln, die sich als Spalte aufnehmen lassen. */
@@ -861,14 +968,30 @@ export interface BoardEmptyStateProps {
    * Angabe, wird der Satz weggelassen statt geraten.
    */
   readonly poolsKnown?: boolean;
-  readonly onCreate: () => void;
+  /**
+   * Öffnet den **Einrichtungsdialog** des Boards (`BoardSetupDialog`), nicht
+   * unmittelbar das Regelformular (T-186, Befund aus TP-KANBAN-08).
+   *
+   * Bis dahin hieß diese Eigenschaft `onCreate` und sprang direkt in
+   * `PoolFormDialog`. Der Sprung war bequem und kostete die **Definition**:
+   * `RULE_IS_A_RULE` steht im Einrichtungsdialog, und seit ST-05 ist er eine
+   * von nur noch **zwei** Stellen, an denen Takt überhaupt sagt, daß eine
+   * Spalte eine Regel ist und kein Ablageort. Auf dem Weg des Leerzustands war
+   * sie damit nicht erreichbar — die Streichung war gebaut, der Ausgleich
+   * nicht (E-081 Punkt 4).
+   *
+   * Der Name sagt jetzt, wohin es geht. `onCreate` sagte, was am Ende
+   * herauskommt, und genau deshalb fiel niemandem auf, daß der Weg dahin einen
+   * Halt übersprang.
+   */
+  readonly onOpenSetup: () => void;
   readonly onAdopt: (pool: Pool) => void;
 }
 
 export function BoardEmptyState({
   pools,
   poolsKnown = true,
-  onCreate,
+  onOpenSetup,
   onAdopt,
 }: BoardEmptyStateProps) {
   return (
@@ -876,48 +999,66 @@ export function BoardEmptyState({
       <EmptyState
         icon="square"
         title="Das Board hat noch keine Spalte"
-        description={`Seit der Umstellung ist eine Spalte eine Regel — dieselbe Art Regel wie ein Pool, über Tags, Status, „Erledigt“ und den Exportstatus. Sie richten die Spalten selbst ein; Takt erfindet keine.`}
+        /*
+          „Seit der Umstellung …" ist mit T-181 (ST-05) gefallen: eine
+          Formulierung, die an ein Ereignis gebunden ist, altert. Was bleibt,
+          ist die **Abwesenheit** — Takt richtet nichts von selbst ein.
+
+          Die Definition ist von hier **einen** Klick entfernt: „Erste Spalte
+          einrichten" oeffnet `BoardSetupDialog`, dessen Beschreibung
+          `RULE_IS_A_RULE` ist (UM-03, Auflage Z-07 Punkt 1 — diese Kette ist
+          Teil der Freigabe des Textdurchgangs).
+
+          **Gemessen** wird sie in `tests/e2e/board-empty-state-rule-chain.spec.ts`
+          (TP-KANBAN-08). Bis T-186 stand hier derselbe Satz — und der Knopf
+          sprang am Dialog vorbei ins Regelformular. Ein Kommentar, der die
+          Erfuellung einer Auflage behauptet, nennt entweder die Stelle, an der
+          sie gemessen wird, oder er behauptet sie nicht.
+        */
+        description="Sie richten die Spalten selbst ein. Takt erfindet keine."
         action={
-          <Button variant="primary" iconStart="plus" onClick={onCreate}>
+          <Button variant="primary" iconStart="plus" onClick={onOpenSetup}>
             Erste Spalte einrichten
           </Button>
         }
       />
 
-      <Card title="Was sich geändert hat" description="Kurz, damit nichts verloren wirkt.">
-        <ul className="board-setup__points">
-          <li>
-            <strong>Ihre Todos sind vollzählig da.</strong> Sie stehen in der Todo-Liste, mit
-            Status, Tags und allen erfassten Zeiten. Es wurde nichts gelöscht und nichts
-            verschoben.
-          </li>
-          <li>
-            <strong>Der Status bleibt.</strong> Er ist weiterhin eine Eigenschaft jedes Todos und
-            wird in der Liste und in der Detailansicht geändert — er ist nur nicht mehr die
-            Spalte. Welche Statuswerte es gibt, richten Sie in den Einstellungen unter „Status“
-            ein.
-          </li>
-          <li>
-            <strong>Keine automatische Übersetzung.</strong> Aus „In Progress" ließe sich nur dann
-            eine Spalte machen, wenn Takt dafür ein Tag anlegte und an Ihre Todos hinge. Genau das
-            soll es nicht tun.
-          </li>
-          <li>
-            <strong>Nichts wird mehr gezogen.</strong> Welche Karte in welcher Spalte steht,
-            entscheidet die Regel der Spalte — über Tags, Status, „Erledigt“ und den
-            Exportstatus. Ändert sich am Todo etwas, wonach die Regel fragt, wandert es von
-            selbst.
-          </li>
-        </ul>
-        <div className="board-setup__actions">
-          <Button variant="primary" iconStart="plus" onClick={onCreate}>
-            Erste Spalte einrichten
-          </Button>
-          <Button variant="ghost" iconStart="arrow-up-right" onClick={() => navigate("todos")}>
-            Zur Todo-Liste
-          </Button>
-        </div>
-      </Card>
+      {/*
+        Hier stand bis T-209 die Karte „Was sich geändert hat" — vier Punkte und
+        zwei Knöpfe. Sie sprach zu jemandem, der **vor E-054 ein Statusboard
+        hatte**, und ihre Bedingung ist gemessen nie wahr (UM-08 in
+        `docs/design/textbestand.md`, Befund B-3 aus T-171): E-054 fiel vor der
+        ersten Auslieferung, und `0010_drop_board_rank` läuft in jeder frischen
+        Einrichtung mit der Kette 0001 bis 0015 durch. Es gibt keinen Bestand,
+        für den sie zutrifft, und es kann keinen mehr geben.
+
+        **Nichts davon ist spurlos verschwunden** — das ist die Bedingung, unter
+        der die Karte fallen durfte (E-081 Punkt 4: Streichung und Ausgleich in
+        einem Auftrag). Wohin die vier Punkte gegangen sind:
+
+         1. „Nichts wird mehr gezogen." steht als `RULE_WHAT_MOVES_A_CARD` im
+            `lead` dieser Ansicht — die Fassung in der Karte war die vierte
+            desselben Satzes.
+         2. „Keine automatische Übersetzung." steht kurz im Leerzustand
+            darüber: „Takt erfindet keine."
+         3. „Ihre Todos sind vollzählig da." und der Rest von „Der Status
+            bleibt." stehen in `docs/benutzerhandbuch.md` unter „Herkunft der
+            Spalten" (T-201, freigegeben in T-200 Z-54). Der Absatz ist seit
+            diesem Fall **Alleinträger** und steht als **SP-22** auf der
+            Sperrliste: Wer ihn beim nächsten Handbuchdurchgang als
+            Geschichtserzählung streicht, nimmt die Auskunft ganz weg.
+         4. Der **Verweisteil** von „Der Status bleibt." — wo die Statuswerte
+            herkommen — steht im Todo-Dialog am Statusfeld
+            (`TodoFormDialog.tsx`, `hint`). Er wurde hier nicht ersatzlos
+            gestrichen, sondern ist dort seit T-181 der Träger.
+
+        **Die zwei Knöpfe fallen mit.** „Erste Spalte einrichten" steht
+        wortgleich als Aktion des Leerzustands darüber (D — dieselbe Handlung
+        zweimal im selben Blickfeld), und „Zur Todo-Liste" ist ein
+        Navigationsknopf in einem Erklärkasten: Regel S-11 verbietet ihn, weil
+        ein Bedienweg an die Bedienstelle gehört und die Todo-Liste ohnehin in
+        der Hauptnavigation steht.
+      */}
 
       {!poolsKnown ? null : pools.length === 0 ? (
         <InlineMessage tone="info" title="Sie haben noch keine Regel">
@@ -966,6 +1107,7 @@ function BoardSetupDialog({
   onClose,
   onCreate,
   onEdit,
+  onRename,
   onAdopt,
   onRemove,
 }: {
@@ -986,6 +1128,8 @@ function BoardSetupDialog({
   readonly onClose: () => void;
   readonly onCreate: () => void;
   readonly onEdit: (pool: Pool) => void;
+  /** Nur den Namen ändern (O-A). Der zweite Weg neben dem Spaltenmenü. */
+  readonly onRename: (pool: Pool) => void;
   readonly onAdopt: (pool: Pool) => void;
   readonly onRemove: (pool: Pool) => void;
 }) {
@@ -996,7 +1140,14 @@ function BoardSetupDialog({
     <FormDialog
       open={open}
       title="Spalten des Boards"
-      description={`${RULE_IS_A_RULE} Dieselbe Entität wie ein Pool — was hier steht, ist eine Regel mit dem Anzeigeort „Board“.`}
+      /*
+        Die **Definition**, und zwar nur sie (T-181, ST-05). Der zweite
+        Halbsatz ist gefallen: Dass eine Spalte dieselbe Entitaet ist wie ein
+        Pool, zeigt die Liste darunter, die Spalten und Pools nebeneinander
+        fuehrt. Dass hier `RULE_IS_A_RULE` steht, ist Bedingung der Freigabe
+        von UM-03 (Auflage Z-07 Punkt 1).
+      */
+      description={RULE_IS_A_RULE}
       submitLabel="Neue Spalte anlegen"
       cancelLabel="Schließen"
       onSubmit={onCreate}
@@ -1057,13 +1208,29 @@ function BoardSetupDialog({
                   </p>
                 ) : null}
               </div>
+              {/*
+                Zwei getrennte Knöpfe, weil es zwei Handlungen sind (O-A):
+                „Umbenennen" schickt `{ name }`, „Regel bearbeiten" schreibt
+                alle fünf Achsen. Die Beschriftung sagt seit T-133, **was**
+                bearbeitet wird — „Bearbeiten" allein ließ offen, ob damit der
+                Name gemeint ist, und genau daran ist das Umbenennen bisher
+                gescheitert.
+              */}
               <Button
                 size="sm"
                 variant="secondary"
                 iconStart="pencil"
+                onClick={() => onRename(view.column)}
+              >
+                Umbenennen
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                iconStart="filter"
                 onClick={() => onEdit(view.column)}
               >
-                Bearbeiten
+                Regel bearbeiten
               </Button>
               <Button size="sm" variant="ghost" iconStart="x" onClick={() => onRemove(view.column)}>
                 Vom Board nehmen

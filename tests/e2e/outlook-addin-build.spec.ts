@@ -55,14 +55,24 @@ test.describe('TP-BUILD-03 — ohne Office-Wirt', () => {
 
     await expect(page.locator('.shell__brand')).toContainText('Takt');
 
-    // Beide Texte sind wörtlich aus `App.tsx#Body` — `no_host` ("Kein
-    // Outlook") oder `no_item` ("Keine E-Mail geöffnet"), je nachdem, ob
-    // `office.js` von seiner externen Herkunft laden konnte (siehe
-    // Dateikopf). Beides ist ein regulärer, erwarteter Zustand; nur ein
-    // dauerhaftes „Wird geladen" (Ladeplatzhalter, `host === null`) oder eine
-    // leere Seite wäre der gesuchte Fund.
+    // Beide Zustände sind aus `App.tsx#Body` — `no_host` ("Kein Outlook")
+    // oder `no_item` ("Keine E-Mail geöffnet"), je nachdem, ob `office.js`
+    // von seiner externen Herkunft laden konnte (siehe Dateikopf). Beides
+    // ist ein regulärer, erwarteter Zustand; nur ein dauerhaftes „Wird
+    // geladen" (Ladeplatzhalter, `host === null`) oder eine leere Seite wäre
+    // der gesuchte Fund.
     const outsideOutlook = page.getByText('Dieser Bereich läuft außerhalb von Outlook.', { exact: false });
-    const noEmailOpen = page.getByText('Öffne eine E-Mail, um daraus ein Todo anzulegen.', { exact: false });
+    // O-GE (T-192, E-080): `App.tsx` duzt an dieser einen Stelle noch
+    // ("Öffne eine E-Mail, um daraus ein Todo anzulegen.") — die einzige
+    // Stelle, die der E-080-Anredewächter im Add-in bislang duldet, weil
+    // dieser Prüffall den Satz bis hierher wörtlich festhielt
+    // (`IMPERATIV_AUSNAHME` in `apps/outlook-addin/scripts/proof-addin.mjs`,
+    // T-190). Der Vergleich hängt jetzt an dem Teil des Satzes, der in der
+    // heutigen Du-Form und der künftigen, gesiezten Fassung „Öffnen Sie eine
+    // E-Mail, um daraus ein Todo anzulegen." wörtlich gleich bleibt, und
+    // trägt damit beide, ohne selbst an der Anrede zu hängen — wird `App.tsx`
+    // entsprechend umgestellt, bleibt dieser Fall unverändert grün.
+    const noEmailOpen = page.getByText('eine E-Mail, um daraus ein Todo anzulegen.', { exact: false });
     await expect(outsideOutlook.or(noEmailOpen)).toBeVisible();
     await expect(page.locator('.shell__body')).not.toContainText('Wird geladen');
 

@@ -153,15 +153,35 @@ if (!existsSync(licenseFile)) {
 const rawVersion = process.env['TAKT_RELEASE_VERSION'];
 const extraArguments = [];
 
+// **Die Form ist zeichengleich die der Domäne** (Befund T-143 S-2).
+//
+// Bis T-147 stand hier `/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/` — dieselbe Gestalt,
+// aber **ohne** die Schranken `{1,9}` und `{1,64}` aus `VERSION_SHAPE`
+// (`packages/domain/src/version.ts`). Ein Etikett `v1234567890.0.0` baute damit
+// durch: Das Erzeugnis trug die Zahl, `takt_installed_version` gab sie heraus,
+// `checkVersion` wies sie danach als `malformed` ab, und `decideUpdateNotice`
+// lieferte dauerhaft `{ show: false, reason: 'unknown' }`. Die Versionsprüfung
+// dieses Erzeugnisses hätte sich **nie** gemeldet — still, ohne Protokollzeile,
+// nicht von „alles aktuell" zu unterscheiden. Dieselbe Fassung wiese auch
+// `takt_open_release` ab.
+//
+// Der Ausdruck aus `@takt/domain` einzubinden wäre der bessere Weg. Das Paket
+// liefert `.ts` und keine übersetzte Fassung, und eine Abhängigkeit in
+// `apps/desktop/package.json` einzutragen ist eine Entscheidung des
+// Orchestrators (offene Frage 2 aus T-143). Bis dahin gilt die zweite Hälfte
+// derselben Auflage: **gemessen statt aufgelöst.** `proof:shell-surface`
+// vergleicht diese Zeile zeichengleich mit `VERSION_SHAPE` und wird rot, sobald
+// die beiden auseinanderlaufen.
+const VERSION_SHAPE = /^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$/;
+
 if (typeof rawVersion === 'string' && rawVersion.trim() !== '') {
   const version = rawVersion.trim().replace(/^v/, '');
-  // Bewusst eng: drei Zahlen, wahlweise mit Vorabkennung. Alles andere lässt
-  // der Bündler entweder fallen oder übersetzt es in etwas, das niemand
-  // vorhergesagt hat — und das fiele erst am fertigen Installer auf.
-  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
+  if (!VERSION_SHAPE.test(version)) {
     fail(
       `TAKT_RELEASE_VERSION="${rawVersion}" ist keine brauchbare Fassungsangabe.\n` +
-        `Erwartet wird X.Y.Z, wahlweise mit Vorabkennung (1.2.3, 1.2.3-rc.1).\n` +
+        `Erwartet wird X.Y.Z, wahlweise mit Vorabkennung (1.2.3, 1.2.3-rc.1);\n` +
+        `jede Zahl höchstens neunstellig, die Vorabkennung höchstens 64 Zeichen —\n` +
+        `dieselbe Form wie VERSION_SHAPE in packages/domain/src/version.ts.\n` +
         `Ein führendes „v" wird abgeschnitten, alles andere nicht geraten.`,
     );
   }

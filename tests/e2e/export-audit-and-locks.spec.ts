@@ -286,3 +286,125 @@ test('Fehlschlag der Vorschau, während der Bestätigungsdialog bereits offen is
   for (const entry of await listTimeEntriesByTodo(todoA.id)) await deleteTimeEntry(entry.id);
   for (const entry of await listTimeEntriesByTodo(todoB.id)) await deleteTimeEntry(entry.id);
 });
+
+/**
+ * O-GZ (T-192, aus T-186 selbst benannt) — TP-EXPST-15.
+ *
+ * T-186 hat den Bestätigungsknopf dieses Dialogs von `disabled` auf
+ * `aria-disabled` umgestellt (O-GP), damit er mit der Tastatur erreichbar
+ * bleibt und ein Klick sagen kann, was fehlt (SC 3.3.1). Genau das macht ihn
+ * aber **anklickbar** — die einzige Sicherung gegen die Handlung ist seither
+ * der Torwächter im `onClick` (`ConfirmDialog.tsx#confirmOrExplain`), und
+ * der war ungemessen. Zwei Fälle, beide nötig, weil dies der Dialog ist,
+ * hinter dem eine mögliche Doppelabrechnung liegt (E-012, R-10): die Meldung
+ * erscheint, UND die Handlung läuft **nicht** — ein Fall, der nur die
+ * Meldung prüft, misst die Hälfte.
+ *
+ * **Playwright-Falle (von T-186 selbst benannt, hier für den nächsten Fall
+ * dokumentiert):** Playwright hält ein `aria-disabled="true"`-Element für
+ * nicht bedienbar und verweigert einen gewöhnlichen `.click()`. Der Klick auf
+ * den gesperrten Knopf braucht deshalb `{ force: true }` — das überspringt
+ * ausschließlich Playwrights eigene Erreichbarkeitsprüfung (sichtbar, nicht
+ * verdeckt), löst aber weiterhin ein echtes, vertrauenswürdiges
+ * Klickereignis über die Eingabe-Pipeline des Browsers aus, auf das React
+ * genauso reagiert wie auf einen gewöhnlichen Klick. Ohne diesen Hinweis
+ * hält der nächste Prüffall den Knopf für kaputt, wenn `click()` ohne
+ * `force` scheitert.
+ *
+ * Die Bauplan-Messung aus T-186 (`toHaveCount(1)` **und** `toBeEmpty()`
+ * vorher, Marke am Knoten, derselbe Knoten nachher —
+ * `field-live-region-announcement.spec.ts` ist die Vorlage) läuft hier
+ * gleich mit: eine zweite, im Produkt tatsächlich erreichbare Stelle
+ * derselben Bauart — neben der Titelmeldung des Anlegen-Dialogs (Befund
+ * O-DA, geprüft in `field-live-region-announcement.spec.ts`). Bewusst über
+ * die Befundkennung und die Datei benannt, nicht über den heutigen
+ * Dialogtitel im Wortlaut (O-KB, T-227): Ein Zitat des Titels wäre hier
+ * unangebunden — diese Datei prüft ihn nicht selbst — und würde bei der
+ * nächsten Titeländerung still falsch, statt mit dem dort stehenden
+ * Prüffall rot zu werden. Dieselbe Berichtigung wie in T-205 an O-IW
+ * (`timer-stop-announcement.spec.ts`), hier nachgezogen, wo T-224 sie
+ * ausdrücklich außerhalb des eigenen Auftrags belassen hatte.
+ */
+test('O-GZ — Klick auf den gesperrten Bestätigungsknopf beim Zurücksetzen: die Meldung erscheint, doch die Handlung bleibt aus; erst mit Begründung läuft sie', async ({
+  page,
+}) => {
+  const title = `E2E-GATE-RESET-${Date.now()}`;
+  const todo = await createTodo({ title });
+  await createTimeEntry({
+    todoId: todo.id,
+    startedAt: todayAt(10, 0),
+    endedAt: todayAt(10, 20),
+    note: 'Vor dem Zurücksetzen',
+  });
+
+  await gotoExport(page);
+  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  await runExportFromScreen(page);
+
+  const afterExport = await listTimeEntriesByTodo(todo.id);
+  expect(afterExport[0]?.exportStatus).toBe('exported');
+  expect(afterExport[0]?.exportCount).toBe(1);
+
+  await gotoTodo(page, todo.id);
+  await chooseEntryMenuItem(page, 'Exportstatus zurücksetzen');
+  const resetDialog = page.getByRole('alertdialog', { name: 'Exportstatus zurücksetzen?' });
+  await expect(resetDialog).toBeVisible();
+
+  const confirmButton = resetDialog.getByRole('button', { name: 'Zurücksetzen' });
+  await expect(confirmButton).toHaveAttribute('aria-disabled', 'true');
+
+  // Vorher: die Meldefläche der Begründung steht schon da, aber leer — genau
+  // der Bauplan aus T-186 (siehe Dateikopf).
+  const liveRegion = resetDialog.locator('.dialog__reason .field__live');
+  await expect(liveRegion).toHaveCount(1);
+  await expect(liveRegion).toBeEmpty();
+  await liveRegion.evaluate((element) => element.setAttribute('data-e2e-marker', 'reset-reason-live'));
+
+  // Der Klick auf den gesperrten Knopf, ohne Begründung und ohne das
+  // Kontrollkästchen — beide Bedingungen aus `ConfirmDialog.tsx#blocked`
+  // fehlen hier gleichzeitig; welche davon den Torwächter auslöst, ist für
+  // diesen Fall unerheblich, denn `confirmOrExplain` setzt `reasonTouched`
+  // in jedem gesperrten Fall (siehe Dateikopf im Quelltext).
+  await confirmButton.click({ force: true });
+
+  // Derselbe markierte Knoten trägt jetzt den Text — kein neues, zweites
+  // `role="alert"` an anderer Stelle.
+  const markedRegion = resetDialog.locator('.field__live[data-e2e-marker="reset-reason-live"]');
+  await expect(markedRegion).toHaveCount(1);
+  await expect(markedRegion).toContainText('Begründung für das Protokoll fehlt.');
+
+  // Gegenprobe: der Dialog steht noch, und die Handlung ist **nicht**
+  // gelaufen — der Exportstatus und sein Zähler sind unverändert. Das ist
+  // der eigentliche Kern von O-GZ: eine Meldung ohne diese Prüfung deckt nur
+  // die Hälfte des Torwächters ab.
+  await expect(resetDialog).toBeVisible();
+  const afterBlockedClick = await listTimeEntriesByTodo(todo.id);
+  expect(afterBlockedClick[0]?.exportStatus).toBe('exported');
+  expect(afterBlockedClick[0]?.exportCount).toBe(1);
+
+  // Mit Begründung und Kontrollkästchen: derselbe Knopf, diesmal ohne
+  // `force`, weil er nicht mehr `aria-disabled` ist — die Handlung läuft.
+  const reasonText = `E2E-Gate-Begruendung-${Date.now()}`;
+  await resetDialog.getByLabel(/Begründung für das Protokoll/).fill(reasonText);
+  await resetDialog
+    .getByLabel(/Mir ist klar, dass diese Zeit dadurch ein zweites Mal abgerechnet werden kann/)
+    .check();
+  await expect(confirmButton).not.toHaveAttribute('aria-disabled');
+  await confirmButton.click();
+  await expect(resetDialog).toBeHidden();
+
+  const afterReset = await listTimeEntriesByTodo(todo.id);
+  expect(afterReset[0]?.exportStatus).toBe('open');
+  // E-047/R-10: die Historie sinkt beim Zurücksetzen nicht.
+  expect(afterReset[0]?.exportCount).toBe(1);
+
+  // Kein Aufräumen hier: Eine Buchung mit Exportprotokoll (dieser Fall hat
+  // sie exportiert und zurückgesetzt, `exportCount: 1` bleibt) lässt sich
+  // über die API nicht mehr löschen — der Dienst antwortet mit `422
+  // validation_error` ("Ein verwiesener Datensatz existiert … oder wird
+  // noch benutzt", gemessen bei einem Löschversuch), weil das Protokoll auf
+  // sie verweist. Das ist dieselbe Regel wie bei `TP-SEC-13`
+  // (`export-audit-and-locks.spec.ts` Zeile 56), die ihre exportierte
+  // Buchung aus demselben Grund ebenfalls unbereinigt im gemeinsamen Bestand
+  // lässt, nicht ein Versehen dieses Falls.
+});

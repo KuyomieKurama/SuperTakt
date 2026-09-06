@@ -318,6 +318,84 @@ Desktop-Erfahrung, weil die Anwendung primär für produktives Arbeiten am PC ge
 
 ---
 
+## 18. Versionsprüfung
+
+Nachtrag des Auftraggebers vom 2026-09-04. Takt bleibt eine lokale Anwendung (E-001); dieser
+Abschnitt beschreibt die **einzige** Verbindung nach außen, die sie kennt, und zwar in dem Umfang,
+in dem sie erlaubt ist.
+
+| ID | Anforderung |
+|---|---|
+| A-18.1 | Takt ermittelt die eigene installierte Fassung eindeutig aus einer einzigen Quelle im Erzeugnis. |
+| A-18.2 | Beim Start und danach regelmäßig prüft Takt, ob im offiziellen GitHub-Bestand eine neuere veröffentlichte Fassung vorliegt. |
+| A-18.3 | Gefragt wird die dafür vorgesehene offizielle Quelle: die Releases des Bestands. Die Adresse ist fest im Erzeugnis hinterlegt und weder einstellbar noch aus einer Antwort übernehmbar. |
+| A-18.4 | Verglichen wird die installierte Fassung mit der neuesten veröffentlichten. Der Vergleich folgt einer festgelegten Ordnung von Versionsnummern, nicht dem Zeichenkettenvergleich. |
+| A-18.5 | Liegt keine neuere Fassung vor, sagt Takt nichts und tut nichts. |
+| A-18.6 | Liegt eine neuere Fassung vor, zeigt Takt sie an, und zwar mindestens: die installierte Fassung, die verfügbare Fassung und den Verweis auf die offizielle Release-Seite dieser Fassung. |
+| A-18.7 | Takt fragt ausdrücklich, ob der Benutzer installieren oder überspringen möchte. Es gibt keine Vorauswahl, die eine der beiden Antworten für ihn trifft. |
+| A-18.8 | Wählt der Benutzer „Installieren", öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
+| A-18.9 | Takt lädt zu keinem Zeitpunkt eine Datei herunter und installiert zu keinem Zeitpunkt etwas. Herunterladen und Installieren löst ausschließlich der Benutzer aus, außerhalb von Takt. |
+| A-18.10 | Wählt der Benutzer „Überspringen", wird genau diese Fassung übersprungen. Für sie erscheint der Hinweis nicht wieder; eine spätere, neuere Fassung wird wieder gemeldet. |
+| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen im selben Lauf. Der Grund steht im Protokoll. |
+| A-18.12 | Die Prüfung überträgt nichts über den Benutzer, den Bestand oder die Nutzung. Sie stellt eine Frage und liest eine Antwort. |
+
+**Was diese Anforderung ausdrücklich nicht ist.** Kein Selbstaktualisierer, kein Hintergrundlader,
+keine Telemetrie. E-001 gilt unverändert für alles andere: Es gibt weiterhin keinen Cloud-Dienst,
+keinen Datenbankserver und keine Übertragung von Daten aus Takt heraus.
+
+---
+
+## 19. Frist und Anhänge am Todo
+
+Nachtrag des Auftraggebers vom 2026-09-05, mit der Anhangfunktion von Super Productivity als
+Vorbild für Bedienung und Verhalten. Beides hängt am **bestehenden** Todo und ist keine zweite
+Struktur daneben.
+
+### 19.1 Frist
+
+| ID | Anforderung |
+|---|---|
+| A-19.1 | Ein Todo kann eine Frist tragen. Sie ist **optional**; ein Todo ohne Frist bleibt in jeder Hinsicht ein gültiges Todo. |
+| A-19.2 | In der Oberfläche heißt sie ausschließlich **„Frist"**. Nicht „Fälligkeitsdatum", nicht „fällig am", nicht „Deadline". |
+| A-19.3 | Die Frist wird beim Anlegen und beim Bearbeiten eines Todos gesetzt, geändert und wieder entfernt. |
+| A-19.4 | Die Frist ist in der Todo-Ansicht sichtbar, ohne dass man das Todo öffnen muss. |
+| A-19.5 | Drei Zustände sind unterscheidbar und benannt: **überfällig**, **heute fällig**, **später fällig**. Ein Todo ohne Frist hat keinen dieser Zustände. |
+| A-19.6 | Die Frist ist ein Tag, keine Uhrzeit. Die drei Zustände aus A-19.5 sind Tagesvergleiche. |
+| A-19.7 | Die Frist ändert nichts an Pools, Spalten, Zeitbuchungen oder Export. Sie ist eine Eigenschaft des Todos, keine neue Achse. |
+
+### 19.2 Anhänge
+
+| ID | Anforderung |
+|---|---|
+| A-19.8 | Ein Todo kann **beliebig viele** Anhänge tragen. |
+| A-19.9 | Es gibt drei Arten: **Verweis** (öffnet im Browser), **Bild** (wird als Vorschaubild angezeigt), **Datei** (öffnet mit der Standardanwendung des Systems). |
+| A-19.10 | Beim Hinzufügen bestimmt die gewählte Art das Eingabefeld: Verweis → **Adresse** (Pflicht) und **Titel** (optional); Bild → **Bild** (Pflicht) und **Titel** (optional); Datei → **Dateipfad** (Pflicht) und **Titel** (optional). |
+| A-19.11 | Anhänge sind unmittelbar am Todo sichtbar und dort verwaltbar: hinzufügen, öffnen, entfernen. |
+| A-19.12 | Bei Verweis und Datei steht der Titel als Bezeichnung; fehlt er, steht dort etwas Lesbares aus Adresse beziehungsweise Pfad und nie eine leere Zeile. |
+| A-19.13 | Ein Bild wird als Vorschaubild dargestellt. |
+| A-19.14 | Anhänge und Frist werden gespeichert und stehen beim erneuten Öffnen des Todos unverändert wieder da. |
+| A-19.15 | Ein Anhang, der sich nicht öffnen lässt — Datei verschwunden, Adresse unbrauchbar, Bild nicht mehr lesbar —, sagt das an Ort und Stelle. Er verschwindet nicht und er wirft nicht. |
+
+### 19.3 Sortieren, Filtern und das Add-in
+
+Nachtrag des Auftraggebers vom 2026-09-05, als Antwort auf F-20.
+
+| ID | Anforderung |
+|---|---|
+| A-19.20 | Die Todo-Liste lässt sich nach der Frist **sortieren** und nach ihr **filtern**. |
+| A-19.21 | Das Outlook-Add-in kann beim Anlegen eines Todos eine **Frist** setzen. |
+
+### 19.4 Was dabei nicht geschehen darf
+
+| ID | Anforderung |
+|---|---|
+| A-19.16 | Bestehende Todos funktionieren unverändert weiter. Frist und Anhänge sind Ergänzungen, keine Umstellung. |
+| A-19.17 | Die Notiz-Trennung bleibt: Weder Frist noch Anhang gelangen in einen Export. |
+| A-19.18 | Ein Anhang wird **nur auf ausdrückliche Handlung des Benutzers** geöffnet. Nichts öffnet sich beim Anzeigen einer Liste, beim Laden eines Todos oder als Nebenwirkung. |
+| A-19.19 | Über das Outlook-Add-in entstehen **keine** Anhänge. Es legt Todos an und bucht Zeiten; ein Anhang, der aus einer E-Mail stammt, wäre ein von außen geschriebener Öffnen-Befehl. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

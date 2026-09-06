@@ -22,6 +22,7 @@ import {
 
 import { createApp } from './app.ts';
 import { nodeSecretDigest, type SecretDigestPort } from './access/crypto.ts';
+import { createAttachmentBlobPort } from './access/attachment-store.ts';
 import { createDirectoryInsightPort } from './access/export-directory.ts';
 import { createNoticeBoard, type NoticeBoard } from './access/notices.ts';
 import { EMPTY_THROTTLE } from './access/throttle.ts';
@@ -33,6 +34,8 @@ import type { AccessRuntime } from './runtime.ts';
 import type { TaktEnv } from './http/guards.ts';
 import type { AppContext } from './usecases/context.ts';
 import type { ExportFaultInjection } from './usecases/export.ts';
+import { createVersionChecker, type VersionChecker } from './version/checker.ts';
+import type { ReleaseSourcePort } from './version/source.ts';
 
 export interface CompositionOptions {
   readonly port: number;
@@ -61,6 +64,21 @@ export interface CompositionOptions {
    * prüft die Kette, nicht den Datenpfad.
    */
   readonly databaseLocation?: string;
+  /**
+   * Wo die Bildkopien der Anhänge liegen — das Anwendungsdatenverzeichnis
+   * (E-018, E-071 Punkt 2, A-A-17).
+   *
+   * Er kommt aus dem Zusammenbau und nie aus einer Anfrage, genau wie
+   * `databaseLocation` (B-1.6 Punkt 1). **Ohne Angabe gibt es keinen Ort**,
+   * und dann gibt es keine Bildanhänge: `copyImage` antwortet mit
+   * `write_failed` („Das Bild konnte nicht abgelegt werden."), `readImage`
+   * mit `bad_name`. Das ist der Zustand jedes Prüfpfads mit `':memory:'` —
+   * eine Antwort und kein Wurf.
+   *
+   * Seit T-159 nicht mehr `unreadable`: Dieser Satz sagte „Diese Datei lässt
+   * sich nicht lesen." über eine Datei, die tadellos ist.
+   */
+  readonly appDataDir?: string;
   /** Zeitzone für die Tagesgruppierung des Exports (E-025). */
   readonly timeZone?: string;
   /**
@@ -70,6 +88,18 @@ export interface CompositionOptions {
    * Begründung, warum er im Erzeugnis steht, in `usecases/export.ts`.
    */
   readonly exportFaults?: ExportFaultInjection;
+  /**
+   * Woher die zuletzt veröffentlichte Fassung kommt (E-066 Punkt 1).
+   *
+   * Ohne Angabe: die feste Adresse im Erzeugnis (A-V-1). Dieser Parameter ist
+   * die **prüfbare Naht** und kein Regler: Er liegt im Prozess, wie jeder
+   * andere Port dieses Zusammenbaus, und ist von außen nicht erreichbar — nicht
+   * über eine Route, nicht über eine Einstellung, nicht über eine
+   * Umgebungsvariable, nicht über ein Argument (der Sidecar kennt keine,
+   * B-1.6 Punkt 1). `proof:release-safety` misst, dass im ausgelieferten
+   * Zusammenbau kein Weg zu einer anderen Adresse führt.
+   */
+  readonly releaseSource?: ReleaseSourcePort;
 }
 
 export interface Composition {
@@ -79,6 +109,15 @@ export interface Composition {
   /** `null`, wenn keine Datenbank geöffnet wurde. Dann hängen keine Fachrouten. */
   readonly database: OpenedDatabase | null;
   readonly context: AppContext | null;
+  /**
+   * Die Versionsprüfung (E-069). **Gebaut, aber nicht gestartet.**
+   *
+   * `compose()` stellt keine Verbindung nach außen her — kein Nachweispfad und
+   * kein Prüffall, der den Dienst zusammenbaut, sendet dadurch ein
+   * Lebenszeichen (R-19 Punkt 3). Wer eine Anfrage will, ruft `start()`, und
+   * das tut genau eine Stelle: `main.ts`.
+   */
+  readonly versionCheck: VersionChecker;
 }
 
 export function compose(options: CompositionOptions): Composition {
@@ -129,6 +168,13 @@ export function compose(options: CompositionOptions): Composition {
           clock: clockPort,
           files: createFilePort(),
           directories: createDirectoryInsightPort(),
+          // Die Bildkopien der Anhänge (E-071 Punkt 2). Derselbe Ort wie der
+          // Bestand und dieselben Rechten (E-018, A-A-17); ohne Angabe kein
+          // Ort und damit keine Bildanhänge.
+          // Der Protokollschreiber ist derselbe wie überall. Er ist hier kein
+          // Beiwerk: Ein Fehlschlag beim Entfernen einer Bildkopie hat keinen
+          // anderen Empfänger (T-159, A-A-18).
+          attachmentBlobs: createAttachmentBlobPort(options.appDataDir ?? null, logger),
           // E-010, E-042: Der Windows-Benutzername kommt über die zweite
           // `stdin`-Zeile herein und wird von hier bis in `export_run` und
           // `export_audit` durchgereicht. Es gibt auf dem ganzen Weg keine
@@ -145,11 +191,24 @@ export function compose(options: CompositionOptions): Composition {
           ...(options.exportFaults === undefined ? {} : { exportFaults: options.exportFaults }),
         };
 
+  // Die Versionsprüfung (A-18.2, E-069). Sie hängt an keiner Datenbank: Was
+  // sie weiß, liegt im Arbeitsspeicher, und was übersprungen wurde, ist eine
+  // Einstellung wie jede andere und wird über `/settings` gelesen.
+  const versionCheck = createVersionChecker({
+    logger,
+    now: clock,
+    ...(options.releaseSource === undefined ? {} : { source: options.releaseSource }),
+  });
+
   return {
     runtime,
-    app: createApp(runtime, context === null ? {} : { context }),
+    app: createApp(runtime, {
+      ...(context === null ? {} : { context }),
+      versionState: () => versionCheck.current(),
+    }),
     tokens,
     database,
     context,
+    versionCheck,
   };
 }

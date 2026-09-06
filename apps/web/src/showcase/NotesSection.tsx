@@ -11,7 +11,7 @@ interface DifferenceRow {
 }
 
 const DIFFERENCES: readonly DifferenceRow[] = [
-  { trait: "Randschiene", billing: "4px gestreift, Akzentfarbe", internal: "4px einfarbig, Grau" },
+  { trait: "Randschiene", billing: "4px durchgezogen, Akzentfarbe", internal: "4px unterbrochen, Grau" },
   {
     trait: "Kopfband",
     billing: "„Verlässt Takt · steht in der Abrechnung“, Pfeil nach außen",
@@ -114,9 +114,9 @@ export function NotesSection() {
       >
         <p className="section__lead">
           „Leistung“ sagt, <em>was</em> in dem Feld steht, nicht <em>wohin</em> es geht. Diese
-          zweite Hälfte trägt deshalb nicht der Name, sondern die Gestaltung: die gestreifte
-          Randschiene, das Kopfband mit der Richtung und die gefüllte Marke unmittelbar vor dem
-          Wort. Die Marke ist neu gegenüber T-006 und der Grund dafür, dass die Zuordnung auch
+          zweite Hälfte trägt deshalb nicht der Name, sondern die Gestaltung: die durchgezogene
+          Randschiene gegen die unterbrochene des Vermerks, das Kopfband mit der Richtung und die
+          gefüllte Marke unmittelbar vor dem Wort. Die Marke ist neu gegenüber T-006 und der Grund dafür, dass die Zuordnung auch
           dann steht, wenn das Kopfband außerhalb des Blickfelds liegt — etwa in einem schmalen
           Dialog oder im Outlook-Add-in.
         </p>

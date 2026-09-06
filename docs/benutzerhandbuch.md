@@ -38,6 +38,11 @@ und erledigte Todos sowie die zuletzt bearbeiteten Todos. Die wichtigsten Handgr
 Timer starten und stoppen, lassen sich direkt von hier aus ausführen, ohne zuerst ein Todo zu
 öffnen.
 
+Hat mindestens ein Todo eine Frist, die bereits in der Vergangenheit liegt, zeigt das Dashboard
+zusätzlich eine Kachel „Überfällig" mit deren Anzahl. Ohne ein solches Todo bleibt die Kachel weg,
+statt eine Null anzuzeigen. Ein Klick auf „In der Todo-Liste zeigen" öffnet die Todo-Liste bereits
+auf genau diese Todos gefiltert.
+
 Die zuletzt bearbeiteten Todos sind eine Chronik, keine gefilterte Liste: Ein erledigtes Todo wird
 hier nicht ausgeblendet, sondern mit seinem Erledigt-Kennzeichen angezeigt. Das unterscheidet das
 Dashboard von den Pool-Ansichten, in denen erledigte Todos standardmäßig verschwinden (siehe
@@ -58,6 +63,9 @@ Bestätigung, welche dazugekommen sind, zum Beispiel „„Rechnung prüfen" ist
 Standard-Tag kam „Intern" hinzu." Das gilt auf jedem Weg, auf dem ein Todo entsteht, auch beim
 Anlegen aus dem Outlook-Add-in.
 
+Im selben Formular lässt sich auch schon eine Frist setzen, muss aber nicht; siehe „Eine Frist
+setzen" weiter unten.
+
 ### Ein Todo bearbeiten
 
 In der Detailansicht eines Todos lassen sich Titel, Tags und weitere Angaben ändern. Dort liegt
@@ -67,17 +75,88 @@ damit der Unterschied zwischen beiden auf einen Blick sichtbar bleibt.
 
 ### Ein Todo als erledigt markieren
 
-Ein Todo lässt sich jederzeit als erledigt markieren, unabhängig davon, in welcher Kanban-Spalte
-es gerade steht. Erledigt und Kanban-Spalte sind zwei voneinander unabhängige Eigenschaften: Ein
-Todo kann in der Spalte „Done" stehen und trotzdem nicht erledigt sein, und ein erledigtes Todo
-kann weiterhin in „In Progress" liegen. Keine Spalte gilt automatisch als „die Erledigt-Spalte".
+Ein Todo lässt sich jederzeit als erledigt markieren, unabhängig von seinem Status und unabhängig
+davon, in welchen Board-Spalten es gerade steht. Erledigt, Status und Board-Spalte sind drei
+voneinander unabhängige Eigenschaften: Ein Todo kann den Status „Done" tragen und trotzdem nicht
+erledigt sein, und ein erledigtes Todo kann weiterhin in einer Spalte stehen, die mit „Erledigt"
+gar nichts zu tun hat. Keine Spalte gilt automatisch als „die Erledigt-Spalte" — nur eine Spalte,
+deren Regel ausdrücklich nach „Erledigt" fragt, sammelt erledigte Todos (siehe „Wie eine Karte auf
+eine Spalte kommt" weiter unten).
 
 Solange ein Todo erledigt ist, wird es in den Pool-Ansichten standardmäßig ausgeblendet — nicht
 weil es aus dem Pool entfernt wurde, sondern weil erledigte Todos dort per Voreinstellung nicht
 angezeigt werden. Ein Schalter in der Filterleiste blendet sie bei Bedarf wieder ein; diese Wahl
-merkt sich Takt je Ansicht. Was beim erneuten Starten des Timers auf einem erledigten Todo
-geschieht, steht weiter unten unter einem eigenen Abschnitt, weil es der Punkt ist, an dem sich die
-meisten Rückfragen sammeln.
+merkt sich Takt je Ansicht.
+
+Setzt oder hebt man das Erledigt-Kennzeichen von Hand auf, meldet Takt zugleich, ob und wo sich
+dadurch etwas ändert: in welchen Pools oder Board-Spalten das Todo jetzt zusätzlich erscheint oder
+aus welchen es verschwindet. Passt keine Regel auf die Änderung, bleibt die Meldung entsprechend
+kurz. Was beim erneuten Starten des Timers auf einem erledigten Todo geschieht, steht weiter unten
+unter einem eigenen Abschnitt, weil es der Punkt ist, an dem sich die meisten Rückfragen sammeln.
+
+### Eine Frist setzen
+
+Jedes Todo kann eine Frist tragen, muss aber nicht. Eine Frist ist ein Tag, keine Uhrzeit; sie
+lässt sich beim Anlegen oder in der Detailansicht setzen, ändern und wieder entfernen — Letzteres,
+indem man das Feld leer lässt. In der Oberfläche heißt sie ausschließlich „Frist", nicht
+„Fälligkeitsdatum" und nicht „Deadline".
+
+Solange eine Frist gesetzt ist, zeigt Takt einen von drei Zuständen: **Überfällig**, wenn der Tag
+in der Vergangenheit liegt, **Heute fällig**, wenn er auf den heutigen Tag fällt, oder, wenn er
+noch in der Zukunft liegt, schlicht das Datum ohne ein vorangestelltes Wort — das ist „später
+fällig", nur eben ohne eigenes Ausrufezeichen auf dem Bildschirm. Ein Todo ohne Frist hat keinen
+dieser Zustände und trägt auch keine leere Marke dafür. Diese Zustände werden bei jedem Blick auf
+den Bildschirm neu berechnet und nicht gespeichert: Ein Todo, das gestern noch „heute fällig" war,
+zeigt heute von selbst „überfällig", ohne dass irgendjemand etwas angefasst hätte.
+
+Man sieht die Frist an zwei Stellen, ohne das Todo öffnen zu müssen: in der Todo-Liste und auf der
+Kanban-Karte. In der Todo-Liste lässt sich zusätzlich nach der Frist filtern (Überfällig, Heute
+fällig, Später fällig, Ohne Frist) und danach sortieren, welche Frist zuerst oder zuletzt kommt.
+Ein Todo ohne Frist steht dabei in beiden Sortierrichtungen ganz am Ende, statt mit einem
+erfundenen Datum irgendwo mittendrin zu erscheinen.
+
+**Eine Frist bewegt nichts.** Sie ändert nichts an Pools, an Board-Spalten und an Zeitbuchungen und
+erscheint in keinem Export. Sie ist eine reine Anzeige- und Planungshilfe — dieselbe Datentrennung
+wie beim Vermerk, nur aus einem anderen Grund: Eine Frist, die von sich aus eine Karte durchs Board
+schöbe, wäre eine Überraschung, keine Hilfe.
+
+### Anhänge an ein Todo hängen
+
+Ein Todo kann beliebig viele Anhänge tragen, in drei Arten:
+
+- **Verweis** — eine Adresse. Ein Klick öffnet sie im Browser.
+- **Datei** — ein Pfad auf dem eigenen Rechner. Ein Klick öffnet sie mit der Standardanwendung des
+  Systems, genau wie ein Doppelklick im Dateimanager.
+- **Bild** — Takt legt eine Kopie der Datei neben den eigenen Daten ab und zeigt sie als
+  Vorschaubild. Verschiebt man später die ursprüngliche Datei, bleibt das Vorschaubild trotzdem
+  erhalten, weil Takt mit der Kopie arbeitet. Ein Klick öffnet nichts nach draußen; die größere
+  Ansicht bleibt innerhalb von Takt.
+
+Beim Hinzufügen wählt man zuerst die Art, dann füllt sich das passende Feld: eine Adresse, ein
+Dateipfad oder eine Bilddatei, dazu wahlweise ein Titel. Ohne Titel zeigt die Liste stattdessen ein
+lesbares Stück der Adresse oder des Pfades — nie eine leere Zeile.
+
+**Vor dem Öffnen einer Datei fragt Takt bei jedem Klick nach**, und die Frage nennt den
+vollständigen Pfad und den Dateinamen: Eine Datei mit der Standardanwendung zu öffnen ist dasselbe
+wie sie im Dateimanager per Doppelklick zu starten. Trägt die Datei eine Endung, mit der
+üblicherweise Programme oder Befehlsfolgen laufen, sagt der Dialog das ausdrücklich, und der
+Bestätigungsknopf heißt dann „Ausführen" statt „Öffnen". Diese Rückfrage lässt sich nicht
+abschalten — es gibt kein Kontrollkästchen „nicht mehr fragen", und das ist Absicht: Sie ist die
+letzte Gelegenheit, eine unerwartete Datei zu erkennen, bevor sie startet. Bei einem Verweis gibt
+es diese Frage nicht; ein Browser zu öffnen ist der erwartete, harmlose Fall. Ein **Bild** öffnet
+ohnehin nichts nach draußen, also fragt hier auch nichts.
+
+Ein Anhang, der sich nicht mehr öffnen lässt — weil die Datei verschoben oder gelöscht wurde, eine
+Adresse ungültig geworden ist oder ein Bild sich nicht mehr lesen lässt —, verschwindet nicht
+einfach aus der Liste. Er bleibt stehen und sagt an seiner Stelle, was los ist.
+
+Nichts öffnet sich von selbst: kein Vorabladen, keine Vorschau, die im Hintergrund etwas startet.
+Ein Anhang öffnet ausschließlich auf einen eigenen Klick. Und wie der Vermerk gelangt kein Anhang
+in einen Export — er ist Arbeitsfläche, keine Rechnungsangabe.
+
+**Über das Outlook-Add-in entstehen keine Anhänge.** Das ist keine vorübergehende Einschränkung,
+sondern Absicht: Ein Anhang, der aus einer E-Mail heraus entstünde, wäre ein von außen
+geschriebener Befehl, etwas auf dem eigenen Rechner zu öffnen.
 
 ## Tags und Ordner verwalten
 
@@ -99,16 +178,33 @@ er fehlen würde.
 
 ## Todo-Pools einrichten
 
-Ein Pool bündelt Todos über ihre Tags, zum Beispiel alles unter dem Ordner „Kunden". Die Regel
-eines Pools nennt Tags und Ordner; ein genannter Ordner steht dabei auch für alles, was in ihm
-und, falls gewünscht, in seinen Unterordnern liegt. Trifft die Regel auf mehrere Tags gleichzeitig
-zu, entscheidet eine Einstellung, ob „Mindestens einer" davon reicht oder ob ein Todo „Alle"
-tragen muss, um zum Pool zu gehören.
+Ein Pool bündelt Todos über eine Regel. Diese Regel ist dieselbe Struktur wie bei den
+Kanban-Spalten im übernächsten Abschnitt — ein Pool und eine Board-Spalte sind sogar dieselbe
+Sache an zwei verschiedenen Stellen, siehe „Wie eine Karte auf eine Spalte kommt" weiter unten.
 
-Wichtig zu wissen: Die Mitgliedschaft in einem Pool wird nicht gespeichert, sondern bei jeder
-Anzeige neu aus den aktuellen Tags berechnet. Das ist auch der Grund, warum ein reaktiviertes Todo
-ohne weiteres Zutun wieder in seinem Pool erscheint, siehe „Was passiert, wenn der Timer auf einem
-erledigten Todo startet".
+Eine Regel prüft bis zu fünf Bedingungen zugleich, und jede zusätzlich genannte grenzt weiter ein:
+
+- **Erforderliche Tags** — die genannten Tags müssen vorhanden sein. Eine Einstellung legt fest,
+  ob eines davon reicht („Mindestens eines davon") oder ob das Todo alle genannten tragen muss
+  („Jedes der genannten").
+- **Ausgeschlossene Tags** — keiner der genannten Tags darf am Todo hängen.
+- **Status** — das Todo muss einen der ausgewählten Status tragen.
+- **Erledigt** — nur erledigte Todos, nur unerledigte, oder beides.
+- **Exportstatus** — nur Todos mit mindestens einer noch nicht abgerechneten Buchung, nur mit
+  mindestens einer abgerechneten, oder beides.
+
+Ein genannter Tag-Ordner, zum Beispiel „Kunden", steht dabei auch für alles, was unmittelbar in
+ihm liegt, und, falls gewünscht, auch für seine Unterordner, beliebig tief.
+
+Jede der fünf Bedingungen lässt sich auch auf „Alle" stellen. Das heißt nicht „trifft alles",
+sondern „schränkt nicht ein" — die übrigen Bedingungen entscheiden dann allein. Stehen alle fünf
+auf „Alle", ist die Regel leer und trifft deshalb **nichts**, nicht etwa alles: Eine gerade erst
+angelegte Regel enthält so lange kein Todo, bis mindestens eine Bedingung genannt ist.
+
+Wichtig zu wissen: Die Mitgliedschaft in einer Regel wird nicht gespeichert, sondern bei jeder
+Anzeige neu aus den aktuellen Tags und dem aktuellen Zustand des Todos berechnet. Das ist auch der
+Grund, warum ein reaktiviertes Todo ohne weiteres Zutun wieder in seinem Pool erscheint, siehe
+„Was passiert, wenn der Timer auf einem erledigten Todo startet".
 
 ## Standard-Tags festlegen
 
@@ -120,17 +216,50 @@ passt vorerst auch keine Poolregel auf sie.
 
 ## Mit dem Kanban-Board arbeiten
 
-### Todos zwischen Spalten verschieben
+### Wie eine Karte auf eine Spalte kommt
 
-Das Kanban-Board zeigt Todos in frei definierbaren Spalten, zwischen denen sie sich per Drag &
-Drop verschieben lassen. Die Spalten selbst, ihre Namen und ihre Reihenfolge sind in den
-Einstellungen konfigurierbar; „Backlog", „In Progress", „Waiting" und „Done" sind ein Beispiel,
-keine feste Vorgabe.
+Eine Spalte des Kanban-Boards ist dieselbe Sache wie ein Pool: eine Regel mit denselben fünf
+Bedingungen, die im Abschnitt „Todo-Pools einrichten" beschrieben sind. Was eine Spalte von einem
+Pool unterscheidet, ist ausschließlich, wo sie erscheint — nur im Bereich der Pools, nur auf dem
+Board, oder an beiden Stellen zugleich.
+
+**Karten lassen sich nicht mehr per Drag & Drop zwischen Spalten ziehen.** Weil eine Spalte eine
+Regel ist, würde ein Ziehen bedeuten, im Hintergrund heimlich Tags zu setzen oder zu entfernen,
+bis die Karte in die Zielspalte passt — und genau das tut Takt nicht. Eine Karte wechselt die
+Spalte stattdessen von selbst, sobald sich am Todo etwas ändert, das eine Regel abfragt: ein Tag,
+der Status, das Erledigt-Kennzeichen oder der Exportstatus einer seiner Buchungen. Aus demselben
+Grund kann eine Karte auch in mehreren Spalten gleichzeitig stehen, wenn sie auf mehrere Regeln
+zugleich passt — das ist kein Fehler, sondern die unmittelbare Folge davon, dass Spalten Regeln
+sind und keine feste Schublade.
+
+### Eine Spalte anlegen, umbenennen oder ändern
+
+Über „Spalten des Boards" lässt sich eine neue Spalte anlegen. Ebenso lässt sich dort eine bereits
+bestehende Regel aus den Pools zusätzlich als Spalte übernehmen („Als Spalte aufnehmen") — dieselbe
+Regel erscheint dann zusätzlich auf dem Board, ohne kopiert zu werden. „Vom Board nehmen" macht das
+wieder rückgängig; die Regel selbst bleibt dabei vollständig erhalten, nur ihr Anzeigeort ändert
+sich, und die Meldung dazu bietet einen Rückgängig-Knopf an, statt vorher nachzufragen, weil sich
+die Handlung jederzeit vollständig zurücknehmen lässt.
+
+Am Kopf jeder Spalte lassen sich zwei unterschiedliche Dinge tun, und sie heißen deshalb auch
+unterschiedlich: **„Umbenennen"** ändert nur den Namen der Regel, **„Regel bearbeiten"** öffnet das
+vollständige Formular mit allen fünf Bedingungen.
 
 ### Ein Todo direkt aus dem Board öffnen
 
 Jede Karte lässt sich direkt öffnen, um das dahinterliegende Todo zu bearbeiten, ohne den Umweg
 über die Todo-Liste.
+
+### Herkunft der Spalten
+
+Vor der ersten Veröffentlichung wies eine interne Reihenfolge jeder Karte ihren Platz in einer
+Spalte zu. Diese Reihenfolge wurde aber nie tatsächlich vom Benutzer gesetzt, und die Umstellung
+auf regelbasierte Spalten hat sie ersatzlos abgelöst. Jede ausgelieferte Fassung von Takt kennt
+bereits ausschließlich das heutige, regelbasierte Board: Kein bestehender Datenbestand ist von
+dieser Umstellung betroffen. Falls sie es doch einmal gewesen wäre: Kein Todo wäre dabei verloren
+gegangen oder verschoben worden. Es bliebe mit Status, Tags und allen erfassten Zeiten vollständig
+in der Todo-Liste, und der Status bliebe weiterhin eine eigene Eigenschaft des Todos, unabhängig
+von der Spalte, in der die zugehörige Karte gerade steht.
 
 ## Zeit erfassen
 
@@ -159,17 +288,18 @@ Erledigt-Kennzeichen automatisch auf. Das Todo gilt danach wieder als offen und 
 in seinen Pool-Ansichten, weil es sie durch das Erledigt-Kennzeichen nie wirklich verlassen hatte,
 sondern nur ausgeblendet war.
 
-**Die Kanban-Spalte ändert sich dabei nicht.** Ein Todo, das in „Done" lag, bleibt nach der
-Reaktivierung in „Done" liegen, jetzt aber nicht mehr erledigt. Das folgt unmittelbar daraus, dass
-Erledigt und Kanban-Spalte zwei unabhängige Eigenschaften sind: Es gibt nichts, wohin die Karte
-zurückkehren müsste, weil sie ihre Spalte nie verlassen hat.
+**Der Status ändert sich dabei nicht.** Ob sich dadurch aber auch etwas an den Board-Spalten
+ändert, hängt von deren Regeln ab: Fragt eine Spalte nach „Erledigt", verlässt die Karte sie in dem
+Moment, in dem das Todo wieder als offen gilt; fragt eine andere Spalte nach „unerledigt", erscheint
+die Karte dort neu. Das ist keine Ausnahme, sondern dieselbe Regel, die für jede andere Änderung am
+Todo ebenso gilt — nur der Status selbst bleibt von einem Timerstart unberührt.
 
-Takt meldet den Vorgang ausdrücklich, statt ihn stillschweigend zu vollziehen. Die Meldung nennt
-den Titel des Todos, in welchem Pool oder welchen Pools es jetzt wieder erscheint (oder dass
-derzeit keine Poolregel auf seine Tags passt), und den Satz „Die Karte bleibt, wo sie ist — die
-Spalte ändert sich dadurch nicht." Ein Rückgängig-Knopf an derselben Meldung stoppt den gerade
-gestarteten Timer wieder, verwirft die eben entstandene Buchung und setzt das Todo erneut auf
-erledigt, falls man den Timer aus Versehen gestartet hat.
+Takt meldet den Vorgang ausdrücklich, statt ihn stillschweigend zu vollziehen. Eine Meldung wie
+„Timer gestartet. „Rechnung prüfen" ist wieder offen." nennt den Titel des Todos, und ein zweiter
+Satz sagt dazu, in welchem Pool oder welchen Spalten es jetzt erscheint und aus welchen es
+verschwunden ist — oder dass derzeit keine Regel auf das Todo passt. Ein Rückgängig-Knopf an
+derselben Meldung stoppt den gerade gestarteten Timer wieder, verwirft die eben entstandene
+Buchung und setzt das Todo erneut auf erledigt, falls man den Timer aus Versehen gestartet hat.
 
 ### Zeitbuchungen ansehen und filtern
 
@@ -421,6 +551,11 @@ zuweisen und in der bestehenden Ordnerstruktur einordnen lassen, ebenso wie sich
 geöffneten E-Mail übernehmen lassen. Die dazu nötige Tag- und Ordnerstruktur ruft das Add-in beim
 Öffnen direkt von Takt ab, sodass sie immer dem aktuellen Stand entspricht.
 
+Beim Anlegen eines neuen Todos lässt sich dort ebenfalls eine Frist setzen. Anders als die
+Call-Nummer sucht Takt sie nicht automatisch in der E-Mail: Sie bleibt leer, bis man sie selbst
+einträgt. Wie überall in Takt ist sie ein Tag, keine Uhrzeit, und ein leeres Feld bedeutet: keine
+Frist.
+
 ### Die Call-Nummer und bereits bestehende Todos
 
 Das Add-in erkennt eine Call-Nummer in der E-Mail über einen regulären Ausdruck, der in den
@@ -439,6 +574,35 @@ Pools, Exportvorlagen, der Exportordner und der Zugang für das Outlook-Add-in. 
 Bereich „Dieser Arbeitsplatz", unter welchem Windows-Benutzernamen künftige Exporte abgerechnet
 werden und wo Takt seine Datenbank auf diesem Rechner ablegt. Beide Werte kommen unmittelbar vom
 Dienst und lassen sich hier nur ansehen, nicht ändern.
+
+## Nach neuen Fassungen von Takt suchen
+
+Beim Start und danach in regelmäßigen Abständen prüft Takt, ob auf der offiziellen GitHub-Seite
+eine neuere Fassung veröffentlicht wurde. Das ist die einzige Verbindung, die Takt von sich aus
+nach außen aufbaut — abgesehen davon läuft alles ausschließlich auf dem eigenen Rechner. Die
+Prüfung fragt lediglich, ob es etwas Neueres gibt, und liest die Antwort; sie überträgt nichts über
+Sie, Ihren Datenbestand oder Ihre Nutzung von Takt.
+
+Findet Takt eine neuere Fassung, öffnet sich ein Dialog mit der installierten und der verfügbaren
+Fassung sowie einem Verweis auf die zugehörige Release-Seite. Zwei Antworten stehen gleichwertig
+zur Wahl, keine ist vorausgewählt:
+
+- **Installieren** öffnet die Release-Seite dieser Fassung im Browser. Mehr geschieht nicht:
+  **Takt lädt zu keinem Zeitpunkt selbst etwas herunter und installiert zu keinem Zeitpunkt
+  etwas.** Herunterladen und Installieren sind eigene Schritte, die man auf der Release-Seite
+  selbst auslöst.
+- **Überspringen** merkt sich genau diese eine Fassung. Für sie erscheint der Hinweis danach nicht
+  mehr — eine spätere, noch neuere Fassung meldet sich aber wieder.
+
+Ohne eine der beiden Antworten kehrt der Hinweis beim nächsten Start von Takt zurück. Meldet sich
+eine neue Fassung, während Takt schon eine Weile läuft, erscheint zunächst nur eine schmale Leiste
+am oberen Rand, die sich ansehen oder wegklicken lässt, ohne mitten in der Arbeit den Fokus aus
+einem gerade benutzten Eingabefeld zu nehmen.
+
+Ist GitHub nicht erreichbar oder liefert eine unerwartete Antwort, bleibt die Prüfung **still**:
+kein Hinweis, keine Fehlermeldung, kein zweiter Versuch im selben Lauf. Der Grund dafür steht im
+Protokoll des lokalen Dienstes, nicht auf dem Bildschirm — ein Problem bei dieser Prüfung soll
+niemanden bei der eigentlichen Arbeit aufhalten.
 
 ## Was Takt (noch) nicht tut
 
@@ -459,7 +623,8 @@ erwarten könnte. Das gilt aktuell für:
   nach Trefferart sichtbar zu gruppieren.
 - **Das Outlook-Add-in.** Vermerk und Leistung sind dort zwar inhaltlich sauber getrennt (der
   Vermerk geht auch von dort nie in den Export), aber optisch noch nicht so klar unterschieden wie
-  in der Hauptanwendung.
+  in der Hauptanwendung. Anhänge entstehen über das Add-in absichtlich nicht und sollen es auch
+  nicht, siehe „Anhänge an ein Todo hängen".
 
 Keiner dieser Punkte gefährdet die Abrechnung. Sie sind hier aufgeführt, damit niemand ein
 Verhalten erwartet, das die Anwendung heute nicht zeigt.

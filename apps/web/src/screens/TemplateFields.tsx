@@ -1,4 +1,5 @@
 import { useId, useState, type DragEvent } from "react";
+import type { ForeignText } from "../api/types";
 import { Icon } from "../components/Icon";
 import { Button, IconButton, InlineMessage } from "../components/Primitives";
 import { Select, type SelectEntry, type SelectOptionGroup } from "../components/Select";
@@ -96,7 +97,14 @@ export function TemplateFields({
   /** Was zuletzt geschah — wird angesagt, nicht nur gezeigt (SC 4.1.3). */
   const [announcement, setAnnouncement] = useState("");
 
-  const move = (key: string, delta: number, index: number, name: string): void => {
+  /*
+   * `name` heißt `ForeignText` und nicht `string` (O-AT, T-133): Der Feldname
+   * kommt aus `definition`, also aus einem `unknown`, in das ein Benutzer
+   * geschrieben hat — und er geht hier in einen **angesagten Satz**. Steht am
+   * Parameter `string`, ist an der Aufrufstelle nicht mehr zu sehen, was mit
+   * dem Wert geschieht.
+   */
+  const move = (key: string, delta: number, index: number, name: ForeignText): void => {
     const target = index + delta;
     if (target < 0 || target >= fields.length) return;
     onMove(key, delta);
@@ -149,7 +157,16 @@ export function TemplateFields({
       </p>
 
       <ol className="tfield-list">
-        {fields.map((entry, index) => (
+        {fields.map((entry, index) => {
+          /*
+           * Der Nachschlagewert steht **vor** dem JSX und nicht darin (O-AT):
+           * `entry.field.name.trim()` ist fremder Text, der hier nachgeschlagen
+           * und nicht gezeigt wird. Im Attribut sähe das aus wie eine Anzeige —
+           * für einen Leser wie für `scripts/proof-foreign.mjs`.
+           */
+          const duplicate = duplicates.has(entry.field.name.trim());
+
+          return (
           <TemplateFieldRow
             key={entry.key}
             entry={entry}
@@ -157,7 +174,7 @@ export function TemplateFields({
             total={fields.length}
             catalog={catalog}
             builtinFields={builtinFields}
-            duplicate={duplicates.has(entry.field.name.trim())}
+            duplicate={duplicate}
             {...(errorIndex === index && errorMessage !== null ? { rowError: errorMessage } : {})}
             readOnly={readOnly}
             dragging={dragIndex === index}
@@ -174,7 +191,8 @@ export function TemplateFields({
             }}
             onDropHere={() => finishDrag(index)}
           />
-        ))}
+          );
+        })}
       </ol>
 
       <p className="tfields__boundary">
@@ -393,15 +411,34 @@ function TemplateFieldRow({
           {catalog.transformationInfo(field.transformation)?.effect ?? ""}
         </p>
 
-        {emptyName || duplicate || rowError !== undefined ? (
-          <p className="tfield__error" id={errorId}>
-            {emptyName
-              ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
-              : duplicate
-                ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
-                : rowError}
-          </p>
-        ) : null}
+        {/*
+          Die Meldefläche der Zeile steht **immer** im Baum, auch leer (B-5,
+          T-162, T-186; Befund O-GQ, T-191). Bis dahin trug dieser Absatz
+          **gar keine Rolle**: Er erschien, während der Vorlageneditor schon
+          stand — beim Tippen eines doppelten Schlüssels und beim Rückschlag
+          des Dienstes —, und keine Vorlesehilfe sagte ihn an.
+
+          Der Behälter trägt die Rolle, der Absatz den Text: `.tfield__error`
+          bleibt damit **bedingt**, und wer nach ihm greift, findet weiter nur
+          die Zeilen mit einem Befund. Ein `role`-Attribut am Absatz selbst
+          hätte dieselbe Ansage, aber eine leere Meldung in jeder Zeile.
+
+          Ohne Klasse und ohne eigene Regel: Der Behälter ist leer ein Block
+          ohne Höhe und ohne Rand, und der obere Rand von `.tfield__error`
+          fällt durch ihn hindurch — dieselbe Bauart wie `role="status"` im
+          Bestätigungsdialog.
+        */}
+        <div role="alert">
+          {emptyName || duplicate || rowError !== undefined ? (
+            <p className="tfield__error" id={errorId}>
+              {emptyName
+                ? "Ohne Namen gibt es keinen Schlüssel in der Datei."
+                : duplicate
+                  ? `${quotedName(field.name)} steht mehr als einmal in dieser Vorlage. In der Datei bleibt nur das letzte dieser Felder übrig.`
+                  : rowError}
+            </p>
+          ) : null}
+        </div>
 
         <ConditionEditor
           idPrefix={id}

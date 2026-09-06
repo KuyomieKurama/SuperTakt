@@ -24,7 +24,23 @@ export default defineConfig({
   // das Bauergebnis wäre, das da liefe. Gemessen: ohne diese Zeile wird der
   // zuvor durchgehend grüne Bestand dieser Datei auf 29 bestanden/3
   // fehlgeschlagen verschoben, exakt durch diese beiden Dateien.
-  testIgnore: ['web-build-smoke.spec.ts', 'outlook-addin-build.spec.ts'],
+  //
+  // T-142: `version-check-live.spec.ts` läuft gegen `version-check-entry.ts`
+  // statt gegen `apps/local-api/src/index.ts` (`playwright.version-check
+  // .config.ts`) — derselbe Grund, derselbe Port (17843), dieselbe Bauart des
+  // Ausschlusses.
+  //
+  // T-150: `attachment-persistence-live.spec.ts` beendet den lokalen Dienst
+  // mitten im Lauf und startet ihn neu (`support/services.ts#restartLocalApi`,
+  // TP-ANH-10 Stufe 2) — geschähe das hier, risse es jeder anderen Datei
+  // dieser Reihe den Dienst unter den Füßen weg. Eigene Konfiguration,
+  // derselbe Port, derselbe Ausschlussgrund.
+  testIgnore: [
+    'web-build-smoke.spec.ts',
+    'outlook-addin-build.spec.ts',
+    'version-check-live.spec.ts',
+    'attachment-persistence-live.spec.ts',
+  ],
 
   // Ein einziger lokaler Dienst, eine einzige SQLite-Datei (E-001, E-018).
   // Zwei gleichzeitig laufende Testdateien zögen sich gegenseitig Buchungen

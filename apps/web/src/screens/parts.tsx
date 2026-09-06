@@ -50,7 +50,14 @@ export interface ScreenHeaderProps {
 export function ScreenHeader({ title, lead, actions, refreshing, children }: ScreenHeaderProps) {
   return (
     <header className="screen__header">
-      <div className="screen__headline">
+      {/*
+        Ohne `lead` wird die Kopfzeile senkrecht zentriert (T-181, Vorgabe aus
+        `docs/design/textabbau-gestalt.md` 2.1). `.screen__headline` richtet
+        sonst an der Oberkante aus — richtig, solange ein zweizeiliger `lead`
+        darunter hängt, falsch, wenn eine 36-px-Aktion an der Oberkante einer
+        29-px-Titelzeile sitzt. Rolle und Überschrift bleiben zeichengleich.
+      */}
+      <div className={cx("screen__headline", lead === undefined && "screen__headline--bare")}>
         <div className="grow">
           <h1 className="screen__title">{title}</h1>
           {lead === undefined ? null : <p className="screen__lead">{lead}</p>}
@@ -82,14 +89,16 @@ export function ExportTabs({
 }: {
   readonly active: "export" | "templates" | "exportAudit";
 }) {
+  /*
+    Kein `hint` und kein `title` (T-181, ST-02). Die drei Zusätze erklärten
+    die sichtbare Beschriftung; der dritte war zugleich die längste Fassung
+    eines Satzes, der als `lead` des Protokolls noch einmal steht. Ein
+    natives Titelattribut erfüllt SC 1.4.13 nicht (Regel S-16).
+  */
   const items = [
-    { key: "export", label: "Export", hint: "Auswahl, Vorschau und Lauf" },
-    { key: "templates", label: "Vorlagen", hint: "Welche Felder in die Datei gehen" },
-    {
-      key: "exportAudit",
-      label: "Protokoll",
-      hint: "Wann welche Buchung exportiert, zurückgesetzt oder nicht abgerechnet wurde",
-    },
+    { key: "export", label: "Export" },
+    { key: "templates", label: "Vorlagen" },
+    { key: "exportAudit", label: "Protokoll" },
   ] as const;
 
   return (
@@ -101,7 +110,6 @@ export function ExportTabs({
               className={cx("subtab", active === item.key && "subtab--current")}
               href={href(item.key)}
               aria-current={active === item.key ? "page" : undefined}
-              title={item.hint}
               /* Wie in der Hauptnavigation (T-102): der eigene Bereich noch einmal. */
               onClick={(event) => handleRouteLinkClick(href(item.key), event)}
             >
@@ -174,7 +182,18 @@ export function StatTile({
   readonly label: string;
   readonly value: string;
   readonly detail?: string;
-  readonly tone?: "default" | "accent" | "warning";
+  /**
+   * `danger` ist die lauteste Ausprägung und bleibt der einen Kachel
+   * vorbehalten, die auf etwas Überfälliges zeigt (A-19.4).
+   *
+   * Ohne Farbe trägt die **Randschiene**: 4px an der Startkante, und keine
+   * andere Kachel der Reihe hat eine. Fläche und Rahmen verstärken nur —
+   * beide liegen in Graustufen unter 1,8 gegen ihre Nachbarn. Die Zahlen
+   * stehen im Lauf (`contrast-check.mjs`, Gruppe „Anwendung"), die Regel in
+   * `app.css` unter `.stat--danger`. Dazu trägt der Umstand, dass die Kachel
+   * gar nicht erst erscheint, wenn ihre Zahl null ist.
+   */
+  readonly tone?: "default" | "accent" | "warning" | "danger";
   readonly action?: ReactNode;
 }) {
   return (

@@ -75,7 +75,7 @@ export function DuplicateOffer({ offers, onChoose, busyTodoId }: DuplicateOfferP
 
             {/*
               A-2.5 seit T-038: Die Aufhebung ist keine Wahl mehr, also steht
-              hier keine Bedingung („sofern du …"), sondern die Folge. Der
+              hier keine Bedingung („sofern Sie …"), sondern die Folge. Der
               vollständige Satz mit den Pools kommt im Bestätigungsschritt —
               hier ist eine Zeile Platz, und diese eine Zeile muss reichen, um
               niemanden zu überraschen.

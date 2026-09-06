@@ -16,12 +16,14 @@
 import type {
   AppSettings,
   AppSettingsUpdate,
+  Attachment,
+  AttachmentCreate,
+  AttachmentId,
   CalendarDay,
   DefaultTag,
   ExportAuditEntry,
   ExportCandidate,
   ExportDirectoryCheck,
-  ExportDirectoryTrait,
   ExportGroup,
   ExportRun,
   ExportRunId,
@@ -29,6 +31,7 @@ import type {
   ExportStatusResetRequest,
   ExportTemplateEnvelope,
   ExportTemplateId,
+  LocationTrait,
   NotBilledRequest,
   Pool,
   PoolId,
@@ -102,6 +105,7 @@ export interface TransactionPort {
 export interface UnitOfWork {
   readonly todos: TodoPort;
   readonly notes: TodoNotePort;
+  readonly attachments: AttachmentPort;
   readonly tags: TagPort;
   readonly folders: TagFolderPort;
   readonly pools: PoolPort;
@@ -177,6 +181,273 @@ export interface TodoNotePort {
   load(todoId: TodoId): Promise<TodoNote | null>;
   write(todoId: TodoId, text: string, now: Timestamp): Promise<TodoNote>;
 }
+
+// ---------------------------------------------------------------------------
+// Anhänge (A-19.8 bis A-19.15)
+// ---------------------------------------------------------------------------
+
+/**
+ * Anhänge eines Todos — Tabelle `todo_attachment` (A-19.8 bis A-19.14).
+ *
+ * **Ein eigener Port, aus demselben Grund wie `TodoNotePort`.** Kein Wert vom
+ * Typ `Todo` trägt Anhänge; wer sie will, benennt diesen Port, und diese
+ * Benennung ist im Quelltext auffindbar. Der Exportmotor bekommt weder diesen
+ * Port noch den Typ (A-19.17, R-06) — er bekommt überhaupt keine Ports,
+ * sondern fertige `ExportGroup`-Werte.
+ *
+ * **Bytes stehen hier nicht.** Dieser Port führt Zeilen. Die Bytes eines Bildes
+ * liegen als Datei im Anwendungsdatenverzeichnis und haben einen eigenen Port
+ * ({@link AttachmentBlobPort}) — die Trennung ist dieselbe wie zwischen
+ * `ExportPort` und `FilePort`, und sie hat denselben Zweck: Eine Transaktion
+ * über Zeilen kann keine Datei zurücknehmen, und wer beides in einem Port
+ * hätte, merkte das erst beim ersten Abbruch.
+ */
+export interface AttachmentPort {
+  /** Alle Anhänge eines Todos, in stabiler Reihenfolge (A-19.8). */
+  list(todoId: TodoId): Promise<readonly Attachment[]>;
+  /** Alle Anhänge mehrerer Todos in **einer** Abfrage. Kein N+1 in der Liste. */
+  listMany(todoIds: readonly TodoId[]): Promise<ReadonlyMap<TodoId, readonly Attachment[]>>;
+  load(id: AttachmentId): Promise<Attachment | null>;
+  /**
+   * Legt einen Anhang an. `position` bestimmt der Adapter — sie ist die
+   * nächste freie Stelle an diesem Todo und keine Angabe des Aufrufers.
+   *
+   * Ein Aufrufer, der sie setzen dürfte, könnte zwei Anhänge auf dieselbe
+   * Stelle legen; die Reihenfolge wäre dann wieder die der Datenbank, und
+   * A-19.8 verlangt eine stabile.
+   */
+  create(input: AttachmentCreate): Promise<Result<Attachment, TaktError>>;
+  /**
+   * Entfernt einen Anhang und meldet, **was** entfernt wurde.
+   *
+   * Der Rückgabewert trägt den Datensatz und nicht nur ein „erledigt": Der
+   * Aufrufer braucht bei einem Bild den erzeugten Dateinamen, um die Kopie
+   * mitzunehmen (A-A-18) — und er braucht ihn **nach** dem Löschen der Zeile,
+   * weil er ihn danach nicht mehr lesen könnte.
+   */
+  remove(id: AttachmentId): Promise<Result<Attachment, TaktError<'not_found'>>>;
+  /**
+   * Die Bildkopien eines Todos, **bevor** es gelöscht wird (A-A-18).
+   *
+   * `ON DELETE CASCADE` nimmt die Zeilen mit, die Dateien nicht — SQL kennt
+   * kein Dateisystem. Wer ein Todo löscht, liest deshalb zuerst diese Liste
+   * und entfernt danach die Dateien. Die Reihenfolge ist Inhalt: Umgekehrt
+   * bliebe bei einem abgebrochenen Löschvorgang ein Anhang ohne Bild zurück.
+   */
+  imageTargets(todoId: TodoId): Promise<readonly string[]>;
+  /**
+   * Welche dieser Namen gehören noch zu einem Anhang? (A-A-18)
+   *
+   * Die Frage des Aufräumens beim Start: Im Bildverzeichnis liegen Dateien,
+   * und gesucht sind die **ohne Eigentümer**. Gefragt wird deshalb nach den
+   * gefundenen Dateien und nicht nach allen Zeilen — die Antwort ist eine
+   * Teilmenge der Frage, und ihre Größe hängt an dem, was auf der Platte
+   * liegt, nicht an der Größe des Bestands.
+   *
+   * Der Adapter fragt in Blöcken über `ix_todo_attachment_image`
+   * (`target` mit `WHERE kind = 'image'`, Migration 0015) und lädt die Tabelle
+   * nicht in den Speicher.
+   *
+   * **Die Richtung ist Inhalt.** Wer stattdessen alle Bildziele holte und
+   * gegen das Verzeichnis abgliche, bekäme dieselbe Antwort und eine Abfrage,
+   * die mit dem Bestand wächst. Wer aus der Antwort auf „nicht vorhanden"
+   * schließt, muss außerdem wissen, wann er gefragt hat: Erst das Verzeichnis
+   * lesen, dann fragen — in dieser Reihenfolge ist eine Zeile, die zwischen
+   * beiden Schritten entsteht, in der Antwort enthalten. Umgekehrt wäre sie es
+   * nicht, und die frische Kopie fiele dem Aufräumen zum Opfer.
+   */
+  knownImageTargets(names: readonly string[]): Promise<ReadonlySet<string>>;
+  /**
+   * Welche Arten führt der Bestand? (A-A-36.)
+   *
+   * Die Zeilen der Nachschlagetabelle `todo_attachment_kind` aus Migration
+   * 0015 — heute drei, und das ist genau die Frage.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum eine eigene Methode und nicht eine Annahme im Aufrufer
+   * ---------------------------------------------------------------------------
+   *
+   * 0015 hat die Arten zu **Daten** gemacht, damit eine vierte Art ein `INSERT`
+   * ist und kein Tabellenumbau. Jede Stelle, die über Arten **rechnet**, hat
+   * damit eine Annahme über eine Menge, die absichtlich wachsen darf.
+   * {@link knownImageTargets} ist eine solche Stelle: Sie filtert hart auf
+   * `kind = 'image'`, weil `ix_todo_attachment_image` ein Teilindex über genau
+   * diese Bedingung ist, und ihre **leere** Antwort wird vom Aufräumlauf als
+   * Beweis der Verwaistheit gelesen (Bedrohungsmodell 23.3.3).
+   *
+   * Diese Methode erlaubt dem Aufrufer, die Annahme zu **prüfen**, statt sie zu
+   * haben. Sie ist billig — eine Tabelle mit drei Zeilen ohne Bedingung — und
+   * sie kostet den Teilindex nicht.
+   *
+   * Zurück kommt `string[]` und nicht `AttachmentKind[]`: Was hier gefragt wird,
+   * ist gerade das, was dieses Erzeugnis **nicht** kennt. Ein Typ, der die
+   * Antwort auf drei Werte einengt, gäbe die Frage auf, bevor sie gestellt ist.
+   */
+  knownKinds(): Promise<readonly string[]>;
+  /**
+   * Wie viele Bildanhänge führt der Bestand insgesamt? (T-179 B-1.)
+   *
+   * ---------------------------------------------------------------------------
+   * Die Frage, mit der sich eine **leere** Antwort widerlegen läßt
+   * ---------------------------------------------------------------------------
+   *
+   * {@link knownImageTargets} beantwortet „welche dieser Namen kennt der
+   * Bestand". Eine **leere** Antwort heißt für den Aufräumlauf „keiner davon
+   * gehört noch jemandem" — und sie heißt dasselbe, wenn die Abfrage selbst
+   * nichts mehr findet, weil sich unter ihr etwas verschoben hat: eine künftige
+   * Änderung an `target` (ein Präfix, eine Normalisierung) oder an `kind`. Der
+   * nächste Start löschte dann den **ganzen** Bildbestand, und die einzige Spur
+   * wäre eine `info`-Zeile mit einer Zahl.
+   *
+   * Diese Zahl macht daraus einen **Widerspruch**, den man sehen kann: Der
+   * Bestand sagt, er führe Bildanhänge, und zugleich gehört ihm keine einzige
+   * der Dateien, die dort liegen. Beides zusammen ist kein Aufräumfall, sondern
+   * ein Zeichen, daß die Frage nicht mehr trifft.
+   *
+   * Sie zählt über denselben Teilindex `ix_todo_attachment_image` und lädt
+   * nichts in den Speicher.
+   */
+  imageCount(): Promise<number>;
+}
+
+/**
+ * Die **Bytes** eines Bildanhangs (E-071 Punkt 2, A-A-15 bis A-A-18).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum ein eigener Port und nicht `FilePort`
+ * ---------------------------------------------------------------------------
+ *
+ * `FilePort` schreibt Exportdateien in einen Ordner, den der **Benutzer**
+ * einstellt, und seine ganze Aufgabe ist, nicht daneben zu schreiben (R-11).
+ * Dieser Port schreibt in einen Ordner, den **niemand** einstellen kann: das
+ * Anwendungsdatenverzeichnis, neben dem Bestand, unter denselben Rechten
+ * (`0700`/`0600`, E-018, A-A-17). Zwei Ordner mit zwei entgegengesetzten
+ * Regeln in einem Port zu führen, wäre die Gelegenheit, die eine für die
+ * andere zu halten.
+ *
+ * ---------------------------------------------------------------------------
+ * Was der Adapter zusagt
+ * ---------------------------------------------------------------------------
+ *
+ *  - **Er zählt beim Lesen** und nicht aus `stat` (A-A-15). Eine angekündigte
+ *    Größe ist keine Grenze; dieselbe Begründung wie bei `content-length` in
+ *    A-V-6.
+ *  - **Er entscheidet an der Kopfsignatur** und nicht an der Endung (A-A-16).
+ *    Die Positivliste steht in `packages/domain/src/attachment.ts`.
+ *  - **Er erzeugt den Dateinamen** der Kopie und übernimmt ihn nicht aus der
+ *    Quelle (A-A-17). Ein Name aus einer fremden Datei ist fremder Text an
+ *    einem Ort, an dem er zum Pfad wird.
+ *  - **Er wirft nicht.** Jeder Fehlschlag ist ein Wert aus einem geschlossenen
+ *    Vorrat (`ImageRejection`), damit ein unlesbares Bild eine Anzeige nach
+ *    A-19.15 ergibt und keine Fehlerfläche.
+ */
+export interface AttachmentBlobPort {
+  /**
+   * Liest eine Bilddatei, prüft sie und legt eine Kopie an.
+   *
+   * `sourcePath` kommt aus dem Dateiauswahldialog der Hülle
+   * (`dialog:allow-open` mit `directory: false`, A-A-11) — der Benutzer hat
+   * die Datei gesehen und ausgewählt, bevor irgendetwas geschieht.
+   *
+   * Zurück kommt der **erzeugte** Name der Kopie. Er ist der Wert, der in
+   * `todo_attachment.target` landet.
+   */
+  copyImage(
+    sourcePath: string,
+  ): Promise<
+    | { readonly ok: true; readonly name: string; readonly mediaType: string; readonly bytes: number }
+    | { readonly ok: false; readonly reason: ImageBlobFailure }
+  >;
+  /**
+   * Liest eine Kopie zurück, für die Anzeige (E-071 Punkt 3).
+   *
+   * Der Aufrufer baut daraus eine `data:`-Adresse. Die CSP wird dafür **nicht**
+   * geöffnet: `img-src` bleibt `'self' data:` (A-A-12).
+   *
+   * `name` ist ein von diesem Port **erzeugter** Name aus dem Bestand. Der
+   * Adapter prüft ihn trotzdem — zwischen Erzeugen und Lesen liegt der
+   * Bestand, und das ist derselbe Grund wie bei E-072 Punkt 2.
+   */
+  readImage(
+    name: string,
+  ): Promise<
+    | { readonly ok: true; readonly mediaType: string; readonly data: Uint8Array }
+    | { readonly ok: false; readonly reason: ImageBlobFailure }
+  >;
+  /**
+   * Entfernt eine Kopie (A-A-18).
+   *
+   * Eine Kopie, die es nicht gibt, ist **kein** Fehlschlag: Das Ziel ist „sie
+   * liegt danach nicht mehr da", und das ist erreicht.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum hier ein Wert zurückkommt und kein `void`
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-159 gab diese Methode `void` zurück und der Adapter verschluckte
+   * jeden Fehlschlag. Ein Bild, das sich nicht löschen läßt — unter Windows
+   * genügt ein offener Betrachter (`EBUSY`) —, blieb damit als Kundenmaterial
+   * **ohne Eigentümer** im Anwendungsdatenverzeichnis liegen, und kein
+   * Aufrufer und keine Protokollzeile wußte davon. Genau den Zustand schließt
+   * A-A-18 aus.
+   *
+   * Der Rückgabewert ändert **nichts** an der Antwort an den Benutzer: Der
+   * Anhang ist entfernt, und das stimmt. Er ist die Möglichkeit, es zu
+   * erfahren — und damit die Bedingung dafür, daß ein späterer Aufrufer
+   * anders entscheiden kann als „gar nicht hinsehen".
+   */
+  removeImage(name: string): Promise<ImageRemoval>;
+  /**
+   * Die Namen der Kopien, die im Bildverzeichnis liegen (A-A-18).
+   *
+   * **Nur Namen, die dieser Port erzeugt haben könnte.** Alles andere im
+   * Verzeichnis — ein Unterordner, eine `.tmp` aus einem Abbruch, eine Datei,
+   * die jemand dort abgelegt hat — bleibt ungenannt und wird damit vom
+   * Aufräumen nie angefasst. Die Form ist dieselbe wie beim Lesen und beim
+   * Entfernen; sie steht an einer Stelle im Adapter.
+   *
+   * Gibt es kein Verzeichnis oder lässt es sich nicht lesen, ist die Liste
+   * **leer**. Das ist der Regelfall einer frischen Einrichtung und kein
+   * Fehlschlag: Wo nichts liegt, ist auch nichts verwaist.
+   *
+   * Diese Methode beantwortet keine Anfrage. Sie ist die eine Hälfte des
+   * Aufräumens beim Start; die andere ist
+   * {@link AttachmentPort.knownImageTargets}.
+   */
+  listImages(): Promise<readonly string[]>;
+}
+
+/**
+ * Was aus dem Entfernen einer Bildkopie geworden ist (A-A-18).
+ *
+ * Geschlossener Vorrat, drei Werte, keiner davon trägt einen Pfad oder eine
+ * Fehlermeldung des Betriebssystems.
+ */
+export type ImageRemoval =
+  /** Sie liegt danach nicht mehr da — gelöscht, oder es gab sie schon nicht mehr. */
+  | 'removed'
+  /**
+   * Der Name ist keiner, den dieser Port erzeugt hätte, oder es gibt gar kein
+   * Bildverzeichnis. Es wurde **nichts** angefaßt.
+   */
+  | 'unknown_name'
+  /** Sie liegt noch da. Der Grund steht im Protokoll, nicht in diesem Wert. */
+  | 'failed';
+
+/** Warum eine Bilddatei nicht gelesen oder nicht übernommen werden konnte. */
+export type ImageBlobFailure =
+  /** Nicht vorhanden, nicht lesbar, kein Verzeichnis vorhanden. */
+  | 'unreadable'
+  /** Über {@link MAX_ATTACHMENT_IMAGE_BYTES} — beim Lesen gezählt. */
+  | 'too_large'
+  /** Leer. Eine Datei ohne Bytes hat keine Kopfsignatur. */
+  | 'empty'
+  /** Die Kopfsignatur gehört zu keiner der vier erlaubten Bildarten. */
+  | 'not_an_image'
+  /** Der Name ist keiner, den dieser Port erzeugt hätte. */
+  | 'bad_name'
+  /** Das Schreiben der Kopie ist gescheitert. */
+  | 'write_failed';
 
 // ---------------------------------------------------------------------------
 // Tags und Ordner
@@ -981,7 +1252,7 @@ export interface FilePort {
 }
 
 /**
- * Was für ein Ordner das ist — belegt, nicht geraten (T-039, B-5.2,
+ * Was für ein Ort das ist — belegt, nicht geraten (T-039, B-5.2,
  * B-5.3 Punkt 3).
  *
  * Ein eigener Port neben `FilePort`, weil es eine andere Frage ist. Ob
@@ -989,6 +1260,13 @@ export interface FilePort {
  * ist, hängt nicht daran. Ein Systemverzeichnis bleibt eines, ob es nun
  * beschreibbar ist oder nicht, und eine Netzfreigabe bleibt eine, auch wenn sie
  * gerade nicht antwortet.
+ *
+ * **Nicht nur der Exportordner** (T-132, O-C). Bis dahin hieß die eine Frage
+ * dieses Ports `describeExportDirectory`, und der Ort des Datenbestands bekam
+ * gar keine Antwort — obwohl an ihm mehr hängt: Der Exportordner enthält, was
+ * exportiert wurde, der Bestand enthält **alles**, einschließlich der internen
+ * Vermerke (A-7.2). Liegt er in einem Synchronisierungsordner, verlässt die
+ * Kundendatenbank den Rechner, und genau davor steht E-018.
  *
  * Der Adapter dazu liegt **nicht** in diesem Paket, sondern in
  * `apps/local-api/src/access/export-directory.ts` — bei den übrigen
@@ -998,6 +1276,8 @@ export interface FilePort {
  */
 export interface DirectoryInsightPort {
   /**
+   * Merkmale eines Ortes — eines Ordners oder einer Datei.
+   *
    * `mayAskFileSystem` ist `false`, wenn die Prüfung eben in eine Zeitgrenze
    * gelaufen ist. Dann wird das Dateisystem nicht noch einmal gefragt — es liefe
    * in dieselbe Wand und verdoppelte die Wartezeit, die gerade abgebrochen
@@ -1006,10 +1286,10 @@ export interface DirectoryInsightPort {
    *
    * Eine leere Liste ist **keine** Entwarnung, sondern eine Nichtaussage.
    */
-  describeExportDirectory(
+  describeLocation(
     path: string | null,
     options: { readonly mayAskFileSystem: boolean },
-  ): Promise<readonly ExportDirectoryTrait[]>;
+  ): Promise<readonly LocationTrait[]>;
 }
 
 /** Windows-Benutzername (A-8.5, E-010). Kommt aus der Tauri-Hülle, nie aus einer Eingabe. */
@@ -1029,4 +1309,19 @@ export interface SystemPort {
    * damit nachsehen, statt es zu vermuten.
    */
   databasePath(): string | null;
+  /**
+   * Wie viele der drei Dateien des Bestands weiter liegen als `0600`
+   * (B-7.2, T-132/O-C).
+   *
+   * Eine **Zahl** und keine Pfadliste: Der Aufrufer soll sagen können „zwei
+   * Dateien liegen offen", nicht welche. Der Dienst protokolliert dieselbe Zahl
+   * beim Start und merkt sie als Vorfall vor; über die Einstellungen ist sie
+   * damit auch dann noch sichtbar, wenn niemand das Startprotokoll gelesen hat.
+   *
+   * `null` heißt „nicht messbar": unter Windows, wo der POSIX-Modus nichts
+   * sagt und die geerbte ACL die Grenze trägt, und bei einem Bestand im
+   * Arbeitsspeicher. `null` ist ausdrücklich **nicht** `0` — eine
+   * Nichtaussage ist keine Entwarnung, genauso wie bei den Merkmalen oben.
+   */
+  databaseFilesTooPermissive(): number | null;
 }

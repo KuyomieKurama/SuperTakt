@@ -6,7 +6,9 @@
   "description": "Takt — Oberflaeche. Die Musterseite des Designsystems liegt seit T-057 auf einem eigenen Einstiegspunkt: /designsystem.html im Entwicklungsbetrieb, im Auslieferungsbuendel gar nicht. Seit T-059 liefert @ark-ui/react das Verhalten von Auswahlfeld, Kombobox und Menue (E-052) — ungestylt; das Aussehen kommt weiter aus @takt/ui-tokens. @takt/domain steckt hier aus zwei Gruenden, und der zweite ist der wichtigere: Die Vorschlagsliste der Tag-Eingabe vergleicht mit tagNameKey nach derselben Regel wie der Dienst, und seit T-083 kommen die Fragen an eine Regel aus der Domaene statt aus einer zweiten Fassung in der Oberflaeche (countPoolRuleConditions, poolRuleIsEmpty, PoolRuleAxes). Seit T-091 kommt der Wertebereich der Aufzaehlungen dazu, die die Domaene bereits benennt (PoolCompletionFilter, PoolExportFilter, PoolPlacement, RoundingMode, TimeEntrySource, ExportAuditEvent) — src/lib/labels.ts importiert sie und beschriftet sie nur, statt sie ein zweites Mal zu tippen.",
   "license": "MIT",
   "scripts": {
+    "proof:engines": "node scripts/proof-engine-parity.mjs",
     "proof:foreign": "node scripts/proof-foreign.mjs",
+    "proof:surface": "node scripts/proof-surface.mjs",
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "build:designsystem": "tsc -p tsconfig.json --noEmit && node scripts/build-designsystem.mjs",

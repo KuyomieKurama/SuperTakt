@@ -1,3 +1,4 @@
+import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -38,6 +39,7 @@ import { POOL_PLACEMENT_SHORT, poolPlacementMessage } from "../lib/labels";
 import { axesOf, describeRule, describeRuleReach } from "../lib/poolRule";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { PoolFormDialog } from "./PoolFormDialog";
+import { PoolRenameDialog } from "./PoolRenameDialog";
 import { quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
 
@@ -74,7 +76,7 @@ export function TagsScreen() {
     <section className="screen">
       <ScreenHeader
         title="Tags"
-        lead="Tags, Ordner und die Regeln darüber. Dieselbe Regel kann ein Pool sein, eine Spalte des Kanban-Boards oder beides (E-054)."
+        lead="Tags, Ordner und die Regeln darüber. Dieselbe Regel kann ein Pool sein, eine Spalte des Kanban-Boards oder beides."
         /*
           Diese Ansicht liest allein aus der Struktur; ihr Nachladen ist
           `structure.reload()` (W-12).
@@ -132,6 +134,17 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
   const [pendingDelete, setPendingDelete] = useState<Selection>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [name, setName] = useState("");
+  /**
+   * Wurde das Namensfeld schon einmal verlassen? (Befund O-DZ, T-167.)
+   *
+   * Drei Dialoge teilen sich `name`, und in allen dreien ist die Schaltfläche
+   * bei leerem Feld gesperrt — `onSubmit` läuft also nie, und eine Meldung, die
+   * dort entstünde, sähe niemand. Sie entsteht deshalb beim **Verlassen** des
+   * Feldes, nicht beim Tippen (SC 3.3.1). Seit E-084 ist sie zugleich die
+   * einzige, die es hier noch gibt: `noValidate` nimmt dem Formular Chromiums
+   * eigene, englische Sprechblase.
+   */
+  const [nameTouched, setNameTouched] = useState(false);
   const [targetFolder, setTargetFolder] = useState<string>("");
   /*
    * Eigener Vorgang neben `mutation`: Der Dialog zeigt seinen Fehler im
@@ -140,6 +153,31 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
    * Ziehen den naechsten Dialog mit einer alten Meldung oeffnet.
    */
   const dragMove = useMutation();
+
+  /**
+   * Ein Namensdialog beginnt — Wert setzen und die Meldung zurücknehmen.
+   *
+   * Die vier Einstiege (Ordner, Tag, erster Tag, Umbenennen) laufen über diesen
+   * einen Weg, damit kein fünfter entsteht, der das Zurücksetzen vergisst: Eine
+   * stehengebliebene Meldung begrüßte den nächsten Dialog mit dem Tadel des
+   * vorigen.
+   *
+   * `ForeignText` und nicht `string`: Beim Umbenennen kommt der Vorschlag aus
+   * dem Bestand, also von außen (E-063). Wer die Herkunft am Parameter fallen
+   * ließe, verlöre sie für jede Prüfung dahinter — `proof:foreign` misst genau
+   * das.
+   */
+  const beginNaming = (initial: ForeignText): void => {
+    setName(initial);
+    setNameTouched(false);
+  };
+
+  /*
+    Grundform aus T-177 P-3, erstes Wort ist die Feldbeschriftung (P-2). Drei
+    Dialoge, dieselbe Beschriftung, derselbe Fall — also dreimal derselbe Satz.
+  */
+  const nameError = nameTouched && name.trim().length === 0 ? "Name fehlt." : undefined;
+
 
   const nodes = useMemo(() => toTreeNodes(tree), [tree]);
   const folders = useMemo(() => flatFolders(tree), [tree]);
@@ -164,7 +202,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               variant="secondary"
               iconStart="folder"
               onClick={() => {
-                setName("");
+                beginNaming("");
                 setFolderDialog(true);
               }}
             >
@@ -175,7 +213,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
               variant="primary"
               iconStart="plus"
               onClick={() => {
-                setName("");
+                beginNaming("");
                 setTagDialog(true);
               }}
             >
@@ -194,7 +232,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                 variant="primary"
                 iconStart="plus"
                 onClick={() => {
-                  setName("");
+                  beginNaming("");
                   setTagDialog(true);
                 }}
               >
@@ -275,7 +313,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
                       variant="secondary"
                       iconStart="pencil"
                       onClick={() => {
-                        setName(selected.name);
+                        beginNaming(selected.name);
                         setRenameDialog(true);
                       }}
                     >
@@ -346,7 +384,15 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setTagDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField
+          label="Name"
+          value={name}
+          onChange={setName}
+          onTouched={() => setNameTouched(true)}
+          required
+          maxLength={MAX_NAME_LENGTH}
+          {...(nameError === undefined ? {} : { error: nameError })}
+        />
       </FormDialog>
 
       {/* Neuer Ordner */}
@@ -368,7 +414,15 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setFolderDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField
+          label="Name"
+          value={name}
+          onChange={setName}
+          onTouched={() => setNameTouched(true)}
+          required
+          maxLength={MAX_NAME_LENGTH}
+          {...(nameError === undefined ? {} : { error: nameError })}
+        />
       </FormDialog>
 
       {/* Umbenennen */}
@@ -393,7 +447,15 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         }}
         onCancel={() => setRenameDialog(false)}
       >
-        <TextField label="Name" value={name} onChange={setName} required maxLength={128} />
+        <TextField
+          label="Name"
+          value={name}
+          onChange={setName}
+          onTouched={() => setNameTouched(true)}
+          required
+          maxLength={MAX_NAME_LENGTH}
+          {...(nameError === undefined ? {} : { error: nameError })}
+        />
       </FormDialog>
 
       {/* Verschieben — I-07 und I-08 */}
@@ -546,6 +608,16 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
   const { bump } = useRefresh();
 
   const [form, setForm] = useState<{ readonly pool?: Pool } | null>(null);
+  /**
+   * Die Regel, die gerade umbenannt wird (O-A).
+   *
+   * Sie steht hier aus demselben Grund wie auf dem Board: Dieselbe Handlung
+   * heißt an beiden Flächen gleich und tut an beiden dasselbe. Eine Fläche mit
+   * „Umbenennen" und eine ohne wäre wieder das Paar aus E-059 — zwei
+   * Schutzniveaus beziehungsweise zwei Bedienniveaus für eine Sache, und eines
+   * davon lehrt, dass es das andere nicht ernst meint.
+   */
+  const [renaming, setRenaming] = useState<Pool | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Pool | null>(null);
 
   const lookup = useRuleLookup();
@@ -595,9 +667,15 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
 
   return (
     <>
+      {/*
+        Von vier Saetzen auf zwei (T-181, ST-05, dazu ST-03 fuer die
+        Kennung). Die Aufzaehlung der fuenf Achsen steht **je Zeile** in
+        `.pool-row__rule` — dieselbe `RuleSummary` wie am Board, spezifisch
+        statt allgemein. Der Anzeigeort steht als Marke neben jedem Namen.
+      */}
       <Card
         title="Regeln"
-        description="Eine Regel bündelt Todos — über Tags, Status, „Erledigt“ und den Exportstatus. Wo sie erscheint, sagt der Anzeigeort: im Pool-Bereich, als Spalte des Kanban-Boards oder an beiden Stellen (E-054)."
+        description="Eine Regel bündelt Todos. Der Anzeigeort sagt, wo sie erscheint."
         actions={
           <Button size="sm" variant="primary" iconStart="plus" onClick={() => setForm({})}>
             Neue Regel
@@ -609,7 +687,12 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
             compact
             icon="filter"
             title="Noch keine Regel"
-            description="Eine Regel bündelt Todos — etwa alles unter dem Ordner „Kunden“ oder alles Erledigte, das noch nicht abgerechnet ist. Dieselbe Regel kann als Pool und als Kanban-Spalte dienen."
+            /*
+              Das **Beispiel** bleibt, die Definition faellt (T-181, ST-05).
+              Ein Leerzustand zeigt den naechsten Schritt, er klaert keinen
+              Begriff (Regel S-08).
+            */
+            description="Etwa alles unter dem Ordner „Kunden“ — oder alles Erledigte, das noch offen ist."
             action={
               <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
                 Erste Regel anlegen
@@ -674,8 +757,16 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
                 >
                   {pool.placement === "pool" ? "Als Spalte aufnehmen" : "Vom Board nehmen"}
                 </Button>
-                <Button size="sm" variant="secondary" iconStart="pencil" onClick={() => setForm({ pool })}>
-                  Bearbeiten
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  iconStart="pencil"
+                  onClick={() => setRenaming(pool)}
+                >
+                  Umbenennen
+                </Button>
+                <Button size="sm" variant="ghost" iconStart="filter" onClick={() => setForm({ pool })}>
+                  Regel bearbeiten
                 </Button>
                 <Button
                   size="sm"
@@ -697,6 +788,20 @@ function PoolAdministration({ rules }: { readonly rules: readonly Pool[] }) {
         {...(form?.pool === undefined ? {} : { pool: form.pool })}
         defaultPlacement="pool"
         onClose={() => setForm(null)}
+      />
+
+      {/*
+        `rules` ist hier bereits die vollständige Liste beider Flächen — die
+        Verwaltung in S-11 zeigt jede Regel. Damit ist die Vorabprüfung auf
+        einen vergebenen Namen genau so weit wie der eindeutige Index
+        `ux_pool_name`, der über die ganze Tabelle gilt.
+      */}
+      <PoolRenameDialog
+        open={renaming !== null}
+        pool={renaming}
+        existing={rules}
+        existingKnown
+        onClose={() => setRenaming(null)}
       />
 
       <ConfirmDialog

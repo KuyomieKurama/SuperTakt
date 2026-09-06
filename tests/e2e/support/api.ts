@@ -40,6 +40,11 @@ export interface Todo {
   readonly statusId: string;
   readonly completedAt: string | null;
   readonly tagIds: readonly string[];
+  /**
+   * Die Frist (A-19.1, A-19.3). `null` heißt: keine — ein Tag als
+   * `YYYY-MM-DD`, kein Zeitstempel (T-150, Abschnitt 19).
+   */
+  readonly dueDate: string | null;
 }
 
 export interface TimeEntry {
@@ -58,6 +63,8 @@ export async function createTodo(input: {
   callNumber?: string | null;
   tagIds?: readonly string[];
   statusId?: string | null;
+  /** Die Frist beim Anlegen (A-19.1, A-19.3). Fehlt sie, entsteht das Todo ohne Frist. */
+  dueDate?: string | null;
 }): Promise<Todo> {
   const result = await call<{ todo: Todo; addedDefaultTagIds: readonly string[] }>('/todos', {
     method: 'POST',
@@ -67,9 +74,34 @@ export async function createTodo(input: {
       callNumber: input.callNumber ?? null,
       tagIds: input.tagIds ?? [],
       statusId: input.statusId ?? null,
+      dueDate: input.dueDate ?? null,
     }),
   });
   return result.todo;
+}
+
+/**
+ * `PATCH /todos/:id` — nur die Frist (A-19.3, T-150).
+ *
+ * `undefined` ist hier **nicht** erreichbar (anders als am Dienst selbst):
+ * Diese Testhilfe dient ausschließlich dazu, eine Frist zu setzen, zu ändern
+ * oder zu entfernen (`null`) — nie dazu, sie unverändert zu lassen, dafür
+ * braucht es kein eigenes Werkzeug.
+ */
+export async function updateTodoDueDate(id: string, dueDate: string | null): Promise<Todo> {
+  return call<Todo>(`/todos/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ dueDate }),
+  });
+}
+
+/** `GET /todos/:id` — das Todo, so wie `TodoDetailScreen` es lädt. */
+export async function loadTodoDetail(id: string): Promise<{
+  readonly todo: Todo;
+  readonly totalSeconds: number;
+  readonly openSeconds: number;
+}> {
+  return call(`/todos/${id}`);
 }
 
 /** A-2.4 — als erledigt markieren. Verschiebt keine Karte (A-3.4, E-054). */
@@ -647,4 +679,113 @@ export async function addinBookOnTodo(
     method: 'POST',
     body: JSON.stringify({ startedAt: input.startedAt, endedAt: input.endedAt, note: input.note ?? '' }),
   });
+}
+
+/**
+ * `POST /addin/todos` — Vorbereitung/Spotcheck für TP-ANH-13 (A-19.19).
+ *
+ * Bewusst **ohne** `dueDate`: Die Frist-Route des Add-ins entsteht gerade erst
+ * (Welle V, siehe Auftrag T-150) und wird hier nicht vorgezogen. Diese
+ * Funktion trägt ausschließlich das, was TP-ANH-13 braucht — einen Titel und
+ * ein zusätzliches, unbekanntes Feld, mit dem sich prüfen lässt, dass über das
+ * Add-in strukturell kein Anhang entsteht.
+ */
+export interface AddinCreatedTodo {
+  readonly todo: { readonly id: string; readonly title: string };
+}
+
+export async function addinCreateTodo(
+  input: { readonly title: string } & Record<string, unknown>,
+): Promise<AddinCreatedTodo> {
+  return call<AddinCreatedTodo>('/addin/todos', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/* ==================================================================== */
+/* Anhänge (A-19.8 bis A-19.15, E-071, E-072, T-150)                     */
+/* ==================================================================== */
+
+export type AttachmentKind = 'link' | 'image' | 'file';
+
+export interface Attachment {
+  readonly id: string;
+  readonly todoId: string;
+  readonly kind: AttachmentKind;
+  readonly title: string | null;
+  readonly target: string;
+  readonly position: number;
+  readonly createdAt: string;
+}
+
+/** Dieselbe unterschiedene Vereinigung wie `AttachmentCreate` in `apps/web/src/api/types.ts`. */
+export type AttachmentCreateBody =
+  | { readonly kind: 'link'; readonly url: string; readonly title?: string | null }
+  | { readonly kind: 'file'; readonly path: string; readonly title?: string | null }
+  | { readonly kind: 'image'; readonly sourcePath: string; readonly title?: string | null };
+
+/** `POST /todos/:id/attachments` (A-19.10, A-19.11). */
+export async function createAttachment(todoId: string, body: AttachmentCreateBody): Promise<Attachment> {
+  return call<Attachment>(`/todos/${todoId}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** `GET /todos/:id/attachments` (A-19.11). */
+export async function listAttachmentsByTodo(todoId: string): Promise<readonly Attachment[]> {
+  const result = await call<{ items: readonly Attachment[] }>(`/todos/${todoId}/attachments`);
+  return result.items;
+}
+
+/** `DELETE /todos/:id/attachments/:attachmentId` (A-19.11). Aufräumen nach einem Testfall. */
+export async function deleteAttachmentById(todoId: string, attachmentId: string): Promise<void> {
+  await call<void>(`/todos/${todoId}/attachments/${attachmentId}`, { method: 'DELETE' });
+}
+
+export interface AttachmentImage {
+  readonly mediaType: string;
+  readonly base64: string;
+}
+
+/** `GET /todos/:id/attachments/:attachmentId/image` (A-19.13). */
+export async function getAttachmentImage(todoId: string, attachmentId: string): Promise<AttachmentImage> {
+  return call<AttachmentImage>(`/todos/${todoId}/attachments/${attachmentId}/image`);
+}
+
+/**
+ * `POST /todos/:id/attachments` roh — für die Formprüfung an der Tür
+ * (TP-ANH-15 bis TP-ANH-18, R-21, R-22). Anders als {@link createAttachment}
+ * wirft dieser Weg bei einer Ablehnung nicht, sondern liefert Status und
+ * Antwortkörper zur Prüfung — dieselbe Bauart wie {@link attemptDeleteTagFolder}.
+ */
+export async function attemptCreateAttachment(
+  todoId: string,
+  body: unknown,
+): Promise<
+  | { readonly ok: true; readonly value: Attachment }
+  | {
+      readonly ok: false;
+      readonly status: number;
+      readonly body: { readonly error?: { readonly code?: string; readonly message?: string } };
+    }
+> {
+  const response = await fetch(`${API_BASE_URL}/todos/${todoId}/attachments`, {
+    method: 'POST',
+    headers: {
+      Origin: WEB_BASE_URL,
+      [TOKEN_HEADER]: SESSION_SECRET,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const parsed = (await response.json().catch(() => ({}))) as {
+    error?: { code?: string; message?: string };
+    data?: Attachment;
+  };
+  if (response.ok && parsed.data !== undefined) {
+    return { ok: true, value: parsed.data };
+  }
+  return { ok: false, status: response.status, body: parsed };
 }

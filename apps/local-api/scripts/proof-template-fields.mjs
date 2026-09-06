@@ -36,6 +36,12 @@
  *    derselbe Weg, mit dem T-023 die Notiz-Grenze angegriffen hat. Ein Lauf
  *    gegen eine so eingeschmuggelte Vorlage muss **abbrechen**, nicht das Feld
  *    still auslassen (B-3.1 Punkt 4).
+ *
+ * **Die Regel über allen Nachweispfaden** steht ausgeschrieben im Kopf von
+ * `proof-route-policy.mjs` (A-A-55, T-206): *Keine Zusicherung darf bestehen,
+ * ohne daß das Geprüfte stattgefunden hat.* Abschnitt 5 ist ihre Anwendung —
+ * er liest den eingeschmuggelten Datensatz zurück, bevor er über dessen
+ * Abwehr urteilt (A-A-54).
  */
 
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
@@ -431,7 +437,29 @@ try {
         `INSERT INTO export_template (${used.join(', ')}) VALUES (${used.map(() => '?').join(', ')})`,
       )
       .run(...used.map((column) => values[column]));
-    check('die Vorlage steckt an jeder Prüfung vorbei in der Datenbank', true);
+
+    /*
+     * A-A-54 (T-206-4) — der Angriff wird **zurückgelesen**, bevor über seine
+     * Wirkung geurteilt wird.
+     *
+     * Bis dahin lautete die Bedingung dieser Zeile wörtlich `true`: Es wurde
+     * nichts nachgesehen. Gemessen mit einem Durchlauf ohne den `INSERT` —
+     * Vorschau und Lauf antworteten `404 not_found`, und alle drei
+     * Zusicherungen dieses Abschnitts bestanden. Rot wurde der Lauf nur an den
+     * beiden `details`-Zeilen aus T-046, also durch einen Zufall der
+     * Geschichte und nicht durch seine Anlage.
+     *
+     * Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat
+     * (A-A-55, ausgeschrieben im Kopf von `proof-route-policy.mjs`).
+     */
+    const stored = service.database.connection
+      .prepare('SELECT definition FROM export_template WHERE id = ?')
+      .get(id);
+    check(
+      'die Vorlage steckt an jeder Prüfung vorbei in der Datenbank',
+      stored !== undefined && String(stored['definition']) === smuggled,
+      stored === undefined ? 'keine Zeile' : `gelesen: ${String(stored['definition']).slice(0, 160)}`,
+    );
 
     service.database.close();
     service = compose({
@@ -442,17 +470,24 @@ try {
       databaseLocation,
     });
 
+    /*
+     * Zweiter Teil von A-A-54: nicht bloß „irgendein Fehler ab 400", sondern
+     * der Schlüssel des **Feldnamens**. `>= 400` erfüllt auch ein `404
+     * not_found` — also genau die Antwort, die kommt, wenn der Angriff gar
+     * nicht angekommen ist. Der Unterschied zwischen „abgewehrt" und „nicht
+     * stattgefunden" ist der ganze Zweck dieses Abschnitts.
+     */
     const preview = await call('/export/preview', { method: 'POST', body: { templateId: id } });
     check(
-      'die Vorschau gegen die eingeschmuggelte Vorlage bricht ab',
-      preview.status >= 400,
+      'die Vorschau gegen die eingeschmuggelte Vorlage bricht ab — mit validation_error',
+      preview.status >= 400 && preview.body?.error?.code === 'validation_error',
       `Status ${preview.status}: ${preview.text.slice(0, 200)}`,
     );
 
     const run = await call('/export/runs', { method: 'POST', body: { templateId: id } });
     check(
-      'der Exportlauf bricht ab, statt das Feld still auszulassen (B-3.1 Punkt 4)',
-      run.status >= 400,
+      'der Exportlauf bricht mit validation_error ab, statt das Feld still auszulassen (B-3.1 Punkt 4)',
+      run.status >= 400 && run.body?.error?.code === 'validation_error',
       `Status ${run.status}: ${run.text.slice(0, 200)}`,
     );
 

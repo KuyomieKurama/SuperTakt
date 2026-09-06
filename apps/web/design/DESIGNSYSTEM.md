@@ -66,10 +66,31 @@ Zustand; die Einleitung oben auf der Seite erklärt sie ohne Vorwissen.
   auf 272px. Neue Regel 11.
 * Kein Token geändert, keine Typografie: 376 Kontrastpaare, 0 durchgefallen.
 
+**Was T-139 geändert hat**
+
+* **Der Hinweis auf eine neuere Fassung hat eine Darstellung** — mit einem Dialog, der keine
+  seiner beiden Antworten im Voraus trifft, und mit einem Zustand, der ausdrücklich nichts
+  zeigt — Abschnitt 12.
+* **Der Verweis ist ein Knopf, kein `<a href>`.** Ein Anker trüge den Webview selbst nach
+  github.com; einen Wächter über Navigationen gibt es in der Hülle nicht. Neue Regel 15.
+* Kein Token geändert, keine Typografie, keine neue CSS-Klasse: 432 Kontrastpaare, 0
+  durchgefallen.
+
+**Was T-226 geändert hat**
+
+* **Ein Knopf, der einen Dialog öffnet, wird nicht gegen einen anderen Baustein getauscht** —
+  U-5, R-0 bis R-6 und N-1 bis N-4 stehen als Hausregeln in Abschnitt 5.2. Vier Flächen tragen
+  denselben Satz: die Buchungszeile der Exportvorschau, die Buchungszeile und die Sperrmeldung der
+  Vorlagenvorschau und die Liste der ausgelassenen Gruppen. Neue Regel 16.
+* **Der Zeilenbezug im zugänglichen Namen steht im Knopf**, als verborgener Zusatz hinter der
+  sichtbaren Beschriftung, und nicht als `aria-label` — Abschnitt 5.2, letzter Absatz.
+* Kein Token geändert, keine Typografie, keine neue CSS-Klasse: 259 Kontrastpaare, 0
+  durchgefallen.
+
 ```
 pnpm install      # an der Wurzel des Arbeitsbereichs, nicht in apps/web
 pnpm dev          # http://127.0.0.1:5173
-pnpm --filter @takt/web contrast    # Kontrastnachweis, 376 Paare
+pnpm --filter @takt/web contrast    # Kontrastnachweis samt Vollstaendigkeitswaechter
 ```
 
 ---
@@ -167,10 +188,25 @@ pnpm contrast          # Klartext
 pnpm contrast:md       # Markdown-Tabelle
 ```
 
-Stand 2026-09-01: **124 Paare geprüft, 0 durchgefallen** (62 je Modus, davon 2 je Modus als
-dekorativ ausgenommen). Gegenüber T-006 sind 15 Paare je Modus dazugekommen: die gestreifte
-Randschiene des Leistungsfelds, die Marken vor beiden Beschriftungen, die drei Ausprägungen des
+Stand 2026-09-06 (gemessen in T-209): **253 Paare, 506 Messungen, 0 durchgefallen**, dazu
+**9 Gegenproben** und **83 gezeichnete Farbtoken, 0 davon ohne Nachweis**. Gegenüber T-006 sind
+seinerzeit 15 Paare je Modus dazugekommen: die Randschiene des Leistungsfelds — damals gestreift,
+seit T-202 durchgezogen —, die Marken vor beiden Beschriftungen, die drei Ausprägungen des
 Erledigt-Kennzeichens und die Flächen der Einleitung.
+
+**Der Lauf misst seit T-209 auch seine eigene Vollständigkeit** (Auflage A-A-45 aus T-189, Zeilen
+je Token aus T-204 Abschnitt 9). Bis dahin sagte er, daß die Paare in seiner Liste halten — nicht,
+daß seine Liste die gezeichneten Farben abdeckt; vierzehn Farbtoken wurden gezeichnet und von
+keinem Paar gemessen, und der Lauf blieb grün. Jedes farbtragende Token aus `tokens.css`, das eine
+Klasse oder Komponente unter `apps/web/src` zeichnet, braucht jetzt eine von drei Aussagen: ein
+Paar, eine benannte Ausnahme (`exempt`) oder einen Eintrag in `noContrastQuestion` **mit dem
+Grund, warum es ein Paar hier nicht geben kann**. Die Gegenrichtung gilt auch: Ein Paar auf eine
+Farbe, die keine Klasse mehr zeichnet, macht den Lauf rot. Die Prüfung ist **tokengenau, nicht
+flächengenau** — sie findet ein Token ohne Paar, nicht ein Paar, das die falsche Fläche mißt.
+
+Vier davon stellen keine Kontrastfrage und sind namentlich ausgenommen: `--shadow-xs`,
+`--shadow-sm` und `--shadow-lg` sind Schattenkurzschriften und keine Farben, und `--bg-scrim` hat
+die Aufgabe, Kontrast zu **nehmen** — ein Mindestwert wäre die Umkehrung ihres Zwecks.
 
 Zwei Token mussten dafür nachgezogen werden, weil sie gemessen durchfielen:
 `--note-internal-rail` von `#a8b2c3` auf `#7e8a9e` (2,13:1 → 3,49:1) und die Kontur des
@@ -514,15 +550,24 @@ Buchungsliste und eine Einstellungsseite unterschiedliche Ansprüche haben.
 
 ### 4.3 Radien und Erhebung
 
-Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: fünf Stufen von `--shadow-xs` (Karte in Ruhe) bis
-`--shadow-drag` (gezogenes Element, mit farbigem Ring). Im dunklen Modus sind die Schatten
-kräftiger, weil Schatten auf dunklem Grund sonst nicht wirken.
+Radien: 3 / 4 / 6 / 8 / 12 / Pille. Schatten: drei Stufen — `--shadow-xs` (Karte in Ruhe),
+`--shadow-sm` (Karte unter dem Zeiger) und `--shadow-lg` (Auswahlliste, Menü, Dialog, globale
+Suche, Toast), dazu `--shadow-none`. Im dunklen Modus sind die Schatten kräftiger, weil Schatten
+auf dunklem Grund sonst nicht wirken.
 
-`--shadow-drag` ist zurzeit **von keiner Fläche belegt**: Die Kartenbewegung, für die er gedacht
-war, ist mit E-054 entfallen (Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen
-sich anders aus — der gezogene Tag über `.tree__item--dragging`, das gezogene Feld über
-`.tfield--dragging` (Deckkraft) und `.tfield--drop` (Kante am Ablageziel). Er bleibt als Stufe
-stehen, damit die nächste Ziehfläche nicht ihren eigenen Schatten erfindet.
+**Es waren fünf Stufen, und zwei davon zeichnete nichts** (T-214, O-IT). `--shadow-drag` war seit
+E-054 ausdrücklich unbelegt — die Kartenbewegung, für die er gedacht war, ist entfallen
+(Abschnitt 6), und die zwei verbliebenen Ziehbewegungen zeichnen sich anders aus: der gezogene Tag
+über `.tree__item--dragging`, das gezogene Feld über `.tfield--dragging` (Deckkraft) und
+`.tfield--drop` (Kante am Ablageziel). `--shadow-md` war unbemerkt unbelegt: Die Musterseite
+schrieb ihm die Auswahlliste zu, und die trägt `--shadow-lg`.
+
+Die Begründung, die `--shadow-drag` bis dahin trug — „bleibt als Stufe stehen, damit die nächste
+Ziehfläche nicht ihren eigenen Schatten erfindet" —, ist damit gefallen. Sie hielt einen Wert
+gegen einen Fall, den es nicht gibt; wer eine Ziehfläche baut, misst ihren Schatten dann und
+schreibt ihn hierher. Der vierte Wächter der Kontrastprüfung hält die Liste seither ehrlich:
+**Ein farbtragendes Token der semantischen Ebene, das keine Fläche zeichnet, macht `pnpm contrast`
+rot.**
 
 ---
 
@@ -532,9 +577,24 @@ Für jeden Baustein sind dieselben Zustände in derselben Reihenfolge definiert:
 normal, `:hover`, `:active`, `:focus-visible`, `[disabled]`, Fehler.
 
 **Fokus.** `:focus-visible` erzeugt einen 2px-Ring in `--focus-ring-color` mit 2px Abstand. Der
-Ring liegt außerhalb des Elements, damit ihn nichts verdeckt (SC 2.4.11 Focus Not Obscured). Auf
-gefüllten Flächen kommt über die Klasse `on-solid` ein heller Gegenring dazu. `outline: none`
-ohne Ersatz gibt es nirgends. Bei `prefers-contrast: more` wächst der Ring auf 3px.
+Ring liegt außerhalb des Elements, damit ihn nichts verdeckt (SC 2.4.11 Focus Not Obscured).
+`outline: none` ohne Ersatz gibt es nirgends. Bei `prefers-contrast: more` wächst der Ring auf
+3px.
+
+Auf gefüllten Flächen kommt über die Klasse `on-solid` ein Gegenband dazu, und es liegt **innen,
+an der Füllung** — 0 bis 2px `--focus-ring-contrast` als Schatten, darüber 2 bis 4px
+`--focus-ring-color` als Kontur gegen die Fläche. Der Doppelring hat damit drei Nahtstellen, und
+alle drei sind gemessen: Füllung gegen Gegenband **5,98** hell / **6,26** dunkel am Primärknopf und
+**6,75** / **7,98** am Gefahrenknopf, Gegenband gegen Kontur **5,98** / **9,23**, Kontur gegen die
+Fläche **5,33** bis **5,98** / **7,62** bis **9,07**. Der kleinste Wert der Reihe ist 5,33 — knapp
+das Doppelte dessen, was SC 1.4.11 fordert.
+
+Bis T-213 lagen die beiden Bänder andersherum. Dann berührte das Gegenband die Füllung gar nicht,
+und am Primärknopf im hellen Thema fielen **beide** Bänder mit ihrem Nachbarn zusammen — 1,00:1 an
+beiden Kanten, sichtbar blieb ein Knopf, der beim Tabulieren um 2px wächst (T-210, SC 2.4.7 und
+SC 1.4.11). Der Tausch hat keinen Farbwert geändert; er hat die Aufgaben der beiden Token an die
+Plätze gebracht, an die sie gehören. Zurückdrehen geht nicht: Für die alte Anordnung existiert im
+dunklen Thema kein gültiger Wert.
 
 **Klickfläche.** Symbolknöpfe sind mindestens 28×28px und erfüllen damit SC 2.5.8 (24×24) mit
 Reserve. `--hit-target-min` hält den Mindestwert als Token fest.
@@ -546,6 +606,12 @@ Animiert werden nur `transform`, `opacity` und Farben.
 **Deaktiviert gegen ladend.** Ein ladender Knopf behält die Farbe seiner Ausprägung und zeigt
 einen Anzeiger; ein deaktivierter Knopf wird grau. „Arbeitet gerade“ und „geht nicht“ dürfen
 nicht gleich aussehen.
+
+**Und `loading` gehört nicht an den Auslöser eines Dialogs** (T-218, B-18). Wer einem Knopf „zur
+Sicherheit“ `loading` gibt, während der Dialog dahinter arbeitet, sperrt ihn — `Button` setzt bei
+`loading` das echte `disabled` —, und ein gesperrter Knoten nimmt keinen Fokus auf. Die
+Fokusrückkehr fiele auf `<body>`, und es sähe wie Sorgfalt aus. Die Arbeit wird an **einem** Ort
+gezeigt, und es ist der Ort des Fokus: der Absendeknopf **im** Dialog. Siehe 5.2.
 
 **Rückmeldung.** Jede Interaktion aus Abschnitt 16 hat eine sichtbare Rückmeldung: sofortige
 Zustandsänderung unter 100ms, Anzeiger ab etwa 300ms, Erfolgs- oder Fehlermeldung danach.
@@ -616,6 +682,86 @@ zurück (`scrollTop` von 897 auf 0), der Knopf steht danach bei y = 130 im Fenst
 Fokusfalle, kein `tabindex` an der Rollfläche: Ein Halt an einer `aria-live`-Region wäre ein Halt,
 an dem nichts zu tun ist.
 
+### 5.2 Knöpfe, die einen Dialog öffnen — U-5, R-1 bis R-6, N-1 bis N-4 (T-218, T-222, T-226)
+
+Ein Knopf, der einen Dialog öffnet, ist zugleich das **Rückkehrziel** dieses Dialogs:
+`DialogSurface` gibt den Fokus beim Schließen an den Auslöser zurück. Damit ist jede Handlung, die
+den Auslöser verändert, auch eine Handlung am Fokus. Die folgenden Regeln sind Hausregeln und
+nicht Befund einer Aufgabe.
+
+**Die Frage vor dem Bauen (R-5).** *Überlebt dieses Bedienelement seinen eigenen Erfolg?* Es gibt
+drei Antworten und je genau eine Bauform. Eine vierte gibt es nicht, und „zwei Bausteine an einer
+Stelle“ ist keine davon.
+
+| Antwort | Bauform |
+|---|---|
+| Ja, unverändert | nichts zu tun |
+| Ja, aber anders beschriftet | **ein Baustein, zwei Beschriftungen** (U-5) |
+| Nein, es fällt | Ersatzkette nach N-1 bis N-4, am Aufrufer benannt (R-4) |
+
+**Regel U-5 — ein Bedienelement ist auch ein Fach.** Wechselt an einer Stelle nicht der Text,
+sondern der **Zustand eines Bedienelements**, bleibt der Baustein derselbe und nur seine
+Eigenschaften wechseln — Beschriftung, Sinnbild, Ausprägung. Zwei verschiedene Bausteine an einer
+Stelle, umgeschaltet durch einen Wert, der sich **zur Laufzeit** ändert, hängt React aus und baut
+neu auf; der Knoten, der den Dialog geöffnet hat, existiert danach nicht mehr. Gebaut ist das
+zweimal an derselben Zeile (`ExportGroups.tsx`, `TemplatePreview.tsx`) und seit jeher richtig am
+`Timer.tsx`: ein Knoten, wechselndes `icon` und `variant`.
+
+**Regel R-6 — woran man den Fall ohne Browser erkennt.** Verdächtig ist nicht „zwei Bausteine in
+einer Bedingung“, sondern die Verbindung dreier Merkmale: (a) an einer Stelle stehen zwei
+**verschiedene** Bausteinarten, (b) die Bedingung dazwischen kann sich ändern, **während die
+Fläche steht**, und (c) einer der beiden öffnet einen Dialog oder ein Menü. Fehlt (b) — die
+Bedingung ist eine feste Eigenschaft der Aufrufstelle —, ist die Stelle harmlos.
+
+**Regel R-1 — wann ein Rückkehrziel gültig ist.** Ein Ziel taugt nur, wenn es zum Zeitpunkt der
+Rückkehr **alle drei** Bedingungen erfüllt: es hängt im Dokument (`isConnected`), es ist nicht
+gesperrt (`disabled`, `inert`), und es ist nicht verborgen (`hidden`, `display: none`). Daraus
+folgt unmittelbar: *ein Rückkehrziel wird nicht gesperrt, solange der Dialog steht, der zu ihm
+zurückkehren soll* — siehe den Absatz zu `loading` oben.
+
+**Regel R-0 — eine Fläche, aus der Dialoge geöffnet werden, wird beim Auffrischen nicht
+ausgetauscht.** Auffrischen heißt `refreshDeps` und `refreshing`, nicht `deps` und Skelett. Ein
+Skelett ist der richtige Zustand beim **ersten** Laden und der falsche nach jeder Handlung — es
+nähme jedes Rückkehrziel auf dem Bildschirm mit.
+
+**Regel R-3 — ein Ersatz ohne zugänglichen Namen wird übersprungen.** Ein Sprung auf einen
+namenlosen Kasten ist für den, der hört, ununterscheidbar von dem Fall auf `<body>`, den die Kette
+gerade vermeiden soll. Eine eigene Ansage braucht die Kette nicht: Die Folge ist ohnehin gemeldet
+— unter der Bedingung, daß die Meldung den **Gegenstand** nennt und nicht nur die Handlung.
+„Gelöscht.“ erklärt einen Sprung nicht, „Todo „X“ gelöscht.“ erklärt ihn.
+
+**Regel R-4 — den Ersatz nennt der Aufrufer, nicht der Dialog.** `DialogSurface` weiß, **wer**
+geöffnet hat; welche Zeile nachrückt, weiß allein die Liste.
+
+**N-1 bis N-4 — wohin der Fokus geht, wenn das Ziel zu Recht fällt.** *Der Fokus folgt der
+Arbeit, nicht dem Baum:* Er geht auf das Bedienelement, mit dem der Benutzer die begonnene Arbeit
+**fortsetzt** — und wo es keines mehr gibt, auf die kleinste Fläche, die die **Folge** seiner
+Handlung zeigt. Vier Stufen, erster Treffer gewinnt.
+
+| # | Lage | Ziel |
+|---|---|---|
+| **N-1** | Der Gegenstand lebt, nur woanders (verschoben, umsortiert, in eine andere Spalte gewandert) | **seine neue Darstellung** — dasselbe Bedienelement am selben Gegenstand |
+| **N-2** | Der Gegenstand ist fort, die Liste bleibt | **der Nachfolger in der sichtbaren Reihenfolge** — nach Filter und Sortierung, nicht nach den Daten; war es der letzte, der Vorgänger |
+| **N-3** | Der Gegenstand war der letzte, die Liste ist danach leer | **die eine Aktion des Leerzustands**; trägt er keine, sein **Titel** mit `tabindex="-1"`. Ein leerer Behälter mit `tabindex="-1"` ist eine Sackgasse mit Namen |
+| **N-4** | Die Fläche selbst ist fort | **`.screen__title`** der Ansicht, die jetzt steht, `tabindex="-1"` |
+
+Was **nie** gilt: `<body>`. `<body>` ist kein Ziel, sondern die Meldung, daß keines gewählt wurde.
+
+**Der Zeilenbezug im Namen gehört in den Knopf, nicht in ein `aria-label`.** Trägt ein Knopf
+sichtbaren Text und braucht er zusätzlich den Bezug auf seine Zeile (SC 2.4.6), steht der Bezug
+als `visually-hidden`-Zusatz **hinter** der Beschriftung, im selben Knopf, mit Komma davor. Ein
+`aria-label` wäre nach SC 2.5.3 zwar erlaubt, solange es die sichtbare Beschriftung wörtlich und
+am Anfang enthält — es ist trotzdem die schlechtere Bauform, weil es die Beschriftung ein
+**zweites Mal** aufschreibt: Wer später ein Wort ändert und die zweite Stelle übersieht, bricht
+2.5.3, ohne daß irgendetwas rot wird. Der Zusatz kann das nicht, denn er enthält die Beschriftung
+gar nicht. Er schreibt außerdem die **sichtbare** Zeichenkette der Zeile zeichengleich ab; eine
+zweite Formatierung desselben Wertes wäre dieselbe Abschrift eine Ebene tiefer.
+
+**Und jede Prüfung des Fokus nach einer ändernden Handlung mißt zweimal** (B-19): einmal sofort
+und einmal **nach dem Eintreffen der Auffrischung**. Zwischen Rückkehr und Austausch liegt ein
+Netzweg; eine Messung bei t+0 besteht auch dann, wenn der Auslöser einen Wimpernschlag später
+ausgehängt wird. Der Prüffall dazu heißt `TP-FOCUS-07`.
+
 ---
 
 ## 6. Tastatur und Hilfsmittel
@@ -628,6 +774,7 @@ an dem nichts zu tun ist.
 | Baumansicht | genau ein Tabulator-Halt, darin Pfeiltasten, Pos1, Ende, `*` klappt alles auf |
 | Dialog | Fokus springt hinein, Tabulator bleibt gefangen, Escape bricht ab, Fokus kehrt zum Auslöser zurück |
 | Kanban | Kein Verschieben und keine Sondertasten (E-054). Jede Karte ist über Tabulator erreichbar; ihr Kartenmenü führt zu Detailansicht, Timer und Status |
+| Kanban-Spaltenkopf | Ein Menü je Spalte („Spalte „X“ verwalten“): Todo anlegen, **Umbenennen**, Regel bearbeiten, Todos in der Liste, vom Board nehmen. Dieselben fünf Einträge stehen als Schaltflächen im Dialog „Spalten des Boards“ (T-133, O-A) |
 | Tag-Baum | Ziehen ist die schnelle Art; die vollständige ist auswählen und „Verschieben“ (Dialog mit Zielordner) |
 | Exportvorlage | Ziehen ordnet die Felder um; dieselbe Umordnung leisten die Pfeilknöpfe „nach oben“ und „nach unten“ an jeder Feldzeile |
 | Tabelle | Sortierknöpfe mit `aria-sort`, Auswahlkästchen mit `indeterminate` für die Kopfzeile |
@@ -681,7 +828,7 @@ Diese zweite Hälfte trägt die Gestaltung. Sechs Merkmale, von denen nur eines 
 
 | Merkmal | `scope="billing"` — Leistung | `scope="internal"` — Vermerk |
 |---|---|---|
-| Randschiene links | 4px, **gestreift**, Akzentfarbe | 4px, einfarbig, Grau |
+| Randschiene links | 4px, **durchgezogen**, Akzentfarbe | 4px, **unterbrochen**, Grau |
 | Kopfband | „Verlässt Takt · steht in der Abrechnung“, Pfeil nach außen | „Bleibt in Takt“, Schloss |
 | Marke vor der Beschriftung | gefülltes Quadrat mit Pfeil nach außen | gestrichelte Kontur mit Schloss |
 | Schreibfläche | hell, wirkt wie ein Ausgabefeld | gedämpft, wirkt wie ein Notizzettel |
@@ -690,10 +837,17 @@ Diese zweite Hälfte trägt die Gestaltung. Sechs Merkmale, von denen nur eines 
 
 Zwei dieser Merkmale sind in T-015 dazugekommen und lösen jeweils einen konkreten Ausfall:
 
-* **Die gestreifte Randschiene** trägt auch dann, wenn Farbe wegfällt. Zwei 4px-Schienen, die
-  sich nur im Farbton unterscheiden, sind in Graustufen und bei Deuteranopie nahezu gleich.
-  Gestreift gegen einfarbig ist es nicht. Die Musterseite hat dafür in Abschnitt 7 eine eigene
-  **Graustufenprobe**.
+* **Die unterbrochene Randschiene am Vermerk** trägt auch dann, wenn Farbe wegfällt. Zwei
+  4px-Schienen, die sich nur im Farbton unterscheiden, sind in Graustufen und bei Deuteranopie
+  nahezu gleich — gemessen liegen diese beiden bei **1,71:1** hell und **1,31:1** dunkel
+  auseinander. Durchgezogen gegen unterbrochen ist es nicht: In der Lücke sieht man die Karte,
+  also ist Balken gegen Lücke dasselbe Verhältnis wie Schiene gegen Karte, **3,49:1** hell und
+  **4,31:1** dunkel (`apps/web/scripts/contrast-check.mjs`, Gruppe „Feldart"). Bis T-202 stand
+  hier eine **gestreifte** Schiene; ihr Streifen unterschied sich von seiner Schiene wieder nur
+  im Farbton, und visual-qa hat in T-198 an echten Pixeln gemessen, dass `overflow: hidden` sie
+  auf keinem Bildschirm sichtbar werden ließ. Die Musterseite hat für den Vergleich in
+  Abschnitt 7 eine eigene **Graustufenprobe** — sie zeigt das Bauteil als Ganzes und kann ein
+  einzelnes Merkmal nicht freisprechen.
 * **Die Marke unmittelbar vor der Beschriftung** trägt auch dann, wenn das Kopfband nicht im
   Blickfeld ist — in einem schmalen Dialog, in einer gescrollten Liste, im Outlook-Add-in.
 
@@ -793,7 +947,7 @@ damit der einzige, in dem eine modale Sperre richtig ist. Der Dialog hat eine be
 Schaltfläche, die den Zustand auflöst („Takt beenden“); ohne sie wäre er eine Tastaturfalle
 (SC 2.1.2). Escape schließt ihn nicht.
 
-**Drei Regeln, die daraus folgen:**
+**Fünf Regeln, die daraus folgen:**
 
 1. **Kein Wert aus `osUser()` gehört in eine dieser Meldungen.** Die Hülle prüft ausdrücklich,
    dass ihre Sätze den Benutzernamen nicht wiedergeben; eine Oberfläche, die ihn danebenschreibt,
@@ -809,6 +963,14 @@ Schaltfläche, die den Zustand auflöst („Takt beenden“); ohne sie wäre er 
    trägt den Grund als Nutzlast. Eine Sperrmeldung, die auf den nächsten Abruf wartet, sperrt
    nichts — sie beschreibt hinterher, und dazwischen arbeitet der Benutzer weiter, ohne dass
    etwas gespeichert wird.
+5. **Der einzige Ausgang sagt es, wenn er nicht wirkt** (O-AF, T-124; nachgemessen in T-133).
+   „Takt beenden“ ist der einzige Weg aus der Sperrmeldung. Sein Erfolgsfall ist das Ende des
+   eigenen Prozesses — die Zusage aus `takt_quit` kommt danach **nie** zurück. Ein Fehlschlag
+   ist deshalb nicht „die Zusage wird abgewiesen“, sondern „es geschieht nichts“, und auf nichts
+   kann man nicht warten. `useQuitAttempt` macht mit einer Frist von fünf Sekunden aus dem
+   Ausbleiben ein Ereignis, und die Auskunft steht **im Feld selbst** (`.quitfail`,
+   `role="status"`, immer im Baum) und nicht im Meldungsstapel: Der liegt seit T-110 hinter der
+   Abdunklung, solange ein Dialog steht — die Sperrmeldung würde ihn also gar nicht zeigen.
 
 Lebend nachvollziehbar auf der Musterseite, Abschnitt 10: Jeder Zustand lässt sich einzeln und
 in Kombination einschalten.
@@ -835,7 +997,8 @@ Vollständig und aktuell auf der Musterseite, Abschnitt 11. Kurzfassung:
 | Menü, Kontextmenü | `Menu.tsx` | S-02, S-04, S-06, S-08 |
 | Bestätigungsdialog | `ConfirmDialog.tsx` | S-03, S-04, S-06, S-07, S-08, S-09 |
 | Filterleiste, Suchfeld, Auswahlliste, Filterschalter | `FilterBar.tsx` | global, S-02, S-06, S-07, S-09, S-14 |
-| Startmeldung, Datenordner-Hinweis, Sperrmeldung | `ShellStatus.tsx` | global, vor jeder Ansicht |
+| Startmeldung, Datenordner-Hinweis, Sperrmeldung, „Takt beenden“ samt Auskunft bei Fehlschlag | `ShellStatus.tsx` | global, vor jeder Ansicht |
+| Exportordnerfeld: Auswahldialog mit Textfeld als Rückfallweg | `ExportDirectoryField.tsx` | S-09 |
 | Fokusführung modaler Flächen (keine Darstellung) | `lib/focus.ts` | `ConfirmDialog.tsx`, `ShellStatus.tsx` |
 | Wert zu Beschriftung (keine Darstellung) | `lib/labels.ts` | alle |
 | Symbolsatz | `Icon.tsx` | alle |
@@ -882,3 +1045,124 @@ Seitennavigation (global).
 12. **Ein Bedienweg je Einstellung.** Dieselbe Einstellung an zwei Stellen bedienbar zu machen
    kostet zweimal Pflege und stiftet einmal Zweifel, welche der beiden gilt. Wenn ein zweiter
    Weg unvermeidlich ist, teilen sich beide **einen** Zustand — nie zwei (T-057, T-065).
+
+   *Benannte Ausnahme, T-133:* Der **Name einer Regel** lässt sich an zwei Stellen ändern — im
+   Regelformular (`PoolFormDialog`, zusammen mit den fünf Achsen) und im eigenen Dialog
+   `PoolRenameDialog`. Der Zustand ist trotzdem **einer**: Beide lesen `pool.name` aus der
+   Struktur und schreiben über `PATCH /pools/{poolId}`; es gibt keinen zwischengespeicherten
+   zweiten Wert. Der zweite Weg ist nicht Bequemlichkeit, sondern die Behebung von O-A: Bis
+   T-133 war der einzige Weg zum Namen ein Formular mit acht Abschnitten, das beim Speichern
+   **alle** Achsen neu schreibt — für die Änderung eines Wortes. Wer nur umbenennt, schickt
+   jetzt `{ name }` und sonst nichts.
+
+13. **Ein Ausgang, dessen Scheitern niemand sieht, ist kein Ausgang** (T-133, O-AF-Klasse).
+   Wo eine Fläche genau **einen** Weg nach vorne hat, gehört der Fehlschlag dieses Weges auf
+   dieselbe Fläche — nicht in eine Meldung daneben, die die Fläche womöglich verdeckt oder gar
+   nicht zeigt. Betroffen sind drei Stellen, und alle drei tragen ihre Auskunft heute selbst:
+   die Sperrmeldung und die Meldung zum Benutzernamen („Takt beenden“, Abschnitt 9 Regel 5), der
+   Dialog zur verwaisten Buchung (`dialogError`) und das **Exportordnerfeld**: Scheitert der
+   Auswahldialog des Betriebssystems, tritt das Textfeld an seine Stelle und nennt den Grund.
+   Bis T-133 lief dort eine Zusage ohne `catch` ins Leere — der Knopf reagierte auf nichts, und
+   das Textfeld erschien nie. Wer eine Zusage mit `void` verwirft, beantwortet vorher die Frage:
+   *Was sieht der Benutzer, wenn sie abgewiesen wird?*
+
+14. **Die Herkunft eines Textes steht in seinem Typ, auch hinter einem `unknown`** (E-063
+   Punkt 6, T-129; erweitert in T-133 um O-AT). `api/types.ts` kennt kein nacktes `string`
+   mehr: Jedes Feld heißt `ForeignText`, `DraftText`, `ServiceText`, `TechnicalKey`,
+   `FileSystemPath`, `ColorValue`, `PageCursor` oder `SecretText`. Wo ein Feld ausdrücklich
+   `unknown` ist — `ExportTemplate.definition`, weil das Vorlagenformat dem Motor gehört, und
+   seit T-139 `VersionCheckView.latestVersion`, weil dieser Wert aus der Antwort von GitHub
+   stammt —, führt der Weg zu angezeigtem Text über **eine** erklärte Übergangsstelle
+   (`foreignTextFrom` in `lib/foreign.ts`): `unknown` hinein, fremder Text heraus. Und die
+   Marke überlebt auch eine **Sammlung**: `namen.join(", ")` gilt als fremder Wert, weil sie
+   sonst genau dort abfiele, wo niemand hinsieht. Gemessen wird das alles von
+   `scripts/proof-foreign.mjs` — vierzehn Prüfungen in sechs Abschnitten, keine davon mit einer
+   Liste von Feld- oder Funktionsnamen.
+
+15. **Ein Verweis nach außen ist ein Knopf, kein `<a href>`** (T-139, A-V-18). Die Oberfläche
+   läuft im Webview der Hülle, und über Navigationen wacht dort **niemand**: Ein Anker auf
+   github.com trüge den Benutzer aus seiner Anwendung in ein Fenster ohne Adresszeile. Der
+   einzige Weg nach außen führt über einen Befehl der Hülle, und der nimmt **keine Adresse**
+   entgegen, sondern die Fassungsbezeichnung (Abschnitt 12). Die Adresse darf danebenstehen —
+   als Text, damit man sie liest, bevor man klickt.
+
+16. **Ein Auslöser eines Dialogs überlebt seinen eigenen Erfolg — als *derselbe* Knoten**
+   (T-218, T-222, T-226). Wer an einer Stelle zwei verschiedene Bausteine anbringt und zwischen
+   ihnen mit einem Wert umschaltet, den der Dialog dahinter selbst ändert, zerstört die
+   Fokusrückkehr: React hängt den Auslöser aus, und der Fokus fällt auf `<body>`. Die Bauform ist
+   **ein** Baustein mit wechselnden Eigenschaften (U-5); wo das Ziel zu Recht fällt, gilt die
+   Ersatzkette N-1 bis N-4. Alles dazu in Abschnitt 5.2, einschließlich der Regel, daß ein
+   Rückkehrziel nicht `loading` bekommt, und der Regel, daß der Zeilenbezug im Knopf steht und
+   nicht in einem `aria-label`. Geprüft wird **nach** der Auffrischung, nie nur bei t+0.
+
+---
+
+## 12. Wenn eine neuere Fassung vorliegt (A-18, T-139)
+
+Takt fragt bei GitHub nach neueren Fassungen und **fragt den Benutzer**, was geschehen soll. Es
+lädt nichts herunter und installiert nichts, zu keinem Zeitpunkt (A-18.9). Der Dialog ist die
+einzige Fläche dieser Funktion.
+
+### 12.1 Der Zustand, der nichts zeigt — und das ist der Normalfall
+
+Sechs Lagen führen zu genau demselben Bild, nämlich zu keinem:
+
+| Lage | Was erscheint |
+|---|---|
+| Die installierte Fassung ist aktuell | nichts |
+| Die installierte Fassung ist neuer als die veröffentlichte | nichts |
+| Diese Fassung wurde übersprungen | nichts |
+| Es wurde noch nicht geprüft | nichts |
+| GitHub war nicht erreichbar oder antwortete unbrauchbar | nichts |
+| Takt läuft ohne seine Anwendungshülle | nichts |
+
+Kein Abzeichen, keine Meldung, keine Fehlerfläche, kein „Prüfung fehlgeschlagen“ (A-18.5,
+A-18.11). Der Grund steht im Protokoll des Dienstes, und dort gehört er hin: Ein Fehlschlag, der
+den Benutzer bei seiner Arbeit nicht behindert, ist keine Meldung wert — und wer gelernt hat,
+eine Meldung ungelesen wegzuklicken, klickt auch die weg, die zählt (R-20).
+
+Umgesetzt ist das an einer Stelle: `app/UpdateNotice.tsx` gibt `null` zurück, wenn nichts zu
+melden ist. Es gibt keinen leeren Behälter, der auf Inhalt wartet.
+
+### 12.2 Der Dialog — drei Angaben, zwei Antworten, keine Vorauswahl
+
+Er nennt **die installierte Fassung, die verfügbare Fassung und die Release-Seite dieser
+Fassung** (A-18.6), letztere als lesbaren Text in Festbreitenschrift. Darunter stehen zwei
+Knöpfe: „Installieren“ und „Überspringen“.
+
+Beide tragen dieselbe Gestalt (`secondary`), und der Fokus liegt beim Öffnen **auf dem Dialog**
+und nicht auf einem der Knöpfe. Das ist die eine Stelle, an der dieser Dialog bewusst von
+Abschnitt 8 abweicht: Der Bestätigungsdialog hebt seinen rechten Knopf hervor und stellt den
+Fokus hinein — hier wäre genau das die Vorauswahl, die A-18.7 verbietet, und zwar für die
+Antwort, die den Benutzer aus der Anwendung heraus zu einer **unsignierten** Datei führt.
+
+Escape und der Schließknopf beantworten nichts. Sie stellen den Hinweis für diesen Lauf zurück;
+beim nächsten Start steht er wieder da. Nur „Überspringen“ wird gespeichert — im Bestand, nicht
+im Browserspeicher —, und es gilt genau dieser einen Fassung: Eine spätere, höhere meldet sich
+wieder (A-18.10).
+
+### 12.3 Was nach der Antwort passiert
+
+| Antwort | Sichtbares Ergebnis |
+|---|---|
+| „Installieren“, Seite geht auf | Dialog schließt, Meldung: „Die Release-Seite ist im Browser geöffnet.“ |
+| „Installieren“, Bezeichnung abgewiesen | Dialog bleibt offen, Meldung im Dialog; die Adresse steht weiter zum Lesen da |
+| „Installieren“, kein Browser | Dialog bleibt offen, Meldung im Dialog |
+| „Überspringen“ | Knopf zeigt den Ladezustand, danach Dialog zu und Meldung mit der Fassungsnummer |
+| „Überspringen“ scheitert | Dialog bleibt offen, Meldung im Dialog, nichts ist gespeichert |
+
+Die Fehlermeldungen stehen **im** Dialog und nicht als Toast daneben: Der Dialog ist modal
+(`aria-modal`), und eine Meldung außerhalb erreicht den Benutzer dort nicht — dieselbe Lehre wie
+in Abschnitt 8 beim Undo-Toast.
+
+### 12.4 Die Fassungsnummer ist fremder Text
+
+Sie kommt aus der Antwort von GitHub. Sie betritt die Oberfläche als `unknown`
+(`VersionCheckView.latestVersion`), geht durch `foreignTextFrom` (Regel 14) und danach durch die
+Formprüfung der Domäne. Erst was dort besteht, wird angezeigt — und dieselbe geprüfte
+Zeichenkette geht in den Öffnen-Befehl der Hülle, die sie ein zweites Mal prüft, bevor sie eine
+Adresse daraus baut.
+
+Die Ordnung der Fassungen liegt in `packages/domain` und nicht hier: `0.10.0` steht über
+`0.9.0`, was ein Zeichenkettenvergleich umdreht. Die Musterseite benutzt genau dieses Paar als
+Beispiel (Abschnitt 12 der Musterseite).

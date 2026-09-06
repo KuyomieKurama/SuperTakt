@@ -63,7 +63,7 @@ const todoDoneResult = (poolMovement: PoolMovement | null): TodoDoneResult => ({
   title: "Kesselwartung",
   callNumber: null,
   statusId: "status-1",
-  completedAt: null,
+  completedAt: null, dueDate: null,
   tagIds: [],
   createdAt: "2026-09-04T08:00:00Z",
   updatedAt: "2026-09-04T08:00:00Z",
@@ -133,7 +133,7 @@ describe("undoDoneAction — Erfolg: afterwards() läuft, die Meldung trägt den
     await flush();
 
     const toast = show.mock.calls[0]?.[0] as ToastInput;
-    expect(toast.body).toBe("Das Abhaken ist zurückgenommen. Tags und Status ändern sich dadurch nicht.");
+    expect(toast.body).toBe("Tags und Status ändern sich dadurch nicht.");
   });
 
   it("mit einer Bewegung hängt der Rumpf GENAU den Satz des Anlasses 'reopen' an — nicht den von 'booking'", async () => {
@@ -152,7 +152,7 @@ describe("undoDoneAction — Erfolg: afterwards() läuft, die Meldung trägt den
 
     const toast = show.mock.calls[0]?.[0] as ToastInput;
     expect(toast.body).toBe(
-      `Das Abhaken ist zurückgenommen. Tags und Status ändern sich dadurch nicht. ${reopenSentence}`,
+      `Tags und Status ändern sich dadurch nicht. ${reopenSentence}`,
     );
   });
 });

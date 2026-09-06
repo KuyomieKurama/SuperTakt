@@ -1417,3 +1417,1107 @@ T-114.
    stehen und ein Wächter sie lesen. Die Herkunft eines Textes gehört deshalb in seinen Typ und
    nicht in eine gepflegte Namensliste im Nachweis: Eine Liste ist wieder eine Abschrift, und
    Punkt 4 gilt für sie wie für jede andere.
+
+---
+
+## E-064 — Die Versionsprüfung ist die einzige Verbindung nach außen, und sie darf nur fragen
+
+**Kontext.** Der Auftraggeber am 2026-09-04: Takt soll beim Start und regelmäßig prüfen, ob auf
+GitHub eine neuere Fassung vorliegt, den Benutzer fragen und ihn zur Release-Seite führen —
+ausdrücklich **ohne** eigenen Download und **ohne** eigene Installation. Aufgenommen als
+Abschnitt 18 der Spezifikation, A-18.1 bis A-18.12.
+
+**Entscheidung.**
+
+1. **E-001 gilt weiter, wird aber benannt eingeschränkt.** Takt kannte bisher keine Adresse
+   außerhalb von `127.0.0.1`. Ab hier kennt es genau eine: die Releases des offiziellen
+   Bestands. Sie steht fest im Erzeugnis, ist nicht einstellbar, und **keine Antwort kann sie
+   verlegen** — weder über einen Verweis in der Antwort noch über eine Umleitung. Alles andere
+   an E-001 bleibt unberührt: kein Cloud-Dienst, kein Datenbankserver, keine Telemetrie.
+
+2. **Die Frage stellt der lokale Dienst, nicht die Oberfläche.** Die CSP der Hülle erlaubt dem
+   Webview `connect-src` nur auf sich selbst, `ipc:` und `http://127.0.0.1:17843`
+   (`tauri.conf.json`). Die Oberfläche kann GitHub also gar nicht fragen, und das soll so
+   bleiben: Eine Liste, die man für eine Funktion aufmacht, bleibt für alles andere offen. Der
+   Dienst holt die Antwort, wirft alles weg, was er nicht braucht, und gibt der Oberfläche eine
+   Fassung, einen Verweis und sonst nichts.
+
+3. **Die Ordnung der Versionsnummern liegt in `packages/domain`.** Sie ist Fachlogik ohne HTTP
+   und ohne SQL, sie wird an drei Stellen gebraucht (Dienst, Oberfläche, Prüfungen), und ein
+   Zeichenkettenvergleich stellt `0.10.0` vor `0.9.0`. Dazu gehört die Regel, wann überhaupt
+   etwas gezeigt wird: neuer **und** nicht übersprungen.
+
+4. **Die Release-Seite öffnet die Hülle, und sie baut die Adresse selbst.** `tauri-plugin-shell`
+   liegt bereits vor. Der Befehl nimmt **keine** Adresse entgegen, sondern höchstens die
+   Fassungsbezeichnung, prüft sie gegen eine enge Form und setzt sie in eine im Erzeugnis
+   festgelegte Adresse ein. Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen
+   wäre dieselbe Bauart wie eine offene Weiterleitung — nur mit dem Browser des Benutzers als
+   Ziel.
+
+5. **Übersprungen wird eine Fassung, nicht die Prüfung.** Der übersprungene Wert steht als
+   Einstellung im Bestand, wie jede andere Einstellung. Eine spätere, höhere Fassung meldet sich
+   wieder. Es gibt keinen Schalter „nie wieder fragen", weil er nicht verlangt wurde.
+
+6. **Ein Fehlschlag ist kein Ereignis.** Nicht erreichbar, unerwartete Antwort, fehlende
+   Fassungsangabe, gar keine Veröffentlichung: Die Prüfung endet still, der Grund steht im
+   Protokoll, die Oberfläche zeigt nichts. Ein Hinweis „Aktualisierungsprüfung fehlgeschlagen"
+   wäre eine Fehlerfläche für ein Problem, das den Benutzer bei seiner Arbeit nicht behindert.
+
+**Konsequenz.** Der Dienst bekommt eine Route und einen Ausgang ins Netz; damit gehört die
+Verbindung ins Bedrohungsmodell (neues Risiko R-19) und in die Prüfung jeder künftigen Freigabe.
+Die Zeitüberschreitung, das Fehlen jeder Weiterleitung auf einen fremden Wirt und die Obergrenze
+der gelesenen Antwort sind Teil der Umsetzung und nicht Feinschliff.
+
+---
+
+## E-065 — Die Fassung von Takt steht an einer Stelle
+
+**Kontext.** `tauri.conf.json`, `apps/desktop/package.json`, `Cargo.toml` und jede
+Arbeitsbereichsdatei tragen heute `0.0.0`. Eine Prüfung gegen GitHub braucht eine Zahl, die
+etwas bedeutet, und A-18.1 verlangt sie aus **einer** Quelle.
+
+**Entscheidung.** Führende Quelle ist `version` in `apps/desktop/src-tauri/tauri.conf.json`. Die
+Hülle liest sie zur Laufzeit aus den Angaben des Erzeugnisses und gibt sie der Oberfläche; sie
+wird nicht abgeschrieben. Wo eine zweite Datei dieselbe Zahl führen muss, wird sie beim Bauen
+daraus abgeleitet und der Gleichlauf gemessen — dieselbe Regel wie bei den Zahlen aus T-128 und
+O-AS: nicht „hier steht dasselbe", sondern „das kommt von dort".
+
+**Konsequenz.** Solange `0.0.0` steht, ist jede veröffentlichte Fassung neuer, und die Prüfung
+meldet sich sofort. Das ist richtig so und keine Fehlfunktion; die erste echte Fassungsnummer zu
+vergeben ist eine Entscheidung des Auftraggebers und keine des Bauablaufs.
+
+---
+
+## E-066 — Die feste Adresse und die prüfbare Naht sind nicht dasselbe
+
+**Kontext.** T-137 hat den Testplan vor dem Bau geschrieben und dabei die Frage gestellt, an der
+er hängt: Wie zeigt der Dienst im Prüflauf auf eine Nachbildung von GitHub, ohne A-18.3 zu
+verletzen („Die Adresse ist fest im Erzeugnis hinterlegt und weder einstellbar noch aus einer
+Antwort übernehmbar")? 22 von 26 Fällen warten darauf. Dazu drei kleinere Fragen aus derselben
+Aufgabe.
+
+**Entscheidung.**
+
+1. **Einstellbar heißt: von außen veränderbar. Das ist die Grenze, und sie verläuft am Prozess.**
+   A-18.3 verbietet, dass irgendetwas **außerhalb** des Erzeugnisses die Adresse verlegt: keine
+   Route, keine Einstellung im Bestand, keine Umgebungsvariable, kein Argument der Befehlszeile,
+   keine Datei daneben, keine Antwort und keine Weiterleitung. Der Sidecar kennt schon heute
+   keine Argumente (B-1.6 Punkt 1); dieselbe Härte gilt hier.
+
+   Sie verbietet **nicht**, dass der Zusammenbau im selben Prozess eine andere Abholfunktion
+   einsetzt. Genau so hängt in diesem Bestand jeder andere Anschluss: `compose()` nimmt Ports,
+   der Adapter ist austauschbar (E-001, E-035), und der Prüflauf baut sich seinen eigenen
+   Zusammenbau. Die Adresse bleibt dabei eine Festlegung im Erzeugnis mit genau einem Ort; die
+   **Naht** ist die Abholfunktion, nicht die Zeichenkette.
+
+   Bedingung, ohne die diese Entscheidung nicht gilt: Es muss ein Nachweis messen, dass im
+   ausgelieferten Zusammenbau **kein** Weg zu einer anderen Adresse führt. Ohne diesen Nachweis
+   ist die Naht ein Schalter, den nur noch niemand gefunden hat.
+
+2. **Gefragt wird `GET /repos/<besitzer>/<bestand>/releases/latest`.** Ein Gegenstand statt einer
+   Liste, Entwürfe und Vorabfassungen sind darin von GitHub bereits ausgenommen, und „es gibt
+   keine Veröffentlichung" ist ein 404 und damit ein klarer, stiller Fall (A-18.11).
+
+3. **Die Ordnung folgt der Vorrangregel von SemVer**, einschließlich „Vorabfassung steht unter
+   der gleichnamigen Fassung". Sie wird gebraucht, obwohl Punkt 2 keine Vorabfassung liefern
+   kann: Die **installierte** Fassung kann eine sein, und dann muss `1.2.0-rc.1` unter `1.2.0`
+   stehen. Ein führendes `v` gehört zur Bezeichnung der Veröffentlichung, nicht zur Fassung, und
+   wird vor dem Vergleich abgeschnitten — an genau einer Stelle.
+
+4. **Der Nachweis `proof:release-safety` gehört zu T-138** (Skript unter
+   `apps/local-api/scripts/`, es sieht den ganzen Baum an). Der Eintrag in `proof:all` ist Sache
+   des Orchestrators. Er misst mindestens: genau eine Adresse im Baum, kein Weg von einer Antwort
+   zum Öffnen-Befehl, und nirgends ein Herunterladen einer Datei aus einer Veröffentlichung.
+
+**Konsequenz.** T-138 kann bauen. Die eigentlichen Prüfdateien unter `tests/e2e/**` samt der
+Nachbildung der GitHub-Antwort bekommen eine eigene Aufgabe (T-142) in derselben Welle wie die
+Umsetzung, nicht davor — sie brauchen die Naht aus Punkt 1.
+
+---
+
+## E-067 — Woher die Hülle die Fassung nimmt, und was sie dem Öffnen-Befehl nicht gibt
+
+**Kontext.** T-136 hat gemessen, was `tauri-plugin-shell` auf dem Rust-Weg prüft: **nichts.**
+`Shell::open` reicht durch an `open::open(None, …)`, und die Quelle sagt dort wörtlich, dass bei
+einem Aufruf aus Rust nicht geprüft werden muss; der Prüfbereich wird nur bei Aufrufen aus
+JavaScript betreten. Damit ist die Formprüfung der Fassungsbezeichnung die **einzige** Kontrolle
+zwischen der Antwort von GitHub und `xdg-open` beziehungsweise `ShellExecuteW`. Zweiter Befund:
+Die Vorgabeberechtigung `shell:default` enthält `allow-open` mit einem Muster, das **jede**
+`https:`-Adresse durchlässt — eine Zeile in `capabilities/default.json` wäre eine offene
+Weiterleitung in den Browser des Benutzers. Dazu die Frage aus T-136-3: E-065 sagt nicht genau
+genug, woher die Fassung zur Laufzeit kommt.
+
+**Entscheidung.**
+
+1. **Die Hülle liest die Fassung aus den einkompilierten Angaben des Erzeugnisses**
+   (`app.package_info().version`, gefüllt aus `tauri.conf.json` beim Bauen). **Nicht** aus einer
+   Datei neben der Binärdatei, nicht aus einer Umgebungsvariablen, nicht aus einem Argument.
+   Sonst hinge die Aussage „diese Fassung ist installiert" an etwas, das jeder Prozess auf dem
+   Rechner ändern kann — und an ihr hängt, ob ein Hinweis erscheint und welche Adresse geöffnet
+   wird.
+
+2. **In `apps/desktop/src-tauri/capabilities/**` steht keine Shell-Berechtigung.** Weder
+   `shell:default` noch `shell:allow-open`. Der Öffnen-Weg läuft ausschließlich über einen
+   eigenen Befehl in Rust, der die Fassungsbezeichnung gegen eine enge Form prüft und die Adresse
+   selbst zusammensetzt. Das ist keine Vorsicht mehr, sondern die einzige vorhandene Kontrolle.
+
+3. **Beides wird gemessen, nicht zugesagt.** Ein Nachweis hält fest, dass die Berechtigungsdateien
+   keine Shell-Zeile tragen und dass die zugesagten Einträge der CSP mit denen in
+   `tauri.conf.json` übereinstimmen (T-136-2: die Zusage nennt drei, die Datei trägt vier). Vor
+   dem Bau kostet das eine halbe Stunde, danach eine Wiedervorlage.
+
+**Konsequenz.** Auflagen für T-139. Die zwanzig Auflagen aus `docs/bedrohungsmodell.md`
+Abschnitt 18.9 sind die Bedingung der Freigabe von T-136 und werden dort Auflage für Auflage
+gegen den Code wiedervorgelegt, nicht gegen den Entwurf.
+
+---
+
+## E-068 — Kein Schalter, den niemand verlangt hat
+
+**Kontext.** T-136 fragt, ob die Versionsprüfung abschaltbar sein soll. Abschnitt 18 der
+Spezifikation verlangt keinen Schalter; E-064 verbietet nur ein „nie wieder fragen" für den
+Hinweis.
+
+**Entscheidung.** Vorerst kein Schalter. Ohne Anforderungs-ID wird nichts gebaut — das ist die
+Regel, und sie gilt auch, wenn die Erweiterung klein und plausibel wäre. Die Frage geht als
+**F-18** an den Auftraggeber, weil sie ihm gehört: In einer Anwendung, die für sich in Anspruch
+nimmt, ausschließlich lokal zu laufen, ist „darf ich das abstellen?" eine berechtigte Frage und
+keine Bequemlichkeit.
+
+**Konsequenz.** Wird der Schalter gewünscht, ist er eine Einstellung wie jede andere und keine
+Ausnahme im Startpfad.
+
+---
+
+## E-069 — Die Prüfung läuft nach der Uhr, die Route liest nur ab
+
+**Kontext.** Auflage A-V-10 aus `docs/bedrohungsmodell.md` 18.9: Der Netzaufruf darf **nie** in
+einem eingehenden Anfragebehandler liegen. Sonst taktet jeder lokale Prozess, der das
+Sitzungsgeheimnis hat (R-02), das Lebenszeichen aus R-19 Punkt 3 und verbraucht die
+Ratenbegrenzung von GitHub. Der naheliegende Entwurf — die Oberfläche fragt eine Route, die Route
+fragt GitHub — ist damit ausgeschlossen. Er war in E-064 nicht ausdrücklich verboten, und ohne
+diesen Eintrag hätte ihn jemand gebaut.
+
+**Entscheidung.** Der Dienst prüft **von sich aus**: einmal beim Start, danach höchstens einmal
+in 24 Stunden. Das Ergebnis liegt im Arbeitsspeicher des Dienstes. Die Route gibt genau dieses
+Ergebnis heraus und löst **nie** eine Anfrage aus — auch nicht, wenn noch keines vorliegt; dann
+antwortet sie „noch nichts geprüft", und das ist eine gültige Antwort und kein Fehler.
+
+Der Vergleich selbst bleibt in der Oberfläche, weil dort die installierte Fassung liegt (E-067
+Punkt 1): Die Hülle nennt sie, `packages/domain` ordnet, die Oberfläche entscheidet, ob etwas
+erscheint. Der Dienst weiß nur, was GitHub zuletzt gesagt hat.
+
+**Konsequenz.** Die Häufigkeit steht an einer Stelle und ist ablesbar. Ein zweiter Aufruf der
+Route kostet nichts. Und der Weg, auf dem ein fremder lokaler Prozess Takt zum Senden bringt,
+existiert nicht — statt nur unwahrscheinlich zu sein.
+
+---
+
+## Berichtigung zu E-064 Punkt 2 (T-136-2, gemessen in T-139)
+
+E-064 zählt für `connect-src` drei Marken auf. Die Datei trägt **vier**: `'self'`, `ipc:`,
+`http://ipc.localhost` und `http://127.0.0.1:17843`. Die Entscheidung ändert sich dadurch nicht —
+die Aufzählung war unvollständig, nicht die Absicht. Seit T-139 zählt niemand mehr von Hand:
+`proof:shell-surface` hält die Zusage zeichengleich gegen `tauri.conf.json`, und ein eingesetzter
+fünfter Eintrag macht den Nachweis rot.
+
+---
+
+## E-070 — Die Frist ist ein Tag, und der Tag ist derselbe wie beim Export
+
+**Kontext.** A-19.1 bis A-19.7. Zwei Fragen sind zu beantworten, bevor jemand ein Feld anlegt:
+Trägt die Frist eine Uhrzeit, und wessen Tag ist gemeint?
+
+**Entscheidung.**
+
+1. **Ein Tag, keine Uhrzeit.** Die drei verlangten Zustände — überfällig, heute fällig, später
+   fällig — sind Tagesvergleiche. Eine Uhrzeit brächte einen vierten Zustand („in zwei Stunden
+   fällig"), und der ist ohne Erinnerung sinnlos; eine Erinnerung ist nicht verlangt. Wer eine
+   Uhrzeit braucht, schreibt sie in die Notiz.
+
+2. **Der Tag ist der aus E-025.** Die Tagesgruppierung des Exports rechnet bereits in einer
+   Zeitzone, und der Dienst kennt sie. Ein zweiter Tagesbegriff im selben Programm hieße, dass
+   „heute fällig" und „heute gebucht" an einem Reisetag verschiedene Tage meinen. Die Frist nimmt
+   denselben.
+
+3. **Der Zustand wird gerechnet, nicht gespeichert.** Gespeichert ist der Tag; „überfällig"
+   entsteht aus ihm und aus heute. Ein gespeicherter Zustand wäre über Nacht falsch, ohne dass
+   jemand etwas angefasst hat.
+
+4. **Die Frist ist keine Achse.** Sie geht nicht in Pools, nicht in Spalten, nicht in den Export
+   (A-19.7, A-19.17). Wer sie später als Regelterm will, bekommt eine eigene Entscheidung —
+   `pool_rule` hat seit 0011 die Form dafür.
+
+---
+
+## E-071 — Anhänge: was gespeichert wird und was nur gezeigt
+
+**Kontext.** A-19.8 bis A-19.15, mit der Anhangfunktion von Super Productivity als Vorbild. Drei
+Arten, und sie unterscheiden sich nicht nur im Etikett, sondern darin, **was Takt eigentlich
+hält**.
+
+**Entscheidung.**
+
+1. **Verweis und Datei speichern eine Zeichenkette, kein Byte.** Ein Verweis ist eine Adresse,
+   eine Datei ist ein Pfad. Takt kopiert nichts und verwaltet nichts davon; verschwindet die
+   Datei, sagt der Anhang das (A-19.15), statt sie wiederherstellen zu wollen.
+
+2. **Ein Bild wird kopiert.** Es liegt als Kopie im Anwendungsdatenverzeichnis, neben dem
+   Bestand und unter denselben Rechten (`0700`, E-018). Grund: Ein Vorschaubild, dessen Quelle
+   der Benutzer verschiebt, ist ein Anhang, der nach zwei Wochen leer ist — und ein Vorschaubild,
+   das bei jedem Zeichnen eine fremde Datei liest, ist ein Lesezugriff, den niemand angefordert
+   hat.
+
+3. **Das Vorschaubild kommt als `data:`-Adresse in die Oberfläche.** Die CSP der Hülle erlaubt
+   `img-src 'self' data:` — mehr nicht, und sie wird dafür **nicht** geöffnet. Die Oberfläche
+   holt die Bytes über die schon erlaubte Verbindung zu `127.0.0.1:17843` und baut daraus die
+   Adresse selbst. Damit bleibt die Positivliste unverändert; sie eine Zeile weiter zu machen,
+   hieße sie für alles andere mitzuöffnen. Dafür gibt es eine Obergrenze für die Bildgröße, und
+   sie steht an einer Stelle.
+
+4. **Anhänge gehen in keinen Export** (A-19.17). Dieselbe Grenze wie die Todo-Notiz, aus
+   demselben Grund, und mit demselben Prüfanspruch: nicht nur die Standardvorlage, sondern
+   beliebige Vorlagen.
+
+---
+
+## E-072 — Einen Anhang öffnet der Benutzer, und die Hülle prüft, was sie öffnet
+
+**Kontext.** A-19.9, A-19.18, A-19.19. Ein Verweis öffnet den Browser, eine Datei die
+Standardanwendung des Systems. Das ist genau der Weg, den T-136 vermessen hat:
+`tauri-plugin-shell` prüft auf dem Rust-Weg **nichts**, und in `capabilities/**` steht deshalb
+seit E-067 keine Shell-Berechtigung. Was hier dazukommt, ist schwerer als die Versionsprüfung:
+Dort war die Zeichenkette eine Fassungsbezeichnung aus einer bekannten Quelle. Hier ist sie eine
+Adresse oder ein Pfad, und beide kommen aus dem Bestand.
+
+**Entscheidung.**
+
+1. **Der Bestand ist keine vertrauenswürdige Quelle, wenn von außen hineingeschrieben werden
+   kann.** Deshalb: **Über das Add-in entstehen keine Anhänge** (A-19.19). Ein Anhang, den eine
+   E-Mail anlegt, wäre ein von außen geschriebener Öffnen-Befehl auf den Rechner des Benutzers.
+   Die Add-in-Türen nehmen das Feld nicht entgegen — nicht per Voreinstellung, sondern
+   strukturell, wie die Todo-Notiz im Exportmotor (R-06).
+
+2. **Der Öffnen-Befehl der Hülle prüft bei jedem Aufruf neu, nach Art getrennt.** Eine Prüfung
+   beim Eingeben allein trägt nicht: Zwischen Eingabe und Öffnen liegen der Bestand, eine
+   Migration und jeder künftige zweite Schreibpfad.
+   * **Verweis:** ausschließlich `http` und `https`. Kein `file:`, kein `javascript:`, kein
+     `data:`, kein sonstiges Schema — und kein UNC-Pfad. Ein `\\server\freigabe` in einem
+     Verweis ist unter Windows ein Anmeldeversuch gegen einen fremden Rechner, kein Öffnen.
+   * **Datei:** ein absoluter Pfad, der existiert, und kein UNC-Pfad.
+   * **Bild:** öffnet nichts nach draußen. Es wird angezeigt, und das ist der ganze Umfang.
+
+3. **Vor dem Öffnen einer Datei fragt die Oberfläche, und die Frage nennt den vollen Pfad.**
+   Eine Datei mit der Standardanwendung zu öffnen ist dasselbe wie ein Doppelklick im
+   Dateimanager — bei einer `.bat`, einer `.lnk` oder einer `.exe` ist es eine Ausführung. Der
+   Benutzer soll sehen, was er startet, bevor es startet. Bei einem Verweis genügt die
+   Handlung selbst; ein Browser ist der erwartete Ausgang.
+
+4. **Nichts öffnet sich von selbst** (A-19.18). Kein Vorabholen, keine Vorschau, die im
+   Hintergrund etwas startet, keine Nebenwirkung beim Laden einer Liste.
+
+5. **Gemessen, nicht zugesagt.** `proof:shell-surface` misst heute einen Aufrufort für `open`.
+   Kommen die Anhänge dazu, wächst die Zahl — und der Nachweis muss dann sagen, **welche** und
+   dass jeder durch eine Prüfung geht. Ein Nachweis, der nur zählt, hätte diese Aufgabe nicht
+   überstanden.
+
+**Konsequenz.** Das Bedrohungsmodell bewertet diese Grenze, bevor gebaut wird — so wie bei der
+Versionsprüfung, wo genau dieses Vorgehen den Befund T-136-1 zutage gefördert hat.
+
+---
+
+## E-073 — Nachträge zu E-065, E-070 und E-071 (aus T-144)
+
+**Kontext.** T-144 hat drei Sätze gefunden, an denen sich der nächste Agent orientiert und die
+nicht stimmen oder nicht genau genug sind. Zwei davon sind Fragen, die vor dem Bau von
+Abschnitt 19 beantwortet sein müssen.
+
+**Entscheidungen.**
+
+1. **Berichtigung zu E-065 (T-144 U-06, offen seit T-136-3).** E-065 nennt `tauri.conf.json` die
+   führende Quelle der Fassung. Im **Auslieferungsbau** stimmt das nicht: Dort kommt sie aus
+   `TAKT_RELEASE_VERSION`, das `build-app.mjs` als zweite Datei über die Konfiguration legt
+   (`release.yml` füllt sie aus dem Etikett); die Datei im Repository trägt weiter `0.0.0`. Das
+   ist **so gebaut und richtig** — `tauri.conf.json` ist JSON5 mit Kommentaren, und ein Werkzeug,
+   das sie neu schreibt, wirft die Begründung zu E-043 weg. Die Entscheidung ändert sich nicht;
+   der Satz war falsch. Richtig ist: **Die führende Quelle einer Veröffentlichung ist das
+   Etikett**, `tauri.conf.json` ist der Rückfallwert für jeden Bau ohne Etikett. `CLAUDE.md`
+   sagt das jetzt so.
+
+2. **Wann „heute fällig" neu gerechnet wird (E-070 Punkt 3 sagte *dass*, nicht *wann*).** Der
+   Zustand wird bei jedem Zeichnen aus dem gespeicherten Tag und dem heutigen gerechnet. Damit
+   eine Anwendung, die über Nacht offen bleibt, nicht bis zum nächsten Klick falsch anzeigt,
+   wird zusätzlich neu gezeichnet: bei `visibilitychange` und über einen Zeitgeber auf die
+   nächste Mitternacht der maßgeblichen Zeitzone. Das ist dieselbe Bauart wie `useDataFreshness`
+   aus T-097 und kein neuer Mechanismus. Ein Zeitgeber auf „alle 60 Sekunden" wäre die
+   naheliegende Antwort und die schlechtere: Er rechnet 1439 Mal umsonst und trifft die
+   Grenze trotzdem nur zufällig genau.
+
+3. **Wo die Obergrenze für die Bildgröße steht (E-071 Punkt 3).** In `packages/domain`, bei den
+   übrigen Grenzwerten aus T-128 — dieselbe Klasse, dieselbe Behandlung. Die Tür prüft sie, und
+   der Nachweis fragt nach der **Herkunft** und nicht nach der Zahl (der Anspruch aus T-134).
+   Wert: **5 MiB** je Bild. Begründung, damit sie später jemand ändern kann statt sie zu raten:
+   Das Bild wird als `data:`-Adresse in die Oberfläche gereicht und dort um rund ein Drittel
+   größer; fünf Anhänge an einem Todo sind dann etwa 33 MiB im Webview, und das ist die Grenze
+   dessen, was ein Vorschaubild wert ist.
+
+4. **Nicht entschieden, sondern gefragt.** Ob nach der Frist **sortiert und gefiltert** werden
+   darf und ob das **Add-in** eine Frist setzen darf, steht in keiner Anforderungs-ID.
+   Abschnitt 19 verlangt Sichtbarkeit (A-19.4), nicht Sortierung. Beides geht als **F-20** an den
+   Auftraggeber. Ohne ID wird nichts gebaut — dieselbe Regel wie bei E-068, und sie gilt auch,
+   wenn die Erweiterung klein und plausibel wäre.
+
+---
+
+## E-074 — Sortieren und Filtern nach der Frist, und das Add-in setzt sie
+
+**Kontext.** Antwort des Auftraggebers auf F-20 am 2026-09-05: „Ja, es soll sortiert und gefiltert
+werden können und das addin soll diese werte auch setzten können." Aufgenommen als A-19.20 und
+A-19.21.
+
+**Entscheidung.**
+
+1. **Sortieren und Filtern sind Anzeige, keine Achse.** E-070 Punkt 4 bleibt unverändert: Die
+   Frist geht **nicht** in Pools, nicht in Spalten, nicht in den Export. Sie ordnet und filtert
+   die Todo-Liste, und das ist etwas anderes als ein Regelterm. Wer sie später als Pool-Achse
+   will, bekommt eine eigene Entscheidung; `pool_rule` hat seit 0011 die Form dafür.
+
+2. **Ein Todo ohne Frist ist beim Sortieren nicht „ganz oben".** Es hat keinen Wert, keinen
+   frühesten und keinen spätesten. Es steht am Ende, in beiden Richtungen, und die Oberfläche
+   sagt das nicht mit einem Platzhalterdatum. Ein leeres Feld als „01.01.1970" zu sortieren ist
+   die Sorte Bequemlichkeit, die niemandem auffällt, bis sie in einer Abrechnung steht.
+
+3. **Das Add-in setzt die Frist — und nur sie.** A-19.21 nennt die Frist. **A-19.19 bleibt
+   unangetastet: über das Add-in entstehen weiterhin keine Anhänge.** Der Unterschied ist nicht
+   Vorsicht, sondern Art: Eine Frist ist ein Tag, den die Anwendung anzeigt. Ein Anhang ist eine
+   Adresse oder ein Pfad, den die Anwendung auf Klick **öffnet** — aus einer E-Mail geschrieben
+   wäre er ein von außen gesetzter Öffnen-Befehl auf den Rechner des Benutzers (R-21, R-22).
+   Sollte auch das gewollt sein, ist es eine eigene Frage mit einer eigenen Antwort, und das
+   Bedrohungsmodell bewertet sie neu.
+
+4. **Die Frist aus dem Add-in ist Eingabe von außen** und wird an ihrer Tür geprüft wie jedes
+   andere Feld dort: ein Tag in fester Form, kein freier Text, keine Uhrzeit, keine Rechnung aus
+   einer E-Mail. Der Wert kommt aus einem Feld, das der Benutzer im Aufgabenbereich ausfüllt,
+   nicht aus einem erkannten Muster im Text.
+
+---
+
+## E-075 — Vier Nachträge nach Welle T
+
+1. **Die Bildgrenze ist 8 MiB, nicht 5 MiB (berichtigt E-073 Punkt 3).** E-073 hat die Zahl
+   gesetzt, bevor T-145 sie vermessen hatte; A-A-15 im Bedrohungsmodell nennt 8 388 608 Bytes,
+   und T-146 hat so gebaut. Die spätere, gemessene Zahl gilt. Der Ort bleibt `packages/domain`,
+   und der Nachweis fragt weiterhin nach der **Herkunft** und nicht nach der Zahl.
+
+2. **Die Suche trifft den Vermerk — sie tut es nur noch nicht (O-BK, O-BY).** Gemessen von
+   T-147: `repo-todos.ts` sucht in `title` und `call_number`, der Vermerk ist nicht dabei; der
+   Text in der Suchfläche sagt damit heute die Wahrheit, und E-038, `glossar.md` und das
+   Benutzerhandbuch versprechen etwas, das es nicht gibt. **E-038 bleibt gültig**, weil die
+   versprochene Sache die richtige ist: Ein Vermerk, den der eigene Rechner nicht durchsuchen
+   kann, ist eine Notiz, die man zweimal schreibt. Gebaut wird also die Suche, nicht die
+   Streichung — **mit einer Bedingung:** T-116 hat den Befund C-22 mit genau der Begründung
+   geschlossen, dass die Suche den Vermerk trifft. Mit dem Bau lebt er wieder auf, und
+   spec-ux-reviewer legt ihn zusammen mit der Umsetzung erneut vor. Ohne diese Wiedervorlage
+   wird nicht gebaut.
+
+3. **`apps/desktop` darf `@takt/domain` einbinden (O-BZ, altes O-AO).** `build-app.mjs` führt
+   heute eine **dritte** Fassung der Formprüfung für die Fassungsbezeichnung, und der Gleichlauf
+   ist gemessen statt aufgelöst — dieselbe Klasse, die T-128, T-131 und T-134 in drei Wellen
+   aufgeräumt haben. Eine Arbeitsbereichsabhängigkeit auf ein Paket, das ohnehin ausgeliefert
+   wird, ist der billigere Preis. `package.json` und die Sperrdatei ändert der Orchestrator.
+
+4. **`release.yml` misst die Größe von `releases/latest` nicht (T-146 Frage 3).** T-146 hat die
+   Grenze von rund 38 auf rund 153 Anhänge angehoben und den `too_large`-Satz die **Folge**
+   nennen lassen. Ein Meßschritt im Auslieferungsablauf beantwortete die Frage „reicht die
+   Grenze noch?" einmal je Veröffentlichung — und die Antwort läge in einem Ablaufprotokoll,
+   das niemand liest. Wird die Grenze eines Tages knapp, sagt es die Protokollzeile des Dienstes
+   an dem Rechner, an dem es zählt.
+
+
+---
+
+## E-076 — Ark UI weiter, aber in Stufen, und der Vertrag der Oberfläche bleibt
+
+**Kontext.** Der Auftraggeber will die Oberfläche „konsequent auf Ark UI ausrichten bzw. Ark UI
+dort einsetzen, wo es sinnvoll ist", ausdrücklich **ohne** Neubau und ohne Verlust des
+bestehenden Designs. Zu prüfen war zuerst der Stand.
+
+**Befund (Orchestrator, gemessen am Bestand).**
+
+1. **Ark UI ist seit T-059 im Baum** (`@ark-ui/react ^5.39.0` in `apps/web/package.json`,
+   entschieden in E-052) und trägt heute genau drei Bausteine: `Select.tsx` (Auswahlfeld),
+   `TagInput.tsx` (Kombobox), `Menu.tsx` (Kontextmenü). Es ist also **keine Einführung**,
+   sondern eine Erweiterung eines vorhandenen Musters. Kein neues Paket, keine neue Fassung,
+   keine Änderung an `package.json` oder an den Lieferkettenschaltern.
+2. **Die eigene Abstraktionsschicht existiert:** `apps/web/src/components/` (Primitives, Icon,
+   Foreign, Tag, …) über `@takt/ui-tokens` als einziger Farb- und Maßquelle, dazu die Musterseite
+   unter `src/showcase/`. Die Schichtung, die der Auftrag verlangt, ist da; sie hat nur an einer
+   Stelle keinen Unterbau.
+3. **Diese Stelle sind die Dialoge.** `FormDialog`, `ConfirmDialog`, `InfoDialog`,
+   `UpdateDialog`, `AttachmentOpenDialog` und die Sperrfläche in `ShellStatus` führen `role`,
+   `aria-modal`, Fokuseinsprung, Fokusrückgabe, Tabulatorschleife (`lib/focus.ts`) und
+   Escape-Behandlung **von Hand**. Zwei Notbehelfe darin sind bereits als Befund vermerkt:
+   die Abfrage auf `event.defaultPrevented`, weil eine Ark-Liste im Portal ihr Escape sonst
+   zweimal wirken lässt, und `recoverFocus`, weil ein verschwindender Knopf den Fokus auf
+   `body` fallen lässt (T-072). Beides sind Fälle, die eine Dialog-Zustandsmaschine kennt.
+
+**Entscheidung.**
+
+1. **Der Umfang aus E-052 wird erweitert, nicht ersetzt** — und in **Stufen**, nicht in einem
+   Zug. Reihenfolge nach Verhaltensdichte, nicht nach Dateizahl:
+   **Stufe 1 (jetzt): Dialog.** Stufe 2: Kontrollkästchen, Auswahlgruppe, Schalter.
+   Stufe 3: **Datumsauswahl** für die Frist. Stufe 4: Meldungen (Toast). Stufe 5: Baumansicht
+   der Tag-Ordner. Jede Stufe ist eine eigene Aufgabe mit eigener Freigabe; keine Stufe beginnt,
+   bevor die vorige durch Sichtprüfung und Spezifikationsabgleich ist.
+2. **Was nicht auf Ark UI wandert, und warum.** Layout, Text, Karten, Etiketten, Exportgruppen,
+   die Kanban-Karte, die Statusanzeige und die Zeitleiste tragen fachliche Bedeutung und haben
+   in einer allgemeinen Bibliothek kein Gegenstück — E-052 Absatz „Umfang" gilt wörtlich weiter.
+   Es gibt in Takt **keine** Reiter und **keine** Aufklappabschnitte; für diese beiden
+   Ark-Bausteine wird keine Fläche erfunden. Die **Sperrfläche der Hülle** (`ShellStatus`,
+   `.scrim--blocking`) bleibt vorerst von Hand: Sie ist der einzige Ausgang aus einem Zustand,
+   in dem die Anwendung nicht bedienbar ist (T-133, O-AF), und ein Dialog, der sich schließen
+   lässt, wäre dort ein Fehler und keine Verbesserung.
+3. **Der Vertrag der Oberfläche bleibt zeichengleich.** Rolle, zugänglicher Name, Klassennamen
+   und Datenmerkmale jeder migrierten Fläche bleiben, wie sie sind. Der Grund ist gemessen:
+   **315** Zugriffe in `tests/e2e` gehen über `getByRole` (T-152 zählte 222, T-163 am 2026-09-05
+   dann 286, T-203 am 2026-09-06 315 — die Zahl wächst mit jeder Prüfwelle und ist ein **Stand**,
+   kein Nachweis, E-087 Punkt 2), `contrast-check.mjs` prüft heute 242 Paare in 484 Messungen
+   gegen die Klassen, und `proof-foreign.mjs` liest das JSX. Eine Migration, die diese drei
+   Ketten rot macht, hat nichts bewiesen. **Ark UI liefert Verhalten; das Aussehen und die
+   Ansprache bleiben aus diesem Bestand** — dieselbe Bedingung wie in E-052, jetzt als
+   Abnahmekriterium.
+4. **Keine Fachlogik wandert mit.** Kein Griff an Dienst, Domäne, Datenmodell oder OpenAPI. Wo
+   ein Baustein heute eine fachliche Frage stellt (die Rückfrage vor dem Öffnen einer Datei,
+   die Bestätigung mit Kontrollkästchen vor dem Zurücksetzen eines Exportstatus), bleibt die
+   Frage wörtlich und die Bedingung unverändert.
+5. **`lib/focus.ts` bleibt, solange es einen Träger hat.** Die Sperrfläche der Hülle benutzt es
+   weiter. Gestrichen wird es erst, wenn es keinen Aufrufer mehr hat — nicht vorher, und keine
+   Kopie „für alle Fälle".
+
+**Nachtrag zu E-076 (nach T-152, Stufe 1).**
+
+6. **Die Dialoge laufen mit `modal={false}`, ausdrücklichem `trapFocus`, `closeOnInteractOutside={false}` und `aria-modal="true"` von Hand.** Das sieht nach einem Widerspruch aus und ist keiner. `modal` schaltet in der Zustandsmaschine von Ark UI zusätzlich `hideContentBelow`, und das setzt beim Öffnen **einmalig** `aria-hidden="true"` auf alles neben dem Dialog. Zwei Folgen, beide von T-152 gemessen: Erstens verschwände die aufgeklappte Liste **jedes Auswahlfelds im Dialog** aus dem Zugänglichkeitsbaum — sie hängt im Portal am Dokumentkörper, ist im Augenblick des Öffnens zu, und die Ausnahmeregel dafür verlangt `aria-expanded="true"`. Das ist ein Fehler in der Sache und kein Testproblem. Zweitens verlöre jede Fläche hinter dem Dialog ihre Rolle, was Punkt 3 dieser Entscheidung untersagt.
+
+   `aria-modal="true"` am Dialog ist ohnehin der Weg, den Vorlesehilfen heute lesen; `aria-hidden` auf den Geschwistern ist der ältere Rückfall. Wer diese Zeile später „aufräumen" will, ändert damit zwei Dinge auf einmal — er soll den gemessenen Fall aus T-152 vorher nachstellen.
+
+7. **Was Stufe 1 hinterlässt und Stufe 2 aufräumt.** `stopClosingKeys` in `Select.tsx` und `Menu.tsx` ist ohne die Notbehelfe wirkungslos geworden; `hideContentBelow` bliebe nur zusammen mit `lazyMount` und `unmountOnExit` an `Select`, `TagInput` und `Menu` erreichbar und kollidiert dann mit TAGINPUT-05. Beides wird **nicht** nebenbei gemacht, sondern in Stufe 2, zusammen mit `AttachmentOpenDialog`.
+
+---
+
+## E-077 — Die Vorgabe der Fassung im Hüllen-Ersatz kehrt sich um
+
+**Kontext.** T-150 hat beim Bau der End-to-End-Fälle zu Abschnitt 19 einen Fund gemacht, der
+älter ist als die Aufgabe: Seit T-146/T-147 fragt der lokale Dienst die Versionsprüfung **real**
+gegen den echten Bestand — und seit der Auslieferung gibt es dort tatsächlich `v0.1.0`. Jede
+Prüfdatei, die `installShellShim` **ohne** `installedVersion` benutzt, bekommt deshalb den
+Vorgabewert `0.0.0`, also eine Fassung unterhalb jeder veröffentlichten. Nach der ersten
+Abfrage steht ein **modaler** Aktualisierungsdialog vor der Oberfläche und blockiert alles
+dahinter. Ob er es tut, hängt an der seit Dienststart verstrichenen Zeit; betroffen waren auch
+zwei bestehende Dateien (`shell-quit-failure.spec.ts`, `shell-username-lock.spec.ts`), die
+zufällig nicht angeschlagen haben.
+
+**Entscheidung.**
+
+1. **Die Vorgabe kehrt sich um.** `installShellShim` liefert künftig von sich aus eine Fassung,
+   die **keinen** Dialog auslöst. Wer den Aktualisierungsdialog messen will, sagt es
+   ausdrücklich. Die heutige Polung verlangt von jeder neuen Prüfdatei, an einen Nebeneffekt zu
+   denken, der mit ihrem Gegenstand nichts zu tun hat — und eine Vorsichtsmaßnahme, an die man
+   denken muss, ist eine, die irgendwann vergessen wird. Das ist dieselbe Klasse wie O-BS und
+   O-BT, nur an der anderen Seite: dort ein Nachweis, den niemand startet, hier eine Falle, die
+   niemand sieht.
+2. **Die Zeile pro Datei ist die Behebung, nicht die Lösung.** T-150 hat sie an den betroffenen
+   Stellen gesetzt, damit die Reihe grün steht. Die Umkehr der Vorgabe gehört in **Welle V** zu
+   e2e-tester, mitsamt einer Gegenprobe: eine Datei **ohne** Angabe darf keinen Dialog bekommen,
+   eine Datei **mit** ausdrücklicher Angabe muss ihn bekommen.
+3. **Die größere Frage bleibt offen und bekommt einen Punkt.** Dass eine Prüfreihe überhaupt
+   nach draußen greift, ist dieselbe Überschreitung, die T-145 an `proof:access` gefunden hat
+   (O-BU): Der Lauf, der eine Vertrauensgrenze misst, überschreitet sie selbst. T-142 hat mit
+   `tests/e2e/support/version-check-entry.ts` bereits eine Naht dafür gebaut. Ob die Hauptreihe
+   sie ebenfalls benutzt, ist eine eigene Aufgabe und keine Beigabe zu dieser Entscheidung.
+4. **Die neue Ausführungskonfiguration hängt ab sofort in der Kette** (Orchestrator, sofort
+   erledigt). `playwright.attachment-persistence.config.ts` misst einen echten Prozeßneustart
+   des Dienstes und lief nur von Hand. `pnpm test:e2e` ruft jetzt alle drei Reihen
+   hintereinander. Dritter Fall dieser Klasse nach O-BS und O-BT.
+
+---
+
+## E-078 — Weniger Text. Jeder Satz in der Oberfläche muss sich rechtfertigen
+
+**Kontext.** Vorgabe des Auftraggebers vom 2026-09-05: Text im gesamten Produkt bewusst kurz und
+prägnant. Keine langen Erklärungen, keine Textwände, keine doppelte Information, keine
+überflüssigen Überschriften, keine unnötigen Hinweisfelder, keine langen Schaltflächentexte.
+Bevorzugt: kurze Beschriftungen, klare Schaltflächen, prägnante Hinweise, eindeutige Sinnbilder,
+und zusätzliche Auskunft **erst dann, wenn sie gebraucht wird**. Das Ergebnis soll modern, ruhig,
+übersichtlich und hochwertig wirken.
+
+**Warum das hier eine Entscheidung braucht und keine Stilnotiz ist.** Takt hat sich seine Länge
+verdient: Fast jeder lange Satz in der Oberfläche steht dort, weil ein Prüfer ihn verlangt hat.
+Die Rückfrage vor dem Öffnen einer Datei nennt den vollen Pfad, weil ein kurzer Satz dort einen
+Programmstart verschleiern würde (R-21). Der Hinweis am Fristfeld des Aufgabenbereichs ist lang,
+weil er eine **Abwesenheit** ausspricht, die man sonst nicht sieht (E-074 Punkt 4, V-03). Wer
+diese Sätze nach Zeichenzahl kürzt, kürzt genau die Stellen weg, die dieses Vorhaben teuer
+gelernt hat.
+
+**Entscheidung.**
+
+1. **Die Regel gilt, und sie gilt zuerst für die Menge, nicht für den einzelnen Satz.** Gestrichen
+   wird, was **doppelt** dasteht, was **erklärt, was man sieht**, und was **auf Vorrat** erklärt.
+   Nicht gestrichen wird, was eine **Folge** benennt, eine **Abwesenheit** ausspricht oder eine
+   **Absage** begründet. Ein Satz, der den Benutzer vor einer nicht umkehrbaren Handlung warnt,
+   ist kein Fülltext, auch wenn er lang ist.
+2. **Progressive Enthüllung ist der bevorzugte Weg zur Kürze**, nicht die Streichung. Wo eine
+   Auskunft heute dauerhaft dasteht und nur in einem Zustand zählt, gehört sie in diesen Zustand
+   — nicht in den Papierkorb. Das ist die Bauart, die T-158 im Aufgabenbereich schon benutzt
+   (Hinweis bleibt, Meldung tritt daneben).
+3. **Kein Satz fällt, den ein Prüfer verlangt hat, ohne dass derselbe Prüfer zustimmt.** Die
+   Sätze aus B-5, V-03, R-21, R-22, E-063 und A-19.x tragen Anforderungs-IDs oder Befundnummern.
+   Wer sie kürzen will, legt die neue Fassung dem Prüfer vor, der sie verlangt hat. Alles andere
+   ist eine stille Rücknahme einer Freigabe.
+4. **Die Reihenfolge ist die aus dem Ablauf:** ux-designer schreibt die Bestandsaufnahme und die
+   Regel je Textsorte, ui-designer sagt, was das für Hierarchie, Dichte und Sinnbilder bedeutet,
+   erst dann ändert frontend-dev Text. Ein Textdurchgang, den ein Programmierer nebenbei macht,
+   ist ein Durchgang ohne Gegenüber.
+5. **Deutsch bleibt Deutsch** (Sprachregel unverändert), und **Sinnbilder ersetzen Text nur, wenn
+   sie ohne Beschriftung eindeutig sind**. Ein Sinnbild mit Erklärungstext daneben ist keine
+   Kürzung, sondern eine Verdopplung; ein Sinnbild ohne zugänglichen Namen ist ein Verstoß gegen
+   SC 4.1.2 und keine Gestaltung.
+
+**Nachtrag vom 2026-09-05, nach der Bestandsaufnahme T-163** (`docs/design/textbestand.md`).
+
+6. **Progressive Enthüllung hat drei Träger, und einen vierten gibt es nicht ohne Entscheidung.**
+   Punkt 2 nennt die Enthüllung als bevorzugten Weg, E-076 verbietet zugleich, Aufklappabschnitte
+   zu erfinden, die es in Takt nie gab. Beides gilt weiter. Erlaubt sind deshalb genau die
+   Träger, die schon stehen: **Zustandsbindung** (die Auskunft erscheint in dem Zustand, in dem
+   sie zählt), **Handlungsbindung** (sie erscheint an der Handlung, die sie betrifft) und das
+   **Handbuch** (sie verlässt die Oberfläche ganz). Ein vierter Träger — Aufklappabschnitt,
+   Sprechblase, Zweitfläche — ist eine eigene Entscheidung mit ux-designer und ui-designer, nicht
+   die Wahl des Umsetzenden. Wer keinen der drei Träger findet, streicht nicht: er meldet.
+7. **E-078 gilt auch für den Aufgabenbereich des Add-ins.** Die Regel ist eine Produktregel, keine
+   Regel einer Fläche; dass die Bestandsaufnahme T-163 nur `apps/web` umfaßt, ist eine Frage der
+   Hoheit und nicht des Geltungsbereichs. Für den Aufgabenbereich führt integration-dev die
+   eigene Aufnahme, und der Fristhinweis bekommt **eine** Fassung für beide Flächen — der
+   Zeitpunkt dafür ist die Wiedervorlage V-03/V-04 in T-165, nicht ein späterer Durchgang.
+8. **Was eine Vorlesehilfe hört, muß ein Sehender sehen können, und umgekehrt.** Die Enthüllung
+   nach Punkt 2 darf Blick und Gehör nicht auseinanderlaufen lassen: ein Hinweis, der aus dem
+   Blickfeld verschwindet, aber in `aria-describedby` stehen bleibt, ist derselbe Fehler, den
+   R-2a schon einmal abgelehnt hat, nur in die andere Richtung. Die Symmetrie ist bei jedem
+   Eintrag der Umbauliste zu **messen**, nicht zuzusichern.
+
+## E-079 — Die Lieferkette wird gemessen, wo sie messbar ist, und der Rest bekommt eine Größe
+
+**Anlaß.** O-CW: Zehn Wellen lang hat der security-checker vermerkt, daß die Lieferkette nicht
+gemessen werden konnte — Guardian ohne Werkzeug (zehnter Anlauf), 42Crunch ohne Werkzeug
+(neunter), `cargo audit` nicht installiert (T-B07). Ein Vermerk, der zehnmal gleich lautet, ist
+keine Feststellung mehr, sondern eine Gewohnheit. Der Orchestrator entscheidet ihn deshalb.
+
+**Was am 2026-09-05 tatsächlich gemessen wurde**, mit den Werkzeugen, die hier stehen:
+
+- `pnpm audit`: **0 Meldungen** über **271** Abhängigkeiten (97 Laufzeit, 174 Bauzeit, 65
+  wahlweise). Erste Messung der Lieferkette in diesem Vorhaben überhaupt.
+- Lebenszyklus-Skripte: **eine** Freigabe (`esbuild`, begründet in `pnpm-workspace.yaml`),
+  `strictDepBuilds` bricht bei jeder weiteren ab.
+- Herkunft: `blockExoticSubdeps` schließt Git-, URL- und Dateiquellen aus; `minimumReleaseAge`
+  hält sieben Tage Abstand zu frischen Veröffentlichungen; `trustPolicy: no-downgrade`
+  verhindert das stille Herabsetzen dieser Schalter. Zwei begründete Ausnahmen, beide ohne
+  Laufzeitanteil und ohne Lebenszyklus-Skript.
+- Rust: **498** Kisten in `apps/desktop/src-tauri/Cargo.lock`, davon **null** je auf Warnungen
+  geprüft.
+
+**Entscheidung.**
+
+1. **`pnpm audit` gehört ab sofort ins Tor**, nicht in einen Bericht. Es ist der einzige
+   Lieferkettennachweis, der hier ohne fremdes Werkzeug läuft, und er lief bisher nie. Eine
+   Meldung ist ein Befund für den security-checker, kein Grund, den Lauf zu übergehen. Eingehängt
+   als `pnpm run audit` am **Ende** von `pnpm check`, hinter dem Bau: Der Schritt braucht als
+   einziger im Tor eine Verbindung zur Registry, und ohne Netz **fällt er laut aus**, statt still
+   zu überspringen. Ein Tor, das ohne Netz grün wird, obwohl es die Lieferkette nicht gesehen
+   hat, wäre genau der Fehler, den O-BU und O-CI an anderer Stelle beschreiben.
+2. **Der Rust-Anteil wird dort gemessen, wo Werkzeug und Netz stehen: im Bauauftrag.**
+   `cargo audit` gehört auf einen Läufer mit Werkzeug und Netz, nicht auf diesen Rechner. T-B07
+   bleibt für den lokalen Lauf blockiert, aber die Blockade hat jetzt eine Größe (498 Kisten) und
+   einen Weg. **Umgesetzt am selben Tag** als eigener Auftrag `.github/workflows/pruefung.yml`,
+   nicht in `release.yml`: Eine Lieferkettenmessung, die erst beim Bau einer Veröffentlichung
+   läuft, meldet den untergeschobenen Baustein zu dem Zeitpunkt, zu dem er schon im Erzeugnis
+   ist. Derselbe Auftrag fährt die Rust-Prüffälle auf **Windows** bei jedem Anstoß — die zweite
+   Hälfte von A-A-32 (T-164).
+3. **Guardian und 42Crunch werden nicht mehr je Welle erneut versucht.** Beide brauchen eine
+   Zugangsberechtigung, die es hier nicht gibt; ein elfter Fehlversuch erzeugt keinen Erkenntnis-
+   gewinn. Sie bleiben als T-B06 in der Liste der blockierten Aufgaben stehen — dort, wo das
+   Fehlen sichtbar ist, statt in jedem Bericht neu.
+4. **Was gemessen wurde, steht im Bedrohungsmodell**, mit Datum und Zahl. Die Lieferkette ist
+   damit nicht sicher, sondern zum ersten Mal **beziffert** — der Unterschied gehört
+   aufgeschrieben, weil sonst die erste grüne Zahl als Freispruch gelesen wird.
+
+## E-080 — Takt siezt
+
+**Anlaß.** T-165 (X-01): `apps/web` siezt an über zwanzig Stellen, das Add-in duzt an sechs, und
+in der Hauptanwendung duzt genau eine Zeile (`apps/web/src/components/NoteField.tsx:59`). Weder
+`CLAUDE.md` noch `docs/spec.md` haben die Anrede je geregelt — das ist eine fehlende Entscheidung
+und kein Verstoß, und deshalb entscheidet sie der Orchestrator statt sie zu melden.
+
+**Entscheidung.**
+
+1. **Takt siezt, überall.** Hauptanwendung, Aufgabenbereich des Add-ins, Fehlermeldungen der
+   Hülle, Handbuch. Die Mehrheit steht schon so, und der Preis der Gegenrichtung wären über
+   zwanzig Änderungen an Sätzen, die Prüfer freigegeben haben.
+2. **Sieben Stellen ziehen nach**: `NoteField.tsx:59` (frontend-dev) und sechs im Add-in
+   (integration-dev): `DuplicateOffer.tsx:78`, `callnumber/labels.ts:33`, `SettingsView.tsx:207`,
+   `TaskPane.tsx:288`, `:515`, `:864`, `:1081` — `labels.ts:33` und `TaskPane.tsx:1081` sind
+   derselbe Satz an zwei Stellen und damit zugleich ein Fall für E-078.
+3. **Der Fristsatz aus T-158 wird dabei mitgezogen**, nicht neu verhandelt: V-04 ist von T-165
+   freigegeben, die Anrede ist die einzige Änderung. Wer ihn dabei kürzt, braucht die Zustimmung
+   aus T-165 — E-078 Punkt 3.
+4. **Die beste Anrede ist keine.** Wo ein Satz ohne Anrede auskommt, ist das die kürzere und die
+   ruhigere Fassung, und E-078 zieht sie vor: „Keine Call-Nummer im Text gefunden — sie lässt sich
+   eintragen." braucht weder „du" noch „Sie".
+
+## E-081 — Die Ungleichheit an `RadioRow` ist Absicht, und sie überlebt E-078
+
+**Anlaß.** T-171 (B-1, B-2): E-078 Nachtrag Punkt 8 verlangt, daß Blick und Gehör nicht
+auseinanderlaufen. `apps/web/src/components/RadioRow.tsx` tut aber genau das, und zwar seit S-6
+aus R-2 mit Absicht: Die Erläuterung **jeder** Option liegt dauerhaft als `visually-hidden` im
+Baum und hängt über `aria-describedby` an ihrem eigenen Bedienelement (`:114`, `:139-141`);
+**sichtbar** steht nur die Erläuterung der **gewählten** Option, und die ist `aria-hidden`
+(`:145-152`), damit sie nicht ein zweites Mal angesagt wird. Nachgemessen am 2026-09-05.
+
+**Entscheidung.**
+
+1. **Das bleibt so.** Wer die Auswahl mit der Tastatur durchgeht, hört zu **jeder** Option, was sie
+   bedeutet, **bevor** er sie wählt — sehend liest man dieselbe Auskunft erst nach der Wahl. Das
+   ist keine Benachteiligung, sondern der Ausgleich dafür, daß ein Durchgang mit Vorlesehilfe
+   linear ist und kein Auge über die Fläche springen kann.
+2. **Nachtrag 8 zu E-078 gilt gegen Verluste, nicht gegen Zugaben.** Verboten ist, daß eine
+   Auskunft **verschwindet** und nur noch in `aria-describedby` weiterlebt. Erlaubt bleibt, daß
+   das Gehör mehr bekommt als der Blick, wenn die Bauart es begründet.
+3. **UM-02 fällt aus der Umbauliste** (`docs/design/textbestand.md`): Der Umbau ist bereits
+   gebaut. Ihn im Wortsinn auszuführen änderte sichtbar nichts und nähme S-6 still zurück. An der
+   Stelle bleibt ST-03. Sinngemäß dasselbe gilt für `POOL_MATCH_MODE_HINT` und
+   `Attachments.tsx:420-422`.
+4. **Streichung und Ausgleich gehören in einen Auftrag.** T-171 hat für ST-05 gezeigt, wie eng
+   das hängt: Fällt die Kompensation an der Regelzeile weg, ist der Satz gestrichen **ohne**
+   Ersatz. Kein Textdurchgang wird in zwei Wellen zerlegt, deren erste nur streicht.
+
+## E-082 — Der Wächter über die Fläche der Hülle mißt das Erzeugnis, nicht die Prüffälle
+
+**Anlaß.** `pnpm run proof:shell-surface` ist rot, und zwar seit T-160 und unabhängig von jeder
+Änderung aus Welle Y (T-167 hat den Stand davor wiederhergestellt und beides gemessen). Grund:
+Der Wächter liest `apps/desktop/src-tauri/src/**` als **eine** Zeichenkette und findet in den
+`#[cfg(test)]`-Fällen aus T-160 die Beispieladressen `https://example.org/…` — genau die Fälle,
+die T-154 als V-01 blockierend verlangt hat. Zwei Auflagen des Vorhabens stehen damit
+gegeneinander: *keine zweite Adresse im Rust-Anteil* und *die letzte Kontrolle vor `open` ist
+gemessen*.
+
+**Entscheidung.**
+
+1. **Der Wächter schließt `#[cfg(test)]`-Blöcke aus.** Das ist keine Lockerung, sondern die
+   Berichtigung eines Meßfehlers: Was in einem `#[cfg(test)]`-Block steht, wird in das
+   ausgelieferte Erzeugnis nicht übersetzt. Der Wächter behauptet etwas über das Erzeugnis; also
+   muß er lesen, was das Erzeugnis ist.
+2. **Der Ausschluß ist blockgenau und wird gegengeprobt.** Zwei Gegenproben, beide verlangt:
+   eine Adresse im **Produktivteil** derselben Datei muß den Lauf weiterhin rot machen, und der
+   Ausschluß darf nicht am ersten `}` enden, sondern muß den Block wirklich zählen. Ein
+   Ausschluß ohne Gegenprobe wäre genau der blinde Wächter, den dieser Lauf selbst als Befund
+   führt.
+3. **Die Prüffälle bleiben, wie sie sind.** Sie auf `.invalid` umzuschreiben verlegte den Fehler
+   nur: Der Wächter sähe dann eine andere fremde Adresse, und die Fälle verlören die Form, gegen
+   die sie prüfen. Ein Prüffall richtet sich nach dem, was er messen soll, nicht nach dem
+   Wächter, der zufällig dieselbe Datei liest.
+4. **security-checker sieht es nach**, bevor die Welle abgenommen wird — es ist eine Änderung an
+   einer Sicherheitsschranke, auch wenn sie eine Meßgrenze berichtigt.
+
+## E-083 — Der feste Port ist eine Regel der Wellenplanung, bis er es nicht mehr sein muß
+
+**Anlaß.** T-168 und T-169 konnten fünf beziehungsweise einen Nachweispfad nicht fahren:
+`proof:conflicts`, `proof:tags`, `proof:access`, `proof:export-api` und `proof:addin-wiring`
+brauchen `127.0.0.1:17843` — und dort lauschte der e2e-Lauf derselben Welle. Viermal versucht,
+viermal `FEHLER: Auf 127.0.0.1:17843 lauscht bereits etwas`. Das ist kein Fehler eines Agenten,
+sondern einer der Planung: Zwei Aufgaben derselben Welle haben denselben Port als stille
+Voraussetzung.
+
+**Entscheidung.**
+
+1. **Der Port des Erzeugnisses bleibt fest.** `http://127.0.0.1:17843` steht in der CSP der Hülle
+   und wird von `proof:shell-surface` zeichengleich gemessen. Ihn einstellbar zu machen, um
+   Prüfläufe zu entzerren, hieße die Zusage zu öffnen, die E-001 trägt.
+2. **Solange er fest ist, laufen portgebundene Nachweispfade und `test:e2e` nicht in derselben
+   Welle.** Der Orchestrator plant das, nicht die Agenten. Wo es sich nicht vermeiden läßt, holt
+   der Orchestrator die fehlenden Pfade **nach** der Welle nach — ein Nachweis, der nicht lief,
+   ist kein grüner Nachweis.
+3. **Innerhalb einer Welle fährt kein Agent `proof:all`.** Auch zwei Nachweisläufe stolpern
+   übereinander, nicht nur ein Lauf über eine Prüfreihe. Jeder Agent fährt die Pfade, die seine
+   Änderung betreffen; **den vollständigen Lauf fährt der Orchestrator nach der Welle**, auf
+   einem Baum, an dem niemand mehr schreibt. Wer einen Pfad nicht fahren konnte, schreibt hin,
+   welchen — ein Nachweis, der nicht lief, ist kein grüner Nachweis.
+4. **Die Entzerrung ist dennoch eine Aufgabe.** Ein Prüflauf, der sich nicht neben einen anderen
+   stellen läßt, wird mit wachsender Reihe teurer. Ob die Prüfläufe (nicht das Erzeugnis) ihren
+   Port aus einer Umgebungsvariablen nehmen können, ohne die Zusage aus Punkt 1 zu berühren, ist
+   zu prüfen und zu entscheiden — nicht nebenbei zu bauen.
+
+## E-084 — Die eigene Feldprüfung steht vor der des Browsers
+
+**Anlaß.** T-170 hat beim Bau der Fokusreihe einen Nebenbefund gemessen, der schwerer wiegt als
+der Anlaß: Ein wirklich leeres Pflichtfeld erreicht die **deutsche** Fehlermeldung der Anwendung
+gar nicht. Kein Formular trägt `noValidate`, also fängt Chromium den Absendeversuch selbst ab und
+zeigt seine eigene Sprechblase — auf Englisch, in einer Gestalt, die Takt nicht kennt, und ohne
+die Live-Region, die T-118 und T-162 für genau diesen Fall gebaut haben. Der Befund gilt
+vermutlich für **jedes** `required`-Feld der Anwendung, nicht nur den Titel; nachgemessen ist
+bisher einer.
+
+**Entscheidung.**
+
+1. **Die Formulare tragen `noValidate`, und die Prüfung der Anwendung ist die maßgebliche.** Zwei
+   Gründe, und beide sind Regeln des Vorhabens: Oberflächentexte sind deutsch, und eine Meldung,
+   die während eines stehenden Dialogs entsteht, wird **angesagt** (B-5, SC 4.1.3) — die native
+   Sprechblase tut beides nicht.
+2. **Bedingung, ohne die Punkt 1 nicht gilt:** Jedes `required`-Feld braucht seine eigene
+   Prüfung, bevor ihm die des Browsers genommen wird. Wer `noValidate` setzt und ein Feld ohne
+   eigene Prüfung zurückläßt, hat keine Meldung verbessert, sondern eine entfernt. Die Liste der
+   betroffenen Felder wird **gezählt**, nicht geschätzt.
+3. **Der Nachweis ist eine Prüfreihe, kein Bericht.** T-170 hat die Meßlücke selbst gefunden,
+   weil `role="alert"` in einem `TextField` nie gemessen wurde. Die neue Reihe bleibt und wächst
+   um die Felder aus Punkt 2.
+
+## E-085 — Domäne und Hülle stellen dieselbe Frage, und das wird gemessen statt zugesichert
+
+**Anlaß.** T-179 hat gemessen, was zwei Berichte daneben behaupteten: `checkAttachmentPath` in der
+Domäne und `check_file` in der Hülle urteilten **verschieden** — bei `/home/nutzer/.lnk` sagte die
+Domäne `ok`, die Hülle wies ab. Zwei grüne Prüffälle behaupteten beides zugleich
+(`apps/desktop/src-tauri/src/attachment.rs:763` gegen `packages/domain/test/attachment.test.ts:421`).
+T-178 hat nachgemessen: es waren **7 von 10** Namen, nicht einer — führender Punkt, nachgestellter
+Punkt, nachgestelltes Leerzeichen. Nach der Behebung: 0 von 14.
+
+Das ist keine Schlamperei eines Agenten. Es ist die vorhersehbare Folge davon, daß dieselbe Regel
+in zwei Sprachen steht und **kein Lauf sie gegeneinander hält** — genau die Klasse, die in diesem
+Vorhaben schon zweimal zugeschlagen hat (O-CR bei der Beschriftung, jetzt hier).
+
+**Entscheidung.**
+
+1. **Es gibt einen Nachweispfad `proof:attachment-parity`.** Er nimmt die Zeichenketten aus der
+   Falltabelle des `#[cfg(test)]`-Blocks in `attachment.rs` und fährt sie durch
+   `checkAttachmentPath` der Domäne. Weichen die Urteile ab, ist der Lauf rot — und die
+   Fehlermeldung nennt den Namen, beide Urteile und die Stelle.
+2. **Die Hülle darf strenger sein, die Domäne nie.** Das ist die Richtung, die zählt: Ein Name,
+   den die Tür annimmt und die Hülle abweist, kostet einen Benutzer eine Fehlermeldung. Ein Name,
+   den die Tür abweist und die Hülle annehmen würde, kostet nichts. Der Lauf mißt deshalb **eine
+   Richtung als Fehler** und die andere als Hinweis.
+3. **Er gehört zu frontend-dev**, weil dort schon der Wächter über dieselbe Datei liegt
+   (`proof-shell-surface.mjs`), und weil die Alternative — zwei Eigentümer für einen Lauf über
+   zwei Sprachen — die Frage nur verschiebt.
+4. **Er wird gegengeprobt wie jeder andere:** eine eingesetzte Abweichung in der Domäne und eine
+   in der Rust-Falltabelle müssen ihn rot machen. Sonst ist er der dritte Wächter, der etwas
+   zusichert, was er nicht mißt (T-176-1 war der zweite).
+
+## E-086 — Wo eine Regel in zwei Sprachen steht, mißt ein Lauf sie gegeneinander
+
+**Anlaß.** Dieselbe Klasse hat in zwei Wellen dreimal zugeschlagen: `checkAttachmentPath` gegen
+`check_file` (T-179 fand eine Abweichung, T-178 maß nach — **7 von 10** Namen), `is_release_version`
+gegen `VERSION_SHAPE` (T-184: der Zweig, der dem Benutzer rät, den Verweis von Hand aufzurufen, ist
+**nur** deshalb unerreichbar, weil beide heute zeichengleich sind, **und nichts mißt das**), und der
+Kontrastlauf, der ein Farbpaar unter eigenem Namen führte, das keine Klasse zeichnete (T-181).
+Jedes Mal war der Lauf grün und sagte nichts über das Erzeugnis.
+
+**Entscheidung.**
+
+1. **Jede Regel, die in zwei Sprachen steht, bekommt einen Lauf, der beide Seiten fährt.** Nicht
+   zwei gepflegte Listen — die sind irgendwann *zufällig gleich sortiert*. Die **Falltafel gehört
+   dem Lauf**, und er schickt jede Zeichenkette durch beide Seiten.
+2. **Die Aussage ist nicht überall dieselbe, und sie wird je Lauf benannt.** Bei den Anhängen
+   (`proof:attachment-parity`, E-085) darf die Hülle **strenger** sein, die Domäne nie — nur eine
+   Richtung schadet. Bei der Fassungsprüfung wird **Gleichheit** gemessen: Ist die Hülle strenger,
+   schickt Takt den Benutzer auf eine Seite, die es nicht gibt; ist die **Domäne** strenger, meldet
+   sie `show: false` — und das ist nach A-18.11 von „alles aktuell" **nicht zu unterscheiden**.
+   Eine wirklich veröffentlichte Fassung erschiene nie, ohne jede Fehlerfläche. Die stille
+   Richtung ist die schlimmere.
+3. **Gegenprobe in beide Richtungen, sonst zählt der Lauf nicht.** Eine eingesetzte Abweichung auf
+   jeder Seite muß ihn rot machen. Das ist keine Förmlichkeit: T-176 hat einen Wächter gefunden,
+   der 23 Gegenproben bestand und trotzdem blind war.
+4. **Die Zahl gehört zur Gleichheit.** Wo beide Seiten eine Schranke tragen (`VERSION_MAX_LENGTH`
+   gegen `MAX_VERSION_LEN`, heute 94), wird auch sie gemessen — eine Regel ist nicht nur ihre Form.
+
+## E-087 — Eine Messung altert. Gemessen wird im Auftrag, nicht im Papier
+
+**Anlaß.** T-163 hat gemessen, daß **kein** Streichkandidat in `tests/**` durch einen Textvergleich
+festgenagelt ist, und diese Zusage trug die Freigabe des Textdurchgangs. T-181 fand beim Bauen den
+ersten Gegenbeleg (ST-07), T-184 beim Nachmessen den zweiten — und der zweite ist der lehrreiche:
+`S-19` zählt fünf Kennungen im Oberflächentext, es sind **sechs**, und ausgerechnet die übersehene
+ist die einzige mit einem Prüffall. Dieselbe Alterung traf schon die Zahl der `getByRole`-Zugriffe
+(222, nachgemessen 286).
+
+Die Zusage war **nicht falsch**, sie war **richtig und veraltet**: gefahren gegen einen Baum, der
+seither zehn Streichungen, die Pflichtmeldungen und X-04 aufgenommen hat.
+
+**Entscheidung.**
+
+1. **Vor jedem Streich- oder Umbenennungsauftrag wird der *heutige* Wortlaut gesucht** — in
+   `tests/**` und `apps/*/test/**` —, und das Ergebnis steht **im Auftrag**, nicht im Designpapier.
+   Ein Suchlauf je Eintrag. Der Auftraggeber des Auftrags trägt die Messung, nicht der Umsetzende.
+2. **Eine Zahl in einem Papier ist ein Datum, kein Nachweis.** Wo sie trägt, gehört das Datum ihrer
+   Messung daneben. Wer sie später benutzt, mißt neu oder nennt sie als Stand.
+3. **Der Bestand hat das Mittel dafür schon** (`proof-shell-surface` Prüfung 3b und 4) — es wird
+   nur nicht angewandt, wenn der Träger ein **Kommentar oder ein Designpapier** ist statt Code.
+   Genau dort ist es künftig anzuwenden.
+4. **Nachtrag vom 2026-09-06: gesucht wird über den Wortlaut, nicht über die Zeile.** T-196 hat es
+   gezählt: In einer Datei stand **keine einzige** der dreizehn Zeilenangaben des eigenen Papiers
+   richtig — elf davon exakt um acht verschoben, ohne daß ein Wortlaut sich geändert hätte. Und
+   die drei Fundstellen, die T-195 wenige Stunden zuvor **ausdrücklich am Baum gemessen** hatte,
+   waren schon wieder verrutscht. **Die Substanz hielt jedes Mal, die Zahl nie.** Also: ein Zitat
+   ist der Anker, die Zeile höchstens ein Hinweis, und eine fremde Datei wird **ohne**
+   Zeilenangabe genannt. Wer Zeilen doch nachführt, führt nur die nach, die er selbst gemessen
+   hat, und kennzeichnet den Rest — eine stille Aktualisierung erzeugt genau die Zusicherung,
+   gegen die diese Entscheidung gerichtet ist.
+
+## E-088 — Die Doppelpunktregel bleibt vorerst an beiden Stellen, und der Grund steht dazu
+
+**Anlaß.** O-FO: Seit T-178 weist Takt einen Doppelpunkt im Dateinamen **auch an der Tür** ab, auf
+jeder Plattform. Unter Linux und macOS ist `:` ein gewöhnliches Namenszeichen — `Besprechung
+10:30.pdf` läßt sich seither weder eintragen noch öffnen. Das ist eine Produktentscheidung, keine
+Umsetzungsfrage, und security-checker hat sie in T-183 vorbereitet statt getroffen.
+
+**Was die Sicherheit wirklich verlangt** (T-183, Abschnitt 24.3): die Regel an der **Hülle**, nicht
+an der Tür. `check_file` ist die einzige Kontrolle vor dem Prozeßstart, und ein Wert erreicht den
+Bestand über VG-1 und VG-3 an der Tür **vorbei** — ein Angreifer nimmt die Tür nie. Außerhalb des
+Öffnens trägt der Doppelpunkt kein Risiko; nachgerechnet über Anzeige, Protokoll (`REASON_SHAPE`
+läßt ihn ohnehin nicht durch), Export (Anhänge gelangen in keinen) und Bildablage.
+
+**Entscheidung.**
+
+1. **Die Regel bleibt vorerst an beiden Stellen.** Takt ist für Windows gebaut; dort kostet sie
+   nichts. Der Preis fällt heute allein bei der Entwicklung an, und dort ist er sichtbar statt
+   still.
+2. **Der abgeratene Weg bleibt abgeraten:** „die Tür warnt nur" ist sicherheitlich unbedenklich,
+   verlegt aber die Absage vom Augenblick der Eingabe hinter einen Klick und macht aus einer Regel
+   zwei Wahrheiten — mit der milderen vorn.
+3. **Eine plattformabhängige Regel ist vertretbar, kostet aber Meßbarkeit.** `pruefung.yml` fährt
+   auf `windows-2022` nur `cargo test --lib`, nicht die pnpm-Nachweise; `proof:attachment-parity`
+   liefe dort nicht. Wer diesen Weg will, baut zuerst den Läufer, dann die Regel.
+4. **Wiedervorlage, nicht Abschluß** — und **nicht vor A-A-37**. Die ganze Begründung ruht auf dem
+   Satz „`check_file` ist die einzige Kontrolle vor dem Prozeßstart", und dieser Satz ruht auf
+   einem Wächter, der nachweislich grün bleibt, während ein vierter Aufrufort danebensteht.
+
+## E-089 — Eine Bedingung, die niemand erfüllen kann, wird durch eine ersetzt, die man abhaken kann
+
+**Anlaß.** E-088 Punkt 4 macht die Wiedervorlage der Doppelpunktregel davon abhängig, daß
+`proof:shell-surface` nicht „grün bleibt, während ein vierter Aufrufort danebensteht". Diese
+Bedingung ist inzwischen **dreimal** an einem Befund gescheitert, den derselbe Prüfer selbst
+gefunden hat — `cr"…"`, das Zeichenliteral mit Fluchtfolge, und jetzt `['😀','"']`, wo ein Zeichen
+oberhalb der BMP als Ersatzpaar den Rumpf sprengt. Er sagt es selbst: eine Bedingung, die an einem
+**Negativbeweis** hängt („es fällt niemandem mehr etwas ein"), kann niemand erfüllen.
+
+Zugleich hat er die Frage zum ersten Mal **begrenzt**: die lexikalische Grammatik der
+Rust-Referenz vollständig durch den Lauf gefahren, **19 Formen, achtzehn gefangen, eine blind**.
+
+**Entscheidung.**
+
+1. **E-088 Punkt 4 wird ersetzt.** Die Wiedervorlage der Doppelpunktregel wird frei, sobald
+   **A-A-46** gebaut (der `u`-Merker, ein Zeichen) und **A-A-47** erfüllt ist: je eine Kunstquelle
+   für **jede** lexikalische Form der Rust-Referenz im Gegenprobenteil. Heute 18 von 19.
+2. **Der Unterschied ist die Art der Frage.** Vorher hieß sie „ist jemandem noch etwas
+   eingefallen?" — eine Frage, die nur der nächste Fund beantwortet. Jetzt heißt sie „steht jede
+   Form der Referenz im Gegenprobenteil?" — abhakbar, und ihr Maßstab liegt außerhalb dieses
+   Vorhabens.
+3. **Die künstliche Gegenprobe fällt aus der Zählung** (A-A-48). `9r"x"` mißt keine Eingabe, die
+   die Sprache erzeugen kann — gemessen über acht Dateien und 23 Schreibweisen: **null**
+   Unterschiede, und `rustc` lehnt genau die abweichenden Fälle ab. Die Rückschau bleibt (ohne sie
+   ist der Ausdruck **strenger**, nie milder); die Probe wird nicht mitgezählt, weil sie sonst
+   ununterschieden in „31 Gegenproben" steht und eine Verhaltensprobe vortäuscht, wo eine
+   Festschreibung des Quelltextes steht.
+4. **Der Erbauer hat sie als künstlich benannt, und das rettet sie vor der Nacharbeit.** Der
+   Maßstab dieses Vorhabens ist nicht, keine Notlösung zu bauen, sondern keine ungekennzeichnete.
+
+**Nachtrag zu E-088 vom 2026-09-06 — die Wiedervorlage ist gelaufen, und Punkt 1 bleibt.**
+
+Die Bedingung aus Punkt 4 ist in der Fassung von E-089 erfüllt: A-A-46 gebaut, A-A-47 erfüllt,
+von security-checker nachgemessen (neunzehn Formen eins zu eins, die entscheidende Probe **ohne**
+Leerzeichen nach dem Komma — mit Leerzeichen hätte sie trivial bestanden). Der Wächter ist zu, und
+damit ruht der Satz „`check_file` ist die einzige Kontrolle vor dem Prozeßstart" erstmals auf einer
+Messung statt auf einer Zusage.
+
+**Die Doppelpunktregel bleibt an beiden Stellen, und das ist jetzt eine Entscheidung statt eines
+Aufschubs.** Drei Gründe, in dieser Reihenfolge:
+
+1. **Die Absage gehört in den Augenblick der Eingabe.** Nimmt man sie an der Tür heraus, nimmt
+   der Bestand den Wert an und die Hülle weist ihn beim Öffnen ab — der Benutzer erfährt vom
+   Fehler erst, wenn er ihn nicht mehr mit dem Eintippen in Verbindung bringt. Dasselbe Argument,
+   das E-088 Punkt 2 gegen „die Tür warnt nur" führt.
+2. **Der Preis fällt heute allein bei der Entwicklung an.** Takt wird für Windows gebaut; dort ist
+   `:` in einem Dateinamen ohnehin unzulässig. Unter Linux kostet die Regel einen Dateinamen wie
+   `Besprechung 10:30.pdf` — sichtbar, sofort, und nicht still.
+3. **Zwei Fassungen derselben Regel sind teurer als eine strenge.** Die plattformabhängige
+   Variante ist sicherheitlich vertretbar, kostet aber Meßbarkeit: `pruefung.yml` fährt auf
+   `windows-2022` nur `cargo test --lib`, nicht die pnpm-Nachweise. Wer sie will, baut zuerst den
+   Läufer, dann die Regel — und dann trägt E-085/E-086 sie mit.
+
+**Damit ist E-088 abgeschlossen.** Wird die Regel je gelockert, geschieht es über eine neue
+Entscheidung mit einem Läufer im Rücken, nicht über eine Zeile Code.
+
+## E-090 — Ein Wächter mißt, was allein trägt, nicht alles, was in einem Papier steht
+
+**Anlaß.** T-199 hat für zwei Sätze eine Zusicherung in `proof:addin` gebaut und dann **von sich
+aus nicht ausgedehnt** — mit der Begründung, der Lauf würde sonst „eine zweite Quelle neben dem
+Papier". Die Frage, ob er die ganze Sperrliste halten soll, hat er an den Orchestrator gegeben,
+statt sie selbst zu entscheiden.
+
+**Entscheidung.**
+
+1. **Gemessen wird, was allein trägt.** Ein Satz kommt in einen Wächter, wenn er die **einzige**
+   Stelle ist, an der eine Auskunft steht — dann kostet sein stiller Verlust etwas. Ein Satz, der
+   neben zwei anderen dasselbe sagt, gehört nicht dorthin; sein Verlust ist eine Kürzung, keine
+   Lücke.
+2. **Ein Wächter, der ein ganzes Papier spiegelt, ist ein zweites Papier.** Er läuft mit der
+   Aufnahme auseinander, sobald eine Welle beide anfaßt, und dann hat das Vorhaben zwei Listen
+   und keine Wahrheit — genau die Klasse, die E-085, E-086 und O-GC beschreiben.
+3. **Die Auswahl gehört begründet, nicht behauptet.** Wer einen Satz in einen Wächter legt,
+   schreibt dazu, **warum er allein trägt**. Fällt die Begründung später weg (weil ein zweiter
+   Träger entsteht), fällt die Zusicherung mit.
+
+## E-091 — Wer streicht, darf den Sperreintrag datieren: eine zweite benannte Ausnahme
+
+**Anlaß.** T-211 hat einen echten Widerspruch zwischen zwei Regeln gemeldet, statt ihn zu umgehen:
+**E-081 Punkt 4** verlangt, daß Streichung und Ausgleich in **einem** Auftrag laufen — und seit
+T-203 gehört zum Ausgleich ein Eintrag in der **Sperrliste**, mit dem **Datum des Falls** als
+Pflichtangabe. Die Sperrliste steht in `docs/design/textbestand.md`, und die gehört ux-designer.
+Der bauende Agent müßte also in fremder Hoheit schreiben — oder melden und warten, und dann steht
+die Halbierung wieder da, die E-081 Punkt 4 gerade verbietet.
+
+In dieser Welle ist es genau so passiert: frontend-dev hat beim Fall der Karte das Datum
+nachgetragen, sachlich richtig und von der Auflage verlangt, **formal als zweiter Schreiber**.
+Es ging gut aus, weil die Zeilen auseinanderlagen und ux-designer vor jedem weiteren Schreiben
+nachgesehen hat. Das ist kein Verfahren, das ist Glück.
+
+**Entscheidung — eine zweite benannte Ausnahme, so eng wie die erste.**
+
+1. **Der bauende Agent darf in einem bestehenden Sperrlisteneintrag genau eine Angabe setzen: das
+   Datum des Falls** (und, wo die Sorte es verlangt, den Verweis auf die gefallene Fläche). Nichts
+   sonst — kein neuer Eintrag, kein geänderter Wortlaut, keine Umsortierung.
+2. **Er sagt es im Bericht**, in einem Satz, mit der Zeile, die er gesetzt hat. Ein stiller
+   Eingriff in fremder Hoheit bleibt ein Verstoß, auch unter dieser Ausnahme.
+3. **Läuft ux-designer in derselben Welle**, meldet der bauende Agent es **zusätzlich** an den
+   Orchestrator, damit die Kollision gesehen wird, statt gutzugehen.
+4. **Der Grund ist derselbe wie bei `release.rs`:** Die Alternative ist nicht sauberer, sondern
+   schlechter. Ein Datum, das eine Welle später nachgetragen wird, steht eine Welle lang falsch —
+   und T-211 hat gemessen, wie das aussieht: die eigene Nachtragszeile war **eine Stunde lang**
+   falsch, weil sie vor dem Fall geschrieben und nach dem Fall nicht nachgesehen wurde.
+
+## E-092 — Eine verbindliche Regel, die niemand findet, ist keine Regel
+
+**Anlaß.** T-212 hat gemessen, was passiert, wenn eine Regel nur in einem Aufgabenbericht steht:
+frontend-dev hat in T-207 einen Umbauvorschlag gemacht, der **wörtlich P-9 ist** — der Regel, die
+spec-ux-reviewer selbst geschrieben hat und die seit T-184 als **verbindlich** gilt. Er hat sie
+nicht ignoriert, er hat sie **wiedererfunden**, weil ihr Wortlaut im ganzen Bestand nicht steht:
+drei bare Verweise, und der einzige im Code liest sie **falsch herum**.
+
+**Entscheidung.**
+
+1. **Eine Regel, die über ihre Welle hinaus bindet, steht in `decisions.md`** — nicht in dem
+   Bericht, in dem sie entstanden ist. Berichte sind Belege, keine Nachschlagewerke.
+2. **Die drei Regeln, die diese Runde gekostet haben, stehen hiermit hier**, im Wortlaut ihres
+   Verfassers:
+
+   > **P-1 (berichtigt, T-184).** Ein Satz, mit Punkt, kein Ausrufezeichen, kein „Bitte", kein
+   > „Sie müssen". Die Grundform nach P-3 bleibt bei **60 Zeichen**. Ein Satz mit dem zweiten
+   > Halbsatz aus P-4 darf **80** — dieselbe Grenze wie ein dauerhaft sichtbarer Feldhinweis
+   > (S-05), und P-4 begrenzt ihn ohnehin auf einmal je Formular.
+
+   > **P-8 (T-184, verbindlich).** Eine Pflichtmeldung erscheint erst, wenn der Benutzer **an
+   > diesem Feld etwas getan hat**. „Berührt" heißt: eine Eingabe, nicht ein Durchqueren. Ein
+   > Feld, das seit dem Öffnen unverändert ist, wird beim bloßen Weitertabben nicht getadelt.
+   > Ein Absendeversuch setzt `touched` weiterhin **immer**.
+
+   > **P-9 (T-184, verbindlich).** **Der Auslöser folgt dem Knopf.** Läßt sich der Absendeknopf
+   > drücken, kommt die Meldung beim **Absendeversuch**. Ist er von Anfang an gesperrt, kommt sie
+   > beim **Verlassen nach einer Eingabe** (P-8), **und** der Grund für die Sperre steht von der
+   > ersten Sekunde an als zustandsgebundener **Hinweis** daneben — nicht als Meldung.
+
+3. **Die übrigen (P-2 bis P-7, und die S-Regeln aus den Textpapieren) zieht spec-ux-reviewer
+   nach.** Solange sie nur in Berichten stehen, wird die nächste wiedererfunden — und dann steht
+   sie zweimal da und läuft auseinander, wie es in dieser Sitzung viermal geschehen ist.
+
+## E-093 — Die neun gesperrten Absendeknöpfe werden umgebaut
+
+**Anlaß.** frontend-dev hat in T-207 gezählt, zerlegt und **gegen den eigenen Umbauvorschlag**
+gefragt, ob ein dauerhafter Hinweis nicht billiger und besser wäre. spec-ux-reviewer hat in T-212
+mit **dessen eigenen Zahlen** dagegen entschieden, und zwei der drei nicht in Zeilen meßbaren
+Kosten halten nachweislich nicht: Die eine Messung, die achtmal wöge, ist auf dem Board längst als
+erledigt geführt, und der Riegel wiegt nicht neunmal, weil er **zentral** in `FormDialog.tsx`
+liegt — alle neun laufen hindurch.
+
+**Entscheidung.**
+
+1. **Alle neun werden umgebaut**, nicht fünf. Neun Dialoge in zwei Bauarten sind schlechter als
+   neun in einer — die Lehre dieser Sitzung aus dem halb umgesetzten Textdurchgang.
+2. **Die Eingabetaste ist der Gewinn, nicht der Preis.** Der gesperrte Absendeknopf ist der
+   Standardknopf des Formulars; Enter im frisch geöffneten Dialog ist damit heute ein **stummer
+   Leerlauf**. Das ist die Sorte Fehler, die niemand meldet, weil sie wie Absicht aussieht.
+3. **Vorher zu messen** ist die Behauptung über die Eingabetaste — sie ist gerechnet, nicht im
+   Browser gesehen, und sie trägt einen Teil dieses Urteils.
+4. **Nicht parallel zu Bündel 0.** Beide fassen `FormDialog.tsx` an; sie laufen nacheinander, und
+   die Reihenfolge entscheidet der Orchestrator, nicht der Zufall.
+5. **Nachtrag vom 2026-09-06 (T-221), und er ist blockierend — beide Punkte standen bis eben nur
+   in einem Bericht, also genau dort, wogegen E-092 geschrieben wurde.**
+   - **Der Riegel steht an der falschen Stelle.** `if (busy || submitDisabled) return;` liegt in
+     `FormDialog.tsx` **vor** dem Setzen des Zustands, an dem die Rückführung und die Meldung
+     hängen. Wörtlich gebaut **erschiene der freigegebene Satz nie** — der Knopf bliebe stumm, und
+     alle Prüffälle der Sorte „es wird nichts geschickt" wären grün. Der Riegel muß den
+     **Versuch** zählen und **dann** abbrechen.
+   - **Der Satz gehört nicht in den Fehlerkanal.** `TextField.error` setzt `aria-invalid="true"`
+     und die Fehlerfarbe — das erklärt einen **gültigen, gespeicherten** Wert für ungültig. Das
+     Vorbild steht im Bestand: die Absage im Bestätigungsdialog liegt in einer Statusfläche
+     **ohne** `aria-invalid`. Es ist der einzige Befund dieser Runde, der einer Vorlesehilfe
+     etwas **Falsches sagt**.
+
+## E-094 — Eine Selbstprobe geht denselben Weg wie ihr Prüfgegenstand, oder sie sagt, welchen sie ausläßt
+
+**Anlaß.** T-230, die achte Anwendung derselben Frage — diesmal in **vier Läufen von vier**. Der
+schwerste Fall zeigt die Bauart: `proof:callers` meldet `ok` mit **„0 Dateien durchgesehen"** und
+bleibt **45/0, Code 0**, wenn sein Sammler nichts einsammelt. Und seine **sechs** Gegenproben
+können das **strukturell nicht sehen**, weil die Kunstquelle der **Liste hinzugefügt** wird: Sie
+prüfen damit das **Sieb**, nie die **Ernte**.
+
+Dieselbe Sitzung hat davon acht Ausprägungen gesehen — ein Wächter, der grün blieb, während ein
+vierter Aufrufort danebenstand; ein Ausdruck, der zwanzig Zeilen unter seiner eigenen
+Blindheitswarnung wieder benutzt wird; eine Zusicherung über **30 Namen** nach **null** verglichenen
+Zeilen; ein Farbpaar, das nie eine sichtbare Fläche hatte.
+
+**Entscheidung.**
+
+1. **Eine Gegenprobe muß denselben Weg nehmen wie das, was sie prüft.** Wird die eingesetzte
+   Verletzung an dem Schritt **vorbei** eingespeist, den sie prüfen soll, mißt sie sich selbst.
+2. **Wo das nicht geht, sagt der Lauf es** — im Kopf, nicht im Bericht: *welchen Schritt diese
+   Probe ausläßt und was deshalb ungemessen bleibt*. Ein benannter Rest ist tragbar, ein
+   unbenannter nicht.
+3. **Und der Zähler gehört zur Aussage.** „0 Dateien durchgesehen" darf nicht `ok` sein. Wo ein
+   Lauf über eine Menge urteilt, prüft er **zuerst**, daß die Menge nicht leer ist — dieselbe
+   Regel, die T-215 für eine Zusicherung über der leeren Menge schon einmal gebaut hat.
+4. **Der Vorschlag kam von security-checker, die Entscheidung ist meine** — er hat sie ausdrücklich
+   nicht selbst getroffen, weil verfassen und genehmigen in einer Hand nicht geht.
+
+## E-095 — Ein überspringbarer Lauf gehört nicht in eine Menge, deren Wert das Nichtüberspringen ist
+
+**Anlaß:** T-232 hat die Engine-Messung dauerhaft gemacht — `proof:engines`, 23 Prüfungen, zwei
+Engines (WebKitGTK 2.52.6 und Chromium 151.0.7922.34), vier Gegenproben, jede in **beiden** Engines
+gerendert. Der Erbauer hat gefragt, ob der Lauf in `proof:all` gehört, und **selbst nein gesagt**,
+mit dem Argument, das trägt: Der Lauf braucht `xvfb-run`, `python3-gi` mit `WebKit2 4.1`, Pillow und
+Playwrights Chromium. Fehlen sie, sagt er ehrlich *„ÜBERSPRUNGEN — dieser Lauf hat nichts
+gemessen"* — und geht mit **Code 0** hinaus.
+
+`proof:all` besteht aus neunzehn Läufen, die auf jedem Rechner **dasselbe** messen. Ein
+überspringbarer zwanzigster macht die Menge weicher, ohne daß es jemand sieht: `proof:all` bliebe
+grün und hieße auf zwei Rechnern zweierlei. Dazu 18 Sekunden gegen Millisekunden.
+
+**Entscheidung.**
+
+1. **`proof:engines` steht als Wurzelbefehl neben `test:e2e`** — nicht in `proof:all`, nicht in
+   `check`. Gemessen über den Wurzelbefehl: **23 bestanden, 0 fehlgeschlagen**.
+2. **Der Preis dafür ist benannt, nicht verschwiegen:** Ein Lauf, der nichts messen kann und
+   trotzdem mit Code 0 hinausgeht, ist die Bauform, vor der **E-094 Punkt 3** warnt. Hier ist sie
+   vertretbar, weil der Lauf **freiwillig** gefahren wird und im selben Atemzug sagt, was ungemessen
+   blieb. Sie ist **nicht** vertretbar dort, wo die Umgebung feststeht.
+3. **Also: in der Prüfstrecke wird ein Übersprung rot.** Der Lauf bekommt einen Schalter, der
+   jeden Übersprung zu Code 1 macht, und die Prüfstrecke richtet die vier Voraussetzungen ein und
+   fährt ihn damit. Ohne den Schalter wäre die Prüfstrecke grün, gerade weil sie nichts gemessen
+   hat — und das ist der Fehler, den diese Sitzung achtmal gefunden hat. **Eine Prüfung des
+   Ausgabetextes durch die Prüfstrecke ist ausdrücklich nicht die Antwort:** sie wird beim ersten
+   umformulierten Satz still blind.
+4. **Die Bilder werden nicht aufbewahrt.** `--keep=<Pfad>` bleibt der einzige Weg, sie zu sehen;
+   ein fester Ordner im Bestand bräuchte einen Eintrag in `.gitignore` und würde bei jedem Lauf
+   überschrieben, ohne daß jemand hinsieht. Die gemessenen **Zahlen** stehen im Bericht.

@@ -36,6 +36,8 @@ import type {
   TodoPort,
 } from '../ports.ts';
 import type {
+  DueComparison,
+  DueSortDirection,
   PoolCompletionFilter,
   PoolExportFilter,
   PoolMatchMode,
@@ -51,18 +53,65 @@ import type {
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
-import { err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
+import { dueComparison, err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
 
-import { chunk, integer, placeholders, text, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
+import { chunk, integer, placeholders, text, textOrNull, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
 import { attempt } from './errors.ts';
 import { toTodo, toTodoNote } from './mappers.ts';
 import { decodeCursor, encodeCursor, pageSize } from './paging.ts';
 import type { IdSource } from './ids.ts';
 
-/** Alle Spalten von `todo`, ausgeschrieben. `todo_note.body` ist keine davon. */
+/**
+ * Alle Spalten von `todo`, ausgeschrieben.
+ *
+ * `todo_note.body` ist keine davon (A-7.2, R-06), und `todo_attachment` steht
+ * in keiner Abfrage dieser Datei (A-19.17): Anhänge haben einen eigenen Port,
+ * und wer sie will, benennt ihn.
+ *
+ * `due_date` ist seit 0014 dabei — der **Tag**, nicht der Zustand. „Überfällig"
+ * wird gerechnet und nie gespeichert (E-070 Punkt 3).
+ */
 const TODO_COLUMNS =
-  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.created_at, t.updated_at';
+  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.due_date, t.created_at, t.updated_at';
+
+/**
+ * Der Ersatzwert, mit dem ein Todo **ohne** Frist beim Sortieren ans Ende
+ * rückt — je Richtung ein anderer (E-074 Punkt 2, A-19.20).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das kein Platzhalterdatum ist
+ * ---------------------------------------------------------------------------
+ *
+ * Weil es keines sein darf. E-074 Punkt 2 ist ausdrücklich: „Ein leeres Feld
+ * als 01.01.1970 zu sortieren ist die Sorte Bequemlichkeit, die niemandem
+ * auffällt, bis sie in einer Abrechnung steht."
+ *
+ * Ein Platzhalter**datum** wäre ein Wert, der sich anzeigen ließe und der in
+ * beiden Richtungen genau eine Seite bevorzugt. Diese beiden Zeichen sind
+ * keine Daten: `due_date` steht unter dem GLOB aus Migration 0014 und kann
+ * ausschließlich Ziffern und Bindestriche tragen. `!` (0x21) liegt **unter**
+ * jeder Ziffer, `~` (0x7E) **über** jeder — bei BINARY-Vergleich, und der ist
+ * für TEXT ohne COLLATE die Voreinstellung von SQLite.
+ *
+ * Damit steht die fristlose Zeile in **beiden** Richtungen am Ende:
+ *
+ *   ORDER BY COALESCE(due_date, '~') ASC   →  '~' ist größer als jedes Datum
+ *   ORDER BY COALESCE(due_date, '!') DESC  →  '!' ist kleiner als jedes Datum
+ *
+ * Und sie verläßt die Datenbank nie: `toTodo` liest `due_date` und nicht
+ * diesen Ausdruck. Der Ersatzwert lebt ausschließlich in `ORDER BY` und in der
+ * Blätterungsbedingung — an genau den zwei Stellen, an denen er dieselbe Zahl
+ * bedeuten muß.
+ *
+ * Die **Regel** dahinter steht in `compareByDueDate` (`due-date.ts`); dies ist
+ * ihre zweite Fassung für die Abfrage, so wie `buildConditions` die zweite
+ * Fassung von `matchesPool` ist.
+ */
+const DUE_SORT_SENTINEL: Readonly<Record<DueSortDirection, string>> = Object.freeze({
+  asc: '~',
+  desc: '!',
+});
 
 interface Condition {
   readonly sql: string;
@@ -254,7 +303,58 @@ function buildConditions(
     });
   }
 
+  /*
+   * Die Frist (A-19.20). **Anzeige, keine Achse** (E-074 Punkt 1) — deshalb
+   * steht sie hier bei den Filtern und nicht oben bei den Pool-Regeln.
+   *
+   * Mehrere Zustände wirken als Vereinigung: „überfällig oder heute fällig"
+   * ist die Frage, die jemand stellt; der Schnitt wäre immer leer, weil die
+   * vier Zustände einander ausschließen.
+   *
+   * Übersetzt wird nicht hier, sondern in der Domäne: `dueComparison(zustand,
+   * heute)` gibt vier geschlossene Formen, und darüber steht der `switch`
+   * unten. Der Unterschied zu einem `if` je Zustand ist der, den `SOURCE_PATHS`
+   * im Exportmotor macht — ein fünfter Zustand bricht den Übersetzer, statt
+   * still nichts zu treffen.
+   *
+   * `heute` kommt vom Aufrufer und wird hier nicht gerechnet (E-070 Punkt 2):
+   * Es gibt einen Tagesbegriff, und er entsteht an einer Stelle.
+   */
+  const due = filter.due;
+  if (due !== undefined && due.states.length > 0) {
+    const parts: string[] = [];
+    const params: SqlValue[] = [];
+    for (const state of due.states) {
+      const translated = translateDueComparison(dueComparison(state, due.today));
+      parts.push(translated.sql);
+      params.push(...translated.params);
+    }
+    conditions.push({ sql: `(${parts.join(' OR ')})`, params });
+  }
+
   return conditions;
+}
+
+/**
+ * Ein Fristvergleich der Domäne als SQL-Bedingung.
+ *
+ * Vier Zweige, geschlossen aufgezählt. `due_date` ist eine Zeichenkette fester
+ * Breite (`YYYY-MM-DD`, erzwungen vom GLOB aus Migration 0014); ein
+ * lexikographischer Vergleich ist dort derselbe wie ein kalendarischer, und
+ * deshalb steht hier keine Datumsfunktion. Das ist dieselbe Begründung wie bei
+ * `started_at` in `calendarDayBounds`.
+ */
+function translateDueComparison(comparison: DueComparison): Condition {
+  switch (comparison.kind) {
+    case 'none':
+      return { sql: 't.due_date IS NULL', params: [] };
+    case 'before':
+      return { sql: 't.due_date IS NOT NULL AND t.due_date < ?', params: [comparison.day] };
+    case 'equal':
+      return { sql: 't.due_date = ?', params: [comparison.day] };
+    case 'after':
+      return { sql: 't.due_date IS NOT NULL AND t.due_date > ?', params: [comparison.day] };
+  }
 }
 
 function escapeLike(value: string): string {
@@ -387,29 +487,78 @@ export function createTodoPort(
       const cursor = decodeCursor(pagination?.cursor);
 
       /**
-       * Sortiert nach zuletzt geändert, absteigend, mit der Kennung als
-       * eindeutigem zweiten Schlüssel.
+       * Zwei Ordnungen, und die zweite ist Anzeige (A-19.20, E-074 Punkt 1).
        *
-       * Es gibt keine zweite Ordnung daneben. Bis Migration 0010 trug
-       * `board_rank` die Reihenfolge innerhalb einer Kanban-Spalte; mit E-054
-       * ist das Ziehen entfallen, und das Board ist eine Frage über Regeln
-       * geworden. Diese Abfrage ist damit die einzige Ordnung über Todos —
-       * eine zweite, abweichende wäre eine zweite Wahrheit über dieselbe Liste.
+       * **Ohne Angabe:** zuletzt geändert, absteigend, mit der Kennung als
+       * eindeutigem zweiten Schlüssel. Das ist die Ordnung, die es seit
+       * Migration 0010 gibt — bis dahin trug `board_rank` die Reihenfolge
+       * innerhalb einer Kanban-Spalte; mit E-054 ist das Ziehen entfallen.
+       *
+       * **Mit `sortByDueDate`:** nach der Frist, in der genannten Richtung,
+       * und ein Todo **ohne** Frist steht in **beiden** Richtungen am Ende
+       * (E-074 Punkt 2). Der Ersatzwert dafür ist kein Platzhalterdatum,
+       * sondern ein Zeichen außerhalb des Vorrats, den `due_date` tragen kann
+       * — die Begründung steht bei {@link DUE_SORT_SENTINEL}.
+       *
+       * Das ist keine zweite Wahrheit über dieselbe Liste: Beide Ordnungen
+       * zeigen dieselben Zeilen, nur in anderer Reihenfolge, und der Aufrufer
+       * wählt. Was es **nicht** gibt, ist eine Frist in einer Pool-Regel oder
+       * in einer Kanban-Spalte — das wäre die zweite Wahrheit, und A-19.7
+       * verbietet sie.
+       *
+       * Der Sortierschlüssel steht in `ORDER BY` **und** in der
+       * Blätterungsbedingung, und beide Male ist es derselbe Ausdruck. Zwei
+       * verschiedene Ausdrücke wären eine Blätterung, die Zeilen überspringt
+       * oder doppelt liefert — und das fiele erst auf der dritten Seite auf.
        */
+      const direction = filter.sortByDueDate;
+      const order =
+        direction === undefined
+          ? {
+              key: 't.updated_at',
+              params: [] as SqlValue[],
+              sql: 'ORDER BY t.updated_at DESC, t.id DESC',
+              comparator: '<',
+              read: (row: SqlRow): string => text(row, 'updated_at'),
+            }
+          : {
+              key: 'COALESCE(t.due_date, ?)',
+              params: [DUE_SORT_SENTINEL[direction]] as SqlValue[],
+              sql:
+                direction === 'asc'
+                  ? 'ORDER BY COALESCE(t.due_date, ?) ASC, t.id ASC'
+                  : 'ORDER BY COALESCE(t.due_date, ?) DESC, t.id DESC',
+              comparator: direction === 'asc' ? '>' : '<',
+              read: (row: SqlRow): string =>
+                textOrNull(row, 'due_date') ?? DUE_SORT_SENTINEL[direction],
+            };
+
       const keyed =
         cursor === null
           ? { sql: '', params: [] as SqlValue[] }
           : {
-              sql: `${where === '' ? 'WHERE' : 'AND'} (t.updated_at < ? OR (t.updated_at = ? AND t.id < ?))`,
-              params: [cursor.sort, cursor.sort, cursor.id] as SqlValue[],
+              sql:
+                `${where === '' ? 'WHERE' : 'AND'} (${order.key} ${order.comparator} ? ` +
+                `OR (${order.key} = ? AND t.id ${order.comparator} ?))`,
+              // Die Reihenfolge der Werte folgt der Reihenfolge der
+              // Fragezeichen im Text, und `order.key` trägt bei der
+              // Fristsortierung selbst eines. Deshalb steht der Ersatzwert
+              // zweimal davor und nicht einmal.
+              params: [
+                ...order.params,
+                cursor.sort,
+                ...order.params,
+                cursor.sort,
+                cursor.id,
+              ] as SqlValue[],
             };
 
       const rows = conn
         .prepare(
           `SELECT ${TODO_COLUMNS} FROM todo t ${where} ${keyed.sql}
-            ORDER BY t.updated_at DESC, t.id DESC LIMIT ?`,
+            ${order.sql} LIMIT ?`,
         )
-        .all(...params, ...keyed.params, limit + 1);
+        .all(...params, ...keyed.params, ...order.params, limit + 1);
 
       const hasMore = rows.length > limit;
       const page = hasMore ? rows.slice(0, limit) : rows;
@@ -419,7 +568,7 @@ export function createTodoPort(
         items: hydrate(page),
         nextCursor:
           hasMore && last !== undefined
-            ? encodeCursor({ sort: text(last, 'updated_at'), id: text(last, 'id') })
+            ? encodeCursor({ sort: order.read(last), id: text(last, 'id') })
             : null,
         total,
       };
@@ -449,10 +598,13 @@ export function createTodoPort(
 
       conn
         .prepare(
-          `INSERT INTO todo (id, title, call_number, status_id, completed_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+          `INSERT INTO todo (id, title, call_number, status_id, completed_at, due_date, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`,
         )
-        .run(id, input.title, input.callNumber, statusId, input.now, input.now);
+        // `dueDate` kommt geprüft herein (`checkDueDate` in der Domäne, an der
+        // Tür). Der Adapter urteilt nicht — der CHECK aus Migration 0014 ist
+        // die zweite Wache und nicht die erste.
+        .run(id, input.title, input.callNumber, statusId, input.dueDate ?? null, input.now, input.now);
 
       writeTags(id, tagIds, input.now);
 
@@ -511,6 +663,17 @@ export function createTodoPort(
         if (input.statusId !== undefined) {
           sets.push('status_id = ?');
           params.push(input.statusId);
+        }
+        /*
+         * Drei Fälle, und die Unterscheidung ist der Grund für
+         * `exactOptionalPropertyTypes`: Das Feld **fehlt** heißt „unverändert",
+         * `null` heißt „Frist entfernen" (A-19.3), ein Tag heißt „setzen".
+         * `!== undefined` und nicht `!= null` — wer die ersten beiden
+         * verwechselt, macht aus einer Löschung ein Weglassen.
+         */
+        if (input.dueDate !== undefined) {
+          sets.push('due_date = ?');
+          params.push(input.dueDate);
         }
         // Auch wenn nur Tags geändert werden, wandert `updated_at` mit: Die
         // Liste sortiert danach, und eine Änderung, die nicht nach oben

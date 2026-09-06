@@ -124,8 +124,13 @@ test('E-047 — "Nicht abrechnen" ohne Grund: Status exported, Zähler bleibt 0,
   await page.getByRole('menuitem', { name: 'Verlauf dieser Buchung' }).click();
   const history = page.getByRole('dialog', { name: 'Verlauf dieser Buchung' });
   await expect(history).toBeVisible();
+  // O-GJ (T-187, E-087): Der Substring endet bewusst vor der internen
+  // Kennung „(E-047)" — sie steht heute noch im Oberflächentext, soll aber
+  // aus ihm verschwinden (frontend-dev, gleiche Welle). Dieser Vergleich
+  // erfüllt beides, den heutigen Wortlaut **und** den geplanten ohne
+  // Kennung, und hängt damit an keiner internen Kennung mehr.
   await expect(history.locator('.auditrow--not_billed .auditrow__reason--absent')).toContainText(
-    'Ohne Begründung ausgebucht. Das Feld ist freiwillig (E-047)',
+    'Ohne Begründung ausgebucht. Das Feld ist freiwillig',
   );
   await history.getByRole('button', { name: 'Schließen', exact: true }).click();
   await expect(history).toBeHidden();

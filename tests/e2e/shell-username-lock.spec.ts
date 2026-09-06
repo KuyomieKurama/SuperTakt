@@ -68,6 +68,9 @@ function shimArgs(
       service_exit: serviceExit,
     },
     quit: 'resolve',
+    // Kein `installedVersion` mehr nötig (E-077, T-166): siehe Begründung in
+    // `shell-quit-failure.spec.ts` — die Vorgabe von `installShellShim` löst
+    // ohne ausdrückliche Angabe nie mehr den Versionsdialog aus.
   };
 }
 

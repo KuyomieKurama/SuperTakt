@@ -153,24 +153,87 @@ export function secureDatabaseFiles(location: string): void {
  *
  * Für die sichtbare Warnung beim Start (B-7.2 Punkt 3). Gibt Pfade zurück und
  * keinen Text: Was der Benutzer liest, entscheidet der Dienst.
+ *
+ * ===========================================================================
+ * „Nicht messbar" ist ein dritter Ausgang und keine Entwarnung (T-143 S-4)
+ * ===========================================================================
+ *
+ * Bis T-146 gab es hier zwei Ausgänge: `checked: false` (Windows,
+ * Arbeitsspeicher) und `checked: true` mit einer Liste. Jeder gescheiterte
+ * `statSync` wurde dazwischen mit `catch {}` verschluckt — Kommentar: „Nicht
+ * vorhanden heißt nicht zu weit."
+ *
+ * Der Satz stimmt für `ENOENT` und für nichts sonst. Liegt das
+ * Anwendungsdatenverzeichnis auf einem Dateisystem, auf dem `stat` mit
+ * `EACCES` oder `EIO` scheitert — eine eingehängte Freigabe, ein
+ * Container-Bind-Mount mit engem `x`-Recht auf dem Elternordner —, dann blieb
+ * `tooPermissive` leer, `checked` war `true`, und `GET /settings` zeigte
+ * **0**: „alle drei Dateien liegen eng", obwohl **nichts gemessen** wurde.
+ *
+ * Das ist wörtlich der Fall, den `ports.ts` bei
+ * `SystemPort.databaseFilesTooPermissive` ausschließt: „`null` ist
+ * ausdrücklich **nicht** `0` — eine Nichtaussage ist keine Entwarnung." Vor
+ * T-132 hing an demselben `catch` nur eine Protokollzeile; seit die Zahl in
+ * den Einstellungen steht, ist es eine Entwarnung ohne Messung.
+ *
+ * Deshalb wird der Fehlschlag jetzt **unterschieden**:
+ *
+ * | Was `statSync` sagt | Was das heißt | Ausgang |
+ * |---|---|---|
+ * | Erfolg, Modus zu weit | gemessen | Pfad in `tooPermissive` |
+ * | Erfolg, Modus eng | gemessen | nichts |
+ * | `ENOENT` | die Datei gibt es (noch) nicht — `-wal` und `-shm` entstehen erst mit der ersten Transaktion | nichts, und das ist eine Aussage |
+ * | alles andere | **nicht messbar** | `unmeasured` wächst |
+ *
+ * Und `checked` ist nur dann `true`, wenn **jede** der drei Dateien eine
+ * Antwort gegeben hat. Eine einzige nicht messbare macht die ganze Auskunft zu
+ * einer Nichtaussage — denn welche der drei offen liegt, weiß man dann nicht,
+ * und „zwei von drei sind eng" ist keine Entwarnung für die dritte.
  */
 export function inspectDatabasePermissions(location: string): {
   readonly checked: boolean;
   readonly tooPermissive: readonly string[];
+  /** Die Dateien, über die sich nichts sagen ließ. Leer heißt: alle gemessen. */
+  readonly unmeasured: readonly string[];
 } {
   if (process.platform === 'win32' || location === ':memory:' || location === '') {
-    return { checked: false, tooPermissive: [] };
+    return { checked: false, tooPermissive: [], unmeasured: [] };
   }
   const wide: string[] = [];
+  const unmeasured: string[] = [];
   for (const suffix of companionSuffixes) {
     const path = `${location}${suffix}`;
     try {
       if ((statSync(path).mode & 0o777 & ~DATABASE_FILE_MODE) !== 0) wide.push(path);
-    } catch {
-      // Nicht vorhanden heißt nicht zu weit.
+    } catch (error) {
+      /*
+       * **Der Grund wird gelesen, nicht der Wurf.** `ENOENT` ist die Antwort
+       * „gibt es nicht", und die ist eine Messung: `-wal` und `-shm` entstehen
+       * erst mit der ersten Transaktion, und was es nicht gibt, liegt nicht zu
+       * weit.
+       *
+       * Jeder andere Grund — `EACCES`, `EIO`, `ELOOP`, `ENOTDIR` — heißt
+       * „konnte nicht nachsehen". Ihn wie `ENOENT` zu behandeln wäre die
+       * Entwarnung ohne Messung.
+       */
+      if (errorCodeOf(error) === 'ENOENT') continue;
+      unmeasured.push(path);
     }
   }
-  return { checked: true, tooPermissive: wide };
+  return { checked: unmeasured.length === 0, tooPermissive: wide, unmeasured };
+}
+
+/**
+ * Der `code` an einem Systemfehler — oder `null`, wenn keiner dransteht.
+ *
+ * Vier Zeilen und keine Zusicherung: `unknown` in `catch` ist der Schalter
+ * `useUnknownInCatchVariables`, und ein `as NodeJS.ErrnoException` wäre eine
+ * Behauptung über einen Wert, den irgendjemand geworfen hat.
+ */
+function errorCodeOf(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const code: unknown = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
 }
 
 /**

@@ -115,17 +115,18 @@ const RADII: readonly { readonly token: string; readonly usage: string }[] = [
   { token: "--radius-pill", usage: "Statusetikett" },
 ];
 
+/*
+  Drei Erhebungen, und jede hat eine Fläche. `--shadow-md` und `--shadow-drag`
+  standen bis T-214 mit in dieser Tabelle und waren die einzigen zwei Farbtoken,
+  die nirgends gezeichnet wurden — `--shadow-drag` seit E-054 ausdrücklich, und
+  `--shadow-md` unbemerkt: Die hier genannte Auswahlliste trägt `--shadow-lg`,
+  wie das Menü und der Dialog. Beide sind mit dem vierten Wächter aus O-IT
+  gefallen; die Beschriftung von `--shadow-lg` nennt seither die Auswahlliste.
+*/
 const SHADOWS: readonly { readonly token: string; readonly usage: string }[] = [
   { token: "--shadow-xs", usage: "Karte in Ruhe" },
   { token: "--shadow-sm", usage: "Karte unter dem Zeiger" },
-  { token: "--shadow-md", usage: "Auswahlliste" },
-  { token: "--shadow-lg", usage: "Dialog, Kontextmenü" },
-  /*
-    Seit E-054 wird auf dem Board keine Karte mehr gezogen; dieser Schatten hat
-    zurzeit keine Fläche (Designsystem, Abschnitt 4.3). Die Beschriftung sagt
-    das, statt eine Bedienung zu behaupten, die es nicht gibt.
-  */
-  { token: "--shadow-drag", usage: "gezogenes Element — zurzeit unbelegt" },
+  { token: "--shadow-lg", usage: "Auswahlliste, Menü, Dialog" },
 ];
 
 export function FoundationsSection() {

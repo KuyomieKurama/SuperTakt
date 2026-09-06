@@ -69,8 +69,9 @@
  * gemessene Zusicherung: `apps/web/src/api/client.ts` ist die einzige Stelle
  * mit `fetch`, und außerhalb von `endpoints.ts` setzt keine Ansicht einen
  * Rumpf zusammen (T-050, Punkt 6). Abschnitt 1 misst das nach, statt es zu
- * glauben: Kein `fetch` und kein `request(`-Aufruf außerhalb dieser beiden
- * Dateien.
+ * glauben: kein Zugriff auf das globale `fetch` und keiner auf die
+ * Anfragefunktion `request` außerhalb dieser beiden Dateien — **und** dass der
+ * Sammler, der das misst, überhaupt etwas eingesammelt hat (T-231, A-A-61).
  *
  * **c) Was der Leser nicht auflösen kann.** Ein berechneter Schlüsselname,
  * eine Verbreitung aus einer Variablen ohne Typangabe, ein Rumpf aus einem
@@ -81,8 +82,28 @@
  * Ein Prüfer mit einem benannten blinden Fleck ist brauchbar, einer mit einem
  * unbenannten ist gefährlich.
  *
- * **d) Das Add-in.** `apps/outlook-addin` ruft dieselben Routen unter
- * `/addin/*` an und hat seinen eigenen Nachweis (`proof:addin-wiring`).
+ * **d) Was hinter der Tür geschieht.** Dieser Lauf misst Namen an der Tür, nicht
+ * das Verhalten dahinter. Ob eine Route tut, was sie verspricht, messen
+ * `proof:addin-wiring` (echter Dienst, echte Datenbank) und die Einheitentests.
+ *
+ * ===========================================================================
+ * Zwei Aufrufer, ein Dienst (T-132, O-M)
+ * ===========================================================================
+ *
+ * Hier stand bis T-132: „Das Add-in ruft dieselben Routen unter `/addin/*` an
+ * und hat seinen eigenen Nachweis (`proof:addin-wiring`)." Der Satz war
+ * richtig und die Schlussfolgerung falsch. `proof:addin-wiring` fährt den
+ * **Dienst** und prüft, dass die Kette hält; er sieht sich nicht an, welche
+ * Schlüssel `apps/outlook-addin/src/api/client.ts` in seine Rümpfe schreibt.
+ * Genau das ist die Frage, die T-050 an der Oberfläche gestellt und dreimal
+ * beantwortet bekommen hat — und sie war für die zweite Tür offen (O-M).
+ *
+ * Beide Aufrufer laufen deshalb durch **denselben** Leser mit demselben
+ * Urteil. Sie unterscheiden sich in der Gestalt ihres Aufrufs
+ * (`request(pfad, optionen)` gegen `call(methode, pfad, abfrage, rumpf)`) und
+ * in der Vorsilbe ihres Pfades; beides sagt `CALL_SHAPES` in
+ * `caller-scan.mjs`. Alles Weitere ist gleich, und das ist der Punkt: Ein
+ * Fehler, den der eine Nachweis findet, findet der andere auch.
  *
  * ===========================================================================
  * Und der Prüfer prüft sich selbst
@@ -92,6 +113,35 @@
  * im Arbeitsspeicher, die Datei bleibt unberührt — und verlangt, dass jeder
  * einzelne genau eine Beanstandung auslöst. Ohne das wäre dieser Lauf, was
  * `pnpm contrast` vor T-011 war: grün, weil er nichts tut.
+ *
+ * **Und seit T-188 auch die Zusage, auf der Punkt b) ruht** (A-A-40). Sie war
+ * die einzige tragende Aussage dieses Laufs ohne Gegenprobe, und gemessen
+ * wurde sie mit einem Ausdruck, den T-143 an anderer Stelle bereits als blind
+ * befunden hatte. Abschnitt 6 und 8 setzen jetzt je fünf Schreibweisen eines
+ * zweiten Wegs ein — nackt, über `globalThis.`, über `window.`, über `self.`
+ * und aus einer Zerlegung — und verlangen je einen Zuwachs; eine sechste Probe
+ * verlangt das Gegenteil, damit der Wächter nicht auf Prosa anspringt.
+ *
+ * ===========================================================================
+ * Was T-231 daran geändert hat (A-A-61, A-A-62)
+ * ===========================================================================
+ *
+ * Security-checker hat in T-230 drei Löcher in genau dieser Zusage gemessen
+ * (Bedrohungsmodell 30.1), und alle drei sagten **45/0, Code 0**:
+ *
+ *  - Der **Sammler** konnte ins Leere greifen, und der Lauf meldete es als
+ *    „(0 Dateien durchgesehen)" in grün. Die Selbstproben aus T-188 können das
+ *    strukturell nicht sehen, weil sie ihre Kunstquelle der **Aufstellung**
+ *    hinzufügen und damit das Sieb prüfen, nie die Ernte. Deshalb misst
+ *    `proveHarvest` die Ernte jetzt eigens — Untergrenze **und** benannte
+ *    Datei, **vor** der Zusage (A-A-61).
+ *  - Der Sammler sah **zwei** Endungen; der Bündler löst **acht** auf. Die
+ *    Liste steht jetzt in `BUNDLED_EXTENSIONS` (A-A-61, zweiter Satz).
+ *  - Die **Zwillingszeile** für `request` trug unverändert den Ausdruck, den
+ *    dieser Lauf zwanzig Zeilen weiter unten selbst als blind ausweist, und
+ *    hatte null Gegenproben. `client.request(…)` war ein offener zweiter Weg
+ *    zum Dienst. Die Regel kommt jetzt aus `request-scan.mjs` und hat sechs
+ *    eigene Proben in Abschnitt 6 (A-A-62).
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -100,16 +150,39 @@ import { z } from 'zod';
 
 import { parseYaml } from './openapi-reader.mjs';
 import { createMatcher } from './schema-match.mjs';
-import { buildTypeIndex, normalizePath, scanCallers } from './caller-scan.mjs';
+import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './caller-scan.mjs';
+/*
+ * Die Regel „hier geht etwas ins Netz" (T-188, A-A-40).
+ *
+ * Sie stand bis T-188 hier als eigener Ausdruck, und er war **zeichengleich**
+ * der, den T-143 als S-1 als blind gemessen hat. Jetzt kommt sie aus
+ * `fetch-scan.mjs` — derselben Datei, aus der `proof:release-safety` sie holt.
+ * Die Herleitung steht dort; die Gegenproben stehen unten in Abschnitt 6 und 8.
+ */
+import { BLIND_FETCH_CALL, describeStray, strayGlobalFetch } from './fetch-scan.mjs';
+import { BLIND_REQUEST_CALL, strayRequestAccess } from './request-scan.mjs';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
+/*
+ * Die Eingabeschemata der Add-in-Tür (T-132, O-M).
+ *
+ * `routes/addin/**` gehört integration-dev und wird hier **gelesen**, nicht
+ * geändert. Anders als die vier Routendateien der Hauptfläche führt diese
+ * Datei keine Aufstellung `REQUEST_SCHEMAS`; die Zuordnung zu den
+ * Operationskennungen steht deshalb unten in `ADDIN_SCHEMAS` und nirgends
+ * sonst. Die Schemata selbst sind dieselben Werte, die die Routen benutzen —
+ * keine Abschrift.
+ */
+import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const CALLER_PATH = new URL('../../web/src/api/endpoints.ts', import.meta.url);
 const TYPES_PATH = new URL('../../web/src/api/types.ts', import.meta.url);
 const WEB_SOURCE_DIR = new URL('../../web/src/', import.meta.url);
+const ADDIN_CALLER_PATH = new URL('../../outlook-addin/src/api/client.ts', import.meta.url);
+const ADDIN_SOURCE_DIR = new URL('../../outlook-addin/src/', import.meta.url);
 
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
 
@@ -118,6 +191,12 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+};
+
+/** Die beiden Türen mit Rumpf unter `/addin/*`, nach Operationskennung. */
+const ADDIN_SCHEMAS = {
+  createAddinTodo: createTodoSchema,
+  createAddinTimeEntry: bookSchema,
 };
 
 let passed = 0;
@@ -200,9 +279,21 @@ const typeIndex = buildTypeIndex(readFileSync(TYPES_PATH, 'utf8'), 'types.ts');
  * Genau deshalb steht er hier und nicht verstreut: Abschnitt 6 setzt einen
  * verdorbenen Text ein und erwartet Beanstandungen. Ein Vergleich, der nur auf
  * der echten Datei läuft, kann sich nicht auf die Probe stellen lassen.
+ *
+ * Seit T-132 (O-M) nimmt er entgegen, **wessen** Text er ansieht: Aufstellung
+ * der Typen, Gestalt des Aufrufs, Zuordnung der Eingabeschemata. Das Urteil
+ * darunter ist für beide Aufrufer dasselbe — es gibt keine zweite Fassung, die
+ * milder sein könnte.
  */
-function inspect(text) {
-  const { functions, calls, unreadable } = scanCallers(text, typeIndex, 'endpoints.ts');
+const WEB_CALLER = {
+  fileName: 'endpoints.ts',
+  typeIndex,
+  shape: CALL_SHAPES.options,
+  schemas: REQUEST_SCHEMAS,
+};
+
+function inspect(text, who = WEB_CALLER) {
+  const { functions, calls, unreadable } = scanCallers(text, who.typeIndex, who.fileName, who.shape);
   const findings = [];
   const covered = new Set();
   const sentKeys = new Map();
@@ -231,7 +322,7 @@ function inspect(text) {
     }
 
     if (call.body !== null) {
-      const schema = REQUEST_SCHEMAS[operation.id];
+      const schema = who.schemas[operation.id];
       if (schema === undefined) {
         // Eine Route ohne Rumpfschema liest keinen Rumpf. `body: {}` ist dann
         // die leere Höflichkeitsform und schadet nicht; jeder Schlüssel darin
@@ -277,6 +368,23 @@ const callerText = readFileSync(CALLER_PATH, 'utf8');
 const result = inspect(callerText);
 const of = (kind) => result.findings.filter((finding) => finding.kind === kind);
 
+/**
+ * Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M).
+ *
+ * Seine Typaufstellung steht in **derselben** Datei — `CreateTodoRequest` und
+ * `BookRequest` sind dort deklariert, nicht in `types.ts`. Deshalb wird der
+ * Text einmal gelesen und zweimal benutzt.
+ */
+const addinText = readFileSync(ADDIN_CALLER_PATH, 'utf8');
+const ADDIN_CALLER = {
+  fileName: 'client.ts',
+  typeIndex: buildTypeIndex(addinText, 'client.ts'),
+  shape: CALL_SHAPES.addin,
+  schemas: ADDIN_SCHEMAS,
+};
+const addin = inspect(addinText, ADDIN_CALLER);
+const addinOf = (kind) => addin.findings.filter((finding) => finding.kind === kind);
+
 // ---------------------------------------------------------------------------
 section('0  Der Leser liest die Datei — sonst wäre alles Folgende wertlos');
 // ---------------------------------------------------------------------------
@@ -319,33 +427,136 @@ section('1  Es gibt keinen zweiten Weg zum Dienst als diese Datei');
  *
  * Fällt das eines Tages, ist die richtige Antwort nicht, diese Prüfung zu
  * lockern, sondern die neue Stelle in die Aufstellung aufzunehmen.
+ *
+ * ===========================================================================
+ * Womit gemessen wird — und womit bis T-188 gemessen wurde (A-A-40)
+ * ===========================================================================
+ *
+ * Hier stand `/(?<![\w.])fetch\s*\(/`. Das ist **zeichengleich** der Ausdruck,
+ * den T-143 als S-1 an einem anderen Wächter als blind gemessen und den T-146
+ * dort ersetzt hat: Der Rückblick auf `.` schließt **jedes** `.fetch` aus, um
+ * zwei Fälle durchzulassen — und läßt damit `globalThis.fetch(`,
+ * `window.fetch(`, `self.fetch(` und jede Zerlegung durch. Für diese Zusage
+ * gab es außerdem **null** Gegenproben; sie stehen jetzt in Abschnitt 6.
+ *
+ * Die Regel kommt aus `fetch-scan.mjs` und ist damit dieselbe, die
+ * `proof:release-safety` fährt (E-086 Punkt 1). Kommentare zählen nicht mit:
+ * Eine Datei darf in ihrer Beschreibung sagen, daß sie `fetch` **nicht** ruft.
+ *
+ * ===========================================================================
+ * Was der Sammler sieht — und daß er überhaupt etwas sieht (T-231, A-A-61)
+ * ===========================================================================
+ *
+ * Zwei Befunde aus T-230 sitzen nicht an der Regel, sondern an der **Ernte**:
+ *
+ *  - Die Zahl der eingesammelten Dateien stand im **Namen** der Zusicherung
+ *    und in keiner Bedingung. Ein Sammler, der ins Leere greift, meldete
+ *    „`fetch` steht nur in api/client.ts (**0 Dateien durchgesehen**)" — grün,
+ *    45/0, Code 0 (Bedrohungsmodell 30.1.1). Deshalb steht die Untergrenze
+ *    jetzt **vor** der Zusage, und zwar als Zahl **und** als benannte Datei:
+ *    Eine Zahl allein ließe einen Sammler durch, der irgendetwas sammelt.
+ *  - Der Sammler sah `.ts` und `.tsx`; Vite löst fünf Endungen mehr auf. Eine
+ *    Kunstquelle mit nacktem `fetch(` als `.js`, `.jsx`, `.mts`, `.cts` oder
+ *    `.mjs` war unsichtbar, und die Zahl im Text blieb stehen (30.1.3).
+ *    Deshalb steht die Endungsliste jetzt ausgeschrieben und deckt das ab,
+ *    was der Bündler auflöst.
  */
+
+/**
+ * Die Endungen, die der Bündler auflöst — ausgeschrieben (A-A-61).
+ *
+ * Ausgeschrieben und nicht als Ausdruck: Wer eine Endung hinzunimmt, soll sie
+ * eintragen und dabei merken, daß er sie eintragen mußte. `.cjs` steht mit
+ * darin, obwohl heute keine solche Datei im Baum liegt — die Liste ist gegen
+ * das gebaut, was auflösbar **wäre**, nicht gegen das, was zufällig daliegt.
+ */
+const BUNDLED_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
+
+const isBundledSource = (name) =>
+  BUNDLED_EXTENSIONS.some((extension) => name.endsWith(extension)) && !name.endsWith('.d.ts');
+
+/**
+ * Die Ernte eines Sammlers, bevor über sie geurteilt wird (A-A-61).
+ *
+ * Zwei Zeilen, und beide sind Vorbedingungen und keine Aussagen über den Baum:
+ * Eine **Untergrenze** — der Sammler hat nicht ins Leere gegriffen — und die
+ * **benannte Datei**, ohne die die Zusage darunter über die leere Menge stünde.
+ *
+ * Die Untergrenze ist bewußt weit unter dem heutigen Stand. Sie ist kein
+ * Zensus: Sie soll rot werden, wenn ein Verzeichnis umbenannt, eine Endung
+ * geändert oder ein Werkzeug getauscht wurde — nicht, wenn jemand eine Ansicht
+ * löscht.
+ */
+function proveHarvest(who, files, minimum, mustContain) {
+  check(
+    `${who}: der Sammler hat mindestens ${String(minimum)} Dateien eingesammelt (${String(files.length)})`,
+    files.length >= minimum,
+    `${String(files.length)} statt mindestens ${String(minimum)} — der Sammler greift ins Leere`,
+  );
+  const missing = mustContain.filter((name) => !files.some((file) => file.name === name));
+  check(
+    `${who}: und ${mustContain.join(' und ')} ${mustContain.length === 1 ? 'ist' : 'sind'} darunter`,
+    missing.length === 0,
+    files.length === 0 ? 'die Ernte ist leer' : `nicht eingesammelt: ${missing.join(', ')}`,
+  );
+}
+
 const webSources = [];
 const walk = (dir) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
     if (entry.isDirectory()) walk(child);
-    else if (/\.tsx?$/.test(entry.name)) webSources.push(child);
+    else if (isBundledSource(entry.name)) webSources.push(child);
   }
 };
 walk(WEB_SOURCE_DIR);
 
-const strayFetch = [];
-const strayRequest = [];
-for (const file of webSources) {
-  const body = readFileSync(file, 'utf8');
-  const name = file.pathname.slice(WEB_SOURCE_DIR.pathname.length);
-  if (/(?<![\w.])fetch\s*\(/.test(body) && name !== 'api/client.ts') strayFetch.push(name);
-  if (/(?<![\w.])request\s*[<(]/.test(body) && name !== 'api/endpoints.ts' && name !== 'api/client.ts') {
-    strayRequest.push(name);
-  }
-}
+const webFiles = webSources.map((file) => ({
+  name: file.pathname.slice(WEB_SOURCE_DIR.pathname.length),
+  source: readFileSync(file, 'utf8'),
+}));
+
+proveHarvest('die Oberfläche', webFiles, 100, ['api/client.ts', 'api/endpoints.ts']);
+
+/**
+ * Wo der Zugriff auf das globale `fetch` seinen Platz hat — ausgeschrieben.
+ *
+ * Eine Liste von **Dateien** und keine Ausnahme für eine **Form**: Wer
+ * `window.fetch` allgemein durchließe, hätte den blinden Ausdruck von vorhin
+ * unter anderem Namen zurück.
+ */
+const WEB_FETCH_HOME = ['api/client.ts'];
+
+/**
+ * Wo der Zugriff auf die Anfragefunktion seinen Platz hat — ausgeschrieben.
+ *
+ * `api/endpoints.ts` ruft sie, `api/client.ts` führt sie. Beide stehen als
+ * **Datei** da und nicht als Form, aus demselben Grund wie oben.
+ */
+const WEB_REQUEST_HOME = ['api/endpoints.ts', 'api/client.ts'];
+
+const strayFetch = strayGlobalFetch(webFiles, WEB_FETCH_HOME);
+
+/*
+ * Bis T-231 stand hier `/(?<![\w.])request\s*[<(]/` — zeichengleich der
+ * Ausdruck, den der Absatz oben für `fetch` als blind ausweist. Er sah
+ * `client.request(` nicht, und der Lauf sagte dazu 45/0 (Bedrohungsmodell
+ * 30.1.2). Die Regel kommt jetzt aus `request-scan.mjs` und hat dieselbe
+ * Bauart wie die `fetch`-Regel: die bekannten Nicht-Aufrufe namentlich, danach
+ * jedes verbliebene `request` als Wort. Die Gegenproben stehen in Abschnitt 6.
+ */
+const strayRequest = strayRequestAccess(webFiles, WEB_REQUEST_HOME);
+
 check(
-  `\`fetch\` steht nur in api/client.ts (${webSources.length} Dateien durchgesehen)`,
+  `\`fetch\` steht nur in api/client.ts (${String(webFiles.length)} Dateien durchgesehen)`,
   strayFetch.length === 0,
-  strayFetch.join(', '),
+  strayFetch.map(describeStray).join(' | '),
 );
-check('`request(` steht nur in api/endpoints.ts', strayRequest.length === 0, strayRequest.join(', '));
+check(
+  '`request` steht nur in api/endpoints.ts und in api/client.ts, wo es entsteht',
+  strayRequest.length === 0,
+  strayRequest.map(describeStray).join(' | '),
+);
 
 // ---------------------------------------------------------------------------
 section('2  Jeder Aufruf trifft eine Operation, die es gibt');
@@ -362,7 +573,9 @@ check('kein Aufruf zeigt auf einen Weg, den der Dienst nicht führt', of('route'
  * ausgeschrieben und nicht als „meistens ruft sie alles an".
  */
 const NOT_CALLED_BY_UI = new Set([
-  // Die vier Add-in-Routen. Eigener Aufrufer, eigener Nachweis.
+  // Die vier Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
+  // O-M): Dass jede von ihnen im Aufgabenbereich einen Aufrufer hat, misst
+  // Abschnitt 7 — mit demselben Leser und demselben Urteil.
   'getAddinContext',
   'findAddinDuplicates',
   'createAddinTodo',
@@ -380,6 +593,17 @@ const NOT_CALLED_BY_UI = new Set([
   // entfernt, ohne dass die Oberfläche `/board` anruft, bekommt den Befund
   // zurück — so soll es sein.
   'getBoard',
+  // T-138, **Uebergabe an frontend-dev (T-139).** `GET /version` gibt heraus,
+  // was der Dienst zuletzt ueber die veroeffentlichte Fassung weiss (A-18.2,
+  // E-069). Der Aufrufer entsteht mit dem Dialog in T-139; T-138 und T-139
+  // laufen in derselben Welle, und `apps/web` gehoert einem anderen Agenten.
+  //
+  // Dieselbe Lage wie bei `getBoard`, und derselbe Umgang: Der Eintrag steht
+  // hier und nicht als roter Lauf, weil die Luecke **benannt** ist. Sobald
+  // `endpoints.ts` die Route anruft, ist die Zeile ueberfluessig -- der Lauf
+  // wird davon nicht rot, aber sie sagt dann etwas Falsches und gehoert
+  // entfernt.
+  'getVersionCheck',
 ]);
 const uncalled = [...operations.entries()]
   .filter(([key, operation]) => !result.covered.has(key) && !NOT_CALLED_BY_UI.has(operation.id))
@@ -571,6 +795,426 @@ check(
   result.findings.length === 0,
   result.findings.map(label).join(' | '),
 );
+
+/*
+ * ===========================================================================
+ * Und die Zusage aus Abschnitt 1 prüft sich ebenfalls selbst (T-188, A-A-40)
+ * ===========================================================================
+ *
+ * Bis T-188 stand für „es gibt keinen zweiten Weg zum Dienst" **keine**
+ * Gegenprobe da. Vier der Selbstproben oben decken den Vergleich der
+ * Schlüssel; die Zusage, ohne die dieser Vergleich gar nichts wert wäre —
+ * daß nämlich eine Datei genügt —, wurde mit einem Ausdruck gemessen, den
+ * dieselbe Werkstatt an anderer Stelle schon als blind befunden hatte.
+ *
+ * Gemessen wird wie bei den Regressionen oben: der **echte** Dateibestand im
+ * Arbeitsspeicher, eine eingesetzte Datei dazu, und verlangt ist genau **ein**
+ * Zuwachs gegenüber dem unveränderten Lauf. Damit stehen diese Proben auch
+ * dann noch, wenn der Bestand einen echten Fund enthält.
+ *
+ * `apps/web` und `apps/outlook-addin` werden dabei nicht angefaßt; die
+ * eingesetzte Datei entsteht als Eintrag in einer Aufstellung und nie auf der
+ * Platte.
+ */
+const FETCH_FORMS = [
+  {
+    name: 'nacktes `fetch(`',
+    source: 'export const laden = async () => fetch(ZIEL);\n',
+  },
+  {
+    name: '`globalThis.fetch(` — die Lücke aus T-143 S-1',
+    source: 'export const laden = async () => globalThis.fetch(ZIEL);\n',
+  },
+  {
+    name: '`window.fetch(` — die Schreibweise, die am Baum steht',
+    source: 'export const laden = async () => window.fetch(ZIEL);\n',
+  },
+  {
+    name: '`self.fetch(`',
+    source: 'export const laden = async () => self.fetch(ZIEL);\n',
+  },
+  {
+    name: 'eine Zerlegung: `const { fetch: holen } = globalThis`',
+    source: 'const { fetch: holen } = globalThis;\nexport const laden = async () => holen(ZIEL);\n',
+  },
+];
+
+/**
+ * Die Umkehrung, und sie ist hier so wichtig wie die fünf oben.
+ *
+ * Ein Wächter, der auf **jedes** Vorkommen von `fetch` anspringt, bestünde die
+ * fünf Proben und wäre trotzdem unbrauchbar: Er meldete die Beschreibung einer
+ * Datei, die Kopfzeile `sec-fetch-site` und den Port selbst. Der nächste, der
+ * ihn liest, lockerte ihn — und zwar an der Stelle, an der er richtig ist.
+ */
+const FETCH_HARMLESS = {
+  name: 'Prosa, `sec-fetch-site` und der Port sind kein zweiter Weg',
+  source: [
+    '// Diese Ansicht ruft fetch(…) niemals selbst auf.',
+    '/* Auch globalThis.fetch steht hier nur in einem Absatz. */',
+    "const seite = kopfzeilen.get('sec-fetch-site');",
+    'const antwort = await options.fetch(ZIEL);',
+    "const grund = 'fetch_context_not_allowed';",
+    '',
+  ].join('\n'),
+};
+
+const INJECTED = 'ui/Eingesetzt.tsx';
+
+function proveFetchGuard(who, files, allowed) {
+  const baseline = strayGlobalFetch(files, allowed).map((finding) => finding.name);
+  const probe = (source) =>
+    strayGlobalFetch([...files, { name: INJECTED, source }], allowed)
+      .map((finding) => finding.name)
+      .filter((name) => !baseline.includes(name));
+
+  for (const form of FETCH_FORMS) {
+    const found = probe(form.source);
+    check(
+      `${who}: ${form.name} wird gefunden`,
+      found.length === 1 && found[0] === INJECTED,
+      found.length === 0 ? 'nichts beanstandet' : found.join(', '),
+    );
+  }
+
+  const harmless = probe(FETCH_HARMLESS.source);
+  check(`${who}: ${FETCH_HARMLESS.name}`, harmless.length === 0, harmless.join(', '));
+}
+
+proveFetchGuard('die Oberfläche', webFiles, WEB_FETCH_HOME);
+
+/*
+ * Und die Begründung selbst als Messung: Der Ausdruck, der bis T-188 in
+ * Abschnitt 1 und 7 stand, sieht vier dieser fünf Schreibweisen nicht. Der
+ * Satz stand bisher in einem Bericht; ein Satz in einem Bericht altert, eine
+ * Zahl in einem Lauf nicht. Setzt ihn jemand zurück, fallen mit ihm vier
+ * Proben oben — und diese Zeile sagt, warum.
+ */
+const blindForms = FETCH_FORMS.filter((form) => !BLIND_FETCH_CALL.test(form.source));
+check(
+  `der Ausdruck aus T-143 S-1 sieht vier der fünf Schreibweisen nicht (${blindForms.length})`,
+  blindForms.length === 4,
+  blindForms.map((form) => form.name).join(', '),
+);
+
+/*
+ * ===========================================================================
+ * Und dieselben Proben für die Zwillingszeile (T-231, A-A-62)
+ * ===========================================================================
+ *
+ * Die `request`-Zusage in Abschnitt 1 hatte bis T-231 **null** Gegenproben und
+ * wurde mit genau dem Ausdruck gemessen, den der Absatz über den `fetch`-Proben
+ * als blind ausweist. Security-checker hat den offenen Weg in T-230 gegangen
+ * (Bedrohungsmodell 30.1.2): eine Ansicht mit `import * as client` und
+ * `client.request('/todos/…', { method: 'DELETE' })` — der Lauf sagte 45/0.
+ * Der `fetch`-Wächter fängt sie nicht, denn sie ruft kein `fetch`; sie benutzt
+ * das eine, das erlaubt ist.
+ *
+ * ===========================================================================
+ * Welchen Weg diese Proben auslassen — und wer ihn geht
+ * ===========================================================================
+ *
+ * Das ist der Satz aus T-230, und er gilt für die sechs oben genauso wie für
+ * die sechs hier: Beide Reihen setzen ihre Kunstquelle als Eintrag in eine
+ * **Aufstellung** ein und nie auf die Platte. Damit prüfen sie das **Sieb** und
+ * niemals die **Ernte** — ein Sammler, der nichts einsammelt, ließe alle zwölf
+ * grün. Das ist keine Nachlässigkeit, sondern eine benannte Auslassung: Die
+ * Ernte misst `proveHarvest` in Abschnitt 1 und 7, mit einer Untergrenze und
+ * einer benannten Datei, **vor** der Zusage (A-A-61). Erst beide Hälften
+ * zusammen sind die Aussage; eine allein ist keine.
+ */
+const REQUEST_FORMS = [
+  {
+    name: 'nacktes `request<T>(` aus einer benannten Einfuhr',
+    source: "import { request } from '../api/client';\nexport const laden = async () => request<Todo[]>(WEG);\n",
+  },
+  {
+    name: '`client.request(` über den Namensraum — die Lücke aus T-230-2',
+    source: "import * as client from '../api/client';\nexport const laden = async () => client.request(WEG);\n",
+  },
+  {
+    name: '`globalThis.request(` — dieselbe Lücke, anderer Träger',
+    source: 'export const laden = async () => globalThis.request(WEG);\n',
+  },
+  {
+    name: "der Name als Zeichenkette: `client['request'](`",
+    source: "import * as client from '../api/client';\nexport const laden = async () => client['request'](WEG);\n",
+  },
+  {
+    name: 'eine Zerlegung: `const { request: senden } = client`',
+    source: "import * as client from '../api/client';\nconst { request: senden } = client;\nexport const laden = async () => senden(WEG);\n",
+  },
+];
+
+/**
+ * Die Umkehrung, und sie ist hier so wichtig wie die fünf oben.
+ *
+ * Ein Wächter, der auf jedes Vorkommen der Zeichenfolge `request` anspringt,
+ * bestünde die fünf Proben und wäre unbrauchbar: Er meldete `requestStop`,
+ * `requestAnimationFrame`, den Typnamen `RequestOptions`, die Kopfzeile
+ * `x-request-id` und den Portaufruf `options.request(` — und der nächste, der
+ * ihn liest, lockerte ihn an der Stelle, an der er richtig ist.
+ */
+const REQUEST_HARMLESS = {
+  name: 'Prosa, `requestStop`, `x-request-id` und der Port sind kein zweiter Weg',
+  source: [
+    '// Diese Ansicht ruft request(…) niemals selbst auf.',
+    '/* Auch client.request steht hier nur in einem Absatz. */',
+    'const stoppen = () => timer.requestStop();',
+    'window.requestAnimationFrame(() => stoppen());',
+    "const kennung = kopfzeilen.get('x-request-id');",
+    'const antwort = await options.request(WEG);',
+    'const feld: RequestOptions = {};',
+    '',
+  ].join('\n'),
+};
+
+function proveRequestGuard(who, files, allowed) {
+  const baseline = strayRequestAccess(files, allowed).map((finding) => finding.name);
+  const probe = (source) =>
+    strayRequestAccess([...files, { name: INJECTED, source }], allowed)
+      .map((finding) => finding.name)
+      .filter((name) => !baseline.includes(name));
+
+  for (const form of REQUEST_FORMS) {
+    const found = probe(form.source);
+    check(
+      `${who}: ${form.name} wird gefunden`,
+      found.length === 1 && found[0] === INJECTED,
+      found.length === 0 ? 'nichts beanstandet' : found.join(', '),
+    );
+  }
+
+  const harmless = probe(REQUEST_HARMLESS.source);
+  check(`${who}: ${REQUEST_HARMLESS.name}`, harmless.length === 0, harmless.join(', '));
+}
+
+proveRequestGuard('die Oberfläche', webFiles, WEB_REQUEST_HOME);
+
+/*
+ * Und die Begründung als Messung, wie oben: Der Ausdruck, der bis T-231 in
+ * Abschnitt 1 stand, sieht vier dieser fünf Schreibweisen nicht. Setzt ihn
+ * jemand zurück, fallen mit ihm vier Proben — und diese Zeile sagt, warum.
+ */
+const blindRequestForms = REQUEST_FORMS.filter((form) => !BLIND_REQUEST_CALL.test(form.source));
+check(
+  `der Ausdruck aus T-230-2 sieht vier der fünf Schreibweisen nicht (${blindRequestForms.length})`,
+  blindRequestForms.length === 4,
+  blindRequestForms.map((form) => form.name).join(', '),
+);
+
+// ---------------------------------------------------------------------------
+section('7  Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M)');
+// ---------------------------------------------------------------------------
+
+/*
+ * Dieselben vier Fragen wie oben, an derselben Stelle beantwortet: Liest der
+ * Leser überhaupt etwas, trifft jeder Aufruf eine Operation, wird jeder
+ * gesendete Schlüssel gelesen, und ist der Leser sich seiner blinden Flecken
+ * bewusst.
+ *
+ * Der Unterschied zu Abschnitt 0 bis 5 ist die Gestalt des Aufrufs und die
+ * Vorsilbe des Pfades. Das Urteil ist zeichengleich dasselbe.
+ */
+const addinRawCalls = [...addinText.matchAll(/\bcall\s*[<(]/g)].length;
+check(
+  `so viele Aufrufe gelesen wie im Rohtext stehen (${addinRawCalls})`,
+  addinRawCalls > 0 && addin.calls.length === addinRawCalls,
+  `gelesen ${addin.calls.length}`,
+);
+check(
+  `die Typaufstellung des Add-ins ist gelesen (${ADDIN_CALLER.typeIndex.size} Typen)`,
+  ADDIN_CALLER.typeIndex.has('CreateTodoRequest') && ADDIN_CALLER.typeIndex.has('BookRequest'),
+);
+check(
+  'jeder Aufruf ist als Ganzes lesbar — Methode, Pfad, Rumpf, Abfrage',
+  addin.unreadable.length === 0,
+  addin.unreadable.join(' | '),
+);
+
+/*
+ * Und die Zusicherung, ohne die das Lesen **einer** Datei nichts wert wäre:
+ * Es gibt im Add-in keinen zweiten Weg zum Dienst. `fetch` steht dort
+ * ausschließlich als Port — `options.fetch(...)` in `api/client.ts` —, und
+ * kein Bildschirm setzt selbst eine Anfrage zusammen.
+ */
+const addinSources = [];
+const walkAddin = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
+    if (entry.isDirectory()) walkAddin(child);
+    else if (isBundledSource(entry.name)) addinSources.push(child);
+  }
+};
+walkAddin(ADDIN_SOURCE_DIR);
+
+const addinFiles = addinSources.map((file) => ({
+  name: file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length),
+  source: readFileSync(file, 'utf8'),
+}));
+
+proveHarvest('das Add-in', addinFiles, 25, ['api/client.ts']);
+
+/**
+ * Wie {@link WEB_FETCH_HOME}, und aus demselben Grund ausgeschrieben.
+ *
+ * **`ui/App.tsx` steht hier nicht** (T-188). Die Datei speist mit
+ * `fetch: window.fetch.bind(window)` die Abholfunktion des Ports ein — kein
+ * zweiter Weg zum Dienst, aber ein Zugriff auf das globale `fetch` außerhalb
+ * von `api/client.ts`, und bis T-188 war er für diesen Wächter unsichtbar.
+ * Sie einzutragen wäre eine Entscheidung über eine fremde Datei
+ * (`apps/outlook-addin/**` gehört integration-dev) und nicht die Aufgabe
+ * dieses Laufs. Er sagt, was er sieht; wo die Einspeisung hingehört,
+ * entscheidet der Orchestrator.
+ */
+const ADDIN_FETCH_HOME = ['api/client.ts'];
+
+const strayAddinFetch = strayGlobalFetch(addinFiles, ADDIN_FETCH_HOME);
+check(
+  `\`fetch\` steht im Add-in nur in api/client.ts (${String(addinFiles.length)} Dateien durchgesehen)`,
+  strayAddinFetch.length === 0,
+  strayAddinFetch.map(describeStray).join(' | '),
+);
+
+check(
+  'kein Aufruf des Add-ins zeigt auf einen Weg, den der Dienst nicht führt',
+  addinOf('route').length === 0,
+  [...new Set(addinOf('route').map((finding) => finding.message))].join(' | '),
+);
+
+/*
+ * Die Gegenrichtung, und sie ist hier die wichtigere: Eine Add-in-Route ohne
+ * Aufrufer wäre eine Tür, die der Dienst offenhält und die niemand benutzt —
+ * genau die Sorte Fläche, die B-1.x nicht will. Die Liste steht in
+ * `NOT_CALLED_BY_UI` und wird hier eingelöst.
+ */
+const addinOperations = [...operations.entries()].filter(([key]) => key.includes(' /addin/'));
+const addinUncalled = addinOperations
+  .filter(([key]) => !addin.covered.has(key))
+  .map(([key, operation]) => `${key} (${operation.id})`);
+check(
+  `jede Operation unter /addin hat einen Aufrufer im Aufgabenbereich (${addinOperations.length})`,
+  addinOperations.length > 0 && addinUncalled.length === 0,
+  addinUncalled.join(', '),
+);
+
+check(
+  'kein Rumpfschlüssel, den die getroffene Add-in-Route nicht kennt',
+  addinOf('body').length === 0,
+  addinOf('body')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+
+/*
+ * Und die Umkehrung wie in Abschnitt 3: ein Feld, das die Add-in-Tür liest und
+ * das der Aufgabenbereich nie sendet. Die Ausnahmeliste ist **leer**, und das
+ * soll sie bleiben — wächst sie, gehört der Zusatz benannt.
+ */
+const ADDIN_NEVER_SENT = {};
+const addinSurprises = [];
+for (const [id, schema] of Object.entries(ADDIN_SCHEMAS)) {
+  const sent = addin.sentKeys.get(id);
+  if (sent === undefined) continue;
+  const allowed = ADDIN_NEVER_SENT[id] ?? [];
+  for (const name of fieldsOf(schema).names) {
+    if (sent.has(name) || allowed.includes(name)) continue;
+    addinSurprises.push(`${id}.${name}`);
+  }
+}
+check(
+  'kein Feld, das die Add-in-Tür liest und der Aufgabenbereich unerklärt nie sendet',
+  addinSurprises.length === 0,
+  addinSurprises.join(', '),
+);
+
+check(
+  'kein Abfrageschlüssel, den die getroffene Add-in-Operation nicht führt',
+  addinOf('query').length === 0,
+  addinOf('query')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+check(
+  'kein Rumpf und keine Abfrage des Add-ins, deren Schlüssel dieser Leser nicht kennt',
+  addinOf('blind').length === 0,
+  addinOf('blind')
+    .map((finding) => finding.message)
+    .join(' | '),
+);
+
+// ---------------------------------------------------------------------------
+section('8  Und der Add-in-Leser prüft sich ebenfalls selbst');
+// ---------------------------------------------------------------------------
+
+/*
+ * Dieselbe Probe wie in Abschnitt 6, mit den Namen dieser Tür. Ohne sie wäre
+ * Abschnitt 7 grün, weil er nichts tut — und genau das ist der Zustand, in dem
+ * die Aufruferseite des Add-ins bis T-132 war.
+ */
+const ADDIN_REGRESSIONS = [
+  {
+    name: '`tagNamen` statt `tagNames` (die Tür legte keine neuen Tags an)',
+    pattern: /readonly tagNames: readonly string\[\];/,
+    replacement: 'readonly tagNamen: readonly string[];',
+    kind: 'body',
+  },
+  {
+    name: '`callNummer` statt `callNumber` (die Duplikatsuche fände nichts)',
+    pattern: /'\/api\/v1\/addin\/todo-matches', \{ callNumber \}/,
+    replacement: "'/api/v1/addin/todo-matches', { callNummer: callNumber }",
+    kind: 'query',
+  },
+  {
+    name: 'ein Weg, den es nicht gibt',
+    pattern: /'\/api\/v1\/addin\/context'/,
+    replacement: "'/api/v1/addin/kontext'",
+    kind: 'route',
+  },
+];
+
+const addinBaseline = new Set(addin.findings.map(label));
+for (const regression of ADDIN_REGRESSIONS) {
+  const spoiled = addinText.replace(regression.pattern, regression.replacement);
+  if (spoiled === addinText) {
+    check(`die Probe „${regression.name}" lässt sich anwenden`, false, 'die Stelle wurde nicht gefunden');
+    continue;
+  }
+  if (spoiled.split('\n').length !== addinText.split('\n').length) {
+    check(`die Probe „${regression.name}" bleibt einzeilig`, false, 'die Ersetzung verschiebt Zeilen');
+    continue;
+  }
+  const found = inspect(spoiled, {
+    ...ADDIN_CALLER,
+    // Die Typaufstellung wird mitverdorben: Die Anfragetypen stehen in
+    // derselben Datei, und ein Leser, der den alten Namen behielte, prüfte
+    // gegen eine Fassung, die es nicht mehr gibt.
+    typeIndex: buildTypeIndex(spoiled, 'client.ts'),
+  }).findings.filter((finding) => !addinBaseline.has(label(finding)));
+  check(
+    `${regression.name} wird gefunden`,
+    found.length === 1 && found[0].kind === regression.kind,
+    found.length === 0 ? 'nichts beanstandet' : found.map(label).join(' | '),
+  );
+  if (found.length === 1) console.log(`        → ${found[0].message}`);
+}
+
+check(
+  'der unveränderte Text des Add-ins ergibt keine einzige Beanstandung',
+  addin.findings.length === 0,
+  addin.findings.map(label).join(' | '),
+);
+
+/*
+ * Dieselben sechs Proben wie in Abschnitt 6, an der zweiten Tür (A-A-40).
+ *
+ * Sie sind hier **nicht** die Wiederholung der ersten: Der Bestand ist ein
+ * anderer, die Ausnahmeliste ist eine andere, und der Zuwachs wird gegen einen
+ * Grundstand gemessen, der heute nicht leer ist. Genau das ist der Fall, für
+ * den die Zuwachsmessung gebaut ist — ein Wächter, der erst wieder proben darf,
+ * wenn alles grün ist, probt nie dann, wenn es darauf ankommt.
+ */
+proveFetchGuard('der Aufgabenbereich', addinFiles, ADDIN_FETCH_HOME);
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);

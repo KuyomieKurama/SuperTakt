@@ -14,6 +14,9 @@
 
 import type {
   AppSettings,
+  Attachment,
+  AttachmentId,
+  AttachmentKind,
   DefaultTag,
   ExportAuditEntry,
   ExportAuditEvent,
@@ -24,6 +27,7 @@ import type {
   ExportStatus,
   ExportTemplateEnvelope,
   ExportTemplateId,
+  CalendarDay,
   Pool,
   PoolId,
   PoolCompletionFilter,
@@ -46,6 +50,7 @@ import type {
   TodoNote,
   TodoStatus,
 } from '@takt/domain';
+import { normalizeVersion } from '@takt/domain';
 
 import { boolean, integer, text, textOrNull, type SqlRow, type SqlValue } from './database.ts';
 
@@ -84,9 +89,41 @@ export function toTodo(row: SqlRow, tagIds: readonly TagId[]): Todo {
     callNumber: textOrNull(row, 'call_number'),
     statusId: brand<StatusId>(text(row, 'status_id')),
     completedAt: mapNullable(textOrNull(row, 'completed_at'), asTimestamp),
+    /**
+     * Die Frist (A-19.1, E-070). `null` heißt „keine Frist" und ist ein
+     * vollwertiger Zustand — kein Platzhalterdatum, an keiner Stelle
+     * (E-074 Punkt 2).
+     *
+     * Der **Zustand** (überfällig / heute fällig / später fällig) steht hier
+     * nicht: Er wird gerechnet, nie gespeichert (E-070 Punkt 3), und diese
+     * Datei liest, was gespeichert ist.
+     */
+    dueDate: mapNullable(textOrNull(row, 'due_date'), brand<CalendarDay>),
     tagIds,
     createdAt: asTimestamp(text(row, 'created_at')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
+  };
+}
+
+/**
+ * Ein Anhang (A-19.8 bis A-19.14).
+ *
+ * `kind` wird hier **umgedeutet und nicht geprüft**. Die Prüfung steht beim
+ * Aufrufer (`repo-attachments.ts`, `isAttachmentKind`), und sie steht dort aus
+ * einem Grund: Diese Datei bildet ab, sie urteilt nicht. Eine Zeile mit einer
+ * Art, die die Domäne nicht kennt, wird übergangen — sie hier zu einem Wurf zu
+ * machen hieße, ein Todo unöffenbar zu machen, weil jemand am Bestand
+ * vorbeigeschrieben hat.
+ */
+export function toAttachment(row: SqlRow): Attachment {
+  return {
+    id: brand<AttachmentId>(text(row, 'id')),
+    todoId: brand(text(row, 'todo_id')),
+    kind: text(row, 'kind') as AttachmentKind,
+    title: textOrNull(row, 'title'),
+    target: text(row, 'target'),
+    position: integer(row, 'position'),
+    createdAt: asTimestamp(text(row, 'created_at')),
   };
 }
 
@@ -434,6 +471,21 @@ export function toAppSettings(row: SqlRow): AppSettings {
     roundingMode: toRoundingMode(text(row, 'rounding_mode')),
     locale: text(row, 'locale'),
     theme: toTheme(text(row, 'theme')),
+    /*
+     * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).
+     *
+     * Sie ist Benutzereingabe und steht in einer Datei, die kopiert, gesichert
+     * und aus einer fremden Quelle mitgebracht werden kann. Ein unbrauchbarer
+     * Wert heißt hier „nichts übersprungen" — kein Wurf, keine Fehlermeldung,
+     * kein Wert, der weitergereicht wird. Schaden im schlimmsten Fall: ein
+     * unterdrückter Hinweis.
+     *
+     * `normalizeVersion` schneidet dabei ein führendes `v` ab. Damit steht in
+     * dieser Eigenschaft dieselbe Schreibweise wie in der Antwort der
+     * Versionsprüfung, und die Gleichheitsprüfung in `decideUpdateNotice`
+     * vergleicht nicht `v1.2.3` gegen `1.2.3`.
+     */
+    skippedVersion: normalizeVersion(textOrNull(row, 'skipped_version')),
     updatedAt: asTimestamp(text(row, 'updated_at')),
   };
 }
