@@ -28,6 +28,7 @@
     "proof:callers": "pnpm --filter @takt/local-api proof:callers",
     "proof:conflicts": "pnpm --filter @takt/local-api proof:conflicts",
     "proof:db-permissions": "pnpm --filter @takt/local-api proof:db-permissions",
+    "proof:engines": "pnpm --filter @takt/web proof:engines",
     "proof:export": "pnpm --filter @takt/local-api proof:export",
     "proof:export-api": "pnpm --filter @takt/local-api proof:export-api",
     "proof:migrations": "pnpm --filter @takt/storage migrations:embed:check",

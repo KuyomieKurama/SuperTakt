@@ -75,9 +75,15 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
 
       // Eine Leistung eintragen, damit die Tagesgruppe abrechenbar ist und der
       // Toast den einfachen Erfolgstitel „Zeit gebucht.“ trägt statt der
-      // Warnung „aber noch nicht abrechenbar“ (`TimerContext.tsx`,
-      // `reportStopped`) — die ist nicht Gegenstand dieses Falls. Auf den
-      // Dialog gescoped: Das Feld heißt außerhalb davon „Leistung" nicht.
+      // Warnungsvariante, die `reportStopped` (`TimerContext.tsx`, Zweig
+      // `insight.blockedReason !== null`) für eine noch nicht abrechenbare
+      // Tagesgruppe zeigt — jener Zweig ist nicht Gegenstand dieses Falls und
+      // wird hier nicht geprüft. Bewusst über die Bedingung benannt, nicht
+      // über ihren heutigen Wortlaut im Zitat: Diese Datei prüft ihn nirgends
+      // selbst, und ein Zitat wäre bei der nächsten Titeländerung dort
+      // still falsch, statt rot zu werden (dieselbe Klasse Befund wie O-IW/
+      // O-KB, `docs/testplan.md` Abschnitt 30/31). Auf den Dialog gescoped:
+      // Das Feld heißt außerhalb davon „Leistung" nicht.
       await dialog.getByLabel('Leistung').fill('E2E-Stopp-Leistungstext');
 
       const [stopResponse] = await Promise.all([

@@ -846,14 +846,15 @@ wird.
 # 9. Nachtrag T-204 (Welle AE) — der `MessageSlot`
 
 **Vorlage:** O-HZ (Board), Z-53 und **Z-53a blockierend** aus `.claude/team/reports/T-200-spec-ux-reviewer.md`
-Abschnitt 3, die Messung aus `.claude/team/reports/T-191-frontend-dev.md` 2.3 bis 2.5 (42 Aufrufstellen),
+Abschnitt 3, die Messung aus `.claude/team/reports/T-191-frontend-dev.md` 2.3 bis 2.5 (42 **bedingt
+gezeichnete Meldebausteine**, nicht Aufrufstellen — berichtigt T-236),
 die Browsermessung aus `.claude/team/reports/T-202-frontend-dev.md` 1.2 und 1.3, B-5, SC 4.1.3,
 E-076 Punkt 3, E-078 Nachtrag Punkt 8, E-087.
 
 **Warum dieser Abschnitt hier steht und nicht in einem neuen Papier.** Abschnitt 4.1 dieses Papiers
 hat drei Bauformen benannt und **B2 — reserviertes Fach** die schwächste Begründung mitgegeben
 („steht dauerhaft im Baum und ist leer, wenn es nichts zu sagen gibt"). T-191 hat B2 danach an zehn
-Stellen gebaut, T-200 hat 42 weitere sortiert. Was fehlt, ist die **Gestalt** von B2: wo das Fach
+Stellen gebaut, T-200 hat die 42 bedingt gezeichneten sortiert. Was fehlt, ist die **Gestalt** von B2: wo das Fach
 sitzt, wie hoch es leer ist, und was beim Füllen nicht springen darf. Das ist die Fortschreibung von
 4.1 und keine neue Sache. Die Regeln U-1 bis U-4 gelten unverändert weiter; W-1 bis W-6 unten sind
 ihre Anwendung auf den einen Behälter, den es dafür braucht.
@@ -877,8 +878,17 @@ trägt die **Rolle**. Der Baustein darin zeichnet sie dann nicht mehr.
 **Wie `InlineMessage` erfährt, dass es schweigen soll: über einen Zusammenhang, nicht über eine
 Eigenschaft am Aufruf.** `MessageSlot` legt `MessageHostContext` über seinen Teilbaum;
 `InlineMessage` liest ihn und lässt `role` und `aria-live` weg, wenn er gesetzt ist. Damit bleiben
-**alle 76 Aufrufstellen zeichengleich**, und die Verschachtelung **Wirt über Meldebaustein** ist
-nicht mehr eine Frage der Sorgfalt, sondern baulich ausgeschlossen.
+**alle Aufrufstellen zeichengleich** — **77** in `apps/web/src`, davon 31 auf der Musterseite
+(gemessen 2026-09-06 über den Wortlaut `<InlineMessage` im Arbeitsbaum, T-236; T-204 nannte hier 76,
+Stand jener Welle) —, und die Verschachtelung **Wirt über Meldebaustein** ist nicht mehr eine Frage
+der Sorgfalt, sondern baulich ausgeschlossen.
+
+> **Diese Zahl und die 42 in 9.2 zählen nicht dasselbe, und das stand hier bis T-236 nirgends.**
+> **77** sind **alle** Aufrufstellen von `InlineMessage`. **42** sind die **bedingt gezeichneten
+> Meldebausteine** aus T-191 2.5 — 37 `InlineMessage`, 4 `LoadingBlock`, 1 `UpdateNotice`. Beide
+> Sätze waren richtig; keiner sagte, worüber er zählt. Der Satz dieses Abschnitts hängt an keiner
+> von beiden — er gilt für *alle*, gleich wie viele es sind. Genau deshalb ist die Zahl gefährlich:
+> Sie trägt nichts und wird trotzdem als Beleg weitergereicht (E-087 Punkt 2).
 
 > **Und weiter reicht der Ausschluss nicht — das ist seit T-213 gemessen und gehört hierher, nicht
 > ans Ende des Papiers (Regel T-7).** `MessageSlot` stellt `InlineMessage` still. Er stellt **keine
@@ -924,8 +934,10 @@ dasteht. `.field__live` führt seit T-162 aus demselben Grund ein dauerhaftes `r
 > eine bestehende Stelle, kein neuer Ort.
 
 Das ist die wichtigste Zeile dieses Abschnitts, und sie ist zugleich die Antwort auf die Frage nach
-den Kosten: An der wichtigsten der 42 Stellen kostet der Wirt **keinen einzigen Knoten**, weil dort
-bereits ein Behälter steht (9.5).
+den Kosten: An der wichtigsten der **42 bedingt gezeichneten Meldebausteine** (Stand T-191 2.5:
+37 `InlineMessage`, 4 `LoadingBlock`, 1 `UpdateNotice` — **nicht** dieselbe Menge wie die 77
+Aufrufstellen in 9.1) kostet der Wirt **keinen einzigen Knoten**, weil dort bereits ein Behälter
+steht (9.5).
 
 | Platz | Wann | Beispiele |
 |---|---|---|
@@ -1332,3 +1344,128 @@ Höhenanimation") bekommt dabei einen Satz dazu, der aus demselben Fall stammt: 
 Beschriftung eines Knopfes wird nicht übergeblendet.** Ein Text, der verblasst, ist unlesbar in
 genau dem Augenblick, in dem er gelesen wird — und beim Wechsel einer Knopfbeschriftung steht dort
 zusätzlich der Fokusring eines Benutzers, der gerade zurückgekehrt ist.
+
+---
+
+# 11. Nachtrag T-236 (Welle AL) — was eine Auswahl zeigt, die keinen Wert hat
+
+**Vorlage:** Board O-KI, erste Hälfte, vom Orchestrator entschieden; `.claude/team/reports/T-228-ux-designer.md`
+Frage 3; `docs/design/textbestand.md` S-06 samt Nachtrag T-228 (fremde Hoheit, hier nur gelesen);
+E-078.
+
+**Die Frage, wie sie gestellt war:** `Select.tsx` trägt als **Vorgabewert** den Platzhalter
+„Bitte wählen". Das ist nach S-06 eine **Anweisung** und damit weder Beispiel noch Form. Weil es
+ein Vorgabewert ist, steht der Satz an **jeder** Auswahl ohne eigenen Platzhalter — nicht nur an
+der einen, an der er aufgefallen ist. Der Ersatz ist eine Gestaltfrage.
+
+## 11.1 Zuerst gezählt, dann entschieden (E-087)
+
+Gemessen 2026-09-06 über den Wortlaut `<Select` im Arbeitsbaum, `.gitignore` beachtet — also über
+versionierte **und** unversionierte Quelldateien, Bauergebnisse ausgeschlossen. Dieselbe Grenze wie
+in `traeger-und-zusage.md` 14.1: die **Vereinigung** ist gemessen, die Differenz der beiden Wege
+nicht, weil in dieser Sitzung keine Schale zur Verfügung stand.
+
+| | Zahl |
+|---|---:|
+| Aufrufstellen von `Select` in `apps/web/src` | **31** |
+| davon in Ansichten und Bausteinen | 19 |
+| davon auf der Musterseite (`showcase/`) | 12 |
+| **mit dem Vorgabewert „Bitte wählen"** | **30** |
+| mit eigenem Platzhalter | **1** — `showcase/ControlsSection.tsx:206`, „Nichts zur Auswahl" |
+| gleichartige Bausteine im Add-in oder in der Hülle | **0** — es gibt `Select` nur einmal |
+
+**Und eine zweite Zählung, die wichtiger ist als die erste: an wie vielen Stellen ist der Satz
+überhaupt _zu sehen_?** Er erscheint nur, wenn der gesetzte Wert in der Liste **nicht vorkommt**.
+Die meisten Auswahlflächen führen dafür eine eigene Option — `{ value: "", label: "Alle Pools" }`,
+„Jeder Status", „Jede Frist", „Wurzelebene", „Alle Läufe". Dort ist er unerreichbar. Gelesen habe
+ich alle 31 Aufrufstellen; **erreichbar ist er an vieren**, und die zwei wichtigsten sind keine
+Ladezustände:
+
+| Stelle | Wann sichtbar | Art |
+|---|---|---|
+| `ExportScreen.tsx:670` „Exportvorlage" | `activeTemplateId` ist `null` — der Zustand **frisch installiert**, in dem die mitgelieferte Standardvorlage gilt. Die Liste führt dafür **keine** Option | **dauerhaft** |
+| `TodoFormDialog.tsx:247` „Status" | `statusId` ist `""`; die Liste führt nur die vorhandenen Status. Der Zustand ist speicherbar (`statusId: null`, `:103`) und über die Auswahl **nicht wieder erreichbar** | **dauerhaft** |
+| `SettingsScreen.tsx:449` „Aktive Exportvorlage" | solange die Vorlagenliste lädt und die gespeicherte Kennung noch nicht darin steht | vorübergehend |
+| `TemplateFields.tsx:374, 389, 586, 594` | solange der Katalog nicht geladen ist | vorübergehend |
+
+*Diese zweite Tabelle ist am Quelltext **gelesen**, nicht im Browser gemessen — sie folgt aus dem
+Verhältnis zwischen `value` und `options` an jeder Stelle. Was ein Ladezustand tatsächlich wie lange
+zeigt, ist damit nicht gemessen.*
+
+**Die dritte Zählung, weil hier ein Oberflächentext gestrichen wird (E-087):** Der Wortlaut
+„Bitte wählen" kommt in `tests/**` und `apps/*/test/**` **null** mal als Platzhalter der Auswahl
+vor. Drei Treffer gibt es, alle drei in `apps/web/test/lib/errorText.test.ts:137, 218, 330`, und
+alle drei gehören zu einem **anderen** Satz: „Dieser Tagname kommt in mehreren Ordnern vor. Bitte
+wählen Sie das gemeinte Tag ausdrücklich aus." — eine Absage des Dienstes aus
+`apps/local-api/src/usecases/tag-names.ts:176`, von dieser Entscheidung **nicht** berührt. Wer nach
+dem Wortlaut sucht, findet also drei Stellen, von denen keine gemeint ist; das gehört in den
+Auftrag, damit niemand sie mitändert.
+
+## 11.2 Die Entscheidung — ein Ersatz für alle, und er ist kein Platzhalter
+
+> **Es ist gar kein Platzhalter, und daran hängt der Ersatz.** Ein Platzhalter im Sinn von S-06
+> steht in einem Feld, in das getippt wird, und gibt ein **Beispiel** für das, was dort hingehört.
+> Eine Auswahl hat nichts zu tippen. Der Text steht im **Auslöser** und ist das einzige Sichtbare
+> einer Auswahl ohne Wert — er ist eine **Zustandsanzeige**, die nur zufällig über eine Eigenschaft
+> namens `placeholder` hineinkommt. Deshalb ist er nicht nach der Platzhalterregel zu beurteilen,
+> sondern nach der Regel für Leerzustände: **den Zustand benennen, nicht zum Handeln auffordern.**
+
+> **Wortlaut: „Nichts gewählt". Einer für alle.**
+
+**Fünf Gründe, in Rangfolge:**
+
+1. **Er ist kein neuer Text.** Das Produkt schreibt „Nichts gewählt" schon dreimal, und zwar für
+   genau diesen Zustand: `showcase/RuleSection.tsx:495` und `:510` und
+   `screens/PoolFormDialog.tsx:664` („Nichts gewählt heißt „Alle" — schränkt nicht ein"), dazu der
+   Kommentar in `components/RulePickers.tsx:308`. Ein vorhandenes Wort zu nehmen ist nach E-078
+   besser, als ein gleichbedeutendes danebenzustellen.
+2. **Er sagt, was ist, statt zu verlangen, was sein soll.** „Bitte wählen" behauptet eine Pflicht,
+   die an mindestens zwei der vier Stellen gar nicht besteht — der leere Status ist speicherbar, die
+   leere Vorlage ist die gültige Voreinstellung.
+3. **Die Gestalt trägt den Rest schon.** `.select__trigger[data-placeholder-shown] .select__value`
+   setzt `--text-muted` (`components.css:1705-1709`), und der Kommentar dort sagt es wörtlich: „der
+   liest sich wie einer, nicht wie ein Wert". Der Text muß also **nicht** zusätzlich signalisieren,
+   daß er kein Wert ist. Er muß nur den Zustand benennen. Das ist der Grund, aus dem eine Alternative
+   wie „—" ausscheidet: Sie verläßt sich auf die Farbe allein und sagt in der Ansage gar nichts.
+4. **Er ist auch angesagt richtig.** Der zugängliche Name kommt von `Ark.Label` und ist Pflicht
+   (`Select.tsx:185-187`); der Auslöser sagt danach seinen Inhalt. „Status, Nichts gewählt" ist eine
+   Zustandsauskunft. „Status, Bitte wählen" ist eine Aufforderung an der Stelle, an der ein Wert
+   erwartet wird.
+5. **Er hält S-06 ein, auch wenn er nicht darunter fällt:** keine Anweisung, keine Anrede, keine
+   Wiederholung der Beschriftung, 14 Zeichen von höchstens 40.
+
+**Verworfen, mit Grund:**
+
+| Fassung | Warum nicht |
+|---|---|
+| „Keine Auswahl" | Zweideutig — es kann heißen „nichts gewählt" oder „es steht nichts zur Wahl". Der zweite Fall hat in `ControlsSection.tsx:206` bereits einen eigenen Text |
+| „—" oder leer | Verläßt sich auf `--text-muted` allein, sagt in der Ansage nichts, und ein leerer Auslöser liest sich als kaputtes Bedienelement |
+| je Fläche ein eigener Text | Siehe 11.3: Wo die Fläche wirklich etwas Eigenes zu sagen hat, ist der Platzhalter das falsche Mittel |
+
+## 11.3 Die Regel dahinter — und warum es trotzdem nur **einen** Text gibt
+
+> **Regel G-1.** Der Vorgabetext einer Auswahl ohne Wert **benennt den Zustand** („Nichts gewählt").
+> Hat der leere Wert an einer Fläche eine **Bedeutung**, bekommt er dort keinen eigenen Text im
+> Auslöser, sondern eine **eigene Option mit Namen**. Ein Text, der einen benannten Wert vertritt,
+> ist eine Lücke im Vorrat und keine Gestaltfrage. Steht überhaupt nichts zur Wahl, ist das ein
+> dritter Zustand mit eigenem Text an der Fläche.
+
+Drei Fälle, ein Rangordnung, und alle drei kommen im Bestand vor:
+
+1. **Der leere Wert ist wirklich leer** → Vorgabetext „Nichts gewählt". `TodoFormDialog.tsx:247`
+   ist heute dieser Fall.
+2. **Der leere Wert hat einen Namen** → er gehört als Option in die Liste, und der Vorgabetext wird
+   dort nie sichtbar. `SettingsScreen.tsx:451` macht es richtig vor:
+   `{ value: "", label: "Mitgelieferte Standardvorlage" }`. **`ExportScreen.tsx:672-681` macht es
+   nicht** — dieselbe Wahl, dieselbe Bedeutung, eine Ansicht weiter, und dort steht im Zustand
+   „frisch installiert" heute eine Aufforderung, wo eine Ansicht daneben einen Namen dafür hat.
+   Das ist der eine Punkt dieser Aufgabe, der nicht nur ein Wort ist.
+3. **Es steht nichts zur Wahl** → eigener Text an der Fläche, wie `ControlsSection.tsx:206`
+   („Nichts zur Auswahl"). Der Unterschied zu (1) ist nicht Feinheit: Im einen Fall kann der
+   Benutzer wählen und hat es nicht getan, im anderen kann er nicht.
+
+**Was ich ausdrücklich nicht entschieden habe.** Ob `TodoFormDialog` den Zustand „kein Status"
+überhaupt anbieten soll — heute ist er speicherbar, aber über die Auswahl nicht wiederherstellbar.
+Das ist eine **fachliche** Frage an die Spezifikation, keine gestalterische, und sie wird durch den
+neuen Text weder besser noch schlechter. Sie steht als offene Frage im Bericht, nicht als
+stillschweigende Annahme hier.

@@ -37,9 +37,16 @@ der Befund derselbe ist.
 
 | Stufe | Was sie bedeutet | Was sie verlangt |
 |---|---|---|
-| **Träger** | Ohne dieses Merkmal ist der Zustand nicht erkennbar | ein Paar in `contrast-check.mjs` mit Mindestwert — oder, wenn das Merkmal **Form** ist, ein gemessenes Verhältnis zwischen Form und Grund (Balken gegen Lücke) |
+| **Träger** | Ohne dieses Merkmal ist der Zustand nicht erkennbar | ein Paar in `contrast-check.mjs` mit Mindestwert — oder, wenn das Merkmal **Form** ist, **zwei** Angaben: das gemessene Verhältnis zwischen Form und Grund (Balken gegen Lücke) **und** der Nachweis, daß die Form überhaupt entsteht (**T-8**, hergeleitet in 2.8). Das zweite ist seit T-236 **keine Rechnung, sondern eine Messung an dieser Rahmenbreite** — eine Faustformel dafür gab es, sie war an einem zurückgerechneten Punkt bestätigt und für die zweite Engine falsch |
 | **Verstärkung** | Der Zustand ist ohne dieses Merkmal erkennbar; es hilft dem, der es sieht | ein Paar mit **Obergrenze** statt Untergrenze: die Verstärkung darf nichts kaputtmachen, was trägt |
 | **Zierde** | Sagt nichts | eine benannte Ausnahme mit der gemessenen Zahl und dem Grund |
+
+**Die zweite Angabe in der ersten Zeile ist in T-233 dazugekommen, und sie berichtigt einen
+Fehlschluß dieser Tabelle.** Bis dahin galt: ein Formmerkmal ist gemessen, sobald das Verhältnis
+Balken gegen Lücke dasteht. Das Verhältnis sagt aber nur, **wie deutlich** die Form ist, wo sie
+entsteht — nicht, **ob** sie entsteht. Eine gestrichelte Schiene, die die Engine als **einen**
+Strich zeichnet, hat ein tadelloses Verhältnis und keine einzige Lücke. Die Herleitung mit den
+gemessenen Zahlen steht in 2.8.
 
 **Regel T-1.** Ein Merkmal darf in einem Kommentar, im Designsystem oder auf der Musterseite nur
 dann als Träger gezählt werden, wenn ein Paar es mißt. Ein Satz, der SC 1.4.1 zitiert, ist eine
@@ -66,7 +73,8 @@ Zustandsgrenzen benutzt. Wer eine andere Zahl will, ändert sie an einer Stelle,
 ### 0.1 Die übrigen Regeln dieses Papiers, und wo sie stehen
 
 **T-4** (die drei Nahtstellen eines Doppelrings) steht in 10.1, **T-5** (eine Graustufenzusage ist
-eine Kontrastzusage) in 10.8 — beide dort, wo sie hergeleitet sind. Die zwei folgenden hängen an
+eine Kontrastzusage) in 10.8, **T-8** (eine Form hat ein Mindestmaß, und unterhalb davon sagt sie
+nicht nichts, sondern das Gegenteil) in 2.8 — alle drei dort, wo sie hergeleitet sind. Die zwei folgenden hängen an
 keinem einzelnen Befund, sondern an **jeder** Messung und an **jedem** Papier dieses Ordners.
 Deshalb stehen sie hier vorn und nicht am Ende eines Nachtrags.
 
@@ -169,7 +177,7 @@ dieser Entscheidung ist die Zuordnung:
 | Symbol (`circle`, `check-circle`, `rotate-ccw`, `slash-circle`) | **ja** | vier verschiedene Formen, in `--status-*-fg` gezeichnet, das mit 4,5:1 gegen die Füllung gemessen ist |
 | Beschriftung („Offen", „Exportiert", „Erneut offen", „Nicht abgerechnet") | **ja** | vier verschiedene Wörter; bei `iconOnly` als zugänglicher Name erhalten (`ExportStatus.tsx:185-187`) |
 | Punktform in der Zeile (Ring, Scheibe, Raute, Balken) | **ja** | Form, kein Farbwert |
-| Konturform (durchgezogen gegen gestrichelt) | **ja**, für „Nicht abgerechnet" | trennt den vierten Zustand von den drei übrigen |
+| Konturform (durchgezogen gegen gestrichelt) | **ja, aber neben Symbol, Wort und Balken — nicht allein** | trennt den vierten Zustand von den drei übrigen. Die Kontur ist ein **geschlossener** Pfad von rund 69 px Umfang bei 1 px Rahmen, auch in der kleinsten Ausprägung `.badge--icon-only`; **maßgeblich ist die Pfadlänge, nicht die Größe des Bauteils**. **Berichtigt in T-236:** Der Satz von T-233, das sei „das Zwölffache der Schranke aus T-8", ist zurückgenommen — die Schranke, auf die er sich berief, gibt es nicht mehr, und **bei 1 px ist in keiner Engine etwas gemessen** (2.8, Meßauftrag). Bis dahin trägt diese Zeile die Aufzählung **mit**, nie allein |
 | Füllung (Kontur, voll, Kontur + Schraffur, gedämpft) | **teilweise** | „Exportiert" ist voll gefüllt und damit auch in Graustufen anders; „Offen" gegen „Erneut offen" ist über die Füllung **nicht** unterscheidbar (die beiden Tönungen liegen bei 1,03:1) |
 | Zeilenrand (bernstein, grün, rose, neutral) | **nein** | reine Farbe. Steht ausdrücklich als Farbmerkmal in der Tabelle und darf dort auch stehen — solange die fünf übrigen Zeilen stimmen |
 
@@ -291,6 +299,12 @@ Merkmal ist damit von dem Paar gemessen, das ohnehin schon dasteht — die Form 
 bekommen, ohne daß ein Paar dazukommen mußte. Das ist der eigentliche Vorzug dieser Lösung
 gegenüber jeder Farbvariante.
 
+**Und die Grenze dieses Satzes, seit T-233 gemessen:** Das Paar mißt, **wie deutlich** der
+Unterschied zwischen Balken und Lücke ist, nicht, **ob** es Lücken gibt. Die Zahl der Lücken legt
+die Engine fest, und sie tut es verschieden (2.8). Für die Vermerkschiene ist das folgenlos — sie
+liegt um ein Vielfaches über der Schranke —, aber der Satz „die Form ist damit gemessen" gilt nur
+zusammen mit T-8. Ein Paar allein spricht ein Formmerkmal nicht frei.
+
 ### 2.6 Fünf Stellen sagen denselben Satz. Alle fünf müssen mit
 
 Wer nur die CSS-Zeile ändert, läßt die widerlegte Zusage an vier weiteren Stellen stehen:
@@ -330,15 +344,220 @@ nicht bloß die Berichtigung eines Satzes.
 * **Responsiv.** Keine neue Umbruchmarke. Die Schiene ist 4px in jeder Breite; bei 40 rem und
   darunter, wo Felder einspaltig stehen, wird die Form **wichtiger**, weil dann kein zweites Feld
   zum Vergleich danebensteht — genau der Fall, für den Merkmal 1 und 4 gedacht sind.
-* **Zu prüfen (visual-qa, beide Themen, 1280x720):** (1) Die Länge der Unterbrechungen legt die
-  Engine fest, und Takt läuft in zwei verschiedenen (WebView2, WebKitGTK). Anforderung: **auf dem
-  kleinsten vorkommenden Feld (`rows={3}`) mindestens drei sichtbare Unterbrechungen.** (2) Die
-  Eckverbindung zwischen der 4px-Schiene und dem 1px-Rahmen bei `--radius-lg`. Fällt eine der
-  beiden Prüfungen, gilt der **Rückfall**: dasselbe Bild als `repeating-linear-gradient` mit
-  fester Geometrie (8px Balken, 6px Lücke) — dann aber **nicht** in einem Pseudoelement im
-  Rahmenbereich, sondern als `background-image` mit `background-origin: border-box` und
-  `border-inline-start: 4px solid transparent`. Die Gestaltentscheidung ist damit geschlossen, offen
-  ist nur die Bauform, und beide Bauformen sind hier benannt.
+* **Zu prüfen (visual-qa, beide Themen, 1280x720):** die Eckverbindung zwischen der 4px-Schiene und
+  dem 1px-Rahmen bei `--radius-lg`. *(Die zweite Prüfung dieser Zeile — die Zahl der
+  Unterbrechungen — ist seit T-233 gemessen und seit T-232 ein **wiederholbarer Lauf**:
+  `pnpm proof:engines`, zwei Engines, vier Gegenproben, 23 bestanden / 0 fehlgeschlagen. Was hier
+  stand, war eine Vermutung mit einem Rückfall daneben; jetzt ist es ein Nachweispfad. Der Lauf
+  steht neben `test:e2e` und **nicht** in `proof:all` — er braucht `xvfb-run`, `python3-gi`,
+  Pillow und ein eingerichtetes Chromium und kann sich überspringen, und eine Menge, deren ganzer
+  Wert im Nie-Überspringen liegt, verträgt das nicht (E-095).)*
+
+**Die Messung — Stand 2026-09-06, und keine dieser Zahlen ist eine Zusage** (E-087 Punkt 2). Sie
+kommt aus zwei Läufen: der Handmessung des Orchestrators (T-233) und dem wiederholbaren Lauf
+`proof:engines` (T-232, 23 bestanden / 0 fehlgeschlagen, beide Engines gegen **dieselbe**
+ausgeschnittene Deklaration). Alle Zeilen: Rahmenbreite **4 px**.
+
+| Engine | Schiene | Pfadlänge | Striche | Längen | Lücken | bemalt | Herkunft |
+|---|---|---:|---:|---|---:|---:|---|
+| WebKitGTK 4.1 | Vermerk | 41 px | **3** | {7, 9, 7} | 2 | 23 px | T-233 |
+| Chromium (Fassung nicht festgehalten) | Vermerk | 41 px | **4** | {7, 7, 7, 7} | 3 | 28 px | T-233 |
+| WebKitGTK 2.52.6 | Vermerk | 56 px | **3** | {7, 12, 12} | 2 {13, 12} | 31 px | T-232 |
+| Chromium 151.0.7922.34 | Vermerk | 73 px | **7** | {7, 8, 8, 8, 8, 8, 2} | 6 {4×6} | 49 px | T-232 |
+| WebKitGTK 2.52.6 | Leistung | 73 px | **1** | {73} | 0 | 73 px | T-232 |
+| Chromium 151.0.7922.34 | Leistung | 73 px | **1** | {73} | 0 | 73 px | T-232 |
+| Chromium (T-202) | Vermerk | ≈ 217 px | **19** | 7,7 (Mittel) | 19 à 3,7 | ≈ 146 px | T-202 2.4 |
+
+> **Zwei Zeilen, die hier nicht stehen, und warum.** Die Auswertung der **durchgezogenen** Schiene
+> aus T-233 ist unbrauchbar: `--focus-ring-color` und `--note-billing-rail` sind derselbe Wert
+> (`#2159da`), Knopf und Schiene standen in derselben Bildspalte, und der Schnitt lief durch beide.
+> Derselbe Fehler steckte in der ersten Fassung der Vorrichtung von T-232, dort **doppelt** — er ist
+> dort baulich beseitigt (zwei Seiten, im Bild einmalige Farbe je Fläche, Zählung der Farbfelder).
+> **Für die durchgezogene Schiene gelten deshalb ausschließlich die zwei `proof:engines`-Zeilen.**
+> Die gestrichelte war in beiden Läufen sauber; ihre Farbe ist einmalig.
+
+**Die Form trägt in beiden Engines. Engine-abhängig ist die Verteilung — und, wie sich jetzt zeigt,
+auch die Pfadlänge selbst.** Die Gestaltentscheidung aus 2.3 (durchgezogen gegen unterbrochen) ist
+damit gemessen und nicht mehr gerechnet. Zugleich ist gemessen, daß **keine** Zahl dieser Tabelle
+eine Zusage tragen darf:
+
+* nicht die **Strichzahl** — 3 gegen 7 an derselben Vorrichtung;
+* nicht die **Strichlänge** und nicht die Gleichheit der Längen — Chromium beschneidet den ersten
+  und letzten Strich ({7, 8, 8, 8, 8, 8, 2});
+* nicht die **bemalte Länge** — 31 gegen 49 px;
+* und **nicht einmal die Länge der Schiene**: dieselbe Fläche mißt in WebKitGTK **56 px** und in
+  Chromium **73 px**, weil WebKitGTKs äußere Striche nicht in die Ecken reichen. Eine Prüfung, die
+  die Schienenlänge festnagelt, mißt die Eckbehandlung der Engine.
+
+Wer eine dieser Zahlen festnagelt, mißt die Engine und nicht Takt (P-3, unten).
+
+**Der Rückfall aus dieser Zeile ist hinfällig — für den Grund, für den er hinterlegt war.** Er
+sollte den Fall abfangen, daß eine WebKit-Engine die Schiene gar nicht als Strichmuster zeichnet.
+Dieser Fall ist gemessen und tritt nicht ein. Was ein `repeating-linear-gradient` mit fester
+Geometrie zusätzlich brächte, wäre eine feste **Verteilung** — und die Verteilung ist nach
+derselben Messung genau das, was **nicht** trägt. Er kostete dafür ein zweites Zeichenverfahren
+für dieselbe Linie und nähme die Schiene aus der Rahmenmalerei heraus, in der sie nach 2.3 gegen
+Positionierung und Beschneidung unempfindlich ist. **Er bleibt für einen anderen Fall stehen**, und
+nur für den: für eine Schiene, die unter die Schranke aus T-8 fällt und trotzdem tragen muß. Dort
+ist die feste Geometrie das einzige Mittel, das die Engine nicht neu verhandeln kann. Aus einem
+Rückfall gegen die Engine ist ein Werkzeug gegen die **Kürze** geworden.
+
+**Und zwei Angaben dieser Zeile waren falsch, unabhängig von der Engine.**
+
+1. **Nicht `rows={3}`, sondern `rows={2}`.** Drei ist der Vorgabewert von `NoteField`
+   (`NoteField.tsx:104`), nicht die kleinste vorkommende Ausprägung. Die kleinste steht in
+   `TodoFormDialog.tsx:272` — und sie ist `scope="internal"`, also ausgerechnet die **gestrichelte**.
+   Der Rest des Feldes (Kopfband, Marke mit Beschriftung, Schreibfläche, Fußnote) trägt die Schiene
+   trotzdem weit über jede Schranke; T-202 hat in Chromium am `rows={3}`-Feld **19 Striche**
+   gemessen, und der heute gemessene Faktor ließe in WebKitGTK ungefähr vierzehn übrig. Der Fehler
+   ändert das Urteil nicht, aber er hätte die Messung an das falsche Feld geschickt.
+2. **„Drei sichtbare Unterbrechungen" ist zweideutig, und die zwei Lesarten fallen bei dieser
+   Messung entgegengesetzt aus.** Eine Unterbrechung kann die Lücke sein oder der Strich. Als
+   **Lücken** gelesen verlangt der Satz vier Striche — WebKitGTK zeichnet drei und wäre rot,
+   während die Form unverkennbar dasteht. Das ist der falsche Alarm aus dem letzten Teil dieses
+   Abschnitts, und meine eigene Anforderung war sein erster Fall. **Verbindlich ist ab jetzt: drei
+   Striche und damit zwei Lücken.**
+
+**Regel T-8 — eine Form hat ein Mindestmaß, und unterhalb davon sagt sie nicht nichts, sondern das
+Gegenteil.** Ein Formmerkmal ist erst dann Träger, wenn die Engine es überhaupt zeichnen kann.
+Die Schranke ist **drei Striche und zwei Lücken**. Der Grund ist nicht Geschmack:
+
+* **Ein** Strich ist von einer kurzen durchgezogenen Schiene nicht zu unterscheiden.
+* **Zwei** Striche mit einer Lücke sind keine Wiederholung, sondern eine Kerbe — und eine Kerbe an
+  einer Schiene liest sich als Fehler des Bildes, nicht als Zustand. Wo die eine Lücke liegt,
+  entscheidet dazu die Engine (siehe die verschobenen 9 px oben), und an einem Ende liegend bleibt
+  von ihr eine verkürzte Schiene übrig.
+* Erst **zwei** Lücken machen aus zwei Dingen ein Muster. Das ist dieselbe Hausentscheidung wie die
+  3:1 in Abschnitt 0: WCAG nennt keine Zahl, Takt braucht eine, und sie steht an einer Stelle.
+
+**Der teure Teil der Regel ist der zweite Halbsatz.** Eine Farbe, die zu schwach wird, sagt
+„unklar". Eine **Form**, die zu kurz wird, sagt **den anderen Wert desselben Merkmals**: Die
+gestrichelte Schiene mit einem Strich ist die durchgezogene. Am Vermerkfeld heißt das, daß es
+aussieht wie das Leistungsfeld — genau der Verwechslungsweg, gegen den die Entscheidung aus 2.3
+gebaut ist (R-08, E-016). Ein ausfallendes Formmerkmal ist deshalb schlechter als ein fehlendes.
+
+**Die Mindesthöhe. Die Faustformel von T-233 ist zurückgenommen; an ihre Stelle tritt ein
+gemessenes Band** (T-236, O-KM und T-232 Frage 2). Sie lautete *„Zahl der Striche ≈ Pfadlänge ÷
+(3 × Rahmenbreite)"* mit der Planungsschranke *„Pfadlänge ≥ 12 × Rahmenbreite"*. Drei Dinge daran
+sind inzwischen gemessen und alle drei fallen gegen sie aus:
+
+1. **Sie war an jedem Punkt um genau einen Strich zu niedrig**, und der Grund ist kein Rundungspech,
+   sondern die Bauart: Chromium beschneidet den ersten **und** den letzten Strich, es kommt also
+   ein angeschnittener Strich obendrauf. Richtig ist ein **Aufrunden**, und damit stimmt das Modell
+   an allen drei Chromium-Punkten aufs Stück: ⌈41 ÷ 12⌉ = 4 ✓, ⌈73 ÷ 12⌉ = 7 ✓, ⌈217 ÷ 12⌉ = 19 ✓.
+2. **Die Gegenprobe von T-233 war zirkulär.** Dort standen „228 px Pfad" als Länge des
+   `rows={3}`-Feldes. Diese Zahl war **nicht gemessen, sondern aus der zu prüfenden Formel
+   zurückgerechnet** (19 × 12). Gemessen hat T-202 2.4 etwas anderes: 19 Balken à 7,7 css und 19
+   Lücken à 3,7 css, also einen Pfad von **≈ 217 px**. Ein Modell, das an einem aus ihm selbst
+   gewonnenen Punkt bestätigt wird, ist an diesem Punkt nicht geprüft. **Das ist mein Fehler aus
+   T-233, und es ist genau die Sorte, gegen die dort Annahme 4 geschrieben war.**
+3. **Für WebKitGTK gilt sie überhaupt nicht.** Zwei Messungen, 41 px und 56 px — **beide 3
+   Striche**. Die Periode wächst mit: rund 16 px bei 41, rund 24 px bei 56. WebKitGTK zieht die
+   Periode mit der Länge mit, statt Striche hinzuzufügen. Damit ist auch das Verhältnis „3 zu 4"
+   aus T-233 widerlegt: an derselben Vorrichtung steht es bei 73/56 px als **3 zu 7**. Es ist keine
+   Konstante, sondern öffnet sich mit der Länge.
+
+> **Was an die Stelle tritt.**
+>
+> **(a) Chromium — ein Modell mit Stand.** `n ≈ ⌈Pfadlänge ÷ (3 × Rahmenbreite)⌉`. Stand
+> 2026-09-06, drei Punkte, alle bei **4 px** Rahmen, alle exakt. Es taugt zum Planen, nicht zum
+> Prüfen; CSS legt die Strichgeometrie nicht fest.
+>
+> **(b) WebKitGTK — kein Modell, sondern zwei Punkte.** 41 px → 3, 56 px → 3, beide bei 4 px
+> Rahmen. **Länge kauft in WebKitGTK keine Striche.** Wer dort Luft über T-8 braucht, bekommt sie
+> nicht aus der Geometrie.
+>
+> **(c) Die Planungsschranke ist keine Rechnung mehr, sondern ein gemessenes Band.** Getragen ist,
+> was **innerhalb** von 41 px bis ≈ 217 px bei **4 px** Rahmen liegt. Darunter, darüber und bei
+> jeder anderen Rahmenbreite ist **nichts gemessen** — und weil (b) gilt, darf von hier auch nicht
+> extrapoliert werden, in keine Richtung. Eine Fläche außerhalb des Bandes ist damit nicht
+> durchgefallen; sie ist **ungemessen**, und das ist ein anderer Zustand mit einer anderen Folge.
+
+**Warum das Band besser ist als die alte Zahl, obwohl es weniger sagt.** Die alte Schranke war zur
+sicheren Seite falsch — sie hätte 41 px als zu kurz verworfen, obwohl beide Engines dort tragen.
+Eine Schranke, die eine tragende Fläche verwirft, ist nicht vorsichtig; sie ist ein Grund, eine
+Gestalt zu ändern, die in Ordnung ist. Das Band macht keine Aussage, die es nicht gemessen hat, und
+benennt die Lücke statt sie zu überrechnen.
+
+Angewandt auf jede Fläche, an der in Takt durchgezogen gegen gestrichelt etwas **sagt**. Jede Zeile
+sagt jetzt **entweder** „gemessen" **oder** „ausdrücklich ausgenommen, und warum" — eine leere
+Spalte gibt es hier nicht mehr (T-236, O-KM):
+
+| Fläche | Rahmen | kürzeste Ausprägung | Stand der Messung | Stufe |
+|---|---:|---|---|---|
+| `.note--internal`, Vermerkschiene (`components.css:1424-1427`) | 4 px | `rows={2}` in `TodoFormDialog`, mit Kopfband, Marke und Fußnote weit über 100 px | **gemessen**, und zwar diese Fläche selbst: 41 / 56 / 73 / ≈ 217 px in zwei Engines | **Träger** (2.3) |
+| `.badge--not-billed`, Kontur „Nicht abgerechnet" (`:496-501`) | 1 px, **geschlossener Pfad** | Pille 22×22 (`.badge--icon-only`), Umfang ≈ 69 px | **ungemessen — und die einzige Fläche, an der das etwas kostet.** Keine der sechs Messungen liegt bei 1 px. Meßauftrag unten | **Träger in der Aufzählung von 1.4, aber nicht allein tragend** |
+| `.table__row--not-billed > td:first-child` (`:840-843`) | 3 px | eine Zeile: `--row-height` **40 px**, unter `[data-density="compact"]` **32 px** (`tokens.css:332, 429`) | **ausdrücklich ausgenommen** — außerhalb des Bandes und bei fremder Rahmenbreite, und es hängt nichts daran | **Verstärkung** — Begründung unten |
+| `.auditrow__reason--absent` (`app.css:2634-2639`) | 2 px | Rechnung am Kastenmodell: 2 × `--space-2` + eine Zeile `--text-xs` × `--leading-normal` = 8 + 18 + 8 = **34 px**; der gebaute Satz ist rund 150 Zeichen und bricht in der Regel auf zwei Zeilen | **ausdrücklich ausgenommen**, aus demselben Grund, mit demselben Ergebnis | **Verstärkung** — Begründung unten |
+
+**Die zwei Ausnahmen, in einem Satz und mit demselben Grund.** Beide Flächen sind Verstärkung, nicht
+Träger, und beide sagen dasselbe **ohne** die Schiene noch ein zweites und drittes Mal:
+
+* **Zeile der Buchung:** Der Zeilenrand steht in der Merkmalstabelle von 1.4 ausdrücklich als reines
+  **Farb**merkmal, und der Kommentar an der Regel sagt es auch so („zusaetzlich gestrichelt").
+  „Nicht abgerechnet" trägt in derselben Zeile dreifach — **Balken** des Zustandspunktes (vierte
+  Silhouette neben Ring, Scheibe und Raute, `components.css:532-547`), **Symbol** `slash-circle`,
+  **Wort**. In der dichten Ansicht wird die Verstärkung leiser. Das ist hinnehmbar und gehört
+  benannt, damit es niemand als Befund wiederfindet.
+* **Fehlende Begründung im Protokoll:** Die Unterscheidung „Begründung steht da" gegen „keine
+  Begründung" trägt der **Text selbst** — im einen Zweig die Marke „BEGRÜNDUNG" über dem fremden
+  Text, im anderen der ausgeschriebene Satz „Ohne Begründung ausgebucht. …"
+  (`ExportAudit.tsx:167-181`). Beide Zweige stehen zudem **nie nebeneinander**, sondern in
+  verschiedenen Zeilen einer Liste; eine Form, die nur im Vergleich über Zeilen hinweg lesbar wäre,
+  war nach Abschnitt 0 nie Träger. **Deshalb wird sie nicht gemessen:** Eine Messung, deren Ausgang
+  nichts ändert, ist kein Nachweis, sondern Zierde am Verfahren.
+
+**Was aus der Ausnahme trotzdem folgt — eine Zeile für frontend-dev.** `.table__row--not-billed`
+trägt den Satz „zusaetzlich gestrichelt" bereits im Kommentar. `.auditrow__reason--absent`
+(`app.css:2634-2639`) trägt **gar keinen** Kommentar. Dort fehlt derselbe Halbsatz, und ohne ihn
+liest der nächste Leser die gestrichelte Schiene als Träger und sucht die Messung, die es
+absichtlich nicht gibt. Übergabe in 14.2.
+
+**Der Meßauftrag, der offenbleibt — und er betrifft nicht die 2-px-Fläche, sondern die 1-px-Kontur.**
+`.badge--not-billed` ist die einzige Fläche, an der die Konturform in der Aufzählung von 1.4
+**mitgezählt** wird, und Regel T-1 verlangt für ein mitgezähltes Merkmal eine Messung. Sechs
+Messungen liegen vor, alle bei 4 px, keine bei 1 px — und nach (b) oben darf von der einen
+Rahmenbreite nicht auf die andere geschlossen werden. Der Auftrag ist klein, weil die Vorrichtung
+steht: `proof:engines` schneidet seine Deklarationen aus den echten Stilblättern; `.badge` und
+`.badge--not-billed` sind ein weiterer Ausschnitt und ein weiteres Element, keine zweite
+Vorrichtung. **Bis das gemessen ist, gilt die Kontur dort als Träger _neben_ Symbol, Wort und
+Balken, nie als der Träger** — und genau so steht sie seit T-236 auch in 1.4.
+
+**Was außerhalb des Bandes an die Stelle des Merkmals tritt — drei Wege, in dieser Rangfolge.**
+
+1. **Nichts, weil nichts wegfällt.** War die Form eine Verstärkung, tragen die übrigen Merkmale
+   weiter. Das ist der einzige Fall, den Takt heute hat, und er kostet keine Zeile.
+2. **Ein anderes Merkmal derselben Fläche**, wenn die Form der Träger war: die Marke vor der
+   Beschriftung, das Symbol, das Wort. **Nie eine zweite Farbe** — 2.2 rechnet vor, daß dieses
+   Fenster im dunklen Thema arithmetisch geschlossen ist, und daran ändert eine kurze Schiene
+   nichts.
+3. **Die Geometrie festschreiben:** `repeating-linear-gradient` mit genannter Periode auf
+   `background-origin: border-box` über `border-inline-start: Npx solid transparent`. Nur, wenn 1
+   und 2 ausfallen — es ist ein zweites Zeichenverfahren für dieselbe Linie und nimmt sie aus der
+   Rahmenmalerei.
+
+**Ausdrücklich nicht: eine Fläche höher machen, damit die Striche hineinpassen.** Dagegen stehen
+jetzt drei Gründe statt einem. *Erstens* bestimmte dann ein Zeichendetail das Layout, und die
+nächste Engine verschöbe es wieder. *Zweitens* — und das ist neu gemessen — **hilft es nicht**:
+WebKitGTK zeichnet bei 41 px drei Striche und bei 56 px immer noch drei. *Drittens*, an einer
+**Vorrichtung** getan, wäre es das Messen der Vorrichtung: Ein Rumpf, den man so lange streckt, bis
+die Zahl paßt, läßt genau den Fall durch, gegen den T-8 geschrieben ist. Der Erbauer von
+`proof:engines` hat das von sich aus abgelehnt (T-232 Abschnitt 5), und die Ablehnung ist hiermit
+bestätigt.
+
+**Was ein Lauf über die Schienenform prüfen soll — die Form, nicht den Rhythmus.** P-1 bis P-6
+sind seit T-232 gebaut und gefahren; die folgenden Zeilen sind der **Stand nach diesem Lauf**, nicht
+mehr der Entwurf davor.
+
+| | |
+|---|---|
+| **P-1** | Geprüft wird: die durchgezogene Schiene hat entlang ihrer Länge **genau einen** Strich und **keine** Lücke; die gestrichelte hat **mindestens drei** Striche und **mindestens zwei** Lücken. Dazu die Farbe des Striches gleich dem Token und die Farbe der Lücke gleich der Karte — das ist das Verhältnis aus 2.5, das die Form zur Zahl macht |
+| **P-2** | **Jede Schranke ist ein `≥`, nie ein `=`.** Der Beleg steht in der Tabelle oben: dieselbe Vorrichtung, dasselbe Erzeugnis, 3 gegen 4 Striche. Eine Prüfung auf Gleichheit ist nicht die strengere Prüfung, sondern eine **andere** — sie mißt die Engine |
+| **P-3** | Nicht geprüft wird: eine feste Strichzahl, eine feste Strichlänge, gleiche Strichlängen untereinander, die bemalte Länge oder ihr Anteil — **und seit T-232 ausdrücklich auch nicht die Länge der Schiene selbst** (56 gegen 73 px an derselben Fläche; WebKitGTKs äußere Striche reichen nicht in die Ecken). Kein Vergleich gegen ein hinterlegtes Bild. Alle diese Zahlen stehen in der **Ausgabe** — als Zahlen, nie als Schranke |
+| **P-4** | **Zwei Schranken, je nachdem, ob die Engine gemessen oder geschätzt wird.** Fährt der Lauf **nur Chromium**, ist die Schranke dort **≥ 4 / ≥ 3**. Mißt er WebKitGTK **unmittelbar**, gilt dort die Grundschranke aus P-1 (**≥ 3 / ≥ 2**) und der Zuschlag bleibt trotzdem für Chromium stehen. **T-232 hat das so ausgelegt, und die Auslegung ist richtig** (T-236): Der Zuschlag war nie eine Aussage über WebKitGTK, sondern ein Aufschlag auf eine **ungemessene** Engine; wo gemessen wird, hat er keinen Adressaten. Seine ursprüngliche Begründung — das Verhältnis „3 zu 4" — ist dagegen **widerlegt** (bei 73/56 px steht es 3 zu 7). Was ihn heute trägt, ist enger und stimmt: In Chromium wächst die Zahl mit der Länge, also fängt eine 4 dort eine zu **kurze** Schiene ab — mehr ist ein reiner Chromium-Lauf nicht imstande zu sehen |
+| **P-5** | Mitgeschrieben wird, was **keine** Schranke ist: Engine und Fassung, Datum, Schienenlänge, Strichzahl, Strichlängen, Lückenzahl, bemalte Länge — **und der Abstand zur Schranke**. Als Stand mit Datum (E-087 Punkt 2). Ohne diese Angaben ist die nächste Messung mit dieser nicht vergleichbar, und die Frage beginnt von vorn |
+| **P-6** | Was der Lauf **nicht** kann: Gemessen ist die **Engine-Familie**, nicht die gebaute Binärdatei — der Wirt ist ein Python-Prozeß, nicht Takt; CSP, Webview-Einstellungen und Fenster der Hülle bleiben draußen. **macOS/WKWebView ist ungemessen** und bleibt es. Und keine eingesetzte Verletzung kann eine Engine erzeugen: Der Lauf zeigt, daß die **Messung** eine vertauschte Bandfolge sähe, nicht, daß eine dritte Engine sie erzeugte |
+| **P-7** | **WebKitGTK liegt mit 3 Strichen genau _auf_ der Schranke, ohne Luft, und das steht in der Ausgabe.** Es ist kein Mangel der Vorrichtung: Länge kauft dort keine Striche (siehe (b) oben). Wird der Lauf eines Tages deshalb rot, ist die Antwort **weder** eine höhere Vorrichtung **noch** eine niedrigere Schranke — zwei Striche mit einer Lücke sind nach T-8 eine Kerbe und kein Muster. Die Antwort ist Weg **2** der Rangfolge oben: ein zweites Merkmal an der Fläche, die trägt. Entschieden wird das hier, nicht im Lauf |
 
 ---
 
@@ -1095,6 +1314,25 @@ war in keiner ein Band beidseits begrenzt (T-4). Der Gefahrenknopf im hellen The
 unbetroffen führte, geht an seiner Füllungsnaht von **1,13 auf 6,76**. Das ist der Fall, dessen
 Ring bis dahin allein am Farbton Blau gegen Rot hing, und er ist der Beleg dafür, daß die
 Entscheidung für **alle vier** und nicht für den einen sichtbar kaputten Fall richtig war.
+
+**Die Voraussetzung dieser ganzen Tabelle ist seit T-233 gemessen, und sie hält.** Die drei Zonen
+entstehen nur, wenn die Umrandung **über** den Schatten gemalt wird (die Geometrie in 10.1). Das
+war in Chromium belegt und in den beiden ausgelieferten WebKit-Engines eine Annahme — die Grenze,
+die O-JV führt. Der Orchestrator hat den Gefahrenknopf im hellen Thema in **WebKitGTK 4.1** und in
+Chromium gegen dieselbe Vorrichtung abgezogen; der Schnitt von der Fläche zur Füllung lautet in
+**beiden** Engines zeichengleich:
+
+```
+#2159da  #2159da   --focus-ring-color     (Umrandung, 2..4 px, ueber dem Schatten)
+#ffffff  #ffffff   --focus-ring-contrast  (Schatten,   0..2 px, an der Fuellung)
+          Fuellung
+```
+
+**Die Malreihenfolge trägt also auch dort, und der Tausch aus 10.2 kommt in WebKitGTK genauso an
+wie in Chromium.** Damit ist O-JV zur Hälfte erledigt. Es bleibt: **macOS/WKWebView ist
+ungemessen**, und gemessen ist die **Engine-Familie**, nicht die gebaute Binärdatei — beides gehört
+an jede Aussage, die sich auf diese Messung stützt. Die zweite Hälfte kostet nach wie vor genau
+einen Abzug eines fokussierten Knopfes aus einem Auslieferungsbau.
 
 ---
 
@@ -2176,9 +2414,222 @@ Zeile, die sie herstellt.** Für Farben tut das der Lauf; für Bauformen gibt es
 Zitat. Ich nehme das als Auflage an mich selbst und nicht als Vorschlag für einen Wächter — eine
 Prüfung, die „behauptete Bauformen" fände, müßte Prosa verstehen.
 
-**F-13 — offen an den Orchestrator, klein und nicht dringend:** `textabbau-gestalt.md` 9.1 nennt
-**76 Aufrufstellen** von `InlineMessage`. Diese Zahl stammt aus T-204 und ist von mir in dieser
-Aufgabe **nicht** nachgemessen worden (in diesem Lauf keine Schale, kein `git grep`); die Zahlen in
-der Vorlage desselben Abschnitts lauten 42 und 42. Sie trägt keine Entscheidung — der Satz gilt für
-„alle" Aufrufstellen, gleich wie viele es sind —, aber sie ist genau die Sorte Zahl, die beim
-nächsten Lesen als Beleg benutzt wird. Wer eine Schale hat, zählt sie in zwei Minuten nach.
+**F-13 — nachgemessen und geschlossen in T-236 (O-KF).** Die Frage lautete, ob **76** oder **42**
+die Zahl der `InlineMessage`-Aufrufstellen sei. **Beides und keines: es waren nie zwei Antworten auf
+eine Frage, sondern zwei verschiedene Mengen in einem Abschnitt.** 76 zählte alle Aufrufstellen von
+`InlineMessage`; 42 zählte die **bedingt gezeichneten Meldebausteine** aus T-191 2.5 — davon 37
+`InlineMessage`, 4 `LoadingBlock`, 1 `UpdateNotice`. Beide Sätze waren richtig, und beide standen
+ohne Angabe, worüber sie zählen. Gemessen 2026-09-06: **77** Aufrufstellen in `apps/web/src`.
+Berichtigt ist es dort, wo es steht — `textabbau-gestalt.md` 9.1 und 9.2 —, mit Stand und Datum an
+jeder der beiden Zahlen. Die Messung und ihre Grenzen stehen in 14.1.
+
+---
+
+# 13. Nachtrag T-233 (Welle AK) — aus einer Möglichkeit wird eine Zahl
+
+**Vorlage:** die Messung des Orchestrators in **WebKitGTK 4.1** und in Chromium gegen dieselbe
+Vorrichtung; `.claude/team/reports/T-207-frontend-dev.md` Abschnitt 4 (die Grenze, die hier zur
+Hälfte fällt); `.claude/team/reports/T-202-frontend-dev.md` Risiko 3 und die dortigen 19 Striche;
+`.claude/team/reports/T-216-frontend-dev.md` Risiko R-T216-1; Board O-JV; E-087.
+
+**Auch dieser Abschnitt trägt keine Entscheidung.** Nach Regel T-7 steht jede Berichtigung **in**
+dem Abschnitt, den sie berichtigt. Hier steht, wohin — und der Teil der Herleitung, der an keinem
+einzelnen Abschnitt hängt.
+
+| Was | Wohin es gezogen wurde | Was dort verschwunden ist |
+|---|---|---|
+| Die Zahlen der zwei Engines, Striche und Längen | 2.8, Tabelle | „Die Länge der Unterbrechungen legt die Engine fest" als Vermutung |
+| Das Urteil über den Rückfall | 2.8 | der Rückfall **gegen die Engine**; er steht jetzt als Werkzeug gegen die **Kürze** |
+| `rows={3}` → `rows={2}` | 2.8, Punkt 1 | die falsche kleinste Ausprägung |
+| „drei sichtbare Unterbrechungen" → drei Striche, zwei Lücken | 2.8, Punkt 2 | die zweideutige Anforderung |
+| **Regel T-8** samt Mindesthöhe, Faustformel und Flächentabelle | 2.8 | — (neu). *T-8 gilt unverändert; die **Faustformel** und die aus ihr gezogene Planungsschranke sind in T-236 zurückgenommen* |
+| Die zweite Bedingung für ein Formmerkmal | 0, erste Tabellenzeile, und 0.1 | „ein gemessenes Verhältnis" als **alleinige** Bedingung |
+| Die Grenze des Paares „Balken gegen Lücke" | 2.5 | „die Form ist damit gemessen" ohne Vorbehalt |
+| Die Pfadlänge als Maß am Etikett | 1.4, Zeile Konturform | — (die Zeile sagte kein Maß) |
+| Die Malreihenfolge in WebKitGTK, Schnitt und Farben | 10.4 | die Annahme hinter allen vier Kombinationen |
+| **P-1 bis P-6** — was ein Lauf über die Schienenform prüfen soll | 2.8, letzter Teil | — (neu) |
+
+## 13.1 Was diese Messung beweist und was nicht — die Trennung, an der alles hängt
+
+Die Messung sagt **zwei** Dinge, und sie werden leicht zu einem verschmolzen:
+
+1. **Die Form entsteht in beiden Engines.** Durchgezogen bleibt durchgezogen, gestrichelt bleibt
+   gestrichelt. Das ist die Aussage, auf der 2.3 und 1.4 stehen, und sie ist damit für die
+   Engine-Familie des Linux-Erzeugnisses belegt statt angenommen.
+2. **Die Verteilung ist verschieden.** 3 gegen 4 Striche, {7, 9, 7} gegen {7, 7, 7, 7}, 23 gegen
+   28 px bemalte Länge. Keine dieser Zahlen ist eine Eigenschaft von Takt.
+
+**Wer beides zusammenwirft, baut in eine von zwei Richtungen falsch.** Nach oben: Er hält die
+Zahlen für die Zusage und nagelt eine Prüfung darauf fest — dann ist das Erzeugnis in einer der
+beiden Engines rot, obwohl es in beiden richtig ist (P-2, P-3). Nach unten: Er hält die Form für
+engine-unabhängig **ohne Maß** — dann übersteht sie die 40-px-Schiene und fällt bei 32 px aus, ohne
+daß es jemand bemerkt, weil das Ergebnis nicht „kaputt" aussieht, sondern wie der **andere**
+Zustand (T-8, zweiter Halbsatz).
+
+## 13.2 Übergabe an frontend-dev
+
+Alles hier ist ein Satz oder eine Zeile. Nichts davon ändert einen Wert, eine Klasse, ein Token
+oder einen zugänglichen Namen — **kein Vertragspunkt nach E-076 Punkt 3.**
+
+| Datei | Änderung |
+|---|---|
+> **Berichtigt in T-236.** Drei Zeilen dieser Tabelle nannten Zahlen, die inzwischen widerlegt oder
+> zurückgenommen sind. Sie stehen unten in ihrer heutigen Fassung; die letzte Zeile ist **gebaut**
+> (T-232). Wer nach dieser Tabelle arbeitet, arbeitet nach der heutigen Fassung.
+
+| Datei | Änderung |
+|---|---|
+| `apps/web/src/styles/components.css:1405-1422` (Kommentar über `.note--internal`) | Der Satz „Der Unterschied ist eine **Form** und bleibt deshalb in Graustufen und bei Farbfehlsichtigkeit bestehen" ist richtig und **gemessen** — er darf das jetzt sagen: *gemessen in WebKitGTK 2.52.6 und Chromium 151, die Form trägt in beiden; engine-abhängig ist der Rhythmus (3 gegen 7 Striche an derselben Fläche) und sogar die gemessene Schienenlänge (56 gegen 73 px)*. Dazu ein Satz zu T-8: Das Paar mißt das Verhältnis, nicht die Zahl der Lücken. **Keine Strichzahl in den Kommentar als Zusage** |
+| `apps/web/src/styles/components.css:837-839` (Kommentar über `.table__row--not-billed`) | Der Kommentar sagt „zusaetzlich gestrichelt" und meint es richtig. Ein Halbsatz gehört dazu: **Verstärkung, kein Träger.** Getragen wird der Zustand vom Balken des Zustandspunktes, vom Symbol und vom Wort. **Nicht mehr zu schreiben:** „liegt unter der Schranke aus T-8" — diese Schranke ist zurückgenommen; richtig ist „außerhalb des gemessenen Bandes, und ausdrücklich ausgenommen" (2.8) |
+| `apps/web/scripts/contrast-check.mjs:388-391` (Notiz am Paar `--note-internal-rail`) | Die Notiz „zugleich Balken gegen Luecke" bleibt und bekommt die Grenze dazu: Das Paar mißt, **wie deutlich** der Unterschied ist, nicht, **ob** es Lücken gibt. Zwei Zeilen, Verweis auf T-8 und auf `proof:engines` |
+| `apps/web/design/DESIGNSYSTEM.md:840-850` | Der Absatz nennt die zwei Zahlen und ist damit richtig. Es fehlt der Satz, den T-207 verlangt hat und der jetzt beantwortbar ist: **gemessen in zwei Engines, Stand 2026-09-06**, Form ja, Rhythmus nein. Und **T-8 gehört als Hausregel in den Abschnitt über Formmerkmale** — nicht als Befund einer Aufgabe |
+| ~~eine Prüfung über die Schienenform, falls eine gebaut wird~~ | **Gebaut: `proof:engines` (T-232), 23 / 0, beide Engines.** P-1 bis P-7 stehen in 2.8 in der Fassung **nach** diesem Lauf. Die Schranke ist zweigeteilt (P-4), nicht die eine 4 aus T-233 |
+
+**Reihenfolge.** Die vier Textstellen sind voneinander unabhängig und können in einer Aufgabe
+laufen.
+
+## 13.3 Befunde und offene Fragen
+
+**B-21 — meine eigene Anforderung war der erste Fall des Fehlers, vor dem 2.8 jetzt warnt.**
+„Mindestens drei sichtbare Unterbrechungen" ist zweideutig, und in der schärferen Lesart (drei
+**Lücken**) wäre WebKitGTK an der gemessenen Vorrichtung rot, während die Form dort unverkennbar
+steht. Der Fehler ist nicht die Zahl, sondern die **Einheit**: Ich habe eine Schranke in einer
+Größe formuliert, die zwei Bedeutungen hat, und keine davon benannt. Dieselbe Sorte wie B-20 — eine
+Angabe, die plausibel aussieht und beim ersten Nachmessen in zwei Aussagen zerfällt.
+
+**F-14 — beantwortet: die gemessene Schiene war 41 px hoch.** Und die Antwort hat die Regel
+umgeworfen, statt sie zu bestätigen. 41 px bei 4 px Rahmen liegt **unter** der damaligen
+Planungsschranke von 48 px — und beide Engines tragen dort. Die Schranke war also nicht
+vorsichtig, sondern **falsch, und zwar zur sicheren Seite**: Sie hätte eine tragende Fläche als zu
+kurz verworfen. Zusammen mit den 56 px aus T-232 (WebKitGTK, wieder 3 Striche) folgt daraus, was in
+2.8 an ihre Stelle getreten ist: kein gerechnetes Mindestmaß mehr, sondern ein **gemessenes Band**
+von 41 px bis ≈ 217 px bei 4 px Rahmen. **Geschlossen in T-236.**
+
+**F-15 — entschieden: `.auditrow__reason--absent` wird _nicht_ gemessen, sondern ausdrücklich
+ausgenommen.** Sie ist Verstärkung; die Unterscheidung trägt der Text selbst, in beiden Zweigen, und
+die zwei Zweige stehen nie nebeneinander. Eine Messung, deren Ausgang an der Gestalt nichts ändert,
+ist kein Nachweis. Die Begründung steht in 2.8, wo die Tabelle steht; **die Ausnahme kostet eine
+Zeile Kommentar im Stilblatt** (14.2), damit der nächste Leser nicht die Messung sucht, die es
+absichtlich nicht gibt. **Geschlossen in T-236 — und dabei ist die Fläche aufgefallen, an der es
+wirklich fehlt: F-17.**
+
+**F-17 — neu und offen: `.badge--not-billed` ist ein mitgezählter Träger ohne Messung.** 1 px
+Rahmen, geschlossener Pfad, ≈ 69 px Umfang. Alle sechs vorliegenden Messungen liegen bei **4 px**,
+und nach der Messung an WebkitGTK darf von einer Rahmenbreite nicht auf eine andere geschlossen
+werden. Es ist die einzige Fläche, an der die Konturform in der Aufzählung von 1.4 **mitgezählt**
+wird — und Regel T-1 verlangt für ein mitgezähltes Merkmal eine Messung. Der Auftrag ist klein: ein
+weiterer Ausschnitt und ein weiteres Element in der stehenden Vorrichtung von `proof:engines`. **Bis
+dahin trägt die Kontur dort neben Symbol, Wort und Balken, nie allein** — so steht sie seit T-236
+auch in 1.4, und damit ist die Lücke benannt statt überschrieben.
+
+**F-16 — offen und nicht durch mich schließbar: macOS/WKWebView.** Die Grenze aus
+T-207 ist zur Hälfte gefallen, nicht ganz — seit T-232 fällt diese Hälfte nicht mehr in einer
+Handmessung, sondern in einem **wiederholbaren Lauf**, und das ist der Unterschied zwischen „einmal
+gesehen" und „bei jeder Änderung gemessen". Zwei von drei ausgelieferten Erzeugnissen zeichnen mit
+einer WebKit-Engine; gemessen ist eine von beiden. Und gemessen ist die **Engine-Familie**, nicht
+die gebaute Binärdatei — dieselbe Einschränkung, die O-JV für den Fokusring führt. Beide Sätze
+gehören an jede Aussage, die sich auf diese Messung stützt; sie stehen deshalb in 2.8 (P-6) und in
+10.4 und nicht nur hier.
+
+---
+
+# 14. Nachtrag T-236 (Welle AL) — eine Faustformel weniger, ein Band mehr
+
+**Vorlage:** Board O-KM und O-KF; `.claude/team/reports/T-232-frontend-dev.md` Abschnitte 4, 5 und
+8 samt seinen Fragen 2 und 3; `.claude/team/reports/T-202-frontend-dev.md` 2.4;
+`.claude/team/reports/T-191-frontend-dev.md` 2.5 und 10; die Handmessung des Orchestrators aus
+T-233; E-078, E-087, E-094, E-095.
+
+**Dieser Abschnitt trägt keine Entscheidung** (Regel T-7). Verbindlich ist, was in 0, 1.4, 2.8, 13.2
+und 13.3 steht; hier steht nur, **wohin** es gezogen ist, **wie** gemessen wurde und **was die
+Messung ausläßt**.
+
+| Was | Wohin | Was dort verschwunden ist |
+|---|---|---|
+| Sechs Meßzeilen aus zwei Läufen, mit Engine, Fassung und Datum | 2.8, Tabelle | die Zwei-Spalten-Tabelle aus T-233 samt der unbrauchbaren Zeile über die durchgezogene Schiene |
+| Rücknahme der Faustformel; Chromium-Modell mit Aufrunden; „kein Modell für WebKitGTK" | 2.8 | „Zahl der Striche ≈ Pfadlänge ÷ (3 × Rahmenbreite)" als **engineübergreifende** Größe |
+| Das gemessene Band 41 px … ≈ 217 px bei 4 px Rahmen | 2.8 | „Planungsschranke: Pfadlänge ≥ 12 × Rahmenbreite" |
+| Zwei ausdrückliche Ausnahmen mit Begründung; ein benannter Meßauftrag | 2.8, Flächentabelle | die leere Spalte an `.auditrow__reason--absent` und die Zahl „Zwölffaches" an der 1-px-Kontur |
+| P-3 um die Schienenlänge; P-4 zweigeteilt; P-7 neu | 2.8, letzter Teil | „Die Schranke im Lauf ist 4, nicht 3" als **einzige** Fassung |
+| Die zweite Bedingung ist eine Messung, keine Rechnung | 0, erste Tabellenzeile | „ein Mindestmaß" ohne Angabe, woher es kommt |
+| Die Kontur trägt **mit**, nicht **allein** | 1.4, Zeile Konturform | „das Zwölffache der Schranke aus T-8" |
+| 76 gegen 42: zwei Mengen, nicht zwei Antworten | `textabbau-gestalt.md` 9.1 und 9.2 | zwei Zahlen ohne Angabe, worüber sie zählen |
+| Der Ersatz für „Bitte wählen" und die Regel dahinter | `textabbau-gestalt.md` 11 | — (neu) |
+
+## 14.1 Wie gemessen wurde — und was die Messung ausläßt (E-094)
+
+**Die Zahlen zur Schienenform** sind **nicht** von mir gemessen. Sie stammen aus `proof:engines`
+(T-232), aus der Handmessung des Orchestrators (T-233) und aus T-202 2.4. Was ich getan habe, ist
+das, was an dieser Stelle fehlte: die Punkte **zusammen** gerechnet und gegen das Modell gehalten,
+das sie tragen sollten. Dabei ist aufgefallen, daß
+
+* das Modell an allen drei Chromium-Punkten um **genau einen** Strich zu niedrig lag,
+* einer der drei Punkte (die „228 px") **aus dem Modell selbst zurückgerechnet** war,
+* und der vierte und fünfte Punkt (WebKitGTK bei 41 und 56 px) es **widerlegen**.
+
+**Nicht gemessen und ausdrücklich offen:** jede Rahmenbreite außer 4 px, jede Länge außer den fünf
+genannten, WKWebView, und die gebaute Binärdatei. Nichts davon ist überrechnet worden.
+
+**Die Zählung der Aufrufstellen (O-KF)** habe ich gemessen, am 2026-09-06, über den **Wortlaut**
+`<InlineMessage` im Arbeitsbaum, unter Beachtung von `.gitignore` — also über die versionierten
+**und** die unversionierten Quelldateien, während die Bauergebnisse (`apps/desktop/src-tauri/taskpane/`)
+draußen bleiben. Das ist genau die Vereinigung, die `CLAUDE.md` verlangt, in **einem** Durchgang
+statt in zweien.
+
+> **Was dieser Durchgang ausläßt, und ich sage es, statt es zu verschweigen:** In dieser Sitzung
+> stand keine Schale zur Verfügung; ich konnte `git grep` und den Verzeichnisdurchlauf deshalb
+> **nicht als zwei Zahlen** nebeneinanderstellen. Die Vereinigung ist gemessen, die **Differenz**
+> zwischen beiden Wegen nicht. Für die Zahl unten ist das ohne Folge — sie ist die Vereinigung, und
+> die Vereinigung ist die gesuchte Menge. Für die Regel aus `CLAUDE.md` ist es eine benannte Lücke.
+
+**Ergebnis, Stand 2026-09-06:**
+
+| Menge | Zahl | Wo |
+|---|---:|---|
+| `<InlineMessage` in `apps/web/src` | **77** | 46 in Ansichten und Bausteinen, **31** auf der Musterseite (`showcase/`) |
+| davon **bedingt** gezeichnet (`{x === null ? null : <…/>}`) | **37**, Stand T-191 | von mir **nicht** nachgemessen — es braucht den AST-Durchgang, den T-191 gefahren hat |
+| bedingte Meldebausteine **aller drei Arten** | **42**, Stand T-191 | 37 `InlineMessage`, 4 `LoadingBlock`, 1 `UpdateNotice` |
+| Aufrufstellen außerhalb von `apps/web/src` | **0** | die drei Treffer in `apps/web/scripts/proof-surface.mjs` sind Gegenproben des Wächters, keine Aufrufstellen; im Add-in und in der Hülle gibt es den Baustein nicht |
+
+**Und damit ist die Frage aufgelöst, statt beantwortet.** 76 und 42 waren nie zwei Antworten auf
+eine Frage. Der Fehler war nicht die Zahl, sondern daß **an keiner von beiden stand, worüber sie
+zählt** — dieselbe Sorte wie B-21, wo eine Schranke in einer Einheit stand, die zwei Bedeutungen
+hat. Die Berichtigung ist deshalb nicht „eine Zahl statt zweier", sondern **an jeder Zahl die
+Menge**.
+
+## 14.2 Übergabe an frontend-dev
+
+Alles Neue aus dieser Welle. Die vier Zeilen aus 13.2 gelten unverändert weiter, in ihrer dort
+berichtigten Fassung.
+
+| Datei | Änderung | Warum |
+|---|---|---|
+| `apps/web/src/styles/app.css:2634-2639` (`.auditrow__reason--absent`) | **Ein Kommentar, wo heute keiner steht:** die gestrichelte Schiene ist hier **Verstärkung, kein Träger**; getragen wird der Unterschied vom Text selbst (Marke „Begründung" gegen den ausgeschriebenen Satz), und die zwei Zweige stehen nie nebeneinander. **Ausdrücklich nicht gemessen**, mit Verweis auf 2.8 | Ohne den Satz sucht der nächste Durchgang die Messung, die absichtlich fehlt. Genau so ist F-15 entstanden |
+| `apps/web/scripts/engine-parity/**` (`proof:engines`) | **`.badge` und `.badge--not-billed` als zweiter Ausschnitt und zweites Element**, 1 px Rahmen, geschlossener Pfad. Gemessen: entsteht das Muster, wie viele Striche, wie lang — **keine Zahl als Schranke**, P-3 gilt unverändert | F-17. Die einzige Fläche, an der eine mitgezählte Formaussage ohne Messung dasteht. Die Vorrichtung steht bereits; es ist ein Ausschnitt, keine zweite Vorrichtung |
+| `apps/web/src/components/Select.tsx:117` | Vorgabewert `placeholder` — Wortlaut und Regel in `textabbau-gestalt.md` **11** | O-KI |
+| `apps/web/src/screens/ExportScreen.tsx:672-681` | Die fehlende Option für den leeren Wert — Begründung ebenfalls in `textabbau-gestalt.md` **11.3** | O-KI. Es ist **kein** Platzhalterproblem, sondern eine Lücke im Vorrat |
+
+**Reihenfolge.** Die erste Zeile ist eine Zeile Kommentar und hängt an nichts. Die zweite gehört zu
+`proof:engines` und läuft am besten mit der nächsten Änderung dort. Die dritte und vierte gehören
+zusammen und in **eine** Aufgabe: Wer den Vorgabetext ändert, ohne die Option nachzutragen, ersetzt
+an der Exportansicht eine falsche Aufforderung durch eine falsche Zustandsaussage.
+
+## 14.3 Befunde
+
+**B-22 — dieselbe Fehlerart wie B-20, diesmal in einer Zahl.** Bei B-20 habe ich eine **Bauform**
+angenommen, statt sie zu lesen. Hier habe ich eine **Messung** angenommen, statt sie zu lesen: Die
+„228 px" in 2.8 waren aus der Formel zurückgerechnet, die sie bestätigen sollten, während zwei
+Zeilen weiter oben in T-202 2.4 die echten Zahlen standen (7,7 und 3,7 css). Der Unterschied
+zwischen den beiden Fehlern ist gering, der zwischen ihren Folgen nicht: Eine zurückgerechnete Zahl
+sieht wie eine Messung aus und **bestätigt jedes Modell, aus dem sie stammt**. Sie ist von einer
+echten nicht zu unterscheiden — dieselbe Bauart wie die Zwischenfarbe in T-6.
+
+**Die Auflage, die daraus folgt und die ich mir selbst gebe:** Neben jeder Zahl in diesem Papier
+steht, **wer sie gemessen hat und woran**. Wo das nicht steht, ist sie gerechnet, und dann steht
+die Rechnung dabei. Ein Papier, das beides gleich aussehen läßt, erzeugt B-22 wieder.
+
+**B-23 — die Schranke war zur sicheren Seite falsch, und das ist kein kleiner Fehler.** Eine zu
+strenge Schranke gilt leicht als die vorsichtige Wahl. Sie ist es nicht: Sie erklärt eine tragende
+Fläche für zu kurz und liefert damit den Grund, eine Gestalt zu ändern, die in Ordnung ist. Der
+Schaden einer falschen Schranke hängt nicht an ihrer Richtung, sondern daran, daß jemand nach ihr
+handelt.

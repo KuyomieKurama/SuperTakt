@@ -158,9 +158,46 @@ ist:
     <p className="dialog__consequence">
 ```
 
-**`role="status"`, `.dialog__consequence`, kein `aria-invalid`, keine Gefahrenfarbe.** Das genau
-zitierte Vorbild ist ein **nicht**-Fehlerkanal. 13.5 folgt ihm im Satzbau und verläßt ihn in der
-Zustellung.
+**`role="status"`, `.dialog__consequence`, kein `aria-invalid` — die Gefahrenfarbe trägt es dagegen
+sehr wohl** (`components.css`, Regel `.dialog__consequence`): `color: var(--danger-text)`,
+`background-color: var(--danger-bg-subtle)`, `border-inline-start: 3px solid var(--danger-bg)`. Das
+genau zitierte Vorbild ist ein **nicht**-Fehlerkanal **im maschinell Gelesenen**, nicht im
+Augenschein — und **das** ist der Unterschied, auf den es ankommt. 13.5 folgt ihm im Satzbau und
+verläßt ihn dort, wo es zählt: bei `aria-invalid`.
+
+> **Berichtigt am 2026-09-06 (T-237, O-KE) — und es ist eine Berichtigung der Begründung, keine
+> Rücknahme des Urteils.**
+>
+> Hier stand bis eben *„`role=\"status\"`, `.dialog__consequence`, kein `aria-invalid`, **keine
+> Gefahrenfarbe**"*. Der vierte Punkt hält der Messung nicht stand. frontend-dev hat ihn in T-220
+> Abschnitt 7.3 am gezeichneten Baum widerlegt, T-237 hat ihn an der Quelle nachgemessen: Die Fläche
+> trägt die Gefahrenfarbe **dreifach** — als Text (`--danger-text`), als getönten Grund
+> (`--danger-bg-subtle`) und als Schiene. **Die Schiene kommt aus `--danger-bg`, nicht aus
+> `--danger-text`.** Am Bild ist das im hellen Schema dasselbe `#ac2a22`, an der **Marke** nicht:
+> Wer sie ändern will, trifft über `--danger-bg` jeden gefüllten Gefahrenknopf mit.
+>
+> **Das Urteil steht auf demselben Bein.** Z-73 hatte nie vier Beine, sondern **eines und drei
+> Merkmale.** Der tragende Satz dieses Abschnitts ist der über die maschinell gelesene Aussage
+> *dieser Wert ist ungültig* an einem gültigen, gespeicherten Wert — und **E-093 Punkt 5 hat genau
+> dieses eine verbindlich gemacht**: *„Es ist der einzige Befund dieser Runde, der einer Vorlesehilfe
+> etwas **Falsches sagt**."* Die Gefahrenfarbe sagt nichts Falsches; sie sagt „hier ist eine Wand",
+> und da ist eine. `aria-invalid="true"` behauptet etwas über den **Bestand des Benutzers**, und das
+> ist falsch. Gefallen ist damit eine **Zierde**, kein Bein — anders als in T-228, wo bei 13.3 ein
+> Bein wegbrach und ux-designer ein neues finden mußte.
+>
+> **Der Satz unter 1. bleibt unberührt und ist unverändert richtig.** Der **Feldkanal** trägt die
+> Gefahrenfarbe tatsächlich (`.field__input--invalid` → `border-color: var(--danger-text)`,
+> `.field__error` → `color: var(--danger-text)`). Wer diese Stelle berichtigt, nimmt jene **nicht**
+> mit.
+>
+> **Was sich sonst ändert, und nur das:** Der unter 2. beschriebene Ausgang existiert im Bestand
+> nicht so, wie er dort beschrieben war. Gebaut ist deshalb ein **drittes** Ding, das niemand
+> benannt hatte — Statusfläche, **kein** `aria-invalid`, **mit** Gefahrenfarbe. Es ist von E-093
+> Punkt 5 gedeckt (dort steht allein `aria-invalid` als Zusage), es ist die richtige Wahl, und
+> frontend-dev ist zu Recht dem **Vorbild** und nicht dem **Nebensatz** gefolgt (T-220 Annahme 1).
+> `docs/design/textbestand.md` 13.4 schreibt es seit T-228 von sich aus richtig: *„ohne
+> `aria-invalid`, **ohne Fehlerfarbe am Feld**"* — der Zusatz **„am Feld"** ist genau die
+> Unterscheidung, die diesem Absatz gefehlt hat.
 
 **Vorschlag — eine Entscheidung, zwei zulässige Ausgänge, beide im Papier zu benennen:**
 
@@ -170,9 +207,11 @@ Zustellung.
    stillschweigend fallen. Dann gehört in 13.1 ein Satz: *das B trägt hier die Gestalt eines
    Fehlers, weil die Rückführung an `aria-invalid` hängt.*
 2. **Der Kanal ist der aus dem eigenen Vorbild** — eine Fläche mit `role="status"` an derselben
-   Stelle, ohne `aria-invalid`, ohne Gefahrenfarbe. Dann trägt AK 4 **nicht** mehr, weil
-   `revealFirstInvalidWithin` nichts findet, und der Fokus muß von der Aufrufstelle gesetzt werden.
-   Das ist mehr Arbeit und die ehrlichere Fläche.
+   Stelle, ohne `aria-invalid`, **in der Gestalt des Vorbilds, also mit dessen Gefahrenfarbe auf
+   getöntem Grund** (berichtigt am 2026-09-06, T-237/O-KE; hier stand *„ohne Gefahrenfarbe"* —
+   siehe den Kasten oben). Dann trägt AK 4 **nicht** mehr, weil `revealFirstInvalidWithin` nichts
+   findet, und der Fokus muß von der Aufrufstelle gesetzt werden. Das ist mehr Arbeit und die
+   ehrlichere Fläche.
 
 **Ich schreibe den Ausgang nicht vor** (E-078 Punkt 4 — der Wortlaut ist ux-designers, die Zeile
 frontend-devs). Ich verlange, daß **einer von beiden dasteht**, bevor gebaut wird. Was nicht geht,
@@ -545,8 +584,23 @@ Z-73  13.5 AK 3/4/5                 Abweichung: BLOCKIEREND. 13.1 nennt den Satz
                                     Behauptung, die 13.3 unter „Ungültiger Name." verwirft. Das
                                     eigene Vorbild aus 13.2 macht es anders:
                                     `ConfirmDialog.refusal` steht in `<div role="status">` mit
-                                    `.dialog__consequence`, ohne `aria-invalid`, ohne
-                                    Gefahrenfarbe.
+                                    `.dialog__consequence` und OHNE `aria-invalid`.
+                                    [BERICHTIGT 2026-09-06, T-237/O-KE.] Hier stand „ohne
+                                    `aria-invalid`, ohne Gefahrenfarbe". Die Gefahrenfarbe
+                                    trägt es, und zwar DREIFACH:
+                                    `color: var(--danger-text)`,
+                                    `background-color: var(--danger-bg-subtle)` und
+                                    `border-inline-start: 3px solid var(--danger-bg)` — die
+                                    Schiene aus `--danger-bg`, NICHT aus `--danger-text`; am
+                                    Bild im hellen Schema dasselbe #ac2a22, an der Marke
+                                    nicht. Sie ist NICHT der Unterschied. Der Unterschied ist
+                                    die maschinell gelesene Aussage, und auf ihr — und nur auf
+                                    ihr — steht dieser Befund: E-093 Punkt 5 hat genau sie
+                                    verbindlich gemacht. Das Urteil bleibt auf DEMSELBEN Bein;
+                                    gefallen ist eine Zierde, kein Bein. Ausgang (b) unten ist
+                                    damit so, wie er dasteht, nicht im Bestand vorhanden —
+                                    gebaut und richtig ist: Statusfläche, kein `aria-invalid`,
+                                    MIT Gefahrenfarbe.
                                     Vorschlag: EINE von zwei Auflösungen ins Papier — (a) Kanal
                                     bleibt `error`, und 13.1 sagt, daß dieses B die Gestalt
                                     eines Fehlers trägt, weil die Rückführung daran hängt; oder
@@ -747,6 +801,10 @@ Befunde berührt einen Buchstaben von 13.3 oder 14.3.
    `.field__input--invalid`/`.field__error` (Z-73) und die Reihenfolge im `submit` (Z-75). Hier
    läuft kein Browser. Alle drei sind so gefaßt, daß ein Lauf sie widerlegen kann; Z-75 ist der
    einzige, bei dem eine Widerlegung das Urteil änderte.
+   **Nachtrag vom 2026-09-06 (T-237):** Ein vierter Satz gehörte in diese Aufzählung und stand nicht
+   darin — die Behauptung über die **Gestalt** von `.dialog__consequence`. Sie war weder gelesen noch
+   laufen gesehen, sondern **angenommen**, und sie war falsch (siehe 1.4). Genau dafür ist diese
+   Annahmeliste da; sie hat den einen Satz nicht gefangen, der sie gebraucht hätte.
 4. **Die 102 Zeichen habe ich gezählt, nicht gemessen** (Z-76). Bei einer Abweichung von ein oder
    zwei Zeichen ändert sich nichts: die Grenze ist 60 beziehungsweise 80.
 5. **Ich habe die sieben verworfenen Fassungen aus 13.3 und die acht aus 14.4 nicht gegen den Baum
@@ -758,6 +816,10 @@ Befunde berührt einen Buchstaben von 13.3 oder 14.3.
    in Grau" liest sich wie Geschmack. Es ist der einzige Befund dieser Prüfung, der einem Benutzer
    etwas Falsches **sagt** — `aria-invalid="true"` über einen Wert, der gültig ist —, und der
    einzige, der eine Vorlesehilfe erreicht.
+   **Nachtrag vom 2026-09-06 (T-237):** Dieser Risikosatz ist die genaueste Fassung des Befundes im
+   ganzen Bericht, und er ist der Grund, warum die Berichtigung an 1.4 das Urteil nicht anfaßt: Er
+   nennt `aria-invalid` und **nicht** die Farbe. „In Rot statt in Grau" war schon hier als das
+   benannt, was es ist — die schwache Hälfte.
 2. **Z-75 ist die Sorte Fehler, die nach dem Bau wie Absicht aussieht.** Der Knopf ist klickbar, es
    passiert nichts, alle Prüffälle über „es wird kein `PATCH` gesendet" sind grün. Genau deshalb
    verlangt Z-64.1 **beide** Hälften, und deshalb gehört Z-75 in dieselbe Messung.

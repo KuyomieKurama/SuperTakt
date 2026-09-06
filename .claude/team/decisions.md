@@ -2490,3 +2490,34 @@ Zeilen; ein Farbpaar, das nie eine sichtbare Fläche hatte.
    Regel, die T-215 für eine Zusicherung über der leeren Menge schon einmal gebaut hat.
 4. **Der Vorschlag kam von security-checker, die Entscheidung ist meine** — er hat sie ausdrücklich
    nicht selbst getroffen, weil verfassen und genehmigen in einer Hand nicht geht.
+
+## E-095 — Ein überspringbarer Lauf gehört nicht in eine Menge, deren Wert das Nichtüberspringen ist
+
+**Anlaß:** T-232 hat die Engine-Messung dauerhaft gemacht — `proof:engines`, 23 Prüfungen, zwei
+Engines (WebKitGTK 2.52.6 und Chromium 151.0.7922.34), vier Gegenproben, jede in **beiden** Engines
+gerendert. Der Erbauer hat gefragt, ob der Lauf in `proof:all` gehört, und **selbst nein gesagt**,
+mit dem Argument, das trägt: Der Lauf braucht `xvfb-run`, `python3-gi` mit `WebKit2 4.1`, Pillow und
+Playwrights Chromium. Fehlen sie, sagt er ehrlich *„ÜBERSPRUNGEN — dieser Lauf hat nichts
+gemessen"* — und geht mit **Code 0** hinaus.
+
+`proof:all` besteht aus neunzehn Läufen, die auf jedem Rechner **dasselbe** messen. Ein
+überspringbarer zwanzigster macht die Menge weicher, ohne daß es jemand sieht: `proof:all` bliebe
+grün und hieße auf zwei Rechnern zweierlei. Dazu 18 Sekunden gegen Millisekunden.
+
+**Entscheidung.**
+
+1. **`proof:engines` steht als Wurzelbefehl neben `test:e2e`** — nicht in `proof:all`, nicht in
+   `check`. Gemessen über den Wurzelbefehl: **23 bestanden, 0 fehlgeschlagen**.
+2. **Der Preis dafür ist benannt, nicht verschwiegen:** Ein Lauf, der nichts messen kann und
+   trotzdem mit Code 0 hinausgeht, ist die Bauform, vor der **E-094 Punkt 3** warnt. Hier ist sie
+   vertretbar, weil der Lauf **freiwillig** gefahren wird und im selben Atemzug sagt, was ungemessen
+   blieb. Sie ist **nicht** vertretbar dort, wo die Umgebung feststeht.
+3. **Also: in der Prüfstrecke wird ein Übersprung rot.** Der Lauf bekommt einen Schalter, der
+   jeden Übersprung zu Code 1 macht, und die Prüfstrecke richtet die vier Voraussetzungen ein und
+   fährt ihn damit. Ohne den Schalter wäre die Prüfstrecke grün, gerade weil sie nichts gemessen
+   hat — und das ist der Fehler, den diese Sitzung achtmal gefunden hat. **Eine Prüfung des
+   Ausgabetextes durch die Prüfstrecke ist ausdrücklich nicht die Antwort:** sie wird beim ersten
+   umformulierten Satz still blind.
+4. **Die Bilder werden nicht aufbewahrt.** `--keep=<Pfad>` bleibt der einzige Weg, sie zu sehen;
+   ein fester Ordner im Bestand bräuchte einen Eintrag in `.gitignore` und würde bei jedem Lauf
+   überschrieben, ohne daß jemand hinsieht. Die gemessenen **Zahlen** stehen im Bericht.

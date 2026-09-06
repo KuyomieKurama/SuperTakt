@@ -3640,6 +3640,97 @@ check(`beide Türen nehmen dieselben ${String(ANGENOMMENE_ZEICHEN.length)} harml
   assert.deepEqual(abweichungen, [], abweichungen.join('; '));
 });
 
+// ---------------------------------------------------------------------------
+// O-AY (T-239): der Wächter fragt nach der Bedeutung, nicht bloß nach der Zahl
+// ---------------------------------------------------------------------------
+/*
+ * Der Herkunftswächter unten sucht eine **Zahl**. Bis T-239 suchte er sie ohne
+ * jede Rücksicht darauf, was sie an ihrer Fundstelle bedeutet — und wurde damit
+ * von jeder künftigen, unbeteiligten 500 rot gemacht.
+ *
+ * Gemessen statt vermutet (T-239): Im Quellbaum des Aufgabenbereichs stehen
+ * heute **acht** Vorkommen der freistehenden Zahl 500, verteilt auf drei
+ * Dateien. **Sieben** davon meinen den Titeldeckel (`text/cut.ts`,
+ * `office/mail.ts`), **eine** meint einen HTTP-Statuscode
+ * (`api/client.ts`: „Alles Übrige, einschließlich 500"). Alle acht stehen in
+ * Kommentaren, und weil `sourceWithoutComments` Kommentare streicht, sieht der
+ * Wächter heute null Träger und ist grün.
+ *
+ * Grün ist er also nur, solange die fremde Bedeutung als Fließtext dasteht.
+ * Zwanzig Zeilen unter jenem Kommentar läuft in `api/client.ts` bereits eine
+ * Statusleiter **im Code** — `401`, `403`, `404`, `422`, `400` —, und ihre
+ * sechste Sprosse ist im Kommentar oben schon angekündigt. Wer
+ * `if (status >= 500) …` ergänzt, tut das Richtige und bekommt dafür einen
+ * roten Lauf, der ihm etwas über den Titeldeckel erzählt.
+ *
+ * Das ist der teure Fehlschlag, nicht der billige: Ein falscher Alarm wird
+ * abgeschaltet, und danach misst gar nichts mehr. Deshalb hinnehmen wir ihn
+ * nicht, sondern schärfen — die Ausnahme ist **eine**, sie ist eng, und sie ist
+ * ihrerseits gemessen (Gegenprobe unmittelbar hinter dem Wächter, in **beide**
+ * Richtungen).
+ *
+ * Was **nicht** ausgenommen wird und weiter rot macht: die Zahl in einer
+ * Zeichenkette (`'HTTP 500'`) und die Zahl unter einem `case` an einem
+ * Schalter, der über etwas anderes als einen Status entscheidet. Beide Fälle
+ * kommen heute nicht vor; sie stehen hier, damit der nächste Leser die Grenze
+ * der Ausnahme kennt, statt sie zu erraten.
+ */
+
+const STATUS_OPERATOR = String.raw`(?:===|!==|==|!=|>=|<=|>|<)`;
+/** `status`, `statusCode`, `httpStatus`, `response.status`, `antwort.statusCode`. */
+const STATUS_NAME = String.raw`(?:\b[A-Za-z_$][\w$]*\s*\.\s*)?\b\w*[Ss]tatus(?:Code)?\b`;
+
+/** Die Zeile um eine Fundstelle — damit die Meldung auf den Ort zeigt. */
+const zeileUm = (text, index) => {
+  const von = text.lastIndexOf('\n', index) + 1;
+  const bis = text.indexOf('\n', index);
+  return text.slice(von, bis === -1 ? text.length : bis).trim();
+};
+
+/**
+ * Die Stellen, an denen ein Quelltext die Zahl `wert` **selbst trägt** — ohne
+ * die Stellen, an denen sie erkennbar einen HTTP-Statuscode meint.
+ *
+ * Der Quelltext kommt ohne Kommentare herein; eine Begründung darf die Zahl
+ * nennen, ein Ausdruck nicht.
+ */
+const traegerStellen = (quelltext, wert) => {
+  const n = String(wert);
+  const freistehend = `(?<![\\d_])${n}(?![\\d_])`;
+
+  /** Spannen, in denen die Zahl nachweislich einen HTTP-Status meint. */
+  const statusSpannen = [];
+
+  // Form 1 — ein Vergleich, dessen andere Seite ein statusartiger Name ist.
+  const vergleich = new RegExp(
+    `${STATUS_NAME}\\s*${STATUS_OPERATOR}\\s*${freistehend}` +
+      `|${freistehend}\\s*${STATUS_OPERATOR}\\s*${STATUS_NAME}`,
+    'g',
+  );
+  for (const treffer of quelltext.matchAll(vergleich)) {
+    statusSpannen.push([treffer.index, treffer.index + treffer[0].length]);
+  }
+
+  // Form 2 — `case 500:`, aber **nur** unter einem Schalter, der über einen
+  // statusartigen Wert entscheidet. Ohne diese Bedingung wäre die Ausnahme ein
+  // Loch: Jeder Deckel unter einem beliebigen `case` liefe hindurch.
+  const schalter = [...quelltext.matchAll(/\bswitch\s*\(([^)]*)\)/g)];
+  const statusName = new RegExp(STATUS_NAME);
+  for (const treffer of quelltext.matchAll(new RegExp(`\\bcase\\s+${freistehend}\\s*:`, 'g'))) {
+    const davor = schalter.filter((eintrag) => eintrag.index < treffer.index).at(-1);
+    if (davor !== undefined && statusName.test(davor[1])) {
+      statusSpannen.push([treffer.index, treffer.index + treffer[0].length]);
+    }
+  }
+
+  const traeger = [];
+  for (const treffer of quelltext.matchAll(new RegExp(freistehend, 'g'))) {
+    const gedeckt = statusSpannen.some(([von, bis]) => treffer.index >= von && treffer.index < bis);
+    if (!gedeckt) traeger.push(zeileUm(quelltext, treffer.index));
+  }
+  return traeger;
+};
+
 check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigene', () => {
   /*
    * ---------------------------------------------------------------------------
@@ -3671,7 +3762,9 @@ check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigen
    * Sie lässt sich am **Quelltext** stellen, und zwar in drei Teilen, die
    * einzeln nichts und zusammen alles sagen:
    *
-   *  1. Kein Quelltext des Aufgabenbereichs **trägt** die Zahl. Das Muster dafür
+   *  1. Kein Quelltext des Aufgabenbereichs **trägt** die Zahl in einer Bedeutung,
+   *     die den Deckel meinen könnte — ein HTTP-Statuscode ist seit T-239
+   *     ausgenommen und die Ausnahme gegengeprüft (O-AY). Das Muster dafür
    *     wird aus der Domäne **erzeugt** und nicht hingeschrieben — änderte die
    *     Domäne ihren Wert, suchte dieser Lauf im selben Durchgang nach dem
    *     neuen. Ein Wächter, der seine eigene Zahl abschriebe, wäre wieder genau
@@ -3688,17 +3781,29 @@ check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigen
    * für einen Wert ohne Kennung.
    */
 
-  // Teil 1 — erzeugt, nicht abgeschrieben.
-  const zahl = new RegExp(`(?<![\\d_])${String(DOMAENE_MAX_TITEL)}(?![\\d_])`);
-  const traeger = files
-    .filter((datei) => /\.tsx?$/.test(datei))
-    .filter((datei) => zahl.test(sourceWithoutComments(datei)))
-    .map((datei) => path.relative(srcRoot, datei));
+  // Teil 1 — erzeugt, nicht abgeschrieben; und nach der **Bedeutung** gefragt,
+  // nicht bloß nach der Ziffernfolge (O-AY, siehe `traegerStellen` oben).
+  const durchsucht = files.filter((datei) => /\.tsx?$/.test(datei));
+  assert.ok(
+    durchsucht.length > 15,
+    `nur ${String(durchsucht.length)} TypeScript-Dateien durchsucht — der Wächter greift ins Leere`,
+  );
+
+  const traeger = durchsucht
+    .map((datei) => ({
+      datei: path.relative(srcRoot, datei),
+      stellen: traegerStellen(sourceWithoutComments(datei), DOMAENE_MAX_TITEL),
+    }))
+    .filter((eintrag) => eintrag.stellen.length > 0)
+    .map((eintrag) => `${eintrag.datei}: ${eintrag.stellen.join(' | ')}`);
+
   assert.deepEqual(
     traeger,
     [],
-    `der Aufgabenbereich führt die Zahl ${String(DOMAENE_MAX_TITEL)} selbst, in: ${traeger.join(', ')} — ` +
-      'kommt sie aus der Domäne, gehört der Name hin; bedeutet sie etwas anderes, gehört ihr ein eigener Name',
+    `der Aufgabenbereich führt die Zahl ${String(DOMAENE_MAX_TITEL)} selbst, in: ${traeger.join(' — ')} — ` +
+      'kommt sie aus der Domäne, gehört der Name hin; bedeutet sie etwas anderes, gehört ihr ein eigener Name. ' +
+      'Ein HTTP-Statuscode ist bereits ausgenommen, sofern er als Vergleich gegen einen statusartigen Namen dasteht ' +
+      '(`status === ' + String(DOMAENE_MAX_TITEL) + '`) — diese Zeile hier abzuschalten ist nicht der nächste Schritt.',
   );
 
   // Teil 2 — die Datei, die den Namen ausführt, liest ihn.
@@ -3721,6 +3826,76 @@ check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigen
     DOMAENE_MAX_TITEL,
     'der Aufgabenbereich führt einen anderen Wert aus der Domäne unter diesem Namen',
   );
+});
+
+check('O-AY, Gegenprobe: der Wächter beißt weiter — und nicht mehr in den Statuscode', () => {
+  /*
+   * Die Schärfung aus T-239 ist nur dann eine Verbesserung, wenn sie in **beide**
+   * Richtungen gemessen ist. Eine Ausnahme, die niemand gegenprüft, ist ein Loch
+   * mit einer Begründung davor.
+   *
+   * Richtung A: jede Bauart, in der im Aufgabenbereich eine **zweite Fassung**
+   * des Titeldeckels entstünde, wird weiterhin gefunden. Das ist der Zweck des
+   * Wächters; ginge hier eine durch, hätte die Schärfung ihn entwertet.
+   *
+   * Richtung B: die eine andere Bedeutung, die die Zahl im Add-in belegbar hat
+   * — ein HTTP-Statuscode —, macht ihn nicht mehr rot. Das ist der Fehlalarm,
+   * gegen den O-AY geschrieben ist.
+   *
+   * Richtung C: die Ausnahme bleibt eng. Ein Deckel neben einem Status und ein
+   * `case` an einem Schalter, der über etwas anderes entscheidet, sind rot.
+   */
+  const n = DOMAENE_MAX_TITEL;
+
+  // Richtung A — die zweite Fassung des Deckels, in sieben Bauarten.
+  for (const quelle of [
+    `const MAX_TITLE_CHARACTERS = ${String(n)};`,
+    `const deckel = ${String(n)};`,
+    `const gekuerzt = titel.slice(0, ${String(n)});`,
+    `const schema = z.string().max(${String(n)});`,
+    `if (text.length > ${String(n)}) { melden(); }`,
+    `const vorschlag = suggestTitle(text, ${String(n)});`,
+    `const grenzen = [${String(n)}, 64];`,
+  ]) {
+    assert.equal(
+      traegerStellen(quelle, n).length,
+      1,
+      `der Wächter übersieht eine zweite Fassung des Deckels: ${quelle}`,
+    );
+  }
+
+  // Richtung B — der Statuscode in sechs Schreibweisen.
+  for (const quelle of [
+    `if (status === ${String(n)}) return 'failed';`,
+    `if (status >= ${String(n)}) return 'failed';`,
+    `if (response.status === ${String(n)}) return 'failed';`,
+    `if (httpStatus !== ${String(n)}) return 'ok';`,
+    `if (${String(n)} <= antwort.statusCode) return 'failed';`,
+    `switch (status) { case ${String(n)}: return 'failed'; }`,
+  ]) {
+    assert.deepEqual(
+      traegerStellen(quelle, n),
+      [],
+      `ein HTTP-Status macht den Wächter rot — genau der falsche Alarm aus O-AY: ${quelle}`,
+    );
+  }
+
+  // Richtung C — die Ausnahme ist kein Loch.
+  assert.equal(
+    traegerStellen(`switch (modus) { case ${String(n)}: return 'failed'; }`, n).length,
+    1,
+    'ein `case` unter einem Schalter, der über keinen Status entscheidet, wird durchgelassen',
+  );
+  assert.equal(
+    traegerStellen(`if (status === 404) { const deckel = ${String(n)}; }`, n).length,
+    1,
+    'ein Deckel in derselben Zeile wie ein Status wird durchgelassen',
+  );
+
+  // Und die Selbstprobe: das Muster wird aus der Domäne erzeugt. Änderte sie
+  // ihren Wert, suchte dieser Lauf im selben Durchgang nach dem neuen — eine
+  // fremde Zahl ist kein Träger.
+  assert.deepEqual(traegerStellen(`const fremd = ${String(n + 1)};`, n), []);
 });
 
 check('beide Türen wenden den Deckel wirklich an — die Bindung, nicht die Zahl', () => {

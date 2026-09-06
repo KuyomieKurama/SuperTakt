@@ -4515,3 +4515,91 @@ dort nicht. Seit T-220 stimmt das nicht mehr — beide Absätze sind dort um ein
 der historische Text bleibt unverändert stehen (dieselbe Vorgehensweise wie bei O-HU/O-HW).
 
 **Nachweis:** `pnpm test:e2e` vollständig, siehe Bericht `.claude/team/reports/T-227-e2e-tester.md`.
+
+## 32. Nachtrag aus T-240 (Welle AL — der Zustand ohne Prüffall, eine Zusicherung über der leeren Menge, ein dritter O-IW-Fundort)
+
+### TP-ANH-22 — der dritte Zustand der Öffnen-Rückfrage: Umleitung erkannt, kein Öffnen-Knopf (O-KQ, V-07)
+
+**Anlaß.** `AttachmentOpenDialog.tsx` kennt seit T-167 drei Zustände: "wird geöffnet", "wird
+ausgeführt" und — seit V-07 — "wird nicht geöffnet", bei dem der Dialog keinen Öffnen-Knopf trägt
+(Kopfabschnitt "Der dritte Zustand: Takt öffnet diese Datei gar nicht"). Für die ersten beiden gibt
+es Prüffälle (TP-ANH-06, TP-ANH-19); der dritte hatte **keinen einzigen** — gemessen über den
+Wortlaut und über den ganzen Arbeitsbaum, nach beiden Wegen aus `CLAUDE.md` (`git grep` und ein
+roher Lauf über die Quellverzeichnisse): „Diese Datei wird nicht geöffnet", `foreseenRefusal` und
+`foreseeableRefusalOf` kommen in `tests/**` und `apps/*/test/**` null mal vor.
+
+**Die Falle im Auftrag, gelöst ohne Produktivänderung.** `checkAttachmentPath`
+(`packages/domain/src/attachment.ts:826-837`) weist eine Umleitungsendung (`.lnk`, `.url`, `.pif`,
+`.scf`, `.desktop`) und einen Dateinamen mit Doppelpunkt (A-A-28) inzwischen **an der Tür** ab —
+über `createAttachment` (die Oberfläche wie das Add-in) läßt sich eine solche Zeile nicht mehr
+anlegen. Der dritte Dialogzustand trifft also nur noch einen **Altbestandswert**: eine Zeile, die
+vor dieser Verschärfung entstand, oder eine, die — wie der Kopf von `checkAttachmentPath` selbst
+festhält (VG-1, VG-3) — an der Tür vorbei über eine zweite Anwendung mit dem Sitzungsgeheimnis oder
+ein `UPDATE` auf die Bestandsdatei geschrieben wurde. `overwriteAttachmentTargetDirectly`
+(neue Funktion, `tests/e2e/support/db.ts`, dieselbe Bauart wie `overwriteTodoTitleDirectly` für
+`titleSchema` und `deleteAttachmentRowDirectly` für den Aufräumlauf) legt eine Zeile ganz regulär
+über die Tür an und überschreibt danach **nur** die Spalte `target` an der Tür vorbei — kein Umgehen
+der Prüfung, sondern der einzige Weg, den Bestandszustand herzustellen, für den der dritte
+Dialogzustand überhaupt gebaut wurde.
+
+**Die Zusicherung geht auf die Wirkung, nicht auf die Anzeige (Auflage des Prüfers).** Ein Fall, der
+nur nachsähe, ob die Überschrift „Diese Datei wird nicht geöffnet" dasteht, bliebe grün, wenn der
+`blocked`-Zweig aufgehoben würde und dieselbe Überschrift aus einem anderen Grund erschiene. Die
+tragende Zusicherung in `tests/e2e/attachment-open-commands.spec.ts` (`TP-ANH-22`-Block) ist deshalb
+`window.__taktOpenAttachmentFileCalls__` — sie bleibt **0**, über den ganzen Fall hinweg, auch nach
+dem Klick auf „Schließen". Gemessen (Fehlschlag mit Zahl): Mit unversehrtem Produktivcode und
+`toBe(1)` statt `toBe(0)` an dieser einen Stelle wird der Fall **rot** — `Expected: 1, Received: 0`
+—, mit `toBe(0)` **grün**. Ergänzend eine Gegenprobe nach demselben Muster wie O-KR (E-094 Punkt 3):
+ein zweiter, unveränderter Dateianhang am selben Todo zeigt, daß derselbe Öffnen-Knopf und derselbe
+"wird geöffnet"-Dialog tatsächlich erscheinen, wenn keine Umleitung im Weg steht — die
+`toHaveCount(0)`-Zusicherungen für „Öffnen“/„Ausführen“ im blockierten Dialog sind damit keine
+Zusicherungen über eine grundsätzlich leere Menge.
+
+**Ergebnis, gemessen:** `TP-ANH-22` grün (siehe Nachweis-Abschnitt unten).
+
+### O-KR — eine Zusicherung über der leeren Menge in `attachment-open-commands.spec.ts:70` (E-094 Punkt 3)
+
+**Anlaß.** Die Zusicherung „kein Öffnen-Dialog bei einem Verweis" prüfte
+`toHaveCount(0)` auf `page.getByRole('alertdialog', { name: /Diese Datei wird/ })` — richtig in der
+Sache, aber ohne jeden Beleg, daß der Ausdruck bei Gelegenheit **etwas** träfe. Bliebe der Ausdruck
+nach einer künftigen Titeländerung wirkungslos, würde diese Datei es nicht bemerken: Sie prüft den
+Titel „Diese Datei wird geöffnet"/„…ausgeführt" sonst nirgends selbst (der bindet in
+`attachment-open-commands.spec.ts` an anderer Stelle, mit dem vollen Wortlaut).
+
+**Gemessen (rot vor der Reparatur).** Derselbe Fall, unverändert, mit dem Ausdruck ersetzt durch
+`/Diese Verknüpfung wird garantiert nie im Baum/` — ein Ausdruck, der an keiner heutigen Stelle im
+Baum trifft: **„1 passed", Code 0.** Genau die Bauform aus E-094 Punkt 3: „0 gefunden" war `ok`.
+
+**Reparatur.** Der Fall legt jetzt einen **zweiten** Dateianhang am selben Todo an
+(`FILE_OPEN_DIALOG_NAME`, eine gemeinsame Konstante für Gegenprobe und Zusicherung statt zweier
+gleichlautender Literale, die auseinanderlaufen könnten) und öffnet ihn zuerst: Der Öffnen-Dialog
+erscheint, `toHaveCount(1)` besteht, wird abgebrochen, `toHaveCount(0)` besteht wieder — erst danach
+folgt der eigentliche Fall (der Verweis öffnet ohne Rückfrage) mit derselben `toHaveCount(0)`-
+Zusicherung wie zuvor, jetzt aber belegt, daß der Ausdruck greifen würde.
+
+**Gemessen (rot nach der Reparatur, mit demselben absichtlich falschen Ausdruck an der Konstante).**
+`FILE_OPEN_DIALOG_NAME = /Diese Verknüpfung wird garantiert nie im Baum/`: Die neue Gegenprobe
+schlägt jetzt fehl — `Locator: getByRole('alertdialog', { name: /Diese Verknüpfung wird garantiert
+nie im Baum/ }); Expected: 1; Received: 0`, **„1 failed", Code 1.** Mit dem unveränderten Ausdruck
+(`/Diese Datei wird/`) wieder grün, Code 0. Derselbe Fehlschlag, den die Titeländerung morgen
+auslösen würde, ist damit heute schon rot statt still grün.
+
+### Ein dritter Fundort desselben O-IW-Musters: `timer-stop-announcement.spec.ts`
+
+**Anlaß.** Neben der bereits an ihrem eigenen Fundort behobenen Stelle (Abschnitt 30) und ihrem
+Zwilling in `export-audit-and-locks.spec.ts` (Abschnitt 31, O-KB) zitierte dieselbe Datei ein
+zweites Mal einen Wortlaut aus fremder Hoheit, ohne ihn selbst zu prüfen: „Warnung „aber noch nicht
+abrechenbar"" — der Titel, den `reportStopped` (`TimerContext.tsx`) für eine noch nicht abrechenbare
+Tagesgruppe zeigt (tatsächlicher Wortlaut, gemessen: `` `${on} — aber noch nicht abrechenbar.` ``,
+mit einer Todo-Bewegung vor dem Gedankenstrich, die das Zitat verschwieg). Kein Prüffall in dieser
+Datei — und keiner sonst im Baum — bindet diesen Wortlaut an irgendeine Zusicherung; er stand nur
+zur Begründung, warum der Fall eine Leistung einträgt, um den **anderen**, hier tatsächlich
+geprüften Titel („Zeit gebucht.") zu erreichen. Dieselbe Klasse Befund wie O-IW/O-KB: ein Kommentar,
+der bei der nächsten Titeländerung dort still falsch würde, statt mit einem Prüffall rot zu werden.
+
+**Berichtigung.** Der Kommentar benennt die Abweichung jetzt über ihre **Bedingung**
+(`insight.blockedReason !== null` in `reportStopped`) statt über ihren heutigen Wortlaut im Zitat,
+mit einem ausdrücklichen Verweis auf diese Fehlerklasse (O-IW/O-KB, Abschnitt 30/31). Reiner
+Kommentartext, kein Prüffall und kein Ausgang geändert — 6/6 unverändert grün.
+
+**Nachweis:** `pnpm test:e2e` vollständig, siehe Bericht `.claude/team/reports/T-240-e2e-tester.md`.

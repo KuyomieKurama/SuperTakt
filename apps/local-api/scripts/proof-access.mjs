@@ -1063,6 +1063,36 @@ try {
     // wird die **Untergrenze** — die Menge ist nicht leer, und die vier
     // Dateien, die B-2.5 tragen, sind darin. Sonst urteilte die Zusicherung
     // über eine Menge, die es nicht mehr gibt (A-A-55, A-A-60).
+    //
+    // ===================================================================
+    // A-A-68 — die Untergrenze sagte nichts, und die Zeile sagte
+    // „vollständig"
+    // ===================================================================
+    //
+    // Bis T-235 lautete die Vorbedingung
+    // `scanned.length >= TRAGENDE_DATEIEN.length`, also „mindestens vier" —
+    // die Länge genau der Liste, die zwei Zeilen weiter ohnehin einzeln
+    // geprüft wird. Sie schützte gegen die **leere** Ernte und gegen nichts
+    // darüber hinaus, während die Zeile „**vollständig** durchsucht" behauptet.
+    //
+    // Gemessen (T-234, 31.1.1; in T-235 zeichengleich nachgestellt):
+    // `src/access/unter/verifier-match.ts` mit `const gleich = presented ===
+    // secret;`, und aus dem Sammler fällt **ein Wort** — `recursive: true`.
+    // Der Lauf sagt dann **106/0, Code 0** und „vollständig durchsucht —
+    // 16 Dateien", während sechzehn von siebzehn durchsucht sind und die
+    // siebzehnte die einzige ist, auf die es ankommt.
+    //
+    // Zwei Zeilen schließen das, und sie messen **Verschiedenes**:
+    //
+    //  1. **Eine benannte Zahl**, nach dem Muster von A-A-61 (dort 100 und 25
+    //     bei 117 und 31). Sie fängt den Zusammenbruch der Ernte — „0
+    //     durchgesehen" darf nie `ok` sein (E-094 Punkt 3).
+    //  2. **Eine zweite, unabhängige Aufnahme derselben Menge**, von Hand und
+    //     ohne `recursive`. Sie fängt die **übersehene** Datei, und das kann
+    //     eine Zahl allein nicht: Nach dem Streichen von `recursive: true`
+    //     stehen heute weiterhin 16 Dateien in der Ernte, weil es heute keinen
+    //     Unterordner gibt — jede Untergrenze bliebe grün. Erst der Vergleich
+    //     zweier Wege macht das Wort „vollständig" verdient (E-094 Punkt 1).
     const scanRoots = ['src/access', 'src/http'];
     const scanned = [];
     for (const root of scanRoots) {
@@ -1076,7 +1106,48 @@ try {
       }
     }
 
-    // Die Untergrenze der Menge, vor jedem Urteil über sie.
+    /**
+     * Die benannte Untergrenze (A-A-68).
+     *
+     * Heute liegen 16 Dateien unter den beiden Wurzeln. 14 lässt zwei
+     * verschwinden, ohne rot zu werden — dasselbe Verhältnis, das A-A-61 mit
+     * 100 bei 117 gewählt hat (rund 85 Prozent) —, und liegt mit dem Faktor
+     * dreieinhalb deutlich über den vier tragenden Dateien. Fällt die Ernte
+     * darunter, ist nicht der Bestand geschrumpft, sondern der Sammler kaputt.
+     */
+    const MINDESTENS_DURCHSUCHT = 14;
+    check(
+      `Der Sammler hat mindestens ${String(MINDESTENS_DURCHSUCHT)} Dateien eingesammelt (${String(scanned.length)}) (A-A-68)`,
+      scanned.length >= MINDESTENS_DURCHSUCHT,
+      `${String(scanned.length)} statt mindestens ${String(MINDESTENS_DURCHSUCHT)} — der Sammler greift ins Leere`,
+    );
+
+    /**
+     * Dieselbe Menge ein zweites Mal, auf einem anderen Weg (A-A-68).
+     *
+     * Von Hand abgestiegen statt `recursive: true`, mit eigener Endungsprüfung.
+     * Zwei Wege, ein Ergebnis — sonst ist die Ernte nicht die Menge, über die
+     * geurteilt wird, und „vollständig" wäre ein Wort ohne Deckung.
+     */
+    const vonHand = (absolute, prefix) => {
+      const out = [];
+      for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+        if (entry.isDirectory()) out.push(...vonHand(join(absolute, entry.name), join(prefix, entry.name)));
+        else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(join(prefix, entry.name));
+      }
+      return out;
+    };
+    const vorhanden = scanRoots.flatMap((root) => vonHand(join(HERE, '..', root), root));
+    const uebersehen = vorhanden.filter((name) => !scanned.includes(name));
+    check(
+      `Der Nachweispfad ist vollständig durchsucht — ${String(scanned.length)} von ${String(vorhanden.length)} Dateien unter ${scanRoots.join(' und ')}, zweiter Weg (A-A-68)`,
+      uebersehen.length === 0 && scanned.length === vorhanden.length,
+      uebersehen.length === 0
+        ? `${String(scanned.length)} eingesammelt, ${String(vorhanden.length)} vorhanden`
+        : `übersehen: ${uebersehen.join(', ')}`,
+    );
+
+    // Die vier Dateien, die B-2.5 tragen, vor jedem Urteil über die Menge.
     const TRAGENDE_DATEIEN = [
       'src/access/verifier.ts',
       'src/access/crypto.ts',
@@ -1085,11 +1156,9 @@ try {
     ];
     const fehlend = TRAGENDE_DATEIEN.filter((name) => !scanned.includes(name));
     check(
-      `Der Nachweispfad ist vollständig durchsucht — ${scanned.length} Dateien unter ${scanRoots.join(' und ')} (A-A-59)`,
-      scanned.length >= TRAGENDE_DATEIEN.length && fehlend.length === 0,
-      fehlend.length === 0
-        ? `nur ${scanned.length} Dateien gefunden`
-        : `nicht angesehen, obwohl B-2.5 daran hängt: ${fehlend.join(', ')}`,
+      'Und die vier Dateien, an denen B-2.5 hängt, sind darunter (A-A-59)',
+      fehlend.length === 0,
+      `nicht angesehen, obwohl B-2.5 daran hängt: ${fehlend.join(', ')}`,
     );
 
     let offending = [];

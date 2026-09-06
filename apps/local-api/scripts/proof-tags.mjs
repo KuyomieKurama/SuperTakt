@@ -40,6 +40,24 @@
  *  - **Mehrdeutigkeit wird gefragt, nicht geraten.** Denselben Namen in zwei
  *    Ordnern löst der Dienst nicht auf den ersten Treffer auf.
  *
+ * ===========================================================================
+ * Was dieser Lauf über sich selbst mißt (A-A-66, A-A-67, E-094)
+ * ===========================================================================
+ *
+ * Zwei Abschnitte dieses Laufs sagten bis T-235 mehr, als sie maßen, und beide
+ * blieben grün, während die bewachte Regel des Produkts fehlte (T-234, 31.2
+ * und 31.3):
+ *
+ *  - **Abschnitt 5** zusicherte die gemeinsame Transaktion und maß eine Zahl.
+ *    Scheitert die Anfrage schon an der Gestaltprüfung, ist keine Tag-Anlage
+ *    geschehen, die etwas zurückzunehmen hätte — und die Zusage steht über der
+ *    leeren Menge. Seit T-235 mißt er seine eigene Vorbedingung von beiden
+ *    Seiten: der Fehlschlag ist keine Eingabeprüfung, und derselbe Rumpf ohne
+ *    die unmögliche Spalte legt das Tag an.
+ *  - **Abschnitt 9** maß „abgewiesen", nicht „abgewiesen weil". Seit T-235
+ *    steht neben dem Status **genau ein** `details`-Eintrag mit Feld und
+ *    Kennung, nach dem Muster, das Abschnitt 8 immer schon hatte.
+ *
  * Ausgabe: eine Zeile je Prüfung, am Ende eine Zusammenfassung. Exitcode 1,
  * sobald eine Prüfung fehlschlägt.
  */
@@ -576,17 +594,57 @@ try {
   // es nicht gibt. Ohne gemeinsame Transaktion bliebe das Tag stehen: ein
   // Vokabular, das niemand bestellt hat, und beim nächsten Versuch ein Treffer,
   // der aus einem Fehlschlag stammt.
+  //
+  // ===========================================================================
+  // A-A-67 — dieser Abschnitt sichert seine eigene Vorbedingung
+  // ===========================================================================
+  //
+  // Bis T-235 stand hier nur „die Anfrage scheitert", und danach zweimal eine
+  // Zahl. Beides ist wahr, wenn die Anfrage **vor** der Tag-Anlage scheitert —
+  // und dann steht die Zusage über die gemeinsame Transaktion über der leeren
+  // Menge. Gemessen (T-234, 31.3): Fehlschlag an einem 600 Zeichen langen Titel
+  // statt an der Kanban-Spalte, dazu `resolveTagNames` in einer **eigenen**
+  // Klammer — das Tag überlebt den Fehlschlag seines Todos, und der Lauf sagt
+  // 43/0, Code 0. Nachgestellt in T-235, zeichengleich.
+  //
+  // Zwei Bedingungen schließen das ein, von beiden Seiten:
+  //
+  //  1. **Der Fehlschlag ist keine Gestaltprüfung.** Die zod-Tür antwortet mit
+  //     `details` und einer Feldangabe; der verwiesene Datensatz, den es nicht
+  //     gibt, kommt ohne. A-A-67 nennt als erste Form „die Fehlerkennung der
+  //     Antwort" — die trägt hier **nicht**: gemessen ist beides
+  //     `validation_error` (siehe Bericht T-235). Was trägt, ist das
+  //     Vorhandensein der Feldangabe.
+  //  2. **Positiv verankert.** Derselbe Rumpf **ohne** die unmögliche Spalte
+  //     legt das Tag an. Damit ist gemessen und nicht angenommen, daß diese
+  //     Anfrage die Tag-Anlage überhaupt erreicht — der Fehlschlag lag dahinter.
+  //
+  // Der Rumpf steht **einmal** da, und beide Anfragen leiten sich daraus ab.
+  // Das ist E-094 Punkt 1 in Bauform: Eine Kunstquelle am Titel trifft die
+  // Gegenprobe genauso wie ihren Gegenstand; sie kann sich nicht an ihr
+  // vorbeischleichen.
+  //
+  // **Was diese Probe nicht mißt** (E-094 Punkt 2): daß die Prüfung der
+  // Kanban-Spalte im Quelltext *hinter* `resolveTagNames` **in derselben
+  // Klammer** steht. Das ist an der Tür nicht sichtbar. Gemessen wird die
+  // Wirkung von beiden Seiten — der Fehlschlag ist keine Eingabeprüfung, und
+  // dieselbe Anfrage legt ohne ihn ein Tag an.
+
+  const rumpf = { title: 'Scheitert absichtlich', tagNames: ['rücklauf'] };
 
   const beforeFailure = (await allTags()).length;
-  const doomed = await post('/todos', {
-    title: 'Scheitert absichtlich',
-    statusId: 'gibt-es-nicht',
-    tagNames: ['rücklauf'],
-  });
+  const doomed = await post('/todos', { ...rumpf, statusId: 'gibt-es-nicht' });
   check(
     'die Anfrage scheitert',
     doomed.status >= 400,
     `Status ${String(doomed.status)}`,
+  );
+
+  const doomedDetails = doomed.body?.error?.details ?? [];
+  check(
+    'und zwar nicht an der Gestaltprüfung — der Fehlschlag trägt keine Feldangabe (A-A-67)',
+    doomed.status === 422 && doomedDetails.length === 0,
+    `Status ${String(doomed.status)}, details ${JSON.stringify(doomedDetails)}`,
   );
 
   const afterFailure = await allTags();
@@ -599,6 +657,14 @@ try {
     'und es ist überhaupt kein Tag hinzugekommen',
     afterFailure.length === beforeFailure,
     `${String(beforeFailure)} vorher, ${String(afterFailure.length)} nachher`,
+  );
+
+  const anchor = await post('/todos', rumpf);
+  check(
+    'derselbe Rumpf ohne die unmögliche Spalte legt das Tag an — der Fehlschlag lag also dahinter (A-A-67)',
+    anchor.status === 201 &&
+      (anchor.body?.data?.createdTags ?? []).some((tag) => tagNameKey(tag.name) === 'rücklauf'),
+    `Status ${String(anchor.status)}: ${JSON.stringify(anchor.body?.data?.createdTags ?? anchor.text.slice(0, 200))}`,
   );
 
   // -------------------------------------------------------------------------
@@ -684,14 +750,53 @@ try {
   section('9  Was der Nachweis nicht misst, steht als Prüfung da');
   // -------------------------------------------------------------------------
 
+  // ===========================================================================
+  // A-A-66 — „abgewiesen weil", nicht „abgewiesen"
+  // ===========================================================================
+  //
+  // Bis T-235 stand hier zweimal `status === 422`, und mehr nicht. Gemessen
+  // (T-234, 31.2; in T-235 zeichengleich nachgestellt): Ein 600 Zeichen langer
+  // Titel bringt dieselbe Anfrage aus einem **anderen** Grund auf 422 — und
+  // dann darf die bewachte Produktivregel fehlen. Mit `.max(50)` → `.max(500)`
+  // nimmt Takt 51 Tagnamen mit 201 an, und der Lauf sagt weiterhin 43/0,
+  // Code 0. Der Nachbarabschnitt 8 hat es im selben Lauf immer richtig gemacht.
+  //
+  // Geprüft wird deshalb der **Grund**, und zwar scharf: **genau ein**
+  // `details`-Eintrag, an **diesem** Feld, mit **dieser** Kennung. Die Schärfe
+  // ist Absicht — scheitert die Anfrage zusätzlich an etwas anderem, steht die
+  // Zusicherung wieder über einem Fehlschlag, den sie nicht gemeint hat, und
+  // dann soll die Zeile rot sein und nicht grün (E-094 Punkt 1).
+  //
+  // Die Kennungen kommen von zod und gehen durch `toFieldErrors`
+  // (`http/input.ts`); der **Wert** steht bewußt in keiner Meldung (B-4.3).
+  const einGrund = (response, field, code) => {
+    const details = response.body?.error?.details ?? [];
+    return (
+      response.status === 422 &&
+      details.length === 1 &&
+      details[0]?.field === field &&
+      details[0]?.code === code
+    );
+  };
+  const grundDetail = (response) =>
+    `Status ${String(response.status)}, details ${JSON.stringify(response.body?.error?.details ?? [])}`;
+
   const tooMany = await post('/todos', {
     title: 'Zu viele Namen',
     tagNames: Array.from({ length: 51 }, (_, index) => `t${String(index)}`),
   });
-  check('mehr als fünfzig Namen werden abgewiesen', tooMany.status === 422, `Status ${String(tooMany.status)}`);
+  check(
+    'mehr als fünfzig Namen werden abgewiesen — und die Antwort sagt, daß es an ihrer Zahl lag (A-A-66)',
+    einGrund(tooMany, 'tagNames', 'too_big'),
+    grundDetail(tooMany),
+  );
 
   const blank = await post('/todos', { title: 'Leerer Name', tagNames: ['   '] });
-  check('ein Name aus lauter Leerzeichen wird abgewiesen', blank.status === 422, `Status ${String(blank.status)}`);
+  check(
+    'ein Name aus lauter Leerzeichen wird abgewiesen — und die Antwort nennt den leeren Namen (A-A-66)',
+    einGrund(blank, 'tagNames.0', 'too_small'),
+    grundDetail(blank),
+  );
 
   const untouched = await post('/todos', { title: 'Ohne Tagnamen' });
   check(

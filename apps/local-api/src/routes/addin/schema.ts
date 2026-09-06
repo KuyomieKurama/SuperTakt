@@ -422,15 +422,15 @@ export type BookBody = z.infer<typeof bookSchema>;
  * beiden Richtungen, und prüft dabei ausdrücklich, dass die Einträge
  * **dieselben** Objekte sind, die die Route benutzt.
  *
- * `apps/local-api/scripts/proof-openapi.mjs` führt daneben weiterhin zwei
- * Einzelimporte derselben beiden Schemata. Das ist keine Doppelung der Regel —
- * beide Seiten zeigen auf dieselben zwei Objekte, nicht auf zwei Abschriften
- * davon —, aber der Vermerk dort („liegen in fremder Hoheit und führen kein
- * `REQUEST_SCHEMAS`") stimmt seit dieser Zeile nicht mehr. `scripts/` gehört
- * domain-dev (E-053); der Austausch der beiden Zeilen gegen ein
- * `...ADDIN_SCHEMAS` ist als Abweichung gemeldet und nicht hier gemacht
- * worden. Bis dahin trägt die Wache oben, und sie hängt an keiner fremden
- * Datei.
+ * `apps/local-api/scripts/proof-openapi.mjs` führte daneben eine Weile zwei
+ * Einzelimporte derselben beiden Schemata, mit einem Vermerk („liegen in
+ * fremder Hoheit und führen kein `REQUEST_SCHEMAS`"), der seit T-149 nicht
+ * mehr stimmte. `scripts/` gehört domain-dev (E-053); der Austausch war als
+ * Abweichung gemeldet (O-CE) und ist mit T-159 geschehen — dort steht jetzt
+ * `...ADDIN_SCHEMAS` aus **dieser** Datei. Beide Nachweispfade lesen damit
+ * dieselbe Aufstellung, und die Wache oben hängt trotzdem an keiner fremden
+ * Datei: Sie wäre auch dann rot, wenn `proof:openapi` seine Einzelimporte
+ * behalten hätte. (Nachgemessen in T-239.)
  */
 export const REQUEST_SCHEMAS = Object.freeze({
   createAddinTodo: createTodoSchema,

@@ -7,8 +7,8 @@
 # Zusage brach: Ein Prüffall, der nur auf einem Läufer übersetzt wird, den man
 # einmal im Quartal startet, ist eine Absichtserklärung.
 #
-# Dieser Auftrag hat deshalb genau zwei Aufgaben, und beide sind Aufgaben, die
-# der Entwicklungsrechner hier nicht erledigen kann:
+# Dieser Auftrag hat deshalb genau drei Aufgaben, und alle drei sind Aufgaben,
+# die der Entwicklungsrechner hier nicht oder nicht verläßlich erledigen kann:
 #
 #   1. Die Rust-Prüffälle auf **Windows** übersetzen und fahren. Sie sind die
 #      letzte Kontrolle zwischen einer fremden Zeichenkette und `ShellExecuteW`
@@ -19,6 +19,16 @@
 #   2. Die **Lieferkette** messen (E-079). `pnpm audit` läuft auch hier, aber
 #      `cargo audit` gibt es auf diesem Rechner nicht — und 498 Kisten in
 #      `Cargo.lock` sind bisher nie auf Warnungen gesehen worden (T-B07).
+#   3. Den **Engine-Vergleich** fahren, und zwar so, daß ein Übersprung **rot**
+#      wird (E-095 Punkt 3). `proof:engines` steht bewußt nicht in `proof:all`:
+#      Er braucht `xvfb-run`, `python3-gi` mit `WebKit2 4.1`, Pillow und
+#      Playwrights Chromium und überspringt sich sonst ehrlich — mit Code 0.
+#      Auf einem Entwicklerrechner ist das richtig. Hier nicht: Hier steht die
+#      Umgebung fest, und ein grüner Lauf, der nichts gemessen hat, ist genau
+#      der Fehler, den diese Sitzung achtmal gefunden hat. Deshalb
+#      `--kein-uebersprung`, und deshalb hängt der Schritt am **Ausgangscode**
+#      und nicht an einer Textsuche im Protokoll — die wird beim ersten
+#      umformulierten Satz still blind.
 #
 # Was hier **nicht** steht: `pnpm check` in voller Länge und der Bau des
 # Erzeugnisses. Beides tut `release.yml` bereits, und beides doppelt zu fahren
@@ -138,3 +148,58 @@ jobs:
         shell: bash
         working-directory: apps/desktop/src-tauri
         run: cargo audit
+
+  # =========================================================================
+  # Der Engine-Vergleich, mit rotem Übersprung (E-095 Punkt 3, T-232/T-238)
+  # =========================================================================
+  engines:
+    name: Engine-Vergleich (WebKitGTK und Chromium)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+
+      - name: pnpm bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm --version
+
+      - name: Abhängigkeiten installieren
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      # Die vier Voraussetzungen des Laufs, in der Reihenfolge, in der er sie
+      # prüft: Pillow für die Auswertung, python3-gi mit GTK 3 und WebKit2 4.1
+      # für die Engine-Familie des Linux-Erzeugnisses, `xvfb-run` für das
+      # Fenster ohne Bildschirm. Fehlt eine davon, sagt der Lauf mit
+      # `--kein-uebersprung` **Code 1** statt sich still zu überspringen.
+      - name: Voraussetzungen für WebKitGTK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb \
+            python3-pil \
+            python3-gi \
+            gir1.2-gtk-3.0 \
+            gir1.2-webkit2-4.1
+
+      # Die vierte Voraussetzung. Chromium hat kein Debian-Paket, das hier
+      # trüge — Playwright bringt seine eigene Fassung mit, und genau die mißt
+      # der Lauf.
+      - name: Playwrights Chromium
+        shell: bash
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Engine-Vergleich, Übersprung ist rot
+        shell: bash
+        run: pnpm --filter @takt/web proof:engines --kein-uebersprung

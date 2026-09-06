@@ -775,7 +775,414 @@ const kunstWaechter = ({
   ].join('\n');
 
 /* ==================================================================== */
-/* 6  Die Prüfungen über den Bestand                                    */
+/* 6  Regel F — jedes direkte Kind von `.app` trägt eine Rasterzuordnung */
+/* ==================================================================== */
+
+/**
+ * ## Warum diese Regel und nicht nur die Berichtigung von T-214 (O-JH)
+ *
+ * `.app` ist ein Raster mit **benannten** Flächen. Ein Kind, das keine
+ * Zuordnung trägt, verschwindet nicht — es wird **selbst platziert**, und zwar
+ * lautlos: CSS Grid setzt es in die nächste freie Zelle. Genau das ist T-214
+ * passiert. Die Sitzungsleiste war das einzige selbstplatzierte Kind, landete
+ * ohne Hüllenmeldung in Zeile 1 / Spalte 1 — der Spur der Seitenleiste, **240
+ * px breit** — und verkleinerte den Inhaltsbereich um ihre eigene Höhe, **ohne
+ * die Fläche zu nutzen**: 240 × 153,5 px auf einem Fenster von 1280 px, und
+ * 111 px, die nach der Berichtigung zurückkamen.
+ *
+ * Behoben war danach der **Fehler**, nicht die **Fehlerklasse**. Und die Klasse
+ * hat zwei Wellen lang niemand gesehen, **weil die Fläche auf der Musterseite
+ * fehlt**: `designsystem.html` zeigt Bausteine, nie die Hülle. Ein Blick fängt
+ * das also nicht — nur ein Lauf.
+ *
+ * ## Was die Regel verlangt
+ *
+ * Jedes direkte Kind von `.app` muß **eine** dieser zwei Zusagen tragen:
+ *
+ *  1. eine **Rasterzuordnung** (`grid-area`, `grid-row`, `grid-column`, oder
+ *     eine der `-start`-Formen) in einer Regel, die entweder bloß auf seiner
+ *     Klasse steht (`.app__sidebar`) oder unter `.app` verankert ist
+ *     (`.app > .updatebar`); oder
+ *  2. eine Herausnahme **aus dem Fluß** (`position: fixed` oder `absolute`) —
+ *     dann ist der Knoten kein Rasterelement, und die Frage stellt sich nicht.
+ *     Das ist der Weg von `.skip-link` und von jeder Abdunklung (`.scrim`).
+ *
+ * Eine Regel wie `.irgendwas .updatebar { grid-area: … }` zählt **nicht**: Sie
+ * greift unter `.app` nicht, und ein Wächter, der sie zählte, wäre grün an
+ * einer Stelle, an der der Browser selbst platziert.
+ *
+ * ## Wie der Sammler zum Kind kommt
+ *
+ * Nicht jedes Kind ist ein HTML-Knoten. `{shell === null ? null :
+ * <ShellStatus …/>}` ist ein Baustein, und **genau darin lag T-214** — die
+ * Leiste stand hinter zwei Bausteinen. Der Sammler löst deshalb auf: Bedingung
+ * in ihre Zweige, Bruchstück in seine Kinder, Baustein in die Wurzeln seiner
+ * `return`-Ausdrücke, und das über beliebig viele Ebenen. Am Ende steht eine
+ * Liste **konkreter** HTML-Knoten mit ihren Klassen.
+ *
+ * ## Was der Sammler ausdrücklich nicht darf: schweigen
+ *
+ * Trifft er auf etwas, das er nicht lesen kann — einen Baustein, den er in
+ * `apps/web/src` nicht findet; einen Ausdruck, dessen Bauart er nicht kennt;
+ * einen Kreis —, dann ist das ein **Befund** und kein stilles Weiter. Ein
+ * Wächter, der über einen Wirt urteilt, den er nicht gelesen hat, urteilt über
+ * nichts (E-094 Punkt 3). Dasselbe gilt für die Ernte: **null** Wirte, **null**
+ * Kinder oder **null** aufgelöste Knoten sind rot, nie `ok`.
+ *
+ * ## Welchen Weg diese Regel ausläßt — und wer ihn geht (E-094 Punkt 2)
+ *
+ * Drei Wege, alle drei benannt:
+ *
+ *  1. **Den gerenderten.** Dieser Lauf liest Quelltext. Ob der Browser den
+ *     Knoten wirklich in die genannte Fläche setzt, mißt er nicht. Diesen Weg
+ *     geht `visual-qa` am laufenden Fenster — und genau der hat T-214 gefunden,
+ *     nachdem zwei Wellen lang niemand hinsah. Der Lauf ersetzt ihn nicht, er
+ *     macht ihn entbehrlich für die **Klasse**.
+ *  2. **Den zur Laufzeit gebauten Klassennamen.** `cx("shellnotes", className)`
+ *     wird mit den Zeichenketten gelesen, die dastehen; ein Name, der erst aus
+ *     einer Bindung entsteht, bleibt ungelesen. Er wäre allerdings auch für
+ *     jeden Leser unsichtbar — dieselbe Grenze, dieselbe Person.
+ *  3. **Die Kaskade.** Der Lauf fragt, ob **irgendeine** greifende Regel eine
+ *     Zuordnung erklärt; er rechnet keine Spezifität aus und sieht nicht, ob
+ *     eine spätere Regel sie mit `grid-area: auto` zurücknimmt. Das ist eine
+ *     bewußte Untergrenze: Wer die Kaskade nachbaut, baut einen zweiten
+ *     Browser.
+ */
+
+/** Die Klasse, die die Hülle trägt. Alles Weitere hängt an ihr. */
+const SHELL_CLASS = 'app';
+
+/**
+ * Fremde Bausteine, die **kein eigenes DOM-Element** zeichnen und ihre Kinder
+ * durchreichen. Jeder Eintrag mit seinem Grund — und keiner darf ungenutzt
+ * herumstehen: Der Prüffall unter dieser Tafel verlangt, daß der Sammler jeden
+ * von ihnen wirklich passiert. Wird einer überflüssig, wird der Lauf rot und
+ * der Eintrag gehört gelöscht, nicht behalten.
+ *
+ * Ohne diese Tafel bliebe der Sammler bei `Dialog.Root` stehen und meldete
+ * einen unlesbaren Wirt — richtig, aber unbrauchbar: Der Dialog **ist** ein
+ * direktes Kind von `.app`, und seine Abdunklung liegt fest im Fenster.
+ */
+const DURCHREICHER = Object.freeze([
+  {
+    name: 'Dialog.Root',
+    grund:
+      'Die Wurzel von `@ark-ui/react`s Dialog ist ein Zusammenhang, kein Element. Was im ' +
+      'Baum landet, ist das erste eigene Kind darin — bei `DialogSurface` die Abdunklung.',
+  },
+]);
+
+/**
+ * Die geschweifte Klammer in JSX — `{fehler ? … : null}`.
+ *
+ * Von Hand und nicht ueber `ts.isJsxExpressionContainer`: Die Kurzform steht in
+ * dieser TypeScript-Fassung nicht in der oeffentlichen Schnittstelle, und der
+ * Knoten heisst dort `JsxExpression`. Ein `ts.isJsx…`, das es nicht gibt, ist
+ * `undefined` — der Aufruf wuerde werfen statt still zu schweigen, aber
+ * verlassen kann man sich darauf nicht.
+ */
+const istJsxKlammer = (node) => node.kind === ts.SyntaxKind.JsxExpression;
+
+/** Ist dieser Ausdruck ein Nichts, das nichts in den Baum legt? */
+const rendersNothing = (node) =>
+  node.kind === ts.SyntaxKind.NullKeyword ||
+  node.kind === ts.SyntaxKind.FalseKeyword ||
+  node.kind === ts.SyntaxKind.TrueKeyword ||
+  (ts.isIdentifier(node) && node.text === 'undefined');
+
+/** Steckt in diesem Teilbaum irgendwo JSX? */
+const containsJsx = (node) => {
+  let found = false;
+  walk(node, (child) => {
+    if (
+      ts.isJsxElement(child) ||
+      ts.isJsxSelfClosingElement(child) ||
+      ts.isJsxFragment(child)
+    ) {
+      found = true;
+    }
+  });
+  return found;
+};
+
+/**
+ * Die Rückgabeausdrücke einer Bausteinfunktion — **ihre eigenen**, nicht die
+ * ihrer verschachtelten Funktionen. Ein `return` innerhalb einer Rückrufliste
+ * (`items.map(() => <li/>)`) gehört nicht zur Wurzel dieses Bausteins.
+ */
+const returnedExpressions = (fn) => {
+  const body = fn.body;
+  if (body === undefined) return [];
+  if (!ts.isBlock(body)) return [body];
+  const found = [];
+  const descend = (node) => {
+    ts.forEachChild(node, (child) => {
+      if (
+        ts.isFunctionDeclaration(child) ||
+        ts.isFunctionExpression(child) ||
+        ts.isArrowFunction(child) ||
+        ts.isClassDeclaration(child)
+      ) {
+        return;
+      }
+      if (ts.isReturnStatement(child)) {
+        if (child.expression !== undefined) found.push(child.expression);
+        return;
+      }
+      descend(child);
+    });
+  };
+  descend(body);
+  return found;
+};
+
+/**
+ * Sucht die Erklärung eines Bausteins in den übergebenen Quellen.
+ *
+ * Zwei Erklärungen desselben Namens sind ein Befund und keine Auswahl: Der
+ * Lauf soll nicht raten, welche von beiden an dieser Stelle steht.
+ *
+ * @returns {{ fn: ts.Node } | { fehler: string }}
+ */
+const componentDeclaration = (name, quellen) => {
+  const treffer = [];
+  for (const file of quellen) {
+    walk(file, (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name !== undefined && node.name.text === name) {
+        treffer.push({ fn: node, datei: file.fileName });
+        return;
+      }
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === name &&
+        node.initializer !== undefined &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      ) {
+        treffer.push({ fn: node.initializer, datei: file.fileName });
+      }
+    });
+  }
+  if (treffer.length === 0) {
+    return {
+      fehler:
+        `der Baustein <${name}> ist unter apps/web/src nicht zu finden — dieser Lauf urteilt ` +
+        'nicht über einen Wirt, den er nicht gelesen hat',
+    };
+  }
+  if (treffer.length > 1) {
+    return {
+      fehler:
+        `der Baustein <${name}> ist ${String(treffer.length)}-mal erklärt ` +
+        `(${treffer.map((t) => t.datei).join(', ')}) — der Lauf soll nicht raten, welcher gemeint ist`,
+    };
+  }
+  return { fn: treffer[0].fn };
+};
+
+/**
+ * Löst einen JSX-Ausdruck in die **konkreten HTML-Knoten** auf, die daraus im
+ * Baum landen können.
+ *
+ * @param {ts.Node} node
+ * @param {ReadonlyArray<ts.SourceFile>} quellen
+ * @param {{ traeger: Array<{ tag: string; klassen: string[]; weg: string }>; befunde: string[]; durchgereicht: Set<string>; pfad: string[] }} ernte
+ * @param {string} weg Wie der Sammler hierher kam — steht im Befund.
+ */
+const resolveIntoElements = (node, quellen, ernte, weg) => {
+  if (ts.isParenthesizedExpression(node)) {
+    resolveIntoElements(node.expression, quellen, ernte, weg);
+    return;
+  }
+  if (istJsxKlammer(node)) {
+    // `{/* nur ein Kommentar */}` hat keinen Ausdruck.
+    if (node.expression === undefined) return;
+    resolveIntoElements(node.expression, quellen, ernte, weg);
+    return;
+  }
+  if (ts.isJsxText(node)) {
+    if (node.text.trim().length === 0) return;
+    ernte.befunde.push(
+      `${weg}: roher Text als Kind von .${SHELL_CLASS} — ein anonymes Rasterelement, das keine ` +
+        'Zuordnung tragen kann',
+    );
+    return;
+  }
+  if (rendersNothing(node)) return;
+  if (ts.isJsxFragment(node)) {
+    for (const child of node.children) resolveIntoElements(child, quellen, ernte, weg);
+    return;
+  }
+  if (ts.isConditionalExpression(node)) {
+    resolveIntoElements(node.whenTrue, quellen, ernte, weg);
+    resolveIntoElements(node.whenFalse, quellen, ernte, weg);
+    return;
+  }
+  if (ts.isBinaryExpression(node) && CONDITIONAL_OPERATORS.has(node.operatorToken.kind)) {
+    /*
+     * Nur die rechte Seite wird gezeichnet — bei `&&` immer, bei `||` und `??`
+     * jedenfalls dann, wenn links kein JSX steht. Steht dort welches, sagt der
+     * Lauf es, statt die Hälfte stillschweigend zu überspringen.
+     */
+    if (containsJsx(node.left)) {
+      ernte.befunde.push(
+        `${weg}: links von \`${node.operatorToken.getText()}\` steht JSX — diesen Zweig liest der ` +
+          'Sammler nicht, und er tut nicht so, als hätte er es',
+      );
+    }
+    resolveIntoElements(node.right, quellen, ernte, weg);
+    return;
+  }
+  if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+    const opening = ts.isJsxElement(node) ? node.openingElement : node;
+    const tag = tagNameOf(opening);
+    if (isHtmlTag(tag)) {
+      ernte.traeger.push({ tag, klassen: classTokensOf(opening), weg: `${weg} → <${tag}>` });
+      return;
+    }
+    const durchreicher = DURCHREICHER.find((eintrag) => eintrag.name === tag);
+    if (durchreicher !== undefined) {
+      ernte.durchgereicht.add(tag);
+      if (!ts.isJsxElement(node)) {
+        ernte.befunde.push(`${weg}: <${tag}> reicht durch, hat hier aber keine Kinder`);
+        return;
+      }
+      for (const child of node.children) {
+        resolveIntoElements(child, quellen, ernte, `${weg} → <${tag}>`);
+      }
+      return;
+    }
+    if (ernte.pfad.includes(tag)) {
+      ernte.befunde.push(`${weg}: <${tag}> zeichnet sich selbst als Wurzel — der Sammler dreht im Kreis`);
+      return;
+    }
+    const erklaerung = componentDeclaration(tag, quellen);
+    if ('fehler' in erklaerung) {
+      ernte.befunde.push(`${weg}: ${erklaerung.fehler}`);
+      return;
+    }
+    ernte.pfad.push(tag);
+    for (const rueckgabe of returnedExpressions(erklaerung.fn)) {
+      resolveIntoElements(rueckgabe, quellen, ernte, `${weg} → <${tag}>`);
+    }
+    ernte.pfad.pop();
+    return;
+  }
+  ernte.befunde.push(
+    `${weg}: einen Ausdruck dieser Bauart (${ts.SyntaxKind[node.kind]}) liest der Sammler nicht — ` +
+      `\`${node.getText().replace(/\s+/g, ' ').slice(0, 60)}\``,
+  );
+};
+
+/**
+ * Die Rasterzusagen der Stilblätter.
+ *
+ * Gezählt wird nur, was **unter `.app`** greift: eine bloße Klassenregel
+ * (`.app__sidebar { … }`) oder eine unter `.app` verankerte
+ * (`.app > .updatebar { … }`). `.woanders .updatebar` zählt nicht.
+ *
+ * @param {ReadonlyArray<{ name: string; text: string }>} blaetter
+ */
+const gridAssignments = (blaetter) => {
+  const platziert = new Set();
+  const ausserhalb = new Set();
+  const PLACEMENT = /(?:^|[;{\s])grid-(?:area|row|column|row-start|column-start|row-end|column-end)\s*:/i;
+  const OUT_OF_FLOW = /(?:^|[;{\s])position\s*:\s*(?:fixed|absolute)\s*(?:;|$|})/i;
+  for (const { text } of blaetter) {
+    const withoutComments = text.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '));
+    const blocks = /([^{}]+)\{([^{}]*)\}/g;
+    let match = blocks.exec(withoutComments);
+    while (match !== null) {
+      const body = match[2];
+      const setzt = PLACEMENT.test(body);
+      const fliegt = OUT_OF_FLOW.test(body);
+      if (setzt || fliegt) {
+        for (const einzeln of match[1].split(',')) {
+          const teile = einzeln.trim().split(/\s*[>+~]\s*|\s+/).filter((teil) => teil.length > 0);
+          if (teile.length === 0) continue;
+          const verankert =
+            teile.length === 1 || /\.app(?![\w-])/.test(teile[0]) || teile[0] === `.${SHELL_CLASS}`;
+          if (!verankert) continue;
+          for (const treffer of teile[teile.length - 1].matchAll(/\.([\w-]+)/g)) {
+            if (setzt) platziert.add(treffer[1]);
+            if (fliegt) ausserhalb.add(treffer[1]);
+          }
+        }
+      }
+      match = blocks.exec(withoutComments);
+    }
+  }
+  return { platziert, ausserhalb };
+};
+
+/**
+ * Regel F über einen Bestand — den echten oder einen erfundenen.
+ *
+ * **Beides geht durch dieselbe Funktion.** Die Gegenproben in Abschnitt 8
+ * reichen eine Kunstquelle **statt** des Bestandes hinein und nicht **neben**
+ * ihn: Sonst prüften sie das Sieb und nie die Ernte (E-094 Punkt 1).
+ *
+ * @param {{ quellen: ReadonlyArray<ts.SourceFile>; blaetter: ReadonlyArray<{ name: string; text: string }> }} bestand
+ */
+const findChildrenWithoutGridArea = ({ quellen, blaetter }) => {
+  /** @type {{ traeger: Array<{ tag: string; klassen: string[]; weg: string }>; befunde: string[]; durchgereicht: Set<string>; pfad: string[] }} */
+  const ernte = { traeger: [], befunde: [], durchgereicht: new Set(), pfad: [] };
+  let wirte = 0;
+  let kinder = 0;
+
+  for (const file of quellen) {
+    for (const opening of jsxOpenings(file)) {
+      if (!classTokensOf(opening).includes(SHELL_CLASS)) continue;
+      wirte += 1;
+      const element = elementOf(opening);
+      if (!ts.isJsxElement(element)) {
+        ernte.befunde.push(`${positionOf(opening)} — .${SHELL_CLASS} hat keine Kinder`);
+        continue;
+      }
+      for (const child of element.children) {
+        if (ts.isJsxText(child) && child.text.trim().length === 0) continue;
+        if (istJsxKlammer(child) && child.expression === undefined) continue;
+        kinder += 1;
+        resolveIntoElements(child, quellen, ernte, `${positionOf(opening)} Kind ${String(kinder)}`);
+      }
+    }
+  }
+
+  const { platziert, ausserhalb } = gridAssignments(blaetter);
+  for (const traeger of ernte.traeger) {
+    if (traeger.klassen.some((klasse) => platziert.has(klasse))) continue;
+    if (traeger.klassen.some((klasse) => ausserhalb.has(klasse))) continue;
+    ernte.befunde.push(
+      `${traeger.weg} — trägt weder eine Rasterzuordnung noch eine Herausnahme aus dem Fluß ` +
+        `(Klassen: ${traeger.klassen.length === 0 ? 'keine' : traeger.klassen.join(', ')}). ` +
+        'CSS Grid setzt diesen Knoten selbst — lautlos und in die falsche Zelle (T-214)',
+    );
+  }
+
+  return { befunde: ernte.befunde, traeger: ernte.traeger, wirte, kinder, durchgereicht: ernte.durchgereicht, platziert, ausserhalb };
+};
+
+/**
+ * Ein erfundener Bestand für die Gegenproben: eine Hülle, ein Stilblatt.
+ * Er kommt ohne den echten Baum aus — sonst mäße die Gegenprobe den Zustand
+ * des Bestandes und nicht die Regel.
+ */
+const kunstHuelle = (kinder, css) => ({
+  quellen: [parse('kunst.tsx', `const App = () => (\n  <div className="app">\n${kinder}\n  </div>\n);\n`)],
+  blaetter: [{ name: 'kunst.css', text: css }],
+});
+
+/** Das Stilblatt, das jede richtige Bauart der Gegenproben trägt. */
+const KUNST_CSS = [
+  '.app { display: grid; }',
+  '.app__side { grid-area: side; }',
+  '.app > .leiste { grid-area: leiste; }',
+  '.abdunklung { position: fixed; inset: 0; }',
+  '.woanders .fremd { grid-area: fremd; }',
+].join('\n');
+
+/* ==================================================================== */
+/* 7  Die Prüfungen über den Bestand                                    */
 /* ==================================================================== */
 
 process.stdout.write(
@@ -905,8 +1312,56 @@ check('die Falltafel ist nicht stumpf — sie faellt beide Urteile', () => {
   }
 });
 
+heading('F  Jedes direkte Kind von `.app` trägt eine Rasterzuordnung (T-214, O-JH)');
+
+const rasterErnte = findChildrenWithoutGridArea({
+  quellen: parsedSources,
+  blaetter: styleFiles.map((name) => ({ name, text: readFileSync(path.join(styleRoot, name), 'utf8') })),
+});
+
+check('die Ernte steht vor der Zusage: eine Hülle, Kinder, aufgelöste Knoten (E-094 Punkt 3)', () => {
+  /*
+   * Zuerst die Menge, dann das Urteil. Fände der Sammler kein `.app`, keine
+   * Kinder oder keinen einzigen konkreten Knoten, wäre die Regel darunter
+   * leer wahr — und der Lauf grün, gerade weil er nichts gemessen hat.
+   */
+  assert.equal(rasterErnte.wirte, 1, `.${SHELL_CLASS} steht ${String(rasterErnte.wirte)}-mal statt einmal`);
+  assert.ok(rasterErnte.kinder > 0, 'null direkte Kinder gefunden — das darf kein `ok` sein');
+  assert.ok(
+    rasterErnte.traeger.length > 0,
+    'null konkrete Knoten aufgelöst — dann urteilt die Regel darunter über nichts',
+  );
+  assert.ok(
+    rasterErnte.platziert.size > 0,
+    'null Rasterzuordnungen in den Stilblättern gefunden — dann mißt der Sammler die Stilblätter nicht',
+  );
+});
+
+check('kein selbstplatziertes Kind — jedes trägt eine Fläche oder liegt außerhalb des Flusses', () => {
+  assert.deepEqual(
+    rasterErnte.befunde,
+    [],
+    'Ein Kind ohne Zuordnung setzt CSS Grid selbst, und zwar lautlos (T-214: 240 px breit in der ' +
+      `Spur der Seitenleiste):\n        ${rasterErnte.befunde.join('\n        ')}`,
+  );
+});
+
+check('jeder Durchreicher wird wirklich passiert — sonst gehört er gelöscht', () => {
+  /*
+   * Dieselbe Bauart wie die geduldeten Sätze bei Regel D: Die Tafel löst sich
+   * selbst auf. Ein Eintrag, den der Sammler nie erreicht, macht keinen
+   * Bestand sicherer — er macht nur eine künftige Wurzel unsichtbar.
+   */
+  for (const { name } of DURCHREICHER) {
+    assert.ok(
+      rasterErnte.durchgereicht.has(name),
+      `der Durchreicher <${name}> steht in der Tafel, wird aber nirgends passiert`,
+    );
+  }
+});
+
 /* ==================================================================== */
-/* 7  Die Gegenproben — jede Regel gegen eine eingesetzte Verletzung    */
+/* 8  Die Gegenproben — jede Regel gegen eine eingesetzte Verletzung    */
 /* ==================================================================== */
 
 /*
@@ -917,7 +1372,7 @@ check('die Falltafel ist nicht stumpf — sie faellt beide Urteile', () => {
  * teuer.
  */
 
-heading('F  Gegenproben — jede Regel gegen eine eingesetzte Verletzung');
+heading('G  Gegenproben — jede Regel gegen eine eingesetzte Verletzung');
 
 /** Wie viele Prüfungen vor den Gegenproben liefen — damit die Schlußzeile zählt statt behauptet. */
 const beforeCounterProbes = passed + failed;
@@ -1097,6 +1552,121 @@ check('Regel E findet eine eingesetzte Abweichung auf jeder der beiden Seiten', 
   }
 });
 
+check('Regel F findet das Kind ohne Rasterzuordnung — auch hinter zwei Bausteinen (T-214)', () => {
+  /*
+   * Der letzte Fall ist der von T-214, Zeichen für Zeichen nachgestellt: Die
+   * Leiste steht nicht als `<div>` unter `.app`, sondern hinter einer
+   * Bedingung **und** einem Baustein. Ein Sammler, der nur die unmittelbaren
+   * HTML-Kinder ansähe, bliebe hier grün — und genau das war zwei Wellen lang
+   * der Fall.
+   */
+  for (const [beschreibung, kinder] of [
+    ['der nackte Knoten', '    <div className="leiste-ohne" />'],
+    ['ganz ohne Klasse', '    <div />'],
+    ['hinter einer Bedingung', '    {offen ? <div className="leiste-ohne" /> : null}'],
+    [
+      'hinter einem Baustein',
+      '    <Leiste />\n  </div>\n);\nconst Leiste = () => <div className="leiste-ohne" />;\nconst Rest = () => (\n  <div>',
+    ],
+    [
+      'hinter Bedingung und Baustein — der Fall T-214',
+      '    {shell === null ? null : <Hinweis />}\n  </div>\n);\n' +
+        'function Hinweis() {\n  if (leer) return null;\n  return <div className="leiste-ohne" />;\n}\nconst Rest = () => (\n  <div>',
+    ],
+    [
+      'in einem Bruchstück',
+      '    <Gruppe />\n  </div>\n);\nconst Gruppe = () => (\n  <>\n    <div className="app__side" />\n    <div className="leiste-ohne" />\n  </>\n);\nconst Rest = () => (\n  <div>',
+    ],
+    [
+      'nur unter einem fremden Vorfahren platziert',
+      '    <div className="fremd" />',
+    ],
+  ]) {
+    const { befunde } = findChildrenWithoutGridArea(kunstHuelle(kinder, KUNST_CSS));
+    assert.equal(befunde.length, 1, `Regel F sieht die Verletzung nicht: ${beschreibung}\n${befunde.join('\n')}`);
+  }
+});
+
+check('Regel F meldet die richtige Bauart nicht', () => {
+  /*
+   * Die teurere Hälfte. Ohne sie wäre die Regel mit einer Zeile zu erfüllen,
+   * die alles meldet — und würde binnen einer Welle gelockert.
+   */
+  for (const [beschreibung, kinder] of [
+    ['die bloße Klassenregel', '    <div className="app__side" />'],
+    ['die unter `.app` verankerte Regel', '    <div className="leiste" />'],
+    ['aus dem Fluß genommen', '    <div className="abdunklung" />'],
+    ['zwei Klassen, eine trägt', '    <div className="etwas leiste" />'],
+    ['hinter einer Bedingung, aber zugeordnet', '    {offen ? <div className="leiste" /> : null}'],
+    ['beide Zweige zugeordnet', '    {offen ? <div className="leiste" /> : <div className="app__side" />}'],
+    ['ein `null`-Zweig', '    {offen ? null : <div className="leiste" />}'],
+    ['ein Kommentar zwischen den Kindern', '    {/* ein Wort dazu */}\n    <div className="leiste" />'],
+    [
+      'ein Baustein mit zugeordneter Wurzel',
+      '    <Leiste />\n  </div>\n);\nconst Leiste = () => <div className="leiste" />;\nconst Rest = () => (\n  <div>',
+    ],
+    [
+      'ein Durchreicher zwischen Baustein und Knoten',
+      '    <Dialog.Root>\n      <div className="abdunklung" />\n    </Dialog.Root>',
+    ],
+  ]) {
+    const { befunde } = findChildrenWithoutGridArea(kunstHuelle(kinder, KUNST_CSS));
+    assert.deepEqual(befunde, [], `Regel F meldet die richtige Bauart: ${beschreibung}`);
+  }
+});
+
+check('Regel F schweigt nicht über das, was sie nicht lesen kann', () => {
+  /*
+   * Der Kern von E-094 Punkt 3, auf den Sammler angewandt: Ein Wirt, den der
+   * Lauf nicht findet, ist ein Befund und kein stilles Weiter. Ohne diese
+   * Gegenprobe wäre der Sammler an jedem unbekannten Baustein still grün —
+   * die bequemste aller Lockerungen.
+   */
+  for (const [beschreibung, kinder] of [
+    ['ein Baustein ohne Erklärung', '    <Fremd />'],
+    [
+      'zwei Erklärungen desselben Namens',
+      '    <Leiste />\n  </div>\n);\nconst Leiste = () => <div className="leiste" />;\nfunction Leiste() {\n  return <div className="leiste" />;\n}\nconst Rest = () => (\n  <div>',
+    ],
+    ['ein Aufruf statt eines Knotens', '    {baueLeiste()}'],
+    ['JSX links vom `||`', '    {<div className="leiste" /> || null}'],
+    ['roher Text', '    Ein Wort'],
+    [
+      'ein Baustein, der sich selbst als Wurzel zeichnet',
+      '    <Leiste />\n  </div>\n);\nfunction Leiste() {\n  return <Leiste />;\n}\nconst Rest = () => (\n  <div>',
+    ],
+  ]) {
+    const { befunde } = findChildrenWithoutGridArea(kunstHuelle(kinder, KUNST_CSS));
+    assert.ok(befunde.length > 0, `Regel F schweigt über: ${beschreibung}`);
+  }
+});
+
+check('Regel F ist rot, wenn der Sammler nichts erntet (E-094 Punkt 3)', () => {
+  /*
+   * Die Kehrseite: Ein Sammler, der nichts findet, meldet keine Befunde — und
+   * ohne diese Probe hieße das `ok`. Gemessen wird deshalb an den **Zählern**,
+   * durch dieselbe Funktion wie der Bestand.
+   */
+  const ohneHuelle = findChildrenWithoutGridArea({
+    quellen: [parse('kunst.tsx', 'const V = () => <div className="etwas" />;\n')],
+    blaetter: [{ name: 'kunst.css', text: KUNST_CSS }],
+  });
+  assert.equal(ohneHuelle.wirte, 0, 'die Kunstquelle trägt eine Hülle, die sie nicht tragen sollte');
+  assert.deepEqual(ohneHuelle.befunde, [], 'ohne Hülle gibt es nichts zu melden — und genau das ist die Gefahr');
+
+  const leereHuelle = findChildrenWithoutGridArea(kunstHuelle('', KUNST_CSS));
+  assert.equal(leereHuelle.wirte, 1, 'die leere Hülle wird nicht gefunden');
+  assert.equal(leereHuelle.kinder, 0, 'die leere Hülle hat Kinder');
+  assert.deepEqual(leereHuelle.befunde, [], 'eine leere Hülle meldet nichts — die Zähler tragen das Urteil');
+
+  const ohneBlatt = findChildrenWithoutGridArea({
+    quellen: kunstHuelle('    <div className="leiste" />', KUNST_CSS).quellen,
+    blaetter: [],
+  });
+  assert.equal(ohneBlatt.platziert.size, 0, 'ohne Stilblatt findet der Sammler eine Zuordnung');
+  assert.equal(ohneBlatt.befunde.length, 1, 'ohne Stilblatt bleibt das zugeordnete Kind unbeanstandet');
+});
+
 check('die Falltafel traegt und nicht nur der Textvergleich', () => {
   /*
    * Der Textvergleich allein wuerde die hintere Grenze schon melden. Diese
@@ -1115,7 +1685,7 @@ check('die Falltafel traegt und nicht nur der Textvergleich', () => {
 });
 
 /* ==================================================================== */
-/* 8  Ergebnis                                                          */
+/* 9  Ergebnis                                                          */
 /* ==================================================================== */
 
 process.stdout.write(`\n${'═'.repeat(58)}\n`);
@@ -1132,5 +1702,15 @@ process.stdout.write(
     `${String(sources.length)} Quelldateien, ${String(HTML_ENTRY_POINTS.length)} Einstiegsseiten, ` +
     `${String(styleFiles.length)} Stilblätter, ` +
     `${String(liveClasses.length)} benannte Live-Regionen, ` +
-    `${String(ANREDE_AUSNAHMEN.length)} geduldete Sätze.\n`,
+    `${String(ANREDE_AUSNAHMEN.length)} geduldete Sätze.\n` +
+    /*
+     * Die Ernte von Regel F steht in der Ausgabe und nicht in einem Bericht:
+     * Wer die Zahl der Kinder liest, sieht sofort, wenn der Sammler eines
+     * verloren hat — ohne daß dafür jemand den Lauf öffnen muß.
+     */
+    `Unter .${SHELL_CLASS}: ${String(rasterErnte.kinder)} direkte Kinder, aufgelöst zu ` +
+    `${String(rasterErnte.traeger.length)} Knoten ` +
+    `(${rasterErnte.traeger.map((t) => `<${t.tag}>${t.klassen.length === 0 ? '' : `.${t.klassen[0]}`}`).join(', ')}); ` +
+    `${String(rasterErnte.platziert.size)} Klassen mit Rasterzuordnung, ` +
+    `${String(rasterErnte.ausserhalb.size)} außerhalb des Flusses.\n`,
 );

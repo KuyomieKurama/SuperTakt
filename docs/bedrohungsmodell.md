@@ -5233,7 +5233,7 @@ mit `../../takt.db` und mit einem unbekannten Namen wirft nicht und ändert nich
 | **T-156-5** | Hinweis | **A-A-20 fängt den Fall nicht, für den sie geschrieben wurde.** `Record<ExportSourcePath, true>` hält Typ und Laufzeitliste zusammen; es hält die **Zahl** nicht fest. Wer `'todo.dueDate'` sauber an beiden Stellen einträgt, übersetzt grün. Die Auflage verlangte eine ausgeschriebene Liste der zwölf in einem Prüffall, und genau die fehlt. Neufassung als **A-A-20′**. |
 | **T-156-6** | Hinweis | **Die Bildgrenze ist als Zahl 8 454 144, nicht 8 388 608.** Gezählt wird nach dem Lesen eines Blocks von 65 536 Bytes, der Abbruch geschieht also frühestens danach. Als Sache ist die Auflage erfüllt (nichts wird kopiert, nichts kodiert); als Zahl ist sie wie A-V-6 zu berichtigen. Neufassung als **A-A-15′**. |
 | **T-156-7** | Hinweis | **`logger.lifecycle` nimmt weiterhin `string`** (A-V-21 aus T-145, unerledigt). Der Riegel ist eine Gestaltprüfung, siehe 21.5. |
-| **T-156-8** | Hinweis | **Die erste Zeile eines Verweises zeigt das Schema nicht.** `attachmentLabel` schneidet `https://` beziehungsweise `http://` weg; eine Herabstufung von `https` auf `http` steht damit nur in der zweiten, kleineren Zeile. Bei einem Verweis gibt es keine Rückfrage (A-A-7, richtig so), also ist die Liste die einzige Anzeige vor dem Klick. Kein Fund im Sinne von R-22 — Anzeige und Ziel bleiben zeichengleich, es wird nur weniger angezeigt —, aber die Verkürzung nimmt genau das Stück weg, an dem man eine Herabstufung sähe. |
+| **T-156-8** — *erledigt seit T-168; die Beschreibung hier war danach falsch, berichtigt in T-241 (2026-09-06), Begründung in 32.1* | Hinweis, geschlossen | **Der Satz, der bis heute hier stand, lautete: „`attachmentLabel` schneidet `https://` beziehungsweise `http://` weg". Für `http://` war er falsch — und er beschrieb damit ausgerechnet die Sicherheitseigenschaft weg, um die es in dieser Zeile geht.** Heute nachgemessen an `packages/domain/src/attachment.ts:1044` (`url.protocol === 'https:' ? rest : protocol + '//' + rest`), Werte aus dem Lauf: `https://beispiel.example/tickets/4711` → `beispiel.example/tickets/4711`; `http://beispiel.example/tickets/4711` → **`http://beispiel.example/tickets/4711`**; `http://beispiel.example/` → **`http://beispiel.example`**; `http://beispiel.example:8443/a?b=1#c` → **`http://beispiel.example:8443/a?b=1#c`**. **Weg fällt genau ein Schema, und zwar das, das nichts unterscheidet.** Jedes andere — heute nur `http:` — bleibt sichtbar stehen. Damit steht die **Herabstufung von `https` auf `http` schon in der ersten Zeile**, also dort, wo sie vor dem Klick gebraucht wird: Bei einem Verweis fragt Takt nicht zurück (A-A-7, richtig so), die Liste ist die ganze Anzeige. Das sichtbare `http://` ist eine **bewußte** Abweichung von X-04 (zwei Anhänge tragen nie dieselbe Ersatzbeschriftung — `http://a/b` und `https://a/b` sind zwei Anhänge) und von spec-ux-reviewer in T-237 erneut geprüft und **bestätigt**. Kein Fund im Sinne von R-22: Anzeige und Ziel bleiben zeichengleich. **Wer diese Zeile künftig als Auftrag läse, kürzte eine Sicherheitseigenschaft weg** — deshalb steht die Berichtigung hier und nicht als Nachtrag am Ende. |
 | **T-156-9** | Hinweis | **Semgrep Guardian zum zehnten, 42Crunch zum neunten Mal ohne Werkzeug.** Die Lieferkette ist weiterhin nie gemessen worden, und seit `v0.1.0` sind Binärdateien draußen. Beschaffungsentscheidung, unverändert. |
 | **T-156-10** | Hinweis | **Fünf Nachweisläufe konnten nicht laufen**, weil der Port belegt war (21.1). Sie stehen hier als *nicht gemessen* und nicht als grün. |
 
@@ -7433,18 +7433,44 @@ sondern ein Wächter, an dem man vorbeigehen kann — dieselbe Art wie T-176-1, 
 Der Test lautet `noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote')`. **Über
 der leeren Liste ist `every` wahr.** Die Zahl zwei, die der Kommentar nennt, wird nirgends geprüft.
 
-**Verstümmelung, gemessen.** Im Spiegel schreibt `service-scenario.mjs` an seinen drei Stellen
-statt `INTERNAL_NOTE` eine andere Zeichenkette — genau das, was passiert, wenn jemand den
-Durchlauf umbaut, ein Todo streicht oder die Vermerksroute den Text nicht mehr zurückgibt. Ergebnis:
+**Verstümmelung, gemessen** — *Stand 2026-09-06, nachgemessen in T-241; die Zahlen der ersten Fassung
+waren teils falsch und teils überholt, siehe die zweite Tafel und 32.3.* Im Spiegel schreibt
+`service-scenario.mjs` an seinen drei Stellen statt `INTERNAL_NOTE` eine andere Zeichenkette — genau
+das, was passiert, wenn jemand den Durchlauf umbaut, ein Todo streicht oder die Vermerksroute den
+Text nicht mehr zurückgibt.
+
+**Erste Fassung (T-206, 2026-09-05) — als Stand aufbewahrt, nicht als geltende Zahl:**
 
 | Zustand | Antworten mit dem Vermerk | Lauf |
 |---|---|---|
 | Bestand | 2 (`getTodoNote`, `putTodoNote`) | 110/0 |
-| eine der drei Stellen umgeschrieben | 1 | **110/0** |
-| alle drei umgeschrieben | **0** | **110/0, Code 0** |
+| ~~eine der drei Stellen umgeschrieben~~ | ~~1~~ | ~~**110/0**~~ |
+| ~~alle drei umgeschrieben~~ | ~~**0**~~ | ~~**110/0, Code 0**~~ |
 
-Die Zeile sagt weiterhin „der interne Vermerk steht in keiner Antwort außer der Vermerksroute
-(A-7.2)" und hat nichts gemessen.
+**Zwei Berichtigungen, und beide sind gemessen.** Erstens: Die Zeile „eine der drei Stellen" galt nie
+für alle drei — **tragend sind zwei**, die dritte schreibt einen Vermerk über die **Add-in-Route** und
+speist keine Antwort (T-215, 29.3, T-223-6). Zweitens: Die letzte Zeile ist seit dem Bau von
+**A-A-52** überholt — der Lauf mißt die Zwei inzwischen selbst und wird rot.
+
+**Geltender Stand (2026-09-06, jede Stelle einzeln im Spiegel, `proof:openapi` gegen den heutigen
+Baum):**
+
+| ersetzt | Antworten mit dem Vermerk | Lauf | Code | Die Zeile, die zuschlägt |
+|---|---|---|---|---|
+| nichts (Bestand) | **2** (`getTodoNote`, `putTodoNote`) | **114/0** | **0** | — |
+| Stelle 1 — `note: INTERNAL_NOTE` bei `createTodo` (`:449`) | **1** | **113/1** | **1** | A-A-52, `1: putTodoNote` |
+| Stelle 2 — `text: INTERNAL_NOTE` bei `putTodoNote` (`:520`) | **1** | **113/1** | **1** | A-A-52, `1: getTodoNote` |
+| **Stelle 3 — `note: INTERNAL_NOTE` bei `createAddinTodo` (`:877`)** | **2**, unverändert | **114/0** | **0** | keine — und das ist richtig so |
+| alle drei | **0** | **113/1** | **1** | A-A-52, `0:` |
+
+**Eine Zahl, nicht zwei: tragend sind zwei der drei Stellen.** Die dritte bleibt trotzdem stehen; sie
+ist ein **negativer** Beitrag zur Zusicherung (der Vermerk kommt über die Add-in-Tür herein und darf
+in keiner Antwort erscheinen), und die Zusicherung mißt Antworten, nicht Eingaben. Ausführlich in
+29.3.
+
+Die Zeile sagte bis A-A-52 weiterhin „der interne Vermerk steht in keiner Antwort außer der
+Vermerksroute (A-7.2)" und hatte nichts gemessen. **Heute mißt sie:** Die A-A-52-Zeile davor nennt
+die Zahl und wird ohne sie rot — in drei der vier Verstümmelungen oben, und die vierte ist keine.
 
 **Das Gegenmittel steht im selben Lauf schon zweimal**, und dort ist es ausgeschrieben: Abschnitt 16
 prüft „die Klasse ist nicht leer — sonst prüfte alles Folgende die leere Menge", Abschnitt 8 prüft
@@ -8605,12 +8631,33 @@ fahren — `proof:access` (**106/0**) und `proof:route-policy` (**43/0**) —, u
 Wer die Zahl zum Wächter über die Kettenglieder macht, verlegt eine Verhaltensfrage in einen
 Zeichenvergleich; das ist genau der Fehler, gegen den B-2.10 geschrieben ist.
 
-**Zweitens: die Reichweite des getarnten Sammelpfads ist gemessen, und sie ist klein.** Zweimal
-unabhängig — von mir in 29.2.2 und von domain-dev in T-225 — antwortet ein `ALL`-Eintrag auf `/*`
-dem **Add-in-Token mit 401** und nur dem **Sitzungsgeheimnis** mit 200. Die Tür, die von außen
-erreichbar ist, ist die des Add-ins; sie öffnet dieser Weg nicht. Und der Rest verlangt **zwei**
-gleichzeitige Änderungen in **derselben** Datei — `apps/local-api/src/app.ts` —, von denen die
-erste eine Sicherheitsschicht entfernt. Wer so weit ist, braucht keinen getarnten Sammelpfad mehr.
+**Zweitens: die Reichweite des getarnten Sammelpfads ist gemessen — und dieser Absatz war zu
+milde.** *Berichtigt in T-241 (2026-09-06); die Zahlen stehen in 32.2, hier steht, was von dem Satz
+bleibt.* Zweimal unabhängig — von mir in 29.2.2 und von domain-dev in T-225 — antwortet ein
+`ALL`-Eintrag auf `/*` dem **Add-in-Token mit 401** und nur dem **Sitzungsgeheimnis** mit 200.
+**Das gilt für einen Eintrag, der hinter der Kette liegt** (im Teilbaum `api`, nach
+`credentialPolicy`) — und **genau den fängt A-A-56 ohnehin an der Zahl**. Für den Rest, um den es
+hier geht, gilt es **nicht**: Der Rest ist der **Tausch**, und ein getauschtes Kettenglied liegt
+**in** der Kette. Nachgemessen im Spiegel, `app.fetch`, unveränderter Nachweisstand:
+
+| Tausch an | ohne jeden Nachweis | fremde Herkunft (`Origin: https://boese.example`) | fremder `Host` |
+|---|---|---|---|
+| Stelle 6 der zehn (`contentTypeGuard`) | **200** | 403 `origin_not_allowed` | 403 `host_not_allowed` |
+| **Stelle 1 der zehn (`securityHeaders`)** | **200** | **200** | **200** |
+| Vergleich: `/api/v1/todos`, keine Änderung | 401 `unauthorized` | — | — |
+
+**Der Grund ist die Reihenfolge, und sie steht bereits als Satz in `app.ts`: „Reihenfolge ist
+Inhalt".** Ein getauschtes Glied **antwortet**, statt durchzureichen; damit laufen für seinen Pfad
+alle Glieder dahinter nicht mehr. Ein Tausch an Stelle *k* schaltet für diesen einen Pfad
+**11 − *k*** Wächter ab. An Stelle 1 sind das alle zehn — und dann ist der getarnte Pfad aus **jeder
+Webseite im Browser des Benutzers** erreichbar, also genau die Klasse, die `CLAUDE.md` als die
+wahrscheinlichste echte Lücke dieser Architektur benennt. Der Satz „die Reichweite ist klein" gilt
+für den **hinzugefügten** Eintrag; für den getauschten ist er falsch.
+
+**Was von diesem Absatz trägt:** Der Rest verlangt weiterhin **zwei** Änderungen in **derselben**
+Datei (`apps/local-api/src/app.ts`), von denen die erste eine Sicherheitsschicht entfernt. Das ist
+die richtige Beobachtung — aber sie macht den Rest nicht klein, sondern **überprüfbar**, und genau
+daraus wird in 32.2 eine Auflage (**A-A-69**), die keine Aufstellung von Pfaden ist.
 
 **Drittens, und das ist der Teil, der ohne Begründung wie ein Versehen aussieht: die
 Durchgriffsprobe aus 29.2.4 wird ausdrücklich nicht zur Bedingung gemacht.** Das ist kein
@@ -8624,6 +8671,14 @@ Rumpf liefert. **Eine Bedingung, die falsch negativ ist und dabei jeden Lauf um 
 teurer macht, ist schlechter als eine Hilfe, die man bewußt zieht.** Wer sie zur Bedingung machen
 will, löst zuerst diesen Fall; solange er offen ist, wäre die Verschärfung eine Zusicherung, die
 ihre eigene Vorbedingung nicht prüft — und damit ausgerechnet ein Verstoß gegen A-A-60.
+
+*Nachgetragen T-241 (2026-09-06), und diesmal mit dem Fall statt mit dem Argument:* Der getarnte
+Sammelpfad aus 32.2 ist selbst der zweite falsch negative Fall. Sein Glied lautet
+`(c, next) => (c.req.path.endsWith('/leak') ? c.json(…) : next())` — für jeden **nirgends
+registrierten** Pfad reicht es durch, und die Durchgriffsprobe hielte es für ein Kettenglied,
+während es auf seinem einen Pfad 200 samt Rumpf liefert. **Die Probe kann einen getarnten Pfad
+nicht finden, weil sie ihn raten müßte.** Punkt drei gilt damit unverändert, und er gilt jetzt aus
+zwei gemessenen Gründen statt aus einem.
 
 **Was stattdessen gilt.** Der Rest steht als benannter Rest in diesem Papier und in A-A-56 unter
 „als Hilfe, nicht als Bedingung". Wer die Zahl `MIDDLEWARE_COUNT` **senkt**, sagt im selben Zug,
@@ -8677,3 +8732,710 @@ Selbstprüfungsabschnitten, hat eine Selbstprobe, die ihre eigene Ernte umgeht.
 einspeist, prüft den Prüfer und nicht die Prüfung. Sie ist deshalb nicht wertlos — sie hat in
 T-188 vier echte Lücken gefunden —, aber sie ist keine Antwort auf die Frage, ob der Lauf weiß,
 wann er blind ist. **Sie ist der Grund, warum er es nicht weiß.**
+
+---
+
+## 31. Prüfung T-234 (2026-09-06) — drei Vorhersagen am freien Port, die fehlende Gegenprobe aus zwei Wellen, und eine Auflage, die für ihren eigenen Fall falsch war
+
+**Auftrag.** Vier Punkte, und alle vier hängen an derselben Bedingung: **der Port war in dieser
+Welle frei** (E-083 Punkt 2, kein e2e-Lauf). **Erstens** die drei Vorhersagen V-1 bis V-3 aus 30.6,
+die ich aufgeschrieben habe, **weil** ich sie nicht messen konnte. **Zweitens** die zweite
+Gegenprobe zu T-223-5, die seit zwei Wellen fehlt und die kein grüner Lauf ersetzt. **Drittens**
+zwei Bestätigungen an gebauter Arbeit (O-KK und O-KL aus T-231). **Viertens** die vier Läufe aus
+T-231 nachfahren, mit den vier Gegenproben, die der Erbauer selbst als die entscheidenden nennt.
+
+### 31.0 Stand der Werkzeuge, was gemessen wurde und was nicht
+
+**Guardian und 42Crunch: vierzehntes Mal ohne Werkzeug** (E-079 Punkt 3, nicht erneut versucht;
+30.0 zählte das dreizehnte). Der Grund ist seit T-230 kein Termin mehr, sondern eine Antwort des
+Auftraggebers: **es gibt keinen Zugang**. Damit gilt unverändert und mit jeder Welle schwerer:
+**Die Aussage über die OpenAPI-Beschreibung ruht dauerhaft auf `proof:openapi`** — einem Lauf, in
+dem T-206 zwei von vier Befunden gefunden hat. Ein zweites, fremdes Augenpaar auf dieselbe Datei
+wird es nicht geben. Der einzige Ersatz ist, die eigenen Läufe gegen Verstümmelungen zu fahren;
+diese Prüfung ist die neunte Anwendung dieses Ersatzes.
+
+**`proof:all` nicht gefahren** (Auftrag, E-083 Punkt 3).
+
+**Der Port war frei.** Alle Läufe sind **vollständig** gefahren, kein Schnitt, keine Vorhersage.
+Zusätzlich ist er in dieser Prüfung einmal **absichtlich belegt** worden — das ist die Messung V-3.
+
+**Eine Grenze halbiert sich, und sie gehört hierher berichtigt.** Der Satz „von drei
+ausgelieferten Erzeugnissen sind zwei in ihrer Engine ungemessen" stimmt so nicht mehr: `Xvfb` und
+`python3-gi` mit `WebKit2 4.1` stehen auf diesem Rechner, und die Engine-Familie des
+Linux-Erzeugnisses ist damit gemessen — zeichengleiche Bänder wie in Chromium. Es bleibt
+**macOS/WKWebView ungemessen**, und gemessen ist die **Engine-Familie**, nicht die gebaute
+Binärdatei. Die Grenze ist kleiner geworden; verschwunden ist sie nicht.
+
+**Gemessen wurde am Verhalten, außerhalb des Bestands** — wie in T-176, T-183, T-189, T-206, T-223
+und T-230. Der Spiegel liegt unter `/tmp/t234/root` und trägt die Gestalt des Arbeitsbereichs:
+`apps/local-api`, `apps/web`, `apps/outlook-addin` und `packages` als Kopien, `node_modules` als
+Verweis auf den echten. Alle Verstümmelungen — auch die drei in **Produktivcode** (`routes/todos.ts`,
+`usecases/todos.ts`, `packages/storage/.../database.ts`) und die eine **neue Datei**
+(`src/access/verifier-match.ts`) — sind ausschließlich im Spiegel entstanden und mit ihm gelöscht.
+
+**Zeichengleichheit doppelt belegt.** `diff -rq` über `apps/local-api/src`,
+`apps/local-api/scripts`, `packages`, `apps/web/src` und `apps/outlook-addin/src` nach der letzten
+Messung **ohne Unterschied**, und eine Prüfsumme über alle `ok`/`FEHL`-Zeilen vor der ersten und
+nach der letzten Verstümmelung:
+
+| Lauf | vorher | nachher | Zahlen |
+|---|---|---|---|
+| `proof:callers` | `1597254575` | `1597254575` | **56/0** |
+| `proof:tags` | `689993371` | `689993371` | **43/0** |
+| `proof:conflicts` | `2545999469` | `2545999469` | **154/0** |
+| `proof:db-permissions` | `197552816` | `197552816` | **18/0** |
+| `proof:access` | `3048530334` | `3048530334` | **106/0** |
+
+`proof:callers` ist zusätzlich **im Bestand selbst** gefahren, portfrei: **56/0, Code 0**. Der
+Spiegel bildet also nicht nur sich selbst ab. Der versionierte Bestand führt weder `verifier-match`
+noch `unter/` noch `t234`.
+
+---
+
+### 31.1 Die zweite Gegenprobe zu T-223-5 — nachgeholt, und sie trägt in beide Richtungen
+
+Sie fehlt seit zwei Wellen (29.4.4: „ließ sich nicht fahren — Port belegt"), und ich habe sie
+zweimal ausdrücklich **nicht** für erledigt erklärt, obwohl `proof:access` längst mit 106/0
+vollständig läuft: **das ist eine Gegenprobe und kein grüner Lauf.** Jetzt ist sie gefahren.
+
+**Die Umgliederung.** `verifier.ts` in zwei Dateien aufgeteilt — der Vergleich zieht nach
+`src/access/verifier-match.ts`, `verifyCredential` ruft ihn dort. Genau der Fall, den A-A-59
+benennt: nicht eine Aufstellung, die durch Nachlässigkeit veraltet, sondern eine **gewöhnliche
+Umgliederung**, nach der es eine Datei mehr gibt.
+
+| Zustand | Lauf | Code | Die Zeile |
+|---|---|---|---|
+| Bestand | **106/0** | 0 | `ok Kein === auf Tokenmaterial im Nachweispfad` |
+| Aufspaltung, Vergleich **verhaltensneutral** in der neuen Datei | **105/1** | **1** | `FEHL Kein === auf Tokenmaterial im Nachweispfad — src/access/verifier-match.ts:28: const gleich = presented === secret;` |
+| dieselbe Aufspaltung, gemessen gegen die **Fassung von T-223** (die vier Dateien als Aufstellung) | **106/0** | 0 | `ok Kein === auf Tokenmaterial im Nachweispfad` |
+
+Die dritte Zeile ist der Beleg, den 29.4.4 offenlassen mußte: **Die alte Fassung hätte diese
+Umgliederung nicht gesehen** — und zwar auch dann nicht, wenn man ihr die Vorbedingung von heute
+gegeben hätte, denn vier durchsuchte Dateien sind „mindestens vier". Die gebaute Fassung sieht sie
+und nennt Datei und Zeile.
+
+**Nebenbefund, und er ist der wertvollste Teil dieser Messung.** Die erste, nicht
+verhaltensneutrale Fassung derselben Umgliederung war kein Stilfehler, sondern ein **echter
+Umgehungsweg**: Die neue Datei enthielt die naheliegende Bequemlichkeit
+`if (presented === secret) return { addin: 1, session: 0 };`. Gemessen an der Funktion selbst,
+ohne HTTP:
+
+```
+kein Token, kein Add-in-Token eingerichtet: {"ok":true,"kind":"addin"}
+leeres Token, kein Add-in-Token eingerichtet: {"ok":true,"kind":"addin"}
+kein Token, Add-in-Token eingerichtet:       {"ok":false}
+falsches Token:                              {"ok":false}
+```
+
+Solange **kein** Add-in-Token eingerichtet ist — der Zustand jeder frischen Installation —
+authentifiziert eine Anfrage **ohne jeden Nachweis**. `proof:access` fängt diese Fassung dreifach:
+**103/3, Code 1**, die statische Zeile aus Abschnitt 13 und zusätzlich zwei Verhaltenszeilen aus
+Abschnitt 3 (`Ohne Token: 401`, `Beide 401-Antworten sind zeichengleich`). Das ist der Grund,
+warum B-2.5 keine Stilregel ist: Die verbotene Zeile und der Umgehungsweg sind dieselbe Zeile.
+
+**Urteil zu A-A-59: erfüllt, in beiden Richtungen abgenommen.** Unveränderter Baum 106/0, kein
+falscher Alarm; beide Gegenproben rot mit Code 1 und mit Datei und Zeile in der Meldung.
+
+#### 31.1.1 Und ein Rest, der aus derselben Messung fällt — die Untergrenze sagt nichts
+
+Die Vorbedingung von Abschnitt 13 lautet gebaut:
+
+```js
+check(
+  `Der Nachweispfad ist vollständig durchsucht — ${scanned.length} Dateien unter ${scanRoots.join(' und ')} (A-A-59)`,
+  scanned.length >= TRAGENDE_DATEIEN.length && fehlend.length === 0,
+  …
+);
+```
+
+`TRAGENDE_DATEIEN` hat **vier** Einträge. Die Untergrenze ist damit „mindestens die vier, die
+ohnehin einzeln geprüft werden" — sie schützt gegen die **leere** Ernte und gegen **nichts
+darüber hinaus**. Das ist genau die Lücke, die A-A-61 für `proof:callers` mit einer **benannten**
+Zahl (100 und 25, bei 117 und 31) geschlossen hat.
+
+Gemessen, mit einer realistischen Regression statt einer erfundenen: `src/access` bekommt einen
+Unterordner (`src/access/unter/verifier-match.ts` mit derselben verbotenen Zeile), und aus dem
+Sammler fällt **ein Wort**:
+
+| Sammler | Lauf | Code | Die Zeile |
+|---|---|---|---|
+| `readdirSync(…, { recursive: true, … })` | **105/1** | **1** | nennt `src/access/unter/verifier-match.ts:28` |
+| `recursive: true` entfernt | **106/0** | **0** | `ok Der Nachweispfad ist vollständig durchsucht — 16 Dateien …` |
+
+Der Lauf sagt „**vollständig** durchsucht" über sechzehn von siebzehn Dateien und übersieht dabei
+die einzige, auf die es ankommt. **Gegenmittel: A-A-68.**
+
+---
+
+### 31.2 V-1 — bestätigt, und härter als vorhergesagt: die Regel darf fehlen, die Zeile bleibt grün
+
+**Die Vorhersage** (30.6): Eine Kunstquelle, die die Anfrage aus einem anderen Grund auf 422
+bringt, läßt beide Zeilen von `proof:tags` Abschnitt 9 grün.
+
+**Die Kunstquelle.** `.padEnd(600, '!')` an den beiden Titeln der Anfragen — 600 Zeichen gegen
+`MAX_TITLE_CHARACTERS = 500`. Die Anfrage scheitert damit an der Eingabeprüfung, bevor irgendetwas
+über Tagnamen entschieden wird.
+
+| Zustand | Lauf | Code | Abschnitt 9 |
+|---|---|---|---|
+| Bestand | **43/0** | 0 | beide grün |
+| **Kunstquelle** (langer Titel) | **43/0** | **0** | **beide grün** |
+| **Produktivregel entfernt** (`z.array(nameSchema).max(50)` → `.max(500)`) **und** Kunstquelle | **43/0** | **0** | **beide grün** |
+| Produktivregel entfernt, Lauf **unverändert** | **42/1** | **1** | `FEHL mehr als fünfzig Namen werden abgewiesen — Status 201` |
+
+Die dritte Zeile ist der Befund, und sie geht über die Vorhersage hinaus: Es bleibt nicht bei
+„die Zusicherung sagt mehr, als sie mißt". **Die bewachte Regel des Produkts ist weg — Takt nimmt
+51 Tagnamen mit 201 an —, und der Lauf sagt 43/0, Code 0.** Die vierte Zeile belegt, daß die
+Zusicherung Zähne hat; die Kunstquelle zieht sie.
+
+Der Nachbarabschnitt 8 macht es im selben Lauf richtig:
+`(ambiguous.body?.error?.details ?? []).some((entry) => entry.code === 'tag_name_ambiguous')`.
+**Gegenmittel: A-A-66.**
+
+---
+
+### 31.3 V-2 — bestätigt, und es ist die achte Stelle aus T-047
+
+**Die Vorhersage** (30.6): Eine Kunstquelle, die den Fehlschlag **vor** die Tag-Anlage legt, läßt
+alle drei Zeilen von Abschnitt 5 grün, und die Zusage über die gemeinsame Transaktion steht dann
+über der leeren Menge.
+
+**Die Kunstquelle.** Statt `statusId: 'gibt-es-nicht'` (scheitert **in** der Transaktion, nach der
+Tag-Anlage) ein Titel mit 600 Zeichen (scheitert **vor** ihr). Die erste Zeile des Abschnitts
+(`doomed.status >= 400`) bleibt erfüllt.
+
+**Die Verstümmelung des Produkts.** `createTodo` legt die Tags in einer **eigenen** Klammer an:
+
+```ts
+const vorab = await context.transactions.inTransaction(async (eigen) =>
+  resolveTagNames(eigen, names.value, timestamp),
+);
+```
+
+Damit überlebt das Tag den Fehlschlag des Todos — genau der Fall, gegen den A-7 und die achte
+Stelle aus T-047 geschrieben sind.
+
+| Zustand | Lauf | Code | Abschnitt 5 |
+|---|---|---|---|
+| Bestand | **43/0** | 0 | drei Zeilen grün |
+| **Kunstquelle** | **43/0** | **0** | **drei Zeilen grün** |
+| **Transaktion gebrochen**, Lauf unverändert | **41/2** | **1** | `FEHL das Tag der gescheiterten Anfrage gibt es nicht — ["backend","rücklauf"]`, `FEHL und es ist überhaupt kein Tag hinzugekommen — 1 vorher, 2 nachher` |
+| **Transaktion gebrochen** und **Kunstquelle** | **43/0** | **0** | **drei Zeilen grün** |
+
+Die letzte Zeile ist der Befund in seiner schärfsten Form: **Die gemeinsame Transaktion ist offen,
+ein Vokabular aus einem Fehlschlag bleibt im Bestand stehen — und der Lauf sagt 43/0, Code 0.**
+
+**Zwei Ehrlichkeiten dazu.** Erstens war meine erste, gröbere Fassung der Verstümmelung (die
+eigene Klammer **außerhalb** der Fehlerbehandlung) zusätzlich in Abschnitt 8 rot — nicht wegen
+Abschnitt 5, sondern weil `AbortTodoCreate` dort an der Übersetzung vorbeilief (500 statt 422).
+Deshalb steht oben die feinere Fassung, bei der **nur** Abschnitt 5 rot wird. Zweitens: Der
+Unterschied wäre an der **Fehlerkennung** der Antwort erkennbar, nicht an der Zahl — dieselbe
+Bauart, die A-A-66 verlangt. **Gegenmittel: A-A-67.**
+
+---
+
+### 31.4 V-3 — widerlegt: der Satz stimmt, und jetzt ist er gemessen
+
+**Die Vorhersage** (30.6): `proof:db-permissions` Abschnitt 4 hat als einziger der drei keine
+Portmeldung, sondern eine **Annahme im Kommentar** — „Verzeichnis, Datenbank und Migration
+entstehen im Start **vor** dem Binden". Stimmt der Satz, ist alles gut; stimmt er nicht, wird der
+Lauf bei belegtem Port rot mit der falschen Begründung.
+
+**Gemessen mit einem eigenen Lauscher auf `127.0.0.1:17843`:**
+
+| Lauf, Port belegt | Ergebnis |
+|---|---|
+| `proof:db-permissions` (voll) | **18/0, Code 0**, in 0,68 s — Abschnitt 4 sechs Zeilen grün |
+| `proof:tags` (zum Vergleich) | **Code 1**: `FEHLER: Auf 127.0.0.1:17843 lauscht bereits etwas, auch nach 5 s Warten. Läuft Takt oder ein anderer Prüfpfad noch?` |
+
+**Der Startpfad selbst, einzeln gemessen** (Dienst mit belegtem Port gestartet): Verzeichnis
+`0700`, `takt.db` `0600`, `takt.db-wal` `0600` — **alle drei vorhanden** —, dann
+`{"level":"error","message":"Der Port 17843 ist belegt. Takt startet nicht und weicht nicht auf
+einen anderen Port aus.","reason":"port_in_use port=17843"}` und **Exitcode 74**. Die Reihenfolge
+ist im Bestand auch strukturell nachlesbar: `ensureDirectory` (`main.ts:179`), Migration (`:234`),
+`server.listen` (`:405`).
+
+**Und die zweite Hälfte der Vorhersage ist halb falsch.** Ich hatte geschrieben, der nächste Leser
+suche dann „an den Dateirechten". Gemessen (Wartepfad des Laufs künstlich auf eine Datei gelenkt,
+die nie entsteht, Port belegt): Die **Überschrift** ist tatsächlich falsch — `FEHL der Dienst legt
+seinen Bestand an` —, aber der **Beleg** derselben Zeile trägt den wahren Grund im Klartext, weil
+der Lauf `stderr.slice(-300)` als Detail mitgibt: `…"reason":"port_in_use port=17843"`. Der Leser
+wird also nicht in die Irre geschickt, sondern nur der Zeilentitel. **Kein Befund, eine
+Feststellung** — und der Kommentar in Abschnitt 4 ist ab jetzt keine Annahme mehr, sondern
+gemessen (dieser Absatz ist der Beleg).
+
+---
+
+### 31.5 O-KK — bestätigt, und der Fund geht gegen meine eigene Auflage
+
+**Die Frage** (T-231, Offene Frage 1): A-A-64 nennt als Behebung wörtlich `raw.includes(indexName)`.
+domain-dev hat gemessen, daß der eine Indexname **Teilzeichenkette** des anderen ist, und statt
+dessen einen **ganzen** Namensvergleich in beiden Gestalten der Datenbank gebaut — zwei Zeilen
+mehr, als die Auflage sagt.
+
+**Erstens: die Teilzeichenketten-Beziehung mißt der Lauf selbst**, seit T-231 als eigene Zeile:
+
+```
+ok    es gibt überhaupt einen Indexnamen, der in einem anderen steckt (ux_tag_name)
+```
+
+**Zweitens: die Auflage ist in ihrem Wortlaut nicht nur zu schwach, sie ist unbrauchbar.** Ich habe
+sie wörtlich gebaut — `translated !== null && raw.includes(indexName)` in `provoke`, sonst nichts —
+und gemessen:
+
+| Zustand | Lauf | Code | `ux_tag_name`-Block |
+|---|---|---|---|
+| **A-A-64 wörtlich**, unveränderter Baum | **126/7** | **1** | grün |
+| **A-A-64 wörtlich** + Kunstquelle aus 30.3 | **126/7** | **1** | **vier Zeilen grün** |
+| **gebaute Fassung** (ganzer Name) + Kunstquelle aus 30.3 | **150/1** | **1** | **rot**, mit beiden Indexnamen |
+
+**Sieben Fehlalarme auf dem gesunden Baum.** SQLite nennt den Index in sieben der vierzehn Blöcke
+gar nicht, sondern die Spalten — `UNIQUE constraint failed: todo_status.name`. Eine
+Teilzeichenkettensuche darauf findet den Indexnamen nie, und die Meldung liest sich absurd:
+
+```
+FEHL  ux_todo_status_name: die Verletzung tritt ein — und es ist diese
+      — UNIQUE constraint failed: todo_status.name → ux_todo_status_name, erwartet war ux_todo_status_name
+```
+
+**Und der gemeldete Fall bliebe grün.** Die zweite Zeile der Tafel ist die Bestätigung von O-KK:
+Mit dem wörtlichen Bau ändert die Kunstquelle aus 30.3 **nichts** — 126/7 vorher wie nachher, der
+`ux_tag_name`-Block viermal grün, obwohl `ux_tag_name_key` zugeschlagen hat. **Die Auflage hätte
+den Fall nicht gefangen, für den sie geschrieben wurde.**
+
+**Urteil: bestätigt. Der Bau löst A-A-64 ein und überschreitet sie nicht.** Der Wortlaut der
+Auflage war falsch, nicht ihr Ziel; das Ziel („nicht *eine* Verletzung, sondern **die benannte**")
+ist erfüllt. Die zwei Zeilen mehr sind der Preis dafür, daß SQLite zwei Gestalten hat und beide am
+Baum vorkommen. **A-A-64 wird hiermit im Wortlaut berichtigt** (31.9, Berichtigung) — mit dem
+Satz, den ich dort hätte schreiben müssen: *Verglichen wird der ganze Name; eine
+Teilzeichenkettensuche ist an dieser Stelle selbst der Fehler.*
+
+Der Erbauer hat außerdem die **Vorbedingung des Zuordners** mitgebaut (keine zwei eindeutigen
+Indizes mit derselben Spaltenliste — `die Spaltenform ist eindeutig zuzuordnen (7 von 14 Indizes
+nennen Spalten)`) und vier Proben darauf. Das ist A-A-60 angewandt, ohne daß eine Auflage es
+verlangt hätte.
+
+---
+
+### 31.6 O-KL — beides aufgenommen: ein Befund ist größer, und ein Zwilling fehlt begründet
+
+**Erstens: T-230-6 ist größer als beschrieben.** 30.4 nennt Abschnitt 1 und 3 als die, die unter M2
+grün bleiben. Nachgemessen gegen den **gebauten** Stand (`secureDatabaseFiles` fällt aus,
+`umask 0o077`):
+
+| Abschnitt | Zeilen | unter M2 |
+|---|---|---|
+| 0 (neu, A-A-65) | 1 | **rot** — `die umask dieses Laufs ist weit (0000) — gemessen: 0077 — Abschnitt 1, 3 und 4 messen dann die umask und nicht das chmod` |
+| 1 | 5 | **grün** |
+| 2 | 2 | **rot** — `nach dem Öffnen liegt sie mit 0600 — 0644` |
+| 3 | 4 | **grün** |
+| **4** | **6** | **grün** |
+
+Lauf **16/2, Code 1**. **Drei von vier Abschnitten messen unter M2 den Zustand statt der Wirkung**,
+nicht zwei. Der Befund verschiebt sich dadurch nicht — er wird größer, und die Behebung ist
+dieselbe. Bemerkenswert: Die gebaute Meldung von Abschnitt 0 **nennt Abschnitt 4 bereits mit**; der
+Erbauer hat die Vergrößerung in den Text des Laufs geschrieben, bevor sie hier stand. 30.4 gilt mit
+dieser Ergänzung.
+
+**Zweitens: kein Zwilling im Add-in — gemessen, nicht angenommen.** Die Frage lag nahe, ob
+`proof:callers` Abschnitt 7 für `call(` dieselbe Lücke hat wie Abschnitt 1 für `request(`
+(T-230-2). Nachgemessen:
+
+- `call<` beziehungsweise `call(` kommt in **genau einer** Datei vor —
+  `apps/outlook-addin/src/api/client.ts`, fünf Stellen, alle innerhalb von `createApiClient`
+  (`const call` in Zeile 189, die Funktion beginnt in Zeile 186).
+- **Keine Ausfuhr:** Unter den `export`-Zeilen dieser Datei steht kein `call`; die Bildschirme
+  bekommen ein `ApiClient`-Objekt, keinen Modulexport.
+- Außerhalb der Datei kommt das Wort nur in Prosa, in `className="badge badge--call"` und in
+  `htmlFor="call"` vor — kein Zugriff, weder benannt noch über einen Namensraum.
+
+**Der Satz gehört aufgeschrieben, damit ihn niemand für ein Vergessen hält:** Für `call` gibt es
+keine zweite Regel, weil es keinen zweiten Weg gibt. Kommt eines Tages ein `export`
+vor diese Funktion, entsteht der Zwilling von T-230-2 — dann ist A-A-62 die Vorlage.
+
+---
+
+### 31.7 Die vier Läufe aus T-231 nachgefahren, mit den vier entscheidenden Gegenproben
+
+Jede Zahl eigenständig gemessen, keine übernommen.
+
+| Lauf | T-231 sagt | gemessen | Code |
+|---|---|---|---|
+| `proof:callers` | 45/0 → **56/0** | **56/0** | 0 |
+| `proof:tags` | 42/0 → **43/0** | **43/0** | 0 |
+| `proof:conflicts` | 149/0 → **154/0** | **154/0** | 0 |
+| `proof:db-permissions` | 17/0 → **18/0** | **18/0** | 0 |
+
+**Die vier Gegenproben, die der Erbauer selbst als die entscheidenden nennt:**
+
+| Gegenprobe | T-231 sagt | gemessen | Die Meldung |
+|---|---|---|---|
+| A-A-61: Sammler leer (`/\.KEINETREFFER$/`) | 54/2 | **54/2, Code 1** | `der Sammler hat mindestens 100 Dateien eingesammelt (0) — 0 statt mindestens 100 — der Sammler greift ins Leere`, dazu `die Ernte ist leer` |
+| A-A-61: Sammler überspringt `api/` | 55/1 | **55/1, Code 1** | `mindestens 100 Dateien eingesammelt (114)` **grün**, `und api/client.ts und api/endpoints.ts sind darunter — nicht eingesammelt: api/client.ts, api/endpoints.ts` **rot** |
+| A-A-64: Kunstquelle aus 30.3 | 150/1 | **150/1, Code 1** | `ux_tag_name: die Verletzung tritt ein — und es ist diese — UNIQUE constraint failed: index 'ux_tag_name_key' → ux_tag_name_key, erwartet war ux_tag_name` |
+| A-A-64: Zuordner als Teilzeichenkettensuche | 149/2 | **149/2, Code 1** | `der Zuordner: ux_tag_name_key bleibt ux_tag_name_key — der Fall aus T-230-5 — ux_tag_name statt ux_tag_name_key`, dazu der `ux_tag_name_key`-Block |
+
+**Alle vier Zahlen stimmen zeichengenau**, und die zweite Zeile ist die, auf die es ankommt: Sie
+belegt den **zweiten Satz** von A-A-61 — eine Zahl allein ließe einen Sammler durch, der
+irgendetwas sammelt. Hier sammelt er 114 Dateien und übersieht die eine, um die es geht.
+
+**Abnahme A-A-61 bis A-A-65: erfüllt.** Dazu, außerhalb der vier: A-A-65 in beiden Richtungen
+(31.6), A-A-63 und A-A-64 im **vollen** Lauf statt im Schnitt (die Schnitte trugen den Befund,
+nicht die Abnahme), und A-A-59 aus der Welle davor (31.1).
+
+---
+
+### 31.8 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-234-0** | **Abnahme** | **A-A-59 und A-A-61 bis A-A-65 sind erfüllt.** Alle vier Läufe eigenständig nachgefahren (56/0, 43/0, 154/0, 18/0), die vier entscheidenden Gegenproben zeichengenau bestätigt (54/2, 55/1, 150/1, 149/2), dazu A-A-59 mit der Gegenprobe, die zwei Wellen lang nicht zu fahren war. Kein falscher Alarm auf dem unveränderten Baum. | — |
+| **T-234-1** | **muß** | **`proof:tags` Abschnitt 9 mißt „abgewiesen", nicht „abgewiesen weil" — und die bewachte Regel darf dabei fehlen.** Gemessen: langer Titel als Kunstquelle → **43/0, Code 0**, beide Zeilen grün; **zusätzlich mit entfernter Produktivregel** (`.max(50)` → `.max(500)`, Takt nimmt 51 Tagnamen mit 201 an) → **weiterhin 43/0, Code 0**. Zähne belegt: dieselbe Regel entfernt, Lauf unverändert → **42/1, Code 1** (`Status 201`). Der Nachbarabschnitt 8 macht es richtig. Gegenmittel: **A-A-66**. | domain-dev |
+| **T-234-2** | **muß** | **`proof:tags` Abschnitt 5 zusichert die gemeinsame Transaktion und mißt eine Zahl.** Gemessen: Fehlschlag vor die Tag-Anlage gelegt → **43/0, Code 0**, alle drei Zeilen grün; **mit gebrochener Transaktion** (Tag-Anlage in eigener Klammer, Tag überlebt den Fehlschlag) **und** derselben Kunstquelle → **weiterhin 43/0, Code 0**. Zähne belegt: gebrochene Transaktion mit unverändertem Lauf → **41/2, Code 1**. Betroffen ist die achte Stelle aus T-047 (A-7). Gegenmittel: **A-A-67**. | domain-dev |
+| **T-234-3** | soll | **Die Untergrenze von `proof:access` Abschnitt 13 ist die Länge der Liste, die ohnehin geprüft wird.** `scanned.length >= TRAGENDE_DATEIEN.length` heißt „mindestens vier" — sie schützt gegen die leere Ernte und gegen nichts sonst. Gemessen: verbotene Zeile in `src/access/unter/verifier-match.ts`; mit `recursive: true` → **105/1, Code 1** mit Datei und Zeile, **ein Wort entfernt** → **106/0, Code 0**, und die Zeile sagt „**vollständig** durchsucht — 16 Dateien". Dieselbe Klasse, die A-A-61 für `proof:callers` mit 100 und 25 geschlossen hat. Gegenmittel: **A-A-68**. | domain-dev |
+| **T-234-4** | Berichtigung | **A-A-64 war in ihrem Wortlaut falsch, und zwar für ihren eigenen Fall.** `raw.includes(indexName)` liefert auf dem gesunden Baum **sieben** Fehlalarme (SQLite meldet dort die Spaltenform und nennt den Index nicht) und läßt den gemeldeten Fall aus 30.3 **grün** (126/7 mit und ohne Kunstquelle, `ux_tag_name`-Block viermal grün). Der gebaute ganze Namensvergleich in beiden Gestalten löst die Auflage ein und überschreitet sie nicht — **O-KK bestätigt**. Wortlaut berichtigt in 31.9. | — |
+| **T-234-5** | Ergänzung | **T-230-6 ist größer als beschrieben: unter M2 bleibt auch Abschnitt 4 vollständig grün** (sechs Zeilen), also **drei von vier** Abschnitten statt zwei. Gemessen am gebauten Stand: **16/2, Code 1**, rot allein Abschnitt 0 und 2. **O-KL erster Teil bestätigt**; 30.4 gilt mit dieser Ergänzung. | — |
+| **T-234-6** | Feststellung | **Kein Zwilling im Add-in — gemessen.** `call(`/`call<` steht in genau einer Datei (fünf Stellen, alle in `createApiClient`), wird nicht exportiert, und außerhalb kommt das Wort nur in Prosa, einer CSS-Klasse und einem `htmlFor` vor. Für `call` gibt es keine zweite Regel, **weil es keinen zweiten Weg gibt** — kein Vergessen. **O-KL zweiter Teil bestätigt.** | — |
+| **T-234-7** | Feststellung | **V-3 ist widerlegt: der Satz im Kommentar stimmt.** Mit belegtem Port läuft `proof:db-permissions` **18/0, Code 0**; der Dienst legt Verzeichnis (0700) und Bestand (0600) an und scheitert danach am Binden (`port_in_use port=17843`, Exitcode 74). Halb widerlegt ist auch meine zweite Hälfte: Würde Abschnitt 4 doch rot, wäre der **Zeilentitel** falsch, aber der **Beleg** trägt den Grund im Klartext. | — |
+| **T-234-8** | Feststellung | **Hygiene: `tmp-chrome.mjs` liegt unversioniert im Wurzelverzeichnis und ist nicht ignoriert.** Inhalt harmlos (sechs Zeilen Playwright-Abzug, keine Zugangsdaten, keine Kundendaten, keine Call-Nummer), aber ein `git add -A` nähme sie mit. Sie gehört nach `/tmp` oder in `.gitignore`. | Orchestrator |
+
+### 31.9 Neue Auflagen
+
+| Auflage | Was zu tun ist | Wie geprüft wird |
+|---|---|---|
+| **A-A-66** | `proof:tags` Abschnitt 9 prüft den **Grund** der Abweisung, nicht nur den Status: Neben `status === 422` steht die Fehlerkennung beziehungsweise der `details`-Eintrag der Antwort, nach dem Muster von Abschnitt 8 desselben Laufs (`entry.code === 'tag_name_ambiguous'`). Für beide Zeilen. | In beide Richtungen: unveränderter Baum **43/0**; `.max(50)` → `.max(500)` im Dienst → **rot, Code 1** in Abschnitt 9 (heute: 42/1 — das bleibt); dieselbe Anfrage mit zusätzlich überlangem Titel → **rot**, nicht grün. Die Zahlen aus 31.2 sind die Erwartung. |
+| **A-A-67** | `proof:tags` Abschnitt 5 sichert seine eigene Vorbedingung: Der Fehlschlag muß **in** der Transaktion eintreten, nicht davor. Zwei tragfähige Formen, die Entscheidung gehört zum Bau: entweder die **Fehlerkennung** der Antwort wird geprüft (der Fall „Kanban-Spalte gibt es nicht" hat eine andere als eine Eingabeprüfung), oder es wird **positiv verankert** — das Tag ist während des Versuchs entstanden und danach wieder weg. Die zweite Form ist die genauere; die erste ist eine Zeile. | In beide Richtungen: unveränderter Baum **43/0**; die Verstümmelung aus 31.3 (Tag-Anlage in eigener Klammer) → **rot, Code 1** in Abschnitt 5 **auch dann**, wenn der Fehlschlag vor die Tag-Anlage gelegt wird. Ohne diese letzte Bedingung ist die Auflage nicht eingelöst. |
+| **A-A-68** | Die Untergrenze in `proof:access` Abschnitt 13 wird eine **benannte** Zahl nach dem Muster von A-A-61 (dort 100 und 25 bei 117 und 31) und nicht die Länge der tragenden Liste. Heute sind es 16 Dateien; eine Zahl mit Luft nach unten, aber deutlich über den vier tragenden. Das Wort „vollständig" in der Zeile trägt sonst mehr, als die Bedingung prüft. | In beide Richtungen: unveränderter Baum **106/0**, kein falscher Alarm; `recursive: true` aus dem Sammler entfernt (oder eine Endung verengt) → **rot, Code 1**, und die Meldung nennt die gemessene Zahl. Zusätzlich die Gegenprobe aus 31.1 bleibt rot. |
+| **A-A-64** *(berichtigt)* | **Berichtigung des Wortlauts, keine neue Arbeit.** Der Satz „Behebung: `raw.includes(indexName)`" aus 30.8 und die Formulierung „eine Bedingung mehr in einer Zeile, die es gibt" aus 30.9 sind **falsch** und durch diesen Satz ersetzt: *Verglichen wird der **ganze** Indexname, und zwar in beiden Gestalten, in denen SQLite den verletzten Index nennt — als `index 'NAME'` und als Spaltenliste. Eine Teilzeichenkettensuche ist an dieser Stelle selbst der Fehler, weil `ux_tag_name` in `ux_tag_name_key` steckt.* | Bereits erfüllt (31.5, 31.7). Die Messung gegen den wörtlichen Bau — **126/7 auf dem gesunden Baum, gemeldeter Fall grün** — ist der Beleg dafür, warum die Berichtigung nötig war. |
+
+### 31.10 Urteil dieser Prüfung
+
+**Zur Abnahme von T-231 und A-A-59: freigegeben.** Sechs Auflagen erfüllt, jede Zahl eigenständig
+nachgemessen, keine übernommen. Die zwei Fragen des Erbauers sind beantwortet: **O-KK bestätigt**
+(und die Auflage war es, die falsch war, nicht der Bau), **O-KL in beiden Teilen bestätigt**.
+
+**Zur Prüfung insgesamt: Nacharbeit.** Zwei Befunde der Stufe **muß**, einer der Stufe **soll**,
+eine Berichtigung an meiner eigenen Auflage, vier Feststellungen. Drei neue Auflagen, alle drei in
+`apps/local-api/scripts/**`, **keine berührt Produktivcode**.
+
+**Zur Bilanz an derselben Frage.** Neunmal in neun Wellen war die Antwort auf „weiß der Lauf, wann
+er blind ist?" **ja**. Diesmal aber nicht in vier Läufen von vier: `proof:callers`,
+`proof:conflicts` und `proof:db-permissions` haben nach T-231 gehalten, was sie versprechen, und
+`proof:access` hat die Gegenprobe bestanden, die zwei Wellen offen war. Die beiden `muß`-Befunde
+sitzen **beide** in `proof:tags`, und beide an Abschnitten, die derselbe Lauf zwei Abschnitte
+weiter vorbildlich macht. Das ist dieselbe Beobachtung wie in 30.10 — die Blindheit sitzt einen
+Schritt neben der Sorgfalt.
+
+**Was diese Welle über den Port gelernt hat.** Drei Vorhersagen sind gefahren worden: **zwei
+bestätigt und beide härter als vorhergesagt**, **eine widerlegt**. Eine Vorhersage ist kein Befund
+— aber sie ist auch keine verlorene Arbeit: Alle drei ließen sich in dieser Welle in unter einer
+Stunde messen, weil die Verstümmelung schon dastand. **Aufgeschriebene Erwartungen sind billiger
+als vergessene Fragen.** Die Entzerrung des festen Ports (E-083 Punkt 4, O-KJ) bleibt trotzdem
+fällig; sie hat diese Prüfung zwei Wellen gekostet.
+
+**Der Satz dieser Prüfung.** Eine Auflage, die ihre eigene Behebung wörtlich hinschreibt, ist so
+gut gemessen wie der Lauf, den sie verbessern soll — und meine war es nicht. `raw.includes(…)`
+hätte sieben gesunde Blöcke rot und den einen kranken grün gemacht. **Der Erbauer hat sie nicht
+befolgt, sondern verstanden; das ist der Grund, warum sie jetzt trägt.**
+
+---
+
+## 32. Prüfung T-241 (2026-09-06) — drei Punkte am eigenen Papier, und einer davon hatte eine Sicherheitseigenschaft wegbeschrieben
+
+**Auftrag.** Drei Punkte, alle drei ohne Port: **O-KS** (die Zeile über `attachmentLabel`),
+**O-JL** (der benannte Rest von A-A-51, mit einer Zahl zu entscheiden), **O-JM** (Zahl gegen Zahl in
+28.2.2). Die Abnahme von T-235 war ausdrücklich **nicht** Teil dieses Auftrags; sie braucht den
+Port. Was sich für sie ohne Port vorbereiten ließ, steht in 32.4.
+
+### 32.0 Was gemessen wurde und was nicht (E-094, angewandt auf diese Prüfung selbst)
+
+**Den Weg, den ich gegangen bin.** Alle Zahlen dieses Kapitels sind an diesem Baum entstanden, keine
+ist aus einem früheren Kapitel übernommen. Die Verstümmelungen liefen in einem **Spiegel** unter
+`/tmp/t241-spiegel` — eine Kopie von `apps/local-api` und `packages` mit einem Verweis auf die
+`node_modules` des Baums —, damit kein Produktivstand angefaßt wird. Der Spiegel ist gegen den Baum
+geeicht: `proof:openapi` liefert dort **114/0, Code 0**, zeichengleich mit dem Baum.
+
+**Den Weg, den ich ausgelassen habe, und er ist benannt.** `e2e-tester` hält 5173 und 17843. Kein
+portgebundener Lauf: kein `proof:access`, kein `proof:tags`, kein `proof:db-permissions`, kein
+`proof:taskpane` (bindet 17944), kein `proof:all`. Gefahren sind ausschließlich `proof:openapi` und
+`proof:route-policy` — beide gehen über `app.fetch` und binden nichts; die Begründung dafür steht im
+Kopf von `proof-route-policy.mjs` und ist heute nachgelesen, nicht angenommen. **Was daraus folgt:**
+Die Aussagen dieses Kapitels über die **Routenliste**, über den **Vermerk** und über die
+**Erreichbarkeit über `app.fetch`** sind gemessen. Die Aussagen über `proof:access` und
+`proof:tags` in 32.4 sind **statisch gelesen und ausdrücklich nicht gemessen**; sie stehen dort als
+Vorbereitung und nicht als Abnahme.
+
+**Die Suchregel** aus `CLAUDE.md` ist in beiden Hälften gefahren: `git grep` **und** ein roher Lauf
+über `apps/*/src`, `packages/*/src`, `tests/` und `docs/`, Bauergebnisse
+(`apps/desktop/src-tauri/taskpane/`) ausgeschlossen. Ergebnis für O-KS in 32.1.
+
+**E-087, auf den Auftrag selbst angewandt.** Zwei der drei Punkte hatten seit ihrer Meldung eine
+Antwort bekommen, die im Auftrag nicht stand — O-JM ist in 29.3 bereits berichtigt worden (nur nicht
+**an Ort und Stelle**, O-JZ), und O-JL ist in 30.7 bereits entschieden worden. **Beide Befunde gibt
+es heute trotzdem noch**, und zwar an anderer Stelle als gemeldet: bei O-JM stand die falsche Zahl
+weiter in der Tafel, die der nächste Leser zuerst sieht; bei O-JL trug die Entscheidung eine
+**gemessen zu milde** Begründung. Beides ist jetzt an Ort und Stelle berichtigt.
+
+---
+
+### 32.1 O-KS — die Zeile, die die Sicherheitseigenschaft wegbeschrieb
+
+**Den Befund gibt es heute noch, und er ist größer als „falsch".**
+
+`docs/bedrohungsmodell.md:5236` (Hinweis T-156-8) sagte: *„`attachmentLabel` schneidet `https://`
+beziehungsweise `http://` weg."* **Für `http://` ist das seit T-168 falsch.** Nachgemessen an
+`packages/domain/src/attachment.ts:1044` und am laufenden Erzeugnis:
+
+| Ziel | Beschriftung ohne Titel |
+|---|---|
+| `https://beispiel.example/tickets/4711` | `beispiel.example/tickets/4711` |
+| `http://beispiel.example/tickets/4711` | **`http://beispiel.example/tickets/4711`** |
+| `https://beispiel.example/` | `beispiel.example` |
+| `http://beispiel.example/` | **`http://beispiel.example`** |
+| `http://beispiel.example:8443/a?b=1#c` | **`http://beispiel.example:8443/a?b=1#c`** |
+
+Die beiden Beschriftungen von `http://…/tickets/4711` und `https://…/tickets/4711` sind **nicht
+gleich**, und die erste beginnt mit `http://`.
+
+**Warum das kein Schreibfehler ist.** Der Hinweis T-156-8 war seinerzeit richtig, und er hat gewirkt:
+Er ist die Begründung, die heute im Kopf von `attachmentLabel` steht (*„Zweitens ist es die einzige
+Stelle vor dem Klick, an der eine Herabstufung von `https` auf `http` zu sehen ist — bei einem
+Verweis fragt Takt nicht zurück (A-A-7) … (Bedrohungsmodell, Hinweis T-156-8)"*). Der Code ist dem
+Hinweis gefolgt; **das Papier ist ihm nicht gefolgt**. Damit stand in der
+Sicherheitsbewertung dieser Anwendung ein Satz, der die Eigenschaft, die den Befund geschlossen hat,
+als nicht vorhanden beschreibt. Wer ihn als Auftrag läse — „das Schema fällt ohnehin weg, also kann
+es auch bei `http` weg" —, kürzte die Herabstufungsanzeige weg und hielte das für Aufräumen.
+
+**Die Gegenprobe: gibt es die Eigenschaft heute wirklich, oder beschreibe ich sie herbei?** Sie ist
+dreifach verankert, und keine der drei Verankerungen ist von mir:
+
+1. **Im Code**, als Zweig mit ausgeschriebener Begründung (`attachment.ts:1041–1044`).
+2. **Im Prüffall**, zweimal namentlich: *„Verweis ohne Titel: `http://` bleibt SICHTBAR stehen —
+   Absicht, nicht vergessen (T-168 1.4)"* und *„http und https auf demselben Pfad bleiben
+   unterscheidbar, weil `http://` sichtbar bleibt"* (`packages/domain/test/attachment.test.ts:679`
+   und `:748`).
+3. **In der Prüfung durch spec-ux-reviewer**, T-237, als bewußte Abweichung von X-04 erneut geprüft
+   und bestätigt.
+
+**Suchregel, beide Hälften, Ergebnis.** `git grep` findet die falsche Formulierung an **einer**
+Stelle im Papier; der rohe Lauf über die Quellverzeichnisse findet **dieselbe eine** und sonst
+nichts. Zusätzlich gefunden und ausdrücklich **nicht** zu berichtigen:
+`.claude/team/reports/T-156-security-checker.md:231` schreibt *„`attachmentLabel` schneidet
+`https://` weg"* — **ohne** das `http://`. Der Bericht war richtig; die Abweichung ist beim Übertrag
+ins Papier entstanden. Ein Bericht ist ein Stand seines Tages und wird nicht rückwirkend
+umgeschrieben.
+
+**Erledigt.** Zeile 5236 ist an Ort und Stelle berichtigt, mit Marke, mit den gemessenen Werten und
+mit dem Satz, warum die Kürzung hier nicht stattfindet. Der Hinweis T-156-8 ist damit **geschlossen**
+und nicht offen: Was er verlangte, ist gebaut.
+
+---
+
+### 32.2 O-JL — der benannte Rest von A-A-51, entschieden mit Zahlen
+
+#### Die Zahlen, um die gebeten wurde
+
+Gezählt an `probe.app.routes` des zusammengesetzten Dienstes, heutiger Baum:
+
+| Größe | Zahl |
+|---|---|
+| Einträge in der Routenliste | **83** |
+| davon Kettenglieder (Methode `ALL`) | **10** |
+| davon Endpunkte (Methode `GET`/`POST`/`PATCH`/`PUT`/`DELETE`) | **73** |
+| **Endpunkte, die auf einem Platzhalter liegen** | **30** (auf 18 verschiedenen Pfaden) |
+| davon mit `*` im Pfad | **0** |
+| **Endpunkte, die an ihrem Pfad ununterscheidbar sind** | **0** |
+
+**Warum die letzte Zahl null ist, und warum das die Frage nicht erledigt.** Ununterscheidbarkeit
+setzt die Methode `ALL` voraus — nur dort trägt Hono Kettenglieder und Endpunkte in denselben Topf.
+Unter `ALL` steht heute **kein einziger Endpunkt**. Die 30 Endpunkte auf Platzhaltern tragen
+sämtlich eine konkrete Methode und sind deshalb an ihrem Eintrag zu erkennen, Platzhalter hin oder
+her. **Die ununterscheidbare Klasse ist ausschließlich die der zehn Kettenglieder.**
+
+#### Warum eine gepflegte Aufstellung hier nicht teuer, sondern wirkungslos wäre
+
+Das ist die Zahl, auf die es ankommt:
+
+| Unterscheidungsmerkmal | verschiedene Werte über die zehn Kettenglieder | Unterscheidungskraft |
+|---|---|---|
+| **Pfad** | **1** (`/*`, zehnmal derselbe) | **null** |
+| Name der Handlerfunktion | 3 (`bodyLimit2`, `timeout2`, **8 × der leere Name**) | null für die acht, die die Grenze tragen |
+| Stelligkeit des Handlers | 1 (alle zehn nehmen `(c, next)`) | null |
+
+**Eine Aufstellung der erlaubten Kettenglied-*Pfade* hätte genau ein Element und könnte über die
+zehn nichts sagen.** Sie wäre nicht der teure, aber wirksame Weg — sie wäre der teure und
+**unwirksame**. Das ist der Grund, aus dem ich sie nicht anordne, und er ist gemessen und nicht
+gefühlt. Der zweitbeste Fingerabdruck, der Handlername, ist für **8 von 10** leer, weil die Wächter
+aus Fabrikfunktionen kommen; auch er trägt nicht.
+
+#### Was A-A-56 heute fängt und was nicht — vier Gegenproben, im Spiegel
+
+Jede Gegenprobe ist eine Zeile in `src/app.ts`, gefahren gegen die **echten** Läufe:
+
+| Gegenprobe | `proof:openapi` | Code | Die Zeile, die zuschlägt |
+|---|---|---|---|
+| unveränderter Spiegel | **114/0** | **0** | — (kein falscher Alarm) |
+| **R2** `api.all('/*', …)` **zusätzlich** | **112/2** | **1** | A-A-56 Form (`/api/v1/*`) **und** Zahl (`11`) |
+| **R3** `api.all('/addin/leak/:id', …)` | **112/2** | **1** | A-A-56 Form **und** Zahl |
+| **R4** `api.all('/addin/leak', …)` | **111/3** | **1** | A-A-51 **und** A-A-56 Form **und** Zahl |
+| **R1** Kettenglied 6 (`contentTypeGuard`) **ersetzt** durch `app.all('*', …)` | **114/0** | **0** | **keine** |
+| **R1b** Kettenglied 1 (`securityHeaders`) **ersetzt** durch `app.all('*', …)` | **114/0** | **0** | **keine** |
+
+`proof:route-policy` bleibt bei R1 und R1b ebenfalls **43/0, Code 0**. **Drei der vier Formen sind
+gefangen; die vierte — der Tausch bei gleichbleibender Zahl — ist der benannte Rest, und er ist
+heute zum ersten Mal an diesem Baum gemessen und nicht nur beschrieben.**
+
+#### Und noch eine Form, die im Auftrag nicht stand: die **Reihenfolge**
+
+Sie ist mir beim Bauen der Gegenproben in die Hand gefallen, und sie gehört hierher, weil sie
+dieselbe Lücke ist:
+
+| Gegenprobe | Kettenglieder gezählt | `proof:openapi` | `proof:route-policy` | Code |
+|---|---|---|---|---|
+| **(3)** `authGuard` und `hostGuard` **vertauscht** | **10**, in **anderer** Reihenfolge | **114/0** | **43/0** | **0** |
+| **(4)** `originGuard` **ersatzlos gestrichen** | **9** | **113/1** | **42/1** | **1** |
+| zum Vergleich: `credentialPolicy` und `authGuard` vertauscht | 10 | **rot** (der Durchlauf bekommt 401) | — | 1 |
+
+**Streichen wird gefangen, Vertauschen nicht — jedenfalls nicht zuverlässig.** Die dritte Zeile zeigt,
+daß **manche** Vertauschung am Verhalten auffällt, weil der Durchlauf dann nicht mehr durchkommt; die
+erste zeigt, daß **andere** vollständig unsichtbar bleiben. Über dem Block in `src/app.ts` steht
+*„Die Kette. Reihenfolge ist Inhalt"* — **und kein Lauf dieses Baums mißt diesen Inhalt.** Ob eine
+bestimmte Vertauschung ein Loch aufreißt, ist eine Frage für sich und hier nicht behauptet; daß der
+Wächter dagegen fehlt, ist gemessen.
+
+#### Die Reichweite des Restes — hier ist 30.7 zu milde gewesen
+
+Der getarnte Sammelpfad antwortet in R1/R1b auf `/api/v1/leak` und auf `/leak`; für jeden anderen
+Pfad reicht er durch. Erreichbarkeit, gemessen über `app.fetch`:
+
+| Tausch an | ohne jeden Nachweis | fremde Herkunft | fremder `Host` |
+|---|---|---|---|
+| Stelle 6 (`contentTypeGuard`) | **200** | 403 `origin_not_allowed` | 403 `host_not_allowed` |
+| **Stelle 1 (`securityHeaders`)** | **200** | **200** | **200** |
+| Vergleich `/api/v1/todos`, unverändert | 401 | — | — |
+
+**Ein Tausch an Stelle *k* schaltet für den getarnten Pfad 11 − *k* Wächter ab**, weil das getauschte
+Glied antwortet statt durchzureichen. An Stelle 1 sind es alle zehn, und dann ist der Pfad aus
+**jeder Webseite im Browser des Benutzers** erreichbar — genau die Klasse, die `CLAUDE.md` als die
+wahrscheinlichste echte Lücke dieser Architektur benennt. 30.7 ist an dieser Stelle berichtigt: Der
+Satz *„die Reichweite ist klein"* gilt für den **hinzugefügten** Eintrag (den A-A-56 ohnehin fängt),
+nicht für den **getauschten**.
+
+Und die Durchgriffsprobe aus 29.2.4 schließt ihn auch nicht: Das Glied aus R1 reicht für jeden
+nirgends registrierten Pfad durch und sähe in der Probe wie ein Kettenglied aus. 30.7 Punkt drei
+gilt damit unverändert — jetzt mit einem gemessenen Fall statt mit einem Argument.
+
+#### Die Entscheidung
+
+**Hinnehmen mit benanntem Rest — keine Aufstellung von Pfaden. Und der Rest bekommt eine Auflage,
+die keine Aufstellung von Pfaden ist: A-A-69.**
+
+Die Begründung in einem Satz: **Der Pfad kann den Rest nicht schließen, weil alle zehn denselben
+Pfad tragen; die Reihenfolge kann es, weil sie schon Inhalt ist.** In `src/app.ts` steht über dem
+Block wörtlich *„Die Kette. Reihenfolge ist Inhalt"* — und `MIDDLEWARE_COUNT = 10` ist bereits die
+**Mächtigkeit** genau der Liste, die A-A-69 verlangt. Der Schritt von der Zahl zu den zehn Namen in
+ihrer Reihenfolge legt deshalb **keinen neuen Pflegeort** an; er füllt den bestehenden aus.
+
+**Der Preis, ausgeschrieben, damit ihn niemand später als verschwiegen findet.** A-A-69 liest den
+**Quelltext** von `src/app.ts` und nicht das Verhalten. Sie prüft, daß die zehn Wächter dort in
+dieser Reihenfolge registriert sind — nicht, daß sie laufen; das messen `proof:access` und
+`proof:route-policy`. Wer die Kette umbaut (etwa in eine Hilfsfunktion zieht), macht sie rot, ohne
+daß ein Sicherheitsfehler vorläge; das ist der bewußt gewählte Preis, und er kostet eine Zeile im
+Lauf. **Gemessener Ertrag:** Ein Prototyp, der `app.(use|all|on)('…', Wächter(` aus der Datei liest,
+zählt am unveränderten Baum die zehn in genau dieser Reihenfolge und meldet bei **beiden**
+Tauschformen **9 statt 10** und **welcher** Wächter fehlt.
+
+---
+
+### 32.3 O-JM — Zahl gegen Zahl, jetzt an der Stelle, an der die Zahl steht
+
+**Den Befund gibt es heute noch — an einer anderen Stelle, als er gemeldet war.** 29.3 hat die
+Berichtigung schon 2026-09-06 aufgeschrieben, vollständig und mit Marke. Sie steht aber **hinter**
+der Tafel, die sie berichtigt, und über 4 000 Zeilen davon entfernt. Wer 28.2.2 liest, liest die
+falsche Zahl und erfährt nichts von 29.3. Das ist O-JZ in Reinform: ein Nachtrag, der die
+berichtigte Stelle nicht erreicht.
+
+**Nachgemessen, jede der drei Stellen einzeln, im Spiegel, gegen den heutigen Lauf:**
+
+| ersetzt | Antworten mit dem Vermerk | `proof:openapi` | Code |
+|---|---|---|---|
+| nichts | **2** | **114/0** | 0 |
+| Stelle 1 (`:449`) | **1** | **113/1** | **1** |
+| Stelle 2 (`:520`) | **1** | **113/1** | **1** |
+| **Stelle 3 (`:877`, Add-in-Route)** | **2** | **114/0** | **0** |
+| alle drei | **0** | **113/1** | **1** |
+
+**Die Zahl ist zwei.** Und die zweite Hälfte der alten Tafel ist nicht nur falsch, sondern
+**überholt**: Die Zeile *„alle drei umgeschrieben → 110/0, Code 0"* war der Befund; heute ist es
+**113/1, Code 1**, weil A-A-52 gebaut ist und die Zwei selbst mißt. Eine Tafel, die einen behobenen
+Befund als offen führt, ist derselbe Schaden wie eine, die eine falsche Zahl führt.
+
+**Erledigt.** 28.2.2 trägt jetzt beide Tafeln: die erste als **Stand mit Datum und Herkunft**
+(durchgestrichen, nicht gelöscht — sie ist die Spur des Befunds), die zweite als geltende Messung mit
+Datum. E-087 Punkt 2, angewandt auf mein eigenes Papier.
+
+---
+
+### 32.4 Vorbereitung der Abnahme T-235 — was ohne Port ging, und was ausdrücklich nicht
+
+Die Abnahme selbst ist **nicht** gefahren; sie braucht 17843. Was sich statisch feststellen ließ:
+
+| Auflage | Gebaut? | Statisch gelesen |
+|---|---|---|
+| **A-A-66** | ja | `proof-tags.mjs:789` und `:796` prüfen den **Grund** neben dem Status: *„und die Antwort sagt, daß es an ihrer Zahl lag"*, *„und die Antwort nennt den leeren Namen"*. |
+| **A-A-67** | ja | `proof-tags.mjs:645` und `:664` — **beide** Formen, die die Auflage als tragfähig genannt hat: die Fehlerkennung („der Fehlschlag trägt keine Feldangabe") **und** die positive Verankerung („derselbe Rumpf ohne die unmögliche Spalte legt das Tag an"). Die Auflage verlangte eine; gebaut sind zwei. |
+| **A-A-68** | ja | `proof-access.mjs:1118` `MINDESTENS_DURCHSUCHT = 14`, dazu ein **zweiter Weg** (`vonHand`, von Hand abgestiegen statt `recursive: true`) mit `scanned.length === vorhanden.length`. |
+
+**Eine Zahl davon ist ohne Port nachzählbar und stimmt:** Unter den beiden Sammelwurzeln
+`src/access` und `src/http` liegen heute **16** `.ts`-Dateien. Die benannte Untergrenze 14 läßt zwei
+verschwinden, ohne rot zu werden, und liegt mit Faktor dreieinhalb über den vier tragenden — das
+Verhältnis, das die Auflage verlangt hat.
+
+**Was ausdrücklich offen bleibt:** die Zahlen. Die Erwartung des Erbauers liegt vor und wird in der
+nächsten Welle **zeichengenau** gegengeprüft: `proof:tags` **45/0** und `proof:access` **108/0** auf
+unverändertem Baum, **acht** Gegenproben rot mit Code 1, darunter die entscheidenden **43/2**
+(`proof:tags`, je Verstümmelung **plus** Kunstquelle) und **107/1** (`proof:access`,
+Unterordnerdatei **plus** gestrichenes `recursive: true`). Kein Wort davon ist hier abgenommen.
+
+---
+
+### 32.5 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-241-1** | **Berichtigung** | **Das Papier hat eine Sicherheitseigenschaft wegbeschrieben, der es selbst zum Leben verholfen hat.** Zeile 5236 sagte, `attachmentLabel` schneide `https://` **und** `http://` weg. Gemessen: `http://beispiel.example/tickets/4711` → `http://beispiel.example/tickets/4711`, `https://…` → `beispiel.example/…`; die beiden Beschriftungen sind nicht gleich. Der Code folgt seit T-168 dem Hinweis T-156-8 und nennt ihn im Kommentar; das Papier ist ihm nicht gefolgt. Dreifach verankert (Code, zwei namentliche Prüffälle, T-237). **An Ort und Stelle berichtigt, Hinweis T-156-8 geschlossen.** | — |
+| **T-241-2** | **Berichtigung** | **30.7 war an einer Stelle gemessen zu milde.** Der Satz *„die Reichweite des getarnten Sammelpfads ist klein — 401 für das Add-in-Token"* gilt für einen **hinzugefügten** `ALL`-Eintrag hinter der Kette (den A-A-56 an der Zahl fängt), nicht für den **getauschten** in der Kette. Gemessen: Tausch an Stelle 6 → **200 ohne jeden Nachweis**; Tausch an Stelle 1 → **200 auch mit fremder Herkunft und fremdem `Host`**, also aus jeder Webseite im Browser. Beide Male `proof:openapi` **114/0** und `proof:route-policy` **43/0**, Code 0. **An Ort und Stelle berichtigt.** | — |
+| **T-241-3** | **soll** | **Der Rest von A-A-51 ist tragbar, aber er soll nicht unbewacht bleiben — und der Wächter ist billig.** Gemessen: Der Tausch bei gleichbleibender Zahl ist die einzige der vier `ALL`-Formen, die beide Läufe grün läßt (114/0 und 43/0, Code 0); die anderen drei sind rot (112/2, 112/2, 111/3, alle Code 1). Eine Aufstellung der erlaubten **Pfade** hilft nicht: **10 von 10 Kettengliedern tragen denselben Pfad `/*`**, und **8 von 10** tragen den leeren Handlernamen. Was hilft, ist die **Reihenfolge** — sie ist in `app.ts` bereits als Inhalt bezeichnet (*„Die Kette. Reihenfolge ist Inhalt“*), und `MIDDLEWARE_COUNT = 10` ist bereits ihre Mächtigkeit. **Dazu ein zweiter, größerer Teil desselben Lochs, beim Bauen der Gegenproben gemessen:** `authGuard` und `hostGuard` vertauscht → zehn Kettenglieder in anderer Reihenfolge, `proof:openapi` **114/0** und `proof:route-policy` **43/0**, beide Code 0 — **kein Lauf dieses Baums mißt die Reihenfolge der Kette**, obwohl `app.ts` sie ausdrücklich Inhalt nennt. Gestrichen wird gefangen (`originGuard` weg → 113/1 und 42/1, Code 1), vertauscht nicht. Gegenmittel: **A-A-69**. | domain-dev |
+| **T-241-4** | **Berichtigung** | **28.2.2 führte eine falsche und eine überholte Zahl.** Falsch: „eine der drei Stellen → 1" gilt nur für zwei der drei. Überholt: „alle drei → 110/0, Code 0" ist seit A-A-52 **113/1, Code 1**. Beides in 29.3 bereits gemeldet, aber **hinter** der Tafel und 4 000 Zeilen entfernt (O-JZ). **Beide Tafeln stehen jetzt an Ort und Stelle: die alte als Stand mit Datum, die neue als Messung mit Datum.** | — |
+| **T-241-5** | Feststellung | **Kein Endpunkt liegt heute unter `ALL`.** 83 Einträge, 73 Endpunkte, 10 Kettenglieder; **30** Endpunkte auf einem Platzhalter (18 verschiedene Pfade), **0** davon mit `*`, **0** am Pfad ununterscheidbar. Die ununterscheidbare Klasse ist ausschließlich die der zehn Kettenglieder. Damit ist die Frage aus O-JL beantwortet, und die Antwort ist der Grund, warum die Aufstellung wirkungslos wäre. | — |
+| **T-241-6** | Feststellung | **Der Bericht war richtig, das Papier war falsch.** `.claude/team/reports/T-156-security-checker.md:231` schreibt „schneidet `https://` weg" — ohne `http://`. Die Abweichung ist beim Übertrag ins Papier entstanden. Berichte werden nicht rückwirkend umgeschrieben; die Beobachtung gehört trotzdem aufgeschrieben, weil sie sagt, **wo** der Fehler entsteht: nicht beim Messen, beim Zusammenfassen. | — |
+| **T-241-7** | Hinweis | **Semgrep Guardian und 42Crunch weiterhin ohne Werkzeug.** Unverändert seit T-156-9: Die Lieferkette dieses Baums ist nie gemessen worden, und seit `v0.1.0` sind Binärdateien draußen. Beschaffungsentscheidung, nicht Agentenarbeit. | Orchestrator |
+| **T-241-8** | Feststellung | **Der Port hat diese Prüfung weniger gekostet als die zwei davor — weil zwei Läufe über `app.fetch` gehen.** Ohne Port fahrbar und gefahren: `proof:openapi` und `proof:route-policy` je einmal am unveränderten Baum, dazu **sechzehn** Läufe an einer Verstümmelung im Spiegel (**zwölf** `proof:openapi`, **vier** `proof:route-policy`), `proof:codepoints` einmal, **sieben** Läufe des Prototyps zu A-A-69 und vier eigene Messungen am zusammengesetzten Dienst (Beschriftung, Routenliste, Handlernamen, Erreichbarkeit). **Nicht fahrbar und deshalb nicht behauptet:** `proof:access`, `proof:tags`, `proof:db-permissions`, `proof:taskpane` — und mit ihnen die ganze Abnahme von T-235. Die Entzerrung des festen Ports (E-083 Punkt 4, O-KJ) bleibt fällig. | Orchestrator |
+
+### 32.6 Neue Auflagen
+
+| Auflage | Was zu tun ist | Wie geprüft wird |
+|---|---|---|
+| **A-A-69** | Der Rest von A-A-51 wird bewacht, **ohne** eine Aufstellung von Pfaden — die trüge nichts (10 von 10 Kettengliedern haben den Pfad `/*`). Bewacht wird die **Reihenfolge**: `proof:route-policy` liest `src/app.ts` als Text und hält die Registrierungen an der Wurzel-App gegen eine im Lauf **ausgeschriebene** Liste der zehn Wächter **in ihrer Reihenfolge** — `securityHeaders`, `requestLog`, `hostGuard`, `originGuard`, `urlSecretGuard`, `contentTypeGuard`, `bodyLimit`, `timeout`, `authGuard`, `credentialPolicy`. `MIDDLEWARE_COUNT` wird von dieser Liste abgeleitet und nicht mehr daneben geführt; damit entsteht **kein zweiter Pflegeort**. Der Kommentar nennt drei Dinge: daß die Reihenfolge Inhalt ist (der Satz steht schon in `app.ts`), daß ein getauschtes Glied **antwortet statt durchzureichen** und deshalb alles hinter sich abschaltet, und daß dieser Lauf **Quelltext** liest und nicht Verhalten — das Verhalten messen `proof:access` und `proof:route-policy` an ihren eigenen Zeilen. | In **beide** Richtungen. Unveränderter Baum: grün, kein falscher Alarm; die Zeile nennt die zehn in ihrer Reihenfolge. Vier Gegenproben, alle **rot mit Code 1** und alle mit dem **Namen** des betroffenen Wächters in der Meldung: (1) `securityHeaders` durch `app.all('*', …)` ersetzt, (2) `contentTypeGuard` durch `app.all('*', …)` ersetzt, (3) zwei Glieder vertauscht (`authGuard` vor `hostGuard`), (4) ein Glied ersatzlos gestrichen. Der Prototyp aus 32.2 liefert für (1), (2) und (4) bereits **9 statt 10** und **benennt den fehlenden Wächter** — das ist der Zugewinn gegenüber A-A-56, die bei (4) zwar rot wird (113/1), aber nur die Zahl nennt und nicht, welches Glied fehlt. Für (3) zählt der Prototyp **10** und muß an der **Reihenfolge** rot werden; eine Zahlmeldung wäre dort der falsche Befund. Gemessen: (3) läßt heute `proof:openapi` bei **114/0** und `proof:route-policy` bei **43/0**, beide Code 0. Zusätzlich als Nichtregression: `proof:openapi` bleibt bei **114/0** und `proof:route-policy` bei seiner heutigen Zahl **+ den neuen Zeilen**. |
+| **A-A-70** | **Eine Regel gegen die Fehlerart aus T-241-1 und T-241-4, und sie kostet nichts.** Wird in diesem Papier eine Aussage über gemessenes Verhalten berichtigt oder überholt, steht die Berichtigung **an der Stelle**, an der die alte Aussage steht — mit Marke und Datum —, und nicht nur im Kapitel der Prüfung, die sie gefunden hat. Ein Nachtrag im hinteren Teil darf die Stelle **ergänzen**, aber nicht **ersetzen**. Der Grund ist zweimal gemessen: 29.3 hat O-JM vollständig berichtigt und die falsche Zahl stand danach zwei Wellen weiter in der Tafel, die der nächste Leser zuerst sieht; T-156-8 hat eine Sicherheitseigenschaft ausgelöst und beschrieb sie danach als nicht vorhanden. | Keine Messung; eine Regel über dieses Papier. Ihre Wirkung ist an 21.4, 28.2.2 und 30.7 in dieser Fassung ablesbar — drei Stellen, an denen die Berichtigung jetzt dort steht, wo die Aussage steht. |
+
+### 32.7 Urteil dieser Prüfung
+
+**Zu den drei Punkten: erledigt, alle drei, und alle drei an Ort und Stelle.** O-KS berichtigt und
+der Hinweis T-156-8 geschlossen; O-JL entschieden — **hinnehmen mit benanntem Rest, keine Aufstellung
+von Pfaden**, begründet mit der Zahl **1** (so viele verschiedene Pfade tragen die zehn Kettenglieder)
+und der Zahl **0** (so viele Endpunkte sind heute an ihrem Pfad ununterscheidbar); O-JM nachgemessen,
+auf **eine** Zahl gebracht und die alte als Stand mit Datum aufbewahrt.
+
+**Was im Auftrag nicht stand und trotzdem hier steht.** Beim Bauen der Gegenproben für O-JL ist eine zweite, größere Form derselben Lücke aufgefallen: **Die Reihenfolge der zehn Kettenglieder wird von keinem Lauf gemessen.** Zwei Glieder vertauscht — `proof:openapi` **114/0**, `proof:route-policy` **43/0**, beide Code 0. Ein gestrichenes Glied fällt auf (die Zahl), ein verschobenes nicht. A-A-69 deckt beides ab, weil eine Liste in Reihenfolge beides trägt — das ist der Grund, warum die Auflage die Reihenfolge und nicht nur die Namen verlangt.
+
+**Zur Prüfung insgesamt: Nacharbeit.** Ein Befund der Stufe **soll** (T-241-3, Gegenmittel A-A-69),
+drei Berichtigungen an meinem eigenen Papier, zwei neue Auflagen. **Keine berührt Produktivcode**;
+A-A-69 liegt in `apps/local-api/scripts/**`, A-A-70 in diesem Papier.
+
+**Der Satz dieser Prüfung.** Zweimal in einem Auftrag hat mein eigenes Papier eine Sache falsch
+beschrieben, die es selbst durchgesetzt hat — die Herabstufungsanzeige und die Zwei im Vermerk. Beide
+Male war der **Code** richtig, beide Male war der **Bericht** richtig, und beide Male war die
+**Zusammenfassung** falsch. Der Fehler entsteht nicht beim Messen. Er entsteht, wenn eine Messung zu
+einem Satz wird und der Satz danach ohne die Messung weiterlebt. **Deshalb A-A-70, und deshalb steht
+in diesem Kapitel neben jeder Zahl, wann sie gemessen wurde.**
