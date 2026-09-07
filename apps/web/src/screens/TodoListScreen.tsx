@@ -436,6 +436,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         }
       >
         <FilterBar
+          className="todo-list__filters"
           label="Todos filtern"
           resultLabel={
             list.state.status === "ready"
@@ -490,23 +491,25 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                   { value: "no_due_date", label: DEADLINE_FILTER_LABEL.no_due_date },
                 ]}
               />
-              <Select
-                label="Ordnung"
-                value={sort}
-                onChange={(next) => setSort(next === "asc" || next === "desc" ? next : "")}
-                options={[
-                  { value: "", label: TODO_SORT_LABEL[""] },
-                  { value: "asc", label: TODO_SORT_LABEL.asc },
-                  { value: "desc", label: TODO_SORT_LABEL.desc },
-                ]}
-                hint="Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten."
-              />
-              <FilterToggle
-                label="Erledigte einblenden"
-                pressed={showDone}
-                onChange={setShowDone}
-                hint="Voreingestellt ausgeblendet"
-              />
+              <div className="todo-list__ordering">
+                <Select
+                  label="Ordnung"
+                  value={sort}
+                  onChange={(next) => setSort(next === "asc" || next === "desc" ? next : "")}
+                  options={[
+                    { value: "", label: TODO_SORT_LABEL[""] },
+                    { value: "asc", label: TODO_SORT_LABEL.asc },
+                    { value: "desc", label: TODO_SORT_LABEL.desc },
+                  ]}
+                  hint="Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten."
+                />
+                <FilterToggle
+                  label="Erledigte einblenden"
+                  pressed={showDone}
+                  onChange={setShowDone}
+                  hint="Voreingestellt ausgeblendet"
+                />
+              </div>
             </>
           }
         />

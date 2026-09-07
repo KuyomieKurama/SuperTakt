@@ -1388,6 +1388,68 @@ body:has(.scrim) .toast {
   color: var(--text-muted);
 }
 
+/*
+ * Ordnung und Erledigt-Schalter bilden eine Zeile, obwohl nur das
+ * Auswahlfeld einen Hinweis darunter trägt. `align-items: flex-end` in der
+ * allgemeinen Filterleiste richtet sonst den Schalter an der Unterkante des
+ * Hinweises aus: Er steht dann sichtbar eine Zeile tiefer als das Feld.
+ *
+ * `display: contents` lässt die drei Teile des Auswahlfelds am gemeinsamen
+ * Raster teilnehmen. Damit teilen sich Auswahl und Schalter wirklich die
+ * zweite Rasterzeile; die Höhe oder Zeilenzahl des Hinweises kann ihre
+ * Ausrichtung nicht mehr verschieben.
+ */
+.todo-list__filters {
+  container-type: inline-size;
+}
+
+.todo-list__ordering {
+  display: grid;
+  grid-template-columns: minmax(16rem, 29rem) max-content;
+  grid-template-rows: auto auto auto;
+  align-items: start;
+  gap: var(--space-1) var(--space-3);
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.todo-list__ordering > .field {
+  display: contents;
+}
+
+.todo-list__ordering > .field > .field__label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.todo-list__ordering > .field > .select {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.todo-list__ordering > .field > .field__hint {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.todo-list__ordering > .filter-toggle {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+@container (max-width: 44rem) {
+  .todo-list__ordering {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .todo-list__ordering > .filter-toggle {
+    grid-column: 1;
+    grid-row: 4;
+    justify-self: start;
+    margin-top: var(--space-2);
+  }
+}
+
 .todo-list {
   display: flex;
   flex-direction: column;
