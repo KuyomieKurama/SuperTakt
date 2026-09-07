@@ -125,7 +125,24 @@ jobs:
       - name: Rust-Prüffälle auf dieser Plattform
         shell: bash
         working-directory: apps/desktop/src-tauri
-        run: cargo test --lib
+        run: |
+          set -o pipefail
+          protokoll="$RUNNER_TEMP/rust-tests.log"
+          set +e
+          cargo test --lib 2>&1 | tee "$protokoll"
+          test_code=${PIPESTATUS[0]}
+          set -e
+          if (( test_code != 0 )); then
+            # Die Protokolle eines oeffentlichen Bestands sind ohne Anmeldung
+            # nicht abrufbar. Der aussagekraeftige Schluss steht deshalb auch
+            # als Check-Anmerkung bereit, statt nur „Code 101" zu melden.
+            details="$(tail -n 100 "$protokoll")"
+            details="${details//'%'/'%25'}"
+            details="${details//$'\r'/'%0D'}"
+            details="${details//$'\n'/'%0A'}"
+            echo "::error title=Rust-Prüffälle fehlgeschlagen::$details"
+          fi
+          exit "$test_code"
 
   # =========================================================================
   # Die Lieferkette (E-079)
