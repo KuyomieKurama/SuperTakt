@@ -83,10 +83,11 @@
  * — gleich, ob es aus einem Netzanschluss oder von hier kommt.
  */
 
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import ts from 'typescript';
 
 import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
@@ -257,8 +258,86 @@ function hasPlaceholder(path) {
  */
 const MIDDLEWARE_PATH = '/*';
 
-/** Die Zahl der Kettenglieder aus `src/app.ts` — siehe {@link MIDDLEWARE_PATH}. */
-const MIDDLEWARE_COUNT = 10;
+/**
+ * A-A-69 — die Wächter der Wurzel-App, in ihrer wirksamen Reihenfolge.
+ *
+ * In `src/app.ts` steht bereits „Reihenfolge ist Inhalt“. Ein Glied, das
+ * antwortet statt an `next` weiterzureichen, schaltet alle Wächter hinter
+ * sich ab; deshalb ist ein Tausch nicht bloß eine Umformatierung. Dieser
+ * Nachweis liest bewusst **Quelltext**, nicht Verhalten. Das Verhalten der
+ * Kette messen die Angriffe in diesem Lauf und in `proof:access`; ein Umbau
+ * der Registrierungsform darf diese Quelltextprüfung daher auch dann rot
+ * machen, wenn das Verhalten unverändert geblieben ist.
+ */
+const EXPECTED_MIDDLEWARE_ORDER = [
+  'securityHeaders',
+  'requestLog',
+  'hostGuard',
+  'originGuard',
+  'urlSecretGuard',
+  'contentTypeGuard',
+  'bodyLimit',
+  'timeout',
+  'authGuard',
+  'credentialPolicy',
+];
+
+/** Die Zahl wird aus derselben Liste abgeleitet, nicht daneben gepflegt. */
+const MIDDLEWARE_COUNT = EXPECTED_MIDDLEWARE_ORDER.length;
+
+/**
+ * Liest ausschließlich `app.use('*', name(` an der Wurzel-App.
+ *
+ * `app.all` und `app.on` sind absichtlich keine gleichwertigen Schreibweisen:
+ * Hono registriert sie als Endpunkt. Genau dieser Tausch ließ den bisherigen
+ * Routenwächter bei gleichbleibender Zahl grün werden (T-241-3).
+ */
+async function middlewareOrderFromSource() {
+  const source = await readFile(new URL('../src/app.ts', import.meta.url), 'utf8');
+  const tree = ts.createSourceFile('src/app.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const registrations = [];
+
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === 'app' &&
+      node.expression.name.text === 'use' &&
+      node.arguments.length >= 2 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === '*' &&
+      ts.isCallExpression(node.arguments[1]) &&
+      ts.isIdentifier(node.arguments[1].expression)
+    ) {
+      registrations.push(node.arguments[1].expression.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(tree);
+  return registrations;
+}
+
+function sameOrder(actual, expected) {
+  return actual.length === expected.length && actual.every((name, index) => name === expected[index]);
+}
+
+function middlewareOrderDifference(actual, expected) {
+  const missing = expected.filter((name) => !actual.includes(name));
+  const unexpected = actual.filter((name) => !expected.includes(name));
+  const firstDifference = expected.findIndex((name, index) => actual[index] !== name);
+  const parts = [];
+  if (firstDifference !== -1) {
+    parts.push(
+      `erste Abweichung an Stelle ${firstDifference + 1}: erwartet ${expected[firstDifference]}, gefunden ${actual[firstDifference] ?? 'nichts'}`,
+    );
+  }
+  if (missing.length > 0) parts.push(`fehlend: ${missing.join(', ')}`);
+  if (unexpected.length > 0) parts.push(`unerwartet: ${unexpected.join(', ')}`);
+  parts.push(`gelesen: ${actual.join(' → ') || '(keine)'}`);
+  return parts.join('; ');
+}
 
 /**
  * Baut den Dienst ein zweites Mal, nur um ihn nach seinen Routen zu fragen.
@@ -518,6 +597,17 @@ try {
   const { routes, opaque, allEntries } = collectRoutes();
   const foreign = routes.filter((r) => requiredCredentialForPath(r.path) === 'session');
   const own = routes.filter((r) => requiredCredentialForPath(r.path) === 'any');
+  const middlewareOrder = await middlewareOrderFromSource();
+
+  // A-A-69 — Namen und Reihenfolge stehen vor den Urteilen über die
+  // Routenliste. Die Zeile nennt auf dem grünen Baum die vollständige Kette;
+  // bei einem Tausch oder Ausfall nennt ihr Detail die erste Abweichung und
+  // den fehlenden Wächter.
+  check(
+    `die Wächterkette der Wurzel-App steht in ihrer wirksamen Reihenfolge: ${EXPECTED_MIDDLEWARE_ORDER.join(' → ')} (A-A-69)`,
+    sameOrder(middlewareOrder, EXPECTED_MIDDLEWARE_ORDER),
+    middlewareOrderDifference(middlewareOrder, EXPECTED_MIDDLEWARE_ORDER),
+  );
 
   // A-A-51 — die Weigerung steht vor jedem Urteil über die Liste. Wer künftig
   // ein Kettenglied auf einen genauen Pfad legt, schreibt es mit Platzhalter

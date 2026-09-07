@@ -60,7 +60,11 @@ def main(argv):
             flaeche.write_to_png(ziel)
             zustand["code"] = 0
             zustand["grund"] = ""
-        except (GLib.Error, OSError) as fehler:
+        # Ohne die PyGObject-Cairo-Bruecke kommt hier ein TypeError. Die
+        # Verfuegbarkeitsprobe faengt diesen Zustand vor dem Start ab; sollte
+        # die Laufzeit trotzdem abweichen, endet der Schiesser sofort mit dem
+        # wirklichen Grund statt erst nach der 30-Sekunden-Notbremse.
+        except (GLib.Error, OSError, TypeError) as fehler:
             zustand["code"] = 1
             zustand["grund"] = str(fehler)
         Gtk.main_quit()

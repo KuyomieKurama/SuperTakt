@@ -2513,7 +2513,7 @@ grün und hieße auf zwei Rechnern zweierlei. Dazu 18 Sekunden gegen Millisekund
    vertretbar, weil der Lauf **freiwillig** gefahren wird und im selben Atemzug sagt, was ungemessen
    blieb. Sie ist **nicht** vertretbar dort, wo die Umgebung feststeht.
 3. **Also: in der Prüfstrecke wird ein Übersprung rot.** Der Lauf bekommt einen Schalter, der
-   jeden Übersprung zu Code 1 macht, und die Prüfstrecke richtet die vier Voraussetzungen ein und
+   jeden Übersprung zu Code 1 macht, und die Prüfstrecke richtet die fünf Voraussetzungen ein und
    fährt ihn damit. Ohne den Schalter wäre die Prüfstrecke grün, gerade weil sie nichts gemessen
    hat — und das ist der Fehler, den diese Sitzung achtmal gefunden hat. **Eine Prüfung des
    Ausgabetextes durch die Prüfstrecke ist ausdrücklich nicht die Antwort:** sie wird beim ersten
@@ -2521,3 +2521,7 @@ grün und hieße auf zwei Rechnern zweierlei. Dazu 18 Sekunden gegen Millisekund
 4. **Die Bilder werden nicht aufbewahrt.** `--keep=<Pfad>` bleibt der einzige Weg, sie zu sehen;
    ein fester Ordner im Bestand bräuchte einen Eintrag in `.gitignore` und würde bei jedem Lauf
    überschrieben, ohne daß jemand hinsieht. Die gemessenen **Zahlen** stehen im Bericht.
+5. **Berichtigung T-244:** Zu den Voraussetzungen gehört außerdem `python3-gi-cairo`. Ohne diese
+   PyGObject-Cairo-Brücke wird WebKitGTK zwar gefunden und gestartet, aber
+   `get_snapshot_finish` kann die zurückgegebene `cairo.Surface` nicht umwandeln. Die Prüfstrecke
+   installiert das Paket, und der Lauf prüft die Brücke vor dem ersten Bild ausdrücklich.

@@ -358,6 +358,28 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile
 
+      # `tauri-build` verlangt Sidecar, Aufgabenbereich und Lizenzbeilage
+      # bereits beim Uebersetzen der Rust-Bibliothek. Diese drei Dateien sind
+      # absichtlich nicht versioniert und werden erst beim anschliessenden Bau
+      # echt erzeugt. Fuer die davor liegenden Rust-Prueffaelle reichen leere,
+      # niemals ausgefuehrte Platzhalter; der Bau ersetzt sie danach.
+      - name: Platzhalter für die reine Testübersetzung
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(rustc -vV | sed -n 's/^host: //p' | tr -d '\r')"
+          test -n "$target"
+          suffix=''
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then
+            suffix='.exe'
+          fi
+          mkdir -p apps/desktop/src-tauri/binaries
+          : > "apps/desktop/src-tauri/binaries/takt-local-api-${target}${suffix}"
+          mkdir -p apps/desktop/src-tauri/taskpane
+          : > apps/desktop/src-tauri/taskpane/index.html
+          mkdir -p apps/desktop/src-tauri/licenses
+          : > apps/desktop/src-tauri/licenses/LICENSE.txt
+
       # A-A-10, zweite Hälfte (T-147), berichtigt nach T-164 (A-A-32):
       #
       # Die Prüfung im Öffnen-Befehl verhält sich unter Windows anders als

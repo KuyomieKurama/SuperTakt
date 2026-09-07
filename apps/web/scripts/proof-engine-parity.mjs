@@ -32,7 +32,7 @@
  *     Eine Textsuche waere beim ersten umformulierten Satz still blind
  *     (E-095 Punkt 3). Deshalb steckt der Schalter im Lauf.
  *
- *     Die vier Voraussetzungen, die eine Pruefstrecke vorher einrichten muss,
+ *     Die fuenf Voraussetzungen, die eine Pruefstrecke vorher einrichten muss,
  *     stehen bei {@link VORAUSSETZUNGEN}.
  *
  *  1. **Gemessen wird die Engine-Familie, nicht die gebaute Binaerdatei.**
@@ -362,7 +362,7 @@ try {
 }
 
 /**
- * Die vier Voraussetzungen, ihre Probe und ihr Debian-Paket.
+ * Die fuenf Voraussetzungen, ihre Probe und ihr Debian-Paket.
  *
  * Diese Tafel ist **die Quelle der Pruefungen** und keine Randnotiz daneben:
  * `hatPil` und `hatWebKit` unten lesen aus ihr. Eine Liste von Paketnamen, die
@@ -370,7 +370,7 @@ try {
  * niemand saehe es.
  *
  * Wer die Pruefstrecke einrichtet, braucht auf Debian:
- * `apt-get install -y xvfb python3-pil python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
+ * `apt-get install -y xvfb python3-pil python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1`
  * und dazu `pnpm exec playwright install --with-deps chromium` — Playwrights
  * Chromium ist kein Debian-Paket, es liegt in Playwrights eigenem Ablageort.
  *
@@ -394,6 +394,14 @@ const VORAUSSETZUNGEN = Object.freeze([
         '-c',
         'import gi; gi.require_version("Gtk","3.0"); gi.require_version("WebKit2","4.1"); from gi.repository import Gtk, WebKit2',
       ]),
+  },
+  {
+    id: 'gi-cairo',
+    name: 'python3-gi-cairo — die Umwandlung des WebKit-Schnappschusses',
+    probe: 'python3 -c \'import gi; gi.require_foreign("cairo"); import cairo\'',
+    debian: 'python3-gi-cairo',
+    pruefe: () =>
+      laeuft('python3', ['-c', 'import gi; gi.require_foreign("cairo"); import cairo']),
   },
   {
     id: 'xvfb',
@@ -425,10 +433,13 @@ if (!hatPil) {
   );
 }
 
-const hatWebKit = vorhanden.get('gi') === true && vorhanden.get('xvfb') === true;
+const hatWebKit =
+  vorhanden.get('gi') === true &&
+  vorhanden.get('gi-cairo') === true &&
+  vorhanden.get('xvfb') === true;
 if (!hatWebKit) {
   uebersprungen.push(
-    '`python3-gi` mit `WebKit2 4.1` oder `xvfb-run` fehlt. Ungemessen bleibt damit die ' +
+    '`python3-gi` mit `WebKit2 4.1`, `python3-gi-cairo` oder `xvfb-run` fehlt. Ungemessen bleibt damit die ' +
       'Engine-Familie des **Linux-Erzeugnisses** — genau die, wegen der es diesen Lauf gibt. ' +
       'Chromium allein misst die Regel, nicht die Uebereinstimmung, und seine Formschranke ' +
       'aus P-4 ist dann ein Zuschlag auf eine ungemessene Engine.',
