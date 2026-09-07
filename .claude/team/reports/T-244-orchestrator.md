@@ -2,10 +2,11 @@
 
 Aufgabe: T-244 — die auf Commit `5d869ae` unter `push` und `pull_request` doppelt
 fehlgeschlagenen Rust- und Engine-Prüfungen ursächlich beheben
-Status: fertig, GitHub-Lauf nach dem Push ausstehend
+Status: fertig
 Artefakte: `.github/workflows/pruefung.yml`, `.github/workflows/release.yml`,
 `apps/web/scripts/proof-engine-parity.mjs`,
-`apps/web/scripts/engine-parity/shoot-webkitgtk.py`, `.claude/team/decisions.md`
+`apps/web/scripts/engine-parity/shoot-webkitgtk.py`,
+`apps/desktop/src-tauri/src/attachment.rs`, `.claude/team/decisions.md`
 
 ## Befund
 
@@ -36,6 +37,27 @@ der sonst beim nächsten sauberen Auslieferungsbau an derselben Stelle abgebroch
 Der anschließende echte Bau ersetzt alle drei Ergebnisse.
 
 Mit diesen Platzhaltern: sauberer Archivbaum, `cargo test --lib --locked`, **62/62**.
+
+Der erste GitHub-Wiederholungslauf bestätigte das auf Ubuntu, legte aber einen zweiten,
+zuvor von den fehlenden Bündeldateien verdeckten Fehler frei: Mehrere Rust-Prüffälle
+behaupteten, plattformneutral zu sein, verwendeten jedoch literale Pfade wie `/tmp/...`,
+`/pfad/...` oder erwarteten ausdrücklich die Linux-Deutung von `C:\\...`. Unter Windows
+endete die Prüffolge deshalb früher beziehungsweise später mit einem anderen, dort
+richtigen Ablehnungsgrund.
+
+Die plattformneutralen Fälle erzeugen ihre absoluten, garantiert fehlenden Pfade nun im
+jeweiligen System-Temp-Verzeichnis. Die Belege, die laut A-A-28 absichtlich echte
+Doppelpunkte in Linux-Dateinamen messen, tragen `#[cfg(not(windows))]`. Der Windows-Block
+hat dafür zwei zusätzliche Betriebssystembelege: Ein echtes Temp-Dokument zeigt, dass der
+Laufwerksdoppelpunkt nicht zum Dateinamen zählt; eine reale `x.lnk` zeigt, dass
+`x.lnk::$DATA` auf ihren unbenannten NTFS-Datenstrom auflöst und trotzdem vor der
+Endungsprüfung mit `PathStreamSeparator` abgewiesen wird. Damit nennen und messen die nun
+fünf Windows-Fälle tatsächlich Punkt, Leerzeichen und Doppelpunkt aus A-A-32.
+
+Die Cargo-Schritte veröffentlichen bei einem Fehlschlag außerdem die letzten hundert
+Testzeilen als Check-Anmerkung. So bleibt der konkrete Fehler auch ohne angemeldeten
+Zugriff auf das Actions-Protokoll sichtbar; der ursprüngliche Cargo-Ausgangscode wird
+dabei unverändert weitergereicht.
 
 ### Engine-Vergleich
 
@@ -68,11 +90,13 @@ auftretenden `TypeError` sofort ab, statt den wirklichen Grund mit der Notbremse
 | Ubuntu 24.04 mit `python3-gi-cairo` | **23/23**, 2 Engines, Code 0 |
 | lokaler `proof:engines --kein-uebersprung` | **23/23**, Code 0 |
 | `pnpm check` | **Code 0**, 1464/1464 und 62/62 |
+| Rust nach Pfadkorrektur auf Linux | **62/62**, Code 0 |
+| Windows-Testquellen, `cargo check --tests --target x86_64-pc-windows-msvc` | Code 0 |
 
 Annahmen: Die von GitHub bereitgestellten x64-Läufer melden ihr tatsächliches Ziel-Tripel
 über `rustc`; der Workflow setzt keinen Zielwechsel über `--target`.
-Risiken: Der Windows-Zweig kann hier nicht lokal ausgeführt werden. Pfadbildung und
-`.exe`-Regel sind unmittelbar gegen Tauris verwendete `external_binaries`-Funktion
-geprüft; die endgültige Plattformbestätigung liefert der neue GitHub-Lauf.
+Risiken: Die wirkliche Win32-/NTFS-Namensauflösung ist nur auf dem GitHub-Windows-Läufer
+ausführbar; die lokale Kreuzübersetzung prüft Typen und bedingte Übersetzung, nicht diese
+Betriebssystemwirkung. Genau dafür bleibt der Windows-Auftrag bei jedem Push und jedem
+Pull Request Bestandteil des Tores.
 Offene Fragen: keine.
-Nächster Schritt: Änderungen pushen und den neuen GitHub-Lauf bis zum Ende prüfen.

@@ -484,7 +484,8 @@ pub fn takt_open_attachment_file(app: tauri::AppHandle, path: String) -> Result<
 // gemessen, nicht neu erfunden — Abschnitt 21.3 Punkt 1 nennt für jede den
 // Ablehnungsgrund), die zehn Zeilen der Festpunkttabelle (A-A-3), die
 // UNC-Fälle (A-A-4) und die Umleitungsfälle samt der beiden
-// Reihenfolge-Fälle und der drei `#[cfg(windows)]`-Fälle (A-A-5′, A-A-10).
+// Reihenfolge-Fälle und der fünf `#[cfg(windows)]`-Fälle (A-A-5′, A-A-10,
+// A-A-28).
 //
 // **Die Gegenprobe (Auftrag Punkt 2):** `gegenprobe_die_alte_fassung_...`
 // baut absichtlich eine zweite, VOR T-157 gültige Fassung von
@@ -530,6 +531,13 @@ mod tests {
         let pfad = ordner.join(name);
         fs::write(&pfad, b"").expect("Datei muss anlegbar sein");
         pfad.to_string_lossy().into_owned()
+    }
+
+    fn fehlende_datei(marke: &str, name: &str) -> String {
+        eigenes_verzeichnis(marke)
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -674,6 +682,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn ein_windows_laufwerkspfad_ist_unter_linux_nicht_absolut_und_damit_nicht_messbar_als_unc() {
         // Dokumentiert die Grenze aus A-A-4/Bedrohungsmodell 21.3, Punkt 3:
@@ -693,7 +702,12 @@ mod tests {
             Err(Rejection::PathControlCharacter)
         );
 
-        let praefix = "/";
+        let praefix = format!(
+            "{}{}",
+            std::env::temp_dir().display(),
+            std::path::MAIN_SEPARATOR
+        );
+        assert!(praefix.len() < MAX_PATH_LEN);
         let genau_4096 = format!("{praefix}{}", "a".repeat(4096 - praefix.len()));
         assert_eq!(genau_4096.len(), 4096);
         // Laenge allein reicht bis zur Existenzpruefung durch -- eine
@@ -712,8 +726,9 @@ mod tests {
 
     #[test]
     fn fehlende_datei_ergibt_path_missing_wenn_alles_andere_stimmt() {
+        let pfad = fehlende_datei("fehlt", "takt-test-attachment.txt");
         assert_eq!(
-            check_file("/pfad/der/hoffentlich/nicht/existiert/takt-test-attachment"),
+            check_file(&pfad),
             Err(Rejection::PathMissing)
         );
     }
@@ -803,8 +818,9 @@ mod tests {
     fn indirekte_endung_wird_vor_der_existenzpruefung_abgewiesen() {
         // Ohne dass die Datei je existiert hat -- has_indirect_extension muss
         // vor is_file() laufen, sonst waere das Ergebnis PathMissing.
+        let pfad = fehlende_datei("lnk-fehlt", "rechnung.lnk");
         assert_eq!(
-            check_file("/pfad/der/nicht/existiert/rechnung.lnk"),
+            check_file(&pfad),
             Err(Rejection::PathIndirectExtension)
         );
     }
@@ -822,6 +838,7 @@ mod tests {
     // schon eine Doku-Zeile im Kopf der Datei; hier steht die Messung.
     // ===========================================================================
 
+    #[cfg(not(windows))]
     #[test]
     fn a_a_28_unbenannter_alternativer_datenstrom_wird_abgewiesen() {
         // Unter NTFS loest "datei::$DATA" auf den unbenannten Datenstrom von
@@ -830,12 +847,14 @@ mod tests {
         assert_eq!(check_file(&pfad), Err(Rejection::PathStreamSeparator));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn a_a_28_benannter_alternativer_datenstrom_wird_abgewiesen() {
         let pfad = echte_datei("a-a-28-2", "rechnung.lnk:harmlos.txt");
         assert_eq!(check_file(&pfad), Err(Rejection::PathStreamSeparator));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn a_a_28_doppelpunkt_geht_der_endungspruefung_vor_bericht_txt_doppelpunkt_evil_lnk() {
         // Vor T-167 war das PathIndirectExtension (letztes Punktsegment
@@ -860,14 +879,16 @@ mod tests {
         // Ein nicht vorhandener Pfad mit Doppelpunkt bekommt
         // PathStreamSeparator und NICHT PathMissing -- has_stream_separator
         // laeuft in check_file VOR path.is_file().
+        let pfad = fehlende_datei("ads-fehlt", "rechnung.lnk::$DATA");
         assert_eq!(
-            check_file("/pfad/der/hoffentlich/nicht/existiert/rechnung.lnk::$DATA"),
+            check_file(&pfad),
             Err(Rejection::PathStreamSeparator)
         );
     }
 
+    #[cfg(not(windows))]
     #[test]
-    fn a_a_28_windows_laufwerksbuchstabe_ist_kein_doppelpunkt_im_dateinamen() {
+    fn a_a_28_windows_laufwerksbuchstabe_ist_unter_linux_kein_doppelpunkt_im_dateinamen() {
         // Unveraendert durch A-A-28: has_stream_separator fragt nur den
         // LETZTEN Namensbestandteil, der Laufwerksbuchstabe "C:" faellt also
         // nicht darunter. Die Kette endet unter Linux ohnehin vorher bei
@@ -884,6 +905,7 @@ mod tests {
     /// OHNE den Aufruf von `has_stream_separator` (A-A-28). Lebt
     /// ausschliesslich in `#[cfg(test)]` und dient der Gegenprobe unten --
     /// kein Produktivcode wird dafuer angefasst oder ausgecheckt.
+    #[cfg(not(windows))]
     fn check_file_ergebnis_vor_t_167(value: &str) -> Result<(), Rejection> {
         if value.is_empty() {
             return Err(Rejection::PathEmpty);
@@ -911,6 +933,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn gegenprobe_a_a_28_die_fassung_vor_t_167_war_bei_drei_faellen_anders() {
         // Rot-vor-gruen ohne Produktivcode anzufassen: Diese Gegenprobe baut
@@ -1259,8 +1282,9 @@ mod tests {
     }
 
     // ===========================================================================
-    // Windows -- die drei Faelle, die auf dem Linux-Laeufer nichts pruefen
-    // koennen, weil die Win32-Namensaufloesung dort nicht existiert (A-A-10).
+    // Windows -- die fuenf Faelle, die auf dem Linux-Laeufer nichts pruefen
+    // koennen, weil die Win32-Namensaufloesung dort nicht existiert (A-A-10,
+    // A-A-28).
     // ===========================================================================
 
     #[cfg(windows)]
@@ -1277,6 +1301,27 @@ mod tests {
             let pfad = echte_datei("win-plain", "x.lnk");
             assert!(Path::new(&pfad).is_file());
             assert_eq!(check_file(&pfad), Err(Rejection::PathIndirectExtension));
+        }
+
+        #[test]
+        fn laufwerksbuchstabe_ist_kein_doppelpunkt_im_dateinamen() {
+            let pfad = echte_datei("win-drive", "bericht.txt");
+            assert!(Path::new(&pfad).is_absolute());
+            assert_eq!(check_file(&pfad), Ok(Path::new(&pfad)));
+        }
+
+        #[test]
+        fn unbenannter_datenstrom_loest_sich_auf_die_reale_datei_auf() {
+            let plain = echte_datei("win-ads", "x.lnk");
+            let datenstrom = format!("{plain}::$DATA");
+            assert!(
+                Path::new(&datenstrom).is_file(),
+                "Windows muss '{datenstrom}' auf den unbenannten Datenstrom der realen 'x.lnk' aufloesen"
+            );
+            assert_eq!(
+                check_file(&datenstrom),
+                Err(Rejection::PathStreamSeparator)
+            );
         }
 
         #[test]
