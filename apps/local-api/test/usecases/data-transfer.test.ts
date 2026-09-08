@@ -85,6 +85,45 @@ describe('Fremdimport — Todoist und Super Productivity (A-20.7)', () => {
       }
     });
   });
+
+  it('liest das aktuelle Super-Productivity-Backup mit data-Wrapper und beiden Archiven', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const backup = {
+      timestamp: Date.parse('2026-09-08T09:00:00Z'),
+      lastUpdate: Date.parse('2026-09-08T09:00:00Z'),
+      crossModelVersion: 1,
+      data: {
+        project: { entities: { p1: { id: 'p1', title: 'Aktuelles Projekt' } } },
+        tag: { entities: {} },
+        section: { entities: {} },
+        task: { entities: { active: {
+          id: 'active', title: 'Aktiv', projectId: 'p1', tagIds: [], isDone: false,
+          timeSpentOnDay: {},
+        } } },
+        archiveYoung: { task: { entities: { young: {
+          id: 'young', title: 'Jung archiviert', projectId: 'p1', tagIds: [], isDone: true,
+          doneOn: Date.parse('2026-09-07T10:00:00Z'), timeSpentOnDay: { '2026-09-07': 600_000 },
+        } } } },
+        archiveOld: { task: { entities: { old: {
+          id: 'old', title: 'Alt archiviert', projectId: 'p1', tagIds: [], isDone: true,
+          doneOn: Date.parse('2026-08-01T10:00:00Z'), timeSpentOnDay: {},
+        } } } },
+      },
+    };
+
+    const result = await importSuperProductivity(context, backup);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({ todos: 3, projects: 1, timeEntries: 1 });
+
+    await database.transactions.inTransaction(async (unit) => {
+      const todos = (await unit.todos.search({})).items;
+      expect(todos.map((todo) => todo.title).sort()).toEqual(['Aktiv', 'Alt archiviert', 'Jung archiviert']);
+      expect(todos.find((todo) => todo.title === 'Jung archiviert')?.completedAt).toBe('2026-09-07T10:00:00Z');
+      expect(todos.find((todo) => todo.title === 'Alt archiviert')?.completedAt).toBe('2026-08-01T10:00:00Z');
+    });
+  });
 });
 
 describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
