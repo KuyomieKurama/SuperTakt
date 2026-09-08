@@ -83,6 +83,7 @@ pub struct Service {
     /// ausweist (T-011). Es berührt die Platte nie und gilt für einen Start.
     secret: String,
     child: Mutex<Option<CommandChild>>,
+    stopping: std::sync::atomic::AtomicBool,
     /// Wurde der Dienst beendet, weil er von sich aus ausgestiegen ist?
     exit: Mutex<Option<ExitReason>>,
 }
@@ -120,6 +121,7 @@ impl Service {
         Ok(Self {
             secret: new_secret()?,
             child: Mutex::new(None),
+            stopping: std::sync::atomic::AtomicBool::new(false),
             exit: Mutex::new(None),
         })
     }
@@ -153,7 +155,10 @@ impl Service {
     /// Wird beim Schließen des Fensters **und** beim Verlassen der
     /// Ereignisschleife gerufen; welcher zuerst kommt, hängt an der Plattform.
     pub fn stop(&self) {
-        let taken = self.child.lock().ok().and_then(|mut guard| guard.take());
+        let taken = self.child.lock().ok().and_then(|mut guard| {
+            self.stopping.store(true, std::sync::atomic::Ordering::SeqCst);
+            guard.take()
+        });
         if let Some(child) = taken {
             // `kill` schließt zugleich unser Ende der Röhre. Selbst wenn das
             // Signal nicht ankäme, endete der Dienst über das Ende von `stdin`.
@@ -225,6 +230,11 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
     // Erst prüfen, dann starten. Umgekehrt hinge ein Kindprozess fünf Sekunden
     // an einer Röhre, aus der nie etwas Gültiges kommt.
     let line = handshake_line(&service.secret, os_user)?;
+    // Serialize process creation with shutdown, including a close during preparation.
+    let mut child_slot = service.child.lock().map_err(|_| "Der Dienstzustand ist nicht verfügbar.")?;
+    if service.stopping.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
+    }
 
     let command = app
         .shell()
@@ -238,13 +248,12 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
     // Beide Zeilen, ein Schreibvorgang, sofort nach dem Start. Der Dienst
     // wartet fünf Sekunden darauf und beendet sich sonst
     // (`SESSION_SECRET_TIMEOUT_MS`).
-    child
-        .write(line.as_bytes())
-        .map_err(|error| format!("Die Startzeilen ließen sich nicht übergeben: {error}"))?;
-
-    if let Ok(mut guard) = service.child.lock() {
-        *guard = Some(child);
+    if let Err(error) = child.write(line.as_bytes()) {
+        let _ = child.kill();
+        return Err(format!("Die Startzeilen ließen sich nicht übergeben: {error}"));
     }
+    *child_slot = Some(child);
+    drop(child_slot);
 
     let handle = app.clone();
     let secret = service.secret.clone();
@@ -336,6 +345,15 @@ fn explain_exit(code: Option<i32>) -> (String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closing_before_spawn_permanently_stops_the_service() {
+        let service = Service::new().unwrap();
+        service.stop();
+        service.stop();
+        assert!(service.stopping.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(service.child.lock().unwrap().is_none());
+    }
 
     #[test]
     fn geheimnis_ist_lang_genug_und_jedes_mal_anders() {
