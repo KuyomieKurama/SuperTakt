@@ -440,7 +440,7 @@ export async function readOutlookCertificate(): Promise<OutlookCertificateResult
 
 export async function readIdleActivity(): Promise<IdleActivity | null> {
   const shell = await loadShell();
-  return shell === null ? null : shell.idleActivity();
+  return shell === null || !shell.isShellAvailable() ? null : shell.idleActivity();
 }
 
 export async function confirmOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {

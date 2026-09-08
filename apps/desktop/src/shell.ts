@@ -76,6 +76,7 @@ import { parseIdleActivity, type IdleActivity } from './idleActivity';
 export type { IdleActivity, IdlePeriod } from './idleActivity';
 
 export async function idleActivity(): Promise<IdleActivity> {
+  requireShell();
   return parseIdleActivity(await invoke<unknown>('takt_idle_activity'));
 }
 import { parseOutlookCertificate, type OutlookCertificateResult } from './outlookCertificate';

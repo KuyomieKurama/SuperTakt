@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { E2E_DATA_DIR } from './support/session';
+import { gotoTime } from './support/nav';
 import { cleanupAnyTimer, createTodo, deleteTodo, deleteTimeEntry, getRunningTimer, listTimeEntriesByTodo } from './support/api';
 
 const iso = (ms: number) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z');
@@ -21,7 +22,7 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
     // choices and allocations below use the real UI, HTTP and SQLite service.
     db.prepare('INSERT INTO timer_idle (id, session_id, todo_id, started_at, returned_at, note) VALUES (1, ?, ?, ?, ?, ?)')
       .run(sessionId, a.id, iso(begin), iso(end), 'Telefonat');
-    await page.goto('/#/zeit');
+    await gotoTime(page);
     let dialog = page.getByRole('dialog', { name: 'Willkommen zurück' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Später zuordnen' }).click();
