@@ -428,7 +428,25 @@ function superProductivityData(value: unknown): UseCaseResult<ExternalData> {
   const tagsRaw = entities(root['tag']);
   const sectionsRaw = entities(root['section']);
   const activeTasks = entities(root['task']);
-  const archived = entities(root['taskArchive']);
+  const archiveYoung = record(root['archiveYoung']);
+  const archiveOld = record(root['archiveOld']);
+  const archivedYoungTasks = entities(archiveYoung?.['task']);
+  const archivedOldTasks = entities(archiveOld?.['task']);
+  const legacyArchivedTasks = entities(root['taskArchive']);
+  const seenTaskIds = new Set<string>();
+  const tasksRaw = [
+    ...activeTasks,
+    ...archivedYoungTasks,
+    ...archivedOldTasks,
+    ...legacyArchivedTasks,
+  ].filter((item) => {
+    const rawId = item['id'];
+    if (typeof rawId !== 'string' && typeof rawId !== 'number') return true;
+    const id = String(rawId);
+    if (seenTaskIds.has(id)) return false;
+    seenTaskIds.add(id);
+    return true;
+  });
   const projectNames = new Map(projectsRaw.map((item) => [String(item['id']), cleanName(text(item['title']) ?? 'Projekt', 'Projekt')]));
   const tagNames = new Map(tagsRaw.map((item) => [String(item['id']), cleanName(text(item['title']) ?? 'Tag', 'Tag')]));
   const sectionByTask = new Map<string, string>();
@@ -440,7 +458,7 @@ function superProductivityData(value: unknown): UseCaseResult<ExternalData> {
     if (Array.isArray(item['taskIds'])) for (const id of item['taskIds']) sectionByTask.set(String(id), name);
   }
 
-  const tasks: ExternalTask[] = [...activeTasks, ...archived].map((item, index) => {
+  const tasks: ExternalTask[] = tasksRaw.map((item, index) => {
     const id = String(item['id'] ?? `task-${String(index + 1)}`);
     const project = projectNames.get(String(item['projectId'])) ?? 'Eingang';
     const tagIds = Array.isArray(item['tagIds']) ? item['tagIds'].map(String) : [];
