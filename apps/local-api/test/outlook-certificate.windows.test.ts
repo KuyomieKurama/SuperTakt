@@ -22,7 +22,11 @@ async function powershell(script: string, input: unknown): Promise<Record<string
     child.on('close', (code) => {
       clearTimeout(timer);
       if (code !== 0) { reject(new Error(Buffer.concat(errors).toString('utf8'))); return; }
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>); }
+      try {
+        const result = JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>;
+        if (result['error'] === 'trust_failed') { reject(new Error(`Windows import failed: ${Buffer.concat(errors).toString('utf8')}`)); return; }
+        resolve(result);
+      }
       catch (error) { reject(error); }
     });
     child.stdin.end(JSON.stringify(input));
@@ -62,6 +66,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     const fingerprint = cert.fingerprint256.replaceAll(':', '');
     const script = (await readFile(scriptUrl, 'utf8'))
       .replace("Import-Certificate -FilePath", "[Console]::Error.WriteLine('importing certificate'); Import-Certificate -FilePath")
+      .replace("throw 'trust_failed'", "[Console]::Error.WriteLine($_.Exception.Message); throw 'trust_failed'")
       .replace('CheckHttps $fingerprint', "[Console]::Error.WriteLine('checking HTTPS'); CheckHttps $fingerprint");
     server = createServer({ key: pair.keyPem, cert: pair.certPem }, (_req, res) => res.writeHead(200).end('test add-in'));
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(17844, '127.0.0.1', resolve); });

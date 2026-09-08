@@ -78,9 +78,14 @@ try {
         $snapshot = [IO.Path]::GetTempFileName()
         $locked = $null
         try {
-            $locked = [IO.File]::Open($snapshot, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
-            $locked.Write($certificate.RawData, 0, $certificate.RawData.Length)
-            $locked.Flush()
+            [IO.File]::WriteAllBytes($snapshot, $certificate.RawData)
+            $locked = [IO.File]::Open($snapshot, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            # Windows import opens its input with read sharing. Hold a read-only
+            # lock and verify the snapshot after locking, so no writer can swap it.
+            $hash = [System.Security.Cryptography.SHA256]::Create()
+            try { $snapshotHash = ([BitConverter]::ToString($hash.ComputeHash($locked))).Replace('-', '') }
+            finally { $hash.Dispose() }
+            if ($snapshotHash -cne $fingerprint) { throw 'certificate_changed' }
             Import-Module (Join-Path $PSHOME 'Modules\PKI\PKI.psd1') -ErrorAction Stop
             Import-Certificate -FilePath $snapshot -CertStoreLocation 'Cert:\CurrentUser\Root' -ErrorAction Stop | Out-Null
         } catch { throw 'trust_failed' }
