@@ -1573,6 +1573,7 @@
 
 .note__count {
   flex: none;
+  margin-inline-start: auto;
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
@@ -1844,6 +1845,7 @@
 .select__option,
 .combobox__option {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-2);
   min-height: var(--control-height-md);
@@ -2195,6 +2197,11 @@
 .filterbar__controls .taginput {
   flex: 0 1 16rem;
   min-width: 12rem;
+}
+
+.filterbar__secondary {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .filterbar__status {
@@ -3808,7 +3815,6 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  max-width: var(--measure-prose);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);

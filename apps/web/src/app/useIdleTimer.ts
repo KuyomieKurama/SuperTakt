@@ -34,7 +34,10 @@ export function useIdleTimer(options: {
       if (Math.abs(Date.now() - activity.sampledAtMs) > 10_000) return pending;
       if (pending !== null && pending.returnedAt === null) {
         const at = idleReturnTime(activity, pending.startedAt);
-        if (at !== null) pending = await returnFromIdle(pending.id, at);
+        if (at !== null) {
+          pending = await returnFromIdle(pending.id, at);
+          current.changed();
+        }
       } else if (pending === null && current.enabled && current.running !== null) {
         const candidate = idleCandidate(activity, current.running.entry.startedAt, current.thresholdMinutes);
         if (candidate !== null) {

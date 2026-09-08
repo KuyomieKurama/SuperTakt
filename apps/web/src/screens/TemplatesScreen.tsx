@@ -39,7 +39,9 @@ import {
   messageWithoutFieldPrefix,
   type DraftField,
 } from "./TemplateFields";
-import { TemplatePreviewCard } from "./TemplatePreview";
+import { TemplatePreview } from "./TemplatePreview";
+import { DialogSurface } from "../components/DialogSurface";
+import { Dialog } from "@ark-ui/react/dialog";
 import { quotedName } from "../lib/foreign";
 import { Foreign } from "../components/Foreign";
 
@@ -144,6 +146,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   /* Entwurf                                                          */
   /* ---------------------------------------------------------------- */
 
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ExportTemplate | null>(null);
@@ -519,6 +522,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
             />
 
             <div className="tpl-editor">
+              <div className="tpl-preview-action"><Button variant="secondary" onClick={() => setPreviewOpen(true)}>Vorschau öffnen</Button></div>
               {/*
                 Die Notiz-Grenze wird an der **Antwort** noch einmal gezogen
                 (A-7.2, R-06). Der Dienst haelt sie an seinem eigenen
@@ -604,7 +608,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                         <p className="tpl-dirty">
                           <Icon name="pencil" size={13} />
                           <span>
-                            Ungespeicherte Änderungen. Die Vorschau rechts zeigt sie bereits — auf
+                            Ungespeicherte Änderungen. Die Vorschau zeigt den aktuellen Entwurf — auf
                             den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
                           </span>
                         </p>
@@ -682,19 +686,15 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
               )}
             </div>
 
-            <div className="tpl-preview">
-              {/*
-                Gezeigt wird **immer** der Stand im Editor (E-051). `stale` und
-                `unsaved` sagen nur noch, ob dieser Stand schon gespeichert
-                ist; sie entscheiden nicht mehr darueber, was gerendert wird.
-              */}
-              <TemplatePreviewCard
-                catalog={value.catalog}
-                stale={dirty}
-                unsaved={creating}
-                fields={draftFields}
-              />
-            </div>
+            <DialogSurface open={previewOpen} onDismiss={() => setPreviewOpen(false)} className="dialog dialog--wide tpl-preview-dialog">
+              <div className="dialog__head">
+                <Dialog.Title className="dialog__title">Vorschau</Dialog.Title>
+                <Button variant="ghost" onClick={() => setPreviewOpen(false)}>Schließen</Button>
+              </div>
+              <div className="dialog__body">
+                {previewOpen ? <TemplatePreview catalog={value.catalog} stale={dirty} unsaved={creating} fields={draftFields} /> : null}
+              </div>
+            </DialogSurface>
           </div>
         )}
       </AsyncBoundary>

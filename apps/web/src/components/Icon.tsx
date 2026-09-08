@@ -45,6 +45,7 @@ export type IconName =
   | "search"
   | "shield"
   | "slash-circle"
+  | "split"
   | "square"
   | "sun"
   | "tag"
@@ -53,6 +54,7 @@ export type IconName =
 
 /** Pfaddaten je Symbol, gezeichnet auf einem 24x24-Raster. */
 const PATHS: Record<IconName, readonly string[]> = {
+  split: ["M12 21v-7c0-4-6-4-6-8V3", "M6 3 3 6", "M6 3l3 3", "M12 14c0-4 6-4 6-8V3", "M18 3l-3 3", "M18 3l3 3"],
   "alert-circle": ["M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Z", "M12 8v5", "M12 16.2h.01"],
   "alert-triangle": ["M12 4.2 2.8 19.2h18.4L12 4.2Z", "M12 10v4", "M12 16.9h.01"],
   "arrow-down": ["M12 5v14", "M6.5 13.5 12 19l5.5-5.5"],

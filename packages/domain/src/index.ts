@@ -43,3 +43,4 @@ export * from './version.ts';
 // Datei aendert.
 export type * from './todo.ts';
 export type * from './settings.ts';
+export { DESIGN_THEMES } from './settings.ts';

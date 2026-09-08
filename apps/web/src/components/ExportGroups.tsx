@@ -1,5 +1,5 @@
 import type { ForeignText } from "../api/types";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../lib/labels";
 import { exportDisplayState, ExportStatusBadge } from "./ExportStatus";
@@ -90,6 +90,7 @@ export interface ExportGroupEntryData {
 
 export interface ExportGroupData {
   readonly id: string;
+  readonly todoId?: string;
   readonly todoTitle: ForeignText;
   /** Call-Nummer des Todos (A-2.6). `null`, wenn nicht gesetzt. */
   readonly callNumber: ForeignText | null;
@@ -146,7 +147,55 @@ export interface ExportGroupListProps {
   readonly className?: string;
 }
 
-export function ExportGroupList({
+export function ExportGroupList(props: ExportGroupListProps) {
+  if (props.models.every(model => model.group.todoId === undefined)) return <ExportDayGroupList {...props} />;
+  const byTodo = new Map<string, ExportGroupViewModel[]>();
+  for (const model of props.models) {
+    const id = model.group.todoId ?? model.group.id;
+    const days = byTodo.get(id) ?? [];
+    days.push(model);
+    byTodo.set(id, days);
+  }
+  return <ul className={cx("egroups", props.className)}>
+    {Array.from(byTodo, ([id, models]) => <ExportTodoGroup key={id} {...props} models={models} />)}
+  </ul>;
+}
+
+function ExportTodoGroup(props: ExportGroupListProps) {
+  const [open, setOpen] = useState(false);
+  const first = props.models[0]!;
+  const available = props.models.filter(model => model.blockedReason === null);
+  const selected = available.filter(model => props.selectedGroupIds.has(model.group.id)).length;
+  const blocked = props.models.length - available.length;
+  const entryCount = props.models.reduce((sum, model) => sum + model.group.entries.length, 0);
+  const allSelected = available.length > 0 && selected === available.length;
+  const bodyId = `export-todo-${first.group.todoId ?? first.group.id}`;
+  return <li className={cx("export-todo", blocked === props.models.length && "egroup--blocked", selected > 0 && "egroup--selected")}>
+    <div className="export-todo__head">
+      <input type="checkbox" checked={allSelected} disabled={available.length === 0}
+        ref={node => { if (node) node.indeterminate = selected > 0 && !allSelected; }}
+        aria-label={`Alle exportierbaren Tage auswählen: ${foreignText(first.group.todoTitle)}`}
+        onChange={() => {
+          for (const model of available) {
+            if (props.selectedGroupIds.has(model.group.id) === allSelected) props.onToggleGroup(model.group.id);
+          }
+        }} />
+      <button type="button" className="export-todo__toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(value => !value)}>
+        <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
+        <span className="export-todo__identity">
+          <strong><Foreign value={first.group.todoTitle} /></strong>
+          <span className="muted">{props.models.length} {props.models.length === 1 ? "Tag" : "Tage"} · {entryCount} {entryCount === 1 ? "Buchung" : "Buchungen"} · {selected} ausgewählt</span>
+        </span>
+      </button>
+      {blocked > 0 ? <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{blocked} {blocked === 1 ? "Tag nicht exportierbar" : "Tage nicht exportierbar"}</span> : null}
+    </div>
+    <div id={bodyId} hidden={!open}>
+      <ExportDayGroupList {...props} className="export-todo__days" />
+    </div>
+  </li>;
+}
+
+function ExportDayGroupList({
   models,
   selectedGroupIds,
   expandedGroupIds,
@@ -255,7 +304,9 @@ function ExportGroupRow({
         </div>
 
         <p className="egroup__note truncate" title={foreignText(mergedNote)}>
-          {mergedNote === "" ? (
+          {blocked ? (
+            <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{blockedReason}</span>
+          ) : mergedNote === "" ? (
             <span className="muted">— keine Leistung erfasst —</span>
           ) : (
             <Foreign value={mergedNote} />
@@ -269,18 +320,6 @@ function ExportGroupRow({
             {" h"}
           </span>
         </output>
-      </div>
-
-      <div className="live-region" role="status">
-        {blocked ? (
-          <p className="egroup__blocked">
-            <Icon name="alert-triangle" size={14} />
-            <span>
-              <strong>Nicht exportierbar.</strong> {blockedReason} Der übrige Export läuft trotzdem;
-              diese Gruppe bleibt offen und erscheint beim nächsten Mal wieder.
-            </span>
-          </p>
-        ) : null}
       </div>
 
       <div className="egroup__body" id={bodyId} hidden={!expanded}>

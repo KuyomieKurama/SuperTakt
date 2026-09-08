@@ -767,6 +767,9 @@ export async function runScenario() {
     await record('resolveIdle', 'POST', '/timer/idle/resolve', '/timer/idle/resolve', {
       id: idleTimer.entry.id, resume: false, allocations: [{ todoId: null, seconds: 360, note: '' }],
     });
+    // Die Zuordnung lässt den Timer weiterlaufen; das Szenario beendet ihn ausdrücklich.
+    tick(1);
+    await quiet('POST', '/timer/stop', { note: '' });
 
     const entry = await record('createTimeEntry', 'POST', '/time-entries', '/time-entries', {
       todoId,

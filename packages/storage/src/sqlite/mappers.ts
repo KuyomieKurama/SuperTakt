@@ -1,3 +1,4 @@
+import { DESIGN_THEMES } from '@takt/domain';
 /**
  * Takt — von der Zeile zum Domänenwert.
  *
@@ -471,10 +472,11 @@ export function toAppSettings(row: SqlRow): AppSettings {
     roundingMode: toRoundingMode(text(row, 'rounding_mode')),
     locale: text(row, 'locale'),
     theme: toTheme(text(row, 'theme')),
-    designTheme: row['design_theme'] === 'classic' ? 'classic' : 'clear',
+    designTheme: DESIGN_THEMES.find(value => value === row['design_theme']) ?? 'classic',
     density: row['density'] === 'compact' ? 'compact' : 'comfortable',
     promptOnTimerStop: row['prompt_on_timer_stop'] !== 0,
     idleDetectionEnabled: row['idle_detection_enabled'] !== 0,
+    idleKeepTimerRunning: row['idle_keep_timer_running'] !== 0,
     idleThresholdMinutes: integer(row, 'idle_threshold_minutes'),
     /*
      * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).

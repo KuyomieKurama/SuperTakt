@@ -145,7 +145,7 @@ export function createExportTemplatePort(conn: SqlConnection, ids: IdSource): Ex
  */
 export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
   const COLUMNS =
-    'export_directory, active_export_template_id, rounding_mode, locale, theme, design_theme, density, prompt_on_timer_stop, idle_detection_enabled, idle_threshold_minutes, skipped_version, updated_at';
+    'export_directory, active_export_template_id, rounding_mode, locale, theme, design_theme, density, prompt_on_timer_stop, idle_detection_enabled, idle_keep_timer_running, idle_threshold_minutes, skipped_version, updated_at';
 
   const read = (): AppSettings => {
     const row = conn.prepare(`SELECT ${COLUMNS} FROM app_setting WHERE id = 1`).get();
@@ -187,6 +187,10 @@ export function createAppSettingsPort(conn: SqlConnection): AppSettingsPort {
         if (input.promptOnTimerStop !== undefined) {
           sets.push('prompt_on_timer_stop = ?');
           params.push(input.promptOnTimerStop ? 1 : 0);
+        }
+        if (input.idleKeepTimerRunning !== undefined) {
+          sets.push('idle_keep_timer_running = ?');
+          params.push(input.idleKeepTimerRunning ? 1 : 0);
         }
         if (input.idleDetectionEnabled !== undefined) {
           sets.push('idle_detection_enabled = ?');

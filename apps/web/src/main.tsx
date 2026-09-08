@@ -1,3 +1,4 @@
+import { installTextEditing } from "./lib/textEditing";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
@@ -5,6 +6,7 @@ import "@takt/ui-tokens/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/app.css";
+import "./styles/theme-palettes.css";
 
 /**
  * Takt — Einstiegspunkt der Anwendung.
@@ -16,6 +18,9 @@ import "./styles/app.css";
  * einmal als Raster der Musterseite, einmal als Huelle der Anwendung — und wer
  * an der einen arbeitete, verstellte die andere.
  */
+
+const removeTextEditing = installTextEditing();
+if (import.meta.hot) import.meta.hot.dispose(removeTextEditing);
 
 const container = document.getElementById("root");
 if (container === null) {

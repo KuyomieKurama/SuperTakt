@@ -1,3 +1,4 @@
+import { themePreset } from "../lib/themePresets";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { errorMessage } from "../api/client";
@@ -17,6 +18,7 @@ interface PreferenceValues {
   readonly density: Density;
   readonly promptOnTimerStop: boolean;
   readonly idleDetectionEnabled: boolean;
+  readonly idleKeepTimerRunning: boolean;
   readonly idleThresholdMinutes: number;
 }
 
@@ -25,6 +27,7 @@ export interface PreferencesApi extends PreferenceValues {
   readonly setDesignTheme: (next: DesignTheme) => void;
   readonly setDensity: (next: Density) => void;
   readonly setPromptOnTimerStop: (next: boolean) => void;
+  readonly setIdleKeepTimerRunning: (next: boolean) => void;
   readonly setIdleDetectionEnabled: (next: boolean) => void;
   readonly setIdleThresholdMinutes: (next: number) => void;
   readonly saving: boolean;
@@ -35,10 +38,11 @@ const PreferencesContext = createContext<PreferencesApi | null>(null);
 export function PreferencesProvider({ children }: { readonly children: ReactNode }) {
   const structure = useStructure();
   const toasts = useToasts();
-  const [theme, setThemeLocal] = useThemePreference("system");
-  const [designTheme, setDesignThemeLocal] = useDesignTheme("clear");
+  const [designTheme, setDesignThemeLocal] = useDesignTheme("classic");
+  const [theme, setThemeLocal] = useThemePreference("system", themePreset(designTheme).mode);
   const [density, setDensityLocal] = useDensity("comfortable");
   const [promptOnTimerStop, setPromptOnTimerStopLocal] = useState(true);
+  const [idleKeepTimerRunning, setIdleKeepTimerRunningLocal] = useState(true);
   const [idleDetectionEnabled, setIdleDetectionEnabledLocal] = useState(true);
   const [idleThresholdMinutes, setIdleThresholdMinutesLocal] = useState(5);
   const [saving, setSaving] = useState(false);
@@ -50,6 +54,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const storedDesign = settings?.designTheme;
   const storedDensity = settings?.density;
   const storedPrompt = settings?.promptOnTimerStop;
+  const storedKeepRunning = settings?.idleKeepTimerRunning;
   const storedIdle = settings?.idleDetectionEnabled;
   const storedThreshold = settings?.idleThresholdMinutes;
 
@@ -59,18 +64,19 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
     setDensityLocal(value.density);
     setPromptOnTimerStopLocal(value.promptOnTimerStop);
     setIdleDetectionEnabledLocal(value.idleDetectionEnabled);
+    setIdleKeepTimerRunningLocal(value.idleKeepTimerRunning);
     setIdleThresholdMinutesLocal(value.idleThresholdMinutes);
   }, [setThemeLocal, setDesignThemeLocal, setDensityLocal]);
 
   useEffect(() => {
     if (storedTheme !== undefined && !inFlight.current) {
-      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true, idleDetectionEnabled: storedIdle ?? true, idleThresholdMinutes: storedThreshold ?? 5 });
+      apply({ theme: storedTheme, designTheme: storedDesign ?? "classic", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true, idleDetectionEnabled: storedIdle ?? true, idleKeepTimerRunning: storedKeepRunning ?? true, idleThresholdMinutes: storedThreshold ?? 5 });
     }
-  }, [storedTheme, storedDesign, storedDensity, storedPrompt, storedIdle, storedThreshold, apply]);
+  }, [storedTheme, storedDesign, storedDensity, storedPrompt, storedIdle, storedKeepRunning, storedThreshold, apply]);
 
   const change = useCallback((patch: Partial<PreferenceValues>) => {
     if (inFlight.current) return;
-    const previous = { theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes };
+    const previous = { theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes };
     inFlight.current = true;
     setSaving(true);
     apply({ ...previous, ...patch });
@@ -87,17 +93,18 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
         inFlight.current = false;
         setSaving(false);
       });
-  }, [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, apply, structure, toasts]);
+  }, [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, apply, structure, toasts]);
 
   const api = useMemo<PreferencesApi>(() => ({
-    theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, saving,
+    theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, saving,
     setTheme: (next) => change({ theme: next }),
     setDesignTheme: (next) => change({ designTheme: next }),
     setDensity: (next) => change({ density: next }),
     setPromptOnTimerStop: (next) => change({ promptOnTimerStop: next }),
+    setIdleKeepTimerRunning: (next) => change({ idleKeepTimerRunning: next }),
     setIdleDetectionEnabled: (next) => change({ idleDetectionEnabled: next }),
     setIdleThresholdMinutes: (next) => change({ idleThresholdMinutes: next }),
-  }), [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, saving, change]);
+  }), [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, saving, change]);
 
   return <PreferencesContext.Provider value={api}>{children}</PreferencesContext.Provider>;
 }

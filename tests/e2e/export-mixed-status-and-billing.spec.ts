@@ -173,7 +173,7 @@ test('E-034 — Tagesgruppe ohne Leistung ist gesperrt, der übrige Export läuf
 
   await expect(blockedGroup).toHaveClass(/egroup--blocked/);
   await expect(blockedGroup.locator('input.egroup__check')).toBeDisabled();
-  await expect(blockedGroup.locator('.egroup__blocked')).toContainText('Nicht exportierbar');
+  await expect(blockedGroup.locator('.egroup__blocked-label')).toContainText('Leistung fehlt');
 
   await runExportFromScreen(page);
   // Die gesperrte Gruppe war nie Teil der Auswahl (ihre Kontrollkästchen sind

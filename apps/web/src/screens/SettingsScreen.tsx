@@ -1,3 +1,6 @@
+import { DEFAULT_IMPORT_CALL_PATTERN } from "@takt/domain";
+import { TextField } from "../components/FormDialog";
+import { THEME_PRESETS, themePreset } from "../lib/themePresets";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -31,7 +34,7 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import { adviseExportDirectory } from "../lib/exportDirectoryAdvice";
-import { ROUNDING_MODE_LABEL, THEME_LABEL } from "../lib/labels";
+import { ROUNDING_MODE_LABEL } from "../lib/labels";
 import { formatDateTime, plural } from "../lib/format";
 import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
@@ -303,6 +306,15 @@ function DataTransferSettings() {
   const archiveInput = useRef<HTMLInputElement>(null);
   const todoistInput = useRef<HTMLInputElement>(null);
   const superProductivityInput = useRef<HTMLInputElement>(null);
+  const [excludeTransferred, setExcludeTransferred] = useState(true);
+  const [callPattern, setCallPattern] = useState(() => {
+    try { return localStorage.getItem('supertakt.import.callPattern') ?? DEFAULT_IMPORT_CALL_PATTERN; }
+    catch { return DEFAULT_IMPORT_CALL_PATTERN; }
+  });
+  const changeCallPattern = (value: string): void => {
+    setCallPattern(value);
+    try { localStorage.setItem('supertakt.import.callPattern', value); } catch { /* Remains editable for this import. */ }
+  };
   const [pendingArchive, setPendingArchive] = useState<unknown | null>(null);
   const [result, setResult] = useState<DataImportSummary | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -353,7 +365,7 @@ function DataTransferSettings() {
     const file = files?.[0];
     if (file === undefined) return;
     setFileError(null);
-    void mutation.run(async () => refreshAfterImport(await importSuperProductivity(await readJson(file))));
+    void mutation.run(async () => refreshAfterImport(await importSuperProductivity(await readJson(file), excludeTransferred, callPattern)));
   };
 
   return (
@@ -375,6 +387,20 @@ function DataTransferSettings() {
 
       <Card title="Aus Super Productivity importieren" description="Ergänzt den vorhandenen Bestand.">
         <p className="field__hint">Wählen Sie eine JSON-Datensicherung aus Super Productivity. Projekte, Bereiche, Tags, Fristen, Vermerke, Erledigt-Zustand und erfasste Zeiten werden übernommen.</p>
+        <p className="field__hint">Leistungsnachweise aus OutlookBridge werden dem passenden Buchungstag zugeordnet. Ursprüngliche Notizen bleiben als Vermerk erhalten.</p>
+        <TextField
+          label="Call-Nummer aus Titel erkennen (Regex)"
+          value={callPattern}
+          onChange={changeCallPattern}
+          maxLength={512}
+          disabled={mutation.busy}
+          hint="Die erste Klammergruppe liefert die Call-Nummer, ohne Gruppe der gesamte Treffer. Groß-/Kleinschreibung wird ignoriert. Leer lassen zum Ausschalten."
+        />
+        <label className="choice__option">
+          <input type="checkbox" checked={excludeTransferred} disabled={mutation.busy} onChange={event => setExcludeTransferred(event.target.checked)} />
+          <span>Bereits übertragene Zeiten vom erneuten Export ausnehmen</span>
+        </label>
+        <p className="field__hint">OutlookBridge-Markierungen „Eingetragen“ werden mit Herkunftsvermerk als ausgebucht übernommen. Ausgeschaltet werden alle Zeiten wieder offen importiert.</p>
         <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => superProductivityInput.current?.click()}>Super-Productivity-JSON auswählen</Button>
         <input ref={superProductivityInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseSuperProductivity(event.currentTarget.files); event.currentTarget.value = ""; }} />
       </Card>
@@ -411,8 +437,12 @@ const DENSITY_LABEL: Readonly<Record<Density, string>> = {
 
 /** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
 function TimerSettings() {
-  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
+  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleKeepTimerRunning, setIdleKeepTimerRunning, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
   const activity = useAsync(readIdleActivity, []);
+  useEffect(() => {
+    const interval = window.setInterval(activity.reload, 5000);
+    return () => window.clearInterval(interval);
+  }, [activity.reload]);
   return (
     <Card title="Timer" description="Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.">
       <label className="choice__option">
@@ -426,14 +456,17 @@ function TimerSettings() {
         <span>Leistung beim Stoppen abfragen</span>
       </label>
       <p className="field__hint" id="timer-prompt-hint">
-        Ausgeschaltet wird die Zeit sofort gebucht. Vorhandene Leistung bleibt erhalten;
+        Ausgeschaltet wird die Zeit sofort gebucht, auch beim Wechsel zu einem anderen Timer.
+        Vorhandene Leistung bleibt erhalten;
         fehlenden Text können Sie später in der Buchungsübersicht ergänzen.
       </p>
       <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>Inaktive Zeit erkennen</span></label>
-      <p className="field__hint" id="idle-detection-hint">Ohne Maus- oder Tastatureingabe wird der Timer angehalten. Bei Ihrer Rückkehr können Sie die Zeit als Pause auslassen, einer Aufgabe zuordnen oder aufteilen. Offene Zuordnungen bleiben beim Ausschalten dieser Einstellung erhalten.</p>
+      <p className="field__hint" id="idle-detection-hint">Bei Ihrer Rückkehr können Sie die inaktive Zeit als Pause auslassen, einer Aufgabe zuordnen oder aufteilen. Offene Zuordnungen bleiben beim Ausschalten dieser Einstellung erhalten.</p>
+      <Select label="Timer bei Inaktivität" value={idleKeepTimerRunning ? 'continue' : 'pause'} onChange={value => setIdleKeepTimerRunning(value === 'continue')} disabled={saving || !idleDetectionEnabled}
+        options={[{ value: 'continue', label: 'Weiterlaufen lassen' }, { value: 'pause', label: 'Bis zur Zuordnung pausieren' }]} />
       <Select label="Inaktivität erkennen nach" value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
         options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} ${value === 1 ? 'Minute' : 'Minuten'}` }))} />
-      <p role="status">{activity.state.status === 'loading' ? 'Inaktivitätserkennung wird geprüft …' : activity.state.status === 'ready' && activity.state.value?.supported ? 'Windows-Erkennung verfügbar — auch Eingaben in anderen Programmen zählen als Aktivität.' : 'Automatische Erkennung benötigt die Windows-Desktop-App. Im Browser und auf anderen Betriebssystemen wird keine systemweite Inaktivität erkannt.'}</p>
+      <p role="status">{activity.state.status === 'loading' ? 'Inaktivitätserkennung wird geprüft …' : activity.state.status === 'ready' && activity.state.value?.supported ? 'Systemweite Erkennung verfügbar — auch Eingaben in anderen Programmen zählen als Aktivität.' : 'Systemweite Erkennung ist hier nicht verfügbar. Sie benötigt die Desktop-App und eine unterstützte Systemschnittstelle.'}</p>
       <p className="field__hint">Es werden nur Zeitpunkte gelesen, keine Tasten, Texte oder Programminhalte aufgezeichnet.</p>
     </Card>
   );
@@ -442,31 +475,39 @@ function TimerSettings() {
 function DisplaySettings() {
   const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity } = usePreferences();
 
+  const preset = themePreset(designTheme);
+
   return (
     <Card
       title="Darstellung"
       description="Theme, Farbmodus und Zeilendichte wirken sofort und bleiben beim nächsten Start erhalten."
     >
       <RadioRow
-        label="Theme"
-        value={designTheme}
-        onChange={setDesignTheme}
-        disabled={saving}
+        className="appearance-mode"
+        label="Farbmodus"
+        value={preset.mode === "auto" ? theme : preset.mode}
+        onChange={setTheme}
+        disabled={saving || preset.mode !== "auto"}
         options={[
-          { value: "classic", label: "Klassisch", hint: "Die vertraute Gestaltung mit Karten und farbigen Kennzahlen." },
-          { value: "clear", label: "Klar", hint: "Ruhigere Flächen, kompakte Navigation und mehr Raum für Ihre Arbeitslisten." },
+          { value: "system", label: "System", icon: "monitor", hint: "Folgt dem Farbmodus des Betriebssystems." },
+          { value: "dark", label: "Dunkel", icon: "moon" },
+          { value: "light", label: "Hell", icon: "sun" },
         ]}
       />
+      {preset.mode === "auto" ? null : (
+        <p className="field__hint">Dieses Theme verwendet feste {preset.mode === "dark" ? "dunkle" : "helle"} Farben. Die freie Farbwahl steht bei Klassisch und den anpassbaren Themes zur Verfügung.</p>
+      )}
       <Select
-        label="Farbmodus"
-        value={theme}
-        onChange={setTheme}
+        label="Theme auswählen"
+        value={preset.value}
+        onChange={setDesignTheme}
         disabled={saving}
-        options={(["system", "light", "dark"] as const).map((value) => ({
-          value,
-          label: THEME_LABEL[value],
+        options={THEME_PRESETS.map(item => ({
+          value: item.value,
+          label: item.label,
+          hint: `${item.mode === "dark" ? "Dunkel · " : item.mode === "light" ? "Hell · " : "Hell & Dunkel · "}${item.hint}`,
         }))}
-        hint="„Systemvorgabe“ folgt der Einstellung von Windows. Die Wahl gilt sofort und bleibt beim nächsten Start erhalten."
+        hint="Alle Themes verwenden das klassische Layout. Klassisch ist der Standard."
       />
 
       <Select

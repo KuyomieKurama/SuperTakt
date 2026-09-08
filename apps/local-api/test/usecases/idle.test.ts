@@ -33,17 +33,33 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
   afterEach(() => db.close());
   const begin = (returned = true) => beginIdle(context, { entryId, startedAt: ts('2026-09-08T08:10:00Z'), ...(returned ? { returnedAt: ts('2026-09-08T08:50:00Z') } : {}) });
 
-  it('bucht nur aktive Zeit, pausiert und blockiert einen konkurrierenden Timer', async () => {
+  it('speichert die Pausenoption und pausiert bis zur Zuordnung, ohne Dialogzeit zu buchen', async () => {
+    expect((await unit.settings.load()).idleKeepTimerRunning).toBe(true);
+    await unit.settings.update({ idleKeepTimerRunning: false, now: clock });
+    expect((await unit.settings.load()).idleKeepTimerRunning).toBe(false);
     expect((await begin(false)).ok).toBe(true);
     expect(await unit.timer.running()).toBeNull();
-    expect((await unit.timeEntries.search({})).items.map(e => e.durationSeconds)).toEqual([600]);
+    expect((await returnFromIdle(context, entryId)).ok).toBe(true);
+    expect(await unit.timer.running()).toBeNull();
+    clock = ts('2026-09-08T08:55:00Z');
+    expect((await resolveIdle(context, { id: entryId, resume: true, allocations: [{ todoId: null, seconds: 2400, note: '' }] })).ok).toBe(true);
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: clock });
+    expect((await unit.timeEntries.search({})).items.map(entry => entry.durationSeconds)).toEqual([600]);
+  });
+
+  it('lässt den Timer während der Abwesenheit laufen und trennt die Zeit erst bei der Rückkehr', async () => {
+    expect((await begin(false)).ok).toBe(true);
+    expect(await unit.timer.running()).toMatchObject({ id: entryId, startedAt: '2026-09-08T08:00:00Z' });
+    expect((await unit.timeEntries.search({})).items).toHaveLength(0);
     expect((await unit.timer.start(second, false, clock)).ok).toBe(false);
     expect((await loadIdle(context))?.returnedAt).toBeNull();
     expect((await returnFromIdle(context, entryId)).ok).toBe(true);
     expect((await loadIdle(context))?.returnedAt).toBe(clock);
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: clock });
+    expect((await unit.timeEntries.search({})).items.map(e => e.durationSeconds)).toEqual([600]);
   });
 
-  it('teilt 40 Minuten ohne Überlappung auf Aufgaben und Pause auf und startet erst nach der Zuordnung neu', async () => {
+  it('teilt 40 Minuten ohne Überlappung auf Aufgaben und Pause auf und erfasst die Zeit während der Zuordnung weiter', async () => {
     await begin();
     clock = ts('2026-09-08T08:51:00Z');
     const result = await resolveIdle(context, { id: entryId, resume: true, allocations: [
@@ -58,15 +74,15 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
       ['2026-09-08T08:10:00Z', '2026-09-08T08:30:00Z', 1200],
       ['2026-09-08T08:40:00Z', '2026-09-08T08:50:00Z', 600],
     ]);
-    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: clock });
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: '2026-09-08T08:50:00Z' });
     expect(await loadIdle(context)).toBeNull();
   });
 
-  it('verwirft auf Wunsch ausschließlich die Pause und bleibt gestoppt', async () => {
+  it('verwirft ausschließlich die Pause und lässt den laufenden Timer unverändert', async () => {
     await begin();
     expect((await resolveIdle(context, { id: entryId, resume: false, allocations: [{ todoId: null, seconds: 2400, note: '' }] })).ok).toBe(true);
     expect((await unit.timeEntries.search({})).items).toHaveLength(1);
-    expect(await unit.timer.running()).toBeNull();
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: '2026-09-08T08:50:00Z' });
   });
 
   it.each([2399, 2401, 0, -1, 1.5, Number.NaN])('weist unvollständige oder überzählige Zuordnung %s ohne Änderungen ab', async seconds => {
@@ -93,7 +109,53 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
     expect(result.ok).toBe(false);
     expect((await unit.timeEntries.search({})).items).toHaveLength(1);
     expect(await loadIdle(context)).not.toBeNull();
-    expect(await unit.timer.running()).toBeNull();
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: '2026-09-08T08:50:00Z' });
+  });
+
+  it('erlaubt nach der Rückkehr Timerwechsel und lässt den neuen Timer bei der Zuordnung unberührt', async () => {
+    await begin();
+    clock = ts('2026-09-08T08:51:00Z');
+    const switched = await unit.timer.start(second, true, clock);
+    expect(switched.ok).toBe(true);
+    const active = await unit.timer.running();
+    clock = ts('2026-09-08T08:55:00Z');
+    expect((await resolveIdle(context, { id: entryId, resume: false, allocations: [{ todoId: null, seconds: 2400, note: '' }] })).ok).toBe(true);
+    expect(await unit.timer.running()).toEqual(active);
+    expect((await unit.timeEntries.search({})).items.map(e => e.durationSeconds).sort((a, b) => a - b)).toEqual([60, 600]);
+  });
+
+  it('behält Leistung und Timer bei erneutem Rückkehr-Aufruf bei', async () => {
+    db.connection.prepare('UPDATE time_entry SET note = ? WHERE id = ?').run('Laufende Leistung', entryId);
+    await begin(false);
+    await returnFromIdle(context, entryId, clock);
+    const active = await unit.timer.running();
+    expect(active?.note).toBe('Laufende Leistung');
+    await returnFromIdle(context, entryId, clock);
+    expect(await unit.timer.running()).toEqual(active);
+    expect((await unit.timeEntries.search({})).items).toHaveLength(1);
+  });
+
+  it('rollt eine fehlgeschlagene Abtrennung einschließlich der offenen Phase zurück', async () => {
+    db.connection.exec("CREATE TRIGGER test_idle_continue_failure BEFORE INSERT ON time_entry WHEN NEW.started_at = '2026-09-08T08:50:00Z' BEGIN SELECT RAISE(ABORT, 'time_entry_locked'); END");
+    expect((await begin()).ok).toBe(false);
+    expect(await unit.timer.running()).toMatchObject({ id: entryId, startedAt: '2026-09-08T08:00:00Z' });
+    expect(await loadIdle(context)).toBeNull();
+    expect((await unit.timeEntries.search({})).items).toHaveLength(0);
+  });
+
+  it('trennt eine vollständig inaktive Buchung ohne Nullsekunden-Buchung ab', async () => {
+    expect((await beginIdle(context, { entryId, startedAt: ts('2026-09-08T08:00:00Z'), returnedAt: clock })).ok).toBe(true);
+    expect((await unit.timeEntries.search({})).items).toHaveLength(0);
+    expect(await unit.timer.running()).toMatchObject({ todoId: first, startedAt: clock });
+  });
+
+  it('stellt einen weiterlaufenden Timer zusammen mit der offenen Zuordnung aus dem Archiv wieder her', async () => {
+    await begin();
+    const snapshot = await unit.dataArchive.readAll();
+    const running = await unit.timer.running();
+    await db.transactions.inTransaction(unit => unit.dataArchive.replaceAll(snapshot));
+    expect(await unit.timer.running()).toEqual(running);
+    expect(await loadIdle(context)).toMatchObject({ id: entryId, returnedAt: clock });
   });
 
   it('weist alte Timerkennung, Zukunft und Zeiten vor dem Timerstart ab', async () => {

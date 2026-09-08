@@ -15,16 +15,20 @@ Navigationspunkte geben bislang fast jedem Inhalt dasselbe Gewicht. Viele
 Kommentare dokumentieren frühere Zwischenstände. Der Abschnitt „Befehle“ in
 `CLAUDE.md` war noch auf dem Stand vor Einrichtung des Arbeitsbereichs.
 
-## Umsetzung
+## Aktuelle Theme-Auswahl
 
-Unter Einstellungen → Darstellung stehen „Klassisch“ und „Klar“ zur Wahl.
-Klassisch behält das bisherige Layout. Klar ist der Standard für neue und
-aktualisierte Installationen ohne bisherige Theme-Auswahl; eine bereits gespeicherte
-Auswahl bleibt erhalten. Die folgenden Layoutänderungen gelten ausschließlich für Klar;
-die neue Wortmarke gilt für beide Themes. Hell/Dunkel/System und Zeilendichte
-sind unabhängig vom Theme wählbar. Alle drei Einstellungen werden in der lokalen
-Datenbank gespeichert. Ein fehlgeschlagener Wechsel wird sichtbar gemeldet und
-auf den vorherigen Zustand zurückgesetzt.
+Nach dem ergänzten Auftrag bleibt das klassische Layout für alle Themes erhalten.
+Klassisch ist der Standard. Die Auswahl und das Verhalten der zusätzlichen
+Farbthemen stehen in [theme-palettes.md](theme-palettes.md). Die frühere gespeicherte
+Auswahl Klar wird als Klassisch dargestellt. Darstellung, Farbmodus-Vorliebe und
+Zeilendichte werden weiterhin lokal gespeichert; fehlgeschlagene Änderungen
+werden zurückgesetzt und sichtbar gemeldet.
+
+## Frühere Layoutvariante Klar
+
+Die folgenden Änderungen dokumentieren die frühere Variante Klar. Sie werden
+von der aktuellen Theme-Auswahl nicht mehr aktiviert; die Wortmarke SuperTakt
+bleibt Bestandteil aller Themes.
 
 - Die Marke heißt sichtbar SuperTakt: Webtitel, Wortmarke mit ST-Kürzel,
   Desktop-Fenster und Menü, Installer-Metadaten, Outlook-Manifest und Meldungen.

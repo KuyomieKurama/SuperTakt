@@ -21,7 +21,7 @@ const todoistSchema = z.object({
   })).min(1).max(200),
 });
 const archiveSchema = z.object({ archive: z.unknown() });
-const superProductivitySchema = z.object({ backup: z.unknown() });
+const superProductivitySchema = z.object({ backup: z.unknown(), excludeTransferred: z.boolean().default(true), callPattern: z.string().max(512).optional() });
 
 export const REQUEST_SCHEMAS = Object.freeze({
   importDataArchive: archiveSchema,
@@ -59,7 +59,7 @@ export function createDataTransferRoutes(context: AppContext): Hono<TaktEnv> {
   routes.post('/super-productivity', async (c) => {
     const parsed = superProductivitySchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
-    const result = await importSuperProductivity(context, parsed.data.backup);
+    const result = await importSuperProductivity(context, parsed.data.backup, parsed.data.excludeTransferred, parsed.data.callPattern);
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 

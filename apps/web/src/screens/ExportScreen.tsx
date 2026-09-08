@@ -33,6 +33,7 @@ import {
 } from "../components/ExportGroups";
 import { ExportRowPanes } from "../components/ExportRowPanes";
 import { Select } from "../components/Select";
+import { InfoHint } from "../components/InfoHint";
 import { Icon } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
 import { useRefresh } from "../app/RefreshContext";
@@ -665,7 +666,12 @@ export function ExportScreen() {
             nirgends; jetzt steht es an der Auswahl, die es betrifft.
           */}
           <div className="export-settings__fact">
+            <div className="export-settings__label"><span>Exportvorlage</span><InfoHint label="Hinweis zur Exportvorlage">
+              Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
+              Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
+            </InfoHint></div>
             <Select
+              hideLabel
               label="Exportvorlage"
               value={activeTemplateId ?? ""}
               onChange={setTemplateId}
@@ -680,51 +686,44 @@ export function ExportScreen() {
                   : [{ value: "", label: "wird geladen …" }]
               }
             />
-            <span className="muted">
-              Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
-              Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
-            </span>
           </div>
-          <p className="export-settings__fact">
-            <span className="overline">Rundung</span>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Rundung</span><InfoHint label="Hinweis: Rundung">
+              Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
+              Tagesgruppe, nicht auf die einzelne Buchung.
+            </InfoHint></span>
             <strong>
               {settings === null ? "—" : ROUNDING_MODE_LABEL[settings.roundingMode]}
             </strong>
-            <span className="muted">
-              Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
-              Tagesgruppe, nicht auf die einzelne Buchung.
-            </span>
-          </p>
-          <p className="export-settings__fact">
-            <span className="overline">Exportordner</span>
-            <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
-              {settings?.exportDirectory ?? "nicht gewählt"}
-            </strong>
-            <span className="muted">
+          </div>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Exportordner</span><InfoHint label="Hinweis: Exportordner">
               {directoryState === "ok"
                 ? "Vorhanden und beschreibbar — soeben geprüft."
                 : (directoryProblem?.title ?? "Zustand unbekannt.")}
-            </span>
+            </InfoHint></span>
+            <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
+              {settings?.exportDirectory ?? "nicht gewählt"}
+            </strong>
             <Button
               size="sm"
-              variant="ghost"
+              variant="primary"
               iconStart="folder-open"
               onClick={() => navigate("settings")}
             >
               Ordner ändern
             </Button>
-          </p>
-          <p className="export-settings__fact">
-            <span className="overline">Abgerechnet unter</span>
-            <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
-              {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
-            </strong>
-            <span className="muted">
+          </div>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Abgerechnet unter</span><InfoHint label="Hinweis: Abgerechnet unter">
               {billingUser.length === 0
                 ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
                 : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
-            </span>
-          </p>
+            </InfoHint></span>
+            <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
+              {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
+            </strong>
+          </div>
         </div>
 
         {/*
@@ -795,6 +794,7 @@ export function ExportScreen() {
 
             const groupData: ExportGroupData = {
               id: group.key,
+              todoId: group.todoId,
               todoTitle: todo?.title ?? "Unbekanntes Todo",
               callNumber: todo?.callNumber ?? null,
               day: formatDayLabel(group.day),
@@ -906,6 +906,15 @@ export function ExportScreen() {
                   </span>
                 ) : null}
               </div>
+
+              {blockedCount > 0 ? (
+                <details className="export-legend">
+                  <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
+                  <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
+                  <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
+                  <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
+                </details>
+              ) : null}
 
               <ExportGroupList
                 models={models}
@@ -1324,11 +1333,11 @@ function toLayout(preview: ExportPreview): readonly GroupLayout[] {
 
 const ALL_EXCLUDED: GroupInsight = {
   quarters: null,
-  blockedReason: "Alle Buchungen dieser Gruppe sind ausgeschlossen.",
+  blockedReason: "Alle Buchungen ausgeschlossen",
 };
 
 function reasonText(reason: SkippedExportGroup["reason"]): string {
   return reason === "empty_note"
-    ? "Keine der Buchungen dieser Tagesgruppe trägt einen Leistungstext, und eine leere Notiz nimmt das Abrechnungstool nicht an."
-    : "Diese Tagesgruppe ist nicht exportierbar.";
+    ? "Leistung fehlt"
+    : "Nicht exportierbar";
 }

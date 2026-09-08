@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { E2E_DATA_DIR } from './support/session';
 import { gotoTime } from './support/nav';
-import { cleanupAnyTimer, createTodo, deleteTodo, deleteTimeEntry, getRunningTimer, listTimeEntriesByTodo } from './support/api';
+import { cleanupAnyTimer, startTimer, createTodo, deleteTodo, deleteTimeEntry, getRunningTimer, listTimeEntriesByTodo } from './support/api';
 
 const iso = (ms: number) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z');
 
@@ -12,6 +12,8 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
   await cleanupAnyTimer();
   const a = await createTodo({ title: `E2E-Inaktiv-A-${Date.now()}` });
   const b = await createTodo({ title: `E2E-Inaktiv-B-${Date.now()}` });
+  await startTimer(a.id);
+  const continuing = await getRunningTimer();
   const sessionId = randomUUID();
   const end = Date.now() - 60_000;
   const begin = end - 40 * 60_000;
@@ -25,24 +27,24 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
     await gotoTime(page);
     let dialog = page.getByRole('dialog', { name: 'Willkommen zurück' });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Später zuordnen' }).click();
-    expect(await getRunningTimer()).toBeNull();
+    await dialog.getByRole('button', { name: 'Später', exact: true }).click();
+    expect((await getRunningTimer())?.entry.id).toBe(continuing?.entry.id);
     await page.reload();
     dialog = page.getByRole('dialog', { name: 'Willkommen zurück' });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('radio', { name: 'Zeit aufteilen', exact: true }).check();
+    await dialog.getByRole('radio', { name: 'Aufteilen', exact: true }).check();
     await dialog.getByRole('textbox', { name: 'Dauer', exact: true }).first().fill('20');
     await dialog.getByRole('button', { name: 'Abschnitt hinzufügen' }).click();
     await dialog.getByRole('textbox', { name: 'Dauer', exact: true }).nth(1).fill('10');
     await dialog.getByRole('button', { name: 'Abschnitt hinzufügen' }).click();
-    await dialog.getByRole('combobox', { name: 'Aufgabe oder Pause' }).nth(2).click();
+    await dialog.getByRole('combobox', { name: 'Aufgabe oder Pause' }).nth(2).fill(b.title);
     await page.getByRole('option', { name: b.title, exact: true }).click();
     await dialog.getByRole('button', { name: 'Rest übernehmen', exact: true }).nth(2).click();
-    await expect(dialog.getByText('Die gesamte Zeit ist verteilt.', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Alles verteilt', { exact: true })).toBeVisible();
     const bounds = await dialog.boundingBox();
     expect(bounds?.height).toBeLessThanOrEqual(page.viewportSize()!.height);
     await page.screenshot({ path: 'test-results-e2e/idle-split.png' });
-    await dialog.getByRole('button', { name: 'Zuordnung speichern' }).click();
+    await dialog.getByRole('button', { name: 'Zeit buchen', exact: true }).click();
     await expect(dialog).toBeHidden();
     const entriesA = await listTimeEntriesByTodo(a.id);
     const entriesB = await listTimeEntriesByTodo(b.id);
@@ -50,7 +52,7 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
     expect(entriesB).toHaveLength(1);
     expect(entriesA[0]).toMatchObject({ startedAt: iso(begin), endedAt: iso(begin + 20 * 60_000), note: 'Telefonat' });
     expect(entriesB[0]).toMatchObject({ startedAt: iso(begin + 30 * 60_000), endedAt: iso(end) });
-    expect((await getRunningTimer())?.entry.todoId).toBe(a.id);
+    expect((await getRunningTimer())?.entry.id).toBe(continuing?.entry.id);
     await page.reload();
     await expect(dialog).toBeHidden();
   } finally {

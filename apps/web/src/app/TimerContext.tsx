@@ -130,7 +130,7 @@ interface StartConflict {
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const toasts = useToasts();
   const { bump } = useRefresh();
-  const { promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes } = usePreferences();
+  const { promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes } = usePreferences();
   const directStopPending = useRef(false);
 
   const [running, setRunning] = useState<RunningTimerView | null>(null);
@@ -187,7 +187,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const guardIdle = useCallback((action: () => void) => {
     if (actionPending.current || busy || stopOpen || conflict !== null || orphan !== null) return;
     actionPending.current = true;
-    void idle.check().then(pending => { if (pending === null) action(); })
+    void idle.check().then(pending => { if (pending === null || pending.returnedAt !== null) action(); })
       .catch((cause: unknown) => toasts.failure("Timer konnte nicht geprüft werden", errorMessage(cause)))
       .finally(() => { actionPending.current = false; });
   }, [idle.check, busy, stopOpen, conflict, orphan, toasts]);
@@ -355,30 +355,6 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   );
 
   /* ---------------------------------------------------------------- */
-  /* Starten                                                           */
-  /* ---------------------------------------------------------------- */
-
-  const start = useCallback(
-    (todoId: Id, todoTitle: ForeignText) => {
-      if (directStopPending.current || runningRef.current?.entry.todoId === todoId) return;
-      void (async () => {
-        try {
-          const result = await startTimer(todoId, false);
-          if (result.kind === "confirmation_required") {
-            setConflictNote(result.running.note);
-            setConflict({ todoId, todoTitle, runningTitle: result.runningTodoTitle });
-            return;
-          }
-          announceStart(todoId, todoTitle, result.doneCleared, result.poolMovement);
-        } catch (cause) {
-          toasts.failure("Der Timer ließ sich nicht starten", errorMessage(cause));
-        }
-      })();
-    },
-    [announceStart, toasts],
-  );
-
-  /* ---------------------------------------------------------------- */
   /* Stoppen                                                           */
   /* ---------------------------------------------------------------- */
 
@@ -530,14 +506,6 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     setStopOpen(true);
   }, [busy, conflict, performStop, promptOnTimerStop, refresh, stopOpen, toasts]);
 
-  const toggle = useCallback(
-    (todoId: Id, todoTitle: ForeignText) => {
-      if (runningRef.current?.entry.todoId === todoId) requestStop();
-      else start(todoId, todoTitle);
-    },
-    [requestStop, start],
-  );
-
   const confirmStop = useCallback(() => {
     setBusy(true);
     setDialogError(null);
@@ -614,53 +582,100 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
    * nichts geändert, kein Timer ist beendet, und der Dialog ist die Stelle, an
    * der der Benutzer eben „Wechseln" gedrückt hat.
    */
-  const confirmSwitch = useCallback(() => {
-    const pending = conflict;
-    if (pending === null) return;
+  const performSwitch = useCallback(async (pending: StartConflict, note: ForeignText, showDialog: boolean) => {
     setBusy(true);
     setDialogError(null);
-    void (async () => {
-      /* Schritt 1 — der Stopp. Sein Fehler gehört noch in den Dialog. */
-      try {
-        await performStop(conflictNote);
-      } catch (cause) {
-        setDialogError(errorMessage(cause));
-        setBusy(false);
+    /* Schritt 1 — der Stopp. Sein Fehler gehört noch in den Dialog. */
+    try {
+      await performStop(note);
+    } catch (cause) {
+      if (showDialog) setDialogError(errorMessage(cause));
+      else toasts.failure("Der Timer ließ sich nicht stoppen", errorMessage(cause));
+      refresh();
+      setBusy(false);
+      return;
+    }
+
+    /*
+      Schritt 2 — schließen, im selben Zustandsschritt wie die Meldung aus
+      `performStop`. Zwischen beiden liegt kein `await`, also keine
+      Zeichnung, in der die Meldung hinter der Abdunklung stünde.
+    */
+    setConflict(null);
+    setBusy(false);
+
+    /* Schritt 3 — der Start. Ab hier meldet nur noch der Stapel. */
+    const failed = (detail: string) => {
+      toasts.failure(
+        `Gebucht, aber der Timer auf ${quotedName(pending.todoTitle)} ließ sich nicht starten`,
+        `Die Zeit des vorigen Timers ist gebucht — daran ändert das nichts. ${detail}`,
+      );
+    };
+    try {
+      const result = await startTimer(pending.todoId, false);
+      if (result.kind === "confirmation_required") {
+        failed("Es läuft weiterhin ein Timer. Bitte starten Sie erneut.");
         return;
       }
+      announceStart(
+        pending.todoId,
+        pending.todoTitle,
+        result.doneCleared,
+        result.poolMovement,
+      );
+    } catch (cause) {
+      failed(errorMessage(cause));
+    }
+  }, [announceStart, performStop, refresh, toasts]);
 
-      /*
-        Schritt 2 — schließen, im selben Zustandsschritt wie die Meldung aus
-        `performStop`. Zwischen beiden liegt kein `await`, also keine
-        Zeichnung, in der die Meldung hinter der Abdunklung stünde.
-      */
-      setConflict(null);
-      setBusy(false);
+  const confirmSwitch = useCallback(() => {
+    if (conflict === null || directStopPending.current) return;
+    directStopPending.current = true;
+    void performSwitch(conflict, conflictNote, true).finally(() => {
+      directStopPending.current = false;
+    });
+  }, [conflict, conflictNote, performSwitch]);
 
-      /* Schritt 3 — der Start. Ab hier meldet nur noch der Stapel. */
-      const failed = (detail: string) => {
-        toasts.failure(
-          `Gebucht, aber der Timer auf ${quotedName(pending.todoTitle)} ließ sich nicht starten`,
-          `Die Zeit des vorigen Timers ist gebucht — daran ändert das nichts. ${detail}`,
-        );
-      };
-      try {
-        const result = await startTimer(pending.todoId, false);
-        if (result.kind === "confirmation_required") {
-          failed("Es läuft weiterhin ein Timer. Bitte starten Sie erneut.");
-          return;
+  /* ---------------------------------------------------------------- */
+  /* Starten                                                           */
+  /* ---------------------------------------------------------------- */
+
+  const start = useCallback(
+    (todoId: Id, todoTitle: ForeignText) => {
+      if (directStopPending.current || runningRef.current?.entry.todoId === todoId) return;
+      directStopPending.current = true;
+      void (async () => {
+        try {
+          const result = await startTimer(todoId, false);
+          if (result.kind === "confirmation_required") {
+            const pending = { todoId, todoTitle, runningTitle: result.runningTodoTitle };
+            if (promptOnTimerStop) {
+              setDialogError(null);
+              setConflictNote(result.running.note);
+              setConflict(pending);
+            } else {
+              await performSwitch(pending, result.running.note, false);
+            }
+            return;
+          }
+          announceStart(todoId, todoTitle, result.doneCleared, result.poolMovement);
+        } catch (cause) {
+          toasts.failure("Der Timer ließ sich nicht starten", errorMessage(cause));
+        } finally {
+          directStopPending.current = false;
         }
-        announceStart(
-          pending.todoId,
-          pending.todoTitle,
-          result.doneCleared,
-          result.poolMovement,
-        );
-      } catch (cause) {
-        failed(errorMessage(cause));
-      }
-    })();
-  }, [announceStart, conflict, conflictNote, performStop, toasts]);
+      })();
+    },
+    [announceStart, performSwitch, promptOnTimerStop, toasts],
+  );
+
+  const toggle = useCallback(
+    (todoId: Id, todoTitle: ForeignText) => {
+      if (runningRef.current?.entry.todoId === todoId) requestStop();
+      else start(todoId, todoTitle);
+    },
+    [requestStop, start],
+  );
 
   /* ---------------------------------------------------------------- */
   /* E-036 — die verwaiste Buchung                                     */
@@ -778,7 +793,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   return (
     <TimerContext.Provider value={api}>
       {children}
-      {idle.session === null ? null : <IdleRecovery key={idle.session.id} session={idle.session} changed={idle.refresh} />}
+      {idle.session === null ? null : <IdleRecovery key={idle.session.id} session={idle.session} changed={idle.refresh} running={running !== null} resumeAfter={!idleKeepTimerRunning} />}
       <div role="alert">{idle.error === null ? null : <aside className="idle-reminder">Inaktivität konnte nicht geprüft werden: {idle.error}<Button onClick={idle.refresh}>Erneut prüfen</Button></aside>}</div>
 
       <FormDialog

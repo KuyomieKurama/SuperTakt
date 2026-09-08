@@ -115,7 +115,6 @@ bdi {
    Eine globale Regel auf `p` wuerde auch Kopfbaender und Etiketten kuerzen. */
 .prose,
 .section__lead,
-.card__description,
 .note__help,
 .message__body {
   max-width: var(--measure-prose);

@@ -1259,6 +1259,7 @@ export interface AppSettings {
   readonly density: Density;
   readonly promptOnTimerStop: boolean;
   readonly idleDetectionEnabled: boolean;
+  readonly idleKeepTimerRunning: boolean;
   readonly idleThresholdMinutes: number;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20). `null`
@@ -1288,6 +1289,7 @@ export interface AppSettingsUpdate {
   readonly density?: Density;
   readonly promptOnTimerStop?: boolean;
   readonly idleDetectionEnabled?: boolean;
+  readonly idleKeepTimerRunning?: boolean;
   readonly idleThresholdMinutes?: number;
   /**
    * `null` setzt „nichts übersprungen" zurück, ein Wert überspringt genau

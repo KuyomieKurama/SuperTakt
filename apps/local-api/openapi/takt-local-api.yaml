@@ -3890,9 +3890,10 @@ paths:
                 roundingMode: { $ref: '#/components/schemas/RoundingMode' }
                 locale: { type: string, minLength: 2, maxLength: 35 }
                 theme: { type: string, enum: [system, light, dark] }
-                designTheme: { type: string, enum: [classic, clear] }
+                designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
                 density: { type: string, enum: [comfortable, compact] }
                 promptOnTimerStop: { type: boolean }
+                idleKeepTimerRunning: { type: boolean, default: true }
                 idleDetectionEnabled: { type: boolean }
                 idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
                 skippedVersion:
@@ -4096,6 +4097,8 @@ paths:
               required: [backup]
               properties:
                 backup: {}
+                excludeTransferred: { type: boolean, default: true }
+                callPattern: { type: string, maxLength: 512 }
       responses:
         '200':
           description: Aufgaben und Strukturen ergänzt.
@@ -4447,7 +4450,7 @@ components:
       required: [format, schemaVersion, createdAt, generator, data, warnings]
       properties:
         format: { type: string, const: de.supertakt.data-archive }
-        schemaVersion: { type: integer, const: 4 }
+        schemaVersion: { type: integer, const: 5 }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
         data:
@@ -6629,7 +6632,7 @@ components:
       description: |
         Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
       required:
-        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, skippedVersion, updatedAt]
+        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, skippedVersion, updatedAt]
       properties:
         exportDirectory:
           oneOf: [{ type: string }, { type: 'null' }]
@@ -6638,10 +6641,11 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         locale: { type: string }
         theme: { type: string, enum: [system, light, dark] }
-        designTheme: { type: string, enum: [classic, clear] }
+        designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
         density: { type: string, enum: [comfortable, compact] }
         promptOnTimerStop: { type: boolean }
         idleDetectionEnabled: { type: boolean }
+        idleKeepTimerRunning: { type: boolean, default: true }
         idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
         skippedVersion:
           oneOf: [{ $ref: '#/components/schemas/Version' }, { type: 'null' }]

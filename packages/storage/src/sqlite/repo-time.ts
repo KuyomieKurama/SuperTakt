@@ -341,8 +341,29 @@ export function createTimerPort(conn: SqlConnection, ids: IdSource): TimerPort {
      * A-6.8, nicht eine Bequemlichkeit des Aufrufers. Ohne sie wird nichts
      * angefasst.
      */
+    async separateIdle(entryId: TimeEntryId, startedAt: Timestamp, returnedAt: Timestamp, now: Timestamp) {
+      const current = running();
+      if (current === null || current.id !== entryId || startedAt < current.startedAt || returnedAt <= startedAt || returnedAt > now) {
+        return err(taktError('conflict', 'Der Timer passt nicht mehr zur inaktiven Zeit.'));
+      }
+      return attemptAtomically(conn, 'takt_idle_separate', () => {
+        if (Date.parse(startedAt) - Date.parse(current.startedAt) >= 1000) {
+          conn.prepare('UPDATE time_entry SET ended_at = ?, updated_at = ? WHERE id = ?').run(startedAt, now, current.id);
+        } else {
+          conn.prepare('DELETE FROM time_entry WHERE id = ?').run(current.id);
+        }
+        const nextId = ids.next() as TimeEntryId;
+        conn.prepare(`INSERT INTO time_entry (id, todo_id, started_at, ended_at, note, export_status, export_count, source, created_at, updated_at)
+          VALUES (?, ?, ?, NULL, ?, 'open', 0, 'timer', ?, ?)`)
+          .run(nextId, current.todoId, returnedAt, current.note, now, now);
+        const continued = running();
+        if (continued === null) throw new Error('Der weiterlaufende Timer ist nicht auffindbar.');
+        return continued;
+      });
+    },
+
     async start(todoId: TodoId, stopRunning: boolean, now: Timestamp) {
-      if (conn.prepare('SELECT id FROM timer_idle WHERE id = 1').get() !== undefined) {
+      if (conn.prepare('SELECT id FROM timer_idle WHERE id = 1 AND returned_at IS NULL').get() !== undefined) {
         return err(taktError('timer_already_running', 'Ordnen Sie zuerst die noch offene inaktive Zeit zu.'));
       }
       const todo = conn.prepare('SELECT id, completed_at FROM todo WHERE id = ?').get(todoId);

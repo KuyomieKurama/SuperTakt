@@ -93,6 +93,8 @@ export interface FilterBarProps {
   readonly label: string;
   /** Auswahllisten und Umschalter, die den Filter setzen. */
   readonly controls: ReactNode;
+  /** Zusätzliche Ansichtsoptionen, etwa Sortierung und Sichtbarkeit. */
+  readonly secondaryControls?: ReactNode;
   readonly activeFilters: readonly ActiveFilter[];
   readonly onResetAll: () => void;
   /** Bereits formatierter Trefferhinweis, zum Beispiel "42 von 318 Buchungen". */
@@ -103,6 +105,7 @@ export interface FilterBarProps {
 export function FilterBar({
   label,
   controls,
+  secondaryControls,
   activeFilters,
   onResetAll,
   resultLabel,
@@ -113,6 +116,11 @@ export function FilterBar({
       <div className="filterbar__controls" role="group" aria-label={label}>
         {controls}
       </div>
+      {secondaryControls === undefined ? null : (
+        <div className="filterbar__secondary" role="group" aria-label="Ansichtsoptionen">
+          {secondaryControls}
+        </div>
+      )}
       <div className="filterbar__status">
         <p className="filterbar__result" role="status" aria-live="polite">
           {resultLabel}

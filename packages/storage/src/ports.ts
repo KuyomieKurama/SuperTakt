@@ -973,6 +973,8 @@ export interface TimeEntryPort {
  * Prüfung im Adapter, die zwischen Lesen und Schreiben verlieren könnte.
  */
 export interface TimerPort {
+  /** Separates the completed idle window and continues from return, atomically. */
+  separateIdle(entryId: TimeEntryId, startedAt: Timestamp, returnedAt: Timestamp, now: Timestamp): Promise<Result<RunningTimeEntry, TaktError>>;
   running(): Promise<RunningTimeEntry | null>;
 
   /**

@@ -82,6 +82,8 @@ export interface NoteFieldProps {
   readonly onChange: (next: string) => void;
   /** Ueberschreibt die Standardbeschriftung der Feldart. */
   readonly label?: string;
+  /** Wenn eine umgebende Karte bereits die sichtbare Überschrift trägt. */
+  readonly hideLabel?: boolean;
   readonly placeholder?: string;
   readonly rows?: number;
   readonly maxLength?: number;
@@ -100,6 +102,7 @@ export function NoteField({
   value,
   onChange,
   label,
+  hideLabel = false,
   placeholder,
   rows = 3,
   maxLength,
@@ -116,6 +119,7 @@ export function NoteField({
   const errorId = `${fieldId}-error`;
   const countId = `${fieldId}-count`;
   const quietLive = useFieldMessageLive();
+  const showHelp = scope === "billing" || (readOnly && readOnlyHint !== undefined);
 
   const describedBy = [
     helpId,
@@ -136,14 +140,14 @@ export function NoteField({
         className,
       )}
     >
-      <p className="note__banner">
+      <p className="note__banner" id={showHelp ? undefined : helpId}>
         <Icon name={definition.bannerIcon} size={13} />
         <span>{definition.bannerLabel}</span>
         {readOnly ? <span className="note__banner-tail">gesperrt</span> : null}
       </p>
 
       <div className="note__frame">
-        <label className="note__label" htmlFor={fieldId}>
+        <label className={hideLabel ? "visually-hidden" : "note__label"} htmlFor={fieldId}>
           <span className="note__mark" aria-hidden>
             <Icon name={definition.bannerIcon} size={11} />
           </span>
@@ -174,9 +178,11 @@ export function NoteField({
         />
 
         <div className="note__footer">
-          <p className="note__help" id={helpId}>
-            {readOnly && readOnlyHint !== undefined ? readOnlyHint : definition.help}
-          </p>
+          {showHelp ? (
+            <p className="note__help" id={helpId}>
+              {readOnly && readOnlyHint !== undefined ? readOnlyHint : definition.help}
+            </p>
+          ) : null}
           {maxLength !== undefined ? (
             <p className="note__count" id={countId}>
               <span className="visually-hidden">Zeichen: </span>

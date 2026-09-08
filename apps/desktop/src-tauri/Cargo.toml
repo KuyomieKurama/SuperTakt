@@ -61,6 +61,13 @@ getrandom = "0.3"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = "0.31"
+# 0.32.9 includes input-idle v2 and supports the declared Rust 1.82 baseline.
+wayland-protocols = { version = "=0.32.9", features = ["client", "staging"] }
+x11rb = { version = "0.13", features = ["screensaver"] }
+dbus = "0.9"
+
 [features]
 # Von tauri-build erzeugt. Muss stehen bleiben.
 custom-protocol = ["tauri/custom-protocol"]

@@ -396,6 +396,12 @@ export function TagTree({
               onSelect(row.node);
               focusRow(row.node.id);
             }}
+            onDoubleClick={(event) => {
+              if (row.node.kind !== "folder" || !row.hasChildren) return;
+              event.preventDefault();
+              toggle(row.node.id, !isOpen);
+              focusRow(row.node.id);
+            }}
             onDragStart={(event: DragEvent<HTMLElement>) => {
               if (!draggable) return;
               event.dataTransfer.setData(TREE_DRAG_MIME, row.node.id);
@@ -430,6 +436,7 @@ export function TagTree({
               {row.hasChildren ? (
                 <span
                   className="tree__twisty tree__twisty--active"
+                  onDoubleClick={(event) => event.stopPropagation()}
                   aria-hidden
                   onClick={(event) => {
                     // Der Klick bleibt hier: Aufklappen ist keine Auswahl.

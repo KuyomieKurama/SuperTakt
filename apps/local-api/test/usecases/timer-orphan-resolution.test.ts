@@ -86,6 +86,7 @@ describe('resolveOrphanedTimer — reicht den Grund der Domäne unverändert dur
             /* nicht Teil dieses Zweigs */
           },
         },
+        idle: { pending: async () => null },
         timer: {
           async running() {
             return null;
@@ -129,6 +130,7 @@ describe('resolveOrphanedTimer — reicht den Grund der Domäne unverändert dur
           },
           async touch() {},
         },
+        idle: { pending: async () => null },
         timer: {
           async running() {
             return null;
@@ -159,6 +161,7 @@ describe('resolveOrphanedTimer — reicht den Grund der Domäne unverändert dur
             },
             async touch() {},
           },
+          idle: { pending: async () => null },
           timer: {
             async running() {
               return null;
@@ -187,6 +190,7 @@ describe('stopTimer — bleibt bei "timer_too_short" (O-R: POST /timer/stop kenn
   it('scheitert die Buchung an der Mindestdauer, lautet der Grund exakt "timer_too_short" und poolMovement ist null', async () => {
     const context = buildContext(
       {
+        idle: { pending: async () => null },
         timer: {
           async running() {
             // Kein Timer "vor" dem Stopp sichtbar — für den geprüften Zweig

@@ -10,6 +10,9 @@
 
 import {
   IMAGE_SIGNATURE_BYTES,
+  DEFAULT_IMPORT_CALL_PATTERN,
+  normalizeAttachmentLink,
+  checkAttachmentPath,
   MAX_ATTACHMENT_IMAGE_BYTES,
   dropHiddenCharacters,
   imageMediaTypeOf,
@@ -32,9 +35,11 @@ import type {
 } from '@takt/storage';
 
 import type { AppContext, UseCaseResult } from './context.ts';
+import { extractImportCalls } from './import-call-numbers.ts';
+import { outlookBridgeBillingNotes, readOutlookBridge, trackedMilliseconds, wasTransferred } from './super-productivity-time.ts';
 
 export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
-export const DATA_ARCHIVE_VERSION = 4 as const;
+export const DATA_ARCHIVE_VERSION = 5 as const;
 
 export interface ArchivedImage {
   readonly name: string;
@@ -71,6 +76,8 @@ export interface TodoistFile {
 }
 
 interface ExternalTask {
+  readonly attachments?: readonly { readonly kind: 'link' | 'file'; readonly title: string | null; readonly target: string }[];
+  readonly callNumber?: string | null;
   readonly externalId: string;
   readonly title: string;
   readonly note: string;
@@ -83,13 +90,16 @@ interface ExternalTask {
   readonly parentExternalId: string | null;
   readonly metadata: readonly string[];
   readonly timeByDay: Readonly<Record<string, number>>;
+  readonly billingNotesByDay: Readonly<Record<string, string>>;
+  readonly transferredDays: readonly string[];
 }
 
 interface ExternalData {
   readonly source: 'todoist' | 'super-productivity';
   readonly projects: readonly string[];
   readonly sections: readonly { readonly project: string; readonly name: string }[];
-  readonly labels: readonly { readonly name: string; readonly color: string | null }[];
+  readonly labels: readonly { readonly key?: string; readonly folderId?: string; readonly name: string; readonly color: string | null }[];
+  readonly labelFolders?: readonly { readonly id: string; readonly parentId: string | null; readonly name: string }[];
   readonly tasks: readonly ExternalTask[];
   readonly warnings: readonly string[];
 }
@@ -163,10 +173,10 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
   if (
     root === null ||
     root['format'] !== DATA_ARCHIVE_FORMAT ||
-    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== 2 && root['schemaVersion'] !== 3 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
+    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== 2 && root['schemaVersion'] !== 3 && root['schemaVersion'] !== 4 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1, 2, 3 oder 4.') };
+    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1, 2, 3, 4 oder 5.') };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
@@ -177,7 +187,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
 
   const tables = {} as Record<(typeof DATA_ARCHIVE_TABLES)[number], readonly ArchiveRow[]>;
   for (const table of DATA_ARCHIVE_TABLES) {
-    const rows = table === 'timer_idle' && root['schemaVersion'] !== 4 ? [] : rawTables[table];
+    const rows = table === 'timer_idle' && (root['schemaVersion'] === 1 || root['schemaVersion'] === 2 || root['schemaVersion'] === 3) ? [] : rawTables[table];
     if (!Array.isArray(rows) || rows.length > 250_000) {
       return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ fehlt oder ist zu groß.`) };
     }
@@ -190,11 +200,12 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       // Defaults are added only for fields missing from the declared version.
       let upgraded = item;
       if (table === 'app_setting') {
-        if (root['schemaVersion'] !== 4) {
+        if (root['schemaVersion'] !== 5) upgraded = { ...upgraded, idle_keep_timer_running: 1 };
+        if ((root['schemaVersion'] === 1 || root['schemaVersion'] === 2 || root['schemaVersion'] === 3)) {
           upgraded = { ...upgraded, idle_detection_enabled: 1, idle_threshold_minutes: 5 };
         }
         if (root['schemaVersion'] === 1) {
-          upgraded = { ...upgraded, design_theme: 'clear', density: 'comfortable' };
+          upgraded = { ...upgraded, design_theme: 'classic', density: 'comfortable' };
         }
         if (root['schemaVersion'] === 1 || root['schemaVersion'] === 2) {
           upgraded = { ...upgraded, prompt_on_timer_stop: 1 };
@@ -395,6 +406,8 @@ function todoistData(files: readonly TodoistFile[]): UseCaseResult<ExternalData>
         parentExternalId,
         metadata,
         timeByDay: {},
+        billingNotesByDay: {},
+        transferredDays: [],
         noteParts: [],
       };
       tasks.push(task);
@@ -460,8 +473,36 @@ function superProductivityData(value: unknown): UseCaseResult<ExternalData> {
     seenTaskIds.add(id);
     return true;
   });
+  const bridge = readOutlookBridge(root);
+  const warnings: string[] = [];
+  if (bridge.invalid) return { ok: false, error: taktError('validation_error', 'Die OutlookBridge-Daten im Backup sind beschädigt. Der Import wurde nicht begonnen.') };
+  const rawById = new Map(tasksRaw.map(item => [String(item['id']), item]));
+  let parentDays = 0;
+  let unassignedNotes = 0;
+  let inferredNotes = 0;
+  let shortDays = 0;
+  let unsupportedAttachments = 0;
+  let fileAttachments = 0;
   const projectNames = new Map(projectsRaw.map((item) => [String(item['id']), cleanName(text(item['title']) ?? 'Projekt', 'Projekt')]));
   const tagNames = new Map(tagsRaw.map((item) => [String(item['id']), cleanName(text(item['title']) ?? 'Tag', 'Tag')]));
+  const labelFolders: { id: string; parentId: string | null; name: string }[] = [];
+  const tagFolderIds = new Map<string, string>();
+  const readTagTree = (nodes: unknown, parentId: string | null, depth: number): void => {
+    if (!Array.isArray(nodes)) return;
+    if (depth > 100) throw new Error('Die Tag-Ordnerstruktur ist zu tief verschachtelt.');
+    for (const rawNode of nodes) {
+      const node = record(rawNode);
+      if (node?.['k'] === 'f') {
+        // Eigene Baumkennung erhält auch leere und gleichnamige Ordner getrennt.
+        const id = `folder-${labelFolders.length}`;
+        labelFolders.push({ id, parentId, name: cleanName(text(node['name']) ?? 'Ordner', 'Ordner') });
+        readTagTree(node['children'], id, depth + 1);
+      } else if (node?.['k'] === 't' && parentId !== null && !tagFolderIds.has(String(node['id']))) {
+        tagFolderIds.set(String(node['id']), parentId);
+      }
+    }
+  };
+  readTagTree(record(root['menuTree'])?.['tagTree'], null, 0);
   const sectionByTask = new Map<string, string>();
   const sections: { project: string; name: string }[] = [];
   for (const item of sectionsRaw) {
@@ -476,94 +517,152 @@ function superProductivityData(value: unknown): UseCaseResult<ExternalData> {
     const project = projectNames.get(String(item['projectId'])) ?? 'Eingang';
     const tagIds = Array.isArray(item['tagIds']) ? item['tagIds'].map(String) : [];
     const timeByDay: Record<string, number> = {};
-    const rawTime = record(item['timeSpentOnDay']);
-    if (rawTime !== null) {
-      for (const [day, millis] of Object.entries(rawTime)) {
-        if (isCalendarDay(day) && typeof millis === 'number' && millis > 0) timeByDay[day] = Math.floor(millis / 1000);
+    const rawTime = trackedMilliseconds(item['timeSpentOnDay']);
+    const children = Array.isArray(item['subTaskIds']) ? [...new Set(item['subTaskIds'].map(String))] : [];
+    const childTime: Record<string, number> = {};
+    for (const childId of children) {
+      if (childId === id) continue;
+      for (const [day, ms] of Object.entries(trackedMilliseconds(rawById.get(childId)?.['timeSpentOnDay']))) {
+        childTime[day] = (childTime[day] ?? 0) + ms;
       }
+    }
+    for (const [day, ms] of Object.entries(rawTime)) {
+      // SP führt die Tageszeiten der Unteraufgaben auch an der Elternaufgabe.
+      // Nur der nicht bereits durch vorhandene Kinder gedeckte Rest bleibt hier.
+      const ownMs = Math.max(0, ms - (childTime[day] ?? 0));
+      if (ownMs < ms) parentDays += 1;
+      if (ownMs >= 1000) timeByDay[day] = Math.floor(ownMs / 1000);
+      else if (ownMs > 0) shortDays += 1;
+    }
+    const billingNotes = outlookBridgeBillingNotes(text(item['notes']) ?? '', Object.keys(timeByDay));
+    unassignedNotes += billingNotes.unassigned;
+    inferredNotes += billingNotes.inferred;
+    const attachments: { kind: 'link' | 'file'; title: string | null; target: string }[] = [];
+    for (const rawAttachment of Array.isArray(item['attachments']) ? item['attachments'] : []) {
+      const attachment = record(rawAttachment);
+      const path = text(attachment?.['path']) ?? '';
+      const title = text(attachment?.['title']);
+      if (attachment?.['type'] === 'LINK') {
+        const checked = normalizeAttachmentLink(path);
+        if (checked.ok) {
+          attachments.push({ kind: 'link', title: title === null ? null : cleanTitle(title), target: checked.url });
+          continue;
+        }
+      } else if (attachment?.['type'] === 'FILE') {
+        const checked = checkAttachmentPath(path);
+        if (checked.ok) {
+          attachments.push({ kind: 'file', title: title === null ? null : cleanTitle(title), target: checked.path });
+          fileAttachments += 1;
+          continue;
+        }
+      }
+      unsupportedAttachments += 1;
     }
     const metadata = [
       finite(item['timeEstimate']) !== null && Number(item['timeEstimate']) > 0 ? `Super-Productivity-Schätzung: ${String(item['timeEstimate'])} ms` : '',
       text(item['repeatCfgId']) !== null ? `Wiederholung: ${text(item['repeatCfgId']) ?? ''}` : '',
       Array.isArray(item['attachments']) && item['attachments'].length > 0 ? `Anhänge aus Super Productivity: ${JSON.stringify(item['attachments'])}` : '',
       text(item['issueId']) !== null ? `Vorgangskennung: ${text(item['issueId']) ?? ''}` : '',
+      children.length > 0 ? `Super-Productivity-Tageszeiten einschließlich Unteraufgaben (Millisekunden): ${JSON.stringify(rawTime)}` : '',
     ].filter((line) => line.length > 0);
     return {
+      attachments,
       externalId: id,
       title: cleanTitle(text(item['title']) ?? ''),
       note: text(item['notes']) ?? '',
       project,
       section: sectionByTask.get(id) ?? null,
-      labels: tagIds.map((tagId) => tagNames.get(tagId)).filter((name): name is string => name !== undefined),
+      labels: tagIds.filter(tagId => tagNames.has(tagId)),
       priority: null,
       dueDate: dayFrom(item['deadlineDay']) ?? dayFrom(item['deadlineWithTime']) ?? dayFrom(item['dueDay']) ?? dayFrom(item['dueWithTime']),
       completedAt: item['isDone'] === true ? timestampFromMillis(item['doneOn']) ?? timestampFromMillis(item['modified']) ?? timestampFromMillis(item['created']) : null,
       parentExternalId: text(item['parentId']),
       metadata,
       timeByDay,
+      billingNotesByDay: billingNotes.byDay,
+      transferredDays: Object.keys(timeByDay).filter(day => wasTransferred(bridge.state, id, tagIds, day)),
     };
   });
+  if (unsupportedAttachments > 0) warnings.push(`${unsupportedAttachments} Anhänge konnten nicht als Verweis oder Dateipfad angelegt werden. Ihre Originaldaten bleiben im Aufgabenvermerk erhalten.`);
+  if (fileAttachments > 0) warnings.push(`${fileAttachments} Dateianhänge wurden als Pfadverweise übernommen. Das Backup enthält keine Dateiinhalte; zum Öffnen müssen die Dateien am ursprünglichen Pfad verfügbar sein.`);
+  if (parentDays > 0) warnings.push(`${parentDays} Tageszeiten an Elternaufgaben enthalten bereits Unteraufgaben. Diese Zeitanteile wurden nur einmal übernommen.`);
+  if (unassignedNotes > 0) warnings.push(`${unassignedNotes} OutlookBridge-Leistungstexte haben keinen eindeutig zuordenbaren Buchungstag. Sie bleiben vollständig im Vermerk der jeweiligen Aufgabe erhalten.`);
+  if (inferredNotes > 0) warnings.push(`${inferredNotes} OutlookBridge-Leistungstexte ohne Datum wurden dem einzigen erfassten Tag ihrer Aufgabe zugeordnet.`);
+  if (shortDays > 0) warnings.push(`${shortDays} Tageszeiten unter einer Sekunde konnten nicht als Zeitbuchung übernommen werden.`);
+  if (tasks.some(task => Object.keys(task.timeByDay).length > 0)) warnings.push('Die Buchungsdauer stammt aus den erfassten SP-Tageszeiten. Plugin-Dauerzeilen werden nicht zusätzlich gebucht. Startzeiten sind unbekannt; die Importbuchungen beginnen als Platzhalter um 08:00 UTC.');
   return {
     ok: true,
     value: {
       source: 'super-productivity',
       projects: [...new Set([...projectNames.values(), ...tasks.map((task) => task.project)])],
       sections,
+      labelFolders,
       labels: tagsRaw.map((item) => {
         const rawColor = text(item['color']);
         return {
+          key: String(item['id']),
+          ...(tagFolderIds.has(String(item['id'])) ? { folderId: tagFolderIds.get(String(item['id']))! } : {}),
           name: tagNames.get(String(item['id'])) ?? 'Tag',
           color: rawColor !== null && /^#[0-9A-Fa-f]{6}$/.test(rawColor) ? rawColor : null,
         };
       }),
       tasks,
-      warnings: [],
+      warnings,
     },
   };
 }
 
 async function expectCreated<T>(result: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown }): Promise<T> {
-  if (!result.ok) throw new Error('Eine Struktur des Imports konnte nicht angelegt werden.');
+  if (!result.ok) throw new Error(text(record(result.error)?.['message']) ?? 'Ein Datensatz des Imports konnte nicht angelegt werden.');
   return result.value;
 }
 
-async function importExternal(context: AppContext, external: ExternalData): Promise<ImportSummary> {
+async function importExternal(context: AppContext, external: ExternalData, excludeTransferred = true): Promise<ImportSummary> {
   return context.transactions.inTransaction(async (unit) => {
     const now = context.clock.now();
     const stamp = now.replace(/[-:TZ]/g, '').slice(0, 14);
     const sourceLabel = external.source === 'todoist' ? 'Todoist' : 'Super Productivity';
-    const rootNames = new Set((await unit.folders.listChildren(null)).map((folder) => folder.name.toLocaleLowerCase('de-DE')));
-    const rootBase = cleanName(`${sourceLabel}-Import ${stamp}`, 'Import');
-    let rootName = rootBase;
-    let rootSuffix = 2;
-    while (rootNames.has(rootName.toLocaleLowerCase('de-DE'))) {
-      rootName = cleanName(`${rootBase} (${String(rootSuffix)})`, `Import ${String(rootSuffix)}`);
-      rootSuffix += 1;
-    }
-    const root = await expectCreated(await unit.folders.create(null, rootName, now));
-    const projectFolder = await expectCreated(await unit.folders.create(root.id, 'Projekte', now));
-    const sectionFolder = await expectCreated(await unit.folders.create(root.id, 'Bereiche', now));
-    const labelFolder = await expectCreated(await unit.folders.create(root.id, 'Labels', now));
-    const priorityFolder = await expectCreated(await unit.folders.create(root.id, 'Prioritäten', now));
+    const direct = external.source === 'super-productivity';
+    const siblingNames = new Map<TagFolderId | null, Set<string>>();
+    const uniqueName = async (parentId: TagFolderId | null, original: string): Promise<string> => {
+      let names = siblingNames.get(parentId);
+      if (names === undefined) {
+        const folders = await unit.folders.listChildren(parentId);
+        const tags = await unit.tags.listInFolder(parentId);
+        names = new Set([...folders, ...tags].map(item => item.name.toLocaleLowerCase('de-DE')));
+        siblingNames.set(parentId, names);
+      }
+      let name = original;
+      let suffix = 2;
+      while (names.has(name.toLocaleLowerCase('de-DE'))) name = cleanName(`${original} (${suffix++})`, `Import ${suffix}`);
+      names.add(name.toLocaleLowerCase('de-DE'));
+      return name;
+    };
+    const createFolder = async (parentId: TagFolderId | null, name: string): Promise<TagFolderId> =>
+      (await expectCreated(await unit.folders.create(parentId, await uniqueName(parentId, name), now))).id;
+    const rootId = direct ? null : await createFolder(null, cleanName(`${sourceLabel}-Import ${stamp}`, 'Import'));
+    const projectFolderId = external.projects.length > 0 ? await createFolder(rootId, 'Projekte') : rootId;
+    const sectionFolderId = external.sections.length > 0 ? await createFolder(rootId, 'Bereiche') : rootId;
+    const labelFolderId = direct ? null : await createFolder(rootId, 'Labels');
+    const priorityFolderId = external.tasks.some(task => task.priority !== null) ? await createFolder(rootId, 'Prioritäten') : rootId;
 
     const projectTags = new Map<string, TagId>();
     const existingPoolNames = new Set((await unit.pools.listNames()).map((pool) => pool.name.toLocaleLowerCase('de-DE')));
-    let poolPosition = (await unit.pools.list('all')).length;
     for (const project of external.projects) {
-      const tag = await expectCreated(await unit.tags.create(projectFolder.id, cleanName(project, 'Projekt'), null, now));
+      const tag = await expectCreated(await unit.tags.create(projectFolderId, cleanName(project, 'Projekt'), null, now));
       projectTags.set(project, tag.id);
-      let poolName = cleanName(`${sourceLabel}: ${project}`, `${sourceLabel}: Projekt`);
+      const poolBase = external.source === 'super-productivity' ? project : `${sourceLabel}: ${project}`;
+      let poolName = cleanName(poolBase, 'Projekt');
       let suffix = 2;
       while (existingPoolNames.has(poolName.toLocaleLowerCase('de-DE'))) {
-        poolName = cleanName(`${sourceLabel}: ${project} (${String(suffix)})`, `${sourceLabel}: Projekt ${String(suffix)}`);
+        poolName = cleanName(`${poolBase} (${String(suffix)})`, `Projekt ${String(suffix)}`);
         suffix += 1;
       }
       existingPoolNames.add(poolName.toLocaleLowerCase('de-DE'));
       await unit.pools.create({
-        name: poolName, matchMode: 'any', includeSubfolders: true, position: poolPosition,
+        name: poolName, matchMode: 'any', includeSubfolders: true, position: 0,
         placement: 'pool', rule: [{ kind: 'tag', tagId: tag.id }],
       }, now);
-      poolPosition += 1;
     }
 
     const sectionFolders = new Map<string, TagFolderId>();
@@ -571,7 +670,7 @@ async function importExternal(context: AppContext, external: ExternalData): Prom
     for (const item of external.sections) {
       let folderId = sectionFolders.get(item.project);
       if (folderId === undefined) {
-        const folder = await expectCreated(await unit.folders.create(sectionFolder.id, cleanName(item.project, 'Projekt'), now));
+        const folder = await expectCreated(await unit.folders.create(sectionFolderId, cleanName(item.project, 'Projekt'), now));
         folderId = folder.id;
         sectionFolders.set(item.project, folderId);
       }
@@ -582,48 +681,70 @@ async function importExternal(context: AppContext, external: ExternalData): Prom
       }
     }
 
+    const labelFolderIds = new Map<string, TagFolderId>();
+    for (const folder of external.labelFolders ?? []) {
+      const parentId = folder.parentId === null ? labelFolderId : labelFolderIds.get(folder.parentId)!;
+      const created = await expectCreated(await unit.folders.create(parentId, await uniqueName(parentId, folder.name), now));
+      labelFolderIds.set(folder.id, created.id);
+    }
     const labelTags = new Map<string, TagId>();
     for (const label of external.labels) {
-      const key = label.name.toLocaleLowerCase('de-DE');
+      const key = label.key ?? label.name.toLocaleLowerCase('de-DE');
       if (labelTags.has(key)) continue;
-      const tag = await expectCreated(await unit.tags.create(labelFolder.id, cleanName(label.name, 'Label'), label.color, now));
+      const folderId = label.folderId === undefined ? labelFolderId : labelFolderIds.get(label.folderId)!;
+      const tag = await expectCreated(await unit.tags.create(folderId, await uniqueName(folderId, cleanName(label.name, 'Label')), label.color, now));
       labelTags.set(key, tag.id);
     }
     const priorityTags = new Map<string, TagId>();
     for (const priority of [...new Set(external.tasks.map((task) => task.priority).filter((item): item is string => item !== null))]) {
-      const tag = await expectCreated(await unit.tags.create(priorityFolder.id, priority, null, now));
+      const tag = await expectCreated(await unit.tags.create(priorityFolderId, priority, null, now));
       priorityTags.set(priority, tag.id);
     }
 
     const defaultStatus = await unit.statuses.defaultStatus();
     const titles = new Map(external.tasks.map((task) => [task.externalId, task.title]));
     let timeEntries = 0;
+    let transferredEntries = 0;
     for (const task of external.tasks) {
       const tagIds = [projectTags.get(task.project)];
       if (task.section !== null) tagIds.push(sectionTags.get(`${task.project}\u0000${task.section}`));
-      for (const label of task.labels) tagIds.push(labelTags.get(label.toLocaleLowerCase('de-DE')));
+      for (const label of task.labels) tagIds.push(labelTags.get(external.source === 'super-productivity' ? label : label.toLocaleLowerCase('de-DE')));
       if (task.priority !== null) tagIds.push(priorityTags.get(task.priority));
       const parent = task.parentExternalId === null ? null : titles.get(task.parentExternalId) ?? task.parentExternalId;
       const importLines = [
-        `Importquelle: ${sourceLabel} (${task.externalId})`,
         parent === null ? '' : `Unteraufgabe von: ${parent}`,
         ...task.metadata,
       ].filter((line) => line.length > 0);
       const created = await unit.todos.create({
-        title: task.title, callNumber: null, statusId: defaultStatus.id,
+        title: task.title, callNumber: task.callNumber ?? null, statusId: defaultStatus.id,
         tagIds: tagIds.filter((id): id is TagId => id !== undefined),
         note: '', dueDate: task.dueDate, now,
       }, tagIds.filter((id): id is TagId => id !== undefined));
       const note = [task.note.trim(), importLines.join('\n')].filter(Boolean).join('\n\n');
       if (note.length > 0) await unit.notes.write(created.id, note, now);
+      for (const attachment of task.attachments ?? []) {
+        await expectCreated(await unit.attachments.create({ ...attachment, todoId: created.id, now }));
+      }
       if (task.completedAt !== null) await unit.todos.markDone(created.id, task.completedAt);
 
       for (const [day, seconds] of Object.entries(task.timeByDay)) {
         if (!isCalendarDay(day) || seconds < 1) continue;
         const started = `${day}T08:00:00Z` as Timestamp;
         const ended = `${new Date(Date.parse(started) + seconds * 1000).toISOString().slice(0, 19)}Z` as Timestamp;
-        const entry = await unit.timeEntries.create({ todoId: created.id, startedAt: started, endedAt: ended, note: `Import aus ${sourceLabel}` }, now);
-        if (entry.ok) timeEntries += 1;
+        const entry = await unit.timeEntries.create({ todoId: created.id, startedAt: started, endedAt: ended, note: task.billingNotesByDay[day] ?? '' }, now);
+        const recorded = await expectCreated(entry);
+        if (task.transferredDays.includes(day)) {
+          transferredEntries += 1;
+          if (excludeTransferred) {
+            await expectCreated(await unit.export.markNotBilled({
+              timeEntryId: recorded.id,
+              reason: `Import aus OutlookBridge: Aufgabe ${task.externalId}, Tag ${day} war bereits als eingetragen markiert. Vom erneuten Export ausgenommen; kein SuperTakt-Exportlauf.`,
+              actor: context.system.windowsUser(),
+              now,
+            }));
+          }
+        }
+        timeEntries += 1;
       }
     }
 
@@ -635,7 +756,12 @@ async function importExternal(context: AppContext, external: ExternalData): Prom
       tags: projectTags.size + sectionTags.size + labelTags.size + priorityTags.size,
       timeEntries,
       images: 0,
-      warnings: external.warnings,
+      warnings: [
+        ...external.warnings,
+        ...(transferredEntries === 0 ? [] : [excludeTransferred
+          ? `${transferredEntries} bereits in OutlookBridge übertragene Tagesbuchungen wurden mit Herkunftsvermerk ausgebucht und sind vom erneuten Export ausgenommen.`
+          : `${transferredEntries} bereits in OutlookBridge übertragene Tagesbuchungen wurden auf Wunsch erneut als offen übernommen.`]),
+      ],
     };
   });
 }
@@ -646,8 +772,11 @@ export async function importTodoist(context: AppContext, files: readonly Todoist
   return { ok: true, value: await importExternal(context, parsed.value) };
 }
 
-export async function importSuperProductivity(context: AppContext, raw: unknown): Promise<UseCaseResult<ImportSummary>> {
+export async function importSuperProductivity(context: AppContext, raw: unknown, excludeTransferred = true, callPattern = DEFAULT_IMPORT_CALL_PATTERN): Promise<UseCaseResult<ImportSummary>> {
   const parsed = superProductivityData(raw);
   if (!parsed.ok) return parsed;
-  return { ok: true, value: await importExternal(context, parsed.value) };
+  const calls = extractImportCalls(parsed.value.tasks.map(task => task.title), callPattern);
+  if (!calls.ok) return calls;
+  const external = { ...parsed.value, tasks: parsed.value.tasks.map((task, index) => ({ ...task, callNumber: calls.value[index] ?? null })) };
+  return { ok: true, value: await importExternal(context, external, excludeTransferred) };
 }

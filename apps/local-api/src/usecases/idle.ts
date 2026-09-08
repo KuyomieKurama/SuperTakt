@@ -35,6 +35,22 @@ function validInstant(value: string): boolean {
   return Number.isFinite(ms) && new Date(ms).toISOString().replace('.000Z', 'Z') === value;
 }
 
+async function completeReturn(unit: UnitOfWork, pending: IdleSession, end: Timestamp, timestamp: Timestamp): Promise<void> {
+  const running = await unit.timer.running();
+  if (running !== null && running.id === pending.id) {
+    const continued = requireSuccess(await unit.timer.separateIdle(running.id, pending.startedAt, end, timestamp));
+    await unit.heartbeat.touch(continued.id, timestamp);
+  } else if (running !== null && Date.parse(running.startedAt) < Date.parse(end)) {
+    throw new IdleWriteFailure(taktError('conflict', 'Der Timer wurde während der inaktiven Zeit geändert.'));
+  }
+  await unit.idle.returned(pending.id, end);
+  // Existing saved sessions from the previous version had already stopped.
+  if (running === null && (await unit.settings.load()).idleKeepTimerRunning) {
+    const continued = requireSuccess(await unit.timer.start(pending.todoId, false, end));
+    await unit.heartbeat.touch(continued.started.id, timestamp);
+  }
+}
+
 export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; startedAt: Timestamp; returnedAt?: Timestamp }): Promise<UseCaseResult<IdleView | null>> {
   const timestamp = now(context);
   return transaction(context, async unit => {
@@ -51,8 +67,10 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
         end - start < settings.idleThresholdMinutes * 60_000) {
       return err(taktError('validation_error', 'Die inaktive Zeit liegt nicht innerhalb des laufenden Timers oder ist kürzer als die eingestellte Schwelle.'));
     }
-    requireSuccess(await unit.timer.stop(running.note, input.startedAt));
-    await unit.idle.begin({ id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: input.returnedAt ?? null, note: running.note });
+    const pending = { id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: null, note: running.note };
+    if (!settings.idleKeepTimerRunning) requireSuccess(await unit.timer.stop(running.note, input.startedAt));
+    await unit.idle.begin(pending);
+    if (input.returnedAt !== undefined) await completeReturn(unit, pending, input.returnedAt, timestamp);
     return ok(await view(unit));
   });
 }
@@ -68,7 +86,7 @@ export function returnFromIdle(context: AppContext, id: TimeEntryId, returnedAt?
     if (!validInstant(end) || Date.parse(end) <= Date.parse(pending.startedAt) || Date.parse(end) > Date.parse(timestamp)) {
       return err(taktError('validation_error', 'Der Rückkehrzeitpunkt ist ungültig.'));
     }
-    await unit.idle.returned(id, end);
+    await completeReturn(unit, pending, end, timestamp);
     return ok(await view(unit));
   });
 }
@@ -81,7 +99,6 @@ export function resolveIdle(context: AppContext, input: { id: TimeEntryId; alloc
     if (pending === null) return ok({ recordedSeconds: 0, breakSeconds: 0, resumed: false, alreadyResolved: true });
     if (pending.id !== input.id) return err(taktError('conflict', 'Es wartet inzwischen eine andere inaktive Zeit auf Zuordnung.'));
     if (pending.returnedAt === null) return err(taktError('conflict', 'Bestätigen Sie zuerst Ihre Rückkehr.'));
-    if (await unit.timer.running() !== null) return err(taktError('conflict', 'Es läuft inzwischen ein anderer Timer. Stoppen Sie ihn vor der Zuordnung.'));
     const planned = planIdleAllocation(pending.startedAt, pending.returnedAt, input.allocations);
     if (!planned.ok) return planned;
     // Check every target before the first mutation; later errors still roll back.
@@ -96,10 +113,10 @@ export function resolveIdle(context: AppContext, input: { id: TimeEntryId; alloc
       recordedSeconds += part.seconds;
     }
     await unit.idle.clear(pending.id);
-    if (input.resume) {
+    if (input.resume && await unit.timer.running() === null) {
       const started = requireSuccess(await unit.timer.start(pending.todoId, false, timestamp));
       await unit.heartbeat.touch(started.started.id, timestamp);
     }
-    return ok({ recordedSeconds, breakSeconds, resumed: input.resume, alreadyResolved: false });
+    return ok({ recordedSeconds, breakSeconds, resumed: await unit.timer.running() !== null, alreadyResolved: false });
   });
 }

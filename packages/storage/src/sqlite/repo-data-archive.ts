@@ -40,7 +40,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   export_run_group: { columns: ['id', 'export_run_id', 'todo_id', 'day', 'seconds', 'quarters'], orderBy: 'export_run_id, day, todo_id' },
   export_run_entry: { columns: ['export_run_group_id', 'time_entry_id', 'duration_seconds'], orderBy: 'export_run_group_id, time_entry_id' },
   export_audit: { columns: ['id', 'time_entry_id', 'event', 'previous_status', 'new_status', 'export_run_id', 'export_run_group_id', 'actor', 'reason', 'occurred_at'], orderBy: 'occurred_at, id' },
-  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes'], orderBy: 'id' },
+  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running'], orderBy: 'id' },
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [
@@ -101,8 +101,14 @@ export function createDataArchivePort(conn: SqlConnection): DataArchivePort {
     },
 
     async replaceAll(tables: DataArchiveTables): Promise<void> {
-      if (tables.timer_idle.length > 0 && tables.time_entry.some(row => row['ended_at'] === null)) {
-        throw new Error('Das Datenarchiv enthält zugleich einen laufenden Timer und eine offene Inaktivitätsphase.');
+      const idle = tables.timer_idle[0];
+      const running = tables.time_entry.find(row => row['ended_at'] === null);
+      if (idle !== undefined && running !== undefined) {
+        const returned = idle['returned_at'];
+        const valid = returned === null
+          ? running['id'] === idle['session_id'] && String(running['started_at']) <= String(idle['started_at'])
+          : String(running['started_at']) >= String(returned);
+        if (!valid) throw new Error('Laufender Timer und Inaktivitätsphase im Datenarchiv überschneiden sich ungültig.');
       }
       // Vollständig prüfen, bevor der erste bestehende Datensatz angefasst wird.
       for (const table of INSERT_ORDER) {

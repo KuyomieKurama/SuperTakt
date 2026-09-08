@@ -16,7 +16,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { ExportRunId, ExportTemplateId, TimeEntryId } from '@takt/domain';
-import { RELEASE_TAG_SHAPE, VERSION_MAX_LENGTH } from '@takt/domain';
+import { DESIGN_THEMES, RELEASE_TAG_SHAPE, VERSION_MAX_LENGTH } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
 import { previewExport, runExport, type ExportPreviewTemplate } from '../usecases/export.ts';
@@ -79,10 +79,11 @@ const settingsSchema = z.object({
   roundingMode: z.enum(['up', 'nearest']).optional(),
   locale: z.string().min(2).max(35).optional(),
   theme: z.enum(['system', 'light', 'dark']).optional(),
-  designTheme: z.enum(['classic', 'clear']).optional(),
+  designTheme: z.enum(DESIGN_THEMES).optional(),
   density: z.enum(['comfortable', 'compact']).optional(),
   promptOnTimerStop: z.boolean().optional(),
   idleDetectionEnabled: z.boolean().optional(),
+  idleKeepTimerRunning: z.boolean().optional(),
   idleThresholdMinutes: z.number().int().min(1).max(120).optional(),
   /**
    * Die übersprungene Fassung (A-18.10, R-20). `null` setzt sie zurück.
@@ -328,6 +329,7 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.designTheme === undefined ? {} : { designTheme: parsed.data.designTheme }),
       ...(parsed.data.density === undefined ? {} : { density: parsed.data.density }),
       ...(parsed.data.promptOnTimerStop === undefined ? {} : { promptOnTimerStop: parsed.data.promptOnTimerStop }),
+      ...(parsed.data.idleKeepTimerRunning === undefined ? {} : { idleKeepTimerRunning: parsed.data.idleKeepTimerRunning }),
       ...(parsed.data.idleDetectionEnabled === undefined ? {} : { idleDetectionEnabled: parsed.data.idleDetectionEnabled }),
       ...(parsed.data.idleThresholdMinutes === undefined ? {} : { idleThresholdMinutes: parsed.data.idleThresholdMinutes }),
       // `null` heißt „nichts übersprungen" und ist damit ein Wert; nur ein

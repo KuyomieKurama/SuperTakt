@@ -102,7 +102,7 @@ export function GlobalSearch() {
       const inField =
         target instanceof HTMLElement &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-      if ((event.key === "k" && (event.ctrlKey || event.metaKey)) || (event.key === "/" && !inField)) {
+      if (!event.defaultPrevented && !inField && ((event.key === "k" && (event.ctrlKey || event.metaKey)) || event.key === "/")) {
         event.preventDefault();
         inputRef.current?.focus();
       }
