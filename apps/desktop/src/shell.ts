@@ -72,6 +72,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { parseOutlookCertificate, type OutlookCertificateResult } from './outlookCertificate';
+export type { OutlookCertificateFacts, OutlookCertificateResult } from './outlookCertificate';
 
 /** Womit sich die Oberfläche beim lokalen Dienst ausweist. */
 export interface ServiceHandshake {
@@ -432,6 +434,19 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
 export async function installedVersion(): Promise<string> {
   requireShell();
   return await invoke<string>('takt_installed_version');
+}
+
+/** Read-only inspection of the fixed local Outlook certificate (A-23). */
+export async function outlookCertificate(): Promise<OutlookCertificateResult> {
+  requireShell();
+  return parseOutlookCertificate(await invoke<unknown>('takt_outlook_certificate'));
+}
+
+/** Called only after the user has confirmed this exact SHA-256 fingerprint. */
+export async function trustOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {
+  requireShell();
+  if (!/^[A-F0-9]{64}$/.test(fingerprint)) throw new Error('Der bestätigte Fingerabdruck ist ungültig.');
+  return parseOutlookCertificate(await invoke<unknown>('takt_trust_outlook_certificate', { fingerprint }));
 }
 
 /**

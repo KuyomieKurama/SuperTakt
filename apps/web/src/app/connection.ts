@@ -54,6 +54,7 @@ import type {
   DirectoryChoice,
   OsUser,
   ReleasePageResult,
+  OutlookCertificateResult,
 } from "@takt/desktop/shell";
 import { hasForbiddenNameCharacter } from "@takt/domain";
 import type { ForeignText } from "../api/types";
@@ -96,6 +97,8 @@ interface ShellModule {
   quit(): Promise<void>;
   chooseExportDirectory(current: string | null): Promise<ExportDirectoryChoice>;
   installedVersion(): Promise<string>;
+  outlookCertificate(): Promise<OutlookCertificateResult>;
+  trustOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult>;
   openReleasePage(version: string): Promise<ReleasePageResult>;
   /*
     **Fremder Text bis zur Hülle.** Adresse und Pfad kommen aus dem Bestand und
@@ -424,4 +427,17 @@ export async function chooseAttachmentFile(
     };
   }
   return shell.chooseAttachmentFile(kind);
+}
+
+/** A-23: native Windows trust inspection, unavailable in the browser preview. */
+export async function readOutlookCertificate(): Promise<OutlookCertificateResult | null> {
+  const shell = await loadShell();
+  if (shell === null) return null;
+  return shell.outlookCertificate();
+}
+
+export async function confirmOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {
+  const shell = await loadShell();
+  if (shell === null) throw new Error("Bitte öffnen Sie die SuperTakt-Desktop-App für die Zertifikatseinrichtung.");
+  return shell.trustOutlookCertificate(fingerprint);
 }

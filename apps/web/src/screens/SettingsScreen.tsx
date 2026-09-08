@@ -15,6 +15,7 @@ import {
 } from "../api/endpoints";
 import type { DataImportSummary, Id, RoundingMode, SecurityNoticeKind } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { OutlookSetup } from "../components/OutlookSetup";
 import { ExportDirectoryField } from "../components/ExportDirectoryField";
 import { BillingUserFact, DatabaseLocationFact } from "../components/WorkstationFacts";
 import { RadioRow } from "../components/RadioRow";
@@ -255,7 +256,7 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
     case "status":
       return <StatusSettings />;
     case "addin":
-      return <AddinSettings />;
+      return <><OutlookSetup /><AddinSettings /></>;
     case "arbeitsplatz":
       return (
         <>

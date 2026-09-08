@@ -1089,6 +1089,9 @@ export function checkWebAddress(webSources, rustPrefix) {
         }
         // Der lokale Dienst und der Entwicklungsserver.
         if (address.startsWith('http://127.0.0.1:') || address.startsWith('http://localhost:')) continue;
+        // A-23: fixed display address of the local Outlook taskpane. No new
+        // webview connection permission or general-purpose opener is granted.
+        if (address === 'https://localhost:17844/index.html') continue;
         /*
           **Ein Schemastück ohne Wirt ist keine Adresse.** Seit Abschnitt 19
           steht in der Oberfläche `"https://"` — als Platzhalter im Eingabefeld
@@ -1983,6 +1986,13 @@ const counterProbes = [
         [...webSources, { name: 'zweite.ts', text: 'const X = "https://evil.example/holen";' }],
         RELEASE_TAG_PREFIX,
       ),
+  },
+  {
+    title: 'A-23: nur die genaue lokale Outlook-Adresse ist erlaubt',
+    run: () => checkWebAddress(
+      [...webSources, { name: 'lokal.ts', text: 'const X = "https://localhost:17844.evil.example/index.html";' }],
+      RELEASE_TAG_PREFIX,
+    ),
   },
   {
     title: 'A-18.6: eine Beispieladresse außerhalb der Musterseite',

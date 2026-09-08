@@ -38,6 +38,22 @@ ausschalten. Der Timer bucht dann direkt; vorhandener Leistungstext bleibt erhal
 Fehlende Leistung lässt sich später in der Buchungsübersicht ergänzen. Die Auswahl
 wird dauerhaft gespeichert und ist zunächst eingeschaltet.
 
+## Outlook lokal einrichten
+
+In der Windows-Desktop-App führt **Einstellungen → Outlook-Add-in** durch die
+Zertifikatsprüfung. Prüfen Sie Inhaber, Gültigkeit und SHA-256-Fingerabdruck und
+bestätigen Sie **Zertifikat prüfen und vertrauen**. Erst diese Bestätigung
+hinterlegt das konkrete lokale Serverzertifikat für Ihr Windows-Benutzerkonto.
+Danach prüft SuperTakt die Add-in-Seite über HTTPS. Fehlende Zertifikate, ein
+nicht erreichbarer Server oder Windows-Richtlinien werden als Fehler angezeigt.
+
+Anschließend importieren Sie `apps/outlook-addin/manifest.xml` in Outlook und
+verbinden das Add-in mit dem Zugangstoken aus demselben Einstellungsbereich.
+SuperTakt muss dafür laufen. Eine Domain ist für diese lokale Einrichtung nicht nötig.
+Im Browser und auf anderen Betriebssystemen ist die Windows-Zertifikatseinrichtung
+nicht verfügbar. Nach einer Zertifikatserneuerung muss das neue Zertifikat erneut
+bestätigt werden. Alte Einträge werden nicht automatisch aus dem Windows-Speicher entfernt.
+
 ## Aufbau
 
 Ein pnpm-Arbeitsbereich mit acht Paketen:

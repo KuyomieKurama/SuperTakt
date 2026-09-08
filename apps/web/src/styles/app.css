@@ -4517,6 +4517,8 @@ body:has(.scrim) .toast {
   margin-top: var(--space-3);
 }
 
+.outlook-setup__fingerprint { overflow-wrap: anywhere; word-break: break-word; }
+
 
 /* Gestaltung „Klar“: gemeinsame Bausteine bilden das alternative Theme „Klassisch“. */
 :root[data-design-theme="clear"] .app { --app-header-height: calc(var(--control-height-lg) + 2 * var(--space-3)); }

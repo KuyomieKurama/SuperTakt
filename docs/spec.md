@@ -444,6 +444,21 @@ Nachtrag des Auftraggebers: Die Leistungsabfrage beim Stoppen soll einstellbar s
 
 ---
 
+## 23. Lokale Outlook-Einrichtung
+
+Nachtrag des Auftraggebers: Lokaler Einrichtungsassistent mit ausdrücklicher
+Bestätigung des Zertifikats; keine Bereitstellung über eine Domain.
+
+| ID | Anforderung |
+|---|---|
+| A-23.1 | Einstellungen → Outlook-Add-in zeigt den lokalen Zertifikatsinhaber, Aussteller, SHA-256-Fingerabdruck, Gültigkeit und den HTTPS-Zustand. |
+| A-23.2 | Erst nach ausdrücklicher Bestätigung darf die Desktop-Hülle das angezeigte Zertifikat in CurrentUser/Root unter Windows hinterlegen. Keine automatische Installation, keine Rechteerhöhung, keine Änderung von Unternehmensrichtlinien. |
+| A-23.3 | Die Hülle bestimmt den Zertifikatspfad selbst. Der Auftrag enthält nur den bestätigten Fingerabdruck. Geänderte, ungültige, abgelaufene oder nicht lokale Zertifikate werden abgewiesen; CA-Zertifikate und zusätzliche DNS-Namen sind ausgeschlossen. Der private Schlüssel verlässt seine Datei nicht. |
+| A-23.4 | Nach der Bestätigung wird die Add-in-Seite über Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats geprüft. Ein Eintrag im Zertifikatsspeicher allein gilt nicht als erfolgreicher HTTPS-Test. |
+| A-23.5 | Fehler, nicht erreichbare Seiten und nicht unterstützte Betriebsarten werden sichtbar erklärt. Browserbetrieb und andere Betriebssysteme behaupten keine Windows-Vertrauensprüfung. Manifestimport und Tokenverbindung bleiben explizite nächste Schritte. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

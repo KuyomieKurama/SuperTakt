@@ -24,6 +24,7 @@ mod appdata;
 mod attachment;
 mod identity;
 mod menu;
+mod outlook_certificate;
 mod release;
 mod sidecar;
 
@@ -182,6 +183,8 @@ pub fn run() {
             takt_os_user,
             takt_shell_state,
             takt_quit,
+            outlook_certificate::takt_outlook_certificate,
+            outlook_certificate::takt_trust_outlook_certificate,
             // Versionsprüfung (Abschnitt 18). Beide Befehle stehen in
             // `release.rs`; die Begründung, warum der zweite **keine** Adresse
             // entgegennimmt, steht dort und nicht hier.
