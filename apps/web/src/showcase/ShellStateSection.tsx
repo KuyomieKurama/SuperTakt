@@ -22,7 +22,7 @@ import { Section, SubHeading } from "./Section";
 
 /** Die Saetze stammen woertlich aus der Huelle — nachgestellt, nicht erfunden. */
 const DEMO_PROBLEMS: readonly string[] = [
-  "Der Windows-Benutzername ließ sich nicht vom Betriebssystem lesen. Takt startet den lokalen Dienst nicht, weil ein Export ohne Urheber nicht nachvollziehbar wäre.",
+  "Der Windows-Benutzername ließ sich nicht vom Betriebssystem lesen. SuperTakt startet den lokalen Dienst nicht, weil ein Export ohne Urheber nicht nachvollziehbar wäre.",
   "icacls endete mit exit code: 5. Die Zugriffsrechte sind unverändert.",
 ];
 
@@ -32,7 +32,7 @@ const DEMO_PROBLEMS: readonly string[] = [
  * Satz auf dem Bildschirm.
  */
 const DEMO_SYNC_WARNING =
-  "Der Datenordner von Takt liegt in einem Ordner, der laufend an einen anderen Ort kopiert wird: C:\\Users\\mmueller\\OneDrive - Musterfirma\\AppData\\Local\\Takt";
+  "Der Datenordner von SuperTakt liegt in einem Ordner, der laufend an einen anderen Ort kopiert wird: C:\\Users\\mmueller\\OneDrive - Musterfirma\\AppData\\Local\\Takt";
 
 const DEMO_SYNC_DETAIL =
   "Der Pfad trägt den Namen eines Synchronisierungsdienstes. Die Datenbank besteht aus mehreren Dateien, die zusammengehören; werden sie einzeln und zeitversetzt kopiert, wird die Datenbank beschädigt — und die kopierten Daten liegen danach außerhalb dieses Rechners.";
@@ -48,13 +48,13 @@ const DEMO_EXITS: Readonly<Record<ExitCase, ShellServiceExit>> = {
   port: {
     code: 74,
     message:
-      "Takt konnte den lokalen Dienst nicht starten, weil ein anderes Programm den Zugang belegt, über den Takt mit sich selbst spricht. Am häufigsten ist das Takt selbst: Läuft es vielleicht schon in einem anderen Fenster?",
+      "SuperTakt konnte den lokalen Dienst nicht starten, weil ein anderes Programm den Zugang belegt, über den SuperTakt mit sich selbst spricht. Am häufigsten ist das SuperTakt selbst: Läuft es vielleicht schon in einem anderen Fenster?",
     detail:
-      "Der Port 17843 auf 127.0.0.1 ist belegt. Takt weicht bewusst nicht auf einen anderen Port aus, weil sich sonst ein fremdes Programm als Takt ausgeben könnte.",
+      "Der Port 17843 auf 127.0.0.1 ist belegt. SuperTakt weicht bewusst nicht auf einen anderen Port aus, weil sich sonst ein fremdes Programm als SuperTakt ausgeben könnte.",
   },
   unexpected: {
     code: null,
-    message: "Der lokale Dienst von Takt hat sich unerwartet beendet.",
+    message: "Der lokale Dienst von SuperTakt hat sich unerwartet beendet.",
     detail: null,
   },
 };
@@ -96,7 +96,7 @@ export function ShellStateSection() {
   return (
     <Section
       id="huelle"
-      title="10 — Wenn Takt nicht vollständig startet"
+      title="10 — Wenn SuperTakt nicht vollständig startet"
       lead="Drei Zustände meldet die Anwendungshülle beim Start, und alle drei kann ein Anwender als Erstes zu sehen bekommen. Sie unterscheiden sich in der Lautstärke: Der Ausfall des lokalen Dienstes sperrt die Anwendung, eine unvollständige Startmeldung bleibt dauerhaft über der Ansicht stehen, der Hinweis auf den Datenordner bleibt ruhig. Keiner der drei lässt sich wegklicken, weil keiner durch Wegklicken aufhört zu gelten."
       refs={["Abschnitt 15", "B-7.1", "B-7.2", "R-13", "E-018", "E-042"]}
     >
@@ -106,7 +106,7 @@ export function ShellStateSection() {
       >
         <div className="stack" style={{ gap: "var(--space-3)" }}>
           <FilterToggle
-            label="Takt ist nicht vollständig gestartet"
+            label="SuperTakt ist nicht vollständig gestartet"
             hint="zwei Meldungen aus der Hülle"
             pressed={startupFailed}
             onChange={setStartupFailed}
@@ -119,7 +119,7 @@ export function ShellStateSection() {
           />
           <FilterToggle
             label="Der lokale Dienst hat sich beendet"
-            hint="sperrt die Anwendung — Ausgang ist „Takt beenden“"
+            hint="sperrt die Anwendung — Ausgang ist „SuperTakt beenden“"
             pressed={serviceStopped}
             onChange={setServiceStopped}
           />
@@ -140,13 +140,13 @@ export function ShellStateSection() {
           />
           <p className="section__lead">
             Der dritte Schalter legt eine Sperrmeldung über die ganze Seite. Sie hat genau
-            einen Ausgang, und der steht im Dialog: „Takt beenden“. Auf dieser Musterseite
+            einen Ausgang, und der steht im Dialog: „SuperTakt beenden“. Auf dieser Musterseite
             beendet der Knopf nichts, sondern schaltet den Zustand zurück und sagt es.
           </p>
           {quitDemo ? (
             <InlineMessage
               tone="info"
-              title="„Takt beenden“ wurde gewählt"
+              title="„SuperTakt beenden“ wurde gewählt"
               onDismiss={() => setQuitDemo(false)}
             >
               In der Anwendung ruft dieser Knopf den Beenden-Befehl der Hülle auf: Der
@@ -162,7 +162,7 @@ export function ShellStateSection() {
         description="So sieht der Benutzer die eingeschalteten Zustände — in der Anwendung stehen sie über der Ansicht, vor Navigation und Inhalt."
       >
         {nothingToShow ? (
-          <InlineMessage tone="success" title="Takt ist vollständig gestartet">
+          <InlineMessage tone="success" title="SuperTakt ist vollständig gestartet">
             Der Normalfall zeigt nichts. Das ist der Leerzustand dieser Anzeige und braucht
             keinen Platzhalter: „Alles in Ordnung“ ist die Abwesenheit einer Meldung und
             kein eigener Kasten.
@@ -192,7 +192,7 @@ export function ShellStateSection() {
 
       <div className="grid grid--2">
         <Card title="Was jede Meldung leistet">
-          <SubHeading>Startmeldung — Takt ist nicht vollständig gestartet</SubHeading>
+          <SubHeading>Startmeldung — SuperTakt ist nicht vollständig gestartet</SubHeading>
           <p className="section__lead" style={{ marginBottom: "var(--space-4)" }}>
             Der Rahmen ist von uns, die Aufzählung nicht: Jeder Satz kommt unverändert aus
             der Hülle und benennt, was fehlt. Ein Fehlercode allein wäre keine Auskunft,
@@ -204,7 +204,7 @@ export function ShellStateSection() {
 
           <SubHeading>Sperrmeldung — der lokale Dienst ist weg</SubHeading>
           <p className="section__lead" style={{ marginBottom: "var(--space-4)" }}>
-            Der einzige Ort in Takt, an dem eine Meldung die Bedienung anhält. Ohne den
+            Der einzige Ort in SuperTakt, an dem eine Meldung die Bedienung anhält. Ohne den
             Dienst wird nichts mehr geschrieben; eine weggeklickte Meldung ließe den
             Benutzer weiterarbeiten und seine Zeit verlieren. Deshalb: kein Schließkreuz,
             kein Abbrechen, keine Escape-Taste. Der Dialog sagt zusätzlich, was
@@ -220,10 +220,10 @@ export function ShellStateSection() {
           <SubHeading>Datenordner — der Hinweis nach R-13</SubHeading>
           <p className="section__lead">
             Ernst genug, um dauerhaft stehen zu bleiben, aber nicht dringend genug für
-            eine Sperre: Takt arbeitet weiter. Der Befund der Hülle steht zuerst, danach
+            eine Sperre: SuperTakt arbeitet weiter. Der Befund der Hülle steht zuerst, danach
             in eigenen Worten, was er bedeutet — eine beschädigte Datenbank und
             Kundendaten, die den Rechner verlassen — und was zu tun ist. Den Ordner kann
-            Takt nicht selbst verlegen; das gehört gesagt, statt eine Schaltfläche
+            SuperTakt nicht selbst verlegen; das gehört gesagt, statt eine Schaltfläche
             anzubieten, die es nicht gibt.
           </p>
         </Card>
@@ -260,7 +260,7 @@ export function ShellStateSection() {
               <tr>
                 <td>Dienst beendet</td>
                 <td>Sperrdialog über der ganzen Anwendung</td>
-                <td>nein — Ausgang ist „Takt beenden“</td>
+                <td>nein — Ausgang ist „SuperTakt beenden“</td>
                 <td>sofort, als Fehlerdialog</td>
               </tr>
               <tr>

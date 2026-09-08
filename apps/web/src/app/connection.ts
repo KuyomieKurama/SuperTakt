@@ -268,7 +268,7 @@ export async function quitApplication(): Promise<void> {
   const shell = await loadShell();
   if (shell === null || !shell.isShellAvailable()) {
     throw new Error(
-      "Takt läuft hier ohne seine Anwendungshülle. Den Befehl zum Beenden gibt es nur in der Takt-Anwendung.",
+      "SuperTakt läuft hier ohne seine Anwendungshülle. Den Befehl zum Beenden gibt es nur in der SuperTakt-Anwendung.",
     );
   }
   await shell.quit();
@@ -316,7 +316,7 @@ export async function openReleasePage(version: string): Promise<ReleasePageResul
     return {
       outcome: "unavailable",
       reason:
-        "Die Release-Seite öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.",
+        "Die Release-Seite öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.",
     };
   }
   return shell.openReleasePage(version);
@@ -350,7 +350,7 @@ export async function chooseExportDirectory(
     return {
       outcome: "unavailable",
       reason:
-        "Der Ordnerauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.",
+        "Der Ordnerauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.",
     };
   }
   return shell.chooseExportDirectory(current);
@@ -368,7 +368,7 @@ export async function chooseExportDirectory(
  * dass das Modul selbst nicht geladen werden konnte. Zwei Lagen, eine Auskunft.
  */
 const NO_SHELL_FOR_ATTACHMENTS =
-  "Anhänge öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.";
+  "Anhänge öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.";
 
 /**
  * Öffnet einen Verweis im Browser (A-19.9, A-19.18).
@@ -420,7 +420,7 @@ export async function chooseAttachmentFile(
     return {
       outcome: "unavailable",
       reason:
-        "Der Dateiauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.",
+        "Der Dateiauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.",
     };
   }
   return shell.chooseAttachmentFile(kind);

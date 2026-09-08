@@ -76,7 +76,11 @@ export function Navigation({ active, openTodoCount, openEntryCount }: Navigation
                 : null;
 
           return (
-            <li key={item.route}>
+            <li key={item.route} className={cx(
+              item.route === "time" && "nav__section-start",
+              item.route === "tags" && "nav__section-start",
+              item.route === "settings" && "nav__settings",
+            )}>
               <a
                 className={cx("nav__item", current && "nav__item--current")}
                 href={href(item.route)}

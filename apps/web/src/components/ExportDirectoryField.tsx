@@ -118,7 +118,7 @@ const TRAIT_TEXT: Readonly<Record<ExportDirectoryTrait, TraitText>> = {
   },
   system_dir: {
     title: "Der Ordner ist ein Systemverzeichnis",
-    body: "So benennt das Betriebssystem ihn selbst, unabhängig davon, auf welchem Laufwerk Windows liegt. Dorthin gehört nichts, was Takt schreibt.",
+    body: "So benennt das Betriebssystem ihn selbst, unabhängig davon, auf welchem Laufwerk Windows liegt. Dorthin gehört nichts, was SuperTakt schreibt.",
     tone: "warning",
   },
 };
@@ -175,7 +175,7 @@ export function ExportDirectoryTraitList({
             ? "Am eingestellten Ordner ist nichts belegt worden. Das ist keine Entwarnung, sondern eine Nichtaussage: "
             : "Geprüft wurde außerdem: "}
           Ein <strong>zugeordnetes Netzlaufwerk</strong> wie <span className="mono">Z:\</span>{" "}
-          erkennt Takt nicht — die Auskunft dazu bekommt der Dienst vom Betriebssystem nicht.
+          erkennt SuperTakt nicht — die Auskunft dazu bekommt der Dienst vom Betriebssystem nicht.
           {state === "unreachable"
             ? " Und weil dieser Ordner gerade nicht antwortet, konnte auch das Dateisystem nicht befragt werden; ob er im Netz liegt, ist damit offen."
             : ""}
@@ -227,8 +227,8 @@ const SHELL_ANSWER_GRACE_MS = 2_000;
 
 const DIRECTORY_STATE_TEXT: Readonly<Record<Exclude<ExportDirectoryState, "ok">, string>> = {
   not_set: "Noch nicht gewählt. Ohne Exportordner ist kein Export möglich.",
-  missing: "Dieser Ordner ist nicht erreichbar. Takt legt ihn nicht von sich aus an.",
-  not_writable: "Dieser Ordner ist da, aber Takt darf nicht hineinschreiben.",
+  missing: "Dieser Ordner ist nicht erreichbar. SuperTakt legt ihn nicht von sich aus an.",
+  not_writable: "Dieser Ordner ist da, aber SuperTakt darf nicht hineinschreiben.",
   not_a_directory: "Dieser Pfad zeigt auf eine Datei, nicht auf einen Ordner.",
   // T-039: nicht als abwesend belegt, sondern ohne Antwort. Der Satz nennt
   // deshalb den anderen Handgriff.
@@ -404,7 +404,7 @@ export function ExportDirectoryField({
           onChange={onChange}
           disabled={disabled}
           placeholder="z. B. C:\Takt\Export"
-          hint="Vollständiger Pfad. Die geschriebene Datei liegt immer innerhalb dieses Ordners — Takt schreibt niemals daneben."
+          hint="Vollständiger Pfad. Die geschriebene Datei liegt immer innerhalb dieses Ordners — SuperTakt schreibt niemals daneben."
           {...(serviceProblem === null ? {} : { error: serviceProblem })}
         />
       ) : (
@@ -444,7 +444,7 @@ export function ExportDirectoryField({
           </div>
           <p className="field__hint" id={hintId}>
             Der Ordner wird im Dialog des Betriebssystems gewählt und nicht getippt. Die
-            geschriebene Datei liegt immer innerhalb dieses Ordners — Takt schreibt niemals
+            geschriebene Datei liegt immer innerhalb dieses Ordners — SuperTakt schreibt niemals
             daneben.
           </p>
           {/*
@@ -475,12 +475,12 @@ export function ExportDirectoryField({
 
       {pickerFailure === null ? null : (
         <InlineMessage tone="info" title="Der Ordnerauswahldialog steht hier nicht zur Verfügung">
-          {pickerFailure} Tragen Sie den vollständigen Pfad von Hand ein — Takt prüft ihn genauso.
+          {pickerFailure} Tragen Sie den vollständigen Pfad von Hand ein — SuperTakt prüft ihn genauso.
         </InlineMessage>
       )}
 
       {shell === false ? (
-        <InlineMessage tone="info" title="Takt läuft gerade ohne seine Anwendungshülle">
+        <InlineMessage tone="info" title="SuperTakt läuft gerade ohne seine Anwendungshülle">
           Im Browser allein gibt es keinen Ordnerauswahldialog des Betriebssystems. In der
           installierten Anwendung wird der Ordner ausgewählt statt eingetippt.
         </InlineMessage>

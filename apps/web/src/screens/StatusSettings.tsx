@@ -373,7 +373,7 @@ export function StatusSettings() {
               Sie ihn dazu bestimmen; abwählen lässt sich der Standard nicht, nur weitergeben.
             </li>
             <li>
-              <strong>Ein Status mit Todos wird nicht gelöscht.</strong> Takt hängt dabei nichts
+              <strong>Ein Status mit Todos wird nicht gelöscht.</strong> SuperTakt hängt dabei nichts
               automatisch um — es gäbe keinen ehrlichen Zielwert. Stellen Sie die Todos zuerst auf
               einen anderen Status um; danach lässt sich der leere Status löschen.
             </li>
@@ -520,9 +520,9 @@ function StatusRow({
       ? "Das ist der Standard für neue Todos. Bestimmen Sie zuerst einen anderen zum Standard — sonst wäre nicht mehr festgelegt, was ein neues Todo bekommt."
       : null,
     count === 1
-      ? "Hier steht noch ein Todo. Takt hängt es nicht von sich aus um; stellen Sie es zuerst auf einen anderen Status."
+      ? "Hier steht noch ein Todo. SuperTakt hängt es nicht von sich aus um; stellen Sie es zuerst auf einen anderen Status."
       : typeof count === "number" && count > 1
-        ? `Hier stehen noch ${plural(count, "Todo", "Todos")}. Takt hängt sie nicht von sich aus um; stellen Sie sie zuerst auf einen anderen Status.`
+        ? `Hier stehen noch ${plural(count, "Todo", "Todos")}. SuperTakt hängt sie nicht von sich aus um; stellen Sie sie zuerst auf einen anderen Status.`
         : null,
   ].filter((reason): reason is string => reason !== null);
 

@@ -130,19 +130,19 @@ const DIRECTORY_PROBLEM: Readonly<
 > = {
   not_set: {
     title: "Es ist kein Exportordner eingestellt",
-    body: "Ohne Exportordner schreibt Takt keine Datei. Wählen Sie ihn in den Einstellungen.",
+    body: "Ohne Exportordner schreibt SuperTakt keine Datei. Wählen Sie ihn in den Einstellungen.",
   },
   missing: {
     title: "Der eingestellte Exportordner ist nicht da",
-    body: "Er wurde verschoben, umbenannt oder liegt auf einem Laufwerk, das gerade nicht verbunden ist. Takt legt ihn nicht von sich aus wieder an.",
+    body: "Er wurde verschoben, umbenannt oder liegt auf einem Laufwerk, das gerade nicht verbunden ist. SuperTakt legt ihn nicht von sich aus wieder an.",
   },
   not_writable: {
     title: "In den Exportordner lässt sich nicht schreiben",
-    body: "Der Ordner ist da, aber die Rechte fehlen. Ein Lauf würde mitten im Vorgang scheitern — deshalb hält Takt hier an.",
+    body: "Der Ordner ist da, aber die Rechte fehlen. Ein Lauf würde mitten im Vorgang scheitern — deshalb hält SuperTakt hier an.",
   },
   not_a_directory: {
     title: "Der eingestellte Pfad ist kein Ordner",
-    body: "Er zeigt auf eine Datei. Takt schreibt Exporte nur in einen Ordner.",
+    body: "Er zeigt auf eine Datei. SuperTakt schreibt Exporte nur in einen Ordner.",
   },
   /*
    * T-039: „antwortet nicht" ist nicht „gibt es nicht". Der Dienst wartet drei
@@ -722,7 +722,7 @@ export function ExportScreen() {
             <span className="muted">
               {billingUser.length === 0
                 ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
-                : "Dieser Name steht in jeder Zeile der Datei. Takt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
+                : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
             </span>
           </p>
         </div>
@@ -858,7 +858,7 @@ export function ExportScreen() {
                     </Button>
                   }
                 >
-                  {totalsState.message} Solange sie fehlt, weiß Takt nicht, wie viele Zeilen
+                  {totalsState.message} Solange sie fehlt, weiß SuperTakt nicht, wie viele Zeilen
                   und wie viele Stunden dieser Lauf schreiben würde — deshalb ist „Export
                   ausführen" gesperrt. Eine Null an dieser Stelle wäre keine Auskunft, sondern
                   eine Behauptung. Die Auswahl darunter bleibt erhalten.

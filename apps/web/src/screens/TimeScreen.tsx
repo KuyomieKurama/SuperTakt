@@ -164,8 +164,8 @@ export function TimeScreen() {
                         onStop={timer.requestStop}
                       />
                       <p className="timer-panel__hint">
-                        Beim Stoppen fragt Takt nach der Leistung. Sie geht in die Abrechnung —
-                        im Unterschied zum Vermerk, der in Takt bleibt.
+                        Beim Stoppen fragt SuperTakt nach der Leistung. Sie geht in die Abrechnung —
+                        im Unterschied zum Vermerk, der in SuperTakt bleibt.
                       </p>
                     </div>
                   )}

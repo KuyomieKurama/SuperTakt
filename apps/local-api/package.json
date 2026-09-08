@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Takt — lokaler Dienst (Node-Sidecar). Eingehender Adapter: HTTP, Token, Herkunft, JSON.",
+  "description": "SuperTakt — lokaler Dienst (Node-Sidecar). Eingehender Adapter: HTTP, Token, Herkunft, JSON.",
   "license": "MIT",
   "scripts": {
     "proof:codepoints": "node scripts/proof-codepoints.mjs",

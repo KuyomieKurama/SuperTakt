@@ -128,7 +128,7 @@ export function TimeSection() {
         <div className="stack" style={{ gap: "var(--space-4)" }}>
           <Card
             title="Nur ein Timer gleichzeitig"
-            description="A-6.8: Wird ein Timer gestartet, während ein anderer läuft, stoppt Takt den laufenden — aber erst, nachdem der Benutzer zugestimmt hat."
+            description="A-6.8: Wird ein Timer gestartet, während ein anderer läuft, stoppt SuperTakt den laufenden — aber erst, nachdem der Benutzer zugestimmt hat."
           >
             <Button variant="secondary" onClick={() => setSwitchDialogOpen(true)}>
               Timer auf anderem Todo starten
@@ -250,7 +250,7 @@ export function TimeSection() {
             Timer.
           </>
         }
-        consequence="Takt stoppt diesen Timer, legt die erfasste Zeit als offene Buchung ab und startet dann den neuen Timer."
+        consequence="SuperTakt stoppt diesen Timer, legt die erfasste Zeit als offene Buchung ab und startet dann den neuen Timer."
         confirmLabel="Stoppen und wechseln"
         onCancel={() => setSwitchDialogOpen(false)}
         onConfirm={() => {

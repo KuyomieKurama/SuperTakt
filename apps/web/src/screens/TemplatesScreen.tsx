@@ -531,7 +531,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
                   tone="danger"
                   title="Der Dienst hat Feldquellen geliefert, die nicht wählbar sein dürfen"
                 >
-                  Takt bietet sie nicht an:{" "}
+                  SuperTakt bietet sie nicht an:{" "}
                   {value.catalog.rejectedNoteSources.map((path) => `„${path}“`).join(", ")}. Der
                   interne Vermerk eines Todos geht in keinen Export (A-7.2). Melden Sie das bitte —
                   an der Auswahlliste dieses Editors ändert es nichts, aber es gehört geprüft.
@@ -879,7 +879,7 @@ function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefini
       </p>
       <p className="tpl-builtin__text">
         Wollen Sie etwas anderes exportieren, legen Sie eine Kopie an. Die Kopie ist eine
-        gewöhnliche Vorlage, und Takt zeigt Ihnen dort laufend, worin sie von dieser hier abweicht.
+        gewöhnliche Vorlage, und SuperTakt zeigt Ihnen dort laufend, worin sie von dieser hier abweicht.
       </p>
     </div>
   );

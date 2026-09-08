@@ -264,7 +264,7 @@ const CONDITION_OPERATOR_LABELS: Readonly<Record<ExportConditionOperator, string
 
 const NOTE_BOUNDARY_HINT =
   'Der Vermerk eines Todos steht nicht auf dieser Liste und lässt sich nicht hinzufügen. ' +
-  'Er bleibt in Takt und geht in keinen Export. ' +
+  'Er bleibt in SuperTakt und geht in keinen Export. ' +
   'Die abrechenbare Leistung heißt „Leistung der Tagesgruppe“.';
 
 /* ========================================================================= */

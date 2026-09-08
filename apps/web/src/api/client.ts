@@ -163,7 +163,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const active = connection;
   if (active === null) {
     throw new TaktTransportError(
-      "Takt ist noch nicht mit dem lokalen Dienst verbunden.",
+      "SuperTakt ist noch nicht mit dem lokalen Dienst verbunden.",
     );
   }
 
@@ -190,7 +190,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     throw new TaktTransportError(
-      "Der lokale Dienst antwortet nicht. Läuft Takt noch vollständig?",
+      "Der lokale Dienst antwortet nicht. Läuft SuperTakt noch vollständig?",
       { cause },
     );
   }

@@ -202,7 +202,7 @@ describe('T-132 — der Grund wird unterschieden', () => {
     expect(lines[0]?.reason).toBe('unknown code=enoent');
     // Der Satz ist der von vorher — für diesen Fall ist er richtig.
     expect(lines[0]?.message).toBe(
-      'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht.',
+      'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. SuperTakt startet nicht.',
     );
   });
 

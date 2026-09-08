@@ -1,11 +1,11 @@
-# Takt
+# SuperTakt
 
-Takt ist eine lokale Anwendung zum Verwalten von Todos, zum Erfassen von Arbeitszeit und zum
+SuperTakt ist eine lokale Anwendung zum Verwalten von Todos, zum Erfassen von Arbeitszeit und zum
 Export dieser Zeit an ein externes Abrechnungstool. Dazu kommen ein Kanban-Board, frei
 verschachtelbare Tags und Ordner, konfigurierbare Todo-Pools und ein Outlook-Add-in, mit dem sich
 Todos direkt aus einer E-Mail heraus anlegen lassen.
 
-Takt läuft vollständig auf dem eigenen Rechner. Es gibt keine Cloud-Anbindung, keinen
+SuperTakt läuft vollständig auf dem eigenen Rechner. Es gibt keine Cloud-Anbindung, keinen
 Datenbankserver und keine Telemetrie; gespeichert wird in einer eingebetteten SQLite-Datei im
 Anwendungsdatenverzeichnis. Diese Entscheidung ist architektonisch verankert: Die Fachlogik in
 `packages/domain` kennt weder HTTP noch SQL, sodass sich der Speicherweg austauschen ließe, ohne
@@ -16,6 +16,20 @@ Wer die Anwendung benutzt, statt an ihr zu arbeiten, findet das vollständige Be
 wichtigsten Lehren aus seiner Entstehung im `docs/entwicklerhandbuch.md`. Begriffe, die auf dem
 Bildschirm und im Code unterschiedlich heißen könnten, aber es nicht tun sollen, stehen in
 `docs/glossar.md`.
+
+## Name und bestehende Installationen
+
+Der sichtbare Produktname lautet SuperTakt. Bestehende Datenpfade (`Takt` unter Windows,
+`takt` unter Linux), die Anwendungskennung `de.takt.desktop`, interne `@takt/*`-Pakete
+und Schnittstellenkennungen bleiben kompatibel. Die Erzeugerkennung `Takt` im
+versionierten Datenarchiv bleibt erhalten. SuperTakt liest Archivfassungen 1 und 2;
+neue Sicherungen verwenden Fassung 2 und benötigen diese oder eine neuere App-Version.
+
+Unter **Einstellungen → Darstellung** lässt sich zwischen **Klassisch** (bisheriges
+Layout) und **Klar** (ruhigere Navigation und Arbeitsfläche) wählen. Farbmodus und
+Zeilendichte sind separat einstellbar und werden ebenfalls dauerhaft gespeichert.
+Bestehende Installationen starten mit Klassisch. Die Gestaltung ist in
+`docs/design/supertakt-layout.md` beschrieben.
 
 ## Aufbau
 
@@ -50,7 +64,7 @@ pnpm dev
 # http://127.0.0.1:5173
 ```
 
-Takt als Anwendung, mit Fenster und lokalem Dienst als Sidecar:
+SuperTakt als Anwendung, mit Fenster und lokalem Dienst als Sidecar:
 
 ```bash
 pnpm desktop
@@ -95,7 +109,7 @@ Daneben bestehen in `apps/local-api` und `apps/outlook-addin` neun weitere Nachw
 `proof:route-policy`, `proof:template-fields`, `proof:db-permissions`, `proof:addin`), die
 zusammen mit `pnpm proof:openapi` die zehn Nachweispfade des Projekts bilden. Sie stehen nicht alle
 in `pnpm check`, weil ein Teil von ihnen den lokalen Dienst auf seinem festen Port startet und
-deshalb nicht neben einem bereits laufenden Takt bestehen kann. Details dazu im
+deshalb nicht neben einem bereits laufenden SuperTakt bestehen kann. Details dazu im
 Entwicklerhandbuch.
 
 Ende-zu-Ende-Tests laufen mit Playwright:
@@ -116,7 +130,7 @@ pnpm sidecar:verify  # nur den Nachweis, gegen die zuletzt gebaute Datei
 ```
 
 Sie steht bewusst **nicht** in `pnpm check`: Sie braucht die Rust-Toolchain, baut rund 120 MiB und
-belegt dabei die Ports 17843 und 17844, kann also nicht neben einem laufenden Takt bestehen.
+belegt dabei die Ports 17843 und 17844, kann also nicht neben einem laufenden SuperTakt bestehen.
 `pnpm check` soll schnell und oft laufen.
 
 Sie gehört trotzdem vor jede Auslieferung und in jeden Durchlauf, der die Hülle, den lokalen Dienst
@@ -127,7 +141,7 @@ den Nachweis seither selbst mit.
 
 ## Wo es weitergeht
 
-- Was Takt tut und wie man damit arbeitet: `docs/benutzerhandbuch.md`
+- Was SuperTakt tut und wie man damit arbeitet: `docs/benutzerhandbuch.md`
 - Aufbau, Paketgrenzen, Sicherheitsmodell und die Lehren aus der Entwicklung: `docs/entwicklerhandbuch.md`
 - Begriffe mit ihrer Entsprechung im Code: `docs/glossar.md`
 - Datenmodell und Migrationsverfahren: `docs/datenmodell.md`

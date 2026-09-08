@@ -325,7 +325,7 @@ export function TaskPane({
             Überschrift dieser Fläche („Das Token fehlt."). Dreimal derselbe
             Zustand, bevor der erste Satz sagt, was zu tun ist.
           */}
-          Das Token finden Sie in Takt unter Einstellungen; von dort wird es einmalig hier
+          Das Token finden Sie in SuperTakt unter Einstellungen; von dort wird es einmalig hier
           eingetragen.
         </Callout>
       </Section>
@@ -552,7 +552,7 @@ export function TaskPane({
             <Field
               label="Frist"
               htmlFor="due"
-              hint="Takt sucht in der E-Mail nicht nach einer Frist — Sie tragen sie selbst ein. Ein Tag, keine Uhrzeit; leer lassen heißt: keine Frist."
+              hint="SuperTakt sucht in der E-Mail nicht nach einer Frist — Sie tragen sie selbst ein. Ein Tag, keine Uhrzeit; leer lassen heißt: keine Frist."
               error={dueEntry.kind === 'invalid' ? dueEntry.message : undefined}
             >
               {(aria) => (
@@ -657,7 +657,7 @@ export function TaskPane({
               beiden gehören zusammen; warum, steht dort.
             */}
             <Field
-              label="Vermerk (bleibt in Takt)"
+              label="Vermerk (bleibt in SuperTakt)"
               htmlFor="note"
               hint="Er geht nicht in die Abrechnung."
             >
@@ -1126,7 +1126,7 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
         <Callout tone="success" title={<Foreign value={done.title} />}>
           {done.kind === 'created' ? (
             <>
-              Das Todo ist in Takt angelegt.
+              Das Todo ist in SuperTakt angelegt.
               {done.addedDefaults > 0
                 ? ` ${String(done.addedDefaults)} Standard-Tag(s) wurden automatisch gesetzt.`
                 : ''}
@@ -1152,7 +1152,7 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
                       {index > 0 ? ', ' : ''}„<Foreign value={name} />“
                     </Fragment>
                   ))}{' '}
-                  — ab jetzt auch in Takt auswählbar.
+                  — ab jetzt auch in SuperTakt auswählbar.
                 </p>
               ) : null}
             </>

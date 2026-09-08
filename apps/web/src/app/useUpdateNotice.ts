@@ -243,12 +243,12 @@ export function useUpdateNotice(): UpdateNoticeApi {
           toasts.show({
             tone: "info",
             title: "Die Release-Seite ist im Browser geöffnet.",
-            body: "Herunterladen und Installieren geschehen dort — Takt tut von sich aus nichts davon.",
+            body: "Herunterladen und Installieren geschehen dort — SuperTakt tut von sich aus nichts davon.",
           });
           return;
         case "rejected":
           setOpenProblem(
-            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite.",
+            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. SuperTakt öffnet dafür keine Seite.",
           );
           return;
         case "failed":

@@ -64,7 +64,7 @@ const EXAMPLES: readonly Example[] = [
   {
     label: "Systemordner",
     path: "C:\\Windows\\System32\\Takt",
-    why: "Abgewiesen. Dorthin gehört nichts, was Takt schreibt (B-5.2 Punkt 1).",
+    why: "Abgewiesen. Dorthin gehört nichts, was SuperTakt schreibt (B-5.2 Punkt 1).",
   },
   {
     label: "Laufwerkswurzel",
@@ -91,7 +91,7 @@ export function ExportDirectorySection() {
     <Section
       id="exportordner"
       title="4a — Der Exportordner"
-      lead="Gewählt wird im Systemdialog, nicht getippt. Die Warnungen erklären, sie verbieten nicht — abgewiesen wird nur, wohin nichts gehört, was Takt schreibt."
+      lead="Gewählt wird im Systemdialog, nicht getippt. Die Warnungen erklären, sie verbieten nicht — abgewiesen wird nur, wohin nichts gehört, was SuperTakt schreibt."
       refs={["S-04", "B-5.1", "B-5.2", "B-5.3", "B-6.1", "E-011", "E-018"]}
     >
       <Card

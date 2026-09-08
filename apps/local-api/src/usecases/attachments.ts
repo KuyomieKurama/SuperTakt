@@ -158,7 +158,7 @@ const INDIRECT_MESSAGE =
  * (E-078). Ohne Anrede, weil der Satz ohne auskommt (E-080 Punkt 4).
  */
 const STREAM_SEPARATOR_MESSAGE =
-  'Ein Doppelpunkt im Dateinamen ist als Anhang nicht zulässig: Unter Windows benennt er einen zweiten Datenstrom derselben Datei, und Takt öffnet solche Pfade nicht.';
+  'Ein Doppelpunkt im Dateinamen ist als Anhang nicht zulässig: Unter Windows benennt er einen zweiten Datenstrom derselben Datei, und SuperTakt öffnet solche Pfade nicht.';
 
 /** Der Satz zu einem abgewiesenen Pfad. Ein Grund, ein Satz — und keiner nennt den Wert (A-A-8). */
 function pathMessage(reason: PathRejection): string {

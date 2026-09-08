@@ -419,7 +419,7 @@ export function TagCombobox(props: TagComboboxProps) {
                     ? "Noch kein Tag angelegt."
                     : `Kein Tag passt zu ${quotedName(pendingName)}.`}{" "}
                   {allowCreate ? (
-                    "Tippen Sie einen Namen — Takt bietet Ihnen dann an, ihn anzulegen."
+                    "Tippen Sie einen Namen — SuperTakt bietet Ihnen dann an, ihn anzulegen."
                   ) : (
                     <>
                       Neue Tags legen Sie unter <a href={href("tags")}>Tags</a> an.

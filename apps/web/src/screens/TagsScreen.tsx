@@ -465,7 +465,7 @@ function TagAdministration({ tree }: { readonly tree: TagTreeData }) {
         description={
           selected?.kind === "tag"
             ? "Ein Tag liegt in genau einem Ordner. Die Todos, die ihn tragen, bleiben unberührt."
-            : "Ein Ordner kann nicht unter einen seiner eigenen Unterordner. Takt lehnt das ab, statt einen Zyklus anzulegen."
+            : "Ein Ordner kann nicht unter einen seiner eigenen Unterordner. SuperTakt lehnt das ab, statt einen Zyklus anzulegen."
         }
         submitLabel="Verschieben"
         busy={mutation.busy}

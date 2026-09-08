@@ -398,7 +398,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                           {flagState === "done"
                             ? `Erledigt am ${formatDateTime(todo.completedAt ?? todo.updatedAt)}. Das Todo ist aus seinen Pools ausgeblendet; ein Timerstart hebt das auf.`
                             : flagState === "reopened"
-                              ? 'Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen; welche Pools und Spalten das betrifft, hat die Meldung beim Start genannt. Setzen Sie den Haken, gilt wieder „Erledigt".'
+                              ? 'Der Timerstart hat das Kennzeichen aufgehoben — SuperTakt hat das getan, nicht Sie. Das Todo ist wieder offen; welche Pools und Spalten das betrifft, hat die Meldung beim Start genannt. Setzen Sie den Haken, gilt wieder „Erledigt".'
                               : "Es erscheint überall dort, wo eine Regel es aufnimmt — als Pool, als Board-Spalte oder beides."}
                         </span>
                       </span>
@@ -628,7 +628,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                             const saved = await putTodoNote(todoId, noteText);
                             setNoteDraft(null);
                             detail.replace({ ...value, note: saved });
-                            toasts.success("Vermerk gespeichert.", "Er bleibt in Takt.");
+                            toasts.success("Vermerk gespeichert.", "Er bleibt in SuperTakt.");
                           });
                         }}
                       >

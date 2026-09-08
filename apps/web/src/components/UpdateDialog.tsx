@@ -122,11 +122,11 @@ export function UpdateDialog({
       <div className="dialog__head dialog__head--form">
         <div className="grow">
           <Dialog.Title className="dialog__title">
-            Eine neuere Fassung von Takt ist verfügbar
+            Eine neuere Fassung von SuperTakt ist verfügbar
           </Dialog.Title>
           <Dialog.Description asChild>
             <p className="dialog__lead">
-              Takt lädt nichts herunter und installiert nichts. „Installieren" öffnet die
+              SuperTakt lädt nichts herunter und installiert nichts. „Installieren" öffnet die
               Release-Seite dieser Fassung im Browser; alles Weitere entscheiden Sie dort.
             </p>
           </Dialog.Description>

@@ -521,12 +521,12 @@ const pairs = [
   { group: "Startmeldung", fg: "--danger-text", bg: "--danger-bg-subtle", min: 4.5, note: "Zwischenueberschrift Was Sie tun koennen" },
   { group: "Startmeldung", fg: "--text-on-solid", bg: "--danger-bg", min: 4.5, note: "Symbol der Startmeldung" },
   { group: "Startmeldung", fg: "--danger-bg", bg: "--danger-bg-subtle", min: 3, note: "Randschiene der Startmeldung, SC 1.4.11" },
-  { group: "Startmeldung", fg: "--border-control", bg: "--danger-bg-subtle", min: 3, note: "Knopf Takt beenden in der Startmeldung, SC 1.4.11" },
+  { group: "Startmeldung", fg: "--border-control", bg: "--danger-bg-subtle", min: 3, note: "Knopf SuperTakt beenden in der Startmeldung, SC 1.4.11" },
   { group: "Sperrmeldung", fg: "--text-secondary", bg: "--bg-surface", min: 4.5, note: "Erklaerung und Schritte im Sperrdialog" },
   { group: "Sperrmeldung", fg: "--danger-text", bg: "--danger-bg-subtle", min: 4.5, note: "Grund aus der Huelle im Sperrdialog" },
   { group: "Sperrmeldung", fg: "--text-primary", bg: "--bg-inset", min: 4.5, note: "Schrittnummer im Sperrdialog" },
   { group: "Sperrmeldung", fg: "--text-muted", bg: "--bg-subtle", min: 4.5, note: "Beendigungscode in der Fusszeile" },
-  { group: "Sperrmeldung", fg: "--text-on-solid", bg: "--danger-bg", min: 4.5, note: "Knopf Takt beenden im Sperrdialog" },
+  { group: "Sperrmeldung", fg: "--text-on-solid", bg: "--danger-bg", min: 4.5, note: "Knopf SuperTakt beenden im Sperrdialog" },
   { group: "Datenordner", fg: "--text-primary", bg: "--warning-bg", min: 4.5, note: "Ueberschrift des Datenordner-Hinweises" },
   { group: "Datenordner", fg: "--text-secondary", bg: "--warning-bg", min: 4.5, note: "Befund der Huelle und Erklaerung" },
   { group: "Datenordner", fg: "--warning-fg", bg: "--warning-bg", min: 4.5, note: "Zwischenueberschriften des Hinweises" },
@@ -546,6 +546,8 @@ const pairs = [
   { group: "Weitergabe", fg: "--bg-surface", bg: "--warning-bg", min: 0, exempt: true, note: "Zusatzflaeche gegen Warnband, rein abgrenzend" },
 
   // Anwendungshuelle (T-022) — Navigation, Suche, Rueckmeldung, Kennzahlen
+  { group: "Theme Klar", fg: "--warning-fg", bg: "--bg-canvas", min: 4.5, note: "Kennzahl ohne getoente Kartenflaeche" },
+  { group: "Theme Klar", fg: "--text-muted", bg: "--bg-surface-alt", min: 4.5, note: "Navigation und Wortmarke auf ruhiger Seitenleiste" },
   { group: "Anwendung", fg: "--text-secondary", bg: "--bg-subtle", min: 4.5, note: "Zaehler im Navigationseintrag, Kennzeichen in der Todo-Zeile" },
   { group: "Anwendung", fg: "--text-muted", bg: "--bg-selected", min: 4.5, note: "Zusatz im hervorgehobenen Suchtreffer" },
   { group: "Anwendung", fg: "--success-fg", bg: "--bg-surface", min: 3, note: "Farbschiene der Erfolgsmeldung, SC 1.4.11" },

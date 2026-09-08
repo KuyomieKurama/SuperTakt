@@ -205,7 +205,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
           kind: "not_absolute",
           verdict: "reject",
           title: "Das ist kein vollständiger Pfad",
-          body: "Takt braucht den ganzen Weg zum Ordner — unter Windows mit Laufwerksbuchstaben, etwa C:\\Takt\\Export. Ein Pfad ohne Anfang zeigt je nach Arbeitsverzeichnis woandershin.",
+          body: "SuperTakt braucht den ganzen Weg zum Ordner — unter Windows mit Laufwerksbuchstaben, etwa C:\\Takt\\Export. Ein Pfad ohne Anfang zeigt je nach Arbeitsverzeichnis woandershin.",
           evidence: path,
         },
       ],
@@ -218,7 +218,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
       kind: "drive_root",
       verdict: "reject",
       title: "Das ist die Wurzel eines Laufwerks",
-      body: "Dorthin schreibt Takt nicht. Exportdateien in der Laufwerkswurzel sind für jedes Programm sichtbar, das das Laufwerk durchsucht, und lassen sich später von den Dateien des Systems nicht mehr auseinanderhalten. Legen Sie einen eigenen Unterordner an.",
+      body: "Dorthin schreibt SuperTakt nicht. Exportdateien in der Laufwerkswurzel sind für jedes Programm sichtbar, das das Laufwerk durchsucht, und lassen sich später von den Dateien des Systems nicht mehr auseinanderhalten. Legen Sie einen eigenen Unterordner an.",
       evidence: shape.kind === "windows" ? `${shape.anchor}\\` : "/",
     });
   }
@@ -233,7 +233,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
         kind: "system_directory",
         verdict: "reject",
         title: "Das ist ein Verzeichnis des Betriebssystems",
-        body: "Dorthin gehört nichts, was Takt schreibt. Der Export enthält Kundendaten, die in einem Systemordner niemand vermutet und die dort bei der nächsten Aktualisierung oder Bereinigung ohne Vorwarnung verschwinden können. Wählen Sie einen Ordner unter Ihrem Benutzerprofil.",
+        body: "Dorthin gehört nichts, was SuperTakt schreibt. Der Export enthält Kundendaten, die in einem Systemordner niemand vermutet und die dort bei der nächsten Aktualisierung oder Bereinigung ohne Vorwarnung verschwinden können. Wählen Sie einen Ordner unter Ihrem Benutzerprofil.",
         evidence: shape.kind === "windows" ? `${shape.anchor}\\${first}` : `/${first}`,
       });
     }
@@ -258,7 +258,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
       kind: "sync_folder",
       verdict: "confirm",
       title: "Dieser Ordner wird in einen Onlinespeicher synchronisiert",
-      body: "Alles, was Takt hier ablegt, wird kurz darauf hochgeladen — automatisch, ohne weitere Rückfrage und ohne dass es jemand sieht. Die Exportdatei enthält lesbare Kundennotizen; Base64 ist eine Kodierung, keine Verschlüsselung. Damit liegen die Daten Ihrer Kunden bei einem Anbieter, und die Entscheidung dafür trifft man besser hier als später beim Aufräumen.",
+      body: "Alles, was SuperTakt hier ablegt, wird kurz darauf hochgeladen — automatisch, ohne weitere Rückfrage und ohne dass es jemand sieht. Die Exportdatei enthält lesbare Kundennotizen; Base64 ist eine Kodierung, keine Verschlüsselung. Damit liegen die Daten Ihrer Kunden bei einem Anbieter, und die Entscheidung dafür trifft man besser hier als später beim Aufräumen.",
       evidence: syncSegment,
     });
   }
@@ -270,7 +270,7 @@ export function adviseExportDirectory(rawPath: string): ExportDirectoryAdvice {
       kind: "roaming_profile",
       verdict: "confirm",
       title: "Dieser Ordner gehört zum servergespeicherten Profil",
-      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Die Exportdateien mit ihren lesbaren Kundennotizen wandern dann mit. Genau deswegen liegen die Daten von Takt unter AppData\\Local (E-018) — dort bleiben sie auf diesem Rechner.",
+      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Die Exportdateien mit ihren lesbaren Kundennotizen wandern dann mit. Genau deswegen liegen die Daten von SuperTakt unter AppData\\Local (E-018) — dort bleiben sie auf diesem Rechner.",
       evidence: roamingEvidence,
     });
   }

@@ -162,8 +162,8 @@ function ConnectedApp({
   if (state.kind === "connecting") {
     return (
       <div className="boot">
-        <Spinner size={22} label="Takt wird verbunden" />
-        <p className="boot__text">Takt verbindet sich mit dem lokalen Dienst …</p>
+        <Spinner size={22} label="SuperTakt wird verbunden" />
+        <p className="boot__text">SuperTakt verbindet sich mit dem lokalen Dienst …</p>
       </div>
     );
   }
@@ -175,13 +175,13 @@ function ConnectedApp({
   if (state.kind === "failed") {
     return (
       <div className="boot">
-        <Card title="Takt konnte sich nicht verbinden">
+        <Card title="SuperTakt konnte sich nicht verbinden">
           <InlineMessage tone="danger" title="Der lokale Dienst ist nicht erreichbar">
             {state.message}
           </InlineMessage>
           <p className="boot__text">
             Ohne den lokalen Dienst gibt es keine Daten: Todos, Zeiten und Einstellungen liegen
-            allein dort. Takt speichert nichts im Browser.
+            allein dort. SuperTakt speichert nichts im Browser.
           </p>
           <div className="boot__actions">
             <Button variant="primary" iconStart="rotate-ccw" onClick={attempt}>
@@ -223,10 +223,10 @@ function ConnectedApp({
 function NoShellNotice() {
   return (
     <div className="boot">
-      <Card title="Takt läuft in der Takt-Anwendung">
+      <Card title="SuperTakt läuft in der SuperTakt-Anwendung">
         <p className="boot__text">
-          Diese Seite ist die Oberfläche von Takt. Sie spricht mit einem lokalen Dienst, der
-          ausschließlich von der Takt-Anwendung gestartet wird — und sie weist sich dabei mit
+          Diese Seite ist die Oberfläche von SuperTakt. Sie spricht mit einem lokalen Dienst, der
+          ausschließlich von der SuperTakt-Anwendung gestartet wird — und sie weist sich dabei mit
           einem Sitzungsgeheimnis aus, das nur diese Anwendung kennt. Im Browser allein gibt es
           beides nicht, deshalb bleibt hier alles leer.
         </p>
@@ -316,9 +316,9 @@ function Workspace({
       <aside className="app__sidebar">
         <a className="brand" href={href("dashboard")}>
           <span className="brand__mark" aria-hidden>
-            T
+            ST
           </span>
-          <span className="brand__name">Takt</span>
+          <span className="brand__name">SuperTakt</span>
         </a>
 
         <Navigation

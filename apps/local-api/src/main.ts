@@ -149,7 +149,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
         ? 'Der lokale Dienst hat keinen Windows-Benutzernamen empfangen. Er startet nicht: Ein Export ohne Urheber wäre nicht nachvollziehbar.'
         : handshake.reason === 'user_invalid'
           ? 'Der lokale Dienst hat einen Windows-Benutzernamen mit Steuer- oder Richtungszeichen empfangen. Er startet nicht: Dieser Name ginge unverändert in die Abrechnungsdatei.'
-          : 'Der lokale Dienst wird von der Takt-Anwendung gestartet und nicht von Hand. Kein Startgeheimnis empfangen.',
+          : 'Der lokale Dienst wird von der SuperTakt-Anwendung gestartet und nicht von Hand. Kein Startgeheimnis empfangen.',
       // Der Grund noch einmal als Schlüssel: Der Satz ist für den Menschen,
       // dieser Wert für den, der die Zeile später auswertet (T-132).
       `handshake_rejected reason=${handshake.reason}`,
@@ -166,7 +166,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     logger.lifecycle(
       'error',
       paths.reason === 'localappdata_missing'
-        ? 'Das lokale Anwendungsdatenverzeichnis (%LOCALAPPDATA%) ist nicht gesetzt. Takt weicht bewusst nicht auf das Roaming-Profil aus.'
+        ? 'Das lokale Anwendungsdatenverzeichnis (%LOCALAPPDATA%) ist nicht gesetzt. SuperTakt weicht bewusst nicht auf das Roaming-Profil aus.'
         : 'Kein Benutzerverzeichnis gefunden.',
       `appdata_missing reason=${paths.reason}`,
     );
@@ -255,7 +255,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
       logger.lifecycle(
         'warn',
         `${permissions.tooPermissive.length} Datei(en) des Datenbestands sind für andere Benutzer lesbar. ` +
-          'Takt konnte die Rechte nicht enger setzen. Der Bestand enthält Kundendaten und interne Vermerke.',
+          'SuperTakt konnte die Rechte nicht enger setzen. Der Bestand enthält Kundendaten und interne Vermerke.',
         `file_permissions_wide files=${permissions.tooPermissive.length}`,
       );
     }
@@ -277,7 +277,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
       logger.lifecycle(
         'info',
         `Die Rechte von ${permissions.unmeasured.length} Datei(en) des Datenbestands ließen sich nicht lesen. ` +
-          'Takt sagt darüber nichts — weder dass sie eng liegen noch dass sie offen liegen.',
+          'SuperTakt sagt darüber nichts — weder dass sie eng liegen noch dass sie offen liegen.',
         `file_permissions_unmeasured files=${permissions.unmeasured.length}`,
       );
     }
@@ -455,7 +455,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     // ließ sich hinterher nicht mehr sagen.
     logger.lifecycle(
       'warn',
-      'Der Aufgabenbereich des Add-ins konnte nicht bereitgestellt werden. Takt läuft weiter; das Add-in ist bis auf Weiteres nicht benutzbar.',
+      'Der Aufgabenbereich des Add-ins konnte nicht bereitgestellt werden. SuperTakt läuft weiter; das Add-in ist bis auf Weiteres nicht benutzbar.',
       `taskpane_failed${runtimeCode(error)}`,
     );
   }

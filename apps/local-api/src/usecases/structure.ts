@@ -11,6 +11,8 @@
 
 import type {
   AppSettings,
+  DesignTheme,
+  Density,
   DefaultTag,
   ExportAuditEntry,
   ExportDirectoryTrait,
@@ -771,6 +773,8 @@ export interface SettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
   readonly theme?: Theme;
+  readonly designTheme?: DesignTheme;
+  readonly density?: Density;
   /**
    * Die übersprungene Fassung (A-18.10). `null` setzt sie zurück.
    *

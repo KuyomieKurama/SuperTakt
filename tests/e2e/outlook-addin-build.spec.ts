@@ -53,7 +53,7 @@ test.describe('TP-BUILD-03 — ohne Office-Wirt', () => {
 
     await page.goto('/');
 
-    await expect(page.locator('.shell__brand')).toContainText('Takt');
+    await expect(page.locator('.shell__brand')).toContainText('SuperTakt');
 
     // Beide Zustände sind aus `App.tsx#Body` — `no_host` ("Kein Outlook")
     // oder `no_item` ("Keine E-Mail geöffnet"), je nachdem, ob `office.js`

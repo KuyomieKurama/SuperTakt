@@ -79,7 +79,7 @@ async function openApp(page: Page): Promise<void> {
 }
 
 function updateDialog(page: Page) {
-  return page.getByRole('dialog', { name: 'Eine neuere Fassung von Takt ist verfügbar' });
+  return page.getByRole('dialog', { name: 'Eine neuere Fassung von SuperTakt ist verfügbar' });
 }
 
 async function expectDialogFacts(page: Page, available: string): Promise<void> {

@@ -216,7 +216,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("Takt ließ sich nicht aufbauen");
+        .expect("SuperTakt ließ sich nicht aufbauen");
 
     app.run(|handle, event| {
         // Zweiter Halt. `Exit` kommt auch dann, wenn kein Fensterereignis

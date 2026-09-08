@@ -17,7 +17,7 @@
  * die Oberfläche erzeugt keine davon selbst.
  */
 
-import type { PoolMovement } from "@takt/domain";
+import type { PoolMovement, DesignTheme, Density } from "@takt/domain";
 import type { ExportStatus } from "../components/ExportStatus";
 import type {
   PoolCompletionFilter,
@@ -1255,6 +1255,8 @@ export interface AppSettings {
   readonly roundingMode: RoundingMode;
   readonly locale: TechnicalKey;
   readonly theme: ThemeSetting;
+  readonly designTheme: DesignTheme;
+  readonly density: Density;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20). `null`
    * heißt: nichts übersprungen.
@@ -1279,6 +1281,8 @@ export interface AppSettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: TechnicalKey;
   readonly theme?: ThemeSetting;
+  readonly designTheme?: DesignTheme;
+  readonly density?: Density;
   /**
    * `null` setzt „nichts übersprungen" zurück, ein Wert überspringt genau
    * diese eine Fassung — nicht die Prüfung (E-064 Punkt 5).

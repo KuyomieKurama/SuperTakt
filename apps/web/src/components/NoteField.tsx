@@ -52,7 +52,7 @@ interface ScopeDefinition {
 
 const SCOPE: Readonly<Record<NoteScope, ScopeDefinition>> = {
   billing: {
-    bannerLabel: "Verlässt Takt · steht in der Abrechnung",
+    bannerLabel: "Verlässt SuperTakt · steht in der Abrechnung",
     bannerIcon: "arrow-up-right",
     defaultLabel: "Leistung",
     markLabel: "Wird exportiert",
@@ -60,11 +60,11 @@ const SCOPE: Readonly<Record<NoteScope, ScopeDefinition>> = {
     defaultPlaceholder: "Was wurde in diesem Zeitraum für den Kunden geleistet?",
   },
   internal: {
-    bannerLabel: "Bleibt in Takt",
+    bannerLabel: "Bleibt in SuperTakt",
     bannerIcon: "lock",
     defaultLabel: "Vermerk",
     markLabel: "Wird nicht exportiert",
-    help: "Bleibt in Takt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage.",
+    help: "Bleibt in SuperTakt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage.",
     /*
       Ohne Anrede (T-181, ST-09). „Nur fuer Sie" war eine Verdopplung des
       Banners „Bleibt in Takt" unmittelbar darueber; ein Platzhalter traegt

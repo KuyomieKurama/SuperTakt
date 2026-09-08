@@ -127,7 +127,7 @@ const FAILURE_TEXT = "Diese Datei ist an diesem Pfad nicht mehr vorhanden.";
  * darf nirgends anders lauten.
  */
 const BLOCKED_TEXT =
-  "Diese Datei ist eine Verknüpfung. Ihr Ziel steht woanders — die Rückfrage könnte darüber nicht die Wahrheit sagen, deshalb öffnet Takt sie nicht.";
+  "Diese Datei ist eine Verknüpfung. Ihr Ziel steht woanders — die Rückfrage könnte darüber nicht die Wahrheit sagen, deshalb öffnet SuperTakt sie nicht.";
 
 export function DeadlineSection() {
   const [dialog, setDialog] = useState<
@@ -221,7 +221,7 @@ export function DeadlineSection() {
           icon="paperclip"
           compact
           title="Keine Anhänge"
-          description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört. Takt kopiert nur Bilder; Verweise und Dateien merkt es sich als Adresse beziehungsweise Pfad."
+          description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört. SuperTakt kopiert nur Bilder; Verweise und Dateien merkt es sich als Adresse beziehungsweise Pfad."
         />
       </Card>
 
@@ -243,7 +243,7 @@ export function DeadlineSection() {
             Name beim Öffnen weicht ab
           </Button>
           <Button variant="secondary" onClick={() => setDialog("umleitung")}>
-            Umleitung — Takt öffnet sie gar nicht
+            Umleitung — SuperTakt öffnet sie gar nicht
           </Button>
         </div>
 

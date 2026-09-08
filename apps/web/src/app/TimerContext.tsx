@@ -429,7 +429,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
           return {
             tone: "warning",
             title: `${on} — der Exportwert ließ sich nicht abfragen.`,
-            body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte Takt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
+            body: `${booked} Was diese Tagesgruppe beim Export ergibt, konnte SuperTakt gerade nicht ermitteln: ${insight.previewProblem} Die erfasste Zeit steht fest; der gerundete Wert steht in der Export-Ansicht.`,
           };
         }
         if (insight.blockedReason !== null) {
@@ -805,7 +805,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
         description={
           orphan === null
             ? undefined
-            : `Beim letzten Mal wurde Takt nicht ordentlich beendet. Auf ${quotedName(orphan.todoTitle)} lief ein Timer, der nie gestoppt wurde.`
+            : `Beim letzten Mal wurde SuperTakt nicht ordentlich beendet. Auf ${quotedName(orphan.todoTitle)} lief ein Timer, der nie gestoppt wurde.`
         }
         submitLabel="Entscheiden"
         cancelLabel="Später entscheiden"

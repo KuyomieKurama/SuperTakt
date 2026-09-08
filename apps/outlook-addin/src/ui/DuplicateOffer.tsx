@@ -43,7 +43,7 @@ export function DuplicateOffer({ offers, onChoose, busyTodoId }: DuplicateOfferP
   return (
     <div className="offer">
       <Callout tone="warning" title={heading}>
-        Darauf buchen oder trotzdem ein neues Todo anlegen? Takt entscheidet das nicht von selbst.
+        Darauf buchen oder trotzdem ein neues Todo anlegen? SuperTakt entscheidet das nicht von selbst.
       </Callout>
 
       <ul className="offer__list">

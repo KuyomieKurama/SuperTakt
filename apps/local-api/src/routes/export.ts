@@ -79,6 +79,8 @@ const settingsSchema = z.object({
   roundingMode: z.enum(['up', 'nearest']).optional(),
   locale: z.string().min(2).max(35).optional(),
   theme: z.enum(['system', 'light', 'dark']).optional(),
+  designTheme: z.enum(['classic', 'clear']).optional(),
+  density: z.enum(['comfortable', 'compact']).optional(),
   /**
    * Die übersprungene Fassung (A-18.10, R-20). `null` setzt sie zurück.
    *
@@ -320,6 +322,8 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.roundingMode === undefined ? {} : { roundingMode: parsed.data.roundingMode }),
       ...(parsed.data.locale === undefined ? {} : { locale: parsed.data.locale }),
       ...(parsed.data.theme === undefined ? {} : { theme: parsed.data.theme }),
+      ...(parsed.data.designTheme === undefined ? {} : { designTheme: parsed.data.designTheme }),
+      ...(parsed.data.density === undefined ? {} : { density: parsed.data.density }),
       // `null` heißt „nichts übersprungen" und ist damit ein Wert; nur ein
       // fehlendes Feld heißt „unverändert" (A-18.10).
       ...(parsed.data.skippedVersion === undefined

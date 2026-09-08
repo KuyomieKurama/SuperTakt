@@ -17,6 +17,7 @@ import type { DataImportSummary, Id, RoundingMode, SecurityNoticeKind } from "..
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ExportDirectoryField } from "../components/ExportDirectoryField";
 import { BillingUserFact, DatabaseLocationFact } from "../components/WorkstationFacts";
+import { RadioRow } from "../components/RadioRow";
 import { Select } from "../components/Select";
 import { Icon, type IconName } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
@@ -144,7 +145,7 @@ interface AreaDescriptor {
   nicht hier, sondern in der Karte (`StatusSettings`, Auflage Z-01).
 */
 const AREA_LIST: readonly AreaDescriptor[] = [
-  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Farbmodus und Zeilendichte" },
+  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Themes, Farbmodus und Zeilendichte" },
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
   { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
   {
@@ -352,7 +353,7 @@ function DataTransferSettings() {
 
   return (
     <>
-      <Card title="Takt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
+      <Card title="SuperTakt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
         <p className="field__hint">Enthält Aufgaben, Vermerke, Tags, Strukturen, Zeitbuchungen, Exporteinstellungen, Protokolle und Bildanhänge. Eine Wiederherstellung ersetzt den aktuellen Bestand.</p>
         <div className="data-transfer__actions">
           <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>Sicherung herunterladen</Button>
@@ -381,7 +382,7 @@ function DataTransferSettings() {
       <ConfirmDialog
         open={pendingArchive !== null}
         tone="danger"
-        title="Takt-Datensicherung wiederherstellen?"
+        title="SuperTakt-Datensicherung wiederherstellen?"
         description="Der aktuelle Bestand wird vollständig durch den Inhalt der gewählten Sicherung ersetzt."
         consequence="Aufgaben und Zeitbuchungen, die nur im aktuellen Bestand vorkommen, sind danach nicht mehr vorhanden."
         acknowledgeLabel="Ich habe den aktuellen Bestand bei Bedarf gesichert."
@@ -403,40 +404,30 @@ const DENSITY_LABEL: Readonly<Record<Density, string>> = {
   compact: "Kompakt — mehr Zeilen auf dem Bildschirm",
 };
 
-/**
- * Farbmodus und Zeilendichte.
- *
- * **Ohne Speichern-Knopf, und das ist die Absicht.** Beide Werte wirken sofort
- * und sichtbar; ein Knopf, der bestätigt, was man schon sieht, stellt eine
- * Frage, die nicht mehr offen ist. Der Farbmodus geht dabei über
- * `PreferencesContext` in `app_setting.theme` (E-041) und ist damit dauerhaft.
- *
- * Seit T-065 ist dies der **einzige** Ort, an dem der Farbmodus eingestellt
- * wird. Bis dahin stand dasselbe Auswahlfeld ein zweites Mal oben rechts in
- * der Kopfleiste. Es bediente seit T-057 zwar dieselbe Einstellung, blieb aber
- * ein zweiter Bedienweg für etwas, das man einmal einstellt — der
- * Auftraggeber hat ihn gestrichen. Was blieb: `PreferencesContext`. Er ist
- * nicht Zubehör dieses Feldes, sondern die Stelle, die die gespeicherte Wahl
- * beim Start anwendet.
- *
- * Die Zeilendichte ist bis zum Beenden von Takt gültig. Das Datenmodell führt
- * keine Spalte dafür, und diese Oberfläche legt nichts im Browser ab. Der
- * Hinweis unter dem Feld sagt es, statt es den Benutzer beim nächsten Start
- * herausfinden zu lassen.
- */
+/** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
 function DisplaySettings() {
-  const { theme, setTheme, themeSaving, density, setDensity } = usePreferences();
+  const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity } = usePreferences();
 
   return (
     <Card
       title="Darstellung"
-      description="Wirkt sofort. Nichts zu speichern."
+      description="Theme, Farbmodus und Zeilendichte wirken sofort und bleiben beim nächsten Start erhalten."
     >
+      <RadioRow
+        label="Theme"
+        value={designTheme}
+        onChange={setDesignTheme}
+        disabled={saving}
+        options={[
+          { value: "classic", label: "Klassisch", hint: "Die vertraute Gestaltung mit Karten und farbigen Kennzahlen." },
+          { value: "clear", label: "Klar", hint: "Ruhigere Flächen, kompakte Navigation und mehr Raum für Ihre Arbeitslisten." },
+        ]}
+      />
       <Select
         label="Farbmodus"
         value={theme}
         onChange={setTheme}
-        disabled={themeSaving}
+        disabled={saving}
         options={(["system", "light", "dark"] as const).map((value) => ({
           value,
           label: THEME_LABEL[value],
@@ -448,11 +439,12 @@ function DisplaySettings() {
         label="Zeilendichte"
         value={density}
         onChange={setDensity}
+        disabled={saving}
         options={(["comfortable", "compact"] as const).map((value) => ({
           value,
           label: DENSITY_LABEL[value],
         }))}
-        hint="Betrifft Tabellen und Listen. Diese Wahl gilt bis zum Beenden von Takt — sie hat noch keinen Platz in den gespeicherten Einstellungen."
+        hint="Bestimmt die Abstände in Tabellen und Listen, unabhängig vom gewählten Theme."
       />
     </Card>
   );
@@ -812,7 +804,7 @@ function AddinSettings() {
           <>
             {value.unreadable ? (
               <InlineMessage tone="danger" title="Die Tokendatei ist nicht lesbar">
-                Takt erzeugt von sich aus kein neues Token — das würde ein eingerichtetes Add-in
+                SuperTakt erzeugt von sich aus kein neues Token — das würde ein eingerichtetes Add-in
                 ohne Vorwarnung aussperren. Erzeugen Sie eines von Hand, wenn Sie das Add-in
                 neu einrichten wollen.
               </InlineMessage>

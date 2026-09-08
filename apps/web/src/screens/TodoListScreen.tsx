@@ -533,7 +533,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                   <EmptyState
                     icon="inbox"
                     title="Noch kein Todo"
-                    description="Takt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
+                    description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
                     action={
                       <Button
                         variant="primary"
@@ -624,7 +624,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         }
         consequence={
           deleteError ??
-          "Hängt an dem Todo eine bereits exportierte Buchung, lehnt Takt das Löschen ab: Abgerechnete Zeit wird nicht durch das Löschen eines Todos entfernt."
+          "Hängt an dem Todo eine bereits exportierte Buchung, lehnt SuperTakt das Löschen ab: Abgerechnete Zeit wird nicht durch das Löschen eines Todos entfernt."
         }
         confirmLabel="Endgültig löschen"
         busy={deleting}

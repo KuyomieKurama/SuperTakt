@@ -145,7 +145,7 @@ export function WorkstationSection() {
       <p className="section__lead">
         E-042 holt den Benutzernamen ausdrücklich nicht aus der Umgebungsvariablen, sondern über
         einen eigenen Kanal vom Betriebssystem — sonst genügte{" "}
-        <span className="mono">set USERNAME=fremder &amp;&amp; Takt.exe</span>, um fremde
+        <span className="mono">set USERNAME=fremder &amp;&amp; SuperTakt.exe</span>, um fremde
         Arbeitszeit unter eigenem Namen abzurechnen. Diese Absicherung ist wertlos, wenn niemand
         nachsehen kann, welcher Name tatsächlich verwendet wird. Und der Moment, in dem man es
         wissen will, liegt <strong>vor</strong> dem ersten Export — nicht danach im Protokoll.
@@ -220,7 +220,7 @@ export function WorkstationSection() {
           Es gibt hier <strong>keine Stufen</strong>. Beim Exportordner gibt es einen Knopf zu
           sperren und eine Rückfrage zu stellen; der Ablageort des Bestandes ist über keine Route
           und kein Startargument einstellbar (B-1.6 Punkt 1). Jeder Befund führt deshalb einen
-          Handgriff mit, der außerhalb von Takt liegt — eine Warnung ohne Ausweg wäre an dieser
+          Handgriff mit, der außerhalb von SuperTakt liegt — eine Warnung ohne Ausweg wäre an dieser
           Stelle nur ein Vorwurf.
         </p>
 

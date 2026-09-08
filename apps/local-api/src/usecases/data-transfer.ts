@@ -34,7 +34,7 @@ import type {
 import type { AppContext, UseCaseResult } from './context.ts';
 
 export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
-export const DATA_ARCHIVE_VERSION = 1 as const;
+export const DATA_ARCHIVE_VERSION = 2 as const;
 
 export interface ArchivedImage {
   readonly name: string;
@@ -163,16 +163,16 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
   if (
     root === null ||
     root['format'] !== DATA_ARCHIVE_FORMAT ||
-    root['schemaVersion'] !== DATA_ARCHIVE_VERSION ||
+    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes Takt-Datenarchiv der Fassung 1.') };
+    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 oder 2.') };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
   const rawImages = data?.['images'];
   if (data === null || rawTables === null || !Array.isArray(rawImages)) {
-    return { ok: false, error: taktError('validation_error', 'Das Takt-Datenarchiv ist unvollständig.') };
+    return { ok: false, error: taktError('validation_error', 'Das SuperTakt-Datenarchiv ist unvollständig.') };
   }
 
   const tables = {} as Record<(typeof DATA_ARCHIVE_TABLES)[number], readonly ArchiveRow[]>;
@@ -187,14 +187,18 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       if (item === null || !Object.values(item).every(isScalar)) {
         return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ enthält eine ungültige Zeile.`) };
       }
-      checked.push(item as ArchiveRow);
+      // Archive v1 predates appearance settings. Only that explicit version
+      // receives defaults; malformed v2 archives still fail strict row checks.
+      checked.push(table === 'app_setting' && root['schemaVersion'] === 1
+        ? { ...item, design_theme: 'classic', density: 'comfortable' } as ArchiveRow
+        : item as ArchiveRow);
     }
     tables[table] = checked;
   }
 
   const images: ArchivedImage[] = [];
   if (rawImages.length > 10_000) {
-    return { ok: false, error: taktError('validation_error', 'Das Takt-Datenarchiv enthält zu viele Bildanhänge.') };
+    return { ok: false, error: taktError('validation_error', 'Das SuperTakt-Datenarchiv enthält zu viele Bildanhänge.') };
   }
   for (const rawImage of rawImages) {
     const image = record(rawImage);

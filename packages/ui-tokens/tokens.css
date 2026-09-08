@@ -651,3 +651,9 @@
     --focus-ring-width: 3px;
   }
 }
+
+/* Gestaltung ist unabhängig von Hell/Dunkel. */
+:root[data-design-theme="clear"] {
+  --sidebar-width: 13.5rem;
+  --text-2xs: 0.75rem;
+}

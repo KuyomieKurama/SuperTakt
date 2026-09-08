@@ -78,7 +78,7 @@ export function UpdateNotice() {
             Neues da ist, muss dafür keinen Dialog öffnen — A-18.6 verlangt,
             dass Takt die Fassung **anzeigt**.
           */}
-          Eine neuere Fassung von Takt ist verfügbar: <strong>{view.available}</strong>. Installiert
+          Eine neuere Fassung von SuperTakt ist verfügbar: <strong>{view.available}</strong>. Installiert
           ist {view.installed}.
         </p>
         <Button variant="secondary" size="sm" onClick={() => setOpened(true)}>

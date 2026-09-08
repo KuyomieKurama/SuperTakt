@@ -45,7 +45,7 @@ impl ResolveError {
         match self {
             ResolveError::LocalAppDataMissing => {
                 "Das lokale Anwendungsdatenverzeichnis (%LOCALAPPDATA%) ist nicht gesetzt. \
-                 Takt weicht bewusst nicht auf das Roaming-Profil aus, weil die Kundendatenbank \
+                 SuperTakt weicht bewusst nicht auf das Roaming-Profil aus, weil die Kundendatenbank \
                  dort auf einen Dateiserver kopiert und über die WAL-Dateien beschädigt würde."
             }
             ResolveError::HomeMissing => "Kein Benutzerverzeichnis gefunden.",
@@ -291,10 +291,10 @@ fn sync_warning(dir: &Path) -> Option<SyncFinding> {
     if text.starts_with("\\\\") {
         return Some(SyncFinding {
             warning: format!(
-                "Der Datenordner von Takt liegt auf einer Freigabe im Netz und nicht auf \
+                "Der Datenordner von SuperTakt liegt auf einer Freigabe im Netz und nicht auf \
                  einer Festplatte dieses Rechners: {text}"
             ),
-            detail: "Netzfreigabe über einen UNC-Pfad. Die Datenbank von Takt kann ihre \
+            detail: "Netzfreigabe über einen UNC-Pfad. Die Datenbank von SuperTakt kann ihre \
                      Dateien dort nicht zuverlässig sperren; greifen zwei Programme \
                      gleichzeitig zu, wird sie beschädigt."
                 .to_string(),
@@ -305,11 +305,11 @@ fn sync_warning(dir: &Path) -> Option<SyncFinding> {
     if drive_is_remote(dir) {
         return Some(SyncFinding {
             warning: format!(
-                "Der Datenordner von Takt liegt auf einem Netzlaufwerk und nicht auf einer \
+                "Der Datenordner von SuperTakt liegt auf einem Netzlaufwerk und nicht auf einer \
                  Festplatte dieses Rechners: {text}"
             ),
             detail: "Das Laufwerk meldet sich als Netzlaufwerk (DRIVE_REMOTE). Die Datenbank \
-                     von Takt kann ihre Dateien dort nicht zuverlässig sperren; greifen zwei \
+                     von SuperTakt kann ihre Dateien dort nicht zuverlässig sperren; greifen zwei \
                      Programme gleichzeitig zu, wird sie beschädigt."
                 .to_string(),
         });
@@ -332,7 +332,7 @@ fn sync_warning(dir: &Path) -> Option<SyncFinding> {
         if lowered.contains(marker) {
             return Some(SyncFinding {
                 warning: format!(
-                    "Der Datenordner von Takt liegt in einem Ordner, der laufend an einen \
+                    "Der Datenordner von SuperTakt liegt in einem Ordner, der laufend an einen \
                      anderen Ort kopiert wird: {text}"
                 ),
                 detail: "Der Pfad trägt den Namen eines Synchronisierungsdienstes. Die \

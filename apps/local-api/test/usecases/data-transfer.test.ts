@@ -130,6 +130,56 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
   let opened: OpenedDatabase | null = null;
   afterEach(() => { opened?.close(); opened = null; });
 
+  it('A-21.5: Archivfassung 2 stellt alle Darstellungseinstellungen wieder her', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    expect(archive.schemaVersion).toBe(2);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', now: NOW });
+    });
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'compact' });
+    });
+  });
+
+  it('A-21.5: liest Fassung 1 mit klassischer Gestaltung und erhält den alten Farbmodus', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    const legacyRows = archive.data.tables.app_setting.map((row) => {
+      const legacy = { ...row };
+      delete legacy['design_theme'];
+      delete legacy['density'];
+      return legacy;
+    });
+    const legacyArchive = { ...archive, schemaVersion: 1, data: { ...archive.data, tables: { ...archive.data.tables, app_setting: legacyRows } } };
+    expect((await importDataArchive(context, legacyArchive)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'classic', density: 'comfortable' });
+    });
+  });
+
+  it('A-21.5: unbekannte Fassungen verändern den aktuellen Bestand nicht', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ designTheme: 'clear', now: NOW });
+    });
+    expect((await importDataArchive(context, { ...archive, schemaVersion: 3 })).ok).toBe(false);
+    await database.transactions.inTransaction(async (unit) => {
+      expect((await unit.settings.load()).designTheme).toBe('clear');
+    });
+  });
+
   it('weist eine ungültige Bildkopie ab, bevor der Bestand ersetzt wird', async () => {
     const { database, context } = await setup();
     opened = database;

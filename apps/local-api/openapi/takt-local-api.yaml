@@ -3657,6 +3657,8 @@ paths:
                 roundingMode: { $ref: '#/components/schemas/RoundingMode' }
                 locale: { type: string, minLength: 2, maxLength: 35 }
                 theme: { type: string, enum: [system, light, dark] }
+                designTheme: { type: string, enum: [classic, clear] }
+                density: { type: string, enum: [comfortable, compact] }
                 skippedVersion:
                   oneOf:
                     - type: string
@@ -4208,7 +4210,7 @@ components:
       required: [format, schemaVersion, createdAt, generator, data, warnings]
       properties:
         format: { type: string, const: de.supertakt.data-archive }
-        schemaVersion: { type: integer, const: 1 }
+        schemaVersion: { type: integer, const: 2 }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
         data:
@@ -6345,7 +6347,7 @@ components:
       description: |
         Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
       required:
-        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, skippedVersion, updatedAt]
+        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, skippedVersion, updatedAt]
       properties:
         exportDirectory:
           oneOf: [{ type: string }, { type: 'null' }]
@@ -6354,6 +6356,8 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         locale: { type: string }
         theme: { type: string, enum: [system, light, dark] }
+        designTheme: { type: string, enum: [classic, clear] }
+        density: { type: string, enum: [comfortable, compact] }
         skippedVersion:
           oneOf: [{ $ref: '#/components/schemas/Version' }, { type: 'null' }]
           description: |

@@ -110,7 +110,7 @@ export function App() {
     <div className="shell">
       <header className="shell__bar">
         <span className="shell__brand">
-          Takt
+          SuperTakt
           <span className="shell__brand-sub">Todo aus E-Mail</span>
         </span>
         <button

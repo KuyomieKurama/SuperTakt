@@ -193,7 +193,7 @@ fn handshake_line(secret: &str, os_user: &str) -> Result<String, String> {
 
     if user.is_empty() {
         return Err(
-            "Der Windows-Benutzername ließ sich nicht vom Betriebssystem lesen. Takt startet den \
+            "Der Windows-Benutzername ließ sich nicht vom Betriebssystem lesen. SuperTakt startet den \
              lokalen Dienst nicht, weil ein Export ohne Urheber nicht nachvollziehbar wäre."
                 .to_string(),
         );
@@ -201,7 +201,7 @@ fn handshake_line(secret: &str, os_user: &str) -> Result<String, String> {
     if user.chars().count() > MAX_USER_LENGTH {
         return Err(format!(
             "Der vom Betriebssystem gelesene Benutzername ist länger als {MAX_USER_LENGTH} Zeichen. \
-             Takt startet den lokalen Dienst nicht."
+             SuperTakt startet den lokalen Dienst nicht."
         ));
     }
     if user.chars().any(|c| c.is_control()) {
@@ -209,7 +209,7 @@ fn handshake_line(secret: &str, os_user: &str) -> Result<String, String> {
         // die fremde Eingabe wörtlich wiedergibt, ist der bequemste Weg, ein
         // Protokoll zu fälschen.
         return Err(
-            "Der vom Betriebssystem gelesene Benutzername enthält Steuerzeichen. Takt startet den \
+            "Der vom Betriebssystem gelesene Benutzername enthält Steuerzeichen. SuperTakt startet den \
              lokalen Dienst nicht."
                 .to_string(),
         );
@@ -304,19 +304,19 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
 fn explain_exit(code: Option<i32>) -> (String, Option<String>) {
     match code {
         Some(74) => (
-            "Takt konnte den lokalen Dienst nicht starten, weil ein anderes Programm den \
-             Zugang belegt, über den Takt mit sich selbst spricht. Am häufigsten ist das Takt \
+            "SuperTakt konnte den lokalen Dienst nicht starten, weil ein anderes Programm den \
+             Zugang belegt, über den SuperTakt mit sich selbst spricht. Am häufigsten ist das SuperTakt \
              selbst: Läuft es vielleicht schon in einem anderen Fenster?"
                 .to_string(),
             Some(
-                "Der Port 17843 auf 127.0.0.1 ist belegt. Takt weicht bewusst nicht auf einen \
-                 anderen Port aus, weil sich sonst ein fremdes Programm als Takt ausgeben \
+                "Der Port 17843 auf 127.0.0.1 ist belegt. SuperTakt weicht bewusst nicht auf einen \
+                 anderen Port aus, weil sich sonst ein fremdes Programm als SuperTakt ausgeben \
                  könnte."
                     .to_string(),
             ),
         ),
         Some(78) => (
-            "Takt konnte den lokalen Dienst nicht starten, weil ihm beim Start etwas fehlte, \
+            "SuperTakt konnte den lokalen Dienst nicht starten, weil ihm beim Start etwas fehlte, \
              das er zum Speichern braucht."
                 .to_string(),
             Some(
@@ -327,7 +327,7 @@ fn explain_exit(code: Option<i32>) -> (String, Option<String>) {
         ),
         Some(0) => ("Der lokale Dienst wurde beendet.".to_string(), None),
         Some(_) | None => (
-            "Der lokale Dienst von Takt hat sich unerwartet beendet.".to_string(),
+            "Der lokale Dienst von SuperTakt hat sich unerwartet beendet.".to_string(),
             None,
         ),
     }

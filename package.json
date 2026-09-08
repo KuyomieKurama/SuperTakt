@@ -1,9 +1,9 @@
 {
-  "name": "takt",
+  "name": "supertakt",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Takt — lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export (E-001).",
+  "description": "SuperTakt — lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export (E-001).",
   "license": "MIT",
   "packageManager": "pnpm@11.3.0",
   "engines": {

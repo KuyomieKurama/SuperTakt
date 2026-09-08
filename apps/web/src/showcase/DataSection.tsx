@@ -280,7 +280,7 @@ export function DataSection() {
                 </>
               }
             >
-              Der lokale Dienst antwortet nicht. Prüfen Sie, ob Takt vollständig gestartet ist.
+              Der lokale Dienst antwortet nicht. Prüfen Sie, ob SuperTakt vollständig gestartet ist.
               Ihre Daten sind nicht verloren — sie liegen unverändert in der lokalen Datei.
             </InlineMessage>
           </div>

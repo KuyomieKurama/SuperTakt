@@ -225,9 +225,9 @@ describe("errorMessageWithRules — Dienstmeldung, um die betroffenen Regeln erg
   });
 
   it("Nicht-TaktApiError-Ursache (Transportfehler): unverändert wie errorMessage", () => {
-    const cause = new TaktTransportError("Der lokale Dienst antwortet nicht. Läuft Takt noch vollständig?");
+    const cause = new TaktTransportError("Der lokale Dienst antwortet nicht. Läuft SuperTakt noch vollständig?");
     expect(errorMessageWithRules(cause)).toBe(
-      "Der lokale Dienst antwortet nicht. Läuft Takt noch vollständig?",
+      "Der lokale Dienst antwortet nicht. Läuft SuperTakt noch vollständig?",
     );
   });
 

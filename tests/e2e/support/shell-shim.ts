@@ -201,7 +201,7 @@ export function installShellShim(args: ShellShimArgs): void {
     takt_quit: () => {
       if (args.quit === "resolve") return null;
       if (args.quit === "reject") {
-        throw new Error('E2E-Testfall: Die Nachbildung der Hülle weist „Takt beenden" ab.');
+        throw new Error('E2E-Testfall: Die Nachbildung der Hülle weist „SuperTakt beenden" ab.');
       }
       // 'hang': Genau der Fall, den O-AF behandelt — eine Zusage, die nie
       // ankommt, weil der Erfolgsfall der Tod des eigenen Prozesses ist.

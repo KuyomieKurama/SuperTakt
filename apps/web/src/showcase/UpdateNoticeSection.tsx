@@ -28,7 +28,7 @@ type DemoCase = "plain" | "rejected" | "busy";
 const PROBLEMS: Readonly<Record<DemoCase, string | null>> = {
   plain: null,
   rejected:
-    "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite.",
+    "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. SuperTakt öffnet dafür keine Seite.",
   busy: null,
 };
 
@@ -39,7 +39,7 @@ export function UpdateNoticeSection() {
     <Section
       id="fassung"
       title="12 — Wenn eine neuere Fassung vorliegt"
-      lead="Takt fragt, es lädt nicht. Der Dialog nennt beide Fassungen und die Release-Seite, und er trifft keine der beiden Antworten im Voraus."
+      lead="SuperTakt fragt, es lädt nicht. Der Dialog nennt beide Fassungen und die Release-Seite, und er trifft keine der beiden Antworten im Voraus."
       refs={["A-18.5", "A-18.6", "A-18.7", "A-18.8", "A-18.9", "A-18.10", "A-18.11"]}
     >
       <Card title="Die drei Zustände des Dialogs">

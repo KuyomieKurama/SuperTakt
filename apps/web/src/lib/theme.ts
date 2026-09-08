@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { DesignTheme, Density } from "@takt/domain";
 import type { ThemeSetting } from "./labels";
 
 /**
@@ -12,7 +13,7 @@ import type { ThemeSetting } from "./labels";
 export type ThemePreference = ThemeSetting;
 
 /** Zeilendichte der Tabellen und Listen. */
-export type Density = "comfortable" | "compact";
+export type { Density, DesignTheme };
 
 const THEME_ATTRIBUTE = "data-theme";
 const DENSITY_ATTRIBUTE = "data-density";
@@ -66,6 +67,15 @@ export function useDensity(
   }, []);
 
   return [density, set] as const;
+}
+
+/** Gestaltung und Farbmodus belegen getrennte Attribute und können kombiniert werden. */
+export function useDesignTheme(initial: DesignTheme = "classic") {
+  const [designTheme, setDesignTheme] = useState<DesignTheme>(initial);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-design-theme", designTheme);
+  }, [designTheme]);
+  return [designTheme, setDesignTheme] as const;
 }
 
 /** Meldet, ob der Benutzer reduzierte Bewegung angefordert hat. */

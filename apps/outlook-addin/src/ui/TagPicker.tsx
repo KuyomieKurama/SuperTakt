@@ -194,7 +194,7 @@ export function TagPicker({
 
       <p className="tagpicker__count" id={countId}>
         {flat.length === 0
-          ? 'In Takt sind noch keine Tags angelegt.'
+          ? 'In SuperTakt sind noch keine Tags angelegt.'
           : filtered.length === flat.length
             ? `${String(flat.length)} Tags`
             : `${String(filtered.length)} von ${String(flat.length)} Tags`}
@@ -232,7 +232,7 @@ export function TagPicker({
         {visible.length === 0 ? (
           <li className="tagpicker__none">
             {flat.length === 0
-              ? 'Noch keine Tags in Takt. Das Todo lässt sich trotzdem anlegen — es bekommt dann die Standard-Tags, und ein neuer Name lässt sich oben eingeben.'
+              ? 'Noch keine Tags in SuperTakt. Das Todo lässt sich trotzdem anlegen — es bekommt dann die Standard-Tags, und ein neuer Name lässt sich oben eingeben.'
               : 'Kein Tag passt zu dieser Suche.'}
           </li>
         ) : null}

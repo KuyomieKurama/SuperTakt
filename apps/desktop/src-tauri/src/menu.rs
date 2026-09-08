@@ -12,7 +12,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuild
 use tauri::{AppHandle, Emitter, Manager};
 
 pub fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let quit = MenuItemBuilder::with_id("takt.beenden", "Takt beenden")
+    let quit = MenuItemBuilder::with_id("takt.beenden", "SuperTakt beenden")
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
@@ -20,9 +20,9 @@ pub fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
 
-    let about = MenuItemBuilder::with_id("takt.ueber", "Über Takt").build(app)?;
+    let about = MenuItemBuilder::with_id("takt.ueber", "Über SuperTakt").build(app)?;
 
-    let application = SubmenuBuilder::new(app, "Takt")
+    let application = SubmenuBuilder::new(app, "SuperTakt")
         .item(&settings)
         .separator()
         .item(&quit)

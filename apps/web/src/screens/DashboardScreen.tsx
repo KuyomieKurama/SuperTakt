@@ -134,7 +134,7 @@ export function DashboardScreen() {
   }, [today], [version]);
 
   return (
-    <section className="screen">
+    <section className="screen screen--dashboard">
       {/*
         Kein `lead` (T-181, ST-10). Die drei Glieder des Satzes waren die
         Namen dreier beschrifteter Flaechen im selben Blickfeld: Karte
@@ -276,7 +276,7 @@ export function DashboardScreen() {
                   }
                 >
                   {value.previewProblem} Wie viel Zeit erfasst ist, steht fest — wie viele
-                  Exportzeilen und Stunden daraus werden, weiß Takt gerade nicht und rät es
+                  Exportzeilen und Stunden daraus werden, weiß SuperTakt gerade nicht und rät es
                   nicht. Solange fehlt hier auch die Prüfung, ob eine Tagesgruppe ohne
                   Leistung dasteht.
                 </InlineMessage>
@@ -309,7 +309,7 @@ export function DashboardScreen() {
                       compact
                       icon="inbox"
                       title="Noch kein Todo"
-                      description="Takt erfasst Zeit auf Todos. Legen Sie das erste an."
+                      description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an."
                       action={
                         <Button variant="primary" iconStart="plus" onClick={() => setFormOpen(true)}>
                           Neues Todo
