@@ -10,14 +10,14 @@
 //!
 //! ```text
 //!   1  Einzelinstanz sichern      B-1.6 Punkt 5
-//!   2  Datenverzeichnis anlegen   E-018, B-7.2 — vor dem Dienst, damit alles,
+//!   2  Startgeheimnis erzeugen    B-1.6 Punkt 2
+//!   3  Datenverzeichnis anlegen   E-018, B-7.2 — vor dem Dienst, damit alles,
 //!                                 was er hineinschreibt, die engen Rechte erbt
-//!   3  Startgeheimnis erzeugen    B-1.6 Punkt 2
 //!   4  Benutzernamen lesen        E-010, B-8.1 — vom Betriebssystem, nicht
 //!                                 aus der Umgebung
 //!   5  Sidecar starten            Geheimnis und Benutzername über `stdin`,
 //!                                 zwei Zeilen, ein Schreibvorgang (E-042)
-//!   6  Fenster zeigen
+//!   Das Fenster kann während 3–5 bereits die Ladeansicht darstellen.
 //! ```
 
 mod appdata;
@@ -41,10 +41,34 @@ use sidecar::{ExitReason, Handshake, Service};
 /// oder das Verzeichnis in einem Synchronisierungsordner liegt. Sie sagt es.
 /// Ein Abbruch wäre hier falsch: Der Benutzer stünde ohne Anwendung und ohne
 /// Möglichkeit da, den Zustand zu ändern (B-7.2 Punkt 3).
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Startup {
     directory: Option<DirectoryReport>,
     problems: Vec<String>,
+}
+
+// Await preparation without blocking the window's event loop. All callers
+// share the same result, including failures from the worker.
+enum StartupResult {
+    Pending(tauri::async_runtime::JoinHandle<Startup>),
+    Ready(Startup),
+}
+struct StartupState(tauri::async_runtime::Mutex<StartupResult>);
+impl StartupState {
+    async fn ready(&self) -> Startup {
+        let mut state = self.0.lock().await;
+        if let StartupResult::Pending(task) = &mut *state {
+            let result = task.await.unwrap_or_else(|_| Startup {
+                directory: None,
+                problems: vec!["Die Startvorbereitung ist fehlgeschlagen. Bitte starten Sie SuperTakt erneut.".into()],
+            });
+            *state = StartupResult::Ready(result);
+        }
+        match &*state {
+            StartupResult::Ready(result) => result.clone(),
+            StartupResult::Pending(_) => unreachable!(),
+        }
+    }
 }
 
 /// Zustand der Hülle für die Oberfläche.
@@ -63,8 +87,9 @@ struct ShellState {
 /// Sicherheitsrichtlinie des Fensters in `tauri.conf.json` eng gesetzt und die
 /// Fähigkeitenliste kurz.
 #[tauri::command]
-fn takt_service_handshake(service: tauri::State<'_, Service>) -> Handshake {
-    service.handshake()
+async fn takt_service_handshake(service: tauri::State<'_, Service>, startup: tauri::State<'_, StartupState>) -> Result<Handshake, String> {
+    startup.ready().await;
+    Ok(service.handshake())
 }
 
 /// Der Windows-Benutzername (E-010).
@@ -79,12 +104,13 @@ fn takt_os_user() -> OsUser {
 
 /// Ablageort, Rechte und Warnungen (E-018, B-7.1, B-7.2).
 #[tauri::command]
-fn takt_shell_state(app: tauri::AppHandle, startup: tauri::State<'_, Startup>) -> ShellState {
-    ShellState {
+async fn takt_shell_state(app: tauri::AppHandle, startup: tauri::State<'_, StartupState>) -> Result<ShellState, String> {
+    let startup = startup.ready().await;
+    Ok(ShellState {
         directory: startup.directory.clone(),
         problems: startup.problems.clone(),
         service_exit: app.state::<Service>().exit_reason(),
-    }
+    })
 }
 
 /// Beendet den Dienst und danach die Anwendung.
@@ -122,67 +148,69 @@ pub fn run() {
         .setup(|app| {
             let started = std::time::Instant::now();
             eprintln!("[start] phase=setup elapsed_ms=0");
-            let mut startup = Startup::default();
-
-            // 2 — Datenverzeichnis, **vor** dem Dienst.
-            match appdata::resolve(&appdata::current_environment()) {
-                Ok(dir) => match appdata::prepare(&dir) {
-                    Ok(report) => {
-                        if !report.permissions_applied {
-                            startup.problems.push(report.permissions_detail.clone());
-                        }
-
-                        // Die Ordnerwarnung geht **nicht** zusätzlich hierher
-                        // (T-020b). Sie stand hier, solange sie sonst nirgends
-                        // erschienen wäre; seit die Oberfläche sie an ihrem
-                        // eigenen Platz zeigt, wäre die zweite Ablage doppelt —
-                        // und die Überschrift dieser Liste, „Takt ist nicht
-                        // vollständig gestartet", ist für sie schlicht falsch:
-                        // Takt läuft, der Ordner liegt nur an einer Stelle, an
-                        // der er nicht liegen sollte.
-                        //
-                        // `report.sync_warning` und `report.sync_detail`
-                        // bleiben unverändert und gehen über `directory` an die
-                        // Oberfläche.
-                        startup.directory = Some(report);
-                    }
-                    Err(error) => startup.problems.push(format!(
-                        "Das Anwendungsdatenverzeichnis {} ließ sich nicht anlegen: {error}",
-                        dir.display()
-                    )),
-                },
-                Err(reason) => startup.problems.push(reason.message().to_string()),
-            }
-
-            eprintln!("[start] phase=directory_ready elapsed_ms={}", started.elapsed().as_millis());
-
-            // 3 — Startgeheimnis.
             let service = Service::new().map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             app.manage(service);
             app.manage(idle::IdleMonitor::start());
-
-            // 4 — Der Benutzername, vom Betriebssystem (E-010, B-8.1). Er geht
-            // als zweite Startzeile an den Dienst (E-042) und ist dort Pflicht:
-            // Ohne ihn startet er nicht, weil ein Export ohne Urheber nicht
-            // nachvollziehbar wäre.
-            //
-            // Bewusst der **nackte** Name und nicht `qualified_name`. A-8.5
-            // nennt das Feld `WindowsUser`, nicht `Domäne und Benutzer`; ob das
-            // Abrechnungstool die Domäne erwartet, ist offen (B-8.2 Punkt 4).
-            // Beide Werte stehen der Oberfläche über `takt_os_user` zur
-            // Verfügung, damit die Antwort auf diese Frage keine Änderung an
-            // der Startkette braucht.
-            let os_user = identity::current();
-
-            // 5 — Sidecar. Ein Fehlschlag beendet Takt nicht: Das Fenster soll
-            // erscheinen und den Grund nennen können.
-            if let Err(error) = sidecar::start(app.handle(), &os_user.name) {
-                startup.problems.push(error);
-            }
-
-            eprintln!("[start] phase=sidecar_spawned elapsed_ms={}", started.elapsed().as_millis());
             menu::install(app.handle())?;
-            app.manage(startup);
+            let handle = app.handle().clone();
+            let preparation = tauri::async_runtime::spawn_blocking(move || {
+                let mut startup = Startup::default();
+
+                // 3 — Datenverzeichnis, **vor** dem Dienst.
+                match appdata::resolve(&appdata::current_environment()) {
+                    Ok(dir) => match appdata::prepare(&dir) {
+                        Ok(report) => {
+                            if !report.permissions_applied {
+                                startup.problems.push(report.permissions_detail.clone());
+                            }
+
+                            // Die Ordnerwarnung geht **nicht** zusätzlich hierher
+                            // (T-020b). Sie stand hier, solange sie sonst nirgends
+                            // erschienen wäre; seit die Oberfläche sie an ihrem
+                            // eigenen Platz zeigt, wäre die zweite Ablage doppelt —
+                            // und die Überschrift dieser Liste, „Takt ist nicht
+                            // vollständig gestartet", ist für sie schlicht falsch:
+                            // Takt läuft, der Ordner liegt nur an einer Stelle, an
+                            // der er nicht liegen sollte.
+                            //
+                            // `report.sync_warning` und `report.sync_detail`
+                            // bleiben unverändert und gehen über `directory` an die
+                            // Oberfläche.
+                            startup.directory = Some(report);
+                        }
+                        Err(error) => startup.problems.push(format!(
+                            "Das Anwendungsdatenverzeichnis {} ließ sich nicht anlegen: {error}",
+                            dir.display()
+                        )),
+                    },
+                    Err(reason) => startup.problems.push(reason.message().to_string()),
+                }
+
+                eprintln!("[start] phase=directory_ready elapsed_ms={}", started.elapsed().as_millis());
+
+                // 4 — Der Benutzername, vom Betriebssystem (E-010, B-8.1). Er geht
+                // als zweite Startzeile an den Dienst (E-042) und ist dort Pflicht:
+                // Ohne ihn startet er nicht, weil ein Export ohne Urheber nicht
+                // nachvollziehbar wäre.
+                //
+                // Bewusst der **nackte** Name und nicht `qualified_name`. A-8.5
+                // nennt das Feld `WindowsUser`, nicht `Domäne und Benutzer`; ob das
+                // Abrechnungstool die Domäne erwartet, ist offen (B-8.2 Punkt 4).
+                // Beide Werte stehen der Oberfläche über `takt_os_user` zur
+                // Verfügung, damit die Antwort auf diese Frage keine Änderung an
+                // der Startkette braucht.
+                let os_user = identity::current();
+
+                // 5 — Sidecar. Ein Fehlschlag beendet Takt nicht: Das Fenster soll
+                // erscheinen und den Grund nennen können.
+                if let Err(error) = sidecar::start(&handle, &os_user.name) {
+                    startup.problems.push(error);
+                }
+
+                eprintln!("[start] phase=sidecar_spawned elapsed_ms={}", started.elapsed().as_millis());
+                startup
+            });
+            app.manage(StartupState(tauri::async_runtime::Mutex::new(StartupResult::Pending(preparation))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -236,4 +264,35 @@ pub fn run() {
             handle.state::<Service>().stop();
         }
     });
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+
+    #[test]
+    fn preparation_is_shared_and_does_not_block_async_work() {
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = tauri::async_runtime::spawn_blocking(move || {
+            receive.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+            Startup { directory: None, problems: vec!["test finding".into()] }
+        });
+        let state = std::sync::Arc::new(StartupState(tauri::async_runtime::Mutex::new(StartupResult::Pending(worker))));
+        tauri::async_runtime::block_on(async {
+            let reader = state.clone();
+            let result = tauri::async_runtime::spawn(async move { reader.ready().await });
+            tauri::async_runtime::spawn(async move { send.send(()).unwrap(); }).await.unwrap();
+            assert_eq!(result.await.unwrap().problems, vec!["test finding"]);
+            assert_eq!(state.ready().await.problems, vec!["test finding"]);
+        });
+    }
+
+    #[test]
+    fn failed_worker_becomes_a_visible_startup_problem() {
+        let worker = tauri::async_runtime::spawn_blocking(|| -> Startup { panic!("test worker failure") });
+        let state = StartupState(tauri::async_runtime::Mutex::new(StartupResult::Pending(worker)));
+        let result = tauri::async_runtime::block_on(state.ready());
+        assert_eq!(result.problems.len(), 1);
+        assert!(result.directory.is_none());
+    }
 }

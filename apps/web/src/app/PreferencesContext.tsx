@@ -6,6 +6,7 @@ import { updateSettings } from "../api/endpoints";
 import { useDensity, useDesignTheme, useThemePreference, type Density, type DesignTheme, type ThemePreference } from "../lib/theme";
 import { useStructure } from "./StructureContext";
 import { useToasts } from "./ToastContext";
+import { cacheAppearance, startupAppearance } from "../lib/startupAppearance";
 
 /**
  * Darstellung und Timerverhalten (A-21.4, A-22.1) sind unabhängig.
@@ -38,9 +39,10 @@ const PreferencesContext = createContext<PreferencesApi | null>(null);
 export function PreferencesProvider({ children }: { readonly children: ReactNode }) {
   const structure = useStructure();
   const toasts = useToasts();
-  const [designTheme, setDesignThemeLocal] = useDesignTheme("classic");
-  const [theme, setThemeLocal] = useThemePreference("system", themePreset(designTheme).mode);
-  const [density, setDensityLocal] = useDensity("comfortable");
+  const [initialAppearance] = useState(startupAppearance);
+  const [designTheme, setDesignThemeLocal] = useDesignTheme(initialAppearance.designTheme);
+  const [theme, setThemeLocal] = useThemePreference(initialAppearance.theme, themePreset(designTheme).mode);
+  const [density, setDensityLocal] = useDensity(initialAppearance.density);
   const [promptOnTimerStop, setPromptOnTimerStopLocal] = useState(true);
   const [idleKeepTimerRunning, setIdleKeepTimerRunningLocal] = useState(true);
   const [idleDetectionEnabled, setIdleDetectionEnabledLocal] = useState(true);
@@ -58,7 +60,8 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const storedIdle = settings?.idleDetectionEnabled;
   const storedThreshold = settings?.idleThresholdMinutes;
 
-  const apply = useCallback((value: PreferenceValues) => {
+  const apply = useCallback((value: PreferenceValues, persistAppearance = true) => {
+    if (persistAppearance) cacheAppearance(value);
     setThemeLocal(value.theme);
     setDesignThemeLocal(value.designTheme);
     setDensityLocal(value.density);
@@ -79,7 +82,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
     const previous = { theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes };
     inFlight.current = true;
     setSaving(true);
-    apply({ ...previous, ...patch });
+    apply({ ...previous, ...patch }, false);
     void updateSettings(patch)
       .then((saved) => {
         apply(saved);

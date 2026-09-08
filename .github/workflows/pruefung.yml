@@ -94,7 +94,7 @@ jobs:
       - name: Chromium bereitstellen
         run: pnpm exec playwright install --with-deps chromium
       - name: Rückkehrdialog und Timer-Einstellung im Browser prüfen
-        run: pnpm exec playwright test --config tests/e2e/playwright.config.ts tests/e2e/idle-recovery.spec.ts tests/e2e/timer-prompt-setting.spec.ts --retries=0
+        run: pnpm exec playwright test --config tests/e2e/playwright.config.ts tests/e2e/idle-recovery.spec.ts tests/e2e/timer-prompt-setting.spec.ts tests/e2e/startup-appearance.spec.ts --retries=0
       - name: Prüfbilder und Fehlerberichte aufbewahren
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

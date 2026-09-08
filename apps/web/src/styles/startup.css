@@ -1,0 +1,8 @@
+@import '@takt/ui-tokens/tokens.css';
+@import './theme-palettes.css';
+
+html, body {
+  margin: 0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+}
