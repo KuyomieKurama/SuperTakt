@@ -43,7 +43,7 @@
     "sidecar:verify": "pnpm --filter @takt/desktop sidecar:verify",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
-    "test:rust": "cd apps/desktop/src-tauri && cargo test --lib",
+    "test:rust": "pnpm --filter @takt/desktop rust:test",
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts && pnpm run test:e2e:version-check && pnpm run test:e2e:attachment-persistence",
     "test:e2e:attachment-persistence": "playwright test -c tests/e2e/playwright.attachment-persistence.config.ts",
     "test:e2e:version-check": "playwright test -c tests/e2e/playwright.version-check.config.ts",

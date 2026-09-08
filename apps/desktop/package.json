@@ -15,6 +15,8 @@
     "sidecar": "node scripts/build-sidecar.mjs",
     "sidecar:verify": "node scripts/verify-sidecar.mjs",
     "sidecar:checksums": "node scripts/verify-node-checksums.mjs",
+    "rust:test:prepare": "node scripts/prepare-rust-test.mjs",
+    "rust:test": "node scripts/prepare-rust-test.mjs && cd src-tauri && cargo test --lib",
     "taskpane": "node scripts/build-taskpane.mjs",
     "taskpane:dev": "node scripts/build-taskpane.mjs --dev",
     "licenses": "node scripts/collect-licenses.mjs",
