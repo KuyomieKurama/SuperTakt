@@ -28,6 +28,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   todo_note: { columns: ['todo_id', 'body', 'updated_at'], orderBy: 'todo_id' },
   todo_tag: { columns: ['todo_id', 'tag_id', 'created_at'], orderBy: 'todo_id, tag_id' },
   time_entry: { columns: ['id', 'todo_id', 'started_at', 'ended_at', 'note', 'export_status', 'export_count', 'source', 'created_at', 'updated_at'], orderBy: 'started_at, id' },
+  timer_idle: { columns: ['id', 'session_id', 'todo_id', 'started_at', 'returned_at', 'note'], orderBy: 'id' },
   timer_heartbeat: { columns: ['time_entry_id', 'seen_at'], orderBy: 'time_entry_id' },
   todo_attachment_kind: { columns: ['kind'], orderBy: 'kind' },
   todo_attachment: { columns: ['id', 'todo_id', 'kind', 'title', 'target', 'position', 'created_at'], orderBy: 'todo_id, position, id' },
@@ -39,12 +40,12 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   export_run_group: { columns: ['id', 'export_run_id', 'todo_id', 'day', 'seconds', 'quarters'], orderBy: 'export_run_id, day, todo_id' },
   export_run_entry: { columns: ['export_run_group_id', 'time_entry_id', 'duration_seconds'], orderBy: 'export_run_group_id, time_entry_id' },
   export_audit: { columns: ['id', 'time_entry_id', 'event', 'previous_status', 'new_status', 'export_run_id', 'export_run_group_id', 'actor', 'reason', 'occurred_at'], orderBy: 'occurred_at, id' },
-  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version'], orderBy: 'id' },
+  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running'], orderBy: 'id' },
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [
   'todo_status', 'tag_folder', 'tag', 'todo_attachment_kind', 'todo', 'todo_note',
-  'todo_tag', 'time_entry', 'timer_heartbeat', 'todo_attachment', 'pool', 'pool_rule',
+  'todo_tag', 'time_entry', 'timer_heartbeat', 'timer_idle', 'todo_attachment', 'pool', 'pool_rule',
   'default_tag', 'export_template', 'export_run', 'export_run_group',
   'export_run_entry', 'export_audit', 'app_setting',
 ];
@@ -100,6 +101,15 @@ export function createDataArchivePort(conn: SqlConnection): DataArchivePort {
     },
 
     async replaceAll(tables: DataArchiveTables): Promise<void> {
+      const idle = tables.timer_idle[0];
+      const running = tables.time_entry.find(row => row['ended_at'] === null);
+      if (idle !== undefined && running !== undefined) {
+        const returned = idle['returned_at'];
+        const valid = returned === null
+          ? running['id'] === idle['session_id'] && String(running['started_at']) <= String(idle['started_at'])
+          : String(running['started_at']) >= String(returned);
+        if (!valid) throw new Error('Laufender Timer und Inaktivitätsphase im Datenarchiv überschneiden sich ungültig.');
+      }
       // Vollständig prüfen, bevor der erste bestehende Datensatz angefasst wird.
       for (const table of INSERT_ORDER) {
         const columns = TABLES[table].columns;

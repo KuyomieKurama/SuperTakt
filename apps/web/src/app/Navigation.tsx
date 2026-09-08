@@ -48,6 +48,9 @@ const ITEMS: readonly NavItem[] = [
 ];
 
 export interface NavigationProps {
+  readonly installedVersion?: string | null;
+  readonly availableVersion?: string | null;
+  readonly onOpenUpdate?: () => void;
   readonly active: RouteName;
   /** Zahl offener Todos am Punkt „Todos“. `null`, solange sie unbekannt ist. */
   readonly openTodoCount: number | null;
@@ -55,7 +58,7 @@ export interface NavigationProps {
   readonly openEntryCount: number | null;
 }
 
-export function Navigation({ active, openTodoCount, openEntryCount }: NavigationProps) {
+export function Navigation({ active, openTodoCount, openEntryCount, installedVersion, availableVersion, onOpenUpdate }: NavigationProps) {
   return (
     <nav className="nav" aria-label="Hauptnavigation">
       <ul className="nav__list">
@@ -76,7 +79,11 @@ export function Navigation({ active, openTodoCount, openEntryCount }: Navigation
                 : null;
 
           return (
-            <li key={item.route}>
+            <li key={item.route} className={cx(
+              item.route === "time" && "nav__section-start",
+              item.route === "tags" && "nav__section-start",
+              item.route === "settings" && "nav__settings",
+            )}>
               <a
                 className={cx("nav__item", current && "nav__item--current")}
                 href={href(item.route)}
@@ -110,6 +117,11 @@ export function Navigation({ active, openTodoCount, openEntryCount }: Navigation
           );
         })}
       </ul>
+      <div className="nav__version">
+        {availableVersion ? <button type="button" className="nav__update" onClick={onOpenUpdate}>
+          <span>v{installedVersion ?? "—"}</span><span><Icon name="arrow-up-right" size={12} /> v{availableVersion} verfügbar</span>
+        </button> : <span>{installedVersion ? `Version ${installedVersion}` : "Version unbekannt"}</span>}
+      </div>
     </nav>
   );
 }

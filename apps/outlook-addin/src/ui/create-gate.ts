@@ -75,7 +75,7 @@ const REASON = Object.freeze({
   title: 'Der Titel fehlt.',
   due_date: 'Die Frist stimmt noch nicht.',
   loading: 'Die Tags werden noch geladen.',
-  failed: 'Keine Verbindung zu Takt.',
+  failed: 'Keine Verbindung zu SuperTakt.',
 });
 
 /**

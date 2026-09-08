@@ -318,6 +318,8 @@ describe('toAppSettings', () => {
       active_export_template_id: null,
       rounding_mode: 'up',
       locale: 'de-DE',
+      idle_detection_enabled: 1,
+      idle_threshold_minutes: 5,
       theme: 'light',
       updated_at: 'a',
     };
@@ -332,6 +334,8 @@ describe('toAppSettings', () => {
       active_export_template_id: null,
       rounding_mode: 'nearest',
       locale: 'de-DE',
+      idle_detection_enabled: 1,
+      idle_threshold_minutes: 5,
       theme: 'system',
       updated_at: 'a',
     });

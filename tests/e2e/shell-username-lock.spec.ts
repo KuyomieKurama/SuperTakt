@@ -99,19 +99,19 @@ test.describe('O-AJ — Windows-Benutzername mit Richtungszeichen sperrt Takt', 
       await page.goto('/#/');
 
       const dialog = page.getByRole('alertdialog', {
-        name: 'Takt kann unter diesem Windows-Benutzernamen nicht arbeiten',
+        name: 'SuperTakt kann unter diesem Windows-Benutzernamen nicht arbeiten',
       });
       await expect(dialog).toBeVisible();
       await expect(dialog).toHaveAttribute('aria-modal', 'true');
 
       // Die Sperrmeldung zum Dienstausfall bleibt aus — die Ursache hat
       // Vorrang vor dem zweiten Zustand (`ShellStatus.tsx`, „Zusammenstellung").
-      await expect(page.getByRole('alertdialog', { name: 'Takt kann im Moment nichts speichern' })).toHaveCount(
+      await expect(page.getByRole('alertdialog', { name: 'SuperTakt kann im Moment nichts speichern' })).toHaveCount(
         0,
       );
 
       // Fokus liegt nach dem Öffnen auf dem einzigen Knopf (`focusFirstWithin`).
-      const quitButton = dialog.getByRole('button', { name: 'Takt beenden' });
+      const quitButton = dialog.getByRole('button', { name: 'SuperTakt beenden' });
       await expect(quitButton).toBeFocused();
 
       // Tab hält den Fokus im Dialog (`keepTabInside`, SC 2.4.3) — mit genau

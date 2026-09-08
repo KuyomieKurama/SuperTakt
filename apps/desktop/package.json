@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Takt — Tauri-Hülle: Fenster, Lebenszyklus des Sidecars, Windows-Benutzername (E-003, E-004, E-010, E-018).",
+  "description": "SuperTakt — Tauri-Hülle: Fenster, Lebenszyklus des Sidecars, Windows-Benutzername (E-003, E-004, E-010, E-018).",
   "license": "MIT",
   "exports": {
     "./shell": "./src/shell.ts",

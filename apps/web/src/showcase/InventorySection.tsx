@@ -176,7 +176,7 @@ const INVENTORY: readonly InventoryEntry[] = [
     name: "Ordnerbefund",
     file: "ExportDirectoryField.tsx",
     purpose:
-      "Was an einem Pfad auffällt, mit Grund und Beleg. Erklärt, statt zu verbieten — abgewiesen wird nur, wohin nichts gehört, was Takt schreibt.",
+      "Was an einem Pfad auffällt, mit Grund und Beleg. Erklärt, statt zu verbieten — abgewiesen wird nur, wohin nichts gehört, was SuperTakt schreibt.",
     states: "abgewiesen · Rückfrage · Hinweis · nichts aufgefallen",
     screens: "S-07 · S-09",
     built: true,
@@ -344,7 +344,7 @@ const INVENTORY: readonly InventoryEntry[] = [
   {
     name: "Vermerk- und Leistungsfeld",
     file: "NoteField.tsx",
-    purpose: "Zwei Feldarten: Leistung geht in den Export, Vermerk bleibt in Takt (E-016).",
+    purpose: "Zwei Feldarten: Leistung geht in den Export, Vermerk bleibt in SuperTakt (E-016).",
     states: "normal · Zeiger · fokussiert · fehlerhaft · gesperrt · deaktiviert · mit Zähler",
     screens: "S-03 · S-05 · S-06 · S-12",
     built: true,

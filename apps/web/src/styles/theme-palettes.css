@@ -1,0 +1,488 @@
+/* Built-in color palettes for the classic layout.
+ * Color references: Super Productivity src/assets/themes, Catppuccin palette,
+ * and Nord. See docs/design/theme-palettes.md. Component styles are local.
+ */
+
+:root[data-design-theme="arc"] {
+  --preset-canvas: #2d323d;
+  --preset-surface: #383c4a;
+  --preset-ink: #d3dae3;
+  --preset-muted: #bfc5cf;
+  --preset-accent: #5294e2;
+  --preset-link: #a3c0e3;
+  --preset-on: #101010;
+  --preset-accent-hover: #5c9ae4;
+  --preset-accent-active: #639fe5;
+}
+
+:root[data-design-theme="cybr"] {
+  --preset-canvas: #030408;
+  --preset-surface: #0a0e1a;
+  --preset-ink: #d5d8e2;
+  --preset-muted: #a8acb6;
+  --preset-accent: #29becc;
+  --preset-link: #29becc;
+  --preset-on: #101010;
+  --preset-accent-hover: #36c2cf;
+  --preset-accent-active: #3ec4d1;
+}
+
+:root[data-design-theme="dark-base"] {
+  --preset-canvas: #0a0a0a;
+  --preset-surface: #141414;
+  --preset-ink: #e0e0e0;
+  --preset-muted: #b3b3b3;
+  --preset-accent: #ff4081;
+  --preset-link: #fd4a87;
+  --preset-on: #101010;
+  --preset-accent-hover: #ff4b89;
+  --preset-accent-active: #ff538e;
+}
+
+:root[data-design-theme="dracula"] {
+  --preset-canvas: #282a36;
+  --preset-surface: #2c2e3a;
+  --preset-ink: #f8f8f2;
+  --preset-muted: #cbccca;
+  --preset-accent: #bd93f9;
+  --preset-link: #c39df8;
+  --preset-on: #101010;
+  --preset-accent-hover: #c199f9;
+  --preset-accent-active: #c49efa;
+}
+
+:root[data-design-theme="everfrost"] {
+  --preset-canvas: #fdf6e3;
+  --preset-surface: #fffbf0;
+  --preset-ink: #4b5961;
+  --preset-muted: #59666c;
+  --preset-accent: #667800;
+  --preset-link: #5e6f1b;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #617201;
+  --preset-accent-active: #5d6e02;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="everfrost"]:not([data-theme="light"]) {
+  --preset-canvas: #2d353b;
+  --preset-surface: #343f44;
+  --preset-ink: #d3c6aa;
+  --preset-muted: #cdc1a6;
+  --preset-accent: #a7c080;
+  --preset-link: #b6c28e;
+  --preset-on: #101010;
+  --preset-accent-hover: #acc488;
+  --preset-accent-active: #b0c68d;
+  }
+}
+
+:root[data-design-theme="everfrost"][data-theme="dark"] {
+  --preset-canvas: #2d353b;
+  --preset-surface: #343f44;
+  --preset-ink: #d3c6aa;
+  --preset-muted: #cdc1a6;
+  --preset-accent: #a7c080;
+  --preset-link: #b6c28e;
+  --preset-on: #101010;
+  --preset-accent-hover: #acc488;
+  --preset-accent-active: #b0c68d;
+}
+
+:root[data-design-theme="glass"] {
+  --preset-canvas: #eef1f5;
+  --preset-surface: #ffffff;
+  --preset-ink: #252932;
+  --preset-muted: #55585f;
+  --preset-accent: #3866ad;
+  --preset-link: #3866ad;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #3661a4;
+  --preset-accent-active: #345d9d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="glass"]:not([data-theme="light"]) {
+  --preset-canvas: #131314;
+  --preset-surface: #232326;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbbbc;
+  --preset-accent: #83b9f3;
+  --preset-link: #83b9f3;
+  --preset-on: #101010;
+  --preset-accent-hover: #8abdf4;
+  --preset-accent-active: #8fc0f4;
+  }
+}
+
+:root[data-design-theme="glass"][data-theme="dark"] {
+  --preset-canvas: #131314;
+  --preset-surface: #232326;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbbbc;
+  --preset-accent: #83b9f3;
+  --preset-link: #83b9f3;
+  --preset-on: #101010;
+  --preset-accent-hover: #8abdf4;
+  --preset-accent-active: #8fc0f4;
+}
+
+:root[data-design-theme="lines"] {
+  --preset-canvas: #fafafa;
+  --preset-surface: #fafafa;
+  --preset-ink: #292929;
+  --preset-muted: #575757;
+  --preset-accent: #455a80;
+  --preset-link: #455a80;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #425679;
+  --preset-accent-active: #405375;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="lines"]:not([data-theme="light"]) {
+  --preset-canvas: #17191c;
+  --preset-surface: #17191c;
+  --preset-ink: #e1e5ea;
+  --preset-muted: #b5b8bd;
+  --preset-accent: #97b4de;
+  --preset-link: #97b4de;
+  --preset-on: #101010;
+  --preset-accent-hover: #9db9e0;
+  --preset-accent-active: #a1bce1;
+  }
+}
+
+:root[data-design-theme="lines"][data-theme="dark"] {
+  --preset-canvas: #17191c;
+  --preset-surface: #17191c;
+  --preset-ink: #e1e5ea;
+  --preset-muted: #b5b8bd;
+  --preset-accent: #97b4de;
+  --preset-link: #97b4de;
+  --preset-on: #101010;
+  --preset-accent-hover: #9db9e0;
+  --preset-accent-active: #a1bce1;
+}
+
+:root[data-design-theme="liquid-glass"] {
+  --preset-canvas: #e9f0fa;
+  --preset-surface: #f8fbff;
+  --preset-ink: #20314c;
+  --preset-muted: #505d73;
+  --preset-accent: #2563bd;
+  --preset-link: #2563bd;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #245eb3;
+  --preset-accent-active: #235bac;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="liquid-glass"]:not([data-theme="light"]) {
+  --preset-canvas: #101826;
+  --preset-surface: #1c293c;
+  --preset-ink: #e9f2ff;
+  --preset-muted: #bcc6d4;
+  --preset-accent: #8cc4ff;
+  --preset-link: #8cc4ff;
+  --preset-on: #101010;
+  --preset-accent-hover: #93c8ff;
+  --preset-accent-active: #98caff;
+  }
+}
+
+:root[data-design-theme="liquid-glass"][data-theme="dark"] {
+  --preset-canvas: #101826;
+  --preset-surface: #1c293c;
+  --preset-ink: #e9f2ff;
+  --preset-muted: #bcc6d4;
+  --preset-accent: #8cc4ff;
+  --preset-link: #8cc4ff;
+  --preset-on: #101010;
+  --preset-accent-hover: #93c8ff;
+  --preset-accent-active: #98caff;
+}
+
+:root[data-design-theme="nord-polar-night"] {
+  --preset-canvas: #2e3440;
+  --preset-surface: #3b4252;
+  --preset-ink: #eceff4;
+  --preset-muted: #ced2d8;
+  --preset-accent: #88c0d0;
+  --preset-link: #a6cedb;
+  --preset-on: #101010;
+  --preset-accent-hover: #8fc4d3;
+  --preset-accent-active: #94c6d5;
+}
+
+:root[data-design-theme="nord-snow-storm"] {
+  --preset-canvas: #eceff4;
+  --preset-surface: #ffffff;
+  --preset-ink: #2e3440;
+  --preset-muted: #5c616a;
+  --preset-accent: #3c6386;
+  --preset-link: #3c6386;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #395e7f;
+  --preset-accent-active: #385b7a;
+}
+
+:root[data-design-theme="plainspace"] {
+  --preset-canvas: #ece5d4;
+  --preset-surface: #faf6ef;
+  --preset-ink: #1f1c17;
+  --preset-muted: #4f4c47;
+  --preset-accent: #3f7473;
+  --preset-link: #3b6a69;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #3c6e6d;
+  --preset-accent-active: #3a6a69;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="plainspace"]:not([data-theme="light"]) {
+  --preset-canvas: #1c1916;
+  --preset-surface: #28231e;
+  --preset-ink: #eee5d6;
+  --preset-muted: #c2baae;
+  --preset-accent: #a8c5bc;
+  --preset-link: #a8c5bc;
+  --preset-on: #101010;
+  --preset-accent-hover: #adc8c0;
+  --preset-accent-active: #b1cbc3;
+  }
+}
+
+:root[data-design-theme="plainspace"][data-theme="dark"] {
+  --preset-canvas: #1c1916;
+  --preset-surface: #28231e;
+  --preset-ink: #eee5d6;
+  --preset-muted: #c2baae;
+  --preset-accent: #a8c5bc;
+  --preset-link: #a8c5bc;
+  --preset-on: #101010;
+  --preset-accent-hover: #adc8c0;
+  --preset-accent-active: #b1cbc3;
+}
+
+:root[data-design-theme="rainbow"] {
+  --preset-canvas: #f8f5ff;
+  --preset-surface: #ffffff;
+  --preset-ink: #302747;
+  --preset-muted: #5e576f;
+  --preset-accent: #8050b5;
+  --preset-link: #8050b5;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #794cab;
+  --preset-accent-active: #754aa4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="rainbow"]:not([data-theme="light"]) {
+  --preset-canvas: #0e0b1a;
+  --preset-surface: #15102a;
+  --preset-ink: #ece6ff;
+  --preset-muted: #bdb7d0;
+  --preset-accent: #b66bff;
+  --preset-link: #b76cff;
+  --preset-on: #101010;
+  --preset-accent-hover: #ba74ff;
+  --preset-accent-active: #bd7aff;
+  }
+}
+
+:root[data-design-theme="rainbow"][data-theme="dark"] {
+  --preset-canvas: #0e0b1a;
+  --preset-surface: #15102a;
+  --preset-ink: #ece6ff;
+  --preset-muted: #bdb7d0;
+  --preset-accent: #b66bff;
+  --preset-link: #b76cff;
+  --preset-on: #101010;
+  --preset-accent-hover: #ba74ff;
+  --preset-accent-active: #bd7aff;
+}
+
+:root[data-design-theme="zen"] {
+  --preset-canvas: #f8f8f7;
+  --preset-surface: #ffffff;
+  --preset-ink: #2c2c2c;
+  --preset-muted: #5a5a5a;
+  --preset-accent: #536556;
+  --preset-link: #536556;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #4f6052;
+  --preset-accent-active: #4c5c4f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="zen"]:not([data-theme="light"]) {
+  --preset-canvas: #131314;
+  --preset-surface: #1c1c1e;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bababa;
+  --preset-accent: #b4c9b9;
+  --preset-link: #b4c9b9;
+  --preset-on: #101010;
+  --preset-accent-hover: #b9ccbd;
+  --preset-accent-active: #bccec0;
+  }
+}
+
+:root[data-design-theme="zen"][data-theme="dark"] {
+  --preset-canvas: #131314;
+  --preset-surface: #1c1c1e;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bababa;
+  --preset-accent: #b4c9b9;
+  --preset-link: #b4c9b9;
+  --preset-on: #101010;
+  --preset-accent-hover: #b9ccbd;
+  --preset-accent-active: #bccec0;
+}
+
+:root[data-design-theme="velvet"] {
+  --preset-canvas: #131013;
+  --preset-surface: #221f22;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbabb;
+  --preset-accent: #d5adca;
+  --preset-link: #d5adca;
+  --preset-on: #101010;
+  --preset-accent-hover: #d8b2cd;
+  --preset-accent-active: #d9b5cf;
+}
+
+:root[data-design-theme="catppuccin-latte"] {
+  --preset-canvas: #eff1f5;
+  --preset-surface: #e6e9ef;
+  --preset-ink: #4c4f69;
+  --preset-muted: #555871;
+  --preset-accent: #8839ef;
+  --preset-link: #7241bd;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #8137e2;
+  --preset-accent-active: #7c35d9;
+}
+
+:root[data-design-theme="catppuccin-frappe"] {
+  --preset-canvas: #303446;
+  --preset-surface: #292c3c;
+  --preset-ink: #c6d0f5;
+  --preset-muted: #a7afd0;
+  --preset-accent: #ca9ee6;
+  --preset-link: #ca9ee6;
+  --preset-on: #101010;
+  --preset-accent-hover: #cda4e7;
+  --preset-accent-active: #cfa8e8;
+}
+
+:root[data-design-theme="catppuccin-macchiato"] {
+  --preset-canvas: #24273a;
+  --preset-surface: #1e2030;
+  --preset-ink: #cad3f5;
+  --preset-muted: #a4acca;
+  --preset-accent: #c6a0f6;
+  --preset-link: #c6a0f6;
+  --preset-on: #101010;
+  --preset-accent-hover: #c9a6f7;
+  --preset-accent-active: #ccaaf7;
+}
+
+:root[data-design-theme="catppuccin-mocha"] {
+  --preset-canvas: #1e1e2e;
+  --preset-surface: #181825;
+  --preset-ink: #cdd6f4;
+  --preset-muted: #a5acc6;
+  --preset-accent: #cba6f7;
+  --preset-link: #cba6f7;
+  --preset-on: #101010;
+  --preset-accent-hover: #ceabf7;
+  --preset-accent-active: #d0aff8;
+}
+
+:root[data-design-theme]:not([data-design-theme="classic"]):not([data-design-theme="clear"]) {
+  --bg-canvas: var(--preset-canvas);
+  --bg-surface: var(--preset-surface);
+  --bg-surface-alt: color-mix(in srgb, var(--preset-ink) 3%, var(--preset-surface));
+  --bg-subtle: color-mix(in srgb, var(--preset-ink) 4%, var(--preset-surface));
+  --bg-inset: var(--preset-canvas);
+  --bg-hover: color-mix(in srgb, var(--preset-ink) 8%, var(--preset-surface));
+  --bg-active: color-mix(in srgb, var(--preset-ink) 12%, var(--preset-surface));
+  --bg-selected: color-mix(in srgb, var(--preset-accent) 12%, var(--preset-surface));
+  --bg-disabled: var(--bg-subtle);
+  --text-primary: var(--preset-ink);
+  --text-secondary: color-mix(in srgb, var(--preset-ink) 94%, var(--preset-surface));
+  --text-muted: var(--preset-muted);
+  --text-disabled: color-mix(in srgb, var(--preset-ink) 45%, var(--preset-surface));
+  --text-on-accent: var(--preset-on);
+  --text-link: var(--preset-link);
+  --border-subtle: color-mix(in srgb, var(--preset-ink) 15%, var(--preset-surface));
+  --border-default: color-mix(in srgb, var(--preset-ink) 25%, var(--preset-surface));
+  --border-control: color-mix(in srgb, var(--preset-ink) 65%, var(--preset-surface));
+  --border-strong: color-mix(in srgb, var(--preset-ink) 80%, var(--preset-surface));
+  --border-accent: var(--preset-link);
+  --accent-bg: var(--preset-accent);
+  --accent-bg-hover: var(--preset-accent-hover);
+  --accent-bg-active: var(--preset-accent-active);
+  --accent-bg-subtle: var(--bg-selected);
+  --accent-text: var(--preset-link);
+  --accent-border-subtle: color-mix(in srgb, var(--preset-accent) 40%, var(--preset-surface));
+  --focus-ring-color: var(--preset-link);
+  --focus-ring-contrast: var(--preset-on);
+  --note-billing-rail: var(--preset-link);
+  --note-billing-bg: var(--bg-surface);
+  --note-billing-header-bg: var(--bg-selected);
+  --note-billing-header-fg: var(--text-primary);
+  --note-billing-border: var(--accent-border-subtle);
+  --note-internal-rail: var(--border-control);
+  --note-internal-bg: var(--bg-canvas);
+  --note-internal-header-bg: var(--bg-subtle);
+  --note-internal-header-fg: var(--text-secondary);
+  --note-internal-border: var(--border-default);
+  --timer-idle-fg: var(--text-muted);
+  --timer-idle-bg: var(--bg-subtle);
+  --timer-idle-border: var(--border-default);
+}
+
+/* Surface effects do not change layout, typography, or interaction geometry. */
+:root:is([data-design-theme="glass"], [data-design-theme="liquid-glass"], [data-design-theme="velvet"]) .app {
+  background-image: radial-gradient(ellipse at top right, color-mix(in srgb, var(--accent-bg) 18%, transparent), transparent 60%);
+}
+
+:root:is([data-design-theme="glass"], [data-design-theme="liquid-glass"]) :is(.card, .filterbar, .app__sidebar, .app__header) {
+  background-color: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(115%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent), var(--shadow-sm);
+}
+
+:root[data-design-theme="liquid-glass"] :is(.card, .filterbar) {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--accent-bg) 6%, transparent), transparent 65%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 18%, transparent), var(--shadow-lg);
+}
+
+:root[data-design-theme="lines"] :is(.card, .todo-row, .filterbar) {
+  border-color: var(--border-control);
+  box-shadow: none;
+}
+
+:root[data-design-theme="zen"] :is(.card, .todo-row, .filterbar) {
+  background-color: var(--bg-canvas);
+  box-shadow: none;
+}
+
+:root[data-design-theme="rainbow"] .app {
+  background-image: radial-gradient(ellipse at top left, color-mix(in srgb, #b66bff 12%, transparent), transparent 50%), radial-gradient(ellipse at bottom right, color-mix(in srgb, #2fe0e6 10%, transparent), transparent 55%);
+}
+
+:root[data-design-theme="rainbow"] .brand__mark {
+  background-image: linear-gradient(120deg, #b66bff, #2fe0e6, #ff8a4c);
+  color: #101010;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root:is([data-design-theme="glass"], [data-design-theme="liquid-glass"]) :is(.card, .filterbar, .app__sidebar, .app__header) {
+    background-color: var(--bg-surface);
+    backdrop-filter: none;
+  }
+}

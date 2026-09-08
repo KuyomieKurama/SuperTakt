@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import type { DesignTheme, Density } from "@takt/domain";
+import { themePreset } from "./themePresets";
 import type { ThemeSetting } from "./labels";
 
 /**
@@ -12,7 +14,7 @@ import type { ThemeSetting } from "./labels";
 export type ThemePreference = ThemeSetting;
 
 /** Zeilendichte der Tabellen und Listen. */
-export type Density = "comfortable" | "compact";
+export type { Density, DesignTheme };
 
 const THEME_ATTRIBUTE = "data-theme";
 const DENSITY_ATTRIBUTE = "data-density";
@@ -37,12 +39,13 @@ function applyDensity(density: Density): void {
  */
 export function useThemePreference(
   initial: ThemePreference = "system",
+  forcedMode: "auto" | "light" | "dark" = "auto",
 ): readonly [ThemePreference, (next: ThemePreference) => void] {
   const [preference, setPreference] = useState<ThemePreference>(initial);
 
   useEffect(() => {
-    applyTheme(preference);
-  }, [preference]);
+    applyTheme(forcedMode === "auto" ? preference : forcedMode);
+  }, [preference, forcedMode]);
 
   const set = useCallback((next: ThemePreference) => {
     setPreference(next);
@@ -66,6 +69,15 @@ export function useDensity(
   }, []);
 
   return [density, set] as const;
+}
+
+/** Gestaltung und Farbmodus belegen getrennte Attribute und können kombiniert werden. */
+export function useDesignTheme(initial: DesignTheme = "classic") {
+  const [designTheme, setDesignTheme] = useState<DesignTheme>(initial);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-design-theme", themePreset(designTheme).value);
+  }, [designTheme]);
+  return [designTheme, setDesignTheme] as const;
 }
 
 /** Meldet, ob der Benutzer reduzierte Bewegung angefordert hat. */

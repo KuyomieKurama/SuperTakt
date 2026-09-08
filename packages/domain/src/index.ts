@@ -34,6 +34,7 @@ export * from './board.ts';
 export * from './pool-movement.ts';
 export * from './tag-name.ts';
 export * from './time-entry.ts';
+export * from './idle.ts';
 export * from './export.ts';
 export * from './version.ts';
 
@@ -42,3 +43,4 @@ export * from './version.ts';
 // Datei aendert.
 export type * from './todo.ts';
 export type * from './settings.ts';
+export { DESIGN_THEMES } from './settings.ts';

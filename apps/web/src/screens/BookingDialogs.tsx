@@ -172,7 +172,7 @@ export function BookingFormDialog({
       title={entry === undefined ? "Zeit von Hand erfassen" : "Buchung bearbeiten"}
       description={
         entry === undefined
-          ? `Für ${quotedName(todoTitle)}. Die Dauer ergibt sich aus Anfang und Ende; Takt rechnet sie aus.`
+          ? `Für ${quotedName(todoTitle)}. Die Dauer ergibt sich aus Anfang und Ende; SuperTakt rechnet sie aus.`
           : `Für ${quotedName(todoTitle)}. Der gerundete Exportwert hängt an der Tagesgruppe, nicht an dieser Buchung.`
       }
       submitLabel={entry === undefined ? "Buchen" : "Speichern"}

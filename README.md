@@ -1,11 +1,11 @@
-# Takt
+# SuperTakt
 
-Takt ist eine lokale Anwendung zum Verwalten von Todos, zum Erfassen von Arbeitszeit und zum
+SuperTakt ist eine lokale Anwendung zum Verwalten von Todos, zum Erfassen von Arbeitszeit und zum
 Export dieser Zeit an ein externes Abrechnungstool. Dazu kommen ein Kanban-Board, frei
 verschachtelbare Tags und Ordner, konfigurierbare Todo-Pools und ein Outlook-Add-in, mit dem sich
 Todos direkt aus einer E-Mail heraus anlegen lassen.
 
-Takt läuft vollständig auf dem eigenen Rechner. Es gibt keine Cloud-Anbindung, keinen
+SuperTakt läuft vollständig auf dem eigenen Rechner. Es gibt keine Cloud-Anbindung, keinen
 Datenbankserver und keine Telemetrie; gespeichert wird in einer eingebetteten SQLite-Datei im
 Anwendungsdatenverzeichnis. Diese Entscheidung ist architektonisch verankert: Die Fachlogik in
 `packages/domain` kennt weder HTTP noch SQL, sodass sich der Speicherweg austauschen ließe, ohne
@@ -16,6 +16,65 @@ Wer die Anwendung benutzt, statt an ihr zu arbeiten, findet das vollständige Be
 wichtigsten Lehren aus seiner Entstehung im `docs/entwicklerhandbuch.md`. Begriffe, die auf dem
 Bildschirm und im Code unterschiedlich heißen könnten, aber es nicht tun sollen, stehen in
 `docs/glossar.md`.
+
+## Name und bestehende Installationen
+
+Der sichtbare Produktname lautet SuperTakt. Bestehende Datenpfade (`Takt` unter Windows,
+`takt` unter Linux), die Anwendungskennung `de.takt.desktop`, interne `@takt/*`-Pakete
+und Schnittstellenkennungen bleiben kompatibel. Die Erzeugerkennung `Takt` im
+versionierten Datenarchiv bleibt erhalten. SuperTakt liest Archivfassungen 1, 2 und 3;
+neue Sicherungen verwenden Fassung 3 und benötigen diese oder eine neuere App-Version.
+
+Unter **Einstellungen → Darstellung** lässt sich zwischen **Klassisch** (bisheriges
+Layout) und **Klar** (ruhigere Navigation und Arbeitsfläche) wählen. Farbmodus und
+Zeilendichte sind separat einstellbar und werden ebenfalls dauerhaft gespeichert.
+Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl. Eine gespeicherte Auswahl bleibt erhalten. Die Gestaltung ist in
+`docs/design/supertakt-layout.md` beschrieben.
+
+## Timer und Leistung
+
+Unter **Einstellungen → Timer** lässt sich **Leistung beim Stoppen abfragen**
+ausschalten. Der Timer bucht dann direkt; vorhandener Leistungstext bleibt erhalten.
+Fehlende Leistung lässt sich später in der Buchungsübersicht ergänzen. Die Auswahl
+wird dauerhaft gespeichert und ist zunächst eingeschaltet.
+
+## Inaktive Zeit zuordnen
+
+Unter **Einstellungen → Timer** ist die Inaktivitätserkennung einstellbar:
+zunächst nach **5 Minuten**, abschaltbar und zwischen 1 und 120 Minuten wählbar.
+Die automatische Erkennung benötigt die Windows-Desktop-App. Maus- und
+Tastatureingaben in anderen Programmen zählen ebenfalls als Aktivität; es werden
+keine Eingabeinhalte aufgezeichnet.
+
+Bei einer längeren Abwesenheit hält SuperTakt den Timer an. Bei der Rückkehr
+können Sie die Zeit als Pause auslassen, einer Aufgabe zuordnen oder auf mehrere
+Aufgaben und Pausen aufteilen. **Rest übernehmen** füllt den verbleibenden Anteil.
+Die gesamte Zeit muss genau verteilt sein, bevor gespeichert wird.
+
+Offene Zuordnungen bleiben nach einem Neustart erhalten. **Später zuordnen**
+lässt den Timer angehalten. Auf Wunsch startet er nach dem Speichern erneut auf
+der ursprünglichen Aufgabe; die Zeit zum Ausfüllen des Dialogs wird nicht gebucht.
+Datenarchive verwenden hierfür Fassung 4; Fassungen 1 bis 3 bleiben einlesbar.
+
+Die Bedienidee orientiert sich an [Super Productivitys Inaktivitätsdialog](https://github.com/super-productivity/super-productivity/tree/master/src/app/features/idle).
+
+## Outlook lokal einrichten
+
+In der Windows-Desktop-App führt **Einstellungen → Outlook-Add-in** durch die
+Zertifikatsprüfung. Prüfen Sie Inhaber, Gültigkeit und SHA-256-Fingerabdruck und
+bestätigen Sie **Zertifikat prüfen und vertrauen**. Erst diese Bestätigung
+hinterlegt das konkrete lokale Serverzertifikat für Ihr Windows-Benutzerkonto.
+Bestätigen Sie auch die Windows-Sicherheitsabfrage; der Assistent wartet dafür
+bis zu drei Minuten. Bei Abbruch wird kein erfolgreicher Abschluss behauptet.
+Danach prüft SuperTakt die Add-in-Seite über HTTPS. Fehlende Zertifikate, ein
+nicht erreichbarer Server oder Windows-Richtlinien werden als Fehler angezeigt.
+
+Anschließend importieren Sie `apps/outlook-addin/manifest.xml` in Outlook und
+verbinden das Add-in mit dem Zugangstoken aus demselben Einstellungsbereich.
+SuperTakt muss dafür laufen. Eine Domain ist für diese lokale Einrichtung nicht nötig.
+Im Browser und auf anderen Betriebssystemen ist die Windows-Zertifikatseinrichtung
+nicht verfügbar. Nach einer Zertifikatserneuerung muss das neue Zertifikat erneut
+bestätigt werden. Alte Einträge werden nicht automatisch aus dem Windows-Speicher entfernt.
 
 ## Aufbau
 
@@ -50,7 +109,7 @@ pnpm dev
 # http://127.0.0.1:5173
 ```
 
-Takt als Anwendung, mit Fenster und lokalem Dienst als Sidecar:
+SuperTakt als Anwendung, mit Fenster und lokalem Dienst als Sidecar:
 
 ```bash
 pnpm desktop
@@ -95,7 +154,7 @@ Daneben bestehen in `apps/local-api` und `apps/outlook-addin` neun weitere Nachw
 `proof:route-policy`, `proof:template-fields`, `proof:db-permissions`, `proof:addin`), die
 zusammen mit `pnpm proof:openapi` die zehn Nachweispfade des Projekts bilden. Sie stehen nicht alle
 in `pnpm check`, weil ein Teil von ihnen den lokalen Dienst auf seinem festen Port startet und
-deshalb nicht neben einem bereits laufenden Takt bestehen kann. Details dazu im
+deshalb nicht neben einem bereits laufenden SuperTakt bestehen kann. Details dazu im
 Entwicklerhandbuch.
 
 Ende-zu-Ende-Tests laufen mit Playwright:
@@ -116,7 +175,7 @@ pnpm sidecar:verify  # nur den Nachweis, gegen die zuletzt gebaute Datei
 ```
 
 Sie steht bewusst **nicht** in `pnpm check`: Sie braucht die Rust-Toolchain, baut rund 120 MiB und
-belegt dabei die Ports 17843 und 17844, kann also nicht neben einem laufenden Takt bestehen.
+belegt dabei die Ports 17843 und 17844, kann also nicht neben einem laufenden SuperTakt bestehen.
 `pnpm check` soll schnell und oft laufen.
 
 Sie gehört trotzdem vor jede Auslieferung und in jeden Durchlauf, der die Hülle, den lokalen Dienst
@@ -127,7 +186,7 @@ den Nachweis seither selbst mit.
 
 ## Wo es weitergeht
 
-- Was Takt tut und wie man damit arbeitet: `docs/benutzerhandbuch.md`
+- Was SuperTakt tut und wie man damit arbeitet: `docs/benutzerhandbuch.md`
 - Aufbau, Paketgrenzen, Sicherheitsmodell und die Lehren aus der Entwicklung: `docs/entwicklerhandbuch.md`
 - Begriffe mit ihrer Entsprechung im Code: `docs/glossar.md`
 - Datenmodell und Migrationsverfahren: `docs/datenmodell.md`

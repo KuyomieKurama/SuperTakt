@@ -168,7 +168,7 @@ test.describe('TP-BUILD-01 — ohne Hülle', () => {
     // `App.tsx#NoShellNotice`, wörtlich. Ein Absturz oder ein leeres
     // Dokument (die T-053-Fehlerklasse: Bündel kommt nicht hoch) zeigte
     // diesen Text nicht.
-    await expect(page.getByRole('heading', { name: 'Takt läuft in der Takt-Anwendung' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'SuperTakt läuft in der SuperTakt-Anwendung' })).toBeVisible();
     await expect(page.getByText('Das ist kein Fehler, sondern die Absicht', { exact: false })).toBeVisible();
 
     // Beleg 1 (T-060, seit T-057 anstelle des Klicks auf die entfernte
@@ -185,7 +185,7 @@ test.describe('TP-BUILD-01 — ohne Hülle', () => {
     // hängt nicht von der Route ab, deshalb bleibt der sichtbare Inhalt
     // gleich; das Ziel ist hier, dass er **überhaupt noch da ist**.
     await page.goto('/#/kaputte-adresse');
-    await expect(page.getByRole('heading', { name: 'Takt läuft in der Takt-Anwendung' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'SuperTakt läuft in der SuperTakt-Anwendung' })).toBeVisible();
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
@@ -220,7 +220,7 @@ test.describe('TP-BUILD-05 — Musterseite im Auslieferungsbündel nicht erreich
     page.on('pageerror', (error) => pageErrors.push(String(error)));
 
     await page.goto('/designsystem.html');
-    await expect(page.getByRole('heading', { name: 'Takt läuft in der Takt-Anwendung' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'SuperTakt läuft in der SuperTakt-Anwendung' })).toBeVisible();
     await expect(page.locator('.showcase')).toHaveCount(0);
     await expect(page.getByLabel(SHOWCASE_MARKER)).toHaveCount(0);
 

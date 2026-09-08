@@ -21,6 +21,7 @@ async function setup(): Promise<{ readonly database: OpenedDatabase; readonly co
     context: {
       transactions: database.transactions,
       clock: { now: () => NOW },
+      system: { windowsUser: () => 'Importprüfung' },
     } as unknown as AppContext,
   };
 }
@@ -81,6 +82,7 @@ describe('Fremdimport — Todoist und Super Productivity (A-20.7)', () => {
       expect(todo?.completedAt).toBe('2026-09-07T12:00:00Z');
       if (todo !== undefined) {
         expect((await unit.notes.load(todo.id))?.text).toContain('Ausführlicher Vermerk');
+        expect((await unit.notes.load(todo.id))?.text).not.toContain('Importquelle:');
         expect((await unit.timeEntries.search({ todoId: todo.id })).items[0]?.durationSeconds).toBe(1800);
       }
     });
@@ -124,11 +126,281 @@ describe('Fremdimport — Todoist und Super Productivity (A-20.7)', () => {
       expect(todos.find((todo) => todo.title === 'Alt archiviert')?.completedAt).toBe('2026-08-01T10:00:00Z');
     });
   });
+
+  it.each([false, true])('importiert mehrere Projekte auch bei lückenhaften Poolpositionen (%s)', async (existing) => {
+    const { database, context } = await setup();
+    opened = database;
+    const project = { entities: { p1: { id: 'p1', title: 'Eins' }, p2: { id: 'p2', title: 'Zwei' } } };
+    const task = { entities: { t: { id: 't', title: 'Arbeit', projectId: 'p1' } } };
+    if (existing) {
+      expect((await importSuperProductivity(context, { project, task })).ok).toBe(true);
+      database.connection.exec('UPDATE pool SET position = position + 10');
+    }
+    expect((await importSuperProductivity(context, { project, task })).ok).toBe(true);
+    const pools = database.connection.prepare('SELECT position FROM pool ORDER BY position').all();
+    expect(pools.map(row => row['position'])).toEqual(existing ? [11, 12, 13, 14] : [1, 2]);
+  });
+
+  it.each([true, false])('übernimmt Leistungsnachweise und externe Übertragung (ausnehmen: %s)', async (excludeTransferred) => {
+    const { database, context } = await setup();
+    opened = database;
+    const notes = [
+      'Interne Mail, kein Leistungsnachweis', '---- Eigene Notiz', 'Privater Kontext',
+      '---- Zeit Dauer: 06.09.26 02:00:00', 'Analyse',
+      '---- Zeit Dauer: 06.09.2026 01:00:00', 'Korrektur',
+      '---- Zeit Dauer: 07.09.26 00:30:00', 'Abnahme',
+    ].join('\n');
+    const result = await importSuperProductivity(context, { data: {
+      project: { entities: {} },
+      task: { entities: {
+        t: { id: 't', title: 'Arbeit', notes, tagIds: ['open'], timeSpentOnDay: { '2026-09-06': 600_000, '2026-09-07': 300_000 } },
+        b: { id: 'b', title: 'Übertragen', tagIds: ['booked', 'open'], timeSpentOnDay: { '2026-09-06': 60_000 } },
+      } },
+      pluginUserData: [{ id: 'outlook-super-productivity-bridge', data: JSON.stringify({
+        version: 1, bookingTagId: 'booked', bookingOpenTagId: 'open', timeBooked: { 't|2026-09-06': 123 },
+      }) }],
+    } }, excludeTransferred);
+    expect(result.ok).toBe(true);
+    const rows = database.connection.prepare('SELECT note, duration_seconds, export_status, export_count FROM time_entry ORDER BY duration_seconds DESC').all();
+    expect(rows).toEqual([
+      { note: 'Analyse\n\nKorrektur', duration_seconds: 600, export_status: excludeTransferred ? 'exported' : 'open', export_count: 0 },
+      { note: 'Abnahme', duration_seconds: 300, export_status: 'open', export_count: 0 },
+      { note: '', duration_seconds: 60, export_status: excludeTransferred ? 'exported' : 'open', export_count: 0 },
+    ]);
+    const audit = database.connection.prepare('SELECT event, reason FROM export_audit').all();
+    expect(audit).toHaveLength(excludeTransferred ? 2 : 0);
+    for (const row of audit) {
+      expect(row['event']).toBe('not_billed');
+      expect(row['reason']).toContain('Import aus OutlookBridge');
+    }
+    await database.transactions.inTransaction(async unit => {
+      const todo = (await unit.todos.search({})).items.find(item => item.title === 'Arbeit');
+      expect(todo).toBeDefined();
+      expect((await unit.notes.load(todo!.id))?.text).toContain(notes);
+    });
+  });
+
+  it('zählt Elternsummen nicht doppelt und erhält nicht datierbare Leistungsnachweise in der Notiz', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const notes = '---- Eigene Notiz\n---- Zeit Dauer: 00:10:00\nOhne Datum';
+    const result = await importSuperProductivity(context, { project: { entities: {} }, task: { entities: {
+      parent: { id: 'parent', title: 'Eltern', subTaskIds: ['child'], timeSpentOnDay: { '2026-09-06': 120_000 } },
+      child: { id: 'child', title: 'Kind', parentId: 'parent', notes, timeSpentOnDay: { '2026-09-06': 120_000 } },
+      multi: { id: 'multi', title: 'Mehrere Tage', notes, timeSpentOnDay: { '2026-09-06': 60_000, '2026-09-07': 60_000, '2026-09-08': 999 } },
+    } } });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.timeEntries).toBe(3);
+    expect(result.value.warnings.join(' ')).toContain('keinen eindeutig zuordenbaren Buchungstag');
+    const rows = database.connection.prepare('SELECT note, duration_seconds FROM time_entry ORDER BY duration_seconds DESC').all();
+    expect(rows).toEqual([{ note: 'Ohne Datum', duration_seconds: 120 }, { note: '', duration_seconds: 60 }, { note: '', duration_seconds: 60 }]);
+    await database.transactions.inTransaction(async unit => {
+      const todo = (await unit.todos.search({})).items.find(item => item.title === 'Mehrere Tage');
+      expect((await unit.notes.load(todo!.id))?.text).toContain(notes);
+    });
+  });
+
+  it('erhält Tag-Ordner, leere Unterordner, Farben und gleichnamige Tags über ihre Kennungen', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const result = await importSuperProductivity(context, { data: {
+      project: { entities: {} },
+      task: { entities: { t: { id: 't', title: 'Arbeit', tagIds: ['a', 'b', 'loose'] } } },
+      tag: { entities: {
+        a: { id: 'a', title: 'Gleich', color: '#112233' },
+        b: { id: 'b', title: 'Gleich', color: '#445566' },
+        loose: { id: 'loose', title: 'Frei' },
+      } },
+      menuTree: { tagTree: [
+        { k: 'f', id: 'f1', name: 'Kunden', children: [
+          { k: 't', id: 'a' }, { k: 'f', id: 'empty', name: 'Leer', children: [] },
+        ] },
+        { k: 'f', id: 'f2', name: 'Kollegen', children: [{ k: 't', id: 'b' }] },
+      ] },
+    } });
+    expect(result.ok).toBe(true);
+    const tags = database.connection.prepare(`SELECT t.name, t.color, f.name AS folder
+      FROM tag t LEFT JOIN tag_folder f ON f.id=t.folder_id
+      JOIN todo_tag tt ON tt.tag_id=t.id WHERE t.name IN ('Gleich', 'Frei') ORDER BY t.name, f.name`).all();
+    expect(tags).toEqual([
+      { name: 'Frei', color: null, folder: null },
+      { name: 'Gleich', color: '#445566', folder: 'Kollegen' },
+      { name: 'Gleich', color: '#112233', folder: 'Kunden' },
+    ]);
+    expect(database.connection.prepare(`SELECT p.name FROM tag_folder c JOIN tag_folder p ON c.parent_id=p.id WHERE c.name='Leer'`).get()?.['name']).toBe('Kunden');
+    expect(database.connection.prepare("SELECT COUNT(*) AS n FROM tag_folder WHERE name LIKE 'Super Productivity%'").get()?.['n']).toBe(0);
+    expect(database.connection.prepare("SELECT name FROM tag_folder WHERE parent_id IS NULL ORDER BY name").all().map(row => row['name'])).toEqual(['Kollegen', 'Kunden', 'Projekte']);
+    expect(database.connection.prepare("SELECT COUNT(*) AS n FROM tag_folder WHERE name IN ('Labels', 'Bereiche', 'Prioritäten') OR name LIKE 'Import %'").get()?.['n']).toBe(0);
+    expect(database.connection.prepare("SELECT COUNT(*) AS n FROM pool WHERE name LIKE 'Super Productivity%'").get()?.['n']).toBe(0);
+  });
+
+  it('legt Links und Dateipfade als Anhänge an und erhält nicht unterstützte Originaldaten im Vermerk', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const result = await importSuperProductivity(context, {
+      project: { entities: {} },
+      task: { entities: { t: { id: 't', title: 'Mit Anhängen', attachments: [
+        { id: 'a', type: 'LINK', title: 'Mail', path: 'https://outlook.office.com/mail/test' },
+        { id: 'b', type: 'FILE', title: 'Dokument', path: 'C:/Documents/test.pdf' },
+        { id: 'c', type: 'LINK', title: 'Ungültig', path: 'javascript:alert(1)' },
+      ] } } },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.warnings.join(' ')).toContain('1 Anhänge konnten nicht');
+    await database.transactions.inTransaction(async unit => {
+      const todo = (await unit.todos.search({})).items[0]!;
+      const attachments = await unit.attachments.list(todo.id);
+      expect(attachments.map(({ kind, title, target }) => ({ kind, title, target }))).toEqual([
+        { kind: 'link', title: 'Mail', target: 'https://outlook.office.com/mail/test' },
+        { kind: 'file', title: 'Dokument', target: 'C:/Documents/test.pdf' },
+      ]);
+      expect((await unit.notes.load(todo.id))?.text).toContain('javascript:alert(1)');
+    });
+  });
+
+  it('speichert erkannte Calls am Todo und schreibt bei ungültigem Regex keine Importdaten', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const backup = { project: { entities: {} }, task: { entities: {
+      t: { id: 't', title: 'Fw: Call 31855 - Arbeit', notes: 'Originalnotiz' },
+    } } };
+    expect((await importSuperProductivity(context, backup, true, '(')).ok).toBe(false);
+    expect(database.connection.prepare('SELECT COUNT(*) AS n FROM todo').get()?.['n']).toBe(0);
+    expect((await importSuperProductivity(context, backup)).ok).toBe(true);
+    expect(database.connection.prepare('SELECT call_number, title FROM todo').get()).toMatchObject({ call_number: '31855', title: 'Fw: Call 31855 - Arbeit' });
+  });
+
+  it('bricht bei beschädigten Plugin-Daten vor dem Schreiben ab', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const result = await importSuperProductivity(context, {
+      project: { entities: {} },
+      task: { entities: { t: { id: 't', title: 'Arbeit' } } },
+      pluginUserData: [{ id: 'outlook-super-productivity-bridge', data: '{invalid' }],
+    });
+    expect(result.ok).toBe(false);
+    expect(database.connection.prepare('SELECT COUNT(*) AS n FROM todo').get()?.['n']).toBe(0);
+  });
+
 });
 
 describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
   let opened: OpenedDatabase | null = null;
   afterEach(() => { opened?.close(); opened = null; });
+
+  it('A-21.5: Archivfassung 4 stellt Darstellung und Timer-Einstellung wieder her', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15, now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    expect(archive.schemaVersion).toBe(5);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5, now: NOW });
+    });
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15 });
+    });
+  });
+
+  it('Fassung 4 ergänzt Weiterlaufen als Standard und erhält die Inaktivitätsschwelle', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async unit => {
+      await unit.settings.update({ idleThresholdMinutes: 15, idleKeepTimerRunning: false, now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    const rows = archive.data.tables.app_setting.map(row => {
+      const legacy = { ...row };
+      delete legacy['idle_keep_timer_running'];
+      return legacy;
+    });
+    expect((await importDataArchive(context, {
+      ...archive, schemaVersion: 4, data: { ...archive.data, tables: { ...archive.data.tables, app_setting: rows } },
+    })).ok).toBe(true);
+    await database.transactions.inTransaction(async unit => {
+      expect(await unit.settings.load()).toMatchObject({ idleKeepTimerRunning: true, idleThresholdMinutes: 15 });
+    });
+  });
+
+  it('A-24: Fassung 3 ergänzt Inaktivitätseinstellungen ohne offene Zeit', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    const { timer_idle: _idle, ...tables } = archive.data.tables;
+    const rows = tables.app_setting.map(row => {
+      const legacy = { ...row };
+      delete legacy['idle_detection_enabled'];
+      delete legacy['idle_threshold_minutes'];
+      return legacy;
+    });
+    expect((await importDataArchive(context, {
+      ...archive, schemaVersion: 3, data: { ...archive.data, tables: { ...tables, app_setting: rows } },
+    })).ok).toBe(true);
+    await database.transactions.inTransaction(async unit => {
+      expect(await unit.settings.load()).toMatchObject({ idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5 });
+      expect(await unit.idle.pending()).toBeNull();
+    });
+  });
+
+  it('A-21.5: liest Fassung 1 mit Klassisch und erhält den alten Farbmodus', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    const legacyRows = archive.data.tables.app_setting.map((row) => {
+      const legacy = { ...row };
+      delete legacy['design_theme'];
+      delete legacy['density'];
+      delete legacy['prompt_on_timer_stop'];
+      return legacy;
+    });
+    const legacyArchive = { ...archive, schemaVersion: 1, data: { ...archive.data, tables: { ...archive.data.tables, app_setting: legacyRows } } };
+    expect((await importDataArchive(context, legacyArchive)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true });
+    });
+  });
+
+  it('A-22.1: Fassung 2 behält die Gestaltung und ergänzt die Leistungsabfrage', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ designTheme: 'classic', density: 'compact', promptOnTimerStop: false, now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    const rows = archive.data.tables.app_setting.map((row) => {
+      const legacy = { ...row };
+      delete legacy['prompt_on_timer_stop'];
+      return legacy;
+    });
+    expect((await importDataArchive(context, {
+      ...archive, schemaVersion: 2,
+      data: { ...archive.data, tables: { ...archive.data.tables, app_setting: rows } },
+    })).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ designTheme: 'classic', density: 'compact', promptOnTimerStop: true });
+    });
+  });
+
+  it('A-21.5: unbekannte Fassungen verändern den aktuellen Bestand nicht', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ designTheme: 'clear', now: NOW });
+    });
+    expect((await importDataArchive(context, { ...archive, schemaVersion: 99 })).ok).toBe(false);
+    await database.transactions.inTransaction(async (unit) => {
+      expect((await unit.settings.load()).designTheme).toBe('clear');
+    });
+  });
 
   it('weist eine ungültige Bildkopie ab, bevor der Bestand ersetzt wird', async () => {
     const { database, context } = await setup();

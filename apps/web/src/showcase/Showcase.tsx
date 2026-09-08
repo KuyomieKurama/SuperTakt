@@ -45,7 +45,7 @@ const NAV: readonly NavEntry[] = [
   { id: "notizen", label: "7 — Vermerk und Leistung" },
   { id: "tags", label: "8 — Tags und Ordner" },
   { id: "bausteine", label: "9 — Bedienelemente und Zustände" },
-  { id: "huelle", label: "10 — Wenn Takt nicht startet" },
+  { id: "huelle", label: "10 — Wenn SuperTakt nicht startet" },
   { id: "inventar", label: "11 — Komponenteninventar" },
   { id: "fassung", label: "12 — Neuere Fassung (A-18)" },
   { id: "frist", label: "13 — Frist und Anhänge (A-19)" },
@@ -99,7 +99,7 @@ function ShowcasePage() {
 
       <header className="appbar">
         <div className="appbar__brand">
-          <span className="appbar__mark">Takt</span>
+          <span className="appbar__mark">SuperTakt</span>
           <span className="appbar__sub">
             Designsystem — abgenommen, Stand T-015
           </span>

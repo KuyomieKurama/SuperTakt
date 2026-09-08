@@ -1,3 +1,6 @@
+import { DEFAULT_IMPORT_CALL_PATTERN } from "@takt/domain";
+import { TextField } from "../components/FormDialog";
+import { THEME_PRESETS, themePreset } from "../lib/themePresets";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
@@ -15,8 +18,10 @@ import {
 } from "../api/endpoints";
 import type { DataImportSummary, Id, RoundingMode, SecurityNoticeKind } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { OutlookSetup } from "../components/OutlookSetup";
 import { ExportDirectoryField } from "../components/ExportDirectoryField";
 import { BillingUserFact, DatabaseLocationFact } from "../components/WorkstationFacts";
+import { RadioRow } from "../components/RadioRow";
 import { Select } from "../components/Select";
 import { Icon, type IconName } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
@@ -29,12 +34,13 @@ import { useToasts } from "../app/ToastContext";
 import { useAsync, useMutation } from "../app/useAsync";
 import { cx } from "../lib/cx";
 import { adviseExportDirectory } from "../lib/exportDirectoryAdvice";
-import { ROUNDING_MODE_LABEL, THEME_LABEL } from "../lib/labels";
+import { ROUNDING_MODE_LABEL } from "../lib/labels";
 import { formatDateTime, plural } from "../lib/format";
 import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { StatusSettings } from "./StatusSettings";
 import { foreignText } from "../lib/foreign";
+import { readIdleActivity } from "../app/connection";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -109,7 +115,7 @@ const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
 /* Die Bereiche                                                         */
 /* ==================================================================== */
 
-const AREAS = ["darstellung", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
+const AREAS = ["darstellung", "timer", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
 
 type SettingsArea = (typeof AREAS)[number];
 
@@ -144,7 +150,8 @@ interface AreaDescriptor {
   nicht hier, sondern in der Karte (`StatusSettings`, Auflage Z-01).
 */
 const AREA_LIST: readonly AreaDescriptor[] = [
-  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Farbmodus und Zeilendichte" },
+  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Themes, Farbmodus und Zeilendichte" },
+  { area: "timer", label: "Timer", icon: "clock", hint: "Leistung beim Stoppen" },
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
   { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
   {
@@ -200,7 +207,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
         <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
           <ul className="settings-rail__list">
             {AREA_LIST.map((item) => (
-              <li key={item.area}>
+              <li key={item.area} className={["export", "standardtags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
                 <a
                   className={cx(
                     "settings-rail__item",
@@ -242,6 +249,8 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
   switch (area) {
     case "darstellung":
       return <DisplaySettings />;
+    case "timer":
+      return <TimerSettings />;
     case "export":
       return <ExportSettings />;
     case "daten":
@@ -251,7 +260,7 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
     case "status":
       return <StatusSettings />;
     case "addin":
-      return <AddinSettings />;
+      return <><OutlookSetup /><AddinSettings /></>;
     case "arbeitsplatz":
       return (
         <>
@@ -297,6 +306,15 @@ function DataTransferSettings() {
   const archiveInput = useRef<HTMLInputElement>(null);
   const todoistInput = useRef<HTMLInputElement>(null);
   const superProductivityInput = useRef<HTMLInputElement>(null);
+  const [excludeTransferred, setExcludeTransferred] = useState(true);
+  const [callPattern, setCallPattern] = useState(() => {
+    try { return localStorage.getItem('supertakt.import.callPattern') ?? DEFAULT_IMPORT_CALL_PATTERN; }
+    catch { return DEFAULT_IMPORT_CALL_PATTERN; }
+  });
+  const changeCallPattern = (value: string): void => {
+    setCallPattern(value);
+    try { localStorage.setItem('supertakt.import.callPattern', value); } catch { /* Remains editable for this import. */ }
+  };
   const [pendingArchive, setPendingArchive] = useState<unknown | null>(null);
   const [result, setResult] = useState<DataImportSummary | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -347,12 +365,12 @@ function DataTransferSettings() {
     const file = files?.[0];
     if (file === undefined) return;
     setFileError(null);
-    void mutation.run(async () => refreshAfterImport(await importSuperProductivity(await readJson(file))));
+    void mutation.run(async () => refreshAfterImport(await importSuperProductivity(await readJson(file), excludeTransferred, callPattern)));
   };
 
   return (
     <>
-      <Card title="Takt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
+      <Card title="SuperTakt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
         <p className="field__hint">Enthält Aufgaben, Vermerke, Tags, Strukturen, Zeitbuchungen, Exporteinstellungen, Protokolle und Bildanhänge. Eine Wiederherstellung ersetzt den aktuellen Bestand.</p>
         <div className="data-transfer__actions">
           <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>Sicherung herunterladen</Button>
@@ -369,6 +387,20 @@ function DataTransferSettings() {
 
       <Card title="Aus Super Productivity importieren" description="Ergänzt den vorhandenen Bestand.">
         <p className="field__hint">Wählen Sie eine JSON-Datensicherung aus Super Productivity. Projekte, Bereiche, Tags, Fristen, Vermerke, Erledigt-Zustand und erfasste Zeiten werden übernommen.</p>
+        <p className="field__hint">Leistungsnachweise aus OutlookBridge werden dem passenden Buchungstag zugeordnet. Ursprüngliche Notizen bleiben als Vermerk erhalten.</p>
+        <TextField
+          label="Call-Nummer aus Titel erkennen (Regex)"
+          value={callPattern}
+          onChange={changeCallPattern}
+          maxLength={512}
+          disabled={mutation.busy}
+          hint="Die erste Klammergruppe liefert die Call-Nummer, ohne Gruppe der gesamte Treffer. Groß-/Kleinschreibung wird ignoriert. Leer lassen zum Ausschalten."
+        />
+        <label className="choice__option">
+          <input type="checkbox" checked={excludeTransferred} disabled={mutation.busy} onChange={event => setExcludeTransferred(event.target.checked)} />
+          <span>Bereits übertragene Zeiten vom erneuten Export ausnehmen</span>
+        </label>
+        <p className="field__hint">OutlookBridge-Markierungen „Eingetragen“ werden mit Herkunftsvermerk als ausgebucht übernommen. Ausgeschaltet werden alle Zeiten wieder offen importiert.</p>
         <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => superProductivityInput.current?.click()}>Super-Productivity-JSON auswählen</Button>
         <input ref={superProductivityInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseSuperProductivity(event.currentTarget.files); event.currentTarget.value = ""; }} />
       </Card>
@@ -381,7 +413,7 @@ function DataTransferSettings() {
       <ConfirmDialog
         open={pendingArchive !== null}
         tone="danger"
-        title="Takt-Datensicherung wiederherstellen?"
+        title="SuperTakt-Datensicherung wiederherstellen?"
         description="Der aktuelle Bestand wird vollständig durch den Inhalt der gewählten Sicherung ersetzt."
         consequence="Aufgaben und Zeitbuchungen, die nur im aktuellen Bestand vorkommen, sind danach nicht mehr vorhanden."
         acknowledgeLabel="Ich habe den aktuellen Bestand bei Bedarf gesichert."
@@ -403,56 +435,93 @@ const DENSITY_LABEL: Readonly<Record<Density, string>> = {
   compact: "Kompakt — mehr Zeilen auf dem Bildschirm",
 };
 
-/**
- * Farbmodus und Zeilendichte.
- *
- * **Ohne Speichern-Knopf, und das ist die Absicht.** Beide Werte wirken sofort
- * und sichtbar; ein Knopf, der bestätigt, was man schon sieht, stellt eine
- * Frage, die nicht mehr offen ist. Der Farbmodus geht dabei über
- * `PreferencesContext` in `app_setting.theme` (E-041) und ist damit dauerhaft.
- *
- * Seit T-065 ist dies der **einzige** Ort, an dem der Farbmodus eingestellt
- * wird. Bis dahin stand dasselbe Auswahlfeld ein zweites Mal oben rechts in
- * der Kopfleiste. Es bediente seit T-057 zwar dieselbe Einstellung, blieb aber
- * ein zweiter Bedienweg für etwas, das man einmal einstellt — der
- * Auftraggeber hat ihn gestrichen. Was blieb: `PreferencesContext`. Er ist
- * nicht Zubehör dieses Feldes, sondern die Stelle, die die gespeicherte Wahl
- * beim Start anwendet.
- *
- * Die Zeilendichte ist bis zum Beenden von Takt gültig. Das Datenmodell führt
- * keine Spalte dafür, und diese Oberfläche legt nichts im Browser ab. Der
- * Hinweis unter dem Feld sagt es, statt es den Benutzer beim nächsten Start
- * herausfinden zu lassen.
- */
+/** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
+function TimerSettings() {
+  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleKeepTimerRunning, setIdleKeepTimerRunning, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
+  const activity = useAsync(readIdleActivity, []);
+  useEffect(() => {
+    const interval = window.setInterval(activity.reload, 5000);
+    return () => window.clearInterval(interval);
+  }, [activity.reload]);
+  return (
+    <Card title="Timer" description="Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.">
+      <label className="choice__option">
+        <input
+          type="checkbox"
+          checked={promptOnTimerStop}
+          disabled={saving}
+          onChange={(event) => setPromptOnTimerStop(event.target.checked)}
+          aria-describedby="timer-prompt-hint"
+        />
+        <span>Leistung beim Stoppen abfragen</span>
+      </label>
+      <p className="field__hint" id="timer-prompt-hint">
+        Ausgeschaltet wird die Zeit sofort gebucht, auch beim Wechsel zu einem anderen Timer.
+        Vorhandene Leistung bleibt erhalten;
+        fehlenden Text können Sie später in der Buchungsübersicht ergänzen.
+      </p>
+      <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>Inaktive Zeit erkennen</span></label>
+      <p className="field__hint" id="idle-detection-hint">Bei Ihrer Rückkehr können Sie die inaktive Zeit als Pause auslassen, einer Aufgabe zuordnen oder aufteilen. Offene Zuordnungen bleiben beim Ausschalten dieser Einstellung erhalten.</p>
+      <Select label="Timer bei Inaktivität" value={idleKeepTimerRunning ? 'continue' : 'pause'} onChange={value => setIdleKeepTimerRunning(value === 'continue')} disabled={saving || !idleDetectionEnabled}
+        options={[{ value: 'continue', label: 'Weiterlaufen lassen' }, { value: 'pause', label: 'Bis zur Zuordnung pausieren' }]} />
+      <Select label="Inaktivität erkennen nach" value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
+        options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} ${value === 1 ? 'Minute' : 'Minuten'}` }))} />
+      <p role="status">{activity.state.status === 'loading' ? 'Inaktivitätserkennung wird geprüft …' : activity.state.status === 'ready' && activity.state.value?.supported ? 'Systemweite Erkennung verfügbar — auch Eingaben in anderen Programmen zählen als Aktivität.' : 'Systemweite Erkennung ist hier nicht verfügbar. Sie benötigt die Desktop-App und eine unterstützte Systemschnittstelle.'}</p>
+      <p className="field__hint">Es werden nur Zeitpunkte gelesen, keine Tasten, Texte oder Programminhalte aufgezeichnet.</p>
+    </Card>
+  );
+}
+
 function DisplaySettings() {
-  const { theme, setTheme, themeSaving, density, setDensity } = usePreferences();
+  const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity } = usePreferences();
+
+  const preset = themePreset(designTheme);
 
   return (
     <Card
       title="Darstellung"
-      description="Wirkt sofort. Nichts zu speichern."
+      description="Theme, Farbmodus und Zeilendichte wirken sofort und bleiben beim nächsten Start erhalten."
     >
-      <Select
+      <RadioRow
+        className="appearance-mode"
         label="Farbmodus"
-        value={theme}
+        value={preset.mode === "auto" ? theme : preset.mode}
         onChange={setTheme}
-        disabled={themeSaving}
-        options={(["system", "light", "dark"] as const).map((value) => ({
-          value,
-          label: THEME_LABEL[value],
+        disabled={saving || preset.mode !== "auto"}
+        options={[
+          { value: "system", label: "System", icon: "monitor", hint: "Folgt dem Farbmodus des Betriebssystems." },
+          { value: "dark", label: "Dunkel", icon: "moon" },
+          { value: "light", label: "Hell", icon: "sun" },
+        ]}
+      />
+      {preset.mode === "auto" ? null : (
+        <p className="field__hint">Dieses Theme verwendet feste {preset.mode === "dark" ? "dunkle" : "helle"} Farben. Die freie Farbwahl steht bei Klassisch und den anpassbaren Themes zur Verfügung.</p>
+      )}
+      <Select
+        className="settings-field-section"
+        label="Theme auswählen"
+        value={preset.value}
+        onChange={setDesignTheme}
+        disabled={saving}
+        options={THEME_PRESETS.map(item => ({
+          value: item.value,
+          label: item.label,
+          hint: `${item.mode === "dark" ? "Dunkel · " : item.mode === "light" ? "Hell · " : "Hell & Dunkel · "}${item.hint}`,
         }))}
-        hint="„Systemvorgabe“ folgt der Einstellung von Windows. Die Wahl gilt sofort und bleibt beim nächsten Start erhalten."
+        hint="Alle Themes verwenden das klassische Layout. Klassisch ist der Standard."
       />
 
       <Select
+        className="settings-field-section"
         label="Zeilendichte"
         value={density}
         onChange={setDensity}
+        disabled={saving}
         options={(["comfortable", "compact"] as const).map((value) => ({
           value,
           label: DENSITY_LABEL[value],
         }))}
-        hint="Betrifft Tabellen und Listen. Diese Wahl gilt bis zum Beenden von Takt — sie hat noch keinen Platz in den gespeicherten Einstellungen."
+        hint="Bestimmt die Abstände in Tabellen und Listen, unabhängig vom gewählten Theme."
       />
     </Card>
   );
@@ -812,7 +881,7 @@ function AddinSettings() {
           <>
             {value.unreadable ? (
               <InlineMessage tone="danger" title="Die Tokendatei ist nicht lesbar">
-                Takt erzeugt von sich aus kein neues Token — das würde ein eingerichtetes Add-in
+                SuperTakt erzeugt von sich aus kein neues Token — das würde ein eingerichtetes Add-in
                 ohne Vorwarnung aussperren. Erzeugen Sie eines von Hand, wenn Sie das Add-in
                 neu einrichten wollen.
               </InlineMessage>

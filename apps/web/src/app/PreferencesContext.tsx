@@ -1,60 +1,36 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { themePreset } from "../lib/themePresets";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { errorMessage } from "../api/client";
 import { updateSettings } from "../api/endpoints";
-import { useDensity, useThemePreference, type Density, type ThemePreference } from "../lib/theme";
+import { useDensity, useDesignTheme, useThemePreference, type Density, type DesignTheme, type ThemePreference } from "../lib/theme";
 import { useStructure } from "./StructureContext";
 import { useToasts } from "./ToastContext";
 
 /**
- * Takt — die Einstellungen der Darstellung, an einer Stelle (T-057, Punkt 2).
- *
- * ## Warum es diesen Zusammenhang gibt
- *
- * Farbmodus und Zeilendichte werden in einem Bereich eingestellt
- * („Darstellung“ in den Einstellungen) und wirken auf das **ganze** Fenster.
- * Zwischen diesen beiden Punkten liegt der Zusammenhang: Er nimmt die
- * gespeicherte Wahl entgegen, schreibt sie an das Wurzelelement und macht sie
- * damit fuer jede Ansicht gueltig — unabhaengig davon, wo sie gesetzt wurde.
- *
- * ## Warum er nicht mit dem Schalter in der Kopfleiste entfallen ist (T-065)
- *
- * Bis T-057 gab es zwei voneinander unabhaengige Zustaende: Die Kopfleiste
- * hielt ihren eigenen `useThemePreference`, die Einstellungen ihren eigenen.
- * Wer oben umschaltete, sah unten den alten Wert stehen, und beim naechsten
- * Start war die Wahl wieder weg, weil die Kopfleiste nie gespeichert hat.
- * T-057 hat beide auf diesen einen Zusammenhang gelegt.
- *
- * T-065 hat das Bedienelement in der Kopfleiste entfernt — den zweiten
- * Bedienweg, nicht die Quelle. Dieser Zusammenhang bleibt, und er muss
- * bleiben: Ohne ihn wuerde die gespeicherte Wahl beim Start nirgends
- * angewandt, und Takt stuende nach jedem Neustart wieder auf Systemvorgabe.
- * Der `useEffect` weiter unten ist genau diese Stelle.
- *
- * ## Was dauerhaft ist und was nicht
- *
- * **Der Farbmodus ist dauerhaft.** Er liegt in `app_setting.theme` (E-041) und
- * wird bei jeder Aenderung sofort geschrieben — ohne Speichern-Knopf. Eine
- * Darstellungseinstellung, die man erst bestaetigen muss, obwohl man das
- * Ergebnis schon sieht, ist ein Knopf ohne Frage.
- *
- * **Die Zeilendichte ist es nicht.** Das Datenmodell fuehrt keine Spalte dafuer
- * (`AppSettings`: `exportDirectory`, `activeExportTemplateId`, `roundingMode`,
- * `locale`, `theme`). Sie gilt deshalb bis zum Beenden von Takt, und die
- * Oberflaeche sagt das an der Stelle, an der sie eingestellt wird, statt es zu
- * verschweigen. Im Browser wird nichts abgelegt — Takt speichert dort nichts,
- * auch keine Vorliebe. Als offene Frage an die Domaene vermerkt (T-057).
+ * Darstellung und Timerverhalten (A-21.4, A-22.1) sind unabhängig.
+ * Die lokale Datenbank hält die Einstellungen. Ein Wechsel wirkt sofort und
+ * wird bei einem Schreibfehler auf den vorherigen Zustand zurückgesetzt.
  */
-
-export interface PreferencesApi {
+interface PreferenceValues {
   readonly theme: ThemePreference;
-  /** Setzt den Farbmodus und schreibt ihn in die Einstellungen. */
-  readonly setTheme: (next: ThemePreference) => void;
-  /** Laeuft gerade ein Schreibvorgang fuer den Farbmodus? */
-  readonly themeSaving: boolean;
+  readonly designTheme: DesignTheme;
   readonly density: Density;
-  /** Setzt die Zeilendichte. Gilt bis zum Beenden, siehe oben. */
+  readonly promptOnTimerStop: boolean;
+  readonly idleDetectionEnabled: boolean;
+  readonly idleKeepTimerRunning: boolean;
+  readonly idleThresholdMinutes: number;
+}
+
+export interface PreferencesApi extends PreferenceValues {
+  readonly setTheme: (next: ThemePreference) => void;
+  readonly setDesignTheme: (next: DesignTheme) => void;
   readonly setDensity: (next: Density) => void;
+  readonly setPromptOnTimerStop: (next: boolean) => void;
+  readonly setIdleKeepTimerRunning: (next: boolean) => void;
+  readonly setIdleDetectionEnabled: (next: boolean) => void;
+  readonly setIdleThresholdMinutes: (next: number) => void;
+  readonly saving: boolean;
 }
 
 const PreferencesContext = createContext<PreferencesApi | null>(null);
@@ -62,54 +38,79 @@ const PreferencesContext = createContext<PreferencesApi | null>(null);
 export function PreferencesProvider({ children }: { readonly children: ReactNode }) {
   const structure = useStructure();
   const toasts = useToasts();
-  const [theme, setThemeLocal] = useThemePreference("system");
-  const [density, setDensity] = useDensity("comfortable");
-  const [themeSaving, setThemeSaving] = useState(false);
+  const [designTheme, setDesignThemeLocal] = useDesignTheme("classic");
+  const [theme, setThemeLocal] = useThemePreference("system", themePreset(designTheme).mode);
+  const [density, setDensityLocal] = useDensity("comfortable");
+  const [promptOnTimerStop, setPromptOnTimerStopLocal] = useState(true);
+  const [idleKeepTimerRunning, setIdleKeepTimerRunningLocal] = useState(true);
+  const [idleDetectionEnabled, setIdleDetectionEnabledLocal] = useState(true);
+  const [idleThresholdMinutes, setIdleThresholdMinutesLocal] = useState(5);
+  const [saving, setSaving] = useState(false);
+  // The ref also guards two events in the same render, before controls disable.
+  const inFlight = useRef(false);
 
-  const settingsTheme =
-    structure.state.status === "ready" ? structure.state.value.settings.theme : null;
+  const settings = structure.state.status === "ready" ? structure.state.value.settings : null;
+  const storedTheme = settings?.theme;
+  const storedDesign = settings?.designTheme;
+  const storedDensity = settings?.density;
+  const storedPrompt = settings?.promptOnTimerStop;
+  const storedKeepRunning = settings?.idleKeepTimerRunning;
+  const storedIdle = settings?.idleDetectionEnabled;
+  const storedThreshold = settings?.idleThresholdMinutes;
 
-  /*
-   * Die dauerhafte Wahl liegt beim Dienst (`app_setting.theme`, E-041). Diese
-   * Wirkung zieht sie nach, sobald die Einstellungen da sind oder sich
-   * geaendert haben — auch dann, wenn jemand sie anderswo gesetzt hat.
-   */
+  const apply = useCallback((value: PreferenceValues) => {
+    setThemeLocal(value.theme);
+    setDesignThemeLocal(value.designTheme);
+    setDensityLocal(value.density);
+    setPromptOnTimerStopLocal(value.promptOnTimerStop);
+    setIdleDetectionEnabledLocal(value.idleDetectionEnabled);
+    setIdleKeepTimerRunningLocal(value.idleKeepTimerRunning);
+    setIdleThresholdMinutesLocal(value.idleThresholdMinutes);
+  }, [setThemeLocal, setDesignThemeLocal, setDensityLocal]);
+
   useEffect(() => {
-    if (settingsTheme !== null) setThemeLocal(settingsTheme);
-  }, [settingsTheme, setThemeLocal]);
+    if (storedTheme !== undefined && !inFlight.current) {
+      apply({ theme: storedTheme, designTheme: storedDesign ?? "classic", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true, idleDetectionEnabled: storedIdle ?? true, idleKeepTimerRunning: storedKeepRunning ?? true, idleThresholdMinutes: storedThreshold ?? 5 });
+    }
+  }, [storedTheme, storedDesign, storedDensity, storedPrompt, storedIdle, storedKeepRunning, storedThreshold, apply]);
 
-  const setTheme = useCallback(
-    (next: ThemePreference) => {
-      const previous = theme;
-      // Zuerst anwenden, dann schreiben: Der Farbmodus ist das eine
-      // Bedienelement, dessen Ergebnis man sieht, bevor der Dienst antwortet.
-      setThemeLocal(next);
-      setThemeSaving(true);
-      void updateSettings({ theme: next })
-        .then(() => {
-          structure.reload();
-        })
-        .catch((cause: unknown) => {
-          setThemeLocal(previous);
-          toasts.failure("Der Farbmodus wurde nicht gespeichert", errorMessage(cause));
-        })
-        .finally(() => setThemeSaving(false));
-    },
-    [structure, theme, setThemeLocal, toasts],
-  );
+  const change = useCallback((patch: Partial<PreferenceValues>) => {
+    if (inFlight.current) return;
+    const previous = { theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes };
+    inFlight.current = true;
+    setSaving(true);
+    apply({ ...previous, ...patch });
+    void updateSettings(patch)
+      .then((saved) => {
+        apply(saved);
+        structure.reload();
+      })
+      .catch((cause: unknown) => {
+        apply(previous);
+        toasts.failure("Die Einstellung wurde nicht gespeichert", errorMessage(cause));
+      })
+      .finally(() => {
+        inFlight.current = false;
+        setSaving(false);
+      });
+  }, [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, apply, structure, toasts]);
 
-  const api = useMemo<PreferencesApi>(
-    () => ({ theme, setTheme, themeSaving, density, setDensity }),
-    [theme, setTheme, themeSaving, density, setDensity],
-  );
+  const api = useMemo<PreferencesApi>(() => ({
+    theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, saving,
+    setTheme: (next) => change({ theme: next }),
+    setDesignTheme: (next) => change({ designTheme: next }),
+    setDensity: (next) => change({ density: next }),
+    setPromptOnTimerStop: (next) => change({ promptOnTimerStop: next }),
+    setIdleKeepTimerRunning: (next) => change({ idleKeepTimerRunning: next }),
+    setIdleDetectionEnabled: (next) => change({ idleDetectionEnabled: next }),
+    setIdleThresholdMinutes: (next) => change({ idleThresholdMinutes: next }),
+  }), [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, saving, change]);
 
   return <PreferencesContext.Provider value={api}>{children}</PreferencesContext.Provider>;
 }
 
 export function usePreferences(): PreferencesApi {
   const value = useContext(PreferencesContext);
-  if (value === null) {
-    throw new Error("usePreferences ausserhalb von PreferencesProvider benutzt.");
-  }
+  if (value === null) throw new Error("usePreferences ausserhalb von PreferencesProvider benutzt.");
   return value;
 }

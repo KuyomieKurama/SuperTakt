@@ -72,6 +72,15 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { parseIdleActivity, type IdleActivity } from './idleActivity';
+export type { IdleActivity, IdlePeriod } from './idleActivity';
+
+export async function idleActivity(): Promise<IdleActivity> {
+  requireShell();
+  return parseIdleActivity(await invoke<unknown>('takt_idle_activity'));
+}
+import { parseOutlookCertificate, type OutlookCertificateResult } from './outlookCertificate';
+export type { OutlookCertificateFacts, OutlookCertificateResult } from './outlookCertificate';
 
 /** Womit sich die Oberfläche beim lokalen Dienst ausweist. */
 export interface ServiceHandshake {
@@ -236,7 +245,7 @@ export function isShellAvailable(): boolean {
 function requireShell(): void {
   if (!isShellAvailable()) {
     throw new Error(
-      'Diese Funktion braucht die Takt-Anwendung. Im Browser allein steht sie nicht zur Verfügung.',
+      'Diese Funktion braucht die SuperTakt-Anwendung. Im Browser allein steht sie nicht zur Verfügung.',
     );
   }
 }
@@ -376,7 +385,7 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
   if (!isShellAvailable()) {
     return {
       outcome: 'unavailable',
-      reason: 'Der Ordnerauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.',
+      reason: 'Der Ordnerauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.',
     };
   }
 
@@ -398,7 +407,7 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
     // daneben und tut es auch.
     return {
       outcome: 'unavailable',
-      reason: 'Diese Fassung von Takt kann den Ordnerauswahldialog des Betriebssystems nicht öffnen.',
+      reason: 'Diese Fassung von SuperTakt kann den Ordnerauswahldialog des Betriebssystems nicht öffnen.',
     };
   }
 
@@ -432,6 +441,19 @@ export async function chooseExportDirectory(current: string | null): Promise<Dir
 export async function installedVersion(): Promise<string> {
   requireShell();
   return await invoke<string>('takt_installed_version');
+}
+
+/** Read-only inspection of the fixed local Outlook certificate (A-23). */
+export async function outlookCertificate(): Promise<OutlookCertificateResult> {
+  requireShell();
+  return parseOutlookCertificate(await invoke<unknown>('takt_outlook_certificate'));
+}
+
+/** Called only after the user has confirmed this exact SHA-256 fingerprint. */
+export async function trustOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {
+  requireShell();
+  if (!/^[A-F0-9]{64}$/.test(fingerprint)) throw new Error('Der bestätigte Fingerabdruck ist ungültig.');
+  return parseOutlookCertificate(await invoke<unknown>('takt_trust_outlook_certificate', { fingerprint }));
 }
 
 /**
@@ -480,7 +502,7 @@ export async function openReleasePage(version: string): Promise<ReleasePageResul
     return {
       outcome: 'unavailable',
       reason:
-        'Die Release-Seite öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.',
+        'Die Release-Seite öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.',
     };
   }
 
@@ -527,7 +549,7 @@ export type AttachmentOpenResult =
 
 /** Der Satz für den reinen Browserbetrieb. Wortgleich an beiden Stellen. */
 const NO_SHELL_FOR_ATTACHMENTS =
-  'Anhänge öffnet die Takt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.';
+  'Anhänge öffnet die SuperTakt-Anwendung. Im Browser allein steht dieser Weg nicht zur Verfügung.';
 
 /**
  * Übersetzt den technischen Schlüssel aus der Hülle in einen Ausgang.
@@ -620,7 +642,7 @@ export async function chooseAttachmentFile(kind: 'file' | 'image'): Promise<Dire
   if (!isShellAvailable()) {
     return {
       outcome: 'unavailable',
-      reason: 'Der Dateiauswahldialog gehört zur Takt-Anwendung. Im Browser allein gibt es ihn nicht.',
+      reason: 'Der Dateiauswahldialog gehört zur SuperTakt-Anwendung. Im Browser allein gibt es ihn nicht.',
     };
   }
 
@@ -644,7 +666,7 @@ export async function chooseAttachmentFile(kind: 'file' | 'image'): Promise<Dire
   } catch {
     return {
       outcome: 'unavailable',
-      reason: 'Diese Fassung von Takt kann den Dateiauswahldialog des Betriebssystems nicht öffnen.',
+      reason: 'Diese Fassung von SuperTakt kann den Dateiauswahldialog des Betriebssystems nicht öffnen.',
     };
   }
 

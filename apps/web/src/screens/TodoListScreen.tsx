@@ -9,34 +9,27 @@ import {
 import { errorMessage } from "../api/client";
 import type { DueSortDirection, DueState, Todo, TodoStatus } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { DeadlineFlag } from "../components/DeadlineFlag";
-import { DoneFlag } from "../components/DoneFlag";
-import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../components/FilterBar";
-import { Select } from "../components/Select";
+import { type ActiveFilter } from "../components/FilterBar";
 import { Icon } from "../components/Icon";
-import { ExportSummaryStrip } from "../components/Kanban";
-import { Menu, type MenuEntry } from "../components/Menu";
-import { Button, EmptyState, IconButton } from "../components/Primitives";
-import { TagChip } from "../components/Tag";
-import { TagInput } from "../components/TagInput";
-import { EMPTY_SUMMARY, loadExportSummaries, type ExportSummary } from "../app/exportSummary";
+import { type MenuEntry } from "../components/Menu";
+import { Button, EmptyState } from "../components/Primitives";
+import { EMPTY_SUMMARY, loadExportSummaries } from "../app/exportSummary";
 import { useRefresh } from "../app/RefreshContext";
-import { href, navigate } from "../app/router";
+import { navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { undoDoneAction } from "../app/undoDone";
 import { useAsync } from "../app/useAsync";
 import { useToday } from "../app/useToday";
-import { cx } from "../lib/cx";
 import { formatCount, plural } from "../lib/format";
-import { doneFlagState, type DoneFlagState } from "../lib/labels";
-import type { CalendarDay } from "../api/types";
+import { doneFlagState } from "../lib/labels";
 import { doneMovementSentence, withMovement } from "../lib/movement";
-import { AsyncBoundary, RefreshHint, ScreenHeader } from "./parts";
+import { AsyncBoundary, ScreenHeader } from "./parts";
+import { TodoRow } from "../components/TodoRow";
+import { TodoListFilters, DEADLINE_FILTER_LABEL, TODO_SORT_LABEL } from "../components/TodoListFilters";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { foreignText, quotedName } from "../lib/foreign";
-import { Foreign } from "../components/Foreign";
 
 /**
  * Takt — S-02, die Todo-Liste.
@@ -63,21 +56,6 @@ import { Foreign } from "../components/Foreign";
 const PAGE_SIZE = 100;
 
 /**
- * Die Wörter für den Fristfilter (A-19.5, T-144 Abschnitt 8.5).
- *
- * „Überfällig", „Heute fällig", „Später fällig" — nicht „in Verzug", nicht
- * „abgelaufen", nicht „geplant". „Ohne Frist" ist **kein** vierter Zustand,
- * sondern die Auswahl derer, die keinen haben; an der Zeile selbst steht dafür
- * weiterhin nichts.
- */
-const DEADLINE_FILTER_LABEL: Readonly<Record<DueState, string>> = {
-  overdue: "Überfällig",
-  due_today: "Heute fällig",
-  due_later: "Später fällig",
-  no_due_date: "Ohne Frist",
-};
-
-/**
  * Der Wert aus der Adresse, geprüft.
  *
  * Was in der Adresszeile steht, hat niemand geprüft — ein `as DeadlineFilter`
@@ -89,13 +67,6 @@ function asDueState(value: string | undefined): DueState | "" {
   if (value === undefined) return "";
   return value in DEADLINE_FILTER_LABEL ? (value as DueState) : "";
 }
-
-/** Die Wörter für die Ordnung (A-19.20). */
-const TODO_SORT_LABEL: Readonly<Record<DueSortDirection | "", string>> = {
-  "": "Zuletzt bearbeitet",
-  asc: "Frist, früheste zuerst",
-  desc: "Frist, späteste zuerst",
-};
 
 export interface TodoListScreenProps {
   readonly query: Readonly<Record<string, string>>;
@@ -418,9 +389,10 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
   );
 
   return (
-    <section className="screen">
+    <section className="screen todo-screen">
       <ScreenHeader
         title="Todos"
+        refreshing={list.state.status === "ready" && list.state.refreshing}
         lead="Alles, wofür Zeit erfasst wird. Erledigte sind ausgeblendet, bis Sie sie einblenden."
         actions={
           <Button
@@ -435,83 +407,18 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           </Button>
         }
       >
-        <FilterBar
-          className="todo-list__filters"
-          label="Todos filtern"
-          resultLabel={
-            list.state.status === "ready"
-              ? plural(list.state.value.page.total, "Todo", "Todos")
-              : "wird geladen …"
-          }
+        <TodoListFilters
+          search={search} onSearchChange={setSearch}
+          statusId={statusId} onStatusChange={setStatusId} statuses={statuses}
+          poolId={poolId} onPoolChange={setPoolId} pools={pools}
+          tagIds={tagIds} onTagsChange={setTagIds}
+          deadlineFilter={deadlineFilter} onDeadlineChange={setDeadlineFilter}
+          sort={sort} onSortChange={setSort}
+          showDone={showDone} onShowDoneChange={setShowDone}
+          busy={list.state.status === "ready" && list.state.refreshing}
+          resultLabel={list.state.status === "ready" ? plural(list.state.value.page.total, "Todo", "Todos") : "wird geladen …"}
           activeFilters={activeFilters}
           onResetAll={resetAll}
-          controls={
-            <>
-              <SearchField
-                label="Todos durchsuchen"
-                value={search}
-                onChange={setSearch}
-                placeholder="Titel oder Call-Nummer …"
-                busy={list.state.status === "ready" && list.state.refreshing}
-              />
-              <Select
-                label="Status"
-                value={statusId}
-                onChange={setStatusId}
-                options={[
-                  { value: "", label: "Jeder Status" },
-                  ...statuses.map((status) => ({ value: status.id, label: status.name })),
-                ]}
-              />
-              <Select
-                label="Pool"
-                value={poolId}
-                onChange={setPoolId}
-                options={[
-                  { value: "", label: "Alle Pools" },
-                  ...pools.map((pool) => ({ value: pool.id, label: pool.name })),
-                ]}
-              />
-              <TagInput
-                label="Tags"
-                size="lg"
-                value={tagIds}
-                onChange={setTagIds}
-                placeholder="Nach Tag filtern …"
-              />
-              <Select
-                label="Frist"
-                value={deadlineFilter}
-                onChange={(next) => setDeadlineFilter(asDueState(next))}
-                options={[
-                  { value: "", label: "Jede Frist" },
-                  { value: "overdue", label: DEADLINE_FILTER_LABEL.overdue },
-                  { value: "due_today", label: DEADLINE_FILTER_LABEL.due_today },
-                  { value: "due_later", label: DEADLINE_FILTER_LABEL.due_later },
-                  { value: "no_due_date", label: DEADLINE_FILTER_LABEL.no_due_date },
-                ]}
-              />
-              <div className="todo-list__ordering">
-                <Select
-                  label="Ordnung"
-                  value={sort}
-                  onChange={(next) => setSort(next === "asc" || next === "desc" ? next : "")}
-                  options={[
-                    { value: "", label: TODO_SORT_LABEL[""] },
-                    { value: "asc", label: TODO_SORT_LABEL.asc },
-                    { value: "desc", label: TODO_SORT_LABEL.desc },
-                  ]}
-                  hint="Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten."
-                />
-                <FilterToggle
-                  label="Erledigte einblenden"
-                  pressed={showDone}
-                  onChange={setShowDone}
-                  hint="Voreingestellt ausgeblendet"
-                />
-              </div>
-            </>
-          }
         />
       </ScreenHeader>
 
@@ -521,7 +428,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         rows={6}
         onRetry={list.reload}
       >
-        {(value, refreshing) => {
+        {(value) => {
           const hiddenCount = showDone ? 0 : Math.max(0, value.totalWithDone - value.page.total);
           const todos = value.page.items;
 
@@ -533,7 +440,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
                   <EmptyState
                     icon="inbox"
                     title="Noch kein Todo"
-                    description="Takt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
+                    description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
                     action={
                       <Button
                         variant="primary"
@@ -566,7 +473,6 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
           return (
             <>
               <HiddenDoneNotice count={hiddenCount} onShow={() => setShowDone(true)} />
-              <RefreshHint active={refreshing} />
 
               <ul className="todo-list" aria-label="Todos">
                 {todos.map((todo) => (
@@ -624,7 +530,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         }
         consequence={
           deleteError ??
-          "Hängt an dem Todo eine bereits exportierte Buchung, lehnt Takt das Löschen ab: Abgerechnete Zeit wird nicht durch das Löschen eines Todos entfernt."
+          "Hängt an dem Todo eine bereits exportierte Buchung, lehnt SuperTakt das Löschen ab: Abgerechnete Zeit wird nicht durch das Löschen eines Todos entfernt."
         }
         confirmLabel="Endgültig löschen"
         busy={deleting}
@@ -658,112 +564,5 @@ function HiddenDoneNotice({
         Einblenden
       </Button>
     </p>
-  );
-}
-
-/* ==================================================================== */
-/* Zeile                                                                */
-/* ==================================================================== */
-
-interface TodoRowProps {
-  readonly todo: Todo;
-  readonly summary: ExportSummary;
-  readonly statusName: string;
-  readonly running: boolean;
-  /**
-   * Erledigt, offen oder „Erledigt aufgehoben" (A-2.5, Befund C-23).
-   *
-   * Der dritte Zustand kommt aus der Sitzung und nicht aus dem Todo, deshalb
-   * reicht ihn die Liste herein, statt ihn hier aus `completedAt` zu raten.
-   */
-  readonly doneState: DoneFlagState;
-  /** Heute, aus `useToday` der Ansicht — nicht je Zeile geholt. */
-  readonly today: CalendarDay;
-  readonly onToggleDone: () => void;
-  readonly onToggleTimer: () => void;
-  readonly menu: readonly MenuEntry[];
-  readonly tagLabels: ReadonlyArray<{ readonly tag: { readonly name: string }; readonly path: readonly string[] }>;
-}
-
-function TodoRow({
-  todo,
-  summary,
-  statusName,
-  running,
-  doneState,
-  today,
-  onToggleDone,
-  onToggleTimer,
-  menu,
-  tagLabels,
-}: TodoRowProps) {
-  const done = todo.completedAt !== null;
-  const visibleTags = tagLabels.slice(0, 3);
-  const hiddenTags = tagLabels.length - visibleTags.length;
-
-  return (
-    <li className={cx("todo-row", done && "todo-row--done", running && "todo-row--running")}>
-      <label className="todo-row__check">
-        <input type="checkbox" checked={done} onChange={onToggleDone} />
-        <span className="visually-hidden">
-          {done ? `${quotedName(todo.title)} als offen markieren` : `${quotedName(todo.title)} als erledigt markieren`}
-        </span>
-      </label>
-
-      <div className="todo-row__main">
-        <a className="todo-row__title" href={href("todo", todo.id)}>
-          <Foreign value={todo.title} />
-        </a>
-        <div className="todo-row__meta">
-          {todo.callNumber === null ? null : (
-            <span className="todo-row__call">
-              Call <Foreign value={todo.callNumber} />
-            </span>
-          )}
-          <Foreign className="todo-row__status" value={statusName} />
-          {/*
-            A-2.5, T-005n Abschnitt 1 Regel 1: Hat ein Timerstart „Erledigt"
-            aufgehoben, darf die Zeile nicht aussehen, als waere sie nie
-            erledigt gewesen. S-02 ist neben S-03 die Ansicht, aus der am
-            haeufigsten gestartet wird (E-027, A-6.1) — bis T-045 stand das
-            Etikett hier als einziger Listenansicht nicht (Befund C-23).
-          */}
-          <DoneFlag state={doneState} />
-          {/*
-            Die Frist (A-19.4): sichtbar, ohne dass man das Todo öffnen muss.
-            Sie steht zwischen dem Erledigt-Kennzeichen und den Tags — und sie
-            steht **gar nicht** da, wenn keine gesetzt ist (A-19.5). Damit
-            trägt die Mehrzahl der Zeilen weiterhin zwei Marken und nicht drei.
-          */}
-          <DeadlineFlag dueDate={todo.dueDate} today={today} />
-        </div>
-      </div>
-
-      <div className="todo-row__tags">
-        {visibleTags.map((info, index) => (
-          <TagChip
-            key={`${info.tag.name}-${String(index)}`}
-            label={info.tag.name}
-            path={info.path}
-            size="sm"
-          />
-        ))}
-        {hiddenTags > 0 ? <span className="todo-row__more">+{hiddenTags}</span> : null}
-      </div>
-
-      <div className="todo-row__export">
-        <ExportSummaryStrip summary={summary} />
-      </div>
-
-      <div className="todo-row__actions">
-        <IconButton
-          label={running ? `Timer für ${quotedName(todo.title)} stoppen` : `Timer für ${quotedName(todo.title)} starten`}
-          icon={running ? "pause" : "play"}
-          variant={running ? "primary" : "ghost"}
-          onClick={onToggleTimer}
-        />
-        <Menu trigger={<Icon name="more-horizontal" size={16} />} triggerLabel={`Menü für ${quotedName(todo.title)}`} entries={menu} align="end" />
-      </div>
-    </li>
   );
 }

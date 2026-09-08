@@ -113,34 +113,34 @@ const key = (mark: string, ...parts: readonly string[]): string => `${mark}${par
  */
 const SENTENCES = Object.freeze({
   checksum_mismatch:
-    'Der vorhandene Datenbestand passt nicht zu dieser Fassung von Takt: Eine bereits ausgeführte ' +
-    'Änderung am Bestand sieht heute anders aus als damals. Takt startet nicht und ändert nichts. ' +
-    'Bitte die Fassung von Takt verwenden, mit der zuletzt gearbeitet wurde.',
+    'Der vorhandene Datenbestand passt nicht zu dieser Fassung von SuperTakt: Eine bereits ausgeführte ' +
+    'Änderung am Bestand sieht heute anders aus als damals. SuperTakt startet nicht und ändert nichts. ' +
+    'Bitte die Fassung von SuperTakt verwenden, mit der zuletzt gearbeitet wurde.',
   database_too_new:
-    'Der Datenbestand stammt aus einer neueren Fassung von Takt. Diese Fassung startet nicht, ' +
+    'Der Datenbestand stammt aus einer neueren Fassung von SuperTakt. Diese Fassung startet nicht, ' +
     'damit sie den Bestand nicht beschädigt. Bitte die neuere Fassung verwenden.',
   database_busy:
-    'Der Datenbestand ist gerade von einem anderen Vorgang belegt. Takt startet nicht. ' +
-    'Läuft Takt vielleicht schon in einem anderen Fenster?',
+    'Der Datenbestand ist gerade von einem anderen Vorgang belegt. SuperTakt startet nicht. ' +
+    'Läuft SuperTakt vielleicht schon in einem anderen Fenster?',
   state_unreadable:
-    'Der Datenbestand ließ sich nicht lesen. Takt startet nicht und hat nichts geändert. ' +
-    'Bitte den Datenträger prüfen und Takt erneut starten.',
+    'Der Datenbestand ließ sich nicht lesen. SuperTakt startet nicht und hat nichts geändert. ' +
+    'Bitte den Datenträger prüfen und SuperTakt erneut starten.',
   backup_failed:
-    'Vor der Änderung am Datenbestand ließ sich keine Sicherungskopie anlegen. Takt startet nicht ' +
+    'Vor der Änderung am Datenbestand ließ sich keine Sicherungskopie anlegen. SuperTakt startet nicht ' +
     'und hat nichts geändert. Bitte den freien Speicherplatz und die Schreibrechte des ' +
     'Anwendungsdatenverzeichnisses prüfen.',
   migration_failed:
     'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Die begonnene ' +
     'Änderung wurde vollständig zurückgenommen, und eine Sicherungskopie von vorher liegt daneben. ' +
-    'Takt startet nicht.',
+    'SuperTakt startet nicht.',
   no_way_back:
     'Der Datenbestand ließ sich nicht auf eine frühere Fassung zurücknehmen: Zu einer bereits ' +
     'ausgeführten Änderung fehlt der Rückweg. Es wurde nichts geändert.',
   embedded_drift:
     'Die mitgelieferten Änderungen am Datenbestand stimmen nicht mit dem Quelltext überein. ' +
-    'Takt startet nicht. Das ist ein Fehler im Bauablauf und keiner des Bestands.',
+    'SuperTakt startet nicht. Das ist ein Fehler im Bauablauf und keiner des Bestands.',
   store_unopenable:
-    'Der Datenbestand ließ sich nicht öffnen. Takt startet nicht. Bitte prüfen, ob das ' +
+    'Der Datenbestand ließ sich nicht öffnen. SuperTakt startet nicht. Bitte prüfen, ob das ' +
     'Anwendungsdatenverzeichnis erreichbar und beschreibbar ist.',
   /**
    * Der Wortlaut, mit dem T-132 anfing.
@@ -150,7 +150,7 @@ const SENTENCES = Object.freeze({
    * sondern daneben — `key` trägt jetzt Fehlerschlüssel und Ergebniskennzeichen
    * von SQLite, und genau die hätten die Frage vom 2026-09-04 beantwortet.
    */
-  unknown: 'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht.',
+  unknown: 'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. SuperTakt startet nicht.',
 });
 
 // ---------------------------------------------------------------------------

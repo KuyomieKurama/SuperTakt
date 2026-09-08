@@ -251,7 +251,7 @@ export async function sweepOrphanedImages(
        */
       logger.lifecycle(
         'warn',
-        'Der Bestand führt andere Anhangsarten als diese Fassung von Takt. Liegengebliebene Bildkopien werden deshalb nicht aufgeräumt.',
+        'Der Bestand führt andere Anhangsarten als diese Fassung von SuperTakt. Liegengebliebene Bildkopien werden deshalb nicht aufgeräumt.',
         `attachment_image_sweep_unknown_kinds kinds=${String(kinds.length)} expected=${String(
           Object.keys(KIND_OWNS_IMAGE_FILE).length,
         )}`,

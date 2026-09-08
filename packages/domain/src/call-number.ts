@@ -242,3 +242,6 @@ export const normalizeCallNumber = (value: string | null | undefined): string | 
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
 };
+
+/** Vorgabe für die Call-Erkennung beim Super-Productivity-Import. */
+export const DEFAULT_IMPORT_CALL_PATTERN = String.raw`call[\s#:_-]*(\d{5,6})`;

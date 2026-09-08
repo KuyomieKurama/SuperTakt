@@ -138,8 +138,8 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
       kind: "sync_folder",
       impacts: ["confidentiality", "durability"],
       title: "Der Bestand liegt in einem Synchronisierungsordner",
-      body: "In dieser Datei stehen alle Todos, Buchungen und Vermerke im Klartext. Der Client des Anbieters lädt sie fortlaufend hoch — auch während Takt läuft, ohne Rückfrage und ohne dass es jemand sieht. Damit liegen die Daten Ihrer Kunden bei einem Anbieter. Dazu kommt ein zweites Problem: Eine Datenbankdatei, die mitten im Schreiben kopiert wird, kommt dort regelmäßig unbrauchbar an, und wenn zwei Rechner denselben Ordner synchronisieren, beschädigen sie einander die Datei.",
-      remedy: "Takt kann den Ablageort nicht verlegen — er folgt dem Anwendungsdatenverzeichnis dieses Benutzers. Nehmen Sie diesen Ordner im Synchronisierungsclient von der Übertragung aus.",
+      body: "In dieser Datei stehen alle Todos, Buchungen und Vermerke im Klartext. Der Client des Anbieters lädt sie fortlaufend hoch — auch während SuperTakt läuft, ohne Rückfrage und ohne dass es jemand sieht. Damit liegen die Daten Ihrer Kunden bei einem Anbieter. Dazu kommt ein zweites Problem: Eine Datenbankdatei, die mitten im Schreiben kopiert wird, kommt dort regelmäßig unbrauchbar an, und wenn zwei Rechner denselben Ordner synchronisieren, beschädigen sie einander die Datei.",
+      remedy: "SuperTakt kann den Ablageort nicht verlegen — er folgt dem Anwendungsdatenverzeichnis dieses Benutzers. Nehmen Sie diesen Ordner im Synchronisierungsclient von der Übertragung aus.",
       evidence: syncEvidence,
     });
   }
@@ -152,7 +152,7 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
       impacts: ["confidentiality", "durability"],
       title: "Der Bestand liegt nicht auf diesem Rechner",
       body: "Der Pfad zeigt auf eine Netzfreigabe. Eine SQLite-Datei über das Netz zu führen gilt als unsicher: Die Sperren, mit denen sie sich gegen gleichzeitige Zugriffe schützt, wirken über viele Netzdateisysteme nicht zuverlässig, und ein Verbindungsabriss mitten im Schreiben kann sie beschädigen. Außerdem liegen die Kundendaten damit auf einem anderen Rechner — bei einem Produkt, das laut E-001 vollständig lokal arbeitet.",
-      remedy: "Das Anwendungsdatenverzeichnis gehört auf die lokale Festplatte. Wenn es hier im Netz liegt, ist das eine Einstellung des Windows-Profils; das entscheidet die Verwaltung des Rechners, nicht Takt.",
+      remedy: "Das Anwendungsdatenverzeichnis gehört auf die lokale Festplatte. Wenn es hier im Netz liegt, ist das eine Einstellung des Windows-Profils; das entscheidet die Verwaltung des Rechners, nicht SuperTakt.",
       evidence: networkEvidence,
     });
   }
@@ -164,7 +164,7 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
       kind: "roaming_profile",
       impacts: ["confidentiality", "durability"],
       title: "Der Bestand liegt im servergespeicherten Profil",
-      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Der ganze Bestand wandert dann mit, Kundennotizen inbegriffen — und kopiert wird auch eine Datei, die gerade noch geöffnet war. Genau deshalb legt Takt seine Daten unter AppData\\Local ab (E-018).",
+      body: "Der Ordner AppData\\Roaming wird beim An- und Abmelden auf einen Dateiserver kopiert, wenn das Konto ein servergespeichertes Profil hat. Der ganze Bestand wandert dann mit, Kundennotizen inbegriffen — und kopiert wird auch eine Datei, die gerade noch geöffnet war. Genau deshalb legt SuperTakt seine Daten unter AppData\\Local ab (E-018).",
       remedy: "Steht hier trotzdem Roaming, ist dieses Windows-Profil anders eingerichtet. Auch das entscheidet die Verwaltung des Rechners.",
       evidence: roamingEvidence,
     });
@@ -178,7 +178,7 @@ export function adviseDatabaseLocation(rawPath: string): DatabaseLocationAdvice 
       impacts: ["durability"],
       title: "Der Bestand liegt in einem Ordner für flüchtige Dateien",
       body: "Ordner mit dem Namen Temp oder tmp werden von der Windows-Speicheroptimierung, von Aufräumwerkzeugen und je nach System beim Neustart geleert — ohne Rückfrage. Was Sie eintragen, kann beim nächsten Start fehlen. Im Prüf- und Entwicklungsbetrieb ist das gewollt; auf einem Arbeitsplatz ist es ein Fehler in der Einrichtung.",
-      remedy: "Starten Sie Takt über die installierte Verknüpfung. Ein abweichendes Anwendungsdatenverzeichnis kommt aus der Umgebung, in der die Anwendung gestartet wurde, und nicht aus den Einstellungen.",
+      remedy: "Starten Sie SuperTakt über die installierte Verknüpfung. Ein abweichendes Anwendungsdatenverzeichnis kommt aus der Umgebung, in der die Anwendung gestartet wurde, und nicht aus den Einstellungen.",
       evidence: volatileEvidence,
     });
   }

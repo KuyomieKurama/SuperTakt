@@ -160,7 +160,7 @@ export function FoundationsSection() {
 
       <Card
         title="Schriftskala"
-        description="Grundgröße 14px. Takt ist eine Desktop-Anwendung mit vielen Tabellen; 16px als Grundgröße würde die Zeilendichte halbieren. Die Wurzelgröße bleibt bei 16px, damit Browser-Zoom und rem-Rechnung stimmen. Systemschriftstapel ohne Netzabruf, weil Takt vollständig lokal läuft."
+        description="Grundgröße 14px. SuperTakt ist eine Desktop-Anwendung mit vielen Tabellen; 16px als Grundgröße würde die Zeilendichte halbieren. Die Wurzelgröße bleibt bei 16px, damit Browser-Zoom und rem-Rechnung stimmen. Systemschriftstapel ohne Netzabruf, weil SuperTakt vollständig lokal läuft."
       >
         <div className="type-scale">
           {TYPE_ROWS.map((row) => (

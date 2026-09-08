@@ -49,12 +49,12 @@ interface ErrorDefinition {
 const CATALOG: Readonly<Record<AccessErrorCode, ErrorDefinition>> = Object.freeze({
   unauthorized: {
     status: 401,
-    message: 'Zugriff nicht möglich. Bitte das Takt-Token prüfen.',
+    message: 'Zugriff nicht möglich. Bitte das SuperTakt-Token prüfen.',
   },
   host_not_allowed: {
     status: 403,
     message:
-      'Diese Anfrage war nicht an den lokalen Dienst gerichtet. Takt beantwortet nur Anfragen an 127.0.0.1.',
+      'Diese Anfrage war nicht an den lokalen Dienst gerichtet. SuperTakt beantwortet nur Anfragen an 127.0.0.1.',
   },
   origin_not_allowed: {
     status: 403,

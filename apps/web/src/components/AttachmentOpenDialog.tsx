@@ -290,7 +290,7 @@ export function AttachmentOpenDialog({
             </p>
           ) : (
             <p>
-              Takt übergibt diese Datei an die Standardanwendung des Systems — dasselbe wie ein
+              SuperTakt übergibt diese Datei an die Standardanwendung des Systems — dasselbe wie ein
               Doppelklick im Dateimanager. Was danach geschieht, entscheidet die Anwendung, die
               Ihr System dafür eingestellt hat.
             </p>

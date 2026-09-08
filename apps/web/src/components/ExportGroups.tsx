@@ -1,5 +1,5 @@
 import type { ForeignText } from "../api/types";
-import type { ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { cx } from "../lib/cx";
 import { TIME_ENTRY_SOURCE_LABEL, type TimeEntrySource } from "../lib/labels";
 import { exportDisplayState, ExportStatusBadge } from "./ExportStatus";
@@ -90,6 +90,7 @@ export interface ExportGroupEntryData {
 
 export interface ExportGroupData {
   readonly id: string;
+  readonly todoId?: string;
   readonly todoTitle: ForeignText;
   /** Call-Nummer des Todos (A-2.6). `null`, wenn nicht gesetzt. */
   readonly callNumber: ForeignText | null;
@@ -146,7 +147,88 @@ export interface ExportGroupListProps {
   readonly className?: string;
 }
 
-export function ExportGroupList({
+function toggleOnRowDoubleClick(event: MouseEvent<HTMLTableRowElement>, toggle: () => void) {
+  const target = event.target;
+  if (!(target instanceof Element) || target.closest('button, input, label, a, select, textarea, [role="button"]')) return;
+  toggle();
+}
+
+export function ExportGroupList(props: ExportGroupListProps) {
+  if (props.models.every(model => model.group.todoId === undefined)) return <ExportDayGroupList {...props} />;
+  const byTodo = new Map<string, ExportGroupViewModel[]>();
+  for (const model of props.models) {
+    const id = model.group.todoId ?? model.group.id;
+    const days = byTodo.get(id) ?? [];
+    days.push(model);
+    byTodo.set(id, days);
+  }
+  const selectable = props.models.filter(model => model.blockedReason === null);
+  const selected = selectable.filter(model => props.selectedGroupIds.has(model.group.id)).length;
+  const allSelected = selectable.length > 0 && selected === selectable.length;
+  return <div className={cx("table-wrap", props.className)}>
+    <table className="table export-todo-table">
+      <caption className="visually-hidden">Export nach Todo, aufklappbar nach Tagen</caption>
+      <colgroup>
+        <col className="export-col--expand" /><col className="export-col--select" />
+        <col className="export-col--status" /><col className="export-col--call" /><col />
+        <col className="export-col--days" /><col className="export-col--entries" /><col className="export-col--selected" />
+      </colgroup>
+      <thead><tr>
+        <th scope="col" className="export-table__expand"><span className="visually-hidden">Aufklappen</span></th>
+        <th scope="col" className="table__select"><input type="checkbox" aria-label="Alle exportierbaren Tagesgruppen auswählen"
+          checked={allSelected} disabled={selectable.length === 0}
+          ref={node => { if (node) node.indeterminate = selected > 0 && !allSelected; }}
+          onChange={() => { for (const model of selectable) if (props.selectedGroupIds.has(model.group.id) === allSelected) props.onToggleGroup(model.group.id); }} /></th>
+        <th scope="col">Status</th><th scope="col">Call</th><th scope="col">Todo</th>
+        <th scope="col" className="table__cell--center">Tage</th>
+        <th scope="col" className="table__cell--center">Buchungen</th>
+        <th scope="col" className="table__cell--center">Ausgewählte Tage</th>
+      </tr></thead>
+      {Array.from(byTodo, ([id, models]) => <ExportTodoGroup key={id} {...props} models={models} />)}
+    </table>
+  </div>;
+}
+
+function ExportTodoGroup(props: ExportGroupListProps) {
+  const [open, setOpen] = useState(false);
+  const first = props.models[0]!;
+  const available = props.models.filter(model => model.blockedReason === null);
+  const selected = available.filter(model => props.selectedGroupIds.has(model.group.id)).length;
+  const blocked = props.models.length - available.length;
+  const entryCount = props.models.reduce((sum, model) => sum + model.group.entries.length, 0);
+  const allSelected = available.length > 0 && selected === available.length;
+  const bodyId = `export-todo-${first.group.todoId ?? first.group.id}`;
+  return <tbody className="export-todo">
+    <tr className={cx("table__row", "export-todo__head", blocked === props.models.length && "export-todo__head--blocked", selected > 0 && "table__row--selected")}
+      onDoubleClick={event => toggleOnRowDoubleClick(event, () => setOpen(value => !value))}>
+      <td className="export-table__expand"><button type="button" className="export-todo__toggle" aria-label={`Tage auf- oder einklappen: ${foreignText(first.group.todoTitle)}`}
+        aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(value => !value)}>
+        <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
+      </button></td>
+      <td className="table__select"><input type="checkbox" checked={allSelected} disabled={available.length === 0}
+        ref={node => { if (node) node.indeterminate = selected > 0 && !allSelected; }}
+        aria-label={`Alle exportierbaren Tage auswählen: ${foreignText(first.group.todoTitle)}`}
+        onChange={() => {
+          for (const model of available) {
+            if (props.selectedGroupIds.has(model.group.id) === allSelected) props.onToggleGroup(model.group.id);
+          }
+        }} /></td>
+      <td className="export-todo__status">{blocked > 0
+        ? <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{blocked} {blocked === 1 ? "Tag blockiert" : "Tage blockiert"}</span>
+        : <span className="export-todo__ready"><Icon name="check-circle" size={14} />Exportierbar</span>}</td>
+      <td className="table__call">{first.group.callNumber === null ? <span className="muted">—</span> : <Foreign value={first.group.callNumber} />}</td>
+      <td><Foreign value={first.group.todoTitle} /></td>
+      <td className="table__cell--center tabular">{props.models.length}</td>
+      <td className="table__cell--center tabular">{entryCount}</td>
+      <td className="table__cell--center tabular">{selected}</td>
+    </tr>
+    <tr id={bodyId} hidden={!open} className="export-todo__details">
+      <td colSpan={8}><ExportDayGroupList {...props} className="export-todo__days" /></td>
+    </tr>
+  </tbody>;
+}
+
+function ExportDayGroupList({
   models,
   selectedGroupIds,
   expandedGroupIds,
@@ -158,7 +240,21 @@ export function ExportGroupList({
   className,
 }: ExportGroupListProps) {
   return (
-    <ul className={cx("egroups", className)}>
+    <div className={cx("table-wrap", className)}>
+      <table className="table export-day-table">
+        <caption className="visually-hidden">Tagesgruppen für den Export</caption>
+        <colgroup>
+          <col className="export-col--expand" /><col className="export-col--select" />
+          <col className="export-col--status" /><col className="export-col--date" />
+          <col className="export-col--entries" /><col /><col className="export-col--time" />
+        </colgroup>
+        <thead><tr>
+        <th scope="col" className="export-table__expand"><span className="visually-hidden">Aufklappen</span></th>
+          <th scope="col" className="table__select"><span className="visually-hidden">Auswahl</span></th>
+          <th scope="col">Status</th><th scope="col">Datum</th>
+          <th scope="col" className="table__cell--center">Buchungen</th>
+          <th scope="col">Leistung</th><th scope="col" className="table__cell--center">Exportzeit</th>
+        </tr></thead>
       {models.map((model) => (
         <ExportGroupRow
           key={model.group.id}
@@ -172,7 +268,7 @@ export function ExportGroupList({
           {...(renderRowDetail === undefined ? {} : { renderRowDetail })}
         />
       ))}
-    </ul>
+    </table></div>
   );
 }
 
@@ -199,90 +295,30 @@ function ExportGroupRow({
 }: ExportGroupRowProps) {
   const { group, excludedEntryIds, quarters, mergedNote, blockedReason } = model;
   const bodyId = `egroup-body-${group.id}`;
-  const titleId = `egroup-title-${group.id}`;
   const included = group.entries.filter((entry) => !excludedEntryIds.has(entry.id));
   const blocked = blockedReason !== null;
 
   return (
-    <li className={cx("egroup", blocked && "egroup--blocked", selected && "egroup--selected")}>
-      <div className="egroup__head">
-        <input
-          type="checkbox"
-          className="egroup__check"
-          id={`egroup-check-${group.id}`}
-          checked={selected && !blocked}
-          disabled={blocked}
-          aria-describedby={titleId}
-          onChange={() => onToggleGroup(group.id)}
-        />
-        <label className="visually-hidden" htmlFor={`egroup-check-${group.id}`}>
-          Tagesgruppe exportieren
-        </label>
-
-        <button
-          type="button"
-          className="egroup__twisty"
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={() => onToggleExpanded(group.id)}
-        >
+    <tbody className="egroup export-day">
+      <tr className={cx("table__row", "export-day__head", blocked && "export-day__head--blocked", selected && !blocked && "table__row--selected")}
+        onDoubleClick={event => toggleOnRowDoubleClick(event, () => onToggleExpanded(group.id))}>
+        <td className="export-table__expand"><button type="button" className="export-todo__toggle" aria-label={`Buchungen auf- oder einklappen: ${group.day}`}
+          aria-expanded={expanded} aria-controls={bodyId} onClick={() => onToggleExpanded(group.id)}>
           <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
-          <span className="visually-hidden">
-            {expanded ? "Buchungen dieser Tagesgruppe einklappen" : "Buchungen dieser Tagesgruppe aufklappen"}
-          </span>
-        </button>
-
-        <div className="egroup__identity">
-          <p className="egroup__title" id={titleId}>
-            <Foreign value={group.todoTitle} />
-          </p>
-          <p className="egroup__meta">
-            <span>{group.day}</span>
-            <span aria-hidden> · </span>
-            {group.callNumber === null ? (
-              <span className="muted">ohne Call</span>
-            ) : (
-              <span className="mono">
-                <Foreign value={group.callNumber} />
-              </span>
-            )}
-            <span aria-hidden> · </span>
-            <span>
-              {included.length} von {group.entries.length}{" "}
-              {group.entries.length === 1 ? "Buchung" : "Buchungen"}
-            </span>
-          </p>
-        </div>
-
-        <p className="egroup__note truncate" title={foreignText(mergedNote)}>
-          {mergedNote === "" ? (
-            <span className="muted">— keine Leistung erfasst —</span>
-          ) : (
-            <Foreign value={mergedNote} />
-          )}
-        </p>
-
-        <output className={cx("egroup__quarters", "tabular")} key={quarters}>
-          <span className="visually-hidden">Gerundete Exportzeit: </span>
-          {quarters}
-          <span className="egroup__unit" aria-hidden>
-            {" h"}
-          </span>
-        </output>
-      </div>
-
-      <div className="live-region" role="status">
-        {blocked ? (
-          <p className="egroup__blocked">
-            <Icon name="alert-triangle" size={14} />
-            <span>
-              <strong>Nicht exportierbar.</strong> {blockedReason} Der übrige Export läuft trotzdem;
-              diese Gruppe bleibt offen und erscheint beim nächsten Mal wieder.
-            </span>
-          </p>
-        ) : null}
-      </div>
-
+        </button></td>
+        <td className="table__select">
+          <input type="checkbox" className="egroup__check" checked={selected && !blocked} disabled={blocked}
+            aria-label={`Tagesgruppe exportieren: ${group.day}`} onChange={() => onToggleGroup(group.id)} />
+        </td>
+        <td className="export-day__status">{blocked
+          ? <span className="egroup__blocked-label"><Icon name="alert-triangle" size={14} />{blockedReason}</span>
+          : <span className="export-todo__ready"><Icon name="check-circle" size={14} />Exportierbar</span>}</td>
+        <td>{group.day}</td>
+        <td className="table__cell--center tabular">{included.length} / {group.entries.length}</td>
+        <td className="export-day__note" title={foreignText(mergedNote)}>{mergedNote === "" ? <span className="muted">—</span> : <Foreign value={mergedNote} />}</td>
+        <td className="table__cell--center tabular"><span className="visually-hidden">Gerundete Exportzeit: </span>{quarters} h</td>
+      </tr>
+      <tr hidden={!expanded} className="export-day__details"><td colSpan={7}>
       <div className="egroup__body" id={bodyId} hidden={!expanded}>
         {/*
           Zuerst die Zeile, dann die Buchungen: Erst was geschrieben wird,
@@ -355,6 +391,7 @@ function ExportGroupRow({
           })}
         </ul>
       </div>
-    </li>
+      </td></tr>
+    </tbody>
   );
 }

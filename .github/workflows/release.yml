@@ -592,7 +592,7 @@ jobs:
           # Schalter erzeugte ein Tippfehler ein Etikett auf dem Vorgabezweig —
           # und damit eine Fassung, die auf nichts zeigt, was jemand geprüft hat.
           gh release create "$TAG" \
-            --title "Takt $VERSION" \
+            --title "SuperTakt $VERSION" \
             --notes-file beschreibung.md \
             --verify-tag \
             "${zusatz[@]}" \

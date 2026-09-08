@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Takt — Outlook-Add-in: Todo aus einer E-Mail anlegen (A-10.*, S-12, S-13).",
+  "description": "SuperTakt — Outlook-Add-in: Todo aus einer E-Mail anlegen (A-10.*, S-12, S-13).",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

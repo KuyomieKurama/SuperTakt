@@ -39,10 +39,10 @@
 
   <Id>6f2c1d84-9a4e-4f2b-b7d1-3c5a8e0b41f7</Id>
   <Version>0.1.0.0</Version>
-  <ProviderName>Takt</ProviderName>
+  <ProviderName>SuperTakt</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
-  <DisplayName DefaultValue="Takt" />
-  <Description DefaultValue="Aus einer E-Mail heraus ein Todo in Takt anlegen oder Zeit auf ein vorhandenes buchen." />
+  <DisplayName DefaultValue="SuperTakt" />
+  <Description DefaultValue="Aus einer E-Mail heraus ein Todo in SuperTakt anlegen oder Zeit auf ein vorhandenes buchen." />
   <IconUrl DefaultValue="https://localhost:17844/assets/takt-64.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:17844/assets/takt-128.png" />
   <SupportUrl DefaultValue="https://localhost:17844/" />
@@ -126,11 +126,11 @@
           <bt:Url id="paneUrl" DefaultValue="https://localhost:17844/index.html" />
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="groupLabel" DefaultValue="Takt" />
+          <bt:String id="groupLabel" DefaultValue="SuperTakt" />
           <bt:String id="paneButtonLabel" DefaultValue="Todo anlegen" />
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="paneButtonTip" DefaultValue="Aus dieser E-Mail ein Todo in Takt anlegen oder Zeit auf ein vorhandenes Todo buchen." />
+          <bt:String id="paneButtonTip" DefaultValue="Aus dieser E-Mail ein Todo in SuperTakt anlegen oder Zeit auf ein vorhandenes Todo buchen." />
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

@@ -64,6 +64,7 @@ import { createAppSettingsPort, createDefaultTagPort, createExportTemplatePort }
 import { createTodoStatusPort } from './repo-statuses.ts';
 import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatchMode, resolvePoolAxis } from './repo-tags.ts';
 import { createTimeEntryPort, createTimerHeartbeatPort, createTimerPort } from './repo-time.ts';
+import { createIdleTimerPort } from './repo-idle.ts';
 import { createAttachmentPort } from './repo-attachments.ts';
 import { createTodoNotePort, createTodoPort, type PoolResolver } from './repo-todos.ts';
 import { createDataArchivePort } from './repo-data-archive.ts';
@@ -143,6 +144,7 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
     statuses: createTodoStatusPort(conn, ids),
     timeEntries: createTimeEntryPort(conn, ids, options.timeZone),
     timer: createTimerPort(conn, ids),
+    idle: createIdleTimerPort(conn),
     heartbeat: createTimerHeartbeatPort(conn),
     exportRead: createExportReadPort(conn, options.timeZone),
     export: createExportPort(conn, ids),

@@ -2302,6 +2302,239 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
 
+  /timer/idle:
+    get:
+      tags:
+        - Timer
+      operationId: getIdleSession
+      summary: Offene Inaktivität lesen (A-24)
+      responses:
+        '200':
+          description: Ergebnis; wiederholtes Auflösen erzeugt keine weiteren Buchungen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/IdleSession'
+                      - type: 'null'
+        '400':
+          $ref: '#/components/responses/TokenInUrl'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+  /timer/idle/begin:
+    post:
+      tags:
+        - Timer
+      operationId: beginIdle
+      summary: Laufenden Timer vor der inaktiven Zeit anhalten (A-24)
+      responses:
+        '200':
+          description: Ergebnis; wiederholtes Auflösen erzeugt keine weiteren Buchungen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/IdleSession'
+                      - type: 'null'
+        '400':
+          $ref: '#/components/responses/TokenInUrl'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entryId
+                - startedAt
+              properties:
+                entryId:
+                  $ref: '#/components/schemas/Id'
+                startedAt:
+                  $ref: '#/components/schemas/Timestamp'
+                returnedAt:
+                  $ref: '#/components/schemas/Timestamp'
+  /timer/idle/return:
+    post:
+      tags:
+        - Timer
+      operationId: returnFromIdle
+      summary: Rückkehrzeitpunkt festhalten (A-24)
+      responses:
+        '200':
+          description: Ergebnis; wiederholtes Auflösen erzeugt keine weiteren Buchungen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/IdleSession'
+                      - type: 'null'
+        '400':
+          $ref: '#/components/responses/TokenInUrl'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+              properties:
+                id:
+                  $ref: '#/components/schemas/Id'
+                returnedAt:
+                  $ref: '#/components/schemas/Timestamp'
+  /timer/idle/resolve:
+    post:
+      tags:
+        - Timer
+      operationId: resolveIdle
+      summary: Inaktive Zeit auf Aufgaben und Pausen verteilen (A-24)
+      responses:
+        '200':
+          description: Ergebnis; wiederholtes Auflösen erzeugt keine weiteren Buchungen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IdleResolution'
+        '400':
+          $ref: '#/components/responses/TokenInUrl'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - id
+                - resume
+                - allocations
+              properties:
+                id:
+                  $ref: '#/components/schemas/Id'
+                resume:
+                  type: boolean
+                allocations:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - todoId
+                      - seconds
+                      - note
+                    properties:
+                      todoId:
+                        oneOf:
+                          - $ref: '#/components/schemas/Id'
+                          - type: 'null'
+                      seconds:
+                        type: integer
+                        minimum: 1
+                        maximum: 315360000
+                      note:
+                        type: string
+                        maxLength: 20000
+
   /timer/orphaned:
     get:
       tags: [Timer]
@@ -3657,6 +3890,12 @@ paths:
                 roundingMode: { $ref: '#/components/schemas/RoundingMode' }
                 locale: { type: string, minLength: 2, maxLength: 35 }
                 theme: { type: string, enum: [system, light, dark] }
+                designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
+                density: { type: string, enum: [comfortable, compact] }
+                promptOnTimerStop: { type: boolean }
+                idleKeepTimerRunning: { type: boolean, default: true }
+                idleDetectionEnabled: { type: boolean }
+                idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
                 skippedVersion:
                   oneOf:
                     - type: string
@@ -3858,6 +4097,8 @@ paths:
               required: [backup]
               properties:
                 backup: {}
+                excludeTransferred: { type: boolean, default: true }
+                callPattern: { type: string, maxLength: 512 }
       responses:
         '200':
           description: Aufgaben und Strukturen ergänzt.
@@ -4173,7 +4414,7 @@ components:
 
     DataArchiveTables:
       type: object
-      required: [todo_status, tag_folder, tag, todo, todo_note, todo_tag, time_entry, timer_heartbeat, todo_attachment_kind, todo_attachment, pool, pool_rule, default_tag, export_template, export_run, export_run_group, export_run_entry, export_audit, app_setting]
+      required: [todo_status, tag_folder, tag, todo, todo_note, todo_tag, time_entry, timer_heartbeat, timer_idle, todo_attachment_kind, todo_attachment, pool, pool_rule, default_tag, export_template, export_run, export_run_group, export_run_entry, export_audit, app_setting]
       properties:
         todo_status: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         tag_folder: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
@@ -4183,6 +4424,7 @@ components:
         todo_tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         time_entry: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         timer_heartbeat: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        timer_idle: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         todo_attachment_kind: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         todo_attachment: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
         pool: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
@@ -4208,7 +4450,7 @@ components:
       required: [format, schemaVersion, createdAt, generator, data, warnings]
       properties:
         format: { type: string, const: de.supertakt.data-archive }
-        schemaVersion: { type: integer, const: 1 }
+        schemaVersion: { type: integer, const: 5 }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
         data:
@@ -6340,12 +6582,57 @@ components:
         Vorabfassung steht unter der gleichnamigen Fassung. Beides liegt in
         `packages/domain` und nirgends sonst.
 
+    IdleSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - todoId
+        - todoTitle
+        - note
+        - startedAt
+        - returnedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        todoId:
+          $ref: '#/components/schemas/Id'
+        todoTitle:
+          type: string
+        note:
+          type: string
+        startedAt:
+          $ref: '#/components/schemas/Timestamp'
+        returnedAt:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+    IdleResolution:
+      type: object
+      additionalProperties: false
+      required:
+        - recordedSeconds
+        - breakSeconds
+        - resumed
+        - alreadyResolved
+      properties:
+        recordedSeconds:
+          type: integer
+          minimum: 0
+        breakSeconds:
+          type: integer
+          minimum: 0
+        resumed:
+          type: boolean
+        alreadyResolved:
+          type: boolean
+
     AppSettings:
       type: object
       description: |
         Das Add-in-Token ist bewusst nicht Teil dieses Objekts (E-009, R-09).
       required:
-        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, skippedVersion, updatedAt]
+        [exportDirectory, activeExportTemplateId, roundingMode, locale, theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleKeepTimerRunning, idleThresholdMinutes, skippedVersion, updatedAt]
       properties:
         exportDirectory:
           oneOf: [{ type: string }, { type: 'null' }]
@@ -6354,6 +6641,12 @@ components:
         roundingMode: { $ref: '#/components/schemas/RoundingMode' }
         locale: { type: string }
         theme: { type: string, enum: [system, light, dark] }
+        designTheme: { type: string, enum: [classic, clear, arc, cybr, dark-base, dracula, everfrost, glass, lines, liquid-glass, nord-polar-night, nord-snow-storm, plainspace, rainbow, zen, velvet, catppuccin-latte, catppuccin-frappe, catppuccin-macchiato, catppuccin-mocha] }
+        density: { type: string, enum: [comfortable, compact] }
+        promptOnTimerStop: { type: boolean }
+        idleDetectionEnabled: { type: boolean }
+        idleKeepTimerRunning: { type: boolean, default: true }
+        idleThresholdMinutes: { type: integer, minimum: 1, maximum: 120 }
         skippedVersion:
           oneOf: [{ $ref: '#/components/schemas/Version' }, { type: 'null' }]
           description: |

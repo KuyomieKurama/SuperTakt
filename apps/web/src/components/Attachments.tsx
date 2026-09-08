@@ -107,25 +107,25 @@ const KIND_ICON: Readonly<Record<AttachmentKind, IconName>> = {
 const REFUSAL_TEXT: Readonly<Record<string, string>> = {
   link_empty: "Dieser Verweis hat keine Adresse.",
   link_too_long: "Diese Adresse ist zu lang, um sie zu öffnen.",
-  link_control_character: "Diese Adresse enthält unsichtbare Steuerzeichen. Takt öffnet sie nicht.",
+  link_control_character: "Diese Adresse enthält unsichtbare Steuerzeichen. SuperTakt öffnet sie nicht.",
   link_unparsable: "Diese Adresse lässt sich nicht lesen.",
   link_scheme_rejected:
-    "Diese Adresse lässt sich nicht öffnen: Takt öffnet nur „http“ und „https“. Ein Netzwerkpfad ist keine Adresse, sondern eine Anmeldung an einem fremden Rechner.",
+    "Diese Adresse lässt sich nicht öffnen: SuperTakt öffnet nur „http“ und „https“. Ein Netzwerkpfad ist keine Adresse, sondern eine Anmeldung an einem fremden Rechner.",
   link_not_normalized:
-    "Diese Adresse steht nicht in der Form, die Takt beim Anlegen erzeugt. Sie wird nicht geöffnet — sonst stünde hier eine andere Adresse, als geöffnet würde.",
+    "Diese Adresse steht nicht in der Form, die SuperTakt beim Anlegen erzeugt. Sie wird nicht geöffnet — sonst stünde hier eine andere Adresse, als geöffnet würde.",
   link_no_host: "Dieser Adresse fehlt der Rechnername.",
   link_userinfo:
     "Diese Adresse trägt Zugangsdaten vor dem Rechnernamen. Sie sieht dann nach einem anderen Ziel aus, als sie ansteuert, und wird nicht geöffnet.",
   path_empty: "Dieser Anhang hat keinen Pfad.",
   path_too_long: "Dieser Pfad ist zu lang, um ihn zu öffnen.",
-  path_control_character: "Dieser Pfad enthält unsichtbare Steuerzeichen. Takt öffnet ihn nicht.",
+  path_control_character: "Dieser Pfad enthält unsichtbare Steuerzeichen. SuperTakt öffnet ihn nicht.",
   path_unc:
-    "Dieser Pfad zeigt auf eine Netzwerkfreigabe. Takt öffnet keine, weil ein solcher Zugriff zugleich eine Anmeldung an einem fremden Rechner ist.",
-  path_not_absolute: "Dieser Pfad ist nicht vollständig. Takt öffnet nur vollständige Pfade.",
+    "Dieser Pfad zeigt auf eine Netzwerkfreigabe. SuperTakt öffnet keine, weil ein solcher Zugriff zugleich eine Anmeldung an einem fremden Rechner ist.",
+  path_not_absolute: "Dieser Pfad ist nicht vollständig. SuperTakt öffnet nur vollständige Pfade.",
   path_stream_separator:
-    "Der Dateiname trägt einen Doppelpunkt. Unter Windows benennt er einen zweiten Datenstrom derselben Datei — geöffnet würde dann nicht das, was hier steht. Takt öffnet ihn deshalb nicht.",
+    "Der Dateiname trägt einen Doppelpunkt. Unter Windows benennt er einen zweiten Datenstrom derselben Datei — geöffnet würde dann nicht das, was hier steht. SuperTakt öffnet ihn deshalb nicht.",
   path_indirect_extension:
-    "Diese Datei ist eine Verknüpfung. Ihr Ziel steht woanders — die Rückfrage könnte darüber nicht die Wahrheit sagen, deshalb öffnet Takt sie nicht.",
+    "Diese Datei ist eine Verknüpfung. Ihr Ziel steht woanders — die Rückfrage könnte darüber nicht die Wahrheit sagen, deshalb öffnet SuperTakt sie nicht.",
   path_missing: "Diese Datei ist an diesem Pfad nicht mehr vorhanden.",
 };
 
@@ -152,7 +152,7 @@ function refusalText(result: AttachmentOpen): string | null {
     case "rejected":
       return (
         REFUSAL_TEXT[result.reason] ??
-        "Takt hat das Öffnen abgewiesen. Der Anhang bleibt bestehen; der Grund lässt sich hier nicht genauer benennen."
+        "SuperTakt hat das Öffnen abgewiesen. Der Anhang bleibt bestehen; der Grund lässt sich hier nicht genauer benennen."
       );
     case "failed":
       return "Das Öffnen ist fehlgeschlagen. Möglicherweise ist auf diesem Rechner keine Anwendung dafür eingerichtet.";
@@ -392,7 +392,7 @@ function AttachmentFormDialog({ open, todoId, onClose, onSaved }: AttachmentForm
             das Textfeld daneben, und der Grund steht darunter (dieselbe Lehre
             wie am Exportordnerfeld, T-133).
           */
-          setPickerNote(`${choice.reason} Tragen Sie den vollständigen Pfad von Hand ein — Takt prüft ihn genauso.`);
+          setPickerNote(`${choice.reason} Tragen Sie den vollständigen Pfad von Hand ein — SuperTakt prüft ihn genauso.`);
       }
     });
   }, [kind]);
@@ -453,9 +453,9 @@ function AttachmentFormDialog({ open, todoId, onClose, onSaved }: AttachmentForm
           setPickerNote(null);
         }}
         options={[
-          { value: "link", label: "Verweis", hint: "Eine Adresse. Takt merkt sie sich und öffnet sie im Browser." },
-          { value: "image", label: "Bild", hint: "Takt legt eine Kopie neben seinen Daten ab und zeigt sie als Vorschaubild." },
-          { value: "file", label: "Datei", hint: "Ein Pfad. Takt merkt ihn sich und öffnet die Datei mit der Standardanwendung." },
+          { value: "link", label: "Verweis", hint: "Eine Adresse. SuperTakt merkt sie sich und öffnet sie im Browser." },
+          { value: "image", label: "Bild", hint: "SuperTakt legt eine Kopie neben seinen Daten ab und zeigt sie als Vorschaubild." },
+          { value: "file", label: "Datei", hint: "Ein Pfad. SuperTakt merkt ihn sich und öffnet die Datei mit der Standardanwendung." },
         ]}
       />
 
@@ -468,7 +468,7 @@ function AttachmentFormDialog({ open, todoId, onClose, onSaved }: AttachmentForm
           required
           maxLength={2048}
           placeholder="https://…"
-          hint="Nur „http“ und „https“. Takt speichert die Adresse, nicht die Seite."
+          hint="Nur „http“ und „https“. SuperTakt speichert die Adresse, nicht die Seite."
           {...(valueError === undefined ? {} : { error: valueError })}
         />
       ) : (
@@ -483,8 +483,8 @@ function AttachmentFormDialog({ open, todoId, onClose, onSaved }: AttachmentForm
             placeholder={kind === "image" ? "Pfad der Bilddatei" : "Vollständiger Pfad zur Datei"}
             hint={
               kind === "image"
-                ? "Takt legt eine Kopie neben seinen Daten ab. Verschieben Sie die Quelle später, bleibt das Vorschaubild."
-                : "Takt merkt sich den Pfad und kopiert nichts. Verschwindet die Datei, sagt der Anhang das."
+                ? "SuperTakt legt eine Kopie neben seinen Daten ab. Verschieben Sie die Quelle später, bleibt das Vorschaubild."
+                : "SuperTakt merkt sich den Pfad und kopiert nichts. Verschwindet die Datei, sagt der Anhang das."
             }
             {...(valueError === undefined ? {} : { error: valueError })}
           />
@@ -644,7 +644,7 @@ export function Attachments({ todoId, todoTitle, version = 0 }: AttachmentsProps
               sonst A-19.15 scheitert — wer glaubt, Takt hebe die Datei auf,
               hält ihr Verschwinden für einen Fehler von Takt.
             */
-            description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört. Takt kopiert nur Bilder; Verweise und Dateien merkt es sich als Adresse beziehungsweise Pfad."
+            description="Ein Verweis, ein Bild oder eine Datei, die zu diesem Todo gehört. SuperTakt kopiert nur Bilder; Verweise und Dateien merkt es sich als Adresse beziehungsweise Pfad."
             action={
               <Button variant="secondary" iconStart="plus" onClick={() => setFormOpen(true)}>
                 Anhang hinzufügen
@@ -703,8 +703,8 @@ export function Attachments({ todoId, todoTitle, version = 0 }: AttachmentsProps
         }
         consequence={
           pendingRemove?.kind === "image"
-            ? "Die Kopie des Bildes im Datenverzeichnis von Takt wird mit gelöscht. Die Datei, aus der sie stammt, bleibt unberührt."
-            : "Takt vergisst die Adresse beziehungsweise den Pfad. Die Datei oder die Seite dahinter bleibt unberührt."
+            ? "Die Kopie des Bildes im Datenverzeichnis von SuperTakt wird mit gelöscht. Die Datei, aus der sie stammt, bleibt unberührt."
+            : "SuperTakt vergisst die Adresse beziehungsweise den Pfad. Die Datei oder die Seite dahinter bleibt unberührt."
         }
         refusal={removal.error}
         confirmLabel="Entfernen"

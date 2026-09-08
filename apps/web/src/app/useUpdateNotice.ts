@@ -99,6 +99,8 @@ export type UpdateNoticeView =
 export type UpdateArrival = "start" | "session";
 
 export interface UpdateNoticeApi {
+  readonly installedVersion: string | null;
+  readonly availableVersion: string | null;
   readonly view: UpdateNoticeView;
   /** Siehe {@link UpdateArrival}. Entscheidet über die **Fläche**, nicht über den Inhalt. */
   readonly arrival: UpdateArrival;
@@ -154,6 +156,8 @@ export function useUpdateNotice(): UpdateNoticeApi {
   }, [reload]);
 
   const facts = state.status === "ready" ? state.value : null;
+  const availableUpdate = decideUpdateNotice({ installed: facts?.installed ?? null, latest: facts?.latest ?? null, skipped: null });
+  const availableVersion = availableUpdate.show ? availableUpdate.version : null;
   const skipped = structure.status === "ready" ? structure.value.settings.skippedVersion : null;
 
   const notice = useMemo(
@@ -229,9 +233,13 @@ export function useUpdateNotice(): UpdateNoticeApi {
   }, [notice, postponed, facts]);
 
   const install = useCallback(() => {
-    if (view.kind !== "available") return;
-    const version = view.available;
+    if (availableVersion === null) return;
+    const version = availableVersion;
     setOpenProblem(null);
+    const reportProblem = (message: string) => {
+      setOpenProblem(message);
+      if (view.kind !== "available") toasts.failure("Update konnte nicht geöffnet werden", message);
+    };
     void openReleasePage(version).then((result) => {
       switch (result.outcome) {
         case "opened":
@@ -243,24 +251,24 @@ export function useUpdateNotice(): UpdateNoticeApi {
           toasts.show({
             tone: "info",
             title: "Die Release-Seite ist im Browser geöffnet.",
-            body: "Herunterladen und Installieren geschehen dort — Takt tut von sich aus nichts davon.",
+            body: "Herunterladen und Installieren geschehen dort — SuperTakt tut von sich aus nichts davon.",
           });
           return;
         case "rejected":
-          setOpenProblem(
-            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. Takt öffnet dafür keine Seite.",
+          reportProblem(
+            "Die gemeldete Fassungsbezeichnung hat die Prüfung der Anwendung nicht bestanden. SuperTakt öffnet dafür keine Seite.",
           );
           return;
         case "failed":
-          setOpenProblem(
+          reportProblem(
             "Die Release-Seite ließ sich nicht öffnen. Möglicherweise ist auf diesem Rechner kein Browser eingerichtet; der angezeigte Verweis führt von Hand zum selben Ziel.",
           );
           return;
         case "unavailable":
-          setOpenProblem(result.reason);
+          reportProblem(result.reason);
       }
     });
-  }, [view, toasts]);
+  }, [availableVersion, view, toasts]);
 
   const skip = useCallback(() => {
     if (view.kind !== "available") return;
@@ -291,6 +299,8 @@ export function useUpdateNotice(): UpdateNoticeApi {
   }, [view, skipping]);
 
   return {
+    installedVersion: normalizeVersion(facts?.installed),
+    availableVersion,
     view,
     /*
       `arrival` gilt für den **Hinweis**, nicht für die Antwort, in der er kam:

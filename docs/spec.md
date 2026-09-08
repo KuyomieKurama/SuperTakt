@@ -412,7 +412,69 @@ vollständige Datensicherung und ausdrücklich nicht der Abrechnungsexport aus A
 | A-20.7 | Takt importiert Todoist-Projektdateien im CSV-Format und Datensicherungen von Super Productivity im JSON-Format. Fremdimporte ergänzen den Bestand; sie ersetzen ihn nicht. |
 | A-20.8 | Soweit im Quellformat vorhanden, werden Aufgaben, Projekte, Bereiche, Labels/Tags, Prioritäten, Fristen, Vermerke/Beschreibungen, Unteraufgaben, Erledigt-Zustand, erfasste Zeiten und weitere Metadaten übernommen. |
 | A-20.9 | Nicht nativ darstellbare Beziehungen oder Metadaten bleiben nachvollziehbar im Vermerk der importierten Aufgabe erhalten. Projekte werden als Projekt-Tags und Pools, Bereiche, Labels und Prioritäten als getrennt gruppierte Tags abgebildet. |
-| A-20.10 | Jeder Fremdimport liegt in einem eigenen, benannten Importordner. Wiederholte Importe geraten weder mit diesem Ordner noch mit bereits vorhandenen Pools in Namenskonflikte. |
+| A-20.10 | Todoist-Importe liegen in einem eigenen, benannten Importordner. Super-Productivity-Importe übernehmen die Tag-Struktur direkt auf oberster Ebene. Namenskonflikte mit vorhandenem Bestand werden durch nummerierte Zusätze aufgelöst. |
+
+Super-Productivity-Import: Call-Nummern werden mit einem einstellbaren Regex aus dem Titel extrahiert (Vorgabe `call[\s#:_-]*(\d{5,6})`, ohne Groß-/Kleinschreibung). Die erste Klammergruppe liefert die Nummer, ohne Gruppe gilt der gesamte Treffer; ein leeres Muster deaktiviert die Erkennung. Das Muster wird im Importbereich auf diesem Gerät gemerkt. Ungültige oder zu langsame Muster brechen vor Schreibzugriffen ab. LINK- und FILE-Anhänge werden nach Prüfung als Verweise beziehungsweise Dateipfade im Anhangsbereich angelegt. Dateiinhalte sind im Fremdbackup nicht enthalten. Nicht unterstützte Anhänge bleiben mit Importhinweis im Aufgabenvermerk erhalten. Tag-Ordner aus `menuTree.tagTree` werden einschließlich Unterordnern und leeren Ordnern übernommen. Tag-Zuordnungen verwenden die Quellkennungen, damit gleiche Namen in verschiedenen Ordnern getrennt bleiben. Die Tag-Struktur steht direkt auf oberster Ebene, ohne Import- oder Labels-Ordner. Zusätzliche Gruppen für Projekte und Bereiche entstehen nur bei vorhandenem Inhalt; Projektnamen erhalten keinen Produktpräfix. OutlookBridge-Leistungsnachweise werden anhand ihrer Datumszeilen den Tagesbuchungen zugeordnet; die vollständigen Originalnotizen bleiben an der Aufgabe. Undatierte Texte werden nur bei genau einem erfassten Tag zugeordnet. Maßgeblich ist `timeSpentOnDay`, ohne doppelte Elternsummen; Plugin-Dauerzeilen erzeugen keine zusätzlichen Zeiten. Unbekannte Startzeiten erhalten den ausdrücklich ausgewiesenen Platzhalter 08:00 UTC. Bereits übertragene Tage (Plugin-Tagesmarker oder Eingetragen-Tag) werden standardmäßig mit Herkunftsvermerk ausgebucht und vom erneuten Export ausgeschlossen; die Importauswahl kann dies deaktivieren.
+
+---
+
+## 21. Produktname und Layout
+
+Nachtrag des Auftraggebers vom 2026-09-08: Umbenennung von Takt in SuperTakt und
+Überarbeitung der als KI-generiert empfundenen Oberfläche.
+
+| ID | Anforderung |
+|---|---|
+| A-21.1 | Der sichtbare Produktname lautet SuperTakt, einschließlich Desktop-Fenster, Menü, Meldungen und Outlook-Add-in. |
+| A-21.2 | Navigation, Dashboard und gemeinsame Oberflächen erhalten eine klarere Gewichtung und weniger gleichförmige Kartenflächen. |
+| A-21.3 | Vorhandene Daten, Schnittstellen, Statuskennzeichnungen und Bedienabläufe bleiben kompatibel. |
+| A-21.4 | Unter Einstellungen → Darstellung bleibt das klassische Layout für alle Themes erhalten. Klassisch ist der Standard. Die Auswahl umfasst zusätzlich Arc, Cybr, Dark-base, Dracula, Everfrost, Glass, Lines, Liquid-Glass, Nord-Polar-Night, Nord-Snow-Storm, Plainspace, Rainbow, Zen, Velvet und alle vier Catppuccin-Varianten. Farbmodus und Zeilendichte werden separat gespeichert; feste helle/dunkle Paletten wenden ihren Modus an, ohne die Farbmodus-Vorliebe zu überschreiben. Die alte Auswahl Klar wird klassisch dargestellt. |
+| A-21.5 | Datenarchive enthalten die Darstellungseinstellungen ab Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klassisch und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
+
+---
+
+## 22. Leistungsabfrage beim Timerstopp
+
+Nachtrag des Auftraggebers: Die Leistungsabfrage beim Stoppen soll einstellbar sein.
+
+| ID | Anforderung |
+|---|---|
+| A-22.1 | Einstellungen → Timer enthält „Leistung beim Stoppen abfragen“. Die Auswahl wird dauerhaft gespeichert; der bisherige Standard bleibt eingeschaltet. |
+| A-22.2 | Ausgeschaltet stoppt ein ausdrücklicher Stopp den Timer ohne Leistungsdialog und bucht die Zeit. Vorhandener Leistungstext bleibt erhalten; fehlende Leistung kann in der Buchungsübersicht nachgetragen werden. Die Exportregeln bleiben bestehen. |
+| A-22.3 | Fehler beim direkten Stopp werden sichtbar gemeldet. Mehrere Stop-Klicks während derselben Anfrage erzeugen keine weiteren Stoppanfragen. Die Bestätigung beim Wechsel auf einen anderen laufenden Timer und die Wiederherstellung verwaister Timer bleiben erhalten. |
+| A-22.4 | Archivfassung 3 sichert die Timer-Einstellung. Die Fassungen 1 und 2 bleiben lesbar und erhalten für die Leistungsabfrage den bisherigen Standard. |
+
+---
+
+## 23. Lokale Outlook-Einrichtung
+
+Nachtrag des Auftraggebers: Lokaler Einrichtungsassistent mit ausdrücklicher
+Bestätigung des Zertifikats; keine Bereitstellung über eine Domain.
+
+| ID | Anforderung |
+|---|---|
+| A-23.1 | Einstellungen → Outlook-Add-in zeigt den lokalen Zertifikatsinhaber, Aussteller, SHA-256-Fingerabdruck, Gültigkeit und den HTTPS-Zustand. |
+| A-23.2 | Erst nach ausdrücklicher Bestätigung darf die Desktop-Hülle das angezeigte Zertifikat in CurrentUser/Root unter Windows hinterlegen. Die zusätzliche Windows-Sicherheitsabfrage bleibt erhalten; für ihre Bestätigung stehen drei Minuten zur Verfügung. Keine automatische Installation, keine Rechteerhöhung, keine Änderung von Unternehmensrichtlinien. |
+| A-23.3 | Die Hülle bestimmt den Zertifikatspfad selbst. Der Auftrag enthält nur den bestätigten Fingerabdruck. Geänderte, ungültige, abgelaufene oder nicht lokale Zertifikate werden abgewiesen; CA-Zertifikate und zusätzliche DNS-Namen sind ausgeschlossen. Der private Schlüssel verlässt seine Datei nicht. |
+| A-23.4 | Nach der Bestätigung wird die Add-in-Seite über Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats geprüft. Ein Eintrag im Zertifikatsspeicher allein gilt nicht als erfolgreicher HTTPS-Test. |
+| A-23.5 | Fehler, nicht erreichbare Seiten und nicht unterstützte Betriebsarten werden sichtbar erklärt. Browserbetrieb und andere Betriebssysteme behaupten keine Windows-Vertrauensprüfung. Manifestimport und Tokenverbindung bleiben explizite nächste Schritte. |
+
+---
+
+## 24. Inaktivität und Rückkehr
+
+Nachtrag des Auftraggebers: Inaktivitätsanzeige und anschließende Zeitaufteilung,
+angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
+
+| ID | Anforderung |
+|---|---|
+| A-24.1 | In der Desktop-App wird die systemweite Inaktivität der aktuellen Sitzung verwendet: Windows über GetLastInputInfo, macOS über CoreGraphics, Linux über Wayland ext-idle-notify, GNOME Mutter oder X11 ScreenSaver. Arbeit in anderen Programmen zählt als Aktivität. Keine Eingabeinhalte, Fenstertitel oder Telemetrie. Im Browser und bei fehlender Systemschnittstelle wird keine automatische Erkennung behauptet. XWayland wird nicht als Ersatz für systemweite Wayland-Aktivität verwendet. |
+| A-24.2 | Einstellungen → Timer enthält einen Ein-/Ausschalter und eine Schwelle von 1 bis 120 Minuten, zunächst eingeschaltet mit 5 Minuten. Speicherung in SQLite und Datensicherung. Ausschalten verwirft keine bereits erkannte Phase. |
+| A-24.3 | Bei laufendem Timer und überschrittener Schwelle wird die Abwesenheit vorgemerkt; der Timer läuft weiter. Erst bei der Rückkehr wird die aktive Zeit vor der Abwesenheit abgeschlossen und der Timer atomar ab dem Rückkehrzeitpunkt fortgeführt. Die inaktive Zeit wartet separat auf Zuordnung. Eine Rückkehr, die zwischen Webview-Abfragen liegt, wird aus dem nativen Verlauf erkannt. |
+| A-24.4 | Bei der Rückkehr erscheint ein Dialog mit Zeitraum und Dauer: als Pause auslassen, auf eine Aufgabe buchen oder in mehrere Aufgaben-/Pausenabschnitte aufteilen. Aufgaben sind suchbar, auch erledigte. Leistungstext ist freiwillig und nachträglich ergänzbar. |
+| A-24.5 | Die Summe muss sekundengenau dem gesamten Zeitraum entsprechen. „Rest übernehmen“ ergänzt einen Abschnitt. Keine negativen/überzähligen Zeiten, keine überlappenden Teilstücke. Alle Buchungen entstehen atomar; ein Fehler erhält den offenen Zustand, Wiederholungen buchen nicht doppelt. Abrechnungsrundung bleibt ausschließlich Sache des Exports. |
+| A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Der Timer läuft während des Dialogs und nach „Später“ weiter. Die Zuordnung verändert keinen inzwischen gewechselten oder manuell gestoppten Timer. Timerwechsel sind nach der Rückkehr auch bei offener Zuordnung möglich. Der Dialog zeigt Dauer und die drei Optionen Pause, Gearbeitet und Aufteilen; weitere Felder erscheinen nur bei Bedarf. |
+| A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Archivfassung 4 enthält Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. |
 
 ---
 
@@ -422,3 +484,5 @@ vollständige Datensicherung und ausdrücklich nicht der Abrechnungsexport aus A
   wird, ist diese Spezifikation zusammen mit dem Designsystem aus Aufgabe T-006 die verbindliche
   Referenz.
 - Die zwei Referenzbilder für das Outlook-Add-in aus Abschnitt 10.
+
+Das Timerverhalten bei Inaktivität ist unter Einstellungen → Timer wählbar: Weiterlaufen (Standard) oder bis zur Zuordnung pausieren. Im Pausenmodus bleibt der Timer auch bei „Später“ pausiert und startet nach dem Speichern der Zuordnung wieder.

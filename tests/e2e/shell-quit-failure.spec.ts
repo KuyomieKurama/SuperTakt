@@ -1,7 +1,7 @@
 /**
  * O-AF (docs/testplan.md, Abschnitt 23) — T-130, Vorlage `reports/T-124-frontend-dev.md` Abschnitt 3.
  *
- * „Takt beenden" scheitert nicht mehr stumm. Der Erfolgsfall dieses Knopfes
+ * „SuperTakt beenden" scheitert nicht mehr stumm. Der Erfolgsfall dieses Knopfes
  * ist der Tod des eigenen Prozesses: `takt_quit` ruft `app.exit(0)`, und die
  * Zusage aus `invoke` kommt danach nie mehr an — deshalb steht in
  * `useQuitAttempt` (`apps/web/src/components/ShellStatus.tsx`) eine Frist von
@@ -51,7 +51,7 @@ const SHIM_ARGS: ShellShimArgs = {
   // die Heilung — siehe `shell-shim.ts`, `installedVersion`.
 };
 
-test.describe('O-AF — „Takt beenden" scheitert nicht mehr stumm', () => {
+test.describe('O-AF — „SuperTakt beenden" scheitert nicht mehr stumm', () => {
   test('fünf Sekunden ohne Rückmeldung zeigen die Ausweichauskunft, ohne auf die Systembetreuung zu verweisen', async ({
     page,
   }) => {
@@ -60,22 +60,22 @@ test.describe('O-AF — „Takt beenden" scheitert nicht mehr stumm', () => {
 
     await page.goto('/#/');
 
-    const dialog = page.getByRole('alertdialog', { name: 'Takt kann im Moment nichts speichern' });
+    const dialog = page.getByRole('alertdialog', { name: 'SuperTakt kann im Moment nichts speichern' });
     await expect(dialog).toBeVisible();
 
-    const quitButton = dialog.getByRole('button', { name: 'Takt beenden' });
+    const quitButton = dialog.getByRole('button', { name: 'SuperTakt beenden' });
     await expect(quitButton).toBeVisible();
     await quitButton.click();
 
     // Sichtbare Rückmeldung, solange die Zusage aussteht.
-    await expect(dialog.getByRole('button', { name: 'Takt wird beendet …' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'SuperTakt wird beendet …' })).toBeVisible();
     await expect(page.locator('.quitfail')).toBeHidden();
 
     await page.clock.fastForward('00:06');
 
     const failure = page.locator('.quitfail');
     await expect(failure).toBeVisible();
-    await expect(failure.locator('.quitfail__title')).toContainText('Takt ließ sich so nicht beenden');
+    await expect(failure.locator('.quitfail__title')).toContainText('SuperTakt ließ sich so nicht beenden');
     // Kein erfundener Grund: `cause` ist `null`, weil nur die Frist ablief,
     // die Zusage selbst wurde nicht abgewiesen.
     await expect(failure.locator('.quitfail__body')).toHaveText(
@@ -92,7 +92,7 @@ test.describe('O-AF — „Takt beenden" scheitert nicht mehr stumm', () => {
     // Die Live-Region steht dauerhaft da (leer, bis es etwas zu sagen gibt) —
     // hier, nach dem Fehlschlag, füllt sie sich mit genau diesem Inhalt.
     await expect(page.locator('[role="status"].quitfail__region')).toContainText(
-      'Takt ließ sich so nicht beenden',
+      'SuperTakt ließ sich so nicht beenden',
     );
 
     // F-15: kein Verweis auf eine Systembetreuung, die ein allein arbeitender
@@ -102,7 +102,7 @@ test.describe('O-AF — „Takt beenden" scheitert nicht mehr stumm', () => {
 
     // Der Knopf bleibt bedienbar (nicht dauerhaft gesperrt) — Text und
     // Zustand sind wieder die des Ausgangspunkts.
-    await expect(quitButton).toHaveText('Takt beenden');
+    await expect(quitButton).toHaveText('SuperTakt beenden');
     await expect(quitButton).toBeEnabled();
   });
 });

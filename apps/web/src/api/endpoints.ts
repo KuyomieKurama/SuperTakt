@@ -25,6 +25,7 @@ import type {
   DefaultTag,
   DataImportSummary,
   DraftText,
+  ForeignText,
   ExportAuditEntry,
   ExportPreview,
   ExportRun,
@@ -612,7 +613,7 @@ export function startTimer(todoId: Id, stopRunning = false): Promise<StartTimerR
   });
 }
 
-export function stopTimer(note: string): Promise<StopTimerResult> {
+export function stopTimer(note: ForeignText): Promise<StopTimerResult> {
   return request<StopTimerResult>("/timer/stop", { method: "POST", body: { note } });
 }
 
@@ -838,10 +839,10 @@ export function importTodoistFiles(
   });
 }
 
-export function importSuperProductivity(backup: unknown): Promise<DataImportSummary> {
+export function importSuperProductivity(backup: unknown, excludeTransferred = true, callPattern?: string): Promise<DataImportSummary> {
   return request<DataImportSummary>("/data-transfer/super-productivity", {
     method: "POST",
-    body: { backup },
+    body: { backup, excludeTransferred, ...(callPattern === undefined ? {} : { callPattern }) },
   });
 }
 
@@ -875,3 +876,10 @@ export function searchEverything(term: string, limit = 20): Promise<SearchResult
 
 /** Kalendertag als Filterwert; die Oberfläche bildet ihn aus `lib/format`. */
 export type { CalendarDay };
+
+// Inaktivität: dieselbe zentrale API-Grenze wie die übrigen Timeraktionen.
+import type { IdleSession, IdleAllocation, IdleResolution } from './idle';
+export const getIdleSession = () => request<IdleSession | null>('/timer/idle');
+export const beginIdleSession = (input: { entryId: Id; startedAt: Timestamp; returnedAt?: Timestamp }) => request<IdleSession | null>('/timer/idle/begin', { method: 'POST', body: input });
+export const returnFromIdle = (id: Id, returnedAt?: Timestamp) => request<IdleSession | null>('/timer/idle/return', { method: 'POST', body: { id, ...(returnedAt === undefined ? {} : { returnedAt }) } });
+export const resolveIdleSession = (id: Id, allocations: readonly IdleAllocation[], resume: boolean) => request<IdleResolution>('/timer/idle/resolve', { method: 'POST', body: { id, allocations, resume } });

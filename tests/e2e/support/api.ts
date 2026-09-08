@@ -431,7 +431,12 @@ export async function setDefaultTags(tagIds: readonly string[]): Promise<unknown
   return call('/settings/default-tags', { method: 'PUT', body: JSON.stringify({ tagIds }) });
 }
 
+export async function setTimerPrompt(promptOnTimerStop: boolean): Promise<void> {
+  await call('/settings', { method: 'PATCH', body: JSON.stringify({ promptOnTimerStop }) });
+}
+
 export async function getSettings(): Promise<{
+  promptOnTimerStop: boolean;
   exportDirectory: string | null;
   activeExportTemplateId: string;
 }> {
@@ -497,7 +502,9 @@ export async function deleteTodoStatus(id: string): Promise<void> {
 /* ==================================================================== */
 
 export interface RunningTimer {
-  readonly todoId: string;
+  readonly entry: { readonly id: string; readonly todoId: string; readonly startedAt: string };
+  readonly todoTitle: string;
+  readonly elapsedSeconds: number;
 }
 
 /**
@@ -519,8 +526,8 @@ export async function getRunningTimer(): Promise<RunningTimer | null> {
 }
 
 /** `GET /timer/orphaned` — `null`, wenn keiner verwaist ist. */
-export async function getOrphanedTimer(): Promise<RunningTimer | null> {
-  return call<RunningTimer | null>('/timer/orphaned');
+export async function getOrphanedTimer(): Promise<{ readonly running: RunningTimer['entry']; readonly todoTitle: string; readonly heartbeatAt: string | null; readonly bookableSeconds: number } | null> {
+  return call('/timer/orphaned');
 }
 
 /**

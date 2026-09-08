@@ -33,6 +33,7 @@ import {
 } from "../components/ExportGroups";
 import { ExportRowPanes } from "../components/ExportRowPanes";
 import { Select } from "../components/Select";
+import { InfoHint } from "../components/InfoHint";
 import { Icon } from "../components/Icon";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
 import { useRefresh } from "../app/RefreshContext";
@@ -130,19 +131,19 @@ const DIRECTORY_PROBLEM: Readonly<
 > = {
   not_set: {
     title: "Es ist kein Exportordner eingestellt",
-    body: "Ohne Exportordner schreibt Takt keine Datei. Wählen Sie ihn in den Einstellungen.",
+    body: "Ohne Exportordner schreibt SuperTakt keine Datei. Wählen Sie ihn in den Einstellungen.",
   },
   missing: {
     title: "Der eingestellte Exportordner ist nicht da",
-    body: "Er wurde verschoben, umbenannt oder liegt auf einem Laufwerk, das gerade nicht verbunden ist. Takt legt ihn nicht von sich aus wieder an.",
+    body: "Er wurde verschoben, umbenannt oder liegt auf einem Laufwerk, das gerade nicht verbunden ist. SuperTakt legt ihn nicht von sich aus wieder an.",
   },
   not_writable: {
     title: "In den Exportordner lässt sich nicht schreiben",
-    body: "Der Ordner ist da, aber die Rechte fehlen. Ein Lauf würde mitten im Vorgang scheitern — deshalb hält Takt hier an.",
+    body: "Der Ordner ist da, aber die Rechte fehlen. Ein Lauf würde mitten im Vorgang scheitern — deshalb hält SuperTakt hier an.",
   },
   not_a_directory: {
     title: "Der eingestellte Pfad ist kein Ordner",
-    body: "Er zeigt auf eine Datei. Takt schreibt Exporte nur in einen Ordner.",
+    body: "Er zeigt auf eine Datei. SuperTakt schreibt Exporte nur in einen Ordner.",
   },
   /*
    * T-039: „antwortet nicht" ist nicht „gibt es nicht". Der Dienst wartet drei
@@ -628,8 +629,9 @@ export function ExportScreen() {
         <InlineMessage
           tone="warning"
           title={directoryProblem.title}
+          className="message--inline-action"
           action={
-            <Button size="sm" variant="secondary" onClick={() => navigate("settings")}>
+            <Button size="sm" variant="secondary" onClick={() => navigate("settings", undefined, { bereich: "export" })}>
               In den Einstellungen prüfen
             </Button>
           }
@@ -665,7 +667,12 @@ export function ExportScreen() {
             nirgends; jetzt steht es an der Auswahl, die es betrifft.
           */}
           <div className="export-settings__fact">
+            <div className="export-settings__label"><span>Exportvorlage</span><InfoHint label="Hinweis zur Exportvorlage">
+              Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
+              Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
+            </InfoHint></div>
             <Select
+              hideLabel
               label="Exportvorlage"
               value={activeTemplateId ?? ""}
               onChange={setTemplateId}
@@ -680,51 +687,44 @@ export function ExportScreen() {
                   : [{ value: "", label: "wird geladen …" }]
               }
             />
-            <span className="muted">
-              Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
-              Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
-            </span>
           </div>
-          <p className="export-settings__fact">
-            <span className="overline">Rundung</span>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Rundung</span><InfoHint label="Hinweis: Rundung">
+              Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
+              Tagesgruppe, nicht auf die einzelne Buchung.
+            </InfoHint></span>
             <strong>
               {settings === null ? "—" : ROUNDING_MODE_LABEL[settings.roundingMode]}
             </strong>
-            <span className="muted">
-              Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
-              Tagesgruppe, nicht auf die einzelne Buchung.
-            </span>
-          </p>
-          <p className="export-settings__fact">
-            <span className="overline">Exportordner</span>
-            <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
-              {settings?.exportDirectory ?? "nicht gewählt"}
-            </strong>
-            <span className="muted">
+          </div>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Exportordner</span><InfoHint label="Hinweis: Exportordner">
               {directoryState === "ok"
                 ? "Vorhanden und beschreibbar — soeben geprüft."
                 : (directoryProblem?.title ?? "Zustand unbekannt.")}
-            </span>
+            </InfoHint></span>
+            <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
+              {settings?.exportDirectory ?? "nicht gewählt"}
+            </strong>
             <Button
               size="sm"
-              variant="ghost"
+              variant="primary"
               iconStart="folder-open"
-              onClick={() => navigate("settings")}
+              onClick={() => navigate("settings", undefined, { bereich: "export" })}
             >
               Ordner ändern
             </Button>
-          </p>
-          <p className="export-settings__fact">
-            <span className="overline">Abgerechnet unter</span>
+          </div>
+          <div className="export-settings__fact">
+            <span className="export-settings__label"><span className="overline">Abgerechnet unter</span><InfoHint label="Hinweis: Abgerechnet unter">
+              {billingUser.length === 0
+                ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
+                : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
+            </InfoHint></span>
             <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
               {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
             </strong>
-            <span className="muted">
-              {billingUser.length === 0
-                ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
-                : "Dieser Name steht in jeder Zeile der Datei. Takt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
-            </span>
-          </p>
+          </div>
         </div>
 
         {/*
@@ -795,6 +795,7 @@ export function ExportScreen() {
 
             const groupData: ExportGroupData = {
               id: group.key,
+              todoId: group.todoId,
               todoTitle: todo?.title ?? "Unbekanntes Todo",
               callNumber: todo?.callNumber ?? null,
               day: formatDayLabel(group.day),
@@ -858,7 +859,7 @@ export function ExportScreen() {
                     </Button>
                   }
                 >
-                  {totalsState.message} Solange sie fehlt, weiß Takt nicht, wie viele Zeilen
+                  {totalsState.message} Solange sie fehlt, weiß SuperTakt nicht, wie viele Zeilen
                   und wie viele Stunden dieser Lauf schreiben würde — deshalb ist „Export
                   ausführen" gesperrt. Eine Null an dieser Stelle wäre keine Auskunft, sondern
                   eine Behauptung. Die Auswahl darunter bleibt erhalten.
@@ -907,6 +908,15 @@ export function ExportScreen() {
                 ) : null}
               </div>
 
+              {blockedCount > 0 ? (
+                <details className="export-legend">
+                  <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
+                  <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
+                  <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
+                  <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
+                </details>
+              ) : null}
+
               <ExportGroupList
                 models={models}
                 selectedGroupIds={selectedGroupIds}
@@ -950,12 +960,6 @@ export function ExportScreen() {
                 )}
               />
 
-              /*
-                Nur noch der erste Satz (T-181, ST-07). Wie der Lauffilter im
-                Protokoll wirkt, steht am Knopf „Buchungen dieses Laufs" und
-                im Leerzustand des Protokolls selbst — dort, wo man davor
-                steht, und nicht im Vorspann einer Liste von Läufen.
-              */
               <Card
                 title="Letzte Exportläufe"
                 description="Was wann geschrieben wurde."
@@ -1324,11 +1328,11 @@ function toLayout(preview: ExportPreview): readonly GroupLayout[] {
 
 const ALL_EXCLUDED: GroupInsight = {
   quarters: null,
-  blockedReason: "Alle Buchungen dieser Gruppe sind ausgeschlossen.",
+  blockedReason: "Alle Buchungen ausgeschlossen",
 };
 
 function reasonText(reason: SkippedExportGroup["reason"]): string {
   return reason === "empty_note"
-    ? "Keine der Buchungen dieser Tagesgruppe trägt einen Leistungstext, und eine leere Notiz nimmt das Abrechnungstool nicht an."
-    : "Diese Tagesgruppe ist nicht exportierbar.";
+    ? "Leistung fehlt"
+    : "Nicht exportierbar";
 }

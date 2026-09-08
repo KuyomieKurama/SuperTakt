@@ -14,8 +14,8 @@ const DIFFERENCES: readonly DifferenceRow[] = [
   { trait: "Randschiene", billing: "4px durchgezogen, Akzentfarbe", internal: "4px unterbrochen, Grau" },
   {
     trait: "Kopfband",
-    billing: "„Verlässt Takt · steht in der Abrechnung“, Pfeil nach außen",
-    internal: "„Bleibt in Takt“, Schloss",
+    billing: "„Verlässt SuperTakt · steht in der Abrechnung“, Pfeil nach außen",
+    internal: "„Bleibt in SuperTakt“, Schloss",
   },
   {
     trait: "Marke vor der Beschriftung",
@@ -45,7 +45,7 @@ export function NotesSection() {
     <Section
       id="notizen"
       title="7 — Vermerk und Leistung: zwei Feldarten"
-      lead="In der Spezifikation heißen beide Felder „Notiz“. Nur eines geht in die Abrechnung. Das ist der wahrscheinlichste Bedienfehler dieses Produkts, und er fällt erst beim Kunden auf. Deshalb tragen sie nach E-016 Namen ohne gemeinsamen Wortstamm — Vermerk bleibt in Takt, Leistung geht in den Export — und sind zusätzlich zwei sichtbar verschiedene Feldarten."
+      lead="In der Spezifikation heißen beide Felder „Notiz“. Nur eines geht in die Abrechnung. Das ist der wahrscheinlichste Bedienfehler dieses Produkts, und er fällt erst beim Kunden auf. Deshalb tragen sie nach E-016 Namen ohne gemeinsamen Wortstamm — Vermerk bleibt in SuperTakt, Leistung geht in den Export — und sind zusätzlich zwei sichtbar verschiedene Feldarten."
       refs={["A-7.1", "A-7.2", "A-7.3", "A-7.4", "E-016", "R-08", "R-06"]}
     >
       <Card
@@ -93,7 +93,7 @@ export function NotesSection() {
             <tr>
               <th scope="col">Merkmal</th>
               <th scope="col">Leistung — geht an die Abrechnung</th>
-              <th scope="col">Vermerk — bleibt in Takt</th>
+              <th scope="col">Vermerk — bleibt in SuperTakt</th>
             </tr>
           </thead>
           <tbody>

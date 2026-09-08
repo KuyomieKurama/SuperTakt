@@ -755,6 +755,22 @@ export async function runScenario() {
     // -----------------------------------------------------------------------
     // Zeitbuchungen (A-6.1, A-7.3)
     // -----------------------------------------------------------------------
+    await record('getIdleSession', 'GET', '/timer/idle', '/timer/idle');
+    await quiet('POST', '/timer/start', { todoId });
+    const idleTimer = (await quiet('GET', '/timer')).body.data;
+    tick(60);
+    const idleStart = new Date(clockMs).toISOString().replace('.000Z', 'Z');
+    tick(300);
+    await record('beginIdle', 'POST', '/timer/idle/begin', '/timer/idle/begin', { entryId: idleTimer.entry.id, startedAt: idleStart });
+    tick(60);
+    await record('returnFromIdle', 'POST', '/timer/idle/return', '/timer/idle/return', { id: idleTimer.entry.id });
+    await record('resolveIdle', 'POST', '/timer/idle/resolve', '/timer/idle/resolve', {
+      id: idleTimer.entry.id, resume: false, allocations: [{ todoId: null, seconds: 360, note: '' }],
+    });
+    // Die Zuordnung lässt den Timer weiterlaufen; das Szenario beendet ihn ausdrücklich.
+    tick(1);
+    await quiet('POST', '/timer/stop', { note: '' });
+
     const entry = await record('createTimeEntry', 'POST', '/time-entries', '/time-entries', {
       todoId,
       startedAt: '2026-03-02T08:00:00Z',

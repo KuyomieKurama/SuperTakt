@@ -27,7 +27,7 @@ const FOCUS: readonly FocusPoint[] = [
   {
     anchor: "#notizen",
     title: "Abschnitt 7 — Vermerk und Leistung",
-    text: "Zwei Textfelder, die in der Spezifikation beide „Notiz“ heißen. Der Vermerk bleibt in Takt, die Leistung steht später auf der Rechnung des Kunden. Sie zu verwechseln ist der wahrscheinlichste Bedienfehler dieses Produkts, und er fällt erst beim Kunden auf. Auch hier gibt es eine Graustufenprobe.",
+    text: "Zwei Textfelder, die in der Spezifikation beide „Notiz“ heißen. Der Vermerk bleibt in SuperTakt, die Leistung steht später auf der Rechnung des Kunden. Sie zu verwechseln ist der wahrscheinlichste Bedienfehler dieses Produkts, und er fällt erst beim Kunden auf. Auch hier gibt es eine Graustufenprobe.",
   },
 ];
 
@@ -41,7 +41,7 @@ export function IntroSection() {
   return (
     <Section id="einleitung" title="Was Sie hier sehen">
       <p className="intro__lead">
-        Takt ist eine lokale Anwendung für Todos, Zeiterfassung und die Übergabe erfasster Zeiten
+        SuperTakt ist eine lokale Anwendung für Todos, Zeiterfassung und die Übergabe erfasster Zeiten
         an ein Abrechnungstool. Diese Seite ist noch nicht die Anwendung. Sie ist ihr Bauplan in
         sichtbarer Form: alle Farben, Schriftgrößen, Abstände und Bausteine, aus denen die
         vierzehn Ansichten später zusammengesetzt werden — jeder Baustein in allen Zuständen, die

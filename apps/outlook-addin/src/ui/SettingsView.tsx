@@ -168,8 +168,8 @@ export function SettingsView({
   return (
     <div className="pane">
       <Section
-        title="Verbindung zu Takt"
-        description="Takt läuft auf diesem Rechner. Das Add-in spricht ausschließlich mit dem lokalen Dienst."
+        title="Verbindung zu SuperTakt"
+        description="SuperTakt läuft auf diesem Rechner. Das Add-in spricht ausschließlich mit dem lokalen Dienst."
         actions={
           <Button variant="ghost" onClick={onClose}>
             Zurück
@@ -216,7 +216,7 @@ export function SettingsView({
         <Field
           label="Zugangstoken"
           htmlFor="token"
-          hint="Das Token entsteht in Takt unter Einstellungen."
+          hint="Das Token entsteht in SuperTakt unter Einstellungen."
         >
           {(aria) => (
             <div className="tokenrow">
@@ -249,8 +249,8 @@ export function SettingsView({
 
         {tokenInput.length > 0 && !looksLikeToken(tokenInput) ? (
           <Callout tone="warning" title="Das sieht nicht nach einem vollständigen Token aus">
-            Ein Takt-Token beginnt mit <span className="mono">takt_</span> und ist 48 Zeichen lang.
-            Speichern lässt es sich trotzdem — ob es gilt, entscheidet allein Takt.
+            Ein SuperTakt-Token beginnt mit <span className="mono">takt_</span> und ist 48 Zeichen lang.
+            Speichern lässt es sich trotzdem — ob es gilt, entscheidet allein SuperTakt.
           </Callout>
         ) : null}
 
@@ -282,12 +282,12 @@ export function SettingsView({
 
         {probe.kind === 'ok' ? (
           <Callout tone="success" title="Verbindung steht">
-            Takt hat geantwortet und das Token angenommen.
+            SuperTakt hat geantwortet und das Token angenommen.
           </Callout>
         ) : null}
         {probe.kind === 'failed' ? (
           <Callout tone="danger" title={probe.message}>
-            Der Grund steht in Worten, nicht als Wert. Takt nennt bewusst nicht, ob das Token
+            Der Grund steht in Worten, nicht als Wert. SuperTakt nennt bewusst nicht, ob das Token
             fehlte, falsch war oder inzwischen ersetzt wurde.
           </Callout>
         ) : null}
@@ -408,7 +408,7 @@ export function SettingsView({
 
       <Section title="Woher das Token kommt">
         <ol className="steps">
-          <li>Takt öffnen, Einstellungen aufrufen.</li>
+          <li>SuperTakt öffnen, Einstellungen aufrufen.</li>
           <li>Ein Token erzeugen. Es wird genau einmal angezeigt.</li>
           <li>Es hier oben eintragen und „Verbindung prüfen" drücken.</li>
         </ol>

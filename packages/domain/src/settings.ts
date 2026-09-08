@@ -25,6 +25,32 @@ import type { RoundingMode } from './rounding.ts';
  */
 export type Theme = 'system' | 'light' | 'dark';
 
+/** Gestaltung unabhängig vom Farbmodus (A-21.4). */
+export const DESIGN_THEMES = [
+  'classic',
+  'clear', // Kompatibilität mit bereits gespeicherten Einstellungen.
+  'arc',
+  'cybr',
+  'dark-base',
+  'dracula',
+  'everfrost',
+  'glass',
+  'lines',
+  'liquid-glass',
+  'nord-polar-night',
+  'nord-snow-storm',
+  'plainspace',
+  'rainbow',
+  'zen',
+  'velvet',
+  'catppuccin-latte',
+  'catppuccin-frappe',
+  'catppuccin-macchiato',
+  'catppuccin-mocha',
+] as const;
+export type DesignTheme = (typeof DESIGN_THEMES)[number];
+export type Density = 'comfortable' | 'compact';
+
 /**
  * Anwendungseinstellungen. Eine Zeile, feste Felder — kein Schlüssel-Wert-Beutel,
  * damit jede Einstellung einen Typ hat und eine Migration erzwingt.
@@ -55,6 +81,12 @@ export interface AppSettings {
   readonly roundingMode: RoundingMode;
   readonly locale: string;
   readonly theme: Theme;
+  readonly designTheme: DesignTheme;
+  readonly density: Density;
+  readonly promptOnTimerStop: boolean;
+  readonly idleDetectionEnabled: boolean;
+  readonly idleKeepTimerRunning: boolean;
+  readonly idleThresholdMinutes: number;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20, E-064
    * Punkt 5). `null` heißt: nichts übersprungen.
@@ -88,6 +120,12 @@ export interface AppSettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
   readonly theme?: Theme;
+  readonly designTheme?: DesignTheme;
+  readonly density?: Density;
+  readonly promptOnTimerStop?: boolean;
+  readonly idleDetectionEnabled?: boolean;
+  readonly idleKeepTimerRunning?: boolean;
+  readonly idleThresholdMinutes?: number;
   /** `null` setzt „nichts übersprungen" zurück. Nicht gesetzt heißt unverändert. */
   readonly skippedVersion?: string | null;
   readonly now: Timestamp;

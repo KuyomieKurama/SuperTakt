@@ -359,26 +359,26 @@ export function describeVersionCheckFailure(
     case 'timeout':
       return {
         sentence:
-          'Die Versionsprüfung hat innerhalb der Frist keine Antwort bekommen. Takt läuft unverändert weiter.',
+          'Die Versionsprüfung hat innerhalb der Frist keine Antwort bekommen. SuperTakt läuft unverändert weiter.',
         key: 'version_check_timeout',
       };
     case 'redirect':
       return {
         sentence:
-          'Die Versionsprüfung wurde auf eine andere Adresse verwiesen. Takt folgt dem nicht und läuft unverändert weiter.',
+          'Die Versionsprüfung wurde auf eine andere Adresse verwiesen. SuperTakt folgt dem nicht und läuft unverändert weiter.',
         key: 'version_check_redirect',
       };
     case 'status':
       return {
         sentence:
-          'Die Versionsprüfung hat eine unerwartete Antwort bekommen. Takt läuft unverändert weiter.',
+          'Die Versionsprüfung hat eine unerwartete Antwort bekommen. SuperTakt läuft unverändert weiter.',
         key: isHttpStatus(statusCode)
           ? `version_check_status code=${String(statusCode)}`
           : 'version_check_status',
       };
     case 'no_release':
       return {
-        sentence: 'Es liegt keine veröffentlichte Fassung vor. Takt läuft unverändert weiter.',
+        sentence: 'Es liegt keine veröffentlichte Fassung vor. SuperTakt läuft unverändert weiter.',
         key: 'version_check_no_release',
       };
     case 'too_large':
@@ -397,13 +397,13 @@ export function describeVersionCheckFailure(
          */
         sentence:
           `Die Antwort der Versionsprüfung war größer als ${String(VERSION_CHECK_MAX_BYTES)} Bytes und wurde verworfen. ` +
-          'Die Versionsprüfung liefert damit dauerhaft kein Ergebnis; Takt läuft unverändert weiter.',
+          'Die Versionsprüfung liefert damit dauerhaft kein Ergebnis; SuperTakt läuft unverändert weiter.',
         key: 'version_check_too_large',
       };
     case 'malformed':
       return {
         sentence:
-          'Die Antwort der Versionsprüfung war nicht auswertbar. Takt läuft unverändert weiter.',
+          'Die Antwort der Versionsprüfung war nicht auswertbar. SuperTakt läuft unverändert weiter.',
         key: 'version_check_malformed',
       };
     case 'aborted':
@@ -414,7 +414,7 @@ export function describeVersionCheckFailure(
     case 'unreachable':
     default:
       return {
-        sentence: 'Die Versionsprüfung konnte GitHub nicht erreichen. Takt läuft unverändert weiter.',
+        sentence: 'Die Versionsprüfung konnte GitHub nicht erreichen. SuperTakt läuft unverändert weiter.',
         key: 'version_check_unreachable',
       };
   }

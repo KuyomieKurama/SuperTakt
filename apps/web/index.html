@@ -12,10 +12,15 @@
       `tauri.conf.json`; sichtbar wurde die Verwechslung deshalb nur im
       Browserbetrieb — in der Reiterleiste und im Verlauf.
     -->
-    <title>Takt</title>
+    <title>SuperTakt</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div role="status" aria-live="polite" style="min-height:100vh;display:grid;place-content:center;gap:12px;text-align:center;font-family:system-ui,sans-serif">
+        <strong>SuperTakt</strong>
+        <span>Wird gestartet …</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

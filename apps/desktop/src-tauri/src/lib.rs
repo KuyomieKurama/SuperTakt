@@ -23,7 +23,9 @@
 mod appdata;
 mod attachment;
 mod identity;
+mod idle;
 mod menu;
+mod outlook_certificate;
 mod release;
 mod sidecar;
 
@@ -118,6 +120,8 @@ pub fn run() {
         // `capabilities/default.json` nur `dialog:allow-open`.
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let started = std::time::Instant::now();
+            eprintln!("[start] phase=setup elapsed_ms=0");
             let mut startup = Startup::default();
 
             // 2 — Datenverzeichnis, **vor** dem Dienst.
@@ -150,9 +154,12 @@ pub fn run() {
                 Err(reason) => startup.problems.push(reason.message().to_string()),
             }
 
+            eprintln!("[start] phase=directory_ready elapsed_ms={}", started.elapsed().as_millis());
+
             // 3 — Startgeheimnis.
             let service = Service::new().map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             app.manage(service);
+            app.manage(idle::IdleMonitor::start());
 
             // 4 — Der Benutzername, vom Betriebssystem (E-010, B-8.1). Er geht
             // als zweite Startzeile an den Dienst (E-042) und ist dort Pflicht:
@@ -173,6 +180,7 @@ pub fn run() {
                 startup.problems.push(error);
             }
 
+            eprintln!("[start] phase=sidecar_spawned elapsed_ms={}", started.elapsed().as_millis());
             menu::install(app.handle())?;
             app.manage(startup);
             Ok(())
@@ -182,6 +190,9 @@ pub fn run() {
             takt_os_user,
             takt_shell_state,
             takt_quit,
+            idle::takt_idle_activity,
+            outlook_certificate::takt_outlook_certificate,
+            outlook_certificate::takt_trust_outlook_certificate,
             // Versionsprüfung (Abschnitt 18). Beide Befehle stehen in
             // `release.rs`; die Begründung, warum der zweite **keine** Adresse
             // entgegennimmt, steht dort und nicht hier.
@@ -216,7 +227,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("Takt ließ sich nicht aufbauen");
+        .expect("SuperTakt ließ sich nicht aufbauen");
 
     app.run(|handle, event| {
         // Zweiter Halt. `Exit` kommt auch dann, wenn kein Fensterereignis

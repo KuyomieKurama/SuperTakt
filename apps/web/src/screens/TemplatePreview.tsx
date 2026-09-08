@@ -119,7 +119,7 @@ const DRAFT_DEBOUNCE_MS = 400;
  * nebeneinander. Zwei Abschriften laufen auseinander, sobald eine gepflegt
  * wird; vier laufen schneller auseinander.
  */
-const PREVIEW_SOURCE = "Vom selben Renderer wie die Exportdatei, an Ihren offenen Buchungen.";
+const PREVIEW_SOURCE = "Vorschau anhand Ihrer offenen Buchungen.";
 
 export interface TemplatePreviewProps {
   /** Die Felder, die der Benutzer gerade vor sich hat. Sie werden gerendert. */
@@ -300,6 +300,10 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
 
   return (
     <div className="tpreview">
+      <details className="export-legend">
+        <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
+        <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen. Betroffene Tagesgruppen bleiben offen; der übrige Export läuft weiter.</p>
+      </details>
       <div className="tpreview__banner">
         {/*
           Seit E-051 zeigt die Vorschau **immer** den Stand im Editor. Der
@@ -409,10 +413,10 @@ export function TemplatePreview({ catalog, stale, fields, unsaved }: TemplatePre
                 {plural(groups.length, "Tagesgruppe", "Tagesgruppen")} aus{" "}
                 {plural(value.total, "offenen Buchung", "offenen Buchungen")}
                 {value.total > groups.length
-                  ? " — die neuesten zuerst, damit die Vorschau schnell bleibt."
+                  ? " — neueste zuerst."
                   : "."}{" "}
                 {outcome.preview.templateSource === "draft"
-                  ? "Gerendert aus Ihrem aktuellen Stand."
+                  ? "Aktueller Entwurf."
                   : `Gerendert aus der gespeicherten Vorlage ${quotedName(outcome.preview.templateName ?? "")}.`}
                 <RefreshHint active={pending} />
               </p>
@@ -527,13 +531,7 @@ function PreviewGroupRow({
               <Icon name="alert-triangle" size={14} />
             </span>
             <div className="tpgroup__blocked-body">
-              <p className="tpgroup__blocked-title">Diese Tagesgruppe ist nicht exportierbar</p>
-              <p className="tpgroup__blocked-text">
-                Keine ihrer Buchungen trägt einen Leistungstext, und eine leere Notiz nimmt das
-                Abrechnungstool nicht an. Der übrige Export läuft trotzdem; diese Gruppe bleibt
-                offen und erscheint beim nächsten Mal wieder. Tragen Sie die Leistung nach, dann
-                geht sie mit.
-              </p>
+              <p className="tpgroup__blocked-title">Leistung fehlt</p>
             </div>
             {group.entries[0] === undefined ? null : (
               /*

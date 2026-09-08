@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { Icon, type IconName } from "./Icon";
 import { cx } from "../lib/cx";
 
 /**
@@ -59,6 +60,7 @@ import { cx } from "../lib/cx";
 export interface RadioRowOption<TValue extends string> {
   readonly value: TValue;
   readonly label: string;
+  readonly icon?: IconName;
   /**
    * Ein Satz, der sagt, wozu diese Wahl führt. Für Hilfsmittel hängt er als
    * Beschreibung am Optionsknopf; sichtbar steht der Satz der **gewählten**
@@ -113,6 +115,7 @@ export function RadioRow<TValue extends string>({
                 onChange={() => onChange(option.value)}
                 {...(option.hint === undefined ? {} : { "aria-describedby": `${optionId}-hint` })}
               />
+              {option.icon === undefined ? null : <Icon name={option.icon} size={16} />}
               <span className="radio-row__label">{option.label}</span>
               {option.neutral === true && neutralNote !== undefined ? (
                 <span className="radio-row__neutral">{neutralNote}</span>

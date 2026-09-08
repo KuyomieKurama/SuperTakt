@@ -1015,7 +1015,7 @@ export function BoardEmptyState({
           Erfuellung einer Auflage behauptet, nennt entweder die Stelle, an der
           sie gemessen wird, oder er behauptet sie nicht.
         */
-        description="Sie richten die Spalten selbst ein. Takt erfindet keine."
+        description="Sie richten die Spalten selbst ein. SuperTakt erfindet keine."
         action={
           <Button variant="primary" iconStart="plus" onClick={onOpenSetup}>
             Erste Spalte einrichten

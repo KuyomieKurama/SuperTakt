@@ -152,7 +152,7 @@ export function ControlsSection() {
         </div>
 
         <SubHeading>
-          Die aufgeklappte Liste gehört jetzt Takt und nicht mehr dem Betriebssystem
+          Die aufgeklappte Liste gehört jetzt SuperTakt und nicht mehr dem Betriebssystem
         </SubHeading>
         <p className="demo-note">
           Bis T-057 war das ein natives <code>&lt;select&gt;</code>. Ein Browser lässt seine
@@ -399,7 +399,7 @@ export function ControlsSection() {
         tone="danger"
         title="Todo endgültig löschen?"
         description="Das Todo und alle 7 zugehörigen Zeitbuchungen werden gelöscht."
-        consequence="Zwei dieser Buchungen wurden bereits exportiert. Die Abrechnung beim Kunden bleibt bestehen, der Nachweis in Takt aber nicht."
+        consequence="Zwei dieser Buchungen wurden bereits exportiert. Die Abrechnung beim Kunden bleibt bestehen, der Nachweis in SuperTakt aber nicht."
         acknowledgeLabel="Ich habe verstanden, dass der Nachweis der bereits abgerechneten Zeiten verloren geht."
         confirmLabel="Endgültig löschen"
         onCancel={() => setDialog("none")}

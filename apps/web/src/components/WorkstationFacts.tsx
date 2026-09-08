@@ -87,7 +87,7 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
             Exportprotokoll.
           </p>
           <p>
-            Beenden Sie Takt und starten Sie die Anwendung über ihre Verknüpfung neu. Der Name
+            Beenden Sie SuperTakt und starten Sie die Anwendung über ihre Verknüpfung neu. Der Name
             kommt beim Start von der Anwendungshülle; fehlt er, ist der Dienst nicht auf dem
             üblichen Weg gestartet worden.
           </p>
@@ -113,7 +113,7 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
           <p className="workstation__source">
             <Icon name="shield" size={14} />
             <span>
-              Takt bekommt ihn beim Start vom Betriebssystem, nicht aus einer Umgebungsvariablen:{" "}
+              SuperTakt bekommt ihn beim Start vom Betriebssystem, nicht aus einer Umgebungsvariablen:{" "}
               <span className="mono">set USERNAME=…</span> ändert ihn nicht, und über keine Route
               lässt er sich setzen. Deshalb steht er hier: nachzusehen ist er damit{" "}
               <strong>vor</strong> dem ersten Export und nicht erst danach im Exportprotokoll.
@@ -217,7 +217,7 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
       {path === null ? (
         <InlineMessage tone="info" title="Diese Fassung führt keine Datei">
           Der Bestand steht im Arbeitsspeicher: Alles, was Sie eintragen, ist beim Beenden weg. So
-          läuft der Prüfbetrieb und die Musterseite des Designsystems. Im installierten Takt steht
+          läuft der Prüfbetrieb und die Musterseite des Designsystems. Im installierten SuperTakt steht
           an dieser Stelle ein Pfad.
         </InlineMessage>
       ) : (
@@ -252,14 +252,14 @@ export function DatabaseLocationFact({ path, className }: DatabaseLocationFactPr
             </span>
           </div>
           <p className="workstation__body">
-            In dieser einen Datei stehen alle Todos, Buchungen und Vermerke — im Klartext. Takt kann
+            In dieser einen Datei stehen alle Todos, Buchungen und Vermerke — im Klartext. SuperTakt kann
             den Ort nicht verlegen: Er folgt dem Anwendungsdatenverzeichnis dieses Benutzers und ist
             über keine Einstellung verstellbar.
           </p>
           <p className="workstation__source">
             <Icon name="download" size={14} />
             <span>
-              Zum Sichern: Takt beenden und den <strong>ganzen Ordner</strong> kopieren. Neben{" "}
+              Zum Sichern: SuperTakt beenden und den <strong>ganzen Ordner</strong> kopieren. Neben{" "}
               <span className="mono">takt.db</span> führt SQLite die Nachbardateien{" "}
               <span className="mono">-wal</span> und <span className="mono">-shm</span>; die Datei
               allein kann unvollständig sein.

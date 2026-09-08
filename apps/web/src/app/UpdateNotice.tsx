@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { Button, IconButton } from "../components/Primitives";
 import { UpdateDialog } from "../components/UpdateDialog";
-import { useUpdateNotice } from "./useUpdateNotice";
+import type { UpdateNoticeApi } from "./useUpdateNotice";
 
 /**
  * Takt — die Fläche der Versionsprüfung, an einer Stelle (Abschnitt 18).
@@ -44,8 +44,8 @@ import { useUpdateNotice } from "./useUpdateNotice";
  * regelmäßig**". Ein Takt, das über Tage läuft, erführe sonst nichts, und die
  * regelmäßige Prüfung wäre eine Prüfung ohne Wirkung.
  */
-export function UpdateNotice() {
-  const { view, arrival, busy, problem, install, skip, postpone } = useUpdateNotice();
+export function UpdateNotice({ api }: { readonly api: UpdateNoticeApi }) {
+  const { view, arrival, busy, problem, install, skip, postpone } = api;
 
   /** Hat der Benutzer die Leiste aufgeklappt? Nur dann kommt der Dialog. */
   const [opened, setOpened] = useState(false);
@@ -78,7 +78,7 @@ export function UpdateNotice() {
             Neues da ist, muss dafür keinen Dialog öffnen — A-18.6 verlangt,
             dass Takt die Fassung **anzeigt**.
           */}
-          Eine neuere Fassung von Takt ist verfügbar: <strong>{view.available}</strong>. Installiert
+          Eine neuere Fassung von SuperTakt ist verfügbar: <strong>{view.available}</strong>. Installiert
           ist {view.installed}.
         </p>
         <Button variant="secondary" size="sm" onClick={() => setOpened(true)}>

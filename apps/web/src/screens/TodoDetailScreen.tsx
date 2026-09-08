@@ -21,7 +21,7 @@ import {
 import { Icon } from "../components/Icon";
 import { Menu, type MenuEntry } from "../components/Menu";
 import { NoteField } from "../components/NoteField";
-import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
+import { Button, Card, EmptyState, IconButton, InlineMessage } from "../components/Primitives";
 import { TagChip } from "../components/Tag";
 import { previewOpenEntries } from "../app/dayGroup";
 import { useRefresh } from "../app/RefreshContext";
@@ -356,82 +356,69 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
 
               <div className="detail">
                 <div className="detail__main">
-                  <Card
-                    title="Erledigt"
-                    description="Ein Kennzeichen am Todo — weder der Status noch eine Kanban-Spalte. Alle drei sind unabhängig."
-                  >
+                  <div className="detail__completion">
                     <label className={cx("done-switch", done && "done-switch--on")}>
                       <input
                         type="checkbox"
                         checked={done}
+                        aria-label="Aufgabe erledigt"
                         onChange={() => toggleDone(done, todo.title)}
                       />
                       <span className="done-switch__box" aria-hidden>
                         <Icon name={done ? "check" : "square"} size={14} />
                       </span>
-                      <span>
-                        <span className="done-switch__state">
-                          <strong>{DONE_FLAG_LABEL[flagState]}</strong>
-                          {flagState === "reopened" ? (
-                            <DoneFlag state={flagState} />
-                          ) : null}
-                        </span>
-                        {/*
-                          Drei Saetze, und keiner wertet eine Regel aus (E-058,
-                          T-094).
-
-                          Bis T-094 stand im mittleren „… erscheint erneut in
-                          jedem Pool, dessen Regel auf seine Tags passt. Die
-                          Karte bleibt, wo sie ist …" — doppelt falsch. Eine
-                          Regel hat seit E-055 fuenf Achsen, nicht nur Tags; und
-                          die Spalte aendert sich sehr wohl, wenn eine Regel
-                          nach „Erledigt" oder nach dem Exportstatus fragt.
-
-                          Rekonstruiert wird die Bewegung hier auch nicht
-                          nachtraeglich: Diese Ansicht weiss nicht, welcher
-                          Zustand vor dem Start galt. Wer es weiss, ist der
-                          Dienst, und er hat es beim Start gesagt (`poolMovement`
-                          an `POST /timer/start`). Der Satz verweist deshalb auf
-                          jene Meldung, statt eine zweite, schlechtere zu bauen.
-                        */}
-                        <span className="done-switch__hint">
-                          {flagState === "done"
-                            ? `Erledigt am ${formatDateTime(todo.completedAt ?? todo.updatedAt)}. Das Todo ist aus seinen Pools ausgeblendet; ein Timerstart hebt das auf.`
-                            : flagState === "reopened"
-                              ? 'Der Timerstart hat das Kennzeichen aufgehoben — Takt hat das getan, nicht Sie. Das Todo ist wieder offen; welche Pools und Spalten das betrifft, hat die Meldung beim Start genannt. Setzen Sie den Haken, gilt wieder „Erledigt".'
-                              : "Es erscheint überall dort, wo eine Regel es aufnimmt — als Pool, als Board-Spalte oder beides."}
-                        </span>
-                      </span>
+                      <strong>{DONE_FLAG_LABEL[flagState]}</strong>
                     </label>
-                  </Card>
+                    {flagState === "reopened" ? <DoneFlag state={flagState} /> : null}
+                    {done ? (
+                      <span className="muted">{formatDateTime(todo.completedAt ?? todo.updatedAt)}</span>
+                    ) : null}
+                  </div>
 
-                  {/*
-                    Die **Frist** (A-19.3, A-19.4). Sie steht in der
-                    Detailansicht als Eigenschaft und nicht als dritte
-                    Anzeigestelle — gesetzt, geändert und entfernt wird sie im
-                    Bearbeiten-Dialog, hier steht ihr Zustand.
-
-                    Der Satz darunter sagt, was sie **nicht** tut. Ohne ihn
-                    liegt die Annahme nahe, eine Frist bewege ein Todo in eine
-                    Spalte oder in einen Pool; sie tut nichts dergleichen
-                    (A-19.7, E-070 Punkt 4).
-                  */}
-                  <Card
-                    title="Frist"
-                    description="Ein Tag, keine Uhrzeit. Sie ändert nichts an Pools, Spalten, Buchungen oder Export — und sie steht in keinem Export."
-                    actions={
-                      <Button variant="ghost" iconStart="pencil" onClick={() => setEditOpen(true)}>
-                        {todo.dueDate === null ? "Frist setzen" : "Frist ändern"}
+                  <Card title="Vermerk">
+                    <NoteField
+                      scope="internal"
+                      hideLabel
+                      value={noteText}
+                      onChange={setNoteDraft}
+                      rows={12}
+                      maxLength={65536}
+                      /*
+                        Kein eigener Platzhalter mehr (T-181, ST-09): Das Feld
+                        nimmt den Vorgabewert aus `NoteField`. Zwei Fassungen
+                        fuer dasselbe Feld an zwei Flaechen waren zwei Anreden
+                        und zwei Wortlaute fuer eine Sache.
+                      */
+                    />
+                    <div className="note-actions">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!noteDirty}
+                        loading={noteMutation.busy}
+                        onClick={() => {
+                          void noteMutation.run(async () => {
+                            const saved = await putTodoNote(todoId, noteText);
+                            setNoteDraft(null);
+                            detail.replace({ ...value, note: saved });
+                            toasts.success("Vermerk gespeichert.", "Er bleibt in SuperTakt.");
+                          });
+                        }}
+                      >
+                        Vermerk speichern
                       </Button>
-                    }
-                  >
-                    {todo.dueDate === null ? (
-                      <p className="muted">
-                        Keine Frist gesetzt. Dieses Todo ist deshalb weder überfällig noch heute
-                        fällig — es hat schlicht keinen dieser Zustände.
-                      </p>
-                    ) : (
-                      <DeadlineFlag dueDate={todo.dueDate} today={today} />
+                      {noteDirty ? (
+                        <span className="note-actions__hint">Nicht gespeicherte Änderung</span>
+                      ) : (
+                        <span className="note-actions__hint muted">
+                          Zuletzt geändert am {formatDateTime(value.note.updatedAt)}
+                        </span>
+                      )}
+                    </div>
+                    {noteMutation.error === null ? null : (
+                      <InlineMessage tone="danger" title="Der Vermerk wurde nicht gespeichert">
+                        {noteMutation.error}
+                      </InlineMessage>
                     )}
                   </Card>
 
@@ -538,6 +525,27 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 </div>
 
                 <aside className="detail__side">
+                  <Card
+                    title="Frist"
+                    className="detail__deadline-card"
+                    actions={
+                      <IconButton
+                        size="sm"
+                        icon="pencil"
+                        label={todo.dueDate === null ? "Frist setzen" : "Frist ändern"}
+                        onClick={() => setEditOpen(true)}
+                      />
+                    }
+                  >
+                    {todo.dueDate === null ? (
+                      <p className="muted">
+                        Keine Frist gesetzt.
+                      </p>
+                    ) : (
+                      <DeadlineFlag dueDate={todo.dueDate} today={today} className="detail__deadline" />
+                    )}
+                  </Card>
+
                   <Card title="Erfasste Zeit">
                     <div className="stat-grid stat-grid--tight">
                       <StatTile
@@ -600,52 +608,6 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                           );
                         })}
                       </div>
-                    )}
-                  </Card>
-
-                  <Card title="Vermerk">
-                    <NoteField
-                      scope="internal"
-                      value={noteText}
-                      onChange={setNoteDraft}
-                      rows={6}
-                      maxLength={65536}
-                      /*
-                        Kein eigener Platzhalter mehr (T-181, ST-09): Das Feld
-                        nimmt den Vorgabewert aus `NoteField`. Zwei Fassungen
-                        fuer dasselbe Feld an zwei Flaechen waren zwei Anreden
-                        und zwei Wortlaute fuer eine Sache.
-                      */
-                    />
-                    <div className="note-actions">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={!noteDirty}
-                        loading={noteMutation.busy}
-                        onClick={() => {
-                          void noteMutation.run(async () => {
-                            const saved = await putTodoNote(todoId, noteText);
-                            setNoteDraft(null);
-                            detail.replace({ ...value, note: saved });
-                            toasts.success("Vermerk gespeichert.", "Er bleibt in Takt.");
-                          });
-                        }}
-                      >
-                        Vermerk speichern
-                      </Button>
-                      {noteDirty ? (
-                        <span className="note-actions__hint">Nicht gespeicherte Änderung</span>
-                      ) : (
-                        <span className="note-actions__hint muted">
-                          Zuletzt geändert am {formatDateTime(value.note.updatedAt)}
-                        </span>
-                      )}
-                    </div>
-                    {noteMutation.error === null ? null : (
-                      <InlineMessage tone="danger" title="Der Vermerk wurde nicht gespeichert">
-                        {noteMutation.error}
-                      </InlineMessage>
                     )}
                   </Card>
 

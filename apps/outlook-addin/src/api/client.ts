@@ -150,13 +150,13 @@ export interface ApiClient {
 }
 
 const MESSAGES: Readonly<Record<ApiFailureKind, string>> = Object.freeze({
-  unreachable: 'Takt ist nicht erreichbar. Läuft die Anwendung?',
+  unreachable: 'SuperTakt ist nicht erreichbar. Läuft die Anwendung?',
   unauthorized: 'Das hinterlegte Token wird nicht akzeptiert.',
   origin_rejected:
-    'Der lokale Dienst nimmt Anfragen von dieser Herkunft nicht an. Die Herkunft des Add-ins muss in Takt freigeschaltet sein.',
-  not_found: 'Diese Funktion ist im laufenden Takt nicht vorhanden.',
+    'Der lokale Dienst nimmt Anfragen von dieser Herkunft nicht an. Die Herkunft des Add-ins muss in SuperTakt freigeschaltet sein.',
+  not_found: 'Diese Funktion ist im laufenden SuperTakt nicht vorhanden.',
   invalid_input: 'Die Eingabe ist unvollständig oder unzulässig.',
-  failed: 'Die Anfrage an Takt ist fehlgeschlagen.',
+  failed: 'Die Anfrage an SuperTakt ist fehlgeschlagen.',
 });
 
 const kindForStatus = (status: number): ApiFailureKind => {
@@ -198,7 +198,7 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
         ok: false,
         kind: 'unauthorized',
         code: null,
-        message: 'Es ist kein Takt-Token hinterlegt.',
+        message: 'Es ist kein SuperTakt-Token hinterlegt.',
       };
     }
 

@@ -218,7 +218,7 @@ function QuitFailureNotice({ cause }: { readonly cause: string | null }) {
     <div className="quitfail">
       <p className="quitfail__title">
         <Icon name="alert-triangle" size={14} />
-        <span>Takt ließ sich so nicht beenden</span>
+        <span>SuperTakt ließ sich so nicht beenden</span>
       </p>
       <p className="quitfail__body">
         {cause ?? "Der Beenden-Befehl hat nicht gewirkt: Das Fenster steht noch."}
@@ -230,12 +230,12 @@ function QuitFailureNotice({ cause }: { readonly cause: string | null }) {
         </li>
         <li>
           Hilft das nicht: <span className="mono">Strg+Umschalt+Esc</span> öffnet den
-          Task-Manager. Beenden Sie dort den Eintrag „Takt".
+          Task-Manager. Beenden Sie dort den Eintrag „SuperTakt".
         </li>
       </ol>
       <p className="quitfail__foot">
         Beides ist gefahrlos. Was gespeichert ist, bleibt gespeichert, und der lokale
-        Dienst hält von selbst an, sobald das Fenster von Takt weg ist.
+        Dienst hält von selbst an, sobald das Fenster von SuperTakt weg ist.
       </p>
     </div>
   );
@@ -278,7 +278,7 @@ function QuitButton({
         loading={attempt.kind === "running"}
         onClick={start}
       >
-        {attempt.kind === "running" ? "Takt wird beendet …" : "Takt beenden"}
+        {attempt.kind === "running" ? "SuperTakt wird beendet …" : "SuperTakt beenden"}
       </Button>
     </>
   );
@@ -332,9 +332,9 @@ export function StartupProblemNotice({
         <Icon name="alert-circle" size={18} />
       </span>
       <div className="shellnote__main">
-        <p className="shellnote__title">Takt ist nicht vollständig gestartet</p>
+        <p className="shellnote__title">SuperTakt ist nicht vollständig gestartet</p>
         <p className="shellnote__body">
-          Ein Teil der Anwendung steht nicht zur Verfügung. Das ist Takt beim Start
+          Ein Teil der Anwendung steht nicht zur Verfügung. Das ist SuperTakt beim Start
           aufgefallen:
         </p>
         <ul className="shellnote__list">
@@ -349,7 +349,7 @@ export function StartupProblemNotice({
         <div className="shellnote__todo">
           <p className="shellnote__todo-title">Was Sie tun können</p>
           <p className="shellnote__body">
-            Beenden Sie Takt und starten Sie es neu. Bleibt die Meldung, geben Sie sie
+            Beenden Sie SuperTakt und starten Sie es neu. Bleibt die Meldung, geben Sie sie
             unverändert an Ihre Systembetreuung weiter — sie benennt bereits, was fehlt.
           </p>
         </div>
@@ -401,7 +401,7 @@ export function SyncFolderNotice({ warning, detail, className }: SyncFolderNotic
         <Icon name="alert-triangle" size={18} />
       </span>
       <div className="shellnote__main">
-        <p className="shellnote__title">Die Daten von Takt liegen an einer ungeeigneten Stelle</p>
+        <p className="shellnote__title">Die Daten von SuperTakt liegen an einer ungeeigneten Stelle</p>
         <p className="shellnote__body">{warning}</p>
         <div className="shellnote__todo">
           <p className="shellnote__todo-title">Was das bedeutet</p>
@@ -415,7 +415,7 @@ export function SyncFolderNotice({ warning, detail, className }: SyncFolderNotic
         <div className="shellnote__todo">
           <p className="shellnote__todo-title">Was Sie tun können</p>
           <p className="shellnote__body">
-            Takt kann diesen Ordner nicht selbst verlegen; er wird vom Betriebssystem
+            SuperTakt kann diesen Ordner nicht selbst verlegen; er wird vom Betriebssystem
             vorgegeben. Wenden Sie sich an Ihre Systembetreuung, damit der
             Anwendungsdatenordner dieses Kontos auf einem Laufwerk dieses Rechners liegt.
           </p>
@@ -427,7 +427,7 @@ export function SyncFolderNotice({ warning, detail, className }: SyncFolderNotic
           </p>
         ) : null}
         <p className="shellnote__foot">
-          Takt arbeitet weiter. Der Hinweis bleibt stehen, solange der Ordner dort liegt.
+          SuperTakt arbeitet weiter. Der Hinweis bleibt stehen, solange der Ordner dort liegt.
         </p>
       </div>
     </div>
@@ -465,13 +465,13 @@ export function ServiceStoppedPanel({
           <Icon name="alert-circle" size={18} />
         </span>
         <h2 className="dialog__title" id={titleId}>
-          Takt kann im Moment nichts speichern
+          SuperTakt kann im Moment nichts speichern
         </h2>
       </div>
 
       <div className="dialog__body" id={descriptionId}>
         <p>
-          Der lokale Dienst von Takt ist nicht erreichbar. Er ist der Teil der Anwendung,
+          Der lokale Dienst von SuperTakt ist nicht erreichbar. Er ist der Teil der Anwendung,
           der jede Buchung und jede Änderung auf die Festplatte schreibt.
         </p>
         <p className="dialog__consequence">
@@ -491,7 +491,7 @@ export function ServiceStoppedPanel({
         <p className="servicestop__steps-title">Was zu tun ist</p>
         <ol className="servicestop__steps">
           <li>Notieren Sie sich, woran Sie gerade gearbeitet haben.</li>
-          <li>Beenden Sie Takt und starten Sie es neu.</li>
+          <li>Beenden Sie SuperTakt und starten Sie es neu.</li>
           <li>
             Kommt die Meldung wieder, geben Sie sie an Ihre Systembetreuung weiter.
           </li>
@@ -630,13 +630,13 @@ export function UserNameBlockedPanel({
           <Icon name="alert-circle" size={18} />
         </span>
         <h2 className="dialog__title" id={titleId}>
-          Takt kann unter diesem Windows-Benutzernamen nicht arbeiten
+          SuperTakt kann unter diesem Windows-Benutzernamen nicht arbeiten
         </h2>
       </div>
 
       <div className="dialog__body" id={descriptionId}>
         <p>
-          Takt schreibt den Windows-Benutzernamen, unter dem Sie an diesem Rechner
+          SuperTakt schreibt den Windows-Benutzernamen, unter dem Sie an diesem Rechner
           angemeldet sind, unverändert in jede Exportdatei. Daran erkennt die Abrechnung,
           wem die erfasste Zeit gehört.
         </p>
@@ -644,7 +644,7 @@ export function UserNameBlockedPanel({
           <Icon name="alert-triangle" size={14} />
           <span>
             In diesem Namen steht ein Steuer- oder Richtungszeichen. Solche Zeichen sind
-            unsichtbar und können die Zeile, in der sie stehen, umstellen. Takt startet
+            unsichtbar und können die Zeile, in der sie stehen, umstellen. SuperTakt startet
             deshalb nicht, statt eine Abrechnung zu schreiben, die etwas anderes anzeigt,
             als in ihr steht.
           </span>
@@ -658,7 +658,7 @@ export function UserNameBlockedPanel({
         <ol className="servicestop__steps">
           <li>
             Melden Sie sich an diesem Rechner unter einem anderen Windows-Konto an und
-            starten Sie Takt dort. Das ist der Weg, der ohne fremde Hilfe funktioniert.
+            starten Sie SuperTakt dort. Das ist der Weg, der ohne fremde Hilfe funktioniert.
           </li>
           <li>
             Oder lassen Sie den Anmeldenamen dieses Kontos ändern. Das geht nur mit
@@ -670,7 +670,7 @@ export function UserNameBlockedPanel({
           <p className="servicestop__assurance">
             Ihre bisher erfassten Daten sind davon nicht betroffen. Sie liegen in{" "}
             <span className="mono">{dataPath}</span>. Sichern Sie diesen Ordner, bevor Sie
-            das Konto wechseln: Unter einem anderen Konto legt Takt einen eigenen an.
+            das Konto wechseln: Unter einem anderen Konto legt SuperTakt einen eigenen an.
           </p>
         )}
 

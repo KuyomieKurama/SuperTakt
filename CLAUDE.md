@@ -1,6 +1,6 @@
-# Takt — Projektregeln
+# SuperTakt — Projektregeln
 
-Takt ist eine lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export an ein
+SuperTakt ist eine lokale Todo- und Zeittracking-Anwendung mit konfigurierbarem Export an ein
 externes Abrechnungstool und einem Outlook-Add-in.
 
 Verbindliche Quellen:
@@ -217,6 +217,8 @@ werden.
 
 ## Befehle
 
-Noch nicht eingerichtet. Der lokale Dienst, die Oberfläche und die Testläufe werden in Welle 2
-mit `package.json` festgelegt. Bis dahin trägt jeder Agent die von ihm benötigten Befehle in
-seinen Bericht ein, statt sie zu erfinden.
+Die aktuellen Befehle stehen im Wurzel-`package.json` und in den jeweiligen Paketen.
+`pnpm dev`, `pnpm desktop`, `pnpm check` und `pnpm test:e2e` sind eingerichtet.
+Die sichtbare Marke heißt seit A-21 SuperTakt; technische Kennungen und Datenpfade
+behalten aus Kompatibilitätsgründen ihre bisherigen Namen. Die Layoutänderungen
+sind in `docs/design/supertakt-layout.md` beschrieben.
