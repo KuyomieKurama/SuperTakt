@@ -396,6 +396,26 @@ Nachtrag des Auftraggebers vom 2026-09-05, als Antwort auf F-20.
 
 ---
 
+## 20. Datensicherung und Datenmigration
+
+Nachtrag des Auftraggebers vom 2026-09-08. Der Datenexport dieses Abschnitts ist eine
+vollständige Datensicherung und ausdrücklich nicht der Abrechnungsexport aus Abschnitt 8.
+
+| ID | Anforderung |
+|---|---|
+| A-20.1 | In den Einstellungen lässt sich eine vollständige Datensicherung als anwendungsunabhängige JSON-Datei herunterladen und wieder einlesen. |
+| A-20.2 | Das eigene Archiv trägt eine eindeutige Formatkennung, eine ganzzahlige Schemafassung, den Erzeugungszeitpunkt und den Erzeuger. Unbekannte Fassungen werden abgewiesen statt geraten. |
+| A-20.3 | Das Archiv enthält alle fachlichen Daten: Aufgaben, Vermerke, Tags und Ordner, Status, Fristen, Zeitbuchungen und Timerzustand, Anhänge samt Bildkopien, Pools und Regeln, Standard-Tags, Exportvorlagen, Exportläufe und -protokoll sowie Anwendungseinstellungen. Zugriffstoken und das interne Migrationsbuch sind ausgeschlossen. |
+| A-20.4 | Export und anschließender Re-Import stellen denselben fachlichen Bestand einschließlich Kennungen, Zeitstempeln, Beziehungen und Protokollen wieder her. |
+| A-20.5 | Vor dem Ersetzen des Bestands verlangt die Oberfläche eine ausdrückliche Bestätigung und weist auf den Verlust nur lokal vorhandener Änderungen hin. Ein ungültiges Archiv verändert nichts. |
+| A-20.6 | Das Format ist durch seine Schemafassung versionierbar. Eine künftige Änderung der Tabellen oder Bedeutung verlangt eine bewusste neue Fassung und einen eigenen Einlesepfad. |
+| A-20.7 | Takt importiert Todoist-Projektdateien im CSV-Format und Datensicherungen von Super Productivity im JSON-Format. Fremdimporte ergänzen den Bestand; sie ersetzen ihn nicht. |
+| A-20.8 | Soweit im Quellformat vorhanden, werden Aufgaben, Projekte, Bereiche, Labels/Tags, Prioritäten, Fristen, Vermerke/Beschreibungen, Unteraufgaben, Erledigt-Zustand, erfasste Zeiten und weitere Metadaten übernommen. |
+| A-20.9 | Nicht nativ darstellbare Beziehungen oder Metadaten bleiben nachvollziehbar im Vermerk der importierten Aufgabe erhalten. Projekte werden als Projekt-Tags und Pools, Bereiche, Labels und Prioritäten als getrennt gruppierte Tags abgebildet. |
+| A-20.10 | Jeder Fremdimport liegt in einem eigenen, benannten Importordner. Wiederholte Importe geraten weder mit diesem Ordner noch mit bereits vorhandenen Pools in Namenskonflikte. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

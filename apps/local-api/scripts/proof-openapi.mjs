@@ -98,6 +98,7 @@ import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { REQUEST_SCHEMAS as ADDIN_SCHEMAS } from '../src/routes/addin/schema.ts';
+import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-transfer.ts';
 import {
   FORBIDDEN_NAME_CHARACTERS,
   POOL_RULE_AXIS_IDS,
@@ -385,6 +386,7 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+  ...DATA_TRANSFER_SCHEMAS,
   // Seit T-149 führt auch die Add-in-Tür ihre eigene Aufstellung. Bis dahin
   // standen hier zwei Einzelimporte mit dem Vermerk „liegen in fremder Hoheit
   // und führen kein `REQUEST_SCHEMAS`" — er stimmte seit jener Aufgabe nicht
@@ -716,14 +718,17 @@ check(
 );
 
 /**
- * A-7.2, R-06 — der interne Vermerk verlässt seine eigene Route nicht.
+ * A-7.2, R-06 — der interne Vermerk verlässt seine eigene Route nur in der
+ * ausdrücklich vollständigen Datensicherung. Er erscheint weder in einem
+ * Leistungsexport noch auf der schmalen Add-in-Fläche.
  *
  * Der Durchlauf hat ihn beim Anlegen zweier Todos mitgegeben. Er darf in
- * genau zwei Antworten stehen: in der der Vermerksroute selbst. Diese Probe
- * kostet nichts, weil ohnehin jede Antwort eingesammelt wird — und sie misst
- * eine Zusicherung, die sonst nur behauptet wird.
+ * genau drei Antworten stehen: zweimal in der Vermerksroute und einmal im
+ * vollständigen Archiv. Diese Probe kostet nichts, weil ohnehin jede Antwort
+ * eingesammelt wird — und sie misst eine Zusicherung, die sonst nur behauptet
+ * wird.
  *
- * A-A-52 (T-206-2): Die Zahl **zwei** muss dabei geprüft werden und nicht nur
+ * A-A-52 (T-206-2): Die Zahl **drei** muss dabei geprüft werden und nicht nur
  * im Kommentar stehen. `every` ist über der leeren Liste wahr — gemessen mit
  * einem Durchlauf, der den Vermerk nirgends mehr mitgab: null Treffer, Lauf
  * grün, Zeile bestanden, nichts gemessen. Die Untergrenze steht deshalb
@@ -734,16 +739,17 @@ const noteBearing = records
   .filter((record) => (record.text ?? '').includes(INTERNAL_NOTE))
   .map((record) => record.operationId);
 check(
-  'der Durchlauf trägt den Vermerk überhaupt — genau zwei Antworten führen ihn (A-A-52)',
-  noteBearing.length === 2 &&
+  'der Durchlauf trägt den Vermerk genau in Notizantworten und Datensicherung (A-A-52)',
+  noteBearing.length === 3 &&
     noteBearing.includes('getTodoNote') &&
-    noteBearing.includes('putTodoNote'),
+    noteBearing.includes('putTodoNote') &&
+    noteBearing.includes('exportDataArchive'),
   `${noteBearing.length}: ${noteBearing.join(', ')}`,
 );
 check(
-  'der interne Vermerk steht in keiner Antwort außer der Vermerksroute (A-7.2)',
-  noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote'),
-  noteBearing.filter((id) => id !== 'getTodoNote' && id !== 'putTodoNote').join(', '),
+  'der interne Vermerk steht nur in Vermerksroute und vollständiger Datensicherung (A-7.2)',
+  noteBearing.every((id) => id === 'getTodoNote' || id === 'putTodoNote' || id === 'exportDataArchive'),
+  noteBearing.filter((id) => id !== 'getTodoNote' && id !== 'putTodoNote' && id !== 'exportDataArchive').join(', '),
 );
 
 /*

@@ -15,7 +15,7 @@
  * was dort steht, ist geprüft.
  */
 
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { routePath } from 'hono/route';
 import { timeout } from 'hono/timeout';
@@ -23,7 +23,12 @@ import { HTTPException } from 'hono/http-exception';
 
 import { asStorageFailure } from '@takt/storage';
 
-import { API_BASE_PATH, MAX_BODY_BYTES, REQUEST_TIMEOUT_MS } from './config.ts';
+import {
+  API_BASE_PATH,
+  DATA_TRANSFER_MAX_BODY_BYTES,
+  MAX_BODY_BYTES,
+  REQUEST_TIMEOUT_MS,
+} from './config.ts';
 import { errorEnvelope, errorStatus } from './errors.ts';
 import { fail } from './http/problem.ts';
 import {
@@ -47,6 +52,7 @@ import { createStructureRoutes } from './routes/structure.ts';
 import { createTimeEntryRoutes, createTimerRoutes } from './routes/time.ts';
 import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
 import { createVersionRoutes } from './routes/version.ts';
+import { createDataTransferRoutes } from './routes/data-transfer.ts';
 import type { VersionCheckState } from './version/checker.ts';
 
 /**
@@ -72,6 +78,24 @@ export interface AppOptions {
   readonly versionState?: () => VersionCheckState;
 }
 
+/** Eine größere, weiterhin feste Rumpfgrenze nur für vollständige Datenarchive. */
+function bodyLimitByRoute(): MiddlewareHandler<TaktEnv> {
+  const ordinary = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
+  });
+  const dataTransfer = bodyLimit({
+    maxSize: DATA_TRANSFER_MAX_BODY_BYTES,
+    onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
+  });
+  return (c, next) => {
+    const limit = c.req.path.startsWith(`${API_BASE_PATH}/data-transfer`)
+      ? dataTransfer
+      : ordinary;
+    return limit(c, next);
+  };
+}
+
 export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hono<TaktEnv> {
   const app = new Hono<TaktEnv>();
 
@@ -84,13 +108,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
   app.use('*', originGuard(runtime));
   app.use('*', urlSecretGuard(runtime));
   app.use('*', contentTypeGuard());
-  app.use(
-    '*',
-    bodyLimit({
-      maxSize: MAX_BODY_BYTES,
-      onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
-    }),
-  );
+  app.use('*', bodyLimitByRoute());
   app.use('*', timeout(REQUEST_TIMEOUT_MS));
   app.use('*', authGuard(runtime));
 
@@ -227,6 +245,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     api.route('/timer', createTimerRoutes(context));
     api.route('/export', createExportRoutes(context));
     api.route('/settings', createSettingsRoutes(context));
+    api.route('/data-transfer', createDataTransferRoutes(context));
 
     /**
      * Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).

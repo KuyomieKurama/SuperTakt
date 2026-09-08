@@ -12,6 +12,7 @@
  */
 
 export type * from './ports.ts';
+export { DATA_ARCHIVE_TABLES } from './ports.ts';
 export type * from './migration.ts';
 
 /**

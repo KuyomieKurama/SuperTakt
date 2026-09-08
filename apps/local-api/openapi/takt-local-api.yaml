@@ -151,6 +151,8 @@ tags:
       diese Fläche reicht.
   - name: Einstellungen
     description: Anwendungseinstellungen, Standard-Tags (A-9, E-011).
+  - name: Daten
+    description: Vollständige Datensicherung und Migration aus Fremdsystemen (A-20.*).
   - name: Versionsprüfung
     description: |
       Die **einzige** Verbindung, die Takt nach außen kennt (A-18, E-064,
@@ -3748,6 +3750,131 @@ paths:
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
+  # ---------------------------------------------------------------------------
+  /data-transfer/archive:
+    get:
+      tags: [Daten]
+      operationId: exportDataArchive
+      summary: Vollständige Takt-Datensicherung erzeugen
+      description: |
+        Liefert ein versioniertes JSON-Archiv des vollständigen fachlichen
+        Bestands einschließlich Bildanhängen. Sichten, Zugriffstoken und das
+        interne Migrationsbuch sind nicht enthalten.
+      responses:
+        '200':
+          description: Vollständiges Archiv.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DataArchive' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+    post:
+      tags: [Daten]
+      operationId: importDataArchive
+      summary: Takt-Datensicherung wiederherstellen
+      description: Ersetzt den fachlichen Bestand atomar durch ein Archiv der unterstützten Fassung.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [archive]
+              properties:
+                archive: {}
+      responses:
+        '200':
+          description: Bestand wiederhergestellt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DataImportSummary' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /data-transfer/todoist:
+    post:
+      tags: [Daten]
+      operationId: importTodoist
+      summary: Todoist-Projektdateien importieren
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [name, content]
+                    properties:
+                      name: { type: string, minLength: 1, maxLength: 260 }
+                      content: { type: string, maxLength: 16777216 }
+      responses:
+        '200':
+          description: Aufgaben und Strukturen ergänzt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DataImportSummary' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /data-transfer/super-productivity:
+    post:
+      tags: [Daten]
+      operationId: importSuperProductivity
+      summary: Super-Productivity-Datensicherung importieren
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backup]
+              properties:
+                backup: {}
+      responses:
+        '200':
+          description: Aufgaben und Strukturen ergänzt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DataImportSummary' }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
 components:
 
   securitySchemes:
@@ -3954,7 +4081,8 @@ components:
     PayloadTooLarge:
       description: |
         Fehlerschlüssel `payload_too_large`. Der Anfragerumpf überschreitet
-        1 MB (B-1.7).
+        die Grenze seiner Route (B-1.7): gewöhnlich 1 MiB, für die drei
+        Datenimport-Routen wegen eingebetteter Bildanhänge 64 MiB.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -4031,6 +4159,78 @@ components:
                       code: too_short
 
   schemas:
+
+    ArchiveScalar:
+      oneOf:
+        - { type: string }
+        - { type: number }
+        - { type: 'null' }
+
+    ArchiveRow:
+      type: object
+      description: Eine vollständig benannte, JSON-kompatible Zeile der jeweiligen Archivtabelle.
+      additionalProperties: { $ref: '#/components/schemas/ArchiveScalar' }
+
+    DataArchiveTables:
+      type: object
+      required: [todo_status, tag_folder, tag, todo, todo_note, todo_tag, time_entry, timer_heartbeat, todo_attachment_kind, todo_attachment, pool, pool_rule, default_tag, export_template, export_run, export_run_group, export_run_entry, export_audit, app_setting]
+      properties:
+        todo_status: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        tag_folder: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_note: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        time_entry: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        timer_heartbeat: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_attachment_kind: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        todo_attachment: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        pool: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        pool_rule: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        default_tag: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        export_template: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        export_run: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        export_run_group: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        export_run_entry: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        export_audit: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+        app_setting: { type: array, items: { $ref: '#/components/schemas/ArchiveRow' } }
+
+    ArchivedImage:
+      type: object
+      required: [name, mediaType, base64]
+      properties:
+        name: { type: string }
+        mediaType: { type: string }
+        base64: { type: string, description: Bildbytes in Base64-Kodierung. }
+
+    DataArchive:
+      type: object
+      required: [format, schemaVersion, createdAt, generator, data, warnings]
+      properties:
+        format: { type: string, const: de.supertakt.data-archive }
+        schemaVersion: { type: integer, const: 1 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        generator: { type: string, const: Takt }
+        data:
+          type: object
+          required: [tables, images]
+          properties:
+            tables: { $ref: '#/components/schemas/DataArchiveTables' }
+            images: { type: array, items: { $ref: '#/components/schemas/ArchivedImage' } }
+        warnings: { type: array, items: { type: string } }
+
+    DataImportSummary:
+      type: object
+      required: [source, todos, projects, sections, tags, timeEntries, images, warnings]
+      properties:
+        source: { type: string, enum: [takt, todoist, super-productivity] }
+        todos: { type: integer, minimum: 0 }
+        projects: { type: integer, minimum: 0 }
+        sections: { type: integer, minimum: 0 }
+        tags: { type: integer, minimum: 0 }
+        timeEntries: { type: integer, minimum: 0 }
+        images: { type: integer, minimum: 0 }
+        warnings: { type: array, items: { type: string } }
 
     Id:
       type: string

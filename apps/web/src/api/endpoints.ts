@@ -23,6 +23,8 @@ import type {
   CalendarDay,
   CreateTimeEntryResult,
   DefaultTag,
+  DataImportSummary,
+  DraftText,
   ExportAuditEntry,
   ExportPreview,
   ExportRun,
@@ -809,6 +811,37 @@ export function setDefaultTags(tagIds: readonly Id[]): Promise<readonly DefaultT
   return request<readonly DefaultTag[]>("/settings/default-tags", {
     method: "PUT",
     body: { tagIds },
+  });
+}
+
+/* ==================================================================== */
+/* Datensicherung und Migration                                         */
+/* ==================================================================== */
+
+export function exportDataArchive(): Promise<unknown> {
+  return request<unknown>("/data-transfer/archive");
+}
+
+export function importDataArchive(archive: unknown): Promise<DataImportSummary> {
+  return request<DataImportSummary>("/data-transfer/archive", {
+    method: "POST",
+    body: { archive },
+  });
+}
+
+export function importTodoistFiles(
+  files: readonly { readonly name: DraftText; readonly content: DraftText }[],
+): Promise<DataImportSummary> {
+  return request<DataImportSummary>("/data-transfer/todoist", {
+    method: "POST",
+    body: { files },
+  });
+}
+
+export function importSuperProductivity(backup: unknown): Promise<DataImportSummary> {
+  return request<DataImportSummary>("/data-transfer/super-productivity", {
+    method: "POST",
+    body: { backup },
   });
 }
 

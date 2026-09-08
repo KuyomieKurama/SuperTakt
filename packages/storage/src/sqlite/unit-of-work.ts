@@ -66,6 +66,7 @@ import { createPoolPort, createTagFolderPort, createTagPort, poolAxes, poolMatch
 import { createTimeEntryPort, createTimerHeartbeatPort, createTimerPort } from './repo-time.ts';
 import { createAttachmentPort } from './repo-attachments.ts';
 import { createTodoNotePort, createTodoPort, type PoolResolver } from './repo-todos.ts';
+import { createDataArchivePort } from './repo-data-archive.ts';
 import type { Page, Pagination } from '../ports.ts';
 import type { Todo } from '@takt/domain';
 
@@ -148,6 +149,7 @@ export function createUnitOfWork(conn: SqlConnection, options: UnitOptions = {})
     templates: createExportTemplatePort(conn, ids),
     settings: createAppSettingsPort(conn),
     defaultTags: createDefaultTagPort(conn),
+    dataArchive: createDataArchivePort(conn),
   };
 }
 

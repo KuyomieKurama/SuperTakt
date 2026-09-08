@@ -8,7 +8,9 @@ exportiert.
 Begriffe in diesem Handbuch folgen `docs/glossar.md`. Zwei davon sind von Anfang an wichtig, weil
 sie sich leicht verwechseln lassen:
 
-- **Vermerk** — die persönliche Notiz an einem Todo. Sie verlässt Takt nie.
+- **Vermerk** — die persönliche Notiz an einem Todo. Sie geht nie in den
+  Abrechnungsexport; eine ausdrücklich heruntergeladene vollständige
+  Datensicherung enthält sie selbstverständlich.
 - **Leistung** — die Notiz an einer einzelnen Zeitbuchung. Sie geht beim Export an den Kunden.
 
 Wer diese beiden vertauscht, merkt es meistens erst auf der Rechnung. Der Abschnitt „Die Leistung
@@ -574,6 +576,28 @@ Pools, Exportvorlagen, der Exportordner und der Zugang für das Outlook-Add-in. 
 Bereich „Dieser Arbeitsplatz", unter welchem Windows-Benutzernamen künftige Exporte abgerechnet
 werden und wo Takt seine Datenbank auf diesem Rechner ablegt. Beide Werte kommen unmittelbar vom
 Dienst und lassen sich hier nur ansehen, nicht ändern.
+
+## Daten sichern, wiederherstellen und importieren
+
+Unter „Einstellungen → Daten“ liegen drei voneinander getrennte Wege:
+
+- **Sicherung herunterladen** erzeugt ein formatiertes JSON-Archiv. Es enthält den vollständigen
+  fachlichen Bestand einschließlich Vermerken, Bildkopien, Zeitbuchungen, Regeln,
+  Exporteinstellungen und Protokollen. Die Datei trägt die Formatkennung
+  `de.supertakt.data-archive` und eine Schemafassung, damit spätere Takt-Fassungen sie eindeutig
+  erkennen können. Zugangstoken werden nicht mitgesichert.
+- **Sicherung wiederherstellen** ersetzt den aktuellen Bestand vollständig. Takt verlangt vorher
+  eine ausdrückliche Bestätigung. Für eine Migration oder Wiederherstellung sollte deshalb zuerst
+  eine aktuelle Sicherung heruntergeladen werden.
+- **Todoist** und **Super Productivity** ergänzen den vorhandenen Bestand. Jeder Import bekommt
+  einen eigenen Ordner; Projekte werden als Pools und Projekt-Tags abgebildet, Bereiche, Labels
+  und Prioritäten als getrennt gruppierte Tags. Eine Unteraufgabenbeziehung oder andere Metadaten,
+  für die Takt kein eigenes Feld hat, bleiben im Vermerk der Aufgabe nachvollziehbar.
+
+Für Todoist wird das heruntergeladene Backup zuerst entpackt; anschließend lassen sich alle darin
+enthaltenen CSV-Projektdateien gemeinsam auswählen. Todoists CSV-Sicherung enthält nach Vorgabe
+von Todoist keine erledigten Aufgaben. Für Super Productivity wird die JSON-Datensicherung direkt
+ausgewählt.
 
 ## Nach neuen Fassungen von Takt suchen
 

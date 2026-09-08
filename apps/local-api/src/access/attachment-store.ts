@@ -306,7 +306,7 @@ export function createAttachmentBlobPort(
       try {
         const out = await open(temporary, 'w', FILE_MODE);
         try {
-          await out.write(data);
+          await out.writeFile(data);
         } finally {
           await out.close();
         }
@@ -374,6 +374,38 @@ export function createAttachmentBlobPort(
       if (mediaType === null) return { ok: false, reason: 'not_an_image' };
 
       return { ok: true, mediaType, data };
+    },
+
+    async restoreImage(name: string, data: Uint8Array) {
+      if (data.byteLength === 0) return { ok: false, reason: 'empty' };
+      if (data.byteLength > MAX_ATTACHMENT_IMAGE_BYTES) return { ok: false, reason: 'too_large' };
+
+      const mediaType = imageMediaTypeOf(data.subarray(0, IMAGE_SIGNATURE_BYTES));
+      if (mediaType === null) return { ok: false, reason: 'not_an_image' };
+      const extension = EXTENSION_BY_MEDIA_TYPE[mediaType];
+      if (extension === undefined || !name.endsWith(`.${extension}`)) {
+        return { ok: false, reason: 'bad_name' };
+      }
+
+      const directoryReady = await ensureDirectory();
+      const full = pathOf(name);
+      if (directoryReady === null || full === null) return { ok: false, reason: 'write_failed' };
+
+      const temporary = `${full}.tmp`;
+      try {
+        const out = await open(temporary, 'w', FILE_MODE);
+        try {
+          await out.write(data);
+        } finally {
+          await out.close();
+        }
+        if (process.platform !== 'win32') await chmod(temporary, FILE_MODE);
+        await rename(temporary, full);
+      } catch {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        return { ok: false, reason: 'write_failed' };
+      }
+      return { ok: true, mediaType, bytes: data.byteLength };
     },
 
     async removeImage(name: string): Promise<ImageRemoval> {

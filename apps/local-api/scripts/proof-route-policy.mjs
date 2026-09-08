@@ -238,7 +238,7 @@ function hasPlaceholder(path) {
  * - **Alle zehn stehen an einer Stelle**, als `app.use('*', …)` in einem
  *   zusammenhängenden Block in `src/app.ts`: `securityHeaders`, `requestLog`,
  *   `hostGuard`, `originGuard`, `urlSecretGuard`, `contentTypeGuard`, der
- *   Rumpfgrößenwächter (`bodyLimit`), `timeout`, `authGuard`,
+ *   pfadabhängige Rumpfgrößenwächter (`bodyLimitByRoute`), `timeout`, `authGuard`,
  *   `credentialPolicy`.
  * - **Diese zehn sind die Vertrauensgrenze selbst** — Herkunft, Wirt, Nachweis,
  *   Inhaltstyp, Rumpfgröße, Frist. Eine Änderung daran **soll** auffallen. Das
@@ -276,7 +276,7 @@ const EXPECTED_MIDDLEWARE_ORDER = [
   'originGuard',
   'urlSecretGuard',
   'contentTypeGuard',
-  'bodyLimit',
+  'bodyLimitByRoute',
   'timeout',
   'authGuard',
   'credentialPolicy',
