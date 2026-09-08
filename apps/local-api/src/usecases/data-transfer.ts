@@ -34,7 +34,7 @@ import type {
 import type { AppContext, UseCaseResult } from './context.ts';
 
 export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
-export const DATA_ARCHIVE_VERSION = 2 as const;
+export const DATA_ARCHIVE_VERSION = 3 as const;
 
 export interface ArchivedImage {
   readonly name: string;
@@ -163,10 +163,10 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
   if (
     root === null ||
     root['format'] !== DATA_ARCHIVE_FORMAT ||
-    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
+    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== 2 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1 oder 2.') };
+    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1, 2 oder 3.') };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
@@ -187,11 +187,17 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       if (item === null || !Object.values(item).every(isScalar)) {
         return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ enthält eine ungültige Zeile.`) };
       }
-      // Archive v1 predates appearance settings. Only that explicit version
-      // receives defaults; malformed v2 archives still fail strict row checks.
-      checked.push(table === 'app_setting' && root['schemaVersion'] === 1
-        ? { ...item, design_theme: 'clear', density: 'comfortable' } as ArchiveRow
-        : item as ArchiveRow);
+      // Defaults are added only for fields missing from the declared version.
+      let upgraded = item;
+      if (table === 'app_setting') {
+        if (root['schemaVersion'] === 1) {
+          upgraded = { ...upgraded, design_theme: 'clear', density: 'comfortable' };
+        }
+        if (root['schemaVersion'] === 1 || root['schemaVersion'] === 2) {
+          upgraded = { ...upgraded, prompt_on_timer_stop: 1 };
+        }
+      }
+      checked.push(upgraded as ArchiveRow);
     }
     tables[table] = checked;
   }

@@ -39,7 +39,7 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   export_run_group: { columns: ['id', 'export_run_id', 'todo_id', 'day', 'seconds', 'quarters'], orderBy: 'export_run_id, day, todo_id' },
   export_run_entry: { columns: ['export_run_group_id', 'time_entry_id', 'duration_seconds'], orderBy: 'export_run_group_id, time_entry_id' },
   export_audit: { columns: ['id', 'time_entry_id', 'event', 'previous_status', 'new_status', 'export_run_id', 'export_run_group_id', 'actor', 'reason', 'occurred_at'], orderBy: 'occurred_at, id' },
-  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density'], orderBy: 'id' },
+  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop'], orderBy: 'id' },
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [

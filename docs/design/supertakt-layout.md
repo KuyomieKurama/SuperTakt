@@ -55,9 +55,12 @@ Sidecar-Namen und die bestehenden Datenpfade erhalten. Unter Windows verwenden
 Rust-Hülle und lokaler Dienst weiterhin `%LOCALAPPDATA%\Takt`.
 Die Format- und Erzeugerkennungen bestehender Datenarchive ändern sich nicht.
 Migration 0016 ergänzt Gestaltung und Dichte mit den Standardwerten `clear`
-und `comfortable`. Neue Datenarchive tragen Schemafassung 2. Der Import von
+und `comfortable`. Neue Datenarchive tragen Schemafassung 3. Der Import von
 Fassung 1 ergänzt diese Standardwerte; Fassung 2 bewahrt die gespeicherte Auswahl.
-Ältere App-Versionen können Archive der Fassung 2 nicht einlesen.
+Migration 0017 ergänzt die abschaltbare Leistungsabfrage beim Timerstopp.
+Archive der Fassungen 1 und 2 erhalten dafür den bisherigen Standard (eingeschaltet).
+Fassung 3 bewahrt die gewählte Einstellung. Ältere App-Versionen können diese
+neue Archivfassung nicht einlesen.
 Historische Berichte und Quelltextkommentare werden nicht rückwirkend umgeschrieben.
 
 ## Prüfung und verbleibende Abnahme

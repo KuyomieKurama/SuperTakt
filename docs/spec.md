@@ -427,7 +427,20 @@ Nachtrag des Auftraggebers vom 2026-09-08: Umbenennung von Takt in SuperTakt und
 | A-21.2 | Navigation, Dashboard und gemeinsame Oberflächen erhalten eine klarere Gewichtung und weniger gleichförmige Kartenflächen. |
 | A-21.3 | Vorhandene Daten, Schnittstellen, Statuskennzeichnungen und Bedienabläufe bleiben kompatibel. |
 | A-21.4 | Unter Einstellungen → Darstellung sind die bisherige Gestaltung „Klassisch“ und die neue Gestaltung „Klar“ auswählbar. Farbmodus (System, Hell, Dunkel) und Zeilendichte sind unabhängig davon. Alle drei Werte werden dauerhaft gespeichert; Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl; eine gespeicherte Auswahl bleibt erhalten. |
-| A-21.5 | Datenarchive enthalten die Darstellungseinstellungen in Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klar und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
+| A-21.5 | Datenarchive enthalten die Darstellungseinstellungen ab Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klar und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
+
+---
+
+## 22. Leistungsabfrage beim Timerstopp
+
+Nachtrag des Auftraggebers: Die Leistungsabfrage beim Stoppen soll einstellbar sein.
+
+| ID | Anforderung |
+|---|---|
+| A-22.1 | Einstellungen → Timer enthält „Leistung beim Stoppen abfragen“. Die Auswahl wird dauerhaft gespeichert; der bisherige Standard bleibt eingeschaltet. |
+| A-22.2 | Ausgeschaltet stoppt ein ausdrücklicher Stopp den Timer ohne Leistungsdialog und bucht die Zeit. Vorhandener Leistungstext bleibt erhalten; fehlende Leistung kann in der Buchungsübersicht nachgetragen werden. Die Exportregeln bleiben bestehen. |
+| A-22.3 | Fehler beim direkten Stopp werden sichtbar gemeldet. Mehrere Stop-Klicks während derselben Anfrage erzeugen keine weiteren Stoppanfragen. Die Bestätigung beim Wechsel auf einen anderen laufenden Timer und die Wiederherstellung verwaister Timer bleiben erhalten. |
+| A-22.4 | Archivfassung 3 sichert die Timer-Einstellung. Die Fassungen 1 und 2 bleiben lesbar und erhalten für die Leistungsabfrage den bisherigen Standard. |
 
 ---
 

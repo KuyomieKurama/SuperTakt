@@ -61,6 +61,7 @@ export interface AppSettings {
   readonly theme: Theme;
   readonly designTheme: DesignTheme;
   readonly density: Density;
+  readonly promptOnTimerStop: boolean;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20, E-064
    * Punkt 5). `null` heißt: nichts übersprungen.
@@ -96,6 +97,7 @@ export interface AppSettingsUpdate {
   readonly theme?: Theme;
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
+  readonly promptOnTimerStop?: boolean;
   /** `null` setzt „nichts übersprungen" zurück. Nicht gesetzt heißt unverändert. */
   readonly skippedVersion?: string | null;
   readonly now: Timestamp;

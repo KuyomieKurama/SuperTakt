@@ -81,6 +81,7 @@ const settingsSchema = z.object({
   theme: z.enum(['system', 'light', 'dark']).optional(),
   designTheme: z.enum(['classic', 'clear']).optional(),
   density: z.enum(['comfortable', 'compact']).optional(),
+  promptOnTimerStop: z.boolean().optional(),
   /**
    * Die übersprungene Fassung (A-18.10, R-20). `null` setzt sie zurück.
    *
@@ -324,6 +325,7 @@ export function createSettingsRoutes(context: AppContext): Hono<TaktEnv> {
       ...(parsed.data.theme === undefined ? {} : { theme: parsed.data.theme }),
       ...(parsed.data.designTheme === undefined ? {} : { designTheme: parsed.data.designTheme }),
       ...(parsed.data.density === undefined ? {} : { density: parsed.data.density }),
+      ...(parsed.data.promptOnTimerStop === undefined ? {} : { promptOnTimerStop: parsed.data.promptOnTimerStop }),
       // `null` heißt „nichts übersprungen" und ist damit ein Wert; nur ein
       // fehlendes Feld heißt „unverändert" (A-18.10).
       ...(parsed.data.skippedVersion === undefined

@@ -22,14 +22,21 @@ Bildschirm und im Code unterschiedlich heißen könnten, aber es nicht tun solle
 Der sichtbare Produktname lautet SuperTakt. Bestehende Datenpfade (`Takt` unter Windows,
 `takt` unter Linux), die Anwendungskennung `de.takt.desktop`, interne `@takt/*`-Pakete
 und Schnittstellenkennungen bleiben kompatibel. Die Erzeugerkennung `Takt` im
-versionierten Datenarchiv bleibt erhalten. SuperTakt liest Archivfassungen 1 und 2;
-neue Sicherungen verwenden Fassung 2 und benötigen diese oder eine neuere App-Version.
+versionierten Datenarchiv bleibt erhalten. SuperTakt liest Archivfassungen 1, 2 und 3;
+neue Sicherungen verwenden Fassung 3 und benötigen diese oder eine neuere App-Version.
 
 Unter **Einstellungen → Darstellung** lässt sich zwischen **Klassisch** (bisheriges
 Layout) und **Klar** (ruhigere Navigation und Arbeitsfläche) wählen. Farbmodus und
 Zeilendichte sind separat einstellbar und werden ebenfalls dauerhaft gespeichert.
 Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl. Eine gespeicherte Auswahl bleibt erhalten. Die Gestaltung ist in
 `docs/design/supertakt-layout.md` beschrieben.
+
+## Timer und Leistung
+
+Unter **Einstellungen → Timer** lässt sich **Leistung beim Stoppen abfragen**
+ausschalten. Der Timer bucht dann direkt; vorhandener Leistungstext bleibt erhalten.
+Fehlende Leistung lässt sich später in der Buchungsübersicht ergänzen. Die Auswahl
+wird dauerhaft gespeichert und ist zunächst eingeschaltet.
 
 ## Aufbau
 

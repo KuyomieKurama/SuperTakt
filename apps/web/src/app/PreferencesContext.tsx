@@ -7,20 +7,22 @@ import { useStructure } from "./StructureContext";
 import { useToasts } from "./ToastContext";
 
 /**
- * Darstellung (A-21.4): Gestaltung, Farbmodus und Dichte sind unabhängig.
- * Die lokale Datenbank hält alle drei Werte. Ein Wechsel wirkt sofort und
+ * Darstellung und Timerverhalten (A-21.4, A-22.1) sind unabhängig.
+ * Die lokale Datenbank hält die Einstellungen. Ein Wechsel wirkt sofort und
  * wird bei einem Schreibfehler auf den vorherigen Zustand zurückgesetzt.
  */
-interface Appearance {
+interface PreferenceValues {
   readonly theme: ThemePreference;
   readonly designTheme: DesignTheme;
   readonly density: Density;
+  readonly promptOnTimerStop: boolean;
 }
 
-export interface PreferencesApi extends Appearance {
+export interface PreferencesApi extends PreferenceValues {
   readonly setTheme: (next: ThemePreference) => void;
   readonly setDesignTheme: (next: DesignTheme) => void;
   readonly setDensity: (next: Density) => void;
+  readonly setPromptOnTimerStop: (next: boolean) => void;
   readonly saving: boolean;
 }
 
@@ -32,6 +34,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const [theme, setThemeLocal] = useThemePreference("system");
   const [designTheme, setDesignThemeLocal] = useDesignTheme("clear");
   const [density, setDensityLocal] = useDensity("comfortable");
+  const [promptOnTimerStop, setPromptOnTimerStopLocal] = useState(true);
   const [saving, setSaving] = useState(false);
   // The ref also guards two events in the same render, before controls disable.
   const inFlight = useRef(false);
@@ -40,22 +43,24 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const storedTheme = settings?.theme;
   const storedDesign = settings?.designTheme;
   const storedDensity = settings?.density;
+  const storedPrompt = settings?.promptOnTimerStop;
 
-  const apply = useCallback((value: Appearance) => {
+  const apply = useCallback((value: PreferenceValues) => {
     setThemeLocal(value.theme);
     setDesignThemeLocal(value.designTheme);
     setDensityLocal(value.density);
+    setPromptOnTimerStopLocal(value.promptOnTimerStop);
   }, [setThemeLocal, setDesignThemeLocal, setDensityLocal]);
 
   useEffect(() => {
     if (storedTheme !== undefined && !inFlight.current) {
-      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable" });
+      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true });
     }
-  }, [storedTheme, storedDesign, storedDensity, apply]);
+  }, [storedTheme, storedDesign, storedDensity, storedPrompt, apply]);
 
-  const change = useCallback((patch: Partial<Appearance>) => {
+  const change = useCallback((patch: Partial<PreferenceValues>) => {
     if (inFlight.current) return;
-    const previous = { theme, designTheme, density };
+    const previous = { theme, designTheme, density, promptOnTimerStop };
     inFlight.current = true;
     setSaving(true);
     apply({ ...previous, ...patch });
@@ -66,20 +71,21 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
       })
       .catch((cause: unknown) => {
         apply(previous);
-        toasts.failure("Die Darstellung wurde nicht gespeichert", errorMessage(cause));
+        toasts.failure("Die Einstellung wurde nicht gespeichert", errorMessage(cause));
       })
       .finally(() => {
         inFlight.current = false;
         setSaving(false);
       });
-  }, [theme, designTheme, density, apply, structure, toasts]);
+  }, [theme, designTheme, density, promptOnTimerStop, apply, structure, toasts]);
 
   const api = useMemo<PreferencesApi>(() => ({
-    theme, designTheme, density, saving,
+    theme, designTheme, density, promptOnTimerStop, saving,
     setTheme: (next) => change({ theme: next }),
     setDesignTheme: (next) => change({ designTheme: next }),
     setDensity: (next) => change({ density: next }),
-  }), [theme, designTheme, density, saving, change]);
+    setPromptOnTimerStop: (next) => change({ promptOnTimerStop: next }),
+  }), [theme, designTheme, density, promptOnTimerStop, saving, change]);
 
   return <PreferencesContext.Provider value={api}>{children}</PreferencesContext.Provider>;
 }

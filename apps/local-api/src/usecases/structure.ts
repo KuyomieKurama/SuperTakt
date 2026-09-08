@@ -775,6 +775,7 @@ export interface SettingsUpdate {
   readonly theme?: Theme;
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
+  readonly promptOnTimerStop?: boolean;
   /**
    * Die übersprungene Fassung (A-18.10). `null` setzt sie zurück.
    *

@@ -40,6 +40,7 @@ import { loadDayGroupInsight } from "./dayGroup";
 import { useRefresh } from "./RefreshContext";
 import { useToasts, type ToastTone } from "./ToastContext";
 import { quotedName } from "../lib/foreign";
+import { usePreferences } from "./PreferencesContext";
 
 /**
  * Takt — der Timer, überall erreichbar (A-13.4, I-04, I-05).
@@ -80,7 +81,7 @@ export interface TimerApi {
   readonly isRunningFor: (todoId: Id) => boolean;
   /** I-04 — startet den Timer. Kümmert sich um A-6.8 und A-2.5 selbst. */
   readonly start: (todoId: Id, todoTitle: ForeignText) => void;
-  /** I-04 — öffnet den Stoppdialog. Ohne Leistung wird nicht gestoppt. */
+  /** A-22.1 — fragt je nach Einstellung nach der Leistung oder stoppt direkt. */
   readonly requestStop: () => void;
   /** Startet oder stoppt, je nachdem was gerade gilt. */
   readonly toggle: (todoId: Id, todoTitle: ForeignText) => void;
@@ -126,6 +127,8 @@ interface StartConflict {
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const toasts = useToasts();
   const { bump } = useRefresh();
+  const { promptOnTimerStop } = usePreferences();
+  const directStopPending = useRef(false);
 
   const [running, setRunning] = useState<RunningTimerView | null>(null);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -342,7 +345,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
 
   const start = useCallback(
     (todoId: Id, todoTitle: ForeignText) => {
-      if (runningRef.current?.entry.todoId === todoId) return;
+      if (directStopPending.current || runningRef.current?.entry.todoId === todoId) return;
       void (async () => {
         try {
           const result = await startTimer(todoId, false);
@@ -457,6 +460,9 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       const current = runningRef.current;
       if (current === null) return false;
       const result = await stopTimer(note);
+      runningRef.current = null;
+      setRunning(null);
+      setAnchor(null);
       refresh();
       bump();
 
@@ -488,11 +494,26 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   );
 
   const requestStop = useCallback(() => {
-    if (runningRef.current === null) return;
-    setStopNote(runningRef.current.entry.note);
+    const current = runningRef.current;
+    if (current === null || directStopPending.current || busy || stopOpen || conflict !== null) return;
+    if (!promptOnTimerStop) {
+      directStopPending.current = true;
+      setBusy(true);
+      void performStop(current.entry.note)
+        .catch((cause: unknown) => {
+          toasts.failure("Der Timer ließ sich nicht stoppen", errorMessage(cause));
+          refresh();
+        })
+        .finally(() => {
+          directStopPending.current = false;
+          setBusy(false);
+        });
+      return;
+    }
+    setStopNote(current.entry.note);
     setDialogError(null);
     setStopOpen(true);
-  }, []);
+  }, [busy, conflict, performStop, promptOnTimerStop, refresh, stopOpen, toasts]);
 
   const toggle = useCallback(
     (todoId: Id, todoTitle: ForeignText) => {

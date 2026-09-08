@@ -473,6 +473,7 @@ export function toAppSettings(row: SqlRow): AppSettings {
     theme: toTheme(text(row, 'theme')),
     designTheme: row['design_theme'] === 'classic' ? 'classic' : 'clear',
     density: row['density'] === 'compact' ? 'compact' : 'comfortable',
+    promptOnTimerStop: row['prompt_on_timer_stop'] !== 0,
     /*
      * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).
      *

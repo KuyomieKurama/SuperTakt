@@ -110,7 +110,7 @@ const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
 /* Die Bereiche                                                         */
 /* ==================================================================== */
 
-const AREAS = ["darstellung", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
+const AREAS = ["darstellung", "timer", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
 
 type SettingsArea = (typeof AREAS)[number];
 
@@ -146,6 +146,7 @@ interface AreaDescriptor {
 */
 const AREA_LIST: readonly AreaDescriptor[] = [
   { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Themes, Farbmodus und Zeilendichte" },
+  { area: "timer", label: "Timer", icon: "clock", hint: "Leistung beim Stoppen" },
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
   { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
   {
@@ -243,6 +244,8 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
   switch (area) {
     case "darstellung":
       return <DisplaySettings />;
+    case "timer":
+      return <TimerSettings />;
     case "export":
       return <ExportSettings />;
     case "daten":
@@ -405,6 +408,28 @@ const DENSITY_LABEL: Readonly<Record<Density, string>> = {
 };
 
 /** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
+function TimerSettings() {
+  const { promptOnTimerStop, setPromptOnTimerStop, saving } = usePreferences();
+  return (
+    <Card title="Timer" description="Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.">
+      <label className="choice__option">
+        <input
+          type="checkbox"
+          checked={promptOnTimerStop}
+          disabled={saving}
+          onChange={(event) => setPromptOnTimerStop(event.target.checked)}
+          aria-describedby="timer-prompt-hint"
+        />
+        <span>Leistung beim Stoppen abfragen</span>
+      </label>
+      <p className="field__hint" id="timer-prompt-hint">
+        Ausgeschaltet wird die Zeit sofort gebucht. Vorhandene Leistung bleibt erhalten;
+        fehlenden Text können Sie später in der Buchungsübersicht ergänzen.
+      </p>
+    </Card>
+  );
+}
+
 function DisplaySettings() {
   const { theme, setTheme, designTheme, setDesignTheme, saving, density, setDensity } = usePreferences();
 

@@ -130,20 +130,20 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
   let opened: OpenedDatabase | null = null;
   afterEach(() => { opened?.close(); opened = null; });
 
-  it('A-21.5: Archivfassung 2 stellt alle Darstellungseinstellungen wieder her', async () => {
+  it('A-21.5: Archivfassung 3 stellt Darstellung und Timer-Einstellung wieder her', async () => {
     const { database, context } = await setup();
     opened = database;
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', now: NOW });
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, now: NOW });
     });
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(2);
+    expect(archive.schemaVersion).toBe(3);
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', now: NOW });
+      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, now: NOW });
     });
     expect((await importDataArchive(context, archive)).ok).toBe(true);
     await database.transactions.inTransaction(async (unit) => {
-      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'compact' });
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false });
     });
   });
 
@@ -151,19 +151,41 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     const { database, context } = await setup();
     opened = database;
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', now: NOW });
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, now: NOW });
     });
     const archive = await exportDataArchive(context);
     const legacyRows = archive.data.tables.app_setting.map((row) => {
       const legacy = { ...row };
       delete legacy['design_theme'];
       delete legacy['density'];
+      delete legacy['prompt_on_timer_stop'];
       return legacy;
     });
     const legacyArchive = { ...archive, schemaVersion: 1, data: { ...archive.data, tables: { ...archive.data.tables, app_setting: legacyRows } } };
     expect((await importDataArchive(context, legacyArchive)).ok).toBe(true);
     await database.transactions.inTransaction(async (unit) => {
-      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'comfortable' });
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'comfortable', promptOnTimerStop: true });
+    });
+  });
+
+  it('A-22.1: Fassung 2 behält die Gestaltung und ergänzt die Leistungsabfrage', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ designTheme: 'classic', density: 'compact', promptOnTimerStop: false, now: NOW });
+    });
+    const archive = await exportDataArchive(context);
+    const rows = archive.data.tables.app_setting.map((row) => {
+      const legacy = { ...row };
+      delete legacy['prompt_on_timer_stop'];
+      return legacy;
+    });
+    expect((await importDataArchive(context, {
+      ...archive, schemaVersion: 2,
+      data: { ...archive.data, tables: { ...archive.data.tables, app_setting: rows } },
+    })).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect(await unit.settings.load()).toMatchObject({ designTheme: 'classic', density: 'compact', promptOnTimerStop: true });
     });
   });
 
@@ -174,7 +196,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     await database.transactions.inTransaction(async (unit) => {
       await unit.settings.update({ designTheme: 'clear', now: NOW });
     });
-    expect((await importDataArchive(context, { ...archive, schemaVersion: 3 })).ok).toBe(false);
+    expect((await importDataArchive(context, { ...archive, schemaVersion: 4 })).ok).toBe(false);
     await database.transactions.inTransaction(async (unit) => {
       expect((await unit.settings.load()).designTheme).toBe('clear');
     });

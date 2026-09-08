@@ -431,7 +431,12 @@ export async function setDefaultTags(tagIds: readonly string[]): Promise<unknown
   return call('/settings/default-tags', { method: 'PUT', body: JSON.stringify({ tagIds }) });
 }
 
+export async function setTimerPrompt(promptOnTimerStop: boolean): Promise<void> {
+  await call('/settings', { method: 'PATCH', body: JSON.stringify({ promptOnTimerStop }) });
+}
+
 export async function getSettings(): Promise<{
+  promptOnTimerStop: boolean;
   exportDirectory: string | null;
   activeExportTemplateId: string;
 }> {
