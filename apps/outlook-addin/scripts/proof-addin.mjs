@@ -6126,7 +6126,7 @@ const GESPERRTE_TEXTE = Object.freeze([
   Object.freeze({
     sperre: 'SP-A-01',
     datei: TASKPANE,
-    text: 'label="Vermerk (bleibt in Takt)"',
+    text: 'label="Vermerk (bleibt in SuperTakt)"',
     verletzung: 'label="Vermerk"',
     grund: 'A-7.2 — der Klammerzusatz nennt den Ort, an dem der Text bleibt',
   }),
