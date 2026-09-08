@@ -27,7 +27,7 @@
     "@takt/domain": "workspace:*",
     "@takt/export": "workspace:*",
     "@takt/storage": "workspace:*",
-    "hono": "4.13.4",
+    "hono": "4.13.5",
     "zod": "4.4.3"
   },
   "devDependencies": {
