@@ -190,7 +190,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       // Archive v1 predates appearance settings. Only that explicit version
       // receives defaults; malformed v2 archives still fail strict row checks.
       checked.push(table === 'app_setting' && root['schemaVersion'] === 1
-        ? { ...item, design_theme: 'classic', density: 'comfortable' } as ArchiveRow
+        ? { ...item, design_theme: 'clear', density: 'comfortable' } as ArchiveRow
         : item as ArchiveRow);
     }
     tables[table] = checked;

@@ -28,7 +28,7 @@ neue Sicherungen verwenden Fassung 2 und benötigen diese oder eine neuere App-V
 Unter **Einstellungen → Darstellung** lässt sich zwischen **Klassisch** (bisheriges
 Layout) und **Klar** (ruhigere Navigation und Arbeitsfläche) wählen. Farbmodus und
 Zeilendichte sind separat einstellbar und werden ebenfalls dauerhaft gespeichert.
-Bestehende Installationen starten mit Klassisch. Die Gestaltung ist in
+Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl. Eine gespeicherte Auswahl bleibt erhalten. Die Gestaltung ist in
 `docs/design/supertakt-layout.md` beschrieben.
 
 ## Aufbau

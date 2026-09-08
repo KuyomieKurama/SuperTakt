@@ -18,8 +18,9 @@ Kommentare dokumentieren frühere Zwischenstände. Der Abschnitt „Befehle“ i
 ## Umsetzung
 
 Unter Einstellungen → Darstellung stehen „Klassisch“ und „Klar“ zur Wahl.
-Klassisch behält das bisherige Layout und bleibt der Standard, auch nach einem
-Upgrade. Die folgenden Layoutänderungen gelten ausschließlich für Klar;
+Klassisch behält das bisherige Layout. Klar ist der Standard für neue und
+aktualisierte Installationen ohne bisherige Theme-Auswahl; eine bereits gespeicherte
+Auswahl bleibt erhalten. Die folgenden Layoutänderungen gelten ausschließlich für Klar;
 die neue Wortmarke gilt für beide Themes. Hell/Dunkel/System und Zeilendichte
 sind unabhängig vom Theme wählbar. Alle drei Einstellungen werden in der lokalen
 Datenbank gespeichert. Ein fehlgeschlagener Wechsel wird sichtbar gemeldet und
@@ -53,7 +54,7 @@ Der Produktname ist von technischen Identitäten getrennt. Insbesondere bleiben
 Sidecar-Namen und die bestehenden Datenpfade erhalten. Unter Windows verwenden
 Rust-Hülle und lokaler Dienst weiterhin `%LOCALAPPDATA%\Takt`.
 Die Format- und Erzeugerkennungen bestehender Datenarchive ändern sich nicht.
-Migration 0016 ergänzt Gestaltung und Dichte mit den Standardwerten `classic`
+Migration 0016 ergänzt Gestaltung und Dichte mit den Standardwerten `clear`
 und `comfortable`. Neue Datenarchive tragen Schemafassung 2. Der Import von
 Fassung 1 ergänzt diese Standardwerte; Fassung 2 bewahrt die gespeicherte Auswahl.
 Ältere App-Versionen können Archive der Fassung 2 nicht einlesen.

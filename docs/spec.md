@@ -426,8 +426,8 @@ Nachtrag des Auftraggebers vom 2026-09-08: Umbenennung von Takt in SuperTakt und
 | A-21.1 | Der sichtbare Produktname lautet SuperTakt, einschließlich Desktop-Fenster, Menü, Meldungen und Outlook-Add-in. |
 | A-21.2 | Navigation, Dashboard und gemeinsame Oberflächen erhalten eine klarere Gewichtung und weniger gleichförmige Kartenflächen. |
 | A-21.3 | Vorhandene Daten, Schnittstellen, Statuskennzeichnungen und Bedienabläufe bleiben kompatibel. |
-| A-21.4 | Unter Einstellungen → Darstellung sind die bisherige Gestaltung „Klassisch“ und die neue Gestaltung „Klar“ auswählbar. Farbmodus (System, Hell, Dunkel) und Zeilendichte sind unabhängig davon. Alle drei Werte werden dauerhaft gespeichert; bestehende Installationen behalten zunächst Klassisch. |
-| A-21.5 | Datenarchive enthalten die Darstellungseinstellungen in Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klassisch und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
+| A-21.4 | Unter Einstellungen → Darstellung sind die bisherige Gestaltung „Klassisch“ und die neue Gestaltung „Klar“ auswählbar. Farbmodus (System, Hell, Dunkel) und Zeilendichte sind unabhängig davon. Alle drei Werte werden dauerhaft gespeichert; Klar ist der Standard für neue und aktualisierte Installationen ohne bisherige Theme-Auswahl; eine gespeicherte Auswahl bleibt erhalten. |
+| A-21.5 | Datenarchive enthalten die Darstellungseinstellungen in Schemafassung 2. Archive der bisherigen Fassung 1 werden mit Klar und angenehmer Dichte eingelesen; unbekannte Fassungen werden weiterhin abgewiesen. |
 
 ---
 

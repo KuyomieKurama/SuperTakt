@@ -70,7 +70,7 @@ export function useDensity(
 }
 
 /** Gestaltung und Farbmodus belegen getrennte Attribute und können kombiniert werden. */
-export function useDesignTheme(initial: DesignTheme = "classic") {
+export function useDesignTheme(initial: DesignTheme = "clear") {
   const [designTheme, setDesignTheme] = useState<DesignTheme>(initial);
   useEffect(() => {
     document.documentElement.setAttribute("data-design-theme", designTheme);

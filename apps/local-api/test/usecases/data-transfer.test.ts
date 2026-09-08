@@ -147,7 +147,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     });
   });
 
-  it('A-21.5: liest Fassung 1 mit klassischer Gestaltung und erhält den alten Farbmodus', async () => {
+  it('A-21.5: liest Fassung 1 mit Klar und erhält den alten Farbmodus', async () => {
     const { database, context } = await setup();
     opened = database;
     await database.transactions.inTransaction(async (unit) => {
@@ -163,7 +163,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     const legacyArchive = { ...archive, schemaVersion: 1, data: { ...archive.data, tables: { ...archive.data.tables, app_setting: legacyRows } } };
     expect((await importDataArchive(context, legacyArchive)).ok).toBe(true);
     await database.transactions.inTransaction(async (unit) => {
-      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'classic', density: 'comfortable' });
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'comfortable' });
     });
   });
 

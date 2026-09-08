@@ -30,7 +30,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const structure = useStructure();
   const toasts = useToasts();
   const [theme, setThemeLocal] = useThemePreference("system");
-  const [designTheme, setDesignThemeLocal] = useDesignTheme("classic");
+  const [designTheme, setDesignThemeLocal] = useDesignTheme("clear");
   const [density, setDensityLocal] = useDensity("comfortable");
   const [saving, setSaving] = useState(false);
   // The ref also guards two events in the same render, before controls disable.
@@ -49,7 +49,7 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
 
   useEffect(() => {
     if (storedTheme !== undefined && !inFlight.current) {
-      apply({ theme: storedTheme, designTheme: storedDesign ?? "classic", density: storedDensity ?? "comfortable" });
+      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable" });
     }
   }, [storedTheme, storedDesign, storedDensity, apply]);
 

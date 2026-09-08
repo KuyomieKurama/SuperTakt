@@ -471,7 +471,7 @@ export function toAppSettings(row: SqlRow): AppSettings {
     roundingMode: toRoundingMode(text(row, 'rounding_mode')),
     locale: text(row, 'locale'),
     theme: toTheme(text(row, 'theme')),
-    designTheme: row['design_theme'] === 'clear' ? 'clear' : 'classic',
+    designTheme: row['design_theme'] === 'classic' ? 'classic' : 'clear',
     density: row['density'] === 'compact' ? 'compact' : 'comfortable',
     /*
      * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).
