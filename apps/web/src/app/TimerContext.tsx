@@ -41,6 +41,9 @@ import { useRefresh } from "./RefreshContext";
 import { useToasts, type ToastTone } from "./ToastContext";
 import { quotedName } from "../lib/foreign";
 import { usePreferences } from "./PreferencesContext";
+import { useIdleTimer } from "./useIdleTimer";
+import { IdleRecovery } from "../components/IdleRecovery";
+import { Button } from "../components/Primitives";
 
 /**
  * Takt — der Timer, überall erreichbar (A-13.4, I-04, I-05).
@@ -127,7 +130,7 @@ interface StartConflict {
 export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const toasts = useToasts();
   const { bump } = useRefresh();
-  const { promptOnTimerStop } = usePreferences();
+  const { promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes } = usePreferences();
   const directStopPending = useRef(false);
 
   const [running, setRunning] = useState<RunningTimerView | null>(null);
@@ -176,6 +179,18 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const idleChanged = useCallback(() => { refresh(); bump(); }, [refresh, bump]);
+  const idle = useIdleTimer({ running, enabled: idleDetectionEnabled, thresholdMinutes: idleThresholdMinutes,
+    blocked: busy || stopOpen || conflict !== null || orphan !== null, changed: idleChanged });
+  const actionPending = useRef(false);
+  const guardIdle = useCallback((action: () => void) => {
+    if (actionPending.current || busy || stopOpen || conflict !== null || orphan !== null) return;
+    actionPending.current = true;
+    void idle.check().then(pending => { if (pending === null) action(); })
+      .catch((cause: unknown) => toasts.failure("Timer konnte nicht geprüft werden", errorMessage(cause)))
+      .finally(() => { actionPending.current = false; });
+  }, [idle.check, busy, stopOpen, conflict, orphan, toasts]);
 
   useEffect(() => {
     refresh();
@@ -736,9 +751,9 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       elapsedSeconds,
       loading,
       isRunningFor,
-      start,
-      requestStop,
-      toggle,
+      start: (id, title) => guardIdle(() => start(id, title)),
+      requestStop: () => guardIdle(requestStop),
+      toggle: (id, title) => guardIdle(() => toggle(id, title)),
       refresh,
       orphan,
       reactivated,
@@ -756,12 +771,15 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       orphan,
       reactivated,
       clearReactivated,
+      guardIdle,
     ],
   );
 
   return (
     <TimerContext.Provider value={api}>
       {children}
+      {idle.session === null ? null : <IdleRecovery key={idle.session.id} session={idle.session} changed={idle.refresh} />}
+      <div role="alert">{idle.error === null ? null : <aside className="idle-reminder">Inaktivität konnte nicht geprüft werden: {idle.error}<Button onClick={idle.refresh}>Erneut prüfen</Button></aside>}</div>
 
       <FormDialog
         open={stopOpen}

@@ -1258,6 +1258,8 @@ export interface AppSettings {
   readonly designTheme: DesignTheme;
   readonly density: Density;
   readonly promptOnTimerStop: boolean;
+  readonly idleDetectionEnabled: boolean;
+  readonly idleThresholdMinutes: number;
   /**
    * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20). `null`
    * heißt: nichts übersprungen.
@@ -1285,6 +1287,8 @@ export interface AppSettingsUpdate {
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
   readonly promptOnTimerStop?: boolean;
+  readonly idleDetectionEnabled?: boolean;
+  readonly idleThresholdMinutes?: number;
   /**
    * `null` setzt „nichts übersprungen" zurück, ein Wert überspringt genau
    * diese eine Fassung — nicht die Prüfung (E-064 Punkt 5).

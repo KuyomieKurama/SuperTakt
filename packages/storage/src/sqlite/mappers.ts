@@ -474,6 +474,8 @@ export function toAppSettings(row: SqlRow): AppSettings {
     designTheme: row['design_theme'] === 'classic' ? 'classic' : 'clear',
     density: row['density'] === 'compact' ? 'compact' : 'comfortable',
     promptOnTimerStop: row['prompt_on_timer_stop'] !== 0,
+    idleDetectionEnabled: row['idle_detection_enabled'] !== 0,
+    idleThresholdMinutes: integer(row, 'idle_threshold_minutes'),
     /*
      * Die übersprungene Fassung wird **beim Lesen** geprüft (T-136-4).
      *

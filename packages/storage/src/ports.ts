@@ -112,6 +112,7 @@ export interface UnitOfWork {
   readonly statuses: TodoStatusPort;
   readonly timeEntries: TimeEntryPort;
   readonly timer: TimerPort;
+  readonly idle: IdleTimerPort;
   readonly heartbeat: TimerHeartbeatPort;
   /** Leseseite des Exports. Getrennt von `export`, damit eine Vorschau nichts schreiben kann. */
   readonly exportRead: ExportReadPort;
@@ -144,6 +145,7 @@ export const DATA_ARCHIVE_TABLES = [
   'todo_tag',
   'time_entry',
   'timer_heartbeat',
+  'timer_idle',
   'todo_attachment_kind',
   'todo_attachment',
   'pool',
@@ -1012,6 +1014,22 @@ export interface TimerPort {
       TaktError<'timer_not_running'>
     >
   >;
+}
+
+/** A-24: genau eine noch nicht zugeordnete Inaktivitätsphase. */
+export interface IdleSession {
+  readonly id: TimeEntryId;
+  readonly todoId: TodoId;
+  readonly startedAt: Timestamp;
+  readonly returnedAt: Timestamp | null;
+  readonly note: string;
+}
+
+export interface IdleTimerPort {
+  pending(): Promise<IdleSession | null>;
+  begin(session: IdleSession): Promise<void>;
+  returned(id: TimeEntryId, at: Timestamp): Promise<void>;
+  clear(id: TimeEntryId): Promise<void>;
 }
 
 /**

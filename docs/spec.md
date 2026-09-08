@@ -459,6 +459,23 @@ Bestätigung des Zertifikats; keine Bereitstellung über eine Domain.
 
 ---
 
+## 24. Inaktivität und Rückkehr
+
+Nachtrag des Auftraggebers: Inaktivitätsanzeige und anschließende Zeitaufteilung,
+angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
+
+| ID | Anforderung |
+|---|---|
+| A-24.1 | In der Windows-Desktop-App wird die letzte Maus-/Tastatureingabe der aktuellen Windows-Sitzung verwendet; Arbeit in anderen Programmen zählt als Aktivität. Keine Eingabeinhalte, Fenstertitel oder Telemetrie. Browser und andere Betriebssysteme behaupten keine automatische Erkennung. |
+| A-24.2 | Einstellungen → Timer enthält einen Ein-/Ausschalter und eine Schwelle von 1 bis 120 Minuten, zunächst eingeschaltet mit 5 Minuten. Speicherung in SQLite und Datensicherung. Ausschalten verwirft keine bereits erkannte Phase. |
+| A-24.3 | Bei laufendem Timer und überschrittener Schwelle wird die aktive Zeit bis zur letzten Eingabe abgeschlossen. Die restliche Zeit bleibt als einzelne offene Phase außerhalb der abrechenbaren Buchungen gespeichert. Eine Rückkehr, die zwischen Webview-Abfragen liegt, wird aus dem nativen Verlauf erkannt. |
+| A-24.4 | Bei der Rückkehr erscheint ein Dialog mit Zeitraum und Dauer: als Pause auslassen, auf eine Aufgabe buchen oder in mehrere Aufgaben-/Pausenabschnitte aufteilen. Aufgaben sind suchbar, auch erledigte. Leistungstext ist freiwillig und nachträglich ergänzbar. |
+| A-24.5 | Die Summe muss sekundengenau dem gesamten Zeitraum entsprechen. „Rest übernehmen“ ergänzt einen Abschnitt. Keine negativen/überzähligen Zeiten, keine überlappenden Teilstücke. Alle Buchungen entstehen atomar; ein Fehler erhält den offenen Zustand, Wiederholungen buchen nicht doppelt. Abrechnungsrundung bleibt ausschließlich Sache des Exports. |
+| A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Optional startet nach dem Speichern ein neuer Timer auf der ursprünglichen Aufgabe. Die Zeit für die Zuordnung wird nicht gebucht; der Dialog erklärt dies. „Später zuordnen“ behält die Phase und lässt den Timer angehalten. Neue Timerstarts warten auf ihre Auflösung. |
+| A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Archivfassung 4 enthält Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

@@ -18,7 +18,7 @@
  * ist der SHA-256 darüber; jede Abweichung wäre eine andere Prüfsumme und damit
  * ein Bestand, den die gebündelte Fassung nicht mehr annimmt.
  *
- * 34 Datei(en).
+ * 36 Datei(en).
  */
 
 export const EMBEDDED_MIGRATION_FILES: Readonly<Record<string, string>> = Object.freeze({
@@ -56,4 +56,6 @@ export const EMBEDDED_MIGRATION_FILES: Readonly<Record<string, string>> = Object
   "0016_appearance_settings.up.sql": "-- SuperTakt — wählbare Gestaltung und dauerhafte Zeilendichte (A-21.4).\n-- Ohne bisherige Theme-Auswahl ist Klar der Standard.\nALTER TABLE app_setting ADD COLUMN design_theme TEXT NOT NULL DEFAULT 'clear'\n  CHECK (design_theme IN ('classic', 'clear'));\nALTER TABLE app_setting ADD COLUMN density TEXT NOT NULL DEFAULT 'comfortable'\n  CHECK (density IN ('comfortable', 'compact'));\n",
   "0017_timer_prompt.down.sql": "ALTER TABLE app_setting DROP COLUMN prompt_on_timer_stop;\n",
   "0017_timer_prompt.up.sql": "-- A-22.1: Leistungsabfrage beim Timerstopp ist abschaltbar.\nALTER TABLE app_setting ADD COLUMN prompt_on_timer_stop INTEGER NOT NULL DEFAULT 1\n  CHECK (prompt_on_timer_stop IN (0, 1));\n",
+  "0018_idle_timer.down.sql": "DROP TABLE timer_idle;\nALTER TABLE app_setting DROP COLUMN idle_threshold_minutes;\nALTER TABLE app_setting DROP COLUMN idle_detection_enabled;\n",
+  "0018_idle_timer.up.sql": "-- A-24: offene Inaktivität ist keine abrechenbare Zeitbuchung.\nALTER TABLE app_setting ADD COLUMN idle_detection_enabled INTEGER NOT NULL DEFAULT 1 CHECK (idle_detection_enabled IN (0, 1));\nALTER TABLE app_setting ADD COLUMN idle_threshold_minutes INTEGER NOT NULL DEFAULT 5 CHECK (idle_threshold_minutes BETWEEN 1 AND 120);\nCREATE TABLE timer_idle (\n  id INTEGER PRIMARY KEY CHECK (id = 1),\n  session_id TEXT NOT NULL UNIQUE,\n  todo_id TEXT NOT NULL REFERENCES todo(id) ON DELETE RESTRICT,\n  started_at TEXT NOT NULL,\n  returned_at TEXT CHECK (returned_at IS NULL OR returned_at > started_at),\n  note TEXT NOT NULL DEFAULT '',\n  CHECK (started_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'),\n  CHECK (returned_at IS NULL OR returned_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z')\n) STRICT;\n",
 });

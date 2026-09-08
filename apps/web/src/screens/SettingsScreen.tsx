@@ -37,6 +37,7 @@ import type { Density } from "../lib/theme";
 import { AsyncBoundary, ScreenHeader } from "./parts";
 import { StatusSettings } from "./StatusSettings";
 import { foreignText } from "../lib/foreign";
+import { readIdleActivity } from "../app/connection";
 
 /**
  * Takt — S-09 (Einstellungen), S-10 (Standard-Tags) und S-13 (Add-in).
@@ -410,7 +411,8 @@ const DENSITY_LABEL: Readonly<Record<Density, string>> = {
 
 /** Sofortige, dauerhaft gespeicherte Darstellungseinstellungen (A-21.4). */
 function TimerSettings() {
-  const { promptOnTimerStop, setPromptOnTimerStop, saving } = usePreferences();
+  const { promptOnTimerStop, setPromptOnTimerStop, saving, idleDetectionEnabled, idleThresholdMinutes, setIdleDetectionEnabled, setIdleThresholdMinutes } = usePreferences();
+  const activity = useAsync(readIdleActivity, []);
   return (
     <Card title="Timer" description="Bestimmen Sie, wann Sie Ihre Leistung eintragen möchten.">
       <label className="choice__option">
@@ -427,6 +429,12 @@ function TimerSettings() {
         Ausgeschaltet wird die Zeit sofort gebucht. Vorhandene Leistung bleibt erhalten;
         fehlenden Text können Sie später in der Buchungsübersicht ergänzen.
       </p>
+      <label className="choice__option"><input type="checkbox" checked={idleDetectionEnabled} disabled={saving} onChange={event => setIdleDetectionEnabled(event.target.checked)} aria-describedby="idle-detection-hint" /><span>Inaktive Zeit erkennen</span></label>
+      <p className="field__hint" id="idle-detection-hint">Ohne Maus- oder Tastatureingabe wird der Timer angehalten. Bei Ihrer Rückkehr können Sie die Zeit als Pause auslassen, einer Aufgabe zuordnen oder aufteilen. Offene Zuordnungen bleiben beim Ausschalten dieser Einstellung erhalten.</p>
+      <Select label="Inaktivität erkennen nach" value={String(idleThresholdMinutes)} onChange={value => setIdleThresholdMinutes(Number(value))} disabled={saving || !idleDetectionEnabled}
+        options={Array.from(new Set([1, 2, 5, 10, 15, 30, 60, 120, idleThresholdMinutes])).sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} ${value === 1 ? 'Minute' : 'Minuten'}` }))} />
+      <p role="status">{activity.state.status === 'loading' ? 'Inaktivitätserkennung wird geprüft …' : activity.state.status === 'ready' && activity.state.value?.supported ? 'Windows-Erkennung verfügbar — auch Eingaben in anderen Programmen zählen als Aktivität.' : 'Automatische Erkennung benötigt die Windows-Desktop-App. Im Browser und auf anderen Betriebssystemen wird keine systemweite Inaktivität erkannt.'}</p>
+      <p className="field__hint">Es werden nur Zeitpunkte gelesen, keine Tasten, Texte oder Programminhalte aufgezeichnet.</p>
     </Card>
   );
 }

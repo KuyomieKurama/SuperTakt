@@ -22,6 +22,7 @@
  */
 
 import { Hono } from 'hono';
+import { beginIdle, loadIdle, resolveIdle, returnFromIdle } from '../usecases/idle.ts';
 import { z } from 'zod';
 
 import type {
@@ -32,6 +33,7 @@ import type {
   TimeEntryId,
   Timestamp,
   TodoId,
+  IdleAllocation,
 } from '@takt/domain';
 
 import type { AppContext } from '../usecases/context.ts';
@@ -100,6 +102,13 @@ const startSchema = z.object({
 
 const stopSchema = z.object({ note: textSchema.default('') });
 const resolveSchema = z.object({ resolution: z.enum(['book_until_heartbeat', 'discard']) });
+const idleBeginSchema = z.object({ entryId: idSchema, startedAt: timestampSchema, returnedAt: timestampSchema.optional() }).strict();
+const idleReturnSchema = z.object({ id: idSchema, returnedAt: timestampSchema.optional() }).strict();
+const idleResolveSchema = z.object({
+  id: idSchema,
+  resume: z.boolean(),
+  allocations: z.array(z.object({ todoId: idSchema.nullable(), seconds: z.number().int().min(1).max(315360000), note: textSchema }).strict()).min(1).max(50),
+}).strict();
 
 /** Rumpfschemata nach `operationId`; gelesen von `proof:openapi`, siehe `todos.ts`. */
 export const REQUEST_SCHEMAS = Object.freeze({
@@ -110,6 +119,9 @@ export const REQUEST_SCHEMAS = Object.freeze({
   startTimer: startSchema,
   stopTimer: stopSchema,
   resolveOrphanedTimer: resolveSchema,
+  beginIdle: idleBeginSchema,
+  returnFromIdle: idleReturnSchema,
+  resolveIdle: idleResolveSchema,
 });
 
 export function createTimeEntryRoutes(context: AppContext): Hono<TaktEnv> {
@@ -251,6 +263,27 @@ export function createTimerRoutes(context: AppContext): Hono<TaktEnv> {
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
     const result = await stopTimer(context, parsed.data.note);
+    return result.ok ? data(c, result.value) : fail(c, result.error);
+  });
+
+  routes.get('/idle', async c => data(c, await loadIdle(context)));
+  routes.post('/idle/begin', async c => {
+    const parsed = idleBeginSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) return failValidation(c, issues(parsed.error));
+    const result = await beginIdle(context, { entryId: parsed.data.entryId as TimeEntryId, startedAt: parsed.data.startedAt as Timestamp,
+      ...(parsed.data.returnedAt === undefined ? {} : { returnedAt: parsed.data.returnedAt as Timestamp }) });
+    return result.ok ? data(c, result.value) : fail(c, result.error);
+  });
+  routes.post('/idle/return', async c => {
+    const parsed = idleReturnSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) return failValidation(c, issues(parsed.error));
+    const result = await returnFromIdle(context, parsed.data.id as TimeEntryId, parsed.data.returnedAt as Timestamp | undefined);
+    return result.ok ? data(c, result.value) : fail(c, result.error);
+  });
+  routes.post('/idle/resolve', async c => {
+    const parsed = idleResolveSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) return failValidation(c, issues(parsed.error));
+    const result = await resolveIdle(context, { id: parsed.data.id as TimeEntryId, resume: parsed.data.resume, allocations: parsed.data.allocations as readonly IdleAllocation[] });
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 

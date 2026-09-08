@@ -58,6 +58,7 @@ import type {
 } from "@takt/desktop/shell";
 import { hasForbiddenNameCharacter } from "@takt/domain";
 import type { ForeignText } from "../api/types";
+import type { IdleActivity } from "@takt/desktop/shell";
 import { setConnection, type Connection } from "../api/client";
 import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellStatus";
 
@@ -90,6 +91,7 @@ export type ConnectionState =
   | { readonly kind: "failed"; readonly message: string };
 
 interface ShellModule {
+  idleActivity(): Promise<IdleActivity>;
   isShellAvailable(): boolean;
   serviceHandshake(): Promise<Connection>;
   shellState(): Promise<ShellStateSnapshot>;
@@ -434,6 +436,11 @@ export async function readOutlookCertificate(): Promise<OutlookCertificateResult
   const shell = await loadShell();
   if (shell === null) return null;
   return shell.outlookCertificate();
+}
+
+export async function readIdleActivity(): Promise<IdleActivity | null> {
+  const shell = await loadShell();
+  return shell === null ? null : shell.idleActivity();
 }
 
 export async function confirmOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {

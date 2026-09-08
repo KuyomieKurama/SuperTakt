@@ -23,6 +23,7 @@
 mod appdata;
 mod attachment;
 mod identity;
+mod idle;
 mod menu;
 mod outlook_certificate;
 mod release;
@@ -154,6 +155,7 @@ pub fn run() {
             // 3 — Startgeheimnis.
             let service = Service::new().map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             app.manage(service);
+            app.manage(idle::IdleMonitor::start());
 
             // 4 — Der Benutzername, vom Betriebssystem (E-010, B-8.1). Er geht
             // als zweite Startzeile an den Dienst (E-042) und ist dort Pflicht:
@@ -183,6 +185,7 @@ pub fn run() {
             takt_os_user,
             takt_shell_state,
             takt_quit,
+            idle::takt_idle_activity,
             outlook_certificate::takt_outlook_certificate,
             outlook_certificate::takt_trust_outlook_certificate,
             // Versionsprüfung (Abschnitt 18). Beide Befehle stehen in

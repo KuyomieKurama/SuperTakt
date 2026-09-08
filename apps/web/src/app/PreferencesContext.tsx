@@ -16,6 +16,8 @@ interface PreferenceValues {
   readonly designTheme: DesignTheme;
   readonly density: Density;
   readonly promptOnTimerStop: boolean;
+  readonly idleDetectionEnabled: boolean;
+  readonly idleThresholdMinutes: number;
 }
 
 export interface PreferencesApi extends PreferenceValues {
@@ -23,6 +25,8 @@ export interface PreferencesApi extends PreferenceValues {
   readonly setDesignTheme: (next: DesignTheme) => void;
   readonly setDensity: (next: Density) => void;
   readonly setPromptOnTimerStop: (next: boolean) => void;
+  readonly setIdleDetectionEnabled: (next: boolean) => void;
+  readonly setIdleThresholdMinutes: (next: number) => void;
   readonly saving: boolean;
 }
 
@@ -35,6 +39,8 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const [designTheme, setDesignThemeLocal] = useDesignTheme("clear");
   const [density, setDensityLocal] = useDensity("comfortable");
   const [promptOnTimerStop, setPromptOnTimerStopLocal] = useState(true);
+  const [idleDetectionEnabled, setIdleDetectionEnabledLocal] = useState(true);
+  const [idleThresholdMinutes, setIdleThresholdMinutesLocal] = useState(5);
   const [saving, setSaving] = useState(false);
   // The ref also guards two events in the same render, before controls disable.
   const inFlight = useRef(false);
@@ -44,23 +50,27 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
   const storedDesign = settings?.designTheme;
   const storedDensity = settings?.density;
   const storedPrompt = settings?.promptOnTimerStop;
+  const storedIdle = settings?.idleDetectionEnabled;
+  const storedThreshold = settings?.idleThresholdMinutes;
 
   const apply = useCallback((value: PreferenceValues) => {
     setThemeLocal(value.theme);
     setDesignThemeLocal(value.designTheme);
     setDensityLocal(value.density);
     setPromptOnTimerStopLocal(value.promptOnTimerStop);
+    setIdleDetectionEnabledLocal(value.idleDetectionEnabled);
+    setIdleThresholdMinutesLocal(value.idleThresholdMinutes);
   }, [setThemeLocal, setDesignThemeLocal, setDensityLocal]);
 
   useEffect(() => {
     if (storedTheme !== undefined && !inFlight.current) {
-      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true });
+      apply({ theme: storedTheme, designTheme: storedDesign ?? "clear", density: storedDensity ?? "comfortable", promptOnTimerStop: storedPrompt ?? true, idleDetectionEnabled: storedIdle ?? true, idleThresholdMinutes: storedThreshold ?? 5 });
     }
-  }, [storedTheme, storedDesign, storedDensity, storedPrompt, apply]);
+  }, [storedTheme, storedDesign, storedDensity, storedPrompt, storedIdle, storedThreshold, apply]);
 
   const change = useCallback((patch: Partial<PreferenceValues>) => {
     if (inFlight.current) return;
-    const previous = { theme, designTheme, density, promptOnTimerStop };
+    const previous = { theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes };
     inFlight.current = true;
     setSaving(true);
     apply({ ...previous, ...patch });
@@ -77,15 +87,17 @@ export function PreferencesProvider({ children }: { readonly children: ReactNode
         inFlight.current = false;
         setSaving(false);
       });
-  }, [theme, designTheme, density, promptOnTimerStop, apply, structure, toasts]);
+  }, [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, apply, structure, toasts]);
 
   const api = useMemo<PreferencesApi>(() => ({
-    theme, designTheme, density, promptOnTimerStop, saving,
+    theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, saving,
     setTheme: (next) => change({ theme: next }),
     setDesignTheme: (next) => change({ designTheme: next }),
     setDensity: (next) => change({ density: next }),
     setPromptOnTimerStop: (next) => change({ promptOnTimerStop: next }),
-  }), [theme, designTheme, density, promptOnTimerStop, saving, change]);
+    setIdleDetectionEnabled: (next) => change({ idleDetectionEnabled: next }),
+    setIdleThresholdMinutes: (next) => change({ idleThresholdMinutes: next }),
+  }), [theme, designTheme, density, promptOnTimerStop, idleDetectionEnabled, idleThresholdMinutes, saving, change]);
 
   return <PreferencesContext.Provider value={api}>{children}</PreferencesContext.Provider>;
 }

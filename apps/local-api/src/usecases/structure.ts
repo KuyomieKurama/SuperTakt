@@ -776,6 +776,8 @@ export interface SettingsUpdate {
   readonly designTheme?: DesignTheme;
   readonly density?: Density;
   readonly promptOnTimerStop?: boolean;
+  readonly idleDetectionEnabled?: boolean;
+  readonly idleThresholdMinutes?: number;
   /**
    * Die übersprungene Fassung (A-18.10). `null` setzt sie zurück.
    *

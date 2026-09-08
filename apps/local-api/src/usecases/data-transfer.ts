@@ -34,7 +34,7 @@ import type {
 import type { AppContext, UseCaseResult } from './context.ts';
 
 export const DATA_ARCHIVE_FORMAT = 'de.supertakt.data-archive' as const;
-export const DATA_ARCHIVE_VERSION = 3 as const;
+export const DATA_ARCHIVE_VERSION = 4 as const;
 
 export interface ArchivedImage {
   readonly name: string;
@@ -163,10 +163,10 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
   if (
     root === null ||
     root['format'] !== DATA_ARCHIVE_FORMAT ||
-    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== 2 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
+    (root['schemaVersion'] !== 1 && root['schemaVersion'] !== 2 && root['schemaVersion'] !== 3 && root['schemaVersion'] !== DATA_ARCHIVE_VERSION) ||
     root['generator'] !== 'Takt'
   ) {
-    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1, 2 oder 3.') };
+    return { ok: false, error: taktError('validation_error', 'Die Datei ist kein unterstütztes SuperTakt-Datenarchiv der Fassung 1, 2, 3 oder 4.') };
   }
   const data = record(root['data']);
   const rawTables = record(data?.['tables']);
@@ -177,7 +177,7 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
 
   const tables = {} as Record<(typeof DATA_ARCHIVE_TABLES)[number], readonly ArchiveRow[]>;
   for (const table of DATA_ARCHIVE_TABLES) {
-    const rows = rawTables[table];
+    const rows = table === 'timer_idle' && root['schemaVersion'] !== 4 ? [] : rawTables[table];
     if (!Array.isArray(rows) || rows.length > 250_000) {
       return { ok: false, error: taktError('validation_error', `Die Tabelle „${table}“ fehlt oder ist zu groß.`) };
     }
@@ -190,6 +190,9 @@ function parseArchive(value: unknown): UseCaseResult<TaktDataArchive> {
       // Defaults are added only for fields missing from the declared version.
       let upgraded = item;
       if (table === 'app_setting') {
+        if (root['schemaVersion'] !== 4) {
+          upgraded = { ...upgraded, idle_detection_enabled: 1, idle_threshold_minutes: 5 };
+        }
         if (root['schemaVersion'] === 1) {
           upgraded = { ...upgraded, design_theme: 'clear', density: 'comfortable' };
         }

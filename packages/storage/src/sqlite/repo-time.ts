@@ -342,6 +342,9 @@ export function createTimerPort(conn: SqlConnection, ids: IdSource): TimerPort {
      * angefasst.
      */
     async start(todoId: TodoId, stopRunning: boolean, now: Timestamp) {
+      if (conn.prepare('SELECT id FROM timer_idle WHERE id = 1').get() !== undefined) {
+        return err(taktError('timer_already_running', 'Ordnen Sie zuerst die noch offene inaktive Zeit zu.'));
+      }
       const todo = conn.prepare('SELECT id, completed_at FROM todo WHERE id = ?').get(todoId);
       if (todo === undefined) {
         return err(taktError('not_found', 'Dieses Todo gibt es nicht.'));

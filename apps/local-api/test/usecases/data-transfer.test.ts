@@ -130,20 +130,40 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
   let opened: OpenedDatabase | null = null;
   afterEach(() => { opened?.close(); opened = null; });
 
-  it('A-21.5: Archivfassung 3 stellt Darstellung und Timer-Einstellung wieder her', async () => {
+  it('A-21.5: Archivfassung 4 stellt Darstellung und Timer-Einstellung wieder her', async () => {
     const { database, context } = await setup();
     opened = database;
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, now: NOW });
+      await unit.settings.update({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleThresholdMinutes: 15, now: NOW });
     });
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(3);
+    expect(archive.schemaVersion).toBe(4);
     await database.transactions.inTransaction(async (unit) => {
-      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, now: NOW });
+      await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, idleDetectionEnabled: true, idleThresholdMinutes: 5, now: NOW });
     });
     expect((await importDataArchive(context, archive)).ok).toBe(true);
     await database.transactions.inTransaction(async (unit) => {
-      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false });
+      expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'clear', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleThresholdMinutes: 15 });
+    });
+  });
+
+  it('A-24: Fassung 3 ergänzt Inaktivitätseinstellungen ohne offene Zeit', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    const { timer_idle: _idle, ...tables } = archive.data.tables;
+    const rows = tables.app_setting.map(row => {
+      const legacy = { ...row };
+      delete legacy['idle_detection_enabled'];
+      delete legacy['idle_threshold_minutes'];
+      return legacy;
+    });
+    expect((await importDataArchive(context, {
+      ...archive, schemaVersion: 3, data: { ...archive.data, tables: { ...tables, app_setting: rows } },
+    })).ok).toBe(true);
+    await database.transactions.inTransaction(async unit => {
+      expect(await unit.settings.load()).toMatchObject({ idleDetectionEnabled: true, idleThresholdMinutes: 5 });
+      expect(await unit.idle.pending()).toBeNull();
     });
   });
 
@@ -196,7 +216,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     await database.transactions.inTransaction(async (unit) => {
       await unit.settings.update({ designTheme: 'clear', now: NOW });
     });
-    expect((await importDataArchive(context, { ...archive, schemaVersion: 4 })).ok).toBe(false);
+    expect((await importDataArchive(context, { ...archive, schemaVersion: 99 })).ok).toBe(false);
     await database.transactions.inTransaction(async (unit) => {
       expect((await unit.settings.load()).designTheme).toBe('clear');
     });

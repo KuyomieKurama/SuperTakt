@@ -38,6 +38,26 @@ ausschalten. Der Timer bucht dann direkt; vorhandener Leistungstext bleibt erhal
 Fehlende Leistung lässt sich später in der Buchungsübersicht ergänzen. Die Auswahl
 wird dauerhaft gespeichert und ist zunächst eingeschaltet.
 
+## Inaktive Zeit zuordnen
+
+Unter **Einstellungen → Timer** ist die Inaktivitätserkennung einstellbar:
+zunächst nach **5 Minuten**, abschaltbar und zwischen 1 und 120 Minuten wählbar.
+Die automatische Erkennung benötigt die Windows-Desktop-App. Maus- und
+Tastatureingaben in anderen Programmen zählen ebenfalls als Aktivität; es werden
+keine Eingabeinhalte aufgezeichnet.
+
+Bei einer längeren Abwesenheit hält SuperTakt den Timer an. Bei der Rückkehr
+können Sie die Zeit als Pause auslassen, einer Aufgabe zuordnen oder auf mehrere
+Aufgaben und Pausen aufteilen. **Rest übernehmen** füllt den verbleibenden Anteil.
+Die gesamte Zeit muss genau verteilt sein, bevor gespeichert wird.
+
+Offene Zuordnungen bleiben nach einem Neustart erhalten. **Später zuordnen**
+lässt den Timer angehalten. Auf Wunsch startet er nach dem Speichern erneut auf
+der ursprünglichen Aufgabe; die Zeit zum Ausfüllen des Dialogs wird nicht gebucht.
+Datenarchive verwenden hierfür Fassung 4; Fassungen 1 bis 3 bleiben einlesbar.
+
+Die Bedienidee orientiert sich an [Super Productivitys Inaktivitätsdialog](https://github.com/super-productivity/super-productivity/tree/master/src/app/features/idle).
+
 ## Outlook lokal einrichten
 
 In der Windows-Desktop-App führt **Einstellungen → Outlook-Add-in** durch die

@@ -502,7 +502,9 @@ export async function deleteTodoStatus(id: string): Promise<void> {
 /* ==================================================================== */
 
 export interface RunningTimer {
-  readonly todoId: string;
+  readonly entry: { readonly id: string; readonly todoId: string; readonly startedAt: string };
+  readonly todoTitle: string;
+  readonly elapsedSeconds: number;
 }
 
 /**
@@ -524,8 +526,8 @@ export async function getRunningTimer(): Promise<RunningTimer | null> {
 }
 
 /** `GET /timer/orphaned` — `null`, wenn keiner verwaist ist. */
-export async function getOrphanedTimer(): Promise<RunningTimer | null> {
-  return call<RunningTimer | null>('/timer/orphaned');
+export async function getOrphanedTimer(): Promise<{ readonly running: RunningTimer['entry']; readonly todoTitle: string; readonly heartbeatAt: string | null; readonly bookableSeconds: number } | null> {
+  return call('/timer/orphaned');
 }
 
 /**

@@ -72,6 +72,12 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { parseIdleActivity, type IdleActivity } from './idleActivity';
+export type { IdleActivity, IdlePeriod } from './idleActivity';
+
+export async function idleActivity(): Promise<IdleActivity> {
+  return parseIdleActivity(await invoke<unknown>('takt_idle_activity'));
+}
 import { parseOutlookCertificate, type OutlookCertificateResult } from './outlookCertificate';
 export type { OutlookCertificateFacts, OutlookCertificateResult } from './outlookCertificate';
 
