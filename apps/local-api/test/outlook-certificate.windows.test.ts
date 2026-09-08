@@ -61,7 +61,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     const cert = new X509Certificate(pair.certPem);
     const fingerprint = cert.fingerprint256.replaceAll(':', '');
     const script = (await readFile(scriptUrl, 'utf8'))
-      .replace('$store.Add($certificate)', "[Console]::Error.WriteLine('adding certificate'); $store.Add($certificate); [Console]::Error.WriteLine('certificate added')")
+      .replace("Import-Certificate -FilePath", "[Console]::Error.WriteLine('importing certificate'); Import-Certificate -FilePath")
       .replace('CheckHttps $fingerprint', "[Console]::Error.WriteLine('checking HTTPS'); CheckHttps $fingerprint");
     server = createServer({ key: pair.keyPem, cert: pair.certPem }, (_req, res) => res.writeHead(200).end('test add-in'));
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(17844, '127.0.0.1', resolve); });

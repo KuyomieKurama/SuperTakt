@@ -25,6 +25,7 @@ import type {
   DefaultTag,
   DataImportSummary,
   DraftText,
+  ForeignText,
   ExportAuditEntry,
   ExportPreview,
   ExportRun,
@@ -612,7 +613,7 @@ export function startTimer(todoId: Id, stopRunning = false): Promise<StartTimerR
   });
 }
 
-export function stopTimer(note: string): Promise<StopTimerResult> {
+export function stopTimer(note: ForeignText): Promise<StopTimerResult> {
   return request<StopTimerResult>("/timer/stop", { method: "POST", body: { note } });
 }
 

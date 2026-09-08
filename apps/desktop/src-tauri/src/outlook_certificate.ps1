@@ -72,14 +72,22 @@ try {
     if ($inputData.action -eq 'trust') {
         if (-not $validProfile -or -not $validNow) { throw 'certificate_invalid' }
         if ($inputData.fingerprint -cnotmatch '^[A-F0-9]{64}$' -or $inputData.fingerprint -cne $fingerprint) { throw 'certificate_changed' }
-        # Add the already-read certificate, never reopen the file after confirmation.
-        # This touches only CurrentUser\Root and never elevates or changes policy.
-        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser')
+        # Use the Windows PKI import cmdlet, as Microsoft's Office add-in setup
+        # does. Import only a locked snapshot of the already-confirmed public
+        # certificate; never reopen the original file or export the private key.
+        $snapshot = [IO.Path]::GetTempFileName()
+        $locked = $null
         try {
-            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-            $store.Add($certificate)
+            $locked = [IO.File]::Open($snapshot, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+            $locked.Write($certificate.RawData, 0, $certificate.RawData.Length)
+            $locked.Flush()
+            Import-Module (Join-Path $PSHOME 'Modules\PKI\PKI.psd1') -ErrorAction Stop
+            Import-Certificate -FilePath $snapshot -CertStoreLocation 'Cert:\CurrentUser\Root' -ErrorAction Stop | Out-Null
         } catch { throw 'trust_failed' }
-        finally { $store.Close() }
+        finally {
+            if ($null -ne $locked) { $locked.Dispose() }
+            [IO.File]::Delete($snapshot)
+        }
     }
     $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser')
     try {
