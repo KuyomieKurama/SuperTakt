@@ -24,7 +24,6 @@ async function powershell(script: string, input: unknown): Promise<Record<string
       if (code !== 0) { reject(new Error(Buffer.concat(errors).toString('utf8'))); return; }
       try {
         const result = JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>;
-        if (result['error'] === 'trust_failed') { reject(new Error(`Windows import failed: ${Buffer.concat(errors).toString('utf8')}`)); return; }
         resolve(result);
       }
       catch (error) { reject(error); }
@@ -45,7 +44,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
         $ErrorActionPreference = 'Stop'
         $id = [Console]::In.ReadToEnd() | ConvertFrom-Json
         if ($id -cnotmatch '^[A-F0-9]{40}$') { throw 'bad test thumbprint' }
-        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser')
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'LocalMachine')
         try {
           $store.Open('ReadWrite')
           foreach ($cert in $store.Certificates) { if ($cert.Thumbprint -ceq $id) { $store.Remove($cert) } }
@@ -56,7 +55,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     if (directory !== null) { await rm(directory, { recursive: true, force: true }); directory = null; }
   });
 
-  it('reads the real generated certificate, rejects stale approval, and validates HTTPS after explicit trust', async () => {
+  it('rejects stale approval and headless trust, and validates HTTPS with a trusted test certificate', async () => {
     // Trust-store mutation is limited to an explicitly enabled disposable CI runner.
     directory = await mkdtemp(join(tmpdir(), "supertakt-zertifikat-ä-'"));
     const path = join(directory, 'taskpane-cert.pem');
@@ -64,18 +63,29 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     await writeFile(path, pair.certPem);
     const cert = new X509Certificate(pair.certPem);
     const fingerprint = cert.fingerprint256.replaceAll(':', '');
-    const script = (await readFile(scriptUrl, 'utf8'))
-      .replace("Import-Certificate -FilePath", "[Console]::Error.WriteLine('importing certificate'); Import-Certificate -FilePath")
-      .replace("throw 'trust_failed'", "[Console]::Error.WriteLine($_.Exception.Message); throw 'trust_failed'")
-      .replace('CheckHttps $fingerprint', "[Console]::Error.WriteLine('checking HTTPS'); CheckHttps $fingerprint");
+    const script = await readFile(scriptUrl, 'utf8');
     server = createServer({ key: pair.keyPem, cert: pair.certPem }, (_req, res) => res.writeHead(200).end('test add-in'));
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(17844, '127.0.0.1', resolve); });
     expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ fingerprint, validNow: true, validProfile: true, installed: false, https: 'tls_failed' });
     expect(await powershell(script, { path, action: 'trust', fingerprint: '0'.repeat(64) })).toEqual({ error: 'certificate_changed' });
     expect(await powershell(script, { path, action: 'trust', fingerprint: '../anything' })).toEqual({ error: 'certificate_changed' });
     if (process.env['SUPERTAKT_TEST_CERT_TRUST'] !== '1') return;
+    // The CI service cannot approve a native Windows dialog. This must fail
+    // closed; the interactive first-time import remains a manual desktop check.
+    expect(await powershell(script, { path, action: 'trust', fingerprint })).toEqual({ error: 'trust_failed' });
+    expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ installed: false });
     trustedThumbprint = cert.fingerprint.replaceAll(':', '');
-    expect(await powershell(script, { path, action: 'trust', fingerprint })).toMatchObject({ installed: true, https: 'ready' });
+    // Seed this generated fixture in the disposable CI machine store. This is
+    // test setup, not the application's CurrentUser import path or a UI test.
+    await powershell(`
+      $ErrorActionPreference = 'Stop'
+      $pem = [Console]::In.ReadToEnd() | ConvertFrom-Json
+      $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList @(,[Text.Encoding]::ASCII.GetBytes($pem))
+      $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'LocalMachine')
+      try { $store.Open('ReadWrite'); $store.Add($cert) }
+      finally { $store.Close(); $cert.Dispose() }
+      '{}'`, pair.certPem);
+    expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ installed: true, https: 'ready' });
     await writeFile(path, createSelfSignedCertificate().certPem);
     expect(await powershell(script, { path, action: 'trust', fingerprint })).toEqual({ error: 'certificate_changed' });
   }, 90_000);

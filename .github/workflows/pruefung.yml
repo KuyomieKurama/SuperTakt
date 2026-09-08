@@ -73,7 +73,7 @@ jobs:
           manager="$(node -p "require('./package.json').packageManager")"
           npm install --global "$manager"
           pnpm install --frozen-lockfile
-      - name: Zertifikatsprüfung und ausdrückliches Vertrauen testen
+      - name: Zertifikatsprüfung, Ablehnung und HTTPS testen
         shell: bash
         env:
           # Only the disposable CI account receives the generated test leaf;

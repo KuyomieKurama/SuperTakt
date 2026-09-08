@@ -44,6 +44,8 @@ In der Windows-Desktop-App führt **Einstellungen → Outlook-Add-in** durch die
 Zertifikatsprüfung. Prüfen Sie Inhaber, Gültigkeit und SHA-256-Fingerabdruck und
 bestätigen Sie **Zertifikat prüfen und vertrauen**. Erst diese Bestätigung
 hinterlegt das konkrete lokale Serverzertifikat für Ihr Windows-Benutzerkonto.
+Bestätigen Sie auch die Windows-Sicherheitsabfrage; der Assistent wartet dafür
+bis zu drei Minuten. Bei Abbruch wird kein erfolgreicher Abschluss behauptet.
 Danach prüft SuperTakt die Add-in-Seite über HTTPS. Fehlende Zertifikate, ein
 nicht erreichbarer Server oder Windows-Richtlinien werden als Fehler angezeigt.
 

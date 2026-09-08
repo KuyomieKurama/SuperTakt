@@ -66,7 +66,7 @@ export function OutlookSetup() {
         open={confirmed !== null}
         title="Diesem lokalen Zertifikat vertrauen?"
         description={<span>Bestätigen Sie den SHA-256-Fingerabdruck des oben gezeigten Zertifikats: <span className="outlook-setup__fingerprint mono">{confirmed?.fingerprint.match(/.{2}/g)?.join(":")}</span></span>}
-        consequence="Dieses Zertifikat wird im Zertifikatsspeicher Ihres Windows-Benutzerkontos als vertrauenswürdig hinterlegt. Es gilt für localhost und 127.0.0.1. SuperTakt prüft danach die HTTPS-Verbindung erneut."
+        consequence="Dieses Zertifikat wird im Zertifikatsspeicher Ihres Windows-Benutzerkontos als vertrauenswürdig hinterlegt. Es gilt für localhost und 127.0.0.1. Bestätigen Sie auch die anschließend angezeigte Windows-Sicherheitsabfrage. Dafür haben Sie drei Minuten Zeit. SuperTakt prüft danach die HTTPS-Verbindung erneut."
         acknowledgeLabel="Ich habe die Zertifikatsdaten geprüft und möchte diesem Zertifikat vertrauen."
         confirmLabel="Zertifikat vertrauen"
         busy={mutation.busy}

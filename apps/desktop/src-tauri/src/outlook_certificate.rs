@@ -22,8 +22,14 @@ fn run(path: std::path::PathBuf, fingerprint: Option<String>) -> Result<serde_js
         "action": if fingerprint.is_some() { "trust" } else { "inspect" },
         "fingerprint": fingerprint,
     });
-    let mut child = Command::new(executable)
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", include_str!("outlook_certificate.ps1")])
+    let trusting = fingerprint.is_some();
+    let mut command = Command::new(executable);
+    command.args(["-NoLogo", "-NoProfile"]);
+    // Windows may ask for its own root-store confirmation. Keep that dialog
+    // available only for the operation the user explicitly requested.
+    if !trusting { command.arg("-NonInteractive"); }
+    let mut child = command
+        .args(["-Command", include_str!("outlook_certificate.ps1")])
         .creation_flags(0x08000000) // CREATE_NO_WINDOW; no shell, no elevation.
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn().map_err(|_| "Die Zertifikatsprüfung konnte nicht gestartet werden.")?;
@@ -34,7 +40,7 @@ fn run(path: std::path::PathBuf, fingerprint: Option<String>) -> Result<serde_js
         let _ = child.wait();
         return Err("Die Zertifikatsprüfung konnte nicht gestartet werden.".into());
     }
-    let deadline = Instant::now() + Duration::from_secs(25);
+    let deadline = Instant::now() + Duration::from_secs(if trusting { 180 } else { 25 });
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
