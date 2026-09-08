@@ -350,7 +350,7 @@
 .nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-1);
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -4797,20 +4797,76 @@ body:has(.scrim) .toast {
 .info-hint__content { max-width: min(24rem, calc(100vw - 2rem)); padding: var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-control); border-radius: var(--radius-md); font-size: var(--text-sm); line-height: var(--leading-relaxed); box-shadow: var(--shadow-lg); }
 .export-settings__fact > .btn { align-self: start; }
 
-.export-todo { list-style: none; border-bottom: 1px solid var(--border-subtle); }
-.export-todo__head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
-.export-todo__toggle { display: flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.export-todo-table { min-width: 60rem; }
+.export-todo-table .export-todo__head > td { background: var(--bg-surface); }
+.export-todo-table .export-todo:nth-of-type(even) .export-todo__head > td { background: var(--bg-surface-alt); }
+.export-todo-table .export-todo__head:hover > td { background: var(--bg-hover); }
+.export-todo-table .export-todo__head.table__row--selected > td { background: var(--bg-selected); }
+.export-todo-table .export-todo__head--blocked > td:first-child { box-shadow: inset 3px 0 var(--warning-fg); }
+.export-todo__status { white-space: nowrap; }
+.export-todo__ready { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
+.export-todo__toggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .export-todo__toggle > svg { flex-shrink: 0; }
-.export-todo__identity { display: grid; gap: var(--space-1); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.export-todo__identity .muted { font-size: var(--text-xs); }
-.export-todo__days { margin-inline-start: var(--space-5); }
-@media (max-width: 40rem) {
-  .export-todo__head { flex-wrap: wrap; }
-  .export-todo__head > .egroup__blocked-label { margin-inline-start: var(--space-5); }
-}
+.export-todo__toggle > bdi { overflow-wrap: anywhere; }
+.export-todo-table .export-todo__details > td { height: auto; padding: var(--space-3); }
+.export-todo__days { margin-inline-start: var(--space-3); }
 
 .tpl-preview-action { display: flex; justify-content: flex-end; margin-bottom: var(--space-3); }
 
 .tpl-preview-dialog { display: flex; flex-direction: column; max-height: calc(100dvh - 3rem); }
 .tpl-preview-dialog > .dialog__head { flex-shrink: 0; justify-content: space-between; }
 .tpl-preview-dialog > .dialog__body { min-height: 0; overflow-y: auto; }
+
+/* Navigation: work above, settings and installed version at the bottom. */
+.nav__list { flex: 1; }
+.nav__section-start { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.nav__settings { margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
+.nav__version { padding: 0; color: var(--text-muted); font-size: var(--text-xs); }
+.nav__update { width: 100%; min-height: var(--control-height-md); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-md); background: var(--bg-selected); color: var(--accent-text); cursor: pointer; text-align: left; }
+.nav__version > span { display: flex; align-items: center; min-height: var(--control-height-md); padding: 0 var(--space-2); }
+.nav__update > span:last-child { display: inline-flex; align-items: center; gap: var(--space-1); }
+.settings-rail { padding-right: var(--space-4); border-right: 1px solid var(--border-subtle); }
+.settings-rail__section-start { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+@media (max-width: 52rem) {
+  .nav__list { flex: initial; }
+  .nav__settings, .nav__section-start { margin: 0; padding: 0; border: 0; }
+  .nav__version { padding-bottom: 0; }
+}
+@media (max-width: 60rem) {
+  .settings-rail { padding-right: 0; border-right: 0; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-subtle); }
+}
+
+.settings-field-section { border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
+
+.export-day-table { min-width: 52rem; }
+.export-day-table .export-day__head > td { background: var(--bg-surface); }
+.export-day-table .export-day:nth-of-type(even) .export-day__head > td { background: var(--bg-surface-alt); }
+.export-day-table .export-day__head:hover > td { background: var(--bg-hover); }
+.export-day-table .export-day__head.table__row--selected > td { background: var(--bg-selected); }
+.export-day-table .export-day__head--blocked > td:first-child { box-shadow: inset 3px 0 var(--warning-fg); }
+.export-day__status { white-space: nowrap; }
+.export-day__note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-day-table .export-day__details > td { height: auto; padding: var(--space-3); }
+
+.table .export-table__expand { width: 2rem; padding-inline: var(--space-2); }
+.export-table__expand .export-todo__toggle { justify-content: center; min-width: 1rem; }
+.export-todo-table input[type="checkbox"]:disabled, .export-day-table input[type="checkbox"]:disabled { cursor: not-allowed; }
+.export-todo-table .export-todo__head--blocked > td:first-child, .export-day-table .export-day__head--blocked > td:first-child { box-shadow: inset 3px 0 var(--warning-fg); }
+
+.export-todo-table, .export-day-table { table-layout: fixed; }
+.export-col--expand { width: 2rem; }
+.export-col--select { width: 2.25rem; }
+.export-col--status { width: 12rem; }
+.export-col--call { width: 7rem; }
+.export-col--days { width: 5rem; }
+.export-col--entries { width: 7rem; }
+.export-col--selected { width: 11rem; }
+.export-col--date { width: 12rem; }
+.export-col--time { width: 8rem; }
+.export-todo__head > td:nth-child(5) { overflow-wrap: anywhere; }
+
+/* Share the day table width across its facts and service text. */
+.export-day-table .export-col--status { width: 20%; }
+.export-day-table .export-col--date { width: 20%; }
+.export-day-table .export-col--entries { width: 12%; }
+.export-day-table .export-col--time { width: 12%; }

@@ -343,8 +343,10 @@ export function InlineMessage({
         <Icon name={TONE_ICON[tone]} size={16} />
       </span>
       <div className="grow">
-        <p className="message__title">{title}</p>
-        {children !== undefined ? <div className="message__body">{children}</div> : null}
+        <div className="message__text">
+          <p className="message__title">{title}</p>
+          {children !== undefined ? <div className="message__body">{children}</div> : null}
+        </div>
         {action !== undefined ? <div className="message__action">{action}</div> : null}
       </div>
       {onDismiss !== undefined ? (

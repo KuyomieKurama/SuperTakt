@@ -906,8 +906,14 @@
   color: var(--text-muted);
 }
 
+.table thead th.table__cell--end,
 .table__cell--end {
   text-align: end;
+}
+
+.table thead th.table__cell--center,
+.table__cell--center {
+  text-align: center;
 }
 
 .table__row-menu,
@@ -4228,3 +4234,17 @@
   flex: none;
   margin-top: 2px;
 }
+
+/* Keep short notices and their action together when the container allows it. */
+.message--inline-action > .grow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+}
+.message--inline-action .message__text {
+  flex: 1 1 32rem;
+  min-width: 0;
+}
+.message--inline-action .message__action { margin-top: 0; }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
 import { listTimeEntries, listTodos } from "../api/endpoints";
 import {
   ShellStatus,
@@ -6,17 +6,7 @@ import {
   type UserNameFinding,
 } from "../components/ShellStatus";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
-import { BoardScreen } from "../screens/BoardScreen";
-import { BookingsScreen } from "../screens/BookingsScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
-import { ExportAuditScreen } from "../screens/ExportAuditScreen";
-import { ExportScreen } from "../screens/ExportScreen";
-import { SettingsScreen } from "../screens/SettingsScreen";
-import { TagsScreen } from "../screens/TagsScreen";
-import { TemplatesScreen } from "../screens/TemplatesScreen";
-import { TimeScreen } from "../screens/TimeScreen";
-import { TodoDetailScreen } from "../screens/TodoDetailScreen";
-import { TodoListScreen } from "../screens/TodoListScreen";
 import { connect, quitApplication, readShellState, type ConnectionState } from "./connection";
 import { GlobalSearch } from "./GlobalSearch";
 import { Navigation } from "./Navigation";
@@ -28,9 +18,21 @@ import { TimerBar } from "./TimerBar";
 import { TimerProvider } from "./TimerContext";
 import { ToastProvider } from "./ToastContext";
 import { UpdateNotice } from "./UpdateNotice";
+import { useUpdateNotice } from "./useUpdateNotice";
 import { useAsync } from "./useAsync";
 import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
+
+const BoardScreen = lazy(() => import("../screens/BoardScreen").then(module => ({ default: module.BoardScreen })));
+const BookingsScreen = lazy(() => import("../screens/BookingsScreen").then(module => ({ default: module.BookingsScreen })));
+const ExportAuditScreen = lazy(() => import("../screens/ExportAuditScreen").then(module => ({ default: module.ExportAuditScreen })));
+const ExportScreen = lazy(() => import("../screens/ExportScreen").then(module => ({ default: module.ExportScreen })));
+const SettingsScreen = lazy(() => import("../screens/SettingsScreen").then(module => ({ default: module.SettingsScreen })));
+const TagsScreen = lazy(() => import("../screens/TagsScreen").then(module => ({ default: module.TagsScreen })));
+const TemplatesScreen = lazy(() => import("../screens/TemplatesScreen").then(module => ({ default: module.TemplatesScreen })));
+const TimeScreen = lazy(() => import("../screens/TimeScreen").then(module => ({ default: module.TimeScreen })));
+const TodoDetailScreen = lazy(() => import("../screens/TodoDetailScreen").then(module => ({ default: module.TodoDetailScreen })));
+const TodoListScreen = lazy(() => import("../screens/TodoListScreen").then(module => ({ default: module.TodoListScreen })));
 
 /**
  * Takt — die Anwendung.
@@ -82,6 +84,7 @@ import { useRoute } from "./useRoute";
  */
 
 export function App() {
+  useEffect(() => { performance.mark("supertakt:first-render"); }, []);
   const { route, revisit } = useRoute();
   return <ConnectedApp route={route} revisit={revisit} />;
 }
@@ -263,6 +266,7 @@ function Workspace({
   readonly userName: UserNameFinding;
 }) {
   const { version } = useRefresh();
+  const updates = useUpdateNotice();
 
   /*
     Hier und nur hier (T-097): Die Arbeitsfläche steht innerhalb beider
@@ -304,7 +308,7 @@ function Workspace({
         genau die Meldung den Blick, die den Benutzer zum Neustart bringt — und
         „Überspringen" könnte in diesem Zustand ohnehin nichts ablegen.
       */}
-      {shell?.serviceExit == null ? <UpdateNotice /> : null}
+      {shell?.serviceExit == null ? <UpdateNotice api={updates} /> : null}
 
       {/*
         Seitenleiste, Kopf und Inhalt sind Geschwister im Raster von `.app` und
@@ -322,6 +326,9 @@ function Workspace({
         </a>
 
         <Navigation
+          installedVersion={updates.installedVersion}
+          availableVersion={updates.availableVersion}
+          onOpenUpdate={updates.install}
           active={route.name}
           openTodoCount={openTodoCount}
           openEntryCount={openEntryCount}
@@ -352,7 +359,11 @@ function Workspace({
       </header>
 
       <main className="app__main" id="inhalt" tabIndex={-1}>
-        <Screen route={route} />
+        <ScreenLoadBoundary key={route.name}>
+          <Suspense fallback={<div className="boot" role="status"><Spinner label="Ansicht wird geladen" /><p>Ansicht wird geladen …</p></div>}>
+            <Screen route={route} />
+          </Suspense>
+        </ScreenLoadBoundary>
       </main>
     </div>
   );
@@ -400,4 +411,16 @@ function UnknownScreen() {
       }
     />
   );
+}
+
+class ScreenLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  override render() {
+    if (this.state.failed) return <InlineMessage tone="danger" title="Die Ansicht konnte nicht geladen werden"
+      action={<Button onClick={() => window.location.reload()}>Erneut laden</Button>}>
+      Bitte laden Sie die Anwendung erneut.
+    </InlineMessage>;
+    return this.props.children;
+  }
 }

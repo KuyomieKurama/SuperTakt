@@ -19,6 +19,8 @@ import "./styles/theme-palettes.css";
  * an der einen arbeitete, verstellte die andere.
  */
 
+performance.mark("supertakt:javascript-ready");
+
 const removeTextEditing = installTextEditing();
 if (import.meta.hot) import.meta.hot.dispose(removeTextEditing);
 

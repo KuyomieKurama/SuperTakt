@@ -286,6 +286,7 @@ export function DashboardScreen() {
                 <InlineMessage
                   tone="warning"
                   title={`${plural(value.blocked, "Tagesgruppe geht", "Tagesgruppen gehen")} so nicht in den Export`}
+                  className="message--inline-action"
                   action={
                     <Button size="sm" variant="secondary" onClick={() => navigate("export")}>
                       In der Export-Ansicht ansehen

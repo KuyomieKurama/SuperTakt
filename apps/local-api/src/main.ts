@@ -106,6 +106,11 @@ export interface MainOptions {
 
 export async function main(options: MainOptions = {}): Promise<void> {
   const logger = createLogger();
+  const started = performance.now();
+  const startupPhase = (phase: string): void => {
+    logger.lifecycle('info', `Start: ${phase}`, `startup phase=${phase} elapsed_ms=${Math.round(performance.now() - started)}`);
+  };
+  startupPhase('entry');
 
   /**
    * B-7.2, S-03 aus T-023 — die `umask` des Sidecars, vor allem anderen.
@@ -283,6 +288,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
     }
   }
 
+  startupPhase('database_ready');
+
   // Liegengebliebene Nachbardateien eines abgebrochenen Exportlaufs entfernen.
   // Sie enthalten Kundendaten (A-8.9, R-05) und belegen nichts — die zugehörige
   // Transaktion ist zurückgenommen.
@@ -295,6 +302,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
       }
     }
   }
+
+  startupPhase('export_cleanup_ready');
 
   /*
    * Bildkopien ohne Eigentümer entfernen (A-A-18).
@@ -335,6 +344,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     );
   }
 
+  startupPhase('image_cleanup_ready');
   await tokens.load(new Date());
   const status = tokens.status();
   if (status.unreadable) {
@@ -424,6 +434,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
         server.close(() => process.exit(EXIT_BIND));
         return;
       }
+      startupPhase('listening');
       logger.lifecycle('info', `Takt lauscht auf ${BIND_ADDRESS}:${DEFAULT_PORT}.`);
     },
   );

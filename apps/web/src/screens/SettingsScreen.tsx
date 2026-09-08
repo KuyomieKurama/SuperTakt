@@ -207,7 +207,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
         <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
           <ul className="settings-rail__list">
             {AREA_LIST.map((item) => (
-              <li key={item.area}>
+              <li key={item.area} className={["export", "standardtags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
                 <a
                   className={cx(
                     "settings-rail__item",
@@ -498,6 +498,7 @@ function DisplaySettings() {
         <p className="field__hint">Dieses Theme verwendet feste {preset.mode === "dark" ? "dunkle" : "helle"} Farben. Die freie Farbwahl steht bei Klassisch und den anpassbaren Themes zur Verfügung.</p>
       )}
       <Select
+        className="settings-field-section"
         label="Theme auswählen"
         value={preset.value}
         onChange={setDesignTheme}
@@ -511,6 +512,7 @@ function DisplaySettings() {
       />
 
       <Select
+        className="settings-field-section"
         label="Zeilendichte"
         value={density}
         onChange={setDensity}

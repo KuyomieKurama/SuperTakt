@@ -629,8 +629,9 @@ export function ExportScreen() {
         <InlineMessage
           tone="warning"
           title={directoryProblem.title}
+          className="message--inline-action"
           action={
-            <Button size="sm" variant="secondary" onClick={() => navigate("settings")}>
+            <Button size="sm" variant="secondary" onClick={() => navigate("settings", undefined, { bereich: "export" })}>
               In den Einstellungen prüfen
             </Button>
           }
@@ -709,7 +710,7 @@ export function ExportScreen() {
               size="sm"
               variant="primary"
               iconStart="folder-open"
-              onClick={() => navigate("settings")}
+              onClick={() => navigate("settings", undefined, { bereich: "export" })}
             >
               Ordner ändern
             </Button>
@@ -959,12 +960,6 @@ export function ExportScreen() {
                 )}
               />
 
-              /*
-                Nur noch der erste Satz (T-181, ST-07). Wie der Lauffilter im
-                Protokoll wirkt, steht am Knopf „Buchungen dieses Laufs" und
-                im Leerzustand des Protokolls selbst — dort, wo man davor
-                steht, und nicht im Vorspann einer Liste von Läufen.
-              */
               <Card
                 title="Letzte Exportläufe"
                 description="Was wann geschrieben wurde."
