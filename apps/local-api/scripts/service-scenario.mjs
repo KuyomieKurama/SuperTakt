@@ -1145,6 +1145,44 @@ export async function runScenario() {
     tick(3600);
     await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
 
+    // -----------------------------------------------------------------------
+    // Datensicherung und Migration (A-20). Das native Archiv geht einmal durch
+    // den vollständigen Round-Trip; die beiden Fremdformate ergänzen danach
+    // je einen kleinen, aber strukturell aussagekräftigen Bestand.
+    // -----------------------------------------------------------------------
+    const archive = await record('exportDataArchive', 'GET', '/data-transfer/archive', '/data-transfer/archive');
+    await record('importDataArchive', 'POST', '/data-transfer/archive', '/data-transfer/archive', {
+      archive: archive.body.data,
+    });
+    await record('importTodoist', 'POST', '/data-transfer/todoist', '/data-transfer/todoist', {
+      files: [{
+        name: 'Migration.csv',
+        content: [
+          'TYPE;CONTENT;DESCRIPTION;PRIORITY;INDENT;DATE;DEADLINE',
+          'section;Planung;;;;;',
+          'task;Hauptaufgabe @kunde;Aus Todoist;1;1;;2026-09-30',
+          'task;Unteraufgabe;;2;2;;;',
+        ].join('\n'),
+      }],
+    });
+    await record(
+      'importSuperProductivity',
+      'POST',
+      '/data-transfer/super-productivity',
+      '/data-transfer/super-productivity',
+      {
+        backup: {
+          project: { entities: { p1: { id: 'p1', title: 'Migration' } } },
+          tag: { entities: { t1: { id: 't1', title: 'Wichtig', color: '#ef4444' } } },
+          section: { entities: { s1: { id: 's1', contextId: 'p1', title: 'Sprint', taskIds: ['a1'] } } },
+          task: { entities: { a1: {
+            id: 'a1', title: 'Aus Super Productivity', notes: 'Importvermerk',
+            projectId: 'p1', tagIds: ['t1'], deadlineDay: '2026-10-01',
+          } } },
+        },
+      },
+    );
+
     // Die Kette selbst: kein Nachweis, fremde Herkunft, Geheimnis in der
     // Adresse, falscher Inhaltstyp.
     await record('health', 'GET', '/health', '/health', undefined, { token: null });

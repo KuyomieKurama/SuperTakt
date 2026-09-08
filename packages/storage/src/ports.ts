@@ -119,6 +119,51 @@ export interface UnitOfWork {
   readonly templates: ExportTemplatePort;
   readonly settings: AppSettingsPort;
   readonly defaultTags: DefaultTagPort;
+  /** Vollständige, versionierte Datensicherung (A-20.1 bis A-20.8). */
+  readonly dataArchive: DataArchivePort;
+}
+
+// ---------------------------------------------------------------------------
+// Datensicherung und Migration (A-20.*)
+// ---------------------------------------------------------------------------
+
+/** JSON-kompatibler Zellenwert des anwendungsunabhängigen Archivs. */
+export type ArchiveScalar = string | number | null;
+export type ArchiveRow = Readonly<Record<string, ArchiveScalar>>;
+
+/**
+ * Die Tabellen des fachlichen Bestands. Abgeleitete Sichten und das interne
+ * Migrationsbuch gehören nicht in das Austauschformat.
+ */
+export const DATA_ARCHIVE_TABLES = [
+  'todo_status',
+  'tag_folder',
+  'tag',
+  'todo',
+  'todo_note',
+  'todo_tag',
+  'time_entry',
+  'timer_heartbeat',
+  'todo_attachment_kind',
+  'todo_attachment',
+  'pool',
+  'pool_rule',
+  'default_tag',
+  'export_template',
+  'export_run',
+  'export_run_group',
+  'export_run_entry',
+  'export_audit',
+  'app_setting',
+] as const;
+
+export type DataArchiveTable = (typeof DATA_ARCHIVE_TABLES)[number];
+export type DataArchiveTables = Readonly<Record<DataArchiveTable, readonly ArchiveRow[]>>;
+
+export interface DataArchivePort {
+  readAll(): Promise<DataArchiveTables>;
+  /** Ersetzt den fachlichen Bestand innerhalb der bereits offenen Transaktion. */
+  replaceAll(tables: DataArchiveTables): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +417,14 @@ export interface AttachmentBlobPort {
     name: string,
   ): Promise<
     | { readonly ok: true; readonly mediaType: string; readonly data: Uint8Array }
+    | { readonly ok: false; readonly reason: ImageBlobFailure }
+  >;
+  /** Schreibt eine bereits geprüfte Bildkopie aus einem Takt-Datenarchiv zurück. */
+  restoreImage(
+    name: string,
+    data: Uint8Array,
+  ): Promise<
+    | { readonly ok: true; readonly mediaType: string; readonly bytes: number }
     | { readonly ok: false; readonly reason: ImageBlobFailure }
   >;
   /**

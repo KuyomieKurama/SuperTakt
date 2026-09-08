@@ -1290,6 +1290,18 @@ export interface AppSettingsUpdate {
   readonly skippedVersion?: ForeignText | null;
 }
 
+/** Ergebnis eines vollständigen Datenimports. */
+export interface DataImportSummary {
+  readonly source: TechnicalKey;
+  readonly todos: number;
+  readonly projects: number;
+  readonly sections: number;
+  readonly tags: number;
+  readonly timeEntries: number;
+  readonly images: number;
+  readonly warnings: readonly ServiceText[];
+}
+
 /**
  * Was der Dienst über die letzte Versionsprüfung weiß (A-18.2, E-069).
  *

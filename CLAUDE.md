@@ -114,7 +114,8 @@ Security-Checker freigegeben haben. Der Dokumentierer arbeitet als Letzter.
   Format ab.
 - Jede Buchung ist eindeutig exportiert oder offen, und das ist überall sichtbar.
 - Die Notiz der Buchung geht in die Abrechnung. Die Notiz des Todos bleibt intern und darf in
-  keinem Export auftauchen.
+  keinem **Abrechnungsexport** auftauchen; die ausdrücklich vollständige Datensicherung nach
+  A-20 enthält sie für den Round-Trip.
 - Wird der Timer auf einem erledigten Todo gestartet, hebt die Anwendung „Erledigt" automatisch
   auf; das Todo landet wieder in seinem Pool.
 - Tag-Ordner sind beliebig tief verschachtelbar, Pools werden über Tags definiert, Standard-Tags
@@ -181,7 +182,8 @@ R-22. Bei jeder Freigabe zu prüfen:
   Bestand.
 - Vor dem Öffnen einer **Datei** fragt die Oberfläche und nennt dabei den vollen Pfad. Eine Datei
   mit der Standardanwendung zu öffnen ist bei `.bat`, `.lnk` oder `.exe` eine Ausführung.
-- Nichts öffnet sich von selbst. Weder Frist noch Anhang gelangen in einen Export.
+- Nichts öffnet sich von selbst. Weder Frist noch Anhang gelangen in einen
+  **Abrechnungsexport**; die vollständige Datensicherung nach A-20 enthält beide.
 
 ## Text streichen und umbenennen
 

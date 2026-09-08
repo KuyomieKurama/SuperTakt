@@ -4149,6 +4149,21 @@ body:has(.scrim) .toast {
   min-width: 0;
 }
 
+.data-transfer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.data-transfer__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Schmales Fenster: Die Leiste legt sich ueber den Bereich statt daneben. */
 @media (max-width: 60rem) {
   .settings-layout {

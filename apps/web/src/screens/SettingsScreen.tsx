@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import {
   getTokenStatus,
+  exportDataArchive,
+  importDataArchive,
+  importSuperProductivity,
+  importTodoistFiles,
   listDefaultTags,
   listExportTemplates,
   listSecurityNotices,
@@ -9,7 +13,7 @@ import {
   setDefaultTags,
   updateSettings,
 } from "../api/endpoints";
-import type { Id, RoundingMode, SecurityNoticeKind } from "../api/types";
+import type { DataImportSummary, Id, RoundingMode, SecurityNoticeKind } from "../api/types";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ExportDirectoryField } from "../components/ExportDirectoryField";
 import { BillingUserFact, DatabaseLocationFact } from "../components/WorkstationFacts";
@@ -105,7 +109,7 @@ const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
 /* Die Bereiche                                                         */
 /* ==================================================================== */
 
-const AREAS = ["darstellung", "export", "standardtags", "status", "addin", "arbeitsplatz"] as const;
+const AREAS = ["darstellung", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
 
 type SettingsArea = (typeof AREAS)[number];
 
@@ -142,6 +146,7 @@ interface AreaDescriptor {
 const AREA_LIST: readonly AreaDescriptor[] = [
   { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Farbmodus und Zeilendichte" },
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
+  { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
   {
     area: "standardtags",
     label: "Standard-Tags",
@@ -239,6 +244,8 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
       return <DisplaySettings />;
     case "export":
       return <ExportSettings />;
+    case "daten":
+      return <DataTransferSettings />;
     case "standardtags":
       return <DefaultTagSettings />;
     case "status":
@@ -253,6 +260,138 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
         </>
       );
   }
+}
+
+/* ==================================================================== */
+/* Daten — Sicherung, Wiederherstellung und Fremdimport                 */
+/* ==================================================================== */
+
+function saveJsonFile(value: unknown): void {
+  const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+  const blob = new Blob([JSON.stringify(value, null, 2) + "\n"], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `takt-datensicherung-${stamp}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function ImportResult({ result }: { readonly result: DataImportSummary | null }) {
+  if (result === null) return null;
+  return (
+    <InlineMessage tone={result.warnings.length === 0 ? "success" : "warning"} title="Import abgeschlossen">
+      {result.todos} Aufgaben, {result.projects} Projekte, {result.tags} Tags und {result.timeEntries} Zeitbuchungen wurden übernommen.
+      {result.warnings.length === 0 ? null : (
+        <ul>{result.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+      )}
+    </InlineMessage>
+  );
+}
+
+function DataTransferSettings() {
+  const structure = useStructure();
+  const { bump } = useRefresh();
+  const toasts = useToasts();
+  const mutation = useMutation();
+  const archiveInput = useRef<HTMLInputElement>(null);
+  const todoistInput = useRef<HTMLInputElement>(null);
+  const superProductivityInput = useRef<HTMLInputElement>(null);
+  const [pendingArchive, setPendingArchive] = useState<unknown | null>(null);
+  const [result, setResult] = useState<DataImportSummary | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const refreshAfterImport = (summary: DataImportSummary): void => {
+    setResult(summary);
+    structure.reload();
+    bump();
+    toasts.success("Daten importiert.");
+  };
+
+  const exportArchive = (): void => {
+    setFileError(null);
+    void mutation.run(async () => {
+      saveJsonFile(await exportDataArchive());
+      toasts.success("Datensicherung erstellt.");
+    });
+  };
+
+  const readJson = async (file: File): Promise<unknown> => JSON.parse(await file.text()) as unknown;
+
+  const chooseArchive = (files: FileList | null): void => {
+    const file = files?.[0];
+    if (file === undefined) return;
+    setFileError(null);
+    void readJson(file).then(setPendingArchive).catch(() => setFileError("Die gewählte Datei enthält kein gültiges JSON."));
+  };
+
+  const restoreArchive = (): void => {
+    if (pendingArchive === null) return;
+    void mutation.run(async () => {
+      const summary = await importDataArchive(pendingArchive);
+      setPendingArchive(null);
+      refreshAfterImport(summary);
+    });
+  };
+
+  const chooseTodoist = (files: FileList | null): void => {
+    if (files === null || files.length === 0) return;
+    setFileError(null);
+    void mutation.run(async () => {
+      const selected = await Promise.all([...files].map(async (file) => ({ name: file.name, content: await file.text() })));
+      refreshAfterImport(await importTodoistFiles(selected));
+    });
+  };
+
+  const chooseSuperProductivity = (files: FileList | null): void => {
+    const file = files?.[0];
+    if (file === undefined) return;
+    setFileError(null);
+    void mutation.run(async () => refreshAfterImport(await importSuperProductivity(await readJson(file))));
+  };
+
+  return (
+    <>
+      <Card title="Takt-Datensicherung" description="Vollständiges, versioniertes JSON-Archiv.">
+        <p className="field__hint">Enthält Aufgaben, Vermerke, Tags, Strukturen, Zeitbuchungen, Exporteinstellungen, Protokolle und Bildanhänge. Eine Wiederherstellung ersetzt den aktuellen Bestand.</p>
+        <div className="data-transfer__actions">
+          <Button variant="primary" iconStart="download" loading={mutation.busy} onClick={exportArchive}>Sicherung herunterladen</Button>
+          <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => archiveInput.current?.click()}>Sicherung wiederherstellen</Button>
+          <input ref={archiveInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseArchive(event.currentTarget.files); event.currentTarget.value = ""; }} />
+        </div>
+      </Card>
+
+      <Card title="Aus Todoist importieren" description="Ergänzt den vorhandenen Bestand.">
+        <p className="field__hint">Entpacken Sie das Todoist-Backup und wählen Sie eine oder mehrere CSV-Dateien. Projekte werden Pools, Bereiche und Prioritäten werden Tags; Unteraufgaben bleiben im Vermerk nachvollziehbar.</p>
+        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => todoistInput.current?.click()}>Todoist-CSV auswählen</Button>
+        <input ref={todoistInput} className="data-transfer__input" type="file" accept="text/csv,.csv" multiple onChange={(event) => { chooseTodoist(event.currentTarget.files); event.currentTarget.value = ""; }} />
+      </Card>
+
+      <Card title="Aus Super Productivity importieren" description="Ergänzt den vorhandenen Bestand.">
+        <p className="field__hint">Wählen Sie eine JSON-Datensicherung aus Super Productivity. Projekte, Bereiche, Tags, Fristen, Vermerke, Erledigt-Zustand und erfasste Zeiten werden übernommen.</p>
+        <Button iconStart="folder-open" disabled={mutation.busy} onClick={() => superProductivityInput.current?.click()}>Super-Productivity-JSON auswählen</Button>
+        <input ref={superProductivityInput} className="data-transfer__input" type="file" accept="application/json,.json" onChange={(event) => { chooseSuperProductivity(event.currentTarget.files); event.currentTarget.value = ""; }} />
+      </Card>
+
+      {fileError === null && mutation.error === null ? null : (
+        <InlineMessage tone="danger" title="Die Datei konnte nicht verarbeitet werden">{fileError ?? mutation.error}</InlineMessage>
+      )}
+      <ImportResult result={result} />
+
+      <ConfirmDialog
+        open={pendingArchive !== null}
+        tone="danger"
+        title="Takt-Datensicherung wiederherstellen?"
+        description="Der aktuelle Bestand wird vollständig durch den Inhalt der gewählten Sicherung ersetzt."
+        consequence="Aufgaben und Zeitbuchungen, die nur im aktuellen Bestand vorkommen, sind danach nicht mehr vorhanden."
+        acknowledgeLabel="Ich habe den aktuellen Bestand bei Bedarf gesichert."
+        confirmLabel="Bestand ersetzen"
+        busy={mutation.busy}
+        onConfirm={restoreArchive}
+        onCancel={() => setPendingArchive(null)}
+      />
+    </>
+  );
 }
 
 /* ==================================================================== */

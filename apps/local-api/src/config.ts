@@ -109,10 +109,11 @@ export const ALLOWED_ORIGINS: readonly string[] = Object.freeze([
   'https://localhost:17844',
 ]);
 
-/**
- * Höchstgröße eines Anfragerumpfs (B-1.7). Für Notizfelder reichlich.
- */
+/** Höchstgröße eines gewöhnlichen Anfragerumpfs (B-1.7). Für Notizfelder reichlich. */
 export const MAX_BODY_BYTES = 1024 * 1024;
+
+/** Datenarchive mit eingebetteten Bildanhängen benötigen bewusst mehr als Notizfelder. */
+export const DATA_TRANSFER_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 /** Zeitgrenze je Anfrage (B-1.7). */
 export const REQUEST_TIMEOUT_MS = 15_000;

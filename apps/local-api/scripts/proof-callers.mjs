@@ -165,6 +165,7 @@ import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
+import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-transfer.ts';
 /*
  * Die Eingabeschemata der Add-in-Tür (T-132, O-M).
  *
@@ -191,6 +192,7 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+  ...DATA_TRANSFER_SCHEMAS,
 };
 
 /** Die beiden Türen mit Rumpf unter `/addin/*`, nach Operationskennung. */
