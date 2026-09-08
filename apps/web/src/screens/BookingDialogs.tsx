@@ -86,24 +86,42 @@ export function BookingFormDialog({
   const [startedAt, setStartedAt] = useState("");
   const [endedAt, setEndedAt] = useState("");
   const [note, setNote] = useState("");
-  const [fieldError, setFieldError] = useState<string | undefined>(undefined);
+  /**
+   * Der Absendeversuch, nicht der erste Tastendruck (SC 3.3.1).
+   *
+   * Bis T-175 stand hier **eine** Meldung für **zwei** Pflichtfelder, und sie
+   * hing am Feld „Anfang“: Wer das Ende leer ließ, las den Tadel unter dem
+   * Feld, das er ausgefüllt hatte. Seit E-084 dem Formular `noValidate` gibt,
+   * ist die Bauart zugleich die einzige Prüfung, die diese beiden Felder noch
+   * haben — Chromiums Sprechblase fängt hier nichts mehr ab. Also trägt jedes
+   * Feld seine eigene Meldung, und beide stehen in der Live-Region ihres
+   * Feldes (T-162).
+   */
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setStartedAt(entry === undefined ? "" : toLocalInputValue(entry.startedAt));
     setEndedAt(entry === undefined ? "" : toLocalInputValue(entry.endedAt));
     setNote(entry?.note ?? "");
-    setFieldError(undefined);
+    setAttempted(false);
   }, [open, entry]);
+
+  /*
+    Der Wortlaut ist die Grundform aus T-177 P-3, das erste Wort die
+    Beschriftung des Feldes (P-2): Die Meldung wird in einer `role="alert"`-
+    Fläche **angesagt**, während der Dialog schon steht — wer sie hört und nicht
+    sieht, hat ohne den Feldnamen keinen Bezug.
+  */
+  const startError =
+    attempted && fromLocalInputValue(startedAt) === null ? "Anfang fehlt." : undefined;
+  const endError = attempted && fromLocalInputValue(endedAt) === null ? "Ende fehlt." : undefined;
 
   const submit = (): void => {
     const start = fromLocalInputValue(startedAt);
     const end = fromLocalInputValue(endedAt);
-    if (start === null || end === null) {
-      setFieldError("Anfang und Ende müssen beide gesetzt sein.");
-      return;
-    }
-    setFieldError(undefined);
+    setAttempted(true);
+    if (start === null || end === null) return;
 
     void mutation.run(async () => {
       if (entry === undefined) {
@@ -170,7 +188,7 @@ export function BookingFormDialog({
           value={startedAt}
           onChange={setStartedAt}
           required
-          {...(fieldError === undefined ? {} : { error: fieldError })}
+          {...(startError === undefined ? {} : { error: startError })}
         />
         <TextField
           label="Ende"
@@ -178,6 +196,7 @@ export function BookingFormDialog({
           value={endedAt}
           onChange={setEndedAt}
           required
+          {...(endError === undefined ? {} : { error: endError })}
         />
       </div>
 

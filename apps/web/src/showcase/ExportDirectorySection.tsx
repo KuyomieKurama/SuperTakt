@@ -150,11 +150,12 @@ export function ExportDirectorySection() {
           serviceTraits={[]}
           unsaved={saved !== path}
         />
-        {blocked ? (
-          <p className="field__error" role="status">
-            Solange dieser Ordner eingetragen ist, lässt sich nichts speichern.
-          </p>
-        ) : null}
+        {/* Dieselbe Bauart wie in den Einstellungen (O-GQ, T-191): Die Region
+            steht immer da, der Satz kommt später. Die Musterseite zeigt die
+            Bauart mit, sonst wird hier abgeschrieben, was dort behoben ist. */}
+        <p className="field__error" role="status">
+          {blocked ? "Solange dieser Ordner eingetragen ist, lässt sich nichts speichern." : null}
+        </p>
         {saved === null ? null : (
           <InlineMessage tone="success" title="Eingestellt">
             Der Exportordner steht jetzt auf <span className="mono">{saved}</span>. In der

@@ -256,6 +256,117 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
     'ohne einen solchen Fall sagt die Prüfung darüber nichts',
   );
 
+  /*
+   * ===========================================================================
+   * Welche Verletzung ist eingetreten? (T-231, A-A-64)
+   * ===========================================================================
+   *
+   * Bis T-231 fragte `provoke` nur, **daß** eine Verletzung eintritt. `raw`
+   * trug den Indexnamen und ging in keine Bedingung. Security-checker hat den
+   * Fall in T-230 gestellt (Bedrohungsmodell 30.3): Trägt der Block für
+   * `ux_tag_name` einen kollidierenden Vergleichsschlüssel, schlägt
+   * `ux_tag_name_key` zu — SQLite meldet `index 'ux_tag_name_key'`, alle vier
+   * Zeilen des Blocks bleiben grün, der Lauf sagt Code 0. Zwei der vierzehn
+   * Blöcke messen dann denselben Index und einer gar keinen.
+   *
+   * Das ist dieselbe Gefahr, die drei Absätze weiter oben für den **Übersetzer**
+   * benannt und dort sogar gegen die leere Menge gesichert ist. Hier fällt sie
+   * bei der **Provokation** aus, und deshalb steht sie jetzt hier.
+   *
+   * **Warum `raw.includes(indexName)` nicht genügt**: `ux_tag_name` ist eine
+   * Teilzeichenkette von `ux_tag_name_key`. Eine Teilzeichenkettensuche wäre
+   * genau der Zuordner, den der Absatz oben ausschließt — sie ließe den
+   * gemessenen Fall grün. Verglichen wird deshalb der **ganze** Name.
+   *
+   * SQLite nennt den verletzten Index in zwei Gestalten, und beide kommen am
+   * Baum vor (der Anlaß von T-074 steht im Kopf dieser Datei):
+   *
+   *   UNIQUE constraint failed: index 'ux_tag_name_key'          — bei Ausdruck
+   *                                                                oder WHERE
+   *   UNIQUE constraint failed: todo_status.name                 — bei nackten
+   *                                                                Spalten
+   *
+   * Die zweite Gestalt wird über das Schema zurückübersetzt: Welcher eindeutige
+   * Index trägt genau diese Spalten in genau dieser Reihenfolge? Gefragt wird
+   * `pragma_index_info` mit gebundenem Namen, nicht der Text von `CREATE INDEX`
+   * — ein Ausdruck über SQL wäre wieder eine Nachbildung.
+   */
+  const indexTables = new Map(
+    db
+      .prepare(
+        `SELECT name, tbl_name FROM sqlite_master
+          WHERE type = 'index' AND sql IS NOT NULL AND sql LIKE 'CREATE UNIQUE%'
+          ORDER BY name`,
+      )
+      .all()
+      .map((row) => [row.name, row.tbl_name]),
+  );
+
+  /** Die qualifizierten Spalten eines Index, oder `[]`, wenn er über Ausdrücke geht. */
+  const qualifiedColumns = (indexName) => {
+    const columns = db
+      .prepare('SELECT seqno, name FROM pragma_index_info(?) ORDER BY seqno')
+      .all(indexName);
+    if (columns.length === 0 || columns.some((column) => column.name === null)) return [];
+    return columns.map((column) => `${indexTables.get(indexName)}.${column.name}`);
+  };
+
+  const columnForm = new Map(
+    [...indexTables.keys()].map((name) => [name, qualifiedColumns(name).join(', ')]),
+  );
+
+  /*
+   * Die Vorbedingung des Zuordners selbst: Zwei eindeutige Indizes mit
+   * derselben Spaltenliste wären nicht auseinanderzuhalten, und die Zuordnung
+   * unten wäre geraten. Ohne diese Zeile stünde die neue Bedingung über einer
+   * Annahme statt über einer Messung.
+   */
+  const signatures = [...columnForm.values()].filter((value) => value !== '');
+  check(
+    `die Spaltenform ist eindeutig zuzuordnen (${String(signatures.length)} von ${String(indexTables.size)} Indizes nennen Spalten)`,
+    signatures.length > 0 && new Set(signatures).size === signatures.length,
+    signatures.length === 0
+      ? 'kein einziger Index nennt Spalten — dann sagt die Zuordnung darüber nichts'
+      : 'zwei eindeutige Indizes tragen dieselbe Spaltenliste',
+  );
+
+  /** Welcher Index ist es gewesen — aus der Meldung von SQLite, ganz und nicht als Teil. */
+  const violatedIndex = (raw) => {
+    const named = /^UNIQUE constraint failed: index '([^']+)'$/.exec(raw);
+    if (named !== null) return named[1];
+    const columns = /^UNIQUE constraint failed: (.+)$/.exec(raw);
+    if (columns === null) return null;
+    const wanted = columns[1]
+      .split(',')
+      .map((part) => part.trim())
+      .join(', ');
+    for (const [name, form] of columnForm) {
+      if (form !== '' && form === wanted) return name;
+    }
+    return null;
+  };
+
+  /*
+   * Und der Zuordner auf der Probe. Vier Meldungen, deren Zuordnung feststeht —
+   * darunter die aus T-230-5, an der eine Teilzeichenkettensuche scheitern
+   * würde. Die Proben messen den **Zuordner**; die Meldung, die er unten
+   * zuordnet, kommt von SQLite selbst und nicht aus dieser Aufstellung.
+   */
+  const MAPPER_PROBES = [
+    { name: "die Indexform: index 'ux_tag_name'", raw: "UNIQUE constraint failed: index 'ux_tag_name'", expected: 'ux_tag_name' },
+    { name: 'die Spaltenform: todo_status.name', raw: 'UNIQUE constraint failed: todo_status.name', expected: 'ux_todo_status_name' },
+    { name: "ux_tag_name_key bleibt ux_tag_name_key — der Fall aus T-230-5", raw: "UNIQUE constraint failed: index 'ux_tag_name_key'", expected: 'ux_tag_name_key' },
+    { name: 'eine fremde Meldung ergibt keine Zuordnung', raw: 'FOREIGN KEY constraint failed', expected: null },
+  ];
+  for (const probe of MAPPER_PROBES) {
+    const answered = violatedIndex(probe.raw);
+    check(
+      `der Zuordner: ${probe.name}`,
+      answered === probe.expected,
+      `${String(answered)} statt ${String(probe.expected)}`,
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Bestand, gegen den die Verletzungen ausgelöst werden.
   //
@@ -354,12 +465,20 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
       }
     }
 
+    /*
+     * Nicht „eine Verletzung", sondern **diese** (T-231, A-A-64). Der Wert lag
+     * schon vor: `raw` ist die Meldung von SQLite.
+     */
+    const actual = violatedIndex(raw);
+
     check(
-      `${indexName}: die Verletzung tritt ein`,
-      translated !== null,
-      raw === '' ? 'kein Wurf — die Vorbedingung stimmt nicht' : raw,
+      `${indexName}: die Verletzung tritt ein — und es ist diese`,
+      translated !== null && actual === indexName,
+      raw === ''
+        ? 'kein Wurf — die Vorbedingung stimmt nicht'
+        : `${raw} → ${actual ?? 'keinem Index zuzuordnen'}, erwartet war ${indexName}`,
     );
-    if (translated === null) return;
+    if (translated === null || actual !== indexName) return;
 
     check(
       `${indexName}: übersetzt zu ${expectedCode}`,

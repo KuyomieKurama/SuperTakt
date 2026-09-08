@@ -359,7 +359,14 @@ export function DataSection() {
         }
         consequence="Diese Zeit war bereits in einer Abrechnung. Beim nächsten Export geht sie erneut an das Abrechnungstool — die Leistung kann dadurch zweimal berechnet werden."
         acknowledgeLabel="Ich weiß, dass diese Zeit dadurch ein zweites Mal abgerechnet werden kann."
-        reasonLabel="Begründung — wird protokolliert"
+        /*
+          Zeichengleich mit dem Produkt (`BookingDialogs.tsx:342`,
+          `BookingsScreen.tsx:536`). Seit Z-16 traegt das Feld eine eigene
+          Meldung, und sie setzt die Beschriftung als erstes Wort (T-177 P-2) —
+          eine Musterseite mit einer erfundenen Beschriftung zeigte dann einen
+          Satz, den es im Produkt nicht gibt.
+        */
+        reasonLabel="Begründung für das Protokoll"
         reasonRequired
         confirmLabel="Zurücksetzen"
         onCancel={() => setResetTarget(null)}

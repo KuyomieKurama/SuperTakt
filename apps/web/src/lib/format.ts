@@ -207,6 +207,23 @@ export function calendarDayOf(timestamp: string): string {
   return DAY_FORMAT.format(new Date(timestamp));
 }
 
+/**
+ * Ein Kalendertag als deutsches Datum: `12.09.2026`.
+ *
+ * Für die Frist an einer Zeile und auf einer Karte (A-19.2). Ohne Wochentag —
+ * anders als {@link formatDayLabel}, das eine Tagesgruppe von Buchungen
+ * überschreibt und dort den Wochentag braucht, weil man Buchungen nach ihm
+ * sucht. Eine Frist wird nach dem Datum gesucht.
+ *
+ * Der Mittag als Uhrzeit ist der übliche Griff gegen Zeitzonenversatz beim
+ * Auslesen: `new Date("2026-09-12")` ist Mitternacht **UTC** und liegt westlich
+ * von Greenwich noch am Vortag. **Er rechnet nichts** — welcher Tag gemeint ist,
+ * steht schon in der Zeichenkette; hier wird er nur gesetzt.
+ */
+export function formatCalendarDay(day: string): string {
+  return DATE_FORMAT.format(new Date(`${day}T12:00:00`));
+}
+
 /** Heute, als Filterwert `YYYY-MM-DD`. */
 export function todayCalendarDay(): string {
   return DAY_FORMAT.format(new Date());

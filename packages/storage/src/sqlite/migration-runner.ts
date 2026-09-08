@@ -38,7 +38,20 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { AppliedMigration, Migration, MigrationRunnerPort, MigrationState } from '../migration.ts';
+import type {
+  AppliedMigration,
+  Migration,
+  MigrationFailureReason,
+  MigrationRunnerPort,
+  MigrationState,
+} from '../migration.ts';
+import {
+  errorCodeOf,
+  isBusyResultCode,
+  migrationFailure,
+  migrationFailureReason,
+  sqliteResultCodeOf,
+} from '../migration.ts';
 import type { Timestamp } from '@takt/domain';
 
 import { integer, secureDatabaseFiles, text, type SqlConnection } from './database.ts';
@@ -143,6 +156,47 @@ export interface MigrationRunnerOptions {
   readonly now: () => Timestamp;
   /** Ort der Sicherungskopien. Ohne Angabe neben der Datenbankdatei. */
   readonly backupDirectory?: string;
+}
+
+/**
+ * Die Meldung eines Wurfs, ohne über seine Gestalt zu raten.
+ *
+ * Sie bleibt **im Wurf** und geht nie in eine Protokollzeile — siehe
+ * `migrationFailure` in `../migration.ts`.
+ */
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : 'Unbekannter Fehler der Speicherung.';
+
+/**
+ * Ordnet einen Wurf ein, ohne seine Meldung zu benutzen (T-132).
+ *
+ * `busy` bekommt einen eigenen Zweig, weil er die einzige Störung ist, auf die
+ * ein Benutzer selbst etwas tun kann: einen zweiten Takt beenden und es noch
+ * einmal versuchen. Alles Übrige ist `fallback` mit Schlüssel und Zahl — und
+ * genau diese Zahl ist es, die die Frage beantwortet, die T-132 ausgelöst hat.
+ */
+function classify(
+  error: unknown,
+  fallback: (code: string | null, sqlite: number | null) => MigrationFailureReason,
+): MigrationFailureReason {
+  const sqlite = sqliteResultCodeOf(error);
+  if (isBusyResultCode(sqlite)) return { kind: 'database_busy', sqlite };
+  return fallback(errorCodeOf(error), sqlite);
+}
+
+/**
+ * Reicht einen bereits eingeordneten Wurf durch und ordnet jeden anderen ein.
+ *
+ * Ohne diese Prüfung bekäme ein `checksum_mismatch`, der durch eine äußere
+ * Klammer läuft, dort ein zweites Mal einen Grund — den unspezifischeren.
+ */
+function failWith(
+  error: unknown,
+  fallback: (code: string | null, sqlite: number | null) => MigrationFailureReason,
+): Error {
+  const known = migrationFailureReason(error);
+  if (known !== null) return error as Error;
+  return migrationFailure(classify(error, fallback), messageOf(error), error);
 }
 
 export function createMigrationRunner(
@@ -305,25 +359,47 @@ export function createMigrationRunner(
     }
   };
 
+  /**
+   * Den Stand lesen — und einen Fehlschlag dabei als solchen kennzeichnen
+   * (T-132).
+   *
+   * `currentState()` sieht harmlos aus, führt aber eine Abfrage aus. Genau
+   * dieser Aufruf ist der erste, der einen belegten oder beschädigten Bestand
+   * bemerkt, und bis T-132 verschwand sein Grund im `catch {}` des Dienstes.
+   */
+  const readState = (): MigrationState => {
+    try {
+      return currentState();
+    } catch (error) {
+      throw failWith(error, (code, sqlite) => ({ kind: 'state_unreadable', code, sqlite }));
+    }
+  };
+
   return {
     async state() {
-      return currentState();
+      return readState();
     },
 
     async applied() {
-      return applied();
+      try {
+        return applied();
+      } catch (error) {
+        throw failWith(error, (code, sqlite) => ({ kind: 'state_unreadable', code, sqlite }));
+      }
     },
 
     async migrateToLatest() {
-      const before = currentState();
+      const before = readState();
 
       if (before.kind === 'checksum_mismatch') {
-        throw new Error(
+        throw migrationFailure(
+          { kind: 'checksum_mismatch', version: before.version },
           `Die bereits gelaufene Migration ${before.version} unterscheidet sich von der mitgelieferten Datei. Es wird nichts migriert.`,
         );
       }
       if (before.kind === 'database_too_new') {
-        throw new Error(
+        throw migrationFailure(
+          { kind: 'database_too_new', database: before.database, known: before.known },
           `Der Bestand ist auf Stand ${before.database}, diese Fassung von Takt kennt nur ${before.known}. Bitte die neuere Fassung verwenden.`,
         );
       }
@@ -335,10 +411,29 @@ export function createMigrationRunner(
         return { from, to: from, backup: null };
       }
 
-      const backup = createBackup(conn, options, from);
+      // Die Sicherungskopie ist der eigentliche Rückweg (siehe Kopf). Scheitert
+      // sie, wird **nicht** migriert — und der Grund dafür ist ein anderer als
+      // der einer gescheiterten Migration: Hier ist der Bestand unversehrt und
+      // ungeändert, dort steht eine zurückgenommene Transaktion dahinter.
+      let backup: string | null;
+      try {
+        backup = createBackup(conn, options, from);
+      } catch (error) {
+        throw failWith(error, (code, sqlite) => ({ kind: 'backup_failed', from, code, sqlite }));
+      }
 
       for (const migration of pending) {
-        applyOne(migration, 'up', options.now());
+        try {
+          applyOne(migration, 'up', options.now());
+        } catch (error) {
+          throw failWith(error, (code, sqlite) => ({
+            kind: 'migration_failed',
+            version: migration.version,
+            direction: 'up',
+            code,
+            sqlite,
+          }));
+        }
       }
 
       return { from, to: highestKnown(), backup };
@@ -352,11 +447,22 @@ export function createMigrationRunner(
         if (row.version <= targetVersion) break;
         const migration = migrations.find((entry) => entry.version === row.version);
         if (migration === undefined) {
-          throw new Error(
+          throw migrationFailure(
+            { kind: 'no_way_back', version: row.version },
             `Für die gelaufene Migration ${row.version} gibt es keine Datei. Der Rückweg ist nicht gangbar.`,
           );
         }
-        applyOne(migration, 'down', options.now());
+        try {
+          applyOne(migration, 'down', options.now());
+        } catch (error) {
+          throw failWith(error, (code, sqlite) => ({
+            kind: 'migration_failed',
+            version: migration.version,
+            direction: 'down',
+            code,
+            sqlite,
+          }));
+        }
       }
 
       const after = applied().reduce((max, row) => Math.max(max, row.version), 0);

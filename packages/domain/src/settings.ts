@@ -55,6 +55,29 @@ export interface AppSettings {
   readonly roundingMode: RoundingMode;
   readonly locale: string;
   readonly theme: Theme;
+  /**
+   * Die übersprungene Fassung der Versionsprüfung (A-18.10, R-20, E-064
+   * Punkt 5). `null` heißt: nichts übersprungen.
+   *
+   * Sie steht **hier** und nicht im Arbeitsspeicher und nicht im
+   * Browserspeicher. Ein nur für die Sitzung gemerktes Überspringen meldete
+   * sich beim nächsten Start wieder — und ein Hinweis, den man nicht loswird,
+   * wird ungelesen weggeklickt, danach auch der, der zählt (R-20).
+   *
+   * Übersprungen wird **eine Fassung, nicht die Prüfung**: Eine spätere,
+   * höhere Fassung meldet sich wieder. Die Regel dazu steht in
+   * `decideUpdateNotice` (version.ts) und nicht an einer Anzeigestelle.
+   *
+   * Der Wert ist **Benutzereingabe** (T-136-4, VG-6): Jeder Prozess mit dem
+   * Sitzungsgeheimnis kann ihn setzen. Er wird an seiner Tür geprüft — beim
+   * Schreiben **und** beim Lesen —, und ein unbrauchbarer gespeicherter Wert
+   * heißt „nichts übersprungen". Schaden im schlimmsten Fall: ein
+   * unterdrückter Hinweis. Er geht in **keine** Adresse; die Adresse baut die
+   * Hülle aus der Fassung, die sie selbst geprüft hat (A-V-16).
+   *
+   * Ohne führendes `v`, wie jede Fassung nach der Domäne (E-066 Punkt 3).
+   */
+  readonly skippedVersion: string | null;
   readonly updatedAt: Timestamp;
 }
 
@@ -65,6 +88,8 @@ export interface AppSettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
   readonly theme?: Theme;
+  /** `null` setzt „nichts übersprungen" zurück. Nicht gesetzt heißt unverändert. */
+  readonly skippedVersion?: string | null;
   readonly now: Timestamp;
 }
 
@@ -96,7 +121,22 @@ export interface AppSettingsUpdate {
  *                  Betriebssystem selbst benennt. Auch dann, wenn Windows nicht
  *                  auf `C:` liegt.
  */
-export type ExportDirectoryTrait = 'unc' | 'network' | 'sync_folder' | 'system_dir';
+export type LocationTrait = 'unc' | 'network' | 'sync_folder' | 'system_dir';
+
+/**
+ * Derselbe Vorrat, unter seinem alten Namen (T-132, O-C).
+ *
+ * Die vier Merkmale sagen nichts über den **Zweck** eines Ortes, sondern über
+ * seine Art. Sie gelten deshalb für den Exportordner genauso wie für den Ort
+ * des Datenbestands — und der ist der Ort, an dem E-018 hängt: Liegt der
+ * Bestand in einem Synchronisierungsordner, verlässt die Kundendatenbank den
+ * Rechner (R-13, B-5.3).
+ *
+ * Der alte Name bleibt, weil er an mehreren Flächen steht und weil ein
+ * umbenannter Typ hier nichts gewinnt. Wer den Ort des Bestands meint, schreibt
+ * {@link LocationTrait}; beide sind dasselbe.
+ */
+export type ExportDirectoryTrait = LocationTrait;
 
 /**
  * Ergebnis der Prüfung eines Exportordners (E-011, R-11).

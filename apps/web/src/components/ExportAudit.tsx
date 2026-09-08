@@ -167,7 +167,7 @@ export function ExportAuditList({
           {model.reason.trim().length === 0 ? (
             model.event === "not_billed" ? (
               <p className="auditrow__reason auditrow__reason--absent">
-                Ohne Begründung ausgebucht. Das Feld ist freiwillig (E-047) — protokolliert ist
+                Ohne Begründung ausgebucht. Das Feld ist freiwillig — protokolliert ist
                 trotzdem, dass hier jemand Zeit ohne Abrechnung abgehakt hat, und wann.
               </p>
             ) : null

@@ -38,6 +38,7 @@
 import { Hono } from 'hono';
 
 import type {
+  CalendarDay,
   CallNumberRejection,
   StatusId,
   TagId,
@@ -46,12 +47,7 @@ import type {
   Timestamp,
   TodoId,
 } from '@takt/domain';
-import {
-  CALL_NUMBER_MAX_LENGTH,
-  CALL_NUMBER_MIN_LENGTH,
-  checkCallNumber,
-  normalizeCallNumber,
-} from '@takt/domain';
+import { CALL_NUMBER_INPUT_MESSAGE, checkCallNumber, normalizeCallNumber } from '@takt/domain';
 
 /*
  * Der einzige Import **dieser Datei** aus dem übrigen Dienst, und er holt genau
@@ -148,28 +144,27 @@ const REJECTION_TEXT: Readonly<Record<CallNumberRejection, string>> = Object.fre
   formula_start: 'Die erkannte Call-Nummer beginnt mit einem Zeichen, das nicht zulässig ist.',
 });
 
-/**
- * Warum eine **eingetragene** Call-Nummer nicht angenommen wird (T-041, T-046).
+/*
+ * Hier stand bis T-190 `CALL_NUMBER_INPUT_TEXT` — warum eine **eingetragene**
+ * Call-Nummer nicht angenommen wird (T-041, T-046).
  *
- * Zweite Liste neben {@link REJECTION_TEXT}, mit Absicht: Dort geht es um einen
- * Wert, den das Add-in aus einer E-Mail **erkannt** hat, hier um einen, den ein
- * Mensch eingetragen hat. „Es wurde keine Call-Nummer erkannt" ist auf ein
- * Eingabefeld bezogen falsch, und derselbe Satz für beide Fälle wäre in einem
- * der beiden eine Unwahrheit.
+ * Die fünf Sätze stehen jetzt als `CALL_NUMBER_INPUT_MESSAGE` in
+ * `packages/domain/src/call-number.ts`, weil sie an **zwei** Flächen gebraucht
+ * werden: hier an der Tür und im Aufgabenbereich am Eingabefeld
+ * (`apps/outlook-addin/src/callnumber/labels.ts` führte sie als
+ * `INPUT_REJECTION_LABEL`). Beide Flächen liegen in verschiedenen Paketen mit
+ * verschiedenen Eigentümern, und als T-188 nachgemessen hat, waren zwei der
+ * fünf Sätze bereits auseinandergelaufen, ohne dass einer der beiden
+ * Eigentümer es hätte bemerken können. `empty` gilt seither ohne Anrede
+ * (E-080 Punkt 4), `too_long` mit dem Nachsatz über die Duplikatsuche
+ * (E-078 Punkt 1 — die Folge ist R-15).
  *
- * `Record<CallNumberRejection, string>` statt `Record<string, string>`: Nimmt
- * die Domäne einen Ablehnungsgrund auf, fehlt hier ein Schlüssel und `tsc`
- * bricht ab. Sonst fiele der neue Grund in einen Ersatztext, und der Benutzer
- * läse etwas, das nicht zu seiner Eingabe passt.
+ * {@link REJECTION_TEXT} bleibt und bleibt **eine zweite Liste**. Dort geht es
+ * um einen Wert, den das Add-in aus einer E-Mail **erkannt** hat, hier um
+ * einen, den ein Mensch eingetragen hat. Derselbe Satz für beide Fälle wäre in
+ * einem der beiden eine Unwahrheit — das ist der Unterschied zwischen zwei
+ * Aussagen und zwei Fassungen einer Aussage.
  */
-const CALL_NUMBER_INPUT_TEXT: Readonly<Record<CallNumberRejection, string>> = Object.freeze({
-  empty: 'Die Call-Nummer ist leer. Lassen Sie das Feld frei, wenn es keine gibt.',
-  too_short: `Eine Call-Nummer braucht mindestens ${String(CALL_NUMBER_MIN_LENGTH)} Zeichen.`,
-  too_long: `Eine Call-Nummer darf höchstens ${String(CALL_NUMBER_MAX_LENGTH)} Zeichen haben.`,
-  forbidden_characters:
-    'Erlaubt sind Buchstaben, Ziffern, Punkt, Schrägstrich, Bindestrich und Unterstrich — keine Leerzeichen.',
-  formula_start: 'Eine Call-Nummer darf nicht mit =, +, - oder @ beginnen.',
-});
 
 export function createAddinRoutes(deps: AddinDeps): Hono {
   const routes = new Hono();
@@ -270,6 +265,25 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    *    beschrieben, weil er sonst als 500 erschiene.
    *
    * In beiden Fällen ist **nichts** angelegt worden, auch kein Tag.
+   *
+   * **Seit T-149 nimmt diese Route eine `dueDate` entgegen** (A-19.21, E-074).
+   * Der Tag wird **eingetragen** und nicht erkannt: Es gibt kein Muster, das
+   * ihn aus dem Betreff oder dem Text der E-Mail liest, und es soll keines
+   * geben (E-074 Punkt 4). Geprüft wird er trotzdem wie jedes andere Feld
+   * dieser Tür, mit derselben Prüfung wie `POST /todos` — `dueDateSchema` und
+   * darunter `isCalendarDay` aus `@takt/domain`. Ein unmöglicher Tag
+   * (`2026-02-30`), ein Zeitstempel oder freier Text ergibt 422 mit
+   * `details[].field = "dueDate"`.
+   *
+   * **Ein Anhang entsteht hier weiterhin nicht** (A-19.19, E-074 Punkt 3,
+   * A-A-21, A-A-22). Das ist keine Voreinstellung, sondern der Schnitt: Diese
+   * Route hat kein Anhangsfeld, `AddinUnit` hat keinen `AttachmentPort`, und
+   * die Anhangsrouten liegen unter `/api/v1/todos/{todoId}/attachments`,
+   * also außerhalb von `/addin` und für das Add-in-Token unerreichbar. Ein
+   * mitgeschicktes `attachments`, `attachment` oder `attachmentUrl` fällt in
+   * zod still weg und ist damit ohne Wirkung — gemessen wird nicht der
+   * Statuscode, sondern die Wirkung: null Zeilen in `todo_attachment`
+   * (`proof:addin` Abschnitt 18).
    */
   routes.post('/todos', async (c) => {
     const body = await readJson(c.req.raw);
@@ -290,7 +304,7 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
           errorBody('validation_error', [
             {
               field: 'callNumber',
-              message: CALL_NUMBER_INPUT_TEXT[checked.reason],
+              message: CALL_NUMBER_INPUT_MESSAGE[checked.reason],
               // Der Schlüssel der Domäne, nicht ein Zod-Code: Das Add-in soll
               // gegen denselben Grund verzweigen können, den es beim Erkennen
               // schon kennt.
@@ -309,6 +323,23 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
       tagIds: parsed.data.tagIds as readonly string[] as readonly TagId[],
       tagNames: parsed.data.tagNames,
       note: parsed.data.note,
+      /*
+       * Die Frist (A-19.21, E-074, T-149).
+       *
+       * Ohne `?? null` und ohne Umdeutung: Das Schema trägt `.default(null)`,
+       * `parsed.data.dueDate` ist damit bereits `string | null`. Ein `?? null`
+       * an dieser Stelle sähe aus wie eine Vorsichtsmaßnahme und wäre der
+       * Hinweis darauf, dass die Tür einen dritten Fall kennt, den sie nicht
+       * kennt.
+       *
+       * Die Zusicherung `as CalendarDay | null` ist die einzige an dieser
+       * Route, die nach einer echten Prüfung steht und nicht davor:
+       * `dueDateSchema` hat `isCalendarDay` aus `@takt/domain` bereits laufen
+       * lassen. Sie behauptet also nichts, sondern trägt ein Ergebnis in den
+       * Typ — anders als `statusId as StatusId | null` darüber, wo die
+       * Kennung erst der Bestand prüft.
+       */
+      dueDate: parsed.data.dueDate as CalendarDay | null,
     });
 
     if (!result.ok) {

@@ -41,6 +41,8 @@ import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { errorCodeOf } from '@takt/storage';
+
 import { BIND_ADDRESS } from '../config.ts';
 import { taskpaneCertPath, taskpaneKeyPath } from '../access/paths.ts';
 import { loadOrCreateCertificate } from './certificate.ts';
@@ -186,11 +188,19 @@ export async function startTaskpaneServer(
   });
 
   return await new Promise<TaskpaneServer | null>((done) => {
-    server.on('error', () => {
+    server.on('error', (error: unknown) => {
       // Belegter Port oder fehlende Berechtigung. Der Dienst läuft weiter.
+      //
+      // **Welches von beidem, steht seit T-132 daneben.** Ein belegter Port
+      // (`EADDRINUSE`) verlangt eine andere Nacharbeit als ein fehlendes Recht
+      // (`EACCES`), und die Zeile sagte bis dahin nur, dass es nicht ging.
+      // `errorCodeOf` lässt nur Schlüssel der Laufzeit durch — kein Pfad,
+      // keine Meldung (B-2.4).
+      const code = errorCodeOf(error);
       options.logger.lifecycle(
         'warn',
         `Der Aufgabenbereich konnte auf Port ${options.port} nicht bereitgestellt werden.`,
+        `taskpane_listen_failed port=${options.port}${code === null ? '' : ` code=${code.toLowerCase()}`}`,
       );
       done(null);
     });

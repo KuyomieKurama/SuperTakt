@@ -39,7 +39,9 @@ import { Icon, type IconName } from "./Icon";
  *
  * Die vier Anzeigezustaende unterscheiden sich in **sechs** voneinander
  * unabhaengigen Merkmalen, damit die Unterscheidung nicht an der Farbe haengt
- * und auch bei Farbfehlsichtigkeit und in Graustufen traegt:
+ * und auch bei Farbfehlsichtigkeit und in Graustufen traegt — die **Schraffur**
+ * in der Spalte Fuellung zaehlt dabei nicht mit, sie ist eine Verstaerkung und
+ * kein Traeger (Rechenweg bei `.badge--reopened` in `styles/components.css`):
  *
  *   |                    | Fuellung           | Kontur      | Punkt    | Symbol        | Beschriftung      | Zeilenrand |
  *   |--------------------|--------------------|-------------|----------|---------------|-------------------|------------|

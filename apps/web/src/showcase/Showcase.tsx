@@ -6,6 +6,7 @@ import { useDensity, useThemePreference, type Density, type ThemePreference } fr
 import { BoardSection } from "./BoardSection";
 import { ControlsSection } from "./ControlsSection";
 import { DataSection } from "./DataSection";
+import { DeadlineSection } from "./DeadlineSection";
 import { ExportDirectorySection } from "./ExportDirectorySection";
 import { WorkstationSection } from "./WorkstationSection";
 import { ExportPreviewSection } from "./ExportPreviewSection";
@@ -18,6 +19,7 @@ import { RuleSection } from "./RuleSection";
 import { ShellStateSection } from "./ShellStateSection";
 import { TagsSection } from "./TagsSection";
 import { TimeSection } from "./TimeSection";
+import { UpdateNoticeSection } from "./UpdateNoticeSection";
 
 interface NavEntry {
   readonly id: string;
@@ -45,6 +47,8 @@ const NAV: readonly NavEntry[] = [
   { id: "bausteine", label: "9 — Bedienelemente und Zustände" },
   { id: "huelle", label: "10 — Wenn Takt nicht startet" },
   { id: "inventar", label: "11 — Komponenteninventar" },
+  { id: "fassung", label: "12 — Neuere Fassung (A-18)" },
+  { id: "frist", label: "13 — Frist und Anhänge (A-19)" },
 ];
 
 /**
@@ -166,6 +170,8 @@ function ShowcasePage() {
           <ControlsSection />
           <ShellStateSection />
           <InventorySection />
+          <UpdateNoticeSection />
+          <DeadlineSection />
         </main>
       </div>
     </div>

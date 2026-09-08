@@ -106,6 +106,9 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Welche Zeichen in einem Namen nichts zu suchen haben | `characters.ts` → `hasForbiddenNameCharacter` | R-3a H-2, E-063 |
 | Fremden Text bereinigen und anzeigen | `characters.ts` → `dropHiddenCharacters`, `visibleText` | E-063 |
 | Namen deutsch aufzählen: „A“, „A und B“, „A, B und C“ | `enumeration.ts` → `enumerateNames` | E-058 Punkt 4 |
+| Die Ordnung der Fassungen (SemVer-Vorrang, kein Zeichenkettenvergleich) | `version.ts` → `compareVersions`, `comparePrecedence` | A-18.4, E-064 Punkt 3, E-066 Punkt 3 |
+| Ist das überhaupt eine Fassungsbezeichnung? | `version.ts` → `checkVersion` | A-18.11, A-V-8 |
+| Wann sich Takt meldet: neuer **und** nicht übersprungen | `version.ts` → `decideUpdateNotice` | A-18.5, A-18.10, E-064 Punkt 3 |
 
 Die Zeile zum Bewegungssatz ist mit T-089 dazugekommen, und sie war die erste der Tabelle, die
 keine Fachregel enthält, sondern einen **Text**. Sie steht trotzdem hier und aus demselben Grund wie
@@ -498,7 +501,7 @@ Grund, warum es drei Sekunden sind und nicht dreihundert Millisekunden.
 |---|---|---|
 | `exportDirectoryAdvice.ts` | **warnt**, während getippt wird, aus dem Pfad heraus | `apps/web/src/lib/` |
 | `checkExportDirectory` | **entscheidet**: vorhanden, Ordner, beschreibbar, erreichbar | `packages/storage/src/sqlite/file-port.ts` |
-| `DirectoryInsightPort` | **belegt**, was für ein Ordner das ist | `apps/local-api/src/access/export-directory.ts` |
+| `DirectoryInsightPort` | **belegt**, was für ein Ort das ist | `apps/local-api/src/access/export-directory.ts` |
 
 Die dritte Zeile ist mit T-039 dazugekommen und schließt eine Lücke, die die erste offen lassen
 muss: Ob `Z:\` ein Netzlaufwerk ist, steht nicht im Pfad, und ein umbenannter OneDrive-Ordner
@@ -517,6 +520,19 @@ Warum der Adapter in `apps/local-api/src/access/` liegt und nicht bei der Prüfu
 Umgebungsvariablen und Dateisystemarten. Das ist Auskunft über den **Rechner** und nicht über
 eine Speicherung — dieselbe Sorte Wissen wie in `paths.ts` (wo liegt das
 Anwendungsdatenverzeichnis) und `token-store.ts` (welche Rechte hat diese Datei).
+
+**Nicht nur der Exportordner** (T-132, O-C). Der Port hieß bis dahin
+`describeExportDirectory`, und der Ort des **Datenbestands** bekam gar keine Antwort:
+`GET /settings` lieferte dazu nur den Pfad, und der Benutzer musste ihn ansehen und raten. Das
+ist die falsche Seite herum — im Exportordner liegt, was exportiert wurde, im Bestand liegt
+alles, einschließlich der internen Vermerke (A-7.2). Liegt er in einem Synchronisierungsordner,
+verlässt die Kundendatenbank den Rechner (E-018, R-13, B-5.3), und unabhängig synchronisierte
+WAL-Dateien beschädigen ihn obendrein.
+
+Die Frage heißt deshalb `describeLocation` und wird für beide Orte gestellt. `GET /settings`
+liefert seither `databaseTraits` aus demselben Vorrat und `databaseFilesTooPermissive` — eine
+**Zahl** und keine Pfadliste (B-7.2): „zwei Dateien liegen offen", nicht welche. `null` heißt
+„nicht messbar" (Windows, Bestand im Arbeitsspeicher) und ausdrücklich nicht `0`.
 
 **Base64 ist eine Kodierung, keine Verschlüsselung (A-8.9, R-05).** Die Datei enthält
 Kundendaten im Klartextäquivalent. Das gehört in die Benutzerdokumentation und ins
@@ -893,8 +909,8 @@ weil sein gelingender Zug über die Testhilfe lief und am Code der Oberfläche v
 eingeordnet. Richtig, und unvollständig: Niemand hat gefragt, ob ihn jemand *sendet*.
 
 `pnpm run proof:callers` (`apps/local-api/scripts/proof-callers.mjs`, in der `check`-Kette) liest
-`apps/web/src/api/endpoints.ts` mit dem TypeScript-Syntaxbaum und hält jeden Aufruf gegen den
-Dienst:
+die **beiden** Aufrufer des Dienstes mit dem TypeScript-Syntaxbaum — `apps/web/src/api/endpoints.ts`
+und, seit T-132, `apps/outlook-addin/src/api/client.ts` — und hält jeden Aufruf gegen den Dienst:
 
 * **Weg.** Methode und Pfad jedes `request(...)` müssen eine Operation treffen. `/todos/${id}`
   und `/todos/{todoId}` treffen sich in `/todos/{}`. Die Gegenrichtung gilt auch: Jede Operation
@@ -936,6 +952,25 @@ während die Oberfläche es sendete. Dieselbe Bauart wie `nurOffene`. Die Route 
 T-039 — dort als Feld, das die *Beschreibung* führte und der Dienst nicht las. Die Antwort war
 damals, es aus der Beschreibung zu streichen. Dass zugleich die *Oberfläche* es sendete, hat
 niemand gesehen, weil niemand danach gesehen hat.
+
+**Die zweite Tür war bis T-132 nicht dabei** (O-M). Hier stand: „Das Add-in ruft dieselben Routen
+unter `/addin/*` an und hat seinen eigenen Nachweis (`proof:addin-wiring`)." Der Satz war richtig
+und die Schlussfolgerung falsch: `proof:addin-wiring` fährt den **Dienst** und prüft, dass die
+Kette hält; er sieht sich nicht an, welche Schlüssel der Aufgabenbereich in seine Rümpfe
+schreibt. Genau die Frage aus T-050, für die zweite Tür offen.
+
+Beide Aufrufer laufen jetzt durch **denselben** Leser mit demselben Urteil. Sie unterscheiden
+sich in der Gestalt ihres Aufrufs — `request(pfad, optionen)` gegen
+`call(methode, pfad, abfrage, rumpf)` — und in der Vorsilbe des Pfades (`/api/v1`); beides steht
+als `CALL_SHAPES` in `caller-scan.mjs`. Ein zweiter Leser wäre die falsche Antwort gewesen: Zwei
+Leser sind zwei Auffassungen davon, was ein Aufruf ist, und eine läuft der anderen davon — genau
+das Muster, das T-114 an zwei Eingabeschemata gefunden hat.
+
+Damit ist auch die Gegenrichtung für `/addin/*` eingelöst: Jede der vier Add-in-Operationen hat
+einen nachgewiesenen Aufrufer, `fetch` steht im Add-in nur in `api/client.ts`, und die
+Selbstprobe setzt drei erfundene Fehler in den echten Text ein — einen Rumpfschlüssel, einen
+Abfrageschlüssel, einen Weg — und verlangt für jeden genau eine Beanstandung. Die
+Add-in-Routen selbst gehören integration-dev; dieser Lauf **liest** sie und ändert sie nicht.
 
 ### 5.0b Was im Baum steht, muss ein Mensch lesen können (T-128)
 
@@ -988,6 +1023,7 @@ Grundpfad `/api/v1`. Substantive, Mehrzahl, Bindestrich statt Unterstrich, kein 
 | `/token` | `GET` Zustand, `POST` neu erzeugen. Nur mit dem Sitzungsgeheimnis, siehe 6.4 |
 | `/security/notices` | Fehlversuche und Vorfälle als Zählwerte, ohne einen Wert aus einer Anfrage |
 | `/health` | Hinter der Token-Prüfung, siehe 6.3 |
+| `/version-check` | Was der Dienst zuletzt über die veröffentlichte Fassung auf GitHub erfahren hat (A-18.2, E-069). **Sie liest ab, sie fragt nicht** — siehe 5.7. Zwei Felder, `state` und `latestVersion`, mehr nicht |
 
 **Warum `/timer/start` und `/timer/stop` statt `POST` und `DELETE` auf `/timer`.** Die
 Ressourcenform wäre sauberer, aber beide Vorgänge tragen Fachlogik, die ein Leser der
@@ -1191,7 +1227,162 @@ einem nachgebauten **Installationsbild** (Binärdatei, daneben das `taskpane`-B�
 leeren Arbeitsverzeichnis und verlangt beide Ports: 17843 mit einer Fachroute, die nur aus einem
 migrierten Schema antworten kann, und 17844 mit der `index.html` aus dem Bündel neben der Datei.
 
+### 5.6 Der Startabbruch nennt seinen Grund (T-132)
+
+Am 2026-09-04 um 18:57 startete Takt nicht. Der Sidecar schrieb eine Zeile — „Der Datenbestand
+konnte nicht auf den Stand dieser Fassung gebracht werden. Takt startet nicht." —, ein zweiter
+Anlauf lief durch, und der Grund war nicht mehr zu ermitteln. Nicht zufällig: `main.ts` fing den
+Wurf mit `catch {` **ohne Bindung** ab. Der Fehlerwert wurde nie angesehen.
+
+Die Begründung stand als Kommentar daneben und war die halbe Wahrheit: Der Grund könne einen
+Dateipfad enthalten, und B-2.4 verbiete das. **B-2.4 verbietet den Pfad, nicht den Grund.**
+
+Der Startpfad ist deshalb umgebaut:
+
+* Der Läufer hängt an jeden Wurf einen **Wert** mit benannten Feldern
+  (`MigrationFailureReason`, datenmodell.md 8.2a). Zahlen und Schlüssel aus geschlossenen
+  Vorräten, keine Meldung.
+* `apps/local-api/src/startup.ts` macht daraus **zwei Auskünfte**: einen deutschen Satz für den
+  Menschen — er sagt, was los ist und was zu tun ist, und nennt keine Fassungsnummer — und einen
+  technischen Schlüssel für die Protokollzeile. Dieselbe Rolle wie `outcome` bei einer Anfrage.
+* Der Protokollierer lässt für den Schlüssel nur einen engen Zeichenvorrat durch
+  (`[a-z0-9_]`, `name=wert`, kein Trenner). Was nicht passt, wird `unclassified`. Damit hängt die
+  Zusage nicht an der Sorgfalt der nächsten Aufrufstelle.
+* Der Schritt selbst nimmt zwei Schnittstellen entgegen und ist damit **ohne laufenden Dienst**
+  prüfbar.
+
+**Zwei weitere Stellen, an denen im Startpfad ein Grund verschwand**, sind mitbehandelt:
+
+* `compose()` stand in **keiner** Klammer. Ein Wurf beim Öffnen des Bestands lief an `main.ts`
+  vorbei und endete im Auffangnetz des gebündelten Sidecars, das `error.message` nach `stderr`
+  schreibt — ausgerechnet dort kann ein Pfad stehen (`ENOENT: … open '/home/…'`), und aus dem
+  Quelltext gestartet kam der ganze Aufrufstapel dazu. Der Fall, gegen den B-2.4 geschrieben ist,
+  war also der ungefangene.
+* Der Aufgabenbereich (`startTaskpaneServer`) meldete „geht nicht" ohne zu sagen, ob ein
+  Zertifikat fehlt, ein Recht oder der Port. Er nennt jetzt den Fehlerschlüssel der Laufzeit.
+
+**Was der Beendigungscode weiterhin nicht unterscheidet**, ist eine offene Naht zur Hülle: 78
+steht für fehlendes Startgeheimnis, fehlenden Benutzernamen, fehlendes
+Anwendungsdatenverzeichnis **und** für einen Bestand, der nicht auf den Stand zu bringen war. Die
+Hülle erklärt 78 mit „Startgeheimnis oder Windows-Benutzername oder Anwendungsdatenverzeichnis"
+und liegt im vierten Fall daneben. Das gehört zusammen mit O-AJ entschieden und nicht nebenbei.
+
 ---
+
+### 5.6a Was der Start aufräumt — und was er dabei nie anfasst (T-168, A-A-18)
+
+Zwei Sorten Kundenmaterial bleiben liegen, wenn ein Vorgang abbricht, und beide gehören dem
+Benutzer, nicht Takt:
+
+* eine **halbe Exportdatei** (`.takt-*.tmp`), wenn der Dienst zwischen Schreiben und Umbenennen
+  endet. Sie enthält Kundendaten (A-8.9, R-05) und belegt nichts — die Transaktion ist
+  zurückgenommen.
+* eine **Bildkopie ohne Anhang**, wenn das Entfernen scheitert (unter Windows genügt ein
+  geöffneter Betrachter, `EBUSY`) oder wenn Migration 0015 zurückgeht. SQL kennt kein
+  Dateisystem; der Rückweg nimmt die Zeilen mit und die Dateien nicht.
+
+Beides räumt der Start auf, jedes mit einer Zeile im Protokoll und nur dann, wenn es etwas
+gefunden hat. Bis T-168 war die Gegenmaßnahme für den zweiten Fall ein Satz in der Migration, der
+einen Menschen bittet, einen Ordner von Hand zu leeren — das ist keine Maßnahme, sondern eine
+Hoffnung.
+
+**Drei Bedingungen, und die erste trägt die anderen beiden.**
+
+1. **Entfernt wird nur, was nachweislich zu keinem Bestand gehört.** Im Zweifel bleibt es liegen.
+   Der Nachweis besteht aus drei Riegeln, von denen jeder einzelne eine Datei verschont:
+   `listImages` nennt nur Namen, die der Adapter erzeugt haben könnte (32 Hexziffern, vier
+   Endungen) und nur Dateien — ein Unterordner, eine fremde Datei, eine halbe Kopie bleiben
+   unsichtbar; `knownImageTargets` wird **gefragt**, und nur eine Antwort ohne den Namen macht
+   ihn zum Waisen; bleibt die Antwort aus, wird gar nichts entfernt; `removeImage` misst die Form
+   noch einmal und verlässt sich nicht auf den Aufrufer.
+2. **Still, wenn nichts liegt.** Der Regelfall schreibt keine Zeile. Gemeldet wird eine Zahl, und
+   nur, wenn wirklich etwas fort ist. Ein Lauf, der bei jedem Start seine Untätigkeit meldet,
+   wird nach dem dritten Mal nicht mehr gelesen.
+3. **Er hält den Start nicht auf.** Ein Verzeichniseintrag (5 000 Dateien: knapp 4 ms gemessen)
+   und eine Abfrage in Blöcken über den Teilindex `ix_todo_attachment_image` aus Migration 0015.
+   Die Tabelle wird nicht in den Speicher geladen.
+
+**Die Reihenfolge ist Teil des Nachweises, nicht eine Frage des Geschmacks:** erst das
+Verzeichnis lesen, dann den Bestand fragen. Eine Kopie, die zwischen beiden Schritten entsteht,
+steht in der Antwort und überlebt. Umgekehrt fiele genau die frische Kopie dem Aufräumen zum
+Opfer, deren Zeile eine Sekunde später geschrieben wird. Aus demselben Grund läuft der Schritt
+**vollständig, bevor der Dienst zuhört**, und nicht nebenher im Hintergrund: Solange keine Route
+erreichbar ist, gibt es dieses Rennen nicht.
+
+**Und was er nicht anfasst:** den Startabbruch aus 5.6. Er läuft nach der Migration, sein
+Rückgabewert wird von niemandem gelesen, und es gibt keinen Ausgang, an dem er den Dienst am
+Starten hindern könnte. Ein Aufräumen, das den Start verhindert, hätte den Zweck verfehlt.
+
+---
+
+### 5.7 Die eine Verbindung nach außen (T-138, A-18, E-064, E-066, E-069, R-19)
+
+Bis T-138 galt der stärkste einzelne Satz dieses Entwurfs: Takt kennt keine Adresse außerhalb von
+`127.0.0.1` (E-001). Er gilt weiter, mit **einer** benannten Ausnahme — der Versionsprüfung. Eine
+Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
+`apps/local-api/src/version/source.ts`.
+
+**Die Richtung der Daten, und wo welche Prüfung liegt.**
+
+```text
+  GitHub (api.github.com)
+        │  (1) Antwort: beliebig groß, beliebig geformt, fremder Text
+        ▼
+  apps/local-api/src/version/source.ts    ← hier liegt die ganze Prüfung
+        │  (2) heraus: eine geprüfte Fassungsbezeichnung, sonst nichts
+        ▼
+  version/checker.ts                      ← hält sie im Arbeitsspeicher
+        │  (3) GET /api/v1/version-check
+        ▼
+  apps/web                                ← vergleicht, zeigt an
+        │  (4) takt_open_release(version)  — keine Adresse
+        ▼
+  apps/desktop/src-tauri                  ← baut die Adresse selbst
+```
+
+**Vier Eigenschaften, und jede ist eine Entscheidung.**
+
+1. **Die Frage stellt der Dienst, nicht die Oberfläche.** Die CSP der Hülle lässt den Webview nur
+   an sich selbst, `ipc:` und `http://127.0.0.1:17843`. Sie wird dafür nicht geöffnet: Eine Liste,
+   die man für eine Funktion aufmacht, bleibt für alles andere offen — ein XSS im Webview wäre
+   damit ein Weg ins Netz.
+
+2. **Der Netzaufruf liegt nie in einem Anfragebehandler** (A-V-10, E-069). Der Dienst prüft nach
+   der Uhr: einmal wenige Sekunden nach dem Start, danach höchstens einmal in 24 Stunden, mit
+   einem harten Boden von 60 Minuten. Die Route `GET /version-check` gibt das Ergebnis heraus und
+   löst **nie** eine Anfrage aus.
+
+   Der naheliegende Entwurf — die Oberfläche fragt eine Route, die Route fragt GitHub — ist genau
+   deshalb ausgeschlossen: Der Dienst ist für jeden lokalen Prozess erreichbar (VG-1), und ein
+   Prozess mit dem Sitzungsgeheimnis könnte die Route in einer Schleife aufrufen. Takt würde zum
+   Anfragegenerator, das Lebenszeichen aus R-19 würde von einem Dritten getaktet, und die 60
+   Anfragen je Stunde und Quelladresse wären in Sekunden verbraucht.
+
+3. **Aus der Antwort verlässt genau eine geprüfte Fassungsbezeichnung den Dienst** (A-V-7,
+   A-V-14). Gelesen wird ein Feld: `tag_name`. `html_url`, `body`, `name` und `assets` werden
+   nicht gelesen, nicht protokolliert, nicht gespeichert, nicht weitergereicht. `html_url` ist der
+   gefährlichste von ihnen: Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen wäre
+   dieselbe Bauart wie eine offene Weiterleitung — nur mit dem Browser des Benutzers als Ziel.
+
+4. **Ein Fehlschlag ist still** (A-18.11). Nicht erreichbar, unerwartete Antwort, fehlende
+   Fassungsangabe, keine Veröffentlichung: kein Hinweis, keine Fehlerfläche, **kein zweiter
+   Versuch im selben Lauf**. Der Zeitgeber wird nach einem Fehlschlag nicht neu gestellt. Der
+   Grund steht im Protokoll — als technischer Schlüssel aus einem geschlossenen Vorrat, in
+   derselben Bauart wie 5.6.
+
+**Die Naht, und was sie nicht ist.** Die Adresse ist eine Konstante im Erzeugnis: nicht aus einer
+Umgebungsvariablen, nicht aus einer Einstellung, nicht aus der Datenbank, nicht aus einem Argument
+(der Sidecar kennt keine). Austauschbar ist die **Abholfunktion** — der Prüflauf setzt eine eigene
+ein und lenkt sie mit denselben Optionen auf einen lokalen Prüfserver. Das ist dieselbe Bauform
+wie bei jedem anderen Port dieses Zusammenbaus (1.3), und sie gilt nur unter einer Bedingung:
+`proof:release-safety` misst, dass im ganzen Baum genau **eine** Abfrageadresse steht, dass kein
+Weg von einer Antwort zum Öffnen-Befehl führt und dass nirgends eine Datei heruntergeladen wird.
+Ohne diesen Nachweis wäre die Naht ein Schalter, den nur noch niemand gefunden hat.
+
+**Was `compose()` dabei tut: nichts.** Der Prüfer wird gebaut und **nicht gestartet**. Kein
+Nachweispfad und kein Prüffall, der den Dienst zusammenbaut, schickt dadurch ein Lebenszeichen.
+Gestartet wird an genau einer Stelle, in `main.ts`, und auch dort erst wenige Sekunden nach dem
+Hochfahren — ein Lauf, der keine Sitzung war, gibt damit gar keines ab.
 
 ## 6. Token und Vertrauensgrenze
 

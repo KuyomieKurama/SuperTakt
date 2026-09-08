@@ -86,7 +86,30 @@ export type PatternCheck = PatternCheckOk | PatternCheckError;
 export const PATTERN_MAX_LENGTH = 200;
 
 const MESSAGES: Readonly<Record<Exclude<PatternRejection, 'syntax'>, string>> = Object.freeze({
-  empty: 'Der Ausdruck ist leer. Trage ein Muster ein oder wähle eines aus der Liste.',
+  /*
+   * T-182, E-080: Hier stand „Trage ein Muster ein oder wähle eines aus der
+   * Liste." — ein Imperativ im Du, und damit die siebte Stelle, an der das
+   * Add-in duzte. Sechs hat T-169 umgestellt; diese hat der Wächter in
+   * `scripts/proof-addin.mjs` nicht gesehen, weil er auf die **Fürwörter**
+   * `du`, `dir`, `dich`, `dein` prüft und ein Imperativ ohne Fürwort auskommt.
+   * **Seit T-190 sieht er ihn** (O-GD): `ANREDE_IMPERATIV` in
+   * `scripts/proof-addin.mjs` mißt die Verbstämme, die eine Oberfläche
+   * benutzt, und die Gegenprobe dort sucht genau diesen Satz wieder.
+   *
+   * Die **achte** Stelle stand in `ui/App.tsx` („Öffne eine E-Mail, um daraus
+   * ein Todo anzulegen.") und war hier nicht mitgeändert: Sie war in
+   * `tests/e2e/outlook-addin-build.spec.ts` wörtlich festgenagelt, und diese
+   * Datei gehört e2e-tester. T-190 duldete sie deshalb als **einen Satz** —
+   * nicht als Datei — und verlangte im selben Atemzug den Nachweis, daß es ihn
+   * noch gibt. **In T-199 ist sie gegangen**, in der Reihenfolge, die die
+   * Ausnahme erzwungen hat: T-192 hat den Prüffall vom Wortlaut gelöst, T-199
+   * den Satz gesiezt und `IMPERATIV_AUSNAHME` gelöscht. Der Wächter mißt
+   * seither den ganzen Bestand ohne Ausnahme.
+   *
+   * Die neue Fassung kommt ohne jede Anrede aus (E-080 Punkt 4) und ist
+   * kürzer.
+   */
+  empty: 'Der Ausdruck ist leer. Ein Muster steht in der Liste darüber, oder es lässt sich hier eintragen.',
   no_capture_group:
     'Der Ausdruck braucht eine Klammer um den Teil, der die Call-Nummer ist — zum Beispiel TCK-(\\d{6}) statt TCK-\\d{6}. Übernommen wird immer der Inhalt der ersten Klammer.',
   matches_empty:

@@ -10,6 +10,8 @@ import {
 } from "../api/endpoints";
 import { errorMessage } from "../api/client";
 import type { ForeignText, Id, TimeEntry } from "../api/types";
+import { Attachments } from "../components/Attachments";
+import { DeadlineFlag } from "../components/DeadlineFlag";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DoneFlag } from "../components/DoneFlag";
 import {
@@ -29,6 +31,7 @@ import { useTimer } from "../app/TimerContext";
 import { useToasts } from "../app/ToastContext";
 import { undoDoneAction } from "../app/undoDone";
 import { useAsync, useMutation } from "../app/useAsync";
+import { useToday } from "../app/useToday";
 import { cx } from "../lib/cx";
 import {
   DONE_FLAG_LABEL,
@@ -91,6 +94,12 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
   const timer = useTimer();
   const toasts = useToasts();
   const { version, bump } = useRefresh();
+  /*
+    Der heutige Tag für die Frist (E-073 Punkt 2). Auch hier einer je Ansicht:
+    Die Detailansicht zeigt genau eine Frist, aber der Haken ist derselbe, und
+    zwei Bauarten für dieselbe Sache liefen auseinander.
+  */
+  const today = useToday();
 
   const [editOpen, setEditOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -396,6 +405,50 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                     </label>
                   </Card>
 
+                  {/*
+                    Die **Frist** (A-19.3, A-19.4). Sie steht in der
+                    Detailansicht als Eigenschaft und nicht als dritte
+                    Anzeigestelle — gesetzt, geändert und entfernt wird sie im
+                    Bearbeiten-Dialog, hier steht ihr Zustand.
+
+                    Der Satz darunter sagt, was sie **nicht** tut. Ohne ihn
+                    liegt die Annahme nahe, eine Frist bewege ein Todo in eine
+                    Spalte oder in einen Pool; sie tut nichts dergleichen
+                    (A-19.7, E-070 Punkt 4).
+                  */}
+                  <Card
+                    title="Frist"
+                    description="Ein Tag, keine Uhrzeit. Sie ändert nichts an Pools, Spalten, Buchungen oder Export — und sie steht in keinem Export."
+                    actions={
+                      <Button variant="ghost" iconStart="pencil" onClick={() => setEditOpen(true)}>
+                        {todo.dueDate === null ? "Frist setzen" : "Frist ändern"}
+                      </Button>
+                    }
+                  >
+                    {todo.dueDate === null ? (
+                      <p className="muted">
+                        Keine Frist gesetzt. Dieses Todo ist deshalb weder überfällig noch heute
+                        fällig — es hat schlicht keinen dieser Zustände.
+                      </p>
+                    ) : (
+                      <DeadlineFlag dueDate={todo.dueDate} today={today} />
+                    )}
+                  </Card>
+
+                  {/*
+                    Anhänge (A-19.11): unmittelbar am Todo sichtbar und dort
+                    verwaltbar — hinzufügen, öffnen, entfernen. `version` reicht
+                    das Änderungssignal der Anwendung durch, damit ein zweites
+                    Fenster oder der Aufgabenbereich des Add-ins nicht an einer
+                    veralteten Liste vorbeiläuft (T-097).
+                  */}
+                  <Card
+                    title="Anhänge"
+                    description="Ein Verweis öffnet den Browser, eine Datei die Standardanwendung des Systems, ein Bild wird hier gezeigt. Geöffnet wird nur auf Ihren Klick."
+                  >
+                    <Attachments todoId={todo.id} todoTitle={todo.title} version={version} />
+                  </Card>
+
                   <Card
                     title="Buchungen"
                     description="Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."
@@ -524,7 +577,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
 
                   <Card
                     title="Tags"
-                    description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt — aber nicht der einzige: Eine Regel fragt auch nach Status, „Erledigt“ und Exportstatus (E-055)."
+                    description="Tags sind der häufigste Griff, mit dem eine Karte die Spalte wechselt — aber nicht der einzige: Eine Regel fragt auch nach Status, „Erledigt“ und Exportstatus."
                   >
                     {todo.tagIds.length === 0 ? (
                       <p className="muted">
@@ -557,7 +610,12 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       onChange={setNoteDraft}
                       rows={6}
                       maxLength={65536}
-                      placeholder="Notiz für Sie selbst — Zugangsdaten, Ansprechpartner, Zwischenstand."
+                      /*
+                        Kein eigener Platzhalter mehr (T-181, ST-09): Das Feld
+                        nimmt den Vorgabewert aus `NoteField`. Zwei Fassungen
+                        fuer dasselbe Feld an zwei Flaechen waren zwei Anreden
+                        und zwei Wortlaute fuer eine Sache.
+                      */
                     />
                     <div className="note-actions">
                       <Button

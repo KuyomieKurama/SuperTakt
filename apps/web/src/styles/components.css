@@ -59,11 +59,11 @@
   border-color: var(--accent-bg);
   color: var(--text-on-accent);
 }
-.btn--primary:hover:not(:disabled) {
+.btn--primary:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--accent-bg-hover);
   border-color: var(--accent-bg-hover);
 }
-.btn--primary:active:not(:disabled) {
+.btn--primary:active:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--accent-bg-active);
   border-color: var(--accent-bg-active);
 }
@@ -73,22 +73,22 @@
   border-color: var(--border-control);
   color: var(--text-primary);
 }
-.btn--secondary:hover:not(:disabled) {
+.btn--secondary:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-hover);
   border-color: var(--border-strong);
 }
-.btn--secondary:active:not(:disabled) {
+.btn--secondary:active:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-active);
 }
 
 .btn--ghost {
   color: var(--text-secondary);
 }
-.btn--ghost:hover:not(:disabled) {
+.btn--ghost:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
-.btn--ghost:active:not(:disabled) {
+.btn--ghost:active:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-active);
 }
 
@@ -97,23 +97,43 @@
   border-color: var(--danger-bg);
   color: var(--text-on-solid);
 }
-.btn--danger:hover:not(:disabled) {
+.btn--danger:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--danger-bg-hover);
   border-color: var(--danger-bg-hover);
 }
-.btn--danger:active:not(:disabled) {
+.btn--danger:active:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--danger-bg-active);
   border-color: var(--danger-bg-active);
 }
 
-.btn:disabled {
+/*
+  **Zwei Wege in denselben Zustand, ein Aussehen** (T-186).
+
+  `:disabled` ist die harte Sperre: aus dem Tabulatorlauf entfernt, kein Klick,
+  kein Ereignis. `[aria-disabled="true"]` ist die weiche: erreichbar,
+  fokussierbar, anklickbar — der Knopf sagt beim Klick, was fehlt, statt
+  stumm zu bleiben (`Primitives.tsx#ButtonProps.ariaDisabled`).
+
+  Sie stehen in **einem** Selektor, weil der Unterschied den Benutzer nichts
+  angehen darf: Ein Knopf, der nach „weich gesperrt" anders aussaehe als nach
+  „hart gesperrt", waere ein dritter Zustand, den niemand gelernt hat.
+
+  Der Fokusring bleibt: Er kommt aus `:focus-visible` in `base.css` und wird
+  hier bewusst nicht zurueckgenommen. Ein erreichbarer Knopf ohne sichtbaren
+  Fokus waere erreichbar und unsichtbar zugleich (SC 2.4.7). Ein
+  `disabled`-Knopf kann den Fokus ohnehin nicht bekommen — die Zeile kostet
+  dort nichts und traegt hier alles.
+*/
+.btn:disabled,
+.btn[aria-disabled="true"] {
   cursor: not-allowed;
   background-color: var(--bg-disabled);
   border-color: var(--border-default);
   color: var(--text-disabled);
 }
 
-.btn--ghost:disabled {
+.btn--ghost:disabled,
+.btn--ghost[aria-disabled="true"] {
   background-color: transparent;
   border-color: transparent;
 }
@@ -168,7 +188,7 @@
   height: var(--control-height-lg);
 }
 
-.icon-btn.btn--ghost:hover:not(:disabled) {
+.icon-btn.btn--ghost:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
@@ -177,7 +197,7 @@
   border-color: var(--border-control);
   color: var(--text-primary);
 }
-.icon-btn.btn--secondary:hover:not(:disabled) {
+.icon-btn.btn--secondary:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-hover);
   border-color: var(--border-strong);
 }
@@ -186,7 +206,7 @@
   border-color: var(--danger-bg);
   color: var(--text-on-solid);
 }
-.icon-btn.btn--danger:hover:not(:disabled) {
+.icon-btn.btn--danger:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--danger-bg-hover);
 }
 .icon-btn:disabled {
@@ -322,9 +342,27 @@
  *
  * `:where()` haelt die Spezifitaet bei null, damit ein Baustein mit eigenem
  * Abstand ihn behaelt.
+ *
+ * **`.live-region` steht nur links** (T-191). Der dauerhafte Wirt einer
+ * Meldung schiebt sich zwischen zwei Nachbarn, die bis dahin unmittelbar
+ * aufeinanderfolgten — ohne diese Zeile verloere der Knoten **hinter** ihm
+ * seinen Abstand, sobald der Wirt leer ist, und der Rhythmus haette ein Loch,
+ * das niemand mit ihm in Verbindung braechte. Rechts steht er mit Absicht
+ * **nicht**: Leer soll er gar keinen Abstand bekommen (er faellt dann samt
+ * seiner Raender in sich zusammen), und voll traegt ihn seine Meldung selbst.
  */
 .card__body
-  > :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section)
+  > :where(
+    .field,
+    .field__hint,
+    .field__error,
+    .live-region,
+    .message,
+    .dirfield,
+    .tag-picker,
+    .radio-row,
+    .form-section
+  )
   + :where(.field, .field__hint, .field__error, .message, .dirfield, .tag-picker, .radio-row, .form-section) {
   margin-top: var(--space-4);
 }
@@ -333,6 +371,36 @@
 .card__body > :where(.field, .dirfield) + :where(.field__hint, .field__error) {
   margin-top: var(--space-1);
 }
+
+/* ==================================================================== */
+/* Der dauerhafte Wirt einer Meldung — `.live-region` (B-5, T-191)      */
+/* ==================================================================== */
+/*
+ * Eine Meldeflaeche steht **immer** im Baum, auch leer. Ein `role="alert"`
+ * oder `role="status"`, das erst zusammen mit seinem Inhalt entsteht, wird von
+ * vielen Vorlesehilfen uebergangen: Sie melden Aenderungen an einer Region,
+ * die sie in diesem Augenblick noch nicht kennen (SC 4.1.3). Der Befund ist im
+ * Bestand neunmal aufgetreten — `ConfirmDialog` (T-118), `TextField` (T-162),
+ * `NoteField` (T-186) und sechs weitere Stellen in T-191 — und wird seit T-191
+ * von `proof:surface` (Regel A) gemessen statt gezaehlt.
+ *
+ * `.field__live` in `app.css` ist derselbe Wirt **im Feld**; er nimmt dort den
+ * `gap` der Feldspalte zurueck. Dieser hier ist der allgemeine: ein Kasten
+ * ohne Rand, ohne Fuellung und ohne eigenen Abstand.
+ *
+ * **Er bekommt mit Absicht keine einzige Erklaerung.** Leer ist er ein Block
+ * ohne Hoehe; seine Raender und die seines Kindes fallen durch ihn hindurch,
+ * und im Seitenfluss steht danach genau das, was ohne ihn dort stuende. Wo ein
+ * Behaelter mit `gap` arbeitet, zaehlt er trotzdem als Kind und bekommt einen
+ * Abstand — den nimmt die jeweilige Regel neben ihrem Behaelter zurueck
+ * (`.attachment__main`, `.tag-picker` in `app.css`).
+ *
+ * **Was er nie bekommt: `display: none` oder `visibility: hidden`.** Beides
+ * naehme ihn aus dem Baum der Vorlesehilfe und hoebe damit genau die Zusage
+ * auf, fuer die er da ist — derselbe Fehler wie eine Region, die mit ihrem
+ * Inhalt entsteht, nur eine Ebene tiefer. Regel C von `proof:surface` misst
+ * das; sie ist aus einem echten Fund entstanden (`.dirfield__announce`).
+ */
 
 .card__body--flush {
   padding: 0;
@@ -398,8 +466,15 @@
   color: var(--status-exported-fg);
 }
 
-/* Erneut offen: Kontur plus Schraffur. Die Schraffur traegt die
-   Unterscheidung auch dann, wenn Farbe nicht wahrgenommen wird. */
+/* Erneut offen: Kontur plus Schraffur. Die Schraffur ist eine **Verstaerkung**
+   und kein Traeger: gemessen 1,24:1 hell und 1,45:1 dunkel gegen die eigene
+   Fuellung (T-189). Sie kann auch keiner werden — ueber der Schraffur steht die
+   Beschriftung, und damit deckelt SC 1.4.3 sie bei 1,80:1 hell und 1,58:1
+   dunkel (T-194 Abschnitt 1.2). Ohne Farbe tragen das Symbol (Pfeil zurueck),
+   das Wort und die Rautenform des Zeilenpunktes; siehe die Merkmalstabelle in
+   `components/ExportStatus.tsx`. Gemessen wird beides in `contrast-check.mjs`:
+   die Schraffur als benannte Ausnahme, die Beschriftung ueber ihrem dunkelsten
+   Punkt mit 4,5:1. */
 .badge--reopened {
   border-color: var(--status-reopened-border);
   color: var(--status-reopened-fg);
@@ -426,8 +501,9 @@
 }
 
 /* Zusatzkennzeichen "schon einmal exportiert" — Variante B aus T-005.
-   Steht neben einem Etikett "Offen", nicht an dessen Stelle. Traegt Symbol,
-   Schraffur und Wortlaut, damit es ohne Farbe erkennbar bleibt. */
+   Steht neben einem Etikett "Offen", nicht an dessen Stelle. Ohne Farbe tragen
+   Symbol und Wortlaut; die Schraffur zaehlt seit T-194 nicht mehr mit, siehe
+   die Begruendung bei `.badge--reopened`. */
 /* Exportstatus — Zustandspunkt mit eigener Form je Zustand. */
 .status-marker {
   display: inline-block;
@@ -556,7 +632,7 @@
     background-color var(--motion-fast) var(--ease-out),
     border-color var(--motion-fast) var(--ease-out);
 }
-.chip--interactive:hover:not(:disabled) {
+.chip--interactive:hover:not(:disabled, [aria-disabled="true"]) {
   border-color: var(--border-strong);
   background-color: var(--bg-hover);
 }
@@ -637,7 +713,7 @@
   color: inherit;
   cursor: pointer;
 }
-.chip__remove:hover:not(:disabled) {
+.chip__remove:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-active);
   color: var(--text-primary);
 }
@@ -878,12 +954,20 @@
     background-color var(--motion-fast) var(--ease-out);
 }
 
+/* Keine Trennlinie zwischen Kopf und Regel (T-181, ST-05 Ausgleich; Vorgabe
+   aus `docs/design/textabbau-gestalt.md` 3.2). Zwei gleich starke Linien
+   innerhalb von rund 60 px zerlegten den Kopf in drei Baender und lehrten,
+   dass die Regel eine eigene, abtrennbare Sache sei — genau die Lesart, gegen
+   die vierzehn Saetze angeschrieben haben. Name, Zahl und Regel bilden jetzt
+   **einen** Block: die Identitaet der Spalte. Die verbleibende Linie unter
+   `.kcolumn__rule` trennt Identitaet von Inhalt.
+
+   Kein Abstand wird dabei groesser. Weniger Text ist nicht mehr Luft. */
 .kcolumn__head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .kcolumn__heading {
@@ -1319,25 +1403,27 @@
 }
 
 /* Zweites Merkmal neben der Farbe: Die Schiene des Leistungsfelds ist
-   gestreift, die des Vermerks einfarbig. Der Unterschied bleibt in
-   Graustufen und bei Farbfehlsichtigkeit bestehen (R-08, SC 1.4.1). */
-.note--billing::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: -4px;
-  width: 4px;
-  background-image: repeating-linear-gradient(
-    135deg,
-    var(--note-billing-rail) 0 3px,
-    var(--note-billing-rail-stripe) 3px 6px
-  );
-  pointer-events: none;
-}
+   durchgezogen, die des Vermerks unterbrochen. Der Unterschied ist eine **Form**
+   und bleibt deshalb in Graustufen und bei Farbfehlsichtigkeit bestehen (R-08,
+   SC 1.4.1) — und er ist gemessen, ohne dass ein Paar dazukommen musste: In der
+   Luecke sieht man die Karte, also ist Balken gegen Luecke dasselbe Verhaeltnis
+   wie Schiene gegen Karte, 3,49:1 hell und 4,31:1 dunkel
+   (`scripts/contrast-check.mjs`, Gruppe "Feldart").
+
+   Bis T-202 stand hier statt dessen eine **gestreifte** Schiene: ein
+   Pseudoelement `.note--billing::before` mit einem Verlauf aus zwei Blautoenen.
+   Zwei Gruende, aus denen sie entfaellt. Erstens unterschied sich der Streifen
+   von seiner Schiene wieder nur im Farbton (1,76:1) — derselbe Fehler eine
+   Ebene tiefer, und im dunklen Thema arithmetisch nicht behebbar, weil eine
+   zweite Schiene mit 3:1 Abstand dort praktisch weiss sein muesste (T-194
+   Abschnitt 2.2). Zweitens hat visual-qa in T-198 an echten Pixeln gemessen,
+   dass das Pseudoelement im Rahmenbereich lag und `overflow: hidden` es auf
+   **keinem** Bildschirm hat sichtbar werden lassen. Das Merkmal war nicht
+   schwach, es war abwesend. */
 
 .note--internal {
   border-color: var(--note-internal-border);
-  border-inline-start: 4px solid var(--note-internal-rail);
+  border-inline-start: 4px dashed var(--note-internal-rail);
 }
 
 .note__banner {
@@ -1445,7 +1531,7 @@
   background-color: var(--bg-surface);
 }
 
-.note__input:hover:not(:disabled):not([readonly]) {
+.note__input:hover:not(:disabled, [aria-disabled="true"]):not([readonly]) {
   border-color: var(--border-strong);
 }
 
@@ -1492,6 +1578,17 @@
   color: var(--text-muted);
 }
 
+/*
+  Die Meldeflaeche des Notizfeldes steht **immer** im Baum, auch ohne Meldung
+  (T-186, Befund O-FX; dieselbe Bauart wie `.field__live` in `app.css` seit
+  T-162). Sie bekommt deshalb bewusst **keine** eigene Regel: leer ist sie ein
+  Block ohne Inhalt, ohne Abstand und ohne Hoehe — den Abstand traegt
+  `.note__error` selbst, und sein oberer Rand faellt durch den leeren Behaelter
+  hindurch.
+
+  Wer ihr `display: none` gaebe, naehme sie aus dem Baum und damit die ganze
+  Wirkung: Eine Region, die eine Vorlesehilfe nicht kennt, sagt nichts an.
+*/
 .note__error {
   display: flex;
   align-items: center;
@@ -1568,7 +1665,7 @@
     border-color var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
 }
-.select__trigger:hover:not(:disabled) {
+.select__trigger:hover:not(:disabled, [aria-disabled="true"]) {
   border-color: var(--border-strong);
   background-color: var(--bg-hover);
 }
@@ -1628,7 +1725,7 @@
     color var(--motion-fast) var(--ease-out),
     transform var(--motion-fast) var(--ease-out);
 }
-.select__trigger:hover:not(:disabled) .select__chevron {
+.select__trigger:hover:not(:disabled, [aria-disabled="true"]) .select__chevron {
   color: var(--text-secondary);
 }
 /* Der Pfeil dreht sich, wenn die Liste offen ist — ein zweites Merkmal neben
@@ -2179,7 +2276,7 @@
   font-size: var(--text-sm);
   cursor: pointer;
 }
-.menu__trigger:hover:not(:disabled) {
+.menu__trigger:hover:not(:disabled, [aria-disabled="true"]) {
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
@@ -2777,7 +2874,7 @@
     border-color var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
 }
-.filter-toggle:hover:not(:disabled) {
+.filter-toggle:hover:not(:disabled, [aria-disabled="true"]) {
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
@@ -3589,6 +3686,20 @@
  * Der Meldebereich fuer das Ergebnis des Dialogs. Immer im Baum, damit eine
  * Vorlesehilfe eine **Aenderung** bemerkt und nicht ein neu erscheinendes
  * Element; leer nimmt er deshalb keinen Platz ein.
+ *
+ * **Und leer heisst hier nicht `display: none`** (Befund O-GQ, T-191). Bis
+ * dahin stand genau das hier — und es hebt die Zusage der Zeile darueber
+ * wieder auf: Ein Element mit `display: none` steht nicht im Baum der
+ * Vorlesehilfe. Die Region entstand fuer sie also doch erst mit ihrer ersten
+ * Meldung, nur ueber das Stilblatt statt ueber das JSX. Das ist derselbe
+ * Fehler wie ein `role="status"`, das zusammen mit seinem Satz gebaut wird,
+ * eine Ebene tiefer — und deshalb misst ihn seit T-191 auch derselbe Waechter
+ * (`proof:surface`, Regel C).
+ *
+ * Statt dessen wie `.field__live` in `app.css`: sichtbar bleiben, aber leer
+ * keinen Platz nehmen. Der Absatz hat leer die Hoehe null; uebrig bleibt der
+ * `gap` der Spalte `.dirfield`, und genau den nimmt diese Zeile zurueck. Wer
+ * den Abstand in `.dirfield` aendert, aendert ihn hier mit.
  */
 .dirfield__announce {
   color: var(--text-secondary);
@@ -3596,7 +3707,7 @@
   line-height: var(--leading-snug);
 }
 .dirfield__announce:empty {
-  display: none;
+  margin-block-start: calc(-1 * var(--space-2));
 }
 
 .dirfield__pending {
@@ -3916,12 +4027,25 @@
  * Was hier **nicht** steht, ist genauso wichtig: Eine Achse auf ihrem
  * Neutralwert erscheint nicht. Die Leseregel dieser Flaeche lautet: Was
  * dasteht, engt ein; was fehlt, laesst alles durch.
+ *
+ * `--text-secondary` statt `--text-muted` seit T-181 (ST-05 Ausgleich;
+ * Vorgabe aus `docs/design/textabbau-gestalt.md` 3.3). `--text-muted` ist die
+ * Farbe des Hilfetextes; eine Zeile, die sagt, **warum diese Karten hier
+ * stehen**, ist kein Hilfetext, sondern die Definition der Spalte. Sie tritt
+ * an die Stelle von vierzehn gestrichenen Saetzen und muss auch so gelesen
+ * werden. Gemessen von `contrast-check.mjs` auf `--bg-subtle` (Spaltenkopf)
+ * und auf `--bg-surface` (Regelliste, Formularvorschau).
+ *
+ * Die Groesse bleibt bei `--text-2xs`: Eine Spalte ist 17 bis 21 rem breit,
+ * fuenf Achsen mit Chips brauchen jedes Zeichen davon. Groesser heisst hier
+ * umbrechen. Die Versalien der Achsenbeschriftung bleiben ebenfalls — sie
+ * sagen bereits „dies ist ein Feldname und kein Kommentar".
  */
 .rule-summary {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--text-2xs);
   line-height: var(--leading-snug);
 }

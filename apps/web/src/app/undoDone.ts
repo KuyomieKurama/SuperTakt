@@ -37,7 +37,12 @@ import { quotedName } from "../lib/foreign";
  * kann zwischen dem Anzeigen der Meldung und dem Klick ein anderer geworden
  * sein. Lieber eine Auskunft weniger als eine, die zwei Sekunden alt ist.
  */
-const UNDONE_BODY = "Das Abhaken ist zurückgenommen. Tags und Status ändern sich dadurch nicht.";
+/*
+  Nur die Abwesenheit (T-181, ST-07). Dass das Abhaken zurueckgenommen ist,
+  steht im Titel der Meldung („„X" ist wieder offen.") — der Rumpf hat ihn
+  wiederholt. Regel S-13: Der Rumpf wiederholt den Titel nicht.
+*/
+const UNDONE_BODY = "Tags und Status ändern sich dadurch nicht.";
 
 /** Der Titel, wenn das Zurücknehmen scheitert. Ein Wortlaut für alle drei Flächen. */
 const UNDO_FAILED_TITLE = "Das Zurücknehmen hat nicht geklappt";

@@ -9,7 +9,13 @@ import { Card, InlineMessage, Button, LoadingBlock } from "../components/Primiti
 import { RuleSummary } from "../components/RuleSummary";
 import { describeRule, describeRuleReach } from "../lib/poolRule";
 import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
-import { BOARD_CARDS, BOARD_COLUMNS, SHOWCASE_RULE_LOOKUP, type BoardCard } from "./data";
+import {
+  BOARD_CARDS,
+  BOARD_COLUMNS,
+  SHOWCASE_RULE_LOOKUP,
+  SHOWCASE_TODAY,
+  type BoardCard,
+} from "./data";
 import { reactivationTitle, RULE_IS_A_RULE, RULE_WHAT_MOVES_A_CARD } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 
@@ -305,7 +311,7 @@ export function BoardSection() {
           size="sm"
           onClick={() => setStage("empty")}
         >
-          Leeres Board nach der Umstellung
+          Board ohne Spalten
         </Button>
         <FilterToggle
           label="Erledigte einblenden"
@@ -322,7 +328,7 @@ export function BoardSection() {
       {stage === "empty" ? (
         <BoardEmptyState
           pools={[]}
-          onCreate={() => setAnnouncement("Spalte einrichten.")}
+          onOpenSetup={() => setAnnouncement("Spalte einrichten.")}
           onAdopt={() => setAnnouncement("Regel aufgenommen.")}
         />
       ) : (
@@ -374,6 +380,8 @@ export function BoardSection() {
                         }}
                         entries={cardMenu(card, others)}
                         highlighted={highlighted === card.id}
+                        /* Fester Tag statt Systemuhr — siehe SHOWCASE_TODAY. */
+                        today={SHOWCASE_TODAY}
                         onOpen={() => setAnnouncement(`${foreignText(card.title)} geöffnet.`)}
                         onToggleTimer={() => toggleTimer(card.id)}
                         {...(others.length === 0

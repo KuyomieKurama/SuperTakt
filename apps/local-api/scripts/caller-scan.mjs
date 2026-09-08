@@ -1,7 +1,8 @@
 /**
  * Takt — der Leser der Aufrufer (T-051).
  *
- * Dieses Modul liest `apps/web/src/api/endpoints.ts` **syntaktisch** und sagt,
+ * Dieses Modul liest die Aufrufer des Dienstes — `apps/web/src/api/endpoints.ts`
+ * und `apps/outlook-addin/src/api/client.ts` — **syntaktisch** und sagt,
  * welche Route jede Funktion anfährt und welche Schlüssel sie dabei in Rumpf
  * und Abfragezeichenkette schreibt. Es urteilt nicht; das Urteil steht in
  * `proof-callers.mjs`.
@@ -10,6 +11,12 @@
  * erfundenen Eingabe auf die Probe stellen. Hier geht Text hinein und eine
  * Aufstellung heraus — damit kann der Nachweis sich selbst prüfen, indem er
  * denselben Leser auf einen absichtlich verdorbenen Text ansetzt.
+ *
+ * **Zwei Aufrufergestalten** (T-132, O-M). Die Oberfläche ruft
+ * `request(pfad, optionen)` an, das Add-in `call(methode, pfad, abfrage,
+ * rumpf)`. Beide gehen durch denselben Leser; welche Gestalt gemeint ist,
+ * sagt {@link CALL_SHAPES}. Zwei Leser wären zwei Auffassungen davon, was ein
+ * Aufruf ist, und eine davon liefe der anderen davon.
  *
  * **Was dieser Leser kann und was nicht.** Er sieht Objektliterale, auch unter
  * `...(Bedingung ? { a } : {})`, und er löst einen Bezeichner auf, dessen Typ
@@ -114,6 +121,45 @@ function resolveTypeNode(node, index, seen = new Set()) {
       names.push(...resolved);
     }
     return names;
+  }
+
+  /**
+   * Eine **unterschiedene Vereinigung** (T-146).
+   *
+   * ---------------------------------------------------------------------------
+   * Warum die Vereinigung der Schlüssel die richtige Antwort ist
+   * ---------------------------------------------------------------------------
+   *
+   * Die Frage dieses Lesers lautet: „Welche Schlüssel **kann** dieser Aufruf
+   * schreiben?" Bei einer Vereinigung ist die Antwort die Vereinigung — jeder
+   * Zweig ist ein möglicher Rumpf, und jeder seiner Schlüssel kann über die
+   * Leitung gehen.
+   *
+   * Das ist **nicht** dieselbe Frage wie „welche Schlüssel stehen zusammen in
+   * einem Rumpf?". Die beantwortet dieser Leser nicht und soll er nicht: Sie ist
+   * die Frage der Schemaprüfung an der Tür, und dort steht mit
+   * `z.discriminatedUnion` genau die Antwort — ein Rumpf
+   * `{ kind: 'file', url: '…' }` wird abgewiesen und nicht ausgewertet.
+   *
+   * Anlaß: `AttachmentCreate` aus T-146 (A-19.10). Der Rumpf von
+   * `createAttachment` war damit unauflösbar, und der Lauf meldete gleich
+   * dreierlei — einen blinden Fleck, fünf angeblich nie gesendete Felder und
+   * den Selbsttest. Dieselbe Lage wie `Partial<PoolWrite>` in T-074, und
+   * dieselbe Behebung: Der Leser lernt die eine Form dazu, statt daß jemand
+   * die Meldung wegerklärt.
+   *
+   * **Ein Zweig, der sich nicht auflösen läßt, macht die ganze Vereinigung
+   * unauflösbar.** Der Leser rät nicht: `string | { a: 1 }` ist keine Menge von
+   * Schlüsseln, und eine geratene Antwort wäre schlimmer als „weiß ich nicht".
+   */
+  if (ts.isUnionTypeNode(node)) {
+    const names = new Set();
+    for (const part of node.types) {
+      const resolved = resolveTypeNode(part, index, seen);
+      if (resolved === null) return null;
+      for (const name of resolved) names.add(name);
+    }
+    return [...names];
   }
 
   if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
@@ -256,11 +302,63 @@ const propertyValue = (object, name) => {
 };
 
 /**
- * Liest alle `request(...)`-Aufrufe eines Quelltextes.
+ * Die beiden Aufrufgestalten, die dieser Leser kennt (T-132, O-M).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das ein Parameter ist und keine zweite Datei
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-132 las dieser Leser genau eine Gestalt: `request(pfad, optionen)` aus
+ * `apps/web/src/api/endpoints.ts`. Die zweite Aufruferseite des Dienstes — das
+ * Add-in mit `call(methode, pfad, abfrage, rumpf)` — war damit von
+ * `proof:callers` **nicht erfasst** (O-M). Sie schickt Rümpfe an dieselben
+ * Schemata und hat dieselbe Art Fehler zu machen: ein Schlüsselname, den keine
+ * Route liest, fällt keinem Übersetzer auf.
+ *
+ * Ein zweiter Leser wäre die falsche Antwort gewesen. Zwei Leser sind zwei
+ * Auffassungen davon, was ein Aufruf ist, und eine davon läuft irgendwann der
+ * anderen davon — genau das Muster, das T-114 an zwei Eingabeschemata
+ * gefunden hat. Hier ist es **ein** Leser mit einem Formparameter: Was er
+ * kann, kann er für beide Seiten, und was er nicht kann, meldet er für beide
+ * als blinden Fleck.
+ *
+ *   `options`     `request('/todos', { method: 'POST', body, query })`
+ *   `positional`  `call('POST', '/api/v1/addin/todos', abfrage, rumpf)`
+ */
+export const CALL_SHAPES = Object.freeze({
+  options: Object.freeze({ callee: 'request', layout: 'options', pathPrefix: '' }),
+  addin: Object.freeze({ callee: 'call', layout: 'positional', pathPrefix: '/api/v1' }),
+});
+
+/**
+ * Die Parameter mit Typangabe der **innersten** umschließenden Funktion.
+ *
+ * Erfasst werden Funktionsdeklaration, Methode eines Objektliterals,
+ * Funktionsausdruck und Pfeilfunktion. Die Methode ist der Fall, den das
+ * Add-in braucht: `createTodo(input: CreateTodoRequest) { … }` steht in dem
+ * Objektliteral, das `createApiClient` zurückgibt.
+ */
+function isFunctionLike(node) {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node)
+  );
+}
+
+/** Der Name einer umschließenden Funktion, oder `null`. */
+function functionName(fn) {
+  if (fn === null || fn.name === undefined) return null;
+  return ts.isIdentifier(fn.name) ? fn.name.text : null;
+}
+
+/**
+ * Liest alle Aufrufe eines Quelltextes, die auf den Dienst zeigen.
  *
  * @returns {{ functions: number, calls: Array<object>, unreadable: string[] }}
  */
-export function scanCallers(text, typeIndex, fileName = 'endpoints.ts') {
+export function scanCallers(text, typeIndex, fileName = 'endpoints.ts', shape = CALL_SHAPES.options) {
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const calls = [];
   const unreadable = [];
@@ -275,37 +373,66 @@ export function scanCallers(text, typeIndex, fileName = 'endpoints.ts') {
     return map;
   };
 
+  /** Der Pfad ohne die Vorsilbe, die der Aufrufer mitschreibt und der Dienst nicht führt. */
+  const stripPrefix = (path) => {
+    if (path === null || shape.pathPrefix === '') return path;
+    return path.startsWith(shape.pathPrefix) ? path.slice(shape.pathPrefix.length) : path;
+  };
+
   const visit = (node, fn) => {
     let current = fn;
-    if (ts.isFunctionDeclaration(node)) {
-      functions += 1;
+    if (isFunctionLike(node)) {
+      // Gezählt werden nur benannte Funktionen — dasselbe wie vorher, nur dass
+      // eine Methode jetzt auch eine ist.
+      if (functionName(node) !== null) functions += 1;
       current = node;
     }
 
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'request') {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === shape.callee) {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-      const where = current === null || current.name === undefined ? `Zeile ${line}` : current.name.text;
+      const named = functionName(current);
+      const where = named === null ? `Zeile ${line}` : named;
       const context = { parameters: parametersOf(current), typeIndex };
 
-      const path = readPath(node.arguments[0]);
-      if (path === null) unreadable.push(`${where}: der Pfad ist kein Literal`);
-
-      const options = node.arguments[1];
-      const methodNode = propertyValue(options, 'method');
+      let path = null;
       let method = 'GET';
-      if (methodNode !== undefined) {
-        if (ts.isStringLiteral(methodNode)) method = methodNode.text.toUpperCase();
-        else {
+      let bodyNode;
+      let queryNode;
+
+      if (shape.layout === 'positional') {
+        // `call(methode, pfad, abfrage, rumpf)`
+        const methodNode = node.arguments[0];
+        if (methodNode !== undefined && ts.isStringLiteral(methodNode)) {
+          method = methodNode.text.toUpperCase();
+        } else {
           method = null;
           unreadable.push(`${where}: die Methode ist kein Literal`);
         }
-      } else if (options !== undefined && !ts.isObjectLiteralExpression(options)) {
-        method = null;
-        unreadable.push(`${where}: die Aufrufoptionen sind kein Objektliteral`);
-      }
+        path = stripPrefix(readPath(node.arguments[1]));
+        if (path === null) unreadable.push(`${where}: der Pfad ist kein Literal`);
+        queryNode = undefinedIfVoid(node.arguments[2]);
+        bodyNode = undefinedIfVoid(node.arguments[3]);
+      } else {
+        // `request(pfad, { method, body, query })`
+        path = stripPrefix(readPath(node.arguments[0]));
+        if (path === null) unreadable.push(`${where}: der Pfad ist kein Literal`);
 
-      const bodyNode = propertyValue(options, 'body');
-      const queryNode = propertyValue(options, 'query');
+        const options = node.arguments[1];
+        const methodNode = propertyValue(options, 'method');
+        if (methodNode !== undefined) {
+          if (ts.isStringLiteral(methodNode)) method = methodNode.text.toUpperCase();
+          else {
+            method = null;
+            unreadable.push(`${where}: die Methode ist kein Literal`);
+          }
+        } else if (options !== undefined && !ts.isObjectLiteralExpression(options)) {
+          method = null;
+          unreadable.push(`${where}: die Aufrufoptionen sind kein Objektliteral`);
+        }
+
+        bodyNode = propertyValue(options, 'body');
+        queryNode = propertyValue(options, 'query');
+      }
 
       calls.push({
         where,
@@ -323,4 +450,18 @@ export function scanCallers(text, typeIndex, fileName = 'endpoints.ts') {
 
   visit(source, null);
   return { functions, calls, unreadable };
+}
+
+/**
+ * `undefined` als **Platzhalter** ist kein Wert, sondern eine Leerstelle.
+ *
+ * `call('POST', '/addin/todos', undefined, input)` schreibt an dritter Stelle
+ * ein `undefined`, weil die vierte belegt werden soll. Ohne diese Zeile hielte
+ * der Leser das für eine Abfrage, deren Schlüssel er nicht kennt, und meldete
+ * einen blinden Fleck, wo keiner ist.
+ */
+function undefinedIfVoid(node) {
+  if (node === undefined) return undefined;
+  if (ts.isIdentifier(node) && node.text === 'undefined') return undefined;
+  return node;
 }

@@ -180,12 +180,48 @@ output {
   border-radius: var(--radius-sm);
 }
 
-/* Innerhalb gefuellter Flaechen braucht der Ring einen hellen Gegenring,
-   sonst verschwindet er auf der Fuellfarbe. */
+/* Auf einem gefuellten Bedienelement braucht der Ring ein Gegenband, sonst
+   verschwindet er auf der Fuellfarbe. Das kann es nur, wenn es die Fuellfarbe
+   **beruehrt** — deshalb liegt es seit T-216 innen und nicht aussen (T-213
+   Abschnitt 10.2, Messung T-210 B-11). "Hell" war es uebrigens nie in beiden
+   Themen: im dunklen ist --focus-ring-contrast das dunkelste Blau der Palette.
+
+   Zwei Baender, beide ausserhalb des Randkastens, von der Knopfkante nach
+   aussen:
+
+     0..2px   --focus-ring-contrast   Schatten, beruehrt die **Fuellung**
+     2..4px   --focus-ring-color      Kontur aus :focus-visible, beruehrt
+                                      die **Flaeche**
+
+   Drei Nahtstellen, alle drei gemessen, keine unter 5,33 — die Paare stehen
+   in `apps/web/scripts/contrast-check.mjs`. `.on-solid` **fuegt** damit ein
+   Band hinzu, statt die Konturfarbe zu **ersetzen**: jeder Fokusring in Takt
+   hat dieselbe aeussere Kante.
+
+   Bis T-213 lagen die Baender andersherum, und dann beruehrte der Gegenton
+   die Fuellung gar nicht. Am Primaerknopf im hellen Thema fielen **beide**
+   Baender mit ihrem Nachbarn zusammen — 1,00:1 an beiden Kanten, an Pixeln
+   gemessen (T-210 B-11). Sichtbar blieb ein Knopf, der beim Tabulieren um
+   2px waechst: SC 2.4.7 und SC 1.4.11 am meistgenutzten Knopftyp des
+   Standardthemas.
+
+   Nicht zurueckdrehen, und kein Farbwert rettet die alte Anordnung. Dort
+   muesste --focus-ring-color zugleich die Fuellungen und die Flaechen
+   tragen. Im **dunklen** Thema verlangt das erste L <= 0,065, das zweite
+   L >= 0,133; der Schnitt ist leer. Es gibt keinen gueltigen Wert, nicht
+   einmal einen schlechten (T-213 Abschnitt 10.3).
+
+   **Was an der Malreihenfolge haengt.** Die Kontur wird ueber den aeusseren
+   Schatten gemalt. In Chromium ist das gemessen (T-216), fuer die beiden
+   uebrigen ausgelieferten Engines nicht. Malte eine Engine den Schatten
+   ueber die Kontur, laege statt der drei Zonen ein einziges 4px-Band in
+   --focus-ring-contrast an der Knopfkante: gegen die Fuellung 5,98 bis 7,98,
+   gegen die Flaeche 1,00. Auch das ist ein Ring **am** Knopf und nicht ein
+   groesserer Knopf — der Tausch ist auf **beiden** moeglichen Reihenfolgen
+   besser als der Zustand davor. */
 .on-solid:focus-visible {
-  outline-color: var(--focus-ring-contrast);
   box-shadow: 0 0 0 calc(var(--focus-ring-width) + var(--focus-ring-offset))
-    var(--focus-ring-color);
+    var(--focus-ring-contrast);
 }
 
 ::selection {

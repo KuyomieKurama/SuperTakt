@@ -44,7 +44,7 @@
  *    gemeinsamen Bestand darf nicht wie eine Auswahl aussehen.
  */
 
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { filterTags, flattenTagTree, indexTags, type FlatTag } from '../tags/tree.ts';
 import {
@@ -55,9 +55,20 @@ import {
 } from '../tags/new-name.ts';
 import type { TagTreeDto } from '../api/types.ts';
 import { visibleText } from '../text/hidden.ts';
+import { withDescription, type FieldAria } from './field.ts';
 import { Chip, Foreign } from './Primitives.tsx';
 
 interface TagPickerProps {
+  /**
+   * Kennung und Beschreibungen des umgebenden Feldes (T-158).
+   *
+   * Bis T-158 erzeugte der Auswähler seine Kennung selbst (`useId`) — die
+   * Beschriftung „Tags" verwies damit auf ein Element, das es nicht gab, und
+   * der Hinweis des Feldes stand für eine Vorlesehilfe nirgends. Die eigene
+   * Zeile mit der Trefferzahl bleibt und tritt **hinter** den Hinweis: erst
+   * das Allgemeine des Feldes, dann das Besondere dieses Bausteins.
+   */
+  readonly aria: FieldAria;
   readonly tree: TagTreeDto;
   /** Vom Benutzer gewählte Tags. Ohne die Standard-Tags. */
   readonly selected: readonly string[];
@@ -76,6 +87,7 @@ interface TagPickerProps {
 const MAX_VISIBLE = 60;
 
 export function TagPicker({
+  aria,
   tree,
   selected,
   defaultTagIds,
@@ -84,7 +96,7 @@ export function TagPicker({
   onNewNamesChange,
 }: TagPickerProps) {
   const [query, setQuery] = useState('');
-  const inputId = useId();
+  const countId = `${aria.id}-count`;
 
   const flat = useMemo(() => flattenTagTree(tree), [tree]);
   const byId = useMemo(() => indexTags(flat), [flat]);
@@ -160,7 +172,7 @@ export function TagPicker({
       </div>
 
       <input
-        id={inputId}
+        {...withDescription(aria, countId)}
         className="input input--search"
         type="search"
         placeholder="Tag suchen oder neuen Namen eingeben …"
@@ -178,10 +190,9 @@ export function TagPicker({
             remember(offer.name);
           }
         }}
-        aria-describedby={`${inputId}-count`}
       />
 
-      <p className="tagpicker__count" id={`${inputId}-count`}>
+      <p className="tagpicker__count" id={countId}>
         {flat.length === 0
           ? 'In Takt sind noch keine Tags angelegt.'
           : filtered.length === flat.length
@@ -221,7 +232,7 @@ export function TagPicker({
         {visible.length === 0 ? (
           <li className="tagpicker__none">
             {flat.length === 0
-              ? 'Noch keine Tags in Takt. Das Todo lässt sich trotzdem anlegen — es bekommt dann die Standard-Tags, und einen neuen Namen kannst du oben eingeben.'
+              ? 'Noch keine Tags in Takt. Das Todo lässt sich trotzdem anlegen — es bekommt dann die Standard-Tags, und ein neuer Name lässt sich oben eingeben.'
               : 'Kein Tag passt zu dieser Suche.'}
           </li>
         ) : null}

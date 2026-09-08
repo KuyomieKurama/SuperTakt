@@ -21,8 +21,10 @@
 //! ```
 
 mod appdata;
+mod attachment;
 mod identity;
 mod menu;
+mod release;
 mod sidecar;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -179,7 +181,20 @@ pub fn run() {
             takt_service_handshake,
             takt_os_user,
             takt_shell_state,
-            takt_quit
+            takt_quit,
+            // Versionsprüfung (Abschnitt 18). Beide Befehle stehen in
+            // `release.rs`; die Begründung, warum der zweite **keine** Adresse
+            // entgegennimmt, steht dort und nicht hier.
+            release::takt_installed_version,
+            release::takt_open_release,
+            // Anhänge (Abschnitt 19, E-072). Zwei Befehle, je genau ein
+            // `String`, getrennt nach Art (A-A-1) — ein gemeinsamer Befehl mit
+            // einem Typkennzeichen wäre der Weg, eine Adresse durch die
+            // Pfadprüfung zu schicken. Ein **Bild** hat keinen Befehl: Es
+            // öffnet nichts nach draußen (E-072 Punkt 2). Die Begründung zu
+            // jeder einzelnen Prüfung steht in `attachment.rs`.
+            attachment::takt_open_attachment_link,
+            attachment::takt_open_attachment_file
         ])
         .on_window_event(|window, event| {
             // Auch beim harten Schließen — der Benutzer klickt auf das Kreuz,

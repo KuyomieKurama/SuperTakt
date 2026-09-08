@@ -7,7 +7,8 @@
  * als das, was es immer war: eine Eigenschaft des Todos.
  */
 
-import type { PoolId, StatusId, TagId, TodoId, Timestamp } from './kernel.ts';
+import type { DueState, DueSortDirection } from './due-date.ts';
+import type { CalendarDay, PoolId, StatusId, TagId, TodoId, Timestamp } from './kernel.ts';
 
 // ---------------------------------------------------------------------------
 // Status eines Todos (A-5.3, A-5.4) — Tabelle `todo_status`
@@ -95,6 +96,25 @@ export interface Todo {
    * bedeutet erledigt. Unabhängig von `statusId`.
    */
   readonly completedAt: Timestamp | null;
+  /**
+   * Die **Frist** (A-19.1 bis A-19.7, E-070). Ein Kalendertag, keine Uhrzeit.
+   *
+   * `null` heißt „keine Frist", und das ist ein vollwertiger Zustand: Ein Todo
+   * ohne Frist bleibt in jeder Hinsicht ein gültiges Todo (A-19.1).
+   *
+   * Was hier **nicht** steht, ist der Zustand „überfällig / heute fällig /
+   * später fällig" (A-19.5). Er wird gerechnet, nie gespeichert (E-070
+   * Punkt 3) — `dueState(todo.dueDate, today)` in `due-date.ts`. Ein
+   * gespeicherter Zustand wäre über Nacht falsch, ohne daß jemand etwas
+   * angefaßt hat.
+   *
+   * Die Frist ist **keine Achse** (A-19.7, E-070 Punkt 4): Sie ändert nichts
+   * an Pools, Spalten, Zeitbuchungen oder Export. Sie steht in keinem
+   * `PoolRule`-Term und in keinem `ExportSourcePath` — und der Export sieht
+   * sie ohnehin nie, weil er `ExportCandidate` bekommt und kein `Todo`
+   * (A-19.17, R-06).
+   */
+  readonly dueDate: CalendarDay | null;
   readonly tagIds: readonly TagId[];
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
@@ -140,15 +160,47 @@ export interface TodoCreate {
   readonly statusId: StatusId | null;
   readonly tagIds: readonly TagId[];
   readonly note: string;
+  /**
+   * Die Frist (A-19.3). `null` heißt „ohne Frist" — der Regelfall.
+   *
+   * Sie kommt **geprüft** hier an: `checkDueDate` in `due-date.ts` läuft an
+   * der Tür, und zwar an jeder. Auch an der des Add-ins (A-19.21, E-074
+   * Punkt 4): ein Tag in fester Form, kein freier Text, keine Uhrzeit, keine
+   * Rechnung aus einer E-Mail.
+   *
+   * ---------------------------------------------------------------------------
+   * Freiwillig — und warum das hier **kein** dritter Fall ist
+   * ---------------------------------------------------------------------------
+   *
+   * Beim **Ändern** sind „fehlt" und `null` zwei verschiedene Anweisungen:
+   * unverändert lassen gegen entfernen (siehe {@link TodoUpdate}). Beim
+   * **Anlegen** gibt es nichts zu entfernen — ein Todo, das es noch nicht
+   * gibt, hat keine Frist, die man ihm nehmen könnte. Beide bedeuten deshalb
+   * dasselbe: ohne Frist.
+   *
+   * Das ist keine Bequemlichkeit für Aufrufer, die das Feld vergessen, sondern
+   * die Aussage, daß es hier nur zwei Zustände gibt. Der Adapter schreibt
+   * `dueDate ?? null` und hat damit denselben Zweig für beide.
+   */
+  readonly dueDate?: CalendarDay | null;
   readonly now: Timestamp;
 }
 
-/** Ein Todo ändern. Nicht gesetzte Felder bleiben unverändert. */
+/**
+ * Ein Todo ändern. Nicht gesetzte Felder bleiben unverändert.
+ *
+ * `dueDate` unterscheidet drei Fälle, und die Unterscheidung ist der Grund für
+ * `exactOptionalPropertyTypes` in diesem Baum: Das Feld **fehlt** heißt „die
+ * Frist bleibt, wie sie ist"; `null` heißt „die Frist entfernen" (A-19.3);
+ * ein Tag heißt „auf diesen Tag setzen". Wer die ersten beiden verwechselt,
+ * macht aus einer Löschung ein Weglassen.
+ */
 export interface TodoUpdate {
   readonly title?: string;
   readonly callNumber?: string | null;
   readonly statusId?: StatusId;
   readonly tagIds?: readonly TagId[];
+  readonly dueDate?: CalendarDay | null;
   readonly now: Timestamp;
 }
 
@@ -168,4 +220,36 @@ export interface TodoFilter {
   readonly callNumber?: string;
   readonly onlyOpen?: boolean;
   readonly onlyWithOpenEntries?: boolean;
+  /**
+   * Filtern nach der Frist (A-19.20, E-074 Punkt 1).
+   *
+   * **Anzeige, keine Achse.** Dieses Feld steht in `TodoFilter` und
+   * ausdrücklich nicht in `PoolRule`: Es ordnet eine Liste, es ordnet kein
+   * Todo einem Pool zu. Wer die Frist später als Regelterm will, bekommt eine
+   * eigene Entscheidung; `pool_rule` hat seit 0011 die Form dafür.
+   *
+   * `today` steht **daneben** und wird nicht hier gerechnet. Der Grund ist
+   * E-070 Punkt 2: Es gibt einen Tagesbegriff, und er entsteht an einer
+   * Stelle — `toCalendarDay(clock.now(), timeZone)` im Anwendungsfall. Ein
+   * Filter, der sich seinen eigenen „heute" nähme, wäre der zweite.
+   *
+   * Mehrere Zustände wirken als **Vereinigung**: „überfällig oder heute
+   * fällig" ist die Frage, die jemand stellt. Der Schnitt wäre immer leer.
+   */
+  readonly due?: TodoDueFilter;
+  /**
+   * Nach der Frist sortieren (A-19.20, E-074 Punkt 2).
+   *
+   * Ohne Angabe bleibt es bei der einen Ordnung, die es seit 0010 gibt:
+   * zuletzt geändert, absteigend. Ein Todo **ohne** Frist steht in **beiden**
+   * Richtungen am Ende und bekommt kein Platzhalterdatum — die Begründung
+   * steht bei `compareByDueDate` in `due-date.ts`.
+   */
+  readonly sortByDueDate?: DueSortDirection;
+}
+
+/** Welche Fristzustände die Liste zeigen soll, und gegen welchen Tag gerechnet wird. */
+export interface TodoDueFilter {
+  readonly states: readonly DueState[];
+  readonly today: CalendarDay;
 }

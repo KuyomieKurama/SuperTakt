@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { cx } from "../lib/cx";
+import { useFieldMessageLive } from "../lib/fieldMessages";
 import { Icon } from "./Icon";
 
 /**
@@ -19,7 +20,7 @@ import { Icon } from "./Icon";
  * drinsteht, nicht wohin es geht. Deshalb wird der Unterschied ueber sechs
  * sichtbare Merkmale getragen, von denen nur eines Farbe ist:
  *
- *   1. Randschiene links — gestreift (Leistung) gegen einfarbig (Vermerk)
+ *   1. Randschiene links — durchgezogen (Leistung) gegen unterbrochen (Vermerk)
  *   2. Kopfband mit Richtung — "Verlaesst Takt" gegen "Bleibt in Takt"
  *   3. Symbol im Kopfband — Pfeil nach aussen gegen Schloss
  *   4. Marke direkt vor der Beschriftung — gefuellt gegen Kontur
@@ -27,7 +28,15 @@ import { Icon } from "./Icon";
  *   6. Fussnote — nennt Ziel und Empfaenger gegen "wird nie exportiert"
  *
  * Merkmal 1 und 4 tragen auch dann, wenn das Kopfband abgeschnitten ist, und
- * bleiben in Graustufen unterscheidbar (Probe in Abschnitt 7 der Musterseite).
+ * bleiben in Graustufen unterscheidbar. Fuer Merkmal 1 steht die Zahl dazu im
+ * Kontrastlauf: In der Luecke der unterbrochenen Schiene sieht man die Karte,
+ * also ist Balken gegen Luecke dasselbe Verhaeltnis wie Schiene gegen Karte —
+ * 3,49:1 hell und 4,31:1 dunkel (`scripts/contrast-check.mjs`, Gruppe
+ * "Feldart"). Die Graustufenprobe in Abschnitt 7 der Musterseite zeigt das
+ * Bauteil als Ganzes und kann ein **einzelnes** Merkmal nicht freisprechen: Sie
+ * besteht, solange irgendeines der sechs traegt, und genau deshalb ist die
+ * gestreifte Schiene, die bis T-202 hier stand, jahrelang durchgekommen,
+ * obwohl sie nie gezeichnet wurde (T-194 Abschnitt 2.1, gemessen in T-198).
  */
 export type NoteScope = "billing" | "internal";
 
@@ -56,7 +65,14 @@ const SCOPE: Readonly<Record<NoteScope, ScopeDefinition>> = {
     defaultLabel: "Vermerk",
     markLabel: "Wird nicht exportiert",
     help: "Bleibt in Takt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage.",
-    defaultPlaceholder: "Nur für dich. Gedanken, Zwischenstände, Ansprechpartner …",
+    /*
+      Ohne Anrede (T-181, ST-09). „Nur fuer Sie" war eine Verdopplung des
+      Banners „Bleibt in Takt" unmittelbar darueber; ein Platzhalter traegt
+      ein Beispiel oder eine Form, nie eine Anrede (Regel S-06). Der Satz
+      der Grenze steht unveraendert im Banner, in der Marke und im `help` —
+      alle drei sind gesperrt (SP-09).
+    */
+    defaultPlaceholder: "Gedanken, Zwischenstände, Ansprechpartner …",
   },
 };
 
@@ -99,6 +115,7 @@ export function NoteField({
   const helpId = `${fieldId}-help`;
   const errorId = `${fieldId}-error`;
   const countId = `${fieldId}-count`;
+  const quietLive = useFieldMessageLive();
 
   const describedBy = [
     helpId,
@@ -168,12 +185,37 @@ export function NoteField({
           ) : null}
         </div>
 
-        {error !== undefined ? (
-          <p className="note__error" id={errorId} role="alert">
-            <Icon name="alert-circle" size={14} />
-            <span>{error}</span>
-          </p>
-        ) : null}
+        {/*
+          Die Meldeflaeche steht **immer** im Baum, auch leer (T-186, Befund
+          O-FX). Bis dahin war sie der eine Baustein, den T-162 nicht erreicht
+          hat: Ein `role="alert"`, das erst zusammen mit seinem Inhalt entsteht,
+          wird von vielen Vorlesehilfen uebergangen — sie melden Aenderungen an
+          einer Region, die sie kennen, und diese kennen sie in dem Augenblick
+          noch nicht. Eine Meldung, die **waehrend** des stehenden Dialogs
+          entsteht, blieb deshalb stumm.
+
+          Dieselbe Bauart und derselbe Grund wie in `FormDialog.tsx#TextField`
+          (T-162), in `ConfirmDialog.tsx` (T-118, T-175) und im Aufgabenbereich
+          des Add-ins (`outlook-addin/src/ui/field.ts`, T-158). Gemessen wird
+          sie an `TextField` in `tests/e2e/field-live-region-announcement.spec.ts`;
+          fuer dieses Feld steht die Messung aus (Bericht T-186).
+
+          `alert` und nicht `status`: Eine Feldmeldung ist die Absage an eine
+          gerade getaetigte Eingabe. Leer nimmt die Flaeche keinen Platz ein —
+          den Abstand traegt `.note__error` selbst.
+
+          `aria-live` schaltet sie waehrend eines Absendeversuchs still, ohne
+          die Rolle anzutasten: Dann traegt der Fokuswechsel den Satz, und ein
+          zweites Mal ist keine Hilfe (T-202, `lib/fieldMessages.ts`).
+        */}
+        <div className="note__live" role="alert" aria-live={quietLive}>
+          {error === undefined ? null : (
+            <p className="note__error" id={errorId}>
+              <Icon name="alert-circle" size={14} />
+              <span>{error}</span>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

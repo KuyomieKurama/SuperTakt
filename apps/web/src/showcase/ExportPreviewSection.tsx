@@ -110,6 +110,20 @@ export function ExportPreviewSection() {
     [excludedEntryIds],
   );
 
+  /**
+   * Auf der Musterseite oeffnet sich kein Dialog; die Ansage steht an seiner
+   * Stelle. Sie nennt die Buchung so, wie der Knopf sie nennt — mit ihrem
+   * **sichtbaren** Zeitraum und nicht mit ihrer Kennung (T-222 Abschnitt
+   * 15.4).
+   */
+  const onEditEntry = useCallback((groupId: string, entryId: string) => {
+    const group = EXPORT_GROUPS.find((candidate) => candidate.id === groupId);
+    const entry = group?.entries.find((candidate) => candidate.id === entryId);
+    setAnnouncement(
+      `Buchung ${entry?.period ?? ""} bearbeiten. Hier öffnet sich sonst der Dialog.`,
+    );
+  }, []);
+
   return (
     <Section
       id="export"
@@ -123,6 +137,16 @@ export function ExportPreviewSection() {
         Buchung heraus: Es bleiben 15 Minuten, und die Gruppe fällt sofort auf{" "}
         <strong>0,25</strong>. Das ist die ganze Rundungsregel in einer Bewegung, und sie steht
         an der einzigen Stelle, an der sie jemanden Geld kostet.
+      </InlineMessage>
+
+      <InlineMessage tone="info" title="Am Ende jeder Buchungszeile steht ein Knopf, nicht zwei">
+        Klappen Sie zusätzlich die <strong>letzte</strong> Gruppe auf: Ihre einzige Buchung hat
+        keine Leistung. Der Knopf dort heißt „Leistung nachtragen“ und trägt die festere
+        Ausprägung; in den Zeilen darüber heißt <em>derselbe</em> Knopf „Leistung bearbeiten“ und
+        ist leiser. Das ist ein Baustein mit zwei Beschriftungen und nicht zwei Bausteine — der
+        Knopf ist das Rückkehrziel des Dialogs, den er öffnet, und ein Knopf, der beim Gelingen
+        ausgetauscht wird, nimmt den Fokus mit ins Nichts. Der Zeitraum der Zeile steht in beiden
+        Zuständen unsichtbar im Namen, damit acht Buchungen nicht achtmal gleich heißen.
       </InlineMessage>
 
       <p className="visually-hidden" role="status" aria-live="polite">
@@ -153,9 +177,7 @@ export function ExportPreviewSection() {
             onToggleGroup={onToggleGroup}
             onToggleExpanded={onToggleExpanded}
             onToggleEntry={onToggleEntry}
-            onEditEntry={(_groupId, entryId) =>
-              setAnnouncement(`Leistung der Buchung ${entryId} bearbeiten.`)
-            }
+            onEditEntry={onEditEntry}
           />
         )}
       </Card>

@@ -98,7 +98,11 @@ apps/web/
    `exactOptionalPropertyTypes`.
 4. Wer ein Farbtoken ändert, ergänzt das Paar in `scripts/contrast-check.mjs` und lässt
    `pnpm contrast` laufen. Das Skript liest `packages/ui-tokens/tokens.css` ohne Vite direkt vom
-   Dateisystem — eine Zuordnung im Bündler hilft ihm nicht.
+   Dateisystem — eine Zuordnung im Bündler hilft ihm nicht. **Seit T-209 ist das keine Bitte
+   mehr:** Der Lauf misst seine eigene Vollständigkeit (A-A-45) und wird rot, sobald ein
+   farbtragendes Token gezeichnet wird, das weder ein Paar noch eine benannte Ausnahme noch einen
+   Eintrag in `noContrastQuestion` hat — und ebenso, wenn ein Paar eine Farbe misst, die keine
+   Klasse mehr zeichnet. Die Prüfung ist tokengenau, nicht flächengenau.
 5. Jede neue Ziehbewegung braucht eine Alternative ohne Ziehen (WCAG 2.2 SC 2.5.7).
 6. Jeder neue Zustand braucht ein zweites Merkmal neben der Farbe.
 7. Der **Exportstatus bleibt zweiwertig** (A-6.9, E-032). Filter, Abfragen und Exportauswahl

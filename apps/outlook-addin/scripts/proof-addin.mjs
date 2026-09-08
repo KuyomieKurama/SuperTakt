@@ -37,7 +37,7 @@ import path from 'node:path';
 
 // --- Prüflinge: das Add-in ------------------------------------------------
 import { checkPattern } from '../src/callnumber/pattern.ts';
-import { REJECTION_LABEL } from '../src/callnumber/labels.ts';
+import { NO_CALL_NUMBER_FOUND, REJECTION_LABEL } from '../src/callnumber/labels.ts';
 import { PATTERN_CATALOG, DEFAULT_PATTERN } from '../src/callnumber/catalog.ts';
 import { createTimedEvaluator } from '../src/callnumber/evaluate.ts';
 import { detectCallNumber } from '../src/callnumber/detect.ts';
@@ -65,6 +65,14 @@ import {
 } from '../src/office/mail.ts';
 import { HIDDEN_MARKER, dropHidden, hasHidden, visibleText } from '../src/text/hidden.ts';
 import { cutToCharacterBoundary } from '../src/text/cut.ts';
+import { dueDateForRequest, readDueDate } from '../src/duedate/entry.ts';
+import {
+  fieldErrorId,
+  fieldHintId,
+  fieldParts,
+  withDescription,
+} from '../src/ui/field.ts';
+import { createTodoGate } from '../src/ui/create-gate.ts';
 
 // --- Prüflinge: die Add-in-Routen des lokalen Dienstes ---------------------
 // Bewusst über einen relativen Pfad und nicht über eine Paketabhängigkeit: Der
@@ -109,7 +117,16 @@ import { parseYaml } from '../../local-api/scripts/openapi-reader.mjs';
  * folgt daraus, statt gemessen zu werden.
  */
 import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/routes/todos.ts';
-import { createTodoSchema as addinCreateTodoSchema } from '../../local-api/src/routes/addin/schema.ts';
+import {
+  ADDIN_NOTE_MAX_LENGTH,
+  ADDIN_TAG_IDS_MAX,
+  ADDIN_BOOKING_NOTE_MAX_LENGTH,
+  ADDIN_TAG_NAMES_MAX,
+  REQUEST_SCHEMAS as ADDIN_REQUEST_SCHEMAS,
+  bookSchema as addinBookSchema,
+  createTodoSchema as addinCreateTodoSchema,
+} from '../../local-api/src/routes/addin/schema.ts';
+import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/routes/time.ts';
 
 /*
  * --- Prüflinge: die **echte** Speicherung und der **andere** Weg (T-061) ----
@@ -160,14 +177,20 @@ import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases
 // Bezeichner steht im Quelltext des Aufgabenbereichs.
 import {
   CONTROL_WHITESPACE,
+  DUE_DATE_MESSAGE,
+  DUE_DATE_SHAPE,
   FORBIDDEN_NAME_CHARACTERS,
   HIDDEN_MARKER as DOMAENE_MARKE,
+  MAX_DUE_YEAR,
   MAX_TAG_NAME_LENGTH,
+  MAX_TITLE_CHARACTERS as DOMAENE_MAX_TITEL,
+  MIN_DUE_YEAR,
   POOL_RULE_AXIS_IDS,
   POOL_RULE_AXIS_OF_FIELD,
   checkCallNumber,
   dropHiddenCharacters,
   hasHiddenCharacter,
+  isCalendarDay,
   matchesPool,
   mayLookUpDuplicates,
   poolMovementSentence,
@@ -896,7 +919,13 @@ check('Ein erledigtes Todo wird im Angebot als solches ausgewiesen (A-2.4)', () 
 
 check('C-03: die Trefferliste kündigt die Aufhebung an, statt sie zur Wahl zu stellen', () => {
   assert.match(REOPEN_HINT, /automatisch/, 'der Hinweis sagt nicht, dass es von selbst geschieht');
-  assert.equal(/sofern|wenn du|ausdrücklich|Kästchen/.test(REOPEN_HINT), false, `bedingt formuliert: ${REOPEN_HINT}`);
+  // Seit E-080 siezt Takt. „wenn du" allein finge die bedingte Formulierung
+  // nicht mehr, in die sie beim nächsten Umschreiben rutschen könnte.
+  assert.equal(
+    /sofern|wenn (?:du|Sie)|ausdrücklich|Kästchen/.test(REOPEN_HINT),
+    false,
+    `bedingt formuliert: ${REOPEN_HINT}`,
+  );
 });
 
 /*
@@ -3611,20 +3640,288 @@ check(`beide Türen nehmen dieselben ${String(ANGENOMMENE_ZEICHEN.length)} harml
   assert.deepEqual(abweichungen, [], abweichungen.join('; '));
 });
 
-check('die Länge läuft ebenfalls nicht auseinander', () => {
-  /*
-   * Die zweite Hälfte desselben Befunds, und sie stand länger im Baum als die
-   * erste: Die Add-in-Tür nahm 512 Zeichen an, die Hauptanwendung 500. Ein so
-   * angelegtes Todo ließ sich über `PATCH /todos/{todoId}` nie wieder
-   * speichern — der Änderungsdialog schickt den Titel mit.
-   */
-  const gerade = 'a'.repeat(MAX_TITLE_CHARACTERS);
-  const einsZuViel = 'a'.repeat(MAX_TITLE_CHARACTERS + 1);
+// ---------------------------------------------------------------------------
+// O-AY (T-239): der Wächter fragt nach der Bedeutung, nicht bloß nach der Zahl
+// ---------------------------------------------------------------------------
+/*
+ * Der Herkunftswächter unten sucht eine **Zahl**. Bis T-239 suchte er sie ohne
+ * jede Rücksicht darauf, was sie an ihrer Fundstelle bedeutet — und wurde damit
+ * von jeder künftigen, unbeteiligten 500 rot gemacht.
+ *
+ * Gemessen statt vermutet (T-239): Im Quellbaum des Aufgabenbereichs stehen
+ * heute **acht** Vorkommen der freistehenden Zahl 500, verteilt auf drei
+ * Dateien. **Sieben** davon meinen den Titeldeckel (`text/cut.ts`,
+ * `office/mail.ts`), **eine** meint einen HTTP-Statuscode
+ * (`api/client.ts`: „Alles Übrige, einschließlich 500"). Alle acht stehen in
+ * Kommentaren, und weil `sourceWithoutComments` Kommentare streicht, sieht der
+ * Wächter heute null Träger und ist grün.
+ *
+ * Grün ist er also nur, solange die fremde Bedeutung als Fließtext dasteht.
+ * Zwanzig Zeilen unter jenem Kommentar läuft in `api/client.ts` bereits eine
+ * Statusleiter **im Code** — `401`, `403`, `404`, `422`, `400` —, und ihre
+ * sechste Sprosse ist im Kommentar oben schon angekündigt. Wer
+ * `if (status >= 500) …` ergänzt, tut das Richtige und bekommt dafür einen
+ * roten Lauf, der ihm etwas über den Titeldeckel erzählt.
+ *
+ * Das ist der teure Fehlschlag, nicht der billige: Ein falscher Alarm wird
+ * abgeschaltet, und danach misst gar nichts mehr. Deshalb hinnehmen wir ihn
+ * nicht, sondern schärfen — die Ausnahme ist **eine**, sie ist eng, und sie ist
+ * ihrerseits gemessen (Gegenprobe unmittelbar hinter dem Wächter, in **beide**
+ * Richtungen).
+ *
+ * Was **nicht** ausgenommen wird und weiter rot macht: die Zahl in einer
+ * Zeichenkette (`'HTTP 500'`) und die Zahl unter einem `case` an einem
+ * Schalter, der über etwas anderes als einen Status entscheidet. Beide Fälle
+ * kommen heute nicht vor; sie stehen hier, damit der nächste Leser die Grenze
+ * der Ausnahme kennt, statt sie zu erraten.
+ */
 
-  assert.equal(nimmtAn(addinTuer, { title: gerade }), true, 'die Add-in-Tür nimmt ihren eigenen Deckel nicht an');
-  assert.equal(nimmtAn(hauptTuer, { title: gerade }), true, 'die Haupttür nimmt weniger als das Add-in');
-  assert.equal(nimmtAn(addinTuer, { title: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
-  assert.equal(nimmtAn(hauptTuer, { title: einsZuViel }), false, 'die Haupttür nimmt mehr als das Add-in');
+const STATUS_OPERATOR = String.raw`(?:===|!==|==|!=|>=|<=|>|<)`;
+/** `status`, `statusCode`, `httpStatus`, `response.status`, `antwort.statusCode`. */
+const STATUS_NAME = String.raw`(?:\b[A-Za-z_$][\w$]*\s*\.\s*)?\b\w*[Ss]tatus(?:Code)?\b`;
+
+/** Die Zeile um eine Fundstelle — damit die Meldung auf den Ort zeigt. */
+const zeileUm = (text, index) => {
+  const von = text.lastIndexOf('\n', index) + 1;
+  const bis = text.indexOf('\n', index);
+  return text.slice(von, bis === -1 ? text.length : bis).trim();
+};
+
+/**
+ * Die Stellen, an denen ein Quelltext die Zahl `wert` **selbst trägt** — ohne
+ * die Stellen, an denen sie erkennbar einen HTTP-Statuscode meint.
+ *
+ * Der Quelltext kommt ohne Kommentare herein; eine Begründung darf die Zahl
+ * nennen, ein Ausdruck nicht.
+ */
+const traegerStellen = (quelltext, wert) => {
+  const n = String(wert);
+  const freistehend = `(?<![\\d_])${n}(?![\\d_])`;
+
+  /** Spannen, in denen die Zahl nachweislich einen HTTP-Status meint. */
+  const statusSpannen = [];
+
+  // Form 1 — ein Vergleich, dessen andere Seite ein statusartiger Name ist.
+  const vergleich = new RegExp(
+    `${STATUS_NAME}\\s*${STATUS_OPERATOR}\\s*${freistehend}` +
+      `|${freistehend}\\s*${STATUS_OPERATOR}\\s*${STATUS_NAME}`,
+    'g',
+  );
+  for (const treffer of quelltext.matchAll(vergleich)) {
+    statusSpannen.push([treffer.index, treffer.index + treffer[0].length]);
+  }
+
+  // Form 2 — `case 500:`, aber **nur** unter einem Schalter, der über einen
+  // statusartigen Wert entscheidet. Ohne diese Bedingung wäre die Ausnahme ein
+  // Loch: Jeder Deckel unter einem beliebigen `case` liefe hindurch.
+  const schalter = [...quelltext.matchAll(/\bswitch\s*\(([^)]*)\)/g)];
+  const statusName = new RegExp(STATUS_NAME);
+  for (const treffer of quelltext.matchAll(new RegExp(`\\bcase\\s+${freistehend}\\s*:`, 'g'))) {
+    const davor = schalter.filter((eintrag) => eintrag.index < treffer.index).at(-1);
+    if (davor !== undefined && statusName.test(davor[1])) {
+      statusSpannen.push([treffer.index, treffer.index + treffer[0].length]);
+    }
+  }
+
+  const traeger = [];
+  for (const treffer of quelltext.matchAll(new RegExp(freistehend, 'g'))) {
+    const gedeckt = statusSpannen.some(([von, bis]) => treffer.index >= von && treffer.index < bis);
+    if (!gedeckt) traeger.push(zeileUm(quelltext, treffer.index));
+  }
+  return traeger;
+};
+
+check('die Titellänge hat eine Herkunft: der Aufgabenbereich führt keine eigene', () => {
+  /*
+   * ---------------------------------------------------------------------------
+   * Warum hier keine Zahlen mehr verglichen werden (T-128, T-134, E-063 Punkt 5)
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-134 stand an dieser Stelle ein Vergleich: Das Add-in trug seine eigene
+   * `MAX_TITLE_CHARACTERS = 500`, der Dienst seine, und dieser Abschnitt hielt
+   * beide gegeneinander. Der Vergleich war ehrlich gemeint und trotzdem die
+   * schwächste Sorte Prüfung, die es hier geben kann: **Er wird erst rot, wenn
+   * die Doppelung schon falsch ist.** Führen beide Seiten dieselbe falsche Zahl,
+   * bleibt er grün — er misst die Doppelung nicht, er verträgt sie. Genau so hat
+   * die Zeichenklasse fünf Wellen überlebt (T-117 bis T-123).
+   *
+   * Gefragt ist deshalb nicht mehr „steht hier und dort dasselbe?", sondern
+   * **„kommt der Wert an dieser Stelle aus `@takt/domain`?"**.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum das bei einer Zahl anders gemessen werden muss als bei einer Funktion
+   * ---------------------------------------------------------------------------
+   *
+   * Für die Zeichenklasse genügt `assert.equal(dropHidden, dropHiddenCharacters)`
+   * (Abschnitt 17): Zwei Funktionen sind genau dann dieselbe Sache, wenn sie
+   * dasselbe Objekt sind. Eine **Zahl** hat keine Kennung. `500 === 500` ist
+   * wahr, gleichgültig, wo die beiden Fünfhundert herkommen — die Frage nach der
+   * Herkunft lässt sich zur Laufzeit an einem Zahlenwert überhaupt nicht
+   * stellen.
+   *
+   * Sie lässt sich am **Quelltext** stellen, und zwar in drei Teilen, die
+   * einzeln nichts und zusammen alles sagen:
+   *
+   *  1. Kein Quelltext des Aufgabenbereichs **trägt** die Zahl in einer Bedeutung,
+   *     die den Deckel meinen könnte — ein HTTP-Statuscode ist seit T-239
+   *     ausgenommen und die Ausnahme gegengeprüft (O-AY). Das Muster dafür
+   *     wird aus der Domäne **erzeugt** und nicht hingeschrieben — änderte die
+   *     Domäne ihren Wert, suchte dieser Lauf im selben Durchgang nach dem
+   *     neuen. Ein Wächter, der seine eigene Zahl abschriebe, wäre wieder genau
+   *     das Muster, gegen das er steht.
+   *  2. Die eine Datei, die den Namen ausführt, holt ihn aus `@takt/domain`.
+   *  3. Der Wert, den der Aufgabenbereich tatsächlich herausgibt, ist der der
+   *     Domäne. Ohne diesen dritten Teil bestünde die Prüfung auch dann, wenn
+   *     jemand `MAX_NAME_LENGTH as MAX_TITLE_CHARACTERS` ausführte — ein Import
+   *     aus der richtigen Datei mit der falschen Bedeutung.
+   *
+   * Teil 1 allein bemerkt eine daneben angelegte Kopie, Teil 2 allein eine
+   * Umleitung, Teil 3 allein eine Verwechslung. Erst zusammen sind sie die
+   * Aussage „eine Quelle" — dieselbe Bauart wie das Paar in Abschnitt 17, nur
+   * für einen Wert ohne Kennung.
+   */
+
+  // Teil 1 — erzeugt, nicht abgeschrieben; und nach der **Bedeutung** gefragt,
+  // nicht bloß nach der Ziffernfolge (O-AY, siehe `traegerStellen` oben).
+  const durchsucht = files.filter((datei) => /\.tsx?$/.test(datei));
+  assert.ok(
+    durchsucht.length > 15,
+    `nur ${String(durchsucht.length)} TypeScript-Dateien durchsucht — der Wächter greift ins Leere`,
+  );
+
+  const traeger = durchsucht
+    .map((datei) => ({
+      datei: path.relative(srcRoot, datei),
+      stellen: traegerStellen(sourceWithoutComments(datei), DOMAENE_MAX_TITEL),
+    }))
+    .filter((eintrag) => eintrag.stellen.length > 0)
+    .map((eintrag) => `${eintrag.datei}: ${eintrag.stellen.join(' | ')}`);
+
+  assert.deepEqual(
+    traeger,
+    [],
+    `der Aufgabenbereich führt die Zahl ${String(DOMAENE_MAX_TITEL)} selbst, in: ${traeger.join(' — ')} — ` +
+      'kommt sie aus der Domäne, gehört der Name hin; bedeutet sie etwas anderes, gehört ihr ein eigener Name. ' +
+      'Ein HTTP-Statuscode ist bereits ausgenommen, sofern er als Vergleich gegen einen statusartigen Namen dasteht ' +
+      '(`status === ' + String(DOMAENE_MAX_TITEL) + '`) — diese Zeile hier abzuschalten ist nicht der nächste Schritt.',
+  );
+
+  // Teil 2 — die Datei, die den Namen ausführt, liest ihn.
+  const deckel = sourceWithoutComments(path.join(srcRoot, 'office', 'mail.ts'));
+  assert.match(deckel, /from '@takt\/domain'/, 'mail.ts liest die Domäne nicht');
+  assert.match(
+    deckel,
+    /\bMAX_TITLE_CHARACTERS\b[\s\S]*?from '@takt\/domain'|from '@takt\/domain'[\s\S]*?\bMAX_TITLE_CHARACTERS\b/,
+    'mail.ts holt MAX_TITLE_CHARACTERS nicht aus @takt/domain',
+  );
+  assert.equal(
+    /(?:const|let|var)\s+MAX_TITLE_CHARACTERS\b/.test(deckel),
+    false,
+    'mail.ts erklärt MAX_TITLE_CHARACTERS wieder selbst',
+  );
+
+  // Teil 3 — und es ist auch der richtige Name aus der Domäne.
+  assert.equal(
+    MAX_TITLE_CHARACTERS,
+    DOMAENE_MAX_TITEL,
+    'der Aufgabenbereich führt einen anderen Wert aus der Domäne unter diesem Namen',
+  );
+});
+
+check('O-AY, Gegenprobe: der Wächter beißt weiter — und nicht mehr in den Statuscode', () => {
+  /*
+   * Die Schärfung aus T-239 ist nur dann eine Verbesserung, wenn sie in **beide**
+   * Richtungen gemessen ist. Eine Ausnahme, die niemand gegenprüft, ist ein Loch
+   * mit einer Begründung davor.
+   *
+   * Richtung A: jede Bauart, in der im Aufgabenbereich eine **zweite Fassung**
+   * des Titeldeckels entstünde, wird weiterhin gefunden. Das ist der Zweck des
+   * Wächters; ginge hier eine durch, hätte die Schärfung ihn entwertet.
+   *
+   * Richtung B: die eine andere Bedeutung, die die Zahl im Add-in belegbar hat
+   * — ein HTTP-Statuscode —, macht ihn nicht mehr rot. Das ist der Fehlalarm,
+   * gegen den O-AY geschrieben ist.
+   *
+   * Richtung C: die Ausnahme bleibt eng. Ein Deckel neben einem Status und ein
+   * `case` an einem Schalter, der über etwas anderes entscheidet, sind rot.
+   */
+  const n = DOMAENE_MAX_TITEL;
+
+  // Richtung A — die zweite Fassung des Deckels, in sieben Bauarten.
+  for (const quelle of [
+    `const MAX_TITLE_CHARACTERS = ${String(n)};`,
+    `const deckel = ${String(n)};`,
+    `const gekuerzt = titel.slice(0, ${String(n)});`,
+    `const schema = z.string().max(${String(n)});`,
+    `if (text.length > ${String(n)}) { melden(); }`,
+    `const vorschlag = suggestTitle(text, ${String(n)});`,
+    `const grenzen = [${String(n)}, 64];`,
+  ]) {
+    assert.equal(
+      traegerStellen(quelle, n).length,
+      1,
+      `der Wächter übersieht eine zweite Fassung des Deckels: ${quelle}`,
+    );
+  }
+
+  // Richtung B — der Statuscode in sechs Schreibweisen.
+  for (const quelle of [
+    `if (status === ${String(n)}) return 'failed';`,
+    `if (status >= ${String(n)}) return 'failed';`,
+    `if (response.status === ${String(n)}) return 'failed';`,
+    `if (httpStatus !== ${String(n)}) return 'ok';`,
+    `if (${String(n)} <= antwort.statusCode) return 'failed';`,
+    `switch (status) { case ${String(n)}: return 'failed'; }`,
+  ]) {
+    assert.deepEqual(
+      traegerStellen(quelle, n),
+      [],
+      `ein HTTP-Status macht den Wächter rot — genau der falsche Alarm aus O-AY: ${quelle}`,
+    );
+  }
+
+  // Richtung C — die Ausnahme ist kein Loch.
+  assert.equal(
+    traegerStellen(`switch (modus) { case ${String(n)}: return 'failed'; }`, n).length,
+    1,
+    'ein `case` unter einem Schalter, der über keinen Status entscheidet, wird durchgelassen',
+  );
+  assert.equal(
+    traegerStellen(`if (status === 404) { const deckel = ${String(n)}; }`, n).length,
+    1,
+    'ein Deckel in derselben Zeile wie ein Status wird durchgelassen',
+  );
+
+  // Und die Selbstprobe: das Muster wird aus der Domäne erzeugt. Änderte sie
+  // ihren Wert, suchte dieser Lauf im selben Durchgang nach dem neuen — eine
+  // fremde Zahl ist kein Träger.
+  assert.deepEqual(traegerStellen(`const fremd = ${String(n + 1)};`, n), []);
+});
+
+check('beide Türen wenden den Deckel wirklich an — die Bindung, nicht die Zahl', () => {
+  /*
+   * Was vom alten Zahlenvergleich bleibt und **nicht** tautologisch ist: Dass
+   * die Zahl aus einer Quelle kommt, sagt nichts darüber, ob `zod` sie an
+   * diesem Feld tatsächlich anwendet. Die Bindung kann jemand lösen, ohne die
+   * Zahl anzufassen — genauso wie bei der Zeichenklasse eine Zeile weiter oben.
+   *
+   * Gemessen wird deshalb **jede Tür einzeln gegen die Domäne** und keine gegen
+   * die andere (T-123): Zwei Türen, die einander gleichen, können gemeinsam
+   * falsch liegen. Dass sie einander gleichen, folgt jetzt, statt gemessen zu
+   * werden.
+   *
+   * Der Befund dahinter stand länger im Baum als der der Zeichenklasse: Die
+   * Add-in-Tür nahm 512 Zeichen an, die Hauptanwendung 500. Ein so angelegtes
+   * Todo ließ sich über `PATCH /todos/{todoId}` nie wieder speichern — der
+   * Änderungsdialog schickt den Titel mit.
+   */
+  const gerade = 'a'.repeat(DOMAENE_MAX_TITEL);
+  const einsZuViel = 'a'.repeat(DOMAENE_MAX_TITEL + 1);
+
+  for (const [wo, tuer] of [['die Add-in-Tür', addinTuer], ['die Haupttür', hauptTuer]]) {
+    assert.equal(nimmtAn(tuer, { title: gerade }), true, `${wo} nimmt den Deckel der Domäne nicht an`);
+    assert.equal(nimmtAn(tuer, { title: einsZuViel }), false, `${wo} nimmt mehr an als die Domäne sagt`);
+  }
 });
 
 check(`der Tagname bleibt an ${String(MAX_TAG_NAME_LENGTH)} Zeichen aus der Domäne gebunden`, () => {
@@ -3642,6 +3939,160 @@ check(`der Tagname bleibt an ${String(MAX_TAG_NAME_LENGTH)} Zeichen aus der Dom�
     assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [gerade] }), true, `${wo} nimmt ${String(MAX_TAG_NAME_LENGTH)} Zeichen nicht an`);
     assert.equal(nimmtAn(tuer, { title: 'Wartung Nord', tagNames: [einsZuViel] }), false, `${wo} nimmt mehr als ${String(MAX_TAG_NAME_LENGTH)} Zeichen an`);
   }
+});
+
+/** Erfundene Kennungen in UUID-Form — beide Türen nehmen dieselbe Form an. */
+const kennungen = (anzahl) =>
+  Array.from(
+    { length: anzahl },
+    (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+  );
+
+/** Erfundene Tagnamen, jeder für sich zulässig und von den anderen verschieden. */
+const namen = (anzahl) => Array.from({ length: anzahl }, (_, index) => `Ost ${String(index)}`);
+
+check('die Listengrenzen sagen an beiden Türen dasselbe (O-AR)', () => {
+  /*
+   * O-AR, der Add-in-Anteil — und die ehrliche Auskunft dazu, was diese Zeilen
+   * können und was nicht.
+   *
+   * `tagIds` und `tagNames` tragen ihre Obergrenze an **zwei** Türen:
+   * `routes/addin/schema.ts` (hier gemessen, T-134 hat ihr einen Namen gegeben)
+   * und `routes/todos.ts`, gleich zweimal. Es ist dieselbe Wahrheit — „wie viele
+   * Tags darf ein Todo in einer Anfrage bekommen" — und sie steht heute an drei
+   * Stellen unabhängig geschrieben. Der Kommentar an `ADDIN_TAG_NAMES_MAX` sagte
+   * das bis T-134 zu, ohne dass es jemand erzwang: E-063 Punkt 5 in seiner
+   * mildesten Form.
+   *
+   * **Das hier ist ein Zahlenvergleich, und ein Zahlenvergleich ist die
+   * schwächere Prüfung** — genau die, die zwei Zeilen weiter oben für den
+   * Titeldeckel abgelöst wurde. Er bleibt hier trotzdem stehen, weil die
+   * stärkere Frage noch nicht gestellt werden **kann**: Solange es keine
+   * gemeinsame Quelle gibt, gibt es keine Herkunft zu prüfen. Die zweite Tür
+   * liegt außerhalb der Hoheit dieser Aufgabe (E-053); T-134 meldet sie, statt
+   * die Zahl halb umzustellen — eine halb umgestellte Zahl sieht aus wie
+   * erledigt.
+   *
+   * Bis dahin gilt: Laufen die Türen auseinander, wird dieser Lauf rot. Vorher
+   * wäre gar nichts geschehen.
+   */
+  const titel = { title: 'Wartung Nord' };
+
+  for (const [was, grenze, bauen] of [
+    ['tagIds', ADDIN_TAG_IDS_MAX, (anzahl) => ({ ...titel, tagIds: kennungen(anzahl) })],
+    ['tagNames', ADDIN_TAG_NAMES_MAX, (anzahl) => ({ ...titel, tagNames: namen(anzahl) })],
+  ]) {
+    for (const [wo, tuer] of [['Add-in-Tür', addinTuer], ['Haupttür', hauptTuer]]) {
+      assert.equal(
+        nimmtAn(tuer, bauen(grenze)),
+        true,
+        `${wo}: ${was} nimmt ${String(grenze)} Einträge nicht an`,
+      );
+      assert.equal(
+        nimmtAn(tuer, bauen(grenze + 1)),
+        false,
+        `${wo}: ${was} nimmt mehr als ${String(grenze)} Einträge an`,
+      );
+    }
+  }
+});
+
+check('der übernommene Vermerk passt durch die Tür, die ihn annehmen soll (B-12.3, T-134)', () => {
+  /*
+   * **Der Fund dieser Aufgabe, und er war keine Aufräumarbeit.**
+   *
+   * `prepareNote` schnitt bis T-134 auf `MAX_TAKEOVER_CHARACTERS` und hängte den
+   * Hinweis „(gekürzt)" **danach** an. Der Vermerk war damit elf Zeichen länger
+   * als der Deckel, den `ADDIN_NOTE_MAX_LENGTH` an derselben Tür durchsetzt —
+   * und zwar in jedem Fall, in dem die zweite Hälfte des Textes keinen
+   * Zeilenumbruch trägt: eine lange Mail ohne Absätze, ein Zitatverlauf aus
+   * einer Zeile, ein Textkörper aus Emoji.
+   *
+   * Der Benutzer drückt „Inhalt der E-Mail übernehmen", dann „Anlegen" — und
+   * bekommt ein 422 auf ein Feld, dessen Inhalt er nicht geschrieben hat.
+   * Dieselbe Sackgasse wie T-114 beim Titel, nur elf Zeichen weiter.
+   *
+   * **Warum ihn niemand gefunden hat:** Der Nachweis prüfte den Vermerk gegen
+   * eine **Rechnung** (`Deckel + Länge des Hinweises`, Abschnitt 17) statt gegen
+   * die **Tür**. Eine Erwartung, die den Fehler nachrechnet, bestätigt ihn.
+   * Diese Zeile fragt deshalb das Schema, das den Vermerk wirklich annimmt.
+   */
+  const emoji = String.fromCodePoint(0x1f6e0);
+
+  for (const [was, body] of [
+    ['ein Textkörper aus Emoji', emoji.repeat(3000)],
+    ['ein langer Fließtext ohne Absatz', 'a'.repeat(9000)],
+    ['ein Zitatverlauf mit Absätzen', 'Zeile mit etwas Text\n'.repeat(400)],
+  ]) {
+    const vermerk = prepareNote({
+      subject: 'Störung Lüftung',
+      body,
+      senderName: 'A. Beispiel',
+      senderAddress: 'a.beispiel@example.org',
+      receivedAt: null,
+    });
+
+    assert.ok(
+      vermerk.length <= ADDIN_NOTE_MAX_LENGTH,
+      `${was}: der Vermerk ist ${String(vermerk.length)} Zeichen lang, die Tür nimmt ${String(ADDIN_NOTE_MAX_LENGTH)}`,
+    );
+    assert.equal(
+      nimmtAn(addinTuer, { title: 'Wartung Nord', note: vermerk }),
+      true,
+      `${was}: die Tür weist den übernommenen Vermerk ab`,
+    );
+  }
+
+  // Die Gegenprobe zur Behebung: Die alte Rechnung — voll ausschneiden, Hinweis
+  // danach anhängen — ergibt einen Vermerk, den die Tür abweist. Ohne sie stünde
+  // nur fest, dass es heute passt, und nicht, dass es je ein Problem war.
+  const alt = `${'a'.repeat(ADDIN_NOTE_MAX_LENGTH)}\n…(gekürzt)`;
+  assert.equal(
+    nimmtAn(addinTuer, { title: 'Wartung Nord', note: alt }),
+    false,
+    'die alte Rechnung ginge durch — dann misst diese Prüfung nichts',
+  );
+});
+
+check('die Leistung: was die Add-in-Tür annimmt, nimmt die Haupttür auch an (O-AR)', () => {
+  /*
+   * Die zweite der beiden `4000` in `routes/addin/schema.ts` — und sie ist
+   * **nicht** dieselbe Wahrheit wie die erste. Der Vermerk begrenzt übernommenen
+   * E-Mail-Text (B-12.3 Punkt 3, geht nie in den Export); die Leistung ist eine
+   * Eingabe des Benutzers und geht in die Abrechnungsdatei (A-7.4). Gleiche
+   * Zahl, andere Bedeutung — die Begründung steht an der Konstante, nicht hier.
+   *
+   * Was hier zu messen ist, ist die **eine Richtung, in der eine Abweichung
+   * weh tut**: Eine Buchung, die über den Aufgabenbereich entsteht, muss in der
+   * Hauptanwendung bearbeitbar bleiben. Das ist der Befund C-03 in seiner
+   * allgemeinen Form — dieselbe Handlung, zwei Ergebnisse —, und er hängt nicht
+   * daran, dass beide Deckel gleich sind, sondern daran, dass der engere im
+   * Add-in liegt.
+   *
+   * Diese Zeile bleibt deshalb auch dann grün, wenn der Orchestrator die offene
+   * Frage andersherum entscheidet und beide Türen gleichzieht. Sie wird rot,
+   * wenn das Add-in eines Tages **mehr** annimmt als die Hauptanwendung — genau
+   * der Zustand, der zwischen T-101 und T-114 zwei Wellen lang bestand.
+   */
+  const gerade = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH);
+  const einsZuViel = 'a'.repeat(ADDIN_BOOKING_NOTE_MAX_LENGTH + 1);
+  const buchung = { startedAt: '2026-09-04T08:00:00Z', endedAt: '2026-09-04T08:30:00Z' };
+
+  // Die Bindung an der Add-in-Tür: Der Deckel wirkt wirklich.
+  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: gerade }), true, 'die Add-in-Tür nimmt ihren Deckel nicht an');
+  assert.equal(nimmtAn(addinBookSchema, { ...buchung, note: einsZuViel }), false, 'die Add-in-Tür nimmt mehr als ihren Deckel');
+
+  // Und die Richtung, auf die es ankommt: Die Haupttür nimmt alles an, was hier
+  // durchgeht. Derselbe Text, dieselbe Spalte, zwei Wege.
+  assert.equal(
+    nimmtAn(MAIN_TIME_SCHEMAS.createTimeEntry, {
+      todoId: ID.todoStoerung,
+      ...buchung,
+      note: gerade,
+    }),
+    true,
+    'eine über den Aufgabenbereich gebuchte Leistung ist in der Hauptanwendung nicht mehr speicherbar (C-03)',
+  );
 });
 
 check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () => {
@@ -4151,9 +4602,20 @@ check('der Vermerk wird ebenso an einer Zeichengrenze gekürzt', () => {
 
   assert.equal(wohlgeformt(vermerk), true, 'der Vermerk übersteht UTF-8 nicht');
   assert.equal(fromBase64(toBase64(vermerk)), vermerk);
+
+  /*
+   * **Hier stand bis T-134 die Erwartung, die den Fehler nachrechnete:**
+   * `MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length`. Sie war grün, und der
+   * Vermerk war trotzdem elf Zeichen zu lang für die Tür, die ihn annehmen soll
+   * — weil die Erwartung dieselbe Rechnung anstellte wie der Fehler. Eine
+   * Prüfung, die den Prüfling nachbaut, bestätigt ihn.
+   *
+   * Der Deckel steht jetzt allein da, und die Frage nach der Tür stellt
+   * Abschnitt 16 („der übernommene Vermerk passt durch die Tür").
+   */
   assert.ok(
-    vermerk.length <= MAX_TAKEOVER_CHARACTERS + '\n…(gekürzt)'.length,
-    `Länge ${String(vermerk.length)} — mehr als der Deckel und der Hinweis`,
+    vermerk.length <= MAX_TAKEOVER_CHARACTERS,
+    `Länge ${String(vermerk.length)} — mehr als der Deckel`,
   );
 });
 
@@ -4168,6 +4630,1651 @@ check('cutToCharacterBoundary kostet höchstens eine Einheit und nur, wenn es mu
   assert.equal(cutToCharacterBoundary('abcd', 3), 'abc');
   // Ein leerer Deckel ist kein Sonderfall mit eigener Antwort.
   assert.equal(cutToCharacterBoundary(`${EMOJI}`, 0), '');
+});
+
+// ===========================================================================
+heading('18  Die Frist wird eingetragen — und ein Anhang entsteht nicht (A-19.19, A-19.21)');
+// ===========================================================================
+
+/*
+ * Zwei Aussagen in einem Abschnitt, weil sie **eine** Entscheidung sind
+ * (E-074 Punkt 3): Das Add-in bekommt die Frist und ausdrücklich nichts
+ * daneben. Der Unterschied ist Art und nicht Vorsicht — eine Frist ist ein
+ * Tag, den die Anwendung anzeigt; ein Anhang ist eine Adresse, die sie auf
+ * Klick öffnet (R-21, R-22).
+ *
+ * Vier Ebenen, in dieser Reihenfolge:
+ *
+ *  18a  Der Aufgabenbereich entscheidet **nicht**, was ein Tag ist — er fragt
+ *       die Domäne. Rein, ohne Dienst.
+ *  18b  Beide Türen, jede einzeln gegen die Domäne gemessen (T-123).
+ *  18c  Die Route gegen eine **echte** Datenbank: Was kommt in der Spalte an?
+ *  18d  A-19.19 an der Wirkung: null Zeilen in `todo_attachment` — mit der
+ *       Gegenprobe, dass diese Messung rot werden kann.
+ *  18e  A-19.2: Die Frist heißt im Aufgabenbereich „Frist" — und die drei
+ *       verbotenen Wörter stehen in keinem sichtbaren Text (V-09).
+ */
+
+// ---------------------------------------------------------------------------
+// 18a — die Regel wird gerufen, nicht nachgebaut
+// ---------------------------------------------------------------------------
+
+/**
+ * Tage, die es gibt — und Zeichenketten, die keine sind.
+ *
+ * Die zweite Liste ist von Hand geschrieben und bleibt es, aus demselben Grund
+ * wie {@link ANGENOMMENE_ZEICHEN} in Abschnitt 16: Sie ist keine zweite Fassung
+ * der Regel, sondern eine **Anforderung** an sie. Aus der Domäne erzeugt wäre
+ * sie wertlos — sie zöge mit, wenn die Regel in die falsche Richtung wächst.
+ *
+ * Die beiden Jahresgrenzen sind dagegen **gerechnet** und nicht hingeschrieben:
+ * Verschiebt die Domäne ihre Bandbreite, sucht dieser Lauf im selben Durchgang
+ * an der neuen Grenze und nicht an der alten.
+ */
+const ECHTE_TAGE = ['2026-09-30', '2026-02-28', '2024-02-29', '1970-01-01', '2999-12-31'];
+
+const KEINE_TAGE = [
+  ['2026-02-30', 'besteht die Form und ist kein Tag'],
+  ['2024-02-30', 'auch im Schaltjahr nicht'],
+  ['2026-13-01', 'dreizehnter Monat'],
+  ['2026-00-10', 'nullter Monat'],
+  ['2026-9-3', 'ohne führende Null'],
+  ['2026-09-30T00:00:00Z', 'ein Zeitstempel ist keine Frist'],
+  ['2026-09-30 12:00', 'eine Uhrzeit gehört nicht dazu'],
+  ['30.09.2026', 'die deutsche Schreibweise ist keine Eingabeform'],
+  ['bis Freitag', 'freier Text — und genau der, den ein Muster aus einer E-Mail läse'],
+  [' 2026-09-30', 'Leerraum vorn — die Tür trimmt nicht, also trimmt das Add-in auch nicht'],
+  ['2026-09-30 ', 'Leerraum hinten'],
+  [`${String(MIN_DUE_YEAR - 1)}-12-31`, 'ein Tag vor der Bandbreite'],
+  [`${String(MAX_DUE_YEAR + 1)}-01-01`, 'ein Tag hinter der Bandbreite'],
+];
+
+check('A-19.1: ein leeres Feld heißt „keine Frist" und ist kein Fehler', () => {
+  const gelesen = readDueDate('');
+  assert.equal(gelesen.kind, 'none');
+  assert.equal(dueDateForRequest(gelesen), null, 'ohne Frist geht kein Wert an den Dienst');
+});
+
+check(`A-19.21: ${String(ECHTE_TAGE.length)} echte Tage gehen unverändert an den Dienst`, () => {
+  for (const tag of ECHTE_TAGE) {
+    const gelesen = readDueDate(tag);
+    assert.equal(gelesen.kind, 'day', `„${tag}" wurde abgewiesen`);
+    assert.equal(dueDateForRequest(gelesen), tag, `„${tag}" wurde unterwegs verändert`);
+  }
+});
+
+check(`E-074 Punkt 4: ${String(KEINE_TAGE.length)} Eingaben, die keine Frist sind`, () => {
+  for (const [wert, warum] of KEINE_TAGE) {
+    const gelesen = readDueDate(wert);
+    assert.equal(gelesen.kind, 'invalid', `„${wert}" wurde angenommen — ${warum}`);
+  }
+});
+
+check('der Satz kommt aus der Domäne und gibt den abgewiesenen Wert nicht wieder', () => {
+  /*
+   * Zwei Dinge auf einmal, und beide zählen an dieser Tür.
+   *
+   * **Der Satz ist derselbe Wert**, nicht ein gleichlautender: `assert.equal`
+   * auf eine Zeichenkette ist hier ausnahmsweise dieselbe Aussage wie die
+   * Objektgleichheit in Abschnitt 17, weil es die eine Konstante der Domäne
+   * ist und der Aufgabenbereich sie durchreicht. Formulierte er selbst, stünde
+   * hier ein anderer Text — und er dürfte sich nie wieder ändern, ohne dass es
+   * jemand merkt.
+   *
+   * **Der Wert steht nicht darin.** Ein abgewiesener Wert kann aus einer
+   * fremden E-Mail abgeschrieben sein, und eine Meldung, die ihn wörtlich
+   * wiedergibt, setzt ein Richtungszeichen in einen deutschen Satz (T-119).
+   * Dieselbe Regel wie bei der Call-Nummer (B-4.3 Punkt 5).
+   */
+  const boese = `2026-02-30${String.fromCodePoint(0x202e)}`;
+  const gelesen = readDueDate(boese);
+  assert.equal(gelesen.kind, 'invalid');
+  assert.equal(gelesen.message, DUE_DATE_MESSAGE, 'der Aufgabenbereich formuliert selbst');
+  assert.equal(gelesen.message.includes('2026-02-30'), false, 'die Meldung gibt den Wert wieder');
+  assert.equal(hasHiddenCharacter(gelesen.message), false, 'ein unsichtbares Zeichen ist durchgereicht');
+});
+
+check('die Antwort des Aufgabenbereichs ist die der Domäne — für jeden geprüften Wert', () => {
+  /*
+   * Die Eigenschaft statt einer Fälletabelle: Für **jeden** Wert oben gilt
+   * `readDueDate(v).kind === 'day'` genau dann, wenn `isCalendarDay(v)`.
+   *
+   * Ohne diese Zeile prüften die drei Zeilen darüber nur, dass zwei Listen zu
+   * zwei Ausgängen führen — sie sagten nichts darüber, ob dieselbe Regel
+   * entscheidet. Mit ihr ist eine zweite Fassung im Add-in nur so lange grün,
+   * wie sie deckungsgleich ist; sie ist es beim ersten Zusatz in der Domäne
+   * nicht mehr.
+   */
+  const abweichungen = [];
+  for (const wert of [...ECHTE_TAGE, ...KEINE_TAGE.map(([w]) => w)]) {
+    const addin = readDueDate(wert).kind === 'day';
+    const domaene = isCalendarDay(wert);
+    if (addin !== domaene) {
+      abweichungen.push(`„${wert}": Add-in ${addin ? 'nimmt an' : 'weist ab'}, Domäne ${domaene ? 'nimmt an' : 'weist ab'}`);
+    }
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+check('der Aufgabenbereich führt keine eigene Form der Frist', () => {
+  /*
+   * Dieselbe dreiteilige Bauart wie bei der Titellänge in Abschnitt 16, und aus
+   * demselben Grund: Ein Vergleich zweier Fassungen wird erst rot, wenn die
+   * Doppelung schon falsch ist. Gefragt ist die **Herkunft**.
+   *
+   *  1. Kein Quelltext des Aufgabenbereichs trägt die Form. Das Muster dafür
+   *     wird aus `DUE_DATE_SHAPE` erzeugt und nicht hingeschrieben.
+   *  2. Die eine Datei, die die Frist liest, holt die Regel aus `@takt/domain`
+   *     und erklärt sie nicht selbst.
+   *  3. Und sie ruft sie auch — ein Import ohne Aufruf wäre eine Fassade.
+   */
+  const form = DUE_DATE_SHAPE.source;
+  assert.ok(form.length > 10, 'die Form der Domäne ist zu kurz — der Wächter griffe ins Leere');
+
+  const traeger = files
+    .filter((datei) => /\.tsx?$/.test(datei))
+    .filter((datei) => sourceWithoutComments(datei).includes(form))
+    .map((datei) => path.relative(srcRoot, datei));
+  assert.deepEqual(
+    traeger,
+    [],
+    `der Aufgabenbereich schreibt die Form der Frist selbst hin, in: ${traeger.join(', ')}`,
+  );
+
+  const feld = sourceWithoutComments(path.join(srcRoot, 'duedate', 'entry.ts'));
+  assert.match(feld, /from '@takt\/domain'/, 'duedate/entry.ts liest die Domäne nicht');
+  assert.match(feld, /\bisCalendarDay\s*\(/, 'duedate/entry.ts ruft isCalendarDay nicht auf');
+  assert.equal(
+    /(?:const|let|var|function)\s+isCalendarDay\b/.test(feld),
+    false,
+    'duedate/entry.ts erklärt isCalendarDay wieder selbst',
+  );
+});
+
+check('E-074 Punkt 4: nichts im Aufgabenbereich liest die Frist aus der E-Mail', () => {
+  /*
+   * Die Aussage, die dem Feld seinen Sinn gibt, statisch gemessen.
+   *
+   * Der Titel wird aus dem Betreff vorgeschlagen, die Call-Nummer aus dem Text
+   * erkannt, der Vermerk auf Knopfdruck übernommen. Die Frist ist das einzige
+   * Feld, für das es **keinen** solchen Weg gibt — und das ist eine
+   * Entscheidung (E-074 Punkt 4) und keine offene Baustelle.
+   *
+   * Gemessen wird deshalb nicht das Vorhandensein des Feldes, sondern die
+   * **Abwesenheit** einer Verbindung zwischen ihm und `MailFacts`: Keine Datei
+   * des Add-ins setzt die Frist aus einem `mail.`-Wert oder aus einer
+   * Erkennung. Wer eines Tages `setDueDate(detection…)` schreibt, wird hier
+   * rot, bevor der Kalender eines Empfängers dem Absender gehört.
+   */
+  const verdaechtig =
+    /setDueDate\s*\(\s*(?:mail|detection|suggest|prepare|parse|guess|extract|body|subject)/i;
+  const offenders = files.filter((datei) => verdaechtig.test(sourceWithoutComments(datei)));
+  assert.deepEqual(
+    offenders,
+    [],
+    `die Frist wird aus der E-Mail gesetzt: ${offenders.join(', ')}`,
+  );
+
+  // Und die Gegenprobe zur Gegenprobe: Es gibt das Feld überhaupt. Ohne diese
+  // Zeile wäre die Prüfung darüber auch dann grün, wenn niemand eine Frist
+  // eintragen könnte.
+  const pane = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
+  assert.match(pane, /\breadDueDate\s*\(/, 'der Aufgabenbereich liest gar kein Fristfeld');
+  assert.match(pane, /label="Frist"/, 'das Feld heißt in der Oberfläche nicht „Frist" (A-19.2)');
+});
+
+// ---------------------------------------------------------------------------
+// 18b — beide Türen, jede einzeln gegen die Domäne (T-123)
+// ---------------------------------------------------------------------------
+
+const mitFrist = (wert) => ({ title: 'Wartung Nord', dueDate: wert });
+
+check('beide Türen nehmen dieselben Tage an und weisen dieselben ab', () => {
+  const abweichungen = [];
+  for (const wert of [...ECHTE_TAGE, ...KEINE_TAGE.map(([w]) => w)]) {
+    const soll = isCalendarDay(wert);
+    const haupt = nimmtAn(hauptTuer, mitFrist(wert));
+    const addin = nimmtAn(addinTuer, mitFrist(wert));
+    // Jede Tür gegen die **Quelle**, nicht gegeneinander: Zwei Türen, die
+    // einander gleichen, können gemeinsam falsch liegen (T-123).
+    if (haupt !== soll) abweichungen.push(`Haupttür bei „${wert}": ${haupt ? 'nimmt an' : 'weist ab'}`);
+    if (addin !== soll) abweichungen.push(`Add-in-Tür bei „${wert}": ${addin ? 'nimmt an' : 'weist ab'}`);
+  }
+  assert.deepEqual(abweichungen, [], abweichungen.join('; '));
+});
+
+check('die Beanstandung nennt das Feld — `dueDate` und nicht „body"', () => {
+  assert.deepEqual(beanstandet(addinTuer, mitFrist('2026-02-30')), ['dueDate']);
+});
+
+check('an der Add-in-Tür sind „fehlt" und `null` dasselbe: ohne Frist', () => {
+  /*
+   * Der dritte Fall aus `TodoUpdate` — `null` heißt **entfernen** (A-19.3) —
+   * kommt an dieser Tür nicht vor, weil sie nichts ändert. `.default(null)`
+   * schreibt das einmal hin, statt es an der Aufrufstelle mit `?? null`
+   * nachzuholen.
+   */
+  assert.equal(addinTuer.parse({ title: 'Ohne Frist' }).dueDate, null);
+  assert.equal(addinTuer.parse({ title: 'Ohne Frist', dueDate: null }).dueDate, null);
+  assert.equal(addinTuer.parse({ title: 'Mit Frist', dueDate: '2026-09-30' }).dueDate, '2026-09-30');
+});
+
+check('die Add-in-Tür hat kein Anhangsfeld (A-19.19) — strukturell, nicht per Voreinstellung', () => {
+  /*
+   * A-A-21/A-A-22 an der Form der Tür.
+   *
+   * Zod wirft unbekannte Schlüssel still weg; ein mitgeschicktes `attachments`
+   * ist damit ohne Wirkung. Das ist die richtige Reihenfolge (siehe die
+   * Begründung zu `reopenIfDone` in `schema.ts`) — aber es ist **nicht** die
+   * Messung. Gemessen wird hier, dass die Tür gar kein solches Feld führt und
+   * kein Aufrufer auf die Idee kommen kann, eines zu füllen. Die Wirkung misst
+   * 18d.
+   */
+  const felder = Object.keys(addinTuer.shape);
+  const anhang = felder.filter((name) => /attach|anhang|file|image|url/i.test(name));
+  assert.deepEqual(anhang, [], `die Add-in-Tür führt ein Anhangsfeld: ${anhang.join(', ')}`);
+  assert.ok(felder.includes('dueDate'), 'die Frist fehlt an der Tür — dann misst 18c nichts');
+});
+
+check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang', () => {
+  const spec = parseYaml(
+    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+  );
+  const rumpf = spec.paths['/addin/todos']?.post;
+  const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+
+  assert.ok(Object.keys(felder).includes('dueDate'), 'die Beschreibung kennt die Frist nicht');
+  assert.match(
+    String(felder['dueDate']?.description ?? ''),
+    /A-19\.21/,
+    'die Frist steht ohne ihre Anforderungs-ID da',
+  );
+
+  const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
+  assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
+
+  // Und keine der vier Add-in-Routen ist eine Anhangsroute (A-A-21).
+  const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
+  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.deepEqual(
+    addinPfade.filter((pfad) => /attachment/i.test(pfad)),
+    [],
+    'unter /addin hängt eine Anhangsroute',
+  );
+});
+
+check('O-BB: jede beschriebene Add-in-Route mit Rumpf hat ein Schema an der Tür', () => {
+  /*
+   * ---------------------------------------------------------------------------
+   * Warum diese Zeile hier steht und nicht in `proof:openapi`
+   * ---------------------------------------------------------------------------
+   *
+   * `proof:openapi` hält jedes Rumpfschema des Dienstes gegen die Beschreibung
+   * und wird rot, wenn eines fehlt. Die **Zuordnung** dorthin führten die vier
+   * Türen der Hauptfläche je als `REQUEST_SCHEMAS` neben ihren Routen; die
+   * Add-in-Tür war bis T-149 die Ausnahme und stand als zwei einzelne Importe
+   * im Skript selbst.
+   *
+   * Der Unterschied ist keine Ordnungsfrage. Eine neue Add-in-Route mit Rumpf
+   * entstünde in `routes/addin/`, und der Eintrag, der sie messbar macht, läge
+   * in `apps/local-api/scripts/` — in fremder Hoheit (E-053), in einer Datei,
+   * die ihr Verfasser nicht anfaßt. Genau dort fällt so etwas heraus.
+   *
+   * `REQUEST_SCHEMAS` steht deshalb seit T-149 in `routes/addin/schema.ts`,
+   * und **diese** Zeile ist die Wache dazu: Sie liest die Aufstellung an der
+   * Tür und hält sie gegen den Add-in-Abschnitt der Beschreibung — in beiden
+   * Richtungen. Sie hängt an keiner fremden Datei und wird auch dann rot, wenn
+   * `proof:openapi` seine beiden Einzelimporte behielte.
+   */
+  const spec = parseYaml(
+    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+  );
+
+  const METHODEN = ['get', 'put', 'post', 'delete', 'patch'];
+  const mitRumpf = [];
+  for (const [pfad, eintrag] of Object.entries(spec.paths ?? {})) {
+    if (!pfad.startsWith('/addin')) continue;
+    for (const methode of METHODEN) {
+      const vorgang = eintrag[methode];
+      if (vorgang?.requestBody !== undefined) mitRumpf.push(vorgang.operationId);
+    }
+  }
+
+  assert.ok(mitRumpf.length >= 2, `nur ${String(mitRumpf.length)} Add-in-Rümpfe — der Leser greift ins Leere`);
+
+  assert.deepEqual(
+    [...mitRumpf].sort(),
+    Object.keys(ADDIN_REQUEST_SCHEMAS).sort(),
+    'Beschreibung und Tür führen verschiedene Vorgänge mit Rumpf',
+  );
+
+  // Und die Einträge sind Schemata und keine Platzhalter — sonst stünde die
+  // Zuordnung da und prüfte nichts.
+  for (const [id, schema] of Object.entries(ADDIN_REQUEST_SCHEMAS)) {
+    assert.equal(typeof schema?.safeParse, 'function', `${id} ist kein zod-Schema`);
+  }
+
+  // Die beiden Objekte sind **dieselben**, die die Route benutzt — nicht
+  // gleichaussehende daneben. Ein zweites Schema unter demselben Schlüssel
+  // wäre die Doppelung, die diese Aufstellung gerade abschafft.
+  assert.equal(ADDIN_REQUEST_SCHEMAS.createAddinTodo, addinCreateTodoSchema);
+  assert.equal(ADDIN_REQUEST_SCHEMAS.createAddinTimeEntry, addinBookSchema);
+});
+
+// ---------------------------------------------------------------------------
+// 18c — die Route gegen eine echte Datenbank: was steht in der Spalte?
+// ---------------------------------------------------------------------------
+
+/** Was in `todo.due_date` steht — gelesen an der Datenbank, nicht an der Antwort. */
+const dueDateInDerSpalte = (db, todoId) =>
+  db.connection.prepare('SELECT due_date FROM todo WHERE id = ?').get(todoId)?.['due_date'] ?? null;
+
+await checkAsync('A-19.21: die eingetragene Frist steht danach in der Spalte', async () => {
+  await withRealDatabase(async ({ app, db }) => {
+    const antwort = await postTodo(app, {
+      title: 'Aus Outlook, mit Frist',
+      tagIds: [],
+      tagNames: [],
+      note: '',
+      dueDate: '2026-09-30',
+    });
+    const body = await antwort.json();
+    assert.equal(antwort.status, 201, JSON.stringify(body));
+
+    // Zwei Messungen, und die zweite ist die, die zählt: Die Antwort kann eine
+    // Frist behaupten, die nie geschrieben wurde.
+    assert.equal(body.data.todo.dueDate, '2026-09-30', 'die Antwort trägt die Frist nicht');
+    assert.equal(
+      dueDateInDerSpalte(db, body.data.todo.id),
+      '2026-09-30',
+      'die Frist steht nicht im Bestand',
+    );
+  });
+});
+
+await checkAsync('A-19.1: ohne Frist bleibt die Spalte leer — und das ist kein Fehler', async () => {
+  await withRealDatabase(async ({ app, db }) => {
+    // Ohne das Feld überhaupt: der Weg eines Aufrufers, der die Frist nicht
+    // kennt. `.default(null)` fängt ihn, ohne dass er etwas hinschreiben muss.
+    const ohne = await postTodo(app, { title: 'Ohne Frist', tagIds: [], tagNames: [], note: '' });
+    const ohneBody = await ohne.json();
+    assert.equal(ohne.status, 201, JSON.stringify(ohneBody));
+    assert.equal(ohneBody.data.todo.dueDate, null);
+    assert.equal(dueDateInDerSpalte(db, ohneBody.data.todo.id), null);
+
+    // Und mit ausdrücklichem `null` — an dieser Tür dasselbe.
+    const mitNull = await postTodo(app, {
+      title: 'Ohne Frist, ausdrücklich',
+      tagIds: [],
+      tagNames: [],
+      note: '',
+      dueDate: null,
+    });
+    const nullBody = await mitNull.json();
+    assert.equal(mitNull.status, 201, JSON.stringify(nullBody));
+    assert.equal(dueDateInDerSpalte(db, nullBody.data.todo.id), null);
+  });
+});
+
+await checkAsync('A-A-19: eine unmögliche Frist ergibt 422 — und kein halbes Todo', async () => {
+  await withRealDatabase(async ({ app, db }) => {
+    const zaehleTodos = () =>
+      Number(db.connection.prepare('SELECT COUNT(*) AS n FROM todo').get()['n']);
+    const vorher = zaehleTodos();
+
+    for (const [wert] of KEINE_TAGE) {
+      const antwort = await postTodo(app, {
+        title: 'Aus Outlook',
+        tagIds: [],
+        tagNames: [],
+        note: '',
+        dueDate: wert,
+      });
+      const body = await antwort.json();
+      assert.equal(antwort.status, 422, `„${wert}" ergab ${String(antwort.status)}`);
+      assert.equal(body.error.code, 'validation_error');
+      assert.deepEqual(
+        body.error.details.map((eintrag) => eintrag.field),
+        ['dueDate'],
+        `„${wert}" wurde einem anderen Feld angelastet`,
+      );
+
+      // Der abgewiesene Wert steht nicht in der Antwort — er kann aus einer
+      // fremden E-Mail abgeschrieben sein (B-4.3 Punkt 5).
+      assert.equal(
+        JSON.stringify(body).includes(wert),
+        false,
+        `die Antwort gibt „${wert}" wieder`,
+      );
+    }
+
+    assert.equal(zaehleTodos(), vorher, 'ein abgewiesener Anlegeversuch hat trotzdem geschrieben');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18d — A-19.19 an der Wirkung, nicht am Statuscode
+// ---------------------------------------------------------------------------
+
+/**
+ * Ein **voll ausgefüllter** Anhang in drei Schreibweisen.
+ *
+ * Drei und nicht eine, weil niemand weiß, welchen Namen ein künftiger Aufrufer
+ * (oder ein Angreifer mit dem Add-in-Token) probierte. Die Werte sind so
+ * gewählt, dass ein Durchkommen sofort sichtbar wäre: eine ausführbare Datei,
+ * eine Adresse, ein Bild. Erfunden, wie alle Prüfdaten hier — `beispiel.invalid`
+ * und `example.org` sind reservierte Namen ohne erreichbaren Wirt.
+ */
+const ANHANGSVERSUCHE = {
+  attachments: [
+    { kind: 'file', path: '/tmp/nicht-oeffnen.bat', title: 'Rechnung' },
+    { kind: 'image', name: 'bild.png', bytes: 'iVBORw0KGgo=' },
+  ],
+  attachment: { kind: 'link', url: 'https://example.org/nicht-oeffnen', title: 'Verweis' },
+  attachmentUrl: 'https://example.org/auch-nicht',
+  attachmentPath: 'C:\\Windows\\System32\\calc.exe',
+};
+
+await checkAsync('A-19.19/A-A-22: ein voll ausgefüllter Anhang ergibt 201 und **null** Zeilen', async () => {
+  await withRealDatabase(async ({ app, db }) => {
+    const zaehleAnhaenge = () =>
+      Number(db.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n']);
+
+    assert.equal(zaehleAnhaenge(), 0, 'der Bestand war nicht leer — die Messung sagte dann nichts');
+
+    const antwort = await postTodo(app, {
+      title: 'Aus Outlook, mit Frist und Anhangsversuch',
+      tagIds: [],
+      tagNames: [],
+      note: '',
+      // Die Frist geht durch (A-19.21) …
+      dueDate: '2026-09-30',
+      // … der Anhang nicht (A-19.19). Beides in **einer** Anfrage, weil genau
+      // das der Fall ist, den E-074 Punkt 3 trennt.
+      ...ANHANGSVERSUCHE,
+    });
+    const body = await antwort.json();
+
+    // Gemessen wird die **Wirkung** und nicht der Statuscode: Ein 422 wäre
+    // hier die falsche Antwort — die Anfrage ist fachlich vollständig, und ein
+    // unbekannter Schlüssel darf ein Todo nicht scheitern lassen (dieselbe
+    // Überlegung wie bei `reopenIfDone`).
+    assert.equal(antwort.status, 201, JSON.stringify(body));
+    assert.equal(body.data.todo.dueDate, '2026-09-30', 'die Frist ist mit dem Anhang untergegangen');
+    assert.equal(zaehleAnhaenge(), 0, 'über die Add-in-Tür ist ein Anhang entstanden');
+
+    // Und keiner der Werte ist irgendwo gelandet, wo er auf Klick geöffnet
+    // würde: nicht als Call-Nummer, nicht im Titel, nicht im Vermerk.
+    const gespeichert = db.connection
+      .prepare('SELECT title, call_number FROM todo WHERE id = ?')
+      .get(body.data.todo.id);
+    const vermerk = db.connection
+      .prepare('SELECT body FROM todo_note WHERE todo_id = ?')
+      .get(body.data.todo.id);
+    const alles = JSON.stringify([gespeichert, vermerk ?? null]);
+    for (const spur of ['nicht-oeffnen', 'calc.exe', 'example.org']) {
+      assert.equal(alles.includes(spur), false, `„${spur}" ist in ein anderes Feld gewandert`);
+    }
+  });
+});
+
+await checkAsync('die Gegenprobe: diese Messung kann rot werden', async () => {
+  /*
+   * Ohne sie wäre die Zeile darüber die schlimmste Sorte grün — eine, die auch
+   * dann bestünde, wenn `todo_attachment` gar nicht existierte oder die
+   * Abfrage die falsche Tabelle läse. Das ist derselbe Befund, den T-146 im
+   * Rechteport aufgeräumt hat: Entwarnung ohne Messung.
+   *
+   * Geschrieben wird deshalb **von Hand**, an der Add-in-Tür vorbei, mit
+   * denselben Mitteln, die der Anwendungsfall der Hauptanwendung benutzt. Zählt
+   * die Abfrage danach eins, zählt sie die richtige Tabelle.
+   */
+  await withRealDatabase(async ({ app, db }) => {
+    const antwort = await postTodo(app, {
+      title: 'Träger der Gegenprobe',
+      tagIds: [],
+      tagNames: [],
+      note: '',
+    });
+    const body = await antwort.json();
+    assert.equal(antwort.status, 201, JSON.stringify(body));
+
+    const zaehle = () => Number(db.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n']);
+    assert.equal(zaehle(), 0);
+
+    db.connection
+      .prepare(
+        'INSERT INTO todo_attachment (id, todo_id, kind, title, target, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        '01931f4e-0000-7000-8000-00000000ffff',
+        body.data.todo.id,
+        'link',
+        'Von Hand, nicht über das Add-in',
+        'https://example.org/gegenprobe',
+        0,
+        JETZT,
+      );
+
+    assert.equal(zaehle(), 1, 'die Zählung sieht auch einen Anhang nicht, den es gibt');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18e — A-19.2: die Frist heißt „Frist", und die drei Wörter stehen nirgends
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund (V-09 aus T-154):
+ *
+ * Für `apps/web/dist` ist die Abwesenheit von „Fälligkeitsdatum", „fällig am"
+ * und „Deadline" als Build-Nachweis gemessen (`web-build-smoke.spec.ts`). Für
+ * den Aufgabenbereich gab es nichts Vergleichbares — obwohl A-19.2 „die
+ * Oberfläche" sagt und der Aufgabenbereich eine ist. Der Zustand war richtig
+ * und nicht gemessen.
+ *
+ * **Warum hier der Quelltext ohne Kommentare gemessen wird und nicht `dist`.**
+ * Diese Reihe baut das Add-in nicht, und `pnpm check` ruft `proof:all` **vor**
+ * `build`. Ein Abschnitt, der `dist` liest, hätte damit drei Ausgänge, und
+ * zwei davon sind schlechter als der gewählte:
+ *
+ *  - `dist` fehlt und der Abschnitt überspringt still — ein grüner Lauf, der
+ *    nichts gesehen hat (dieselbe Klasse wie O-BU und O-CI).
+ *  - `dist` liegt von gestern und der Abschnitt misst den Stand von gestern.
+ *  - `dist` wird hier gebaut — dann hängt eine Textprüfung an einem
+ *    vollständigen Vite-Lauf.
+ *
+ * Der Quelltext **ohne Kommentare** ist genau die Menge, die das Bauen übrig
+ * lässt: Kommentare fallen weg, Zeichenketten und JSX-Text bleiben. Er ist
+ * damit dieselbe Aussage, nur früher — und er ist die schärfere, weil sie den
+ * Kommentar mit dem Gegenbeispiel (`TaskPane.tsx`) bewusst ausnimmt, statt an
+ * der Quellzuordnung des Bündels zu scheitern (`index-*.js.map` führt jeden
+ * Kommentar wörtlich mit).
+ *
+ * Das **Manifest** liegt daneben: Sein `DisplayName` steht in Outlook auf dem
+ * Bildschirm, ohne je durch ein Bündel zu laufen.
+ */
+
+/** Die drei Wörter, die A-19.2 verbietet. */
+const VERBOTENE_FRISTWOERTER = Object.freeze(['Fälligkeitsdatum', 'fällig am', 'Deadline']);
+
+/**
+ * Was der Benutzer am Ende lesen kann: Quelltext ohne Kommentare, plus das
+ * Manifest ohne seine XML-Kommentare.
+ */
+const sichtbareTexte = () => {
+  const eintraege = files.map((datei) => ({
+    datei: path.relative(path.join(here, '..'), datei),
+    text: sourceWithoutComments(datei),
+  }));
+
+  const manifest = path.join(here, '..', 'manifest.xml');
+  eintraege.push({
+    datei: 'manifest.xml',
+    text: readFileSync(manifest, 'utf8').replace(/<!--[\s\S]*?-->/g, ''),
+  });
+
+  return eintraege;
+};
+
+/**
+ * Die Anrede „du" in allen Formen, die in deutschen Oberflächentexten
+ * vorkommen (E-080).
+ *
+ * Zwei Ausdrücke, weil `test` mit `g` einen Zustand mitführt und beim zweiten
+ * Aufruf an der falschen Stelle weitersucht — ein Wächter, der jedes zweite
+ * Mal grün ist, wäre schlimmer als keiner.
+ *
+ * **Der Bindestrich im Nachblick, seit T-199 (E-086, aus T-197):** Ein Wort vor
+ * einem Bindestrich ist ein **Bestimmungswort** und keine Anrede — „Prüf- und
+ * Entwicklungsbetrieb", „Lade-", „Leer-". Drüben in `apps/web` hat diese
+ * Ergänzung eine geduldete Ausnahme fällig gemacht und gelöscht; hier kostet
+ * sie **null Treffer**: über den ganzen Add-in-Quelltext, Kommentare
+ * eingeschlossen, findet der Imperativwächter vorher wie nachher **neun**
+ * Stellen, und keine einzige steht vor einem Bindestrich.
+ *
+ * **Und sie ist keine Höflichkeit, sondern eine Zusage.** `proof:surface`
+ * liest diese Datei seit T-197 und hält beide Ausdrücke zeichenweise
+ * gegeneinander (E-086: wo eine Regel an zwei Stellen steht, wird sie
+ * gegeneinander gemessen). Wer hier ein Zeichen ändert, ohne es drüben zu tun,
+ * macht `proof:surface` rot — und die Meldung nennt beide Wortlaute.
+ */
+const ANREDE_DU_QUELLE = String.raw`(?<![\wäöüß])(?:du|dir|dich|dein(?:e|em|en|er|es)?)(?![\wäöüß-])`;
+const ANREDE_DU = new RegExp(ANREDE_DU_QUELLE, 'i');
+const ANREDE_DU_GLOBAL = new RegExp(ANREDE_DU_QUELLE, 'gi');
+
+/**
+ * Die zweite Hälfte derselben Anrede: der **Imperativ ohne Fürwort** (O-GD,
+ * T-190).
+ *
+ * ---------------------------------------------------------------------------
+ * Der Befund
+ * ---------------------------------------------------------------------------
+ *
+ * {@link ANREDE_DU} prüft auf `du`, `dir`, `dich`, `dein`. Ein deutscher
+ * Imperativ im Du kommt ohne all das aus: „Trage ein Muster ein", „Öffne eine
+ * E-Mail", „Gib das Token ein". Der Wächter meldete dazu **Ruhe**, und zwar
+ * über zwei Wellen: T-182 hat die siebte duzende Stelle von Hand gefunden und
+ * dabei aufgeschrieben, daß der Wächter sie nicht sehen konnte
+ * (`src/callnumber/pattern.ts`). Das ist derselbe Fehlerbau wie ein
+ * Umlautfilter, der nur die Kleinbuchstaben kennt: Wer die halbe Form prüft,
+ * bekommt die ganze Zusage nicht.
+ *
+ * ---------------------------------------------------------------------------
+ * Wie gemessen wird — und warum als Liste
+ * ---------------------------------------------------------------------------
+ *
+ * Ein Imperativ ist im Deutschen der Verbstamm, wahlweise mit `-e`. Eine
+ * allgemeine Regel dafür gibt es nicht, ohne jedes zweite Hauptwort
+ * mitzunehmen — deshalb steht hier eine **Liste der Verben, die eine
+ * Oberfläche benutzt**, und keine Grammatik. Sie ist nicht vollständig und
+ * behauptet es nicht; sie ist die Menge, die T-190 am Baum gemessen hat.
+ * Fehlt eines, gehört es hierher und nicht in eine Ausnahme.
+ *
+ * **Ohne Rücksicht auf Groß- und Kleinschreibung**, wie {@link ANREDE_DU}: Im
+ * zweiten Halbsatz steht der Imperativ klein („Öffne Takt und trage das Token
+ * ein"). Am Baum gemessen kostet das keinen einzigen Fehltreffer.
+ *
+ * **Was mit Absicht fehlt**, weil es zugleich ein Hauptwort ist und in diesem
+ * Add-in als solches vorkommt oder vorkommen kann: `Suche` („Kein Tag passt zu
+ * dieser Suche"), `Stelle`, `Start`, `Send`, `Versuche`, `Wende`, `Acht`,
+ * `Tipp`, `Ruf`, `Buch`, `Wart`. Wo der Imperativ dazu eindeutig ist, steht er
+ * ausgeschrieben in {@link IMPERATIV_WOERTLICH} — `Starte`, `Sende`, `Buche`,
+ * `Warte`, `Tippe`, `Rufe`.
+ */
+const IMPERATIV_STAMM = [
+  'Öffn', 'Trag', 'Leg', 'Prüf', 'Wähl', 'Speicher', 'Klick', 'Drück', 'Schließ',
+  'Setz', 'Änder', 'Lösch', 'Erstell', 'Wechsl', 'Hinterleg', 'Beacht', 'Kontrollier',
+  'Lad', 'Zeig', 'Wiederhol', 'Entfern', 'Kopier', 'Markier', 'Bestätig', 'Aktivier',
+  'Deaktivier', 'Ergänz', 'Beend', 'Hol', 'Schreib', 'Mach', 'Zieh', 'Füg', 'Meld',
+];
+
+/** Unregelmäßige Formen und die, bei denen nur die lange Fassung eindeutig ist. */
+const IMPERATIV_WOERTLICH = [
+  'Gib', 'Nimm', 'Übernimm', 'Sieh', 'Lies', 'Geh', 'Tu',
+  'Starte', 'Sende', 'Buche', 'Warte', 'Tippe', 'Rufe',
+];
+
+const ANREDE_IMPERATIV_QUELLE = String.raw`(?<![\wäöüß])(?:(?:${IMPERATIV_STAMM.join('|')})e?|${IMPERATIV_WOERTLICH.join('|')})(?![\wäöüß-])`;
+const ANREDE_IMPERATIV = new RegExp(ANREDE_IMPERATIV_QUELLE, 'i');
+const ANREDE_IMPERATIV_GLOBAL = new RegExp(ANREDE_IMPERATIV_QUELLE, 'gi');
+
+/**
+ * Die Fassung, die dieser Wächter bis T-199 dulden musste (O-GE, O-HM).
+ *
+ * Sie steht **nicht mehr im Bestand**. Der Satz in `src/ui/App.tsx` war in
+ * `tests/e2e/outlook-addin-build.spec.ts` wörtlich festgenagelt; T-192 hat den
+ * Prüffall dort auf den anredefreien Teil des Satzes gelöst, T-199 den Satz
+ * umgestellt und die Ausnahme `IMPERATIV_AUSNAHME` gelöscht — in dieser
+ * Reihenfolge, und jeder ausgelassene Schritt macht den Lauf rot.
+ *
+ * Was bleibt, ist die Gegenprobe: Der Wächter muss die eigene Vergangenheit
+ * wiederfinden. Deshalb steht der alte Wortlaut hier als **Beispiel** und
+ * nicht mehr als Ausnahme — er wird nirgends mehr aus einer Messung
+ * herausgerechnet.
+ */
+const IMPERATIV_VORHER = 'Öffne eine E-Mail, um daraus ein Todo anzulegen.';
+
+/** Die Fassung, die seit T-199 an derselben Stelle steht (O-HM). */
+const IMPERATIV_NACHHER = 'Öffnen Sie eine E-Mail, um daraus ein Todo anzulegen.';
+
+/** Findet ein Wort ohne Rücksicht auf Groß- und Kleinschreibung. */
+const findeWort = (text, wort) => text.toLowerCase().includes(wort.toLowerCase());
+
+check('A-19.2: „Fälligkeitsdatum", „fällig am" und „Deadline" stehen in keinem sichtbaren Text', () => {
+  const texte = sichtbareTexte();
+  assert.ok(texte.length > 15, `nur ${String(texte.length)} Texte gefunden — der Scan greift ins Leere`);
+
+  const treffer = [];
+  for (const { datei, text } of texte) {
+    for (const wort of VERBOTENE_FRISTWOERTER) {
+      if (findeWort(text, wort)) treffer.push(`${datei}: „${wort}"`);
+    }
+  }
+
+  assert.deepEqual(treffer, [], 'A-19.2 verbietet diese Wörter auf dem Bildschirm');
+});
+
+check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst die Abwesenheit nichts', () => {
+  /*
+   * Ohne diese Hälfte wäre der Abschnitt am grünsten, wenn es das Feld gar
+   * nicht gäbe. Gemessen wird deshalb dieselbe Menge mit demselben Sucher:
+   * Was die Abwesenheit prüft, muss das Vorhandene finden können.
+   */
+  const texte = sichtbareTexte();
+  const mitFrist = texte.filter(({ text }) => findeWort(text, 'Frist'));
+  assert.ok(mitFrist.length > 0, 'in keinem sichtbaren Text kommt „Frist" vor — der Sucher findet nichts');
+
+  const pane = texte.find(({ datei }) => datei.endsWith(path.join('ui', 'TaskPane.tsx')));
+  assert.notEqual(pane, undefined, 'der Aufgabenbereich ist nicht unter den gemessenen Texten');
+  assert.match(pane.text, /label="Frist"/, 'das Feld heißt nicht mehr „Frist" — oder es steht nicht mehr da');
+});
+
+// ===========================================================================
+heading('19  Jedes Feld verweist auf seinen Hinweis und auf seine Meldung (V-03/V-04, T-158)');
+// ===========================================================================
+
+/*
+ * Der Befund, den dieser Abschnitt festnagelt (V-03 aus T-154):
+ *
+ * `Field` erzeugte die Kennungen `…-hint` und `…-error`, und **kein einziges**
+ * Eingabefeld des Aufgabenbereichs verwies darauf. Im ganzen Add-in gab es
+ * genau ein `aria-describedby`, und das gehörte der Trefferzahl im
+ * Tag-Auswähler. Für einen sehenden Benutzer stand der Hinweis da; für einen
+ * Benutzer mit Vorlesehilfe stand er nicht da. Dazu verschwand er vollständig,
+ * sobald eine Meldung danebentrat — also genau dann, wenn er gebraucht wird.
+ *
+ * Am Fristfeld ist das kein Randfall: Die Frist ist das einzige Feld dieses
+ * Bereichs, das weder vorbelegt noch aus der E-Mail erkannt wird
+ * (E-074 Punkt 4). Der Riegel gegen eine Frist aus fremdem Text ist eine
+ * **Abwesenheit**, und die einzige Stelle, an der sie ausgesprochen wird, ist
+ * dieser Hinweis.
+ *
+ *  19a  Die Regel selbst, über alle vier Fälle — ohne JSX, damit sie messbar
+ *       ist und nicht nur behauptet.
+ *  19b  Der Baustein tut, was die Regel sagt: Er ruft sie, er baut die
+ *       Kennungen nicht daneben noch einmal, und seine Meldefläche steht
+ *       immer im Baum (SC 4.1.3, dieselbe Bauart wie B-5/T-118).
+ *  19c  **Jede** Aufrufstelle reicht die Attribute bis an ihr Bedienelement
+ *       durch. Ein Feld, das sie liegen lässt, ist der Zustand von vorher.
+ *  19d  Der Wortlaut am Fristfeld (V-04): die tragende Aussage zuerst, der
+ *       Fülltext der Hauptanwendung gestrichen.
+ *
+ * Die Nachlese aus T-169 hängt daran, weil sie dieselben Flächen betrifft:
+ *
+ *  19e  V-08: Die eingetragene Frist verfällt beim Wechsel auf ein vorhandenes
+ *       Todo — und das steht jetzt da.
+ *  19f  V-11: Sperre und Grund des Hauptknopfes kommen aus **einer** Rechnung.
+ *  19g  X-02: Kein `Field` ohne Bedienelement.
+ *  19h  E-080 und E-078: eine Anrede, und ein Satz an einer Stelle.
+ */
+
+// ---------------------------------------------------------------------------
+// 19a — die Regel, über alle vier Fälle
+// ---------------------------------------------------------------------------
+
+check('ohne Hinweis und ohne Meldung: keine Beschreibung, keine Beanstandung', () => {
+  const teile = fieldParts('due', undefined, undefined);
+  assert.equal(teile.aria.id, 'due', 'die Kennung des Bedienelements kommt nicht vom Feld');
+  assert.equal(teile.aria['aria-describedby'], undefined);
+  assert.equal(teile.aria['aria-invalid'], undefined);
+  assert.equal(teile.showHint, false);
+  assert.equal(teile.showError, false);
+  assert.equal(teile.className, 'field');
+});
+
+check('nur ein Hinweis: das Bedienelement verweist darauf (SC 1.3.1)', () => {
+  const teile = fieldParts('due', 'Ein Tag, keine Uhrzeit.', undefined);
+  assert.equal(teile.aria['aria-describedby'], 'due-hint');
+  assert.equal(teile.aria['aria-describedby'], fieldHintId('due'));
+  assert.equal(teile.aria['aria-invalid'], undefined, 'ein Feld ohne Meldung ist nicht beanstandet');
+  assert.equal(teile.showHint, true);
+});
+
+check('nur eine Meldung: Verweis und `aria-invalid` (SC 3.3.1)', () => {
+  const teile = fieldParts('due', undefined, 'Diesen Tag gibt es nicht.');
+  assert.equal(teile.aria['aria-describedby'], fieldErrorId('due'));
+  assert.equal(teile.aria['aria-invalid'], true);
+  assert.equal(teile.className, 'field field--invalid');
+});
+
+check('V-03: beides zugleich — die Meldung tritt neben die Erklärung, nicht an ihre Stelle', () => {
+  /*
+   * Der Kern des Befunds. Bis T-158 galt in `Field`
+   * `hint !== undefined && error === undefined` — der Satz, der sagt, **was
+   * das Feld ist**, fiel weg, sobald der Satz dastand, der sagt, was falsch
+   * ist. Am Fristfeld fiel damit die Erklärung der Abwesenheit weg, und zwar
+   * in dem Augenblick, in dem der Benutzer am Feld hängt.
+   */
+  const teile = fieldParts('due', 'Takt sucht in der E-Mail nicht nach einer Frist.', 'Diesen Tag gibt es nicht.');
+  assert.equal(teile.showHint, true, 'der Hinweis fällt weg, sobald eine Meldung danebensteht');
+  assert.equal(teile.showError, true);
+  assert.equal(
+    teile.aria['aria-describedby'],
+    'due-hint due-error',
+    'Hinweis und Meldung stehen nicht beide im Verweis, oder nicht in der Reihenfolge der Anzeige',
+  );
+  assert.equal(teile.aria['aria-invalid'], true);
+});
+
+check('ein leerer Text ist kein Text', () => {
+  const teile = fieldParts('due', '', '');
+  assert.equal(teile.aria['aria-describedby'], undefined, 'ein Verweis auf einen leeren Absatz');
+  assert.equal(teile.aria['aria-invalid'], undefined, 'beanstandet ohne Grund');
+  assert.equal(teile.showError, false);
+});
+
+check('die Kennungen hängen am Feld und nicht an einer zweiten Zählung', () => {
+  for (const name of ['due', 'call', 'title', 'tags', 'note', 'minutes', 'service', 'baseurl', 'token']) {
+    const teile = fieldParts(name, 'h', 'e');
+    assert.equal(teile.hintId, `${name}-hint`);
+    assert.equal(teile.errorId, `${name}-error`);
+    assert.equal(teile.aria.id, name);
+    assert.equal(teile.aria['aria-describedby'], `${name}-hint ${name}-error`);
+  }
+});
+
+check('eine eigene Beschreibung tritt hinzu und verdrängt nichts (Tag-Auswähler)', () => {
+  const mitBeidem = withDescription(fieldParts('tags', 'h', 'e').aria, 'tags-count');
+  assert.equal(mitBeidem['aria-describedby'], 'tags-hint tags-error tags-count');
+  assert.equal(mitBeidem.id, 'tags', 'die Kennung geht beim Anhängen verloren');
+
+  const ohne = withDescription(fieldParts('tags', undefined, undefined).aria, 'tags-count');
+  assert.equal(ohne['aria-describedby'], 'tags-count');
+});
+
+// ---------------------------------------------------------------------------
+// 19b — der Baustein tut, was die Regel sagt
+// ---------------------------------------------------------------------------
+
+const primitives = sourceWithoutComments(path.join(srcRoot, 'ui', 'Primitives.tsx'));
+
+check('`Field` ruft die Regel, statt sie ein zweites Mal hinzuschreiben', () => {
+  assert.match(primitives, /\bfieldParts\s*\(/, '`Field` ruft `fieldParts` nicht auf');
+  assert.equal(
+    /`\$\{htmlFor\}-(?:hint|error)`/.test(primitives),
+    false,
+    '`Primitives.tsx` baut die Kennungen daneben noch einmal — dann können sie auseinanderlaufen',
+  );
+});
+
+check('V-03: der Hinweis hängt nicht mehr am Fehlen einer Meldung', () => {
+  /*
+   * Die alte Zeile wörtlich. Sie ist der Befund, und sie darf nicht
+   * zurückkommen — auch nicht in umgekehrter Schreibweise.
+   */
+  const alteBedingung = /hint\s*!==\s*undefined\s*&&\s*error\s*===\s*undefined/;
+  assert.equal(alteBedingung.test(primitives), false, 'der Hinweis wird bei einer Meldung wieder ausgeblendet');
+  assert.equal(
+    /error\s*===\s*undefined\s*&&\s*hint\s*!==\s*undefined/.test(primitives),
+    false,
+    'dieselbe Bedingung, nur andersherum geschrieben',
+  );
+});
+
+check('SC 4.1.3: die Meldefläche steht immer im Baum, auch leer', () => {
+  /*
+   * Dieselbe Bauart und derselbe Grund wie im Bestätigungsdialog der
+   * Hauptanwendung (B-5 aus T-116, gebaut in T-118): Eine Live-Region, die
+   * erst zusammen mit ihrem Inhalt entsteht, wird von vielen Vorlesehilfen
+   * nicht angesagt — sie melden Änderungen an einer Region, die sie kennen.
+   *
+   * Gemessen wird deshalb, dass `role="alert"` **außerhalb** der Bedingung
+   * steht: an der dauerhaften Hülle und nicht am Absatz, der kommt und geht.
+   */
+  assert.match(
+    primitives,
+    /<div className="field__live" role="alert">/,
+    'die Meldefläche trägt ihre Rolle nicht, oder sie heißt anders',
+  );
+  assert.equal(
+    /<p className="field__error"[^>]*role=/.test(primitives),
+    false,
+    'die Rolle sitzt am Absatz, der kommt und geht — dann kennt die Vorlesehilfe die Region nicht',
+  );
+
+  // Und die Gegenprobe: Die Hülle liegt hinter keiner Bedingung. Zwischen ihr
+  // und der schließenden Klammer der Feldhülle steht nichts, was sie
+  // wegnehmen könnte.
+  const huelle = primitives.slice(primitives.indexOf('<div className="field__live"'));
+  assert.equal(
+    /field__live"[^>]*>\s*\{\s*(?:error|parts\.showError)[^}]*\?\s*null/.test(huelle),
+    false,
+    'die Meldefläche selbst hängt an einer Bedingung',
+  );
+});
+
+check('die leere Meldefläche nimmt keinen Platz — und wird nicht ausgeblendet', () => {
+  /*
+   * `display: none` nähme sie aus dem Baum und damit die ganze Wirkung. Die
+   * Stilvorlage darf sie deshalb nur um den Abstand erleichtern.
+   */
+  const css = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8');
+  const regel = /\.field__live:empty\s*\{([^}]*)\}/.exec(css);
+  assert.ok(regel !== null, 'die leere Meldefläche trägt den Abstand des Feldes und schiebt jedes Feld auseinander');
+  assert.equal(
+    /display\s*:\s*none/.test(regel[1]),
+    false,
+    'die leere Meldefläche wird ausgeblendet — dann kennt die Vorlesehilfe sie nicht',
+  );
+  assert.equal(
+    /visibility\s*:\s*hidden/.test(regel[1]),
+    false,
+    'dieselbe Wirkung über einen anderen Schalter',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 19c — jede Aufrufstelle reicht die Attribute bis an ihr Bedienelement durch
+// ---------------------------------------------------------------------------
+
+/** Jeder `<Field …>…</Field>`-Block der Oberfläche, mit seiner Datei. */
+const fieldBlocks = () => {
+  const found = [];
+  for (const datei of files.filter((eintrag) => eintrag.endsWith('.tsx'))) {
+    const text = sourceWithoutComments(datei);
+    let from = 0;
+    for (;;) {
+      const start = text.indexOf('<Field', from);
+      if (start === -1) break;
+      const end = text.indexOf('</Field>', start);
+      assert.notEqual(end, -1, `unabgeschlossenes <Field> in ${path.relative(srcRoot, datei)}`);
+      const block = text.slice(start, end);
+      const label = /label="([^"]*)"/.exec(block)?.[1] ?? '(ohne Beschriftung)';
+      found.push({ datei: path.relative(srcRoot, datei), label, block });
+      from = end + 1;
+    }
+  }
+  return found;
+};
+
+const felder = fieldBlocks();
+
+check(`V-03: alle ${String(felder.length)} Felder des Add-ins reichen ihre Attribute weiter`, () => {
+  /*
+   * Der Prüfer hat ausdrücklich verlangt, das **einmal** in `Field` zu
+   * beheben und nicht am Fristfeld. Das ist geschehen — aber ein Baustein,
+   * der die Attribute anbietet, und eine Aufrufstelle, die sie liegen lässt,
+   * ergeben zusammen wieder den Zustand von vorher. Diese Zeile misst deshalb
+   * jedes Feld einzeln.
+   *
+   * Zugelassen sind zwei Wege, und beide sind derselbe: `{...aria}` an einem
+   * `input`, `textarea` oder `select`, oder `aria={aria}` an einen Baustein,
+   * der sein Bedienelement selbst zeichnet (der Tag-Auswähler).
+   */
+  assert.ok(felder.length >= 12, `nur ${String(felder.length)} Felder gefunden — der Wächter greift ins Leere`);
+
+  const ohne = felder.filter(({ block }) => {
+    if (!/\{\s*\(\s*aria\s*\)\s*=>/.test(block)) return true;
+    return !(/\{\s*\.\.\.aria\s*\}/.test(block) || /\baria=\{aria\}/.test(block) || /withDescription\s*\(\s*aria\b/.test(block));
+  });
+
+  assert.deepEqual(
+    ohne.map(({ datei, label }) => `${datei}: ${label}`),
+    [],
+    'diese Felder erzeugen Kennungen, auf die nichts verweist',
+  );
+});
+
+check('kein Bedienelement führt seine Kennung daneben noch einmal', () => {
+  /*
+   * Eine von Hand geschriebene `id` neben `{...aria}` wäre die zweite Quelle
+   * derselben Zeichenkette — und die Stelle, an der `label for` und `input id`
+   * wieder auseinanderlaufen. Genau das war der Zustand des Tag-Feldes:
+   * `htmlFor="tags"` verwies auf eine Kennung, die es nirgends gab.
+   */
+  const daneben = felder.filter(({ block }) => /<(?:input|textarea|select)\b[^>]*\sid="/.test(block));
+  assert.deepEqual(
+    daneben.map(({ datei, label }) => `${datei}: ${label}`),
+    [],
+    'ein Bedienelement trägt eine eigene Kennung neben der des Feldes',
+  );
+});
+
+check('der Tag-Auswähler erzeugt seine Kennung nicht mehr selbst', () => {
+  const picker = sourceWithoutComments(path.join(srcRoot, 'ui', 'TagPicker.tsx'));
+  assert.equal(
+    /\buseId\s*\(/.test(picker),
+    false,
+    'der Auswähler zählt wieder eine eigene Kennung — dann beschriftet „Tags" nichts',
+  );
+  assert.match(picker, /withDescription\s*\(\s*aria\s*,/, 'die eigene Zeile tritt nicht zur Beschreibung des Feldes hinzu');
+});
+
+// ---------------------------------------------------------------------------
+// 19d — der Wortlaut am Fristfeld (V-04)
+// ---------------------------------------------------------------------------
+
+const paneQuelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
+const fristHinweis = /label="Frist"[\s\S]{0,300}?hint="([^"]*)"/.exec(paneQuelle)?.[1] ?? '';
+
+check('V-04: der Hinweis am Fristfeld nennt die Abwesenheit — und zwar zuerst', () => {
+  /*
+   * Vier Aussagen standen dort, und die einzige, die auf dieser Fläche etwas
+   * erklärt, stand an dritter Stelle. Sie steht jetzt an erster.
+   *
+   * Gemessen wird die **Stellung**, nicht der Wortlaut: Wer den Satz
+   * umschreibt, darf das — wer die Aussage über die E-Mail hinter die
+   * Bedienhinweise schiebt, nicht.
+   */
+  assert.ok(fristHinweis.length > 0, 'das Fristfeld hat gar keinen Hinweis mehr');
+  const ueberDieMail = fristHinweis.indexOf('E-Mail');
+  assert.notEqual(ueberDieMail, -1, 'der Hinweis sagt nicht, dass die Frist nicht aus der E-Mail kommt');
+
+  const bedienhinweis = fristHinweis.indexOf('Ein Tag');
+  assert.notEqual(bedienhinweis, -1, 'der Hinweis sagt nicht mehr, dass die Frist ein Tag und keine Uhrzeit ist');
+  assert.ok(
+    ueberDieMail < bedienhinweis,
+    `die tragende Aussage steht wieder hinten: „${fristHinweis}"`,
+  );
+});
+
+check('V-04: der Fülltext der Hauptanwendung steht nicht mehr im Aufgabenbereich', () => {
+  /*
+   * „ändert nichts an Pools, Spalten, Buchungen oder Export" beantwortet in
+   * der Hauptanwendung eine reale Sorge — dort gibt es Pools, Spalten und
+   * eine Exportansicht. Im Aufgabenbereich gibt es keine davon; der Satz
+   * schob dort nur die tragende Aussage in die Mitte.
+   *
+   * Der Satz bleibt gültig (A-19.7) und bleibt dort stehen, wo er gilt.
+   */
+  for (const wort of ['Pools', 'Spalten', 'Export']) {
+    assert.equal(
+      fristHinweis.includes(wort),
+      false,
+      `„${wort}" steht wieder im Hinweis des Aufgabenbereichs: „${fristHinweis}"`,
+    );
+  }
+});
+
+check('A-19.1: „leer lassen" bleibt gesagt — ohne Frist ist ein Todo gültig', () => {
+  assert.match(
+    fristHinweis,
+    /leer lassen/i,
+    `der Hinweis sagt nicht mehr, dass ein leeres Feld erlaubt ist: „${fristHinweis}"`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 19e — V-08: die eingetragene Frist verfällt, und das wird gesagt
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund (V-08 aus T-154):
+ *
+ * Wer eine Frist einträgt und danach über ein Angebot auf „Auf vorhandenes
+ * Todo buchen" wechselt, verliert die Anlegen-Fläche und mit ihr das
+ * Fristfeld. Sachlich richtig — A-19.21 nennt das **Anlegen**, und das bebuchte
+ * Todo behält seine eigene Frist —, aber es ist eine bewusste Eingabe, die
+ * ohne ein Wort verfiel.
+ *
+ * Gemessen wird dreierlei: dass der Satz dasteht, dass er **an der Eingabe
+ * hängt** (und nicht dauerhaft), und dass sich daraus **kein Übertragen**
+ * eingeschlichen hat. Der dritte Punkt ist der eigentliche Riegel: Der
+ * Vorschlag lautete ausdrücklich „kein neues Feld, kein Übertragen — nur die
+ * Auskunft".
+ */
+
+const buchungsFlaeche = paneQuelle.slice(paneQuelle.indexOf('Auf vorhandenes Todo buchen'));
+
+check('V-08: die Buchungsfläche sagt, dass die eingetragene Frist nur für ein neues Todo gilt', () => {
+  assert.ok(buchungsFlaeche.length > 0, 'die Buchungsfläche ist nicht auffindbar — dann misst dieser Abschnitt nichts');
+  assert.match(
+    buchungsFlaeche,
+    /Die eingetragene Frist gilt nur für ein neues Todo\./,
+    'der Wechsel auf ein vorhandenes Todo verwirft die Frist weiterhin stillschweigend',
+  );
+  assert.match(
+    buchungsFlaeche,
+    /behält seine eigene/,
+    'der Satz sagt nicht, dass das bebuchte Todo seine eigene Frist behält',
+  );
+});
+
+check('V-08: der Satz hängt an der Eingabe und steht nicht auf Vorrat', () => {
+  /*
+   * E-078 Punkt 6, Zustandsbindung: Wer keine Frist eingetragen hat, liest
+   * nichts über Fristen. Gemessen an der Bedingung unmittelbar davor.
+   */
+  const stelle = buchungsFlaeche.indexOf('Die eingetragene Frist gilt nur');
+  const davor = buchungsFlaeche.slice(Math.max(0, stelle - 200), stelle);
+  assert.match(
+    davor,
+    /dueEntry\.kind !== 'none'\s*\?/,
+    'der Satz steht unbedingt da — dann liest ihn auch, wer keine Frist eingetragen hat',
+  );
+});
+
+check('V-08: die Frist wird nicht heimlich mitgebucht', () => {
+  /*
+   * Die naheliegende „Verbesserung" wäre, die eingetragene Frist auf das
+   * fremde Todo zu schreiben. Das wäre eine Änderung an einem Todo, das der
+   * Benutzer nicht bearbeitet — und sie stünde in keiner Anforderung.
+   */
+  const rumpf = /await api\.book\(\{([\s\S]*?)\}\);/.exec(paneQuelle)?.[1] ?? '';
+  assert.ok(rumpf.length > 0, 'der Buchungsaufruf ist nicht auffindbar');
+  assert.equal(/due/i.test(rumpf), false, `die Buchung führt eine Frist mit: ${rumpf.trim()}`);
+});
+
+// ---------------------------------------------------------------------------
+// 19f — V-11: der gesperrte Knopf nennt seinen Grund, aus einer Rechnung
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund (V-11 aus T-154):
+ *
+ * Der Hauptknopf hatte vier Sperrgründe und nannte keinen. Zwei davon tragen
+ * eine Meldung an ihrem Feld, zwei hatten gar keine.
+ *
+ * Der Kern der Behebung ist nicht der Satz, sondern dass **Sperre und Grund
+ * dieselbe Rechnung** sind: `blocked` ist genau dann wahr, wenn `reason`
+ * dasteht. Zwei Ausdrücke nebeneinander wären die Bauart, aus der ein
+ * gesperrter Knopf ohne Grund entsteht — also der Zustand von vorher, nur mit
+ * mehr Zeilen.
+ */
+
+const gateFall = (abweichung) =>
+  createTodoGate({
+    title: 'Rechnung prüfen',
+    connection: 'ready',
+    callNumberProblem: null,
+    dueDateInvalid: false,
+    ...abweichung,
+  });
+
+check('V-11: nichts offen — kein Riegel und kein Satz', () => {
+  const gate = gateFall({});
+  assert.equal(gate.blocked, false, 'der Knopf ist gesperrt, obwohl alles beisammen ist');
+  assert.equal(gate.reason, null, 'ein Grund steht da, obwohl nichts fehlt');
+});
+
+check('V-11: jeder der fünf Zustände nennt seinen Grund', () => {
+  const faelle = [
+    [{ callNumberProblem: 'irgendetwas stimmt nicht' }, /Call-Nummer/],
+    [{ title: '   ' }, /Titel/],
+    [{ dueDateInvalid: true }, /Frist/],
+    [{ connection: 'loading' }, /Tags/],
+    [{ connection: 'failed' }, /Verbindung/],
+  ];
+
+  for (const [abweichung, erwartet] of faelle) {
+    const gate = gateFall(abweichung);
+    assert.equal(gate.blocked, true, `nicht gesperrt: ${JSON.stringify(abweichung)}`);
+    assert.notEqual(gate.reason, null, `gesperrt ohne Grund: ${JSON.stringify(abweichung)}`);
+    assert.match(gate.reason, erwartet, `der Grund benennt die falsche Stelle: „${gate.reason}"`);
+  }
+});
+
+check('V-11: Sperre und Grund sind dieselbe Rechnung — über alle 24 Möglichkeiten', () => {
+  /*
+   * Die eigentliche Zusicherung. Ein Knopf, der gesperrt ist und keinen Grund
+   * nennt, ist der Befund; ein Grund ohne Sperre wäre seine Umkehrung und
+   * genauso falsch (ein Satz unter einem Knopf, der geht).
+   */
+  let gezaehlt = 0;
+  for (const connection of ['loading', 'ready', 'failed']) {
+    for (const title of ['Rechnung prüfen', '']) {
+      for (const callNumberProblem of [null, 'unbrauchbar']) {
+        for (const dueDateInvalid of [false, true]) {
+          const gate = createTodoGate({ title, connection, callNumberProblem, dueDateInvalid });
+          gezaehlt += 1;
+          assert.equal(
+            gate.blocked,
+            gate.reason !== null,
+            `Sperre und Grund fallen auseinander: ${JSON.stringify({ connection, title, callNumberProblem, dueDateInvalid })}`,
+          );
+        }
+      }
+    }
+  }
+  assert.equal(gezaehlt, 24, 'die Schleife hat nicht alle Möglichkeiten durchlaufen');
+});
+
+check('V-11: genannt wird der erste Grund in der Lesereihenfolge der Fläche', () => {
+  assert.match(
+    gateFall({ callNumberProblem: 'unbrauchbar', title: '', dueDateInvalid: true, connection: 'failed' }).reason,
+    /Call-Nummer/,
+    'bei vier offenen Gründen steht nicht der oberste da',
+  );
+  assert.match(
+    gateFall({ title: '', dueDateInvalid: true, connection: 'failed' }).reason,
+    /Titel/,
+    'nach der Call-Nummer kommt der Titel',
+  );
+  assert.match(gateFall({ dueDateInvalid: true, connection: 'failed' }).reason, /Frist/, 'nach dem Titel kommt die Frist');
+});
+
+check('V-11: die Sätze sind kurz und ohne Anrede (E-078, E-080)', () => {
+  const saetze = [
+    gateFall({ callNumberProblem: 'x' }).reason,
+    gateFall({ title: '' }).reason,
+    gateFall({ dueDateInvalid: true }).reason,
+    gateFall({ connection: 'loading' }).reason,
+    gateFall({ connection: 'failed' }).reason,
+  ];
+
+  for (const satz of saetze) {
+    assert.ok(satz.length <= 60, `zu lang für einen Satz unter einem Knopf (${String(satz.length)}): „${satz}"`);
+    assert.match(satz, /\.$/, `kein ganzer Satz: „${satz}"`);
+    assert.equal(ANREDE_DU.test(satz), false, `duzt: „${satz}"`);
+  }
+});
+
+check('V-11: der Aufgabenbereich benutzt die Rechnung und rechnet nicht daneben', () => {
+  assert.match(paneQuelle, /disabled=\{gate\.blocked\}/, 'der Knopf hängt nicht an der Rechnung');
+  assert.match(
+    paneQuelle,
+    /gate\.reason !== null \? <p className="pane-note">\{gate\.reason\}<\/p> : null/,
+    'der Grund wird nicht angezeigt — dann ist der Knopf wieder stumm',
+  );
+  assert.equal(
+    /title\.trim\(\)\.length === 0 \|\|/.test(paneQuelle),
+    false,
+    'der alte vierteilige Sperrausdruck steht wieder daneben — zwei Rechnungen für eine Frage',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 19g — X-02: ein Feld ohne Feld ist kein Feld
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund (X-02 aus T-165):
+ *
+ * In den Zuständen „lädt" und „nicht verbunden" zeichnete `Field` die
+ * Beschriftung „Tags" mit `htmlFor="tags"` und den Hinweis mit `id="tags-hint"`
+ * — und es gab kein Bedienelement, das `id="tags"` getragen hätte. Kein
+ * Verstoß gegen ein Erfolgskriterium, aber genau die Bauart, aus der V-03
+ * entstanden ist.
+ */
+
+const tagFeld = felder.find(({ datei, label }) => datei.endsWith('TaskPane.tsx') && label === 'Tags');
+
+check('X-02: das Tag-Feld steht nur da, wo es ein Bedienelement gibt', () => {
+  assert.notEqual(tagFeld, undefined, 'kein Feld „Tags" gefunden — dann misst dieser Abschnitt nichts');
+  assert.match(tagFeld.block, /<TagPicker/, 'das Tag-Feld zeichnet seinen Auswähler nicht mehr');
+
+  for (const fremd of ['Skeleton', 'pane-loading', '<Callout']) {
+    assert.equal(
+      tagFeld.block.includes(fremd),
+      false,
+      `„${fremd}" steht wieder im Feld — dann beschriftet „Tags" in diesem Zustand nichts`,
+    );
+  }
+});
+
+check('X-02: die beiden anderen Zustände tragen eine Überschrift und ihren Inhalt', () => {
+  /*
+   * Die Gegenprobe zur Streichung: Der Ladezustand und die Meldung sind nicht
+   * verschwunden, sie stehen nur nicht mehr in einem Feld. Ohne diese Hälfte
+   * wäre der Abschnitt am grünsten, wenn beide Flächen ganz fehlten.
+   */
+  assert.match(paneQuelle, /<p className="field__heading">Tags<\/p>/, 'die Überschrift „Tags" fehlt');
+  assert.match(paneQuelle, /pane-loading">Tags werden geladen/, 'das Ladebild der Tagauswahl ist verschwunden');
+  assert.match(
+    paneQuelle,
+    /Ohne Verbindung lassen sich keine Tags wählen\./,
+    'die Meldung bei fehlender Verbindung ist verschwunden',
+  );
+
+  const stil = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8');
+  assert.match(stil, /\.field__heading\b/, 'die Überschrift hat keine Gestalt — sie fiele aus der Feldspalte');
+});
+
+// ---------------------------------------------------------------------------
+// 19h — E-080: eine Anrede. E-078: ein Satz an einer Stelle
+// ---------------------------------------------------------------------------
+
+check('E-080: der Aufgabenbereich duzt niemanden mehr', () => {
+  /*
+   * `apps/web` siezt an über zwanzig Stellen, das Add-in duzte an sechs, und
+   * die Grenze verlief entlang zweier Dateihoheiten statt entlang einer
+   * Überlegung (X-01 aus T-165). E-080 hat sie aufgehoben.
+   *
+   * Gemessen wird über denselben Textbegriff wie in 18e — Quelltext ohne
+   * Kommentare, dazu das Manifest. In einem Kommentar darf „du" stehen, etwa
+   * als zitierte Fassung, die gerade **nicht** genommen wurde.
+   *
+   * Findet dieser Wächter einen technischen Bezeichner (`dir`, `du`), ist der
+   * umzubenennen und nicht die Prüfung zu lockern: In einem Add-in mit
+   * deutschen Oberflächentexten ist ein englischer Kurzname, der wie eine
+   * Anrede aussieht, ohnehin die schlechtere Wahl.
+   */
+  const treffer = [];
+  for (const { datei, text } of sichtbareTexte()) {
+    const fund = text.match(ANREDE_DU_GLOBAL);
+    if (fund !== null) treffer.push(`${datei}: ${[...new Set(fund)].join(', ')}`);
+  }
+  assert.deepEqual(treffer, [], 'E-080 Punkt 1: Takt siezt, überall');
+});
+
+check('E-080, Gegenprobe: der Wächter erkennt eine Anrede überhaupt', () => {
+  assert.equal(ANREDE_DU.test('Das Token findest du in Takt.'), true, 'der Wächter sieht ein „du" nicht');
+  assert.equal(ANREDE_DU.test('Trage es dir dort ein.'), true, 'der Wächter sieht ein „dir" nicht');
+  assert.equal(ANREDE_DU.test('Der Durchlauf endet.'), false, 'der Wächter meldet „Durchlauf"');
+  assert.equal(ANREDE_DU.test('const dueDate = readDueDate(raw);'), false, 'der Wächter meldet „dueDate"');
+});
+
+check('E-080 Punkt 1: auch der Imperativ ohne Fürwort ist eine Anrede (O-GD)', () => {
+  /*
+   * Die andere Hälfte der Zusage von einer Zeile weiter oben. Ohne sie sagt
+   * der Wächter „Takt siezt, überall" und meint „Takt schreibt nirgends
+   * ‚du'" — zwei verschiedene Aussagen, und die zweite ist die schwächere.
+   *
+   * **Seit T-199 ohne Ausnahme.** Bis dahin wurde ein geduldeter Satz vor dem
+   * Messen herausgerechnet; er ist umgestellt, die Ausnahme gelöscht. Was hier
+   * gemessen wird, ist der ganze Bestand.
+   */
+  const treffer = [];
+  for (const { datei, text } of sichtbareTexte()) {
+    const fund = text.match(ANREDE_IMPERATIV_GLOBAL);
+    if (fund !== null) treffer.push(`${datei}: ${[...new Set(fund)].join(', ')}`);
+  }
+  assert.deepEqual(treffer, [], 'E-080 Punkt 1: Takt siezt, auch ohne Fürwort');
+});
+
+check('E-080, Gegenprobe: der Wächter erkennt den Imperativ und nicht das Hauptwort', () => {
+  /*
+   * Die Sätze mit einem Imperativ sind keine erfundenen: Der erste stand bis
+   * T-182 in `callnumber/pattern.ts`, der zweite bis T-199 in `ui/App.tsx`.
+   * Ein Wächter, der die eigene Vergangenheit nicht wiederfindet, ist keiner.
+   */
+  for (const satz of [
+    'Trage ein Muster ein oder wähle eines aus der Liste.',
+    IMPERATIV_VORHER,
+    'Gib das Token ein.',
+    'Klick auf „Verbindung prüfen".',
+    'Öffne Takt und trage das Token dort ein.',
+    'Speichere die Einstellung.',
+  ]) {
+    assert.equal(ANREDE_IMPERATIV.test(satz), true, `der Wächter sieht den Imperativ nicht: „${satz}"`);
+  }
+
+  /*
+   * Und die teurere Hälfte: Ein Wächter, der jedes Hauptwort meldet, wird beim
+   * ersten Fehltreffer gelockert, und dann mißt er wieder nichts. Diese Sätze
+   * stehen so oder so ähnlich im Add-in.
+   */
+  for (const satz of [
+    'Kein Tag passt zu dieser Suche.',
+    'Der Satz steht an dieser Stelle.',
+    'Die Tags werden geladen.',
+    'Der Start der Anwendung ist gescheitert.',
+    'Zwei Versuche sind offen.',
+    'Die Buchung ist offen.',
+    'Ein Tipp steht daneben.',
+    'const dueDate = readDueDate(raw);',
+  ]) {
+    assert.equal(ANREDE_IMPERATIV.test(satz), false, `der Wächter meldet ein Hauptwort: „${satz}"`);
+  }
+});
+
+check('O-HM: die letzte Duz-Stelle ist umgestellt — und der Satz steht noch da', () => {
+  /*
+   * Der Nachfolger des selbstauflösenden Prüffalls von T-190. Er misst jetzt
+   * das Ergebnis statt die Ausnahme, und zwar in beide Richtungen:
+   *
+   * 1. Die alte Fassung kommt im ganzen Bestand nicht mehr vor. Ohne diese
+   *    Hälfte wäre die Umstellung zurücknehmbar, ohne dass ein Lauf es merkt —
+   *    der Wächter darüber führt keine Ausnahme mehr, aber er nennt beim
+   *    Rückfall nur ein Verb und nicht die Geschichte dazu.
+   * 2. Die neue Fassung steht genau einmal da. Ohne diese Hälfte wäre der
+   *    Abschnitt am grünsten, wenn die Fläche ganz fehlte — dieselbe Bauart wie
+   *    die Gegenprobe zu A-19.2 weiter oben.
+   *
+   * Der gemessene Teil deckt sich mit dem Teilstring, an dem
+   * `tests/e2e/outlook-addin-build.spec.ts` seit T-192 hängt (Hoheit
+   * e2e-tester): Wer den Satz künftig anfasst — etwa für ST-A-01, das die
+   * Überschrift dieser Hinweisfläche ganz streichen will —, macht **beide**
+   * Läufe rot und nicht nur einen.
+   */
+  const texte = sichtbareTexte();
+
+  assert.deepEqual(
+    texte.filter(({ text }) => text.includes(IMPERATIV_VORHER)).map(({ datei }) => datei),
+    [],
+    'die Du-Fassung ist zurück — E-080 gilt auch für den Imperativ ohne Fürwort',
+  );
+
+  assert.deepEqual(
+    texte.filter(({ text }) => text.includes(IMPERATIV_NACHHER)).map(({ datei }) => datei),
+    [path.join('src', 'ui', 'App.tsx')],
+    'der Satz steht nicht mehr genau einmal im Bestand',
+  );
+
+  assert.equal(
+    ANREDE_IMPERATIV.test(IMPERATIV_NACHHER),
+    false,
+    'die neue Fassung ist selbst ein Imperativ — dann hat die Umstellung nichts geändert',
+  );
+  assert.equal(ANREDE_DU.test(IMPERATIV_NACHHER), false, 'die neue Fassung duzt');
+});
+
+check('E-078: „Keine Call-Nummer im Text gefunden" steht an genau einer Stelle', () => {
+  /*
+   * Der Satz stand wörtlich gleich in `callnumber/labels.ts` und in
+   * `TaskPane.tsx#describeDetection`. Zwei Fassungen einer Aussage laufen
+   * auseinander, sobald jemand eine davon anfasst — und der Textdurchgang aus
+   * E-078 ist genau so ein Jemand.
+   */
+  const mitSatz = sichtbareTexte().filter(({ text }) => text.includes(NO_CALL_NUMBER_FOUND));
+  assert.deepEqual(
+    mitSatz.map(({ datei }) => datei),
+    [path.join('src', 'callnumber', 'labels.ts')],
+    'der Satz steht wieder mehr als einmal wörtlich im Bestand',
+  );
+  assert.equal(
+    REJECTION_LABEL.empty,
+    NO_CALL_NUMBER_FOUND,
+    'die Ablehnungstafel führt eine zweite Fassung desselben Satzes',
+  );
+  assert.match(paneQuelle, /help: NO_CALL_NUMBER_FOUND/, 'der Aufgabenbereich schreibt den Satz wieder selbst hin');
+});
+
+check('E-080 Punkt 4: der eine Satz kommt ohne Anrede aus', () => {
+  assert.equal(ANREDE_DU.test(NO_CALL_NUMBER_FOUND), false, `duzt: „${NO_CALL_NUMBER_FOUND}"`);
+  assert.equal(
+    /\bSie\b|\bIhre?[nmrs]?\b/.test(NO_CALL_NUMBER_FOUND),
+    false,
+    `die kürzere Fassung ohne Anrede war möglich: „${NO_CALL_NUMBER_FOUND}"`,
+  );
+});
+
+// ===========================================================================
+heading('20  Die Sperrliste: was allein eine Grenze trägt (O-HO, T-196)');
+// ===========================================================================
+
+/*
+ * Der Befund (O-HO, aus T-196 Frage 1).
+ *
+ * `docs/design/textbestand-aufgabenbereich.md` führt in Abschnitt 5.1 eine
+ * **Sperrliste**: Sätze, die ein Textdurchgang nicht kürzen darf, weil sie als
+ * einzige eine fachliche Grenze aussprechen. Bis T-199 stand diese Liste
+ * ausschließlich in Prosa — in einem Papier und in Kommentaren neben den
+ * Sätzen selbst. Kein Lauf hielt sie.
+ *
+ * Zwei Einträge sind dabei besonders dünn geworden, und zwar durch Kürzungen,
+ * die für sich richtig waren:
+ *
+ *  - **SP-A-01.** ST-A-08 hat „Interner Vermerk des Todos." gestrichen
+ *    (T-196). Was bleibt, ist „Er geht nicht in die Abrechnung." — nach dieser
+ *    Streichung der **einzige ganze Satz** des Aufgabenbereichs, der A-7.2 und
+ *    R-08 ausspricht. Die Klammerzusätze der beiden Beschriftungen nennen den
+ *    **Ort** („bleibt in Takt", „geht in die Abrechnung"); den Weg, den der
+ *    Vermerk **nicht** nimmt, nennt nur dieser Satz. Sein Zwilling am Feld
+ *    „Leistung" ist SP-A-05 und steht aus demselben Grund mit hier: Er ist die
+ *    einzige Stelle, die Text aus einer fremden E-Mail von der Rechnung
+ *    fernhält.
+ *  - **SP-A-12.** ST-A-06 hat den Zustand aus der Chip-Erklärung genommen
+ *    („Dieses Tag gibt es in Takt noch nicht.") und dabei ausdrücklich darauf
+ *    gebaut, daß die **Folge** im Tag-Auswähler weiter ausgesprochen wird.
+ *    Auflage 1 aus Z-44 (T-195): Fällt SP-A-12, ist die Kürzung zurückgenommen.
+ *
+ * Diese Welle hat viermal erlebt, was mit einer Zusage geschieht, die niemand
+ * mißt. Deshalb steht sie hier — **zeichengleich**, denn eine Umschreibung ist
+ * genau der Weg, auf dem so ein Satz verschwindet, und **mit Gegenprobe**, denn
+ * ein Sucher, der nichts findet, ist der grünste von allen.
+ *
+ * Was hier **nicht** gemessen wird: die ganze Sperrliste. SP-A-02 bis SP-A-26
+ * hängen an Flächen, die andere Abschnitte dieses Laufs bereits zeichengleich
+ * halten, oder sie tragen ihre Aussage nicht allein. Gemessen wird, was
+ * **allein** trägt.
+ */
+
+/** Quelltext einer Add-in-Datei ohne Kommentare, über ihren Pfad unter `src/`. */
+const uiQuelle = (...teile) => sourceWithoutComments(path.join(srcRoot, ...teile));
+
+const TASKPANE = path.join('ui', 'TaskPane.tsx');
+const TAGPICKER = path.join('ui', 'TagPicker.tsx');
+
+/**
+ * Die gesperrten Texte, die allein tragen.
+ *
+ * `verletzung` ist die Fassung, in die der Satz beim nächsten Textdurchgang
+ * abrutschen würde — plausibel und nicht erfunden: Jede stammt aus derselben
+ * Sorte Kürzung, die T-196 an den Nachbarsätzen tatsächlich ausgeführt hat.
+ * Sie ist die Gegenprobe und nicht Schmuck.
+ */
+const GESPERRTE_TEXTE = Object.freeze([
+  Object.freeze({
+    sperre: 'SP-A-01',
+    datei: TASKPANE,
+    text: 'Er geht nicht in die Abrechnung.',
+    verletzung: 'Er bleibt intern.',
+    grund: 'A-7.2, R-08, E-016 — nach ST-A-08 der einzige ganze Satz, der die Grenze ausspricht',
+  }),
+  Object.freeze({
+    sperre: 'SP-A-01',
+    datei: TASKPANE,
+    text: 'label="Vermerk (bleibt in Takt)"',
+    verletzung: 'label="Vermerk"',
+    grund: 'A-7.2 — der Klammerzusatz nennt den Ort, an dem der Text bleibt',
+  }),
+  Object.freeze({
+    sperre: 'SP-A-01',
+    datei: TASKPANE,
+    text: 'label="Leistung (geht in die Abrechnung)"',
+    verletzung: 'label="Leistung"',
+    grund: 'A-7.3, A-7.4 — der Klammerzusatz nennt den Weg, den dieser Text nimmt',
+  }),
+  Object.freeze({
+    sperre: 'SP-A-05',
+    datei: TASKPANE,
+    text: 'Text aus der E-Mail gehört in den Vermerk, nicht hierher.',
+    verletzung: 'Kurz und sachlich.',
+    grund: 'B-12.3, R-08 — die einzige Stelle, die fremden Text von der Rechnung fernhält',
+  }),
+  Object.freeze({
+    sperre: 'SP-A-12',
+    datei: TAGPICKER,
+    text: '— entsteht beim Anlegen des Todos',
+    verletzung: '',
+    grund: 'T-061 — ein Tag wirkt über dieses Todo hinaus; ST-A-06 hängt daran',
+  }),
+]);
+
+/**
+ * Der Sucher, den beide Hälften benutzen: welcher gesperrte Text fehlt in den
+ * übergebenen Quellen?
+ *
+ * `quellen` ist eine Abbildung Datei → Quelltext und wird herumgereicht statt
+ * gelesen, damit die Gegenprobe eine **eingesetzte Verletzung** durchschicken
+ * kann, ohne eine Datei anzufassen.
+ */
+const fehlendeSperrtexte = (quellen) =>
+  GESPERRTE_TEXTE.filter(({ datei, text }) => !(quellen.get(datei) ?? '').includes(text)).map(
+    ({ sperre, text }) => `${sperre}: „${text}"`,
+  );
+
+const sperrQuellen = () =>
+  new Map([
+    [TASKPANE, uiQuelle('ui', 'TaskPane.tsx')],
+    [TAGPICKER, uiQuelle('ui', 'TagPicker.tsx')],
+  ]);
+
+check('O-HO: die gesperrten Sätze stehen zeichengleich im Aufgabenbereich', () => {
+  const quellen = sperrQuellen();
+
+  assert.ok(
+    (quellen.get(TASKPANE) ?? '').length > 5000 && (quellen.get(TAGPICKER) ?? '').length > 1000,
+    'die Quellen sind leer — dann mißt dieser Abschnitt nichts',
+  );
+
+  assert.deepEqual(
+    fehlendeSperrtexte(quellen),
+    [],
+    'ein gesperrter Satz ist gekürzt oder umgeschrieben — die Sperrliste steht in ' +
+      'docs/design/textbestand-aufgabenbereich.md Abschnitt 5.1',
+  );
+
+  // Und jeder genau **einmal**: Eine zweite Fassung desselben Satzes ist der
+  // Befund aus E-078 und läuft von der ersten auseinander, sobald jemand eine
+  // davon anfasst.
+  for (const { sperre, datei, text } of GESPERRTE_TEXTE) {
+    const anzahl = (quellen.get(datei) ?? '').split(text).length - 1;
+    assert.equal(anzahl, 1, `${sperre}: „${text}" steht ${String(anzahl)}-mal in ${datei}`);
+  }
+});
+
+check('O-HO, Gegenprobe: jede eingesetzte Verletzung wird gefunden — einzeln', () => {
+  /*
+   * Die teurere Hälfte. Für jeden Eintrag wird **eine** Verletzung in eine
+   * Kopie der Quelle gesetzt; gefunden werden muß genau dieser Eintrag und
+   * kein zweiter. Ein Sucher, der bei jeder Änderung alles meldet, wird beim
+   * ersten Fehlalarm gelockert — und mißt dann nichts mehr.
+   */
+  for (const eintrag of GESPERRTE_TEXTE) {
+    const quellen = sperrQuellen();
+    const verletzt = (quellen.get(eintrag.datei) ?? '').replace(eintrag.text, eintrag.verletzung);
+    quellen.set(eintrag.datei, verletzt);
+
+    assert.deepEqual(
+      fehlendeSperrtexte(quellen),
+      [`${eintrag.sperre}: „${eintrag.text}"`],
+      `die eingesetzte Verletzung „${eintrag.verletzung}" bleibt unbemerkt (${eintrag.grund})`,
+    );
+  }
+});
+
+/**
+ * Die gekürzte Chip-Erklärung aus ST-A-06 (T-196), zeichengleich.
+ *
+ * Gemessen wird die Erklärung **an ihrem Ton**, nicht irgendwo in der Datei:
+ * Der Zustand („neu") steht sichtbar am Chip, die Folge steht im `title` — und
+ * genau diese Aufteilung ist es, die ohne SP-A-12 nicht mehr aufgeht.
+ */
+const CHIP_GEKUERZT = /'new-tag':\s*\{\s*label:\s*'neu',\s*title:\s*'Entsteht zusammen mit dem Todo\.',/;
+
+const SP_A_12 = '— entsteht beim Anlegen des Todos';
+
+/**
+ * Auflage 1 aus Z-44 als **Rechnung** und nicht als zwei Behauptungen: Die
+ * Kürzung im Chip ist nur gedeckt, solange der Auswähler die Folge ausspricht.
+ * Wird die Kürzung zurückgenommen, darf der Satz drüben fallen — deshalb eine
+ * Folgerung und kein „beides muß dastehen".
+ */
+const kuerzungIstGedeckt = (chipQuelle, pickerQuelle) =>
+  !CHIP_GEKUERZT.test(chipQuelle) || pickerQuelle.includes(SP_A_12);
+
+check('O-HO: ST-A-06 hängt an SP-A-12 — und die Abhängigkeit ist gerechnet', () => {
+  const picker = uiQuelle('ui', 'TagPicker.tsx');
+
+  assert.equal(
+    CHIP_GEKUERZT.test(primitives),
+    true,
+    'die gekürzte Chip-Erklärung steht nicht mehr zeichengleich da — dann ist ST-A-06 angefasst ' +
+      'und die Auflage aus Z-44 neu zu bewerten',
+  );
+  assert.equal(
+    picker.includes(SP_A_12),
+    true,
+    'die Folge steht nicht mehr im Tag-Auswähler — dann ist ST-A-06 zurückgenommen und der ' +
+      'Zustand gehört wieder in die Chip-Erklärung (Auflage 1 aus Z-44)',
+  );
+  assert.equal(kuerzungIstGedeckt(primitives, picker), true, 'die Kürzung steht ohne ihren Träger');
+});
+
+check('O-HO, Gegenprobe: die Kürzung ohne Träger wird rot, die Rücknahme nicht', () => {
+  const picker = uiQuelle('ui', 'TagPicker.tsx');
+  const pickerOhne = picker.replace(SP_A_12, '');
+  const chipMitZustand = primitives.replace(
+    CHIP_GEKUERZT,
+    "'new-tag': {\n      label: 'neu',\n      title: 'Dieses Tag gibt es in Takt noch nicht.',",
+  );
+
+  assert.notEqual(pickerOhne, picker, 'die Verletzung ließ sich nicht einsetzen — der Sucher greift daneben');
+  assert.equal(CHIP_GEKUERZT.test(chipMitZustand), false, 'die Rücknahme ließ sich nicht einsetzen');
+
+  assert.equal(
+    kuerzungIstGedeckt(primitives, pickerOhne),
+    false,
+    'die gekürzte Erklärung bliebe grün, obwohl ihr Träger weg ist',
+  );
+  assert.equal(
+    kuerzungIstGedeckt(chipMitZustand, pickerOhne),
+    true,
+    'die Rechnung verlangt beides statt einer Folgerung — dann wäre ST-A-06 unwiderruflich',
+  );
 });
 
 // ===========================================================================

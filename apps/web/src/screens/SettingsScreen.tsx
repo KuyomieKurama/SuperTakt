@@ -131,53 +131,32 @@ interface AreaDescriptor {
  * Status keine Kanban-Spalte mehr, sondern eine Stammgröße wie sie — deshalb
  * ist er aus dem Board hierher gezogen und nicht ersatzlos entfallen (A-5.4).
  */
+/*
+  Der Zusatz unterscheidet sechs Geschwister, er traegt keine Auskunft
+  (T-181, ST-04; `docs/design/textabbau-gestalt.md` 1.3). Er ist unter
+  60 rem ausgeblendet (`app.css`, `.settings-rail__hint`) — was in einem
+  schmalen Fenster verschwindet, darf nirgends die einzige Fassung sein.
+  Deshalb hoechstens fuenf Woerter, und die Verneinung zum Status steht
+  nicht hier, sondern in der Karte (`StatusSettings`, Auflage Z-01).
+*/
 const AREA_LIST: readonly AreaDescriptor[] = [
-  {
-    area: "darstellung",
-    label: "Darstellung",
-    icon: "sun",
-    hint: "Farbmodus und Zeilendichte der Oberfläche",
-  },
-  {
-    area: "export",
-    label: "Export",
-    icon: "download",
-    hint: "Zielordner, aktive Vorlage und Rundung",
-  },
+  { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Farbmodus und Zeilendichte" },
+  { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
   {
     area: "standardtags",
     label: "Standard-Tags",
     icon: "tag",
-    hint: "Tags, die an jedes neue Todo kommen",
+    hint: "Tags für jedes neue Todo",
   },
-  {
-    area: "status",
-    label: "Status",
-    icon: "inbox",
-    hint: "Die Statuswerte eines Todos — nicht die Spalten des Boards",
-  },
-  {
-    area: "addin",
-    label: "Outlook-Add-in",
-    icon: "shield",
-    hint: "Der Zugang, mit dem sich das Add-in ausweist",
-  },
+  { area: "status", label: "Status", icon: "inbox", hint: "Statuswerte eines Todos" },
+  { area: "addin", label: "Outlook-Add-in", icon: "shield", hint: "Zugang des Add-ins" },
   {
     area: "arbeitsplatz",
     label: "Arbeitsplatz",
     icon: "monitor",
-    hint: "Abrechnungsname, Ablageort und Sicherheitsmeldungen",
+    hint: "Abrechnungsname, Ablageort, Meldungen",
   },
 ];
-
-const AREA_LEAD: Readonly<Record<SettingsArea, string>> = {
-  darstellung: "Wie Takt aussieht. Änderungen wirken sofort, ohne Speichern.",
-  export: "Wohin die Exportdatei geht, welche Vorlage sie füllt und wie gerundet wird.",
-  standardtags: "Welche Tags jedes neu angelegte Todo mitbekommt — auf jedem Weg.",
-  status: "Welche Statuswerte es gibt, in welcher Reihenfolge und welcher an ein neues Todo kommt.",
-  addin: "Das Token, mit dem sich das Outlook-Add-in beim lokalen Dienst ausweist.",
-  arbeitsplatz: "Was der Dienst über diesen Arbeitsplatz meldet. Hier nicht änderbar.",
-};
 
 function readArea(query: Readonly<Record<string, string>>): SettingsArea {
   const value = query["bereich"];
@@ -200,9 +179,15 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
         Bereich der Einstellungen liest aus der Struktur, und die wird beim
         erneuten Ansteuern und beim Fensterwechsel erneuert.
       */}
+      {/*
+        Kein `lead` mehr (T-181, ST-04). Er stand unter der Ueberschrift
+        „Einstellungen“, sprach aber vom **gewaehlten Bereich** — ein
+        Rangfehler, und dazu derselbe Satz wie in der Kartenbeschreibung
+        darunter. Der Bereich ist danach dreifach benannt: Schiene mit
+        `aria-current`, Kartentitel und Adresse (`?bereich=…`).
+      */}
       <ScreenHeader
         title="Einstellungen"
-        lead={AREA_LEAD[active]}
         refreshing={structure.state.status === "ready" && structure.state.refreshing}
       />
 
@@ -306,7 +291,7 @@ function DisplaySettings() {
   return (
     <Card
       title="Darstellung"
-      description="Farbmodus und Zeilendichte. Beides wirkt sofort — es gibt hier nichts zu speichern."
+      description="Wirkt sofort. Nichts zu speichern."
     >
       <Select
         label="Farbmodus"
@@ -418,7 +403,7 @@ function ExportSettings() {
   return (
     <Card
       title="Export"
-      description="Der Exportordner wird vor jedem Lauf erneut geprüft: vorhanden, ein Ordner, beschreibbar."
+      description="Vor jedem Lauf erneut geprüft."
       actions={
         <Button
           variant="primary"
@@ -440,12 +425,24 @@ function ExportSettings() {
         disabled={mutation.busy}
       />
 
-      {blocked ? (
-        <p className="field__error" role="status">
-          Solange dieser Ordner eingetragen ist, lässt sich nichts speichern. Wählen Sie einen
-          anderen — die übrigen Einstellungen auf dieser Karte gehen dabei nicht verloren.
-        </p>
-      ) : null}
+      {/*
+        Die Meldefläche steht **immer** im Baum, auch leer (B-5, T-162, T-186;
+        Befund O-GQ). Bis T-191 entstand dieses `role="status"` zusammen mit
+        seinem Satz — und eine Region, die eine Vorlesehilfe in dem Augenblick
+        noch nicht kennt, meldet ihre erste Änderung nicht. Der Satz erscheint
+        aber genau dann, während die Karte schon steht: wenn der eingetragene
+        Ordner abgelehnt wird. Er blieb damit stumm.
+
+        Hier reicht der Absatz selbst als Region — anders als in `TextField`
+        braucht er keinen Behälter, weil kein `aria-describedby` auf ihn zeigt.
+        Leer hat er die Höhe null, und seine Ränder fallen mit denen des
+        nächsten Feldes zusammen; am Bild ändert sich dadurch nichts.
+      */}
+      <p className="field__error" role="status">
+        {blocked
+          ? "Solange dieser Ordner eingetragen ist, lässt sich nichts speichern. Wählen Sie einen anderen — die übrigen Einstellungen auf dieser Karte gehen dabei nicht verloren."
+          : null}
+      </p>
 
       <Select
         label="Aktive Exportvorlage"
@@ -554,10 +551,23 @@ function WorkstationFacts() {
   const value = structure.state.status === "ready" ? structure.state.value : null;
 
   return (
-    <Card
-      title="Dieser Arbeitsplatz"
-      description="Unter welchem Namen abgerechnet wird und wo Takt seine Daten führt. Beides meldet der Dienst; ändern lässt es sich hier nicht."
-    >
+    /*
+      „Arbeitsplatz" statt „Dieser Arbeitsplatz" (T-181, Auflage Z-12 aus
+      T-177). Nach ST-04 ist der Kartentitel die **Bereichsueberschrift** —
+      ein Deiktikum in einer Ueberschrift ist im Kopf des Lesers ein zweiter
+      Gegenstand. Solange darueber ein `AREA_LEAD` stand, der von etwas
+      anderem sprach, hatte „Dieser" eine Aufgabe; jetzt hat es keine mehr.
+      Die Schiene heisst ebenfalls „Arbeitsplatz" und traegt `aria-current`;
+      zwei Namen fuer eine Sache sind bereits in das Handbuch gelaufen.
+
+      Was „Dieser" trug, geht nicht verloren: Dass es um **diesen** Rechner
+      geht, sagen die Beschreibung und die beiden Werte selbst.
+
+      **Berührt einen zugaenglichen Namen** (`Card.title`, E-076 Punkt 3).
+      Gemessen haengt heute kein Pruefall daran — genau deshalb hat der
+      Pruefer ihn benannt.
+    */
+    <Card title="Arbeitsplatz" description="Meldet der Dienst. Hier nicht änderbar.">
       {value === null ? (
         <p className="muted">Die Auskünfte werden geladen.</p>
       ) : (
@@ -586,7 +596,7 @@ function DefaultTagSettings() {
   return (
     <Card
       title="Standard-Tags"
-      description="Sie kommen an jedes neu angelegte Todo — auf jedem Weg, auch aus dem Add-in."
+      description="Auch aus dem Add-in."
       actions={
         <Button
           variant="primary"
@@ -656,7 +666,7 @@ function AddinSettings() {
   return (
     <Card
       title="Outlook-Add-in"
-      description="Das Add-in weist sich mit einem eigenen Token aus — getrennt vom Zugang dieser Oberfläche."
+      description="Getrennt vom Zugang dieser Oberfläche."
     >
       <AsyncBoundary state={status.state} label="Tokenzustand wird geladen" rows={2} onRetry={status.reload}>
         {(value) => (
@@ -771,7 +781,7 @@ function SecurityNotices() {
   return (
     <Card
       title="Sicherheitsmeldungen"
-      description="Was der lokale Dienst seit dem Start abgewiesen hat. Zählwerte und Zeitpunkte, keine Inhalte aus fremden Anfragen."
+      description="Zählwerte und Zeitpunkte, keine Inhalte."
       actions={
         <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={notices.reload}>
           Aktualisieren

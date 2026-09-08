@@ -18,15 +18,34 @@ import { Foreign } from "../components/Foreign";
  * Takt — globale Suche (A-13.7, E-038).
  *
  * Sie trifft Todos über Titel und Call-Nummer und Zeitbuchungen über ihren
- * **Leistungstext**. Den internen Vermerk trifft sie nicht und darf sie nicht
- * treffen (A-7.1) — das ist keine Einschränkung der Suche, sondern die vierte
- * Schicht der Notiz-Trennung: Der Dienst kennt für den Vermerk eine eigene
- * Ressource und liefert ihn in keiner Suchantwort.
+ * **Leistungstext**.
  *
- * Bedienung ohne Maus, nach dem Muster für Kombinationsfelder:
- * `Strg`+`K` oder `/` setzt den Fokus, Pfeiltasten wählen, Eingabe öffnet,
- * `Esc` schließt. Der aktive Eintrag wird über `aria-activedescendant`
- * angesagt, ohne dass der Fokus das Feld verlässt.
+ * ## Der Vermerk: was hier bis T-156 stand, war falsch (Befund O-CM)
+ *
+ * An dieser Stelle stand der Satz, die Suche dürfe den internen Vermerk „nicht
+ * treffen (A-7.1)". **A-7.1 sagt darüber nichts.** Verboten ist der Vermerk im
+ * **Export** (A-7.2) — nicht sein Wiederfinden auf dem eigenen Rechner. E-038
+ * verlangt sogar das Gegenteil, und E-075 Punkt 2 hat es nach der Messung
+ * ausdrücklich bestätigt: „Ein Vermerk, den der eigene Rechner nicht
+ * durchsuchen kann, ist eine Notiz, die man zweimal schreibt."
+ *
+ * Der Satz war damit keine Beschreibung, sondern eine Anweisung an den
+ * nächsten Agenten, gegen die Entscheidung zu bauen. Er ist gestrichen.
+ *
+ * **Was heute wirklich gilt:** `repo-todos.ts` sucht in `title` und
+ * `call_number`; der Vermerk ist im Dienst nicht dabei, und deshalb steht er
+ * auch in keiner Antwort. Das ist der **Stand**, nicht die Regel. Die
+ * Erweiterung ist eine eigene Aufgabe — sie braucht zuerst die Herkunft des
+ * Treffers aus dem Dienst, damit die Trefferzeile sagen kann, **wo** sie
+ * getroffen hat, und sie legt zugleich Befund C-22 erneut vor (E-075 Punkt 2,
+ * Bedingung).
+ *
+ * ## Bedienung
+ *
+ * Ohne Maus, nach dem Muster für Kombinationsfelder: `Strg`+`K` oder `/` setzt
+ * den Fokus, Pfeiltasten wählen, Eingabe öffnet, `Esc` schließt. Der aktive
+ * Eintrag wird über `aria-activedescendant` angesagt, ohne dass der Fokus das
+ * Feld verlässt.
  */
 
 interface Entry {

@@ -122,3 +122,8 @@ blob-report*/
 # Verzeichnisse mit Abdeckungsberichten, wenn sie je ein Suffix bekommen —
 # dieselbe Sorte Luecke wie oben, nur noch nicht eingetreten.
 coverage*/
+
+# Bildschirmabzüge der Prüfläufe: Arbeitsmaterial, nicht Bestand.
+# Die gemessenen Zahlen stehen in den Berichten daneben; die Bilder kosten
+# 20 MB und lassen sich aus den Vorrichtungen jederzeit neu erzeugen.
+.claude/team/reports/*-screens/

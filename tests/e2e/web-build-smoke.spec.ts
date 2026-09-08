@@ -98,11 +98,47 @@
  *    Bau lässt sie danach wieder verschwinden.
  */
 import { test, expect } from '@playwright/test';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { cleanupAnyTimer, createTodo } from './support/api';
 import { gotoTodo } from './support/nav';
+import { WEB_APP_DIST_DIR } from './support/build-check-session';
 import { installTauriShim } from './support/tauri-shim';
 import { buildWeb, buildWebWithDesignsystem, distContainsText, distHasFile } from './support/web-build-services';
+
+/**
+ * Wie `distContainsText` (`web-build-services.ts`), aber ohne
+ * Quellkarten (`.map`) — für T-150s Feldbezeichnungs-Mikrofall (A-19.2).
+ *
+ * Eine Quellkarte trägt zwangsläufig den **Originalquelltext samt
+ * Kommentaren** (`sourcesContent`), und genau ein Kommentar zitiert die
+ * verbotenen Wörter als Gegenbeispiel — wörtlich, in
+ * `TodoFormDialog.tsx`: "Sie heißt in der Oberfläche ausschließlich so —
+ * nicht „Fälligkeitsdatum“, nicht „fällig am“, nicht „Deadline“." Ein Treffer
+ * dort wäre ein Fund über die eigene Dokumentation dieser Regel, nicht über
+ * einen Bruch der Regel selbst — gemessen (nicht vermutet): Ohne diesen
+ * Ausschluss schlägt der Fall unten tatsächlich fehl, obwohl die Oberfläche
+ * die drei Wörter an keiner sichtbaren Stelle zeigt.
+ */
+function distContainsRenderedText(needle: string): boolean {
+  if (!existsSync(WEB_APP_DIST_DIR)) return false;
+  const stack: string[] = [WEB_APP_DIST_DIR];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined) continue;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (entry.name.endsWith('.map')) continue;
+      if (readFileSync(fullPath, 'utf8').includes(needle)) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Wörtlich aus `apps/web/src/showcase/Showcase.tsx` (`aria-label` der
@@ -208,6 +244,25 @@ test.describe('TP-BUILD-05 — Musterseite im Auslieferungsbündel nicht erreich
       await buildWeb();
     }
     expect(distHasFile('designsystem.html')).toBe(false);
+  });
+});
+
+test.describe('Feldbezeichnung "Frist" (A-19.2, Abschnitt 25 Mikrofall, T-150)', () => {
+  test('das ausgelieferte Bündel enthält weder "Fälligkeitsdatum" noch "fällig am" noch "Deadline"', () => {
+    // Positivliste-Prüfung nach dem Vorbild von `distContainsText` in
+    // TP-BUILD-05, hier umgekehrt als Abwesenheitsprüfung: Die Frist heißt in
+    // der Oberfläche ausschließlich "Frist" (A-19.2) — nicht
+    // "Fälligkeitsdatum", nicht "fällig am", nicht "Deadline". Eine Prüfung
+    // im Quelltext genügt nicht, weil ein Bezeichner, eine CSS-Klasse oder ein
+    // Kommentar dieselben Wörter tragen könnten, ohne dass sie je auf dem
+    // Bildschirm stünden — gemessen wird deshalb am tatsächlich gebauten
+    // Bündel, wie bei jedem anderen Fall dieser Datei.
+    //
+    // Quellkarten (`.map`) sind hier ausdrücklich ausgenommen —
+    // {@link distContainsRenderedText}, Begründung dort.
+    expect(distContainsRenderedText('Fälligkeitsdatum')).toBe(false);
+    expect(distContainsRenderedText('fällig am')).toBe(false);
+    expect(distContainsRenderedText('Deadline')).toBe(false);
   });
 });
 

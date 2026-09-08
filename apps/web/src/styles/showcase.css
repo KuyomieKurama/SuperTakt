@@ -104,9 +104,6 @@
     gap: var(--space-6);
     padding-inline: var(--space-4);
   }
-  .sidenav {
-    position: static;
-  }
 }
 
 .sidenav {
@@ -116,6 +113,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+/*
+  Die Ausnahme steht **hinter** der Grundregel und nicht in der Medienabfrage
+  weiter oben (T-153, Befund O-CZ).
+
+  Beide Regeln wählen `.sidenav` und haben damit dieselbe Spezifität; bei
+  gleicher Spezifität entscheidet die Reihenfolge, und eine Medienabfrage
+  gewinnt davon nichts. Stand die Ausnahme vorn, blieb die Leiste bei schmaler
+  Breite auf `sticky`, legte sich über den Inhalt und fing dort Zeigerklicks
+  ab — gemessen bei 380 px. Nur die Musterseite, aber sie hat die Sichtprüfung
+  des Dialogs bei kleinem Sichtfeld behindert.
+*/
+@media (max-width: 60rem) {
+  .sidenav {
+    position: static;
+  }
 }
 
 .sidenav__title {
@@ -429,3 +443,55 @@
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
+
+/* ==================================================================== */
+/* Abschnitt 13 — Frist und Anhaenge (T-147)                            */
+/* ==================================================================== */
+
+/* Eine Reihe Beispielzeilen mit ihrer Begruendung daneben. Die Marke steht
+   rechts, damit die vier Zeilen untereinander vergleichbar sind — und damit
+   die vierte auffaellt, an der **nichts** steht. */
+.showcase-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.showcase-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-surface);
+}
+
+.showcase-row__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.showcase-row__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.showcase-row__note {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.showcase-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+

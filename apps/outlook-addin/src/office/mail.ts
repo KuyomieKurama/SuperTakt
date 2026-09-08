@@ -7,15 +7,46 @@
  * ohne laufendes Outlook prüfbar.
  */
 
+import { MAX_TITLE_CHARACTERS } from '@takt/domain';
+
 import { cutToCharacterBoundary } from '../text/cut.ts';
 import { dropHidden } from '../text/hidden.ts';
 
-/** Obergrenze für übernommenen Text (B-12.3 Punkt 3). */
+/**
+ * Obergrenze für übernommenen Text (B-12.3 Punkt 3).
+ *
+ * **Diese Zahl steht noch zweimal im Baum**, und zwar hier und als
+ * `ADDIN_NOTE_MAX_LENGTH` in `apps/local-api/src/routes/addin/schema.ts`. Es ist
+ * dieselbe Wahrheit in derselben Bauart wie {@link MAX_TITLE_CHARACTERS} vor
+ * T-134: Was `prepareNote` vorbereitet, muss die Tür annehmen — sonst bekommt
+ * der Benutzer ein 422 für einen Text, den nicht er geschrieben hat, sondern
+ * der Knopf „Inhalt der E-Mail übernehmen".
+ *
+ * Auflösen lässt sie sich nur dort, wo beide Seiten lesen können, also in
+ * `@takt/domain` (`packages/domain/src/text-length.ts`, das sie ausdrücklich als
+ * offene Frage führt). Das ist nicht die Hoheit des Add-ins; T-134 meldet es,
+ * statt es halb zu tun — eine halb umgestellte Zahl sieht aus wie erledigt.
+ * Bis dahin misst `scripts/proof-addin.mjs` Abschnitt 16 beide Seiten
+ * gegeneinander: ein Vergleich, der den Schaden bewacht und nicht die Ursache
+ * (E-063 Punkt 5), aber besser als der Kommentar, der es bis T-134 nur hoffte.
+ */
 export const MAX_TAKEOVER_CHARACTERS = 4000;
 
 /**
- * Obergrenze für den Titelvorschlag — dieselbe Zahl, die der Dienst annimmt
- * (T-114).
+ * Was am Ende eines gekürzten Vermerks steht (T-134).
+ *
+ * Ein Name statt einer Zeichenkette mitten im Ausdruck, weil der Hinweis seit
+ * T-134 in die **Rechnung** eingeht: Seine Länge bestimmt mit, wo geschnitten
+ * wird, damit er unter den Deckel passt und nicht daneben (siehe
+ * {@link prepareNote}). Stünde er weiterhin nur als Text am Ende, ließe er sich
+ * ändern, ohne dass die Rechnung davon erführe — und der Vermerk wäre wieder
+ * länger, als die Tür annimmt.
+ */
+const TRUNCATION_HINT = '\n…(gekürzt)';
+
+/*
+ * Obergrenze für den Titelvorschlag — **die** Zahl des Dienstes und nicht eine
+ * gleich große daneben (T-114, T-128, T-134).
  *
  * Hier stand bis T-114 eine 512 mitten im Ausdruck, während `POST /addin/todos`
  * seit derselben Aufgabe 500 nimmt, wie `POST /todos` und `PATCH /todos/{id}`
@@ -23,12 +54,25 @@ export const MAX_TAKEOVER_CHARACTERS = 4000;
  * vorbereitetes 422: Der Benutzer drückt „Anlegen" und bekommt eine Abweisung
  * für einen Text, den er nicht geschrieben hat.
  *
- * Der Aufgabenbereich ist ein Browserbündel und kann `titleSchema` nicht
- * importieren — die Zahl steht deshalb zweimal im Baum. Dass sie dieselbe
- * bleibt, prüft `scripts/proof-addin.mjs` Abschnitt 16 gegen das Schema des
- * Dienstes, statt es hier zuzusichern.
+ * T-114 hat die beiden Zahlen gleichgemacht und den Nachweispfad sie
+ * gegeneinander halten lassen. Das war die halbe Antwort, und T-128 hat gesagt,
+ * warum: Ein Vergleich „hier 500, dort 500" wird erst rot, wenn die Doppelung
+ * schon falsch ist — er misst sie nicht, er verträgt sie (E-063 Punkt 5).
+ * Seither liegt die Zahl in `packages/domain/src/text-length.ts`, `titleSchema`
+ * liest sie dort, und seit T-134 tut es diese Datei auch.
+ *
+ * Der Aufgabenbereich ist ein Browserbündel und darf `@takt/local-api` nicht
+ * einbinden — `@takt/domain` aber schon, genau wie bei der Zeichenklasse in
+ * `../text/hidden.ts`. Die Ausfuhr unter demselben Namen bleibt, damit die
+ * Aufrufstellen und der Nachweispfad den Deckel weiterhin dort finden, wo sie
+ * ihn suchen: an der Datei, die ihn benutzt.
+ *
+ * Was hier steht, ist deshalb **keine Zahl mehr**, sondern ein Name. Dass er aus
+ * der Domäne kommt, misst `scripts/proof-addin.mjs` Abschnitt 16 als Frage nach
+ * der Herkunft und nicht als Zahlenvergleich: Der Aufgabenbereich darf die Zahl
+ * nirgends selbst führen — auch nicht als richtige.
  */
-export const MAX_TITLE_CHARACTERS = 500;
+export { MAX_TITLE_CHARACTERS };
 
 /*
  * Die Zeichen, die aus einem übernommenen Betreff **fallen**, standen bis T-119
@@ -117,15 +161,15 @@ export const suggestTitle = (subject: string): string => {
  * Dritten stammt, ist Kontext für die eigene Arbeit und nichts, was ungefragt
  * an das Abrechnungstool geht. Diese Aufteilung ist in S-12 auch beschriftet.
  *
- * Gekürzt wird auf 4000 Zeichen, und an einer Zeilengrenze, damit kein Satz
- * mitten im Wort abbricht. Leerzeilenfolgen fallen zusammen — ein Zitatverlauf
- * besteht zur Hälfte daraus.
+ * Gekürzt wird auf {@link MAX_TAKEOVER_CHARACTERS} Zeichen, und an einer
+ * Zeilengrenze, damit kein Satz mitten im Wort abbricht. Leerzeilenfolgen
+ * fallen zusammen — ein Zitatverlauf besteht zur Hälfte daraus.
  *
  * Findet sich keine Zeilengrenze in der zweiten Hälfte, bleibt der harte
  * Schnitt — und der trifft seit T-119 eine Zeichengrenze. Es ist derselbe
  * Befund wie bei {@link suggestTitle}, an derselben Art Zeile: Ein Text aus
  * Emoji ergab hier einen Vermerk mit einer einzelnen Ersatzstelle am Ende,
- * gemessen an Stelle 4000. Der Vermerk geht in die Datenbank; was dort ankommt,
+ * gemessen an der Grenze. Der Vermerk geht in die Datenbank; was dort ankommt,
  * war dann nicht, was im Feld stand.
  *
  * Der **Inhalt** wird dagegen bewusst nicht angetastet: Anders als der Titel
@@ -147,8 +191,28 @@ export const prepareNote = (mail: MailFacts): string => {
 
   if (combined.length <= MAX_TAKEOVER_CHARACTERS) return combined;
 
-  const cut = cutToCharacterBoundary(combined, MAX_TAKEOVER_CHARACTERS);
+  /*
+   * **Der Hinweis muss unter den Deckel passen, nicht neben ihn** (T-134).
+   *
+   * Bis T-134 wurde auf {@link MAX_TAKEOVER_CHARACTERS} geschnitten und der
+   * Hinweis **danach** angehängt. Der Vermerk war damit 4011 Zeichen lang, die
+   * Tür nimmt 4000 — und zwar in jedem Fall, in dem die zweite Hälfte des
+   * Textes keinen Zeilenumbruch trägt: eine lange Mail ohne Absätze, ein
+   * Zitatverlauf aus einer Zeile, ein Textkörper aus Emoji.
+   *
+   * Die Folge war genau die Sackgasse, gegen die {@link suggestTitle} und die
+   * ganze Zahlenarbeit dieser Datei geschrieben sind, nur eine Zeile tiefer:
+   * Der Benutzer drückt „Inhalt der E-Mail übernehmen", dann „Anlegen" — und
+   * bekommt ein 422 auf ein Feld, dessen Inhalt er nicht geschrieben hat, mit
+   * keiner anderen Auflösung als „elf Zeichen von Hand löschen".
+   *
+   * Gemessen und behoben, nicht nur bemerkt: Der Schnitt bekommt sein Budget
+   * abzüglich des Hinweises, und `proof-addin.mjs` Abschnitt 16 hält das
+   * Ergebnis gegen die **Tür** statt gegen eine Zahl.
+   */
+  const budget = MAX_TAKEOVER_CHARACTERS - TRUNCATION_HINT.length;
+  const cut = cutToCharacterBoundary(combined, budget);
   const lastBreak = cut.lastIndexOf('\n');
-  const trimmed = lastBreak > MAX_TAKEOVER_CHARACTERS / 2 ? cut.slice(0, lastBreak) : cut;
-  return `${trimmed}\n…(gekürzt)`;
+  const trimmed = lastBreak > budget / 2 ? cut.slice(0, lastBreak) : cut;
+  return `${trimmed}${TRUNCATION_HINT}`;
 };

@@ -107,9 +107,20 @@ async function waitForPortFree(port, timeoutMs = 5000) {
   return false;
 }
 
+/**
+ * Jeder Antwortkörper dieses Laufs — die Menge, über die Abschnitt 8 urteilt.
+ *
+ * A-A-57: Genau **eine** Anfrage wird hier nicht eingetragen, und zwar die, die
+ * den Vermerk holen **soll** (`sammeln: false`, Abschnitt 3). Sie ist der
+ * positive Anker; stünde ihr Körper in dieser Menge, wäre die Menge nicht mehr
+ * die, über die Abschnitt 8 etwas behauptet.
+ */
 const seenBodies = [];
 
-function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
+/** Wie viele Anfragen der Dienst tatsächlich beantwortet hat — Untergrenze für A-A-58. */
+let beantworteteAnfragen = 0;
+
+function call(path, { method = 'GET', token, origin = UI_ORIGIN, body, sammeln = true } = {}) {
   return new Promise((resolve) => {
     const payload = body === undefined ? null : Buffer.from(JSON.stringify(body), 'utf8');
     const headers = { Host: `127.0.0.1:${PORT}` };
@@ -129,7 +140,8 @@ function call(path, { method = 'GET', token, origin = UI_ORIGIN, body } = {}) {
           text += chunk;
         });
         res.on('end', () => {
-          seenBodies.push(text);
+          beantworteteAnfragen += 1;
+          if (sammeln) seenBodies.push(text);
           let json = null;
           try {
             json = JSON.parse(text);
@@ -353,6 +365,26 @@ try {
   check('das Todo entsteht', todo.status === 201, `Status ${todo.status}: ${todo.text.slice(0, 200)}`);
   const todoId = todo.body?.data?.todo?.id ?? todo.body?.data?.id;
   check('es trägt eine Kennung', typeof todoId === 'string' && todoId.length > 0, todo.text.slice(0, 200));
+
+  /**
+   * A-A-57 — der positive Anker, vor jeder Aussage über das Fehlen.
+   *
+   * Bis T-223 wurde `VERMERK` einmal geschrieben und nie gelesen; Abschnitt 8
+   * urteilte über sein Fehlen, ohne daß irgend etwas geprüft hätte, daß er je
+   * im Bestand war. Gemessen mit `note: 'harmlos, kein Vermerk'` blieb der Lauf
+   * bei 69/0 und Code 0, beide Zeilen grün (T-223-3).
+   *
+   * `proof-route-policy.mjs` macht es an derselben Grenze richtig: erst
+   * nachweisen, daß die Oberfläche den Vermerk liest, dann nachweisen, daß er
+   * anderswo fehlt. Diese eine Antwort trägt den Vermerk mit Absicht und wird
+   * deshalb **nicht** in `seenBodies` eingetragen.
+   */
+  const vermerkImBestand = await call(`/todos/${todoId}/note`, { token: secret, sammeln: false });
+  check(
+    'der Vermerk steht im Bestand und ist über die reguläre Route lesbar (A-A-57)',
+    vermerkImBestand.status === 200 && vermerkImBestand.text.includes(VERMERK),
+    `Status ${vermerkImBestand.status}: ${vermerkImBestand.text.slice(0, 200)}`,
+  );
 
   for (const [startedAt, endedAt, note] of [
     ['2026-01-15T08:00:00Z', '2026-01-15T08:10:00Z', 'Rückruf entgegengenommen'],
@@ -599,17 +631,64 @@ try {
   section('8  Der Vermerk kommt in keiner dieser Antworten vor (A-7.2, R-06)');
   // -------------------------------------------------------------------------
 
+  // A-A-57 — die Untergrenze der Menge, über die die nächste Zeile urteilt.
+  // `some` über einer leeren Menge ist falsch, die Verneinung also wahr: Ohne
+  // diese Zeile bestünde „weder in der Auswahlliste noch in einer Vorschau"
+  // auch dann, wenn dieser Lauf gar nichts gefahren hätte.
+  check(
+    `die Menge ist die gefahrene: ${seenBodies.length} Antwortkörper, darunter die Auswahlliste und die Vorschau (A-A-57)`,
+    seenBodies.length >= 2 &&
+      seenBodies.includes(sources.text) &&
+      seenBodies.includes(stored.text) &&
+      stored.text.includes('"Notiz"'),
+    `gesammelt: ${seenBodies.length}; Auswahlliste enthalten: ${seenBodies.includes(sources.text)}; Vorschau enthalten: ${seenBodies.includes(stored.text)}`,
+  );
   check(
     'weder in der Auswahlliste noch in einer Vorschau',
     !seenBodies.some((text) => text.includes(VERMERK)),
   );
+
+  /**
+   * A-A-58 — die Untergrenze der Ausgabe, vor den beiden Zeilen darüber.
+   *
+   * `stdout` und `stderr` wurden bis T-223 aufgesammelt und nur durchsucht.
+   * Gemessen mit zwei geleerten Sammlern: 69/0, Code 0, beide Zeilen grün
+   * (T-223-4) — B-2.4 wäre in diesem Lauf eine Zusicherung ohne Gegenstand,
+   * sobald der Dienst schweigt oder sein Protokoll künftig in eine Datei
+   * schreibt.
+   *
+   * Die Untergrenze wird nicht geraten, sondern aus dem Lauf abgeleitet: Der
+   * Dienst schreibt je beantworteter Anfrage eine JSON-Zeile. Vorher wird die
+   * Ausgabe **eingeholt** — eine letzte Anfrage auf einen wiedererkennbaren,
+   * nirgends registrierten Pfad, und gewartet, bis deren Protokollzeile
+   * angekommen ist. Der Kanal ist der Reihe nach: Steht die letzte Zeile da,
+   * stehen alle früheren da.
+   */
+  const MARKE = 'a-a-58-marke';
+  await get(`/${MARKE}`);
+  for (let versuch = 0; versuch < 60; versuch += 1) {
+    if (`${stdout}\n${stderr}`.includes(MARKE)) break;
+    await sleep(50);
+  }
+  const ausgabe = `${stdout}\n${stderr}`;
+  const protokollzeilen = ausgabe
+    .split('\n')
+    .filter((line) => line.includes('"method":') && line.includes('"path":'));
+  check(
+    `die Ausgabe des Dienstes ist angekommen — ${ausgabe.length} Zeichen, ${protokollzeilen.length} Protokollzeilen zu ${beantworteteAnfragen} beantworteten Anfragen (A-A-58)`,
+    ausgabe.includes(`Takt lauscht auf 127.0.0.1:${PORT}`) &&
+      protokollzeilen.length >= beantworteteAnfragen &&
+      protokollzeilen.some((line) => line.includes('/api/v1/export/sources')) &&
+      protokollzeilen.some((line) => line.includes(`/api/v1/${MARKE}`)),
+    `Länge ${ausgabe.length}, Protokollzeilen ${protokollzeilen.length}, beantwortete Anfragen ${beantworteteAnfragen}`,
+  );
   check(
     'auch nicht in der Ausgabe des Dienstes',
-    !`${stdout}\n${stderr}`.includes(VERMERK),
+    !ausgabe.includes(VERMERK),
   );
   check(
     'und kein Token steht in der Protokollausgabe (B-2.4)',
-    !/takt_[A-Za-z0-9_-]{43}/.test(`${stdout}\n${stderr}`),
+    !/takt_[A-Za-z0-9_-]{43}/.test(ausgabe),
   );
 } finally {
   child.kill('SIGTERM');

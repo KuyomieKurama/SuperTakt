@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Menu as Ark, useMenu } from "@ark-ui/react/menu";
 import { Portal } from "@ark-ui/react/portal";
 import { cx } from "../lib/cx";
@@ -122,9 +122,15 @@ function MenuItems({ entries }: { readonly entries: readonly MenuEntry[] }) {
   );
 }
 
-/** Ruft die Aktion auf, deren Kennung das Menü gemeldet hat. */
+/**
+ * Ruft die Aktion auf, deren Kennung das Menü gemeldet hat.
+ *
+ * `beforeAction` bekommt der Auslöser-Fall mit; siehe {@link Menu}. Das
+ * Kontextmenü hat keinen Auslöser und reicht deshalb nichts herein.
+ */
 function useSelectHandler(
   entries: readonly MenuEntry[],
+  beforeAction?: () => void,
 ): (details: { readonly value: string }) => void {
   const actions = useMemo(() => {
     const map = new Map<string, () => void>();
@@ -135,8 +141,11 @@ function useSelectHandler(
   }, [entries]);
 
   return useCallback((details: { readonly value: string }) => {
-    actions.get(details.value)?.();
-  }, [actions]);
+    const action = actions.get(details.value);
+    if (action === undefined) return;
+    beforeAction?.();
+    action();
+  }, [actions, beforeAction]);
 }
 
 /* ==================================================================== */
@@ -162,7 +171,123 @@ export function Menu({
   triggerClassName,
   disabled = false,
 }: MenuProps) {
-  const onSelect = useSelectHandler(entries);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * Der Auslöser bekommt den Fokus, **bevor** die Aktion läuft (T-153 O-CY,
+   * berichtigt in T-162 O-CY-2).
+   *
+   * **Der gemessene Fall.** „Bearbeiten" im Zeilenmenü der Todo-Liste öffnet
+   * einen Dialog. Schließt man ihn mit Escape, fiel der Fokus auf `<body>`
+   * statt zurück auf den Menü-Auslöser. Über den Knopf „Neues Todo" auf dem
+   * Dashboard stimmte es — der Unterschied ist nicht der Dialog, sondern der
+   * Weg dorthin.
+   *
+   * **Warum.** Die Fokusfalle des Dialogs merkt sich beim Scharfstellen, was
+   * gerade den Fokus trägt, und gibt ihn beim Schließen dorthin zurück
+   * (`nodeFocusedBeforeActivation` in `@zag-js/focus-trap`). Auf dem Weg über
+   * ein Menü ist das der Menükasten im Portal: Er verschwindet mit dem Menü,
+   * und ein Fokus auf einen verschwundenen Knoten ist gar keiner.
+   *
+   * **Was diese Zeile leistet — und was nicht.** Sie macht den Auslöser zu
+   * dem, was im Augenblick des Öffnens tatsächlich den Fokus trägt; genau
+   * daran hält sich `DialogSurface` fest (`finalFocusEl`, siehe dort). Sie
+   * allein trägt aber **nicht**: T-157 hat sie eingebaut und als Behebung
+   * gemeldet, T-161 hat sie im Browser widerlegt. Der Grund steht im Quelltext
+   * von `@zag-js/menu`: Jede Pfeiltaste und jede Zeigerbewegung im Menü merkt
+   * einen `requestAnimationFrame` vor (`focusMenu`), und der zieht den Fokus
+   * auf den Menükasten zurück, sobald er außerhalb steht
+   * (`enabled: !contains(contentEl, activeElement)`). Liegen Pfeiltaste und
+   * Eingabe im selben Bild — bei der Tastatur der Regelfall —, überholt dieses
+   * Bild die Behebung. Gemessen: `focusout .menu → .menu__trigger`, 32 ms
+   * später `focusout .menu__trigger → .menu`, dann `→ null`.
+   *
+   * Deshalb liegt die Rückgabe nicht mehr hier, sondern beim Dialog, der sich
+   * seinen Auslöser festhält, statt den Stand von später zu lesen.
+   *
+   * Ein Verlassen der Fokusfalle des Menüs ist das nicht — die
+   * Abweisungsebene von Ark UI führt den eigenen Auslöser ausdrücklich als
+   * Ausnahme (`exclude: [getTriggerEl(scope), …]`).
+   */
+  const focusTriggerFirst = useCallback(() => {
+    triggerRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const onSelect = useSelectHandler(entries, focusTriggerFirst);
+
+  /**
+   * Fällt der Fokus beim Schließen des Menüs ins Nichts, holt der Auslöser ihn
+   * zurück (T-162, Befund O-CY-3).
+   *
+   * **Der gemessene Fall.** „Status: In Progress" im Zeilenmenü — eine Aktion
+   * **ohne** Dialog, die Zeile bleibt stehen. Der Auslöser hat danach kurz den
+   * Fokus, verliert ihn aber an denselben vorgemerkten `focusMenu` wie oben,
+   * und der Menükasten verschwindet gleich darauf: `document.activeElement`
+   * ist 100 ms später `<body>`. Wer mit der Tastatur arbeitet, steht dann am
+   * Dokumentanfang statt in seiner Zeile.
+   *
+   * Der Anlaß ist das Ereignis und kein Zeitgeber: `focusout` am Menükasten
+   * mit `relatedTarget === null` heißt „der Fokus ging **nirgendwohin**".
+   * Ging er an ein anderes Element — der nächste Tabulatorhalt, ein
+   * angeklickter Knopf außerhalb, das erste Feld eines gerade geöffneten
+   * Dialogs —, gehört er dorthin, und hier passiert nichts. Dieselbe Regel und
+   * dieselbe Bauart wie die Rückholung in `DialogSurface`.
+   *
+   * Die Prüfung steht in einem `setTimeout`, weil `document.activeElement`
+   * während `focusout` noch das alte Element ist. Zurückgeholt wird nur aus
+   * `null` oder `<body>`, nur wenn das Fenster den Fokus überhaupt hat
+   * (`document.hasFocus()`) und nur, wenn es den Auslöser noch gibt — nach
+   * „Löschen" oder „Als erledigt markieren" ist seine Zeile fort, und ein
+   * `focus()` auf einen ausgebauten Knoten wäre keiner.
+   */
+  const recoveryTimer = useRef<number | null>(null);
+
+  const recoverTriggerFocus = useCallback(() => {
+    if (recoveryTimer.current !== null) window.clearTimeout(recoveryTimer.current);
+    recoveryTimer.current = window.setTimeout(() => {
+      recoveryTimer.current = null;
+      if (!document.hasFocus()) return;
+      const active = document.activeElement;
+      if (active !== null && active !== document.body) return;
+      const element = triggerRef.current;
+      if (element === null || !element.isConnected) return;
+      element.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (recoveryTimer.current !== null) window.clearTimeout(recoveryTimer.current);
+    },
+    [],
+  );
+
+  /**
+   * Hängt den Zuhörer an den Menükasten — **nicht** über `onBlur`, und ohne
+   * Abräumer. Beides ist gemessen und beides hat einen Grund.
+   *
+   * Das `focusout`, auf das es ankommt, entsteht dadurch, dass React den
+   * Menükasten **ausbaut**. In diesem Augenblick hat React seine eigene
+   * Zuordnung zwischen Knoten und Baustein bereits gelöst, und die
+   * synthetische Fassung des Ereignisses kommt nicht mehr an. Gemessen: Ein
+   * Zuhörer am Dokument sieht `focusout .menu → null`; mit `onBlur` am selben
+   * Kasten bleibt die Rückholung aus und der Fokus liegt weiter auf `<body>`.
+   *
+   * Und ein Abräumer über den Rückgabewert (React 19) räumt zu früh ab: React
+   * löst die Halter, **bevor** es den Knoten aus dem Baum nimmt. Mit Abräumer
+   * ist der Zuhörer weg, wenn das Ereignis kommt — gemessen, der Fokus landet
+   * wieder auf `<body>`. Ohne Abräumer ist nichts offen: Der Zuhörer hängt an
+   * einem Knoten, den React wegwirft, und geht mit ihm.
+   */
+  const watchContentFocus = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node === null) return;
+      node.addEventListener("focusout", (event: FocusEvent) => {
+        if (event.relatedTarget === null) recoverTriggerFocus();
+      });
+    },
+    [recoverTriggerFocus],
+  );
 
   return (
     <Ark.Root
@@ -173,6 +298,7 @@ export function Menu({
       }}
     >
       <Ark.Trigger
+        ref={triggerRef}
         className={cx("menu__trigger", triggerClassName)}
         disabled={disabled}
         {...(triggerLabel === undefined ? {} : { "aria-label": triggerLabel })}
@@ -181,7 +307,11 @@ export function Menu({
       </Ark.Trigger>
       <Portal>
         <Ark.Positioner className="popover-layer">
-          <Ark.Content className="menu" onKeyDown={stopClosingKeys}>
+          <Ark.Content
+            className="menu"
+            onKeyDown={stopClosingKeys}
+            ref={watchContentFocus}
+          >
             <MenuItems entries={entries} />
           </Ark.Content>
         </Ark.Positioner>

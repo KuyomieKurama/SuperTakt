@@ -236,15 +236,20 @@
   /* 9. Semantisch — Vermerk- und Leistungsfeld (R-08, E-016)           */
   /* ------------------------------------------------------------------ */
 
-  /* Leistung: Inhalt verlaesst die Anwendung und landet beim Kunden. */
+  /* Leistung: Inhalt verlaesst die Anwendung und landet beim Kunden.
+     Die Schiene ist durchgezogen; unterbrochen ist die des Vermerks. Bis
+     T-202 stand daneben ein zweiter Ton `--note-billing-rail-stripe` fuer
+     eine gestreifte Schiene — er ist mit ihr entfallen (T-194, T-198). */
   --note-billing-rail: #2159da;
-  --note-billing-rail-stripe: #17398a; /* Streifen der Schiene, zweites Merkmal */
   --note-billing-bg: #ffffff;
   --note-billing-header-bg: #eef4ff;
   --note-billing-header-fg: #17398a;
   --note-billing-border: #bdd1fe;
 
   /* Vermerk: Inhalt bleibt in Takt. */
+  /* Vermerk: bleibt in Takt. Die Schiene ist unterbrochen — in der Luecke
+     sieht man die Karte, damit ist Balken gegen Luecke dasselbe Verhaeltnis
+     wie Schiene gegen Karte und von diesem Wert mitgemessen. */
   --note-internal-rail: #7e8a9e; /* 3,49:1 gegen Karte — Zustandsgrenze, SC 1.4.11 */
   --note-internal-bg: #f6f8fa;
   --note-internal-header-bg: #eff2f6;
@@ -255,8 +260,12 @@
   /* 10. Fokus                                                          */
   /* ------------------------------------------------------------------ */
 
-  --focus-ring-color: #2159da;
-  --focus-ring-contrast: #ffffff; /* aeusserer Ring auf dunklen Flaechen */
+  /* Zwei Baender mit zwei Aufgaben, und sie liegen seit T-216 an den Plaetzen,
+     an die sie gehoeren (T-213 Abschnitt 10.2). Der Satz, der bis dahin hier
+     stand — "aeusserer Ring auf dunklen Flaechen" —, war doppelt falsch: das
+     Gegenband liegt nicht aussen, und es traegt nicht gegen Flaechen. */
+  --focus-ring-color: #2159da; /* der Ring; liegt aussen und traegt gegen die Flaeche */
+  --focus-ring-contrast: #ffffff; /* Gegenband; liegt innen an der Fuellung eines gefuellten Bedienelements */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
@@ -341,9 +350,7 @@
   --shadow-none: none;
   --shadow-xs: 0 1px 2px rgba(15, 21, 32, 0.06);
   --shadow-sm: 0 1px 3px rgba(15, 21, 32, 0.08), 0 1px 2px rgba(15, 21, 32, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 21, 32, 0.1), 0 1px 3px rgba(15, 21, 32, 0.06);
   --shadow-lg: 0 12px 28px rgba(15, 21, 32, 0.14), 0 2px 6px rgba(15, 21, 32, 0.06);
-  --shadow-drag: 0 16px 32px rgba(15, 21, 32, 0.2), 0 0 0 1px rgba(33, 89, 218, 0.4);
 
   /* ------------------------------------------------------------------ */
   /* 15. Bewegung                                                       */
@@ -364,7 +371,7 @@
   --z-base: 0;
   --z-sticky: 10; /* Tabellenkopf, Werkzeugleiste */
   --z-dropdown: 100; /* Auswahlliste, Kontextmenue im Seitenfluss */
-  --z-drag: 200; /* gezogenes Element; seit E-054 keine Karte, siehe --shadow-drag */
+  --z-drag: 200; /* gezogenes Element; seit E-054 keine Karte */
   --z-scrim: 300;
   --z-dialog: 310;
   /*
@@ -511,7 +518,6 @@
     --warning-border: #7a5a1c;
 
     --note-billing-rail: #6091f8;
-    --note-billing-rail-stripe: #bdd1fe;
     --note-billing-bg: #131b2b;
     --note-billing-header-bg: #16294a;
     --note-billing-header-fg: #bdd1fe;
@@ -528,9 +534,7 @@
 
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
-    --shadow-drag: 0 16px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(96, 145, 248, 0.55);
   }
 }
 
@@ -616,7 +620,6 @@
   --warning-border: #7a5a1c;
 
   --note-billing-rail: #6091f8;
-  --note-billing-rail-stripe: #bdd1fe;
   --note-billing-bg: #131b2b;
   --note-billing-header-bg: #16294a;
   --note-billing-header-fg: #bdd1fe;
@@ -633,9 +636,7 @@
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
-  --shadow-drag: 0 16px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(96, 145, 248, 0.55);
 }
 
 /* -------------------------------------------------------------------- */

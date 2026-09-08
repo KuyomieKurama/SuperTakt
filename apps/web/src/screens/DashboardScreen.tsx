@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { listTimeEntries, listTodos } from "../api/endpoints";
 import { DoneFlag } from "../components/DoneFlag";
 import { ExportStatusBadge, exportDisplayState } from "../components/ExportStatus";
@@ -12,6 +12,7 @@ import { href, navigate } from "../app/router";
 import { useStructure } from "../app/StructureContext";
 import { useTimer } from "../app/TimerContext";
 import { useAsync } from "../app/useAsync";
+import { useToday } from "../app/useToday";
 import {
   formatDuration,
   formatQuarters,
@@ -19,7 +20,6 @@ import {
   formatTime,
   formatTimeRange,
   plural,
-  todayCalendarDay,
 } from "../lib/format";
 import { doneFlagState } from "../lib/labels";
 import { AsyncBoundary, ScreenHeader, StatTile } from "./parts";
@@ -62,7 +62,24 @@ export function DashboardScreen() {
   const { version } = useRefresh();
   const [formOpen, setFormOpen] = useState(false);
 
-  const today = useMemo(() => todayCalendarDay(), []);
+  /*
+    **Der Tag kommt aus `useToday` und nicht aus einem eingefrorenen
+    `useMemo`** (T-154, Befund O-CO).
+
+    Er steht in zwei Fragen an den Dienst: „was wurde heute erfasst"
+    (`fromDay`/`toDay`) und, mittelbar, „wie viel ist überfällig" — den
+    Fristzustand rechnet der Dienst beim Beantworten gegen **seinen** heutigen
+    Tag (E-070 Punkt 3). Ein `useMemo` mit leerer Abhängigkeitsliste hielt
+    beides bis zum nächsten Zeichnen fest: Ein über Nacht offenes Takt zeigte
+    am Morgen die Kacheln von gestern, und „überfällig" zählte einen Stand,
+    den es seit Mitternacht nicht mehr gab.
+
+    `useToday` beantwortet genau das — ein Zeitgeber auf die **nächste
+    Mitternacht** und ein zweiter Anlass, wenn das Fenster wieder sichtbar wird
+    (E-073 Punkt 2). Der Wert wechselt einmal je Tag; die Abfrage unten hängt
+    an ihm und läuft dann von selbst neu.
+  */
+  const today = useToday();
 
   const data = useAsync(async () => {
     const [todayEntries, openTodos, allTodos, recent, openEntries] = await Promise.all([
@@ -74,6 +91,22 @@ export function DashboardScreen() {
       listTodos({}, { limit: 8 }),
       listTimeEntries({ exportStatus: "open" }, { limit: 200 }),
     ]);
+
+    /*
+      Die **Zahl** der überfälligen Todos (A-19.4, T-144 Abschnitt 8.1).
+
+      Das Dashboard ist die eine Ausnahme von „zwei Anzeigestellen": §12 zählt
+      ausdrücklich auf, was hierher gehört, und „was ist überfällig" ist die
+      Frage, für die ein Dashboard da ist. Eine **Zahl** ist dabei keine vierte
+      Etikettenstelle — es steht hier kein `DeadlineFlag`, und die Zeilen unter
+      „Zuletzt bearbeitet" tragen weiterhin keine Frist: Diese Liste beantwortet
+      „woran war ich zuletzt", nicht „was ist dran".
+
+      Gezählt wird im **Dienst**: `total` einer Anfrage mit `limit: 1`, so wie
+      die übrigen Zahlen dieser Kacheln. Die Oberfläche vergleicht dafür keine
+      Tage — der Tagesbegriff steht an einer Stelle (E-070 Punkt 2).
+    */
+    const overdue = await listTodos({ onlyOpen: true, dueStates: ["overdue"] }, { limit: 1 });
 
     /*
       Bis T-045 wurde der Fehlschlag hier verschluckt: `quarters` blieb `null`,
@@ -96,14 +129,25 @@ export function DashboardScreen() {
       recent: recent.items,
       openEntryCount: openEntries.total,
       openSeconds: openEntries.items.reduce((sum, entry) => sum + entry.durationSeconds, 0),
+      overdueCount: overdue.total,
     };
   }, [today], [version]);
 
   return (
     <section className="screen">
+      {/*
+        Kein `lead` (T-181, ST-10). Die drei Glieder des Satzes waren die
+        Namen dreier beschrifteter Flaechen im selben Blickfeld: Karte
+        „Timer", Kennzahl „Heute erfasst", Kennzahl „Noch nicht exportiert".
+        Eine Inhaltsangabe des Bildschirms, den man ansieht.
+
+        Der Gewinn ist mehr als Platz: Die Primaeraktion „Neues Todo" stand
+        rechts neben einem 68-Zeichen-Absatz; sie steht jetzt neben dem
+        Titel. `.screen__headline--bare` richtet die Kopfzeile dafuer
+        senkrecht mittig aus (`parts.tsx`).
+      */}
       <ScreenHeader
         title="Dashboard"
-        lead="Was läuft, was heute erfasst wurde, was noch nicht abgerechnet ist."
         refreshing={data.state.status === "ready" && data.state.refreshing}
         actions={
           <>
@@ -177,6 +221,31 @@ export function DashboardScreen() {
                   tone="accent"
                   detail="In Pool-Ansichten sichtbar."
                 />
+                {/*
+                  Die Kachel steht **nur da, wenn es etwas zu sagen gibt**. Eine
+                  dauerhafte „0 überfällig" wäre eine Fläche, die nie etwas
+                  meldet und deshalb nicht mehr gelesen wird — und ein leeres
+                  Feld hat auf einem Dashboard nichts verloren, das ohnehin
+                  sechs Kacheln trägt.
+                */}
+                {value.overdueCount === 0 ? null : (
+                  <StatTile
+                    label="Überfällig"
+                    value={String(value.overdueCount)}
+                    tone="danger"
+                    detail={`${plural(value.overdueCount, "offenes Todo", "offene Todos")} mit einer Frist in der Vergangenheit.`}
+                    action={
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        iconStart="calendar"
+                        onClick={() => navigate("todos", undefined, { frist: "overdue" })}
+                      >
+                        In der Todo-Liste zeigen
+                      </Button>
+                    }
+                  />
+                )}
                 <StatTile
                   label="Erledigte Todos"
                   value={String(value.doneTodoCount)}

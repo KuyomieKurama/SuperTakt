@@ -177,6 +177,7 @@ const baseTodo = (completedAt: Timestamp | null): Todo => ({
   callNumber: null,
   statusId: statusId('status-1'),
   completedAt,
+  dueDate: null,
   tagIds: [tagId('irrelevant')],
   createdAt: timestamp('2026-08-31T07:00:00Z'),
   updatedAt: timestamp('2026-08-31T07:00:00Z'),

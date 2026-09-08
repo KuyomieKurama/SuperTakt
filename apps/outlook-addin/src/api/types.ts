@@ -136,6 +136,24 @@ export interface TodoDto {
   readonly statusId: string;
   readonly tagIds: readonly string[];
   readonly completedAt: string | null;
+  /**
+   * Die **Frist**, so wie der Dienst sie abgelegt hat (A-19.21, T-149).
+   *
+   * Sie steht in der Antwort, weil sie im Bestand steht — der Umschlag trägt
+   * `Todo`, und `Todo` führt sie seit T-146. Der Aufgabenbereich **zeigt** sie
+   * in der Erfolgsmeldung nicht: Der Benutzer hat sie eben eingetragen, und
+   * eine Bestätigung dessen, was gerade im Feld darüber stand, sagt ihm
+   * nichts, was er nicht wüßte. Anders als bei `createdTags`, wo die
+   * Schreibweise aus der Antwort und nicht aus dem Eingabefeld kommt, gibt es
+   * hier nichts, was der Dienst anders entschieden haben könnte.
+   *
+   * Der **Zustand** (überfällig, heute fällig, später fällig) steht bewußt
+   * nicht hier und wird auch nicht geliefert: Er wird gerechnet und nie
+   * gespeichert (E-070 Punkt 3). Rechnen würde ihn `dueState` aus
+   * `@takt/domain`; das tut die Hauptanwendung, weil dort die Liste steht,
+   * die er ordnet. Der Aufgabenbereich hat keine Liste.
+   */
+  readonly dueDate: string | null;
 }
 
 export interface CreateTodoResponseDto {

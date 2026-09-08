@@ -45,9 +45,38 @@ export interface RequestLogEntry {
   readonly outcome: string;
 }
 
+/**
+ * Der Zeichenvorrat eines Grundes (T-132).
+ *
+ * Ein Schlüssel aus Kleinbuchstaben, gefolgt von höchstens acht Paaren
+ * `name=wert`. Kein Schrägstrich, kein Rückstrich, kein Punkt, kein Doppelpunkt,
+ * kein Großbuchstabe, kein Zeichen außerhalb von ASCII.
+ *
+ * **Das ist die Zusage und nicht die Sorgfalt.** Ein Pfad enthält zwangsläufig
+ * einen Trenner, ein Windows-Benutzername in aller Regel einen Großbuchstaben,
+ * ein Inhalt des Bestands Leerzeichen und Satzzeichen. Was hier durchkommt,
+ * kann keines von beidem sein — auch dann nicht, wenn eine spätere Aufrufstelle
+ * unbedacht etwas übergibt. Was nicht durchkommt, wird zu `unclassified`: eine
+ * Zeile, die sagt „hier war ein Grund, und er hatte die falsche Gestalt", ist
+ * besser als eine, die ihn ausschreibt (B-2.4).
+ */
+const REASON_SHAPE = /^[a-z][a-z0-9_]{0,47}(?: [a-z][a-z0-9_]{0,31}=[a-z0-9_]{1,32}){0,8}$/;
+
+/** Was statt eines Grundes in falscher Gestalt erscheint. */
+export const UNCLASSIFIED_REASON = 'unclassified';
+
 export interface Logger {
   request(entry: RequestLogEntry): void;
-  lifecycle(level: LogLevel, message: string): void;
+  /**
+   * Eine Zeile über den Lebenslauf des Dienstes.
+   *
+   * `message` ist der deutsche Satz für den Menschen: was los ist und was zu
+   * tun ist. `reason` ist der **technische Grund** für den, der die Zeile
+   * später auswertet — dieselbe Rolle wie `outcome` bei einer Anfrage: ein
+   * Schlüssel aus einem geschlossenen Vorrat, ergänzt um Zahlen, nie ein Wert
+   * aus der Umgebung.
+   */
+  lifecycle(level: LogLevel, message: string, reason?: string): void;
 }
 
 export function createLogger(write: (line: string) => void = defaultWrite): Logger {
@@ -67,8 +96,12 @@ export function createLogger(write: (line: string) => void = defaultWrite): Logg
       });
     },
 
-    lifecycle(level: LogLevel, message: string): void {
-      emit(level, { message });
+    lifecycle(level: LogLevel, message: string, reason?: string): void {
+      if (reason === undefined) {
+        emit(level, { message });
+        return;
+      }
+      emit(level, { message, reason: REASON_SHAPE.test(reason) ? reason : UNCLASSIFIED_REASON });
     },
   };
 }

@@ -14,6 +14,8 @@ export type IconName =
   | "arrow-down"
   | "arrow-up"
   | "arrow-up-right"
+  | "calendar"
+  | "calendar-clock"
   | "check"
   | "copy"
   | "check-circle"
@@ -26,12 +28,15 @@ export type IconName =
   | "filter"
   | "folder"
   | "folder-open"
+  | "image"
   | "info"
   | "inbox"
+  | "link"
   | "lock"
   | "monitor"
   | "moon"
   | "more-horizontal"
+  | "paperclip"
   | "pause"
   | "pencil"
   | "play"
@@ -53,6 +58,24 @@ const PATHS: Record<IconName, readonly string[]> = {
   "arrow-down": ["M12 5v14", "M6.5 13.5 12 19l5.5-5.5"],
   "arrow-up": ["M12 19V5", "M6.5 10.5 12 5l5.5 5.5"],
   "arrow-up-right": ["M7.5 16.5 16.5 7.5", "M9.5 7.5h7v7"],
+  /* Kalenderblatt: die Frist ohne Zustandswort ("spaeter faellig", A-19.5).
+     Bewusst ruhig — nur zwei der drei Zustaende sind laut. */
+  calendar: [
+    "M4.5 6.5h15v13h-15v-13Z",
+    "M4.5 10.5h15",
+    "M8.5 4.2v3",
+    "M15.5 4.2v3",
+  ],
+  /* Kalenderblatt mit Zeiger: "heute faellig". Dasselbe Blatt, damit die drei
+     Zustaende als eine Familie lesbar bleiben, plus die Uhr aus `clock`. */
+  "calendar-clock": [
+    "M19.5 11.2v-4.7h-15v13h6.4",
+    "M4.5 10.5h15",
+    "M8.5 4.2v3",
+    "M15.5 4.2v3",
+    "M17 12.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z",
+    "M17 14.9v2.2l1.6 1",
+  ],
   check: ["M4.5 12.5 9.5 17.5 19.5 6.5"],
   copy: [
     "M9 9.2a1.7 1.7 0 0 1 1.7-1.7h7.6A1.7 1.7 0 0 1 20 9.2v7.6a1.7 1.7 0 0 1-1.7 1.7h-7.6A1.7 1.7 0 0 1 9 16.8V9.2Z",
@@ -75,11 +98,27 @@ const PATHS: Record<IconName, readonly string[]> = {
     "M3.5 12.5h4l1.6 3h5.8l1.6-3h4",
     "M6.2 4.6h11.6l2.7 7.9v5a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8v-5l2.7-7.9Z",
   ],
+  /* Bild: Rahmen, Sonne, Bergzug — der Bildanhang (A-19.13). */
+  image: [
+    "M4 5.5h16v13H4v-13Z",
+    "M8.4 10.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6Z",
+    "M4 15.4l4.6-4.1 4.2 3.7 3-2.6L20 15.2",
+  ],
   info: ["M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Z", "M12 11v5", "M12 7.9h.01"],
+  /* Zwei Kettenglieder: der Verweis (A-19.9). Nicht "Link" — das Wort steht
+     auf dem Bildschirm nirgends, das Zeichen dafuer schon. */
+  link: [
+    "M10.2 13.8a3.4 3.4 0 0 0 5 .3l2.6-2.6a3.4 3.4 0 0 0-4.8-4.8l-1.5 1.5",
+    "M13.8 10.2a3.4 3.4 0 0 0-5-.3l-2.6 2.6a3.4 3.4 0 0 0 4.8 4.8l1.5-1.5",
+  ],
   lock: ["M6.2 10.6h11.6v8.2H6.2v-8.2Z", "M8.6 10.6V8.2a3.4 3.4 0 0 1 6.8 0v2.4"],
   monitor: ["M3.5 5h17v10h-17V5Z", "M9 19h6", "M12 15v4"],
   moon: ["M20 13.4A8.2 8.2 0 0 1 10.6 4a8.4 8.4 0 1 0 9.4 9.4Z"],
   "more-horizontal": ["M6 12h.01", "M12 12h.01", "M18 12h.01"],
+  /* Bueroklammer: der Anhang als Sammelsache (A-19.8). */
+  paperclip: [
+    "M17.6 10.4 11 17a3.7 3.7 0 0 1-5.2-5.2l7.3-7.3a2.5 2.5 0 0 1 3.5 3.5l-7.3 7.3a1.2 1.2 0 0 1-1.8-1.8l6.6-6.6",
+  ],
   pause: ["M9.2 5.5v13", "M14.8 5.5v13"],
   pencil: ["M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10v3Z", "M14.5 6.5l3 3"],
   play: ["M7.5 5.2 18.6 12 7.5 18.8V5.2Z"],

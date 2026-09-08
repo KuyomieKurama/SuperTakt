@@ -169,10 +169,13 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
         />
       </ScreenHeader>
 
-      <Card
-        title="Wozu dieses Protokoll da ist"
-        description="Es ist die Maßnahme gegen R-10 — nicht das Verbot des Zurücksetzens, sondern seine Nachvollziehbarkeit."
-      >
+      {/*
+        Ohne Überschrift und ohne Beschreibung (T-181, ST-03). Die Überschrift
+        erklärte eine Liste, die sichtbar darunter steht, und die Beschreibung
+        trug eine interne Befundnummer (Regel S-19). Die Karte bleibt als
+        Fläche, die Legende steht damit unmittelbar in der Ansicht.
+      */}
+      <Card>
         <dl className="auditlegend">
           {(["exported", "reset", "not_billed"] as const).map((value) => (
             <div className="auditlegend__item" key={value}>

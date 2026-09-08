@@ -17,6 +17,7 @@
 
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { routePath } from 'hono/route';
 import { timeout } from 'hono/timeout';
 import { HTTPException } from 'hono/http-exception';
 
@@ -45,6 +46,8 @@ import { createExportRoutes, createSettingsRoutes } from './routes/export.ts';
 import { createStructureRoutes } from './routes/structure.ts';
 import { createTimeEntryRoutes, createTimerRoutes } from './routes/time.ts';
 import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
+import { createVersionRoutes } from './routes/version.ts';
+import type { VersionCheckState } from './version/checker.ts';
 
 /**
  * Der fachliche Teil ist **auswechselbar leer**.
@@ -56,6 +59,17 @@ import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
  */
 export interface AppOptions {
   readonly context?: AppContext;
+  /**
+   * Was der Dienst zuletzt über die veröffentlichte Fassung weiß (E-069).
+   *
+   * Eine **Funktion** und kein Wert: Die Route soll den Stand zum Zeitpunkt der
+   * Anfrage lesen und nicht den zum Zeitpunkt des Zusammenbaus. Ohne Angabe
+   * lautet die Antwort „noch nichts geprüft" — die Route gibt es damit immer,
+   * auch ohne Datenbank und ohne laufenden Prüfer. Das ist Absicht: Eine
+   * Route, die je nach Zusammenbau vorhanden ist oder nicht, wäre an
+   * `proof:route-policy` Abschnitt 4 und `proof:openapi` vorbei.
+   */
+  readonly versionState?: () => VersionCheckState;
 }
 
 export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hono<TaktEnv> {
@@ -171,6 +185,22 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     c.json({ data: { notices: runtime.notices.list() } }),
   );
 
+  /**
+   * Die Versionsprüfung (A-18.2, E-069, A-V-19).
+   *
+   * Hier oben und **nicht** im Block der Fachrouten: Sie hängt an keiner
+   * Datenbank. Damit gibt es sie in jedem Zusammenbau, und
+   * `proof:route-policy` Abschnitt 4 wie `proof:openapi` sehen immer dieselbe
+   * Routenliste. Sie liest ab und fragt nicht — die Begründung steht in
+   * `routes/version.ts`.
+   *
+   * Kein `requireCredential('session')` daneben: Das steht schon oben in der
+   * Kette für **jeden** Pfad, der nicht unter `/addin` liegt und nicht in
+   * `SHARED_PATHS` steht (`credentialPolicy()`). Eine zweite Angabe je Route
+   * wäre die Aufzählung, aus der B-2.10 entstanden ist.
+   */
+  api.route('/version-check', createVersionRoutes(options.versionState ?? (() => ({ state: 'unknown' }))));
+
   // ---------------------------------------------------------------------------
   // Fachrouten (T-021). Alle **hinter** der Kette oben, keine daneben.
   // ---------------------------------------------------------------------------
@@ -256,6 +286,28 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       return c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large'));
     }
 
+    /*
+     * **Der gemusterte Pfad und nicht der angefragte** (T-164, Auflage A-A-31).
+     *
+     * Hier stand bis T-168 `c.req.path`. Das ist der Weg, den der Aufrufer
+     * geschickt hat, und damit fremder Text in einem Protokoll, das ein
+     * Benutzer weitergibt. Der Riegel des Protokollierers liegt auf `reason`
+     * und auf nichts sonst (`logger.ts`); für `message` bürgt allein die
+     * Aufrufstelle — also diese hier.
+     *
+     * `routePath` liefert stattdessen den **registrierten** Pfad
+     * (`/todos/:id`). Er stammt aus dem Erzeugnis und nicht aus der Anfrage;
+     * damit kann diese Zeile gar keinen fremden Wert mehr tragen, statt keinen
+     * zu tragen, weil bisher keiner vorbeikam.
+     *
+     * Der zweite Parameter `-1` ist der **zuletzt** getroffene Eintrag, also
+     * der Routeneintrag selbst. Ohne ihn stünde bei einem Wurf aus einem der
+     * Wächter nur `*` da — die Kette hängt an `app.use('*', …)`, und die
+     * Wächter laufen vor der Route. Gibt es überhaupt keinen Treffer, ist die
+     * Zeichenkette leer; dann steht `?` da und keine leere Stelle.
+     */
+    const where = `${c.req.method} ${routePath(c, -1) || '?'}`;
+
     /**
      * Das letzte Netz unter der Speicherung (T-074).
      *
@@ -283,10 +335,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      */
     const stored = asStorageFailure(error);
     if (stored !== null) {
-      runtime.logger.lifecycle(
-        'warn',
-        `Regel der Speicherung in ${c.req.method} ${c.req.path}: ${stored.code}`,
-      );
+      runtime.logger.lifecycle('warn', `Regel der Speicherung in ${where}: ${stored.code}`);
       return fail(c, stored);
     }
     // Hier stand bis T-058 ein `console.error('DEBUG-T041', …, error)` — eine
@@ -296,7 +345,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     // in der Hülle zusammen und geht bei einer Fehlermeldung mit; damit war der
     // Innenbau der Datenbank in einem Protokoll, das ein Benutzer weitergibt.
     c.set('outcome', 'internal_error');
-    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${c.req.method} ${c.req.path}`);
+    runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${where}`);
     return c.json(errorEnvelope('internal_error'), errorStatus('internal_error'));
   });
 

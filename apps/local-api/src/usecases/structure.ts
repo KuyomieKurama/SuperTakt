@@ -19,6 +19,7 @@ import type {
   ExportStatus,
   ExportTemplateEnvelope,
   ExportTemplateId,
+  LocationTrait,
   Pool,
   PoolId,
   PoolPlacement,
@@ -47,6 +48,7 @@ import {
   checkExportStatusTransition,
   checkPoolName,
   checkTagName,
+  checkVersion,
   err,
   nameKey,
   ok,
@@ -696,6 +698,40 @@ export interface SettingsView {
    * `settings.exportDirectory` bereits einen Pfad desselben Rechners.
    */
   readonly databasePath: string | null;
+  /**
+   * Was am **Ort des Bestands** belegbar ist (T-132, O-C).
+   *
+   * Derselbe Vorrat wie bei {@link exportDirectoryTraits} und aus demselben
+   * Grund — nur wiegt er hier schwerer. Der Exportordner enthält, was exportiert
+   * wurde; der Bestand enthält alles, einschließlich der internen Vermerke
+   * (A-7.2). Liegt er in einem Synchronisierungsordner oder auf einem
+   * Netzdateisystem, verlässt die Kundendatenbank den Rechner — genau der
+   * Schaden, gegen den E-018 die Ablage unter `%LOCALAPPDATA%` gesetzt hat, und
+   * bei WAL-Dateien obendrein ein Weg, den Bestand zu beschädigen (R-13,
+   * B-5.3).
+   *
+   * Bis T-132 lieferte `GET /settings` dazu **nur den Pfad**: Der Benutzer
+   * musste ihn ansehen und raten. Der Exportordner bekam seit T-039 einen
+   * Beleg, der Bestand keinen — obwohl an ihm mehr hängt.
+   *
+   * Leer, wenn nichts belegbar ist, und **leer heißt nicht „unbedenklich"**:
+   * Ein zugeordnetes Netzlaufwerk unter Windows ist von hier aus nicht
+   * erkennbar (siehe `access/export-directory.ts`).
+   */
+  readonly databaseTraits: readonly LocationTrait[];
+  /**
+   * Wie viele Dateien des Bestands weiter liegen als `0600` (B-7.2, T-132/O-C).
+   *
+   * Eine Zahl und keine Pfadliste. `null` heißt „nicht messbar" — unter Windows,
+   * wo die geerbte ACL die Grenze trägt, und bei einem Bestand im
+   * Arbeitsspeicher. `null` ist nicht `0`.
+   *
+   * Der Dienst meldet dieselbe Zahl beim Start ins Protokoll und merkt sie als
+   * Vorfall vor. Hier steht sie, damit sie auch dann sichtbar ist, wenn niemand
+   * das Startprotokoll gelesen hat — und weil sie sich im Betrieb ändern kann:
+   * SQLite legt `-wal` und `-shm` wiederholt neu an.
+   */
+  readonly databaseFilesTooPermissive: number | null;
 }
 
 export async function loadSettings(context: AppContext): Promise<SettingsView> {
@@ -705,8 +741,16 @@ export async function loadSettings(context: AppContext): Promise<SettingsView> {
   // Nach einer Zeitgrenze wird das Dateisystem nicht noch einmal gefragt: Es
   // liefe in dieselbe Wand. Was aus Pfad und Umgebung folgt, bleibt trotzdem —
   // und ist dort die eigentliche Erklärung.
-  const traits = await context.directories.describeExportDirectory(settings.exportDirectory, {
+  const traits = await context.directories.describeLocation(settings.exportDirectory, {
     mayAskFileSystem: check.ok || check.reason !== 'unreachable',
+  });
+
+  // Der Ort des Bestands wird **immer** gefragt: Er ist offen, also antwortet
+  // er auch. Die Zeitgrenze oben gilt dem Exportordner, der eine abgehängte
+  // Freigabe sein kann; für den Bestand gäbe es keinen Grund, sie zu erben.
+  const databasePath = context.system.databasePath();
+  const databaseTraits = await context.directories.describeLocation(databasePath, {
+    mayAskFileSystem: true,
   });
 
   return {
@@ -715,7 +759,9 @@ export async function loadSettings(context: AppContext): Promise<SettingsView> {
     exportDirectoryTraits: traits,
     defaultTags,
     windowsUser: context.system.windowsUser(),
-    databasePath: context.system.databasePath(),
+    databasePath,
+    databaseTraits,
+    databaseFilesTooPermissive: context.system.databaseFilesTooPermissive(),
   };
 }
 
@@ -725,6 +771,13 @@ export interface SettingsUpdate {
   readonly roundingMode?: RoundingMode;
   readonly locale?: string;
   readonly theme?: Theme;
+  /**
+   * Die übersprungene Fassung (A-18.10). `null` setzt sie zurück.
+   *
+   * Sie kommt als **Benutzereingabe** herein (T-136-4) und wird unten an ihrer
+   * Tür geprüft, nicht erst in der Datenbank.
+   */
+  readonly skippedVersion?: string | null;
 }
 
 /**
@@ -765,6 +818,43 @@ export async function updateSettings(
     }
   }
 
+  /*
+   * A-18.10, T-136-4 — die Tür der übersprungenen Fassung.
+   *
+   * Der Wert ist Benutzereingabe: Jeder Prozess mit dem Sitzungsgeheimnis kann
+   * ihn setzen (VG-6, R-02). Geprüft wird deshalb **hier**, mit derselben Form
+   * wie die Antwort von GitHub — `checkVersion` aus `packages/domain`, ohne
+   * zweite Meinung und ohne eigenen regulären Ausdruck.
+   *
+   * Was dabei zusätzlich geschieht und gewollt ist: `checkVersion` gibt die
+   * Bezeichnung **ohne** führendes `v` zurück. Gespeichert wird also `1.2.3`,
+   * gleich ob `1.2.3` oder `v1.2.3` hereinkam — sonst stünde in derselben
+   * Spalte je nach Aufrufer zweierlei, und die Gleichheitsprüfung fände das
+   * eine nicht neben dem anderen.
+   *
+   * `null` ist ein Wert und keine fehlende Angabe: Er setzt „nichts
+   * übersprungen" zurück und wird nicht geprüft.
+   */
+  let skippedVersion: string | null | undefined = input.skippedVersion;
+  if (typeof skippedVersion === 'string') {
+    const version = checkVersion(skippedVersion);
+    if (!version.ok) {
+      // Der abgewiesene Wert steht **nicht** in der Meldung. Er kann genau die
+      // Zeichen tragen, um die es geht; eine Meldung, die sie wiedergibt, ist
+      // derselbe fremde Text an einer neuen Stelle (B-2.4, B-18.2).
+      return err(
+        taktError('validation_error', 'Das ist keine Fassungsbezeichnung. Die Einstellung wurde nicht geändert.'),
+      );
+    }
+    skippedVersion = version.version.value;
+  }
+
   const timestamp = now(context);
-  return context.transactions.inTransaction((unit) => unit.settings.update({ ...input, now: timestamp }));
+  return context.transactions.inTransaction((unit) =>
+    unit.settings.update({
+      ...input,
+      ...(skippedVersion === undefined ? {} : { skippedVersion }),
+      now: timestamp,
+    }),
+  );
 }

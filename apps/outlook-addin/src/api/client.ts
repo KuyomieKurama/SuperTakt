@@ -17,6 +17,10 @@
  *    Der Client tut es ihm gleich und leitet daraus **eine** Meldung ab, die
  *    nach S-13 führt — er rät nicht, woran es lag.
  * 4. **`fetch` ist ein Port.** Sonst wäre nichts hiervon ohne Browser prüfbar.
+ *    Der Port bleibt **Pflicht** — {@link createApiClient} nimmt keine
+ *    Abholfunktion aus der Umgebung, wenn der Aufrufer keine nennt. Wer das
+ *    globale `fetch` will, sagt es mit {@link createBrowserApiClient}, und
+ *    diese eine Zeile steht am Ende dieser Datei (T-190).
  */
 
 import type {
@@ -71,6 +75,15 @@ export interface ApiClientOptions {
    * Geheimnis liegt.
    */
   readonly token: () => string | null;
+  /**
+   * Die Abholfunktion — **ohne Ersatzwert**.
+   *
+   * Kein `?`, kein Rückfall auf das globale `fetch`: Ein Ersatzwert machte aus
+   * dem Port eine Bequemlichkeit. Ein Prüffall, der die Einspeisung vergisst,
+   * liefe dann still gegen das Netz der Umgebung, statt an `tsc` zu scheitern.
+   * Die Umgebung kommt über {@link createBrowserApiClient} herein und sonst
+   * nirgends.
+   */
   readonly fetch: typeof globalThis.fetch;
 }
 
@@ -94,6 +107,22 @@ export interface CreateTodoRequest {
   readonly tagNames: readonly string[];
   /** Der **interne Vermerk** (A-7.2). Nicht die Leistung. */
   readonly note: string;
+  /**
+   * Die **Frist** (A-19.21, E-074, T-149). `null` heißt „ohne Frist".
+   *
+   * Ein Tag der Form `JJJJ-MM-TT`, den der Benutzer im Aufgabenbereich
+   * einträgt — **nicht** aus dem Betreff oder dem Text der E-Mail erkannt
+   * (E-074 Punkt 4). Kein Feld, sondern der Wert: Was der Aufgabenbereich hier
+   * einsetzt, hat `readDueDate` (`duedate/entry.ts`) gegen `isCalendarDay` aus
+   * `@takt/domain` gehalten; die Grenze liegt trotzdem an der Tür des
+   * Dienstes, die dieselbe Regel führt.
+   *
+   * **Ein Anhang steht hier nicht** und wird auch nicht nachgereicht
+   * (A-19.19). Dieser Client kennt keine Anhangsroute, und die des Dienstes
+   * liegt außerhalb von `/addin` — das Add-in-Token kommt dort nicht hin
+   * (A-A-21).
+   */
+  readonly dueDate: string | null;
 }
 
 export interface BookRequest {
@@ -270,3 +299,55 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
     },
   };
 };
+
+/** {@link ApiClientOptions} ohne den Port — alles, was der Browser nicht liefert. */
+export type BrowserApiClientOptions = Omit<ApiClientOptions, 'fetch'>;
+
+/**
+ * Derselbe Zugang, aber mit der Abholfunktion des Browsers (T-190, A-A-40).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum diese drei Zeilen hier stehen und nicht beim Zusammenbau
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-190 stand `fetch: window.fetch.bind(window)` in `ui/App.tsx`, also
+ * dort, wo alles Äußere einmal erzeugt wird. Fachlich war das richtig und ist
+ * es geblieben: Es ist **kein zweiter Weg zum Dienst**, sondern die
+ * Einspeisung des Ports.
+ *
+ * Meßtechnisch war es trotzdem ein Fund. `proof:callers` sichert zu: „`fetch`
+ * steht im Add-in nur in `api/client.ts`" — und diese Zusage ist der einzige
+ * Grund, warum der Lauf **eine** Datei lesen darf und daraus über das ganze
+ * Add-in urteilt. Sie stimmte nicht wörtlich; sichtbar wurde das erst, als
+ * T-188 den blinden Ausdruck ersetzte, der `window.fetch` nie gesehen hatte.
+ *
+ * Zwei Wege standen offen. Die Einspeisung als Ausnahme eintragen — dann führt
+ * dieselbe Zusage zwei Fassungen, eine im Satz und eine in einer Liste, und
+ * genau das ist der Fehlerbau, den E-086 an anderer Stelle gerade aufgelöst
+ * hat. Oder die Einspeisung dorthin legen, wo die Zusage sie ohnehin erwartet.
+ * Das ist dieser Weg.
+ *
+ * ---------------------------------------------------------------------------
+ * Was dabei **nicht** verlorengeht: die Prüfbarkeit
+ * ---------------------------------------------------------------------------
+ *
+ * Der Grund für die Einspeisung war, daß sich jeder Baustein ohne Browser und
+ * ohne laufenden Dienst prüfen läßt. Der Grund trägt weiter, weil der Port
+ * bleibt, was er war:
+ *
+ *  - {@link createApiClient} verlangt `fetch` **weiterhin ohne Ersatzwert**.
+ *    Jeder der Prüfläufe in `scripts/proof-addin.mjs` reicht seine eigene
+ *    Abholfunktion herein und mißt an ihr Kopfzeilen, Adresse und Rumpf; keiner
+ *    von ihnen ändert sich durch T-190.
+ *  - Neu ist nur diese Hülle, und sie enthält **keine Entscheidung**: kein
+ *    Zweig, keine Umformung, kein zweiter Aufruf. Was sich an ihr prüfen ließe,
+ *    ist bereits an {@link createApiClient} geprüft.
+ *  - `ui/App.tsx` nennt `fetch` danach nicht mehr — weder als Wert noch als
+ *    Feldnamen. Die Zusage des Wächters stimmt damit wörtlich, und er verliert
+ *    keine Datei aus dem Blick.
+ *
+ * Gebunden wird, weil das globale `fetch` seinen Empfänger braucht: `const f =
+ * globalThis.fetch; f(...)` wirft in einigen Umgebungen `Illegal invocation`.
+ */
+export const createBrowserApiClient = (options: BrowserApiClientOptions): ApiClient =>
+  createApiClient({ ...options, fetch: globalThis.fetch.bind(globalThis) });

@@ -14,6 +14,21 @@
 export type * from './ports.ts';
 export type * from './migration.ts';
 
+/**
+ * Der Fehlschlag des Migrationsverfahrens ist **kein** reiner Typ (T-132).
+ *
+ * Er gehört zur Zusage des Ports: Wer migrieren lässt, muss den Ausgang
+ * unterscheiden können, ohne eine Meldung zu zergliedern. Die vier Helfer
+ * daneben sind pur und lesen nur, was an einem Wurf steht.
+ */
+export {
+  errorCodeOf,
+  isBusyResultCode,
+  migrationFailure,
+  migrationFailureReason,
+  sqliteResultCodeOf,
+} from './migration.ts';
+
 // ---------------------------------------------------------------------------
 // SQLite-Adapter (T-021)
 // ---------------------------------------------------------------------------
@@ -40,6 +55,8 @@ export {
   within,
 } from './sqlite/file-port.ts';
 export type { TimeBudgetResult } from './sqlite/file-port.ts';
+
+export { createAttachmentPort } from './sqlite/repo-attachments.ts';
 
 export { createTransactionPort, createUnitOfWork } from './sqlite/unit-of-work.ts';
 export type { UnitOptions } from './sqlite/unit-of-work.ts';

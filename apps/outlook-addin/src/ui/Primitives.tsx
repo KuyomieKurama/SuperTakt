@@ -16,6 +16,9 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 import { visibleText } from '../text/hidden.ts';
+import { fieldParts, type FieldAria } from './field.ts';
+
+export type { FieldAria } from './field.ts';
 
 /**
  * Fremder Text in der Anzeige (T-119).
@@ -101,26 +104,65 @@ interface FieldProps {
   readonly htmlFor: string;
   readonly hint?: string;
   readonly error?: string | undefined;
-  readonly children: ReactNode;
+  /**
+   * Das Bedienelement — als Funktion und nicht als Knoten (T-158).
+   *
+   * Der Grund ist der Befund V-03: `Field` erzeugte die Kennungen, und kein
+   * einziges Eingabefeld verwies darauf. Ein Knoten lässt sich nur erraten
+   * (`cloneElement` auf das erste Kind, das wie ein Feld aussieht) — bei den
+   * Feldern dieses Bereichs wäre das Raten falsch: Das Tag-Feld trägt drei
+   * Zustände, das Dauerfeld eine Knopfreihe neben dem Eingabefeld, das
+   * Tokenfeld einen Knopf daneben. Als Funktion bekommt jede Aufrufstelle die
+   * Attribute in die Hand und setzt sie dorthin, wo das Bedienelement
+   * tatsächlich steht.
+   */
+  readonly children: (aria: FieldAria) => ReactNode;
 }
 
+/**
+ * Beschriftung, Bedienelement, Hinweis, Meldung — in dieser Reihenfolge.
+ *
+ * Drei Eigenschaften, die seit T-158 gelten und die vorher fehlten (V-03):
+ *
+ *  1. Das Bedienelement **verweist** auf beide Texte (`aria-describedby`) und
+ *     trägt `aria-invalid`, solange eine Meldung steht.
+ *  2. Der **Hinweis bleibt**, wenn eine Meldung dazukommt. Die Meldung sagt,
+ *     was falsch ist; der Hinweis sagt, was das Feld ist. Am Fristfeld sagt er
+ *     außerdem, warum es leer war — und das ist die Auskunft, die genau dann
+ *     gebraucht wird, wenn der Benutzer am Feld hängt.
+ *  3. Die **Meldefläche steht immer da, auch leer.** Ein `role="alert"`, das
+ *     erst zusammen mit seinem Inhalt in den Baum kommt, wird von vielen
+ *     Vorlesehilfen nicht angesagt: Sie melden Änderungen an einer Region, die
+ *     sie kennen, und diese kennen sie in dem Augenblick noch nicht. Dieselbe
+ *     Bauart und derselbe Grund wie im Bestätigungsdialog der Hauptanwendung
+ *     (B-5 aus T-116, gebaut in T-118). Der Unterschied zu dort: Eine
+ *     Feldmeldung ist eine Absage an eine gerade getätigte Eingabe, also
+ *     `alert` und nicht `status`.
+ *
+ * Was die Meldefläche **nicht** enthält: den Hinweis. Er liegt bereits in
+ * `aria-describedby` und stünde sonst beim Öffnen zweimal da.
+ */
 export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
+  const parts = fieldParts(htmlFor, hint, error);
+
   return (
-    <div className={error === undefined ? 'field' : 'field field--invalid'}>
+    <div className={parts.className}>
       <label className="field__label" htmlFor={htmlFor}>
         {label}
       </label>
-      {children}
-      {hint !== undefined && error === undefined ? (
-        <p className="field__hint" id={`${htmlFor}-hint`}>
+      {children(parts.aria)}
+      {parts.showHint ? (
+        <p className="field__hint" id={parts.hintId}>
           {hint}
         </p>
       ) : null}
-      {error !== undefined ? (
-        <p className="field__error" id={`${htmlFor}-error`} role="alert">
-          {error}
-        </p>
-      ) : null}
+      <div className="field__live" role="alert">
+        {parts.showError ? (
+          <p className="field__error" id={parts.errorId}>
+            {error}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -180,16 +222,43 @@ interface ChipProps {
   readonly removeLabel?: string;
 }
 
-/** Wortmarke und Erklärung je Sonderfall. Ein Ort, damit beide zusammenbleiben. */
+/**
+ * Wortmarke und Erklärung je Sonderfall. Ein Ort, damit beide zusammenbleiben.
+ *
+ * **Beide `title` sind in T-196 gekürzt** — ST-A-03 (Z-42) und ST-A-06 (Z-44)
+ * aus `docs/design/textbestand-aufgabenbereich.md`, freigegeben in T-195.
+ *
+ * Bei `default-tag` ist die Anforderungs-ID „(A-9.3)“ gefallen. Eine Kennung aus
+ * `docs/spec.md` ist für den Benutzer Rauschen und verspricht eine
+ * Nachschlagemöglichkeit, die es in der Oberfläche nicht gibt (Regel S-19,
+ * Geschwister von ST-03 drüben). Die Anforderung selbst steht weiter im
+ * Dateikopf von `Chip` — dort gehört sie hin, dort liest sie ein Entwickler.
+ *
+ * Bei `new-tag` ist der **Zustand** gefallen („Dieses Tag gibt es in Takt noch
+ * nicht.“). Den trägt der Chip sichtbar: die Wortmarke „neu“ und die eigene
+ * Gestalt `chip--new`. Stehen bleibt die **Folge**. Sie steht danach nur noch an
+ * einer zweiten Stelle — `TagPicker.tsx`, „… — entsteht beim Anlegen des
+ * Todos“, gesperrt als **SP-A-12** (T-061). **Fällt SP-A-12, ist diese Kürzung
+ * zurückgenommen**; das ist Auflage 1 aus Z-44 und kein Nebensatz.
+ *
+ * Was diese Kürzung **nicht** heilt: Der Träger ist und bleibt ein `title` auf
+ * einem `<span class="chip__note">` — nicht fokussierbar, auf
+ * Berührungsgeräten unsichtbar, nicht abweisbar (Regel S-16). Die sichtbaren
+ * Wortmarken „Standard“ und „neu“ tragen die Aussage; der `title` ergänzt sie
+ * nur. Drüben hat ST-09 dieselbe Bauart an `Tag.tsx` aufgelöst und dafür einen
+ * `visually-hidden`-Text behalten — hier gibt es keinen. Wer beide Häuser
+ * angleicht, setzt ihn zuerst und nimmt dann den `title` weg, nicht umgekehrt.
+ * Das ist ein eigener Eintrag und nicht Gegenstand dieser Kürzung (Z-42).
+ */
 const CHIP_NOTE: Readonly<Record<'default-tag' | 'new-tag', { label: string; title: string }>> =
   Object.freeze({
     'default-tag': {
       label: 'Standard',
-      title: 'Standard-Tag aus den Einstellungen (A-9.3)',
+      title: 'Standard-Tag aus den Einstellungen',
     },
     'new-tag': {
       label: 'neu',
-      title: 'Dieses Tag gibt es in Takt noch nicht. Es entsteht zusammen mit dem Todo.',
+      title: 'Entsteht zusammen mit dem Todo.',
     },
   });
 
@@ -268,7 +337,16 @@ export function Section({
   actions,
 }: {
   readonly title: string;
-  readonly description?: string;
+  /**
+   * Die Zeile unter der Überschrift — **oder keine** (T-182).
+   *
+   * `string | undefined` und nicht `string?`: Unter
+   * `exactOptionalPropertyTypes` ist „die Eigenschaft fehlt" etwas anderes
+   * als „sie ist `undefined`", und eine Aufrufstelle, die je nach Zustand
+   * eine Zeile hat oder nicht, kann nur das Zweite ausdrücken. Dieselbe
+   * Schreibweise und derselbe Grund wie bei `error` in {@link FieldProps}.
+   */
+  readonly description?: string | undefined;
   readonly children: ReactNode;
   readonly actions?: ReactNode;
 }) {

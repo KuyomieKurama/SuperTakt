@@ -14,8 +14,8 @@
 import { z } from 'zod';
 
 /*
- * Die beiden **geprüften Namensformen der Hauptanwendung** (T-114, Befund
- * T-112-1 aus der Sicherheitsprüfung).
+ * Die **geprüften Eingabeformen der Hauptanwendung** (T-114, Befund T-112-1
+ * aus der Sicherheitsprüfung; seit T-149 auch die Frist).
  *
  * Bis T-114 stand hier für Titel und Tagname je eine eigene Abschrift
  * (`z.string().trim().min(1).max(…)`), und ein Kommentar sagte zu, sie sei
@@ -27,8 +27,17 @@ import { z } from 'zod';
  * Deshalb jetzt **dieselben Werte** und keine zweite Fassung. Der Bezug über
  * die Modulgrenze ist derselbe wie der auf `http/problem.ts` in `index.ts`:
  * Er holt eine Regel, die es genau einmal geben soll, und keinen Text.
+ *
+ * `dueDateSchema` kam mit T-149 dazu (A-19.21, E-074 Punkt 4) und ist
+ * derselbe Handgriff ein drittes Mal — diesmal **vor** dem Auseinanderlaufen
+ * statt danach. Die Regel selbst liegt noch eine Ebene tiefer: `isCalendarDay`
+ * und `DUE_DATE_MESSAGE` stehen in `packages/domain/src/due-date.ts` (T-146),
+ * `http/input.ts` bindet sie an zod, und diese Tür liest die Bindung. Eine
+ * eigene `z.string().regex(/^\d{4}-\d{2}-\d{2}$/)` hier wäre die vierte
+ * Abschrift der Klasse, die T-122, T-128 und T-134 dreimal aufgeräumt haben —
+ * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
-import { nameSchema, titleSchema } from '../../http/input.ts';
+import { dueDateSchema, nameSchema, titleSchema } from '../../http/input.ts';
 
 /** UUID Fassung 7, wie `Id` in der OpenAPI-Beschreibung. */
 const id = z.string().uuid();
@@ -39,10 +48,28 @@ const timestamp = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
 /**
  * Der interne Vermerk aus der E-Mail (A-7.1, B-12.3 Punkt 3).
  *
- * 4000 Zeichen, nicht 65536 wie bei der Hauptanwendung. Der Vorschlag stammt
- * aus B-12.3: Was aus einer E-Mail übernommen wird, soll der Kontext sein und
- * nicht ein ganzer Zitatverlauf. Wer mehr braucht, schreibt es in der
- * Hauptanwendung dazu.
+ * Enger als an der Tür der Hauptanwendung, wo `textSchema` gilt. Der Vorschlag
+ * stammt aus B-12.3 Punkt 3: Was aus einer E-Mail übernommen wird, soll der
+ * Kontext sein und nicht ein ganzer Zitatverlauf. Wer mehr braucht, schreibt es
+ * in der Hauptanwendung dazu.
+ *
+ * **Die Gegenzahl steht bis heute im Add-in** als `MAX_TAKEOVER_CHARACTERS`
+ * (`apps/outlook-addin/src/office/mail.ts`), und sie muss dieselbe sein: Der
+ * Knopf „Inhalt der E-Mail übernehmen" füllt das Feld, bevor der Benutzer es
+ * gelesen hat. Kürzte das Add-in großzügiger, als diese Zeile annimmt, bekäme
+ * er ein 422 für einen Text, den nicht er geschrieben hat — dieselbe Sackgasse
+ * wie bei der Titellänge vor T-114. Auflösen lässt sich das nur in
+ * `@takt/domain`, weil ein Browserbündel `@takt/local-api` nicht einbinden darf;
+ * T-134 meldet es, statt es halb zu tun. Bis dahin hält
+ * `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16 beide Seiten
+ * gegeneinander — ein Vergleich, der den Schaden bewacht und nicht die Ursache
+ * (E-063 Punkt 5), aber einer, der rot wird.
+ *
+ * **Der Wortlaut hier nannte bis T-134 „65536" als Zahl der Hauptanwendung.**
+ * Sie war seit langem falsch — `textSchema` nimmt weniger —, und sie war es
+ * unbemerkt, weil eine Beschreibung, die eine fremde Zahl abschreibt, dieselbe
+ * Abschrift ist wie eine im Quelltext, nur ohne die Möglichkeit, rot zu werden
+ * (E-063 Punkt 5). Sie zeigt jetzt auf den Namen statt auf einen Wert.
  */
 export const ADDIN_NOTE_MAX_LENGTH = 4000;
 
@@ -67,6 +94,28 @@ export const ADDIN_NOTE_MAX_LENGTH = 4000;
 export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
 
 /**
+ * Wie viele **Kennungen** eine Anfrage höchstens mitgeben darf (T-058, T-134).
+ *
+ * Bis T-134 stand die Zahl als `.max(200)` mitten im Schema, ohne Namen und
+ * ohne Grund — und ohne einen Hinweis darauf, dass sie nicht allein steht.
+ *
+ * **Sie steht an zwei Türen.** `routes/todos.ts` führt dieselbe Zahl an
+ * `createSchema` und an `updateSchema`; es ist dieselbe Wahrheit („wie viele
+ * Tags darf ein Todo in einer Anfrage bekommen") und nicht bloß derselbe Wert.
+ * Aufgelöst ist sie damit **nicht**: Der andere Weg liegt außerhalb dieser Datei
+ * (E-053), und eine halb umgestellte Zahl ist schlechter als eine ganz
+ * doppelte — sie sieht aus wie erledigt. T-134 gibt ihr deshalb hier einen
+ * Namen, meldet die zweite Tür und lässt sie messen
+ * (`apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 16): Laufen die beiden
+ * Türen auseinander, wird der Lauf rot, statt dass ein Kommentar es hofft.
+ *
+ * Warum überhaupt eine Grenze: Ohne sie nimmt die Tür eine Liste beliebiger
+ * Länge entgegen und legt sie in eine Transaktion. Warum 200 und nicht 50 wie
+ * bei den Namen, steht eine Zeile weiter unten.
+ */
+export const ADDIN_TAG_IDS_MAX = 200;
+
+/**
  * Wie viele **Namen** eine Anfrage höchstens benennen darf (T-058, T-061).
  *
  * Dieselbe Zahl wie in `routes/todos.ts`, und aus demselben Grund: Kennungen
@@ -74,6 +123,10 @@ export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
  * einer Anfrage sind kein Arbeitsablauf, sondern ein Skript. Zwei verschiedene
  * Zahlen an den beiden Wegen wären die Art Unterschied, die niemand bemerkt,
  * bis eine Anfrage über den einen Weg durchgeht und über den anderen nicht.
+ *
+ * Dieser Satz war bis T-134 eine Zusicherung, die niemand ausführt — genau die
+ * Bauart, an der T-114 gescheitert ist. Seither hält Abschnitt 16 des
+ * Add-in-Nachweises beide Türen gegeneinander, für `tagIds` wie für `tagNames`.
  */
 export const ADDIN_TAG_NAMES_MAX = 50;
 
@@ -136,7 +189,7 @@ export const createTodoSchema = z.object({
   title: titleSchema,
   callNumber: z.string().max(ADDIN_CALL_NUMBER_MAX_LENGTH).nullable().default(null),
   statusId: id.nullable().default(null),
-  tagIds: z.array(id).max(200).default([]),
+  tagIds: z.array(id).max(ADDIN_TAG_IDS_MAX).default([]),
   /**
    * Tags über ihren **Namen** statt über eine Kennung (T-058, T-061).
    *
@@ -196,7 +249,106 @@ export const createTodoSchema = z.object({
    * die Prüfung dort nötig macht und hier nicht.
    */
   note: z.string().max(ADDIN_NOTE_MAX_LENGTH).default(''),
+  /**
+   * Die **Frist** (A-19.21, E-074 Punkt 3 und 4, T-149).
+   *
+   * ---------------------------------------------------------------------------
+   * Sie wird eingetragen, nicht erkannt
+   * ---------------------------------------------------------------------------
+   *
+   * Das ist der Unterschied zur `callNumber` eine Bildschirmhöhe weiter oben,
+   * und er ist der Kern von E-074 Punkt 4. Die Call-Nummer kommt aus einem
+   * regulären Ausdruck über dem **Text der E-Mail** und damit von Akteur A-06;
+   * die Frist kommt aus einem Feld, das der Benutzer im Aufgabenbereich
+   * ausfüllt. Es gibt kein Muster, das sie aus einem Betreff liest, und es
+   * soll keines geben: „bis Freitag" in einer fremden E-Mail ist eine
+   * Behauptung des Absenders über den Kalender des Empfängers.
+   *
+   * Geprüft wird sie trotzdem wie jedes andere Feld dieser Tür. Ein Feld im
+   * Aufgabenbereich ist keine Zusicherung über das, was hier ankommt — der
+   * Aufgabenbereich ist ein Browsersteuerelement, und diese Route hört auf
+   * `127.0.0.1`.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum `.default(null)` und nicht `.optional()`
+   * ---------------------------------------------------------------------------
+   *
+   * An der Haupttür stehen zwei Schemata nebeneinander: `createSchema` faßt
+   * „fehlt" und `null` zusammen, `updateSchema` hält sie auseinander, weil
+   * `null` dort **entfernen** heißt (A-19.3). Diese Tür kennt das Ändern
+   * nicht — sie legt an und bucht, mehr nicht. Es gibt hier also nur zwei
+   * Zustände, und `.default(null)` schreibt das einmal hin, statt es an der
+   * Aufrufstelle mit `?? null` nachzuholen. Derselbe Handgriff wie bei
+   * `callNumber` und `statusId` darüber.
+   *
+   * Der **Wert** der Prüfung steht in `dueDateSchema` und nicht hier: Form
+   * `JJJJ-MM-TT`, Jahr zwischen 1970 und 2999 und ein Tag, den es wirklich
+   * gibt. `2026-02-30` besteht die Form und wird abgewiesen; eine Uhrzeit und
+   * ein Zeitzonenanhang ebenso.
+   *
+   * ---------------------------------------------------------------------------
+   * Was an dieser Stelle **nicht** dazukommt
+   * ---------------------------------------------------------------------------
+   *
+   * Ein Anhang. A-19.19 bleibt unangetastet, und zwar strukturell: Diese Tür
+   * hat kein Anhangsfeld, und Anhänge hängen als Unterressource unter
+   * `/api/v1/todos/{todoId}/attachments` — außerhalb von `/addin` und für das
+   * Add-in-Token unerreichbar (A-A-21). Der Unterschied ist Art und nicht
+   * Vorsicht (E-074 Punkt 3): Eine Frist ist ein Tag, den die Anwendung
+   * **anzeigt**; ein Anhang ist eine Adresse, die sie auf Klick **öffnet**
+   * (R-21, R-22). Ein `attachments` im Rumpf dieser Anfrage fällt in zod
+   * still weg — gemessen wird das trotzdem, und zwar an der Wirkung
+   * (`proof:addin` Abschnitt 18: null Zeilen in `todo_attachment`).
+   */
+  dueDate: dueDateSchema.default(null),
 });
+
+/**
+ * Die **Leistung** einer Buchung aus dem Aufgabenbereich (A-7.3, A-7.4).
+ *
+ * ---------------------------------------------------------------------------
+ * Gleiche Zahl, andere Bedeutung — und deshalb ein eigener Name (T-134)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-134 stand hier `z.string().max(4000)` als nackte Zahl, zwei Bildschirme
+ * unter `ADDIN_NOTE_MAX_LENGTH`, das denselben Wert trägt. Von außen sah das aus
+ * wie eine Doppelung innerhalb einer Datei; nachgesehen ist es **keine**:
+ *
+ * | | `ADDIN_NOTE_MAX_LENGTH` | diese Zahl |
+ * |---|---|---|
+ * | Feld | der interne Vermerk des Todos (A-7.1) | die Leistung der Buchung (A-7.3) |
+ * | Herkunft des Textes | vorbelegt aus der E-Mail (B-12.3) | getippt im Aufgabenbereich |
+ * | Weg nach draußen | keiner — nie im Export (A-7.2) | **in die Abrechnungsdatei** (A-7.4) |
+ * | Grund für die Grenze | B-12.3 Punkt 3: kein Zitatverlauf | keiner, der aufgeschrieben wäre |
+ *
+ * Die beiden Zahlen zusammenzulegen hieße zu behaupten, ein übernommener
+ * E-Mail-Kontext und eine abgerechnete Leistung seien dieselbe Sache und
+ * änderten sich gemeinsam. Sie sind es nicht: Fiele die Grenze des Vermerks
+ * morgen aus B-12.3-Gründen auf 2000, hätte das mit der Leistung nichts zu tun.
+ * Gleiche Zahl ist nicht gleiche Bedeutung — deshalb steht sie hier mit eigenem
+ * Namen und eigenem Grund, statt in einer gemeinsamen Konstante zu verschwinden.
+ *
+ * ---------------------------------------------------------------------------
+ * Ihr wirklicher Namensvetter ist ein anderer — und er sagt etwas anderes
+ * ---------------------------------------------------------------------------
+ *
+ * Dieselbe Spalte wird über die Hauptanwendung mit `textSchema` gefüllt
+ * (`POST /time-entries`, `PATCH /time-entries/{id}`, der Stopp des Timers), und
+ * `textSchema` nimmt **mehr** an als diese Zeile. Dieselbe Leistung geht also
+ * über den einen Weg durch und über den anderen nicht — dieselbe Bauart wie der
+ * Befund C-03, nur an einem Freitextfeld statt an einem Titel.
+ *
+ * Eine Sackgasse ist es heute nicht: Der Aufgabenbereich belegt dieses Feld
+ * nicht vor (anders als den Vermerk), und er bearbeitet keine bestehende
+ * Buchung — abgewiesen würde nur ein Text, den der Benutzer selbst getippt hat,
+ * und das ist der zulässige Fall (B-4.3). Die Entscheidung, ob die Add-in-Tür
+ * enger bleiben **soll** als die der Hauptanwendung, ist trotzdem eine
+ * Entscheidung und keine Aufräumarbeit: Sie ändert eine Zusage der Schnittstelle
+ * und gehört deshalb nach `decisions.md` und nicht in diese Zeile. T-134 meldet
+ * sie als offene Frage und lässt den engeren Deckel bis dahin stehen — mit
+ * diesem Grund an Ort und Stelle statt ohne einen.
+ */
+export const ADDIN_BOOKING_NOTE_MAX_LENGTH = 4000;
 
 export const bookSchema = z.object({
   startedAt: timestamp,
@@ -209,8 +361,12 @@ export const bookSchema = z.object({
    * Grund wie der Vermerk: Sie ist Freitext des Benutzers, kein Name. Sie
    * stammt zudem als einziges Feld dieser Tür ausschließlich aus dem
    * Eingabefeld des Aufgabenbereichs und nicht aus der E-Mail (T-114 Punkt 4).
+   *
+   * Warum ihr Deckel {@link ADDIN_BOOKING_NOTE_MAX_LENGTH} heißt und nicht
+   * {@link ADDIN_NOTE_MAX_LENGTH}, obwohl beide heute dieselbe Zahl tragen,
+   * steht an der Konstante.
    */
-  note: z.string().max(4000).default(''),
+  note: z.string().max(ADDIN_BOOKING_NOTE_MAX_LENGTH).default(''),
 });
 
 /*
@@ -232,6 +388,54 @@ export const bookSchema = z.object({
 
 export type CreateTodoBody = z.infer<typeof createTodoSchema>;
 export type BookBody = z.infer<typeof bookSchema>;
+
+/**
+ * Die Rumpfschemata dieser Tür, nach `operationId` der OpenAPI-Beschreibung
+ * (O-BB, T-149).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Zuordnung hier steht und nicht im Nachweispfad
+ * ---------------------------------------------------------------------------
+ *
+ * `scripts/proof-openapi.mjs` hält jedes Rumpfschema des Dienstes gegen das,
+ * was die Beschreibung über denselben Rumpf behauptet — Feldnamen,
+ * Pflichtfelder, Obergrenzen. Die vier Türen der Hauptfläche
+ * (`routes/todos.ts`, `structure.ts`, `time.ts`, `export.ts`) führen dafür je
+ * eine Aufstellung `REQUEST_SCHEMAS` **neben ihren Routen**. Der Grund steht
+ * dort ausgeschrieben: Wer eine Route mit Rumpf hinzufügt, sieht die Zuordnung
+ * neben seiner Arbeit und nicht in einem Skript, von dem er nichts weiß.
+ *
+ * Diese Tür war bis T-149 die Ausnahme. Ihre beiden Schemata standen als zwei
+ * einzelne Importe im Nachweispfad selbst, mit dem Vermerk „liegt in fremder
+ * Hoheit und führt kein `REQUEST_SCHEMAS`" — die Hoheitsgrenze aus E-053 war
+ * zur Begründung einer Sonderform geworden. Das ist genau die Stelle, an der
+ * eine neue Add-in-Route mit Rumpf unbemerkt bliebe: Sie entstünde in **dieser**
+ * Datei, und der Eintrag, der sie messbar macht, läge in einer, die ihr
+ * Verfasser nicht anfaßt.
+ *
+ * Die Aufstellung ist deshalb weder eine Bequemlichkeit noch eine Doppelung —
+ * sie ist die Wache. Ein Schlüssel ohne Gegenstück in der Beschreibung und
+ * eine beschriebene Route ohne Schlüssel machen den Lauf rot.
+ *
+ * **Wer sie liest.** `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 18
+ * hält diese Aufstellung gegen den Add-in-Abschnitt der Beschreibung, in
+ * beiden Richtungen, und prüft dabei ausdrücklich, dass die Einträge
+ * **dieselben** Objekte sind, die die Route benutzt.
+ *
+ * `apps/local-api/scripts/proof-openapi.mjs` führte daneben eine Weile zwei
+ * Einzelimporte derselben beiden Schemata, mit einem Vermerk („liegen in
+ * fremder Hoheit und führen kein `REQUEST_SCHEMAS`"), der seit T-149 nicht
+ * mehr stimmte. `scripts/` gehört domain-dev (E-053); der Austausch war als
+ * Abweichung gemeldet (O-CE) und ist mit T-159 geschehen — dort steht jetzt
+ * `...ADDIN_SCHEMAS` aus **dieser** Datei. Beide Nachweispfade lesen damit
+ * dieselbe Aufstellung, und die Wache oben hängt trotzdem an keiner fremden
+ * Datei: Sie wäre auch dann rot, wenn `proof:openapi` seine Einzelimporte
+ * behalten hätte. (Nachgemessen in T-239.)
+ */
+export const REQUEST_SCHEMAS = Object.freeze({
+  createAddinTodo: createTodoSchema,
+  createAddinTimeEntry: bookSchema,
+});
 
 export interface FieldIssue {
   readonly field: string;

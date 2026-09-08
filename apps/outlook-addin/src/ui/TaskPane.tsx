@@ -9,10 +9,17 @@
  *   Call-Nummer     erkannt oder nicht, mit Herkunft — und immer änderbar (B-4.3 Punkt 5)
  *   Angebot         nur bei plausibler Nummer und nur als Angebot (A-10.9, R-15)
  *   Titel           Vorschlag aus dem Betreff
+ *   Frist           eingetragen, nie erkannt (A-19.21, E-074 Punkt 4)
  *   Tags            über die API, mit Suche über vier und mehr Ebenen (A-10.4)
  *   Vermerk         intern, ausdrücklich beschriftet (A-7.2, B-12.3)
  *   Anlegen         die Hauptaktion
  * ```
+ *
+ * Die **Frist** ist seit T-149 dabei und ist das einzige Feld dieser Liste,
+ * das weder vorbelegt noch aus der E-Mail gelesen wird. Sie steht damit auf
+ * der anderen Seite derselben Grenze wie ein **Anhang**, den es hier
+ * ausdrücklich nicht gibt (A-19.19): Ein Tag wird angezeigt, eine Adresse wird
+ * geöffnet (E-074 Punkt 3, R-21, R-22).
  *
  * Die Beschriftung der beiden Notizfelder ist dieselbe wie in der
  * Hauptanwendung (E-016, R-08): **Vermerk** bleibt intern, **Leistung** geht in
@@ -23,18 +30,32 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 /*
- * Der Satz über die Bewegung kommt seit T-092 aus der Domäne und nicht mehr aus
- * dem Add-in (E-058 Absatz 2). `PoolMovement` ist derselbe Typ, den der Dienst
+ * Zwei Sätze aus der Domäne, und beide aus demselben Grund dort.
+ *
+ * Der Satz über die Bewegung kommt seit T-092 von dort und nicht mehr aus dem
+ * Add-in (E-058 Absatz 2). `PoolMovement` ist derselbe Typ, den der Dienst
  * ausrechnet und den `poolMovementSentence` liest — eine Zweitschrift im
  * Aufgabenbereich wäre der Anfang zweier verschiedener Sätze für dieselbe
  * Handlung.
+ *
+ * `CALL_NUMBER_INPUT_MESSAGE` kommt seit T-190 von dort (O-GC). Er stand
+ * zweimal — hier als `INPUT_REJECTION_LABEL` und an der Tür des Dienstes als
+ * `CALL_NUMBER_INPUT_TEXT` —, und zwei der fünf Fassungen waren bereits
+ * auseinandergelaufen. Dieselbe Aussage über dieselbe Eingabe kommt aus
+ * derselben Quelle; welche der beiden Fassungen gilt, steht in
+ * `packages/domain/src/call-number.ts`.
  */
-import { poolMovementSentence, type PoolMovement } from '@takt/domain';
+import { CALL_NUMBER_INPUT_MESSAGE, poolMovementSentence, type PoolMovement } from '@takt/domain';
 
 import { DURATION_PRESETS_MINUTES, MAX_DURATION_MINUTES } from '../config.ts';
-import { INPUT_REJECTION_LABEL, REJECTION_LABEL } from '../callnumber/labels.ts';
+import {
+  CALL_NUMBER_BY_HAND,
+  NO_CALL_NUMBER_FOUND,
+  REJECTION_LABEL,
+} from '../callnumber/labels.ts';
 import type { Detection } from '../callnumber/detect.ts';
 import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
+import { dueDateForRequest, readDueDate } from '../duedate/entry.ts';
 import {
   bookingOutcome,
   reopenOutcome,
@@ -46,6 +67,7 @@ import type { ApiClient, ApiFailure } from '../api/client.ts';
 import type { AddinContextDto } from '../api/types.ts';
 import { cutToCharacterBoundary } from '../text/cut.ts';
 import { visibleText } from '../text/hidden.ts';
+import { createTodoGate } from './create-gate.ts';
 import { Button, Callout, Field, Foreign, Section, Skeleton } from './Primitives.tsx';
 import { DuplicateOffer } from './DuplicateOffer.tsx';
 import { TagPicker } from './TagPicker.tsx';
@@ -125,6 +147,14 @@ export function TaskPane({
   /** Tagnamen, die es in Takt noch nicht gibt (T-061). Gehen als `tagNames` mit. */
   const [newTagNames, setNewTagNames] = useState<readonly string[]>([]);
   const [note, setNote] = useState('');
+  /**
+   * Die **Frist** (A-19.21, E-074, T-149).
+   *
+   * Beginnt leer und bleibt es, solange der Benutzer nichts einträgt. Es gibt
+   * hier — anders als bei `title` und `callNumber` — **keinen** Vorschlag aus
+   * der E-Mail und kein `useEffect`, das etwas übernähme (E-074 Punkt 4).
+   */
+  const [dueDate, setDueDate] = useState('');
   const [offers, setOffers] = useState<readonly OfferDescription[]>([]);
   const [lookupNote, setLookupNote] = useState<string | null>(null);
   const [booking, setBooking] = useState<OfferDescription | null>(null);
@@ -238,8 +268,43 @@ export function TaskPane({
   const callNumberProblem = useMemo((): string | null => {
     if (callNumber.trim().length === 0) return null;
     const decision = decideLookup(callNumber);
-    return decision.kind === 'lookup' ? null : INPUT_REJECTION_LABEL[decision.reason];
+    return decision.kind === 'lookup' ? null : CALL_NUMBER_INPUT_MESSAGE[decision.reason];
   }, [callNumber]);
+
+  /**
+   * Steht im Fristfeld ein Tag, den es gibt? (A-19.21, E-074 Punkt 4)
+   *
+   * Derselbe Aufbau wie bei {@link callNumberProblem} eine Zeile darüber und
+   * aus demselben Grund: **Leer ist kein Problem** — ein Todo ohne Frist ist
+   * der Regelfall (A-19.1). Gefragt wird nur nach einem Wert, der da ist und
+   * trotzdem kein Tag ist.
+   *
+   * Die Entscheidung fällt in `duedate/entry.ts` gegen `isCalendarDay` aus
+   * `@takt/domain`, also gegen dieselbe Regel, die an der Tür des Dienstes
+   * steht. Der Hinweis ersetzt die Prüfung dort nicht; er steht davor, damit
+   * der Benutzer nicht erst nach dem Anlegen erfährt, dass sein Todo nicht
+   * entstanden ist.
+   */
+  const dueEntry = useMemo(() => readDueDate(dueDate), [dueDate]);
+
+  /**
+   * Warum „Todo anlegen" gesperrt ist — und ob es das überhaupt ist (V-11).
+   *
+   * Bis T-169 stand hier ein `disabled`-Ausdruck mit vier Bedingungen und
+   * darunter kein Wort dazu. Beides kommt jetzt aus **einem** Aufruf: Ein
+   * gesperrter Knopf ohne Grund und ein Grund ohne Sperre lassen sich so nicht
+   * mehr getrennt bauen. Die Begründung steht in `create-gate.ts`.
+   */
+  const gate = useMemo(
+    () =>
+      createTodoGate({
+        title,
+        connection: load.kind,
+        callNumberProblem,
+        dueDateInvalid: dueEntry.kind === 'invalid',
+      }),
+    [title, load.kind, callNumberProblem, dueEntry.kind],
+  );
 
   if (!hasToken) {
     return (
@@ -253,8 +318,15 @@ export function TaskPane({
             </Button>
           }
         >
-          Takt und das Add-in kennen sich noch nicht. Das Token findest du in Takt unter
-          Einstellungen; von dort wird es einmalig hier eingetragen.
+          {/*
+            T-182, E-078 Punkt 1: Hier stand davor „Takt und das Add-in kennen
+            sich noch nicht." — dieselbe Aussage wie die Überschrift des
+            Bereichs zwei Zeilen darüber („Noch nicht verbunden") und wie die
+            Überschrift dieser Fläche („Das Token fehlt."). Dreimal derselbe
+            Zustand, bevor der erste Satz sagt, was zu tun ist.
+          */}
+          Das Token finden Sie in Takt unter Einstellungen; von dort wird es einmalig hier
+          eingetragen.
         </Callout>
       </Section>
     );
@@ -278,6 +350,11 @@ export function TaskPane({
       // derselben Transaktion, in der das Todo entsteht.
       tagNames: newTagNames,
       note,
+      // A-19.21: der Tag aus dem Feld, geprüft und sonst nichts. Kein Wert
+      // aus dem Betreff, kein aus einer Nachricht gerechnetes Datum
+      // (E-074 Punkt 4). Ein unbrauchbarer Wert kommt hier nicht an — der
+      // Knopf ist dann gesperrt.
+      dueDate: dueDateForRequest(dueEntry),
     });
 
     setBusy(false);
@@ -394,16 +471,18 @@ export function TaskPane({
           hint="Sie ist die Standardquelle für das Exportfeld „Call“ und darf leer bleiben."
           error={callNumberProblem ?? undefined}
         >
-          <input
-            id="call"
-            className="input mono"
-            value={callNumber}
-            spellCheck={false}
-            autoComplete="off"
-            onChange={(event) => {
-              setCallNumber(event.target.value);
-            }}
-          />
+          {(aria) => (
+            <input
+              {...aria}
+              className="input mono"
+              value={callNumber}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => {
+                setCallNumber(event.target.value);
+              }}
+            />
+          )}
         </Field>
         {lookupNote !== null ? (
           <Callout tone="info">{lookupNote}</Callout>
@@ -423,68 +502,176 @@ export function TaskPane({
 
           <Section title="Neues Todo">
             <Field label="Titel" htmlFor="title">
-              <input
-                id="title"
-                className="input"
-                value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                }}
-              />
-            </Field>
-
-            <Field
-              label="Tags"
-              htmlFor="tags"
-              hint="Die Standard-Tags aus den Einstellungen kommen beim Anlegen automatisch dazu. Ein Name, den es noch nicht gibt, wird zusammen mit dem Todo angelegt."
-            >
-              {load.kind === 'loading' ? (
-                <>
-                  <p className="pane-loading">Tags werden geladen …</p>
-                  <Skeleton lines={4} />
-                </>
-              ) : null}
-              {load.kind === 'failed' ? (
-                <Callout
-                  tone="danger"
-                  title={load.failure.message}
-                  action={
-                    load.failure.kind === 'unauthorized' || load.failure.kind === 'origin_rejected' ? (
-                      <Button variant="secondary" onClick={onOpenSettings}>
-                        Einstellungen öffnen
-                      </Button>
-                    ) : null
-                  }
-                >
-                  Ohne Verbindung lassen sich keine Tags wählen. Ein Todo entsteht so nicht.
-                </Callout>
-              ) : null}
-              {load.kind === 'ready' ? (
-                <TagPicker
-                  tree={load.context.tagTree}
-                  selected={selectedTags}
-                  defaultTagIds={defaultTagIds}
-                  onChange={setSelectedTags}
-                  newNames={newTagNames}
-                  onNewNamesChange={setNewTagNames}
+              {(aria) => (
+                <input
+                  {...aria}
+                  className="input"
+                  value={title}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                  }}
                 />
-              ) : null}
+              )}
             </Field>
 
+            {/*
+              Die **Frist** (A-19.21, A-19.2, E-074). Sie heißt hier
+              ausschließlich so — nicht „Fälligkeitsdatum", nicht „fällig am",
+              nicht „Deadline". Derselbe Wortlaut wie im Änderungsdialog der
+              Hauptanwendung (`TodoFormDialog.tsx`), weil es dasselbe Feld ist.
+
+              `type="date"` und nicht `datetime-local`: Die Frist ist ein Tag,
+              keine Uhrzeit (E-070 Punkt 1). Das Feld liefert von sich aus
+              `JJJJ-MM-TT` — das ist Bedienkomfort und **keine** Kontrolle.
+              Geprüft wird der Wert von `readDueDate` gegen `@takt/domain` und
+              danach noch einmal an der Tür des Dienstes (A-A-19).
+
+              Sie steht **unter** dem Titel und **über** den Tags: Titel und
+              Frist sind Angaben über das Todo, Tags und Vermerk ordnen es ein.
+              Vorbelegt ist sie nicht, und erkannt wird sie nicht — als
+              einziges Feld dieses Bereichs (E-074 Punkt 4).
+
+              Und weil sie das einzige ist, muss der Hinweis es **sagen**
+              (V-03/V-04 aus T-154, gebaut in T-158). Alle drei Felder darüber
+              sind gefüllt, wenn der Bereich aufgeht: Call-Nummer erkannt,
+              Titel vorgeschlagen, Angebot angeboten. Ein leeres Feld am Ende
+              einer Kette gefüllter Felder liest sich als „nichts gefunden" —
+              hier heißt es „wurde nicht gesucht". Der Riegel aus E-074 Punkt 4
+              ist eine Abwesenheit, und eine Abwesenheit, die niemand
+              ausspricht, ist für den Benutzer keine.
+
+              Deshalb steht diese Aussage **zuerst** und nicht an dritter von
+              vier Stellen, und deshalb ist der Satz „ändert nichts an Pools,
+              Spalten, Buchungen oder Export" hier gestrichen: Er stammt aus
+              `TodoFormDialog.tsx` der Hauptanwendung, wo es Pools, Spalten und
+              eine Exportansicht **gibt**. In einem Aufgabenbereich ohne all
+              das beantwortet er keine Sorge — er schiebt nur den tragenden
+              Satz in die Mitte. „Wie in der Hauptanwendung" war an dieser
+              Stelle das falsche Maß.
+            */}
+            <Field
+              label="Frist"
+              htmlFor="due"
+              hint="Takt sucht in der E-Mail nicht nach einer Frist — Sie tragen sie selbst ein. Ein Tag, keine Uhrzeit; leer lassen heißt: keine Frist."
+              error={dueEntry.kind === 'invalid' ? dueEntry.message : undefined}
+            >
+              {(aria) => (
+                <input
+                  {...aria}
+                  className="input"
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => {
+                    setDueDate(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+
+            {/*
+              **Ein Feld ohne Feld ist kein Feld** (X-02 aus T-165).
+
+              Bis T-169 stand hier in allen drei Zuständen ein `Field`. In
+              „lädt" und „nicht verbunden" zeichnete es damit eine Beschriftung
+              mit `htmlFor="tags"` und einen Hinweis mit `id="tags-hint"` —
+              und es gab kein Bedienelement, das `id="tags"` getragen oder auf
+              den Hinweis verwiesen hätte. Kein Verstoß gegen ein
+              Erfolgskriterium (es gibt nichts, was einen Namen bräuchte), aber
+              genau die Bauart, aus der V-03 entstanden ist: eine Beschriftung,
+              die niemanden beschriftet.
+
+              Deshalb trägt nur der Zustand `ready` ein `Field`. Die beiden
+              anderen tragen eine **Überschrift** in derselben Gestalt und
+              darunter das, was es dort zu sehen gibt. Eine Überschrift und
+              kein `<h3>`: Die Fläche wechselt in denselben Kasten zurück,
+              sobald der Baum da ist, und eine Gliederungsebene, die es in zwei
+              von drei Zuständen gibt, wäre die nächste Ungleichheit.
+
+              T-158 bleibt unangetastet: Das Bedienelement dieses Feldes ist
+              das Suchfeld **im** Tag-Auswähler, und beide Kennungen kommen
+              weiterhin von `Field` und gehen bis an das Suchfeld durch.
+            */}
+            {load.kind === 'ready' ? (
+              <Field
+                label="Tags"
+                htmlFor="tags"
+                hint="Die Standard-Tags aus den Einstellungen kommen beim Anlegen automatisch dazu. Ein Name, den es noch nicht gibt, wird zusammen mit dem Todo angelegt."
+              >
+                {(aria) => (
+                  <TagPicker
+                    aria={aria}
+                    tree={load.context.tagTree}
+                    selected={selectedTags}
+                    defaultTagIds={defaultTagIds}
+                    onChange={setSelectedTags}
+                    newNames={newTagNames}
+                    onNewNamesChange={setNewTagNames}
+                  />
+                )}
+              </Field>
+            ) : (
+              <div className="field">
+                <p className="field__heading">Tags</p>
+                {load.kind === 'loading' ? (
+                  <>
+                    <p className="pane-loading">Tags werden geladen …</p>
+                    <Skeleton lines={4} />
+                  </>
+                ) : (
+                  <Callout
+                    tone="danger"
+                    title={load.failure.message}
+                    action={
+                      load.failure.kind === 'unauthorized' ||
+                      load.failure.kind === 'origin_rejected' ? (
+                        <Button variant="secondary" onClick={onOpenSettings}>
+                          Einstellungen öffnen
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    Ohne Verbindung lassen sich keine Tags wählen. Ein Todo entsteht so nicht.
+                  </Callout>
+                )}
+              </div>
+            )}
+
+            {/*
+              ST-A-08 (Z-45 aus T-195) — und dieselbe Freigabe ist F-2 aus
+              T-165, seit damals unumgesetzt. Gefallen ist „Interner Vermerk des
+              Todos.": reine Verdopplung der Beschriftung darüber, die dasselbe
+              Wort und denselben Ort schon sagt.
+
+              Der Hinweis beginnt danach mit „Er". Der Bezug ist die
+              Beschriftung „Vermerk (bleibt in Takt)" — `fieldParts` gibt sie als
+              **Namen** und den Hinweis als **Beschreibung** aus, in dieser
+              Reihenfolge, sichtbar wie vorgelesen. Kein Bruch.
+
+              Der bleibende Satz ist ab jetzt **gesperrt** (SP-A-01): „bleibt in
+              Takt" nennt den Ort, „geht nicht in die Abrechnung" nennt das Ziel,
+              das der Text **nicht** erreicht — und das ist die Aussage, um
+              derentwillen A-7.2 und R-08 bestehen. Fällt auch er, steht die
+              Grenze nur noch in einem Klammerzusatz.
+
+              Sein Zwilling ist der Hinweis am Feld „Leistung" weiter unten. Die
+              beiden gehören zusammen; warum, steht dort.
+            */}
             <Field
               label="Vermerk (bleibt in Takt)"
               htmlFor="note"
-              hint="Interner Vermerk des Todos. Er geht nicht in die Abrechnung."
+              hint="Er geht nicht in die Abrechnung."
             >
-              <textarea
-                id="note"
-                className="input textarea"
-                rows={5}
-                value={note}
-                onChange={(event) => {
-                  setNote(event.target.value);
-                }}
-              />
+              {(aria) => (
+                <textarea
+                  {...aria}
+                  className="input textarea"
+                  rows={5}
+                  value={note}
+                  onChange={(event) => {
+                    setNote(event.target.value);
+                  }}
+                />
+              )}
             </Field>
 
             <Button
@@ -500,6 +687,16 @@ export function TaskPane({
           {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
 
           <div className="pane-actions">
+            {/*
+              V-11 aus T-154: Der Knopf hatte vier Sperrgründe und nannte
+              keinen. Der Satz steht **über** ihm und nicht an ihm: Ein
+              gesperrter Knopf lässt sich nicht anklicken und mit der Tastatur
+              nicht ansteuern — was ihn hält, muss auf dem Weg dorthin gelesen
+              werden. Eine Meldefläche ist er nicht: Der Satz erscheint,
+              solange der Grund besteht, und geht mit ihm weg (E-078 Punkt 6,
+              Zustandsbindung).
+            */}
+            {gate.reason !== null ? <p className="pane-note">{gate.reason}</p> : null}
             <Button
               variant="primary"
               full
@@ -507,9 +704,14 @@ export function TaskPane({
               // Ein Todo mit unbrauchbarer Call-Nummer entsteht gar nicht erst
               // (T-041, R-15). Der Dienst weist es ebenfalls ab — hier wird nur
               // der Weg dorthin gespart, nicht die Prüfung ersetzt.
-              disabled={
-                title.trim().length === 0 || load.kind !== 'ready' || callNumberProblem !== null
-              }
+              // Eine unbrauchbare Frist sperrt ebenso (A-19.21, T-149). Sie
+              // stillschweigend wegzulassen wäre der teurere Ausgang: Der
+              // Benutzer hat sie eingetragen, und ein Todo, das ohne sie
+              // entsteht, sieht nach Erfolg aus.
+              // Welche Gründe das im Einzelnen sind, steht seit T-169 in
+              // `create-gate.ts` — zusammen mit dem Satz darüber, damit nicht
+              // eines von beidem ohne das andere geändert wird.
+              disabled={gate.blocked}
               onClick={() => {
                 void submitCreate();
               }}
@@ -547,49 +749,101 @@ export function TaskPane({
             <p className="offer__meta">{booking.summary}</p>
           </div>
 
+          {/*
+            V-08 aus T-154: Wer eine Frist eingetragen hat und danach auf ein
+            vorhandenes Todo wechselt, verliert die Anlegen-Fläche und mit ihr
+            das Fristfeld. Sachlich ist das richtig — A-19.21 nennt das
+            **Anlegen**, und ein fremdes Todo behält seine eigene Frist —, aber
+            es ist eine bewusste Eingabe, die ohne ein Wort verfiele.
+
+            Nur die Auskunft: kein zweites Feld, kein Übertragen, keine
+            Rückfrage. Der Wert bleibt im Zustand stehen und ist nach
+            „Abbrechen" wieder da; nur gebucht wird er nicht.
+
+            Sie erscheint ausschließlich, wenn wirklich etwas im Feld steht
+            (E-078 Punkt 6) — auch bei einer unbrauchbaren Eingabe, denn auch
+            die ist eingetragen worden.
+          */}
+          {dueEntry.kind !== 'none' ? (
+            <p className="pane-note">
+              Die eingetragene Frist gilt nur für ein neues Todo. Dieses Todo behält seine eigene.
+            </p>
+          ) : null}
+
           <Field label="Dauer" htmlFor="minutes" hint="Gerundet wird erst beim Export, auf die Tagessumme.">
-            <div className="duration">
-              {DURATION_PRESETS_MINUTES.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  className={preset === minutes ? 'duration__chip duration__chip--on' : 'duration__chip'}
-                  onClick={() => {
-                    setMinutes(preset);
+            {(aria) => (
+              <div className="duration">
+                {DURATION_PRESETS_MINUTES.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={preset === minutes ? 'duration__chip duration__chip--on' : 'duration__chip'}
+                    onClick={() => {
+                      setMinutes(preset);
+                    }}
+                  >
+                    {preset} min
+                  </button>
+                ))}
+                {/*
+                  Die Attribute gehen an das Eingabefeld und nicht an die
+                  Knopfreihe davor: Die Voreinstellungen sind Abkürzungen auf
+                  denselben Wert, das Feld ist das Bedienelement dieses Feldes.
+                */}
+                <input
+                  {...aria}
+                  className="input input--minutes"
+                  type="number"
+                  min={1}
+                  max={MAX_DURATION_MINUTES}
+                  value={minutes}
+                  onChange={(event) => {
+                    const parsed = Number.parseInt(event.target.value, 10);
+                    setMinutes(Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_DURATION_MINUTES) : 1);
                   }}
-                >
-                  {preset} min
-                </button>
-              ))}
-              <input
-                id="minutes"
-                className="input input--minutes"
-                type="number"
-                min={1}
-                max={MAX_DURATION_MINUTES}
-                value={minutes}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  setMinutes(Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_DURATION_MINUTES) : 1);
-                }}
-              />
-            </div>
+                />
+              </div>
+            )}
           </Field>
 
+          {/*
+            Der Zwilling zu ST-A-08, und er fällt **in demselben Handgriff**.
+
+            T-165 hat in einer Tabelle zwei Sätze freigegeben: F-2 am Vermerk
+            („Interner Vermerk des Todos.") und F-3 hier („Dieser Text wird
+            exportiert."). Beide sind dieselbe Verdopplung — der Hinweis
+            wiederholt die Klammer der Beschriftung darüber, hier „(geht in die
+            Abrechnung)". Nur F-2 ist später in eine Streichliste geraten; F-3
+            wurde in `textbestand-aufgabenbereich.md` als Teil einer gesperrten
+            Zeile geführt. **Diese Halbierung ist der Grund, aus dem beide hier
+            zusammen fallen** (Z-45 aus T-195, Auflage 1): Eine Freigabe zur
+            Hälfte auszuführen und die andere Hälfte in eine Sperre
+            umzuschreiben, steht nirgends als Rücknahme — es sieht danach nur so
+            aus, als wäre beides in Ordnung.
+
+            **Was hier nicht fällt:** „Text aus der E-Mail gehört in den Vermerk,
+            nicht hierher." Das ist **SP-A-05** (B-12.3, R-08) und bleibt
+            zeichengleich — der Satz ist die einzige Stelle im Aufgabenbereich,
+            die verhindert, dass Text aus einer fremden E-Mail in eine Rechnung
+            wandert. Er trägt nach der Kürzung allein; „exportiert" steht
+            sichtbar in der Beschriftung darüber.
+          */}
           <Field
             label="Leistung (geht in die Abrechnung)"
             htmlFor="service"
-            hint="Dieser Text wird exportiert. Text aus der E-Mail gehört in den Vermerk, nicht hierher."
+            hint="Text aus der E-Mail gehört in den Vermerk, nicht hierher."
           >
-            <textarea
-              id="service"
-              className="input textarea"
-              rows={3}
-              value={service}
-              onChange={(event) => {
-                setService(event.target.value);
-              }}
-            />
+            {(aria) => (
+              <textarea
+                {...aria}
+                className="input textarea"
+                rows={3}
+                value={service}
+                onChange={(event) => {
+                  setService(event.target.value);
+                }}
+              />
+            )}
           </Field>
 
           {/*
@@ -734,7 +988,7 @@ function Failure({
           ))}
         </ul>
       ) : (
-        'Die Eingaben bleiben stehen. Du kannst es erneut versuchen.'
+        'Die Eingaben bleiben stehen. Ein neuer Versuch ist möglich.'
       )}
     </Callout>
   );
@@ -924,16 +1178,37 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
 }
 
 interface DetectionLine {
-  readonly help: string;
+  /**
+   * Die Zeile unter der Überschrift „Call-Nummer" — oder **nichts** (T-182).
+   *
+   * `undefined`, sobald unmittelbar darunter eine Hinweisfläche steht. Bis
+   * T-182 trug diese Zeile in **vier von sechs** Fällen dieselbe Aussage wie
+   * die Fläche zwei Zeilen tiefer, zweimal davon nahezu Wort für Wort („Die
+   * Erkennung wurde abgebrochen." über „Erkennung abgebrochen") und einmal
+   * zeichengleich (`REJECTION_LABEL[reason]` stand als Zeile **und** im
+   * Rumpf der Fläche). Das ist der Fall D aus `docs/design/textbestand.md`
+   * Abschnitt 2, den E-078 Punkt 1 ohne Rückfrage zum Streichen freigibt —
+   * und in einem 320 bis 450 Pixel breiten Bereich stehen beide immer im
+   * selben Blickfeld (AB-1).
+   *
+   * Gefallen ist die **Kopie**, nicht das Original: Die Fläche darunter ist
+   * die reichere Auskunft — sie trägt den Rohwert, die Meldung der
+   * Laufzeitumgebung und den Ausweg. Wo **keine** Fläche steht (erkannt,
+   * nichts gefunden, wird gesucht), trägt diese Zeile die Auskunft allein und
+   * bleibt.
+   */
+  readonly help: string | undefined;
   readonly callout: React.ReactNode;
 }
 
 /**
- * Sagt in einem Satz, was mit der Erkennung passiert ist (A-10.8).
+ * Sagt **einmal**, was mit der Erkennung passiert ist (A-10.8).
  *
- * Jeder Fall bekommt einen eigenen Text. „Nicht erkannt" ist dabei **kein**
- * Fehler, sondern der Normalfall bei einer E-Mail ohne Vorgang — deshalb steht
- * dort keine Fehlerfläche, sondern nur ein Hinweis.
+ * Jeder Fall bekommt einen eigenen Text, und jeder Fall sagt ihn an genau
+ * einer Stelle: entweder als Zeile unter der Überschrift oder als Fläche
+ * darunter, nie als beides. „Nicht erkannt" ist dabei **kein** Fehler,
+ * sondern der Normalfall bei einer E-Mail ohne Vorgang — deshalb steht dort
+ * keine Fehlerfläche, sondern nur die Zeile.
  */
 function describeDetection(detection: Detection | null): DetectionLine {
   if (detection === null) {
@@ -950,13 +1225,24 @@ function describeDetection(detection: Detection | null): DetectionLine {
         callout: null,
       };
     case 'no_match':
-      return {
-        help: 'Keine Call-Nummer im Text gefunden — du kannst sie eintragen.',
-        callout: null,
-      };
+      /*
+       * Derselbe Satz wie `REJECTION_LABEL.empty`, und seit T-169 auch
+       * dieselbe Zeichenkette (E-078 Punkt 1). Er stand zweimal wörtlich
+       * gleich da — zwei Fassungen einer Aussage, die beim nächsten
+       * Textdurchgang auseinandergelaufen wären.
+       */
+      return { help: NO_CALL_NUMBER_FOUND, callout: null };
     case 'implausible':
       return {
-        help: REJECTION_LABEL[detection.reason],
+        /*
+         * T-182: Hier stand `REJECTION_LABEL[detection.reason]` — **derselbe
+         * Ausdruck**, der zwei Zeilen tiefer den Rumpf der Fläche beschließt.
+         * Der Ablehnungsgrund stand damit zeichengleich zweimal übereinander.
+         * Er bleibt dort, wo er zusammen mit dem Rohwert steht: „Der Ausdruck
+         * hat X geliefert. <Grund>" ist ein Satz, „<Grund>" allein darüber war
+         * seine Hälfte.
+         */
+        help: undefined,
         callout: (
           <Callout tone="warning" title="Gefunden, aber nicht übernommen">
             {/*
@@ -973,16 +1259,25 @@ function describeDetection(detection: Detection | null): DetectionLine {
       };
     case 'pattern_invalid':
       return {
-        help: 'Der Ausdruck in den Einstellungen ist nicht verwendbar.',
+        /*
+         * T-182: Die Zeile lautete „Der Ausdruck in den Einstellungen ist
+         * nicht verwendbar." und die Überschrift der Fläche „Der Ausdruck
+         * lässt sich nicht verwenden" — dieselbe Aussage in zwei Fassungen,
+         * übereinander. Der **Ort** („in den Einstellungen") stand nur in der
+         * Zeile und ist die einzige Auskunft, die der Rumpf nicht trägt; er
+         * ist deshalb in die Überschrift gewandert und nicht mitgestrichen.
+         */
+        help: undefined,
         callout: (
-          <Callout tone="warning" title="Der Ausdruck lässt sich nicht verwenden">
-            {detection.message} Die Call-Nummer lässt sich hier von Hand eintragen.
+          <Callout tone="warning" title="Der Ausdruck in den Einstellungen lässt sich nicht verwenden">
+            {detection.message} {CALL_NUMBER_BY_HAND}
           </Callout>
         ),
       };
     case 'timeout':
       return {
-        help: 'Die Erkennung wurde abgebrochen.',
+        /* T-182: „Die Erkennung wurde abgebrochen." über „Erkennung abgebrochen". */
+        help: undefined,
         callout: (
           <Callout tone="warning" title="Erkennung abgebrochen">
             Der eingestellte Ausdruck hat für diese E-Mail zu lange gerechnet und wurde nach 100
@@ -993,16 +1288,22 @@ function describeDetection(detection: Detection | null): DetectionLine {
       };
     case 'unavailable':
       return {
-        help: 'Automatische Erkennung steht hier nicht zur Verfügung.',
+        /* T-182: „Automatische Erkennung steht hier nicht zur Verfügung." über „Keine automatische Erkennung". */
+        help: undefined,
         callout: (
           <Callout tone="info" title="Keine automatische Erkennung">
             Die Auswertung läuft aus Sicherheitsgründen in einem eigenen Faden, und der steht in
-            dieser Umgebung nicht zur Verfügung. Die Call-Nummer lässt sich von Hand eintragen.
+            dieser Umgebung nicht zur Verfügung. {CALL_NUMBER_BY_HAND}
           </Callout>
         ),
       };
     default:
-      return { help: '', callout: null };
+      /*
+       * `undefined` und nicht `''` (T-182): Ein leerer Text ist für `Section`
+       * ein Text, und sie baute ihm einen leeren Absatz mit dem Abstand einer
+       * Zeile. Dieselbe Unterscheidung, die `fieldParts` seit T-158 trifft.
+       */
+      return { help: undefined, callout: null };
   }
 }
 

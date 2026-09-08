@@ -35,7 +35,9 @@ import {
   createTodo,
   deletePoolByName,
   deleteTag,
+  deleteTimeEntry,
   deleteTodo,
+  listTimeEntriesByTodo,
   startTimer,
   touchTimerHeartbeat,
 } from './support/api';
@@ -73,9 +75,15 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
 
       // Eine Leistung eintragen, damit die Tagesgruppe abrechenbar ist und der
       // Toast den einfachen Erfolgstitel „Zeit gebucht.“ trägt statt der
-      // Warnung „aber noch nicht abrechenbar“ (`TimerContext.tsx`,
-      // `reportStopped`) — die ist nicht Gegenstand dieses Falls. Auf den
-      // Dialog gescoped: Das Feld heißt außerhalb davon „Leistung" nicht.
+      // Warnungsvariante, die `reportStopped` (`TimerContext.tsx`, Zweig
+      // `insight.blockedReason !== null`) für eine noch nicht abrechenbare
+      // Tagesgruppe zeigt — jener Zweig ist nicht Gegenstand dieses Falls und
+      // wird hier nicht geprüft. Bewusst über die Bedingung benannt, nicht
+      // über ihren heutigen Wortlaut im Zitat: Diese Datei prüft ihn nirgends
+      // selbst, und ein Zitat wäre bei der nächsten Titeländerung dort
+      // still falsch, statt rot zu werden (dieselbe Klasse Befund wie O-IW/
+      // O-KB, `docs/testplan.md` Abschnitt 30/31). Auf den Dialog gescoped:
+      // Das Feld heißt außerhalb davon „Leistung" nicht.
       await dialog.getByLabel('Leistung').fill('E2E-Stopp-Leistungstext');
 
       const [stopResponse] = await Promise.all([
@@ -407,6 +415,88 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
     } finally {
       await deleteTodo(todo.id).catch(() => undefined);
       await deleteTag(tag.id).catch(() => undefined);
+    }
+  });
+});
+
+/**
+ * Zusatz zu O-GZ (T-192) — die **Bauart** der Meldefläche im Leistungsfeld,
+ * am natürlichen Ort aus dem Bericht zu T-186: „`toHaveCount(1)` und
+ * `toBeEmpty()` vorher, Marke am Knoten, derselbe Knoten nachher —
+ * `field-live-region-announcement.spec.ts` ist die Vorlage; der natürliche
+ * Ort ist der Timer-Stopp, weil dort der Leistungstext entsteht."
+ *
+ * **Befund dieser Aufgabe, nicht behoben (`apps/web/**` gehört
+ * frontend-dev):** Die Leistung ist an dieser Stelle frei
+ * (`BILLING_NOTE_MAY_BE_EMPTY`, `TimerContext.tsx`), und `NoteField.error`
+ * wird für sie im echten Produkt nirgends gesetzt — weder hier noch bei
+ * „Zeit von Hand erfassen" (`BookingDialogs.tsx`) reicht ein Aufrufer
+ * `error=` an ein `NoteField` herein. Einzig die Musterseite
+ * (`apps/web/src/showcase/NotesSection.tsx:135`) zeigt den Fehlerzustand fest
+ * verdrahtet, ohne eigenen Übergang, und ist damit für den vollen Bauplan
+ * (Übergang von leer zu befüllt) ungeeignet.
+ *
+ * Der volle Bauplan — Marke, derselbe Knoten trägt danach Text — ließe sich
+ * am Timer-Stopp deshalb nur über einen erfundenen Fehlerweg nachstellen,
+ * den es im Produkt nicht gibt; das würde einen Vorgang prüfen, der nicht
+ * existiert. Gemessen wird deshalb die **erste** Hälfte, an einer real
+ * erreichbaren, dritten Stelle derselben Bauart — neben der Titelmeldung des
+ * Anlegen-Dialogs (Befund O-DA, geprüft in
+ * `field-live-region-announcement.spec.ts`) und der Begründung des
+ * Zurücksetzen-Dialogs (Befund O-GZ, geprüft in
+ * `export-audit-and-locks.spec.ts`). Bewusst über die Befundkennung und die
+ * Datei benannt, nicht über den heutigen Dialogtitel im Wortlaut: Ein Zitat
+ * des Titels wäre hier unangebunden — diese Datei prüft ihn nicht selbst —
+ * und würde bei der nächsten Titeländerung still falsch, statt mit den
+ * jeweils dort stehenden Prüffällen rot zu werden (dieselbe Klasse Befund
+ * wie in T-224, „ein Kommentar, der etwas anderes begründet, als
+ * danebensteht"). Die Fläche mit `role="alert"` existiert bereits, bevor der
+ * Dialog überhaupt etwas zu melden hätte — der Defekt „Live-Region entsteht
+ * mit ihrem Inhalt" ist an dieser Stelle also mindestens strukturell
+ * ausgeschlossen, auch ohne dass ein Übergang gezeigt werden kann. Siehe
+ * Bericht.
+ */
+test.describe('Bauart der Meldefläche im Leistungsfeld beim Timer-Stopp (Zusatz zu O-GZ, Bauplan aus T-186)', () => {
+  test('`.note__live[role="alert"]` steht von Anfang an im Baum, leer, bevor der Dialog etwas zu melden hätte', async ({
+    page,
+  }) => {
+    await cleanupAnyTimer();
+
+    const run = Date.now();
+    const todo = await createTodo({ title: `E2E-STOPP-NOTELIVE-${run}` });
+
+    try {
+      await gotoTodo(page, todo.id);
+      const main = page.locator('#inhalt');
+      await main.getByRole('button', { name: 'Timer starten' }).first().click();
+      const stopButton = main.getByRole('button', { name: 'Timer stoppen' });
+      await expect(stopButton).toBeVisible();
+      await stopButton.click();
+
+      const dialog = page.getByRole('dialog', { name: 'Timer stoppen' });
+      await expect(dialog).toBeVisible();
+
+      // Vorher, unmittelbar beim Öffnen: die Fläche steht schon da, leer —
+      // dieselben zwei Zeilen wie in `field-live-region-announcement.spec.ts`.
+      const liveRegion = dialog.locator('.note__live');
+      await expect(liveRegion).toHaveCount(1);
+      await expect(liveRegion).toBeEmpty();
+      await liveRegion.evaluate((element) => element.setAttribute('data-e2e-marker', 'stop-note-live'));
+
+      // Ohne einen echten Fehlerweg endet dieser Fall hier — siehe Dateikopf.
+      // Die Marke bleibt am Knoten stehen, damit ein späterer, zweiter
+      // Prüffall (sobald `NoteField.error` an dieser Stelle einmal wirklich
+      // gesetzt wird) dieselbe Bauplan-Frage stellen kann, ohne den Selektor
+      // neu zu suchen.
+      const markedRegion = dialog.locator('.note__live[data-e2e-marker="stop-note-live"]');
+      await expect(markedRegion).toHaveCount(1);
+      await expect(markedRegion).toBeEmpty();
+
+      await dialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
+      await expect(dialog).toBeHidden();
+    } finally {
+      for (const entry of await listTimeEntriesByTodo(todo.id)) await deleteTimeEntry(entry.id).catch(() => undefined);
+      await deleteTodo(todo.id).catch(() => undefined);
     }
   });
 });

@@ -1,3 +1,4 @@
+import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorCode } from "../api/client";
 import {
@@ -270,39 +271,35 @@ export function StatusSettings() {
 
   return (
     <>
+      {/*
+        Die Beschreibung entfaellt **nicht** ersatzlos (T-181, ST-04 mit
+        Auflage Z-01 aus T-177): Sie schrumpft auf die Verneinung. „Status“
+        ist das einzige Wort dieser Anwendung, das mit einem Begriff
+        kollidiert, den derselbe Benutzer im selben Kopf traegt — wer die
+        Statusspalten des Boards sucht, sucht sie hier. Eine **Abwesenheit**
+        sieht man nicht; ohne diese dreissig Zeichen waere ST-05 in den
+        Einstellungen eine Streichung ohne Ausgleich (E-081 Punkt 4).
+
+        Sie steht in der Karte und nicht in der Schiene, weil der
+        Schienenzusatz unter 60 rem ausgeblendet ist. Eine Verneinung, die
+        vom Fensterformat abhaengt, ist keine.
+
+        Der Erklaerkasten „Der Status ist nicht die Kanban-Spalte“ ist mit
+        ST-05 entfallen — zwei Absaetze und zwei Navigationsknoepfe in eine
+        andere Ansicht. Regel S-11: Ein Erklaerkasten enthaelt keine
+        Navigationsknoepfe; ein Bedienweg gehoert an die Bedienstelle, und
+        das Board ist ein Punkt der Hauptnavigation. Kein Ersatzkasten,
+        auch kein kleinerer (UM-03, Auflage Z-07 Punkt 2).
+      */}
       <Card
         title="Status"
-        description="Welche Statuswerte es gibt, in welcher Reihenfolge sie erscheinen und welcher an ein neues Todo kommt."
+        description="Nicht die Spalten des Boards."
         actions={
           <Button variant="primary" iconStart="plus" onClick={() => setForm({})}>
             Status anlegen
           </Button>
         }
       >
-        <InlineMessage tone="info" title="Der Status ist nicht die Kanban-Spalte">
-          <p>
-            Sie suchen die Statusspalten des Boards? Die gibt es dort nicht mehr. Eine Spalte des
-            Kanban-Boards ist seit der Umstellung eine <strong>Regel</strong> — über Tags, Status,
-            „Erledigt“ und den Exportstatus. Der Status kann also weiterhin eine Spalte
-            bestimmen; er ist nur nicht mehr <em>die</em> Spalte, sondern eine von fünf
-            Bedingungen. Diese Spalten richten Sie auf dem Board selbst ein, unter „Spalten
-            verwalten“.
-          </p>
-          <p>
-            Der <strong>Status</strong> ist etwas anderes geblieben: eine Eigenschaft des Todos.
-            Er steht auf jeder Karte, wird in der Todo-Liste und in der Detailansicht geändert — und
-            hier wird festgelegt, welche Werte es überhaupt gibt.
-          </p>
-          <div className="status-admin__links">
-            <Button size="sm" variant="ghost" iconStart="arrow-up-right" onClick={() => navigate("board")}>
-              Zum Kanban-Board
-            </Button>
-            <Button size="sm" variant="ghost" iconStart="arrow-up-right" onClick={() => navigate("todos")}>
-              Zur Todo-Liste
-            </Button>
-          </div>
-        </InlineMessage>
-
         <p className="visually-hidden" role="status" aria-live="polite">
           {announcement}
         </p>
@@ -706,16 +703,33 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
   const { bump } = useRefresh();
   const mutation = useMutation();
   const [name, setName] = useState("");
+  /**
+   * Das Verlassen des Feldes, nicht der Absendeversuch (Befund O-DZ, T-167).
+   *
+   * Bei leerem Namen ist die Schaltfläche gesperrt — `onSubmit` läuft also nie,
+   * und eine Meldung, die dort entstünde, sähe niemand. Dieselbe Lehre wie im
+   * Anhangsdialog: Ein Pflichtfeld, dessen Grund unerreichbar ist, ist ein
+   * gesperrter Knopf ohne Erklärung. Nicht das Tippen, weil eine Meldung beim
+   * ersten Zeichen eine Eingabe tadelt, die noch niemand beendet hat (SC 3.3.1).
+   */
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName(status?.name ?? "");
+    setTouched(false);
   }, [open, status]);
 
   const trimmed = name.trim();
   const duplicate = existing.some(
     (entry) => entry.id !== status?.id && entry.name.toLocaleLowerCase("de-DE") === trimmed.toLocaleLowerCase("de-DE"),
   );
+  const empty = touched && trimmed.length === 0;
+  const nameError = duplicate
+    ? "Diesen Namen gibt es schon. Zwei Statuswerte mit demselben Namen wären in jeder Auswahl nicht auseinanderzuhalten."
+    : empty
+      ? "Name fehlt."
+      : undefined;
 
   return (
     <FormDialog
@@ -756,13 +770,12 @@ function StatusFormDialog({ open, status, existing, onClose }: StatusFormDialogP
         label="Name"
         value={name}
         onChange={setName}
+        onTouched={() => setTouched(true)}
         required
-        maxLength={128}
+        maxLength={MAX_NAME_LENGTH}
         placeholder="z. B. Wartet auf Rückmeldung"
-        {...(duplicate
-          ? { error: "Diesen Namen gibt es schon. Zwei Statuswerte mit demselben Namen wären in jeder Auswahl nicht auseinanderzuhalten." }
-          : {})}
-        {...(duplicate
+        {...(nameError === undefined ? {} : { error: nameError })}
+        {...(nameError !== undefined
           ? {}
           : {
               hint:

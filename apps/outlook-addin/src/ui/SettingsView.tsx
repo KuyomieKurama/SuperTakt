@@ -182,53 +182,69 @@ export function SettingsView({
           hint="Vorgabe ist 127.0.0.1:17843. Der Port ist kein Geheimnis."
           error={isAcceptableBaseUrl(baseUrl) ? undefined : 'Nur 127.0.0.1 oder localhost sind zulässig.'}
         >
-          <input
-            id="baseurl"
-            className="input mono"
-            value={baseUrl}
-            spellCheck={false}
-            onChange={(event) => {
-              setBaseUrl(event.target.value);
-            }}
-            onBlur={() => {
-              if (isAcceptableBaseUrl(baseUrl)) {
-                store.writeBaseUrl(baseUrl);
-                onChanged();
-              }
-            }}
-          />
+          {(aria) => (
+            <input
+              {...aria}
+              className="input mono"
+              value={baseUrl}
+              spellCheck={false}
+              onChange={(event) => {
+                setBaseUrl(event.target.value);
+              }}
+              onBlur={() => {
+                if (isAcceptableBaseUrl(baseUrl)) {
+                  store.writeBaseUrl(baseUrl);
+                  onChanged();
+                }
+              }}
+            />
+          )}
         </Field>
 
+        {/*
+          T-182, E-078 Punkt 1: Der Hinweis lautete „Das Token erzeugen Sie in
+          Takt unter Einstellungen. Es wird dort genau einmal angezeigt." Der
+          zweite Satz steht auf **demselben Bildschirm** noch einmal, im
+          Bereich „Woher das Token kommt" als Schritt 2 („Ein Token erzeugen.
+          Es wird genau einmal angezeigt.") — beide gleichzeitig sichtbar.
+          Gefallen ist die Kopie am Feld; der Schritt bleibt dort, wo die
+          Handlung geschieht, die er beschreibt.
+
+          Und ohne Anrede (E-080 Punkt 4): „entsteht" sagt dasselbe wie
+          „erzeugen Sie" und ist kürzer.
+        */}
         <Field
           label="Zugangstoken"
           htmlFor="token"
-          hint="Das Token erzeugst du in Takt unter Einstellungen. Es wird dort genau einmal angezeigt."
+          hint="Das Token entsteht in Takt unter Einstellungen."
         >
-          <div className="tokenrow">
-            <input
-              id="token"
-              className="input mono"
-              // Vor der ausdrücklichen Handlung steht der Wert nirgends im
-              // Klartext — auch nicht in einem Attribut (B-2.3).
-              type={revealed ? 'text' : 'password'}
-              value={tokenInput}
-              placeholder={describeToken(store.readToken())}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                setTokenInput(event.target.value);
-              }}
-            />
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setRevealed((current) => !current);
-              }}
-              aria-pressed={revealed}
-            >
-              {revealed ? 'Verdecken' : 'Anzeigen'}
-            </Button>
-          </div>
+          {(aria) => (
+            <div className="tokenrow">
+              <input
+                {...aria}
+                className="input mono"
+                // Vor der ausdrücklichen Handlung steht der Wert nirgends im
+                // Klartext — auch nicht in einem Attribut (B-2.3).
+                type={revealed ? 'text' : 'password'}
+                value={tokenInput}
+                placeholder={describeToken(store.readToken())}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => {
+                  setTokenInput(event.target.value);
+                }}
+              />
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRevealed((current) => !current);
+                }}
+                aria-pressed={revealed}
+              >
+                {revealed ? 'Verdecken' : 'Anzeigen'}
+              </Button>
+            </div>
+          )}
         </Field>
 
         {tokenInput.length > 0 && !looksLikeToken(tokenInput) ? (
@@ -291,26 +307,28 @@ export function SettingsView({
         description="Der Ausdruck steht in dieser Einstellung, nicht im Programm. Übernommen wird immer der Inhalt der ersten Klammer."
       >
         <Field label="Erprobte Muster" htmlFor="catalog" hint="Deckt den Normalfall ab. Alle Beispiele sind erfunden.">
-          <select
-            id="catalog"
-            className="input"
-            value={PATTERN_CATALOG.find((entry) => entry.source === pattern)?.id ?? ''}
-            onChange={(event) => {
-              const entry = PATTERN_CATALOG.find((candidate) => candidate.id === event.target.value);
-              if (entry === undefined) return;
-              setPattern(entry.source);
-              setSample(entry.sample);
-              setPatternError(undefined);
-              setPatternSaved(false);
-            }}
-          >
-            <option value="">— eigenes Muster —</option>
-            {PATTERN_CATALOG.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
+          {(aria) => (
+            <select
+              {...aria}
+              className="input"
+              value={PATTERN_CATALOG.find((entry) => entry.source === pattern)?.id ?? ''}
+              onChange={(event) => {
+                const entry = PATTERN_CATALOG.find((candidate) => candidate.id === event.target.value);
+                if (entry === undefined) return;
+                setPattern(entry.source);
+                setSample(entry.sample);
+                setPatternError(undefined);
+                setPatternSaved(false);
+              }}
+            >
+              <option value="">— eigenes Muster —</option>
+              {PATTERN_CATALOG.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         <Field
@@ -319,18 +337,20 @@ export function SettingsView({
           hint="Genau eine Klammer um die Nummer. Rückverweise und Rückschau sind nicht zugelassen."
           error={patternError}
         >
-          <input
-            id="pattern"
-            className="input mono"
-            value={pattern}
-            spellCheck={false}
-            autoComplete="off"
-            onChange={(event) => {
-              setPattern(event.target.value);
-              setPatternError(undefined);
-              setPatternSaved(false);
-            }}
-          />
+          {(aria) => (
+            <input
+              {...aria}
+              className="input mono"
+              value={pattern}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => {
+                setPattern(event.target.value);
+                setPatternError(undefined);
+                setPatternSaved(false);
+              }}
+            />
+          )}
         </Field>
 
         <div className="pane-actions pane-actions--row">
@@ -360,16 +380,18 @@ export function SettingsView({
         ) : null}
 
         <Field label="Beispieltext zum Ausprobieren" htmlFor="sample">
-          <textarea
-            id="sample"
-            className="input textarea"
-            rows={3}
-            value={sample}
-            onChange={(event) => {
-              setSample(event.target.value);
-              setSampleResult({ kind: 'idle' });
-            }}
-          />
+          {(aria) => (
+            <textarea
+              {...aria}
+              className="input textarea"
+              rows={3}
+              value={sample}
+              onChange={(event) => {
+                setSample(event.target.value);
+                setSampleResult({ kind: 'idle' });
+              }}
+            />
+          )}
         </Field>
 
         <Button
