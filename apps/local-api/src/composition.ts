@@ -167,6 +167,7 @@ export function compose(options: CompositionOptions): Composition {
           transactions: database.transactions,
           clock: clockPort,
           files: createFilePort(),
+          timerRecovery: { entryId: null },
           directories: createDirectoryInsightPort(),
           // Die Bildkopien der Anhänge (E-071 Punkt 2). Derselbe Ort wie der
           // Bestand und dieselben Rechten (E-018, A-A-17); ohne Angabe kein

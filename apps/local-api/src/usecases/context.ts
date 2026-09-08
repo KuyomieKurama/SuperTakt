@@ -33,7 +33,7 @@ import type {
   TransactionPort,
   UnitOfWork,
 } from '@takt/storage';
-import type { Result, TaktError, Timestamp } from '@takt/domain';
+import type { Result, TaktError, Timestamp, TimeEntryId } from '@takt/domain';
 
 import type { ExportFaultInjection } from './export.ts';
 
@@ -45,6 +45,8 @@ import type { ExportFaultInjection } from './export.ts';
  * Anwendungsfall anspricht, liest seine Signatur.
  */
 export interface AppContext {
+  /** Snapshot taken before HTTP starts; timers created in this service run are not orphaned. */
+  readonly timerRecovery?: { entryId: TimeEntryId | null };
   readonly transactions: TransactionPort;
   readonly clock: ClockPort;
   readonly files: FilePort;

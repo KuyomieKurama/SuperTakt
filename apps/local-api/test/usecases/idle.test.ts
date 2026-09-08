@@ -7,6 +7,7 @@ import type { Timestamp } from '@takt/domain';
 const ts = (value: string) => value as Timestamp;
 import type { TimeEntryId, TodoId } from '@takt/domain';
 import type { AppContext } from '../../src/usecases/context.ts';
+import { loadOrphanedTimer, resolveOrphanedTimer } from '../../src/usecases/timer.ts';
 import { beginIdle, loadIdle, resolveIdle, returnFromIdle } from '../../src/usecases/idle.ts';
 
 // Real SQLite transactions: the test deliberately fails the second split write.
@@ -32,6 +33,26 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
   });
   afterEach(() => db.close());
   const begin = (returned = true) => beginIdle(context, { entryId, startedAt: ts('2026-09-08T08:10:00Z'), ...(returned ? { returnedAt: ts('2026-09-08T08:50:00Z') } : {}) });
+
+  it('behandelt einen Timer aus der laufenden Dienstsitzung nicht als verwaist', async () => {
+    context = { ...context, timerRecovery: { entryId: null } };
+    await begin();
+    expect(await loadOrphanedTimer(context)).toBeNull();
+    expect((await resolveOrphanedTimer(context, 'discard')).ok).toBe(false);
+    expect(await unit.timer.running()).not.toBeNull();
+  });
+
+  it('erkennt den beim Dienststart vorgefundenen Timer und schützt spätere Timer', async () => {
+    context = { ...context, timerRecovery: { entryId } };
+    expect(await loadOrphanedTimer(context)).toMatchObject({ running: { id: entryId } });
+    expect((await resolveOrphanedTimer(context, 'discard')).ok).toBe(true);
+    expect(await unit.timer.running()).toBeNull();
+    const next = await unit.timer.start(second, false, clock);
+    expect(next.ok).toBe(true);
+    expect(await loadOrphanedTimer(context)).toBeNull();
+    expect((await resolveOrphanedTimer(context, 'discard')).ok).toBe(false);
+    expect(await unit.timer.running()).not.toBeNull();
+  });
 
   it('speichert die Pausenoption und pausiert bis zur Zuordnung, ohne Dialogzeit zu buchen', async () => {
     expect((await unit.settings.load()).idleKeepTimerRunning).toBe(true);

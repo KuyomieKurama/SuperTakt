@@ -504,7 +504,7 @@ export interface OrphanedTimerView {
 export async function loadOrphanedTimer(context: AppContext): Promise<OrphanedTimerView | null> {
   return context.transactions.inTransaction(async (unit) => {
     const orphan = await unit.heartbeat.orphaned();
-    if (orphan === null) return null;
+    if (orphan === null || (context.timerRecovery !== undefined && context.timerRecovery.entryId !== orphan.running.id)) return null;
     const idle = await unit.idle.pending();
     if (idle !== null && idle.returnedAt === null && idle.id === orphan.running.id) return null;
 
@@ -547,7 +547,7 @@ export async function resolveOrphanedTimer(
     if (idle !== null && idle.returnedAt === null) return err(taktError('conflict', 'Die Rückkehr aus der inaktiven Zeit muss zuerst bestätigt werden.'));
 
     const orphan = await unit.heartbeat.orphaned();
-    if (orphan === null) {
+    if (orphan === null || (context.timerRecovery !== undefined && context.timerRecovery.entryId !== orphan.running.id)) {
       return err(taktError('timer_not_running', 'Es gibt keine unvollständige Buchung.'));
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Combobox as Ark, createListCollection } from '@ark-ui/react/combobox';
 import { Portal } from '@ark-ui/react/portal';
 import type { ForeignText } from '../api/types';
@@ -23,12 +23,16 @@ export function IdleTaskSelect({ label, value, title, allowPause, disabled, onCh
   }, [search]);
   const tasks = useAsync(() => listTodos({ search: query }, { limit: 100 }), [query]);
   const items = useMemo(() => {
-    if (search !== query || tasks.state.status !== 'ready') return [];
+    if (search !== query || tasks.state.status !== 'ready') return [{ value, label: title }];
     const found = tasks.state.status === 'ready' ? tasks.state.value.items.map(todo => ({ value: todo.id, label: todo.title })) : [];
     const options: { value: string; label: ForeignText }[] = allowPause && (!query || 'pause'.includes(query.toLocaleLowerCase())) ? [{ value: '', label: 'Pause — nicht buchen' }, ...found] : found;
-    if (!query && !options.some(item => item.value === value)) options.unshift({ value, label: title });
+    if (!options.some(item => item.value === value)) options.unshift({ value, label: title });
     return options;
   }, [tasks.state, allowPause, search, query, value, title]);
+  // Closing the popup can reset its search collection before Ark emits the
+  // selected value. Retain labels so a valid selection is not silently lost.
+  const knownItems = useRef(new Map<string, { value: string; label: ForeignText }>());
+  for (const item of items) knownItems.current.set(item.value, item);
   const collection = useMemo(() => createListCollection({
     items, itemToValue: item => item.value, itemToString: item => foreignText(item.label),
   }), [items]);
@@ -36,7 +40,8 @@ export function IdleTaskSelect({ label, value, title, allowPause, disabled, onCh
     inputBehavior="none" openOnClick positioning={{ sameWidth: true, gutter: 4 }}
     onInputValueChange={details => { if (details.reason === 'input-change') { setInput(details.inputValue); setSearch(details.inputValue); } }}
     onValueChange={details => {
-      const item = details.items[0];
+      const selected = details.value[0];
+      const item = details.items[0] ?? (selected === undefined ? undefined : knownItems.current.get(selected));
       if (item) { onChange(item.value, item.label); setInput(foreignText(item.label)); setSearch(''); }
     }}
     onOpenChange={details => { if (!details.open) { setInput(foreignText(title)); setSearch(''); } }}

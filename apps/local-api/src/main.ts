@@ -288,6 +288,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
     }
   }
 
+  if (context?.timerRecovery !== undefined) {
+    context.timerRecovery.entryId = await context.transactions.inTransaction(async unit => (await unit.timer.running())?.id ?? null);
+  }
   startupPhase('database_ready');
 
   // Liegengebliebene Nachbardateien eines abgebrochenen Exportlaufs entfernen.

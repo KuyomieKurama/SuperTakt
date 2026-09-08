@@ -39,6 +39,7 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
     await dialog.getByRole('button', { name: 'Abschnitt hinzufügen' }).click();
     await dialog.getByRole('combobox', { name: 'Aufgabe oder Pause' }).nth(2).fill(b.title);
     await page.getByRole('option', { name: b.title, exact: true }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Aufgabe oder Pause' }).nth(2)).toHaveValue(b.title);
     await dialog.getByRole('button', { name: 'Rest übernehmen', exact: true }).nth(2).click();
     await expect(dialog.getByText('Alles verteilt', { exact: true })).toBeVisible();
     const bounds = await dialog.boundingBox();
