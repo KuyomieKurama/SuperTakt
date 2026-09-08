@@ -30,10 +30,8 @@
 #      und nicht an einer Textsuche im Protokoll — die wird beim ersten
 #      umformulierten Satz still blind.
 #
-# Was hier **nicht** steht: `pnpm check` in voller Länge und der Bau des
-# Erzeugnisses. Beides tut `release.yml` bereits, und beides doppelt zu fahren
-# kostet Minuten je Anstoß, ohne eine Frage zu beantworten, die hier nicht
-# schon beantwortet wird.
+# Die Release-Prüffälle laufen auch vor dem Merge, damit ein grüner PR nicht
+# erst beim Release an einem veralteten Dienstszenario scheitert.
 name: Prüfung
 
 on:
@@ -56,6 +54,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-proofs:
+    name: Release-Prüffälle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+      - name: Abhängigkeiten installieren
+        run: |
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm install --frozen-lockfile
+      - name: Release-Prüffälle ausführen
+        run: pnpm proof:all
+
   inaktivitaet:
     name: Inaktivität und Rückkehrdialog
     runs-on: ubuntu-24.04

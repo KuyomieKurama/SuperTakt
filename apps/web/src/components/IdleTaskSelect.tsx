@@ -53,13 +53,13 @@ export function IdleTaskSelect({ label, value, title, allowPause, disabled, onCh
     </Ark.Control>
     <Portal><Ark.Positioner className="popover-layer">
       <Ark.Content className="combobox__content" onKeyDown={event => { if (event.key === 'Escape' || event.key === 'Tab') event.stopPropagation(); }}>
-        {search !== query || tasks.state.status === 'loading' ? <p className="combobox__empty" role="status">Suche …</p> :
-          tasks.state.status === 'error' ? <p className="combobox__empty" role="alert">Suche fehlgeschlagen. <button type="button" onClick={tasks.reload}>Erneut versuchen</button></p> :
-          items.length === 0 ? <p className="combobox__empty" role="status">Keine Aufgaben gefunden.</p> :
-          items.map(item => <Ark.Item key={item.value} item={item} className="combobox__option">
+        <div role="status">{search !== query || tasks.state.status === 'loading' ? <p className="combobox__empty">Suche …</p> :
+          tasks.state.status === 'ready' && items.length === 0 ? <p className="combobox__empty">Keine Aufgaben gefunden.</p> : null}</div>
+        <div role="alert">{tasks.state.status === 'error' ? <p className="combobox__empty">Suche fehlgeschlagen. <button type="button" onClick={tasks.reload}>Erneut versuchen</button></p> : null}</div>
+        {search === query && tasks.state.status === 'ready' ? items.map(item => <Ark.Item key={item.value} item={item} className="combobox__option">
             <Ark.ItemText className="combobox__option-label"><Foreign value={item.label} /></Ark.ItemText>
             <Ark.ItemIndicator><Icon name="check" size={14} /></Ark.ItemIndicator>
-          </Ark.Item>)}
+          </Ark.Item>) : null}
         {tasks.state.status === 'ready' && tasks.state.value.total > 100 ? <p className="combobox__more">Weitere Aufgaben: Suche nach Titel oder Call-Nummer eingrenzen.</p> : null}
       </Ark.Content>
     </Ark.Positioner></Portal>

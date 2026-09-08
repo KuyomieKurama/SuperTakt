@@ -76,12 +76,12 @@ export function IdleRecovery({ session, changed, running, resumeAfter = false }:
       submitLabel={mode === 'break' ? 'Als Pause übernehmen' : 'Zeit buchen'} cancelLabel="Später" busy={mutation.busy}
       error={validation ?? mutation.error} onSubmit={submit} onCancel={() => setOpen(false)}>
       <div className="idle-summary">
-        <span className="muted">Du warst inaktiv für</span>
+        <span className="muted">Sie waren inaktiv für</span>
         <strong className="idle-summary__duration">{formatStopwatch(seconds)}</strong>
         <span className="muted">{session.returnedAt === null ? '' : formatTimeRange(session.startedAt, session.returnedAt)}</span>
         <span className="idle-summary__task" title={foreignText(session.todoTitle)}><Foreign value={session.todoTitle} /></span>
       </div>
-      <fieldset className="idle-mode"><legend>Was hast du in dieser Zeit gemacht?</legend>
+      <fieldset className="idle-mode"><legend>Was haben Sie in dieser Zeit gemacht?</legend>
         {([{ value: 'break', label: 'Pause', emoji: '☕' }, { value: 'task', label: 'Gearbeitet', emoji: '🎯' }, { value: 'split', label: 'Aufteilen', emoji: '🔀' }] as const).map(item =>
           <label className="idle-mode__choice" key={item.value} data-selected={mode === item.value}>
             <input type="radio" name="idle-mode" checked={mode === item.value} disabled={mutation.busy} onChange={() => { setMode(item.value); setValidation(null); }} />

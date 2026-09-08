@@ -42,6 +42,7 @@ import { createFileTokenStore } from './access/token-store.ts';
 import { bringDatabaseUpToDate, describeStoreOpenFailure } from './startup.ts';
 import { startTaskpaneServer } from './taskpane/server.ts';
 import { sweepOrphanedImages } from './usecases/image-sweep.ts';
+import { captureTimerRecovery } from './usecases/timer.ts';
 import type { ReleaseSourcePort } from './version/source.ts';
 import { VERSION_CHECK_START_DELAY_MS } from './version/checker.ts';
 
@@ -288,9 +289,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     }
   }
 
-  if (context?.timerRecovery !== undefined) {
-    context.timerRecovery.entryId = await context.transactions.inTransaction(async unit => (await unit.timer.running())?.id ?? null);
-  }
+  if (context !== null) await captureTimerRecovery(context);
   startupPhase('database_ready');
 
   // Liegengebliebene Nachbardateien eines abgebrochenen Exportlaufs entfernen.

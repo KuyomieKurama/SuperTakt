@@ -59,6 +59,7 @@ import { join } from 'node:path';
 
 import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
+import { captureTimerRecovery } from '../src/usecases/timer.ts';
 
 const PORT = 17843;
 const UI_ORIGIN = 'http://127.0.0.1:5173';
@@ -742,11 +743,13 @@ export async function runScenario() {
     await quiet('POST', '/timer/start', { todoId });
     await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: '' });
 
-    // Die verwaiste Buchung (E-036): ein laufender Timer, dann aufgelöst.
+    // Die verwaiste Buchung (E-036): Timer aus dem vorherigen Dienstlauf.
     await quiet('POST', '/timer/start', { todoId: secondTodoId });
     tick(600);
     await quiet('POST', '/timer/heartbeat');
     tick(120);
+    // Derselbe Snapshot wie beim Dienststart, bevor HTTP-Anfragen angenommen werden.
+    await captureTimerRecovery(service.context);
     await record('getOrphanedTimer', 'GET', '/timer/orphaned', '/timer/orphaned');
     await record('resolveOrphanedTimer', 'POST', '/timer/orphaned/resolve', '/timer/orphaned/resolve', {
       resolution: 'book_until_heartbeat',

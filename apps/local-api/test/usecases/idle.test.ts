@@ -7,7 +7,7 @@ import type { Timestamp } from '@takt/domain';
 const ts = (value: string) => value as Timestamp;
 import type { TimeEntryId, TodoId } from '@takt/domain';
 import type { AppContext } from '../../src/usecases/context.ts';
-import { loadOrphanedTimer, resolveOrphanedTimer } from '../../src/usecases/timer.ts';
+import { captureTimerRecovery, loadOrphanedTimer, resolveOrphanedTimer } from '../../src/usecases/timer.ts';
 import { beginIdle, loadIdle, resolveIdle, returnFromIdle } from '../../src/usecases/idle.ts';
 
 // Real SQLite transactions: the test deliberately fails the second split write.
@@ -43,7 +43,9 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
   });
 
   it('erkennt den beim Dienststart vorgefundenen Timer und schützt spätere Timer', async () => {
-    context = { ...context, timerRecovery: { entryId } };
+    context = { ...context, timerRecovery: { entryId: null } };
+    await captureTimerRecovery(context);
+    expect(context.timerRecovery?.entryId).toBe(entryId);
     expect(await loadOrphanedTimer(context)).toMatchObject({ running: { id: entryId } });
     expect((await resolveOrphanedTimer(context, 'discard')).ok).toBe(true);
     expect(await unit.timer.running()).toBeNull();

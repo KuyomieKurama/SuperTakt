@@ -42,6 +42,13 @@ import {
   poolMovementNamer,
 } from './pool-movement.ts';
 
+/** Capture once before serving requests: only a timer from the previous run is orphaned. */
+export async function captureTimerRecovery(context: AppContext): Promise<void> {
+  if (context.timerRecovery !== undefined) {
+    context.timerRecovery.entryId = await context.transactions.inTransaction(async (unit) => (await unit.timer.running())?.id ?? null);
+  }
+}
+
 export interface RunningTimerView {
   readonly entry: RunningTimeEntry;
   readonly todoTitle: string;

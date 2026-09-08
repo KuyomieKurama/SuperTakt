@@ -40,7 +40,7 @@ Alles andere ist Vorlage und wartet auf spec-ux-reviewer.
 | `:547` Fristhinweis (SP-A-02) | `:555` | +8 |
 | `:590` Standard-Tags (SP-A-04) | `:598` | +8 |
 | `:625` „Ein Todo entsteht so nicht." (SP-A-15) | `:633` | +8 |
-| `:632` „(bleibt in Takt)" (SP-A-01) | `:640` | +8 |
+| `:632` „(bleibt in SuperTakt)" (SP-A-01) | `:640` | +8 |
 | `:634` Vermerkhinweis (ST-A-08) | `:642` | +8 |
 | `:745` Rundungsauskunft (ST-A-02) | `:753` | +8 |
 | `:782` „(geht in die Abrechnung)" (SP-A-01) | `:790` | +8 |
@@ -203,7 +203,7 @@ Drei Stück, davon eine berechnet.
 
 Zwölf Stück; genau die zwölf, die der Wächter in `scripts/proof-addin.mjs` Abschnitt 19c zählt.
 
-„Call-Nummer", „Titel", „Frist", „Tags", „Vermerk (bleibt in Takt)", „Dauer", „Leistung (geht in
+„Call-Nummer", „Titel", „Frist", „Tags", „Vermerk (bleibt in SuperTakt)", „Dauer", „Leistung (geht in
 die Abrechnung)", „Adresse des lokalen Dienstes", „Zugangstoken", „Erprobte Muster", „Regulärer
 Ausdruck (für Fortgeschrittene)", „Beispieltext zum Ausprobieren".
 
@@ -349,7 +349,7 @@ Ausdrücklich aufgenommen und ausdrücklich außerhalb des Rasters:
 
 | # | Ort | Was er trägt | Buchstabe | Prüfpunkt |
 |---|---|---|---|---|
-| **SP-A-01** | `TaskPane.tsx:660`, `:832` — „(bleibt in Takt)", „(geht in die Abrechnung)" — **und seit T-196 dazu `:662` „Er geht nicht in die Abrechnung."** | die Grenze zwischen Vermerk und Leistung | **A** | A-7.2, A-7.3, **R-08**, E-016, B-12.3. Der Zusatz ist die Auflage aus Z-45: Nach ST-A-08 ist `:662` der einzige ganze **Satz** dieser Fläche, der die Grenze noch ausspricht. Fiele auch er, stünde A-7.2 nur noch in einem Klammerzusatz — und ein Klammerzusatz nennt den **Ort**, nicht das Ziel, das der Text nicht erreicht |
+| **SP-A-01** | `TaskPane.tsx:660`, `:832` — „(bleibt in SuperTakt)", „(geht in die Abrechnung)" — **und seit T-196 dazu `:662` „Er geht nicht in die Abrechnung."** | die Grenze zwischen Vermerk und Leistung | **A** | A-7.2, A-7.3, **R-08**, E-016, B-12.3. Der Zusatz ist die Auflage aus Z-45: Nach ST-A-08 ist `:662` der einzige ganze **Satz** dieser Fläche, der die Grenze noch ausspricht. Fiele auch er, stünde A-7.2 nur noch in einem Klammerzusatz — und ein Klammerzusatz nennt den **Ort**, nicht das Ziel, das der Text nicht erreicht |
 | **SP-A-02** | `TaskPane.tsx:547` — der Fristhinweis | die Abwesenheit jeder Fristerkennung | **A** | **V-04 aus T-165, unverändert freigegeben.** E-074 Punkt 4, A-19.1, A-19.7. Die kürzere Fassung liegt vor und ist **nicht** freigegeben. Gemessen von `proof:addin` 19d (Stellung, „leer lassen", kein Fülltext). Sein Geschwister ist SP-04 drüben — **eine** Fassung für beide Flächen, Zeitpunkt V-03/V-04 in T-165 (E-078 Nachtrag Punkt 7) |
 | **SP-A-03** | `TaskPane.tsx:463` | „darf leer bleiben" | **A** | A-2.6 |
 | **SP-A-04** | `TaskPane.tsx:590` | Standard-Tags kommen von selbst dazu | **A** | A-9.5, Pflichtflow `CLAUDE.md`, `textbestand.md` 11.4 Zeile 5 |
@@ -377,7 +377,7 @@ Ausdrücklich aufgenommen und ausdrücklich außerhalb des Rasters:
 | **SP-A-26** | `packages/export/template.ts`, `base64.ts` | elf Absagen an eine Vorlage | **B** | A-7.x, E-063. Sie erscheinen über `apps/web/src/lib/exportTemplateModel.ts`, das `textbestand.md` 1.2 bereits als **B, vorläufig gesperrt** führt |
 
 **Seit T-199 gemessen, und zwar zeichengleich (O-HO):** SP-A-01 mit allen drei Trägern
-(„(bleibt in Takt)", „(geht in die Abrechnung)", „Er geht nicht in die Abrechnung."), SP-A-05 und
+(„(bleibt in SuperTakt)", „(geht in die Abrechnung)", „Er geht nicht in die Abrechnung."), SP-A-05 und
 SP-A-12. `proof:addin` Abschnitt 20 hält jeden dieser Texte Zeichen für Zeichen, verlangt ihn
 **genau einmal** und misst dazu die Abhängigkeit **ST-A-06 → SP-A-12** als Folgerung: Die gekürzte
 Chip-Erklärung ist nur gedeckt, solange der Tag-Auswähler die Folge ausspricht. Jede Hälfte hat
@@ -633,7 +633,7 @@ in Abschnitt 8.
 
 `TaskPane.tsx:634` laut dieser Aufnahme; **gemessen stand er auf `:642`**, heute auf `:662`.
 „Interner Vermerk des Todos. Er geht nicht in die Abrechnung." Die Beschriftung darüber lautet
-„Vermerk (bleibt in Takt)". Satz 1 ist **D** dagegen.
+„Vermerk (bleibt in SuperTakt)". Satz 1 ist **D** dagegen.
 
 **Gebaut:** `hint="Er geht nicht in die Abrechnung."` — Satz 2 ist **A**, bleibt unverändert und
 ist **ab jetzt selbst gesperrt** (SP-A-01, Auflage aus Z-45). Der Hinweis beginnt danach mit „Er";
@@ -820,7 +820,7 @@ ist in Abschnitt 4.1 aufgeschrieben, damit sie beim nächsten Mal auffällt.
 - „**Text aus der E-Mail gehört in den Vermerk, nicht hierher.**" — SP-A-05, B-12.3, R-08. Er ist
   die einzige Stelle dieser Fläche, die verhindert, dass Text aus einer fremden E-Mail in eine
   Rechnung wandert. Er trägt jetzt allein; „exportiert" steht sichtbar in der Beschriftung darüber.
-- „**Er geht nicht in die Abrechnung.**" — ab jetzt SP-A-01. „bleibt in Takt" nennt den **Ort**,
+- „**Er geht nicht in die Abrechnung.**" — ab jetzt SP-A-01. „bleibt in SuperTakt" nennt den **Ort**,
   dieser Satz nennt das **Ziel, das der Text nicht erreicht**, und das ist die Aussage aus A-7.2.
 - **SP-A-12** (`TagPicker.tsx:330`), an dem ST-A-06 hängt. Zeichengleich gemessen.
 
@@ -883,7 +883,7 @@ die Hinweisfläche ganz fehlte.
   gesperrte Text muss genau **einmal** dastehen; eine zweite Fassung wäre der E-078-Befund.
 - **Mit Gegenprobe, und einzeln.** Für jeden Eintrag wird eine plausible Verletzung in eine Kopie
   der Quelle gesetzt — „Er bleibt intern." statt „Er geht nicht in die Abrechnung.", `label="Vermerk"`
-  statt `label="Vermerk (bleibt in Takt)"` —, und gefunden werden muss genau dieser Eintrag und
+  statt `label="Vermerk (bleibt in SuperTakt)"` —, und gefunden werden muss genau dieser Eintrag und
   kein zweiter. Ein Sucher, der bei jeder Änderung alles meldet, wird beim ersten Fehlalarm
   gelockert.
 - **Die Abhängigkeit ST-A-06 → SP-A-12 als Rechnung**, nicht als zwei Behauptungen: Die gekürzte
