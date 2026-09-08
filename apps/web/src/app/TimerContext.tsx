@@ -456,7 +456,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   );
 
   const performStop = useCallback(
-    async (note: string): Promise<boolean> => {
+    async (note: ForeignText): Promise<boolean> => {
       const current = runningRef.current;
       if (current === null) return false;
       const result = await stopTimer(note);

@@ -15,7 +15,7 @@ async function powershell(script: string, input: unknown): Promise<Record<string
     const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     const chunks: Buffer[] = [];
     const errors: Buffer[] = [];
-    const timer = setTimeout(() => { child.kill(); reject(new Error('PowerShell timeout')); }, 25_000);
+    const timer = setTimeout(() => { child.kill(); reject(new Error(`PowerShell timeout: ${Buffer.concat(errors).toString('utf8')}`)); }, 25_000);
     child.stdout.on('data', (b: Buffer) => chunks.push(b));
     child.stderr.on('data', (b: Buffer) => errors.push(b));
     child.on('error', (error) => { clearTimeout(timer); reject(error); });
@@ -60,7 +60,9 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     await writeFile(path, pair.certPem);
     const cert = new X509Certificate(pair.certPem);
     const fingerprint = cert.fingerprint256.replaceAll(':', '');
-    const script = await readFile(scriptUrl, 'utf8');
+    const script = (await readFile(scriptUrl, 'utf8'))
+      .replace('$store.Add($certificate)', "[Console]::Error.WriteLine('adding certificate'); $store.Add($certificate); [Console]::Error.WriteLine('certificate added')")
+      .replace('CheckHttps $fingerprint', "[Console]::Error.WriteLine('checking HTTPS'); CheckHttps $fingerprint");
     server = createServer({ key: pair.keyPem, cert: pair.certPem }, (_req, res) => res.writeHead(200).end('test add-in'));
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(17844, '127.0.0.1', resolve); });
     expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ fingerprint, validNow: true, validProfile: true, installed: false, https: 'tls_failed' });
