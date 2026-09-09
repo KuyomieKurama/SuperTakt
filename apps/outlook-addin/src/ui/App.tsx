@@ -15,7 +15,6 @@ import { createTimedEvaluator, type Evaluator } from '../callnumber/evaluate.ts'
 import { spawnBrowserChannel, supportsWorker } from '../callnumber/browser-channel.ts';
 import { detectCallNumber, type Detection } from '../callnumber/detect.ts';
 import { readHost, type HostState } from '../office/host.ts';
-import { EMPTY_MAIL } from '../office/mail.ts';
 import { createSettingsStore, type AddinSettings } from '../settings/store.ts';
 import { Button, Callout, Section, Skeleton } from './Primitives.tsx';
 import { SettingsView } from './SettingsView.tsx';
