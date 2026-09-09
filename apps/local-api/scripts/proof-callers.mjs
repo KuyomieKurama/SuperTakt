@@ -167,16 +167,12 @@ import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
 import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
 import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-transfer.ts';
 /*
- * Die Eingabeschemata der Add-in-Tür (T-132, O-M).
- *
- * `routes/addin/**` gehört integration-dev und wird hier **gelesen**, nicht
- * geändert. Anders als die vier Routendateien der Hauptfläche führt diese
- * Datei keine Aufstellung `REQUEST_SCHEMAS`; die Zuordnung zu den
- * Operationskennungen steht deshalb unten in `ADDIN_SCHEMAS` und nirgends
- * sonst. Die Schemata selbst sind dieselben Werte, die die Routen benutzen —
- * keine Abschrift.
+ * Die Eingabeschemata der Add-in-Tür (T-132, O-M; seit T-149 als gemeinsame
+ * Aufstellung direkt neben den Routen). Der Nachweis liest dieselbe Registry
+ * wie `proof:openapi`, damit eine neue Add-in-Route mit Rumpf nicht an einem
+ * zweiten, handgepflegten Wörterbuch vorbeilaufen kann.
  */
-import { bookSchema, createTodoSchema } from '../src/routes/addin/schema.ts';
+import { REQUEST_SCHEMAS as ADDIN_SCHEMAS } from '../src/routes/addin/schema.ts';
 
 const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
 const CALLER_PATH = new URL('../../web/src/api/endpoints.ts', import.meta.url);
@@ -193,12 +189,6 @@ const REQUEST_SCHEMAS = {
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
   ...DATA_TRANSFER_SCHEMAS,
-};
-
-/** Die beiden Türen mit Rumpf unter `/addin/*`, nach Operationskennung. */
-const ADDIN_SCHEMAS = {
-  createAddinTodo: createTodoSchema,
-  createAddinTimeEntry: bookSchema,
 };
 
 let passed = 0;
@@ -575,12 +565,13 @@ check('kein Aufruf zeigt auf einen Weg, den der Dienst nicht führt', of('route'
  * ausgeschrieben und nicht als „meistens ruft sie alles an".
  */
 const NOT_CALLED_BY_UI = new Set([
-  // Die vier Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
+  // Die fünf Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
   // O-M): Dass jede von ihnen im Aufgabenbereich einen Aufrufer hat, misst
   // Abschnitt 7 — mit demselben Leser und demselben Urteil.
   'getAddinContext',
   'findAddinDuplicates',
   'createAddinTodo',
+  'addAddinTodoAttachment',
   'createAddinTimeEntry',
   // T-066, **Übergabe an frontend-dev.** `GET /board` ist die Antwort auf
   // E-054: Kanban-Spalten sind Regeln über Tags, eine Karte kann in mehreren
