@@ -1,5 +1,34 @@
 # Oberflächentext des Aufgabenbereichs — Bestandsaufnahme und Urteil
 
+## Nachtrag 2026-09-09 — Folge-E-Mail ohne Zeitbuchung (PR #15)
+
+Der Auftraggeber hat den Ablauf geändert: Bei einem vorhandenen Todo wird die E-Mail
+als Outlook-Verweis angehängt, nicht als Zeit gebucht. Die folgende ältere Aufnahme
+bleibt als Historie erhalten; ihre Anforderungen an die entfernte Buchungsfläche gelten
+nicht mehr für das neue Anhangsangebot. Die Buchungs-API und ihre bestehenden fachlichen
+Prüfungen bleiben davon unberührt.
+
+SP-A-01 schützt weiterhin **„Vermerk (bleibt in SuperTakt)“** und
+**„Er geht nicht in die Abrechnung.“**. Der Leistungsteil von SP-A-01 sowie SP-A-05
+und SP-A-11 entfallen mit den zugehörigen Buchungsfeldern und dem Wiederöffnen-Knopf.
+SP-A-16 beschreibt den weiterhin geprüften Buchungshelfer, nicht die neue Folgehandlung.
+SP-A-24 wird durch das ausdrückliche Anhangsangebot ersetzt; SP-A-12 bleibt unverändert.
+
+Die neuen geschützten Aussagen stehen in `DuplicateOffer.tsx`:
+
+| Kennung | Wortlaut | Bedeutung |
+|---|---|---|
+| SP-A-27 | Dabei wird auf dem vorhandenen Todo keine Zeit erfasst. | Anhängen erzeugt keine Zeitbuchung. |
+| SP-A-28 | Ein erledigtes Todo bleibt erledigt. | Anhängen hebt das Kennzeichen nicht auf. |
+
+`proof:addin` Abschnitt 20 prüft diese Aussagen wie die bisherigen Träger auf genau ein
+Vorkommen und mit einzeln eingesetzten Gegenbeispielen. Abschnitt 21 prüft die Wirkung
+gegen den zusammengesetzten Dienst mit echtem Add-in-Token und echter SQLite-Datenbank.
+V-08 gilt weiter: Eine eingegebene Frist wird beim Anhängen nicht übernommen. Der Hinweis
+erscheint nur bei einem Treffer und einer eingegebenen Frist; ohne diese Zustände nicht.
+
+---
+
 **Aufgabe:** T-182, Welle AA. **Verfasser:** integration-dev.
 **Grundlage:** `docs/design/textbestand.md` **Abschnitt 11** (Methode und Urteilsraster für diese
 Fläche), dazu dessen Abschnitte 1, 1.1, 1.2 und 2. E-078 (mit Nachtrag Punkt 6 und 7), E-080,

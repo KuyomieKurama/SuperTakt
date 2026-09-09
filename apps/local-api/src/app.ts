@@ -47,6 +47,7 @@ import type { AccessRuntime } from './runtime.ts';
 import type { AppContext } from './usecases/context.ts';
 import { createAddinAttachmentRoutes } from './routes/addin/attachments.ts';
 import { createAddinRoutes } from './routes/addin/index.ts';
+import type { AddinDeps } from './routes/addin/ports.ts';
 import { createBoardRoutes } from './routes/board.ts';
 import { createExportRoutes, createSettingsRoutes } from './routes/export.ts';
 import { createStructureRoutes } from './routes/structure.ts';
@@ -268,9 +269,10 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * `TransactionPort` erfüllt ihn ohne Übersetzungsadapter, der etwas
      * verlieren könnte.
      */
-    const addinDeps = {
-      inTransaction: (work: Parameters<typeof context.transactions.inTransaction>[0]) =>
-        context.transactions.inTransaction(work),
+    // Kontextuell typisieren: Parameters<...> würde den generischen
+    // Transaktionsrückgabewert T zu unknown verbreitern.
+    const addinDeps: AddinDeps = {
+      inTransaction: (work) => context.transactions.inTransaction(work),
       now: () => context.clock.now(),
     };
     api.route('/addin', createAddinRoutes(addinDeps));

@@ -30,6 +30,7 @@ export function DuplicateOffer({ offers, onChoose, busyTodoId, canAttach }: Dupl
       <Callout tone="warning" title={heading}>
         Hängen Sie diese E-Mail an das passende Todo oder legen Sie darunter bewusst ein neues an.
         Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.
+        Ein erledigtes Todo bleibt erledigt.
       </Callout>
 
       {!canAttach ? (

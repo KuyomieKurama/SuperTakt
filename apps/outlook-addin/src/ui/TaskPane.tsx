@@ -318,6 +318,12 @@ export function TaskPane({
         }}
       />
 
+      {offers.length > 0 && dueEntry.kind !== 'none' ? (
+        <p className="pane-note">
+          Die eingetragene Frist gilt nur für ein neues Todo. Das vorhandene Todo behält seine eigene Frist.
+        </p>
+      ) : null}
+
       {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
 
       <Section title="Neues Todo">
