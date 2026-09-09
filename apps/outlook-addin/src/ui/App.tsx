@@ -6,14 +6,6 @@
  * Call-Nummer. Kein Baustein weiter unten greift selbst auf `localStorage`,
  * `Worker` oder `Office` zu — deshalb lässt sich jeder von ihnen ohne Outlook
  * und ohne laufenden Dienst prüfen.
- *
- * **Eine Ausnahme, und sie ist seit T-190 eine Zusage.** Die Abholfunktion des
- * Browsers wird hier *nicht* mehr eingesetzt. `createBrowserApiClient` setzt
- * sie in `api/client.ts` ein — in derselben Datei, in der der Zugang wohnt und
- * über die `proof:callers` zusichert, daß es keinen zweiten Weg zum Dienst
- * gibt. Am Port ändert das nichts: `createApiClient` verlangt seine
- * Abholfunktion weiterhin ohne Ersatzwert, und jeder Prüflauf reicht seine
- * eigene herein.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -29,14 +21,6 @@ import { Button, Callout, Section, Skeleton } from './Primitives.tsx';
 import { SettingsView } from './SettingsView.tsx';
 import { TaskPane } from './TaskPane.tsx';
 
-/**
- * Auswerter ohne Worker.
- *
- * Es wird **nicht** ersatzweise im Hauptfaden gerechnet. Ein regulärer Ausdruck
- * ist dort nicht abbrechbar, und ein eingefrorener Aufgabenbereich, den der
- * Benutzer nicht einmal schließen kann, ist schlimmer als eine fehlende
- * Erkennung (B-4.1). Der Benutzer trägt die Nummer dann von Hand ein.
- */
 const unavailableEvaluator: Evaluator = () =>
   Promise.resolve({
     kind: 'unavailable',
@@ -92,10 +76,6 @@ export function App() {
     };
   }, [hostAttempt]);
 
-  /**
-   * Erkennung — **nach** dem Laden der E-Mail und mit dem Muster aus den
-   * Einstellungen. Es wird bei jeder Verwendung neu geprüft (B-4.2 Punkt 2).
-   */
   useEffect(() => {
     if (host === null || host.kind !== 'ready') return undefined;
     let cancelled = false;
@@ -196,8 +176,7 @@ function Body({
           title="Die Outlook-Schnittstelle konnte nicht geladen werden."
           action={<Button onClick={onRetryHost}>Erneut prüfen</Button>}
         >
-          Die Seite ist geladen, aber Office.js fehlt. In Outlook deutet das meist auf einen
-          blockierten Zugriff auf Microsofts Office.js hin. Prüfen Sie die Netzwerk- oder
+          Die Seite ist geladen, aber Office.js fehlt. Prüfen Sie die Netzwerk- oder
           Proxy-Einstellungen und versuchen Sie es erneut.
         </Callout>
       </Section>
@@ -213,8 +192,7 @@ function Body({
           action={<Button onClick={onRetryHost}>Erneut prüfen</Button>}
         >
           Office.js ist geladen, aber Outlook hat innerhalb von 15 Sekunden nicht geantwortet.
-          Versuchen Sie es erneut. Bleibt der Zustand bestehen, schließen Sie Outlook vollständig
-          und öffnen Sie es erneut.
+          Versuchen Sie es erneut.
         </Callout>
       </Section>
     );
@@ -232,7 +210,8 @@ function Body({
 
   return (
     <TaskPane
-      mail={host.kind === 'ready' ? host.mail : EMPTY_MAIL}
+      mail={host.mail}
+      mailLink={host.webLink}
       detection={detection}
       api={api}
       hasToken={settings.hasToken}
