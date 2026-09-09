@@ -1,0 +1,106 @@
+name: PR15 gezielte Reparaturprüfung
+
+on:
+  push:
+    branches: [ci/pr15-repair-validation-6578eab]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release-Prüffälle und Add-in-Bau prüfen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    outputs:
+      validated_sha: ${{ steps.commit.outputs.sha }}
+    defaults:
+      run:
+        working-directory: source
+        shell: bash
+    steps:
+      - name: Reparaturskript holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: repair
+          persist-credentials: false
+      - name: Unveränderten PR-Stand separat holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: source
+          ref: 6578eabead3a4e5cde7347562c3915102628a6e9
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          package-manager-cache: false
+      - name: Gezielte Änderungen anwenden und prüfen
+        run: |
+          set -euo pipefail
+          python ../repair/ci/pr15-repair.py
+          git add apps/outlook-addin/src/ui/TaskPane.tsx apps/outlook-addin/src/ui/DuplicateOffer.tsx apps/outlook-addin/scripts/proof-addin.mjs apps/outlook-addin/scripts/proof-followup.mjs apps/local-api/test/outlook-certificate.windows.test.ts docs/design/textbestand-aufgabenbereich.md
+          git diff --cached --check
+          node --check apps/outlook-addin/scripts/proof-addin.mjs
+          node --check apps/outlook-addin/scripts/proof-followup.mjs
+          git diff --cached --stat
+      - name: Abhängigkeiten installieren
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm install --frozen-lockfile
+      - name: Sämtliche Release-Nachweise ausführen
+        run: pnpm proof:all
+      - name: Typprüfung einschließlich Tests
+        run: pnpm typecheck
+      - name: Unit- und Integrationstests
+        run: pnpm test
+      - name: Add-in und Hauptoberfläche bauen
+        run: |
+          set -euo pipefail
+          pnpm --filter @takt/outlook-addin build
+          pnpm --filter @takt/web build
+      - name: Geprüften Fix getrennt bereitstellen
+        id: commit
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "6578eabead3a4e5cde7347562c3915102628a6e9"
+          test -z "$(git diff --name-only)"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: validate Outlook follow-up contract and Windows certificate tests'
+          sha="$(git rev-parse HEAD)"
+          git push origin HEAD:refs/heads/ci/pr15-validated-fix-6578eab
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Geprüfter Fix: $sha" >> "$GITHUB_STEP_SUMMARY"
+
+  outlook:
+    name: Outlook-Zertifikat (Windows) prüfen
+    needs: release
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Exakt den geprüften Fix holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.release.outputs.validated_sha }}
+      - name: Node bereitstellen
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.2
+          package-manager-cache: false
+      - name: Abhängigkeiten installieren
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm install --frozen-lockfile
+      - name: Zertifikatsprüfung, Ablehnung und HTTPS testen
+        env:
+          SUPERTAKT_TEST_CERT_TRUST: '1'
+        run: pnpm exec vitest run apps/local-api/test/outlook-certificate.windows.test.ts apps/desktop/test/outlookCertificate.test.ts
