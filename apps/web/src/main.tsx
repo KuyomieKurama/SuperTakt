@@ -5,6 +5,7 @@ import { App } from "./app/App";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/app.css";
+import "./styles/viewport-layout.css";
 
 /**
  * Takt — Einstiegspunkt der Anwendung.
