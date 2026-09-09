@@ -16,7 +16,7 @@ import { FormDialog } from "../components/FormDialog";
 import { Icon } from "../components/Icon";
 import { KanbanCard, KanbanColumn, type KanbanCardData } from "../components/Kanban";
 import type { MenuEntry } from "../components/Menu";
-import { Button, Card, EmptyState, InlineMessage, LoadingBlock } from "../components/Primitives";
+import { Button, Card, EmptyState, IconButton, InlineMessage, LoadingBlock } from "../components/Primitives";
 import { RuleSummary } from "../components/RuleSummary";
 import { EMPTY_SUMMARY, loadExportSummaries } from "../app/exportSummary";
 import { useRefresh } from "../app/RefreshContext";
@@ -1133,8 +1133,37 @@ function BoardSetupDialog({
   readonly onAdopt: (pool: Pool) => void;
   readonly onRemove: (pool: Pool) => void;
 }) {
+  const structure = useStructure();
+  const toasts = useToasts();
+  const { bump } = useRefresh();
+  const [reordering, setReordering] = useState<Id | null>(null);
   const onBoard = new Set(columns.map((view) => view.column.id));
   const available = pools.filter((pool) => !onBoard.has(pool.id));
+
+  const moveColumn = (index: number, offset: -1 | 1): void => {
+    const current = columns[index];
+    const target = columns[index + offset];
+    if (current === undefined || target === undefined || reordering !== null) return;
+
+    setReordering(current.column.id);
+    void Promise.all([
+      updatePool(current.column.id, { position: target.column.position }),
+      updatePool(target.column.id, { position: current.column.position }),
+    ])
+      .then(() => {
+        structure.reload();
+        bump();
+        toasts.show({
+          tone: "success",
+          title: "Reihenfolge geändert.",
+          body: `${quotedName(current.column.name)} steht jetzt ${offset < 0 ? "weiter links" : "weiter rechts"}. Die Position gilt auch in der Pool-Liste.`,
+        });
+      })
+      .catch((cause: unknown) =>
+        toasts.failure("Die Reihenfolge ließ sich nicht ändern", errorMessage(cause)),
+      )
+      .finally(() => setReordering(null));
+  };
 
   return (
     <FormDialog
@@ -1177,7 +1206,7 @@ function BoardSetupDialog({
         />
       ) : (
         <ul className="rule-list">
-          {columns.map((view) => {
+          {columns.map((view, index) => {
             /*
              * Derselbe Befund wie im Leerzustand der Spalte, aus derselben
              * Quelle (E-057). Er steht auch hier, weil dieser Dialog die
@@ -1190,52 +1219,74 @@ function BoardSetupDialog({
             );
 
             return (
-            <li key={view.column.id} className="rule-row">
-              <div className="grow">
-                <p className="rule-row__name">
-                  <Foreign value={view.column.name} />
-                </p>
-                <p className="rule-row__meta">
-                  {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
-                  {plural(countPoolRuleConditions(axesOf(view.column)), "Bedingung", "Bedingungen")}{" "}
-                  · {plural(view.total, "Karte", "Karten")}
-                </p>
-                {reach.kind === "empty-folder" ? (
-                  <p className="rule-row__fault">
-                    <Icon name="alert-triangle" size={11} />
-                    Kein Tag in {emptyFolderNames(reach.folders)} — diese Spalte kann nichts
-                    treffen.
+              <li key={view.column.id} className="rule-row">
+                <div className="grow">
+                  <p className="rule-row__name">
+                    <Foreign value={view.column.name} />
                   </p>
-                ) : null}
-              </div>
-              {/*
-                Zwei getrennte Knöpfe, weil es zwei Handlungen sind (O-A):
-                „Umbenennen" schickt `{ name }`, „Regel bearbeiten" schreibt
-                alle fünf Achsen. Die Beschriftung sagt seit T-133, **was**
-                bearbeitet wird — „Bearbeiten" allein ließ offen, ob damit der
-                Name gemeint ist, und genau daran ist das Umbenennen bisher
-                gescheitert.
-              */}
-              <Button
-                size="sm"
-                variant="secondary"
-                iconStart="pencil"
-                onClick={() => onRename(view.column)}
-              >
-                Umbenennen
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                iconStart="filter"
-                onClick={() => onEdit(view.column)}
-              >
-                Regel bearbeiten
-              </Button>
-              <Button size="sm" variant="ghost" iconStart="x" onClick={() => onRemove(view.column)}>
-                Vom Board nehmen
-              </Button>
-            </li>
+                  <p className="rule-row__meta">
+                    {POOL_PLACEMENT_SHORT[view.column.placement]} ·{" "}
+                    {plural(countPoolRuleConditions(axesOf(view.column)), "Bedingung", "Bedingungen")}{" "}
+                    · {plural(view.total, "Karte", "Karten")}
+                  </p>
+                  {reach.kind === "empty-folder" ? (
+                    <p className="rule-row__fault">
+                      <Icon name="alert-triangle" size={11} />
+                      Kein Tag in {emptyFolderNames(reach.folders)} — diese Spalte kann nichts
+                      treffen.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div
+                  className="board-order"
+                  role="group"
+                  aria-label={`Reihenfolge von ${quotedName(view.column.name)}`}
+                >
+                  <IconButton
+                    label={`${quotedName(view.column.name)} weiter nach links verschieben`}
+                    icon="arrow-up"
+                    size="sm"
+                    disabled={index === 0 || reordering !== null}
+                    onClick={() => moveColumn(index, -1)}
+                  />
+                  <IconButton
+                    label={`${quotedName(view.column.name)} weiter nach rechts verschieben`}
+                    icon="arrow-down"
+                    size="sm"
+                    disabled={index === columns.length - 1 || reordering !== null}
+                    onClick={() => moveColumn(index, 1)}
+                  />
+                </div>
+
+                {/*
+                  Zwei getrennte Knöpfe, weil es zwei Handlungen sind (O-A):
+                  „Umbenennen" schickt `{ name }`, „Regel bearbeiten" schreibt
+                  alle fünf Achsen. Die Beschriftung sagt seit T-133, **was**
+                  bearbeitet wird — „Bearbeiten" allein ließ offen, ob damit der
+                  Name gemeint ist, und genau daran ist das Umbenennen bisher
+                  gescheitert.
+                */}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  iconStart="pencil"
+                  onClick={() => onRename(view.column)}
+                >
+                  Umbenennen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  iconStart="filter"
+                  onClick={() => onEdit(view.column)}
+                >
+                  Regel bearbeiten
+                </Button>
+                <Button size="sm" variant="ghost" iconStart="x" onClick={() => onRemove(view.column)}>
+                  Vom Board nehmen
+                </Button>
+              </li>
             );
           })}
         </ul>
@@ -1263,35 +1314,12 @@ function BoardSetupDialog({
         </div>
       )}
 
-      <InlineMessage tone="info" title="Reihenfolge">
-        Die Spalten stehen in der Reihenfolge ihrer Position, die sie mit der Pool-Liste teilen.
-        Sie lässt sich hier noch nicht ändern.
-      </InlineMessage>
-
-      {/*
-        Wer „Statusspalten" sucht, sucht sie hier — bis E-054 wurden sie in
-        genau diesem Dialog verwaltet. Der Hinweis nennt den neuen Ort und den
-        Grund, statt ihn suchen zu lassen (A-5.4, T-073).
-      */}
-      <InlineMessage
-        tone="info"
-        title="Sie suchen die Statuswerte?"
-        action={
-          <Button
-            size="sm"
-            variant="secondary"
-            iconStart="arrow-up-right"
-            onClick={() => navigate("settings", undefined, { bereich: "status" })}
-          >
-            Zu den Einstellungen
-          </Button>
-        }
-      >
-        Der Status ist seit der Umstellung keine Spalte mehr, sondern eine Eigenschaft des Todos —
-        sichtbar auf jeder Karte, geändert in der Liste und in der Detailansicht. Angelegt,
-        umbenannt, sortiert und gelöscht werden die Statuswerte in den Einstellungen unter
-        „Status“.
-      </InlineMessage>
+      {columns.length < 2 ? null : (
+        <p className="field__hint">
+          Mit den Pfeilen ändern Sie die Reihenfolge auf dem Board. Die Position wird mit der
+          Pool-Liste geteilt.
+        </p>
+      )}
     </FormDialog>
   );
 }

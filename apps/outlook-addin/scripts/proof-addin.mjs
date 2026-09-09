@@ -34,6 +34,7 @@ import { Worker } from 'node:worker_threads';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { runFollowupProofs } from './proof-followup.mjs';
 
 // --- Prüflinge: das Add-in ------------------------------------------------
 import { checkPattern } from '../src/callnumber/pattern.ts';
@@ -382,9 +383,12 @@ check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => 
   // Funktion. Ohne sie wäre die Zeile darüber auch dann grün, wenn der Satz
   // gar nicht mehr vorkäme.
   const rufer = files.filter((file) => /poolMovementSentence\s*\(/.test(sourceWithoutComments(file)));
-  assert.ok(
-    rufer.length >= 2,
-    `nur ${String(rufer.length)} Datei(en) rufen poolMovementSentence — der Satz erscheint nirgends mehr`,
+  // PR #15: the booking API and its legacy presentation helper remain;
+  // the follow-up UI no longer announces a booking or a pool movement.
+  assert.deepEqual(
+    rufer.map((file) => path.relative(srcRoot, file)).sort(),
+    [path.join('duplicate', 'reopen.ts')],
+    'der verbleibende Buchungshelfer muss den Satz aus der Domäne beziehen',
   );
 });
 
@@ -4876,7 +4880,7 @@ check('die Add-in-Tür hat kein Anhangsfeld (A-19.19) — strukturell, nicht per
   assert.ok(felder.includes('dueDate'), 'die Frist fehlt an der Tür — dann misst 18c nichts');
 });
 
-check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang', () => {
+check('der Add-in-Abschnitt trennt Todo-Anlage und die schmale Verweisroute', () => {
   const spec = parseYaml(
     readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
   );
@@ -4890,16 +4894,34 @@ check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang'
     'die Frist steht ohne ihre Anforderungs-ID da',
   );
 
+  // Die Todo-Anlage selbst bleibt frei von Anhangsfeldern. Der Verweis ist
+  // eine ausdrückliche zweite Handlung auf einem bereits vorhandenen Todo.
   const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
   assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
 
-  // Und keine der vier Add-in-Routen ist eine Anhangsroute (A-A-21).
   const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
-  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.ok(addinPfade.length >= 5, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
   assert.deepEqual(
     addinPfade.filter((pfad) => /attachment/i.test(pfad)),
-    [],
-    'unter /addin hängt eine Anhangsroute',
+    ['/addin/todos/{todoId}/attachments'],
+    'unter /addin gibt es mehr oder andere Anhangswege als den schmalen Verweis',
+  );
+
+  const verweis = spec.paths['/addin/todos/{todoId}/attachments'] ?? {};
+  assert.ok(verweis.post, 'die schmale Verweisroute hat kein POST');
+  assert.equal(verweis.get, undefined, 'das Add-in darf Anhänge nicht lesen');
+  assert.equal(verweis.delete, undefined, 'das Add-in darf Anhänge nicht löschen');
+  const verweisFelder =
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+  assert.deepEqual(
+    Object.keys(verweisFelder).sort(),
+    ['title', 'url'],
+    'die Add-in-Verweisroute ist breiter als URL plus freiwilliger Titel',
+  );
+  assert.deepEqual(
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.required ?? [],
+    ['url'],
+    'nur die URL darf an der Verweisroute Pflicht sein',
   );
 });
 
@@ -5582,7 +5604,15 @@ check(`V-03: alle ${String(felder.length)} Felder des Add-ins reichen ihre Attri
    * `input`, `textarea` oder `select`, oder `aria={aria}` an einen Baustein,
    * der sein Bedienelement selbst zeichnet (der Tag-Auswähler).
    */
-  assert.ok(felder.length >= 12, `nur ${String(felder.length)} Felder gefunden — der Wächter greift ins Leere`);
+  // PR #15 removes exactly two inputs: minutes and billable service.
+  // Every remaining field still has to forward its accessibility attributes.
+  assert.ok(felder.length >= 10, `nur ${String(felder.length)} Felder gefunden — der Wächter greift ins Leere`);
+  for (const id of ['call', 'title', 'due', 'tags', 'note']) {
+    assert.ok(
+      felder.some(({ block }) => block.includes(`htmlFor="${id}"`)),
+      `das erwartete Feld ${id} fehlt — eine kleinere Menge ist keine Entwarnung`,
+    );
+  }
 
   const ohne = felder.filter(({ block }) => {
     if (!/\{\s*\(\s*aria\s*\)\s*=>/.test(block)) return true;
@@ -5695,45 +5725,43 @@ check('A-19.1: „leer lassen" bleibt gesagt — ohne Frist ist ein Todo gültig
  * Auskunft".
  */
 
-const buchungsFlaeche = paneQuelle.slice(paneQuelle.indexOf('Auf vorhandenes Todo buchen'));
+// PR #15 replaces the booking surface with an explicit link-only follow-up.
+// The user's draft date is still not an instruction to modify the found Todo.
+const attachmentSurfaceStart = paneQuelle.indexOf('<DuplicateOffer');
+const attachmentSurface = paneQuelle.slice(Math.max(0, attachmentSurfaceStart));
 
-check('V-08: die Buchungsfläche sagt, dass die eingetragene Frist nur für ein neues Todo gilt', () => {
-  assert.ok(buchungsFlaeche.length > 0, 'die Buchungsfläche ist nicht auffindbar — dann misst dieser Abschnitt nichts');
+check('V-08: das Anhangsangebot sagt, dass die eingetragene Frist nur für ein neues Todo gilt', () => {
+  assert.notEqual(attachmentSurfaceStart, -1, 'das Anhangsangebot ist nicht auffindbar');
   assert.match(
-    buchungsFlaeche,
+    attachmentSurface,
     /Die eingetragene Frist gilt nur für ein neues Todo\./,
-    'der Wechsel auf ein vorhandenes Todo verwirft die Frist weiterhin stillschweigend',
+    'das Anhängen verwirft die eingegebene Frist weiterhin stillschweigend',
   );
   assert.match(
-    buchungsFlaeche,
-    /behält seine eigene/,
-    'der Satz sagt nicht, dass das bebuchte Todo seine eigene Frist behält',
+    attachmentSurface,
+    /Das vorhandene Todo behält seine eigene Frist\./,
+    'die unveränderte Frist des vorhandenen Todos bleibt unerwähnt',
   );
 });
 
-check('V-08: der Satz hängt an der Eingabe und steht nicht auf Vorrat', () => {
-  /*
-   * E-078 Punkt 6, Zustandsbindung: Wer keine Frist eingetragen hat, liest
-   * nichts über Fristen. Gemessen an der Bedingung unmittelbar davor.
-   */
-  const stelle = buchungsFlaeche.indexOf('Die eingetragene Frist gilt nur');
-  const davor = buchungsFlaeche.slice(Math.max(0, stelle - 200), stelle);
+check('V-08: der Satz hängt am Angebot und an der eingegebenen Frist', () => {
+  const position = attachmentSurface.indexOf('Die eingetragene Frist gilt nur');
+  assert.notEqual(position, -1, 'kein Hinweis gefunden');
+  const before = attachmentSurface.slice(Math.max(0, position - 220), position);
   assert.match(
-    davor,
-    /dueEntry\.kind !== 'none'\s*\?/,
-    'der Satz steht unbedingt da — dann liest ihn auch, wer keine Frist eingetragen hat',
+    before,
+    /offers\.length > 0 && dueEntry\.kind !== 'none'\s*\?/,
+    'der Hinweis darf weder ohne Treffer noch ohne eingegebene Frist erscheinen',
   );
 });
 
-check('V-08: die Frist wird nicht heimlich mitgebucht', () => {
-  /*
-   * Die naheliegende „Verbesserung" wäre, die eingetragene Frist auf das
-   * fremde Todo zu schreiben. Das wäre eine Änderung an einem Todo, das der
-   * Benutzer nicht bearbeitet — und sie stünde in keiner Anforderung.
-   */
-  const rumpf = /await api\.book\(\{([\s\S]*?)\}\);/.exec(paneQuelle)?.[1] ?? '';
-  assert.ok(rumpf.length > 0, 'der Buchungsaufruf ist nicht auffindbar');
-  assert.equal(/due/i.test(rumpf), false, `die Buchung führt eine Frist mit: ${rumpf.trim()}`);
+check('V-08: das Anhängen sendet weder eine Frist noch eine Zeitbuchung', () => {
+  const payload = /await api\.addLinkAttachment\(\{([\s\S]*?)\}\);/.exec(paneQuelle)?.[1] ?? '';
+  assert.ok(payload.length > 0, 'der Anhangsaufruf ist nicht auffindbar');
+  const keys = [...payload.matchAll(/^\s*([A-Za-z]+):/gm)].map((match) => match[1]).sort();
+  assert.deepEqual(keys, ['title', 'todoId', 'url'], 'das Anhangsangebot sendet mehr als den Verweis');
+  assert.equal(/\bapi\.book\s*\(/.test(paneQuelle), false, 'das Angebot bucht weiterhin Zeit');
+  assert.equal(/due|startedAt|endedAt|minutes/.test(payload), false, 'der Entwurf verändert das gefundene Todo');
 });
 
 // ---------------------------------------------------------------------------
@@ -6104,7 +6132,12 @@ heading('20  Die Sperrliste: was allein eine Grenze trägt (O-HO, T-196)');
 /** Quelltext einer Add-in-Datei ohne Kommentare, über ihren Pfad unter `src/`. */
 const uiQuelle = (...teile) => sourceWithoutComments(path.join(srcRoot, ...teile));
 
+// PR #15: SP-A-01 retains the note's privacy label and sentence.
+// SP-A-05 and the service label retire with the removed booking controls.
+// SP-A-27/28 protect the replacement action's no-booking/no-reopening promise.
+// The corresponding product change is recorded in the text inventory.
 const TASKPANE = path.join('ui', 'TaskPane.tsx');
+const DUPLICATE_OFFER = path.join('ui', 'DuplicateOffer.tsx');
 const TAGPICKER = path.join('ui', 'TagPicker.tsx');
 
 /**
@@ -6131,18 +6164,18 @@ const GESPERRTE_TEXTE = Object.freeze([
     grund: 'A-7.2 — der Klammerzusatz nennt den Ort, an dem der Text bleibt',
   }),
   Object.freeze({
-    sperre: 'SP-A-01',
-    datei: TASKPANE,
-    text: 'label="Leistung (geht in die Abrechnung)"',
-    verletzung: 'label="Leistung"',
-    grund: 'A-7.3, A-7.4 — der Klammerzusatz nennt den Weg, den dieser Text nimmt',
+    sperre: 'SP-A-27',
+    datei: DUPLICATE_OFFER,
+    text: 'Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.',
+    verletzung: 'Die E-Mail wird übernommen.',
+    grund: 'PR #15 — Anhängen ist keine Zeitbuchung',
   }),
   Object.freeze({
-    sperre: 'SP-A-05',
-    datei: TASKPANE,
-    text: 'Text aus der E-Mail gehört in den Vermerk, nicht hierher.',
-    verletzung: 'Kurz und sachlich.',
-    grund: 'B-12.3, R-08 — die einzige Stelle, die fremden Text von der Rechnung fernhält',
+    sperre: 'SP-A-28',
+    datei: DUPLICATE_OFFER,
+    text: 'Ein erledigtes Todo bleibt erledigt.',
+    verletzung: 'Das Todo wird aktualisiert.',
+    grund: 'PR #15 — der Verweis hebt Erledigt nicht auf',
   }),
   Object.freeze({
     sperre: 'SP-A-12',
@@ -6169,6 +6202,7 @@ const fehlendeSperrtexte = (quellen) =>
 const sperrQuellen = () =>
   new Map([
     [TASKPANE, uiQuelle('ui', 'TaskPane.tsx')],
+    [DUPLICATE_OFFER, uiQuelle('ui', 'DuplicateOffer.tsx')],
     [TAGPICKER, uiQuelle('ui', 'TagPicker.tsx')],
   ]);
 
@@ -6276,6 +6310,10 @@ check('O-HO, Gegenprobe: die Kürzung ohne Träger wird rot, die Rücknahme nich
     'die Rechnung verlangt beides statt einer Folgerung — dann wäre ST-A-06 unwiderruflich',
   );
 });
+
+// ===========================================================================
+heading('21  Outlook-Verweise: keine Buchung, kein Wiederöffnen, enge Rechte');
+await runFollowupProofs({ check, checkAsync });
 
 // ===========================================================================
 process.stdout.write(
