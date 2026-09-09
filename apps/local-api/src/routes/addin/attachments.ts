@@ -17,15 +17,11 @@ import { z } from 'zod';
 import type { TodoId } from '@takt/domain';
 import { normalizeAttachmentLink, taktError } from '@takt/domain';
 
-import { attachmentTitleSchema, attachmentUrlSchema, idSchema, readJson } from '../../http/input.ts';
+import { idSchema, readJson } from '../../http/input.ts';
 import { data, fail, failValidation } from '../../http/problem.ts';
 import type { TaktEnv } from '../../http/guards.ts';
 import type { AddinDeps } from './ports.ts';
-
-const linkSchema = z.object({
-  url: attachmentUrlSchema,
-  title: attachmentTitleSchema.nullish(),
-});
+import { addLinkAttachmentSchema } from './schema.ts';
 
 const issues = (error: z.ZodError) =>
   error.issues.map((issue) => ({
@@ -41,7 +37,7 @@ export function createAddinAttachmentRoutes(deps: AddinDeps): Hono<TaktEnv> {
     const parsedId = idSchema.safeParse(c.req.param('todoId'));
     if (!parsedId.success) return failValidation(c, issues(parsedId.error));
 
-    const parsed = linkSchema.safeParse(await readJson(c.req.raw));
+    const parsed = addLinkAttachmentSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return failValidation(c, issues(parsed.error));
 
     const normalized = normalizeAttachmentLink(parsed.data.url);
