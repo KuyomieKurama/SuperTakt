@@ -13,7 +13,7 @@ describe('Outlook host diagnostics', () => {
     await expect(readHost(1)).resolves.toEqual({ kind: 'office_js_unavailable' });
   });
 
-  it('reports an Office host that does not become ready before the deadline', async () => {
+  it('reports an Office host that does not invoke the onReady callback before the deadline', async () => {
     vi.stubGlobal('Office', {
       onReady: () => new Promise<void>(() => undefined),
       context: { mailbox: {} },
@@ -22,9 +22,12 @@ describe('Outlook host diagnostics', () => {
     await expect(readHost(5)).resolves.toEqual({ kind: 'office_not_ready' });
   });
 
-  it('keeps the existing no-item state once Office is ready', async () => {
+  it('uses the onReady callback and does not depend on the returned promise resolving', async () => {
     vi.stubGlobal('Office', {
-      onReady: () => Promise.resolve(),
+      onReady: (callback: () => void) => {
+        callback();
+        return new Promise<void>(() => undefined);
+      },
       context: { mailbox: {} },
     });
 

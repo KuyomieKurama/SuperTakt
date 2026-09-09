@@ -34,6 +34,42 @@ export const hasOfficeHost = (): boolean =>
   typeof (globalThis as { Office?: { onReady?: unknown } }).Office?.onReady === 'function';
 
 /**
+ * Wartet auf die Office-Initialisierung über die Callback-Form von `onReady`.
+ *
+ * Microsoft unterstützt Callback und Promise offiziell. Für den klassischen
+ * Outlook-Client verwenden wir bewusst den Callback: Genau diese Form läuft
+ * auch in der bereits eingesetzten SP-OutlookBridge zuverlässig, während die
+ * Promise-Form in klassischem Outlook auf realen Installationen hängen bleiben
+ * kann, obwohl `Office` und `Office.onReady` schon vorhanden sind.
+ *
+ * Der Rückgabewert von `Office.onReady(...)` wird daher absichtlich nicht
+ * abgewartet. Entscheidend ist ausschließlich, dass der von Office aufgerufene
+ * Callback eintrifft. Die Zeitgrenze bleibt als Notausgang bestehen.
+ */
+function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ready);
+    };
+    const timer = setTimeout(() => {
+      finish(false);
+    }, timeoutMs);
+
+    try {
+      void Office.onReady(() => {
+        finish(true);
+      });
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+/**
  * Liest den Nur-Text der geöffneten E-Mail.
  *
  * `body.getAsync` ist rückrufbasiert; die Verpackung in ein Versprechen ist
@@ -68,22 +104,14 @@ const readBody = (item: Office.MessageRead): Promise<string> =>
  * Aufgabenbereich sichtbar in Outlook geöffnet hat.
  *
  * 15 Sekunden sind eine Fehlergrenze, kein Ladeziel. Der erste WebView2-Start
- * kann deutlich langsamer sein als ein warmer Start; fünf Sekunden haben einen
- * langsamen Wirt unnötig als fehlend eingestuft.
+ * kann deutlich langsamer sein als ein warmer Start.
  */
 export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
   if (!hasOfficeHost()) {
     return { kind: 'office_js_unavailable' };
   }
 
-  const ready = await Promise.race([
-    Office.onReady().then(() => true),
-    new Promise<false>((resolve) => {
-      setTimeout(() => {
-        resolve(false);
-      }, timeoutMs);
-    }),
-  ]);
+  const ready = await waitForOfficeReady(timeoutMs);
 
   if (!ready) {
     return { kind: 'office_not_ready' };
