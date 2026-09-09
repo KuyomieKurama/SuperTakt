@@ -1,0 +1,30 @@
+name: One-shot caller proof patch
+
+on:
+  push:
+    branches:
+      - 'feat/outlook-followup-attachments'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/outlook-followup-attachments
+          fetch-depth: 0
+      - name: Nachweispatch anwenden
+        run: python .github/one-shot-callers.py
+      - name: Änderungen einchecken und Hilfsdateien entfernen
+        shell: bash
+        run: |
+          git rm .github/one-shot-callers.py .github/workflows/one-shot-callers.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/local-api/scripts/proof-callers.mjs
+          git commit -m "fix: teach caller proof about add-in attachment route"
+          git push origin HEAD:feat/outlook-followup-attachments
