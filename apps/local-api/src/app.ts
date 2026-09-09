@@ -45,6 +45,7 @@ import {
 } from './http/guards.ts';
 import type { AccessRuntime } from './runtime.ts';
 import type { AppContext } from './usecases/context.ts';
+import { createAddinAttachmentRoutes } from './routes/addin/attachments.ts';
 import { createAddinRoutes } from './routes/addin/index.ts';
 import { createBoardRoutes } from './routes/board.ts';
 import { createExportRoutes, createSettingsRoutes } from './routes/export.ts';
@@ -250,38 +251,30 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
     /**
      * Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
      *
-     * Vier Routen: Baum und Vorbelegungen lesen, nach einer Call-Nummer suchen,
-     * ein Todo anlegen, eine Zeit buchen. Kein Löschen, kein Export, kein
-     * Zugriff auf den Vermerk eines fremden Todos, keine Einstellungen.
-     * Daneben erreicht das Add-in-Token nur noch `GET /health` — „Verbindung
-     * prüfen", ohne Inhalt und ohne Wirkung (`access/route-policy.ts`).
+     * Der Aufgabenbereich darf lesen, nach einer Call-Nummer suchen, ein Todo
+     * anlegen, die bestehende Buchungsroute nutzen und einen **http(s)-Verweis**
+     * an ein erkanntes Todo hängen. Die neue Anhangroute akzeptiert weder
+     * Dateipfade noch Bildquellen; sie kann also keine Datei des Rechners lesen.
+     * Kein Löschen, kein Export, kein Zugriff auf den Vermerk eines fremden
+     * Todos, keine Einstellungen. Daneben erreicht das Add-in-Token nur noch
+     * `GET /health` — „Verbindung prüfen", ohne Inhalt und ohne Wirkung.
      *
      * Der Grund ist nicht Sparsamkeit: Das Add-in weist sich mit dem
      * **dauerhaften** Token aus, die Oberfläche mit dem Sitzungsgeheimnis
      * (B-2.9 Punkt 3). Ein entwendetes Add-in-Token kommt genau so weit, wie
      * diese Fläche reicht.
      *
-     * **Wodurch dieser Absatz trägt (T-034).** Bis dahin trug er nicht: Er
-     * beschrieb die Absicht, und der Dienst nahm auf allen sechzig übrigen
-     * Routen beide Geheimnisse an (B-2.10, in T-023 gemessen — Vermerk gelesen
-     * und überschrieben, Exportordner gesetzt, Exportlauf ausgelöst). Er ist
-     * nicht abgeschwächt worden, sondern eingeholt: `credentialPolicy()` oben
-     * in der Kette verlangt `session` für **jeden** Pfad, und die einzige
-     * Ausnahme ist genau der Teilbaum, der hier eingehängt wird. Die Fläche
-     * dieses Blocks ist damit wörtlich die Fläche des Add-in-Tokens. Wer sie
-     * erweitert, erweitert das, was ein entwendetes Token erreicht.
-     *
      * `AddinDeps` ist strukturell ein Ausschnitt der echten Ports — ein
      * `TransactionPort` erfüllt ihn ohne Übersetzungsadapter, der etwas
      * verlieren könnte.
      */
-    api.route(
-      '/addin',
-      createAddinRoutes({
-        inTransaction: (work) => context.transactions.inTransaction(work),
-        now: () => context.clock.now(),
-      }),
-    );
+    const addinDeps = {
+      inTransaction: (work: Parameters<typeof context.transactions.inTransaction>[0]) =>
+        context.transactions.inTransaction(work),
+      now: () => context.clock.now(),
+    };
+    api.route('/addin', createAddinRoutes(addinDeps));
+    api.route('/addin', createAddinAttachmentRoutes(addinDeps));
   }
 
   app.route(API_BASE_PATH, api);
@@ -305,64 +298,13 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       return c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large'));
     }
 
-    /*
-     * **Der gemusterte Pfad und nicht der angefragte** (T-164, Auflage A-A-31).
-     *
-     * Hier stand bis T-168 `c.req.path`. Das ist der Weg, den der Aufrufer
-     * geschickt hat, und damit fremder Text in einem Protokoll, das ein
-     * Benutzer weitergibt. Der Riegel des Protokollierers liegt auf `reason`
-     * und auf nichts sonst (`logger.ts`); für `message` bürgt allein die
-     * Aufrufstelle — also diese hier.
-     *
-     * `routePath` liefert stattdessen den **registrierten** Pfad
-     * (`/todos/:id`). Er stammt aus dem Erzeugnis und nicht aus der Anfrage;
-     * damit kann diese Zeile gar keinen fremden Wert mehr tragen, statt keinen
-     * zu tragen, weil bisher keiner vorbeikam.
-     *
-     * Der zweite Parameter `-1` ist der **zuletzt** getroffene Eintrag, also
-     * der Routeneintrag selbst. Ohne ihn stünde bei einem Wurf aus einem der
-     * Wächter nur `*` da — die Kette hängt an `app.use('*', …)`, und die
-     * Wächter laufen vor der Route. Gibt es überhaupt keinen Treffer, ist die
-     * Zeichenkette leer; dann steht `?` da und keine leere Stelle.
-     */
     const where = `${c.req.method} ${routePath(c, -1) || '?'}`;
 
-    /**
-     * Das letzte Netz unter der Speicherung (T-074).
-     *
-     * Ein Adapter, der eine Regel der Datenbank durchschlagen lässt, ist ein
-     * Versehen — `attempt` und `attemptAtomically` in `packages/storage` sind
-     * die Stelle, an der eine Verletzung zum **Wert** wird. Vergisst sie jemand,
-     * kam die Störung bis hierher und wurde ein 500. Genau das ist in T-072
-     * gemessen worden: `POST /pools` mit vergebenem Namen antwortete
-     * `internal_error`, und die Oberfläche riet daraufhin zum erneuten Versuch,
-     * der genauso scheiterte.
-     *
-     * Der Unterschied ist nicht kosmetisch. Ein 500 sagt „bei mir ist etwas
-     * kaputt“, ein 409 sagt „das geht so nicht“ — nur das zweite lässt sich
-     * beantworten.
-     *
-     * **Dieses Netz ersetzt keinen Fehlerzweig.** Es sagt nur „ein doppelter
-     * Wert“, wo der Anwendungsfall sagen könnte, welcher. `proof:conflicts`
-     * misst deshalb beides: dass keine Route mit 500 antwortet, **und** dass
-     * die Antwort einen lesbaren Schlüssel trägt.
-     *
-     * Was nicht aus der Speicherung stammt, geht unverändert weiter unten durch
-     * und bleibt ein 500 ohne Innenleben. `asStorageFailure` liefert dafür
-     * `null` statt zu werfen; die werfende Fassung wäre hier eine Fangklammer
-     * um eine Fangklammer.
-     */
     const stored = asStorageFailure(error);
     if (stored !== null) {
       runtime.logger.lifecycle('warn', `Regel der Speicherung in ${where}: ${stored.code}`);
       return fail(c, stored);
     }
-    // Hier stand bis T-058 ein `console.error('DEBUG-T041', …, error)` — eine
-    // Zeile aus einer Fehlersuche, die den vollständigen Wurf samt
-    // SQLite-Meldung, Tabellennamen und Aufrufstapel auf `stderr` schrieb. Sie
-    // widersprach dem Absatz darüber Wort für Wort. `stderr` des Sidecars läuft
-    // in der Hülle zusammen und geht bei einer Fehlermeldung mit; damit war der
-    // Innenbau der Datenbank in einem Protokoll, das ein Benutzer weitergibt.
     c.set('outcome', 'internal_error');
     runtime.logger.lifecycle('error', `Unerwarteter Fehler in ${where}`);
     return c.json(errorEnvelope('internal_error'), errorStatus('internal_error'));
