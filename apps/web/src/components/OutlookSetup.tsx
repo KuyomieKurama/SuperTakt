@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { OutlookCertificateFacts } from "@takt/desktop/shell";
+import type { OutlookCertificateFacts, OutlookCertificateResult } from "@takt/desktop/shell";
 import { readOutlookCertificate, confirmOutlookCertificate } from "../app/connection";
 import { useAsync, useMutation } from "../app/useAsync";
 import { formatDateTime } from "../lib/format";
@@ -15,8 +15,41 @@ const HTTPS_LABEL: Readonly<Record<OutlookCertificateFacts["https"], string>> = 
   certificate_invalid: "Das Zertifikat ist nicht gültig oder entspricht nicht dem lokalen SuperTakt-Serverzertifikat.",
 };
 
+/**
+ * Tauri gibt ein `Result<_, String>` auf der JavaScript-Seite als verworfenen
+ * Promise mit genau diesem String zurück. `useAsync`/`useMutation` behandeln
+ * absichtlich nur echte `Error`-Objekte als Anzeigetext; sonst könnten
+ * technische Schlüssel beliebiger Aufrufe ungeprüft in der Oberfläche landen.
+ *
+ * Die beiden Outlook-Befehle sind die enge Ausnahme: Ihre Rust-Seite liefert
+ * ausschließlich feste deutsche Benutzermeldungen. Genau an dieser Grenze
+ * werden deshalb nur ihre nichtleeren Strings in `Error` übersetzt.
+ */
+function outlookShellError(cause: unknown): never {
+  if (typeof cause === "string" && cause.trim().length > 0) {
+    throw new Error(cause);
+  }
+  throw cause;
+}
+
+async function inspectOutlookCertificate(): Promise<OutlookCertificateResult | null> {
+  try {
+    return await readOutlookCertificate();
+  } catch (cause) {
+    outlookShellError(cause);
+  }
+}
+
+async function trustOutlookCertificate(fingerprint: string): Promise<OutlookCertificateResult> {
+  try {
+    return await confirmOutlookCertificate(fingerprint);
+  } catch (cause) {
+    outlookShellError(cause);
+  }
+}
+
 export function OutlookSetup() {
-  const status = useAsync(readOutlookCertificate, []);
+  const status = useAsync(inspectOutlookCertificate, []);
   const mutation = useMutation();
   const inFlight = useRef(false);
   const [confirmed, setConfirmed] = useState<OutlookCertificateFacts | null>(null);
@@ -25,7 +58,7 @@ export function OutlookSetup() {
     if (confirmed === null || inFlight.current) return;
     inFlight.current = true;
     void mutation.run(async () => {
-      const result = await confirmOutlookCertificate(confirmed.fingerprint);
+      const result = await trustOutlookCertificate(confirmed.fingerprint);
       status.replace(result);
       setConfirmed(null);
     }).finally(() => { inFlight.current = false; });
