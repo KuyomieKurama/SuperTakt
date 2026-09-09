@@ -34,3 +34,5 @@ jobs:
           pnpm install --frozen-lockfile
       - name: Outlook-Aufgabenbereich bauen
         run: pnpm --filter @takt/outlook-addin build
+      - name: Add-in-Aufrufe gegen den Dienst prüfen
+        run: pnpm --filter @takt/local-api proof:callers
