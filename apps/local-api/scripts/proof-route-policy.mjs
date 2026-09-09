@@ -246,7 +246,7 @@ function hasPlaceholder(path) {
  *
  * Es kostet eine Zeichenkette und eine ganze Zahl, keine Aufstellung von
  * Pfaden — und es ist die Hausform dieses Baums: „die Add-in-Fläche sind genau
- * vier Routen", „beide Seiten führen dieselbe Zahl".
+ * fünf Routen", „beide Seiten führen dieselbe Zahl".
  *
  * **Als Hilfe, nicht als Bedingung** (29.2.4): Wer {@link MIDDLEWARE_COUNT}
  * anhebt, kann mit der Durchgriffsprobe belegen, ob der neue Eintrag
@@ -364,7 +364,7 @@ function collectRoutes() {
     // Kettenglied allein am Platzhalter zu unterscheiden. Gemessen wurde eine
     // Zeile `api.all('/addin/leak', …)`: mit dem Add-in-Token 200 samt Rumpf,
     // dieser Lauf 40/0 und grün — samt der Zusicherung „die Add-in-Fläche sind
-    // genau vier Routen".
+    // genau fünf Routen".
     //
     // Ein `ALL`-Eintrag ohne Platzhalter wird deshalb nicht übersprungen,
     // sondern festgehalten und unten gemeldet: Eine Aussage über eine Liste,
@@ -532,7 +532,7 @@ try {
   }
 
   // ---------------------------------------------------------------------------
-  section('3  Die vier Routen, die das Add-in wirklich braucht, bleiben offen');
+  section('3  Die fünf Routen, die das Add-in wirklich braucht, bleiben offen');
   // ---------------------------------------------------------------------------
   {
     const context = await call('/addin/context', { token: addinToken });
@@ -641,8 +641,8 @@ try {
   const shared = own.filter((r) => !r.path.startsWith(ADDIN_PATH_PREFIX));
 
   check(
-    `die Add-in-Fläche sind genau vier Routen (${addinSurface.length})`,
-    addinSurface.length === 4,
+    `die Add-in-Fläche sind genau fünf Routen (${addinSurface.length})`,
+    addinSurface.length === 5,
     addinSurface.map((r) => `${r.method} ${r.path}`).join(', '),
   );
   check(

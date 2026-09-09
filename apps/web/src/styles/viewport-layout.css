@@ -1,0 +1,103 @@
+/*
+ * Viewport-gebundene Flaechen.
+ *
+ * Formulardialoge und das Kanban sollen sich nach dem verfuegbaren Fenster
+ * richten. Kopf und Fuss bleiben dabei erreichbar; nur der Teil, dessen Inhalt
+ * wachsen kann, bekommt einen eigenen Laufbereich.
+ */
+
+/* Formulardialoge: statt einer starren 60-vh-Grenze nimmt der Rumpf genau den
+   Platz ein, der zwischen Kopf und Fuss uebrig bleibt. `vh` ist die Rueckfall-
+   groesse, `dvh` folgt bei Engines mit dynamischem Viewport der tatsaechlich
+   sichtbaren Hoehe. */
+.dialog--form > form {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  max-block-size: calc(100vh - 2 * var(--space-6));
+  max-block-size: calc(100dvh - 2 * var(--space-6));
+}
+
+.dialog--form > form > .dialog__head--form,
+.dialog--form > form > .dialog__refusal,
+.dialog--form > form > .dialog__footer {
+  flex: none;
+}
+
+.dialog--form > form > .dialog__body--form {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  max-block-size: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Auf sehr kleinen Fenstern braucht auch die Abdunklung weniger Rand. Der
+   Dialog bleibt dadurch innerhalb des Viewports, ohne die Mindestabstaende an
+   normalen Fenstern zu veraendern. */
+@media (max-height: 44rem), (max-width: 38rem) {
+  .scrim {
+    padding: var(--space-2);
+  }
+
+  .dialog--form > form {
+    max-block-size: calc(100vh - 2 * var(--space-2));
+    max-block-size: calc(100dvh - 2 * var(--space-2));
+  }
+}
+
+/* Kanban: Sobald ein echtes Board da ist, gehoert die vertikale Laufstrecke
+   den Spalten und nicht der ganzen Anwendung. Der Bildschirmkopf und die
+   Board-Werkzeugzeile bleiben stehen; horizontal bleibt der vorhandene
+   Board-Laufweg unangetastet. */
+.app__main:has(> .screen > .board) {
+  overflow-y: hidden;
+}
+
+.app__main > .screen:has(> .board) {
+  height: 100%;
+  min-height: 0;
+}
+
+.screen:has(> .board) > .screen__header,
+.screen:has(> .board) > .board__bar,
+.screen:has(> .board) > .list-more {
+  flex: none;
+}
+
+.screen:has(> .board) > .board {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.screen:has(> .board) .kcolumn {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.screen:has(> .board) .kcolumn__head,
+.screen:has(> .board) .kcolumn__rule {
+  flex: none;
+}
+
+.screen:has(> .board) .kcolumn__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Die beiden Positionsknopfe bilden eine kleine, zusammengehoerige Gruppe in
+   jeder Zeile der Spaltenverwaltung. */
+.board-order {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}

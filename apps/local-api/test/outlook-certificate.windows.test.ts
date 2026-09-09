@@ -10,18 +10,37 @@ import { createSelfSignedCertificate } from '../src/taskpane/certificate.ts';
 const scriptUrl = new URL('../../desktop/src-tauri/src/outlook_certificate.ps1', import.meta.url);
 const executable = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
-async function powershell(script: string, input: unknown): Promise<Record<string, unknown>> {
+// Disposable Windows runners can spend over 25 seconds in the first
+// PowerShell startup. This is a test-process budget, not a TLS/trust bypass.
+const POWERSHELL_TIMEOUT_MS = 60_000;
+
+async function powershell(script: string, input: unknown, phase = 'certificate helper'): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     const chunks: Buffer[] = [];
     const errors: Buffer[] = [];
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`PowerShell timeout: ${Buffer.concat(errors).toString('utf8')}`)); }, 25_000);
+    let timedOut = false;
+    let inputError: Error | null = null;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+      // Settle on close, so cleanup never races a still-running trust helper.
+    }, POWERSHELL_TIMEOUT_MS);
+    child.stdin.on('error', (error: Error) => {
+      inputError = error;
+      child.kill();
+    });
     child.stdout.on('data', (b: Buffer) => chunks.push(b));
     child.stderr.on('data', (b: Buffer) => errors.push(b));
     child.on('error', (error) => { clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== 0) { reject(new Error(Buffer.concat(errors).toString('utf8'))); return; }
+      if (timedOut) {
+        reject(new Error(`PowerShell ${phase} exceeded ${POWERSHELL_TIMEOUT_MS} ms; stdout=${Buffer.concat(chunks).length} bytes; stderr: ${Buffer.concat(errors).toString('utf8')}`));
+        return;
+      }
+      if (inputError !== null) { reject(inputError); return; }
+      if (code !== 0) { reject(new Error(`PowerShell ${phase} exited ${String(code)}: ${Buffer.concat(errors).toString('utf8')}`)); return; }
       try {
         const result = JSON.parse(Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>;
         resolve(result);
@@ -53,7 +72,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
       trustedThumbprint = null;
     }
     if (directory !== null) { await rm(directory, { recursive: true, force: true }); directory = null; }
-  });
+  }, 75_000);
 
   it('rejects stale approval and headless trust, and validates HTTPS with a trusted test certificate', async () => {
     // Trust-store mutation is limited to an explicitly enabled disposable CI runner.
@@ -66,7 +85,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     const script = await readFile(scriptUrl, 'utf8');
     server = createServer({ key: pair.keyPem, cert: pair.certPem }, (_req, res) => res.writeHead(200).end('test add-in'));
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(17844, '127.0.0.1', resolve); });
-    expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ fingerprint, validNow: true, validProfile: true, installed: false, https: 'tls_failed' });
+    expect(await powershell(script, { path, action: 'inspect' }, 'initial untrusted inspection')).toMatchObject({ fingerprint, validNow: true, validProfile: true, installed: false, https: 'tls_failed' });
     expect(await powershell(script, { path, action: 'trust', fingerprint: '0'.repeat(64) })).toEqual({ error: 'certificate_changed' });
     expect(await powershell(script, { path, action: 'trust', fingerprint: '../anything' })).toEqual({ error: 'certificate_changed' });
     if (process.env['SUPERTAKT_TEST_CERT_TRUST'] !== '1') return;
@@ -88,7 +107,7 @@ describe.skipIf(process.platform !== 'win32')('A-23: real Windows certificate he
     expect(await powershell(script, { path, action: 'inspect' })).toMatchObject({ installed: true, https: 'ready' });
     await writeFile(path, createSelfSignedCertificate().certPem);
     expect(await powershell(script, { path, action: 'trust', fingerprint })).toEqual({ error: 'certificate_changed' });
-  }, 90_000);
+  }, 180_000);
 
   it('rejects expired and nonlocal certificates before trust can be added', async () => {
     directory = await mkdtemp(join(tmpdir(), 'supertakt-invalid-certificate-'));

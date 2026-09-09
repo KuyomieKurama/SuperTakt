@@ -37,7 +37,13 @@ import { z } from 'zod';
  * Abschrift der Klasse, die T-122, T-128 und T-134 dreimal aufgeräumt haben —
  * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
-import { dueDateSchema, nameSchema, titleSchema } from '../../http/input.ts';
+import {
+  attachmentTitleSchema,
+  attachmentUrlSchema,
+  dueDateSchema,
+  nameSchema,
+  titleSchema,
+} from '../../http/input.ts';
 
 /** UUID Fassung 7, wie `Id` in der OpenAPI-Beschreibung. */
 const id = z.string().uuid();
@@ -304,6 +310,19 @@ export const createTodoSchema = z.object({
 });
 
 /**
+ * Der schmale Anhangsrumpf des Add-ins.
+ *
+ * Anders als `AttachmentCreate` der Hauptfläche gibt diese Tür keine Wahl der
+ * Art: Das dauerhafte Add-in-Token darf ausschließlich einen http(s)-Verweis
+ * an ein vorhandenes Todo hängen. Datei- und Bildpfade sind hier strukturell
+ * nicht darstellbar.
+ */
+export const addLinkAttachmentSchema = z.object({
+  url: attachmentUrlSchema,
+  title: attachmentTitleSchema.nullish(),
+});
+
+/**
  * Die **Leistung** einer Buchung aus dem Aufgabenbereich (A-7.3, A-7.4).
  *
  * ---------------------------------------------------------------------------
@@ -387,6 +406,7 @@ export const bookSchema = z.object({
  */
 
 export type CreateTodoBody = z.infer<typeof createTodoSchema>;
+export type AddLinkAttachmentBody = z.infer<typeof addLinkAttachmentSchema>;
 export type BookBody = z.infer<typeof bookSchema>;
 
 /**
@@ -434,6 +454,7 @@ export type BookBody = z.infer<typeof bookSchema>;
  */
 export const REQUEST_SCHEMAS = Object.freeze({
   createAddinTodo: createTodoSchema,
+  addAddinTodoAttachment: addLinkAttachmentSchema,
   createAddinTimeEntry: bookSchema,
 });
 

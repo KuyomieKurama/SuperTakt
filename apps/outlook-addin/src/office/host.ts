@@ -1,33 +1,23 @@
 /**
  * Takt — die einzige Datei, die `Office.*` anfasst.
  *
- * Alles, was der Aufgabenbereich sonst tut, arbeitet auf `MailFacts` — einem
- * einfachen Wert. Diese Trennung ist der Grund, warum Erkennung der
- * Call-Nummer, Duplikatabgleich, API-Aufrufe und Tokenbehandlung ohne Outlook
- * prüfbar sind: Sie sehen Outlook nie.
- *
- * Was hier **nicht** passiert:
- *
- *  - Kein Schreiben in die E-Mail. Das Add-in liest (`ReadItem` im Manifest).
- *  - Kein `roamingSettings` (E-019, B-2.8). Der Typ ist in `office-js.d.ts`
- *    nicht einmal deklariert.
- *  - Kein HTML. `CoercionType.Text` liefert Nur-Text; HTML aus einer fremden
- *    E-Mail hat im Aufgabenbereich nichts zu suchen (B-12.1).
+ * Alles, was der Aufgabenbereich sonst tut, arbeitet auf einfachen Werten.
+ * Dadurch bleiben Erkennung, Duplikatabgleich und API-Aufrufe ohne Outlook
+ * prüfbar.
  */
 
 import { EMPTY_MAIL, type MailFacts } from './mail.ts';
 
 export type HostState =
   /** Office ist bereit und eine E-Mail ist geöffnet. */
-  | { readonly kind: 'ready'; readonly mail: MailFacts }
-  /** Office ist bereit, aber es ist kein Element geöffnet (Empty-Zustand in S-12). */
+  | { readonly kind: 'ready'; readonly mail: MailFacts; readonly webLink: string | null }
+  /** Office ist bereit, aber es ist kein Element geöffnet. */
   | { readonly kind: 'no_item' }
   /** `office.js` hat `window.Office` nicht bereitgestellt. */
   | { readonly kind: 'office_js_unavailable' }
   /** `office.js` ist da, aber der Office-Wirt hat `onReady` nicht rechtzeitig beantwortet. */
   | { readonly kind: 'office_not_ready' };
 
-/** Steht Office.js überhaupt zur Verfügung? */
 export const hasOfficeHost = (): boolean =>
   typeof globalThis === 'object' &&
   'Office' in globalThis &&
@@ -35,16 +25,8 @@ export const hasOfficeHost = (): boolean =>
 
 /**
  * Wartet auf die Office-Initialisierung über die Callback-Form von `onReady`.
- *
- * Microsoft unterstützt Callback und Promise offiziell. Für den klassischen
- * Outlook-Client verwenden wir bewusst den Callback: Genau diese Form läuft
- * auch in der bereits eingesetzten SP-OutlookBridge zuverlässig, während die
- * Promise-Form in klassischem Outlook auf realen Installationen hängen bleiben
- * kann, obwohl `Office` und `Office.onReady` schon vorhanden sind.
- *
- * Der Rückgabewert von `Office.onReady(...)` wird daher absichtlich nicht
- * abgewartet. Entscheidend ist ausschließlich, dass der von Office aufgerufene
- * Callback eintrifft. Die Zeitgrenze bleibt als Notausgang bestehen.
+ * Diese Form ist im klassischen Outlook zuverlässiger als das Abwarten des
+ * zurückgegebenen Promise und entspricht der eingesetzten SP-OutlookBridge.
  */
 function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -69,15 +51,28 @@ function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
   });
 }
 
-/**
- * Liest den Nur-Text der geöffneten E-Mail.
- *
- * `body.getAsync` ist rückrufbasiert; die Verpackung in ein Versprechen ist
- * die einzige Umformung. Ein Fehlschlag ergibt einen **leeren Text** und keinen
- * Wurf: Ohne den Text funktioniert das Add-in weiter — Betreff und Titel stehen
- * ohnehin, und die Call-Nummer lässt sich von Hand eintragen. Ein Wurf hier
- * risse dagegen den ganzen Aufgabenbereich mit.
- */
+/** Outlook-Web-Link wie in SP-OutlookBridge. */
+function outlookWebLink(item: Office.MessageRead): string | null {
+  const mailbox = Office.context.mailbox;
+  const itemId = item.itemId;
+  if (mailbox === undefined || itemId === undefined || itemId.length === 0) return null;
+
+  try {
+    const restId = mailbox.convertToRestId(itemId, Office.MailboxEnums.RestVersion.v2_0);
+    if (restId.length === 0) return null;
+    const accountType = (mailbox.userProfile?.accountType ?? '').toLowerCase();
+    const base = accountType.includes('consumer')
+      ? 'https://outlook.live.com/mail/0/deeplink/read/'
+      : 'https://outlook.office.com/mail/deeplink/read/';
+    return `${base}${encodeURIComponent(restId)}`;
+  } catch {
+    // Der Link ist Zusatznutzen. Eine E-Mail ohne konvertierbare ID bleibt
+    // vollständig lesbar; nur „an vorhandenes Todo anhängen“ ist dann nicht
+    // möglich.
+    return null;
+  }
+}
+
 const readBody = (item: Office.MessageRead): Promise<string> =>
   new Promise((resolve) => {
     try {
@@ -93,26 +88,12 @@ const readBody = (item: Office.MessageRead): Promise<string> =>
     }
   });
 
-/**
- * Wartet auf Office und liest die geöffnete E-Mail.
- *
- * Die beiden Fehler vor dem eigentlichen Lesen bleiben absichtlich getrennt:
- * Fehlt `Office.onReady` vollständig, konnte `office.js` nicht bereitgestellt
- * werden. Existiert es, antwortet aber nicht rechtzeitig, ist Office.js geladen
- * und der Office-Wirt hängt bei der Initialisierung. Beides als „kein Outlook“
- * auszugeben war diagnostisch falsch — insbesondere dann, wenn der Benutzer den
- * Aufgabenbereich sichtbar in Outlook geöffnet hat.
- *
- * 15 Sekunden sind eine Fehlergrenze, kein Ladeziel. Der erste WebView2-Start
- * kann deutlich langsamer sein als ein warmer Start.
- */
 export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
   if (!hasOfficeHost()) {
     return { kind: 'office_js_unavailable' };
   }
 
   const ready = await waitForOfficeReady(timeoutMs);
-
   if (!ready) {
     return { kind: 'office_not_ready' };
   }
@@ -133,5 +114,5 @@ export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
     receivedAt: item.dateTimeCreated instanceof Date ? item.dateTimeCreated.toISOString() : null,
   };
 
-  return { kind: 'ready', mail };
+  return { kind: 'ready', mail, webLink: outlookWebLink(item) };
 };
