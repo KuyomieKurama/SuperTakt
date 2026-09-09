@@ -1,0 +1,346 @@
+name: One-shot PR 15 consistency fix
+
+on:
+  push:
+    branches:
+      - feat/outlook-followup-attachments
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Quelltext holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/outlook-followup-attachments
+          fetch-depth: 0
+      - name: OpenAPI, Szenario und Add-in-Nachweis angleichen
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: erwartete genau eine Fundstelle, gefunden {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          spec = 'apps/local-api/openapi/takt-local-api.yaml'
+
+          replace_once(
+              spec,
+              '''      Vier Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
+      Call-Nummer suchen, ein Todo anlegen, eine Zeit buchen. Kein Löschen,
+      kein Export, kein Zugriff auf den internen Vermerk eines fremden Todos,
+      keine Einstellungen.
+''',
+              '''      Fünf Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
+      Call-Nummer suchen, ein Todo anlegen, einen http(s)-Verweis an ein
+      vorhandenes Todo hängen und Zeit buchen. Kein Löschen, kein Datei- oder
+      Bildzugriff, kein Export, kein Zugriff auf den internen Vermerk eines
+      fremden Todos, keine Einstellungen.
+''',
+          )
+
+          replace_once(
+              spec,
+              '''                    **Ein Anhang kommt hier nicht dazu** (A-19.19, E-074
+                    Punkt 3, A-A-21). Diese Anfrage hat kein Anhangsfeld, und
+                    das ist strukturell und nicht per Voreinstellung: Anhänge
+                    entstehen ausschließlich über
+                    `POST /todos/{todoId}/attachments`, außerhalb von `/addin`
+                    und für das Add-in-Token unerreichbar. Ein trotzdem
+                    mitgeschicktes `attachments`, `attachment` oder
+                    `attachmentUrl` wird von der Eingabeprüfung still
+                    verworfen und hat keine Wirkung: Die Antwort ist `201`,
+                    und die Anhangstabelle bleibt leer (gemessen in
+                    `proof:addin` Abschnitt 18, A-A-22).
+
+                    Der Grund ist Art und nicht Vorsicht: Eine Frist ist ein
+                    Tag, den die Anwendung **anzeigt**. Ein Anhang ist eine
+                    Adresse oder ein Pfad, den sie auf Klick **öffnet** — aus
+                    einer E-Mail geschrieben wäre er ein von außen gesetzter
+                    Öffnen-Befehl auf den Rechner des Benutzers (R-21, R-22).
+''',
+              '''                    **Ein Anhang kommt über diese Anfrage nicht dazu**
+                    (E-074 Punkt 3). `POST /addin/todos` hat kein Anhangsfeld;
+                    ein trotzdem mitgeschicktes `attachments`, `attachment`
+                    oder `attachmentUrl` wird von der Eingabeprüfung still
+                    verworfen und hat keine Wirkung: Die Antwort ist `201`,
+                    und die Anhangstabelle bleibt leer (gemessen in
+                    `proof:addin` Abschnitt 18).
+
+                    Für die ausdrücklich gewählte Folgehandlung gibt es eine
+                    eigene, schmale Route:
+                    `POST /addin/todos/{todoId}/attachments`. Sie nimmt nur
+                    einen normalisierten `http`- oder `https`-Verweis auf ein
+                    **bereits vorhandenes** Todo an. Datei- und Bildpfade sind
+                    dort strukturell nicht darstellbar; Lesen und Löschen von
+                    Anhängen bleiben ebenfalls der Hauptanwendung vorbehalten.
+
+                    Der Unterschied ist Art und nicht Vorsicht: Eine Frist ist
+                    ein Tag, den die Anwendung **anzeigt**. Die neue Route
+                    speichert genau den Web-Verweis, den der Benutzer an das
+                    vorhandene Todo hängen will — keinen beliebigen lokalen
+                    Pfad und keine Bildbytes.
+''',
+          )
+
+          anchor = '''        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /addin/todos/{todoId}/time-entries:
+'''
+          route = '''        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /addin/todos/{todoId}/attachments:
+    parameters: [{ $ref: '#/components/parameters/TodoId' }]
+    post:
+      tags: [Add-in]
+      operationId: addAddinTodoAttachment
+      summary: Outlook-Verweis an ein vorhandenes Todo hängen
+      description: |
+        Diese Route ist absichtlich schmaler als
+        `POST /todos/{todoId}/attachments`: Das dauerhafte Add-in-Token darf
+        **nur einen http(s)-Verweis** speichern. Datei- und Bildpfade, Lesen,
+        Entfernen und Bilddaten sind über `/addin` nicht erreichbar.
+
+        Gedacht ist sie für den Deep-Link auf die geöffnete Outlook-Nachricht.
+        Der Vorgang erfasst **keine Zeit** und hebt „Erledigt“ nicht auf.
+
+        Derselbe normalisierte Verweis ist am selben Todo idempotent. Hängt er
+        schon dort, antwortet die Route mit `200` und `alreadyPresent: true`;
+        andernfalls wird er angelegt und die Antwort ist `201`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  minLength: 1
+                  maxLength: 2048
+                  description: |
+                    Ausschließlich eine gültige `http`- oder `https`-Adresse.
+                    Gespeichert wird ihre Normalform.
+                title:
+                  oneOf:
+                    - { type: string, maxLength: 200 }
+                    - { type: 'null' }
+                  description: Freiwillige sichtbare Bezeichnung des Verweises.
+      responses:
+        '200':
+          description: Der normalisierte Verweis hing bereits am Todo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [attachment, alreadyPresent]
+                    properties:
+                      attachment:
+                        type: object
+                        required: [id, todoId, kind, title, target]
+                        properties:
+                          id: { $ref: '#/components/schemas/Id' }
+                          todoId: { $ref: '#/components/schemas/Id' }
+                          kind: { type: string, const: link }
+                          title:
+                            oneOf:
+                              - { type: string }
+                              - { type: 'null' }
+                          target: { type: string }
+                      alreadyPresent: { type: boolean, const: true }
+        '201':
+          description: Verweis angelegt.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [attachment, alreadyPresent]
+                    properties:
+                      attachment:
+                        type: object
+                        required: [id, todoId, kind, title, target]
+                        properties:
+                          id: { $ref: '#/components/schemas/Id' }
+                          todoId: { $ref: '#/components/schemas/Id' }
+                          kind: { type: string, const: link }
+                          title:
+                            oneOf:
+                              - { type: string }
+                              - { type: 'null' }
+                          target: { type: string }
+                      alreadyPresent: { type: boolean, const: false }
+        '400': { $ref: '#/components/responses/TokenInUrl' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /addin/todos/{todoId}/time-entries:
+'''
+          replace_once(spec, anchor, route)
+
+          replace_once(
+              spec,
+              '''        * **Ausschließlich** der Teilbaum `/addin` — `GET /addin/context`,
+          `GET /addin/todo-matches`, `POST /addin/todos`,
+          `POST /addin/todos/{todoId}/time-entries` — nimmt daneben auch das
+          **Add-in-Token** an.
+''',
+              '''        * **Ausschließlich** der Teilbaum `/addin` — `GET /addin/context`,
+          `GET /addin/todo-matches`, `POST /addin/todos`,
+          `POST /addin/todos/{todoId}/attachments` und
+          `POST /addin/todos/{todoId}/time-entries` — nimmt daneben auch das
+          **Add-in-Token** an.
+''',
+          )
+          replace_once(
+              spec,
+              '''        kommt genau so weit, wie die vier Add-in-Operationen reichen — es liest
+        keinen internen Vermerk, ändert keine Einstellung und löst keinen
+        Exportlauf aus.
+''',
+              '''        kommt genau so weit, wie die fünf Add-in-Operationen reichen — es liest
+        keinen internen Vermerk, ändert keine Einstellung, kann weder Datei-
+        noch Bildanhänge lesen oder schreiben und löst keinen Exportlauf aus.
+''',
+          )
+
+          scenario = 'apps/local-api/scripts/service-scenario.mjs'
+          replace_once(
+              scenario,
+              '''    const addinTodoId = addinTodo.body?.data?.todo?.id;
+    if (addinTodoId !== undefined) {
+      // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
+''',
+              '''    const addinTodoId = addinTodo.body?.data?.todo?.id;
+    if (addinTodoId !== undefined) {
+      const outlookAttachment = {
+        url: 'https://outlook.office.com/mail/deeplink/read/takt-proof-message',
+        title: 'Outlook-Nachricht aus dem Schnittstellenszenario',
+      };
+      await record(
+        'addAddinTodoAttachment',
+        'POST',
+        '/addin/todos/{todoId}/attachments',
+        `/addin/todos/${addinTodoId}/attachments`,
+        outlookAttachment,
+      );
+      // Derselbe normalisierte Link ein zweites Mal: Der zweite Erfolgsfall
+      // (200, alreadyPresent=true) gehört genauso zum Vertrag wie 201.
+      await record(
+        'addAddinTodoAttachment',
+        'POST',
+        '/addin/todos/{todoId}/attachments',
+        `/addin/todos/${addinTodoId}/attachments`,
+        outlookAttachment,
+      );
+
+      // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
+''',
+          )
+
+          proof = 'apps/outlook-addin/scripts/proof-addin.mjs'
+          old = '''check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang', () => {
+  const spec = parseYaml(
+    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+  );
+  const rumpf = spec.paths['/addin/todos']?.post;
+  const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+
+  assert.ok(Object.keys(felder).includes('dueDate'), 'die Beschreibung kennt die Frist nicht');
+  assert.match(
+    String(felder['dueDate']?.description ?? ''),
+    /A-19\\.21/,
+    'die Frist steht ohne ihre Anforderungs-ID da',
+  );
+
+  const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
+  assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
+
+  // Und keine der vier Add-in-Routen ist eine Anhangsroute (A-A-21).
+  const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
+  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.deepEqual(
+    addinPfade.filter((pfad) => /attachment/i.test(pfad)),
+    [],
+    'unter /addin hängt eine Anhangsroute',
+  );
+});
+'''
+          new = '''check('der Add-in-Abschnitt trennt Todo-Anlage und die schmale Verweisroute', () => {
+  const spec = parseYaml(
+    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+  );
+  const rumpf = spec.paths['/addin/todos']?.post;
+  const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+
+  assert.ok(Object.keys(felder).includes('dueDate'), 'die Beschreibung kennt die Frist nicht');
+  assert.match(
+    String(felder['dueDate']?.description ?? ''),
+    /A-19\\.21/,
+    'die Frist steht ohne ihre Anforderungs-ID da',
+  );
+
+  // Die Todo-Anlage selbst bleibt frei von Anhangsfeldern. Der Verweis ist
+  // eine ausdrückliche zweite Handlung auf einem bereits vorhandenen Todo.
+  const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
+  assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
+
+  const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
+  assert.ok(addinPfade.length >= 5, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.deepEqual(
+    addinPfade.filter((pfad) => /attachment/i.test(pfad)),
+    ['/addin/todos/{todoId}/attachments'],
+    'unter /addin gibt es mehr oder andere Anhangswege als den schmalen Verweis',
+  );
+
+  const verweis = spec.paths['/addin/todos/{todoId}/attachments'] ?? {};
+  assert.ok(verweis.post, 'die schmale Verweisroute hat kein POST');
+  assert.equal(verweis.get, undefined, 'das Add-in darf Anhänge nicht lesen');
+  assert.equal(verweis.delete, undefined, 'das Add-in darf Anhänge nicht löschen');
+  const verweisFelder =
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+  assert.deepEqual(
+    Object.keys(verweisFelder).sort(),
+    ['title', 'url'],
+    'die Add-in-Verweisroute ist breiter als URL plus freiwilliger Titel',
+  );
+  assert.deepEqual(
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.required ?? [],
+    ['url'],
+    'nur die URL darf an der Verweisroute Pflicht sein',
+  );
+});
+'''
+          replace_once(proof, old, new)
+          PY
+
+          git rm .github/workflows/one-shot-fix-pr15.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/local-api/openapi/takt-local-api.yaml \
+                  apps/local-api/scripts/service-scenario.mjs \
+                  apps/outlook-addin/scripts/proof-addin.mjs
+          git commit -m "fix: document and prove add-in follow-up attachments"
+          git push origin HEAD:feat/outlook-followup-attachments
