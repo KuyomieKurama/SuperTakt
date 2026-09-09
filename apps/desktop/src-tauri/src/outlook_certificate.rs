@@ -1,5 +1,5 @@
 //! A-23: two narrow desktop commands, no caller-controlled file or URL.
-use crate::Startup;
+use crate::StartupState;
 
 fn fingerprint_is_valid(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(&b))
@@ -70,9 +70,16 @@ fn run(path: std::path::PathBuf, fingerprint: Option<String>) -> Result<serde_js
     Ok(result)
 }
 
-async fn execute(startup: tauri::State<'_, Startup>, fingerprint: Option<String>) -> Result<serde_json::Value, String> {
+async fn execute(
+    startup: tauri::State<'_, StartupState>,
+    fingerprint: Option<String>,
+) -> Result<serde_json::Value, String> {
     #[cfg(windows)]
     {
+        // `lib.rs` registriert `StartupState`, nicht den fertigen `Startup`-
+        // Wert. Auf dieselbe Startvorbereitung warten wie die übrigen Befehle,
+        // statt von Tauri einen nie verwalteten State-Typ anzufordern.
+        let startup = startup.ready().await;
         let path = startup.directory.as_ref()
             .map(|d| std::path::PathBuf::from(&d.path).join("taskpane-cert.pem"))
             .ok_or("Das Anwendungsdatenverzeichnis ist nicht verfügbar.")?;
@@ -87,12 +94,17 @@ async fn execute(startup: tauri::State<'_, Startup>, fingerprint: Option<String>
 }
 
 #[tauri::command]
-pub async fn takt_outlook_certificate(startup: tauri::State<'_, Startup>) -> Result<serde_json::Value, String> {
+pub async fn takt_outlook_certificate(
+    startup: tauri::State<'_, StartupState>,
+) -> Result<serde_json::Value, String> {
     execute(startup, None).await
 }
 
 #[tauri::command]
-pub async fn takt_trust_outlook_certificate(startup: tauri::State<'_, Startup>, fingerprint: String) -> Result<serde_json::Value, String> {
+pub async fn takt_trust_outlook_certificate(
+    startup: tauri::State<'_, StartupState>,
+    fingerprint: String,
+) -> Result<serde_json::Value, String> {
     if !fingerprint_is_valid(&fingerprint) {
         return Err("Der bestätigte Fingerabdruck ist ungültig.".into());
     }
