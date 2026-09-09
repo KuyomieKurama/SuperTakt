@@ -2,8 +2,6 @@ from pathlib import Path
 import runpy
 import subprocess
 
-# The original repair is pinned as a Git blob and copied beside this driver.
-# Its exact-parent and exact-anchor checks remain active.
 runpy.run_path(str(Path(__file__).with_name('pr15-base.py')), run_name='__main__')
 
 p = Path('apps/local-api/scripts/proof-access.mjs')
