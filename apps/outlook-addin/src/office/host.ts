@@ -22,11 +22,10 @@ export type HostState =
   | { readonly kind: 'ready'; readonly mail: MailFacts }
   /** Office ist bereit, aber es ist kein Element geöffnet (Empty-Zustand in S-12). */
   | { readonly kind: 'no_item' }
-  /**
-   * Kein Office. Das ist der Fall im Browser während der Entwicklung und in
-   * jedem Nachweislauf — er ist ausdrücklich vorgesehen und kein Fehler.
-   */
-  | { readonly kind: 'no_host' };
+  /** `office.js` hat `window.Office` nicht bereitgestellt. */
+  | { readonly kind: 'office_js_unavailable' }
+  /** `office.js` ist da, aber der Office-Wirt hat `onReady` nicht rechtzeitig beantwortet. */
+  | { readonly kind: 'office_not_ready' };
 
 /** Steht Office.js überhaupt zur Verfügung? */
 export const hasOfficeHost = (): boolean =>
@@ -61,14 +60,20 @@ const readBody = (item: Office.MessageRead): Promise<string> =>
 /**
  * Wartet auf Office und liest die geöffnete E-Mail.
  *
- * Der Aufruf hat eine eigene Zeitgrenze. `Office.onReady` löst in einem
- * Steuerelement, das nicht von Outlook geladen wurde, nie aus — dann bliebe der
- * Aufgabenbereich ohne diese Grenze für immer im Ladezustand, und der Benutzer
- * sähe einen Platzhalter statt einer Erklärung.
+ * Die beiden Fehler vor dem eigentlichen Lesen bleiben absichtlich getrennt:
+ * Fehlt `Office.onReady` vollständig, konnte `office.js` nicht bereitgestellt
+ * werden. Existiert es, antwortet aber nicht rechtzeitig, ist Office.js geladen
+ * und der Office-Wirt hängt bei der Initialisierung. Beides als „kein Outlook“
+ * auszugeben war diagnostisch falsch — insbesondere dann, wenn der Benutzer den
+ * Aufgabenbereich sichtbar in Outlook geöffnet hat.
+ *
+ * 15 Sekunden sind eine Fehlergrenze, kein Ladeziel. Der erste WebView2-Start
+ * kann deutlich langsamer sein als ein warmer Start; fünf Sekunden haben einen
+ * langsamen Wirt unnötig als fehlend eingestuft.
  */
-export const readHost = async (timeoutMs = 5000): Promise<HostState> => {
+export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
   if (!hasOfficeHost()) {
-    return { kind: 'no_host' };
+    return { kind: 'office_js_unavailable' };
   }
 
   const ready = await Promise.race([
@@ -81,7 +86,7 @@ export const readHost = async (timeoutMs = 5000): Promise<HostState> => {
   ]);
 
   if (!ready) {
-    return { kind: 'no_host' };
+    return { kind: 'office_not_ready' };
   }
 
   const item = Office.context.mailbox?.item;

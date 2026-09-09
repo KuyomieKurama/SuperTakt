@@ -16,16 +16,17 @@
  * **Gemessen statt angenommen (Befund dieser Aufgabe):** Diese Maschine
  * erreicht `appsforoffice.microsoft.com` tatsächlich — das `<script>` aus
  * `index.html` lädt, `window.Office` entsteht, und `Office.onReady()` löst
- * innerhalb der 5-Sekunden-Grenze auf (`office/host.ts#readHost`). Ohne echtes
+ * innerhalb der Host-Zeitgrenze auf (`office/host.ts#readHost`). Ohne echtes
  * Outlook-Fenster bleibt `Office.context.mailbox.item` dabei `undefined` —
- * der Zustand landet deshalb bei `HostState.kind === 'no_item'`
- * ("Keine E-Mail geöffnet"), nicht bei `no_host` ("Kein Outlook"), wie eine
- * erste Fassung dieser Datei angenommen hatte, bevor der Lauf das
- * widerlegte. Beide sind in `office/host.ts`/`App.tsx#Body` als reguläre,
- * fehlerfreie Zustände benannt; TP-BUILD-03 prüft deshalb auf **einen von
- * beiden**, nicht auf einen bestimmten — welcher es wird, hängt von der
- * Erreichbarkeit dieser einen externen Adresse ab und ist nicht Gegenstand
- * dieser Aufgabe (T-055 misst `apps/outlook-addin`, nicht Microsofts CDN).
+ * der Zustand landet deshalb bei `HostState.kind === 'no_item'`.
+ *
+ * Seit der Outlook-Hostdiagnose sind die beiden davor liegenden Fehlerzustände
+ * getrennt: `office_js_unavailable`, wenn `office.js` gar kein `Office`
+ * bereitstellt, und `office_not_ready`, wenn `Office.onReady()` trotz geladener
+ * Schnittstelle innerhalb von 15 Sekunden nicht antwortet. TP-BUILD-03 darf
+ * außerhalb eines echten Outlook-Wirts jeden dieser drei abgeschlossenen
+ * Zustände sehen; nur ein dauerhaftes „Wird geladen“ oder eine leere Seite
+ * wäre der gesuchte Fund.
  *
  * TP-BUILD-04 ist der eigentliche Fund-oder-Nichtfund dieser Datei: Der
  * Testbereich in `SettingsView.tsx` (`runSample`) ruft `evaluate()` auf, und
@@ -55,25 +56,18 @@ test.describe('TP-BUILD-03 — ohne Office-Wirt', () => {
 
     await expect(page.locator('.shell__brand')).toContainText('SuperTakt');
 
-    // Beide Zustände sind aus `App.tsx#Body` — `no_host` ("Kein Outlook")
-    // oder `no_item` ("Keine E-Mail geöffnet"), je nachdem, ob `office.js`
-    // von seiner externen Herkunft laden konnte (siehe Dateikopf). Beides
-    // ist ein regulärer, erwarteter Zustand; nur ein dauerhaftes „Wird
-    // geladen" (Ladeplatzhalter, `host === null`) oder eine leere Seite wäre
-    // der gesuchte Fund.
-    const outsideOutlook = page.getByText('Dieser Bereich läuft außerhalb von Outlook.', { exact: false });
-    // O-GE (T-192, E-080): `App.tsx` duzt an dieser einen Stelle noch
-    // ("Öffne eine E-Mail, um daraus ein Todo anzulegen.") — die einzige
-    // Stelle, die der E-080-Anredewächter im Add-in bislang duldet, weil
-    // dieser Prüffall den Satz bis hierher wörtlich festhielt
-    // (`IMPERATIV_AUSNAHME` in `apps/outlook-addin/scripts/proof-addin.mjs`,
-    // T-190). Der Vergleich hängt jetzt an dem Teil des Satzes, der in der
-    // heutigen Du-Form und der künftigen, gesiezten Fassung „Öffnen Sie eine
-    // E-Mail, um daraus ein Todo anzulegen." wörtlich gleich bleibt, und
-    // trägt damit beide, ohne selbst an der Anrede zu hängen — wird `App.tsx`
-    // entsprechend umgestellt, bleibt dieser Fall unverändert grün.
-    const noEmailOpen = page.getByText('eine E-Mail, um daraus ein Todo anzulegen.', { exact: false });
-    await expect(outsideOutlook.or(noEmailOpen)).toBeVisible();
+    const officeJsUnavailable = page.getByText(
+      'Die Outlook-Schnittstelle konnte nicht geladen werden.',
+      { exact: false },
+    );
+    const officeNotReady = page.getByText(
+      'Outlook hat den Aufgabenbereich noch nicht initialisiert.',
+      { exact: false },
+    );
+    const noEmailOpen = page.getByText('eine E-Mail, um daraus ein Todo anzulegen.', {
+      exact: false,
+    });
+    await expect(officeJsUnavailable.or(officeNotReady).or(noEmailOpen)).toBeVisible();
     await expect(page.locator('.shell__body')).not.toContainText('Wird geladen');
 
     // Ein scheiterndes `<script src="https://appsforoffice.microsoft.com/…">`

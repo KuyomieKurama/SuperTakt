@@ -25,7 +25,7 @@ import { detectCallNumber, type Detection } from '../callnumber/detect.ts';
 import { readHost, type HostState } from '../office/host.ts';
 import { EMPTY_MAIL } from '../office/mail.ts';
 import { createSettingsStore, type AddinSettings } from '../settings/store.ts';
-import { Callout, Section, Skeleton } from './Primitives.tsx';
+import { Button, Callout, Section, Skeleton } from './Primitives.tsx';
 import { SettingsView } from './SettingsView.tsx';
 import { TaskPane } from './TaskPane.tsx';
 
@@ -47,6 +47,7 @@ export function App() {
   const store = useMemo(() => createSettingsStore(window.localStorage), []);
   const [settings, setSettings] = useState<AddinSettings>(() => store.read());
   const [host, setHost] = useState<HostState | null>(null);
+  const [hostAttempt, setHostAttempt] = useState(0);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -75,6 +76,12 @@ export function App() {
     store.noteConnected(new Date().toISOString());
   }, [store]);
 
+  const retryHost = useCallback(() => {
+    setDetection(null);
+    setHost(null);
+    setHostAttempt((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void readHost().then((state) => {
@@ -83,7 +90,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hostAttempt]);
 
   /**
    * Erkennung — **nach** dem Laden der E-Mail und mit dem Muster aus den
@@ -148,6 +155,7 @@ export function App() {
               setShowSettings(true);
             }}
             onConnected={noteConnected}
+            onRetryHost={retryHost}
           />
         )}
       </main>
@@ -162,6 +170,7 @@ function Body({
   api,
   onOpenSettings,
   onConnected,
+  onRetryHost,
 }: {
   readonly host: HostState | null;
   readonly detection: Detection | null;
@@ -169,6 +178,7 @@ function Body({
   readonly api: ApiClient;
   readonly onOpenSettings: () => void;
   readonly onConnected: () => void;
+  readonly onRetryHost: () => void;
 }) {
   if (host === null) {
     return (
@@ -178,15 +188,33 @@ function Body({
     );
   }
 
-  if (host.kind === 'no_host') {
-    // Der Fall im Browser während der Entwicklung — und der Fall, in dem der
-    // Aufgabenbereich außerhalb von Outlook geöffnet wurde. Kein Fehler,
-    // sondern eine Erklärung; die Einstellungen bleiben erreichbar.
+  if (host.kind === 'office_js_unavailable') {
     return (
-      <Section title="Kein Outlook">
-        <Callout tone="info" title="Dieser Bereich läuft außerhalb von Outlook.">
-          Betreff und Text einer E-Mail stehen deshalb nicht zur Verfügung. Die Einstellungen oben
-          rechts lassen sich trotzdem prüfen und ändern.
+      <Section title="Office.js nicht verfügbar">
+        <Callout
+          tone="warning"
+          title="Die Outlook-Schnittstelle konnte nicht geladen werden."
+          action={<Button onClick={onRetryHost}>Erneut prüfen</Button>}
+        >
+          Die Seite ist geladen, aber Office.js fehlt. In Outlook deutet das meist auf einen
+          blockierten Zugriff auf Microsofts Office.js hin. Prüfen Sie die Netzwerk- oder
+          Proxy-Einstellungen und versuchen Sie es erneut.
+        </Callout>
+      </Section>
+    );
+  }
+
+  if (host.kind === 'office_not_ready') {
+    return (
+      <Section title="Outlook noch nicht bereit">
+        <Callout
+          tone="warning"
+          title="Outlook hat den Aufgabenbereich noch nicht initialisiert."
+          action={<Button onClick={onRetryHost}>Erneut prüfen</Button>}
+        >
+          Office.js ist geladen, aber Outlook hat innerhalb von 15 Sekunden nicht geantwortet.
+          Versuchen Sie es erneut. Bleibt der Zustand bestehen, schließen Sie Outlook vollständig
+          und öffnen Sie es erneut.
         </Callout>
       </Section>
     );
