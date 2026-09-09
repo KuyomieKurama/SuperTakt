@@ -49,3 +49,21 @@ s = s[:start] + '''    const candidates = [nearMiss, farMiss, ''];
 p.write_text(s)
 subprocess.run(['git', 'add', str(p)], check=True)
 print('Timing-Probe: gemeinsame Aufwärmphase, verschachtelte Messungen, unveränderte Sicherheitsgrenze.')
+
+p = Path('apps/local-api/src/app.ts')
+s = p.read_text()
+old = "import { createAddinRoutes } from './routes/addin/index.ts';"
+assert s.count(old) == 1
+s = s.replace(old, old + "\nimport type { AddinDeps } from './routes/addin/ports.ts';", 1)
+old = '''    const addinDeps = {
+      inTransaction: (work: Parameters<typeof context.transactions.inTransaction>[0]) =>
+        context.transactions.inTransaction(work),'''
+new = '''    // Kontextuell typisieren: Parameters<...> würde den generischen
+    // Transaktionsrückgabewert T zu unknown verbreitern.
+    const addinDeps: AddinDeps = {
+      inTransaction: (work) => context.transactions.inTransaction(work),'''
+assert s.count(old) == 1
+s = s.replace(old, new, 1)
+p.write_text(s)
+subprocess.run(['git', 'add', str(p)], check=True)
+print('AddinDeps bewahrt den generischen Transaktionsrückgabewert ohne Typzusicherung.')
