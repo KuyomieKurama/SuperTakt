@@ -3,6 +3,7 @@ import type { OutlookCertificateFacts, OutlookCertificateResult } from "@takt/de
 import { readOutlookCertificate, confirmOutlookCertificate } from "../app/connection";
 import { useAsync, useMutation } from "../app/useAsync";
 import { formatDateTime } from "../lib/format";
+import { foreignText, foreignTextFrom } from "../lib/foreign";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Button, Card, InlineMessage } from "./Primitives";
 
@@ -22,12 +23,15 @@ const HTTPS_LABEL: Readonly<Record<OutlookCertificateFacts["https"], string>> = 
  * technische Schlüssel beliebiger Aufrufe ungeprüft in der Oberfläche landen.
  *
  * Die beiden Outlook-Befehle sind die enge Ausnahme: Ihre Rust-Seite liefert
- * ausschließlich feste deutsche Benutzermeldungen. Genau an dieser Grenze
- * werden deshalb nur ihre nichtleeren Strings in `Error` übersetzt.
+ * ausschließlich feste deutsche Benutzermeldungen. Weil der verworfene Wert an
+ * der Tauri-Grenze trotzdem `unknown` ist, läuft er über dieselbe erklärte
+ * Übergangsstelle für fremden Text wie andere untypisierte Werte und wird vor
+ * der Anzeige sichtbar gemacht.
  */
 function outlookShellError(cause: unknown): never {
-  if (typeof cause === "string" && cause.trim().length > 0) {
-    throw new Error(cause);
+  const message = foreignTextFrom(cause);
+  if (message !== null) {
+    throw new Error(foreignText(message));
   }
   throw cause;
 }
