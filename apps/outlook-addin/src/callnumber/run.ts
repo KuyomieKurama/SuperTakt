@@ -23,8 +23,11 @@ export const runPattern = (request: EvaluateRequest): EvaluateResponse => {
 
   try {
     // Je Aufruf neu übersetzt und ohne `g` (B-4.4): kein `lastIndex`, der
-    // zwischen zwei E-Mails hängen bleibt.
-    expression = new RegExp(request.source);
+    // zwischen zwei E-Mails hängen bleibt. Die Erkennung ist bewusst immer
+    // case-insensitiv: Ein Vorgang `TCK-123` soll auch aus `tck-123`, `Tck-123`
+    // oder einer anders geschriebenen Betreffzeile erkannt werden, ohne dass
+    // jedes gespeicherte Muster seine eigene `(?i)`-Variante führen müsste.
+    expression = new RegExp(request.source, 'i');
   } catch (error) {
     return {
       id: request.id,
