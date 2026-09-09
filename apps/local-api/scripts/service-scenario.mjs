@@ -897,6 +897,27 @@ export async function runScenario() {
     });
     const addinTodoId = addinTodo.body?.data?.todo?.id;
     if (addinTodoId !== undefined) {
+      const outlookAttachment = {
+        url: 'https://outlook.office.com/mail/deeplink/read/takt-proof-message',
+        title: 'Outlook-Nachricht aus dem Schnittstellenszenario',
+      };
+      await record(
+        'addAddinTodoAttachment',
+        'POST',
+        '/addin/todos/{todoId}/attachments',
+        `/addin/todos/${addinTodoId}/attachments`,
+        outlookAttachment,
+      );
+      // Derselbe normalisierte Link ein zweites Mal: Der zweite Erfolgsfall
+      // (200, alreadyPresent=true) gehört genauso zum Vertrag wie 201.
+      await record(
+        'addAddinTodoAttachment',
+        'POST',
+        '/addin/todos/{todoId}/attachments',
+        `/addin/todos/${addinTodoId}/attachments`,
+        outlookAttachment,
+      );
+
       // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
       // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
       // (Bis T-104 hießen die drei Listen `poolNames`, `enteringPoolNames`

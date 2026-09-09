@@ -4876,7 +4876,7 @@ check('die Add-in-Tür hat kein Anhangsfeld (A-19.19) — strukturell, nicht per
   assert.ok(felder.includes('dueDate'), 'die Frist fehlt an der Tür — dann misst 18c nichts');
 });
 
-check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang', () => {
+check('der Add-in-Abschnitt trennt Todo-Anlage und die schmale Verweisroute', () => {
   const spec = parseYaml(
     readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
   );
@@ -4890,16 +4890,34 @@ check('der Add-in-Abschnitt der Beschreibung führt die Frist und keinen Anhang'
     'die Frist steht ohne ihre Anforderungs-ID da',
   );
 
+  // Die Todo-Anlage selbst bleibt frei von Anhangsfeldern. Der Verweis ist
+  // eine ausdrückliche zweite Handlung auf einem bereits vorhandenen Todo.
   const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
   assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
 
-  // Und keine der vier Add-in-Routen ist eine Anhangsroute (A-A-21).
   const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
-  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.ok(addinPfade.length >= 5, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
   assert.deepEqual(
     addinPfade.filter((pfad) => /attachment/i.test(pfad)),
-    [],
-    'unter /addin hängt eine Anhangsroute',
+    ['/addin/todos/{todoId}/attachments'],
+    'unter /addin gibt es mehr oder andere Anhangswege als den schmalen Verweis',
+  );
+
+  const verweis = spec.paths['/addin/todos/{todoId}/attachments'] ?? {};
+  assert.ok(verweis.post, 'die schmale Verweisroute hat kein POST');
+  assert.equal(verweis.get, undefined, 'das Add-in darf Anhänge nicht lesen');
+  assert.equal(verweis.delete, undefined, 'das Add-in darf Anhänge nicht löschen');
+  const verweisFelder =
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+  assert.deepEqual(
+    Object.keys(verweisFelder).sort(),
+    ['title', 'url'],
+    'die Add-in-Verweisroute ist breiter als URL plus freiwilliger Titel',
+  );
+  assert.deepEqual(
+    verweis.post?.requestBody?.content?.['application/json']?.schema?.required ?? [],
+    ['url'],
+    'nur die URL darf an der Verweisroute Pflicht sein',
   );
 });
 
