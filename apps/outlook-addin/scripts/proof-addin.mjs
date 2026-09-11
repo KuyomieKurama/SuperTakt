@@ -32,7 +32,8 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -98,6 +99,29 @@ import {
   withDescription,
 } from '../src/ui/field.ts';
 import { createTodoGate } from '../src/ui/create-gate.ts';
+import {
+  base64ByteLength,
+  normalizeBase64,
+  utf8ToBase64,
+} from '../src/attachments/base64.ts';
+import { buildRebuiltEml, encodeHeaderWords } from '../src/attachments/eml.ts';
+import { planTakeover } from '../src/attachments/plan.ts';
+import { collectAttachments } from '../src/attachments/collect.ts';
+import { formatBytes } from '../src/attachments/size.ts';
+import { reasonSentence, shortReason } from '../src/attachments/reasons.ts';
+import { DISPLAY_ONLY_SKIP_REASONS, TAKEOVER_LIMITS } from '../src/attachments/model.ts';
+/*
+ * Die Fachregeln, gegen die Abschnitt 22 den Aufgabenbereich hält (T-304).
+ *
+ * Aus `@takt/domain` und nicht abgeschrieben: Eine Prüfung, die die Zahl
+ * danebenschreibt, zieht mit, wenn die Regel in die falsche Richtung wächst.
+ */
+import {
+  EMAIL_ATTACHMENT_FAILURE_REASONS,
+  MAX_EMAIL_ATTACHMENT_BYTES,
+  MAX_EMAIL_ATTACHMENT_COUNT,
+  MAX_EMAIL_ATTACHMENT_TOTAL_BYTES,
+} from '@takt/domain';
 
 // --- Prüflinge: die Add-in-Routen des lokalen Dienstes ---------------------
 // Bewusst über einen relativen Pfad und nicht über eine Paketabhängigkeit: Der
@@ -212,6 +236,15 @@ import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/featur
  * Datenbank importieren **kann**, importiert sie irgendwann.
  */
 import { openDatabase } from '../../../packages/storage/src/sqlite/open.ts';
+/*
+ * Die **Naht** aus T-299 und der echte Anhangsspeicher aus T-301 (T-304).
+ *
+ * Beide werden hier gebraucht, weil `AddinDeps` seit T-304 `emailAttachments`
+ * führt und Abschnitt 18 die **Wirkung** dieser Fähigkeit mißt — gegen echte
+ * Zeilen und echte Dateien und nicht gegen eine Attrappe.
+ */
+import { createEmailAttachmentIntake } from '../../local-api/src/features/todos/email-attachments.ts';
+import { createAttachmentBlobPort } from '../../local-api/src/access/attachment-store.ts';
 import { createTodo as createTodoOnMainPath } from '../../local-api/src/features/todos/todos.ts';
 
 // --- Prüfling: die eine Fassung der Plausibilisierung (E-045) -------------
@@ -572,6 +605,22 @@ const FREMDE_ORTE = Object.freeze({
     pfad: ['src', 'http', 'input.ts'],
     marke: 'withoutControlCharacters',
     zweck: 'der Befund aus T-101, auf den sich Abschnitt 16 beruft',
+  }),
+  /**
+   * Gelesen: Abschnitt 18d — die Naht, an der A-A-82 im Typ hängt (T-304).
+   *
+   * Sie liegt in fremder Hoheit (domain-dev) und wird hier **gelesen**, nicht
+   * geschrieben. Der Grund, sie überhaupt zu lesen: Die Zusage „es gibt keinen
+   * Parameter vom Typ `TodoId`" ist eine Aussage über eine Signatur, und eine
+   * Signatur prüft man am Quelltext oder gar nicht. Der Typ trägt sie beim
+   * Übersetzen; dieser Lauf fängt den Tag, an dem jemand sie mit einer
+   * Zusicherung umgeht.
+   */
+  naht: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['src', 'features', 'todos', 'email-attachments.ts'],
+    marke: 'EmailAttachmentIntake',
+    zweck: 'die Naht der Anhangsübernahme — A-A-82 im Typ (T-299, T-304)',
   }),
   /** Gelesen: Abschnitt 16, 18b und 18c. */
   schnittstelle: Object.freeze({
@@ -2870,28 +2919,75 @@ const SCHREIBWEISEN = [
   'rückruf',
 ];
 
-/** Eine echte, migrierte Datenbank im Arbeitsspeicher. Kein Port, kein Kindprozess. */
+/**
+ * Eine echte, migrierte Datenbank im Arbeitsspeicher. Kein Port, kein
+ * Kindprozess.
+ *
+ * ---------------------------------------------------------------------------
+ * Seit T-304 mit einem **echten** Anhangsspeicher in einem Wegwerfordner
+ * ---------------------------------------------------------------------------
+ *
+ * `AddinDeps` führt seit T-304 `emailAttachments`, und die Fähigkeit dahinter
+ * schreibt Bytes. Sie hier durch eine Attrappe zu ersetzen wäre die Bauart, die
+ * 39.4.1 hervorgebracht hat: Eine Namensregel gegen eine Attrappe zu messen
+ * sagt nichts darüber, was auf der Platte entsteht. Also ein echter Ordner,
+ * echte Dateien, und danach weg.
+ *
+ * **Der Ordner liegt im Systemtemp und nicht im Anwendungsdatenverzeichnis.**
+ * Das ist der Befund „Prüfläufe schreiben unter Windows in den echten Bestand"
+ * — `XDG_DATA_HOME` greift dort nicht, und ein Lauf, der in den Bestand des
+ * Benutzers schreibt, ist kein Prüflauf.
+ */
 const withRealDatabase = async (work) => {
   const db = openDatabase({ location: ':memory:', now: () => JETZT });
   await db.migrations.migrateToLatest();
+  const appData = mkdtempSync(path.join(tmpdir(), 'takt-proof-addin-'));
   try {
+    /*
+     * Der Zusammenhang, den die Anwendungsfälle der Hauptanwendung brauchen —
+     * dieselbe Klammer und dieselbe Uhr wie das Add-in.
+     *
+     * `attachmentBlobs` ist der echte Port aus `access/attachment-store.ts`.
+     * Ein Protokoll, das nichts tut: Was dieser Lauf messen will, sind Zeilen
+     * und Dateien, nicht Zeilen im Protokoll.
+     */
+    const context = {
+      transactions: db.transactions,
+      clock: { now: () => JETZT },
+      attachmentBlobs: createAttachmentBlobPort(appData, STILLES_PROTOKOLL),
+    };
     const deps = {
       inTransaction: (unitWork) => db.transactions.inTransaction(unitWork),
       now: () => JETZT,
+      /*
+       * **Die Naht, und sie ist hier dieselbe wie in `app.ts`** (T-304).
+       *
+       * Sie zu übergeben ist keine Bequemlichkeit des Prüflaufs: Ohne sie
+       * liefe Abschnitt 18 gegen eine Tür, die das Feld liest und niemanden
+       * hat, der es ausführt — und der Lauf mäße seinen eigenen Aufbau statt
+       * der Fläche.
+       */
+      emailAttachments: createEmailAttachmentIntake(context),
     };
     await work({
       db,
+      appData,
       app: mountAddinRoutes(deps),
-      // Der Zusammenhang, den die Anwendungsfälle der Hauptanwendung brauchen —
-      // dieselbe Klammer und dieselbe Uhr wie das Add-in.
-      context: { transactions: db.transactions, clock: { now: () => JETZT } },
+      context,
       tagsWithKey: (name) =>
         db.transactions.inTransaction((unit) => unit.tags.findByKey(tagNameKey(name))),
     });
   } finally {
     db.close();
+    rmSync(appData, { recursive: true, force: true });
   }
 };
+
+/** Ein Protokoll, das nichts schreibt — der Lauf mißt Zeilen und Dateien. */
+const STILLES_PROTOKOLL = Object.freeze({
+  request: () => {},
+  lifecycle: () => {},
+});
 
 await checkAsync('T-061: acht gleichzeitige Anfragen aus dem Add-in ergeben **ein** Tag', async () => {
   await withRealDatabase(async ({ app, tagsWithKey }) => {
@@ -5493,30 +5589,63 @@ check('cutToCharacterBoundary kostet höchstens eine Einheit und nur, wenn es mu
 });
 
 // ===========================================================================
-heading('18  Die Frist wird eingetragen — und ein Anhang entsteht nicht (A-19.19, A-19.21)');
+heading(
+  '18  Die Frist wird eingetragen — und kein Anhang entsteht an einem vorhandenen Todo (A-19.21, A-A-82)',
+);
 // ===========================================================================
 
 /*
- * Zwei Aussagen in einem Abschnitt, weil sie **eine** Entscheidung sind
- * (E-074 Punkt 3): Das Add-in bekommt die Frist und ausdrücklich nichts
- * daneben. Der Unterschied ist Art und nicht Vorsicht — eine Frist ist ein
- * Tag, den die Anwendung anzeigt; ein Anhang ist eine Adresse, die sie auf
- * Klick öffnet (R-21, R-22).
+ * ===========================================================================
+ * **Was dieser Abschnitt seit T-304 zusichert — und was er bis dahin zusicherte**
+ * ===========================================================================
  *
- * Vier Ebenen, in dieser Reihenfolge:
+ * Bis T-247 lautete die Zusage: „Über das Add-in entsteht kein Anhang." Das war
+ * der Wortlaut von A-19.19, und dieser Abschnitt maß ihn an der Wirkung — null
+ * Zeilen in `todo_attachment`, mit Gegenprobe.
+ *
+ * **E-108 hat diesen Wortlaut aufgehoben.** Über das Add-in entstehen jetzt
+ * Anhänge: die E-Mail als Datei, ihre Dateianhänge, ihre Cloud-Verweise. Ein
+ * Wächter, der weiterhin „null Zeilen" zählte, wäre ab heute rot an einer
+ * Fläche, die es geben **soll** — oder, schlimmer, jemand entschärfte ihn zu
+ * einem Lauf, der nichts mehr mißt. Beides ist die Bauart vom 2026-09-10, nur
+ * in der anderen Richtung: ein Wächter, der das Gegenteil des Bestands
+ * behauptet.
+ *
+ * **Was E-108 nicht aufgehoben hat, ist A-A-82**, und das ist die Zusage ab
+ * hier, wörtlich:
+ *
+ *   > Über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da
+ *   > war.
+ *
+ * Sie wird an der **Wirkung** gemessen und nicht am Namen. Der Typ der Naht
+ * trägt sie schon — `AddinDeps.emailAttachments` hat keinen Parameter vom Typ
+ * `TodoId` —, aber ein Typ trägt beim Übersetzen und nicht beim Fahren. Dieser
+ * Lauf mißt sie unabhängig davon, an echten Zeilen.
+ *
+ * Und sie hat eine **Gegenprobe, die rot wird, wenn jemand einen
+ * `todoId`-Parameter nachrüstet**: Die Anfrage schickt die Kennung eines
+ * vorhandenen Todos mit. Heute fällt sie in zod still weg, die Anhänge landen
+ * am neuen Todo, und das vorhandene bleibt bei null. Läse die Tür sie, stünden
+ * sie am vorhandenen — und die Zeile wäre rot.
+ *
+ * Sieben Ebenen, in dieser Reihenfolge:
  *
  *  18a  Der Aufgabenbereich entscheidet **nicht**, was ein Tag ist — er fragt
  *       die Domäne. Rein, ohne Dienst.
  *  18b  Beide Türen, jede einzeln gegen die Domäne gemessen (T-123).
  *  18c  Die Route gegen eine **echte** Datenbank: Was kommt in der Spalte an?
- *  18d  A-19.19 an der Wirkung: null Zeilen in `todo_attachment` — mit der
- *       Gegenprobe, dass diese Messung rot werden kann.
+ *  18d  A-A-82 an der Wirkung: Die Anhänge hängen am **neuen** Todo, das
+ *       vorhandene bleibt bei null — mit der Gegenprobe, daß diese Messung rot
+ *       werden kann, und mit **A-19.33** von Ende zu Ende (zwei Dateianhänge
+ *       ergeben drei Anhänge).
  *  18e  A-19.2: Die Frist heißt im Aufgabenbereich „Frist" — und die drei
  *       verbotenen Wörter stehen in keinem sichtbaren Text (V-09).
- *  18f  Und **die zweite Tür**: dass es sie nicht gibt (F-21, T-247). 18d
- *       mißt die Anlegetür; 18f mißt den ganzen Teilbaum `/addin` am
- *       fertigen Dienst. Ohne 18f bliebe dieser Abschnitt grün, während
- *       nebenan ein Anhang entsteht — genau das ist geschehen.
+ *  18f  Und **der ganze Teilbaum** `/addin` am fertigen Dienst: Nach jeder
+ *       Route mit gültigem Token hat das vorhandene Todo weiterhin null
+ *       Anhänge, und es gibt keine Tür unter `/addin`, die eine Todo-Kennung
+ *       entgegennimmt und einen Anhang erzeugt. Ohne 18f bliebe dieser
+ *       Abschnitt grün, während nebenan eine zweite Tür aufgeht — genau das
+ *       ist zwischen PR #16 und F-21 geschehen.
  */
 
 // ---------------------------------------------------------------------------
@@ -5723,24 +5852,94 @@ check('an der Add-in-Tür sind „fehlt" und `null` dasselbe: ohne Frist', () =>
   assert.equal(addinTuer.parse({ title: 'Mit Frist', dueDate: '2026-09-30' }).dueDate, '2026-09-30');
 });
 
-check('die Add-in-Tür hat kein Anhangsfeld (A-19.19) — strukturell, nicht per Voreinstellung', () => {
+check('A-A-82: die Add-in-Tür führt kein Feld, das ein vorhandenes Todo benennt', () => {
   /*
-   * A-A-21/A-A-22 an der Form der Tür.
+   * Die Form der Tür, und sie ist seit T-304 eine andere Aussage.
    *
-   * Zod wirft unbekannte Schlüssel still weg; ein mitgeschicktes `attachments`
-   * ist damit ohne Wirkung. Das ist die richtige Reihenfolge (siehe die
-   * Begründung zu `reopenIfDone` in `schema.ts`) — aber es ist **nicht** die
-   * Messung. Gemessen wird hier, dass die Tür gar kein solches Feld führt und
-   * kein Aufrufer auf die Idee kommen kann, eines zu füllen. Die Wirkung misst
-   * 18d.
+   * Bis dahin stand hier „die Tür führt gar kein Anhangsfeld". Sie führt jetzt
+   * eines (E-108), und der Wächter spannt seine Menge deshalb an der
+   * **Anforderung** auf statt an dem Namen, den er kennt (E-099 Punkt 3): Was
+   * es nicht geben darf, ist ein Feld, mit dem ein Aufrufer **ein vorhandenes
+   * Todo benennt**. Genau das wäre die Tür, die A-A-82 zuhält — ohne sie kann
+   * ein Anhang nur an dem Todo landen, das dieselbe Anfrage anlegt.
+   *
+   * Die Namensmenge ist absichtlich weit und schließt Schreibweisen ein, die
+   * niemand wählen würde: Sie soll den Fall fangen, den jemand **bauen will**,
+   * und nicht den, den jemand versteckt.
+   *
+   * Die Wirkung mißt 18d, den ganzen Teilbaum 18f.
    */
   const felder = Object.keys(addinTuer.shape);
-  const anhang = felder.filter((name) => /attach|anhang|file|image|url/i.test(name));
-  assert.deepEqual(anhang, [], `die Add-in-Tür führt ein Anhangsfeld: ${anhang.join(', ')}`);
+  const benennend = felder.filter((name) => /todo.?id|target.?todo|existing|vorhanden/i.test(name));
+  assert.deepEqual(
+    benennend,
+    [],
+    `die Add-in-Tür benennt ein vorhandenes Todo: ${benennend.join(', ')} — das ist die Tür aus A-A-82`,
+  );
+
   assert.ok(felder.includes('dueDate'), 'die Frist fehlt an der Tür — dann misst 18c nichts');
+
+  /*
+   * Und die Gegenrichtung, damit dieser Prüfsatz nicht auch dann grün bliebe,
+   * wenn das Anhangsfeld ganz verschwände: Dann hätte 18d nichts zu messen,
+   * und der Aufgabenbereich verlöre seine Anhänge still (A-19.31).
+   */
+  assert.ok(
+    felder.includes('attachments'),
+    'die Tür liest `attachments` nicht mehr — dann verschwindet ein mitgeschickter Anhang lautlos (A-19.31)',
+  );
 });
 
-check('der Add-in-Abschnitt beschreibt keinen Anhangsweg (A-19.19, F-21)', () => {
+check('A-A-82: die Naht führt keinen Parameter vom Typ `TodoId` — gemessen am Quelltext', () => {
+  /*
+   * Der Typ trägt die Zusage beim **Übersetzen**; dieser Lauf liest sie am
+   * Quelltext, damit sie auch dann rot wird, wenn jemand sie mit einer
+   * Zusicherung (`as`) oder einem `any` umgeht.
+   *
+   * Gemessen wird die **Signatur** von `EmailAttachmentIntake` und der
+   * Funktion darunter — nicht die ganze Datei: `TodoId` steht dort mehrfach,
+   * und zwar richtig (als Feld von `FreshTodo`, als Rückgabe des Anlegens).
+   * Was es nicht geben darf, ist ein **Parameter**.
+   */
+  const quelle = fremdeQuelle(FREMDE_ORTE.naht).text;
+
+  const typ = /export type EmailAttachmentIntake = <T>\(([\s\S]*?)\) =>/.exec(quelle);
+  assert.notEqual(typ, null, 'die Naht heißt nicht mehr `EmailAttachmentIntake`');
+  assert.equal(
+    /TodoId/.test(typ[1]),
+    false,
+    `die Naht nimmt eine Todo-Kennung entgegen — das hebt E-108 auf und nicht eine Zeile Code:\n${typ[1]}`,
+  );
+
+  const funktion = /export async function attachEmailToNewTodo<T>\(([\s\S]*?)\): Promise</.exec(
+    quelle,
+  );
+  assert.notEqual(funktion, null, 'die Funktion hinter der Naht heißt nicht mehr so');
+  assert.equal(
+    /TodoId/.test(funktion[1]),
+    false,
+    `die Funktion hinter der Naht nimmt eine Todo-Kennung entgegen:\n${funktion[1]}`,
+  );
+
+  /*
+   * Die Gegenprobe: Derselbe Ausdruck **findet** eine Kennung, wenn eine
+   * dasteht. Ohne sie wäre die Zeile darüber die schlimmste Sorte grün — eine,
+   * die auch dann bestünde, wenn der Ausdruck nie träfe.
+   */
+  const verstuemmelt = quelle.replace(
+    'export type EmailAttachmentIntake = <T>(\n  intake: EmailIntake,',
+    'export type EmailAttachmentIntake = <T>(\n  todoId: TodoId,\n  intake: EmailIntake,',
+  );
+  assert.notEqual(verstuemmelt, quelle, 'die Verstümmelung hat nicht gegriffen — sie mißt nichts');
+  const gefunden = /export type EmailAttachmentIntake = <T>\(([\s\S]*?)\) =>/.exec(verstuemmelt);
+  assert.equal(
+    /TodoId/.test(gefunden[1]),
+    true,
+    'der Ausdruck sieht eine nachgerüstete Todo-Kennung nicht — dann mißt er nichts',
+  );
+});
+
+check('der Add-in-Abschnitt beschreibt den Anhangsweg — und keinen zweiten (A-A-82, E-108)', () => {
   const spec = parseYaml(
     fremdeQuelle(FREMDE_ORTE.schnittstelle).text,
   );
@@ -5754,29 +5953,57 @@ check('der Add-in-Abschnitt beschreibt keinen Anhangsweg (A-19.19, F-21)', () =>
     'die Frist steht ohne ihre Anforderungs-ID da',
   );
 
-  // Die Todo-Anlage selbst bleibt frei von Anhangsfeldern. Der Verweis ist
-  // eine ausdrückliche zweite Handlung auf einem bereits vorhandenen Todo.
-  const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
-  assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
+  /*
+   * **Die Beschreibung sagt dasselbe wie der Dienst** (T-247, jetzt in beide
+   * Richtungen).
+   *
+   * Seit T-304 liest die Anlegetür `attachments`. Ein Leser, dem das
+   * verschwiegen würde, schickte keine Anhänge und erführe nie, warum keine
+   * ankommen — dieselbe Sorte Schaden wie eine beschriebene Route, die 404
+   * antwortet, nur in der anderen Richtung.
+   */
+  assert.ok(
+    Object.keys(felder).includes('attachments'),
+    'die Beschreibung kennt das Anhangsfeld nicht — der Dienst liest es aber (T-304)',
+  );
+  assert.match(
+    String(felder['attachments']?.description ?? ''),
+    /A-19\.22/,
+    'das Anhangsfeld steht ohne seine Anforderungs-ID da',
+  );
 
   /*
-   * **Die Beschreibung sagt dasselbe wie der Dienst** (T-247).
-   *
-   * Bis zur Entscheidung zu F-21 stand hier die schmale Verweisroute
-   * ausgeschrieben, mit ihren Feldern und ihren fehlenden Verben. Sie ist
-   * gefallen; also fällt auch ihr Absatz in der Beschreibung. Ein Leser, dem
-   * eine Route beschrieben wird, die 404 antwortet, ist schlechter dran als
-   * einer ohne Beschreibung.
-   *
-   * Gemessen wird das hier am Papier, in 18f am laufenden Dienst. Beide
-   * zusammen — und nicht eines davon — sind die Zusage.
+   * Und was die Beschreibung **nicht** führen darf: einen zweiten Weg, der ein
+   * vorhandenes Todo benennt. Gemessen am Papier; 18f mißt es am laufenden
+   * Dienst. Beide zusammen — und nicht eines davon — sind die Zusage.
    */
   const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
   assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
   assert.deepEqual(
-    addinPfade.filter((pfad) => /attachment/i.test(pfad)),
+    addinPfade.filter((pfad) => /attachment|anhang|file|link|mail/i.test(pfad)),
     [],
-    'die Beschreibung führt unter /addin wieder einen Anhangsweg',
+    'die Beschreibung führt unter /addin einen zweiten Weg für Anhänge',
+  );
+
+  /*
+   * **Kein Add-in-Rumpf benennt ein vorhandenes Todo.** Der Pfadparameter
+   * `{todoId}` an `…/time-entries` ist davon ausgenommen und zwar mit Grund:
+   * Dort wird gebucht, nicht angehängt, und das ist A-10.9. Was gemessen wird,
+   * sind die **Rumpfschlüssel**.
+   */
+  const benennend = [];
+  for (const pfad of addinPfade) {
+    for (const [verfahren, operation] of Object.entries(spec.paths[pfad] ?? {})) {
+      const schema = operation?.requestBody?.content?.['application/json']?.schema;
+      for (const name of Object.keys(schema?.properties ?? {})) {
+        if (/todo.?id|existing|vorhanden/i.test(name)) benennend.push(`${verfahren} ${pfad}.${name}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    benennend,
+    [],
+    `ein Add-in-Rumpf benennt ein vorhandenes Todo: ${benennend.join(', ')}`,
   );
 });
 
@@ -5930,70 +6157,280 @@ await checkAsync('A-A-19: eine unmögliche Frist ergibt 422 — und kein halbes 
 });
 
 // ---------------------------------------------------------------------------
-// 18d — A-19.19 an der Wirkung, nicht am Statuscode
+// 18d — A-A-82 und A-19.33 an der Wirkung, nicht am Statuscode
 // ---------------------------------------------------------------------------
 
 /**
- * Ein **voll ausgefüllter** Anhang in drei Schreibweisen.
+ * Der Umschlag aus **einer E-Mail mit zwei Dateianhängen** — die Abnahme aus
+ * A-19.33, von Ende zu Ende.
  *
- * Drei und nicht eine, weil niemand weiß, welchen Namen ein künftiger Aufrufer
- * (oder ein Angreifer mit dem Add-in-Token) probierte. Die Werte sind so
- * gewählt, dass ein Durchkommen sofort sichtbar wäre: eine ausführbare Datei,
- * eine Adresse, ein Bild. Erfunden, wie alle Prüfdaten hier — `beispiel.invalid`
- * und `example.org` sind reservierte Namen ohne erreichbaren Wirt.
+ * „Die E-Mail als Datei und die beiden ursprünglichen Dateien" — **drei**
+ * Anhänge aus zwei Dateianhängen. Das ist die Zahl, die diese Anforderung
+ * verlangt, und der häufigste Weg, sie zu verfehlen, ist die Nachricht
+ * mitzuzählen oder zu vergessen.
+ *
+ * Alle Werte sind **erfunden**: `example.invalid` und `example.org` sind
+ * reservierte Namen ohne erreichbaren Wirt, die Base64-Rümpfe sind kurze
+ * ASCII-Texte. Es steht hier keine Call-Nummer eines Kunden und kein Name aus
+ * einem echten Postfach.
  */
-const ANHANGSVERSUCHE = {
-  attachments: [
-    { kind: 'file', path: '/tmp/nicht-oeffnen.bat', title: 'Rechnung' },
-    { kind: 'image', name: 'bild.png', bytes: 'iVBORw0KGgo=' },
+const base64Von = (text) => Buffer.from(text, 'utf8').toString('base64');
+
+const EMAIL_MIT_ZWEI_DATEIEN = Object.freeze({
+  sender: 'T. Beispiel <t.beispiel@example.invalid>',
+  items: [
+    {
+      kind: 'message',
+      displayName: 'Nachricht.eml',
+      contentBase64: base64Von('Subject: Pruefvorgang\r\n\r\nErfundener Text.\r\n'),
+      rebuilt: false,
+    },
+    { kind: 'file', displayName: 'Angebot.pdf', contentBase64: base64Von('erfundenes PDF') },
+    { kind: 'file', displayName: 'Skizze.png', contentBase64: base64Von('erfundenes PNG') },
   ],
-  attachment: { kind: 'link', url: 'https://example.org/nicht-oeffnen', title: 'Verweis' },
-  attachmentUrl: 'https://example.org/auch-nicht',
-  attachmentPath: 'C:\\Windows\\System32\\calc.exe',
-};
-
-await checkAsync('A-19.19/A-A-22: ein voll ausgefüllter Anhang ergibt 201 und **null** Zeilen', async () => {
-  await withRealDatabase(async ({ app, db }) => {
-    const zaehleAnhaenge = () =>
-      Number(db.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n']);
-
-    assert.equal(zaehleAnhaenge(), 0, 'der Bestand war nicht leer — die Messung sagte dann nichts');
-
-    const antwort = await postTodo(app, {
-      title: 'Aus Outlook, mit Frist und Anhangsversuch',
-      tagIds: [],
-      tagNames: [],
-      note: '',
-      // Die Frist geht durch (A-19.21) …
-      dueDate: '2026-09-30',
-      // … der Anhang nicht (A-19.19). Beides in **einer** Anfrage, weil genau
-      // das der Fall ist, den E-074 Punkt 3 trennt.
-      ...ANHANGSVERSUCHE,
-    });
-    const body = await antwort.json();
-
-    // Gemessen wird die **Wirkung** und nicht der Statuscode: Ein 422 wäre
-    // hier die falsche Antwort — die Anfrage ist fachlich vollständig, und ein
-    // unbekannter Schlüssel darf ein Todo nicht scheitern lassen (dieselbe
-    // Überlegung wie bei `reopenIfDone`).
-    assert.equal(antwort.status, 201, JSON.stringify(body));
-    assert.equal(body.data.todo.dueDate, '2026-09-30', 'die Frist ist mit dem Anhang untergegangen');
-    assert.equal(zaehleAnhaenge(), 0, 'über die Add-in-Tür ist ein Anhang entstanden');
-
-    // Und keiner der Werte ist irgendwo gelandet, wo er auf Klick geöffnet
-    // würde: nicht als Call-Nummer, nicht im Titel, nicht im Vermerk.
-    const gespeichert = db.connection
-      .prepare('SELECT title, call_number FROM todo WHERE id = ?')
-      .get(body.data.todo.id);
-    const vermerk = db.connection
-      .prepare('SELECT body FROM todo_note WHERE todo_id = ?')
-      .get(body.data.todo.id);
-    const alles = JSON.stringify([gespeichert, vermerk ?? null]);
-    for (const spur of ['nicht-oeffnen', 'calc.exe', 'example.org']) {
-      assert.equal(alles.includes(spur), false, `„${spur}" ist in ein anderes Feld gewandert`);
-    }
-  });
 });
+
+/**
+ * Der Versuch, an ein **vorhandenes** Todo zu hängen — in vier Schreibweisen.
+ *
+ * Vier und nicht eine, weil niemand weiß, welchen Namen ein künftiger Aufrufer
+ * (oder ein Angreifer mit dem Add-in-Token) probierte. Heute streicht zod jede
+ * davon still weg; das ist die richtige Reihenfolge (siehe die Begründung zu
+ * `reopenIfDone` in `schema.ts`) und **nicht** die Messung. Gemessen wird, daß
+ * der Anhang trotzdem am **neuen** Todo landet.
+ */
+const FREMDES_TODO_BENANNT = (todoId) =>
+  Object.freeze({
+    todoId,
+    todoID: todoId,
+    targetTodoId: todoId,
+    existingTodoId: todoId,
+  });
+
+await checkAsync(
+  'A-A-82/A-19.33: die Anhänge hängen am **neuen** Todo — das vorhandene bleibt bei null',
+  async () => {
+    await withRealDatabase(async ({ app, db, appData, context }) => {
+      const zaehleAm = (todoId) =>
+        Number(
+          db.connection
+            .prepare('SELECT COUNT(*) AS n FROM todo_attachment WHERE todo_id = ?')
+            .get(todoId)['n'],
+        );
+      const zaehleAlle = () =>
+        Number(db.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n']);
+
+      assert.equal(zaehleAlle(), 0, 'der Bestand war nicht leer — die Messung sagte dann nichts');
+
+      /*
+       * Das **vorhandene** Todo. Es entsteht über den Anwendungsfall der
+       * Hauptanwendung und nicht über die Add-in-Tür: Es soll da sein, bevor
+       * das Add-in etwas tut, und genau das ist die Lage, über die A-A-82
+       * spricht.
+       */
+      const vorhanden = await context.transactions.inTransaction(async (unit) =>
+        unit.todos.create(
+          {
+            title: 'Stand vorher da',
+            callNumber: null,
+            statusId: (await unit.statuses.defaultStatus()).id,
+            tagIds: [],
+            note: '',
+            dueDate: null,
+            now: JETZT,
+          },
+          [],
+        ),
+      );
+      assert.equal(zaehleAm(vorhanden.id), 0);
+
+      const antwort = await postTodo(app, {
+        title: 'Aus Outlook, mit Frist und drei Anhängen',
+        tagIds: [],
+        tagNames: [],
+        note: '',
+        // Die Frist geht durch (A-19.21) …
+        dueDate: '2026-09-30',
+        // … die Anhänge auch (A-19.22 bis A-19.33, E-108) …
+        attachments: EMAIL_MIT_ZWEI_DATEIEN,
+        // … und die Kennung des vorhandenen Todos **nicht**. Beides in einer
+        // Anfrage, weil genau das der Fall ist, um den es geht.
+        ...FREMDES_TODO_BENANNT(vorhanden.id),
+      });
+      const body = await antwort.json();
+
+      /*
+       * Gemessen wird die **Wirkung** und nicht der Statuscode: Ein 422 wäre
+       * hier die falsche Antwort — die Anfrage ist fachlich vollständig, und
+       * ein unbekannter Schlüssel darf ein Todo nicht scheitern lassen.
+       */
+      assert.equal(antwort.status, 201, JSON.stringify(body));
+      assert.equal(
+        body.data.todo.dueDate,
+        '2026-09-30',
+        'die Frist ist mit den Anhängen untergegangen',
+      );
+
+      const neu = body.data.todo.id;
+      assert.notEqual(neu, vorhanden.id, 'die Tür hat auf das vorhandene Todo gebucht');
+
+      /*
+       * **A-19.33, von Ende zu Ende**: zwei Dateianhänge ergeben drei Anhänge.
+       * Gezählt in der Datenbank und nicht in der Antwort — die Antwort sagt
+       * dasselbe, und beide müssen übereinstimmen.
+       */
+      assert.equal(zaehleAm(neu), 3, 'aus zwei Dateianhängen sind nicht drei Anhänge geworden');
+      assert.equal(body.data.attachments.stored, 3, JSON.stringify(body.data.attachments));
+      assert.deepEqual(body.data.attachments.rejected, []);
+
+      /*
+       * **Und der Kern von A-A-82**: Das vorhandene Todo hat weiterhin null.
+       * Diese Zeile wird rot, wenn jemand einen `todoId`-Parameter nachrüstet
+       * — dann landeten die drei dort.
+       */
+      assert.equal(
+        zaehleAm(vorhanden.id),
+        0,
+        'über die Add-in-Tür ist ein Anhang an einem **vorhandenen** Todo entstanden (A-A-82)',
+      );
+      assert.equal(zaehleAlle(), 3, 'es sind mehr Zeilen entstanden als an einem Todo hängen');
+
+      /*
+       * Die Reihenfolge am Todo (A-19.33): die E-Mail zuerst, dann die Dateien
+       * in der Reihenfolge der Nachricht. Sie steht in `position`, und sie ist
+       * die Zusage aus A-19.8.
+       */
+      const zeilen = db.connection
+        .prepare(
+          'SELECT display_name, origin, origin_sender, rebuilt, target FROM todo_attachment' +
+            ' WHERE todo_id = ? ORDER BY position',
+        )
+        .all(neu);
+      assert.deepEqual(
+        zeilen.map((zeile) => zeile['display_name']),
+        ['Nachricht.eml', 'Angebot.pdf', 'Skizze.png'],
+      );
+      for (const zeile of zeilen) {
+        assert.equal(zeile['origin'], 'email', 'die Herkunft ist nicht gespeichert (A-A-84)');
+        assert.equal(
+          zeile['origin_sender'],
+          'T. Beispiel <t.beispiel@example.invalid>',
+          'der Absender ist nicht gespeichert — dann fehlt er in der Rückfrage (A-A-85)',
+        );
+      }
+
+      /*
+       * **Der fremde Name wird nie ein Pfadbestandteil** (A-A-78). Er steht als
+       * Anzeigename in der Spalte daneben; auf der Platte liegt ein erzeugter
+       * Name. Gemessen am Ordner und nicht nur an der Zeile.
+       */
+      const dateien = readdirSync(path.join(appData, 'email-attachments'));
+      assert.equal(dateien.length, 3, `im Ordner liegen ${String(dateien.length)} Dateien statt 3`);
+      for (const name of dateien) {
+        assert.match(
+          name,
+          /^[0-9a-f]{32}(\.[a-z0-9]{1,16})?$/,
+          `ein Name auf der Platte ist keiner, den SuperTakt erzeugt hätte: ${name}`,
+        );
+      }
+      for (const spur of ['Angebot', 'Skizze', 'Nachricht']) {
+        assert.equal(
+          dateien.some((name) => name.includes(spur)),
+          false,
+          `„${spur}" steht im Pfad — der fremde Name ist ein Pfadbestandteil geworden (A-A-78)`,
+        );
+      }
+
+      // Und keiner der Werte ist irgendwo gelandet, wo er auf Klick geöffnet
+      // würde: nicht als Call-Nummer, nicht im Titel, nicht im Vermerk.
+      const gespeichert = db.connection
+        .prepare('SELECT title, call_number FROM todo WHERE id = ?')
+        .get(neu);
+      const vermerk = db.connection
+        .prepare('SELECT body FROM todo_note WHERE todo_id = ?')
+        .get(neu);
+      const alles = JSON.stringify([gespeichert, vermerk ?? null]);
+      for (const spur of ['Angebot.pdf', 'example.invalid', vorhanden.id]) {
+        assert.equal(alles.includes(spur), false, `„${spur}" ist in ein anderes Feld gewandert`);
+      }
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-82, Gegenprobe: eine Anlegefunktion, die auf das vorhandene Todo zeigt, ist ein Entschluß',
+  async () => {
+    /*
+     * ---------------------------------------------------------------------------
+     * Warum diese Gegenprobe den Wächter von oben trägt
+     * ---------------------------------------------------------------------------
+     *
+     * Die Zeile oben zählt null am vorhandenen Todo. Ohne diese Gegenprobe wäre
+     * das die schlimmste Sorte grün — eine, die auch dann bestünde, wenn die
+     * Zählung die falsche Spalte läse oder die Fähigkeit gar nichts schriebe.
+     *
+     * Also wird die Naht hier **von Hand** auf ein vorhandenes Todo gerichtet,
+     * und zwar auf dem einzigen Weg, den ihre Signatur offenläßt: mit einer
+     * „Anlegefunktion", die nichts anlegt und eine fremde Kennung zurückgibt.
+     * Das ist genau der Satz, der an der Naht steht — „kein Versehen mehr,
+     * sondern ein Entschluß" —, und hier steht er als ausführbarer Code.
+     *
+     * Dreierlei wird damit gemessen:
+     *
+     *  1. Die Zählung **sieht** einen Anhang am vorhandenen Todo, wenn es einen
+     *     gibt. Sie liest also die richtige Spalte.
+     *  2. Die Fähigkeit **schreibt** wirklich, wenn man sie schreiben läßt. Der
+     *     grüne Lauf oben ist damit eine gemessene Abwesenheit und nicht eine
+     *     leere.
+     *  3. Und der Umweg ist sichtbar: Er kostet eine Funktion, die lügt. Über
+     *     die **Route** gibt es ihn nicht — dort wird `create` vom Dienst
+     *     gestellt und nicht vom Aufrufer.
+     */
+    await withRealDatabase(async ({ db, context }) => {
+      const vorhanden = await context.transactions.inTransaction(async (unit) =>
+        unit.todos.create(
+          {
+            title: 'Stand vorher da',
+            callNumber: null,
+            statusId: (await unit.statuses.defaultStatus()).id,
+            tagIds: [],
+            note: '',
+            dueDate: null,
+            now: JETZT,
+          },
+          [],
+        ),
+      );
+      const zaehleAm = (todoId) =>
+        Number(
+          db.connection
+            .prepare('SELECT COUNT(*) AS n FROM todo_attachment WHERE todo_id = ?')
+            .get(todoId)['n'],
+        );
+      assert.equal(zaehleAm(vorhanden.id), 0);
+
+      const naht = createEmailAttachmentIntake(context);
+      const ergebnis = await naht(
+        {
+          sender: null,
+          message: null,
+          files: [{ displayName: 'Beleg.pdf', base64: base64Von('erfundenes PDF') }],
+          links: [],
+          failed: [],
+        },
+        // Die Funktion, die nichts anlegt. Sie ist der ganze Punkt.
+        async () => ({ ok: true, value: { todoId: vorhanden.id, value: null } }),
+      );
+
+      assert.equal(ergebnis.ok, true, JSON.stringify(ergebnis));
+      assert.equal(
+        zaehleAm(vorhanden.id),
+        1,
+        'die Zählung sieht auch einen Anhang nicht, den es gibt — dann mißt die Zeile darüber nichts',
+      );
+    });
+  },
+);
 
 await checkAsync('die Gegenprobe: diese Messung kann rot werden', async () => {
   /*
@@ -6613,9 +7050,55 @@ const PROBE_RUMPF = Object.freeze({
   startedAt: '2026-09-30T08:00:00Z',
   endedAt: '2026-09-30T08:30:00Z',
   note: 'Leistung aus dem Prüflauf',
+  /*
+   * **Seit T-304 trägt der Probenrumpf einen echten Anhang** (A-A-82).
+   *
+   * Ohne ihn führe die Rundfahrt an der einen Tür vorbei, die wirklich einen
+   * Anhang anlegen kann, und meldete „null Zeilen" — grün und ohne Aussage.
+   * Das ist derselbe Befund wie T-247-12 an einer anderen Stelle: Eine
+   * Anfrage, die den Schreibpfad nicht trifft, ist keine gemessene Fläche.
+   *
+   * Der Umschlag paßt auf `POST /addin/todos` und wird von jeder anderen Route
+   * still verworfen — das ist richtig so: Die Rundfahrt fragt jede Tür, ob
+   * **sie** daraus einen Anhang am Trägertodo macht.
+   */
+  attachments: {
+    sender: 'T. Beispiel <t.beispiel@example.invalid>',
+    items: [
+      {
+        kind: 'link',
+        displayName: 'Ablage.docx',
+        url: 'https://example.org/ablage/42',
+      },
+    ],
+  },
 });
 
-/** Wie viele Anhänge stehen in der Datenbank? */
+/**
+ * Wie viele Anhänge hängen an **diesem** Todo?
+ *
+ * ---------------------------------------------------------------------------
+ * Warum je Todo und nicht über die ganze Tabelle (T-304)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-247 zählte diese Funktion alle Zeilen, und das war richtig, solange die
+ * Zusage „über das Add-in entsteht kein Anhang" lautete. E-108 hat diese Zusage
+ * aufgehoben: `POST /addin/todos` legt jetzt welche an, und eine Zählung über
+ * die ganze Tabelle wäre ab heute rot an einer Fläche, die es geben **soll**.
+ *
+ * Die Zusage, die geblieben ist, ist A-A-82 — kein Anhang an einem Todo, das
+ * **vorher schon da war** —, und sie ist genau dann meßbar, wenn die Zählung
+ * ein Todo nennt. Die Rundfahrt fährt deshalb gegen das **Trägertodo**, das vor
+ * ihr entstanden ist.
+ */
+const zaehleAnhaengeAm = (service, todoId) =>
+  Number(
+    service.database.connection
+      .prepare('SELECT COUNT(*) AS n FROM todo_attachment WHERE todo_id = ?')
+      .get(todoId)['n'],
+  );
+
+/** Wie viele Anhänge stehen insgesamt in der Datenbank? */
 const zaehleAnhaenge = (service) =>
   Number(
     service.database.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n'],
@@ -6637,7 +7120,8 @@ const rundfahrt = async ({ service, anfrage, todoId, rumpf = PROBE_RUMPF, option
   for (const eintrag of addinFlaeche(service)) {
     const [verfahren, vollerPfad] = eintrag.split(' ');
     const pfad = vollerPfad.replace('/api/v1', '').replace(':todoId', todoId);
-    const vorher = zaehleAnhaenge(service);
+    const vorher = zaehleAnhaengeAm(service, todoId);
+    const vorherGesamt = zaehleAnhaenge(service);
     const antwort = await anfrage(verfahren === 'GET' ? `${pfad}?callNumber=TCK-000042` : pfad, {
       method: verfahren,
       ...(verfahren === 'GET' ? {} : { body: rumpf }),
@@ -6649,17 +7133,33 @@ const rundfahrt = async ({ service, anfrage, todoId, rumpf = PROBE_RUMPF, option
       pfad,
       status: antwort.status,
       text: antwort.text,
-      wirkung: zaehleAnhaenge(service) > vorher,
+      /*
+       * **Wirkung heißt: am Trägertodo** (A-A-82, T-304). Ein Anhang, der an
+       * einem Todo entsteht, das **derselbe Aufruf** angelegt hat, ist kein
+       * Befund, sondern die Fläche aus E-108.
+       */
+      wirkung: zaehleAnhaengeAm(service, todoId) > vorher,
+      /*
+       * Und daneben, damit eine leere Rundfahrt nicht als gemessene
+       * Abwesenheit durchgeht: Ist **irgendwo** ein Anhang entstanden? Die
+       * Anlegetür soll das tun; täte sie es nicht, hätte diese Fahrt den
+       * Schreibpfad nie berührt und ihre Null sagte nichts.
+       */
+      irgendwo: zaehleAnhaenge(service) > vorherGesamt,
     });
   }
   return fahrten;
 };
 
 /**
- * Die Routen, nach denen `todo_attachment` gewachsen ist — mit Pfad, damit die
- * Meldung sagt, welche Tür aufgegangen ist.
+ * Die Routen, nach denen `todo_attachment` **am Trägertodo** gewachsen ist —
+ * mit Pfad, damit die Meldung sagt, welche Tür aufgegangen ist.
  */
 const mitWirkung = (fahrten) => fahrten.filter(({ wirkung }) => wirkung).map(({ eintrag }) => eintrag);
+
+/** Die Routen, nach denen **irgendwo** ein Anhang entstanden ist. Siehe `irgendwo`. */
+const mitSchreibpfad = (fahrten) =>
+  fahrten.filter(({ irgendwo }) => irgendwo).map(({ eintrag }) => eintrag);
 
 /**
  * **Ist die Rundfahrt angekommen?** (A-A-73, und dahinter A-A-60.)
@@ -6810,7 +7310,7 @@ await checkAsync('A-A-71: die Fläche unter /addin ist die ausgeschriebene Menge
 });
 
 await checkAsync(
-  'A-A-71: nach **jeder** Add-in-Route mit gültigem Token bleibt todo_attachment bei null',
+  'A-A-71/A-A-82: nach **jeder** Add-in-Route bleibt das vorhandene Todo bei null Anhängen',
   async () => {
     await withComposedService(async ({ service, anfrage, secret }) => {
       const todoId = await traegerTodo(anfrage, secret);
@@ -6822,9 +7322,28 @@ await checkAsync(
       assert.deepEqual(
         wirksam,
         [],
-        `über das Add-in-Token entsteht ein Anhang (A-19.19): ${wirksam.join(', ')}`,
+        `über das Add-in-Token entsteht ein Anhang an einem vorhandenen Todo (A-A-82): ${wirksam.join(', ')}`,
       );
-      assert.equal(zaehleAnhaenge(service), 0, 'nach der Rundfahrt steht ein Anhang in der Tabelle');
+      assert.equal(
+        zaehleAnhaengeAm(service, todoId),
+        0,
+        'nach der Rundfahrt hängt ein Anhang am vorhandenen Todo',
+      );
+
+      /*
+       * **Und die Fahrt hat den Schreibpfad wirklich berührt** (T-304).
+       *
+       * Ohne diese Zeile wäre die Null oben von der Sorte, vor der A-A-73
+       * warnt: Ein Probenrumpf ohne Anhänge ergäbe überall null, und der Lauf
+       * bliebe grün, ohne je an einer Anhangstür gewesen zu sein. Die
+       * Anlegetür **muß** einen anlegen — an ihrem eigenen, neuen Todo.
+       */
+      const schreibend = mitSchreibpfad(fahrten);
+      assert.deepEqual(
+        schreibend,
+        ['POST /api/v1/addin/todos'],
+        `der Probenrumpf hat den Schreibpfad nicht getroffen — dann mißt die Null oben nichts (${fahrtprotokoll(fahrten)})`,
+      );
 
       // **Und der Nachweis, dass die Fahrt angekommen ist** (A-A-73/A-A-60).
       // Ohne ihn wäre der grünste Lauf von allen der, den die Wächterkette
@@ -8147,6 +8666,863 @@ check('O-HO, Gegenprobe: die Kürzung ohne Träger wird rot, die Rücknahme nich
     kuerzungIstGedeckt(chipMitZustand, pickerOhne),
     true,
     'die Rechnung verlangt beides statt einer Folgerung — dann wäre ST-A-06 unwiderruflich',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 21  Die Anhangsübernahme: Plan, Nachbau, Sammellauf (T-300)
+// ---------------------------------------------------------------------------
+
+heading('21  Die Anhangsübernahme: Plan, Nachbau, Sammellauf (T-300, E-108, E-109)');
+
+/**
+ * Die Grenzen, wie der Dienst sie nennen wird.
+ *
+ * Sie stehen **hier** und nicht im Add-in: Der Aufgabenbereich liest sie aus
+ * `GET /addin/context`, und dieser Lauf setzt sie wie der Dienst. Eine Zahl im
+ * Add-in wäre die zweite Wahrheit über eine Grenze, die ein anderer
+ * durchsetzt.
+ */
+const GRENZEN = Object.freeze({
+  maxBytesPerFile: 25 * 1024 * 1024,
+  maxBytesTotal: 100 * 1024 * 1024,
+  maxCount: 50,
+});
+
+const KANN_ALLES = Object.freeze({ canReadAttachments: true, canReadMessageFile: true });
+
+/** Ein angekündigter Anhang — erfundene Werte, keine echten Kundendaten. */
+const anhang = (over) => ({
+  id: 'att-1',
+  name: 'Angebot.pdf',
+  size: 1_200_000,
+  isInline: false,
+  attachmentType: 'file',
+  ...over,
+});
+
+/** Base64 zurück in Text — die Gegenrichtung, und zwar über die Laufzeit. */
+const ausBase64 = (wert) =>
+  new TextDecoder().decode(Uint8Array.from(atob(wert), (zeichen) => zeichen.charCodeAt(0)));
+
+check('A-19.22: Base64 über UTF-8 — Umlaute und Emoji überstehen den Rückweg', () => {
+  for (const probe of ['Grüße aus Köln', 'Straße/Maß — ÄÖÜäöüß', 'Rechnung 😀 fällig', '']) {
+    const kodiert = utf8ToBase64(probe);
+    assert.equal(normalizeBase64(kodiert), kodiert, 'die eigene Ausgabe hält die eigene Formprüfung nicht');
+    assert.equal(ausBase64(kodiert), probe, 'der Rückweg verliert Zeichen');
+  }
+});
+
+check('A-A-81: gezählt wird an der Zeichenkette, nicht an der Ankündigung', () => {
+  assert.equal(base64ByteLength(utf8ToBase64('abc')), 3);
+  assert.equal(base64ByteLength(utf8ToBase64('ab')), 2);
+  assert.equal(base64ByteLength(utf8ToBase64('a')), 1);
+  assert.equal(base64ByteLength(utf8ToBase64('äöü')), 6, 'UTF-8 zählt Bytes und nicht Zeichen');
+  assert.equal(base64ByteLength(''), 0);
+});
+
+check('Eine Zeichenkette, die keine Base64 ist, wird abgewiesen und nicht geraten', () => {
+  assert.equal(normalizeBase64('AAAA'), 'AAAA');
+  assert.equal(normalizeBase64('AA\r\nAA'), 'AAAA', 'gefalteter Leerraum ist zulässig');
+  assert.equal(normalizeBase64('AAA'), null, 'Länge kein Vielfaches von vier');
+  assert.equal(normalizeBase64('AA*A'), null, 'Zeichen außerhalb des Alphabets');
+  assert.equal(normalizeBase64('A=AA'), null, 'Füllzeichen mitten drin');
+});
+
+/**
+ * Alle vier Felder des Nachbaus mit einem Angriff darin (A-A-96, 39.3.0).
+ *
+ * Der Betreff schreibt eine eigene Kopfzeile, einen eigenen `Content-Type`
+ * mit Trennmarke und in den so entstandenen Teil einen **Anhang**; der
+ * Textkörper versucht dasselbe über die Marke. Erfundene Adressen unter
+ * `.invalid`, wie die Sicherheitsregel es verlangt.
+ */
+const ANGRIFF = Object.freeze({
+  subject:
+    'Rechnung\r\nBcc: opfer@example.invalid\r\nContent-Type: multipart/mixed; boundary=XX\r\n\r\n--XX\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="setup.exe"\r\n\r\nTVqQAAMAAAAEAAAA\r\n--XX--',
+  from: { displayName: 'Absender\r\nX-Untergeschoben: ja', address: 'a@example.invalid' },
+  to: [{ displayName: 'Empfänger', address: 'b@example.invalid' }],
+  cc: [],
+  sentAt: new Date(Date.UTC(2026, 8, 11, 9, 30, 0)),
+  body:
+    '--XX\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="rechnung.bat"\r\n\r\necho weg\r\n--XX--',
+});
+
+/** Die erzeugte Datei, dekodiert — so, wie Outlook sie sähe. */
+const nachbauText = (felder) => {
+  const gebaut = buildRebuiltEml(felder);
+  assert.equal(gebaut.ok, true, 'der Nachbau wurde abgelehnt, obwohl er gelingen muss');
+  return ausBase64(gebaut.base64);
+};
+
+/** Der Kopfteil endet an der ersten Leerzeile — danach beginnt der Rumpf. */
+const kopfzeilen = (text) => text.split('\r\n\r\n')[0].split('\r\n');
+
+/** Der Rumpf, zusammengezogen: eine einzige Base64-Zeichenkette. */
+const rumpfBase64 = (text) => text.split('\r\n\r\n').slice(1).join('').replace(/[\r\n]/g, '');
+
+check('A-A-96: kein Kopfzeilenwert aus fremdem Text steht roh in der Datei', () => {
+  const kopf = kopfzeilen(nachbauText(ANGRIFF));
+
+  for (const zeile of kopf) {
+    assert.match(zeile, /^[\x20-\x7e]*$/, 'eine Kopfzeile trägt ein Zeichen außerhalb von druckbarem ASCII');
+  }
+  assert.equal(
+    kopf.some((zeile) => /^Bcc:/i.test(zeile)),
+    false,
+    'der Betreff hat eine eigene Kopfzeile geschrieben — die Einschleusung ist offen',
+  );
+  assert.equal(
+    kopf.some((zeile) => /^X-Untergeschoben/i.test(zeile)),
+    false,
+    'der Absendername hat eine eigene Kopfzeile geschrieben',
+  );
+  assert.equal(
+    kopf.some((zeile) => /multipart/i.test(zeile)),
+    false,
+    'aus fremdem Text ist ein zusätzlicher Abschnitt geworden (A-19.22c)',
+  );
+});
+
+check('A-19.22c: die Datei hat genau einen Teil, keine Trennmarke und keinen Anhang', () => {
+  const text = nachbauText(ANGRIFF);
+  const kopf = kopfzeilen(text);
+  const typen = kopf.filter((zeile) => /^Content-Type:/i.test(zeile));
+
+  assert.deepEqual(typen, ['Content-Type: text/plain; charset=utf-8'], 'es gibt mehr als einen Teil');
+  assert.equal(text.includes('boundary'), false, 'es gibt eine Trennmarke — dann kann fremder Inhalt sie beenden');
+  assert.equal(
+    text.includes('filename='),
+    false,
+    'ein Anhangsteil ist entstanden, der nie einer im Sinne von A-19.23 war',
+  );
+});
+
+check('A-A-96: der Rumpf ist base64 — fremder Inhalt kann keine Struktur tragen', () => {
+  const text = nachbauText(ANGRIFF);
+  const kompakt = rumpfBase64(text);
+
+  assert.equal(normalizeBase64(kompakt), kompakt, 'der Rumpf ist nicht durchgehend base64');
+  assert.equal(text.includes('setup.exe'), false, 'der rohe Angriffstext steht unkodiert in der Datei');
+
+  const lesbar = ausBase64(kompakt);
+  assert.equal(lesbar.includes('Nachbau'), true, 'die Datei sagt nicht, dass sie ein Nachbau ist');
+  assert.equal(lesbar.includes(ANGRIFF.body), true, 'der Nachrichtentext fehlt — A-19.22 verlangt ihn');
+});
+
+check('A-19.22b: die Kennzeichnung hängt an der Datei, nicht am Augenblick', () => {
+  assert.equal(
+    kopfzeilen(nachbauText(ANGRIFF)).includes('X-SuperTakt-Rebuilt: yes'),
+    true,
+    'ohne diese Kopfzeile ist der Nachbau drei Wochen später von einem Original nicht zu unterscheiden',
+  );
+});
+
+check('A-19.22: Absender, Empfänger, Betreff, Versanddatum und Text stehen darin', () => {
+  const text = nachbauText({
+    subject: 'Angebot für Küche & Bad',
+    from: { displayName: 'Änne Müller', address: 'aenne@example.invalid' },
+    to: [{ displayName: 'Bü Rö', address: 'buero@example.invalid' }],
+    cc: [{ displayName: '', address: 'kopie@example.invalid' }],
+    sentAt: new Date(Date.UTC(2026, 8, 11, 9, 30, 0)),
+    body: 'Guten Tag,\r\nanbei das Angebot.\r\nGrüße',
+  });
+  const kopf = kopfzeilen(text);
+
+  assert.equal(
+    kopf.includes('Date: Fri, 11 Sep 2026 09:30:00 +0000'),
+    true,
+    'das Versanddatum fehlt oder steht nicht nach RFC 5322',
+  );
+  assert.match(kopf.find((zeile) => /^From:/.test(zeile)) ?? '', /<aenne@example\.invalid>$/);
+  assert.match(kopf.find((zeile) => /^To:/.test(zeile)) ?? '', /<buero@example\.invalid>$/);
+  assert.equal(kopf.includes('Cc: <kopie@example.invalid>'), true);
+  assert.match(kopf.find((zeile) => /^Subject:/.test(zeile)) ?? '', /^Subject: =\?UTF-8\?B\?/);
+
+  const lesbar = ausBase64(rumpfBase64(text));
+  for (const stueck of ['Änne Müller', 'aenne@example.invalid', 'Angebot für Küche & Bad', 'anbei das Angebot.']) {
+    assert.equal(lesbar.includes(stueck), true, 'im lesbaren Rumpf fehlt: ' + stueck);
+  }
+});
+
+check('RFC 2047: kodierte Wörter bleiben unter 76 Zeichen und teilen an Zeichengrenzen', () => {
+  const worte = encodeHeaderWords('😀'.repeat(40) + 'Grüße');
+  assert.ok(worte.length > 1, 'ein langer Betreff ergibt nur ein Wort — dann wird nicht gefaltet');
+
+  for (const wort of worte) {
+    assert.ok(wort.length <= 75, 'ein kodiertes Wort ist zu lang: ' + String(wort.length));
+    const nutz = wort.slice('=?UTF-8?B?'.length, -2);
+    assert.equal(normalizeBase64(nutz), nutz, 'die Nutzlast eines kodierten Wortes ist keine Base64');
+    // Wirft, wenn ein Emoji zwischen zwei Wörtern zerschnitten wurde.
+    new TextDecoder('utf-8', { fatal: true }).decode(
+      Uint8Array.from(atob(nutz), (zeichen) => zeichen.charCodeAt(0)),
+    );
+  }
+  assert.deepEqual(encodeHeaderWords(''), [], 'ein leerer Wert ergibt ein leeres kodiertes Wort');
+});
+
+check('A-A-96, Gegenprobe: eine roh zusammengeklebte Kopfzeile fiele durch', () => {
+  /*
+   * Die Wache dieses Moduls ist die Formprüfung über den **erzeugten**
+   * Kopfzeilen. Unter der Kodierung ist sie unerreichbar; genau deshalb steht
+   * sie da. Hier wird sie einmal von außen vorgeführt — an derselben Zeile,
+   * die ohne Kodierung entstünde.
+   */
+  assert.equal(
+    /^[\x20-\x7e]*$/.test('Subject: ' + ANGRIFF.subject),
+    false,
+    'die Formprüfung ließe eine roh eingesetzte Kopfzeile durch — dann wäre sie wirkungslos',
+  );
+  for (const zeile of kopfzeilen(nachbauText(ANGRIFF))) {
+    assert.equal(/^[\x20-\x7e]*$/.test(zeile), true, 'dieselbe Prüfung an der erzeugten Datei');
+  }
+});
+
+check('A-19.27: eine E-Mail ohne Dateianhänge ergibt genau einen Anhang', () => {
+  const plan = planTakeover([], GRENZEN, KANN_ALLES);
+  assert.equal(plan.entries.length, 1);
+  assert.equal(plan.expected, 1);
+  assert.equal(plan.skipped, 0);
+  assert.equal(plan.entries[0].kind, 'message');
+});
+
+check('A-19.33: zwei Dateianhänge ergeben drei Anhänge', () => {
+  const plan = planTakeover(
+    [anhang({ id: 'a' }), anhang({ id: 'b', name: 'Skizze.png', size: 340_000 })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.expected, 3, 'die Abnahme aus A-19.33 ist nicht ablesbar');
+  assert.deepEqual(plan.entries.map((eintrag) => eintrag.kind), ['message', 'file', 'file']);
+});
+
+check('A-19.24: ein eingebettetes Bild erscheint in keiner Liste und in keiner Zahl', () => {
+  const plan = planTakeover(
+    [anhang({ id: 'a' }), anhang({ id: 'sig', name: 'logo.png', size: 4_000, isInline: true })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.expected, 2);
+  assert.equal(plan.entries.length, 2, 'das Signaturbild steht in der Liste');
+});
+
+check('A-19.30: eine zu große Datei steht vor dem Klick mit Größe und Grenze da', () => {
+  const plan = planTakeover(
+    [anhang({ id: 'v', name: 'Video.mp4', size: 31 * 1024 * 1024 })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.entries[1].kind, 'skipped');
+  assert.equal(plan.entries[1].reason, 'too_large');
+  assert.equal(plan.skipped, 1);
+  assert.equal(
+    reasonSentence('too_large', plan.entries[1].bytes, GRENZEN),
+    'zu groß (31,0 MB). Die Grenze liegt bei 25,0 MB je Datei.',
+  );
+});
+
+check('A-19.25: ein Cloud-Anhang wird ein Verweis — geprüft am zerlegten Schema', () => {
+  const plan = planTakeover(
+    [anhang({ id: 'https://ablage.example.invalid/a.docx', name: 'Vertrag.docx', attachmentType: 'cloud' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.entries[1].kind, 'link');
+  assert.equal(plan.entries[1].url, 'https://ablage.example.invalid/a.docx');
+});
+
+check('A-A-13/R-22: ein Cloud-Anhang mit fremdem Schema wird nicht übernommen', () => {
+  for (const adresse of [
+    'file:///C:/Windows/System32/calc.exe',
+    '\\\\server\\freigabe\\setup.exe',
+    'javascript:alert(1)',
+    'https://nutzer:kennwort@gutartig.example.invalid/',
+  ]) {
+    const plan = planTakeover(
+      [anhang({ id: adresse, name: 'Vertrag.docx', attachmentType: 'cloud' })],
+      GRENZEN,
+      KANN_ALLES,
+    );
+    assert.equal(plan.entries[1].kind, 'skipped', 'durchgelassen: ' + adresse);
+    assert.equal(plan.entries[1].reason, 'not_a_web_address');
+  }
+});
+
+check('Gegenprobe: der Schemawächter prüft das zerlegte Schema und nicht das Präfix', () => {
+  /*
+   * `http:/\example.invalid/` ist nach WHATWG ein `http`-Ziel; ein
+   * Präfixvergleich hielte es für keines und verführte dazu, die Rohfassung zu
+   * speichern. Gespeichert wird die Normalform.
+   */
+  const plan = planTakeover(
+    [anhang({ id: 'http:/\\example.invalid/a.docx', name: 'V.docx', attachmentType: 'cloud' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.entries[1].kind, 'link');
+  assert.equal(plan.entries[1].url, 'http://example.invalid/a.docx', 'gespeichert wird nicht die Normalform');
+});
+
+check('A-19.31: ohne Mailbox 1.8 steht vor dem Klick da, dass die Dateien fehlen', () => {
+  const plan = planTakeover([anhang({})], GRENZEN, {
+    canReadAttachments: false,
+    canReadMessageFile: false,
+  });
+  assert.equal(plan.entries[1].kind, 'skipped');
+  assert.equal(plan.entries[1].reason, 'outlook_too_old');
+  assert.equal(plan.entries[0].expectRebuild, true, 'ohne 1.14 ist der Nachbau nicht angekündigt');
+  assert.equal(plan.expected, 1, 'das Todo entsteht trotzdem, mit der E-Mail als Nachbau');
+});
+
+check('A-A-81: Anzahl und Summe sind eigene Grenzen mit eigenen Gründen', () => {
+  const eng = { maxBytesPerFile: 10_000, maxBytesTotal: 15_000, maxCount: 2 };
+  const zahl = planTakeover(
+    [
+      anhang({ id: '1', name: 'a.pdf', size: 4_000 }),
+      anhang({ id: '2', name: 'b.pdf', size: 4_000 }),
+      anhang({ id: '3', name: 'c.pdf', size: 4_000 }),
+    ],
+    eng,
+    KANN_ALLES,
+  );
+  assert.deepEqual(
+    zahl.entries.slice(1).map((eintrag) => (eintrag.kind === 'skipped' ? eintrag.reason : 'file')),
+    ['file', 'file', 'too_many'],
+  );
+
+  const summe = planTakeover(
+    [anhang({ id: '1', name: 'a.pdf', size: 8_000 }), anhang({ id: '2', name: 'b.pdf', size: 9_000 })],
+    { ...eng, maxCount: 50 },
+    KANN_ALLES,
+  );
+  assert.equal(summe.entries[2].reason, 'total_too_large');
+});
+
+check('A-19.23a: ein angehängtes Element bekommt eine sichtbare Endung', () => {
+  const plan = planTakeover(
+    [anhang({ id: 'i', name: 'Weitergeleitete Nachricht', attachmentType: 'item' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  assert.equal(plan.entries[1].displayName, 'Weitergeleitete Nachricht.eml');
+});
+
+check('T-119/A-19.23b: ein Richtungszeichen im Anhangsnamen wird sichtbar gemacht', () => {
+  const plan = planTakeover([anhang({ id: 'x', name: 'Rechnung\u202Efdp.exe' })], GRENZEN, KANN_ALLES);
+  assert.equal(
+    plan.entries[1].displayName.includes('\u202e'),
+    false,
+    'das Richtungszeichen steht unbehandelt im Anzeigenamen',
+  );
+  assert.equal(plan.entries[1].displayName.includes(HIDDEN_MARKER), true, 'es wird nicht markiert');
+});
+
+/** Ein Satz Ports, der ohne Outlook antwortet. */
+const portsMit = (over = {}) => ({
+  messageAsFile: () => Promise.resolve(utf8ToBase64('From: a@example.invalid\r\n\r\nOriginal')),
+  attachmentContent: (id) =>
+    Promise.resolve({ format: 'base64', content: utf8ToBase64('Inhalt ' + id) }),
+  rebuildFields: () => ({
+    subject: 'Nachbau',
+    from: { displayName: 'A', address: 'a@example.invalid' },
+    to: [],
+    cc: [],
+    sentAt: new Date(Date.UTC(2026, 8, 11, 9, 0, 0)),
+    body: 'Text',
+  }),
+  ...over,
+});
+
+const laufen = (plan, ports, over = {}) =>
+  collectAttachments(plan, over.grenzen ?? GRENZEN, ports, {
+    signal: over.signal ?? new AbortController().signal,
+    timeoutMs: over.timeoutMs ?? 500,
+    onProgress: over.onProgress ?? (() => undefined),
+  });
+
+await checkAsync('A-19.22a: mit Mailbox 1.14 kommt das Original, ohne Kennzeichnung', async () => {
+  const plan = planTakeover([anhang({})], GRENZEN, KANN_ALLES);
+  const ergebnis = await laufen(plan, portsMit());
+
+  assert.equal(ergebnis.payload.length, 2);
+  assert.equal(ergebnis.payload[0].kind, 'message');
+  assert.equal(ergebnis.payload[0].rebuilt, false, 'das Original wird als Nachbau ausgegeben');
+  assert.deepEqual(ergebnis.missing, []);
+});
+
+await checkAsync('A-19.22a/A-19.22b: ohne 1.14 entsteht ein Nachbau, und er sagt es', async () => {
+  const plan = planTakeover([], GRENZEN, { canReadAttachments: true, canReadMessageFile: false });
+  const ergebnis = await laufen(plan, portsMit({ messageAsFile: null }));
+
+  assert.equal(ergebnis.payload.length, 1);
+  assert.equal(ergebnis.payload[0].rebuilt, true, 'der Nachbau ist nicht gekennzeichnet');
+  assert.deepEqual(ergebnis.missing, [], 'A-19.31: die E-Mail fehlt nicht, sie ist nachgebaut');
+});
+
+await checkAsync('A-19.22a: schlägt der Abruf fehl, wird nachgebaut statt gemeldet', async () => {
+  const plan = planTakeover([], GRENZEN, KANN_ALLES);
+  const ergebnis = await laufen(
+    plan,
+    portsMit({ messageAsFile: () => Promise.reject(new Error('nicht herausgegeben')) }),
+  );
+
+  assert.equal(ergebnis.payload.length, 1);
+  assert.equal(ergebnis.payload[0].rebuilt, true);
+});
+
+await checkAsync('A-19.29: ein gescheiterter Anhang bricht die übrigen nicht ab', async () => {
+  const plan = planTakeover(
+    [anhang({ id: 'gut', name: 'a.pdf' }), anhang({ id: 'boese', name: 'b.pdf' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  const ergebnis = await laufen(
+    plan,
+    portsMit({
+      attachmentContent: (id) =>
+        id === 'boese'
+          ? Promise.reject(new Error('nicht lesbar'))
+          : Promise.resolve({ format: 'base64', content: utf8ToBase64('gut') }),
+    }),
+  );
+
+  assert.equal(ergebnis.payload.length, 2, 'die E-Mail oder die gute Datei fehlt');
+  assert.equal(ergebnis.missing.length, 1);
+  assert.equal(ergebnis.missing[0].displayName, 'b.pdf');
+  assert.equal(ergebnis.missing[0].reason, 'not_released');
+});
+
+await checkAsync('AK-10: nach dem Deckel gilt der Anhang als gescheitert, der Lauf geht weiter', async () => {
+  const plan = planTakeover(
+    [anhang({ id: 'haengt', name: 'a.pdf' }), anhang({ id: 'gut', name: 'b.pdf' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  const ergebnis = await laufen(
+    plan,
+    portsMit({
+      attachmentContent: (id) =>
+        id === 'haengt'
+          ? new Promise(() => undefined)
+          : Promise.resolve({ format: 'base64', content: utf8ToBase64('gut') }),
+    }),
+    { timeoutMs: 20 },
+  );
+
+  assert.equal(ergebnis.missing.length, 1);
+  assert.equal(ergebnis.missing[0].reason, 'timeout');
+  assert.equal(ergebnis.payload.length, 2, 'der Lauf ist stehengeblieben statt weiterzugehen');
+});
+
+await checkAsync('AK-07/AK-08: Abbrechen hinterlässt nichts, und kein Rückläufer ändert das', async () => {
+  const plan = planTakeover([anhang({ id: 'lang', name: 'a.pdf' })], GRENZEN, KANN_ALLES);
+  const steuerung = new AbortController();
+  let spaeter = () => undefined;
+
+  const lauf = laufen(
+    plan,
+    portsMit({
+      attachmentContent: () =>
+        new Promise((aufloesen) => {
+          spaeter = () => {
+            aufloesen({ format: 'base64', content: 'QUJD' });
+          };
+        }),
+    }),
+    { signal: steuerung.signal, timeoutMs: 5_000 },
+  );
+
+  steuerung.abort();
+  spaeter();
+  const ergebnis = await lauf;
+
+  assert.equal(ergebnis.cancelled, true);
+  assert.deepEqual(ergebnis.payload, [], 'ein Abbruch hat eine Nutzlast hinterlassen');
+  assert.deepEqual(ergebnis.missing, []);
+});
+
+await checkAsync('A-A-81: gezählt wird beim Lesen — klein angekündigt, groß geliefert', async () => {
+  const eng = { maxBytesPerFile: 1024 * 1024, maxBytesTotal: 8 * 1024 * 1024, maxCount: 10 };
+  const plan = planTakeover([anhang({ id: 'luegt', name: 'a.bin', size: 1000 })], eng, KANN_ALLES);
+  assert.equal(plan.entries[1].kind, 'file', 'die Ankündigung ließ ihn passieren — so soll es sein');
+
+  const ergebnis = await laufen(
+    plan,
+    portsMit({
+      attachmentContent: () => Promise.resolve({ format: 'base64', content: 'A'.repeat(4 * 1024 * 1024) }),
+    }),
+    { grenzen: eng, timeoutMs: 2_000 },
+  );
+
+  assert.equal(ergebnis.missing.length, 1, 'die gelieferte Größe wurde nicht gemessen');
+  assert.equal(ergebnis.missing[0].reason, 'too_large');
+  assert.equal(ergebnis.payload.length, 1, 'nur die E-Mail darf übrig bleiben');
+});
+
+await checkAsync('A-19.25: ein Cloud-Verweis wandert als Adresse und nicht als Datei', async () => {
+  const plan = planTakeover(
+    [anhang({ id: 'https://ablage.example.invalid/v.docx', name: 'V.docx', attachmentType: 'cloud' })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  const ergebnis = await laufen(plan, portsMit());
+  const verweis = ergebnis.payload.find((eintrag) => eintrag.kind === 'link');
+
+  assert.notEqual(verweis, undefined, 'der Cloud-Anhang ist keine Nutzlast geworden');
+  assert.equal(verweis.url, 'https://ablage.example.invalid/v.docx');
+  assert.equal('contentBase64' in verweis, false, 'ein Verweis trägt Bytes mit');
+});
+
+await checkAsync('Der Fortschritt meldet je Zeile einen Zustand, und keiner bleibt stehen', async () => {
+  const plan = planTakeover(
+    [anhang({ id: 'a', name: 'a.pdf' }), anhang({ id: 'gross', name: 'b.mp4', size: 99 * 1024 * 1024 })],
+    GRENZEN,
+    KANN_ALLES,
+  );
+  const meldungen = [];
+  const ergebnis = await laufen(plan, portsMit(), {
+    onProgress: (stand) => meldungen.push(stand),
+  });
+
+  assert.ok(meldungen.length >= 2, 'es kam kein Fortschritt an');
+  assert.deepEqual(
+    meldungen[meldungen.length - 1].map((eintrag) => eintrag.state),
+    ['taken', 'taken', 'missing'],
+    'eine Zeile ist in „steht an" oder „läuft" steckengeblieben',
+  );
+  assert.equal(ergebnis.missing[0].reason, 'too_large');
+});
+
+check('Entwurf 4.2: Größen mit Komma, unter einem Kilobyte ohne Zahl', () => {
+  assert.equal(formatBytes(340 * 1024), '340 KB');
+  assert.equal(formatBytes(Math.round(1.2 * 1024 * 1024)), '1,2 MB');
+  assert.equal(formatBytes(900), '< 1 KB');
+  assert.equal(formatBytes(0), '< 1 KB');
+});
+
+check('A-19.29: zu jedem Grund gibt es einen Satz, und die Liste schrumpft nicht still', () => {
+  const gruende = [
+    'too_large',
+    'too_many',
+    'total_too_large',
+    'not_released',
+    'timeout',
+    'rejected',
+    'connection',
+    'not_a_web_address',
+    'outlook_too_old',
+    'rebuild_rejected',
+  ];
+  for (const grund of gruende) {
+    assert.ok(reasonSentence(grund, 1000, GRENZEN).length > 0, 'kein Satz für ' + grund);
+    assert.ok(shortReason(grund).length > 0, 'keine Kurzform für ' + grund);
+  }
+  // Die Zahl steht hier, damit ein Schrumpfen der Menge rot wird (E-107).
+  assert.equal(gruende.length, 10, 'die Liste der Gründe hat sich geändert, ohne dass jemand es merkte');
+});
+
+// ---------------------------------------------------------------------------
+// 22  Was das Add-in nicht tut: kein EWS, kein erweitertes Recht (A-A-89')
+// ---------------------------------------------------------------------------
+
+heading("22  Kein EWS, kein ReadWriteMailbox, genau ein getAsFileAsync (A-A-89', A-A-94)");
+
+const ADDIN_QUELLEN = quelldateienUnter(srcRoot).filter((datei) => /\.tsx?$/.test(datei));
+const MANIFEST_TEXT = readFileSync(path.join(srcRoot, '..', 'manifest.xml'), 'utf8');
+
+/*
+ * Der Quelltext ohne Kommentare, über alle Dateien — dieselbe Hausregel wie in
+ * Abschnitt 18e: Der Name **darf** im Kommentar stehen, denn die Begründung,
+ * warum es etwas nicht gibt, gehört in den Quelltext. Verboten ist die
+ * **Verwendung**.
+ */
+const ADDIN_CODE = ADDIN_QUELLEN.map((datei) => sourceWithoutComments(datei)).join('\n');
+
+check("A-A-89': im ganzen Baum steht kein Weg ins Postfach jenseits der offenen Nachricht", () => {
+  /*
+   * Gemessen wird **nicht** der Name `makeEwsRequest`, sondern jeder Aufruf,
+   * der über die geöffnete Nachricht hinausreicht (E-099 Punkt 3): der
+   * SOAP-Kanal, die beiden Zugriffstoken und die beiden Dienstadressen, ohne
+   * die kein fremder Ruf zustande kommt.
+   */
+  const verboten = [
+    /makeEwsRequestAsync/,
+    /getCallbackTokenAsync/,
+    /getUserIdentityTokenAsync/,
+    /\bewsUrl\b/,
+    /\brestUrl\b/,
+    /<soap:/i,
+  ];
+  const treffer = verboten.filter((muster) => muster.test(ADDIN_CODE)).map(String);
+  assert.deepEqual(treffer, [], 'gefunden: ' + treffer.join(', '));
+});
+
+check("A-A-89': das Original-MIME kommt aus genau einem getAsFileAsync", () => {
+  /*
+   * Gezählt wird der **Aufruf** und nicht die Nennung. Der Name steht im
+   * Quelltext dreimal, und zwei davon sind keine Aufrufstelle: die Deklaration
+   * in `office-js.d.ts` und die Fähigkeitsprüfung in `host.ts`
+   * (`typeof item.getAsFileAsync === 'function'`). Wer die Nennungen zählt,
+   * mißt, wie ausführlich jemand geschrieben hat.
+   */
+  const aufrufe = ADDIN_CODE.match(/getAsFileAsync\?\.\(/g) ?? [];
+  assert.equal(aufrufe.length, 1, 'nicht genau ein Aufruf, sondern ' + String(aufrufe.length));
+
+  const aufrufer = ADDIN_QUELLEN.filter((datei) =>
+    /getAsFileAsync\?\.\(/.test(sourceWithoutComments(datei)),
+  ).map((datei) => path.basename(datei));
+  assert.deepEqual(aufrufer, ['host.ts'], 'Office.* wird außerhalb von host.ts angefasst');
+
+  const nennungen = ADDIN_QUELLEN.filter((datei) =>
+    /getAsFileAsync/.test(sourceWithoutComments(datei)),
+  ).map((datei) => path.basename(datei));
+  assert.deepEqual(
+    [...nennungen].sort(),
+    ['host.ts', 'office-js.d.ts'],
+    'der Name steht in einer dritten Datei — dann gibt es einen zweiten Weg zur Nachricht',
+  );
+});
+
+check("A-A-89', Gegenprobe in beide Richtungen: der Wächter misst nicht den leeren Baum", () => {
+  assert.equal(
+    /makeEwsRequestAsync/.test(ADDIN_CODE + '\nitem.makeEwsRequestAsync(rumpf, zurueck);\n'),
+    true,
+    'die Verletzung ließ sich nicht einsetzen — der Sucher greift daneben',
+  );
+  assert.notEqual(
+    (ADDIN_CODE.match(/getAsFileAsync\?\.\(/g) ?? []).length,
+    0,
+    'der Lauf zählt an einem Baum ohne Abruf — dann misst er nichts',
+  );
+});
+
+check("A-A-91'/A-19.32: das Manifest bleibt bei ReadItem", () => {
+  assert.equal(
+    MANIFEST_TEXT.includes('<Permissions>ReadItem</Permissions>'),
+    true,
+    'das schwächste Recht, das genügt, steht nicht mehr zeichengleich im Manifest',
+  );
+  assert.equal(/<Permissions>ReadWrite/.test(MANIFEST_TEXT), false, 'ein weitergehendes Recht');
+  assert.equal(
+    ADDIN_CODE.includes('ReadWriteMailbox'),
+    false,
+    'der Name eines Rechts, das nicht angefordert wird, steht im Quelltext',
+  );
+});
+
+check('A-A-94/AK-17: MinVersion fordert die Fähigkeit nicht, der Lauf prüft sie', () => {
+  const gefordert = /<Set Name="Mailbox" MinVersion="([0-9.]+)"/.exec(MANIFEST_TEXT);
+  assert.notEqual(gefordert, null, 'der Anforderungssatz steht nicht mehr im Manifest');
+  assert.ok(
+    Number.parseFloat(gefordert[1]) < 1.8,
+    'MinVersion steht auf ' +
+      gefordert[1] +
+      ' — dann verweigert älteres Outlook die Installation, und A-19.31 ist nicht mehr erfüllbar: ' +
+      'wo nichts installiert ist, entsteht kein Todo, bei dem stehen könnte, was fehlt',
+  );
+
+  const host = sourceWithoutComments(path.join(srcRoot, 'office', 'host.ts'));
+  for (const fassung of ['1.8', '1.14']) {
+    assert.equal(
+      host.includes("supportsSet('" + fassung + "')"),
+      true,
+      'die Fassung ' + fassung + ' wird nicht zur Laufzeit geprüft',
+    );
+  }
+});
+
+check('A-19.19/E-108/A-A-82: es gibt keinen eigenen Weg für Anhänge', () => {
+  const ohneKommentare = sourceWithoutComments(path.join(srcRoot, 'api', 'client.ts'));
+  const wege = [...ohneKommentare.matchAll(/'(?:GET|POST)',\s*\n?\s*[`']([^`']+)[`']/g)].map((t) => t[1]);
+
+  assert.ok(wege.length >= 3, 'die Wege des Zugangs wurden nicht gefunden');
+  assert.deepEqual(
+    wege.filter((weg) => /attachment/i.test(weg)),
+    [],
+    'ein eigener Weg für Anhänge — das ist die Tür, die A-A-82 zuhält',
+  );
+});
+
+check('T-300/T-304, die Naht: nichts wird eingesammelt, was nicht mitfahren kann', () => {
+  /*
+   * Die Kette, die A-19.31 hier trägt, und sie ist **eine**:
+   *
+   *   Tür liest `attachments`  →  ATTACHMENTS_TRAVEL_WITH_CREATE  →  `limits`
+   *   →  Vorschau, Sammellauf und jeder Satz darüber.
+   *
+   * Liest die Tür das Feld nicht, steht die Konstante auf `false`, und dann
+   * gibt es keine Vorschau, keinen Sammellauf und keinen Satz. Ohne diese
+   * Kette entstünde genau der Fall, den `z.object` so unangenehm macht: Der
+   * Aufgabenbereich sammelte dreißig Sekunden lang ein, der Dienst striche das
+   * unbekannte Feld, und der Benutzer läse „3 Anhänge hängen daran".
+   *
+   * **Seit T-304 steht die Konstante auf `true`**, und die Prüfung ist
+   * dieselbe: Sie hält Konstante und Feld gegeneinander, in beide Richtungen.
+   * Wer das Feld entfernt und die Konstante stehenläßt, wird ebenso rot wie
+   * umgekehrt.
+   */
+  const zugang = readFileSync(path.join(srcRoot, 'api', 'client.ts'), 'utf8');
+  const pane = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
+
+  const traegt = /export const ATTACHMENTS_TRAVEL_WITH_CREATE: boolean = (true|false);/.exec(zugang);
+  assert.notEqual(traegt, null, 'die Naht ist nicht mehr benannt');
+
+  /*
+   * Gemessen am Quelltext **ohne** Kommentare: Der Name darf im Kommentar
+   * stehen — dort steht die Beschreibung der Naht. Gezählt wird, ob das Feld
+   * wirklich deklariert ist.
+   */
+  const feldAnDerTuer = /attachments\??: EmailAttachmentEnvelope \| null/.test(
+    sourceWithoutComments(path.join(srcRoot, 'api', 'client.ts')),
+  );
+  assert.equal(
+    feldAnDerTuer,
+    traegt[1] === 'true',
+    'die Konstante und das Feld im Anlegeruf sagen Verschiedenes — eines von beiden ist eine Behauptung',
+  );
+
+  /*
+   * Und die Vorschau hängt an **beiden** Bedingungen: an der Konstante (trägt
+   * dieser Bau die Anhänge mit?) und an der Auskunft des Dienstes (nimmt
+   * dieser laufende Dienst sie an?). Die zweite kam mit T-304 dazu und ist
+   * die, die ein auseinandergelaufenes Paar fängt — Add-in und Dienst werden
+   * getrennt installiert.
+   */
+  assert.match(
+    pane,
+    /ATTACHMENTS_TRAVEL_WITH_CREATE &&\s+load\.kind === 'ready' &&/,
+    'die Vorschau hängt nicht mehr an der Naht — dann kann sie erscheinen, ohne dass etwas mitfährt',
+  );
+  assert.match(
+    pane,
+    /load\.context\.emailAttachments\?\.accepted === true/,
+    'die Vorschau fragt den Dienst nicht — dann sammelt ein neues Add-in gegen einen alten Dienst ins Leere',
+  );
+});
+
+check('T-304: die Grenzen und die Gründe kommen aus @takt/domain, nicht aus dem Add-in', () => {
+  /*
+   * Zwei Fachregeln, ein Wächter, und beide aus demselben Grund: Eine Zahl und
+   * eine Kennung, die an zwei Stellen stehen, sind zwei Gelegenheiten, sie
+   * verschieden zu ändern (E-063 Punkt 5).
+   *
+   *  1. Die **drei Grenzen** aus A-A-81 sind dieselben Werte wie in der Domäne
+   *     — und zwar **dieselben Objekte**, nicht zeichengleiche Zahlen. Der
+   *     Vergleich läuft über den gelesenen Wert und nicht über den Quelltext.
+   *  2. Die **Liste der Gründe**: Jede Kennung der Domäne kommt im
+   *     Aufgabenbereich vor, und die zwei zusätzlichen sind ausdrücklich
+   *     benannt statt stillschweigend dazugekommen.
+   */
+  assert.equal(TAKEOVER_LIMITS.maxBytesPerFile, MAX_EMAIL_ATTACHMENT_BYTES);
+  assert.equal(TAKEOVER_LIMITS.maxBytesTotal, MAX_EMAIL_ATTACHMENT_TOTAL_BYTES);
+  assert.equal(TAKEOVER_LIMITS.maxCount, MAX_EMAIL_ATTACHMENT_COUNT);
+
+  /*
+   * Und die Zahlen stehen **nicht ausgeschrieben** im Aufgabenbereich. Ohne
+   * diese Zeile bliebe die Prüfung darüber grün, während daneben eine zweite
+   * 25 in einem Satz stünde.
+   */
+  const anhangsdateien = ['model.ts', 'plan.ts', 'collect.ts', 'reasons.ts', 'size.ts']
+    .map((datei) => sourceWithoutComments(path.join(srcRoot, 'attachments', datei)))
+    .join('\n');
+  for (const zahl of [
+    String(MAX_EMAIL_ATTACHMENT_BYTES),
+    String(MAX_EMAIL_ATTACHMENT_TOTAL_BYTES),
+    '25 * 1024 * 1024',
+    '48 * 1024 * 1024',
+  ]) {
+    assert.equal(
+      anhangsdateien.includes(zahl),
+      false,
+      `die Grenze steht ausgeschrieben im Aufgabenbereich: ${zahl}`,
+    );
+  }
+
+  /*
+   * Die Gründe: Die Menge auf dem Bildschirm ist eine echte **Obermenge** der
+   * Menge über die Leitung, und der Unterschied ist genau die ausdrücklich
+   * benannte Liste. Gemessen und nicht behauptet — wächst die Domäne um einen
+   * Grund, ohne daß hier ein Satz entsteht, wird schon der Übersetzer rot
+   * (`never` in `reasons.ts`); wächst der Aufgabenbereich um eine Kennung,
+   * ohne daß sie in {@link DISPLAY_ONLY_SKIP_REASONS} steht, wird diese Zeile
+   * rot.
+   */
+  const derLeitung = new Set(EMAIL_ATTACHMENT_FAILURE_REASONS);
+  assert.ok(derLeitung.size >= 8, 'die Liste der Domäne ist geschrumpft — dann mißt das hier wenig');
+  for (const grund of DISPLAY_ONLY_SKIP_REASONS) {
+    assert.equal(
+      derLeitung.has(grund),
+      false,
+      `„${grund}" steht in der Domäne — dann ist er kein reiner Anzeigegrund mehr`,
+    );
+  }
+
+  /*
+   * Jede Kennung der Leitung fällt auf **genau einen** Satz, und keiner ist
+   * leer. Das ist die Bedingung, unter der der ux-designer die gröbere
+   * Leitungsliste zugelassen hat (T-303).
+   */
+  const saetze = new Map();
+  for (const grund of [...derLeitung, ...DISPLAY_ONLY_SKIP_REASONS]) {
+    const satz = reasonSentence(grund, grund === 'too_large' ? 31_400_000 : null, TAKEOVER_LIMITS);
+    assert.ok(satz.length > 0, `„${grund}" hat keinen Satz`);
+    assert.equal(satz, satz.trimStart(), `der Satz zu „${grund}" beginnt mit Leerraum`);
+    assert.equal(
+      saetze.has(satz),
+      false,
+      `zwei Gründe fallen auf denselben Satz: „${String(saetze.get(satz))}" und „${grund}"`,
+    );
+    saetze.set(satz, grund);
+
+    const kurz = shortReason(grund);
+    assert.ok(kurz.length > 0, `„${grund}" hat keine Kurzform`);
+  }
+
+  /*
+   * `mailbox_closed` ist gestrichen (E-109) — an **beiden** Stellen. Ein
+   * Grund, den nichts mehr erzeugt, ist ein Satz, der das Gegenteil des
+   * Bestands behauptet.
+   */
+  const anhangsquellen = anhangsdateien + sourceWithoutComments(path.join(srcRoot, 'ui', 'Attachments.tsx'));
+  assert.equal(
+    anhangsquellen.includes('mailbox_closed'),
+    false,
+    'der gestrichene Grund `mailbox_closed` steht wieder im Aufgabenbereich (E-109)',
+  );
+  assert.equal(derLeitung.has('rebuild_rejected'), true, '`rebuild_rejected` fehlt in der Domäne');
+});
+
+check('E-108: die Übernahme ist automatisch — kein Häkchen, keine Abwahl', () => {
+  const flaechen = ['TaskPane.tsx', 'Attachments.tsx']
+    .map((datei) => sourceWithoutComments(path.join(srcRoot, 'ui', datei)))
+    .join('\n');
+  assert.equal(/type="checkbox"/.test(flaechen), false, 'im Aufgabenbereich steht wieder ein Kästchen');
+});
+
+check('A-19.31: es gibt keinen stillen Ausgang im Sammellauf', () => {
+  const lauf = sourceWithoutComments(path.join(srcRoot, 'attachments', 'collect.ts'));
+  assert.equal(
+    /catch\s*\{\s*\}/.test(lauf),
+    false,
+    'ein leerer Fangzweig — das ist die stille Degradierung der Vorlage',
+  );
+});
+
+check('A-A-93: an einem Anhangsnamen steht kein Deckel', () => {
+  const css = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const regeln = [...css.matchAll(/\.attachments[^{]*\{([^}]*)\}/g)].map((treffer) => treffer[1]);
+  assert.ok(regeln.length >= 4, 'die Regeln der Anhangsliste wurden nicht gefunden');
+
+  const namensregeln = regeln.filter((regel) => !regel.includes('clip-path'));
+  for (const regel of namensregeln) {
+    for (const deckel of ['text-overflow', '-webkit-line-clamp', 'overflow: hidden']) {
+      assert.equal(regel.includes(deckel), false, 'ein Deckel an der Anhangsliste: ' + deckel);
+    }
+  }
+  assert.equal(
+    namensregeln.some((regel) => regel.includes('overflow-wrap: anywhere')),
+    true,
+    'ohne Umbruch bricht die enge Spalte den Namen anders — und dann kürzt sie ihn',
   );
 });
 

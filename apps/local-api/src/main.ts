@@ -505,26 +505,28 @@ export async function main(options: MainOptions = {}): Promise<void> {
    * von einer Stunde (A-V-11), und ein Fehlschlag beendet die Prüfung nicht
    * für die Laufzeit der Anwendung.
    *
-   * Die beiden Zahlen, damit sie der nächste Leser nicht wieder schätzt:
+   * Die Zahlen, damit sie der nächste Leser nicht wieder schätzt:
    * **1 Anfrage je 24 Stunden im Erfolgsfall, höchstens 24 je Kalendertag im
    * ununterbrochenen Fehlschlag** — ein Sechzigstel dessen, was GitHub nicht
-   * angemeldeten Aufrufern je Stunde und Quelladresse zugesteht.
+   * angemeldeten Aufrufern je Stunde und Quelladresse zugesteht. Der Streuwert
+   * von 0 bis 25 % (höchstens 15 min) verlängert nur; er senkt den
+   * Erwartungswert auf rund 21,3 und hebt die Obergrenze nicht.
    *
-   * **Der Boden gilt seit T-279 über den Prozeß hinaus.** Sein Bezugspunkt
-   * steht im Bestand (`app_setting.last_version_check_at`, Migration 0022) und
-   * nicht mehr allein im Arbeitsspeicher; ein Neustart hebt ihn deshalb nicht
-   * mehr auf. Das schließt die Lücke „zwanzig Starts, zwanzig Anfragen"
-   * (gemessen: 344 je Stunde für den, der den Sidecar in einer Schleife
-   * startet — T-276) und stellt den Wert auf dieselbe Lebensdauer wie seine
-   * Nachbarn `skipped_version` (A-18.10) und die offenen Inaktivitätsphasen
-   * (A-24.7). **Als Abwehr gegen einen feindlichen lokalen Prozeß taugt er
-   * nicht** — der kommt mit `sqlite3` an dieselbe Datei (VG-3); er ist die
-   * Abwehr gegen den Unfall.
+   * **Diese Obergrenze gilt innerhalb eines Laufs** (T-285). Ein Programmstart
+   * prüft immer einmal: Der Bezugspunkt des Bodens liegt im Arbeitsspeicher,
+   * ein neu gestarteter Dienst kennt keine vorige Anfrage, und A-V-11 spricht
+   * vom Abstand **zwischen zwei** ausgehenden Anfragen. Die Tagesgrenze ist
+   * damit `24 + Anzahl der Starts`; im Grenzfall der Startschleife rund 344 je
+   * Stunde (T-276).
    *
-   * Auf den Boden kommt dabei ein Streuwert von 0 bis 25 % (höchstens 15 min),
-   * der die Gleichschaltung mehrerer Installationen hinter einer Quelladresse
-   * bricht (T-275-8). Er verlängert nur; die Obergrenze von 24 je Kalendertag
-   * bleibt damit unverändert, der Erwartungswert sinkt auf rund 21,3.
+   * Zwischen T-279 und T-285 reichte der Boden über den Neustart hinweg, weil
+   * sein Bezugspunkt aus `app_setting.last_version_check_at` gelesen wurde. Das
+   * hat einen Neustart bis zu eine Stunde lang wirkungslos gemacht — und der
+   * Neustart ist die einzige Selbsthilfe, die E-069 dem Benutzer läßt, wenn die
+   * Prüfung nicht greift. Der Wert steht weiterhin im Bestand und wird weiter
+   * geschrieben; er ist eine **Tatsache** („wann wurde zuletzt gefragt") und
+   * keine Sperre. **Als Abwehr gegen einen feindlichen lokalen Prozeß taugte er
+   * ohnehin nicht** — der kommt mit `sqlite3` an dieselbe Datei (VG-3).
    */
   versionCheck.start();
 

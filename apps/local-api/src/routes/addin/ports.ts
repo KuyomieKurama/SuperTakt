@@ -20,13 +20,20 @@
  * Vermerk eines fremden Todos, keine Einstellungen. Das ist die Anwendung von
  * „Angriffsfläche des Tokens klein halten" (RR-1) auf den Zuschnitt der API.
  *
- * **Und kein Anhang.** Zwischen PR #16 und der Entscheidung zu F-21 stand hier
- * ein `AttachmentPort` mit `list` und `create`, für die schmale Verweisroute
- * des Aufgabenbereichs. Der Auftraggeber hat F-21 gegen das Anhängen
- * entschieden (T-247): A-19.19 bleibt im Wortlaut, die Route ist gefallen, und
- * der Port mit ihr. Das Add-in-Token kann damit auf keinem Weg einen Anhang
- * anlegen — nicht, weil eine Prüfung es abweist, sondern weil die Fähigkeit in
- * dieser Vertrauensstufe nicht vorhanden ist.
+ * **Und kein `AttachmentPort`.** Zwischen PR #16 und der Entscheidung zu F-21
+ * stand hier einer mit `list` und `create`, für die schmale Verweisroute des
+ * Aufgabenbereichs. Der Auftraggeber hat F-21 gegen das Anhängen entschieden
+ * (T-247): die Route ist gefallen, und der Port mit ihr. In {@link AddinUnit}
+ * steht er bis heute nicht.
+ *
+ * **Seit E-108 entsteht trotzdem ein Anhang — aber ausschließlich beim
+ * Anlegen.** Die Fähigkeit dafür steht in {@link AddinDeps.emailAttachments}
+ * und nicht in {@link AddinUnit}, und sie kennt keine `TodoId`. Der Unterschied
+ * zur gefallenen Route ist nicht die Vorsicht, sondern die **Reichweite**: Jene
+ * nahm eine Kennung entgegen und hängte an ein beliebiges vorhandenes Todo;
+ * diese kann nur an das hängen, was im selben Aufruf entstanden ist. An ein
+ * **vorhandenes** Todo kommt das Add-in-Token damit weiterhin auf keinem Weg
+ * mit einem Anhang heran (A-A-82).
  *
  * ## Warum `Pick<>` auf den echten Ports
  *
@@ -49,6 +56,8 @@ import type {
   TodoStatusPort,
 } from '@takt/storage';
 import type { Timestamp } from '@takt/domain';
+
+import type { EmailAttachmentIntake } from '../../features/todos/email-attachments.ts';
 
 /**
  * Die Ports innerhalb **einer** Transaktion.
@@ -98,4 +107,39 @@ export interface AddinUnit {
 export interface AddinDeps {
   inTransaction<T>(work: (unit: AddinUnit) => Promise<T>): Promise<T>;
   readonly now: () => Timestamp;
+  /**
+   * Die Aufnahme von Anhängen aus einer E-Mail (A-19.22 bis A-19.33, E-108).
+   *
+   * ---------------------------------------------------------------------------
+   * In dieser Signatur gibt es **keinen Parameter vom Typ `TodoId`**
+   * ---------------------------------------------------------------------------
+   *
+   * Das ist kein Versehen und keine Bequemlichkeit, sondern A-A-21′ (b)/(c) und
+   * A-A-82, **im Typ festgehalten**. Die Fähigkeit nimmt keine Kennung
+   * entgegen, sondern die **Funktion, die eine erzeugt**; ihr einziger Zugang
+   * zu einem Todo führt durch den Anlegevorgang. An ein **vorhandenes** Todo
+   * kann diese Tür deshalb nichts hängen — nicht, weil eine Prüfung es abweist,
+   * sondern weil sie keines benennen kann.
+   *
+   * Wer sie darauf richten wollte, müßte eine Anlegefunktion schreiben, die
+   * nichts anlegt und eine fremde Kennung zurückgibt. Das ist kein Versehen
+   * mehr, das ist ein Entschluß, und er stünde im Quelltext.
+   *
+   * `apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 18 mißt dieselbe
+   * Zusage noch einmal, und zwar **unabhängig vom Typ**: an der Wirkung gegen
+   * eine echte Datenbank. Der Typ trägt sie beim Übersetzen, der Lauf beim
+   * Fahren; keines von beiden allein ist der Nachweis.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum das Feld hier steht und nicht in {@link AddinUnit}
+   * ---------------------------------------------------------------------------
+   *
+   * `AddinUnit` ist der Ausschnitt **innerhalb** einer Transaktion, und jede
+   * seiner Zeilen ist ein `Pick<>` auf einem echten Port. Die Anhangsübernahme
+   * ist keiner: Sie schreibt Bytes auf die Platte, **bevor** sie Zeilen
+   * schreibt, und sie führt ihre Transaktion selbst. Sie in `AddinUnit` zu
+   * legen hieße, dem Add-in einen schreibenden `AttachmentPort` zu geben — und
+   * genau den hat es nach A-A-21′ (c) nicht.
+   */
+  readonly emailAttachments: EmailAttachmentIntake;
 }

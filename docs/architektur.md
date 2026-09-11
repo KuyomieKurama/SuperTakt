@@ -1342,6 +1342,96 @@ Starten hindern könnte. Ein Aufräumen, das den Start verhindert, hätte den Zw
 
 ---
 
+### 5.6b Die Aufnahme von Anhängen aus einer E-Mail (T-299, A-19.22 bis A-19.33, E-108, E-109)
+
+Mit E-108 entsteht ein Todo aus einer E-Mail, und es trägt die Nachricht selbst als Datei
+(A-19.22) sowie sämtliche ihrer Dateianhänge (A-19.23). Das ist die erste Stelle, an der **fremde
+Bytes mit einem fremden Namen** in das Anwendungsdatenverzeichnis geschrieben werden — Grenze
+VG-12 im Bedrohungsmodell.
+
+**Der Schnitt in einem Satz:** Die Tür steht unter `/api/v1/addin` und gehört zum Add-in-Teil des
+Dienstes; alles, was nach der Gestaltprüfung geschieht, steht in
+`apps/local-api/src/features/todos/email-attachments.ts`, und die Regeln, nach denen entschieden
+wird, stehen in `packages/domain/src/email-attachment.ts`. Die Domäne kennt dabei weder HTTP noch
+SQL noch ein Dateisystem: Sie beantwortet, **welche Endung** eine Datei bekommt, **ob** sie
+hereinkommt und **wie** ihr Anzeigename lautet.
+
+**Vier Eigenschaften, und jede hat einen gemessenen Grund.**
+
+1. **Der fremde Name wird nie ein Pfadbestandteil** (A-A-78). Er lebt als Anzeigename in
+   `todo_attachment.display_name`; den Namen auf der Platte erzeugt SuperTakt als
+   `<32 Hexziffern>[.<endung>]`. Aus dem fremden Namen kommt ausschließlich die Endung, und die
+   ist auf `[a-z0-9]`, höchstens 16 Zeichen, beschränkt. Der Anlaß ist gemessen und nicht
+   vermutet: T-297 hat die Vorlage gefahren — 25 Angriffsnamen hinein, 25 Dateien auf der Platte,
+   null Ablehnungen; `NUL`, `COM1`, `CON.txt` und `prn.pdf` wurden zu Dateien, die Windows
+   anschließend nicht sieht. **Es gibt deshalb keinen zweiten Namensfilter**: Ein Filter, der 25
+   Fälle abweist, läßt beim 26. durch. Die Fehlerklasse ist nicht abgewehrt, sondern unmöglich.
+2. **Die Anhänge hängen an einer Kennung, die im selben Aufruf entstanden ist** (A-A-21′,
+   A-A-82). Die Naht nimmt keine `TodoId` entgegen, sondern eine **Funktion, die eine erzeugt**:
+   `attachEmailToNewTodo(context, intake, create)`. Es gibt in diesem Pfad keinen Parameter vom
+   Typ `TodoId` — die Zusage steht im Typ und nicht in einem Satz daneben.
+3. **Kein verwaistes Byte** (A-A-83). Das Todo entsteht **zuerst**; scheitert es, ist nichts
+   geschrieben worden und es gibt nichts aufzuräumen. Scheitert danach eine Zeile, geht ihre
+   Datei im selben Lauf. Eine Zusage am Aufrufstapel ist stärker als eine an einem Zeitgeber, und
+   sie fällt nicht lautlos aus.
+4. **Ein Fehlschlag je Datei ist ein Ergebnis und kein Abbruch** (A-19.29). Das Ergebnis nennt,
+   wie viele übernommen wurden und **welche nicht, mit Namen und Grund**. Die Gründe sind eine
+   geschlossene Menge von acht Werten aus `docs/design/addin-anhangsuebernahme-fluss.md` 6.2 —
+   kein Freitext, keine durchgereichte Fehlermeldung von Office oder vom Betriebssystem.
+
+**Drei Grenzen, alle vor dem ersten Byte auf der Platte** (A-A-81): 25 MB je Datei, 48 MB Summe je
+Übernahme, 25 Dateien. Gezählt wird **beim Dekodieren** und nie an einer Ankündigung — die Naht
+nimmt gar keine Größenangabe entgegen, damit keine zu glauben ist. Die Summengrenze ist die
+Umrechnung der Rumpfgrenze dieser einen Route (64 MB, `ADDIN_ATTACHMENT_MAX_BODY_BYTES`): Base64
+bläht um ein Drittel auf, und zwei Grenzen über dieselbe Sache dürfen einander nicht verdecken.
+Das ist die **dritte** benannte Ausnahme von B-1.7 neben der Datensicherung.
+
+**Ein eigener Ordner**, `<appdata>/email-attachments/`, `0700`, Dateien `0600`, ausdrücklich
+gesetzt und nicht der `umask` überlassen. Er liegt neben den Bildkopien und nicht in ihnen: Die
+beiden Bestände beantworten die Frage „welche Datei hat keinen Eigentümer mehr?" an
+unterschiedlichen Spalten, und ein Aufräumlauf, der die Dateien des jeweils anderen übergehen
+müßte, hätte eine Gelegenheit mehr, Kundenmaterial zu löschen, das einen Eigentümer hat.
+
+**Was hier ausdrücklich nicht geschieht:** Es wird keine `.eml` gebaut und keine gelesen (A-A-88,
+A-A-96). Die Nachricht kommt als Bytefeld herein und geht als Bytefeld auf die Platte — kein
+MIME-Zerleger, kein HTML, keine Vorschau. Ist sie ein **Nachbau** statt des Originals (A-19.22a),
+steht das als Eigenschaft an der Datei im Bestand, überlebt die Datensicherung und erscheint
+später an der Anhangszeile und in der Rückfrage vor dem Öffnen (A-19.22b, A-A-97).
+
+**Die Gründe sind eine geschlossene Menge, und sie steht an genau einer Stelle** —
+`packages/domain/src/email-attachment.ts`, acht Werte (T-301). In derselben Welle war im
+Aufgabenbereich eine zweite entstanden; entschieden ist, daß die Domäne die Quelle ist und der
+Aufgabenbereich auf sie abbildet. Dabei hat die Liste `rebuild_rejected` aufgenommen — der Nachbau
+kann abgelehnt werden, und das ist seit E-109 der einzige Fall, in dem die E-Mail selbst fehlt —
+und `mailbox_closed` gestrichen, weil dieser Zustand seit E-109 unerreichbar ist. Ein Grund, der
+nicht eintreten kann, ist ein Satz, der das Gegenteil des Bestands behauptet. Aus derselben Datei
+kommen die drei Grenzen; das Add-in **liest** sie und baut sie nicht nach.
+
+### 5.6c Die Datensicherung trägt diese Dateien mit (T-301, A-19.34, A-A-90)
+
+Der Blob-Port bekommt drei Methoden dazu: `readEmailFile(target)` für die Sicherung,
+`restoreEmailFile(name, bytes)` für das Einspielen und `emailFilePathOf(name)` — die einzige
+Methode dieses Ports ohne Dateisystemzugriff, die aus einem Namen den hiesigen Pfad rechnet.
+
+Drei Dinge daran sind Architektur und nicht Ausführung:
+
+1. **Gelesen wird über denselben Rückweg wie gelöscht.** Der `target` aus dem Bestand wird nicht
+   benutzt, wie er dasteht, sondern an der Form zurückgeprüft, in der er erzeugt wurde. Ohne das
+   wäre die Datensicherung ein Lesewerkzeug für jede Datei, die der Benutzer lesen darf — ein
+   `target`, den jemand auf `takt.db` gesetzt hat (VG-1, VG-3), käme base64-kodiert wieder heraus.
+2. **Der Pfad wird beim Einspielen neu gesetzt.** Im Archiv steht der Pfad des Quellrechners; er
+   gilt dort, wo die Sicherung ankommt, nie. Das geschieht **vor** `replaceAll` und auch dann,
+   wenn die Bytes fehlen (Fassungen 1 bis 5) — ein fremder Pfad in der Rückfrage vor dem Öffnen
+   wäre eine Ortsangabe über einen anderen Rechner (A-A-6).
+3. **Zurückgeschrieben wird nur, was eine Zeile nennt.** Ein Archiv mit Dateien ohne Anhang legte
+   sonst Bytes im Anwendungsdatenverzeichnis ab, für die es von der ersten Sekunde an keinen
+   Eigentümer gibt (A-A-83).
+
+Die Fassung des Archivs steigt dafür von 5 auf 6, und die Rumpfgrenze des Einspielens von 64 MB auf
+256 MiB — beides mit Messung begründet in `docs/datenmodell.md` Abschnitt 10.
+
+---
+
 ### 5.7 Die eine Verbindung nach außen (T-138, A-18, E-064, E-066, E-069, R-19)
 
 Bis T-138 galt der stärkste einzelne Satz dieses Entwurfs: Takt kennt keine Adresse außerhalb von
@@ -1405,33 +1495,187 @@ Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
    offen bleibt, faktisch für immer. Der häufigste Auslöser ist banal: Die Anwendung startet
    schneller als das Netz. Der Auftraggeber hat „Lauf" als den einzelnen **Prüflauf** bestimmt.
    Die Obergrenze, die daraus folgt, ist gerechnet: bei ununterbrochenem Fehlschlag höchstens
-   **24** ausgehende Anfragen je 24 Stunden gegen 1 im Erfolgsfall — ein Sechzigstel dessen, was
-   GitHub nicht angemeldeten Aufrufern je Stunde und Quelladresse zugesteht.
+   **24** ausgehende Anfragen je 24 Stunden **innerhalb eines Laufs** gegen 1 im Erfolgsfall —
+   ein Sechzigstel dessen, was GitHub nicht angemeldeten Aufrufern je Stunde und Quelladresse
+   zugesteht.
 
-5. **Der Boden überlebt den Prozeß, und auf ihn kommt ein Streuwert** (A-V-11, T-279). Zwei
-   Ergänzungen, und beide betreffen den Boden von 60 Minuten, nicht den Takt von 24 Stunden.
+5. **Der Boden gilt innerhalb eines Laufs, und auf ihn kommt ein Streuwert** (A-V-11, T-279,
+   T-285). Zwei Aussagen, und beide betreffen den Boden von 60 Minuten, nicht den Takt von
+   24 Stunden.
 
-   **Der Bezugspunkt liegt im Bestand**, in `app_setting.last_version_check_at` (Migration 0022),
-   und nicht mehr allein im Arbeitsspeicher. Vorher kannte ein neu gestarteter Dienst keinen
-   letzten Zeitpunkt, also griff kein Boden, also ging nach dem Startabstand eine Anfrage hinaus —
-   gemessen **344 je Stunde** für den, der den Sidecar in einer Schleife startet und beendet
-   (T-276), das 5,7fache des GitHub-Kontingents. Der Wert erfüllt damit dieselbe Regel wie seine
-   beiden Nachbarn `skipped_version` (A-18.10) und die offenen Inaktivitätsphasen (A-24.7).
-   **Er ist keine Abwehr gegen einen feindlichen lokalen Prozeß** — derselbe Prozeß kommt mit
-   `sqlite3` an dieselbe Datei (VG-3) —, sondern gegen den Unfall: den Entwicklerrechner, den
-   zwanzigfachen Doppelklick, eine künftige Neustartautomatik. Die Anbindung ist ein **optionaler**
-   Port; ohne Bestand (`compose()` ohne `databaseLocation`) bleibt es beim bisherigen Verhalten.
+   **Ein Programmstart prüft immer einmal.** Der Bezugspunkt des Bodens liegt im
+   Arbeitsspeicher des Dienstes; ein neu gestarteter Dienst kennt keine vorige Anfrage, also
+   hält kein Boden, also geht nach dem Startabstand eine Anfrage hinaus. Das ist der Wortlaut
+   von A-V-11 genau gelesen — „zwischen zwei ausgehenden Anfragen liegt mindestens
+   `minIntervalMs`" ist eine Aussage über den Betrieb und nicht über Prozeßgrenzen. Jede
+   **weitere** Planung desselben Laufs hält den Boden unverändert.
 
-   **Auf den Boden kommt ein Aufschlag von 0 bis 25 %**, bei 60 Minuten also höchstens 15. Anlaß
-   ist eine Rückkopplung, kein Angriff (T-275-8): Alle Installationen hinter einer Quelladresse
-   teilen sich 60 Anfragen je Stunde; wurden sie gemeinsam abgewiesen, klopfen sie seither
-   gemeinsam weiter und bleiben in Phase. Der Aufschlag bricht die Gleichschaltung. Er **verlängert
-   nur** — ein Streuwert, der auch verkürzte, hübe die Zusage aus A-V-11′ Punkt 4 auf —, und
-   deshalb bleibt die Obergrenze bei **24 Anfragen je Kalendertag**; der Erwartungswert sinkt auf
-   rund 21,3, gemessen über 100 000 simulierte Tage auf 20 bis 22. Die Rechenregel steht als reine
-   Funktion in `packages/domain/src/version.ts`, der Zufall kommt als Zahl herein — so ist die
-   Zusage „verlängert nur" ohne Zeitgeber meßbar. **Der Aufschlag senkt die Summe je Stunde
-   nicht**; wer das will, braucht eine Rückstufung, und die ist nicht entschieden.
+   T-279 hatte den Bezugspunkt in den Bestand gelegt (`app_setting.last_version_check_at`,
+   Migration 0022) und ihn beim ersten Prüflauf gelesen; der Boden reichte damit über den
+   Neustart hinweg. Der Anlaß war gemessen und richtig — **344 ausgehende Anfragen je Stunde**
+   für den, der den Sidecar in einer Schleife startet und beendet (T-276), das 5,7fache des
+   GitHub-Kontingents. Der Preis war zu hoch und stand im Prüffall TP-VER-11: **Ein Neustart
+   bewirkte bis zu eine Stunde lang nichts.** Weil der Zeitpunkt **vor** der Anfrage
+   geschrieben wird — richtig so, sonst umginge ein Absturz ihn —, setzte ihn auch ein
+   fehlgeschlagener Versuch: Start ohne Netz um 9:00, Neustart um 9:10, keine Prüfung bis
+   10:00. Der Neustart ist die einzige Selbsthilfe, die E-069 dem Benutzer läßt, wenn die
+   Prüfung nicht greift; es gibt keinen Knopf „jetzt prüfen".
+
+   **Die Spalte bleibt und wird weiter geschrieben.** Sie ist seither eine **Tatsache** („wann
+   wurde zuletzt gefragt") und **keine Sperre**: Sie nimmt am Round-Trip der Datensicherung
+   teil (A-20.4) und wird von keinem Betriebspfad gelesen. `VersionCheckStorePort` hat deshalb
+   kein `read`, und `proof:release-safety` mißt den Rückweg als eigene Prüfung in **fünf
+   Gestalten** mit **sechsundzwanzig** Gegenproben.
+
+   **Die Gestalt des Ports wird seit T-292 vom TypeScript-Compiler gelesen, nicht von einem
+   regulären Ausdruck.** Das ist keine Geschmacksfrage, sondern das Ergebnis von drei
+   Runden: `\{([^}]*)\}` brach am ersten `}` und übersah `read` hinter einem Inline-Objekttyp
+   (T-289); die gezählte Klammer brach am `}` **in einer Zeichenkette** (T-291); und die
+   Mitgliederregel `/(\w+)\s*\(/` sah überhaupt nur Methodensyntax, so daß
+   `readonly read: () => Promise<string | null>;` — die Schreibweise, in der die
+   Nachbarschnittstelle in derselben Datei steht — den ganzen Prüfsatz bei 43/0 grün ließ.
+   Jede Reparatur ließ die nächste Schreibweise übrig. Gelesen wird jetzt wie in
+   `caller-scan.mjs`, `proof-route-policy.mjs`, `proof-foreign.mjs` und `proof-surface.mjs`;
+   dazu kam eine **Untergrenze**: Ein Leser, der null Mitglieder findet, ist rot und nicht
+   grün — „nichts gefunden" und „nichts gesehen" sind zwei Sätze.
+
+   **Was die Untergrenze nicht ist, berichtigt in T-294 und noch einmal in T-296.** Hier
+   stand, sie sei „allen drei Ausfällen gemeinsam" gewesen. Das ist falsch und war es beim
+   Hinschreiben: An den beiden damaligen Lesern nachgebaut und gemessen (T-293, in T-294
+   unabhängig nachgefahren) fanden sie in allen drei Fällen genau **ein** Mitglied — `write` —,
+   nie null; die Untergrenze hätte keinen der drei gefangen. Was die drei Ausfälle wirklich
+   gemeinsam hatten: Der Leser fand das eine Mitglied, das er sehen wollte, und übersah das
+   zweite — dagegen hilft der Compiler.
+
+   **Und sie erkennt auch sonst nichts.** In T-294 stand hier noch, sie stehe „gegen einen
+   künftigen schwächeren Leser". Gemessen (T-295, M2: Untergrenze abgeschaltet) ist sie gegen
+   **keinen** Leser der Unterschied zwischen grün und rot, auch gegen keinen künftigen: Eine
+   leere Mitgliederliste ist ohne sie ebenso rot, nur mit dem Satz „kennt kein `write` mehr".
+   Was sie leistet, ist der **Satz** — ohne sie bekäme ein **blinder** Leser gemeldet, der Port
+   habe sein `write` verloren, also genau den Satz, der seit T-294 einem eigenen Zweig gehört,
+   und der nächste suchte ein verlorenes `write`, wo ein blinder Leser ist. Sie verhindert,
+   daß zwei verschiedene Befunde denselben Satz tragen. Das ist die Zählvorschrift, auf den
+   Leser selbst angewandt.
+
+   **Die zweite Klasse liegt neben der Schreibweise: die Auflösung (T-294).** Der Compiler
+   liest, was in der Deklaration **steht**. Ein `read`, das über `extends` aus einer
+   Basisschnittstelle hereinkommt, steht dort nicht — und der code-reviewer hat in T-293 mit
+   genau dieser Bauart alle fünf Gestalten grün gemacht, einmal mit einer Basis in derselben
+   Datei, einmal mit einer aus `@takt/domain`, also aus einer der sieben **erlaubten**
+   Importquellen, mit `port.read()` daneben gerufen. Dieselbe Wirkung über einen zweiten Weg:
+   zwei `interface` gleichen Namens, die TypeScript zusammenführt, während der Leser beim
+   ersten stehenblieb. Beides ist seit T-294 **rot, und zwar als Meßfehlschlag** — der Leser
+   folgt der Basis nicht und führt nichts zusammen, er sagt, daß er nichts mehr weiß. Das ist
+   die Regel, die dieselbe Funktion bei berechneten Namen und nicht aufgelösten Aliassen schon
+   anwendet, und die sichere Richtung: Ein klügerer Leser brächte die nächste
+   Auflösungslücke gleich mit — die Basis einer Basis, ein `extends` aus einem Paket.
+
+   **Die dritte Tür derselben Klasse, und die letzte (T-296).** Die Zusammenführung war nur
+   für zwei **oberste Anweisungen derselben Datei** zu; der Leser sieht nichts anderes. Der
+   code-reviewer hat in T-295 drei Stände gebaut, die **68/0 grün** blieben, während `tsc`
+   `port.read()` mit Exit 0 übersetzte — `declare module './version.ts'` in `version.ts`
+   selbst, dasselbe als `declare global`, und dasselbe in einer **zusätzlichen Datei ohne
+   einen einzigen Import**, die `"include": ["src"]` trotzdem ins Programm zieht und die
+   Gestalt 5 deshalb nicht sieht. Dagegen stehen seit T-296 zwei Zusagen über den **gelesenen
+   Baum**, beide heute leer und deshalb gratis: **kein Erweiterungsblock** (`declare module`
+   mit einer Zeichenkette, `declare global`) irgendwo im Baum, und **der Portname genau
+   einmal**. Die Namensform `declare namespace Office` in
+   `apps/outlook-addin/src/office/office-js.d.ts` ist ausdrücklich **nicht** getroffen — sie
+   erweitert kein Modul, sondern legt einen eigenen Deklarationsraum an —, und genau diese
+   Unterscheidung ist der Grund, warum hier der Compiler fragt: Ein Lauf ohne sie ist am
+   echten Baum rot und nimmt dreizehn Gegenproben mit (gemessen, M5: 59/14).
+
+   **Damit ist das Lesen der obersten Anweisungen wieder tragfähig, und das ist ein Argument
+   und keine Hoffnung:** Eine Deklaration, die mit der obersten zusammengeführt wird, steht
+   entweder ebenfalls oben — dann greift „N-mal deklariert" — oder in einem Erweiterungsblock.
+   Eine Deklaration in einem Block, einer Funktion oder einem `namespace` mit Bezeichner wird
+   von TypeScript **nicht** zusammengeführt: gegen `tsc` gemessen endet beides bei
+   `TS2339: Property 'read' does not exist`, also dort, wo der Bestand auch ohne sie endet. Sie
+   in denselben Zweig zu ziehen — der Vorschlag einer rekursiven Sammlung aus T-295 — wäre ein
+   Satz über einen Zustand, den der Compiler anders sieht. Die Klasse „einer Schnittstelle ein
+   Mitglied geben, das nicht in ihrer Deklaration steht" hat genau zwei Wege, `extends` und die
+   Zusammenführung, und beide sind damit zu.
+
+   **Wie viele Gegenproben eine Prüfung braucht, ist seit T-294 abzählbar** (Zählvorschrift aus
+   T-293): **so viele, wie ihre Prüffunktion unterscheidbare Befundsätze kennt** — nicht so
+   viele, wie sie eingesetzte Dateien braucht, denn `erwartet` nagelt immer nur einen Zweig
+   fest, und mehrere Einträge dürfen dieselbe Datei einsetzen. Angewandt ergab sie 51 → **68**
+   Prüfzeilen: elf Einträge in den sechs Prüfungen neben dem Rückweg, sechs an der zweiten
+   Gestalt, dazu ein `erwartet` an den sieben Einträgen, die keines hatten. Sie zwingt
+   nebenbei den Leser zur Genauigkeit — vier Meßfehlschläge brauchen vier Sätze, sonst wären
+   vier Zweige eine Gegenprobe.
+
+   **Zwei Hälften sind in T-296 aus den Ausnahmen in die Regel gezogen**, weil sie dort als
+   Erlaubnis zu lesen waren, es zu lassen: **Ein Zweig, dessen Befundsatz sich nicht von dem
+   eines anderen unterscheiden läßt, ist kein gezählter Zweig, sondern ein zu trennender
+   Satz** — im Wortlaut von T-294 hätte die Vorschrift, auf den Stand von T-292 angewandt, für
+   vier Zweige hinter einem Satz genau **eine** Gegenprobe verlangt und die Lücke damit
+   gesegnet, die gemessen drei bis vier wert war (65/3 und 64/4). Und: **jede Gegenprobe trägt
+   ein `erwartet`**, das seit T-296 Pflicht ist und bis dahin „freiwillig" hieß, obwohl die
+   ganze Zählung darauf steht — gemessen ist der Unterschied an einer einzigen Mutation: 67/1
+   mit dem `erwartet`, **68/0 ohne es**. Abschnitt 0 zählt die `erwartet` seither gegen.
+   Zusammen mit den vier Einträgen für die dritte Tür steht der Lauf bei **73** Prüfzeilen.
+
+   Wo sie **nicht** trägt, steht im Quelltext des Laufs: Ein Satz, der aus einer Liste von
+   Marken entsteht (`download` mit vierzehn, `optionen` mit sieben), zählt als einer — das
+   teilweise Leeren dieser Listen bleibt damit ungemessen (E-107). Der Ausgleich braucht mehr
+   als weitere Einträge: `erwartet` ist **ein** Ausdruck gegen `findings.some(…)` und kann nie
+   vierzehn Befunde verlangen; es braucht ein `erwartetAlle`, **aus der Listenkonstante
+   abgeleitet** und nicht abgeschrieben (T-295).
+
+   **Warum fünf und nicht zwei (T-288 und T-290, A-V-27 und A-V-28).** Die ersten beiden
+   bewachten den *Bezeichner* `lastCheckAt` und die Gestalt des Ports — also den Leser, der
+   durch den Port geht. Der security-checker ist in T-287 mit einer Zeile daneben
+   vorbeigegriffen: ein roher `SELECT last_version_check_at FROM app_setting` in einer neuen
+   Datei unter `features/version/`, und der Lauf blieb grün. Bewacht wird seither zusätzlich
+   der **Spaltenname** — erlaubt in genau vier tragenden Dateien (Adapter, Archivadapter,
+   eingebettete Migrationen, Archivübersetzung), Kommentare zählen nicht —, eine Umgehung
+   weiter **jeder unmittelbare Datenbankgriff im Ordner des Prüfers** (auch `SELECT *`, ohne
+   den Namen zu nennen) und seit T-290 die **Importmenge dieses Ordners**: sieben festgenagelte
+   Quellen, beide Richtungen gemessen, `@takt/storage` nicht darunter.
+
+   **Die fünfte Gestalt ist der Preis für einen zu weit geschriebenen Satz.** Hier stand bis
+   T-290 „Er erreicht den Bestand über seinen Port oder gar nicht". Gemessen war etwas
+   Engeres — *er faßt keine Datenbank unmittelbar an* —, und der Unterschied ist eine Zeile
+   `import`: Der security-checker hat ihn in T-289 durchschritten (V1b — `DataArchivePort
+   .readAll()` im Ordner des Prüfers, Schlüssel aus vier Stücken zusammengesetzt, der Wert
+   entscheidet über die ausgehende Anfrage; `proof:release-safety` 37/0, `proof:layers` 36/0,
+   `proof:callers` 74/0, alles grün). Seit die Importmenge mitgemessen wird, ist V1b rot —
+   **gemessen, nicht behauptet**: die Datei lag für die Dauer eines Befehls im Baum.
+
+   **Was auch die fünf nicht messen, steht im Quelltext des Laufs** und gehört in denselben
+   Satz wie die Zusage: ein Zugriff **außerhalb** des Ordners, der den Wert über zwei Dateien
+   hereinreicht (T-289, V2b und V11), und ein **erlaubter Nachbar**, der selbst einen
+   Bestandszugriff bekommt — Gestalt 5 mißt die Menge der Quellen, nicht deren Inhalt. Was
+   dieser Lauf gar nicht sieht, liegt außerhalb der acht gelesenen `src`-Wurzeln und der zehn
+   gelesenen Einzeldateien: jeder
+   `scripts/`-Baum, `packages/ui-tokens/**`, `apps/web/public/**` und
+   `packages/storage/migrations/**`. Warum der Aufwand mehr ist als Ordnungsliebe: Das
+   Datenarchiv ist fremder Text und ersetzt `app_setting` vollständig — ein wiederhergestellter
+   Leser machte aus einem präparierten Archiv einen **stillen Ausschalter** der
+   Versionsprüfung, und still heißt A-18.11.
+
+   **Als Abwehr gegen einen feindlichen lokalen Prozeß taugte der Wert ohnehin
+   nicht** — derselbe Prozeß kommt mit `sqlite3` an dieselbe Datei (VG-3); er war die Abwehr
+   gegen den Unfall, und ihr Preis war die Selbsthilfe des Benutzers.
+
+   **Auf den Boden kommt ein Aufschlag von 0 bis 25 %**, bei 60 Minuten also höchstens 15.
+   Anlaß ist eine Rückkopplung, kein Angriff (T-275-8): Alle Installationen hinter einer
+   Quelladresse teilen sich 60 Anfragen je Stunde; wurden sie gemeinsam abgewiesen, klopfen sie
+   seither gemeinsam weiter und bleiben in Phase. Der Aufschlag bricht die Gleichschaltung. Er
+   **verlängert nur** — ein Streuwert, der auch verkürzte, hübe die Zusage aus A-V-11′ Punkt 4
+   auf. Die Rechenregel steht als reine Funktion in `packages/domain/src/version.ts`, der
+   Zufall kommt als Zahl herein — so ist die Zusage „verlängert nur" ohne Zeitgeber meßbar.
+   **Der Aufschlag senkt die Summe je Stunde nicht**; wer das will, braucht eine Rückstufung,
+   und die ist nicht entschieden.
+
+   **Die Zahlen, neu gerechnet mit T-285.** Innerhalb eines Laufs unverändert: höchstens **24
+   je Kalendertag**, Erwartungswert mit Streuwert rund **21,3** (gemessen über 100 000
+   simulierte Tage: 20 bis 22). Über Prozeßgrenzen hinweg gilt die 24 **nicht** — jeder Start
+   bringt eine Anfrage mit, die Tagesgrenze ist `24 + Anzahl der Starts`. Für den gewöhnlichen
+   Benutzer sind das 25; für den Grenzfall der Startschleife die 344 je Stunde aus T-276, also
+   rund 8 250 je Kalendertag. Dieser Grenzfall ist mit der Entscheidung zu T-285 in Kauf
+   genommen.
 
    **Nichts davon wird sichtbar.** Der Wert geht durch keine Route und in keine Oberfläche; die
    Prüfung bleibt vollständig stumm (A-18.11, A-V-14′).

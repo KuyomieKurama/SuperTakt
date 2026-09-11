@@ -945,6 +945,65 @@ A-5.5): durch E-054/E-055 unberührt — das Öffnen einer Karte zur Detailansic
 Bedienung, die sich an der Spaltendefinition ändert. **Noch nicht als eigene Datei unter
 `tests/e2e/**` automatisiert** (weder vor noch nach T-081); nicht Gegenstand dieses Auftrags.
 
+### TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in schmaler Spalte
+**Anforderungen:** A-5.5, A-19.4, A-19.5, A-19.6, T-144 Abschnitt 8.2 (drei Marken: Call-Nummer,
+Erledigt-Kennzeichen, Frist), T-281, T-282
+**Ebene:** End-to-End (`tests/e2e/kanban-card-header-overflow.spec.ts`, eigene Datei statt
+`kanban.spec.ts` — derselbe Grund wie bei `deadline-computed-state.spec.ts`: ein einzelner,
+scharf umrissener Fall, der eine eigene Fensterbreite braucht und die übrigen Fälle der Datei
+nicht mit sich ziehen soll)
+**Vorbedingung:** Keine.
+
+**Der Befund, den dieser Fall festhält.** Ein Bildschirmfoto zeigte auf einer Kanban-Karte mit
+Call-Nummer, Erledigt-Kennzeichen **und** Frist die Abspieltaste über dem roten
+„⚠ Überfällig …" — die dritte Marke ragte aus der Karte heraus und legte sich über
+`.kcard__actions`. Der Fall war bis T-282 **nie geprüft**: Es gab keinen Testfall „drei Marken,
+schmale Spalte", weder in dieser Datei noch anderswo — sonst wäre der Befund vorher aufgefallen.
+T-281 hat die Ursache behoben (`.kcard__top` bricht um, `.kcard__deadline` schrumpft tatsächlich
+statt nur eine wirkungslose `max-width` zu tragen) und das am Musterbaustein
+(`designsystem.html`) gemessen; dieser Fall ist die erste Messung am echten Board-Bildschirm.
+
+**Schritte:**
+1. Über die API zwei Todos mit demselben Tag anlegen: eines mit Call-Nummer und einer Frist in
+   der Vergangenheit (drei Marken auf der Karte: Call-Nummer, „Erledigt", „Überfällig …"), eines
+   mit Call-Nummer und **ohne** Frist (zwei Marken, A-19.5: ein Todo ohne Frist trägt die dritte
+   Marke gar nicht).
+2. Über die Oberfläche eine Board-Spalte mit diesem Tag als Bedingung anlegen (dieselbe Bedienung
+   wie TP-KANBAN-01, nicht über die API).
+3. Das Fenster auf eine Breite verengen, bei der die Spalte auf ihre in `.board`
+   (`grid-auto-columns: minmax(17rem, 21rem)`) festgelegte **Mindestbreite** von 17 rem (272 px)
+   fällt — nicht durch eine feste Breite im Testcode, sondern durch ein schmales
+   `page.setViewportSize`, dieselbe Bedingung, unter der der Fehler am Bildschirm entstand. Eine
+   solche Spur wächst ohne `fr`-Einheit nur, wenn im Container mehr Platz übrig bleibt, als die
+   Summe der Mindestbreiten aller Spuren braucht; unterhalb der 52-rem-Schwelle legt sich die
+   Seitenleiste als Band über den Kopf (`app.css`, „Schmales Fenster"), und bei ausreichend
+   schmalem Fenster bleibt für eine einzelne Spalte kein Wachstumsspielraum mehr — nachgemessen,
+   nicht nur gerechnet (Schritt 4).
+4. Für jedes unmittelbare Kind von `.kcard__top` der Drei-Marken-Karte in Pixeln messen: rechter
+   Rand ≤ rechter Rand von `.kcard__main`; keine Überschneidung (Rechteckschnitt) mit
+   `.kcard__actions`; `scrollWidth` ≤ aufgerundetem `clientWidth` (kein abgeschnittener Text).
+5. Gegenprobe an der Zwei-Marken-Karte: genau zwei Kinder von `.kcard__top`, beide auf derselben
+   Zeile (gleiche vertikale Mitte, `align-items: center` zentriert unterschiedlich hohe Marken auf
+   derselben Grundlinie, nicht an der oberen Kante).
+
+**Erwartetes Ergebnis:** Die gemessene Spaltenbreite liegt bei 272 px ± 1,5 px (Sub-Pixel-Rundung
+der Layout-Engine). Keine der drei Marken der ersten Karte ragt aus `.kcard__main`, keine
+überschneidet `.kcard__actions`, keine verliert Text. Die zweite Karte trägt zwei Marken in einer
+Zeile, ohne `.kcard__deadline`.
+
+**Gegenprobe des Falls selbst (T-282, Auflage 1 — Fassung 2026-09-11).** Die Regeln aus T-281
+(`.kcard__top { flex-wrap: wrap; … }` in `components.css`, `.kcard__deadline { flex: 0 1 auto;
+flex-wrap: wrap; }` in `app.css`) probehalber auf den Stand vor T-281 zurückgesetzt: Der Fall
+fällt, und zwar an genau der Stelle, die den gemeldeten Schaden beschreibt — rechter Rand der
+Frist-Marke bei 274,05 px gegen einen zulässigen rechten Rand von 229 px (`.kcard__main`),
+45 px Überlauf. Byte-genau zurückgestellt (`git checkout HEAD --`, Prüfsummenvergleich
+SHA-256 vor Rücksetzung und nach Wiederherstellung identisch: `app.css`
+`eaab5269a41b6f2698fc025309d5d57682fe7fd294cd00b1f00b61d9f3daa502`, `components.css`
+`9e9845181ca83a1807f7557760f8b857e84f63c96454a118be5485dab920f339`). Der Fall misst damit die
+**Wirkung** (Ränder und `scrollWidth` am gerenderten Baum), nicht die Regel selbst — ein Umbau,
+der dieselbe Wirkung mit anderen CSS-Mitteln erzielt, bleibt grün; ein Umbau, der sie zerstört,
+wird rot, unabhängig davon, welche Regel dafür verantwortlich ist.
+
 ---
 
 ## 9. Export von Anfang bis Ende (A-8.1 bis A-8.6, A-8.8, A-8.9, E-011)
@@ -3729,6 +3788,12 @@ nur in der Detailansicht zeigt, verfehlt A-19.4 wörtlich.
 Text, Farbe oder Symbol, geprüft am Text und nicht allein an der Farbe, wegen SC 1.4.1). Ein Todo
 ohne Frist zeigt an derselben Stelle **nichts**, keinen leeren Platzhalter (dieselbe Falle wie
 A-18.5/`TP-VER-08`: eine Fläche, die für „nichts" trotzdem ein Element reserviert).
+
+**Sichtbar ist nicht dasselbe wie unverdeckt** (Nachtrag T-282): Auf der Kanban-Karte trägt die
+Frist als dritte Marke neben Call-Nummer und Erledigt-Kennzeichen — bei schmaler Spalte legte sich
+eine der drei Marken über die Kartenaktionen (Timer-/Menüknopf), obwohl sie im DOM vorhanden und
+diesem Fall nach „sichtbar" war. Diese Geometrie, nicht die bloße Anwesenheit, prüft eigens
+`TP-KANBAN-07` (Abschnitt 8).
 
 #### TP-FRIST-09 — Der Zustand wird **gerechnet**, nicht gespeichert (E-070 Punkt 3)
 

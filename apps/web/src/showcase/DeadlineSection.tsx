@@ -12,6 +12,7 @@ import { Icon } from "../shared/ui/Icon";
 import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
 import { attachmentLabel, ATTACHMENT_KIND_LABEL } from "../features/todos/attachmentLabel";
 import { Foreign } from "../shared/ui/Foreign";
+import { ForeignName } from "../shared/ui/ForeignName";
 import { SHOWCASE_TODAY } from "./data";
 import { Section, SubHeading } from "./Section";
 
@@ -77,6 +78,20 @@ const DEADLINE_CASES: ReadonlyArray<{
  * Der zweite trägt **keinen** Titel: Dort greift die Ersatzbezeichnung, und man
  * sieht, dass nie eine leere Zeile entsteht.
  */
+/**
+ * Was ein Anhang trägt, den der Benutzer **selbst** eingetragen hat (A-A-84).
+ *
+ * Vier Felder, und alle vier sagen dasselbe: Es gibt hier keine fremde Hand.
+ * Der Dienst bildet Unbekanntes ausdrücklich auf `user` ab und nicht auf
+ * `email` — eine behauptete Herkunft läse die Rückfrage vor dem Öffnen vor.
+ */
+const SELF_CHOSEN: Pick<Attachment, "origin" | "originSender" | "displayName" | "rebuilt"> = {
+  origin: "user",
+  originSender: null,
+  displayName: null,
+  rebuilt: false,
+};
+
 const ATTACHMENT_CASES: readonly Attachment[] = [
   {
     id: "a-1" as Id,
@@ -86,6 +101,7 @@ const ATTACHMENT_CASES: readonly Attachment[] = [
     target: "https://portal.beispiel.invalid/tickets/4711",
     position: 1,
     createdAt: "2026-09-01T08:00:00Z",
+    ...SELF_CHOSEN,
   },
   {
     id: "a-2" as Id,
@@ -95,6 +111,7 @@ const ATTACHMENT_CASES: readonly Attachment[] = [
     target: "https://wiki.beispiel.invalid/betrieb/schnittstellen/abrechnung",
     position: 2,
     createdAt: "2026-09-01T08:05:00Z",
+    ...SELF_CHOSEN,
   },
   {
     id: "a-3" as Id,
@@ -104,6 +121,7 @@ const ATTACHMENT_CASES: readonly Attachment[] = [
     target: "/home/musterfrau/Belege/2026-09/abnahmeprotokoll.pdf",
     position: 3,
     createdAt: "2026-09-02T09:10:00Z",
+    ...SELF_CHOSEN,
   },
   {
     id: "a-4" as Id,
@@ -119,6 +137,54 @@ const ATTACHMENT_CASES: readonly Attachment[] = [
     target: "/home/musterfrau/Downloads/rechnung\u{202e}fdp.exe",
     position: 4,
     createdAt: "2026-09-03T11:00:00Z",
+    ...SELF_CHOSEN,
+  },
+  /*
+    **Der Anhang aus einer E-Mail** (A-19.23). Drei Dinge auf einmal, und keines
+    davon hat ein Anhang, den der Benutzer selbst eingetragen hat:
+
+     - Der **Pfad** ist der von SuperTakt **erzeugte** Name (A-A-78) — er sagt
+       einem Menschen nichts, und das ist Absicht.
+     - Der **Anzeigename** kommt aus fremder Hand. Er ist lang genug, um in
+       jeder Spalte dieser Seite umzubrechen, und er endet auf `.exe`. Genau
+       dieses Ende nimmt ein Deckel weg (A-19.23b, A-A-93, R-27).
+     - Der **Absender** steht an der Zeile (A-A-87).
+  */
+  {
+    id: "a-5" as Id,
+    todoId: "t-1" as Id,
+    kind: "file",
+    title: null,
+    target:
+      "/home/musterfrau/.local/share/de.takt.desktop/email-attachments/4a7c1f90b2e84d6580aa13c7e5d90f21.exe",
+    position: 5,
+    createdAt: "2026-09-04T07:30:00Z",
+    origin: "email",
+    originSender: "buchhaltung@lieferant.invalid",
+    displayName:
+      "Rechnung_Nachtrag_Q3_2026_Projekt_Schnittstelle_Abrechnung_Endfassung_final.exe",
+    rebuilt: false,
+  },
+  /*
+    **Der Nachbau** (A-19.22a/b, Auflage A-A-97). Outlook hat die ursprüngliche
+    Nachricht nicht herausgegeben; SuperTakt hat sie aus den verfügbaren Angaben
+    zusammengestellt. Die Kennzeichnung hängt an der **Datei** und steht deshalb
+    hier — drei Wochen nach dem Anlegen, wo sie gebraucht wird, und nicht im
+    Aufgabenbereich, wo sie beim Anlegen einmal aufblitzte.
+  */
+  {
+    id: "a-6" as Id,
+    todoId: "t-1" as Id,
+    kind: "file",
+    title: null,
+    target:
+      "/home/musterfrau/.local/share/de.takt.desktop/email-attachments/9f21c05ab7de41328e6f0a5c3b91d874.eml",
+    position: 6,
+    createdAt: "2026-09-04T07:30:01Z",
+    origin: "email",
+    originSender: "buchhaltung@lieferant.invalid",
+    displayName: "Nachtrag zur Rechnung 2026-0417.eml",
+    rebuilt: true,
   },
 ];
 
@@ -136,7 +202,14 @@ const BLOCKED_TEXT =
 
 export function DeadlineSection() {
   const [dialog, setDialog] = useState<
-    "harmlos" | "ausfuehrbar" | "abgewiesen" | "namensabweichung" | "umleitung" | null
+    | "harmlos"
+    | "ausfuehrbar"
+    | "abgewiesen"
+    | "namensabweichung"
+    | "umleitung"
+    | "ausEmail"
+    | "nachbau"
+    | null
   >(null);
 
   return (
@@ -183,9 +256,42 @@ export function DeadlineSection() {
               </span>
               <span className="attachment__main">
                 <span className="attachment__open">
-                  <Foreign className="attachment__label" value={attachmentLabel(attachment)} />
+                  {/*
+                    `ForeignName` und nicht `Foreign`: Der Name darf am Ende
+                    **nie** gekürzt werden (A-19.23b, A-A-93). Die Musterseite
+                    zeigt die Bauart und nicht nur das Bild — ein `truncate`
+                    hier wäre dieselbe Lüge wie in der Anwendung.
+                  */}
+                  <ForeignName className="attachment__label" value={attachmentLabel(attachment)} />
+                  {/*
+                    „(nachgebaut)" steht hinter dem Namen und **nicht in ihm**
+                    (A-19.22b): Der Name kommt aus fremder Hand, die Klammer von
+                    uns. Zwei Herkünfte in einer Zeichenkette wären an dieser
+                    Zeile der teuerste Fehler — ein Absender könnte die
+                    Kennzeichnung sonst selbst schreiben.
+                  */}
+                  {attachment.rebuilt ? (
+                    <span className="attachment__rebuilt">
+                      <span className="attachment__mark-icon" aria-hidden>
+                        <Icon name="alert-triangle" size={12} />
+                      </span>
+                      (nachgebaut)
+                    </span>
+                  ) : null}
                 </span>
-                <span className="attachment__value muted truncate">
+                {attachment.origin === "email" ? (
+                  <span className="attachment__marks">
+                    <span className="attachment__mark attachment__mark--email">
+                      <span className="attachment__mark-icon" aria-hidden>
+                        <Icon name="inbox" size={12} />
+                      </span>
+                      <span>
+                        Aus einer E-Mail von <Foreign value={attachment.originSender ?? ""} />
+                      </span>
+                    </span>
+                  </span>
+                ) : null}
+                <span className="attachment__value muted">
                   <Foreign value={attachment.target} />
                 </span>
               </span>
@@ -201,7 +307,7 @@ export function DeadlineSection() {
             </span>
             <span className="attachment__main">
               <span className="attachment__label">abnahmeprotokoll.pdf</span>
-              <span className="attachment__value muted truncate">
+              <span className="attachment__value muted">
                 /home/musterfrau/Belege/2026-09/abnahmeprotokoll.pdf
               </span>
               {/* Mit `role="status"`, wie in `Attachments.tsx` (O-GQ, T-191):
@@ -249,6 +355,12 @@ export function DeadlineSection() {
           </Button>
           <Button variant="secondary" onClick={() => setDialog("umleitung")}>
             Umleitung — SuperTakt öffnet sie gar nicht
+          </Button>
+          <Button variant="secondary" onClick={() => setDialog("ausEmail")}>
+            Aus einer E-Mail, langer fremder Name mit „.exe"
+          </Button>
+          <Button variant="secondary" onClick={() => setDialog("nachbau")}>
+            Nachbau der Nachricht
           </Button>
         </div>
 
@@ -300,6 +412,39 @@ export function DeadlineSection() {
         open={dialog === "umleitung"}
         path="/home/musterfrau/Belege/rechnung.lnk"
         foreseenRefusal={BLOCKED_TEXT}
+        onConfirm={() => setDialog(null)}
+        onCancel={() => setDialog(null)}
+      />
+      {/*
+        T-302 — der Fall, um den es in A-19.23b und R-27 geht. Der Anzeigename
+        ist 78 Zeichen lang und endet auf `.exe`. Ein Deckel am Zeilenende
+        machte daraus `Rechnung_Nachtrag_Q3_2026…` — der Benutzer bestätigte
+        eine PDF und startete ein Programm, **ohne daß ein Zeichen falsch
+        gewesen wäre**. Hier bricht der Name um, und die Endung steht zusätzlich
+        abgesetzt in ihrer eigenen Zeile (A-A-86).
+      */}
+      <AttachmentOpenDialog
+        open={dialog === "ausEmail"}
+        path="/home/musterfrau/.local/share/de.takt.desktop/email-attachments/4a7c1f90b2e84d6580aa13c7e5d90f21.exe"
+        displayName="Rechnung_Nachtrag_Q3_2026_Projekt_Schnittstelle_Abrechnung_Endfassung_final.exe"
+        originSender="buchhaltung@lieferant.invalid"
+        fromEmail
+        onConfirm={() => setDialog(null)}
+        onCancel={() => setDialog(null)}
+      />
+      {/*
+        A-19.22b und Auflage A-A-97: Die Kennzeichnung hängt an der **Datei**.
+        Drei Wochen nach dem Anlegen ist der Aufgabenbereich längst zu — diese
+        Rückfrage ist die Stelle, an der der Satz noch gelesen wird, bevor die
+        Datei in eine Akte wandert.
+      */}
+      <AttachmentOpenDialog
+        open={dialog === "nachbau"}
+        path="/home/musterfrau/.local/share/de.takt.desktop/email-attachments/9f21c05ab7de41328e6f0a5c3b91d874.eml"
+        displayName="Nachtrag zur Rechnung 2026-0417.eml"
+        originSender="buchhaltung@lieferant.invalid"
+        fromEmail
+        rebuilt
         onConfirm={() => setDialog(null)}
         onCancel={() => setDialog(null)}
       />

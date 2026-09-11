@@ -37,6 +37,7 @@ import type {
   AttachmentCreate,
   AttachmentId,
   AttachmentKind,
+  AttachmentOrigin,
   ImageMediaType,
   PathRejection,
   TodoId,
@@ -100,6 +101,29 @@ export interface AttachmentView {
   readonly target: string;
   readonly position: number;
   readonly createdAt: string;
+  /**
+   * Woher der Anhang stammt (A-A-84). Er steht in der Antwort, weil die
+   * Rückfrage vor dem Öffnen ihn braucht (A-A-85) und weil die Anhangsliste an
+   * ihm entscheidet, welche Regeln für den angezeigten Namen gelten
+   * (A-19.23b, A-A-93).
+   *
+   * **Gespeichert wird geliefert.** Das ist kein abgeleiteter Wert, der sich
+   * aus dem Pfad raten ließe — genau das verbietet A-A-84.
+   */
+  readonly origin: AttachmentOrigin;
+  /** Der Absender, **fremder Text** (A-A-85). `null` heißt „gibt es nicht". */
+  readonly originSender: string | null;
+  /**
+   * Der Name aus fremder Hand (A-19.23a), **fremder Text**. `null` bei jedem
+   * Anhang, den der Benutzer selbst eingetragen hat.
+   *
+   * Getrennt von `title`, damit die anzeigende Fläche weiß, welche Regeln
+   * gelten: Bei diesem Wert ist die Endung stets sichtbar und am Ende wird nie
+   * gekürzt.
+   */
+  readonly displayName: string | null;
+  /** Nachbau statt ursprünglicher Nachricht (A-19.22b, A-A-97). */
+  readonly rebuilt: boolean;
 }
 
 export function toAttachmentView(attachment: Attachment): AttachmentView {
@@ -111,6 +135,10 @@ export function toAttachmentView(attachment: Attachment): AttachmentView {
     target: attachment.target,
     position: attachment.position,
     createdAt: attachment.createdAt,
+    origin: attachment.origin,
+    originSender: attachment.originSender,
+    displayName: attachment.displayName,
+    rebuilt: attachment.rebuilt,
   };
 }
 
@@ -300,6 +328,19 @@ export async function removeAttachment(
   });
 
   if (!outcome.ok) return err(outcome.error);
+  /*
+   * Eine **übernommene** E-Mail-Datei geht mit (A-19.23, A-A-83). Ein vom
+   * Benutzer eingetragener Pfad geht ausdrücklich **nicht** mit: Die Datei
+   * dahinter gehört ihm, Takt hat sie nie kopiert und verwaltet sie nicht
+   * (Migration 0015, `target` bei `kind = 'file'`).
+   *
+   * Die Unterscheidung hängt an `origin` und an nichts sonst — nicht am Ordner,
+   * nicht an der Form des Pfads. Die Form prüft der Blob-Port noch einmal, und
+   * zwar an dem Wert, den er benutzt.
+   */
+  if (outcome.value.kind === 'file' && outcome.value.origin === 'email') {
+    await context.attachmentBlobs.removeEmailFile(outcome.value.target);
+  }
   if (outcome.value.kind === 'image') {
     // Der Benutzer bekommt `ok`, auch wenn die Datei liegen bleibt — der
     // **Anhang** ist entfernt, und das stimmt. Aus einem Fehlschlag hier einen

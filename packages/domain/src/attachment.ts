@@ -154,6 +154,55 @@ export function isKnownAttachmentKindSet(kinds: readonly string[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Herkunft — die Eigenschaft am Anhang (A-A-84)
+// ---------------------------------------------------------------------------
+
+/**
+ * Woher ein Anhang stammt.
+ *
+ * **Zweiwertig, nie leer, nie mehrdeutig** — dieselbe Bauart wie der
+ * Exportstatus, und aus demselben Grund: Eine Eigenschaft, an der eine
+ * Rückfrage vor einem Programmstart hängt (A-A-85), darf nicht „unbekannt"
+ * sein können.
+ *
+ *  - `user` — der Benutzer hat den Anhang selbst eingetragen. Er weiß, woher
+ *    die Datei kommt, weil er sie gewählt hat. Das ist der Zustand jedes
+ *    Anhangs, den es vor A-19.23 gab, und deshalb der Vorgabewert der
+ *    Migration.
+ *  - `email` — der Anhang ist beim Anlegen eines Todos aus einer E-Mail
+ *    entstanden (A-19.22, A-19.23). Ab dieser Fassung ist der **häufigste**
+ *    Dateianhang einer, den ein Fremder geschickt hat, und der Benutzer sieht
+ *    ihn Tage später zwischen seinen eigenen (Bedrohungsmodell 39.5.2).
+ *
+ * **Warum das hier steht und nicht in `email-attachment.ts`:** Es ist ein Feld
+ * von {@link Attachment}, so wie {@link AttachmentKind} eines ist. Es dort zu
+ * führen ergäbe einen Kreis zwischen den beiden Dateien für einen Typ, der zu
+ * dieser gehört. Die Richtung ist damit eindeutig: `email-attachment.ts` liest
+ * hier, nicht umgekehrt.
+ */
+export type AttachmentOrigin = 'user' | 'email';
+
+/**
+ * Die Herkünfte als Datensatz. Dieselbe Bauart wie
+ * {@link ATTACHMENT_KIND_PRESENCE}: Ein neuer Wert im Typ ohne Eintrag hier
+ * ist ein Typfehler und keine stille Lücke.
+ */
+export const ATTACHMENT_ORIGIN_PRESENCE: Readonly<Record<AttachmentOrigin, true>> = Object.freeze({
+  user: true,
+  email: true,
+});
+
+/** Die Herkünfte in fester Reihenfolge. */
+export const ATTACHMENT_ORIGINS: readonly AttachmentOrigin[] = Object.freeze(
+  Object.keys(ATTACHMENT_ORIGIN_PRESENCE) as AttachmentOrigin[],
+);
+
+/** Ist das eine bekannte Herkunft? **Wörtlich** verglichen, ohne Normalisierung. */
+export function isAttachmentOrigin(value: string): value is AttachmentOrigin {
+  return Object.prototype.hasOwnProperty.call(ATTACHMENT_ORIGIN_PRESENCE, value);
+}
+
+// ---------------------------------------------------------------------------
 // Der Wert
 // ---------------------------------------------------------------------------
 
@@ -183,15 +232,80 @@ export interface Attachment {
   /** Reihenfolge des Hinzufügens. Stabil über alle Ladevorgänge (A-19.8). */
   readonly position: number;
   readonly createdAt: Timestamp;
+  /**
+   * Woher dieser Anhang stammt (A-A-84). `AttachmentOrigin` steht in
+   * `email-attachment.ts`; hier steht `string`-frei der Wert selbst.
+   *
+   * **Eine Eigenschaft und keine Ableitung.** Nicht aus dem Pfad gelesen,
+   * nicht aus dem Ordner geraten — sonst hinge die Rückfrage vor einem
+   * Programmstart (A-A-85) an einer Vermutung.
+   */
+  readonly origin: AttachmentOrigin;
+  /**
+   * Der Absender der E-Mail, aus der dieser Anhang stammt — **fremder Text**.
+   * `null` bei `origin === 'user'` und dann, wenn die Nachricht keinen
+   * hergab.
+   *
+   * Er steht hier und nicht nur in einer Meldung beim Anlegen, weil A-A-85 ihn
+   * in der Rückfrage vor dem Öffnen verlangt: *„Diese Datei stammt aus einer
+   * E-Mail von …"*. Ein Hinweis, der nur beim Anlegen erscheint, ist drei
+   * Wochen später nirgends.
+   */
+  readonly originSender: string | null;
+  /**
+   * Der Anzeigename aus fremder Hand (A-19.23a). `null`, wenn es keinen gibt.
+   *
+   * **Getrennt von `title`, und das ist der Punkt.** `title` ist, was der
+   * **Benutzer** gewählt hat (A-19.10); `displayName` ist, was der **Absender**
+   * die Datei genannt hat. Beides in ein Feld zu legen hieße, der anzeigenden
+   * Fläche die Auskunft zu nehmen, welche Regeln gelten: Für fremden Text ist
+   * die Endung stets sichtbar und am Ende wird nie gekürzt (A-19.23b, A-A-93);
+   * für den eigenen Titel gilt das nicht.
+   *
+   * Auf der Platte steht er **nie** (A-A-78). Dort steht ein erzeugter Name.
+   */
+  readonly displayName: string | null;
+  /**
+   * Ist diese Datei ein **Nachbau** statt der ursprünglichen Nachricht?
+   * (A-19.22b, A-A-97.)
+   *
+   * `true` nur bei der `.eml` aus A-19.22a, die aus den Office.js-Feldern
+   * zusammengesetzt wurde, weil Outlook die Nachricht nicht hergab. Die
+   * Kennzeichnung hängt an der **Datei** und nicht am Augenblick: Sie steht
+   * hier im Bestand, übersteht den Round-Trip der Datensicherung (A-20.4) und
+   * ist damit auch in drei Wochen noch da.
+   *
+   * Der Grund ist kein Ordnungssinn: Eine Datei, die für die ursprüngliche
+   * Nachricht gehalten werden kann, ohne es zu sein, ist in einem Vorgang, aus
+   * dem eine Rechnung wird, eine falsche Auskunft über ein Beweisstück. Sie
+   * trägt keine Kopfzeilen, kein DKIM, kein S/MIME und keine Empfangsstempel
+   * — und sie wird weitergereicht: an die Buchhaltung, in eine Akte.
+   */
+  readonly rebuilt: boolean;
 }
 
-/** Was zum Anlegen eines Anhangs nötig ist. Geprüft, bevor es hierher kommt. */
+/**
+ * Was zum Anlegen eines Anhangs nötig ist. Geprüft, bevor es hierher kommt.
+ *
+ * Die vier Felder aus A-A-84 und A-A-97 sind **freiwillig**, und das ist
+ * Absicht: Der gewöhnliche Weg — der Benutzer trägt einen Verweis, einen Pfad
+ * oder ein Bild ein — nennt sie nicht, und der Adapter setzt `origin: 'user'`,
+ * `rebuilt: false` und zweimal `null`. Wer sie nennt, tut es sichtbar.
+ */
 export interface AttachmentCreate {
   readonly todoId: TodoId;
   readonly kind: AttachmentKind;
   readonly title: string | null;
   readonly target: string;
   readonly now: Timestamp;
+  /** Siehe {@link Attachment.origin}. Fehlt: `'user'`. */
+  readonly origin?: AttachmentOrigin;
+  /** Siehe {@link Attachment.originSender}. Fehlt: `null`. */
+  readonly originSender?: string | null;
+  /** Siehe {@link Attachment.displayName}. Fehlt: `null`. */
+  readonly displayName?: string | null;
+  /** Siehe {@link Attachment.rebuilt}. Fehlt: `false`. */
+  readonly rebuilt?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,9 +1128,40 @@ export function attachmentLabel(
   kind: AttachmentKind,
   title: string | null,
   target: string,
+  /**
+   * Der Name aus fremder Hand (A-19.23a) — der Anzeigename einer aus einer
+   * E-Mail übernommenen Datei. Fehlt bei jedem Anhang, den der Benutzer selbst
+   * eingetragen hat, und dann ändert dieser Parameter nichts.
+   *
+   * -------------------------------------------------------------------------
+   * Warum er **zwischen** Titel und Ableitung steht, und nicht davor oder
+   * dahinter
+   * -------------------------------------------------------------------------
+   *
+   * **Der Titel gewinnt weiter.** Er ist das, was der Benutzer selbst gewählt
+   * hat (A-19.10); eine Angabe aus einer fremden E-Mail über seine eigene zu
+   * stellen wäre die falsche Reihenfolge, und sie wäre neu — heute gewinnt der
+   * Titel über alles.
+   *
+   * **Die Ableitung verliert.** Sie wäre hier `4a…c1.pdf` — der **erzeugte**
+   * Name auf der Platte (A-A-78). Der sagt einem Menschen nichts, und drei
+   * Anhänge aus derselben E-Mail hießen drei zufällige Hexzahlen. Genau den
+   * Zustand schließt die zweite Hälfte dieser Funktion aus (T-165, X-04): Zwei
+   * verschiedene Anhänge tragen nie dieselbe Beschriftung — aber eine, die
+   * niemand wiedererkennt, erfüllt den Buchstaben und verfehlt den Zweck,
+   * genau wie der bloße Wirt bis T-157.
+   *
+   * **Der Parameter ist freiwillig**, damit kein bestehender Aufrufer ihn
+   * nennen muß. Wer ihn nennt, bekommt dieselbe Funktion mit einer Stufe mehr;
+   * die Reihenfolge ist an einer Stelle beschrieben und nicht an dreien.
+   */
+  displayName: string | null = null,
 ): string {
   const trimmed = title === null ? '' : title.trim();
   if (trimmed !== '') return trimmed;
+
+  const foreign = displayName === null ? '' : displayName.trim();
+  if (foreign !== '') return foreign;
 
   switch (kind) {
     case 'link': {

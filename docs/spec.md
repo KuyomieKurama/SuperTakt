@@ -343,7 +343,7 @@ in dem sie erlaubt ist.
 | A-18.8 | Wählt der Benutzer „Installieren", öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
 | A-18.9 | Takt lädt zu keinem Zeitpunkt eine Datei herunter und installiert zu keinem Zeitpunkt etwas. Herunterladen und Installieren löst ausschließlich der Benutzer aus, außerhalb von Takt. |
 | A-18.10 | Wählt der Benutzer „Überspringen", wird genau diese Fassung übersprungen. Für sie erscheint der Hinweis nicht wieder; eine spätere, neuere Fassung wird wieder gemeldet. |
-| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen **im selben Prüflauf**. Der gewöhnliche Takt bleibt davon unberührt — der nächste Versuch folgt frühestens nach dem Mindestabstand von einer Stunde. Ein Fehlschlag beendet die Prüfung **nicht** für die Laufzeit der Anwendung. Der Grund steht im Protokoll. |
+| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen **im selben Prüflauf**. Der gewöhnliche Takt bleibt davon unberührt — der nächste Versuch folgt frühestens nach dem Mindestabstand von einer Stunde. Ein Fehlschlag beendet die Prüfung **nicht** für die Laufzeit der Anwendung. Der Mindestabstand gilt **innerhalb eines Laufs**: Ein Programmstart fragt immer einmal, gleich wann zuletzt gefragt wurde. Der Grund steht im Protokoll. |
 | A-18.12 | Die Prüfung überträgt nichts über den Benutzer, den Bestand oder die Nutzung. Sie stellt eine Frage und liest eine Antwort. |
 
 **Was diese Anforderung ausdrücklich nicht ist.** Kein Selbstaktualisierer, kein Hintergrundlader,
@@ -399,7 +399,36 @@ Nachtrag des Auftraggebers vom 2026-09-05, als Antwort auf F-20.
 | A-19.16 | Bestehende Todos funktionieren unverändert weiter. Frist und Anhänge sind Ergänzungen, keine Umstellung. |
 | A-19.17 | Die Notiz-Trennung bleibt: Weder Frist noch Anhang gelangen in einen Export. |
 | A-19.18 | Ein Anhang wird **nur auf ausdrückliche Handlung des Benutzers** geöffnet. Nichts öffnet sich beim Anzeigen einer Liste, beim Laden eines Todos oder als Nebenwirkung. |
-| A-19.19 | Über das Outlook-Add-in entstehen **keine** Anhänge. Es legt Todos an und bucht Zeiten; ein Anhang, der aus einer E-Mail stammt, wäre ein von außen geschriebener Öffnen-Befehl. |
+| A-19.19 | Über das Outlook-Add-in entstehen Anhänge **ausschließlich beim Anlegen eines neuen Todos aus einer E-Mail** und ausschließlich auf dem in 19.5 beschriebenen Weg. An einem **bereits vorhandenen** Todo entsteht über das Add-in kein Anhang — weder im Duplikatfall (A-10.9) noch sonst. *Bis zum 2026-09-11 lautete diese Anforderung „Über das Outlook-Add-in entstehen **keine** Anhänge"; sie ist durch E-108 ersetzt.* |
+
+### 19.5 Anhänge aus dem Outlook-Add-in
+
+Nachtrag des Auftraggebers vom 2026-09-11. Er hebt E-100 zur Hälfte auf: Beim **Anlegen** aus
+einer E-Mail entstehen Anhänge, am **gefundenen** Todo weiterhin nicht. Vorbild für das
+Einsammeln der Dateien ist die bestehende Outlook-Bridge zu Super Productivity; die E-Mail
+selbst als Datei anzuhängen kann diese Bridge **nicht** — sie legt dafür einen Deep-Link und
+einen Textauszug ab, und genau das genügt hier nicht.
+
+| ID | Anforderung |
+|---|---|
+| A-19.22 | Entsteht ein Todo aus einer E-Mail, wird die **E-Mail selbst als Datei** an dieses Todo gehängt. Die Datei enthält Absender, Empfänger, Betreff, Versanddatum und Nachrichteninhalt. Ein Verweis auf die E-Mail und ein kopierter Nachrichtentext genügen **nicht**. |
+| A-19.22a | Gibt Outlook die Nachricht als Datei her, ist es **die ursprüngliche Nachricht**, unverändert. Gibt es sie nicht her, wird die Datei aus den verfügbaren Angaben **nachgebaut** — mit demselben Inhalt nach A-19.22, ohne die übrigen Kopfzeilen. |
+| A-19.22b | Ein **Nachbau ist als solcher gekennzeichnet**. Die Kennzeichnung hängt an der **Datei**, nicht am Augenblick des Anlegens: Sie ist am Anhang sichtbar, sie steht in der Rückfrage vor dem Öffnen, und sie übersteht die Datensicherung. Ein Hinweis, der nur beim Anlegen erscheint, ist drei Wochen später nirgends. Eine Datei, die für die ursprüngliche Nachricht gehalten werden kann, ohne es zu sein, ist der Fehler, den diese Anforderung ausschließt. |
+| A-19.22c | Der Nachbau wird aus fremdem Text **erzeugt**. Dabei darf aus keiner Angabe der Nachricht eine Struktur der Datei werden — kein zusätzlicher Kopfteil, kein zusätzlicher Abschnitt, kein zusätzlicher Anhang. Ein Anhang, der auf diesem Weg entstünde, wäre keiner im Sinne von A-19.23 und unterläge keiner seiner Regeln. |
+| A-19.23 | **Sämtliche Dateianhänge** derselben E-Mail werden zusätzlich als je ein eigener Anhang an dasselbe Todo gehängt. Inhalt und Dateiformat bleiben unverändert. |
+| A-19.23a | Der Name aus der E-Mail ist **fremder Text** und wird als **Anzeigename** geführt, nicht als Name auf der Platte; den Namen auf der Platte bestimmt SuperTakt. Die Endung bleibt dabei erhalten, denn sie entscheidet, womit die Datei geöffnet wird. |
+| A-19.23b | Wo ein Anzeigename aus fremder Hand erscheint — in der Liste der Anhänge **und in der Rückfrage vor dem Öffnen** —, ist die **Endung stets sichtbar** und nicht durch Kürzung, Richtungszeichen oder unsichtbare Zeichen zu verbergen. |
+| A-19.24 | Eingebettete Bilder, die Teil der Darstellung sind — Signaturbilder, Logos im Nachrichtentext —, sind keine Dateianhänge im Sinne von A-19.23. |
+| A-19.25 | Ein Anhang, der in der E-Mail selbst nur als Verweis auf einen Ablageort liegt (Cloud-Anhang), wird als **Verweis** übernommen, nicht als Datei, und ist als solcher erkennbar. |
+| A-19.26 | Übernommene Dateien sind gewöhnliche Dateianhänge im Sinne von A-19.9. Für sie gilt A-19.18 unverändert: Sie öffnen sich nie von selbst, und vor dem Öffnen nennt die Oberfläche den vollen Pfad. |
+| A-19.27 | Eine E-Mail **ohne** Dateianhänge ergibt genau **einen** Anhang: die E-Mail. |
+| A-19.28 | Die Übernahme von Titel, Beschreibung, Tags, Pool, Frist und allen übrigen Feldern ändert sich nicht. |
+| A-19.29 | **Kein Fehlschlag ist still.** Scheitert ein einzelner Anhang, bricht er die übrigen nicht ab — aber das Ergebnis nennt, **wie viele** übernommen wurden und **welche** nicht, mit Namen und Grund. Ein Todo, das mit weniger Anhängen entsteht als die E-Mail trägt, sagt das. |
+| A-19.30 | Eine Datei über der Größengrenze wird übersprungen und nach A-19.29 namentlich gemeldet. Die Grenze gilt **je Datei**; die Rumpfgrenze der übrigen Routen (B-1.7) bleibt davon unberührt. |
+| A-19.31 | Steht der Weg zur ursprünglichen Nachricht nicht offen — das Postfach gibt ihn nicht her, die benötigte Outlook-Fassung fehlt —, entsteht das Todo trotzdem, und **was fehlt, steht dabei**. Ein stiller Ausfall der Anhangsübernahme ist ausgeschlossen. |
+| A-19.32 | Das Add-in fordert **kein weitergehendes Recht** als bisher. Die Nachricht als Datei zu lesen genügt mit dem Recht, das es für die geöffnete Nachricht ohnehin hat; ein Zugriff auf das Postfach über die geöffnete Nachricht hinaus ist ausgeschlossen. |
+| A-19.34 | Die **Datensicherung trägt die übernommenen Dateien mit** — die Bytes, nicht nur den Verweis darauf. Eine Sicherung, auf einem anderen Rechner eingespielt, gibt alle Anhänge wieder her. Das gilt für die Nachricht wie für ihre Anhänge und ist dieselbe Zusage, die für Bildanhänge bereits besteht. |
+| A-19.33 | **Abnahme:** Ein Todo, aus einer E-Mail mit zwei Dateianhängen angelegt, trägt danach **drei** Anhänge — die E-Mail als Datei und die beiden ursprünglichen Dateien. |
 
 ---
 
@@ -481,7 +510,7 @@ angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
 | A-24.4 | Bei der Rückkehr erscheint ein Dialog mit Zeitraum und Dauer: als Pause auslassen, auf eine Aufgabe buchen oder in mehrere Aufgaben-/Pausenabschnitte aufteilen. Aufgaben sind suchbar, auch erledigte. Leistungstext ist freiwillig und nachträglich ergänzbar. |
 | A-24.5 | Die Summe muss sekundengenau dem gesamten Zeitraum entsprechen. „Rest übernehmen“ ergänzt einen Abschnitt. Keine negativen/überzähligen Zeiten, keine überlappenden Teilstücke. Alle Buchungen entstehen atomar; ein Fehler erhält den offenen Zustand, Wiederholungen buchen nicht doppelt. Abrechnungsrundung bleibt ausschließlich Sache des Exports. |
 | A-24.6 | Der Rückkehrzeitpunkt friert den Zeitraum ein. Der Timer läuft während des Dialogs und nach „Später“ weiter. Die Zuordnung verändert keinen inzwischen gewechselten oder manuell gestoppten Timer. Timerwechsel sind nach der Rückkehr auch bei offener Zuordnung möglich. Der Dialog zeigt Dauer und die drei Optionen Pause, Gearbeitet und Aufteilen; weitere Felder erscheinen nur bei Bedarf. |
-| A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Archivfassung 4 enthält Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. |
+| A-24.7 | Offene Phasen überleben Neuladen, Neustart und Datensicherung. Ab Archivfassung 4 enthält das Archiv Einstellungen und Phase; Fassungen 1–3 werden mit bisherigen Defaults ohne offene Phase übernommen. Ein nicht automatisch erkanntes Wiederkommen kann ausdrücklich bestätigt werden. *Die Fassung wird hier nicht mehr beziffert — sie stand am 2026-09-10 auf 4 im Papier und auf 5 im Code (T-245-2). Die führende Angabe ist `DATA_ARCHIVE_VERSION`; was jede Fassung enthält, steht in A-20 und in `docs/datenmodell.md`.* |
 
 ---
 

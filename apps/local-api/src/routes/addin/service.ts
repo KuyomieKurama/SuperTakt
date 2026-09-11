@@ -12,6 +12,7 @@ import type {
   CalendarDay,
   CallNumberRejection,
   DefaultTag,
+  EmailAttachmentFailureReason,
   Pool,
   PoolMovement,
   Result,
@@ -53,6 +54,20 @@ import {
   type PoolMovementNamer,
 } from '../../pool-movement.ts';
 import { AbortTodoCreate, resolveTagNames } from '../../tag-names.ts';
+/*
+ * Die **Gestalten** der Anhangsübernahme, nicht ihre Umsetzung.
+ *
+ * Nur Typen: Diese Datei ruft die Fähigkeit über `deps.emailAttachments` und
+ * nicht über einen Import. Das ist derselbe Grundsatz wie bei jedem Port —
+ * wer wissen will, was diese Routen ansprechen, liest ihre Abhängigkeiten und
+ * nicht einen Dienstsucher.
+ */
+import type {
+  EmailIntake,
+  IncomingEmailFile,
+  IncomingEmailLink,
+  IncomingEmailMessage,
+} from '../../features/todos/email-attachments.ts';
 
 import type { AddinDeps } from './ports.ts';
 
@@ -79,6 +94,38 @@ export interface AddinContext {
   readonly statuses: readonly TodoStatus[];
   readonly defaultStatusId: StatusId;
   readonly defaultTagIds: readonly TagId[];
+  /**
+   * **Daß** dieser Dienst Anhänge aus einer E-Mail annimmt (A-19.22, E-108).
+   *
+   * ---------------------------------------------------------------------------
+   * Warum hier keine Zahlen stehen — und warum der Block trotzdem steht
+   * ---------------------------------------------------------------------------
+   *
+   * Die drei Grenzen (25 MB je Datei, 48 MB in der Summe, 25 Stück) sind eine
+   * **Fachregel** und stehen in `packages/domain` als
+   * `MAX_EMAIL_ATTACHMENT_BYTES`, `…_TOTAL_BYTES` und `…_COUNT`. Der
+   * Aufgabenbereich liest sie von dort — er führt `@takt/domain` ohnehin, und
+   * dieselbe Zahl über zwei Wege zu verteilen ist die Bauart, aus der die
+   * Titellänge vor T-114 auseinandergelaufen ist.
+   *
+   * Was er **nicht** aus einem Paket lesen kann, ist diese Auskunft hier:
+   * Add-in und Dienst werden getrennt installiert und können auseinanderlaufen.
+   * Ein neuer Aufgabenbereich an einem älteren Dienst würde sonst Anhänge
+   * einsammeln, die dessen Tür nicht liest — und still verlieren (A-19.31).
+   * Fehlt dieses Feld, bietet der Aufgabenbereich die Übernahme gar nicht an,
+   * und es gibt keinen Satz darüber (E-100 Punkt 3).
+   *
+   * Deshalb genau ein Feld und kein zweites: `accepted`. Es ist heute immer
+   * `true` — der Dienst, der diese Zeile ausliefert, ist derselbe, der die Tür
+   * führt. Ein `false` wäre eine Behauptung über eine Fläche, die es in
+   * demselben Erzeugnis gibt.
+   */
+  readonly emailAttachments: AddinEmailAttachmentSupport;
+}
+
+/** Siehe {@link AddinContext.emailAttachments}. */
+export interface AddinEmailAttachmentSupport {
+  readonly accepted: boolean;
 }
 
 export const loadContext = (deps: AddinDeps): Promise<AddinContext> =>
@@ -97,6 +144,12 @@ export const loadContext = (deps: AddinDeps): Promise<AddinContext> =>
       statuses,
       defaultStatusId: defaultStatus.id,
       defaultTagIds: orderedDefaultTagIds(defaults),
+      /*
+       * Eine Konstante und keine Abfrage: Die Tür, die Anhänge annimmt, steht
+       * in derselben Datei wie diese Route und wird im selben Erzeugnis
+       * ausgeliefert. Was hier nachgesehen werden könnte, gäbe es nicht.
+       */
+      emailAttachments: { accepted: true },
     };
   });
 
@@ -372,6 +425,74 @@ export interface AddinCreateTodoInput {
    * ist die Abwesenheit eine leere Liste und keine Aussage.
    */
   readonly dueDate: CalendarDay | null;
+  /**
+   * Die Anhänge aus der geöffneten E-Mail (A-19.22 bis A-19.33, E-108).
+   *
+   * `null` heißt „ohne Anhänge" und ist der Zustand jedes Aufrufers, der die
+   * Übernahme nicht benutzt. Die Gestalt ist dieselbe wie {@link EmailIntake}
+   * in `features/todos/email-attachments.ts`, abzüglich des Feldes `failed`:
+   * **Was der Aufgabenbereich selbst nicht übernehmen konnte, reist nicht über
+   * die Leitung.** Er zeigt es an derselben Stelle wie die Erfolge, und er hat
+   * dafür feinere Gründe (`too_many`, `total_too_large`) als der Dienst; sie
+   * hier durch die gröbere Liste der Domäne zu schicken und zurückzuholen
+   * nähme ihm die Auskunft, ohne irgendetwas zu gewinnen.
+   *
+   * **Keine Todo-Kennung, in keinem Feld.** Siehe `AddinDeps.emailAttachments`.
+   */
+  readonly attachments: AddinEmailAttachments | null;
+}
+
+/**
+ * Was der Aufgabenbereich an Anhängen mitschickt — der geprüfte Wert.
+ *
+ * Der **Absender** steht am Umschlag und nicht am einzelnen Anhang: Er gehört
+ * der Nachricht. Am Eintrag stünde er zweimal, und zwei Anhänge derselben
+ * Anfrage könnten zwei verschiedene Herkünfte behaupten — die Rückfrage vor
+ * dem Öffnen läse dann eine davon vor (A-A-85).
+ */
+export interface AddinEmailAttachments {
+  readonly sender: string | null;
+  readonly items: readonly AddinEmailAttachmentItem[];
+}
+
+/** Die drei Gestalten aus `emailAttachmentItemSchema`. */
+export type AddinEmailAttachmentItem =
+  | {
+      readonly kind: 'message';
+      readonly displayName: string;
+      readonly contentBase64: string;
+      readonly rebuilt: boolean;
+    }
+  | { readonly kind: 'file'; readonly displayName: string; readonly contentBase64: string }
+  | { readonly kind: 'link'; readonly displayName: string; readonly url: string };
+
+/**
+ * Was der Dienst von den mitgeschickten Anhängen **wirklich** abgelegt hat
+ * (A-19.29, A-19.33).
+ *
+ * ---------------------------------------------------------------------------
+ * Was hier ausdrücklich **nicht** steht: der Pfad
+ * ---------------------------------------------------------------------------
+ *
+ * `AttachmentView` führt `target`, und das ist bei einer übernommenen Datei der
+ * **volle Pfad im Anwendungsdatenverzeichnis dieses Rechners** (Befund T-301).
+ * Ein Pfad ist eine Ortsangabe über **einen** Rechner; er gehört in die
+ * Hauptanwendung, die ihn vor dem Öffnen nennen muß, und nicht in ein
+ * Browsersteuerelement innerhalb von Outlook.
+ *
+ * Der Aufgabenbereich braucht ihn auch nicht: Er braucht eine **Zahl** für
+ * „3 Anhänge hängen daran" (A-19.33) und die **Namen** derer, die es nicht
+ * geworden sind (A-19.29). Beides steht hier, und mehr nicht.
+ */
+export interface AddinCreatedAttachments {
+  /** Wie viele Anhänge am neuen Todo hängen. */
+  readonly stored: number;
+  /** Was der Dienst nicht angenommen hat — mit Namen, Grund und Größe. */
+  readonly rejected: readonly {
+    readonly displayName: string;
+    readonly reason: EmailAttachmentFailureReason;
+    readonly bytes: number | null;
+  }[];
 }
 
 export interface AddinCreateTodoResult {
@@ -389,6 +510,16 @@ export interface AddinCreateTodoResult {
    * hatte.
    */
   readonly createdTags: readonly Tag[];
+  /**
+   * Was aus den mitgeschickten Anhängen geworden ist — oder `null`, wenn keine
+   * mitgeschickt wurden.
+   *
+   * `null` und `{ stored: 0, rejected: [] }` sind **nicht** dasselbe: Das erste
+   * heißt „es war keiner dabei", das zweite „es waren welche dabei, und keiner
+   * ist angekommen". Der Aufgabenbereich schreibt daraus zwei verschiedene
+   * Sätze (A-19.29, A-19.31).
+   */
+  readonly attachments: AddinCreatedAttachments | null;
 }
 
 /**
@@ -432,8 +563,113 @@ export interface AddinCreateTodoResult {
  *
  * Der Fehlschlag ist ein **Wert** (`Result`) und kein Wurf: Ein Tagname, den es
  * zweimal gibt, ist eine Eingabe des Benutzers und kein Programmierfehler.
+ *
+ * ---------------------------------------------------------------------------
+ * Die Anhänge: **um** diesen Anwendungsfall herum, nicht in ihm (T-304, E-108)
+ * ---------------------------------------------------------------------------
+ *
+ * Sind Anhänge dabei, läuft nicht dieser Aufruf, sondern
+ * `deps.emailAttachments(intake, create)` — und `create` ist genau die Funktion
+ * hier darunter, unverändert. Die Verschachtelung ist die Umsetzung von
+ * A-A-21′ (b)/(c):
+ *
+ *  - Die Fähigkeit bekommt **keine Kennung**, sondern die Funktion, die eine
+ *    erzeugt. Sie sieht die Kennung erst, nachdem sie selbst das Anlegen
+ *    ausgelöst hat.
+ *  - Scheitert das Anlegen, ist **kein Byte** geschrieben worden — der Fehler
+ *    kommt unverändert zurück, und es gibt nichts aufzuräumen (A-A-83).
+ *  - Scheitert ein einzelner Anhang, steht das Todo trotzdem, und der Anhang
+ *    erscheint mit Namen und Grund im Ergebnis (A-19.29). Von den beiden
+ *    möglichen Halbzuständen ist „Todo ohne diesen Anhang, und es steht dabei"
+ *    der behebbare.
+ *
+ * **Ohne Anhänge wird die Fähigkeit gar nicht gerufen.** Nicht aus
+ * Sparsamkeit: Ein Aufruf mit leerem Umschlag legte eine zweite, leere
+ * Transaktion um dieselbe Anlage und läse die Uhr ein zweites Mal. Der Weg
+ * jedes Aufrufers, der keine Anhänge schickt, bleibt damit zeichengleich der
+ * von gestern.
  */
 export const createTodo = async (
+  deps: AddinDeps,
+  input: AddinCreateTodoInput,
+): Promise<Result<AddinCreateTodoResult, TaktError>> => {
+  const envelope = input.attachments;
+  if (envelope !== null && envelope.items.length > 0) {
+    const outcome = await deps.emailAttachments(toEmailIntake(envelope), async () => {
+      const created = await createTodoOnly(deps, input);
+      if (!created.ok) return err(created.error);
+      return ok({ todoId: created.value.todo.id, value: created.value });
+    });
+    if (!outcome.ok) return err(outcome.error);
+    return ok({
+      ...outcome.value.created,
+      attachments: {
+        stored: outcome.value.attachments.attached.length,
+        rejected: outcome.value.attachments.failed.map((entry) => ({
+          displayName: entry.displayName,
+          reason: entry.reason,
+          bytes: entry.bytes,
+        })),
+      },
+    });
+  }
+  return createTodoOnly(deps, input);
+};
+
+/**
+ * Der Umschlag der Route in den Eingabewert der Fähigkeit.
+ *
+ * **Eine Umsortierung und keine Übersetzung.** Die Fähigkeit ordnet nach
+ * Wirkung — die Nachricht zuerst, dann Dateien, dann Verweise, und das ist die
+ * Reihenfolge am Todo (A-19.33). Der Rumpf ordnet nach der Reihenfolge der
+ * Nachricht, weil der Aufgabenbereich sie so einsammelt. Beide Ordnungen sind
+ * richtig; hier wird die eine in die andere gebracht, und **die Reihenfolge
+ * innerhalb der Dateien bleibt erhalten**.
+ *
+ * `failed` bleibt leer, und das ist eine Entscheidung mit Grund: Was der
+ * Aufgabenbereich selbst nicht übernehmen konnte, zeigt er selbst, mit seinen
+ * eigenen — feineren — Gründen. Siehe {@link AddinCreateTodoInput.attachments}.
+ */
+const toEmailIntake = (envelope: AddinEmailAttachments): EmailIntake => {
+  let message: IncomingEmailMessage | null = null;
+  const files: IncomingEmailFile[] = [];
+  const links: IncomingEmailLink[] = [];
+
+  for (const item of envelope.items) {
+    if (item.kind === 'message') {
+      /*
+       * **Die erste Nachricht gewinnt, jede weitere wird eine Datei.**
+       *
+       * A-19.22 kennt genau eine E-Mail je Anlegeruf, und der Aufgabenbereich
+       * schickt auch genau eine. Eine zweite fallen zu lassen wäre der stille
+       * Ausfall aus A-19.31; sie als Nachricht zu behandeln hieße, `rebuilt`
+       * an zwei Dateien zu schreiben. Also kommt sie als gewöhnlicher
+       * Dateianhang an — sichtbar, gezählt, und ohne eine Kennzeichnung, die
+       * für sie niemand geprüft hat (A-A-97).
+       */
+      if (message === null) {
+        message = {
+          displayName: item.displayName,
+          base64: item.contentBase64,
+          rebuilt: item.rebuilt,
+        };
+        continue;
+      }
+      files.push({ displayName: item.displayName, base64: item.contentBase64 });
+      continue;
+    }
+    if (item.kind === 'file') {
+      files.push({ displayName: item.displayName, base64: item.contentBase64 });
+      continue;
+    }
+    links.push({ displayName: item.displayName, url: item.url });
+  }
+
+  return { sender: envelope.sender, message, files, links, failed: [] };
+};
+
+/** Das Anlegen selbst — unverändert seit T-061, und ohne jeden Anhang. */
+const createTodoOnly = async (
   deps: AddinDeps,
   input: AddinCreateTodoInput,
 ): Promise<Result<AddinCreateTodoResult, TaktError>> => {
@@ -491,6 +727,12 @@ export const createTodo = async (
         todo,
         addedDefaultTagIds: effectiveTagIds.filter((tagId) => !chosen.has(tagId)),
         createdTags: resolved.fresh,
+        /*
+         * `null` und nicht `{ stored: 0, rejected: [] }`: Hier war kein Anhang
+         * dabei. Der Unterschied trägt einen Satz im Aufgabenbereich — siehe
+         * {@link AddinCreateTodoResult.attachments}.
+         */
+        attachments: null,
       });
     });
   } catch (error) {

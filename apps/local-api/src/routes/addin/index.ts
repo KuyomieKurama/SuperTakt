@@ -275,24 +275,47 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * (`2026-02-30`), ein Zeitstempel oder freier Text ergibt 422 mit
    * `details[].field = "dueDate"`.
    *
-   * **Ein Anhang entsteht hier nicht — und seit T-247 nirgends unter
-   * `/addin`** (A-19.19, E-074 Punkt 3, A-A-21, A-A-22). Das ist keine
-   * Voreinstellung, sondern der Schnitt: Diese Route hat kein Anhangsfeld,
-   * `AddinUnit` hat keinen `AttachmentPort`, und die Anhangsrouten liegen
-   * unter `/api/v1/todos/{todoId}/attachments`, also außerhalb von `/addin`
-   * und für das Add-in-Token unerreichbar. Ein mitgeschicktes `attachments`,
-   * `attachment` oder `attachmentUrl` fällt in zod still weg und ist damit
-   * ohne Wirkung — gemessen wird nicht der Statuscode, sondern die Wirkung:
-   * null Zeilen in `todo_attachment` (`proof:addin` Abschnitt 18).
+   * ---------------------------------------------------------------------------
+   * **Seit T-304 entstehen hier Anhänge — an diesem Todo und an keinem
+   * anderen** (A-19.22 bis A-19.33, E-108, A-A-82)
+   * ---------------------------------------------------------------------------
    *
-   * Der Satz galt zwischen PR #16 und der Entscheidung zu F-21 nur noch für
-   * **diese** Tür: Daneben stand `POST /addin/todos/{todoId}/attachments` und
-   * legte einen Verweis an. Der Auftraggeber hat F-21 gegen das Anhängen
-   * entschieden, die Route ist gefallen, und Abschnitt 18 mißt seither
-   * zusätzlich ihre **Abwesenheit** — 404 mit gültigem Add-in-Token und kein
-   * Pfad unter `/addin` mit `attachment` im Namen. Eine Zusage, die nur die
-   * Tür beschreibt, an der sie steht, ist die Sorte Satz, aus der dieser
-   * Befund entstanden ist.
+   * Das ist die Änderung, und sie ist eng. Der Rumpf trägt `attachments`: die
+   * E-Mail selbst als Datei, ihre Dateianhänge und ihre Cloud-Anhänge als
+   * Verweise. Sie hängen an dem Todo, das **dieselbe Anfrage** anlegt.
+   *
+   * **Die Zusage, die geblieben ist, lautet anders als bis gestern.** Bis T-247
+   * hieß sie „über das Add-in entsteht kein Anhang"; das war der Wortlaut von
+   * A-19.19, und E-108 hat ihn aufgehoben. Was E-108 **nicht** aufgehoben hat,
+   * ist A-A-82, und das ist die Zusage ab jetzt:
+   *
+   * > Über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da
+   * > war.
+   *
+   * Sie ist strukturell und nicht per Voreinstellung:
+   *
+   *  - Diese Route führt **kein Feld, das ein Todo benennt** — es gibt an ihr
+   *    keinen Pfadparameter und keinen Rumpfschlüssel dafür.
+   *  - `AddinDeps.emailAttachments` hat **keinen Parameter vom Typ `TodoId`**.
+   *    Sie nimmt die Funktion entgegen, die eine Kennung erzeugt, und sieht
+   *    die Kennung erst, nachdem sie selbst das Anlegen ausgelöst hat.
+   *  - `AddinUnit` hat weiterhin **keinen `AttachmentPort`** (A-A-21′ (c)).
+   *  - Die Anhangsrouten der Hauptanwendung liegen unter
+   *    `/api/v1/todos/{todoId}/attachments`, also außerhalb von `/addin`, und
+   *    sind für das Add-in-Token unerreichbar (A-A-21).
+   *
+   * **Gemessen wird die Wirkung und nicht der Name.** `proof:addin`
+   * Abschnitt 18 legt ein Todo über die Haupttür an, ruft danach diese Route
+   * mit Anhängen **und** einer mitgeschickten `todoId` des vorhandenen Todos —
+   * und zählt: Die Anhänge hängen am **neuen** Todo, das vorhandene hat
+   * weiterhin null. Die Gegenprobe daneben wird rot, wenn jemand einen
+   * `todoId`-Parameter nachrüstet.
+   *
+   * Bis T-247 maß derselbe Abschnitt „null Zeilen in `todo_attachment`". Das
+   * war die richtige Messung für die damalige Zusage und wäre für die heutige
+   * falsch — ein Wächter, der eine aufgehobene Zusage weiterhin bewacht,
+   * behauptet das Gegenteil des Bestands, und das ist der Befund vom
+   * 2026-09-10 in der anderen Richtung.
    */
   routes.post('/todos', async (c) => {
     const body = await readJson(c.req.raw);
@@ -349,6 +372,24 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
        * Kennung erst der Bestand prüft.
        */
       dueDate: parsed.data.dueDate as CalendarDay | null,
+      /*
+       * Die Anhänge aus der E-Mail (A-19.22 bis A-19.33, E-108, T-304).
+       *
+       * Unverändert weitergereicht, ohne Umdeutung: Was hier ankommt, ist
+       * bereits durch `emailAttachmentsSchema` gegangen (Gestalt, Deckel,
+       * Adressform des Verweises), und alles Weitere — zählen, benennen,
+       * ablegen, aufräumen — geschieht in der Fähigkeit, die `service.ts` um
+       * den Anlegevorgang legt.
+       *
+       * **Keine Zusicherung `as`.** Die unterschiedene Vereinigung des Schemas
+       * ist strukturell zuweisbar; sie ist mit derselben Absicht geschrieben
+       * wie `AddinEmailAttachmentItem` und nicht nur zufällig gleich.
+       *
+       * **Und keine Todo-Kennung**, in keinem Zweig dieser Route. Ein Anhang
+       * entsteht hier an dem Todo, das diese Anfrage anlegt, und an keinem
+       * anderen (A-A-82).
+       */
+      attachments: parsed.data.attachments,
     });
 
     if (!result.ok) {

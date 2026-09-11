@@ -9,6 +9,7 @@
     "proof:engines": "node scripts/proof-engine-parity.mjs",
     "proof:foreign": "node scripts/proof-foreign.mjs",
     "proof:locked": "node scripts/proof-locked-text.mjs",
+    "proof:clamp": "node scripts/proof-clamp.mjs",
     "proof:surface": "node scripts/proof-surface.mjs",
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",

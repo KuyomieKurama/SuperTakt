@@ -112,8 +112,147 @@ export const ALLOWED_ORIGINS: readonly string[] = Object.freeze([
 /** Höchstgröße eines gewöhnlichen Anfragerumpfs (B-1.7). Für Notizfelder reichlich. */
 export const MAX_BODY_BYTES = 1024 * 1024;
 
-/** Datenarchive mit eingebetteten Bildanhängen benötigen bewusst mehr als Notizfelder. */
+/**
+ * Fremdimporte (Todoist-CSV, Super-Productivity-JSON) — Text, keine Binärdaten.
+ *
+ * 64 MB, unverändert seit A-20.7. Ein Fremdbackup trägt Titel, Vermerke, Tags
+ * und Zeitstempel; eingebettete Bytes kennt keines der beiden Formate. Wo diese
+ * Zahl vorher **auch** für das eigene Archiv galt, gilt jetzt
+ * {@link DATA_ARCHIVE_MAX_BODY_BYTES} — siehe dort, warum die beiden getrennt
+ * sind.
+ */
 export const DATA_TRANSFER_MAX_BODY_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Die Rumpfgrenze der **einen** Route, über die eine eigene Datensicherung
+ * eingespielt wird (A-20.4, A-19.34, T-301).
+ *
+ * ===========================================================================
+ * Warum die Zahl von 64 MB auf 256 MiB steigt
+ * ===========================================================================
+ *
+ * Seit A-19.34 trägt das Archiv die aus E-Mails übernommenen **Dateien samt
+ * Bytes**. Damit ist die alte Zahl nicht mehr großzügig, sondern zu klein für
+ * ihren eigenen Gegenstand: Eine Datei darf 25 MB haben
+ * (`MAX_EMAIL_ATTACHMENT_BYTES`), base64 also 33,3 MB — **zwei** solche Dateien
+ * im ganzen Bestand ergaben ein Archiv, das sich nicht mehr einspielen ließ.
+ * Und schon vorher galt dasselbe für die Bildkopien: Sechs Bilder à 8 MB
+ * (`MAX_ATTACHMENT_IMAGE_BYTES`) reißen 64 MB. Ein Archiv, das die Anwendung
+ * selbst erzeugt und danach nicht wieder annimmt, bricht A-20.4 — die
+ * Anforderung, auf der die ganze Datensicherung ruht.
+ *
+ * ===========================================================================
+ * Woher die 256 kommt — drei Messungen, keine Vorliebe
+ * ===========================================================================
+ *
+ * Gemessen am 2026-09-11 auf dem Zielsystem (Windows 11, 8 GB, Node 22.23.2)
+ * über die Kette, die eine Anfrage wirklich durchläuft: Rumpf als Buffer →
+ * `request.text()` → `JSON.parse` → `Buffer.from(base64)` je Datei.
+ *
+ * | Rumpf | Nutzlast | Spitze RSS | Spitze Halde | Dauer |
+ * |---|---|---|---|---|
+ * | 66,7 MB | 50 MB | 333 MB | 137 MB | 108 ms |
+ * | 133,3 MB | 100 MB | 533 MB | 271 MB | 203 ms |
+ * | **266,7 MB** | **200 MB** | **934 MB** | **537 MB** | **455 ms** |
+ * | 400,0 MB | 300 MB | 1 333 MB | 804 MB | 731 ms |
+ * | 500,0 MB | 375 MB | 1 684 MB | 1 004 MB | 876 ms |
+ *
+ *  1. **Die harte Wand liegt bei 512 MiB, und sie gehört nicht uns.** V8 setzt
+ *     `buffer.constants.MAX_STRING_LENGTH` auf 536 870 888 Zeichen; ein Rumpf
+ *     darüber läßt `request.json()` **werfen**, und aus dem Wurf wird in
+ *     `readJson` ein 422 mit einem Satz über ein „nicht unterstütztes Archiv" —
+ *     eine Auskunft, die auf die falsche Ursache zeigt. Eine Rumpfgrenze **muß**
+ *     unter dieser Wand liegen, damit statt dessen ein sauberes 413 mit Grund
+ *     kommt. 256 MiB ist genau die Hälfte.
+ *  2. **Die Halde trägt es.** V8 gibt diesem Rechner (8 GB) 2 096 MB; bei
+ *     266,7 MB Rumpf stehen 537 MB darin, also Faktor 3,9 Luft. Bei 500 MB
+ *     Rumpf sind es 1 004 MB — es läuft, aber es läuft nur, solange sonst wenig
+ *     läuft, und der Dienst liegt neben Outlook auf demselben Rechner. Eine
+ *     Grenze, deren oberes Ende einen leeren Rechner braucht, ist keine.
+ *  3. **Die Zeit reicht.** 455 ms für Lesen, Zerlegen und Dekodieren gegen
+ *     {@link REQUEST_TIMEOUT_MS} von 15 s — über Loopback ist der Weg dorthin
+ *     ein Bruchteil davon.
+ *
+ * **Was 256 MiB in der Sache heißt:** rund 192 MiB Nutzlast (Base64 bläht um
+ * ein Drittel), also 7 Dateien der vollen Einzelgröße, 24 Bildkopien der vollen
+ * Größe oder — realistisch — einige hundert gewöhnliche Anhänge nebst dem
+ * ganzen übrigen Bestand.
+ *
+ * ===========================================================================
+ * Was die Zahl **nicht** löst, und wer es sagt
+ * ===========================================================================
+ *
+ * Sie ist eine Zahl und keine Eigenschaft: Ein Bestand, der lange genug wächst,
+ * reißt jede feste Grenze. Deshalb hängt an dieser Zeile eine zweite Maßnahme,
+ * und die ist die eigentliche: **Die Sicherung sagt es, wenn sie größer wird,
+ * als das Einspielen annimmt** (`exportDataArchive`, Warnung mit beiden
+ * Zahlen). Der schlechteste Zeitpunkt, das zu erfahren, ist der Tag, an dem man
+ * die Sicherung braucht.
+ *
+ * ===========================================================================
+ * Warum eine eigene Zahl statt einer für `/data-transfer`
+ * ===========================================================================
+ *
+ * `startsWith('/data-transfer')` wäre kürzer und falsch — dieselbe Begründung
+ * wie bei {@link ADDIN_ATTACHMENT_MAX_BODY_BYTES} und in `app.ts`
+ * ausgeschrieben: Eine Ausnahme, deren Menge an einem Präfix aufgespannt ist
+ * statt an der Anforderung, wächst mit jeder Nachbarroute mit, ohne daß es
+ * jemand entscheidet (E-099 Punkt 3). Die Fremdimporte tragen keine
+ * eingebetteten Bytes und brauchen die Erhöhung nicht; sie behalten ihre 64 MB.
+ *
+ * Damit stehen drei Ausnahmen von B-1.7 im Bestand, und jede hängt an genau
+ * einer Anforderung: das eigene Archiv (A-20.4), die Fremdimporte (A-20.7) und
+ * das Anlegen eines Todos aus einer E-Mail (A-19.30).
+ */
+export const DATA_ARCHIVE_MAX_BODY_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Die Rumpfgrenze der **einen** Route, über die ein Todo aus einer E-Mail
+ * entsteht (A-19.30, E-108 Punkt 3, A-A-81).
+ *
+ * ===========================================================================
+ * Die dritte benannte Ausnahme von B-1.7, und sie steht genau hier
+ * ===========================================================================
+ *
+ * Es gibt drei, und nur drei:
+ *
+ *  1. {@link DATA_TRANSFER_MAX_BODY_BYTES} — die Datensicherung mit
+ *     eingebetteten Bildkopien (A-20).
+ *  2. **Diese** — die Anhangsübernahme aus einer E-Mail.
+ *  3. Sonst nichts. {@link MAX_BODY_BYTES} bleibt für **jede** andere Route
+ *     bei einem Megabyte, und daran ändert diese Zeile nichts.
+ *
+ * ===========================================================================
+ * Warum eine Zahl an einer Stelle und nicht vier an vier
+ * ===========================================================================
+ *
+ * Das Bedrohungsmodell entscheidet in 39.4.5 die Frage, ob die Bytes einzeln
+ * zum Dienst wandern oder gesammelt mit dem Anlegevorgang kommen — und es
+ * trägt den **gesammelten** Weg. Der andere wäre eine Stelle, an der ein
+ * Aufrufer mit gültigem Token Dateien in das Anwendungsdatenverzeichnis
+ * schreibt, **ohne daß ein Todo entsteht**: ein unbegrenztes Schreibwerkzeug
+ * in dem Ordner, der die Bildkopien und die Datenbank als Nachbarn hat.
+ *
+ * Der Preis des gesammelten Wegs ist ein großer Rumpf, und das ist eine Zahl
+ * und keine Eigenschaft. Die Summengrenze ist zugleich die Rumpfgrenze dieser
+ * einen Route; damit gibt es **eine** Zahl statt vier, und sie hängt an einer
+ * Anforderung statt an einer Zählweise.
+ *
+ * ===========================================================================
+ * Der Zusammenhang mit der Summengrenze — und warum er gemessen wird
+ * ===========================================================================
+ *
+ * Base64 bläht um genau ein Drittel auf: 64 MB Rumpf tragen 48 MB Nutzlast,
+ * und das ist `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES` in `@takt/domain`.
+ *
+ * Stünde dort eine größere Zahl, wäre die wirksame Grenze diese hier — und der
+ * Benutzer bekäme statt einer benannten Meldung nach A-19.29 einen abgewiesenen
+ * Rumpf **ohne Namen und ohne Grund**. Genau das ist ein stiller Ausfall im
+ * Sinne von A-19.31, nur an der Tür statt an der Nachricht. Die beiden Zahlen
+ * dürfen deshalb nicht unabhängig voneinander wandern; der Nachweislauf hält
+ * sie gegeneinander.
+ */
+export const ADDIN_ATTACHMENT_MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 /** Zeitgrenze je Anfrage (B-1.7). */
 export const REQUEST_TIMEOUT_MS = 15_000;

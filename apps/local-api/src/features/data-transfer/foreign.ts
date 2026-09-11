@@ -569,6 +569,10 @@ async function importExternal(context: AppContext, external: ExternalData, exclu
       tags: projectTags.size + sectionTags.size + labelTags.size + priorityTags.size,
       timeEntries,
       images: 0,
+      // Aus einem Fremdbackup entstehen Verweise und Dateipfade (A-20.7), nie
+      // eine Datei, die SuperTakt selbst ablegt — deshalb null und nicht
+      // "noch nicht gezählt".
+      files: 0,
       warnings: [
         ...external.warnings,
         ...(transferredEntries === 0 ? [] : [excludeTransferred

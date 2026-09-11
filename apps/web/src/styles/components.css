@@ -1094,10 +1094,35 @@
   gap: var(--space-2);
 }
 
+/* Die Kopfzeile der Karte traegt bis zu drei Marken: Call-Nummer,
+   Erledigt-Kennzeichen und — nur wenn eine Frist gesetzt ist (A-19.5) — die
+   Frist. Die Spalte ist zwischen 17rem und 21rem breit (`.board`), der Karte
+   bleiben davon rund 200 px fuer diese Zeile. Drei Marken passen darin nicht
+   nebeneinander.
+
+   Deshalb **umbricht** sie (T-281). Ohne `flex-wrap` schob die dritte Marke
+   sich aus `.kcard__main` heraus und legte sich ueber `.kcard__actions` — die
+   Frist lag unter dem Timerknopf. Kuerzen waere die schlechtere Antwort: Eine
+   Frist, die als "Ueberfael..." endet, sieht richtig aus und ist es nicht.
+
+   Gemessen in Chromium: Der Ueberlauf begann bei einer Spaltenbreite von
+   308 px, in den Gestaltungen mit groesseren Marken (`--text-2xs: 0.75rem`)
+   schon bei 324 px — die Spalte darf 272 bis 336 px breit sein, der Fall lag
+   also im Regelbereich und bei der Mindestbreite immer vor. Mit dem Umbruch
+   bleibt bis hinunter zu 240 px alles innerhalb der Karte.
+
+   Es ist dieselbe Regel, die die Todo-Zeile in S-02 fuer dieselben drei Marken
+   schon traegt (`.todo-row__meta`) — hier fehlte sie, und nur hier.
+
+   Die Zeilenluecke ist kleiner als die Spaltenluecke: Die zweite Zeile gehoert
+   sichtbar zum selben Block und soll ihn nicht zu einem zweiten Absatz
+   auseinanderziehen. */
 .kcard__top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
   min-height: 1rem;
 }
 
@@ -2495,6 +2520,27 @@
   background-color: var(--danger-bg-subtle);
   font-size: var(--text-sm);
   color: var(--danger-text);
+}
+
+/*
+ * Zwei Abwandlungen fuer die Rueckfrage vor dem Oeffnen (T-302).
+ *
+ * Die Grundform ist rot, weil sie bisher nur eine Sache sagte: „das hier
+ * startet ein Programm". Die Herkunft ist keine Gefahr, sondern eine
+ * **Tatsache** (A-A-85) — rot gesetzt stumpfte sie den roten Satz daneben ab,
+ * und der ist der wichtigere. Der Nachbau liegt dazwischen: eine Warnung, aber
+ * kein Fehlschlag (A-19.22b, A-A-97).
+ */
+.dialog__consequence--origin {
+  border-inline-start-color: var(--border-strong);
+  background-color: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.dialog__consequence--rebuilt {
+  border-inline-start-color: var(--warning-border);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
 }
 
 .dialog__reason {

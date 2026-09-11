@@ -78,6 +78,14 @@ Abrechnungsintegrität.
 Fortgeschrieben in **T-023** (2026-09-01, Welle 8). Die Tabelle aus T-003 steht darunter, damit
 der Unterschied sichtbar bleibt. Damit niemand ein Prüfergebnis annimmt, das es nicht gibt:
 
+### Stand T-297 (2026-09-11) — Anhänge aus dem Add-in, **bevor** sie gebaut werden
+
+Vollständig in **39.0**. In einem Satz: **Node 22.23.2 und PowerShell auf Windows 11 sind gelaufen**
+— die Vorlage aus der Outlook-Bridge wurde zeichengleich nachgebaut und gegen 25 Angriffsnamen mit
+echten Dateien gefahren, dazu die Win32-Gegenprobe. **Semgrep Guardian und 42Crunch sind erneut
+nicht verfügbar** und für diesen Auftrag ohne Gewicht, weil kein Produktivcode geändert wurde.
+`pnpm check` und die Nachweisläufe sind **nicht** gefahren, und zwar aus demselben Grund.
+
 ### Stand T-156 (2026-09-05) — Frist und Anhänge, gegen den gebauten Code
 
 | Werkzeug | Lief | Ergebnis |
@@ -229,6 +237,8 @@ Rechner ist. Siehe Abschnitt 9, Grundannahmen.
 | VG-9 | Webview → Rust-Kern | Tauri-Befehle und -Fähigkeiten. Ein XSS im Webview ist hier deutlich schwerer als im Web, weil dahinter Dateisystem und Prozessstart liegen. |
 | VG-10 | Lokaler Dienst → GitHub (Versionsprüfung) | **Neu am 2026-09-04 (A-18.*, E-064, R-19).** Die erste und einzige Grenze, an der Takt den Rechner verlässt. Sie trägt in **zwei** Richtungen: hinaus geht ein Lebenszeichen (Quelladresse, Zeitpunkt, SNI `api.github.com`), herein kommt eine Antwort beliebiger Größe und Gestalt, aus der Text in die Oberfläche und — wenn man es zulässt — eine Adresse in den Browser des Benutzers wandern kann. Bewertet in Abschnitt 18, **bevor** sie gebaut wird. |
 | VG-11 | Anhang im Bestand → Öffnen-Befehl der Hülle | **Neu am 2026-09-05 (A-19.8 bis A-19.19, E-071, E-072, R-21, R-22).** Die schwerere Schwester von VG-10. Dort war die Zeichenkette eine Fassungsbezeichnung aus einer bekannten Quelle; hier ist sie eine **Adresse oder ein Pfad aus dem Bestand**, und „öffnen" heißt beim Typ Datei: die Standardanwendung starten. Wer in den Bestand schreiben kann (VG-1, VG-3), schreibt damit einen Öffnen-Befehl auf den Rechner des Benutzers. Bewertet in Abschnitt **20**, bevor sie gebaut wurde; gegen den gebauten Code gemessen in Abschnitt **21**. |
+| VG-12 | E-Mail-Anhang → Anwendungsdatenverzeichnis | **Neu am 2026-09-11 (A-19.22 bis A-19.33, E-108, R-24).** Die Umkehrung von VG-11: Dort geht eine Zeichenkette aus dem Bestand an den Öffnen-Befehl, hier kommen **Bytes und ein Name von außen in den Bestand** — beides vollständig vom Absender einer E-Mail bestimmt. Die beiden Grenzen hängen zusammen, und in der Verkettung liegt der Schaden: Wer VG-12 schreibt, schreibt den Wert, den VG-11 öffnet. Bewertet in Abschnitt **39**, bevor sie gebaut wird. |
+| ~~VG-13~~ | ~~Outlook-Add-in → Postfach des Benutzers~~ | **Angelegt und wieder gestrichen am 2026-09-11 (T-297, A-A-70), bevor eine Zeile Code entstand.** Der Wortlaut lautete: *„Mit `ReadWriteMailbox` liegt dahinter das ganze Postfach mit Lese- und Schreibrecht, und die Grenze wird ausschließlich von der Selbstbeschränkung unseres eigenen Codes getragen."* Mit der Entscheidung des Auftraggebers für `item.getAsFileAsync` (Mailbox 1.14, Mindestrecht **read item**) bleibt das Manifest bei `ReadItem`; hinter dem Add-in liegt weiterhin **die geöffnete Nachricht**. Die Grenze ist nicht abgesichert, sondern **nicht entstanden**. Die Zeile bleibt durchgestrichen stehen, damit niemand sie ein zweites Mal für neu hält. Begründung in **39.3** und **39.3.0**. |
 
 ---
 
@@ -241,7 +251,7 @@ Rechner ist. Siehe Abschnitt 9, Grundannahmen.
 | A-03 | Ein anderer Prozess im selben Benutzerkonto | Beliebige HTTP-Anfragen mit **frei gewählten** Kopfzeilen, Lesen aller Dateien mit Benutzerrechten, Prozessliste und Befehlszeilen einsehen | Schadsoftware, ein anderes Outlook-Add-in, ein neugieriges Werkzeug |
 | A-04 | Ein anderer angemeldeter Benutzer auf demselben Rechner (Terminalserver, geteilter PC) | Zugriff auf alles, was nicht durch Dateirechte geschützt ist | Kollege, Neugier, Datenabfluss |
 | A-05 | Sicherungs-, Synchronisierungs- und Virenschutzagenten | Lesen und kopieren Dateien, teils in die Cloud | Keins. Unbeabsichtigter Datenabfluss — deshalb gefährlich. |
-| A-06 | Der Absender einer E-Mail | Kontrolliert die Zeichenkette, die der reguläre Ausdruck verarbeitet | Störung des Add-ins, falsche Call-Nummern in der Abrechnung |
+| A-06 | Der Absender einer E-Mail | Kontrolliert die Zeichenkette, die der reguläre Ausdruck verarbeitet. **Erweitert am 2026-09-11 (T-297, A-A-70; E-108, A-19.22 bis A-19.33):** zusätzlich **Dateinamen und Dateiinhalte, die auf der Platte des Benutzers landen**, deren Zahl und deren Größe, dazu die Adresse eines Cloud-Anhangs und das Kennzeichen `isInline`, mit dem er die Grenze aus A-19.24 selbst zieht. A-06 ist damit vom Störenfried zum **Schreiber im Anwendungsdatenverzeichnis** geworden, und er braucht dafür keine Lücke, sondern nur eine E-Mail an eine Adresse, die er kennt. | Störung des Add-ins, falsche Call-Nummern in der Abrechnung — und ab E-108 ein Programmstart auf dem Rechner des Benutzers (R-21, VG-12) |
 | A-07 | Ein Paketautor in der Lieferkette | Führt Code beim Installieren und zur Laufzeit aus | Übernommene npm-Konten sind der Regelfall, nicht die Ausnahme |
 | A-08 | Wer den Rechner in die Hand bekommt | Offline-Zugriff auf die Datenträgerinhalte | Diebstahl, Reparatur, Ausmusterung |
 | A-09 | Das Abrechnungstool als Empfänger | Verarbeitet, was Takt liefert | Kein Angreifer, aber eine Senke: Was Takt falsch exportiert, wird dort zu Geld. |
@@ -4201,7 +4211,7 @@ gefordert. *nicht erfüllt* — die Sache fehlt.
 | **A-V-8** | erfüllt | `VERSION_SHAPE` in `packages/domain/src/version.ts:91`, zeichengleich mit der Form aus 18.9, beidseitig verankert, ohne `g`. `checkVersion` nimmt `unknown` und wirft nicht. Die zehn geforderten Fälle stehen als Prüffälle; `null`, `42`, `{}`, `[]`, `true`, fehlend, `""`, 60 000 Zeichen, `../../evil`, `1.2.3?x=1` ergeben je einen stillen Fehlschlag. |
 | **A-V-9** | erfüllt | `comparePrecedence` zerlegt in drei Zahlen und vergleicht numerisch; `0.10.0 > 0.9.0` ist ein Prüffall. Eine Vorabkennung gilt als kleiner als dieselbe Fassung ohne. Kein `localeCompare`, kein `<` auf Zeichenketten. Jede Komponente ≤ 999 999 999, in der Form gebunden. |
 | **A-V-10** | erfüllt | `features/version/routes.ts:81` gibt `current()` heraus und ruft nichts. Der Prüffall „`current()` löst niemals eine Anfrage aus, auch nicht nach 100 Aufrufen" zählt am Port **null** ausgehende Anfragen. Die Entscheidung dazu ist E-069 und sie ist **nach** 18.9 gefallen — sie ist der Grund für die Abweichung bei A-V-14. |
-| **A-V-11** | **erfüllt — am 2026-09-11 neu beurteilt (T-275)** | Eine Anfrage je Start (nach `START_DELAY_MS` = 10 s), danach `intervalMs` = 24 h, harter Boden `minIntervalMs` = 60 min, geprüft an einer gestellten Uhr **und** an der Frist des Zeitgebers. Nach einem Fehlschlag wird auf den **Boden** neu geplant — im Fehlschlagzweig wie in der Auffangklammer (`apps/local-api/src/features/version/version.ts`). **Berichtigt (A-A-70). Hier stand: „Nach einem Fehlschlag wird **nicht** neu geplant — ein eigener Prüffall mißt, daß auch bei einer sehr kurzen ‚Regelfrist' die Zahl bei eins bleibt."** Das beschrieb den Zustand bis T-273 zutreffend und den Sollzustand falsch; es war zugleich die Zeile, die den gemeldeten Fehler als erfüllte Auflage abnahm. Am 2026-09-11 gegen den Produktivcode gemessen (36.0, Messung 1): bei ununterbrochenem Fehlschlag und gesetztem Boden von 300 ms **fünf** Anfragen in 1,25 s, Abstände **305, 310, 314, 313 ms**; der Zustand bleibt `unknown`, jede Zeile im Protokoll trägt `version_check_unreachable` auf `info`, und nach `stop()` kommt in 1,2 s keine Anfrage mehr dazu. Obergrenze im Dauerfehlschlag: **24** je Kalendertag gegen **1** im Erfolgsfall — ein Sechzigstel dessen, was GitHub je Stunde zugesteht. Die Meßvorschrift steht neu als **A-V-11′** in 36.4. |
+| **A-V-11** | **erfüllt — am 2026-09-11 neu beurteilt (T-275)** | Eine Anfrage je Start (nach `START_DELAY_MS` = 10 s), danach `intervalMs` = 24 h, harter Boden `minIntervalMs` = 60 min, geprüft an einer gestellten Uhr **und** an der Frist des Zeitgebers. Nach einem Fehlschlag wird auf den **Boden** neu geplant — im Fehlschlagzweig wie in der Auffangklammer (`apps/local-api/src/features/version/version.ts`). **Berichtigt (A-A-70). Hier stand: „Nach einem Fehlschlag wird **nicht** neu geplant — ein eigener Prüffall mißt, daß auch bei einer sehr kurzen ‚Regelfrist' die Zahl bei eins bleibt."** Das beschrieb den Zustand bis T-273 zutreffend und den Sollzustand falsch; es war zugleich die Zeile, die den gemeldeten Fehler als erfüllte Auflage abnahm. Am 2026-09-11 gegen den Produktivcode gemessen (36.0, Messung 1): bei ununterbrochenem Fehlschlag und gesetztem Boden von 300 ms **fünf** Anfragen in 1,25 s, Abstände **305, 310, 314, 313 ms**; der Zustand bleibt `unknown`, jede Zeile im Protokoll trägt `version_check_unreachable` auf `info`, und nach `stop()` kommt in 1,2 s keine Anfrage mehr dazu. Obergrenze im Dauerfehlschlag: **24** je Kalendertag **und Prozeßlauf** gegen **1** im Erfolgsfall — ein Sechzigstel dessen, was GitHub je Stunde zugesteht; über Prozeßgrenzen hinweg `24 + Zahl der Starts`, gewöhnlich 25. **Berichtigt am 2026-09-11 (T-287, E-106). Hier stand: „Obergrenze im Dauerfehlschlag: 24 je Kalendertag gegen 1 im Erfolgsfall"** — zwischen T-279 und T-285 richtig, seither je Lauf. Am 2026-09-11 gegen den Produktivcode nachgemessen (37.0, Messung 2): zwei nacheinander gebaute Prüfer auf demselben Speicher senden **je eine** Anfrage, obwohl der Boden auf 60 Minuten steht. Die Meßvorschrift steht neu als **A-V-11′** in 36.4. |
 | **A-V-12** | **abweichend erfüllt** | Der Zeitgeber ist `unref()`t (`features/version/version.ts:160`), `stop()` löst einen `AbortController` aus, und `main.ts:373` ruft `stop()` als **ersten** Schritt des Anhaltens, vor `taskpane.close()` und `database.close()`. Prüffälle messen `stop()` während einer ausstehenden Antwort und `start()` gefolgt von sofortigem `stop()`. **Die Messung aus 18.9 ist es nicht:** „`proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft" — `proof:access` mißt das nicht. Es mißt in Abschnitt 0e den umgekehrten Fall (ein fremder Prozeß hält eine **eingehende** Verbindung), und der Fall „ausgehende Anfrage läuft" tritt dort zufällig ein oder nicht, je nachdem, wie lange ein einzelner Dienst lebt. Was trägt, ist die harte Abschaltfrist aus T-126: Der Prozeß endet auch dann, wenn `stop()` nichts bewirkte. **A-V-12′ in 19.5.** |
 | **A-V-13** | erfüllt | **Gegen einen Prüfserver gemessen** (19.2, Messung 3), nicht gegen den Quelltext. Hinaus gehen acht Kopfzeilen: die drei gesetzten (`accept: application/vnd.github+json`, `x-github-api-version: 2022-11-28`, `user-agent: Takt`) und fünf, die Node selbst anhängt (`accept-encoding: gzip, deflate`, `accept-language: *`, `connection: keep-alive`, `host`, `sec-fetch-mode: cors`). Keine davon trägt Benutzer, Rechnernamen, Sprache oder Fassung. Die Gegenprobe aus 18.9 hält: Die installierte Fassung kommt in keiner Kopfzeile und in keinem Teil der Adresse vor — der Dienst kennt sie überhaupt nicht (E-069). |
 | **A-V-14** | **abweichend erfüllt, enger als gefordert** | Die Route gibt **zwei** Felder heraus: `state` (`unknown` \| `known`) und `latestVersion` (`string \| null`). Gefordert waren drei; das dritte war die installierte Fassung, und die kennt der Dienst seit E-069 nicht mehr. Der **Kern** der Auflage — „kein Text aus der Antwort, kein `html_url`, keine Fassungsbeschreibung" — ist gewahrt und wird von `proof:release-safety` mit einer Gegenprobe gemessen. Die Auflage nannte eine Zahl, wo sie eine Verbotsliste hätte nennen müssen: Eine Zahl wird bei jeder Entwurfsänderung falsch, eine Verbotsliste nicht. **A-V-14′ in 19.5.** |
@@ -4891,7 +4901,7 @@ die Eigenschaft und der Lauf, der sie mißt.
 
 | ID | Auflage | Woran messbar |
 |---|---|---|
-| **A-A-21** | **Über das Add-in entstehen keine Anhänge** (A-19.19) — strukturell. Anhänge entstehen über eigene Routen **außerhalb** von `/api/v1/addin`; sie stehen nicht in `SHARED_PATHS`. Die Eingabetypen der Add-in-Anwendungsfälle tragen kein Anhangsfeld, und zwar als **Typ**, nach dem Vorbild von `ExportCandidate` (R-06). | **Berichtigt am 2026-09-10 (T-247-3, A-A-70). Die alte Fassung stand hier: „`proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit; `tsc` bricht ab, wenn ein Anhangsfeld in einen Add-in-Eingabetyp gerät."** Der erste Halbsatz ist gemessen falsch: Abschnitt 4 fährt ausschließlich die Routen an, für die `requiredCredentialForPath` `session` verlangt — also alles **außerhalb** von `/addin`. Eine Anhangsroute **innerhalb** von `/addin` sieht er nicht als Verstoß, sondern zählt sie zur erlaubten Fläche. Genau so ist PR #16 durchgekommen. Was heute trägt, sind drei Stücke, und keines davon allein: (1) die **Zahl** in `proof:route-policy` — `addinSurface.length === 4`, rot bei **jeder** neuen Route unter `/addin`, gleich wie sie heißt; (2) `proof:addin` 18f; (3) `tsc` gegen `AddinUnit`, das keinen `AttachmentPort` führt. **Zweite Berichtigung am 2026-09-10 (T-247-15, A-A-70), Stück (2).** Die Fassung vom Vormittag stand hier: „`proof:addin` 18f — 404 auf dem gefallenen Pfad und kein Pfad unter `/addin` mit `attachment` im Namen (spannt am **Namen**, nicht an der Anforderung — siehe A-A-71)". Sie beschreibt 18f in seinem Stand von gestern. Nach dem Umbau aus A-A-71 mißt 18f: 404 auf dem gefallenen Pfad mit Gegenprobe, die Fläche unter `/addin` gegen die **ausgeschriebene Menge der vier**, und für **jede** gefundene Route unter `/addin` die Wirkung — `todo_attachment` bleibt bei null. Die Namensprüfung steht daneben und trägt nicht mehr allein. **Abgenommen als T-247-0 (Kapitel 34.1).** Zwei gemessene Grenzen gehören dazu und stehen in 34.2 und 34.3: Ein **Kettenglied**, das unter `/addin` selbst antwortet, steht in keiner Routenliste und wird von 18f nicht gesehen; und die Rundfahrt erreicht `…/time-entries` heute nicht (422 an der Prüfschicht). Gegenmittel **A-A-73** und **A-A-74**. |
+| **A-A-21** | **Gilt in dieser Fassung nicht mehr. Berichtigt am 2026-09-11 (T-297-5, A-A-70).** Mit **E-108** entstehen über das Add-in Anhänge — ausschließlich beim **Anlegen** eines neuen Todos aus einer E-Mail (A-19.22 bis A-19.33, neugefaßte A-19.19). Diese Auflage sichert damit ab dem 2026-09-11 eine **Abwesenheit zu, die es nicht mehr gibt**, und das ist genau die Fehlerart aus R-25 und E-099 Punkt 3. **Vollständige Neufassung als A-A-21′ in 39.7**, aufgespannt an der Anforderung statt an der Route: eine Tür, sie hängt am Anlegen, und keine Route unter `/addin` nimmt eine Todo-Kennung aus der Anfrage entgegen und erzeugt einen Anhang. Der bisherige Wortlaut und seine zweimal berichtigte Nachweisspalte stehen unverändert darunter, weil an ihnen die Geschichte dieses Wächters ablesbar ist. — **Bisheriger Wortlaut:** **Über das Add-in entstehen keine Anhänge** (A-19.19) — strukturell. Anhänge entstehen über eigene Routen **außerhalb** von `/api/v1/addin`; sie stehen nicht in `SHARED_PATHS`. Die Eingabetypen der Add-in-Anwendungsfälle tragen kein Anhangsfeld, und zwar als **Typ**, nach dem Vorbild von `ExportCandidate` (R-06). | **Berichtigt am 2026-09-10 (T-247-3, A-A-70). Die alte Fassung stand hier: „`proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit; `tsc` bricht ab, wenn ein Anhangsfeld in einen Add-in-Eingabetyp gerät."** Der erste Halbsatz ist gemessen falsch: Abschnitt 4 fährt ausschließlich die Routen an, für die `requiredCredentialForPath` `session` verlangt — also alles **außerhalb** von `/addin`. Eine Anhangsroute **innerhalb** von `/addin` sieht er nicht als Verstoß, sondern zählt sie zur erlaubten Fläche. Genau so ist PR #16 durchgekommen. Was heute trägt, sind drei Stücke, und keines davon allein: (1) die **Zahl** in `proof:route-policy` — `addinSurface.length === 4`, rot bei **jeder** neuen Route unter `/addin`, gleich wie sie heißt; (2) `proof:addin` 18f; (3) `tsc` gegen `AddinUnit`, das keinen `AttachmentPort` führt. **Zweite Berichtigung am 2026-09-10 (T-247-15, A-A-70), Stück (2).** Die Fassung vom Vormittag stand hier: „`proof:addin` 18f — 404 auf dem gefallenen Pfad und kein Pfad unter `/addin` mit `attachment` im Namen (spannt am **Namen**, nicht an der Anforderung — siehe A-A-71)". Sie beschreibt 18f in seinem Stand von gestern. Nach dem Umbau aus A-A-71 mißt 18f: 404 auf dem gefallenen Pfad mit Gegenprobe, die Fläche unter `/addin` gegen die **ausgeschriebene Menge der vier**, und für **jede** gefundene Route unter `/addin` die Wirkung — `todo_attachment` bleibt bei null. Die Namensprüfung steht daneben und trägt nicht mehr allein. **Abgenommen als T-247-0 (Kapitel 34.1).** Zwei gemessene Grenzen gehören dazu und stehen in 34.2 und 34.3: Ein **Kettenglied**, das unter `/addin` selbst antwortet, steht in keiner Routenliste und wird von 18f nicht gesehen; und die Rundfahrt erreicht `…/time-entries` heute nicht (422 an der Prüfschicht). Gegenmittel **A-A-73** und **A-A-74**. |
 | **A-A-22** | Ein Prüffall schickt einen vollständig ausgefüllten Anhang an `POST /api/v1/addin/todos` und mißt danach **am Bestand**: null Anhänge. Gemessen wird die **Wirkung**, nicht der Statuscode — ein 422 wäre die Bibliothek, die antwortet, und nicht die Grenze, die hält. | Der Prüffall liest nach dem Aufruf die Anhangstabelle. |
 | **A-A-23** | `GET /api/v1/addin/context` bekommt **kein** Anhangs- und **kein** Fristfeld. | `proof:addin` und die OpenAPI-Beschreibung. |
 | **A-A-24** | Kein Anhang öffnet sich als Nebenwirkung (A-19.18): nicht beim Laden einer Liste, nicht beim Öffnen eines Todos, nicht als Vorabholen, nicht als Vorschau, die im Hintergrund etwas startet. Das Vorschaubild ist die **einzige** Anzeige, die ohne Handlung des Benutzers entsteht, und es startet nichts. | Ein E2E-Fall lädt eine Liste mit je einem Anhang jeder Art und zählt die Aufrufe der Öffnen-Befehle: **null**. |
@@ -5183,6 +5193,16 @@ Prüflauf.
 > **Innere** von `/addin` sagt sie nichts, und dort ist der Schaden entstanden (PR #16). Die
 > Ergänzung steht in Kapitel 33; A-A-21 selbst bleibt **erfüllt** — die Route ist mit E-100
 > gefallen, und `AddinUnit` führt wieder keinen `AttachmentPort`.
+>
+> **Zweiter Nachtrag vom 2026-09-11 (T-297-5, A-A-70) zu A-A-21.** Diese Abnahme ist für ihren
+> Stand richtig gemessen und beschreibt ab heute einen Bestand, den es nicht mehr geben wird.
+> **E-108** hebt E-100 zur Hälfte auf: Beim **Anlegen** aus einer E-Mail entstehen Anhänge, am
+> **gefundenen** Todo weiterhin nicht. Die Auflage selbst ist damit nicht „erfüllt" oder „nicht
+> erfüllt", sondern **überholt**; ihre Neufassung steht als **A-A-21′** in 39.7, und die drei
+> Stücke, die sie heute tragen — `addinSurface.length === 4`, `proof:addin` 18f, `tsc` gegen
+> `AddinUnit` — wandern im selben Auftrag mit wie die Route. Ein Wächter, der die Abwesenheit
+> einer Fläche mißt, die gerade gebaut wird, ist kein harmloser Rest: Er ist der Satz, der das
+> Gegenteil des Bestands behauptet (R-25).
 
 **A-A-24 — erfüllt.** Kein Anhang öffnet sich als Nebenwirkung: `openAttachmentLink` und
 `openAttachmentFile` haben im ganzen Oberflächenbaum genau **zwei** Aufrufstellen, beide in
@@ -10781,7 +10801,7 @@ diesmal hat er nicht eine Messung veralten lassen, sondern einen behobenen Fehle
 
 | ID | Wortlaut | Messung |
 |---|---|---|
-| **A-V-11′** | **Fünf Zusagen, und die dritte ist die neue.** (1) **Eine** ausgehende Anfrage je Prozeßstart, um den Startabstand versetzt. (2) Nach einem **Erfolg** folgt die nächste frühestens nach dem Takt (24 h). (3) Nach einem **Fehlschlag** folgt die nächste frühestens nach dem **Boden** (60 min) — und **es folgt eine**. Kein zweiter Versuch im selben Prüflauf, kein sofortiger, keine Rückstufungskette, die den Boden unterschreitet, und **kein Zeitgeber, der stehenbleibt**. (4) Der Boden gilt für die **gesamte Prozeßlaufzeit** und über beide Zweige; er wird an der Uhr gemessen, die gerade gilt, **und zusätzlich** an der Frist des Zeitgebers (A-V-24). (5) Nach `stop()` wird nichts mehr geplant. **Die Obergrenze, die daraus folgt, gehört in die Auflage, damit niemand sie überschreitet, ohne es zu bemerken:** höchstens **24** ausgehende Anfragen je Kalendertag im Dauerfehlschlag (25 im gleitenden 24-Stunden-Fenster mit beiden Rändern) gegen **1** im Erfolgsfall. Der Zustand bleibt bei jedem Fehlschlag `unknown`, die Oberfläche zeigt nichts, der Grund steht als Schlüssel aus dem geschlossenen Vorrat im Protokoll (A-V-20). **Ersetzt A-V-11 vom 2026-09-04 vollständig**, samt dessen Meßvorschrift „bleibt die Zahl bei eins" | **Gemessen wird gegen die Uhr, nicht gegen die Eins.** An einem Prüfer mit klein gesetztem Boden und ununterbrochenem Fehlschlag zählt der Prüffall über ein Vielfaches des Bodens und prüft **beides**: die Zahl der Anfragen entspricht der Zahl der Bodenlängen im Meßfenster (plus die Startanfrage), und **jeder einzelne** gemessene Abstand liegt bei oder über dem Boden. Gefahren am 2026-09-11 gegen den Produktivcode: 5 Anfragen in 1,25 s bei einem Boden von 300 ms, Abstände 305/310/314/313 ms. **Zwei Gegenproben, und die zweite ist die, die gefehlt hat:** (a) ein Prüfer, der nach einem Fehlschlag **nicht** neu plant — der Zustand vor T-273 —, muß den Lauf **rot** machen; (b) ein Prüfer, der **sofort** neu versucht (Boden auf null), ebenso. Dazu, in demselben Fall mitgemessen, weil es sonst niemand tut: `state` bleibt `unknown`, je Fehlschlag entsteht **eine** Protokollzeile mit einem Schlüssel aus dem Vorrat, und nach `stop()` kommt keine Anfrage mehr dazu. Der Ort der Messung ist `apps/local-api/test/version/**` (unit-tester, T-274); dieses Papier schreibt den Prüffall nicht, es schreibt vor, was er zu treffen hat |
+| **A-V-11′** | **Fünf Zusagen, und die dritte ist die neue.** (1) **Eine** ausgehende Anfrage je Prozeßstart, um den Startabstand versetzt. (2) Nach einem **Erfolg** folgt die nächste frühestens nach dem Takt (24 h). (3) Nach einem **Fehlschlag** folgt die nächste frühestens nach dem **Boden** (60 min) — und **es folgt eine**. Kein zweiter Versuch im selben Prüflauf, kein sofortiger, keine Rückstufungskette, die den Boden unterschreitet, und **kein Zeitgeber, der stehenbleibt**. (4) Der Boden gilt für die **gesamte Prozeßlaufzeit** — **und nicht darüber hinaus** (ergänzt am 2026-09-11, T-287, E-106: „gesamte Prozeßlaufzeit" ist die **Obergrenze** dieser Zusage und nicht ihre Untergrenze; ein Programmstart fragt immer einmal, gleich wann zuletzt gefragt wurde) — und über beide Zweige; er wird an der Uhr gemessen, die gerade gilt, **und zusätzlich** an der Frist des Zeitgebers (A-V-24). (5) Nach `stop()` wird nichts mehr geplant. **Die Obergrenze, die daraus folgt, gehört in die Auflage, damit niemand sie überschreitet, ohne es zu bemerken:** höchstens **24** ausgehende Anfragen je Kalendertag **und Prozeßlauf** im Dauerfehlschlag (25 im gleitenden 24-Stunden-Fenster mit beiden Rändern) gegen **1** im Erfolgsfall; **jeder weitere Programmstart bringt eine Anfrage mit**, die Grenze eines Kalendertages ist damit `24 + Zahl der Starts` — für den gewöhnlichen Benutzer 25, im Grenzfall der Startschleife rund 344 je Stunde und damit etwa **8 250**. **Berichtigt am 2026-09-11 (T-287, E-106). Hier stand ohne jede Einschränkung: „höchstens 24 ausgehende Anfragen je Kalendertag im Dauerfehlschlag (25 im gleitenden 24-Stunden-Fenster mit beiden Rändern) gegen 1 im Erfolgsfall."** Zwischen T-279 und T-285 war die Zahl auch über Prozeßgrenzen hinweg wahr, weil der Bezugspunkt des Bodens im Bestand lag; E-106 hat das zurückgenommen. Wer den alten Satz ohne den Zusatz liest, hält den Neustart für abgedeckt — und genau der ist es nicht. Der Zustand bleibt bei jedem Fehlschlag `unknown`, die Oberfläche zeigt nichts, der Grund steht als Schlüssel aus dem geschlossenen Vorrat im Protokoll (A-V-20). **Ersetzt A-V-11 vom 2026-09-04 vollständig**, samt dessen Meßvorschrift „bleibt die Zahl bei eins" | **Gemessen wird gegen die Uhr, nicht gegen die Eins.** An einem Prüfer mit klein gesetztem Boden und ununterbrochenem Fehlschlag zählt der Prüffall über ein Vielfaches des Bodens und prüft **beides**: die Zahl der Anfragen entspricht der Zahl der Bodenlängen im Meßfenster (plus die Startanfrage), und **jeder einzelne** gemessene Abstand liegt bei oder über dem Boden. Gefahren am 2026-09-11 gegen den Produktivcode: 5 Anfragen in 1,25 s bei einem Boden von 300 ms, Abstände 305/310/314/313 ms. **Zwei Gegenproben, und die zweite ist die, die gefehlt hat:** (a) ein Prüfer, der nach einem Fehlschlag **nicht** neu plant — der Zustand vor T-273 —, muß den Lauf **rot** machen; (b) ein Prüfer, der **sofort** neu versucht (Boden auf null), ebenso. Dazu, in demselben Fall mitgemessen, weil es sonst niemand tut: `state` bleibt `unknown`, je Fehlschlag entsteht **eine** Protokollzeile mit einem Schlüssel aus dem Vorrat, und nach `stop()` kommt keine Anfrage mehr dazu. Der Ort der Messung ist `apps/local-api/test/version/**` (unit-tester, T-274); dieses Papier schreibt den Prüffall nicht, es schreibt vor, was er zu treffen hat |
 
 ### 36.5 Mißbrauch — fünf Wege, jeder einzeln, und einer davon ist nicht der, nach dem gefragt wurde
 
@@ -10951,3 +10971,1380 @@ gekostet hat. Und ein Satz, der mir aus dieser Prüfung bleibt: **Der Fehler sta
 sondern in der Zahl, mit der wir ihn abgenommen haben.** Eine Meßvorschrift, die eine Zahl nennt,
 wo eine Eigenschaft gemeint ist, ist keine Messung — sie ist ein Andenken an den Tag, an dem
 jemand nachgesehen hat.
+
+---
+
+## 37. Prüfung T-287 (2026-09-11) — der Bestandswert, den dieses Papier nie gesehen hat, und der Tausch 24 gegen 8 250
+
+**Gegenstand.** E-106 nimmt T-279 teilweise zurück: Der Mindestabstand der Versionsprüfung gilt
+**innerhalb eines Programmlaufs**, ein Programmstart fragt immer einmal, und
+`app_setting.last_version_check_at` bleibt als **Tatsache** für die Datensicherung stehen, ohne
+eine Anfrage aufzuhalten. T-285 hat das Lesen entfernt und einen Wächter dagegen eingezogen.
+Nachzuziehen waren hier zwei Zahlen (37.1).
+
+**Der Befund, den dieser Auftrag eigentlich einbringt, ist ein anderer, und er ist älter als der
+Auftrag.** Dieses Papier nannte `last_version_check_at` und T-279 **an keiner Stelle**. Die Spalte
+ist zwischen zwei meiner Prüfungen entstanden: T-275 hat sie als Hinweis vorgeschlagen (T-275-7),
+T-279 hat sie gebaut, T-280 sie geprüft, T-285 ihr das Lesen genommen — und bei keinem dieser
+Schritte ist jemand durch diesen Abschnitt gekommen. Eine Spalte, die den Zeitpunkt jeder
+ausgehenden Anfrage führt, liegt im selben Bestand wie die Kundendaten und wandert nach A-20.4 in
+**jede** Datensicherung. Daß sie am Ende klein ausfällt, ist das Ergebnis dieser Bewertung und
+nicht ihre Voraussetzung.
+
+### 37.0 Werkzeuglage und was tatsächlich gemessen wurde
+
+Node 22.23.2 und pnpm 11.3.0 stehen auf dieser Maschine. **Semgrep über den Guardian-Dienst und
+42Crunch stehen weiterhin nicht zur Verfügung** — unveränderte Lage seit T-136-6, zum sechsten Mal
+festgehalten. Das Tor aus Abschnitt 8 ist damit an zwei von vier Stellen nicht einlösbar; für
+diesen Auftrag ist die Lücke klein (geänderter Produktivcode: keiner), für die Lieferkette bleibt
+sie offen.
+
+Sechs eigene Messungen, alle gegen den **Produktivcode** und keine davon in einer Prüfdatei:
+
+**Messung 1 — `pnpm proof:release-safety`.** 35 bestanden, 0 fehlgeschlagen. Darin die beiden
+Gegenproben der neuen Prüfung `rueckweg`: ein Leser irgendwo im Baum macht rot, ein `read` am
+`VersionCheckStorePort` macht rot. Die Zahl 35 aus T-285 ist damit bestätigt und nicht übernommen.
+
+**Messung 2 — das Verhalten des Prüfers, vier Läufe.** `node --experimental-strip-types` gegen
+`apps/local-api/src/features/version/version.ts`, mit eigener Attrappe für Quelle und Speicher, im
+Ablagebereich dieser Sitzung; kein Prüffall im Bestand angefaßt.
+
+| Lauf | Aufbau | Ergebnis |
+|---|---|---|
+| A | Dauerfehlschlag, Boden 300 ms, Fenster 1 500 ms | **5** Anfragen, Abstände **314 / 314 / 309 / 316 ms** — jeder einzelne über dem Boden (A-V-11′ Punkte 3 und 4) |
+| B | Boden **60 min**, frisch gebauter Prüfer, Fenster 400 ms | **1** Anfrage |
+| C | wie B, unmittelbar danach, derselbe Speicher | **1** Anfrage |
+| D | **ein** Lauf, Boden 60 min, Fenster 1 500 ms | **1** Anfrage |
+
+B und C sind die Messung zu E-106 Punkt 1: **Ein Programmstart fragt immer einmal**, obwohl der
+Boden auf 60 Minuten steht und der Speicher den Zeitpunkt der Vorgängeranfrage getragen hat. D ist
+die Gegenrichtung: **innerhalb** eines Laufs hält derselbe Boden. A zeigt, daß der Boden dabei
+nicht weich geworden ist.
+
+**Messung 3 — der Wächter gegen den nächsten Angriff, und er hält ihn nicht.** In
+`apps/local-api/src/features/version/` eine Datei eingesetzt, die den Zeitpunkt **als rohes SQL**
+zurückliest (`SELECT last_version_check_at FROM app_setting WHERE id = 1`), ohne den Namen
+`lastCheckAt` und ohne den Port des Prüfers zu berühren. `pnpm proof:release-safety`: **35
+bestanden, 0 fehlgeschlagen — grün.** Datei wieder entfernt, `git status` über
+`apps/local-api/src` danach unverändert. Befund T-287-2.
+
+**Messung 4 — wo der Name überhaupt steht.** Über alle versionierten Dateien unter `apps/*/src`
+und `packages/*/src`, mit **derselben** `stripComments` aus `fetch-scan.mjs`, die der Wächter
+benutzt: im **Code** vier Dateien (`packages/storage/src/sqlite/repo-version-check.ts`,
+`…/repo-data-archive.ts`, `…/migrations.embedded.ts`,
+`apps/local-api/src/features/data-transfer/data-transfer.ts`), nur im **Kommentar** vier weitere
+(`composition.ts`, `version.ts`, `main.ts` und der Kopf von `repo-data-archive.ts`). Dazu zwei
+Gegenproben am Datenweg: die Spaltenliste von `GET`/`PATCH /settings`
+(`packages/storage/src/sqlite/repo-settings.ts:147`) führt die Spalte **nicht**, und die Liste der
+wählbaren Exportquellen (`packages/export/src/sources.ts`) ist mit **zwölf** Einträgen
+abschließend und kennt keinen Pfad in die Einstellungen — **eine Exportvorlage kann diesen Wert
+nicht erreichen.**
+
+**Messung 5 — die Beistelldatei an der Migration** (zu 37.5): eine
+`0022_last_version_check_at.hinweis.md` neben die Migration gelegt, `pnpm proof:migrations`
+gefahren — grün, „migrations.embedded.ts ist aktuell (44 Datei(en))". Datei wieder entfernt.
+Läufer und Erzeuger filtern beide auf dasselbe Muster `NNNN_name.(up|down).sql`; eine Beistelldatei
+ist für beide unsichtbar und läßt die Prüfsumme von 0022 unberührt.
+
+**Messung 6, nachgetragen:** `pnpm typecheck` über alle acht Pakete und die drei Prüfbäume —
+**grün**. Er war zu Beginn dieser Prüfung rot, allein in `apps/local-api/test/version/checker.test.ts`;
+T-286 ist während dieser Prüfung gelandet.
+
+**Nicht gemessen:** `pnpm check` im ganzen — `contrast`, `verify:bundle`, `test:coverage`,
+`test:rust`, `build` und `audit` sind hier nicht gefahren. Meine Freigabe unten steht auf dem
+gemessenen Ausschnitt und nicht auf dem Tor.
+
+### 37.1 Was E-106 an diesem Papier ändert — zwei Zahlen, sonst nichts
+
+domain-dev hat richtig gemessen: A-V-11′ trifft in den Punkten 1 („**eine** ausgehende Anfrage je
+Prozeßstart") und 4 („der Boden gilt für die gesamte Prozeßlaufzeit") den Zustand nach E-106
+wörtlich. Nachgezogen sind:
+
+| Ort | Was dort stand | Stand |
+|---|---|---|
+| 36.4, A-V-11′, Satz zur Obergrenze | „höchstens **24** ausgehende Anfragen je Kalendertag im Dauerfehlschlag" — ohne Einschränkung auf den Lauf | **berichtigt**: je Kalendertag **und Prozeßlauf**, Tagesgrenze `24 + Zahl der Starts`, Grenzfall rund 8 250 |
+| 36.4, A-V-11′, Punkt (4) | „Der Boden gilt für die **gesamte Prozeßlaufzeit**" | **ergänzt** um „**und nicht darüber hinaus**" — die Zusage ist eine Obergrenze, keine Untergrenze |
+| 19.1, Urteil zu A-V-11 | dieselbe Zahl, als erfüllt abgenommen | **berichtigt**, mit der Nachmessung aus 37.0 |
+
+Beide Zahlenzeilen tragen Marke, Datum und den alten Wortlaut, wie A-A-70 es verlangt. **Es ist das
+zweite Mal innerhalb einer Woche, daß eine Zahl in A-V-11 nachgezogen werden muß**, und der Grund
+ist derselbe wie in 36.9: Eine Auflage, die eine Zahl nennt, wo sie eine Eigenschaft meint, ist bei
+der nächsten Entscheidung falsch. Die Eigenschaft heißt hier: *zwischen zwei ausgehenden Anfragen
+desselben Laufs liegt mindestens der Boden.* Die 24 ist ihre Folge, nicht ihr Inhalt — sie steht
+jetzt als Folge da.
+
+`docs/spec.md` A-18.11 trägt den Zusatz bereits („Der Mindestabstand gilt **innerhalb eines
+Laufs**: Ein Programmstart fragt immer einmal, gleich wann zuletzt gefragt wurde"). Gegengelesen,
+deckungsgleich mit E-106 und mit dem gemessenen Verhalten.
+
+### 37.2 `app_setting.last_version_check_at` — erstmals bewertet
+
+**Was der Wert ist.** `TEXT`, ISO-8601 in UTC, **sekundengenau**, mit `Z`, ein CHECK auf genau
+diese Form, `NULL` heißt „noch nie gefragt". Geschrieben **vor** jeder ausgehenden Anfrage, also
+auch von einer, die scheitert. Gelesen im Betrieb von niemandem.
+
+**Was er über den Benutzer sagt — und das ist mehr, als „ein Zeitstempel" klingt.** Weil seit
+E-106 **jeder** Programmstart genau einmal fragt, und zwar rund zehn Sekunden nach dem Start, ist
+der Wert in der Praxis: **der Zeitpunkt, zu dem dieser Benutzer zuletzt SuperTakt gestartet hat**,
+auf die Sekunde. Nur bei einem Lauf, der über 24 Stunden hinausgeht, wird daraus ein späterer
+Taktzeitpunkt. Das ist keine Spitzfindigkeit: Es ist eine Aussage über **Anwesenheit**, und sie ist
+in einem Werkzeug, dessen Ausgabe in eine Abrechnung geht, nicht wertfrei.
+
+**Und er sagt eine Sache, die sonst nichts im Bestand sagt: Benutzung ohne Buchung.** Wer
+SuperTakt öffnet, nachsieht und nichts bucht, hinterläßt in `time_entry`, in `export_audit` und im
+Protokoll nichts. Diese Spalte datiert genau diesen Vorgang. „Am Sonntag um 23:47 lief das
+Werkzeug, gebucht wurde nichts" ist ein Satz, den vorher niemand aus diesem Bestand bilden konnte.
+
+**Die zweite Eigenschaft, und sie ist die unangenehmere: Es gibt keinen Weg, ihn loszuwerden.**
+Keine Route schreibt ihn, keine liest ihn, keine Oberfläche zeigt ihn, es gibt kein
+„zurücksetzen". Wer alle Todos und alle Buchungen löscht, löscht ihn nicht mit. Er ist damit der
+einzige Wert dieses Bestands, der **ohne Zutun des Benutzers entsteht und durch kein Zutun des
+Benutzers verschwindet**. Beim `skipped_version` ist das anders (der Benutzer setzt ihn), bei
+`updated_at` anders (es beschreibt eine Handlung des Benutzers) und bei den Buchungen anders.
+
+**Wem gegenüber sagt er etwas?**
+
+| Gegenüber | Bewertung |
+|---|---|
+| **VG-3, ein Prozeß im Benutzerkonto** | **nichts Neues.** Er liest `takt.db` ohnehin, und dort stehen Kundennamen, Vermerke und Anhänge. Wer diese Spalte liest, hat die Datei; wer die Datei hat, hat Schlimmeres. |
+| **Der Empfänger einer Datensicherung oder einer Kopie von `takt.db`** — Support, Rechnerwechsel, ein synchronisierter Ordner, ein Firmengerät, das jemand einsieht | **neu, und klein.** Neu, weil der Wert vorher nirgends stand. Klein, weil die richtige Vergleichsgröße nicht „keine Daten" ist, sondern **das inhaltsreichste Erzeugnis dieses Produkts**: Ein Archiv nach A-20 trägt interne Vermerke, Fristen, Anhänge samt Bildkopien und jede Buchungsnotiz. Wer es weitergibt, gibt eine Anwesenheitssekunde mit — neben allem anderen. |
+| **Das Netz** | **nie.** Gemessen in 37.0, Messung 4: nicht in `GET`/`PATCH /settings`, über keine Exportvorlage erreichbar; für die Route der Versionsprüfung gilt A-V-14′, gemessen von `proof:release-safety`. Die Datensicherung verläßt den Dienst nur auf ausdrückliche Anforderung des Benutzers über das Sitzungsgeheimnis — das Add-in-Token erreicht `/data-transfer` nicht (Routenfläche des Add-ins in `app.ts`; `proof:route-policy`). |
+
+**Der Vergleich, den dieses Papier sich selbst schuldet.** In `docs/datenmodell.md` steht als
+Begründung dafür, daß `todo_attachment.source_path` **nicht** gespeichert wird: „Ein Quellpfad ist
+fremder Text, er verriete etwas über den Kunden, und niemand liest ihn je wieder." Zwei der drei
+Teilsätze treffen auf diese Spalte ebenfalls zu — sie verrät etwas, und niemand liest sie im
+Betrieb. Der Unterschied, der sie rettet, ist der erste: Sie ist **kein fremder Text**, sondern ein
+maschinengeschriebener Zeitstempel fester Form hinter einem CHECK, und sie hat eine Aufgabe, die
+der Quellpfad nicht hatte: den Round-Trip nach A-20.4. Ein Archiv, das sie auf `NULL` setzte, wäre
+nicht derselbe fachliche Bestand.
+
+**Urteil: gering, und sie bleibt.** Sie ist mit **A-V-26** (37.8) einzuhegen, damit sie gering
+bleibt. Der teuerste Fehler an dieser Stelle wäre nicht die Spalte, sondern eine Oberfläche, die
+sie zeigt: „zuletzt geprüft: 14:03" ist genau die Fehlerfläche, die A-18.11 ausschließt, und die
+Schaltfläche daneben ist die Route, die E-069 ausgeschlossen hat, mit einer Hand darauf.
+
+### 37.3 Das Archiv ist fremder Text — und diese Spalte ist heute nur deshalb harmlos, weil niemand sie liest
+
+Beim Einspielen einer Datensicherung wird `app_setting` **ersetzt**, einschließlich dieser Spalte
+(`repo-data-archive.ts`, `replaceAll`; `data-transfer.ts` ergänzt einen fehlenden Wert mit `null`).
+Ein Archiv ist eine Datei von außen. Der CHECK aus 0022 prüft die **Form**, nicht die Herkunft;
+Vergangenheit und Zukunft sind ausdrücklich zugelassen.
+
+**Heute ist das folgenlos**, und zwar aus genau einem Grund: Es gibt keinen Leser. **Morgen, wenn
+jemand T-279 nachbaut, ist ein präpariertes Archiv ein Ausschalter für die Versionsprüfung.** Ein
+Wert „jetzt" unterdrückt die nächste Prüfung um eine Stunde; wiederholtes Einspielen verlängert das
+beliebig. Ein Wert in der **Zukunft** unterdrückt sie nicht dauerhaft — `run()` erkennt
+`elapsed < 0`, nimmt den Bezugspunkt neu und wartet den vollen Boden; das ist eine gute
+Entscheidung aus T-279, die T-285 überlebt hat. Der Weg dorthin ist kein ferner: Er heißt „spiel
+diese Sicherung ein, dann läuft es wieder". Und am Ende steht ein Erzeugnis, dessen Prüfung
+**still** ausfällt (A-18.11) — niemand merkt es, und bei einem unsignierten Erzeugnis ist die
+Aktualisierungsmeldung der einzige Weg, auf dem eine Sicherheitsbehebung den Benutzer erreicht
+(36.9).
+
+**Daraus folgt die Einordnung des neuen Wächters: `rueckweg` ist keine Entwurfshygiene, sondern
+eine Sicherheitsmaßnahme**, und er steht ab hier als solche in diesem Papier (**A-V-27**). Er ist
+gut gegen die Gestalt, die T-279 hatte — den Namen `lastCheckAt` und ein `read` am Port —, und
+beide Hälften sind mit Gegenproben belegt.
+
+**Er hat eine gemessene Lücke** (37.0, Messung 3): Er mißt den **Bezeichner**, nicht den Zugriff.
+Ein Rückweg, der weder `lastCheckAt` heißt noch über den Port läuft — rohes SQL im Zusammenbau, ein
+zweiter Port unter anderem Namen, die Spalte an `AppSettingsPort` gehängt —, läßt ihn grün. Das
+Gegenmittel ist klein und genau: **auch der Spaltenname `last_version_check_at` ist ein bewachter
+Name**, erlaubt in genau den vier Dateien aus Messung 4 und sonst nirgends. Kommentare zählen
+nicht, weil der Wächter sie ohnehin entfernt — die vier Dateien, die den Namen nur im Kommentar
+tragen, würden nicht rot. Gegenprobe: die Datei aus Messung 3.
+
+### 37.4 Der Tausch: 24 gegen 8 250 — und warum R-19 dadurch **nicht** anders zu bewerten ist
+
+Ich wiederhole meinen Satz aus T-275 nicht, ich begründe ihn neu, und er hält — aus einem Grund,
+den ich damals nicht genannt habe.
+
+**1. Die entscheidende Frage ist nicht „wie oft", sondern „ist die Versionsprüfung ein
+Verstärker".** Eine Frequenz ist sicherheitsrelevant, wenn ein Angreifer über sie etwas erreicht,
+das er ohne sie nicht oder nur teurer erreicht. Wer den Sidecar in einer Schleife starten kann,
+kann `api.github.com` **unmittelbar** aufrufen: ohne Startabstand von zehn Sekunden, ohne
+Kaltstart, ohne den vollständigen Zyklus von 10 474 ms, mit beliebiger Nebenläufigkeit. Die
+344 je Stunde über SuperTakt sind der **langsamste** Weg zu derselben Adresse. Ein Angreifer, der
+diesen Weg wählt, hat das schlechtere Werkzeug genommen. **Deshalb** bewegt die 8 250 R-19 nicht —
+nicht deshalb, weil Frequenz grundsätzlich egal wäre.
+
+**2. Wo die Frequenz doch wirkt, trifft sie nicht den Angreifer und nicht sein Opfer, sondern die
+Nachbarn.** GitHub gesteht nicht angemeldeten Aufrufern 60 Anfragen je Stunde und **Quelladresse**
+zu; hinter einer Adresse teilen sich alle Installationen dieses Kontingent (T-136-5). 344 je Stunde
+sind das 5,7fache des ganzen Kontingents. Unter der geschärften Lesart von A-18.11 klärt sich ein
+erschöpftes Kontingent **nicht mehr von selbst** (36.5 Punkt 4). Ein einziger Prozeß, der auf einem
+Rechner den Sidecar in einer Schleife startet, kann damit die Aktualisierungsmeldung für **das
+ganze Haus** still abschalten. Das ist ein Schaden an der Verfügbarkeit eines Sicherheitskanals,
+kein Datenabfluß — und es ist ein Satz, den die 24 nicht trug. Er gehört zu R-19, Vorschlag in
+37.7.
+
+**3. Was der Tausch auf der anderen Seite kauft, ist ebenfalls Sicherheit und nicht Bequemlichkeit.**
+Der Neustart ist die einzige Selbsthilfe, die E-069 dem Benutzer läßt; einen Knopf „jetzt prüfen"
+gibt es mit gutem Grund nicht. T-279 hatte einen Mechanismus gebaut, dessen Versagensart „still
+aus" ist und dessen einziges Gegenmittel er selbst abschaltete. Genau diese Bauart hat dieses
+Papier in 36.9 als den eigentlichen Schaden benannt. **Der Tausch ist richtig, und er ist aus
+einem Sicherheitsgrund richtig.**
+
+**4. Ein Verlust bleibt, und er gehört ehrlich benannt: Jeder Programmstart ist von außen
+sichtbar.** R-19 Punkt 3 sagt, jede Anfrage sei ein Lebenszeichen. Seit E-106 ist das Lebenszeichen
+**eines je Start**. Wer die Verbindung sieht — GitHub, ein TLS-abschließender Firmenproxy, wer auf
+dem Weg liegt —, bekommt je Rechner und Tag eine ungefähre **Einschaltzeit** dazu, neben der
+Fassungsbezeichnung. Eine Anfrage am Tag sagt „dieser Rechner fährt Fassung X". Fünfundzwanzig
+sagen „…und er wurde um 08:12, 13:40 und 17:03 eingeschaltet". A-18.12 verbietet, etwas über
+Benutzer und Nutzung zu übertragen; der **Inhalt** hält das (A-V-14′, gemessen), aber der
+**Zeitpunkt** ist selbst eine Angabe über die Nutzung, und sie ist feiner geworden. Das ist kein
+Grund, E-106 zurückzudrehen — der Startabstand von zehn Sekunden ist im Quelltext ausdrücklich mit
+R-19 Punkt 3 begründet, und eine Versionsprüfung ohne Anfrage gibt es nicht —, aber es ist der
+Preis, und er gehört in R-19 Punkt 3 statt in einen Bericht.
+
+**Bewertung: R-19 bleibt „hoch", die Bewertung ändert sich nicht, zwei Sätze kommen dazu.** Und
+mein Satz aus T-275 — „die Bewertung hängt an der Existenz des Ausgangs, nicht an der Frequenz" —
+bleibt gültig, aber er steht ab hier nicht mehr allein: Er ist wahr, **solange die ausgehende
+Anfrage nichts trägt, das mit der Frequenz wächst.** Eine Sitzungskennung, ein Zähler, ein
+Fehlercode in der Abfrage — und aus 8 250 Anfragen würde ein Nutzungsprotokoll bei einem Dritten.
+Was hinausgeht, mißt A-V-14′; das ist die Bedingung, unter der mein Satz gilt.
+
+### 37.5 Migration 0022 behauptet weiter den alten Zweck — genügt `docs/datenmodell.md`?
+
+**Der Zwang ist echt.** Der Läufer vergleicht eine Prüfsumme über den Dateiinhalt
+(`checksum_mismatch`, `packages/storage/src/migration.ts`); eine gelaufene Migration im Wortlaut zu
+ändern gälte jedem bestehenden Bestand als nachträglich verändert. Die Datei ist unantastbar, und
+das ist richtig so.
+
+**Was in 0022 heute falsch steht**, genau gelesen, sind zwei Dinge von ungleichem Gewicht: Der
+Abschnitt „Wozu" nennt die Spalte den **Bezugspunkt des Bodens** — das ist Geschichte, erkennbar
+datiert. Der Abschnitt „Form" verweist auf `run()` in `version.ts` als den Ort, an dem der Wert
+**gelesen** werde — das ist ein **falscher Zeiger**: Der Code steht dort, und er liest diese Spalte
+nicht mehr. Falsche Zeiger sind in diesem Bestand schon einmal als eigener Befund geführt worden
+(A-A-76 Punkt 3).
+
+**Mein Urteil: `docs/datenmodell.md` genügt als gültige Auskunft, und zwar aus drei Gründen.**
+Erstens steht sie am richtigen Ort — wer `app_setting` verstehen will, öffnet diese Datei, nicht
+das Migrationsverzeichnis. Zweitens benennt sie sich ausdrücklich selbst als die gültige Stelle und
+die Migration als Zeitzeugen; das ist mehr, als die meisten solcher Fälle bieten. Drittens, und das
+ist der tragende Grund: **Zwischen dem veralteten Text und dem Schaden steht seit T-285 ein
+Wächter.** Der Schaden wäre, daß ein Leser die Migration für gültig hält und den Rückweg nachbaut —
+und genau das macht `rueckweg` rot. Ein Satz, der in die Irre führt, ist schlimm; ein Satz, der in
+eine Irre führt, an deren Ende ein roter Lauf steht, ist eine Unbequemlichkeit. **Das setzt
+allerdings voraus, daß der Wächter den Rückweg auch dann sieht, wenn er anders geschrieben ist —
+siehe T-287-2. Solange er das nicht tut, trägt mein dritter Grund nur zur Hälfte.**
+
+**Eine Auflage braucht es dafür nicht — eine Regel schon** (**A-A-77**, 37.8): Ein Migrationstext
+darf sagen, **warum er geschrieben wurde**, nie, **was gerade gilt**. Er ist ein Zeitzeuge, und
+Zeitzeugen werden nicht berichtigt.
+
+**Dazu eine Empfehlung, die nichts kostet und den Leser dort abholt, wo er liest** (T-287-4): eine
+**Beistelldatei** `packages/storage/migrations/0022_last_version_check_at.hinweis.md` mit drei
+Sätzen und dem Verweis auf `docs/datenmodell.md`. Gemessen (37.0, Messung 5): Läufer und Erzeuger
+filtern beide auf dasselbe Dateimuster, `pnpm proof:migrations` bleibt grün, die Prüfsumme von 0022
+bleibt unberührt, weil kein Byte der Migration angefaßt wird. Wer die Migration öffnet — und das
+ist der Leser, um den es geht —, sieht die Datei daneben liegen.
+
+### 37.6 R-23 und R-24 — zum fünften Mal nicht bewertet
+
+Ich melde es wieder an, und ich mache diesmal die Bestellung so genau, daß der Auftrag klein wird.
+
+**Eine Teilaussage steht inzwischen da**, und sie entlastet: 36.5 hat gemessen, daß der
+Wurzelspeicher aus A-23 **nicht** in die TLS-Verbindung der Versionsprüfung hineinreicht, weil Node
+seinen eigenen Zertifikatsvorrat mitbringt. Das ist eine Kante von R-23, nicht R-23.
+
+**Was eine Bewertung von R-23 (Wurzelspeicher) zu beantworten hätte:** Wer bestimmt den Pfad
+(die Hülle, laut Regelwerk — von mir nicht gemessen); was genau steht im Auftrag (nur der
+bestätigte SHA-256-Abdruck); **was sieht der Benutzer, bevor er bestätigt**, und ist ihm klar, daß
+er dem Betriebssystemkonto etwas für **jede** TLS-Verbindung beibringt; deckt das Zertifikat genau
+einen DNS-Namen und ist das CA-Kennzeichen ausgeschlossen; **was geschieht bei der
+Deinstallation** — bleibt der Eintrag im Wurzelspeicher stehen? Den letzten Punkt erwarte ich als
+den Befund: Es ist die einzige Stelle dieses Erzeugnisses, an der eine Benutzerhandlung das
+Vertrauen des **ganzen Kontos** dauerhaft verändert.
+
+**Was eine Bewertung von R-24 (Fremdimport) zu beantworten hätte:** Aus Todoist-CSV und
+Super-Productivity-JSON entstehen Anhänge, darunter **Dateipfade**, und am Ende dieses Weges steht
+der Öffnen-Befehl aus Abschnitt 19. Prüfbar: Wird der Pfad **beim Öffnen** geprüft und nicht nur
+beim Einlesen; was tut die Prüfung mit UNC, mit relativen Pfaden, mit Gerätenamen und mit einem
+Pfad, der auf eine `.lnk` zeigt; bricht das einstellbare Call-Muster **vor** dem ersten
+Schreibzugriff ab; was geschieht bei 250 000 Zeilen.
+
+**Schwere der Unterlassung:** Beide sind in `risks.md` als **hoch** geführt, und die Gefahr ist
+nicht, daß sie kaputt wären — die Gefahr ist, daß niemand hingesehen hat. **Empfehlung: R-23 vor
+der nächsten Veröffentlichung vorziehen**, aus dem Grund im vorletzten Absatz.
+
+### 37.7 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-287-1** | **Berichtigung** | **Zwei Zahlenzeilen dieses Papiers trugen die 24 weiter, als sie seit E-106 trägt** (36.4 A-V-11′, 19.1). Beide sind an Ort und Stelle berichtigt, mit Marke, Datum und altem Wortlaut; Punkt (4) von A-V-11′ trägt jetzt „**und nicht darüber hinaus**". Zugleich der zweite Nachzug an A-V-11 innerhalb einer Woche — die Auflage nennt eine Zahl, wo sie eine Eigenschaft meint, und steht jetzt so da | security-checker (erledigt) |
+| **T-287-2** | **sollte** | **`proof:release-safety`, Prüfung `rueckweg`, mißt den Bezeichner und nicht den Zugriff.** Gemessen (37.0, Messung 3): ein roher `SELECT last_version_check_at` in `apps/local-api/src/features/version/` läßt den Lauf **grün** (35/0). **Auswirkung:** Der Wächter hält die Gestalt von T-279, nicht die Regel aus E-106 — dieselbe Bauart wie der Wächter unter A-A-21, der die Tür maß, die zu ist. Über den Umweg eines präparierten Archivs (37.3) wäre ein wiederhergestellter Leser ein stiller Ausschalter der Versionsprüfung. **Gegenmittel:** den **Spaltennamen** `last_version_check_at` als zweiten bewachten Namen aufnehmen, erlaubt in genau vier Dateien (`repo-version-check.ts`, `repo-data-archive.ts`, `migrations.embedded.ts`, `data-transfer.ts`), mit der Datei aus Messung 3 als dritter Gegenprobe. Bezug **A-V-27** | domain-dev |
+| **T-287-3** | Hinweis | **`docs/datenmodell.md` sagt „Er erscheint in keiner Route … in keiner Antwort" — das ist seit T-279 nicht mehr genau.** Die Datensicherung ist eine Route (`GET /api/v1/data-transfer/archive`) und antwortet mit dem Wert; zwei Absätze höher steht das auch so. **Auswirkung:** keine zur Laufzeit, aber es ist die Bauart „ein Satz behauptet eine Abwesenheit, die der Nachbar bricht", und die hat dieses Vorhaben schon zweimal einen Abschnitt gekostet. **Gegenmittel:** „in keiner Route **außer der Datensicherung** (A-20.4), und dort als Zeile des Archivs, nicht als Einstellung" | domain-dev |
+| **T-287-4** | Hinweis | **Migration 0022 behauptet weiter den alten Zweck und enthält einen falschen Zeiger** („`run()` … erkennt an `elapsed < 0`" als Leser dieser Spalte). Unantastbar wegen der Prüfsumme; `docs/datenmodell.md` genügt als gültige Auskunft (Begründung in 37.5). **Gegenmittel, gemessen und kostenlos:** eine Beistelldatei `0022_last_version_check_at.hinweis.md` neben der Migration; Läufer und Erzeuger sehen sie nicht, `pnpm proof:migrations` bleibt grün (37.0, Messung 5) | domain-dev |
+| **T-287-5** | Hinweis | **R-19 gehören zwei Sätze angefügt** (`risks.md` gehört dem Orchestrator). Punkt 3: „Seit E-106 ist das Lebenszeichen **eines je Programmstart**; wer die Verbindung sieht, bekommt je Rechner und Tag eine ungefähre Einschaltzeit dazu. Der Inhalt hält A-18.12, der Zeitpunkt ist selbst eine Angabe über die Nutzung." Neuer Punkt 5: „Ein Prozeß, der den Sidecar in einer Schleife startet, erreicht rund 344 Anfragen je Stunde und kann damit das GitHub-Kontingent **einer Quelladresse** erschöpfen — die Aktualisierungsmeldung fällt dann für alle Installationen hinter dieser Adresse still aus (36.5 Punkt 4). Schaden an der Verfügbarkeit eines Sicherheitskanals, kein Datenabfluß." | Orchestrator |
+| **T-287-6** | **Hinweis, fünfte Meldung** | **R-23 (Wurzelspeicher) und R-24 (Fremdimport) sind weiterhin nie bewertet**, beide in `risks.md` als **hoch** geführt. Die Bestellung steht jetzt in 37.6 so genau, daß der Auftrag klein ist. **Empfehlung: R-23 vor der nächsten Veröffentlichung vorziehen** — es ist die einzige Stelle dieses Erzeugnisses, an der eine Benutzerhandlung das Vertrauen des ganzen Betriebssystemkontos dauerhaft verändert, und die Frage nach der Deinstallation ist bis heute ungestellt | Auftraggeber, Orchestrator |
+| **T-287-7** | Hinweis | **Semgrep über den Guardian-Dienst und 42Crunch stehen zum sechsten Mal nicht zur Verfügung.** Unveränderte Lage seit T-136-6. Für diesen Auftrag ohne Gewicht (kein geänderter Produktivcode), für die Lieferkette offen | Auftraggeber, Orchestrator |
+
+### 37.8 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-V-26** | **`app_setting.last_version_check_at` ist im Betrieb ein Wert, der geschrieben und nicht gelesen wird, und er bleibt unsichtbar.** Er erscheint in keiner Route außer der Datensicherung, in keiner Oberfläche, in keiner Protokollzeile als **Wert**, und er ist über keine Exportvorlage erreichbar. Ein „zuletzt geprüft: hh:mm" ist die von A-18.11 ausgeschlossene Fehlerfläche, eine Schaltfläche daneben die von E-069 ausgeschlossene Route. Er bleibt sekundengenau und fester Form hinter dem CHECK aus 0022; eine feinere Auflösung (Millisekunden) ist ausgeschlossen, weil sie die Anwesenheitsaussage schärft, ohne irgendetwas zu verbessern | Drei Griffe, alle billig und alle heute grün: (a) die Spaltenliste von `GET`/`PATCH /settings` (`repo-settings.ts`) führt den Namen nicht; (b) die abschließende Liste der Exportquellen (`packages/export/src/sources.ts`, zwölf Einträge) kennt keinen Pfad in die Einstellungen — `proof:template-fields` mißt die Abgeschlossenheit; (c) `proof:openapi` und `proof:route-policy` kennen den Namen in keinem Antwortschema außer dem Archiv |
+| **A-V-27** | **Der Rückweg vom Bestand in die Versionsprüfung bleibt zu, und der Wächter dagegen ist eine Sicherheitsmaßnahme, keine Entwurfshygiene.** Begründung: Das Archiv ist fremder Text und ersetzt `app_setting` vollständig; ein wiederhergestellter Leser machte aus einem präparierten Archiv einen **stillen Ausschalter** der Versionsprüfung, und still heißt hier: A-18.11 meldet nichts. Bewacht wird deshalb **nicht nur der Bezeichner, sondern der Spaltenname** — `last_version_check_at` darf im Code nur in den vier Dateien stehen, die ihn tragen müssen (Adapter, Archivadapter, eingebettete Migrationen, Archivübersetzung); Kommentare zählen nicht. **Ergänzt am 2026-09-11 (T-289, gebaut in T-288):** dazu **jeder unmittelbare Datenbankgriff im Ordner des Prüfers** (`apps/local-api/src/features/version/`), gemessen an fünf groben Marken (`prepare(`, `SELECT `, `FROM app_setting`, `better-sqlite3`, `UnitOfWork`). Diese vierte Hälfte hängt an **keinem Namen des Werts** und ist damit eine **andere Art von Zusage** als die drei davor: Die ersten drei sagen „dieser Name kommt hier nicht vor" und sind an ihrem Gegenstand vollständig; die vierte sagt „dieser Ordner faßt keine Datenbank an" und ist an ihrem Gegenstand **unvollständig**, weil sie nur die unmittelbare Anfaßstelle sieht und nicht den Weg über einen zweiten Port. Wer sie liest, darf aus ihr **nicht** „der Prüfer erreicht den Bestand über seinen Port oder gar nicht" ableiten — das ist in T-289 an drei Meßdateien widerlegt (38.1) | `proof:release-safety`, Prüfung `rueckweg`, erweitert um Spaltenname und Ordner. **Vier Gegenproben** (Stand T-288, alle gemessen rot in 38.1): (a) ein Leser über `lastCheckAt` irgendwo im Baum, (b) ein `read` am `VersionCheckStorePort`, (c) ein roher `SELECT last_version_check_at` außerhalb der vier erlaubten Dateien, (d) ein `SELECT *` im Ordner des Prüfers, das den Spaltennamen umgeht. **Berichtigt am 2026-09-11 (T-289). Hier stand: „Drei Gegenproben: (a) … (b) … (c) neu ein roher `SELECT last_version_check_at` außerhalb der vier erlaubten Dateien — heute grün, und das ist der Befund T-287-2."** Es sind vier geworden, und (c) ist seit T-288 rot; die Zahl war die des Auftrags, nicht die des Gebauten. **Was die vier nicht messen, steht in 38.2 und ist nicht der Wächter, sondern sein Ersatz:** die Zusage „die Entscheidung, ob eine Anfrage hinausgeht, hängt an keinem Wert aus dem Bestand" trägt am Verhalten `apps/local-api/test/version/checker.test.ts` (TP-VER-11, zwei nacheinander gebaute Prüfer, je eine Anfrage) — und auch der trägt sie nur, soweit der gelesene Wert durch eine Naht kommt, die dieser Prüffall verdrahtet (38.4) |
+| **A-A-77** | **Ein Migrationstext ist ein Zeitzeuge.** Er darf sagen, **warum** er geschrieben wurde, und er darf nicht sagen, **was gerade gilt** — denn er ist durch die Prüfsumme des Läufers unantastbar und altert mit jeder Entscheidung, die nach ihm fällt. Wo eine Migration eine Eigenschaft des heutigen Verhaltens beschreibt, steht die gültige Auskunft in `docs/datenmodell.md`, und die Migration ist von dort aus auffindbar. Ein Zeiger aus einer Migration in eine Codestelle („dort wird der Wert gelesen") ist besonders heikel: Er überlebt die Codestelle | Beim Gegenlesen jeder neuen Migration; rückwirkend nicht erzwungen. Für 0022 eingelöst durch `docs/datenmodell.md` (Abschnitt zur Spalte und 8.4k) und, sobald T-287-4 gebaut ist, durch die Beistelldatei |
+
+### 37.9 Urteil dieser Prüfung
+
+**E-106 ist von der Sicherheitsseite freigegeben.** Der Tausch ist richtig, und er ist es aus einem
+Sicherheitsgrund: Ein Mechanismus, dessen Versagensart „still aus" ist und der zugleich die einzige
+Selbsthilfe des Benutzers abschaltet, ist schlechter als eine höhere Zahl von Anfragen bei einem
+Dritten. Die 8 250 im Grenzfall bewegen R-19 nicht — nicht weil Frequenz egal wäre, sondern weil
+die Versionsprüfung **kein Verstärker** ist: Wer sie in einer Schleife fahren kann, hat den
+schnelleren Weg zur selben Adresse ohnehin. Gemessen ist beides, was E-106 zusagt: Ein
+Programmstart fragt einmal (Läufe B und C), und innerhalb des Laufs hält der Boden (Läufe A und D).
+
+**`app_setting.last_version_check_at` bleibt, und er ist ab heute bewertet.** Er ist eine
+Anwesenheitsangabe auf die Sekunde, er sagt als einziger Wert dieses Bestands etwas über
+**Benutzung ohne Buchung**, und er ist der einzige, den der Benutzer nicht loswird. Gegenüber einem
+lokalen Prozeß ist das nichts Neues, gegenüber dem Empfänger einer Datensicherung ist es neu und
+klein — klein, weil dieselbe Datei interne Vermerke und Kundennotizen trägt. Er verläßt den Dienst
+auf keinem anderen Weg; das ist gemessen und nicht angenommen. **Gering, eingehegt durch A-V-26.**
+
+**Nacharbeit, die diese Freigabe nicht aufhält:** T-287-2 (der Wächter mißt den Namen, nicht den
+Zugriff — und er ist die einzige Sicherung zwischen einem präparierten Archiv und einer still
+abgeschalteten Versionsprüfung) und T-287-3. Beides ist klein und gehört in dieselbe Welle wie
+T-286.
+
+**Und der Satz, der mir aus dieser Prüfung bleibt.** Diese Spalte ist in vier Aufträgen entstanden,
+gebaut, geprüft, halb zurückgenommen und dokumentiert worden, ohne daß sie **einmal** durch das
+Bedrohungsmodell gegangen wäre — nicht aus Nachlässigkeit, sondern weil jeder einzelne Schritt für
+sich klein aussah. Ein Bestandswert entsteht nicht an dem Tag, an dem jemand ihn bewertet; er
+entsteht an dem Tag, an dem jemand eine Spalte anlegt. **Wer eine Spalte in denselben Bestand legt,
+in dem die Kundendaten liegen, legt sie in jede Datensicherung.** Das ist der Prüfgriff, den ich
+mir für das nächste Mal notiere, und er kostet eine Frage: *Was sagt diese Spalte über den
+Benutzer, und wem gegenüber?*
+
+---
+
+## 38. Prüfung T-289 (2026-09-11) — der Wächter, zum dritten Mal angegriffen: vier Gestalten halten, drei Wege daran vorbei sind gemessen, und die Zusage darüber ist zu weit geschrieben
+
+Anlaß: T-288 (domain-dev) hat die Auflage **A-V-27** eingelöst und dabei **mehr** gebaut als
+bestellt — statt der drei Gegenproben des Auftrags stehen vier, und die vierte hängt an keinem
+Namen des Werts. Dieser Abschnitt nimmt die Antwort ab, mißt den Wächter ein drittes Mal gegen
+seine eigene Zusage und zieht 37.8 nach.
+
+Die Prüffrage ist dieselbe wie in T-287 und sie ist absichtlich schmal: **Gibt es eine Datei, die
+einen Wert aus dem Bestand in die Entscheidung „geht jetzt eine Anfrage hinaus" zurückholt und den
+Lauf grün läßt?** Alles andere an diesem Wächter ist Entwurfshygiene; diese eine Frage ist die
+Sicherheitsfrage, weil ihre Antwort über einen **stillen Ausschalter** der Versionsprüfung
+entscheidet (37.3, A-18.11).
+
+### 38.0 Werkzeuglage und was tatsächlich gemessen wurde
+
+Windows 11, Node 22.23.2. **Semgrep über den Guardian-Dienst und 42Crunch stehen zum siebten Mal
+nicht zur Verfügung** (unveränderte Lage seit T-136-6; ohne Gewicht für diesen Auftrag, weil kein
+Produktivcode geändert wurde, offen für die Lieferkette).
+
+Gemessen wurde mit **elf Meßdateien**, jede für die Dauer **eines** Befehls im Baum und im selben
+Befehl wieder entfernt; `git status` danach unverändert, kein `messung-*` im Arbeitsbaum. Die
+Dateien lagen in `apps/local-api/src/features/version/`, `apps/local-api/src/features/settings/`,
+`apps/local-api/src/` und `apps/web/src/lib/` — fremde Hoheit für die Dauer eines Laufs, wie in
+T-287; anders ist ein Wächter nicht prüfbar.
+
+Ausgangsstand ohne Meßdatei: `pnpm proof:release-safety` **37 bestanden / 0** (35 vor T-288; die
+Rechnung aus dem Bericht von T-288 stimmt: +2 für zwei zusätzliche Gegenproben in Abschnitt 1,
+Abschnitt 2 zählt je Prüfung).
+
+### 38.1 Der Angriff: elf Versuche, sieben rot, **vier grün** — und drei davon sind wirklich ein Rückweg
+
+Die Tabelle ist die Versuchsliste. „Grün" heißt: der Lauf endete mit **37 / 0** und `rueckweg` sagte
+nichts. V1 ist dabei der bloße Leser; V1b, V2b und V11 hängen die **Entscheidung** „geht jetzt eine
+Anfrage hinaus" an den gelesenen Wert und sind damit der gebaute Rückweg.
+
+| Nr | Was gebaut wurde | Wo | Ergebnis |
+|---|---|---|---|
+| V1 | `DataArchivePort.readAll()`, Schlüssel als `['last','version','check','at'].join('_')` | im Ordner des Prüfers | **grün 37/0** |
+| **V1b** | dasselbe, aber der Wert **entscheidet**: `darfAnfragen(archive, jetzt, bodenMs)` vergleicht `jetzt − Date.parse(wert) >= bodenMs` | im Ordner des Prüfers | **grün 37/0** |
+| V2 | Helfer in `features/settings` mit `SELECT *`, Aufrufer im Ordner des Prüfers | beide | rot — aber **nicht** wegen des Helfers: der Aufrufer trug `prepare(` in seiner Typsignatur |
+| **V2b** | derselbe Helfer, Aufrufer ohne jede Marke (`bezugspunkt(kontext)`) | beide | **grün 37/0** |
+| **V11** | `SELECT *` in einer **flachen** Datei `apps/local-api/src/messung-v11.ts`, Positionszugriff über `Object.values(zeile)`, Saatwert in den Prüfer gereicht | flach + Ordner | **grün 37/0** |
+| V3 | die Meßdatei aus T-287 wörtlich (`SELECT last_version_check_at …`) | im Ordner | rot, **vier** Befunde aus zwei Hälften |
+| V4 | `SELECT * FROM app_setting` | im Ordner | rot, drei Befunde |
+| V5 | nur die Zeichenkette `'last_version_check_at'` | `apps/web/src/lib/` | rot |
+| V6 | `await s.lastCheckAt()` | im Ordner | rot |
+| V7 | eine Funktion **namens** `prepare(`, ohne jede Datenbank | im Ordner | rot — falsches Rot, siehe 38.3 |
+| V8 | `UnitOfWork` als Signaturtyp für das Schreiben von `skipped_version` | im Ordner | rot — falsches Rot, siehe 38.3 |
+
+**V1b ist der Befund.** Er liegt **innerhalb** des Ordners, den Hälfte 4 bewacht, er benutzt einen
+Port, den es im Erzeugnis wirklich gibt, er nennt die Spalte nicht, er heißt nicht `lastCheckAt`,
+er faßt keine Datenbank unmittelbar an — und er holt genau den Wert, um den es geht. Der
+`DataArchivePort` führt `app_setting` vollständig mit allen fünfzehn Spalten
+(`repo-data-archive.ts`, Zeile 60), einschließlich `last_version_check_at`; das ist keine Schwäche
+dieses Ports, sondern seine Aufgabe (A-20.4).
+
+**Und es ist nicht nur dieser Lauf, der schweigt.** Mit V1b im Baum gemessen: `proof:layers`
+36 / 0, `proof:callers` 74 / 0, `proof:release-safety` 37 / 0. Kein zweiter Wächter dieses
+Bestands sieht die Datei. Der Ordner des Prüfers importiert heute aus **sechs** Quellen und
+**nirgends** aus `@takt/storage` — ein solcher Import wäre also eine sichtbare, neue Tatsache und
+ist heute meßbar abwesend. Das ist das Gegenmittel und steht als **A-V-28** in 38.7.
+
+### 38.2 Was der Befund heißt — und was er ausdrücklich nicht heißt
+
+**Er ist keine Aufhebung von T-288.** Die vier Hälften halten, was sie messen: V3 bis V6 sind rot,
+und V3 ist die Zeile, mit der ich in T-287 durchgekommen bin. Der Wächter ist heute deutlich
+schärfer als vor der Welle, und die Richtung „vom Namen zur Wirkung" ist richtig gewählt.
+
+**Er ist eine zu weit geschriebene Zusage.** Die Begründung von Hälfte 4 sagt an drei Stellen
+wörtlich „**Der Prüfer erreicht den Bestand über seinen Port oder gar nicht**" — im Quelltext des
+Laufs, in der Befundzeile, die er ausgibt, und in `docs/architektur.md`. Gemessen ist etwas
+Engeres: *Der Prüfer faßt keine Datenbank **unmittelbar** an.* Der Unterschied ist genau ein
+zweiter Port, und ein zweiter Port ist eine Zeile `import`.
+
+Das ist dieselbe Bauart, die dieses Papier schon zweimal notiert hat: **A-A-21** (der Wächter maß
+die Tür, die zu ist) und **E-099 Punkt 3** (wer eine Abwesenheit zusichert, spannt seine Menge an
+der Anforderung auf, nicht an dem Weg, den er kennt). Hier ist die Anforderung „die Entscheidung
+hängt an keinem Wert aus dem Bestand", und die Menge ist an fünf Zeichenketten aufgespannt, die
+einen *unmittelbaren* Zugriff kennzeichnen.
+
+**Die Schwere ist „sollte", nicht „muss", und die Begründung dafür gehört dazu.** V1b ist nicht die
+Gestalt, die jemand aus Bequemlichkeit baut — wer Anfragen sparen will, greift nach
+`store.lastCheckAt()` (V6, rot) oder schreibt ein `SELECT` (V3/V4, rot). V1b braucht den Willen,
+an einem Wächter vorbeizugehen, und einen zusammengesetzten Schlüssel, der in einem Review
+auffällt. V2b und V11 sind harmloser in der Absicht und auffälliger im Bild: Sie brauchen **zwei**
+Dateien und eine neue Kante zwischen zwei Merkmalen.
+
+### 38.3 Hälfte 4 als Grenze — zementiert sie eine Ordnerhoheit?
+
+Die Frage von domain-dev, und sie ist die richtige Frage. Meine Antwort: **Die Grenze ist richtig
+gewählt, der Preis ist richtig gewählt, und die beiden falschen Rot, die ich gemessen habe, sind
+billig.**
+
+**Falsches Rot ist real und ich habe es zweimal ausgelöst.** V7: eine Funktion, die schlicht
+`prepare(` heißt und Text beschneidet — rot. V8: ein Anwendungsfall, der `skipped_version` über
+eine `UnitOfWork` schreibt — rot. V8 ist die absehbare Arbeit und keine Erfindung: A-18.10 hält die
+übersprungene Fassung im Bestand, sie gehört fachlich zur Versionsprüfung, und heute liegt ihre
+Behandlung nur deshalb woanders, weil sie über `GET`/`PATCH /settings` läuft. Wer sie eines Tages
+zum Merkmal zieht, sieht ein Rot, das mit dem Rückweg nichts zu tun hat.
+
+**Trotzdem ist der Preis richtig.** Drei Gründe:
+
+1. **Die Asymmetrie stimmt.** Ein falsches Rot kostet eine Zeile in der erlaubten Menge und einen
+   Satz Begründung daneben. Ein falsches Grün kostet einen stillen Ausschalter der einzigen
+   Meldung, auf der bei einem unsignierten Erzeugnis eine Sicherheitsbehebung den Benutzer
+   überhaupt erreicht. Das ist kein knappes Abwägen.
+2. **Das falsche Rot ist laut, nicht leise.** Es erscheint beim Bauen, mit Pfad, Marke und
+   Begründung, und es zwingt zu einer Entscheidung an der Stelle, an der sie hingehört. Genau das
+   ist der Sinn (E-103: ein Wächter, der sich seine Menge selbst nachzieht, bewacht nichts).
+3. **Der Ordner ist klein und fachlich scharf.** Vier Dateien, sieben Importzeilen, keine
+   Fremdkante. Solange das so ist, ist „dieser Ordner redet mit keiner Datenbank" eine Aussage über
+   ein Merkmal und nicht eine Ordnungsregel über den Baum.
+
+**Zwei Einschränkungen, die ich trotzdem festhalte.** Erstens ist der Preis nicht dort fällig, wo er
+entsteht: Die Bestätigung eines falschen Rot ist eine Änderung in
+`apps/local-api/scripts/proof-release-safety.mjs`, also in einer Datei, die dem domain-dev gehört,
+während der Anlaß im Merkmal liegt. Wer beides gleichzeitig braucht, braucht zwei Aufträge oder
+eine Welle. Zweitens altert die Marke `UnitOfWork` am schlechtesten von den fünfen — sie ist ein
+**Typname** und trifft auch reine Signaturen, die nichts ausführen. Wenn dieser Wächter je ein
+falsches Rot produziert, das niemand mehr ernst nimmt, wird es diese Marke sein. Beides ist ein
+Hinweis, keine Auflage.
+
+### 38.4 Was statt des Wächters trägt — und wo auch das aufhört
+
+Der Quelltext des Laufs sagt richtig, wo die Zusage wirklich hängt: **nicht an einem fünften Namen,
+sondern an einem Prüffall am Verhalten.** Der steht seit T-286 in
+`apps/local-api/test/version/checker.test.ts` unter der Überschrift „E-106 — ein Programmstart
+prüft immer einmal": zwei **nacheinander gebaute** Prüfer auf demselben, echten, migrierten Bestand
+und demselben Adapter; der zweite muß binnen 500 ms fragen, obwohl der Wert im Bestand
+Sekundenbruchteile alt ist und der Boden auf 30 000 ms steht. Das ist die Zusage selbst, gemessen
+am Verhalten, nicht an einer Zeichenkette — und sie ist der Grund, weshalb die Freigabe hier nicht
+am Wächter hängt.
+
+**Und hier gehört die Grenze dieses Prüffalls dazu, weil sie mir bei genau diesem Befund
+aufgefallen ist.** Er verdrahtet, was heute existiert: `store`. Ein Rückweg, der über eine **neue,
+optionale** Naht käme — `createVersionChecker({ …, archive })` —, bliebe in diesem Prüffall
+wirkungslos, weil der Prüffall die neue Option nicht setzt; der Leser liefe ins Leere, der Fall
+bliebe grün. Wäre die Naht **verpflichtend**, würde `typecheck` über der Prüfdatei rot und die
+Sache fiele auf. Der Verhaltensprüffall ist also der bessere Träger als der Wächter, aber er ist
+**kein vollständiger**: Er deckt jede Gestalt ab, die durch eine verdrahtete Naht kommt, und keine,
+die eine neue danebenstellt. Das ist kein Vorwurf an T-286 — ein Prüffall kann nur prüfen, was es
+gibt — und es ist der Grund, weshalb A-V-28 an der **Importmenge** ansetzt und nicht an noch einem
+Prüffall.
+
+**Unverändert außerhalb:** ein anderer Prozeß an derselben Datei (VG-3) und ein Benutzer, der die
+Datenbank selbst bearbeitet. Beides war nie Sache dieses Laufs und ist es nicht geworden.
+
+### 38.5 Die zwei Nachzüge aus T-287 — abgenommen
+
+**T-287-3 (erfüllt).** `docs/datenmodell.md` sagt jetzt „Er erscheint **in keiner Route außer der
+Datensicherung** (A-20.4), und dort als **Zeile des Archivs, nicht als Einstellung**", mit dem Satz
+daneben, der die eigentliche Unterscheidung trägt: nicht „Route ja oder nein", sondern „nur im
+vollständigen Abzug, den der Benutzer auslöst, nie als Auskunft über den Zustand der
+Versionsprüfung". Das ist genauer, als mein eigenes Gegenmittel formuliert war.
+
+**T-287-4 (erfüllt).** `packages/storage/migrations/0022_last_version_check_at.hinweis.md` liegt
+neben der Migration, nennt den überholten Zweck **und** den falschen Zeiger auf `run()`, und sie
+sagt ausdrücklich, was an 0022 **gültig bleibt** (CHECK, Form, `NULL`, Zukunft erlaubt) und daß der
+Rückwärtsteil richtig ist. Der Zusatz ist die Verbesserung gegenüber meiner Bestellung: Ohne ihn
+läse sich die Beistelldatei wie eine Warnung vor der ganzen Migration. Nachgemessen: `pnpm
+proof:migrations` unverändert grün bei 44 Dateien, die Prüfsumme von 0022 unberührt — Läufer und
+Erzeuger filtern auf `NNNN_name.(up|down).sql`.
+
+**T-287-2 (erfüllt, mit dem Rest in T-289-1).** Die Zeile, mit der ich in T-287 durchgekommen bin,
+steht jetzt wörtlich als Gegenprobe (c) im Lauf und ist rot (V3).
+
+### 38.6 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-289-1** | **sollte** | **Die Zusage von Hälfte 4 ist weiter geschrieben als gemessen.** „Der Prüfer erreicht den Bestand über seinen Port oder gar nicht" steht in `proof-release-safety.mjs` (Begründung und ausgegebene Befundzeile) und in `docs/architektur.md`; gemessen ist „faßt keine Datenbank **unmittelbar** an". **Gemessen (38.1):** V1b — `DataArchivePort.readAll()` mit zusammengesetztem Schlüssel, im Ordner des Prüfers, der Wert entscheidet über die ausgehende Anfrage — läßt `proof:release-safety` bei **37/0**, `proof:layers` bei 36/0 und `proof:callers` bei 74/0. **Auswirkung:** Über ein präpariertes Archiv (37.3) wäre ein so gebauter Leser ein stiller Ausschalter der Versionsprüfung; Schwere „sollte" statt „muss", weil die Gestalt Absicht verlangt und in einem Review auffällt. **Gegenmittel:** A-V-28 — die **Importmenge** des Ordners messen statt nur die Anfaßstellen; heute kostenlos, weil der Ordner aus sechs Quellen importiert und aus `@takt/storage` gar nicht. Zusätzlich den Satz in beiden Dateien auf das Gemessene zurücknehmen | domain-dev |
+| T-289-2 | Hinweis | **Zwei falsche Rot sind gemessen** (V7: eine Funktion namens `prepare(`; V8: `UnitOfWork` als Signaturtyp für `skipped_version`). Bewertung in 38.3: **der Preis ist richtig gewählt**, kein Handlungsbedarf. Festgehalten, damit der nächste, der eines auslöst, nicht meint, er habe einen Wächterfehler gefunden — er hat die gewollte Bestätigungspflicht. Einziger Nachsatz: Die Bestätigung fällt in `proof-release-safety.mjs` an, der Anlaß liegt im Merkmal; das sind zwei Hoheiten und braucht eine Welle | Orchestrator (Ablauf), sonst niemand |
+| T-289-3 | Hinweis | **Der Verhaltensprüffall aus T-286 trägt die Zusage nur über verdrahtete Nähte.** Eine neue **optionale** Option an `createVersionChecker` bliebe in `checker.test.ts` ungesetzt und damit grün (38.4). Kein Auftrag daraus — ein Prüffall kann nicht prüfen, was es nicht gibt —, aber der Satz gehört in dieses Papier, weil A-V-27 den Prüffall als Träger benennt | security-checker (erledigt: steht hier) |
+| T-289-4 | Hinweis, **sechste Meldung** | **R-23 (Wurzelspeicher) und R-24 (Fremdimport) sind weiterhin nie bewertet**, beide in `risks.md` als **hoch** geführt. Bestellung unverändert in 37.6. Empfehlung unverändert: **R-23 vorziehen**, und die billigste Frage zuerst — bleibt das Zertifikat nach einer Deinstallation im Wurzelspeicher stehen? | Auftraggeber, Orchestrator |
+| T-289-5 | Hinweis | **Semgrep über den Guardian-Dienst und 42Crunch zum siebten Mal nicht verfügbar.** Für diesen Auftrag ohne Gewicht (kein Produktivcode geändert), für die Lieferkette offen | Auftraggeber, Orchestrator |
+
+### 38.7 Neue Auflage
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-V-28** | **Der Ordner der Versionsprüfung hat keine Leitung in den Bestand — auch keine geliehene.** `apps/local-api/src/features/version/**` importiert nichts aus `@takt/storage`, aus keinem anderen Merkmal und aus keiner flachen Datei des Dienstes, die einen Bestandszugriff trägt. Begründung, und sie ist der Kern von A-V-27 und nicht ihr Anhang: Die zu schützende Wirkung ist **„die Entscheidung, ob eine Anfrage hinausgeht, hängt an keinem Wert aus dem Bestand"**. Fünf Marken für einen unmittelbaren Zugriff messen diese Wirkung nicht; ein zweiter Port ist eine Zeile `import`, und danach hängt sie doch daran (T-289-1, V1b). Der einzige Weg des Prüfers in den Bestand bleibt `VersionCheckStorePort`, und der kann nur `write` (A-V-27, E-106). Die Auflage ist **heute kostenlos** und soll es bleiben; wer sie aufmacht, tut es sichtbar und mit einem Satz daneben | `proof:release-safety`, Prüfung `rueckweg`, um eine fünfte Hälfte erweitert: Für jede Datei unter dem Ordner wird die Menge der Importquellen gegen eine Erlaubnisliste gemessen, **in beiden Richtungen** wie bei den vier Spaltendateien (eine erlaubte Quelle, die im Ordner nicht mehr vorkommt, ist ein Befund, kein Schweigen). Stand am 2026-09-11, gemessen: **sieben** Importzeilen aus **sechs** Quellen — `@takt/domain` (zweimal), `hono`, `../../http/guards.ts`, `../../http/problem.ts`, `../../logger.ts` sowie ordnerintern `./source.ts` und `./version.ts`; `@takt/storage` kommt in keiner der vier Dateien vor. **Gegenprobe, und sie liegt bereits gemessen vor:** die Datei V1b aus 38.1 (`import type { DataArchivePort } from '@takt/storage'`, Schlüssel zusammengesetzt, der Wert entscheidet über die Anfrage) muß den Lauf **rot** machen; heute läßt sie ihn bei 37/0 |
+
+### 38.8 Urteil dieser Prüfung
+
+**T-288 ist freigegeben.** Die Auflage A-V-27 ist erfüllt und an einer Stelle über den Auftrag
+hinaus richtig gelöst: Die vierte Hälfte ist die einzige der vier, die nach der **Wirkung** fragt
+statt nach einem Namen, sie war nicht bestellt, und sie ist die richtige Ergänzung. Die beiden
+Nachzüge (der zu weite Satz in `datenmodell.md`, die Beistelldatei an 0022) sind erfüllt und beide
+besser ausgeführt als bestellt. Die Zahlen des Berichts sind nachgerechnet und stimmen: 35 → 37,
+44 Migrationsdateien unverändert, Prüfsumme von 0022 unberührt.
+
+**Der offene Rest ist eine Zusage, kein Loch.** Was gebaut ist, hält; was darüber geschrieben
+steht, hält weniger weit, als es klingt. Die drei gemessenen Umgehungen (V1b, V2b, V11) verlangen
+alle Absicht, zwei davon zwei Dateien — sie sind der Befund T-289-1 der Stufe „sollte" und keiner,
+der eine Freigabe aufhält. Das Gegenmittel ist klein, heute kostenlos und steht als **A-V-28**
+bereit.
+
+**Und der Satz, der mir aus dieser Prüfung bleibt.** Ein Wächter wird schärfer, indem er vom Namen
+zur Wirkung wandert — T-288 hat diesen Schritt getan, und er ist der richtige. Aber die **Zusage**
+wandert schneller als die **Messung**: „Der Prüfer erreicht den Bestand über seinen Port oder gar
+nicht" war geschrieben, bevor sie gemessen war, und in diesem Abstand von einer Zeile `import`
+wohnt der nächste Fehler. **Wer einen Wächter schärft, schreibt darüber nur, was der Wächter
+sieht — und die Lücke daneben in denselben Absatz.** Der Absatz „Was dieser Wächter NICHT fängt"
+ist genau der richtige Ort dafür; er ist vorhanden, und er ist an dieser einen Stelle zu kurz.
+
+---
+
+## 39. Vorabbewertung T-297 (2026-09-11) — drei Wege aus einer E-Mail, bewertet bevor sie gebaut werden
+
+**Anlaß:** E-108. Der Auftraggeber hat E-100 zur Hälfte aufgehoben: Aus einer E-Mail heraus
+entsteht ein Todo, das die **E-Mail selbst als Datei** und **alle ihre Dateianhänge** trägt
+(A-19.22 bis A-19.33, neuer Abschnitt 19.5, neugefaßte A-19.19). Vorbild ist die Outlook-Bridge
+zu Super Productivity.
+
+**Dieses Kapitel ist eine Vorabbewertung im Sinne von 18 und 20.** Es ist nichts gebaut, und das
+ist Absicht. Gemessen wird deshalb an drei Dingen: an der **Vorlage** (fremder Code, entpackt und
+wirklich gefahren), an dem, was **wir schon haben** und was davon trägt, und an der Lücke
+dazwischen.
+
+### 39.0 Werkzeugstand — was tatsächlich gelaufen ist
+
+| Werkzeug | Lief | Ergebnis |
+|---|---|---|
+| **Node 22.23.2 auf Windows 11**, eigene Messung gegen die zeichengleich nachgebaute `sanitizeFileName`/`uniqueTargetPath` der Vorlage | **ja** | **25 Angriffsnamen, 25 geschriebene Dateien, null Ablehnungen.** Tafel in 39.4.1. Das ist die erste Messung dieses Papiers, die auf Windows **mit echten Dateien** läuft — bis T-176 war der Läufer Linux, und R-21 hat genau daran zweimal gelitten (T-156-1, T-164-1). |
+| **PowerShell, Win32-Sicht auf dieselben Dateien** (`Test-Path -LiteralPath`) | **ja** | Vier von fünf Gerätenamen sind für Win32 **nicht vorhanden**, obwohl Node sie geschrieben hat. Tafel in 39.4.2. |
+| Quelltextmessung gegen `apps/desktop/src-tauri/src/attachment.rs`, `apps/web/src/features/todos/attachmentLabel.ts`, `apps/local-api/src/access/attachment-store.ts`, `.../paths.ts`, `apps/local-api/src/routes/addin/index.ts` | **ja** | Gelesen, nicht gefahren. Was daraus folgt, steht in 39.5 und 39.6. |
+| Suche nach einem Deinstallationspfad für das Wurzelzertifikat (`apps/desktop/**`) | **ja** | **Keiner.** Das ist die Antwort auf die billigste Frage zu R-23, die dieses Papier sechsmal gestellt hat. 39.3.3. |
+| Semgrep Guardian | **nein** | Nicht angemeldet, nicht erreichbar. |
+| 42Crunch-Audit / -Scan | **nein** | Keine OpenAPI-Beschreibung der neuen Fläche, weil die Fläche nicht existiert. Für diesen Auftrag ohne Gewicht; für die Lieferkette weiter offen. |
+| `pnpm check`, `proof:*`, Vitest, `cargo test` | **nein** | **Nicht gefahren, und ausdrücklich nicht versäumt:** Es ist kein Produktivcode geändert worden. Diese Aufgabe ändert `docs/bedrohungsmodell.md` und sonst nichts. |
+
+**Ein Wort zur Zählung.** Dieses Papier zählt die Abwesenheit von Semgrep Guardian und 42Crunch
+an zwei Stellen unterschiedlich — 21.0 zählt „zehntes" beziehungsweise „neuntes", 38.6 zählt
+„siebtes". Ich schreibe hier keine dritte Zahl, sondern die Sache: **beide Werkzeuge sind seit
+dem ersten Tag dieses Bestands nie verfügbar gewesen, und es existiert bis heute kein
+Auditwert.** Wer eine Zahl braucht, muß die Zählweise festlegen; eine falsche Zahl ist an dieser
+Stelle schlimmer als keine.
+
+### 39.1 Was hier bewertet wird, und was ausdrücklich nicht
+
+**Nicht bewertet wird die Entscheidung.** E-108 ist getroffen, der Preis des erweiterten
+Postfachrechts ist benannt und angenommen. Meine Aufgabe ist, was daraus **folgt**.
+
+**Drei Wege, und alle drei sind neu:**
+
+| Weg | Kurz | Grenze |
+|---|---|---|
+| **W-1′** | **Berichtigt am 2026-09-11 (A-A-70), noch am selben Tag.** Das Original-MIME kommt über `item.getAsFileAsync` (Mailbox 1.14, Mindestrecht **read item**) statt über EWS; das Manifest bleibt bei `ReadItem`. **Das erweiterte Postfachrecht entfällt, und mit ihm W-1 vollständig.** An seine Stelle tritt der **Nachbau**: Wo 1.14 fehlt, wird die `.eml` aus Office.js-Feldern zusammengesetzt. Das ist ein **anderer** Weg und ein neuer — bewertet in 39.3.0. Der alte W-1 steht in 39.3.1 bis 39.3.5 als Bewertung der **verworfenen** Weiche | **VG-12**; VG-13 entfällt |
+| **W-2** | Eine **fremde Binärdatei** wird ins Anwendungsdatenverzeichnis geschrieben, ihr Name kommt aus einer E-Mail | **VG-12**, neu |
+| **W-3** | Ein **Pfad aus fremder Hand** steht am Öffnen-Befehl der Hülle — R-21 an einer neuen Stelle | VG-11, neu belastet |
+
+**Was nicht dazugehört und trotzdem mitkommt:** der **Verweis** aus einem Cloud-Anhang (A-19.25).
+Er ist kein Weg für sich, aber er ist der erste Verweis in diesem Bestand, den **nicht der
+Benutzer eingetippt** hat — und Verweise öffnen sich nach A-A-7 **ohne** Rückfrage. 39.5.4.
+
+### 39.2 Vertrauensgrenzen und Akteure, fortgeschrieben
+
+**VG-12 ist neu** und steht ab dieser Fassung in Abschnitt 3: *E-Mail-Anhang → Anwendungs-
+datenverzeichnis*. Sie ist die Umkehrung von VG-11: Dort geht eine Zeichenkette aus dem Bestand an den
+Öffnen-Befehl, hier kommen **Bytes und ein Name** von außen in den Bestand. Die beiden Grenzen
+hängen zusammen, und genau in dieser Verkettung liegt der Schaden: Wer W-2 schreibt, schreibt den
+Wert, den W-3 öffnet.
+
+**VG-13 ist wieder entfallen, bevor sie eine Zeile Code gesehen hat. Berichtigt am 2026-09-11
+(A-A-70), noch am selben Tag.** Der ursprüngliche Wortlaut stand hier: *„VG-13 ist neu: Add-in →
+Postfach des Benutzers. … Mit `ReadWriteMailbox` liegt hinter dem Add-in das ganze Postfach, und
+die Grenze wird ausschließlich von der Selbstbeschränkung unseres eigenen Codes getragen."* Mit der
+Entscheidung für `getAsFileAsync` bleibt das Manifest bei `ReadItem`; hinter dem Add-in liegt
+weiterhin **die geöffnete Nachricht** und nicht das Postfach. **Die Grenze ist damit nicht
+abgesichert, sondern nicht entstanden** — der bessere der beiden Ausgänge, und der einzige, der
+keinen Wächter braucht. Die Zeile in Abschnitt 3 ist entsprechend berichtigt.
+
+**Was an ihre Stelle tritt, ist kleiner und trotzdem neu:** eine Datei, die wir selbst aus fremdem
+Text **zusammensetzen** und die aussieht wie das Original. Sie überschreitet keine neue
+Vertrauensgrenze — sie läuft vollständig innerhalb von VG-12 —, aber sie bringt eine Erzeugerrolle
+in den Bestand, die es bisher nicht gab. 39.3.0.
+
+**A-06 (Der Absender einer E-Mail) wächst.** Bisher: „Kontrolliert die Zeichenkette, die der
+reguläre Ausdruck verarbeitet". Ab jetzt zusätzlich: **Dateinamen und Dateiinhalte, die auf der
+Platte des Benutzers landen, und die Zahl und Größe dieser Dateien.** A-06 ist damit vom
+Störenfried zum Schreiber im Anwendungsdatenverzeichnis geworden — und er braucht dafür keine
+Lücke, sondern nur eine E-Mail an eine Adresse, die er kennt. Das ist der schwerste einzelne Satz
+dieses Kapitels.
+
+### 39.3 W-1′ — vom Postfachrecht zum Nachbau
+
+> **Berichtigt am 2026-09-11 (T-297, A-A-70), noch am Tag der Bewertung.** Die Frage aus 39.3.4 ist
+> gestellt und beantwortet worden: `Office.context.mailbox.item.getAsFileAsync` liefert die
+> geöffnete Nachricht als **EML/MIME in Base64**, Mindestrecht **read item**, Anforderungssatz
+> Mailbox **1.14**. Der Auftraggeber hat entschieden: **EWS fällt, `ReadWriteMailbox` fällt, das
+> Manifest bleibt bei `ReadItem`.** Wo 1.14 fehlt, wird die `.eml` aus den Office.js-Feldern
+> **nachgebaut** und am Todo als nachgebaut gekennzeichnet.
+>
+> **Damit ist W-1 gegenstandslos:** kein Postfachzugriff, kein Senden im Namen des Benutzers, keine
+> Posteingangsregel, keine Grenze VG-13. Die Abschnitte 39.3.1 bis 39.3.5 bleiben **unverändert
+> stehen** — sie sind die Bewertung der verworfenen Weiche, und sie sind der Grund, warum die Frage
+> überhaupt gestellt wurde. Was heute gilt, steht in 39.3.0 davor.
+>
+> **Der Satz, den ich mir dazu aufhebe:** Diese Bewertung hat ihren teuersten Weg nicht dadurch
+> entschärft, daß sie ihn abgesichert hat, sondern dadurch, daß sie **eine Frage gestellt hat, die
+> fünf Minuten kostete** (39.3.4, T-297-9). Das ist die billigste Sicherheitsmaßnahme dieses
+> Papiers, und sie steht in keinem Nachweislauf.
+
+#### 39.3.0 W-1′ — die nachgebaute Datei, und warum sie ein eigener Weg ist
+
+Der Nachbau ist **kein** kleinerer W-1. Er ist etwas anderes: **Wir erzeugen aus fremdem Text eine
+Datei, die aussieht wie ein Original, und legen sie dem Benutzer als Original hin.** Bisher hat
+dieser Bestand fremden Text **angezeigt** (E-063), **gespeichert** und **weitergereicht**. Erzeugt
+hat er daraus noch nie ein Format, das ein anderes Programm interpretiert.
+
+**Vier Punkte, in der Reihenfolge des Schadens.**
+
+**1. Kopfzeilen-Einschleusung — und sie ist der scharfe Punkt.** Betreff, Absender und Textkörper
+kommen aus der E-Mail und damit von A-06. Wer eine `.eml` durch Aneinanderreihen von
+Zeichenketten baut, gibt dem Absender die Feder: Ein Betreff mit `CRLF` schreibt **eigene
+Kopfzeilen**, und wer eigene Kopfzeilen schreiben kann, schreibt auch `Content-Type:
+multipart/mixed` mit eigener Trennmarke — und in den so entstandenen Teil einen **Anhang**. Das
+Ergebnis ist eine Datei in unserem Datenverzeichnis, die Outlook beim Öffnen als Nachricht mit
+einem Anhang darstellt, den der Benutzer doppelklicken kann. **Das ist ein Weg von einer E-Mail zu
+einer ausführbaren Datei, der an A-19.23 vollständig vorbeiführt** — nicht an der Größengrenze,
+nicht an der Namensprüfung, nicht an A-A-78, weil dieser „Anhang" nie einer war, sondern Text in
+einer Datei, die wir selbst geschrieben haben. Gegenmittel **A-A-96**.
+
+**2. Die Trennmarke ist ein Geheimnis, das keines ist.** Wer den Textkörper bestimmt, kann unsere
+Trennmarke hineinschreiben und damit unseren Teil beenden und einen eigenen beginnen. Dieselbe
+Klasse wie Punkt 1, anderer Hebel. Die Abwehr ist nicht „nach der Marke suchen", sondern **jeden
+Teil zu kodieren** — dann kann kein Inhalt eine Marke enthalten, und Punkt 1 stirbt im selben Zug.
+
+**3. Eine Datei, die aussieht wie das Original und es nicht ist.** Der Nachbau trägt Absender,
+Empfänger, Betreff, Datum und Text (A-19.22) — er trägt **nicht** die ursprünglichen Kopfzeilen,
+nicht DKIM, nicht S/MIME, nicht die Empfangsstempel. Er sieht in Outlook aus wie die Nachricht und
+ist als Beleg **nichts wert**. Das ist kein Angriff, sondern eine Eigenschaft, und sie wird
+gefährlich in genau dem Augenblick, in dem jemand die Datei weiterreicht: an die Buchhaltung, an
+einen Anwalt, in eine Akte. Ein Benutzer, der „die E-Mail hängt am Todo" liest, nimmt an, er habe
+die E-Mail. **Die Kennzeichnung muß deshalb an der Datei hängen, nicht an dem Augenblick, in dem
+sie entstand** — eine Meldung beim Anlegen ist drei Wochen später nirgends mehr. Gegenmittel
+**A-A-97**.
+
+**4. Der dritte Zustand von A-19.31.** A-19.31 kennt „es hat geklappt" und „es fehlt etwas, und das
+steht dabei". Der Nachbau ist ein **dritter**: es hat geklappt, aber **anders**. Ein Ausfall, der
+sich als Erfolg darstellt, ist nach den Maßstäben dieses Papiers ein stiller Ausfall — dieselbe
+Sache wie die Gerätenamen in 39.4.2, nur an einer anderen Stelle.
+
+**Was am Nachbau ausdrücklich **nicht** schlechter ist als am Original:** Beide sind fremde Bytes in
+unserem Datenverzeichnis, beide unterliegen A-A-78 (erzeugter Name, Endung `eml`), A-A-79
+(Schreiben ohne Ausweichen), A-A-81 (Zählen beim Lesen — beim MIME aus `getAsFileAsync` gilt die
+Grenze für die **Base64-Zeichenkette vor dem Dekodieren**, nicht für eine angekündigte Größe) und
+A-A-88 (geschrieben, nicht gerendert). Diese vier Auflagen gelten für beide Fassungen der `.eml`
+unverändert.
+
+#### 39.3.1 Was ein Angreifer damit kann, den er vorher nicht konnte
+
+> **Gilt nicht mehr für den gebauten Weg** (siehe Berichtigung am Kopf von 39.3). Steht als
+> Bewertung der verworfenen Weiche und als Beleg dafür, was die Frage aus 39.3.4 erspart hat.
+
+Die Frage ist nicht „ist `ReadWriteMailbox` gefährlich", sondern: **Wer den Aufgabenbereich
+unterwandert — was gewinnt er hinzu?**
+
+Der Ausgangspunkt ist ungünstig und war es schon vorher: Das Token nach E-019 liegt im
+`localStorage` **derselben Herkunft** wie der Aufgabenbereich
+(`apps/outlook-addin/src/settings/store.ts`). Wer im Aufgabenbereich Code ausführt, hat das Token.
+Das ist bekannt, bewertet (5.2, VG-2) und mit der engen Add-in-Fläche von **vier** Routen
+abgefedert.
+
+Neu ist, daß derselbe Angreifer jetzt **Office.js mit `ReadWriteMailbox`** in der Hand hat. Was
+damit dazukommt, in der Reihenfolge des Schadens:
+
+1. **Das ganze Postfach lesen.** Nicht die offene Nachricht, sondern jeden Ordner, jede alte
+   Nachricht, jeden Anhang. Ein Firmenpostfach ist die dichteste Ansammlung von Kundendaten, die
+   dieser Benutzer hat — dichter als `takt.db`, dichter als jeder Export.
+2. **Im Namen des Benutzers senden.** `makeEwsRequestAsync` ist kein Lesekanal, sondern ein
+   SOAP-Kanal: `CreateItem` sendet, `UpdateItem` ändert, `DeleteItem` löscht. Eine Phishing-Mail
+   aus einer echten internen Adresse ist ein anderer Angriff als eine von außen.
+3. **Spuren beseitigen.** Gesendete Nachricht löschen, Regel anlegen, Antwort wegräumen.
+4. **Beharrlichkeit.** Eine Posteingangsregel überlebt jede Deinstallation von SuperTakt.
+
+**Die Vergrößerung des Schadens ist damit nicht graduell, sondern kategorisch.** Vorher war die
+Beute „die Todos und Zeitbuchungen dieses Benutzers". Nachher ist sie „das Postfach dieses
+Benutzers, mit Sendeberechtigung". Der Weg dahin ist derselbe geblieben — die Belohnung am Ende
+ist eine andere Größenordnung, und das ändert, wer sich für diesen Weg interessiert.
+
+#### 39.3.2 Wie man in den Aufgabenbereich kommt — und was daran heute schwach ist
+
+Drei Wege, in absteigender Wahrscheinlichkeit:
+
+- **Lieferkette (VG-7).** Der Aufgabenbereich ist ein gebündeltes Webpaket. Ein übernommenes
+  npm-Konto ist der Regelfall, nicht die Ausnahme (A-07). Dagegen trägt nur `pnpm audit` und die
+  Bündelprüfung, und die messen Bekanntes.
+- **XSS im Aufgabenbereich.** Heute klein: Der Aufgabenbereich zeigt fremden Text über dieselbe
+  `visibleText`-Behandlung wie die Oberfläche (T-122). Bleibt klein, solange niemand HTML rendert
+  — und A-19.22 bringt zum ersten Mal **eine ganze E-Mail samt HTML-Teil** in die Nähe dieses
+  Fensters. Siehe A-A-88.
+- **Der Aufgabenbereich, der gar nicht unserer ist.** Das ist der schwerste, und er ist gemessen:
+  siehe 39.3.3.
+
+#### 39.3.3 Die Verkettung mit R-23 — und die Antwort auf die Frage, die sechsmal offen blieb
+
+Dieses Papier hat R-23 (Wurzelspeicher) sechsmal zur Bewertung angemeldet und dabei jedesmal die
+billigste Frage genannt: *Bleibt das Zertifikat nach einer Deinstallation im Wurzelspeicher
+stehen?*
+
+**Gemessen am 2026-09-11:** Über `apps/desktop/**` gibt es **keinen Deinstallationspfad**. Kein
+`Remove-Item`, kein `X509Store.Remove`, keine Aufräumroutine; `outlook_certificate.ps1` kennt
+`Import-Certificate` nach `Cert:\CurrentUser\Root` (Zeile 90) und das Öffnen des Speichers
+(Zeile 97), aber kein Entfernen. **Die Antwort lautet also: ja, es bleibt stehen.** Für immer,
+im Wurzelspeicher des Benutzerkontos, für jede TLS-Verbindung jedes Programms, das diesen Speicher
+benutzt.
+
+Daneben liegt der private Schlüssel: `apps/local-api/src/access/paths.ts` legt ihn als
+`taskpane-key.pem` ins Anwendungsdatenverzeichnis, mit `0600` — also lesbar für **den angemeldeten
+Benutzer** und damit für jeden Prozeß in seinem Konto (A-03). Die Datei sagt das über sich selbst:
+*„Wer ihn hat, kann sich gegenüber Outlook als der Aufgabenbereich ausgeben."*
+
+**Die Kette, in fünf Schritten, jeder für sich belegt:**
+
+1. A-03 liest `taskpane-key.pem` und `taskpane-cert.pem` aus dem Anwendungsdatenverzeichnis.
+2. A-03 wartet, bis SuperTakt nicht läuft, und bindet selbst `127.0.0.1:17844`. Der Port ist fest
+   (`TASKPANE_PORT`), nicht geheim, und ausdrücklich kein Schutzmittel (`config.ts`).
+3. Outlook lädt `https://localhost:17844/taskpane.html` — die Adresse aus dem Manifest — und
+   bekommt eine **gültige** TLS-Verbindung, weil unser Zertifikat im Wurzelspeicher steht und
+   dort auch nach einer Deinstallation noch steht.
+4. Was Outlook dort lädt, ist der Aufgabenbereich des Angreifers, mit voller Identität des
+   Add-ins.
+5. **Vor E-108:** Er bekommt das Takt-Token und vier Routen. **Nach E-108:** Er bekommt zusätzlich
+   `ReadWriteMailbox` auf das Postfach.
+
+**Bewertung von R-23, hiermit erteilt: hoch, und mit E-108 höher.** Der Wurzelspeichereintrag ist
+für sich genommen schon eine Fläche, deren ganze Sicherheit in der Enge des Auftrags liegt
+(E-098) — das ist gut gebaut und hält, soweit ich es am Quelltext beurteilen kann. Was **nicht**
+gebaut ist, ist sein Ende: Ein Eintrag, der nie entfernt wird, ist kein Zustand, sondern eine
+Hinterlassenschaft. Mit W-1 wird aus dieser Hinterlassenschaft der Zündschlüssel für das Postfach.
+
+**Gegenmittel A-A-92.** Und ein Satz für den Auftraggeber: Dieser Befund hängt **nicht** an E-108.
+Er ist seit A-23 wahr und ich habe ihn sechsmal angemeldet, statt ihn zu messen. Die Messung hat
+vier Minuten gedauert. Das gehört hierher, weil es eine Lehre über dieses Papier ist und nicht
+über den Code: **Eine Anmeldung ist keine Bewertung, und wer sechsmal anmeldet, bewertet nicht,
+sondern verschiebt.**
+
+#### 39.3.4 Eine Frage, die vor dem Bau gestellt werden sollte
+
+Die Vorlage holt das Original-MIME **nicht** — sie legt einen Deep-Link und einen Textauszug ab
+(E-108 sagt das ausdrücklich). Der Weg über EWS und damit `ReadWriteMailbox` ist die Weiche, die
+der Auftraggeber gestellt hat.
+
+**Ich kann nicht prüfen, ob es einen billigeren Weg gibt**, und sage genau, warum: In dieser
+Umgebung gibt es kein Outlook, keinen Netzzugang und keine Office.js-Beschreibung; jede Aussage
+über Fähigkeiten von Office.js wäre bei mir Erinnerung und kein Nachweis. Was ich trotzdem
+weitergebe, als **Frage an integration-dev und den Auftraggeber**, nicht als Behauptung:
+
+- Es gibt in neueren Mailbox-Anforderungssätzen ein `item.getAsFileAsync`, das die geöffnete
+  Nachricht als EML liefert. **Wenn** es mit `ReadItem` auskommt und **wenn** die Zielfassungen
+  von Outlook es tragen, dann erfüllt es A-19.22, ohne W-1 überhaupt zu eröffnen — und die
+  gesamte Bewertung 39.3 entfiele ersatzlos.
+- Dieselbe Frage in der anderen Richtung: `makeEwsRequestAsync` gilt im neuen Outlook für Windows
+  als nicht durchgängig verfügbar. A-19.31 verlangt, daß daraus kein stiller Ausfall wird — das
+  ist richtig gesetzt und deckt den Fall. Es deckt nicht den Fall, daß wir das teurere Recht
+  anfordern und **danach** feststellen, daß der billigere Weg genügt hätte.
+
+**Das ist keine Aufhebung von E-108 und soll keine sein.** Es ist der Satz aus E-106, angewandt:
+Eine Entscheidung kennt ihren Preis; diese hier kennt ihn. Ob sie ihn **zahlen muß**, ist eine
+Frage, die vor dem ersten Zeile Code fünf Minuten kostet und danach ein Manifest, eine
+Benutzerzustimmung und diese Bewertung.
+
+#### 39.3.5 `MinVersion` im Manifest — ein Sicherheitsbefund, obwohl er wie ein Verträglichkeitsbefund aussieht
+
+Aus T-298 (ux-designer), und ich trage ihn mit, weil die zweite Hälfte mir gehört: **Das Manifest
+darf die Fähigkeit nicht fordern.** Ein `MinVersion` von 1.8 im `Requirements`-Block läßt älteres
+Outlook die Installation **verweigern** — und damit ist A-19.31 nicht mehr erfüllbar, denn wo
+nichts installiert ist, entsteht auch kein Todo, bei dem stehen könnte, was fehlt. Geprüft wird
+zur Laufzeit; die Vorlage macht genau das und sagt es in ihrem eigenen Kopf: *„`getAttachment-
+ContentAsync` braucht Mailbox 1.8 – das Manifest fordert nur 1.1, daher wird die Fähigkeit zur
+Laufzeit geprüft"*. Ihr eigenes Manifest steht folgerichtig auf `Set Name="Mailbox"
+MinVersion="1.1"`.
+
+**Der Teil, den wir nicht übernehmen, steht im selben Satz der Vorlage:** *„und das Feature
+degradiert sonst still."* Still ist bei uns ausgeschlossen — A-19.31 wörtlich, und es ist dieselbe
+Regel wie bei der Versionsprüfung, nur mit umgekehrtem Vorzeichen: Dort ist ein Fehlschlag still,
+**weil** er nichts kostet; hier ist er laut, weil er Kundenmaterial kostet, das der Benutzer für
+übernommen hält.
+
+**Eine Folge, die sonst niemand benennt, und sie ist die unangenehmste dieses Abschnitts:**
+`<Permissions>` gilt für das **ganze Add-in**, nicht für einen Aufruf. Wer `ReadWriteMailbox` ins
+Manifest schreibt, zahlt den Preis aus 39.3.1 **auch auf jedem Outlook, das den EWS-Weg gar nicht
+kann** — volle Postfachrechte, kein Original-MIME. Das ist das schlechteste Feld der Tafel, es ist
+erreichbar, und es ist das stärkste Argument für die Frage aus 39.3.4. Auflage **A-A-94**.
+
+### 39.4 W-2 — die fremde Datei im Datenverzeichnis, gegen die Vorlage gemessen
+
+#### 39.4.1 Die Vorlage, zeichengleich nachgebaut und gefahren
+
+`sanitizeFileName` und `uniqueTargetPath` aus `src/server/server.ts` der Bridge, unverändert
+übernommen, auf Windows 11 gegen 25 Namen gefahren, mit echten Schreibvorgängen:
+
+| Fall | Roh (verkürzt) | Ergebnis der Vorlage | Urteil |
+|---|---|---|---|
+| Verzeichniswechsel, Windows-Schreibweise | `..\..\..\Startup\x.bat` | `x.bat` | **gefangen** |
+| Verzeichniswechsel, POSIX | `../../../x.sh` | `x.sh` | **gefangen** |
+| nur Punkte | `..` | `anhang` | **gefangen** |
+| absoluter Pfad | `C:\Windows\System32\calc.exe` | `calc.exe` | **gefangen** |
+| UNC, beide Schreibweisen | `\\wirt\freigabe\x.txt`, `//wirt/…` | `x.txt` | **gefangen** |
+| **Gerätename** | `NUL` | `NUL` | **nicht gefangen** |
+| **Gerätename mit Endung** | `CON.txt`, `prn.pdf` | unverändert | **nicht gefangen** |
+| **Gerätename Schnittstelle** | `COM1` | `COM1` | **nicht gefangen** |
+| **Konsolenstrom** | `CONOUT$` | `CONOUT$` | **nicht gefangen** |
+| Endpunkt / Endleerzeichen | `rechnung.lnk.`, `rechnung.lnk ` | `rechnung.lnk` | gefangen (abgeschnitten) |
+| **Doppelendung** | `rechnung.pdf.exe` | unverändert | **nicht gefangen** (und soll es nach A-19.23 auch nicht) |
+| **Doppelendung mit Lücke** | `Rechnung.pdf␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣.exe` | unverändert | **nicht gefangen** |
+| **Rechts-nach-links** | `rechnung\u202Excod.exe` | unverändert | **nicht gefangen** |
+| **Isolat ohne Abschluß** | `rechnung\u2067fdp.exe` | unverändert | **nicht gefangen** |
+| Datenstromtrenner | `rechnung.txt:evil.lnk` | `rechnung.txt_evil.lnk` | gefangen (`:` ist illegal) |
+| ADS | `rechnung.lnk::$DATA` | `rechnung.lnk__$DATA` | gefangen |
+| Steuerzeichen / Nullbyte | `rechnung.pdf\u0000.exe` | `rechnung.pdf_.exe` | gefangen |
+| 400 Zeichen | 400 × `A`, dann `.exe` | letzte 150 Zeichen, Endung bleibt | gefangen, siehe unten |
+| leer / nur illegale Zeichen | `"   "`, `???` | `anhang`, `___` | gefangen |
+
+**Das Ergebnis in einem Satz: 25 Namen hinein, 25 Dateien auf der Platte, null Ablehnungen.**
+`sanitizeFileName` ist keine Prüfung, sondern eine **Umschreibung** — jeder Name wird zu
+irgendeinem Namen, keiner wird abgewiesen. Für den Pfadausbruch ist das ausreichend und sogar gut
+gelöst: `path.basename` plus die Verbotszeichen `<>:"/\|?*` fangen Verzeichniswechsel, absolute
+Pfade und UNC in **beiden** Schreibweisen, und zwar auch auf einem POSIX-Läufer, auf dem
+`path.basename` den Rückstrich gar nicht als Trenner kennt. Das ist der Teil, den man übernehmen
+kann.
+
+**Für alles, was hinter dem Pfad kommt, trägt sie nichts.** Sie urteilt nicht über die Endung,
+nicht über die Richtungszeichen, nicht über Gerätenamen. Sie hat es auch nie behauptet — sie steht
+in einem Programm, dessen Anhänge in einen Ordner wandern, den ein Mensch mit dem Dateimanager
+ansieht. Bei uns wandern sie an einen **Öffnen-Befehl**.
+
+**Warum in dieser Tafel kein einziges Zeichen roh steht — und warum am 2026-09-11 doch eines
+darin stand.** Die Spalte „Roh" nennt Richtungs- und Formatzeichen mit ihrem **Bezeichner**
+(`\u202E`, `\u2067`) und nicht mit ihrem Zeichen. Das ist Absicht: Ein Bedrohungsmodell, das
+seine Beispiele wörtlich trägt, **wird selbst zum Träger**, und der Wächter, der solche Zeichen im
+Bestand verbietet, kann nicht unterscheiden, ob eines einen Angriff **ausführt** oder ihn
+**erklärt**. Genau deshalb ist `proof:codepoints` blind gegen die Absicht und muß es sein — er
+prüft den Bestand und nicht die Gesinnung.
+
+In der ersten Fassung dieser Tafel stand trotzdem eines: ein **U+200B (ZERO WIDTH SPACE)**, nicht
+als Beispiel, sondern als typografischer Rest in der Zeile über den 400 Zeichen; er hat
+`proof:codepoints` an der ersten Stufe von `pnpm check` rot gemacht. Berichtigt am selben Tag.
+**Die Regel, die daraus folgt und über diesen Fall hinausreicht:** Wer einen Angriff über ein
+unsichtbares Zeichen beschreibt, schreibt den **Bezeichner** und zeigt die **Stelle**, an der das
+Zeichen säße — `rechnung.pdf<U+200B>.exe` —, nie das Zeichen. Das gilt für dieses Papier, für
+Prüffälle, für Fehlermeldungen und für jede Designbeschreibung; derselbe Fehler ist am selben Tag
+an drei weiteren Stellen aufgetreten (T-298).
+
+**Und eine gemessene Nebenbemerkung zu U+200B, weil sie hierher gehört:** `visibleText` erfaßt
+es **absichtlich nicht** — `packages/domain/src/characters.ts` nimmt `U+200B` bis `U+200D`
+ausdrücklich aus, weil das letzte davon zusammengesetzte Emoji zusammenhält. Für die Rückfrage ist
+das **kein** Loch: Ein U+200B in einer Endung macht sie unregistriert, also startet Windows nichts;
+ein U+200B vor einer zweiten Endung ändert an `extensionOf` nichts. Was bleibt, ist eine
+**Anzeigemehrdeutigkeit** — `rechnung.pdf` und `rechnung<U+200B>.pdf` sehen in der Liste gleich
+aus. Schwere: niedrig. Mit A-A-78 steht das Zeichen ohnehin nur noch im Anzeigenamen und nie im
+Pfad; ohne A-A-78 deckt A-A-80 es über die Kategorie `Cf` ab.
+
+**Zur Kappung auf 150 Zeichen, weil sie leicht falsch gelesen wird:** `slice(-150)` behält das
+**Ende**. Das ist die richtige Wahl, denn so überlebt die Endung; die Nebenwirkung ist, daß bei
+langen Namen der **Anfang** verschwindet — der Teil, den ein Benutzer liest. Wer die Vorlage
+übernimmt, sollte in der Mitte kürzen und die Kürzung sichtbar machen.
+
+#### 39.4.2 Die Gerätenamen — gemessen, und das Ergebnis ist nicht das erwartete
+
+Node hat `NUL`, `COM1`, `CON.txt`, `prn.pdf` und `CONOUT$` **als gewöhnliche Dateien angelegt**;
+`readdirSync` listet sie, `statSync` meldet 13 Bytes, keine davon ist ein Zeichengerät. Das liegt
+an libuv, das Pfade in der `\\?\`-Form an Win32 gibt und damit die Gerätenamensauflösung umgeht.
+
+Die zweite Messung — dieselben Pfade aus PowerShell, also mit gewöhnlicher Win32-Auflösung:
+
+| Name | `Test-Path -LiteralPath` | `Get-Item` |
+|---|---|---|
+| `NUL` | **False** | ItemNotFoundException |
+| `COM1` | **False** | ItemNotFoundException |
+| `CON.txt` | **False** | ItemNotFoundException |
+| `prn.pdf` | **False** | ItemNotFoundException |
+| `CONOUT$` | True | 13 |
+| `rechnung.pdf.exe` (Gegenprobe) | True | 13 |
+
+**Was daraus folgt, und es ist kein Ausführungsproblem, sondern ein Ehrlichkeitsproblem:** Der
+Dienst schreibt die Datei, meldet nach A-19.29 „übernommen", trägt den Pfad in
+`todo_attachment` ein — und der Öffnen-Befehl der Hülle wird ihn nie finden. `check_file` endet
+bei `path_missing`, die Oberfläche sagt nach A-19.15 „läßt sich nicht öffnen". Der Benutzer sieht
+einen Anhang, der von Anfang an tot war, und A-19.29 hat ihm das Gegenteil gesagt. Dazu bleibt
+eine Datei im Anwendungsdatenverzeichnis liegen, die er mit dem Dateimanager **nicht löschen
+kann**, und ein Sicherungsagent (A-05), der sie über einen Win32-Pfad öffnet, kann bei `COM1` auf
+eine serielle Schnittstelle laufen.
+
+Schwere: **mittel**, und der Grund für „mittel" statt „niedrig" ist nicht der Schaden, sondern die
+Klasse: Es ist wieder ein Fall, in dem der **geprüfte Name nicht der aufgelöste Name** ist — genau
+T-156-1 und T-164-1, zum dritten Mal, nur diesmal beim Schreiben statt beim Öffnen.
+
+#### 39.4.3 Was wir schon besser haben als die Vorlage — und der Widerspruch, der dabei auffällt
+
+`apps/local-api/src/access/attachment-store.ts` löst dieselbe Aufgabe für Bildkopien seit T-156,
+und es löst sie an jedem der offenen Punkte besser:
+
+- **Der Name wird erzeugt, nie übernommen** (A-A-17): `<32 Hexziffern>.<endung>`. Damit sind
+  Pfadausbruch, Gerätename, Richtungszeichen, Doppelendung, Kappung und Kollision **nicht
+  abgewehrt, sondern unmöglich** — sie kommen nie in die Nähe eines Pfadbestandteils.
+- **Gezählt wird beim Lesen, nicht aus `stat`** (A-A-15). Eine angekündigte Größe ist keine
+  Grenze; in A-V-6 war genau das ein Befund.
+- **Verzeichnis `0700`, Datei `0600`, ausdrücklich gesetzt** (E-018, A-A-17), nicht dem `umask`
+  überlassen.
+- **Geschrieben wird in eine temporäre Datei und dann umbenannt**, nicht an die Zieladresse.
+- **Kein Fehlschlag ist still**, und im Protokoll steht der **erzeugte** Name — nie der fremde.
+
+Die Vorlage macht keines dieser fünf Dinge. Sie schreibt mit `writeFile` an eine Zieladresse, die
+sie zuvor mit `existsSync` freigeprüft hat: ein TOCTOU-Paar, und auf POSIX zugleich ein
+Symlink-Folgen — ein **baumelnder** Symlink an dieser Stelle läßt `existsSync` falsch sagen und
+`writeFile` durch ihn hindurch schreiben, mit fremdem Inhalt, an einen fremden Ort. Bei uns wäre
+das ein Schreibzugriff mit Benutzerrechten auf eine vom Angreifer gewählte Datei.
+
+**Und hier steht der Widerspruch, der vor dem Bau entschieden werden muß:**
+
+> **A-19.23 verlangt „Dateiname … bleibt erhalten". A-A-17 verlangt „Der Name der Kopie wird
+> erzeugt. Nie der Name der Quelle."** Beide können nicht gleichzeitig auf denselben Namen
+> zutreffen.
+
+Mein Vorschlag, und er löst beide, ohne daß einer nachgibt: **Die beiden Namen sind nicht
+derselbe Name.** Auf der Platte steht ein erzeugter Name (A-A-17 gilt weiter). Im Bestand steht
+der Name aus der E-Mail als **Anzeigename** des Anhangs — dort ist er fremder Text und wird wie
+fremder Text behandelt (`visibleText`, `<bdi>`), dort löst er nichts auf, dort verrät er nichts an
+das Dateisystem. A-19.23 meint, was der Benutzer sieht und wiedererkennt; sie meint nicht den
+Inode. **Erhalten bleibt zusätzlich die Endung**, denn „Dateiformat bleibt erhalten" heißt bei
+einer Datei, die mit der Standardanwendung geöffnet wird, genau das. Auflage A-A-78.
+
+Der Preis dieses Vorschlags gehört dazu und ist klein, aber er ist einer: Die Rückfrage vor dem
+Öffnen zeigt dann einen Pfad, in dem der Name aus der E-Mail nicht vorkommt. Sie muß beides
+zeigen — Anzeigename und Pfad —, und A-A-6 Punkt 1 („voller Pfad, ungekürzt") bleibt davon
+unberührt.
+
+#### 39.4.4 Die Tür selbst — der Teil der Vorlage, der auf keinen Fall übernommen wird
+
+`POST /api/attachments` der Bridge hat **keine Prüfschicht**: kein Token, keine Herkunftsprüfung,
+und dazu `Access-Control-Allow-Origin: *` mit `Access-Control-Allow-Private-Network: true`. In
+unserer Sprache: **jede Webseite im Browser des Benutzers (A-02) kann dort eine Datei mit frei
+gewähltem Namen und frei gewähltem Inhalt ins Anwendungsdatenverzeichnis schreiben.** Das ist
+B-1.2 und B-1.4 in einem, und es ist das genaue Gegenteil dessen, was 5.1 dieses Papiers seit dem
+ersten Tag verlangt.
+
+Ich sage es so deutlich, weil „bestehende Logik nachbilden" im Auftrag steht: **Die Ablagefunktion
+ist ein brauchbares Vorbild, die Route um sie herum ist keines.** Unsere Tür steht unter `/addin`,
+hinter Herkunftsprüfung, Host-Positivliste und `X-Takt-Token`, und sie ist genau **eine**, und sie
+hängt am Anlegen (A-A-82).
+
+#### 39.4.5 F-02 — wo die Bytes zwischen Abruf und Anlegen liegen
+
+Die Frage des Orchestrators, und sie ist zur Hälfte meine. Zwei Wege: **alles im Aufgabenbereich
+halten und einmal anlegen**, oder **Datei für Datei zum Dienst und danach anlegen**.
+
+**Ich trage den ersten. Der zweite öffnet genau die Tür, die dieses Kapitel zumacht.**
+
+Der zweite Weg ist eine Stelle, an der ein Aufrufer mit gültigem Token Dateien in unser
+Datenverzeichnis schreibt, **ohne daß ein Todo entsteht**. Das ist zeichengleich die Route der
+Vorlage aus 39.4.4, nur mit einem Token davor — und VG-2 sagt seit dem ersten Tag: *Alles, was das
+Add-in kann, kann ein Angreifer mit dem Token auch.* Das Token liegt im `localStorage` derselben
+Herkunft (39.3.1). Was entstünde, ist ein **unbegrenztes Schreibwerkzeug** ins
+Anwendungsdatenverzeichnis: Platte füllen, Bytes hinterlegen, und zwar in einem Ordner, der die
+Bildkopien und die Datenbank als Nachbarn hat. Auch mit erzeugtem Namen (A-A-78) bleibt es das.
+
+Dazu kommt ein Struktur- und kein Mengenargument, und es wiegt schwerer: **A-A-21′ Punkt (b)
+verlangt, daß Anhänge an einer Kennung entstehen, die im selben Aufruf erzeugt wurde.** Der zweite
+Weg bricht diese Eigenschaft nicht aus Versehen, sondern von Bauart wegen — die Bytes existieren,
+bevor das Todo existiert. Und **A-A-83 („kein verwaistes Byte")** wird von einer Zusage, die der
+Aufrufstapel hält, zu einer, die ein Zeitgeber hält. Eine Zusage an einem Zeitgeber ist schwächer
+als eine an einem Gültigkeitsbereich, und sie fällt lautlos aus.
+
+**Der Einwand gegen den ersten Weg ist echt, aber er ist eine Zahl und keine Eigenschaft.** „Vier
+Dateien à 25 MB ergeben rund 130 MB Base64 im Aufgabenbereich" ist richtig gerechnet — und es ist
+die Rechnung zu einer **Summengrenze, die es noch gar nicht gibt**. A-A-81 verlangt sie ohnehin,
+und zwar unabhängig von dieser Frage. Wer sie auf 64 MB setzt, hat die 130 MB nicht. Die
+Summengrenze ist zugleich die Rumpfgrenze dieser einen Route; sie ist die **dritte** benannte
+Ausnahme von B-1.7 (E-108 Punkt 3), und sie ist **eine** Zahl an **einer** Stelle statt vier
+Zahlen an vier Stellen.
+
+**Wenn eine Messung den ersten Weg widerlegt** — und nur dann, und die Messung gehört in den
+Auftrag, nicht in die Erinnerung —, dann trage ich den zweiten **nur** unter diesen sechs
+Auflagen, die zusammen **A-A-95** bilden:
+
+1. **Die Bytes landen nicht im Anhangsordner, sondern in einer Quarantäne.** Ein eigenes
+   Verzeichnis, `0700`, dessen Inhalt **nie** von `todo_attachment` benannt wird und den der
+   Öffnen-Befehl der Hülle **nicht erreichen kann**. Erst der Anlegeruf **verschiebt** (`rename`)
+   die Bytes in den Anhangsordner. Damit ist ein liegengebliebenes Byte nie ein Anhang und nie ein
+   Pfad am Öffnen-Befehl — der ganze Rest dieser Auflage ist Hygiene, dieser Punkt ist Sicherheit.
+2. **Der Dienst vergibt die Kennung, nicht der Aufrufer.** Ein Anlege-**Vorhaben** wird eröffnet
+   und liefert ein einmal verwendbares Merkzeichen; die Ablegetür nimmt keine frei gewählte
+   Kennung entgegen. Dieselbe Regel wie „die Hülle baut die Adresse selbst" (A-V-3) und aus
+   demselben Grund.
+3. **Das Merkzeichen ist an das Token gebunden, einmal verwendbar und verfällt** — Vorschlag zehn
+   Minuten. Ein verfallenes Vorhaben löscht seine Bytes.
+4. **Die Grenzen aus A-A-81 gelten über das ganze Vorhaben**, nicht je Anfrage: je Datei, Summe,
+   Anzahl. Eine Grenze, die je Anfrage gilt, ist bei mehreren Anfragen keine.
+5. **Aufgeräumt wird beim Start des Dienstes und regelmäßig**, und der Start räumt **alles**, was
+   nicht in diesem Lauf eröffnet wurde. Ein nie abgeholter Bestand ist damit spätestens beim
+   nächsten Start weg — und offene Vorhaben überleben einen Neustart ausdrücklich **nicht**
+   (anders als die offene Inaktivitätsphase nach A-24.7, und aus dem umgekehrten Grund: Was
+   Kundenmaterial ist und keinen Eigentümer hat, soll nicht überleben).
+6. **Die Quarantänetür zählt mit.** `addinSurface.length` steigt auf **sechs**, und `proof:addin`
+   mißt für sie dieselbe Wirkung wie für jede andere Tür unter `/addin`: Sie erzeugt **keine**
+   Zeile in `todo_attachment`, für kein Todo, in keiner Schreibweise.
+
+**Messung dazu, und sie ist die eigentliche Abnahme:** Ein Lauf legt drei Dateien in die
+Quarantäne, legt **nie** ein Todo an, startet den Dienst neu und zählt die Dateien: **null**.
+Gegenprobe: Wird die Aufräumroutine entfernt, zählt derselbe Lauf **drei** und wird rot. Ohne
+diese Gegenprobe mißt der Lauf einen leeren Ordner und nicht das Aufräumen — dieselbe Falle wie in
+30.7.
+
+### 39.5 W-3 — der Pfad aus fremder Hand am Öffnen-Befehl
+
+#### 39.5.1 Was heute schon trägt, und es ist mehr, als der Auftrag vermutet
+
+Die Frage im Auftrag lautet: *Trägt „wir nennen den vollen Pfad" bei einer Datei, die
+`Rechnung.pdf␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣.exe` heißt?*
+
+**Die Rückfrage, die dieser Bestand hat, sagt mehr als den Pfad, und für diesen Namen sagt sie das
+Richtige.** Am Quelltext gelesen (`attachmentLabel.ts`, `AttachmentOpenDialog.tsx`):
+
+- `effectiveFileNameOf` schneidet nachgestellte Punkte und Leerzeichen ab — **denselben Schnitt,
+  den Windows macht** (A-A-5′). Für den Beispielnamen ist nichts abzuschneiden; die Leerzeichen
+  stehen **vor** der Endung.
+- `extensionOf` liefert deshalb `exe`, nicht „keine Endung".
+- `runsWhenOpened` prüft gegen sechzehn Endungen, `exe` steht darauf. Die Rückfrage sagt dann
+  **„wird ausgeführt"** und nicht „wird geöffnet".
+- Der Satz nennt die Wirkung im Klartext: *„dasselbe wie ein Doppelklick im Dateimanager"*.
+- Kein Knopf ist vorbelegt, `Enter` löst nichts aus, es gibt kein „nicht mehr fragen" (A-A-6).
+- Jeder angezeigte Teil geht durch `visibleText`: Richtungszeichen werden durch `U+FFFD`
+  **ersetzt, nicht entfernt** — der RLO-Name aus 39.4.1 kann die Anzeige also nicht umdrehen.
+- `check_file` in der Hülle weist unabhängig davon ab: UNC, nicht absolut, Steuerzeichen,
+  Doppelpunkt im Namen, die fünf Umleitungsendungen (`.lnk .url .pif .scf .desktop`), und sie
+  prüft **bei jedem Aufruf**, nicht beim Eintragen.
+
+**Antwort auf die Frage des Auftrags: ja, für diesen Namen trägt sie** — nicht weil sie den Pfad
+nennt, sondern weil sie die **Wirkung** nennt und die Endung so auflöst, wie Windows sie auflöst.
+Der Bestand hat an dieser Stelle bereits zweimal dazugelernt (T-156-1, T-164-1), und beide Lehren
+greifen hier.
+
+#### 39.5.2 Was heute **nicht** trägt
+
+**1. Die Herkunft fehlt.** Die Rückfrage sagt heute, *was* geschieht. Sie sagt nicht, *woher diese
+Datei kommt*. Bis heute war das in Ordnung, weil jeder Dateianhang von Hand eingetragen war — der
+Benutzer kannte seine Herkunft, weil er sie selbst gewählt hatte. Ab A-19.23 ist der häufigste
+Dateianhang einer, den ein **Fremder** geschickt hat, und der Benutzer sieht ihn Tage später
+zwischen seinen eigenen. Das ist die eine Zutat, die der Rückfrage fehlt, und sie ist billig:
+`Diese Datei stammt aus einer E-Mail von <Absender>` — Absender als fremder Text. Auflage A-A-85.
+
+**2. Die Endung steht im Pfad, nicht daneben.** Bei `…\Rechnung.pdf␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣.exe` ist
+die Endung zwanzig Leerzeichen vom lesbaren Namen entfernt und kann in der Zeile umbrechen. Der
+Dialog kennt die aufgelöste Endung bereits (`extensionOf`) — er soll sie **abgesetzt** zeigen:
+„Endung: **exe** — wird ausgeführt". Auflage A-A-86.
+
+**3. Es gibt keinen Prüffall über diesen Namen.** `runsWhenOpened` hat seine Fälle, die
+**angezeigte** Rückfrage für einen Namen mit Lücke vor der Endung hat keinen. Ein Verhalten, das
+nur im Quelltext richtig ist, ist eine Momentaufnahme (T-156-4, wörtlich). Auflage A-A-86.
+
+**4. Der erzeugte Name ändert die Frage.** Baut man A-A-78, dann heißt die Datei auf der Platte
+`a3f…9e.exe`, und die Täuschung über den Namen ist weg — der **Anzeigename** kann weiter täuschen,
+aber er startet nichts. Das ist der Grund, warum A-A-78 auch eine Maßnahme für W-3 ist und nicht
+nur für W-2.
+
+**5. Die Kürzung ist ein Angriff auf die Rückfrage, und `proof:foreign` sieht sie nicht.** Aus
+T-298, und der Zusatz gehört mir: Der Name aus der E-Mail ist **fremder Text**, nicht nur ein
+fremder Pfad. Gegen das Richtungszeichen trägt `visibleText` — `rechnung\u202Excod.exe` wird als
+`rechnung\uFFFDxcod.exe` angezeigt und dreht sich nicht mehr um; das ist gebaut und gemessen
+(A-A-6, T-119). Gegen die **Kürzung** trägt es nicht: Ein `text-overflow: ellipsis` am Zeilenende,
+ein `slice(0, n)`, ein `white-space: nowrap` in einer engen Spalte — jedes davon nimmt der Anzeige
+die Endung, **ohne ein einziges Zeichen zu verändern**. `proof:foreign` erkennt Anzeigestellen an
+ihrem **Typ**; ein CSS-Deckel hat keinen Typ. Das ist eine Fehlerart, die dieses Papier bisher
+nicht kennt, und sie trifft genau die eine Sicherung, auf der A-19.26 ruht. Regel: **Am Ende wird
+nie gekürzt.** Wo gekürzt werden muß, wird in der **Mitte** gekürzt, die Kürzung ist sichtbar, und
+die aufgelöste Endung steht ohnehin abgesetzt daneben (A-A-86) — der zweite Grund, warum A-A-86
+keine Bequemlichkeit ist. Auflage **A-A-93**.
+
+#### 39.5.3 Was ich ausdrücklich **nicht** empfehle
+
+**Keine erweiterte Verbotsliste ausführbarer Endungen.** A-A-5 hat das bereits entschieden und die
+Begründung hält hier unverändert: Unter Windows ist die Menge über `PATHEXT` benutzerbestimmt,
+eine Liste ist nie vollständig, und sie lehrt das Umbenennen. Die fünf hart abgewiesenen Endungen
+sind keine Liste gefährlicher Dateien, sondern die Liste der Dateien, über die **die Rückfrage
+nicht die Wahrheit sagen kann** — das ist ein anderes Kriterium, und es ist das richtige.
+
+**Was ich statt dessen dem Auftraggeber zur Entscheidung vorlege** (ich empfehle, ich entscheide
+nicht): Soll eine Datei **aus einer E-Mail** mit einer Endung aus `RUNS_WHEN_OPENED` eine
+**zweite** Bestätigung verlangen — eine, die nicht weggeklickt, sondern beantwortet wird? Der Preis
+ist eine Reibung, die den Benutzer bei jeder legitimen `.msi` eines Lieferanten trifft. Der Nutzen
+ist, daß der einzige Weg von einer fremden E-Mail zu einem Programmstart auf diesem Rechner nicht
+an einem einzigen Klick hängt. Ich lege beides hin, weil E-106 gelehrt hat, daß eine Frage ohne
+ihren Preis kein Entscheidungsangebot ist.
+
+#### 39.5.4 Der Cloud-Anhang — der Verweis, den niemand eingetippt hat
+
+A-19.25 nimmt einen Cloud-Anhang als **Verweis** auf. In der Vorlage ist das `content.content` bei
+`format === 'url'` — eine Adresse, die vollständig vom Absender bestimmt wird.
+
+`check_link` trägt: nur `http`/`https`, Festpunkt der Normalform, Wirt vorhanden, keine
+Zugangsdaten, Länge, Steuerzeichen vor dem Zerlegen. Ein `javascript:`, ein `file:///`, ein UNC
+kommt nicht durch. **Das ist die Hauptsache und sie hält.**
+
+**Der ux-designer verlangt zusätzlich, den Verweis schon bei der Übernahme abzuweisen, wenn er
+nicht `http`/`https` ist. Das ist richtig, und meine Auflage geht an drei Stellen darüber hinaus:**
+
+- **Nicht „beginnt mit"**, sondern die Positivliste auf dem **geparsten** Schema. Das ist A-A-2
+  wörtlich, und der Grund steht dort: `https://evil@…`, `http:/\…`, ` https://…` mit führendem
+  Leerzeichen — an einem Präfixvergleich kommt jedes davon anders heraus als am Parser. Ein
+  Präfixvergleich ist derselbe Fehler wie `startsWith` bei der Herkunftsprüfung, und der steht
+  seit B-1.4 in diesem Papier.
+- **Alle fünf Bedingungen aus A-A-2**, nicht nur das Schema: Wirt vorhanden, keine Zugangsdaten,
+  Länge ≤ 2 048, keine Steuerzeichen **vor** dem Zerlegen. Ein `javascript:`, ein `data:`, ein
+  `file:///`, ein `\\wirt\freigabe` und ein `//wirt/freigabe` fallen damit sämtlich, und zwar
+  aus benannten Gründen statt aus einem.
+- **Zusätzlich A-A-3**, der Festpunkt der Normalform. Sonst entsteht ein Verweis, der bei der
+  Übernahme durchgeht und im Öffnen-Befehl an `link_not_normalized` scheitert: ein Anhang, der von
+  Anfang an tot ist, während A-19.29 „übernommen" gemeldet hat — dieselbe Unehrlichkeit wie bei
+  den Gerätenamen in 39.4.2.
+
+**Was eine Prüfung bei der Übernahme ausdrücklich nicht ist: ein Ersatz.** `check_link` bleibt im
+Öffnen-Befehl, bei jedem Aufruf, unverändert — *zwischen Übernahme und Öffnen liegt der Bestand*
+(E-072). Und was **keine** von beiden leisten kann: **Weiterleitungen.** Ein einwandfreies
+`https://` darf im Browser des Benutzers auf alles zeigen, was der Absender will, einschließlich
+eines Downloads. Dagegen trägt an dieser Stelle nichts als der Browser selbst; das ist die Grenze
+unserer Zusage und gehört benannt statt beruhigt.
+
+Was sich außerdem ändert, ist A-A-7: *„Bei einem Verweis genügt die Handlung selbst — keine
+Rückfrage"*.
+Die Begründung dafür war, daß der Benutzer die Adresse selbst eingetragen hat und ein Browser der
+erwartete Ausgang ist. Die erste Hälfte dieser Begründung gilt ab A-19.25 nicht mehr. Ich hebe
+A-A-7 **nicht** auf — eine Rückfrage, die immer erscheint, ist die, die weggeklickt wird, und das
+Argument steht. Aber der **Wirt** gehört sichtbar an die Zeile, bevor geklickt wird, und die
+Herkunft ebenso. Auflage A-A-87. Schwere: niedrig, aber es ist eine Grenze, die sich ohne
+Begleitung bewegt hätte.
+
+#### 39.5.5 Zwei Kleinigkeiten, die aus der Vorlage mitkommen und benannt gehören
+
+- **`isInline` ist eine Behauptung des Absenders.** A-19.24 grenzt eingebettete Bilder aus, und die
+  Vorlage tut das über `!entry.isInline`. Wer die E-Mail schreibt, setzt dieses Kennzeichen. Er
+  kann damit einen echten Anhang **verstecken** (als inline markiert → wird nicht übernommen) oder
+  ein Signaturbild zum Anhang machen. Kein Rechtezuwachs, aber die Grenze aus A-19.24 wird vom
+  Absender gezogen und nicht von uns. Gehört in die Meldung nach A-19.29, nicht in eine Abwehr.
+- **`detail.size` ist eine angekündigte Größe.** Die Vorlage prüft sie gegen 25 MB und lädt danach,
+  was kommt. Das ist wörtlich A-A-15 und war in A-V-6 ein Befund. Auflage A-A-81.
+
+### 39.6 R-21 und R-24 — die Bewertung, statt der siebten Anmeldung
+
+**R-21 („Ein Dateianhang ist ein Startknopf") — Bewertung: hoch, und ab E-108 mit einer neuen,
+häufigeren Quelle.** Die Aussage von R-21 ändert sich nicht; was sich ändert, ist die
+Eintrittswahrscheinlichkeit. Bis heute mußte jemand einen Pfad **eintippen** oder in den Bestand
+schreiben (VG-1, VG-3). Ab A-19.23 genügt eine E-Mail. Das Gegenmittel aus E-072 bleibt richtig
+und ist gebaut (`check_file` bei jedem Aufruf, nach Art getrennt, die fünf Endungen, die
+Rückfrage mit der Wirkung). Es bekommt zwei Ergänzungen, und beide sind klein: die **Herkunft**
+in der Rückfrage (A-A-85) und die **abgesetzte Endung** (A-A-86). Der Satz aus E-072 —
+*„zwischen Eingabe und Öffnen liegt der Bestand"* — trägt hier unverändert und ist der Grund,
+warum eine Prüfung beim Übernehmen die Prüfung im Öffnen-Befehl nicht ersetzt.
+
+**R-24 („Ein Fremdbackup ist eine fremde Datei") — Bewertung: hoch, und die Beschreibung ist ab
+heute zu eng.** R-24 beschreibt eine Datei, die der Benutzer mitbringt: er wählt sie, er weiß,
+woher sie kommt, sie kommt einmal. Die Fläche aus E-108 hat dieselbe Gestalt und drei andere
+Eigenschaften:
+
+1. **Der Benutzer wählt die Datei nicht.** Er wählt eine **E-Mail**, und die Dateien kommen mit.
+2. **Sie kommt nicht einmal, sondern täglich**, und sie kommt von jedem, der die Adresse kennt.
+3. **Beim Fremdimport entstehen nur Pfade** (A-20: „Dateiinhalte sind im Fremdbackup nicht
+   enthalten") — auf eine Datei, die schon auf dem Rechner liegt. **Hier entstehen die Bytes.**
+   Das ist der Unterschied zwischen „ein Zeiger auf etwas Vorhandenes" und „etwas Neues auf der
+   Platte", und er ist erheblich: Ein Zeiger ins Leere ist ein toter Anhang, eine geschriebene
+   Datei ist eine Datei.
+
+**Beide Risiken bleiben „hoch" und keines ist mit dieser Bewertung erledigt** — sie sind ab jetzt
+**bewertet** statt angemeldet, und die Gegenmittel stehen als A-A-78 bis A-A-87 mit Messung
+daneben. Für `risks.md` gebe ich das als Befund an den Orchestrator; die Datei gehört ihm.
+
+### 39.7 A-A-21 ist ab heute falsch — Neufassung als A-A-21′
+
+A-A-21 sichert eine **Abwesenheit** zu: *„Über das Add-in entstehen keine Anhänge (A-19.19) —
+strukturell."* Diese Abwesenheit gibt es ab E-108 nicht mehr. Ein Wächter, der sie mißt, ist genau
+das, wovor R-25 und E-099 Punkt 3 warnen — ein Satz, der das Gegenteil des Bestands behauptet, und
+davon hatte dieser Bestand am 2026-09-10 sechs. Die alte Fassung ist an ihrer Stelle in Kapitel 20
+mit Marke und Datum stehengeblieben (A-A-70); hier steht, was sie ersetzt.
+
+Entscheidend ist, **woran die neue Menge aufgespannt wird**. Nicht an der Route, die ich kenne —
+das war der Fehler von 2026-09-10, zweimal. Sondern an der Anforderung, und die lautet nach der
+neugefaßten A-19.19: *Anhänge entstehen über das Add-in **ausschließlich beim Anlegen eines neuen
+Todos** und an einem **bereits vorhandenen** Todo nicht.*
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-21′** | **Die Anhangsfläche des Add-ins ist genau eine, und sie hängt am Anlegen.** Drei Zusagen, und jede einzeln: **(a)** Unter `/api/v1/addin` gibt es **keine** Route, die eine Todo-Kennung aus der **Anfrage** entgegennimmt und einen Anhang erzeugt — gleich wie sie heißt, gleich ob sie `attachment` im Pfad trägt, gleich ob sie über ein Kettenglied antwortet. **(b)** Anhänge entstehen dort **nur** als Teil des Anlegevorgangs, an einer Todo-Kennung, die **im selben Aufruf erzeugt** wurde. **(c)** `AddinUnit` führt weiterhin **keinen** schreibenden `AttachmentPort` für ein bestehendes Todo; was es führt, ist eine Fähigkeit, die nur an einer frisch erzeugten Kennung greift, und das steht im **Typ**. | **Vier Stücke, und keines allein.** (1) Die **Zahl** in `proof:route-policy`: `addinSurface.length === 5` statt 4 — rot bei **jeder** weiteren Route unter `/addin`. (2) `proof:addin`, Nachfolger von 18f: für **jede** gefundene Route unter `/addin` die **Wirkung** — ein Aufruf mit einer **fremden, bestehenden** Todo-Kennung und einem vollständig ausgefüllten Anhang läßt `todo_attachment` für dieses Todo bei **null**, in mindestens vier Schreibweisen wie in A-A-22; die Gegenprobe schreibt per `INSERT` daran vorbei und verlangt eins. (3) Der Anlegefall: nach `POST /addin/todos` mit zwei Dateien und einer E-Mail zählt `todo_attachment` für das **neue** Todo **drei** (A-19.33), und die Gegenprobe ist eine Anfrage **mit** `todoId` im Rumpf, die den fremden Anhang **nicht** erzeugt. (4) `tsc`. **Was diese Messung NICHT fängt**, und der Absatz gehört dazu (T-289, Schlußsatz): ein Kettenglied, das unter `/addin` selbst antwortet, steht in keiner Routenliste (A-A-73 unverändert offen); und eine Fähigkeit, die an einer **erzeugten** Kennung hängt, ist von einer, die an einer **beliebigen** hängt, nur an der Naht zu unterscheiden — der Prüffall in (2) mißt das an der Wirkung, `tsc` mißt es nicht. |
+
+### 39.8 Was ich **nicht** bewerten kann, und woran es liegt
+
+Kein „vermutlich unkritisch". Sieben Dinge:
+
+1. **Jede Aussage über Office.js.** Kein Outlook, kein Netz, keine Beschreibung in dieser Umgebung.
+   **Berichtigt am 2026-09-11 (A-A-70):** Die erste dieser Fragen ist beantwortet —
+   `getAsFileAsync` gibt es, mit **read item** und Mailbox **1.14** —, und die Antwort hat W-1
+   gestrichen. Offen bleiben: ob `item.attachments[].size` die angekündigte oder die wirkliche
+   Größe ist, ob `isInline` in allen Outlook-Fassungen gleich gesetzt wird, **welche Felder
+   Office.js für den Nachbau überhaupt hergibt** und in welcher Kodierung, und ab welcher
+   Outlook-Fassung 1.14 in der Fläche steht. **Das bleibt die größte Lücke dieser Bewertung**, weil
+   der Nachbau aus 39.3.0 vollständig auf diesem Boden steht — nur ist der Boden jetzt kleiner.
+2. **Die Gestalt und Größe der EWS-Antwort.** Ungemessen. Ob ein einzelner `GetItem`-Aufruf ein
+   Vielfaches der Nachrichtengröße zurückgibt, entscheidet über die Betriebsmittelgrenze — und die
+   Grenze muß vor dem ersten Byte stehen, nicht danach (A-A-81).
+3. **Der Wurzelspeicher in gebauter Form.** 39.3.3 ist am Quelltext und an der **Abwesenheit** von
+   Code gemessen, nicht an einer Installation. Ob ein Installationspaket den Speicher auf anderem
+   Weg räumt, kann ich hier nicht sehen. T-B05 steht dafür seit dem 2026-09-10 offen.
+4. **Das Verhalten der Dateinamen auf macOS und Linux.** Meine 25 Fälle liefen auf Windows.
+   Doppelpunkt, Gerätenamen und die `\\?\`-Wirkung sind Windows-Sachen; ein Name mit `/` oder ein
+   Name aus lauter Punkten verhält sich dort anders. Ungemessen.
+5. **Semgrep über die neue Fläche.** Es gibt keine Fläche. Nach dem Bau fällig, und dann zum ersten
+   Mal mit einem Ziel, das Dateisystemschreibzugriffe aus fremder Eingabe enthält — die einzige
+   Regelklasse, bei der Semgrep hier je etwas hätte finden können.
+6. **42Crunch über die neue Route.** Es gibt keine OpenAPI-Beschreibung der neuen Route. Unverändert
+   auch kein Werkzeug und keine Berechtigung.
+7. **Ob der Benutzer die Zustimmung versteht.** A-19.32 verlangt, daß die erweiterte Berechtigung
+   benannt ist. Ob die Formulierung trägt, ist eine Messung an Menschen und keine an Code; sie
+   gehört zu ux-designer und nicht zu mir. Was ich sagen kann: Sie muß die **Wirkung** nennen
+   („darf im ganzen Postfach lesen und schreiben") und nicht den Namen („ReadWriteMailbox"). A-A-91.
+
+### 39.9 Die Auflagen — die Vorgabe für den Bau
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-A-78** | **Der Name auf der Platte wird erzeugt, der Name aus der E-Mail lebt im Bestand.** A-A-17 gilt für übernommene E-Mail-Dateien unverändert: Zielname `<erzeugt>.<endung>`, nach demselben Muster wie die Bildkopie. Übernommen wird aus dem fremden Namen **ausschließlich die Endung**, und zwar aus dem **aufgelösten** Namen (nachgestellte Punkte und Leerzeichen vorher abgeschnitten, wie `effective_file_name`), kleingeschrieben, auf `[a-z0-9]` beschränkt, höchstens 16 Zeichen; alles andere ergibt **keine** Endung. Der Name aus der E-Mail steht als **Anzeigename** in `todo_attachment` und ist dort fremder Text (`visibleText`, `<bdi>`). Damit entfallen Pfadausbruch, Gerätename, Richtungszeichen, Kollision und Kappung als Klasse, statt einzeln abgewehrt zu werden. | Ein Prüffall fährt die **25 Zeilen aus 39.4.1** durch die Ablage und mißt den **erzeugten Pfad**: Er entspricht in allen 25 Fällen der Form `<32 Hexziffern>[.<endung>]`, und keine der 25 Rohzeichenketten kommt in ihm vor. Gegenprobe in der anderen Richtung: Der **Anzeigename** trägt alle 25 unverändert. Dazu eine Gegenprobe gegen das Schrumpfen der Fallliste (E-107): die Zahl 25 steht im Prüffall. |
+| **A-A-79** | **Geschrieben wird ohne Ausweichen und ohne Nachsehen.** `open(ziel, 'wx', 0600)` in einem Verzeichnis, das mit `0700` angelegt und auf nicht-Windows ausdrücklich `chmod`-t wird — **kein** `existsSync`-dann-`writeFile` wie in der Vorlage. Ein bereits vorhandener Eintrag ist ein **Fehlschlag** nach A-19.29 und kein Ausweichen auf „(2)". Begründung, doppelt: `existsSync` + `writeFile` ist ein TOCTOU-Paar, und es folgt auf POSIX einem **baumelnden** Symlink in ein fremdes Ziel. Mit A-A-78 ist die Kollision ohnehin so wahrscheinlich wie eine doppelte UUID. | `proof:db-permissions`, um den Ordner der E-Mail-Dateien erweitert (wie A-A-27 für die Bildkopien): `0700` für das Verzeichnis, `0600` für jede Datei, unter absichtlich weiter `umask`, im **echten** Startpfad des Dienstes, mit Gegenprobe. Dazu ein Prüffall, der auf POSIX einen baumelnden Symlink an den Zielnamen legt und verlangt, daß der Schreibvorgang **scheitert** statt durchzuschreiben. |
+| **A-A-80** | **Wer A-A-78 nicht baut, baut statt dessen alles einzeln** — und diese Auflage sagt, was „alles" heißt, damit niemand sie für kürzer hält, als sie ist: `path.basename` **und** Verbotszeichen in beiden Schreibweisen; reservierte Windows-Gerätenamen (`CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, `CONIN$`, `CONOUT$`), **auch mit Endung** und ohne Rücksicht auf Groß- und Kleinschreibung; nachgestellte Punkte und Leerzeichen; Richtungs- und Formatzeichen der Kategorie `Cf`; Kappung in der **Mitte** mit sichtbarer Marke; Kollision ohne `existsSync`. Diese Auflage ist ausdrücklich als **teurere Alternative** formuliert und nicht als Ergänzung. | Dieselben 25 Zeilen aus 39.4.1, dazu die Win32-Gegenprobe aus 39.4.2: Für **jede** abgelegte Datei gilt `Test-Path -LiteralPath` unter Windows **True**. Genau diese Messung fällt heute bei vier von fünf Gerätenamen durch. |
+| **A-A-81** | **Gezählt wird beim Lesen, nicht aus der Ankündigung** (A-A-15 wörtlich, A-V-6 als Vorgeschichte). `detail.size` ist eine Behauptung und keine Grenze. Drei Grenzen, alle drei **vor** dem ersten Byte auf der Platte: **je Datei** (Vorschlag 25 MB, E-108 Punkt 3), **Summe über eine Übernahme**, **Anzahl der Dateien**. Sobald eine überschritten wird, bricht **diese** Datei ab — nichts halb Geschriebenes bleibt liegen — und sie wird nach A-19.30 namentlich gemeldet. Die Rumpfgrenze der übrigen Routen (B-1.7) bleibt unberührt; dies ist die **dritte** benannte Ausnahme neben der Datensicherung. | Ein Prüffall kündigt 1 MB an und liefert 40 MB: Der Lauf bricht bei der Grenze ab, auf der Platte liegt **nichts**, und die Meldung nennt den Namen. Ein zweiter mit 200 Dateien à 1 MB gegen die Summengrenze. Gegenprobe: eine Datei knapp unter jeder Grenze kommt durch. |
+| **A-A-82** | **Eine Tür, und sie hängt am Anlegen** — die strukturelle Hälfte von A-A-21′. Die Übernahme ist **Teil** des Anlegevorgangs und keine zweite Anfrage: Es gibt keinen Aufruf, der eine Todo-Kennung entgegennimmt und einen Anhang erzeugt. Wer das später ausweitet, hebt E-108 auf. | Siehe A-A-21′, Stücke (1) bis (4). |
+| **A-A-83** | **Kein verwaistes Byte.** Scheitert das Anlegen des Todos, werden alle in diesem Lauf geschriebenen Dateien entfernt; gelingt es teilweise, nennt A-19.29 die Namen. Im **Protokoll** steht der **erzeugte** Name und nie der fremde, nie der Absender, nie der Betreff — dieselbe Begründung wie bei der Bildkopie: eine Datei ohne Eigentümer ist Kundenmaterial, und das Protokoll ist die einzige Stelle, an der man sie wiederfindet. | Ein Prüffall läßt das Anlegen nach dem Schreiben der Dateien fehlschlagen und zählt die Dateien im Ordner: **null**. Ein zweiter läßt eine von drei Dateien scheitern und mißt: zwei Anhänge, eine Meldung mit Namen und Grund, drei Dateien minus eine im Ordner. |
+| **A-A-84** | **Die Herkunft steht im Bestand**, nicht nur in der Anzeige: Ein Anhang, der aus einer E-Mail entstanden ist, trägt das als Eigenschaft in `todo_attachment` — nicht abgeleitet aus dem Pfad, nicht geraten aus dem Ordner. Ohne sie kann A-A-85 nicht gebaut werden, und sie muß den Round-Trip der Datensicherung überstehen (A-20.4). | Migration und Prüffall; `proof:addin`-Fall aus A-A-21′ (3) liest die Eigenschaft mit. Round-Trip-Fall: Export und Import erhalten sie. |
+| **A-A-85** | **Die Rückfrage nennt die Herkunft.** Vor dem Öffnen einer Datei, die aus einer E-Mail stammt, steht zusätzlich zu den sechs Eigenschaften aus A-A-6: *„Diese Datei stammt aus einer E-Mail von …"*, Absender als **fremder Text**. A-A-6 bleibt im übrigen unverändert — kein vorbelegter Knopf, kein `Enter`, kein „nicht mehr fragen". | Ein Prüffall mißt die **angezeigte** Zeichenkette für einen Anhang mit gesetzter Herkunft und für einen ohne; `proof:foreign` sieht den Absender als behandelten Wert. |
+| **A-A-86** | **Die aufgelöste Endung steht abgesetzt in der Rückfrage**, nicht nur als Ende einer Pfadzeile: „Endung: **exe** — wird ausgeführt". Grund: Zwischen lesbarem Namen und Endung können beliebig viele Zeichen stehen, und eine Pfadzeile bricht um. | Ein Prüffall über die angezeigte Rückfrage für **`Rechnung.pdf` + 20 Leerzeichen + `.exe`**: Die Anzeige nennt `exe` und den Ausführungssatz. Derselbe Fall für `rechnung.pdf` (kein Ausführungssatz) und für `rechnung\u202Excod.exe` (Endung `exe`, Richtungszeichen als `U+FFFD` sichtbar). Diese drei Fälle gibt es heute nicht. |
+| **A-A-87** | **Ein Verweis aus fremder Hand nennt seinen Wirt.** Für einen Cloud-Anhang nach A-19.25 bleibt A-A-7 gültig (keine Rückfrage), aber Wirt und Herkunft stehen **vor** dem Klick an der Zeile. `check_link` gilt unverändert und an derselben Stelle — im Öffnen-Befehl, bei jedem Aufruf. | Ein Prüffall über die angezeigte Zeile; die `check_link`-Fälle bleiben, wie sie sind. |
+| **A-A-88** | **Das MIME wird geschrieben, nicht gelesen.** Weder Dienst noch Oberfläche noch Aufgabenbereich zerlegen, rendern oder zeigen den Inhalt der `.eml` — keine Vorschau, kein HTML-Teil, kein eingebettetes Bild daraus. Geöffnet wird sie ausschließlich über den Öffnen-Befehl der Hülle, wie jede andere Datei. Grund: Der HTML-Teil einer fremden E-Mail in der Nähe eines Fensters, das `ReadWriteMailbox` hält, ist die kürzeste Verbindung zwischen A-06 und VG-13, die dieser Bestand je hatte. | Eine Mustersuche über `apps/**`: kein MIME-Zerleger, kein `innerHTML`, kein `srcdoc`, kein `iframe` auf einem Anhangsinhalt. Dieselbe Bauart wie `proof:foreign`. |
+| **A-A-89′** | **Berichtigt am 2026-09-11 (T-297, A-A-70): Es gibt keinen EWS-Aufruf, und das ist die Auflage.** Im ganzen Baum steht **kein** `makeEwsRequestAsync`, **kein** SOAP-Rumpf und **kein** `ReadWriteMailbox`; das Original-MIME kommt aus genau **einem** `getAsFileAsync`. Eine Abwesenheit, die zugesichert wird, spannt ihre Menge an der Anforderung auf (E-099 Punkt 3): gemessen wird nicht der Name `makeEwsRequest`, sondern **jeder** Aufruf, der das Postfach jenseits der geöffneten Nachricht erreicht, und die Zeichenkette `ReadWriteMailbox` im Manifest. | Ein Nachweislauf über `apps/outlook-addin/**` und `apps/desktop/src-tauri/taskpane/**`: `getAsFileAsync` genau **einmal**, `makeEwsRequestAsync` **null**, `ReadWriteMailbox` **null** — und im Manifest steht `<Permissions>ReadItem</Permissions>` zeichengleich. Gegenprobe in beide Richtungen: Eine eingefügte EWS-Zeile macht den Lauf rot, und ein entferntes `getAsFileAsync` ebenso (sonst mißt er einen leeren Baum). — **Der bisherige Wortlaut, gegenstandslos seit dem 2026-09-11:** **Der SOAP-Rumpf ist eine feste Vorlage mit genau einer eingesetzten Stelle**, und die eingesetzte Stelle wird gegen eine enge Form geprüft und XML-gerecht eingesetzt. Es gibt **einen** `makeEwsRequestAsync`-Aufruf im ganzen Baum, und er holt eine Nachricht. Dieselbe Regel wie A-V-3 für die Release-Adresse, und aus demselben Grund: Eine Zeichenkette, die in einen Befehl an einen fremden Dienst eingesetzt wird, ist ein Befehl, bis das Gegenteil gemessen ist. | Ein Nachweislauf zählt die Aufrufstellen: **eins**. Ein Prüffall setzt eine Kennung mit `"`, `<` und `]]>` ein und mißt den erzeugten Rumpf. |
+| **A-A-90** | **Die Datensicherung wächst, und sie sagt es.** A-20.3 nennt „Anhänge samt Bildkopien". Übernommene E-Mail-Dateien sind Anhänge mit **Bytes**; entweder sie stehen im Archiv (dann wächst es um ganze Postfachinhalte, und die Fassungszahl steigt), oder sie stehen nicht darin (dann verliert der Round-Trip nach A-20.4 Kundenmaterial — **still**). Beides ist vertretbar; das Schweigen darüber ist es nicht. Entscheidung und Fassungszahl gehören dem Orchestrator. | `proof:data-transfer` und der Round-Trip-Fall; was immer entschieden wird, wird gemessen. |
+| **A-A-91′** | **Berichtigt am 2026-09-11 (T-297, A-A-70). A-19.32 ist ab jetzt strukturell erfüllt und nicht mehr durch einen Satz:** Das Add-in fordert die Rechte an, die A-19.22 braucht, und nicht mehr — und die Rechte, die es braucht, sind **dieselben wie gestern** (`ReadItem`). Es gibt keinen Rechtszuwachs mehr zu benennen. Was bleibt, ist die **Gegenrichtung**: Wer das Manifest später auf ein weiteres Recht hebt, tut es sichtbar, mit einem Satz daneben, der die **Wirkung** nennt und nicht den Namen. | `<Permissions>ReadItem</Permissions>` zeichengleich im Manifest, gemessen in A-A-89′. — **Der bisherige Wortlaut, gegenstandslos seit dem 2026-09-11:** „Der Rechtszuwachs wird mit seiner Wirkung benannt (A-19.32) … Nicht ‚ReadWriteMailbox‘, nicht ‚erweiterte Berechtigung‘, nicht in einem Nebensatz." |
+| **A-A-92** | **Der Wurzelspeicher bekommt ein Ende.** Entweder entfernt die Deinstallation das Zertifikat aus `Cert:\CurrentUser\Root` und löscht `taskpane-key.pem`, oder die Einrichtung sagt **beim Legen**, daß es dort dauerhaft bleibt und wie man es von Hand entfernt. Gemessen am 2026-09-11: Es gibt heute **keinen** Deinstallationspfad (39.3.3). Diese Auflage hängt nicht an E-108 — sie wird durch E-108 nur teurer. | Mustersuche über `apps/desktop/**` nach einer Entfernung; heute **null** Treffer, und genau das ist die Gegenprobe. |
+
+| **A-A-93** | **Am Ende wird nie gekürzt.** Weder die Rückfrage vor dem Öffnen noch die Anhangsliste kürzt einen Dateinamen am Zeilenende — kein `text-overflow: ellipsis`, kein `slice(0, n)`, kein Deckel in einer engen Spalte. Wo gekürzt werden muß, wird in der **Mitte** gekürzt und die Kürzung ist sichtbar. Begründung: Eine Kürzung nimmt der Anzeige die Endung, **ohne ein Zeichen zu verändern**; `visibleText` sieht das nicht, weil es nichts zu behandeln gibt, und `proof:foreign` sieht es nicht, weil ein CSS-Deckel keinen Typ hat. Das ist der einzige bekannte Weg, an der Behandlung fremden Textes vorbei die Rückfrage zum Lügen zu bringen. | Ein Prüffall mißt die **gerenderte Breite und den Text** der Rückfrage für einen Namen aus 200 Zeichen mit der Endung `.exe`: Die Endung ist im Text enthalten **und** sichtbar. Ein Nachweislauf sucht über `apps/web/src/**` nach `text-overflow`, `-webkit-line-clamp` und `overflow: hidden` in Nachbarschaft der Anhangsanzeigen und verlangt für jede Fundstelle eine ausgeschriebene Ausnahme. Gegenprobe: ein absichtlich gesetzter Deckel macht den Lauf rot. |
+| **A-A-94** | **Das Manifest fordert die Fähigkeit nicht, es prüft sie zur Laufzeit** — `MinVersion` bleibt auf dem niedrigsten Wert, der das Add-in überhaupt trägt. Ein Outlook, das den Weg zur Nachricht nicht kann, **installiert das Add-in trotzdem**, legt das Todo an und sagt, was fehlt (A-19.31). **Eine stille Degradierung wie in der Vorlage ist ausgeschlossen.** **Berichtigt am 2026-09-11 (T-297, A-A-70): Die erste Hälfte dieser Auflage ist ab heute die tragende, die zweite ist entfallen.** Entfallen ist: *„Und weil `<Permissions>` für das ganze Add-in gilt: Wird der EWS-Weg gebaut, ist zu entscheiden und zu dokumentieren, daß das erweiterte Recht auch dort angefordert wird, wo es nichts nützt."* Es wird kein erweitertes Recht mehr angefordert. **Tragend geworden ist die erste Hälfte**, und zwar stärker als bei ihrer Niederschrift: `getAsFileAsync` braucht Mailbox **1.14**, also liegt die Schwelle **höher** als die 1.8 des Anhangzugriffs. Stünde sie im Manifest, verweigerte ein großer Teil der Outlook-Fassungen die Installation — und der Nachbau aus 39.3.0, der genau für diesen Fall gebaut wird, käme nie zum Zug. **Die Zahl im Manifest ist damit die Bedingung dafür, daß der Rückfallweg überhaupt erreichbar ist.** | Textvergleich am Manifest gegen die Zahl; ein Prüffall setzt die Fähigkeit auf „nicht vorhanden" und mißt: Todo entsteht, Meldung nennt den Grund, `todo_attachment` bleibt für die E-Mail leer. Gegenprobe mit vorhandener Fähigkeit: drei Anhänge (A-19.33). |
+| **A-A-95** | **Wird der Zwischenweg gebaut, gilt die Quarantäne** — die sechs Punkte aus 39.4.5, zusammengefaßt: eigenes Verzeichnis `0700`, vom Öffnen-Befehl unerreichbar und von `todo_attachment` nie benannt; Verschieben erst beim Anlegen; Merkzeichen vom **Dienst** vergeben, tokengebunden, einmal verwendbar, mit Verfall; Grenzen aus A-A-81 über das ganze Vorhaben; Aufräumen beim Start **und** regelmäßig, offene Vorhaben überleben keinen Neustart; die Tür zählt in `addinSurface.length` mit und wird von `proof:addin` auf ihre **Wirkung** gemessen. Diese Auflage gilt **nur**, wenn eine Messung den Weg aus 39.4.5 widerlegt; ohne diese Messung wird sie nicht gebraucht. | Der Lauf aus 39.4.5: drei Dateien in die Quarantäne, kein Todo, Neustart, **null** Dateien — mit der Gegenprobe, daß der Lauf **drei** zählt und rot wird, wenn die Aufräumroutine entfernt ist. |
+
+| **A-A-96** | **Eine nachgebaute `.eml` wird nicht zusammengeklebt, sondern kodiert erzeugt.** Kein Kopfzeilenwert aus fremdem Text gelangt roh in die Datei: Jeder Kopfzeilenwert wird kodiert (RFC 2047) und gefaltet, **jedes** `CR` und `LF` darin ist ein Ablehnungsgrund und keine Zeile, und die Trennmarke wird **erzeugt** wie ein Anhangsname (A-A-78) statt fest zu stehen. **Jeder Teil wird base64-kodiert** — damit kann kein Inhalt eine Trennmarke enthalten, und die Einschleusung stirbt an der Kodierung statt an einer Suche. Begründung: Wer Kopfzeilen schreiben kann, schreibt `Content-Type: multipart/mixed` und in den so entstandenen Teil einen **Anhang**; das ist ein Weg von einer E-Mail zu einer ausführbaren Datei, der an A-19.23, A-A-78 und der Größengrenze **vollständig vorbeiführt** (39.3.0 Punkt 1 und 2). | Ein Prüffall setzt Betreff, Absendername und Textkörper mit `\r\n`, mit der Zeichenfolge der Trennmarke, mit `Content-Type:` am Zeilenanfang und mit einem vollständigen base64-Anhangsteil — und mißt die **erzeugte Datei**: genau die Teile, die wir geschrieben haben, keine fremde Kopfzeile, keine zweite Trennmarke, ein einziger Anhangsteil (nämlich keiner). Gegenprobe: Ein absichtlich roh eingesetzter Betreff macht den Prüffall rot. |
+| **A-A-97** | **„Nachgebaut" hängt an der Datei, nicht am Augenblick.** Ist die `.eml` nicht das Original, steht das als Eigenschaft am Anhang im Bestand (dieselbe Stelle wie die Herkunft aus A-A-84), überlebt den Round-Trip der Datensicherung (A-20.4), steht an der Anhangszeile **und** in der Rückfrage vor dem Öffnen. Begründung: A-19.31 kennt „geklappt" und „etwas fehlt"; der Nachbau ist ein **dritter** Zustand — es hat geklappt, aber **anders** —, und ein Hinweis beim Anlegen ist drei Wochen später nirgends mehr. Eine Datei, die aussieht wie ein Beleg und keiner ist, wird weitergereicht: an die Buchhaltung, in eine Akte. | Ein Prüffall legt ein Todo ohne Mailbox 1.14 an und mißt: Eigenschaft gesetzt, Anhangszeile und Rückfrage nennen sie, Export und Re-Import erhalten sie. Gegenprobe mit 1.14: Eigenschaft **nicht** gesetzt, und kein Satz behauptet einen Nachbau. |
+
+### 39.10 Befunde dieser Vorabbewertung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-297-1** | **muß** | **Der fremde Name darf kein Pfadbestandteil werden.** Die Vorlage schreibt ihn, umgeschrieben, aber ungeprüft: 25 Angriffsnamen, 25 Dateien, null Ablehnungen (39.4.1). Vier von fünf reservierten Gerätenamen landen als Datei, die Win32 nicht sieht (39.4.2) — der dritte Fall derselben Klasse nach T-156-1 und T-164-1: geprüfter Name ≠ aufgelöster Name. **Gegenmittel A-A-78**, hilfsweise A-A-80. **Nebenwirkung, die mitentschieden werden muß:** A-19.23 („Dateiname bleibt erhalten") und A-A-17 („Der Name der Kopie wird erzeugt") widersprechen einander; der Vorschlag zur Auflösung steht in 39.4.3 | integration-dev, domain-dev; die Auflösung des Widerspruchs: Auftraggeber |
+| **T-297-2** | **muß** | **`existsSync` + `writeFile` nicht übernehmen.** TOCTOU-Paar, und auf POSIX ein Schreibzugriff durch einen baumelnden Symlink an ein fremdes Ziel. Unser eigener Bildspeicher macht es seit T-156 besser. **Gegenmittel A-A-79** | domain-dev |
+| **T-297-3** | **muß** | **Die Route der Vorlage ist kein Vorbild.** `POST /api/attachments` hat keine Prüfschicht und dazu `Access-Control-Allow-Origin: *` mit PNA — in unserer Sprache: A-02 schreibt Dateien ins Anwendungsdatenverzeichnis. Die **Ablagefunktion** ist ein Vorbild, die Tür um sie herum nicht (39.4.4). **Gegenmittel A-A-82, A-A-21′** | integration-dev |
+| **T-297-4** | **muß** | **`detail.size` ist eine Ankündigung.** Wörtlich A-A-15, und in A-V-6 war dieselbe Sache schon einmal ein Befund. Dazu fehlen Summen- und Anzahlgrenze vollständig. **Gegenmittel A-A-81** | integration-dev, domain-dev |
+| **T-297-5** | **muß** | **A-A-21 sichert ab heute eine Abwesenheit zu, die es nicht mehr gibt.** Genau die Fehlerart aus R-25 und E-099 Punkt 3. In Kapitel 20 und 21 an Ort und Stelle berichtigt (A-A-70); Neufassung **A-A-21′** in 39.7, aufgespannt an der Anforderung und nicht an der Route. `proof:route-policy` (`addinSurface.length`) und `proof:addin` 18f müssen **im selben Auftrag** mitwandern wie die Route — sonst steht am Ende wieder ein grüner Wächter neben einer offenen Tür | Orchestrator, integration-dev |
+| **T-297-6** | **muß** | **R-23 ist bewertet, und die Antwort ist unangenehm.** Es gibt **keinen** Deinstallationspfad für das Zertifikat in `Cert:\CurrentUser\Root` und keinen für `taskpane-key.pem`. Damit steht die Kette aus 39.3.3 offen: Schlüssel lesen → Port 17844 binden, solange SuperTakt nicht läuft → Outlook lädt den Aufgabenbereich des Angreifers über eine **gültige** TLS-Verbindung. **Berichtigt am 2026-09-11 (A-A-70), nach dem Wegfall von W-1:** Die **Beute** ist wieder das Takt-Token und die geöffnete Nachricht, nicht das Postfach. **Die Einstufung verschiebt sich trotzdem nicht — R-23 bleibt „hoch"**, und die Begründung wechselt die Hälfte. Was bleibt: ein Vertrauensanker, den **niemand je entfernt**, während der zugehörige private Schlüssel mit Benutzerrechten daneben liegt; und ein Angreifer, der sich damit **dauerhaft** als der Aufgabenbereich ausgeben kann — auch nach der Deinstallation, wenn es die Anwendung gar nicht mehr gibt und niemand mehr hinsieht. Was den Umfang begrenzt und in `risks.md` bisher fehlt, weil es nie gemessen wurde: Das Zertifikat ist **kein CA-Zertifikat** (`basicConstraints` kritisch und leer, `certificate.ts:159`) und trägt als alternative Namen ausschließlich `localhost` und die Loopback-Adresse (`:170`). Die Wirkung des Eintrags reicht damit **nicht** über `localhost` hinaus — es ist kein Generalschlüssel für beliebige Wirte, sondern einer für den Aufgabenbereich. **Folge für die Dringlichkeit, und nur sie ändert sich:** A-A-92 und T-B05 müssen nicht mehr **vor dem Bau** liegen, sondern **vor der Auslieferung**. **Gegenmittel A-A-92**, unverändert. Hängt nicht an E-108 und ist seit A-23 wahr | Auftraggeber, frontend-dev |
+| **T-297-7** | **sollte** | **Die Rückfrage sagt die Wirkung, aber nicht die Herkunft.** Sie trägt für `Rechnung.pdf␣…␣.exe` — gelesen, nicht gefahren: `effectiveFileNameOf` → `extensionOf` → `runsWhenOpened` liefert „wird ausgeführt" (39.5.1). Was fehlt: die Herkunft aus einer fremden E-Mail, die abgesetzte Endung, und **drei Prüffälle, die es heute nicht gibt**. **Gegenmittel A-A-84, A-A-85, A-A-86** | frontend-dev, unit-tester |
+| **T-297-8** | **sollte** | **Der Cloud-Anhang ist der erste Verweis, den nicht der Benutzer eingetippt hat**, und Verweise öffnen nach A-A-7 ohne Rückfrage. `check_link` trägt die Hauptsache; die halbe Begründung von A-A-7 ist entfallen. **Gegenmittel A-A-87** | frontend-dev |
+| **T-297-9** | **erledigt, und es ist der Befund mit dem besten Ergebnis dieses Kapitels** | **Frage (1) ist gestellt und beantwortet: `getAsFileAsync` gibt es** — EML/MIME in Base64, Mindestrecht **read item**, Mailbox **1.14**. Der Auftraggeber hat am selben Tag entschieden: EWS fällt, `ReadWriteMailbox` fällt, das Manifest bleibt bei `ReadItem`. **W-1 ist damit gegenstandslos**, VG-13 ist gestrichen, A-A-89 und A-A-91 sind neugefaßt, A-A-94 hat seine tragende Hälfte gewechselt. An seine Stelle tritt der **Nachbau** (39.3.0) mit den Befunden T-297-15 und T-297-16 — kleiner, aber neu. **Frage (2) bleibt offen** und liegt beim Auftraggeber: zweite Bestätigung bei ausführbarer Endung, Preis und Nutzen in 39.5.3 | erledigt (1); Auftraggeber (2) |
+| **T-297-10** | Hinweis | **Die Datensicherung wächst um ganze E-Mails oder verliert sie still** (A-A-90). Base64 ist auch im Archiv keine Verschlüsselung; ein Archiv nach A-20 enthielte ab jetzt vollständige Kundenkorrespondenz. Das ist keine Lücke, sondern eine Eigenschaft, die eine Entscheidung braucht | Orchestrator, Auftraggeber |
+| **T-297-12** | **muß** | **Die Kürzung am Zeilenende bringt die Rückfrage zum Lügen, und kein heutiger Wächter sieht das** (aus T-298, zweite Hälfte von mir). `visibleText` trägt gegen das Richtungszeichen — gebaut, gemessen, A-A-6. Gegen einen CSS-Deckel trägt es nicht, denn es wird kein Zeichen verändert. Betroffen ist genau die Sicherung, auf der A-19.26 ruht. **Gegenmittel A-A-93**, und A-A-86 wird dadurch von „hilfreich" zu „tragend" | frontend-dev, unit-tester |
+| **T-297-13** | **muß** | **`MinVersion` darf nicht auf 1.8** (aus T-298). Sonst verweigert älteres Outlook die Installation und A-19.31 ist nicht mehr erfüllbar — wo nichts installiert ist, entsteht kein Todo, bei dem stehen könnte, was fehlt. Laufzeitprüfung wie in der Vorlage, **ohne** deren stille Degradierung. **Berichtigt am 2026-09-11 (A-A-70): stärker, nicht schwächer.** Entfallen ist der Zusatz über `<Permissions>` — es wird kein erweitertes Recht mehr angefordert. **Die Zahl selbst ist dafür tragend geworden:** `getAsFileAsync` braucht Mailbox **1.14**, also liegt die Schwelle **höher** als die 1.8 der Vorlage. Stünde sie im Manifest, verweigerte ein großer Teil der Fassungen die Installation, und der Nachbau — der genau für diesen Fall gebaut wird — käme nie zum Zug. **Gegenmittel A-A-94** | integration-dev |
+| **T-297-14** | **muß** | **F-02 beantwortet: die Bytes bleiben im Aufgabenbereich, ein Anlegeruf trägt alles.** Der Weg „Datei für Datei zum Dienst" öffnet zeichengleich die Tür aus T-297-3, nur mit einem Token davor — und über VG-2 ist ein Token kein Eigentümer. Er bricht außerdem A-A-21′ (b) von Bauart wegen und macht aus A-A-83 eine Zusage am Zeitgeber. Der Gegeneinwand („130 MB") ist eine Zahl zu einer Summengrenze, die A-A-81 ohnehin verlangt. **Wird er dennoch gebraucht, dann nur unter A-A-95**, und die Messung, die ihn begründet, gehört in den Auftrag | Orchestrator, integration-dev |
+| **T-297-15** | **muß** | **Eine nachgebaute `.eml` ist ein Format, das wir aus fremdem Text erzeugen — und Kopfzeilen-Einschleusung führt an allem vorbei, was dieses Kapitel sonst aufbaut.** Ein Betreff mit `CRLF` schreibt eigene Kopfzeilen; wer Kopfzeilen schreibt, schreibt `multipart/mixed` und in den Teil einen Anhang. Der landet in unserem Datenverzeichnis, Outlook zeigt ihn beim Öffnen, und der Benutzer kann ihn doppelklicken — **ohne** Größengrenze, **ohne** Namensprüfung, **ohne** A-A-78, weil er nie ein Anhang im Sinne von A-19.23 war. Dieselbe Sache über die Trennmarke. **Gegenmittel A-A-96**, und die Abwehr ist die Kodierung, nicht die Suche | integration-dev |
+| **T-297-16** | **muß** | **Eine Datei, die aussieht wie das Original und es nicht ist, muß es selbst sagen.** Der Nachbau trägt Absender, Empfänger, Betreff, Datum und Text — nicht die ursprünglichen Kopfzeilen, nicht DKIM, nicht S/MIME. Als Beleg ist er nichts wert, und er wird weitergereicht. A-19.31 kennt „geklappt" und „etwas fehlt"; das hier ist ein **dritter** Zustand, und ein Hinweis beim Anlegen ist drei Wochen später nirgends. **Gegenmittel A-A-97**: die Kennzeichnung hängt an der Datei, überlebt den Round-Trip und steht in der Rückfrage | integration-dev, frontend-dev, domain-dev |
+| **T-297-11** | Hinweis | **Semgrep Guardian und 42Crunch erneut nicht verfügbar**, und die Zählung dieses Papiers ist uneinheitlich (39.0). Für diesen Auftrag ohne Gewicht — es ist kein Produktivcode geändert —, nach dem Bau zum ersten Mal mit einem lohnenden Ziel | Auftraggeber, Orchestrator |
+
+### 39.11 Restrisiko, wenn alle Auflagen sitzen
+
+**Nicht abgedeckt und nicht abdeckbar:**
+
+- **Der Benutzer, der bestätigt.** A-19.26 macht übernommene Dateien zu gewöhnlichen
+  Dateianhängen, und ein gewöhnlicher Dateianhang läßt sich öffnen. Zwischen einer fremden E-Mail
+  und einem Programmstart steht am Ende ein Mensch, der auf „Öffnen" klickt. Alles, was dieses
+  Papier vorschlägt, macht diesen Klick **informierter** — keines macht ihn überflüssig. Das ist
+  die Entscheidung aus E-108 Punkt 2, und sie ist bewußt getroffen.
+- **~~Das Postfach hinter dem Add-in~~ — entfallen am 2026-09-11 (A-A-70).** Hier stand: *„Die
+  Selbstbeschränkung unseres Codes ist die ganze Grenze (VG-13). Ein Wächter kann zählen, daß es
+  einen EWS-Aufruf gibt (A-A-89); daß Office.js dem Fenster nicht mehr gibt, kann er nicht."* Mit
+  `getAsFileAsync` und `ReadItem` gibt Office.js dem Fenster nicht mehr als die geöffnete
+  Nachricht. **Das ist die einzige Zeile dieses Kapitels, die gestrichen und nicht ersetzt wird.**
+- **Der Nachbau bleibt ein Nachbau**, auch mit A-A-96 und A-A-97. Die Kodierung verhindert, daß
+  fremder Text zu Struktur wird; sie macht die Datei nicht echt. Ein Benutzer, der die
+  Kennzeichnung liest und trotzdem weiterreicht, ist außerhalb dessen, was Code leisten kann —
+  dieselbe Klasse wie der Benutzer, der auf „Öffnen" klickt.
+- **A-03 im selben Benutzerkonto.** Unverändert außerhalb dessen, was diese Anwendung leisten
+  kann — mit der Ausnahme, die T-297-6 benennt: Was wir im Wurzelspeicher **hinterlassen**, ist
+  unsere Sache und nicht seine.
+
+### 39.12 Urteil dieser Vorabbewertung
+
+**Nacharbeit vor dem Bau — und zwar an fünf Stellen, von denen vier klein sind.**
+
+Die Fläche ist baubar, und sie ist es **ohne** neue Erfindung: Vier der sechs Schwachstellen der
+Vorlage sind in diesem Bestand bereits gelöst, in `attachment-store.ts`, seit T-156. Wer A-A-78
+und A-A-79 baut, übernimmt kein fremdes Muster, sondern das eigene, und verliert dabei genau eine
+Sache — den fremden Namen als Pfad, und den wollen wir nicht.
+
+**Gebaut werden darf, sobald fünf Dinge stehen**, und die Reihenfolge ist die des Risikos:
+
+1. **Der Widerspruch zwischen A-19.23 und A-A-17 ist entschieden** (T-297-1). Ohne diese
+   Entscheidung baut integration-dev entweder gegen die Spezifikation oder gegen dieses Papier.
+   Mein Vorschlag: erzeugter Name auf der Platte, fremder Name als Anzeigename, Endung erhalten.
+2. **A-A-21′ ersetzt A-A-21 im selben Auftrag wie die Route** (T-297-5) — Wächterzahl, `proof:addin`
+   und Spezifikationstext zusammen, nicht nacheinander. Das ist die Lehre von E-100, in die
+   Gegenrichtung angewandt.
+3. **A-A-78, A-A-79, A-A-81, A-A-82, A-A-93 und A-A-94 stehen im Auftrag des Bauenden**, nicht in
+   einem Nachbesserungszettel danach. A-A-93 und A-A-94 sind dabei die billigsten der Liste und die
+   beiden, die am leichtesten vergessen werden: eine CSS-Regel und eine Zahl im Manifest.
+   **F-02 ist beantwortet** (39.4.5, T-297-14): die Bytes bleiben im Aufgabenbereich, ein Anlegeruf
+   trägt alles, die Summengrenze aus A-A-81 ist die Rumpfgrenze dieser Route. Der Zwischenweg wird
+   nur gebaut, wenn eine **Messung** ihn erzwingt, und dann unter A-A-95.
+4. **Die Frage aus T-297-9 (1) ist gestellt und beantwortet, und sie hat ein Drittel dieser
+   Bewertung gestrichen** (Berichtigung am 2026-09-11, A-A-70). An die Stelle von W-1 tritt der
+   Nachbau: **A-A-96** (kodiert erzeugen statt zusammenkleben — sonst führt eine Kopfzeile an
+   A-19.23, A-A-78 und der Größengrenze vorbei) und **A-A-97** (die Kennzeichnung hängt an der
+   Datei, nicht am Augenblick). Beide gehören in denselben Auftrag wie der Nachbau. Offen bleibt
+   Frage (2): zweite Bestätigung bei ausführbarer Endung, beim Auftraggeber.
+5. **A-A-92 ist terminiert.** Nicht gebaut, aber terminiert. Ein Wurzelspeichereintrag ohne Ende
+   ist der Zündschlüssel zu allem, was W-1 hinzufügt, und er liegt seit A-23 im Schloß.
+
+**Freigegeben ist damit nichts, und blockiert ist auch nichts.** Was hier steht, ist die
+Bedingung, unter der gebaut werden darf — so wie es Abschnitt 18 für den Ausgang ins Netz und
+Abschnitt 20 für die Anhänge war. Beide Male hat diese Reihenfolge getragen.
+
+**Der Satz, der mir aus dieser Bewertung bleibt.** Ich habe R-23 und R-24 sechsmal angemeldet und
+jedesmal dieselbe billige Frage danebengeschrieben, ohne sie zu stellen. Sie zu beantworten hat
+heute vier Minuten gedauert, und die Antwort war „nein, es wird nie entfernt". **Ein Risiko, das
+sechsmal angemeldet und nie bewertet wird, ist kein Risiko mehr, sondern eine Gewohnheit** — und
+eine Gewohnheit liest der nächste Prüfer als erledigt.

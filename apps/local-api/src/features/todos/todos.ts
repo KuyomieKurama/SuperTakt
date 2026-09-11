@@ -352,13 +352,31 @@ export async function loadTodo(
 export async function removeTodo(context: AppContext, id: TodoId): Promise<UseCaseResult<void>> {
   const outcome = await context.transactions.inTransaction(async (unit) => {
     const images = await unit.attachments.imageTargets(id);
+    /*
+     * Dieselbe Frage für die **übernommenen E-Mail-Dateien** (A-19.23,
+     * A-A-83), und dieselbe Reihenfolge: erst lesen, dann löschen, dann die
+     * Dateien. Nach dem `COMMIT` ließen sich die Pfade nicht mehr lesen.
+     *
+     * `emailFileTargets` fragt mit `origin = 'email'` und trifft damit nur
+     * Dateien, die dieser Dienst selbst geschrieben hat. Ein vom Benutzer
+     * eingetragener Pfad steht nicht darin — seine Datei gehört ihm, und das
+     * Löschen eines Todos darf sie nicht mitnehmen.
+     */
+    const emailFiles = await unit.attachments.emailFileTargets(id);
     const removed = await unit.todos.remove(id);
     if (!removed.ok) return err(removed.error);
-    return ok(images);
+    return ok({ images, emailFiles });
   });
 
   if (!outcome.ok) return err(outcome.error);
-  for (const name of outcome.value) {
+  for (const target of outcome.value.emailFiles) {
+    // Dieselbe Begründung wie bei den Bildkopien eine Schleife weiter: Das Todo
+    // **ist** gelöscht, und daran ändert eine liegengebliebene Datei nichts.
+    // Still ist der Fehlschlag nicht — er steht mit dem erzeugten Namen im
+    // Protokoll.
+    await context.attachmentBlobs.removeEmailFile(target);
+  }
+  for (const name of outcome.value.images) {
     /*
      * Der Rückgabewert wird bewußt nicht in die Antwort getragen (T-159): Das
      * Todo **ist** gelöscht, und daran ändert eine liegengebliebene Kopie

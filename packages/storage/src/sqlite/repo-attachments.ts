@@ -48,7 +48,9 @@ import { toAttachment } from './mappers.ts';
 import type { IdSource } from './ids.ts';
 
 /** Alle Spalten von `todo_attachment`, ausgeschrieben. */
-const ATTACHMENT_COLUMNS = 'a.id, a.todo_id, a.kind, a.title, a.target, a.position, a.created_at';
+const ATTACHMENT_COLUMNS =
+  'a.id, a.todo_id, a.kind, a.title, a.target, a.position, a.created_at, ' +
+  'a.origin, a.origin_sender, a.display_name, a.rebuilt';
 
 /**
  * Zeilen, deren Art die Domäne nicht kennt, werden **übergangen**.
@@ -141,10 +143,34 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
       const outcome = attempt(() => {
         conn
           .prepare(
-            `INSERT INTO todo_attachment (id, todo_id, kind, title, target, position, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO todo_attachment
+               (id, todo_id, kind, title, target, position, created_at,
+                origin, origin_sender, display_name, rebuilt)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .run(id, input.todoId, input.kind, input.title, input.target, next, input.now);
+          .run(
+            id,
+            input.todoId,
+            input.kind,
+            input.title,
+            input.target,
+            next,
+            input.now,
+            /*
+             * Die vier Spalten aus Migration 0023 (A-A-84, A-A-97).
+             *
+             * **Ausgeschrieben und nicht ausgelassen.** Der `DEFAULT` der
+             * Migration trägt die Zeilen, die es vorher gab; diese Anweisung
+             * schreibt jede Spalte selbst, weil ein ausgelassenes Feld sonst
+             * zweimal beantwortet würde — einmal von SQLite, einmal von der
+             * Domäne —, und zwei Antworten über dieselbe Sache laufen
+             * auseinander, ohne daß es jemand sieht.
+             */
+            input.origin ?? 'user',
+            input.originSender ?? null,
+            input.displayName ?? null,
+            (input.rebuilt ?? false) ? 1 : 0,
+          );
       });
       if (!outcome.ok) return err(outcome.error);
 
@@ -179,6 +205,21 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
       const rows = conn
         .prepare(
           "SELECT a.target FROM todo_attachment a WHERE a.todo_id = ? AND a.kind = 'image'",
+        )
+        .all(todoId);
+      return rows.map((row) => text(row, 'target'));
+    },
+
+    async emailFileTargets(todoId) {
+      /*
+       * **Beide Bedingungen, und die zweite ist die tragende.** `kind = 'file'`
+       * allein träfe auch jeden Pfad, den der Benutzer selbst eingetragen hat —
+       * und dessen Datei gehört ihm. `origin = 'email'` schränkt auf die
+       * Dateien ein, die dieser Dienst selbst geschrieben hat.
+       */
+      const rows = conn
+        .prepare(
+          "SELECT a.target FROM todo_attachment a WHERE a.todo_id = ? AND a.kind = 'file' AND a.origin = 'email'",
         )
         .all(todoId);
       return rows.map((row) => text(row, 'target'));

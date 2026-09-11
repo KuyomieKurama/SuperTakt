@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useId, useRef, type KeyboardEvent } from "react";
 
-import type { ForeignText } from "../../api/types";
+import type { ForeignText, UncappedText } from "../../api/types";
 import { cx } from "../../lib/cx";
 import { focusableWithin, keepTabInside } from "../../lib/focus";
 import { foreignText } from "../../lib/foreign";
 import { effectiveFileNameOf, extensionOf, fileNameOf, runsWhenOpened } from "./attachmentLabel";
+import { Foreign } from "../../shared/ui/Foreign";
+import { ForeignName } from "../../shared/ui/ForeignName";
 import { Icon } from "../../shared/ui/Icon";
 import { Button } from "../../shared/ui/Primitives";
 
@@ -125,11 +127,83 @@ import { Button } from "../../shared/ui/Primitives";
  * wäre etwas geschehen. Der Meldungsstapel liegt seit T-110 hinter der
  * Abdunklung, solange ein Dialog steht; dieselbe Lehre wie bei „Takt beenden"
  * (T-133) und beim Versionsdialog (T-139).
+ *
+ * ===========================================================================
+ * Drei Zutaten aus T-302 — Herkunft, Endung, Nachbau
+ * ===========================================================================
+ *
+ * **1. Die Herkunft** (Auflage A-A-85). Bis A-19.23 war jeder Dateianhang von
+ * Hand eingetragen: Der Benutzer kannte die Herkunft, weil er sie selbst
+ * gewählt hatte. Seither ist der häufigste Dateianhang einer, den ein
+ * **Fremder** geschickt hat, und der Benutzer sieht ihn Tage später zwischen
+ * seinen eigenen. Die Rückfrage sagte bisher, **was** geschieht; sie sagt jetzt
+ * auch, **woher** diese Datei kommt, und nennt den Absender als fremden Text.
+ *
+ * **2. Die abgesetzte Endung** (Auflage A-A-86). Der Dialog kannte sie längst
+ * (`extensionOf`), zeigte sie aber nur als Ende einer Pfadzeile. Bei
+ * `…Rechnung.pdf␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣␣.exe` steht sie zwanzig Zeichen vom
+ * lesbaren Namen entfernt und kann in der Zeile umbrechen. Sie steht jetzt in
+ * einer eigenen Zeile mit ihrem Urteil daneben: „Endung: exe — wird
+ * ausgeführt". Der Wert kommt aus dem **Pfad** und nicht aus dem Anzeigenamen —
+ * der Pfad ist es, den das Betriebssystem auflöst (A-19.23a).
+ *
+ * **3. Der Nachbau** (A-19.22b, Auflage A-A-97). Ist die `.eml` nicht die
+ * ursprüngliche Nachricht, steht das hier — nicht nur beim Anlegen im
+ * Aufgabenbereich, denn drei Wochen später ist ein Hinweis von dort nirgends,
+ * und der Benutzer steht dann vor dieser Frage.
+ *
+ * ===========================================================================
+ * Und eine vierte Sache, die nichts hinzufügt, sondern etwas verbietet
+ * ===========================================================================
+ *
+ * **Nichts in diesem Dialog wird am Ende gekürzt** (A-19.23b, Auflage A-A-93,
+ * R-27). Eigenschaft 1 sagte das schon für den Pfad — der security-checker hat
+ * gezeigt, daß die Zusage bisher **nirgends gemessen** war: Ein Deckel in der
+ * Darstellung verändert kein Zeichen, also sieht ihn weder `visibleText` noch
+ * `proof:foreign`. Der Benutzer bestätigt dann `Rechnung…` und startet eine
+ * `.exe`.
+ *
+ * Deshalb tragen Name, aufgelöster Name, Anzeigename und Endung seit T-302 den
+ * Typ `UncappedText`, gehen durch {@link ForeignName}, und
+ * `scripts/proof-clamp.mjs` mißt die Klassen dieser Datei gegen die Menge der
+ * deckelnden Klassen aus den Stilblättern. Wer hier ein `truncate` setzt, macht
+ * den Lauf rot.
  */
 export interface AttachmentOpenDialogProps {
   readonly open: boolean;
-  /** Der volle Pfad aus dem Bestand. Fremder Text (E-063). */
-  readonly path: ForeignText;
+  /**
+   * Der volle Pfad aus dem Bestand. Fremder Text (E-063) — und `UncappedText`,
+   * weil er ungekürzt dastehen muß (A-A-6 Eigenschaft 1, Auflage A-A-93).
+   */
+  readonly path: UncappedText;
+  /**
+   * Der Name aus der E-Mail (A-19.23a), falls dieser Anhang von dort stammt.
+   * `null` bei jedem Anhang, den der Benutzer selbst eingetragen hat.
+   *
+   * **Er ist nicht der Name auf der Platte.** Den bestimmt SuperTakt; dieser
+   * hier ist der einzige Wert im Dialog, den ein Absender frei gewählt hat —
+   * und genau deshalb steht er da: Was der Benutzer in der Liste gelesen und
+   * angeklickt hat, ist er, nicht `<32 Hexziffern>.pdf`. Verschwiege ihn der
+   * Dialog, hätte die Rückfrage nichts mit der Zeile zu tun, aus der sie kommt.
+   */
+  readonly displayName?: UncappedText | null;
+  /**
+   * Der Absender der E-Mail, aus der diese Datei stammt (Auflage A-A-85).
+   * `null` heißt: nicht aus einer E-Mail, oder kein Absender bekannt.
+   */
+  readonly originSender?: ForeignText | null;
+  /**
+   * Diese Datei stammt aus einer E-Mail (A-A-84). Getrennt von
+   * {@link AttachmentOpenDialogProps.originSender}, weil „aus einer E-Mail ohne
+   * bekannten Absender" eine Aussage ist und „nicht aus einer E-Mail" eine
+   * andere.
+   */
+  readonly fromEmail?: boolean;
+  /**
+   * Diese Datei ist ein **Nachbau** der Nachricht und nicht die Nachricht
+   * selbst (A-19.22b, Auflage A-A-97).
+   */
+  readonly rebuilt?: boolean;
   /**
    * Der Grund, aus dem die Hülle abgewiesen hat — schon als deutscher Satz.
    * `null`, solange nichts schiefgegangen ist.
@@ -154,6 +228,10 @@ export interface AttachmentOpenDialogProps {
 export function AttachmentOpenDialog({
   open,
   path,
+  displayName = null,
+  originSender = null,
+  fromEmail = false,
+  rebuilt = false,
   refusal = null,
   foreseenRefusal = null,
   busy = false,
@@ -235,20 +313,26 @@ export function AttachmentOpenDialog({
   */
   const blocked = foreseenRefusal !== null;
   const executes = !blocked && runsWhenOpened(path);
-  // Auch die Endung ist fremder Text und steht auf dem Bildschirm.
-  const extension = foreignText(extensionOf(path));
-  // Beide Teile durch die Behandlung für fremden Text (Eigenschaft 2).
+  /*
+    Die Endung steht **zweimal** auf dem Bildschirm: im Satz über die Ausführung
+    und abgesetzt im Kasten (Auflage A-A-86). Beide Male derselbe Wert aus
+    derselben Rechnung — im Satz als Zeichenkette (dort ist nur eine möglich),
+    im Kasten als {@link ForeignName}, weil sie dort für sich steht und dann
+    auch für sich ungekürzt bleiben muß.
+  */
+  const rawExtension = extensionOf(path);
+  const extension = foreignText(rawExtension);
+  // Der Pfad durch die Behandlung für fremden Text (Eigenschaft 2). Name und
+  // aufgelöster Name gehen über {@link ForeignName}, der sie selbst behandelt.
   const visiblePath = foreignText(path);
   const rawName = fileNameOf(path);
   const effectiveName = effectiveFileNameOf(path);
-  const visibleName = foreignText(rawName);
   /*
     X-05: nur bei **Abweichung**. Gerechnet wird sie nicht hier — beide Werte
     kommen aus `features/todos/attachmentLabel.ts`, aus derselben Rechnung wie die Endung.
     Auch der aufgelöste Name ist fremder Text und geht durch die Behandlung.
   */
   const nameDiverges = effectiveName !== rawName;
-  const visibleEffectiveName = foreignText(effectiveName);
 
   return (
     <div className="scrim" onKeyDown={onKeyDown}>
@@ -306,6 +390,53 @@ export function AttachmentOpenDialog({
             </p>
           ) : null}
 
+          {/*
+            Auflage A-A-85: die **Herkunft**. Sie steht vor dem Kasten mit Namen
+            und Pfad, weil sie die Frage beantwortet, die ein Mensch zuerst
+            stellt — „wo kommt das her?" —, und weil der Kasten darunter die
+            Antwort auf „was genau ist das?" ist.
+
+            Der Absender ist fremder Text und geht durch `<Foreign>`; ohne die
+            Behandlung ordnete ein Richtungszeichen darin den deutschen Satz um,
+            in dem er steht.
+          */}
+          {fromEmail ? (
+            <p className="dialog__consequence dialog__consequence--origin">
+              <Icon name="inbox" size={14} />
+              <span>
+                {originSender === null ? (
+                  <>Diese Datei stammt aus einer E-Mail.</>
+                ) : (
+                  <>
+                    Diese Datei stammt aus einer E-Mail von{" "}
+                    <Foreign value={originSender} />.
+                  </>
+                )}{" "}
+                Ihren Namen und ihren Inhalt hat der Absender bestimmt, nicht Sie.
+              </span>
+            </p>
+          ) : null}
+
+          {/*
+            A-19.22b und Auflage A-A-97: der **Nachbau**. Er hängt an der Datei
+            und nicht am Augenblick des Anlegens — deshalb steht er hier und
+            nicht nur im Aufgabenbereich. Der Satz nennt die Folge und nicht die
+            Technik: Was fehlt, sind die ursprünglichen Kopfzeilen, und was
+            daraus folgt, ist die Untauglichkeit als Beleg.
+          */}
+          {rebuilt ? (
+            <p className="dialog__consequence dialog__consequence--rebuilt">
+              <Icon name="alert-triangle" size={14} />
+              <span>
+                <strong>Diese Datei ist ein Nachbau:</strong> Outlook hat die ursprüngliche
+                Nachricht nicht als Datei hergegeben. Absender, Empfänger, Betreff, Versanddatum
+                und Text stehen in der Datei. Die technischen Kopfzeilen der ursprünglichen
+                Nachricht stehen nicht darin — und mit ihnen nicht der Nachweis, welchen Weg sie
+                genommen hat.
+              </span>
+            </p>
+          ) : null}
+
           <div className="openfile">
             <p className="openfile__label">Dateiname</p>
             {/*
@@ -314,7 +445,7 @@ export function AttachmentOpenDialog({
               unsichtbaren Zeichen bereits sichtbar gemacht.
             */}
             <p className={cx("openfile__name", "mono", nameDiverges && "openfile__name--diverging")}>
-              <bdi>{visibleName}</bdi>
+              <ForeignName value={rawName} />
             </p>
             {/*
               X-05: das dritte Beschriftungspaar. Es steht **vor** dem vollen
@@ -325,16 +456,66 @@ export function AttachmentOpenDialog({
               <>
                 <p className="openfile__label">Name beim Öffnen</p>
                 <p className="openfile__name openfile__name--resolved mono">
-                  <bdi>{visibleEffectiveName}</bdi>
+                  <ForeignName value={effectiveName} />
                 </p>
                 <p className="openfile__note">
                   Punkte und Leerzeichen am Ende lässt Windows beim Öffnen weg.
                 </p>
               </>
             ) : null}
+            {/*
+              A-19.23a: Der Name aus der E-Mail steht **unter** dem Namen auf
+              der Platte und nicht an seiner Stelle. Die Reihenfolge ist die
+              Aussage: Oben steht, was geöffnet wird; hier steht, was der
+              Benutzer gelesen hat. Wäre es umgekehrt, wäre die Zeile mit der
+              größten Schrift die, die am wenigsten über die Wirkung sagt.
+            */}
+            {displayName === null ? null : (
+              <>
+                <p className="openfile__label">Name aus der E-Mail</p>
+                <p className="openfile__name openfile__name--foreign mono">
+                  <ForeignName value={displayName} />
+                </p>
+                <p className="openfile__note">
+                  Diesen Namen hat der Absender gewählt. SuperTakt zeigt ihn, öffnet aber die Datei
+                  oben — ein fremder Name bestimmt hier nichts.
+                </p>
+              </>
+            )}
             <p className="openfile__label">Vollständiger Pfad</p>
             <p className="openfile__path mono">
               <bdi>{visiblePath}</bdi>
+            </p>
+            {/*
+              Auflage A-A-86: die aufgelöste Endung **abgesetzt**, mit ihrem
+              Urteil daneben. Zwischen lesbarem Namen und Endung können beliebig
+              viele Zeichen stehen, und eine Pfadzeile bricht um — dann steht
+              die Endung irgendwo in der Mitte des Kastens.
+
+              Gerechnet wird sie nicht hier: `extensionOf` ist dieselbe Rechnung,
+              die über „öffnen" und „ausführen" entscheidet. Eine zweite wäre
+              eine zweite Wahrheit über dieselbe Datei.
+            */}
+            <p className="openfile__label">Endung</p>
+            <p
+              className={cx(
+                "openfile__extension",
+                "mono",
+                executes && "openfile__extension--executes",
+              )}
+            >
+              {rawExtension === "" ? (
+                <span className="openfile__extension-none">
+                  keine — das System entscheidet selbst, womit es die Datei öffnet
+                </span>
+              ) : (
+                <>
+                  <ForeignName className="openfile__extension-value" value={rawExtension} />
+                  <span className="openfile__extension-verdict">
+                    {executes ? "— wird ausgeführt" : "— wird geöffnet"}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 

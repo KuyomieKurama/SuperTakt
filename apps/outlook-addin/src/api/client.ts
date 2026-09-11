@@ -12,6 +12,8 @@
  *    Abholfunktion aus der Umgebung, wenn der Aufrufer keine nennt.
  */
 
+import type { EmailAttachmentEnvelope } from '../attachments/model.ts';
+
 import type {
   AddinContextDto,
   BookResponseDto,
@@ -63,7 +65,52 @@ export interface CreateTodoRequest {
   readonly note: string;
   /** `null` heißt „ohne Frist". */
   readonly dueDate: string | null;
+  /**
+   * Die E-Mail und ihre Dateien, als **Teil des Anlegens** (A-19.22 bis
+   * A-19.33 in der Fassung von E-108, A-A-82).
+   *
+   * ---------------------------------------------------------------------------
+   * Warum im Rumpf des Anlegens und nicht in einer zweiten Anfrage
+   * ---------------------------------------------------------------------------
+   *
+   * Weil eine zweite Anfrage eine Todo-Kennung tragen müßte. Es gibt keinen
+   * Aufruf, der eine Todo-Kennung entgegennimmt und einen Anhang erzeugt — weder
+   * hier noch im Dienst, und das steht dort im **Typ** der Fähigkeit und nicht
+   * in einem Satz daneben.
+   *
+   * `null` heißt „ohne Anhänge" und ist der Zustand, solange die Übernahme
+   * nicht angeboten wird.
+   */
+  readonly attachments: EmailAttachmentEnvelope | null;
 }
+
+/**
+ * Trägt der Anlegeruf die Anhänge mit? (T-300, T-304)
+ *
+ * `true` ist hier **kein Schalter und keine Voreinstellung**, sondern die
+ * Auskunft über einen Tatbestand: `POST /api/v1/addin/todos` liest seit T-304
+ * das Feld `attachments`. Stünde hier `false`, während das Feld oben steht,
+ * wäre eines von beiden eine Behauptung — `proof:addin` Abschnitt 22 hält
+ * beides gegeneinander und wird dann rot.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum diese Konstante überhaupt existiert hat — und warum sie stehenbleibt
+ * ---------------------------------------------------------------------------
+ *
+ * `createTodoSchema` ist ein `z.object`, und ein `z.object` **streicht**
+ * unbekannte Felder still, statt sie abzuweisen. Ein mitgeschickter Anhang an
+ * einer Tür, die das Feld nicht liest, verschwände also lautlos, während der
+ * Aufgabenbereich „3 Anhänge hängen daran" meldete — der stille Ausfall, den
+ * A-19.31 ausschließt, in seiner unangenehmsten Form.
+ *
+ * Die Konstante ist die Stelle, an der dieser Zusammenhang **gemessen** wird
+ * statt gehofft. Sie bleibt deshalb stehen: Wer die Tür morgen wieder schließt,
+ * ohne den Aufgabenbereich zu ändern, soll rot werden und nicht still verlieren.
+ *
+ * Ausdrücklich `boolean` und nicht der Literaltyp `true`: Der Übersetzer soll
+ * die Zweige für „trägt nicht mit" **nicht** als unerreichbar wegwerfen.
+ */
+export const ATTACHMENTS_TRAVEL_WITH_CREATE: boolean = true;
 
 export interface BookRequest {
   readonly todoId: string;
@@ -82,9 +129,16 @@ export interface ApiClient {
    * Bucht Zeit auf ein vorhandenes Todo.
    *
    * **Die einzige schreibende Handlung an einem fremden Todo, die dieser
-   * Zugang kennt.** Einen Anhang legt er nicht an: Seit der Entscheidung zu
-   * F-21 (T-247) gibt es dafür weder eine Methode hier noch eine Route unter
-   * `/addin` — A-19.19 ist damit strukturell wahr und nicht nur zugesagt.
+   * Zugang kennt.** An einem **vorhandenen** Todo legt er keinen Anhang an:
+   * Es gibt dafür weder eine Methode hier noch eine Route unter `/addin`.
+   *
+   * **Das gilt unverändert weiter, obwohl seit T-304 über
+   * {@link ApiClient.createTodo} Anhänge entstehen.** Sie entstehen
+   * ausschließlich **beim Anlegen** und fahren deshalb im Rumpf jenes Aufrufs
+   * mit; A-10.9 ändert sich nicht, im Duplikatfall wird weiterhin nur
+   * hingewiesen. Diese Methode hier ist die einzige mit einer Todo-Kennung in
+   * der Signatur — und sie nimmt keine Datei entgegen. Beides zusammen mit
+   * einer Kennung wäre die Tür, die A-A-82 zuhält.
    */
   book(input: BookRequest): Promise<ApiResult<BookResponseDto>>;
 }
