@@ -59,6 +59,13 @@ export type { TimeBudgetResult } from './sqlite/file-port.ts';
 
 export { createAttachmentPort } from './sqlite/repo-attachments.ts';
 
+/*
+ * Der Bezugspunkt des harten Bodens der Versionsprüfung (A-V-11, T-279).
+ * Ein eigener Ausfuhrpunkt und kein Teil der Transaktionsklammer: Sein einziger
+ * Aufrufer läuft an einem Zeitgeber, nicht an einer Anfrage.
+ */
+export { createVersionCheckStatePort } from './sqlite/repo-version-check.ts';
+
 export { createTransactionPort, createUnitOfWork } from './sqlite/unit-of-work.ts';
 export type { UnitOptions } from './sqlite/unit-of-work.ts';
 

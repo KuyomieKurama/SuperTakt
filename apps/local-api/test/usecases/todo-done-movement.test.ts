@@ -51,9 +51,9 @@ import type {
 } from '@takt/domain';
 import { ok } from '@takt/domain';
 import type { PoolAxesResolution, PoolPort, UnitOfWork } from '@takt/storage';
-import type { AppContext } from '../../src/usecases/context.ts';
-import { clearTodoDone, markTodoDone } from '../../src/usecases/todos.ts';
-import type { BookingPresenceBefore } from '../../src/usecases/pool-movement.ts';
+import type { AppContext } from '../../src/context.ts';
+import { clearTodoDone, markTodoDone } from '../../src/features/todos/todos.ts';
+import type { BookingPresenceBefore } from '../../src/pool-movement.ts';
 
 const todoId = (value: string) => value as unknown as TodoId;
 const poolId = (value: string) => value as unknown as PoolId;

@@ -1,12 +1,12 @@
 import { foreignText } from "../lib/foreign";
 import { useCallback, useMemo, useState } from "react";
-import { ExportAuditList } from "../components/ExportAudit";
+import { ExportAuditList } from "../features/export/ExportAudit";
 import {
   ExportGroupList,
   type ExportGroupViewModel,
-} from "../components/ExportGroups";
-import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { AUDIT_EVENT_DESCRIPTION, auditEventLabel } from "../app/exportAudit";
+} from "../features/export/ExportGroups";
+import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
+import { AUDIT_EVENT_DESCRIPTION, auditEventLabel } from "../features/export/exportAuditRows";
 import { ROUNDING_MODE_LABEL } from "../lib/labels";
 import { AUDIT_ROWS, EXPORT_GROUPS, exportGroupOutcome } from "./data";
 import { Section, SubHeading } from "./Section";

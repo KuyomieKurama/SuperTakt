@@ -382,3 +382,100 @@ export function decideUpdateNotice(input: UpdateNoticeInput): UpdateNotice {
 
   return { show: true, version: latest.version.value };
 }
+
+// ---------------------------------------------------------------------------
+// Der Streuwert auf den Mindestabstand (A-V-11, A-V-11′, T-275-8, T-279)
+// ---------------------------------------------------------------------------
+
+/**
+ * Der höchste Aufschlag auf den Mindestabstand, als **Anteil** davon.
+ *
+ * 0,25 — bei einem Boden von 60 Minuten also höchstens 15 Minuten obendrauf.
+ *
+ * ===========================================================================
+ * Warum es diesen Aufschlag gibt
+ * ===========================================================================
+ *
+ * Nicht wegen eines Angreifers. Wegen einer **Rückkopplung**, die der
+ * security-checker in T-275 gemessen hat (Bedrohungsmodell 36.5 Punkt 4):
+ *
+ * GitHub gesteht nicht angemeldeten Aufrufern 60 Anfragen je Stunde und
+ * **Quelladresse** zu. Alle Installationen hinter einer Adresse teilen sie
+ * sich. Unter der alten Lesart von A-18.11 löste sich ein erschöpftes
+ * Kontingent von selbst: Wer einmal `403` bekam, stellte die Prüfung für den
+ * ganzen Programmlauf ein. Seit T-273 klopft jede betroffene Installation
+ * **stündlich** weiter — und weil alle im selben Augenblick abgewiesen wurden,
+ * klopfen sie auch alle im selben Augenblick wieder. Der Zustand ist ab etwa
+ * sechzig Installationen hinter einer Adresse selbsterhaltend, und **niemand
+ * sieht es**, weil der Fehlschlag still ist.
+ *
+ * Was der Aufschlag leistet und was nicht, gehört ausgeschrieben, weil die
+ * beiden Sätze leicht verwechselt werden:
+ *
+ *   * Er **bricht die Gleichschaltung**. Nach einem gemeinsamen Fehlschlag
+ *     laufen die Installationen auseinander, statt in Phase zu bleiben.
+ *   * Er senkt die **Summe je Stunde nicht**. Sechzig Installationen, die
+ *     stündlich einmal fragen, sind sechzig Anfragen je Stunde, gleich wie sie
+ *     über die Stunde verteilt liegen. Wer die Summe senken will, braucht eine
+ *     Rückstufung (1 h → 2 h → 4 h …), und die ist eine Produktentscheidung,
+ *     die hier nicht getroffen ist.
+ *
+ * ===========================================================================
+ * Warum nur nach oben
+ * ===========================================================================
+ *
+ * Der naheliegende Entwurf wäre ±10 Minuten um den Boden herum. Er ist
+ * ausgeschlossen: A-V-11′ Punkt 4 sagt zu, daß zwischen zwei ausgehenden
+ * Anfragen **mindestens** der Boden liegt. Ein Streuwert, der auch nach unten
+ * streut, unterschreitet ihn in der Hälfte aller Fälle und hebt damit genau die
+ * Zusage auf, um deren Wirkung es geht. Deshalb `[0, Anteil × Boden]` und nicht
+ * `[−x, +x]`.
+ *
+ * ===========================================================================
+ * Die Obergrenze bleibt nennbar
+ * ===========================================================================
+ *
+ * Im ununterbrochenen Fehlschlag: **höchstens weiterhin 24 ausgehende Anfragen
+ * je Kalendertag** (1440 min / 60 min). Die Zahl sinkt nicht, und das ist die
+ * unmittelbare Folge der Auflage oben — ein Zyklus ist nie kürzer als der
+ * Boden, also ist die Schranke dieselbe. Was sinkt, ist der **Erwartungswert**:
+ * ein mittlerer Zyklus von 60 + 7,5 = 67,5 Minuten ergibt 1440 / 67,5 ≈ **21,3**
+ * Anfragen je Tag. In der Praxis sind es 21, selten 22; für 24 müßten
+ * vierundzwanzig Ziehungen nacheinander null ergeben.
+ */
+export const VERSION_CHECK_JITTER_RATIO = 0.25;
+
+/**
+ * Der Boden plus Streuwert — rein, ohne Uhr, ohne Zufallsquelle.
+ *
+ * Der Zufall kommt als **Zahl herein** und wird nicht hier gezogen. Das ist der
+ * ganze Grund, warum diese Funktion in der Domäne steht und nicht beim
+ * Zeitgeber: So ist die Zusage „verlängert nur, verkürzt nie" an den Rändern
+ * (0 und 1) und über beliebig viele Ziehungen **meßbar**, statt zugesichert.
+ *
+ * @param baseMs        Die Frist, um die es geht — der volle Boden nach einem
+ *                      Fehlschlag oder der noch fehlende Rest bis zum Boden.
+ * @param minIntervalMs Der Boden. Er bestimmt allein die **Spanne** des
+ *                      Aufschlags, damit ein knapp bemessener Rest nicht einen
+ *                      verschwindend kleinen Aufschlag bekommt.
+ * @param unitRandom    Eine Zahl in `[0, 1)`. Werte außerhalb und alles, was
+ *                      keine endliche Zahl ist, werden auf den Bereich geführt
+ *                      — eine kaputte Zufallsquelle darf den Boden nicht
+ *                      verkürzen und keine `NaN`-Frist erzeugen.
+ *
+ * @returns Eine Frist in Millisekunden, immer `>= max(baseMs, 0)` und immer
+ *          `<= max(baseMs, 0) + VERSION_CHECK_JITTER_RATIO × max(minIntervalMs, 0)`.
+ */
+export function versionCheckDelayWithJitter(
+  baseMs: number,
+  minIntervalMs: number,
+  unitRandom: number,
+): number {
+  const base = Number.isFinite(baseMs) && baseMs > 0 ? baseMs : 0;
+  const span =
+    Number.isFinite(minIntervalMs) && minIntervalMs > 0
+      ? minIntervalMs * VERSION_CHECK_JITTER_RATIO
+      : 0;
+  const unit = Number.isFinite(unitRandom) ? Math.min(Math.max(unitRandom, 0), 1) : 0;
+  return base + span * unit;
+}

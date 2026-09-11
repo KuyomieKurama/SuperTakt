@@ -88,7 +88,7 @@ export const idSchema = z.string().min(1).max(64).regex(/^[A-Za-z0-9._:-]+$/);
  *
  * Steht hier und nicht je Route, weil es dieselbe Eingabeform an jeder Stelle
  * ist und dieselbe Obergrenze tragen soll. Die Begründung für die Zahl steht
- * an der einzigen heutigen Aufrufstelle (`routes/todos.ts`, `idListSchema`);
+ * an der einzigen heutigen Aufrufstelle (`features/todos/routes.ts`, `idListSchema`);
  * kurz: Fünfzig Kennungen liegen über jedem Arbeitsablauf und weit unter der
  * Schwelle, an der die Abfrage teuer wird — gemessen 8,4 Sekunden bei 200 und
  * ein `500` aus `SQLITE_MAX_EXPR_DEPTH` bei 1 000.

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { NoteField } from "../components/NoteField";
-import { Card, InlineMessage } from "../components/Primitives";
+import { NoteField } from "../shared/ui/NoteField";
+import { Card, InlineMessage } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
 import { Section, SubHeading } from "./Section";
 

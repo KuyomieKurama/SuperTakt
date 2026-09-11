@@ -73,6 +73,17 @@ Sicht, 37 Indizes und 17 Trigger** (nachgezählt: `sqlite_master` nach allen Vor
 `PRAGMA integrity_check` = ok, Node 22.23.2, T-159). Hinzu kommt `schema_migration`, die der
 Migrationsläufer selbst führt und die deshalb in keiner Migration steht.
 
+**Hier klafft eine Lücke, und sie gehört benannt.** Die Migrationen **0016 bis 0021** — Darstellung,
+Leistungsabfrage, Inaktivität, Klassisch als Vorgabe, Farbpaletten, Timerverhalten bei Inaktivität —
+sind außerhalb des Wellenmodells entstanden (Pull Requests #5 bis #16) und in diesem Papier nie
+aufgeführt worden. Dieser Absatz ist damit seit dem 2026-09-08 unvollständig; das nachzutragen ist
+ein eigener Auftrag und nicht der von 0022.
+
+0022 (T-279, A-V-11) hängt `app_setting.last_version_check_at` an — eine Spalte, kein Index, kein
+Trigger, dieselbe Bauart wie 0013; siehe 3.7 und 8.4k. Der Stand nach 0022 sind **21 Tabellen
+einschließlich `schema_migration`, eine Sicht, 37 Indizes und 17 Trigger** (nachgezählt:
+`sqlite_master` nach `migrateToLatest`, `PRAGMA integrity_check` = ok, Node 22.23.2, T-279).
+
 ```
     time_entry ──1:0..1── timer_heartbeat    Lebenszeichen des laufenden
                                              Timers (E-036), höchstens eine Zeile
@@ -423,7 +434,7 @@ strukturell hält statt durch Sorgfalt.
 Ziffern, Bindestrich, zwei Ziffern, Bindestrich, zwei Ziffern, als GLOB, weil SQLite ohne
 Erweiterung kein REGEXP kennt. Was er nicht leistet: `2026-02-30` besteht ihn, `0000-01-01` auch.
 Die *Existenz* des Tages prüft `isCalendarDay` in `packages/domain/src/due-date.ts`, und beide
-Türen — `routes/todos.ts` und die Add-in-Tür (A-19.21) — lesen dieselbe Bindung, keine Abschrift.
+Türen — `features/todos/routes.ts` und die Add-in-Tür (A-19.21) — lesen dieselbe Bindung, keine Abschrift.
 Der CHECK steht trotzdem da, weil der Wert Benutzereingabe ist (VG-6) und jeder Prozess im
 Benutzerkonto mit `sqlite3` an der Tür vorbeischreiben kann (VG-3).
 
@@ -442,7 +453,7 @@ Todo-Pool" — läuft über die **Sichtbarkeit**, nicht über die Spalte: Erledi
 Pool-Ansichten ausgeblendet, aktive nicht. Die Pool-Zugehörigkeit selbst ist ohnehin aus den Tags
 abgeleitet und nirgends gespeichert (A-3.4). Hebt ein Timerstart das Kennzeichen auf, erscheint
 das Todo ohne einen einzigen zusätzlichen Schreibvorgang wieder in seinem Pool. Die Regel liegt
-als `IsVisibleInPool` in `packages/domain/src/tag.ts`.
+als `IsVisibleInPool` in `packages/domain/src/pool.ts`.
 
 ### 3.3 `tag_folder` und `tag` (A-4.*)
 
@@ -927,8 +938,8 @@ Aufgabe:
 
 | Stelle | Was sie tut |
 |---|---|
-| `settingsSchema` in `routes/export.ts` | Weist ab, was nicht die Form aus A-V-8 hat — mit **dem** Ausdruck aus `packages/domain`, nicht mit einer Abschrift. Ergibt 422. |
-| `updateSettings` in `usecases/structure.ts` | Prüft noch einmal mit `checkVersion` und **normalisiert**: gespeichert wird ohne führendes `v`. Sonst stünde in derselben Spalte je nach Aufrufer `1.2.3` oder `v1.2.3`, und die Gleichheitsprüfung fände das eine nicht neben dem anderen. |
+| `settingsSchema` in `features/settings/routes.ts` | Weist ab, was nicht die Form aus A-V-8 hat — mit **dem** Ausdruck aus `packages/domain`, nicht mit einer Abschrift. Ergibt 422. |
+| `updateSettings` in `features/settings/settings.ts` | Prüft noch einmal mit `checkVersion` und **normalisiert**: gespeichert wird ohne führendes `v`. Sonst stünde in derselben Spalte je nach Aufrufer `1.2.3` oder `v1.2.3`, und die Gleichheitsprüfung fände das eine nicht neben dem anderen. |
 | `toAppSettings` in `sqlite/mappers.ts` | Prüft beim **Lesen**. Ein unbrauchbarer gespeicherter Wert heißt „nichts übersprungen" — kein Wurf, keine Fehlermeldung, kein Wert, der weitergereicht wird. Ein Bestand kann kopiert, gesichert und aus fremder Quelle mitgebracht sein. |
 
 Der CHECK auf der Spalte ist die **zweite Wache**, nicht die erste: Länge zwischen 5 und 94,
@@ -940,6 +951,67 @@ Was der CHECK trägt, ist der Zeichenvorrat, und der ist der sicherheitsrelevant
 Der Wert geht in **keine** Adresse. Die Adresse zur Release-Seite baut die Hülle aus der Fassung,
 die sie selbst geprüft hat (A-V-16); die übersprungene Fassung entscheidet nur darüber, ob ein
 Hinweis erscheint. Schaden im schlimmsten Fall: ein unterdrückter Hinweis.
+
+**`last_version_check_at` — der Bezugspunkt des harten Bodens (A-V-11, T-279).** Seit Migration
+0022. `TEXT`, ISO-8601 in UTC, sekundengenau, mit `Z` — dieselbe eine Form wie jeder andere
+Zeitstempel dieses Schemas. `NULL` heißt „noch nie gefragt" und ist der Zustand jedes bestehenden
+Bestands nach der Migration.
+
+Er steht aus **demselben** Grund hier wie `skipped_version` eine Absatzlänge weiter oben, und das
+ist der eigentliche Punkt: A-18.10 hält die übersprungene Fassung im Bestand, A-24.7 hält die
+offenen Inaktivitätsphasen im Bestand — „nicht im Arbeitsspeicher und nicht im Browserspeicher".
+Der Bezugspunkt des Bodens ist ein Wert derselben Fläche und hatte bis T-279 eine **andere**
+Lebensdauer als sein direkter Nachbar in derselben Tabellenzeile, ohne daß irgendwo stand, warum.
+
+Was sich damit ändert, ist gemessen und nicht geschätzt (T-276): Ein neu gestarteter Dienst kannte
+keinen letzten Zeitpunkt, also griff kein Boden, also ging nach dem Startabstand von 10 s eine
+Anfrage hinaus. Wer den Sidecar in einer Schleife startet und beendet, erreicht damit **344
+ausgehende Anfragen je Stunde** — das 5,7fache dessen, was GitHub nicht angemeldeten Aufrufern je
+Stunde und Quelladresse überhaupt zugesteht.
+
+**Und die Grenze gehört danebengeschrieben, sonst ist der Satz oben eine falsche Zusage:** Derselbe
+Prozeß, der den Sidecar in einer Schleife startet, kommt mit `sqlite3` an diese Datei und setzt die
+Zeitmarke zurück. Das ist VG-3 und war es vorher auch. **Die Spalte ist keine Abwehr gegen einen
+feindlichen lokalen Prozeß, sondern gegen den Unfall** — den Entwicklerrechner, an dem `pnpm
+desktop` bei jedem Rust-Neubau einen neuen Sidecar mit der echten Abholfunktion startet; den
+zwanzigfachen Doppelklick nach einem Startproblem; eine Neustartautomatik, die heute niemand gebaut
+hat und die morgen jemand baut, ohne diesen Zusammenhang zu kennen.
+
+Drei Unterschiede zu `skipped_version`, und alle drei folgen daraus, daß dieser Wert **niemandem
+gehört**:
+
+| | `skipped_version` | `last_version_check_at` |
+|---|---|---|
+| Wer schreibt | der Benutzer über `PATCH /settings` | allein die Versionsprüfung des Dienstes |
+| Wer liest | Oberfläche und Domäne über `GET /settings` | allein die Versionsprüfung des Dienstes |
+| Rolle des CHECK | zweite Wache hinter der Prüfung an der Tür | **einzige** Wache — es gibt keine Tür |
+
+Er erscheint deshalb **in keiner Route**: nicht in `GET /settings`, nicht in `PATCH /settings`, in
+keiner Antwort und in keiner Oberfläche (A-V-14′, A-18.11). Ein „zuletzt geprüft: 14:03" wäre die
+Fehlerfläche, die A-18.11 ausschließt, und eine Schaltfläche daneben wäre die von E-069
+ausgeschlossene Route mit einer Hand darauf. Er hängt aus demselben Grund nicht an `AppSettingsPort`
+und nicht an der `UnitOfWork`, sondern an einem eigenen `VersionCheckStatePort` mit genau zwei
+Fragen; ein „zurücksetzen" gibt es dort nicht.
+
+`updated_at` bleibt beim Schreiben unangetastet. Es ist der Zeitpunkt der letzten
+**Einstellungsänderung** und über `GET /settings` sichtbar; würde eine ausgehende Anfrage ihn
+fortschreiben, ließe sich der Takt der Prüfung daran ablesen — dieselbe Fehlerfläche durch die
+Hintertür.
+
+Ein Zeitstempel aus der **Zukunft** ist zugelassen und wird nicht abgewiesen. Er entsteht ohne
+Zutun: eine zurückgestellte Systemuhr, eine Datensicherung, die auf einem Rechner mit anderer Uhr
+eingespielt wird. Behandelt wird er dort, wo er gelesen wird — der `elapsed < 0`-Zweig der
+Versionsprüfung nimmt den Bezugspunkt neu und wartet den vollen Boden. Ein CHECK „nicht in der
+Zukunft" machte aus einer verstellten Uhr einen Schreibfehler.
+
+**Er wandert über den Round-Trip** (A-20.4). Das ist keine Vollständigkeit um ihrer selbst willen:
+Der Archivadapter leert `app_setting` und schreibt genau die aufgezählten Spalten zurück; eine
+fehlende Spalte wird nicht übergangen, sondern **auf NULL gesetzt**. Ohne den Eintrag höbe also
+jeder Import den Boden auf — die Lücke, gegen die 0022 geschrieben ist, wieder offen, still, über
+den Umweg der eigenen Datensicherung. Eine neue `schemaVersion` braucht die Ergänzung trotzdem
+nicht: Die Spalte ist NULL-fähig, und „Feld fehlt im Archiv" und „Feld ist `null`" bezeichnen
+denselben Bestand — „noch nie gefragt". Es gibt hier nichts zu raten, und nur dafür ist die
+Fassungsnummer da.
 
 ### 3.8 `todo_attachment` und `todo_attachment_kind` (A-19.8 bis A-19.15, E-071)
 
@@ -999,7 +1071,7 @@ deren Größe niemand mehr erklären kann.
 Die Folge trägt der Anwendungsfall und nicht das Schema: `ON DELETE CASCADE` nimmt die **Zeilen**
 mit, die **Dateien** nicht — SQL kennt kein Dateisystem. Wer ein Todo löscht, liest deshalb zuerst
 `imageTargets(todoId)` und entfernt danach die Dateien; die Reihenfolge steht in
-`usecases/todos.ts` und ist der Grund, warum das Löschen eines Todos den Bildport überhaupt
+`features/todos/todos.ts` und ist der Grund, warum das Löschen eines Todos den Bildport überhaupt
 anfasst. Von den beiden möglichen Halbzuständen ist „Zeile weg, Datei liegt noch" der behebbare.
 
 Seit T-159 ist dieser Fehlschlag außerdem nicht mehr stumm: `removeImage` meldet ihn als Wert
@@ -1427,24 +1499,37 @@ nicht.
 
 ## 6. Exportstatus und sein Protokoll
 
-### 6.1 Zwei Werte, zwei Übergänge
+### 6.1 Zwei Werte, drei Übergänge
 
 ```
-        ┌───────────────────────────────────────────┐
-        │                                           │
-        ▼          Exportlauf (A-8.8)               │
-    ┌───────┐  ────────────────────────────►  ┌────────────┐
-    │ offen │                                 │ exportiert │
-    └───────┘  ◄────────────────────────────  └────────────┘
+                  Exportlauf (A-8.8)
+               ────────────────────────────►
+                  Nicht abrechnen (E-047)
+    ┌───────┐     ohne Datei, Ereignis        ┌────────────┐
+    │ offen │     `not_billed`                │ exportiert │
+    └───────┘  ────────────────────────────►  └────────────┘
+
+               ◄────────────────────────────
                   Zurücksetzen (E-012)
                   je Buchung, mit Begründung,
                   protokolliert
 ```
 
+**Zwei Werte, drei Übergänge — und die Zahl steht hier nicht als Zahl.** Maßgeblich ist
+`ExportStatusTransition` in `packages/domain/src/export-status.ts`; wieviele es sind, rechnet
+`allowedExportStatusTransitions()` am Wächter nach. Bis T-270 hieß dieser Abschnitt „Zwei Werte,
+zwei Übergänge" und zeichnete zwei Pfeile, während 6.2 zwei Bildschirme tiefer `not_billed` als
+dritten Ereignistyp führt — dieselbe Regel, dreimal beschrieben, einmal veraltet.
+
+Zwei der drei Übergänge führen auf denselben Wert und sind trotzdem verschiedene Vorgänge: Hinter
+dem einen steht eine geschriebene Datei, hinter dem anderen ausdrücklich keine. Unterscheidbar
+sind sie nur am Auslöser, und der wandert bis in `export_audit.event` (6.2).
+
 Nicht erreichbar:
 
-- `exportiert` **von Hand** setzen. Nur ein Exportlauf löst diesen Übergang aus. Sonst gäbe es
-  eine als abgerechnet markierte Buchung ohne Beleg, und A-6.6 — „jederzeit erkennbar, welche
+- `exportiert` **von Hand** setzen. Nur ein Exportlauf (A-8.8) oder „nicht abrechnen" (E-047)
+  löst diesen Übergang aus, und beide hinterlassen eine Protokollzeile. Sonst gäbe es eine als
+  abgerechnet markierte Buchung ohne Beleg, und A-6.6 — „jederzeit erkennbar, welche
   Zeiten übertragen wurden" — wäre nicht mehr wahr. Der Versuch endet mit `409` und
   `export_status_not_settable`.
 - Ein Wechsel auf sich selbst. Endet mit `409` und `export_status_unchanged`.
@@ -2175,6 +2260,32 @@ Datenmenge erklären soll.
 Nicht betroffen: `todo` selbst, seine Tags, seine Buchungen, sein Vermerk, sein Exportstatus. Keine
 Sicht, kein Trigger und kein CHECK außerhalb dieser beiden Tabellen nennt sie — insbesondere
 `v_export_candidate` nicht, und das ist keine Fügung, sondern A-19.17.
+
+### 8.4k Migration 0022 — dieselbe Bauart wie 0013, und der Rückweg, der mehr sendet (T-279, A-V-11)
+
+`0022_last_version_check_at` hängt `app_setting.last_version_check_at` an: ein `ALTER TABLE …
+ADD COLUMN` vorwärts, ein `ALTER TABLE … DROP COLUMN` rückwärts, kein Index, kein Trigger, keine
+Sicht. Die Begründung für beide Richtungen ist Wort für Wort die von 0013 (8.4h); was hier steht,
+ist der Unterschied.
+
+**Gemessen** gegen `node:sqlite` aus Node 22.23.2 auf einer frisch angelegten Datei: vorwärts von 0
+auf 22, rückwärts auf 21 (Spalte weg), wieder vorwärts auf 22 (Spalte da), rückwärts auf 0, wieder
+vorwärts auf 22. Danach `PRAGMA integrity_check` = `ok` und `PRAGMA foreign_key_check` ohne Zeile.
+Der CHECK nimmt `2026-09-11T09:59:59Z` und `2999-01-01T00:00:00Z` an und weist Millisekunden,
+fehlendes `Z`, einen Zonenversatz, eine Zahl als Text, die leere Zeichenkette und ein angehängtes
+Leerzeichen ab; `NULL` bleibt zulässig.
+
+**Ein Datenverlust, und er ist unangenehmer als der von 0013.** Dort meldete die Anwendung nach dem
+Rückweg **zu viel** — der Hinweis auf eine übersprungene Fassung kam wieder, und der Benutzer konnte
+erneut überspringen. Hier **sendet** sie nach dem Rückweg unter Umständen mehr: Der erste Start
+danach fragt, gleich wie kurz die letzte Anfrage zurückliegt. Und niemand sieht es, weil die
+Versionsprüfung stumm ist (A-18.11). Der Boden **innerhalb** eines Prozeßlaufs bleibt unangetastet
+— er ist derselbe Code; es fällt allein der Zusammenhang über Prozeßgrenzen hinweg.
+
+Wer den Rückweg fährt, fährt ihn typischerweise, um eine ältere Fassung des Erzeugnisses auf
+denselben Bestand zu setzen. Genau die kennt die Spalte nicht und hätte den Wert ohnehin nicht
+gelesen; der Rückweg stellt also den Zustand her, der zu ihr paßt. Der Satz steht im Kopf der
+Rückwärtsdatei.
 
 ### 8.5 Nachgewiesen
 

@@ -1,4 +1,4 @@
-import { Card } from "../components/Primitives";
+import { Card } from "../shared/ui/Primitives";
 import { Section, SubHeading } from "./Section";
 
 interface SwatchDefinition {

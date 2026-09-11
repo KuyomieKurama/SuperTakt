@@ -1,0 +1,33 @@
+# SuperTakt — Zeilenenden (T-248, gefunden am 2026-09-10)
+#
+# Ohne diese Datei entschied `core.autocrlf` allein, und auf einem Windows-Rechner
+# stehen dann CRLF im Arbeitsbaum, während im Bestand überall LF liegt. Das ist
+# nicht kosmetisch:
+#
+#   * `schema_migration.checksum` ist ein SHA-256 über den **Dateiinhalt** einer
+#     Migration. Mit CRLF im Arbeitsbaum bettet `embed-migrations.mjs` andere
+#     Prüfsummen ein als auf einem LF-System — und eine Datenbank, die einmal aus
+#     dem Quelltext migriert wurde, gilt der anderen Fassung als nachträglich
+#     verändert. `proof:migrations` fiel deshalb, und mit ihm das ganze Tor.
+#   * `proof:openapi` zählt benannte Bauteile mit `/^ {4}[A-Z][A-Za-z]*:$/` und
+#     fand bei CRLF null statt 88.
+#
+# Beides sind Aussagen über den Läufer, nicht über den Code — dieselbe Klasse wie
+# die Pfadfalle aus T-246-1. `eol=lf` nimmt die Frage aus dem Zufall heraus.
+#
+# Der Bestand ändert sich dadurch um kein Zeichen: `git ls-files --eol` zählte
+# 884 Dateien mit `i/lf w/crlf` und **null** mit `i/crlf`.
+* text=auto eol=lf
+
+# Bilder, Schriften, Binärdateien: nie anfassen.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff  binary
+*.woff2 binary
+*.pdf binary
+*.db  binary
+*.sqlite binary

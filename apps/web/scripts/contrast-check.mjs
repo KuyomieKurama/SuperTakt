@@ -62,11 +62,16 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readRequiredFile, requireDirectory } from "../../../scripts/source-anchors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const tokensPath = resolve(here, "../../../packages/ui-tokens/tokens.css");
+const repoRoot = resolve(here, "../../..");
+const tokensPath = resolve(repoRoot, "packages/ui-tokens/tokens.css");
+
+/** Ein Pfad für die Ausgabe — relativ zur Wurzel, mit Schrägstrichen. */
+const label = (target) => relative(repoRoot, target).split(/[\\/]/).join("/");
 
 /* ------------------------------------------------------------------ */
 /* Token aus der CSS-Datei lesen                                       */
@@ -103,7 +108,10 @@ function parseDeclarations(block) {
   return out;
 }
 
-const css = readFileSync(tokensPath, "utf8");
+const css = readRequiredFile(
+  tokensPath,
+  "die Tokendatei, aus der jeder gemessene Farbwert dieses Laufs stammt",
+);
 const lightTokens = parseDeclarations(extractBlock(css, ":root {"));
 const darkTokens = new Map(lightTokens);
 for (const [key, value] of parseDeclarations(
@@ -923,8 +931,22 @@ const noContrastQuestion = [
   ["--bg-scrim", "teildurchsichtig, und was darunter liegt, ist die ganze Anwendung — `over` liesse sich nur raten. Ihre Aufgabe ist ausserdem, Kontrast zu **nehmen**; ein Mindestwert waere die Umkehrung ihres Zwecks"],
 ];
 
-/** Quellen, in denen eine Farbe gezeichnet werden kann. */
-const drawingRoot = resolve(here, "../src");
+/**
+ * Quellen, in denen eine Farbe gezeichnet werden kann.
+ *
+ * **Der Baum wird rekursiv gelesen, und das ist die ganze Vorbereitung auf die
+ * Umstrukturierung** (T-249-2): `apps/web/src` bekommt `features/board`,
+ * `features/todos`, … statt `screens/` und `components/`. `collectSources`
+ * steigt in jede Ebene hinab, kennt keinen Ordnernamen und überlebt den Umzug
+ * ohne eine Änderung an dieser Datei. Was nicht überlebte, war die stumme
+ * Annahme, dass es das Verzeichnis überhaupt gibt — die steht jetzt als
+ * benannter Abbruch da und nicht mehr als `ENOENT` aus dem Inneren von
+ * `node:fs`.
+ */
+const drawingRoot = requireDirectory(
+  resolve(here, "../src"),
+  "den Quellbaum, in dem dieser Lauf nach gezeichneten Farbtoken sucht",
+);
 
 /**
  * **Der zweite Bezieher derselben Tokendatei** (T-214, O-IT). Das Add-in laedt
@@ -970,15 +992,65 @@ function drawnIn(files) {
 /** Was die **Oberflaeche** zeichnet. Grundlage der Richtungen 1 bis 3. */
 const drawnTokens = drawnIn(sourceFiles);
 
+/*
+ * ---------------------------------------------------------------------------
+ * Die Untergrenze — bevor geurteilt wird, wird gezaehlt (T-249-2)
+ * ---------------------------------------------------------------------------
+ *
+ * Die Bauart stammt aus T-247-7 und ist dort gemessen: `proof:foreign` urteilte
+ * unter Windows ueber 129 Dateien, ohne eine gelesen zu haben, und waere ohne
+ * seine Zaehlwaechter **gruen** gewesen.
+ *
+ * Hier haengt an `drawnTokens` die erste der vier Richtungen. Waere die Menge
+ * leer, fiele Richtung 1 stumm aus — sie fragt jedes **gezeichnete** Token nach
+ * seinem Nachweis, und ohne gezeichnete Token fragt sie nichts. Richtung 2
+ * schlueg zwar an, aber mit 261 gleichlautenden Befunden ueber „diese Farbe
+ * zeichnet niemand mehr" statt mit dem einen Satz, der stimmt: der Baum wurde
+ * nicht gelesen.
+ *
+ * Gemessen wird deshalb **strukturell** und nicht gegen eine Zahl, die der
+ * naechste Umbau ueberholt: Der Anwendungshintergrund ist das eine Token, unter
+ * dem nichts mehr liegt (CANVAS) — es gibt keine Oberflaeche, die ihn nicht
+ * zeichnet. Findet der Baum ihn nicht, hat der Lauf nicht die Oberflaeche
+ * gelesen, und dann ist jede Aussage darunter hinfaellig.
+ */
+if (sourceFiles.length === 0 || !drawnTokens.has(CANVAS)) {
+  console.error(
+    `\nDer Lauf bricht ab: unter ${label(drawingRoot)} stehen ${String(sourceFiles.length)} ` +
+      `Quelldateien mit ${String(drawnTokens.size)} gezeichneten Token, und ${CANVAS} ist ` +
+      "nicht darunter.\n" +
+      "Der Anwendungshintergrund wird von jeder Oberflaeche gezeichnet; fehlt er, hat dieser\n" +
+      "Lauf nicht die Oberflaeche gelesen. Ein leerer Baum ist ein Fehlschlag der Messung und\n" +
+      "kein bestandener Pruefsatz — Richtung 1 fragt jedes **gezeichnete** Token nach seinem\n" +
+      "Nachweis und faellt ohne gezeichnete Token stumm aus.",
+  );
+  process.exit(1);
+}
+
 /**
  * Was **irgendein** Bezieher von `tokens.css` zeichnet. Grundlage allein der
  * vierten Richtung. Fehlt ein fremder Baum, faellt er still weg — die Frage
  * wird dadurch strenger, nie milder, und ein fehlendes Verzeichnis darf den
  * Kontrastlauf der Oberflaeche nicht abbrechen.
  */
-const foreignSourceFiles = foreignDrawingRoots
-  .filter((root) => existsSync(root))
-  .flatMap((root) => collectSources(root));
+const presentForeignRoots = foreignDrawingRoots.filter((root) => existsSync(root));
+for (const root of foreignDrawingRoots) {
+  if (presentForeignRoots.includes(root)) continue;
+  /*
+   * **Der Wegfall wird gesagt, nicht verschwiegen** (T-249-2). Er macht die
+   * vierte Richtung strenger und nie milder — sie verlangt dann von jedem
+   * semantischen Token eine Flaeche in der Oberflaeche allein. Genau deshalb
+   * bricht der Lauf hier **nicht** ab: Ein fehlender Fremdbaum kann keinen
+   * falschen gruenen Befund erzeugen. Er kann aber einen roten erzeugen, der
+   * wie ein totes Token aussieht und keines ist — und dann muss der Satz
+   * dastehen, der ihn erklaert.
+   */
+  console.error(
+    `Hinweis: ${label(root)} gibt es nicht. Die vierte Richtung urteilt ohne diesen Baum und ` +
+      "wird dadurch strenger, nie milder.",
+  );
+}
+const foreignSourceFiles = presentForeignRoots.flatMap((root) => collectSources(root));
 const drawnAnywhere = new Set([...drawnTokens, ...drawnIn(foreignSourceFiles)]);
 
 /**
@@ -1157,11 +1229,12 @@ if (completeness.length === 0) {
   const detail =
     `${drawnColourTokens.length} gezeichnete Farbtoken: ${covered} von Paaren gemessen, ` +
     `${noContrastQuestion.length} ohne Kontrastfrage benannt, 0 ohne Nachweis ` +
-    `(gelesen aus ${sourceFiles.length} Dateien unter apps/web/src)`;
+    `(gelesen aus ${sourceFiles.length} Dateien unter ${label(drawingRoot)})`;
   const alive =
     `${semanticColourTokens.length} semantische Farbtoken deklariert, 0 ungezeichnet ` +
     `(Vorrat der Rampen ausgenommen: ${declaredColourTokens.length - semanticColourTokens.length} primitive; ` +
-    `mitgelesen: ${foreignSourceFiles.length} Dateien unter apps/outlook-addin/src)`;
+    `mitgelesen: ${foreignSourceFiles.length} Dateien unter ` +
+    `${presentForeignRoots.map(label).join(", ") || "keinem weiteren Baum"})`;
   lines.push(asMarkdown ? `| bestanden | ${detail} |` : `OK   ${detail}`);
   lines.push(asMarkdown ? `| bestanden | ${alive} |` : `OK   ${alive}`);
 } else {

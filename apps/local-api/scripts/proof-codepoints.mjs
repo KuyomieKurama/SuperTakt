@@ -170,7 +170,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { arbeitsbereichWurzel, paketQuelle } from './source-resolve.mjs';
 
 import { CONTROL_WHITESPACE, FORBIDDEN_NAME_CHARACTERS } from '@takt/domain';
 
@@ -178,8 +178,15 @@ import { CONTROL_WHITESPACE, FORBIDDEN_NAME_CHARACTERS } from '@takt/domain';
  * Als Pfad und nicht als URL: Ein Dateiname, der ein `#` oder ein Leerzeichen
  * trägt, würde beim Auflösen gegen eine URL verstümmelt. `git ls-files` gibt
  * Pfade heraus, keine Adressen.
+ *
+ * Seit T-249-1 **erlaufen** statt abgezählt: `../../../` waren drei Ebenen,
+ * weil dieser Lauf heute in `apps/local-api/scripts` liegt. Zieht er eine
+ * Ebene tiefer, zeigte die Zählung auf `apps/`, und `git ls-files` dort wäre
+ * nicht leer, sondern **kleiner** — ein Lauf über einen Ausschnitt des Baums,
+ * der sich wie ein Lauf über den Baum liest. Die Untergrenze weiter unten ist
+ * die zweite Hälfte derselben Absicherung.
  */
-const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+const ROOT = arbeitsbereichWurzel();
 
 let passed = 0;
 let failed = 0;
@@ -544,7 +551,25 @@ try {
   check('git ls-files läuft', false, String(fehler?.message ?? fehler));
 }
 
-check('git ls-files liefert Dateien', dateien.length > 0, `${dateien.length}`);
+/**
+ * Die Untergrenze auf die Menge, über die dieser Lauf urteilt (T-249-1).
+ *
+ * Bis T-249-1 stand hier `> 0`. Das ist keine Untergrenze, sondern die
+ * Feststellung, daß überhaupt etwas herauskam: Zeigte `ROOT` versehentlich auf
+ * `apps/` statt auf die Wurzel, lieferte `git ls-files` dort eine **kleinere**
+ * Liste, und der Satz „kein rohes Steuerzeichen im versionierten Baum" stünde
+ * über einem Ausschnitt, ohne daß irgend etwas rot würde. Der Baum trägt heute
+ * 906 versionierte Dateien; 400 ist bewußt weit darunter — die Zahl soll rot
+ * werden, wenn die Wurzel verrutscht oder `git ls-files` nichts mehr liefert,
+ * nicht wenn jemand ein Verzeichnis aufräumt.
+ */
+const MINDESTENS_VERSIONIERT = 400;
+
+check(
+  `git ls-files liefert mindestens ${String(MINDESTENS_VERSIONIERT)} Dateien (${dateien.length})`,
+  dateien.length >= MINDESTENS_VERSIONIERT,
+  `${dateien.length} statt mindestens ${String(MINDESTENS_VERSIONIERT)} — der Lauf sieht nur einen Ausschnitt des Baums`,
+);
 
 const funde = [];
 const nichtLesbar = [];
@@ -584,6 +609,20 @@ check(
   'jede gelesene Datei ist gültiges UTF-8',
   nichtLesbar.length === 0,
   nichtLesbar.join(' | '),
+);
+
+/*
+ * Und die zweite Hälfte der Untergrenze (T-249-1): `git ls-files` kann eine
+ * lange Liste liefern und trotzdem kann jede einzelne Datei am Lesen
+ * scheitern — dann steht oben eine große Zahl und unten ist nichts geprüft.
+ * Gemessen wird deshalb, was **gelesen** wurde, nicht was aufgezählt wurde.
+ * Ebenso: eine Handvoll Dateien darf fehlen (gelöscht, nicht eingetragen),
+ * aber nicht die Hälfte des Baums.
+ */
+check(
+  `mindestens ${String(MINDESTENS_VERSIONIERT)} Dateien sind auch gelesen worden (${gelesen})`,
+  gelesen >= MINDESTENS_VERSIONIERT,
+  `${gelesen} gelesen, ${fehlend.length} nicht auf der Platte, ${uebersprungen.length} binär`,
 );
 
 console.log(
@@ -808,9 +847,28 @@ const PROBE = [
  * Weg von `git ls-files` bis zur Beanstandung überhaupt zusammenhängt.
  */
 {
-  const opfer = dateien.find((datei) => datei.endsWith('packages/domain/src/characters.ts'));
+  /*
+   * Das Opfer — seit T-249-1 über ein Merkmal gefunden statt über
+   * `endsWith('packages/domain/src/characters.ts')`.
+   *
+   * Der alte Griff war schon fail-closed (er wurde rot, wenn die Datei fehlte),
+   * aber er wäre beim ersten Umzug **grundlos** rot geworden: Die Probe braucht
+   * eine echte, versionierte Quelldatei mit einer bekannten Zeile darin, und
+   * welche das ist, ist ihr gleichgültig. `paketQuelle` liefert sie, wo immer
+   * sie liegt; findet sie keine, endet der Lauf dort rot und sagt, wonach er
+   * gesucht hat.
+   */
+  const opferPfad = paketQuelle('@takt/domain', {
+    hinweis: 'src/characters.ts',
+    merkmal: 'export const FORBIDDEN_NAME_CHARACTERS',
+  });
+  const opfer = dateien.find((datei) => join(ROOT, datei) === opferPfad);
   if (opfer === undefined) {
-    check('die Probe am echten Baum lässt sich anwenden', false, 'Datei nicht gefunden');
+    check(
+      'die Probe am echten Baum lässt sich anwenden',
+      false,
+      `${opferPfad} ist nicht versioniert — die Probe hätte keinen Gegenstand`,
+    );
   } else {
     const text = readFileSync(join(ROOT, opfer), 'utf8');
     const verdorben = text.replace('let out = ', `let out = ${Z(0x202e)}`);

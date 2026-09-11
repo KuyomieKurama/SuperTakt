@@ -30,11 +30,34 @@
  */
 
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { Worker } from 'node:worker_threads';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { runFollowupProofs } from './proof-followup.mjs';
+
+/*
+ * --- Die Ankerpunkte im Quellbaum (T-249-6) --------------------------------
+ *
+ * Eine Datei, kein Arbeitsbereichspaket: `scripts/` in der Wurzel liegt neben
+ * `apps/*` und `packages/*`, hat keine `package.json` und steht in keiner
+ * Abhängigkeitsliste — eingebunden wird sie über einen relativen Pfad. Der
+ * Aufgabenbereich bekommt damit **keine** neue Kante in seinen Modulgraphen;
+ * das Browserbündel sieht diese Zeile nie, denn sie steht in einem Bauskript.
+ *
+ * Bis T-249-6 stand die Suche nach der Arbeitsbaumwurzel, die Auflösung der
+ * Paketnamen und der rekursive Abstieg hier noch einmal — die vierte Abschrift
+ * derselben Regel im Baum (E-063 Punkt 4).
+ */
+import {
+  MissingSourceError,
+  displayPath,
+  locateWorkspacePackage,
+  readTreeSync,
+  requireAtLeast,
+  requireDirectory,
+  workspaceRoot,
+} from '../../../scripts/source-anchors.mjs';
 
 // --- Prüflinge: das Add-in ------------------------------------------------
 import { checkPattern } from '../src/callnumber/pattern.ts';
@@ -44,6 +67,7 @@ import { createTimedEvaluator } from '../src/callnumber/evaluate.ts';
 import { detectCallNumber } from '../src/callnumber/detect.ts';
 import { runPattern } from '../src/callnumber/run.ts';
 import { decideLookup, describeOffers } from '../src/duplicate/rule.ts';
+import { duplicateNotice } from '../src/duplicate/notice.ts';
 import {
   REOPEN_HINT,
   bookingOutcome,
@@ -80,7 +104,28 @@ import { createTodoGate } from '../src/ui/create-gate.ts';
 // Aufgabenbereich soll `@takt/local-api` nicht in seiner Abhängigkeitsliste
 // führen. Ein Browserbündel, das den Dienst importieren kann, importiert ihn
 // irgendwann.
+//
+// **Zum Umzug (T-249):** Diese Angaben und alle folgenden Importe in fremde
+// Pakete sind Kanten im Modulgraphen und brauchen die Landkarte weiter unten
+// nicht. Zeigt eine von ihnen nach einem Umzug ins Leere, löst Node sie nicht
+// auf, der Lauf bricht **vor** dem ersten Prüfsatz ab und nennt dabei die
+// Angabe, die er nicht gefunden hat. Es gibt hier keinen stillen Ausgang: Ein
+// nicht aufgelöster Import ergibt keine leere Menge, über die sich urteilen
+// ließe. Die Landkarte gilt den Stellen, die eine Datei **lesen**, statt sie
+// zu importieren — die werfen zwar auch, aber mit einem `ENOENT` auf einen
+// Pfad, den es seit dem Umzug nicht mehr gibt.
 import { mountAddinRoutes } from '../../local-api/src/routes/addin/index.ts';
+
+/*
+ * Und der **zusammengesetzte** Dienst (T-247).
+ *
+ * `mountAddinRoutes` ist der Teilbaum. Abschnitt 18f fragt aber nicht, was
+ * dieser Teilbaum führt, sondern was der Dienst **insgesamt** unter `/addin`
+ * beantwortet — genau daran ist der Befund zu A-19.19 entstanden: Die
+ * Anlegetür führte keinen Anhang, während daneben eine zweite Tür aufging.
+ * Wer nur den Teilbaum mißt, mißt die Tür, die zu ist.
+ */
+import { compose } from '../../local-api/src/composition.ts';
 
 /*
  * Und der Leser der Schnittstellenbeschreibung, für den **Add-in-Abschnitt**
@@ -117,7 +162,7 @@ import { parseYaml } from '../../local-api/scripts/openapi-reader.mjs';
  * `FORBIDDEN_NAME_CHARACTERS` aus `@takt/domain`; daß sie einander gleichen,
  * folgt daraus, statt gemessen zu werden.
  */
-import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/routes/todos.ts';
+import { REQUEST_SCHEMAS as MAIN_REQUEST_SCHEMAS } from '../../local-api/src/features/todos/routes.ts';
 import {
   ADDIN_NOTE_MAX_LENGTH,
   ADDIN_TAG_IDS_MAX,
@@ -127,7 +172,7 @@ import {
   bookSchema as addinBookSchema,
   createTodoSchema as addinCreateTodoSchema,
 } from '../../local-api/src/routes/addin/schema.ts';
-import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/routes/time.ts';
+import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/features/timer/routes.ts';
 
 /*
  * --- Prüflinge: die **echte** Speicherung und der **andere** Weg (T-061) ----
@@ -152,14 +197,14 @@ import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/routes
  *
  * Bis T-064 war sie nötig, weil die Auflösung der Tagnamen zweimal im Baum
  * stand. Seit T-064 rufen beide Wege dieselbe Funktion auf
- * (`usecases/tag-names.ts`), und der Vergleich prüft trotzdem weiter — nur
- * etwas anderes: nicht mehr, ob zwei Fassungen übereinstimmen, sondern ob die
- * beiden **Aufrufer** es tun. Sie sind nicht gleich. Der eine Weg nimmt
- * `tagIds` und `tagNames` und ergänzt Standard-Tags, der andere kommt aus der
- * Oberfläche; nur das Stück dazwischen ist geteilt. Ein Aufrufer, der die
- * Namen vor dem Aufruf anders behandelt — ungeprüft, in anderer Reihenfolge,
- * außerhalb der Transaktion —, bekommt hier wieder zwei Tags. Genau das war
- * C-03.
+ * (`apps/local-api/src/tag-names.ts`), und der Vergleich prüft trotzdem
+ * weiter — nur etwas anderes: nicht mehr, ob zwei Fassungen übereinstimmen,
+ * sondern ob die beiden **Aufrufer** es tun. Sie sind nicht gleich. Der
+ * eine Weg nimmt `tagIds` und `tagNames` und ergänzt Standard-Tags, der
+ * andere kommt aus der Oberfläche; nur das Stück dazwischen ist geteilt.
+ * Ein Aufrufer, der die Namen vor dem Aufruf anders behandelt — ungeprüft,
+ * in anderer Reihenfolge, außerhalb der Transaktion —, bekommt hier wieder
+ * zwei Tags. Genau das war C-03.
  *
  * Beide Importe gehen über relative Pfade und nicht über Paketnamen: Der
  * Aufgabenbereich soll weder `@takt/local-api` noch `@takt/storage` in seiner
@@ -167,7 +212,7 @@ import { REQUEST_SCHEMAS as MAIN_TIME_SCHEMAS } from '../../local-api/src/routes
  * Datenbank importieren **kann**, importiert sie irgendwann.
  */
 import { openDatabase } from '../../../packages/storage/src/sqlite/open.ts';
-import { createTodo as createTodoOnMainPath } from '../../local-api/src/usecases/todos.ts';
+import { createTodo as createTodoOnMainPath } from '../../local-api/src/features/todos/todos.ts';
 
 // --- Prüfling: die eine Fassung der Plausibilisierung (E-045) -------------
 // Bis T-028 standen hier zwei Importe — die Fassung des Add-ins und die des
@@ -226,6 +271,317 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.join(here, '..', 'src');
 
+// ===========================================================================
+// Die Landkarte — fremde Dateien werden aufgelöst, nicht buchstabiert (T-249)
+// ===========================================================================
+/*
+ * Der Anlass, und er ist derselbe wie bei 18f — nur ohne Angreifer.
+ *
+ * Dieser Lauf greift an elf Stellen in **fremden** Quelltext: mit einem
+ * Import, mit einem Lesevorgang, mit dem Abstieg durch ein Verzeichnis. Ein
+ * Import, der ins Leere zeigt, bricht den Lauf ab und nennt dabei die Angabe,
+ * die er nicht auflösen konnte — der ist laut und braucht hier nichts. Ein
+ * Lesevorgang auf einen ausgeschriebenen Pfad ist der stille Fall: Er wirft
+ * zwar, aber die Meldung heißt `ENOENT` und nennt einen Pfad, den es seit dem
+ * Umzug nicht mehr gibt.
+ * Und die eine Stelle, die ein **Verzeichnis** ausliest, war der stillste von
+ * allen: Ein leeres Ergebnis ergab eine leere Menge, und über eine leere Menge
+ * urteilt sich am bequemsten.
+ *
+ * Der Auftraggeber baut den Bestand featureweise um. Dabei zieht Quelltext um,
+ * den dieser Lauf liest. Ein Wächter, der seinen Gegenstand nach dem Umzug
+ * nicht findet, hat **nicht gemessen** — er hat nicht bestanden. Genau diese
+ * Unterscheidung steht seit T-247-9 in {@link ankunftsMaengel} eine Ebene
+ * höher; hier steht sie eine Ebene früher.
+ *
+ * Zwei Antworten, und jede Stelle bekommt genau eine:
+ *
+ *  - **Auflösung statt Pfad.** Eine fremde Datei wird über ihr **Paket** und
+ *    ein **Merkmal in ihrem Inhalt** gesucht, nicht über eine Buchstabenkette.
+ *    Das Paket findet sich über seinen Namen in `package.json` und die
+ *    Arbeitsbereichsangaben in `pnpm-workspace.yaml` — es darf also selbst
+ *    umziehen. Der gebuchte Pfad ist danach nur noch die **schnelle Antwort**;
+ *    trifft er nicht, sucht die Landkarte im Paket weiter. Ein Umzug von
+ *    `src/lib/labels.ts` nach `src/features/…/labels.ts` nimmt den Wächter
+ *    also mit.
+ *  - **Fail-closed.** Fehlt das Paket, fehlt die Datei, ist sie leer oder
+ *    trägt sie das Merkmal nicht mehr, wirft die Landkarte — mit einer
+ *    Meldung, die **benennt, was fehlt**, und die den Satz „ungemessen, nicht
+ *    bestanden" ausspricht. Kein stiller Rückfall, keine leere Menge.
+ *
+ * ---------------------------------------------------------------------------
+ * Wovon diese Landkarte aufsitzt (T-249-6)
+ * ---------------------------------------------------------------------------
+ *
+ * Das Handwerkszeug darunter — die Wurzel des Arbeitsbaums, die Pakete aus
+ * `pnpm-workspace.yaml`, der rekursive Abstieg, die Untergrenze einer Menge —
+ * steht **nicht** mehr hier, sondern einmal im Bestand:
+ * `scripts/source-anchors.mjs`. Bis dahin stand dieselbe Idee viermal im Baum,
+ * und eine Regel an vier Stellen ist die Bauart, an der am 2026-09-10 drei von
+ * fünf Abschriften eine Plattform vergaßen, ohne dass jemand etwas merkte.
+ *
+ * Was hier bleibt, ist das, was nur dieser Lauf weiß: **welche** fremden Orte
+ * er behauptet ({@link FREMDE_ORTE}), **welche** Ordner seine Suche übergeht
+ * ({@link betreten}) und **wie** ein Fehlschlag der Auflösung aussieht. Die
+ * gemeinsame Fassung wirft {@link MissingSourceError}, statt den Prozeß zu
+ * beenden — ein Baustein, der `process.exit` ruft, ließe sich nicht
+ * gegenprüfen. Innerhalb von `check()` fängt der Rahmen den Wurf; davor tut es
+ * {@link alsMessungsfehler}.
+ *
+ * Und die Grenze dieser Landkarte, ausgesprochen (A-A-55, A-A-60): Sie findet
+ * eine Datei, die **umgezogen** ist. Eine Datei, die **gestrichen** wurde,
+ * findet sie nicht — und soll sie nicht: Dann ist der Prüfsatz gegenstandslos
+ * geworden, und das gehört gelesen und nicht geraten. Beides endet rot; die
+ * Meldung unterscheidet die Fälle, indem sie sagt, wie viele Treffer die Suche
+ * im Paket ergeben hat.
+ *
+ * **Auch die Prosa hängt daran.** Ein Kommentar, der einen fremden Pfad nennt,
+ * gibt eine Auskunft; nach einem Umzug gibt er eine falsche. Die Orte, über
+ * die dieser Lauf in seinen Kommentaren etwas **behauptet**, stehen deshalb in
+ * {@link FREMDE_ORTE} und werden in Abschnitt 0a aufgelöst — auch die, aus
+ * denen keine Prüfung liest.
+ */
+
+/** Verzeichnisse, die bei der Suche im Paket nie betreten werden. */
+const NICHT_BETRETEN = new Set(['node_modules', 'dist', 'build', 'coverage', 'target', 'taskpane']);
+
+/**
+ * Welche Ordner die Suche im Paket betritt.
+ *
+ * Die Übergehen-Liste bleibt hier und wandert **nicht** in die gemeinsame
+ * Fassung: Was ein Lauf übergehen darf, weiß nur der Lauf. `taskpane/` etwa
+ * ist das Bauergebnis dieses Pakets und trägt veraltete Abschriften derselben
+ * Sätze; ein Treffer dort wäre ein Fund in einer Kopie und nicht im Baum —
+ * genau der Fall, den E-087 beim Streichen von Oberflächentexten benennt.
+ */
+const betreten = (name) => !name.startsWith('.') && !NICHT_BETRETEN.has(name);
+
+/**
+ * Der rote Ausgang **dieses** Laufs für eine Auflösung, die vor dem ersten
+ * Prüfsatz steht.
+ *
+ * `scripts/source-anchors.mjs` wirft {@link MissingSourceError}, statt den
+ * Prozeß zu beenden — ein Baustein, der `process.exit` ruft, ließe sich nicht
+ * gegenprüfen, denn eine Prüfung, die seinen Abbruch messen will, stürbe mit
+ * ihm. Wie der Abbruch **aussieht**, entscheidet deshalb der Lauf, und hier
+ * steht seine Entscheidung: eine Zeile in der Form aller anderen roten Zeilen.
+ *
+ * Innerhalb von `check()` braucht es diesen Umweg nicht — dort fängt der
+ * Rahmen jeden Wurf und macht daraus ein `FEHL` samt Zählung. Gebraucht wird
+ * er für die Auflösungen **vor** dem ersten Abschnitt, wo es noch keinen
+ * Zähler gibt, der eine Zeile aufnehmen könnte.
+ */
+const alsMessungsfehler = (was, aufloesen) => {
+  try {
+    return aufloesen();
+  } catch (fehler) {
+    if (!(fehler instanceof MissingSourceError)) throw fehler;
+    process.stdout.write(`  FEHL  ${was}\n        ${fehler.message}\n`);
+    process.exit(1);
+  }
+};
+
+/**
+ * Die Wurzel des Arbeitsbaums.
+ *
+ * Nicht `process.cwd()`: Der Lauf wird über `pnpm --filter` gestartet und
+ * bekommt damit das Paketverzeichnis als Arbeitsverzeichnis, nicht die Wurzel.
+ * Gesucht wird über `pnpm-workspace.yaml`, und zwar in der gemeinsamen Fassung
+ * — bis T-249-6 stand die Aufwärtsschleife hier ein viertes Mal im Baum.
+ */
+const arbeitsbaum = alsMessungsfehler('die Wurzel des Arbeitsbaums auflösen', () => workspaceRoot());
+
+/** Ein Pfad, wie er in einer Meldung stehen soll: relativ zur Wurzel, mit `/`. */
+const alsAnschrift = (datei) => displayPath(arbeitsbaum, datei);
+
+/**
+ * Das Verzeichnis eines Pakets, gesucht über seinen **Namen**.
+ *
+ * Die erlaubten Orte kommen aus `pnpm-workspace.yaml` und nicht aus einer
+ * Liste in dieser Datei: Wer ein Paket verschiebt, ändert dort eine Zeile, und
+ * diese Landkarte zieht mit. Die gemeinsame Fassung meldet außerdem einen
+ * **doppelt vergebenen** Paketnamen, statt ihn still zu überschreiben — zwei
+ * Treffer sind so wenig eine Antwort wie keiner.
+ *
+ * Fail-closed bleibt fail-closed: Ein unbekannter Name wirft, und die Meldung
+ * nennt die Namen, die es gibt.
+ */
+const paketWurzel = (name) => locateWorkspacePackage(arbeitsbaum, name);
+
+/**
+ * Alle Dateien eines Namens im Paket, die ein Merkmal tragen. Der Umzugssucher.
+ *
+ * Der Abstieg kommt aus der gemeinsamen Fassung und ist **rekursiv**; welche
+ * Ordner er betritt, bestimmt {@link betreten}. Ein fehlendes Paketverzeichnis
+ * wirft dort, statt still die leere Menge zu ergeben.
+ */
+const sucheImPaket = (wurzel, dateiname, marke, zweck) =>
+  readTreeSync(wurzel, (name) => name === dateiname, zweck, betreten)
+    .filter((eintrag) => readFileSync(eintrag.path, 'utf8').includes(marke))
+    .map((eintrag) => eintrag.path);
+
+/**
+ * Die Beanstandung an einem gefundenen Inhalt — als **reine** Funktion, damit
+ * die Gegenprobe beide Zweige vorführen kann, ohne eine Datei anzulegen.
+ *
+ * Gibt `null` zurück, wenn nichts zu beanstanden ist.
+ */
+const beanstandeInhalt = ({ text, anschrift, marke, zweck }) => {
+  if (text.trim() === '') return `${anschrift} ist leer — ${zweck} ist ungemessen, nicht bestanden`;
+  if (!text.includes(marke)) {
+    return `${anschrift} trägt „${marke}" nicht mehr — ${zweck} ist ungemessen, nicht bestanden`;
+  }
+  return null;
+};
+
+/**
+ * Eine fremde Datei: aufgelöst über Paket und Merkmal, fail-closed.
+ *
+ * `pfad` ist der **heutige** Ort und damit die schnelle Antwort, nicht die
+ * Zusage. Trifft er nicht, entscheidet die Suche nach `marke` im Paket.
+ */
+const fremdeQuelle = ({ paket, pfad, marke, zweck }) => {
+  const wurzel = paketWurzel(paket);
+  const gebucht = path.join(wurzel, ...pfad);
+  const dateiname = pfad[pfad.length - 1];
+
+  // Die schnelle Antwort: der heutige Ort, in einem Lesevorgang. Daß dort
+  // nichts liegt, ist **kein** Befund, sondern der Anlass zu suchen — gemeldet
+  // wird erst, was die Suche im Paket nicht mehr findet.
+  //
+  // Verschluckt werden deshalb genau die Gründe, die „liegt dort nicht (als
+  // Datei)" heißen. Jeder andere Lesefehler bleibt ein Fehler: Ihn zur Suche
+  // umzudeuten hieße, einen Befund hinter einem Fund zu verstecken.
+  let datei = null;
+  let text = null;
+  try {
+    text = readFileSync(gebucht, 'utf8');
+    datei = gebucht;
+  } catch (fehler) {
+    if (!['ENOENT', 'ENOTDIR', 'EISDIR'].includes(String(fehler?.code))) throw fehler;
+  }
+
+  if (datei === null) {
+    const treffer = sucheImPaket(wurzel, dateiname, marke, `die Suche nach „${dateiname}" (${zweck})`);
+    if (treffer.length !== 1) {
+      throw new Error(
+        `${paket}/${pfad.join('/')} gibt es nicht (mehr); die Suche nach „${dateiname}" mit „${marke}" ` +
+          `in ${paket} ergab ${String(treffer.length)} Treffer` +
+          `${treffer.length === 0 ? '' : `: ${treffer.map(alsAnschrift).join(', ')}`} — ` +
+          `${zweck} ist ungemessen, nicht bestanden`,
+      );
+    }
+    [datei] = treffer;
+    text = readFileSync(datei, 'utf8');
+  }
+
+  const anschrift = alsAnschrift(datei);
+  const beanstandung = beanstandeInhalt({ text, anschrift, marke, zweck });
+  if (beanstandung !== null) throw new Error(beanstandung);
+  return { datei, text, anschrift };
+};
+
+/**
+ * Ein fremdes **Verzeichnis** samt Untergrenze.
+ *
+ * Das Verzeichnis wird über eine seiner Dateien gefunden — `anker` nennt sie
+ * und ihr Merkmal. Damit zieht auch ein umgezogenes Verzeichnis mit. Die
+ * Untergrenze steht daneben, weil ein leeres Ergebnis sonst jede Aussage über
+ * die gefundene Menge grün machte (A-A-60).
+ */
+const fremdesVerzeichnis = ({ paket, pfad, anker, endung, mindestens, zweck }) => {
+  const wurzel = paketWurzel(paket);
+  const gebucht = path.join(wurzel, ...pfad);
+
+  // Auch hier ist der gebuchte Ort nur die schnelle Antwort: `requireDirectory`
+  // sagt in einem Aufruf, ob dort ein Verzeichnis liegt. Sein Wurf ist an
+  // **dieser** Stelle kein Befund, sondern der Anlass, im Paket zu suchen —
+  // und nur seiner: Ein Fehler anderer Herkunft bleibt ein Fehler.
+  let verzeichnis = null;
+  try {
+    verzeichnis = requireDirectory(gebucht, zweck);
+  } catch (fehler) {
+    if (!(fehler instanceof MissingSourceError)) throw fehler;
+  }
+
+  if (verzeichnis === null) {
+    const ankerSuche = `die Suche nach „${anker.datei}" (${zweck})`;
+    const treffer = [
+      ...new Set(sucheImPaket(wurzel, anker.datei, anker.marke, ankerSuche).map((datei) => path.dirname(datei))),
+    ];
+    if (treffer.length !== 1) {
+      throw new Error(
+        `${paket}/${pfad.join('/')} gibt es nicht (mehr); die Suche nach „${anker.datei}" mit „${anker.marke}" ` +
+          `in ${paket} ergab ${String(treffer.length)} Verzeichnisse` +
+          `${treffer.length === 0 ? '' : `: ${treffer.map(alsAnschrift).join(', ')}`} — ` +
+          `${zweck} ist ungemessen, nicht bestanden`,
+      );
+    }
+    [verzeichnis] = treffer;
+  }
+
+  // **Eine** Ebene, nicht rekursiv: `enter` verweigert jeden Ordner. Der
+  // Zähler darunter soll über genau die Dateien urteilen, die hier liegen; ein
+  // rekursiver Abstieg zöge Dateien aus Unterordnern in eine Menge, über die
+  // dieser Prüfsatz nichts behauptet.
+  const dateien = readTreeSync(verzeichnis, (name) => name.endsWith(endung), zweck, () => false).map(
+    (eintrag) => eintrag.path,
+  );
+
+  // Die Untergrenze kommt aus der gemeinsamen Fassung. Ihr Satz sagt dasselbe
+  // wie der bisherige — eine zu kleine Menge macht jede Aussage über sie
+  // „grün und hohl" —, und `zweck` steht im Ort, damit die Meldung weiterhin
+  // nennt, **welche** Messung ausgefallen ist.
+  requireAtLeast(dateien, mindestens, `Dateien auf „${endung}"`, `${alsAnschrift(verzeichnis)} (${zweck})`);
+  return dateien;
+};
+
+/**
+ * Die fremden Orte, über die dieser Lauf etwas behauptet — gemessen **und**
+ * bloß genannt.
+ *
+ * Wer hier einen Eintrag hinzufügt, bekommt zwei Dinge umsonst: die Auflösung
+ * über den Umzug hinweg und die Zusage, daß der Ort in den Kommentaren dieser
+ * Datei keine Auskunft gibt, die niemand nachprüft.
+ */
+const FREMDE_ORTE = Object.freeze({
+  /** Gelesen: Abschnitt 0, E-058 Absatz 1. */
+  addinDienst: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['src', 'routes', 'addin', 'service.ts'],
+    marke: 'findMatches',
+    zweck: 'die Messung zu E-058 Absatz 1 (der Add-in-Dienst rechnet keine Poolregel nach)',
+  }),
+  /** Gelesen: Abschnitt 1, Gegenprobe zu E-045. Genannt: Abschnitt 1 und 19. */
+  callNummer: Object.freeze({
+    paket: '@takt/domain',
+    pfad: ['src', 'call-number.ts'],
+    marke: 'checkCallNumber',
+    zweck: 'die Gegenprobe zu E-045 — die Regel steht in der Domäne',
+  }),
+  /** Genannt in Abschnitt 16 und 17, und in der Schnittstellenbeschreibung. */
+  zeichenklasse: Object.freeze({
+    paket: '@takt/domain',
+    pfad: ['src', 'characters.ts'],
+    marke: 'FORBIDDEN_NAME_CHARACTERS',
+    zweck: 'die eine Fassung der Zeichenklasse (T-122, T-123)',
+  }),
+  /** Genannt in Abschnitt 16 und 17 als Herkunft des Befunds aus T-101/T-114. */
+  eingangswache: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['src', 'http', 'input.ts'],
+    marke: 'withoutControlCharacters',
+    zweck: 'der Befund aus T-101, auf den sich Abschnitt 16 beruft',
+  }),
+  /** Gelesen: Abschnitt 16, 18b und 18c. */
+  schnittstelle: Object.freeze({
+    paket: '@takt/local-api',
+    pfad: ['openapi', 'takt-local-api.yaml'],
+    marke: '/addin/todos',
+    zweck: 'der Add-in-Abschnitt der Schnittstellenbeschreibung (E-053)',
+  }),
+});
+
 let passed = 0;
 let failed = 0;
 let section = '';
@@ -260,17 +616,31 @@ const checkAsync = async (name, fn) => {
   }
 };
 
+/**
+ * Die Untergrenze des Quelldateiscans.
+ *
+ * Sie steht als benannte Zahl da, damit die Gegenprobe unten sie anfassen
+ * kann, ohne sie ein zweites Mal hinzuschreiben.
+ */
+const MINDESTENS_QUELLDATEIEN = 15;
+
+/**
+ * Der Scan selbst, über ein **übergebenes** Verzeichnis (T-249).
+ *
+ * Bis T-249 stand `srcRoot` in dieser Funktion, und damit ließ sich ihre
+ * Untergrenze nicht vorführen: Man konnte sie nicht ins Leere laufen lassen,
+ * ohne den Baum anzufassen. Ein fehlendes Verzeichnis wirft — seit T-249-6
+ * über `requireDirectory` in `readTreeSync`, und die Meldung nennt den Pfad
+ * und sagt dazu, wofür der Lauf ihn braucht.
+ */
+const quelldateienUnter = (wurzel) =>
+  readTreeSync(wurzel, (name) => /\.(ts|tsx|css|html)$/.test(name), 'den Quelltextscan des Add-ins').map(
+    (eintrag) => eintrag.path,
+  );
+
 /** Alle Quelldateien des Add-ins, für die statischen Prüfungen. */
 const sourceFiles = () => {
-  const found = [];
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir)) {
-      const full = path.join(dir, entry);
-      if (statSync(full).isDirectory()) walk(full);
-      else if (/\.(ts|tsx|css|html)$/.test(entry)) found.push(full);
-    }
-  };
-  walk(srcRoot);
+  const found = quelldateienUnter(srcRoot);
   found.push(path.join(here, '..', 'index.html'));
   return found;
 };
@@ -279,10 +649,13 @@ const sourceFiles = () => {
 heading('0  Quelltexthygiene — was im Add-in nicht vorkommen darf');
 // ===========================================================================
 
-const files = sourceFiles();
+const files = alsMessungsfehler('die Quelldateien des Add-ins auflösen', sourceFiles);
 
 check(`${String(files.length)} Quelldateien gefunden`, () => {
-  assert.ok(files.length > 15, 'zu wenige Dateien — der Scan greift ins Leere');
+  assert.ok(
+    files.length > MINDESTENS_QUELLDATEIEN,
+    `nur ${String(files.length)} Dateien — der Scan greift ins Leere`,
+  );
 });
 
 check('B-2.8/E-019: kein Zugriff auf Office.context.roamingSettings', () => {
@@ -357,9 +730,9 @@ check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => 
   /*
    * Der Befund, der zu E-058 geführt hat, in einer statischen Zeile.
    *
-   * Bis T-092 stand der Satz zweimal im Baum — einmal in
-   * `apps/outlook-addin/src/duplicate/reopen.ts`, einmal zeichengleich in
-   * `apps/web/src/lib/labels.ts` —, und beide Fassungen sind auseinandergelaufen:
+   * Bis T-092 stand der Satz zweimal im Baum — einmal im Aufgabenbereich
+   * (`duplicate/reopen.ts`), einmal zeichengleich in der Hauptanwendung —,
+   * und beide Fassungen sind auseinandergelaufen:
    * Die eine kannte `leaves` nicht, die andere nannte eine reine Board-Spalte
    * „Pool". Zwei Abschriften desselben Textes sind zwei Gelegenheiten,
    * Verschiedenes zu behaupten.
@@ -369,6 +742,13 @@ check('E-058: das Add-in hält keine zweite Fassung des Bewegungssatzes', () => 
    * formuliert. Die Satzanfänge stehen als Muster da, weil sie sich zwischen
    * beiden Wortlauten (vor und nach T-093) nicht geändert haben; wer den Satz
    * hier nachbaut, schreibt einen von ihnen hin.
+   *
+   * **Der Ort in der Hauptanwendung steht hier seit T-249 ohne Pfad.** Er lag
+   * damals in `lib/labels.ts`; dieser Lauf liest ihn nicht, kein Prüfsatz hängt
+   * an ihm, und die Umstrukturierung des Bestands wird ihn verschieben. Ein
+   * ausgeschriebener Pfad, den niemand auflöst, ist nach dem ersten Umzug eine
+   * falsche Auskunft — und eine falsche Auskunft in einem Nachweislauf ist
+   * schlimmer als gar keine. Was aufgelöst wird, steht in {@link FREMDE_ORTE}.
    */
   const satzanfaenge =
     /Es erscheint dann|Es steht jetzt|Es ist zurück in|Es verschwindet dann|Auf dieses Todo passt/;
@@ -415,15 +795,16 @@ check('E-058 Absatz 1: der Add-in-Dienst wertet keine Poolregel mehr selbst aus'
    * Handlung, und die zweite kannte `leaves` nicht.
    *
    * Seit E-058 Absatz 1 gibt es **eine** Rechnung
-   * (`usecases/pool-movement.ts`), und der Add-in-Dienst ruft sie. Wer hier
-   * wieder `matchesPool` importiert, baut die zweite Fassung neu — und diese
-   * Zeile wird rot, bevor die beiden Antworten auseinanderlaufen können.
+   * (`apps/local-api/src/pool-movement.ts`), und der Add-in-Dienst ruft sie.
+   * Wer hier wieder `matchesPool` importiert, baut die zweite Fassung neu — und
+   * diese Zeile wird rot, bevor die beiden Antworten auseinanderlaufen können.
    *
    * Der Name darf im Kommentar stehen; verboten ist der **Aufruf**.
    */
-  const service = sourceWithoutComments(
-    path.join(here, '..', '..', 'local-api', 'src', 'routes', 'addin', 'service.ts'),
-  );
+  // Über die Landkarte und nicht über einen ausgeschriebenen Pfad (T-249):
+  // Zieht der Dienst um, findet diese Zeile ihn — und findet sie ihn nicht,
+  // wird sie rot und sagt, wonach sie gesucht hat.
+  const service = sourceWithoutComments(fremdeQuelle(FREMDE_ORTE.addinDienst).datei);
 
   assert.equal(
     /\bmatchesPool\s*\(/.test(service),
@@ -445,6 +826,127 @@ check('Keine echte Call-Nummer und kein echter Kundenname in den Prüfdaten', ()
   for (const address of addresses) {
     assert.match(address, /@example\.(org|com|net)$/, `Adresse außerhalb der Beispieldomänen: ${address}`);
   }
+});
+
+check('T-249, Gegenprobe: die Untergrenze des Quelldateiscans greift wirklich', () => {
+  /*
+   * Eine Untergrenze ohne Gegenprobe ist selbst eine unbelegte Zusage
+   * (A-A-60). Vorgeführt wird sie an einem Verzeichnis, das es **gibt** und
+   * das keine einzige Quelldatei führt: `scripts/` selbst enthält nur `.mjs`.
+   * Damit braucht diese Zeile weder eine angelegte Datei noch einen Umbau des
+   * Baums, und sie mißt genau den Fall, den ein Umzug herstellt — der Scan
+   * läuft, findet nichts und urteilt über die leere Menge.
+   */
+  const leer = quelldateienUnter(here);
+  assert.deepEqual(leer, [], `scripts/ führt doch Quelldateien: ${leer.map(alsAnschrift).join(', ')}`);
+  assert.equal(
+    leer.length > MINDESTENS_QUELLDATEIEN,
+    false,
+    'die Untergrenze wäre auch bei null Dateien erfüllt',
+  );
+
+  // Und der andere Ausgang: Ein Verzeichnis, das es nicht gibt, ist ein
+  // Fehlschlag der Messung und nicht die leere Menge.
+  assert.throws(
+    () => quelldateienUnter(path.join(srcRoot, 'gibt-es-nicht')),
+    /gibt-es-nicht/,
+    'ein fehlendes Verzeichnis ergibt still die leere Menge',
+  );
+});
+
+// ===========================================================================
+heading('0a  Die Landkarte: fremde Orte werden aufgelöst, nicht buchstabiert (T-249)');
+// ===========================================================================
+
+check(`die ${String(Object.keys(FREMDE_ORTE).length)} fremden Orte dieses Laufs lösen sich auf`, () => {
+  /*
+   * Der Wächter vor allen Abschnitten, die in fremdem Quelltext lesen — und
+   * zugleich der Wächter über die **Prosa** dieser Datei: `eingangswache` und
+   * `zeichenklasse` werden von keiner Prüfung gelesen, sondern in Kommentaren
+   * genannt. Ein Kommentar, der einen Pfad nennt, gibt eine Auskunft; nach
+   * einem Umzug gibt er eine falsche. Hier wird sie eingelöst.
+   */
+  const aufgelöst = Object.entries(FREMDE_ORTE).map(([name, ort]) => `${name}: ${fremdeQuelle(ort).anschrift}`);
+
+  assert.equal(
+    aufgelöst.length,
+    Object.keys(FREMDE_ORTE).length,
+    'ein Ort ist auf dem Weg verlorengegangen',
+  );
+  assert.deepEqual(
+    aufgelöst.filter((zeile) => zeile.includes('node_modules')),
+    [],
+    `ein Ort wurde in einer installierten Kopie gefunden statt im Baum: ${aufgelöst.join('; ')}`,
+  );
+});
+
+check('Gegenprobe: was die Landkarte nicht findet, ist ungemessen und nicht bestanden', () => {
+  /*
+   * Vier Ausgänge, und alle vier enden rot mit einer Meldung, die benennt, was
+   * fehlt. Der vierte ist der eigentliche Zweck des Umbaus: Ein **falscher**
+   * Pfad im Eintrag ist kein Fehlschlag, solange das Merkmal im Paket
+   * eindeutig zu finden ist — genau das ist der Umzug.
+   */
+
+  // 1. Das Paket gibt es nicht. Die Meldung nennt es und die, die es gibt.
+  assert.throws(
+    () =>
+      fremdeQuelle({
+        paket: '@takt/gibt-es-nicht',
+        pfad: ['src', 'irgendwas.ts'],
+        marke: 'egal',
+        zweck: 'Gegenprobe',
+      }),
+    /@takt\/gibt-es-nicht.*@takt\/domain/s,
+    'ein unbekanntes Paket fällt nicht auf, oder die Meldung nennt es nicht',
+  );
+
+  // 2. Die Datei gibt es nicht, und auch das Merkmal führt zu keiner anderen.
+  assert.throws(
+    () => fremdeQuelle({ ...FREMDE_ORTE.callNummer, pfad: ['src', 'xyzzy.ts'], marke: 'zzKeinMerkmal' }),
+    /xyzzy\.ts.*0 Treffer.*ungemessen, nicht bestanden/s,
+    'eine fehlende Datei fällt nicht auf, oder die Meldung nennt sie nicht',
+  );
+
+  // 3. Die Datei ist da und trägt ihr Merkmal nicht mehr — die Datei hat sich
+  //    geändert, nicht ihr Ort. Auch das ist ein Fehlschlag der Messung.
+  assert.throws(
+    () => fremdeQuelle({ ...FREMDE_ORTE.callNummer, marke: 'zzTraegtDieDomaeneNicht' }),
+    /call-number\.ts.*zzTraegtDieDomaeneNicht.*ungemessen, nicht bestanden/s,
+    'ein verschwundenes Merkmal fällt nicht auf',
+  );
+
+  // 3b. Und der leere Zweig, an der reinen Funktion und ohne eine angelegte
+  //     Datei: Er hat eine **eigene** Meldung, weil „trägt das Merkmal nicht"
+  //     bei einer leeren Datei in die Irre führte.
+  assert.match(
+    String(
+      beanstandeInhalt({ text: '   \n', anschrift: 'packages/domain/src/leer.ts', marke: 'x', zweck: 'Gegenprobe' }),
+    ),
+    /leer\.ts ist leer.*ungemessen, nicht bestanden/,
+    'eine leere Datei wird nicht als solche benannt',
+  );
+  assert.equal(
+    beanstandeInhalt({
+      text: 'const x = 1;',
+      anschrift: 'packages/domain/src/da.ts',
+      marke: 'const x',
+      zweck: 'Gegenprobe',
+    }),
+    null,
+    'die Beanstandung beanstandet auch, was in Ordnung ist',
+  );
+
+  // 4. Der Umzug: ein Pfad, den es so nie gab, und trotzdem der richtige Fund.
+  const verlegt = fremdeQuelle({
+    ...FREMDE_ORTE.zeichenklasse,
+    pfad: ['src', 'features', 'text', 'characters.ts'],
+  });
+  assert.equal(
+    verlegt.anschrift,
+    'packages/domain/src/characters.ts',
+    'ein umgezogener Ort wird nicht mitgenommen — dann trägt die Landkarte nichts',
+  );
 });
 
 // ===========================================================================
@@ -606,10 +1108,20 @@ check('E-045: es gibt keine zweite Fassung der Regel mehr', () => {
   // Gesucht wird nach ihren Kennzeichen, nicht nach einem Dateinamen: dem
   // Zeichenvorrat aus B-4.3 Punkt 3 und der Formelprüfung aus B-4.4. Wer die
   // Regel nachbaut, schreibt eines von beidem hin.
-  const addinRoutes = path.join(here, '..', '..', 'local-api', 'src', 'routes', 'addin');
-  const routeFiles = readdirSync(addinRoutes)
-    .filter((entry) => entry.endsWith('.ts'))
-    .map((entry) => path.join(addinRoutes, entry));
+  // Über die Landkarte, mit Untergrenze (T-249). Bis dahin stand hier ein
+  // ausgeschriebener Pfad und ein `readdirSync` ohne Grenze: Ein umgezogenes
+  // Verzeichnis hätte geworfen, ein **leeres** hätte still die leere Menge
+  // ergeben — und über die leere Menge urteilt sich am bequemsten. Das
+  // Verzeichnis wird über `index.ts` samt `mountAddinRoutes` gefunden, also
+  // über dieselbe Datei, an der auch der Import oben hängt.
+  const routeFiles = fremdesVerzeichnis({
+    paket: '@takt/local-api',
+    pfad: ['src', 'routes', 'addin'],
+    anker: { datei: 'index.ts', marke: 'mountAddinRoutes' },
+    endung: '.ts',
+    mindestens: 4,
+    zweck: 'die Suche nach einer zweiten Fassung der Regel (E-045)',
+  });
 
   // Als Zeichenketten und nicht als Ausdrücke: Der Zeichenvorrat enthält
   // selbst einen Schrägstrich, und ein Muster, das sich beim Hinschreiben
@@ -628,10 +1140,7 @@ check('E-045: es gibt keine zweite Fassung der Regel mehr', () => {
 
   // Gegenprobe: In der Domäne stehen beide Kennzeichen — der Scan sucht also
   // nach etwas, das es gibt, und nicht nach einer Zeichenkette ins Leere.
-  const domainSource = readFileSync(
-    path.join(here, '..', '..', '..', 'packages', 'domain', 'src', 'call-number.ts'),
-    'utf8',
-  );
+  const domainSource = fremdeQuelle(FREMDE_ORTE.callNummer).text;
   for (const needle of fingerprints) {
     assert.ok(domainSource.includes(needle), `die Domäne trägt ${needle} nicht`);
   }
@@ -1123,6 +1632,262 @@ check('T-084: ohne Bewegung kein Satz — und die Bestätigung ist Zeichen für 
   // Kein Halbsatz, kein Komma zu viel, keine leere Aufzählung — die Auflage aus
   // E-056, eine Stufe früher angewandt.
   assert.equal(/Pool/.test(notice.booked), false, `ein Halbsatz ist übrig geblieben: ${notice.booked}`);
+});
+
+// ===========================================================================
+heading('5b  Die Duplikatfläche sagt, was sie gefunden hat (A-10.9, R-15, Y-02 bis Y-04)');
+// ===========================================================================
+
+/*
+ * Drei Befunde aus dem Spezifikations- und UX-Review zu T-247, in einem
+ * Abschnitt, weil sie eine Fläche sind:
+ *
+ *  - **Y-02.** Die beiden gesperrten Sätze SP-A-27 und SP-A-28 standen nach
+ *    dem Rückbau zeichengleich da, ihr Bezugswort aber nicht mehr: „Dabei"
+ *    verwies auf das Anhängen, und davor steht seit T-247 „Bearbeiten Sie das
+ *    vorhandene Todo in SuperTakt". Auf **diesem** Weg waren beide Sätze
+ *    falsch — in SuperTakt lässt sich Zeit auf dem vorhandenen Todo erfassen,
+ *    und ein Timerstart hebt „Erledigt" auf (A-2.5, I-05). Der Wortlaut ist
+ *    vom Auftraggeber neu entschieden; der Änderung der beiden gesperrten
+ *    Sätze hat der spec-ux-reviewer ausdrücklich zugestimmt (E-078 Punkt 3).
+ *  - **Y-03.** Die Warnung nennt die Treffer wieder. A-10.9 verbietet eine
+ *    **Handlung** am gefundenen Todo, keine **Angabe** darüber; eine anonyme
+ *    Warnung überliest jeder, und dann entsteht das Duplikat unbemerkt — der
+ *    Schaden aus R-15.
+ *  - **Y-04.** Die Live-Region steht **immer** im Baum. Bis T-247-3 gab
+ *    `DuplicateOffer` `null` zurück, solange kein Treffer vorlag — dieselbe
+ *    Bauart, die `Primitives.tsx` bei `Field` seit T-158 ausdrücklich als
+ *    unwirksam beschreibt.
+ *
+ * **Was hier ausgeführt und was gelesen wird.** Der Aufgabenbereich lässt sich
+ * in Node nicht rendern; JSX geht nicht durch die Typentfernung. Die
+ * Fallunterscheidung liegt deshalb nicht im JSX, sondern in
+ * `duplicate/notice.ts` — und die **läuft** hier. Was am JSX bleibt, ist die
+ * Anordnung, und die wird gelesen: dass die Region außerhalb jeder Bedingung
+ * steht. Mit Gegenprobe, denn eine Textsuche, die nichts findet, ist die
+ * grünste von allen.
+ */
+
+/** Ein Treffer, wie ihn `describeOffers` liefert — erfundene Werte (B-7.1). */
+const trefferBauen = (nummer, titel, erledigt) => ({
+  todoId: `todo-${nummer}`,
+  title: titel,
+  callNumber: `TCK-${nummer}`,
+  isDone: erledigt,
+  openSeconds: 0,
+  exportedSeconds: 0,
+  poolMovement: null,
+  summary: 'Bereits gebucht: 0:00 h offen.',
+});
+
+check('Y-04: „gesucht und nichts gefunden" ist ein eigener Fall — nicht derselbe wie „nicht gesucht"', () => {
+  /*
+   * Der Kern des Befunds. Für eine Vorlesehilfe war beides dasselbe: eine
+   * leere Trefferliste. Genau deshalb reicht der Aufgabenbereich die
+   * **gesuchte** Nummer herein.
+   */
+  assert.deepEqual(duplicateNotice([], null), { kind: 'idle' });
+  assert.deepEqual(duplicateNotice([], ''), { kind: 'idle' });
+  assert.deepEqual(duplicateNotice([], 'TCK-000042'), { kind: 'none', callNumber: 'TCK-000042' });
+
+  // Und die Unterscheidung ist eine echte: Die beiden Fälle tragen nicht
+  // denselben Namen.
+  assert.notEqual(duplicateNotice([], null).kind, duplicateNotice([], 'TCK-000042').kind);
+});
+
+check('Y-03: die Warnung nennt jeden Treffer — Titel und, falls erledigt, die Wortmarke', () => {
+  const einer = duplicateNotice([trefferBauen('000042', 'Drucker im Lager', false)], 'TCK-000042');
+  assert.equal(einer.kind, 'found');
+  assert.equal(einer.count, 1);
+  assert.equal(einer.callNumber, 'TCK-000042', 'bei einem Treffer nennt die Überschrift die Nummer');
+  assert.deepEqual(einer.items, [
+    { todoId: 'todo-000042', title: 'Drucker im Lager', isDone: false },
+  ]);
+
+  const mehrere = duplicateNotice(
+    [
+      trefferBauen('000042', 'Drucker im Lager', false),
+      trefferBauen('000042', 'Drucker im Lager — Nachlauf', true),
+    ],
+    'TCK-000042',
+  );
+  assert.equal(mehrere.count, 2);
+  assert.equal(mehrere.callNumber, null, 'bei mehreren Treffern nennt die Überschrift die Anzahl');
+  assert.deepEqual(
+    mehrere.items.map(({ title, isDone }) => ({ title, isDone })),
+    [
+      { title: 'Drucker im Lager', isDone: false },
+      { title: 'Drucker im Lager — Nachlauf', isDone: true },
+    ],
+    'die Reihenfolge oder das Erledigt-Kennzeichen geht unterwegs verloren',
+  );
+});
+
+check('Y-03: die Angabe bleibt eine Angabe — kein Treffer trägt eine Handlung', () => {
+  /*
+   * A-10.9 verbietet die **Handlung**. Gemessen wird sie an zwei Stellen: an
+   * dem, was die Fläche über einen Treffer überhaupt weiß, und an der Fläche
+   * selbst. Steht dort wieder eine Dauer oder eine Kennung zum Buchen, ist der
+   * nächste Knopf einen Handgriff entfernt.
+   */
+  const notiz = duplicateNotice([trefferBauen('000042', 'Drucker im Lager', true)], 'TCK-000042');
+  assert.deepEqual(
+    Object.keys(notiz.items[0]).sort(),
+    ['isDone', 'title', 'todoId'],
+    'ein Treffer trägt mehr als Titel und Erledigt-Kennzeichen',
+  );
+
+  const quelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'DuplicateOffer.tsx'));
+  for (const verboten of ['<Button', 'onClick', '<a ', 'href=', 'api.']) {
+    assert.equal(
+      quelle.includes(verboten),
+      false,
+      `die Duplikatfläche trägt wieder ein Bedienelement (${verboten})`,
+    );
+  }
+});
+
+/**
+ * Der Rumpf der Warnung, aus seinen Teilen zusammengesetzt.
+ *
+ * Die beiden hinteren Teile sind SP-A-27 und SP-A-28 in ihrer neuen Fassung;
+ * Abschnitt 20 hält sie einzeln. Sie stehen **hier** und werden dort gelesen,
+ * damit es den Satz im Lauf nur einmal gibt — zwei Abschriften desselben
+ * Textes sind zwei Gelegenheiten, Verschiedenes zu behaupten (E-078).
+ */
+const SP_A_27 = 'Ein neues Todo erfasst dabei keine Zeit auf dem vorhandenen';
+const SP_A_28 = 'lässt dessen Erledigt-Kennzeichen unberührt.';
+const WARNUNG_RUMPF =
+  'Bearbeiten Sie das vorhandene Todo in SuperTakt oder legen Sie darunter bewusst ein neues an. ' +
+  `${SP_A_27} und ${SP_A_28}`;
+
+/**
+ * Quelltext einer Fläche mit **zusammengefallenem** Zwischenraum.
+ *
+ * JSX faltet Zeilenumbruch und Einrückung zu einem Leerzeichen; was der
+ * Benutzer liest, ist die zusammengefallene Form. Ein Satz, der im Quelltext
+ * über drei Zeilen läuft, ist deshalb zeichengleich derselbe Satz — und ohne
+ * diesen Schritt fände ihn keine Suche.
+ */
+const flaeche = (...teile) =>
+  sourceWithoutComments(path.join(srcRoot, ...teile)).replace(/\s+/g, ' ');
+
+check('Y-02: der Rumpf der Warnung steht im Wortlaut des Auftraggebers', () => {
+  const quelle = flaeche('ui', 'DuplicateOffer.tsx');
+  assert.ok(quelle.length > 500, 'die Quelle ist leer — dann misst diese Zeile nichts');
+  assert.ok(quelle.includes(WARNUNG_RUMPF), `der Rumpf lautet nicht mehr: „${WARNUNG_RUMPF}"`);
+
+  /*
+   * Und die alte Fassung ist weg — nicht bloß die neue da. „Dabei wird auf dem
+   * vorhandenen Todo keine Zeit erfasst." war unter dem neuen ersten Satz
+   * falsch; stünde sie daneben, stünden beide da.
+   */
+  assert.equal(
+    quelle.includes('Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.'),
+    false,
+    'die alte Fassung von SP-A-27 steht noch da — dann sagt die Fläche beides',
+  );
+  assert.equal(
+    quelle.includes('Ein erledigtes Todo bleibt erledigt.'),
+    false,
+    'die alte Fassung von SP-A-28 steht noch da',
+  );
+});
+
+/**
+ * Steht die Live-Region außerhalb jeder Bedingung?
+ *
+ * Drei Teile, und alle drei sind nötig: Die Fläche gibt **kein** `null`
+ * zurück, sie trägt die Region mit ihrer Rolle, und die Region steht **vor**
+ * der ersten Fallunterscheidung. Der letzte Teil allein wäre erfüllt, wenn
+ * darüber ein `return null` stünde; der erste allein, wenn die Rolle am
+ * Hinweis säße, der kommt und geht.
+ */
+const regionStehtImmer = (quelle) => {
+  const region = quelle.indexOf('<div className="offer" role="status">');
+  const rueckgabeNull = /return null/.test(quelle);
+  const ersteBedingung = quelle.indexOf('notice.kind ===');
+  return region >= 0 && !rueckgabeNull && ersteBedingung > region;
+};
+
+check('Y-04: die Duplikatfläche steht immer im Baum, auch ohne Treffer (SC 4.1.3)', () => {
+  /*
+   * Dieselbe Bauart und derselbe Grund wie bei `Field` (T-158) und im
+   * Bestätigungsdialog der Hauptanwendung (T-118): Eine Live-Region, die erst
+   * zusammen mit ihrem Inhalt entsteht, wird von vielen Vorlesehilfen nicht
+   * angesagt — sie melden Änderungen an einer Region, die sie kennen.
+   */
+  const quelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'DuplicateOffer.tsx'));
+  assert.equal(
+    regionStehtImmer(quelle),
+    true,
+    'die Warnung kommt zusammen mit ihrer Region in den Baum',
+  );
+
+  /*
+   * Und die Rolle sitzt **nicht** ein zweites Mal am Hinweis darin: Zwei
+   * ineinandergeschachtelte Live-Regionen sind keine doppelte Sicherheit.
+   * `Callout` nimmt dafür seit T-247-3 ein `role="none"` entgegen.
+   */
+  assert.match(quelle, /role="none"/, 'der Hinweis in der Region trägt seine eigene Rolle weiter');
+  assert.match(
+    sourceWithoutComments(path.join(srcRoot, 'ui', 'Primitives.tsx')),
+    /gewaehlt === 'none' \? \{\} : \{ role: gewaehlt \}/,
+    '`Callout` kann seine Rolle nicht mehr abgeben — dann ist die Region doppelt',
+  );
+});
+
+check('Y-04, Gegenprobe: der frühere Bau würde rot — und zwar an beiden Beinen', () => {
+  const quelle = sourceWithoutComments(path.join(srcRoot, 'ui', 'DuplicateOffer.tsx'));
+
+  // 1. Der Bau vor T-247-3: erst aussteigen, dann rendern.
+  const mitRueckgabe = quelle.replace(
+    'const notice = duplicateNotice(',
+    'if (offers.length === 0) return null;\n  const notice = duplicateNotice(',
+  );
+  assert.notEqual(
+    mitRueckgabe,
+    quelle,
+    'die Verletzung ließ sich nicht einsetzen — der Sucher greift daneben',
+  );
+  assert.equal(regionStehtImmer(mitRueckgabe), false, 'ein `return null` bliebe unbemerkt');
+
+  // 2. Die Rolle am Inhalt statt an der Hülle.
+  const ohneRegion = quelle.replace(
+    '<div className="offer" role="status">',
+    '<div className="offer">',
+  );
+  assert.notEqual(ohneRegion, quelle, 'die zweite Verletzung ließ sich nicht einsetzen');
+  assert.equal(regionStehtImmer(ohneRegion), false, 'eine Region ohne Rolle bliebe unbemerkt');
+});
+
+check('Y-04: die leere Region wird nicht ausgeblendet — sonst kennt die Vorlesehilfe sie nicht', () => {
+  const css = readFileSync(path.join(srcRoot, 'styles', 'addin.css'), 'utf8');
+  const regel = /\.offer:empty\s*\{([^}]*)\}/.exec(css);
+  assert.ok(
+    regel !== null,
+    'die leere Region trägt den Abstand der Bereichsspalte und schiebt den Bereich auseinander',
+  );
+  assert.equal(
+    /display\s*:\s*none/.test(regel[1]),
+    false,
+    'die leere Region wird ausgeblendet — dann ist sie nicht im Baum und die Ansage fällt aus',
+  );
+  assert.equal(
+    /visibility\s*:\s*hidden/.test(regel[1]),
+    false,
+    'die leere Region wird versteckt — dieselbe Wirkung auf einem anderen Weg',
+  );
+
+  // Und die Aufzählung hat wieder eine Gestalt (Y-03). Eine Auszeichnung ohne
+  // Regel ist der Fall aus T-092 mit umgekehrtem Vorzeichen.
+  const ohneKommentar = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const klasse of ['.offer__list', '.offer__item', '.offer__title']) {
+    assert.ok(
+      ohneKommentar.includes(`${klasse} {`),
+      `${klasse} steht in der Auszeichnung und nicht in der Gestaltung`,
+    );
+  }
 });
 
 // ===========================================================================
@@ -2312,7 +3077,7 @@ heading('12  Die Pools eines Todos: fünf Regelachsen und beide Richtungen (T-07
  * Seit T-076 ist eine Regel eine Struktur mit fünf benannten Feldern. Die
  * Rechnung des Add-in-Dienstes — bis T-092 `poolNamer` in
  * `routes/addin/service.ts`, seitdem `poolMovementNamer` in
- * `usecases/pool-movement.ts` — gab `matchesPool` bis T-078 nur die
+ * `apps/local-api/src/pool-movement.ts` — gab `matchesPool` bis T-078 nur die
  * **erforderlichen Tags** mit, und `matchesPool` überspringt jede Achse, die
  * es nicht genannt bekommt. Eine Regel „Wartung, außer Störungen" wurde damit
  * zu „Wartung", und das Add-in nannte einen Pool, in dem das Todo nicht steht.
@@ -2435,8 +3200,8 @@ const poolsOf = async (callNumber) => (await requireMovement(callNumber)).appear
  * Die erste Hälfte trägt der Übersetzer. Bis T-092 stand dafür eine eigene
  * Wache im Add-in-Dienst (`NamedPoolRule`); seit E-058 rechnet der Dienst nicht
  * mehr selbst, und die Wache steht dort, wo gerechnet wird: `ResolvedPoolRule`
- * in `usecases/pool-movement.ts` trägt `MatchesPoolRule` als Ganzes, und das
- * Objektliteral darunter wird rot, sobald der Typ ein Feld dazubekommt.
+ * in `apps/local-api/src/pool-movement.ts` trägt `MatchesPoolRule` als Ganzes,
+ * und das Objektliteral darunter wird rot, sobald der Typ ein Feld dazubekommt.
  * Nachgestellt: Nimmt man dort `exportState` heraus, meldet `tsc` genau diese
  * Zuweisung.
  *
@@ -2733,11 +3498,11 @@ await checkAsync('I-05: die Auskunft nach der Buchung ist dieselbe wie davor —
    * Bis dahin bildete **eine** Funktion (`bookingStates`) das Zustandspaar für
    * beide Aufrufer. Seit E-058 rechnet ein Anwendungsfall die Bewegung, und
    * seit E-061 bildet er auch das Zustandspaar: `bookingMovementStates` aus
-   * `usecases/pool-movement.ts`, gerufen aus **einer** Stelle im Add-in-Dienst
-   * für beide Wege. Das ist eine Zusage im Quelltext; hier wird sie gemessen.
-   * Nähme eine der beiden Stellen etwas anderes an, sagten Ankündigung und
-   * Bestätigung Verschiedenes über dieselbe Handlung — der Befund C-03 aus
-   * T-025, eine Ebene tiefer.
+   * `apps/local-api/src/pool-movement.ts`, gerufen aus **einer** Stelle im
+   * Add-in-Dienst für beide Wege. Das ist eine Zusage im Quelltext; hier wird
+   * sie gemessen. Nähme eine der beiden Stellen etwas anderes an, sagten
+   * Ankündigung und Bestätigung Verschiedenes über dieselbe Handlung — der
+   * Befund C-03 aus T-025, eine Ebene tiefer.
    */
   assert.deepEqual(
     booked.value.poolMovement.enters,
@@ -2969,8 +3734,8 @@ heading('13  Der leere Ordner: eine Einschränkung ohne Treffer (E-057, T-086)')
  * `unresolvedRequired` deshalb ein **Pflichtfeld** von `matchesPool`, und seit
  * T-086 holt die Rechnung die Auskunft dort, wo sie steht: bei
  * `PoolPort.resolveAxes`, das zu jeder Achse auch die Ordner nennt, aus denen
- * kein Tag geworden ist. Seit T-092 steht sie in `usecases/pool-movement.ts` —
- * dieselbe Frage, ein Aufrufer weniger.
+ * kein Tag geworden ist. Seit T-092 steht sie in
+ * `apps/local-api/src/pool-movement.ts` — dieselbe Frage, ein Aufrufer weniger.
  *
  * Gemessen wird gegen die **echten** Routen, mit einem eigenen Poolsatz
  * (`E057_POOLS`) und demselben erfundenen Bestand wie oben. Jede betroffene
@@ -3128,8 +3893,8 @@ heading('14  Der Anzeigeort ist keine Antwort: reine Board-Spalten (E-054, E-056
  * über die Bewegung war bis T-090 eine von ihnen und ist es seit E-056 nicht
  * mehr. Sie beantwortet nicht „in welchen Pools steht das Todo", sondern was
  * diese Buchung ändert, und diese Frage kennt keine Fläche. Seit T-092 steht
- * sie als `poolMovementNamer` in `usecases/pool-movement.ts` und fragt dort
- * `list('all')`.
+ * sie als `poolMovementNamer` in `apps/local-api/src/pool-movement.ts` und
+ * fragt dort `list('all')`.
  *
  * Was daraus wurde: Eine Spalte „erledigt und noch nicht abgerechnet" mit
  * Anzeigeort **„Nur auf dem Board"** — die naheliegende Wahl, denn sie ist eine
@@ -3398,7 +4163,10 @@ heading('16  Beide Türen lesen die Zeichenklasse der Domäne (T-114, T-122, T-1
  * Der Befund, gegen den dieser Abschnitt steht — und der zweite, an dem er
  * selbst beteiligt war.
  *
- * `apps/local-api/src/http/input.ts` weist seit T-101 Steuerzeichen (C0, C1)
+ * Die Eingangswache des Dienstes (`FREMDE_ORTE.eingangswache`, heute
+ * `apps/local-api/src/http/input.ts` — der Ort wird in Abschnitt 0a
+ * aufgelöst, damit dieser Satz nach einem Umzug keine falsche Auskunft gibt)
+ * weist seit T-101 Steuerzeichen (C0, C1)
  * und die bidirektionalen Formatierungszeichen an Titeln und Namen ab. Die
  * Add-in-Tür hatte ihre eigene Abschrift des Schemas und bekam die Prüfung
  * nicht mit — ausgerechnet die Tür, deren Titel mit dem **Betreff einer
@@ -3586,7 +4354,7 @@ check('der Add-in-Abschnitt der Schnittstellenbeschreibung führt die Klasse nic
    * Zeichen der Klasse genannt ist. Eine Beschreibung, die nichts aufzählt,
    * kann nicht hinterherhinken.
    */
-  const spec = parseYaml(readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'));
+  const spec = parseYaml(fremdeQuelle(FREMDE_ORTE.schnittstelle).text);
   const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
   assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
 
@@ -3598,16 +4366,32 @@ check('der Add-in-Abschnitt der Schnittstellenbeschreibung führt die Klasse nic
     'der Add-in-Abschnitt zählt die Klasse ein zweites Mal auf — sie wird dort veralten',
   );
 
-  // Und die Gegenprobe: Ein Verweis, der auf nichts zeigt, wäre schlechter als
-  // die Aufzählung. Beide Felder nennen den einen Ort, und die Route führt die
-  // Antwort, in der die Zeichen stehen.
+  /*
+   * Und die Gegenprobe: Ein Verweis, der auf nichts zeigt, wäre schlechter als
+   * die Aufzählung. Beide Felder nennen den einen Ort, und die Route führt die
+   * Antwort, in der die Zeichen stehen.
+   *
+   * **Seit T-249 wird der genannte Ort aufgelöst und nicht bloß erkannt.** Bis
+   * dahin stand hier ein Mustervergleich auf die Zeichenkette
+   * `packages/domain/src/characters.ts`. Der ist grün, solange die
+   * Beschreibung diese Buchstaben führt — auch dann, wenn es die Datei dort
+   * längst nicht mehr gibt. Ein Verweis auf einen Ort, den niemand nachschlägt,
+   * ist genau die Bauart, gegen die dieser Satz steht. Gemessen wird deshalb:
+   * die Beschreibung nennt **einen** Ort, und dieser Ort ist der, an dem die
+   * Zeichenklasse heute wirklich liegt.
+   */
   const rumpf = spec.paths['/addin/todos']?.post;
   const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
+  const ORTSMUSTER = /(?:apps|packages|libs)\/[\w.@/-]+\.ts\b/;
+  const zeichenklasse = fremdeQuelle(FREMDE_ORTE.zeichenklasse).anschrift;
   for (const feld of ['title', 'tagNames']) {
-    assert.match(
-      String(felder[feld]?.description ?? ''),
-      /packages\/domain\/src\/characters\.ts/,
-      `${feld} nennt den Ort der Zeichenklasse nicht`,
+    const genannt = ORTSMUSTER.exec(String(felder[feld]?.description ?? ''))?.[0] ?? null;
+    assert.notEqual(genannt, null, `${feld} nennt den Ort der Zeichenklasse nicht`);
+    assert.equal(
+      genannt,
+      zeichenklasse,
+      `${feld} verweist auf ${String(genannt)}; die Zeichenklasse liegt in ${zeichenklasse} — ` +
+        'die Beschreibung zeigt auf einen Ort, den es so nicht gibt',
     );
   }
   assert.equal(
@@ -3961,12 +4745,12 @@ check('die Listengrenzen sagen an beiden Türen dasselbe (O-AR)', () => {
    * können und was nicht.
    *
    * `tagIds` und `tagNames` tragen ihre Obergrenze an **zwei** Türen:
-   * `routes/addin/schema.ts` (hier gemessen, T-134 hat ihr einen Namen gegeben)
-   * und `routes/todos.ts`, gleich zweimal. Es ist dieselbe Wahrheit — „wie viele
-   * Tags darf ein Todo in einer Anfrage bekommen" — und sie steht heute an drei
-   * Stellen unabhängig geschrieben. Der Kommentar an `ADDIN_TAG_NAMES_MAX` sagte
-   * das bis T-134 zu, ohne dass es jemand erzwang: E-063 Punkt 5 in seiner
-   * mildesten Form.
+   * `routes/addin/schema.ts` (hier gemessen, T-134 hat ihr einen Namen
+   * gegeben) und `features/todos/routes.ts`, gleich zweimal. Es ist dieselbe
+   * Wahrheit — „wie viele Tags darf ein Todo in einer Anfrage bekommen" — und
+   * sie steht heute an drei Stellen unabhängig geschrieben. Der Kommentar an
+   * `ADDIN_TAG_NAMES_MAX` sagte das bis T-134 zu, ohne dass es jemand
+   * erzwang: E-063 Punkt 5 in seiner mildesten Form.
    *
    * **Das hier ist ein Zahlenvergleich, und ein Zahlenvergleich ist die
    * schwächere Prüfung** — genau die, die zwei Zeilen weiter oben für den
@@ -4101,7 +4885,8 @@ check('die Leistung: was die Add-in-Tür annimmt, nimmt die Haupttür auch an (O
 
 check('T-114 Punkt 4: Vermerk und Leistung tragen die Wache bewusst nicht', () => {
   /*
-   * Kein Versehen, sondern dieselbe Grenze, die `http/input.ts` zwischen
+   * Kein Versehen, sondern dieselbe Grenze, die die Eingangswache des Dienstes
+   * (`FREMDE_ORTE.eingangswache`) zwischen
    * `nameSchema` und `textSchema` zieht: Ein **Name** wird in fremde Sätze
    * eingesetzt, ein **Vermerk** als eigener Absatz gezeigt. Ein Freitextfeld,
    * das an einem Steuerzeichen scheitert, weist Text des Benutzers ab; der
@@ -4466,6 +5251,51 @@ const paneDateien = ['TaskPane.tsx', 'DuplicateOffer.tsx', 'TagPicker.tsx', 'Set
   (name) => ({ name, text: sourceWithoutComments(path.join(srcRoot, 'ui', name)) }),
 );
 
+/**
+ * Die fremden Werte, die in einer Fläche des Aufgabenbereichs erscheinen
+ * können. Zwei Prüfungen lesen sie: „steht keiner roh im JSX" und „wer einen
+ * zeigt, benutzt den Baustein".
+ *
+ * **Die Liste ist in T-247-3 nachgeführt**, und der Anlass war ein Befund des
+ * Code-Reviews: Nach dem Rückbau der Anhangsfläche stand in
+ * `DuplicateOffer.tsx` mit `first.callNumber` genau **eine** fremde Angabe —
+ * und weil kein Name dieser Liste dort noch vorkam, verlangte niemand mehr
+ * den Baustein. Der Umbau hatte den Wächter an der Datei blind gemacht, an
+ * der die letzte fremde Angabe übrig war. Dazu die Auskunft des
+ * Code-Reviewers, die sachlich trägt und trotzdem nicht genügt: Eine
+ * Call-Nummer hat `checkCallNumber` bestanden, und `ALLOWED_SHAPE`
+ * (`packages/domain/src/call-number.ts`) lässt weder Richtungs- noch
+ * Nullbreitenzeichen zu. Sachlich wäre `<Foreign>` dort heute wirkungslos.
+ * **Die Konstruktion trägt nicht:** Die Sicherheit dieser Zeile läge dann in
+ * einer Konstante eines fremden Pakets, und nichts misst mehr, dass sie dort
+ * liegt. Deshalb steht die Call-Nummer jetzt in dieser Liste und in der
+ * Anzeige durch den Baustein — was nichts kostet und der Nummer nebenbei die
+ * Monoschrift zurückgibt, die sie mit `.badge--call` verloren hatte.
+ *
+ * `offer.title` und `booking.title` sind die Namen der **gefallenen**
+ * Buchungsfläche. Sie bleiben stehen: Die erste Prüfung ist eine Verbotsliste,
+ * und ein Name, den es heute nicht gibt, hält die Stelle zu, an der er
+ * wiederkäme.
+ */
+const FREMDE_WERTE = [
+  'mail.subject',
+  'mail.senderName',
+  'mail.senderAddress',
+  'offer.title',
+  'booking.title',
+  'done.title',
+  'offer.tag.name',
+  'offer.name',
+  'tag.name',
+  'tag.folderLabel',
+  'result.raw',
+  'result.value',
+  // Die Duplikatwarnung seit T-247-3: der Titel je Treffer (Y-03) und die
+  // Call-Nummer in der Überschrift.
+  'item.title',
+  'notice.callNumber',
+];
+
 check('kein fremder Wert steht mehr roh im JSX', () => {
   /*
    * Diese Liste ist **kein** Vollständigkeitsbeweis — sie ist die Aufzählung
@@ -4473,20 +5303,7 @@ check('kein fremder Wert steht mehr roh im JSX', () => {
    * die es gab; eine neue Anzeigestelle unter neuem Namen fängt sie nicht. Das
    * ist gesagt und nicht behauptet.
    */
-  const fremdeWerte = [
-    'mail.subject',
-    'mail.senderName',
-    'mail.senderAddress',
-    'offer.title',
-    'booking.title',
-    'done.title',
-    'offer.tag.name',
-    'offer.name',
-    'tag.name',
-    'tag.folderLabel',
-    'result.raw',
-    'result.value',
-  ];
+  const fremdeWerte = FREMDE_WERTE;
 
   /*
    * Gesucht wird die **Inhaltsstelle** und nicht jedes Vorkommen: `{x}` als
@@ -4519,7 +5336,46 @@ check('kein fremder Wert steht mehr roh im JSX', () => {
 });
 
 check('jede Fläche, die fremden Text zeigt, benutzt den Baustein dafür', () => {
-  const ohne = paneDateien.filter(({ text }) => !text.includes('Foreign')).map(({ name }) => name);
+  /*
+   * **Wer fremden Text zeigt, wird gerechnet und nicht aufgezählt** (T-247).
+   *
+   * Eine Ausnahmeliste wäre hier der bequeme und falsche Weg: Sie bliebe
+   * stehen, wenn eine Fläche wieder einen fremden Wert anzeigt. Gerechnet wird
+   * deshalb aus {@link FREMDE_WERTE}: Wer einen zeigt, braucht den Baustein;
+   * wer keinen zeigt, braucht ihn nicht.
+   *
+   * **Der Rückbau hat gezeigt, dass die Rechnung allein nicht reicht**
+   * (T-247-3). Zwischen dem Rückbau und heute zeigte `DuplicateOffer.tsx`
+   * einen fremden Wert — die rohe Call-Nummer —, der in {@link FREMDE_WERTE}
+   * nicht stand. Die Rechnung nahm die Fläche daraufhin aus der Prüfung heraus
+   * und blieb grün. Ein Wächter, der still von vier auf drei Flächen fällt,
+   * misst weniger und sagt es nicht. Deshalb steht die Untergrenze jetzt bei
+   * **vier**: Fällt eine Fläche heraus, ist entweder ein Wert aus der Liste
+   * verschwunden — dann gehört die Liste nachgeführt — oder er ist unter einem
+   * neuen Namen wiedergekommen. Beides ist eine Entscheidung und kein
+   * stilles Weniger.
+   *
+   * **Die Untergrenze ist in T-247-9 keine Zahl mehr** (Befund des
+   * Code-Reviews): `>= 4` stand von Hand da, und `paneDateien` hat heute genau
+   * vier Einträge — die Vier hieß also in Wahrheit „alle", ohne es zu sagen.
+   * Eine fünfte Fläche ohne fremden Wert (eine reine Hilfefläche ist der
+   * naheliegende Fall) hätte die Zahl grün gehalten, während eine der vier
+   * still herausfällt. Geleert wird deshalb die **Gegenmenge**: Sie wächst mit
+   * der Liste mit und nennt bei jedem Fehlschlag die Datei statt einer Zahl.
+   */
+  const zeigtFremdes = ({ text }) => FREMDE_WERTE.some((wert) => text.includes(wert));
+  const anzeigende = paneDateien.filter(zeigtFremdes);
+  const ohneFremdes = paneDateien.filter((datei) => !zeigtFremdes(datei)).map(({ name }) => name);
+
+  assert.deepEqual(
+    ohneFremdes,
+    [],
+    `${ohneFremdes.join(', ')} zeigt keinen Wert aus FREMDE_WERTE mehr — ` +
+      `entweder ist ein Wert aus der Liste gefallen oder er heißt jetzt anders ` +
+      `(${String(anzeigende.length)} von ${String(paneDateien.length)} Flächen)`,
+  );
+
+  const ohne = anzeigende.filter(({ text }) => !text.includes('Foreign')).map(({ name }) => name);
   assert.deepEqual(ohne, [], `ohne <Foreign>: ${ohne.join(', ')}`);
 
   const bausteine = readFileSync(path.join(srcRoot, 'ui', 'Primitives.tsx'), 'utf8');
@@ -4657,6 +5513,10 @@ heading('18  Die Frist wird eingetragen — und ein Anhang entsteht nicht (A-19.
  *       Gegenprobe, dass diese Messung rot werden kann.
  *  18e  A-19.2: Die Frist heißt im Aufgabenbereich „Frist" — und die drei
  *       verbotenen Wörter stehen in keinem sichtbaren Text (V-09).
+ *  18f  Und **die zweite Tür**: dass es sie nicht gibt (F-21, T-247). 18d
+ *       mißt die Anlegetür; 18f mißt den ganzen Teilbaum `/addin` am
+ *       fertigen Dienst. Ohne 18f bliebe dieser Abschnitt grün, während
+ *       nebenan ein Anhang entsteht — genau das ist geschehen.
  */
 
 // ---------------------------------------------------------------------------
@@ -4880,9 +5740,9 @@ check('die Add-in-Tür hat kein Anhangsfeld (A-19.19) — strukturell, nicht per
   assert.ok(felder.includes('dueDate'), 'die Frist fehlt an der Tür — dann misst 18c nichts');
 });
 
-check('der Add-in-Abschnitt trennt Todo-Anlage und die schmale Verweisroute', () => {
+check('der Add-in-Abschnitt beschreibt keinen Anhangsweg (A-19.19, F-21)', () => {
   const spec = parseYaml(
-    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+    fremdeQuelle(FREMDE_ORTE.schnittstelle).text,
   );
   const rumpf = spec.paths['/addin/todos']?.post;
   const felder = rumpf?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
@@ -4899,29 +5759,24 @@ check('der Add-in-Abschnitt trennt Todo-Anlage und die schmale Verweisroute', ()
   const anhangsfelder = Object.keys(felder).filter((name) => /attach|anhang/i.test(name));
   assert.deepEqual(anhangsfelder, [], `beschriebenes Anhangsfeld: ${anhangsfelder.join(', ')}`);
 
+  /*
+   * **Die Beschreibung sagt dasselbe wie der Dienst** (T-247).
+   *
+   * Bis zur Entscheidung zu F-21 stand hier die schmale Verweisroute
+   * ausgeschrieben, mit ihren Feldern und ihren fehlenden Verben. Sie ist
+   * gefallen; also fällt auch ihr Absatz in der Beschreibung. Ein Leser, dem
+   * eine Route beschrieben wird, die 404 antwortet, ist schlechter dran als
+   * einer ohne Beschreibung.
+   *
+   * Gemessen wird das hier am Papier, in 18f am laufenden Dienst. Beide
+   * zusammen — und nicht eines davon — sind die Zusage.
+   */
   const addinPfade = Object.keys(spec.paths ?? {}).filter((pfad) => pfad.startsWith('/addin'));
-  assert.ok(addinPfade.length >= 5, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
+  assert.ok(addinPfade.length >= 4, `nur ${String(addinPfade.length)} Add-in-Pfade — der Leser greift ins Leere`);
   assert.deepEqual(
     addinPfade.filter((pfad) => /attachment/i.test(pfad)),
-    ['/addin/todos/{todoId}/attachments'],
-    'unter /addin gibt es mehr oder andere Anhangswege als den schmalen Verweis',
-  );
-
-  const verweis = spec.paths['/addin/todos/{todoId}/attachments'] ?? {};
-  assert.ok(verweis.post, 'die schmale Verweisroute hat kein POST');
-  assert.equal(verweis.get, undefined, 'das Add-in darf Anhänge nicht lesen');
-  assert.equal(verweis.delete, undefined, 'das Add-in darf Anhänge nicht löschen');
-  const verweisFelder =
-    verweis.post?.requestBody?.content?.['application/json']?.schema?.properties ?? {};
-  assert.deepEqual(
-    Object.keys(verweisFelder).sort(),
-    ['title', 'url'],
-    'die Add-in-Verweisroute ist breiter als URL plus freiwilliger Titel',
-  );
-  assert.deepEqual(
-    verweis.post?.requestBody?.content?.['application/json']?.schema?.required ?? [],
-    ['url'],
-    'nur die URL darf an der Verweisroute Pflicht sein',
+    [],
+    'die Beschreibung führt unter /addin wieder einen Anhangsweg',
   );
 });
 
@@ -4949,7 +5804,7 @@ check('O-BB: jede beschriebene Add-in-Route mit Rumpf hat ein Schema an der Tür
    * `proof:openapi` seine beiden Einzelimporte behielte.
    */
   const spec = parseYaml(
-    readFileSync(path.join(here, '..', '..', 'local-api', 'openapi', 'takt-local-api.yaml'), 'utf8'),
+    fremdeQuelle(FREMDE_ORTE.schnittstelle).text,
   );
 
   const METHODEN = ['get', 'put', 'post', 'delete', 'patch'];
@@ -5372,6 +6227,994 @@ check('A-19.2, Gegenprobe: „Frist" steht im Aufgabenbereich — sonst misst di
   assert.match(pane.text, /label="Frist"/, 'das Feld heißt nicht mehr „Frist" — oder es steht nicht mehr da');
 });
 
+// ---------------------------------------------------------------------------
+// 18f — die zweite Tür: **daß es sie nicht gibt** (A-19.19, F-21, T-247)
+// ---------------------------------------------------------------------------
+
+/*
+ * Der Befund, aus dem dieser Abschnitt entstanden ist:
+ *
+ * 18d mißt die Wirkung an der **Anlegetür** — null Zeilen in
+ * `todo_attachment`, mit Gegenprobe. Das war richtig und trotzdem zu milde.
+ * Zwischen PR #16 und der Entscheidung zu F-21 gab es eine **zweite** Tür,
+ * `POST /api/v1/addin/todos/{todoId}/attachments`, mit dem Add-in-Token
+ * erreichbar, und sie legte einen Anhang an. Der Nachweislauf blieb grün: Er
+ * maß die Tür, die zu war, nicht die, die aufging.
+ *
+ * Der Auftraggeber hat F-21 gegen das Anhängen entschieden. A-19.19 bleibt im
+ * Wortlaut, die Route ist gefallen — und ab hier wird ihre **Abwesenheit**
+ * gemessen, nicht zugesagt:
+ *
+ *  1. Der zusammengesetzte Dienst antwortet auf die Adresse mit **404**, und
+ *     zwar mit einem **gültigen** Add-in-Token. Ohne Token wäre ein 401 die
+ *     Antwort, und ein 401 sagt nichts über die Existenz einer Route.
+ *  2. Die Gegenprobe im selben Lauf: dieselbe Klammer, dasselbe Token, die
+ *     **Nachbarroute** `…/time-entries` — sie antwortet nicht mit 404. Ohne
+ *     sie bestünde Punkt 1 auch dann, wenn Token, Herkunft oder Pfadanfang
+ *     falsch wären.
+ *  3. Und die Fläche selbst: Die Pfade unter `/addin` sind die
+ *     **ausgeschriebene Menge der vier** — nicht „alles außer einem Muster".
+ *  4. Und die **Wirkung** über den ganzen Teilbaum: Nach dem Ansprechen
+ *     **jeder** erreichbaren Add-in-Route mit gültigem Token steht in
+ *     `todo_attachment` weiterhin nichts.
+ *  5. Und der Nachweis, dass diese Rundfahrt **angekommen** ist: Jede Anfrage
+ *     hält ihren Statuscode fest, eine Antwort ab 400 ist ein Fehlschlag der
+ *     Messung, und mindestens eine schreibende Route muss `2xx` geantwortet
+ *     haben (A-A-73, T-247-9).
+ *  6. Und die **Durchgriffsprobe**: erfundene Pfade unter `/addin`, die es
+ *     nicht geben darf, antworten 404 — auch dann, wenn die Tür gar keine
+ *     Route ist, sondern ein Kettenglied (A-A-74, T-247-9).
+ *
+ * **Die beiden 404 dieses Abschnitts** — hier einmal ausgesprochen, damit
+ * niemand eines davon für einen Fehler hält. Sie stehen nicht gegeneinander,
+ * sie beantworten zwei verschiedene Fragen:
+ *
+ * - In der **Rundfahrt** (Punkt 4 und 5) ist ein 404 ein **Fehlschlag der
+ *   Messung**. Sie fährt Pfade an, die es geben **muß**; wer dort nicht
+ *   ankommt, hat nicht die Fläche gemessen, sondern seinen eigenen Aufbau —
+ *   deshalb steht 404 in {@link ankunftsMaengel} neben 401 und 403.
+ * - In der **Durchgriffsprobe** (Punkt 6) ist ein 404 das **verlangte
+ *   Ergebnis**. Sie fragt Pfade, die es **nicht** geben darf; jede andere
+ *   Antwort heißt, daß unter `/addin` etwas antwortet, das in keiner
+ *   Routenliste steht.
+ *
+ * Kurz: dieselbe Zahl ist an einer vorhandenen Fläche ein Mangel und an einer
+ * erfundenen der Nachweis.
+ *
+ * **Punkt 3 und 4 sind in T-247-3 dazugekommen, und sie sind der eigentliche
+ * Wächter** (Auflage A-A-71, `docs/bedrohungsmodell.md` Kapitel 33). Bis
+ * dahin stand hier: „kein Pfad unter `/addin` führt `attachment` im Namen".
+ * Der security-checker hat diesen Satz zur Laufzeit ausgehebelt und das
+ * Ergebnis gemessen: Eine angehängte Route `POST /addin/todos/:todoId/links`,
+ * die in `todo_attachment` schreibt, antwortet mit gültigem Add-in-Token
+ * **201**, hinterlässt **eine Zeile** — und beide Prüfungen von 18f blieben
+ * grün. Gefangen wurde der Fall allein von der **Zahl** in
+ * `proof:route-policy`, und die kann derselbe mitziehen, der die Route
+ * hinzufügt.
+ *
+ * Der Grund ist eine Sorte Fehler, nicht ein vergessenes Muster: **A-19.19
+ * spricht nicht über Pfadnamen, sondern darüber, dass kein Anhang entsteht.**
+ * Ein Wächter, der die Menge an einem Namen aufspannt, misst den Namen. Er
+ * wird deshalb an der Anforderung aufgespannt (E-099 Punkt 3, angewandt auf
+ * den eigenen Fall). Die Namensprüfung bleibt daneben stehen — sie ist billig
+ * und nennt den Fall beim Namen —, aber sie trägt nicht mehr allein.
+ *
+ * Beide Richtungen werden gemessen (Gegenproben weiter unten): Eine Route
+ * unter `/addin`, die einen Anhang schreibt, macht den Lauf **rot** und nennt
+ * dabei ihren Pfad; eine Route unter `/addin`, die **keinen** schreibt, macht
+ * ihn ebenfalls rot — aber an der Menge und mit einer **anderen** Meldung.
+ * Wer nur eine der beiden Meldungen liest, weiß sonst nicht, was er vor sich
+ * hat.
+ *
+ * **Und die nächste Schicht, T-247-9** (Kapitel 34, A-A-73 und A-A-74): Der
+ * security-checker hat den umgebauten Wächter zweimal ausgehebelt, ohne den
+ * Angriff der ersten Runde zu wiederholen.
+ *
+ * - Die Rundfahrt **kam nicht an**. `PROBE_RUMPF` trug Bruchteile im
+ *   Zeitstempel, `…/time-entries` antwortete 422 — und mit fremder Herkunft
+ *   (4 × 403) oder ohne Token (4 × 401) blieb derselbe Lauf grün. Die
+ *   Untergrenze zählte gefundene **Pfade** statt angekommener **Anfragen**;
+ *   das ist wörtlich der Fall, gegen den A-A-60 geschrieben wurde.
+ * - Die Tür war **keine Route**. Ein Kettenglied auf `'*'` steht in
+ *   `app.routes` mit dem Pfad `/*`, beantwortete `…/todos/{id}/links` selbst,
+ *   schrieb eine Zeile — und alle drei Prüfungen blieben grün.
+ *
+ * Die Lehre daraus steht über der ganzen Datei und nicht nur über diesem
+ * Abschnitt: **Eine Liste ist kein Nachweis.** Der Name war es nicht, die
+ * Routenliste ist es auch nicht. Was zählt, ist eine Anfrage von außen, die
+ * eine Antwort bekommt oder nicht — und der Nachweis, dass sie angekommen ist.
+ *
+ * **Und die Reichweite dieser Wächterfamilie, ausgesprochen (A-A-55).** Ein
+ * Lauf, der seine eigene Grenze verschweigt, ist die Bauart aus R-25: Er läßt
+ * den nächsten Leser glauben, die Fläche sei zugesperrt, wo sie nur
+ * beaufsichtigt ist. Also steht beides hier — was der Wächter fängt und was
+ * ausdrücklich nicht:
+ *
+ * - **Gefangen wird Irrtum und Bequemlichkeit**, also die Wiederholung von
+ *   PR #16. Eine Anhangsfläche, die jemand bauen **will**, ist plausibel
+ *   benannt: Sie heißt `attachments`, `links`, `files` oder `mail`, sie trägt
+ *   `url`, `target`, `kind` oder `title`, und sie ist **meistens eine
+ *   Route** — die fängt schon die Rohliste. Die Rundfahrt mißt ihre Wirkung,
+ *   die Durchgriffsprobe klopft ihre Namen von außen ab. Auch die beiden
+ *   unbequemen Bauarten sind darin: das Kettenglied auf `'*'` und die zweite
+ *   Registrierung auf demselben Pfad.
+ * - **Nicht gefangen wird Absicht mit Schreibrecht.** Wer diesen Baum ändern
+ *   darf und es darauf anlegt, versteckt seine Tür hinter einem Pfad, den
+ *   niemand rät, hinter einem Verfahren, das niemand fragt, oder hinter einem
+ *   Rumpf, den nur er kennt. `/addin/xyzzy` ist kein Name, den vergibt, wer
+ *   eine Funktion bauen will — das wäre eine **Hintertür, keine Meßlücke**,
+ *   und dagegen trägt die Änderungsprüfung, nicht dieser Lauf.
+ *
+ *   **Und der Nachbarlauf trägt hier weniger, als sein Name vermuten läßt.**
+ *   Die Zahl in `proof:route-policy` (A-A-56) zählt die Kettenglieder. Sie
+ *   fängt damit das **elfte** — wer seine Tür als zusätzliches
+ *   `app.use('*', …)` schreibt, ändert die Zahl und fällt dort auf. Sie fängt
+ *   **keine Tür innerhalb der zehn vorhandenen**: Steht die Tür in einem der
+ *   bestehenden Kettenglieder, ändert sich keine Zahl — nicht die zehn, nicht
+ *   die vier, nicht die Reihenfolge der Namen (`docs/bedrohungsmodell.md`
+ *   Kapitel 34.2, dort gemessen). Wer diesen Absatz liest und der Zahl mehr
+ *   zuschreibt, hält eine Fläche für zugesperrt, die nur beaufsichtigt ist —
+ *   und das ist die Bauart aus R-25, gegen die A-A-55 geschrieben wurde.
+ *
+ * Der Satz dazu für den, der diese Grenze verschieben möchte: Diese Prüfungen
+ * ersetzen das Lesen einer Änderung nicht. Sie verhindern, daß eine ungelesene
+ * Änderung **still** grün bleibt.
+ */
+
+/**
+ * Der zusammengesetzte Dienst mit echter Datenbank im Arbeitsspeicher.
+ *
+ * `zusatz` hängt vor der ersten Anfrage weitere Routen an den fertigen Dienst.
+ * Das ist ausschließlich für die Gegenproben da und ist der Weg, den der
+ * security-checker in Kapitel 33.2 gegangen ist: Er misst die **Logik** des
+ * Wächters und nicht seinen Text, und er lässt den Baum unverändert.
+ */
+const withComposedService = async (work, zusatz = null) => {
+  let record = null;
+  const secret = `takt_${randomBytes(32).toString('base64url')}`;
+  const service = compose({
+    port: 17843,
+    store: {
+      read: async () => (record === null ? { status: 'absent' } : { status: 'ok', record }),
+      write: async (value) => {
+        record = value;
+      },
+      inspectPermissions: async () => ({
+        checked: false,
+        dirTooPermissive: false,
+        fileTooPermissive: false,
+      }),
+    },
+    sessionSecret: secret,
+    windowsUser: 't.beispiel',
+    databaseLocation: ':memory:',
+  });
+
+  // Vor der ersten Anfrage: Hono baut seinen Zuordner beim ersten Treffer und
+  // nimmt danach keine Route mehr an.
+  if (zusatz !== null) zusatz(service);
+
+  try {
+    await service.database.migrations.migrateToLatest();
+    await service.tokens.load(new Date());
+    const addinToken = await service.tokens.rotate(new Date());
+
+    /**
+     * Eine Anfrage an den fertigen Dienst — mit Wirt und Herkunft wie aus Outlook.
+     *
+     * `origin` ist einstellbar, und zwar nur aus einem Grund: Die Gegenproben
+     * zu A-A-73 müssen messen können, was die Rundfahrt meldet, wenn die
+     * **Wächterkette** sie abweist. Ohne diesen Schalter ließe sich der
+     * Unterschied zwischen „angekommen" und „abgewiesen" nicht vorführen.
+     */
+    const anfrage = async (
+      pfad,
+      { method = 'GET', credential = addinToken, body, origin = 'https://localhost:17844' } = {},
+    ) => {
+      const headers = new Headers({
+        Host: '127.0.0.1:17843',
+        Origin: origin,
+      });
+      if (credential !== null) headers.set('X-Takt-Token', credential);
+      if (body !== undefined) headers.set('Content-Type', 'application/json');
+
+      const antwort = await service.app.fetch(
+        new Request(`http://127.0.0.1:17843/api/v1${pfad}`, {
+          method,
+          headers,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+      const text = await antwort.text();
+      return { status: antwort.status, text };
+    };
+
+    await work({ service, anfrage, secret, addinToken });
+  } finally {
+    service.database.close();
+  }
+};
+
+await checkAsync(
+  'A-19.19/F-21: die Anhangsroute des Add-ins gibt es nicht mehr — 404 mit gültigem Token',
+  async () => {
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      // Das Todo entsteht über die Haupttür, mit dem Sitzungsgeheimnis. Der
+      // Versuch danach benutzt das **Add-in-Token** — die Vertrauensstufe, um
+      // die es geht.
+      const angelegt = await anfrage('/todos', {
+        method: 'POST',
+        credential: secret,
+        body: { title: 'Träger der Messung', callNumber: 'TCK-000042' },
+      });
+      assert.equal(angelegt.status, 201, angelegt.text);
+      const angelegteDaten = JSON.parse(angelegt.text).data;
+      const todoId = angelegteDaten.todo?.id ?? angelegteDaten.id;
+      assert.equal(typeof todoId, 'string', 'ohne Todo mißt der Rest nichts');
+
+      const zaehleAnhaenge = () =>
+        Number(
+          service.database.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()[
+            'n'
+          ],
+        );
+      assert.equal(zaehleAnhaenge(), 0);
+
+      const versuch = await anfrage(`/addin/todos/${todoId}/attachments`, {
+        method: 'POST',
+        body: { url: 'https://example.org/mail/42', title: 'Outlook: Prüfvorgang' },
+      });
+      assert.equal(
+        versuch.status,
+        404,
+        `die Anhangsroute des Add-ins antwortet weiterhin (${String(versuch.status)}): ${versuch.text}`,
+      );
+      assert.equal(zaehleAnhaenge(), 0, 'trotz 404 ist ein Anhang entstanden');
+
+      // Die Gegenprobe: dasselbe Token, dieselbe Herkunft, der Nachbarpfad.
+      // Antwortete auch er mit 404, sagte die Zeile darüber nichts über die
+      // Route, sondern etwas über den Aufbau dieser Messung.
+      const nachbar = await anfrage(`/addin/todos/${todoId}/time-entries`, {
+        method: 'POST',
+        body: {
+          startedAt: '2026-09-30T08:00:00.000Z',
+          endedAt: '2026-09-30T08:30:00.000Z',
+          note: 'Leistung aus dem Prüflauf',
+        },
+      });
+      assert.notEqual(
+        nachbar.status,
+        404,
+        'auch die Buchungsroute ist nicht erreichbar — dann mißt der 404 oben den Aufbau',
+      );
+      assert.notEqual(
+        nachbar.status,
+        401,
+        `das Add-in-Token wird nicht angenommen: ${nachbar.text}`,
+      );
+    });
+  },
+);
+
+/**
+ * Die Fläche des Add-ins, **ausgeschrieben** (A-A-71).
+ *
+ * Vier Routen, jede mit ihrem Verfahren. Ausgeschrieben und nicht als Muster:
+ * Ein Muster beschreibt, was **nicht** dazugehören soll, und übersieht damit
+ * genau das, was sich einen anderen Namen gibt. Eine Aufzählung übersieht
+ * nichts — sie wird rot, sobald etwas dazukommt, gleich wie es heißt.
+ *
+ * ---
+ *
+ * **Für den nächsten, der diese Liste erweitert** — die Bedingung, unter der
+ * der security-checker A-A-73 und A-A-74 abgenommen hat (T-247-10):
+ *
+ * Wer hier eine Route einträgt, meldet sie damit zur **Rundfahrt** an. Die
+ * fährt sie mit dem gemeinsamen {@link PROBE_RUMPF} an und muß dort
+ * **ankommen**: Eine Antwort ab 400 ist ein Fehlschlag der Messung, kein
+ * Ergebnis ({@link ankunftsMaengel}).
+ *
+ * Weist eine **berechtigte** künftige Route diesen gemeinsamen Rumpf zurück,
+ * dann ist der Ausweg ein **eigener Rumpf für diese Route** — eine Zuordnung
+ * Pfad → Rumpf, jeder mit den Feldern einer Anhangstür, damit die Fahrt
+ * weiterhin den Schreibpfad trifft und nicht die Eingabeprüfung.
+ *
+ * **Nicht** eine Lockerung der Ankunftsregel. **Nicht** eine Ausnahmeliste von
+ * Statuscodes. Wörtlich, weil der Satz die Begründung mitträgt:
+ *
+ * > „Ein eigener Rumpf hält die Zusage; eine Ausnahme gibt sie auf und sieht
+ * > dabei aus wie Pflege."
+ */
+const ADDIN_FLAECHE = Object.freeze([
+  'GET /api/v1/addin/context',
+  'GET /api/v1/addin/todo-matches',
+  'POST /api/v1/addin/todos',
+  'POST /api/v1/addin/todos/:todoId/time-entries',
+]);
+
+/**
+ * Was der zusammengesetzte Dienst tatsächlich unter `/addin` führt — als
+ * **Rohliste**, ohne Entdopplung (A-A-74 Punkt 2).
+ *
+ * Bis T-247-9 stand hier ein `Set`. Das war bequem und hat eine Aussage
+ * verloren: Zwei Registrierungen auf demselben Pfad ergaben **einen** Eintrag.
+ * An Hono 4.13.5 gemessen (Kapitel 34.4) gewinnt dabei die **zuerst**
+ * registrierte — wer in `app.ts` eine Zeile über `api.route('/addin', …)`
+ * setzt, beantwortet einen der vier Pfade selbst, und keine Liste sagte es.
+ * `proof:route-policy` entdoppelt an derselben Stelle über eine `Map`
+ * (`proof-route-policy.mjs:392`), zeigt die zweite Registrierung also
+ * ebenfalls nicht.
+ *
+ * Und der Satz, der über dieser ganzen Liste steht: **Eine Liste registrierter
+ * Endpunkte ist nicht die Liste dessen, was antwortet.** Ein Kettenglied
+ * (`app.use('*', …)`) steht in `app.routes` mit dem Pfad `/*`, enthält also
+ * kein `/addin`, sieht aber jede Anfrage und darf antworten, statt an `next`
+ * weiterzureichen. Dagegen hilft keine feinere Liste, sondern nur eine
+ * Anfrage von außen — die Durchgriffsprobe weiter unten.
+ */
+const addinFlaeche = (service) =>
+  (service.app.routes ?? [])
+    .filter((eintrag) => eintrag.path.includes('/addin'))
+    .map((eintrag) => `${eintrag.method} ${eintrag.path}`)
+    .sort();
+
+/** Was dazugekommen ist, was fehlt. Getrennt, damit die Meldung es sagt. */
+const ueberzaehlig = (service) =>
+  addinFlaeche(service).filter((eintrag) => !ADDIN_FLAECHE.includes(eintrag));
+const fehlend = (service) =>
+  ADDIN_FLAECHE.filter((eintrag) => !addinFlaeche(service).includes(eintrag));
+
+/**
+ * Was **zweimal** registriert ist (A-A-74 Punkt 2).
+ *
+ * `ueberzaehlig` fängt diesen Fall nicht: Eine zweite Registrierung auf einem
+ * erlaubten Pfad steht in `ADDIN_FLAECHE` und fällt durch das `includes`. Rot
+ * wird sie am Mengenvergleich, weil die Rohliste dann fünf Einträge hat — und
+ * die Meldung soll sagen, welcher davon doppelt ist.
+ */
+const doppelt = (service) => {
+  const gesehen = new Set();
+  const zweimal = new Set();
+  for (const eintrag of addinFlaeche(service)) {
+    if (gesehen.has(eintrag)) zweimal.add(eintrag);
+    gesehen.add(eintrag);
+  }
+  return [...zweimal].sort();
+};
+
+/**
+ * Ein Rumpf, der zu einer Anhangsroute **passen** würde — und der von der
+ * Prüfschicht **angenommen** wird (A-A-73 Punkt 1).
+ *
+ * Er trägt die Felder aller vier Routen und die einer Anhangstür zugleich.
+ *
+ * Bis T-247-9 stand hier `2026-09-30T08:00:00.000Z`, und der Satz daneben
+ * lautete, der Statuscode sei gleichgültig. Beides zusammen war der Befund
+ * T-247-12: Das Buchungsschema verlangt `T\d{2}:\d{2}:\d{2}Z` **ohne**
+ * Bruchteile, `…/time-entries` antwortete mit **422**, und die Rundfahrt kam
+ * damit an der **einzigen** schreibenden Route neben dem Anlegen nie an. Sie
+ * maß dort die Eingabeprüfung und nicht den Schreibpfad — und blieb grün.
+ *
+ * Für die **Behauptung** ist der Statuscode weiterhin gleichgültig (die Zahl
+ * in `todo_attachment` muß immer null bleiben, ob 201, 422 oder 404). Für die
+ * **Messung** ist er es nicht: Eine abgewiesene Anfrage ist keine gemessene
+ * Fläche. Genau derselbe Zeitstempel steht deshalb hier und in der
+ * Verstümmelung der Gegenprobe.
+ *
+ * Weist eine künftige, berechtigte Route diesen Rumpf zurück, gilt die Regel
+ * im Kopf von {@link ADDIN_FLAECHE}: ein **eigener Rumpf** für diese Route,
+ * keine Ausnahme von der Ankunftsregel.
+ */
+const PROBE_RUMPF = Object.freeze({
+  title: 'Träger der Messung',
+  url: 'https://example.org/mail/42',
+  target: 'https://example.org/mail/42',
+  kind: 'link',
+  startedAt: '2026-09-30T08:00:00Z',
+  endedAt: '2026-09-30T08:30:00Z',
+  note: 'Leistung aus dem Prüflauf',
+});
+
+/** Wie viele Anhänge stehen in der Datenbank? */
+const zaehleAnhaenge = (service) =>
+  Number(
+    service.database.connection.prepare('SELECT COUNT(*) AS n FROM todo_attachment').get()['n'],
+  );
+
+/**
+ * Der tragende Teil von A-A-71: **jede** Route unter `/addin` wird mit
+ * gültigem Add-in-Token angesprochen, und danach muss `todo_attachment` bei
+ * null stehen.
+ *
+ * Die Fahrt gibt seit T-247-9 nicht mehr nur die Routen mit Wirkung zurück,
+ * sondern **jede angefahrene Route mit ihrem Statuscode** — der Rohstoff für
+ * {@link ankunftsMaengel}. `rumpf` und `optionen` sind ausschließlich für die
+ * Gegenproben da: Sie fahren dieselbe Runde mit fremder Herkunft, ohne Token
+ * oder mit einem Rumpf, den die Prüfschicht abweist.
+ */
+const rundfahrt = async ({ service, anfrage, todoId, rumpf = PROBE_RUMPF, optionen = {} }) => {
+  const fahrten = [];
+  for (const eintrag of addinFlaeche(service)) {
+    const [verfahren, vollerPfad] = eintrag.split(' ');
+    const pfad = vollerPfad.replace('/api/v1', '').replace(':todoId', todoId);
+    const vorher = zaehleAnhaenge(service);
+    const antwort = await anfrage(verfahren === 'GET' ? `${pfad}?callNumber=TCK-000042` : pfad, {
+      method: verfahren,
+      ...(verfahren === 'GET' ? {} : { body: rumpf }),
+      ...optionen,
+    });
+    fahrten.push({
+      eintrag,
+      verfahren,
+      pfad,
+      status: antwort.status,
+      text: antwort.text,
+      wirkung: zaehleAnhaenge(service) > vorher,
+    });
+  }
+  return fahrten;
+};
+
+/**
+ * Die Routen, nach denen `todo_attachment` gewachsen ist — mit Pfad, damit die
+ * Meldung sagt, welche Tür aufgegangen ist.
+ */
+const mitWirkung = (fahrten) => fahrten.filter(({ wirkung }) => wirkung).map(({ eintrag }) => eintrag);
+
+/**
+ * **Ist die Rundfahrt angekommen?** (A-A-73, und dahinter A-A-60.)
+ *
+ * Der Befund T-247-12: Mit fremder Herkunft antworten alle vier Routen mit
+ * 403, ohne Token mit 401 — und die Rundfahrt meldete beide Male dasselbe wie
+ * eine Fahrt, die im Anwendungsfall angekommen ist: Wirkung leer, null Zeilen,
+ * Untergrenze erfüllt. Vier abgewiesene Anfragen sind aber keine gemessene
+ * Fläche, sondern eine gemessene Wächterkette.
+ *
+ * Deshalb gilt hier: **Jede Antwort ab 400 ist ein Fehlschlag der Messung,
+ * nicht ihr Ergebnis.** Dazu zwei Fälle, die dieselbe Blindheit auf anderem
+ * Weg erzeugen:
+ *
+ * - Ein **Platzhalter**, der nach dem Einsetzen noch im Pfad steht (T-247-14).
+ *   `…/todos/:id/links` wird sonst als Literal angefahren, antwortet 422 und
+ *   zählt als Aufruf — derselbe Pfad echt angefahren legt eine Zeile an.
+ * - **Keine schreibende Route** mit `2xx`. Eine Rundfahrt aus lauter
+ *   `GET`-Antworten sagt über eine Anhangstür nichts.
+ */
+const ankunftsMaengel = (fahrten) => {
+  const maengel = [];
+  if (fahrten.length === 0) maengel.push('die Rundfahrt ist über null Routen gefahren');
+  for (const { eintrag, pfad, status } of fahrten) {
+    if (pfad.includes(':')) {
+      maengel.push(`${eintrag}: Platzhalter nicht ersetzt (${pfad}) — als Literal angefahren`);
+    }
+    if (status === 401 || status === 403 || status === 404) {
+      maengel.push(`${eintrag}: ${String(status)} — die Wächterkette hat abgewiesen, hier mißt der Aufbau`);
+    } else if (status >= 400) {
+      maengel.push(`${eintrag}: ${String(status)} — die Prüfschicht hat den Probenrumpf abgewiesen`);
+    }
+  }
+  if (!fahrten.some(({ verfahren, status }) => verfahren !== 'GET' && status >= 200 && status < 300)) {
+    maengel.push('keine schreibende Route hat mit 2xx geantwortet');
+  }
+  return maengel;
+};
+
+/** Die vier Statuscodes in einer Zeile — sie steht im Lauf, auch wenn er grün ist. */
+const fahrtprotokoll = (fahrten) =>
+  fahrten.map(({ eintrag, status }) => `${eintrag} -> ${String(status)}`).join('; ');
+
+/**
+ * Die Durchgriffsprobe (A-A-74 Punkt 1): erfundene Pfade unter `/addin`, die
+ * es **nicht** geben darf.
+ *
+ * Sie ist die einzige Prüfung dieses Abschnitts, die nicht aus einer Liste
+ * kommt, die der Erbauer einer Tür mitschreibt. Jede Antwort ungleich 404
+ * heißt: Unter `/addin` beantwortet etwas eine Anfrage, das in **keiner**
+ * Routenliste steht — ein Kettenglied auf `'*'` zum Beispiel, das seine
+ * Anfrage nicht an `next` weiterreicht (Kapitel 34.2).
+ *
+ * Der 404 ist hier das **verlangte** Ergebnis, nicht wie in der Rundfahrt ein
+ * Mangel — siehe den Absatz über die beiden 404 im Kopf dieses Abschnitts.
+ *
+ * Jeder Pfad wird mit **drei** schreibenden Verfahren gefragt (T-247-10). Ein
+ * Kettenglied sieht jede Anfrage, gleich mit welchem Verfahren sie kommt, und
+ * eine Tür, die auf `PUT` oder `PATCH` hört, ist genauso eine Tür wie eine auf
+ * `POST`. Die beiden zusätzlichen Fahrten kosten nichts: derselbe Dienst im
+ * Arbeitsspeicher, dieselbe Schleife, und an einem Pfad, den es nicht gibt,
+ * antwortet Hono ohne Zuordner.
+ */
+const durchgriffsPfade = (todoId) => [
+  `/addin/todos/${todoId}/attachments`,
+  `/addin/todos/${todoId}/links`,
+  `/addin/todos/${todoId}/files`,
+  `/addin/todos/${todoId}/mail`,
+  '/addin/attachments',
+  `/addin/beliebig-${randomBytes(6).toString('hex')}`,
+];
+
+/** Die schreibenden Verfahren, mit denen jeder erfundene Pfad gefragt wird. */
+const DURCHGRIFF_VERFAHREN = Object.freeze(['POST', 'PUT', 'PATCH']);
+
+const durchgriff = async ({ anfrage, todoId }) => {
+  const antwortend = [];
+  for (const pfad of durchgriffsPfade(todoId)) {
+    for (const verfahren of DURCHGRIFF_VERFAHREN) {
+      const antwort = await anfrage(pfad, { method: verfahren, body: PROBE_RUMPF });
+      if (antwort.status !== 404) {
+        antwortend.push(`${verfahren} ${pfad} -> ${String(antwort.status)}`);
+      }
+    }
+  }
+  return antwortend;
+};
+
+/** Ein Todo über die **Haupttür**, mit dem Sitzungsgeheimnis. */
+const traegerTodo = async (anfrage, secret) => {
+  const angelegt = await anfrage('/todos', {
+    method: 'POST',
+    credential: secret,
+    body: { title: 'Träger der Messung', callNumber: 'TCK-000042' },
+  });
+  assert.equal(angelegt.status, 201, angelegt.text);
+  const daten = JSON.parse(angelegt.text).data;
+  const todoId = daten.todo?.id ?? daten.id;
+  assert.equal(typeof todoId, 'string', 'ohne Todo mißt der Rest nichts');
+  return todoId;
+};
+
+/**
+ * Die Verstümmelung für die Gegenproben: eine zusätzliche Route unter
+ * `/addin`, wahlweise mit und ohne Anhangswirkung.
+ *
+ * Sie heißt `links` und nicht `attachments` — das ist der ganze Punkt des
+ * Befunds: Der alte Wächter sah auf den Namen.
+ */
+const zusatzroute = (pfad, schreibtAnhang) => (service) => {
+  service.app.post(pfad, (c) => {
+    if (schreibtAnhang) {
+      service.database.connection
+        .prepare(
+          'INSERT INTO todo_attachment (id, todo_id, kind, title, target, position, created_at)' +
+            ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          randomBytes(8).toString('hex'),
+          c.req.param('todoId'),
+          'link',
+          'Outlook: Prüfvorgang',
+          'https://example.org/mail/42',
+          0,
+          // Ohne Bruchteile: Der CHECK in Migration 0015 verlangt genau diese Form.
+          '2026-09-30T08:00:00Z',
+        );
+    }
+    return c.json({ data: { ok: true } }, 201);
+  });
+};
+
+await checkAsync('A-A-71: die Fläche unter /addin ist die ausgeschriebene Menge der vier', async () => {
+  await withComposedService(async ({ service }) => {
+    assert.deepEqual(
+      addinFlaeche(service),
+      [...ADDIN_FLAECHE].sort(),
+      `unter /addin steht nicht die Menge der vier — zuviel: ${ueberzaehlig(service).join(', ') || '–'}; fehlt: ${fehlend(service).join(', ') || '–'}; doppelt registriert: ${doppelt(service).join(', ') || '–'}`,
+    );
+
+    // Daneben, billig und nicht mehr allein tragend: der Name.
+    assert.deepEqual(
+      addinFlaeche(service).filter((eintrag) => /attachment/i.test(eintrag)),
+      [],
+      'unter /addin steht wieder ein Anhangsweg — und diesmal nennt er sich auch so',
+    );
+  });
+});
+
+await checkAsync(
+  'A-A-71: nach **jeder** Add-in-Route mit gültigem Token bleibt todo_attachment bei null',
+  async () => {
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+      assert.equal(zaehleAnhaenge(service), 0, 'schon vor der Messung steht ein Anhang da');
+
+      const fahrten = await rundfahrt({ service, anfrage, todoId });
+      const wirksam = mitWirkung(fahrten);
+
+      assert.deepEqual(
+        wirksam,
+        [],
+        `über das Add-in-Token entsteht ein Anhang (A-19.19): ${wirksam.join(', ')}`,
+      );
+      assert.equal(zaehleAnhaenge(service), 0, 'nach der Rundfahrt steht ein Anhang in der Tabelle');
+
+      // **Und der Nachweis, dass die Fahrt angekommen ist** (A-A-73/A-A-60).
+      // Ohne ihn wäre der grünste Lauf von allen der, den die Wächterkette
+      // viermal abgewiesen hat. Die Meldung nennt Route und Statuscode.
+      assert.deepEqual(
+        ankunftsMaengel(fahrten),
+        [],
+        `die Rundfahrt ist nicht angekommen — ${ankunftsMaengel(fahrten).join('; ')} (gefahren: ${fahrtprotokoll(fahrten)})`,
+      );
+
+      // Die Untergrenze gegen die stille leere Messung. Die Zahl steht nicht
+      // mehr von Hand da, sondern ist die Länge der ausgeschriebenen Menge:
+      // Wächst die Fläche berechtigt, wächst die Untergrenze mit.
+      assert.ok(
+        addinFlaeche(service).length >= ADDIN_FLAECHE.length,
+        `nur ${String(addinFlaeche(service).length)} Add-in-Routen angefahren — dann liest die Rundfahrt die falsche Stelle`,
+      );
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-73, Gegenprobe 1: mit fremder Herkunft wird die Rundfahrt rot — sie hat nichts gemessen',
+  async () => {
+    /*
+     * Der Befund T-247-12, in ausführbarer Form: Der security-checker hat die
+     * Rundfahrt mit `Origin: https://boese.example` gefahren, alle vier Routen
+     * antworteten **403** — und die Zeile blieb grün, weil sie gefundene
+     * **Pfade** zählte statt angekommener **Anfragen**.
+     */
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+      const fahrten = await rundfahrt({
+        service,
+        anfrage,
+        todoId,
+        optionen: { origin: 'https://boese.example' },
+      });
+
+      assert.deepEqual(mitWirkung(fahrten), [], 'abgewiesene Anfragen legen einen Anhang an?');
+      assert.equal(zaehleAnhaenge(service), 0);
+
+      const maengel = ankunftsMaengel(fahrten);
+      assert.ok(
+        maengel.length >= addinFlaeche(service).length,
+        `vier abgewiesene Anfragen (403) gelten weiterhin als Messung: ${fahrtprotokoll(fahrten)}`,
+      );
+      assert.match(
+        maengel.join('; '),
+        /403/,
+        'die Meldung nennt den Statuscode nicht — dann sagt sie nicht, woran die Messung gescheitert ist',
+      );
+      assert.match(maengel.join('; '), /addin\/context/, 'die Meldung nennt die Route nicht');
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-73, Gegenprobe 2: ohne Token wird die Rundfahrt rot — 401 ist kein Ergebnis',
+  async () => {
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+      const fahrten = await rundfahrt({ service, anfrage, todoId, optionen: { credential: null } });
+
+      const maengel = ankunftsMaengel(fahrten);
+      assert.ok(
+        maengel.length >= addinFlaeche(service).length,
+        `vier Anfragen ohne Token (401) gelten weiterhin als Messung: ${fahrtprotokoll(fahrten)}`,
+      );
+      assert.match(maengel.join('; '), /401/, 'die Meldung nennt den Statuscode nicht');
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-73, Gegenprobe 3: ein Zeitstempel mit Bruchteilen wird rot — genau der alte Probenrumpf',
+  async () => {
+    /*
+     * Die Verstümmelung ist hier **der Stand von gestern**: `PROBE_RUMPF` mit
+     * `.000Z`. Das Buchungsschema verlangt die Form ohne Bruchteile, die Route
+     * antwortete mit 422, und die Rundfahrt kam an der einzigen schreibenden
+     * Route neben dem Anlegen nie an. Auffallen muss sie an **dieser** Zeile —
+     * die Untergrenze und die Wirkung bleiben dabei nämlich grün, und das ist
+     * der ganze Punkt des Befunds.
+     */
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+      const fahrten = await rundfahrt({
+        service,
+        anfrage,
+        todoId,
+        rumpf: {
+          ...PROBE_RUMPF,
+          startedAt: '2026-09-30T08:00:00.000Z',
+          endedAt: '2026-09-30T08:30:00.000Z',
+        },
+      });
+
+      // Das, was gestern grün war, ist auch heute grün — und trägt nicht:
+      assert.deepEqual(mitWirkung(fahrten), []);
+      assert.ok(addinFlaeche(service).length >= ADDIN_FLAECHE.length);
+
+      const maengel = ankunftsMaengel(fahrten);
+      assert.equal(
+        maengel.length,
+        1,
+        `der abgewiesene Probenrumpf fällt nicht (oder nicht nur er) auf: ${maengel.join('; ')} — gefahren: ${fahrtprotokoll(fahrten)}`,
+      );
+      assert.match(
+        maengel[0],
+        /POST \/api\/v1\/addin\/todos\/:todoId\/time-entries: 422/,
+        `die Meldung nennt Route und Statuscode nicht: ${maengel[0]}`,
+      );
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-74: erfundene Pfade unter /addin antworten 404 — auch die, die keine Route sind',
+  async () => {
+    /*
+     * Der Befund T-247-11 (Kapitel 34.2): 18f spannte seine Fläche aus
+     * `service.app.routes` und filterte auf `/addin`. Ein Kettenglied steht
+     * dort mit dem Pfad `/*`, enthält also kein `/addin` — und darf trotzdem
+     * antworten. Gemessen wurde ein Kettenglied, das
+     * `POST /addin/todos/{id}/links` selbst beantwortet und eine Zeile
+     * schreibt: 201, eine Zeile, **alle drei Prüfungen von 18f grün**.
+     *
+     * Gegen eine Tür, die keine Route ist, hilft keine feinere Liste. Es hilft
+     * eine Anfrage von außen, die eine Antwort bekommt oder nicht.
+     */
+    await withComposedService(async ({ service, anfrage, secret }) => {
+      const todoId = await traegerTodo(anfrage, secret);
+
+      // Erst der Nachweis, dass der Aufbau trägt: Wären Token, Wirt oder
+      // Herkunft falsch, antwortete alles mit 401 oder 403 — und ein Lauf, in
+      // dem nichts 404 ist, wäre trotzdem grün, wenn niemand hinsieht.
+      const nachbar = await anfrage(`/addin/todos/${todoId}/time-entries`, {
+        method: 'POST',
+        body: PROBE_RUMPF,
+      });
+      assert.ok(
+        nachbar.status >= 200 && nachbar.status < 300,
+        `die Nachbarroute antwortet ${String(nachbar.status)} — dann mißt die Durchgriffsprobe den Aufbau: ${nachbar.text}`,
+      );
+
+      const antwortend = await durchgriff({ anfrage, todoId });
+      assert.deepEqual(
+        antwortend,
+        [],
+        `unter /addin antwortet etwas, das in keiner Routenliste steht: ${antwortend.join(', ')}`,
+      );
+      assert.equal(zaehleAnhaenge(service), 0, 'ein erfundener Pfad hat einen Anhang angelegt');
+    });
+  },
+);
+
+await checkAsync(
+  'A-A-71, Gegenprobe 1: eine anders benannte Anhangstür macht den Lauf rot — mit Pfad',
+  async () => {
+    /*
+     * Genau der Fall aus Kapitel 33.2 des Bedrohungsmodells, und genau der,
+     * an dem der alte Wächter grün blieb: `…/links` statt `…/attachments`.
+     */
+    const pfad = '/api/v1/addin/todos/:todoId/links';
+    await withComposedService(
+      async ({ service, anfrage, secret }) => {
+        const todoId = await traegerTodo(anfrage, secret);
+
+        // Erst der Beweis, dass die Verstümmelung überhaupt greift: Die Tür
+        // ist mit dem Add-in-Token erreichbar. Sonst mäße die Gegenprobe eine
+        // Route, die es nicht gibt.
+        const versuch = await anfrage(`/addin/todos/${todoId}/links`, {
+          method: 'POST',
+          body: PROBE_RUMPF,
+        });
+        assert.ok(
+          versuch.status < 400,
+          `die eingehängte Tür antwortet ${String(versuch.status)} — dann misst die Gegenprobe nichts: ${versuch.text}`,
+        );
+        assert.equal(zaehleAnhaenge(service), 1, 'die eingehängte Tür legt keinen Anhang an');
+
+        // Und jetzt beide Beine des Wächters, an derselben Verstümmelung.
+        assert.deepEqual(ueberzaehlig(service), [`POST ${pfad}`], 'die Menge der vier bleibt grün');
+
+        service.database.connection.prepare('DELETE FROM todo_attachment').run();
+        const fahrten = await rundfahrt({ service, anfrage, todoId });
+        assert.deepEqual(
+          mitWirkung(fahrten),
+          [`POST ${pfad}`],
+          'die Wirkung bleibt unbemerkt — dann spannt 18f wieder am Namen',
+        );
+        // Und auch diese Fahrt muss angekommen sein: Eine Gegenprobe, die an
+        // der Wächterkette hängenbleibt, meldet die Verstümmelung nicht,
+        // sondern ihren eigenen Aufbau (A-A-73).
+        assert.deepEqual(ankunftsMaengel(fahrten), [], fahrtprotokoll(fahrten));
+      },
+      zusatzroute(pfad, true),
+    );
+  },
+);
+
+await checkAsync(
+  'A-A-71, Gegenprobe 2: eine harmlose fünfte Route wird an der Menge rot, nicht an der Wirkung',
+  async () => {
+    /*
+     * Die zweite Richtung, und sie ist nicht Schmuck: Die beiden Meldungen
+     * müssen **unterscheidbar** sein. „Eine Route zuviel" und „über das
+     * Add-in-Token entsteht ein Anhang" sind zwei verschiedene Befunde, und
+     * wer sie zusammenwirft, liest den schwereren als den leichteren.
+     */
+    const pfad = '/api/v1/addin/todos/:todoId/pings';
+    await withComposedService(
+      async ({ service, anfrage, secret }) => {
+        const todoId = await traegerTodo(anfrage, secret);
+
+        assert.deepEqual(ueberzaehlig(service), [`POST ${pfad}`], 'die fünfte Route fällt nicht auf');
+        const fahrten = await rundfahrt({ service, anfrage, todoId });
+        assert.deepEqual(
+          mitWirkung(fahrten),
+          [],
+          'eine Route ohne Anhangswirkung wird an der Wirkung gemeldet — dann sagt die Meldung das Falsche',
+        );
+        assert.deepEqual(ankunftsMaengel(fahrten), [], fahrtprotokoll(fahrten));
+      },
+      zusatzroute(pfad, false),
+    );
+  },
+);
+
+/**
+ * Die Verstümmelung für A-A-74, Gegenprobe A: **ein Kettenglied**, das die
+ * Anfrage beantwortet, statt sie an `next` weiterzureichen.
+ *
+ * Der Bauplan steht in Kapitel 34.2 des Bedrohungsmodells. Der Unterschied zu
+ * {@link zusatzroute} ist der ganze Befund: Ein Kettenglied wird über
+ * `app.use('*', …)` registriert, steht in `app.routes` mit dem Pfad `/*` und
+ * ist damit für **jede** Prüfung unsichtbar, die auf `/addin` filtert. Es
+ * schreibt hier dieselbe Zeile in `todo_attachment` wie die gefallene Tür.
+ *
+ * Das **Verfahren** ist seit T-247-10 einstellbar. Dieselbe Tür auf `PATCH`
+ * ist die Gegenprobe zu den drei Verfahren in {@link DURCHGRIFF_VERFAHREN}:
+ * Ohne sie stünde dort eine Erweiterung, von der niemand weiß, ob sie beißt.
+ */
+const kettengliedAufVerfahren = (verfahren) => (service) => {
+  service.app.use('*', async (c, next) => {
+    const { pathname } = new URL(c.req.url);
+    const treffer = /^\/api\/v1\/addin\/todos\/([^/]+)\/links$/.exec(pathname);
+    if (c.req.method !== verfahren || treffer === null) return next();
+    service.database.connection
+      .prepare(
+        'INSERT INTO todo_attachment (id, todo_id, kind, title, target, position, created_at)' +
+          ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        randomBytes(8).toString('hex'),
+        treffer[1],
+        'link',
+        'Outlook: Prüfvorgang',
+        'https://example.org/mail/42',
+        0,
+        '2026-09-30T08:00:00Z',
+      );
+    return c.json({ data: { ok: true } }, 201);
+  });
+};
+
+await checkAsync(
+  'A-A-74, Gegenprobe A: ein Kettenglied als Anhangstür wird von der Durchgriffsprobe rot — mit Pfad',
+  async () => {
+    await withComposedService(
+      async ({ service, anfrage, secret }) => {
+        const todoId = await traegerTodo(anfrage, secret);
+
+        // Erst der Nachweis, dass die Verstümmelung überhaupt greift.
+        const versuch = await anfrage(`/addin/todos/${todoId}/links`, {
+          method: 'POST',
+          body: PROBE_RUMPF,
+        });
+        assert.equal(
+          versuch.status,
+          201,
+          `das Kettenglied antwortet nicht — dann mißt die Gegenprobe nichts: ${versuch.text}`,
+        );
+        assert.equal(zaehleAnhaenge(service), 1, 'das Kettenglied legt keinen Anhang an');
+
+        // Und jetzt die beiden Beine aus der Routenliste — sie bleiben grün,
+        // und genau das ist der Befund T-247-11.
+        assert.deepEqual(ueberzaehlig(service), [], 'das Kettenglied steht in der Routenliste?');
+        assert.deepEqual(doppelt(service), []);
+
+        // Die Durchgriffsprobe dagegen muss rot werden und den Pfad nennen —
+        // mit **einem** Eintrag: Das Kettenglied hört nur auf `POST`, die
+        // beiden anderen Verfahren auf demselben Pfad laufen ins 404.
+        service.database.connection.prepare('DELETE FROM todo_attachment').run();
+        const antwortend = await durchgriff({ anfrage, todoId });
+        assert.deepEqual(
+          antwortend,
+          [`POST /addin/todos/${todoId}/links -> 201`],
+          `die Tür, die keine Route ist, bleibt unbemerkt: ${antwortend.join(', ') || '–'}`,
+        );
+      },
+      kettengliedAufVerfahren('POST'),
+    );
+  },
+);
+
+await checkAsync(
+  'A-A-74, Gegenprobe A2: dieselbe Tür auf PATCH — sie wird rot, und die Meldung nennt das Verfahren',
+  async () => {
+    /*
+     * Die Gegenprobe zu der Erweiterung aus T-247-10. Bis dahin fuhr die
+     * Durchgriffsprobe jeden erfundenen Pfad nur mit `POST` an — ein
+     * Kettenglied, das auf `PATCH` hört, wäre in **jeder** Prüfung dieses
+     * Abschnitts unsichtbar geblieben: nicht in der Routenliste, nicht in der
+     * Rundfahrt (die fährt die vier Verfahren der vier Routen), nicht in der
+     * Durchgriffsprobe.
+     *
+     * Der Nachweis läuft deshalb in zwei Zügen: erst zeigen, daß die alte
+     * Fragerichtung an dieser Tür **nichts** findet, dann die neue.
+     */
+    await withComposedService(
+      async ({ service, anfrage, secret }) => {
+        const todoId = await traegerTodo(anfrage, secret);
+
+        // Zug 1: die Tür greift — und `POST` allein sieht sie nicht.
+        const mitPost = await anfrage(`/addin/todos/${todoId}/links`, {
+          method: 'POST',
+          body: PROBE_RUMPF,
+        });
+        assert.equal(
+          mitPost.status,
+          404,
+          `die PATCH-Tür antwortet auch auf POST — dann mißt diese Gegenprobe die alte: ${mitPost.text}`,
+        );
+        const mitPatch = await anfrage(`/addin/todos/${todoId}/links`, {
+          method: 'PATCH',
+          body: PROBE_RUMPF,
+        });
+        assert.equal(
+          mitPatch.status,
+          201,
+          `das Kettenglied antwortet nicht — dann mißt die Gegenprobe nichts: ${mitPatch.text}`,
+        );
+        assert.equal(zaehleAnhaenge(service), 1, 'das Kettenglied legt keinen Anhang an');
+        assert.deepEqual(ueberzaehlig(service), [], 'das Kettenglied steht in der Routenliste?');
+
+        // Zug 2: die Durchgriffsprobe wird rot und nennt Verfahren und Pfad.
+        service.database.connection.prepare('DELETE FROM todo_attachment').run();
+        const antwortend = await durchgriff({ anfrage, todoId });
+        assert.deepEqual(
+          antwortend,
+          [`PATCH /addin/todos/${todoId}/links -> 201`],
+          `eine Tür auf PATCH bleibt unbemerkt: ${antwortend.join(', ') || '–'}`,
+        );
+      },
+      kettengliedAufVerfahren('PATCH'),
+    );
+  },
+);
+
+await checkAsync(
+  'A-A-74, Gegenprobe B: eine zweite Registrierung auf demselben Pfad wird an der Rohliste rot',
+  async () => {
+    /*
+     * Kapitel 34.4: `addinFlaeche` entdoppelte über ein `Set`,
+     * `proof-route-policy.mjs:392` entdoppelt über eine `Map` — beide Listen
+     * zeigten die zweite Registrierung nicht. An Hono 4.13.5 gemessen gewinnt
+     * dabei die **zuerst** registrierte; wer seine Zeile über
+     * `api.route('/addin', …)` setzt, beantwortet einen der vier Pfade selbst.
+     */
+    const pfad = '/api/v1/addin/todos/:todoId/time-entries';
+    await withComposedService(
+      async ({ service }) => {
+        assert.deepEqual(
+          doppelt(service),
+          [`POST ${pfad}`],
+          'die zweite Registrierung steht nicht in der Rohliste — dann ist sie wieder entdoppelt',
+        );
+        // Die tragende Mengenprüfung sieht sie damit ebenfalls: fünf Einträge
+        // gegen vier. `ueberzaehlig` allein täte es nicht — der Pfad steht ja
+        // in ADDIN_FLAECHE.
+        assert.deepEqual(ueberzaehlig(service), []);
+        assert.notDeepEqual(addinFlaeche(service), [...ADDIN_FLAECHE].sort());
+      },
+      zusatzroute(pfad, false),
+    );
+  },
+);
+
 // ===========================================================================
 heading('19  Jedes Feld verweist auf seinen Hinweis und auf seine Meldung (V-03/V-04, T-158)');
 // ===========================================================================
@@ -5705,64 +7548,22 @@ check('A-19.1: „leer lassen" bleibt gesagt — ohne Frist ist ein Todo gültig
   );
 });
 
-// ---------------------------------------------------------------------------
-// 19e — V-08: die eingetragene Frist verfällt, und das wird gesagt
-// ---------------------------------------------------------------------------
-
 /*
- * Der Befund (V-08 aus T-154):
+ * ---------------------------------------------------------------------------
+ * 19e ist weg — mit dem, was es maß (T-247)
+ * ---------------------------------------------------------------------------
  *
- * Wer eine Frist einträgt und danach über ein Angebot auf „Auf vorhandenes
- * Todo buchen" wechselt, verliert die Anlegen-Fläche und mit ihr das
- * Fristfeld. Sachlich richtig — A-19.21 nennt das **Anlegen**, und das bebuchte
- * Todo behält seine eigene Frist —, aber es ist eine bewusste Eingabe, die
- * ohne ein Wort verfiel.
+ * V-08 aus T-154 hing an einer Fläche, die es nicht mehr gibt: Wer eine Frist
+ * eintrug und danach auf das vorhandene Todo wechselte, verlor sie ohne ein
+ * Wort. Der Satz „Die eingetragene Frist gilt nur für ein neues Todo." war die
+ * Auskunft dazu.
  *
- * Gemessen wird dreierlei: dass der Satz dasteht, dass er **an der Eingabe
- * hängt** (und nicht dauerhaft), und dass sich daraus **kein Übertragen**
- * eingeschlichen hat. Der dritte Punkt ist der eigentliche Riegel: Der
- * Vorschlag lautete ausdrücklich „kein neues Feld, kein Übertragen — nur die
- * Auskunft".
+ * Mit der Entscheidung zu F-21 handelt der Aufgabenbereich am gefundenen Todo
+ * gar nicht mehr — es gibt keinen Wechsel, in dem eine Eingabe verfiele. Der
+ * Anlass ist damit weg, nicht nur die Meldung; ein Satz über einen Übergang,
+ * den es nicht gibt, wäre die nächste Zusage ohne Deckung. Der Befund selbst
+ * bleibt in der Prüfliste, damit die Begründung nachlesbar ist (E-078 Punkt 3).
  */
-
-// PR #15 replaces the booking surface with an explicit link-only follow-up.
-// The user's draft date is still not an instruction to modify the found Todo.
-const attachmentSurfaceStart = paneQuelle.indexOf('<DuplicateOffer');
-const attachmentSurface = paneQuelle.slice(Math.max(0, attachmentSurfaceStart));
-
-check('V-08: das Anhangsangebot sagt, dass die eingetragene Frist nur für ein neues Todo gilt', () => {
-  assert.notEqual(attachmentSurfaceStart, -1, 'das Anhangsangebot ist nicht auffindbar');
-  assert.match(
-    attachmentSurface,
-    /Die eingetragene Frist gilt nur für ein neues Todo\./,
-    'das Anhängen verwirft die eingegebene Frist weiterhin stillschweigend',
-  );
-  assert.match(
-    attachmentSurface,
-    /Das vorhandene Todo behält seine eigene Frist\./,
-    'die unveränderte Frist des vorhandenen Todos bleibt unerwähnt',
-  );
-});
-
-check('V-08: der Satz hängt am Angebot und an der eingegebenen Frist', () => {
-  const position = attachmentSurface.indexOf('Die eingetragene Frist gilt nur');
-  assert.notEqual(position, -1, 'kein Hinweis gefunden');
-  const before = attachmentSurface.slice(Math.max(0, position - 220), position);
-  assert.match(
-    before,
-    /offers\.length > 0 && dueEntry\.kind !== 'none'\s*\?/,
-    'der Hinweis darf weder ohne Treffer noch ohne eingegebene Frist erscheinen',
-  );
-});
-
-check('V-08: das Anhängen sendet weder eine Frist noch eine Zeitbuchung', () => {
-  const payload = /await api\.addLinkAttachment\(\{([\s\S]*?)\}\);/.exec(paneQuelle)?.[1] ?? '';
-  assert.ok(payload.length > 0, 'der Anhangsaufruf ist nicht auffindbar');
-  const keys = [...payload.matchAll(/^\s*([A-Za-z]+):/gm)].map((match) => match[1]).sort();
-  assert.deepEqual(keys, ['title', 'todoId', 'url'], 'das Anhangsangebot sendet mehr als den Verweis');
-  assert.equal(/\bapi\.book\s*\(/.test(paneQuelle), false, 'das Angebot bucht weiterhin Zeit');
-  assert.equal(/due|startedAt|endedAt|minutes/.test(payload), false, 'der Entwurf verändert das gefundene Todo');
-});
 
 // ---------------------------------------------------------------------------
 // 19f — V-11: der gesperrte Knopf nennt seinen Grund, aus einer Rechnung
@@ -6132,10 +7933,31 @@ heading('20  Die Sperrliste: was allein eine Grenze trägt (O-HO, T-196)');
 /** Quelltext einer Add-in-Datei ohne Kommentare, über ihren Pfad unter `src/`. */
 const uiQuelle = (...teile) => sourceWithoutComments(path.join(srcRoot, ...teile));
 
-// PR #15: SP-A-01 retains the note's privacy label and sentence.
-// SP-A-05 and the service label retire with the removed booking controls.
-// SP-A-27/28 protect the replacement action's no-booking/no-reopening promise.
-// The corresponding product change is recorded in the text inventory.
+/*
+ * SP-A-01 hält die Datenschutzgrenze des Vermerks (Bezeichnung und Satz).
+ * SP-A-05 und die Leistungsbezeichnung sind mit den Buchungsbedienelementen
+ * des Duplikatfalls gefallen (PR #15).
+ *
+ * SP-A-27 und SP-A-28 sind mit PR #15 entstanden, als die Warnung noch eine
+ * Handlung anbot; seit T-247 (Entscheidung zu F-21) bietet sie keine mehr.
+ * Die beiden Sätze bleiben stehen, und sie tragen jetzt **mehr**: Sie sind die
+ * einzige Stelle, an der der Aufgabenbereich ausspricht, was bei einem Treffer
+ * **nicht** geschieht — keine Zeit, kein Wiederöffnen.
+ *
+ * **Ihr Wortlaut ist in T-247-3 geändert** (Befund Y-02), und das ist bei
+ * einem gesperrten Satz die Ausnahme und nicht der Regelfall: Sie standen
+ * zeichengleich da, ihr Bezugswort aber nicht mehr. „Dabei" verwies auf das
+ * Anhängen; nach dem Rückbau stand davor „Bearbeiten Sie das vorhandene Todo
+ * in SuperTakt", und auf **diesem** Weg behaupteten beide Sätze über die
+ * Hauptanwendung das Gegenteil dessen, was A-2.5 dort tut. Der neue Wortlaut
+ * bindet sie an den Zweig, auf den sie zutreffen: an das **neue** Todo. Der
+ * spec-ux-reviewer hat der Änderung nach E-078 Punkt 3 ausdrücklich
+ * zugestimmt; die Aussage der beiden Sperren ist dieselbe geblieben, nur ihr
+ * Bezug ist eindeutig.
+ *
+ * Der Satz selbst steht in Abschnitt 5b (`SP_A_27`, `SP_A_28`) und wird von
+ * hier gelesen — einmal im Lauf und nicht zweimal.
+ */
 const TASKPANE = path.join('ui', 'TaskPane.tsx');
 const DUPLICATE_OFFER = path.join('ui', 'DuplicateOffer.tsx');
 const TAGPICKER = path.join('ui', 'TagPicker.tsx');
@@ -6166,16 +7988,21 @@ const GESPERRTE_TEXTE = Object.freeze([
   Object.freeze({
     sperre: 'SP-A-27',
     datei: DUPLICATE_OFFER,
-    text: 'Dabei wird auf dem vorhandenen Todo keine Zeit erfasst.',
-    verletzung: 'Die E-Mail wird übernommen.',
-    grund: 'PR #15 — Anhängen ist keine Zeitbuchung',
+    text: SP_A_27,
+    verletzung: 'Ein neues Todo steht daneben',
+    grund:
+      'PR #15, neu gefasst in T-247-3 (Y-02) — das **neue** Todo erfasst keine Zeit auf dem ' +
+      'vorhandenen; unter dem Verweis nach SuperTakt sagte die alte Fassung das Gegenteil dessen, ' +
+      'was A-2.5 dort tut',
   }),
   Object.freeze({
     sperre: 'SP-A-28',
     datei: DUPLICATE_OFFER,
-    text: 'Ein erledigtes Todo bleibt erledigt.',
-    verletzung: 'Das Todo wird aktualisiert.',
-    grund: 'PR #15 — der Verweis hebt Erledigt nicht auf',
+    text: SP_A_28,
+    verletzung: 'ändert daran nichts.',
+    grund:
+      'PR #15, neu gefasst in T-247-3 (Y-02) — das Erledigt-Kennzeichen des vorhandenen Todos ' +
+      'bleibt unberührt, und zwar durch das Anlegen des neuen und nicht durch SuperTakt',
   }),
   Object.freeze({
     sperre: 'SP-A-12',
@@ -6199,11 +8026,23 @@ const fehlendeSperrtexte = (quellen) =>
     ({ sperre, text }) => `${sperre}: „${text}"`,
   );
 
+/*
+ * Der Zwischenraum fällt zusammen, seit T-247-3 (Y-02).
+ *
+ * Der Rumpf der Duplikatwarnung läuft im JSX über drei Zeilen, und JSX faltet
+ * Zeilenumbruch und Einrückung zu einem Leerzeichen. Was der Benutzer liest,
+ * ist die zusammengefallene Form; ohne diesen Schritt fände die Suche einen
+ * Satz nicht mehr, sobald ihn der Zeilenumbruch trifft — und ein Sucher, der
+ * am Umbruch scheitert, meldet eine Streichung, die keine ist.
+ *
+ * Für die übrigen Einträge ändert sich nichts: Sie stehen ohnehin auf je einer
+ * Zeile, und ein einzelnes Leerzeichen bleibt ein einzelnes Leerzeichen.
+ */
 const sperrQuellen = () =>
   new Map([
-    [TASKPANE, uiQuelle('ui', 'TaskPane.tsx')],
-    [DUPLICATE_OFFER, uiQuelle('ui', 'DuplicateOffer.tsx')],
-    [TAGPICKER, uiQuelle('ui', 'TagPicker.tsx')],
+    [TASKPANE, flaeche('ui', 'TaskPane.tsx')],
+    [DUPLICATE_OFFER, flaeche('ui', 'DuplicateOffer.tsx')],
+    [TAGPICKER, flaeche('ui', 'TagPicker.tsx')],
   ]);
 
 check('O-HO: die gesperrten Sätze stehen zeichengleich im Aufgabenbereich', () => {
@@ -6310,10 +8149,6 @@ check('O-HO, Gegenprobe: die Kürzung ohne Träger wird rot, die Rücknahme nich
     'die Rechnung verlangt beides statt einer Folgerung — dann wäre ST-A-06 unwiderruflich',
   );
 });
-
-// ===========================================================================
-heading('21  Outlook-Verweise: keine Buchung, kein Wiederöffnen, enge Rechte');
-await runFollowupProofs({ check, checkAsync });
 
 // ===========================================================================
 process.stdout.write(

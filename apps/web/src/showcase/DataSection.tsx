@@ -5,19 +5,19 @@ import {
   type BookingRowData,
   type SortColumn,
   type SortDirection,
-} from "../components/BookingTable";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { EXPORT_STATUS_LABEL, type ExportStatus } from "../components/ExportStatus";
-import { FilterBar, SearchField, type ActiveFilter } from "../components/FilterBar";
-import { Select } from "../components/Select";
-import { ContextMenu, type ContextMenuState, type MenuEntry } from "../components/Menu";
+} from "../features/bookings/BookingTable";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { EXPORT_STATUS_LABEL, type ExportStatus } from "../shared/ui/ExportStatus";
+import { FilterBar, SearchField, type ActiveFilter } from "../shared/ui/FilterBar";
+import { Select } from "../shared/ui/Select";
+import { ContextMenu, type ContextMenuState, type MenuEntry } from "../shared/ui/Menu";
 import {
   Button,
   Card,
   EmptyState,
   InlineMessage,
   LoadingBlock,
-} from "../components/Primitives";
+} from "../shared/ui/Primitives";
 import { BOOKING_ROWS } from "./data";
 import { Section } from "./Section";
 

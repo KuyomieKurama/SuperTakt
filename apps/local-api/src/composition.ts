@@ -16,7 +16,9 @@ import {
   createClockPort,
   createFilePort,
   createSystemPort,
+  createVersionCheckStatePort,
   openDatabase,
+  toTimestamp,
   type OpenedDatabase,
 } from '@takt/storage';
 
@@ -32,10 +34,10 @@ import { LAST_USED_PERSIST_INTERVAL_MS } from './config.ts';
 import { createLogger, type Logger } from './logger.ts';
 import type { AccessRuntime } from './runtime.ts';
 import type { TaktEnv } from './http/guards.ts';
-import type { AppContext } from './usecases/context.ts';
-import type { ExportFaultInjection } from './usecases/export.ts';
-import { createVersionChecker, type VersionChecker } from './version/checker.ts';
-import type { ReleaseSourcePort } from './version/source.ts';
+import type { AppContext } from './context.ts';
+import type { ExportFaultInjection } from './features/export/export.ts';
+import { createVersionChecker, type VersionChecker } from './features/version/version.ts';
+import type { ReleaseSourcePort } from './features/version/source.ts';
 
 export interface CompositionOptions {
   readonly port: number;
@@ -85,7 +87,7 @@ export interface CompositionOptions {
    * Für den Prüfpfad: ein Haken mitten im Exportlauf.
    *
    * Er ist über keine Anfrage erreichbar und wird ausschließlich hier gesetzt.
-   * Begründung, warum er im Erzeugnis steht, in `usecases/export.ts`.
+   * Begründung, warum er im Erzeugnis steht, in `features/export/export.ts`.
    */
   readonly exportFaults?: ExportFaultInjection;
   /**
@@ -192,13 +194,62 @@ export function compose(options: CompositionOptions): Composition {
           ...(options.exportFaults === undefined ? {} : { exportFaults: options.exportFaults }),
         };
 
-  // Die Versionsprüfung (A-18.2, E-069). Sie hängt an keiner Datenbank: Was
-  // sie weiß, liegt im Arbeitsspeicher, und was übersprungen wurde, ist eine
-  // Einstellung wie jede andere und wird über `/settings` gelesen.
+  /*
+   * Die Versionsprüfung (A-18.2, E-069).
+   *
+   * ===========================================================================
+   * Was sie über den Bestand weiß — und was sich in T-279 daran geändert hat
+   * ===========================================================================
+   *
+   * Hier stand bis T-279: „Sie hängt an keiner Datenbank." Das war der Stand
+   * und ist es nicht mehr. **Was sie weiß, liegt weiterhin im Arbeitsspeicher**
+   * — die zuletzt gemeldete Fassung, der Zustand `unknown`/`known` —, und was
+   * übersprungen wurde, ist eine Einstellung wie jede andere und wird über
+   * `/settings` gelesen.
+   *
+   * **Ein Wert liegt jetzt im Bestand: der Bezugspunkt des harten Bodens**
+   * (`app_setting.last_version_check_at`, Migration 0022, A-V-11). Er erfüllt
+   * damit dieselbe Regel wie seine beiden Nachbarn `skipped_version` (A-18.10)
+   * und die offenen Inaktivitätsphasen (A-24.7): im Bestand, nicht im
+   * Arbeitsspeicher, nicht im Browserspeicher.
+   *
+   * ===========================================================================
+   * Warum die Anbindung optional ist
+   * ===========================================================================
+   *
+   * Weil `compose()` **ohne** Datenbank läuft: Fehlt `databaseLocation`, ist
+   * `database` hier `null` — so fahren `proof:openapi` und
+   * `proof:route-policy`. Ohne Port bleibt es beim Verhalten vor T-279, und
+   * damit bleibt jeder bestehende Prüffall und jeder Nachweislauf unverändert
+   * gültig, ohne eine Attrappe zu brauchen.
+   *
+   * ===========================================================================
+   * Was hier ausdrücklich **nicht** entsteht
+   * ===========================================================================
+   *
+   * Keine Route, kein Feld, keine Auskunft. Der Wert wandert von hier in genau
+   * eine Richtung — vom Prüfer in die Tabelle — und kommt auf genau einem Weg
+   * zurück, nämlich in den Prüfer. `GET /settings` kennt ihn nicht,
+   * `PATCH /settings` kann ihn nicht setzen (A-V-14′, A-18.11).
+   *
+   * Der Adapter ist **hier** und nicht im Prüfer: Er ist die einzige Stelle,
+   * die beide Seiten kennt — die `Date` des Prüfers und die eine
+   * Zeitstempelform, die das Schema annimmt.
+   */
+  const versionCheckState = database === null ? null : createVersionCheckStatePort(database.connection);
+
   const versionCheck = createVersionChecker({
     logger,
     now: clock,
     ...(options.releaseSource === undefined ? {} : { source: options.releaseSource }),
+    ...(versionCheckState === null
+      ? {}
+      : {
+          store: {
+            read: () => versionCheckState.lastCheckAt(),
+            write: (at: Date) => versionCheckState.recordCheck(toTimestamp(at)),
+          },
+        }),
   });
 
   return {

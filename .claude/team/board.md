@@ -1,6 +1,350 @@
-# Aufgabenboard — Takt
+# Aufgabenboard — SuperTakt
 
-Stand: 2026-09-08, Übergabepunkt und GitHub-Reparatur T-244 abgeschlossen.
+Stand: 2026-09-10, **T-247 — F-21 beantwortet, die Anhäng-Fläche des Add-ins fällt: ABGESCHLOSSEN**
+(drei Freigaben, Dokumentation nachgezogen, `pnpm check` Exit 0). Als Nächstes: **T-249 — Schritt 0
+der Umstrukturierung**, die Wächter pfadunabhängig machen, bevor eine Datei umzieht.
+Davor: **T-245 — Bestandsaufnahme nach zwölf Commits von außen** und **T-246 — die
+Werkzeugkette steht auf einem Windows-Rechner**, erster Rust-Lauf dort 68/68. Der Stand davor
+war der 2026-09-08 mit T-244.
+
+## T-249 bis T-272 — Die featureweise Umstrukturierung
+
+Auftrag des Auftraggebers: das Repository für langfristige menschliche Wartbarkeit umbauen. Ziel
+ausdrücklich **nicht** möglichst viel Architektur, sondern leicht verständlicher, lesbarer, wenig
+redundanter Code — „ein neuer Entwickler soll an Dateinamen und Ordnern erkennen, wo eine
+Funktionalität liegt, ohne zuerst die Architektur zu verstehen."
+
+**Vierundzwanzig Aufträge, sechs Rollen, alle neun Torstufen grün.**
+
+### Was der Umbau geleistet hat
+
+| | |
+|---|---|
+| `apps/web/src` | acht Merkmale; `screens/` und `components/` aufgelöst; `shared/ui/` geschlossen |
+| `apps/local-api/src` | acht Merkmale; `usecases/` aufgelöst; unter `routes/` nur noch `addin/` |
+| `packages/domain` | `tag.ts` 1264 → 197 + `pool.ts`; `time-entry.ts` 676 → 475 + `export-status.ts` |
+| Vierstellige Dateien | **keine mehr** |
+| `test:coverage` | 1570 → **1578**, keine Zusicherung geändert oder gestrichen |
+| Nachweisläufe | 19 → **21** (`proof:layers`, `proof:locked` neu) |
+
+**Nicht aufgeteilt, begründet:** `attachment.rs` (1352 Zeilen, **150 Produktivcode**),
+`packages/domain/src/attachment.ts` (Schnitt hätte eine SHA-256-geprüfte Migration berührt),
+`kernel.ts` (hätte den Tagesbegriff halbiert).
+
+### Was der Umbau gefunden hat, ohne danach zu suchen
+
+Der eigentliche Ertrag liegt nicht in der Struktur, sondern in dem, was sie sichtbar gemacht hat.
+**Achtmal dieselbe Form:** eine Zusage, deren Menge an der **Struktur** aufgespannt war statt an
+der **Anforderung** — und damit grün aus Zufall.
+
+1. Vier Wächter urteilten über Mengen, die sie nie gesehen hatten (`proof:release-safety` über 129
+   Dateien, `proof:codepoints` über 9 % des Baums, `proof:surface` über null Stilblätter,
+   `proof:openapi` über einen Pfad, den es nicht gab).
+2. `proof:foreign` sah unter Windows **null statt 129** Quelldateien und wurde nur von einer
+   Untergrenze gerettet.
+3. `request` durfte in zwei Dateien stehen, weil die Ordnerstruktur so war (F-22 → E-102).
+4. Eine Stichprobe fragte einen Typnamen, der umgezogen war (T-251-2).
+5. `REGRESSIONS` verlangte „genau eine Trägerin", und die Begründung im Quelltext war
+   **nachweislich falsch** (T-253-2).
+6. Drei Ausnahmelisten trugen Leichen — `getBoard`, `getVersionCheck`, `NEVER_SENT.tagNames`
+   (→ E-103).
+7. `proof:layers` — **von dieser Umstrukturierung selbst gebaut** — hing an zwei Ordnerpräfixen
+   und wurde vom security-checker zweimal ausgehebelt (A-A-75 → 20/0 auf 36/0, ungemessene
+   Quelldateien 31 → 0).
+8. `searchEverything` verkürzt still bei 200 Treffern; dieselbe Datei baut siebzig Zeilen höher
+   genau diese Unterscheidung sorgfältig auf.
+
+**Und der teuerste Einzelfund:** In `export-status.ts` beschrieben **fünf** Stellen dieselbe Regel,
+drei davon falsch — und der dritte Übergang (`open → exported` über `not_billed`, also die
+Entscheidung, ob Arbeitszeit abgerechnet wird) war **von keinem Prüffall erreicht**. Der falsche
+Kommentar beschrieb nicht den Code, sondern die geprüfte Wirklichkeit. Gefunden nicht durch eine
+Prüfung, sondern weil ein Schnitt zwei Absätze nebeneinander legte, die vierhundert Zeilen
+auseinanderlagen. Die Menge wird jetzt **gerechnet** (`allowedExportStatusTransitions()`), der
+Zweig ist geprüft, `export-status.ts` steht bei 100 %.
+
+### Vier Spuren der zwölf ungeprüften Commits (PR #5 bis #16)
+
+Sie sind bei dieser Arbeit nebenbei zutage getreten und gehören zusammengesehen:
+
+1. Der Widerspruch an A-19.19 (die Anhangsroute) — entschieden in T-247, E-100.
+2. **Achtzehn tote E2E-Prüffälle**, darunter beide Pflichtabläufe „Export von Anfang bis Ende" und
+   „Notiz-Trennung" — seit dem Umbau von `ExportGroups.tsx` rot, nie bemerkt, weil `test:e2e` auf
+   Windows nie lief.
+3. **Drei gesperrte Oberflächensätze gekürzt** (SP-03, SP-05, SP-16) — darunter der Satz des
+   Pflichtablaufs „Timer auf erledigtem Todo", der dem Benutzer sagt, daß die Anwendung seinen
+   Erledigt-Status aufgehoben hat und nicht er. Wiederhergestellt in T-267; **`proof:locked` ist
+   der Wächter, den es dafür nie gab.**
+4. Drei Rust-Dateien mit 4–5 % Prosa und **englischen** Kommentaren gegen die Sprachregel.
+
+### Sechs Windows-Befunde, alle vorbestehend
+
+`XDG_DATA_HOME` isolierte nicht (schrieb in den echten Bestand des Benutzers, A-A-72) · fehlende
+`.gitattributes` (Prüfsummen der Migrationen) · POSIX-Dateirechte in `proof:taskpane` ·
+Pfadtrenner in `proof:foreign` · `.pathname` in den Storage-Tests · `spawn pnpm ENOENT`. Dazu die
+Prozeßbaum-Falle: `SIGTERM` an einen `shell:true`-Prozeß tötet das Enkelkind nicht — sie hat
+heute mindestens vier Messungen verfälscht.
+
+**`pnpm check` läuft seit dieser Sitzung auf einem Windows-Rechner zum ersten Mal vollständig
+durch.**
+
+## T-247 — F-21 ist beantwortet: die Anhäng-Fläche des Add-ins fällt
+
+Der Auftraggeber hat am 2026-09-10 entschieden (E-100): **gegen das Anhängen**. Von den beiden
+Wegen aus E-099 Punkt 4 ist damit der zweite gewählt — nicht A-19.19 fällt, sondern die Route.
+Die Bausperre aus E-099 Punkt 1 ist für diese Fläche aufgehoben.
+
+**Was der Auftraggeber gesehen und entschieden hat.** Er hat die Oberfläche des Duplikatfalls
+selbst festgelegt: nur noch die Warnmeldung, darunter unverändert der Abschnitt „Neues Todo" und
+der Hauptknopf. Kein Handeln mehr am gefundenen Todo. Zwei Folgen hat er dabei benannt bekommen
+und in Kauf genommen: Der Hauptknopf heißt auf seinen Wunsch **„Neue Aufgabe anlegen"**, während
+Menüband und Hauptanwendung weiter „Todo anlegen" sagen; und **A-10.9 mußte mitgeändert werden**,
+weil sie ein Buchungsangebot auf dem gefundenen Todo verlangte.
+
+**Der Meldungstext ist im Auftrag noch einmal gewandert.** Er sollte wortgleich bleiben, und der
+erste Satz forderte „Hängen Sie diese E-Mail an das passende Todo" — also genau die Handlung, die
+verschwindet. Ein Satz, der ins Leere zeigt, ist dieselbe Bauart wie der Befund, der zu F-21
+geführt hat, nur andersherum. Der Auftraggeber hat den Verweis auf SuperTakt gewählt.
+
+| Teil | Wer | Stand |
+|---|---|---|
+| T-247-1 — Fläche, Client, Route, `proof:addin` Abschnitt 18 schärfen | integration-dev | läuft |
+| T-247-2 — OpenAPI ohne `/addin/todos/{todoId}/attachments` | domain-dev | läuft |
+| Einhängung in `app.ts`, A-10.9, E-100, R-25, dieses Board | Orchestrator | fertig |
+| Welle 2 — Code-Review, Spezifikation und UX, Sicherheit, Tests, Dokumentation | fünf Rollen | **fertig — alle drei Prüfer freigegeben, Dokumentierer durch** |
+
+**Y-12 — die Frist verfällt weiterhin unbemerkt, nur an einer anderen Stelle (angemeldet, eigene
+Aufgabe).** Auflage des spec-ux-reviewers für seine Zustimmung nach E-078 Punkt 3. Der Satz aus
+V-08 ist mit seiner Fläche gefallen, der **Fehler der Klasse** aber nicht: `App.tsx:116-139`
+hängt beim Wechsel in die Einstellungen `TaskPane` aus, womit eine eingetragene Frist samt allen
+anderen Eingaben verfällt — und der Fehler-Callout daneben verspricht ausdrücklich „Die Eingaben
+bleiben stehen." Nicht durch T-247 verursacht, aber ohne diesen Eintrag mit dem V-08-Satz aus
+dem Blick geraten. Genau deshalb steht er hier.
+
+### T-247 — Ergebnis, gemessen
+
+**`pnpm check` Exit 0** — das vollständige Tor läuft auf einem Windows-Rechner zum ersten Mal
+durch. `proof:all` 19/19, `proof:addin` **244/0**, `test:coverage` 1570/0 bei 91,2 %,
+`test:rust` 68/0, `verify:bundle` und `build` Exit 0, `audit` ohne Befund.
+
+**Freigaben:** code-reviewer **ja** (alle drei blockierenden Befunde erledigt, selbst nachgemessen,
+Fail-closed-Riegel eigenhändig in beide Richtungen ausgelöst) · spec-ux-reviewer **ja** (Y-05
+zurückgezogen — er hatte eine ältere Fassung von `CLAUDE.md` gelesen; Y-04 freigegeben mit dem
+Playwright-Fall als **Auflage, nicht Bedingung**) · security-checker: A-A-71 **erfüllt**, danach
+zwei neue Wege gefunden und nach deren Schließung zur Wiedervorlage.
+
+**Der Ertrag ist größer als der Auftrag.** Sechs vorbestehende Windows-Befehle sind gefallen, alle
+derselben Bauart — eine Annahme über das Betriebssystem, die auf Linux stimmt und hier still
+danebengreift: die Isolierung der Prüfläufe (A-A-72, schrieb in den echten Bestand des Benutzers),
+dieselbe Falle in den E2E-Stützen, die fehlende `.gitattributes` (Prüfsummen der Migrationen),
+die POSIX-Rechteprüfung in `proof:taskpane`, der Pfadtrenner in `proof:foreign` (urteilte über
+**129 Dateien, ohne eine gesehen zu haben**) und die `.pathname`-Falle in den Storage-Tests.
+**T-248 ist damit miterledigt**, ohne eigenen Auftrag.
+
+**Die Lehre, dreimal an verschiedenen Stellen bestätigt:** Ein Wächter muß nicht nur sagen, daß er
+nichts gefunden hat, sondern belegen, daß er etwas **gesehen** hat. Untergrenze auf die Zahl der
+geprüften Dinge, Ankunftsnachweis bei jeder Rundfahrt, Gegenprobe zu jeder Zusage. Wo das fehlte,
+war der Lauf grün und die Aussage leer.
+
+
+### Entscheidung zur Ablage der Typen (Frage aus T-251-2)
+
+`api/types.ts` **bleibt** — als geteilter Vertrag mit dem Dienst, nicht als Sammelstelle.
+
+- **In `features/<merkmal>/api.ts`** wandern die Anfrage- und Antworttypen, die **ein** Merkmal
+  benutzt. Sie gehören zu den Aufrufen, mit denen sie entstehen.
+- **In `api/types.ts` bleiben** die Größen, die **mehrere** Merkmale tragen: `Todo`, `Tag`,
+  `TimeEntry` und ihresgleichen. Sie sind nicht merkmalseigen — `Todo` steht in `todos`, `board`,
+  `bookings` und `export` zugleich. Sie in ein Merkmal zu legen hieße, drei anderen einen
+  Rückgriff dorthin aufzuzwingen; sie zu vervielfachen hieße, vier Wahrheiten über dieselbe Größe
+  zu führen.
+
+**Zwei Gründe, die über die Ordnung hinausgehen.** Erstens sieht `proof:callers` diese Typen nur,
+solange sie an einem Ort stehen, den er kennt — verteilt auf `features/*/types.ts` fielen sie aus
+der Messung, und zwar still. Zweitens ist genau diese Kreuzung der Grund, warum der Auftraggeber
+`shared` ausdrücklich vor dem Sammelordner gewarnt hat: Was mehrere brauchen, braucht **einen**
+Ort, und dieser Ort heißt hier weiterhin `api/`.
+
+Kein `features/<merkmal>/types.ts`. Was ein Merkmal allein braucht, steht in seiner `api.ts` oder
+neben der Datei, die es benutzt.
+
+### Zwei Zeilen für die Board-Welle (aus T-251-2)
+
+**Erledigt in T-253-2.** `getBoard` und `getVersionCheck` sind aus `NOT_CALLED_BY_UI` gestrichen —
+beide wurden längst angerufen. Der neue Selbstwächter fand dabei eine dritte, ungemeldete Leiche:
+`NEVER_SENT.createTodo: [tagNames]`, obwohl die Oberfläche `tagNames` seit T-058 sendet.
+Beide Ausnahmelisten messen sich seither selbst.
+
+### Aus T-247 hervorgegangen — offen, nach Dringlichkeit
+
+| Nr. | Was | Wer |
+|---|---|---|
+| Y-09 | `docs/design/textbestand-aufgabenbereich.md` führt SP-A-27/28 im alten Wortlaut und widerspricht damit jetzt **der Sperrliste des Nachweislaufs**, nicht nur dem Code. Drei Stellen: Z. 21-22, 355-356. | ux-designer |
+| Y-10 + Y-11 | `duplicate/reopen.ts` fällt samt neun Prüfungen — sie beschreibt die Wirkung einer Buchung, die es nicht gibt; sechs Ausfuhren, null Aufrufer seit PR #15. Zusammen mit der Frage, ob `POST /addin/todos/{id}/time-entries` ohne Fläche im Token bleibt. Auflage: Kopfkommentare `rule.ts:5-10` und `:29-32` im selben Zug. | security-checker entscheidet, dann integration-dev |
+| Y-04-Auflage | Playwright-Fall: die leere `role="status"`-Region steht im Browser wirklich im Baum. Der heutige Nachweis ist statisch und sieht keinen aushängenden Elternteil — und dieser Weg existiert (Y-12). | e2e-tester |
+| Y-12 | Beim Wechsel in die Einstellungen hängt `App.tsx:116-139` `TaskPane` aus; eine eingetragene Frist verfällt unbemerkt, und der Fehler-Callout verspricht daneben „Die Eingaben bleiben stehen." | frontend-dev bzw. integration-dev |
+| T-247-13 | `proof-route-policy.mjs:392` entdoppelt weiterhin über eine `Map`; auf der Add-in-Seite ist die Rohliste schon durchgesetzt. | domain-dev |
+| — | `rule.ts:91`: `summary`, `openSeconds`, `exportedSeconds`, `poolMovement` ohne Leser; ihre Begründungen nennen Schaltflächen, die es nicht mehr gibt. | integration-dev |
+| — | A-A-72 zweite Hälfte (Nachprüfung, wohin geschrieben **wurde**) fehlt in vier der sechs Läufe. | domain-dev |
+| — | `manifest.xml:130` „Todo anlegen" gegen `TaskPane.tsx:384` „Neue Aufgabe anlegen" in **einem** Ablauf. Vom Auftraggeber benannt und bewußt getragen (E-100 Punkt 6). | offen |
+| — | **Noch kein einziges Mal angegriffen:** der Wurzelspeicher aus A-23 (R-23) und der Fremdimport (R-24). Der Add-in-Weg ist jetzt zweimal angegriffen, diese beiden nie. | security-checker |
+| — | Semgrep und 42Crunch stehen nicht zur Verfügung; zwei von vier Punkten der Definition of Done des security-checkers sind seit T-156-9 ungedeckt. | Werkzeugfrage |
+| T-246-1 | Rest: `tests/e2e/support/` — `pnpm test:e2e` bricht auf Windows weiterhin vor dem ersten Prüffall ab. | e2e-tester |
+
+**Nebenbefund aus T-247-2, der nicht zu dieser Aufgabe gehört (T-248 angemeldet).**
+`proof-openapi.mjs:153` trennt Zeilen mit `split('\n')` und prüft dann `/^ {4}[A-Z][A-Za-z]*:$/`.
+Bei CRLF im Arbeitsbaum — also auf jedem Windows-Rechner — trifft das `$` nie: „gelesen 88,
+gezählt 0". Der Befund stand schon im Ausgangslauf, hat mit F-21 nichts zu tun und macht eine
+Prüfung dauerhaft rot und damit als Aussage wertlos. Dieselbe Klasse wie die Pfadfalle aus
+T-246-1: **ein Lauf auf dem falschen Betriebssystem ist eine Aussage über den Läufer, nicht über
+den Code** — nur diesmal andersherum, rot statt grün. Behebung ist eine Zeile und gehört
+trotzdem gemessen, nicht nebenbei erledigt.
+
+**Zwei Punkte, die die Welle 2 ausdrücklich zu prüfen hat.** Erstens: `proof:addin` Abschnitt 18
+muß nach dieser Aufgabe **schärfer** sein als vorher — er zählte Zeilen in `todo_attachment` nach
+einem Aufruf der Anlegetür und maß damit die Tür, die zu ist. Ein bloßes Streichen der drei
+V-08-Prüfungen wäre ein Rückschritt und keine Erledigung. Zweitens: Der Satz „Die eingetragene
+Frist gilt nur für ein neues Todo" stammt aus dem Prüferbefund V-08 (T-154) und fällt nach
+E-078 Punkt 3 nur mit Zustimmung des Prüfers — sein Anlaß verschwindet mit der Fläche, aber das
+festzustellen ist Sache des spec-ux-reviewers, nicht des Bauenden.
+
+## T-245 — Was zwischen dem 2026-09-08 und dem 2026-09-09 an diesem Board vorbeigelaufen ist
+
+**Der wichtigste Satz zuerst: nichts davon ist durch das Qualitätstor.** Zwölf Commits, die
+Pull Requests #5 bis #16, sind von einem anderen Werkzeug außerhalb des Wellenmodells entstanden.
+`board.md`, `decisions.md` und `risks.md` wurden dabei nicht angefaßt und waren zwölf Commits im
+Rückstand; `CLAUDE.md` bekam achtzehn Zeilen. Gemessen an `git diff ef4d721^..15bdd97`:
+**208 Dateien, 9 804 Zeilen dazu, 2 979 weg.**
+
+**Diese Aufnahme ist gelesen, nicht gemessen.** In dieser Umgebung stehen weder `node` noch
+`pnpm` noch `cargo` zur Verfügung — kein `pnpm check`, kein `test:e2e`, kein `cargo test`. Jede
+Zahl unten ist entweder aus dem Quelltext gezählt oder aus einer Commitnachricht **zitiert**;
+wo zitiert, steht es dabei. Der erste Auftrag der nächsten Welle ist deshalb ein Torlauf auf
+einem Rechner mit Werkzeug, nicht ein Bauauftrag.
+
+### Was dazugekommen ist
+
+| PR | Was | Spezifikation |
+|---|---|---|
+| #5, #7 | Vollständige Datensicherung als JSON, Re-Import, Todoist-CSV und Super-Productivity-JSON. Neue Routen `data-transfer.ts`, 782 Zeilen Anwendungsfall, Port `repo-data-archive.ts`, `docs/datenarchiv.md` | **Abschnitt 20** (A-20.1 bis A-20.10), neu |
+| #6 | `prepare-rust-test.mjs` — Platzhalter für Sidecar, Aufgabenbereich und Lizenzbeilage vor `cargo test` | — (Bauwerkzeug) |
+| #8 | Marke SuperTakt, 18 Farbthemen im klassischen Layout, Leistungsabfrage abschaltbar, Inaktivitätserkennung samt Rückkehrdialog, lokale Outlook-Zertifikatseinrichtung. **Sechs Migrationen 0016 bis 0021.** Zitiert: „1 557 Tests bestanden (2 übersprungen)" | **Abschnitte 21, 22, 23, 24**, alle neu |
+| #9 | Release-Prüfung berichtigt, `python3-gi-cairo` als fünfte Voraussetzung von `proof:engines` | — |
+| #10 | Darstellung vor dem ersten Bild wiederhergestellt (`startup-appearance.js`), Start im Hintergrund vorbereitet | A-21.4 |
+| #11 | Code-Signing für Windows (`sign-windows.mjs`, `docs/code-signing.md`), fail-closed über `TAKT_WINDOWS_SIGNING_PROVIDER` | — |
+| #12, #13 | Zertifikatsbefehle über verwalteten Startzustand; Outlook-Wirtsfehler unterscheidbar gemacht | A-23.5 |
+| #16 | **Outlook-Nachricht als Verweis anhängen statt Zeit buchen**, Deep-Link durchgereicht, Tag-Auswahl nach Ordnern gruppiert, Board-Spalten umsortierbar, `viewport-layout.css`, `addin-build.yml` | **ungedeckt — siehe T-245-1** |
+
+### T-245-1 — Der Widerspruch an A-19.19, und er ist nicht klein
+
+A-19.19 steht unverändert da: „Über das Outlook-Add-in entstehen **keine** Anhänge." Seit #16
+gibt es `POST /api/v1/addin/todos/{todoId}/attachments`, mit dem Add-in-Token erreichbar
+(`app.ts:279`). Die Tür ist eng — nur `http(s)`, über `normalizeAttachmentLink` geprüft, keine
+Datei, kein Bild, idempotent gegen den normalisierten Verweis. Sie widerspricht dem Wortlaut
+trotzdem.
+
+**Der zweite Schaden ist der schlimmere.** Der Bestand behauptet weiterhin das Gegenteil, an
+sechs Stellen: `routes/addin/index.ts:278` („Ein Anhang entsteht hier weiterhin nicht"),
+`routes/addin/schema.ts:299` („A-19.19 bleibt unangetastet, und zwar strukturell"),
+`apps/web/src/components/Attachments.tsx:82`, `docs/glossar.md`, `docs/bedrohungsmodell.md`
+(A-A-21) und `proof:addin` Abschnitt 18. Der Wächter dort mißt **die Wirkung** — null Zeilen in
+`todo_attachment` nach einem Aufruf der **Anlegetür** —, und die Anlegetür legt tatsächlich
+keinen Anhang an. Er ist grün und zugleich zu milde: **er mißt die Tür, die zu ist, nicht die,
+die aufging.** Dieselbe Bauart wie O-AY und O-LG, nur an einer neuen Stelle.
+
+Das ist keine Codefrage, sondern F-21 an den Auftraggeber. Bis zur Antwort baut niemand an
+dieser Fläche, weder aus noch zurück. Fällt sie für das Anhängen, ändern sich A-19.19, A-A-21
+und `proof:addin` 18 **in einem Auftrag** (E-081 Punkt 4).
+
+### T-245-2 — Archivfassung 5 gegen Spezifikation 4
+
+`DATA_ARCHIVE_VERSION = 5` in `apps/local-api/src/usecases/data-transfer.ts:42`; gelesen werden
+1 bis 5, alles andere wird abgewiesen. A-24.7 nennt die Fassung **4**. Die fünfte trägt
+`idle_keep_timer_running`, also das Timerverhalten bei Inaktivität aus dem Anhang A der
+Spezifikation — dort steht es als Fließtext **ohne Anforderungs-ID**. Klein, gedeckt durch das
+Verhalten, ungedeckt durch eine ID. Gehört bei der nächsten Fortschreibung der Spezifikation
+mitgezogen.
+
+### T-245-3 — Was das Tor noch nicht gesehen hat
+
+Keine der Rollen hat die Abschnitte 20 bis 24 geprüft. Offen sind damit, in dieser Reihenfolge:
+
+1. **security-checker** — der Wurzelspeicher (R-23), die fremde Datei als Anhangsquelle (R-24),
+   der Deep-Link (R-25), die 64-MB-Ausnahme am Rumpf, das Bedrohungsmodell um A-A-71 ff.
+2. **spec-ux-reviewer** — Deckung jeder ID von A-20.1 bis A-24.7, dazu die zwei ungedeckten
+   Punkte oben und die Textbestände der neuen Flächen.
+3. **code-reviewer** — 9 800 neue Zeilen, davon 782 in einem einzigen Anwendungsfall.
+4. **unit-tester und e2e-tester** — drei neue End-to-End-Fälle liegen vor
+   (`idle-recovery`, `startup-appearance`, `timer-prompt-setting`); der Testplan kennt die
+   Abschnitte 20 bis 24 nicht.
+5. **documenter** — `docs/testplan.md`, `docs/architektur.md`, `docs/datenmodell.md` und das
+   Glossar stehen auf dem Stand vor den sechs Migrationen.
+
+## T-246 — Der Windows-Rechner steht, und der erste Lauf darauf hat etwas gefunden
+
+Am 2026-09-10 ist die Werkzeugkette auf dem Windows-Rechner des Auftraggebers eingerichtet
+worden: Node 22.23.2, pnpm 11.3.0, die Abhängigkeiten des Arbeitsbereichs, Playwright/Chromium,
+Rust 1.98.1 und die MSVC-Bauwerkzeuge 14.44 mit Windows-SDK 10.0.26100. **Damit fällt die
+Umgebungssperre, die seit dem 2026-09-06 über T-B05 und T-B09 lag** — jedenfalls die für
+Windows; ein Vorleseprogramm steht weiterhin nicht zur Verfügung.
+
+### Gemessen, zum ersten Mal auf Windows
+
+| Lauf | Ergebnis |
+|---|---|
+| `pnpm test` | **1 567 bestanden, 3 fehlgeschlagen, 3 übersprungen** (88 Dateien, davon 1 rot) |
+| `pnpm test:rust` | **68 bestanden, 0 fehlgeschlagen, 1 ausgelassen**, Code 0 |
+| `pnpm dev` | Vite 7.3.6 auf `http://127.0.0.1:5173/`, Status 200, Titel `SuperTakt` |
+
+**Die 68 gegen die 62 aus T-244 sind der eigentliche Gewinn.** Sechs Prüffälle mehr, und es sind
+genau die `#[cfg(windows)]`-Zweige aus T-244 — der Laufwerksdoppelpunkt, `x.lnk::$DATA`, der
+`PathStreamSeparator`. Sie sind bisher ausschließlich im Bauauftrag gelaufen; jetzt laufen sie
+auf einem echten Windows-Rechner. Das Gegenteil des Befunds aus dem Nachtrag zu R-21: „Der
+Läufer war Linux."
+
+### T-246-1 — `new URL(...).pathname` ist auf Windows ein falscher Pfad, an sechs Stellen
+
+Die drei roten Fälle stehen alle in `packages/storage/test/not-billed-audit.test.ts` und haben
+**eine** Ursache:
+
+```text
+ENOENT: no such file or directory, scandir 'C:\C:\Users\kyk\...\packages\storage\migrations'
+```
+
+Der doppelte Laufwerksbuchstabe kommt aus `not-billed-audit.test.ts:66`:
+`new URL('../migrations', import.meta.url).pathname` liefert auf Windows `/C:/Users/…`, und
+`readdirSync` legt den führenden Schrägstrich als „Wurzel des aktuellen Laufwerks" aus. Auf Linux
+gibt es diesen Fehler nicht — dieselbe Klasse wie R-21: **ein grüner Lauf auf dem falschen
+Betriebssystem ist keine Aussage über den Code, sondern über den Läufer.** Der Handgriff ist
+`fileURLToPath(new URL(…))` statt `.pathname`.
+
+**Die drei roten Fälle sind nicht der Schaden, sondern die Anzeige.** Dieselbe Zeile steht
+fünfmal mehr, und zwar im Unterbau der End-zu-End-Läufe:
+
+| Datei | Zeile | Hoheit |
+|---|---|---|
+| `packages/storage/test/not-billed-audit.test.ts` | 66 | unit-tester |
+| `tests/e2e/support/services.ts` | 83 | e2e-tester |
+| `tests/e2e/support/attachment-persistence-services.ts` | 27 | e2e-tester |
+| `tests/e2e/support/version-check-services.ts` | 40 | e2e-tester |
+| `tests/e2e/support/build-check-session.ts` | 55, 57 | e2e-tester |
+
+Jede dieser fünf berechnet die Wurzel des Bestands, aus der heraus der lokale Dienst und die
+Oberfläche gestartet werden. **Solange sie so dastehen, ist `pnpm test:e2e` auf Windows nicht
+lauffähig** — gefunden am Quelltext, nicht gemessen, weil der Unit-Lauf vorher rot war.
+
+Beide Dateigruppen gehören unit-tester und e2e-tester, nicht dem Orchestrator. Der Auftrag geht
+deshalb als **eine** Aufgabe in die nächste Welle, mit der Auflage, alle sechs Stellen in einem
+Zug zu ändern und danach `pnpm test` **und** `pnpm test:e2e` auf Windows zu fahren. Ein
+Wächter, der `.pathname` auf `import.meta.url` künftig rot macht, wäre der billigste Teil davon.
+
+### Was damit weiterhin offen ist
+
+Nicht gefahren wurden `pnpm check` (Tor mit Abdeckung, neunzehn Nachweisläufen, Bündelprüfung und
+`audit`), `pnpm test:e2e` (siehe T-246-1) und `pnpm desktop`. Die sieben Punkte der
+Windows-Prüfliste T-B05 sind damit **möglich geworden, aber nicht abgearbeitet** — insbesondere
+der Zertifikatsweg nach A-23 (E-098, R-23), der bis heute nirgends gelaufen ist.
+
+---
 
 Nachtrag T-053 bis T-055: Takt startete nicht — der gebündelte Sidecar starb beim Start, weil im
 Bündel weder Quelltextort noch Migrationsverzeichnis existieren. Elf Nachweispfade waren grün,
@@ -1325,6 +1669,13 @@ A-3.5, A-3.6, A-5.7 nachtragen (Vorschlag in R-2); A-13.6 klären.
 
 ## Blockiert — braucht eine Umgebung, die hier nicht steht
 
+**Nachtrag 2026-09-10, T-246: Der Windows-Rechner steht.** Node, pnpm, Playwright, Rust und die
+MSVC-Bauwerkzeuge sind auf dem Rechner des Auftraggebers eingerichtet, `cargo test --lib` ist
+dort mit **68 von 68** gelaufen. Damit ist die erste der drei Wartepositionen unten **aufgehoben**
+— T-B05 und der Windows-Teil von T-B09 sind ab sofort abarbeitbar und nicht mehr blockiert. Der
+Absatz darunter beschreibt den Stand **davor** und bleibt stehen, weil an ihm hängt, welche
+Aussagen bis heute Ableitung waren. Vorleseprogramm und Lieferkettenzugang stehen weiterhin aus.
+
 **Antwort des Auftraggebers vom 2026-09-06, und sie macht aus drei Wartepositionen einen Zustand:**
 Ein **Windows-Rechner** steht nicht zur Verfügung. Ein **Vorleseprogramm** steht nicht zur
 Verfügung. Ein **Zugang zu Guardian und 42Crunch** steht nicht zur Verfügung. Diese drei Punkte
@@ -1361,3 +1712,5 @@ Erzeugnis ohne sie ausgeliefert wird**. Was daraus folgt, gehört in jede Freiga
 | F-18 | Soll die Versionsprüfung **abschaltbar** sein? Abschnitt 18 verlangt keinen Schalter, und ohne Anforderungs-ID wird nichts gebaut (E-068). In einer Anwendung, die für sich in Anspruch nimmt, ausschließlich lokal zu laufen, ist „darf ich das abstellen?" aber eine berechtigte Frage. |
 | ~~F-19~~ | **Beantwortet 2026-09-04: `0.1.0`.** Erste vorzeigbare Fassung, nicht als fertig erklärt — der Stand trägt sieben offene Fragen und eine ungeprüfte Windows-Liste (T-B05). Das Etikett `v0.1.0` löst den Ablauf aus; `tauri.conf.json` bleibt bei `0.0.0`, weil `build-app.mjs` die Fassung über `TAKT_RELEASE_VERSION` als zweite Datei überlegt und die kommentierte JSON5-Datei nicht neu schreibt. Ebenfalls entschieden: **direkt taggen**, der Ablauf fährt `pnpm check` und `verify:bundle` selbst und bricht bei Rot ab, ohne ein Release zu erzeugen. |
 | ~~F-20~~ | **Beantwortet 2026-09-05: beides ja** (A-19.20, A-19.21, E-074). Ursprünglich: Zwei Fragen zu Abschnitt 19, für die es keine Anforderungs-ID gibt und die deshalb nicht gebaut werden (E-073 Punkt 4): **(a)** Soll sich die Todo-Liste nach der Frist **sortieren und filtern** lassen? A-19.4 verlangt Sichtbarkeit, nicht Sortierung. **(b)** Soll das **Outlook-Add-in** eine Frist setzen dürfen? Für Anhänge ist das ausgeschlossen (A-19.19), für die Frist steht nichts da. |
+| ~~F-21~~ | **Beantwortet 2026-09-10: gegen das Anhängen (E-100).** Die Route fällt, A-19.19 bleibt unverändert stehen und wird dadurch wieder wahr; A-10.9 ändert sich mit, weil das Angebot am gefundenen Todo ganz entfällt. Umgesetzt in T-247. Ursprünglich: **Der Widerspruch aus T-245-1, und er ist die dringendste der Fragen.** Seit PR #16 hängt der Aufgabenbereich die geöffnete Outlook-Nachricht als Verweis an ein vorhandenes Todo, statt Zeit zu buchen. A-19.19 verbietet genau das — „Über das Outlook-Add-in entstehen **keine** Anhänge" — und steht unverändert in der Spezifikation. Entweder fällt A-19.19 und wird durch eine Anforderung ersetzt, die die enge Form beschreibt (nur `http(s)`, keine Datei, kein Bild, idempotent), oder die Route fällt. Ein Drittes gibt es nicht: Der Bestand behauptet an sechs Stellen die Abwesenheit einer Fläche, die es gibt. |
+| F-22 | Sollen die drei blockierten Punkte T-B05, T-B07 und T-B09 vor der Auslieferung fallen oder mit ihr? Die Antwort vom 2026-09-06 hat die Umgebung geklärt, nicht die Entscheidung. Seit den Abschnitten 20 bis 24 wiegt sie schwerer: Der Zertifikatsweg nach A-23 ist **ausschließlich** Windows-Code, und kein Prüffall davon ist je auf Windows gelaufen — außer im Bauauftrag, den PR #9 gerade erst wieder grün bekommen hat. |

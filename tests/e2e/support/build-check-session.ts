@@ -10,6 +10,7 @@
 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 /**
  * `apps/web` wird nach dem Bau auf **demselben** Port wie der
@@ -46,12 +47,19 @@ export const OUTLOOK_TASKPANE_BASE_URL = `https://127.0.0.1:${OUTLOOK_TASKPANE_P
 /** Wegwerfverzeichnis für Schlüssel/Zertifikat dieses Laufs — nicht das der echten Anwendung. */
 export const OUTLOOK_TASKPANE_APP_DATA_DIR = join(tmpdir(), 'takt-e2e-outlook-taskpane-appdata');
 
+/**
+ * `.pathname` statt `fileURLToPath` lieferte unter Windows `/C:/…` — ein
+ * String, der mit demselben Bestand über `join`/`cwd` verkettet zu
+ * `C:\C:\…` führt und den Kindprozess nie startet (`spawn … ENOENT`,
+ * T-246-1). `fileURLToPath` liefert den nativen Pfad, mit demselben
+ * Rückstrich-Trennzeichen wie jeder andere Pfad in diesem Lauf.
+ */
+
 /** Wurzel des ausgelieferten Bündels: das echte `vite build`-Ergebnis, keine Attrappe. */
-export const OUTLOOK_ADDIN_DIST_DIR = new URL(
-  '../../../apps/outlook-addin/dist',
-  import.meta.url,
-).pathname;
+export const OUTLOOK_ADDIN_DIST_DIR = fileURLToPath(
+  new URL('../../../apps/outlook-addin/dist', import.meta.url),
+);
 
-export const WEB_APP_DIST_DIR = new URL('../../../apps/web/dist', import.meta.url).pathname;
+export const WEB_APP_DIST_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url));
 
-export const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+export const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));

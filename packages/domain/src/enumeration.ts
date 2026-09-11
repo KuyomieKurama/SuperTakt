@@ -12,7 +12,7 @@
  * abrufbar. Wer sie brauchte, schrieb sie ab: `joinGerman`
  * (`apps/web/src/lib/format.ts`), `enumerateGerman`
  * (`apps/web/src/lib/errorText.ts`) und `quoteList`
- * (`apps/web/src/screens/TodoFormDialog.tsx`). Eine vierte war bereits
+ * (`apps/web/src/features/todos/TodoFormDialog.tsx`). Eine vierte war bereits
  * dagewesen und hatte bei drei Namen „A und B und C“ ergeben (Befund C-24 aus
  * T-045). frontend-dev und spec-ux-reviewer haben unabhängig voneinander
  * gefragt, ob die Funktion nicht ausgeführt werden könne, statt sie ein drittes

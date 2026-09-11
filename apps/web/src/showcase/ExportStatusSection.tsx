@@ -6,9 +6,9 @@ import {
   ExportStatusMarker,
   exportStatusOf,
   type ExportDisplayState,
-} from "../components/ExportStatus";
-import { ExportSummaryStrip } from "../components/Kanban";
-import { Card, InlineMessage } from "../components/Primitives";
+} from "../shared/ui/ExportStatus";
+import { ExportSummaryStrip } from "../shared/ui/ExportSummaryStrip";
+import { Card, InlineMessage } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
 import { Section, SubHeading } from "./Section";
 

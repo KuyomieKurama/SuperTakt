@@ -66,7 +66,7 @@
 import { describe, expect, it } from 'vitest';
 import { ATTACHMENT_KINDS } from '@takt/domain';
 
-import { sweepOrphanedImages, type OrphanedImageSweep } from '../../src/usecases/image-sweep.ts';
+import { sweepOrphanedImages, type OrphanedImageSweep } from '../../src/features/todos/image-sweep.ts';
 import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../../src/logger.ts';
 
 interface Recorded {

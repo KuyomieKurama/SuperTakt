@@ -1,0 +1,123 @@
+-- Takt — Migration 0022 "last_version_check_at", Vorwärtsrichtung
+-- Deckt: A-18.2, A-18.11, A-V-11, A-V-11′, E-069, R-19, T-275-7, T-275-8, T-279
+-- Der Migrationsläufer setzt PRAGMA foreign_keys vor BEGIN und öffnet die Transaktion selbst.
+--
+-- ===========================================================================
+-- Wozu
+-- ===========================================================================
+--
+-- A-V-11 verlangt einen **harten Boden** von 60 Minuten zwischen zwei
+-- ausgehenden Anfragen der Versionsprüfung. Der Bezugspunkt dieses Bodens — der
+-- Zeitpunkt der letzten Anfrage — lag bis T-279 ausschließlich im
+-- Arbeitsspeicher des Dienstes. Ein neu gestarteter Dienst kannte keinen
+-- letzten Zeitpunkt, also griff kein Boden, also ging nach dem Startabstand von
+-- 10 s eine Anfrage hinaus.
+--
+-- Gemessen (T-276, fünf Läufe auf Windows 11 / Node 22): Kaltstart bis zur
+-- ersten beantworteten Anfrage im Median 474 ms, kürzester vollständiger Zyklus
+-- „starten, eine Anfrage abholen, beenden" damit 10 474 ms — rechnerisch
+-- **344 ausgehende Anfragen je Stunde**, das 5,7fache dessen, was GitHub nicht
+-- angemeldeten Aufrufern je Stunde und Quelladresse überhaupt zugesteht, und
+-- das 14fache dessen, was der Wiederholtakt in einem ganzen Tag hergibt (24).
+--
+-- ===========================================================================
+-- Was dieser Wert **nicht** ist — und der Satz gehört hierher und nicht in
+-- einen Bericht
+-- ===========================================================================
+--
+-- **Er ist keine Abwehr gegen einen feindlichen lokalen Prozeß (VG-3).**
+-- Derselbe Prozeß, der den Sidecar in einer Schleife startet, kommt mit
+-- `sqlite3` an diese Datei und setzt die Zeitmarke zurück; das
+-- Anwendungsdatenverzeichnis kommt aus der Umgebung und ist vom Startenden
+-- bestimmbar. Wer diese Spalte als Behebung von R-19 verkauft, verkauft die
+-- falsche Sache.
+--
+-- **Er ist die Abwehr gegen den Unfall**, und der ist real: der
+-- Entwicklerrechner, auf dem `pnpm desktop` bei jedem Rust-Neubau einen neuen
+-- Sidecar mit der echten Abholfunktion startet; ein Benutzer mit einem
+-- Startproblem, der zwanzigmal doppelklickt; eine Neustartautomatik, die heute
+-- niemand gebaut hat (`sidecar::start` hat genau eine Aufrufstelle) und die
+-- morgen jemand baut, ohne diesen Zusammenhang zu kennen. Aus einem Angriff
+-- würde damit ein Betriebsfall.
+--
+-- ===========================================================================
+-- Der tragende Grund: Gleichbehandlung mit `skipped_version`
+-- ===========================================================================
+--
+-- A-18.10 und A-24.7 verlangen dasselbe für zwei Nachbarwerte derselben
+-- Fläche: Der übersprungene Fassungswert steht im Bestand, die offenen
+-- Inaktivitätsphasen stehen im Bestand — „nicht im Arbeitsspeicher und nicht im
+-- Browserspeicher". Der Bezugspunkt des Bodens ist ein Wert derselben Fläche
+-- und hatte bis heute eine **andere Lebensdauer als sein direkter Nachbar in
+-- derselben Zeile**, ohne daß irgendwo stand, warum. Genau diese Art
+-- stillschweigender Unstimmigkeit hat dieser Bestand mehrfach teuer bezahlt.
+--
+-- Und er steht in `app_setting`, weil er eine Einstellung ist wie jede andere:
+-- eine Zeile, feste Felder, jede Einstellung mit einem Typ und einer Migration
+-- (E-011). Eine Zustandsdatei neben der Datenbank wäre die zweite Art,
+-- Einstellungen zu führen; 0013 hat sie mit Begründung abgelehnt.
+--
+-- ===========================================================================
+-- Was diese Spalte NICHT wird: sichtbar
+-- ===========================================================================
+--
+-- Sie erscheint **weder in `GET /settings` noch in `PATCH /settings`** und in
+-- keiner anderen Route. A-V-14′ zählt aus, was den Dienst verläßt — die
+-- geprüfte Fassungsbezeichnung und ein Kennzeichen —, und A-18.11 verbietet
+-- „kein Hinweis, keine Fehlerfläche". Ein „zuletzt geprüft: 14:03" in der
+-- Oberfläche wäre genau die Fehlerfläche, und eine Schaltfläche daneben wäre
+-- die von E-069 ausgeschlossene Route mit einer Hand darauf.
+--
+-- `skipped_version` ist hier ausdrücklich das **schlechte** Vorbild: Der Wert
+-- ist aus gutem Grund sichtbar, weil der Benutzer ihn setzt. Diesen setzt
+-- niemand, und niemand liest ihn.
+--
+-- Daraus folgt die zweite Abweichung von 0013: Die Spalte ist **keine
+-- Benutzereingabe**. Es gibt keine Tür, durch die ein Aufrufer sie schreiben
+-- könnte. Der CHECK unten ist deshalb nicht die zweite Wache hinter einer
+-- ersten, sondern die einzige — und er wacht über einen Schreiber, der im
+-- selben Erzeugnis liegt.
+--
+-- ===========================================================================
+-- Form
+-- ===========================================================================
+--
+-- TEXT, ISO-8601 in UTC, sekundengenau, mit `Z` — dieselbe eine Form, die das
+-- ganze Schema annimmt (`toTimestamp` in `sqlite/clock.ts`, CHECKs aus 0001).
+-- Keine Millisekunden, kein Zonenversatz, keine Zahl: Ein Zeitstempel, der
+-- neben zwanzig anderen in derselben Datenbank anders aussieht, wird beim
+-- nächsten Vergleich falsch gelesen.
+--
+-- **NULL heißt „noch nie gefragt"** und ist damit ein Wert und kein Fehlen. Das
+-- ist der Zustand jedes bestehenden Bestands nach dieser Migration, und er ist
+-- richtig: Der erste Start nach der Aktualisierung fragt einmal, wie bisher.
+--
+-- Ein Zeitstempel aus der **Zukunft** ist ausdrücklich zugelassen und wird
+-- nicht abgewiesen. Er entsteht ohne Zutun — eine zurückgestellte Systemuhr,
+-- eine Datensicherung, die auf einem Rechner mit anderer Uhr eingespielt wird.
+-- Behandelt wird er dort, wo er gelesen wird: `run()` in
+-- `apps/local-api/src/features/version/version.ts` erkennt an `elapsed < 0`,
+-- daß der Bezugspunkt zu einer Uhr gehört, die es nicht mehr gibt, nimmt ihn
+-- neu und wartet den vollen Boden. Ein CHECK „nicht in der Zukunft" wäre hier
+-- falsch: Er machte aus einer verstellten Uhr einen Schreibfehler.
+--
+-- ===========================================================================
+-- Warum ALTER TABLE ADD COLUMN und kein Tabellenumbau
+-- ===========================================================================
+--
+-- Es ändert sich keine bestehende Spalte, keine REFERENCES-Klausel und kein
+-- bestehender CHECK. `app_setting` hat weder Trigger noch Sicht, die auf ihr
+-- stünden; die einzige Fremdschlüsselbeziehung (`active_export_template_id`)
+-- bleibt unberührt. Dieselbe Begründung wie in 0013 und 0021, und derselbe
+-- eine Satz genügt.
+--
+-- **Kein Index.** Die Tabelle hat genau eine Zeile (id = 1).
+
+ALTER TABLE app_setting ADD COLUMN last_version_check_at TEXT
+  CHECK (
+    last_version_check_at IS NULL
+    OR (
+      length(last_version_check_at) = 20
+      AND last_version_check_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
+    )
+  );

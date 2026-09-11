@@ -1,4 +1,4 @@
-import { Card } from "../components/Primitives";
+import { Card } from "../shared/ui/Primitives";
 import { Section } from "./Section";
 
 interface InventoryEntry {
@@ -63,7 +63,7 @@ const INVENTORY: readonly InventoryEntry[] = [
   },
   {
     name: "Exportstand-Zusammenfassung",
-    file: "Kanban.tsx",
+    file: "ExportSummaryStrip.tsx",
     purpose: "Zählt die Buchungen eines Todos je Exportstand.",
     states: "mit Werten · leer",
     screens: "S-02 · S-03 · S-04",

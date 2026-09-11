@@ -2525,3 +2525,263 @@ grün und hieße auf zwei Rechnern zweierlei. Dazu 18 Sekunden gegen Millisekund
    PyGObject-Cairo-Brücke wird WebKitGTK zwar gefunden und gestartet, aber
    `get_snapshot_finish` kann die zurückgegebene `cairo.Surface` nicht umwandeln. Die Prüfstrecke
    installiert das Paket, und der Lauf prüft die Brücke vor dem ersten Bild ausdrücklich.
+
+## E-096 — Arbeit von außerhalb der Wellen ist eingelesen, nicht fertig
+
+**Anlaß:** Zwischen dem 2026-09-08 und dem 2026-09-09 sind zwölf Commits in `main` gelandet, die
+Pull Requests #5 bis #16, entstanden mit einem anderen Werkzeug und außerhalb des Wellenmodells.
+208 Dateien, 9 804 Zeilen dazu, 2 979 weg, fünf neue Spezifikationsabschnitte, sechs Migrationen.
+`board.md`, `decisions.md` und `risks.md` blieben unberührt; `CLAUDE.md` bekam achtzehn Zeilen.
+Beim Wiederaufsetzen am 2026-09-10 war der Abstand zwischen `git log` und `board.md` damit zwölf
+Commits — und niemand hätte ihn bemerkt, wenn nicht ausdrücklich danach gesucht worden wäre.
+
+**Entscheidung.**
+
+1. **Der Stand solcher Arbeit heißt „eingelesen".** Nicht „fertig", nicht „freigegeben", auch
+   dann nicht, wenn sie in `main` steht und der Ablauf grün war. Das Qualitätstor aus `CLAUDE.md`
+   kennt vier Rollen; ein bestandener GitHub-Ablauf ist keine davon.
+2. **Der erste Auftrag nach einer solchen Lücke ist eine Bestandsaufnahme, kein Bauauftrag.**
+   Sie zählt am `git diff`, benennt jede Anforderungs-ID, die neu gedeckt oder neu **ungedeckt**
+   ist, und trägt beides ins Board. T-245 ist das Muster.
+3. **Und sie sagt, was sie nicht messen konnte.** In der Umgebung vom 2026-09-10 standen weder
+   `node` noch `pnpm` noch `cargo` zur Verfügung. Eine Aufnahme aus dem Quelltext ist eine
+   Aussage über den Quelltext — jede Zahl aus einer Commitnachricht ist ein **Zitat**, kein
+   Nachweis. Dieselbe Trennung wie in E-094, nur an einer neuen Sorte Quelle.
+4. **Vor der nächsten Welle steht ein Torlauf auf einem Rechner mit Werkzeug.** `pnpm check`,
+   `pnpm test:e2e`, `cargo test --lib`. Was danach an Zahlen im Board steht, ist gemessen.
+
+## E-097 — Die Datensicherung ist der Gegenpol des Abrechnungsexports, nicht seine große Schwester
+
+**Anlaß:** Abschnitt 20 der Spezifikation, gebaut in den Pull Requests #5 und #7. Zwei Dinge
+heißen jetzt „Export" und dürfen nie verwechselt werden: der Abrechnungsexport aus Abschnitt 8,
+der **absichtlich wenig** enthält, und die Datensicherung aus Abschnitt 20, die **absichtlich
+alles** enthält — interne Vermerke, Fristen, Anhänge samt Bildkopien.
+
+**Entscheidung.**
+
+1. **Die Sperre aus A-19.17 und A-7.2 gilt weiterhin, aber sie gilt dem Abrechnungsexport.** In
+   `CLAUDE.md` steht deshalb überall dort, wo „Export" die Sperre trug, jetzt
+   „**Abrechnungsexport**". Wer die beiden in einem Satz gleichsetzt, hebt entweder die Sperre
+   auf oder macht den Round-Trip aus A-20.4 unmöglich.
+2. **Unbekannte Fassungen werden abgewiesen, nicht geraten** (A-20.2). Der Code liest die
+   Fassungen 1 bis 5 und weist alles andere ab. Ein ungültiges Archiv verändert **nichts** —
+   nicht teilweise, nicht mit Warnung.
+3. **Die 64-MB-Ausnahme am Anfragerumpf gilt ausschließlich der Datenübertragung**
+   (`DATA_TRANSFER_MAX_BODY_BYTES` gegen `MAX_BODY_BYTES`). Sie ist die einzige Lockerung von
+   B-1.7 im ganzen Dienst und begründet sich aus den eingebetteten Bildern. Wer sie auf eine
+   andere Route zieht, hebt B-1.7 auf.
+4. **Ein Fremdimport ergänzt und ersetzt nicht** (A-20.7), und er ist eine **fremde Quelle**:
+   Aus Todoist-CSV und Super-Productivity-JSON entstehen Anhänge, darunter **Dateipfade**. Damit
+   reicht eine präparierte Fremddatei bis an den Öffnen-Befehl aus Abschnitt 19. Die Prüfungen
+   aus E-072 gelten dort unverändert; das ist R-24.
+
+## E-098 — Ein Wurzelspeicher wird mit einem Fingerabdruck betreten, nicht mit einem Pfad
+
+**Anlaß:** Abschnitt 23, gebaut in Pull Request #8 und nachgebessert in #12. Die Hülle darf nach
+ausdrücklicher Bestätigung ein Zertifikat in `Cert:\CurrentUser\Root` legen. Was dort liegt, gilt
+dem Benutzerkonto für **jede** TLS-Verbindung als vertrauenswürdig — nicht nur für den
+Aufgabenbereich auf `https://localhost:17844`.
+
+**Entscheidung.** Die Bauform ist dieselbe wie bei `takt_open_release` in T-139, und sie ist es
+aus demselben Grund: **Der Befehl nimmt nicht entgegen, was er öffnen soll.**
+
+1. **Der Auftrag trägt nur den bestätigten SHA-256-Fingerabdruck.** Den Pfad zur Zertifikatsdatei
+   bestimmt die Hülle selbst (A-23.3). Ein Befehl, der einen Pfad entgegennähme, wäre ein von
+   außen geschriebener Auftrag an den Wurzelspeicher.
+2. **Abgewiesen werden: geändert, ungültig, abgelaufen, nicht lokal, CA-Zertifikat, zusätzlicher
+   DNS-Name.** Der private Schlüssel verläßt seine Datei nicht.
+3. **Die Windows-Sicherheitsabfrage bleibt stehen.** Für ihre Bestätigung stehen drei Minuten
+   zur Verfügung, und ausschließlich für diesen einen Aufruf fällt `-NonInteractive` weg
+   (`outlook_certificate.rs`). Keine Rechteerhöhung, keine Änderung von Unternehmensrichtlinien,
+   keine automatische Installation.
+4. **Ein Eintrag im Speicher ist kein bestandener HTTPS-Test** (A-23.4). Geprüft wird über
+   Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats. Im Browser und
+   auf anderen Betriebssystemen behauptet nichts eine Windows-Vertrauensprüfung.
+5. **Gemessen ist davon nichts.** Der ganze Weg ist `#[cfg(windows)]`, und ein Windows-Rechner
+   steht nicht zur Verfügung (T-B05). Das gehört in jede Freigabe geschrieben, die ihn berührt.
+
+## E-099 — Eine Anforderung fällt durch eine Entscheidung, nicht durch eine Route
+
+**Anlaß:** Pull Request #16 hat `POST /api/v1/addin/todos/{todoId}/attachments` gebaut. A-19.19
+verbietet genau das und steht unverändert in der Spezifikation. Siehe T-245-1 und F-21.
+
+**Entscheidung.**
+
+1. **A-19.19 gilt weiter, bis der Auftraggeber sie ändert.** Die gebaute Route ist damit
+   **ausgesetzt, nicht gebilligt**. Kein Agent baut an dieser Fläche weiter — weder ausbauend
+   noch zurückbauend —, bis F-21 beantwortet ist.
+2. **Der schwerere Befund ist nicht die Route, sondern der Widerspruch im Bestand.** An sechs
+   Stellen sagt und mißt der Code, über das Add-in entstehe kein Anhang. `proof:addin`
+   Abschnitt 18 mißt dabei die **Wirkung** und ist trotzdem zu milde: Er ruft die **Anlegetür**
+   auf und zählt Zeilen in `todo_attachment`, und die Anlegetür legt tatsächlich keinen an. Er
+   mißt die Tür, die zu ist, nicht die, die aufging. Dieselbe Klasse wie O-AY und O-LG.
+3. **Daraus die Regel, die über diesen Fall hinausreicht:** Ein Wächter, der eine **Abwesenheit**
+   zusichert, muß seine Menge an der Anforderung aufspannen, nicht an der Route, die er kennt.
+   „Über das Add-in entsteht kein Anhang" heißt: über **jede** Tür unter `/addin`, gegen die
+   Tabelle gemessen — nicht über die eine, die der Verfasser im Sinn hatte.
+4. **Fällt die Entscheidung für das Anhängen**, ändern sich A-19.19, A-A-21 im Bedrohungsmodell
+   und `proof:addin` Abschnitt 18 in **einem** Auftrag (E-081 Punkt 4), zusammen mit den sechs
+   Textstellen. Fällt sie dagegen, fällt die Route und mit ihr `addLinkAttachmentSchema`.
+
+## E-100 — F-21 ist beantwortet: die Route fällt, A-19.19 bleibt
+
+**Anlaß:** Der Auftraggeber hat F-21 am 2026-09-10 entschieden. Von den beiden Wegen aus E-099
+Punkt 4 ist der zweite gewählt: **gegen das Anhängen**. Damit ist die Bausperre aus E-099
+Punkt 1 aufgehoben — nicht dadurch, daß jemand weiterbaut, sondern dadurch, daß die Anforderung
+entschieden ist.
+
+**Entscheidung.**
+
+1. **A-19.19 bleibt unverändert stehen.** Sie wird durch diesen Auftrag wieder wahr, statt
+   geändert zu werden. Ebenso bleiben A-A-21 im Bedrohungsmodell und die sechs Textstellen, die
+   die Abwesenheit behaupten, inhaltlich richtig — sie waren nie falsch formuliert, ihnen fehlte
+   nur die Wirklichkeit.
+2. **`POST /api/v1/addin/todos/{todoId}/attachments` fällt**, samt `attachments.ts`,
+   `addLinkAttachmentSchema`, dem Aufrufer `addLinkAttachment` im Add-in, der Beschreibung in der
+   OpenAPI-Datei und `proof-followup.mjs`, das ausschließlich für diese Route entstand.
+3. **`proof:addin` Abschnitt 18 wird schärfer, nicht entfernt.** Er zählte Zeilen in
+   `todo_attachment` nach einem Aufruf der Anlegetür und maß damit die Tür, die zu ist. Künftig
+   mißt er die Abwesenheit **jeder** Anhangstür unter `/addin`: der Aufruf muß 404 ergeben, und
+   kein Pfad unter `/addin` darf `attachment` im Namen führen. Das ist E-099 Punkt 3 auf seinen
+   eigenen Fall angewandt.
+4. **A-10.9 ändert sich mit.** Sie verlangte ein Buchungsangebot auf dem gefundenen Todo; Pull
+   Request #15 hatte daraus ein Anhängen gemacht. Der Auftraggeber will am gefundenen Todo
+   **keine Handlung** mehr — der Hinweis bleibt, das Angebot fällt. Ohne diese Änderung entstünde
+   neben A-19.19 ein zweiter ungedeckter Widerspruch, diesmal in die andere Richtung.
+5. **Der Satz aus V-08 fällt mit seinem Anlaß.** „Die eingetragene Frist gilt nur für ein neues
+   Todo“ stand da, weil eine eingetippte Frist beim Wechsel auf das Anhängen stillschweigend
+   verfiel. Es gibt keinen Wechsel mehr. Nach E-078 Punkt 3 braucht das die Zustimmung des
+   Prüfers; sie wird in Welle 2 dieser Aufgabe eingeholt und nicht vorweggenommen.
+6. **Die Beschriftung des Hauptknopfs im Aufgabenbereich lautet auf Wunsch des Auftraggebers
+   „Neue Aufgabe anlegen“.** Damit steht neben „Todo“ ein zweiter Begriff für dieselbe Sache —
+   im Menüband von Outlook und in der Hauptanwendung heißt die Handlung weiter „Todo anlegen“.
+   Der Widerspruch ist benannt und bewußt in Kauf genommen, nicht übersehen.
+7. **Was ausdrücklich nicht fällt:** die Anhangsrouten der Hauptanwendung
+   (`/todos/{todoId}/attachments` und Nachbarn) und die Duplikaterkennung selbst (R-15). Die
+   Entscheidung betrifft die Tür aus Outlook, nicht das Merkmal.
+
+## E-101 — Eine Ausnahmeliste ist, wie eine Zusage stirbt
+
+**Anlaß:** T-247-9. Der Wächter `proof:addin` 18f fährt jede Route unter `/addin` an und verlangt
+danach null Zeilen in `todo_attachment`. Damit die Aussage etwas wert ist, muß der Probenrumpf
+**angekommen** sein — jede Antwort ab 400 gilt als Fehlschlag der Messung, nicht als Ergebnis.
+
+Der security-checker hat seine Zustimmung an eine Bedingung geknüpft, und sie reicht über diesen
+Fall hinaus.
+
+**Entscheidung.** Weist eine berechtigte künftige Route den gemeinsamen Probenrumpf zurück, ist
+der Ausweg ein **eigener Rumpf für diese Route** — eine Zuordnung Pfad → Rumpf, jeder mit den
+Feldern, die eine Anhangstür trüge. **Nicht** eine Lockerung der Ankunftsregel, **nicht** eine
+Ausnahmeliste von Statuscodes, **nicht** ein Überspringen der Route.
+
+Seine Begründung, die den Kern trifft:
+
+> Ein eigener Rumpf hält die Zusage; eine Ausnahme gibt sie auf und sieht dabei aus wie Pflege.
+
+**Warum das allgemein gilt.** Eine Ausnahmeliste wächst immer in dieselbe Richtung: Jeder Eintrag
+ist einzeln begründet und im Ganzen nicht mehr überschaubar, und am Ende mißt der Lauf die Menge,
+die keine Ausnahme hat — nicht die Menge, die die Anforderung nennt. Das ist E-099 Punkt 3 aus
+der anderen Richtung: Dort spannte ein Wächter seine Menge an der Route auf statt an der
+Anforderung; hier schrumpft er sie durch Ausnahmen, bis dasselbe herauskommt.
+
+**Wo die Regel steht.** Im Doc-Kommentar von `ADDIN_FLAECHE` in `proof-addin.mjs` — also dort, wo
+sie der nächste findet, der die Fläche erweitert, und nicht in einer fernen Datei. Sie steht
+zusätzlich hier, weil ein Kommentar eine Umstrukturierung nicht sicher überlebt.
+
+## E-102 — F-22 beantwortet: `request` wohnt bei den Merkmalen, nicht in einem Ordner
+
+**Anlaß:** Welle 1 der Umstrukturierung (T-250). `proof:callers` Abschnitt 1 maß, daß das Wort
+`request` in genau **zwei** Dateien von `@takt/web` steht — `api/endpoints.ts` und `api/client.ts`.
+Nach dem Umbau nimmt jedes Merkmal seine eigenen Aufrufe mit; `api/endpoints.ts` verschwindet als
+Sammelstelle. Eine `features/tags/api.ts` hätte den Lauf rot gemacht.
+
+**Entscheidung.**
+
+1. **Die Zusage bleibt, ihre Menge ändert sich.** Gesichert ist: In der Oberfläche entsteht kein
+   HTTP-Aufruf außerhalb der dafür vorgesehenen Stellen. Diese Zusage war an der **Ordnerstruktur**
+   aufgespannt statt an der Anforderung — dieselbe Bauart wie E-099 Punkt 3 und wie die vier
+   blinden Wächter aus T-249.
+2. `request` darf stehen in `api/client.ts`, in `api/endpoints.ts` solange es sie gibt, und in
+   **jeder `features/<merkmal>/api.ts`**, die auf der Platte liegt. Sonst nirgends in
+   `apps/web/src`.
+3. **Die Form ist genau `features/<merkmal>/api.ts`, eine Ebene tief.** `features/todos/api/index.ts`
+   wird als zweiter Weg gemeldet — laut und benannt, nicht still. Das deckt sich mit der Vorgabe des
+   Auftraggebers, keine Unterordner für ein oder zwei Dateien anzulegen.
+4. **Die Menge wird gemessen, nicht geraten:** zwei getrennte Wege (Verzeichnislesen und die Ernte
+   des Sammlers) müssen dieselben **Namen** nennen. Mengenvergleich, nicht Zahlenvergleich — der
+   Grund steht in T-247-7, wo ein Wächter über 129 Dateien urteilte, ohne eine gesehen zu haben,
+   weil beide Seiten aus derselben Quelle kamen und `0 === 0` grün war.
+5. **Leere Menge ist ein Fehlschlag der Messung**, kein bestandener Prüfsatz. Das Ausbleiben der
+   Sammelstelle nach der letzten Welle ist zulässig und wird hingeschrieben.
+
+**Verworfen, und warum:** Eine Re-Export-Datei wäre die vom Auftraggeber verbotene Barrel-Datei.
+Ein anderer Name für `request` wäre ein Ausweichen am Wächter vorbei — grün, ohne daß sich etwas
+verbessert hätte.
+
+**Nicht im Auftrag und trotzdem nötig:** Der Leser las **eine** Datei statt der Menge. Ohne diese
+zweite Änderung wäre Welle 2 auch mit gelockertem Abschnitt 1 rot geworden — die Aufrufe in
+`features/todos/api.ts` wären ungelesen geblieben und Abschnitt 2 hätte „diese Operation hat keinen
+Aufrufer" gemeldet. Eine Lockerung allein hätte den Wächter von „falsch rot" auf „falsch rot an
+anderer Stelle" gebracht.
+
+## E-103 — Jede Ausnahmeliste trägt einen Wächter, der sie gegen die Wirklichkeit hält
+
+**Anlaß:** Dreimal in Folge derselbe Befund, jedes Mal an einer anderen Stelle — F-22/E-102
+(`request` durfte in zwei Dateien stehen, weil die Ordnerstruktur so war), T-251-2 (eine
+Stichprobe fragte einen Typnamen, der umgezogen war), T-253-2 (eine Selbstprobe verlangte „genau
+eine Trägerin", und ihre Begründung im Quelltext war nachweislich falsch).
+
+**Die gemeinsame Form:** Ein Nachweislauf führt eine Liste — Ausnahmen, Übergaben, „wird von der
+Oberfläche nicht angerufen", „wird nie gesendet", erlaubte Orte. Die Liste altert. Der Lauf
+bleibt grün, weil er die Liste **anwendet**, statt sie zu **prüfen**.
+
+**Entscheidung.** Jede Ausnahme- oder Übergabeliste in einem Nachweislauf trägt einen Wächter,
+der ihre Einträge gegen die Wirklichkeit hält — in **beide** Richtungen:
+
+1. **Eingelöst:** Ein Eintrag, der behauptet, etwas geschehe nicht, wird rot, sobald es geschieht.
+   `NOT_CALLED_BY_UI` trug zwei solche Leichen, `NEVER_SENT` eine dritte.
+2. **Ins Leere zeigend:** Ein Eintrag, dessen Gegenstand es nicht mehr gibt, wird ebenfalls rot.
+   Eine Ausnahme, die nichts mehr trifft, ist keine Vorsorge, sondern eine offene Tür, an die sich
+   niemand mehr erinnert (dieselbe Begründung wie bei der Streichung von `https://tauri.localhost`
+   aus `ALLOWED_ORIGINS`, E-043).
+3. **Mit Gegenprobe.** Beide Richtungen müssen rot werden **können**, und das wird gemessen, nicht
+   zugesichert.
+
+**Was daraus folgt und noch offen ist:** `proof:openapi`, `proof:route-policy` und `proof:addin`
+führen vergleichbare Listen. Sie sind bislang **nicht** angesehen worden — der Auftrag von T-253-2
+nannte sie nicht, und domain-dev hat sie deshalb zu Recht liegengelassen statt sie nebenbei
+mitzunehmen. Eigener Auftrag.
+
+**Der Satz, der über den Fall hinausreicht** — er stammt aus derselben Familie wie E-099 Punkt 3
+und wie die vier blinden Wächter aus T-249: Eine Zusage, deren Menge an der **Struktur**
+aufgespannt ist statt an der **Anforderung**, ist grün aus Zufall. Sie sagt nichts über den
+Bestand, sondern etwas über die Ordner, in denen er gerade liegt.
+
+## E-104 — Wer sich auf E-078 Punkt 3 beruft, nennt den Fundort
+
+**Anlaß:** T-270. In `packages/domain/src/export-status.ts` stand vierzig Zeilen unter dem richtigen
+Bild ein zweites, falsches — „genau zwei Übergänge", während der Code drei hat. domain-dev hat es
+gefunden und **nicht angefaßt**, in der Annahme, der Satz stamme aus einer Prüferrunde und sei
+damit nach E-078 Punkt 3 gesperrt.
+
+Der spec-ux-reviewer hat die Herkunft zurückverfolgt: Der Wortlaut steht erstmals in
+`T-009-domain-dev.md:129` — **dem eigenen Erstentwurfsbericht des Bauenden**, lange vor der
+Entscheidung, auf die er sich zu berufen schien. Kein Prüferbericht verlangt ihn. E-078 Punkt 3
+griff nie.
+
+**Entscheidung.** Wer einen Satz mit E-078 Punkt 3 schützt, **nennt den Bericht und die Zeile**,
+in der ein Prüfer ihn verlangt hat. Ohne diesen Fundort ist der Satz gewöhnlicher Quelltext und
+folgt den gewöhnlichen Regeln.
+
+**Warum das nötig ist.** E-078 Punkt 3 ist eine gute Regel und schützt genau das Richtige: Ein
+Prüfer, der einen Satz verlangt hat, hat einen Grund gehabt, und der Grund überlebt den Satz
+selten sichtbar. Aber eine Sperre, deren Herkunft niemand prüfen kann, wirkt in beide Richtungen
+falsch — sie schützt Sätze, die nie geschützt waren, und sie kostet jedes Mal eine Prüferrunde,
+um das festzustellen. Hier hat sie einen **falschen** Satz fünf Monate lang gehalten.
+
+**Die schärfere Lehre steht daneben und ist nicht diese Entscheidung**, sondern ihr Anlaß: Der
+falsche Kommentar beschrieb nicht den Code, sondern die **geprüfte** Wirklichkeit. Der dritte
+Übergang war der einzige Zweig, den kein Prüffall der Abdeckungsläufe erreichte
+(`export-status.ts:257`). Ein Satz, der die Testlücke beschreibt und für eine Beschreibung der
+Regel gehalten wird, ist unauffällig, solange beide dasselbe sagen — und genau deshalb fällt er
+nicht auf.

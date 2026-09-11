@@ -18,7 +18,7 @@
  */
 
 import type { PoolMovement, DesignTheme, Density } from "@takt/domain";
-import type { ExportStatus } from "../components/ExportStatus";
+import type { ExportStatus } from "../shared/ui/ExportStatus";
 import type {
   PoolCompletionFilter,
   PoolExportFilter,
@@ -66,7 +66,7 @@ export type CalendarDay = string;
 /**
  * **Warum hier keine Zeichenkette mehr bloß `string` heißt.**
  *
- * Seit T-124 geht fremder Text vor der Anzeige durch `components/Foreign.tsx`,
+ * Seit T-124 geht fremder Text vor der Anzeige durch `shared/ui/Foreign.tsx`,
  * `quotedName` oder `foreignText`. Der Bericht dazu nennt die Schwäche dieser
  * Lösung selbst (R3): Sitzt die Behandlung im Anzeigebaustein, ist sie an der
  * Aufrufstelle **unsichtbar**. Wer morgen eine weitere Stelle baut und den
@@ -269,227 +269,6 @@ export interface Todo {
   readonly updatedAt: Timestamp;
 }
 
-/**
- * Die Antwort von `PUT` und `DELETE /todos/{id}/done` (E-060).
- *
- * ## Warum das Todo hier ein Feld mehr trägt
- *
- * Seit E-055 entscheidet „Erledigt" über Spalten: Eine Regel darf nach dem
- * Kennzeichen fragen, und dann wechselt die Karte mit genau dieser Handlung
- * ihren Platz. Bis E-060 antworteten beide Routen mit dem Todo und sonst
- * nichts — der Toast danach schwieg über die Spalten, während derselbe Übergang
- * über einen Timerstart angesagt wurde (O-U). Wer an einer Stelle Auskunft gibt
- * und an der anderen schweigt, sagt die halbe Wahrheit.
- *
- * ## Zwei Anlässe, zwei Sätze
- *
- * `DELETE` (Aufheben) ist der Anlaß `'reopen'` — das Todo war erledigt und
- * kehrt zurück, „wieder" stimmt. `PUT` (Setzen) nimmt `'booking'`, die neutrale
- * Form: Der Satz dazu trägt kein Wort von Buchung und nennt nur, was dazukommt
- * und was wegfällt (E-060 Punkt 2). Umbenannt wird der Anlaß nicht; er steht in
- * fünf Hoheiten.
- *
- * `null` heißt „keine Fläche bewegt sich", nicht „nichts geschehen": Das
- * Kennzeichen ist in jedem Fall umgelegt, es trifft nur keine Regel darauf zu.
- * Die Aufrufstelle läßt den Satz dann **ganz** weg.
- */
-export interface TodoDoneResult extends Todo {
-  readonly poolMovement: PoolMovement | null;
-}
-
-/** `GET /todos/{id}` — das Todo samt seiner berechneten Summen, ohne Vermerk. */
-export interface TodoDetail {
-  readonly todo: Todo;
-  readonly totalSeconds: number;
-  /** Noch nicht exportierte Sekunden. */
-  readonly openSeconds: number;
-}
-
-/** Der interne Vermerk (A-7.1, E-016). Eigene Ressource, eigener Aufruf. */
-export interface TodoNote {
-  readonly todoId: Id;
-  readonly text: ForeignText;
-  readonly updatedAt: Timestamp;
-}
-
-export interface TodoCreate {
-  readonly title: DraftText;
-  readonly callNumber?: DraftText | null;
-  readonly statusId?: Id | null;
-  readonly tagIds?: readonly Id[];
-  /**
-   * Tagnamen statt Kennungen — für Tags, die es noch nicht gibt (T-058).
-   *
-   * Der Dienst löst sie **in derselben Transaktion** auf, in der das Todo
-   * entsteht: Ein Name, den es schon gibt, wird verwendet; einer, den es nicht
-   * gibt, entsteht auf der Wurzelebene. Deshalb legt die Oberfläche neue Tags
-   * nicht selbst an — wer den Dialog abbricht, hinterlässt sonst ein Tag ohne
-   * Todo.
-   */
-  readonly tagNames?: readonly DraftText[];
-  readonly note?: DraftText;
-  /**
-   * Die Frist beim Anlegen (A-19.3). `null` und ein fehlendes Feld sind
-   * dasselbe: keine Frist.
-   *
-   * Geprüft wird die Form an der **Tür des Dienstes** (Auflage A-A-19):
-   * `YYYY-MM-DD`, ein **existierender** Tag — `2026-02-30` passt auf die Form
-   * und ist keiner —, Jahr zwischen 1970 und 2999. Das Eingabefeld benutzt
-   * `type="date"` und kann von sich aus nichts anderes liefern; das ist
-   * Bedienkomfort und keine Kontrolle.
-   */
-  readonly dueDate?: CalendarDay | null;
-}
-
-export interface TodoUpdate {
-  readonly title?: DraftText;
-  readonly callNumber?: DraftText | null;
-  readonly statusId?: Id;
-  readonly tagIds?: readonly Id[];
-  /**
-   * Frist setzen, ändern und **entfernen** (A-19.3). Drei Fälle, und sie sind
-   * hier alle drei erreichbar: Das Feld fehlt → unverändert. `null` → entfernen.
-   * Ein Tag → setzen. Ohne die Unterscheidung gäbe es keinen Weg, eine gesetzte
-   * Frist wieder loszuwerden.
-   */
-  readonly dueDate?: CalendarDay | null;
-}
-
-/**
- * Wonach die Todo-Liste geordnet wird (A-19.20, E-074 Punkt 1).
- *
- * `recent` ist die bisherige Ordnung des Dienstes und bleibt die Voreinstellung
- * — eine Liste, die sich beim ersten Öffnen anders sortiert als gestern, ist
- * eine Umstellung und keine Ergänzung (A-19.16).
- *
- * **Ein Todo ohne Frist steht in beiden Richtungen am Ende** (E-074 Punkt 2).
- * Es hat keinen Wert, keinen frühesten und keinen spätesten; ein leeres Feld
- * als „01.01.1970" zu sortieren ist die Sorte Bequemlichkeit, die niemandem
- * auffällt, bis sie in einer Abrechnung steht. Die Regel gilt im Dienst und
- * nicht hier — die Oberfläche schickt nur den Namen.
- */
-export type DueSortDirection = "asc" | "desc";
-
-/**
- * Nach der Frist filtern (A-19.20).
- *
- * Die drei Werte sind die drei Zustände aus A-19.5, dazu `none` für „ohne
- * Frist". Gerechnet wird auch hier im Dienst: Er kennt den Tagesbegriff aus
- * E-025, und ein zweiter im Filter wäre der zweite Tagesbegriff, den E-070
- * Punkt 2 ausschließt.
- */
-export type DueState = "overdue" | "due_today" | "due_later" | "no_due_date";
-
-export interface TodoFilter {
-  readonly search?: DraftText;
-  readonly callNumber?: DraftText;
-  readonly statusIds?: readonly Id[];
-  readonly tagIds?: readonly Id[];
-  readonly poolIds?: readonly Id[];
-  /** Erledigte ausblenden (E-039). */
-  readonly onlyOpen?: boolean;
-  readonly onlyWithOpenEntries?: boolean;
-  /**
-   * Nach dem Zustand der Frist filtern (A-19.20). Mehrere sind zugelassen; der
-   * Dienst nimmt sie als kommagetrennte Liste unter `dueState` entgegen.
-   */
-  readonly dueStates?: readonly DueState[];
-  /** `sortByDueDate` am Dienst. Fehlt es, bleibt die bisherige Ordnung. */
-  readonly sortByDueDate?: DueSortDirection;
-}
-
-/* ==================================================================== */
-/* Anhänge (A-19.8 bis A-19.15, E-071, E-072)                           */
-/* ==================================================================== */
-
-/**
- * Die drei Arten, und sie unterscheiden sich nicht nur im Etikett, sondern
- * darin, **was Takt eigentlich hält** (E-071).
- *
- *  - `link` — eine Adresse. Takt speichert eine Zeichenkette, kein Byte, und
- *    öffnet sie im Browser des Benutzers.
- *  - `file` — ein Pfad. Ebenfalls eine Zeichenkette; verschwindet die Datei,
- *    sagt der Anhang das (A-19.15), statt sie wiederherstellen zu wollen.
- *  - `image` — eine **Kopie** im Anwendungsdatenverzeichnis, unter denselben
- *    Rechten wie der Bestand (E-018). Sie **öffnet nichts nach draußen**
- *    (E-072 Punkt 2): Sie wird angezeigt, und das ist der ganze Umfang.
- */
-export type AttachmentKind = "link" | "image" | "file";
-
-/**
- * Ein Anhang, wie der Dienst ihn liefert (A-19.8).
- *
- * **`title` und `value` sind fremder Text**, und das ist keine Förmlichkeit.
- * Beide kommen aus einer Benutzereingabe, ein Pfad zusätzlich aus dem
- * Dateisystem, und beide stehen an einer Zeile, deren Klick ein Programm
- * startet. Ohne die Behandlung aus E-063 zeigt eine Datei namens
- * `rechnung\u{202e}cod.exe` sich als `rechnungexe.doc` — in der Liste **und**
- * in der Rückfrage davor (Auflage A-A-6 Punkt 2).
- */
-export interface Attachment {
-  readonly id: Id;
-  readonly todoId: Id;
-  readonly kind: AttachmentKind;
-  /** Die Beschriftung, wenn der Benutzer eine gesetzt hat (A-19.10). */
-  readonly title: ForeignText | null;
-  /**
-   * Adresse oder Pfad. Bei einem **Bild** der erzeugte Name der Kopie — er
-   * steht in keiner Anzeige (Auflage A-A-17: der Name wird erzeugt und nicht
-   * aus der Quelle übernommen).
-   *
-   * Bei einem Verweis ist dieser Wert bereits die **Normalform**: Normalisiert
-   * wird einmal, beim Anlegen, in `packages/domain` (Auflage A-A-13). Der
-   * Öffnen-Befehl der Hülle verlangt genau das und weist alles andere ab — sonst
-   * läse der Benutzer eine Adresse und Takt öffnete eine andere (A-A-3).
-   */
-  readonly target: ForeignText;
-  /** Reihenfolge am Todo, vom Dienst vergeben. */
-  readonly position: number;
-  readonly createdAt: Timestamp;
-}
-
-/**
- * Was beim Hinzufügen mitgeht (A-19.10) — eine **unterschiedene Vereinigung**
- * und kein Objekt mit drei freiwilligen Feldern.
- *
- * A-19.10 sagt es schon: „Beim Hinzufügen bestimmt die gewählte Art das
- * Eingabefeld." Drei Felder nebeneinander hießen, dass ein Aufrufer zwei davon
- * füllen könnte — und dann entschiede die Reihenfolge im Code, welches gilt.
- * Der Dienst nimmt genau diese Gestalt entgegen; `tsc` bricht hier ab, bevor
- * eine Anfrage überhaupt entsteht.
- *
- * Beim **Bild** geht der Pfad der **Quelle** mit und nicht ihre Bytes: Der
- * Rumpf einer Anfrage ist auf ein Megabyte begrenzt (B-1.7), ein Bild darf
- * acht Mebibyte groß sein. Der Dienst liest die Datei selbst und legt eine
- * Kopie an (E-071 Punkt 2); gespeichert wird der erzeugte Name der Kopie und
- * nie der Name der Quelle (Auflage A-A-17).
- */
-export type AttachmentCreate =
-  | { readonly kind: "link"; readonly url: DraftText; readonly title?: DraftText | null }
-  | { readonly kind: "file"; readonly path: DraftText; readonly title?: DraftText | null }
-  | { readonly kind: "image"; readonly sourcePath: DraftText; readonly title?: DraftText | null };
-
-/**
- * Das Vorschaubild eines Bildanhangs (A-19.13, E-071 Punkt 3).
- *
- * **Warum nicht `<img src="http://127.0.0.1:17843/…">`.** Weil ein `<img src>`
- * **kein** `X-Takt-Token` trägt — der Browser setzt bei einem Bildabruf keine
- * eigenen Kopfzeilen. Der Weg über die CSP bräuchte deshalb entweder eine
- * unauthentifizierte Byte-Route auf einem Port, den jeder lokale Prozess
- * erreicht (VG-1), oder ein Geheimnis in der Adresse, das danach im Verlauf und
- * in jeder Fehlermeldung stünde (B-2.4, T-145-9).
- *
- * Stattdessen: Der Dienst liefert die Bytes über die schon erlaubte Verbindung,
- * **fertig kodiert**, und die Oberfläche setzt daraus eine `data:`-Adresse
- * zusammen. `img-src 'self' data:` bleibt unverändert; die Positivliste wird
- * dafür nicht geöffnet (Auflage A-A-12).
- */
-export interface AttachmentImage {
-  /** `image/png`, `image/jpeg`, `image/gif`, `image/webp` (Auflage A-A-16). */
-  readonly mediaType: TechnicalKey;
-  readonly base64: EncodedBytes;
-}
-
 /* ==================================================================== */
 /* Status eines Todos (A-5.4, E-023, E-054)                              */
 /* ==================================================================== */
@@ -501,7 +280,7 @@ export interface AttachmentImage {
  * Spalte des Boards eine Regel (`Pool` mit `placement`), und der Status ist
  * eine Eigenschaft des Todos geblieben — eine von fünf Bedingungen, nach denen
  * eine Regel fragen kann (E-055), und keine Ablagefläche mehr. Verwaltet wird er im Bereich
- * „Status" der Einstellungen (`screens/StatusSettings.tsx`).
+ * „Status" der Einstellungen (`features/settings/StatusSettings.tsx`).
  *
  * Er trägt kein Merkmal, das ihn als „Erledigt" auswiese — Erledigt hängt am
  * Todo und an keinem Statuswert (E-023).
@@ -756,51 +535,6 @@ export type PoolPatch = Partial<PoolWrite>;
 export type PoolSurfaceQuery = "pool" | "board" | "all";
 
 /* ==================================================================== */
-/* Kanban-Board (E-054)                                                 */
-/* ==================================================================== */
-
-/**
- * Eine Spalte mit ihrer ersten Seite.
- *
- * `column` ist ein vollständiger `Pool` samt Regel — damit die Ansicht sagen
- * kann, **warum** eine Karte hier steht, ohne sie nachzuladen. `total` zählt
- * alle Mitglieder, nicht die geladenen; weitergeblättert wird über
- * `GET /pools/{id}/todos` mit `nextCursor`.
- */
-export interface BoardColumnView {
-  readonly column: Pool;
-  readonly todos: readonly Todo[];
-  readonly nextCursor: PageCursor | null;
-  readonly total: number;
-}
-
-/**
- * Dieselbe Karte in mehreren Spalten (E-054).
- *
- * Geliefert werden **nur** Karten in mehr als einer Spalte; `columnIds` steht
- * in der Reihenfolge der Spalten. Vor E-054 war dieser Fall ausgeschlossen,
- * seitdem ist er der Normalfall: Zwei zutreffende Regeln treffen beide zu.
- */
-export interface BoardAppearance {
-  readonly todoId: Id;
-  readonly columnIds: readonly Id[];
-}
-
-/**
- * Das Board als **Ansicht**, nicht als Bestand.
- *
- * Es gibt nichts Gespeichertes, das diese Antwort wiedergäbe: Sie entsteht bei
- * jedem Aufruf neu aus den Regeln der Spalten und den Tags der Todos. Ein
- * leeres `columns` heißt „keine Spalte eingerichtet“ und nirgends „nichts zu
- * tun“ — nach der Umstellung ist das der Ausgangszustand.
- */
-export interface BoardView {
-  readonly columns: readonly BoardColumnView[];
-  readonly appearances: readonly BoardAppearance[];
-  readonly generatedAt: Timestamp;
-}
-
-/* ==================================================================== */
 /* Zeitbuchungen und Timer                                              */
 /* ==================================================================== */
 
@@ -824,46 +558,6 @@ export interface TimeEntry {
   readonly updatedAt: Timestamp;
 }
 
-/**
- * Die Antwort auf `POST /time-entries` — die Buchung **von Hand** (O-V,
- * Nachtrag zu E-061).
- *
- * Flach wie {@link TodoDoneResult}: die Buchung selbst, `poolMovement` als Feld
- * daneben. Dieselbe Gestalt an allen Routen, die eine Bewegung melden, ist die
- * eine Form aus E-061 Punkt 3.
- *
- * **Warum die Buchung von Hand überhaupt etwas bewegt.** Sie kann die *erste*
- * Buchung eines Todos sein und setzt damit „hat offene Buchungen" von falsch
- * auf wahr. Ein Todo ohne jede Buchung erfüllt seit E-055 keine Regel mit
- * `exportState: 'open'`; mit dieser Buchung erfüllt es sie. Der Dienst rechnet
- * die Bewegung deshalb nach derselben Rechnung wie der Timerstopp
- * (`closedEntryMovementStates`) und meldet sie mit demselben Anlaß `'booking'`.
- *
- * **Nicht `bookingMovementStates`** — die Buchung von Hand hebt „Erledigt"
- * nicht auf (A-2.5 spricht vom **Starten** der Zeiterfassung, nicht vom
- * Nachtragen eines Zeitraums). Mit `BOOKING_EFFECT` meldete diese Route für ein
- * erledigtes Todo ein Verlassen jeder Spalte `completion: 'done'`, das nicht
- * stattfindet: Der Benutzer läse „ist aus „Erledigt“ verschwunden." und sähe
- * die Karte danebenstehen. Der Nachtrag zu E-061 nannte in seiner ersten
- * Fassung `bookingMovementStates`; T-107 hat das gemeldet und richtiggestellt,
- * und dieser Kommentar zog bis T-118 nach.
- *
- * **`PoolMovement | null` und nichts anderes.** Kein optionales Feld und kein
- * `?? null` an der Aufrufstelle: Ein Feld, das fehlen *darf*, zwingt jede
- * Aufrufstelle zu einer Fallunterscheidung vor der eigentlichen, und ein
- * `?? null` verschwiege den Tag, an dem der Dienst es nicht mehr liefert.
- * `null` heißt hier wie überall „hier war keine Bewegung möglich" — nicht
- * „nicht geliefert".
- *
- * **Der `PATCH` hat kein Gegenstück.** Ein geänderter Zeitraum bewegt nichts:
- * Die Buchung war schon da, „hat offene Buchungen" stand bereits (O-V,
- * letzter Satz). `updateTimeEntry` liefert deshalb weiter die nackte
- * {@link TimeEntry}.
- */
-export interface CreateTimeEntryResult extends TimeEntry {
-  readonly poolMovement: PoolMovement | null;
-}
-
 /** Eine laufende Buchung: kein Ende, keine Dauer, nie exportierbar. */
 export interface RunningTimeEntry {
   readonly id: Id;
@@ -872,146 +566,6 @@ export interface RunningTimeEntry {
   readonly note: ForeignText;
   readonly source: "timer";
 }
-
-export interface RunningTimerView {
-  readonly entry: RunningTimeEntry;
-  readonly todoTitle: ForeignText;
-  /** Sekunden seit dem Start, zum Zeitpunkt der Anfrage. Vom Dienst gerechnet. */
-  readonly elapsedSeconds: number;
-}
-
-/**
- * Zwei Ausgänge. `confirmation_required` ist **kein** Fehler, sondern der
- * vorgesehene erste Schritt (A-6.8, T-021 Annahme 9).
- */
-export type StartTimerResult =
-  | {
-      readonly kind: "started";
-      readonly started: RunningTimeEntry;
-      readonly stopped: TimeEntry | null;
-      /** A-2.5: war das Todo erledigt und ist durch den Start wieder aktiv? */
-      readonly doneCleared: boolean;
-      /**
-       * Wie dieser Start das Todo durch die Pools bewegt — oder `null` (E-058).
-       *
-       * `doneCleared` sagt, **was** geschehen ist; dieses Feld sagt, **wo** es
-       * sichtbar wird. Der Dienst rechnet es in genau zwei Fällen: Der Start
-       * hat „Erledigt" aufgehoben, oder die erste abgeschlossene Buchung ist
-       * entstanden. Sonst `null` — und `null` heißt „hier war keine Bewegung
-       * möglich", nicht „es hat sich nichts geändert".
-       *
-       * Die Oberfläche zählt die Namen **nicht** selbst auf. Den Satz bildet
-       * `poolMovementSentence` in `@takt/domain`, und zwar denselben, den der
-       * Aufgabenbereich des Add-ins zeigt. Bis T-094 fragte die Oberfläche
-       * stattdessen je Pool `/pools/{id}/todos` ab und setzte den Satz selbst
-       * zusammen — eine zweite Auskunft über dieselbe Handlung, die `leaves`
-       * nicht kannte und deshalb nur die halbe Bewegung berichtete.
-       *
-       * **Nicht mehr nur an dieser Antwort** (berichtigt in T-097). Seit T-093
-       * liefern `POST /timer/stop` und `POST /timer/orphaned/resolve` dasselbe
-       * Feld, mit festem Anlaß `'booking'` (E-058 Punkt 6) — siehe
-       * `StopTimerResult` weiter unten. Der Satz, den der Start hier bildet,
-       * und der Satz nach dem Stopp kommen aus derselben Funktion.
-       */
-      readonly poolMovement: PoolMovement | null;
-    }
-  | {
-      readonly kind: "confirmation_required";
-      readonly running: RunningTimeEntry;
-      readonly runningTodoTitle: ForeignText;
-    };
-
-/**
- * Der Ausgang eines Stopps — und was die Buchung bewegt hat (E-058 Punkt 6).
- *
- * `POST /timer/stop`. Bis T-102 beantwortete dieser Typ auch
- * `POST /timer/orphaned/resolve`; seit O-R unterscheiden sich die beiden in der
- * Angabe, **warum** nichts gebucht wurde, und stehen deshalb getrennt (siehe
- * {@link ResolveOrphanedTimerResult}). Der gebuchte Zweig ist derselbe
- * geblieben und steht einmal.
- *
- * Beide tragen `poolMovement` **in beiden Zweigen**, und der Anlaß ist stets
- * `'booking'`. Ein Stopp hebt kein „Erledigt" auf — das tut allein der Start
- * (A-2.5) —, also gibt es hier keinen Fall `'reopen'`.
- *
- * **Warum das Feld auch im verworfenen Zweig steht.** Ein Stopp unter der
- * Mindestdauer erzeugt keine Buchung (A-6.2) und bewegt deshalb nichts; der
- * Dienst antwortet dort mit festem `null` (`usecases/timer.ts`,
- * `stopTimer`/`resolveOrphanedTimer`), ohne eine einzige Regel aufzulösen. Das
- * Feld fehlt trotzdem nicht: Ein Feld, das je nach `kind` da ist oder nicht,
- * zwingt jede Aufrufstelle zu einer Fallunterscheidung, bevor sie die
- * eigentliche treffen kann. Der Typ `null` — und nicht `PoolMovement | null` —
- * sagt dem Übersetzer, daß dieser Zweig nichts zu erzählen hat.
- *
- * **`null` heißt: keine Fläche.** `poolMovementSentence(movement, 'past',
- * 'booking')` gibt für eine Bewegung ohne Zu- und Abgang ebenfalls `null`
- * zurück; die Aufrufstelle läßt die Zeile dann **ganz** weg statt sie mit
- * `?? ""` zu füllen (`TimerContext.performStop`).
- */
-export type StopTimerResult =
-  | RecordedStop
-  | {
-      readonly kind: "discarded";
-      /**
-       * Der einzige Grund, aus dem **dieser** Aufruf nichts bucht (A-6.2).
-       *
-       * `POST /timer/stop` kennt kein Verwerfen auf Wunsch: Wer stoppt, will
-       * buchen. Die zweite Route unten kennt beides — siehe
-       * {@link ResolveOrphanedTimerResult}.
-       */
-      readonly reason: "timer_too_short";
-      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
-      readonly poolMovement: null;
-    };
-
-/** Der gebuchte Ausgang. Wortgleich an beiden Routen und deshalb einmal. */
-interface RecordedStop {
-  readonly kind: "recorded";
-  readonly entry: TimeEntry;
-  /** Wie diese Buchung das Todo durch die Pools bewegt — oder `null`. */
-  readonly poolMovement: PoolMovement | null;
-}
-
-/**
- * Der Ausgang von `POST /timer/orphaned/resolve` (E-036, O-R).
- *
- * **Ein eigener Typ und nicht mehr `StopTimerResult`** (T-102, Befund 2 aus
- * R-1a). Die verworfene Hälfte unterscheidet sich, und zwar in der einen
- * Angabe, die der Benutzer zu lesen bekommt:
- *
- *  - `'orphan_discarded'` — **er hat verworfen.** Die Antwort auf die Frage aus
- *    E-036 lautete „Verwerfen"; es wurde nichts gebucht, weil er es so wollte.
- *  - `'timer_too_short'` — **es gab nichts zu buchen.** Er hat „bis zum letzten
- *    Lebenszeichen" gewählt, und zwischen Start und Lebenszeichen liegt weniger
- *    als eine Sekunde (A-6.2) — oder es gibt gar kein Lebenszeichen.
- *
- * Bis T-101 gab der Dienst in beiden Fällen `'timer_too_short'` aus und
- * überschrieb damit die Entscheidung der Domäne (`decideOrphanedTimer` liefert
- * `'orphan_discarded'`). Die Oberfläche sagte deshalb an beiden Ausgängen
- * dasselbe. Sie unterscheidet jetzt; welchen Satz sie je Grund zeigt, steht in
- * `TimerContext.confirmOrphan`.
- *
- * `poolMovement` ist in beiden verworfenen Fällen fest `null` — es entsteht
- * keine Buchung, und der Dienst löst dafür nicht einmal eine Regel auf.
- */
-export type ResolveOrphanedTimerResult =
-  | RecordedStop
-  | {
-      readonly kind: "discarded";
-      readonly reason: "timer_too_short" | "orphan_discarded";
-      /** Immer `null`: Ohne Buchung bewegt sich nichts. */
-      readonly poolMovement: null;
-    };
-
-export interface OrphanedTimerView {
-  readonly running: RunningTimeEntry;
-  readonly todoTitle: ForeignText;
-  readonly heartbeatAt: Timestamp | null;
-  /** Was gebucht würde, wenn „bis zum Lebenszeichen“ gewählt wird. */
-  readonly bookableSeconds: number;
-}
-
-export type OrphanResolution = "book_until_heartbeat" | "discard";
 
 export interface TimeEntryFilter {
   readonly todoId?: Id;
@@ -1033,91 +587,6 @@ export interface ExportTemplate {
   readonly definition: unknown;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
-}
-
-/* -------------------------------------------------------------------- */
-/* Die Auswahlliste einer Vorlage (E-049)                               */
-/* -------------------------------------------------------------------- */
-
-/**
- * `GET /export/sources` — die geschlossene Auswahlliste als **Auskunft des
- * Dienstes** (E-017, E-049).
- *
- * Bis E-049 stand sie zweimal: einmal im Motor und ein zweites Mal in
- * `apps/web/src/lib/exportTemplateModel.ts`, weil die Oberfläche
- * `@takt/export` nicht einbinden darf und keine Route hatte, die sie hätte
- * fragen können. Sie war die fünfte und letzte Doppelung dieses Projekts.
- * Jetzt fragt die Oberfläche, statt zu wissen.
- *
- * Ohne Parameter, ohne Bestand, für jeden Aufruf dieselbe Antwort.
- */
-
-/**
- * Ein Quellenpfad, wie er in `definition.fields[].source` steht.
- *
- * **Bewusst `string` und keine aufgeschriebene Vereinigung.** Welche Pfade es
- * gibt, sagt seit E-049 der Dienst zur Laufzeit; eine Vereinigung hier wäre
- * genau die Doppelung, die E-049 beseitigt hat. Geprüft wird deshalb nicht am
- * Übersetzer, sondern gegen die geholte Liste — `parseTemplateDefinition` in
- * `lib/exportTemplateModel.ts` weist alles ab, was nicht darauf steht, und die
- * Auswahllisten im Editor bieten nichts anderes an.
- *
- * Der Alias trägt trotzdem seinen Namen: Er sagt, **welcher** String hier
- * gemeint ist, und macht jede Stelle auffindbar, an der ein Quellenpfad durch
- * die Oberfläche läuft.
- */
-export type ExportSourcePath = string;
-
-/** Wert aus `EXPORT_TRANSFORMATIONS` des Motors. Englisch (E-015). */
-export type ExportTransformation = string;
-
-/** Vergleich einer Feldbedingung, etwa `is_set`. */
-export type ExportConditionOperator = string;
-
-/** Fachliche Ebene, aus der eine Quelle stammt. Nur zur Gliederung der Liste. */
-export interface ExportSourceGroupInfo {
-  readonly id: TechnicalKey;
-  readonly label: ServiceText;
-  /** Warum diese Ebene existiert. Steht als Erklärung über der Gruppe. */
-  readonly hint: ServiceText;
-}
-
-export interface ExportSourceInfo {
-  /** Der Wert, der in `definition.fields[].source` steht. Englisch (E-015). */
-  readonly path: ExportSourcePath;
-  readonly group: TechnicalKey;
-  /** Deutsche Beschriftung in der Auswahlliste. */
-  readonly label: ServiceText;
-  /** Was diese Quelle liefert, in einem Satz. */
-  readonly description: ServiceText;
-}
-
-export interface ExportTransformationInfo {
-  readonly value: ExportTransformation;
-  readonly label: ServiceText;
-  /** Was die Transformation mit dem Wert macht, in einem Satz. */
-  readonly effect: ServiceText;
-}
-
-export interface ExportConditionOperatorInfo {
-  readonly value: ExportConditionOperator;
-  readonly label: ServiceText;
-}
-
-export interface ExportSourceCatalog {
-  readonly groups: readonly ExportSourceGroupInfo[];
-  /** Alle wählbaren Quellen in Anzeigereihenfolge, nach `groups` sortiert. */
-  readonly sources: readonly ExportSourceInfo[];
-  readonly transformations: readonly ExportTransformationInfo[];
-  readonly conditionOperators: readonly ExportConditionOperatorInfo[];
-  /**
-   * Der feste Satz unter der Quellenauswahl (A-7.2, T-005 Abschnitt 3.4).
-   *
-   * Er kommt mit der Liste, weil er eine Aussage über **diese** Liste ist:
-   * Wer die Liste ausliefert, liefert auch die Begründung dafür, was nicht
-   * darauf steht.
-   */
-  readonly noteBoundaryHint: ServiceText;
 }
 
 /** Ein Wert in einer Exportzeile. */
@@ -1191,59 +660,6 @@ export interface ExportPreview {
   readonly templateName: ForeignText | null;
 }
 
-export interface ExportRunGroup {
-  readonly id: Id;
-  readonly exportRunId: Id;
-  readonly todoId: Id;
-  readonly day: CalendarDay;
-  readonly seconds: number;
-  readonly quarters: number;
-  readonly timeEntryIds?: readonly Id[];
-}
-
-export interface ExportRun {
-  readonly id: Id;
-  readonly templateId: Id;
-  readonly filePath: FileSystemPath;
-  readonly fileSha256: TechnicalKey;
-  readonly bytes: number;
-  readonly entryCount: number;
-  readonly totalQuarters: number;
-  readonly roundingMode: RoundingMode;
-  readonly windowsUser?: ForeignText;
-  /**
-   * **Vom Dienst heute nicht geliefert.** Die Beschreibung führt das Feld, die
-   * Antwort von `POST /export/runs` enthält es nicht (nachgemessen gegen den
-   * laufenden Dienst). Die Oberfläche verlässt sich deshalb nicht darauf: Die
-   * Zahl der geschriebenen Zeilen kommt aus der Vorschau, mit der derselbe
-   * Lauf ausgelöst wurde — dieselbe Rechnung (R-17), nur eine Sekunde früher.
-   */
-  readonly groups?: readonly ExportRunGroup[];
-  /** Die beim Lauf verwendete Vorlage, festgehalten. Wird hier nicht gelesen. */
-  readonly templateSnapshot?: unknown;
-  readonly createdAt: Timestamp;
-}
-
-/** `POST /export/runs` — der Lauf **und** was er ausgelassen hat (E-034). */
-export interface ExportRunResult {
-  readonly run: ExportRun;
-  readonly skipped: readonly SkippedExportGroup[];
-}
-
-export interface ExportAuditEntry {
-  readonly id: Id;
-  readonly timeEntryId: Id;
-  /** `not_billed` seit E-047: ausgebucht, ohne dass eine Datei entstand. */
-  readonly event: "exported" | "reset" | "not_billed";
-  readonly previousStatus: ExportStatus;
-  readonly newStatus: ExportStatus;
-  readonly exportRunId: Id | null;
-  readonly exportRunGroupId: Id | null;
-  readonly actor: ForeignText;
-  readonly reason: ForeignText;
-  readonly occurredAt: Timestamp;
-}
-
 /* ==================================================================== */
 /* Einstellungen                                                        */
 /* ==================================================================== */
@@ -1300,53 +716,6 @@ export interface AppSettingsUpdate {
    * dieselbe Schreibweise, die im Dialog stand.
    */
   readonly skippedVersion?: ForeignText | null;
-}
-
-/** Ergebnis eines vollständigen Datenimports. */
-export interface DataImportSummary {
-  readonly source: TechnicalKey;
-  readonly todos: number;
-  readonly projects: number;
-  readonly sections: number;
-  readonly tags: number;
-  readonly timeEntries: number;
-  readonly images: number;
-  readonly warnings: readonly ServiceText[];
-}
-
-/**
- * Was der Dienst über die letzte Versionsprüfung weiß (A-18.2, E-069).
- *
- * ---------------------------------------------------------------------------
- * Die Naht zu T-138, und warum sie so schmal ist
- * ---------------------------------------------------------------------------
- *
- * **Die Route fragt GitHub nicht.** Sie gibt das Ergebnis heraus, das der
- * Dienst nach der Uhr ermittelt hat — beim Start, danach höchstens einmal in
- * 24 Stunden (E-069, Auflage A-V-10). Ein zweiter Abruf kostet deshalb nichts
- * und taktet nichts; genau darum darf die Oberfläche hier nachsehen, so oft
- * sie will.
- *
- * **Gelesen wird genau ein Feld.** Der Dienst liest aus GitHubs Antwort
- * ausschließlich `tag_name` (A-V-7); die Oberfläche liest aus seiner Antwort
- * ausschließlich `latestVersion`. Alles andere, was in der Antwort stehen mag,
- * wird nicht gelesen, nicht abgelegt und nicht angezeigt.
- *
- * **Und das eine Feld hat keinen Typ.** `unknown` ist hier keine Bequemlichkeit,
- * sondern die Aussage: Der Wert stammt aus einer fremden Antwort, und ein Typ
- * am Rand wäre eine Behauptung statt einer Prüfung. Er geht über
- * `foreignTextFrom` (E-063, T-133) in `decideUpdateNotice`, und erst die
- * Formprüfung dort macht aus ihm eine Fassung. „Noch nichts geprüft",
- * „nicht erreichbar" und „unbrauchbare Antwort" sehen für die Oberfläche
- * gleich aus, und das ist der Sinn: Sie zeigt in allen drei Fällen nichts
- * (A-18.11).
- */
-export interface VersionCheckView {
-  /**
-   * Die zuletzt von GitHub gemeldete Fassung — oder etwas anderes, wenn nichts
-   * geprüft werden konnte. Ungeprüft, ohne Typ, nie unbehandelt angezeigt.
-   */
-  readonly latestVersion: unknown;
 }
 
 export interface DefaultTag {
@@ -1451,32 +820,11 @@ export interface SettingsView {
    * führt mit `settings.exportDirectory` bereits einen Pfad desselben
    * Rechners.
    *
-   * Die Oberfläche legt den Pfad in `lib/databaseLocationAdvice.ts` aus. Anders
+   * Die Oberfläche legt den Pfad in `features/settings/databaseLocationAdvice.ts` aus. Anders
    * als beim Exportordner belegt der Dienst zu dieser Datei **keine** Merkmale;
    * kein Befund heißt deshalb nur „im Pfad steht nichts".
    */
   readonly databasePath: FileSystemPath | null;
-}
-
-/**
- * `POST /todos` liefert **nicht** das Todo allein.
- *
- * `addedDefaultTagIds` nennt die Tags, die der Dienst nach A-9.5 ergänzt hat.
- * Sie gehören in die Rückmeldung: Der Benutzer hat sie nicht gewählt, und ein
- * Tag, der ungefragt erscheint, gehört ausgesprochen.
- */
-export interface TodoCreated {
-  readonly todo: Todo;
-  readonly addedDefaultTagIds: readonly Id[];
-  /**
-   * Welche Tags durch `tagNames` neu entstanden sind (T-058).
-   *
-   * Vollständige Tags und nicht nur Kennungen, damit die Oberfläche den neuen
-   * Namen sofort nennen kann, ohne den Baum erneut zu holen. Ältere
-   * Dienststände liefern das Feld nicht — dann ist es `undefined`, und die
-   * Ansicht sagt einfach nichts darüber.
-   */
-  readonly createdTags?: readonly Tag[];
 }
 
 /* ==================================================================== */
@@ -1487,36 +835,4 @@ export interface SearchResult {
   readonly todos: Page<Todo>;
   /** Getroffen über den Leistungstext. Der Vermerk ist kein Suchfeld (A-7.1). */
   readonly timeEntries: readonly TimeEntry[];
-}
-
-/* ==================================================================== */
-/* Zugriff und Zustand                                                  */
-/* ==================================================================== */
-
-export interface TokenStatus {
-  readonly configured: boolean;
-  readonly issuedAt: Timestamp | null;
-  readonly lastUsedAt: Timestamp | null;
-  readonly generation: number;
-  readonly unreadable: boolean;
-}
-
-export interface IssuedToken {
-  readonly token: SecretText;
-  readonly issuedAt: Timestamp;
-  readonly generation: number;
-}
-
-export type SecurityNoticeKind =
-  | "auth_failure_burst"
-  | "token_in_url"
-  | "origin_rejected"
-  | "host_rejected"
-  | "file_permissions_wide";
-
-export interface SecurityNotice {
-  readonly kind: SecurityNoticeKind;
-  readonly count: number;
-  readonly firstAt: Timestamp;
-  readonly lastAt: Timestamp;
 }

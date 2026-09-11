@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_IMPORT_CALL_PATTERN } from '@takt/domain';
-import { extractImportCalls } from '../../src/usecases/import-call-numbers.ts';
+import { extractImportCalls } from '../../src/features/data-transfer/import-call-numbers.ts';
 
 describe('Call-Erkennung beim Fremdimport', () => {
   it('liest das vorgegebene Muster mit Trennzeichen und unabhängig von der Großschreibung', () => {

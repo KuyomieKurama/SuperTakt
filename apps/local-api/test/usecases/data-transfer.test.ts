@@ -2,14 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Timestamp } from '@takt/domain';
 import { openDatabase, type OpenedDatabase } from '@takt/storage';
 
-import type { AppContext } from '../../src/usecases/context.ts';
-import {
-  exportDataArchive,
-  importDataArchive,
-  importSuperProductivity,
-  importTodoist,
-  parseCsv,
-} from '../../src/usecases/data-transfer.ts';
+import type { AppContext } from '../../src/context.ts';
+import { exportDataArchive, importDataArchive } from '../../src/features/data-transfer/data-transfer.ts';
+import { importSuperProductivity, importTodoist, parseCsv } from '../../src/features/data-transfer/foreign.ts';
 
 const NOW = '2026-09-08T10:00:00Z' as Timestamp;
 
@@ -305,6 +300,80 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
     await database.transactions.inTransaction(async (unit) => {
       expect(await unit.settings.load()).toMatchObject({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15 });
     });
+  });
+
+  it('T-280/T-279: last_version_check_at nimmt am Round-Trip teil — Export, Bestandsänderung, Import stellen denselben Wert wieder her (A-20.4, Migration 0022)', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    database.connection
+      .prepare('UPDATE app_setting SET last_version_check_at = ? WHERE id = 1')
+      .run('2026-09-11T09:12:34Z');
+
+    const archive = await exportDataArchive(context);
+    expect(archive.data.tables.app_setting[0]?.['last_version_check_at']).toBe('2026-09-11T09:12:34Z');
+
+    // Der Bestand ändert sich, bevor die Sicherung wieder eingespielt wird.
+    database.connection
+      .prepare('UPDATE app_setting SET last_version_check_at = ? WHERE id = 1')
+      .run('2026-01-01T00:00:00Z');
+
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    expect(
+      database.connection.prepare('SELECT last_version_check_at FROM app_setting WHERE id = 1').get()?.[
+        'last_version_check_at'
+      ],
+    ).toBe('2026-09-11T09:12:34Z');
+
+    // Und ein zweiter Export nach dem Rundlauf ist zeichengleich zum ersten.
+    const secondArchive = await exportDataArchive(context);
+    expect(secondArchive.data.tables.app_setting).toEqual(archive.data.tables.app_setting);
+  });
+
+  it('T-280/T-279: ein Archiv der Fassung 5 OHNE last_version_check_at wird angenommen — der Wert danach ist NULL ("noch nie gefragt", `hasOwn` statt Fassungsvergleich)', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    database.connection
+      .prepare('UPDATE app_setting SET last_version_check_at = ? WHERE id = 1')
+      .run('2026-09-11T09:12:34Z');
+
+    const archive = await exportDataArchive(context);
+    const rows = archive.data.tables.app_setting.map((row) => {
+      const legacy = { ...row };
+      delete legacy['last_version_check_at'];
+      return legacy;
+    });
+
+    expect(
+      (
+        await importDataArchive(context, {
+          ...archive,
+          data: { ...archive.data, tables: { ...archive.data.tables, app_setting: rows } },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      database.connection.prepare('SELECT last_version_check_at FROM app_setting WHERE id = 1').get()?.[
+        'last_version_check_at'
+      ],
+    ).toBeNull();
+  });
+
+  it('ein Archiv der Fassung 5 MIT last_version_check_at = null bleibt null nach dem Import (derselbe Bestand wie ohne das Feld)', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    expect(archive.data.tables.app_setting[0]?.['last_version_check_at']).toBeNull();
+
+    database.connection
+      .prepare('UPDATE app_setting SET last_version_check_at = ? WHERE id = 1')
+      .run('2026-09-11T09:12:34Z');
+
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    expect(
+      database.connection.prepare('SELECT last_version_check_at FROM app_setting WHERE id = 1').get()?.[
+        'last_version_check_at'
+      ],
+    ).toBeNull();
   });
 
   it('Fassung 4 ergänzt Weiterlaufen als Standard und erhält die Inaktivitätsschwelle', async () => {

@@ -1,19 +1,24 @@
 /**
- * Takt — Zeitbuchung, Exportstatus und Timer-Regel (A-6.*, A-7.3, A-7.4, E-012).
+ * Takt — die Zeitbuchung und die Timer-Regel (A-6.1 bis A-6.8, A-7.3, A-7.4,
+ * A-2.5, E-036).
+ *
+ * Die Buchung selbst (Tabelle `time_entry`), was ein Start und ein Stopp
+ * entscheiden und was eine Buchung am Todo bewirkt.
+ *
+ * **Der Exportstatus wechselt nebenan** (`export-status.ts`, seit T-261). Der
+ * Wert `ExportStatus` steht hier, weil er eine Spalte dieser Tabelle ist;
+ * seine drei Übergänge, die Sperre und das Protokoll `export_audit` stehen
+ * dort. Die Richtung ist einseitig: `export-status.ts` liest diese Datei,
+ * diese Datei liest `export-status.ts` nicht.
+ *
+ * `note` ist die Buchungsnotiz aus A-7.3, auf dem Bildschirm **Leistung**
+ * (E-016). Sie geht in die Abrechnung (A-7.4). Der interne Vermerk des Todos
+ * aus A-7.2 kommt in keinem Typ dieser Datei vor — siehe `TodoNote` in
+ * todo.ts und R-06.
  */
 
-import type {
-  ExportAuditId,
-  ExportRunGroupId,
-  ExportRunId,
-  Result,
-  Seconds,
-  TaktError,
-  Timestamp,
-  TimeEntryId,
-  TodoId,
-} from './kernel.ts';
-import { err, ok, secondsBetween, taktError } from './kernel.ts';
+import type { Seconds, Timestamp, TimeEntryId, TodoId } from './kernel.ts';
+import { secondsBetween } from './kernel.ts';
 
 // ---------------------------------------------------------------------------
 // Exportstatus (A-6.5, A-6.9)
@@ -143,7 +148,7 @@ export type TimerStartResult =
  *
  * Wieder in seinem Pool erscheint das Todo dadurch von selbst: Die
  * Pool-Zugehörigkeit ergibt sich aus den Tags und ist nicht gespeichert
- * (A-3.4); ausgeblendet war es allein über `IsVisibleInPool` in tag.ts. Fällt
+ * (A-3.4); ausgeblendet war es allein über `IsVisibleInPool` in pool.ts. Fällt
  * das Kennzeichen, fällt die Ausblendung.
  *
  * Der eigene Typ bleibt trotz der kurzen Regel bestehen: Er ist die eine
@@ -168,150 +173,6 @@ export type MinimumDurationSeconds = 1;
 export type TimerStopResult =
   | { readonly kind: 'recorded'; readonly entry: TimeEntry }
   | { readonly kind: 'discarded'; readonly reason: 'timer_too_short'; readonly durationSeconds: number };
-
-// ---------------------------------------------------------------------------
-// Exportstatuswechsel (A-6.9, E-012, R-10)
-// ---------------------------------------------------------------------------
-
-/**
- * Erlaubte Übergänge. Es gibt genau drei, und jeder hat einen Auslöser,
- * der protokolliert wird.
- *
- *   open     --[ Exportlauf, A-8.8 ]------>  exported
- *   open     --[ Nicht abrechnen, E-047 ]->  exported
- *   exported --[ Zurücksetzen, E-012 ]---->  open
- *
- * **Der Auslöser ist Teil der Bedingung, nicht Beiwerk.** Zwei der drei
- * Übergänge führen auf denselben Wert, und trotzdem sind es zwei verschiedene
- * Vorgänge: Der eine hat eine geschriebene Datei hinter sich, der andere
- * ausdrücklich keine. Wer sie am Zielwert unterscheiden wollte, könnte es nicht
- * — deshalb steht der Auslöser im Typ und wandert bis in `export_audit.event`.
- *
- * Zu „nicht abrechnen" (E-047, ersetzt E-037): Der Benutzer will diese Zeit
- * nicht abrechnen; exportiert wurde sie nie. Der Exportstatus geht trotzdem auf
- * `exported`, weil zweiwertig zweiwertig bleibt (E-032) — ein dritter Status
- * „ausgebucht" landete früher oder später in einem Filter und hielte die
- * Buchung anders als beabsichtigt aus einer Auswertung heraus. Was tatsächlich
- * geschah, trägt das Protokoll.
- *
- * Nicht erlaubt und in der Speicherung nicht erreichbar:
- *   - `exported` ohne einen der beiden vorgesehenen Auslöser. Ein „einfach
- *     setzen" gäbe eine als abgerechnet markierte Buchung, der weder eine Datei
- *     noch eine Entscheidung des Benutzers zugeordnet werden kann.
- *   - jeder Wechsel auf sich selbst.
- */
-export type ExportStatusTransition =
-  | { readonly from: 'open'; readonly to: 'exported'; readonly trigger: 'export_run' }
-  | { readonly from: 'open'; readonly to: 'exported'; readonly trigger: 'not_billed' }
-  | { readonly from: 'exported'; readonly to: 'open'; readonly trigger: 'reset' };
-
-export type CheckExportStatusTransition = (
-  from: ExportStatus,
-  to: ExportStatus,
-  trigger: 'export_run' | 'reset' | 'not_billed',
-) => Result<
-  ExportStatusTransition,
-  TaktError<'export_status_unchanged' | 'export_status_not_settable'>
->;
-
-/**
- * Ist die Buchung gegen Bearbeitung gesperrt? (A-6.9)
- *
- * Gesperrt sind Start, Ende, Dauer, Leistung, Todo-Zuordnung und Löschen einer
- * exportierten Buchung. Nicht gesperrt ist der Exportstatus selbst — sonst
- * ließe E-012 sich nicht umsetzen. Die Speicherung erzwingt dieselbe Regel
- * über einen Trigger, damit sie auch dann gilt, wenn ein späterer
- * Anwendungsfall sie zu prüfen vergisst.
- */
-export type IsLocked = (entry: Pick<TimeEntry, 'exportStatus'>) => boolean;
-
-// ---------------------------------------------------------------------------
-// Protokoll des Exportstatus (R-10) — Tabelle `export_audit`
-// ---------------------------------------------------------------------------
-
-/**
- * Literale wie in `export_audit.event`.
- *
- * `not_billed` (E-047) ist kein Export und trägt deshalb weder Exportlauf noch
- * Exportzeile — das Schema erzwingt das mit demselben CHECK, der für `exported`
- * beides verlangt. Erst diese Unterscheidung macht die Auswertung möglich, für
- * die man ein solches Protokoll überhaupt führt: Wie viel Zeit ist nie
- * abgerechnet worden?
- */
-export type ExportAuditEvent = 'exported' | 'reset' | 'not_billed';
-
-/**
- * Eine Zeile des Exportstatus-Protokolls. Anhängend und unveränderlich.
- *
- * Zweck: Wird eine Buchung zurückgesetzt und erneut exportiert, geht dieselbe
- * Arbeitszeit ein zweites Mal in die Abrechnung. Das Protokoll macht diesen
- * Vorgang nachträglich auffindbar — wer, wann, welche Buchung, mit welcher
- * Begründung, und in welchem Exportlauf sie vorher steckte.
- *
- * Die Speicherung verbietet UPDATE und DELETE auf dieser Tabelle über Trigger.
- * Es gibt keinen Anwendungsfall, der Protokollzeilen ändert oder löscht.
- */
-export interface ExportAuditEntry {
-  readonly id: ExportAuditId;
-  readonly timeEntryId: TimeEntryId;
-  readonly event: ExportAuditEvent;
-  readonly previousStatus: ExportStatus;
-  readonly newStatus: ExportStatus;
-  /** Gesetzt genau dann, wenn `event === 'exported'`. */
-  readonly exportRunId: ExportRunId | null;
-  /**
-   * Die Exportzeile, in der die Buchung stand. Gesetzt genau dann, wenn
-   * `event === 'exported'`.
-   *
-   * Hier steht bewusst kein `quarters`. Der gerundete Wert gehört der Gruppe,
-   * nicht der Buchung; ein Anteil je Buchung existiert nicht (siehe
-   * `ExportRunGroup`). Über diese Kennung sind Tagessumme und gerundeter Wert
-   * der Zeile erreichbar, in der die Buchung damals stand — und damit auch,
-   * wieviel eine zweite Abrechnung derselben Zeit tatsächlich hinzugefügt hat.
-   */
-  readonly exportRunGroupId: ExportRunGroupId | null;
-  /** Windows-Benutzername (E-010). Keine freie Eingabe. */
-  readonly actor: string;
-  /** Begründung aus dem Bestätigungsdialog beim Zurücksetzen. Darf leer sein. */
-  readonly reason: string;
-  readonly occurredAt: Timestamp;
-}
-
-/**
- * Antrag auf Zurücksetzen des Exportstatus (E-012).
- *
- * Je Buchung, nicht je Exportlauf. `reason` ist die Freitexteingabe aus dem
- * Bestätigungsdialog und wandert unverändert ins Protokoll.
- */
-export interface ExportStatusResetRequest {
-  readonly timeEntryId: TimeEntryId;
-  readonly reason: string;
-  readonly actor: string;
-  readonly now: Timestamp;
-}
-
-/**
- * Antrag auf Ausbuchen ohne Abrechnung (E-047, ersetzt E-037).
- *
- * Gleiche Gestalt wie der Antrag auf Zurücksetzen, und das ist kein Zufall:
- * Beides ist eine Entscheidung eines Menschen über genau eine Buchung, beides
- * wird protokolliert, und `reason` ist beide Male freiwillig. Ein Pflichtfeld
- * erzeugt in der Praxis den Text „x"; was zählt, ist die Nachvollziehbarkeit
- * des Vorgangs, nicht die Qualität seiner Begründung.
- *
- * Der Typ ist trotzdem ein eigener und kein Alias: Die beiden Anträge dürfen
- * sich unterschiedlich entwickeln, und an der Signatur der Ports soll ablesbar
- * sein, welcher der beiden Vorgänge gemeint ist.
- */
-export interface NotBilledRequest {
-  readonly timeEntryId: TimeEntryId;
-  /** Freiwillig. Wandert unverändert ins Protokoll. */
-  readonly reason: string;
-  /** Windows-Benutzername (E-010). Keine freie Eingabe. */
-  readonly actor: string;
-  readonly now: Timestamp;
-}
-
 // ---------------------------------------------------------------------------
 // Entwürfe: was eine reine Regel über eine Buchung sagen kann (T-009)
 //
@@ -450,7 +311,7 @@ export const ENTRY_CLOSED_EFFECT: EntryClosedEffect = Object.freeze({ hasOpenEnt
  * verspricht, als die Bestätigung berichtet, ist Befund C-03 aus T-025.
  *
  * Deshalb steht die **Wirkung** hier, in der Domäne, und die **Rechnung** im
- * Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`). Diese
+ * Anwendungsfall (`apps/local-api/src/pool-movement.ts`). Diese
  * Konstante kennt weder Buchungen im Speicher noch Pools noch Regeln; sie sagt
  * allein, welche zwei Achsen eine Buchung umlegt.
  *
@@ -612,65 +473,4 @@ export const decideOrphanedTimer = (input: {
     note: input.running.note,
     now: input.heartbeatAt ?? input.running.startedAt,
   });
-};
-
-/**
- * Ist die Buchung gegen Bearbeitung gesperrt? (A-6.9)
- *
- * Gesperrt sind Start, Ende, Dauer, Leistung, Todo-Zuordnung und das Löschen.
- * Nicht gesperrt ist der Exportstatus selbst — sonst ließe sich E-012 nicht
- * umsetzen. Dieselbe Regel steht als Trigger in der Speicherung, damit sie auch
- * dann greift, wenn ein späterer Anwendungsfall sie zu prüfen vergisst.
- */
-export const isLocked: IsLocked = (entry) => entry.exportStatus === 'exported';
-
-/**
- * Prüft einen Wechsel des Exportstatus (A-6.9, E-012, E-032).
- *
- * Es gibt genau zwei erlaubte Übergänge, und jeder hat genau einen Auslöser:
- *
- *     open     --[ export_run ]--> exported
- *     exported --[ reset      ]--> open
- *
- * Der Auslöser ist Teil der Bedingung, nicht Beiwerk. `open -> exported` ohne
- * einen der beiden vorgesehenen Auslöser wäre eine als abgerechnet markierte
- * Buchung, hinter der weder eine Datei noch eine Entscheidung steht. „Nicht
- * abrechnen" (E-047) führt deshalb nicht am Wächter vorbei, sondern durch ihn
- * hindurch — mit eigenem Auslöser und eigenem Ereignistyp im Protokoll.
- *
- * **E-032 steht hier als Abwesenheit.** Das Ergebnis eines Resets ist `open` —
- * derselbe Wert wie bei einer Buchung, die nie exportiert war. Es gibt keinen
- * dritten Status „erneut offen", weil ein solcher Wert früher oder später in
- * einem Filter landen und die zurückgesetzte Buchung aus dem nächsten Export
- * heraushalten würde. Dass sie schon einmal exportiert war, trägt `exportCount`
- * und ist eine Frage der Anzeige (R-10).
- */
-export const checkExportStatusTransition: CheckExportStatusTransition = (from, to, trigger) => {
-  if (from === to) {
-    return err(
-      taktError(
-        'export_status_unchanged',
-        'Der Exportstatus ist bereits auf diesem Wert; es gibt nichts zu ändern.',
-      ),
-    );
-  }
-
-  if (from === 'open' && to === 'exported' && trigger === 'export_run') {
-    return ok({ from: 'open', to: 'exported', trigger: 'export_run' });
-  }
-
-  if (from === 'open' && to === 'exported' && trigger === 'not_billed') {
-    return ok({ from: 'open', to: 'exported', trigger: 'not_billed' });
-  }
-
-  if (from === 'exported' && to === 'open' && trigger === 'reset') {
-    return ok({ from: 'exported', to: 'open', trigger: 'reset' });
-  }
-
-  return err(
-    taktError(
-      'export_status_not_settable',
-      'Dieser Wechsel des Exportstatus ist über diesen Weg nicht vorgesehen.',
-    ),
-  );
 };

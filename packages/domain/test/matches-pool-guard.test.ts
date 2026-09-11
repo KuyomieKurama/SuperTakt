@@ -18,8 +18,8 @@
  * hier der Punkt, nicht ein Versehen.
  */
 import { describe, expect, it } from 'vitest';
-import { matchesPool } from '../src/tag.ts';
-import type { MatchesPoolCandidate, MatchesPoolRule } from '../src/tag.ts';
+import { matchesPool } from '../src/pool.ts';
+import type { MatchesPoolCandidate, MatchesPoolRule } from '../src/pool.ts';
 import type { TagId } from '../src/kernel.ts';
 
 const tagId = (value: string) => value as unknown as TagId;

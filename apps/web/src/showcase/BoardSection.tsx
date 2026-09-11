@@ -2,13 +2,14 @@ import { foreignText } from "../lib/foreign";
 import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import { useCallback, useMemo, useState } from "react";
 import { useToasts } from "../app/ToastContext";
-import { FilterToggle } from "../components/FilterBar";
-import { KanbanCard, KanbanColumn } from "../components/Kanban";
-import type { MenuEntry } from "../components/Menu";
-import { Card, InlineMessage, Button, LoadingBlock } from "../components/Primitives";
-import { RuleSummary } from "../components/RuleSummary";
+import { FilterToggle } from "../shared/ui/FilterBar";
+import { KanbanCard, KanbanColumn } from "../features/board/Kanban";
+import type { MenuEntry } from "../shared/ui/Menu";
+import { Card, InlineMessage, Button, LoadingBlock } from "../shared/ui/Primitives";
+import { RuleSummary } from "../features/structure/RuleSummary";
 import { describeRule, describeRuleReach } from "../lib/poolRule";
-import { BoardColumnEmpty, BoardEmptyState } from "../screens/BoardScreen";
+import { BoardColumnEmpty } from "../features/board/BoardColumn";
+import { BoardEmptyState } from "../features/board/BoardEmptyState";
 import {
   BOARD_CARDS,
   BOARD_COLUMNS,

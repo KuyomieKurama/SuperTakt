@@ -49,7 +49,7 @@
  * der Abfrageseite.
  *
  * Die **Mehrfachnennung** — steht diese Karte noch woanders? — beantwortet
- * {@link boardAppearances}, und zwar mit `matchesPool` aus `tag.ts`. Das ist
+ * {@link boardAppearances}, und zwar mit `matchesPool` aus `pool.ts`. Das ist
  * dieselbe Funktion, die auch das Add-in benutzt, um die Pools eines Todos zu
  * benennen (`routes/addin/service.ts`), und die die Abfrage in
  * `repo-todos.ts` in SQL nachbildet.
@@ -62,8 +62,8 @@
  */
 
 import type { PoolId, StatusId, TagId, Timestamp, TodoId } from './kernel.ts';
-import type { MatchesPoolRule, Pool } from './tag.ts';
-import { isVisibleInPool, matchesPool } from './tag.ts';
+import type { MatchesPoolRule, Pool } from './pool.ts';
+import { isVisibleInPool, matchesPool } from './pool.ts';
 
 /**
  * Eine Spalte des Boards. **Derselbe Typ wie ein Pool** (E-054).

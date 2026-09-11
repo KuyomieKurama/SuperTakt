@@ -60,7 +60,7 @@ import { hasForbiddenNameCharacter } from "@takt/domain";
 import type { ForeignText } from "../api/types";
 import type { IdleActivity } from "@takt/desktop/shell";
 import { setConnection, type Connection } from "../api/client";
-import type { ShellStateSnapshot, UserNameFinding } from "../components/ShellStatus";
+import type { ShellStateSnapshot, UserNameFinding } from "./ShellStatus";
 
 /**
  * Das Ergebnis des Ordnerauswahldialogs, unter dem Namen der Hülle.
@@ -267,7 +267,7 @@ export async function readShellState(): Promise<ShellStateSnapshot | null> {
  * Der **Erfolg** dieser Funktion ist nicht sichtbar: `takt_quit` ruft
  * `app.exit(0)`, der Prozess endet, und die Zusage kommt nie zurück. Wer auf
  * sie wartet, wartet deshalb mit einer Frist — siehe `useQuitAttempt` in
- * `components/ShellStatus.tsx`.
+ * `app/ShellStatus.tsx`.
  */
 export async function quitApplication(): Promise<void> {
   const shell = await loadShell();
@@ -398,7 +398,7 @@ export async function openAttachmentLink(url: ForeignText): Promise<AttachmentOp
  * Öffnet eine Datei mit der Standardanwendung des Systems (A-19.9).
  *
  * **Erst rufen, wenn die Rückfrage beantwortet ist** (E-072 Punkt 3,
- * Auflage A-A-6). Sie steht in `components/AttachmentOpenDialog.tsx`, nennt den
+ * Auflage A-A-6). Sie steht in `features/todos/AttachmentOpenDialog.tsx`, nennt den
  * vollen Pfad und wählt ihre Wörter nach der Endung.
  */
 export async function openAttachmentFile(path: ForeignText): Promise<AttachmentOpen> {

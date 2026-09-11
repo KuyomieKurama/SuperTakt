@@ -6,7 +6,7 @@ import type { ForeignText } from "../api/types";
  * Takt — fremder Text, der nur als Zeichenkette möglich ist (E-063, O-AH,
  * T-124, T-129).
  *
- * Das Gegenstück zu `components/Foreign.tsx` für die Stellen, an denen kein
+ * Das Gegenstück zu `shared/ui/Foreign.tsx` für die Stellen, an denen kein
  * Element steht: ein `aria-label`, ein `title`, die Überschrift oder der Rumpf
  * einer Meldung, die Beschriftung eines Menüeintrags. Dort geht nur die eine
  * Hälfte — die Zeichen werden sichtbar gemacht, isoliert wird nichts. Das ist
@@ -71,7 +71,7 @@ export function foreignText(value: ForeignText): string {
  *
  * `ExportTemplate.definition` ist `unknown`, und das ist richtig so: Das
  * Vorlagenformat gehört dem Motor in `packages/export`, nicht der Schnittstelle
- * (siehe `lib/exportTemplateModel.ts`). Aus diesem `unknown` packt die
+ * (siehe `features/export/exportTemplateModel.ts`). Aus diesem `unknown` packt die
  * Oberfläche aber **Feldnamen** aus, die ein Benutzer geschrieben hat und die
  * angezeigt werden — im Editor, in der Abweichungsliste und in der Vorschau der
  * Exportzeile, also in der Ansicht, an der jemand prüft, was er gleich

@@ -65,13 +65,21 @@
  * **a) Werte, nur Namen.** Ob `stopRunning` ein Wahrheitswert ist und
  * `timeEntryIds` eine Liste, misst dieser Lauf nicht. Er misst Schlüssel.
  *
- * **b) Nur `endpoints.ts`.** Das ist keine Nachlässigkeit, sondern eine
+ * **b) Nur die Aufrufdateien.** Das ist keine Nachlässigkeit, sondern eine
  * gemessene Zusicherung: `apps/web/src/api/client.ts` ist die einzige Stelle
- * mit `fetch`, und außerhalb von `endpoints.ts` setzt keine Ansicht einen
- * Rumpf zusammen (T-050, Punkt 6). Abschnitt 1 misst das nach, statt es zu
- * glauben: kein Zugriff auf das globale `fetch` und keiner auf die
- * Anfragefunktion `request` außerhalb dieser beiden Dateien — **und** dass der
- * Sammler, der das misst, überhaupt etwas eingesammelt hat (T-231, A-A-61).
+ * mit `fetch`, und außerhalb der Aufrufdateien setzt keine Ansicht einen Rumpf
+ * zusammen (T-050, Punkt 6). Abschnitt 1 misst das nach, statt es zu glauben:
+ * kein Zugriff auf das globale `fetch` und keiner auf die Anfragefunktion
+ * `request` außerhalb dieser Dateien — **und** dass der Sammler, der das misst,
+ * überhaupt etwas eingesammelt hat (T-231, A-A-61).
+ *
+ * **Welche Dateien das sind, steht seit T-250-2 nicht mehr hier, sondern wird
+ * gemessen** (F-22): `api/endpoints.ts`, solange es die Sammelstelle gibt, und
+ * jede `api.ts` eines Merkmalsordners, die auf der Platte liegt. Der Umbau nach
+ * Merkmalen verteilt die Aufrufe über acht Wellen; eine Zusage, die an der
+ * Ordnerstruktur hängt statt an der Anforderung, wäre in jeder Zwischenstufe rot
+ * und am Ende falsch. Die Herleitung steht bei `WEB_CALLER_FILES`, das Urteil in
+ * Abschnitt 0.
  *
  * **c) Was der Leser nicht auflösen kann.** Ein berechneter Schlüsselname,
  * eine Verbreitung aus einer Variablen ohne Typangabe, ein Rumpf aus einem
@@ -114,6 +122,16 @@
  * einzelne genau eine Beanstandung auslöst. Ohne das wäre dieser Lauf, was
  * `pnpm contrast` vor T-011 war: grün, weil er nichts tut.
  *
+ * **Je Datei, die die Stelle trägt** (T-253-2). Bis dahin verlangte der
+ * Abschnitt **genau eine** Trägerin und maß damit die Aufteilung der
+ * Merkmalsordner statt der Blindheit des Lesers; die Herleitung steht dort.
+ *
+ * **Und die Ausnahmelisten messen sich mit** (T-253-2). `NOT_CALLED_BY_UI` in
+ * Abschnitt 2 und `NEVER_SENT` in Abschnitt 3 sind die einzigen Stellen dieses
+ * Laufs, an denen ein Satz einen Bauzustand **behauptet**. Drei ihrer Einträge
+ * behaupteten einen, den es seit Wellen nicht mehr gab. Ein Eintrag zuviel
+ * macht keinen Lauf rot — er macht ihn unwahr, und das ist teurer.
+ *
  * **Und seit T-188 auch die Zusage, auf der Punkt b) ruht** (A-A-40). Sie war
  * die einzige tragende Aussage dieses Laufs ohne Gegenprobe, und gemessen
  * wurde sie mit einem Ausdruck, den T-143 an anderer Stelle bereits als blind
@@ -144,10 +162,17 @@
  *    eigene Proben in Abschnitt 6 (A-A-62).
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+  optionaleQuelle,
+  paketQuelle,
+  paketVerzeichnis,
+  quellbaum,
+} from './source-resolve.mjs';
 import { parseYaml } from './openapi-reader.mjs';
 import { createMatcher } from './schema-match.mjs';
 import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './caller-scan.mjs';
@@ -161,11 +186,12 @@ import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './calle
  */
 import { BLIND_FETCH_CALL, describeStray, strayGlobalFetch } from './fetch-scan.mjs';
 import { BLIND_REQUEST_CALL, strayRequestAccess } from './request-scan.mjs';
-import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
-import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
-import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
-import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
-import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-transfer.ts';
+import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/features/todos/routes.ts';
+import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/features/structure/routes.ts';
+import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/features/timer/routes.ts';
+import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/features/export/routes.ts';
+import { REQUEST_SCHEMAS as SETTINGS_SCHEMAS } from '../src/features/settings/routes.ts';
+import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/features/data-transfer/routes.ts';
 /*
  * Die Eingabeschemata der Add-in-Tür (T-132, O-M; seit T-149 als gemeinsame
  * Aufstellung direkt neben den Routen). Der Nachweis liest dieselbe Registry
@@ -174,12 +200,230 @@ import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-tra
  */
 import { REQUEST_SCHEMAS as ADDIN_SCHEMAS } from '../src/routes/addin/schema.ts';
 
-const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
-const CALLER_PATH = new URL('../../web/src/api/endpoints.ts', import.meta.url);
-const TYPES_PATH = new URL('../../web/src/api/types.ts', import.meta.url);
-const WEB_SOURCE_DIR = new URL('../../web/src/', import.meta.url);
-const ADDIN_CALLER_PATH = new URL('../../outlook-addin/src/api/client.ts', import.meta.url);
-const ADDIN_SOURCE_DIR = new URL('../../outlook-addin/src/', import.meta.url);
+/*
+ * Wo die gelesenen Dateien liegen — **aufgelöst**, nicht abgezählt (T-249-1).
+ *
+ * Bis T-249-1 standen hier sechs feste Pfade, vier davon über Paketgrenzen
+ * hinweg (`../../web/src/api/endpoints.ts`). Der Umbau nach Merkmalen zieht
+ * genau diese Dateien um. Jetzt nennt dieser Lauf, **was** er lesen will —
+ * Paket und Merkmal —, und `source-resolve.mjs` sagt ihm, wo es liegt; der
+ * bisherige Ort steht als Hinweis daneben und ist eine Abkürzung, keine
+ * Bedingung. Findet die Auflösung nichts, endet der Lauf rot, statt eine leere
+ * Menge für einen sauberen Baum zu halten.
+ *
+ * Die Merkmale sind ausgeführte Ausfuhren und keine Wörter aus Kommentaren:
+ * Ein Kommentar kann in zwei Dateien stehen, `export function checkHealth(`
+ * steht in einer.
+ */
+const SPEC_PATH = paketQuelle('@takt/local-api', {
+  hinweis: 'openapi/takt-local-api.yaml',
+  merkmal: ['openapi: 3', 'paths:'],
+  endungen: new Set(['.yaml', '.yml']),
+});
+/**
+ * Die **Sammelstelle** der Aufrufe — solange es sie gibt (F-22, T-250-2).
+ *
+ * Sie ist die einzige Auflösung dieses Laufs, die ausbleiben **darf**:
+ * `apps/web/src/api/endpoints.ts` löst sich über acht Wellen in die `api.ts`
+ * der Merkmalsordner auf und ist danach weg. Ein Lauf, der an ihrem Fehlen
+ * stirbt, wäre rot, weil eine erwartete Datei fehlt — und das ist kein Befund
+ * über den Bestand, sondern einer über den Lauf.
+ *
+ * Stumm wird er davon nicht: Das Ausbleiben schreibt `optionaleQuelle` hin, und
+ * die Menge, in die das Ergebnis fällt, hat unten in Abschnitt 0 eine
+ * Untergrenze. Verschwindet die Sammelstelle, **ohne** daß ein Merkmalsordner
+ * ihre Aufrufe übernommen hat, ist die Menge leer und der Lauf rot.
+ */
+const LEGACY_CALLER_PATH = optionaleQuelle('@takt/web', {
+  hinweis: 'src/api/endpoints.ts',
+  merkmal: 'export function checkHealth(',
+});
+/**
+ * Die **Sammelstelle der Typen** — und wie die Sammelstelle der Aufrufe
+ * vergänglich (T-251-2).
+ *
+ * `api/types.ts` steht auf demselben Zettel wie `api/endpoints.ts`: Beide
+ * werden über die Wellen auf die Merkmalsordner verteilt und fallen danach weg.
+ * Bis T-251-2 wurde sie hier mit `paketQuelle` verlangt — der Lauf wäre in der
+ * Welle, die sie auflöst, mit „Quelldatei nicht auflösbar" gestorben, und das
+ * ist ein Befund über den Lauf und keiner über den Bestand.
+ *
+ * Dieselbe Einhegung wie bei {@link LEGACY_CALLER_PATH}: Das Ausbleiben wird
+ * hingeschrieben, und die Menge, in die das Ergebnis fällt, hat unten in
+ * Abschnitt 0 eine Untergrenze. Verschwindet die Sammelstelle, **ohne** daß die
+ * Merkmalsordner ihre Typen übernommen haben, ist die Aufstellung dünn und der
+ * Lauf rot.
+ */
+const TYPES_PATH = optionaleQuelle('@takt/web', {
+  hinweis: 'src/api/types.ts',
+  merkmal: ['export type Id = string;', 'export type Timestamp = string;'],
+});
+const WEB_CLIENT_PATH = paketQuelle('@takt/web', {
+  hinweis: 'src/api/client.ts',
+  merkmal: 'export class TaktTransportError',
+});
+const ADDIN_CALLER_PATH = paketQuelle('@takt/outlook-addin', {
+  hinweis: 'src/api/client.ts',
+  merkmal: ['export interface ApiClient', 'export type ApiResult'],
+});
+const WEB_SOURCE_DIR = join(paketVerzeichnis('@takt/web'), 'src');
+const ADDIN_SOURCE_DIR = join(paketVerzeichnis('@takt/outlook-addin'), 'src');
+
+/** Ein Ort unterhalb eines Quellordners, so wie dieser Lauf ihn benennt. */
+const alsName = (wurzel, datei) => relative(wurzel, datei).split(sep).join('/');
+
+// ---------------------------------------------------------------------------
+// Die Ernte — hochgezogen, weil Abschnitt 0 schon über sie urteilt
+// ---------------------------------------------------------------------------
+
+/*
+ * Bis T-250-2 entstand die Ernte erst in Abschnitt 1. Sie steht jetzt hier,
+ * weil die **Aufrufdateien** gegen sie verglichen werden, und dieser Vergleich
+ * gehört vor den Leser: Wer über eine Menge urteilt, die er nicht kennt, urteilt
+ * nicht. Die Prüfsätze über die Ernte bleiben, wo sie waren — Abschnitt 1 für
+ * die Oberfläche, Abschnitt 7 für den Aufgabenbereich.
+ */
+
+/**
+ * Die Endungen, die der Bündler auflöst — ausgeschrieben (A-A-61).
+ *
+ * Ausgeschrieben und nicht als Ausdruck: Wer eine Endung hinzunimmt, soll sie
+ * eintragen und dabei merken, daß er sie eintragen mußte. `.cjs` steht mit
+ * darin, obwohl heute keine solche Datei im Baum liegt — die Liste ist gegen
+ * das gebaut, was auflösbar **wäre**, nicht gegen das, was zufällig daliegt.
+ */
+const BUNDLED_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
+
+const isBundledSource = (name) =>
+  BUNDLED_EXTENSIONS.some((extension) => name.endsWith(extension)) && !name.endsWith('.d.ts');
+
+/*
+ * Der Sammler läuft seit T-249-1 über `quellbaum()`. Zwei Dinge ändern sich
+ * dadurch, und keines davon ist eine Zusage:
+ *
+ *   - der Quellordner wird über den **Paketnamen** gefunden, nicht über
+ *     `../../web/src/`;
+ *   - eine fehlende oder zu dünn besetzte Ernte endet **dort** rot, nicht erst
+ *     in einem Prüfsatz. `proveHarvest` bleibt trotzdem stehen: Es ist die
+ *     Untergrenze dieses Laufs auf die Menge, über die er urteilt, und sie steht
+ *     sichtbar als Prüfsatz in der Ausgabe statt nur als Vorbedingung im Leser.
+ */
+const webFiles = quellbaum('@takt/web', 'src', {
+  mindestens: 100,
+  endungen: new Set(BUNDLED_EXTENSIONS),
+})
+  .filter((file) => isBundledSource(file))
+  .map((file) => ({ name: alsName(WEB_SOURCE_DIR, file), source: readFileSync(file, 'utf8') }));
+
+// ---------------------------------------------------------------------------
+// Die Aufrufdateien der Oberfläche — an der Anforderung aufgespannt (F-22)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wo ein Aufruf an den Dienst stehen darf, seit F-22.
+ *
+ * ===========================================================================
+ * Was sich geändert hat und was nicht
+ * ===========================================================================
+ *
+ * Die **Zusage** ist dieselbe wie seit T-051: In der Oberfläche entsteht kein
+ * Aufruf an den Dienst außerhalb der dafür vorgesehenen Stellen. Bis T-250-2
+ * war diese Zusage an der **Ordnerstruktur** aufgespannt — genau zwei Dateien,
+ * `api/endpoints.ts` und `api/client.ts` —, und der Umbau nach Merkmalen zog
+ * ihr damit den Boden weg: Jedes Merkmal nimmt seine Aufrufe mit, und die erste
+ * `features/…/api.ts` hätte den Lauf rot gemacht, ohne daß irgend etwas an der
+ * Anforderung falsch gewesen wäre.
+ *
+ * Die beiden naheliegenden Auswege sind verworfen (F-22): eine Datei, die
+ * `request` weiterreicht, wäre die ausgeschlossene Sammeldatei; ein zweiter
+ * Name für `request` wäre ein Ausweichen am Wächter vorbei.
+ *
+ * Also spannt die Zusage ihre Menge jetzt an der Anforderung auf:
+ * `api/client.ts`, wo `request` entsteht, und **jede `api.ts` eines
+ * Merkmalsordners, die es tatsächlich gibt**. Die Sammelstelle bleibt darin,
+ * solange sie existiert.
+ *
+ * ===========================================================================
+ * „Die es tatsächlich gibt" — gemessen, nicht geraten (F-22 Punkt 3)
+ * ===========================================================================
+ *
+ * Eine Menge, die aus einer Liste im Lauf käme, wäre eine Behauptung. Sie wird
+ * deshalb auf der Platte **gesucht** und mit dem verglichen, was der Sammler
+ * gesehen hat — Mengenvergleich, nicht Zahlenvergleich. Der Grund steht in
+ * T-247-7: Dort urteilte ein Wächter über 129 Dateien, ohne eine gesehen zu
+ * haben, weil Konfigurationsliste und geladene Dateien aus derselben Quelle
+ * kamen und bei einem Pfadfehler gemeinsam auf null gingen — `0 === 0` war
+ * grün. Zwei Wege zu derselben Menge, und beide müssen dasselbe sagen.
+ *
+ * Und die Untergrenze (F-22 Punkt 4): Findet der Lauf **keine** Datei, in der
+ * `request` stehen darf, ist das ein Fehlschlag der Messung und kein
+ * bestandener Prüfsatz. Ohne sie wäre der Tag denkbar, an dem der Merkmalsordner
+ * nicht gefunden wird, die Sammelstelle schon weg ist und „nichts beanstandet"
+ * heißt: niemand hat hingesehen.
+ */
+const WEB_FEATURES_DIR = join(WEB_SOURCE_DIR, 'features');
+
+/** Der Name, unter dem ein Merkmal seine Aufrufe führt — eine Ebene, kein Muster. */
+const FEATURE_API_FILE = 'api.ts';
+
+/** Wie eine solche Datei heißt, von `src` aus gesehen. */
+const FEATURE_API_NAME = /^features\/[^/]+\/api\.ts$/;
+
+/**
+ * Der **erste** Weg zur Menge: ein Blick auf die Platte.
+ *
+ * Kein Merkmalsordner ist kein Fehler — heute gibt es ihn noch nicht überall,
+ * und am Ende der Wellen gibt es ihn achtmal. Ein Fehlschlag wäre erst, wenn
+ * **nichts** übrigbleibt; das entscheidet Abschnitt 0 und nicht diese Funktion.
+ */
+function featureApiOnDisk() {
+  let eintraege;
+  try {
+    eintraege = readdirSync(WEB_FEATURES_DIR, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const gefunden = [];
+  for (const eintrag of eintraege) {
+    if (!eintrag.isDirectory()) continue;
+    const pfad = join(WEB_FEATURES_DIR, eintrag.name, FEATURE_API_FILE);
+    try {
+      if (!statSync(pfad).isFile()) continue;
+    } catch {
+      continue;
+    }
+    gefunden.push({ name: alsName(WEB_SOURCE_DIR, pfad), path: pfad });
+  }
+  return gefunden.sort((links, rechts) => links.name.localeCompare(rechts.name));
+}
+
+const featureApiPlatte = featureApiOnDisk();
+
+/** Der **zweite** Weg zur selben Menge: was der Sammler eingesammelt hat. */
+const featureApiErnte = webFiles.map((file) => file.name).filter((name) => FEATURE_API_NAME.test(name));
+
+/**
+ * Die Dateien, die dieser Lauf als Aufrufer liest.
+ *
+ * Der Text kommt von der **Platte** und nicht aus der Ernte — das ist die
+ * zweite Hälfte des Vergleichs oben. Läse der Leser aus derselben Aufstellung,
+ * gegen die er geprüft wird, prüfte er sich gegen sich selbst.
+ *
+ * Die Sammelstelle steht vorn, solange es sie gibt. Löst sie sich auf und
+ * wandert ihr Merkmal in einen Merkmalsordner, steht sie dort schon — deshalb
+ * die Entdopplung über den Namen.
+ */
+const WEB_CALLER_FILES = [
+  ...(LEGACY_CALLER_PATH === null
+    ? []
+    : [{ name: alsName(WEB_SOURCE_DIR, LEGACY_CALLER_PATH), path: LEGACY_CALLER_PATH }]),
+  ...featureApiPlatte,
+]
+  .filter((datei, index, alle) => alle.findIndex((andere) => andere.name === datei.name) === index)
+  .map((datei) => ({ ...datei, source: readFileSync(datei.path, 'utf8') }));
+
+/** Die Namen derselben Dateien — die Menge, um die es in Abschnitt 1 geht. */
+const WEB_CALLER_NAMES = WEB_CALLER_FILES.map((datei) => datei.name);
 
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
 
@@ -188,6 +432,7 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+  ...SETTINGS_SCHEMAS,
   ...DATA_TRANSFER_SCHEMAS,
 };
 
@@ -263,7 +508,39 @@ const fieldsOf = (schema) => {
   return collect(json);
 };
 
-const typeIndex = buildTypeIndex(readFileSync(TYPES_PATH, 'utf8'), 'types.ts');
+/**
+ * Die gemeinsame Typaufstellung — solange es sie gibt.
+ *
+ * Ist die Sammelstelle weg, ist sie leer, und jede Aufrufdatei trägt ihre Typen
+ * selbst (siehe {@link webCallerOf}). Daß dabei nichts verlorengeht, mißt nicht
+ * dieser Ausdruck, sondern Abschnitt 0 und Abschnitt 5: eine Untergrenze auf die
+ * Aufstellung und die Zahl der unauflösbaren Rümpfe.
+ */
+const typeIndex =
+  TYPES_PATH === null ? new Map() : buildTypeIndex(readFileSync(TYPES_PATH, 'utf8'), 'types.ts');
+
+/**
+ * Dieselbe Menge, über die der **Leser** verfügt — als eine Aufstellung
+ * (T-251-2).
+ *
+ * Sie ist die Vereinigung dessen, was `webCallerOf` je Datei aufspannt: die
+ * Sammelstelle plus die Typen jeder Aufrufdatei. Gebraucht wird sie für das
+ * Urteil in Abschnitt 0 und nirgends sonst — der **Leser** bekommt sie
+ * ausdrücklich **nicht**, denn er soll je Datei auflösen: Ein Typ, den nur ein
+ * fremder Merkmalsordner deklariert, ist für diese Datei nicht auflösbar, und
+ * das soll er auch bleiben. Ein gemeinsamer Topf wäre eine stillschweigende
+ * Lockerung des Lesers unter dem Vorwand einer Messung.
+ */
+const WEB_TYPE_SOURCES = [
+  ...(TYPES_PATH === null
+    ? []
+    : [{ name: alsName(WEB_SOURCE_DIR, TYPES_PATH), source: readFileSync(TYPES_PATH, 'utf8') }]),
+  ...WEB_CALLER_FILES.map((datei) => ({ name: datei.name, source: datei.source })),
+].filter((datei, index, alle) => alle.findIndex((andere) => andere.name === datei.name) === index);
+
+const WEB_TYPE_INDEX = new Map(
+  WEB_TYPE_SOURCES.flatMap((quelle) => [...buildTypeIndex(quelle.source, quelle.name)]),
+);
 
 /**
  * Der ganze Vergleich als **eine Funktion über einen Text**.
@@ -277,15 +554,38 @@ const typeIndex = buildTypeIndex(readFileSync(TYPES_PATH, 'utf8'), 'types.ts');
  * darunter ist für beide Aufrufer dasselbe — es gibt keine zweite Fassung, die
  * milder sein könnte.
  */
-const WEB_CALLER = {
-  fileName: 'endpoints.ts',
-  typeIndex,
+/**
+ * Wer da gelesen wird, wenn es die Oberfläche ist — **je Datei** (T-250-2).
+ *
+ * Bis T-250-2 stand hier ein einzelnes Objekt mit `fileName: 'endpoints.ts'`.
+ * Nach dem Umbau nach Merkmalen gibt es diese eine Datei nicht mehr, sondern so
+ * viele, wie es Merkmale gibt; der Leser bleibt derselbe und bekommt nur
+ * gesagt, wessen Text er ansieht.
+ *
+ * Die Typaufstellung ist `types.ts` **plus** die Typen der Aufrufdatei selbst —
+ * dieselbe Bauart wie beim Aufgabenbereich, wo `CreateTodoRequest` neben dem
+ * Aufruf steht. Ohne sie wäre ein Rumpf, dessen Typ mit seinem Merkmal umzieht,
+ * ein „unaufgelöst" in Abschnitt 5, und der Umbau erzeugte blinde Flecken, die
+ * keiner ist.
+ */
+const webCallerOf = (fileName, text) => ({
+  fileName,
+  typeIndex: new Map([...typeIndex, ...buildTypeIndex(text, fileName)]),
   shape: CALL_SHAPES.options,
   schemas: REQUEST_SCHEMAS,
-};
+});
 
-function inspect(text, who = WEB_CALLER) {
-  const { functions, calls, unreadable } = scanCallers(text, who.typeIndex, who.fileName, who.shape);
+function inspect(text, who) {
+  const roh = scanCallers(text, who.typeIndex, who.fileName, who.shape);
+  const functions = roh.functions;
+  /*
+   * Der Ort trägt seit T-250-2 den Dateinamen. Solange die Oberfläche **eine**
+   * Aufrufdatei hatte, war „createTodo (Zeile 42)" eindeutig; bei acht ist es
+   * das nicht mehr, und ein Befund, der nicht sagt, wo er steht, kostet den
+   * Leser die Suche.
+   */
+  const calls = roh.calls.map((call) => ({ ...call, where: `${who.fileName} ${call.where}` }));
+  const unreadable = roh.unreadable.map((eintrag) => `${who.fileName} ${eintrag}`);
   const findings = [];
   const covered = new Set();
   const sentKeys = new Map();
@@ -356,8 +656,40 @@ function inspect(text, who = WEB_CALLER) {
   return { functions, calls, unreadable, findings, covered, sentKeys };
 }
 
-const callerText = readFileSync(CALLER_PATH, 'utf8');
-const result = inspect(callerText);
+/**
+ * Derselbe Vergleich über **mehrere** Aufrufdateien, zu einem Urteil vereinigt.
+ *
+ * Vereinigt wird und nicht nebeneinandergestellt: Ob eine Operation einen
+ * Aufrufer hat, ist eine Frage an die Oberfläche als Ganzes und nicht an eine
+ * Datei. Wäre es anders, wäre der Umbau nach Merkmalen eine Amnestie — jede
+ * einzelne Datei ruft die meisten Operationen nicht an.
+ *
+ * Der **Ort** eines Befundes bleibt trotzdem genau: Er trägt seit T-250-2 den
+ * Dateinamen (siehe `inspect`).
+ */
+function inspectAll(dateien) {
+  const teile = dateien.map((datei) => inspect(datei.source, webCallerOf(datei.name, datei.source)));
+  const covered = new Set();
+  const sentKeys = new Map();
+  for (const teil of teile) {
+    for (const key of teil.covered) covered.add(key);
+    for (const [id, keys] of teil.sentKeys) {
+      const bisher = sentKeys.get(id) ?? new Set();
+      for (const name of keys) bisher.add(name);
+      sentKeys.set(id, bisher);
+    }
+  }
+  return {
+    functions: teile.reduce((summe, teil) => summe + teil.functions, 0),
+    calls: teile.flatMap((teil) => teil.calls),
+    unreadable: teile.flatMap((teil) => teil.unreadable),
+    findings: teile.flatMap((teil) => teil.findings),
+    covered,
+    sentKeys,
+  };
+}
+
+const result = inspectAll(WEB_CALLER_FILES);
 const of = (kind) => result.findings.filter((finding) => finding.kind === kind);
 
 /**
@@ -378,16 +710,68 @@ const addin = inspect(addinText, ADDIN_CALLER);
 const addinOf = (kind) => addin.findings.filter((finding) => finding.kind === kind);
 
 // ---------------------------------------------------------------------------
-section('0  Der Leser liest die Datei — sonst wäre alles Folgende wertlos');
+section('0  Der Leser liest die Dateien — sonst wäre alles Folgende wertlos');
 // ---------------------------------------------------------------------------
+
+/*
+ * Zuerst: **welche** Dateien (F-22 Punkt 3 und 4). Die Herleitung steht oben
+ * bei `WEB_CALLER_FILES`; hier steht das Urteil.
+ *
+ * Die Untergrenze ist eins und nicht acht. Acht wäre ein Zensus über einen
+ * Umbau, der über acht Wellen läuft — der Lauf wäre dann in jeder Zwischenstufe
+ * rot, ohne daß etwas falsch wäre. Eins ist die Aussage, um die es geht:
+ * Irgendwo muß der Aufruf an den Dienst stehen, sonst hat dieser Lauf nichts
+ * gelesen und jede Zusage darunter steht über der leeren Menge.
+ */
+check(
+  `die Aufrufdateien der Oberfläche sind gesucht und gefunden (${String(WEB_CALLER_FILES.length)}): ` +
+    `${WEB_CALLER_NAMES.join(', ')}`,
+  WEB_CALLER_FILES.length >= 1,
+  'keine einzige Datei, in der ein Aufruf an den Dienst stehen dürfte — das ist ein ' +
+    'Fehlschlag der Messung und kein sauberer Baum',
+);
+
+/*
+ * Und die zweite Hälfte: Die Menge kommt auf **zwei** Wegen zustande — ein Blick
+ * auf die Platte und die Ernte des Sammlers —, und beide müssen dasselbe sagen.
+ *
+ * T-247-7 ist der Grund. Dort urteilte ein Wächter über 129 Dateien, ohne eine
+ * gesehen zu haben: Konfigurationsliste und geladene Dateien kamen aus derselben
+ * Quelle, ein Pfadfehler setzte beide auf null, und `0 === 0` war grün. Ein
+ * Zahlenvergleich hätte hier dieselbe Schwäche; verglichen werden deshalb die
+ * **Namen**, in beide Richtungen.
+ */
+const nurAufDerPlatte = featureApiPlatte
+  .map((datei) => datei.name)
+  .filter((name) => !featureApiErnte.includes(name));
+const nurInDerErnte = featureApiErnte.filter(
+  (name) => !featureApiPlatte.some((datei) => datei.name === name),
+);
+check(
+  `Platte und Sammler sehen dieselben Aufrufdateien der Merkmalsordner ` +
+    `(${String(featureApiPlatte.length)} zu ${String(featureApiErnte.length)})`,
+  nurAufDerPlatte.length === 0 && nurInDerErnte.length === 0,
+  [
+    nurAufDerPlatte.length === 0 ? '' : `nur auf der Platte: ${nurAufDerPlatte.join(', ')}`,
+    nurInDerErnte.length === 0 ? '' : `nur in der Ernte: ${nurInDerErnte.join(', ')}`,
+  ]
+    .filter((zeile) => zeile !== '')
+    .join(' | '),
+);
 
 /*
  * Dieselbe Vorsichtsmaßnahme wie in `proof:openapi` Abschnitt 0. Ein Leser,
  * der nichts findet, sieht genauso aus wie eine Datei ohne Fehler. Die Zahl
  * steht deshalb nirgends fest, sondern wird zweimal auf verschiedenen Wegen
  * ermittelt: einmal aus dem Syntaxbaum, einmal aus dem Rohtext.
+ *
+ * Über **alle** Aufrufdateien und nicht über eine: Ein Rohtextzähler, der nur
+ * die Sammelstelle ansieht, wird mit jeder Welle stiller, ohne rot zu werden.
  */
-const rawCalls = [...callerText.matchAll(/\brequest\s*[<(]/g)].length;
+const rawCalls = WEB_CALLER_FILES.reduce(
+  (summe, datei) => summe + [...datei.source.matchAll(/\brequest\s*[<(]/g)].length,
+  0,
+);
 check(
   `so viele Aufrufe gelesen wie im Rohtext stehen (${rawCalls})`,
   rawCalls > 0 && result.calls.length === rawCalls,
@@ -397,9 +781,123 @@ check(
   `es sind überhaupt Aufrufe da (${result.calls.length}, mindestens 45)`,
   result.calls.length >= 45,
 );
+/*
+ * Die Typaufstellung — an der Anforderung aufgespannt und **benutzt** gemessen
+ * (T-251-2).
+ *
+ * ===========================================================================
+ * Was hier stand und warum es fiel
+ * ===========================================================================
+ *
+ *     typeIndex.size > 30 && typeIndex.has('TodoCreate') && typeIndex.has('PoolWrite')
+ *
+ * Der Sinn war richtig und ist unverändert: Eine Aufstellung, die leer aus einer
+ * kaputten Auflösung kommt, sieht genauso aus wie eine, in der nichts falsch
+ * ist. Die **Stichprobe** war es nicht. `typeIndex` kam aus `api/types.ts`
+ * allein, während der Leser längst über `types.ts` **und** die Typen jeder
+ * Aufrufdatei verfügt; `TodoCreate` steht seit der zweiten Welle in
+ * `features/todos/api.ts`, und der Lauf war rot, ohne daß am Bestand irgend
+ * etwas falsch gewesen wäre. Derselbe Fall wie F-22 und E-102, eine Zeile
+ * tiefer: eine Zusage, deren Menge an der Ordnerstruktur hängt statt an der
+ * Anforderung.
+ *
+ * ===========================================================================
+ * Was an die Stelle tritt — zwei Sätze und eine Gegenprobe
+ * ===========================================================================
+ *
+ * **Erstens die Menge.** Die Aufstellung wird über dieselben Quellen
+ * aufgespannt wie beim Leser (siehe {@link WEB_TYPE_INDEX}), und die Quellen
+ * stehen im Namen des Prüfsatzes. Damit ist „nichts gefunden" von „nichts
+ * gesehen" unterscheidbar, ohne daß ein Dateiname in einer Bedingung steht.
+ *
+ * **Zweitens der Gebrauch.** Eine gefüllte Aufstellung, die kein Aufruf anfaßt,
+ * wäre eine Zahl ohne Aussage — genau die Sorte grüner Zeile, gegen die dieser
+ * Lauf gebaut ist. Gezählt werden deshalb die Einträge, über die der Leser
+ * beim Auflösen der Rümpfe **tatsächlich gegangen ist** (`call.body.types`).
+ * Kein Name steht dabei fest: Welche Typen das sind, sagt der Bestand.
+ *
+ * **Und die Gegenprobe.** Derselbe Leser über denselben Text, aber mit einer
+ * leeren Aufstellung, muß auf null benutzte Typen fallen. Ohne sie wäre die
+ * Zahl oben eine Behauptung über eine Verbindung, die niemand nachgemessen
+ * hat — sie könnte auch dann stehen, wenn die Aufstellung gar nicht der Grund
+ * der Auflösung wäre.
+ */
+const genutzteTypen = [
+  ...new Set(
+    result.calls.flatMap((call) => [...(call.body?.types ?? []), ...(call.query?.types ?? [])]),
+  ),
+].sort();
+
+/**
+ * Die Untergrenze auf die Aufstellung — gegen den **Endstand** gesetzt, nicht
+ * gegen den heutigen.
+ *
+ * Hier stand `> 30`, und die Zahl war so richtig wie die Stichprobe daneben:
+ * gemessen an einer `api/types.ts` mit 75 Einträgen. Sie hat denselben Fehler.
+ * Diese Zahl **soll** über die Wellen fallen — die Sammelstelle löst sich auf,
+ * und was danach in einer `features/…/api.ts` steht, sind die Anfragetypen
+ * dieses Merkmals und nicht mehr die Typen der ganzen Oberfläche. Eine
+ * Untergrenze am heutigen Stand wäre in der letzten Welle rot, ohne daß etwas
+ * falsch wäre — genau der Fall, den dieser Prüfsatz gerade hinter sich hat.
+ *
+ * Zehn ist deshalb keine Hälfte von heute (89), sondern die Grenze zwischen
+ * „gelesen" und „nichts gelesen": Acht Merkmalsordner, die je ihre Anfragetypen
+ * führen, liegen weit darüber; ein Leser, dem die Auflösung wegbricht, liegt bei
+ * null. Das Gewicht trägt ohnehin der Prüfsatz darunter — eine Aufstellung, die
+ * niemand benutzt, ist eine Zahl ohne Aussage.
+ */
+const TYPAUFSTELLUNG_MINDESTENS = 10;
+
 check(
-  `die Typaufstellung der Oberfläche ist gelesen (${typeIndex.size} Typen)`,
-  typeIndex.size > 30 && typeIndex.has('TodoCreate') && typeIndex.has('PoolWrite'),
+  `die Typaufstellung der Oberfläche ist gelesen (${WEB_TYPE_INDEX.size} Typen aus ` +
+    `${WEB_TYPE_SOURCES.length}: ${WEB_TYPE_SOURCES.map((quelle) => quelle.name).join(', ')})`,
+  WEB_TYPE_SOURCES.length >= 1 && WEB_TYPE_INDEX.size >= TYPAUFSTELLUNG_MINDESTENS,
+  WEB_TYPE_SOURCES.length === 0
+    ? 'keine einzige Quelle für Typen gefunden — das ist ein Fehlschlag der Messung'
+    : `${String(WEB_TYPE_INDEX.size)} Typen, verlangt sind mindestens ${String(TYPAUFSTELLUNG_MINDESTENS)}`,
+);
+
+/**
+ * Die Untergrenze auf die **benutzten** Einträge — und warum sie so tief liegt.
+ *
+ * Heute sind es sechs. Die meisten Rümpfe dieser Oberfläche sind
+ * Objektliterale; über die Aufstellung geht nur, wer einen getippten Parameter
+ * weiterreicht (`body: eingabe` mit `eingabe: TodoCreate`). Drei ist rund die
+ * Hälfte des heutigen Standes — dieselbe Bauart wie bei `proveHarvest` und den
+ * Untergrenzen in `proof:release-safety`: Sie soll rot werden, wenn die
+ * Auflösung über die Aufstellung **aufhört**, nicht wenn ein Aufruf sein
+ * Objektliteral ausschreibt.
+ *
+ * Eine Obergrenze steht hier ausdrücklich nicht: Mehr benutzte Typen sind kein
+ * Befund.
+ */
+const GENUTZTE_TYPEN_MINDESTENS = 3;
+
+const unbekannteTypen = genutzteTypen.filter((name) => !WEB_TYPE_INDEX.has(name));
+check(
+  `und sie wird auch benutzt: ${genutzteTypen.length} ihrer Einträge lösen einen Rumpf auf ` +
+    `(${genutzteTypen.join(', ')})`,
+  genutzteTypen.length >= GENUTZTE_TYPEN_MINDESTENS && unbekannteTypen.length === 0,
+  genutzteTypen.length < GENUTZTE_TYPEN_MINDESTENS
+    ? `nur ${String(genutzteTypen.length)} benutzte Einträge, verlangt sind ${String(GENUTZTE_TYPEN_MINDESTENS)} — ` +
+      'der Leser löst seine Rümpfe nicht mehr über die Aufstellung auf'
+    : `nicht in der Aufstellung: ${unbekannteTypen.join(', ')}`,
+);
+
+const typenOhneAufstellung = new Set(
+  WEB_CALLER_FILES.flatMap((datei) =>
+    scanCallers(datei.source, new Map(), datei.name, CALL_SHAPES.options).calls.flatMap((call) => [
+      ...(call.body?.types ?? []),
+      ...(call.query?.types ?? []),
+    ]),
+  ),
+);
+check(
+  'Gegenprobe: mit leerer Aufstellung löst kein Aufruf mehr einen Rumpftyp auf',
+  typenOhneAufstellung.size === 0 && genutzteTypen.length > 0,
+  typenOhneAufstellung.size === 0
+    ? 'auch mit Aufstellung wurde kein Typ benutzt — die Zahl oben stünde über der leeren Menge'
+    : `ohne Aufstellung benutzt: ${[...typenOhneAufstellung].join(', ')}`,
 );
 check(
   'jeder Aufruf ist als Ganzes lesbar — Pfad, Methode, Optionen',
@@ -408,17 +906,27 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-section('1  Es gibt keinen zweiten Weg zum Dienst als diese Datei');
+section('1  Es gibt keinen Weg zum Dienst außer den gemessenen Dateien');
 // ---------------------------------------------------------------------------
 
 /*
- * Dieser Lauf liest **eine** Datei. Diese Beschränkung ist nur so viel wert
- * wie die Zusicherung, dass es keine zweite gibt. Also wird sie gemessen und
- * nicht geglaubt: `fetch` steht ausschließlich in `client.ts`, und `request(`
- * ausschließlich in `endpoints.ts`.
+ * Dieser Lauf liest die Aufrufdateien der Oberfläche. Diese Beschränkung ist
+ * nur so viel wert wie die Zusicherung, daß es daneben keine weitere gibt. Also
+ * wird sie gemessen und nicht geglaubt: `fetch` steht ausschließlich in
+ * `client.ts`, und `request` ausschließlich dort und in den Dateien, die
+ * Abschnitt 0 gefunden hat.
+ *
+ * **Was sich mit F-22 geändert hat, ist die Menge und nicht die Zusage**
+ * (T-250-2). Bis dahin stand hier „genau zwei Dateien", und das war die alte
+ * Ordnerstruktur und nicht die Anforderung — dieselbe Bauart wie E-099 Punkt 3,
+ * wo ein Wächter seine Menge an der Route aufspannte statt an der Anforderung.
+ * Die Anforderung lautet: In der Oberfläche entsteht kein Aufruf an den Dienst
+ * außerhalb der dafür vorgesehenen Stellen. Wo diese Stellen liegen, sagt der
+ * Baum, und der Baum wird gelesen (siehe `WEB_CALLER_FILES`).
  *
  * Fällt das eines Tages, ist die richtige Antwort nicht, diese Prüfung zu
- * lockern, sondern die neue Stelle in die Aufstellung aufzunehmen.
+ * lockern, sondern die neue Stelle **messbar** zu machen — nicht, sie
+ * einzutragen, und schon gar nicht, den Namen zu wechseln.
  *
  * ===========================================================================
  * Womit gemessen wird — und womit bis T-188 gemessen wurde (A-A-40)
@@ -454,18 +962,13 @@ section('1  Es gibt keinen zweiten Weg zum Dienst als diese Datei');
  *    was der Bündler auflöst.
  */
 
-/**
- * Die Endungen, die der Bündler auflöst — ausgeschrieben (A-A-61).
- *
- * Ausgeschrieben und nicht als Ausdruck: Wer eine Endung hinzunimmt, soll sie
- * eintragen und dabei merken, daß er sie eintragen mußte. `.cjs` steht mit
- * darin, obwohl heute keine solche Datei im Baum liegt — die Liste ist gegen
- * das gebaut, was auflösbar **wäre**, nicht gegen das, was zufällig daliegt.
+/*
+ * `BUNDLED_EXTENSIONS`, `isBundledSource` und die Ernte selbst stehen seit
+ * T-250-2 oben bei der Auflösung der Pfade — Abschnitt 0 urteilt jetzt über die
+ * Aufrufdateien und braucht die Ernte dafür schon. Die Prüfsätze **über** die
+ * Ernte sind hier geblieben, wo sie hingehören: unmittelbar vor der Zusage, die
+ * auf ihnen ruht.
  */
-const BUNDLED_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
-
-const isBundledSource = (name) =>
-  BUNDLED_EXTENSIONS.some((extension) => name.endsWith(extension)) && !name.endsWith('.d.ts');
 
 /**
  * Die Ernte eines Sammlers, bevor über sie geurteilt wird (A-A-61).
@@ -493,22 +996,10 @@ function proveHarvest(who, files, minimum, mustContain) {
   );
 }
 
-const webSources = [];
-const walk = (dir) => {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
-    if (entry.isDirectory()) walk(child);
-    else if (isBundledSource(entry.name)) webSources.push(child);
-  }
-};
-walk(WEB_SOURCE_DIR);
-
-const webFiles = webSources.map((file) => ({
-  name: file.pathname.slice(WEB_SOURCE_DIR.pathname.length),
-  source: readFileSync(file, 'utf8'),
-}));
-
-proveHarvest('die Oberfläche', webFiles, 100, ['api/client.ts', 'api/endpoints.ts']);
+proveHarvest('die Oberfläche', webFiles, 100, [
+  alsName(WEB_SOURCE_DIR, WEB_CLIENT_PATH),
+  ...WEB_CALLER_NAMES,
+]);
 
 /**
  * Wo der Zugriff auf das globale `fetch` seinen Platz hat — ausgeschrieben.
@@ -516,16 +1007,34 @@ proveHarvest('die Oberfläche', webFiles, 100, ['api/client.ts', 'api/endpoints.
  * Eine Liste von **Dateien** und keine Ausnahme für eine **Form**: Wer
  * `window.fetch` allgemein durchließe, hätte den blinden Ausdruck von vorhin
  * unter anderem Namen zurück.
+ *
+ * Seit T-249-1 steht der Name nicht mehr als Zeichenkette hier, sondern kommt
+ * aus derselben Auflösung, die die Datei oben findet. Die Zusage ist
+ * unverändert — **eine** Datei, benannt, keine Form —; nur wird sie nicht
+ * dadurch falsch, daß die Datei umzieht. Zöge man beides getrennt nach, wäre
+ * genau der Tag denkbar, an dem der Sammler `api/client.ts` nicht mehr findet
+ * und diese Liste trotzdem darauf zeigt: Der Ausnahmeort läge dann auf einer
+ * Datei, die es nicht gibt, und jeder Zugriff im Baum wäre ein Fund — oder,
+ * schlimmer, keiner.
  */
-const WEB_FETCH_HOME = ['api/client.ts'];
+const WEB_FETCH_HOME = [alsName(WEB_SOURCE_DIR, WEB_CLIENT_PATH)];
 
 /**
- * Wo der Zugriff auf die Anfragefunktion seinen Platz hat — ausgeschrieben.
+ * Wo der Zugriff auf die Anfragefunktion seinen Platz hat — **gemessen**.
  *
- * `api/endpoints.ts` ruft sie, `api/client.ts` führt sie. Beide stehen als
- * **Datei** da und nicht als Form, aus demselben Grund wie oben.
+ * `api/client.ts` führt sie, die Aufrufdateien rufen sie. Beides steht als
+ * **Datei** da und nicht als Form, aus demselben Grund wie oben; der
+ * Unterschied zu `WEB_FETCH_HOME` ist, daß die zweite Hälfte dieser Liste seit
+ * T-250-2 nicht mehr eine Datei ist, sondern so viele, wie es Merkmalsordner
+ * gibt. Wo diese Menge herkommt und warum sie nicht geraten wird, steht bei
+ * {@link WEB_CALLER_FILES}; daß sie nicht leer ist, hat Abschnitt 0 gemessen.
+ *
+ * **Kein Muster über Namen.** `features/…/api.ts` steht hier nirgends als
+ * Ausdruck: Erlaubt ist, was auf der Platte liegt **und** eingesammelt wurde,
+ * nicht, was so heißt. Eine erfundene `features/erfunden/api.ts` ist deshalb
+ * ein Fund und kein Freibrief — die Gegenprobe dazu steht in Abschnitt 6.
  */
-const WEB_REQUEST_HOME = ['api/endpoints.ts', 'api/client.ts'];
+const WEB_REQUEST_HOME = [alsName(WEB_SOURCE_DIR, WEB_CLIENT_PATH), ...WEB_CALLER_NAMES];
 
 const strayFetch = strayGlobalFetch(webFiles, WEB_FETCH_HOME);
 
@@ -545,7 +1054,9 @@ check(
   strayFetch.map(describeStray).join(' | '),
 );
 check(
-  '`request` steht nur in api/endpoints.ts und in api/client.ts, wo es entsteht',
+  `\`request\` steht nur in api/client.ts, wo es entsteht, und in ` +
+    `${WEB_CALLER_NAMES.length === 1 ? 'der einen gemessenen Aufrufdatei' : `den ${String(WEB_CALLER_NAMES.length)} gemessenen Aufrufdateien`}: ` +
+    `${WEB_CALLER_NAMES.join(', ')}`,
   strayRequest.length === 0,
   strayRequest.map(describeStray).join(' | '),
 );
@@ -565,38 +1076,40 @@ check('kein Aufruf zeigt auf einen Weg, den der Dienst nicht führt', of('route'
  * ausgeschrieben und nicht als „meistens ruft sie alles an".
  */
 const NOT_CALLED_BY_UI = new Set([
-  // Die fünf Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
+  // Die vier Add-in-Routen. **Anderer Aufrufer, nicht ungeprüft** (T-132,
   // O-M): Dass jede von ihnen im Aufgabenbereich einen Aufrufer hat, misst
   // Abschnitt 7 — mit demselben Leser und demselben Urteil.
+  //
+  // Vier seit T-247. Eine fünfte, `addAddinTodoAttachment`, stand hier von
+  // PR #16 bis zur Entscheidung E-100 gegen das Anhängen über das Add-in
+  // (A-19.19). Sie ist ersatzlos gefallen — samt Route, Aufrufer im
+  // Aufgabenbereich und Eintrag in der Beschreibung.
   'getAddinContext',
   'findAddinDuplicates',
   'createAddinTodo',
-  'addAddinTodoAttachment',
   'createAddinTimeEntry',
-  // T-066, **Übergabe an frontend-dev.** `GET /board` ist die Antwort auf
-  // E-054: Kanban-Spalten sind Regeln über Tags, eine Karte kann in mehreren
-  // Spalten zugleich stehen, und das Board ist damit eine eigene Frage
-  // geworden statt einer Gruppierung nach `statusId`. Die Oberfläche baut die
-  // Ansicht in einer eigenen Aufgabe; bis dahin gruppiert `BoardScreen.tsx`
-  // weiterhin selbst nach Status und ruft diese Route nicht an.
-  //
-  // Der Eintrag steht hier und nicht als roter Lauf, weil die Lücke **benannt**
-  // ist: `apps/web` gehört einem anderen Agenten, und T-066 durfte dort nichts
-  // ändern (dieselbe Lage wie `createTodo.tagNames` aus T-058). Wer die Zeile
-  // entfernt, ohne dass die Oberfläche `/board` anruft, bekommt den Befund
-  // zurück — so soll es sein.
-  'getBoard',
-  // T-138, **Uebergabe an frontend-dev (T-139).** `GET /version` gibt heraus,
-  // was der Dienst zuletzt ueber die veroeffentlichte Fassung weiss (A-18.2,
-  // E-069). Der Aufrufer entsteht mit dem Dialog in T-139; T-138 und T-139
-  // laufen in derselben Welle, und `apps/web` gehoert einem anderen Agenten.
-  //
-  // Dieselbe Lage wie bei `getBoard`, und derselbe Umgang: Der Eintrag steht
-  // hier und nicht als roter Lauf, weil die Luecke **benannt** ist. Sobald
-  // `endpoints.ts` die Route anruft, ist die Zeile ueberfluessig -- der Lauf
-  // wird davon nicht rot, aber sie sagt dann etwas Falsches und gehoert
-  // entfernt.
-  'getVersionCheck',
+  /*
+   * Hier standen bis T-253-2 `getBoard` (T-066) und `getVersionCheck` (T-138).
+   * Beide waren **Übergaben** an frontend-dev — „die Oberfläche ruft diese
+   * Route noch nicht an, `apps/web` gehört einem anderen Agenten" —, und beide
+   * Übergaben sind längst eingelöst:
+   *
+   *   - `features/board/api.ts:86` ruft `/board`, `BoardScreen.tsx:159` ruft
+   *     `getBoard(…)`;
+   *   - `api/endpoints.ts:416` ruft `/version-check`, `useUpdateNotice.ts:145`
+   *     ruft `getVersionCheck()`.
+   *
+   * Die alten Zeilen haben den Lauf nicht rot gemacht — ein Eintrag zuviel
+   * unterdrückt nur einen Befund, den es nicht gibt. Sie haben etwas
+   * Schlimmeres getan: Sie haben zwei Absätze lang einen Bauzustand behauptet,
+   * den es seit Wellen nicht mehr gab, und wer sie las, glaubte ihn.
+   *
+   * Deshalb reicht das Streichen nicht. Unmittelbar unter dem Prüfsatz stehen
+   * seit T-253-2 zwei Wächter, die genau diese Sorte Leiche finden, statt sie
+   * jemandem beim Lesen auffallen zu lassen: ein Eintrag, der **angerufen**
+   * wird, und ein Eintrag, den die Beschreibung **nicht mehr führt** (das wäre
+   * `addAddinTodoAttachment` nach E-100 gewesen).
+   */
 ]);
 const uncalled = [...operations.entries()]
   .filter(([key, operation]) => !result.covered.has(key) && !NOT_CALLED_BY_UI.has(operation.id))
@@ -605,6 +1118,72 @@ check(
   `jede Operation außerhalb von /addin hat einen Aufrufer (${operations.size - NOT_CALLED_BY_UI.size})`,
   uncalled.length === 0,
   uncalled.join(', '),
+);
+
+/*
+ * ===========================================================================
+ * Und die Ausnahmeliste selbst wird gemessen (T-253-2)
+ * ===========================================================================
+ *
+ * Eine Ausnahmeliste hat zwei Zustände, die niemandem auffallen, weil beide
+ * **grün** aussehen:
+ *
+ *   1. Der Eintrag ist eingelöst — die Oberfläche ruft die Route inzwischen an.
+ *      Der Prüfsatz oben zieht ihn trotzdem ab und schweigt.
+ *   2. Der Eintrag zeigt ins Leere — die Operation heißt anders oder ist
+ *      gefallen. Auch dann zieht er ab und schweigt.
+ *
+ * Beides ist derselbe Fehler wie in Abschnitt 6 vor T-253-2: eine Zusage, die
+ * nur so lange stimmt, wie zufällig niemand etwas verschoben hat. Sie wird
+ * jetzt gemessen, mit Gegenprobe zu jeder Richtung — „nichts gefunden" muß von
+ * „nichts angesehen" unterscheidbar bleiben.
+ */
+const OPERATION_IDS = new Map([...operations.entries()].map(([key, operation]) => [operation.id, key]));
+
+/** Einträge, die die Oberfläche inzwischen anruft — die Ausnahme ist eingelöst. */
+const eingeloesteAusnahmen = (menge) =>
+  [...menge].filter((id) => {
+    const key = OPERATION_IDS.get(id);
+    return key !== undefined && result.covered.has(key);
+  });
+
+/** Einträge, die die Beschreibung nicht (mehr) führt — die Ausnahme zeigt ins Leere. */
+const unbekannteAusnahmen = (menge) => [...menge].filter((id) => !OPERATION_IDS.has(id));
+
+const eingeloest = eingeloesteAusnahmen(NOT_CALLED_BY_UI);
+check(
+  `kein Eintrag der Ausnahmeliste wird inzwischen doch angerufen (${String(NOT_CALLED_BY_UI.size)} geprüft gegen ${String(result.covered.size)} angerufene Operationen)`,
+  eingeloest.length === 0,
+  `${eingeloest.join(', ')} — die Übergabe ist eingelöst, die Zeile gehört gestrichen`,
+);
+const unbekannt = unbekannteAusnahmen(NOT_CALLED_BY_UI);
+check(
+  `jeder Eintrag der Ausnahmeliste ist eine Operation, die es gibt (${String(NOT_CALLED_BY_UI.size)} gegen ${String(OPERATION_IDS.size)})`,
+  unbekannt.length === 0,
+  `${unbekannt.join(', ')} — die Beschreibung führt diese Kennung nicht`,
+);
+
+/*
+ * Die Gegenproben. Sie fassen die echte Liste nicht an, sondern halten
+ * denselben Regeln je eine Menge hin, bei der die Antwort feststeht: eine
+ * gemessen angerufene Kennung und eine erfundene.
+ */
+const [eineAngerufene] = [...operations.entries()]
+  .filter(([key]) => result.covered.has(key))
+  .map(([, operation]) => operation.id);
+check(
+  `Gegenprobe: eine angerufene Kennung (${eineAngerufene ?? '—'}) in der Ausnahmeliste würde gefunden`,
+  eineAngerufene !== undefined && eingeloesteAusnahmen(new Set([eineAngerufene])).length === 1,
+  eineAngerufene === undefined
+    ? 'keine einzige Operation gilt als angerufen — dann prüft dieser Abschnitt nichts'
+    : 'die Regel sieht eine angerufene Ausnahme nicht',
+);
+check(
+  'Gegenprobe: eine erfundene Kennung in der Ausnahmeliste würde gefunden, eine echte nicht',
+  unbekannteAusnahmen(new Set(['dieseOperationGibtEsNicht'])).length === 1 &&
+    eineAngerufene !== undefined &&
+    unbekannteAusnahmen(new Set([eineAngerufene])).length === 0,
+  'die Regel sagt zu jeder Kennung dasselbe',
 );
 
 // ---------------------------------------------------------------------------
@@ -632,16 +1211,14 @@ const NEVER_SENT = {
   // Die Reihenfolge der Spalten setzt `PUT /todo-statuses/order` als Ganzes
   // (A-5.4). Beim Anlegen ist 0 der Vorgabewert: hinten anhängen.
   createTodoStatus: ['position'],
-  // T-058, **Übergabe an frontend-dev.** Der Dienst nimmt seit T-058 Tags über
-  // ihren Namen entgegen und legt sie an, wenn es sie noch nicht gibt
-  // (architektur.md 3.4). Der Anlegedialog in `apps/web` schickt bisher nur
-  // `tagIds` — die Fachlogik steht, die Bedienmöglichkeit fehlt.
-  //
-  // Der Eintrag steht hier und nicht als roter Lauf, weil die Lücke **benannt**
-  // ist und nicht unbemerkt: `apps/web` gehört einem anderen Agenten, und diese
-  // Aufgabe durfte dort nichts ändern. Wer die Zeile entfernt, ohne dass die
-  // Oberfläche `tagNames` sendet, bekommt den Befund zurück — so soll es sein.
-  createTodo: ['tagNames'],
+  // Hier stand bis T-253-2 `createTodo: ['tagNames']` — die Übergabe aus
+  // T-058: „Die Fachlogik steht, die Bedienmöglichkeit fehlt." Sie ist
+  // eingelöst; `features/todos/TodoFormDialog.tsx:113` schickt `tagNames`, und
+  // `features/tags/TagInput.tsx` ist die Bedienmöglichkeit dazu. Die alte
+  // Zeile hat den Lauf nicht rot gemacht, sondern nur einen Bauzustand
+  // behauptet, den es nicht mehr gab — dieselbe Leiche wie `getBoard` und
+  // `getVersionCheck` in Abschnitt 2, und **gefunden** hat sie nicht ein
+  // Leser, sondern der Wächter unten.
   // `createPool` und `updatePool` standen hier bis T-074 mit `position` und
   // `placement`. Beide Übergaben sind eingelöst: T-072 hat der Oberfläche ein
   // gemeinsames Formular für Pool und Spalte gegeben, das den Anzeigeort als
@@ -669,6 +1246,76 @@ check(
   'kein Feld, das der Dienst liest und die Oberfläche unerklärt nie sendet',
   surprises.length === 0,
   surprises.join(', '),
+);
+
+/*
+ * Und dieselbe Messung an der Liste selbst (T-253-2).
+ *
+ * `NEVER_SENT` ist dieselbe Bauart wie `NOT_CALLED_BY_UI` in Abschnitt 2 und
+ * hat dieselben zwei stillen Zustände: Der Zusatz ist **eingelöst** — die
+ * Oberfläche sendet das Feld inzwischen —, oder er zeigt **ins Leere** — die
+ * Route liest das Feld nicht mehr. In beiden Fällen überspringt die Schleife
+ * oben den Namen und sagt nichts.
+ *
+ * Der Text bei `createTodo.tagNames` verlangt ausdrücklich, daß die Zeile
+ * fällt, sobald die Oberfläche sendet („Wer die Zeile entfernt, ohne dass die
+ * Oberfläche `tagNames` sendet, bekommt den Befund zurück"). Die Gegenrichtung
+ * stand nirgends und wird jetzt gemessen.
+ */
+/** Zusätze, die die Oberfläche inzwischen sendet — der Zusatz ist eingelöst. */
+const eingeloesteZusaetze = (liste) =>
+  Object.entries(liste).flatMap(([id, felder]) => {
+    const sent = result.sentKeys.get(id);
+    if (sent === undefined) return [];
+    return felder.filter((name) => sent.has(name)).map((name) => `${id}.${name}`);
+  });
+
+/** Zusätze, die kein Schema mehr führt — der Zusatz zeigt ins Leere. */
+const unbekannteZusaetze = (liste) =>
+  Object.entries(liste).flatMap(([id, felder]) => {
+    const schema = REQUEST_SCHEMAS[id];
+    if (schema === undefined) return [`${id} (diese Route liest keinen Rumpf)`];
+    const namen = fieldsOf(schema).names;
+    return felder.filter((name) => !namen.includes(name)).map((name) => `${id}.${name}`);
+  });
+
+const zusatzZahl = Object.values(NEVER_SENT).flat().length;
+const eingeloesteFelder = eingeloesteZusaetze(NEVER_SENT);
+check(
+  `kein Zusatz in der Liste, den die Oberfläche inzwischen doch sendet (${String(zusatzZahl)} geprüft)`,
+  eingeloesteFelder.length === 0,
+  `${eingeloesteFelder.join(', ')} — der Zusatz ist eingelöst, die Zeile gehört gestrichen`,
+);
+const unbekannteFelder = unbekannteZusaetze(NEVER_SENT);
+check(
+  `jeder Zusatz in der Liste ist ein Feld, das die Route wirklich liest (${String(zusatzZahl)} geprüft)`,
+  unbekannteFelder.length === 0,
+  `${unbekannteFelder.join(', ')} — die Route liest diesen Namen nicht`,
+);
+
+/*
+ * Die Gegenproben zu beidem, nach demselben Muster wie in Abschnitt 2: Nicht
+ * die echte Liste wird verbogen, sondern denselben Regeln wird je eine
+ * künstliche Liste hingehalten, bei der die Antwort feststeht — ein gemessen
+ * **gesendetes** Feld und ein erfundenes.
+ */
+const [einGesendetes] = [...result.sentKeys.entries()]
+  .filter(([id, keys]) => REQUEST_SCHEMAS[id] !== undefined && keys.size > 0)
+  .map(([id, keys]) => ({ id, name: [...keys][0] }));
+check(
+  `Gegenprobe: ein gesendetes Feld (${einGesendetes === undefined ? '—' : `${einGesendetes.id}.${einGesendetes.name}`}) als Zusatz fiele als eingelöst auf`,
+  einGesendetes !== undefined &&
+    eingeloesteZusaetze({ [einGesendetes.id]: [einGesendetes.name] }).length === 1,
+  einGesendetes === undefined
+    ? 'kein einziges Feld gilt als gesendet — dann prüft diese Regel nichts'
+    : 'die Regel sieht einen eingelösten Zusatz nicht',
+);
+check(
+  'Gegenprobe: ein erfundener Zusatz fiele als „liest die Route nicht" auf',
+  einGesendetes !== undefined &&
+    unbekannteZusaetze({ [einGesendetes.id]: ['diesesFeldGibtEsNicht'] }).length === 1 &&
+    unbekannteZusaetze({ [einGesendetes.id]: [einGesendetes.name] }).length === 0,
+  'die Regel sagt zu jedem Namen dasselbe',
 );
 
 // ---------------------------------------------------------------------------
@@ -756,27 +1403,116 @@ const REGRESSIONS = [
 const label = (finding) => `${finding.kind}: ${finding.message}`;
 const baseline = new Set(result.findings.map(label));
 
+/*
+ * ===========================================================================
+ * Wer die Stelle trägt — und warum „genau eine" die falsche Frage war
+ * (T-253-2)
+ * ===========================================================================
+ *
+ * Welche Aufrufdatei die Stelle trägt, wird **gesucht** und nicht gewußt
+ * (T-250-2). Bis dahin stand hier `callerText` — die eine Sammelstelle. Mit dem
+ * Umbau wandert jede dieser vier Stellen in einen Merkmalsordner, und eine
+ * Selbstprobe, die dann ins Leere greift, ist keine.
+ *
+ * Bis T-253-2 verlangte die Probe **genau eine** Trägerin, mit der Begründung:
+ * „Zwei heißt: Der Zuwachs unten wäre zwei, und die Probe verlangt eins."
+ * Dieser Satz war schlicht falsch. Verdorben wird **eine** Datei — `replace`
+ * ohne `g` an genau einer Stelle —, und der Zuwachs ist deshalb eins,
+ * gleichgültig wie viele andere Dateien dieselbe Stelle auch tragen. Die Zahl
+ * hat nie gemessen, was sie zu messen vorgab.
+ *
+ * Was sie tatsächlich gemessen hat, ist die **Aufteilung des Ordners**: In
+ * Welle 4 lagen `getBoard` und `listPoolTodos` kurzzeitig in zwei Merkmalen,
+ * beide mit `includeCompleted: "true"`, und der Lauf war rot, ohne daß an der
+ * Anforderung irgend etwas fehlte. Er ist danach wieder grün geworden, weil
+ * frontend-dev die beiden aus **sachlichen** Gründen zusammengelegt hat — ein
+ * grüner Haken aus einem Zufall. Es ist derselbe Fehler wie bei F-22 und bei
+ * der Stichprobe aus T-251-2, zum dritten Mal: eine Zusage, deren Menge an der
+ * Ordnerstruktur aufgespannt ist statt an der Anforderung.
+ *
+ * ===========================================================================
+ * Was die Selbstprobe zusichern soll
+ * ===========================================================================
+ *
+ * Sie sichert **nicht** zu, wo ein Aufruf steht — das ist Abschnitt 1, und
+ * dort gehört es hin. Sie sichert zu:
+ *
+ *   **Der Leser ist nicht blind. Setzt man einen der vier Fehler aus T-050 in
+ *   eine Aufrufdatei zurück, beanstandet er ihn — in jeder Datei, die die
+ *   Stelle trägt, und in wenigstens einer.**
+ *
+ * Daraus folgen zwei Prüfsätze je Probe, und keiner von beiden kennt eine Zahl
+ * von Dateien:
+ *
+ *   1. **Untergrenze.** Mindestens eine Trägerin. Keine heißt: Die Stelle ist
+ *      umgeschrieben worden, die Probe greift ins Leere und darf nicht als
+ *      bestanden durchgehen. Das ist der Unterschied zwischen „nichts
+ *      gefunden" und „nichts angesehen".
+ *   2. **Je Trägerin ein Zuwachs.** Jede tragende Datei wird einzeln verdorben
+ *      und muß genau **eine** Beanstandung der erwarteten Art mehr ergeben.
+ *      Zwei Trägerinnen sind damit zwei Proben statt eines Fehlschlags — mehr
+ *      Messung, nicht weniger.
+ *
+ * Welle 5 kann `features/export` also aufteilen, wie es fachlich richtig ist;
+ * dieser Abschnitt wird davon weder zufällig rot noch zufällig grün.
+ */
+
+/** Die Aufrufdateien, in denen eine Stelle steht. Ohne `g`: `test` ist zustandslos. */
+const traegerinnenVon = (pattern) => WEB_CALLER_FILES.filter((datei) => pattern.test(datei.source));
+
 for (const regression of REGRESSIONS) {
-  const spoiled = callerText.replace(regression.pattern, regression.replacement);
-  if (spoiled === callerText) {
-    check(`die Probe „${regression.name}" lässt sich anwenden`, false, 'die Stelle wurde nicht gefunden');
-    continue;
-  }
-  if (spoiled.split('\n').length !== callerText.split('\n').length) {
-    check(`die Probe „${regression.name}" bleibt einzeilig`, false, 'die Ersetzung verschiebt Zeilen');
-    continue;
-  }
-  const found = inspect(spoiled).findings.filter((finding) => !baseline.has(label(finding)));
+  const traeger = traegerinnenVon(regression.pattern);
   check(
-    `${regression.name} wird gefunden`,
-    found.length === 1 && found[0].kind === regression.kind,
-    found.length === 0 ? 'nichts beanstandet' : found.map(label).join(' | '),
+    `die Probe „${regression.name}" hat eine Trägerin (${String(traeger.length)} von ${String(WEB_CALLER_FILES.length)}: ${traeger.map((datei) => datei.name).join(', ') || '—'})`,
+    traeger.length >= 1,
+    `die Stelle steht in keiner der gelesenen Aufrufdateien: ${WEB_CALLER_NAMES.join(', ')}`,
   );
-  // Der Wortlaut des Befundes gehört in die Ausgabe und nicht nur ins Grüne:
-  // Wer den Lauf liest, soll sehen, **was** der Prüfer über den wieder
-  // eingesetzten Namen sagt — sonst ist auch diese Selbstprobe nur ein Haken.
-  if (found.length === 1) console.log(`        → ${found[0].message}`);
+  for (const datei of traeger) {
+    const spoiled = datei.source.replace(regression.pattern, regression.replacement);
+    if (spoiled.split('\n').length !== datei.source.split('\n').length) {
+      check(
+        `die Probe „${regression.name}" bleibt in ${datei.name} einzeilig`,
+        false,
+        'die Ersetzung verschiebt Zeilen',
+      );
+      continue;
+    }
+    const found = inspectAll(
+      WEB_CALLER_FILES.map((andere) =>
+        andere.name === datei.name ? { ...andere, source: spoiled } : andere,
+      ),
+    ).findings.filter((finding) => !baseline.has(label(finding)));
+    check(
+      `${regression.name} wird in ${datei.name} gefunden`,
+      found.length === 1 && found[0].kind === regression.kind,
+      found.length === 0 ? 'nichts beanstandet' : found.map(label).join(' | '),
+    );
+    // Der Wortlaut des Befundes gehört in die Ausgabe und nicht nur ins Grüne:
+    // Wer den Lauf liest, soll sehen, **was** der Prüfer über den wieder
+    // eingesetzten Namen sagt — sonst ist auch diese Selbstprobe nur ein Haken.
+    if (found.length === 1) console.log(`        → ${found[0].message}`);
+  }
 }
+
+/*
+ * Die Gegenprobe zur Trägerinnensuche, und sie prüft **die Regel**, nicht den
+ * Bestand: Eine Stelle, die es nicht gibt, muß **keine** Trägerin haben, und
+ * ein Wort, das aus einer Aufrufdatei selbst genommen ist, muß mindestens eine
+ * haben. Ohne die erste Hälfte wäre eine Suche, die jede Datei für eine
+ * Trägerin hält, von einer richtigen nicht zu unterscheiden — die Untergrenze
+ * oben wäre dann in jedem Baum grün, auch im leeren. Ohne die zweite wäre eine
+ * Suche, die **nie** etwas findet, ebenso grün, und jede Probe darüber wäre in
+ * Wahrheit übersprungen.
+ */
+const [ersteAufrufdatei] = WEB_CALLER_FILES;
+const einWortDaraus = ersteAufrufdatei?.source.match(/[A-Za-z]{8,}/)?.[0];
+check(
+  `Gegenprobe: eine erfundene Stelle hat keine Trägerin, „${einWortDaraus ?? '—'}" aus ${ersteAufrufdatei?.name ?? '—'} hat eine (${String(WEB_CALLER_FILES.length)} Aufrufdateien abgesucht)`,
+  traegerinnenVon(/dieseStelleStehtInKeinerAufrufdatei/).length === 0 &&
+    einWortDaraus !== undefined &&
+    traegerinnenVon(new RegExp(einWortDaraus)).length >= 1,
+  'die Suche sagt zu jeder Stelle dasselbe',
+);
 
 /*
  * Und die Umkehrung: Der unveränderte Text darf **nichts** ergeben. Ohne diese
@@ -937,6 +1673,23 @@ const REQUEST_FORMS = [
     name: 'eine Zerlegung: `const { request: senden } = client`',
     source: "import * as client from '../api/client';\nconst { request: senden } = client;\nexport const laden = async () => senden(WEG);\n",
   },
+  /*
+   * Die sechste Probe ist neu mit F-22 und misst die **Menge** statt der Form.
+   *
+   * Seit T-250-2 darf `request` in jeder `api.ts` eines Merkmalsordners stehen.
+   * Die naheliegende und falsche Umsetzung dieser Regel wäre ein Muster über den
+   * Namen: „heißt es `features/…/api.ts`, ist es erlaubt". Dann wäre der
+   * Wächter mit **einer** neuen Datei zu umgehen, die niemand angelegt hat, und
+   * er sagte trotzdem grün.
+   *
+   * Erlaubt ist deshalb nicht, was so heißt, sondern was auf der Platte liegt
+   * und eingesammelt wurde. Diese Kunstdatei liegt nirgends — und wird gefunden.
+   */
+  {
+    name: 'eine erfundene `features/erfunden/api.ts` — der Name allein erlaubt nichts',
+    ort: 'features/erfunden/api.ts',
+    source: "import { request } from '../../api/client';\nexport const laden = async () => request(WEG);\n",
+  },
 ];
 
 /**
@@ -964,17 +1717,24 @@ const REQUEST_HARMLESS = {
 
 function proveRequestGuard(who, files, allowed) {
   const baseline = strayRequestAccess(files, allowed).map((finding) => finding.name);
-  const probe = (source) =>
-    strayRequestAccess([...files, { name: INJECTED, source }], allowed)
+  /*
+   * Der **Ort** der Kunstdatei ist seit T-250-2 wählbar. Bis dahin lag jede
+   * Probe unter `ui/Eingesetzt.tsx`, und das genügte, solange die Erlaubnis an
+   * zwei festen Dateien hing. Sie hängt jetzt an einer gemessenen Menge, und
+   * damit wird der Ort selbst zum Gegenstand der Probe.
+   */
+  const probe = (source, ort = INJECTED) =>
+    strayRequestAccess([...files, { name: ort, source }], allowed)
       .map((finding) => finding.name)
       .filter((name) => !baseline.includes(name));
 
   for (const form of REQUEST_FORMS) {
-    const found = probe(form.source);
+    const ort = form.ort ?? INJECTED;
+    const found = probe(form.source, ort);
     check(
       `${who}: ${form.name} wird gefunden`,
-      found.length === 1 && found[0] === INJECTED,
-      found.length === 0 ? 'nichts beanstandet' : found.join(', '),
+      found.length === 1 && found[0] === ort,
+      found.length === 0 ? `nichts beanstandet (${ort})` : found.join(', '),
     );
   }
 
@@ -986,12 +1746,16 @@ proveRequestGuard('die Oberfläche', webFiles, WEB_REQUEST_HOME);
 
 /*
  * Und die Begründung als Messung, wie oben: Der Ausdruck, der bis T-231 in
- * Abschnitt 1 stand, sieht vier dieser fünf Schreibweisen nicht. Setzt ihn
- * jemand zurück, fallen mit ihm vier Proben — und diese Zeile sagt, warum.
+ * Abschnitt 1 stand, sieht vier dieser Schreibweisen nicht. Setzt ihn jemand
+ * zurück, fallen mit ihm vier Proben — und diese Zeile sagt, warum.
+ *
+ * Die sechste Probe aus T-250-2 zählt hier **nicht** mit: Sie trägt ein nacktes
+ * `request(`, das auch der blinde Ausdruck sieht. Sie misst den Ort und nicht
+ * die Schreibweise, und die Zahl unten bleibt deshalb vier.
  */
 const blindRequestForms = REQUEST_FORMS.filter((form) => !BLIND_REQUEST_CALL.test(form.source));
 check(
-  `der Ausdruck aus T-230-2 sieht vier der fünf Schreibweisen nicht (${blindRequestForms.length})`,
+  `der Ausdruck aus T-230-2 sieht 4 der ${REQUEST_FORMS.length} Proben nicht (${blindRequestForms.length})`,
   blindRequestForms.length === 4,
   blindRequestForms.map((form) => form.name).join(', '),
 );
@@ -1031,22 +1795,14 @@ check(
  * ausschließlich als Port — `options.fetch(...)` in `api/client.ts` —, und
  * kein Bildschirm setzt selbst eine Anfrage zusammen.
  */
-const addinSources = [];
-const walkAddin = (dir) => {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir);
-    if (entry.isDirectory()) walkAddin(child);
-    else if (isBundledSource(entry.name)) addinSources.push(child);
-  }
-};
-walkAddin(ADDIN_SOURCE_DIR);
+const addinFiles = quellbaum('@takt/outlook-addin', 'src', {
+  mindestens: 25,
+  endungen: new Set(BUNDLED_EXTENSIONS),
+})
+  .filter((file) => isBundledSource(file))
+  .map((file) => ({ name: alsName(ADDIN_SOURCE_DIR, file), source: readFileSync(file, 'utf8') }));
 
-const addinFiles = addinSources.map((file) => ({
-  name: file.pathname.slice(ADDIN_SOURCE_DIR.pathname.length),
-  source: readFileSync(file, 'utf8'),
-}));
-
-proveHarvest('das Add-in', addinFiles, 25, ['api/client.ts']);
+proveHarvest('das Add-in', addinFiles, 25, [alsName(ADDIN_SOURCE_DIR, ADDIN_CALLER_PATH)]);
 
 /**
  * Wie {@link WEB_FETCH_HOME}, und aus demselben Grund ausgeschrieben.
@@ -1060,7 +1816,7 @@ proveHarvest('das Add-in', addinFiles, 25, ['api/client.ts']);
  * dieses Laufs. Er sagt, was er sieht; wo die Einspeisung hingehört,
  * entscheidet der Orchestrator.
  */
-const ADDIN_FETCH_HOME = ['api/client.ts'];
+const ADDIN_FETCH_HOME = [alsName(ADDIN_SOURCE_DIR, ADDIN_CALLER_PATH)];
 
 const strayAddinFetch = strayGlobalFetch(addinFiles, ADDIN_FETCH_HOME);
 check(

@@ -172,7 +172,7 @@ interface TransactionScope {
  * `Result` — er rollt also nicht von selbst zurück. Wer eine Transaktion wegen
  * eines fachlichen Fehlschlags verwerfen will, wirft ausdrücklich; sonst gilt,
  * was bis dahin geschrieben wurde. Der Exportlauf macht genau das (siehe
- * `usecases/export.ts` im Dienst).
+ * `features/export/export.ts` im Dienst).
  */
 export function createTransactionPort(conn: SqlConnection, options: UnitOptions = {}): TransactionPort {
   const unit = createUnitOfWork(conn, options);

@@ -1,9 +1,9 @@
 import type { PoolResolution } from "../api/types";
-import type { ExportAuditRowModel } from "../app/exportAudit";
-import type { BookingRowData } from "../components/BookingTable";
-import type { ExportGroupData } from "../components/ExportGroups";
-import type { KanbanCardData } from "../components/Kanban";
-import type { TagTreeNode } from "../components/TagTree";
+import type { ExportAuditRowModel } from "../features/export/exportAuditRows";
+import type { BookingRowData } from "../features/bookings/BookingTable";
+import type { ExportGroupData } from "../features/export/ExportGroups";
+import type { KanbanCardData } from "../features/board/Kanban";
+import type { TagTreeNode } from "../features/tags/TagTree";
 import type { RuleAxes, RuleLookup } from "../lib/poolRule";
 
 /**

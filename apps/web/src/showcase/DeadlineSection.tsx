@@ -1,12 +1,17 @@
 import { useState } from "react";
 
-import type { Attachment, Id } from "../api/types";
-import { AttachmentOpenDialog } from "../components/AttachmentOpenDialog";
-import { DeadlineFlag } from "../components/DeadlineFlag";
-import { Icon } from "../components/Icon";
-import { Button, Card, EmptyState, InlineMessage } from "../components/Primitives";
-import { attachmentLabel, ATTACHMENT_KIND_LABEL } from "../lib/attachmentLabel";
-import { Foreign } from "../components/Foreign";
+import type {
+  Id,
+} from "../api/types";
+import type {
+  Attachment,
+} from "../features/todos/api";
+import { AttachmentOpenDialog } from "../features/todos/AttachmentOpenDialog";
+import { DeadlineFlag } from "../shared/ui/DeadlineFlag";
+import { Icon } from "../shared/ui/Icon";
+import { Button, Card, EmptyState, InlineMessage } from "../shared/ui/Primitives";
+import { attachmentLabel, ATTACHMENT_KIND_LABEL } from "../features/todos/attachmentLabel";
+import { Foreign } from "../shared/ui/Foreign";
 import { SHOWCASE_TODAY } from "./data";
 import { Section, SubHeading } from "./Section";
 
@@ -122,7 +127,7 @@ const FAILURE_TEXT = "Diese Datei ist an diesem Pfad nicht mehr vorhanden.";
 
 /**
  * Die Absage, die **vor** dem Klick feststeht (V-07) — wörtlich derselbe Satz,
- * den `REFUSAL_TEXT` in `components/Attachments.tsx` zu `path_indirect_extension`
+ * den `REFUSAL_TEXT` in `features/todos/Attachments.tsx` zu `path_indirect_extension`
  * führt. Er steht hier zweimal, weil die Musterseite keine Anwendung ist; er
  * darf nirgends anders lauten.
  */

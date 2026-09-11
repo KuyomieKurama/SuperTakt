@@ -1422,8 +1422,15 @@ body:has(.scrim) .toast {
   min-width: 0;
 }
 
+/*
+ * SP-03 steht seit T-267 wieder in seinem gesperrten Wortlaut hier — zwei
+ * Saetze statt eines Halbsatzes. Rechtsbuendig am Zeilenende gelesen wirkte
+ * er wie eine Fussnote zum Schalter daneben; er gehoert aber zur Ordnung und
+ * ist Fliesstext. Deshalb eine eigene Zeile, linksbuendig, in jeder Breite.
+ */
 .todo-list__sort-hint {
-  margin-inline-start: auto;
+  flex-basis: 100%;
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
@@ -1435,11 +1442,6 @@ body:has(.scrim) .toast {
 
   .todo-list__filter-grid > .search {
     grid-column: 1 / -1;
-  }
-
-  .todo-list__sort-hint {
-    flex-basis: 100%;
-    margin-inline-start: 0;
   }
 }
 
@@ -1688,6 +1690,16 @@ body:has(.scrim) .toast {
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: var(--leading-snug);
+}
+
+/*
+ * SP-16, zweite Haelfte: Der Satz gehoert in dieselbe Flaeche wie der
+ * Schalter, aber in eine eigene Zeile — neben dem Kennzeichen gelesen wirkte
+ * er wie dessen Untertitel, und er gilt der Handlung davor.
+ */
+.detail__completion .done-switch__hint {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .daygroups {
@@ -1948,7 +1960,7 @@ body:has(.scrim) .toast {
  * zwei Faellen verschieden dargestellt und im dritten gar nicht — eine
  * Uneinheitlichkeit wiegt schwerer als ein durchgaengiges Fehlen, weil sie
  * nach Bedeutung aussieht. Jetzt gibt es einen Block; er gehoert zu
- * `components/DoneFlag.tsx`.
+ * `shared/ui/DoneFlag.tsx`.
  *
  * Dieselbe Sprache wie auf der Kanban-Karte: Der Normalfall „offen" traegt in
  * einer Zeile gar kein Etikett, „Erledigt" spricht, „Erledigt aufgehoben"
@@ -2031,7 +2043,7 @@ body:has(.scrim) .toast {
 /*
  * Die **dritte** Sorte Marke am Todo, neben `DoneFlag` und dem Exportstatus.
  * Sie traegt nur unter drei Auflagen (T-144 Abschnitt 8.2), und alle drei
- * stehen im Baustein `components/DeadlineFlag.tsx`:
+ * stehen im Baustein `shared/ui/DeadlineFlag.tsx`:
  *
  *   1. Ein Element, nicht drei — der Zustand bestimmt die Lautstaerke.
  *   2. Abwesend, wenn keine Frist gesetzt ist. Anders als `DoneFlag`, das nach

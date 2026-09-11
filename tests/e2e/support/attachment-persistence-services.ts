@@ -21,10 +21,14 @@
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 
 import { API_BASE_URL, SESSION_SECRET, WEB_BASE_URL } from './session';
 
-const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+// `fileURLToPath` statt `.pathname` (T-246-1): `.pathname` lieferte unter
+// Windows `/C:/…`, verkettet über `${REPO_ROOT}apps/web` zu `C:\C:\…` und
+// ließ den Kindprozess nie starten (`spawn … ENOENT`).
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
 
@@ -49,6 +53,9 @@ async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: 
 export async function startAttachmentPersistenceWeb(): Promise<ChildProcessWithoutStdin> {
   const child = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
     cwd: `${REPO_ROOT}apps/web`,
+    // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
+    // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: API_BASE_URL,

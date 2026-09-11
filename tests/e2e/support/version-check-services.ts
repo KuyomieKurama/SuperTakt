@@ -10,6 +10,14 @@
  * (`TAKT_E2E_GITHUB_STUB_URL`) und mit einem eigenen, von der übrigen
  * Testreihe getrennten Datenverzeichnis.
  *
+ * **Seit T-247-5 (A-A-72) läuft die Umlenkung über `isolatedAppDataEnv`**
+ * (`app-data-isolation.ts`) statt über ein von Hand gesetztes
+ * `XDG_DATA_HOME` allein. Unter Windows liest `access/paths.ts` diese
+ * Variable nicht — der Kindprozeß hätte in `%LOCALAPPDATA%\Takt`, den echten
+ * Bestand des Benutzers, geschrieben. `isolatedAppDataEnv` setzt beide
+ * Variablen und bricht fail-closed ab, falls das Ziel doch der echte
+ * Ablageort wäre.
+ *
  * **Warum ein eigenes Datenverzeichnis und nicht `E2E_DATA_DIR`.** Diese Datei
  * läuft nie gleichzeitig mit `services.ts` (eigene Ausführungskonfiguration,
  * `playwright.version-check.config.ts`, derselbe Grund wie bei
@@ -34,10 +42,15 @@ import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 
 import { SESSION_SECRET, TOKEN_HEADER, WEB_BASE_URL, WINDOWS_USER } from './session';
+import { isolatedAppDataEnv } from './app-data-isolation';
 
-const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+// `fileURLToPath` statt `.pathname` (T-246-1): `.pathname` lieferte unter
+// Windows `/C:/…`, verkettet über `${REPO_ROOT}apps/web` zu `C:\C:\…` und
+// ließ den Kindprozess nie starten (`spawn … ENOENT`).
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 export const VERSION_CHECK_API_BASE_URL = 'http://127.0.0.1:17843/api/v1';
 export const E2E_VERSION_CHECK_DATA_DIR = join(tmpdir(), 'takt-e2e-version-check-data');
@@ -85,8 +98,7 @@ export async function startVersionCheckService(
     const child = spawn('node', ['tests/e2e/support/version-check-entry.ts'], {
       cwd: REPO_ROOT,
       env: {
-        ...process.env,
-        XDG_DATA_HOME: E2E_VERSION_CHECK_DATA_DIR,
+        ...isolatedAppDataEnv(E2E_VERSION_CHECK_DATA_DIR),
         TAKT_E2E_GITHUB_STUB_URL: githubStubUrl,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -143,6 +155,9 @@ export async function stopVersionCheckService(child: ChildProcessWithoutNullStre
 export async function startVersionCheckWeb(): Promise<ChildProcessWithoutStdin> {
   const child = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
     cwd: `${REPO_ROOT}apps/web`,
+    // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
+    // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: VERSION_CHECK_API_BASE_URL,

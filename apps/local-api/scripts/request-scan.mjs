@@ -5,8 +5,10 @@
  * Warum es diese Datei gibt
  * ===========================================================================
  *
- * `proof-callers.mjs` liest **eine** Datei — `apps/web/src/api/endpoints.ts` —
- * und urteilt über alles, was die Oberfläche dem Dienst schickt. Diese
+ * `proof-callers.mjs` liest die **Aufrufdateien** der Oberfläche — bis T-250-2
+ * war das die eine `apps/web/src/api/endpoints.ts`, seit F-22 ist es eine
+ * gemessene Menge — und urteilt über alles, was die Oberfläche dem Dienst
+ * schickt. Diese
  * Beschränkung ist genau so viel wert wie die Zusicherung, dass es keinen
  * zweiten Weg gibt. Für `fetch` wird die Zusicherung seit T-188 mit
  * `fetch-scan.mjs` gemessen. Für `request` stand bis T-231 daneben:

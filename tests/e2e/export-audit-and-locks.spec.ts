@@ -67,7 +67,9 @@ test('TP-SEC-13 — exportieren, zurücksetzen, erneut exportieren: Verlauf blei
 
   // --- Erster Export -------------------------------------------------------
   await gotoExport(page);
-  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+  // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag (T-249-8).
+  await expect(page.locator('.export-todo', { hasText: title })).toBeVisible();
   await runExportFromScreen(page);
 
   const afterFirstExport = await listTimeEntriesByTodo(todo.id);
@@ -94,7 +96,7 @@ test('TP-SEC-13 — exportieren, zurücksetzen, erneut exportieren: Verlauf blei
   // --- Zweiter Export, unmittelbar danach (Migration 0007 betrifft genau ---
   // diesen Fall: zwei Protokollzeilen in derselben Sekunde). -----------------
   await gotoExport(page);
-  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  await expect(page.locator('.export-todo', { hasText: title })).toBeVisible();
   await runExportFromScreen(page);
 
   const afterSecondExport = await listTimeEntriesByTodo(todo.id);
@@ -175,10 +177,13 @@ test('Der gesperrte Export: Vorschau antwortet nicht → Schaltfläche gesperrt,
   await createTimeEntry({ todoId: todoB.id, startedAt: todayAt(7, 30), endedAt: todayAt(7, 50), note: 'Gruppe B' });
 
   await gotoExport(page);
-  const groupA = page.locator('.egroup', { hasText: titleA });
-  const groupB = page.locator('.egroup', { hasText: titleB });
-  await expect(groupA).toBeVisible();
-  await expect(groupB).toBeVisible();
+  // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+  // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag, und ist erst
+  // nach Aufklappen des Todo-Kopfes erreichbar (T-249-8).
+  const todoGroupA = page.locator('.export-todo', { hasText: titleA });
+  const todoGroupB = page.locator('.export-todo', { hasText: titleB });
+  await expect(todoGroupA).toBeVisible();
+  await expect(todoGroupB).toBeVisible();
 
   const exportButton = page.getByRole('button', { name: 'Export ausführen' });
   await expect(exportButton).toBeEnabled();
@@ -198,6 +203,12 @@ test('Der gesperrte Export: Vorschau antwortet nicht → Schaltfläche gesperrt,
     });
   });
 
+  // Gruppe A aufklappen, um ihre Tagesauswahl zu erreichen — ein Todo mit
+  // nur einer Buchung hat genau eine Tagesgruppe.
+  await todoGroupA.getByRole('button', { name: /klappen/ }).click();
+  const groupA = todoGroupA.locator('.egroup');
+  await expect(groupA).toBeVisible();
+
   // Auswahl ändern löst eine neue Gesamtvorschau aus, die jetzt scheitert.
   // `dispatchEvent('click')` statt eines echten Klicks: das Kontrollkästchen
   // ist zwar sichtbar und nicht überdeckt, aber der native Klick auf ein
@@ -212,8 +223,8 @@ test('Der gesperrte Export: Vorschau antwortet nicht → Schaltfläche gesperrt,
   await expect(failure).toContainText('E2E: absichtlich fehlgeschlagen');
   await expect(page.getByText('Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet')).toBeVisible();
   // Die Gliederung selbst bleibt stehen — nur die Zahlen fehlen.
-  await expect(groupA).toBeVisible();
-  await expect(groupB).toBeVisible();
+  await expect(todoGroupA).toBeVisible();
+  await expect(todoGroupB).toBeVisible();
 
   // --- Wiederholung: die Zahlen kommen zurück, die Auswahl bleibt ----------
   failPreview = false;
@@ -245,13 +256,24 @@ test('Fehlschlag der Vorschau, während der Bestätigungsdialog bereits offen is
   await createTimeEntry({ todoId: todoB.id, startedAt: todayAt(9, 0), endedAt: todayAt(9, 20), note: 'Gruppe B' });
 
   await gotoExport(page);
-  const groupA = page.locator('.egroup', { hasText: titleA });
-  const groupB = page.locator('.egroup', { hasText: titleB });
-  await expect(groupA).toBeVisible();
-  await expect(groupB).toBeVisible();
+  // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+  // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag (T-249-8).
+  const todoGroupA = page.locator('.export-todo', { hasText: titleA });
+  const todoGroupB = page.locator('.export-todo', { hasText: titleB });
+  await expect(todoGroupA).toBeVisible();
+  await expect(todoGroupB).toBeVisible();
 
   const exportButton = page.getByRole('button', { name: 'Export ausführen' });
   await expect(exportButton).toBeEnabled();
+
+  // Gruppe A **vor** dem Öffnen des Bestätigungsdialogs aufklappen: Danach
+  // blockiert der Scrim echte Klicks auf die Auswahl dahinter ohnehin (siehe
+  // unten) — das Aufklappen selbst ist aber ein echter, unverdeckter Klick
+  // und soll es bleiben.
+  await todoGroupA.getByRole('button', { name: /klappen/ }).click();
+  const groupA = todoGroupA.locator('.egroup');
+  await expect(groupA).toBeVisible();
+
   await exportButton.click();
   const confirmDialog = page.getByRole('alertdialog', { name: 'Export ausführen?' });
   await expect(confirmDialog).toBeVisible();
@@ -338,7 +360,7 @@ test('O-GZ — Klick auf den gesperrten Bestätigungsknopf beim Zurücksetzen: d
   });
 
   await gotoExport(page);
-  await expect(page.locator('.egroup', { hasText: title })).toBeVisible();
+  await expect(page.locator('.export-todo', { hasText: title })).toBeVisible();
   await runExportFromScreen(page);
 
   const afterExport = await listTimeEntriesByTodo(todo.id);

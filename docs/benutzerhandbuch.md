@@ -158,7 +158,9 @@ in einen Export — er ist Arbeitsfläche, keine Rechnungsangabe.
 
 **Über das Outlook-Add-in entstehen keine Anhänge.** Das ist keine vorübergehende Einschränkung,
 sondern Absicht: Ein Anhang, der aus einer E-Mail heraus entstünde, wäre ein von außen
-geschriebener Befehl, etwas auf dem eigenen Rechner zu öffnen.
+geschriebener Befehl, etwas auf dem eigenen Rechner zu öffnen. Es gibt dafür im Add-in keine
+Schaltfläche und keinen Weg — auch nicht am Hinweis auf ein bereits vorhandenes Todo, siehe „Die
+Call-Nummer und bereits bestehende Todos" weiter unten.
 
 ## Tags und Ordner verwalten
 
@@ -518,9 +520,13 @@ einem Suchtext.
 
 ## Das Outlook-Add-in nutzen
 
-Das Add-in läuft in Outlook und erlaubt es, aus einer geöffneten E-Mail heraus ein Todo anzulegen
-oder Zeit auf ein vorhandenes zu buchen, ohne zu Takt zu wechseln. Es spricht dabei ausschließlich
-mit dem lokalen Dienst auf demselben Rechner, auf dem auch Takt läuft.
+Das Add-in läuft in Outlook und erlaubt es, aus einer geöffneten E-Mail heraus ein Todo anzulegen,
+ohne zu Takt zu wechseln. Es spricht dabei ausschließlich mit dem lokalen Dienst auf demselben
+Rechner, auf dem auch Takt läuft.
+
+Über das Add-in lässt sich ausschließlich ein neues Todo anlegen. Weder eine Zeitbuchung noch ein
+Anhang entstehen von hier aus — dafür wechselt man zu Takt selbst. Der Knopf im Menüband von
+Outlook trägt deshalb bewusst die Handlung, die er auslöst: „Todo anlegen".
 
 ### Das Add-in einrichten
 
@@ -558,16 +564,27 @@ Call-Nummer sucht Takt sie nicht automatisch in der E-Mail: Sie bleibt leer, bis
 einträgt. Wie überall in Takt ist sie ein Tag, keine Uhrzeit, und ein leeres Feld bedeutet: keine
 Frist.
 
+Der Knopf, der das Todo tatsächlich anlegt, heißt im Aufgabenbereich „Neue Aufgabe anlegen" — ein
+zweiter Name für dieselbe Handlung, die auch der Knopf im Menüband von Outlook auslöst, dort unter
+„Todo anlegen". Das ist keine Unachtsamkeit, sondern eine bewusste Abweichung: Beide Knöpfe tun
+dasselbe, nur mit unterschiedlicher Beschriftung.
+
 ### Die Call-Nummer und bereits bestehende Todos
 
 Das Add-in erkennt eine Call-Nummer in der E-Mail über einen regulären Ausdruck, der in den
 Add-in-Einstellungen hinterlegt ist, nicht fest im Programm. Existiert bereits ein Todo mit
-derselben Call-Nummer, bietet das Add-in an, statt eines neuen Todos auf das vorhandene zu buchen.
-Diese Trefferliste zeigt zu jedem Treffer den Titel und die Call-Nummer, damit sich ein falscher
-Treffer sofort erkennen lässt, und weist eigens darauf hin, wenn auf dem betroffenen Todo bereits
-Zeit abgerechnet wurde oder wenn eine Buchung darauf ein bestehendes Erledigt-Kennzeichen aufheben
-würde. Kein Treffer ist vorausgewählt: Die Entscheidung, ob gebucht oder ein neues Todo angelegt
-wird, trifft in jedem Fall der Mensch am Bildschirm.
+derselben Call-Nummer, zeigt der Aufgabenbereich eine Warnung: „Zu Call … gibt es bereits ein
+Todo." — oder, bei mehreren Treffern, deren Anzahl. Darunter listet Takt die gefundenen Todos mit
+ihrem Titel auf; ein bereits erledigtes Todo trägt zusätzlich die Wortmarke „Erledigt".
+
+Diese Liste bietet **keine Handlung** an: kein Buchen, kein Anhängen, kein Zusammenführen. Man
+kann von hier aus nur lesen, welche Todos es schon gibt. Wer auf einem dieser Todos weiterarbeiten
+will, wechselt dafür zu Takt selbst. Der Abschnitt „Neues Todo" darunter bleibt in jedem Fall
+verfügbar: Legt man trotz der Warnung ein neues Todo an, bucht das keine Zeit auf einem der
+gefundenen Todos und lässt deren Erledigt-Kennzeichen unberührt.
+
+Findet das Add-in zur erkannten Call-Nummer kein Todo, steht dort stattdessen ein einfacher
+Hinweis: „Zu Call … gibt es noch kein Todo."
 
 ## Einstellungen im Überblick
 
@@ -623,10 +640,18 @@ eine neue Fassung, während Takt schon eine Weile läuft, erscheint zunächst nu
 am oberen Rand, die sich ansehen oder wegklicken lässt, ohne mitten in der Arbeit den Fokus aus
 einem gerade benutzten Eingabefeld zu nehmen.
 
-Ist GitHub nicht erreichbar oder liefert eine unerwartete Antwort, bleibt die Prüfung **still**:
-kein Hinweis, keine Fehlermeldung, kein zweiter Versuch im selben Lauf. Der Grund dafür steht im
-Protokoll des lokalen Dienstes, nicht auf dem Bildschirm — ein Problem bei dieser Prüfung soll
-niemanden bei der eigentlichen Arbeit aufhalten.
+Ist GitHub nicht erreichbar oder liefert eine unerwartete Antwort, bleibt dieser eine Versuch ohne
+Ergebnis. Auch das bleibt **still**: kein Hinweis, keine Fehlermeldung, kein Zeitstempel „zuletzt
+geprüft", keine Schaltfläche „Jetzt prüfen". Startet Takt zum Beispiel ohne Netzverbindung, gibt es
+deshalb nicht bis zum nächsten Neustart auf — es versucht die Prüfung von selbst zu einem späteren
+Zeitpunkt erneut. Sobald eine Verbindung besteht, meldet sich eine neuere Fassung dann von selbst,
+ohne dass dafür jemand etwas tun muss.
+
+Diese Stille ist eine bewusste Entscheidung und keine Lücke: Takt zeigt zu keinem Zeitpunkt an, ob
+und wann zuletzt geprüft wurde. Wer wissen möchte, ob eine neue Fassung vorliegt, sieht auf der
+offiziellen Release-Seite nach. Der Grund für einen Fehlschlag steht im Protokoll des lokalen
+Dienstes, nicht auf dem Bildschirm — ein Problem bei dieser Prüfung soll niemanden bei der
+eigentlichen Arbeit aufhalten.
 
 ## Was Takt (noch) nicht tut
 

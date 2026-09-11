@@ -210,7 +210,6 @@ function Body({
   return (
     <TaskPane
       mail={host.mail}
-      mailLink={host.webLink}
       detection={detection}
       api={api}
       hasToken={settings.hasToken}

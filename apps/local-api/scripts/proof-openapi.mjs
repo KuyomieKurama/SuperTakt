@@ -83,9 +83,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { relative, sep } from 'node:path';
 
 import { z } from 'zod';
 
+import { arbeitsbereichWurzel, paketQuelle } from './source-resolve.mjs';
 import { parseYaml } from './openapi-reader.mjs';
 import { createMatcher } from './schema-match.mjs';
 import { BOARD_COLUMNS, INTERNAL_NOTE, STATUS_COLOR, runScenario } from './service-scenario.mjs';
@@ -93,12 +95,13 @@ import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
 import { statusFor } from '../src/http/problem.ts';
 import { errorStatus } from '../src/errors.ts';
-import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/routes/todos.ts';
-import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/routes/structure.ts';
-import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/routes/time.ts';
-import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/routes/export.ts';
+import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/features/todos/routes.ts';
+import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/features/structure/routes.ts';
+import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/features/timer/routes.ts';
+import { REQUEST_SCHEMAS as EXPORT_SCHEMAS } from '../src/features/export/routes.ts';
+import { REQUEST_SCHEMAS as SETTINGS_SCHEMAS } from '../src/features/settings/routes.ts';
 import { REQUEST_SCHEMAS as ADDIN_SCHEMAS } from '../src/routes/addin/schema.ts';
-import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/routes/data-transfer.ts';
+import { REQUEST_SCHEMAS as DATA_TRANSFER_SCHEMAS } from '../src/features/data-transfer/routes.ts';
 import {
   FORBIDDEN_NAME_CHARACTERS,
   POOL_RULE_AXIS_IDS,
@@ -110,7 +113,38 @@ import {
 } from '@takt/domain';
 import { titleSchema } from '../src/http/input.ts';
 
-const SPEC_PATH = new URL('../openapi/takt-local-api.yaml', import.meta.url);
+/*
+ * Die Beschreibung — aufgelöst statt abgezählt (T-249-1). Ein Merkmal statt
+ * eines Pfades: `openapi: 3` und `paths:` stehen in dieser Datei und in keiner
+ * zweiten des Pakets.
+ */
+const SPEC_PATH = paketQuelle('@takt/local-api', {
+  hinweis: 'openapi/takt-local-api.yaml',
+  merkmal: ['openapi: 3', 'paths:'],
+  endungen: new Set(['.yaml', '.yml']),
+});
+
+/**
+ * Der eine Ort der Zeichenklasse, **so wie der Baum ihn heute schreibt**.
+ *
+ * Abschnitt 21 verlangt, daß die Beschreibung von 422 diesen Ort nennt. Bis
+ * T-249-1 stand er als Zeichenkette in beiden — in der Beschreibung und im
+ * Prüfsatz darüber. Zwei Abschriften desselben Pfades sind genau die Bauart,
+ * die T-119 einmal grün und falsch gemacht hat: Zieht die Datei um, stimmen
+ * beide Abschriften weiter miteinander überein und beide mit dem Baum nicht
+ * mehr. Jetzt kommt die eine Seite aus der Auflösung; weicht die Beschreibung
+ * ab, wird der Prüfsatz rot, und zwar an der richtigen Stelle.
+ */
+const CHARACTERS_PATH = relative(
+  arbeitsbereichWurzel(),
+  paketQuelle('@takt/domain', {
+    hinweis: 'src/characters.ts',
+    merkmal: 'export const FORBIDDEN_NAME_CHARACTERS',
+  }),
+)
+  .split(sep)
+  .join('/');
+
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
 
 let passed = 0;
@@ -386,6 +420,7 @@ const REQUEST_SCHEMAS = {
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
   ...EXPORT_SCHEMAS,
+  ...SETTINGS_SCHEMAS,
   ...DATA_TRANSFER_SCHEMAS,
   // Seit T-149 führt auch die Add-in-Tür ihre eigene Aufstellung. Bis dahin
   // standen hier zwei Einzelimporte mit dem Vermerk „liegen in fremder Hoheit
@@ -1051,17 +1086,44 @@ check('und es gibt überhaupt Beispiele', examplesChecked >= 8, String(examplesC
  * der Anfrageseite zwei deutsche Feldnamen gefunden, die der Dienst nie gelesen
  * hat; dieselbe Sorte Fund ist hier möglich.
  */
-const routeSources = [
-  '../src/routes/todos.ts',
-  '../src/routes/structure.ts',
-  '../src/routes/board.ts',
-  '../src/routes/time.ts',
-  '../src/routes/export.ts',
-  '../src/routes/addin/index.ts',
-  '../src/http/input.ts',
-]
-  .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'))
-  .join('\n');
+/*
+ * Die acht Dateien, aus denen dieser Ausschnitt besteht — seit T-249-1 über
+ * ihre **Merkmale** gefunden und nicht über `../src/routes/…`.
+ *
+ * Der Ausschnitt bleibt bewußt eng: Läse dieser Prüfsatz den ganzen Quellbaum
+ * des Dienstes, würde jeder Fragezeichenparameter „gelesen" heißen, sobald sein
+ * Name irgendwo im Paket vorkommt — in einer Anwendungsfallschicht, in einer
+ * Fehlermeldung, in einem Kommentar. Die Aussage „die Route liest ihn" wäre
+ * dann nichts mehr wert. Der Umbau nach Merkmalen legt Routen je Merkmal
+ * zusammen; die Merkmale unten — die ausgeführten Erzeugerfunktionen — ziehen
+ * mit um, der Pfad täte es nicht.
+ *
+ * Die Untergrenze darunter ist keine Formalie: Ohne sie wäre ein leerer
+ * Ausschnitt ein Ausschnitt, in dem kein Parametername vorkommt — und dann
+ * meldete dieser Lauf **jeden** Parameter als ungelesen statt keinen. Beide
+ * Enden sind falsch; gemessen wird deshalb, daß überhaupt gelesen wurde.
+ */
+const ROUTE_SOURCE_MARKERS = [
+  { hinweis: 'src/features/todos/routes.ts', merkmal: 'export function createTodoRoutes' },
+  { hinweis: 'src/features/structure/routes.ts', merkmal: 'export function createStructureRoutes' },
+  { hinweis: 'src/features/board/routes.ts', merkmal: 'export function createBoardRoutes' },
+  { hinweis: 'src/features/timer/routes.ts', merkmal: 'export function createTimeEntryRoutes' },
+  { hinweis: 'src/features/export/routes.ts', merkmal: 'export function createExportRoutes' },
+  { hinweis: 'src/features/settings/routes.ts', merkmal: 'export function createSettingsRoutes' },
+  { hinweis: 'src/routes/addin/index.ts', merkmal: 'export function createAddinRoutes' },
+  { hinweis: 'src/http/input.ts', merkmal: 'export const titleSchema' },
+];
+
+const routeSourceTexts = ROUTE_SOURCE_MARKERS.map((eintrag) =>
+  readFileSync(paketQuelle('@takt/local-api', eintrag), 'utf8'),
+);
+const routeSources = routeSourceTexts.join('\n');
+
+check(
+  `der Ausschnitt der Routen ist gelesen (${String(ROUTE_SOURCE_MARKERS.length)} Dateien, ${String(routeSources.length)} Zeichen)`,
+  routeSourceTexts.length === ROUTE_SOURCE_MARKERS.length && routeSources.length >= 20_000,
+  `${String(routeSources.length)} Zeichen — zu wenig, um über ungelesene Parameter zu urteilen`,
+);
 
 const unreadParameters = [];
 let queryParameters = 0;
@@ -2303,7 +2365,8 @@ check(
   );
   check(
     'und die Beschreibung nennt den einen Ort, an dem die Klasse liegt',
-    beschreibung.includes('packages/domain/src/characters.ts'),
+    beschreibung.includes(CHARACTERS_PATH),
+    `gesucht: ${CHARACTERS_PATH}`,
   );
 }
 

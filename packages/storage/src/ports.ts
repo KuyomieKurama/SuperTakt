@@ -690,14 +690,14 @@ export interface PoolPort {
    * Menschen**, nicht nach einer Zugehörigkeit:
    *
    *   - `GET /pools` ohne `placement` — die Pool-Ansicht (`listPools` in
-   *     `usecases/structure.ts`). Sie zeigt die Pool-Liste, und eine reine
+   *     `features/structure/structure.ts`). Sie zeigt die Pool-Liste, und eine reine
    *     Board-Spalte gehört dort nicht hinein.
    *   - `GET /addin/context` — der Aufgabenbereich des Add-ins. Er hat kein
    *     Board; die Liste dient dort der Auswahl. Dass er bei `list()` bleibt,
    *     ist ausdrücklich entschieden (E-058 Punkt 7).
    *
    * **Wer über Zugehörigkeit rechnet, fragt `'all'`** und nicht die Vorgabe:
-   * `poolMovementNamer` (`usecases/pool-movement.ts`, E-058 Absatz 1) will
+   * `poolMovementNamer` (`pool-movement.ts`, E-058 Absatz 1) will
    * jede Regel sehen, gleich auf welcher Fläche sie erscheint — eine Bewegung
    * aus einer reinen Board-Spalte heraus ist eine Bewegung. Das Board fragt
    * ausdrücklich `'board'`.
@@ -1157,7 +1157,7 @@ export interface ExportRunRecord {
  *
  * Geschnitten ist es deshalb so:
  *
- *   - **Der Anwendungsfall** (`apps/local-api/src/usecases/export.ts`) führt
+ *   - **Der Anwendungsfall** (`apps/local-api/src/features/export/export.ts`) führt
  *     den Ablauf aus architektur.md 3.2: Ordner prüfen, Transaktion öffnen,
  *     Gruppen lesen, Plan bilden, Datei schreiben, festschreiben. Er ist die
  *     einzige Stelle, an der die Reihenfolge steht.
@@ -1275,6 +1275,64 @@ export interface AppSettingsPort {
 export interface DefaultTagPort {
   list(): Promise<readonly DefaultTag[]>;
   set(tagIds: readonly TagId[], now: Timestamp): Promise<readonly DefaultTag[]>;
+}
+
+/**
+ * Der Bezugspunkt des harten Bodens der Versionsprüfung (A-V-11, Migration
+ * 0022, T-279).
+ *
+ * ===========================================================================
+ * Warum das ein eigener Port ist und nicht ein Feld in `AppSettingsPort`
+ * ===========================================================================
+ *
+ * Der Wert liegt in derselben Zeile wie die Einstellungen — `app_setting`, eine
+ * Zeile, feste Felder (E-011). Er ist trotzdem **keine Einstellung**: Niemand
+ * setzt ihn, niemand liest ihn, er erscheint in keiner Route und in keiner
+ * Oberfläche.
+ *
+ * Stünde er in `AppSettings`, wäre er über `GET /settings` sichtbar, und das
+ * ist genau die Fehlerfläche, die A-18.11 verbietet („kein Hinweis, keine
+ * Fehlerfläche, kein Zeitstempel ‚zuletzt geprüft'"). Ein eigener Port hält die
+ * Trennung an der einzigen Stelle, an der sie sich nicht versehentlich
+ * auflösen kann: Der Weg zu diesem Wert führt nicht durch den Weg zu den
+ * Einstellungen.
+ *
+ * Er hängt deshalb auch **nicht** an der {@link UnitOfWork}. Sein einziger
+ * Aufrufer ist die Versionsprüfung des Dienstes, und die liegt außerhalb jeder
+ * Anwendungsfall-Transaktion — sie läuft an einem Zeitgeber, nicht an einer
+ * Anfrage.
+ *
+ * ===========================================================================
+ * Zwei Fragen, keine dritte
+ * ===========================================================================
+ *
+ * Es gibt kein „zurücksetzen" und kein „löschen". `null` entsteht genau einmal,
+ * nämlich durch die Migration, und heißt „noch nie gefragt". Eine Tür, die den
+ * Boden aufheben kann, wäre die Umkehrung des Zwecks.
+ */
+export interface VersionCheckStatePort {
+  /**
+   * Der Zeitpunkt der letzten **ausgehenden** Anfrage, oder `null`.
+   *
+   * `null` heißt „noch nie gefragt" — und damit „kein Boden". Das ist der
+   * Zustand jedes Bestands unmittelbar nach Migration 0022 und der Grund, warum
+   * der erste Start danach wie bisher genau einmal fragt.
+   *
+   * Ein Zeitstempel aus der Zukunft ist möglich (verstellte Uhr, eingespielte
+   * Datensicherung von einem anderen Rechner) und wird hier **nicht**
+   * ausgesiebt: Er ist eine gültige gespeicherte Angabe, und was aus ihr folgt,
+   * entscheidet der Leser.
+   */
+  lastCheckAt(): Promise<Timestamp | null>;
+  /**
+   * Merkt den Zeitpunkt einer ausgehenden Anfrage — **vor** der Anfrage.
+   *
+   * Die Reihenfolge ist der Punkt und steht deshalb hier und nicht nur beim
+   * Aufrufer: Wer erst fragt und dann merkt, hat den Boden für jeden Absturz
+   * **während** der Anfrage wieder geöffnet, und das ist schwerer zu sehen als
+   * gar kein Boden.
+   */
+  recordCheck(at: Timestamp): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

@@ -118,19 +118,49 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { locateSingleSource, requireDirectory } from '../../../scripts/source-anchors.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(here, '..');
 const tauriDir = join(desktopDir, 'src-tauri');
 const repoRoot = resolve(desktopDir, '..', '..');
 
+/*
+ * ---------------------------------------------------------------------------
+ * Anker statt Pfade (T-249-2)
+ * ---------------------------------------------------------------------------
+ *
+ * Dieser Lauf greift in vier fremde Bäume: die Fähigkeitenliste und den
+ * Rust-Anteil der Hülle, den Quellbaum der Oberfläche und eine einzelne Datei
+ * in `packages/domain`. Die Oberfläche wird featureweise umgebaut, und die
+ * Domäne gehört ohnehin einem anderen Agenten — beide können sich bewegen,
+ * ohne dass jemand diese Datei aufschlägt.
+ *
+ * Deshalb gilt hier durchgehend: **Ein Baum, den es nicht gibt, ist ein
+ * Fehlschlag der Messung.** {@link requireDirectory} bricht mit dem gesuchten
+ * Gegenstand im Satz ab, statt ein `ENOENT` aus dem Inneren von `node:fs`
+ * durchzureichen — und, was schwerer wiegt, statt eine leere Dateiliste an
+ * eine Prüfung zu geben, die daraufhin nichts findet und grün meldet.
+ *
+ * Die beiden Bäume der Oberfläche und des Rust-Anteils werden ohnehin
+ * **rekursiv** gelesen ({@link readTree}, seit T-147); ein Umzug innerhalb von
+ * `apps/web/src` ändert die gelesene Menge nicht.
+ */
 const configFile = join(tauriDir, 'tauri.conf.json');
-const capabilitiesDir = join(tauriDir, 'capabilities');
-const rustSrcDir = join(tauriDir, 'src');
-const webSrcDir = resolve(repoRoot, 'apps', 'web', 'src');
+const capabilitiesDir = requireDirectory(
+  join(tauriDir, 'capabilities'),
+  'die Fähigkeitenliste der Hülle — ohne sie ist „keine Shell-Zeile" keine Aussage',
+);
+const rustSrcDir = requireDirectory(
+  join(tauriDir, 'src'),
+  'den Rust-Anteil der Hülle, in dem die Aufruforte für `open` gezählt werden',
+);
+const webSrcDir = requireDirectory(
+  resolve(repoRoot, 'apps', 'web', 'src'),
+  'den Quellbaum der Oberfläche, in dem die Release-Adresse genau einmal stehen darf',
+);
 const buildScriptFile = join(desktopDir, 'scripts', 'build-app.mjs');
 const cargoManifestFile = join(tauriDir, 'Cargo.toml');
-const domainVersionFile = resolve(repoRoot, 'packages', 'domain', 'src', 'version.ts');
 
 /* ==================================================================== */
 /* Die zugesagten Werte — hier und sonst nirgends                       */
@@ -1013,12 +1043,12 @@ export function checkOpenCallSites(sources) {
  * @param {string} domainText Inhalt von `packages/domain/src/version.ts`.
  * @returns {string[]} Befunde.
  */
-export function checkBuildVersionShape(buildText, domainText) {
+export function checkBuildVersionShape(buildText, domainText, domainName = 'die Datei der Domäne') {
   const findings = [];
 
   const declared = /export const VERSION_SHAPE = (\/\^.*\$\/);/.exec(domainText);
   if (declared === null) {
-    return ['packages/domain/src/version.ts führt kein `VERSION_SHAPE` in der erwarteten Form.'];
+    return [`${domainName} führt kein \`VERSION_SHAPE\` in der erwarteten Form.`];
   }
   const shape = declared[1];
 
@@ -1071,6 +1101,8 @@ export function checkWebAddress(webSources, rustPrefix) {
 
   let releaseAddresses = 0;
   let bridges = 0;
+  /** Wo die Release-Adresse heute steht — für einen Befund, der den Ort nennt (T-249-2). */
+  const releaseAddressFiles = new Set();
 
   for (const source of webSources) {
     for (const line of source.text.split('\n')) {
@@ -1085,6 +1117,7 @@ export function checkWebAddress(webSources, rustPrefix) {
 
         if (address === rustPrefix) {
           releaseAddresses += 1;
+          releaseAddressFiles.add(source.name);
           continue;
         }
         // Der lokale Dienst und der Entwicklungsserver.
@@ -1132,8 +1165,16 @@ export function checkWebAddress(webSources, rustPrefix) {
   }
 
   if (releaseAddresses !== 1) {
+    /*
+     * Der Ort wird **genannt, nicht behauptet** (T-249-2): Bis dahin stand hier
+     * `lib/releasePage.ts` als fester Text. Nach dem featureweisen Umbau von
+     * `apps/web/src` gibt es diesen Ordner nicht mehr, und ein Befund, der eine
+     * Datei nennt, die es nicht gibt, schickt den nächsten Leser an den
+     * falschen Ort.
+     */
     findings.push(
-      `Die Release-Adresse steht ${releaseAddresses}-mal in der Oberfläche; sie gehört an genau eine Stelle (lib/releasePage.ts).`,
+      `Die Release-Adresse steht ${releaseAddresses}-mal in der Oberfläche; sie gehört an genau eine Stelle` +
+        `${releaseAddressFiles.size === 0 ? '' : ` (heute: ${[...releaseAddressFiles].sort().join(', ')})`}.`,
     );
   }
   if (bridges > 0) {
@@ -1190,8 +1231,31 @@ const rustSources = readTree(rustSrcDir, ['.rs']);
 const webSources = readTree(webSrcDir, ['.ts', '.tsx']);
 const configText = readFileSync(configFile, 'utf8');
 const buildScriptText = readFileSync(buildScriptFile, 'utf8');
-const domainVersionText = readFileSync(domainVersionFile, 'utf8');
 const cargoManifestText = readFileSync(cargoManifestFile, 'utf8');
+
+/*
+ * **Die Fassungsform wird gesucht, nicht abgeschrieben** (T-249-2).
+ *
+ * Bis dahin stand hier `packages/domain/src/version.ts`. Die Datei gehört
+ * domain-dev; zieht sie um, läse dieser Lauf ins Leere. Gesucht wird deshalb
+ * die **Deklaration**, nicht der Pfad: genau eine Datei unter
+ * `packages/domain/src`, die `export const VERSION_SHAPE` führt. Kein Treffer
+ * und zwei Treffer sind beides ein Abbruch mit Namen — und keiner davon ist
+ * ein Bestehen, denn ohne diese Datei kann Prüfung 4 nicht sagen, ob
+ * `build-app.mjs` dieselbe Form prüft wie die Domäne.
+ */
+const domainVersionSource = locateSingleSource({
+  root: requireDirectory(
+    resolve(repoRoot, 'packages', 'domain', 'src'),
+    'die Fachlogik, in der die zugesagte Form einer Fassungsangabe steht',
+  ),
+  accept: (name) => name.endsWith('.ts') && !name.endsWith('.d.ts'),
+  carries: (text) => text.includes('export const VERSION_SHAPE'),
+  description: 'die Deklaration von `VERSION_SHAPE`',
+});
+const domainVersionText = domainVersionSource.text;
+/** Wie die Datei der Domäne heute heißt — für jeden Befund von Prüfung 4. */
+const domainVersionName = `packages/domain/src/${domainVersionSource.name}`;
 
 /* ==================================================================== */
 /* Prüfung 7 — gegen welche Sprache die Formenliste gelesen wurde       */
@@ -1369,7 +1433,7 @@ const runs = [
   },
   {
     title: 'build-app.mjs prüft die Fassung mit der Form der Domäne (T-143 S-2)',
-    findings: checkBuildVersionShape(buildScriptText, domainVersionText),
+    findings: checkBuildVersionShape(buildScriptText, domainVersionText, domainVersionName),
   },
   {
     title:
@@ -1735,6 +1799,22 @@ const counterProbes = [
       checkBuildVersionShape(
         buildScriptText.replace(/\/\^\[0-9\]\{1,9\}[^;]*\$\//, '/^\\d+\\.\\d+\\.\\d+$/'),
         domainVersionText,
+        domainVersionName,
+      ),
+  },
+  {
+    /*
+     * T-249-2: **Nicht gefunden ist ein Fehlschlag der Messung.** Prüfung 4
+     * hält die Form in `build-app.mjs` gegen die der Domäne. Fehlt die Zusage
+     * der Domäne, hat sie nichts, wogegen sie hält — und dann muss sie rot
+     * sein und nicht still. Die Gegenprobe nimmt genau diesen Gegenstand weg.
+     */
+    title: 'T-249-2: die Domäne führt kein `VERSION_SHAPE` mehr',
+    run: () =>
+      checkBuildVersionShape(
+        buildScriptText,
+        domainVersionText.replace('export const VERSION_SHAPE', 'const FORM_OHNE_AUSFUHR'),
+        domainVersionName,
       ),
   },
   {

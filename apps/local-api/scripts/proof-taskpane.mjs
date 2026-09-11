@@ -12,14 +12,20 @@
  *     Laufzeit passt, der private Schlüssel gehört dazu.
  *  3. Der Port liefert statische Dateien aus und **nichts sonst**: kein Pfad
  *     außerhalb der Wurzel, keine Endung außerhalb der Positivliste.
- *  4. Schlüssel und Zertifikat liegen mit `0600` im Anwendungsdatenverzeichnis.
+ *  4. Schlüssel und Zertifikat liegen im Anwendungsdatenverzeichnis, und die
+ *     engen Rechte (`0600`) werden **ausdrücklich** gesetzt. Wo die Plattform
+ *     einen POSIX-Modus führt, wird er am Ergebnis gemessen; wo nicht (Windows),
+ *     wird das gesagt und statt dessen die Regel selbst gemessen — siehe
+ *     Abschnitt 2.
  */
 
 import { X509Certificate, createPrivateKey } from 'node:crypto';
-import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+
+import { paketQuelle } from './source-resolve.mjs';
 
 // Kein Auflösungshaken mehr (T-029): Seit `packages/domain` seine internen
 // Importe mit `.ts` schreibt, gibt es im Arbeitsbereich keinen `.js`-Bezeichner
@@ -89,14 +95,131 @@ try {
     const first = await loadOrCreateCertificate(taskpaneKeyPath(appData), taskpaneCertPath(appData));
     check('beim ersten Mal wird eines erzeugt', first.source === 'created', first.source);
 
-    const keyStat = await stat(taskpaneKeyPath(appData));
-    const certStat = await stat(taskpaneCertPath(appData));
-    check('der Schlüssel liegt mit 0600', !isTooPermissive(keyStat.mode, FILE_MODE), (keyStat.mode & 0o777).toString(8));
-    check('das Zertifikat liegt mit 0600', !isTooPermissive(certStat.mode, FILE_MODE), (certStat.mode & 0o777).toString(8));
+    const keyPath = taskpaneKeyPath(appData);
+    const certPath = taskpaneCertPath(appData);
+    const keyStat = await stat(keyPath);
+    const certStat = await stat(certPath);
 
-    const second = await loadOrCreateCertificate(taskpaneKeyPath(appData), taskpaneCertPath(appData));
+    /*
+     * Zuerst der **Ort**, und der wird überall gemessen.
+     *
+     * Bis T-247-6 sagte dieser Abschnitt nur etwas über den Modus — und damit
+     * unter Windows über gar nichts. Daß beide Dateien überhaupt **hier**
+     * liegen, im übergebenen Anwendungsdatenverzeichnis und nicht neben der
+     * Datenbank, im Arbeitsverzeichnis oder in der ausgelieferten Wurzel, war
+     * nie gemessen. Es ist aber die Zusage, an der der private Schlüssel
+     * genauso hängt wie am Modus: `certificate.ts` sagt im Kopf „nie neben die
+     * Datenbank kopiert", und `startTaskpaneServer` liefert aus einer anderen
+     * Wurzel aus. Derselbe Schritt wie in `proof:access` Abschnitt 11
+     * (A-A-72), aus demselben Grund.
+     */
+    check(
+      'Schlüssel und Zertifikat liegen im übergebenen Anwendungsdatenverzeichnis',
+      keyStat.isFile() && certStat.isFile() && dirname(keyPath) === appData && dirname(certPath) === appData,
+      `${dirname(keyPath)} / ${dirname(certPath)}`,
+    );
+
+    /*
+     * Dann die **Regel**, ebenfalls überall gemessen — statisch am Quelltext.
+     *
+     * `writePair` setzt den Modus zweimal je Datei: einmal beim Schreiben und
+     * einmal danach mit `chmod`. Das ist kein Gürtel-und-Hosenträger, sondern
+     * zwei verschiedene Fälle — die Angabe beim Anlegen wirkt nur, wenn die
+     * Datei **neu** entsteht; eine schon vorhandene, zu weit stehende Datei
+     * behielte ohne das `chmod` ihre alten Rechte. Genau diesen zweiten Fall
+     * fängt die Modusprüfung am Ergebnis unten **nicht** ab, denn sie sieht auf
+     * eine gerade erst angelegte Datei. Der Quelltext ist an dieser Stelle also
+     * nicht die schwächere, sondern die andere Messung — und die einzige, die
+     * auch unter Windows etwas aussagt.
+     */
+    /*
+     * Aufgelöst statt abgezählt (T-249-1) — und hier mit einem zweiten Zweck.
+     *
+     * Dieser Abschnitt urteilt über den **Text** einer Datei, deren Modul
+     * oben ohnehin geladen wird. Ein Pfad, der nicht mehr stimmt, fiele beim
+     * Laden auf; was nicht auffiele, wäre eine Datei, die zwar dort liegt, aber
+     * die gesuchte Stelle gar nicht enthält — dann stünde unten „gefunden: 0"
+     * gegen „erwartet 2", und das liest sich wie ein Befund über B-2.2 statt
+     * wie ein Fehlschlag der Messung. Das Merkmal trennt die beiden Fälle.
+     */
+    const certificateSource = await readFile(
+      paketQuelle('@takt/local-api', {
+        hinweis: 'src/taskpane/certificate.ts',
+        merkmal: 'export function createSelfSignedCertificate',
+      }),
+      'utf8',
+    );
+    const writeWithMode = certificateSource.match(/writeFile\(\s*\w+,[^;]*?\{\s*mode:\s*FILE_MODE\s*\}\s*\)/g) ?? [];
+    const chmodAfter = certificateSource.match(/chmod\(\s*\w+,\s*FILE_MODE\s*\)/g) ?? [];
+    check(
+      'der Quelltext legt beide Dateien ausdrücklich mit FILE_MODE an (B-2.2 Punkt 3)',
+      writeWithMode.length === 2,
+      `gefunden: ${writeWithMode.length}`,
+    );
+    check(
+      'und engt beide danach noch einmal mit chmod ein — für den Fall, daß sie schon vorhanden waren',
+      chmodAfter.length === 2,
+      `gefunden: ${chmodAfter.length}`,
+    );
+    check(
+      'kein Zahlenwert von Hand: der Modus kommt aus access/paths.ts',
+      !/mode:\s*0o[0-7]+/.test(certificateSource) && /FILE_MODE\s*\}\s*from\s*'\.\.\/access\/paths\.ts'/.test(certificateSource),
+    );
+    check('FILE_MODE ist 0600', FILE_MODE === 0o600, `0${FILE_MODE.toString(8)}`);
+    check(
+      'isTooPermissive nennt 0644 zu weit und 0600 nicht',
+      isTooPermissive(0o644, FILE_MODE) && !isTooPermissive(0o600, FILE_MODE),
+    );
+
+    /*
+     * Zuletzt das **Ergebnis** — nur dort, wo die Plattform eines führt.
+     *
+     * Unter Windows liefert `fs.stat` keinen brauchbaren POSIX-Modus; gemessen
+     * kommt dort `0666` für Verzeichnis wie Datei, also erkennbar keine
+     * Auskunft. `access/paths.ts` nennt die Lücke seit T-011 im Kopf von
+     * `isTooPermissive` selbst („dort trägt die ACL"), `proof:db-permissions`
+     * überspringt aus demselben Grund unter Windows seinen ganzen Lauf,
+     * `proof:access` Abschnitt 11 und `verify-sidecar` Abschnitt 18 schreiben
+     * dieselbe Zeile aus.
+     *
+     * Das ist eine Lücke der **Messung**, keine Lockerung der **Regel**: Auf
+     * Linux und macOS bleiben beide Zeilen unverändert scharf, und was oben
+     * steht — Ort und Quelltext — wird auf allen drei Systemen gemessen. Der
+     * Lauf schreibt aus, was er nicht mißt, statt es wegzulassen; ein roter
+     * Balken, der nichts über den Code aussagt, wird gewohnheitsmäßig
+     * überlesen, und ein stumm bestandener sagt die Unwahrheit.
+     */
+    if (process.platform === 'win32') {
+      console.log(
+        '  --    Schlüssel und Zertifikat mit 0600: nicht gemessen — unter Windows sagt der ' +
+          'POSIX-Modus nichts, dort trägt die ACL (T-011). Gemessen sind statt dessen Ort und Quelltext.',
+      );
+    } else {
+      check('der Schlüssel liegt mit 0600', !isTooPermissive(keyStat.mode, FILE_MODE), (keyStat.mode & 0o777).toString(8));
+      check('das Zertifikat liegt mit 0600', !isTooPermissive(certStat.mode, FILE_MODE), (certStat.mode & 0o777).toString(8));
+    }
+
+    const second = await loadOrCreateCertificate(keyPath, certPath);
     check('beim zweiten Mal wird es geladen, nicht neu erzeugt', second.source === 'loaded', second.source);
     check('und es ist dasselbe', second.certPem === first.certPem);
+
+    /*
+     * Der zweite Fall des `chmod` — am laufenden Code statt am Quelltext, und
+     * deshalb wieder nur dort, wo es einen Modus gibt: Eine vorhandene, zu weit
+     * stehende Datei wird beim Ersetzen wieder eingeengt.
+     */
+    if (process.platform !== 'win32') {
+      await writeFile(keyPath, 'kein gueltiger Schluessel');
+      await chmod(keyPath, 0o644);
+      const replaced = await loadOrCreateCertificate(keyPath, certPath);
+      check('ein unbrauchbares Paar wird ersetzt statt beklagt', replaced.source === 'created', replaced.source);
+      const narrowed = await stat(keyPath);
+      check(
+        'und die zu weit stehende Schlüsseldatei wird dabei auf 0600 eingeengt',
+        !isTooPermissive(narrowed.mode, FILE_MODE),
+        (narrowed.mode & 0o777).toString(8),
+      );
+    }
   }
 
   console.log('\n3  Der Port liefert statische Dateien — über echtes TLS');

@@ -1,8 +1,8 @@
 import { ToastProvider } from "../app/ToastContext";
-import { Icon, type IconName } from "../components/Icon";
+import { Icon, type IconName } from "../shared/ui/Icon";
 import { cx } from "../lib/cx";
 import { THEME_LABEL } from "../lib/labels";
-import { useDensity, useThemePreference, type Density, type ThemePreference } from "../lib/theme";
+import { useDensity, useThemePreference, type Density, type ThemePreference } from "../features/settings/theme";
 import { BoardSection } from "./BoardSection";
 import { ControlsSection } from "./ControlsSection";
 import { DataSection } from "./DataSection";

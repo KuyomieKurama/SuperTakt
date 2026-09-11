@@ -662,7 +662,7 @@ function lastNameSegment(path: string): string {
  *
  * Abgeschnitten wird nur am **Ende** und nur diese beiden Zeichen. Zeichengleich
  * mit `effective_file_name` in `apps/desktop/src-tauri/src/attachment.rs` und
- * mit `effectiveFileNameOf` in `apps/web/src/lib/attachmentLabel.ts`.
+ * mit `effectiveFileNameOf` in `apps/web/src/features/todos/attachmentLabel.ts`.
  *
  * **Auf jeder Plattform**, nicht unter einer Betriebssystemabfrage: Ein Zweig,
  * der nur auf einem System etwas tut, ist auf dem Läufer der Reihe unmeßbar
@@ -766,7 +766,7 @@ export function hasPathStreamSeparator(value: string): boolean {
  * Tür durch und fiel erst am Öffnen-Befehl (T-179 B-1). Zeichengleich mit
  * `has_indirect_extension` in `apps/desktop/src-tauri/src/attachment.rs`
  * (`rsplit_once('.')` nimmt den führenden Punkt ebenfalls als Trenner) und mit
- * `extensionOf` in `apps/web/src/lib/attachmentLabel.ts`.
+ * `extensionOf` in `apps/web/src/features/todos/attachmentLabel.ts`.
  *
  * **Über einen Namen mit Doppelpunkt trifft diese Funktion keine Aussage** —
  * `rechnung.lnk::$DATA` liefert `lnk::$data`, und das steht auf keiner Liste
@@ -928,8 +928,8 @@ export type ImageRejection =
  * Bedienkomfort, das ist ein Weg zum Datenverlust (SC 2.4.6).
  *
  * Warum diese Funktion in der **Domäne** liegt: Es gab sie zweimal — hier und
- * in `apps/web/src/lib/attachmentLabel.ts` —, und die beiden **antworteten
- * verschieden** (Befund O-CR). Nicht, weil der Aufgabenbereich des Add-ins
+ * in `apps/web/src/features/todos/attachmentLabel.ts` —, und die beiden
+ * **antworteten verschieden** (Befund O-CR). Nicht, weil der Aufgabenbereich des Add-ins
  * Anhänge zeigte: Er zeigt keine. A-19.19 und E-072 Punkt 1 schließen sie
  * strukturell aus, und das Wort `attachment` kommt in
  * `apps/outlook-addin/src/**` kein einziges Mal vor. Der Ort ist richtig, die

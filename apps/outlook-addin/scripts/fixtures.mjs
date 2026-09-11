@@ -427,7 +427,7 @@ export const createFakeStore = (options = {}) => {
     /*
      * Der Ausschnitt, gegen den seit T-092 der **Anwendungsfall** läuft.
      *
-     * `poolMovementNamer` (`apps/local-api/src/usecases/pool-movement.ts`)
+     * `poolMovementNamer` (`apps/local-api/src/pool-movement.ts`)
      * verlangt `Pick<PoolPort, 'list' | 'resolveAxes'>` — genau diese beiden
      * Methoden, und keine schreibt. Der Add-in-Dienst reicht ihm seinen eigenen
      * Port-Ausschnitt durch, ohne ihn anzufassen (E-058 Absatz 1); die Attrappe

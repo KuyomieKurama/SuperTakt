@@ -2,7 +2,7 @@
  * Takt — Todo, Status und interner Vermerk (A-2.*, A-5.*, A-7.1, A-7.2, E-006).
  *
  * Die **Kanban-Spalte** steht seit E-054 nicht mehr hier, sondern in `board.ts`
- * und `tag.ts`: Sie ist eine Regel. Tags sind darin eine Achse von fünf
+ * und `pool.ts`: Sie ist eine Regel. Tags sind darin eine Achse von fünf
  * (E-055) — der Status ist eine weitere, und `todo_status` ist geblieben, aber
  * als das, was es immer war: eine Eigenschaft des Todos.
  */
@@ -76,7 +76,7 @@ export interface TodoStatus {
  *  - Eine gemerkte Spalte für die Rückkehr aus „Erledigt". Es gibt nichts
  *    wiederherzustellen, weil das Erledigen den Status nie verändert hat — und
  *    seit E-054 erst recht nicht die Spalte, die niemand speichert.
- *    A-2.5 trägt `IsVisibleInPool` in tag.ts.
+ *    A-2.5 trägt `IsVisibleInPool` in pool.ts.
  *  - Die erfasste Arbeitszeit. Sie ist die Summe der Zeitbuchungen und wird
  *    berechnet, nicht mitgeführt, damit sie nie von den Buchungen abweichen kann.
  *  - Ein Sortierschlüssel innerhalb der Spalte (`boardRank`, A-5.2, A-13.6).
@@ -209,7 +209,7 @@ export interface TodoUpdate {
  *
  * `poolIds` und `tagIds` schließen sich nicht aus; beide wirken zusätzlich.
  * `onlyOpen` filtert auf `completed_at IS NULL` und ist die Fassung von
- * `IsVisibleInPool` (tag.ts) auf der Abfrageseite: In Pool-Ansichten steht es
+ * `IsVisibleInPool` (pool.ts) auf der Abfrageseite: In Pool-Ansichten steht es
  * auf `true`, sonst entscheidet der Aufrufer.
  */
 export interface TodoFilter {

@@ -82,9 +82,9 @@ export function doneMovementSentence(
  * von einer Buchung.
  *
  * Die dritte ist seit T-108 dabei: `POST /time-entries`, die Buchung von Hand
- * aus `screens/BookingDialogs.tsx`. Der Dienst rechnet sie nach derselben
+ * aus `features/bookings/BookingDialogs.tsx`. Der Dienst rechnet sie nach derselben
  * Rechnung wie den Stopp (`closedEntryMovementStates`) — die Begründung steht
- * an `CreateTimeEntryResult` in `api/types.ts`.
+ * an `CreateTimeEntryResult` in `features/bookings/api.ts`.
  */
 export function bookingSentence(movement: PoolMovement | null): string | null {
   return movementSentence(movement, "booking");

@@ -1,5 +1,5 @@
 /**
- * Takt — warum „Todo anlegen" gesperrt ist (V-11 aus T-154).
+ * Takt — warum „Neue Aufgabe anlegen" gesperrt ist (V-11 aus T-154).
  *
  * ## Der Befund
  *

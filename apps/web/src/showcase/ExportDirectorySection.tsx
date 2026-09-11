@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
 import {
   Base64Notice,
   ExportDirectoryConcernList,
   ExportDirectoryField,
-} from "../components/ExportDirectoryField";
-import { Button, Card, InlineMessage } from "../components/Primitives";
-import { adviseExportDirectory } from "../lib/exportDirectoryAdvice";
+} from "../features/export/ExportDirectoryField";
+import { Button, Card, InlineMessage } from "../shared/ui/Primitives";
+import { adviseExportDirectory } from "../features/export/exportDirectoryAdvice";
 import { Section, SubHeading } from "./Section";
 
 /**

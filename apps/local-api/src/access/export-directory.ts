@@ -14,7 +14,7 @@
  *
  * Drei Stellen sprechen über denselben Ordner, und sie tun verschiedene Dinge:
  *
- *  1. `apps/web/src/lib/exportDirectoryAdvice.ts` **warnt**. Sie liest den Pfad
+ *  1. `apps/web/src/features/export/exportDirectoryAdvice.ts` **warnt**. Sie liest den Pfad
  *     als Zeichenkette und sagt es auch so: „liegt in", nicht „ist". Sie
  *     erwischt den häufigsten Fall, bevor gespeichert wird, und erklärt ihn.
  *  2. `checkExportDirectory` in `packages/storage` **entscheidet**. Vorhanden,

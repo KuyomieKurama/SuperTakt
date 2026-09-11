@@ -140,11 +140,16 @@ tags:
     description: |
       Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
 
-      Fünf Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
-      Call-Nummer suchen, ein Todo anlegen, einen http(s)-Verweis an ein
-      vorhandenes Todo hängen und Zeit buchen. Kein Löschen, kein Datei- oder
+      Vier Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
+      Call-Nummer suchen, ein Todo anlegen und Zeit buchen. Kein Löschen,
+      **kein Anhang irgendeiner Art** (A-19.19, F-21), kein Datei- oder
       Bildzugriff, kein Export, kein Zugriff auf den internen Vermerk eines
       fremden Todos, keine Einstellungen.
+
+      Bis T-247 war eine fünfte Route dabei, die einen http(s)-Verweis an
+      ein vorhandenes Todo hängte. Sie ist mit der Entscheidung zu F-21
+      ersatzlos entfernt; Anhänge entstehen ausschließlich in der
+      Hauptanwendung.
 
       Der Grund ist nicht Sparsamkeit: Das Add-in weist sich mit dem
       **dauerhaften** Token aus, die Oberfläche mit dem Sitzungsgeheimnis
@@ -3638,19 +3643,42 @@ paths:
                     und die Anhangstabelle bleibt leer (gemessen in
                     `proof:addin` Abschnitt 18).
 
-                    Für die ausdrücklich gewählte Folgehandlung gibt es eine
-                    eigene, schmale Route:
-                    `POST /addin/todos/{todoId}/attachments`. Sie nimmt nur
-                    einen normalisierten `http`- oder `https`-Verweis auf ein
-                    **bereits vorhandenes** Todo an. Datei- und Bildpfade sind
-                    dort strukturell nicht darstellbar; Lesen und Löschen von
-                    Anhängen bleiben ebenfalls der Hauptanwendung vorbehalten.
+                    **Und über keine andere Route unter `/addin` entsteht
+                    einer** (A-19.19, F-21). Bis T-247 gab es dafür eine
+                    schmale Ausnahme: `POST /addin/todos/{todoId}/attachments`
+                    hängte den Deep-Link auf die geöffnete Outlook-Nachricht
+                    an ein vorhandenes Todo. Diese Route ist ersatzlos
+                    entfernt.
 
-                    Der Unterschied ist Art und nicht Vorsicht: Eine Frist ist
-                    ein Tag, den die Anwendung **anzeigt**. Die neue Route
-                    speichert genau den Web-Verweis, den der Benutzer an das
-                    vorhandene Todo hängen will — keinen beliebigen lokalen
-                    Pfad und keine Bildbytes.
+                    Auf diesen Pfad gibt es danach **zwei** richtige
+                    Antworten, und sie widersprechen einander nicht, weil sie
+                    aus verschiedenen Schichten kommen:
+
+                    - **Ohne Token `401`** — aus der Prüfschicht, die **vor**
+                      der Wegwahl liegt (B-2.10). Sie antwortet für jeden
+                      Pfad gleich, für den bekannten wie für den unbekannten,
+                      und sagt deshalb nichts darüber, ob es die Route gibt.
+                    - **Mit gültigem Add-in-Token `404`** — aus der
+                      Abwesenheit der Route selbst. Erst diese Antwort ist
+                      eine Aussage über ihre Existenz.
+
+                    Zugesagt und gemessen wird deshalb die zweite:
+                    `proof:addin` Abschnitt 18f schickt die Anfrage mit einem
+                    **gültigen** Add-in-Token, erwartet `404`, zählt
+                    `todo_attachment` nach und hält als Gegenprobe die
+                    Nachbarroute `…/time-entries` daneben — sie darf weder
+                    `404` noch `401` antworten, sonst spräche der `404`
+                    darüber über den Aufbau der Messung statt über die Route.
+
+                    Diese Beschreibung sagte bis T-247 das Gegenteil — „mit
+                    `401`, nicht mit `404`" — und stand damit gegen ihren
+                    eigenen Wächter. Gemessen ist der `404`.
+
+                    Anhänge legt, liest und löscht ausschließlich die
+                    Hauptanwendung über `/todos/{todoId}/attachments`. Diese
+                    Routen liegen außerhalb von `/addin`, stehen nicht in
+                    `SHARED_PATHS` und sind für ein Add-in-Token damit
+                    unerreichbar.
       responses:
         '201':
           description: Angelegt.
@@ -3683,103 +3711,6 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '413': { $ref: '#/components/responses/PayloadTooLarge' }
-        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
-        '422': { $ref: '#/components/responses/UnprocessableEntity' }
-
-  /addin/todos/{todoId}/attachments:
-    parameters: [{ $ref: '#/components/parameters/TodoId' }]
-    post:
-      tags: [Add-in]
-      operationId: addAddinTodoAttachment
-      summary: Outlook-Verweis an ein vorhandenes Todo hängen
-      description: |
-        Diese Route ist absichtlich schmaler als
-        `POST /todos/{todoId}/attachments`: Das dauerhafte Add-in-Token darf
-        **nur einen http(s)-Verweis** speichern. Datei- und Bildpfade, Lesen,
-        Entfernen und Bilddaten sind über `/addin` nicht erreichbar.
-
-        Gedacht ist sie für den Deep-Link auf die geöffnete Outlook-Nachricht.
-        Der Vorgang erfasst **keine Zeit** und hebt „Erledigt“ nicht auf.
-
-        Derselbe normalisierte Verweis ist am selben Todo idempotent. Hängt er
-        schon dort, antwortet die Route mit `200` und `alreadyPresent: true`;
-        andernfalls wird er angelegt und die Antwort ist `201`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [url]
-              properties:
-                url:
-                  type: string
-                  minLength: 1
-                  maxLength: 2048
-                  description: |
-                    Ausschließlich eine gültige `http`- oder `https`-Adresse.
-                    Gespeichert wird ihre Normalform.
-                title:
-                  oneOf:
-                    - { type: string, maxLength: 200 }
-                    - { type: 'null' }
-                  description: Freiwillige sichtbare Bezeichnung des Verweises.
-      responses:
-        '200':
-          description: Der normalisierte Verweis hing bereits am Todo.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: object
-                    required: [attachment, alreadyPresent]
-                    properties:
-                      attachment:
-                        type: object
-                        required: [id, todoId, kind, title, target]
-                        properties:
-                          id: { $ref: '#/components/schemas/Id' }
-                          todoId: { $ref: '#/components/schemas/Id' }
-                          kind: { type: string, const: link }
-                          title:
-                            oneOf:
-                              - { type: string }
-                              - { type: 'null' }
-                          target: { type: string }
-                      alreadyPresent: { type: boolean, const: true }
-        '201':
-          description: Verweis angelegt.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: object
-                    required: [attachment, alreadyPresent]
-                    properties:
-                      attachment:
-                        type: object
-                        required: [id, todoId, kind, title, target]
-                        properties:
-                          id: { $ref: '#/components/schemas/Id' }
-                          todoId: { $ref: '#/components/schemas/Id' }
-                          kind: { type: string, const: link }
-                          title:
-                            oneOf:
-                              - { type: string }
-                              - { type: 'null' }
-                          target: { type: string }
-                      alreadyPresent: { type: boolean, const: false }
-        '400': { $ref: '#/components/responses/TokenInUrl' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/OriginRejected' }
-        '404': { $ref: '#/components/responses/NotFound' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
@@ -4273,10 +4204,11 @@ components:
         * **Jede** Operation dieser Beschreibung verlangt das
           **Sitzungsgeheimnis** der Oberfläche.
         * **Ausschließlich** der Teilbaum `/addin` — `GET /addin/context`,
-          `GET /addin/todo-matches`, `POST /addin/todos`,
-          `POST /addin/todos/{todoId}/attachments` und
+          `GET /addin/todo-matches`, `POST /addin/todos` und
           `POST /addin/todos/{todoId}/time-entries` — nimmt daneben auch das
-          **Add-in-Token** an.
+          **Add-in-Token** an. Vier Operationen, nicht mehr; eine fünfte für
+          Anhänge gab es bis T-247 und gibt es seit der Entscheidung zu F-21
+          nicht mehr.
         * Dazu genau eine benannte Ausnahme: `GET /health`. Sie ist der Knopf
           „Verbindung prüfen" in den Add-in-Einstellungen, gibt nichts heraus
           als `{ "status": "ok" }`, ändert nichts und liegt weiterhin hinter dem
@@ -4295,9 +4227,10 @@ components:
         einem fremdgehosteten Webview lädt (E-009, E-019, R-09). Das
         Sitzungsgeheimnis entsteht bei jedem Start neu, kommt über `stdin` von
         der Hülle und berührt die Platte nie. Ein entwendetes Add-in-Token
-        kommt genau so weit, wie die fünf Add-in-Operationen reichen — es liest
-        keinen internen Vermerk, ändert keine Einstellung, kann weder Datei-
-        noch Bildanhänge lesen oder schreiben und löst keinen Exportlauf aus.
+        kommt genau so weit, wie die vier Add-in-Operationen reichen — es liest
+        keinen internen Vermerk, ändert keine Einstellung, kann **überhaupt
+        keinen Anhang** anlegen, lesen oder löschen (A-19.19, F-21) und löst
+        keinen Exportlauf aus.
 
         Die Anforderung fällt am Pfad und nicht an einer gepflegten
         Aufzählung: Eine künftig hinzugefügte Operation außerhalb von `/addin`

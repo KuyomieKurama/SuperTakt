@@ -472,7 +472,7 @@
    Beschriftung, und damit deckelt SC 1.4.3 sie bei 1,80:1 hell und 1,58:1
    dunkel (T-194 Abschnitt 1.2). Ohne Farbe tragen das Symbol (Pfeil zurueck),
    das Wort und die Rautenform des Zeilenpunktes; siehe die Merkmalstabelle in
-   `components/ExportStatus.tsx`. Gemessen wird beides in `contrast-check.mjs`:
+   `shared/ui/ExportStatus.tsx`. Gemessen wird beides in `contrast-check.mjs`:
    die Schraffur als benannte Ausnahme, die Beschriftung ueber ihrem dunkelsten
    Punkt mit 4,5:1. */
 .badge--reopened {
@@ -1390,7 +1390,7 @@
    `ReactivationNotice`. Der Baustein ist mit W-9 entfallen: Keine Ansicht der
    Anwendung hat ihn eingesetzt, den Fall A-2.5/I-05 tragen der Toast
    (`.toast`) und das Etikett `.doneflag--reopened`. Die Begruendung steht in
-   `components/Timer.tsx` am selben Platz. */
+   `features/timer/Timer.tsx` am selben Platz. */
 
 /* ==================================================================== */
 /* Vermerk und Leistung — die zwei Feldarten                            */

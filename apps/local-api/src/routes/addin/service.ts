@@ -51,8 +51,8 @@ import {
   type BookingPresenceBefore,
   type MovingTodo,
   type PoolMovementNamer,
-} from '../../usecases/pool-movement.ts';
-import { AbortTodoCreate, resolveTagNames } from '../../usecases/tag-names.ts';
+} from '../../pool-movement.ts';
+import { AbortTodoCreate, resolveTagNames } from '../../tag-names.ts';
 
 import type { AddinDeps } from './ports.ts';
 
@@ -207,7 +207,7 @@ export interface AddinTodoMatch {
  * etwas anderes als die Bestätigung — Befund C-03 aus T-025, eine Ebene
  * tiefer. Bis T-104 stand dafür ein `BOOKING_EFFECT` in dieser Datei und das
  * Zustandspaar zweimal von Hand; beides ist mit E-061 in
- * `packages/domain` beziehungsweise `usecases/pool-movement.ts` gewandert.
+ * `packages/domain` beziehungsweise `src/pool-movement.ts` gewandert.
  *
  * ---------------------------------------------------------------------------
  * Die erste Zeile ist die ganze Sparsamkeit dieser Funktion
@@ -222,8 +222,8 @@ export interface AddinTodoMatch {
  * nicht als Wert: Wo nichts zu rechnen ist, wird auch nichts aufgelöst.
  *
  * Umgekehrt ist der Zweig, der rechnet, genau der aus `movementOfStart` in
- * `usecases/timer.ts`: „Erledigt" fällt, oder die erste abgeschlossene Buchung
- * entsteht.
+ * `features/timer/movement.ts`: „Erledigt" fällt, oder die erste
+ * abgeschlossene Buchung entsteht.
  */
 const bookingMovement = async (
   namer: () => Promise<PoolMovementNamer>,
@@ -283,7 +283,7 @@ export const findMatches = async (
      *
      * Das Auflösen der Ordner über beliebig tiefe Bäume ist die teure Hälfte,
      * das Urteil über ein einzelnes Todo die billige
-     * (`usecases/pool-movement.ts`) — deshalb wird der Namensgeber geteilt.
+     * (`src/pool-movement.ts`) — deshalb wird der Namensgeber geteilt.
      * Gebaut wird er erst, wenn ihn der erste Treffer verlangt: Die häufigste
      * Trefferliste besteht aus offenen Todos mit gebuchter Zeit, und für die
      * gibt es nichts zu rechnen ({@link bookingMovement}).
@@ -351,7 +351,7 @@ export interface AddinCreateTodoInput {
    * Gibt es den Namen schon, wird das vorhandene Tag verwendet; gibt es ihn
    * nicht, entsteht eines — in **derselben** Transaktion wie das Todo. Wortlaut
    * und Wirkung sind dieselben wie bei `CreateTodoInput.tagNames` in
-   * `usecases/todos.ts`; das ist keine Ähnlichkeit, sondern die Bedingung
+   * `features/todos/todos.ts`; das ist keine Ähnlichkeit, sondern die Bedingung
    * dafür, dass A-9.5 und T-058 auf beiden Wegen dasselbe bedeuten.
    *
    * Freiwillig, damit ein Aufrufer, der nur Kennungen benennt, nichts
@@ -410,8 +410,8 @@ export interface AddinCreateTodoResult {
  *
  * `tagNames` sind Namen statt Kennungen. Sie werden **innerhalb** derselben
  * Transaktion aufgelöst, in der das Todo entsteht, und zwar durch **dieselbe**
- * Funktion, die auch `createTodo` in `usecases/todos.ts` benutzt:
- * `resolveTagNames` aus `usecases/tag-names.ts`. Bis T-062 stand hier eine
+ * Funktion, die auch `createTodo` in `features/todos/todos.ts` benutzt:
+ * `resolveTagNames` aus `src/tag-names.ts`. Bis T-062 stand hier eine
  * zweite, abgeschriebene Fassung — nicht aus Nachlässigkeit, sondern weil die
  * erste nicht exportiert war. Seit T-064 gibt es nur noch eine, und damit ist
  * die Gleichheit beider Wege keine Zusicherung mehr, sondern eine Tatsache:
@@ -448,7 +448,7 @@ export const createTodo = async (
       const resolved = await resolveTagNames(unit, names.value, now);
 
       // Erst die ausdrücklich gewählten, dann die über den Namen benannten —
-      // dieselbe Reihenfolge wie in `usecases/todos.ts`. `applyDefaultTags`
+      // dieselbe Reihenfolge wie in `features/todos/todos.ts`. `applyDefaultTags`
       // fasst Doppelte zusammen, ohne die Reihenfolge zu verschieben.
       const selected: readonly TagId[] = [
         ...input.tagIds,
@@ -475,7 +475,7 @@ export const createTodo = async (
           tagIds: effectiveTagIds,
           note: input.note,
           // A-19.21: Der Tag geht unverändert an denselben Port, den auch
-          // `usecases/todos.ts` benutzt. Es gibt keine zweite Schreibstelle
+          // `features/todos/todos.ts` benutzt. Es gibt keine zweite Schreibstelle
           // für die Frist und keine Umrechnung dazwischen — der Adapter
           // schreibt `dueDate ?? null`, und `null` ist hier bereits der Wert
           // und kein fehlendes Feld.
@@ -579,7 +579,7 @@ export type AddinBookResult =
  * Der geplante Abbruch einer Buchung (R-1 Befund 2).
  *
  * Dieselbe Bauart und dieselbe Begründung wie `AbortTodoCreate` in
- * `usecases/tag-names.ts`: Die Transaktionsklammer nimmt **nur bei einem Wurf**
+ * `src/tag-names.ts`: Die Transaktionsklammer nimmt **nur bei einem Wurf**
  * zurück, ein fachlicher Fehlschlag ist aber kein Programmierfehler. Eine
  * eigene Klasse trennt beides — der `catch`-Zweig unterscheidet „geplanter
  * Abbruch" von „etwas ist kaputtgegangen", und nur das Zweite endet als 500.
@@ -651,7 +651,7 @@ class AbortBooking extends Error {
  * Der Kommentar an dieser Stelle behauptete dabei genau das Gegenteil.
  *
  * Der Weg ist derselbe wie bei `createTodo` einen Abschnitt weiter oben
- * (`AbortTodoCreate` aus `usecases/tag-names.ts`): eine eigene Abbruchklasse,
+ * (`AbortTodoCreate` aus `src/tag-names.ts`): eine eigene Abbruchklasse,
  * geworfen innen, gefangen außen, dort in einen Wert übersetzt. Eine eigene
  * Klasse und keine allgemeine `Error`, damit der `catch`-Zweig „geplanter
  * Abbruch" von „etwas ist kaputtgegangen" unterscheiden kann; das Zweite bleibt

@@ -40,7 +40,24 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   export_run_group: { columns: ['id', 'export_run_id', 'todo_id', 'day', 'seconds', 'quarters'], orderBy: 'export_run_id, day, todo_id' },
   export_run_entry: { columns: ['export_run_group_id', 'time_entry_id', 'duration_seconds'], orderBy: 'export_run_group_id, time_entry_id' },
   export_audit: { columns: ['id', 'time_entry_id', 'event', 'previous_status', 'new_status', 'export_run_id', 'export_run_group_id', 'actor', 'reason', 'occurred_at'], orderBy: 'occurred_at, id' },
-  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running'], orderBy: 'id' },
+  /*
+   * `last_version_check_at` steht hier seit T-279, und der Grund ist nicht
+   * Vollständigkeit um ihrer selbst willen.
+   *
+   * `replaceAll` leert die Tabelle und schreibt genau die hier genannten
+   * Spalten zurück. Eine Spalte, die fehlt, wird beim Einspielen also nicht
+   * etwa übergangen — sie wird **auf NULL gesetzt**. Für den Bezugspunkt des
+   * harten Bodens (A-V-11) hieße das: Jeder Import hebt den Boden auf, und
+   * wer ihn aufheben will, spielt eine Datensicherung ein. Genau die Lücke,
+   * gegen die Migration 0022 geschrieben ist, wäre über den Umweg der
+   * eigenen Datensicherung wieder offen — still, denn die Prüfung meldet
+   * nichts.
+   *
+   * Der Wert wandert damit über den Round-Trip nach A-20.4 wie jeder andere.
+   * Er ist trotzdem **keine Einstellung**: keine Route liest ihn, keine
+   * schreibt ihn (siehe `VersionCheckStatePort`).
+   */
+  app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running', 'last_version_check_at'], orderBy: 'id' },
 });
 
 const INSERT_ORDER: readonly DataArchiveTable[] = [

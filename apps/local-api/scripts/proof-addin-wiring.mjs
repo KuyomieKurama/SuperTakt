@@ -33,9 +33,12 @@ import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { isolatedAppDataEnv } from './proof-appdata.mjs';
+import { dienstEinstieg } from './source-resolve.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY = join(HERE, '..', 'src', 'index.ts');
+/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
+const ENTRY = dienstEinstieg();
 const PORT = 17843;
 const BASE = `http://127.0.0.1:${PORT}/api/v1`;
 
@@ -143,7 +146,7 @@ const sessionSecret = `takt_${randomBytes(32).toString('base64url')}`;
 
 const child = spawn(process.execPath, [ENTRY], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, XDG_DATA_HOME: dataDir },
+  env: isolatedAppDataEnv(dataDir),
 });
 const childExit = new Promise((resolve) => child.once('exit', (code) => resolve(code)));
 let stderr = '';

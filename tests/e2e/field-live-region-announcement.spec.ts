@@ -165,6 +165,20 @@ test.describe('Rückführung zum ungültigen Feld nach gescrolltem Absendeversuc
   test('Tastaturweg bis zum Absendeknopf lässt den Rumpf scrollen; nach dem Fehlschlag steht er wieder oben, und der Fokus liegt auf dem Titelfeld', async ({
     page,
   }) => {
+    // Berichtigt (das Erzeugnis hat sich geändert, nicht der Anspruch dieses
+    // Falls): `viewport-layout.css` ersetzt seit der Layoutüberarbeitung
+    // (`docs/design/supertakt-layout.md`) die starre `60vh`-Grenze des
+    // Formularrumpfs durch `calc(100vh - 2 * var(--space-6))` — auf dem
+    // Standardfenster dieser Reihe (Chrome-Vorgabe, ohne diese Zeile) hat der
+    // Dialog seither genug Höhe, um alle Felder ohne Bildlauf zu zeigen;
+    // `scrollTopBeforeSubmit` maß deshalb `0` statt eines Werts größer null —
+    // die Vorbedingung dieses Falls (Kopfkommentar, "der Fall mißt nichts
+    // ohne sie") war nicht mehr erfüllt, nicht die Behebung aus T-202 kaputt.
+    // Ein niedrigeres Fenster erzwingt wieder echten Bildlauf, ohne an der
+    // Meldung selbst etwas abzuschwächen — Zeile 204 unten prüft weiterhin
+    // scharf, dass wirklich gescrollt wurde, bevor irgendetwas über die
+    // Rückführung behauptet wird.
+    await page.setViewportSize({ width: 1280, height: 600 });
     await gotoDashboard(page);
     await page.locator('.screen__actions').getByRole('button', { name: 'Neues Todo' }).click();
 

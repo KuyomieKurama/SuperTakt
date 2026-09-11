@@ -302,7 +302,7 @@ export function plural(count: number, one: string, many: string): string {
   Bis T-124 stand hier `joinGerman`: fünf Zeilen, die „A", „A und B", „A, B
   und C" ergaben. Sie waren die dritte Abschrift derselben Form — neben
   `enumerateGerman` in `lib/errorText.ts` und `quoteList` in
-  `screens/TodoFormDialog.tsx`, und alle drei neben dem privaten `listPools`
+  `features/todos/TodoFormDialog.tsx`, und alle drei neben dem privaten `listPools`
   in `packages/domain/src/pool-movement.ts`, aus dem sie stammten.
 
   Seit T-122 führt die Domäne die Form aus: `enumerateGerman`, `quoteName`

@@ -1,10 +1,10 @@
 /**
  * SuperTakt — Aufgabenbereich des Outlook-Add-ins.
  *
- * Wird zu einer erkannten Call-Nummer bereits ein Todo gefunden, wird die
- * E-Mail nicht mehr als Zeitbuchung behandelt. Der Benutzer kann stattdessen
- * den Outlook-Verweis an genau dieses Todo hängen. Damit entsteht **keine**
- * Zeit, kein Exporttext und kein Wiederöffnen eines erledigten Todos.
+ * Wird zu einer erkannten Call-Nummer bereits ein Todo gefunden, **meldet** der
+ * Aufgabenbereich das und handelt nicht daran: keine Zeitbuchung, kein Anhang,
+ * kein Wiederöffnen eines erledigten Todos (Entscheidung zu F-21, T-247). Die
+ * einzige Handlung dieser Fläche ist das bewusste Anlegen eines neuen Todos.
  */
 
 import {
@@ -30,7 +30,6 @@ import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
 import type { ApiClient, ApiFailure } from '../api/client.ts';
 import type { AddinContextDto } from '../api/types.ts';
 import { cutToCharacterBoundary } from '../text/cut.ts';
-import { visibleText } from '../text/hidden.ts';
 import { createTodoGate } from './create-gate.ts';
 import { Button, Callout, Field, Foreign, Section, Skeleton } from './Primitives.tsx';
 import { DuplicateOffer } from './DuplicateOffer.tsx';
@@ -38,8 +37,6 @@ import { TagPicker } from './TagPicker.tsx';
 
 export interface TaskPaneProps {
   readonly mail: MailFacts;
-  /** Deep-Link auf genau die aktuell geöffnete Outlook-Nachricht. */
-  readonly mailLink: string | null;
   readonly detection: Detection | null;
   readonly api: ApiClient;
   readonly hasToken: boolean;
@@ -52,28 +49,15 @@ type LoadState =
   | { readonly kind: 'ready'; readonly context: AddinContextDto }
   | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
-type Done =
-  | {
-      readonly kind: 'created';
-      readonly title: string;
-      readonly addedDefaults: number;
-      readonly createdTagNames: readonly string[];
-    }
-  | {
-      readonly kind: 'attached';
-      readonly title: string;
-      readonly alreadyPresent: boolean;
-    };
-
-const mailAttachmentTitle = (mail: MailFacts): string => {
-  const subject = visibleText(mail.subject).replace(/\s+/g, ' ').trim();
-  const label = subject.length === 0 ? 'Outlook-E-Mail' : `Outlook: ${subject}`;
-  return cutToCharacterBoundary(label, 200);
-};
+interface Done {
+  readonly kind: 'created';
+  readonly title: string;
+  readonly addedDefaults: number;
+  readonly createdTagNames: readonly string[];
+}
 
 export function TaskPane({
   mail,
-  mailLink,
   detection,
   api,
   hasToken,
@@ -88,9 +72,17 @@ export function TaskPane({
   const [note, setNote] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [offers, setOffers] = useState<readonly OfferDescription[]>([]);
+  /**
+   * Die Call-Nummer, mit der zuletzt **tatsächlich** gesucht wurde — oder
+   * `null`, wenn keine Abfrage gestellt wurde.
+   *
+   * Ohne diesen Zustand ist „gesucht und nichts gefunden" von „gar nicht
+   * gesucht" nicht zu unterscheiden: Beides ist eine leere Trefferliste. Für
+   * eine Vorlesehilfe ist der Unterschied der ganze Punkt (Befund Y-04).
+   */
+  const [checkedCallNumber, setCheckedCallNumber] = useState<string | null>(null);
   const [lookupNote, setLookupNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [busyTodoId, setBusyTodoId] = useState<string | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [done, setDone] = useState<Done | null>(null);
 
@@ -125,6 +117,7 @@ export function TaskPane({
       const decision = decideLookup(value);
       if (decision.kind === 'skip') {
         setOffers([]);
+        setCheckedCallNumber(null);
         setLookupNote(
           decision.reason === 'empty'
             ? null
@@ -136,16 +129,19 @@ export function TaskPane({
       const result = await api.findMatches(decision.callNumber);
       if (!result.ok) {
         setOffers([]);
+        setCheckedCallNumber(null);
         setLookupNote(null);
         return;
       }
       if (!result.value.searched) {
         setOffers([]);
+        setCheckedCallNumber(null);
         setLookupNote(result.value.message);
         return;
       }
 
       setLookupNote(null);
+      setCheckedCallNumber(decision.callNumber);
       setOffers(describeOffers(result.value.matches));
     },
     [api],
@@ -236,39 +232,6 @@ export function TaskPane({
     });
   };
 
-  const submitAttachment = async (offer: OfferDescription): Promise<void> => {
-    if (mailLink === null) {
-      setFailure({
-        ok: false,
-        kind: 'failed',
-        code: 'outlook_link_unavailable',
-        message:
-          'Outlook konnte für diese Nachricht keinen Web-Verweis bereitstellen. Es wurde nichts am vorhandenen Todo geändert.',
-      });
-      return;
-    }
-
-    setBusyTodoId(offer.todoId);
-    setFailure(null);
-    const result = await api.addLinkAttachment({
-      todoId: offer.todoId,
-      url: mailLink,
-      title: mailAttachmentTitle(mail),
-    });
-    setBusyTodoId(null);
-
-    if (!result.ok) {
-      setFailure(result);
-      return;
-    }
-
-    setDone({
-      kind: 'attached',
-      title: offer.title,
-      alreadyPresent: result.value.alreadyPresent,
-    });
-  };
-
   return (
     <div className="pane">
       <Section title="Aus dieser E-Mail">
@@ -309,20 +272,7 @@ export function TaskPane({
         {lookupNote !== null ? <Callout tone="info">{lookupNote}</Callout> : null}
       </Section>
 
-      <DuplicateOffer
-        offers={offers}
-        busyTodoId={busyTodoId}
-        canAttach={mailLink !== null}
-        onChoose={(offer) => {
-          void submitAttachment(offer);
-        }}
-      />
-
-      {offers.length > 0 && dueEntry.kind !== 'none' ? (
-        <p className="pane-note">
-          Die eingetragene Frist gilt nur für ein neues Todo. Das vorhandene Todo behält seine eigene Frist.
-        </p>
-      ) : null}
+      <DuplicateOffer offers={offers} checkedCallNumber={checkedCallNumber} />
 
       {failure !== null ? <Failure failure={failure} onOpenSettings={onOpenSettings} /> : null}
 
@@ -431,7 +381,7 @@ export function TaskPane({
             void submitCreate();
           }}
         >
-          Todo anlegen
+          Neue Aufgabe anlegen
         </Button>
       </div>
     </div>
@@ -445,7 +395,6 @@ const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   tagIds: 'Tags',
   tagNames: 'Neue Tags',
   note: 'Vermerk',
-  url: 'Outlook-Verweis',
   body: 'Eingabe',
 });
 
@@ -495,23 +444,6 @@ function Failure({
 }
 
 function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: () => void }) {
-  if (done.kind === 'attached') {
-    return (
-      <Section title="E-Mail angehängt">
-        <Callout tone="success" title={<Foreign value={done.title} />}>
-          {done.alreadyPresent
-            ? 'Der Outlook-Verweis war an diesem Todo bereits vorhanden. Es wurde keine Zeit erfasst.'
-            : 'Die E-Mail wurde als Outlook-Verweis an das vorhandene Todo angehängt. Es wurde keine Zeit erfasst.'}
-        </Callout>
-        <div className="pane-actions">
-          <Button variant="secondary" full onClick={onAgain}>
-            Noch etwas aus dieser E-Mail
-          </Button>
-        </div>
-      </Section>
-    );
-  }
-
   return (
     <Section title="Todo angelegt">
       <Callout tone="success" title={<Foreign value={done.title} />}>

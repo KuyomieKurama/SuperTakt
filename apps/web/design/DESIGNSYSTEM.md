@@ -295,7 +295,7 @@ Die dritte Darstellung hängt deshalb **nicht am Status**, sondern an einem eige
 nicht durchrutscht:
 
 ```ts
-// src/components/ExportStatus.tsx
+// src/shared/ui/ExportStatus.tsx
 export type ExportStatus = "open" | "exported";              // Filter, Abfragen, Exportauswahl
 export type ExportDisplayState = ExportStatus | "reopened";  // ausschliesslich Darstellung
 export function exportDisplayState(status: ExportStatus, exportCount: number): ExportDisplayState;
@@ -393,7 +393,7 @@ Gesagt wird das auf **zwei Flächen**, und keine davon ist eine eigene Hinweisfl
 | Fläche | Baustein | Was sie trägt |
 |---|---|---|
 | Meldung unten rechts | `app/ToastContext.tsx`, gefüllt aus `app/TimerContext.tsx` | Titel „Timer gestartet. „X“ ist wieder offen.“, als Rumpf der Bewegungssatz, dazu „Rückgängig“ |
-| Etikett an der Zeile und auf der Karte | `components/DoneFlag.tsx`, `DONE_FLAG_LABEL.reopened` | „Erledigt aufgehoben“, bis der Benutzer das Kennzeichen selbst anfasst |
+| Etikett an der Zeile und auf der Karte | `shared/ui/DoneFlag.tsx`, `DONE_FLAG_LABEL.reopened` | „Erledigt aufgehoben“, bis der Benutzer das Kennzeichen selbst anfasst |
 
 Den Bewegungssatz bildet `poolMovementSentence` in `@takt/domain` aus dem `poolMovement`, das
 `POST /timer/start` mitschickt (E-058) — dieselbe Funktion, die der Aufgabenbereich des
@@ -793,7 +793,7 @@ Ziehen setzte diesen Wert; seit E-054 ist eine Spalte eine **Regel** über fünf
 Eine Regel lässt sich nicht durch Verschieben umkehren, ohne Tags zu setzen — und dass Takt von
 sich aus Tags setzt, hat der Auftraggeber ausgeschlossen. A-5.2 und I-14 sind damit aufgehoben;
 `draggable`, die Ablageziele und die Tastaturalternative dazu stehen nicht mehr im Board
-(`components/Kanban.tsx`, `screens/BoardScreen.tsx`). Was es nicht gibt, braucht keine
+(`features/board/Kanban.tsx`, `features/board/BoardScreen.tsx`). Was es nicht gibt, braucht keine
 Ersatzbedienung. Der **Status** bleibt als Eigenschaft am Todo und wird dort geändert, wo er
 hingehört: in der Liste (S-02) und in der Detailansicht (S-03).
 
@@ -989,7 +989,8 @@ Vollständig und aktuell auf der Musterseite, Abschnitt 11. Kurzfassung:
 | Baumansicht | `TagTree.tsx` | S-08, S-11, S-12 |
 | Tabelle, Tabellenrahmen | `BookingTable.tsx` | S-03, S-06, S-07 |
 | Tagesgruppenliste der Exportvorschau | `ExportGroups.tsx` | S-07 |
-| Kanban-Spalte, Kanban-Karte, Exportstand-Zusammenfassung | `Kanban.tsx` | S-02, S-03, S-04 |
+| Kanban-Spalte, Kanban-Karte | `Kanban.tsx` | S-04 |
+| Exportstand-Zusammenfassung | `ExportSummaryStrip.tsx` | S-02, S-03, S-04 |
 | Timer-Anzeige | `Timer.tsx` | global, S-01, S-03, S-04, S-05 |
 | Erledigt-Kennzeichen | `DoneFlag.tsx` | S-01, S-02, S-03, S-05 |
 | Meldung mit Rückweg (Toast) | `app/ToastContext.tsx` | global |
@@ -1121,7 +1122,7 @@ A-18.11). Der Grund steht im Protokoll des Dienstes, und dort gehört er hin: Ei
 den Benutzer bei seiner Arbeit nicht behindert, ist keine Meldung wert — und wer gelernt hat,
 eine Meldung ungelesen wegzuklicken, klickt auch die weg, die zählt (R-20).
 
-Umgesetzt ist das an einer Stelle: `app/UpdateNotice.tsx` gibt `null` zurück, wenn nichts zu
+Umgesetzt ist das an einer Stelle: `features/settings/UpdateNotice.tsx` gibt `null` zurück, wenn nichts zu
 melden ist. Es gibt keinen leeren Behälter, der auf Inhalt wartet.
 
 ### 12.2 Der Dialog — drei Angaben, zwei Antworten, keine Vorauswahl

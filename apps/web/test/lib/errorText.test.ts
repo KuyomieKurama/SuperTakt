@@ -21,8 +21,8 @@
  * `repo-tags.ts` (`TagFolderPort.remove`, Fehler `tag_in_use`) und
  * `repo-statuses.ts` (`remove`, Fehler `status_in_use`) —, dort stehen auch
  * die Basissätze, die unten unverändert als `message` auftauchen. Der
- * "fremde" Detaileintrag stammt aus `apps/local-api/src/usecases/
- * tag-names.ts` (`tag_name_ambiguous`) — ein Detaileintrag, der **keine**
+ * "fremde" Detaileintrag stammt aus `apps/local-api/src/tag-names.ts`
+ * (`tag_name_ambiguous`) — ein Detaileintrag, der **keine**
  * Regel bezeichnet und deshalb nicht mitgezählt werden darf.
  *
  * Keine echten Call-Nummern, Kundennamen oder Zugangsdaten: Die Poolnamen
@@ -130,7 +130,7 @@ describe("ruleReferences — nur Einträge mit code 'pool_rule' aus details[]", 
   });
 
   it("ein fremder code in details wird NICHT als Regelverweis gezählt", () => {
-    // Gestalt aus apps/local-api/src/usecases/tag-names.ts: ein Detaileintrag,
+    // Gestalt aus apps/local-api/src/tag-names.ts: ein Detaileintrag,
     // der eine mehrdeutige Tag-Benennung meldet, keine Regel.
     const error: ApiError = {
       code: "validation_error",

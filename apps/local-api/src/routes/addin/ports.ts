@@ -15,17 +15,18 @@
  *
  * Deshalb bekommt das Add-in nicht die volle Beschreibung, sondern nur die
  * Operationen, die der Aufgabenbereich wirklich braucht: den Tag- und
- * Ordnerbaum lesen, nach einer Call-Nummer suchen, ein Todo anlegen, eine Zeit
- * buchen und einen **http(s)-Verweis** an ein bereits erkanntes Todo hängen.
- * Kein Löschen, kein Export, kein Zugriff auf den internen Vermerk eines
- * fremden Todos, keine Einstellungen. Das ist die Anwendung von
+ * Ordnerbaum lesen, nach einer Call-Nummer suchen, ein Todo anlegen und eine
+ * Zeit buchen. Kein Löschen, kein Export, kein Zugriff auf den internen
+ * Vermerk eines fremden Todos, keine Einstellungen. Das ist die Anwendung von
  * „Angriffsfläche des Tokens klein halten" (RR-1) auf den Zuschnitt der API.
  *
- * Der Anhang-Zuwachs ist bewusst schmal: Das Add-in bekommt nur `list` und
- * `create` auf dem Attachment-Port. Die Route akzeptiert ausschließlich
- * `kind: link` und normalisiert die URL in der Domäne. Damit kann ein
- * entwendetes Add-in-Token weder Dateien lesen noch Bilder kopieren, Anhänge
- * löschen oder fremde Pfade in den Bestand schreiben.
+ * **Und kein Anhang.** Zwischen PR #16 und der Entscheidung zu F-21 stand hier
+ * ein `AttachmentPort` mit `list` und `create`, für die schmale Verweisroute
+ * des Aufgabenbereichs. Der Auftraggeber hat F-21 gegen das Anhängen
+ * entschieden (T-247): A-19.19 bleibt im Wortlaut, die Route ist gefallen, und
+ * der Port mit ihr. Das Add-in-Token kann damit auf keinem Weg einen Anhang
+ * anlegen — nicht, weil eine Prüfung es abweist, sondern weil die Fähigkeit in
+ * dieser Vertrauensstufe nicht vorhanden ist.
  *
  * ## Warum `Pick<>` auf den echten Ports
  *
@@ -39,7 +40,6 @@
  */
 
 import type {
-  AttachmentPort,
   DefaultTagPort,
   PoolPort,
   TagFolderPort,
@@ -58,15 +58,6 @@ import type { Timestamp } from '@takt/domain';
  */
 export interface AddinUnit {
   readonly todos: Pick<TodoPort, 'load' | 'findByCallNumber' | 'create' | 'clearDone'>;
-  /**
-   * Nur Verweise an ein vorhandenes Todo anhängen.
-   *
-   * `list` macht den Vorgang idempotent: Ein Doppelklick oder ein erneuter
-   * Versuch legt denselben Outlook-Link nicht zweimal an. `create` ist der
-   * einzige Schreibzugriff. `remove`, `load`, Bildabfragen und Dateizugriffe
-   * bleiben ausdrücklich außerhalb dieser Vertrauensstufe.
-   */
-  readonly attachments: Pick<AttachmentPort, 'list' | 'create'>;
   readonly folders: Pick<TagFolderPort, 'loadTree'>;
   /**
    * `findByKey` und `create` kamen mit T-061 dazu.
@@ -84,9 +75,8 @@ export interface AddinUnit {
    */
   readonly tags: Pick<TagPort, 'findByKey' | 'create'>;
   /**
-   * Die Auflösung der Pool-Regeln wird für die bestehende Buchungsroute und
-   * die Trefferbeschreibung weiterhin benötigt. Der neue Anhangpfad verändert
-   * keine Zeit und keinen Zustand eines Todos.
+   * Die Auflösung der Pool-Regeln braucht die Buchungsroute, und die
+   * Trefferbeschreibung des Duplikatfalls liest sie mit.
    */
   readonly pools: Pick<PoolPort, 'list' | 'resolveAxes'>;
   readonly statuses: Pick<TodoStatusPort, 'list' | 'defaultStatus'>;

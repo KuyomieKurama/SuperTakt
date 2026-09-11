@@ -9,7 +9,7 @@
  * annimmt. Sie ist **keine** Prüfung im Sinne einer Kontrolle: Die Grenze
  * liegt an der Tür des Dienstes, und sie liegt dort auch dann, wenn diese
  * Datei etwas anderes sagt. Was hier steht, ist der Hinweis für den Benutzer,
- * bevor er auf „Todo anlegen" drückt — dieselbe Rolle wie
+ * bevor er auf „Neue Aufgabe anlegen" drückt — dieselbe Rolle wie
  * `callNumberProblem` in `TaskPane.tsx` und aus demselben Grund
  * ausgeschrieben: Der Aufgabenbereich läuft in einem Browsersteuerelement,
  * und ein Browsersteuerelement ist kein Riegel.

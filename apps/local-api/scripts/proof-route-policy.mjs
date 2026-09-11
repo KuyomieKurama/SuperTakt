@@ -89,6 +89,8 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import ts from 'typescript';
 
+import { paketQuelle } from './source-resolve.mjs';
+
 import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
 import {
@@ -246,7 +248,7 @@ function hasPlaceholder(path) {
  *
  * Es kostet eine Zeichenkette und eine ganze Zahl, keine Aufstellung von
  * Pfaden — und es ist die Hausform dieses Baums: „die Add-in-Fläche sind genau
- * fünf Routen", „beide Seiten führen dieselbe Zahl".
+ * vier Routen", „beide Seiten führen dieselbe Zahl".
  *
  * **Als Hilfe, nicht als Bedingung** (29.2.4): Wer {@link MIDDLEWARE_COUNT}
  * anhebt, kann mit der Durchgriffsprobe belegen, ob der neue Eintrag
@@ -293,7 +295,20 @@ const MIDDLEWARE_COUNT = EXPECTED_MIDDLEWARE_ORDER.length;
  * Routenwächter bei gleichbleibender Zahl grün werden (T-241-3).
  */
 async function middlewareOrderFromSource() {
-  const source = await readFile(new URL('../src/app.ts', import.meta.url), 'utf8');
+  /*
+   * Aufgelöst statt abgezählt (T-249-1). Das Merkmal ist die Erzeugerfunktion
+   * der Wurzel-App — also genau das, was dieser Leser untersucht.
+   *
+   * Der Fehlschlag wäre hier besonders bitter: Läse dieser Leser eine leere
+   * oder falsche Datei, fände er **null** Registrierungen. Die Aussage
+   * darunter — „die Reihenfolge der Zwischenschichten stimmt" — wäre über der
+   * leeren Folge wahr, und der Wächter, der T-241-3 gefunden hat, wäre still.
+   */
+  const pfad = paketQuelle('@takt/local-api', {
+    hinweis: 'src/app.ts',
+    merkmal: 'export function createApp',
+  });
+  const source = await readFile(pfad, 'utf8');
   const tree = ts.createSourceFile('src/app.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const registrations = [];
 
@@ -363,8 +378,10 @@ function collectRoutes() {
     // derselben Methode ein; ein so registrierter Endpunkt ist von einem
     // Kettenglied allein am Platzhalter zu unterscheiden. Gemessen wurde eine
     // Zeile `api.all('/addin/leak', …)`: mit dem Add-in-Token 200 samt Rumpf,
-    // dieser Lauf 40/0 und grün — samt der Zusicherung „die Add-in-Fläche sind
-    // genau fünf Routen".
+    // dieser Lauf 40/0 und grün — samt der Zusicherung „die Add-in-Fläche
+    // sind genau fünf Routen". Fünf waren es damals; seit T-247 sind es vier
+    // (E-100). Die Zahl hat sich geändert, die Lücke nicht: Eine Liste, aus
+    // der ein Eintrag herausfällt, trägt bei jeder Zahl gleich wenig.
     //
     // Ein `ALL`-Eintrag ohne Platzhalter wird deshalb nicht übersprungen,
     // sondern festgehalten und unten gemeldet: Eine Aussage über eine Liste,
@@ -532,7 +549,7 @@ try {
   }
 
   // ---------------------------------------------------------------------------
-  section('3  Die fünf Routen, die das Add-in wirklich braucht, bleiben offen');
+  section('3  Die vier Routen, die das Add-in wirklich braucht, bleiben offen');
   // ---------------------------------------------------------------------------
   {
     const context = await call('/addin/context', { token: addinToken });
@@ -640,9 +657,39 @@ try {
   const addinSurface = own.filter((r) => r.path.startsWith(ADDIN_PATH_PREFIX));
   const shared = own.filter((r) => !r.path.startsWith(ADDIN_PATH_PREFIX));
 
+  // **Vier**, nicht fünf, und die Zahl ist die Zusage und nicht ihre
+  // Buchhaltung. Bis T-247 stand hier eine 5: PR #16 hatte
+  // `POST /addin/todos/{todoId}/attachments` neben die vier gestellt, damit
+  // der Aufgabenbereich den Deep-Link auf die geöffnete Outlook-Nachricht
+  // anhängen konnte. Das widersprach dem Wortlaut von A-19.19 („Über das
+  // Outlook-Add-in entstehen **keine** Anhänge"), und E-100 hat den
+  // Widerspruch zugunsten der Anforderung entschieden: Die Route ist
+  // gefallen, A-19.19 steht unverändert.
+  //
+  // Wer diese Zahl anhebt, öffnet dem **dauerhaften** Token eine weitere
+  // Tür. Dafür braucht es eine Entscheidung, nicht eine Codezeile — und
+  // die Beschreibung, das Add-in und dieser Lauf ändern sich in **einem**
+  // Auftrag. Genau das Auseinanderlaufen war der Schaden an PR #16: Der
+  // Bestand behauptete an sechs Stellen die Abwesenheit einer Tür, die
+  // offen stand. Der Detailtext unten nennt bei einem Fehlschlag jede
+  // gefundene Route mit Methode und Pfad, damit sichtbar ist, **welche**
+  // dazugekommen ist.
+  //
+  // **Was diese Zeile allein nicht fängt, und wo die Deckung liegt**
+  // (T-266-7, E-103). Es ist eine **Zahl**, keine Menge: Ein Tausch — eine
+  // der vier Routen fällt weg, eine andere kommt hinzu — bliebe hier grün,
+  // weil vier vier bleibt. Gefangen wird er nebenan: `proof:addin` hält in
+  // `ADDIN_FLAECHE` die vier **Pfade** ausgeschrieben und mißt `fehlend`,
+  // `überzählig` und `doppelt` getrennt (A-A-71, Abschnitt 18 dort). Die
+  // zwei Läufe sind zusammen dicht; **einzeln ist dieser der schwächere**,
+  // und wer ihn allein für den Nachweis der Add-in-Fläche nimmt, liest mehr
+  // heraus, als darin steht. Die Zahl bleibt hier trotzdem stehen: Sie ist
+  // die Zusage in ihrer kürzesten Form, und sie schlägt auch dann an, wenn
+  // eine fünfte Tür auf einem Pfad aufgeht, den `ADDIN_FLAECHE` gar nicht
+  // kennt.
   check(
-    `die Add-in-Fläche sind genau fünf Routen (${addinSurface.length})`,
-    addinSurface.length === 5,
+    `die Add-in-Fläche sind genau vier Routen (${addinSurface.length})`,
+    addinSurface.length === 4,
     addinSurface.map((r) => `${r.method} ${r.path}`).join(', '),
   );
   check(

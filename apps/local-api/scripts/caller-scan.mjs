@@ -1,8 +1,8 @@
 /**
  * Takt — der Leser der Aufrufer (T-051).
  *
- * Dieses Modul liest die Aufrufer des Dienstes — `apps/web/src/api/endpoints.ts`
- * und `apps/outlook-addin/src/api/client.ts` — **syntaktisch** und sagt,
+ * Dieses Modul liest die Aufrufdateien des Dienstes — die der Oberfläche und
+ * `apps/outlook-addin/src/api/client.ts` — **syntaktisch** und sagt,
  * welche Route jede Funktion anfährt und welche Schlüssel sie dabei in Rumpf
  * und Abfragezeichenkette schreibt. Es urteilt nicht; das Urteil steht in
  * `proof-callers.mjs`.
@@ -21,7 +21,7 @@
  * **Was dieser Leser kann und was nicht.** Er sieht Objektliterale, auch unter
  * `...(Bedingung ? { a } : {})`, und er löst einen Bezeichner auf, dessen Typ
  * am Parameter der umschließenden Funktion steht — `body: TodoCreate` wird zu
- * den Feldern von `TodoCreate` aus `apps/web/src/api/types.ts`. Er rechnet
+ * den Feldern von `TodoCreate` aus der übergebenen Aufstellung. Er rechnet
  * nicht: Ein Schlüssel, der zur Laufzeit entsteht (`[name]: …`), eine
  * Verbreitung aus einer Variablen ohne bekannten Typ, ein Rumpf aus einem
  * Funktionsaufruf — all das kommt als **unaufgelöst** heraus und nicht als
@@ -48,7 +48,12 @@ const nameOf = (node) => {
 // ---------------------------------------------------------------------------
 
 /**
- * Baut aus `apps/web/src/api/types.ts` eine Aufstellung „Name → Feldnamen".
+ * Baut aus einem Quelltext eine Aufstellung „Name → Feldnamen".
+ *
+ * **Aus einem Quelltext und nicht aus einer bestimmten Datei** (T-251-2). Bis
+ * dahin stand hier `apps/web/src/api/types.ts`; der Umbau nach Merkmalen
+ * verteilt die Typen der Oberfläche über die `api.ts` der Merkmalsordner, und
+ * der Aufrufer spannt seine Aufstellung entsprechend auf.
  *
  * Nur Schnittstellen und Aliasse auf ein Typliteral. Alles andere — Vereinigung,
  * `Omit`, `Record` — bleibt außen vor und führt beim Nachschlagen zu
@@ -218,14 +223,40 @@ function resolveTypeName(name, index, seen) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Die Typnamen, die eine Typangabe nennt und die die Aufstellung auch führt
+ * (T-251-2).
+ *
+ * Sie sind **kein** zweiter Auflösungsweg — die Felder kommen weiterhin aus
+ * {@link resolveTypeNode}. Sie sind die Antwort auf eine Frage, die der Leser
+ * bisher nicht beantworten konnte: *welche* Einträge der Aufstellung hat er
+ * tatsächlich gebraucht. `proof-callers.mjs` mißt daran, daß die Aufstellung
+ * nicht nur gefüllt, sondern **benutzt** ist — und braucht dafür keinen fest
+ * verdrahteten Typnamen mehr, der an einer Ordnerstruktur hängt.
+ *
+ * Nur Namen, die die Aufstellung führt: `Partial` und `Readonly` sind
+ * eingebaut und stehen dort nie. Damit ist die Rückgabe genau die Menge der
+ * **benutzten Einträge** und nicht die der genannten Wörter.
+ */
+function referencedTypeNames(node, index, out = []) {
+  if (node === undefined) return out;
+  if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && index.has(node.typeName.text)) {
+    out.push(node.typeName.text);
+  }
+  ts.forEachChild(node, (child) => referencedTypeNames(child, index, out));
+  return out;
+}
+
+/**
  * Sammelt die Schlüssel eines Ausdrucks.
  *
- * Rückgabe ist immer beides: die erkannten Schlüssel **und** die Stellen, an
- * denen der Leser nichts erkennen konnte.
+ * Rückgabe ist dreierlei: die erkannten Schlüssel, die Stellen, an denen der
+ * Leser nichts erkennen konnte — und seit T-251-2 die Einträge der
+ * Typaufstellung, über die er dabei gegangen ist.
  */
 function keysOf(node, context) {
   const keys = [];
   const unresolved = [];
+  const types = [];
 
   const walk = (current) => {
     if (current === undefined) {
@@ -271,13 +302,14 @@ function keysOf(node, context) {
         return;
       }
       keys.push(...names);
+      types.push(...referencedTypeNames(typeNode, context.typeIndex));
       return;
     }
     unresolved.push(`Ausdruck der Art ${ts.SyntaxKind[current.kind]}`);
   };
 
   walk(node);
-  return { keys: [...new Set(keys)], unresolved };
+  return { keys: [...new Set(keys)], unresolved, types: [...new Set(types)] };
 }
 
 const readPath = (node) => {
@@ -355,6 +387,10 @@ function functionName(fn) {
 
 /**
  * Liest alle Aufrufe eines Quelltextes, die auf den Dienst zeigen.
+ *
+ * Rumpf und Abfrage tragen je `{ keys, unresolved, types }`; `types` sind die
+ * Einträge der übergebenen Aufstellung, über die dieser Aufruf gegangen ist
+ * (T-251-2).
  *
  * @returns {{ functions: number, calls: Array<object>, unreadable: string[] }}
  */
