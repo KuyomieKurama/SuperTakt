@@ -47,21 +47,84 @@
  */
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const packageDir = resolve(here, '..');
+/**
+ * Wo dieses Paket liegt — über seine **eigene Ausfuhrtabelle** (T-249-1).
+ *
+ * Bis T-249-1 stand hier `resolve(here, '..')`: eine Ebene über diesem Skript.
+ * Das ist eine Zählung und keine Auflösung — sie stimmt genau so lange, wie
+ * dieses Skript in `packages/storage/scripts` liegt. `package.json` führt
+ * `"./package.json"` als Einstiegspunkt, also kann das Paket sich selbst über
+ * seinen Namen auflösen, und Node beantwortet die Frage „wo liegt
+ * `@takt/storage`" aus dem Modulgraphen statt aus einer Pfadarithmetik.
+ *
+ * Der Name wird danach nachgelesen. Löste die Selbstauflösung eines Tages auf
+ * ein anderes Paket auf — etwa weil ein gleichnamiges Verzeichnis danebenläge —,
+ * schriebe dieser Erzeuger sonst in einen fremden Baum.
+ */
+function paketWurzel() {
+  let manifestPfad;
+  try {
+    manifestPfad = fileURLToPath(import.meta.resolve('@takt/storage/package.json'));
+  } catch (fehler) {
+    process.stderr.write(
+      'FEHLER: "@takt/storage/package.json" ließ sich nicht auflösen. ' +
+        `${String(fehler?.message ?? fehler)}\n`,
+    );
+    process.exit(1);
+  }
+  const manifest = JSON.parse(readFileSync(manifestPfad, 'utf8'));
+  if (manifest.name !== '@takt/storage') {
+    process.stderr.write(
+      `FEHLER: ${manifestPfad} heißt "${String(manifest.name)}" und nicht "@takt/storage".\n`,
+    );
+    process.exit(1);
+  }
+  return dirname(manifestPfad);
+}
+
+const packageDir = paketWurzel();
 const migrationsDir = join(packageDir, 'migrations');
 const outFile = join(packageDir, 'src', 'sqlite', 'migrations.embedded.ts');
 
 /** Dasselbe Muster wie im Läufer. Was hier nicht passt, gilt dort auch nicht. */
 const FILE_PATTERN = /^(\d{4})_([a-z0-9_]+)\.(up|down)\.sql$/;
 
-const names = readdirSync(migrationsDir).filter((name) => FILE_PATTERN.test(name)).sort();
+let verzeichnisInhalt;
+try {
+  verzeichnisInhalt = readdirSync(migrationsDir);
+} catch (fehler) {
+  process.stderr.write(
+    `FEHLER: ${migrationsDir} ist nicht lesbar. ${String(fehler?.message ?? fehler)}\n` +
+      'Ein nicht gelesenes Migrationsverzeichnis ist ein Fehlschlag der Messung und keine leere Menge.\n',
+  );
+  process.exit(1);
+}
 
-if (names.length === 0) {
-  process.stderr.write(`FEHLER: In ${migrationsDir} liegt keine Migrationsdatei.\n`);
+const names = verzeichnisInhalt.filter((name) => FILE_PATTERN.test(name)).sort();
+
+/**
+ * Die Untergrenze auf die Menge, über die dieser Erzeuger urteilt (T-249-1).
+ *
+ * Bis T-249-1 stand hier `names.length === 0`. Das fängt den einen Fall ab, in
+ * dem das Verzeichnis leer ist — nicht den, in dem es **das falsche** ist. Ein
+ * Verzeichnis mit drei zufällig passenden Dateien hätte eine eingebettete
+ * Tabelle mit drei Migrationen erzeugt, und die gebündelte Anwendung hätte
+ * einen Bestand für zu neu gehalten, ohne daß hier etwas rot geworden wäre.
+ *
+ * Heute liegen 42 Dateien (21 Paare) im Verzeichnis. 24 läßt reichlich Luft
+ * nach unten und wird rot, wenn der Sammler ins Leere greift.
+ */
+const MINDESTENS_DATEIEN = 24;
+
+if (names.length < MINDESTENS_DATEIEN) {
+  process.stderr.write(
+    `FEHLER: In ${migrationsDir} liegen ${names.length} Migrationsdatei(en), ` +
+      `verlangt sind mindestens ${MINDESTENS_DATEIEN}.\n` +
+      'Wer Migrationen zusammenfaßt, ändert diese Zahl ausdrücklich.\n',
+  );
   process.exit(1);
 }
 
@@ -107,6 +170,21 @@ if (check) {
       return null;
     }
   })();
+  /*
+   * Zwei verschiedene Fälle, seit T-249-1 mit zwei verschiedenen Meldungen:
+   * Die Datei ist **nicht da** (der Erzeuger sucht sie am falschen Ort, oder
+   * niemand hat ihn je laufen lassen) oder sie ist **anders**. Bis dahin las
+   * sich beides als „nicht auf dem Stand", und der erste Fall schickte den
+   * Leser zu einem Befehl, der ihn nicht behebt.
+   */
+  if (current === null) {
+    process.stderr.write(
+      `FEHLER: ${outFile} ist nicht vorhanden.\n` +
+        'Entweder wurde der Erzeuger nie ausgeführt, oder die eingebettete Tabelle liegt\n' +
+        'inzwischen woanders — dann gehört dieser Erzeuger nachgezogen und nicht der Baum.\n',
+    );
+    process.exit(1);
+  }
   if (current !== text) {
     process.stderr.write(
       'FEHLER: src/sqlite/migrations.embedded.ts ist nicht auf dem Stand der Dateien in migrations/.\n' +

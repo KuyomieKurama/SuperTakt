@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button, Card, InlineMessage } from "../components/Primitives";
-import { UpdateDialog } from "../components/UpdateDialog";
-import { releasePageUrl } from "../lib/releasePage";
+import { Button, Card, InlineMessage } from "../shared/ui/Primitives";
+import { UpdateDialog } from "../features/settings/UpdateDialog";
+import { releasePageUrl } from "../features/settings/releasePage";
 import { Section, SubHeading } from "./Section";
 
 /**
@@ -10,7 +10,7 @@ import { Section, SubHeading } from "./Section";
  * Die Zustände sind hier abnehmbar, weil sie sich in der Anwendung nur
  * herbeiführen lassen, wenn GitHub gerade etwas Bestimmtes sagt. Der Abschnitt
  * zeigt den **echten** Baustein, nicht eine Nachbildung: dieselbe Datei, die
- * `app/UpdateNotice.tsx` benutzt.
+ * `features/settings/UpdateNotice.tsx` benutzt.
  *
  * **Der wichtigste Zustand ist der, den man hier nicht sehen kann.** Liegt
  * nichts Neues vor — oder ist GitHub nicht erreichbar, antwortet unerwartet

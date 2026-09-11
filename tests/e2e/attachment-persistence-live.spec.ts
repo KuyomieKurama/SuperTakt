@@ -23,6 +23,7 @@ import { deleteAttachmentRowDirectly } from './support/db';
 import { gotoTodo } from './support/nav';
 import { configureExportDirectory, restartLocalApi, startLocalApi, stopGithubStub } from './support/services';
 import { E2E_DATA_DIR } from './support/session';
+import { appDataDirIn } from './support/app-data-isolation';
 
 /** Ein minimales, gültiges 1×1-PNG (rot) — selbst erzeugt, keine echten Bilddaten. */
 const MINIMAL_PNG_BASE64 =
@@ -132,7 +133,9 @@ test.describe('TP-ANH-21 — der Aufräumlauf entfernt eine verwaiste Bildkopie 
     // Die Antwort der Tür trägt `target` bereits (`usecases/attachments.ts`) —
     // kein Umweg über die Datenbank nötig, um den erzeugten Dateinamen zu
     // erfahren.
-    const imageFilePath = join(E2E_DATA_DIR, 'takt', 'attachments', attachment.target);
+    // A-A-72 (T-247-5): der Ordnername unter E2E_DATA_DIR ist plattformabhängig
+    // ('Takt' unter Windows, 'takt' sonst) — appDataDirIn kennt beide Regeln.
+    const imageFilePath = join(appDataDirIn(E2E_DATA_DIR), 'attachments', attachment.target);
     expect(existsSync(imageFilePath)).toBe(true);
 
     // Die Zeile verschwindet, die Datei bleibt — die Waise entsteht.

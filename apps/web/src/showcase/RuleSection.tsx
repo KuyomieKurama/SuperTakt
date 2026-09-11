@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Card, InlineMessage } from "../components/Primitives";
-import { RadioRow } from "../components/RadioRow";
+import { Card, InlineMessage } from "../shared/ui/Primitives";
+import { RadioRow } from "../shared/ui/RadioRow";
 import {
   FolderPicker,
   StatusPicker,
   type FolderOption,
   type PickerSource,
   type StatusOption,
-} from "../components/RulePickers";
-import { RuleSummary } from "../components/RuleSummary";
+} from "../features/structure/RulePickers";
+import { FormSection } from "../features/structure/PoolFormDialog";
+import { RuleSummary } from "../features/structure/RuleSummary";
 import {
   POOL_AXIS_NEUTRAL_HINT,
   POOL_COMPLETION_LABEL,
@@ -392,8 +393,7 @@ export function RuleSection() {
           ]}
         />
 
-        <div className="form-section">
-          <h3 className="form-section__title">Diese Regel trifft</h3>
+        <FormSection title="Diese Regel trifft">
           <RuleSummary
             description={describeRule(live, SHOWCASE_RULE_LOOKUP)}
             showNeutral
@@ -415,7 +415,7 @@ export function RuleSection() {
             <strong>Vorgelesen:</strong>{" "}
             {ruleSpoken(describeRule(live, SHOWCASE_RULE_LOOKUP), null)}
           </p>
-        </div>
+        </FormSection>
       </Card>
 
       <SubHeading>Die Quellen des Formulars — vier Zustände nebeneinander</SubHeading>

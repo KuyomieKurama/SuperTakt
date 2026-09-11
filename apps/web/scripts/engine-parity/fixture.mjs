@@ -45,16 +45,52 @@
  * der Malreihenfolge braucht keinen Text.
  */
 
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { locateSingleSource, readRequiredFile } from '../../../../scripts/source-anchors.mjs';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+const WEB_SRC = fileURLToPath(new URL('../../src/', import.meta.url));
+
+/*
+ * ---------------------------------------------------------------------------
+ * Zwei der drei Quellen werden **gesucht**, nicht abgeschrieben (T-249-2)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis dahin standen hier drei feste Pfade, zwei davon unter
+ * `apps/web/src/styles/`. Der featureweise Umbau von `apps/web/src` legt genau
+ * diesen Ordner um. Was dann geschähe, ist kein stiller Fehlschlag, sondern
+ * ein lauter: `readFileSync` wirft `ENOENT`, und die Nachweisvorrichtung baut
+ * gar nicht erst. Der Preis wäre trotzdem hoch — ein `ENOENT` nennt eine
+ * Zeichenkette, die ins Leere zeigt, und nicht den Gegenstand, der gesucht
+ * wurde.
+ *
+ * Gesucht wird deshalb über den Dateinamen im ganzen Quellbaum, mit der
+ * Bedingung **genau ein Treffer**. Ein Umzug nimmt beide mit; ein zweites
+ * `components.css` in einem Feature-Ordner macht den Lauf rot und sagt, welche
+ * zwei Dateien er meint — was richtig ist, denn dann wüsste er nicht, aus
+ * welcher er `.btn` schneidet.
+ *
+ * `tokens.css` bleibt ein fester Pfad: `packages/ui-tokens` wird nicht
+ * umgeräumt, und die Datei ist die einzige ihres Namens im Bestand.
+ */
+const stylesheet = (basename, description) =>
+  locateSingleSource({
+    root: WEB_SRC,
+    accept: (name) => name === basename,
+    description,
+  });
+
+const BASE = stylesheet('base.css', 'das Grundstilblatt der Oberfläche (`base.css`)');
+const COMPONENTS = stylesheet('components.css', 'das Bausteinstilblatt der Oberfläche (`components.css`)');
 
 export const QUELLEN = {
   tokens: 'packages/ui-tokens/tokens.css',
-  base: 'apps/web/src/styles/base.css',
-  components: 'apps/web/src/styles/components.css',
+  base: `apps/web/src/${BASE.name}`,
+  components: `apps/web/src/${COMPONENTS.name}`,
 };
+
+/** Der Inhalt der beiden gesuchten Stilblätter, einmal gelesen. */
+const GEFUNDEN = { [QUELLEN.base]: BASE.text, [QUELLEN.components]: COMPONENTS.text };
 
 /* ==================================================================== */
 /* 1  Ausschneiden statt abschreiben                                    */
@@ -97,9 +133,21 @@ export function extractRule(css, selektor) {
   return css.slice(start, i - 1);
 }
 
-/** @returns {string} Inhalt einer Quelldatei, relativ zur Wurzel des Bestands. */
+/**
+ * Inhalt einer Quelldatei. Die zwei gesuchten Stilblätter stehen bereits
+ * gelesen bereit; alles andere liegt an einem festen Pfad und wird
+ * fail-closed geholt — fehlt es oder ist es leer, bricht der Lauf mit dem
+ * gesuchten Gegenstand im Satz ab statt mit einem `ENOENT`.
+ *
+ * @returns {string}
+ */
 function lies(relativ) {
-  return readFileSync(new URL(relativ, `file://${ROOT}`), 'utf8');
+  const gefunden = GEFUNDEN[relativ];
+  if (gefunden !== undefined) return gefunden;
+  return readRequiredFile(
+    fileURLToPath(new URL(relativ, `file://${ROOT}`)),
+    `die Quelle ${relativ} der Nachweisvorrichtung`,
+  );
 }
 
 /**

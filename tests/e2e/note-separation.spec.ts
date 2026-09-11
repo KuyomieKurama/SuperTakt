@@ -102,10 +102,18 @@ test.describe('TP-NOTE-02/03 — Volltextprüfung, Klartext und base64, über me
     // --- Vorschau in S-14 mit der Standardvorlage --------------------------
     await gotoTemplates(page);
     await expect(page.getByRole('heading', { name: 'Standardvorlage' })).toBeVisible();
-    const groupHeader = page.locator('.tpgroup__head', { hasText: `NOTE-SEP ${run} STD` });
+    // Berichtigt (das Erzeugnis hat sich geändert, nicht der Anspruch dieses
+    // Falls): Die Vorschau steckt nicht mehr im Bildschirm selbst, sondern in
+    // einem eigenen Dialog (`TemplatesScreen.tsx`, `previewOpen`, Vorgabe
+    // `false`) — erst der Knopf „Vorschau öffnen" holt `.tpgroup__head` und
+    // `.tpreview` überhaupt ins DOM (T-249-8).
+    await page.getByRole('button', { name: 'Vorschau öffnen' }).click();
+    const previewDialog = page.getByRole('dialog', { name: 'Vorschau' });
+    await expect(previewDialog).toBeVisible();
+    const groupHeader = previewDialog.locator('.tpgroup__head', { hasText: `NOTE-SEP ${run} STD` });
     await expect(groupHeader).toBeVisible();
     await groupHeader.click();
-    const previewText = await page.locator('.tpreview').innerText();
+    const previewText = await previewDialog.locator('.tpreview').innerText();
     expect(previewText).not.toContain(fixture.todoMarker);
     expect(previewText).not.toContain(b64(fixture.todoMarker));
     // Die Leistung steht unten bei den Buchungen im Klartext (E-028) — die
@@ -113,10 +121,15 @@ test.describe('TP-NOTE-02/03 — Volltextprüfung, Klartext und base64, über me
     // die Vorlage für das zusammengeführte Feld wählt.
     expect(previewText).toContain(fixture.bookingMarkerA);
     expect(previewText).toContain(fixture.bookingMarkerB);
+    await previewDialog.getByRole('button', { name: 'Schließen' }).click();
+    await expect(previewDialog).toBeHidden();
 
     // --- Tatsächlicher Export mit der Standardvorlage -----------------------
     await gotoExport(page);
-    const group = page.locator('.egroup', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'STD' });
+    // `.export-todo` ist der Todo-Block, der den Titel trägt — `.egroup`
+    // liegt seit dem Tabellenumbau eine Ebene tiefer (je Tag) und führt den
+    // Titel nicht mehr im eigenen Text (T-249-8).
+    const group = page.locator('.export-todo', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'STD' });
     await expect(group).toBeVisible();
     await runExportFromScreen(page);
 
@@ -157,7 +170,7 @@ test.describe('TP-NOTE-02/03 — Volltextprüfung, Klartext und base64, über me
     await page.getByRole('combobox', { name: 'Exportvorlage' }).click();
     await page.getByRole('option', { name: rawTemplate.name, exact: true }).click();
 
-    const group = page.locator('.egroup', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'RAW' });
+    const group = page.locator('.export-todo', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'RAW' });
     await expect(group).toBeVisible();
     await runExportFromScreen(page);
 
@@ -196,7 +209,7 @@ test.describe('TP-NOTE-02/03 — Volltextprüfung, Klartext und base64, über me
     await page.getByRole('combobox', { name: 'Exportvorlage' }).click();
     await page.getByRole('option', { name: wideTemplate.name, exact: true }).click();
 
-    const group = page.locator('.egroup', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'WIDE' });
+    const group = page.locator('.export-todo', { hasText: 'NOTE-SEP' }).filter({ hasText: run }).filter({ hasText: 'WIDE' });
     await expect(group).toBeVisible();
     await runExportFromScreen(page);
 

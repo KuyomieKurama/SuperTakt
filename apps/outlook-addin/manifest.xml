@@ -42,7 +42,7 @@
   <ProviderName>SuperTakt</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
   <DisplayName DefaultValue="SuperTakt" />
-  <Description DefaultValue="Aus einer E-Mail heraus ein Todo in SuperTakt anlegen oder Zeit auf ein vorhandenes buchen." />
+  <Description DefaultValue="Aus dieser E-Mail ein Todo in SuperTakt anlegen." />
   <IconUrl DefaultValue="https://localhost:17844/assets/takt-64.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:17844/assets/takt-128.png" />
   <SupportUrl DefaultValue="https://localhost:17844/" />
@@ -130,7 +130,7 @@
           <bt:String id="paneButtonLabel" DefaultValue="Todo anlegen" />
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="paneButtonTip" DefaultValue="Aus dieser E-Mail ein Todo in SuperTakt anlegen oder Zeit auf ein vorhandenes Todo buchen." />
+          <bt:String id="paneButtonTip" DefaultValue="Aus dieser E-Mail ein Todo in SuperTakt anlegen." />
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

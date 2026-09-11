@@ -191,10 +191,13 @@ Systemzeit zu verstellen.
 Speicherung brauchen, und setzt das für SQLite um. Der Adapter ist die einzige Stelle im Projekt,
 an der SQL-Text entsteht, und jeder Wert geht als Parameter hinein, nie als zusammengesetzte
 Zeichenkette. `apps/local-api` übersetzt HTTP-Anfragen in einfache Werte und ruft die
-Anwendungsfälle auf; kein Modul unter `src/usecases/` bindet die HTTP-Bibliothek ein, und keine
-Datei unter `src/routes/` enthält eine Fachregel. Diese Trennung ist im Quelltext erzwungen, nicht
+Anwendungsfälle auf. Route und Anwendungsfall liegen dabei im selben Ordner je Merkmal —
+`src/features/<merkmal>/routes.ts` für die Tür, `src/features/<merkmal>/<merkmal>.ts` für die
+Anwendungsfälle —, aber nicht in derselben Datei: Kein Anwendungsfall bindet die HTTP-Bibliothek
+ein, und keine Routendatei enthält eine Fachregel. Diese Trennung ist im Quelltext erzwungen, nicht
 nur vereinbart: Ein automatisierter Lauf (`pnpm boundaries`) prüft die erlaubten Importe zwischen
-den Paketen bei jedem Durchlauf.
+den Paketen bei jedem Durchlauf, und `pnpm proof:layers` mustert innerhalb von `apps/local-api`
+zusätzlich die Namenskonvention gegen den tatsächlichen Inhalt jeder Datei.
 
 `packages/export`, der Vorlagen-Motor, bekommt keine Ports, sondern ausschließlich fertige Werte.
 Er hat also keinen Zugang zur Datenbank und kann den persönlichen Vermerk eines Todos schon deshalb

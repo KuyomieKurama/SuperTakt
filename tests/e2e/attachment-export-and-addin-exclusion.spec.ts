@@ -69,7 +69,10 @@ test.describe('TP-ANH-12 — weder Frist noch Anhang erscheinen in einem Export'
 
     // --- Standardvorlage ------------------------------------------------------
     await gotoExport(page);
-    const group = page.locator('.egroup', { hasText: 'ANH-EXPORT' }).filter({ hasText: run });
+    // `.export-todo` ist der Todo-Block (trägt den Titel, S-07 nach dem
+    // Tabellenumbau) — `.egroup` liegt seither eine Ebene tiefer, je Tag, und
+    // führt den Todo-Titel nicht mehr im eigenen Text (T-249-8).
+    const group = page.locator('.export-todo', { hasText: 'ANH-EXPORT' }).filter({ hasText: run });
     await expect(group).toBeVisible();
     await runExportFromScreen(page);
     const filePath = await readResultFilePath(page);
@@ -112,7 +115,7 @@ test.describe('TP-ANH-12 — weder Frist noch Anhang erscheinen in einem Export'
     await gotoExport(page);
     await page.getByRole('combobox', { name: 'Exportvorlage' }).click();
     await page.getByRole('option', { name: wideTemplate.name, exact: true }).click();
-    const wideGroup = page.locator('.egroup', { hasText: 'ANH-EXPORT' }).filter({ hasText: run });
+    const wideGroup = page.locator('.export-todo', { hasText: 'ANH-EXPORT' }).filter({ hasText: run });
     await expect(wideGroup).toBeVisible();
     await runExportFromScreen(page);
     const widePath = await readResultFilePath(page);

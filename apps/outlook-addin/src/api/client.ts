@@ -65,31 +65,6 @@ export interface CreateTodoRequest {
   readonly dueDate: string | null;
 }
 
-/**
- * Ein Verweis, den das Add-in an ein bereits vorhandenes Todo hängen darf.
- *
- * Die Route nimmt bewusst nur URLs entgegen. Datei- und Bildpfade bleiben der
- * Hauptanwendung vorbehalten; das dauerhafte Add-in-Token soll keine Dateien
- * des Rechners lesen können.
- */
-export interface AddLinkAttachmentRequest {
-  readonly todoId: string;
-  readonly url: string;
-  readonly title?: string | null;
-}
-
-export interface AddLinkAttachmentResponse {
-  readonly attachment: {
-    readonly id: string;
-    readonly todoId: string;
-    readonly kind: 'link';
-    readonly title: string | null;
-    readonly target: string;
-  };
-  /** `true`, wenn derselbe normalisierte Link schon am Todo hing. */
-  readonly alreadyPresent: boolean;
-}
-
 export interface BookRequest {
   readonly todoId: string;
   readonly startedAt: string;
@@ -104,11 +79,13 @@ export interface ApiClient {
   findMatches(callNumber: string): Promise<ApiResult<MatchResponseDto>>;
   createTodo(input: CreateTodoRequest): Promise<ApiResult<CreateTodoResponseDto>>;
   /**
-   * Hängt einen Outlook-/Cloud-Verweis an ein vorhandenes Todo. Dabei entsteht
-   * ausdrücklich **keine Zeitbuchung**.
+   * Bucht Zeit auf ein vorhandenes Todo.
+   *
+   * **Die einzige schreibende Handlung an einem fremden Todo, die dieser
+   * Zugang kennt.** Einen Anhang legt er nicht an: Seit der Entscheidung zu
+   * F-21 (T-247) gibt es dafür weder eine Methode hier noch eine Route unter
+   * `/addin` — A-19.19 ist damit strukturell wahr und nicht nur zugesagt.
    */
-  addLinkAttachment(input: AddLinkAttachmentRequest): Promise<ApiResult<AddLinkAttachmentResponse>>;
-  /** Bestehende Route für ältere Abläufe; der neue Duplikatpfad benutzt sie nicht mehr. */
   book(input: BookRequest): Promise<ApiResult<BookResponseDto>>;
 }
 
@@ -230,17 +207,6 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
     },
     createTodo(input: CreateTodoRequest) {
       return call<CreateTodoResponseDto>('POST', '/api/v1/addin/todos', undefined, input);
-    },
-    addLinkAttachment(input: AddLinkAttachmentRequest) {
-      return call<AddLinkAttachmentResponse>(
-        'POST',
-        `/api/v1/addin/todos/${encodeURIComponent(input.todoId)}/attachments`,
-        undefined,
-        {
-          url: input.url,
-          title: input.title ?? null,
-        },
-      );
     },
     book(input: BookRequest) {
       return call<BookResponseDto>(

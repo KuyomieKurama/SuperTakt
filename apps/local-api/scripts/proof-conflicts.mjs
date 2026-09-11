@@ -72,14 +72,18 @@ import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { isolatedAppDataEnv } from './proof-appdata.mjs';
+import { dienstEinstieg, migrationsVerzeichnis } from './source-resolve.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 const { nameKey } = await import('@takt/domain');
 const { UNIQUE_INDEX_CATALOG, loadMigrations, translateSqliteError } = await import('@takt/storage');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY = join(HERE, '..', 'src', 'index.ts');
-const MIGRATIONS = join(HERE, '..', '..', '..', 'packages', 'storage', 'migrations');
+/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
+const ENTRY = dienstEinstieg();
+/* Über die Ausfuhrtabelle von @takt/storage, mit Untergrenze (T-249-1). */
+const MIGRATIONS = migrationsVerzeichnis({ mindestens: 12 });
 const PORT = 17843;
 
 /** Die Herkunft der Oberfläche im Entwicklungsbetrieb (config.ts). */
@@ -666,7 +670,7 @@ const secret = `takt_${randomBytes(32).toString('base64url')}`;
 
 const child = spawn(process.execPath, [ENTRY], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, XDG_DATA_HOME: dataDir },
+  env: isolatedAppDataEnv(dataDir),
 });
 let stderr = '';
 child.stderr.setEncoding('utf8');

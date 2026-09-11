@@ -73,15 +73,36 @@ test.describe('TP-EXPORT-01/02/03 — Export von Anfang bis Ende', () => {
     // --- Export-Ansicht: beide Gruppen erscheinen, mit dem korrekten Wert ---
     await gotoExport(page);
 
-    const alphaGroup = page.locator('.egroup', { hasText: `${marker} Alpha` });
-    const betaGroup = page.locator('.egroup', { hasText: `${marker} Beta` });
+    // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+    // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag, standardmäßig
+    // eingeklappt unter dem Todo-Kopf, und ohne den Todo-Titel im eigenen
+    // Text (T-249-8). Beide Todos tragen hier je genau einen Tag (alle
+    // Buchungen desselben Todos liegen auf demselben Kalendertag), also genügt
+    // ein Aufklappen des Todo-Kopfes, um die eine Tagesgruppe zu erreichen.
+    const alphaTodo = page.locator('.export-todo', { hasText: `${marker} Alpha` });
+    const betaTodo = page.locator('.export-todo', { hasText: `${marker} Beta` });
+    await expect(alphaTodo).toBeVisible();
+    await expect(betaTodo).toBeVisible();
+
+    await alphaTodo.getByRole('button', { name: /klappen/ }).click();
+    await betaTodo.getByRole('button', { name: /klappen/ }).click();
+    const alphaGroup = alphaTodo.locator('.egroup');
+    const betaGroup = betaTodo.locator('.egroup');
     await expect(alphaGroup).toBeVisible();
     await expect(betaGroup).toBeVisible();
 
+    // `.egroup__quarters` hat in der Zelle keine Entsprechung mehr — die CSS-
+    // Klasse steht noch in `components.css`, aber `ExportGroups.tsx` setzt sie
+    // seit dem Tabellenumbau an keinem Knoten mehr (Bericht T-249-8, dort als
+    // Fund für frontend-dev gemeldet). Zugriff stattdessen über den eigenen,
+    // unveränderten Text der Zelle (`visually-hidden`-Vorspann "Gerundete
+    // Exportzeit:").
+    const alphaQuarters = alphaGroup.locator('tr.export-day__head td', { hasText: 'Gerundete Exportzeit' });
+    const betaQuarters = betaGroup.locator('tr.export-day__head td', { hasText: 'Gerundete Exportzeit' });
     // E-020: Summe zuerst, dann runden — 0,75 und nicht dreimal 0,25.
-    await expect(alphaGroup.locator('.egroup__quarters')).toHaveText(/0,75/);
+    await expect(alphaQuarters).toHaveText(/0,75/);
     // TP-ROUND-07: 16 Minuten runden auf 0,50 ("immer aufrunden", nicht 0,25).
-    await expect(betaGroup.locator('.egroup__quarters')).toHaveText(/0,50/);
+    await expect(betaQuarters).toHaveText(/0,50/);
 
     // Beide Gruppen sind standardmäßig ausgewählt (Checkbox nicht deaktiviert).
     await expect(alphaGroup.locator('input.egroup__check')).toBeChecked();
@@ -155,7 +176,7 @@ test.describe('TP-EXPORT-01/02/03 — Export von Anfang bis Ende', () => {
     // --- TP-EXPST-02/03: zweiter Lauf ohne neue Buchungen ------------------
     await page.reload();
     // Die eben exportierten Gruppen dürfen nicht mehr in der Auswahl stehen.
-    await expect(page.locator('.egroup', { hasText: `${marker} Alpha` })).toHaveCount(0);
-    await expect(page.locator('.egroup', { hasText: `${marker} Beta` })).toHaveCount(0);
+    await expect(page.locator('.export-todo', { hasText: `${marker} Alpha` })).toHaveCount(0);
+    await expect(page.locator('.export-todo', { hasText: `${marker} Beta` })).toHaveCount(0);
   });
 });

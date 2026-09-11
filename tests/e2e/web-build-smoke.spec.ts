@@ -98,47 +98,36 @@
  *    Bau lässt sie danach wieder verschwinden.
  */
 import { test, expect } from '@playwright/test';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { cleanupAnyTimer, createTodo } from './support/api';
 import { gotoTodo } from './support/nav';
-import { WEB_APP_DIST_DIR } from './support/build-check-session';
 import { installTauriShim } from './support/tauri-shim';
-import { buildWeb, buildWebWithDesignsystem, distContainsText, distHasFile } from './support/web-build-services';
+import {
+  buildWeb,
+  buildWebWithDesignsystem,
+  distContainsText,
+  distContainsRenderedText,
+  distHasFile,
+  startWebPreview,
+  stopChild,
+} from './support/web-build-services';
 
 /**
- * Wie `distContainsText` (`web-build-services.ts`), aber ohne
- * Quellkarten (`.map`) — für T-150s Feldbezeichnungs-Mikrofall (A-19.2).
- *
- * Eine Quellkarte trägt zwangsläufig den **Originalquelltext samt
- * Kommentaren** (`sourcesContent`), und genau ein Kommentar zitiert die
- * verbotenen Wörter als Gegenbeispiel — wörtlich, in
- * `TodoFormDialog.tsx`: "Sie heißt in der Oberfläche ausschließlich so —
- * nicht „Fälligkeitsdatum“, nicht „fällig am“, nicht „Deadline“." Ein Treffer
- * dort wäre ein Fund über die eigene Dokumentation dieser Regel, nicht über
- * einen Bruch der Regel selbst — gemessen (nicht vermutet): Ohne diesen
- * Ausschluss schlägt der Fall unten tatsächlich fehl, obwohl die Oberfläche
- * die drei Wörter an keiner sichtbaren Stelle zeigt.
+ * Testverzeichnisse unter `tests/fixtures/**`, die `apps/web/dist` **nicht**
+ * neu bauen, sondern eine feste, per Hand geschriebene Bündelform
+ * nachbilden — für die Gegenprobe zu `distContainsRenderedText`
+ * (`Feldbezeichnung "Frist"`, unten). Ein echter `vite build` ist hier
+ * bewusst nicht der Weg: Ob die Funktion Bezeichner, Import-Angaben und
+ * Bündeldateinamen richtig ausschließt, muss unabhängig davon gelten, wie
+ * `DeadlineFlag.tsx` heute zufällig gebündelt wird — eine feste Vorlage hält
+ * die Eingabe fest, während der Produktivcode sich weiterbewegt.
  */
-function distContainsRenderedText(needle: string): boolean {
-  if (!existsSync(WEB_APP_DIST_DIR)) return false;
-  const stack: string[] = [WEB_APP_DIST_DIR];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === undefined) continue;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const fullPath = join(current, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(fullPath);
-        continue;
-      }
-      if (entry.name.endsWith('.map')) continue;
-      if (readFileSync(fullPath, 'utf8').includes(needle)) return true;
-    }
-  }
-  return false;
-}
+const RENDERED_TEXT_FIXTURES_ROOT = fileURLToPath(
+  new URL('../fixtures/web-build-rendered-text/', import.meta.url),
+);
+const OHNE_VERSTOSS_DIR = `${RENDERED_TEXT_FIXTURES_ROOT}ohne-verstoss`;
+const MIT_VERSTOSS_DIR = `${RENDERED_TEXT_FIXTURES_ROOT}mit-verstoss`;
 
 /**
  * Wörtlich aus `apps/web/src/showcase/Showcase.tsx` (`aria-label` der
@@ -247,6 +236,22 @@ test.describe('TP-BUILD-05 — Musterseite im Auslieferungsbündel nicht erreich
   });
 });
 
+/**
+ * Wirft mit einer Meldung, die die Fundstelle **nennt**, statt nur "false"
+ * gegen "true" zu vergleichen — Auftragspunkt: "Eine Gegenprobe … muss rot
+ * werden und die Stelle nennen." `distContainsRenderedText` gibt dafür seit
+ * T-263 ein Objekt statt eines blanken `true` zurück ({@link
+ * web-build-services.ts}); `expect(match, meldung).toBe(false)` nutzt
+ * Playwrights zweiten `expect`-Parameter als benannten Fehlschlagstext.
+ */
+function expectNoRenderedText(needle: string, rootDir?: string): void {
+  const match = distContainsRenderedText(needle, rootDir);
+  const meldung = match
+    ? `"${needle}" als gerenderter Text gefunden in ${match.file}: …${match.snippet}…`
+    : undefined;
+  expect(match, meldung).toBe(false);
+}
+
 test.describe('Feldbezeichnung "Frist" (A-19.2, Abschnitt 25 Mikrofall, T-150)', () => {
   test('das ausgelieferte Bündel enthält weder "Fälligkeitsdatum" noch "fällig am" noch "Deadline"', () => {
     // Positivliste-Prüfung nach dem Vorbild von `distContainsText` in
@@ -258,11 +263,111 @@ test.describe('Feldbezeichnung "Frist" (A-19.2, Abschnitt 25 Mikrofall, T-150)',
     // Bildschirm stünden — gemessen wird deshalb am tatsächlich gebauten
     // Bündel, wie bei jedem anderen Fall dieser Datei.
     //
-    // Quellkarten (`.map`) sind hier ausdrücklich ausgenommen —
-    // {@link distContainsRenderedText}, Begründung dort.
-    expect(distContainsRenderedText('Fälligkeitsdatum')).toBe(false);
-    expect(distContainsRenderedText('fällig am')).toBe(false);
-    expect(distContainsRenderedText('Deadline')).toBe(false);
+    // Quellkarten (`.map`) sind hier ausdrücklich ausgenommen, ebenso
+    // Bezeichner, Import-Angaben und Bündeldateinamen —
+    // {@link distContainsRenderedText} (`web-build-services.ts`), Begründung
+    // und der T-263-Fund (schon `HEAD` vor dem laufenden `shared/ui`-Umbau
+    // war der alte, rein substring-basierte Vergleich hier rot, wegen
+    // `onDeadlineChange`) dort.
+    expectNoRenderedText('Fälligkeitsdatum');
+    expectNoRenderedText('fällig am');
+    expectNoRenderedText('Deadline');
+  });
+});
+
+test.describe('Gegenprobe zur Feldbezeichnung "Frist" — das Sieb bleibt scharf (T-263, E-101/E-103)', () => {
+  // Läuft gegen feste Vorlagen unter `tests/fixtures/web-build-rendered-text/`,
+  // nicht gegen `apps/web/dist` — kein Netzwerk, kein Bau, deshalb kein
+  // eigenes `test.setTimeout`.
+
+  test('Negativkontrolle: Bezeichner, Import-Angaben und Bündeldateinamen lösen keinen Treffer aus', () => {
+    // `ohne-verstoss/` bildet genau das nach, was der T-263-Fund am echten
+    // Bündel zeigte: ein eigenes `DeadlineFlag-<hash>.js`-Bündelstück, eine
+    // Import-Angabe darauf aus einem anderen Bündelstück, eine
+    // Vorlade-Liste mit demselben Dateinamen als rohe Zeichenkette, ein
+    // Requisitenname `onDeadlineChange`/`deadlineFilter` — und, für
+    // "Fälligkeitsdatum", dieselbe Form mit einem erfundenen
+    // `FaelligkeitsdatumBadge-<hash>.js`-Bündelstück. Der einzige
+    // tatsächlich gerenderte Text in dieser Vorlage ist "Frist" — korrekt.
+    expectNoRenderedText('Deadline', OHNE_VERSTOSS_DIR);
+    expectNoRenderedText('Fälligkeitsdatum', OHNE_VERSTOSS_DIR);
+    expectNoRenderedText('fällig am', OHNE_VERSTOSS_DIR);
+  });
+
+  test('Positivkontrolle: ein echter, sichtbarer Text wird erkannt — und die Fundstelle benannt', () => {
+    // `mit-verstoss/` enthält für jedes der drei verbotenen Wörter genau
+    // eine Datei mit einem echten JSX-Kind-String-Literal (derselben Form
+    // wie ein gerendertes `e.jsx("span",{},"Deadline")`), umgeben von
+    // derselben Art Rauschen (Importe, Bezeichner) wie in `ohne-verstoss/`.
+    // Ohne die Verengung aus T-263 wäre das kein neuer Fund — der alte,
+    // rohe Substring-Vergleich hätte hier ohnehin "true" geliefert, nur aus
+    // dem falschen Grund. Der Unterschied zeigt sich erst daran, *welche*
+    // Stelle als Fund gemeldet wird.
+    const deadline = distContainsRenderedText('Deadline', MIT_VERSTOSS_DIR);
+    expect(deadline, 'Positivkontrolle "Deadline" hätte einen Fund melden müssen').not.toBe(false);
+    if (deadline !== false) {
+      expect(deadline.file).toBe('assets/RealDeadlineViolation-h4sh03.js');
+      expect(deadline.snippet).toContain('Deadline');
+    }
+
+    const faelligkeitsdatum = distContainsRenderedText('Fälligkeitsdatum', MIT_VERSTOSS_DIR);
+    expect(faelligkeitsdatum, 'Positivkontrolle "Fälligkeitsdatum" hätte einen Fund melden müssen').not.toBe(
+      false,
+    );
+    if (faelligkeitsdatum !== false) {
+      expect(faelligkeitsdatum.file).toBe('assets/RealFaelligkeitsdatumViolation-h4sh04.js');
+      expect(faelligkeitsdatum.snippet).toContain('Fälligkeitsdatum');
+    }
+
+    const faelligAm = distContainsRenderedText('fällig am', MIT_VERSTOSS_DIR);
+    expect(faelligAm, 'Positivkontrolle "fällig am" hätte einen Fund melden müssen').not.toBe(false);
+    if (faelligAm !== false) {
+      expect(faelligAm.file).toBe('assets/RealFaelligAmViolation-h4sh05.js');
+      expect(faelligAm.snippet).toContain('fällig am');
+    }
+  });
+});
+
+test.describe('startWebPreview erkennt eine fremde Gegenstelle auf dem eigenen Port (T-259-Fund, T-263 behoben)', () => {
+  test('eine fremde Antwort auf dem Zielport lässt startWebPreview scheitern, statt "bereit" zu melden', async () => {
+    // Eigener, von 5173 verschiedener Port: 5173 ist für die Dauer dieses
+    // ganzen Laufs bereits vom echten `vite preview` aus `globalSetup`
+    // belegt — eine zweite Belegung dort wäre nicht die fremde Gegenstelle
+    // aus T-259, sondern ein Zugriff auf den eigenen, produktiven Server.
+    const port = 34_173;
+    const { createServer } = await import('node:http');
+    const impostor = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ich bin nicht vite preview');
+    });
+    await new Promise<void>((resolve, reject) => {
+      impostor.once('error', reject);
+      impostor.listen(port, '127.0.0.1', () => resolve());
+    });
+
+    try {
+      // Vor T-263 hätte dies erfolgreich aufgelöst: `startWebPreview` prüfte
+      // nur, ob irgendetwas auf dem Port antwortet, nicht ob es der eigene,
+      // gerade gestartete `vite preview`-Prozess ist — und `--strictPort`
+      // lässt den eigenen Prozess beim Start hier sofort an `EADDRINUSE`
+      // sterben.
+      await expect(startWebPreview(port)).rejects.toThrow(/EADDRINUSE|beendet, bevor/);
+    } finally {
+      await new Promise<void>((resolve) => impostor.close(() => resolve()));
+    }
+  });
+
+  test('ein tatsächlich frei startender vite preview meldet sich weiterhin als bereit', async () => {
+    // Gegenprobe zur Gegenprobe: Die Verschärfung darf den echten Erfolgsfall
+    // nicht mitreißen. Eigener, ungenutzter Port — auch hier nicht 5173.
+    const port = 34_174;
+    const child = await startWebPreview(port);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}`);
+      expect(response.ok).toBe(true);
+    } finally {
+      await stopChild(child);
+    }
   });
 });
 

@@ -14,8 +14,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { VersionCheckState } from '../../src/version/checker.ts';
-import { createVersionRoutes, toVersionCheckView } from '../../src/routes/version.ts';
+import type { VersionCheckState } from '../../src/features/version/version.ts';
+import { createVersionRoutes, toVersionCheckView } from '../../src/features/version/routes.ts';
 
 describe('toVersionCheckView', () => {
   it('"unknown" wird zu state:"unknown", latestVersion:null', () => {

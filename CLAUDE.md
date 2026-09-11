@@ -21,13 +21,19 @@ GitHub-Bestands (Spezifikation Abschnitt 18, E-064). Sie fragt und liest, sonst 
 zweite Adresse außerhalb von `127.0.0.1` einbaut, hebt E-001 auf und braucht dafür eine
 Entscheidung, nicht eine Zeile Code.
 
+Zwei Adressen stehen seit dem 2026-09-09 **im Bau** und ausdrücklich nicht im Erzeugnis: der
+Zeitstempeldienst des Code-Signierens (`WINDOWS_TIMESTAMP_URL`, Vorgabe
+`http://timestamp.digicert.com`, `apps/desktop/scripts/sign-windows.mjs`) und der
+Bezugsort von Azure Artifact Signing. Sie laufen auf dem Bauläufer, nicht auf dem Rechner des
+Benutzers, und heben E-001 damit nicht auf. Wer sie in Laufzeitcode zieht, tut es doch.
+
 ## Stack
 
 | Schicht | Technik |
 |---|---|
-| Hülle | Tauri, Rust-Anteil bewusst dünn: Fenster, Menü, Lebenszyklus des Sidecars, Windows-Benutzername |
+| Hülle | Tauri, Rust-Anteil dünn gehalten, aber **nicht mehr nur Fenster und Menü**: elf Befehle — Fenster, Menü, Lebenszyklus des Sidecars, Windows-Benutzername, Fassung und Öffnen der Release-Seite (`release.rs`), Öffnen von Verweis und Datei (`attachment.rs`), systemweite Inaktivität (`idle.rs`, `idle/linux.rs`), Prüfen und Vertrauen des lokalen Outlook-Zertifikats (`outlook_certificate.rs` samt `outlook_certificate.ps1`) |
 | Oberfläche | React + Vite + TypeScript |
-| Lokaler Dienst | Node als Tauri-Sidecar, gebunden auf `127.0.0.1`, versorgt Oberfläche und Outlook-Add-in |
+| Lokaler Dienst | Node als Tauri-Sidecar, gebunden auf `127.0.0.1`, versorgt Oberfläche und Outlook-Add-in. **Zwei Ports:** `17843` die API über HTTP mit Prüfschicht, `17844` ausschließlich HTTPS und ausschließlich die statischen Dateien des Aufgabenbereichs (E-046, `apps/local-api/src/config.ts`) |
 | Speicherung | Eingebettetes SQLite, eine Datei, kein Serverprozess |
 | Add-in | Office.js + TypeScript |
 | Tests | Vitest für Einheiten und Integration, Playwright für End-to-End |
@@ -36,6 +42,46 @@ Die Fachlogik liegt in `packages/domain` und kennt weder HTTP noch SQL. Der Zugr
 Speicherung läuft über Ports in `packages/storage`; der SQLite-Adapter ist austauschbar. Das ist
 die Bedingung dafür, dass „lokal, zumindest derzeit" später ohne Umbau der Fachlogik aufgehoben
 werden kann.
+
+
+## Wo was liegt — die Merkmalsstruktur (T-249 bis T-272)
+
+Beide Anwendungen sind **featureweise** geordnet. Ein neuer Entwickler soll an Ordnern und
+Dateinamen erkennen, wo etwas liegt, ohne zuerst die Architektur zu verstehen.
+
+```
+apps/web/src/          features/{board,todos,timer,bookings,export,tags,settings,structure}/
+                       shared/ui/   app/   lib/   api/   showcase/   styles/
+apps/local-api/src/    features/{board,todos,timer,export,structure,settings,version,data-transfer}/
+                       routes/addin/   access/   http/
+```
+
+`screens/`, `components/` und `usecases/` gibt es **nicht mehr**. Ein Merkmal trägt seine
+Bausteine, seine Logik, seine API-Aufrufe und seine eigenen Typen flach im eigenen Ordner —
+keine Unterordner für ein bis zwei Dateien, keine Barrel-Dateien, keine `utils.ts`.
+
+Vier Regeln, die dabei gemessen und nicht geraten wurden:
+
+- **`features/<merkmal>/api.ts`, eine Ebene tief** (E-102). `request` darf nur dort und in
+  `api/client.ts` stehen; `proof:callers` mißt die Menge gegen die Platte.
+- **`api/types.ts` bleibt** als geteilter Vertrag mit dem Dienst. Merkmalseigene Anfrage- und
+  Antworttypen wandern mit; `Todo`, `Tag`, `TimeEntry` bleiben, weil sie mehrere Merkmale tragen.
+  **Kein `features/<merkmal>/types.ts`.**
+- **`shared/ui/` nimmt auf, was mehr als ein Merkmal wirklich braucht** — jede der neunzehn
+  Dateien wird aus mindestens drei Bereichen gelesen. `lib/` trägt die Nicht-JSX-Fachhelfer;
+  `labels.ts` hat 8 Merkmale und 30 Leser.
+- **Zwei Dateien liegen flach unter `apps/local-api/src/`** und nicht in einem Merkmal:
+  `pool-movement.ts` und `tag-names.ts`. Sie werden aus mehreren Merkmalen gelesen; ein Merkmal
+  hätte den anderen einen Rückgriff aufgezwungen. Das ist Absicht, kein Rest.
+
+**Kreise zwischen Merkmalen sind erlaubt, wo sie fachlich echt sind** — `export ↔ bookings`,
+`bookings ↔ todos`, `timer ↔ todos`, `structure ↔ tags`. Eine erfundene Zwischenschicht wäre der
+Fehler, nicht die Kante. Wer einen neuen Kreis zieht, schreibt den Grund an die Kante.
+
+**Nicht aufgeteilt, begründet:** `apps/desktop/src-tauri/src/attachment.rs` (1352 Zeilen, davon
+**150 Produktivcode** — der Rest sind 609 Zeilen Prüfcode und 500 Zeilen Prosa; 30 der 69
+Rust-Prüffälle stehen darin) und `packages/domain/src/attachment.ts`. Größe ist in diesem
+Bestand kein Maßstab: `packages/domain` hat 6 975 Zeilen und **1 790 Anweisungszeilen**.
 
 ## Sprache
 
@@ -73,13 +119,24 @@ dieser Datei, wartet die Prüfaufgabe auf die nächste Welle.
 
 Gemeinsame Dateien ändert nur der Orchestrator, also die Hauptsession: `CLAUDE.md`,
 `.claude/team/board.md`, `decisions.md`, `risks.md`, `.claude/settings.json`, `package.json`,
-`pnpm-workspace.yaml`, `tsconfig.base.json` und alle `tsconfig*.json` der Pakete, die
-Modulregistrierung des lokalen Dienstes und die Reihenfolge der Datenbankmigrationen.
+`pnpm-workspace.yaml`, `tsconfig.base.json` und alle `tsconfig*.json` der Pakete, `.github/**`
+(drei Abläufe: `pruefung.yml`, `release.yml`, `addin-build.yml`), die Modulregistrierung des
+lokalen Dienstes und die Reihenfolge der Datenbankmigrationen.
 
 ## Ablauf
 
 Arbeit läuft in Wellen. Unabhängige Aufgaben werden als mehrere Task-Aufrufe in einer Nachricht
 gestartet und laufen parallel. Abhängige Aufgaben kommen in die nächste Welle.
+
+**Nicht jede Arbeit kam bisher aus einer Welle.** Die Pull Requests #5 bis #16 vom 2026-09-08
+und 2026-09-09 sind von einem anderen Werkzeug außerhalb dieses Ablaufs entstanden: 208 Dateien,
+rund 9 800 Zeilen dazu, fünf neue Spezifikationsabschnitte, sechs Migrationen. `board.md`,
+`decisions.md` und `risks.md` blieben dabei unberührt und waren zwölf Commits im Rückstand.
+Daraus folgt eine Regel, nicht ein Vorwurf: **Wer außerhalb der Wellen an diesem Bestand
+arbeitet, ist damit nicht durch das Qualitätstor.** Der Stand solcher Arbeit heißt im Board
+„eingelesen", nicht „fertig", bis Code-Reviewer, Spezifikations- und UX-Reviewer, Tester und
+Security-Checker ihn gesehen haben. Und beim Wiederaufsetzen wird zuerst der Abstand zwischen
+`git log` und `board.md` gemessen, bevor irgendetwas gebaut wird.
 
 Agenten sprechen nicht miteinander. Alles läuft über `board.md`, die Berichte und den
 Orchestrator.
@@ -121,8 +178,9 @@ Security-Checker freigegeben haben. Der Dokumentierer arbeitet als Letzter.
 - Tag-Ordner sind beliebig tief verschachtelbar, Pools werden über Tags definiert, Standard-Tags
   greifen bei jedem neuen Todo — auch bei Anlage aus dem Add-in.
 - Das Outlook-Add-in holt Tags, Ordner und Pools über die lokale API, erkennt die Call-Nummer
-  über einen konfigurierbaren regulären Ausdruck und bietet bei bereits vorhandenem Call an, auf
-  das existierende Todo zu buchen statt ein Duplikat anzulegen.
+  über einen konfigurierbaren regulären Ausdruck und **weist auf einen bereits vorhandenen Call
+  hin**, bevor ein Duplikat entsteht. Gehandelt wird am gefundenen Todo nicht — weder gebucht
+  noch angehängt (A-10.9 in der Fassung von E-100).
 
 ## Versionsprüfung
 
@@ -185,6 +243,90 @@ R-22. Bei jeder Freigabe zu prüfen:
 - Nichts öffnet sich von selbst. Weder Frist noch Anhang gelangen in einen
   **Abrechnungsexport**; die vollständige Datensicherung nach A-20 enthält beide.
 
+## Entschieden — der Widerspruch an A-19.19 ist aufgelöst
+
+Festgestellt am 2026-09-10 beim Einlesen der Pull Requests #5 bis #16, **entschieden am selben
+Tag durch den Auftraggeber** (F-21, E-100). Von den beiden möglichen Wegen ist der zweite
+gewählt: **gegen das Anhängen**.
+
+A-19.19 steht damit unverändert in der Spezifikation — „Über das Outlook-Add-in entstehen
+**keine** Anhänge" — und wird nicht geändert, sondern wieder wahr. Es fällt statt dessen
+`POST /api/v1/addin/todos/{todoId}/attachments` samt `attachments.ts`, dem Aufrufer im Add-in,
+der Beschreibung in der OpenAPI-Datei und `proof-followup.mjs`. Umgesetzt in T-247.
+
+Drei Dinge, die aus diesem Fall über ihn hinaus gelten:
+
+- **Der Wächter wird schärfer, nicht abgeräumt.** `proof:addin` Abschnitt 18 zählte Zeilen in
+  `todo_attachment` nach einem Aufruf der **Anlegetür** — er maß die Tür, die zu ist, nicht die,
+  die aufging. Er mißt künftig die Abwesenheit **jeder** Anhangstür unter `/addin`. Wer eine
+  Abwesenheit zusichert, spannt seine Menge an der Anforderung auf, nicht an der Route, die er
+  kennt (E-099 Punkt 3).
+- **A-10.9 ist mitgeändert.** Sie verlangte ein Angebot auf dem gefundenen Todo. Der
+  Aufgabenbereich weist auf einen vorhandenen Call nur noch **hin**; gehandelt wird dort nicht,
+  weder buchend noch anhängend. Ohne diese Änderung wäre neben A-19.19 ein zweiter ungedeckter
+  Widerspruch entstanden, diesmal in die andere Richtung.
+- **Ein Satz, der eine Handlung nennt, die es nicht gibt, ist derselbe Fehler.** Die Warnung im
+  Duplikatfall forderte „Hängen Sie diese E-Mail an das passende Todo" und wäre nach dem Rückbau
+  eine Anweisung ins Leere geblieben. Sie verweist jetzt auf SuperTakt selbst. Beim Streichen
+  einer Fläche gehören die Sätze über sie in denselben Auftrag — in beide Richtungen.
+
+## Datensicherung, Fremdimport, Darstellung, Timer und Inaktivität
+
+Spezifikation Abschnitte 20 bis 24, nachgereicht am 2026-09-08 und 2026-09-09, gebaut in den
+Pull Requests #5 bis #16 **außerhalb des Wellenmodells** und deshalb ohne Qualitätstor. Was
+hier steht, ist am Quelltext gelesen, nicht gemessen — in dieser Umgebung stehen weder Node
+noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
+
+- **Datensicherung (A-20).** Ein eigenes Archiv, JSON, mit Formatkennung
+  `de.supertakt.data-archive`, ganzzahliger Schemafassung, Zeitpunkt und Erzeuger. **Der Code
+  steht auf Fassung 5** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
+  liest 1 bis 5 und weist alles andere ab — die Spezifikation nennt in A-24.7 die Fassung 4 und
+  kennt die 5 nicht. Das ist der zweite ungedeckte Punkt; er ist klein und gehört trotzdem
+  benannt. Unbekannte Fassungen werden **abgewiesen, nicht geraten**, und ein ungültiges Archiv
+  verändert nichts.
+- **Der Round-Trip ist die Anforderung**, nicht das Herunterladen (A-20.4): Export und
+  anschließender Import stellen denselben fachlichen Bestand her, einschließlich Kennungen,
+  Zeitstempeln und Protokollen. Zugriffstoken und Migrationsbuch bleiben draußen.
+- **Fremdimporte ergänzen, sie ersetzen nicht** (A-20.7). Todoist-CSV und
+  Super-Productivity-JSON. Der Call-Nummern-Regex des Imports ist einstellbar, sein Vorgabewert
+  `call[\s#:_-]*(\d{5,6})` ohne Groß-/Kleinschreibung; ein ungültiges oder zu langsames Muster
+  bricht **vor** dem ersten Schreibzugriff ab. Aus einem Fremdbackup entstehen Verweise und
+  Dateipfade als Anhänge — die Prüfung aus Abschnitt 19 gilt dort genauso, denn ein Pfad aus
+  einer fremden Datei ist ein von außen geschriebener Öffnen-Befehl.
+- **Der Rumpf des Archivs darf 64 MB** (`DATA_TRANSFER_MAX_BODY_BYTES`) gegen 1 MB im
+  Normalfall. Das ist eine bewusste Ausnahme für eingebettete Bildanhänge und die einzige
+  Stelle, an der B-1.7 gelockert ist.
+- **Darstellung (A-21).** Die sichtbare Marke heißt SuperTakt; technische Kennungen und
+  Datenpfade behalten ihre Namen — `identifier` bleibt `de.takt.desktop`, `generator` im Archiv
+  bleibt `Takt`, die Kopfzeile bleibt `X-Takt-Token`. **Klassisch ist der Standard**, die alte
+  Auswahl `clear` wird klassisch dargestellt. Farbmodus und Zeilendichte werden **getrennt**
+  gespeichert; eine feste helle oder dunkle Palette wendet ihren Modus an, ohne die Vorliebe
+  des Benutzers zu überschreiben. Alle Paletten liegen lokal; zur Laufzeit lädt nichts nach.
+- **Leistungsabfrage (A-22).** Einstellbar, Vorgabe eingeschaltet. Ausgeschaltet bucht der
+  Stopp ohne Dialog; vorhandener Leistungstext bleibt, fehlender wird in der Buchungsübersicht
+  nachgetragen. **Die Exportregeln ändern sich nicht** — eine Buchung ohne Leistung ist eine
+  Frage der Vollständigkeit, nicht des Formats.
+- **Outlook-Einrichtung (A-23).** Der schwerste neue Punkt: Die Hülle darf nach **ausdrücklicher**
+  Bestätigung ein Zertifikat in `Cert:\CurrentUser\Root` legen. Das ist ein Wurzelspeicher.
+  Deshalb: **die Hülle bestimmt den Pfad selbst**, der Auftrag enthält nur den bestätigten
+  SHA-256-Fingerabdruck, CA-Zertifikate und zusätzliche DNS-Namen sind ausgeschlossen, keine
+  Rechteerhöhung, keine Änderung von Richtlinien, und die Windows-Sicherheitsabfrage bleibt
+  stehen (drei Minuten Frist, `-NonInteractive` fällt für genau diesen einen Aufruf weg). Ein
+  Eintrag im Speicher allein gilt **nicht** als bestandener HTTPS-Test — geprüft wird über
+  Loopback mit regulärer Windows-TLS-Prüfung und Abgleich des Serverzertifikats. Im Browser und
+  auf anderen Betriebssystemen behauptet nichts eine Windows-Vertrauensprüfung.
+- **Inaktivität (A-24).** Systemweit gemessen und ausschließlich als Dauer: Windows
+  `GetLastInputInfo`, macOS CoreGraphics, Linux Wayland `ext-idle-notify`, Mutter oder X11
+  ScreenSaver. **Keine Eingabeinhalte, keine Fenstertitel, keine Telemetrie**, und XWayland gilt
+  nicht als Ersatz für Wayland. Ohne Systemschnittstelle — im Browser — wird keine Erkennung
+  behauptet. Der Timer läuft während der Abwesenheit weiter; erst die **Rückkehr** schließt die
+  aktive Zeit ab und führt ihn atomar fort. Die Zuordnung muss **sekundengenau** den ganzen
+  Zeitraum treffen, ohne Überlappung und ohne Doppelbuchung bei Wiederholung; gerundet wird
+  weiterhin ausschließlich im Export.
+- **Offene Phasen überleben Neuladen, Neustart und Datensicherung** (A-24.7). Sie stehen in
+  SQLite, nicht im Arbeitsspeicher und nicht im Browserspeicher — dieselbe Regel wie beim
+  übersprungenen Fassungswert, und aus demselben Grund.
+
 ## Text streichen und umbenennen
 
 Vor jedem Auftrag, der einen Oberflächentext streicht oder einen zugänglichen Namen ändert, wird
@@ -215,6 +357,23 @@ fremde Antwort den Prozess, und aus ihr kann Text in die Oberfläche und eine Ad
 Browser des Benutzers wandern. Beide Wege sind im Bedrohungsmodell bewertet, bevor sie gebaut
 werden.
 
+Seit den Abschnitten 20 bis 24 kamen drei Wege dazu. Einer davon ist mit E-100 wieder entfallen;
+die beiden übrigen sind noch **nicht** im Bedrohungsmodell bewertet (R-23 bis R-25):
+
+- **Der Wurzelspeicher.** Die Hülle schreibt auf Bestätigung nach `Cert:\CurrentUser\Root`. Was
+  dort liegt, gilt dem Benutzerkonto für **jede** TLS-Verbindung als vertrauenswürdig, nicht nur
+  für den Aufgabenbereich. Die Enge des Auftrags — nur ein Fingerabdruck, Pfad von der Hülle
+  gewählt, kein CA-Zertifikat — ist die ganze Sicherheit dieser Fläche.
+- **Die fremde Datei.** Todoist-CSV und Super-Productivity-JSON sind von außen geschriebener
+  Inhalt, und aus ihnen entstehen Anhänge: Verweise und **Dateipfade**. Damit reicht ein
+  präpariertes Fremdbackup bis an den Öffnen-Befehl aus Abschnitt 19 heran (R-21).
+- **Der Deep-Link aus Outlook.** Mit E-100 entfallen; die Route ist gefallen, nicht nur die
+  Schaltfläche. Der Weg ist damit zu, bevor er bewertet werden mußte.
+
+Base64 ist auch im Datenarchiv keine Verschlüsselung. Eine Datensicherung nach A-20 enthält
+**mehr** lesbare Kundendaten als jeder Abrechnungsexport: interne Vermerke, Fristen, Anhänge
+samt Bildkopien.
+
 ## Befehle
 
 Die aktuellen Befehle stehen im Wurzel-`package.json` und in den jeweiligen Paketen.
@@ -222,3 +381,17 @@ Die aktuellen Befehle stehen im Wurzel-`package.json` und in den jeweiligen Pake
 Die sichtbare Marke heißt seit A-21 SuperTakt; technische Kennungen und Datenpfade
 behalten aus Kompatibilitätsgründen ihre bisherigen Namen. Die Layoutänderungen
 sind in `docs/design/supertakt-layout.md` beschrieben.
+
+Das Tor heißt `pnpm check` und fährt in dieser Reihenfolge: `typecheck`, `boundaries`,
+`contrast`, `proof:all`, `verify:bundle`, `test:coverage`, `test:rust`, `build`, `audit`.
+`proof:all` sind **neunzehn** Nachweisläufe. Einer steht ausdrücklich **nicht** darin und läuft
+einzeln: `proof:engines` (braucht WebKitGTK und seit PR #9 auch `python3-gi-cairo`).
+`proof:followup` gibt es seit T-247 nicht mehr — es prüfte ausschließlich die Anhangsroute des
+Add-ins und ist mit ihr gefallen (E-100).
+`pnpm test:e2e` fährt drei Playwright-Konfigurationen nacheinander.
+
+Drei GitHub-Abläufe: `pruefung.yml` bei Push und Pull Request, `release.yml` am Etikett,
+`addin-build.yml` baut den Aufgabenbereich und prüft die Add-in-Aufrufe gegen den Dienst.
+`rust:test` legt vor `cargo test --lib` über `prepare-rust-test.mjs` leere, nie ausgeführte
+Platzhalter für Sidecar, Aufgabenbereich und Lizenzbeilage an — ohne sie bricht Tauri im
+sauberen Baum vor dem ersten Prüffall ab (T-244).

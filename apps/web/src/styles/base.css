@@ -104,7 +104,7 @@ h4 {
  * isolierten Blocks weiter um (UBA X2–X5), und `bidi-override` hilft ebenfalls
  * nicht — keine CSS-Eigenschaft entfernt ein Zeichen aus dem Text. Die andere
  * Haelfte besorgt `visibleText` aus `@takt/domain`; beide zusammen sind der
- * Baustein `Foreign` (`components/Foreign.tsx`). Das ist die Berichtigung aus
+ * Baustein `Foreign` (`shared/ui/Foreign.tsx`). Das ist die Berichtigung aus
  * T-119, und sie steht hier, damit sie niemand ein zweites Mal machen muss.
  */
 bdi {

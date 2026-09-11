@@ -243,9 +243,9 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * Schaden wie in R-15, nur über die Länge statt über ein zu weites Muster.
    *
    * Die Hauptanwendung weist einen solchen Wert seit E-045 ab
-   * (`usecases/todos.ts`). Dass das Add-in ihn annahm, war die Art Unterschied,
-   * die C-03 schon einmal gekostet hat: dieselbe Handlung, zwei Ergebnisse, je
-   * nachdem wo sie geschieht.
+   * (`features/todos/todos.ts`). Dass das Add-in ihn annahm, war die Art
+   * Unterschied, die C-03 schon einmal gekostet hat: dieselbe Handlung, zwei
+   * Ergebnisse, je nachdem wo sie geschieht.
    *
    * Leer bleiben darf die Nummer weiterhin (A-2.6). `null` ist keine
    * unplausible Nummer, sondern gar keine.
@@ -275,15 +275,24 @@ export function createAddinRoutes(deps: AddinDeps): Hono {
    * (`2026-02-30`), ein Zeitstempel oder freier Text ergibt 422 mit
    * `details[].field = "dueDate"`.
    *
-   * **Ein Anhang entsteht hier weiterhin nicht** (A-19.19, E-074 Punkt 3,
-   * A-A-21, A-A-22). Das ist keine Voreinstellung, sondern der Schnitt: Diese
-   * Route hat kein Anhangsfeld, `AddinUnit` hat keinen `AttachmentPort`, und
-   * die Anhangsrouten liegen unter `/api/v1/todos/{todoId}/attachments`,
-   * also außerhalb von `/addin` und für das Add-in-Token unerreichbar. Ein
-   * mitgeschicktes `attachments`, `attachment` oder `attachmentUrl` fällt in
-   * zod still weg und ist damit ohne Wirkung — gemessen wird nicht der
-   * Statuscode, sondern die Wirkung: null Zeilen in `todo_attachment`
-   * (`proof:addin` Abschnitt 18).
+   * **Ein Anhang entsteht hier nicht — und seit T-247 nirgends unter
+   * `/addin`** (A-19.19, E-074 Punkt 3, A-A-21, A-A-22). Das ist keine
+   * Voreinstellung, sondern der Schnitt: Diese Route hat kein Anhangsfeld,
+   * `AddinUnit` hat keinen `AttachmentPort`, und die Anhangsrouten liegen
+   * unter `/api/v1/todos/{todoId}/attachments`, also außerhalb von `/addin`
+   * und für das Add-in-Token unerreichbar. Ein mitgeschicktes `attachments`,
+   * `attachment` oder `attachmentUrl` fällt in zod still weg und ist damit
+   * ohne Wirkung — gemessen wird nicht der Statuscode, sondern die Wirkung:
+   * null Zeilen in `todo_attachment` (`proof:addin` Abschnitt 18).
+   *
+   * Der Satz galt zwischen PR #16 und der Entscheidung zu F-21 nur noch für
+   * **diese** Tür: Daneben stand `POST /addin/todos/{todoId}/attachments` und
+   * legte einen Verweis an. Der Auftraggeber hat F-21 gegen das Anhängen
+   * entschieden, die Route ist gefallen, und Abschnitt 18 mißt seither
+   * zusätzlich ihre **Abwesenheit** — 404 mit gültigem Add-in-Token und kein
+   * Pfad unter `/addin` mit `attachment` im Namen. Eine Zusage, die nur die
+   * Tür beschreibt, an der sie steht, ist die Sorte Satz, aus der dieser
+   * Befund entstanden ist.
    */
   routes.post('/todos', async (c) => {
     const body = await readJson(c.req.raw);

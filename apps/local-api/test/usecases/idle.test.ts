@@ -6,9 +6,9 @@ import { openDatabase, type OpenedDatabase, type UnitOfWork } from '@takt/storag
 import type { Timestamp } from '@takt/domain';
 const ts = (value: string) => value as Timestamp;
 import type { TimeEntryId, TodoId } from '@takt/domain';
-import type { AppContext } from '../../src/usecases/context.ts';
-import { captureTimerRecovery, loadOrphanedTimer, resolveOrphanedTimer } from '../../src/usecases/timer.ts';
-import { beginIdle, loadIdle, resolveIdle, returnFromIdle } from '../../src/usecases/idle.ts';
+import type { AppContext } from '../../src/context.ts';
+import { captureTimerRecovery, loadOrphanedTimer, resolveOrphanedTimer } from '../../src/features/timer/timer.ts';
+import { beginIdle, loadIdle, resolveIdle, returnFromIdle } from '../../src/features/timer/idle.ts';
 
 // Real SQLite transactions: the test deliberately fails the second split write.
 describe('A-24: Inaktivität und Zeitaufteilung', () => {

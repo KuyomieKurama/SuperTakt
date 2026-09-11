@@ -27,8 +27,8 @@
  * Die genaue Zeile in `src` steht bei jedem Fall im Kommentar.
  */
 import { describe, expect, it } from 'vitest';
-import { poolRuleMatchesNothing, tagAxisIsUnresolved } from '../src/tag.js';
-import type { ResolvedPoolRuleAxes } from '../src/tag.js';
+import { poolRuleMatchesNothing, tagAxisIsUnresolved } from '../src/pool.js';
+import type { ResolvedPoolRuleAxes } from '../src/pool.js';
 
 // ---------------------------------------------------------------------------
 // tagAxisIsUnresolved — die fünf Ecken aus T-082 §4

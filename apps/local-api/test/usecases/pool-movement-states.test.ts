@@ -34,8 +34,8 @@ import {
   bookingMovementStates,
   closedEntryMovementStates,
   completionMovementStates,
-} from '../../src/usecases/pool-movement.ts';
-import type { BookingPresenceBefore, MovingTodo } from '../../src/usecases/pool-movement.ts';
+} from '../../src/pool-movement.ts';
+import type { BookingPresenceBefore, MovingTodo } from '../../src/pool-movement.ts';
 
 const tagId = (value: string) => value as unknown as TagId;
 const statusId = (value: string) => value as unknown as StatusId;

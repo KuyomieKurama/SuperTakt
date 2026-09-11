@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { E2E_DATA_DIR } from './support/session';
+import { appDataDirIn } from './support/app-data-isolation';
 import { gotoTime } from './support/nav';
 import { cleanupAnyTimer, startTimer, createTodo, deleteTodo, deleteTimeEntry, getRunningTimer, listTimeEntriesByTodo } from './support/api';
 
@@ -17,7 +18,9 @@ test('A-24: offene Zeit überlebt Neuladen, lässt sich aufteilen und setzt den 
   const sessionId = randomUUID();
   const end = Date.now() - 60_000;
   const begin = end - 40 * 60_000;
-  const db = new DatabaseSync(join(E2E_DATA_DIR, 'takt', 'takt.db'));
+  // A-A-72 (T-247-5): der Ordnername unter E2E_DATA_DIR ist plattformabhängig
+  // ('Takt' unter Windows, 'takt' sonst) — appDataDirIn kennt beide Regeln.
+  const db = new DatabaseSync(join(appDataDirIn(E2E_DATA_DIR), 'takt.db'));
   try {
     db.exec('PRAGMA busy_timeout = 5000');
     // Simulates the persisted result of the native idle detection. All user

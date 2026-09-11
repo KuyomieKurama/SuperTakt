@@ -21,6 +21,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  VERSION_CHECK_JITTER_RATIO,
   VERSION_MAX_LENGTH,
   VERSION_SHAPE,
   RELEASE_TAG_SHAPE,
@@ -29,6 +30,7 @@ import {
   decideUpdateNotice,
   isVersion,
   normalizeVersion,
+  versionCheckDelayWithJitter,
 } from '../src/version.js';
 
 /** Der Vergleich, den ein sorgloser Aufrufer schreiben würde. */
@@ -372,5 +374,151 @@ describe('decideUpdateNotice — neuer und nicht übersprungen', () => {
         expect(() => decideUpdateNotice({ installed, latest })).not.toThrow();
       }
     }
+  });
+});
+
+/**
+ * `versionCheckDelayWithJitter` — T-280, Befund aus dem T-279-Bericht des
+ * domain-dev: die Funktion war ungemessen, und `pnpm test:coverage` blieb
+ * trotzdem grün, weil die 80-%-Schwelle über `packages/domain/src/**` als
+ * Gruppe mißt (E-103, "grün aus Zufall"). Diese Blöcke messen die Auflage aus
+ * A-V-11 selbst: Der Boden verlängert sich nur, er verkürzt sich nie — mit
+ * einer Gegenprobe, die zeigt, daß dieselbe Zählung eine kaputte, nach unten
+ * streuende Fassung tatsächlich als kaputt erkennt.
+ */
+describe('versionCheckDelayWithJitter — Ränder (A-V-11, T-279)', () => {
+  const BASE = 60 * 60 * 1_000; // 60 Minuten, wie im Betrieb
+  const MIN_INTERVAL = BASE; // Boden = Grundwert im Regelfall
+  const CEILING = BASE + VERSION_CHECK_JITTER_RATIO * MIN_INTERVAL;
+
+  it('unitRandom = 0 ergibt genau den blanken Boden, ohne Aufschlag', () => {
+    expect(versionCheckDelayWithJitter(BASE, MIN_INTERVAL, 0)).toBe(BASE);
+  });
+
+  it('unitRandom = 1 ergibt den größten Aufschlag: Boden + 25 % des Bodens', () => {
+    expect(versionCheckDelayWithJitter(BASE, MIN_INTERVAL, 1)).toBeCloseTo(CEILING, 6);
+  });
+
+  it.each([-5, -0.0001, -1_000_000_000])(
+    'ein negativer Streuwert (%s) wird auf 0 geführt — der blanke Boden, kein Absturz',
+    (value) => {
+      expect(versionCheckDelayWithJitter(BASE, MIN_INTERVAL, value)).toBe(BASE);
+    },
+  );
+
+  it.each([1.5, 2, 7, 1_000_000_000])(
+    'ein Streuwert über 1 (%s) wird auf 1 geführt — der größte Aufschlag, kein Überlauf',
+    (value) => {
+      expect(versionCheckDelayWithJitter(BASE, MIN_INTERVAL, value)).toBeCloseTo(CEILING, 6);
+    },
+  );
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'eine nicht endliche Zahl (%s) als Streuwert ergibt den blanken Boden, kein NaN',
+    (value) => {
+      const result = versionCheckDelayWithJitter(BASE, MIN_INTERVAL, value);
+      expect(result).toBe(BASE);
+      expect(Number.isNaN(result)).toBe(false);
+    },
+  );
+
+  it('ein negativer Grundwert ergibt 0, nicht negativ und nicht NaN', () => {
+    const result = versionCheckDelayWithJitter(-100, MIN_INTERVAL, 0.5);
+    expect(result).toBeGreaterThanOrEqual(0);
+    expect(Number.isNaN(result)).toBe(false);
+  });
+
+  it('ein nicht endlicher Grundwert (NaN, ±Infinity) ergibt einen endlichen Wert ab 0, keinen NaN', () => {
+    for (const baseMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const result = versionCheckDelayWithJitter(baseMs, MIN_INTERVAL, 0.5);
+      expect(Number.isFinite(result)).toBe(true);
+      expect(result).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('ein negativer oder nicht endlicher Boden liefert keine Spanne: das Ergebnis ist der reine (geführte) Grundwert', () => {
+    expect(versionCheckDelayWithJitter(BASE, -100, 0.9999)).toBe(BASE);
+    expect(versionCheckDelayWithJitter(BASE, Number.NaN, 0.9999)).toBe(BASE);
+    expect(versionCheckDelayWithJitter(BASE, Number.NEGATIVE_INFINITY, 0.9999)).toBe(BASE);
+  });
+
+  it('ein Boden von 0 liefert ebenfalls keine Spanne', () => {
+    expect(versionCheckDelayWithJitter(BASE, 0, 0.9999)).toBe(BASE);
+  });
+});
+
+describe('versionCheckDelayWithJitter — Auflage 1 über sehr viele Ziehungen: nie unter dem Boden, nie über Boden + 25 % (T-279)', () => {
+  const BASE = 60 * 60 * 1_000; // 60 Minuten
+  const MIN_INTERVAL = BASE;
+  const CEILING = BASE + VERSION_CHECK_JITTER_RATIO * MIN_INTERVAL;
+
+  it('1 000 000 Ziehungen mit einer echten Zufallsquelle: keine einzige Verletzung, in beide Richtungen', () => {
+    let belowFloor = 0;
+    let aboveCeiling = 0;
+    let observedSpread = false;
+
+    for (let i = 0; i < 1_000_000; i += 1) {
+      const result = versionCheckDelayWithJitter(BASE, MIN_INTERVAL, Math.random());
+      if (result < BASE) belowFloor += 1;
+      if (result > CEILING) aboveCeiling += 1;
+      if (result > BASE) observedSpread = true;
+    }
+
+    expect(belowFloor).toBe(0);
+    expect(aboveCeiling).toBe(0);
+    // Die Spanne wird auch tatsächlich genutzt — sonst wäre die Zusage
+    // "verlängert nur" leer, weil sie nie etwas verlängert.
+    expect(observedSpread).toBe(true);
+  });
+
+  it('mit den Rändern des Einheitsintervalls selbst (0 und ein Wert knapp unter 1) werden Minimum und Maximum praktisch erreicht', () => {
+    expect(versionCheckDelayWithJitter(BASE, MIN_INTERVAL, 0)).toBe(BASE);
+    const nearCeiling = versionCheckDelayWithJitter(BASE, MIN_INTERVAL, 0.999999);
+    expect(nearCeiling).toBeGreaterThan(BASE);
+    expect(nearCeiling).toBeLessThanOrEqual(CEILING);
+    expect(CEILING - nearCeiling).toBeLessThan(10); // 0,999999 liegt nur Millisekunden unter dem Rand
+  });
+});
+
+describe('versionCheckDelayWithJitter — Gegenprobe: dieselbe Zählung erkennt eine nach unten streuende Fassung (T-280)', () => {
+  const BASE = 60 * 60 * 1_000;
+  const MIN_INTERVAL = BASE;
+
+  /**
+   * Eine bewußt falsche Fassung, wie sie entstünde, würde `unitRandom` über
+   * `[-1, 1]` statt über `[0, 1]` gelesen (zum Beispiel `Math.random() * 2 -
+   * 1` an der Aufrufstelle). Sie streut zur Hälfte der Zeit UNTER den Boden —
+   * genau das, was Auflage 1 verbietet.
+   *
+   * Dieser Test ist die geforderte Gegenprobe: Er beweist, daß die Zählung
+   * aus dem Block oben nicht deshalb grün ist, weil sie nichts unterscheiden
+   * kann, sondern weil die echte Funktion die Zusage tatsächlich einhält. Die
+   * Zählmethode selbst — "wie oft liegt das Ergebnis unter dem Boden" —
+   * erkennt die kaputte Fassung zuverlässig.
+   */
+  function brokenDownwardJitter(baseMs: number, minIntervalMs: number, unitRandom: number): number {
+    const span = minIntervalMs * VERSION_CHECK_JITTER_RATIO;
+    return baseMs + span * (unitRandom * 2 - 1);
+  }
+
+  it('die kaputte Fassung fällt bei genau derselben Zählung durch dieselbe Prüfung', () => {
+    let belowFloor = 0;
+    for (let i = 0; i < 100_000; i += 1) {
+      const result = brokenDownwardJitter(BASE, MIN_INTERVAL, Math.random());
+      if (result < BASE) belowFloor += 1;
+    }
+
+    // Bei einer symmetrischen Streuung um den Boden liegt ungefähr die Hälfte
+    // darunter — die genaue Zahl ist nicht der Punkt, nur daß sie klar über
+    // 0 liegt, während die echte Funktion oben zuverlässig auf 0 kommt.
+    expect(belowFloor).toBeGreaterThan(1_000);
+  });
+
+  it('unitRandom = 0 allein genügt schon: die kaputte Fassung unterschreitet den Boden, die echte nicht', () => {
+    const broken = brokenDownwardJitter(BASE, MIN_INTERVAL, 0);
+    const real = versionCheckDelayWithJitter(BASE, MIN_INTERVAL, 0);
+
+    expect(broken).toBeLessThan(BASE);
+    expect(real).toBe(BASE);
   });
 });

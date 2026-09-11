@@ -5,14 +5,14 @@ import {
   ExportStatusMarker,
   exportDisplayState,
   type ExportDisplayState,
-} from "../components/ExportStatus";
-import { Icon } from "../components/Icon";
-import { Spinner } from "../components/Primitives";
+} from "../shared/ui/ExportStatus";
+import { Icon } from "../shared/ui/Icon";
+import { Spinner } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
 import { formatDate, formatDuration } from "../lib/format";
 import { navigate } from "./router";
 import { foreignText, quotedName } from "../lib/foreign";
-import { Foreign } from "../components/Foreign";
+import { Foreign } from "../shared/ui/Foreign";
 
 /**
  * Takt — globale Suche (A-13.7, E-038).

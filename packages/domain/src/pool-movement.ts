@@ -73,8 +73,9 @@ import { enumerateNames } from './enumeration.ts';
  *
  * Ein Pool steht nie zugleich in `enters` und `leaves`: „erscheint" und
  * „verschwindet" über denselben Namen wäre kein Satz, den jemand lesen möchte.
- * Dafür sorgt die Stelle, die rechnet (`usecases/pool-movement.ts`), und nicht
- * diese Datei — sie hat keine Regel und dürfte darüber auch nicht urteilen.
+ * Dafür sorgt die Stelle, die rechnet (`apps/local-api/src/pool-movement.ts`),
+ * und nicht diese Datei — sie hat keine Regel und dürfte darüber auch nicht
+ * urteilen.
  *
  * **Namen und keine Kennungen.** Der Satz ist für einen Menschen, der die
  * Namen gleich in der Hauptanwendung wiederfindet; eine Kennung im Satz wäre
@@ -86,8 +87,8 @@ import { enumerateNames } from './enumeration.ts';
  * Bis T-107 stand hier als Begründung, zwei Pools dürften denselben Namen
  * tragen. Das ist falsch — die Speicherung verbietet es (W-8 aus R-2a). Die
  * Bauart bleibt trotzdem, wie sie ist; **warum**, steht an der Stelle, die
- * rechnet (`usecases/pool-movement.ts`), und nicht hier: Diese Datei bekommt
- * drei fertige Listen und hat keine Regel, über die sie urteilen könnte.
+ * rechnet (`apps/local-api/src/pool-movement.ts`), und nicht hier: Diese Datei
+ * bekommt drei fertige Listen und hat keine Regel, über die sie urteilen könnte.
  */
 export interface PoolMovement {
   /** Pools, in denen das Todo **nach** der Handlung steht. */

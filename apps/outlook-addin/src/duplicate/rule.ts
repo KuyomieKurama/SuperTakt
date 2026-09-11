@@ -155,6 +155,6 @@ export const describeOffers = (matches: readonly TodoMatchDto[]): readonly Offer
  * zusammenzusetzen und damit auch nichts mehr zu vertauschen.
  *
  * Wer den Wert braucht, liest `offer.poolMovement` — denselben Typ, den
- * `poolMovementSentence` entgegennimmt und den `usecases/pool-movement.ts`
- * ausrechnet.
+ * `poolMovementSentence` entgegennimmt und den
+ * `apps/local-api/src/pool-movement.ts` ausrechnet.
  */

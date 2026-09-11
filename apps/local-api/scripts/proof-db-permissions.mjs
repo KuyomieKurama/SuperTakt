@@ -72,8 +72,12 @@ import { randomBytes } from 'node:crypto';
 
 import { CONNECTION_PRAGMAS, DATABASE_FILE_MODE, openConnection, openDatabase } from '@takt/storage';
 
+import { appDataDirIn, isolatedAppDataEnv } from './proof-appdata.mjs';
+import { dienstEinstieg } from './source-resolve.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENTRY = join(HERE, '..', 'src', 'index.ts');
+/* Aufgelöst statt abgezählt — Begründung in source-resolve.mjs (T-249-1). */
+const ENTRY = dienstEinstieg();
 
 let passed = 0;
 let failed = 0;
@@ -246,7 +250,7 @@ try {
   // ---------------------------------------------------------------------------
   {
     const dataHome = await scratch('takt-proof-perm-start-');
-    const appDir = join(dataHome, 'takt');
+    const appDir = appDataDirIn(dataHome);
     const path = join(appDir, 'takt.db');
 
     // Der Kindprozess erbt `0o000` und muss seine `umask` selbst setzen. Er
@@ -255,7 +259,7 @@ try {
     // Datenbank und Migration entstehen im Start **vor** dem Binden.
     const child = spawn(process.execPath, [ENTRY], {
       stdio: ['pipe', 'ignore', 'pipe'],
-      env: { ...process.env, XDG_DATA_HOME: dataHome },
+      env: isolatedAppDataEnv(dataHome),
     });
     let stderr = '';
     child.stderr.setEncoding('utf8');

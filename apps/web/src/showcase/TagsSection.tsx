@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Card, EmptyState, Button } from "../components/Primitives";
-import { TagChip, TagPath } from "../components/Tag";
-import { TagCombobox } from "../components/TagInput";
-import { TagTree, type TagTreeNode } from "../components/TagTree";
+import { Card, EmptyState, Button } from "../shared/ui/Primitives";
+import { TagChip, TagPath } from "../shared/ui/Tag";
+import { TagCombobox } from "../features/tags/TagInput";
+import { TagTree, type TagTreeNode } from "../features/tags/TagTree";
 import type { TagInfo } from "../app/StructureContext";
 import { TAG_TREE } from "./data";
 import { Section, SubHeading } from "./Section";

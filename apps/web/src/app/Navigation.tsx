@@ -1,4 +1,4 @@
-import { Icon, type IconName } from "../components/Icon";
+import { Icon, type IconName } from "../shared/ui/Icon";
 import { cx } from "../lib/cx";
 import { handleRouteLinkClick, href, type RouteName } from "./router";
 

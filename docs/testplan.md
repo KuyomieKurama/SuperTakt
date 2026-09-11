@@ -2040,6 +2040,35 @@ Bauergebnis tatsächlich lädt: Vite erzeugt dafür einen eigenen Chunk
 („Erkannt"-Callout bleibt aus, Zeitüberschreitung); Datei danach byteidentisch wiederhergestellt
 (`diff`). Siehe `tests/e2e/outlook-addin-build.spec.ts`.
 
+### Bereitschaftsprüfung von `startWeb`/`startWebPreview` gehärtet (T-259-Fund, T-263 behoben)
+
+T-259 fand: `support/web-build-services.ts#startWebPreview` prüfte Bereitschaft nur über
+`fetch(...).then(r => r.ok)` gegen Port 5173 — nicht, ob die Antwort vom selbst gestarteten
+`vite preview`-Prozess stammt. Eine fremde, aber erreichbare Gegenstelle auf demselben Port ließ
+die Prüfung „bereit" melden, während der eigene, `--strictPort` gebundene Prozess längst an
+`EADDRINUSE` gestorben war. Der naheliegende erste Ausweg — dasselbe Wettrennen gegen den frühen
+Tod des eigenen Kindes wie `support/services.ts#spawnLocalApi` — wurde gebaut **und per
+Gegenprobe selbst als unzureichend gemessen**: Der `pnpm`/`cmd.exe`-Vorlauf unter Windows dauert
+spürbar länger als die erste `fetch`-Runde, eine sofort antwortende fremde Gegenstelle gewinnt das
+Wettrennen praktisch immer. Der tatsächliche Ausweg liest die Bereitschaft vom **eigenen `stdout`**
+des Kindes (`➜  Local:   http://127.0.0.1:<port>/`, das `vite`/`vite preview` nur bei
+tatsächlich geglücktem Binden schreibt) statt vom Netz; eine `fetch`-Bestätigung folgt danach nur
+noch als Zusatzsicherung. Dieselbe Bauart auf `support/services.ts#startWeb` angewandt (derselbe
+Fund, dieselbe Ursache, die Hauptreihe betreffend).
+
+Zweiter, dabei gemessener Fund: `child.kill('SIGTERM')` beendet unter Windows bei einem mit
+`shell: true` gestarteten Kind (`pnpm` ist dort eine `.cmd`) nur den unmittelbaren `cmd.exe`
+-Prozess — der eigentliche `vite`/`vite preview`-Prozess läuft als Enkelkind unverändert weiter
+und hält den Port belegt. Reproduziert an dieser Datei selbst (ein `vite preview`-Waisenprozess
+blieb nach einem Testlauf auf 5173 zurück und blockierte den nächsten Lauf) — vermutlich die
+Ursache der in `board.md` genannten „hängenden Prozesse auf 5173 und 17844". Behoben über
+`taskkill /t /f` (`killShellChildTree`/`killChildTree`) an beiden Stellen
+(`support/services.ts#stopServices`, `support/web-build-services.ts#stopChild`).
+
+Gegenprobe (`web-build-smoke.spec.ts`, eigener Abschnitt): Ein `node:http`-Server besetzt einen
+Testport vorab, `startWebPreview` dagegengestellt — muss und tut scheitern; derselbe Aufbau mit
+freiem Port muss und tut weiterhin gelingen.
+
 ### Was diese Fälle nicht abdecken (Grenze, keine Auslassung)
 
 **Die `.AppImage` selbst, mit Playwright gegengeprüft: nicht gelaufen.** Zwei getrennte Gründe,
@@ -3244,18 +3273,70 @@ gesondert `TP-VER-07`).
 | TP-VER-05 | `200 OK`, Fassungsfeld vorhanden, aber unsinnig — je ein Unterfall: `"banana"`, `""`, `null`, `42` (Zahl statt Zeichenkette), `"1.2.3.4.5.6.7"` | „Fassungsangabe ungültig" |
 | TP-VER-06 | `404 Not Found` auf die Einzelabfrage bzw. `200 OK` mit leerer Liste `[]` auf die Listenabfrage — **welche Form zutrifft, hängt davon ab, ob T-138 `/releases/latest` oder `/releases` befragt; offene Frage an den Orchestrator, siehe Bericht** | „keine Veröffentlichung vorhanden" |
 
-### TP-VER-07 — Kein wiederholter Versuch im selben Lauf
-**Anforderungen:** A-18.11 („kein wiederholtes Nachfragen im selben Lauf"). **Ebene:** Integration
-(T-140). **Lauffähigkeit:** wie oben.
+### TP-VER-07 — Nach einem Fehlschlag: kein sofortiger, aber ein späterer Versuch im selben Prüflauf (A-18.11, A-V-11′)
+
+**Berichtigt am 2026-09-11 (T-277).** Bis hierhin stand als Titel „Kein wiederholter Versuch im
+selben Lauf" und als erwartetes Ergebnis „Die Attrappe zählt genau **einen** Aufruf für den
+gesamten Lauf" — dieselbe Meßvorschrift, die security-checker unter der alten Auflage A-V-11 im
+Bedrohungsmodell berichtigen mußte (T-275, `docs/bedrohungsmodell.md` Abschnitt 36.4/36.7,
+T-275-5): Der Auftraggeber hat A-18.11 geschärft (`docs/spec.md:346`, „Lauf" ist der einzelne
+**Prüflauf**, nicht die Laufzeit der Anwendung), domain-dev hat den Fehlschlagzweig entsprechend
+neu geplant (T-273), unit-tester hat den zugehörigen Einheitenfall abgelöst (T-274,
+`apps/local-api/test/version/checker.test.ts`). Die alte Zahl „genau einen Aufruf" hätte diese
+Behebung als Verstoß gemeldet und wäre damit derselbe Fehler gewesen wie der Wächter unter
+A-A-21, der die geschlossene Tür maß statt der, die aufging. Was an ihrer Stelle steht, mißt
+**gegen die Uhr statt gegen eine Zahl** — dieselbe Form wie A-V-11′.
+
+**Anforderungen:** A-18.11 (Fassung vom 2026-09-11: „kein wiederholtes Nachfragen im selben
+**Prüflauf**", der gewöhnliche Wiederholtakt und der Mindestabstand nach einem Fehlschlag bleiben
+unberührt). **Ebene:** Integration (`apps/local-api/test/version/checker.test.ts`, Hoheit
+unit-tester, T-274 bereits umgesetzt und gemessen — dieser Eintrag schreibt vor, was der dortige
+Fall zu treffen hat, keine eigene Playwright-Datei; die T-140-Familie kennt hier kein HTTP, das
+über diese Ebene hinausginge). **Lauffähigkeit:** wie oben.
+
 **Vorbedingung:** Attrappe wie `TP-VER-01` (nicht erreichbar), zusätzlich zählt sie jede
-eingehende Anfrage.
-**Schritte:** Prüfung auslösen; anschließend, ohne die Anwendung neu zu starten, ein zweites
-Ereignis auslösen, das in einer normalen Sitzung ebenfalls eine Prüfung anstoßen könnte (genauer
-Auslöser ist T-138/T-139 — hier zählt nur: irgendein Ereignis, das **kein** ausdrücklicher
-Neustart ist).
-**Erwartetes Ergebnis:** Die Attrappe zählt genau **einen** Aufruf für den gesamten Lauf. Der in
-A-18.2 gemeinte wiederkehrende Prüfrhythmus ist etwas anderes als ein Retry nach einem
-Fehlschlag; dieser Fall prüft ausdrücklich nur Letzteres.
+eingehende Anfrage samt Zeitpunkt. Der Prüfer läuft mit einem klein gesetzten Mindestabstand
+(`minIntervalMs`, z. B. 300 ms statt der Betriebsvorgabe von 60 Minuten) — sonst wäre das
+Meßfenster eines Prüffalls nicht praktikabel. Gemessen wird die **Form** des Verhaltens (der
+Mindestabstand hält, und nach ihm folgt ein weiterer Versuch), nicht die konkrete Betriebszahl;
+die Betriebszahl selbst (60 Minuten, höchstens 24 Anfragen je Kalendertag im Dauerfehlschlag,
+gerechnet in T-273 Abschnitt 2 und unabhängig nachgemessen in T-275) ist nicht Sache dieses
+Falls.
+
+**Schritte und erwartetes Ergebnis — zwei Teile, von denen keiner den anderen ersetzt:**
+
+a) **Kein sofortiger zweiter Versuch — der Boden hält.** Prüfung auslösen; nach dem ersten
+   Fehlschlag innerhalb des Mindestabstands ein zweites Mal messen (z. B. bei zwei Dritteln der
+   Frist). Die Attrappe zählt weiterhin genau **einen** Aufruf. Das ist die bisherige Erwartung
+   dieses Falls, unverändert richtig und nicht abgeschwächt — nur nicht mehr für den ganzen Lauf
+   behauptet, sondern für den Mindestabstand.
+b) **Aber danach wird wieder gefragt, und ein Erfolg schlägt im selben Prüflauf durch.** Ohne die
+   Anwendung neu zu starten, über den Mindestabstand hinaus weitermessen (mindestens ein
+   Vielfaches der Frist). Die Attrappe zählt jetzt einen **zweiten** Aufruf, frühestens im
+   Abstand des Mindestabstands zum ersten (an der Uhr gemessen, nicht nur gezählt — derselbe
+   Maßstab wie A-V-11′). Stellt die Attrappe zwischen erstem und zweitem Versuch auf eine
+   gültige Antwort um, wechselt der Zustand von `unknown` auf `known` mit der gemeldeten
+   Fassung, ohne dass die Anwendung neu gestartet wurde — das ist der vom Auftraggeber gemeldete
+   Fall selbst: Die Anwendung startet schneller als das Netz.
+
+**Zwei Gegenproben, wie unter A-V-11′ verlangt, nicht optional:**
+- Ein Prüfer, der nach einem Fehlschlag **nicht** neu plant (der Stand vor T-273), macht Teil b)
+  **rot**: kein zweiter Aufruf erscheint, auch weit über dem Mindestabstand hinaus.
+- Ein Prüfer, der nach einem Fehlschlag **sofort** neu versucht (Mindestabstand auf null
+  gestellt), macht Teil a) **rot**: ein zweiter Aufruf erscheint innerhalb des Mindestabstands.
+
+**Was unverändert bleibt und nicht neu geprüft werden muss:** Der Zustand bleibt bei jedem
+Fehlschlag `unknown` (Anschluss an die gemeinsame Erwartung der Fehlschlag-Familie oben, nicht
+Teil dieses Falls), und der in A-18.2 gemeinte gewöhnliche Wiederholtakt ist etwas anderes als
+der Mindestabstand nach einem Fehlschlag — dieser Fall prüft weiterhin ausdrücklich nur
+Letzteres.
+
+**Berührt nicht `TP-VER-10` bis `TP-VER-13`:** Der E2E-Eintritt
+(`tests/e2e/playwright.version-check.config.ts`, `version-check-live.spec.ts`) baut den Prüfer
+in `composition.ts:198` ohne `minIntervalMs`, also mit den betriebsüblichen 60 Minuten — auch im
+Playwright-Aufbau. Gegen eine Einzelfall-Frist von 180 s kann ein Wiederholungsversuch nach einem
+Fehlschlag dort nicht feuern, und keiner der fünf dortigen Fälle behauptet eine Anzahl an
+Anfragen (nachgesehen, kein Treffer). Nachgemessen für diesen Auftrag: siehe Bericht T-277.
 
 ---
 
@@ -3595,6 +3676,20 @@ Anzeige heißen ausschließlich **„Frist"**. Ein Nachweis dafür ist eine Posi
 `apps/web/dist` nach „Fälligkeitsdatum", „fällig am" und „Deadline" mit erwarteter Trefferzahl
 null — Bauart wie `distContainsText` aus `support/web-build-services.ts` (T-055), hier umgekehrt
 als Abwesenheitsprüfung. Ebene: Build-Nachweis, `web-build-smoke.spec.ts`-Familie.
+
+**Verengt auf gerenderten Text (T-263).** Ein `shared/ui`-Umbau zog `DeadlineFlag.tsx` in ein
+eigenes Bündelstück; sein Name landet seither in fremden Import-Anweisungen
+(`DeadlineFlag-<hash>.js`) und in Vorlade-Listen — kein Oberflächentext, aber ein Treffer für den
+rohen Substring-Vergleich. **Gemessen, nicht vermutet:** Am Vorzustand (`HEAD` vor dem Umbau,
+`git stash`/`git stash pop` mit Pfadsatz-Beleg) war derselbe Fall schon aus einem anderen Grund
+rot — der Requisitenname `onDeadlineChange` in `TodoListScreen` enthält „Deadline" als
+Teilzeichenkette. Beides ist ein Fund über Bezeichner, keiner über die Oberfläche.
+`distContainsRenderedText` (jetzt in `support/web-build-services.ts`, mit eigenem
+`RenderedTextMatch`-Rückgabewert) durchsucht seither nur noch JS-String-Literale und schließt
+Modulpfade/gehashte Bündeldateinamen aus. Gegenprobe unter
+`tests/fixtures/web-build-rendered-text/` (`ohne-verstoss/`, `mit-verstoss/`) belegt beide
+Richtungen: Bezeichner/Importe/Dateinamen lösen keinen Treffer aus, ein echtes JSX-Kind-Literal
+mit demselben Wort wird weiterhin erkannt und die Fundstelle benannt (E-101/E-103).
 
 #### TP-FRIST-04 bis TP-FRIST-07 — Die drei Zustände, und der vierte, der keiner ist (A-19.5, A-19.6)
 

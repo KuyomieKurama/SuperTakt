@@ -201,9 +201,16 @@ beim Anlegen aus dem Outlook-Add-in heraus.
 **Nachtrag — A-10.8.** Das Add-in erkennt die Call-Nummer über einen regulären Ausdruck, der in
 den Add-in-Einstellungen konfigurierbar ist und nicht im Code steht.
 
-**Nachtrag — A-10.9.** Existiert bereits ein Todo mit derselben Call-Nummer, bietet das Add-in
-an, auf dieses vorhandene Todo zu buchen, statt ein Duplikat anzulegen. Die Entscheidung trifft
-der Benutzer; das Add-in legt nicht stillschweigend an oder zusammen.
+**Nachtrag — A-10.9.** Existiert bereits ein Todo mit derselben Call-Nummer, **weist das Add-in
+darauf hin**, bevor ein zweites entsteht. Es bietet am gefundenen Todo **keine Handlung an** —
+weder eine Zeitbuchung noch einen Anhang. Der Benutzer entscheidet daraufhin, ob er das
+vorhandene Todo in SuperTakt selbst weiterbearbeitet oder aus dem Add-in heraus bewußt ein neues
+anlegt; das Add-in legt nicht stillschweigend an oder zusammen.
+
+Geändert am 2026-09-10 mit der Entscheidung zu F-21 (E-100). Die frühere Fassung verlangte ein
+Buchungsangebot auf dem gefundenen Todo; Pull Request #15 hatte daraus ein Anhängen gemacht, und
+E-100 streicht beides. Der Hinweis selbst bleibt — ohne ihn entstünde ein Duplikat unbemerkt, und
+das ist der Zweck dieser Anforderung (R-15).
 
 **Nachtrag — A-10.10.** Die Referenzbilder aus dem Originalauftrag liegen nicht vor. Bis sie
 nachgereicht werden, gestaltet sich das Add-in allein aus dem Designsystem der Hauptanwendung.
@@ -336,7 +343,7 @@ in dem sie erlaubt ist.
 | A-18.8 | Wählt der Benutzer „Installieren", öffnet Takt die offizielle Release-Seite dieser Fassung. Mehr geschieht nicht. |
 | A-18.9 | Takt lädt zu keinem Zeitpunkt eine Datei herunter und installiert zu keinem Zeitpunkt etwas. Herunterladen und Installieren löst ausschließlich der Benutzer aus, außerhalb von Takt. |
 | A-18.10 | Wählt der Benutzer „Überspringen", wird genau diese Fassung übersprungen. Für sie erscheint der Hinweis nicht wieder; eine spätere, neuere Fassung wird wieder gemeldet. |
-| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen im selben Lauf. Der Grund steht im Protokoll. |
+| A-18.11 | Ist GitHub nicht erreichbar, antwortet die Quelle unerwartet oder fehlt eine Versionsangabe, bleibt die Prüfung folgenlos: kein Hinweis, keine Fehlerfläche, kein wiederholtes Nachfragen **im selben Prüflauf**. Der gewöhnliche Takt bleibt davon unberührt — der nächste Versuch folgt frühestens nach dem Mindestabstand von einer Stunde. Ein Fehlschlag beendet die Prüfung **nicht** für die Laufzeit der Anwendung. Der Grund steht im Protokoll. |
 | A-18.12 | Die Prüfung überträgt nichts über den Benutzer, den Bestand oder die Nutzung. Sie stellt eine Frage und liest eine Antwort. |
 
 **Was diese Anforderung ausdrücklich nicht ist.** Kein Selbstaktualisierer, kein Hintergrundlader,

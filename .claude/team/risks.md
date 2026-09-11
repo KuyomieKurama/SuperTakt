@@ -335,3 +335,77 @@ Zwei Dinge daran gehören festgehalten, weil sie über diesen einen Fall hinausr
    damit scheinbar richtig. Genau dafür stehen A-A-4 und A-A-10 — die Zweige, die nur unter
    Windows etwas anderes tun, sind die, die niemand betritt. Ein grüner Lauf auf dem falschen
    Betriebssystem ist bei dieser Klasse kein Nachweis, sondern eine Aussage über den Läufer.
+
+---
+
+## R-23 — Was im Wurzelspeicher liegt, gilt für alles
+
+**Schwere:** hoch. **Betrifft:** security-checker, frontend-dev. Neu am 2026-09-10 (A-23, E-098).
+
+Die Hülle legt auf Bestätigung ein Zertifikat in `Cert:\CurrentUser\Root`. Der Zweck ist eng —
+der Aufgabenbereich auf `https://localhost:17844` soll ohne Warnung laden. Die Wirkung ist es
+nicht: Ein Wurzelzertifikat gilt dem Benutzerkonto für **jede** TLS-Verbindung, für jeden Wirt,
+in jedem Programm, das diesen Speicher benutzt. Wer den Auftrag verbiegen kann — durch einen
+Pfad, einen zweiten DNS-Namen, ein CA-Kennzeichen —, bekommt keine Ausnahme für einen Port,
+sondern einen Generalschlüssel für das Konto.
+
+Dazu kommt, daß dieser Weg **ausschließlich** Windows-Code ist und in dieser Umgebung nie
+gelaufen ist. Jede Aussage darüber ist heute am Quelltext gelesen.
+
+**Umgang:** E-098 — der Auftrag trägt nur den Fingerabdruck, die Hülle wählt den Pfad, CA und
+zusätzliche DNS-Namen sind ausgeschlossen, die Windows-Sicherheitsabfrage bleibt stehen, und ein
+Eintrag im Speicher gilt nicht als bestandener HTTPS-Test. Vor der Auslieferung einmal auf einem
+Windows-Rechner fahren (T-B05).
+
+---
+
+## R-24 — Ein Fremdbackup ist eine fremde Datei, und aus ihr entstehen Dateipfade
+
+**Schwere:** hoch. **Betrifft:** security-checker, domain-dev, integration-dev. Neu am
+2026-09-10 (A-20.7 bis A-20.10, E-097 Punkt 4).
+
+R-21 sagt: Ein Dateianhang ist ein Startknopf, und jeder Weg in den Bestand ist ein Weg zu einem
+Programmstart. Seit Abschnitt 20 gibt es einen neuen Weg in den Bestand, und er ist der breiteste
+bisher: eine JSON- oder CSV-Datei, die der Benutzer von außen mitbringt. Aus ihren
+`FILE`-Einträgen entstehen **Dateipfade als Anhänge** — genau die Sorte Zeichenkette, die R-21
+beschreibt, nur diesmal nicht von Hand eingetippt, sondern hundertfach auf einmal und ungelesen.
+
+Die Datei kommt aus einem Programm, dem der Benutzer vertraut. Das macht sie nicht
+vertrauenswürdig: Sie ist eine Datei auf der Platte, und wer sie schreiben kann, schreibt in den
+Bestand.
+
+**Umgang:** Die Prüfungen aus E-072 gelten für importierte Anhänge unverändert und an derselben
+Stelle — im Öffnen-Befehl der Hülle, bei jedem Aufruf, nach Art getrennt. Eine Prüfung beim
+Import trägt zusätzlich, aber nicht statt dessen: zwischen Import und Öffnen liegt der Bestand.
+Ausdrücklich zu messen ist, daß ein importierter Pfad denselben Weg nimmt wie ein eingetippter.
+
+---
+
+## R-25 — Eine Zusage, die der Nachbar bricht, ist schlimmer als keine Zusage
+
+**Schwere:** hoch. **Betrifft:** alle Rollen. Neu am 2026-09-10 (T-245-1, F-21, E-099).
+
+Seit Pull Request #16 hängt der Aufgabenbereich die geöffnete Outlook-Nachricht als Verweis an
+ein vorhandenes Todo. A-19.19 verbietet das. Der Widerspruch ist benannt und wartet auf eine
+Entscheidung — das ist tragbar.
+
+Nicht tragbar ist der zweite Teil: An sechs Stellen behauptet der Bestand weiterhin die
+Abwesenheit dieser Fläche, und eine dieser Stellen ist ein **Wächter**, der grün läuft.
+`proof:addin` Abschnitt 18 mißt die Wirkung — null Zeilen in `todo_attachment` — aber er ruft
+dafür die Anlegetür auf, und die legt tatsächlich keinen Anhang an. Ein Prüfer, der ihn liest,
+schließt daraus auf eine Zusage, die nicht mehr gilt.
+
+Das ist die Gefahr, nicht die Route: Ein Bestand, der falsche Zusagen macht, wird geglaubt. Die
+Route ist eng gebaut und einzeln bewertbar; der falsche Satz daneben wirkt an jeder Stelle, an
+der jemand aufhört zu prüfen, weil er ihn gelesen hat.
+
+**Umgang:** E-099, seit dem 2026-09-10 abgelöst durch **E-100**. F-21 ist beantwortet: die Route
+fällt, A-19.19 bleibt. Damit verschwindet nicht der Widerspruch, sondern seine Ursache — die
+sechs Textstellen werden wahr, statt geändert zu werden. Der Wächter aus `proof:addin`
+Abschnitt 18 wird dabei **schärfer** gestellt und mißt künftig die Abwesenheit jeder Anhangstür
+unter `/addin`, nicht mehr nur die Wirkung eines Aufrufs der Anlegetür (T-247).
+
+**Offen bleibt die Lehre, und sie ist der Grund, warum dieses Risiko stehen bleibt:** Für jeden
+künftigen Wächter gilt E-099 Punkt 3. Wer eine Abwesenheit zusichert, spannt seine Menge an der
+Anforderung auf, nicht an der Route, die er kennt. Das Risiko ist mit T-247 nicht erledigt,
+sondern auf seinen nächsten Anlaß vertagt.

@@ -408,9 +408,16 @@ test.describe('O-JP — der Fokus überlebt das Schließen des "Leistung nachtra
 
     try {
       await gotoExport(page);
-      const group = page.locator('.egroup', { hasText: marker });
+      // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+      // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag, und ist erst
+      // nach Aufklappen des Todo-Kopfes erreichbar (T-249-8). Das Todo trägt
+      // hier genau eine Buchung an genau einem Tag.
+      const todoGroup = page.locator('.export-todo', { hasText: marker });
+      await expect(todoGroup).toBeVisible();
+      await todoGroup.getByRole('button', { name: /klappen/ }).click();
+      const group = todoGroup.locator('.egroup');
       await expect(group).toBeVisible();
-      await group.getByRole('button', { name: /aufklappen/ }).click();
+      await group.getByRole('button', { name: /klappen/ }).click();
 
       const row = group.locator('.eentry');
       await expect(row).toHaveCount(1);

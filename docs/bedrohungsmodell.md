@@ -2035,7 +2035,7 @@ angegriffen statt gelesen.
 
 1. Semgrep meldete **Teilparse-Fehler** in vier Dateien — `packages/domain/src/index.ts:34`,
    `packages/storage/src/index.ts:14`, `packages/storage/src/sqlite/paging.ts:40`,
-   `apps/web/src/lib/exportTemplateModel.ts:503`. Teile dieser Dateien sind **nicht analysiert
+   `apps/web/src/features/export/exportTemplateModel.ts:503`. Teile dieser Dateien sind **nicht analysiert
    worden**. Sie wurden dafür von Hand gelesen.
 2. Der YAML-Parser von Semgrep scheiterte an `apps/local-api/openapi/takt-local-api.yaml:2575`.
    Die Datei selbst ist in Ordnung: PyYAML liest sie vollständig, 3060 Zeilen, OpenAPI 3.1.0.
@@ -2393,7 +2393,7 @@ T-067 ist je Befund im Code nachgesehen worden.
 | **B-2.10** — das Add-in-Token erreicht die vollen Fachrouten, liest und überschreibt den internen Vermerk, setzt den Exportordner, löst einen Export aus | **behoben** (T-034). Die Richtung ist umgedreht: **alles** verlangt `session`, abgesenkt wird nur im Teilbaum `/api/v1/addin` und für den einen Pfad `GET /health`. Eine neu hinzugefügte Fachroute ist damit von selbst geschlossen. Punktsegmente werden gar nicht erst abgesenkt. | `apps/local-api/src/access/route-policy.ts` |
 | **B-3.2** — Vorlagenfeldnamen ungeprüft, `__proto__` und Doppelnamen führen zu stillem Feldverlust | **behoben.** `RESERVED_FIELD_NAMES` weist `__proto__`, `constructor` und `prototype` ab; die Ergebniszeile entsteht als `Object.create(null)`, hat also gar keinen Prototyp, den man vergiften könnte. Zwei voneinander unabhängige Gründe. | `packages/export/src/template.ts`, `packages/export/src/render.ts:155` |
 | **B-7.2** — die Datenbankdateien liegen mit 0644 | **behoben.** `DATABASE_FILE_MODE = 0o600`, angewandt auf die Hauptdatei **und** ihre Begleiter `-wal`/`-shm` — der lautlose Fehler, `chmod` nur auf die Hauptdatei zu setzen, ist ausdrücklich vermieden. Verzeichnisse `0o700`. Ein Dateisystem ohne POSIX-Rechte lässt den Start nicht scheitern. | `packages/storage/src/sqlite/database.ts`, `apps/local-api/src/access/paths.ts` |
-| **B-5.1 P1 / B-5.2** — der Exportordner ist ein Freitextfeld ohne Rückfrage | **behoben.** Der Ordner wird im Systemdialog gewählt; die Fähigkeitenliste der Hülle gibt davon **ausschließlich** `dialog:allow-open` frei (kein `save`, `message`, `ask`, `confirm`). Dienstseitig erkennt eine Merkmalsprüfung Systemverzeichnisse, Netzdateisysteme, UNC-Pfade und Synchronisationsordner; die Oberfläche kennt drei Stufen `reject`/`confirm`/`warn`. | `apps/local-api/src/access/export-directory.ts`, `apps/web/src/lib/exportDirectoryAdvice.ts`, `apps/desktop/src-tauri/capabilities/default.json` |
+| **B-5.1 P1 / B-5.2** — der Exportordner ist ein Freitextfeld ohne Rückfrage | **behoben.** Der Ordner wird im Systemdialog gewählt; die Fähigkeitenliste der Hülle gibt davon **ausschließlich** `dialog:allow-open` frei (kein `save`, `message`, `ask`, `confirm`). Dienstseitig erkennt eine Merkmalsprüfung Systemverzeichnisse, Netzdateisysteme, UNC-Pfade und Synchronisationsordner; die Oberfläche kennt drei Stufen `reject`/`confirm`/`warn`. | `apps/local-api/src/access/export-directory.ts`, `apps/web/src/features/export/exportDirectoryAdvice.ts`, `apps/desktop/src-tauri/capabilities/default.json` |
 
 Von den nicht blockierenden Restpunkten aus T-023: **S-05 behoben**
 (`PRAGMA trusted_schema = OFF`). **S-08 überholt** — die 44 Pfade der OpenAPI verweisen über
@@ -2511,7 +2511,7 @@ zu kommen, und die Gestaltprüfung in `proof:openapi`. Wer diese Grenze künftig
 ### 14.3 B-1.7 fortgeschrieben — zwei gemessene Zahlen
 
 Der Fragezeichenparameter `poolId` von `GET /todos` wird zerteilt, ohne geprüft und ohne gezählt zu
-werden (`apps/local-api/src/routes/todos.ts:105`, `:114`). Injektion ist ausgeschlossen — gemessen
+werden (`apps/local-api/src/features/todos/routes.ts:105`, `:114`). Injektion ist ausgeschlossen — gemessen
 mit `'`, `a' OR '1'='1` und `%` als Poolkennung, alle drei ergeben 200 mit leerer Trefferliste, weil
 die Abfrage ausschließlich mit Platzhaltern arbeitet. Die Wirkung ist Rechenzeit und ein
 Statuscode:
@@ -2713,7 +2713,7 @@ zugleich vorgeführt worden:
   `apps/local-api/src/access/**`, `app.ts`, `config.ts` und `composition.ts` sind ebenfalls
   unberührt.
 - **Und trotzdem sieht das Add-in seit dieser Welle etwas Neues.**
-  `apps/local-api/src/usecases/pool-movement.ts:152` fragt `pools.list('all')`, also einschließlich
+  `apps/local-api/src/pool-movement.ts:152` fragt `pools.list('all')`, also einschließlich
   der Regeln mit `placement: 'board'`. Der Add-in-Dienst benutzt genau diesen Anwendungsfall
   (`routes/addin/service.ts:291`, `:722`) und gibt seine drei Namenslisten als `poolNames`,
   `enteringPoolNames` und `leavingPoolNames` heraus (`routes/addin/index.ts:367`, `:373`, `:379`).
@@ -2872,7 +2872,7 @@ nicht.
 ### 15.7 Was in dieser Welle nachweislich gehalten hat
 
 - **Die Notiz-Trennung (VG-5)** — und diesmal mit einem Wächter, der nicht mehr über nichts grün
-  werden kann. `packages/export` ist im ganzen Diff **unberührt**; `usecases/pool-movement.ts` und
+  werden kann. `packages/export` ist im ganzen Diff **unberührt**; `pool-movement.ts` und
   `packages/domain/src/pool-movement.ts` kennen kein Notizfeld. Die drei Listen tragen Namen und
   sonst nichts. *(Seit T-104 sind es die drei Listen **innerhalb** von `poolMovement`; für die
   Notiz-Trennung ändert das nichts — siehe 16.6.)*
@@ -2954,7 +2954,7 @@ andere Route:
 | `apps/local-api/src/routes/addin/service.ts:323`, `:716` | `bookingMovement(...)` — eine Hilfsfunktion für beide Routen |
 | `apps/local-api/src/routes/addin/index.ts:217` | `matches: result.matches` — `GET /addin/todo-matches` |
 | `apps/local-api/src/routes/addin/index.ts:377` | `poolMovement: result.poolMovement` — `POST /addin/todos/{todoId}/time-entries` |
-| `apps/local-api/src/usecases/pool-movement.ts:381` | `unit.pools.list('all')` — unverändert der Ort, an dem die reine Board-Spalte hereinkommt |
+| `apps/local-api/src/pool-movement.ts:381` | `unit.pools.list('all')` — unverändert der Ort, an dem die reine Board-Spalte hereinkommt |
 | `apps/local-api/src/routes/addin/ports.ts:146` | `Pick<PoolPort, 'list' \| 'resolveAxes'>` — **unverändert** |
 
 **Bewertung: dieselbe wie in 15.3.** Es ist dieselbe Auskunft — Namen von Regeln, die der Benutzer
@@ -3046,8 +3046,8 @@ T-101 hat H-2 aus R-3a umgesetzt: `apps/local-api/src/http/input.ts:111` führt 
 (U+202A bis U+202E, U+2066 bis U+2069), und `titleSchema` (`:126`) wie `nameSchema` (`:127`) weisen
 einen Treffer mit 422 ab, ohne den Wert in der Meldung zu wiederholen. Das ist gut gebaut: eine
 Prüfung, zwei Schemata, deutsche Meldung, kein stilles Bereinigen. Über sie laufen alle Namen der
-Hauptfläche — Tags, Ordner, Regeln, Status, Exportvorlagen (`routes/structure.ts`,
-`routes/export.ts`) — und die Titel und Tagnamen aus `POST /todos` (`routes/todos.ts:51`, `:66`).
+Hauptfläche — Tags, Ordner, Regeln, Status, Exportvorlagen (`features/structure/routes.ts`,
+`features/export/routes.ts`) — und die Titel und Tagnamen aus `POST /todos` (`features/todos/routes.ts:51`, `:66`).
 
 > **Nachtrag T-125 (2026-09-04).** Auch diese Aufzählung ist der Stand vor Welle K und
 > **unvollständig**: T-117 hat U+061C, U+200E und U+200F ergänzt, T-122 die ganze Klasse nach
@@ -3118,7 +3118,7 @@ holt `readJson` bereits aus `../http/input.ts`.
 > Was der Befund nicht mit erledigt hat, ist die **Anzeigeseite** — siehe E-063 und 17.1.
 
 **Und der Kommentar daneben gehört mit richtiggestellt.** `routes/addin/schema.ts:74` sagt heute:
-„Der Wortlaut des Schemas ist zeichengleich der aus `routes/todos.ts` (`nameSchema` =
+„Der Wortlaut des Schemas ist zeichengleich der aus `features/todos/routes.ts` (`nameSchema` =
 `z.string().trim().min(1).max(200)`), damit die Hauptanwendung und das Add-in dieselbe Eingabe
 annehmen und dieselbe abweisen." Seit T-101 ist dieser Satz falsch. Ein Kommentar, der eine
 Gleichheit zusichert, die es nicht mehr gibt, ist der Grund, warum diese Lücke bei der nächsten
@@ -3160,11 +3160,11 @@ Damit niemand mehr von ihr erwartet, als sie zusagt. Drei Grenzen, alle drei **k
 
 ### 16.6 `POST /time-entries` mit `poolMovement` — bewertet wie die Timer-Routen
 
-`apps/local-api/src/usecases/timer.ts:670` rechnet die Bewegung in **derselben** Transaktion, in
+`apps/local-api/src/features/timer/timer.ts:670` rechnet die Bewegung in **derselben** Transaktion, in
 der die Buchung entsteht: `presenceBeforeBooking` vor dem Schreiben, `unit.timeEntries.create`,
 dann `movementOfBooking` über denselben `unit`. Das ist die Anordnung, die es sein muss — eine
 Bewegung, die über einen Bestand urteilt, den es zum Zeitpunkt der Handlung nicht mehr gab, wäre
-eine Falschauskunft. Die Antwort steht flach (`routes/time.ts`, `entryAfterBooking`), wie an
+eine Falschauskunft. Die Antwort steht flach (`features/timer/routes.ts`, `entryAfterBooking`), wie an
 `PUT`/`DELETE /done`.
 
 **Datenklasse: keine neue.** Es sind Namen von Regeln aus dem eigenen Bestand, an einer Route der
@@ -3181,7 +3181,7 @@ stattfindet. Ein Satz, der weniger sagt, als geschehen ist, ist die harmlose Ric
 mehr behauptet, ist die andere.
 
 **H-1 in neuer Fassung — der Aufwand je Anfrage.** Jede Route, die eine Bewegung rechnet, ruft
-`poolMovementNamer` (`usecases/pool-movement.ts:379`), und der löst **jede** Regel des Bestands
+`poolMovementNamer` (`pool-movement.ts:379`), und der löst **jede** Regel des Bestands
 über `resolveAxes` auf. Zwei Dinge haben sich gegenüber R-3 H-1 verbessert, eines ist hinzugekommen:
 
 - **Besser:** Die Ordnerterme einer Achse werden in **einer** rekursiven Abfrage aufgelöst
@@ -3189,7 +3189,7 @@ mehr behauptet, ist die andere.
   R-3 H-1 gilt für diesen Pfad nicht.
 - **Besser:** Der Normalfall kostet nichts. `movementOfBooking` gibt `null` zurück, **bevor** es
   liest, wenn das Todo schon eine offene Buchung hatte (`timer.ts:382`); `switchTodoDone` ebenso,
-  wenn das Kennzeichen sich nicht bewegt hat (`usecases/todos.ts:325`); die Duplikatsuche des
+  wenn das Kennzeichen sich nicht bewegt hat (`features/todos/todos.ts:325`); die Duplikatsuche des
   Add-ins baut den Namensgeber verzögert und höchstens einmal je Anfrage.
 - **Neu:** Die Zahl der Aufrufstellen ist von drei auf **acht** gewachsen (Start, Stopp,
   `orphaned/resolve`, `PUT`/`DELETE /done`, `POST /time-entries`, zwei Add-in-Routen), und die
@@ -3204,7 +3204,7 @@ mit jeder neuen Aufrufstelle mehr wert wird.
 
 **`orphan_discarded`** (T-101, O-R) ist sicherheitlich folgenlos und ausdrücklich richtig gebaut:
 Der Grund ist ein Aufzählungswert aus der Domäne (`packages/domain/src/time-entry.ts:607`), kein
-Freitext, er wird in `usecases/timer.ts:547` durchgereicht statt neu gesetzt, und der
+Freitext, er wird in `features/timer/timer.ts:547` durchgereicht statt neu gesetzt, und der
 Verwerfen-Zweig liest **nichts** und löst keine Regel auf. Die Antwort trägt in diesem Fall
 `poolMovement: null` per Typ (`timer.ts:315`).
 
@@ -3243,7 +3243,7 @@ Geprüft über den **ganzen** versionierten Baum, nicht nur über den Diff.
 | Kennung | Schwere | Ort | Zuständig |
 |---|---|---|---|
 | **T-112-1** | sollte | `routes/addin/schema.ts:66`, `:85` — die Wache aus H-2 fehlt an der Add-in-Tür, und der Kommentar `:74` sichert das Gegenteil zu; siehe 16.4 | integration-dev |
-| **T-112-H1** | Hinweis | `usecases/pool-movement.ts:379` — acht Aufrufstellen, ein `resolveAxes` je Regel, keine Obergrenze für die Zahl der Regeln; siehe 16.6 | Auftraggeber, Orchestrator |
+| **T-112-H1** | Hinweis | `pool-movement.ts:379` — acht Aufrufstellen, ein `resolveAxes` je Regel, keine Obergrenze für die Zahl der Regeln; siehe 16.6 | Auftraggeber, Orchestrator |
 | **T-112-H2** | Hinweis | `apps/local-api/test/http/input.test.ts` — die Steuer- und Bidi-Zeichen stehen roh im Quelltext statt als Escape-Folge. Ein NUL macht die Datei für Git zu einer **Binärdatei**: `git diff` zeigt „Bin 0 -> 7238 bytes" statt Zeilen, und Semgrep parst sie nur teilweise (Syntaxfehler bei `:60`). Ausgerechnet der Nachweis einer Sicherheitswache ist damit im Review unsichtbar. Escapes prüfen dasselbe und lassen die Datei Text bleiben. | unit-tester |
 | **T-112-H3** | Hinweis, halb erledigt | `apps/web/src/lib/errorText.ts` — T-110 ist während der Prüfung eingetroffen und **hält**: kein neuer Ausgabeweg, der Satz des Dienstes samt Kürzungshinweis bleibt stehen, der Rückfall auf `message` ist ausgesprochen (16.3). Offen bleibt allein, daß die Namen in **einem** zusammengefügten Satz stehen statt als eigene Knoten (16.5 Punkt 2) — geringe Schwere, kein Rückschritt gegenüber vorher. | frontend-dev |
 | S-1 (aus R-3a) | sollte, vor dem Push | Zweig `backup/status-als-regelterm-vor-filter`, `size-pack` 181,07 MiB — unverändert offen | Orchestrator |
@@ -3575,7 +3575,7 @@ Escape-Folge da, und `docs/bedrohungsmodell.md` ist über eine Codepunktsuche al
 | **T-125-5** | Hinweis | `apps/desktop/src-tauri/src/sidecar.rs:318-327` — ein Text für Code 78, „nicht erhalten". Für `user_invalid` die falsche Auskunft; verdeckt ein Manipulationssignal (17.4). **Siehe 17.9: von der anderen Seite beantwortet, Rest klein.** | frontend-dev |
 | **T-125-6** | Hinweis | `packages/storage/src/sqlite/paging.ts:40` — rohes `U+0000` macht eine **Produktivdatei** für Git zur Binärdatei; seit `d9555d0` nie im Review lesbar. **Offen.** | domain-dev |
 | **T-125-H7** | Hinweis | rohe unsichtbare Zeichen in `T-111-unit-tester.md` und `T-121-unit-tester.md`. Berichte, kein Code. **Offen.** | unit-tester |
-| T-112-H1 | Hinweis, unverändert offen | `usecases/pool-movement.ts` — ein `resolveAxes` je Regel, keine Obergrenze für die Zahl der Regeln. In diesem Diff nicht verschlechtert. | Auftraggeber, Orchestrator |
+| T-112-H1 | Hinweis, unverändert offen | `pool-movement.ts` — ein `resolveAxes` je Regel, keine Obergrenze für die Zahl der Regeln. In diesem Diff nicht verschlechtert. | Auftraggeber, Orchestrator |
 | T-112-H3 | Hinweis, halb offen | `apps/web/src/lib/errorText.ts` — die Namen stehen in **einem** zusammengefügten Satz statt als eigene Knoten. | frontend-dev |
 | S-1 (aus R-3a) | sollte, vor dem Push | Zweig `backup/status-als-regelterm-vor-filter`. Bis zur Bereinigung: ausschließlich benannte Zweige pushen, nie `--all`, nie `--mirror`. | Orchestrator |
 
@@ -3709,7 +3709,7 @@ können daran falsch sein, und sie sind verschieden schlimm:
 **Was die bestehende Behandlung leistet — und was sie hier ausdrücklich nicht leistet.**
 
 E-063 ist die richtige Klasse, aber sie deckt diesen Fall nur zur Hälfte. `<Foreign>`
-(`apps/web/src/components/Foreign.tsx`) setzt fremden Text in ein `<bdi>` und ersetzt unsichtbare
+(`apps/web/src/shared/ui/Foreign.tsx`) setzt fremden Text in ein `<bdi>` und ersetzt unsichtbare
 Zeichen durch `U+FFFD`; `proof:foreign` erzwingt über den Typ `ForeignText`, dass keine
 Anzeigestelle daran vorbeikommt. Das greift, **sobald** ein Text in der Oberfläche steht.
 
@@ -3891,8 +3891,8 @@ lässt. Der letzte Punkt ist der, der in diesem Bestand schon einmal weh getan h
 | Gesamtfrist | **5 000 ms** | Deckt Verbindung, Kopfzeilen **und** das Lesen des Rumpfes in **einer** Frist. Die eingehende Frist des Dienstes ist 15 000 ms (`REQUEST_TIMEOUT_MS`); die ausgehende muss deutlich darunter liegen, weil sie im Hintergrund läuft und niemanden warten lässt. **Gemessen:** `AbortSignal.timeout(700)` bricht eine Antwort, die `{"a":` schreibt und dann schweigt, nach **703 ms** ab (`TimeoutError`). Die Frist greift also auch beim Rumpf und nicht nur beim Verbindungsaufbau. |
 | Obergrenze der gelesenen Antwort | **65 536 Bytes des entpackten Stroms** | Beim Lesen gezählt, nicht aus `content-length` und nicht aus `content-encoding` abgeleitet (Messung in 18.2: Faktor 1 028). Die echte Antwort von `releases/latest` liegt für diesen Bestand bei rund 15 KiB (Vorspann, Prüfsummen, erzeugte Beschreibung, acht Erzeugnisse); 64 KiB gibt das Vierfache. **Auflage an T-138:** die tatsächliche Größe einmal gegen die echte Adresse messen und in den Bericht schreiben. Liegt sie über 32 KiB, wird die Zahl **bewusst** angehoben und nicht stillschweigend. |
 | Antwort, die nie endet | fällt unter die Gesamtfrist | Der bis dahin gelesene Teil wird **verworfen**, nicht geparst. Ein halbes JSON ist keine Antwort. |
-| Häufigkeit | **eine** ausgehende Anfrage je Start, danach höchstens eine je **24 h**; harter Boden von **60 min** zwischen zwei Anfragen desselben Laufs | A-18.2 verlangt „beim Start und danach regelmäßig". 24 h ist für ein Werkzeug, das ein paar Mal im Jahr eine Fassung bekommt, reichlich. Der Boden schützt gegen einen Zeitgeber, der aus irgendeinem Grund öfter feuert. |
-| Nach einem Fehlschlag | **kein zweiter Versuch im selben Lauf** | Wörtlich A-18.11. Der Zeitgeber wird nach einem Fehlschlag **nicht** neu gestellt. Das ist strenger, als man es von selbst bauen würde, und es ist die Anforderung. |
+| Häufigkeit | **eine** ausgehende Anfrage je Start, danach höchstens eine je **24 h**; harter Boden von **60 min** zwischen zwei ausgehenden Anfragen **desselben Prozesses** | A-18.2 verlangt „beim Start und danach regelmäßig". 24 h ist für ein Werkzeug, das ein paar Mal im Jahr eine Fassung bekommt, reichlich. Der Boden schützt gegen einen Zeitgeber, der aus irgendeinem Grund öfter feuert. **Berichtigt am 2026-09-11 (T-275, A-A-70).** In der linken Spalte stand „zwischen zwei Anfragen desselben **Laufs**". Das Wort trug hier schon dieselbe Zweideutigkeit, die eine Zeile tiefer zum Fehler geworden ist: Der Boden ist eine Zusage über die **Prozeßlaufzeit** und gilt über beide Zweige — nach einem Erfolg wie nach einem Fehlschlag —; der einzelne Prüflauf hat mit ihm nichts zu tun. |
+| Nach einem Fehlschlag | **kein** zweiter Versuch im selben **Prüflauf** — aber der Takt läuft weiter, und zwar auf dem **Boden**: der nächste Versuch frühestens nach 60 min | **Berichtigt am 2026-09-11 (T-275, A-A-70). Der alte Wortlaut stand hier, in beiden Spalten: „kein zweiter Versuch im selben Lauf" und „Wörtlich A-18.11. Der Zeitgeber wird nach einem Fehlschlag **nicht** neu gestellt. Das ist strenger, als man es von selbst bauen würde, und es ist die Anforderung."** Er war nicht streng, er war ein Fehler, und der Halbsatz „und es ist die Anforderung" hat ihn festgeschrieben: „Lauf" war als *Programmlauf* gelesen, und damit beendete **ein** Fehlschlag die Versionsprüfung für die gesamte Laufzeit der Anwendung. Häufigster Auslöser, vom Auftraggeber gemeldet: Die Anwendung startet schneller als das Netz. Was dabei herauskam, war nicht „eine Anfrage je 24 h", sondern **eine Anfrage, einmal**. A-18.11 sagt seit dem 2026-09-11 ausdrücklich **Prüflauf**; bewertet in Abschnitt 36. |
 | Zeitgeber und laufender Aufruf beim Anhalten | Zeitgeber `unref()`t, `fetch` an einem `AbortController`, den `shutdown()` auslöst | Sonst hält ein Netzaufruf, der auf eine Antwort wartet, die Ereignisschleife über die Abschaltfrist hinaus — genau der Weg zu 17.2. `main.ts:420` macht es beim Abschalt-Zeitgeber bereits vor. |
 
 **Und die Auflage, die man ohne den lokalen Bedrohungsraum nicht schriebe.**
@@ -4068,7 +4068,7 @@ Zwanzig Auflagen. Jede ist so geschrieben, dass sie entweder eine Zahl oder eine
 | **A-V-8** | `tag_name` muss `typeof === 'string'` sein; ohne führendes `v` muss es `^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}(-[0-9A-Za-z.-]{1,64})?$` erfüllen. Sonst stiller Fehlschlag. | Prüffälle: `null`, `42`, `{}`, `[]`, `true`, fehlend, `""`, 60 000 Zeichen, `../../evil`, `1.2.3?x=1` — jeder ergibt einen stillen Fehlschlag ohne Wurf. |
 | **A-V-9** | Die Ordnung liegt in `packages/domain`, zerlegt in drei Zahlen und vergleicht numerisch. `0.10.0 > 0.9.0`. Eine Vorabkennung gilt als **kleiner** als dieselbe Fassung ohne (sonst meldete sich `1.2.3` gegenüber installiertem `1.2.3-rc.1` nicht). Jede Komponente ≤ 999 999 999. | Tabellenprüfung in `packages/domain/test`; kein `localeCompare`, kein `<` auf Zeichenketten. |
 | **A-V-10** | **Kein Netzaufruf in einem eingehenden Anfragebehandler.** Die Route gibt das zuletzt ermittelte Ergebnis zurück. | Route 100-mal aufrufen, am Prüfserver **eine** ausgehende Anfrage zählen. |
-| **A-V-11** | Eine Anfrage je Start, danach höchstens eine je 24 h, harter Boden 60 min. Nach einem Fehlschlag **kein** zweiter Versuch im selben Lauf. | Zeitgeberprüfung mit gestellter Uhr; nach einem erzwungenen Fehlschlag bleibt die Zahl der ausgehenden Anfragen bei eins. |
+| **A-V-11** | Eine Anfrage je Start, danach höchstens eine je 24 h, harter Boden 60 min. Nach einem Fehlschlag kein zweiter Versuch im selben **Prüflauf**; der gewöhnliche Takt bleibt unberührt, und der nächste Versuch folgt frühestens nach dem Boden. **Berichtigt am 2026-09-11 (T-275, A-A-70). Der alte Wortlaut stand hier: „Nach einem Fehlschlag **kein** zweiter Versuch im selben Lauf", und als Messung daneben: „Zeitgeberprüfung mit gestellter Uhr; nach einem erzwungenen Fehlschlag bleibt die Zahl der ausgehenden Anfragen bei eins."** Die **Meßvorschrift** ist der gefährlichere Teil davon gewesen: Sie hätte ab heute den behobenen Fehler als Verstoß gemeldet und das alte Verhalten eingefroren — dieselbe Bauart wie der Wächter unter A-A-21, der die Tür maß, die zu ist, und nicht die, die aufging. Vollständige Neufassung als **A-V-11′** in 36.4. | **Gilt nicht mehr.** „Bei eins" war die Zahl des Fehlers. Was zu messen ist, steht in A-V-11′: gegen die **Uhr** statt gegen die Eins, mit einer Gegenprobe in beide Richtungen. |
 | **A-V-12** | Zeitgeber `unref()`t, laufender `fetch` an einem `AbortController`, den `shutdown()` auslöst. | `proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft. |
 | **A-V-13** | Gesetzte Kopfzeilen: `accept: application/vnd.github+json`, `x-github-api-version: 2022-11-28`, `user-agent: Takt` — **ohne Fassungsnummer**. Sonst keine. | Prüfserver zeichnet **alle** Kopfzeilen auf; Vergleich gegen eine feste Liste, rot bei jeder zusätzlichen. Gegenprobe: die installierte Fassung kommt als Zeichenkette in keiner Kopfzeile und in keinem Teil der Adresse vor. |
 | **A-V-14** | Was den Dienst verlässt: die geprüfte Fassungsbezeichnung, die installierte Fassung, ein Kennzeichen (neuer / nicht neuer / unbekannt). **Kein** Text aus der Antwort, **kein** `html_url`, **keine** Fassungsbeschreibung. | Antwortschema der Route hat drei Felder; kein Feld vom Typ „freier Text aus der Antwort". |
@@ -4094,7 +4094,7 @@ Zwanzig Auflagen. Jede ist so geschrieben, dass sie entweder eine Zahl oder eine
 | **T-136-2** | Hinweis | **Die Zusage über die CSP beschreibt die Datei nicht genau.** `CLAUDE.md` (Abschnitt „Versionsprüfung") und E-064 Punkt 2 nennen drei Einträge — „sich selbst, `ipc:` und `http://127.0.0.1:17843`". `tauri.conf.json` trägt vier: `'self' ipc: http://ipc.localhost http://127.0.0.1:17843`. Der vierte ist die IPC-Herkunft unter Windows und völlig berechtigt; die Zusage ist trotzdem eine Abschrift, die nicht stimmt, und sie wird ab jetzt bei jeder Freigabe geprüft. Zwei Wege, und der zweite ist der aus E-063 Punkt 4/5: (a) den Eintrag in den Satz aufnehmen, oder (b) ein Wächter liest die `csp`-Zeichenkette aus `tauri.conf.json` und prüft, dass `connect-src` genau diese vier Marken trägt und **kein** `api.github.com`. (b) ist die Antwort, die nicht wieder veraltet. | Orchestrator (Text), frontend-dev (Wächter) |
 | **T-136-3** | Hinweis | **E-065 sagt nicht ganz, woher die Zahl im Erzeugnis kommt.** „Führende Quelle ist `version` in `tauri.conf.json`" gilt für den Entwicklungsbau; dort steht `0.0.0`. Im ausgelieferten Erzeugnis kommt die Zahl aus `TAKT_RELEASE_VERSION` — also aus dem Git-Etikett —, und `apps/desktop/scripts/build-app.mjs:153-170` legt sie beim Bauen als Überlagerung über `tauri.conf.json`. Sicherheitsrelevant ist daran nur eines, und das steht als A-V-15: Die Zahl muss zur Laufzeit aus den **eingeprägten** Angaben kommen. Läse die Hülle sie aus einer Datei neben der ausführbaren Datei, könnte A-03 sie herabsetzen und Takt dauerhaft eine Aktualisierungsaufforderung zeigen lassen — auf einen Knopf, bei dem der Benutzer darauf eingestellt ist, eine unsignierte Datei zu holen und auszuführen. Das ist B-18.2 von der anderen Seite. | Orchestrator (E-065 präzisieren), frontend-dev (A-V-15) |
 | **T-136-4** | Hinweis | **Die übersprungene Fassung ist Benutzereingabe** (VG-6). Sie steht als Einstellung im Bestand und ist damit für jeden schreibbar, der das Sitzungsgeheimnis hat. Auflage: Beim **Lesen** gegen die Form aus A-V-8 prüfen; ein ungültiger gespeicherter Wert heißt „nichts übersprungen", führt zu keinem Wurf und geht in **keine** Adresse. Schaden im schlimmsten Fall: ein unterdrückter Hinweis. Angenommen, aber benannt. | domain-dev (T-138) |
-| **T-136-5** | Hinweis | **Die Anfragebegrenzung von GitHub ist geteilt.** Nicht angemeldete Aufrufer haben 60 Anfragen je Stunde **und Quelladresse**. In einem Haus hinter einer Adresse teilen sich alle Takt-Installationen dieses Kontingent. Folge: `403`, stiller Fehlschlag nach A-18.11 — das Verhalten ist richtig, die Zuverlässigkeit sinkt mit der Verbreitung. Ein weiteres Argument für A-V-11 und gegen jeden Wiederholungsversuch. Kein Gegenmittel nötig, aber es gehört ins Entwicklerhandbuch. | documenter (T-141) |
+| **T-136-5** | Hinweis | **Die Anfragebegrenzung von GitHub ist geteilt.** Nicht angemeldete Aufrufer haben 60 Anfragen je Stunde **und Quelladresse**. In einem Haus hinter einer Adresse teilen sich alle Takt-Installationen dieses Kontingent. Folge: `403`, stiller Fehlschlag nach A-18.11 — das Verhalten ist richtig, die Zuverlässigkeit sinkt mit der Verbreitung. Kein Gegenmittel nötig, aber es gehört ins Entwicklerhandbuch. **Berichtigt am 2026-09-11 (T-275, A-A-70). Hier stand: „Ein weiteres Argument für A-V-11 und gegen jeden Wiederholungsversuch."** Der Satz hing an der alten Lesart von A-18.11 und ist gefallen. Was an seine Stelle tritt, wiegt schwerer und steht in 36.5 Punkt 4: Unter der geschärften Lesart klärt sich eine erschöpfte Anfragebegrenzung **nicht mehr von selbst**. Vorher stellten alle betroffenen Installationen ihre Prüfung ein; heute klopft jede von ihnen stündlich weiter, still, ohne je durchzukommen. Ab etwa sechzig Installationen hinter einer Adresse ist dieser Zustand selbsterhaltend. | documenter (T-141) |
 | **T-136-6** | Hinweis | **Semgrep Guardian zum achten Mal nicht erreichbar, 42Crunch zum siebten Mal ohne Werkzeug.** Das Tor aus Abschnitt 8 ist an zwei von vier Stellen weiterhin nicht einlösbar. Der lokale Semgrep-Lauf deckt SAST ab; Lieferkette und OpenAPI-Bewertung bleiben ungemessen — und die Lieferkette ist bei einem Vorhaben, das erstmals nach außen spricht, die Lücke, die man am wenigsten möchte. Beschaffungsentscheidung. | Auftraggeber, Orchestrator |
 
 ---
@@ -4191,7 +4191,7 @@ gefordert. *nicht erfüllt* — die Sache fehlt.
 
 | ID | Urteil | Woran gemessen |
 |---|---|---|
-| **A-V-1** | **abweichend erfüllt** | Die Adresse steht als Konstante in `apps/local-api/src/version/source.ts:91` und sonst nirgends; `proof:release-safety` Abschnitt 2 misst das mit einer Gegenprobe. **Die Messung aus 18.9 stimmt nicht mehr:** `grep -rn "api\.github\.com" apps/local-api/src` liefert **zwei** Zeilen — 91 (die Konstante) und 83 (ein Kommentar, der begründet, warum es `api.github.com` und nicht `github.com` ist). Und `grep -rn "github\.com"` über den ganzen Produktivcode liefert **sechs** statt der in 18.9 als Ausgangspunkt genannten null: drei Zeichenketten (`source.ts:91`, `web/src/lib/releasePage.ts:43`, `src-tauri/src/release.rs:55`), eine Prüffallerwartung (`release.rs:260`) und zwei Kommentare. Alle sechs sind erklärt und alle sechs werden gemessen. Eine Zählung über rohen Text ist an dieser Stelle nicht mehr die richtige Messung; die richtige ist `proof:release-safety`, das Kommentare vorher wegschneidet (`stripComments`, mit fünf eigenen Gegenproben). **Auflage neu formuliert als A-V-1′ in 19.5.** |
+| **A-V-1** | **abweichend erfüllt** | Die Adresse steht als Konstante in `apps/local-api/src/features/version/source.ts:91` und sonst nirgends; `proof:release-safety` Abschnitt 2 misst das mit einer Gegenprobe. **Die Messung aus 18.9 stimmt nicht mehr:** `grep -rn "api\.github\.com" apps/local-api/src` liefert **zwei** Zeilen — 91 (die Konstante) und 83 (ein Kommentar, der begründet, warum es `api.github.com` und nicht `github.com` ist). Und `grep -rn "github\.com"` über den ganzen Produktivcode liefert **sechs** statt der in 18.9 als Ausgangspunkt genannten null: drei Zeichenketten (`source.ts:91`, `web/src/features/settings/releasePage.ts:43`, `src-tauri/src/release.rs:55`), eine Prüffallerwartung (`release.rs:260`) und zwei Kommentare. Alle sechs sind erklärt und alle sechs werden gemessen. Eine Zählung über rohen Text ist an dieser Stelle nicht mehr die richtige Messung; die richtige ist `proof:release-safety`, das Kommentare vorher wegschneidet (`stripComments`, mit fünf eigenen Gegenproben). **Auflage neu formuliert als A-V-1′ in 19.5.** |
 | **A-V-2** | erfüllt | `source.ts:237-248`: `method: 'GET'`, kein `body`, kein Abfrageparameter, kein `authorization`, kein `cookie`. Gegen einen Prüfserver gemessen (19.2, Messung 3): `GET /`, sonst nichts. |
 | **A-V-3** | erfüllt | `redirect: 'error'` (`source.ts:246`). Zwei Prüffälle in `source.test.ts` fahren 302 und 301 gegen einen Prüfserver und messen, daß am Ziel **nichts** ankommt. |
 | **A-V-4** | **abweichend erfüllt** | Kein `dispatcher`, kein `Agent`, kein `ProxyAgent`, kein `NODE_USE_ENV_PROXY`, kein `NODE_TLS_REJECT_UNAUTHORIZED`, kein `rejectUnauthorized` — als **Code**. Die Messung „`grep` findet keine dieser Zeichenketten" trifft nicht mehr: `dispatcher`, `ProxyAgent` und `undici` stehen je einmal in `source.ts` (Zeilen 66, 67, 219) — in dem Kommentar, der erklärt, daß sie dort nicht stehen. Auch das ist ein Fall für `stripComments`. **A-V-4′ in 19.5.** |
@@ -4200,9 +4200,9 @@ gefordert. *nicht erfüllt* — die Sache fehlt.
 | **A-V-7** | erfüllt | Ein Feldzugriff, hinter `Object.hasOwn`, über eine Konstante `TAG_FIELD`. `proof:release-safety` Abschnitt 2 zählt `'tag_name'` im ganzen Baum: genau eins, und `.tag_name` als Punktzugriff ist **überall** verboten, auch an der erlaubten Stelle. `html_url`, `browser_download_url`, `upload_url`, `assets_url`, `zipball_url`, `tarball_url`, `body_html` sind als Zeichenketten im Code verboten. Mit Gegenprobe. Ein Prüffall mißt, daß bei fehlendem `tag_name` **nicht** auf `name` ausgewichen wird. |
 | **A-V-8** | erfüllt | `VERSION_SHAPE` in `packages/domain/src/version.ts:91`, zeichengleich mit der Form aus 18.9, beidseitig verankert, ohne `g`. `checkVersion` nimmt `unknown` und wirft nicht. Die zehn geforderten Fälle stehen als Prüffälle; `null`, `42`, `{}`, `[]`, `true`, fehlend, `""`, 60 000 Zeichen, `../../evil`, `1.2.3?x=1` ergeben je einen stillen Fehlschlag. |
 | **A-V-9** | erfüllt | `comparePrecedence` zerlegt in drei Zahlen und vergleicht numerisch; `0.10.0 > 0.9.0` ist ein Prüffall. Eine Vorabkennung gilt als kleiner als dieselbe Fassung ohne. Kein `localeCompare`, kein `<` auf Zeichenketten. Jede Komponente ≤ 999 999 999, in der Form gebunden. |
-| **A-V-10** | erfüllt | `routes/version.ts:81` gibt `current()` heraus und ruft nichts. Der Prüffall „`current()` löst niemals eine Anfrage aus, auch nicht nach 100 Aufrufen" zählt am Port **null** ausgehende Anfragen. Die Entscheidung dazu ist E-069 und sie ist **nach** 18.9 gefallen — sie ist der Grund für die Abweichung bei A-V-14. |
-| **A-V-11** | erfüllt | Eine Anfrage je Start (nach `START_DELAY_MS`), danach `intervalMs` = 24 h, harter Boden `minIntervalMs` = 60 min, geprüft an einer gestellten Uhr. Nach einem Fehlschlag wird **nicht** neu geplant — ein eigener Prüffall mißt, daß auch bei einer sehr kurzen „Regelfrist" die Zahl bei eins bleibt. |
-| **A-V-12** | **abweichend erfüllt** | Der Zeitgeber ist `unref()`t (`checker.ts:160`), `stop()` löst einen `AbortController` aus, und `main.ts:373` ruft `stop()` als **ersten** Schritt des Anhaltens, vor `taskpane.close()` und `database.close()`. Prüffälle messen `stop()` während einer ausstehenden Antwort und `start()` gefolgt von sofortigem `stop()`. **Die Messung aus 18.9 ist es nicht:** „`proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft" — `proof:access` mißt das nicht. Es mißt in Abschnitt 0e den umgekehrten Fall (ein fremder Prozeß hält eine **eingehende** Verbindung), und der Fall „ausgehende Anfrage läuft" tritt dort zufällig ein oder nicht, je nachdem, wie lange ein einzelner Dienst lebt. Was trägt, ist die harte Abschaltfrist aus T-126: Der Prozeß endet auch dann, wenn `stop()` nichts bewirkte. **A-V-12′ in 19.5.** |
+| **A-V-10** | erfüllt | `features/version/routes.ts:81` gibt `current()` heraus und ruft nichts. Der Prüffall „`current()` löst niemals eine Anfrage aus, auch nicht nach 100 Aufrufen" zählt am Port **null** ausgehende Anfragen. Die Entscheidung dazu ist E-069 und sie ist **nach** 18.9 gefallen — sie ist der Grund für die Abweichung bei A-V-14. |
+| **A-V-11** | **erfüllt — am 2026-09-11 neu beurteilt (T-275)** | Eine Anfrage je Start (nach `START_DELAY_MS` = 10 s), danach `intervalMs` = 24 h, harter Boden `minIntervalMs` = 60 min, geprüft an einer gestellten Uhr **und** an der Frist des Zeitgebers. Nach einem Fehlschlag wird auf den **Boden** neu geplant — im Fehlschlagzweig wie in der Auffangklammer (`apps/local-api/src/features/version/version.ts`). **Berichtigt (A-A-70). Hier stand: „Nach einem Fehlschlag wird **nicht** neu geplant — ein eigener Prüffall mißt, daß auch bei einer sehr kurzen ‚Regelfrist' die Zahl bei eins bleibt."** Das beschrieb den Zustand bis T-273 zutreffend und den Sollzustand falsch; es war zugleich die Zeile, die den gemeldeten Fehler als erfüllte Auflage abnahm. Am 2026-09-11 gegen den Produktivcode gemessen (36.0, Messung 1): bei ununterbrochenem Fehlschlag und gesetztem Boden von 300 ms **fünf** Anfragen in 1,25 s, Abstände **305, 310, 314, 313 ms**; der Zustand bleibt `unknown`, jede Zeile im Protokoll trägt `version_check_unreachable` auf `info`, und nach `stop()` kommt in 1,2 s keine Anfrage mehr dazu. Obergrenze im Dauerfehlschlag: **24** je Kalendertag gegen **1** im Erfolgsfall — ein Sechzigstel dessen, was GitHub je Stunde zugesteht. Die Meßvorschrift steht neu als **A-V-11′** in 36.4. |
+| **A-V-12** | **abweichend erfüllt** | Der Zeitgeber ist `unref()`t (`features/version/version.ts:160`), `stop()` löst einen `AbortController` aus, und `main.ts:373` ruft `stop()` als **ersten** Schritt des Anhaltens, vor `taskpane.close()` und `database.close()`. Prüffälle messen `stop()` während einer ausstehenden Antwort und `start()` gefolgt von sofortigem `stop()`. **Die Messung aus 18.9 ist es nicht:** „`proof:access`: nach `shutdown()` endet der Prozess innerhalb der Frist, **auch während** eine ausgehende Anfrage läuft" — `proof:access` mißt das nicht. Es mißt in Abschnitt 0e den umgekehrten Fall (ein fremder Prozeß hält eine **eingehende** Verbindung), und der Fall „ausgehende Anfrage läuft" tritt dort zufällig ein oder nicht, je nachdem, wie lange ein einzelner Dienst lebt. Was trägt, ist die harte Abschaltfrist aus T-126: Der Prozeß endet auch dann, wenn `stop()` nichts bewirkte. **A-V-12′ in 19.5.** |
 | **A-V-13** | erfüllt | **Gegen einen Prüfserver gemessen** (19.2, Messung 3), nicht gegen den Quelltext. Hinaus gehen acht Kopfzeilen: die drei gesetzten (`accept: application/vnd.github+json`, `x-github-api-version: 2022-11-28`, `user-agent: Takt`) und fünf, die Node selbst anhängt (`accept-encoding: gzip, deflate`, `accept-language: *`, `connection: keep-alive`, `host`, `sec-fetch-mode: cors`). Keine davon trägt Benutzer, Rechnernamen, Sprache oder Fassung. Die Gegenprobe aus 18.9 hält: Die installierte Fassung kommt in keiner Kopfzeile und in keinem Teil der Adresse vor — der Dienst kennt sie überhaupt nicht (E-069). |
 | **A-V-14** | **abweichend erfüllt, enger als gefordert** | Die Route gibt **zwei** Felder heraus: `state` (`unknown` \| `known`) und `latestVersion` (`string \| null`). Gefordert waren drei; das dritte war die installierte Fassung, und die kennt der Dienst seit E-069 nicht mehr. Der **Kern** der Auflage — „kein Text aus der Antwort, kein `html_url`, keine Fassungsbeschreibung" — ist gewahrt und wird von `proof:release-safety` mit einer Gegenprobe gemessen. Die Auflage nannte eine Zahl, wo sie eine Verbotsliste hätte nennen müssen: Eine Zahl wird bei jeder Entwurfsänderung falsch, eine Verbotsliste nicht. **A-V-14′ in 19.5.** |
 | **A-V-15** | erfüllt | `release.rs:157-159`: `app.package_info().version.to_string()`, ein Aufruf, kein Zweig, keine Datei. `proof:shell-surface` mißt, daß die Oberfläche die Hülle ausschließlich über `@takt/desktop/shell` erreicht — ein eigenes `invoke` in `apps/web/src` macht den Lauf rot (Gegenprobe vorhanden). |
@@ -4251,6 +4251,17 @@ bis fünfundzwanzig. Der Abstand ist real, aber er ist kein Faktor zehn — und 
 Überschreiten ist der **stille** Fehlschlag aus A-18.11: Die Versionsprüfung hörte auf zu
 arbeiten, und niemand außer einer Protokollzeile `version_check_too_large` sagte es. Das ist
 Befund T-145-3.
+
+> **Berichtigung vom 2026-09-11 (T-275, A-A-70).** „Die Versionsprüfung hörte auf zu arbeiten" galt
+> bis T-273 und gilt nicht mehr. Seit A-18.11 in seiner geschärften Fassung plant ein `too_large`
+> wie jeder andere Fehlschlag auf den Boden neu: Die Prüfung arbeitet weiter und scheitert
+> stündlich an derselben zu großen Antwort. **Für den Benutzer ändert das nichts** — sie liefert
+> weiterhin dauerhaft kein Ergebnis, und „unbekannt" sieht weiterhin aus wie „alles aktuell"; genau
+> das ist der Kern von T-145-3 und er bleibt offen. Zwei Dinge ändern sich doch, und beide gehören
+> hierher: Die zu große Antwort wird bis zu **24-mal je Tag** gelesen und verworfen (je Versuch
+> höchstens 81 920 Bytes nach A-V-6′, zusammen rund 1,9 MiB je Tag, nichts davon geparst), und die
+> eine Protokollzeile, „die niemand liest", wird zu bis zu vierundzwanzig gleichlautenden je Tag —
+> womit dieser Fehlschlag zum ersten Mal eine Spur hat, die auffällt.
 
 **Messung 2 — die gzip-Bombe gegen den echten Leser.** 50 989 Bytes auf der Leitung, 52 428 800
 entpackt. Ergebnis `too_large` nach 17 ms, kein `JSON.parse`. **Tatsächlich gelesen: 81 920
@@ -4346,7 +4357,7 @@ auffängt, und der Riegel bliebe als Boden darunter.
 |---|---|---|---|
 | **T-145-1** | **muss** | **Die Nachweisläufe sprechen mit GitHub.** `main.ts` sagt im Kommentar zu `versionCheck.start()`: „Damit stellt kein Nachweispfad, kein Prüffall und keine Messung eine Verbindung nach außen her — nur der echte Prozess tut das." Gemessen ist das Gegenteil: `proof:access` startet den echten Einstiegspunkt `src/index.ts` mit `spawn`, der Lauf dauert 28 s, mehrere Dienste leben über die 10 s Startverzögerung hinaus — und während des Laufs stand eine ESTAB-Verbindung nach `140.82.121.6:443` (= `api.github.com`) offen. Folgen: (a) Jeder `pnpm check`, auch der im Auslieferungstor auf `ubuntu-24.04`, gibt das Lebenszeichen aus R-19 Punkt 3 ab — mit der Quelladresse des Läufers oder des Entwicklers. (b) Die 60 Anfragen je Stunde und Quelladresse (T-136-5) werden von der Prüfinfrastruktur mitverbraucht. (c) Der Satz im Quelltext ist eine Zusage, die nicht stimmt — dieselbe Klasse wie T-136-2. Gegenmittel: Der Aufruf von `versionCheck.start()` gehört hinter eine Bedingung, die im Prüfbetrieb nicht zutrifft, **und** der Nachweis muß messen, daß im Prüfbetrieb keine ausgehende Verbindung entsteht. Ein Kommentar allein ist es nach E-063 Punkt 5 nicht. **Das Muster liegt bereits vor:** T-142 hat für den End-zu-Ende-Lauf einen zweiten, nie ausgelieferten Einstiegspunkt gebaut (`tests/e2e/support/version-check-entry.ts`), der `compose({ releaseSource })` mit einer Attrappe füttert und dabei Frist, `redirect: 'error'`, Lesestrom und Auswertung unverändert aus `version/source.ts` fährt. `proof:access` startet dagegen unverändert `apps/local-api/src/index.ts` — also den echten Einstiegspunkt ohne Naht. Dieselbe Naht dort zu benutzen ist der kürzeste Weg. | domain-dev, Orchestrator |
 | **T-145-2** | **muss** | **`cargo test` läuft nirgends.** Die 31 Rust-Prüffälle — darunter die fünfzehn Ausbruchsversuche gegen `is_release_version`, die Längengrenzen, die `v`/`V`-Fälle und `release_url_ist_wirklich_none_und_keine_teiladresse` — sind die **einzige** Kontrolle zwischen einer Fassungsbezeichnung und `xdg-open`/`ShellExecuteW` (T-136-1). Sie werden von keinem Ablauf gerufen: `cargo test` steht nicht in `package.json`, nicht in `apps/desktop/package.json` und nicht in `.github/workflows/release.yml`. Von Hand gefahren sind sie grün und brauchen nach dem Übersetzen 0,00 s. A-V-16 ist damit formal erfüllt und faktisch ungesichert — und mit den Anhängen aus Abschnitt 20 wächst genau dieses Modul um die **gesamte** Adress- und Pfadprüfung. Gegenmittel: `cargo test` in `pnpm check` einhängen, vor `pnpm build`. | Orchestrator, frontend-dev |
-| **T-145-3** | Hinweis | **Die 64-KiB-Grenze hat drei Fach Luft, nicht vier — und ihr Ausgang ist still.** Gemessen: 21 683 Bytes entpackt, davon 14 996 in `assets` bei 1 666 Bytes je Anhang. Rechnerisch ist die Grenze bei rund 35 Anhängen erreicht; heute sind es neun. Wird sie überschritten, ist der Ausgang `too_large`, also ein stiller Fehlschlag ohne Wiederholung im selben Lauf — die Versionsprüfung stellte den Betrieb ein, und die einzige Spur wäre eine Protokollzeile. Zwei Gegenmittel, und sie schließen sich nicht aus: (a) die Grenze auf 262 144 Bytes anheben (immer noch eine Grenze, immer noch weit unter jeder Bombe) und (b) im Auslieferungsablauf messen, daß die entpackte Antwort von `releases/latest` unter der Grenze bleibt — dort, wo die Anhänge entstehen. Dazu die Berichtigung des Kommentars an `VERSION_CHECK_MAX_BYTES` („rund 15 KiB … das Vierfache" → 21,2 KiB, Faktor 3,02). | domain-dev |
+| **T-145-3** | Hinweis | **Die 64-KiB-Grenze hat drei Fach Luft, nicht vier — und ihr Ausgang ist still.** Gemessen: 21 683 Bytes entpackt, davon 14 996 in `assets` bei 1 666 Bytes je Anhang. Rechnerisch ist die Grenze bei rund 35 Anhängen erreicht; heute sind es neun. Wird sie überschritten, ist der Ausgang `too_large`, also ein stiller Fehlschlag — und „unbekannt" sieht von außen aus wie „alles aktuell", die einzige Spur ist eine Protokollzeile. Zwei Gegenmittel, und sie schließen sich nicht aus: (a) die Grenze auf 262 144 Bytes anheben (immer noch eine Grenze, immer noch weit unter jeder Bombe) und (b) im Auslieferungsablauf messen, daß die entpackte Antwort von `releases/latest` unter der Grenze bleibt — dort, wo die Anhänge entstehen. Dazu die Berichtigung des Kommentars an `VERSION_CHECK_MAX_BYTES` („rund 15 KiB … das Vierfache" → 21,2 KiB, Faktor 3,02). **Berichtigt am 2026-09-11 (T-275, A-A-70). Hier stand: „also ein stiller Fehlschlag ohne Wiederholung im selben Lauf — die Versionsprüfung stellte den Betrieb ein".** Sie stellt ihn nicht mehr ein; sie scheitert stündlich an derselben Antwort. Der Befund selbst ist davon unberührt: Die Grenze bleibt knapp, und der Ausgang bleibt still. Derselbe überholte Satz steht als Kommentar im Produktivcode, `apps/local-api/src/features/version/source.ts:126-131` — Befund T-275-3. | domain-dev |
 | **T-145-4** | Hinweis | **Fünf der zwanzig Auflagen aus 18.9 nennen eine Zählung, wo sie eine Eigenschaft meinen** (A-V-1, A-V-4, A-V-6, A-V-12, A-V-14). Eine Zählung über rohen Text zählt Kommentare mit; eine Zählung über Felder wird von der nächsten Entwurfsentscheidung falsch (E-069 hat A-V-14 überholt). Die Neufassungen stehen in 19.5 und sind ab sofort die geltende Formulierung. Das ist derselbe Befund wie T-136-2, nur gegen den eigenen Text. | security-checker (erledigt in 19.5) |
 | **T-145-5** | Hinweis | **`logger.lifecycle` nimmt `string`.** Der Riegel `REASON_SHAPE` begrenzt Gestalt und Menge (höchstens 256 Zeichen Wertinhalt), nicht Herkunft; ein kleingeschriebener Wert aus dem Bestand käme durch. Heute übergeben alle Aufrufstellen Konstanten. Gegenmittel: eine geschlossene Vereinigung als Typ des dritten Parameters, der Riegel bleibt als Boden. Siehe A-V-21. | domain-dev |
 | **T-145-6** | Hinweis | **Semgrep Guardian zum neunten Mal nicht erreichbar, 42Crunch zum achten Mal ohne Werkzeug.** Das Tor aus Abschnitt 8 ist an zwei von vier Stellen weiterhin nicht einlösbar. Der lokale Semgrep-Lauf deckt SAST ab; **Lieferkette** bleibt ungemessen — und der Baum hat mit `v0.1.0` zum ersten Mal etwas ausgeliefert. Beschaffungsentscheidung, unverändert seit T-023. | Auftraggeber, Orchestrator |
@@ -4358,7 +4369,7 @@ prüfbar und zählen nicht mehr, was Kommentare mitzählen.
 
 | ID | Auflage | Woran messbar |
 |---|---|---|
-| **A-V-1′** | Die Abfrageadresse steht **im Code** an genau einer Stelle: `apps/local-api/src/version/source.ts`. Die Adresse der Release-Seite steht **im Code** an genau zwei Stellen, `src-tauri/src/release.rs` und `apps/web/src/lib/releasePage.ts`, und beide sind zeichengleich. Eine dritte Adresse auf `github.com` gibt es nicht. | `proof:release-safety` Abschnitt 2 und 3, gemessen **nach** `stripComments` und mit Gegenprobe. Eine rohe `grep`-Zählung ist ausdrücklich **nicht** mehr die Messung. |
+| **A-V-1′** | Die Abfrageadresse steht **im Code** an genau einer Stelle: `apps/local-api/src/features/version/source.ts`. Die Adresse der Release-Seite steht **im Code** an genau zwei Stellen, `src-tauri/src/release.rs` und `apps/web/src/features/settings/releasePage.ts`, und beide sind zeichengleich. Eine dritte Adresse auf `github.com` gibt es nicht. **Ortsberichtigung vom 2026-09-10 (T-266-3, A-A-70).** Bis zur Umstrukturierung standen hier `apps/local-api/src/version/source.ts` und `apps/web/src/lib/releasePage.ts`. Beide Dateien sind mit T-257 umgezogen — `source.ts` und `releasePage.ts` je **zeichengleich**, sha256-verglichen —, dieses Papier ist ihnen bis heute nicht gefolgt. Die **Zusage** hat sich dabei nicht geändert; geändert hat sich nur, wo die zwei erlaubten Orte liegen. Genau deshalb steht die Berichtigung hier und nicht nur im Kapitel der Prüfung, die sie gefunden hat: Wer diese Zeile liest, um die Zusage nachzuschlagen, hätte an einem Pfad nachgeschlagen, den es nicht mehr gibt — und ein Pfad, den es nicht gibt, liest sich in einem Wächter wie „nichts gefunden" und nicht wie „Fehlschlag der Messung". `proof-release-safety.mjs:302` führt beide Orte weiterhin **fest** und ist beim Umzug rot geworden, wie es soll (A-V-18); dieses Papier hat kein Gegenstück dazu — siehe **A-A-75**. | | `proof:release-safety` Abschnitt 2 und 3, gemessen **nach** `stripComments` und mit Gegenprobe. Eine rohe `grep`-Zählung ist ausdrücklich **nicht** mehr die Messung. |
 | **A-V-4′** | Im **Code** — nicht in Kommentaren — kommt keine der Zeichenketten `dispatcher`, `Agent`, `ProxyAgent`, `NODE_USE_ENV_PROXY`, `NODE_TLS_REJECT_UNAUTHORIZED`, `rejectUnauthorized` vor, und `undici` ist keine unmittelbare Abhängigkeit. | `proof:release-safety` Prüfung „nirgends ein Herunterladen, kein Installieren, kein zweiter Netzweg", gemessen nach `stripComments`, mit Gegenprobe. |
 | **A-V-6′** | Die Zahl der **gelesenen entpackten Bytes** ist begrenzt auf `VERSION_CHECK_MAX_BYTES` **plus höchstens eine Leseeinheit**. Die Leseeinheit ist bei Node 22 16 384 Bytes; die messbare Obergrenze ist damit 81 920. Es wird nichts geparst, was oberhalb der Grenze gelesen wurde. Die Begründung der Zahl im Quelltext nennt die zuletzt gemessene echte Antwortgröße. | Ein Prüffall zählt die gelesenen Bytes am Strom und erwartet ≤ 81 920 bei einer 50-MiB-Bombe. Die Zahl im Kommentar wird bei jeder Wiedervorlage neu gemessen. |
 | **A-V-12′** | Nach `stop()` geht keine weitere Anfrage hinaus, ein laufender Aufruf endet als `aborted`, und der Prozeß endet innerhalb der Abschaltfrist **auch dann, wenn `stop()` nichts bewirkte**. | Die Prüffälle in `checker.test.ts` messen das erste und zweite; die harte Abschaltfrist aus T-126 (`proof:access` Abschnitt 0e) trägt das dritte. `proof:access` mißt **nicht** den Fall „ausgehende Anfrage läuft" und soll das auch nicht vorgeben. |
@@ -4719,6 +4730,16 @@ von `/addin` und `SHARED_PATHS` von selbst schließt — und `proof:route-policy
 und keine nimmt es an. Kommt eine Anhangsroute dazu, wird sie automatisch mitgemessen; niemand
 muß daran denken.
 
+> **Berichtigung vom 2026-09-10 (T-247-3, A-A-70) — dieser Absatz war die Zusage, an der PR #16
+> vorbeigegangen ist.** Der Satz *„Kommt eine Anhangsroute dazu, wird sie automatisch mitgemessen;
+> niemand muß daran denken"* gilt nur für eine Route **außerhalb** von `/addin`. Pull Request #16 hat
+> die Anhangsroute **innerhalb** von `/addin` gebaut — `POST /api/v1/addin/todos/{todoId}/attachments`
+> —, und `proof:route-policy` Abschnitt 4 hat sie nicht als Verstoß gesehen, sondern zur erlaubten
+> Fläche gezählt: Er fährt nur die Routen an, die `session` verlangen. Der Lauf blieb grün, während
+> die Tür offen stand. Die Vorabbewertung hatte die richtige **Bauform** benannt und den falschen
+> **Wächter** dazu. Was den Fall heute fängt, ist die Zahl (`addinSurface.length === 4`) und nicht
+> die Rundfahrt. E-100 hat die Route am 2026-09-10 gestrichen; A-19.19 steht unverändert.
+
 **Was gemessen werden muß, damit sie hält.** Vier Dinge, und sie sind alle billig:
 
 * `proof:route-policy` bleibt grün, und die Zahl der geprüften Routen wächst um die
@@ -4870,7 +4891,7 @@ die Eigenschaft und der Lauf, der sie mißt.
 
 | ID | Auflage | Woran messbar |
 |---|---|---|
-| **A-A-21** | **Über das Add-in entstehen keine Anhänge** (A-19.19) — strukturell. Anhänge entstehen über eigene Routen **außerhalb** von `/api/v1/addin`; sie stehen nicht in `SHARED_PATHS`. Die Eingabetypen der Add-in-Anwendungsfälle tragen kein Anhangsfeld, und zwar als **Typ**, nach dem Vorbild von `ExportCandidate` (R-06). | `proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit; `tsc` bricht ab, wenn ein Anhangsfeld in einen Add-in-Eingabetyp gerät. |
+| **A-A-21** | **Über das Add-in entstehen keine Anhänge** (A-19.19) — strukturell. Anhänge entstehen über eigene Routen **außerhalb** von `/api/v1/addin`; sie stehen nicht in `SHARED_PATHS`. Die Eingabetypen der Add-in-Anwendungsfälle tragen kein Anhangsfeld, und zwar als **Typ**, nach dem Vorbild von `ExportCandidate` (R-06). | **Berichtigt am 2026-09-10 (T-247-3, A-A-70). Die alte Fassung stand hier: „`proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit; `tsc` bricht ab, wenn ein Anhangsfeld in einen Add-in-Eingabetyp gerät."** Der erste Halbsatz ist gemessen falsch: Abschnitt 4 fährt ausschließlich die Routen an, für die `requiredCredentialForPath` `session` verlangt — also alles **außerhalb** von `/addin`. Eine Anhangsroute **innerhalb** von `/addin` sieht er nicht als Verstoß, sondern zählt sie zur erlaubten Fläche. Genau so ist PR #16 durchgekommen. Was heute trägt, sind drei Stücke, und keines davon allein: (1) die **Zahl** in `proof:route-policy` — `addinSurface.length === 4`, rot bei **jeder** neuen Route unter `/addin`, gleich wie sie heißt; (2) `proof:addin` 18f; (3) `tsc` gegen `AddinUnit`, das keinen `AttachmentPort` führt. **Zweite Berichtigung am 2026-09-10 (T-247-15, A-A-70), Stück (2).** Die Fassung vom Vormittag stand hier: „`proof:addin` 18f — 404 auf dem gefallenen Pfad und kein Pfad unter `/addin` mit `attachment` im Namen (spannt am **Namen**, nicht an der Anforderung — siehe A-A-71)". Sie beschreibt 18f in seinem Stand von gestern. Nach dem Umbau aus A-A-71 mißt 18f: 404 auf dem gefallenen Pfad mit Gegenprobe, die Fläche unter `/addin` gegen die **ausgeschriebene Menge der vier**, und für **jede** gefundene Route unter `/addin` die Wirkung — `todo_attachment` bleibt bei null. Die Namensprüfung steht daneben und trägt nicht mehr allein. **Abgenommen als T-247-0 (Kapitel 34.1).** Zwei gemessene Grenzen gehören dazu und stehen in 34.2 und 34.3: Ein **Kettenglied**, das unter `/addin` selbst antwortet, steht in keiner Routenliste und wird von 18f nicht gesehen; und die Rundfahrt erreicht `…/time-entries` heute nicht (422 an der Prüfschicht). Gegenmittel **A-A-73** und **A-A-74**. |
 | **A-A-22** | Ein Prüffall schickt einen vollständig ausgefüllten Anhang an `POST /api/v1/addin/todos` und mißt danach **am Bestand**: null Anhänge. Gemessen wird die **Wirkung**, nicht der Statuscode — ein 422 wäre die Bibliothek, die antwortet, und nicht die Grenze, die hält. | Der Prüffall liest nach dem Aufruf die Anhangstabelle. |
 | **A-A-23** | `GET /api/v1/addin/context` bekommt **kein** Anhangs- und **kein** Fristfeld. | `proof:addin` und die OpenAPI-Beschreibung. |
 | **A-A-24** | Kein Anhang öffnet sich als Nebenwirkung (A-19.18): nicht beim Laden einer Liste, nicht beim Öffnen eines Todos, nicht als Vorabholen, nicht als Vorschau, die im Hintergrund etwas startet. Das Vorschaubild ist die **einzige** Anzeige, die ohne Handlung des Benutzers entsteht, und es startet nichts. | Ein E2E-Fall lädt eine Liste mit je einem Anhang jeder Art und zählt die Aufrufe der Öffnen-Befehle: **null**. |
@@ -5037,7 +5058,7 @@ selbst erzeugt: **ein nachgestellter Punkt oder ein nachgestelltes Leerzeichen.*
 **T-156-1**.
 
 **A-A-6 — abweichend erfüllt.** Alle sechs Eigenschaften stehen in
-`apps/web/src/components/AttachmentOpenDialog.tsx`, jede an einer benennbaren Stelle: voller
+`apps/web/src/features/todos/AttachmentOpenDialog.tsx`, jede an einer benennbaren Stelle: voller
 ungekürzter Pfad in Festbreitenschrift mit abgesetztem Dateinamen; `foreignText` auf Pfad,
 Dateiname **und** Endung; die Wirkung im Satz („dasselbe wie ein Doppelklick im Dateimanager"),
 bei ausführbarer Endung ein zweiter Satz und die Knopfbeschriftung „Ausführen"; Anfangsfokus auf
@@ -5080,7 +5101,7 @@ einem Unterordner und eine `.json5` mit einer Shell-Zeile.
 Gegenprobe „`http://127.0.0.1:17843` in img-src" wird rot.
 
 **A-A-13 — erfüllt.** `normalizeAttachmentLink` ist im ganzen Baum genau einmal definiert und hat
-genau zwei Aufrufer: den Anwendungsfall beim Anlegen (`usecases/attachments.ts:179`) und
+genau zwei Aufrufer: den Anwendungsfall beim Anlegen (`features/todos/attachments.ts:179`) und
 `attachmentLabel`, das nur liest. Weder Dienst noch Oberfläche noch Hülle normalisieren.
 
 **A-A-14 — erfüllt.** `checkAttachmentPath` und `normalizeAttachmentLink` rufen beide
@@ -5113,8 +5134,8 @@ betreffen ausschließlich `takt.db`, `-wal`, `-shm` und die Sicherungskopie. Sel
 nicht geerbt.
 
 **A-A-18 — abweichend erfüllt.** Die Kopie geht an **drei** Stellen mit: bei einem gescheiterten
-`insert` (`usecases/attachments.ts:212`), beim Entfernen eines Anhangs (`:263`) und beim Löschen
-des Todos (`usecases/todos.ts:362`), dort mit der richtigen Reihenfolge — erst lesen, dann
+`insert` (`features/todos/attachments.ts:212`), beim Entfernen eines Anhangs (`:263`) und beim Löschen
+des Todos (`features/todos/todos.ts:362`), dort mit der richtigen Reihenfolge — erst lesen, dann
 löschen, dann die Dateien — und einer ausgeschriebenen Begründung, warum `ON DELETE CASCADE` das
 nicht erledigt. Gemessen ist `imageTargets` auf Portebene; **die verlangte Zählung der Dateien im
 Bildverzeichnis vor und nach dem Löschen fehlt.** Selbst gemessen (21.3, Messung 8): 2 → 1 → 0,
@@ -5155,6 +5176,13 @@ die Zählung dann **eins** sagt — ohne sie wäre die Null die schlimmste Sorte
 **A-A-23 — erfüllt.** `GET /addin/context` liefert `tagTree`, `pools`, `statuses`,
 `defaultStatusId`, `defaultTagIds` — kein Anhangs- und kein Fristfeld, in der Beschreibung wie im
 Prüflauf.
+
+> **Nachtrag vom 2026-09-10 (T-247-3, A-A-70) zu A-A-21.** Die Abnahme oben ist für ihren Stand
+> richtig gemessen und trotzdem an einer Stelle zu milde gelesen worden: *„fährt alle 65 Routen
+> außerhalb `/addin` mit dem Add-in-Token an"* ist eine Aussage über das **Äußere**. Über das
+> **Innere** von `/addin` sagt sie nichts, und dort ist der Schaden entstanden (PR #16). Die
+> Ergänzung steht in Kapitel 33; A-A-21 selbst bleibt **erfüllt** — die Route ist mit E-100
+> gefallen, und `AddinUnit` führt wieder keinen `AttachmentPort`.
 
 **A-A-24 — erfüllt.** Kein Anhang öffnet sich als Nebenwirkung: `openAttachmentLink` und
 `openAttachmentFile` haben im ganzen Oberflächenbaum genau **zwei** Aufrufstellen, beide in
@@ -5226,7 +5254,7 @@ mit `../../takt.db` und mit einem unbekannten Namen wirft nicht und ändert nich
 
 | Kennung | Schwere | Sache |
 |---|---|---|
-| **T-156-1** | **muss** | **Ein nachgestellter Punkt oder ein nachgestelltes Leerzeichen hebt A-A-5 auf.** Gemessen: `/…/rechnung.lnk.` und `/…/rechnung.lnk ` bestehen `check_file` — `Path::extension()` liefert `""` beziehungsweise `"lnk "`, und keines davon steht in `INDIRECT_EXTENSIONS`. Unter Windows schneidet die Win32-Pfadauflösung nachgestellte Punkte und Leerzeichen vom letzten Namensbestandteil ab, **bevor** die Datei aufgelöst wird: `is_file()` bejaht, weil es dieselbe Abkürzung nimmt, und `ShellExecuteW` öffnet danach die Verknüpfung. Genau der Fall, für den die fünf Endungen dastehen — der Pfad, den die Rückfrage nennt, zeigt nicht auf das, was startet. **Und die Rückfrage lügt mit:** `extensionOf` in `apps/web/src/lib/attachmentLabel.ts:113` gibt für `…exe.` und `…exe ` ebenfalls „keine Endung" zurück, also sagt der Dialog „Diese Datei wird geöffnet" statt „wird ausgeführt". Der Weg dahin ist der, für den die Prüfung im Öffnen-Befehl überhaupt existiert: VG-1 oder VG-3 schreiben den Wert in `todo_attachment.target`, der Benutzer klickt. **Auf Windows nicht gemessen** — der Läufer war Linux; die Mechanik ist die dokumentierte Win32-Namensnormalisierung. **Gegenmittel:** vor dem Endungsvergleich nachgestellte `.` und Leerzeichen vom letzten Namensbestandteil abschneiden und **auf dem beschnittenen Namen** vergleichen — oder, strenger und billiger, einen Pfad abweisen, dessen letzter Bestandteil auf `.` oder Leerzeichen endet. Dieselbe Änderung in `extensionOf`. Zuständig: frontend-dev. |
+| **T-156-1** | **muss** | **Ein nachgestellter Punkt oder ein nachgestelltes Leerzeichen hebt A-A-5 auf.** Gemessen: `/…/rechnung.lnk.` und `/…/rechnung.lnk ` bestehen `check_file` — `Path::extension()` liefert `""` beziehungsweise `"lnk "`, und keines davon steht in `INDIRECT_EXTENSIONS`. Unter Windows schneidet die Win32-Pfadauflösung nachgestellte Punkte und Leerzeichen vom letzten Namensbestandteil ab, **bevor** die Datei aufgelöst wird: `is_file()` bejaht, weil es dieselbe Abkürzung nimmt, und `ShellExecuteW` öffnet danach die Verknüpfung. Genau der Fall, für den die fünf Endungen dastehen — der Pfad, den die Rückfrage nennt, zeigt nicht auf das, was startet. **Und die Rückfrage lügt mit:** `extensionOf` in `apps/web/src/features/todos/attachmentLabel.ts:113` gibt für `…exe.` und `…exe ` ebenfalls „keine Endung" zurück, also sagt der Dialog „Diese Datei wird geöffnet" statt „wird ausgeführt". Der Weg dahin ist der, für den die Prüfung im Öffnen-Befehl überhaupt existiert: VG-1 oder VG-3 schreiben den Wert in `todo_attachment.target`, der Benutzer klickt. **Auf Windows nicht gemessen** — der Läufer war Linux; die Mechanik ist die dokumentierte Win32-Namensnormalisierung. **Gegenmittel:** vor dem Endungsvergleich nachgestellte `.` und Leerzeichen vom letzten Namensbestandteil abschneiden und **auf dem beschnittenen Namen** vergleichen — oder, strenger und billiger, einen Pfad abweisen, dessen letzter Bestandteil auf `.` oder Leerzeichen endet. Dieselbe Änderung in `extensionOf`. Zuständig: frontend-dev. |
 | **T-156-2** | **muss** | **`attachment.rs` hat keinen einzigen Prüffall.** `cargo test` zählt 31 — dieselben 31 wie in T-145, alle in `release.rs`, `sidecar.rs`, `identity.rs`, `appdata.rs`. A-A-2, A-A-3, A-A-4, A-A-5 und A-A-8 verlangten die Fälle ausdrücklich **neben dem Befehl**; A-A-10 verlangte sie auf Windows. Die Rohrleitung dafür ist gebaut (`test:rust` in `pnpm check`, `cargo test --lib` auf allen drei Läufern **vor** dem Bau), aber sie führt nichts. Damit ist die einzige Kontrolle zwischen einer Zeichenkette aus dem Bestand und `ShellExecuteW` weiterhin ungesichert — dieselbe Sache wie T-145-2, nur an der schwereren Grenze. **Und T-156-1 ist der Beleg, daß das nicht theoretisch ist:** Ein Prüffall `x.lnk.` hätte ihn beim Schreiben gefunden. Zuständig: unit-tester (benannte Ausnahme in `CLAUDE.md`), Windows-Fälle unter `#[cfg(windows)]`. |
 | **T-156-3** | **muss** | **Die E2E-Hauptreihe spricht bei jedem Lauf mit `api.github.com` (O-CI).** `tests/e2e/support/services.ts:86` startet `node apps/local-api/src/index.ts`; `index.ts` ruft `main()` **ohne** Argument, `main()` baut den Prüfer mit `createGithubReleaseSource()` und ruft `versionCheck.start()` (`main.ts:448`). Belegt am laufenden Prozeß: `node apps/local-api/src/index.ts` (PID 2289990) hört auf 17843 und 17844. Dieselbe Überschreitung wie T-145-1, nur an der anderen Reihe — und die Naht dagegen liegt seit T-146 fertig daneben: `proof-access-entry.ts` reicht eine Abholfunktion, die nirgendwohin geht, an `main({ releaseSource })`. Folgen unverändert: ein Lebenszeichen je Lauf (R-19 Punkt 3), Mitverbrauch der 60 Anfragen je Stunde und Quelladresse, und — neu und schlimmer — **ein zeitabhängiger modaler Dialog vor der Oberfläche** (E-077, T-150). Ein Prüflauf, dessen Ergebnis davon abhängt, wann er läuft, ist kein Prüflauf. Zuständig: e2e-tester. |
 | **T-156-4** | Hinweis | **Sieben verlangte Messungen fehlen, bei richtigem Code.** A-A-2/A-A-3/A-A-4/A-A-5/A-A-8 (Rust, siehe T-156-2), A-A-6 (RLO-Anzeige, `Enter`), A-A-17 (`proof:db-permissions` um das Bildverzeichnis), A-A-18 (Dateizahl vor und nach), A-A-20 (die zwölf gegen die ausgeschriebene Liste). Ich habe fünf davon selbst nachgemessen (21.3) — aber eine Messung, die in keinem Ablauf steht, ist eine Momentaufnahme und keine Zusage. |
@@ -5301,7 +5329,7 @@ Drei Aussagen, jede gemessen:
 2. **Die E2E-Hauptreihe spricht nach außen.** Siehe T-156-3. Das ist der offene Rest von O-CI.
 3. **Die Adresse steht weiterhin an genau einer Stelle.** `proof:release-safety` 31/0, darunter
    sechs Gegenproben; `api.github.com` steht im Produktivcode nur in
-   `apps/local-api/src/version/source.ts`.
+   `apps/local-api/src/features/version/source.ts`.
 
 Zu **E-077**: Daß in Prüfläufen zeitabhängig ein modaler Dialog vor der Oberfläche springt, ist
 kein Bedienfehler der Prüfreihe, sondern die **Wirkung** von Punkt 2. Die Umkehr der Vorgabe im
@@ -5408,7 +5436,7 @@ Und die Zerlegung dazu, ebenfalls gemessen:
    `sqlite3` auf die Bestandsdatei (VG-3). Das ist genau die Begründung, aus der die Prüfung im
    Öffnen-Befehl sitzt und nicht im Feld (20.3).
 3. Der Benutzer klickt den Anhang an. Die Oberfläche zeigt die Rückfrage mit dem vollen Pfad —
-   und `extensionOf` (`apps/web/src/lib/attachmentLabel.ts`) liest dort dasselbe letzte
+   und `extensionOf` (`apps/web/src/features/todos/attachmentLabel.ts`) liest dort dasselbe letzte
    Punktsegment, also weder `lnk` noch eine Endung von der Liste `RUNS_WHEN_OPENED`. Der Dialog
    sagt „wird geöffnet".
 4. `check_file` (`attachment.rs:332-359`) läuft: kein UNC, absolut (unter Windows ist
@@ -5481,7 +5509,7 @@ Zweige, die nur unter Windows etwas anderes tun, sind die, die niemand betritt.
   Benutzer öffnet sie über seinen Dateimanager. Unter Windows — der Plattform, für die Takt
   gebaut ist (`WindowsUser` im Export, Outlook-Add-in) — kostet die Regel **nichts**: Ein
   Doppelpunkt kann dort in keinem gültigen Dateinamen vorkommen.
-* **Dieselbe Regel in `extensionOf`** (`apps/web/src/lib/attachmentLabel.ts`), aus demselben
+* **Dieselbe Regel in `extensionOf`** (`apps/web/src/features/todos/attachmentLabel.ts`), aus demselben
   Grund wie bei A-A-5′: Ein Bestandteil mit Doppelpunkt hat keine beurteilbare Endung, und der
   Dialog darf für ihn nicht „wird geöffnet" sagen. Da `check_file` den Wert ohnehin abweist, ist
   das Bequemlichkeit und nicht Grenze — es kostet eine Zeile und hält die beiden Seiten
@@ -6001,7 +6029,7 @@ ist eine zweite Wahrheit über dieselbe Frage, und die erste, die veraltet, ist 
 abgeschriebene.
 
 **Hier ist sie es nicht, und der Grund ist die Richtung.** `foreseeableRefusalOf`
-(`apps/web/src/lib/attachmentLabel.ts:270-274`) kann die Rückfrage nur **enger** machen:
+(`apps/web/src/features/todos/attachmentLabel.ts:270-274`) kann die Rückfrage nur **enger** machen:
 Steht ein Satz in `foreseenRefusal`, entfällt der Öffnen-Knopf
 (`AttachmentOpenDialog.tsx:236`, `:364-368`); steht keiner, läuft der Klick unverändert über
 `openAttachmentFile` in `check_file`. Es gibt keinen Zweig, in dem die Vorhersage etwas
@@ -6034,7 +6062,7 @@ Oberfläche und Hülle für denselben Pfad denselben Schlüssel liefern.
 
 ### 23.3 O-EN — der Aufräumlauf beim Start
 
-`apps/local-api/src/usecases/image-sweep.ts` entfernt Bildkopien ohne Anhang. Es ist die einzige
+`apps/local-api/src/features/todos/image-sweep.ts` entfernt Bildkopien ohne Anhang. Es ist die einzige
 Stelle in Takt, an der Kundenmaterial ohne einen Klick verschwindet — die Prüfung dafür ist
 deshalb nicht „räumt er genug auf", sondern **„fällt jeder Zweifel auf die Seite des
 Liegenlassens"**.
@@ -6498,7 +6526,7 @@ Die Begründung aus 22.1.1 gilt unverändert und ist an die **Hülle** gebunden,
 
 Daraus folgt unmittelbar: **Die Strenge der Tür trägt gegen diesen Angriff nichts bei.** Was sie
 beiträgt, steht ausgeschrieben in ihrer eigenen Erklärung
-(`apps/local-api/src/usecases/attachments.ts`): Sie hält den Wert aus dem Bestand heraus, **solange
+(`apps/local-api/src/features/todos/attachments.ts`): Sie hält den Wert aus dem Bestand heraus, **solange
 er über die Tür kommt**, und sie nennt dem Benutzer den Grund **im Augenblick der Eingabe** statt
 nach einem Klick auf einen Anhang, den er schon angelegt hat.
 
@@ -7244,7 +7272,7 @@ zurückgesetzt und gegen die Ausgangszahlen nachgefahren worden.
 
 ### 28.1 O-HF — SP-09, und was von ihm fallen darf
 
-**Was SP-09 heute ist.** Sechs Texte in `apps/web/src/components/NoteField.tsx`, drei je Feldart:
+**Was SP-09 heute ist.** Sechs Texte in `apps/web/src/shared/ui/NoteField.tsx`, drei je Feldart:
 Kopfband, Marke (nur für Vorlesehilfen, im `<label>`), Fußnote (`help`, über `aria-describedby`
 verbunden).
 
@@ -7270,7 +7298,7 @@ die Grenze selbst ist **sechsfach** gebaut, und fünf der sechs Schichten sind g
 
 1. **Typ der Domäne.** `ExportSourcePath` kennt keinen Notizpfad; `ExportGroup` und
    `ExportCandidate` tragen das Feld nicht.
-2. **Zweiter Typwächter am Katalog.** `apps/local-api/src/usecases/export-catalog.ts` führt
+2. **Zweiter Typwächter am Katalog.** `apps/local-api/src/features/export/catalog.ts` führt
    `NoteSourceIsNotPublished` als `Assert<…>` — „Übersetzungsfehler, sobald ein Notizpfad wählbar
    würde."
 3. **Die Auswahlliste, wörtlich verglichen.** `packages/export/src/sources.ts`: „**Ohne jede
@@ -7328,7 +7356,7 @@ kommt an, wenn der Text längst geschrieben ist.
 in der Datei die Leistung meint (A-8.2, E-016). Ein Irrtum darüber kann **keinen** Vermerk
 exportieren — das verhindern die sechs Schichten aus 28.1.1 —, er kann nur eine falsche Vorstellung
 darüber erzeugen, was in einer Datei steht, die man ohnehin lesen kann. Und die Zuordnung steht
-bereits dort, wo sie gebraucht wird: `export-catalog.ts` gibt zur Quelle `group.bookingNotes` den
+bereits dort, wo sie gebraucht wird: `features/export/catalog.ts` gibt zur Quelle `group.bookingNotes` den
 Satz „Die Leistungstexte aller enthaltenen Buchungen, vom Dienst zu einem Text zusammengeführt.
 **Die Quelle für das Feld „Notiz“ der Standardvorlage.**" aus, und `TemplateFields.tsx` zeigt ihn
 im Vorlageneditor als `hint` beziehungsweise als `sourceInfo(...)?.description`. Am Notizfeld ist
@@ -7347,7 +7375,7 @@ geht nach E-078 Punkt 3 nicht. Ich nenne, woran eine Fassung zu messen ist:
   Eingabe wäre die Marke „Wird exportiert" — sie sagt **daß**, nicht **wohin**. **UM-01 darf auf
   `NoteField` nicht angewendet werden**, solange die Empfängerangabe nur in der Fußnote steht.
 - **B-3 — Satz 2 darf nur fallen, solange der Editor die Zuordnung nennt.** Der Satz in
-  `export-catalog.ts` ist heute durch nichts festgehalten. Fällt er, ist die Zuordnung nirgends
+  `features/export/catalog.ts` ist heute durch nichts festgehalten. Fällt er, ist die Zuordnung nirgends
   mehr im Produkt. Dazu die Auflage **A-A-50**.
 
 **Nicht berührt:** die Fußnote des Vermerks, beide Kopfbänder, beide Marken, `NoteField.required`
@@ -7581,7 +7609,7 @@ Läufen bereits an den meisten Stellen; ausgesprochen ist sie in keinem. Dazu **
 
 | ID | Wortlaut | Messung |
 |---|---|---|
-| **A-A-50** | Drei Sätze, die je **allein** eine Grenze tragen, bekommen je eine Zusicherung — **nicht** die Sperrliste, nach E-090: die Empfängerangabe der Fußnote „Leistung" (`NoteField.tsx`), der Halbsatz „auch nicht über eine eigene Exportvorlage" der Fußnote „Vermerk" und der Satz „Die Quelle für das Feld „Notiz“ der Standardvorlage." in `export-catalog.ts`. Der dritte ist die Bedingung, unter der Satz 2 der Fußnote „Leistung" fallen darf (28.1.3 B-3). | Je eine Gegenprobe: Satz entfernt → rot. Die Zusicherungen prüfen den **Satz**, nicht den ganzen Text; eine Umformulierung, die die Aussage behält, darf nicht rot werden. |
+| **A-A-50** | Drei Sätze, die je **allein** eine Grenze tragen, bekommen je eine Zusicherung — **nicht** die Sperrliste, nach E-090: die Empfängerangabe der Fußnote „Leistung" (`NoteField.tsx`), der Halbsatz „auch nicht über eine eigene Exportvorlage" der Fußnote „Vermerk" und der Satz „Die Quelle für das Feld „Notiz“ der Standardvorlage." in `features/export/catalog.ts`. Der dritte ist die Bedingung, unter der Satz 2 der Fußnote „Leistung" fallen darf (28.1.3 B-3). | Je eine Gegenprobe: Satz entfernt → rot. Die Zusicherungen prüfen den **Satz**, nicht den ganzen Text; eine Umformulierung, die die Aussage behält, darf nicht rot werden. |
 | **A-A-51** | `proof:route-policy` und `proof:openapi` **weigern sich**, über die Routenliste zu urteilen, solange ein `ALL`-Eintrag ohne Platzhalter im Pfad darunter ist. Begründung im Text: Hono trägt Kettenglieder und `app.all(…)` mit derselben Methode ein; ein Eintrag ohne Platzhalter ist von einer Route nicht zu unterscheiden, und eine Aussage über eine Liste, aus der etwas herausfällt, ist keine. Wer künftig ein Kettenglied auf einen genauen Pfad legt, schreibt es mit Platzhalter oder nennt es hier. | Gebaut und im Spiegel gemessen, **beide Richtungen**: unveränderter Baum **41/0** und **111/0** — kein falscher Alarm; mit `api.all('/addin/leak', …)` beide **rot, Code 1**, und die Meldung nennt den Pfad `/api/v1/addin/leak`. |
 | **A-A-52** | Vor der Zeile „der interne Vermerk steht in keiner Antwort außer der Vermerksroute (A-7.2)" steht die Untergrenze, die der Kommentar ohnehin behauptet: der Durchlauf trägt den Vermerk in **genau zwei** Antworten, und es sind `getTodoNote` und `putTodoNote`. Dasselbe Muster wie Abschnitt 16 und wie `proof:route-policy` Abschnitt 1. | Gebaut und im Spiegel gemessen, beide Richtungen: unveränderter Baum **111/0**; Durchlauf ohne den Vermerk **rot**, Meldung „0: ". |
 | **A-A-53** | Die Aufzählung wird wie die Zahlengrenzen behandelt: Erzwingt der Dienst eine und beschreibt die Beschreibung keine, ist das ein Befund; beschreibt die Beschreibung eine, die der Dienst nicht erzwingt, ebenso. Dieselbe Ausnahme wie bei den Facetten für Felder, die auf ein benanntes Bauteil zeigen. | Gebaut und im Spiegel gemessen, beide Richtungen: unveränderter Baum **110/0** — kein falscher Alarm über alle 29 Rumpfschemata; `enum` aus `theme` entfernt → **109/1**, „updateSettings.theme: Aufzaehlung [dark\|light\|system] wird erzwungen, aber nicht beschrieben". |
@@ -7683,7 +7711,7 @@ nachstellbar geblieben.**
 |---|---|---|
 | **A-A-51** | **erfüllt** | Unveränderter Baum **41/0** und **112/0**, Code 0 — kein falscher Alarm. Mit der Kunstquelle: `proof:route-policy` **40/1, Code 1**, `proof:openapi` **111/1, Code 1**, beide mit derselben Zeile `FEHL kein ALL-Eintrag ohne Platzhalter … — mit ALL registriert und damit aus der Liste gefallen: /api/v1/addin/leak`. Die Bedingung ist in beiden Dateien zeichengleich. |
 | **A-A-52** | **erfüllt** | Stelle 1 ersetzt → **111/1**, Meldung `1: putTodoNote`. Stelle 2 ersetzt → **111/1**, `1: getTodoNote`. Alle drei → **111/1**, `0: `. Jede mit Code 1. |
-| **A-A-53** | **erfüllt** | `enum` aus `theme` in der Beschreibung entfernt → **111/1**, „wird erzwungen, aber nicht beschrieben". `z.enum([…])` → `z.string()` in `src/routes/export.ts` → **111/1**, „ist beschrieben, aber wird nicht erzwungen". YAML-Leser läßt jeden Schlüssel `enum` fallen → **111/1** mit **fünf** Fundstellen über fünf verschiedene Rumpfschemata (`createPool.matchMode`, `updatePool.matchMode`, `resetExportStatus.status`, `resolveOrphanedTimer.resolution`, `updateSettings.theme`). |
+| **A-A-53** | **erfüllt** | `enum` aus `theme` in der Beschreibung entfernt → **111/1**, „wird erzwungen, aber nicht beschrieben". `z.enum([…])` → `z.string()` in `src/features/export/routes.ts` → **111/1**, „ist beschrieben, aber wird nicht erzwungen". YAML-Leser läßt jeden Schlüssel `enum` fallen → **111/1** mit **fünf** Fundstellen über fünf verschiedene Rumpfschemata (`createPool.matchMode`, `updatePool.matchMode`, `resetExportStatus.status`, `resolveOrphanedTimer.resolution`, `updateSettings.theme`). |
 | **A-A-54** | **erfüllt** | Ohne den `INSERT` → **25/5, Code 1**, und die drei bisher stillen Zeilen sind jetzt die roten: „keine Zeile", zweimal `Status 404 … not_found`. Mit unverdächtiger Definition → **22/8, Code 1**, Meldung `gelesen: {"version":1,"fields":[{"name":"Call",…}]}`. |
 | **A-A-55** | **erfüllt** | Der Satz steht einmal ausgeschrieben im Kopf von `proof-route-policy.mjs`: *„**Keine Zusicherung darf bestehen, ohne daß das Geprüfte stattgefunden hat.** Wer eine Zusicherung über eine Menge schreibt, schreibt die Untergrenze dieser Menge daneben."* `proof-openapi.mjs` verweist darauf und nennt seine drei Anwendungen; `proof-template-fields.mjs` ebenso. |
 
@@ -8769,8 +8797,8 @@ Binärdatei. Die Grenze ist kleiner geworden; verschwunden ist sie nicht.
 **Gemessen wurde am Verhalten, außerhalb des Bestands** — wie in T-176, T-183, T-189, T-206, T-223
 und T-230. Der Spiegel liegt unter `/tmp/t234/root` und trägt die Gestalt des Arbeitsbereichs:
 `apps/local-api`, `apps/web`, `apps/outlook-addin` und `packages` als Kopien, `node_modules` als
-Verweis auf den echten. Alle Verstümmelungen — auch die drei in **Produktivcode** (`routes/todos.ts`,
-`usecases/todos.ts`, `packages/storage/.../database.ts`) und die eine **neue Datei**
+Verweis auf den echten. Alle Verstümmelungen — auch die drei in **Produktivcode** (`features/todos/routes.ts`,
+`features/todos/todos.ts`, `packages/storage/.../database.ts`) und die eine **neue Datei**
 (`src/access/verifier-match.ts`) — sind ausschließlich im Spiegel entstanden und mit ihm gelöscht.
 
 **Zeichengleichheit doppelt belegt.** `diff -rq` über `apps/local-api/src`,
@@ -9439,3 +9467,1487 @@ Male war der **Code** richtig, beide Male war der **Bericht** richtig, und beide
 **Zusammenfassung** falsch. Der Fehler entsteht nicht beim Messen. Er entsteht, wenn eine Messung zu
 einem Satz wird und der Satz danach ohne die Messung weiterlebt. **Deshalb A-A-70, und deshalb steht
 in diesem Kapitel neben jeder Zahl, wann sie gemessen wurde.**
+
+---
+
+## 33. Prüfung T-247 (2026-09-10) — der Rückbau der zweiten Tür, und ein Wächter, der immer noch die Tür mißt statt die Anforderung
+
+**Auftrag.** Der Auftraggeber hat F-21 entschieden (E-100): **gegen das Anhängen**.
+`POST /api/v1/addin/todos/{todoId}/attachments` ist gefallen. Zu prüfen war nicht die Route —
+die war eng gebaut —, sondern das, was den Befund ausgemacht hat: daß der Bestand an sechs
+Stellen ihre Abwesenheit behauptete und eine dieser Stellen ein **grüner Wächter** war, der die
+falsche Tür maß (R-25). Fünf Punkte: ist die Tür zu oder nur die Klinke ab; taugt der neue
+Wächter 18f; zeigt jetzt umgekehrt ein Satz ins Leere; stimmt die **Begründung** unter A-A-21
+noch; und ist das, was ausdrücklich **nicht** fällt, unberührt geblieben.
+
+### 33.0 Was gemessen wurde und was nicht
+
+**Gefahren, an diesem Baum, heute:** `proof:route-policy` (dreimal, **44/0**, Code 0),
+`proof:addin` (**228/0**), `proof:callers` (**56/0**), `proof:openapi` (**113/1** — der eine
+Befund ist das CRLF-Artefakt aus `proof-openapi.mjs:153`, es steht als T-248 auf dem Board und
+hat mit F-21 nichts zu tun), `proof:addin-wiring` (**27/5** — dazu T-247-6, der Befund liegt
+nicht am Rückbau). Dazu **eine eigene Gegenprobe** am zusammengesetzten Dienst mit `:memory:`
+gegen 18f (33.2) und eine Auszählung der Anhangsrouten der Hauptanwendung gegen das Add-in-Token
+(33.5).
+
+**Nicht gefahren und deshalb nicht behauptet:** `pnpm check` als Ganzes, `cargo test`,
+`pnpm test:e2e`. **Semgrep Guardian und 42Crunch stehen unverändert nicht zur Verfügung** —
+`which semgrep`, `which 42crunch`: beide leer. Damit ist die Lieferkette dieses Baums weiterhin
+nie gemessen worden, und das 42Crunch-Audit gegen `apps/local-api/openapi/takt-local-api.yaml`
+hat nie stattgefunden. Unverändert seit T-156-9 und T-241-7; Beschaffungsentscheidung, nicht
+Agentenarbeit.
+
+**Die Suchregel aus `CLAUDE.md`** ist in beiden Hälften gefahren: `git grep` **und** ein roher
+Lauf über `apps/*/src`, `packages/*/src`, `apps/*/scripts`, `tests/` und `docs/`, Bauergebnisse
+ausgeschlossen — mit einer Ausnahme, die absichtlich mitgeprüft wurde: `apps/desktop/src-tauri/taskpane/`
+und `apps/outlook-addin/dist/` sind **eigens** gelesen worden, weil der Aufgabenbereich
+aus dem Bauergebnis ausgeliefert wird (33.5).
+
+---
+
+### 33.1 Punkt 1 — die Tür ist zu, und zwar an drei unabhängigen Stellen
+
+Gemessen, nicht gelesen:
+
+| Was | Wie gemessen | Ergebnis |
+|---|---|---|
+| Die gefallene Route | `POST /api/v1/addin/todos/{id}/attachments`, **gültiges Add-in-Token**, Herkunft `https://localhost:17844` | **404**, `todo_attachment` bleibt bei 0 |
+| Die Gegenprobe daneben | derselbe Aufbau, `…/time-entries` | **422** — also weder 404 noch 401; der 404 oben mißt die Route und nicht den Aufbau |
+| Die Anhangsrouten der Hauptanwendung | `proof:route-policy` Abschnitt 4, alle vier Einträge | `GET`, `POST` `/todos/{id}/attachments`, `DELETE` `…/{attachmentId}`, `GET` `…/image` → **je 401** mit dem Add-in-Token, **404/422** mit dem Sitzungsgeheimnis |
+| Der Einstieg der Fremdimporte | dieselbe Rundfahrt | `GET`/`POST` `/data-transfer/archive`, `POST` `/data-transfer/todoist`, `POST` `/data-transfer/super-productivity` → **je 401** |
+| Die Fläche des Tokens | `addinSurface` aus `proof:route-policy` | **4** Routen: `context`, `todo-matches`, `todos`, `todos/{id}/time-entries`; daneben genau `GET /health` |
+
+**Die Zusage bei `takt-local-api.yaml:647`** — *„Für ein Add-in-Token ist diese Route
+unerreichbar"* — **ist damit gemessen und sie hält.** Sie hält aus dem Grund, den sie selbst
+nennt: nicht wegen eines Wächters, sondern weil `requiredCredentialForPath` alles außerhalb von
+`/addin` und `SHARED_PATHS` von selbst schließt. 73 von 78 Operationen fallen in diesen Zweig.
+
+**Die Fähigkeit ist entfernt, nicht abgewiesen** — mit einer Einschränkung, die genannt gehört:
+`AddinUnit` (`routes/addin/ports.ts`) führt keinen `AttachmentPort` mehr, und `routes/addin/service.ts`
+faßt `unit.attachments` an keiner Stelle an. Das ist eine Zusage des **Übersetzers**.
+Zur **Laufzeit** reicht `context.transactions.inTransaction` weiterhin den vollständigen
+`UnitOfWork` herein, und der trägt `attachments` (`packages/storage/src/ports.ts:108`); `AddinUnit`
+ist ein `Pick<>` darauf und kein eigenes Objekt. Der Kommentar in `ports.ts` sagt heute, das Token
+könne keinen Anhang anlegen, *„nicht, weil eine Prüfung es abweist, sondern weil die Fähigkeit in
+dieser Vertrauensstufe nicht vorhanden ist"*. Vorhanden ist sie; **erreichbar ist sie nicht ohne
+eine Typzusicherung.** Der Verzicht auf einen Übersetzungsadapter ist in `app.ts` ausdrücklich
+begründet und bleibt die richtige Abwägung — der **Satz** ist eine Spur stärker als die Sache
+(T-247-7).
+
+---
+
+### 33.2 Punkt 2 — 18f spannt an dem Namen, den sein Verfasser kannte, nicht an der Anforderung
+
+Der neue Abschnitt 18f prüft zwei Dinge: die gefallene Adresse antwortet mit 404 (mit Gegenprobe),
+und **kein Pfad unter `/addin` führt `attachment` im Namen**. Der zweite Satz ist der Fortschritt
+gegenüber Abschnitt 18d — er gilt für den Teilbaum und nicht für eine Adresse. Er gilt aber für
+den **Namen**, und A-19.19 spricht nicht über Namen. Sie spricht darüber, daß **kein Anhang
+entsteht**.
+
+**Gegenprobe, gemessen** (zusammengesetzter Dienst, `:memory:`, echtes Add-in-Token, nichts am
+Baum geändert — der Lauf hängt die Verstümmelung zur Laufzeit an die fertige App):
+
+Angehängt wurde `POST /api/v1/addin/todos/:todoId/links`, die eine Zeile in `todo_attachment`
+schreibt — dieselbe Wirkung wie die gefallene Route, ein anderer Name.
+
+```text
+neue Tür /addin/todos/{id}/links mit Add-in-Token  -> 201
+Zeilen in todo_attachment danach                   -> 1
+18f Prüfung 1 (404 + Gegenprobe)                   -> grün
+18f Prüfung 2 (kein Pfad mit "attachment")         -> grün
+Pfade unter /addin: …/context, …/todo-matches, …/todos, …/todos/:todoId/time-entries,
+                    …/todos/:todoId/links
+proof:route-policy zählt addinSurface              -> 5   (Zusicherung: 4)  ROT
+```
+
+**A-19.19 ist gebrochen, `proof:addin` bleibt 228/0.** Der einzige Lauf, der den Wiederholungsfall
+von PR #16 fängt, ist die **Zahl** in `proof-route-policy.mjs:644` — und sie fängt ihn, weil sie
+über **keinen** Namen urteilt.
+
+Damit ist E-099 Punkt 3 auf seinen eigenen Fall angewandt worden und hat ihn zur Hälfte verfehlt.
+18f ist besser als 18d und trotzdem dieselbe Bauart: eine Menge, aufgespannt an dem, was der
+Verfasser kannte. Die Zahl in `proof:route-policy` deckt die Lücke heute ab; sie ist aber eine
+Zahl, und eine Zahl kann derjenige mitziehen, der die Route hinzufügt — der Absatz darüber warnt
+ausdrücklich davor, und das ist gut, aber eine Warnung ist kein Wächter. **Gegenmittel: A-A-71.**
+
+---
+
+### 33.3 Punkt 3 — die Gegenrichtung: ein Satz, der jetzt ins Leere zeigt
+
+Der Rückbau ist an den entscheidenden Stellen **erzählend** gemacht worden, nicht schweigend:
+`routes/addin/index.ts`, `routes/addin/schema.ts`, `ports.ts`, die Tag-Beschreibung und der Absatz
+bei `POST /addin/todos` in der OpenAPI-Datei, `proof-route-policy.mjs`, `proof-callers.mjs`,
+`service-scenario.mjs` und 18f nennen alle die gefallene Route beim Namen und sagen, **warum** sie
+fiel. Das ist die richtige Form; eine Beschreibung, die den Wegfall verschweigt, ließe den nächsten
+Leser die Route für vergessen halten.
+
+**Vier Stellen sagen trotzdem noch das Gegenteil, und die erste ist die schwerste:**
+
+1. **`apps/local-api/src/app.ts:251-262`** — der Kommentar **unmittelbar über der Einhängung**, also
+   an der Stelle, an der ein Prüfer die Fläche des Add-ins zuerst nachliest. Er sagt im Präsens:
+   *„Der Aufgabenbereich darf lesen, … und einen **http(s)-Verweis** an ein erkanntes Todo hängen.
+   Die neue Anhangroute akzeptiert weder Dateipfade noch Bildquellen; sie kann also keine Datei des
+   Rechners lesen."* Die Zeile `api.route('/addin', createAddinAttachmentRoutes(addinDeps));` ist
+   entfernt, der Absatz darüber nicht. **Das ist R-25 spiegelbildlich:** dieselbe Bauart, nur
+   behauptet der Satz jetzt eine Fläche, die es nicht gibt, statt die Abwesenheit einer, die es
+   gab. Wer diesen Absatz liest, hält die Route für vorhanden und bewertet sie mit — oder, schlimmer,
+   hält den nächsten Bauversuch für gedeckt. `app.ts` ist Orchestratorhoheit („die Modulregistrierung
+   des lokalen Dienstes").
+2. **`apps/local-api/openapi/takt-local-api.yaml:3651-3654`** — *„Der Pfad ist damit ein unbekannter
+   Pfad und beantwortet sich wie jeder andere mit `401`, nicht mit `404` (B-2.10)."* **Gemessen: 404.**
+   Die B-2.10-Regel gilt für unbekannte Pfade im `session`-Zweig; ein unbekannter Pfad **unter**
+   `/addin` wird von `credentialPolicy` auf `any` abgesenkt, der Nachweis geht durch, und Hono
+   antwortet 404. 18f verlangt diesen 404 ausdrücklich und mißt ihn. **Damit sagen die Beschreibung
+   und der Wächter im selben Baum verschiedene Zahlen über dieselbe Anfrage.** Sachlich ist die
+   Folge klein — ein Inhaber des dauerhaften Tokens kann innerhalb von `/addin` Pfade unterscheiden,
+   was er ohnehin an 422 gegen 404 könnte —, aber die Zusage „die Routenliste bleibt verdeckt" gilt
+   **nicht** innerhalb des Teilbaums, und das steht nirgends.
+3. **`docs/design/textbestand-aufgabenbereich.md`** Zeilen 8, 15, 21-22 und 27 beschreiben das
+   Anhangsangebot als gegenwärtig, erklären die Bedeutung von SP-A-27 und SP-A-28 mit *„Anhängen
+   erzeugt keine Zeitbuchung"* beziehungsweise *„Anhängen hebt das Kennzeichen nicht auf"* — beide
+   Sätze stehen zeichengleich weiter in `DuplicateOffer.tsx` und tragen dort jetzt etwas anderes —,
+   und nennen **`proof:addin` Abschnitt 21** als Nachweis. Abschnitt 21 gibt es nicht mehr. Der
+   Wächter selbst (`proof-addin.mjs:6296`) ist nachgeführt und erzählt die Geschichte richtig; das
+   Papier daneben nicht.
+4. **`docs/design/textbestand.md:1795`** führt *„das Angebot bei vorhandenem Call — auf das
+   vorhandene Todo buchen statt ein Duplikat anlegen"* als **Pflichtflow** und beruft sich dafür auf
+   `CLAUDE.md`. A-10.9 ist mit E-100 geändert: **keine Handlung** am gefundenen Todo. Der Eintrag
+   schützt damit einen Satz, den es nicht mehr geben darf.
+
+Nicht betroffen und eigens nachgesehen: `docs/glossar.md` (Zeilen 139-140, 157, 187) und
+`apps/web/src/features/todos/Attachments.tsx:82` sagen weiterhin richtig, daß über das Add-in keine
+Anhänge entstehen. Diese vier der ursprünglich sechs Stellen sind mit E-100 wahr geworden, ohne
+angefaßt zu werden — genau die Wirkung, die E-100 Punkt 1 beabsichtigt hat.
+
+---
+
+### 33.4 Punkt 4 — die Begründung unter A-A-21 stimmte nicht mehr, und sie war der Grund
+
+A-A-21 selbst bleibt **erfüllt** und inhaltlich unverändert. Ihre **Nachweisspalte** war es nicht:
+Sie sagte, `proof:route-policy` Abschnitt 4 messe neue Routen von selbst mit. Das gilt für Routen
+**außerhalb** von `/addin`; Abschnitt 4 fährt genau die Routen an, die `session` verlangen. Eine
+Anhangsroute **innerhalb** von `/addin` zählt er zur erlaubten Fläche, statt sie zu melden. Genau
+dort hat PR #16 gebaut, und genau deshalb blieb der Lauf grün.
+
+Dieselbe Schlußfolgerung steht in der Vorabbewertung 20.4 — *„Kommt eine Anhangsroute dazu, wird sie
+automatisch mitgemessen; niemand muß daran denken"* — und sie ist die Stelle, an der die
+Bewertung von 2026-09-05 die richtige **Bauform** benannt und den falschen **Wächter** dazu
+geschrieben hat. Beide Stellen sind nach A-A-70 **an Ort und Stelle** berichtigt: 20.4 und die
+Nachweisspalte von A-A-21 in der Auflagentafel von Kapitel 20, dazu ein Nachtrag an der
+A-A-21-Abnahme in Kapitel 21.
+
+**Was A-A-21 heute trägt, in dieser Reihenfolge:** die Zahl `addinSurface.length === 4`; `tsc`
+gegen `AddinUnit` ohne `AttachmentPort`; 18f am Namen; und die Rundfahrt aus Abschnitt 4 für alles
+außerhalb. Nach A-A-71 kommt die Messung an der **Wirkung** dazu, und dann trägt die erste Stelle
+nicht mehr allein.
+
+---
+
+### 33.5 Punkt 5 — was nicht fallen durfte, ist nicht gefallen
+
+* **Die Anhangsrouten der Hauptanwendung** — unverändert, vier Operationen, alle vier gemessen
+  (33.1). `features/todos/attachments.ts` steht ohne eine Zeile Änderung im Baum.
+* **Der Öffnen-Befehl der Hülle** (`apps/desktop/src-tauri/src/attachment.rs`) — nicht angefaßt;
+  `git diff` über `apps/desktop/**` nennt keine Rust-Datei.
+* **Der Weg aus einem Fremdbackup in einen Anhang (R-21)** — unberührt und ausdrücklich nachgesehen:
+  `packages/domain/src/attachment.ts` mit `normalizeAttachmentLink`, `features/data-transfer/data-transfer.ts:546`,
+  `features/todos/attachments.ts:220`. Kein Diff, keine Verschiebung, kein zweiter Aufrufer. Er bleibt der
+  schärfste Weg an den Öffnen-Befehl, und er ist von E-100 nicht berührt.
+* **Der Deep-Link aus Outlook** dagegen ist als Weg **geschlossen**, und zwar an der Quelle, nicht
+  erst an der Tür: `apps/outlook-addin/src/office/host.ts` baute die Adresse aus
+  `mailbox.convertToRestId` und `userProfile.accountType` zu `https://outlook.office.com/mail/deeplink/read/…`
+  beziehungsweise `https://outlook.live.com/…` zusammen; `outlookWebLink`,
+  `HostState.webLink` und der Aufrufer sind entfallen. Damit gibt es keine Stelle mehr, an der eine
+  aus Office-Daten gebildete Adresse in den Bestand und von dort in den Öffnen-Befehl gelangt. Das
+  ist der dritte der drei Wege aus `CLAUDE.md` (R-23 bis R-25); er ist mit E-100 erledigt. Die
+  beiden anderen — **Wurzelspeicher** (A-23) und **fremde Datei** (A-20.7) — sind von dieser Aufgabe
+  nicht berührt und in diesem Papier weiterhin **nicht** bewertet.
+* **Das ausgelieferte Bauergebnis des Aufgabenbereichs** ist nachgesehen, weil es nicht aus dem
+  Quellbaum gelesen wird: `apps/desktop/src-tauri/taskpane/assets/index-*.js` (neu gebaut am
+  2026-09-10 01:50) und `apps/outlook-addin/dist/` enthalten **null** Vorkommen von `attachments`
+  und keinen Aufruf auf `…/addin/todos/…/attachments`. Der ausgelieferte Aufgabenbereich ruft die
+  Route nicht mehr.
+
+---
+
+### 33.6 Ein Befund außerhalb von F-21, heute an dieser Maschine ausgelöst
+
+**Fünf Nachweisläufe fassen unter Windows die echten Daten des Benutzers an.**
+`proof-access.mjs`, `proof-addin-wiring.mjs`, `proof-conflicts.mjs`, `proof-export-api.mjs` und
+`proof-tags.mjs` starten den Sidecar mit `env: { …process.env, XDG_DATA_HOME: dataDir }` auf einen
+Wegwerfordner. `apps/local-api/src/access/paths.ts:36` liest `XDG_DATA_HOME` unter `win32`
+**nicht** — dort gilt `%LOCALAPPDATA%\Takt`. Die Umlenkung greift also nicht, und der Prüfdienst
+läuft gegen den echten Bestand des angemeldeten Kontos.
+
+**Gemessen, nicht hergeleitet.** Ein einziger Lauf von `pnpm --filter @takt/local-api proof:addin-wiring`
+auf dieser Maschine:
+
+```text
+%LOCALAPPDATA%\Takt\addin-token.json   geändert 2026-09-10 01:54:46
+%LOCALAPPDATA%\Takt\takt.db-wal        geändert 2026-09-10 01:54:46
+```
+
+Der Lauf hat das Add-in-Token der **installierten** Anwendung zweimal neu erzeugt — er prüft
+ausdrücklich, daß das alte danach sofort ungültig ist — und Todos und Tags in die Datenbank des
+Benutzers geschrieben. Der zweite Lauf war deshalb **27/5** statt 32/0: *„In diesem Ordner gibt es
+bereits ein Tag mit diesem Namen"*, und die Duplikatsuche fand **drei** Todos zu `TCK-000042` statt
+einem. Die 32/0 aus dem Bericht zu T-247-1 sind nicht falsch gemessen; sie sind auf einem
+Bestand gemessen, den der Lauf selbst hinterläßt.
+
+Drei Schäden, und der dritte ist der, der hierher gehört:
+
+1. **Kundendaten.** Der Bestand unter `%LOCALAPPDATA%\Takt\takt.db` ist der einzige Ort, an dem
+   dieses Erzeugnis Kundendaten hält. `pnpm check` schreibt hinein.
+2. **Ein Geheimnis wird ohne Zutun des Benutzers ungültig.** Wer den Aufgabenbereich in Outlook
+   eingerichtet hat, muß ihn nach einem Prüflauf neu einrichten und erfährt den Grund nicht.
+3. **Der Lauf mißt etwas anderes, als er behauptet.** Ein Nachweis, dessen Ergebnis vom Inhalt
+   eines fremden Bestands abhängt, ist nicht wiederholbar; er wird beim zweiten Mal rot und lädt
+   damit dazu ein, ihn „für Windows zu lockern".
+
+**Der Befund ist nicht neu, die Behebung steht im selben Baum.** `apps/desktop/scripts/verify-sidecar.mjs:113-137`
+hat genau dieses Loch in **T-075** geschlossen und schreibt die
+Begründung wörtlich hin — *„Zwei Schäden auf einmal: Der Nachweis hätte die Datenbank des
+Benutzers angefaßt, und die Prüfung … wäre rot geworden"*. Die Form ist dort acht Zeilen lang
+(`APP_DATA` als `{ variable, folder }` je Plattform). Fünf Läufe haben sie nie bekommen.
+`proof-db-permissions.mjs` ist ausgenommen: Es steigt unter `win32` in Zeile 113 aus.
+**Gegenmittel: A-A-72.**
+
+---
+
+### 33.7 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-247-1** | **soll** | **18f spannt an dem Namen, nicht an der Anforderung.** Gemessen: eine zur Laufzeit angehängte Route `POST /addin/todos/:todoId/links`, die in `todo_attachment` schreibt, antwortet mit gültigem Add-in-Token **201**, hinterläßt **eine Zeile** — und `proof:addin` bleibt bei **228/0**, beide Prüfungen aus 18f grün. Rot wird allein `proof:route-policy` an der **Zahl** (5 statt 4). A-19.19 ist in diesem Fall gebrochen, und der Lauf, den E-100 Punkt 3 dafür geschärft hat, sagt nichts. Gegenmittel **A-A-71**. | integration-dev |
+| **T-247-2** | **soll** | **`app.ts:251-262` verspricht die gefallene Fläche im Präsens** — *„und einen http(s)-Verweis an ein erkanntes Todo hängen. Die neue Anhangroute akzeptiert weder Dateipfade noch Bildquellen"* —, unmittelbar über der Einhängung, aus der die Zeile entfernt wurde. Spiegelbildlich zu R-25 und an der Stelle, die ein Prüfer zuerst liest. Der Absatz ist auf die vier Routen zu bringen und soll den Wegfall **benennen**, wie es die Nachbardateien tun. | Orchestrator |
+| **T-247-3** | **Berichtigung** | **Die Begründung unter A-A-21 war der Grund.** *„`proof:route-policy` Abschnitt 4 mißt die neuen Routen von selbst mit"* gilt nur außerhalb von `/addin`; Abschnitt 4 fährt ausschließlich die `session`-Routen an. PR #16 baute innerhalb. Dieselbe Schlußfolgerung stand seit dem 2026-09-05 in 20.4. **Beide Stellen nach A-A-70 an Ort und Stelle berichtigt** (Auflagentafel Kapitel 20 und Vorabbewertung 20.4), dazu ein Nachtrag an der Abnahme in Kapitel 21. | — |
+| **T-247-4** | **soll** | **Beschreibung und Wächter sagen verschiedene Zahlen über dieselbe Anfrage.** `takt-local-api.yaml:3651-3654` sagt, der gefallene Pfad antworte mit `401`; gemessen und von 18f ausdrücklich verlangt: **404**. Die B-2.10-Zusage „ein Add-in-Token bekommt 401 statt 404 und erfährt nicht, welche Routen es gibt" gilt **nicht** innerhalb von `/addin`, und das steht nirgends. Folge klein, Satz falsch. | domain-dev |
+| **T-247-5** | **soll** | **Zwei Designpapiere beschreiben die gefallene Fläche als gegenwärtig.** `docs/design/textbestand-aufgabenbereich.md` Zeilen 8, 15, 21-22, 27 — einschließlich der Bedeutungen von SP-A-27/SP-A-28 („Anhängen erzeugt keine Zeitbuchung") und eines Verweises auf **`proof:addin` Abschnitt 21**, den es nicht mehr gibt. `docs/design/textbestand.md:1795` führt das Buchungsangebot als **Pflichtflow** mit Berufung auf `CLAUDE.md`, während A-10.9 seit E-100 **keine Handlung** verlangt. | ux-designer / Orchestrator |
+| **T-247-6** | **muß** | **Fünf Nachweisläufe fassen unter Windows die echten Daten des Benutzers an** (33.6). Gemessen: ein Lauf von `proof:addin-wiring` hat `%LOCALAPPDATA%\Takt\addin-token.json` neu geschrieben (das Token der installierten Anwendung damit ungültig) und in `takt.db` geschrieben; der Folgelauf war 27/5 wegen der eigenen Rückstände. Ursache: `XDG_DATA_HOME` wird unter `win32` nicht gelesen (`access/paths.ts:36`). Die Behebung steht seit **T-075** in `verify-sidecar.mjs:113-137` und ist acht Zeilen lang. Gegenmittel **A-A-72**. | domain-dev |
+| **T-247-7** | Feststellung | **Die Abwesenheit des `AttachmentPort` ist eine Zusage des Übersetzers, nicht der Laufzeit.** `inTransaction` reicht den vollen `UnitOfWork` herein; `AddinUnit` ist ein `Pick<>` darauf. Der Kommentar in `ports.ts` sagt, die Fähigkeit sei *„nicht vorhanden"* — erreichbar ist sie nicht, vorhanden schon. Der Verzicht auf einen Übersetzungsadapter ist in `app.ts` begründet und bleibt richtig; **der Satz gehört auf das Maß der Sache gebracht.** | integration-dev |
+| **T-247-8** | Feststellung | **Der Deep-Link aus Outlook ist an der Quelle geschlossen, nicht erst an der Tür.** `outlookWebLink`, `HostState.webLink` und der Aufrufer sind entfallen; die beiden Adressen `outlook.office.com` und `outlook.live.com` werden im Laufzeitcode nirgends mehr gebildet (die verbliebenen Vorkommen sind `frame-ancestors` in der CSP des Aufgabenbereichs und ein Prüfdatum). Der dritte der drei Wege aus `CLAUDE.md` ist damit erledigt; **Wurzelspeicher und fremde Datei bleiben unbewertet.** | — |
+| **T-247-9** | Hinweis | **Semgrep Guardian und 42Crunch weiterhin ohne Werkzeug**, unverändert seit T-156-9 und T-241-7. `which semgrep`, `which 42crunch`: leer. Die Lieferkette dieses Baums ist nie gemessen worden, und das 42Crunch-Audit gegen die vorhandene OpenAPI-Beschreibung hat nie stattgefunden — die Datei liegt seit Monaten vor, die Schwelle des Sicherheitsgates ist damit nie geprüft. Beschaffungsentscheidung. | Orchestrator |
+| **T-247-10** | Feststellung | **E-100 Punkt 5 sagt, die Zustimmung des Prüfers zum Wegfall des V-08-Satzes werde „in Welle 2 eingeholt und nicht vorweggenommen"; der Satz ist in Welle 1 gefallen.** Kein Sicherheitsbefund, aber E-078 Punkt 3 ist eine Zusage über die Sperrliste, und die Sperrliste ist ein Wächter. Nachträgliche Zustimmung oder Rücknahme — die Entscheidung liegt beim spec-ux-reviewer. | spec-ux-reviewer |
+
+### 33.8 Neue Auflagen
+
+| Auflage | Was zu tun ist | Wie geprüft wird |
+|---|---|---|
+| **A-A-71** | **18f mißt die Anforderung und nicht den Namen.** Der Abschnitt zählt die Pfade unter `/addin` aus der Routenliste des zusammengesetzten Dienstes und hält sie gegen die **ausgeschriebene** Menge der vier — `context`, `todo-matches`, `todos`, `todos/:todoId/time-entries` —, nicht gegen ein Muster auf `attachment`. Zusätzlich, und das ist der tragende Teil: Für **jede** gefundene Route unter `/addin` fährt der Lauf sie mit gültigem Add-in-Token an und mißt danach `SELECT COUNT(*) FROM todo_attachment` — die Zahl muß **null** bleiben. **Berichtigt am 2026-09-10 (T-247-17, A-A-70).** Der Halbsatz lautete hier: „— die Zahl muß **null** bleiben, unabhängig davon, ob die Route 201, 422 oder 404 antwortet." Er ist falsch, und er deckt genau die leere Messung, die als Weg 2 in 34.3 gemessen worden ist: Eine Route, die 401, 403, 404 oder 422 antwortet, ist **nicht angefahren** worden — gemessen ist dann die Wächterkette oder die Prüfschicht, nicht die Fläche. Was gilt, steht in **A-A-73**: Jede Antwort ab 400 ist ein **Fehlschlag der Messung**, nicht ihr Ergebnis. Der Satz stand hier, weil er den damaligen Zweck traf (der Statuscode soll nicht zur *Bedingung der Wirkung* werden — eine Tür, die einen Anhang anlegt und danach 500 antwortet, ist eine Tür); dieser Zweck bleibt und heißt jetzt: Die **Wirkung** wird unabhängig vom Statuscode gezählt, die **Ankunft** wird am Statuscode gemessen. Zwei Aussagen, zwei Messungen, nicht mehr eine. Der Kommentar nennt den Grund: A-19.19 spricht über **entstehende Anhänge**, nicht über Pfadnamen, und die Menge wird deshalb an der Anforderung aufgespannt (E-099 Punkt 3). Die Namensprüfung darf daneben stehenbleiben; sie ist billig und nennt den Fall beim Namen. | In **beide** Richtungen, und die Gegenprobe ist bereits gebaut (33.2): Eine zur Laufzeit angehängte Route `POST /addin/todos/:todoId/links`, die eine Zeile in `todo_attachment` schreibt, muß den Lauf **rot** machen und dabei **den Pfad nennen**, der dazugekommen ist. Heute läßt sie ihn bei 228/0. Unveränderter Baum: grün, und die Zeile nennt die vier Pfade. Zweite Gegenprobe: eine Route unter `/addin`, die **keinen** Anhang schreibt, macht den Lauf nicht rot an der Wirkung, wohl aber an der Menge der vier — beide Meldungen müssen unterscheidbar sein. |
+| **A-A-72** | **Jeder Nachweislauf, der den Sidecar startet, lenkt das Anwendungsdatenverzeichnis auf jeder Plattform um.** Die Form liegt seit T-075 vor (`apps/desktop/scripts/verify-sidecar.mjs:113-137`): eine Konstante `{ variable, folder }`, unter `win32` `LOCALAPPDATA`/`Takt`, sonst `XDG_DATA_HOME`/`takt`, benutzt sowohl beim Setzen der Umgebung als auch beim Nachsehen im Wegwerfordner. Zu übertragen auf `proof-access.mjs`, `proof-addin-wiring.mjs`, `proof-conflicts.mjs`, `proof-export-api.mjs` und `proof-tags.mjs`. Dazu, weil eine Regel, an die man denken muß, wieder vergessen wird: **eine Zeile im Lauf selbst, die prüft, daß die Datenbank tatsächlich im Wegwerfordner entstanden ist**, und die rot wird, wenn sie woanders liegt. Ein Prüfer, der am falschen Ort schreibt, soll das sagen und nicht schweigen. | Auf Windows: nach jedem der fünf Läufe sind `mtime` von `%LOCALAPPDATA%\Takt\takt.db`, `…-wal` und `…\addin-token.json` **unverändert**, und im Wegwerfordner liegt eine `takt.db`. Zweimal hintereinander gefahren liefert jeder Lauf **dieselbe** Zahl — heute liefert `proof:addin-wiring` 32/0 und danach 27/5. Gegenprobe: Wird die Umlenkung wieder auf `XDG_DATA_HOME` allein zurückgesetzt, muß die neue Zeile unter Windows **rot** werden und den gefundenen Pfad nennen. Auf Linux ändert sich nichts — dort war die Umlenkung immer richtig, und das ist der Grund, warum der Befund drei Wellen überlebt hat. |
+
+> **Nachtrag vom 2026-09-10 (Wiedervorlage, Kapitel 34).** **A-A-71 ist erfüllt** — ausgeführt wie
+> geschrieben, eigenständig nachgemessen (`proof:addin` **238/0**), beide Gegenproben tragen und benutzen
+> dieselben Hilfsfunktionen wie die tragenden Prüfungen (34.1). Der Angriff aus 33.2 wird heute gefangen.
+> **A-A-72 ist gebaut** (`apps/local-api/scripts/proof-appdata.mjs`); `%LOCALAPPDATA%\Takt` blieb nach
+> allen Läufen dieser Wiedervorlage unverändert. Zwei **neue** Wege am umgebauten Wächter vorbei sind
+> dabei gemessen worden — eine Anhangstür, die keine Route ist (34.2), und eine Rundfahrt, die an der
+> einzigen schreibenden Route nicht ankommt (34.3). Sie nehmen die Abnahme nicht zurück; sie sind der
+> nächste Anlaß, und ihre Gegenmittel heißen **A-A-73** und **A-A-74**.
+
+### 33.9 Urteil dieser Prüfung
+
+**Zum Rückbau selbst: sauber.** Die Tür ist zu, und sie ist nicht verriegelt, sondern ausgebaut —
+Route, Schema, Port, Aufrufer, Beschreibung und der Lauf, der nur ihretwegen existierte. Gemessen
+an drei unabhängigen Stellen (404 mit gültigem Token samt Gegenprobe, vier statt fünf Routen in der
+Fläche, kein `unit.attachments` im Add-in-Zweig). Was nicht fallen durfte, ist nicht gefallen: die
+Anhangsrouten der Hauptanwendung antworten dem Add-in-Token weiterhin mit 401, der Öffnen-Befehl
+der Hülle ist unberührt, und der Weg aus einem Fremdbackup in einen Anhang (R-21) steht ohne eine
+Zeile Änderung da. Der Deep-Link aus Outlook ist an der **Quelle** geschlossen worden und nicht nur
+an der Tür — das ist mehr, als der Auftrag verlangt hat.
+
+**Zur Prüfung insgesamt: Nacharbeit.** Ein Befund der Stufe **muß** (T-247-6, außerhalb von F-21
+und heute an dieser Maschine ausgelöst), vier der Stufe **soll**, eine Berichtigung an meinem
+eigenen Papier, zwei neue Auflagen. Keine davon berührt die Fachlogik; A-A-71 und A-A-72 liegen in
+`apps/*/scripts/**`, T-247-2 in `app.ts`, T-247-4 in der OpenAPI-Beschreibung, T-247-5 in
+`docs/design/**`.
+
+**Der Satz dieser Prüfung.** E-100 Punkt 3 hat verlangt, der Wächter solle künftig die Abwesenheit
+**jeder** Anhangstür unter `/addin` messen. Gebaut wurde ein Wächter, der die Abwesenheit jeder Tür
+mißt, **die „attachment" heißt**. Das ist ein Fortschritt gegenüber dem, der eine einzelne Adresse
+maß, und es ist dieselbe Bauart: eine Menge, aufgespannt an dem, was der Verfasser kannte. R-25
+sagt, das Risiko sei mit T-247 nicht erledigt, sondern auf seinen nächsten Anlaß vertagt. **Der
+nächste Anlaß war derselbe Auftrag.**
+
+---
+
+## 34. Wiedervorlage T-247 (2026-09-10) — der umgebaute Wächter gegen den nächsten Angriff: er hält die Tür, die ich ihm gezeigt habe
+
+**Auftrag.** A-A-71 ist gebaut. Gebaut hat sie derselbe Agent, der 18f schon vorher gebaut hat,
+und gemessen hat sie bisher nur er selbst — genau die Lage, aus der Kapitel 33 entstanden ist.
+Zu prüfen war deshalb nicht, ob die Auflage *ausgeführt* ist (das ist die kleinere Frage), sondern
+ob der ausgeführte Wächter **einem neuen Angriff** standhält: nicht demselben noch einmal, sondern
+dem nächsten. Dazu drei Fragen aus dem Auftrag: Erreicht die Rundfahrt wirklich **jede** Route?
+Trägt die Untergrenze? Stimmt Kapitel 33 nach dem Umbau noch?
+
+### 34.0 Was gemessen wurde und was nicht
+
+**Gefahren, an diesem Baum, heute:** `pnpm --filter @takt/outlook-addin proof:addin` —
+**238 bestanden, 0 fehlgeschlagen, Code 0**, eigenständig nachgefahren und nicht aus dem Bericht
+übernommen. Dazu **sieben eigene Angriffsläufe** gegen den zusammengesetzten Dienst
+(`compose(...)` mit `:memory:`, echtes Add-in-Token, Wirt und Herkunft wie aus dem
+Aufgabenbereich). Sie hängen ihre Verstümmelungen **zur Laufzeit** an den fertigen Dienst; am Baum
+ist keine Zeile geändert.
+
+**Der eigene Lauf war diesmal ungefährlich, und das ist nachgesehen:** `%LOCALAPPDATA%\Takt`
+trägt nach allen Läufen unverändert die Zeitstempel von 01:56/01:57 — vor dem ersten Angriff von
+heute morgen. A-A-72 ist gebaut (`apps/local-api/scripts/proof-appdata.mjs`, `APP_DATA` als
+`{ variable, folder }` je Plattform, Zeile 49 und 168); meine Läufe brauchen sie nicht einmal, weil
+sie Datenbank und Tokenspeicher im Arbeitsspeicher halten.
+
+**Nicht gefahren und deshalb nicht behauptet:** `pnpm check` als Ganzes (der Orchestrator meldet
+ihn für heute vollständig, Code 0 — das ist seine Messung, nicht meine), `proof:route-policy`,
+`proof:openapi`, `cargo test`, `pnpm test:e2e`. Wo ich unten über `proof:route-policy` urteile,
+urteile ich über **gelesenen Quelltext** und sage es an der Stelle.
+
+**Semgrep Guardian und 42Crunch stehen unverändert nicht zur Verfügung** (`which semgrep`,
+`which 42crunch`: leer). Zwei der vier Punkte der Definition of Done dieser Rolle sind damit
+weiterhin ungedeckt — unverändert seit T-156-9, T-241-7 und T-247-9.
+
+---
+
+### 34.1 Abnahme A-A-71 — **erfüllt**, und die beiden Gegenproben sind echte Gegenproben
+
+`apps/outlook-addin/scripts/proof-addin.mjs`, Abschnitt 18f, gelesen und nachgefahren. Die Auflage
+verlangte fünf Stücke; alle fünf stehen da:
+
+1. Die gefallene Adresse antwortet mit gültigem Token **404**, mit `…/time-entries` als Gegenprobe
+   im selben Lauf. Unverändert aus der ersten Runde.
+2. `ADDIN_FLAECHE` ist die **ausgeschriebene** Menge der vier, eingefroren, und die Meldung trennt
+   *zuviel* von *fehlt*. Die Namensprüfung auf `attachment` steht daneben und ist im Kommentar
+   ausdrücklich als nicht mehr allein tragend bezeichnet.
+3. `routenMitAnhangswirkung` fährt **jede** gefundene Route unter `/addin` mit gültigem Token an
+   und meldet die, nach denen `todo_attachment` gewachsen ist — mit Pfad.
+4. Gegenprobe 1 hängt `POST /addin/todos/:todoId/links` zur Laufzeit ein, **beweist vorher, daß die
+   Tür trägt** (`status < 400`, eine Zeile in der Tabelle) und verlangt danach beide Beine rot.
+5. Gegenprobe 2 hängt eine harmlose fünfte Route ein und verlangt: rot an der **Menge**, grün an
+   der **Wirkung**.
+
+Zwei Dinge, die ich eigens nachgesehen habe, weil sie der übliche Weg sind, an dem eine Gegenprobe
+nichts wert ist: Die Gegenproben benutzen **dieselben** Hilfsfunktionen wie die tragenden
+Prüfungen (`addinFlaeche`, `ueberzaehlig`, `routenMitAnhangswirkung`) — es ist kein Zwilling, der
+neben der Sache mißt. Und die Verstümmelung heißt `links` und nicht `attachments`, trifft also
+genau den Fall aus 33.2.
+
+**Urteil zu A-A-71: erfüllt.** Der Wortlaut ist ausgeführt, die Ausführung ist nachgemessen, und
+der Angriff aus der ersten Runde wird heute gefangen. Was folgt, ist deshalb **keine** Rücknahme
+dieser Abnahme, sondern das, wofür die Wiedervorlage angesetzt war: der **nächste** Angriff.
+
+---
+
+### 34.2 Angriff 1 — **gelingt.** Die Tür, die keine Route ist
+
+Der Wächter spannt seine Fläche aus `service.app.routes`. Das ist die Liste der **registrierten
+Endpunkte** — und in Hono beantwortet nicht nur ein Endpunkt eine Anfrage. Ein **Kettenglied**
+(`app.use('*', …)`) sieht jede Anfrage, darf antworten, statt an `next` weiterzureichen, und steht
+in dieser Liste mit dem Pfad `/*`. Der Filter des Wächters lautet `path.includes('/addin')`.
+`/*` enthält kein `/addin`. Damit ist ein Kettenglied für **beide** Beine von 18f unsichtbar: nicht
+in der Menge, und nicht in der Rundfahrt, weil die Rundfahrt nur die Pfade anfährt, die sie in der
+Menge gefunden hat.
+
+Gemessen (`angriff2.mjs`, zusammengesetzter Dienst, Verstümmelung zur Laufzeit):
+
+```text
+Kettenglied auf '*', das POST /api/v1/addin/todos/{id}/links selbst beantwortet
+und dabei eine Zeile in todo_attachment schreibt:
+
+  POST /addin/todos/{id}/links mit gültigem Add-in-Token  -> 201
+  Zeilen in todo_attachment                              -> 1
+  18f „Menge der vier": zuviel = [], fehlt = []          -> GRÜN
+  18f Namensprüfung /attachment/i                        -> GRÜN
+  18f Rundfahrt: Routen mit Wirkung = [], Zeilen = 0     -> GRÜN
+  18f Untergrenze (>= 4 Routen)                          -> 4, erfüllt
+  Tür danach erneut angefahren                           -> 201, Zeile steht wieder
+```
+
+Alle drei Prüfungen von 18f grün, die Tür offen, A-19.19 gebrochen. Es ist **nicht** derselbe
+Angriff wie in der ersten Runde: Damals war es eine Route mit einem anderen Namen, heute ist es
+überhaupt keine Route.
+
+**Was den Fall heute noch fängt, und wo es aufhört.** `proof:route-policy` zählt die Kettenglieder
+(A-A-56, `MIDDLEWARE_COUNT = 10`) und verlangt für jeden `ALL`-Eintrag die Form `/*`. Gemessen: Mit
+einem zusätzlichen Kettenglied stehen **elf** `ALL`-Einträge da, alle auf `/*` — die Zahl wird
+rot. Wer die Tür also als **elftes** `app.use('*', …)` in `app.ts` schreibt, fällt bei
+`proof:route-policy` auf. Zwei Wege daran vorbei bleiben:
+
+- Die Tür steht **in einem der zehn vorhandenen** Kettenglieder (`http/guards.ts`). Dann ändert
+  sich keine Zahl: nicht die zehn, nicht die vier, nicht die Reihenfolge der Namen. `proof:addin`
+  bleibt bei 238/0, `proof:route-policy` bei seiner Zahl. **Nichts in diesem Baum mißt, was ein
+  Kettenglied tut, wenn es antwortet, statt durchzureichen.** (Gelesen, nicht gemessen: Ich habe
+  `guards.ts` nicht verändert. Die Aussage folgt aus dem, was die beiden Läufe zählen, und das ist
+  gemessen.)
+- Die Tür steht in einem Kettenglied und wird von 18f auch dann nicht gesehen, wenn
+  `proof:route-policy` sie fängt — und **18f ist der Lauf, der A-19.19 zugesagt bekommen hat.**
+  Eine Zusage, die in einem anderen Lauf hängt und das nicht sagt, ist genau die Bauart aus R-25.
+
+**Gegenmittel: A-A-74** (34.7). Kurz: 18f fragt nicht nur, **was registriert ist**, sondern auch,
+**was antwortet**.
+
+---
+
+### 34.3 Angriff 2 — **gelingt.** Die Rundfahrt fährt, aber sie kommt nicht überall an
+
+Der tragende Teil von A-A-71 ist die Rundfahrt: jede Route mit einem Rumpf anfahren, „der zu einer
+Anhangstür passen würde", und danach die Tabelle zählen. Gemessen, was dabei tatsächlich über die
+Leitung geht (`angriff.mjs`, unveränderter Baum):
+
+```text
+GET  /api/v1/addin/context                        -> 200
+GET  /api/v1/addin/todo-matches                   -> 200
+POST /api/v1/addin/todos                          -> 201
+POST /api/v1/addin/todos/:todoId/time-entries     -> 422  validation_error: startedAt
+```
+
+Die vierte Route ist **die einzige der vier, die einen Rumpf mit einem Anhangsfeld tragen könnte
+und dabei schreibt** — und sie wird nie erreicht. Der Grund steht in `PROBE_RUMPF`:
+`startedAt: '2026-09-30T08:00:00.000Z'`. Die Prüfschicht der Route verlangt einen Zeitstempel
+**ohne Bruchteile**. Gegenprobe im selben Lauf: derselbe Aufruf mit `2026-09-30T08:00:00Z`
+antwortet **201** und legt eine Buchung an.
+
+Das ist dieselbe Falle, die der Erbauer in seiner eigenen Gegenprobe schon einmal getroffen und
+dort behoben hat (der `INSERT` der Verstümmelung trägt eigens den Kommentar „Ohne Bruchteile: Der
+CHECK in Migration 0015 verlangt genau diese Form") — im **Probenrumpf** ist sie stehengeblieben.
+Wirkung: Ein Anhang, den der Buchungs-Anwendungsfall selbst anlegte — der plausibelste Ort für die
+nächste ungedeckte Fläche, weil er der einzige schreibende der vier ist —, entstünde erst hinter
+der Prüfschicht, und die Rundfahrt kommt dort nicht an.
+
+**Und die Untergrenze trägt das nicht.** Sie lautet `addinFlaeche(service).length >= 4` — sie zählt
+**gefundene Routen**, nicht **angekommene Anfragen**. Gemessen, wie leer die Rundfahrt sein darf,
+ohne daß etwas rot wird (`angriff5.mjs`):
+
+```text
+Rundfahrt mit fremder Herkunft (Origin: https://boese.example)
+  /context:403  /todo-matches:403  /todos:403  /time-entries:403
+  Wirkung=[]  Zeilen=0  Untergrenze=ok   -> GRÜN
+
+Rundfahrt ohne Token
+  /context:401  /todo-matches:401  /todos:401  /time-entries:401
+  Wirkung=[]  Zeilen=0  Untergrenze=ok   -> GRÜN
+```
+
+Vier Anfragen, die die Wächterkette abgewiesen hat, ergeben denselben grünen Satz wie vier
+Anfragen, die im Anwendungsfall angekommen sind. Das ist wörtlich der Fall, gegen den **A-A-60**
+geschrieben wurde: *„neben jede Aussage über einen Angriff den Nachweis, daß er angekommen ist."*
+18f hat die Untergrenze bekommen und den Ankunftsnachweis nicht.
+
+**Was heute rettet, und wie weit.** Gegenprobe 1 fordert von ihrer eingehängten Tür ausdrücklich
+`status < 400` und **eine** Zeile. Wäre der ganze Aufbau blockiert — falscher Wirt, falsche
+Herkunft, kaputtes Token —, fiele Gegenprobe 1 um. Die **vollständige** Blindheit ist damit
+gefangen; die **teilweise** nicht, und die teilweise ist die, die heute besteht: drei von vier
+Routen kommen an, die vierte nicht, und kein Zeichen davon steht im Lauf.
+
+**Gegenmittel: A-A-73** (34.7).
+
+---
+
+### 34.4 Angriff 3 — **gelingt zur Hälfte.** Zwei Registrierungen, ein Eintrag
+
+`addinFlaeche` legt die Rohliste in ein `Set`. Zwei Registrierungen auf demselben Pfad ergeben
+damit **einen** Eintrag. Gemessen (`angriff3.mjs`): roh 5, entdoppelt 4, `ueberzaehlig` leer, die
+Mengenprüfung grün. `proof:route-policy` entdoppelt an derselben Stelle (`unique` als `Map` über
+`METHODE PFAD`, `proof-route-policy.mjs:392`) — **beide** Listen zeigen die zweite Registrierung
+nicht.
+
+Und die zweite Registrierung ist nicht wirkungslos. Gemessen an einer eigenen Hono-App
+(`angriff4.mjs`, Hono 4.13.5, dieselbe Fassung wie im Bestand):
+
+```text
+app.post('/api/v1/addin/todos/:todoId/time-entries', tuer)   // zuerst registriert
+app.route('/api/v1/addin', echteAddinRouten)                 // danach
+
+POST /api/v1/addin/todos/42/time-entries  ->  201 {"wer":"erste Registrierung"}
+Routenliste roh        : zwei gleiche Einträge
+Routenliste entdoppelt : ein Eintrag
+```
+
+Wer in `app.ts` eine Zeile **über** `api.route('/addin', …)` setzt, beantwortet damit einen der
+vier Pfade selbst, und keine der beiden Listen sagt es. Ob die Rundfahrt es fängt, hängt daran, was
+die Tür mit einem Rumpf tut, den sie nicht kennt: schreibt sie stumpf, wird sie gefangen; reicht
+sie einen unpassenden Rumpf an `next` weiter — die naheliegende Bauart —, trifft sie mit
+`PROBE_RUMPF` genau den Fall aus 34.3 und bleibt unsichtbar. **Halb gelungen** heißt deshalb: Die
+Unsichtbarkeit in beiden Listen ist gemessen, die Wirkung im Zusammenspiel mit 34.3 ist
+zusammengesetzt und nicht am Stück gemessen — dazu hätte ich `app.ts` ändern müssen, und das ist
+nicht meine Datei.
+
+---
+
+### 34.5 Angriff 4 — **gelingt an der Wirkung.** Der Platzhalter, der anders heißt
+
+Die Rundfahrt setzt die Kennung mit `vollerPfad.replace(':todoId', todoId)` ein. Eine Route, deren
+Platzhalter anders heißt, wird mit dem **Literal** angefahren. Gemessen (`angriff6.mjs`, fünfte
+Route `POST /api/v1/addin/todos/:id/links`, die eine Zeile schreibt):
+
+```text
+Rundfahrt fährt an:  /addin/todos/:id/links            -> 422   (der Doppelpunkt steht noch drin)
+Rundfahrt meldet:    Wirkung = []                       Zeilen = 0
+Derselbe Pfad echt:  /addin/todos/{uuid}/links          -> 201   Zeilen = 1
+```
+
+Heute wird dieser Fall von der **Mengenprüfung** gefangen, nicht von der Wirkung. Das genügt —
+solange niemand die Menge fortschreibt. Genau das tut aber, wer eine fünfte Route **berechtigt**
+hinzufügt: Er trägt sie in `ADDIN_FLAECHE` ein, das Mengenbein wird wieder grün, und wenn ihr
+Platzhalter nicht `:todoId` heißt, mißt das Wirkungsbein sie ab diesem Tag **nicht**, ohne es zu
+sagen. Ein Bein, das still auf null Routen fällt, ist der Befund aus 34.3 in klein.
+
+---
+
+### 34.6 Was nicht durchkam — und was der Baum heute wirklich beantwortet
+
+Fünf Versuche, die der Wächter hält oder die es gar nicht gibt. Sie stehen hier, weil eine Aussage
+über einen Wächter so viel wert ist wie die Angriffe, die sie überstanden hat:
+
+1. **Die alte Tür unter neuem Namen, als Route.** `POST /addin/todos/:todoId/links` als echte
+   Route: Mengenprüfung rot mit Pfad, Wirkungsprüfung rot mit Pfad. Das ist Gegenprobe 1, und sie
+   ist im Lauf 238/0 mitgefahren.
+2. **`app.mount()`.** Gemessen (`angriff4.mjs`): Hono trägt einen Einhängepunkt als
+   `ALL /api/v1/addin/x/*` ein. Der Pfad enthält `/addin`, die Mengenprüfung meldet ihn als
+   überzählig; zusätzlich wäre er in `proof:route-policy` rot an der **Form** (A-A-56 verlangt für
+   jeden `ALL`-Eintrag `/*`).
+3. **Eine zweite Tabelle.** Es gibt keine. `todo_attachment` ist die einzige Anhangstabelle;
+   `todo_attachment_kind` ist eine Nachschlagetabelle mit drei Zeilen, und ein Bild liegt zwar als
+   **Datei** im Anwendungsdatenverzeichnis, aber **immer** mit Zeile (Migration 0015, A-A-17,
+   A-A-18). Der Zähler von 18f mißt also die richtige Stelle. Der einzige Rest wäre eine Bildkopie
+   **ohne** Zeile — das wäre kein Anhang, sondern Müll, und es fiele unter A-A-18.
+4. **Groß-/Kleinschreibung.** `POST /api/v1/ADDIN/todos` mit Add-in-Token: **401**. Hono routet
+   zeichengenau, und `requiredCredentialForPath` senkt nur den zeichengleichen Teilbaum ab — der
+   Pfad fällt in den `session`-Zweig.
+5. **Die Anhangsroute der Hauptanwendung.** `POST /api/v1/todos/{id}/attachments` mit
+   Add-in-Token: **401**. Unverändert gegenüber der ersten Runde.
+
+Und der Satz, der das Ganze in Verhältnis setzt — gemessen am **unveränderten** Baum, mit gültigem
+Add-in-Token, neun Pfade (`angriff7.mjs`):
+
+```text
+POST /addin/todos/{id}/attachments  -> 404      POST /addin/attachments      -> 404
+POST /addin/todos/{id}/links        -> 404      POST /addin/beliebig-2a6ad02a -> 404
+POST /addin/todos/{id}/files        -> 404      POST /ADDIN/todos             -> 401
+POST /addin/todos/{id}/mail         -> 404      POST /addin/todos/            -> 404
+POST /todos/{id}/attachments        -> 401
+Zeilen in todo_attachment nach allen neun Versuchen: 0
+```
+
+**A-19.19 hält heute im Code.** Über das Add-in-Token entsteht kein Anhang, und keine der Türen,
+die ich gesucht habe, steht offen. Die Befunde dieser Wiedervorlage sind Befunde am **Wächter**,
+nicht an der Fläche — aber sie sind es an der Stelle, an der dieser Baum schon einmal einen
+grünen Lauf über eine offene Tür gelegt hat.
+
+---
+
+### 34.7 Befunde
+
+| Nr. | Stufe | Befund | Zuständig |
+|---|---|---|---|
+| **T-247-0** | **Abnahme** | **A-A-71 ist erfüllt** (34.1). Alle fünf Stücke gebaut, beide Gegenproben sind echte Gegenproben auf denselben Hilfsfunktionen, `proof:addin` **238/0** eigenständig nachgefahren. Der Angriff aus 33.2 wird heute gefangen — an beiden Beinen und mit Pfad. | — |
+| **T-247-11** | **soll** | **Eine Anhangstür, die keine Route ist, sieht 18f nicht** (34.2). Gemessen: ein Kettenglied auf `'*'`, das `POST /addin/todos/{id}/links` selbst beantwortet und eine Zeile schreibt — 201, eine Zeile, **alle drei Prüfungen von 18f grün**. Der Filter des Wächters lautet `path.includes('/addin')`, und ein Kettenglied steht in `app.routes` mit dem Pfad `/*`. Als **elftes** `app.use` fällt der Fall bei `proof:route-policy` an A-A-56 auf (gemessen: elf `ALL`-Einträge); **innerhalb eines der zehn vorhandenen** Kettenglieder ändert er keine Zahl in diesem Baum. Gegenmittel **A-A-74**. | integration-dev |
+| **T-247-12** | **soll** | **Die Rundfahrt kommt an der einzigen schreibenden Route nicht an — Verstoß gegen A-A-60** (34.3). Gemessen: 200/200/201/**422**; `PROBE_RUMPF.startedAt` trägt Bruchteile (`.000Z`), die Prüfschicht verlangt sie ohne. Derselbe Aufruf ohne Bruchteile: 201. Dazu die Untergrenze: Sie zählt **gefundene Routen**, nicht **angekommene Anfragen** — mit fremder Herkunft (4 × 403) und ohne Token (4 × 401) bleibt die Rundfahrt **grün**. Gegenmittel **A-A-73**. | integration-dev |
+| **T-247-13** | Feststellung | **Zwei Registrierungen auf demselben Pfad ergeben einen Eintrag** (34.4). `addinFlaeche` entdoppelt über `Set`, `proof-route-policy.mjs:392` über eine `Map` — beide Listen zeigen die zweite nicht. Gemessen an Hono 4.13.5: Die **zuerst** registrierte gewinnt und antwortet anstelle der echten Add-in-Route. Wirkung nur im Zusammenspiel mit T-247-12 unsichtbar; einzeln gemessen ist die Unsichtbarkeit in den Listen. Behebung liegt in A-A-74 (Rohliste statt entdoppelter Liste). | integration-dev |
+| **T-247-14** | Feststellung | **Ein Platzhalter, der nicht `:todoId` heißt, wird als Literal angefahren** (34.5). Gemessen: `POST /addin/todos/:id/links` — Rundfahrt 422 auf dem Pfad mit Doppelpunkt, Wirkung leer; derselbe Pfad echt 201 und eine Zeile. Heute vom Mengenbein gefangen — also von genau dem Bein, das fortschreibt, wer eine fünfte Route berechtigt hinzufügt. Behebung liegt in A-A-73 (ein nicht ersetzter Platzhalter ist ein Fehlschlag, kein Aufruf). | integration-dev |
+| **T-247-15** | **Berichtigung** | **Die Nachweisspalte von A-A-21 beschrieb 18f in seinem Stand von gestern.** Nach A-A-70 an Ort und Stelle berichtigt, mit dem alten Wortlaut im Zitat (Auflagentafel Kapitel 20). | — |
+| **T-247-16** | Hinweis | **Semgrep Guardian und 42Crunch weiterhin ohne Werkzeug.** Unverändert; zwei der vier Punkte der Definition of Done dieser Rolle bleiben ungedeckt. Beschaffungsentscheidung. | Orchestrator |
+| **T-247-17** | **Berichtigung** | **A-A-71 deckte die leere Messung mit ab.** Der Halbsatz *„die Zahl muß null bleiben, unabhängig davon, ob die Route 201, 422 oder 404 antwortet"* erlaubte genau die Fahrt, die 34.3 als Weg 2 gemessen hat. Nach A-A-70 an Ort und Stelle berichtigt (33.8, alter Wortlaut im Zitat); was bleibt, steht getrennt: Wirkung unabhängig vom Statuscode, **Ankunft** am Statuscode (A-A-73). Nachgezogen am 2026-09-10 auf Rückfrage des Orchestrators (34.10). | — |
+
+### 34.8 Neue Auflagen
+
+| Auflage | Was zu tun ist | Wie geprüft wird |
+|---|---|---|
+| **A-A-73** | **Die Rundfahrt in 18f weist nach, daß sie angekommen ist** (A-A-60, angewandt auf 18f). Drei Stücke: (1) Der Probenrumpf wird von der Prüfschicht **angenommen** — Zeitstempel ohne Bruchteile, damit `…/time-entries` mit **201** antwortet statt mit 422. (2) Jede Anfrage der Rundfahrt hält ihren Statuscode fest; **401, 403 und 404 sind Fehlschläge der Messung**, nicht Ergebnisse: Wer sie sieht, hat den Aufbau gemessen und nicht die Fläche. Mindestens eine **schreibende** Route muß mit `2xx` geantwortet haben. (3) Ein Platzhalter, der nach dem Einsetzen noch im Pfad steht, ist ein Fehlschlag — nicht ein Aufruf ins Leere. Die Meldung nennt bei jedem Fehlschlag Route und Statuscode. | Drei Gegenproben, alle billig: **fremde Herkunft** (`Origin: https://boese.example`) macht den Lauf **rot** — heute grün bei 4 × 403, gemessen in 34.3. **Kein Token** macht ihn rot — heute grün bei 4 × 401. **Bruchteile im Zeitstempel** machen ihn rot — heute grün bei 422. Auf dem unveränderten Baum grün, und die Zeile nennt die vier Statuscodes. |
+| **A-A-74** | **18f fragt nicht nur, was registriert ist, sondern auch, was antwortet.** Zwei Stücke: (1) **Durchgriffsprobe:** Eine feste Liste von Pfaden unter `/addin`, die **nicht** zur Fläche gehören — mindestens `…/todos/{id}/attachments`, `…/todos/{id}/links`, `…/todos/{id}/files`, `…/attachments` und ein zufällig erzeugter Pfad —, wird mit gültigem Add-in-Token angefahren. Jede Antwort muß **404** sein, und `todo_attachment` muß danach bei null stehen. Eine Antwort ungleich 404 heißt: Unter `/addin` beantwortet etwas eine Anfrage, das in keiner Routenliste steht. (2) Die Fläche wird aus der **Rohliste** von `app.routes` gebildet, nicht aus einer entdoppelten: Zwei Registrierungen auf demselben Pfad sind ein Befund und keine Zeile weniger. Der Kommentar nennt den Grund: Eine Liste registrierter Endpunkte ist nicht die Liste dessen, was antwortet — ein Kettenglied steht dort mit `/*`. | In beide Richtungen. **Gegenprobe A:** Das Kettenglied aus 34.2 wird zur Laufzeit eingehängt (der Bauplan liegt in `angriff2.mjs` vor und ist in 34.2 zeichengenau beschrieben); die Durchgriffsprobe muß **rot** werden und den Pfad nennen, der geantwortet hat. Heute läßt sie den Lauf bei 238/0. **Gegenprobe B:** Eine zweite Registrierung auf `POST /api/v1/addin/todos/:todoId/time-entries` muß an der Rohliste rot werden. **Gegenprobe C:** Der unveränderte Baum bleibt grün — gemessen sind die neun Pfade aus 34.6, alle 404 bzw. 401, null Zeilen. |
+
+### 34.9 Urteil dieser Prüfung
+
+**Zu A-A-71: freigegeben.** Die Auflage ist ausgeführt, wie sie geschrieben war, ihre Ausführung
+ist eigenständig nachgemessen, und beide Gegenproben tragen. Der Angriff aus der ersten Runde
+wird heute an beiden Beinen gefangen und mit Pfad gemeldet. **Das ist ein echter Fortschritt und
+kein Papierfortschritt.**
+
+**Zur Fläche: A-19.19 hält im Code.** Neun Türen gesucht, neun zu (34.6). Über das Add-in-Token
+entsteht heute kein Anhang, auf keinem Weg, den ich gefunden habe.
+
+**Zur Prüfung insgesamt: Nacharbeit.** Zwei neue Wege am Wächter vorbei, beide gemessen, beide
+nicht derselbe wie in der ersten Runde: eine Anhangstür, die **keine Route** ist (34.2), und eine
+Rundfahrt, die an der einzigen schreibenden Route **nicht ankommt** (34.3). Dazu zwei
+Feststellungen (Entdopplung, Platzhaltername), die einzeln klein sind und zusammen mit den beiden
+Befunden dieselbe Richtung zeigen.
+
+**Der Satz dieser Prüfung.** Die erste Runde hat gezeigt, daß ein Wächter, der eine Menge am
+**Namen** aufspannt, den Namen mißt. Der Umbau hat den Namen durch die **Routenliste** ersetzt —
+und mißt jetzt die Routenliste. Das ist ein Schritt näher an der Anforderung und immer noch nicht
+die Anforderung: A-19.19 spricht nicht über registrierte Endpunkte, sondern darüber, daß **kein
+Anhang entsteht**. Solange der Wächter seine Fläche aus einer Liste nimmt, die der Erbauer der Tür
+mitschreibt, mißt er den Erbauer. Der Ausweg ist nicht die nächste, feinere Liste — es ist die
+**Anfrage von außen**, die eine Antwort bekommt oder nicht (A-A-74), und der **Nachweis, daß sie
+angekommen ist** (A-A-73). Beides steht seit T-223 als A-A-60 in diesem Papier.
+
+---
+
+### 34.10 Nachtrag vom selben Tag — A-A-73 und A-A-74 gebaut, zwei Fragen entschieden, zwei Grenzen angenommen
+
+**Stand und Grenze dieser Beurteilung.** integration-dev meldet `proof:addin` **244/0** und fünf
+einzeln gefahrene Verstümmelungen. **Ich habe nichts davon nachgemessen** — der Orchestrator fuhr
+zur selben Zeit `pnpm check`, und die Läufe binden denselben Port. Was hier steht, ist am
+**Quelltext** gelesen (`apps/outlook-addin/scripts/proof-addin.mjs`: `rundfahrt`,
+`ankunftsMaengel`, `fahrtprotokoll`, `durchgriff`, `durchgriffsPfade`, die fünf Gegenproben) und
+am Papier geprüft. Die **Abnahme** von A-A-73 und A-A-74 steht damit aus; sie braucht einen
+eigenen Lauf, und sie gehört in die nächste Wiedervorlage.
+
+#### Frage 1 — „jede Antwort ab 400 ist ein Fehlschlag der Messung": **ja, sie trägt**
+
+Die Regel ist richtig, und die Begründung von integration-dev ist die schärfere von zweien:
+
+1. **Aus der Sache.** Die Rundfahrt behauptet eine **Wirkung**. Eine Wirkung entsteht im
+   Anwendungsfall, nicht in der Prüfschicht. Jede Antwort ab 400 heißt: Der Rumpf ist dort nie
+   angekommen. Was der Lauf dann belegt, ist *„ein abgewiesener Rumpf legt keinen Anhang an"* —
+   wahr und nutzlos.
+2. **Aus der Gegenprobe.** A-A-73 verlangt ausdrücklich die dritte Gegenprobe (Bruchteile → 422).
+   Mit einer Untergrenze, die nur *irgendeine* schreibende 2xx-Antwort verlangt, wird sie **nicht
+   rot**: `POST /addin/todos` erfüllt sie allein. Eine Gegenprobe, die nicht fällt, ist keine
+   Gegenprobe — das ist der Fehler, gegen den dieses ganze Kapitel geschrieben ist, angewandt auf
+   den eigenen Fall. Die Regel muß deshalb **je Route** greifen und nicht je Runde.
+
+**Der benannte Preis ist kein Preis, sondern der Zweck.** Eine künftige fünfte Route, die
+`PROBE_RUMPF` zurückweist, macht 18f rot — und das ist richtig: Sie steht dann in `ADDIN_FLAECHE`
+und ihre **Wirkung ist nicht gemessen**. Genau diese stille Lücke war T-247-14. Rot heißt hier:
+Wer die Fläche erweitert, sagt in derselben Zeile, womit sie gemessen wird. Das ist die Hausform
+dieses Baums (A-A-56, „die Add-in-Fläche sind genau vier Routen").
+
+**Eine Bedingung stelle ich dazu, und sie ist der eigentliche Inhalt dieser Antwort.** Wenn eine
+berechtigte fünfte Route den gemeinsamen Probenrumpf zurückweist, ist der Ausweg ein **eigener
+Rumpf für diese Route** — eine Zuordnung Pfad → Rumpf, jeder davon mit den Feldern, die eine
+Anhangstür tragen würde —, **nicht** eine Lockerung der Regel und **nicht** eine Ausnahmeliste von
+Statuscodes. Der Unterschied entscheidet, ob 18f in zwei Jahren noch etwas mißt: Ein eigener Rumpf
+hält die Zusage („jede Route wird bis in ihren Anwendungsfall angefahren"), eine Ausnahme gibt sie
+auf und sieht dabei aus wie Pflege. Wer das erste tut, schreibt eine Zeile; wer das zweite tut,
+baut die Blindheit wieder ein, die T-247-12 gemessen hat.
+
+Zwei kleinere Punkte, beide in Ordnung, beide der Vollständigkeit halber benannt: Die **Meldungen**
+sind im Wortlaut getrennt („die Wächterkette hat abgewiesen" gegen „die Prüfschicht hat den
+Probenrumpf abgewiesen") — das ist die Bedingung dafür, daß ein roter Lauf lesbar bleibt, und sie
+ist erfüllt. Und **404 hat in diesem Abschnitt jetzt zwei Bedeutungen**: in der Rundfahrt ein
+Fehlschlag, in der Durchgriffsprobe das verlangte Ergebnis. Das ist kein Widerspruch — die eine
+fragt eine **vorhandene** Route, die andere eine **erfundene** —, aber es steht in zwei Funktionen
+nebeneinander, und der Kommentar sollte es an einer Stelle aussprechen.
+
+#### Frage 2 — der Satz in A-A-71 ist **gezogen**
+
+Er lautete: *„— die Zahl muß **null** bleiben, unabhängig davon, ob die Route 201, 422 oder 404
+antwortet."* Er deckte die leere Messung aus 34.3 mit ab und ist nach A-A-70 an Ort und Stelle
+berichtigt (33.8, alter Wortlaut im Zitat, Befund **T-247-17**). Was von seinem Zweck bleibt und
+jetzt getrennt dasteht: Die **Wirkung** wird unabhängig vom Statuscode gezählt — eine Tür, die
+einen Anhang anlegt und danach 500 antwortet, ist eine Tür. Die **Ankunft** wird am Statuscode
+gemessen. Zwei Aussagen, zwei Messungen.
+
+#### Die beiden Grenzen von integration-dev — **angenommen, und hier stehen sie**
+
+Beide sind tragbar, und beide sind ab hier **aufgeschrieben** statt vorausgesetzt:
+
+**Grenze 1: Die Durchgriffsprobe ist eine Liste erfundener Pfade, kein Vollständigkeitsbeweis.**
+Sie fängt (a) jede Tür, die einen der plausiblen Anhangsnamen beantwortet, und (b) über den
+Zufallspfad jede Tür, die **jeden** unbekannten Pfad beantwortet. Sie fängt **nicht** ein
+Kettenglied, das ausschließlich auf `/addin/todos/{id}/xyzzy` anspringt.
+
+**Grenze 2: Ein Kettenglied, das erst auf ein Feld anspringt, das `PROBE_RUMPF` nicht trägt,
+bleibt unsichtbar.**
+
+**Warum das tragbar ist.** Der Gegner dieses Wächters ist nicht der Böswillige mit Schreibrecht —
+gegen den hilft kein Nachweislauf, denn er ändert auch den Lauf. Der Gegner ist die
+**Wiederholung von PR #16**: Jemand baut eine plausible Fläche (die geöffnete Outlook-Nachricht
+anhängen), nennt sie plausibel, und der Lauf bleibt grün. Diese Fläche heißt `attachments`,
+`links`, `files` oder `mail`, sie trägt `url`, `target`, `kind` und `title`, und sie ist in neun
+von zehn Fällen eine **Route** — und damit von der Rohliste gefangen. `xyzzy` ist kein Name, den
+jemand vergibt, der eine Funktion bauen will; es ist ein Name, den jemand vergibt, der sich vor
+dem Wächter versteckt. **Das ist keine Meßlücke mehr, das ist eine Hintertür**, und die Grenze
+dieses ganzen Wächterfamilie ist damit sauber benannt: Sie mißt gegen **Irrtum und Bequemlichkeit**,
+nicht gegen Absicht mit Schreibrecht.
+
+**Kein dritter Weg also — aber zwei Sätze, die dazugehören.** Erstens: Die Grenze gehört in den
+**Kommentar von 18f**, nicht nur in dieses Papier; ein Lauf, der seine eigene Reichweite
+verschweigt, ist die Bauart aus R-25 (das ist derselbe Satz wie A-A-55: *„Eine Aussage über eine
+Liste, aus der etwas herausfällt, ist keine."*). Zweitens, **billig und deshalb empfohlen, aber
+nicht als Auflage**: Der Zufallspfad wird heute nur mit `POST` angefahren. Eine Tür unter `PUT`
+oder `PATCH` bliebe unbemerkt, obwohl der Rest der Probe sie fände — zwei zusätzliche Anfragen auf
+demselben Zufallspfad schließen das, kosten nichts und stehen in derselben Schleife.
+
+---
+
+### 34.11 Abnahme A-A-73 und A-A-74 — **erfüllt**, sechs Verstümmelungen von außen gefahren
+
+**Wie gemessen wurde, und warum diesmal anders.** Zweimal hintereinander war die Lage dieselbe: Die
+Zahl war grün, und gemessen hatte sie der, der gebaut hatte. Deshalb ist die Abnahme nicht als
+Nachbildung des Wächters gefahren worden, sondern **am echten Lauf**: Ein Auflösungshaken
+(`node --import`) leitet den Import von `apps/local-api/src/composition.ts` in `proof-addin.mjs`
+auf ein Hüllmodul im Scratchpad um. Das Hüllmodul reicht `compose` durch und verstümmelt den
+**fertigen Dienst** je nach Umgebungsvariable. Der Baum bleibt dabei zeichengleich unverändert —
+gemessen wird `proof-addin.mjs` in der Fassung, die im Bestand steht, gegen eine Laufzeit, die er
+nicht erwartet.
+
+**Der Nullabgleich zuerst**, sonst mißt der Rest den Haken: Mit der Verstümmelung `keine` läuft
+`proof:addin` durch den Haken auf **244 bestanden, 0 fehlgeschlagen, Code 0**. Der Haken selbst
+verändert nichts.
+
+| Verstümmelung | Was sie einbaut | Lauf | Was rot wird |
+|---|---|---|---|
+| **Kettenglied** (Weg 1 aus 34.2) | `app.use('*')`, das `POST /addin/todos/{id}/links` selbst beantwortet und eine Zeile schreibt | **243/1**, Code 1 | **A-A-74 Durchgriffsprobe**, mit Pfad: *„unter /addin antwortet etwas, das in keiner Routenliste steht: POST /addin/todos/01a08a71-…/links -> 201"* |
+| **Route** | dieselbe Tür als **Route** registriert | **236/8**, Code 1 | Menge (*„zuviel: POST …/links"*), Wirkung (*„über das Add-in-Token entsteht ein Anhang (A-19.19): POST …/links"*), Durchgriffsprobe |
+| **Doppelt** (T-247-13) | zweite Registrierung auf `POST …/time-entries` | **241/3**, Code 1 | Menge, mit **eigener** Meldung: *„doppelt registriert: POST /api/v1/addin/todos/:todoId/time-entries"* |
+| **Fünfte** | harmlose fünfte Route `…/pings` | **239/5**, Code 1 | Menge (*„zuviel: … /pings"*) — **nicht** die Wirkung. Die beiden Meldungen bleiben unterscheidbar |
+| **Abgewiesen** (Weg 2 aus 34.3) | `fetch` gibt auf `…/time-entries` **403** zurück, ohne Wirkung | **239/5**, Code 1 | **A-A-73 Ankunft**: *„die Rundfahrt ist nicht angekommen — POST …/time-entries: 403 — die Wächterkette hat abgewiesen, hier mißt der Aufbau"*, dazu das vollständige Fahrtprotokoll aller vier Statuscodes. Und die Durchgriffsprobe hat ihren **eigenen** Ankunftsnachweis: *„die Nachbarroute antwortet 403 — dann mißt die Durchgriffsprobe den Aufbau"* |
+| **Xyzzy** (die benannte Grenze) | Kettenglied, das **nur** auf `/addin/todos/{id}/xyzzy` anspringt | **244/0**, Code 0 | **nichts** — wie in 34.10 angenommen und aufgeschrieben |
+
+**Damit sind beide Wege aus dieser Wiedervorlage geschlossen und gemessen geschlossen.** Weg 1 war
+am 244/0-Stand von gestern grün und ist jetzt rot **mit Nennung des Pfades**; Weg 2 war grün und
+ist jetzt rot **mit Nennung von Route und Statuscode**. Beide Male ist der rote Lauf nicht die
+Gegenprobe des Erbauers, sondern derselbe Angriff, der in 34.2 und 34.3 gemessen wurde, von außen
+in die Laufzeit gehängt.
+
+**Zwei Beobachtungen, die zugunsten des Baus sprechen und die ich nicht gesucht habe.** Die
+Meldungen sind so gebaut, daß der **rote** Lauf mehr sagt als der grüne — das Fahrtprotokoll steht
+auch dann da, wenn nur eine Route klemmt. Und die Durchgriffsprobe trägt ihren Ankunftsnachweis
+selbst, statt sich auf den der Rundfahrt zu verlassen; das ist A-A-60 an einer Stelle angewandt,
+an der die Auflage es nicht ausdrücklich verlangt hat.
+
+**Die Grenze steht, wo sie in 34.10 angenommen wurde, und ist jetzt gemessen.** `xyzzy` bleibt
+grün. Das ist keine Überraschung und kein neuer Befund — es ist die Bestätigung, daß die
+aufgeschriebene Reichweite genau die tatsächliche ist: Der Wächter mißt gegen **Irrtum und
+Bequemlichkeit**, nicht gegen Absicht mit Schreibrecht. Ein Papier, das eine Grenze behauptet, ohne
+sie gemessen zu haben, wäre in diesem Kapitel die falsche letzte Zeile.
+
+**Der eigene Lauf war ungefährlich:** `%LOCALAPPDATA%\Takt` trägt nach allen sieben Läufen
+unverändert die Zeitstempel von 01:56/01:57 (A-A-72).
+
+#### Urteil zur Wiedervorlage: **freigegeben**
+
+- **A-A-71 erfüllt** (34.1), **A-A-73 erfüllt**, **A-A-74 erfüllt** (dieser Abschnitt), **A-A-72
+  erfüllt** (34.0).
+- **T-247-11** (Kettenglied) und **T-247-12** (Ankunft) sind behoben und die Behebung ist von
+  außen nachgemessen; **T-247-13** (Entdopplung) und **T-247-14** (Platzhalter) sind mit
+  behoben — die Rohliste meldet die doppelte Registrierung eigens, ein nicht ersetzter Platzhalter
+  gilt als Fehlschlag der Messung.
+- **T-247-15** und **T-247-17** sind Berichtigungen an diesem Papier und ausgeführt.
+- **T-247-16** bleibt offen und ist keine Agentenarbeit: Semgrep und 42Crunch fehlen weiterhin.
+- **Offen und ausdrücklich nicht Gegenstand dieser Aufgabe:** der Wurzelspeicher aus A-23 (R-23)
+  und der Fremdimport aus A-20.7 (R-24). Beide sind schwerer als alles in den Kapiteln 33 und 34
+  und noch nie bewertet worden.
+
+**Der Satz zum Schluß.** Dreimal ist an derselben Fläche gemessen worden, und dreimal hat die
+Messung etwas gefunden — den Namen, die Routenliste, die Eingabeprüfung. Beim vierten Mal hat sie
+nichts mehr gefunden, und diesmal ist das eine Aussage: weil derselbe Angriff, der zweimal grün
+blieb, jetzt rot wird, und weil die eine Tür, die weiterhin durchkommt, im Papier steht, bevor
+jemand sie findet.
+
+> **Nachtrag vom 2026-09-10, nach der Abnahme: 244 → 245.** Meine Empfehlung aus 34.10 (der
+> erfundene Pfad wird nicht nur mit `POST` gefragt) ist gebaut — `DURCHGRIFF_VERFAHREN` steht auf
+> `POST`, `PUT`, `PATCH`, also achtzehn Anfragen statt sechs. Das Plus von eins kommt **nicht**
+> daher, sondern aus einer **Gegenprobe A2**, die integration-dev ungefragt dazugenommen hat:
+> dieselbe Tür wie meine Verstümmelung aus 34.2, nur auf `PATCH`, gemessen in zwei Zügen — erst,
+> daß sie auf `POST` mit 404 antwortet (die alte Fragerichtung fand sie also **nicht**), dann, daß
+> die Durchgriffsprobe rot wird und `PATCH …/links -> 201` nennt; gegengemessen mit
+> `DURCHGRIFF_VERFAHREN = ['POST']` → 244/1. **Das ist die richtige Ergänzung, und sie ist mehr als
+> Fleiß:** Eine erweiterte Schleife ohne Gegenprobe ist eine Zusicherung, von der niemand weiß, ob
+> sie beißt — genau die Sorte, gegen die A-A-55 und A-A-60 geschrieben sind. Meine Empfehlung war
+> eine Zeile; ihre Absicherung ist die Prüfung. **`DELETE` fehlt zu Recht:** A-19.19 spricht über
+> Anhänge, die **entstehen**, und ein Löschverfahren läßt keinen entstehen; `PUT` und `PATCH` sind
+> genau deshalb dazugekommen. Die **Reichweitenerklärung** im Kopf von 18f trägt in meinem Sinn:
+> Sie nennt beide Hälften, führt `/addin/xyzzy` ausdrücklich als **Hintertür und nicht als
+> Meßlücke**, und ihr Schlußsatz — *„Diese Prüfungen ersetzen das Lesen einer Änderung nicht. Sie
+> verhindern, daß eine ungelesene Änderung **still** grün bleibt"* — ist der Satz, um den es in
+> diesem Kapitel von Anfang an ging. Eine Verfeinerung, nicht blockierend und ohne eigene Auflage:
+> Der zweite Aufzählungspunkt darf sagen, daß die Zahl in `proof:route-policy` (A-A-56) das
+> **elfte** Kettenglied fängt, aber keine Tür **innerhalb** der zehn vorhandenen — sonst schreibt
+> ein Leser dem Nachbarlauf mehr zu, als er leistet.
+
+---
+
+## 35. Prüfung T-266 (2026-09-10) — die Umstrukturierung: keine Vertrauensgrenze hat sich bewegt, ein neuer Wächter ist eine Ebene höher blind, und siebenundvierzig Ortsangaben dieses Papiers zeigten auf leere Orte
+
+**Gegenstand.** Die vierzehn Aufträge T-249 bis T-263: `apps/web/src` und `apps/local-api/src` je
+in acht Merkmale geschnitten, `packages/domain` an zwei Stellen geteilt, zwanzig Nachweisläufe
+von festen Pfaden auf Merkmalsauflösung umgestellt, vier davon nachweislich blinde Läufe
+geschärft. `pnpm check` ist über alle neun Stufen grün gemeldet.
+
+**Der Satz, mit dem diese Prüfung anfängt.** Ein grünes Tor nach einer Umstrukturierung sagt
+zweierlei, und nur eines davon ist erfreulich: daß nichts kaputtgegangen ist, **oder** daß die
+Wächter mit den Dateien mitgezogen sind, ohne daß jemand nachgesehen hat, was sie danach noch
+messen. Die vier blinden Läufe aus T-249 sind der Beleg, daß der zweite Fall in diesem Bestand
+vorkommt. Deshalb ist hier nicht das Ergebnis der Läufe geprüft worden, sondern **ihre
+Reichweite**.
+
+### 35.0 Werkzeuglage und was tatsächlich gefahren wurde
+
+Node 22.23.2 und pnpm 11.3.0 stehen auf dieser Maschine (Werkzeugkette seit T-244). Gefahren
+wurden einzeln und von Hand: `proof:layers`, `proof:release-safety`, `proof:route-policy`,
+`proof:shell-surface`, `proof:codepoints`. Semgrep und 42Crunch stehen weiterhin **nicht** zur
+Verfügung — dieselbe Lage wie in T-241-9, T-247-16 und davor; das ist keine Agentenarbeit
+(T-266-9).
+
+Die beiden Angriffe aus 35.2 sind **am Baum** gefahren und danach zurückgenommen; beide Dateien
+sind sha256-gleich mit ihrer Fassung vor dem Eingriff (`apps/local-api/src/pool-movement.ts` →
+`6be5ce9d…`, `apps/local-api/src/features/todos/todos.ts` → `cfb40cf7…`), und `proof:layers`
+steht danach wieder auf 20/0.
+
+### 35.1 Die erste Frage: hat der Umbau eine Vertrauensgrenze verschoben? — **nein**, und das ist gemessen
+
+Sechs Flächen waren zu prüfen. Fünf sind **unangetastet**, und zwar nicht laut Bericht, sondern
+laut Baum.
+
+| Fläche | Befund | Womit gemessen |
+|---|---|---|
+| **Der Öffnen-Befehl der Hülle** (A-19: Verweis nur `http`/`https`, kein UNC; Datei nur vorhandener absoluter Pfad; Bild öffnet nichts — bei **jedem** Aufruf, nach Art getrennt) | **keine Zeile geändert.** `git status --short -- apps/desktop/src-tauri/` ist leer: der gesamte Rust-Anteil einschließlich `attachment.rs`, `release.rs`, `outlook_certificate.rs` und `outlook_certificate.ps1` liegt zeichengleich wie vor T-249 | `proof:shell-surface` gefahren: 7 Prüfungen, 54 Gegenproben, und die Schlußzeile nennt weiterhin genau drei Aufruforte für `open`, jeden mit seiner Prüfung — `release.rs > takt_open_release() → release_url()`, `attachment.rs > takt_open_attachment_link() → check_link()`, `attachment.rs > takt_open_attachment_file() → check_file()` |
+| **Die Prüfschicht des Dienstes** (Herkunft, Host, Token) | **keine Zeile geändert.** `src/access/**` — `origin-policy.ts`, `route-policy.ts`, `verifier.ts`, `token*.ts`, `throttle.ts`, `paths.ts` — steht vollständig außerhalb des Umbaus | `proof:route-policy` gefahren: **44 bestanden, 0 fehlgeschlagen**, 73 Routen ausgelesen, alle Routen außerhalb von `/addin` ergeben mit dem Add-in-Token 401, und die sechs Seitenwege (`/addintern`, `/addin/../todos`, `/addin/%2e%2e/todos`, `/addin%2f../todos`, unbekannter Pfad, ohne Nachweis) antworten unverändert 401 |
+| **Die Add-in-Fläche der vier Routen** | unverändert vier; `src/routes/addin/**` hat nur die Textänderungen aus T-247 bekommen | `proof:route-policy`: `addinSurface.length === 4` grün, daneben genau eine abgesenkte Route und es ist `GET /health` |
+| **Der Wurzelspeicher aus A-23** | **keine Zeile geändert** im Rust-Anteil; die Zertifikatsfläche des Dienstes ist mit dem Ordner `src/taskpane/` ebenfalls stehengeblieben und **nicht** nach `features/settings/` gezogen — anders als der Auftragstext annahm | Baumvergleich; `src/taskpane/{asn1,certificate,server}.ts` liegen unverändert an ihrem Ort |
+| **Die Versionsprüfung** (lädt nichts herunter, installiert nichts, baut die Adresse selbst) | zwei Dateien umgezogen, **beide zeichengleich**: `version/source.ts` → `features/version/source.ts` und `apps/web/src/lib/releasePage.ts` → `features/settings/releasePage.ts`, sha256 je identisch | `proof:release-safety` gefahren: **342 Dateien aus 8 Quellordnern** gelesen, die eine Abfrageadresse liegt vor, die zwei erlaubten Orte der Release-Adresse liegen im gelesenen Baum, und alle vierzehn Gegenproben beißen |
+| **Der Fremdimport** (A-20.7) | **geteilt, nicht geändert.** `usecases/data-transfer.ts` (782 Zeilen) ist zu `features/data-transfer/data-transfer.ts` + `foreign.ts` geworden | Anweisungszeilen mengengleich gezählt: **713 vor, 715 nach** dem Schnitt; die Differenz sind ausschließlich Einfuhrzeilen und **ein** Helfer (`record`), der aus `const` zu `export const` wurde. `normalizeAttachmentLink` steht unverändert im Schreibweg |
+
+**Die eine inhaltliche Änderung an einer Grenze stammt nicht aus dem Umbau, sondern aus T-247**
+und behebt meinen eigenen Befund T-247-2: `app.ts:253-262` beschreibt die Add-in-Fläche nicht
+mehr mit der gefallenen Anhangroute im Präsens, sondern nennt ihren Wegfall. Der Satz
+*„**Anhängen darf er nicht** — weder einen Verweis noch eine Datei noch ein Bild"* steht jetzt
+dort, wo bis gestern das Gegenteil stand. Damit ist T-247-2 **erledigt**.
+
+**Und eine Feststellung, die zugunsten des Umbaus spricht:** Die drei Dateien, die den
+Öffnen-Weg auf der Oberflächenseite tragen — `AttachmentOpenDialog.tsx`, `attachmentLabel.ts`,
+`Attachments.tsx` — sind umgezogen und dabei **anweisungsgleich** geblieben.
+`attachmentLabel.ts` hat vorher wie nachher **67** Anweisungszeilen, und der Vergleich als
+Multimenge zeigt **null** Zeilen auf einer Seite allein. Was sich geändert hat, sind Einfuhrpfade
+und Kommentare. Die Regeln aus A-A-5 (`runsWhenOpened`, `extensionOf`, der nachgestellte Punkt,
+der Datenstromtrenner) sind zeichengleich mitgezogen.
+
+### 35.2 `proof:layers` — der neue Wächter, und zwei Wege daran vorbei
+
+`proof:layers` mißt eine Zusage, die vor T-257 am Ordnernamen hing: **kein Anwendungsfall bindet
+`hono` ein.** Das ist die Grenze, die HTTP aus der Fachlogik hält, und sie wäre mit dem Ordner
+`usecases/` verschwunden, ohne daß ein Lauf rot geworden wäre. Daß domain-dev das **vor** dem
+Umzug bemerkt und den Lauf gebaut hat, ist die richtige Reihenfolge und gehört gesagt.
+
+Der Lauf ist auch handwerklich gut: Die Menge der Routendateien wird aus der **Konvention**
+gebildet und gegen den **Inhalt** gehalten, nicht umgekehrt — der Kopfabsatz nennt die Falle aus
+T-247-7 beim Namen und geht ihr aus dem Weg. Es gibt eine Untergrenze, es gibt die Gegenrichtung
+(jede Routendatei bindet `hono` **wirklich** ein), und es gibt sechs Gegenproben.
+
+**Und trotzdem ist er eine Ebene höher blind.**
+
+#### 35.2.1 Die Zahl, die es sagt, steht in seiner eigenen ersten Zeile
+
+```text
+Gemessen: 63 Quelldatei(en), davon 9 Routendatei(en) und 23 Anwendungsfall/-fälle.
+```
+
+63 − 9 − 23 = **31**. Einunddreißig Quelldateien des Dienstes fallen in **keine** der beiden
+Mengen und werden von Abschnitt 1 nicht angesehen. Der Grund steht in der Mengenbildung:
+
+```js
+const anwendungsfaelle = DATEIEN.filter(
+  (p) => !istRoute(p) &&
+    ['src/features/', 'src/routes/'].some((ort) => name(p).startsWith(ort)),
+);
+```
+
+Ein Anwendungsfall ist hier, was **unter zwei Ordnerpräfixen liegt**. Damit ist die Menge an der
+**Struktur** aufgespannt und nicht an der Anforderung — genau der Satz, den derselbe Lauf in
+seinem eigenen Kopfabsatz aus E-103 zitiert.
+
+Achtundzwanzig der einunddreißig sind zu Recht draußen: `access/**`, `http/**` und `taskpane/**`
+sind der Rand und dürfen HTTP kennen, `app.ts` und die Einstiegsdateien sind der eingehende
+Adapter selbst; `architektur.md` sagt das ausdrücklich. **Drei sind es nicht.** `src/context.ts`,
+`src/pool-movement.ts` und `src/tag-names.ts` sind Anwendungsfallschicht — sie lagen bis T-257
+unter `usecases/`, `context.ts` trägt die Zusage sogar in seinem eigenen Kopfabsatz (*„**Kein
+Anwendungsfall bindet `hono` ein.**"*), und der Umbau hat sie eine Ebene nach oben gelegt. Damit
+sind sie aus der Menge gefallen, die über sie urteilt.
+
+#### 35.2.2 Weg 1 — gemessen, nicht behauptet
+
+An `apps/local-api/src/pool-movement.ts` angehängt:
+
+```ts
+import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+export const leak = new Hono().get('/x', (c) => c.json({ ok: true }));
+```
+
+Das ist der volle Verstoß: ein `hono`-Import, ein Router, ein `c.json(` — jede der drei Marken,
+auf die Abschnitt 1 anspricht, in einer Datei, die bis vorgestern `usecases/pool-movement.ts`
+hieß.
+
+```text
+1  Kein Anwendungsfall kennt HTTP
+  ok    keiner der 23 Anwendungsfälle bindet `hono` ein
+  ok    keiner nennt `c.json(`, `c.req` oder `HTTPException`
+…
+20 bestanden, 0 fehlgeschlagen.        Ausgangskode 0
+```
+
+**Der Lauf bleibt zeichengleich grün.** Nichts an diesem Weg ist Absicht oder Böswilligkeit: Er
+ist genau das, was passiert, wenn der nächste Auftrag einen Anwendungsfall aus einem Merkmal
+herauszieht, weil zwei Merkmale ihn brauchen — dieselbe Bewegung, die `pool-movement.ts` gerade
+gemacht hat. Der Wächter, der eigens gegen das Verschwinden dieser Grenze gebaut wurde, sieht
+den Verstoß in dem Augenblick nicht mehr, in dem die Datei den Ordner verläßt, den er kennt.
+
+#### 35.2.3 Weg 2 — dieselbe Klasse innerhalb der gemessenen Menge
+
+An `apps/local-api/src/features/todos/todos.ts` angehängt, also in einem Anwendungsfall, der
+**gemessen wird**:
+
+```ts
+const { Hono } = await import('hono');
+export const leak2 = new Hono().get('/y', (ctx) => ctx.json({ ok: true }));
+```
+
+```text
+  ok    keiner der 23 Anwendungsfälle bindet `hono` ein
+  ok    keiner nennt `c.json(`, `c.req` oder `HTTPException`
+```
+
+Beide Marken gehen daneben. `bindetEin` fragt nach `from 'hono…'`, eine dynamische Einfuhr trägt
+kein `from`; und die zweite Marke fragt nach `c.json(`, während der Zusammenhang hier `ctx`
+heißt. Das ist schwächer als Weg 1 — es setzt Absicht voraus, und es steht nicht in der Ordnung
+dieses Baums. Es gehört trotzdem hin, weil es dieselbe Bauart ist: Die Marken sind an
+**Schreibweisen** aufgespannt, nicht an der Sache.
+
+#### 35.2.4 Die Verengung aus E-101 — sie **trägt**
+
+Der Auftrag fragt ausdrücklich danach. Abschnitt 1 hat `Response` und `Context<` aus seiner
+zweiten Marke gestrichen, weil `features/version/source.ts` beim Umzug rot wurde — an einem
+`Response`, das die Antwort von GitHub ist und nicht die an einen Aufrufer. Die Streichung ist
+im Quelltext benannt, mit Grund und mit dem, was dabei verloren geht.
+
+**Sie ist richtig, und die Begründung ist es auch.** `Context<` ist tatsächlich nicht verloren:
+Hono ist die einzige Quelle dieses Typs, ein Anwendungsfall müßte ihn einführen, und das fängt
+die erste Marke vollständig. `Response` ist bewußt aufgegeben, und die Begründung — es ist
+global, seine Prüfung zählte jede ausgehende Verbindung als eingehende — ist an
+`features/version/source.ts` belegbar. Dazu sind `c.req` und `HTTPException` **neu**
+hinzugekommen, die vorher gar nicht geprüft waren.
+
+Das ist der Unterschied zu einer Ausnahmeliste im Sinne von E-101, und er ist der ganze Punkt:
+Hier ist eine Marke gegen zwei bessere getauscht und der Tausch **aufgeschrieben**, statt daß
+ein Eintrag in eine Liste gewandert wäre, den in einem halben Jahr niemand mehr begründen kann.
+Die Verengung trägt. **Was nicht trägt, ist die Menge, auf die sie angewandt wird** — 35.2.2.
+
+#### 35.2.5 Was der Lauf sonst richtig macht, und wo seine Gegenproben zu weich sind
+
+Abschnitt 5 fährt sechs Gegenproben. Fünf davon setzen den Verstoß in eine **echte** Datei ein
+und messen, daß die Erkennung anschlägt; das ist die richtige Form. Die sechste —
+
+```js
+check('Gegenprobe: ein fehlender `<merkmal>.ts` wird gefunden',
+  !['routes.ts', 'anderes.ts'].includes('board.ts'));
+```
+
+— prüft, daß `Array#includes` funktioniert. Sie mißt nicht den Prüfsatz aus Abschnitt 4, sondern
+JavaScript. Das ist keine Sicherheitslücke und keine Auflage; es ist eine Zeile, die einem Leser
+mehr verspricht, als sie hält, und sie steht hier, weil sie in derselben Liste wie fünf richtige
+Gegenproben steht.
+
+### 35.3 Die Release-Adresse — und sechsundvierzig weitere Ortsangaben in diesem Papier
+
+`proof-release-safety.mjs:302` führt die zwei erlaubten Orte der Release-Adresse weiterhin als
+**feste Pfade**, und die Begründung daneben ist richtig: Löste der Lauf sie über ein Merkmal auf,
+wäre das Merkmal die Adresse selbst, die Menge käme aus dem Bestand, gegen den geurteilt werden
+soll, und die Aussage „genau zwei" wäre tautologisch wahr. Der Preis ist ein rotes Fenster nach
+jedem Umzug, es ist bezahlt und es ist der **Zweck**: Jemand muß die Bewegung bemerken und
+bestätigen. Der Eintrag ist mit T-257 nachgezogen worden, sha256-gleich vermerkt.
+
+**Dieses Papier hatte kein Gegenstück dazu, und deshalb war es falsch.** A-V-1′ in 19.5 nennt die
+Orte der Adresse als Zusage — und nannte bis heute `apps/local-api/src/version/source.ts` und
+`apps/web/src/lib/releasePage.ts`. Beide gibt es nicht mehr. Nach A-A-70 ist die Stelle an Ort
+und Stelle berichtigt, mit Marke und Datum, samt dem alten Wortlaut.
+
+Im selben Zug ist **das ganze Papier** gegen die Wirklichkeit gehalten worden: Jede Pfadangabe
+wurde eingesammelt und aufgelöst — gegen die Platte **und** gegen `git ls-files`, in voller und
+in verkürzter Schreibweise. **Siebenundvierzig** Angaben zeigten auf Orte, die es nicht mehr gibt;
+sie verteilen sich auf **zweiundzwanzig** Dateien und **vierundvierzig** Zeilen und sind alle
+nachgezogen.
+
+| war | ist |
+|---|---|
+| `apps/local-api/src/version/source.ts` (3×) | `apps/local-api/src/features/version/source.ts` |
+| `apps/local-api/src/routes/todos.ts`, `routes/todos.ts` (4×) | `features/todos/routes.ts` |
+| `usecases/todos.ts` (3×) | `features/todos/todos.ts` |
+| `usecases/attachments.ts` (5×) | `features/todos/attachments.ts` |
+| `usecases/pool-movement.ts` (6×) | `pool-movement.ts` — an der **Wurzel** von `src/`, nicht in einem Merkmal |
+| `usecases/timer.ts` (2×) | `features/timer/timer.ts` |
+| `usecases/image-sweep.ts` | `features/todos/image-sweep.ts` |
+| `usecases/data-transfer.ts` | `features/data-transfer/data-transfer.ts` |
+| `export-catalog.ts` (4×) | `features/export/catalog.ts` |
+| `routes/export.ts` (2×), `routes/structure.ts`, `routes/time.ts`, `routes/version.ts` | `features/<merkmal>/routes.ts` |
+| `checker.ts:160` | `features/version/version.ts:160` |
+| `apps/web/src/lib/releasePage.ts` (2×) | `apps/web/src/features/settings/releasePage.ts` |
+| `apps/web/src/lib/attachmentLabel.ts` (4×) | `apps/web/src/features/todos/attachmentLabel.ts` |
+| `apps/web/src/lib/exportTemplateModel.ts`, `…/exportDirectoryAdvice.ts` | `apps/web/src/features/export/…` |
+| `apps/web/src/components/Attachments.tsx`, `…/AttachmentOpenDialog.tsx` | `apps/web/src/features/todos/…` |
+| `apps/web/src/components/Foreign.tsx`, `…/NoteField.tsx` | `apps/web/src/shared/ui/…` |
+
+**Die Regel, nach der berichtigt wurde, und warum sie kein Verstoß gegen A-A-70 ist.** Ein Pfad
+in diesem Papier ist ein **Ort**, keine gemessene Aussage. Zieht eine Datei um, ohne daß sich ihr
+Inhalt ändert, ändert sich der Ort und nicht der Befund; der Ort wird deshalb stillschweigend
+nachgezogen und **vollzählig hier aufgeschrieben**. Wo dagegen eine **Zusage** an einem Ort hängt
+— A-V-1′ nennt die Orte, an denen die Adresse stehen **darf** —, steht die Berichtigung an ihrer
+eigenen Stelle, mit Marke, Datum und altem Wortlaut. Diese Trennung ist neu und gehört zu
+A-A-76.
+
+**Ein Nachbarbefund, kleiner und derselben Art.** Die Zeilennummern in diesem Papier sind nicht
+mitgezogen und können es nicht sein. Sieben Stichproben, drei davon treffen nicht mehr:
+`pool-movement.ts:152` (dort steht heute eine schließende Klammer), `timer.ts:670` (leer),
+`features/todos/routes.ts:105` (ein anderes Feld). Vier treffen weiterhin, darunter beide
+Angaben zur Abfrageadresse (`source.ts:83` und `:91`) und `pool-movement.ts:381`. Eine
+Zeilennummer ist eine Abkürzung für den Leser und war nie die Messung; sie steht hier als
+**Hinweis** (T-266-10), nicht als Auflage — sie zu pflegen kostete mehr, als sie wert ist.
+
+### 35.4 E-103 an den drei Listen, die noch niemand angesehen hat
+
+Der Auftrag nennt `proof:openapi`, `proof:route-policy` und `proof:addin`. Gelesen, mit Urteil je
+Liste:
+
+| Lauf | Liste | Steht sie nach E-103? | Dringlichkeit |
+|---|---|---|---|
+| `proof:addin` | **`ADDIN_FLAECHE`** — die vier Pfade, ausgeschrieben | **ja, vollständig.** `ueberzaehlig` und `fehlend` sind getrennt gemessen (beide Richtungen), `doppelt` fängt die zweite Registrierung auf einem erlaubten Pfad, und die Gegenproben aus 34.11 sind von außen in die Laufzeit gehängt gefahren. Der Kopfkommentar trägt zusätzlich die Regel aus E-101 wörtlich | **keine** |
+| `proof:openapi` | **`REQUEST_SCHEMAS`** | **ja.** Beide Richtungen ausgeschrieben: „jede beschriebene Route mit Rumpf hat ein Schema im Dienst" **und** „kein Schema im Dienst ohne beschriebene Route — kein toter Eintrag" | **keine** |
+| `proof:route-policy` | **`EXPECTED_MIDDLEWARE_ORDER`** | **ja.** Die Zahl wird aus der Liste **abgeleitet** (`MIDDLEWARE_COUNT = EXPECTED_MIDDLEWARE_ORDER.length`) statt daneben gepflegt, und die Reihenfolge wird gegen den Quelltext gehalten | **keine** |
+| `proof:openapi` | **`ROUTE_SOURCE_MARKERS`** — „die acht Dateien, aus denen dieser Ausschnitt besteht" | **halb.** Richtung 2 ist gedeckt: `paketQuelle` bricht hart ab, wenn ein Eintrag nichts mehr trifft, und die Untergrenze von 20 000 Zeichen fängt den leeren Ausschnitt. **Richtung 1 fehlt:** Die Menge ist eine **Aufzählung von acht**, die Anforderung heißt „alle Routendateien", und es sind heute **neun**. `features/version/routes.ts` und `features/data-transfer/routes.ts` stehen nicht darin | **gering, und die Richtung ist gutartig** — nachgemessen: keine der beiden fehlenden Dateien liest heute einen Fragezeichenparameter (`c.req.query` kommt dort nicht vor). Käme einer dazu, würde der Lauf **rot** („Parameter ungelesen"), nicht still grün. Der Fehlschlag zeigt also in die sichere Richtung. **T-266-5**, Hinweis, keine Auflage |
+| `proof:openapi` | **`MIDDLEWARE_COUNT = 10`** | **keine Liste, eine Zahl** — und die zweite Abschrift derselben Zahl, die nebenan aus einer Liste abgeleitet wird. Wer ein Kettenglied ergänzt, muß sie hier von Hand nachziehen; tut er es nicht, wird der Lauf rot. Auch hier gutartig | **keine**, aber nennenswert: Die Zahl könnte aus `proof-route-policy.mjs` bezogen werden, dann gäbe es sie einmal |
+| `proof:route-policy` | **`addinSurface.length === 4`** | **eine Zahl, keine Menge.** Ein Tausch — eine Route fällt, eine andere kommt — bliebe hier grün. Er wird von `proof:addin` 18f gefangen, das die vier **Pfade** ausgeschrieben hält (A-A-71). Zwei Läufe, zusammen dicht; einzeln ist es der schwächere | **keine**, die Deckung besteht. Der Kommentar an der Zahl sagt es nicht, und das wäre eine Zeile wert |
+
+**Zusammengefaßt:** Von den drei genannten Läufen trägt `proof:addin` seine Liste vollständig
+nach E-103, `proof:route-policy` ebenfalls, und bei `proof:openapi` ist **eine** Liste halb.
+Kein Fall davon läßt heute eine Grenze offen, und keiner zeigt in die gefährliche Richtung —
+anders als `NOT_CALLED_BY_UI` in `proof:callers`, wo derselbe Wächter sofort drei Leichen fand.
+**Dringlichkeit insgesamt: gering.** Ein eigener Auftrag lohnt; er blockiert nichts.
+
+### 35.5 R-23 und R-24 — weiterhin **nicht bewertet**, und das ist hier keine Formalie
+
+Der Auftrag läßt es offen, und die Antwort ist: **nein, im Rahmen dieser Prüfung nicht.**
+
+- **Der Wurzelspeicher aus A-23 (R-23).** Was in `Cert:\CurrentUser\Root` liegt, gilt dem
+  Benutzerkonto für **jede** TLS-Verbindung als vertrauenswürdig, nicht nur für den
+  Aufgabenbereich. Diese Fläche ist bis heute in keinem Kapitel dieses Papiers bewertet. Was
+  T-266 dazu sagen kann, ist genau ein Satz, und er ist eine Aussage über den **Umbau**, nicht
+  über die Fläche: Sie ist nicht angefaßt worden. Der Rust-Anteil ist zeichengleich, und die
+  Zertifikatsfläche des Dienstes liegt weiterhin in `src/taskpane/` — sie ist **nicht** nach
+  `features/settings/` gezogen, anders als der Auftragstext annahm.
+- **Der Fremdimport aus A-20.7 (R-24).** Ebenfalls nie bewertet. Auch hier nur die Aussage über
+  den Umbau: Der Schnitt in `features/data-transfer/` ist inhaltsgleich (35.1, 713 → 715
+  Anweisungszeilen), `normalizeAttachmentLink` steht unverändert im Schreibweg, und der Weg
+  „präparierte Fremddatei → Anhang mit Dateipfad → Öffnen-Befehl der Hülle" ist damit weder
+  enger noch weiter geworden als vorher.
+
+**Beides gilt hiermit ausdrücklich nicht als geprüft.** Es steht zum vierten Mal in Folge als
+offener Gegenstand in diesem Papier (T-247-8, davor T-241 und T-234) und ist schwerer als alles
+in den Kapiteln 33, 34 und 35.
+
+### 35.6 Die Befunde
+
+| Nr. | Stufe | Kurz | Zuständig |
+|---|---|---|---|
+| **T-266-1** | **soll** | **`proof:layers` ist eine Ebene höher blind.** Die Menge der Anwendungsfälle ist an zwei Ordnerpräfixen aufgespannt; 31 von 63 Quelldateien fallen aus beiden Mengen, drei davon sind Anwendungsfallschicht. Gemessen: ein voller `hono`-Router in `src/pool-movement.ts` läßt den Lauf bei **20/0**. Gegenmittel **A-A-75** | domain-dev |
+| **T-266-2** | Hinweis | Innerhalb der gemessenen Menge gehen beide Marken an einer dynamischen Einfuhr und an einem `ctx` statt `c` vorbei. Teil von **A-A-75** | domain-dev |
+| **T-266-3** | **Berichtigung** | **A-V-1′ nannte zwei Orte, die es nicht mehr gibt**, und fünfundvierzig weitere Angaben ebenso. Nach A-A-70 berichtigt; die vollständige Tafel steht in 35.3. Gegenmittel **A-A-76** | — |
+| **T-266-4** | Feststellung | **Keine Vertrauensgrenze hat sich bewegt.** Rust zeichengleich, `access/**` zeichengleich, vier Läufe von Hand gefahren und grün (35.1) | — |
+| **T-266-5** | Hinweis | `ROUTE_SOURCE_MARKERS` zählt acht Dateien auf, wo neun Routendateien liegen. Fehlschlagrichtung gutartig, heute wirkungslos | domain-dev |
+| **T-266-6** | Feststellung | `ADDIN_FLAECHE`, `REQUEST_SCHEMAS` und `EXPECTED_MIDDLEWARE_ORDER` stehen bereits vollständig nach E-103 | — |
+| **T-266-7** | Hinweis | `addinSurface.length === 4` ist eine Zahl und keine Menge; die Deckung liegt allein bei `proof:addin` 18f, und der Kommentar sagt das nicht | domain-dev |
+| **T-266-8** | Feststellung | **R-23 und R-24 sind weiterhin nicht bewertet** und gelten ausdrücklich nicht als geprüft (35.5) | Orchestrator |
+| **T-266-9** | Hinweis | Semgrep und 42Crunch stehen weiterhin nicht zur Verfügung; keine Werkzeugmessung in dieser Prüfung | Orchestrator |
+| **T-266-10** | Hinweis | Zeilennummern in diesem Papier laufen weg — drei von sieben Stichproben treffen nicht mehr. Keine Auflage | — |
+| **T-266-11** | Hinweis | Die sechste Gegenprobe in `proof:layers` Abschnitt 5 prüft `Array#includes`, nicht den Prüfsatz aus Abschnitt 4 | domain-dev |
+| **T-266-12** | Feststellung | **T-247-2 ist erledigt:** `app.ts` beschreibt die Add-in-Fläche nicht mehr mit der gefallenen Anhangroute im Präsens | — |
+
+### 35.7 Die zwei neuen Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-75** | **`proof:layers` spannt seine Menge an der Anforderung auf, nicht an zwei Ordnerpräfixen.** Die Anforderung lautet „kein **Anwendungsfall** bindet `hono` ein", und ein Anwendungsfall hört nicht auf, einer zu sein, weil er eine Ebene höher liegt. Praktisch, und ohne den Rand mit hineinzuziehen: Die Menge wird als **Ergänzung** gebildet — alle Quelldateien unter `src/` **außer** den Routendateien und **außer** den ausgeschriebenen Randordnern `access/`, `http/`, `taskpane/` und den ausgeschriebenen Einstiegsdateien (`app.ts`, `composition.ts`, `config.ts`, `errors.ts`, `index.ts`, `logger.ts`, `main.ts`, `runtime.ts`, `startup.ts`). Diese Ausnahmeliste trägt nach E-103 ihren eigenen Wächter: **jeder** Eintrag muß auf der Platte etwas treffen, und die Summe „Routen + Anwendungsfälle + Ausnahmen" muß die Zahl der gelesenen Dateien **genau** ergeben — dann kann keine Datei mehr durch die Ritze zwischen zwei Präfixen fallen, ohne daß es auffällt. Dazu die Verschärfung aus T-266-2: die erste Marke fängt auch `import('hono')`, die zweite fragt nicht nach einem Bezeichnernamen, sondern nach einem `.json(`-Aufruf in einer Datei, die `hono` kennt, und nach `HTTPException` | **In beide Richtungen und mit Gegenprobe am echten Baum.** Die Gegenproben sind bereits gefahren und stehen in 35.2.2 und 35.2.3: (1) der Router aus 35.2.2 in `src/pool-movement.ts` muß den Lauf **rot** machen und die Datei **nennen** — heute 20/0; (2) die dynamische Einfuhr aus 35.2.3 in `features/todos/todos.ts` ebenso — heute 20/0; (3) unveränderter Baum bleibt grün; (4) ein erfundener Eintrag in der Ausnahmeliste, der nichts trifft, macht den Lauf rot; (5) eine neue Datei, die in keiner der drei Mengen landet, macht ihn ebenfalls rot |
+| **A-A-76** | **Eine Zusage dieses Papiers, die an einem Ort hängt, wird gegen den Ort gehalten.** Drei Sätze, und der dritte ist der eigentliche: (1) Ein **Pfad** in diesem Papier ist ein Ort und keine Messung; zieht die Datei um, ohne daß ihr Inhalt sich ändert, wird der Ort nachgezogen und der Nachzug **vollzählig aufgeschrieben** — so wie in 35.3. (2) Eine **Auflage**, die einen Ort als Teil ihrer Zusage nennt (A-V-1′ ist der Fall, an dem es aufgefallen ist), wird nach A-A-70 **an ihrer eigenen Stelle** berichtigt, mit Marke, Datum und altem Wortlaut. (3) Der Abgleich wird nicht dem Gedächtnis überlassen: Jede Pfadangabe dieses Papiers wird gegen die Platte **und** gegen `git ls-files` aufgelöst, in voller und in verkürzter Schreibweise, und eine Angabe, die nichts trifft, ist ein Befund. Die Ausnahmen — Wegwerfskripte einer Messung, Pfade in fremden Kisten, erfundene Beispiele — stehen ausgeschrieben und tragen ihrerseits den Wächter aus E-103. **Eine Ausnahme ist eigens zu nennen und sie ist die interessanteste:** die **linke Spalte einer Umzugstafel** wie der in 35.3 nennt Orte, die es absichtlich nicht mehr gibt — sie ist der Beleg des Nachzugs und nicht sein Gegenstand. Ein Wächter, der sie mitzählte, würde jede Berichtigung dieses Papiers zum Befund erklären und wäre binnen einer Welle abgeschaltet | Der Abgleich ist in dieser Prüfung von Hand gefahren und hat siebenundvierzig Angaben in zweiundzwanzig Dateien gefunden (35.3); die Restliste nach der Berichtigung enthält **ausschließlich** Wegwerfskripte, Fremdpfade und erfundene Beispiele. Als Lauf gehört er in einen eigenen kleinen Nachweis; die Gegenprobe ist billig und in beide Richtungen zu schreiben: eine eingesetzte tote Pfadangabe wird rot, ein eingesetzter Ausnahmeeintrag, der nichts mehr trifft, ebenso |
+
+### 35.8 Urteil
+
+**Die Umstrukturierung T-249 bis T-263 ist freigegeben.**
+
+Sie ist die erste Änderung dieser Größe in diesem Bestand, bei der ich nach der Prüfung sagen
+kann, daß **keine** Vertrauensgrenze sich bewegt hat, und es nicht dem Bericht glauben muß: Der
+Rust-Anteil ist zeichengleich, `src/access/**` ist zeichengleich, die zwei Dateien der
+Release-Adresse sind sha256-gleich umgezogen, der Fremdimport ist anweisungsgleich geschnitten,
+und vier Läufe sind von Hand gefahren und grün — `proof:shell-surface` mit seinen drei
+Aufruforten für `open`, `proof:route-policy` mit 44/0 und den sechs Seitenwegen auf 401,
+`proof:release-safety` über 342 statt 129 Dateien, `proof:codepoints` über 1012 Dateien statt
+9 % des Baums. Die vier blinden Wächter aus T-249 sind nicht nur geschärft, sondern messen jetzt
+eine Menge, die sie vorher gar nicht sahen.
+
+**Nicht abgenommen ist `proof:layers` in seiner heutigen Fassung — A-A-75, Nacharbeit.** Er mißt
+die richtige Sache und mißt sie in beide Richtungen; seine Menge ist aber an der Struktur
+aufgespannt, und ein Anwendungsfall, der eine Ebene nach oben zieht, verläßt damit den Wächter,
+der über ihn urteilt. Gemessen, nicht vermutet: 20/0 mit einem vollen Hono-Router in einer Datei,
+die vorgestern noch `usecases/pool-movement.ts` hieß. Das blockiert die Freigabe **nicht** —
+heute steht dort kein Verstoß, die Grenze ist eine Architekturgrenze und keine Zugriffsgrenze,
+und die Behebung ist klein. Es blockiert die Abnahme des Laufs.
+
+**Der Satz, den ich mir aufschreibe.** Der Umbau ist deshalb gutgegangen, weil domain-dev **vor**
+dem Verschieben bemerkt hat, daß eine Zusage am Ordnernamen hing. Genau dieselbe Sorgfalt hat
+den Wächter dann an zwei neuen Ordnernamen aufgehängt. Das ist kein Vorwurf, sondern der Befund
+über die Methode: Eine Menge, die aus Pfadpräfixen gebildet wird, wandert mit jedem Umzug mit —
+und wer sie schreibt, sieht in dem Augenblick genau die Ordner vor sich, die es gerade gibt. Die
+einzige Fassung, die einen Umzug übersteht, ist die **Ergänzung**: alles außer dem, was
+ausgeschrieben ausgenommen ist, mit einem Wächter über die Ausnahmen und einer Summe, die
+aufgehen muß.
+
+Und der Satz, der schwerer wiegt als das ganze Kapitel: **R-23 und R-24 sind zum vierten Mal
+vertagt.** Der Wurzelspeicher und die fremde Datei sind die zwei Flächen, an denen dieser Bestand
+einem Angreifer am meisten anbietet, und beide sind nie bewertet worden. Eine Umstrukturierung
+freizugeben, während das offen steht, ist richtig — die Umstrukturierung hat damit nichts zu tun.
+Es als geprüft durchgehen zu lassen, wäre es nicht.
+
+---
+
+## 36. Prüfung T-275 (2026-09-11) — der Fehlschlag, der die Prüfung beendete, und die zwei Zeilen dieses Papiers, die ihn als erfüllte Auflage abgenommen haben
+
+**Gegenstand.** A-18.11 ist geschärft (`docs/spec.md:346`): „Lauf" ist der einzelne **Prüflauf**,
+nicht der Programmlauf. Anlaß war eine Meldung des Auftraggebers — die Versionsprüfung „greife
+nicht immer" — und eine gemessene Ursache: Der Fehlschlagzweig in
+`apps/local-api/src/features/version/version.ts` rief kein `schedule()`, also beendete **ein**
+Fehlschlag die Prüfung für die gesamte Laufzeit der Anwendung. Häufigster Auslöser: Die Anwendung
+startet schneller als das Netz. T-273 hat den Zweig geschlossen, T-274 löst den Prüffall ab,
+dieser Auftrag zieht das Papier nach.
+
+**Der Satz, mit dem diese Prüfung anfängt, und er ist ein unangenehmer.** Der Fehler stand nicht
+nur im Code. Er stand in **diesem Papier**, zweimal: als Auflage A-V-11 mit der Meßvorschrift
+„nach einem erzwungenen Fehlschlag bleibt die Zahl der ausgehenden Anfragen bei eins", und als
+Urteil in 19.1, das dieselbe Zahl als **erfüllt** abgenommen hat. Eine Meßvorschrift, die das
+Verhalten eines gemeldeten Fehlers festschreibt, ist schlimmer als keine: Sie hätte die Behebung
+ab heute als Verstoß gemeldet. Das ist dieselbe Bauart wie der Wächter unter A-A-21 — der zählte
+Zeilen nach einem Aufruf der Tür, die zu ist, und blieb grün, während der Nachbar aufging. Der
+Unterschied ist nur, daß dort ein Skript die zu milde Messung trug und hier eine Tabellenzeile.
+
+### 36.0 Werkzeuglage und was tatsächlich gemessen wurde
+
+Node 22.23.2 und pnpm 11.3.0 stehen auf dieser Maschine. Semgrep über den Guardian-Dienst und
+42Crunch stehen weiterhin **nicht** zur Verfügung — unveränderte Lage seit T-136-6, zuletzt
+festgehalten in T-266-9; das ist keine Agentenarbeit und keine Ausrede, sondern ein offener
+Beschaffungspunkt.
+
+Gefahren wurden drei eigene Messungen, jede **gegen den Produktivcode** und ausdrücklich **nicht**
+über die Prüfreihe: `apps/local-api/test/**` liegt in dieser Welle bei unit-tester (T-274), und
+eine Messung, die die Datei benutzt, die gerade umgeschrieben wird, mißt nichts. Die Meßskripte
+liegen im Kritzelverzeichnis dieser Sitzung, nicht im Baum; sie führen `createVersionChecker`
+unmittelbar aus, mit einer Abholfunktion, die den Prozeß nicht verläßt.
+
+**Messung 1 — der Wiederholtakt und der Boden.** Prüfer mit `startDelayMs` 5 ms, `intervalMs`
+5 000 ms, `minIntervalMs` **300 ms**, Abholfunktion antwortet stets `unreachable`.
+
+```text
+Anfragen: 5   Zeitpunkte (ms): 8, 313, 623, 937, 1250
+Abstände (ms): 305, 310, 314, 313        (gesetzter Boden: 300)
+Zustand nach fünf Fehlschlägen: {"state":"unknown"}
+Protokoll: 5 Zeilen, alle  info version_check_unreachable
+nach stop() in 1,2 s dazugekommen: 0
+```
+
+Vier Zusagen in einer Messung: Es wird neu geplant, der Boden hält (kein Abstand unter 300 ms),
+der Zustand bleibt `unknown`, und `stop()` plant nichts nach.
+
+**Messung 2 — die boshafte Uhr.** Derselbe Prüfer, Boden **1 000 ms**, aber `now()` springt bei
+**jedem** Blick um eine volle Stunde vorwärts — also die Uhr eines Angreifers, der den Boden
+wegrechnen will:
+
+```text
+bei vorwärts springender Uhr, Boden 1000 ms: 3 Anfragen in 3 s, Zeitpunkte: 15, 1021, 2022
+```
+
+**Die verstellte Uhr ist kein Hebel.** Der Grund steht im Code und ist der Erwähnung wert, weil er
+leicht wegzuräumen wäre: Der Boden wird **zweimal** durchgesetzt — außen von `setTimeout`, das
+`now()` gar nicht liest, innen von der Rechnung „jetzt minus `lastRequestAt`". Wer bei einer
+künftigen Aufräumarbeit die innere Prüfung für redundant hält und streicht, verliert wenig; wer
+die äußere streicht, weil „der Boden ja geprüft wird", macht aus einer vorlaufenden Uhr einen
+Anfragegenerator. Deshalb A-V-24 in 36.8.
+
+**Messung 3 — der Umgebungsproxy gegen die festgenagelte Node-Fassung.** `NODE_USE_ENV_PROXY=1`
+und `HTTPS_PROXY`/`https_proxy` auf einen mitschreibenden Horcher auf `127.0.0.1`, dann ein
+`fetch` auf ein anderes Ziel:
+
+```text
+ohne Variable          : Horcher bekommt nichts, fetch endet mit ECONNREFUSED am Ziel
+NODE_USE_ENV_PROXY=1   : Horcher bekommt nichts, fetch endet mit ECONNREFUSED am Ziel
+```
+
+Auf Node **22.23.2** — der Fassung, die `release.yml` festnagelt — hat die Variable auf globales
+`fetch` **keine Wirkung**. Das ist die gute Antwort auf eine Frage, die A-V-4 bisher nur für den
+**Code** beantwortet hat: Die Auflage verbietet `NODE_USE_ENV_PROXY` als Zeichenkette im Quelltext,
+gegen die **Umgebung** des Sidecars kann sie nichts — `sidecar.rs` startet ihn ohne `env_clear`,
+also erbt er die Umgebung der Benutzersitzung. Die Antwort hängt damit an der Node-Fassung und
+nicht an unserem Code; siehe A-V-25.
+
+**Und eine Suche, die zur Messung gehört.** Über den ganzen Baum — `git grep` **und** ein Lauf über
+die Quellverzeichnisse, nach der Regel aus `CLAUDE.md` — nach der alten Lesart: acht Fundstellen
+außerhalb dieses Papiers, davon zwei im Produktivcode. Sie stehen in 36.6. Dazu die Gegenfrage,
+die zuerst zu stellen war: **Mißt ein Wächter das alte Verhalten?** Nein. Kein Nachweislauf zählt
+die ausgehenden Anfragen der Versionsprüfung; `proof:access` prüft `state: 'unknown'` und nicht die
+Zahl, und seine Abholfunktion scheitert absichtlich (`proof-access-entry.ts`). Der einzige Ort, an
+dem das alte Verhalten festgenagelt war, ist der Prüffall in `apps/local-api/test/version/` — und
+genau der ist T-274. Wäre das anders, ginge diese Freigabe nicht.
+
+### 36.1 Was sich ändert, in Zahlen
+
+| Größe | vor T-273 | seit T-273 |
+|---|---|---|
+| Erfolgsfall | 1 Anfrage je 24 h | **unverändert** 1 Anfrage je 24 h |
+| Dauerfehlschlag | **1 Anfrage, einmal** — danach nichts mehr, für die ganze Laufzeit | höchstens **24** je Kalendertag; 25 in einem gleitenden 24-Stunden-Fenster, wenn beide Ränder mitgezählt werden |
+| Anteil am GitHub-Kontingent (60 je Stunde und Quelladresse) | einmalig 1/60 | 1/60 **je Stunde** |
+| Fremde Bytes, die je Tag in den Prozeß gelesen werden (Obergrenze nach A-V-6′: 81 920 je Versuch) | 81 920 | rund 1,9 MiB — gelesen, gezählt, verworfen; oberhalb der Grenze wird nichts geparst |
+| Protokollzeilen je Tag | 1 | höchstens 24, alle aus dem geschlossenen Schlüsselvorrat (A-V-20) |
+| Zeit ohne Prüfung nach einem Fehlschlag beim Start | bis zum nächsten Programmstart — bei einer Anwendung, die tagelang offen bleibt, faktisch **nie** | höchstens 60 min |
+| Was die Oberfläche zeigt | nichts | **nichts** |
+
+Die letzte Zeile ist die, die diese Bewertung trägt, und die vorletzte die, um die es eigentlich
+ging.
+
+### 36.2 „Nichts ändern" ist hier nicht die bequeme, sondern die sichere Wahl
+
+Der Orchestrator hat dem Auftraggeber zwei Sichtbarkeiten vorgelegt — einen Zeitstempel „zuletzt
+erfolgreich geprüft" und eine Schaltfläche „Jetzt prüfen" — und er hat beide abgelehnt. Ich
+bewerte das ausdrücklich mit, weil eine stumme Wiederholung etwas anderes ist als eine sichtbare,
+und weil die Ablehnung hier die richtige Seite trifft.
+
+**Die Schaltfläche wäre der Rückbau der einen Entwurfsentscheidung, die diese Grenze eng hält.**
+Der Kopf von `version.ts` schreibt seit T-138 auf, welcher naheliegende Entwurf **ausgeschlossen**
+ist: Die Oberfläche fragt eine Route, die Route fragt GitHub. Ausgeschlossen ist er, weil der
+Dienst für **jeden** Prozeß auf diesem Rechner erreichbar ist (R-02, VG-1): Ein Prozeß im
+Benutzerkonto kommt an das Sitzungsgeheimnis und könnte eine solche Route in einer Schleife rufen.
+Drei Folgen, alle unerwünscht — Takt wird zum Anfragegenerator, das Lebenszeichen aus R-19 Punkt 3
+wird von einem Dritten getaktet statt von Takt, und die 60 Anfragen je Stunde sind in Sekunden
+verbraucht. **Eine Schaltfläche „Jetzt prüfen" ist genau diese Route mit einer Hand darauf.** Sie
+ließe sich eng bauen — eine Anfrage je Klick, der Boden bleibt —, aber sie verschöbe die Kontrolle
+über den Zeitpunkt einer ausgehenden Verbindung von der Uhr des Dienstes zu einem Aufrufer, und
+der Aufrufer ist am Ende nicht der Benutzer, sondern wer immer den Aufruf absetzt. „Nichts ändern"
+hält diesen Weg zu.
+
+**Der Zeitstempel wäre harmlos und trotzdem eine zweite Zusage.** Er müßte gespeichert werden
+(sonst überlebt er kein Neuladen), er wäre die erste Angabe über das Prüfverhalten, die den Dienst
+verläßt, und A-V-14′ ist gerade deshalb so eng geschrieben, weil jede zusätzliche Angabe an dieser
+Grenze einzeln begründet gehört. Kein Verstoß, aber auch kein Gewinn: Was er im Fehlerfall
+anzeigt, ist genau das, was A-18.11 nicht anzeigen will.
+
+**Der Preis der Stille, ehrlich benannt.** Er ist derselbe wie in T-145-3: „unbekannt" sieht aus
+wie „alles aktuell". Neu ist, daß dieser Preis **kleiner** geworden ist. Vorher hieß Stille „die
+Prüfung ist für diesen Programmlauf tot"; heute heißt sie „der letzte Versuch ist gescheitert, der
+nächste kommt binnen einer Stunde". Und das ist der eigentliche Sicherheitsgewinn von T-273, den
+ich hier festhalte, weil er in der Meldung des Auftraggebers wie eine Bequemlichkeitsfrage
+aussieht und keine ist:
+
+> **Vor T-273 war ein einziger unterdrückter Verbindungsversuch eine dauerhafte Unterdrückung der
+> Aktualisierungsmeldung.** Wer den ersten Versuch zum Scheitern bringt — ein Netz, das beim Start
+> noch nicht da ist, genügt; ein Prozeß im Benutzerkonto, der die Verbindung zehn Sekunden lang
+> abweist, genügt ebenfalls —, verhindert für die **gesamte** Laufzeit der Anwendung, daß der
+> Benutzer von einer neuen Fassung erfährt. Bei einem Werkzeug, das tagelang offen bleibt, ist das
+> keine Randnotiz: A-18.6 erscheint nur nach einer **erfolgreichen** Prüfung, und die Erzeugnisse
+> sind unsigniert (18.11 Punkt 3), also ist diese Meldung der einzige Weg, auf dem eine
+> Sicherheitsbehebung den Benutzer überhaupt erreicht. Ein Angreifer mußte dafür nichts fälschen,
+> nur einmal stören. Dieser Weg ist zu.
+
+Dagegen stehen im Fehlerfall 23 zusätzliche Anfragen je Tag. Der Tausch ist eindeutig.
+
+### 36.3 Was sich an R-19 ändert — und was nicht
+
+R-19 ist die einzige Verbindung dieses Programms nach außen und trägt vier Punkte. Ich gehe sie
+einzeln durch, weil „24 statt 1" eine andere Größenordnung ist und die Frage verdient.
+
+| R-19 | Bewegt sich? | Begründung |
+|---|---|---|
+| **1. Eine fremde Antwort betritt den Prozeß** | **Häufigkeit ja, Schwere nein** | Im Fehlerfall betritt die Antwort den Prozeß bis zu 24-mal je Tag statt einmal je Lauf — und drei der acht Fehlschlagarten (`status`, `too_large`, `malformed`) sind Fälle, in denen tatsächlich Bytes gelesen und verworfen werden. Daß die Häufigkeit die Schwere **nicht** anhebt, ist keine Annahme, sondern eine Eigenschaft dieses Entwurfs: Jeder Durchgang läuft durch dieselben festen, zustandslosen Kontrollen (5 000 ms Gesamtfrist, höchstens 65 536 Bytes plus eine Leseeinheit, `redirect: 'error'`, ein Feld, eine Formprüfung), und es akkumuliert **nichts** — `state` wird überschrieben, `lastRequestAt` ist ein Skalar, es gibt keine Sammlung, keine Warteschlange, keinen Zwischenspeicher. Gemessen in Messung 1: fünf Fehlschläge in 1,25 s hinterlassen fünf Protokollzeilen und einen unveränderten Zustand. Vierundzwanzig Durchgänge durch eine deterministische Prüfung sind nicht schwächer als einer |
+| **2. Eine Adresse aus der Antwort wandert zum Öffnen-Befehl** | **nein, gar nicht** | Der Fehlschlagzweig liefert **keine** Fassungsbezeichnung; die Hülle baut die Adresse ohnehin selbst (A-V-16). Der gefährlichste Weg dieses Vorhabens ist von T-273 nicht berührt |
+| **3. Jede Anfrage ist ein Lebenszeichen** | **ja — das ist der Punkt, der sich bewegt** | Siehe unten |
+| **4. Der Ausgang steht offen** | nein | Unverändert; er gehört bei jeder Freigabe geprüft, und das ist hier geschehen |
+
+**Zu Punkt 3, und ich formuliere es schärfer, als die Zahl es nahelegt.** Nicht die Menge ist das
+Interessante, sondern **wer** zusieht. Eine Anfrage je Tag ist ein Ereignis; eine Anfrage je Stunde
+ist ein **Leuchtfeuer**. Und dieses Leuchtfeuer entsteht ausgerechnet dann, wenn die Verbindung
+**scheitert** — also in genau dem Netz, in dem jemand filtert, abschließt oder wegwirft. Im
+Erfolgsfall sieht GitHub eine Anfrage je Tag; im Dauerfehlschlag sieht der Betreiber des
+Zwangsportals, des Unternehmensproxys oder des Namensauflösers **vierundzwanzig** Klopfversuche je
+Tag, die nie ankommen, und er sieht sie regelmäßig genug, um daran einen Rechner
+wiederzuerkennen. Der **Inhalt** bleibt dabei unverändert eng (A-V-13: acht Kopfzeilen, keine
+Kennung, keine Sprache außer `*`, keine Fassungsnummer), und die Namensauflösung nennt weiterhin
+nur `api.github.com`.
+
+**Mein Urteil zu R-19: Die Schwere bleibt „hoch", die Bewertung ändert sich nicht, der Wortlaut von
+Punkt 3 gehört um einen Satz ergänzt.** Die Schwere von R-19 hängt an der **Existenz** des
+Ausgangs, nicht an seiner Frequenz — sie wäre bei einer Anfrage je Woche dieselbe. Was fehlt, ist
+der Nachsatz: *Der Fehlerfall ist der gesprächigere, und sein Zuhörer ist nicht GitHub.* Da
+`risks.md` dem Orchestrator gehört, steht das hier als Vorschlag und nicht als Änderung. Ein neues
+Risiko braucht es nicht.
+
+### 36.4 A-V-11′ — die neu gefaßte Auflage, und die Meßvorschrift, die nichts einfriert
+
+Die alte Auflage nannte eine **Zahl**, wo eine **Eigenschaft** gemeint war. Das ist genau der
+Fehler, den 19.1 an fünf eigenen Messungen schon einmal festgestellt hat („eine Zahl wird bei jeder
+Entwurfsänderung falsch, eine Verbotsliste nicht") — hier ist er ein sechstes Mal aufgetreten, und
+diesmal hat er nicht eine Messung veralten lassen, sondern einen behobenen Fehler geschützt.
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-V-11′** | **Fünf Zusagen, und die dritte ist die neue.** (1) **Eine** ausgehende Anfrage je Prozeßstart, um den Startabstand versetzt. (2) Nach einem **Erfolg** folgt die nächste frühestens nach dem Takt (24 h). (3) Nach einem **Fehlschlag** folgt die nächste frühestens nach dem **Boden** (60 min) — und **es folgt eine**. Kein zweiter Versuch im selben Prüflauf, kein sofortiger, keine Rückstufungskette, die den Boden unterschreitet, und **kein Zeitgeber, der stehenbleibt**. (4) Der Boden gilt für die **gesamte Prozeßlaufzeit** und über beide Zweige; er wird an der Uhr gemessen, die gerade gilt, **und zusätzlich** an der Frist des Zeitgebers (A-V-24). (5) Nach `stop()` wird nichts mehr geplant. **Die Obergrenze, die daraus folgt, gehört in die Auflage, damit niemand sie überschreitet, ohne es zu bemerken:** höchstens **24** ausgehende Anfragen je Kalendertag im Dauerfehlschlag (25 im gleitenden 24-Stunden-Fenster mit beiden Rändern) gegen **1** im Erfolgsfall. Der Zustand bleibt bei jedem Fehlschlag `unknown`, die Oberfläche zeigt nichts, der Grund steht als Schlüssel aus dem geschlossenen Vorrat im Protokoll (A-V-20). **Ersetzt A-V-11 vom 2026-09-04 vollständig**, samt dessen Meßvorschrift „bleibt die Zahl bei eins" | **Gemessen wird gegen die Uhr, nicht gegen die Eins.** An einem Prüfer mit klein gesetztem Boden und ununterbrochenem Fehlschlag zählt der Prüffall über ein Vielfaches des Bodens und prüft **beides**: die Zahl der Anfragen entspricht der Zahl der Bodenlängen im Meßfenster (plus die Startanfrage), und **jeder einzelne** gemessene Abstand liegt bei oder über dem Boden. Gefahren am 2026-09-11 gegen den Produktivcode: 5 Anfragen in 1,25 s bei einem Boden von 300 ms, Abstände 305/310/314/313 ms. **Zwei Gegenproben, und die zweite ist die, die gefehlt hat:** (a) ein Prüfer, der nach einem Fehlschlag **nicht** neu plant — der Zustand vor T-273 —, muß den Lauf **rot** machen; (b) ein Prüfer, der **sofort** neu versucht (Boden auf null), ebenso. Dazu, in demselben Fall mitgemessen, weil es sonst niemand tut: `state` bleibt `unknown`, je Fehlschlag entsteht **eine** Protokollzeile mit einem Schlüssel aus dem Vorrat, und nach `stop()` kommt keine Anfrage mehr dazu. Der Ort der Messung ist `apps/local-api/test/version/**` (unit-tester, T-274); dieses Papier schreibt den Prüffall nicht, es schreibt vor, was er zu treffen hat |
+
+### 36.5 Mißbrauch — fünf Wege, jeder einzeln, und einer davon ist nicht der, nach dem gefragt wurde
+
+Die Frage des Orchestrators war: Kann die neue Wiederholung mißbraucht werden — etwa von einer
+Quelle, die absichtlich fehlschlägt, um Anfragen zu erzwingen? Die Antwort ist: ja, um den Faktor
+24, gedeckelt und nicht kumulativ — und das ist nicht der billigste Weg, Takt zum Senden zu
+bringen. Der billigste ist älter als T-273 und steht als Punkt 3.
+
+**1. Erzwungener Fehlschlag als Anfragegenerator.** Wer die Verbindung dauerhaft brechen kann —
+Zwangsportal, Filter, abgezogenes Netz —, hebt die Zahl der ausgehenden Anfragen von 1 auf 24 je
+Tag. Mehr geht nicht: Der Boden ist eine Eigenschaft des Prüfers und nicht der Antwort, und er
+gilt **unabhängig** davon, wie schnell, wie oft oder auf welche Weise der Fehlschlag eintritt.
+Zehn verschiedene Fehlschlagarten ergeben dieselbe Zahl wie eine. Als **Verstärker** ist der Weg
+wertlos: eine Anfrage erzeugt eine Anfrage, `GET`, ohne Rumpf, an eine feste Adresse, die der
+Angreifer nicht wählt. Wer 24 Anfragen je Tag an `api.github.com` auslösen will, hat einfachere
+Mittel als eine fremde Takt-Installation. **Bewertung: kein Mißbrauchsweg von Belang.**
+
+**2. Die verstellte Uhr.** Der einzige von außen erreichbare Eingang in die Terminrechnung ist die
+Systemuhr — und sie trägt nicht. **Gemessen** (36.0, Messung 2): Eine Uhr, die bei jedem Blick um
+eine Stunde vorwärts springt, hebt die Zahl der Anfragen **nicht**; sie blieben bei drei in drei
+Sekunden gegen einen Boden von einer Sekunde. Grund: Der Boden wird zweimal durchgesetzt, und die
+äußere Durchsetzung ist `setTimeout`, das die Wanduhr nicht liest. Der Rücksprung ist seit T-143
+ohnehin behandelt und plant den vollen Boden neu. **Bewertung: kein Hebel — solange beide Durchsetzungen stehen. A-V-24 nagelt das fest.**
+
+**3. Der Neustart — und das ist der billigere Weg, den T-273 gar nicht berührt.** `lastRequestAt`
+lebt im Arbeitsspeicher des Dienstes. Ein neu gestarteter Dienst kennt keinen letzten Zeitpunkt,
+also greift kein Boden, also geht nach dem Startabstand von 10 s eine Anfrage hinaus. Wer den
+Sidecar in einer Schleife beendet und neu starten läßt, erreicht damit rechnerisch **360 Anfragen
+je Stunde** — das Fünfzehnfache dessen, was der Wiederholtakt in einem ganzen Tag hergibt, und das
+Sechsfache des GitHub-Kontingents. Das gilt seit T-138 und ist durch T-273 weder besser noch
+schlechter geworden. Wer es kann, ist A-03: ein Prozeß im Benutzerkonto — und der hat, wie überall
+in diesem Papier, ohnehin bessere Ziele als eine Anfragebegrenzung. Ich nenne es trotzdem, aus
+einem Grund: **Wer die 24 für zu viel hält, optimiert das falsche Ende.** Ein Gegenmittel gäbe es
+(den Zeitpunkt der letzten Anfrage im Bestand halten statt im Arbeitsspeicher — dieselbe Bauart
+wie der übersprungene Fassungswert und die offenen Phasen aus A-24.7), es kostet einen
+gespeicherten Wert und schließt zugleich die Lücke „Anwendung wird zwanzigmal am Tag gestartet".
+**Bewertung: Hinweis, nicht blockierend, älter als dieser Auftrag — T-275-7.**
+
+**4. Die geteilte Anfragebegrenzung klärt sich nicht mehr von selbst.** Das ist der Weg, an dem
+sich durch T-273 wirklich etwas ändert, und er ist kein Angriff, sondern eine Rückkopplung.
+T-136-5 hat notiert: 60 Anfragen je Stunde und **Quelladresse**; alle Installationen hinter einer
+Adresse teilen sie. Unter der alten Lesart löste sich der Stau von selbst — wer einmal `403`
+bekam, stellte die Prüfung ein. Unter der neuen klopft jede betroffene Installation **stündlich**
+weiter. Ab etwa sechzig Installationen hinter einer Adresse ist der Zustand **selbsterhaltend**:
+Das Kontingent bleibt erschöpft, keine Prüfung kommt je durch, jede Installation trägt 24
+Fehlschläge je Tag bei, und **niemand sieht es**, weil der Fehlschlag still ist. Der Schaden ist
+gering (keine Aktualisierungsmeldung, sonst nichts) und die Bauart ist unangenehm: eine stille,
+sich selbst tragende Störung. Zwei Gegenmittel, keines verlangt, beide klein:
+(a) eine **Rückstufung** 1 h → 2 h → 4 h → 8 h → 24 h, die den gemeldeten Fall („das Netz war beim
+Start noch nicht da") unverändert nach einer Stunde bedient und den Dauerfehlschlag von 24 auf 5
+Anfragen je Tag senkt — sie darf den Boden nur **verlängern**, nie verkürzen, sonst hebt sie
+A-V-11′ Punkt 4 auf; (b) ein **Streuwert** auf den Boden (etwa ±10 min), der die Gleichschaltung
+mehrerer Installationen bricht. Beides ist eine Produktentscheidung und keine Auflage.
+**Bewertung: Hinweis — T-275-8.**
+
+**5. Vierundzwanzig Gelegenheiten für einen Mann in der Mitte statt einer.** Wer die Verbindung
+nicht nur brechen, sondern **beantworten** kann, bekommt im Dauerfehlschlag 24 Versuche je Tag
+statt einen je Lauf. Was er damit gewinnt, ist wenig: Aus seiner Antwort verläßt genau eine gegen
+A-V-8 geprüfte Fassungsbezeichnung den Dienst, und die Adresse baut die Hülle selbst (A-V-16) —
+der Gewinn wäre eine erfundene „neue Fassung", die auf eine echte Etikettseite bei GitHub zeigt.
+Wichtiger ist die Vorfrage: **Wer kann überhaupt antworten?** Drei Wege, und alle drei sind heute
+zu oder teuer:
+
+* **Der Wurzelspeicher aus A-23 reicht hier nicht hinein.** Was `Cert:\CurrentUser\Root` gilt,
+  gilt Windows — und Node bringt seinen **eigenen** Zertifikatsvorrat mit und liest den
+  Windows-Speicher nach Voreinstellung nicht. Ein Zertifikat, das die Hülle nach ausdrücklicher
+  Bestätigung für den Aufgabenbereich einträgt, macht damit **keine** TLS-Verbindung der
+  Versionsprüfung fälschbar. Das ist die erste Aussage dieses Papiers über das Verhältnis von R-23
+  zu VG-10, und sie fällt zugunsten des Entwurfs aus.
+* **Der Umgebungsproxy trägt auf der festgenagelten Fassung nicht** — gemessen, 36.0, Messung 3.
+  Er trüge auf einer Node-Fassung mit eingebauter Proxy-Unterstützung, und die Umgebung des
+  Sidecars ist von der Benutzersitzung geerbt. Deshalb A-V-25.
+* **`NODE_EXTRA_CA_CERTS` liest jede Node-Fassung** (aus der Node-Dokumentation, hier **nicht**
+  gemessen). Allein nützt es nichts: Ohne Kontrolle über die Namensauflösung oder den Weg landet
+  die Verbindung weiterhin bei GitHub. Wer beides hat, hat den Rechner.
+
+**Bewertung: Häufigkeit steigt, Erfolgsaussicht unverändert. Kein neuer Weg, eine ältere offene
+Kante (die geerbte Umgebung) wird durch die höhere Frequenz häufiger begehbar — A-V-25.**
+
+### 36.6 Die weiteren Stellen, die an der alten Lesart hingen
+
+Der Auftrag nannte zwei Zeilen in diesem Papier. Es waren **sechs** hier und **acht** draußen. Die
+Suche lief über `git grep` und über die Quellverzeichnisse getrennt, weil keine der beiden Hälften
+allein trägt.
+
+| Ort | Was dort steht | Gehört | Stand |
+|---|---|---|---|
+| `docs/bedrohungsmodell.md:3894` (18.5, Zeile „Häufigkeit") | „zwischen zwei Anfragen desselben **Laufs**" | security-checker | **berichtigt** |
+| `docs/bedrohungsmodell.md:3895` (18.5, Zeile „Nach einem Fehlschlag") | „Der Zeitgeber wird nach einem Fehlschlag **nicht** neu gestellt … und es ist die Anforderung" | security-checker | **berichtigt** |
+| `docs/bedrohungsmodell.md:4071` (A-V-11) | Auflage **und** Meßvorschrift „bleibt die Zahl bei eins" | security-checker | **berichtigt, neu gefaßt als A-V-11′** |
+| `docs/bedrohungsmodell.md:4097` (T-136-5) | „Ein weiteres Argument … gegen jeden Wiederholungsversuch" | security-checker | **berichtigt** |
+| `docs/bedrohungsmodell.md:4204` (19.1, Urteil zu A-V-11) | „Nach einem Fehlschlag wird **nicht** neu geplant" — als **erfüllt** abgenommen | security-checker | **berichtigt und neu beurteilt** |
+| `docs/bedrohungsmodell.md` 19.2 Messung 1 und T-145-3 | „Die Versionsprüfung hörte auf zu arbeiten" / „ohne Wiederholung im selben Lauf" | security-checker | **berichtigt** |
+| `apps/local-api/src/main.ts:498` | „Ein Fehlschlag ist still und wird im selben Lauf nicht wiederholt (A-18.11)" — unmittelbar neben „danach höchstens eine Anfrage je 24 Stunden" | domain-dev | **offen — T-275-2** |
+| `apps/local-api/src/features/version/source.ts:126-131` | „kein zweiter Versuch im selben Lauf (A-18.11). Die Versionsprüfung stellte damit den Betrieb ein" | domain-dev | **offen — T-275-3** |
+| `apps/local-api/scripts/proof-access-entry.ts:73-76` | „**kein zweiter Versuch im selben Lauf**" als Begründung der Attrappe | domain-dev | **offen — T-275-4** |
+| `docs/testplan.md:3276-3288` (TP-VER-07) | Titel „Kein wiederholter Versuch im selben Lauf"; erwartetes Ergebnis: „Die Attrappe zählt genau **einen** Aufruf für den gesamten Lauf" | e2e-tester | **offen — T-275-5** |
+| `docs/glossar.md:200` | „kein zweiter Versuch im selben Lauf"; dazu der tote Pfad `apps/local-api/src/version/checker.ts` | documenter | **offen — T-275-6** |
+| `docs/benutzerhandbuch.md:644` | „kein zweiter Versuch im selben Lauf" | documenter | **offen — T-275-6** |
+| `docs/architektur.md:1397` | „kein zweiter Versuch im selben **Prüflauf**" | domain-dev | **bereits nachgezogen** |
+| `apps/local-api/test/version/checker.test.ts` | der Prüffall, der die alte Zahl festnagelt | unit-tester | **in Arbeit, T-274, dieselbe Welle** |
+
+**Die zwei, die ich als die schlimmsten führe, sind nicht die im Papier.** `main.ts:498` und
+`source.ts:129` stehen im **Produktivcode**, unmittelbar neben dem Code, der das Gegenteil tut. Das
+ist wörtlich die Lage aus dem Abschnitt „Ungedeckt gebaut" in `CLAUDE.md`: *Ein Satz im Quelltext,
+der eine Zusage gibt, die der Nachbar bricht, ist schlimmer als kein Satz.* Formal sind beide seit
+der Schärfung von A-18.11 nicht mehr falsch — „im selben Lauf" heißt jetzt „im selben Prüflauf" —,
+aber beide stehen in einem Umfeld, das die andere Lesart nahelegt: `main.ts:498` direkt hinter
+„danach höchstens eine Anfrage je 24 Stunden", und `source.ts:129` sagt den Rest ausdrücklich
+(„stellte damit den Betrieb ein"), was schlicht nicht mehr stimmt. Wer T-273 rückgängig machen
+wollte, fände in beiden Sätzen seine Begründung.
+
+**TP-VER-07 ist derselbe Fall wie der Prüffall, den T-274 ablöst, nur im Plan.** Der Fall selbst
+liefe heute noch grün, weil er innerhalb eines kurzen Laufs mißt und der Boden 60 min beträgt —
+aber sein erwartetes Ergebnis, „genau **einen** Aufruf für den gesamten Lauf", ist als Satz falsch
+und würde bei der ersten Verlängerung des Meßfensters zur Meldung eines behobenen Fehlers. Er
+gehört umformuliert auf: **genau einen Aufruf innerhalb des Mindestabstands**, mit einem zweiten
+Fall, der über den Mindestabstand hinaus mißt und einen **zweiten** Aufruf erwartet.
+
+### 36.7 Befunde dieser Prüfung
+
+| Kennung | Schwere | Sache | Zuständig |
+|---|---|---|---|
+| **T-275-1** | **Berichtigung** | **Zwei Auflagenzeilen dieses Papiers beschrieben das Verhalten eines gemeldeten Fehlers als erfüllte Zusage** (A-V-11 in 18.9, Urteil in 19.1), dazu vier weitere Stellen, die an derselben Lesart hingen. Alle sechs sind nach A-A-70 **an Ort und Stelle** berichtigt, mit Marke, Datum und altem Wortlaut; die Auflage ist als **A-V-11′** neu gefaßt (36.4). Der eigentliche Schaden lag nicht im Wortlaut, sondern in der **Meßvorschrift**: „bleibt die Zahl bei eins" hätte die Behebung ab heute als Verstoß gemeldet | security-checker (erledigt) |
+| **T-275-2** | sollte | **`apps/local-api/src/main.ts:498` gibt neben dem Takt eine Zusage, die der Nachbarcode nicht mehr hält.** „Ein Fehlschlag ist still und wird im selben Lauf nicht wiederholt" steht unmittelbar hinter „danach höchstens eine Anfrage je 24 Stunden"; in diesem Umfeld liest jeder „Programmlauf". **Auswirkung:** keine zur Laufzeit — eine falsche Erwartung bei der nächsten Änderung an dieser Stelle, und damit der Weg zurück in den behobenen Fehler. **Gegenmittel:** „im selben **Prüflauf**; nach einem Fehlschlag folgt der nächste Versuch frühestens nach dem Mindestabstand von einer Stunde." Bezug A-18.11, A-V-11′ | domain-dev |
+| **T-275-3** | sollte | **`apps/local-api/src/features/version/source.ts:126-131` behauptet das Gegenteil des Bestands.** „kein zweiter Versuch im selben Lauf (A-18.11). Die Versionsprüfung stellte damit den Betrieb ein" — sie stellt ihn nicht ein, sie scheitert stündlich weiter. **Auswirkung:** Der Satz begründet die 64-KiB-Grenze mit einer Folge, die es nicht mehr gibt; wer die Grenze künftig bewertet, bewertet gegen eine falsche Beschreibung (T-145-3 hängt daran). **Gegenmittel:** „…jeder folgende Versuch liest dieselbe zu große Antwort. Die Prüfung liefert damit dauerhaft kein Ergebnis und schreibt dabei bis zu 24 Protokollzeilen je Tag." Der Satz in `version.ts` (`describeVersionCheckFailure`, Fall `too_large`) ist bereits richtig und kann als Vorlage dienen | domain-dev |
+| **T-275-4** | Hinweis | **`apps/local-api/scripts/proof-access-entry.ts:73-76` begründet die Attrappe mit der alten Lesart.** Der Lauf selbst ist unberührt (28 s gegen einen Boden von 60 min), und `proof:access` mißt die Zahl der Anfragen ohnehin nicht — das ist die beruhigende Hälfte des Befunds: **kein grüner Wächter friert das alte Verhalten ein.** Der Satz gehört trotzdem nachgezogen, weil er in einem Nachweisskript steht und dort wie eine gemessene Eigenschaft gelesen wird. **Gegenmittel:** ein Halbsatz — der Lauf endet lange vor dem Mindestabstand, deshalb sieht er genau eine Anfrage | domain-dev |
+| **T-275-5** | sollte | **`docs/testplan.md` TP-VER-07 nagelt die alte Zahl fest.** Erwartetes Ergebnis: „Die Attrappe zählt genau **einen** Aufruf für den gesamten Lauf." Derselbe Fehler wie in A-V-11 alt, im Prüfplan. **Auswirkung:** heute grün (das Meßfenster ist kürzer als der Boden), morgen eine Meldung gegen eine behobene Sache. **Gegenmittel:** Titel und Ergebnis auf **Prüflauf** und **Mindestabstand** umstellen, dazu ein zweiter Fall, der über den Mindestabstand hinaus mißt und einen **zweiten** Aufruf erwartet — die Gegenprobe zu (a) in A-V-11′ | e2e-tester |
+| **T-275-6** | Hinweis | **`docs/glossar.md:200` und `docs/benutzerhandbuch.md:644` tragen die alte Lesart in die Dokumentation.** Im Glossar steht zusätzlich ein **toter Pfad** (`apps/local-api/src/version/checker.ts`; die Datei heißt seit T-257/T-273 `apps/local-api/src/features/version/version.ts`) — ein Fall für A-A-76 Punkt 3. **Gegenmittel:** beide Sätze auf „kein zweiter Versuch im selben **Prüflauf**; der nächste Versuch folgt frühestens nach einer Stunde" umstellen; im Handbuch gehört dazu, daß die Prüfung nach einem Fehlschlag **nicht** aufhört — das ist die Zusage, die der Benutzer braucht | documenter |
+| **T-275-7** | Hinweis | **Der Neustart ist der billigere Anfragehebel, und er ist älter als T-273.** `lastRequestAt` liegt im Arbeitsspeicher; ein neu gestarteter Dienst kennt keinen Boden und sendet nach 10 s. Rechnerisch 360 Anfragen je Stunde gegen 24 je Tag über den Wiederholtakt. **Auswirkung:** gering — wer den Sidecar in einer Schleife startet, ist A-03 und hat bessere Ziele; aber jede Bewertung der neuen 24 sollte diese Zahl daneben stellen, sonst wird das falsche Ende optimiert. **Gegenmittel (nicht verlangt):** den Zeitpunkt der letzten Anfrage im Bestand halten, wie den übersprungenen Fassungswert und die offenen Phasen (A-24.7) | Orchestrator (Entscheidung), domain-dev |
+| **T-275-8** | Hinweis | **Eine erschöpfte GitHub-Anfragebegrenzung klärt sich nicht mehr von selbst** (36.5 Punkt 4). Ab etwa sechzig Installationen hinter einer Quelladresse ist der Zustand selbsterhaltend und still. **Auswirkung:** keine Aktualisierungsmeldung, dauerhaft, unbemerkt — kein Datenabfluß, kein Angriffsweg. **Gegenmittel (nicht verlangt, beide klein):** Rückstufung 1 h → 2 h → 4 h → 8 h → 24 h, die den Boden nur verlängert, oder ein Streuwert auf den Boden gegen die Gleichschaltung | Orchestrator (Entscheidung), domain-dev |
+| **T-275-9** | Hinweis | **Semgrep über den Guardian-Dienst und 42Crunch stehen zum wiederholten Mal nicht zur Verfügung.** Das Tor aus Abschnitt 8 ist an zwei von vier Stellen weiterhin nicht einlösbar; für diesen Auftrag ist die Lücke klein (geänderter Produktivcode: ein Zweig, ein Aufruf), für die Lieferkette bleibt sie offen. Unveränderte Lage seit T-136-6 | Auftraggeber, Orchestrator |
+
+### 36.8 Neue Auflagen
+
+| ID | Wortlaut | Messung |
+|---|---|---|
+| **A-V-24** | **Der Boden wird an zwei Stellen durchgesetzt, und die äußere liest die Wanduhr nicht.** Die Frist des Zeitgebers ist die erste Durchsetzung, die Rechnung gegen `now()` die zweite. Keine der beiden darf mit der Begründung „das prüft ja schon die andere" entfallen. Wer den Boden allein an `now()` hängt, macht aus einer vorlaufenden Systemuhr einen Anfragegenerator; wer ihn allein an den Zeitgeber hängt, verliert die Zusage bei jedem künftigen zweiten Auslöser | **In beide Richtungen, und beide sind billig.** (a) Eine Uhr, die bei jedem Blick um eine Stunde vorwärts springt, darf die Zahl der Anfragen **nicht** erhöhen — gemessen am 2026-09-11: 3 Anfragen in 3 s bei einem Boden von 1 000 ms, unverändert gegenüber einer stehenden Uhr. (b) Ein Zeitgeber, der zu früh feuert (im Prüffall unmittelbar gerufen), darf keine Anfrage auslösen, solange der Boden nach der geltenden Uhr nicht abgelaufen ist |
+| **A-V-25** | **Die Umgebung des Sidecars ist geerbt, also gilt A-V-4 nur für den Code — die Lücke wird an der festgenagelten Node-Fassung gemessen, nicht angenommen.** Bei **jedem** Wechsel der Node-Fassung in `release.yml` wird nachgemessen, ob globales `fetch` einen über die Umgebung gesetzten Proxy benutzt (`NODE_USE_ENV_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NODE_OPTIONS`). Fällt die Messung anders aus als heute, ist das eine **Entscheidung** und keine Zeile Code: Entweder die Hülle startet den Sidecar mit gesäuberter Umgebung, oder die Abhängigkeit steht ausgeschrieben im Bedrohungsmodell | Der Horchertest aus 36.0, Messung 3: ein mitschreibender Horcher auf `127.0.0.1` als Proxy, ein `fetch` auf ein anderes Ziel, die Variablen gesetzt. **Rot, sobald der Horcher irgendetwas sieht.** Gemessen am 2026-09-11 gegen Node 22.23.2: sieht nichts, in beiden Läufen |
+
+### 36.9 Urteil dieser Prüfung
+
+**Die Verhaltensänderung aus T-273 ist freigegeben.**
+
+Sie behebt mehr, als sie kostet, und der Gewinn liegt nicht dort, wo die Fehlermeldung ihn
+vermuten ließ: Vor T-273 genügte **eine** gestörte Verbindung, um die Aktualisierungsmeldung für
+die gesamte Laufzeit der Anwendung zu unterdrücken — bei unsignierten Erzeugnissen ist diese
+Meldung der einzige Weg, auf dem eine Sicherheitsbehebung den Benutzer erreicht. Der Preis sind im
+Dauerfehlschlag 23 zusätzliche Anfragen je Tag, ein Sechzigstel des GitHub-Kontingents je Stunde,
+ohne jede zusätzliche Angabe im Inhalt, ohne jede Sichtbarkeit in der Oberfläche und ohne einen
+neuen Weg für einen Angreifer. Die Zahlen sind gemessen und nicht geschätzt, der Boden hält
+(305/310/314/313 ms gegen 300), der Zustand bleibt `unknown`, `stop()` plant nichts nach, und die
+verstellte Uhr ist kein Hebel.
+
+**Die Entscheidung des Auftraggebers, nichts sichtbar zu machen, ist die sichere und nicht nur die
+bequeme.** Eine Schaltfläche „Jetzt prüfen" wäre die Route, die E-069 ausgeschlossen hat, mit einer
+Hand darauf — und die Hand gehört auf diesem Rechner nicht nur dem Benutzer.
+
+**An R-19 ändert sich die Bewertung nicht, an Punkt 3 ändert sich ein Satz.** Der Fehlerfall ist
+der gesprächigere Fall, und sein Zuhörer ist nicht GitHub, sondern wer die Verbindung abfängt. Der
+Vorschlag für den Nachsatz steht in 36.3; `risks.md` gehört dem Orchestrator.
+
+**Nacharbeit, die diese Freigabe nicht aufhält, aber in derselben Welle nachgezogen gehört:** die
+sechs Stellen aus 36.6, die noch offen sind. Zwei davon stehen im Produktivcode und geben dort eine
+Zusage, die der Nachbar bricht — genau die Bauart, die dieses Vorhaben schon einmal einen Abschnitt
+gekostet hat. Und ein Satz, der mir aus dieser Prüfung bleibt: **Der Fehler stand nicht im Code,
+sondern in der Zahl, mit der wir ihn abgenommen haben.** Eine Meßvorschrift, die eine Zahl nennt,
+wo eine Eigenschaft gemeint ist, ist keine Messung — sie ist ein Andenken an den Tag, an dem
+jemand nachgesehen hat.

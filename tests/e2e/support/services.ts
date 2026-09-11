@@ -9,9 +9,15 @@
  * kein gestubbtes `fetch`. Die Testfälle laufen gegen dieselbe Fachlogik,
  * dasselbe SQLite und dieselbe React-Anwendung wie ein echter Benutzer.
  *
- * `XDG_DATA_HOME` zeigt auf ein Wegwerfverzeichnis (`E2E_DATA_DIR`) — der
+ * `XDG_DATA_HOME` **und** `LOCALAPPDATA` zeigen auf ein Wegwerfverzeichnis
+ * (`E2E_DATA_DIR`, über `isolatedAppDataEnv`, `app-data-isolation.ts`) — der
  * Dienst legt seinen Bestand dort an (`resolveAppDataDir`, access/paths.ts)
- * und rührt niemals an `~/.local/share/takt/`, wo ein echter Bestand läge.
+ * und rührt niemals an `~/.local/share/takt/` oder `%LOCALAPPDATA%\Takt`, wo
+ * ein echter Bestand läge. Bis T-247-5 setzte dieser Aufbau nur
+ * `XDG_DATA_HOME` — unter Windows liest `access/paths.ts` das nicht, und der
+ * Lauf traf den echten Bestand des Benutzers (A-A-72). `app-data-isolation
+ * .ts` prüft seither vor jedem Start fail-closed, wohin der Kindprozeß
+ * tatsächlich schriebe.
  *
  * `startLocalApi`/`configureExportDirectory` sind seit T-055 zusätzlich
  * exportiert: Der Dienst selbst läuft dort unverändert aus dem Quelltext (das
@@ -64,10 +70,12 @@
  * noch nicht gab.
  */
 
-import { spawn, type ChildProcessByStdio, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessByStdio, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import type { Readable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import {
   API_BASE_URL,
@@ -79,8 +87,52 @@ import {
   WINDOWS_USER,
 } from './session';
 import { startGithubReleasesStub, type GithubReleasesStub } from './github-releases-stub';
+import { isolatedAppDataEnv } from './app-data-isolation';
 
-const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
+// `fileURLToPath` statt `.pathname` (T-246-1): `.pathname` lieferte unter
+// Windows `/C:/…`, verkettet über `${REPO_ROOT}apps/web` zu `C:\C:\…` und
+// ließ den Kindprozess nie starten (`spawn … ENOENT`, vor dem ersten Fall).
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Beendet einen mit `shell: true` gestarteten Kindprozess samt seinem ganzen
+ * Prozessbaum.
+ *
+ * **Gemessen, nicht vermutet (T-263, an `web-build-services.ts#startWebPreview`
+ * zuerst gefunden, hier auf denselben Fund an `startWeb` angewandt):**
+ * `child.kill('SIGTERM')` allein beendet unter Windows nur den unmittelbaren
+ * Kindprozess. `startWeb` startet wegen `shell: process.platform ===
+ * 'win32'` ein `cmd.exe`, das `pnpm` aufruft, das wiederum den eigentlichen
+ * `vite`-Prozess als **Enkelkind** startet — `SIGTERM` an das `cmd.exe`
+ * lässt dieses Enkelkind unter Windows als Waise weiterlaufen, mit Port 5173
+ * weiterhin belegt. Reproduziert (T-263): Nach einem Lauf von
+ * `playwright.web-build.config.ts` (derselbe `startWeb`/`stopServices`-Pfad)
+ * blieb ein `vite`/`vite preview`-Prozess auf 5173 zurück und blockierte den
+ * nächsten Lauf — exakt die Bauart, die T-259 schon als „fremde, aber
+ * erreichbare Gegenstelle" auf einem geteilten Port beschrieb, und die der
+ * Auftraggeber als wiederkehrendes Problem benennt (`board.md`: „Hängende
+ * Prozesse auf 5173 und 17844 haben heute mehrfach Läufe verfälscht").
+ * `spawnLocalApi`/`restartLocalApi` sind davon **nicht** betroffen — `node`
+ * wird dort ohne `shell: true` direkt gestartet, kein Enkelkind, `SIGTERM`
+ * trifft den richtigen Prozess.
+ *
+ * `taskkill /t /f` beendet unter Windows den ganzen Baum; auf anderen
+ * Plattformen bleibt `SIGTERM` (kein `shell: true` dort, kein
+ * Enkelkind-Problem).
+ */
+async function killShellChildTree(child: ChildProcessWithoutStdin): Promise<void> {
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    try {
+      await execFileAsync('taskkill', ['/pid', String(child.pid), '/t', '/f']);
+    } catch {
+      // Bereits beendet, oder nie wirklich gestartet — kein zweiter Versuch nötig.
+    }
+    return;
+  }
+  child.kill('SIGTERM');
+}
 
 /**
  * Lazy gestartete, für den ganzen Prozess geteilte GitHub-Attrappe (O-CI).
@@ -125,6 +177,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Entfernt ANSI-Farbcodes aus mitgeschnittenem Kindprozess-`stdout`/`stderr`.
+ * Eigenständig statt aus `web-build-services.ts` importiert (T-249-7-Bauart:
+ * jede Datei unter `support/**` bleibt für sich lauffähig) — dieselbe
+ * Begründung wie bei `listFilesRecursively` dort.
+ */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex -- ANSI-Escapes enthalten per Definition ein Steuerzeichen (ESC, 0x1B).
+  return text.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
 async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown = null;
@@ -167,7 +230,7 @@ async function spawnLocalApi(): Promise<ChildProcessWithoutNullStreams> {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const child = spawn('node', ['tests/e2e/support/version-check-entry.ts'], {
       cwd: REPO_ROOT,
-      env: { ...process.env, XDG_DATA_HOME: E2E_DATA_DIR, TAKT_E2E_GITHUB_STUB_URL: githubStubUrl },
+      env: { ...isolatedAppDataEnv(E2E_DATA_DIR), TAKT_E2E_GITHUB_STUB_URL: githubStubUrl },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -257,9 +320,32 @@ export async function restartLocalApi(
   return spawnLocalApi();
 }
 
+/**
+ * Startet den Entwicklungsserver für `apps/web`.
+ *
+ * **Bereitschaft am eigenen Prozess gemessen, nicht am Netz (T-263-Fund,
+ * zuerst an `web-build-services.ts#startWebPreview` gemessen, hier auf
+ * denselben Aufbau angewandt).** Eine reine `fetch`-Bereitschaftsprüfung
+ * kann nicht unterscheiden, ob die Antwort vom selbst gestarteten Kind
+ * stammt oder von einer fremden, aber erreichbaren Gegenstelle auf
+ * demselben Port — und ein bloßes Wettrennen gegen den frühen Tod des
+ * eigenen Kindes (`Promise.race([ready, exitedEarly])`, `ready` weiterhin
+ * über `fetch`) genügt dafür **nicht**: Der `pnpm`/`cmd.exe`-Vorlauf unter
+ * Windows dauert spürbar länger als die erste `fetch`-Runde, eine sofort
+ * antwortende fremde Gegenstelle gewinnt das Wettrennen praktisch immer
+ * (gemessen an `startWebPreview`, dort ausführlich begründet). `vite`
+ * schreibt bei tatsächlich geglücktem Binden eine eigene Zeile auf sein
+ * `stdout` (`➜  Local:   http://127.0.0.1:<port>/`) — die kann nur der
+ * eigene, wirklich gebundene Prozess schreiben. Die Bereitschaftsprüfung
+ * liest deshalb den mitgeschnittenen Log-Puffer, nicht das Netz; eine
+ * `fetch`-Bestätigung folgt danach nur noch als Zusatzsicherung.
+ */
 async function startWeb(): Promise<ChildProcessWithoutStdin> {
   const child = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
     cwd: `${REPO_ROOT}apps/web`,
+    // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
+    // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: API_BASE_URL,
@@ -272,13 +358,41 @@ async function startWeb(): Promise<ChildProcessWithoutStdin> {
   child.stdout.on('data', (chunk: Buffer) => (log += chunk.toString('utf8')));
   child.stderr.on('data', (chunk: Buffer) => (log += chunk.toString('utf8')));
 
+  const exitedEarly = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve());
+  });
+
+  const boundMarker = '127.0.0.1:5173';
+  const readyOutcome = waitFor(
+    async () => stripAnsi(log).includes(boundMarker),
+    15_000,
+    'Vite-Entwicklungsserver meldet auf eigenem stdout das Binden an 5173',
+  ).then(
+    () => 'ready' as const,
+    () => 'timeout' as const,
+  );
+
+  const outcome = await Promise.race([readyOutcome, exitedEarly.then(() => 'exited' as const)]);
+
+  if (outcome !== 'ready') {
+    await killShellChildTree(child);
+    const reason =
+      outcome === 'exited'
+        ? 'Der eigene Vite-Entwicklungsserver-Prozess ist beendet, bevor er das Binden an Port ' +
+          '5173 auf seinem eigenen stdout gemeldet hat — vermutlich EADDRINUSE (Port bereits von ' +
+          'einer fremden Gegenstelle belegt, --strictPort verhindert ein Ausweichen).'
+        : 'Zeitüberschreitung beim Warten auf: Vite-Entwicklungsserver meldet auf eigenem stdout ' +
+          'das Binden an 5173.';
+    throw new Error(`${reason}\nAusgabe:\n${log}`);
+  }
+
   try {
     await waitFor(async () => {
       const response = await fetch(WEB_BASE_URL).catch(() => null);
       return response !== null && response.ok;
-    }, 15_000, 'Vite-Entwicklungsserver antwortet auf 5173');
+    }, 5_000, 'Vite-Entwicklungsserver (bereits gebunden) antwortet über HTTP auf 5173');
   } catch (error) {
-    child.kill('SIGTERM');
+    await killShellChildTree(child);
     throw new Error(`${String(error)}\nAusgabe:\n${log}`);
   }
 
@@ -317,7 +431,12 @@ export async function startServices(): Promise<RunningServices> {
 }
 
 export async function stopServices(services: RunningServices): Promise<void> {
-  services.web.kill('SIGTERM');
+  // `web` über `killShellChildTree` (T-263-Fund, Begründung dort): `startWeb`
+  // spawnt über `shell: true`, ein blankes `SIGTERM` träfe nur das `cmd.exe`
+  // und ließe den eigentlichen `vite`-Prozess als Waise auf 5173 zurück.
+  // `localApi` startet `node` direkt, ohne Shell — `SIGTERM` bleibt hier
+  // richtig und ausreichend.
+  await killShellChildTree(services.web);
   services.localApi.kill('SIGTERM');
   // Kurze Gnadenfrist, damit beide Prozesse ihre Sockets freigeben, bevor ein
   // erneuter Lauf denselben Port belegen will.

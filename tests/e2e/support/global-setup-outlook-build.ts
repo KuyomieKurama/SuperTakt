@@ -48,6 +48,9 @@ async function buildOutlookAddin(): Promise<void> {
     await execFileAsync('pnpm', ['--filter', '@takt/outlook-addin', 'build'], {
       cwd: REPO_ROOT,
       maxBuffer: 16 * 1024 * 1024,
+      // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
+      // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
+      shell: process.platform === 'win32',
     });
   } catch (error) {
     const detail = error as { stdout?: string; stderr?: string; message?: string };

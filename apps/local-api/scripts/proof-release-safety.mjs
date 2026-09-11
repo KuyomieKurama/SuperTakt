@@ -71,7 +71,8 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { arbeitsbereichWurzel, paketVerzeichnis, scheitern } from './source-resolve.mjs';
 
 /*
  * Der Leser und die Regel liegen seit T-188 in `fetch-scan.mjs`, weil
@@ -81,7 +82,13 @@ import { fileURLToPath } from 'node:url';
  */
 import { mentionsGlobalFetch, stripComments } from './fetch-scan.mjs';
 
-const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+/*
+ * Erlaufen statt abgezählt (T-249-1): `../../..` waren drei Ebenen, weil dieser
+ * Lauf heute in `apps/local-api/scripts` liegt. `ROOT` dient hier nur noch dazu,
+ * die Pfade der Funde lesbar zu machen und die eine Wurzeldatei zu finden — die
+ * Quellordner kommen über ihre Paketnamen.
+ */
+const ROOT = arbeitsbereichWurzel();
 
 let passed = 0;
 let failed = 0;
@@ -110,30 +117,57 @@ function check(name, condition, detail = '') {
  * Was gelesen wird. Ausgeschrieben und nicht „alles außer": Wer einen Ordner
  * hinzufügt, soll ihn hier eintragen und dabei merken, daß er ihn eintragen
  * mußte.
+ *
+ * Seit T-249-1 steht links der **Paketname** statt des Verzeichnisses, und
+ * rechts eine **Untergrenze** (T-249-1). Beides hängt zusammen:
+ *
+ *  - Der Paketname überlebt den Umzug. `apps/web` heißt `@takt/web`, wo immer
+ *    es liegt; `pnpm-workspace.yaml` sagt, wo Pakete stehen dürfen.
+ *  - Die Untergrenze schließt den stummen Ausgang. Bis T-249-1 übersprang
+ *    `collectTree` einen Quellordner, den es nicht gab, mit einem
+ *    `continue` — und das war für diesen Lauf der gefährlichste Zustand
+ *    überhaupt: Er urteilt darüber, daß **nirgends** im Baum eine zweite
+ *    Adresse steht, daß **nirgends** heruntergeladen wird, daß `fetch`
+ *    **nirgends** außerhalb einer Datei vorkommt. Jede dieser Aussagen wird
+ *    über einem nicht gelesenen Ordner wahr. Der Prüfsatz „der Baum ist
+ *    gelesen" zählte dabei weiter über 100 Dateien, weil die anderen sieben
+ *    Ordner reichen — die Zahl war also da und half nichts.
+ *
+ * Die Zahlen sind bewußt rund die Hälfte des heutigen Standes (56, 129, 33, 3,
+ * 11, 19, 24, 8). Sie sollen rot werden, wenn ein Ordner verschwindet oder
+ * umbenannt wird, nicht wenn jemand aufräumt.
  */
 const SOURCE_ROOTS = [
-  'apps/local-api/src',
-  'apps/web/src',
-  'apps/outlook-addin/src',
-  'apps/desktop/src',
-  'apps/desktop/src-tauri/src',
-  'packages/domain/src',
-  'packages/storage/src',
-  'packages/export/src',
+  { paket: '@takt/local-api', unterordner: 'src', mindestens: 25 },
+  { paket: '@takt/web', unterordner: 'src', mindestens: 60 },
+  { paket: '@takt/outlook-addin', unterordner: 'src', mindestens: 15 },
+  { paket: '@takt/desktop', unterordner: 'src', mindestens: 2 },
+  { paket: '@takt/desktop', unterordner: 'src-tauri/src', mindestens: 5 },
+  { paket: '@takt/domain', unterordner: 'src', mindestens: 9 },
+  { paket: '@takt/storage', unterordner: 'src', mindestens: 12 },
+  { paket: '@takt/export', unterordner: 'src', mindestens: 4 },
 ];
 
-/** Einzelne Dateien außerhalb der Quellordner, die trotzdem zählen. */
+/**
+ * Einzelne Dateien außerhalb der Quellordner, die trotzdem zählen.
+ *
+ * `paket: null` heißt „im Wurzelverzeichnis des Arbeitsbereichs". Auch hier
+ * gilt seit T-249-1: eine Datei, die nicht da ist, ist ein **Fehlschlag der
+ * Messung** und kein leerer Fund. `tauri.conf.json` ist die Datei, gegen die
+ * `proof:shell-surface` die CSP-Zusage zeichengleich mißt; sie stillschweigend
+ * auszulassen hieße, über die Zusage zu urteilen, ohne sie gesehen zu haben.
+ */
 const EXTRA_FILES = [
-  'apps/desktop/src-tauri/tauri.conf.json',
-  'apps/desktop/src-tauri/Cargo.toml',
-  'apps/local-api/package.json',
-  'apps/web/package.json',
-  'apps/desktop/package.json',
-  'apps/outlook-addin/package.json',
-  'packages/domain/package.json',
-  'packages/storage/package.json',
-  'packages/export/package.json',
-  'package.json',
+  { paket: '@takt/desktop', pfad: 'src-tauri/tauri.conf.json' },
+  { paket: '@takt/desktop', pfad: 'src-tauri/Cargo.toml' },
+  { paket: '@takt/local-api', pfad: 'package.json' },
+  { paket: '@takt/web', pfad: 'package.json' },
+  { paket: '@takt/desktop', pfad: 'package.json' },
+  { paket: '@takt/outlook-addin', pfad: 'package.json' },
+  { paket: '@takt/domain', pfad: 'package.json' },
+  { paket: '@takt/storage', pfad: 'package.json' },
+  { paket: '@takt/export', pfad: 'package.json' },
+  { paket: null, pfad: 'package.json' },
 ];
 
 const READ_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.js', '.mjs', '.rs', '.json', '.toml', '.html']);
@@ -165,27 +199,67 @@ function walk(directory, out) {
  * Vorkommen, nicht nach Abständen.
  */
 
+/**
+ * Sammelt den Baum — und bricht ab, wo er ihn nicht findet (T-249-1).
+ *
+ * Die beiden `continue` und das leere `catch`, die hier bis T-249-1 standen,
+ * waren der stumme Ausgang: ein fehlender Quellordner, ein fehlendes Manifest,
+ * und die Aussagen dieses Laufs wurden über ihnen leer und damit wahr. Jetzt
+ * ist beides ein Abbruch mit Namen.
+ */
 function collectTree() {
   const files = [];
+  const bilanz = [];
   for (const root of SOURCE_ROOTS) {
-    const full = join(ROOT, root);
+    const full = join(paketVerzeichnis(root.paket), root.unterordner);
+    let istVerzeichnis = false;
     try {
-      if (!statSync(full).isDirectory()) continue;
+      istVerzeichnis = statSync(full).isDirectory();
     } catch {
-      continue; // Ein Ordner, den es (noch) nicht gibt, ist kein Befund dieses Laufs.
+      istVerzeichnis = false;
+    }
+    if (!istVerzeichnis) {
+      scheitern(
+        `Quellordner ${root.paket}/${root.unterordner} lesen`,
+        `${full} ist kein Verzeichnis.`,
+        'Ein übersprungener Quellordner macht jede Aussage über ihn wahr — und dieser',
+        'Lauf sagt „nirgends im Baum".',
+      );
     }
     const found = [];
     walk(full, found);
+    if (found.length < root.mindestens) {
+      scheitern(
+        `Quellordner ${root.paket}/${root.unterordner} lesen`,
+        `${found.length} Datei(en) gefunden, verlangt sind mindestens ${root.mindestens}.`,
+        `Endungen: ${[...READ_EXTENSIONS].join(' ')}`,
+      );
+    }
+    bilanz.push(`${root.paket}/${root.unterordner}: ${found.length}`);
     for (const file of found) files.push(file);
   }
   for (const extra of EXTRA_FILES) {
-    const full = join(ROOT, extra);
+    const full =
+      extra.paket === null
+        ? join(ROOT, extra.pfad)
+        : join(paketVerzeichnis(extra.paket), extra.pfad);
+    let istDatei = false;
     try {
-      if (statSync(full).isFile()) files.push(full);
+      istDatei = statSync(full).isFile();
     } catch {
-      /* nicht vorhanden */
+      istDatei = false;
     }
+    if (!istDatei) {
+      scheitern(
+        `Einzeldatei ${extra.paket ?? '<Wurzel>'}/${extra.pfad} lesen`,
+        `${full} ist keine Datei.`,
+        'Eine ausgelassene Einzeldatei ist eine Datei, über die dieser Lauf schweigt,',
+        'während er behauptet, den ganzen Baum gesehen zu haben.',
+      );
+    }
+    files.push(full);
   }
+  process.stdout.write(`        ${bilanz.join(', ')}\n`);
 
   return files.map((full) => {
     const source = readFileSync(full, 'utf8');
@@ -215,17 +289,41 @@ const RELEASE_PREFIX = 'https://github.com/KuyomieKurama/SuperTakt/releases/tag/
 /**
  * Wo die Abfrageadresse stehen darf: an genau einer Stelle.
  */
-const API_URL_FILE = 'apps/local-api/src/version/source.ts';
+const API_URL_FILE = 'apps/local-api/src/features/version/source.ts';
 
 /**
  * Wo die Adresse der Release-Seite stehen darf.
  *
  * Zwei Orte, und ihr Gleichlauf wird gemessen (`proof:shell-surface`): die
  * Hülle baut die Adresse, die Oberfläche zeigt sie als Text daneben (A-V-18).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum hier ein **fester Pfad** steht und keine Merkmalsauflösung
+ * ---------------------------------------------------------------------------
+ *
+ * Anderswo im Bestand ist der feste Pfad seit T-249-1 der Fehler: Ein Lauf, der
+ * seinen Gegenstand über einen Ort statt über ein Merkmal sucht, findet ihn
+ * nach einem Umzug nicht mehr und wird still grün (`source-resolve.mjs`).
+ *
+ * **Hier ist es umgekehrt, und das ist kein Widerspruch, sondern der Kern der
+ * Zusage.** Diese Aufstellung sagt nicht „wo liegt die Datei mit der Adresse",
+ * sondern „**an wie vielen und welchen Orten darf die Adresse überhaupt
+ * stehen**". Das Merkmal, über das aufgelöst würde, wäre die Adresse selbst —
+ * die Menge käme dann aus dem Bestand, gegen den geurteilt werden soll, und
+ * jede dritte Fundstelle wäre über Nacht ein erlaubter Ort. Die Aussage
+ * „genau zwei" wäre tautologisch wahr (A-V-18, E-103 gegengelesen).
+ *
+ * Der Preis ist ein rotes Fenster nach jedem Umzug einer der beiden Dateien.
+ * Es ist bezahlt und **gewollt**: Der Lauf verlangt, daß jemand die Bewegung
+ * bemerkt und hier bestätigt. Ein Wächter über eine Obergrenze, der sich seine
+ * Obergrenze selbst nachzieht, bewacht nichts.
+ *
+ * Zuletzt nachgezogen mit T-257 (`apps/web/src/lib/releasePage.ts` →
+ * `apps/web/src/features/settings/releasePage.ts`, Inhalt sha256-gleich).
  */
 const RELEASE_PREFIX_FILES = new Set([
   'apps/desktop/src-tauri/src/release.rs',
-  'apps/web/src/lib/releasePage.ts',
+  'apps/web/src/features/settings/releasePage.ts',
 ]);
 
 /** Jede Zeichenkette, die einen Wirt auf github.com nennt. */
@@ -620,6 +718,25 @@ try {
     tree.some((file) => file.path === API_URL_FILE),
     API_URL_FILE,
   );
+  /*
+   * Und dieselbe Frage für die beiden Orte der Release-Adresse (T-249-1).
+   *
+   * Bis T-249-1 fehlte sie, und die Lücke war fein: Die Zählung unten prüft,
+   * daß die Adresse an **zwei** Orten steht und an keinem dritten. Läge einer
+   * der beiden Orte außerhalb des gelesenen Baums, zählte sie eins — und der
+   * Prüfsatz wäre rot, aber mit der falschen Begründung („eine Abschrift zu
+   * wenig" statt „eine Datei nicht gesehen"). Hier steht die richtige.
+   */
+  {
+    const fehlend = [...RELEASE_PREFIX_FILES].filter(
+      (pfad) => !tree.some((file) => file.path === pfad),
+    );
+    check(
+      `die zwei erlaubten Orte der Release-Adresse liegen im gelesenen Baum (${RELEASE_PREFIX_FILES.size})`,
+      fehlend.length === 0,
+      `nicht gelesen: ${fehlend.join(', ')}`,
+    );
+  }
 
   // -------------------------------------------------------------------------
   section('1  Gegenproben: jede Prüfung wird von einem eingesetzten Verstoß rot');
@@ -680,12 +797,34 @@ try {
       source !== undefined && source.code.includes(API_URL),
       'nicht gefunden',
     );
+    /*
+     * Die fehlende Untergrenze, gefunden bei der Gegenprobe zu T-249-1.
+     *
+     * Hier stand `holders.length <= RELEASE_PREFIX_FILES.size` — eine
+     * **Obergrenze** unter einer Überschrift, die „an den zwei gemessenen
+     * Orten" sagt. Gemessen wurde damit nur, daß keine dritte Abschrift
+     * dazukommt; daß eine der beiden **fehlt**, ging durch. Die Gegenprobe hat
+     * es sichtbar gemacht: Mit einem nicht gelesenen `apps/web/src` schrieb
+     * dieser Lauf wörtlich
+     *
+     *     ok    die Adresse der Release-Seite steht an den zwei gemessenen Orten (1)
+     *
+     * — Überschrift „zwei", Zahl „eins", Urteil „ok". Das ist dieselbe Blindheit
+     * wie bei `proof:foreign` und `proof:addin` 18f, nur in einer Klammer statt
+     * in einer Dateiliste.
+     *
+     * Jetzt beide Richtungen: genau so viele wie erlaubt, und jede an ihrem
+     * Ort. Der Prüfsatz wird dadurch nicht milder, sondern erst so scharf, wie
+     * er sich immer gelesen hat.
+     */
     const holders = tree.filter((file) => file.code.includes(RELEASE_PREFIX));
     check(
       `die Adresse der Release-Seite steht an den zwei gemessenen Orten (${holders.length})`,
-      holders.length <= RELEASE_PREFIX_FILES.size &&
+      holders.length === RELEASE_PREFIX_FILES.size &&
         holders.every((file) => RELEASE_PREFIX_FILES.has(file.path)),
-      holders.map((file) => file.path).join(', '),
+      holders.length === 0
+        ? 'an keinem einzigen Ort gefunden'
+        : `gefunden an: ${holders.map((file) => file.path).join(', ')}`,
     );
     check(
       'und sie trägt das führende `v` am Ende — die Fassung wird ohne `v` eingesetzt',

@@ -22,7 +22,7 @@
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createGithubReleaseSource, VERSION_CHECK_MAX_BYTES, VERSION_CHECK_TIMEOUT_MS } from '../../src/version/source.ts';
+import { createGithubReleaseSource, VERSION_CHECK_MAX_BYTES, VERSION_CHECK_TIMEOUT_MS } from '../../src/features/version/source.ts';
 import { fixedResponse, neverResponds, startStub, type HttpStub } from './support/http-stub.ts';
 
 const RELEASE_PATH = '/repos/beispiel-organisation/takt-testfixture/releases/latest';

@@ -1,10 +1,10 @@
 import { poolMovementSentence, type PoolMovement } from "@takt/domain";
 import { useState } from "react";
 import { useToasts } from "../app/ToastContext";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { DoneFlag } from "../components/DoneFlag";
-import { Button, Card, InlineMessage } from "../components/Primitives";
-import { TimerDisplay } from "../components/Timer";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { DoneFlag } from "../shared/ui/DoneFlag";
+import { Button, Card, InlineMessage } from "../shared/ui/Primitives";
+import { TimerDisplay } from "../features/timer/Timer";
 import { reactivationTitle } from "../lib/labels";
 import { Section, SubHeading } from "./Section";
 

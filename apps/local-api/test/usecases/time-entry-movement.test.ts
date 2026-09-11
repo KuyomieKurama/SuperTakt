@@ -4,8 +4,8 @@
  * `POST /time-entries` — die Buchung von Hand — kann die ERSTE abgeschlossene
  * Buchung eines Todos sein und damit `hasOpenEntries` von falsch auf wahr
  * setzen; ein Todo ohne Buchung erscheint dann in jeder Spalte
- * `exportState: 'open'`. `createTimeEntry` (`apps/local-api/src/usecases/
- * timer.ts`) rechnet das über `movementOfBooking` — dieselbe Funktion, die
+ * `exportState: 'open'`. `createTimeEntry` (`apps/local-api/src/features/
+ * timer/bookings.ts`) rechnet das über `movementOfBooking` — dieselbe Funktion, die
  * `POST /timer/stop` und `POST /timer/orphaned/resolve` benutzen — und damit
  * über {@link closedEntryMovementStates} (`ENTRY_CLOSED_EFFECT`), NICHT über
  * {@link bookingMovementStates} (`BOOKING_EFFECT`). Der Unterschied ist genau
@@ -40,9 +40,9 @@ import type {
 } from '@takt/domain';
 import { ok } from '@takt/domain';
 import type { PoolAxesResolution, PoolPort, UnitOfWork } from '@takt/storage';
-import type { AppContext } from '../../src/usecases/context.ts';
-import { createTimeEntry } from '../../src/usecases/timer.ts';
-import type { BookingPresenceBefore } from '../../src/usecases/pool-movement.ts';
+import type { AppContext } from '../../src/context.ts';
+import { createTimeEntry } from '../../src/features/timer/bookings.ts';
+import type { BookingPresenceBefore } from '../../src/pool-movement.ts';
 
 const todoId = (value: string) => value as unknown as TodoId;
 const poolId = (value: string) => value as unknown as PoolId;

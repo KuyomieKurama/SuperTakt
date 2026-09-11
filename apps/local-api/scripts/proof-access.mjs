@@ -9,8 +9,9 @@
  * Aufruf:  pnpm --filter @takt/local-api proof:access
  *
  * Der Lauf startet den echten Dienst als Kindprozess mit einem Startgeheimnis
- * über `stdin`, lenkt das Anwendungsdatenverzeichnis über `XDG_DATA_HOME` in
- * einen Wegwerfordner und fährt danach eine Tabelle von Anfragen dagegen.
+ * über `stdin`, lenkt das Anwendungsdatenverzeichnis in einen Wegwerfordner
+ * (`proof-appdata.mjs`, auf jeder Plattform über die Variable, die der Dienst
+ * dort liest) und fährt danach eine Tabelle von Anfragen dagegen.
  *
  * Ausgabe: eine Zeile je Prüfung, am Ende eine Zusammenfassung. Exitcode 1,
  * sobald eine Prüfung fehlschlägt.
@@ -19,13 +20,16 @@
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, stat, readFile } from 'node:fs/promises';
 import { tmpdir, networkInterfaces } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createConnection } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
+
+import { migrationsVerzeichnis, paketQuelle, paketVerzeichnis, scheitern } from './source-resolve.mjs';
 import { DatabaseSync } from 'node:sqlite';
+import { appDataDirIn, isolatedAppDataEnv } from './proof-appdata.mjs';
 
 /*
  * Die drei Fristen des Betriebs kommen aus `config.ts` und stehen hier nicht
@@ -42,6 +46,28 @@ import {
 } from '../src/config.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Das Paket, dessen Nachweispfad hier durchsucht wird — über seinen **Namen**
+ * (T-249-1).
+ *
+ * Bis T-249-1 stand dafür `join(HERE, '..')`: eine Ebene über diesem Skript.
+ * Das stimmte, solange das Skript in `apps/local-api/scripts` liegt, und band
+ * damit den Ort der Messung an den Ort des Meßgeräts.
+ */
+const PAKET_WURZEL = paketVerzeichnis('@takt/local-api');
+
+/**
+ * Das Migrationsverzeichnis — über die Ausfuhrtabelle von `@takt/storage`,
+ * mit Untergrenze (T-249-1).
+ *
+ * Die Untergrenze trägt hier mehr als anderswo: `MIGRATION_COUNT` geht weiter
+ * unten als „so viele Migrationen kennt diese Fassung" in eine Meldung ein, die
+ * mit einer Datenbankfassung verglichen wird. Ein leeres oder falsches
+ * Verzeichnis ergäbe dort eine Zahl, die niemand als falsch erkennt.
+ */
+const MIGRATIONS_DIR = migrationsVerzeichnis({ mindestens: 12 });
+
 /**
  * **Nicht `src/index.ts`** (T-146, Befund T-145-1).
  *
@@ -72,8 +98,7 @@ const SECRET_SHAPE = /takt_[A-Za-z0-9_-]{43}/;
  * dieser Nachweis bei der nächsten Migration rot — mit einer Meldung, die auf
  * den Nachweis zeigt statt auf die Änderung.
  */
-const MIGRATION_COUNT = readdirSync(join(HERE, '..', '..', '..', 'packages', 'storage', 'migrations'))
-  .filter((name) => name.endsWith('.up.sql')).length;
+const MIGRATION_COUNT = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.up.sql')).length;
 
 let passed = 0;
 let failed = 0;
@@ -104,7 +129,7 @@ async function startService(
 ) {
   const child = spawn(process.execPath, [ENTRY], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, XDG_DATA_HOME: dataDir },
+    env: isolatedAppDataEnv(dataDir),
   });
 
   let stderr = '';
@@ -459,7 +484,7 @@ try {
     const startAbbruch = async (name, prepare, erwarteterGrund) => {
       const eigener = await mkdtemp(join(tmpdir(), 'takt-proof-abbruch-'));
       try {
-        const appDir = join(eigener, 'takt');
+        const appDir = appDataDirIn(eigener);
         await mkdir(appDir, { recursive: true, mode: 0o700 });
         const db = new DatabaseSync(join(appDir, 'takt.db'));
         db.exec(
@@ -995,12 +1020,47 @@ try {
 
   section('11. Rechte an Verzeichnis und Datei (B-2.2 Punkt 3, B-7.2)');
   {
-    const dir = join(dataDir, 'takt');
+    const dir = appDataDirIn(dataDir);
     const file = join(dir, 'addin-token.json');
     const dirStat = await stat(dir);
     const fileStat = await stat(file);
-    check(`Verzeichnis 0700 (ist ${(dirStat.mode & 0o777).toString(8)})`, (dirStat.mode & 0o777) === 0o700);
-    check(`Datei 0600 (ist ${(fileStat.mode & 0o777).toString(8)})`, (fileStat.mode & 0o777) === 0o600);
+
+    /*
+     * Daß beide überhaupt **hier** liegen, ist seit T-247 die erste Zusage
+     * dieses Abschnitts (A-A-72). `dir` ist der umgelenkte Wegwerfort. Fände
+     * `stat` sie dort nicht, hätte der Dienst woandershin geschrieben — und
+     * unter Windows tat er das bis T-247: in das echte `%LOCALAPPDATA%\Takt`
+     * des angemeldeten Kontos, weil die Umlenkung nur `XDG_DATA_HOME` setzte.
+     */
+    check(
+      'Verzeichnis und Tokendatei liegen im umgelenkten Ablageort und nicht im echten (A-A-72)',
+      dirStat.isDirectory() && fileStat.isFile(),
+      dir,
+    );
+
+    /*
+     * Der Modus wird nur dort gemessen, wo es einen gibt.
+     *
+     * Unter Windows liefert `fs.stat` keinen brauchbaren POSIX-Modus — hier
+     * gemessen 0666 für Verzeichnis **und** Datei, also erkennbar keine
+     * Auskunft über die tatsächliche Grenze. `access/paths.ts` nennt das seit
+     * T-011 als benannte Lücke, dort trägt die ACL, und `proof:db-permissions`
+     * überspringt aus demselben Grund unter Windows seinen ganzen Lauf.
+     *
+     * Das ist eine Lücke der **Messung**, keine Lockerung der **Regel**: Auf
+     * Linux und macOS, wo `pnpm check` fährt, bleiben beide Zeilen scharf, und
+     * die Zeile darüber — der Ort — wird überall gemessen. Sichtbar bleibt es
+     * trotzdem: Der Lauf schreibt aus, was er nicht mißt, statt es wegzulassen.
+     */
+    if (process.platform === 'win32') {
+      console.log(
+        '  --    Verzeichnis 0700 und Datei 0600: nicht gemessen — unter Windows sagt der ' +
+          'POSIX-Modus nichts, dort trägt die ACL (T-011)',
+      );
+    } else {
+      check(`Verzeichnis 0700 (ist ${(dirStat.mode & 0o777).toString(8)})`, (dirStat.mode & 0o777) === 0o700);
+      check(`Datei 0600 (ist ${(fileStat.mode & 0o777).toString(8)})`, (fileStat.mode & 0o777) === 0o600);
+    }
 
     const content = await readFile(file, 'utf8');
     check('In der Datei steht kein Token, nur der Abdruck', !SECRET_SHAPE.test(content));
@@ -1093,16 +1153,53 @@ try {
     //     stehen heute weiterhin 16 Dateien in der Ernte, weil es heute keinen
     //     Unterordner gibt — jede Untergrenze bliebe grün. Erst der Vergleich
     //     zweier Wege macht das Wort „vollständig" verdient (E-094 Punkt 1).
+    /*
+     * Die Namen dieses Abschnitts stehen mit `/`, auf jedem Betriebssystem.
+     *
+     * `TRAGENDE_DATEIEN` weiter unten ist eine Aufstellung von Hand und steht
+     * mit Schrägstrichen. `join` liefert unter Windows Rückstriche. Ohne diese
+     * Angleichung verglich die Zeile „die vier Dateien sind darunter" zwei
+     * Schreibweisen desselben Namens und wurde rot, obwohl jede der vier
+     * durchsucht war — eine Meldung über die Schreibweise, die aussieht wie
+     * eine über B-2.5.
+     */
+    const einheitlich = (name) => name.split(sep).join('/');
+
     const scanRoots = ['src/access', 'src/http'];
+    /*
+     * Fail-closed vor dem Sammeln (T-249-1).
+     *
+     * Die Untergrenze weiter unten (A-A-68) trägt die Menge, aber sie kann
+     * einen Grund nicht nennen: Wäre einer der beiden Ordner umbenannt, bräche
+     * `readdirSync` mit einer ENOENT-Stapelspur ab, mitten im Abschnitt und
+     * ohne Bezug auf B-2.5. Der Abbruch hier sagt, welcher Ordner fehlt und
+     * warum das kein Prüfsatz ist, der eben nichts gefunden hat.
+     */
+    for (const root of scanRoots) {
+      let istVerzeichnis = false;
+      try {
+        istVerzeichnis = statSync(join(PAKET_WURZEL, root)).isDirectory();
+      } catch {
+        istVerzeichnis = false;
+      }
+      if (!istVerzeichnis) {
+        scheitern(
+          `Nachweispfad ${root} lesen (A-A-68)`,
+          `${join(PAKET_WURZEL, root)} ist kein Verzeichnis.`,
+          'Über einem nicht gelesenen Ordner ist „kein === auf Tokenmaterial" wahr,',
+          'ohne daß jemand nachgesehen hätte.',
+        );
+      }
+    }
     const scanned = [];
     for (const root of scanRoots) {
-      for (const entry of readdirSync(join(HERE, '..', root), {
+      for (const entry of readdirSync(join(PAKET_WURZEL, root), {
         recursive: true,
         withFileTypes: true,
       })) {
         if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
-        const relative = join(root, entry.parentPath.slice(join(HERE, '..', root).length), entry.name);
-        scanned.push(relative);
+        const relative = join(root, entry.parentPath.slice(join(PAKET_WURZEL, root).length), entry.name);
+        scanned.push(einheitlich(relative));
       }
     }
 
@@ -1133,11 +1230,11 @@ try {
       const out = [];
       for (const entry of readdirSync(absolute, { withFileTypes: true })) {
         if (entry.isDirectory()) out.push(...vonHand(join(absolute, entry.name), join(prefix, entry.name)));
-        else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(join(prefix, entry.name));
+        else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(einheitlich(join(prefix, entry.name)));
       }
       return out;
     };
-    const vorhanden = scanRoots.flatMap((root) => vonHand(join(HERE, '..', root), root));
+    const vorhanden = scanRoots.flatMap((root) => vonHand(join(PAKET_WURZEL, root), root));
     const uebersehen = vorhanden.filter((name) => !scanned.includes(name));
     check(
       `Der Nachweispfad ist vollständig durchsucht — ${String(scanned.length)} von ${String(vorhanden.length)} Dateien unter ${scanRoots.join(' und ')}, zweiter Weg (A-A-68)`,
@@ -1163,7 +1260,7 @@ try {
 
     let offending = [];
     for (const relative of scanned) {
-      const text = await readFile(join(HERE, '..', relative), 'utf8');
+      const text = await readFile(join(PAKET_WURZEL, relative), 'utf8');
       text.split('\n').forEach((line, index) => {
         // Gesucht wird der Vergleich von **Geheimnismaterial**. Zwei
         // gespeicherte Abdrücke mit !== zu vergleichen (Buchführung im
@@ -1178,8 +1275,37 @@ try {
 
     // Gemessen: Ein Kandidat, der 47 von 48 Zeichen teilt, braucht nicht
     // messbar länger als einer, der schon im ersten Zeichen abweicht.
-    const { verifyCredential } = await import(join(HERE, '..', 'src', 'access', 'verifier.ts'));
-    const { nodeSecretDigest } = await import(join(HERE, '..', 'src', 'access', 'crypto.ts'));
+    /*
+     * `import()` nimmt eine Adresse, keinen Pfad. Unter Windows beginnt ein
+     * absoluter Pfad mit `C:`, und der Lader hält das für ein Schema — er
+     * bricht mit „Received protocol 'c:'" ab, mitten im Abschnitt. `pathToFileURL`
+     * macht daraus die `file:`-Adresse, die er erwartet.
+     */
+    const alsAdresse = (pfad) => pathToFileURL(pfad).href;
+    /*
+     * Aufgelöst statt abgezählt (T-249-1): Beide Module werden über ein
+     * Merkmal gefunden. Ein `import()` auf einen festen Pfad wäre laut
+     * gescheitert und nicht still — der Grund für die Änderung ist ein anderer:
+     * Diese beiden Dateien stehen dreißig Zeilen weiter oben schon einmal in
+     * `TRAGENDE_DATEIEN`. Zwei Abschriften desselben Ortes in einem Abschnitt
+     * sind eine zu viel.
+     */
+    const { verifyCredential } = await import(
+      alsAdresse(
+        paketQuelle('@takt/local-api', {
+          hinweis: 'src/access/verifier.ts',
+          merkmal: 'export function verifyCredential',
+        }),
+      )
+    );
+    const { nodeSecretDigest } = await import(
+      alsAdresse(
+        paketQuelle('@takt/local-api', {
+          hinweis: 'src/access/crypto.ts',
+          merkmal: 'export const nodeSecretDigest',
+        }),
+      )
+    );
     const real = `takt_${randomBytes(32).toString('base64url')}`;
     const active = { addin: nodeSecretDigest.digest(real), session: null };
     const nearMiss = `${real.slice(0, -1)}${real.endsWith('A') ? 'B' : 'A'}`;

@@ -1,4 +1,4 @@
-import { Card, InlineMessage } from "../components/Primitives";
+import { Card, InlineMessage } from "../shared/ui/Primitives";
 import { Section } from "./Section";
 
 interface FocusPoint {

@@ -32,7 +32,7 @@ einzulösen, ohne die Fachlogik später umzubauen.
                         ▼
         ┌─────────────────────────────────┐
         │ Anwendungsfälle                 │  Ablauf, Transaktionsgrenze
-        │ apps/local-api/src/anwendung/   │
+        │ apps/local-api/src/features/    │
         └───┬─────────────────────────┬───┘
             │ nutzt Ports             │ nutzt Regeln
             ▼                         ▼
@@ -72,10 +72,11 @@ Bericht.
 ### 1.2 Was in welcher Schicht liegt
 
 **`packages/domain` — Kern.** Entitätstypen, Fehlerkatalog, und die Regeln, an denen Geld hängt:
-die Rundung (`rounding.ts`), der Exportstatuswechsel und die Timer-Regeln (`time-entry.ts`), die
-Zyklusprüfung, die Pool-Ableitung und die Sichtbarkeitsregel (`tag.ts`), die Tagesgruppierung
-(`export.ts`). Alle rein: gleiche Eingabe, gleiche Ausgabe, kein Zugriff auf Uhr, Dateisystem,
-Netz oder Datenbank. Ohne laufenden Dienst prüfbar, wie es die Definition of Done verlangt.
+die Rundung (`rounding.ts`), die Timer-Regeln (`time-entry.ts`), der Exportstatuswechsel
+(`export-status.ts`), die Zyklusprüfung (`tag.ts`), die Pool-Ableitung und die
+Sichtbarkeitsregel (`pool.ts`), die Tagesgruppierung (`export.ts`). Alle rein: gleiche
+Eingabe, gleiche Ausgabe, kein Zugriff auf Uhr, Dateisystem, Netz oder Datenbank. Ohne
+laufenden Dienst prüfbar, wie es die Definition of Done verlangt.
 
 Seit T-009 steht dort Laufzeitcode und nicht mehr nur der Vertrag. Wo eine Regel wohnt, ist
 damit keine Absichtserklärung mehr, sondern nachprüfbar:
@@ -86,20 +87,20 @@ damit keine Absichtserklärung mehr, sondern nachprüfbar:
 | Viertelstunden → Zahlwert des Feldes `Zeit` | `rounding.ts` → `quarterHoursToExportNumber` | A-8.3 |
 | Tagesgruppe je Todo, Tag aus der Startzeit | `export.ts` → `groupExportCandidates` | E-020, E-025 |
 | Kalendertag in Ortszeit | `kernel.ts` → `toCalendarDay` | E-025 |
-| Exportstatuswechsel, zweiwertig | `time-entry.ts` → `checkExportStatusTransition` | A-6.9, E-012, E-032 |
-| Sperre einer exportierten Buchung | `time-entry.ts` → `isLocked` | A-6.9 |
+| Exportstatuswechsel, zweiwertig | `export-status.ts` → `checkExportStatusTransition` | A-6.9, E-012, E-032 |
+| Sperre einer exportierten Buchung | `export-status.ts` → `isLocked` | A-6.9 |
 | Höchstens ein Timer, Rückfrage vor dem Stoppen | `time-entry.ts` → `decideTimerStart` | A-6.8 |
 | Stopp, Mindestdauer | `time-entry.ts` → `decideTimerStop` | A-6.2, A-6.4 |
 | Erledigt aufheben beim Start | `time-entry.ts` → `determineReopen` | A-2.5, E-023 |
 | Verwaiste Buchung | `time-entry.ts` → `decideOrphanedTimer` | E-036 |
 | Zyklusprüfung beim Verschieben | `tag.ts` → `checkFolderMove` | A-4.6, E-022 |
-| Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `tag.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
-| Nennt eine Regel überhaupt eine Bedingung? | `tag.ts` → `poolRuleIsEmpty` | A-3.4, E-055, T-080 |
-| Trifft eine Regel von vornherein nichts? | `tag.ts` → `poolRuleMatchesNothing` | A-3.4, E-057, T-082 |
-| Zeigt eine Tagachse nach dem Auflösen ins Leere? | `tag.ts` → `tagAxisIsUnresolved` | E-057, T-082 |
-| Was eine Regel nach dem Auflösen ergibt | `tag.ts` → `resolvePool` | T-080, E-057 |
+| Pool-Zugehörigkeit: fünf Achsen, mit „und" verbunden | `pool.ts` → `matchesPool` | A-3.2, A-3.4, T-076 |
+| Nennt eine Regel überhaupt eine Bedingung? | `pool.ts` → `poolRuleIsEmpty` | A-3.4, E-055, T-080 |
+| Trifft eine Regel von vornherein nichts? | `pool.ts` → `poolRuleMatchesNothing` | A-3.4, E-057, T-082 |
+| Zeigt eine Tagachse nach dem Auflösen ins Leere? | `pool.ts` → `tagAxisIsUnresolved` | E-057, T-082 |
+| Was eine Regel nach dem Auflösen ergibt | `pool.ts` → `resolvePool` | T-080, E-057 |
 | Dieselbe Karte in mehreren Kanban-Spalten | `board.ts` → `boardAppearances` | E-054 |
-| Sichtbarkeit erledigter Todos in Pools | `tag.ts` → `isVisibleInPool` | A-2.5, E-039 |
+| Sichtbarkeit erledigter Todos in Pools | `pool.ts` → `isVisibleInPool` | A-2.5, E-039 |
 | Standard-Tags beim Anlegen | `tag.ts` → `applyDefaultTags` | A-9.1, A-9.5 |
 | Plausibilisierung der Call-Nummer | `call-number.ts` → `checkCallNumber` | E-045, B-4.3, R-15 |
 | Der Satz über die Bewegung durch die Pools | `pool-movement.ts` → `poolMovementSentence` | E-056, E-058 |
@@ -119,7 +120,7 @@ und entscheidet auch über „Erledigt" und über den Exportstatus, und beides �
 Ein Text, den zwei Flächen gleich sagen müssen, hat genau eine Quelle (E-058).
 
 Die Rechnung dazu — welche Pools ein Todo betritt und verlässt — ist **keine** Domänenfunktion,
-sondern ein Anwendungsfall (`apps/local-api/src/usecases/pool-movement.ts`): Sie braucht die
+sondern ein Anwendungsfall (`apps/local-api/src/pool-movement.ts`): Sie braucht die
 aufgelösten Regeln und damit den Port. Die Entscheidung selbst fällt trotzdem in `matchesPool`;
 der Anwendungsfall hält sie nur zweimal gegen dasselbe Todo, einmal für den Zustand davor und
 einmal für den danach.
@@ -276,12 +277,38 @@ in einfache Werte, prüft das Token und bildet Fehler auf Statuscodes ab. Die An
 darunter kennen kein `Request` und kein `Response`; sie öffnen die Transaktionsgrenze und
 verknüpfen Regeln mit Ports.
 
-Die Trennung ist im Quelltext gehalten und nicht bloß vereinbart: **Kein Modul unter
-`src/usecases/` bindet `hono` ein.** Ein Anwendungsfall bekommt Werte und liefert Werte; er kennt
-weder Anfrage noch Antwort noch Statuscode. Wer das ändert, sieht es an einem neuen Import in
-einem Verzeichnis, in dem sonst keiner steht. Umgekehrt enthält keine Datei unter `src/routes/`
-eine Fachregel — sie liest die Anfrage, prüft ihre Gestalt, ruft einen Anwendungsfall und
-übersetzt dessen Ergebnis.
+Die Trennung ist im Quelltext gehalten und nicht bloß vereinbart: **Kein Anwendungsfall bindet
+`hono` ein.** Er bekommt Werte und liefert Werte; er kennt weder Anfrage noch Antwort noch
+Statuscode. Umgekehrt enthält keine Routendatei eine Fachregel — sie liest die Anfrage, prüft
+ihre Gestalt, ruft einen Anwendungsfall und übersetzt dessen Ergebnis; sie öffnet insbesondere
+keine Transaktionsklammer und bindet `@takt/storage` nicht ein.
+
+**Wo die Dateien liegen (T-257).** Zusammengehörige Routen und Anwendungsfälle liegen in einem
+Ordner je Merkmal:
+
+```
+src/features/<merkmal>/routes.ts      die Tür — hono, Schemata, Statuscodes
+src/features/<merkmal>/<merkmal>.ts   die Anwendungsfälle — Werte hinein, Werte heraus
+src/features/<merkmal>/…              weitere Anwendungsfalldateien desselben Merkmals
+```
+
+Acht Merkmale: `board`, `data-transfer`, `export`, `settings`, `structure`, `timer`, `todos`,
+`version`. Daneben liegen an der Wurzel von `src/` die drei Module, die **kein** Merkmal sind und
+von mehreren gebraucht werden — `context.ts` (der gemeinsame Zusammenhang), `pool-movement.ts`
+und `tag-names.ts` —, und die Adapterordner `access/`, `http/` und `taskpane/`. Bei ihnen trägt
+der Ordnername die Grenze zu Recht: Sie sind keine Fachlichkeit, sondern der Rand.
+
+Unter `src/routes/` steht seit T-257 nur noch `addin/`. Dort lagen Tür, Schemata, Ports und
+Anwendungsfälle schon vorher beieinander — die Add-in-Fläche war das Vorbild, dem der übrige
+Dienst nachgezogen ist.
+
+Bis T-257 lag dasselbe in zwei Ordnern, `src/routes/` und `src/usecases/`, und der **Ordner**
+trug die Grenze: Ein `hono`-Import unter `usecases/` fiel auf, weil dort sonst keiner stand.
+Jetzt liegen Tür und Anwendungsfall nebeneinander, und der **Dateiname** trägt sie. Ein Name, der
+eine Zusage gibt, die niemand nachhält, ist genau die Sorte Satz, vor der E-103 warnt — deshalb
+mißt `proof:layers` die Grenze seit T-257: die Menge der Routendateien wird aus der Konvention
+gebildet und gegen den Inhalt gehalten, in beide Richtungen und mit Gegenprobe. Beide Ordner sind
+mit Welle 4 verschwunden.
 
 Die Anwendungsfälle liegen in der Anwendung und nicht in einem eigenen Paket, weil ein neues
 Paket im Arbeitsbereich registriert werden muss und der Dienst der einzige Aufrufer ist. Fällt
@@ -377,7 +404,7 @@ Tags, und **trotzdem kann die Karte danach in anderen Spalten stehen**: Er hebt 
 sind Achsen. Die Karte bleibt also genau so lange, wo sie ist, wie keine Regel nach „Erledigt" oder
 nach dem Exportstatus fragt.
 
-**Was daraus folgt, wird berechnet und nicht geraten.** `apps/local-api/src/usecases/pool-movement.ts`
+**Was daraus folgt, wird berechnet und nicht geraten.** `apps/local-api/src/pool-movement.ts`
 hält jede Regel gegen den Zustand vor und nach der Handlung und liefert `{ appears, enters, leaves }`;
 die Routen geben das als `poolMovement` heraus (E-058, E-060), den Satz dazu bildet
 `poolMovementSentence` aus der Domäne. Bis T-101 stand an dieser Stelle „die Karte steht danach in
@@ -386,7 +413,7 @@ Irrtum beschreibt (R-2a W-4, D-3 aus R-2).
 
 **Die Pool-Zugehörigkeit wird nicht geschrieben.** Sie ist abgeleitet (A-3.4); Schritt 2 ändert
 allein `completed_at`. A-2.5 trägt die Sichtbarkeit: Erledigte Todos werden in Pool-Ansichten
-ausgeblendet (`isVisibleInPool` in `packages/domain/src/tag.ts`), aktive nicht. Fällt das
+ausgeblendet (`isVisibleInPool` in `packages/domain/src/pool.ts`), aktive nicht. Fällt das
 Kennzeichen, fällt die Ausblendung, und das Todo erscheint ohne einen einzigen Schreibvorgang
 wieder dort, wo seine Regel es hinstellt. Nachgewiesen im Migrationstest: ein Todo bleibt Mitglied
 seines Pools, während es erledigt ist, und ist nach dem Timerstart sofort wieder in der
@@ -405,7 +432,7 @@ also erledigt.
 
 `PATCH /time-entries/{id}` trägt das Feld **nicht** — die Begründung dafür ist aber nicht, dass die
 Route nur „einen Zeitraum oder eine Leistung" ändere. Sie nimmt auch `todoId` entgegen
-(`apps/local-api/src/routes/time.ts`) und hängt die Buchung damit um: Verliert das abgebende Todo
+(`apps/local-api/src/features/timer/routes.ts`) und hängt die Buchung damit um: Verliert das abgebende Todo
 seine letzte offene Buchung und bekommt das aufnehmende seine erste, bewegen sich **zwei** Todos,
 und zwar in entgegengesetzte Richtungen. Ein Feld für **eine** Bewegung kann das nicht tragen.
 Welche Antwort an diese Stelle gehört, ist offen (**O-X**, beim Auftraggeber); bis dahin schweigt
@@ -538,7 +565,7 @@ liefert seither `databaseTraits` aus demselben Vorrat und `databaseFilesTooPermi
 Kundendaten im Klartextäquivalent. Das gehört in die Benutzerdokumentation und ins
 Bedrohungsmodell, nicht in eine Fußnote.
 
-**Wo der Ablauf steht, seit T-021.** `apps/local-api/src/usecases/export.ts` führt die Schritte 1
+**Wo der Ablauf steht, seit T-021.** `apps/local-api/src/features/export/export.ts` führt die Schritte 1
 bis 6; `ExportPort.recordRun` in `packages/storage` schreibt Schritt 5 fest. Der Schnitt ist
 Absicht: Die Klammer gehört dorthin, wo die Transaktion ist, und das Rendern dorthin, wo das
 Vorlagenformat ist. Läge beides in der Speicherung, trüge ein austauschbarer Adapter (E-001) das
@@ -690,7 +717,7 @@ Fassungen der Auflösung es dabei gibt, steht weiter unten unter „Auch auf dem
         │  („Backend" und „backend" in einem Zug sind ein Tag)
         ▼
    ┌─ inTransaction ────────────────────────────────────────────┐
-   │   resolveTagNames  (usecases/tag-names.ts)                 │
+   │   resolveTagNames  (tag-names.ts)                       │
    │      je Name: tags.findByKey(schlüssel)                    │
    │        0 Treffer  → tags.create(…), auf Wurzelebene        │
    │        1 Treffer  → verwenden                              │
@@ -740,12 +767,12 @@ Schema eine andere Regel, als die Anwendung prüft.
 **Auch auf dem Add-in-Weg — und über dieselbe Funktion (T-061, T-062).** Bis T-058 benannte
 `POST /addin/todos` Tags ausschließlich über ihre Kennung; hier stand deshalb der Satz „kommt ein
 Eingabefeld dazu, läuft es über denselben Anwendungsfall". T-061 hat das Feld gebaut — und den
-Anwendungsfall zunächst **abgeschrieben**, weil `resolveTagNames` in `usecases/todos.ts` nicht
-exportiert war und `usecases/` nicht zur Dateihoheit der Add-in-Routen gehört. Zwei Fassungen
+Anwendungsfall zunächst **abgeschrieben**, weil `resolveTagNames` in `features/todos/todos.ts` nicht
+exportiert war und der Ordner der Anwendungsfälle nicht zur Dateihoheit der Add-in-Routen gehört. Zwei Fassungen
 derselben Regel, unter Messung gestellt statt behauptet, aber eben zwei.
 
 T-062 hat den Zuschnitt nachgeholt, und der Zuschnitt ist der eigentliche Punkt. Die Funktion
-liegt seither exportiert in `usecases/tag-names.ts` — einem eigenen, schmalen Modul, aus
+liegt seither exportiert in `src/tag-names.ts` — einem eigenen, schmalen Modul, aus
 demselben Grund, aus dem `@takt/domain/export` neben `@takt/domain` steht — und ihr Parameter ist
 nicht mehr die volle Arbeitseinheit, sondern genau das, was sie benutzt:
 
@@ -1320,7 +1347,7 @@ Starten hindern könnte. Ein Aufräumen, das den Start verhindert, hätte den Zw
 Bis T-138 galt der stärkste einzelne Satz dieses Entwurfs: Takt kennt keine Adresse außerhalb von
 `127.0.0.1` (E-001). Er gilt weiter, mit **einer** benannten Ausnahme — der Versionsprüfung. Eine
 Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
-`apps/local-api/src/version/source.ts`.
+`apps/local-api/src/features/version/source.ts`.
 
 **Die Richtung der Daten, und wo welche Prüfung liegt.**
 
@@ -1328,10 +1355,10 @@ Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
   GitHub (api.github.com)
         │  (1) Antwort: beliebig groß, beliebig geformt, fremder Text
         ▼
-  apps/local-api/src/version/source.ts    ← hier liegt die ganze Prüfung
+  features/version/source.ts              ← hier liegt die ganze Prüfung
         │  (2) heraus: eine geprüfte Fassungsbezeichnung, sonst nichts
         ▼
-  version/checker.ts                      ← hält sie im Arbeitsspeicher
+  features/version/version.ts             ← hält sie im Arbeitsspeicher
         │  (3) GET /api/v1/version-check
         ▼
   apps/web                                ← vergleicht, zeigt an
@@ -1340,7 +1367,7 @@ Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
   apps/desktop/src-tauri                  ← baut die Adresse selbst
 ```
 
-**Vier Eigenschaften, und jede ist eine Entscheidung.**
+**Fünf Eigenschaften, und jede ist eine Entscheidung.**
 
 1. **Die Frage stellt der Dienst, nicht die Oberfläche.** Die CSP der Hülle lässt den Webview nur
    an sich selbst, `ipc:` und `http://127.0.0.1:17843`. Sie wird dafür nicht geöffnet: Eine Liste,
@@ -1364,11 +1391,50 @@ Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
    gefährlichste von ihnen: Eine Adresse aus einer Antwort an einen Öffnen-Befehl zu reichen wäre
    dieselbe Bauart wie eine offene Weiterleitung — nur mit dem Browser des Benutzers als Ziel.
 
-4. **Ein Fehlschlag ist still** (A-18.11). Nicht erreichbar, unerwartete Antwort, fehlende
-   Fassungsangabe, keine Veröffentlichung: kein Hinweis, keine Fehlerfläche, **kein zweiter
-   Versuch im selben Lauf**. Der Zeitgeber wird nach einem Fehlschlag nicht neu gestellt. Der
-   Grund steht im Protokoll — als technischer Schlüssel aus einem geschlossenen Vorrat, in
-   derselben Bauart wie 5.6.
+4. **Ein Fehlschlag ist still — und er beendet die Prüfung nicht** (A-18.11, T-273). Nicht
+   erreichbar, unerwartete Antwort, fehlende Fassungsangabe, keine Veröffentlichung: kein
+   Hinweis, keine Fehlerfläche, kein Zeitstempel „zuletzt geprüft", keine Schaltfläche „Jetzt
+   prüfen", **kein zweiter Versuch im selben Prüflauf**. Der Zustand bleibt `unknown`, der Grund
+   steht im Protokoll — als technischer Schlüssel aus einem geschlossenen Vorrat, in derselben
+   Bauart wie 5.6.
+
+   Der Zeitgeber wird nach einem Fehlschlag jedoch **neu gestellt**, und zwar auf den harten
+   Boden von 60 Minuten statt auf den Takt von 24 Stunden. Bis T-273 blieb er stehen: „Lauf" in
+   A-18.11 war als *Programmlauf* gelesen, und damit beendete ein einziger Fehlschlag die
+   Versionsprüfung für die gesamte Laufzeit der Anwendung — bei einer Anwendung, die tagelang
+   offen bleibt, faktisch für immer. Der häufigste Auslöser ist banal: Die Anwendung startet
+   schneller als das Netz. Der Auftraggeber hat „Lauf" als den einzelnen **Prüflauf** bestimmt.
+   Die Obergrenze, die daraus folgt, ist gerechnet: bei ununterbrochenem Fehlschlag höchstens
+   **24** ausgehende Anfragen je 24 Stunden gegen 1 im Erfolgsfall — ein Sechzigstel dessen, was
+   GitHub nicht angemeldeten Aufrufern je Stunde und Quelladresse zugesteht.
+
+5. **Der Boden überlebt den Prozeß, und auf ihn kommt ein Streuwert** (A-V-11, T-279). Zwei
+   Ergänzungen, und beide betreffen den Boden von 60 Minuten, nicht den Takt von 24 Stunden.
+
+   **Der Bezugspunkt liegt im Bestand**, in `app_setting.last_version_check_at` (Migration 0022),
+   und nicht mehr allein im Arbeitsspeicher. Vorher kannte ein neu gestarteter Dienst keinen
+   letzten Zeitpunkt, also griff kein Boden, also ging nach dem Startabstand eine Anfrage hinaus —
+   gemessen **344 je Stunde** für den, der den Sidecar in einer Schleife startet und beendet
+   (T-276), das 5,7fache des GitHub-Kontingents. Der Wert erfüllt damit dieselbe Regel wie seine
+   beiden Nachbarn `skipped_version` (A-18.10) und die offenen Inaktivitätsphasen (A-24.7).
+   **Er ist keine Abwehr gegen einen feindlichen lokalen Prozeß** — derselbe Prozeß kommt mit
+   `sqlite3` an dieselbe Datei (VG-3) —, sondern gegen den Unfall: den Entwicklerrechner, den
+   zwanzigfachen Doppelklick, eine künftige Neustartautomatik. Die Anbindung ist ein **optionaler**
+   Port; ohne Bestand (`compose()` ohne `databaseLocation`) bleibt es beim bisherigen Verhalten.
+
+   **Auf den Boden kommt ein Aufschlag von 0 bis 25 %**, bei 60 Minuten also höchstens 15. Anlaß
+   ist eine Rückkopplung, kein Angriff (T-275-8): Alle Installationen hinter einer Quelladresse
+   teilen sich 60 Anfragen je Stunde; wurden sie gemeinsam abgewiesen, klopfen sie seither
+   gemeinsam weiter und bleiben in Phase. Der Aufschlag bricht die Gleichschaltung. Er **verlängert
+   nur** — ein Streuwert, der auch verkürzte, hübe die Zusage aus A-V-11′ Punkt 4 auf —, und
+   deshalb bleibt die Obergrenze bei **24 Anfragen je Kalendertag**; der Erwartungswert sinkt auf
+   rund 21,3, gemessen über 100 000 simulierte Tage auf 20 bis 22. Die Rechenregel steht als reine
+   Funktion in `packages/domain/src/version.ts`, der Zufall kommt als Zahl herein — so ist die
+   Zusage „verlängert nur" ohne Zeitgeber meßbar. **Der Aufschlag senkt die Summe je Stunde
+   nicht**; wer das will, braucht eine Rückstufung, und die ist nicht entschieden.
+
+   **Nichts davon wird sichtbar.** Der Wert geht durch keine Route und in keine Oberfläche; die
+   Prüfung bleibt vollständig stumm (A-18.11, A-V-14′).
 
 **Die Naht, und was sie nicht ist.** Die Adresse ist eine Konstante im Erzeugnis: nicht aus einer
 Umgebungsvariablen, nicht aus einer Einstellung, nicht aus der Datenbank, nicht aus einem Argument

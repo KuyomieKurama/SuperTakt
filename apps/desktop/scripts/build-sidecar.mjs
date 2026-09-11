@@ -58,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 import { isInside } from './paths.mjs';
+import { locateWorkspacePackage } from '../../../scripts/source-anchors.mjs';
 import { NODE_VERSION, RuntimeError, ensureRuntime } from './sidecar-runtime.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +67,47 @@ const repoRoot = resolve(appDir, '../..');
 
 /** Name, unter dem Tauri den Sidecar anspricht. Muss zu `tauri.conf.json` passen. */
 const SIDECAR_NAME = 'takt-local-api';
+
+/* ---------------------------------------------------------------------------
+ * Die Ordner der Arbeitsbereichspakete — aufgelöst, nicht abgeschrieben
+ * ---------------------------------------------------------------------------
+ *
+ * T-249-2. Bis dahin standen hier drei feste Pfade:
+ *
+ *     ['@takt/domain',  join(repoRoot, 'packages', 'domain')]
+ *
+ * Der Zähler darunter unterscheidet „null Dateien, weil das Paket zur Laufzeit
+ * nur Typen liefert" von „null Dateien, weil das Paket im Bündel fehlt". Genau
+ * diese Unterscheidung geht verloren, wenn der Pfad ins Leere zeigt: Ein
+ * umgezogenes `packages/domain` ergäbe null Treffer, und der Lauf schriebe
+ * „zur Laufzeit nicht benutzt (heute nur Typen)" — **grün**, über ein Paket,
+ * das er gar nicht gesucht hat. Für `@takt/local-api` fiele es auf, weil dort
+ * ein Abbruch folgt; für die anderen beiden nicht.
+ *
+ * Gesucht wird deshalb über den **Paketnamen** in `package.json`, und ein
+ * fehlender Ordner ist ein Abbruch mit Namen. Dieselbe Familie wie der
+ * Windows-Trennzeichenfehler, den {@link isInside} beantwortet: ein Vergleich,
+ * der nie trifft, meldet dieselbe Zahl wie ein Bestand ohne Treffer.
+ */
+
+/**
+ * Der Ordner eines Arbeitsbereichspakets — die Suche steht seit T-249-4 als
+ * **eine** Fassung in `scripts/source-anchors.mjs` in der Wurzel des Bestands,
+ * damit sie sich ohne einen ganzen Bau gegenprüfen lässt und nicht in vier
+ * Abschriften auseinanderläuft. Sie liest die erlaubten Orte aus
+ * `pnpm-workspace.yaml`, statt `apps` und `packages` abzuschreiben.
+ *
+ * @param {string} packageName
+ * @returns {string}
+ */
+function workspacePackageDirectory(packageName) {
+  try {
+    return locateWorkspacePackage(repoRoot, packageName);
+  } catch (error) {
+    fail(String(error instanceof Error ? error.message : error));
+    return ''; // nicht erreichbar; `fail` beendet den Lauf.
+  }
+}
 
 const workDir = join(appDir, '.sidecar-build');
 const cacheDir = join(workDir, '..', '.sidecar-runtime');
@@ -264,18 +306,15 @@ if (stray.length > 0) {
 // lokale Dienst selbst ist nicht im Bündel" ab, obwohl das Bündel stimmte.
 const inputs = Object.keys(result.metafile.inputs).map((input) => resolve(process.cwd(), input));
 const workspaceHits = new Map();
-for (const [name, folder] of [
-  ['@takt/local-api', join(repoRoot, 'apps', 'local-api')],
-  ['@takt/domain', join(repoRoot, 'packages', 'domain')],
-  ['@takt/storage', join(repoRoot, 'packages', 'storage')],
-]) {
-  workspaceHits.set(name, inputs.filter((input) => isInside(folder, input)).length);
+for (const name of ['@takt/local-api', '@takt/domain', '@takt/storage']) {
+  const folder = workspacePackageDirectory(name);
+  workspaceHits.set(name, { folder, count: inputs.filter((input) => isInside(folder, input)).length });
 }
-for (const [name, count] of workspaceHits) {
+for (const [name, { folder, count }] of workspaceHits) {
   const mark = count > 0 ? 'im Bündel' : 'zur Laufzeit nicht benutzt (heute nur Typen)';
-  process.stdout.write(`      ${name}: ${count} Datei(en) — ${mark}\n`);
+  process.stdout.write(`      ${name}: ${count} Datei(en) aus ${relative(repoRoot, folder)} — ${mark}\n`);
 }
-if ((workspaceHits.get('@takt/local-api') ?? 0) === 0) {
+if ((workspaceHits.get('@takt/local-api')?.count ?? 0) === 0) {
   fail('Der lokale Dienst selbst ist nicht im Bündel. Der Einstiegspunkt zeigt ins Leere.');
 }
 

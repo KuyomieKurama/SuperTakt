@@ -10,7 +10,7 @@ import { EMPTY_MAIL, type MailFacts } from './mail.ts';
 
 export type HostState =
   /** Office ist bereit und eine E-Mail ist geöffnet. */
-  | { readonly kind: 'ready'; readonly mail: MailFacts; readonly webLink: string | null }
+  | { readonly kind: 'ready'; readonly mail: MailFacts }
   /** Office ist bereit, aber es ist kein Element geöffnet. */
   | { readonly kind: 'no_item' }
   /** `office.js` hat `window.Office` nicht bereitgestellt. */
@@ -49,28 +49,6 @@ function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
       finish(false);
     }
   });
-}
-
-/** Outlook-Web-Link wie in SP-OutlookBridge. */
-function outlookWebLink(item: Office.MessageRead): string | null {
-  const mailbox = Office.context.mailbox;
-  const itemId = item.itemId;
-  if (mailbox === undefined || itemId === undefined || itemId.length === 0) return null;
-
-  try {
-    const restId = mailbox.convertToRestId(itemId, Office.MailboxEnums.RestVersion.v2_0);
-    if (restId.length === 0) return null;
-    const accountType = (mailbox.userProfile?.accountType ?? '').toLowerCase();
-    const base = accountType.includes('consumer')
-      ? 'https://outlook.live.com/mail/0/deeplink/read/'
-      : 'https://outlook.office.com/mail/deeplink/read/';
-    return `${base}${encodeURIComponent(restId)}`;
-  } catch {
-    // Der Link ist Zusatznutzen. Eine E-Mail ohne konvertierbare ID bleibt
-    // vollständig lesbar; nur „an vorhandenes Todo anhängen“ ist dann nicht
-    // möglich.
-    return null;
-  }
 }
 
 const readBody = (item: Office.MessageRead): Promise<string> =>
@@ -114,5 +92,5 @@ export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
     receivedAt: item.dateTimeCreated instanceof Date ? item.dateTimeCreated.toISOString() : null,
   };
 
-  return { kind: 'ready', mail, webLink: outlookWebLink(item) };
+  return { kind: 'ready', mail };
 };

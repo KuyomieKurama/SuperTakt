@@ -1,6 +1,10 @@
 import { listTimeEntries } from "../api/endpoints";
 import type { Id } from "../api/types";
-import { exportDisplayState, type ExportDisplayState } from "../components/ExportStatus";
+import {
+  exportDisplayState,
+  type ExportDisplayState,
+  type ExportSummary,
+} from "../shared/ui/ExportStatus";
 
 /**
  * Takt — welchen Exportzustand tragen die Buchungen eines Todos?
@@ -27,8 +31,6 @@ import { exportDisplayState, type ExportDisplayState } from "../components/Expor
  * keine Zugehörigkeit entschieden. Bei einem Bestand über der Obergrenze wird
  * das **gesagt** statt geschätzt — siehe `truncated`.
  */
-
-export type ExportSummary = Readonly<Record<ExportDisplayState, number>>;
 
 export interface ExportSummaryIndex {
   readonly byTodo: ReadonlyMap<Id, ExportSummary>;

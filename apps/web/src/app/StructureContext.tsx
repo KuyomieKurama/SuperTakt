@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import {
-  getTagTree,
   listPools,
   listTodoStatuses,
   getSettings,
 } from "../api/endpoints";
+import { getTagTree } from "../features/tags/api";
 import type {
   AppSettings,
   DefaultTag,

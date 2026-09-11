@@ -141,14 +141,75 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { requireAtLeast, requireDirectory } from "../../../scripts/source-anchors.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
-const srcRoot = path.join(appRoot, "src");
-const typesFile = path.join(srcRoot, "api", "types.ts");
+const srcRoot = requireDirectory(
+  path.join(appRoot, "src"),
+  "den Quellbaum, über den dieser Nachweis urteilt",
+);
+
+/* ==================================================================== */
+/* 0a Pfade — eine Schreibweise, und zwar die des Übersetzers           */
+/* ==================================================================== */
+
+/*
+ * ---------------------------------------------------------------------------
+ * Warum dieser Absatz existiert (T-247)
+ * ---------------------------------------------------------------------------
+ *
+ * `ts.SourceFile.fileName` trägt **immer** Schrägstriche — auch unter Windows,
+ * wo `path.sep` ein Rückstrich ist und `path.join` Rückstriche liefert. Ein
+ * `fileName.startsWith(srcRoot + path.sep)` trifft dort **nie**. Der Lauf
+ * urteilte damit unter Windows über **null** statt 129 Quelldateien und hätte
+ * ohne die Zählwächter aus Abschnitt 2, 3, 5, 6 und die Gegenproben aus
+ * Abschnitt 8 grün gemeldet: „kein fremder Wert steht roh in der Anzeige",
+ * ohne eine einzige Anzeige gelesen zu haben. Das ist die schlimmste Sorte
+ * grün — und der fünfte Fund derselben Familie in diesem Bestand.
+ *
+ * Die Regel daraus, und sie gilt für die ganze Datei: **Ein Wert aus dem
+ * Übersetzer wird nie gegen einen Wert aus `node:path` gehalten, ohne beide
+ * vorher durch {@link comparable} zu schicken.** Vergleiche laufen über
+ * {@link comparable}, Anzeige über {@link displayPath}, und `path.sep` kommt in
+ * keinem Vergleich mehr vor.
+ */
+
+/** Derselbe Pfad in der Schreibweise des Übersetzers: absolut, Schrägstriche. */
+const slashed = (value) => path.resolve(value).split(path.sep).join("/");
+
+/**
+ * Der Vergleichswert eines Pfades.
+ *
+ * Zusätzlich zur Schreibweise die Groß-/Kleinschreibung — und zwar nach
+ * derselben Regel, nach der der Übersetzer selbst zwei Pfade für denselben
+ * hält (`ts.sys.useCaseSensitiveFileNames`). Unter Windows ist `C:\Src` und
+ * `c:\src` dieselbe Datei, unter Linux nicht.
+ */
+const comparable = (value) =>
+  ts.sys.useCaseSensitiveFileNames ? slashed(value) : slashed(value).toLowerCase();
+
+const SRC_PREFIX = `${comparable(srcRoot)}/`;
+
+/** Liegt diese Datei unter `apps/web/src`? */
+const insideSrc = (fileName) => comparable(fileName).startsWith(SRC_PREFIX);
+
+/** Meinen diese beiden Pfade dieselbe Datei? */
+const sameFile = (left, right) => comparable(left) === comparable(right);
+
+/**
+ * Ein Pfad für die Ausgabe — relativ und mit Schrägstrichen.
+ *
+ * Damit ein Fund unter Windows zeichengleich so heißt wie unter Linux; ein
+ * Nachweis, dessen Fundstellen je nach Betriebssystem anders geschrieben sind,
+ * lässt sich nicht vergleichen.
+ */
+const displayPath = (from, fileName) =>
+  path.relative(from, fileName).split(path.sep).join("/");
 
 /* ==================================================================== */
 /* 0  Werkzeug                                                          */
@@ -183,7 +244,26 @@ const rawConfig = ts.readConfigFile(configFile, ts.sys.readFile);
 if (rawConfig.error !== undefined) {
   throw new Error(`tsconfig.json nicht lesbar: ${String(rawConfig.error.messageText)}`);
 }
-const parsedConfig = ts.parseJsonConfigFileContent(rawConfig.config, ts.sys, appRoot);
+/*
+ * **Der Name der Konfigurationsdatei wird mitgereicht** (T-249-2).
+ *
+ * Ohne ihn bleibt `options.configFilePath` leer, und der Übersetzer löst
+ * `types: ["vite/client"]` gegen das **Arbeitsverzeichnis** auf statt gegen
+ * `apps/web`. Gemessen an diesem Baum: derselbe Lauf, einmal aus `apps/web`
+ * gestartet, meldet 21 bestandene Prüfungen; aus der Wurzel des Bestands
+ * gestartet meldet er einen Befund `TS2688: Cannot find type definition file
+ * for 'vite/client'` und vier Folgefehler — dieselben Dateien, dasselbe
+ * Urteil, ein anderes Ergebnis. Ein Nachweis, dessen Urteil am
+ * Arbeitsverzeichnis hängt, ist derselbe Fehler wie ein Nachweis, dessen
+ * Urteil am Trennzeichen hängt (T-247), nur eine Ebene höher.
+ */
+const parsedConfig = ts.parseJsonConfigFileContent(
+  rawConfig.config,
+  ts.sys,
+  appRoot,
+  undefined,
+  configFile,
+);
 
 /**
  * Ein Programm aus **derselben** Konfiguration — wahlweise mit einer Datei, die
@@ -199,15 +279,20 @@ const parsedConfig = ts.parseJsonConfigFileContent(rawConfig.config, ts.sys, app
  */
 const buildProgram = (overlay = null) => {
   if (overlay === null) return ts.createProgram(parsedConfig.fileNames, parsedConfig.options);
-  const target = path.resolve(overlay.path);
+  /*
+   * Der Übersetzer reicht die Namen in **seiner** Schreibweise herein; die
+   * Überlagerung trägt sie aus `node:path`. Verglichen wird deshalb über
+   * {@link sameFile} und nicht über `path.resolve` allein (T-247).
+   */
+  const target = slashed(overlay.path);
   const host = ts.createCompilerHost(parsedConfig.options, true);
   const readOriginal = host.getSourceFile.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>
-    path.resolve(name) === target
+    sameFile(name, target)
       ? ts.createSourceFile(name, overlay.source, languageVersion, true)
       : readOriginal(name, languageVersion, onError, shouldCreate);
-  host.fileExists = (name) => path.resolve(name) === target || ts.sys.fileExists(name);
-  host.readFile = (name) => (path.resolve(name) === target ? overlay.source : ts.sys.readFile(name));
+  host.fileExists = (name) => sameFile(name, target) || ts.sys.fileExists(name);
+  host.readFile = (name) => (sameFile(name, target) ? overlay.source : ts.sys.readFile(name));
   return ts.createProgram([...parsedConfig.fileNames, target], parsedConfig.options, host);
 };
 
@@ -243,7 +328,7 @@ const lensFor = (program) => {
   /** Die Quelldateien der Oberfläche — ohne Deklarationen und ohne `vite.config.ts`. */
   const sourceFiles = program
     .getSourceFiles()
-    .filter((file) => !file.isDeclarationFile && file.fileName.startsWith(srcRoot + path.sep));
+    .filter((file) => !file.isDeclarationFile && insideSrc(file.fileName));
 
   /**
    * Trägt die **Elementart** einer Sammlung die Marke? (T-133)
@@ -292,6 +377,27 @@ const lensFor = (program) => {
 const lens = lensFor(buildProgram());
 const { program, checker, sourceFiles, elementIsForeign, isForeignJoin, yieldsForeign } = lens;
 
+/*
+ * ---------------------------------------------------------------------------
+ * Zuerst die Menge, dann das Urteil (T-249-4)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis hierher stand die Untergrenze als `assert.ok(sourceFiles.length > 60)`
+ * **in** einem Prüfsatz weit unten — geerbt, willkürlich in der Zahl und, was
+ * schwerer wiegt, an der falschen Stelle: Die Abschnitte 2 bis 9 urteilen
+ * längst über diese Menge, bevor der Prüfsatz sie zählt. Wäre die Menge leer,
+ * wären ihre Aussagen leer wahr, und der Lauf käme mit einer Handvoll grüner
+ * Zeilen bis zu der einen roten.
+ *
+ * Deshalb steht die Zählung jetzt hier, vor der ersten Aussage, in derselben
+ * Bauart wie in `proof:surface` und mit derselben Zahl. Die genauere Prüfung
+ * bleibt Abschnitt 2 („und jede Datei unter `src` liegt tatsächlich im
+ * Programm"): Sie vergleicht die geladene Menge Datei für Datei mit der
+ * Platte und ist damit stärker als jede Untergrenze — eine Untergrenze sagt
+ * „nicht null", jene sagt „alle".
+ */
+requireAtLeast(sourceFiles, 60, "Quelldateien im Programm", srcRoot);
+
 /**
  * Sagt dieser Typ „ich nehme fremden Text an"? Auch als **Reihe** davon.
  *
@@ -320,7 +426,7 @@ const isTextType = (type) => {
 const where = (node) => {
   const file = node.getSourceFile();
   const { line } = file.getLineAndCharacterOfPosition(node.getStart());
-  return `${path.relative(srcRoot, file.fileName)}:${String(line + 1)}`;
+  return `${displayPath(srcRoot, file.fileName)}:${String(line + 1)}`;
 };
 
 const shortText = (node) => node.getText().replace(/\s+/g, " ").slice(0, 64);
@@ -378,7 +484,7 @@ const parameterTakesForeign = (call, argument) => {
 
 heading("1  Die Herkunft steht an einem Ort und wird nicht abgeschrieben");
 
-/** Die erlaubten Namen für Text in `api/types.ts`. */
+/** Die erlaubten Namen für Text in der Datei der Dienstantworten. */
 const VOCABULARY = new Set([
   "Id",
   "Timestamp",
@@ -403,8 +509,112 @@ const VOCABULARY = new Set([
   "ExportValue",
 ]);
 
-const typesSource = program.getSourceFile(typesFile);
-assert.ok(typesSource !== undefined, "api/types.ts liegt nicht im Programm");
+/* ==================================================================== */
+/* 1a Die Anker — aufgelöst, nicht abgeschrieben (T-249-2)              */
+/* ==================================================================== */
+
+/*
+ * ---------------------------------------------------------------------------
+ * Warum hier kein Pfad mehr steht
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-249 nannte dieser Nachweis vier Pfade beim Namen: `api/types.ts`,
+ * `lib/foreign.ts`, `components/Foreign.tsx` und — für die Gegenproben —
+ * `lib/eingesetzt.ts`. `apps/web/src` wird featureweise umgebaut; diese vier
+ * Ordner verschwinden. Ein `getSourceFile("…/api/types.ts")` liefert dann
+ * `undefined`, und die Frage ist nur noch, ob der Lauf das als Fehlschlag der
+ * **Messung** meldet oder als Befund über den **Bestand** — oder, im
+ * schlimmsten Fall, gar nicht.
+ *
+ * Gesucht wird deshalb über das, was der Umzug mitnimmt: den Namen der
+ * Deklaration im Modulgraphen. Wer `ForeignText` verschiebt, verschiebt den
+ * Anker mit; wer es streicht, macht diesen Lauf rot und wird dabei genannt.
+ *
+ * Beide Anker bestehen auf **genau einer** Fundstelle. Zwei sind so wenig eine
+ * Antwort wie keine: Bei zweien wüsste der Lauf nicht, über welche der beiden
+ * Dateien er gerade urteilt — und genau diese Ungewissheit ist der Zustand,
+ * den die Zählwächter dieses Nachweises seit T-247 verhindern sollen.
+ */
+
+/**
+ * Die eine Quelldatei, die diese Deklaration führt.
+ *
+ * @param {(statement: ts.Statement) => boolean} matches
+ * @param {string} description Der gesuchte Gegenstand, für den Befund.
+ * @returns {ts.SourceFile}
+ */
+const locateDeclaringFile = (matches, description) => {
+  const hits = sourceFiles.filter((file) => file.statements.some(matches));
+  assert.equal(
+    hits.length,
+    1,
+    hits.length === 0
+      ? `${description} steht in keiner Datei unter \`src\` (${String(sourceFiles.length)} gelesen).\n` +
+        "        Gesucht wird über die Deklaration und nicht über einen Pfad, damit ein Umzug\n" +
+        "        sie mitnimmt. Findet die Suche nichts, ist der Gegenstand gefallen — und\n" +
+        "        dann misst jede Prüfung, die sich auf ihn beruft, nichts."
+      : `${description} steht ${String(hits.length)}-mal:\n        ` +
+        hits.map((file) => displayPath(srcRoot, file.fileName)).join("\n        ") +
+        "\n        Der Lauf wüsste nicht, über welche der Dateien er gerade urteilt.",
+  );
+  return hits[0];
+};
+
+/**
+ * Die eine Quelldatei, die diesen Namen ausführt.
+ *
+ * @param {string} exportName
+ * @param {string} description
+ * @returns {{ file: ts.SourceFile, symbol: ts.Symbol }}
+ */
+const locateExport = (exportName, description) => {
+  const hits = [];
+  for (const file of sourceFiles) {
+    const moduleSymbol = checker.getSymbolAtLocation(file);
+    if (moduleSymbol === undefined) continue;
+    const found = checker.getExportsOfModule(moduleSymbol).find((entry) => entry.getName() === exportName);
+    if (found !== undefined) hits.push({ file, symbol: found });
+  }
+  assert.equal(
+    hits.length,
+    1,
+    hits.length === 0
+      ? `${description} wird von keiner Datei unter \`src\` ausgeführt (${String(sourceFiles.length)} gelesen).\n` +
+        "        Der Anker ist der Ausfuhrname und nicht der Pfad; fehlt er, ist die\n" +
+        "        Behandlung gefallen und die Prüfung darüber gegenstandslos."
+      : `${description} wird ${String(hits.length)}-mal ausgeführt:\n        ` +
+        hits.map((hit) => displayPath(srcRoot, hit.file.fileName)).join("\n        "),
+  );
+  return hits[0];
+};
+
+/**
+ * Die Datei, in der die Antworten des Dienstes beschrieben sind — gefunden über
+ * die Deklaration von `ForeignText`, nicht über `api/types.ts`.
+ *
+ * Der Abbruch ist **sofort** und nicht ein `FEHL` unter vielen: Ohne diese
+ * Datei hat kein einziger Abschnitt darunter einen Gegenstand, und zwanzig
+ * Folgefehler verdecken den einen Satz, der zählt.
+ */
+let typesSource;
+try {
+  typesSource = locateDeclaringFile(
+    (statement) => ts.isTypeAliasDeclaration(statement) && statement.name.getText() === "ForeignText",
+    "die Deklaration von `ForeignText`",
+  );
+} catch (error) {
+  process.stdout.write(
+    `\n  ABBRUCH  ${String(error?.message ?? error)}\n\n` +
+      "Dieser Lauf misst nichts, solange sein Anker fehlt. Das ist kein bestandener\n" +
+      "Prüfsatz, sondern ein Fehlschlag der Messung.\n",
+  );
+  process.exit(1);
+}
+
+/** Wie die Datei der Dienstantworten heute heißt — für jeden Befund darunter. */
+const typesName = displayPath(srcRoot, typesSource.fileName);
+
+process.stdout.write(`  anker die Dienstantworten stehen in ${typesName}\n`);
 
 check("kein Feld der Dienstantworten heißt bloß `string`", () => {
   /*
@@ -438,7 +648,7 @@ check("kein Feld der Dienstantworten heißt bloß `string`", () => {
     ts.forEachChild(node, visit);
   };
   visit(typesSource);
-  assert.deepEqual(bare, [], `nacktes \`string\` in api/types.ts: ${bare.join(", ")}`);
+  assert.deepEqual(bare, [], `nacktes \`string\` in ${typesName}: ${bare.join(", ")}`);
 });
 
 check("`ForeignText` und `DraftText` tragen ihre Marke, die übrigen Namen nicht", () => {
@@ -451,7 +661,17 @@ check("`ForeignText` und `DraftText` tragen ihre Marke, die übrigen Namen nicht
     const decl = typesSource.statements.find(
       (s) => ts.isTypeAliasDeclaration(s) && s.name.getText() === name,
     );
-    assert.ok(decl !== undefined, `${name} gibt es nicht mehr`);
+    /*
+     * **Nicht in `${typesName}` gefunden ist ein Fehlschlag, kein Bestehen**
+     * (T-249-2). Der Satz gilt auch dann, wenn der Name irgendwo anders im
+     * Baum wieder auftaucht: Die Regel dieses Abschnitts ist „die Herkunft
+     * steht an **einem** Ort". Wandert ein Name aus dieser Datei heraus, ist
+     * das eine Entscheidung und muss eine sein.
+     */
+    assert.ok(
+      decl !== undefined,
+      `${name} steht nicht mehr in ${typesName} — die Herkunft gehört an einen Ort.`,
+    );
     return checker.getTypeAtLocation(decl.type);
   };
 
@@ -477,7 +697,11 @@ check("die Klasse ist nicht leer und nicht alles", () => {
     const decl = typesSource.statements.find(
       (s) => ts.isInterfaceDeclaration(s) && s.name.getText() === interfaceName,
     );
-    assert.ok(decl !== undefined, `${interfaceName} gibt es nicht mehr`);
+    assert.ok(
+      decl !== undefined,
+      `${interfaceName} steht nicht mehr in ${typesName}. Entweder ist die Gestalt gefallen ` +
+        "oder sie ist ausgewandert; beides ist eine Entscheidung und keines ein Bestehen.",
+    );
     const member = decl.members.find((m) => m.name?.getText() === propertyName);
     assert.ok(member !== undefined, `${interfaceName}.${propertyName} gibt es nicht mehr`);
     return checker.getTypeAtLocation(member.type);
@@ -498,15 +722,17 @@ check("die drei Behandlungen nehmen fremden Text an und geben gewöhnlichen zur�
    * Behandlung. Verbreitert jemand `quotedName` auf `string`, verliert die
    * Funktion diese Eigenschaft und Abschnitt 2 meldet ihre 103 Aufrufstellen.
    */
-  const parameterType = (file, exportName) => {
-    const source = program.getSourceFile(path.join(srcRoot, file));
-    assert.ok(source !== undefined, `${file} gibt es nicht`);
-    const symbol = checker.getSymbolAtLocation(source);
-    assert.ok(symbol !== undefined, `${file} führt keine Ausfuhren`);
-    const found = checker
-      .getExportsOfModule(symbol)
-      .find((entry) => entry.getName() === exportName);
-    assert.ok(found !== undefined, `${file} führt ${exportName} nicht mehr`);
+  /*
+   * **Gesucht wird der Ausfuhrname, nicht die Datei** (T-249-2). Bis dahin
+   * stand hier `lib/foreign.ts`; nach dem featureweisen Umbau von
+   * `apps/web/src` gibt es diesen Ordner nicht mehr. `locateExport` findet die
+   * Behandlung, wo immer sie liegt, und besteht auf genau einer Fundstelle.
+   */
+  const parameterType = (exportName) => {
+    const { file: source, symbol: found } = locateExport(
+      exportName,
+      `die Behandlung \`${exportName}\``,
+    );
     const type = checker.getTypeOfSymbolAtLocation(found, found.valueDeclaration ?? source);
     const signature = type.getCallSignatures()[0];
     assert.ok(signature !== undefined, `${exportName} ist keine Funktion mehr`);
@@ -517,18 +743,16 @@ check("die drei Behandlungen nehmen fremden Text an und geben gewöhnlichen zur�
   };
 
   for (const name of ["quotedName", "foreignText"]) {
-    const { erster, rueckgabe } = parameterType("lib/foreign.ts", name);
+    const { erster, rueckgabe } = parameterType(name);
     assert.equal(isForeign(erster), true, `${name} nimmt keinen fremden Text mehr an`);
     assert.equal(isForeign(rueckgabe), false, `${name} gibt fremden Text zurück`);
   }
 
   // Und der Baustein: seine Eigenschaft `value` ist dieselbe Senke als Attribut.
-  const source = program.getSourceFile(path.join(srcRoot, "components", "Foreign.tsx"));
-  assert.ok(source !== undefined, "components/Foreign.tsx gibt es nicht");
-  const foreignComponent = checker
-    .getExportsOfModule(checker.getSymbolAtLocation(source))
-    .find((entry) => entry.getName() === "Foreign");
-  assert.ok(foreignComponent !== undefined, "der Baustein Foreign wird nicht mehr ausgeführt");
+  const { file: source, symbol: foreignComponent } = locateExport(
+    "Foreign",
+    "der Baustein `Foreign`",
+  );
   const signature = checker
     .getTypeOfSymbolAtLocation(foreignComponent, foreignComponent.valueDeclaration ?? source)
     .getCallSignatures()[0];
@@ -722,12 +946,66 @@ check("und der Durchlauf ist nicht leer gelaufen", () => {
   /*
    * Ein Nachweis, der nichts findet, weil er nichts sieht, ist schlimmer als
    * keiner. Diese Zeile misst, dass fremde Werte tatsächlich durch Senken
-   * gelaufen sind — sie wird rot, wenn die Marke verschwindet, wenn das
-   * Programm keine Dateien mehr lädt oder wenn jemand `tsconfig.json` so
-   * ändert, dass `src` nicht mehr darin liegt.
+   * gelaufen sind — sie wird rot, wenn die Marke verschwindet oder wenn
+   * niemand sie mehr an eine Anzeige reicht.
+   *
+   * Dass das **Programm** nicht leer ist, misst seit T-249-4 nicht mehr diese
+   * Stelle, sondern `requireAtLeast` unmittelbar hinter dem Aufbau des
+   * Programms — vor der ersten Aussage über die Menge statt lange danach.
    */
-  assert.ok(sourceFiles.length > 60, `nur ${String(sourceFiles.length)} Quelldateien geladen`);
   assert.ok(treatedCount > 80, `nur ${String(treatedCount)} behandelte Übergaben gesehen`);
+});
+
+/**
+ * Jede `.ts`- und `.tsx`-Datei, die **auf der Platte** unter `src` liegt.
+ *
+ * Gelesen mit `node:fs` und nicht aus `parsedConfig.fileNames`: Die Liste des
+ * Übersetzers und die geladenen Quelldateien stammen aus derselben Quelle und
+ * gingen bei einem Pfadfehler **gemeinsam** auf null — `0 === 0` wäre grün
+ * gewesen. Nur ein zweiter, unabhängiger Weg auf dieselbe Platte misst das.
+ */
+const filesOnDisk = (directory) => {
+  const found = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) found.push(...filesOnDisk(full));
+    else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts")) found.push(full);
+  }
+  return found;
+};
+
+check("und jede Datei unter `src` liegt tatsächlich im Programm", () => {
+  /*
+   * Die Verschärfung aus T-247, und der Grund für sie steht in Abschnitt 0a:
+   * Die Untergrenze beim Aufbau des Programms hat den Windows-Pfadfehler
+   * gefangen, weil sie 60 Dateien verlangt — aber sie hätte auch **eine**
+   * geladene Datei durchgelassen
+   * und die Aussage „kein fremder Wert steht roh in der Anzeige" über 128
+   * ungelesene Dateien gemacht. Eine Untergrenze sagt „nicht null", diese
+   * Prüfung sagt „alle", und sie nennt die fehlenden beim Namen.
+   *
+   * Sie ist nicht spröde: Eine neue Datei unter `src` erfüllt sie von selbst.
+   * Rot wird sie genau dann, wenn eine Datei, über die dieser Nachweis zu
+   * urteilen behauptet, gar nicht gelesen wurde — durch einen Pfadfehler, durch
+   * ein `exclude` in `tsconfig.json` oder weil niemand sie einführt.
+   */
+  const onDisk = filesOnDisk(srcRoot)
+    .map((file) => displayPath(srcRoot, file))
+    .sort();
+  const loaded = new Set(sourceFiles.map((file) => displayPath(srcRoot, file.fileName)));
+  const missing = onDisk.filter((file) => !loaded.has(file));
+  assert.deepEqual(
+    missing,
+    [],
+    `${String(missing.length)} von ${String(onDisk.length)} Dateien unter \`src\` sind nicht im\n` +
+      `        Programm — über sie urteilt dieser Lauf, ohne sie gelesen zu haben:\n        ` +
+      missing.slice(0, 10).join("\n        "),
+  );
+  assert.equal(
+    sourceFiles.length,
+    onDisk.length,
+    `${String(sourceFiles.length)} geladene Quelldateien gegen ${String(onDisk.length)} auf der Platte`,
+  );
 });
 
 /* ==================================================================== */
@@ -745,7 +1023,7 @@ heading("3  Kein fremder Wert wird roh in einen Satz eingebaut");
  * unserem Satz.
  *
  * Geprüft wird auch in `.ts`-Dateien: `lib/errorText.ts`, `lib/movement.ts` und
- * `app/TimerContext.tsx` bauen Sätze ohne ein einziges JSX-Element.
+ * `features/timer/TimerContext.tsx` bauen Sätze ohne ein einziges JSX-Element.
  */
 const isInsideReactInternalAttribute = (node) => {
   for (let p = node.parent; p !== undefined; p = p.parent) {
@@ -845,9 +1123,7 @@ for (const file of sourceFiles) {
        */
       const signature = checker.getResolvedSignature(node);
       const declaration = signature?.declaration;
-      const own =
-        declaration !== undefined &&
-        declaration.getSourceFile().fileName.startsWith(srcRoot + path.sep);
+      const own = declaration !== undefined && insideSrc(declaration.getSourceFile().fileName);
       if (signature !== undefined && own) {
         node.arguments.forEach((argument, index) => {
           if (!yieldsForeign(argument)) return;
@@ -1316,7 +1592,7 @@ const compilerFindings = (program) =>
     const text = ts.flattenDiagnosticMessageText(finding.messageText, " ");
     if (finding.file === undefined || finding.start === undefined) return `TS${String(finding.code)}: ${text}`;
     const { line } = finding.file.getLineAndCharacterOfPosition(finding.start);
-    const name = path.relative(appRoot, finding.file.fileName);
+    const name = displayPath(appRoot, finding.file.fileName);
     return `${name}:${String(line + 1)}  TS${String(finding.code)}: ${text}`;
   });
 
@@ -1364,20 +1640,39 @@ heading("8  Gegenprobe — jede eingesetzte Verletzung muss auffallen");
  * Fund ein Typfehler, und dann wäre nicht mehr zu unterscheiden, ob die Prüfung
  * den Verstoß gesehen hat oder ihn geraten hat.
  */
-const COUNTER_PROOF_PATH = path.join(srcRoot, "lib", "eingesetzt.ts");
+/*
+ * **Die Kunstquelle liegt neben den Dienstantworten, nicht in `lib/`**
+ * (T-249-2).
+ *
+ * Bis dahin stand sie unter `src/lib/eingesetzt.ts` und führte ihren Typ über
+ * `"../api/types"` ein — zwei feste Pfade in einer Datei, die es auf der Platte
+ * gar nicht gibt. Nach dem featureweisen Umbau von `apps/web/src` zeigte der
+ * zweite ins Leere: Die Kunstquelle übersetzte dann nicht, alle drei
+ * Gegenproben fänden **Typfehler** statt der eingesetzten Verletzung, und die
+ * dritte — die gerade Typfehler sucht — bliebe sogar grün. Ein Wächter, der
+ * seine eigene Blindheit misst, darf diese Messung nicht an einen Ordnernamen
+ * hängen.
+ *
+ * Deshalb: dasselbe Verzeichnis wie die aufgelöste Datei der Dienstantworten,
+ * und die Einfuhr `./<name>` daneben. Beide wandern mit ihr.
+ */
+const COUNTER_PROOF_DIRECTORY = path.dirname(typesSource.fileName);
+const COUNTER_PROOF_PATH = slashed(path.join(COUNTER_PROOF_DIRECTORY, "eingesetzt.ts"));
+/** Die Einfuhr der Kunstquelle — der Modulname der Nachbardatei, ohne Endung. */
+const TYPES_MODULE = `./${path.basename(typesSource.fileName).replace(/\.tsx?$/, "")}`;
 
 const COUNTER_PROOFS = [
   {
     title: "`todo.title as string` — die Zusicherung",
     source:
-      'import type { Todo } from "../api/types";\n' +
+      `import type { Todo } from "${TYPES_MODULE}";\n` +
       "export const titelVon = (todo: Todo) => todo.title as string;\n",
     findings: (lens) => scanSilentExits(lens).assertions,
   },
   {
     title: "`teile.push(todo.title)` in ein `string[]` — die Ablage",
     source:
-      'import type { Todo } from "../api/types";\n' +
+      `import type { Todo } from "${TYPES_MODULE}";\n` +
       "export function teileVon(todo: Todo): readonly string[] {\n" +
       "  const teile: string[] = [];\n" +
       "  teile.push(todo.title);\n" +
@@ -1388,7 +1683,7 @@ const COUNTER_PROOFS = [
   {
     title: "eine verschriebene Typeinfuhr — der Lauf urteilt sonst über `any`",
     source:
-      'import type { Todo } from "../api/typen";\n' +
+      `import type { Todo } from "${TYPES_MODULE}-gibt-es-nicht";\n` +
       "export const titelVon = (todo: Todo) => todo.title;\n",
     findings: (lens) => compilerFindings(lens.program),
   },

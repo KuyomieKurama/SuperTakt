@@ -235,7 +235,7 @@ describe('createExportPort.recordRun — schreibt fest, weist ab statt zu übers
    * ist die des Aufrufers (`createTransactionPort`), genau wie
    * `architektur.md` 3.2 es vorschreibt. Dieser Test bildet exakt den vom
    * domain-dev in T-021 beschriebenen Haken nach ("Abbruch nach dem
-   * Markieren und vor dem Festschreiben") — ohne den `usecases/export.ts` des
+   * Markieren und vor dem Festschreiben") — ohne den `features/export/export.ts` des
    * Dienstes zu benötigen, weil die Zusage auf der Speicherebene selbst gilt.
    */
   it('A-8.8: ein Abbruch nach dem Markieren und vor dem Festschreiben hinterlässt keine markierte Buchung, keine Protokollzeile, keinen Lauf', async () => {

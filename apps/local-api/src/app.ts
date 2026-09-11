@@ -44,18 +44,18 @@ import {
   type TaktEnv,
 } from './http/guards.ts';
 import type { AccessRuntime } from './runtime.ts';
-import type { AppContext } from './usecases/context.ts';
-import { createAddinAttachmentRoutes } from './routes/addin/attachments.ts';
+import type { AppContext } from './context.ts';
 import { createAddinRoutes } from './routes/addin/index.ts';
 import type { AddinDeps } from './routes/addin/ports.ts';
-import { createBoardRoutes } from './routes/board.ts';
-import { createExportRoutes, createSettingsRoutes } from './routes/export.ts';
-import { createStructureRoutes } from './routes/structure.ts';
-import { createTimeEntryRoutes, createTimerRoutes } from './routes/time.ts';
-import { createSearchRoutes, createTodoRoutes } from './routes/todos.ts';
-import { createVersionRoutes } from './routes/version.ts';
-import { createDataTransferRoutes } from './routes/data-transfer.ts';
-import type { VersionCheckState } from './version/checker.ts';
+import { createBoardRoutes } from './features/board/routes.ts';
+import { createExportRoutes } from './features/export/routes.ts';
+import { createSettingsRoutes } from './features/settings/routes.ts';
+import { createStructureRoutes } from './features/structure/routes.ts';
+import { createTimeEntryRoutes, createTimerRoutes } from './features/timer/routes.ts';
+import { createSearchRoutes, createTodoRoutes } from './features/todos/routes.ts';
+import { createVersionRoutes } from './features/version/routes.ts';
+import { createDataTransferRoutes } from './features/data-transfer/routes.ts';
+import type { VersionCheckState } from './features/version/version.ts';
 
 /**
  * Der fachliche Teil ist **auswechselbar leer**.
@@ -212,7 +212,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
    * Datenbank. Damit gibt es sie in jedem Zusammenbau, und
    * `proof:route-policy` Abschnitt 4 wie `proof:openapi` sehen immer dieselbe
    * Routenliste. Sie liest ab und fragt nicht — die Begründung steht in
-   * `routes/version.ts`.
+   * `features/version/routes.ts`.
    *
    * Kein `requireCredential('session')` daneben: Das steht schon oben in der
    * Kette für **jeden** Pfad, der nicht unter `/addin` liegt und nicht in
@@ -238,7 +238,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * Das Kanban-Board (E-054). **Eine** Route, und sie liest nur.
      *
      * Spalten werden über `/pools` eingerichtet, weil eine Spalte ein Pool ist;
-     * die Begründung steht in `routes/board.ts`. Es gibt bewusst keine Route,
+     * die Begründung steht in `features/board/routes.ts`. Es gibt bewusst keine Route,
      * die eine Karte in eine Spalte legt — Ziehen ist mit E-054 entfallen.
      */
     api.route('/board', createBoardRoutes(context));
@@ -253,9 +253,12 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
      *
      * Der Aufgabenbereich darf lesen, nach einer Call-Nummer suchen, ein Todo
-     * anlegen, die bestehende Buchungsroute nutzen und einen **http(s)-Verweis**
-     * an ein erkanntes Todo hängen. Die neue Anhangroute akzeptiert weder
-     * Dateipfade noch Bildquellen; sie kann also keine Datei des Rechners lesen.
+     * anlegen und die bestehende Buchungsroute nutzen. **Anhängen darf er
+     * nicht** — weder einen Verweis noch eine Datei noch ein Bild. Es gibt
+     * dafür keine Route mehr: Pull Request #16 hatte eine gebaut, F-21 hat
+     * gegen sie entschieden, und E-100 hat sie samt Fähigkeit im `AddinUnit`
+     * entfernt (T-247). A-19.19 ist damit strukturell wahr, nicht zugesagt;
+     * `proof:addin` Abschnitt 18f mißt es am fertigen Dienst.
      * Kein Löschen, kein Export, kein Zugriff auf den Vermerk eines fremden
      * Todos, keine Einstellungen. Daneben erreicht das Add-in-Token nur noch
      * `GET /health` — „Verbindung prüfen", ohne Inhalt und ohne Wirkung.
@@ -276,7 +279,6 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       now: () => context.clock.now(),
     };
     api.route('/addin', createAddinRoutes(addinDeps));
-    api.route('/addin', createAddinAttachmentRoutes(addinDeps));
   }
 
   app.route(API_BASE_PATH, api);

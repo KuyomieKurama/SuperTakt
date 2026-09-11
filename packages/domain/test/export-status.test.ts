@@ -13,10 +13,11 @@
  * Zusicherung im Code"), ist die einzige Stelle, an der die Domäne selbst
  * etwas über gültige Übergänge aussagt: `checkExportStatusTransition`.
  *
- * Dieser Test deckt deshalb die vollständige Übergangsmatrix ab: die zwei
- * erlaubten Übergänge (E-012, A-8.1) und alle sechs verbleibenden
- * Kombinationen aus {open, exported} x {open, exported} x {export_run, reset},
- * die laut `ExportStatusTransition` (time-entry.ts) NICHT konstruierbar sind.
+ * Dieser Test deckt deshalb die vollständige Übergangsmatrix ab: die drei
+ * erlaubten Übergänge (E-012, A-8.1, E-047) und alle neun verbleibenden
+ * Kombinationen aus {open, exported} x {open, exported} x
+ * {export_run, not_billed, reset}, die laut `ExportStatusTransition`
+ * (export-status.ts) NICHT konstruierbar sind.
  * E-032 ("erneut offen ist keine dritte Klasse") ist damit indirekt geprüft:
  * Jeder Übergang, dessen Ziel "open" ist, liefert exakt denselben Status
  * "open" wie ein Todo, das nie exportiert war — es gibt keinen Rückgabewert
@@ -32,9 +33,27 @@
  * (A-6.9): Die Funktion war bei T-010 namentlich in `time-entry.ts` als
  * Typ vorhanden, aber von keinem der ursprünglichen 70 Fälle berührt — der
  * domain-dev listet sie in seinem Bericht ausdrücklich als Lücke.
+ *
+ * NACHTRAG T-272 (`.claude/team/reports/T-245-orchestrator.md` /
+ * `packages/domain/src/export-status.ts`): Der dritte Übergang
+ * `open -> exported` via `not_billed` (E-047) fehlte hier bislang als
+ * Prüffall — genau der Zweig, den ein zwischenzeitlich falscher, inzwischen
+ * gestrichener Kommentar in `export-status.ts` als nicht existent
+ * behauptete. Ergänzt: der fehlende Übergang selbst, die bislang fehlenden
+ * Kombinationen mit `not_billed` in der Matrix, und ein Mengenprüffall auf
+ * `allowedExportStatusTransitions()` (Auflage des spec-ux-reviewers) — der
+ * hält die **Zahl** und die **Anwesenheit je Übergangs** fest, ausdrücklich
+ * ohne eine zweite, abgeschriebene Liste als Erwartungswert. Der
+ * Dateiverweis auf `time-entry.ts` weiter oben ist außerdem veraltet: Der
+ * Typ `ExportStatusTransition` steht seit T-261 in dieser Datei
+ * (`export-status.ts`), nicht mehr in `time-entry.ts`.
  */
 import { describe, expect, it } from 'vitest';
-import { checkExportStatusTransition, isLocked } from '../src/time-entry.js';
+import {
+  allowedExportStatusTransitions,
+  checkExportStatusTransition,
+  isLocked,
+} from '../src/export-status.js';
 import type { ExportStatus } from '../src/time-entry.js';
 
 describe('TP-EXPST-01 — checkExportStatusTransition, vollständige Matrix', () => {
@@ -54,6 +73,18 @@ describe('TP-EXPST-01 — checkExportStatusTransition, vollständige Matrix', ()
     }
   });
 
+  it('open -> exported via "not_billed" ist erlaubt (E-047, ersetzt E-037) — der dritte, bis T-272 ungeprüfte Übergang', () => {
+    // export-status.ts:257. Der einzige Zweig, den keiner der Abdeckungsläufe
+    // erreichte, weil ihn zuvor kein Domänenprüffall überhaupt aufrief — nur
+    // `tests/e2e/export-mixed-status-and-billing.spec.ts`, das nicht in
+    // `test:coverage` läuft.
+    const result = checkExportStatusTransition('open', 'exported', 'not_billed');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ from: 'open', to: 'exported', trigger: 'not_billed' });
+    }
+  });
+
   it('open -> exported via "reset" ist NICHT erlaubt (falscher Auslöser für diesen Übergang)', () => {
     const result = checkExportStatusTransition('open', 'exported', 'reset');
     expect(result.ok).toBe(false);
@@ -64,10 +95,17 @@ describe('TP-EXPST-01 — checkExportStatusTransition, vollständige Matrix', ()
     expect(result.ok).toBe(false);
   });
 
-  it.each<[ExportStatus, ExportStatus, 'export_run' | 'reset']>([
+  it('exported -> open via "not_billed" ist NICHT erlaubt (falscher Auslöser für diesen Übergang)', () => {
+    const result = checkExportStatusTransition('exported', 'open', 'not_billed');
+    expect(result.ok).toBe(false);
+  });
+
+  it.each<[ExportStatus, ExportStatus, 'export_run' | 'not_billed' | 'reset']>([
     ['open', 'open', 'export_run'],
+    ['open', 'open', 'not_billed'],
     ['open', 'open', 'reset'],
     ['exported', 'exported', 'export_run'],
+    ['exported', 'exported', 'not_billed'],
     ['exported', 'exported', 'reset'],
   ])('Wechsel auf sich selbst ist nie erlaubt: %s -> %s via %s', (from, to, trigger) => {
     const result = checkExportStatusTransition(from, to, trigger);
@@ -137,5 +175,41 @@ describe('isLocked — eine exportierte Buchung ist gegen Bearbeitung gesperrt (
     const rejected = checkExportStatusTransition('open', 'exported', 'reset');
     expect(rejected.ok).toBe(false);
     expect(isLocked({ exportStatus: 'open' })).toBe(false);
+  });
+});
+
+describe('allowedExportStatusTransitions — die Menge ist gerechnet, nicht abgeschrieben (T-270, T-272)', () => {
+  // Auflage des spec-ux-reviewers: die Zahl und die Anwesenheit je Übergangs,
+  // ausdrücklich OHNE eine zweite, von Hand geschriebene Liste als
+  // Erwartungswert daneben — genau die Bauart, die in dieser Datei bereits
+  // einmal auseinandergelaufen ist (siehe Kommentar über
+  // `allowedExportStatusTransitions` in `export-status.ts`).
+
+  it('liefert genau drei Übergänge', () => {
+    expect(allowedExportStatusTransitions()).toHaveLength(3);
+  });
+
+  it('enthält "open -> exported" via "export_run" (A-8.8)', () => {
+    expect(allowedExportStatusTransitions()).toContainEqual({
+      from: 'open',
+      to: 'exported',
+      trigger: 'export_run',
+    });
+  });
+
+  it('enthält "open -> exported" via "not_billed" (E-047)', () => {
+    expect(allowedExportStatusTransitions()).toContainEqual({
+      from: 'open',
+      to: 'exported',
+      trigger: 'not_billed',
+    });
+  });
+
+  it('enthält "exported -> open" via "reset" (E-012)', () => {
+    expect(allowedExportStatusTransitions()).toContainEqual({
+      from: 'exported',
+      to: 'open',
+      trigger: 'reset',
+    });
   });
 });

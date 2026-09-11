@@ -21,7 +21,7 @@
  * Deshalb tragen die Funktionen unten seit T-074 zwei Namen. Die neutralen
  * (`normalizeName`, `nameKey`, `checkName`) sind die Sache selbst; die
  * tagbezogenen (`normalizeTagName`, `tagNameKey`, `checkTagName`) bleiben
- * bestehen, weil die Oberfläche (`apps/web/src/components/TagInput.tsx`) und
+ * bestehen, weil die Oberfläche (`apps/web/src/features/tags/TagInput.tsx`) und
  * das Add-in (`apps/outlook-addin/src/tags/new-name.ts`) sie unter diesem Namen
  * aufrufen. Es sind **dieselben** Funktionen und nicht zwei Fassungen — ein
  * `===`-Vergleich der Bezeichner ist wahr.
@@ -196,7 +196,7 @@ export function normalizeName(raw: string): string {
  * Tags als `tag.name_key` in der Datenbank und trägt dort den eindeutigen
  * Index. Bei Pools und Kanban-Spalten steht es nirgends: Dort vergleicht der
  * Anwendungsfall die Schlüssel der wenigen vorhandenen Regeln, siehe
- * `usecases/structure.ts` und die Begründung im Bericht zu T-074.
+ * `features/structure/structure.ts` und die Begründung im Bericht zu T-074.
  */
 export function nameKey(raw: string): string {
   const normalized = normalizeName(raw);

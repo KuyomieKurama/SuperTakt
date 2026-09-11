@@ -64,7 +64,7 @@
  */
 
 import { main } from '../../../apps/local-api/src/main.ts';
-import { createGithubReleaseSource } from '../../../apps/local-api/src/version/source.ts';
+import { createGithubReleaseSource } from '../../../apps/local-api/src/features/version/source.ts';
 
 /**
  * Der Ursprung, den `version/source.ts` fest einsetzt. Ausschließlich zum

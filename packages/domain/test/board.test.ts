@@ -368,7 +368,7 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
 
 describe('boardAppearances — Übereinstimmung mit matchesPool (derselben Regel wie die SQL-Mitgliederabfrage)', () => {
   it('die Menge der Mehrfachnennungen entspricht exakt dem, was matchesPool je Spalte und Karte unabhängig ermittelt', async () => {
-    const { matchesPool } = await import('../src/tag.js');
+    const { matchesPool } = await import('../src/pool.js');
 
     const columns: readonly BoardColumnRule[] = [
       { columnId: poolId('c1'), ruleTagIds: [tagId('a')], matchMode: 'any', unresolvedRequired: false },

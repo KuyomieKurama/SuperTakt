@@ -40,7 +40,7 @@ import {
   BOOKING_EFFECT,
   ENTRY_CLOSED_EFFECT,
 } from '../src/time-entry.js';
-import { isVisibleInPool } from '../src/tag.js';
+import { isVisibleInPool } from '../src/pool.js';
 import type { RunningTimeEntry, TimerStartRequest } from '../src/time-entry.js';
 import type { Timestamp, TodoId } from '../src/kernel.js';
 
@@ -261,7 +261,7 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
 /**
  * T-105 (Auftrag aus `reports/T-101-domain-dev.md`, "Nächster Schritt" 2):
  * `BOOKING_EFFECT` und `ENTRY_CLOSED_EFFECT` (E-061 Punkt 1,
- * `usecases/pool-movement.ts` in `apps/local-api` verwendet sie als einzige
+ * `pool-movement.ts` in `apps/local-api` verwendet sie als einzige
  * Quelle für "was ändert eine Buchung an einem Todo"). Beide Konstanten sind
  * bislang von keinem Test benannt (kein Treffer für "BOOKING_EFFECT" oder
  * "ENTRY_CLOSED_EFFECT" unter `packages/domain/test`, `packages/storage/test`

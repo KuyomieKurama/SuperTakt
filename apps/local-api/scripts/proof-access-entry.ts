@@ -61,7 +61,7 @@
  */
 
 import { main } from '../src/main.ts';
-import type { ReleaseLookup, ReleaseSourcePort } from '../src/version/source.ts';
+import type { ReleaseLookup, ReleaseSourcePort } from '../src/features/version/source.ts';
 
 /**
  * Die Abholfunktion des Nachweislaufs: **sie geht nirgendwohin.**
@@ -71,9 +71,17 @@ import type { ReleaseLookup, ReleaseSourcePort } from '../src/version/source.ts'
  * fehlgeschlagen, und das ist für diesen Nachweis der richtige Ausgang:
  *
  *  - Der Dienst verhält sich danach wie bei jedem stillen Fehlschlag
- *    (A-18.11): kein Hinweis, keine Fehlerfläche, **kein zweiter Versuch im
- *    selben Lauf**. `GET /version-check` antwortet `state: 'unknown'`, und
- *    genau das prüft `proof:access` in seinem Abschnitt zur Versionsprüfung.
+ *    (A-18.11): kein Hinweis, keine Fehlerfläche, **kein wiederholtes
+ *    Nachfragen im selben Prüflauf**. `GET /version-check` antwortet
+ *    `state: 'unknown'`, und genau das prüft `proof:access` in seinem
+ *    Abschnitt zur Versionsprüfung.
+ *  - Der Takt läuft dabei weiter — ein Fehlschlag beendet die Prüfung seit
+ *    T-273 nicht für die Laufzeit —, aber er läuft auf dem Mindestabstand von
+ *    **einer Stunde** (A-V-11). Der Nachweislauf ist um Größenordnungen
+ *    kürzer, also sieht er genau eine Abholung. Die Zahlen dahinter: 1
+ *    Anfrage je 24 Stunden im Erfolgsfall, höchstens 24 je Kalendertag im
+ *    Dauerfehlschlag. Auch bei einem viel längeren Lauf ginge von hier nichts
+ *    hinaus: Diese Abholfunktion kennt kein Netz.
  *  - Es gibt keinen zweiten Prozeß, kein zweites Zertifikat und keinen
  *    zweiten Port, der belegt sein könnte.
  *

@@ -33,9 +33,9 @@ import { join } from 'node:path';
 const { openDatabase, createClockPort, createFilePort, createSystemPort, uuidv7, DIRECTORY_CHECK_BUDGET_MS } =
   await import('@takt/storage');
 const { createDirectoryInsightPort } = await import('../src/access/export-directory.ts');
-const { runExport, previewExport } = await import('../src/usecases/export.ts');
-const { createTodo, loadTodoNote } = await import('../src/usecases/todos.ts');
-const { setExportStatus } = await import('../src/usecases/structure.ts');
+const { runExport, previewExport } = await import('../src/features/export/export.ts');
+const { createTodo, loadTodoNote } = await import('../src/features/todos/todos.ts');
+const { setExportStatus } = await import('../src/features/export/status.ts');
 
 /**
  * Der interne Vermerk des Todos (A-7.2, R-06) — **ein** Literal.

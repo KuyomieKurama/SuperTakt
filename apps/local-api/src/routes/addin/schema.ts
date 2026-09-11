@@ -19,8 +19,9 @@ import { z } from 'zod';
  *
  * Bis T-114 stand hier für Titel und Tagname je eine eigene Abschrift
  * (`z.string().trim().min(1).max(…)`), und ein Kommentar sagte zu, sie sei
- * zeichengleich der aus `routes/todos.ts`. Seit T-101 stimmte das nicht mehr:
- * Dort kam die Prüfung auf Steuer- und Richtungszeichen hinzu, hier nicht.
+ * zeichengleich der aus `features/todos/routes.ts`. Seit T-101 stimmte das
+ * nicht mehr: Dort kam die Prüfung auf Steuer- und Richtungszeichen hinzu,
+ * hier nicht.
  * Zwei Abschriften derselben Regel sind zwei Gelegenheiten, sie verschieden zu
  * ändern — und genau das ist geschehen.
  *
@@ -38,8 +39,6 @@ import { z } from 'zod';
  * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
 import {
-  attachmentTitleSchema,
-  attachmentUrlSchema,
   dueDateSchema,
   nameSchema,
   titleSchema,
@@ -105,7 +104,7 @@ export const ADDIN_CALL_NUMBER_MAX_LENGTH = 128;
  * Bis T-134 stand die Zahl als `.max(200)` mitten im Schema, ohne Namen und
  * ohne Grund — und ohne einen Hinweis darauf, dass sie nicht allein steht.
  *
- * **Sie steht an zwei Türen.** `routes/todos.ts` führt dieselbe Zahl an
+ * **Sie steht an zwei Türen.** `features/todos/routes.ts` führt dieselbe Zahl an
  * `createSchema` und an `updateSchema`; es ist dieselbe Wahrheit („wie viele
  * Tags darf ein Todo in einer Anfrage bekommen") und nicht bloß derselbe Wert.
  * Aufgelöst ist sie damit **nicht**: Der andere Weg liegt außerhalb dieser Datei
@@ -124,11 +123,12 @@ export const ADDIN_TAG_IDS_MAX = 200;
 /**
  * Wie viele **Namen** eine Anfrage höchstens benennen darf (T-058, T-061).
  *
- * Dieselbe Zahl wie in `routes/todos.ts`, und aus demselben Grund: Kennungen
- * kommen aus einer Auswahl, Namen aus einem Eingabefeld. Fünfzig neue Tags in
- * einer Anfrage sind kein Arbeitsablauf, sondern ein Skript. Zwei verschiedene
- * Zahlen an den beiden Wegen wären die Art Unterschied, die niemand bemerkt,
- * bis eine Anfrage über den einen Weg durchgeht und über den anderen nicht.
+ * Dieselbe Zahl wie in `features/todos/routes.ts`, und aus demselben Grund:
+ * Kennungen kommen aus einer Auswahl, Namen aus einem Eingabefeld. Fünfzig
+ * neue Tags in einer Anfrage sind kein Arbeitsablauf, sondern ein Skript. Zwei
+ * verschiedene Zahlen an den beiden Wegen wären die Art Unterschied, die
+ * niemand bemerkt, bis eine Anfrage über den einen Weg durchgeht und über den
+ * anderen nicht.
  *
  * Dieser Satz war bis T-134 eine Zusicherung, die niemand ausführt — genau die
  * Bauart, an der T-114 gescheitert ist. Seither hält Abschnitt 16 des
@@ -205,8 +205,8 @@ export const createTodoSchema = z.object({
    *
    * Hier stand bis T-114 `z.string().trim().min(1).max(MAX_TAG_NAME_LENGTH)`
    * und darüber der Satz, dieser Wortlaut sei zeichengleich dem `nameSchema`
-   * aus `routes/todos.ts`, „damit die Hauptanwendung und das Add-in dieselbe
-   * Eingabe annehmen und dieselbe abweisen".
+   * aus `features/todos/routes.ts`, „damit die Hauptanwendung und das Add-in
+   * dieselbe Eingabe annehmen und dieselbe abweisen".
    *
    * **Seit T-101 war dieser Satz falsch.** `nameSchema` weist seither Steuer-
    * und Richtungszeichen ab, diese Abschrift nicht — und der Kommentar sagte
@@ -305,21 +305,18 @@ export const createTodoSchema = z.object({
    * (R-21, R-22). Ein `attachments` im Rumpf dieser Anfrage fällt in zod
    * still weg — gemessen wird das trotzdem, und zwar an der Wirkung
    * (`proof:addin` Abschnitt 18: null Zeilen in `todo_attachment`).
+   *
+   * **Und seit T-247 gilt der Satz wieder für den ganzen Teilbaum.** Zwischen
+   * PR #16 und der Entscheidung zu F-21 stand er hier, während nebenan
+   * `POST /addin/todos/{todoId}/attachments` einen Verweis anlegte: eine
+   * zweite Tür, die aufging, während diese hier ihre Abwesenheit zusicherte.
+   * Der Auftraggeber hat F-21 **gegen** das Anhängen entschieden; die Route ist
+   * samt Schema gefallen. Abschnitt 18 des Nachweislaufs misst deshalb nicht
+   * mehr nur die Wirkung an dieser Tür, sondern zusätzlich, dass es die andere
+   * **nicht gibt** (404 mit gültigem Add-in-Token, kein Pfad unter `/addin`
+   * mit `attachment` im Namen).
    */
   dueDate: dueDateSchema.default(null),
-});
-
-/**
- * Der schmale Anhangsrumpf des Add-ins.
- *
- * Anders als `AttachmentCreate` der Hauptfläche gibt diese Tür keine Wahl der
- * Art: Das dauerhafte Add-in-Token darf ausschließlich einen http(s)-Verweis
- * an ein vorhandenes Todo hängen. Datei- und Bildpfade sind hier strukturell
- * nicht darstellbar.
- */
-export const addLinkAttachmentSchema = z.object({
-  url: attachmentUrlSchema,
-  title: attachmentTitleSchema.nullish(),
 });
 
 /**
@@ -406,7 +403,6 @@ export const bookSchema = z.object({
  */
 
 export type CreateTodoBody = z.infer<typeof createTodoSchema>;
-export type AddLinkAttachmentBody = z.infer<typeof addLinkAttachmentSchema>;
 export type BookBody = z.infer<typeof bookSchema>;
 
 /**
@@ -420,7 +416,8 @@ export type BookBody = z.infer<typeof bookSchema>;
  * `scripts/proof-openapi.mjs` hält jedes Rumpfschema des Dienstes gegen das,
  * was die Beschreibung über denselben Rumpf behauptet — Feldnamen,
  * Pflichtfelder, Obergrenzen. Die vier Türen der Hauptfläche
- * (`routes/todos.ts`, `structure.ts`, `time.ts`, `export.ts`) führen dafür je
+ * (`features/todos/routes.ts`, `features/structure/routes.ts`,
+ * `features/timer/routes.ts`, `features/export/routes.ts`) führen dafür je
  * eine Aufstellung `REQUEST_SCHEMAS` **neben ihren Routen**. Der Grund steht
  * dort ausgeschrieben: Wer eine Route mit Rumpf hinzufügt, sieht die Zuordnung
  * neben seiner Arbeit und nicht in einem Skript, von dem er nichts weiß.
@@ -454,7 +451,6 @@ export type BookBody = z.infer<typeof bookSchema>;
  */
 export const REQUEST_SCHEMAS = Object.freeze({
   createAddinTodo: createTodoSchema,
-  addAddinTodoAttachment: addLinkAttachmentSchema,
   createAddinTimeEntry: bookSchema,
 });
 

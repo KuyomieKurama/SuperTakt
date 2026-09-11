@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { Icon } from "../components/Icon";
-import { Menu, type MenuEntry } from "../components/Menu";
+import { ConfirmDialog } from "../shared/ui/ConfirmDialog";
+import { Icon } from "../shared/ui/Icon";
+import { Menu, type MenuEntry } from "../shared/ui/Menu";
 import {
   Button,
   Card,
@@ -13,9 +13,9 @@ import {
   Spinner,
   Toolbar,
   type ButtonVariant,
-} from "../components/Primitives";
-import { Select, type SelectEntry } from "../components/Select";
-import { FormDialog, TextField } from "../components/FormDialog";
+} from "../shared/ui/Primitives";
+import { Select, type SelectEntry } from "../shared/ui/Select";
+import { FormDialog, TextField } from "../shared/ui/FormDialog";
 import { Section, SubHeading } from "./Section";
 
 const SAMPLE_OPTIONS = [

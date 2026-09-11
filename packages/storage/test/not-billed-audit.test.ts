@@ -56,6 +56,7 @@
  * "Rot zuerst".
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { join } from 'node:path';
 import type { Timestamp } from '@takt/domain';
 import { openConnection, type SqlConnection } from '../src/sqlite/database.ts';
 import { createMigrationRunner, loadMigrations } from '../src/sqlite/migration-runner.ts';
@@ -63,7 +64,13 @@ import { createUnitOfWork } from '../src/sqlite/unit-of-work.ts';
 import { BUILTIN_TEMPLATE_ID } from './support/migrated-database.js';
 import { NOW, openTestDatabase, ts, type TestDatabase } from './support/setup.ts';
 
-const REAL_MIGRATIONS_DIR = new URL('../migrations', import.meta.url).pathname;
+// `new URL(...).pathname` liefert unter Windows `/C:/Users/…` — ein führender
+// Schrägstrich vor dem Laufwerksbuchstaben, den `readdirSync` (über
+// `loadMigrations`) als wörtlichen Pfad `C:\C:\Users\…` läse (sechster Fund
+// derselben Fehlerklasse, T-246-1/T-247-8). `import.meta.dirname` liefert
+// bereits einen betriebssystemgerechten Pfad — derselbe Weg wie in
+// `migration-runner.test.ts` und `migration-0012-pool-rule-restrict.test.ts`.
+const REAL_MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations');
 const fixedNow =
   (iso: string) =>
   (): Timestamp =>

@@ -1,5 +1,5 @@
 /**
- * Takt — T-095, `poolMovementNamer` (E-058 Absatz 1, `usecases/pool-movement.ts`).
+ * Takt — T-095, `poolMovementNamer` (E-058 Absatz 1, `pool-movement.ts`).
  *
  * `apps/local-api/src/usecases/pool-movement.ts` entstand in T-089 und hatte
  * bis hierher keinen eigenen Prüffall — nur die Messung am laufenden Dienst
@@ -49,8 +49,8 @@ import type {
 } from '@takt/domain';
 import { tagAxisIsUnresolved } from '@takt/domain';
 import type { PoolAxesResolution, PoolPort } from '@takt/storage';
-import { poolMovementNamer } from '../../src/usecases/pool-movement.ts';
-import type { PoolMovementState } from '../../src/usecases/pool-movement.ts';
+import { poolMovementNamer } from '../../src/pool-movement.ts';
+import type { PoolMovementState } from '../../src/pool-movement.ts';
 
 const NOW = '2026-08-31T08:00:00Z' as Timestamp;
 const poolId = (value: string) => value as unknown as PoolId;

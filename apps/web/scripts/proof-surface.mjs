@@ -104,11 +104,14 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { readRequiredFile, readTreeSync, requireAtLeast, requireDirectory } from '../../../scripts/source-anchors.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const srcRoot = path.join(appRoot, 'src');
-const styleRoot = path.join(srcRoot, 'styles');
+const srcRoot = requireDirectory(
+  path.join(appRoot, 'src'),
+  'den Quellbaum, über den dieser Nachweis urteilt',
+);
 
 /* ==================================================================== */
 /* 0  Werkzeug                                                          */
@@ -143,7 +146,21 @@ const collectSourceFiles = (dir) => {
   return found;
 };
 
-const sourceFilePaths = collectSourceFiles(srcRoot);
+/*
+ * **Zuerst die Menge, dann das Urteil** (T-249-2, Bauart aus T-247-7).
+ *
+ * Jede Regel dieses Laufs ist eine Aussage über *alle* Quelldateien der
+ * Oberfläche. Wäre die Menge leer — ein umgeräumter Baum, ein Tippfehler im
+ * Anker —, wäre jede dieser Aussagen **leer wahr**, und der Lauf meldete grün,
+ * ohne eine Zeile gelesen zu haben. Die Untergrenze steht deshalb vor der
+ * ersten Prüfung und nicht in ihr.
+ */
+const sourceFilePaths = requireAtLeast(
+  collectSourceFiles(srcRoot),
+  60,
+  'Quelldateien',
+  srcRoot,
+);
 
 /**
  * Zerlegt Quelltext als TSX — ohne Programm und ohne Typprüfer.
@@ -1214,15 +1231,35 @@ check('jeder HTML-Knoten mit einem Meldungsklassennamen ist eine Live-Region ode
 
 heading('C  Das Stilblatt nimmt keine leere Live-Region aus dem Baum (O-GQ)');
 
-const styleFiles = readdirSync(styleRoot)
-  .filter((name) => name.endsWith('.css'))
-  .sort();
+/*
+ * **Die Stilblätter werden im ganzen Quellbaum gesucht, nicht in `src/styles`**
+ * (T-249-2).
+ *
+ * Bis dahin stand hier `readdirSync(styleRoot)` auf `apps/web/src/styles` —
+ * ein fester Ordnername **und** eine einzige Ebene. Beides bricht am
+ * featureweisen Umbau: Zieht `components.css` nach `features/board/`, findet
+ * der Lauf es nicht mehr; legt jemand `styles/kanban/spalte.css` an, verliert
+ * er es stillschweigend, ohne dass irgendetwas rot wird. Ein Stilblatt, das
+ * eine Live-Region verbirgt, wäre dann unsichtbar — genau die Fläche, die
+ * dieser Abschnitt bewacht.
+ *
+ * Gelesen wird deshalb rekursiv ab `src`, und die Menge trägt ihre eigene
+ * Untergrenze: Ohne ein einziges Stilblatt ist die Prüfung darunter leer wahr.
+ */
+const styleFiles = requireAtLeast(
+  readTreeSync(srcRoot, (name) => name.endsWith('.css'), 'die Stilblätter der Oberfläche').map(
+    (entry) => ({ name: entry.name, text: readFileSync(entry.path, 'utf8') }),
+  ),
+  1,
+  'Stilblätter',
+  srcRoot,
+);
 
 check('kein `display: none` und kein `visibility: hidden` auf einer Live-Region', () => {
   const classes = liveRegionClasses();
   assert.ok(classes.size > 0, 'keine einzige Live-Region gefunden — dann mißt diese Regel nichts');
-  const findings = styleFiles.flatMap((name) =>
-    findHiddenLiveRegions(name, readFileSync(path.join(styleRoot, name), 'utf8'), classes),
+  const findings = styleFiles.flatMap((sheet) =>
+    findHiddenLiveRegions(sheet.name, sheet.text, classes),
   );
   assert.deepEqual(
     findings,
@@ -1281,9 +1318,22 @@ check('die geduldeten Sätze stehen noch da — sonst sind die Ausnahmen fällig
 heading('E  Derselbe Anredewaechter in zwei Laeufen, gegeneinander gemessen (E-086)');
 
 check('beide Laeufe tragen denselben Ausdruck, dieselben Wortlisten und dasselbe Urteil', () => {
+  /*
+   * **Beide Hälften werden fail-closed geholt** (T-249-2). Zieht der zweite
+   * Lauf um, ist das kein `ENOENT` aus dem Inneren von `node:fs`, sondern ein
+   * Satz, der sagt, welche Datei gesucht wurde und wofür — E-086 misst zwei
+   * Fassungen derselben Regel gegeneinander, und eine Fassung, die nicht
+   * gelesen werden konnte, ist keine gemessene Fassung.
+   */
   const findings = compareGuards(
-    guardOf(readFileSync(OWN_GUARD, 'utf8'), path.basename(OWN_GUARD)),
-    guardOf(readFileSync(ADDIN_GUARD, 'utf8'), path.basename(ADDIN_GUARD)),
+    guardOf(
+      readRequiredFile(OWN_GUARD, 'die eine Hälfte des Anredewächters (dieser Lauf selbst)'),
+      path.basename(OWN_GUARD),
+    ),
+    guardOf(
+      readRequiredFile(ADDIN_GUARD, 'die zweite Hälfte des Anredewächters im Aufgabenbereich'),
+      path.basename(ADDIN_GUARD),
+    ),
   );
   assert.deepEqual(
     findings,
@@ -1316,7 +1366,7 @@ heading('F  Jedes direkte Kind von `.app` trägt eine Rasterzuordnung (T-214, O-
 
 const rasterErnte = findChildrenWithoutGridArea({
   quellen: parsedSources,
-  blaetter: styleFiles.map((name) => ({ name, text: readFileSync(path.join(styleRoot, name), 'utf8') })),
+  blaetter: styleFiles,
 });
 
 check('die Ernte steht vor der Zusage: eine Hülle, Kinder, aufgelöste Knoten (E-094 Punkt 3)', () => {

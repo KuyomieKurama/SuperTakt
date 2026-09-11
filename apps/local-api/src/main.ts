@@ -41,10 +41,10 @@ import { readStartupHandshake, watchParentLink } from './access/session-secret.t
 import { createFileTokenStore } from './access/token-store.ts';
 import { bringDatabaseUpToDate, describeStoreOpenFailure } from './startup.ts';
 import { startTaskpaneServer } from './taskpane/server.ts';
-import { sweepOrphanedImages } from './usecases/image-sweep.ts';
-import { captureTimerRecovery } from './usecases/timer.ts';
-import type { ReleaseSourcePort } from './version/source.ts';
-import { VERSION_CHECK_START_DELAY_MS } from './version/checker.ts';
+import { sweepOrphanedImages } from './features/todos/image-sweep.ts';
+import { captureTimerRecovery } from './features/timer/timer.ts';
+import type { ReleaseSourcePort } from './features/version/source.ts';
+import { VERSION_CHECK_START_DELAY_MS } from './features/version/version.ts';
 
 /** Beendigungscodes, damit die Hülle den Grund unterscheiden kann. */
 const EXIT_CONFIG = 78;
@@ -213,7 +213,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
       // aus derselben Auflösung und nicht aus einer Anfrage.
       appDataDir: paths.dir,
       logger,
-      // Ohne Angabe bleibt die feste Adresse aus `version/source.ts` die
+      // Ohne Angabe bleibt die feste Adresse aus `features/version/source.ts` die
       // einzige (A-V-1). `src/index.ts` gibt nichts an; wer hier etwas
       // einsetzt, tut es im selben Prozeß und nicht von außen — siehe
       // {@link MainOptions}.
@@ -319,7 +319,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
    * dann den Bestand. Solange keine Route zuhört, kann zwischen beiden
    * Schritten kein Anhang entstehen — im Hintergrund neben laufenden Anfragen
    * hätte er ein Rennen, das eine frische Kopie kosten könnte. Die ganze
-   * Begründung steht in `usecases/image-sweep.ts`.
+   * Begründung steht in `features/todos/image-sweep.ts`.
    *
    * **Und der Anschlag auf den Port trägt diese Zusage nicht** (A-A-36): Das
    * `EADDRINUSE` weiter unten greift erst beim Lauschen, also nach dieser
@@ -491,12 +491,40 @@ export async function main(options: MainOptions = {}): Promise<void> {
    * setzt eine Abholfunktion ein, die den Prozeß nicht verläßt.
    *
    * Der Takt bleibt unverändert: die erste Anfrage ein paar Sekunden nach dem
-   * Start (Begründung in `version/checker.ts`).
+   * Start (Begründung in `features/version/version.ts`).
    *
    * Was danach geschieht, ist wenig: eine Anfrage, eine geprüfte
-   * Fassungsbezeichnung im Arbeitsspeicher, danach höchstens eine Anfrage je
-   * 24 Stunden. Ein Fehlschlag ist still und wird im selben Lauf nicht
-   * wiederholt (A-18.11).
+   * Fassungsbezeichnung im Arbeitsspeicher, danach im Erfolgsfall höchstens
+   * eine Anfrage je 24 Stunden.
+   *
+   * **Ein Fehlschlag ist still, aber er ist nicht das Ende** (A-18.11 in der
+   * seit T-273 geschärften Fassung). Still heißt: kein Hinweis, keine
+   * Fehlerfläche, kein wiederholtes Nachfragen **im selben Prüflauf** — der
+   * Grund steht allein im Protokoll. Der gewöhnliche Takt bleibt davon
+   * unberührt; der nächste Versuch folgt frühestens nach dem Mindestabstand
+   * von einer Stunde (A-V-11), und ein Fehlschlag beendet die Prüfung nicht
+   * für die Laufzeit der Anwendung.
+   *
+   * Die beiden Zahlen, damit sie der nächste Leser nicht wieder schätzt:
+   * **1 Anfrage je 24 Stunden im Erfolgsfall, höchstens 24 je Kalendertag im
+   * ununterbrochenen Fehlschlag** — ein Sechzigstel dessen, was GitHub nicht
+   * angemeldeten Aufrufern je Stunde und Quelladresse zugesteht.
+   *
+   * **Der Boden gilt seit T-279 über den Prozeß hinaus.** Sein Bezugspunkt
+   * steht im Bestand (`app_setting.last_version_check_at`, Migration 0022) und
+   * nicht mehr allein im Arbeitsspeicher; ein Neustart hebt ihn deshalb nicht
+   * mehr auf. Das schließt die Lücke „zwanzig Starts, zwanzig Anfragen"
+   * (gemessen: 344 je Stunde für den, der den Sidecar in einer Schleife
+   * startet — T-276) und stellt den Wert auf dieselbe Lebensdauer wie seine
+   * Nachbarn `skipped_version` (A-18.10) und die offenen Inaktivitätsphasen
+   * (A-24.7). **Als Abwehr gegen einen feindlichen lokalen Prozeß taugt er
+   * nicht** — der kommt mit `sqlite3` an dieselbe Datei (VG-3); er ist die
+   * Abwehr gegen den Unfall.
+   *
+   * Auf den Boden kommt dabei ein Streuwert von 0 bis 25 % (höchstens 15 min),
+   * der die Gleichschaltung mehrerer Installationen hinter einer Quelladresse
+   * bricht (T-275-8). Er verlängert nur; die Obergrenze von 24 je Kalendertag
+   * bleibt damit unverändert, der Erwartungswert sinkt auf rund 21,3.
    */
   versionCheck.start();
 

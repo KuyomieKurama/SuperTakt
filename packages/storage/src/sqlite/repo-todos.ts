@@ -738,7 +738,7 @@ export function createTodoPort(
      * „Erledigt" fragen: Das Setzen nimmt das Todo aus jeder Spalte mit
      * `completion: 'open'` heraus und trägt es in jede mit `completion: 'done'`
      * ein. Welche das sind, rechnet der Anwendungsfall
-     * (`usecases/pool-movement.ts`) und meldet es als `poolMovement` an
+     * (`pool-movement.ts`) und meldet es als `poolMovement` an
      * `PUT /todos/{todoId}/done` (E-060). Bis T-101 stand hier das Gegenteil
      * (R-2a W-3).
      *

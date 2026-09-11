@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { FilterToggle } from "../components/FilterBar";
-import { Select } from "../components/Select";
-import { Card, InlineMessage } from "../components/Primitives";
+import { FilterToggle } from "../shared/ui/FilterBar";
+import { Select } from "../shared/ui/Select";
+import { Card, InlineMessage } from "../shared/ui/Primitives";
 import {
   ShellStatus,
   type ShellServiceExit,
   type ShellStateSnapshot,
   type UserNameFinding,
-} from "../components/ShellStatus";
+} from "../app/ShellStatus";
 import { Section, SubHeading } from "./Section";
 
 /**

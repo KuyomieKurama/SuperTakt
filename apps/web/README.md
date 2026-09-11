@@ -82,8 +82,15 @@ apps/web/
                              das ein Outlook-Fenster nicht wollen wuerde (E-040).
       components.css         Alle Bausteine. Enthaelt keinen einzigen rohen Farbwert.
       showcase.css           Nur das Geruest der Musterseite.
-    lib/                     cx(), Theme- und Dichte-Haken, Wert-zu-Beschriftung.
-    components/              Die Bausteine. Keine Fachlogik.
+    api/                     Antworttypen des lokalen Dienstes und der Zugriff darauf.
+    app/                     Huelle, Navigation, Kontexte, Startmeldungen — alles, was
+                             mehrere Merkmale zusammensetzt statt eines zu sein.
+    features/                Je Merkmal ein Ordner: board, bookings, export, settings,
+                             structure, tags, timer, todos.
+    lib/                     Reine Hilfsmodule, keine Bausteine: cx(), Formatierung,
+                             Wert-zu-Beschriftung, Fristvergleich. Kein JSX.
+    shared/ui/               Die Bausteine, die mehr als ein Merkmal wirklich braucht.
+                             Keine Fachlogik.
     showcase/                Die Musterseite und ihre erfundenen Beispieldaten.
 ```
 

@@ -26,18 +26,25 @@
  *
  * Der Pfad ist aus `resolveAppDataDir`/`databaseFilePath`
  * (`apps/local-api/src/access/paths.ts`) von Hand nachgebildet: Diese Datei
- * läuft unter `XDG_DATA_HOME = E2E_DATA_DIR` (`services.ts#startLocalApi`),
- * und auf dieser Plattform (nicht `win32`) ergibt das `join(XDG_DATA_HOME,
- * 'takt', 'takt.db')` — eine Konstante hier ist billiger als eine Abhängigkeit
- * dieser Datei auf `apps/local-api/**`, die sie sonst nicht bräuchte.
+ * läuft unter `E2E_DATA_DIR`, umgelenkt über `isolatedAppDataEnv`
+ * (`app-data-isolation.ts`, `services.ts#startLocalApi`). Bis T-247-5 (A-A-72)
+ * stand hier fest `join(E2E_DATA_DIR, "takt", "takt.db")` — richtig nur dort,
+ * wo `access/paths.ts` `XDG_DATA_HOME` liest. Unter Windows legt der Dienst
+ * seinen Ordner groß geschrieben an (`Takt`) und liest `LOCALAPPDATA`, nicht
+ * `XDG_DATA_HOME` — ein fest kleingeschriebener Pfad hätte dort niemals eine
+ * Datenbank gefunden. `appDataDirIn` (`app-data-isolation.ts`) kennt beide
+ * Regeln; eine Konstante auf `apps/local-api/**` bliebe dennoch billiger als
+ * eine Paketabhängigkeit, die diese Datei sonst nicht bräuchte — deshalb die
+ * Kopie dort und nicht ein Import.
  */
 
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 
 import { E2E_DATA_DIR } from "./session";
+import { appDataDirIn } from "./app-data-isolation";
 
-const DB_PATH = join(E2E_DATA_DIR, "takt", "takt.db");
+const DB_PATH = join(appDataDirIn(E2E_DATA_DIR), "takt.db");
 
 /**
  * Überschreibt den Titel eines vorhandenen Todos unmittelbar in der

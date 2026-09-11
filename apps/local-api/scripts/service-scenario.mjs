@@ -59,7 +59,7 @@ import { join } from 'node:path';
 
 import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
-import { captureTimerRecovery } from '../src/usecases/timer.ts';
+import { captureTimerRecovery } from '../src/features/timer/timer.ts';
 
 const PORT = 17843;
 const UI_ORIGIN = 'http://127.0.0.1:5173';
@@ -897,26 +897,18 @@ export async function runScenario() {
     });
     const addinTodoId = addinTodo.body?.data?.todo?.id;
     if (addinTodoId !== undefined) {
-      const outlookAttachment = {
-        url: 'https://outlook.office.com/mail/deeplink/read/takt-proof-message',
-        title: 'Outlook-Nachricht aus dem Schnittstellenszenario',
-      };
-      await record(
-        'addAddinTodoAttachment',
-        'POST',
-        '/addin/todos/{todoId}/attachments',
-        `/addin/todos/${addinTodoId}/attachments`,
-        outlookAttachment,
-      );
-      // Derselbe normalisierte Link ein zweites Mal: Der zweite Erfolgsfall
-      // (200, alreadyPresent=true) gehört genauso zum Vertrag wie 201.
-      await record(
-        'addAddinTodoAttachment',
-        'POST',
-        '/addin/todos/{todoId}/attachments',
-        `/addin/todos/${addinTodoId}/attachments`,
-        outlookAttachment,
-      );
+      // **Hier stand bis T-247 ein Anhang.** PR #16 hatte
+      // `POST /addin/todos/{todoId}/attachments` gebaut, und dieser Durchlauf
+      // fuhr sie zweimal an: einmal für die 201 und einmal für den zweiten
+      // Erfolgsfall, die 200 mit `alreadyPresent: true`. Die Route
+      // widersprach dem Wortlaut von A-19.19; E-100 hat zugunsten der
+      // Anforderung entschieden, und mit der Route ist der Aufruf hier
+      // gefallen.
+      //
+      // Es tritt **nichts** an seine Stelle. Ein Durchlauf, der irgendeine
+      // Ersatzhandlung ausführte, nur damit die Stelle gefüllt ist,
+      // beschriebe eine Fläche, die es nicht gibt — und aus genau dieser
+      // Sorte Satz ist der Befund entstanden, der zu E-100 führte.
 
       // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
       // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
@@ -1155,7 +1147,7 @@ export async function runScenario() {
     await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: '' });
 
     // Und der Gegenprobe halber: das Lebenszeichen **ohne** laufenden Timer.
-    // Es ist ausdrücklich kein Fehler (E-036, `usecases/timer.ts`), und bis
+    // Es ist ausdrücklich kein Fehler (E-036, `features/timer/timer.ts`), und bis
     // T-041 stand in der Beschreibung dafür ein `409`, das es nie gab.
     await record('touchTimerHeartbeat', 'POST', '/timer/heartbeat', '/timer/heartbeat', {});
     await record(

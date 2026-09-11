@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button, Card } from "../components/Primitives";
-import { BillingUserFact, DatabaseLocationFact } from "../components/WorkstationFacts";
-import { adviseDatabaseLocation } from "../lib/databaseLocationAdvice";
+import { Button, Card } from "../shared/ui/Primitives";
+import { BillingUserFact, DatabaseLocationFact } from "../features/settings/WorkstationFacts";
+import { adviseDatabaseLocation } from "../features/settings/databaseLocationAdvice";
 import { Section, SubHeading } from "./Section";
 
 /**

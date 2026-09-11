@@ -21,7 +21,8 @@
  * sind damit entfernt (siehe rounding.test.ts für dieselbe Begründung).
  */
 import { describe, expect, it } from 'vitest';
-import { checkFolderMove, matchesPool } from '../src/tag.js';
+import { checkFolderMove } from '../src/tag.js';
+import { matchesPool } from '../src/pool.js';
 import { applyDefaultTags } from '../src/tag.js';
 import type { TagId, TagFolderId } from '../src/kernel.js';
 

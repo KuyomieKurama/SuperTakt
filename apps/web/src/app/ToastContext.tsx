@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Icon, type IconName } from "../components/Icon";
-import { Button, IconButton } from "../components/Primitives";
+import { Icon, type IconName } from "../shared/ui/Icon";
+import { Button, IconButton } from "../shared/ui/Primitives";
 import { cx } from "../lib/cx";
 
 /**

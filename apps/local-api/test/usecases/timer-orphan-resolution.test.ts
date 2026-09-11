@@ -30,7 +30,7 @@
  * `resolveOrphanedTimer` nur `unit.heartbeat.orphaned()` und
  * `unit.timer.stop()` — `presenceBeforeBooking`/`poolMovementNamer` werden in
  * diesem Zweig laut Quelltext gar nicht erreicht (nachgelesen in
- * `usecases/timer.ts`: der `presence`-Zugriff steht dort HINTER der
+ * `features/timer/timer.ts`: der `presence`-Zugriff steht dort HINTER der
  * `if (decision.kind === 'discarded') return …`-Zeile). Die Attrappe liefert
  * deshalb nur diese beiden Ports; ein Cast auf `UnitOfWork` steht dafür, wie
  * in `todo-done-movement.test.ts` begründet.
@@ -39,8 +39,8 @@ import { describe, expect, it } from 'vitest';
 import type { RunningTimeEntry, TimeEntryId, Timestamp, TodoId } from '@takt/domain';
 import { ok } from '@takt/domain';
 import type { UnitOfWork } from '@takt/storage';
-import type { AppContext } from '../../src/usecases/context.ts';
-import { resolveOrphanedTimer, stopTimer } from '../../src/usecases/timer.ts';
+import type { AppContext } from '../../src/context.ts';
+import { resolveOrphanedTimer, stopTimer } from '../../src/features/timer/timer.ts';
 
 const timeEntryId = (value: string) => value as unknown as TimeEntryId;
 const todoId = (value: string) => value as unknown as TodoId;

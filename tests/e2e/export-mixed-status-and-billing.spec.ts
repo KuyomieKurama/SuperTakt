@@ -43,20 +43,36 @@ test('gemischter Exportstatus: eine von drei Buchungen exportiert, Rest wird ohn
   await createTimeEntry({ todoId: todo.id, startedAt: todayAt(4, 0), endedAt: todayAt(4, 6), note: 'Segment drei' });
 
   await gotoExport(page);
-  const group = page.locator('.egroup', { hasText: title });
+  // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+  // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag, und muss über
+  // den Todo-Kopf erst aufgeklappt werden, bevor er im Baum sichtbar wird
+  // (T-249-8). Alle drei Buchungen dieses Todos liegen auf demselben Tag,
+  // also genügt ein Todo-Aufklappen für die eine Tagesgruppe.
+  const todoGroup = page.locator('.export-todo', { hasText: title });
+  await expect(todoGroup).toBeVisible();
+  // `/klappen/` statt `/aufklappen/`: Das Beschriftungswort lautet "auf- oder
+  // einklappen" (`ExportGroups.tsx`), nicht "aufklappen" als zusammenhängendes
+  // Wort — die alte Regex hätte nie getroffen (T-249-8).
+  await todoGroup.getByRole('button', { name: /klappen/ }).click();
+  const group = todoGroup.locator('.egroup');
   await expect(group).toBeVisible();
-  await expect(group.locator('.egroup__quarters')).toHaveText(/0,50/);
+  // `.egroup__quarters` hat in der Zelle keine Entsprechung mehr — die Klasse
+  // steht noch in `components.css`, aber `ExportGroups.tsx` setzt sie an
+  // keinem Knoten mehr (Bericht T-249-8). Zugriff über den eigenen Text der
+  // Zelle statt über die tote Klasse.
+  const quarters = group.locator('tr.export-day__head td', { hasText: 'Gerundete Exportzeit' });
+  await expect(quarters).toHaveText(/0,50/);
 
   // Aufklappen und eine der drei Buchungen aus **diesem** Lauf ausschließen —
   // das exportiert nur die verbleibenden zwei (12 Minuten).
-  await group.getByRole('button', { name: /aufklappen/ }).click();
+  await group.getByRole('button', { name: /klappen/ }).click();
   await expect(group.locator('.egroup__body')).toBeVisible();
   const entries = group.locator('.eentry');
   await expect(entries).toHaveCount(3);
   await entries.nth(0).locator('input.eentry__check').uncheck();
 
   // Der Gruppenwert rechnet sofort neu, ohne die ausgeschlossene Buchung (E-031).
-  await expect(group.locator('.egroup__quarters')).toHaveText(/0,25/);
+  await expect(quarters).toHaveText(/0,25/);
 
   await runExportFromScreen(page);
 
@@ -68,9 +84,12 @@ test('gemischter Exportstatus: eine von drei Buchungen exportiert, Rest wird ohn
   // Die verbliebene offene Buchung bildet jetzt allein ihre Tagesgruppe —
   // 6 Minuten runden auf 0,25, nicht mehr auf 0,50 wie zuvor mit dreien.
   await page.reload();
-  const groupAfter = page.locator('.egroup', { hasText: title });
+  const todoGroupAfter = page.locator('.export-todo', { hasText: title });
+  await expect(todoGroupAfter).toBeVisible();
+  await todoGroupAfter.getByRole('button', { name: /klappen/ }).click();
+  const groupAfter = todoGroupAfter.locator('.egroup');
   await expect(groupAfter).toBeVisible();
-  await expect(groupAfter.locator('.egroup__quarters')).toHaveText(/0,25/);
+  await expect(groupAfter.locator('tr.export-day__head td', { hasText: 'Gerundete Exportzeit' })).toHaveText(/0,25/);
 
   // Aufräumen: die bewusst offen gelassene Buchung nicht im Bestand lassen,
   // sonst würde sie in einem späteren Test als zusätzliche, ungeplante
@@ -114,7 +133,7 @@ test('E-047 — "Nicht abrechnen" ohne Grund: Status exported, Zähler bleibt 0,
 
   // Sie erscheint danach nicht mehr in der Exportauswahl.
   await gotoExport(page);
-  await expect(page.locator('.egroup', { hasText: title })).toHaveCount(0);
+  await expect(page.locator('.export-todo', { hasText: title })).toHaveCount(0);
 
   // Bei mir angemeldeter Fall (T-040, Offene Frage 2b): "Nicht abrechnen" ohne
   // Grund — im Verlauf dieser Buchung erscheint der Satz, dass das Feld
@@ -166,12 +185,23 @@ test('E-034 — Tagesgruppe ohne Leistung ist gesperrt, der übrige Export läuf
   });
 
   await gotoExport(page);
-  const blockedGroup = page.locator('.egroup', { hasText: blockedTitle });
-  const okGroup = page.locator('.egroup', { hasText: okTitle });
-  await expect(blockedGroup).toBeVisible();
-  await expect(okGroup).toBeVisible();
+  // `.export-todo` ist der Todo-Block (trägt den Titel) — `.egroup` liegt
+  // seit dem Tabellenumbau eine Ebene tiefer, je Kalendertag, und ist erst
+  // nach Aufklappen des Todo-Kopfes erreichbar (T-249-8).
+  const blockedTodoGroup = page.locator('.export-todo', { hasText: blockedTitle });
+  const okTodoGroup = page.locator('.export-todo', { hasText: okTitle });
+  await expect(blockedTodoGroup).toBeVisible();
+  await expect(okTodoGroup).toBeVisible();
 
-  await expect(blockedGroup).toHaveClass(/egroup--blocked/);
+  await blockedTodoGroup.getByRole('button', { name: /klappen/ }).click();
+  const blockedGroup = blockedTodoGroup.locator('.egroup');
+  await expect(blockedGroup).toBeVisible();
+
+  // `.egroup--blocked` steht nur noch in `components.css`, nicht mehr im
+  // Quelltext — die gesperrte Kennzeichnung trägt seit dem Tabellenumbau die
+  // Kopfzeile selbst (`tr.export-day__head--blocked`, `ExportGroups.tsx`),
+  // nicht mehr die Gruppe als Ganzes (Bericht T-249-8, frontend-dev).
+  await expect(blockedGroup.locator('tr.export-day__head')).toHaveClass(/export-day__head--blocked/);
   await expect(blockedGroup.locator('input.egroup__check')).toBeDisabled();
   await expect(blockedGroup.locator('.egroup__blocked-label')).toContainText('Leistung fehlt');
 
@@ -191,5 +221,5 @@ test('E-034 — Tagesgruppe ohne Leistung ist gesperrt, der übrige Export läuf
   // Die gesperrte Gruppe bleibt sichtbar offen und taucht beim nächsten Mal
   // wieder auf.
   await page.reload();
-  await expect(page.locator('.egroup', { hasText: blockedTitle })).toBeVisible();
+  await expect(page.locator('.export-todo', { hasText: blockedTitle })).toBeVisible();
 });

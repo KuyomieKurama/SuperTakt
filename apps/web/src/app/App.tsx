@@ -1,38 +1,43 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
-import { listTimeEntries, listTodos } from "../api/endpoints";
+import {
+  listTimeEntries,
+} from "../api/endpoints";
+import {
+  listTodos,
+} from "../features/todos/api";
 import {
   ShellStatus,
   type ShellStateSnapshot,
   type UserNameFinding,
-} from "../components/ShellStatus";
-import { Button, Card, EmptyState, InlineMessage, Spinner } from "../components/Primitives";
-import { DashboardScreen } from "../screens/DashboardScreen";
+} from "./ShellStatus";
+import { Button, Card, EmptyState, InlineMessage, Spinner } from "../shared/ui/Primitives";
+import { DashboardScreen } from "./DashboardScreen";
 import { connect, quitApplication, readShellState, type ConnectionState } from "./connection";
 import { GlobalSearch } from "./GlobalSearch";
 import { Navigation } from "./Navigation";
-import { PreferencesProvider } from "./PreferencesContext";
+import { PreferencesProvider } from "../features/settings/PreferencesContext";
 import { RefreshProvider, useRefresh } from "./RefreshContext";
 import { href, type Route } from "./router";
 import { StructureProvider } from "./StructureContext";
-import { TimerBar } from "./TimerBar";
-import { TimerProvider } from "./TimerContext";
+import { TimerBar } from "../features/timer/TimerBar";
+import { TimerProvider } from "../features/timer/TimerContext";
 import { ToastProvider } from "./ToastContext";
-import { UpdateNotice } from "./UpdateNotice";
-import { useUpdateNotice } from "./useUpdateNotice";
+import { UpdateNotice } from "../features/settings/UpdateNotice";
+import { useUpdateNotice } from "../features/settings/useUpdateNotice";
 import { useAsync } from "./useAsync";
 import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
 
-const BoardScreen = lazy(() => import("../screens/BoardScreen").then(module => ({ default: module.BoardScreen })));
-const BookingsScreen = lazy(() => import("../screens/BookingsScreen").then(module => ({ default: module.BookingsScreen })));
-const ExportAuditScreen = lazy(() => import("../screens/ExportAuditScreen").then(module => ({ default: module.ExportAuditScreen })));
-const ExportScreen = lazy(() => import("../screens/ExportScreen").then(module => ({ default: module.ExportScreen })));
-const SettingsScreen = lazy(() => import("../screens/SettingsScreen").then(module => ({ default: module.SettingsScreen })));
-const TagsScreen = lazy(() => import("../screens/TagsScreen").then(module => ({ default: module.TagsScreen })));
-const TemplatesScreen = lazy(() => import("../screens/TemplatesScreen").then(module => ({ default: module.TemplatesScreen })));
-const TimeScreen = lazy(() => import("../screens/TimeScreen").then(module => ({ default: module.TimeScreen })));
-const TodoDetailScreen = lazy(() => import("../screens/TodoDetailScreen").then(module => ({ default: module.TodoDetailScreen })));
-const TodoListScreen = lazy(() => import("../screens/TodoListScreen").then(module => ({ default: module.TodoListScreen })));
+const BoardScreen = lazy(() => import("../features/board/BoardScreen").then(module => ({ default: module.BoardScreen })));
+const BookingsScreen = lazy(() => import("../features/bookings/BookingsScreen").then(module => ({ default: module.BookingsScreen })));
+const ExportAuditScreen = lazy(() => import("../features/export/ExportAuditScreen").then(module => ({ default: module.ExportAuditScreen })));
+const ExportScreen = lazy(() => import("../features/export/ExportScreen").then(module => ({ default: module.ExportScreen })));
+const SettingsScreen = lazy(() => import("../features/settings/SettingsScreen").then(module => ({ default: module.SettingsScreen })));
+const TagsScreen = lazy(() => import("../features/tags/TagsScreen").then(module => ({ default: module.TagsScreen })));
+const TemplatesScreen = lazy(() => import("../features/export/TemplatesScreen").then(module => ({ default: module.TemplatesScreen })));
+const TimeScreen = lazy(() => import("../features/timer/TimeScreen").then(module => ({ default: module.TimeScreen })));
+const TodoDetailScreen = lazy(() => import("../features/todos/TodoDetailScreen").then(module => ({ default: module.TodoDetailScreen })));
+const TodoListScreen = lazy(() => import("../features/todos/TodoListScreen").then(module => ({ default: module.TodoListScreen })));
 
 /**
  * Takt — die Anwendung.

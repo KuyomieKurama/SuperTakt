@@ -24,7 +24,7 @@
  *
  * Der Satz liegt jetzt in `packages/domain/src/pool-movement.ts`
  * (`poolMovementSentence`), die **Rechnung** dahinter in
- * `apps/local-api/src/usecases/pool-movement.ts`. Diese Datei ruft die eine und
+ * `apps/local-api/src/pool-movement.ts`. Diese Datei ruft die eine und
  * bekommt die andere über den Dienst; sie hält keine Abschrift und kann
  * deshalb auch keine zweite Wahrheit entwickeln. Was hier bleibt, ist die
  * **Anordnung**: welcher Satz in welcher Zeitform neben welchen anderen Zeilen

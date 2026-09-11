@@ -36,8 +36,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Timestamp, TodoId } from '@takt/domain';
 
-import { addAttachment, type AddAttachmentInput } from '../../src/usecases/attachments.ts';
-import type { AppContext } from '../../src/usecases/context.ts';
+import { addAttachment, type AddAttachmentInput } from '../../src/features/todos/attachments.ts';
+import type { AppContext } from '../../src/context.ts';
 
 const todoId = (value: string) => value as unknown as TodoId;
 const timestamp = (value: string) => value as unknown as Timestamp;

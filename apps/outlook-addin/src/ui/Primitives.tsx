@@ -183,6 +183,20 @@ interface CalloutProps {
   readonly title?: ReactNode;
   readonly children: ReactNode;
   readonly action?: ReactNode;
+  /**
+   * Die Rolle der Fläche. Vorgabe: `alert` bei `danger`, sonst `status`.
+   *
+   * `'none'` lässt die Rolle **weg**, und zwar für genau einen Fall: Der
+   * Aufrufer stellt die Live-Region selbst und **dauerhaft**, und diese
+   * Hinweisfläche kommt und geht darin (`DuplicateOffer`, Befund Y-04). Zwei
+   * ineinandergeschachtelte Live-Regionen sind keine doppelte Sicherheit —
+   * die äußere meldet den ganzen eingefügten Baum, die innere meldet ihn
+   * mancherorts ein zweites Mal.
+   *
+   * Wer `'none'` setzt, ohne eine Region darüber zu haben, nimmt der Fläche
+   * ihre Ansage. Deshalb steht der Fall hier und nicht als Vorgabe.
+   */
+  readonly role?: 'alert' | 'status' | 'none';
 }
 
 /**
@@ -192,7 +206,7 @@ interface CalloutProps {
  * Zeichen und eine eigene Überschrift. Farbe allein wäre für einen Teil der
  * Benutzer keine Information (WCAG 1.4.1).
  */
-export function Callout({ tone, title, children, action }: CalloutProps) {
+export function Callout({ tone, title, children, action, role }: CalloutProps) {
   const marks: Readonly<Record<CalloutTone, string>> = {
     info: 'i',
     warning: '!',
@@ -200,8 +214,13 @@ export function Callout({ tone, title, children, action }: CalloutProps) {
     success: '✓',
   };
 
+  const gewaehlt = role ?? (tone === 'danger' ? 'alert' : 'status');
+
   return (
-    <div className={`callout callout--${tone}`} role={tone === 'danger' ? 'alert' : 'status'}>
+    <div
+      className={`callout callout--${tone}`}
+      {...(gewaehlt === 'none' ? {} : { role: gewaehlt })}
+    >
       <span className="callout__mark" aria-hidden="true">
         {marks[tone]}
       </span>

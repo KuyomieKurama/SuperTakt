@@ -1,0 +1,34 @@
+-- Takt — Migration 0022 "last_version_check_at", Rückwärtsrichtung
+--
+-- ===========================================================================
+-- Was der Rückweg zurücknimmt — und was dabei verloren geht
+-- ===========================================================================
+--
+-- Die Spalte fällt, und mit ihr der CHECK, der an ihr hängt.
+--
+-- **Ein Datenverlust, und er gehört benannt:** Der Bezugspunkt des harten
+-- Bodens aus A-V-11 liegt danach wieder ausschließlich im Arbeitsspeicher des
+-- Dienstes. Der erste Start nach dem Rückweg fragt also einmal, gleich wie kurz
+-- die letzte Anfrage zurückliegt, und die Lücke „zwanzig Starts, zwanzig
+-- Anfragen" ist wieder offen.
+--
+-- Das ist die **unangenehmere** Richtung als bei 0013: Dort meldete die
+-- Anwendung nach dem Rückweg zu viel (der Hinweis auf eine übersprungene
+-- Fassung kam wieder), und der Benutzer konnte erneut überspringen. Hier
+-- **sendet** sie nach dem Rückweg unter Umständen mehr, und niemand sieht es,
+-- weil die Prüfung stumm ist. Der Boden innerhalb eines Prozeßlaufs bleibt
+-- unangetastet — er ist derselbe Code —, es ist allein der Zusammenhang über
+-- Prozeßgrenzen hinweg, der fällt.
+--
+-- Wer den Rückweg fährt, fährt ihn typischerweise, um eine ältere Fassung des
+-- Erzeugnisses auf denselben Bestand zu setzen. Genau die kennt die Spalte
+-- nicht und hätte den Wert ohnehin nicht gelesen; der Rückweg stellt also den
+-- Zustand her, der zu ihr paßt.
+--
+-- Keine andere Spalte, kein Fremdschlüssel und kein bestehender CHECK ist
+-- betroffen: Die Spalte kommt in keinem Index, keiner Sicht, keinem Trigger und
+-- keinem anderen CHECK vor. Genau das ist die Bedingung, unter der SQLite ein
+-- DROP COLUMN überhaupt zuläßt — hier ist sie erfüllt, und deshalb reicht eine
+-- Zeile statt eines Tabellenumbaus.
+
+ALTER TABLE app_setting DROP COLUMN last_version_check_at;
