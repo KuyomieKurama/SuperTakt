@@ -90,7 +90,15 @@ export interface RebuildFields {
   readonly to: readonly MailAddress[];
   readonly cc: readonly MailAddress[];
   readonly sentAt: Date | null;
-  readonly body: string;
+  /**
+   * Der Nachrichtentext — **`null`, wenn er nicht zu bekommen war** (T-310).
+   *
+   * `''` und `null` sind zwei verschiedene Tatsachen: Das Erste ist eine
+   * E-Mail ohne Text, das Zweite ein Ausfall beim Lesen. Der Vorspann des
+   * Nachbaus sagt zu, den Nachrichtentext zu enthalten; er darf deshalb nur
+   * über dem Ersten entstehen. Siehe {@link buildRebuiltEml}.
+   */
+  readonly body: string | null;
 }
 
 export type RebuildResult =
@@ -251,12 +259,26 @@ const REBUILD_SEPARATOR = '-'.repeat(60);
  * Baut die nachgebaute Nachricht und gibt sie als Base64 zurück — oder lehnt
  * ab.
  *
- * Abgelehnt wird genau dann, wenn eine erzeugte physische Kopfzeile nicht aus
- * druckbarem ASCII besteht. Unter den drei Bauentscheidungen im Dateikopf ist
- * das unerreichbar; genau deshalb steht die Prüfung da. Sie ist die Wache für
- * den Tag, an dem jemand einen Wert **roh** einsetzt.
+ * Abgelehnt wird aus **zwei** Gründen, und beide enden im selben Ergebnis
+ * (`rebuild_rejected`, A-19.29):
+ *
+ *  1. Eine erzeugte physische Kopfzeile besteht nicht aus druckbarem ASCII.
+ *     Unter den drei Bauentscheidungen im Dateikopf ist das unerreichbar;
+ *     genau deshalb steht die Prüfung da. Sie ist die Wache für den Tag, an
+ *     dem jemand einen Wert **roh** einsetzt.
+ *  2. **Der Nachrichtentext war nicht zu bekommen** (`body === null`, T-310).
+ *     Der Vorspann sagt wörtlich zu, ihn zu enthalten. Eine Datei, die sagt
+ *     „hier steht die Nachricht" und leer ist, ist in einem Vorgang, aus dem
+ *     eine Rechnung wird, eine falsche Auskunft — und sie wäre nach A-19.31
+ *     außerdem ein stiller Ausfall: Sie ginge als übernommen durch. Lieber
+ *     keine Datei und ein Satz darüber als eine Datei, die etwas behauptet.
+ *
+ * Eine E-Mail **ohne** Text (`''`) wird dagegen gebaut: Dann steht unter der
+ * Trennlinie nichts, und das ist wahr.
  */
 export const buildRebuiltEml = (fields: RebuildFields): RebuildResult => {
+  if (fields.body === null) return { ok: false };
+
   const date = fields.sentAt === null ? null : rfc5322Date(fields.sentAt);
 
   const toStructured = fields.to.map(structuredAddress).filter((value) => value !== null);

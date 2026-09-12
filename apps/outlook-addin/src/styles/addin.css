@@ -182,6 +182,21 @@ bdi {
   color: var(--text-secondary);
 }
 
+/*
+ * Die angesprungene Überschrift ist sichtbar angesprungen (T-310, 2.4.7).
+ *
+ * `:focus` und nicht `:focus-visible`: Der Fokus kommt hier aus dem Programm
+ * und nicht von der Tastatur, und ein Teil der Browser zeigt dafür keinen
+ * Ring. Ein Fokus, den man nicht sieht, ist für einen sehenden Benutzer mit
+ * Tastatur derselbe Verlust wie gar keiner — er weiß nach dem Sprung nicht,
+ * wo die Tabulatorfolge weitergeht. Die Regel greift nur, wo eine Überschrift
+ * überhaupt ein Fokusziel ist; ohne `tabindex` ist sie nicht fokussierbar.
+ */
+.pane-section__title:focus {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .pane-section__lead {
   padding: var(--space-3) var(--space-4) 0;
   font-size: var(--text-sm);

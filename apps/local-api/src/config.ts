@@ -8,7 +8,15 @@
  * keine Argumente für Bindeadresse, Datenbankpfad oder Tokenpfad kennt.
  *
  * Wer hier einen Schalter einbaut, hebt beide Gegenmittel auf.
+ *
+ * **Die eine Einfuhr in dieser Datei** ist die Fachgrenze der Anhangssumme aus
+ * `@takt/domain`. Sie steht hier nicht, weil eine Grenze des Dienstes aus der
+ * Domäne käme, sondern damit die Rumpfgrenze dieser einen Route **aus** ihr
+ * gerechnet wird statt daneben zu stehen (A-A-100). Eine Zahl, die eine andere
+ * voraussetzt und sie nicht nennt, wandert irgendwann allein.
  */
+
+import { MAX_EMAIL_ATTACHMENT_TOTAL_BYTES } from '@takt/domain';
 
 /**
  * Bindeadresse. Buchstäblich `127.0.0.1`.
@@ -207,8 +215,26 @@ export const DATA_TRANSFER_MAX_BODY_BYTES = 64 * 1024 * 1024;
 export const DATA_ARCHIVE_MAX_BODY_BYTES = 256 * 1024 * 1024;
 
 /**
+ * Der Spielraum über der base64-kodierten Summengrenze (A-A-100).
+ *
+ * Was zwischen den Bytes der Anhänge und dem Rumpf noch Platz braucht: das
+ * JSON-Gerüst, die Anzeigenamen (bis 100 Stück à 1020 Zeichen), Betreff,
+ * Absender, Empfänger, der Nachrichtenrumpf, die Auszeichnung jedes
+ * Anführungszeichens — und die Aufrundung, die base64 je Datei auf ein
+ * Vielfaches von vier vornimmt.
+ *
+ * **Acht Mebibyte und nicht achthundert Kilobyte.** Die aufgezählten Felder
+ * summieren sich auf deutlich weniger; die Zahl ist bewußt großzügig, weil ihr
+ * Fehlbetrag ein **stiller Ausfall** wäre (413 statt einer namentlichen
+ * Meldung) und ihr Überschuß nur flüchtiger Speicher auf einer Route mit
+ * Token. Von den beiden Fehlern ist der zweite der billige — dieselbe Richtung
+ * wie in `email-file-sweep.ts`, nur an einer anderen Stelle.
+ */
+export const ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES = 8 * 1024 * 1024;
+
+/**
  * Die Rumpfgrenze der **einen** Route, über die ein Todo aus einer E-Mail
- * entsteht (A-19.30, E-108 Punkt 3, A-A-81).
+ * entsteht (A-19.30, E-108 Punkt 3, A-A-81, A-A-100).
  *
  * ===========================================================================
  * Die dritte benannte Ausnahme von B-1.7, und sie steht genau hier
@@ -239,20 +265,50 @@ export const DATA_ARCHIVE_MAX_BODY_BYTES = 256 * 1024 * 1024;
  * Anforderung statt an einer Zählweise.
  *
  * ===========================================================================
- * Der Zusammenhang mit der Summengrenze — und warum er gemessen wird
+ * Der Zusammenhang mit der Summengrenze — und warum er **gerechnet** und nicht
+ * danebengeschrieben wird (A-A-100, T-313-5)
  * ===========================================================================
  *
- * Base64 bläht um genau ein Drittel auf: 64 MB Rumpf tragen 48 MB Nutzlast,
- * und das ist `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES` in `@takt/domain`.
+ * Bis T-314 stand hier `64 * 1024 * 1024` als eigene Zahl, mit dem Satz
+ * daneben, 64 MB Rumpf trügen 48 MB Nutzlast. Das ist arithmetisch richtig und
+ * praktisch falsch: Base64 bläht um **genau** 4/3 auf, also sind 48 MiB
+ * Nutzlast **exakt** 64 MiB Zeichenkette — und darüber liegen noch das
+ * JSON-Gerüst, die Anzeigenamen, der Betreff, der Absender, der Nachrichtenrumpf
+ * und jedes Anführungszeichen. Eine Anfrage, die die Summengrenze **erreicht**,
+ * riß damit immer zuerst die Rumpfgrenze.
  *
- * Stünde dort eine größere Zahl, wäre die wirksame Grenze diese hier — und der
- * Benutzer bekäme statt einer benannten Meldung nach A-19.29 einen abgewiesenen
- * Rumpf **ohne Namen und ohne Grund**. Genau das ist ein stiller Ausfall im
- * Sinne von A-19.31, nur an der Tür statt an der Nachricht. Die beiden Zahlen
- * dürfen deshalb nicht unabhängig voneinander wandern; der Nachweislauf hält
- * sie gegeneinander.
+ * Der security-checker hat das gemessen: fünf Anläufe über der Summengrenze,
+ * **alle 413**. Damit war `total_too_large` über die Leitung **unerreichbar** —
+ * einer der drei Gründe aus A-19.30a konnte nicht feuern, und der Benutzer bekam
+ * statt einer namentlichen Meldung nach A-19.29 einen abgewiesenen Rumpf ohne
+ * Namen und ohne Grund. Das ist ein stiller Ausfall im Sinne von A-19.31, nur an
+ * der Tür statt an der Nachricht.
+ *
+ * **Die Entscheidung ist: die Rumpfgrenze wandert, nicht die Summengrenze.**
+ * Beide Wege schlössen die Lücke. Die Summengrenze zu senken kostete dem
+ * Benutzer **Anhänge** — Material aus einer fremden E-Mail, das er nicht
+ * ausgesucht hat und für dessen Größe er nichts kann. Die Rumpfgrenze zu heben
+ * kostet **flüchtigen Speicher** auf einer Route, die ohnehin ein Token
+ * verlangt, und zwar nach der gemessenen Spanne (Faktor ≈ 3,3 auf den
+ * zugelassenen Rumpf) rund 26 MB mehr an der Spitze. Von den beiden Preisen ist
+ * der zweite der, den der Rechner zahlt, und der erste der, den der Benutzer
+ * zahlt.
+ *
+ * **Die Grenze wird damit erreichbar, nicht abgeschafft.** Die Fachgrenze bleibt
+ * bei 48 MiB und greift jetzt zuerst: Eine Rohsumme darüber kommt an, das Todo
+ * entsteht, und jede nicht übernommene Datei steht namentlich in `rejected` mit
+ * `reason: 'total_too_large'`. Das Fenster, in dem das gilt, ist so breit wie
+ * {@link ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES} geteilt durch 4/3 — rund 6 MiB
+ * Überschuß. Wer mehr schickt, bekommt weiterhin 413, und das ist richtig: Ab
+ * irgendeiner Größe ist eine Anfrage kein Postfachinhalt mehr.
+ *
+ * **Gerechnet und nicht danebengeschrieben.** Die Zahl steht nicht mehr für
+ * sich, sondern entsteht aus der Fachgrenze. Wer die Fachgrenze verschiebt,
+ * verschiebt diese mit; wer diese Ableitung durch eine Zahl ersetzt, macht
+ * `proof:route-policy` rot.
  */
-export const ADDIN_ATTACHMENT_MAX_BODY_BYTES = 64 * 1024 * 1024;
+export const ADDIN_ATTACHMENT_MAX_BODY_BYTES =
+  Math.ceil(MAX_EMAIL_ATTACHMENT_TOTAL_BYTES / 3) * 4 + ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES;
 
 /** Zeitgrenze je Anfrage (B-1.7). */
 export const REQUEST_TIMEOUT_MS = 15_000;

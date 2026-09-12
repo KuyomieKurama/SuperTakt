@@ -73,18 +73,34 @@ function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
   });
 }
 
-const readBody = (item: Office.MessageRead): Promise<string> =>
+/**
+ * Der Nachrichtentext — **oder `null`, wenn Outlook ihn nicht hergegeben hat**
+ * (T-310 Befund 3, A-19.22, A-19.31).
+ *
+ * Bis T-310 lieferte diese Funktion bei **jedem** Fehlschlag `''`. Der Wert
+ * ging über {@link RebuildFields} in den Nachbau, und dessen Vorspann behauptet
+ * wörtlich: „Sie enthält Absender, Empfänger, Betreff, Versanddatum und
+ * Nachrichtentext." Eine nicht lesbare Nachricht ergab damit eine `.eml` ohne
+ * Text, die sagte, sie habe welchen — in einem Vorgang, aus dem eine Rechnung
+ * wird, eine falsche Auskunft über ein Beweisstück.
+ *
+ * `null` ist deshalb ein eigener Wert und nicht eine leere Zeichenkette: Eine
+ * E-Mail **ohne** Text ist etwas anderes als eine, deren Text nicht zu
+ * bekommen war. Das Erste ist eine Tatsache über die Nachricht, das Zweite ein
+ * Ausfall — und nur das Zweite lehnt der Nachbau ab (`rebuild_rejected`).
+ */
+const readBody = (item: Office.MessageRead): Promise<string | null> =>
   new Promise((resolve) => {
     try {
       item.body.getAsync(Office.CoercionType.Text, (result) => {
         resolve(
           result.status === Office.AsyncResultStatus.Succeeded && typeof result.value === 'string'
             ? result.value
-            : '',
+            : null,
         );
       });
     } catch {
-      resolve('');
+      resolve(null);
     }
   });
 
@@ -143,7 +159,10 @@ const promised = <T>(
  * still durchlaufen; das ist die Bauform gegen die stille Degradierung der
  * Vorlage (A-19.31).
  */
-const readAttachmentAccess = (item: Office.MessageRead, body: string): MailAttachmentAccess => {
+const readAttachmentAccess = (
+  item: Office.MessageRead,
+  body: string | null,
+): MailAttachmentAccess => {
   const canReadAttachments =
     supportsSet('1.8') && typeof item.getAttachmentContentAsync === 'function';
   const canReadMessageFile = supportsSet('1.14') && typeof item.getAsFileAsync === 'function';
@@ -233,10 +252,17 @@ export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
 
   const body = await readBody(item);
 
+  /*
+   * Für das **Formular** ist ein nicht gelesener Text dasselbe wie keiner: Die
+   * Call-Nummern-Erkennung sucht dann nur im Betreff, und „Inhalt der E-Mail
+   * übernehmen" trägt nichts ein. Keiner der beiden Fälle behauptet etwas.
+   * Für den **Nachbau** ist der Unterschied entscheidend — siehe
+   * {@link readBody} —, und dorthin geht der Wert unverändert.
+   */
   const mail: MailFacts = {
     ...EMPTY_MAIL,
     subject: item.subject ?? '',
-    body,
+    body: body ?? '',
     senderName: item.from?.displayName ?? '',
     senderAddress: item.from?.emailAddress ?? '',
     receivedAt: item.dateTimeCreated instanceof Date ? item.dateTimeCreated.toISOString() : null,

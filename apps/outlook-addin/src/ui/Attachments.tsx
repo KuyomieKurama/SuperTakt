@@ -14,7 +14,7 @@
  * der einfachere und bessere Weg als jede Kürzung.
  */
 
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 
 import type { EntryProgress } from '../attachments/collect.ts';
 import type { MissingAttachment, TakeoverLimits } from '../attachments/model.ts';
@@ -137,6 +137,48 @@ const STATE_MARK: Readonly<Record<EntryProgress['state'], { mark: string; word: 
   });
 
 /**
+ * Die Statuszeile von Z1/Z2 — als **Wert** und nicht als Element (T-310).
+ *
+ * Sie wird an zwei Stellen gebraucht: sichtbar unter der Überschrift und im
+ * Live-Bereich, der auf der obersten Ebene des Aufgabenbereichs steht. Der
+ * Grund für die Trennung ist Y-04: Ein Live-Bereich, der zusammen mit seinem
+ * Inhalt entsteht, wird von vielen Vorlesehilfen nicht angesagt — und dieser
+ * Baustein entsteht erst beim Klick.
+ */
+export const progressStatusLine = (
+  plan: TakeoverPlan,
+  progress: readonly EntryProgress[],
+  creating: boolean,
+): string => {
+  if (creating) return 'Das Todo wird angelegt …';
+  const running = progress.findIndex((entry) => entry.state === 'running');
+  return running < 0
+    ? `${String(plan.entries.length)} Anhänge werden übernommen.`
+    : `Anhang ${String(running + 1)} von ${String(plan.entries.length)} wird übernommen.`;
+};
+
+/**
+ * Jeder **nicht** übernommene Anhang, sofort und mit Namen (Entwurf 10.2,
+ * D-08, AK-21).
+ *
+ * Angesagt wird, was man nicht verpassen darf; ein gelungener Schritt ist
+ * sichtbar und stumm. Auch dieser Text steht im Live-Bereich der obersten
+ * Ebene und nicht in diesem Baustein — siehe {@link progressStatusLine}.
+ */
+export const spokenSkips = (
+  plan: TakeoverPlan,
+  progress: readonly EntryProgress[],
+): string =>
+  progress
+    .map((entry, index) =>
+      entry.state === 'missing' && entry.reason !== null
+        ? `${plan.entries[index]?.displayName ?? ''} — ${shortReason(entry.reason)}.`
+        : null,
+    )
+    .filter((line) => line !== null)
+    .join(' ');
+
+/**
  * Die laufende Übernahme — Zustände Z1 und Z2 (Entwurf 6.1).
  *
  * **Ein Fortschritt je Datei, kein Kreisel.** Namen, Größen und die
@@ -152,39 +194,28 @@ export function AttachmentProgress({
   progress,
   creating,
   onCancel,
+  headingRef,
 }: {
   readonly plan: TakeoverPlan;
   readonly progress: readonly EntryProgress[];
   /** Z2: Der Anlegeruf läuft. Ab hier gibt es nichts mehr aufzuhalten. */
   readonly creating: boolean;
   readonly onCancel: () => void;
+  /** Das Fokusziel beim Übergang Z0 → Z1 (Entwurf 10.1). */
+  readonly headingRef: Ref<HTMLHeadingElement>;
 }) {
-  const running = progress.findIndex((entry) => entry.state === 'running');
-  const spoken = progress
-    .map((entry, index) =>
-      entry.state === 'missing' && entry.reason !== null
-        ? `${plan.entries[index]?.displayName ?? ''} — ${shortReason(entry.reason)}.`
-        : null,
-    )
-    .filter((line) => line !== null)
-    .join(' ');
-
-  const status = creating
-    ? 'Das Todo wird angelegt …'
-    : running < 0
-      ? `${String(plan.entries.length)} Anhänge werden übernommen.`
-      : `Anhang ${String(running + 1)} von ${String(plan.entries.length)} wird übernommen.`;
-
   return (
-    <Section title="Anhänge werden übernommen">
+    <Section title="Anhänge werden übernommen" headingRef={headingRef}>
       {/*
-        Die Statuszeile steht **immer** da und wechselt nur ihren Inhalt
-        (Y-04): Ein Live-Bereich, der zusammen mit seinem Inhalt entsteht, wird
-        von vielen Vorlesehilfen nicht angesagt.
+        **Sichtbar und stumm.** Bis T-310 trug diese Zeile selbst das
+        `role="status"` — und war damit ein Live-Bereich, der zusammen mit
+        seinem Baustein entsteht (Y-04): Vorlesehilfen melden Änderungen an
+        einer Region, die sie schon kennen, und diese kannten sie in dem
+        Augenblick nicht. Angesagt wird derselbe Satz jetzt aus dem
+        Live-Bereich auf der obersten Ebene des Aufgabenbereichs, der über alle
+        Zustände hinweg steht (`progressStatusLine`).
       */}
-      <p className="pane-note" role="status">
-        {status}
-      </p>
+      <p className="pane-note">{progressStatusLine(plan, progress, creating)}</p>
       <ul className="attachments">
         {plan.entries.map((entry, index) => {
           const state = progress[index]?.state ?? 'pending';
@@ -209,14 +240,6 @@ export function AttachmentProgress({
           );
         })}
       </ul>
-      {/*
-        Jeder **nicht** übernommene Anhang wird sofort angesagt, jeder
-        gelungene nicht (Entwurf 10.2, D-08): Angesagt wird, was man nicht
-        verpassen darf, und das ist genau das, was fehlt.
-      */}
-      <p className="attachments__spoken" role="status">
-        {spoken}
-      </p>
       <div className="pane-actions">
         {creating ? null : (
           <Button variant="secondary" full onClick={onCancel}>

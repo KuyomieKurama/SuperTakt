@@ -1,72 +1,48 @@
 /**
- * Takt — T-174 (unit-tester), O-EM: die Riegel des Aufräumens verwaister
- * Bildkopien beim Start (A-A-18, A-A-36).
+ * Takt — T-317 (unit-tester): der Aufräumlauf für verwaiste Bildkopien, nach
+ * der Vereinheitlichung in T-315 (A-A-18, A-A-36, A-A-98, T-313, T-314,
+ * T-315-domain-dev.md).
  *
  * ---------------------------------------------------------------------------
- * Warum diese Datei fehlte
+ * Warum diese Datei komplett neu geschrieben wurde
  * ---------------------------------------------------------------------------
  *
- * `apps/local-api/src/usecases/image-sweep.ts` entstand mit T-168 (O-DE) und
- * hatte keinen einzigen Prüffall unter `apps/local-api/test/**` — eine Suche
- * nach `sweepOrphanedImages` oder `OrphanedImageSweep` fand nichts. T-168 hat
- * das im eigenen Bericht als offene Frage 3 an unit-tester weitergereicht:
- * "Miss die Riegel, nicht das Aufräumen."
+ * Die alte Fassung (T-174) prüfte eine Schnittstelle, die es seit T-315 nicht
+ * mehr gibt: `knownImageTargets` ist ersatzlos gestrichen, der Rückgabewert
+ * war ein `number` statt eines {@link OrphanSweepReport}. Rot-zuerst-Nachweis
+ * (vor dieser Änderung gemessen): **16 von 18 Fällen rot, 22
+ * Übersetzungsfehler** (`tsc -p apps/local-api/tsconfig.test.json`).
  *
- * Während dieser Prüffall entstand, hat eine parallel laufende Welle
- * (A-A-36) einen vierten Riegel ergänzt: `attachmentKinds()` wird jetzt **vor
- * allem anderen** gefragt, und der Lauf räumt bei jeder Abweichung von der
- * heute bekannten Artmenge gar nicht auf. Jede Attrappe unten stellt diese
- * Funktion deshalb bereit (`KNOWN_KINDS`) — eine Attrappe ohne sie ließe den
- * Lauf über den neuen Riegel stolpern, bevor er überhaupt beim eigentlich zu
- * prüfenden Verhalten ankommt.
+ * Diese Fassung prüft `sweepOrphanedImages` gegen `OrphanedImageSweep` (acht
+ * Felder: `attachmentKinds`, `folder`, `listImages`, `imageNameOf`,
+ * `attachmentsNamingFiles`, `attachmentNamesUnder`, `imageCount`,
+ * `removeImage`) und `OrphanSweepReport`, nach dem Vorbild von
+ * `email-file-sweep.test.ts` (T-316) — dieselben Riegel, dieselbe Reihenfolge,
+ * derselbe Widerspruchsriegel auf zwei Achsen.
  *
  * ---------------------------------------------------------------------------
- * Was hier gemessen wird — und was nicht
+ * Was hier zusätzlich gemessen wird — die neun Fälle aus T-315-domain-dev.md
+ * Abschnitt 4
  * ---------------------------------------------------------------------------
  *
- * `sweepOrphanedImages` ist bewusst gegen vier schmale Funktionen gebaut statt
- * gegen einen Port oder einen laufenden Dienst (Kopfkommentar der
- * Produktivdatei: "damit ist er ohne Datenbank, ohne Dateisystem und ohne
- * laufenden Dienst prüfbar"). Diese Datei nutzt genau das: Attrappen ohne
- * Dateisystem und ohne SQLite, die die vier Riegel und ihre Reihenfolge
- * einzeln vorführen — **nicht** die echten Adapter (die haben eigene
- * Prüffälle in `attachment-store.test.ts` und `repo-attachments.test.ts`) und
- * **nicht** das Aufräumen selbst als Datei-Vorgang.
- *
- * Gemessen wird:
- *
- *  1. **Riegel 0 (A-A-36) — die Artmenge des Bestands.** Führt der Bestand
- *     eine andere Menge an Anhangsarten als dieses Erzeugnis kennt, räumt der
- *     Lauf **gar nicht** auf — weder `listImages` noch `knownImageTargets`
- *     noch `removeImage` werden dann gerufen.
- *  2. **Riegel 1 — die Form/Antwort von `listImages`.** Eine leere Liste
- *     beendet den Lauf sofort, ohne den Bestand zu fragen.
- *  3. **Riegel 2 — nur eine Antwort ohne den Namen macht ihn zum Waisen.**
- *     Ein gefundener Name, den der Bestand kennt, wird NIE an `removeImage`
- *     übergeben.
- *  4. **Die Reihenfolge selbst ist ein Riegel:** Erst das Verzeichnis lesen,
- *     dann den Bestand fragen. Eine Zeile, die genau zwischen beiden
- *     Schritten entsteht, ist in der zweiten Antwort schon enthalten und
- *     überlebt — würde zuerst gefragt, träfe es die frische Kopie.
- *  5. **Riegel 3 — `removeImage` misst noch einmal** ist der Prüffall von
- *     `attachment-store.test.ts` (`unknown_name`); hier wird nur geprüft,
- *     dass `sweepOrphanedImages` dessen Rückgabewert korrekt auswertet
- *     (`failed` zählt nicht mit, `removed` schon).
- *  6. **Still, wenn nichts liegt / nichts entfernt wurde** — keine Zeile bei
- *     `removed === 0`, unabhängig davon, ob überhaupt etwas gefunden wurde.
- *  7. **Ein unlesbares Verzeichnis** (oder ein unerreichbarer Bestand)
- *     bricht den Lauf ab, ohne zu werfen: eine `warn`-Zeile mit dem Schlüssel
- *     `attachment_image_sweep_unavailable`, kein Pfad, kein `errno` (B-2.4).
- *  8. **Ein Abbruch mitten im Entfernen** verschluckt den bereits erzielten
- *     Fortschritt nicht: Die Zahl der bis dahin wirklich entfernten Kopien
- *     wird weiterhin gemeldet, zusätzlich zur Abbruchzeile — wörtlich der
- *     Kopfkommentar: "Verschluckt wird nichts: Der Abbruch bekommt seine
- *     Zeile, und die Zahl darunter sagt, wie weit es gekommen war."
+ * domain-dev hat `sweepOrphanedImages` in T-315 gegen eine echte, migrierte
+ * Datenbank gefahren und neun Fälle in einer Tabelle festgehalten. Sie sind
+ * hier als eigene `describe`-Gruppe nachgebaut, mit Attrappen statt echter
+ * Adapter — was `attachmentsNamingFiles`/`attachmentNamesUnder` bei
+ * abweichender Groß-/Kleinschreibung, anderem `kind` oder vollem Pfad
+ * tatsächlich antworten, ist Sache von `packages/domain/test/attachment.test.ts`
+ * und `packages/storage/test/repo-attachments.test.ts` — hier wird geprüft,
+ * dass `sweepOrphanedImages` diese Antworten korrekt auswertet.
  */
 import { describe, expect, it } from 'vitest';
 import { ATTACHMENT_KINDS } from '@takt/domain';
 
-import { sweepOrphanedImages, type OrphanedImageSweep } from '../../src/features/todos/image-sweep.ts';
+import {
+  sweepOrphanedImages,
+  KINDS_HOLDING_IMAGE_FILES,
+  type OrphanedImageSweep,
+} from '../../src/features/todos/image-sweep.ts';
+import type { OrphanSweepReport } from '../../src/features/todos/orphan-sweep.ts';
 import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../../src/logger.ts';
 
 interface Recorded {
@@ -80,179 +56,135 @@ function recording(): Recorded {
   return { logger, lines };
 }
 
-/** Ruft nie auf, was der jeweilige Fall nicht erreichen darf. */
 function darfNichtAufgerufenWerden(name: string): never {
   throw new Error(`darf in diesem Fall nicht aufgerufen werden: ${name}`);
 }
 
-/**
- * Genau die Artmenge, die dieses Erzeugnis kennt (A-A-36) — die einzige
- * Antwort von `attachmentKinds`, bei der der neue Riegel den Lauf überhaupt
- * weitermachen lässt. Aus `@takt/domain` und nicht abgeschrieben: Eine eigene
- * Liste hier wäre die zweite Wahrheit, die genau dann veraltet, wenn eine
- * fünfte Art dazukommt.
- */
 const KNOWN_KINDS: readonly string[] = ATTACHMENT_KINDS;
 
+/** Ein vollständiger Satz Attrappen, die jeder darf-nicht-aufgerufen-werden. */
+function niemalsGerufenePorts(): OrphanedImageSweep {
+  return {
+    async attachmentKinds() {
+      return darfNichtAufgerufenWerden('attachmentKinds');
+    },
+    folder() {
+      return darfNichtAufgerufenWerden('folder');
+    },
+    async listImages() {
+      return darfNichtAufgerufenWerden('listImages');
+    },
+    imageNameOf() {
+      return darfNichtAufgerufenWerden('imageNameOf');
+    },
+    async attachmentsNamingFiles() {
+      return darfNichtAufgerufenWerden('attachmentsNamingFiles');
+    },
+    async attachmentNamesUnder() {
+      return darfNichtAufgerufenWerden('attachmentNamesUnder');
+    },
+    async imageCount() {
+      return darfNichtAufgerufenWerden('imageCount');
+    },
+    async removeImage() {
+      return darfNichtAufgerufenWerden('removeImage');
+    },
+  };
+}
+
 describe('sweepOrphanedImages — Riegel 0 (A-A-36): die Artmenge des Bestands', () => {
-  it('kennt der Bestand WENIGER Arten als dieses Erzeugnis, räumt der Lauf gar nicht auf', async () => {
+  it('kennt der Bestand eine ANDERE Artmenge, räumt der Lauf gar nicht auf — kein weiterer Port wird gerufen', async () => {
     const ports: OrphanedImageSweep = {
+      ...niemalsGerufenePorts(),
       async attachmentKinds() {
         return ['link', 'file']; // "image" fehlt
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        return darfNichtAufgerufenWerden('listImages');
-      },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
-      },
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 0,
+      owned: 0,
+      removed: 0,
+      refused: 'unknown_kinds',
+    });
     expect(lines).toHaveLength(1);
     expect(lines[0]?.level).toBe('warn');
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_unknown_kinds kinds=2 expected=3');
+    // Seit T-315: kein "expected=3" mehr im Bildlauf (E-Mail-Lauf führte es
+    // nie) — die Zahl war ohnehin konstant und damit keine Messung.
+    expect(lines[0]?.reason).toBe('attachment_image_sweep_unknown_kinds kinds=2');
     expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
-    // Keine Art wird beim Namen genannt (B-2.4) -- weder "link" noch "file".
     expect(lines[0]?.message).not.toMatch(/link|file|image/);
   });
 
-  it('kennt der Bestand eine ZUSÄTZLICHE, unbekannte Art, räumt der Lauf ebenfalls nicht auf', async () => {
+  it('führt der Bestand genau die bekannte Artmenge, geht der Lauf normal weiter', async () => {
     const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        return [...KNOWN_KINDS, 'screenshot'];
-      },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        return darfNichtAufgerufenWerden('listImages');
-      },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
-      },
-    };
-    const { logger, lines } = recording();
-
-    const removed = await sweepOrphanedImages(ports, logger);
-
-    expect(removed).toBe(0);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_unknown_kinds kinds=4 expected=3');
-  });
-
-  it('führt der Bestand genau die bekannte Artmenge, geht der Lauf normal weiter (kein Riegel, keine Zeile dafür)', async () => {
-    const ports: OrphanedImageSweep = {
+      ...niemalsGerufenePorts(),
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
       async listImages() {
         return [];
-      },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
       },
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
+    expect(report).toEqual<OrphanSweepReport>({ read: 0, owned: 0, removed: 0, refused: null });
     expect(lines).toEqual([]);
-  });
-
-  it('attachmentKinds() wird VOR listImages() gerufen (Reihenfolge-Beleg)', async () => {
-    const reihenfolge: string[] = [];
-    const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        reihenfolge.push('attachmentKinds');
-        return ['link']; // unbekannte Menge -- der Lauf bricht danach ab
-      },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        reihenfolge.push('listImages');
-        return [];
-      },
-      async knownImageTargets() {
-        reihenfolge.push('knownImageTargets');
-        return new Set();
-      },
-      async removeImage() {
-        reihenfolge.push('removeImage');
-        return 'removed';
-      },
-    };
-    const { logger } = recording();
-
-    await sweepOrphanedImages(ports, logger);
-
-    expect(reihenfolge).toEqual(['attachmentKinds']);
   });
 });
 
 describe('sweepOrphanedImages — Riegel 1: eine leere Verzeichnisliste beendet den Lauf sofort', () => {
-  it('kein Bild im Verzeichnis: 0 zurück, der Bestand wird NICHT gefragt, keine Protokollzeile', async () => {
+  it('keine Kopie im Verzeichnis: der Bestand wird NICHT gefragt, keine Protokollzeile', async () => {
     const ports: OrphanedImageSweep = {
+      ...niemalsGerufenePorts(),
       async attachmentKinds() {
         return KNOWN_KINDS;
-      },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
       },
       async listImages() {
         return [];
       },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
-      },
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
+    expect(report).toEqual<OrphanSweepReport>({ read: 0, owned: 0, removed: 0, refused: null });
     expect(lines).toEqual([]);
   });
 });
 
-describe('sweepOrphanedImages — Riegel 2: nur, was der Bestand NICHT kennt, wird zum Waisen', () => {
-  it('ein gefundener Name, den der Bestand kennt, wird nie an removeImage übergeben', async () => {
-    const bekannt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+describe('sweepOrphanedImages — imageNameOf filtert VOR jeder Frage an den Bestand', () => {
+  it('ein Name ohne auflösbaren Wert wird weder gefragt noch entfernt — "read" zählt ihn trotzdem', async () => {
+    const auflösbar = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+    const nicht = 'rechnung.pdf'; // kein von diesem Ordner erzeugter Name
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
       },
       async listImages() {
-        return [bekannt];
+        return [auflösbar, nicht];
       },
-      async knownImageTargets(names) {
-        return new Set(names); // "der Bestand kennt alles, was gefunden wurde"
+      imageNameOf(name) {
+        return name === auflösbar ? name : null;
+      },
+      async attachmentsNamingFiles(names) {
+        // Nur der auflösbare Name darf hier ankommen.
+        expect(names).toEqual([auflösbar]);
+        return new Set(names);
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
       },
       async removeImage() {
         return darfNichtAufgerufenWerden('removeImage');
@@ -260,41 +192,126 @@ describe('sweepOrphanedImages — Riegel 2: nur, was der Bestand NICHT kennt, wi
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
+    expect(report).toEqual<OrphanSweepReport>({ read: 2, owned: 1, removed: 0, refused: null });
     expect(lines).toEqual([]);
   });
 
-  it('gemischt: bekannte Namen bleiben unangetastet, nur die Waise wird entfernt', async () => {
-    const bekannt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
-    const waise = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg';
-    const entfernteNamen: string[] = [];
-
+  it('KEIN gefundener Name hat einen auflösbaren Wert: owned bleibt 0, der Bestand wird gar nicht gefragt', async () => {
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
+      },
+      async listImages() {
+        return ['notizen.txt'];
+      },
+      imageNameOf() {
+        return null;
+      },
+      async attachmentsNamingFiles() {
+        return darfNichtAufgerufenWerden('attachmentsNamingFiles');
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
       async imageCount() {
         return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 0, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+});
+
+describe('sweepOrphanedImages — ohne Waise wird NICHT gefragt (T-313-2: eine unvollständige Zuordnung allein blockiert nichts)', () => {
+  it('jeder gefundene Name hat einen Eigentümer: folder/attachmentNamesUnder/imageCount werden NICHT gerufen', async () => {
+    const bekannt = 'dddddddddddddddddddddddddddddddd.png';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
+      },
+      async listImages() {
+        return [bekannt];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return new Set(names); // "alles hat einen Eigentümer"
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 1, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+});
+
+describe('sweepOrphanedImages — der Widerspruchsriegel: ZWEI Achsen, gestellt sobald überhaupt eine Waise vorläge', () => {
+  it('eine echte Waise, kein Widerspruch auf beiden Achsen: sie wird entfernt', async () => {
+    const bekannt = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png';
+    const waise = 'ffffffffffffffffffffffffffffffff.jpg';
+    const entfernt: string[] = [];
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
       },
       async listImages() {
         return [bekannt, waise];
       },
-      async knownImageTargets() {
-        return new Set([bekannt]);
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return new Set(names.filter((name) => name === bekannt));
+      },
+      async attachmentNamesUnder() {
+        // Bildzeilen tragen bloße Namen, keine Pfade -- diese Gegenfrage
+        // antwortet im Regelfall leer (Kopfkommentar der Produktivdatei).
+        return new Set();
+      },
+      async imageCount() {
+        return 1;
       },
       async removeImage(name) {
-        entfernteNamen.push(name);
+        entfernt.push(name);
         return 'removed';
       },
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(entfernteNamen).toEqual([waise]);
-    expect(removed).toBe(1);
+    expect(report).toEqual<OrphanSweepReport>({ read: 2, owned: 1, removed: 1, refused: null });
+    expect(entfernt).toEqual([waise]);
     expect(lines).toEqual([
       expect.objectContaining({
         level: 'info',
@@ -303,67 +320,33 @@ describe('sweepOrphanedImages — Riegel 2: nur, was der Bestand NICHT kennt, wi
     ]);
   });
 
-  it('ein "failed" von removeImage zählt NICHT mit — die eigene Protokollzeile schreibt der Adapter, nicht dieser Lauf', async () => {
-    const waiseEins = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg';
-    const waiseZwei = 'cccccccccccccccccccccccccccccccc.gif';
-
+  it('DIE WICHTIGSTE MESSUNG (T-315 Abschnitt 3.2): der Riegel feuert auch bei NICHT LEERER Eigentümermenge (owned=1, nicht 0)', async () => {
+    const bekannt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+    const waise = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg';
+    const erwartetAberFehlend = 'cccccccccccccccccccccccccccccccc.gif';
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      // known.size ist hier 0 (keiner der beiden Funde ist "bekannt") -- der
-      // Widerspruchsriegel (T-179 B-1) fragt in diesem Fall imageCount().
-      // "0" heißt: kein Widerspruch, der Bestand führt tatsächlich keine
-      // Bildanhänge, der Lauf darf normal weiterlaufen.
-      async imageCount() {
-        return 0;
+      folder() {
+        return 'C:\\App\\attachments';
       },
       async listImages() {
-        return [waiseEins, waiseZwei];
+        return [bekannt, waise];
       },
-      async knownImageTargets() {
-        return new Set();
+      imageNameOf(name) {
+        return name;
       },
-      async removeImage(name) {
-        return name === waiseEins ? 'failed' : 'removed';
+      async attachmentsNamingFiles(names) {
+        return new Set(names.filter((name) => name === bekannt)); // owned.size === 1, NICHT 0
       },
-    };
-    const { logger, lines } = recording();
-
-    const removed = await sweepOrphanedImages(ports, logger);
-
-    expect(removed).toBe(1);
-    expect(lines).toEqual([
-      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=1' }),
-    ]);
-  });
-});
-
-describe('sweepOrphanedImages — die Reihenfolge selbst ist ein Riegel: erst das Verzeichnis, dann der Bestand', () => {
-  it('eine Anhangszeile, die genau zwischen beiden Schritten entsteht, überlebt', async () => {
-    // Simuliert die Sekunde zwischen "Datei liegt schon" und "Zeile ist
-    // geschrieben": listImages() sieht die Datei zuerst, und GENAU in diesem
-    // Moment (als Seiteneffekt seines Aufrufs) entsteht die Anhangszeile. Wird
-    // knownImageTargets() -- wie im Produktivcode -- ERST DANACH gefragt,
-    // sieht es die Zeile schon und die Kopie überlebt. Würde die Reihenfolge
-    // vertauscht (erst fragen, dann lesen), fiele sie dem Aufräumen zum
-    // Opfer -- das ist der Fall, den die Reihenfolge ausschließt.
-    const frischeKopie = 'dddddddddddddddddddddddddddddddd.webp';
-    let inzwischenAngelegt = false;
-
-    const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        return KNOWN_KINDS;
+      async attachmentNamesUnder() {
+        // Eine Zeile mit vollem Pfad in diesen Ordner nennt einen Namen, der
+        // hier nicht liegt -- "missing" > 0.
+        return new Set([erwartetAberFehlend]);
       },
       async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        inzwischenAngelegt = true;
-        return [frischeKopie];
-      },
-      async knownImageTargets(names) {
-        return inzwischenAngelegt ? new Set(names) : new Set();
+        return 1;
       },
       async removeImage() {
         return darfNichtAufgerufenWerden('removeImage');
@@ -371,28 +354,254 @@ describe('sweepOrphanedImages — die Reihenfolge selbst ist ein Riegel: erst da
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
-    expect(lines).toEqual([]);
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 2,
+      owned: 1,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=2 owned=1 orphans=1 expected=1 missing=1 attachments=1',
+    );
+    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
+    expect(lines[0]?.message).not.toMatch(/\.(png|jpg|gif|webp)/);
   });
 
-  it('die Aufrufreihenfolge ist wörtlich listImages vor knownImageTargets', async () => {
-    const reihenfolge: string[] = [];
+  it('zweite Achse — "blind": der Bestand führt Bildanhänge, findet aber weder am Namen noch am Ordner eine einzige wieder', async () => {
+    const waise = 'dddddddddddddddddddddddddddddddd.webp';
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [waise];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles() {
+        return new Set(); // niemand nennt diesen Namen
+      },
+      async attachmentNamesUnder() {
+        return new Set(); // der Ordner erwartet ebenfalls nichts
+      },
+      async imageCount() {
+        return 3; // der Bestand führt trotzdem Bildanhänge -- Widerspruch
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 1,
+      owned: 0,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=1 owned=0 orphans=1 expected=0 missing=0 attachments=3',
+    );
+  });
+
+  it('Gegenprobe zur zweiten Achse: imageCount() ist 0 -- kein Widerspruch, die Waise wird entfernt', async () => {
+    const waise = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png';
+    const entfernt: string[] = [];
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [waise];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles() {
+        return new Set();
+      },
+      async attachmentNamesUnder() {
+        return new Set();
+      },
+      async imageCount() {
+        return 0;
+      },
+      async removeImage(name) {
+        entfernt.push(name);
+        return 'removed';
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 0, removed: 1, refused: null });
+    expect(entfernt).toEqual([waise]);
+    expect(lines).toEqual([
+      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=1' }),
+    ]);
+  });
+});
+
+describe('sweepOrphanedImages — die Verschärfung "claimed > owned" (T-315): am GEMISCHTEN Fall gemessen, nicht am leeren', () => {
+  it('zehn Kopien, EINE davon zugeordnet, NEUN nicht: der Riegel feuert -- gegen "owned === 0" hätte er geschwiegen', async () => {
+    // Der alte Riegel (bis T-315) verglich die zweite Achse gegen Null. Eine
+    // EINZIGE zugeordnete Datei hätte ihn entwaffnet -- genau der teuerste der
+    // in T-313/T-314 gemessenen Fälle: neun Dateien mit Eigentümer fielen,
+    // weil die zehnte passte. Dieser Fall mißt exakt das Verhältnis 1-von-10,
+    // nicht 0-von-N, damit die Verschärfung selbst (und nicht nur der bereits
+    // vorher erkannte leere Fall) nachgewiesen ist.
+    const bekannt = '00000000000000000000000000000000.png';
+    const scheinbareWaisen = Array.from(
+      { length: 9 },
+      (_, i) => `${String(i + 1).repeat(32)}.png`,
+    );
+    const gefunden = [bekannt, ...scheinbareWaisen];
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return gefunden;
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        // Nur die eine bekannte Datei hat (noch) eine Zeile -- die übrigen
+        // neun Zeilen haben ihre Gestalt gewechselt (z. B. ein von außen
+        // verändertes "kind"/"target") und sind über KEINE der beiden Fragen
+        // mehr auffindbar.
+        return new Set(names.filter((name) => name === bekannt));
+      },
+      async attachmentNamesUnder() {
+        // Bildzeilen tragen bloße Namen -- diese Achse trägt hier nichts bei.
+        return new Set();
+      },
+      async imageCount() {
+        // Der Bestand führt zehn Bildanhänge insgesamt (claimed = 10), obwohl
+        // der Ordner nur einen einzigen davon wiederfindet (owned = 1).
+        // claimed (10) > owned (1) -- der Riegel muß feuern.
+        return 10;
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 10,
+      owned: 1,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.level).toBe('warn');
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=10 owned=1 orphans=9 expected=0 missing=0 attachments=10',
+    );
+    // Keine der neun scheinbaren Waisen wird entfernt -- der Riegel hält alle
+    // zehn zurück, nicht nur die neun ohne Zeile.
+    expect(report.removed).toBe(0);
+  });
+});
+
+describe('sweepOrphanedImages — no_folder: kein Ordner bestimmbar, sobald eine Waise vorläge', () => {
+  it('folder() ist null: der Lauf verweigert, entfernt nichts, und imageCount/attachmentNamesUnder werden NICHT gerufen', async () => {
+    const waise = 'ffffffffffffffffffffffffffffffff.png';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return null;
+      },
+      async listImages() {
+        return [waise];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles() {
+        return new Set();
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
       async imageCount() {
         return darfNichtAufgerufenWerden('imageCount');
       },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 1,
+      owned: 0,
+      removed: 0,
+      refused: 'no_folder',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.level).toBe('warn');
+    expect(lines[0]?.reason).toBe('attachment_image_sweep_no_folder files=1');
+    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
+  });
+});
+
+describe('sweepOrphanedImages — Reihenfolge: erst das Verzeichnis, dann der Bestand, die Gegenfragen zuletzt', () => {
+  it('attachmentKinds -> listImages -> imageNameOf -> attachmentsNamingFiles -> folder -> attachmentNamesUnder -> imageCount -> removeImage', async () => {
+    const reihenfolge: string[] = [];
+    const waise = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        reihenfolge.push('attachmentKinds');
+        return KNOWN_KINDS;
+      },
+      folder() {
+        reihenfolge.push('folder');
+        return 'C:\\App\\attachments';
+      },
       async listImages() {
         reihenfolge.push('listImages');
-        return [];
+        return [waise];
       },
-      async knownImageTargets(names) {
-        reihenfolge.push('knownImageTargets');
-        return new Set(names);
+      imageNameOf(name) {
+        reihenfolge.push('imageNameOf');
+        return name;
+      },
+      async attachmentsNamingFiles() {
+        reihenfolge.push('attachmentsNamingFiles');
+        return new Set();
+      },
+      async attachmentNamesUnder() {
+        reihenfolge.push('attachmentNamesUnder');
+        return new Set();
+      },
+      async imageCount() {
+        reihenfolge.push('imageCount');
+        return 0;
       },
       async removeImage() {
         reihenfolge.push('removeImage');
@@ -403,26 +612,43 @@ describe('sweepOrphanedImages — die Reihenfolge selbst ist ein Riegel: erst da
 
     await sweepOrphanedImages(ports, logger);
 
-    // Bei einer leeren Liste wird knownImageTargets gar nicht erst gerufen
-    // (Riegel 1) -- die Reihenfolge zeigt sich deshalb erst mit Funden.
-    expect(reihenfolge).toEqual(['listImages']);
+    expect(reihenfolge).toEqual([
+      'attachmentKinds',
+      'listImages',
+      'imageNameOf',
+      'attachmentsNamingFiles',
+      'folder',
+      'attachmentNamesUnder',
+      'imageCount',
+      'removeImage',
+    ]);
   });
-});
 
-describe('sweepOrphanedImages — still, wenn nichts liegt oder nichts entfernt wurde', () => {
-  it('etwas liegt, aber nichts ist verwaist: removed=0 und trotzdem keine Zeile', async () => {
+  it('eine Zeile, die genau zwischen Verzeichnislesen und Bestandsfrage entsteht, überlebt', async () => {
+    const frisch = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png';
+    let inzwischenAngelegt = false;
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
       },
       async listImages() {
-        return ['eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png'];
+        inzwischenAngelegt = true;
+        return [frisch];
       },
-      async knownImageTargets(names) {
-        return new Set(names);
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return inzwischenAngelegt ? new Set(names) : new Set();
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
       },
       async removeImage() {
         return darfNichtAufgerufenWerden('removeImage');
@@ -430,114 +656,77 @@ describe('sweepOrphanedImages — still, wenn nichts liegt oder nichts entfernt 
     };
     const { logger, lines } = recording();
 
-    expect(await sweepOrphanedImages(ports, logger)).toBe(0);
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 1, removed: 0, refused: null });
     expect(lines).toEqual([]);
   });
 });
 
-describe('sweepOrphanedImages — ein unlesbares Verzeichnis bricht den Lauf ab, ohne zu werfen (B-2.4)', () => {
-  it('listImages() wirft: 0 zurück, genau eine warn-Zeile mit dem richtigen Schlüssel, kein Pfad, kein errno', async () => {
+describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt den erzielten Fortschritt nicht (B-2.4)', () => {
+  it('ein "failed" von removeImage zählt NICHT mit', async () => {
+    const waiseEins = 'cccccccccccccccccccccccccccccccc.jpg';
+    const waiseZwei = 'dddddddddddddddddddddddddddddddd.gif';
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
+      folder() {
+        return 'C:\\App\\attachments';
       },
       async listImages() {
-        throw new Error('EACCES: permission denied, scandir "/geheim/attachments"');
+        return [waiseEins, waiseZwei];
       },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
+      imageNameOf(name) {
+        return name;
       },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
+      async attachmentsNamingFiles() {
+        return new Set();
       },
-    };
-    const { logger, lines } = recording();
-
-    const removed = await sweepOrphanedImages(ports, logger);
-
-    expect(removed).toBe(0);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]?.level).toBe('warn');
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_unavailable');
-    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
-    expect(lines[0]?.message).not.toMatch(/EACCES|geheim|errno|\//);
-  });
-
-  it('attachmentKinds() wirft (z. B. Bestand nicht erreichbar): derselbe Abbruch, keine Ausnahme dringt nach außen', async () => {
-    const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        throw new Error('SQLITE_BUSY');
+      async attachmentNamesUnder() {
+        return new Set();
       },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        return darfNichtAufgerufenWerden('listImages');
-      },
-      async knownImageTargets() {
-        return darfNichtAufgerufenWerden('knownImageTargets');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
-      },
-    };
-    const { logger, lines } = recording();
-
-    const removed = await sweepOrphanedImages(ports, logger);
-
-    expect(removed).toBe(0);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_unavailable');
-  });
-
-  it('knownImageTargets() wirft (z. B. Bestand nicht erreichbar): derselbe Abbruch, keine Ausnahme dringt nach außen', async () => {
-    const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        return KNOWN_KINDS;
-      },
-      async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
-      },
-      async listImages() {
-        return ['ffffffffffffffffffffffffffffffff.png'];
-      },
-      async knownImageTargets() {
-        throw new Error('SQLITE_BUSY');
-      },
-      async removeImage() {
-        return darfNichtAufgerufenWerden('removeImage');
-      },
-    };
-    const { logger, lines } = recording();
-
-    const removed = await sweepOrphanedImages(ports, logger);
-
-    expect(removed).toBe(0);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_unavailable');
-  });
-
-  it('ein Abbruch MITTEN im Entfernen verschluckt den bereits erzielten Fortschritt nicht', async () => {
-    const bereitsEntfernt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
-    const bricht = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg';
-    const ports: OrphanedImageSweep = {
-      async attachmentKinds() {
-        return KNOWN_KINDS;
-      },
-      // known.size ist hier 0 -- ohne diese Antwort spräche der
-      // Widerspruchsriegel (T-179 B-1) dazwischen, bevor der eigentlich zu
-      // prüfende Abbruch überhaupt erreicht wird.
       async imageCount() {
         return 0;
+      },
+      async removeImage(name) {
+        return name === waiseEins ? 'failed' : 'removed';
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report.removed).toBe(1);
+    expect(lines).toEqual([
+      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=1' }),
+    ]);
+  });
+
+  it('ein werfender Schritt bricht ab, ohne nach außen zu werfen — die Zahl bis dahin bleibt erhalten', async () => {
+    const bereitsEntfernt = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png';
+    const bricht = 'ffffffffffffffffffffffffffffffff.jpg';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
       },
       async listImages() {
         return [bereitsEntfernt, bricht];
       },
-      async knownImageTargets() {
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles() {
         return new Set();
+      },
+      async attachmentNamesUnder() {
+        return new Set();
+      },
+      async imageCount() {
+        return 0;
       },
       async removeImage(name) {
         if (name === bricht) throw new Error('EBUSY');
@@ -546,50 +735,46 @@ describe('sweepOrphanedImages — ein unlesbares Verzeichnis bricht den Lauf ab,
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    // Die eine Kopie, die VOR dem Abbruch entfernt wurde, zählt weiterhin.
-    expect(removed).toBe(1);
-    // Beide Zeilen stehen da: die Abbruchzeile UND die Fortschrittszeile --
-    // "die Zahl darunter sagt, wie weit es gekommen war" (Kopfkommentar).
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 2,
+      owned: 0,
+      removed: 1,
+      refused: 'unavailable',
+    });
     expect(lines).toEqual([
-      expect.objectContaining({ level: 'warn', reason: 'attachment_image_sweep_unavailable' }),
       expect.objectContaining({
-        level: 'info',
-        reason: 'attachment_image_orphans_removed files=1',
+        level: 'warn',
+        reason: 'attachment_image_sweep_unavailable files=2 removed=1',
       }),
     ]);
+    // Kein Name, kein technischer Fehlercode in der Meldung (B-2.4).
+    expect(lines[0]?.message).not.toMatch(/EBUSY|C:\\|errno|\.png|\.jpg/i);
   });
-});
 
-// -----------------------------------------------------------------------
-// T-174 (unit-tester) — der Widerspruchsriegel aus T-179 B-1, ergänzt in
-// `image-sweep.ts` während dieser Aufgabe entstand: Antwortet
-// `knownImageTargets` mit einer LEEREN Menge, obwohl etwas gefunden wurde,
-// widerlegt der Lauf diese Antwort erst, bevor er ihr traut — er fragt
-// `imageCount()`, und nur wenn der Bestand insgesamt auch keine Bildanhänge
-// führt, gilt die leere Antwort als plausibel. `imageCount()` wird
-// AUSSCHLIESSLICH in diesem einen Fall gerufen (known.size === 0) — jede
-// Attrappe in den Gruppen oben, bei der das nicht zutrifft, wirft bei einem
-// Aufruf und bestätigt damit indirekt, dass er unterbleibt.
-// -----------------------------------------------------------------------
-describe('sweepOrphanedImages — der Widerspruchsriegel (T-179 B-1): eine leere Bestandsantwort wird widerlegt, bevor sie gilt', () => {
-  it('knownImageTargets ist leer UND der Bestand führt insgesamt Bildanhänge: Widerspruch, der Lauf räumt gar nicht auf', async () => {
-    const gefunden = ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg'];
+  it('attachmentKinds() wirft: derselbe Abbruch, keine Ausnahme dringt nach außen', async () => {
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
-        return KNOWN_KINDS;
+        throw new Error('SQLITE_BUSY');
       },
-      async imageCount() {
-        // Der Bestand führt sehr wohl Bildanhänge (5) -- nur keiner davon
-        // passt zu den beiden gefundenen Namen. Das ist der Widerspruch.
-        return 5;
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
       },
       async listImages() {
-        return gefunden;
+        return darfNichtAufgerufenWerden('listImages');
       },
-      async knownImageTargets() {
-        return new Set();
+      imageNameOf() {
+        return darfNichtAufgerufenWerden('imageNameOf');
+      },
+      async attachmentsNamingFiles() {
+        return darfNichtAufgerufenWerden('attachmentsNamingFiles');
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
       },
       async removeImage() {
         return darfNichtAufgerufenWerden('removeImage');
@@ -597,73 +782,431 @@ describe('sweepOrphanedImages — der Widerspruchsriegel (T-179 B-1): eine leere
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(0);
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 0,
+      owned: 0,
+      removed: 0,
+      refused: 'unavailable',
+    });
     expect(lines).toHaveLength(1);
-    expect(lines[0]?.level).toBe('warn');
-    expect(lines[0]?.reason).toBe('attachment_image_sweep_contradiction files=2 attachments=5');
-    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
-    // Kein erzeugter Dateiname in der Meldung (B-2.4) -- nur die zwei Zahlen.
-    expect(lines[0]?.message).not.toMatch(/\.(png|jpg|gif|webp)/);
+    expect(lines[0]?.reason).toBe('attachment_image_sweep_unavailable files=0 removed=0');
   });
+});
 
-  it('knownImageTargets ist leer, UND der Bestand führt insgesamt auch keine Bildanhänge: kein Widerspruch, alle Funde werden entfernt', async () => {
-    const verwaist = ['cccccccccccccccccccccccccccccccc.gif', 'dddddddddddddddddddddddddddddddd.webp'];
-    const entfernteNamen: string[] = [];
+// ---------------------------------------------------------------------------
+// Die neun Fälle aus T-315-domain-dev.md Abschnitt 4 — mit echten Adaptern auf
+// einer frischen SQLite-Datenbank gemessen. Hier als Attrappen nachgebaut:
+// Was `attachmentsNamingFiles`/`attachmentNamesUnder` bei abweichender
+// Groß-/Kleinschreibung, anderem `kind` oder vollem Pfad tatsächlich
+// antworten, ist an der echten Datenbank in
+// packages/storage/test/repo-attachments.test.ts und rein in
+// packages/domain/test/attachment.test.ts nachgewiesen (attachmentTargetNamesFile
+// kennt weder "kind" noch "origin" und vergleicht ASCII-gefaltet). Hier wird
+// geprüft, dass sweepOrphanedImages die jeweilige Antwort korrekt auswertet.
+// ---------------------------------------------------------------------------
+describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Abschnitt 4', () => {
+  it('T-313-1: zwei Kopien, eine Zeile zeichengleich, eine mit abweichender Groß-/Kleinschreibung — BEIDE bleiben da', async () => {
+    const einsExakt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.PNG';
+    const zweiAbweichend = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png';
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
-      async imageCount() {
-        return 0;
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
       },
       async listImages() {
-        return verwaist;
+        return [einsExakt, zweiAbweichend];
       },
-      async knownImageTargets() {
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        // Die weiteste Frage (attachmentTargetNamesFile) faltet ASCII und
+        // findet beide -- unabhängig von der Groß-/Kleinschreibung der Zeile.
+        return new Set(names);
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 2, owned: 2, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+
+  it('T-313-2: zwei Kopien, beide Zeilen vom Typ "file" — BEIDE bleiben da, die Frage kennt kein "kind"', async () => {
+    const eins = 'cccccccccccccccccccccccccccccccc.jpg';
+    const zwei = 'dddddddddddddddddddddddddddddddd.gif';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
+      },
+      async listImages() {
+        return [eins, zwei];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        // "attachmentsNamingFiles" fragt ohne "kind" -- zwei Zeilen mit
+        // kind='file', die auf denselben Namen zeigen, zählen genauso.
+        return new Set(names);
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 2, owned: 2, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+
+  it('DER VIERTE WEG (neu in T-315): eine Kopie, deren Zeile denselben Namen als VOLLEN PFAD trägt statt als bloßen Namen — sie bleibt da', async () => {
+    // Vor T-315 fragte der Bildlauf mit einem zeichengleichen "target IN
+    // (namen)" über bloße Namen. Eine Zeile, die dieselbe Datei mit ihrem
+    // vollen Pfad nennt ("C:\...\attachments\<name>.png", z. B. weil sie über
+    // die gewöhnliche Datei-Anhang-Tür statt als Bild angelegt wurde), war
+    // darin unsichtbar: entfernt = 1, Datei fort, Zeile blieb stehen
+    // (T-315-domain-dev.md Abschnitt 4). Seit T-315 fragt der Lauf über
+    // attachmentsNamingFiles, und die endet auf "target.endsWith(name)" --
+    // ein voller Pfad, der auf den Namen endet, nennt ihn ebenfalls.
+    const kopie = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
+      },
+      async listImages() {
+        return [kopie];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        // Simuliert die reale attachmentTargetNamesFile-Antwort für eine
+        // Zeile mit target = voller Pfad in den Bildordner, kind='file'.
+        return new Set(names);
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 1, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+
+  it('Gegenprobe nach oben: drei Kopien, zwei Zeilen — die echte Waise fällt', async () => {
+    const einsBekannt = 'ffffffffffffffffffffffffffffffff.png';
+    const zweiBekannt = '11111111111111111111111111111111.jpg';
+    const waise = '22222222222222222222222222222222.gif';
+    const entfernt: string[] = [];
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [einsBekannt, zweiBekannt, waise];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return new Set(names.filter((name) => name !== waise));
+      },
+      async attachmentNamesUnder() {
         return new Set();
       },
+      async imageCount() {
+        return 2;
+      },
       async removeImage(name) {
-        entfernteNamen.push(name);
+        entfernt.push(name);
         return 'removed';
       },
     };
     const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(entfernteNamen).toEqual(verwaist);
-    expect(removed).toBe(2);
+    expect(report).toEqual<OrphanSweepReport>({ read: 3, owned: 2, removed: 1, refused: null });
+    expect(entfernt).toEqual([waise]);
     expect(lines).toEqual([
-      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=2' }),
+      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=1' }),
     ]);
   });
 
-  it('knownImageTargets kennt WENIGSTENS einen gefundenen Namen: imageCount() wird gar nicht erst gerufen', async () => {
-    const bekannt = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png';
-    const waise = 'ffffffffffffffffffffffffffffffff.jpg';
+  it('der gemischte Fall: drei Kopien, eine Zeile paßt, zwei haben die Gestalt gewechselt — Widerspruch, nichts fällt', async () => {
+    const paßt = '33333333333333333333333333333333.png';
+    const gewechseltEins = '44444444444444444444444444444444.jpg';
+    const gewechseltZwei = '55555555555555555555555555555555.gif';
     const ports: OrphanedImageSweep = {
       async attachmentKinds() {
         return KNOWN_KINDS;
       },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [paßt, gewechseltEins, gewechseltZwei];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return new Set(names.filter((name) => name === paßt));
+      },
+      async attachmentNamesUnder() {
+        return new Set(); // keine Zeile mit vollem Pfad hierher
+      },
       async imageCount() {
-        return darfNichtAufgerufenWerden('imageCount');
+        // Der Bestand führt drei Bildanhänge insgesamt -- claimed(3) > owned(1).
+        return 3;
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 3,
+      owned: 1,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=3 owned=1 orphans=2 expected=0 missing=0 attachments=3',
+    );
+  });
+
+  it('eine Zeile ohne Datei PLUS eine echte Waise: Widerspruch auf der ersten Achse', async () => {
+    const bekannt = '66666666666666666666666666666666.png';
+    const waise = '77777777777777777777777777777777.jpg';
+    const erwartetAberFehlend = '88888888888888888888888888888888.gif';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
       },
       async listImages() {
         return [bekannt, waise];
       },
-      async knownImageTargets() {
-        return new Set([bekannt]); // Größe 1, NICHT leer
+      imageNameOf(name) {
+        return name;
       },
-      async removeImage(name) {
-        return name === waise ? 'removed' : darfNichtAufgerufenWerden('removeImage(' + name + ')');
+      async attachmentsNamingFiles(names) {
+        return new Set(names.filter((name) => name === bekannt));
+      },
+      async attachmentNamesUnder() {
+        // Eine Zeile mit vollem Pfad nennt einen Namen, der hier nicht liegt.
+        return new Set([bekannt, erwartetAberFehlend]);
+      },
+      async imageCount() {
+        return 1;
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger } = recording();
+    const { logger, lines } = recording();
 
-    const removed = await sweepOrphanedImages(ports, logger);
+    const report = await sweepOrphanedImages(ports, logger);
 
-    expect(removed).toBe(1);
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 2,
+      owned: 1,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=2 owned=1 orphans=1 expected=2 missing=1 attachments=1',
+    );
+  });
+
+  it('dieselbe fehlende Zeile OHNE Waise: still — die Gegenfragen werden erst gar nicht gestellt', async () => {
+    const bekannt = '99999999999999999999999999999999.png';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return darfNichtAufgerufenWerden('folder');
+      },
+      async listImages() {
+        return [bekannt];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles(names) {
+        return new Set(names); // alles hat einen Eigentümer -- keine Waise
+      },
+      async attachmentNamesUnder() {
+        return darfNichtAufgerufenWerden('attachmentNamesUnder');
+      },
+      async imageCount() {
+        return darfNichtAufgerufenWerden('imageCount');
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({ read: 1, owned: 1, removed: 0, refused: null });
+    expect(lines).toEqual([]);
+  });
+
+  it('Zeile mit vollem Pfad in den Ordner, deren Datei fehlt, PLUS eine Waise: Widerspruch, obwohl owned=0 UND claimed=owned', async () => {
+    const waise = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab.png';
+    const erwartetAberFehlend = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba.jpg';
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [waise];
+      },
+      imageNameOf(name) {
+        return name;
+      },
+      async attachmentsNamingFiles() {
+        return new Set(); // owned = 0
+      },
+      async attachmentNamesUnder() {
+        // Nur der fehlende Name, NICHT die Waise selbst -- die erste Achse
+        // trägt diesen Fall allein, unabhängig von der zweiten.
+        return new Set([erwartetAberFehlend]);
+      },
+      async imageCount() {
+        return 0; // claimed(0) === owned(0) -- die zweite Achse trägt hier nichts
+      },
+      async removeImage() {
+        return darfNichtAufgerufenWerden('removeImage');
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    expect(report).toEqual<OrphanSweepReport>({
+      read: 1,
+      owned: 0,
+      removed: 0,
+      refused: 'contradiction',
+    });
+    expect(lines[0]?.reason).toBe(
+      'attachment_image_sweep_contradiction files=1 owned=0 orphans=1 expected=1 missing=1 attachments=0',
+    );
+  });
+
+  it('ein fremder Name im Ordner (z. B. "rechnung.pdf") ist unsichtbar und überlebt — die Waise daneben fällt trotzdem', async () => {
+    const fremd = 'rechnung.pdf';
+    const waise = 'cccccccccccccccccccccccccccccccc.png';
+    const entfernt: string[] = [];
+    const ports: OrphanedImageSweep = {
+      async attachmentKinds() {
+        return KNOWN_KINDS;
+      },
+      folder() {
+        return 'C:\\App\\attachments';
+      },
+      async listImages() {
+        return [fremd, waise];
+      },
+      imageNameOf(name) {
+        // Der echte Adapter erkennt nur seine eigene Namensform (Hex + eine
+        // der vier bekannten Endungen); ein fremder Name kommt für diesen
+        // Ordner nicht in Frage.
+        return name === fremd ? null : name;
+      },
+      async attachmentsNamingFiles(names) {
+        expect(names).toEqual([waise]); // "rechnung.pdf" wird nie gefragt
+        return new Set();
+      },
+      async attachmentNamesUnder() {
+        return new Set();
+      },
+      async imageCount() {
+        return 0;
+      },
+      async removeImage(name) {
+        entfernt.push(name);
+        return 'removed';
+      },
+    };
+    const { logger, lines } = recording();
+
+    const report = await sweepOrphanedImages(ports, logger);
+
+    // "read" zählt den fremden Namen mit (er wurde im Verzeichnis gesehen),
+    // aber er wird nie angefaßt -- nur die echte Waise fällt.
+    expect(report).toEqual<OrphanSweepReport>({ read: 2, owned: 0, removed: 1, refused: null });
+    expect(entfernt).toEqual([waise]);
+    expect(lines).toEqual([
+      expect.objectContaining({ reason: 'attachment_image_orphans_removed files=1' }),
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KINDS_HOLDING_IMAGE_FILES — die Auswertung der Tafel KIND_OWNS_IMAGE_FILE
+// (Kopfkommentar von image-sweep.ts). Eine Zusicherung, die genau EINE Art
+// erwartet: Wer eine vierte Art mit "true" einträgt, muß diesen Prüffall
+// ändern, bevor er ihn grün bekommt -- und wird dabei an imageCount()
+// erinnert (die enge Zählung müßte diese Art dann mitzählen).
+// ---------------------------------------------------------------------------
+describe('KINDS_HOLDING_IMAGE_FILES — die Auswertung der Tafel, die eine vierte Art bemerken muß', () => {
+  it('heute genau eine Art: "image"', () => {
+    expect(KINDS_HOLDING_IMAGE_FILES).toEqual(['image']);
   });
 });

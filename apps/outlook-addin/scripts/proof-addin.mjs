@@ -109,7 +109,13 @@ import { planTakeover } from '../src/attachments/plan.ts';
 import { collectAttachments } from '../src/attachments/collect.ts';
 import { formatBytes } from '../src/attachments/size.ts';
 import { reasonSentence, shortReason } from '../src/attachments/reasons.ts';
-import { DISPLAY_ONLY_SKIP_REASONS, TAKEOVER_LIMITS } from '../src/attachments/model.ts';
+import {
+  DISPLAY_ONLY_SKIP_REASONS,
+  MESSAGE_DISPLAY_NAME,
+  TAKEOVER_LIMITS,
+  displaySkipReason,
+} from '../src/attachments/model.ts';
+import { reconcileAttachments } from '../src/attachments/reconcile.ts';
 /*
  * Die Fachregeln, gegen die Abschnitt 22 den Aufgabenbereich hält (T-304).
  *
@@ -121,6 +127,7 @@ import {
   MAX_EMAIL_ATTACHMENT_BYTES,
   MAX_EMAIL_ATTACHMENT_COUNT,
   MAX_EMAIL_ATTACHMENT_TOTAL_BYTES,
+  shortenEmailDisplayName,
 } from '@takt/domain';
 
 // --- Prüflinge: die Add-in-Routen des lokalen Dienstes ---------------------
@@ -8810,6 +8817,30 @@ check('A-A-96: der Rumpf ist base64 — fremder Inhalt kann keine Struktur trage
   assert.equal(lesbar.includes(ANGRIFF.body), true, 'der Nachrichtentext fehlt — A-19.22 verlangt ihn');
 });
 
+check('A-19.22/A-19.31: ohne Nachrichtentext entsteht keine Datei, die einen behauptet', () => {
+  /*
+   * T-307 Befund 4. `readBody` lieferte bei **jedem** Fehlschlag `''` — und
+   * der Vorspann des Nachbaus behauptet wörtlich: „Sie enthält Absender,
+   * Empfänger, Betreff, Versanddatum und Nachrichtentext." Eine nicht lesbare
+   * Nachricht ergab damit eine `.eml` ohne Text, die sagte, sie habe welchen,
+   * und ging als übernommen durch.
+   *
+   * Gemessen werden beide Richtungen: `null` (nicht zu bekommen) wird
+   * abgelehnt, `''` (eine E-Mail ohne Text) nicht — das Zweite ist eine
+   * Tatsache über die Nachricht und kein Ausfall.
+   */
+  const felder = { ...ANGRIFF, body: null };
+  assert.equal(buildRebuiltEml(felder).ok, false, 'ein fehlender Text wird stillschweigend zu einer leeren Datei');
+
+  const ohneText = buildRebuiltEml({ ...ANGRIFF, body: '' });
+  assert.equal(ohneText.ok, true, 'eine E-Mail ohne Text läßt sich nicht mehr nachbauen');
+  assert.equal(
+    ausBase64(rumpfBase64(ausBase64(ohneText.base64))).includes('Nachrichtentext'),
+    true,
+    'der Vorspann fehlt — dann sagt die Datei gar nichts mehr über sich',
+  );
+});
+
 check('A-19.22b: die Kennzeichnung hängt an der Datei, nicht am Augenblick', () => {
   assert.equal(
     kopfzeilen(nachbauText(ANGRIFF)).includes('X-SuperTakt-Rebuilt: yes'),
@@ -9059,6 +9090,29 @@ await checkAsync('A-19.22a/A-19.22b: ohne 1.14 entsteht ein Nachbau, und er sagt
   assert.deepEqual(ergebnis.missing, [], 'A-19.31: die E-Mail fehlt nicht, sie ist nachgebaut');
 });
 
+await checkAsync('A-19.29/A-19.31: ein abgelehnter Nachbau wird gemeldet, nicht verschwiegen', async () => {
+  /*
+   * Die zweite Hälfte von T-307 Befund 4: Der abgelehnte Nachbau darf nicht
+   * still verschwinden. Er ist der einzige Fall, in dem die E-Mail selbst
+   * fehlt — und der Aufgabenbereich hat dafür einen eigenen Grund, einen
+   * eigenen Überschriftszweig und einen eigenen Erklärabsatz (Entwurf 6.4
+   * Fall 2, AK-28).
+   */
+  const plan = planTakeover([], GRENZEN, { canReadAttachments: true, canReadMessageFile: false });
+  const ergebnis = await laufen(
+    plan,
+    portsMit({
+      messageAsFile: null,
+      rebuildFields: () => ({ ...ANGRIFF, body: null }),
+    }),
+  );
+
+  assert.deepEqual(ergebnis.payload, [], 'eine Datei ohne Nachrichtentext ist trotzdem entstanden');
+  assert.equal(ergebnis.missing.length, 1);
+  assert.equal(ergebnis.missing[0].reason, 'rebuild_rejected');
+  assert.equal(ergebnis.missing[0].isMessage, true, 'die Überschrift „die E-Mail fehlt" hängt daran');
+});
+
 await checkAsync('A-19.22a: schlägt der Abruf fehl, wird nachgebaut statt gemeldet', async () => {
   const plan = planTakeover([], GRENZEN, KANN_ALLES);
   const ergebnis = await laufen(
@@ -9201,6 +9255,17 @@ check('Entwurf 4.2: Größen mit Komma, unter einem Kilobyte ohne Zahl', () => {
 });
 
 check('A-19.29: zu jedem Grund gibt es einen Satz, und die Liste schrumpft nicht still', () => {
+  /*
+   * **Die Menge steht hier ausgeschrieben und wird nicht aus der Domäne
+   * gelesen.** Das ist Absicht: Diese Zeilen sind der Festpunkt, gegen den
+   * eine Änderung der Domäne auffällt. Ein Lauf, der seine Erwartung aus dem
+   * Geprüften holt, ist grün, gleich was dort steht.
+   *
+   * `connection` ist in T-309/T-310 gefallen — er hatte keinen Fall (T-308
+   * F-7). `too_many` und `total_too_large` reisen seither **über die
+   * Leitung**; bis dahin waren sie reine Anzeigegründe. Beides ist unten
+   * gegen die Aufzählung der Domäne gemessen und nicht nur hier behauptet.
+   */
   const gruende = [
     'too_large',
     'too_many',
@@ -9208,7 +9273,6 @@ check('A-19.29: zu jedem Grund gibt es einen Satz, und die Liste schrumpft nicht
     'not_released',
     'timeout',
     'rejected',
-    'connection',
     'not_a_web_address',
     'outlook_too_old',
     'rebuild_rejected',
@@ -9218,7 +9282,104 @@ check('A-19.29: zu jedem Grund gibt es einen Satz, und die Liste schrumpft nicht
     assert.ok(shortReason(grund).length > 0, 'keine Kurzform für ' + grund);
   }
   // Die Zahl steht hier, damit ein Schrumpfen der Menge rot wird (E-107).
-  assert.equal(gruende.length, 10, 'die Liste der Gründe hat sich geändert, ohne dass jemand es merkte');
+  assert.equal(gruende.length, 9, 'die Liste der Gründe hat sich geändert, ohne dass jemand es merkte');
+
+  /*
+   * Und die Gegenrichtung: **kein Satz ohne Fall** (T-308 F-7). Der
+   * gestrichene Grund darf nicht als Zweig zurückkommen, ohne dass jemand ihn
+   * erzeugt — gemessen an der Wirkung (der Übersetzer liefert keinen Satz)
+   * und nicht am Namen im Quelltext, denn im Kommentar darf er stehen.
+   */
+  for (const gestrichen of ['connection', 'mailbox_closed']) {
+    assert.throws(
+      () => reasonSentence(gestrichen, null, GRENZEN),
+      `„${gestrichen}" hat wieder einen Satz — ein Grund, den niemand erzeugt`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 21c — die Zahl im Ergebnis stimmt: Abgleich über die Stelle, nicht über den
+//       Namen (A-19.29, A-19.33, T-307 Befund 2, T-310)
+// ---------------------------------------------------------------------------
+
+/** Eine Nutzlast, wie der Sammellauf sie liefert. */
+const last = (name, over = {}) => ({
+  kind: 'file',
+  displayName: name,
+  contentBase64: utf8ToBase64('x'),
+  ...over,
+});
+
+check('T-310: ein über 255 Zeichen langer Name fällt beim Abgleich nicht durch', () => {
+  /*
+   * Der Befund, aus dem diese Zeilen entstanden sind (T-307 Befund 2):
+   *
+   * Der Dienst kürzt den Anzeigenamen auf 255 Zeichen, das Routenschema läßt
+   * 1020 durch. Wer über den **Namen** abglich, fand die abgewiesene Datei
+   * nicht wieder: Sie stand in „hängen daran" **und** in „nicht übernommen",
+   * und die Zeile meldete „3 von 4 Anhängen hängen daran" für eine E-Mail, von
+   * der drei angekommen sind.
+   */
+  const lang = `${'A'.repeat(400)}.pdf`;
+  const gekuerzt = shortenEmailDisplayName(lang);
+  assert.notEqual(gekuerzt, lang, 'der Dienst kürzt diesen Namen gar nicht — dann mißt der Fall nichts');
+
+  const ergebnis = reconcileAttachments(
+    [last(lang), last('Skizze.png')],
+    [{ displayName: gekuerzt, reason: 'rejected', bytes: null }],
+  );
+
+  assert.equal(ergebnis.attached.length, 1, 'die abgewiesene Datei steht weiter unter „hängen daran"');
+  assert.equal(ergebnis.attached[0].displayName, 'Skizze.png');
+  assert.equal(ergebnis.missing.length, 1);
+  assert.equal(ergebnis.missing[0].displayName, lang, 'in der Fehlliste steht der gekürzte Name');
+});
+
+check('T-310: zwei Anhänge dürfen denselben Namen tragen — es fällt genau einer', () => {
+  const ergebnis = reconcileAttachments(
+    [last('Anlage.pdf'), last('Anlage.pdf'), last('Anlage.pdf')],
+    [{ displayName: 'Anlage.pdf', reason: 'too_large', bytes: 31_400_000 }],
+  );
+
+  assert.equal(
+    ergebnis.attached.length,
+    2,
+    'eine Abweisung hat alle gleichnamigen Einträge mitgenommen',
+  );
+  assert.equal(ergebnis.missing.length, 1);
+  assert.equal(ergebnis.missing[0].reason, 'too_large');
+});
+
+check('A-19.31: sagt der Dienst über die Anhänge nichts, gilt keiner als angekommen', () => {
+  const ergebnis = reconcileAttachments([last('Anlage.pdf')], null);
+  assert.equal(ergebnis.attached.length, 0);
+  assert.deepEqual(
+    ergebnis.missing.map((eintrag) => eintrag.reason),
+    ['rejected'],
+    'eine schweigende Antwort wird als Erfolg gelesen — das ist der stille Ausfall',
+  );
+});
+
+check('A-19.29: die E-Mail heißt auch in der Fehlliste „die E-Mail"', () => {
+  const ergebnis = reconcileAttachments(
+    [{ kind: 'message', displayName: MESSAGE_DISPLAY_NAME, contentBase64: 'eA==', rebuilt: true }],
+    [{ displayName: MESSAGE_DISPLAY_NAME, reason: 'rejected', bytes: null }],
+  );
+  assert.equal(ergebnis.missing[0].displayName, 'die E-Mail');
+  assert.equal(ergebnis.missing[0].isMessage, true, 'die Überschrift von Z4 hängt an diesem Feld');
+});
+
+check('A-19.30b: ein unbekannter Grund aus der Antwort wird nicht geraten', () => {
+  /*
+   * Was über die Leitung kommt, ist ungeprüftes JSON. Eine Kennung, die der
+   * Aufgabenbereich nicht kennt, darf weder werfen noch eine Ursache
+   * erfinden: `rejected` ist die eine Aussage, die in diesem Fall sicher
+   * stimmt — die Datei steht in der Abweisungsliste.
+   */
+  assert.equal(displaySkipReason('total_too_large'), 'total_too_large');
+  assert.equal(displaySkipReason('von_morgen'), 'rejected');
+  assert.equal(displaySkipReason(''), 'rejected');
 });
 
 // ---------------------------------------------------------------------------
@@ -9448,7 +9609,7 @@ check('T-304: die Grenzen und die Gründe kommen aus @takt/domain, nicht aus dem
    * rot.
    */
   const derLeitung = new Set(EMAIL_ATTACHMENT_FAILURE_REASONS);
-  assert.ok(derLeitung.size >= 8, 'die Liste der Domäne ist geschrumpft — dann mißt das hier wenig');
+  assert.ok(derLeitung.size >= 9, 'die Liste der Domäne ist geschrumpft — dann mißt das hier wenig');
   for (const grund of DISPLAY_ONLY_SKIP_REASONS) {
     assert.equal(
       derLeitung.has(grund),
@@ -9456,6 +9617,42 @@ check('T-304: die Grenzen und die Gründe kommen aus @takt/domain, nicht aus dem
       `„${grund}" steht in der Domäne — dann ist er kein reiner Anzeigegrund mehr`,
     );
   }
+
+  /*
+   * **Jede der drei Grenzen hat ihre eigene Kennung** (A-19.30b, T-309,
+   * T-310). Bis dahin waren `too_many` und `total_too_large` reine
+   * Anzeigegründe, und die Tür meldete beide Fälle als `too_large` — der
+   * Satz auf dem Bildschirm nannte dann die Grenze je Datei für eine
+   * gerissene Summe. Diese Zeilen sind die Gegenprobe dazu: Fällt eine der
+   * beiden Kennungen wieder aus der Leitung, wird der Lauf rot, und zwar
+   * hier und nicht erst beim Benutzer.
+   */
+  for (const eigene of ['too_large', 'total_too_large', 'too_many']) {
+    assert.equal(
+      derLeitung.has(eigene),
+      true,
+      `„${eigene}" reist nicht über die Leitung — dann nennt eine Grenze beim Melden eine fremde Zahl (A-19.30b)`,
+    );
+  }
+
+  /*
+   * Und die Sätze dazu nennen **verschiedene** Zahlen: je Datei die eine,
+   * für die Summe die andere. Gemessen am erzeugten Satz — zwei Kennungen,
+   * die auf denselben Satz fielen, wären dieselbe Auskunft unter zwei Namen.
+   */
+  const jeDatei = reasonSentence('too_large', 2_000_000, TAKEOVER_LIMITS);
+  const summe = reasonSentence('total_too_large', 2_000_000, TAKEOVER_LIMITS);
+  assert.notEqual(jeDatei, summe, 'Einzel- und Summengrenze sagen denselben Satz');
+  assert.equal(
+    summe.includes(formatBytes(TAKEOVER_LIMITS.maxBytesTotal)),
+    true,
+    'der Satz zur Summengrenze nennt nicht die Summe',
+  );
+  assert.equal(
+    summe.includes(formatBytes(TAKEOVER_LIMITS.maxBytesPerFile)),
+    false,
+    'der Satz zur Summengrenze nennt die Grenze je Datei — genau der Widerspruch aus A-19.30b',
+  );
 
   /*
    * Jede Kennung der Leitung fällt auf **genau einen** Satz, und keiner ist
@@ -9490,6 +9687,61 @@ check('T-304: die Grenzen und die Gründe kommen aus @takt/domain, nicht aus dem
     'der gestrichene Grund `mailbox_closed` steht wieder im Aufgabenbereich (E-109)',
   );
   assert.equal(derLeitung.has('rebuild_rejected'), true, '`rebuild_rejected` fehlt in der Domäne');
+});
+
+check('Y-04/AK-21/AK-26: die Live-Bereiche stehen über allen Zuständen, das Ergebnis hat ein Fokusziel', () => {
+  /*
+   * T-308 Befund F-6, in drei Zeilen gemessen.
+   *
+   * Bis T-310 standen beide `role="status"` **in** `AttachmentProgress` —
+   * einem Baustein, der erst beim Klick entsteht. Nach Y-04 (dieselbe Regel
+   * wie bei `DuplicateOffer` und bei der Meldefläche von `Field`) wird ein
+   * Live-Bereich, der zusammen mit seinem Inhalt in den Baum kommt, von
+   * vielen Vorlesehilfen nicht angesagt. Das Ergebnis (Z3/Z4) hatte
+   * überhaupt keinen und auch keine Fokuszuweisung: Für einen blinden
+   * Benutzer war ein Todo, dem ein Anhang fehlt, still — genau das, was
+   * A-19.29 ausschließt.
+   *
+   * **Was diese Zeilen nicht messen:** wie eine bestimmte Vorlesehilfe den
+   * Bereich vorliest. In dieser Umgebung steht keine zur Verfügung. Gemessen
+   * ist die Bauart — wo die Bereiche stehen und dass es ein Fokusziel gibt.
+   */
+  const fortschritt = sourceWithoutComments(path.join(srcRoot, 'ui', 'Attachments.tsx'));
+  assert.equal(
+    fortschritt.includes('role="status"'),
+    false,
+    'ein Live-Bereich steht wieder in einem Baustein, der erst beim Klick entsteht (Y-04)',
+  );
+
+  const pane = sourceWithoutComments(path.join(srcRoot, 'ui', 'TaskPane.tsx'));
+  assert.equal(
+    (pane.match(/role="status"/g) ?? []).length,
+    2,
+    'es gibt nicht genau zwei Live-Bereiche: einen für Beginn und Ergebnis, einen für jeden Fehlschlag',
+  );
+
+  /*
+   * Und sie stehen **außerhalb** der Zustandsauswahl: Der Baustein hat genau
+   * eine Rückgabe, in der beide vorkommen. Gemessen an der Abwesenheit eines
+   * vorzeitigen `return` vor der Auswahl — das war die Bauart, die es
+   * unmöglich machte.
+   */
+  assert.match(
+    pane,
+    /<Announcements[\s\S]{0,400}\{surface\}/,
+    'die Live-Bereiche stehen nicht mehr vor der ausgewählten Fläche',
+  );
+
+  // Die Fokusziele aus Abschnitt 10.1: Ergebnis, laufende Übernahme, Knopf,
+  // erstes Feld. Ohne sie fällt der Fokus beim Wechsel auf `<body>`.
+  for (const ziel of ['doneHeadingRef', 'progressHeadingRef', 'submitRef', 'callNumberRef']) {
+    assert.equal(pane.includes(`${ziel}.current?.focus()`), true, `${ziel} wird nie angesprungen`);
+  }
+  assert.match(
+    sourceWithoutComments(path.join(srcRoot, 'ui', 'Primitives.tsx')),
+    /tabIndex: -1/,
+    'die Überschrift ist gar nicht anspringbar — dann läuft `.focus()` ins Leere',
+  );
 });
 
 check('E-108: die Übernahme ist automatisch — kein Häkchen, keine Abwahl', () => {

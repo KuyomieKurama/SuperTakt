@@ -48,7 +48,8 @@
  *     damit nicht durch eine Aufräumroutine, sondern weil es nichts
  *     aufzuräumen gibt. Eine Zusage am Aufrufstapel ist stärker als eine an
  *     einem Zeitgeber (Bedrohungsmodell 39.4.5).
- *  2. **Jede Datei wird gemessen, benannt und geschrieben.** In dieser
+ *  2. **Jede Datei wird gemessen, benannt und geschrieben.** Gemessen an drei
+ *     Grenzen (A-19.30a), benannt nach A-19.23a und A-19.23c. In dieser
  *     Reihenfolge und je Datei einzeln: Ein Fehlschlag ist ein **Ergebnis**
  *     und kein Abbruch (A-19.29). Was nicht durchkommt, kommt namentlich in
  *     die Liste.
@@ -58,6 +59,12 @@
  *     gehen alle Dateien dieses Laufs; scheitert eine Zeile, geht ihre Datei.
  *     Das ist die zweite Hälfte von A-A-83, und sie ist die, die man messen
  *     kann: Der Ordner zählt danach **null** zusätzliche Dateien.
+ *
+ *     **„Ganz" heißt seit T-309 auch „mit einem Wurf".** Bis dahin galt Punkt 4
+ *     nur für den Fehlschlag als **Wert**; ein geworfener Fehler verließ die
+ *     Naht und ließ die Bytes liegen (T-307 Befund 1). Die Klammer dafür steht
+ *     unten am Ruf, mitsamt der Begründung, warum sie dort genügt und was sie
+ *     nicht kann.
  *
  * ===========================================================================
  * Der fremde Name: Anzeigename im Bestand, nie ein Pfadbestandteil
@@ -92,6 +99,7 @@ import {
 } from '@takt/domain';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
+import type { Logger } from '../../logger.ts';
 import { type AttachmentView, toAttachmentView } from './attachments.ts';
 
 // ---------------------------------------------------------------------------
@@ -209,9 +217,8 @@ export interface EmailIntake {
   /**
    * Was **vor** diesem Aufruf schon nicht geklappt hat (A-19.29, A-19.31).
    *
-   * `not_released`, `timeout`, `connection`, `rebuild_rejected` und
-   * `outlook_too_old` entstehen im Aufgabenbereich, bevor ein Byte den Dienst
-   * erreicht. Sie kommen trotzdem hierher und erscheinen in **demselben**
+   * `not_released`, `timeout`, `rebuild_rejected` und `outlook_too_old`
+   * entstehen im Aufgabenbereich, bevor ein Byte den Dienst erreicht. Sie kommen trotzdem hierher und erscheinen in **demselben**
    * Ergebnis wie die übrigen: Der Benutzer soll eine Liste lesen und nicht
    * zwei, und er soll sie an derselben Stelle lesen wie die Erfolge.
    *
@@ -295,11 +302,29 @@ export interface FreshTodo<T> {
  * Anhang erscheint mit Namen und Grund in {@link EmailIntakeOutcome.failed}.
  * Von den beiden möglichen Halbzuständen ist „Todo ohne diesen Anhang, und es
  * steht dabei" der behebbare.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum ein `Logger` in der Signatur steht
+ * ---------------------------------------------------------------------------
+ *
+ * Weil genau **ein** Zustand dieser Funktion kein Ergebnis ist, sondern ein
+ * Defekt: eine geworfene Anhangstransaktion. Er wird seit E-111 nicht mehr
+ * weitergeworfen — sonst entstünde aus einer 500 ein zweites Todo mit
+ * derselben Call-Nummer —, und was nicht geworfen wird, muß geschrieben
+ * werden, sonst ist es verschwunden.
+ *
+ * Der `Logger` steht deshalb **in der Signatur** und nicht im `AppContext`:
+ * `AppContext` trägt Ports, also Dinge, die diese Funktion **benutzt**, um ihre
+ * Arbeit zu tun. Das Protokoll gehört nicht zur Arbeit; es ist die
+ * Betriebsschicht des Dienstes. Wer die Signatur liest, sieht beides getrennt —
+ * und sieht zugleich, daß diese Funktion überhaupt etwas zu protokollieren
+ * hat, was für keine ihrer Nachbarinnen gilt.
  */
 export async function attachEmailToNewTodo<T>(
   context: AppContext,
   intake: EmailIntake,
   create: () => Promise<UseCaseResult<FreshTodo<T>>>,
+  logger: Logger,
 ): Promise<UseCaseResult<TodoWithEmailAttachments<T>>> {
   const created = await create();
   if (!created.ok) {
@@ -344,7 +369,7 @@ export async function attachEmailToNewTodo<T>(
    * Die Reihenfolge der drei Schritte ist Inhalt. Gemessen wird **vor** dem
    * Benennen, damit eine zu große Datei nicht erst einen Namen bekommt;
    * benannt wird **vor** dem Ablegen, damit eine Umleitungsendung nie eine
-   * Datei wird.
+   * Datei wird (A-19.23c).
    */
   const take = async (
     displayName: string,
@@ -368,6 +393,16 @@ export async function attachEmailToNewTodo<T>(
     }
     const verdict = admitEmailAttachment({ bytes: announced, bytesBefore, countBefore });
     if (!verdict.ok) {
+      /*
+       * **Die Zahl steht nur bei `too_large`** (A-19.30b). Sie ist die Größe
+       * *dieser* Datei, und nur der Satz zu `too_large` spricht über sie:
+       * „zu groß (31,4 MB). Die Grenze liegt bei 25,0 MB je Datei."
+       *
+       * Bei `total_too_large` und `too_many` wäre dieselbe Zahl kein
+       * Näherungswert, sondern eine zweite Aussage neben einem Satz, der von
+       * etwas anderem handelt — von der Summe oder von der Anzahl. Genau
+       * daraus entstand der Widerspruch, den T-308 F-1 gemeldet hat.
+       */
       failed.push({
         displayName: shown,
         reason: verdict.reason,
@@ -382,6 +417,12 @@ export async function attachEmailToNewTodo<T>(
      * `nameEmailFile` liefert die Endung, die an den erzeugten Namen kommt —
      * oder eine Ablehnung. Der fremde Name selbst geht von hier aus **nur** in
      * `displayName` weiter und nie in einen Pfad.
+     *
+     * Abgelehnt wird nach **A-19.23c**: die fünf Umleitungsarten (`.lnk`,
+     * `.url`, `.pif`, `.scf`, `.desktop`), die beim Öffnen nicht sich
+     * selbst starten. Bis zum 2026-09-12 stand das auf einer Annahme aus
+     * T-299; seither steht es in der Spezifikation, und diese Zeile zeigt
+     * auf die Anforderung statt auf einen Entschluß beim Bauen.
      */
     const naming = nameEmailFile(displayName);
     if (!naming.ok) {
@@ -444,7 +485,11 @@ export async function attachEmailToNewTodo<T>(
   for (const link of intake.links) {
     const shown = shortenEmailDisplayName(link.displayName);
     if (countBefore >= MAX_EMAIL_ATTACHMENT_COUNT) {
-      failed.push({ displayName: shown, reason: 'rejected', bytes: null });
+      // `too_many` und nicht `rejected` (A-19.30b): Es ist dieselbe Grenze,
+      // die eine Datei an dieser Stelle stoppt, also derselbe Grund. Ein
+      // Verweis kostet kein Byte, aber er zählt — und was zählt, kann zu viel
+      // werden.
+      failed.push({ displayName: shown, reason: 'too_many', bytes: null });
       continue;
     }
     /*
@@ -485,17 +530,130 @@ export async function attachEmailToNewTodo<T>(
    * Ein `create` je Zeile und kein Sammel-Insert: `AttachmentPort.create`
    * vergibt die Stelle (`position`) selbst, in derselben Transaktion, und das
    * ist die Zusage aus A-19.8, die eine stabile Reihenfolge trägt.
+   *
+   * ---------------------------------------------------------------------------
+   * Die Klammer darum ist A-A-83 und keine Vorsicht (T-307 Befund 1, T-309)
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-309 stand dieser Ruf **nackt** da. Ein `Result`-Fehlschlag einer
+   * einzelnen Zeile räumte auf; ein **Wurf** aus der Transaktion nicht —
+   * `SQLITE_BUSY`, ein Fehler beim Vergeben der Stelle, eine versehentlich
+   * verschachtelte Transaktion. Dann verließ der Wurf diese Funktion, und die
+   * Dateien aus {@link written} blieben **ohne Eigentümer** im
+   * Anwendungsdatenverzeichnis liegen: Kundenmaterial, das keine Zeile mehr
+   * nennt und das niemand mehr findet. A-A-83 war damit zur Hälfte erfüllt —
+   * der behandelte Fehlschlag räumte auf, der geworfene nicht.
+   *
+   * **Warum die Klammer genügt und keine zweite Transaktion nötig ist.** Der
+   * Transaktionsport nimmt bei einem Wurf aus der Arbeit ein `ROLLBACK` vor,
+   * **bevor** er weiterwirft (`packages/storage/src/sqlite/unit-of-work.ts`).
+   * Nach einem Wurf steht deshalb fest: Es gibt **keine** Zeile aus diesem Lauf.
+   * Genau deshalb darf hier **jede** geschriebene Datei fallen — nicht nur die,
+   * von denen wir wissen, daß sie keine Zeile bekamen. Ohne diese Zusage wäre
+   * dasselbe Aufräumen das Gegenteil: gelöschtes Kundenmaterial **mit**
+   * Eigentümer, und das ist unwiederbringlich (A-A-18).
+   *
+   * **Was die Klammer nicht kann.** Sie ist eine Zusage am **Aufrufstapel** und
+   * reicht so weit wie der Prozeß: Wird der Dienst zwischen dem Schreiben einer
+   * Datei und dem `COMMIT` hart beendet — abgeschossen, Stromausfall —, bleibt
+   * die Datei liegen. Dagegen steht seit T-309 der Aufräumlauf beim Start
+   * ({@link ../../features/todos/email-file-sweep.ts}), gebaut nach dem Vorbild
+   * des Laufs für Bildkopien und mit denselben zwei Riegeln.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum der Wurf **nicht** weitergereicht wird (E-111, T-309 Nacharbeit)
+   * ---------------------------------------------------------------------------
+   *
+   * Bis zur zweiten Fassung dieser Klammer wurde der Fehler nach dem Aufräumen
+   * weitergeworfen. Die Route antwortete dann 500 — **obwohl das Todo stand**.
+   * Der Benutzer las „Fehler", drückte noch einmal und bekam ein zweites Todo
+   * mit derselben Call-Nummer: ein Schaden, den er nicht verursacht hat und
+   * nicht sehen konnte, und genau der Fall, gegen den A-10.9 und die
+   * Duplikatwarnung gebaut sind.
+   *
+   * **Die Regel, und sie gilt über diesen Fall hinaus: Eine Antwort darf den
+   * Aufrufer nicht dazu bringen, etwas zu wiederholen, das bereits geschehen
+   * ist.** Was das Todo betrifft, ist der Vorgang gelungen; was die Anhänge
+   * betrifft, ist er vollständig fehlgeschlagen — und A-19.29 kennt diesen
+   * Zustand bereits: „Ein Todo, das mit weniger Anhängen entsteht als die
+   * E-Mail trägt, sagt das." **Null ist weniger.**
+   *
+   * Der Einwand gegen diese Form ist notiert und nicht unbegründet: Ein Wurf
+   * ist ein **unerwarteter** Zustand, und ihn als gewöhnliches Ergebnis
+   * auszugeben verwischt das. Deshalb die zweite Hälfte der Auflage: **Der
+   * Wurf verschwindet nicht.** Er geht mit `error` ins Protokoll, mit einem
+   * eigenen Grund, und er ist die einzige Stelle in dieser Datei, die diese
+   * Stufe benutzt.
+   *
+   * Gemeldet wird je Zeile `rejected` — „SuperTakt hat die Datei nicht
+   * angenommen". Das ist dieselbe Kennung, die zwölf Zeilen tiefer eine
+   * **einzelne** gescheiterte Zeile bekommt, und sie stimmt aus demselben
+   * Grund: Die Bytes waren da, die Zeile nicht. Ein eigener Grund dafür wäre
+   * ein zehnter Wert in einer geschlossenen Menge, der dem Benutzer nichts
+   * sagt, was er nicht schon läse — er kann in beiden Fällen genau dasselbe
+   * tun (A-19.30b gilt für **Grenzen**, nicht für Innenleben).
    */
-  const rows = await context.transactions.inTransaction(async (unit) => {
-    const views: AttachmentView[] = [];
-    const rejected: number[] = [];
-    for (const [index, input] of pending.entries()) {
-      const outcome = await unit.attachments.create(input);
-      if (outcome.ok) views.push(toAttachmentView(outcome.value));
-      else rejected.push(index);
+  let rows: { readonly views: readonly AttachmentView[]; readonly rejected: readonly number[] };
+  try {
+    rows = await context.transactions.inTransaction(async (unit) => {
+      const views: AttachmentView[] = [];
+      const rejected: number[] = [];
+      for (const [index, input] of pending.entries()) {
+        const outcome = await unit.attachments.create(input);
+        if (outcome.ok) views.push(toAttachmentView(outcome.value));
+        else rejected.push(index);
+      }
+      return { views, rejected };
+    });
+  } catch {
+    /*
+     * Jede Datei einzeln, und ein Fehlschlag beim Entfernen hält die übrigen
+     * nicht auf: Der Adapter beantwortet ihn mit `failed` und schreibt seine
+     * eigene Protokollzeile (`attachment_email_remove_failed`). Wirft eine
+     * fremde Portfassung trotzdem, darf sie die zweite Datei nicht am Leben
+     * lassen — dieselbe Bauart wie beim `ROLLBACK` eine Ebene tiefer.
+     */
+    for (const entry of written) {
+      try {
+        await context.attachmentBlobs.removeEmailFile(entry.path);
+      } catch {
+        /* Der Adapter hat dafür seine Zeile. Weiter zählt die Zeile darunter. */
+      }
     }
-    return { views, rejected };
-  });
+
+    /*
+     * **Die Stufe ist `error` und nicht `warn`**, und das ist der Unterschied
+     * zu jedem anderen Fehlschlag in dieser Datei: Ein übersprungener Anhang
+     * ist ein Ergebnis, eine geworfene Transaktion ist ein Defekt.
+     *
+     * **Der Wurf selbst steht nicht in der Zeile**, und das ist keine
+     * Nachlässigkeit, sondern B-2.4 und T-132: `Logger` hat keinen Parameter,
+     * in den ein Ausnahmeobjekt paßt, `error.message` trägt bei einem
+     * Dateisystem- oder SQLite-Fehler regelmäßig einen **Pfad**, und der Grund
+     * läuft ohnehin durch einen engen Zeichenvorrat. Was die Zeile trägt, sind
+     * Zahlen: wie viele Zeilen entstehen sollten und wie viele Dateien dafür
+     * wieder fortgeräumt wurden.
+     */
+    logger.lifecycle(
+      'error',
+      'Die Anhänge einer aus Outlook angelegten Aufgabe ließen sich nicht eintragen. Die Aufgabe ist angelegt, ihre Anhänge sind es nicht; die bereits abgelegten Dateien wurden wieder entfernt.',
+      `attachment_email_rows_threw rows=${String(pending.length)} files=${String(written.length)}`,
+    );
+
+    /*
+     * Jede geplante Zeile wird **namentlich** gemeldet (A-19.29). Die
+     * Reihenfolge ist die des Rufs, und sie schließt an die Fehlschläge an,
+     * die vorher schon dastanden.
+     */
+    for (const input of pending) {
+      failed.push({ displayName: input.displayName, reason: 'rejected', bytes: null });
+    }
+
+    return ok({
+      created: created.value.value,
+      attachments: { attached: [], failed },
+    });
+  }
 
   /*
    * A-A-83, zweite Hälfte: Was keine Zeile bekommen hat, bleibt nicht liegen.
@@ -565,8 +723,11 @@ export type EmailAttachmentIntake = <T>(
  * für jeden Port: Wer wissen will, was eine Route anspricht, liest ihre
  * Abhängigkeiten und nicht einen Dienstsucher.
  */
-export function createEmailAttachmentIntake(context: AppContext): EmailAttachmentIntake {
-  return (intake, create) => attachEmailToNewTodo(context, intake, create);
+export function createEmailAttachmentIntake(
+  context: AppContext,
+  logger: Logger,
+): EmailAttachmentIntake {
+  return (intake, create) => attachEmailToNewTodo(context, intake, create, logger);
 }
 
 // ---------------------------------------------------------------------------

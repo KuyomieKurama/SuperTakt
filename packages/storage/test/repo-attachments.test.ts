@@ -364,89 +364,18 @@ describe('createAttachmentPort.imageTargets — nur die Bildziele, in Vorbereitu
 });
 
 // -----------------------------------------------------------------------
-// T-174 (unit-tester), O-DE — `knownImageTargets`, einer der drei Riegel des
-// Aufräumens beim Start (A-A-18). Gefragt wird über
-// `ix_todo_attachment_image` (Migration 0015), nach genau den Namen, die im
-// Bildverzeichnis gefunden wurden — nicht nach allen Bildzielen des Bestands.
+// T-317 (unit-tester) — `knownImageTargets` ist in T-315 ersatzlos gestrichen
+// worden (siehe T-315-domain-dev.md Abschnitt 3.1): Die engere Zweitfassung
+// derselben Eigentümerfrage war genau die Doppelung, die den in T-313/T-314
+// gemessenen Fehler erzeugt hat. Die Frage, die dieser Block hier prüfte,
+// prüft `createAttachmentPort.attachmentsNamingFiles` (Block weiter unten in
+// dieser Datei) bereits — und zwar weiter, nicht enger: ohne `kind`, ohne
+// `origin`. Die vier Fälle dieses Blocks sind darin sinngemäß enthalten
+// ("ein Verweis-/Dateianhang mit demselben Namenswert" entspricht dort der
+// Gegenprobe "eine Zeile der Art image/link/file mit demselben Namenswert
+// zählt ebenfalls als Eigentümer"). Dieser Block wurde deshalb ersatzlos
+// gestrichen, nicht als "veraltet" stehengelassen.
 // -----------------------------------------------------------------------
-describe('createAttachmentPort.knownImageTargets — der Bestands-Riegel des Aufräumens (A-A-18)', () => {
-  let db: TestDatabase;
-
-  afterEach(() => {
-    db.close();
-  });
-
-  it('eine leere Namensliste ergibt eine leere Menge, ohne die Datenbank zu fragen', async () => {
-    db = openTestDatabase();
-    expect(await db.unit.attachments.knownImageTargets([])).toEqual(new Set());
-  });
-
-  it('nennt nur Namen, die als Bildanhang bekannt sind — unbekannte Namen fehlen in der Antwort', async () => {
-    db = openTestDatabase();
-    const todo = await createTodo(db);
-    await db.unit.attachments.create({
-      todoId: todo.id,
-      kind: 'image',
-      title: null,
-      target: 'bild-eins.png',
-      now: NOW,
-    });
-
-    const bekannt = await db.unit.attachments.knownImageTargets([
-      'bild-eins.png',
-      'bild-nie-angelegt.png',
-    ]);
-
-    expect(bekannt.has('bild-eins.png')).toBe(true);
-    expect(bekannt.has('bild-nie-angelegt.png')).toBe(false);
-    expect(bekannt.size).toBe(1);
-  });
-
-  it('ein Verweis- oder Dateianhang mit demselben Namenswert zählt NICHT als bekanntes Bildziel', async () => {
-    // Der Riegel fragt ausdrücklich "kind = 'image'" (Migration 0015). Ein
-    // Verweis oder eine Datei, deren Ziel zufällig wie ein erzeugter
-    // Bildname aussieht, darf eine wirklich verwaiste Bildkopie nicht
-    // verschonen.
-    db = openTestDatabase();
-    const todo = await createTodo(db);
-    const wieEinBildname = '0123456789abcdef0123456789abcdef.png';
-    await db.unit.attachments.create({
-      todoId: todo.id,
-      kind: 'file',
-      title: null,
-      target: wieEinBildname,
-      now: NOW,
-    });
-
-    const bekannt = await db.unit.attachments.knownImageTargets([wieEinBildname]);
-    expect(bekannt.has(wieEinBildname)).toBe(false);
-    expect(bekannt.size).toBe(0);
-  });
-
-  it('ein entfernter Bildanhang verschwindet aus der Antwort — der Bestand wächst und schrumpft, der Riegel folgt', async () => {
-    db = openTestDatabase();
-    const todo = await createTodo(db);
-    const angelegt = await db.unit.attachments.create({
-      todoId: todo.id,
-      kind: 'image',
-      title: null,
-      target: 'bild-zwei.jpg',
-      now: NOW,
-    });
-    expect(angelegt.ok).toBe(true);
-    if (!angelegt.ok) return;
-
-    expect((await db.unit.attachments.knownImageTargets(['bild-zwei.jpg'])).has('bild-zwei.jpg')).toBe(
-      true,
-    );
-
-    await db.unit.attachments.remove(angelegt.value.id);
-
-    expect(
-      (await db.unit.attachments.knownImageTargets(['bild-zwei.jpg'])).has('bild-zwei.jpg'),
-    ).toBe(false);
-  });
-});
 
 // -----------------------------------------------------------------------
 // T-174 (unit-tester), Nachtrag zur Deckungsschwelle: `knownKinds` und
@@ -645,5 +574,280 @@ describe('Eine Art, die die Domäne nicht kennt, wird beim Lesen übergangen —
       .run('unbekannte-art-002', todo.id, NOW);
 
     expect(await db.unit.attachments.load('unbekannte-art-002' as AttachmentId)).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------
+// T-316 (unit-tester) — A-A-98: die Eigentümerfrage des Aufräumlaufs für
+// übernommene E-Mail-Dateien, an der echten, migrierten Datenbank gemessen
+// (T-313-1 bis T-313-3, T-314-domain-dev.md Abschnitt 1 und 2).
+//
+// Der tragende Satz aus T-314: "Die Vorauswahl im Adapter ist absichtlich
+// weiter als die Entscheidung" — LIKE '%name%' plus die Domänenregel
+// (attachmentTargetNamesFile), OHNE origin und OHNE kind. Jede der drei
+// Gegenproben unten ist genau der Fall, in dem die FRÜHERE, engere Frage
+// (zeichengleiches IN über ix_todo_attachment_email, origin='email' AND
+// kind='file') eine Datei MIT Eigentümer für eine Waise gehalten und
+// gelöscht hätte. Wer den Filter hier später enger macht — ein
+// "AND a.origin = 'email'", ein "AND a.kind = 'file'", ein zeichengleicher
+// Vergleich statt LIKE, oder eine engere Antwort in
+// attachmentTargetNamesFile selbst — lässt mindestens einen der drei Fälle
+// rot werden.
+// -----------------------------------------------------------------------
+describe('createAttachmentPort.attachmentsNamingFiles — die weiteste Eigentümerfrage (A-A-98)', () => {
+  let db: TestDatabase;
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('eine leere Namensliste ergibt eine leere Menge', async () => {
+    db = openTestDatabase();
+    expect(await db.unit.attachments.attachmentsNamingFiles([])).toEqual(new Set());
+  });
+
+  it('Gegenprobe 1 (T-313-1): eine zeichengleich passende Zeile nennt die Datei — der Grundfall, den auch die alte Fassung fand', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml',
+    ]);
+    expect(owned.has('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml')).toBe(true);
+  });
+
+  it('eine abweichende Trennerschreibweise/Groß-Kleinschreibung findet dieselbe Datei wieder (T-313-1, die frühere Fassung verlor sie hier)', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'c:/users/nutzer/appdata/email-attachments/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.EML',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.eml',
+    ]);
+    expect(owned.has('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.eml')).toBe(true);
+  });
+
+  it('Gegenprobe 2 (T-313-2): eine Zeile mit origin=\'user\' in diesem Ordner nennt die Datei trotzdem — die Frage kennt kein "origin"', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    // origin fehlt hier ausdrücklich -> Vorgabe 'user' (siehe AttachmentCreate).
+    // Das ist genau der Zustand aus T-313-2: Die Zeile hat ihr 'email' verloren
+    // (ON DELETE CASCADE auf einen zweiten, selbst eingetragenen Anhang; der
+    // Rückweg von Migration 0023), die Datei liegt aber weiterhin da.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\cccccccccccccccccccccccccccccccc.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([
+      'cccccccccccccccccccccccccccccccc.eml',
+    ]);
+    expect(owned.has('cccccccccccccccccccccccccccccccc.eml')).toBe(true);
+  });
+
+  it('eine Zeile der Art "link" oder "image" mit demselben Namenswert zählt ebenfalls als Eigentümer — die Frage kennt kein "kind"', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'image',
+      title: null,
+      target: 'dddddddddddddddddddddddddddddddd.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([
+      'dddddddddddddddddddddddddddddddd.eml',
+    ]);
+    expect(owned.has('dddddddddddddddddddddddddddddddd.eml')).toBe(true);
+  });
+
+  it('ein Name, den keine Zeile nennt, fehlt in der Antwort — die Waise bleibt eine Waise', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([
+      'ffffffffffffffffffffffffffffffff.eml', // niemand nennt diesen Namen
+    ]);
+    expect(owned.has('ffffffffffffffffffffffffffffffff.eml')).toBe(false);
+    expect(owned.size).toBe(0);
+  });
+
+  it('mehr als NAME_LIKE_CHUNK Namen auf einmal werden vollständig beantwortet (Blockbildung ändert nichts am Ergebnis)', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    const namen: string[] = [];
+    for (let i = 0; i < 150; i += 1) {
+      const name = `${String(i).padStart(32, '0')}.eml`;
+      namen.push(name);
+      // Nur jede zweite Datei bekommt tatsächlich eine Zeile.
+      if (i % 2 === 0) {
+        await db.unit.attachments.create({
+          todoId: todo.id,
+          kind: 'file',
+          title: null,
+          origin: 'email',
+          target: `C:\\email-attachments\\${name}`,
+          now: NOW,
+        });
+      }
+    }
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles(namen);
+    expect(owned.size).toBe(75);
+    expect(owned.has(namen[0] as string)).toBe(true);
+    expect(owned.has(namen[1] as string)).toBe(false);
+  });
+});
+
+describe('createAttachmentPort.attachmentNamesUnder — die erste Gegenfrage, am Anfang des Pfades (A-A-98)', () => {
+  let db: TestDatabase;
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('ein leerer Ordner ergibt eine leere Menge, ohne die Datenbank zu fragen', async () => {
+    db = openTestDatabase();
+    expect(await db.unit.attachments.attachmentNamesUnder('')).toEqual(new Set());
+  });
+
+  it('nennt die gefalteten Namen der Zeilen unter diesem Ordner, in Windows-Schreibweise gefragt', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\App\\email-attachments\\AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.eml',
+      now: NOW,
+    });
+
+    const namen = await db.unit.attachments.attachmentNamesUnder('C:\\App\\email-attachments');
+    expect(namen.has('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml')).toBe(true);
+  });
+
+  it('findet denselben Ordner auch in Posix-Schreibweise, unabhängig davon, wie der Pfad in der Zeile steht', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: '/var/app/email-attachments/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.eml',
+      now: NOW,
+    });
+
+    const namen = await db.unit.attachments.attachmentNamesUnder('/var/app/email-attachments');
+    expect(namen.has('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.eml')).toBe(true);
+  });
+
+  it('eine Zeile in einem ANDEREN Ordner erscheint nicht in der Antwort', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Anderswo\\cccccccccccccccccccccccccccccccc.eml',
+      now: NOW,
+    });
+
+    const namen = await db.unit.attachments.attachmentNamesUnder('C:\\App\\email-attachments');
+    expect(namen.has('cccccccccccccccccccccccccccccccc.eml')).toBe(false);
+    expect(namen.size).toBe(0);
+  });
+});
+
+describe('createAttachmentPort.emailFileCount — die zweite Gegenfrage, ganz ohne Pfad (A-A-98, T-313-2)', () => {
+  let db: TestDatabase;
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('ohne jeden Anhang: 0', async () => {
+    db = openTestDatabase();
+    expect(await db.unit.attachments.emailFileCount()).toBe(0);
+  });
+
+  it('zählt ausschließlich Zeilen mit origin=\'email\' UND kind=\'file\'', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\email-attachments\\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eml',
+      now: NOW,
+    });
+    // origin='user': zählt NICHT mit, obwohl kind='file'.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      target: '/home/nutzer/eigene-datei.pdf',
+      now: NOW,
+    });
+    // origin='email', aber kind='image': zählt NICHT mit.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'image',
+      title: null,
+      origin: 'email',
+      target: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
+      now: NOW,
+    });
+
+    expect(await db.unit.attachments.emailFileCount()).toBe(1);
+  });
+
+  it('sinkt wieder, sobald die übernommene Datei entfernt wird', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    const created = await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\email-attachments\\cccccccccccccccccccccccccccccccc.eml',
+      now: NOW,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    expect(await db.unit.attachments.emailFileCount()).toBe(1);
+    await db.unit.attachments.remove(created.value.id);
+    expect(await db.unit.attachments.emailFileCount()).toBe(0);
   });
 });

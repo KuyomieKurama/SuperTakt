@@ -41,6 +41,7 @@ import { readStartupHandshake, watchParentLink } from './access/session-secret.t
 import { createFileTokenStore } from './access/token-store.ts';
 import { bringDatabaseUpToDate, describeStoreOpenFailure } from './startup.ts';
 import { startTaskpaneServer } from './taskpane/server.ts';
+import { sweepOrphanedEmailFiles } from './features/todos/email-file-sweep.ts';
 import { sweepOrphanedImages } from './features/todos/image-sweep.ts';
 import { captureTimerRecovery } from './features/timer/timer.ts';
 import type { ReleaseSourcePort } from './features/version/source.ts';
@@ -319,12 +320,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
    * dann den Bestand. Solange keine Route zuhört, kann zwischen beiden
    * Schritten kein Anhang entstehen — im Hintergrund neben laufenden Anfragen
    * hätte er ein Rennen, das eine frische Kopie kosten könnte. Die ganze
-   * Begründung steht in `features/todos/image-sweep.ts`.
+   * Begründung steht in `features/todos/orphan-sweep.ts`; welcher Ordner
+   * gemeint ist, sagt `features/todos/image-sweep.ts`.
    *
    * **Und der Anschlag auf den Port trägt diese Zusage nicht** (A-A-36): Das
    * `EADDRINUSE` weiter unten greift erst beim Lauschen, also nach dieser
    * Stelle. Getragen wird sie von `tauri_plugin_single_instance` in der Hülle,
-   * einem anderen Erzeugnis — nachzulesen im Kopf von `image-sweep.ts`, damit
+   * einem anderen Erzeugnis — nachzulesen im Kopf von `orphan-sweep.ts`, damit
    * beide Seiten dieselbe Begründung führen.
    *
    * Er kann den Start nicht verhindern: Sein Rückgabewert wird nicht gelesen,
@@ -335,12 +337,73 @@ export async function main(options: MainOptions = {}): Promise<void> {
       {
         attachmentKinds: () =>
           context.transactions.inTransaction((unit) => unit.attachments.knownKinds()),
+        folder: () => context.attachmentBlobs.imageFolder(),
         listImages: () => context.attachmentBlobs.listImages(),
-        knownImageTargets: (names) =>
-          context.transactions.inTransaction((unit) => unit.attachments.knownImageTargets(names)),
+        imageNameOf: (name) => context.attachmentBlobs.imageNameOf(name),
+        /*
+         * **Die weite Frage und ihre beiden Gegenfragen** (A-A-98, T-315) —
+         * dieselben drei wie beim Lauf über die E-Mail-Dateien, und das ist
+         * seit T-315 der Punkt: `attachmentsNamingFiles` fragt am **Ende** des
+         * Pfades und ohne `kind`, `attachmentNamesUnder` an seinem **Anfang**,
+         * `imageCount` gar nicht am Pfad. Bis T-315 stand hier
+         * `knownImageTargets` — dieselbe Frage wie `imageCount`, nur mit einer
+         * Namensliste daneben, und damit ein Riegel, der nur bestätigen konnte,
+         * was die Abfrage schon behauptet hatte.
+         */
+        attachmentsNamingFiles: (names) =>
+          context.transactions.inTransaction((unit) =>
+            unit.attachments.attachmentsNamingFiles(names),
+          ),
+        attachmentNamesUnder: (directory) =>
+          context.transactions.inTransaction((unit) =>
+            unit.attachments.attachmentNamesUnder(directory),
+          ),
         imageCount: () =>
           context.transactions.inTransaction((unit) => unit.attachments.imageCount()),
         removeImage: (name) => context.attachmentBlobs.removeImage(name),
+      },
+      logger,
+    );
+
+    /*
+     * **Und derselbe Lauf für die Dateien aus E-Mail-Übernahmen** (A-A-83,
+     * T-309). Zwei Läufe und nicht einer: Zwei Ordner, zwei Bedingungen — ein
+     * gemeinsamer Lauf müßte die Dateien des jeweils anderen übergehen und
+     * hätte damit eine Gelegenheit mehr, Kundenmaterial mit Eigentümer zu
+     * löschen. Die ganze Begründung steht im Kopf von `email-file-sweep.ts`.
+     *
+     * Er steht **nach** dem Bildlauf, weil die Reihenfolge zwischen beiden
+     * gleichgültig ist und eine willkürliche Reihenfolge dann besser an der
+     * älteren festgemacht wird. Auch sein Rückgabewert trifft hier keine
+     * Entscheidung; er ist für die Messung da.
+     */
+    await sweepOrphanedEmailFiles(
+      {
+        attachmentKinds: () =>
+          context.transactions.inTransaction((unit) => unit.attachments.knownKinds()),
+        folder: () => context.attachmentBlobs.emailFileFolder(),
+        listEmailFiles: () => context.attachmentBlobs.listEmailFiles(),
+        pathOf: (name) => context.attachmentBlobs.emailFilePathOf(name),
+        /*
+         * **Die weite Frage und ihre beiden Gegenfragen** (A-A-98). Sie stehen
+         * hier nebeneinander, weil ihre Verschiedenheit der ganze Nachweis ist:
+         * `attachmentsNamingFiles` fragt am **Ende** des Pfades und ohne
+         * `origin`, `attachmentNamesUnder` an seinem **Anfang**,
+         * `emailFileCount` gar nicht am Pfad. Wer eine davon durch eine
+         * zweite Fassung einer anderen ersetzt, stellt wieder dieselbe Frage
+         * zweimal — und das war T-313-2.
+         */
+        attachmentsNamingFiles: (names) =>
+          context.transactions.inTransaction((unit) =>
+            unit.attachments.attachmentsNamingFiles(names),
+          ),
+        attachmentNamesUnder: (directory) =>
+          context.transactions.inTransaction((unit) =>
+            unit.attachments.attachmentNamesUnder(directory),
+          ),
+        emailFileCount: () =>
+          context.transactions.inTransaction((unit) => unit.attachments.emailFileCount()),
+        removeEmailFile: (target) => context.attachmentBlobs.removeEmailFile(target),
       },
       logger,
     );

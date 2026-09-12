@@ -331,6 +331,12 @@ den Namen auf der Platte bestimmt SuperTakt (A-19.23a). Damit ist die Klasse nic
 sondern **unmöglich**.
 
 
+**Nachgetragen am 2026-09-12 (T-313).** Die Bytes einer fremden E-Mail liegen jetzt wirklich im
+Anwendungsdatenverzeichnis — mit erzeugtem Namen und `0600`/`0700`, beides gemessen. **Neu und
+in der anderen Richtung:** Aus ihnen wird beim Aufräumen ein **Löschziel**. Ein Fehler beim
+Hereinlassen ist eine Lücke; ein Fehler beim Entfernen ist nicht wiedergutzumachen. Siehe R-29.
+
+
 ## R-22 — Ein Verweis kann alles sein, was wie eine Adresse aussieht
 
 **Schwere:** hoch. **Betrifft:** security-checker, frontend-dev. Neu am 2026-09-05.
@@ -423,6 +429,11 @@ dieser Aufgabenbereich ausgeben — auch nach der Deinstallation, wenn niemand m
 Auslieferung**. Damit hängt T-B05 mit daran.
 
 
+**Zweite Messung am 2026-09-12, Ergebnis identisch:** weiterhin **kein Deinstallationspfad**,
+A-A-92 ist nicht gebaut. Zweimal null gemessen, an zwei Tagen. Termin bleibt **vor der
+Auslieferung**; T-B05 hängt mit daran.
+
+
 ## R-24 — Ein Fremdbackup ist eine fremde Datei, und aus ihr entstehen Dateipfade
 
 **Schwere:** hoch. **Betrifft:** security-checker, domain-dev, integration-dev. Neu am
@@ -452,6 +463,11 @@ seltenen Umzug, sondern bei jeder E-Mail, aus der ein Todo wird.
 
 Der Unterschied ist nicht graduell. Ein Zeiger ins Leere ist ein Anhang, der sich nicht öffnen
 läßt (A-19.15). Eine Datei, die wirklich im Datenverzeichnis liegt, öffnet sich.
+
+
+**Nachgetragen am 2026-09-12 (T-313): eine zweite Hälfte.** Bisher handelte dieser Eintrag vom
+**Hereinkommen** — eine fremde Datei wird zur Quelle eines Anhangs. Ab heute auch vom
+**Verschwinden**: Dieselbe fremde Datei ist Gegenstand eines Laufs, der beim Start löscht.
 
 
 ## R-25 — Eine Zusage, die der Nachbar bricht, ist schlimmer als keine Zusage
@@ -542,9 +558,23 @@ und fehlt. Von Hand gemessen bei 420 px, hell und dunkel: Name vollständig, End
 Eine Handmessung ist ein Stand, kein Nachweis.
 
 
+**Nachgetragen am 2026-09-12 (T-313): der Träger hat gewechselt, die Einstufung sinkt auf
+mittel.** `apps/web` ist gebaut **und** bewacht (`proof:clamp`, dazu der Prüffall gegen das
+lebende DOM aus T-311). Der **Aufgabenbereich** ist gebaut und **nicht** bewacht. Die Kürzung im
+Bestand ist gemessen richtig — in der Mitte, Marke sichtbar, Endung erhalten. R-27 bleibt offen,
+steht aber nur noch auf **einem** Bein, und das gehört hier hin, damit niemand den Rest für
+gedeckt hält.
+
+
 ## R-28 — Ein selbst erzeugtes Format ist eine neue Rolle
 
-**Schwere:** offen, beim security-checker. **Betrifft:** security-checker, integration-dev.
+**Schwere:** niedrig seit dem 2026-09-12 (vorher: offen) — **20 gefahrene Angriffe, 0 Durchbrüche**.
+Die Einstufung hängt an **einer** Bauentscheidung: Der Nachbau erzeugt **kein** `multipart`, und
+was es nicht gibt, kann niemand treffen. Wird diese Entscheidung je zurückgenommen, kommt die
+Einstufung mit ihr zurück. Der Kern bleibt für jede künftige Erweiterung wahr: Dieser Bestand
+erzeugt ein Format, das ein anderes Programm interpretiert.
+
+**Schwere vor der Messung:** offen, beim security-checker. **Betrifft:** security-checker, integration-dev.
 Neu am 2026-09-11 (T-297-15, T-297-16; Auflagen A-A-96 und A-A-97).
 
 Mit dem Rückfall aus A-19.22a **erzeugt** dieser Bestand zum ersten Mal aus fremdem Text ein
@@ -569,3 +599,39 @@ Anlegen erscheint, ist drei Wochen später nirgends.
 
 **Der Eintrag steht hier und nicht nur im Bedrohungsmodell**, weil er eine Grenze verschiebt, die
 dieses Vorhaben bisher getragen hat: „Takt liest fremden Text, Takt schreibt ihn nicht."
+
+## R-29 — Der Lauf, der löscht
+
+**Schwere:** hoch. **Betrifft:** domain-dev, security-checker. Neu am 2026-09-12 (T-313-1 bis
+T-313-3, T-314; Auflagen A-A-98 und A-A-100).
+
+Dieser Bestand hat seit E-111 einen Weg, der **ohne Zutun des Benutzers Kundendaten entfernt** —
+und er entscheidet darüber an einer Zeichenkette aus der Datenbank. Das ist keine Abwandlung von
+R-21 (dort geht es ums Hereinkommen) und keine von R-24 (dort ist die fremde Datei die Quelle).
+Der Schaden ist **Datenverlust ohne Wiederherstellung und ohne Spur** außer einer Zahl im
+Protokoll.
+
+**Drei Wege daran vorbei waren gemessen** (T-313), alle geschlossen in T-314. Der teuerste war
+nicht ein Loch, sondern ein Denkfehler in einer Auflage des Orchestrators: Der Widerspruchsriegel
+sollte über **dieselbe** Bedingung zählen wie die Abfrage. Ein Riegel, der dieselbe Frage stellt,
+kann aber nur bestätigen, was die Abfrage ohnehin behauptet. Er fragt seither auf **zwei
+Achsen** — einmal am Anfang des Pfades, einmal gar nicht am Pfad.
+
+**Die Umkehr, die den Lauf trägt:** Die Eigentümerfrage ist jetzt die **weiteste**, die einen
+Eigentümer finden kann — ohne `origin`, ohne `kind`, namensbasiert —, und der SQL-Filter
+darunter ist ausdrücklich **weiter** als nötig, nie enger. Wer weniger fragt, löscht mehr.
+
+**Der offene Punkt, und er ist größer als der behobene.** `sweepOrphanedImages` hat **dieselbe
+Bauart** und ist älter. Gemessen am 2026-09-12, nicht vermutet:
+
+- T-313-1 trägt dort **strukturell** — der Riegel hängt weiter an `known.size === 0`; Auslöser
+  ist die Groß-/Kleinschreibung statt der Pfadschreibweise.
+- T-313-2 trägt mit `kind='image'` statt `origin`: **beide Dateien fort, beide Zeilen stehen.**
+- Ein **vierter Weg**, den die Sicherheitsprüfung nicht genannt hat und der **ohne besondere
+  Rechte** erreichbar ist: Der Bildlauf fragt mit bloßen **Namen**. Eine Zeile, die dieselbe
+  Datei mit ihrem **vollen Pfad** nennt, ist für ihn unsichtbar — und so ein Pfad kommt durch die
+  **gewöhnliche** Tür (absolut, vorhanden, `.png`). Gemessen: `entfernt = 1, Dateien = 0,
+  Zeilen = 1`.
+
+Das ist kein neues Risiko dieser Welle. Es ist ein **bestehendes**, das erst sichtbar wurde, als
+jemand denselben Mechanismus ein zweites Mal baute und dabei gemessen wurde.

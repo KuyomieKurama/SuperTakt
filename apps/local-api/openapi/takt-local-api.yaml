@@ -142,14 +142,23 @@ tags:
 
       Vier Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
       Call-Nummer suchen, ein Todo anlegen und Zeit buchen. Kein Löschen,
-      **kein Anhang irgendeiner Art** (A-19.19, F-21), kein Datei- oder
-      Bildzugriff, kein Export, kein Zugriff auf den internen Vermerk eines
-      fremden Todos, keine Einstellungen.
+      kein Datei- oder Bildzugriff, kein Export, kein Zugriff auf den
+      internen Vermerk eines fremden Todos, keine Einstellungen.
+
+      **Und an einem vorhandenen Todo kein Anhang** (A-19.19 in der Fassung
+      von E-108). Der Satz hieß bis E-108 „kein Anhang irgendeiner Art"; er
+      ist seither halbiert und nicht gestrichen. Beim **Anlegen** aus einer
+      E-Mail entstehen Anhänge — die Nachricht als Datei und ihre
+      Dateianhänge (A-19.22, A-19.23, A-19.33) —, am **gefundenen** Todo
+      weiterhin nicht.
 
       Bis T-247 war eine fünfte Route dabei, die einen http(s)-Verweis an
       ein vorhandenes Todo hängte. Sie ist mit der Entscheidung zu F-21
-      ersatzlos entfernt; Anhänge entstehen ausschließlich in der
-      Hauptanwendung.
+      ersatzlos entfernt und **nicht** wiedergekommen: Es gibt unter `/addin`
+      keine Tür, die eine Todo-Kennung entgegennimmt und einen Anhang
+      erzeugt. Der Weg, der seit T-304 offen ist, führt ausschließlich über
+      `POST /addin/todos`, also über ein Todo, das in demselben Ruf erst
+      entsteht.
 
       Der Grund ist nicht Sparsamkeit: Das Add-in weist sich mit dem
       **dauerhaften** Token aus, die Oberfläche mit dem Sitzungsgeheimnis
@@ -3467,10 +3476,20 @@ paths:
         Die Standard-Tags (A-9) kommen im Anwendungsfall dazu, nicht im Add-in
         — deshalb gelten sie über beide Wege gleichermaßen (A-9.5).
 
-        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074) —
-        und **nur** sie. Über diese Route entsteht weiterhin **kein Anhang**
-        (A-19.19): Der Rumpf hat kein Anhangsfeld, und die Anhangsrouten
-        liegen außerhalb von `/addin`. Siehe `dueDate` unten.
+        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074).
+        Siehe `dueDate` unten.
+
+        **Seit T-304 entstehen über diese Route Anhänge** (A-19.22 bis
+        A-19.33, E-108) — die E-Mail selbst als Datei und ihre Dateianhänge,
+        im Feld `attachments` unten. Bis dahin stand hier das Gegenteil, und
+        es stimmte: A-19.19 verbot jeden Anhang aus dem Add-in. E-108 hat den
+        Satz **halbiert**, nicht gestrichen — am **gefundenen** Todo entsteht
+        weiterhin keiner.
+
+        Der Unterschied ist strukturell und nicht eine Einstellung: Die Naht
+        dahinter nimmt keine `TodoId` entgegen, sondern die Anlegefunktion
+        selbst, und es gibt unter `/addin` keine zweite Tür, die eine Kennung
+        entgegennimmt und eine Datei ablegt (A-A-82).
       requestBody:
         required: true
         content:
@@ -3672,13 +3691,26 @@ paths:
                     leere Liste bedeuten dasselbe wie „ohne Anhänge", und der
                     Anlegevorgang selbst ändert sich dadurch in keiner Weise.
 
-                    **Der Rumpf dieser einen Route darf 64 MB**
+                    **Der Rumpf dieser einen Route darf 72 MiB**
                     (`ADDIN_ATTACHMENT_MAX_BODY_BYTES`) gegen 1 MB an jeder
                     anderen Route des Dienstes. Die Ausnahme hängt an dieser
                     Methode auf diesem Pfad und nicht am Präfix `/addin`: Eine
                     Ausnahme, deren Menge an einem Präfix aufgespannt ist,
                     wächst mit jeder Nachbarroute mit, ohne daß es jemand
                     entscheidet (E-099 Punkt 3).
+
+                    **Die Zahl steht nicht für sich, sie ist gerechnet**
+                    (A-A-100, T-314): `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES · 4/3`
+                    plus 8 MiB Spielraum für JSON-Gerüst, Namen, Betreff und
+                    Absender. Bis T-314 stand hier die Zahl 64 MiB daneben, und
+                    weil Base64 um **genau** 4/3 aufbläht, war eine Anfrage an
+                    der Summengrenze immer schon über der Rumpfgrenze: Die
+                    fachliche Meldung `total_too_large` konnte über die Leitung
+                    **nie** feuern (fünf Anläufe, alle `413` — T-313-5). Eine
+                    Grenze, die der Transport vorwegnimmt, ist keine Grenze.
+                    Seither greift die fachliche zuerst: Eine Rohsumme über
+                    48 MiB ergibt `201`, das Todo entsteht, und jede nicht
+                    übernommene Datei steht namentlich in `rejected`.
 
                     **Bis T-304 wurde dieses Feld still verworfen.** `z.object`
                     streicht unbekannte Schlüssel, statt sie abzuweisen — und
@@ -4310,9 +4342,14 @@ components:
         Sitzungsgeheimnis entsteht bei jedem Start neu, kommt über `stdin` von
         der Hülle und berührt die Platte nie. Ein entwendetes Add-in-Token
         kommt genau so weit, wie die vier Add-in-Operationen reichen — es liest
-        keinen internen Vermerk, ändert keine Einstellung, kann **überhaupt
-        keinen Anhang** anlegen, lesen oder löschen (A-19.19, F-21) und löst
-        keinen Exportlauf aus.
+        keinen internen Vermerk, ändert keine Einstellung, **liest und löscht
+        keinen Anhang** und legt an einem **vorhandenen** Todo keinen an
+        (A-19.19 in der Fassung von E-108), und es löst keinen Exportlauf aus.
+        Was es seit T-304 kann, ist an **ein Todo, das es im selben Ruf
+        anlegt**, die E-Mail und ihre Dateien hängen — mehr Reichweite gibt
+        ihm das nicht: Ein entwendetes Token kann damit Todos mit Dateien
+        erzeugen, aber keines fremden Todos Anhang lesen, ändern oder
+        entfernen.
 
         Die Anforderung fällt am Pfad und nicht an einer gepflegten
         Aufzählung: Eine künftig hinzugefügte Operation außerhalb von `/addin`
@@ -6708,6 +6745,18 @@ components:
             feinere Gründe als diese Liste. Die Gründe über die Leitung dürfen
             gröber sein als die auf dem Bildschirm, solange jede Kennung hier
             auf genau einen Satz dort fällt.
+
+            **Diese Liste kann jede angekündigte Datei enthalten, und die
+            Antwort bleibt trotzdem 201** (E-111). Scheitert das Eintragen der
+            Zeilen als Ganzes — ein Fehler der Speicherung, keine Aussage über
+            eine einzelne Datei —, dann ist `stored` gleich `0`, jede Datei
+            steht hier mit `rejected`, und die bereits abgelegten Bytes sind
+            wieder entfernt (A-A-83). **Kein 500:** Das Todo steht, und eine
+            Fehlerantwort brächte den Aufrufer dazu, es ein zweites Mal
+            anzulegen — mit derselben Call-Nummer. Eine Antwort darf den
+            Aufrufer nicht dazu bringen, etwas zu wiederholen, das bereits
+            geschehen ist. Der Grund des Fehlschlags steht im Protokoll des
+            Dienstes und nicht in dieser Antwort (B-2.4).
           items:
             type: object
             required: [displayName, reason, bytes]
@@ -6722,10 +6771,11 @@ components:
                 type: string
                 enum:
                   - too_large
+                  - total_too_large
+                  - too_many
                   - not_released
                   - timeout
                   - rejected
-                  - connection
                   - not_a_web_address
                   - rebuild_rejected
                   - outlook_too_old
@@ -6733,21 +6783,41 @@ components:
                   Warum die Datei nicht übernommen wurde — eine **geschlossene
                   Menge** und kein Freitext (A-19.29, AB-3).
 
-                  Die acht Kennungen stehen in
+                  Die neun Kennungen stehen in
                   `packages/domain/src/email-attachment.ts` und sind die einzige
                   Liste; der **Satz** dazu gehört der Fläche, die ihn zeigt.
                   Eine Fehlermeldung aus fremder Hand durchzureichen wäre fremder
                   Text an einer Stelle, an der ein Mensch eine Auskunft von
                   SuperTakt erwartet, und sie verriete Innenleben (B-2.4).
 
-                  An dieser Tür entstehen davon drei: `too_large`, `rejected`
-                  und `not_a_web_address`. Die übrigen fünf stellt der
+                  An dieser Tür entstehen davon fünf: `too_large`,
+                  `total_too_large`, `too_many`, `rejected` und
+                  `not_a_web_address`. Die übrigen vier stellt der
                   Aufgabenbereich fest, bevor ein Byte hier ankommt.
+
+                  **Jede der drei Grenzen hat ihre eigene Kennung** (A-19.30a,
+                  A-19.30b): je Datei `too_large`, Summe `total_too_large`,
+                  Anzahl `too_many`. Bis T-309 meldete eine gerissene
+                  Summengrenze `too_large`, und der Satz daraus nannte die
+                  Grenze je Datei — für eine 2-MB-Datei ein Satz, der sich
+                  selbst widerspricht.
+
+                  **`connection` gibt es seit T-309 nicht mehr.** Niemand
+                  erzeugte ihn: Der Aufgabenbereich sammelt lokal und schickt
+                  genau einmal, und was hier ankommt, ist angekommen. Ein
+                  Grund, den nichts erzeugt, ist eine Zusage, die nie geprüft
+                  wird — dasselbe Urteil wie bei `mailbox_closed` (E-109).
               bytes:
                 oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
                 description: |
                   Die **gemessene** Größe in Bytes — nur bei `too_large`, sonst
                   `null`.
+
+                  Auch bei `total_too_large` und `too_many` steht hier
+                  `null`, und das ist Absicht (A-19.30b): Die Größe *dieser*
+                  Datei neben einem Satz über die **Summe** oder die **Anzahl**
+                  wäre eine zweite Aussage, die von etwas anderem handelt als
+                  der Satz daneben.
 
                   Gemessen und nicht angekündigt (A-A-81): Es ist die Zahl, die
                   aus der Base64-Zeichenkette folgt und danach am dekodierten

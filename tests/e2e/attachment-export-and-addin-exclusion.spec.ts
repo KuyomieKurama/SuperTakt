@@ -1,5 +1,7 @@
 /**
- * TP-ANH-12, TP-ANH-13 (docs/testplan.md, Abschnitt 25.2) — T-150.
+ * TP-ANH-12, TP-ANH-13 (docs/testplan.md, Abschnitt 25.2) — T-150, TP-ANH-13
+ * neu gefasst T-311 (E-108, T-304, Befund F-2 in
+ * `.claude/team/reports/T-308-spec-ux-reviewer.md`).
  *
  * Weder die Frist noch ein Anhang gelangen in einen Export, gleich welche
  * Vorlage aktiv ist (A-19.17) — geprüft nach demselben Muster wie
@@ -11,18 +13,37 @@
  * `packages/export/src/sources.ts`, zwölf Werte, keiner davon neu) — dieselbe
  * Prüfbauart wie `TP-NOTE-01`.
  *
- * TP-ANH-13 (A-19.19, E-072 Punkt 1) ist hier nur als **Spotcheck** von der
- * Oberfläche aus vertreten: Die eigentliche Integrationsprüfung
- * (`apps/local-api/test/routes/addin/**`) und der strukturelle Nachweis
- * (`proof:addin`) gehören unit-tester/integration-dev (T-148/T-149, laufen in
- * dieser Welle parallel) — dieser Fall misst dieselbe Wirkung zusätzlich über
- * die echte HTTP-Tür, ohne die Add-in-Route selbst zu berühren.
+ * **TP-ANH-13 maß bis zum 2026-09-11 die volle Abwesenheit** — „über das
+ * Add-in entstehen keine Anhänge" (A-19.19 alt, E-072 Punkt 1). Seit E-108
+ * ist das **falsch**: Über `POST /addin/todos` entstehen seit T-304 Anhänge,
+ * und zwar **beim Anlegen eines neuen Todos aus einer E-Mail**. Was A-19.19
+ * (neu) und A-A-82 im Bedrohungsmodell weiterhin zusagen, ist die **engere**
+ * Hälfte: **an einem Todo, das vorher schon da war, entsteht über das Add-in
+ * kein Anhang** — auch nicht im Duplikatfall (A-10.9, E-100), auch nicht über
+ * die neue Anlegetür (es gibt an ihr kein Feld, das ein vorhandenes Todo
+ * benennt). Genau das mißt dieser Fall jetzt, und er mißt es an der
+ * **Wirkung**, nicht an einem Statuscode oder einer Namensliste — dieselbe
+ * Lehre, wegen der `proof:addin` Abschnitt 18 am 2026-09-10 von Name auf
+ * Wirkung umgestellt wurde (T-247).
+ *
+ * **Spotcheck, keine Menge.** Dieser Fall ist weiterhin nur ein Spotcheck von
+ * der Oberfläche/über die echte HTTP-Tür aus, kein struktureller Nachweis
+ * über **alle** Türen unter `/addin` — der struktureller Nachweis (die
+ * Untergrenze über die Menge der Türen: neun gesucht, neun zu) bleibt
+ * `proof:addin` Abschnitt 18f/`proof:route-policy` (fremde Hoheit,
+ * `apps/outlook-addin/**`, `apps/local-api/**`). Was hier zusätzlich zu der
+ * strukturellen Prüfung gemessen wird: zwei konkrete Schmuggelversuche, an
+ * den beiden Stellen, an denen das Add-in ein **vorhandenes** Todo überhaupt
+ * berührt — die Anlegetür (mit einer mitgeschickten fremden Kennung) und die
+ * Buchungstür (mit einem mitgeschickten Anhangsfeld).
  */
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 import {
+  addinBookOnTodo,
   addinCreateTodo,
+  addinTodoMatches,
   createAttachment,
   createTemplate,
   createTimeEntry,
@@ -154,20 +175,86 @@ test.describe('TP-ANH-12 — weder Frist noch Anhang erscheinen in einem Export'
   });
 });
 
-test.describe('TP-ANH-13 — über das Add-in entstehen keine Anhänge (Spotcheck, A-19.19)', () => {
-  test('ein zusätzliches Anhangsfeld im Rumpf von POST /addin/todos hat keine Wirkung', async () => {
-    const title = `E2E-ADDIN-KEIN-ANHANG-${Date.now()}`;
+test.describe('TP-ANH-13 — an einem vorhandenen Todo entsteht über das Add-in kein Anhang (Spotcheck, A-19.19 neu, A-A-82, A-10.9/E-100)', () => {
+  test('Anlegetür: eine mitgeschickte Kennung eines vorhandenen Todos lenkt den Anhang nicht um — er hängt am neu angelegten Todo', async () => {
+    // Ein Todo, das es vorher schon gibt — die Tür, die A-19.19 (neu) zuhält.
+    const existing = await createTodo({ title: `E2E-ADDIN-VORHANDEN-${Date.now()}` });
+    expect(await listAttachmentsByTodo(existing.id)).toHaveLength(0);
+
+    const marker = `ANH-SCHMUGGEL-${Date.now()}`;
     const created = await addinCreateTodo({
-      title,
-      // Ein Feld, das einen Anhang beschreiben würde — die Route hat dafür
-      // keinen Zweig (A-A-21), egal ob zod es abweist oder still verwirft.
-      attachments: [{ kind: 'link', url: 'https://beispiel.example/sollte-nicht-ankommen' }],
-      attachmentUrl: 'https://beispiel.example/sollte-auch-nicht-ankommen',
+      title: `E2E-ADDIN-NEU-${Date.now()}`,
+      // Der Schmuggelversuch: `POST /addin/todos` führt kein Feld, das ein
+      // Todo benennt (A-A-82) — `AddinDeps.emailAttachments` hat keinen
+      // Parameter vom Typ `TodoId`. Ein unbekannter Schlüssel fällt in zod
+      // still weg (`createTodoSchema` ist kein `.strict()`); dieser Fall prüft
+      // genau das an der Wirkung, nicht an der Zusage im Kommentar.
+      todoId: existing.id,
+      attachments: {
+        sender: 'kunde@beispiel.example',
+        items: [{ kind: 'link', displayName: marker, url: `https://beispiel.example/${marker}` }],
+      },
     });
 
-    const attachments = await listAttachmentsByTodo(created.todo.id);
-    expect(attachments).toHaveLength(0);
+    // Die Gegenprobe, ohne die die Nullmessung unten nichts wert wäre: Der
+    // Anhang ist wirklich entstanden — nur eben am **neuen** Todo.
+    expect(created.todo.id).not.toBe(existing.id);
+    expect(created.attachments?.stored).toBe(1);
+    const onNewTodo = await listAttachmentsByTodo(created.todo.id);
+    expect(onNewTodo).toHaveLength(1);
+    expect(onNewTodo[0]?.kind).toBe('link');
 
-    await deleteTodo(created.todo.id);
+    // Die eigentliche Zusage: das vorhandene Todo bleibt bei null, gleich, was
+    // im Rumpf stand.
+    expect(await listAttachmentsByTodo(existing.id)).toHaveLength(0);
+
+    await deleteTodo(existing.id);
+    // `created.todo` bleibt bewusst stehen: Es trägt jetzt einen Anhang, und
+    // ein Todo mit Anhang lässt sich über die reguläre Tür so wenig unbemerkt
+    // wegräumen wie eines mit Zeitbuchung — derselbe Vorbehalt wie am Ende von
+    // TP-ANH-12 oben. Der Titel trägt den Zeitstempel und ist als E2E-Rest
+    // erkennbar.
+  });
+
+  test('Duplikat-Hinweis und Buchungstür: kein Weg, am gefundenen Todo einen Anhang zu erzeugen (A-10.9, E-100)', async () => {
+    const callNumber = `CALL-ADDIN-${Date.now()}`;
+    const found = await createTodo({ title: `E2E-ADDIN-DUPLIKAT-${Date.now()}`, callNumber });
+    expect(await listAttachmentsByTodo(found.id)).toHaveLength(0);
+
+    // Die Ankündigung vor jeder Buchung (A-10.9) findet das Todo — und trägt
+    // strukturell keine Anhangsauskunft: `AddinTodoMatch` hat dafür kein Feld,
+    // hier zusätzlich an der rohen Antwort gemessen und nicht nur am Typ.
+    const matches = await addinTodoMatches(callNumber);
+    expect(matches.searched).toBe(true);
+    if (matches.searched) {
+      const match = matches.matches.find((entry) => entry.id === found.id);
+      expect(match).toBeDefined();
+      expect(Object.keys(match as object)).not.toContain('attachments');
+    }
+
+    // Die einzige Route unter `/addin`, die heute eine Todo-Kennung im Pfad
+    // entgegennimmt, ist `POST /addin/todos/:todoId/time-entries`. Die
+    // Oberfläche des Aufgabenbereichs ruft sie seit F-21/E-100 nicht mehr auf
+    // (`DuplicateOffer.tsx`: „keine Zeitbuchung, kein Anhang" — und
+    // `apps/outlook-addin/src/api/client.ts` hat keinen Aufrufer von `.book(
+    // …)` mehr) — die Route selbst steht trotzdem, und A-10.9 spricht über die
+    // **Handlung**, nicht über die Existenz einer Route. Dieser Testfall prüft
+    // deshalb die Route direkt: Auch mit einem mitgeschickten `attachments`-
+    // Feld entsteht darüber kein Anhang am gefundenen Todo.
+    await addinBookOnTodo(found.id, {
+      startedAt: todayAt(5, 0),
+      endedAt: todayAt(5, 15),
+      note: 'E2E-Aufräumung',
+      attachments: {
+        sender: null,
+        items: [{ kind: 'link', displayName: 'sollte-nicht-ankommen', url: 'https://beispiel.example/schmuggel' }],
+      },
+    });
+
+    expect(await listAttachmentsByTodo(found.id)).toHaveLength(0);
+
+    // Kein Aufräumen: `found` trägt jetzt eine Zeitbuchung und lässt sich
+    // deshalb nicht löschen (`time_entry_locked`) — dieselbe Lage wie in
+    // `note-separation.spec.ts` und im ersten Test dieser Datei oben.
   });
 });

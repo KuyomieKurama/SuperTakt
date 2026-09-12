@@ -63,7 +63,7 @@ import { INDIRECT_EXTENSIONS, fileExtensionOf } from './attachment.ts';
 /**
  * Warum eine einzelne Datei nicht übernommen wurde.
  *
- * **Acht Werte, und sie sind nicht hier erfunden worden**: Sie stammen aus
+ * **Neun Werte, und sie sind nicht hier erfunden worden**: Sie stammen aus
  * `docs/design/addin-anhangsuebernahme-fluss.md` Abschnitt 6.2, wo der
  * ux-designer sie samt Satzteil festgelegt hat. Diese Datei führt die
  * Kennungen, nicht die Sätze — der Satz gehört der Fläche, die ihn zeigt.
@@ -77,14 +77,17 @@ import { INDIRECT_EXTENSIONS, fileExtensionOf } from './attachment.ts';
  *
  * Die Aufteilung nach Zuständigkeit, weil sie beim Lesen der Naht zählt:
  *
- *  - **Der Aufgabenbereich** kann `not_released`, `timeout`, `connection`,
+ *  - **Der Aufgabenbereich** kann `not_released`, `timeout`,
  *    `rebuild_rejected` und `outlook_too_old` feststellen; sie entstehen,
  *    bevor ein Byte den Dienst erreicht. Er meldet sie **mit**, damit sie im
  *    selben Ergebnis stehen wie die übrigen (A-19.31: was fehlt, steht dabei).
- *  - **Der Dienst** stellt `too_large`, `rejected` und `not_a_web_address`
- *    fest — er ist die Stelle, die zählt, benennt und ablegt.
+ *    Die drei Grenzgründe stellt er **zusätzlich** schon in der Vorschau fest,
+ *    aus den angekündigten Größen — dieselben Kennungen, früherer Zeitpunkt.
+ *  - **Der Dienst** stellt `too_large`, `total_too_large`, `too_many`,
+ *    `rejected` und `not_a_web_address` fest — er ist die Stelle, die zählt,
+ *    benennt und ablegt, und die einzige, deren Urteil bindet.
  *
- * Beide Seiten benutzen **dieselben** acht Kennungen. Zwei Vorräte für
+ * Beide Seiten benutzen **dieselben** neun Kennungen. Zwei Vorräte für
  * dieselbe Sache wären zwei Wahrheiten, von denen eine altert.
  *
  * ===========================================================================
@@ -112,24 +115,65 @@ import { INDIRECT_EXTENSIONS, fileExtensionOf } from './attachment.ts';
  *    (A-19.22a). Der Zustand ist damit unerreichbar, und ein Grund, der nicht
  *    eintreten kann, ist ein Satz, der das Gegenteil des Bestands behauptet.
  *
- * `too_many` und `total_too_large` aus der zweiten Liste sind **nicht**
- * übernommen. Sie sind eine Feinheit der Anzeige und keine Aussage über den
- * Bestand: Die 26. Datei ist `rejected` (zu viel, nicht zu groß), und eine
- * gerissene Summe läßt dem Benutzer dieselbe Handlung wie eine zu große
- * Einzeldatei. Wer den Satz feiner haben will, unterscheidet ihn an der Fläche;
- * die Meldung trägt ohnehin den Namen der Datei.
+ * ===========================================================================
+ * Drei Grenzen, drei Kennungen (A-19.30b, T-308 F-1, T-309)
+ * ===========================================================================
+ *
+ * Bis T-309 standen `too_many` und `total_too_large` **nicht** in dieser
+ * Liste. Die Begründung dafür lautete, die 26. Datei sei `rejected` und eine
+ * gerissene Summe lasse dem Benutzer dieselbe Handlung wie eine zu große
+ * Einzeldatei — eine Feinheit der Anzeige also, keine Aussage über den Bestand.
+ *
+ * **Sie war falsch, und der Beleg stand auf dem Bildschirm.** Wer eine 2-MB-
+ * Datei schickte, die an der **Summe** hängenblieb, las
+ * „zu groß (2,0 MB). Die Grenze liegt bei 25,0 MB je Datei." — einen Satz, der
+ * sich selbst widerspricht: Die genannte Zahl ist kleiner als die genannte
+ * Grenze. Der Grund war nicht gröber, er war **unwahr**. A-19.30b sagt das
+ * seit dem 2026-09-12 ausdrücklich: Jede der drei Grenzen nennt beim Melden
+ * ihren eigenen Wert und ihren eigenen Bezug; ein Satz, der eine gerissene
+ * Summengrenze mit der Grenze je Datei begründet, ist ein Fehler und kein
+ * Näherungswert.
+ *
+ * Die Regel dahinter ist allgemein und größer als dieser Fall: **Eine Kennung
+ * darf gröber sein als der Satz, aber nie gröber als die Ursache.** Wo zwei
+ * Ursachen zu zwei verschiedenen Handlungen des Benutzers führen — eine Datei
+ * einzeln nachreichen gegen eine zweite E-Mail schicken —, sind es zwei
+ * Kennungen.
+ *
+ * **`connection` fällt** (T-308 F-7, T-309). Er stand für „die Übertragung zum
+ * Dienst ist abgerissen". Gemessen, nicht gelesen: Im ganzen Bestand erzeugt
+ * ihn **niemand** — der Aufgabenbereich sammelt vollständig lokal und schickt
+ * genau einmal; reißt dieser Ruf, gibt es kein Todo, und der Fall ist die
+ * Fehlerfläche und nicht die Ergebnisliste. Der Dienst kann ihn gar nicht
+ * feststellen: Was bei ihm ankommt, ist angekommen. Dasselbe Urteil wie bei
+ * `mailbox_closed` und aus demselben Satz: Ein Grund, der nicht eintreten
+ * kann, ist ein Satz, der das Gegenteil des Bestands behauptet.
  */
 export type EmailAttachmentFailureReason =
-  /** Über der Grenze je Datei oder über der Summe einer Übernahme (A-19.30). */
+  /**
+   * Über der Grenze **je Datei** (A-19.30, A-19.30a, A-19.30b).
+   *
+   * Nur diese eine Grenze, und deshalb darf der Satz dazu die Zahl je Datei
+   * nennen. Die Summe hat ihren eigenen Grund, siehe {@link
+   * MAX_EMAIL_ATTACHMENT_TOTAL_BYTES}.
+   */
   | 'too_large'
+  /**
+   * Diese Datei paßt nicht mehr in die **Summe** einer Übernahme (A-19.30a).
+   *
+   * Sie ist für sich genommen klein genug. Was sie stoppt, ist, was vor ihr
+   * kam — und das ist eine andere Auskunft und eine andere Handlung: nicht
+   * „diese Datei ist zu groß", sondern „diese E-Mail trägt zu viel".
+   */
+  | 'total_too_large'
+  /** Über der **Anzahl**grenze je E-Mail (A-19.30a). Zu viel, nicht zu groß. */
+  | 'too_many'
   /** Outlook hat die Datei nicht herausgegeben (Office-Fehler beim Abruf). */
   | 'not_released'
   /** Der Abruf hat den Deckel je Anhang gerissen. */
   | 'timeout'
-  /** SuperTakt hat die Datei nicht angenommen — Form, Anzahl, Ablage. */
+  /** SuperTakt hat die Datei nicht angenommen — Form oder Ablage. */
   | 'rejected'
-  /** Die Übertragung zum Dienst ist abgerissen. */
-  | 'connection'
   /** Ein Cloud-Anhang, dessen Ablageort keine `http`/`https`-Adresse ist. */
   | 'not_a_web_address'
   /**
@@ -152,20 +196,21 @@ export const EMAIL_ATTACHMENT_FAILURE_PRESENCE: Readonly<
   Record<EmailAttachmentFailureReason, true>
 > = Object.freeze({
   too_large: true,
+  total_too_large: true,
+  too_many: true,
   not_released: true,
   timeout: true,
   rejected: true,
-  connection: true,
   not_a_web_address: true,
   rebuild_rejected: true,
   outlook_too_old: true,
 });
 
-/** Die acht Fehlgründe in fester Reihenfolge. */
+/** Die neun Fehlgründe in fester Reihenfolge. */
 export const EMAIL_ATTACHMENT_FAILURE_REASONS: readonly EmailAttachmentFailureReason[] =
   Object.freeze(Object.keys(EMAIL_ATTACHMENT_FAILURE_PRESENCE) as EmailAttachmentFailureReason[]);
 
-/** Ist diese Zeichenkette einer der acht Gründe? */
+/** Ist diese Zeichenkette einer der neun Gründe? */
 export function isEmailAttachmentFailureReason(
   value: string,
 ): value is EmailAttachmentFailureReason {
@@ -175,14 +220,27 @@ export function isEmailAttachmentFailureReason(
 // ---------------------------------------------------------------------------
 // Grenzen — drei, und alle drei gelten **vor** dem ersten Byte auf der Platte
 // ---------------------------------------------------------------------------
+//
+// **Gedeckt seit dem 2026-09-12 durch A-19.30a**, und vorher nicht: E-108
+// Punkt 3 nannte nur die Grenze je Datei; Summe und Anzahl entstanden beim
+// Bauen (T-299 Annahme 3) und standen bis zum Befund T-308 F-5 in keiner
+// Anforderung. Sie bleiben — eine Nachricht mit zweihundert kleinen Anhängen
+// ist derselbe Angriff wie eine mit einer sehr großen Datei —, aber sie stehen
+// jetzt in der Spezifikation und nicht in einer Annahme.
+//
+// **A-19.30b gehört dazu und ist die schärfere Hälfte:** Jede der drei nennt
+// beim Melden **ihren eigenen** Wert. Deshalb hat jede ihre eigene Kennung in
+// {@link EmailAttachmentFailureReason}; die Zuordnung trifft
+// {@link admitEmailAttachment} und niemand sonst.
 
 /**
- * Die Größengrenze **je Datei** (A-19.30, E-108 Punkt 3): 25 MB.
+ * Die Größengrenze **je Datei** (A-19.30, A-19.30a, E-108 Punkt 3): 25 MB.
  *
  * Die Zahl stammt aus E-108 Punkt 3 und damit aus der Vorlage; sie ist
- * ausdrücklich vom Auftraggeber gesetzt. Sie ist die **dritte** benannte
- * Ausnahme von B-1.7 neben der Datensicherung, und sie steht an genau dieser
- * einen Stelle.
+ * ausdrücklich vom Auftraggeber gesetzt. Sie ist die **einzige** der drei
+ * Grenzen, die der Satz zu `too_large` nennen darf (A-19.30b), und sie ist
+ * die **dritte** benannte Ausnahme von B-1.7 neben der Datensicherung. Sie
+ * steht an genau dieser einen Stelle.
  *
  * **Gezählt wird beim Dekodieren, nicht an einer Ankündigung** (A-A-81,
  * A-A-15 wörtlich). `detail.size` aus Office.js ist eine Behauptung des
@@ -197,7 +255,11 @@ export function isEmailAttachmentFailureReason(
 export const MAX_EMAIL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 /**
- * Die Summengrenze über **eine** Übernahme: 48 MB dekodiert.
+ * Die Summengrenze über **eine** Übernahme: 48 MB dekodiert (A-19.30a).
+ *
+ * Sie meldet sich mit `total_too_large` und **nie** mit `too_large`
+ * (A-19.30b): Eine 2-MB-Datei, die an dieser Grenze hängenbleibt, ist nicht
+ * zu groß, und ein Satz, der ihr das sagte, widerspräche sich selbst.
  *
  * Sie ist keine frei gewählte Zahl, sondern die Umrechnung der Rumpfgrenze
  * dieser einen Route. Das Bedrohungsmodell setzt diese auf 64 MB (39.4.5:
@@ -218,7 +280,12 @@ export const MAX_EMAIL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const MAX_EMAIL_ATTACHMENT_TOTAL_BYTES = 48 * 1024 * 1024;
 
 /**
- * Die Anzahl der Dateien je Übernahme: 25.
+ * Die Anzahl der Dateien je Übernahme: 25 (A-19.30a).
+ *
+ * Sie meldet sich mit `too_many` und nicht mit `rejected` (A-19.30b): Ein
+ * Grund ohne Zahl nennt seinen Wert nicht, und „SuperTakt hat die Datei nicht
+ * angenommen" klingt nach einem Formfehler an **dieser** Datei, wo in
+ * Wahrheit die Anzahl **aller** gerissen ist.
  *
  * Die dritte Grenze aus A-A-81, und die billigste: Eine E-Mail mit 4 000
  * Anhängen à 2 KB reißt weder die Grenze je Datei noch die Summe, erzeugt aber
@@ -326,9 +393,18 @@ export function emailFileExtension(displayName: string): string | null {
  *
  * Deshalb: abweisen, mit Namen und Grund (`rejected`), im selben Ergebnis wie
  * jede andere übersprungene Datei. Der Benutzer erfährt es **sofort** statt
- * drei Wochen später an einer Schaltfläche, die nichts tut. Das ist die
- * Auslegung von „sämtliche Dateianhänge" (A-19.23), die A-19.29 und A-19.30
- * bereits vorsehen: Übersprungen wird benannt, nicht verschwiegen.
+ * drei Wochen später an einer Schaltfläche, die nichts tut.
+ *
+ * **Das ist seit dem 2026-09-12 keine Auslegung mehr, sondern A-19.23c.** Bis
+ * dahin stand die Abweisung auf einer Annahme aus T-299, die ihr Urheber
+ * selbst als prüfbedürftig gemeldet hat, und der Spezifikationsreviewer hat
+ * sie zu Recht als ungedeckt beanstandet (T-308 F-4): A-19.23 sagt
+ * „**sämtliche** Dateianhänge", und fünf Ausnahmen davon sind eine
+ * Produktentscheidung und keine Umsetzungsfrage. A-19.23c trifft sie
+ * ausdrücklich und geht A-19.23 vor: Eine Datei, deren Inhalt eine Anweisung
+ * an das Betriebssystem ist, ist kein Anhang, sondern ein Öffnen-Befehl aus
+ * fremder Hand. Gemeldet wird sie nach A-19.29 — übersprungen wird benannt,
+ * nicht verschwiegen.
  *
  * **Geprüft wird, was benutzt wird.** Die Endung in diesem Urteil ist
  * zeichengleich die, die der Aufrufer an den erzeugten Namen hängt — nicht die
@@ -367,14 +443,29 @@ export type EmailAttachmentAdmission =
  *
  * Die Zuordnung der Gründe ist nicht beliebig:
  *
- *  - **Größe je Datei und Summe ergeben `too_large`.** Der Satz dazu nennt die
- *    Grenze, und der Benutzer kann etwas damit anfangen (die Datei einzeln
- *    speichern und von Hand anhängen).
- *  - **Anzahl und leerer Rumpf ergeben `rejected`.** Beides ist keine
- *    Größenaussage: Eine leere Datei ist keine zu große, und die 26. Datei ist
- *    nicht zu groß, sondern zu viel. `too_large` dafür zu nehmen wäre ein
- *    Satz, der auf die falsche Ursache zeigt — derselbe Fehler, den T-159 bei
- *    `unreadable` gegen `write_failed` berichtigt hat.
+ * **Jede Grenze nennt ihren eigenen Wert** (A-19.30b). Das ist der Grund,
+ * warum diese Funktion vier verschiedene Kennungen vergibt und nicht zwei:
+ *
+ *  - **Größe je Datei ⇒ `too_large`.** Der Satz nennt die Grenze je Datei und
+ *    die gemessene Größe. Handlung: die Datei einzeln speichern und von Hand
+ *    anhängen.
+ *  - **Summe ⇒ `total_too_large`.** Der Satz nennt die **Summen**grenze und
+ *    keine Zahl über diese Datei. Handlung: die E-Mail in zweien schicken.
+ *    Bis T-309 stand hier `too_large`, und der Satz daraus widersprach sich
+ *    selbst, sobald die hängengebliebene Datei kleiner war als 25 MB — der
+ *    Befund T-308 F-1 und der Anlaß für A-19.30b.
+ *  - **Anzahl ⇒ `too_many`.** Die 26. Datei ist nicht zu groß, sondern zu
+ *    viel, und die Zahl, die dazugehört, ist 25 Dateien und keine Bytes.
+ *  - **Leerer oder unsinniger Rumpf ⇒ `rejected`.** Das einzige Urteil, das
+ *    keine Grenze nennt, weil keine gerissen ist: Eine leere Datei ist keine
+ *    zu große. `too_large` dafür zu nehmen wäre ein Satz, der auf die falsche
+ *    Ursache zeigt — derselbe Fehler, den T-159 bei `unreadable` gegen
+ *    `write_failed` berichtigt hat.
+ *
+ * **Die Reihenfolge ist Inhalt und bleibt, wie sie war:** Anzahl vor Größe.
+ * Wer als 26. Datei eine 40-MB-Datei schickt, liest „über der Anzahlgrenze" —
+ * die Grenze, die zuerst greift, ist die, die genannt wird, und sie greift
+ * ohne die Größe überhaupt anzusehen.
  */
 export function admitEmailAttachment(input: {
   readonly bytes: number;
@@ -382,10 +473,10 @@ export function admitEmailAttachment(input: {
   readonly countBefore: number;
 }): EmailAttachmentAdmission {
   if (!Number.isInteger(input.bytes) || input.bytes <= 0) return { ok: false, reason: 'rejected' };
-  if (input.countBefore >= MAX_EMAIL_ATTACHMENT_COUNT) return { ok: false, reason: 'rejected' };
+  if (input.countBefore >= MAX_EMAIL_ATTACHMENT_COUNT) return { ok: false, reason: 'too_many' };
   if (input.bytes > MAX_EMAIL_ATTACHMENT_BYTES) return { ok: false, reason: 'too_large' };
   if (input.bytesBefore + input.bytes > MAX_EMAIL_ATTACHMENT_TOTAL_BYTES) {
-    return { ok: false, reason: 'too_large' };
+    return { ok: false, reason: 'total_too_large' };
   }
   return { ok: true };
 }

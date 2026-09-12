@@ -898,6 +898,102 @@ export function fileExtensionOf(path: string): string {
 }
 
 /**
+ * ASCII-Faltung — und **nur** ASCII (A-A-98).
+ *
+ * `toLowerCase()` faltet nach Unicode und ist dabei nicht längentreu: `İ` wird
+ * zu zwei Zeichen, `ẞ` zu `ß`, und die türkische Regel für `I` hängt an der
+ * Umgebung. Was hier gefaltet wird, entscheidet darüber, ob eine Datei mit
+ * Kundenmaterial **gelöscht** wird; eine Faltung, die je nach Laufzeit ein
+ * anderes Ergebnis liefert, ist an dieser Stelle keine Erleichterung, sondern
+ * eine zweite Antwort auf dieselbe Frage.
+ *
+ * Dieselbe Faltung benutzt SQLite in `LIKE` (ASCII, ohne `ICU`). Damit sind die
+ * Vorauswahl im Adapter und die Entscheidung hier **dieselbe** Regel und nicht
+ * zwei — genau die Trennung, an der T-313-1 hing.
+ */
+function asciiLower(value: string): string {
+  return value.replace(/[A-Z]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) - 65 + 97),
+  );
+}
+
+/**
+ * Der Dateiname, den ein gespeicherter Pfad nennt — gefaltet (A-A-98).
+ *
+ * Der letzte Namensbestandteil, so wie Windows ihn beim Öffnen auflöst
+ * ({@link effectiveNameSegment}: nachgestellte Punkte und Leerzeichen fallen),
+ * anschließend ASCII-gefaltet. Beide Trenner zählen auf jeder Plattform —
+ * derselbe Grund wie bei {@link fileExtensionOf}: Der Wert kommt aus einem
+ * Bestand, der auf einem anderen Betriebssystem entstanden sein kann.
+ */
+export function attachmentTargetFileName(target: string): string {
+  return asciiLower(effectiveNameSegment(target));
+}
+
+/**
+ * **Nennt dieser gespeicherte Pfad diese liegende Datei?** (A-A-98, T-313-1,
+ * T-313-2, T-313-3.)
+ *
+ * ===========================================================================
+ * Diese Funktion entscheidet über eine Löschung, und sie entscheidet in die
+ * teure Richtung nur widerwillig
+ * ===========================================================================
+ *
+ * Die **beiden** Aufräumläufe — übernommene E-Mail-Dateien und Bildkopien,
+ * `apps/local-api/src/features/todos/orphan-sweep.ts` — entfernen eine Datei
+ * genau dann, wenn **keine** Zeile in `todo_attachment` sie nennt. Die Frage,
+ * was „nennt" heißt, steht hier und an keiner zweiten Stelle. Seit T-315 gilt
+ * das wörtlich: Der Bildlauf hatte bis dahin seine eigene, engere Fassung
+ * derselben Frage (`kind = 'image' AND target IN (namen)`), und **drei** der
+ * vier dort gemessenen Löschwege lagen ausschließlich in dieser Zweitfassung.
+ *
+ * **Die Richtung ist entschieden, und sie steht hier ausdrücklich:** Ein
+ * falsches `true` läßt eine Datei liegen, die niemandem mehr gehört — ein
+ * Schönheitsfehler in einem Ordner. Ein falsches `false` entfernt eine Rechnung
+ * aus der E-Mail eines Kunden, ohne Rückfrage, ohne Papierkorb und ohne Spur
+ * außer einer Zahl im Protokoll. **Die beiden Fehler sind nicht gleich teuer,
+ * also ist die Funktion nicht symmetrisch:** Im Zweifel `true`.
+ *
+ * Deshalb ist die Bedingung die **weiteste**, die einen Eigentümer finden kann:
+ *
+ *  - **Kein `origin`, kein `kind`.** Die engere Frage war der Fehler, den T-313
+ *   gemessen hat: `origin = 'email' AND kind = 'file'` ist die Bedingung, die
+ *   **löscht** — verliert eine Zeile ihr `origin` (`ON DELETE CASCADE` auf ein
+ *   zweites, selbst eingetragenes Anhangsrecht; der Rückweg von Migration 0023,
+ *   der die Spalte fallen läßt und mit `DEFAULT 'user'` neu anlegt), dann
+ *   verschwindet sie aus der Frage und ihre Datei fällt. Der Quelltext an
+ *   `knownEmailFileTargets` hatte diese Richtung genau verkehrt herum
+ *   aufgeschrieben. Im Bildverzeichnis hieß dieselbe Enge `kind = 'image'`, und
+ *   sie kostete dort zwei Dateien in einer Messung, deren Zeilen unverändert
+ *   stehenblieben (T-314 Abschnitt 4).
+ *  - **Mit Namen, nicht mit Zeilen — und deshalb auch gegen den vollen Pfad.**
+ *   Der Bildlauf fragte mit bloßen Namen (`target IN (namen)`); eine Zeile, die
+ *   dieselbe Datei mit ihrem **vollen Pfad** nennt, war für ihn unsichtbar, und
+ *   so ein Pfad entsteht durch die gewöhnliche Tür: ein Dateianhang, der auf
+ *   eine Bildkopie zeigt, ist absolut, vorhanden und trägt `.png`. Das ist kein
+ *   Angriff, das ist ein Bedienweg — und hier ist er zu, weil der Name am Ende
+ *   des Pfades gefunden wird.
+ *  - **Ohne Rücksicht auf die Schreibweise des Pfades davor.** Verglichen wird
+ *   der Name, nicht der Pfad. `C:\…\email-attachments\<hex>.eml` und
+ *   `c:/…/email-attachments/<hex>.eml` sind dieselbe Datei und zwei
+ *   Zeichenketten; ein zeichengleicher Vergleich hielt die zweite für
+ *   herrenlos.
+ *  - **Und großzügiger als „letzter Pfadbestandteil".** Ein Pfad, der auf
+ *   diesen Namen **endet**, nennt ihn ebenfalls — auch wenn sein letzter
+ *   Bestandteil länger ist. Das trifft mehr Zeilen als nötig und verschont
+ *   damit mehr Dateien als nötig; siehe die Richtung oben.
+ *
+ * **Was sie nicht ist:** eine Aussage darüber, ob der Pfad in **diesem** Ordner
+ * liegt. Das ist Absicht. Ein Pfad, der denselben Namen in einem anderen Ordner
+ * nennt, verschont die Datei hier — und das ist der billige Fehler.
+ */
+export function attachmentTargetNamesFile(target: string, fileName: string): boolean {
+  if (fileName === '') return false;
+  const name = asciiLower(fileName);
+  return asciiLower(target).endsWith(name) || attachmentTargetFileName(target) === name;
+}
+
+/**
  * Die Form eines Dateipfads an der Tür (A-A-4, A-A-5).
  *
  * Der Pfad wird **nicht** verändert — kein `trim`, keine Auflösung, keine

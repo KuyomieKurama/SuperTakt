@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from 'react';
 
 import { CALL_NUMBER_INPUT_MESSAGE } from '@takt/domain';
@@ -27,9 +28,10 @@ import {
 import type { Detection } from '../callnumber/detect.ts';
 import { collectAttachments, type EntryProgress } from '../attachments/collect.ts';
 import type { AttachmentPayload, MissingAttachment, TakeoverLimits } from '../attachments/model.ts';
-import { MESSAGE_DISPLAY_NAME, TAKEOVER_LIMITS } from '../attachments/model.ts';
+import { TAKEOVER_LIMITS } from '../attachments/model.ts';
 import { OUTLOOK_REQUIREMENT_HINT } from '../attachments/reasons.ts';
 import { planTakeover } from '../attachments/plan.ts';
+import { reconcileAttachments } from '../attachments/reconcile.ts';
 import { decideLookup, describeOffers, type OfferDescription } from '../duplicate/rule.ts';
 import { dueDateForRequest, readDueDate } from '../duedate/entry.ts';
 import { prepareNote, suggestTitle, type MailFacts } from '../office/mail.ts';
@@ -43,6 +45,8 @@ import {
   AttachmentPreview,
   AttachmentProgress,
   MissingList,
+  progressStatusLine,
+  spokenSkips,
   type AttachedEntry,
 } from './Attachments.tsx';
 import { Button, Callout, Field, Foreign, Section, Skeleton } from './Primitives.tsx';
@@ -90,12 +94,29 @@ type LoadState =
 /**
  * Was aus der Übernahme geworden ist — die Grundlage von Z3 und Z4.
  *
- * `stored` kommt aus der **Antwort des Dienstes** und nicht aus der eigenen
- * Zählung: „3 Anhänge hängen daran" ist eine Aussage über den Bestand. Was der
- * Aufgabenbereich allein weiß, ist `missing` — die Anhänge, die es nicht bis
- * zum Anlegeruf geschafft haben, und die kennt der Dienst nicht.
+ * ---------------------------------------------------------------------------
+ * Die Zahl und die Namen kommen aus **zwei** Quellen, und das ist Absicht
+ * ---------------------------------------------------------------------------
+ *
+ * {@link stored} kommt aus der Antwort des Dienstes und wird nirgends
+ * nachgerechnet: „3 Anhänge hängen daran" ist eine Aussage über den Bestand,
+ * und über den Bestand weiß der Dienst Bescheid. {@link attached} ist der
+ * Abgleich der eigenen Nutzlast gegen die Abweisungsliste — er beantwortet
+ * die andere Frage, **welche** Anhänge das sind, und steht in
+ * `attachments/reconcile.ts`.
+ *
+ * Bis T-310 stand hier ein Kommentar, der `stored` beschrieb, und ein Feld,
+ * das es nicht gab; gezählt wurde die eigene Liste. Ein Satz im Quelltext, der
+ * eine Zusage gibt, die der Nachbar bricht, ist schlimmer als kein Satz.
+ *
+ * {@link missing} kennt zwei Herkünfte in einer Liste: was es nicht bis zum
+ * Anlegeruf geschafft hat (das weiß nur der Aufgabenbereich) und was der
+ * Dienst abgewiesen hat. Für den Benutzer ist „fehlt" dasselbe; der Grund
+ * unterscheidet sich, und den nennt die Zeile.
  */
 interface DoneAttachments {
+  /** Wie viele Anhänge am Todo hängen — **aus der Antwort des Dienstes**. */
+  readonly stored: number;
   readonly attached: readonly AttachedEntry[];
   readonly missing: readonly MissingAttachment[];
   readonly limits: TakeoverLimits;
@@ -345,28 +366,45 @@ export function TaskPane({
     [title, load.kind, callNumberProblem, dueEntry.kind],
   );
 
-  if (!hasToken) {
-    return (
-      <Section title="Noch nicht verbunden">
-        <Callout
-          tone="info"
-          title="Das Token fehlt."
-          action={
-            <Button variant="primary" onClick={onOpenSettings}>
-              Zu den Einstellungen
-            </Button>
-          }
-        >
-          Das Token finden Sie in SuperTakt unter Einstellungen; von dort wird es einmalig hier
-          eingetragen.
-        </Callout>
-      </Section>
-    );
-  }
+  /*
+   * Die vier Fokusziele aus Abschnitt 10.1 des Entwurfs.
+   *
+   * Bis T-310 gab es im ganzen Aufgabenbereich kein `tabIndex` und kein
+   * `.focus()`: Beim Übergang Z0 → Z1 verschwand der Knopf unter dem Fokus,
+   * und der Fokus fiel auf `<body>`. Wer nicht sieht, wusste danach nicht
+   * mehr, wo er ist.
+   */
+  const progressHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const doneHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const submitRef = useRef<HTMLButtonElement | null>(null);
+  const callNumberRef = useRef<HTMLInputElement | null>(null);
+  /** Wurde das Ergebnis **vom Benutzer** verlassen? Siehe den Effekt darunter. */
+  const leftDoneRef = useRef(false);
 
-  if (done !== null) {
-    return <DoneView done={done} onAgain={() => setDone(null)} />;
-  }
+  useEffect(() => {
+    if (flow.kind === 'collecting') progressHeadingRef.current?.focus();
+  }, [flow.kind]);
+
+  useEffect(() => {
+    if (done !== null) {
+      doneHeadingRef.current?.focus();
+      return;
+    }
+    /*
+     * Zurück ins Formular — **nur auf eine Handlung hin** (3.2.1, 3.2.2).
+     * `done` wird auch beim Wechsel der geöffneten Nachricht auf `null`
+     * gesetzt; dort hat der Benutzer nichts gedrückt, und ein springender
+     * Fokus wäre eine Bewegung ohne Ereignis.
+     */
+    if (!leftDoneRef.current) return;
+    leftDoneRef.current = false;
+    callNumberRef.current?.focus();
+  }, [done]);
+
+  useEffect(() => {
+    // Z5 und Z6 — dorthin, wo der nächste Versuch beginnt.
+    if (failure !== null || cancelNote !== null) submitRef.current?.focus();
+  }, [failure, cancelNote]);
 
   /**
    * Der ganze Vorgang: **erst sammeln, dann anlegen** (Entwurf 5.3).
@@ -462,15 +500,7 @@ export function TaskPane({
       attachments:
         payload === null || limits === null
           ? null
-          : {
-              attached: attachedEntries(payload, result.value.attachments?.rejected ?? []),
-              missing: [...missing, ...rejectedAsMissing(result.value.attachments?.rejected ?? [])],
-              limits,
-              rebuiltMessage: messageArrivedRebuilt(
-                payload,
-                result.value.attachments?.rejected ?? [],
-              ),
-            },
+          : describeTakeover(payload, missing, limits, result.value.attachments ?? null),
     });
   };
 
@@ -479,18 +509,16 @@ export function TaskPane({
     runRef.current?.abort();
   };
 
-  if (plan !== null && flow.kind !== 'form') {
-    return (
-      <AttachmentProgress
-        plan={plan}
-        progress={flow.progress}
-        creating={flow.kind === 'creating'}
-        onCancel={cancelRun}
-      />
-    );
-  }
-
-  return (
+  /**
+   * Das Formular — **als Wert und nicht als vorzeitiges `return`** (T-310).
+   *
+   * Der Grund ist Y-04 und steht an {@link Announcements}: Die Live-Bereiche
+   * müssen über allen Zuständen stehen und dürfen nicht zusammen mit der
+   * Fläche entstehen, über die sie sprechen. Dafür muss dieser Baustein in
+   * **jedem** Zustand dieselbe Wurzel liefern, und die Zustände werden
+   * darunter ausgewählt statt hier verlassen.
+   */
+  const form = (
     <div className="pane">
       <Section title="Aus dieser E-Mail">
         <dl className="mailfacts">
@@ -519,6 +547,7 @@ export function TaskPane({
           {(aria) => (
             <input
               {...aria}
+              ref={callNumberRef}
               className="input mono"
               value={callNumber}
               spellCheck={false}
@@ -664,6 +693,7 @@ export function TaskPane({
         {cancelNote !== null ? <p className="pane-note">{cancelNote}</p> : null}
         {gate.reason !== null ? <p className="pane-note">{gate.reason}</p> : null}
         <Button
+          ref={submitRef}
           variant="primary"
           full
           loading={busy}
@@ -677,7 +707,146 @@ export function TaskPane({
       </div>
     </div>
   );
+
+  /** Welche der vier Flächen gerade dasteht — Z0, Z1/Z2, Z3/Z4 oder „kein Token". */
+  const surface = !hasToken ? (
+    <Section title="Noch nicht verbunden">
+      <Callout
+        tone="info"
+        title="Das Token fehlt."
+        action={
+          <Button variant="primary" onClick={onOpenSettings}>
+            Zu den Einstellungen
+          </Button>
+        }
+      >
+        Das Token finden Sie in SuperTakt unter Einstellungen; von dort wird es einmalig hier
+        eingetragen.
+      </Callout>
+    </Section>
+  ) : done !== null ? (
+    <DoneView
+      done={done}
+      headingRef={doneHeadingRef}
+      onAgain={() => {
+        leftDoneRef.current = true;
+        setDone(null);
+      }}
+    />
+  ) : plan !== null && flow.kind !== 'form' ? (
+    <AttachmentProgress
+      plan={plan}
+      progress={flow.progress}
+      creating={flow.kind === 'creating'}
+      onCancel={cancelRun}
+      headingRef={progressHeadingRef}
+    />
+  ) : (
+    form
+  );
+
+  const running = plan !== null && flow.kind !== 'form';
+
+  return (
+    <>
+      <Announcements
+        status={
+          done !== null
+            ? spokenResult(done)
+            : running
+              ? progressStatusLine(plan, flow.progress, flow.kind === 'creating')
+              : ''
+        }
+        skipped={running ? spokenSkips(plan, flow.progress) : ''}
+      />
+      {surface}
+    </>
+  );
 }
+
+/**
+ * Die beiden Live-Bereiche des Aufgabenbereichs (Entwurf 10.2, AK-21, AK-26,
+ * A-19.29, A-19.31).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum sie **hier oben** stehen und nicht in der Fläche, über die sie reden
+ * ---------------------------------------------------------------------------
+ *
+ * **Y-04, die hauseigene Regel:** Ein Live-Bereich, der zusammen mit seinem
+ * Inhalt in den Baum kommt, wird von vielen Vorlesehilfen nicht angesagt — sie
+ * melden Änderungen an einer Region, die sie bereits kennen, und diese kennen
+ * sie in dem Augenblick noch nicht. Bis T-310 standen beide `role="status"` in
+ * `AttachmentProgress`, und der ganze Baustein entstand erst beim Klick; das
+ * Ergebnis (Z3/Z4) hatte gar keinen. Hier stehen sie vom ersten Bild an da und
+ * wechseln nur ihren Inhalt.
+ *
+ * ---------------------------------------------------------------------------
+ * Was gesprochen wird — und was nicht
+ * ---------------------------------------------------------------------------
+ *
+ * Genau dreierlei (Entwurf 10.2, D-08): der **Beginn**, **jeder** nicht
+ * übernommene Anhang sofort, und das **Ergebnis**. Gelungene Zwischenschritte
+ * sind sichtbar und stumm; die Liste selbst ist **kein** Live-Bereich, denn
+ * bei siebzehn Anhängen wären das vierunddreißig Ansagen. Angesagt wird, was
+ * man nicht verpassen darf.
+ *
+ * Der **Nachbau** ist die eine Ausnahme (AK-26): Er ist kein Fehlschlag und
+ * fehlt nicht, wird aber mitgesagt. Für einen sehenden Benutzer steht
+ * „(nachgebaut)" in der Zeile; wer die Liste nicht sieht, bekäme ohne diesen
+ * Zusatz weniger als der Sehende, und zwar genau an der Stelle, an der es auf
+ * den Unterschied ankommt.
+ *
+ * Zwei Bereiche und nicht einer: Ein Fehlschlag darf die Fortschrittsansage
+ * nicht überschreiben, und der Fortschritt darf einen Fehlschlag nicht
+ * verdrängen. Beide sind `role="status"` (also `aria-live="polite"`) — nichts
+ * hiervon unterbricht, was der Benutzer gerade liest.
+ *
+ * **Ehrlich benannt:** In dieser Umgebung steht kein Vorleseprogramm zur
+ * Verfügung. Gemessen sind der Bedienungshilfen-Baum und die Erreichbarkeit
+ * über die Tastatur; dass eine bestimmte Hilfe genau diese Sätze genau so
+ * vorliest, ist eine Ableitung aus der Bauart und keine Messung.
+ */
+function Announcements({
+  status,
+  skipped,
+}: {
+  readonly status: string;
+  readonly skipped: string;
+}) {
+  return (
+    <>
+      <p className="attachments__spoken" role="status">
+        {status}
+      </p>
+      <p className="attachments__spoken" role="status">
+        {skipped}
+      </p>
+    </>
+  );
+}
+
+/**
+ * Was eine Vorlesehilfe im Ergebnis hört (Entwurf 10.2 Punkt 3, AK-26).
+ *
+ * „Todo angelegt. 2 von 3 Anhängen hängen daran." — Überschrift und Kern, mit
+ * Punkt statt Doppelpunkt, denn in der Ansage folgt keine Liste. Der
+ * erklärende Absatz zum Nachbau wird **nicht** mitgesagt; er steht im
+ * Fokusziel und wird beim Weiterlesen erreicht.
+ */
+const spokenResult = (done: Done): string => {
+  const attachments = done.attachments;
+  if (attachments === null) return `${doneTitle(null)}. ${CREATED_SENTENCE}`;
+  const core = attachedCore(attachments);
+  /*
+   * Der Zusatz entfällt, wo der Kern das Wort schon trägt („Die E-Mail hängt
+   * als Nachbau daran") — sonst stünde er zweimal in einem Atemzug. Gemessen
+   * am erzeugten Satz und nicht an der Bedingung, unter der er entsteht: Die
+   * beiden liefen sonst auseinander, sobald jemand den Kern umschreibt.
+   */
+  const rebuilt =
+    attachments.rebuiltMessage && !core.includes('Nachbau') ? ' Die E-Mail ist ein Nachbau.' : '';
+  return `${doneTitle(attachments)}. ${core}.${rebuilt}`;
+};
 
 const FIELD_LABEL: Readonly<Record<string, string>> = Object.freeze({
   title: 'Titel',
@@ -763,61 +932,49 @@ const attachedEntry = (entry: AttachmentPayload): AttachedEntry => {
 };
 
 /**
- * Was der Dienst abgewiesen hat, in dieselbe Liste wie das, was Outlook nicht
- * hergegeben hat (A-19.29).
+ * Nutzlast, eigene Fehlschläge und die Antwort des Dienstes zu **einem**
+ * Ergebnis (A-19.29, A-19.33, T-310).
  *
- * Zwei Quellen, ein Ergebnis: Für den Benutzer ist „fehlt" dasselbe, gleich an
- * welcher Stelle es gescheitert ist. Der Grund unterscheidet sich, und den
- * nennt die Zeile.
+ * Drei Auskünfte, und jede kommt von der Stelle, die sie kennt:
+ *
+ *  - die **Zahl** aus `report.stored` — der Bestand,
+ *  - die **Namen** aus dem Abgleich in `reconcileAttachments` — die Nutzlast,
+ *  - die **Fehlschläge vor dem Anlegeruf** aus dem Sammellauf; die kennt der
+ *    Dienst nicht, denn sie sind nie bei ihm angekommen.
+ *
+ * Die eigenen Fehlschläge stehen **vorn**: Sie betreffen Anhänge, die vor
+ * allen anderen an der Reihe waren, und der Benutzer liest sie in der
+ * Reihenfolge, in der sie entstanden sind — dieselbe Ordnung wie im Dienst.
+ *
+ * `report === null` heißt „der Dienst hat über Anhänge nichts gesagt"; was
+ * daraus folgt, steht in `reconcileAttachments`.
  */
-const rejectedAsMissing = (
-  rejected: readonly CreatedAttachmentsDto['rejected'][number][],
-): readonly MissingAttachment[] =>
-  rejected.map((entry) => ({
-    displayName: entry.displayName,
+const describeTakeover = (
+  payload: readonly AttachmentPayload[],
+  collected: readonly MissingAttachment[],
+  limits: TakeoverLimits,
+  report: CreatedAttachmentsDto | null,
+): DoneAttachments => {
+  const reconciled = reconcileAttachments(payload, report === null ? null : report.rejected);
+
+  return {
+    stored: report?.stored ?? 0,
+    attached: reconciled.attached.map(attachedEntry),
+    missing: [...collected, ...reconciled.missing],
+    limits,
     /*
-     * **Der Grund kommt vom Dienst und wird nicht hier gesetzt** (T-304).
+     * Z3a — ist die E-Mail als **Nachbau** angekommen?
      *
-     * Bis dahin stand hier ein festes `rejected`. Das war die einzige
-     * Auskunft, die die Antwort trug — und es war an drei von acht Fällen
-     * falsch: Eine zu große Datei ist `too_large` und nennt ihre Größe, ein
-     * Cloud-Verweis mit unzulässiger Adresse ist `not_a_web_address`. Der
-     * Benutzer las „SuperTakt hat die Datei nicht angenommen", wo die Datei
-     * 31,4 MB groß war, und konnte daraus nichts machen.
+     * Zwei Bedingungen, und beide müssen erfüllt sein: Die Nachricht war ein
+     * Nachbau (`rebuilt`), **und** der Dienst hat sie nicht abgewiesen. Fehlt
+     * die zweite, fehlt die Datei — und dann ist es Z4 und nicht Z3a. Ein Satz
+     * über eine dauerhafte Kennzeichnung an einer Datei, die es nicht gibt,
+     * wäre die Sorte Text, gegen die E-100 Punkt 3 geschrieben ist.
      */
-    reason: entry.reason,
-    bytes: entry.bytes,
-    isMessage: entry.displayName === MESSAGE_DISPLAY_NAME,
-  }));
-
-/** Die Nutzlasten, die der Dienst **nicht** abgewiesen hat. */
-const attachedEntries = (
-  payload: readonly AttachmentPayload[],
-  rejected: readonly { readonly displayName: string }[],
-): readonly AttachedEntry[] => {
-  const refused = new Set(rejected.map((entry) => entry.displayName));
-  return payload
-    .filter((entry) => !refused.has(entry.displayName))
-    .map(attachedEntry);
-};
-
-/**
- * Ist die E-Mail als **Nachbau** am Todo angekommen? (Z3a.)
- *
- * Zwei Bedingungen, und beide müssen erfüllt sein: Die Nachricht war ein
- * Nachbau (`rebuilt`), **und** der Dienst hat sie nicht abgewiesen. Fehlt die
- * zweite, fehlt die Datei — und dann ist es Z4 und nicht Z3a. Ein Satz über
- * eine dauerhafte Kennzeichnung an einer Datei, die es nicht gibt, wäre die
- * Sorte Text, gegen die E-100 Punkt 3 geschrieben ist.
- */
-const messageArrivedRebuilt = (
-  payload: readonly AttachmentPayload[],
-  rejected: readonly { readonly displayName: string }[],
-): boolean => {
-  const refused = new Set(rejected.map((entry) => entry.displayName));
-  return payload.some(
-    (entry) => entry.kind === 'message' && entry.rebuilt && !refused.has(entry.displayName),
-  );
+    rebuiltMessage: reconciled.attached.some(
+      (entry) => entry.kind === 'message' && entry.rebuilt,
+    ),
+  };
 };
 
 /**
@@ -862,16 +1019,26 @@ const doneTitle = (attachments: DoneAttachments | null): string => {
     : `Todo angelegt — ${String(attachments.missing.length)} Anhänge fehlen`;
 };
 
-/** „2 von 3 Anhängen hängen daran" bzw. „3 Anhänge hängen daran". */
-const attachedLine = (attachments: DoneAttachments): string => {
-  const total = attachments.attached.length + attachments.missing.length;
-  if (attachments.attached.length === 0) {
-    return 'Das Todo ist in SuperTakt angelegt. Kein Anhang aus dieser E-Mail hängt daran:';
-  }
+/** Der eine Satz, der in jeder Fassung von Z3 und Z4 gleich beginnt. */
+const CREATED_SENTENCE = 'Das Todo ist in SuperTakt angelegt.';
+
+/**
+ * Der Kern der Ergebniszeile, **ohne Satzzeichen am Ende** — „2 von 3
+ * Anhängen hängen daran", „3 Anhänge hängen daran" (A-19.29, A-19.33).
+ *
+ * Die Zahl ist {@link DoneAttachments.stored} und nicht die Länge der eigenen
+ * Liste (T-310 Befund 2). Ohne Satzzeichen, weil derselbe Kern zweimal
+ * gebraucht wird: sichtbar mit Doppelpunkt, wenn eine Liste folgt, und mit
+ * Punkt in der Ansage, in der keine folgt.
+ */
+const attachedCore = (attachments: DoneAttachments): string => {
+  const total = attachments.stored + attachments.missing.length;
+  if (attachments.stored === 0) return 'Kein Anhang aus dieser E-Mail hängt daran';
   if (attachments.missing.length > 0) {
-    return `Das Todo ist in SuperTakt angelegt. ${String(attachments.attached.length)} von ${String(total)} Anhängen hängen daran:`;
+    const verb = attachments.stored === 1 ? 'hängt' : 'hängen';
+    return `${String(attachments.stored)} von ${String(total)} Anhängen ${verb} daran`;
   }
-  if (attachments.attached.length === 1) {
+  if (attachments.stored === 1) {
     /*
      * Der Fall aus A-19.27: eine E-Mail ohne Dateianhänge. Ist sie ein
      * Nachbau, steht **hier schon** das Wort und nicht erst im Absatz darunter
@@ -879,11 +1046,28 @@ const attachedLine = (attachments: DoneAttachments): string => {
      * das einzige, was vom Postfach am Todo hängt.
      */
     return attachments.rebuiltMessage
-      ? 'Das Todo ist in SuperTakt angelegt. Die E-Mail hängt als Nachbau daran.'
-      : 'Das Todo ist in SuperTakt angelegt. Die E-Mail hängt als Datei daran.';
+      ? 'Die E-Mail hängt als Nachbau daran'
+      : 'Die E-Mail hängt als Datei daran';
   }
-  return `Das Todo ist in SuperTakt angelegt. ${String(attachments.attached.length)} Anhänge hängen daran:`;
+  return `${String(attachments.stored)} Anhänge hängen daran`;
 };
+
+/**
+ * Folgt dem Satz eine Liste? (T-310 Befund 1, zweite Hälfte.)
+ *
+ * Zwei Bedingungen, und die zweite ist die neue: Es muss etwas dahängen —
+ * **und** die abgeglichene Liste muss so viele Namen tragen, wie der Dienst
+ * Anhänge zählt. Laufen die beiden auseinander (ein Eintrag der
+ * Abweisungsliste ließ sich keiner Nutzlast zuordnen), gewinnt die **Zahl des
+ * Dienstes**, und die Liste entfällt. Lieber eine Zahl ohne Namen als eine
+ * Zahl, unter der der Benutzer etwas anderes abzählt.
+ */
+const showsAttachedList = (attachments: DoneAttachments): boolean =>
+  attachments.attached.length > 0 && attachments.attached.length === attachments.stored;
+
+/** „Das Todo ist in SuperTakt angelegt. 2 von 3 Anhängen hängen daran:" */
+const attachedLine = (attachments: DoneAttachments): string =>
+  `${CREATED_SENTENCE} ${attachedCore(attachments)}${showsAttachedList(attachments) ? ':' : '.'}`;
 
 /**
  * Der Absatz zu Z3a — **die E-Mail ist ein Nachbau** (Entwurf 6.3a, A-19.22b).
@@ -952,25 +1136,98 @@ const REBUILT_MESSAGE_PERSISTENCE =
  * Der genannte Weg ist zweimal geprüft: Outlook legt Anhänge über „Speichern
  * unter" ab, und SuperTakt hat am Todo den Bereich „Anhänge" mit „Anhang
  * hinzufügen", Art „Datei", Feld „Vollständiger Pfad zur Datei".
+ *
+ * **Zwei Fassungen seit T-310**, und der Unterschied ist ein Wort: Wo die
+ * E-Mail selbst fehlt, speichert der Benutzer in Outlook keine Datei, sondern
+ * die **Nachricht** (Entwurf 6.4 Fall 2). Welche Fassung gilt, entscheidet
+ * {@link catchUpSubject}.
  */
-const CATCH_UP_NOTE =
-  'Nachtragen lässt sich das nur in SuperTakt: die Datei in Outlook speichern und am Todo unter „Anhänge“ mit ihrem vollständigen Pfad hinzufügen.';
+const catchUpNote = (what: 'Datei' | 'Nachricht'): string =>
+  `Nachtragen lässt sich das nur in SuperTakt: die ${what} in Outlook speichern und am Todo unter „Anhänge“ mit ihrem vollständigen Pfad hinzufügen.`;
+
+/**
+ * Welches Wort in {@link catchUpNote} steht (Entwurf 6.4, Fall 2).
+ *
+ * **„die Nachricht", wenn ausschließlich die E-Mail fehlt** — dann gibt es
+ * keine Datei, die der Benutzer in Outlook speichern könnte, und der Satz
+ * schickte ihn zu etwas, das es in diesem Fall nicht gibt. Sonst „die Datei":
+ * Fehlt beides, ist der Weg für die Dateien derselbe, und zwei Sätze
+ * untereinander, die sich nur in einem Wort unterscheiden, sind schwerer zu
+ * lesen als einer.
+ */
+const catchUpSubject = (missing: readonly MissingAttachment[]): 'Datei' | 'Nachricht' =>
+  missing.length > 0 && missing.every((entry) => entry.isMessage) ? 'Nachricht' : 'Datei';
+
+/**
+ * Der Erklärabsatz zu `rebuild_rejected` (Entwurf 6.4 Fall 2, A-19.22c,
+ * AK-28) — **der heikelste Zustand des ganzen Entwurfs**.
+ *
+ * Er ist heikel, weil der Benutzer nichts falsch gemacht hat und trotzdem
+ * etwas fehlt, und weil er der einzige Fall ist, in dem SuperTakt aus eigenem
+ * Entschluss etwas **nicht** tut, was es könnte.
+ *
+ * Der Wortlaut stammt zeichengleich aus dem Entwurf; jedes Stück ist dort
+ * begründet:
+ *
+ *  - **„an einer Angabe dieser Nachricht"** — nicht „an einem ungültigen
+ *    Zeichen", nicht „an einem Angriffsversuch". Der Benutzer kann die Angabe
+ *    nicht sehen und nicht ändern; ihm nahezulegen, wer ihm geschrieben hat,
+ *    sei verdächtig, wäre eine Behauptung ohne Grundlage.
+ *  - **„Sie würde in der Datei nicht als Text stehen, sondern deren Aufbau
+ *    verändern."** Das ist R-28 in einem Satz und ohne Fachwort.
+ *  - **„statt eine Datei zu erzeugen, die mehr enthält als die Nachricht."**
+ *    Die Gefahr in der einen Form, in der sie den Benutzer betrifft.
+ *
+ * **Was hier ausdrücklich nicht steht** (AK-28): kein Knopf „Erneut
+ * versuchen", keine Fehlernummer, kein Auszug aus der Formprüfung und kein
+ * Name der Angabe, an der es lag. Das Letzte wegen AB-3 — der Name einer
+ * Kopfzeile aus fremder Hand wäre fremder Text in einer Fläche, die vor
+ * fremdem Text warnt.
+ */
+const REBUILD_REJECTED_NOTE =
+  'Die ursprüngliche Nachricht war nicht zu bekommen, und der Nachbau ist an einer Angabe ' +
+  'dieser Nachricht gescheitert: Sie würde in der Datei nicht als Text stehen, sondern deren ' +
+  'Aufbau verändern. SuperTakt bricht dann ab, statt eine Datei zu erzeugen, die mehr enthält ' +
+  'als die Nachricht.';
+
+/**
+ * Der Satz, der die Schleife beendet (Entwurf 6.4 Fall 2, Sperrkandidat
+ * SP-A-35).
+ *
+ * Zwei Auskünfte, und die zweite ist die wichtigere. Sie ist **keine
+ * Beruhigung, sondern eine Ersparnis**: Ohne sie löscht der Benutzer das Todo
+ * und legt es noch einmal an — mit demselben Ergebnis, denn die Ablehnung ist
+ * deterministisch. Die erste Hälfte steht davor, weil ein Mensch, dem etwas
+ * fehlt, zuerst bei sich sucht.
+ */
+const REBUILD_REJECTED_NOT_YOUR_FAULT =
+  'Das liegt an dieser Nachricht, nicht an Ihren Eingaben, und ein zweiter Versuch ändert daran nichts.';
 
 /** Die Abwesenheitszusage, die die Frage beantwortet, die der Benutzer hier stellt. */
 const NO_ATTACHMENT_ON_EXISTING =
   'Über diesen Aufgabenbereich entsteht an einem vorhandenen Todo kein Anhang.';
 
-function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: () => void }) {
+function DoneView({
+  done,
+  onAgain,
+  headingRef,
+}: {
+  readonly done: Done;
+  readonly onAgain: () => void;
+  readonly headingRef: Ref<HTMLHeadingElement>;
+}) {
   const attachments = done.attachments;
   const incomplete = attachments !== null && attachments.missing.length > 0;
   const outlookTooOld =
     attachments?.missing.some((entry) => entry.reason === 'outlook_too_old') === true;
+  const rebuildRejected =
+    attachments?.missing.some((entry) => entry.reason === 'rebuild_rejected') === true;
 
   return (
-    <Section title={doneTitle(attachments)}>
+    <Section title={doneTitle(attachments)} headingRef={headingRef}>
       <Callout tone={incomplete ? 'warning' : 'success'} title={<Foreign value={done.title} />}>
-        {attachments === null ? 'Das Todo ist in SuperTakt angelegt.' : attachedLine(attachments)}
-        {attachments !== null && attachments.attached.length > 0 ? (
+        {attachments === null ? CREATED_SENTENCE : attachedLine(attachments)}
+        {attachments !== null && showsAttachedList(attachments) ? (
           <AttachedList entries={attachments.attached} />
         ) : null}
         {/*
@@ -995,7 +1252,20 @@ function DoneView({ done, onAgain }: { readonly done: Done; readonly onAgain: ()
             <p className="pane-note">Nicht übernommen:</p>
             <MissingList missing={attachments.missing} limits={attachments.limits} />
             {outlookTooOld ? <p className="pane-note">{OUTLOOK_REQUIREMENT_HINT}</p> : null}
-            <p className="pane-note">{CATCH_UP_NOTE}</p>
+            {/*
+              Der Erklärabsatz zu Z4 Sonderfall 2 (Entwurf 6.4, AK-28). Er
+              steht **unter** der Fehlliste, in der die Zeile bereits „— sie
+              ließ sich nicht als Datei nachbauen." trägt: Die Zeile nennt den
+              Grund, der Absatz erklärt ihn — dieselbe Ordnung wie beim
+              Nachbau darüber.
+            */}
+            {rebuildRejected ? (
+              <>
+                <p className="pane-note">{REBUILD_REJECTED_NOTE}</p>
+                <p className="pane-note">{REBUILD_REJECTED_NOT_YOUR_FAULT}</p>
+              </>
+            ) : null}
+            <p className="pane-note">{catchUpNote(catchUpSubject(attachments.missing))}</p>
             <p className="pane-note">{NO_ATTACHMENT_ON_EXISTING}</p>
           </>
         ) : null}

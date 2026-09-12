@@ -23,16 +23,16 @@
  * ändert.
  *
  * ---------------------------------------------------------------------------
- * Zehn Sätze über acht Kennungen der Leitung — und warum das kein Widerspruch
- * ist
+ * Ein Satz je Kennung, und keine Kennung ohne Satz
  * ---------------------------------------------------------------------------
  *
- * `SkipReason` ist die Liste der Domäne **plus zwei**, die nur auf dem
- * Bildschirm vorkommen (`too_many`, `total_too_large`). Die Regel, die das
- * zuläßt, steht an `SkipReason` in `model.ts` und lautet: Die Gründe über die
- * Leitung dürfen gröber sein als die auf dem Bildschirm, solange jede Kennung
- * der Leitung auf **genau einen** Satz fällt. Das leistet der `switch` unten —
- * ein Zweig je Kennung, kein Sammelzweig, und ein `never` als Wache.
+ * `SkipReason` ist seit T-309/T-310 **dieselbe** Liste wie die der Domäne:
+ * `too_many` und `total_too_large` reisen jetzt selbst über die Leitung, und
+ * `connection` ist gestrichen. Die Regel, die dahintersteht, ist an
+ * `SkipReason` in `model.ts` ausgeschrieben; hier leistet sie der `switch` —
+ * ein Zweig je Kennung, kein Sammelzweig, und ein `never` als Wache. Kommt in
+ * der Domäne ein Grund dazu, wird diese Datei rot und nicht erst der
+ * Benutzer, der eine leere Zeile liest.
  */
 
 import type { MissingAttachment, SkipReason, TakeoverLimits } from './model.ts';
@@ -83,8 +83,17 @@ export const reasonSentence = (
       return 'Zeitüberschreitung beim Laden.';
     case 'rejected':
       return 'SuperTakt hat die Datei nicht angenommen.';
-    case 'connection':
-      return 'Die Verbindung zu SuperTakt ist abgerissen.';
+    /*
+     * **`connection` ist gestrichen** (T-308 F-7, T-309, T-310).
+     *
+     * Der Satz lautete „Die Verbindung zu SuperTakt ist abgerissen." und
+     * hatte keinen Fall: Der Aufgabenbereich sammelt vollständig lokal und
+     * schickt genau einmal — reißt dieser Ruf, gibt es kein Todo, und der
+     * Fall ist die Fehlerfläche (Z5) und nicht die Ergebnisliste (Z4).
+     * Dasselbe Urteil wie bei `mailbox_closed` und aus demselben Satz: Ein
+     * Grund, der nicht eintreten kann, ist ein Satz, der das Gegenteil des
+     * Bestands behauptet.
+     */
     case 'not_a_web_address':
       return 'Der Ablageort ist keine Webadresse.';
     /*
@@ -143,8 +152,7 @@ export const shortReason = (reason: SkipReason): string => {
       return 'Zeitüberschreitung';
     case 'rejected':
       return 'nicht angenommen';
-    case 'connection':
-      return 'Verbindung abgerissen';
+    // `connection` ist gestrichen — siehe `reasonSentence`.
     case 'not_a_web_address':
       return 'keine Webadresse';
     case 'outlook_too_old':

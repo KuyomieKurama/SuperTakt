@@ -38,9 +38,30 @@
 -- **Die Dateien bleiben liegen.** Wie beim Rückweg von 0015: SQL kennt kein
 -- Dateisystem. Ohne die Spalte `origin` kann danach niemand mehr sagen, welche
 -- Datei im Anwendungsdatenverzeichnis SuperTakt selbst geschrieben hat und
--- welche dem Benutzer gehört — das Aufräumen verliert seine Bedingung, bevor es
--- die Dateien verliert. Wer diesen Rückweg fährt, räumt den Ordner von Hand;
--- er liegt neben `takt.db` und heißt `email-attachments`.
+-- welche dem Benutzer gehört. Wer diesen Rückweg fährt, räumt den Ordner von
+-- Hand; er liegt neben `takt.db` und heißt `email-attachments`.
+--
+-- **Berichtigt in T-314, und die alte Fassung dieses Absatzes war die
+-- freundlichere Hälfte der Wahrheit.** Hier stand: „das Aufräumen verliert
+-- seine Bedingung, bevor es die Dateien verliert". Gemessen hat T-313 das
+-- Gegenteil: Der Aufräumlauf verlor seine Bedingung **nicht**, er behielt sie
+-- und beantwortete sie mit „niemandem" — die Hinrichtung legt `origin` mit
+-- `DEFAULT 'user'` wieder an, danach war jede Zeile `origin = 'user'`, und beim
+-- nächsten Start entfernte der Lauf **jede** übernommene Datei, während ihre
+-- Zeile stehenblieb (`{read:2, owned:0, removed:2}`). Kein Handgriff des
+-- Benutzers, keine Rückfrage, kein Papierkorb.
+--
+-- **Dieser Weg ist seit T-314 zu, und zwar nicht hier, sondern dort, wo er
+-- aufging:** Die Frage nach dem Eigentümer einer liegenden Datei stellt der
+-- Aufräumlauf jetzt **ohne** `origin` und ohne `kind`
+-- (`attachmentTargetNamesFile` in `@takt/domain`, A-A-98). Dieser Rückweg
+-- kostet damit die Unterscheidbarkeit — er kostet keine Datei mehr. Gemessen
+-- am 2026-09-12: zurück auf 22, wieder vor auf 23, danach der Lauf →
+-- `{read:2, owned:2, removed:0}`, beide Dateien da.
+--
+-- Der Satz, der daraus über diesen Fall hinaus gilt: **Ein Rückweg, der eine
+-- Spalte fallen läßt, muß auch sagen, was die Spalte woanders entscheidet.**
+-- Sie entschied hier über eine Löschung, und das stand nicht dabei.
 --
 -- ===========================================================================
 -- Was NICHT betroffen ist

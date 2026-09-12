@@ -213,14 +213,17 @@ export interface CreateTodoResponseDto {
    * Was der Dienst von den mitgeschickten Anhängen **tatsächlich** abgelegt
    * hat (A-19.29, A-19.33).
    *
-   * Fehlt, solange der Dienst keine Anhänge annimmt. Die Zahl in der
-   * Erfolgsmeldung kommt aus dieser Antwort und nicht aus der eigenen Zählung
-   * des Aufgabenbereichs: „3 Anhänge hängen daran" ist eine Aussage über den
-   * Bestand, und über den Bestand weiß der Dienst Bescheid. Was der
-   * Aufgabenbereich selbst weiß, sind die Anhänge, die es **nicht** bis zum
-   * Anlegeruf geschafft haben — die kennt der Dienst nicht.
+   * `null`, wenn im Anlegeruf kein Anhang dabei war; **fehlt**, solange der
+   * Dienst keine Anhänge annimmt. Für den Aufgabenbereich sind beide Fälle
+   * derselbe: Es hängt keiner daran, und niemand hat etwas anderes behauptet.
+   *
+   * Die Zahl in der Erfolgsmeldung kommt aus dieser Antwort und nicht aus der
+   * eigenen Zählung des Aufgabenbereichs: „3 Anhänge hängen daran" ist eine
+   * Aussage über den Bestand, und über den Bestand weiß der Dienst Bescheid.
+   * Was der Aufgabenbereich selbst weiß, sind die Anhänge, die es **nicht** bis
+   * zum Anlegeruf geschafft haben — die kennt der Dienst nicht.
    */
-  readonly attachments?: CreatedAttachmentsDto;
+  readonly attachments?: CreatedAttachmentsDto | null;
 }
 
 export interface CreatedAttachmentsDto {

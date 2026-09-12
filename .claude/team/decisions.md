@@ -2965,3 +2965,59 @@ Suche, nicht danach.**
 als Pfadbestandteil (A-A-78 bis A-A-82), die Kürzung, die der Rückfrage die Endung nimmt
 (A-A-93), der Cloud-Verweis als Adresse aus fremder Hand, und R-21 an neuer Stelle — bis heute
 mußte ein Pfad eingetippt werden, ab A-19.23 genügt eine E-Mail.
+
+## E-110 — Eine Antwort darf nicht zur Wiederholung dessen verleiten, was schon geschehen ist
+
+**Frage aus T-309.** Beim Anlegen eines Todos aus einer E-Mail laufen die Anhangszeilen in einer
+zweiten Transaktion, nachdem das Todo bereits festgeschrieben ist. Ein **Wurf** dort ließ die
+Route mit 500 antworten. domain-dev hat die Folge selbst benannt: *„Das Todo überlebt den Wurf,
+die Route antwortet 500; ein zweiter Versuch erzeugt ein Duplikat."*
+
+**Entschieden: kein 500, wenn das Todo steht.** Der Aufrufer bekommt den Zustand, der wahr ist —
+das Todo ist angelegt, die Anhänge sind vollständig fehlgeschlagen. A-19.29 kennt diesen Zustand
+bereits: „Ein Todo, das mit weniger Anhängen entsteht als die E-Mail trägt, sagt das." **Null ist
+weniger.**
+
+**Die Regel dahinter gilt über diesen Fall hinaus:** Eine Antwort darf den Aufrufer nicht dazu
+bringen, etwas zu wiederholen, das bereits geschehen ist. Ein Fehlerschluß, der zu einem zweiten
+Todo mit derselben Call-Nummer führt, richtet einen Schaden an, den der Benutzer nicht verursacht
+hat und nicht sehen kann — und er richtet ihn genau an der Stelle an, gegen die A-10.9 und die
+ganze Duplikatwarnung gebaut sind.
+
+**Die Gegenposition ist notiert und nicht unbegründet.** domain-dev hat eingewandt, ein Wurf sei
+ein **unerwarteter** Zustand, und ihn als gewöhnliches Ergebnis auszugeben verwische das. Richtig.
+Deshalb gehört der Wurf ins Protokoll — mit Stufe `error` und eigenem Grund —, während der
+Aufrufer die Wahrheit über den Bestand bekommt. Zwei verschiedene Leser, zwei verschiedene
+Auskünfte, beide wahr.
+
+**Eine Grenze, die dabei sichtbar wurde und nicht still gelöst ist (offen):** Der **Wortlaut** des
+Wurfs steht nicht in der Protokollzeile. `Logger` hat strukturell keinen Parameter für ein
+Ausnahmeobjekt, und `error.message` trägt bei SQLite- und Dateisystemfehlern regelmäßig einen
+Pfad — das ist B-2.4 und T-132. „In voller Schärfe protokollieren" braucht damit einen eigenen
+Diagnosekanal, und der ist eine Entscheidung, keine Codezeile.
+
+## E-111 — Der Aufräumlauf für herrenlose E-Mail-Dateien
+
+**Frage aus T-309.** Das `try`/`catch` um die Anhangstransaktion reicht so weit wie der Prozeß.
+Ein **harter Abbruch** zwischen Schreiben und `COMMIT` hinterläßt eine Datei im
+Anwendungsdatenverzeichnis, auf die keine Zeile zeigt.
+
+**Entschieden: der Lauf wird gebaut**, nach dem Vorbild des Bildlaufs, verdrahtet beim Start.
+Der Grund ist nicht Ordnungsliebe: Es geht um **Kundendaten aus einer fremden E-Mail**, die
+unbemerkt liegenbleiben. Niemand fände sie — kein Bestand zeigt auf sie, keine Datensicherung
+erwähnt sie, keine Anhangsliste nennt sie.
+
+**Zwei Auflagen, beide gebaut:**
+
+- **Eine Untergrenze**, und sie steckt im Rückgabewert statt in einer Zahl:
+  `{ read, owned, removed, refused }`. „Null Waisen" ist damit von „null gelesene Dateien"
+  unterscheidbar — der Fehler, den dieser Bestand dreizehnmal nachschärfen mußte.
+- **Nie eine Datei löschen, auf die eine Zeile zeigt.** Vier Sicherungen plus ein
+  Widerspruchsriegel, der über **dieselbe** Bedingung zählt wie die Abfrage; sonst wäre der
+  Widerspruch ein Vergleich zweier verschiedener Mengen.
+
+**Die Falle, die der Bildlauf nicht hat** und die aus dem Aufräumlauf beinahe einen Löschlauf
+gemacht hätte: `listEmailFiles()` liefert **Namen**, `todo_attachment.target` trägt **Pfade**.
+Ohne Umrechnung wäre jede Datei herrenlos gewesen. Es ist derselbe Fehler wie „geprüfter Name ≠
+aufgelöster Name" (T-156-1, T-164-1, T-297), diesmal in der löschenden Richtung — und dort kostet
+er nicht eine Lücke, sondern Daten.

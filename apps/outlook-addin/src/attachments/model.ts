@@ -16,6 +16,7 @@ import {
   MAX_EMAIL_ATTACHMENT_BYTES,
   MAX_EMAIL_ATTACHMENT_COUNT,
   MAX_EMAIL_ATTACHMENT_TOTAL_BYTES,
+  isEmailAttachmentFailureReason,
   type EmailAttachmentFailureReason,
 } from '@takt/domain';
 
@@ -108,10 +109,14 @@ export interface MailCapabilities {
  * Was **über die Leitung** geht — die Liste der Domäne, und es gibt keine
  * zweite (A-19.29, T-301, T-304).
  *
- * Acht Kennungen, aufgezählt in `packages/domain/src/email-attachment.ts`. Der
- * Dienst stellt drei davon fest (`too_large`, `rejected`, `not_a_web_address`)
- * und meldet sie in der Antwort auf den Anlegeruf; der Aufgabenbereich
- * übersetzt sie hier in Sätze.
+ * Aufgezählt in `packages/domain/src/email-attachment.ts`. Der Dienst stellt
+ * einen Teil davon fest (`too_large`, `total_too_large`, `too_many`,
+ * `rejected`, `not_a_web_address`) und meldet ihn in der Antwort auf den
+ * Anlegeruf; der Aufgabenbereich übersetzt ihn hier in Sätze.
+ *
+ * **Die Zahl steht hier bewusst nicht mehr ausgeschrieben** (T-310): Sie war
+ * „acht", ist seit T-309 neun, und eine Zahl in einem Kommentar neben einer
+ * Aufzählung, die woanders steht, altert still.
  *
  * Bis T-300 stand hier eine eigene Aufzählung von zehn Werten. Sie deckte sich
  * an drei Stellen nicht mit der der Domäne, und der Orchestrator hat
@@ -123,49 +128,103 @@ export interface MailCapabilities {
 export type WireSkipReason = EmailAttachmentFailureReason;
 
 /**
- * Was **auf dem Bildschirm** steht (Entwurf 6.2, A-19.29).
+ * Was **auf dem Bildschirm** steht (Entwurf 6.2, A-19.29, A-19.30b).
  *
- * Die acht der Domäne **plus zwei**, und die zwei sind eine ausdrückliche
- * Entscheidung des ux-designers (T-303) und keine Nachlässigkeit:
+ * ---------------------------------------------------------------------------
+ * Seit T-309/T-310 dieselbe Menge wie die der Leitung — und das ist die
+ * Auflösung, nicht der Verlust einer Unterscheidung
+ * ---------------------------------------------------------------------------
  *
- *  - `too_many` — die 26. Datei ist zu **viel**, nicht zu groß.
- *  - `total_too_large` — die Summe ist gerissen, die einzelne Datei nicht.
+ * `too_many` und `total_too_large` waren bis dahin **reine Anzeigegründe**:
+ * Der Plan erkennt beide vor dem Klick an den angekündigten Größen, und über
+ * die Leitung gab es sie nicht. Genau daran ist A-19.30b entstanden — die
+ * **Tür** kann beide Fälle ebenfalls feststellen, und sie meldete sie als
+ * `too_large`. Der Benutzer las dann „zu groß (2,0 MB). Die Grenze liegt bei
+ * 25,0 MB je Datei.": einen Satz, der sich selbst widerspricht.
  *
- * Beide Fälle stehen **vor dem Klick** fest und **reisen nie über die
- * Leitung**: Der Plan aus `plan.ts` erkennt sie an den angekündigten Größen,
- * lange bevor irgendetwas gesendet ist. Ein `rejected` („SuperTakt hat die
- * Datei nicht angenommen") wäre in der Vorschau schlicht unwahr — SuperTakt
- * hat sie nie gesehen.
+ * Domain-dev hat die beiden Kennungen in T-309 in die Aufzählung der Domäne
+ * genommen. Damit fällt die Sonderstellung weg: Die Menge auf dem Bildschirm
+ * ist dieselbe wie die über die Leitung, jede Kennung trägt ihren eigenen Wert
+ * und ihren eigenen Bezug, und der Aufgabenbereich erfindet keine.
  *
  * **Die Regel dahinter, und sie gilt allgemein:** Die Gründe über die Leitung
  * dürfen gröber sein als die auf dem Bildschirm, solange jede Kennung der
- * Leitung auf **genau einen** Satz fällt und keine auf zwei. Deshalb ist diese
- * Menge eine echte Obermenge der Leitungsmenge und nicht eine zweite daneben:
- * Kommt in der Domäne ein Grund dazu, wird der Übersetzer in `reasons.ts` ohne
- * Satz dafür **rot** (`never`), und nicht erst der Benutzer, der eine leere
- * Zeile liest.
+ * Leitung auf **genau einen** Satz fällt und keine auf zwei — **aber nie
+ * gröber als die Ursache**. Wo zwei Ursachen zu zwei verschiedenen Handlungen
+ * des Benutzers führen, sind es zwei Kennungen.
  *
  * **Freitext aus fremden Fehlermeldungen ist verboten** (AB-3). Was Outlook
  * meldet, ist Text aus fremder Hand in einer Fläche, die sonst nur eigene
  * Sätze zeigt.
  *
- * **`mailbox_closed` gibt es nicht** — weder hier noch in der Domäne. Er stand
- * für den EWS-Weg, den es seit E-109 nicht mehr gibt; gibt Outlook die
- * Nachricht nicht her, fehlt sie nicht, sondern wird nachgebaut (A-19.22a).
+ * **`mailbox_closed` und `connection` gibt es nicht** — weder hier noch in der
+ * Domäne. Der erste stand für den EWS-Weg, den es seit E-109 nicht mehr gibt;
+ * den zweiten erzeugte niemand (T-308 F-7). Ein Grund, der nicht eintreten
+ * kann, ist ein Satz, der das Gegenteil des Bestands behauptet.
  */
-export type SkipReason = WireSkipReason | 'too_many' | 'total_too_large';
+export type SkipReason = WireSkipReason;
 
 /**
- * Die zwei Kennungen, die **nur** auf dem Bildschirm vorkommen.
+ * Die Kennungen, die **nur** auf dem Bildschirm vorkommen — **heute keine**.
  *
- * Sie stehen hier als Wert und nicht nur als Typ, damit der Nachweislauf die
- * Aussage „diese beiden reisen nicht" gegen die Aufzählung der Domäne halten
- * kann, statt sie in einem Satz zu behaupten.
+ * Die Liste bleibt als Wert stehen, weil der Nachweislauf sie gegen die
+ * Aufzählung der Domäne hält: Wer hier wieder einen eigenen Grund einträgt,
+ * muss ihn ausschreiben, und der Lauf mißt dann, dass er wirklich nicht über
+ * die Leitung geht. Leer heißt: Der Aufgabenbereich führt keine eigene
+ * Gründeliste mehr, und das ist die Aussage, die A-19.30b trägt.
  */
-export const DISPLAY_ONLY_SKIP_REASONS: readonly SkipReason[] = Object.freeze([
-  'too_many',
-  'total_too_large',
-]);
+export const DISPLAY_ONLY_SKIP_REASONS: readonly SkipReason[] = Object.freeze([]);
+
+/**
+ * Die Kennung der Leitung in die Kennung des Bildschirms — **eine Auswahl, die
+ * die Kennung braucht** (A-19.30b, T-310).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum ein vollständiger Record und kein Durchreichen
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-310 wurde der Grund des Dienstes unbesehen als Anzeigegrund benutzt.
+ * Das ging gut, solange beide Mengen deckungsgleich waren, und es ist genau
+ * die Bauart, aus der A-19.30b entstanden ist: Der Dienst meldet heute eine
+ * gerissene **Summengrenze** als `too_large`, und der Aufgabenbereich schreibt
+ * daraus den Satz „zu groß (2,0 MB). Die Grenze liegt bei 25,0 MB je Datei." —
+ * ein Satz, der sich selbst widerspricht.
+ *
+ * `Record<WireSkipReason, SkipReason>` zwingt jede Kennung der Leitung zu
+ * **einer ausgeschriebenen Zeile**. Nimmt die Domäne `total_too_large` oder
+ * `too_many` in ihre Aufzählung auf — daran arbeitet domain-dev —, wird dieser
+ * Record unvollständig und `pnpm typecheck` rot, und die beiden Sätze, die in
+ * `reasons.ts` bereits stehen, werden hier angeschlossen. Es gibt bewusst
+ * **keinen** Vorgabewert, der diesen Tag überleben würde: Ein Raten wäre genau
+ * das, was A-19.30b verbietet.
+ *
+ * Die Abbildung ist heute die Gleichheit. Das ist kein Grund, sie wegzulassen
+ * — sie ist die Stelle, an der die Frage gestellt wird.
+ */
+const DISPLAY_SKIP_REASON: Readonly<Record<WireSkipReason, SkipReason>> = Object.freeze({
+  too_large: 'too_large',
+  total_too_large: 'total_too_large',
+  too_many: 'too_many',
+  not_released: 'not_released',
+  timeout: 'timeout',
+  rejected: 'rejected',
+  not_a_web_address: 'not_a_web_address',
+  rebuild_rejected: 'rebuild_rejected',
+  outlook_too_old: 'outlook_too_old',
+});
+
+/**
+ * Siehe {@link DISPLAY_SKIP_REASON}.
+ *
+ * Nimmt eine **Zeichenkette** entgegen und nicht die Vereinigung: Was aus der
+ * Antwort des Dienstes kommt, ist ungeprüftes JSON, und ein Typ ist dort eine
+ * Erwartung und keine Tatsache. Eine unbekannte Kennung fällt auf `rejected` —
+ * „SuperTakt hat die Datei nicht angenommen" —, und das ist keine Vermutung
+ * über die Ursache, sondern die eine Aussage, die in diesem Fall sicher
+ * stimmt: Die Datei steht in der Abweisungsliste.
+ */
+export const displaySkipReason = (raw: string): SkipReason =>
+  isEmailAttachmentFailureReason(raw) ? DISPLAY_SKIP_REASON[raw] : 'rejected';
 
 /** Ein Anhang, der **nicht** übernommen wurde — mit Namen und Grund (A-19.29). */
 export interface MissingAttachment {

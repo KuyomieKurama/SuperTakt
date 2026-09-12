@@ -3971,27 +3971,64 @@ Prüfung:** Frist und Anhänge dürfen im Vorlagen-Editor als Feldquelle gar nic
 sein — derselbe Nachweis wie `TP-NOTE-01` („die Quellenauswahl im Vorlageneditor listet niemals
 ‚Vermerk‘"), hier auf zwei neue Felder angewandt.
 
-#### TP-ANH-13 — Über das Add-in entstehen keine Anhänge (A-19.19, E-072 Punkt 1)
+#### TP-ANH-13 — An einem vorhandenen Todo entsteht über das Add-in kein Anhang (A-19.19 in der Fassung von E-108, A-A-82, A-10.9/E-100) — **neu gefasst T-311**
 
-**Ebene:** Integration (`apps/local-api/test/routes/addin/**`, Hoheit unit-tester/integration-dev),
-ergänzt um einen E2E-Spotcheck über das Add-in-Taskpane (wie
-`outlook-addin-build.spec.ts`/`run-outlook-taskpane.mjs`).
+**Bis zum 2026-09-11 maß dieser Fall die volle Abwesenheit** — „über das Add-in entstehen keine
+Anhänge" (A-19.19 alt, E-072 Punkt 1). Seit **E-108** ist das falsch: Über `POST /addin/todos`
+entstehen seit T-304 Anhänge, und zwar **beim Anlegen eines neuen Todos aus einer E-Mail**.
+`.claude/team/reports/T-308-spec-ux-reviewer.md` Befund F-2 stellt fest, dass der bis dahin
+gültige Testfall (`tests/e2e/attachment-export-and-addin-exclusion.spec.ts`) und dieser
+Testplaneintrag seither **das Gegenteil des Bestands** behaupteten — dieselbe Fehlerklasse, wegen
+der `proof:addin` Abschnitt 18 am 2026-09-10 von Name auf Wirkung umgestellt wurde (T-247), nur
+diesmal im Wächter selbst.
 
-**Schritt 1 (Integration):** `POST /addin/todos` (oder die zuständige Route, Name aus dem Bau) mit
-einem zusätzlichen Feld, das einen Anhang beschreiben würde (z. B. `attachments: [...]` oder
-`attachmentUrl`), im Rumpf mitschicken.
-**Erwartung:** Die Antwort ist entweder eine Ablehnung des unbekannten Felds (422, falls die Route
-mit `.strict()`/gleichwertig geschützt ist) oder ein stillschweigendes Verwerfen — **so oder so**
-entsteht **kein** Anhang am angelegten oder gebuchten Todo (Nachschau über die reguläre Tür).
-**Schritt 2 (E2E-Spotcheck):** Eine simulierte E-Mail mit erkennbarer Call-Nummer über das
-Add-in-Taskpane verarbeiten; das Taskpane selbst bietet an keiner Stelle ein Eingabefeld für einen
-Anhang.
-**Strukturelle Bedingung (E-072 Punkt 1 wörtlich: „nicht per Voreinstellung, sondern
-strukturell"):** Ein Nachweis nach dem Vorbild von `proof:addin`/`proof:route-policy` — die
-Add-in-Türen (`apps/local-api/src/routes/addin/**`, `apps/outlook-addin/**`) enthalten **keinen**
-Code-Pfad, der ein Anhangsfeld liest oder schreibt. Dieselbe Prüfbauart wie R-06 für die
-Todo-Notiz im Exportmotor: nicht „das Eingabefeld fehlt heute", sondern „es gibt keine Leitung,
-über die es entstehen könnte".
+Was A-19.19 (neu) und A-A-82 im Bedrohungsmodell weiterhin zusagen, ist die **engere** Hälfte der
+alten Zusage: **an einem Todo, das vorher schon da war, entsteht über das Add-in kein Anhang** —
+auch nicht im Duplikatfall (A-10.9, E-100), auch nicht über die neue Anlegetür (sie führt kein
+Feld, das ein vorhandenes Todo benennt). Genau diese engere Hälfte mißt der Fall jetzt, und er
+mißt sie an der **Wirkung**: Ein Fall, der nur den Statuscode einer abgelehnten Anfrage liest,
+wird rot, sobald jemand die Tür wirklich ausweitet, aber auch grün, solange ein Aufrufer die neue
+Gestalt (`{ sender, items }`) nicht trifft — und genau daran ist der alte Fall am 2026-09-11
+gescheitert, aus dem falschen Grund grün geblieben zu sein wäre ein zweiter Fehler derselben Art.
+
+**Ebene:** E2E-Spotcheck über die echte HTTP-Tür (`tests/e2e/attachment-export-and-addin-exclusion
+.spec.ts`), ergänzt um Integration (`apps/local-api/test/routes/addin/**`, Hoheit
+unit-tester/integration-dev) und den strukturellen Nachweis `proof:addin`
+Abschnitt 18f/`proof:route-policy` (Hoheit domain-dev/integration-dev, `apps/local-api/**`,
+`apps/outlook-addin/**`). **Der E2E-Fall allein ist kein struktureller Nachweis über die Menge der
+Türen** — er hat keine Untergrenze über „wie viele Routen unter `/addin` wurden angefahren" und
+behauptet das auch nicht; diese Untergrenze (neun Türen gesucht, neun zu) trägt ausschließlich
+`proof:addin` 18f, fremde Hoheit. Was der E2E-Fall zusätzlich zu diesem strukturellen Nachweis
+trägt, ist die Prüfung **an den beiden konkreten Stellen**, an denen das Add-in ein vorhandenes
+Todo im Rumpf überhaupt berührt:
+
+**Schritt 1 — die Anlegetür, ein Schmuggelversuch über eine mitgeschickte Kennung:** Ein
+vorhandenes Todo anlegen. `POST /addin/todos` mit Titel, einem gültigen Anhangsumschlag
+(`attachments: { sender, items: [...] }`) **und** einem zusätzlichen Feld, das die Kennung des
+vorhandenen Todos trägt (z. B. `todoId`), aufrufen.
+**Erwartung:** Die Antwort ist 201 mit einem **neuen** Todo (Kennung ungleich der mitgeschickten).
+Das neue Todo trägt den/die Anhänge (Gegenprobe: `attachments.stored` und eine Nachschau über
+`GET /todos/:id/attachments` sind beide größer null — sonst wäre die folgende Nullmessung aus dem
+falschen Grund richtig). Das **vorhandene** Todo hat weiterhin null Anhänge.
+
+**Schritt 2 — die Duplikat-Ankündigung und die Buchungstür (A-10.9, E-100):** Ein Todo mit einer
+Call-Nummer anlegen; `GET /addin/todo-matches` mit derselben Call-Nummer aufrufen.
+**Erwartung:** Der Treffer erscheint (`searched: true`, Todo in `matches`), und die Antwort trägt
+strukturell **keine** Anhangsauskunft (kein Schlüssel `attachments` am Treffer) — die Ankündigung
+ist eine Angabe, keine Handlung (A-10.9 wörtlich). Danach: `POST
+/addin/todos/:todoId/time-entries` auf das gefundene Todo mit einem zusätzlichen `attachments`-Feld
+im Rumpf aufrufen (die einzige Route unter `/addin`, die heute eine Todo-Kennung im Pfad entgegen-
+nimmt — die Oberfläche des Aufgabenbereichs ruft sie seit F-21/E-100 nicht mehr auf, die Route
+selbst steht trotzdem, und A-10.9 spricht über die Handlung, nicht über die Existenz einer Route).
+**Erwartung:** Die Buchung entsteht, das mitgeschickte Anhangsfeld hat **keine** Wirkung — das
+gefundene Todo hat weiterhin null Anhänge.
+
+**Strukturelle Bedingung, weiterhin gültig (E-072 Punkt 1 wörtlich: „nicht per Voreinstellung,
+sondern strukturell"), jetzt auf die engere Zusage angewandt:** Die Add-in-Türen
+(`apps/local-api/src/routes/addin/**`, `apps/outlook-addin/**`) enthalten **keinen** Code-Pfad, der
+eine Todo-Kennung **und** ein Anhangsfeld in derselben Anfrage liest — A-A-82 im Typ (`AddinDeps
+.emailAttachments` hat keinen Parameter vom Typ `TodoId`), nicht nur im Kommentar. Dieselbe
+Prüfbauart wie R-06 für die Todo-Notiz im Exportmotor.
 
 #### TP-ANH-14 — Nichts öffnet sich von selbst (A-19.18)
 
@@ -4085,6 +4122,62 @@ Filter nach Endung, der sich umgehen ließe).
 
 ---
 
+### 25.4 Anhänge aus einer E-Mail, beim Anlegen (A-19.22 bis A-19.34, E-108, E-109, T-304) — nachgetragen T-311
+
+**Dieser Unterabschnitt fehlte vollständig, bis T-311 ihn nachträgt.** E-108/E-109 und die Welle,
+die T-304 gebaut hat, haben Abschnitt 19.5 der Spezifikation (A-19.22 bis A-19.34) und A-A-82 bis
+A-A-97 im Bedrohungsmodell neu geschaffen, ohne dass dieser Plan mitgezogen wäre — genau die
+Lücke, die `.claude/team/reports/T-308-spec-ux-reviewer.md` unter „A-19.33, Abschnitt 2" benennt:
+Die **erste** Naht (Office.js → Nutzlast → Bestand) ist mit echtem SQLite gemessen
+(`apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 18), die **zweite** (Bestand →
+Hauptfenster) war bis dahin nur **von Hand** gemessen (T-302, bei 420 px) — eine Zahl aus einem
+Bericht ist ein Stand, kein Nachweis. TP-ANH-23 unten schließt genau diese zweite Naht E2E und
+ist zugleich die einzige e2e-Messung der Nachbau-Kennzeichnung im Hauptfenster (A-19.22b, die drei
+Orte aus `docs/design/addin-anhangsuebernahme-fluss.md` Abschnitt 3 sind sonst nur an Quelltext und
+Kommentar gemessen) und der ersten sichtbaren Endung eines fremden Namens jenseits der
+Speichergrenze (A-19.23b, A-A-93, R-27).
+
+#### TP-ANH-23 — Übernommene Anhänge erscheinen vollständig im Hauptfenster (A-19.33 zweite Naht, A-19.22b, A-19.23b, A-A-93, R-27)
+
+**Ebene:** E2E, über die echte HTTP-Tür `POST /addin/todos` (kein Office.js-Host nötig — dieselbe
+Einschränkung wie bei TP-ANH-13: die Naht Office.js → Nutzlast bleibt eine benannte, hinnehmbare
+Lücke, die einen echten Windows-Rechner mit Outlook braucht, T-308 Abschnitt 2 Punkt 1).
+
+**Vorbedingung:** Ein Umschlag mit **drei** Anhängen in einer Anfrage: die Nachricht selbst als
+Nachbau gekennzeichnet (`kind: "message"`, `rebuilt: true` — der Fall aus A-19.22a, in dem
+Outlook die Mailbox-Fassung 1.14 nicht hat), eine gewöhnliche Datei, und eine Datei mit einem
+**200 Zeichen langen Anzeigenamen mit `.exe` am Ende** (204 Zeichen insgesamt — unter der
+Speichergrenze von 255 Zeichen, `MAX_EMAIL_DISPLAY_NAME_CHARACTERS`, geht also **unverändert** in
+den Bestand und ist eine reine Darstellungsfrage).
+**Schritt:** `POST /addin/todos` mit diesem Umschlag aufrufen; das neu angelegte Todo in
+`apps/web` aufschlagen (`gotoTodo`); die Anhangsliste auszählen und lesen.
+**Erwartung, mit einer echten Untergrenze und nicht „mindestens eine":**
+
+- Genau **drei** Zeilen in der Anhangsliste — nicht „eine oder mehr". Ein Prüffall über eine
+  Menge braucht eine Untergrenze auf die Zahl der geprüften Dinge, sonst mißt er nur die
+  Anwesenheit der Karte.
+- Die Nachricht trägt die Kennzeichnung „(nachgebaut)" **an der Zeile** und **im zugänglichen
+  Namen** des Öffnen-Knopfes (A-19.22b) sowie die Herkunftszeile mit dem Absender (A-A-84, A-A-85).
+- Die gewöhnliche Datei trägt **keine** Nachbau-Kennzeichnung.
+- Der 200-Zeichen-Name erscheint **vollständig**, mit sichtbarer `.exe`-Endung — gemessen als
+  echte, zur Laufzeit berechnete Darstellung (Randposition des Elements im sichtbaren Fenster,
+  kein Vorfahre beschneidet die tatsächliche Position mit `overflow(-x): hidden`), **nicht** nur
+  am Quelltext gemessen. Das ist der Unterschied zu `proof:clamp` (fremde Hoheit,
+  `apps/web/scripts/proof-clamp.mjs`): Der liest Klassennamen im Quelltext und wird rot, wenn eine
+  deckelnde Klasse **dazukommt** — er sieht keine zur Laufzeit geerbte oder von außen gesetzte
+  Eigenschaft, die denselben Schaden anrichtet, ohne dass sich der Quelltext ändert. Beide Prüfungen
+  ergänzen sich; keine ersetzt die andere.
+- Dieselbe Messung **zusätzlich bei einem schmalen Viewport (420 px, wie T-302 von Hand
+  geprüft hat)** — hier automatisiert statt behauptet.
+
+**Gegenprobe, ohne die die Zeilenzahl aus dem falschen Grund richtig wäre:** Vor der Messung im
+Hauptfenster wird `attachments.stored === 3` aus der Antwort von `POST /addin/todos` und die
+Zeilenzahl über `GET /todos/:id/attachments` gelesen — beide müssen mit der später gezählten
+Zeilenzahl übereinstimmen, sonst zeigte ein leeres oder halb gefülltes Ergebnis dieselbe Zahl wie
+ein vollständiges.
+
+---
+
 ### Zusammenfassung: Lauffähigkeit dieses Abschnitts
 
 | Fälle | Ebene | Zusätzlich zum Bau nötig | Grenze dieser Umgebung |
@@ -4099,17 +4192,34 @@ Filter nach Endung, der sich umgehen ließe).
 | `TP-ANH-08` | Unit + E2E-Spotcheck | reine Ableitungsfunktion für die Bezeichnung | keine |
 | `TP-ANH-10` | E2E, mit Prozess-Neustart | Neustart-Fähigkeit (liegt seit T-142 in `tests/e2e/support/**`, hier auf Frist/Anhänge statt Versionsprüfung angewandt) | keine |
 | `TP-ANH-12` | Integration | Frist/Anhang testweise über mehrere Vorlagen exportieren | keine |
-| `TP-ANH-13` | Integration + E2E-Spotcheck + struktureller Nachweis | Add-in-Route baut, ohne ein Anhangsfeld zu kennen | keine |
+| `TP-ANH-13` | E2E-Spotcheck (echte HTTP-Tür) + Integration + struktureller Nachweis | Add-in-Anlegetür baut Anhänge, ohne ein Feld für ein vorhandenes Todo zu führen (E-108, T-304) | keine — **läuft** (siehe unten) |
 | `TP-ANH-14` | E2E | Ereigniswache über eine ganze Interaktionsfolge | keine |
 | `TP-ANH-15` bis `-18` | Integration (Tür) + Rust-Einheitentest (Öffnen-Befehl) | Formprüfung an beiden Stellen | die **tatsächliche** Ablehnung durch `open`/`ShellExecuteW` selbst (jenseits der Formprüfung) ist unter Linux nicht messbar |
 | `TP-ANH-19`, `-20` | E2E (Rückfrage) + Rust-Einheitentest | Rückfrage-Dialog, Formprüfung | die tatsächliche Ausführung einer `.bat`/`.lnk` durch das Betriebssystem ist unter Linux nicht messbar und wird hier nicht behauptet |
+| `TP-ANH-23` | E2E (echte HTTP-Tür, kein Office.js-Host) | Anhänge aus einer E-Mail beim Anlegen (E-108, T-304) | die Naht Office.js → Nutzlast (T-308 Abschnitt 2 Punkt 1) — echter Windows-Rechner mit Outlook nötig |
 
-Kein einziger Fall dieses Abschnitts ist heute ausführbar — derselbe erwartete Zustand wie bei
-Abschnitt 24 vor dem Bau. Zwei Klassen von Grenzen sind vorweg benannt statt stillschweigend
-ausgelassen: die Wahl zwischen Integration und E2E bei `TP-FRIST-09`, die erst der Bau auflöst, und
-die Betriebssystemebene bei `TP-ANH-15` bis `-20`, die diese Umgebung grundsätzlich nicht erreicht
-(T-B08) und die ein Rust-Einheitentest neben dem jeweiligen Öffnen-Befehl tragen muss, so wie
-`release.rs` es für die Versionsprüfung bereits vormacht.
+**Diese Zusammenfassung stammt aus der Planung vor dem Bau (T-142) und ist an dieser Stelle seit
+T-150 nicht mehr richtig** — der Satz „kein einziger Fall dieses Abschnitts ist heute ausführbar"
+galt für den Planungsstand, nicht mehr für den Bestand: `TP-ANH-01` bis `-20` (mit den zwei
+`TP-ANH-20`-Ausnahmen aus dem Nachtrag oben) laufen seit T-150 als echte, grüne Playwright-Fälle,
+`TP-ANH-13` seit T-311 in seiner neu gefassten Form ebenfalls (gemessen, s. u.), und `TP-ANH-23`
+ist mit T-311 neu dazugekommen und läuft ebenfalls. Diese Lücke zwischen dem hier stehenden Satz
+und dem tatsächlichen Bestand ist derselbe Fehler, den T-311 an TP-ANH-13 behoben hat, nur in der
+Rahmung statt im Fall selbst — sie wird hier benannt und nicht stillschweigend mitgezogen, weil
+eine vollständige Überarbeitung dieser Zusammenfassung außerhalb des Auftrags T-311 liegt.
+
+Zwei Klassen von Grenzen sind vorweg benannt statt stillschweigend ausgelassen: die Wahl zwischen
+Integration und E2E bei `TP-FRIST-09`, die erst der Bau auflöst, und die Betriebssystemebene bei
+`TP-ANH-15` bis `-20`, die diese Umgebung grundsätzlich nicht erreicht (T-B08) und die ein
+Rust-Einheitentest neben dem jeweiligen Öffnen-Befehl tragen muss, so wie `release.rs` es für die
+Versionsprüfung bereits vormacht.
+
+**Gemessen (T-311), nicht nur behauptet:** `TP-ANH-13` (beide Testfälle in
+`tests/e2e/attachment-export-and-addin-exclusion.spec.ts`) und `TP-ANH-23`
+(`tests/e2e/addin-attachment-handoff-to-app.spec.ts`) sind auf dieser Maschine
+(Windows, Werkzeugkette benutzerlokal) tatsächlich gegen den echten lokalen Dienst gelaufen —
+`pnpm exec playwright test -c tests/e2e/playwright.config.ts <Datei>` — und bestanden. Kein Befund
+aus dem „nicht gelaufen, keine Deckung"-Grundsatz dieses Bestands trifft auf diese beiden Fälle zu.
 
 ---
 

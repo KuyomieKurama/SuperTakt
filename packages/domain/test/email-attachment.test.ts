@@ -15,11 +15,22 @@
  * Was hier gemessen wird, und warum genau das
  * ===========================================================================
  *
- * 1. **Die acht Fehlgründe sind eine geschlossene Menge** (T-301): Jeder der
- *    acht ist über {@link isEmailAttachmentFailureReason} erreichbar, und
- *    `mailbox_closed` — der mit T-301 gefallene neunte — ist es ausdrücklich
- *    **nicht mehr**. Ein Grund, der nicht eintreten kann, ist derselbe Fehler
- *    wie ein Wächter, der eine Abwesenheit mißt, die nicht mehr gilt.
+ * 1. **Die neun Fehlgründe sind eine geschlossene Menge** (T-301, T-309): Jeder
+ *    der neun ist über {@link isEmailAttachmentFailureReason} erreichbar, und
+ *    `connection` — der mit T-309 gefallene, `mailbox_closed` — der mit T-301
+ *    gefallene — sind es ausdrücklich **nicht mehr**. Ein Grund, der nicht
+ *    eintreten kann, ist derselbe Fehler wie ein Wächter, der eine Abwesenheit
+ *    mißt, die nicht mehr gilt.
+ *
+ *    **Die schärfere Zusicherung — jeder erreichbare Grund hat im ganzen
+ *    Bestand tatsächlich einen Erzeuger, und ein gestrichener hat keinen
+ *    mehr — steht bewußt NICHT hier**, sondern in
+ *    `apps/local-api/test/email-attachment-reason-producers.test.ts` (T-312).
+ *    Sie müßte den Quelltext von `apps/outlook-addin/src`, `apps/web/src` und
+ *    `apps/local-api/src` lesen, und die Domäne bekommt ausdrücklich **keine**
+ *    Umgebungstypen (`packages/domain/tsconfig.json`: `"types": []"`) — nicht
+ *    einmal `node:fs` ist hier benennbar, und das ist E-001, nicht eine Lücke
+ *    in diesem Prüffall.
  * 2. **Die drei Grenzen aus A-A-81 greifen am dekodierten Puffer**, nicht an
  *    der Base64-Zeichenkette. Ein Prüffall, der am kodierten Text mißt, ginge
  *    um den Faktor 4/3 daneben und wäre trotzdem grün — deshalb wird hier mit
@@ -77,20 +88,21 @@ function base64OfExactByteLength(byteLength: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Die acht Fehlgründe — eine geschlossene Menge (T-301)
+// Die neun Fehlgründe — eine geschlossene Menge (T-301, T-309)
 // ---------------------------------------------------------------------------
 
-describe('EMAIL_ATTACHMENT_FAILURE_REASONS — genau acht Gründe, und mailbox_closed ist keiner mehr (T-301)', () => {
-  it('genau acht Gründe, keiner mehr und keiner weniger', () => {
-    expect(EMAIL_ATTACHMENT_FAILURE_REASONS.length).toBeGreaterThanOrEqual(8);
-    expect(EMAIL_ATTACHMENT_FAILURE_REASONS.length).toBe(8);
+describe('EMAIL_ATTACHMENT_FAILURE_REASONS — neun Gründe, und connection/mailbox_closed sind keine mehr (T-301, T-309)', () => {
+  it('genau neun Gründe, keiner mehr und keiner weniger', () => {
+    expect(EMAIL_ATTACHMENT_FAILURE_REASONS.length).toBeGreaterThanOrEqual(9);
+    expect(EMAIL_ATTACHMENT_FAILURE_REASONS.length).toBe(9);
     expect([...EMAIL_ATTACHMENT_FAILURE_REASONS].sort()).toEqual(
       [
         'too_large',
+        'total_too_large',
+        'too_many',
         'not_released',
         'timeout',
         'rejected',
-        'connection',
         'not_a_web_address',
         'rebuild_rejected',
         'outlook_too_old',
@@ -100,10 +112,11 @@ describe('EMAIL_ATTACHMENT_FAILURE_REASONS — genau acht Gründe, und mailbox_c
 
   it.each([
     'too_large',
+    'total_too_large',
+    'too_many',
     'not_released',
     'timeout',
     'rejected',
-    'connection',
     'not_a_web_address',
     'rebuild_rejected',
     'outlook_too_old',
@@ -112,17 +125,21 @@ describe('EMAIL_ATTACHMENT_FAILURE_REASONS — genau acht Gründe, und mailbox_c
     expect(Object.hasOwn(EMAIL_ATTACHMENT_FAILURE_PRESENCE, reason)).toBe(true);
   });
 
-  it('"mailbox_closed" ist NICHT mehr erreichbar (T-301: der Zustand ist seit E-109 unerreichbar)', () => {
-    expect(isEmailAttachmentFailureReason('mailbox_closed')).toBe(false);
-    expect(Object.hasOwn(EMAIL_ATTACHMENT_FAILURE_PRESENCE, 'mailbox_closed')).toBe(false);
-    expect(EMAIL_ATTACHMENT_FAILURE_REASONS).not.toContain('mailbox_closed');
-  });
+  it.each(['connection', 'mailbox_closed'])(
+    '"%s" ist NICHT mehr erreichbar (T-309/T-301: der Zustand ist seit E-109 bzw. seit der Messung in T-309 unerreichbar)',
+    (removed) => {
+      expect(isEmailAttachmentFailureReason(removed)).toBe(false);
+      expect(Object.hasOwn(EMAIL_ATTACHMENT_FAILURE_PRESENCE, removed)).toBe(false);
+      expect(EMAIL_ATTACHMENT_FAILURE_REASONS).not.toContain(removed);
+    },
+  );
 
-  it('eine beliebige unbekannte Zeichenkette ist keiner der acht Gründe', () => {
+  it('eine beliebige unbekannte Zeichenkette ist keiner der neun Gründe', () => {
     expect(isEmailAttachmentFailureReason('')).toBe(false);
-    expect(isEmailAttachmentFailureReason('too_many')).toBe(false);
-    expect(isEmailAttachmentFailureReason('total_too_large')).toBe(false);
+    expect(isEmailAttachmentFailureReason('connection')).toBe(false);
+    expect(isEmailAttachmentFailureReason('mailbox_closed')).toBe(false);
     expect(isEmailAttachmentFailureReason('TOO_LARGE')).toBe(false);
+    expect(isEmailAttachmentFailureReason('totally_too_large')).toBe(false);
   });
 });
 
@@ -160,28 +177,36 @@ describe('admitEmailAttachment — drei Grenzen, jede an ihrer eigenen Achse (A-
     expect(verdict.ok).toBe(true);
   });
 
-  it('ein Byte über der Summengrenze über den Lauf: too_large, obwohl die Datei allein unter der Einzelgrenze bleibt', () => {
-    const verdict = admitEmailAttachment({
-      bytes: 100,
-      bytesBefore: MAX_EMAIL_ATTACHMENT_TOTAL_BYTES - 99,
-      countBefore: 0,
-    });
-    expect(verdict.ok).toBe(false);
-    if (verdict.ok) throw new Error('unreachable');
-    expect(verdict.reason).toBe('too_large');
-  });
+  it(
+    'ein Byte über der Summengrenze über den Lauf: total_too_large (NICHT too_large) — obwohl die Datei ' +
+      'allein unter der Einzelgrenze bleibt, und der Satz dazu darf keine Zahl über SIE nennen (A-19.30b)',
+    () => {
+      const verdict = admitEmailAttachment({
+        bytes: 100,
+        bytesBefore: MAX_EMAIL_ATTACHMENT_TOTAL_BYTES - 99,
+        countBefore: 0,
+      });
+      expect(verdict.ok).toBe(false);
+      if (verdict.ok) throw new Error('unreachable');
+      expect(verdict.reason).toBe('total_too_large');
+    },
+  );
 
   it('die 25. Datei (countBefore 24) ist noch zulässig', () => {
     const verdict = admitEmailAttachment({ bytes: 10, bytesBefore: 0, countBefore: MAX_EMAIL_ATTACHMENT_COUNT - 1 });
     expect(verdict.ok).toBe(true);
   });
 
-  it('die 26. Datei (countBefore 25) ist rejected, nicht too_large — Anzahl ist keine Größenaussage', () => {
-    const verdict = admitEmailAttachment({ bytes: 10, bytesBefore: 0, countBefore: MAX_EMAIL_ATTACHMENT_COUNT });
-    expect(verdict.ok).toBe(false);
-    if (verdict.ok) throw new Error('unreachable');
-    expect(verdict.reason).toBe('rejected');
-  });
+  it(
+    'die 26. Datei (countBefore 25) ist too_many, weder too_large noch rejected — Anzahl ist keine ' +
+      'Größenaussage und nennt ihren eigenen Wert (A-19.30a, A-19.30b)',
+    () => {
+      const verdict = admitEmailAttachment({ bytes: 10, bytesBefore: 0, countBefore: MAX_EMAIL_ATTACHMENT_COUNT });
+      expect(verdict.ok).toBe(false);
+      if (verdict.ok) throw new Error('unreachable');
+      expect(verdict.reason).toBe('too_many');
+    },
+  );
 
   it('eine leere Datei (0 Bytes) ist rejected, nicht too_large — leer ist keine Größenaussage', () => {
     const verdict = admitEmailAttachment({ bytes: 0, bytesBefore: 0, countBefore: 0 });

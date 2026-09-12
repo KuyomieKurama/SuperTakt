@@ -892,6 +892,47 @@ export function createAttachmentBlobPort(
     emailFilePathOf(name: string): string | null {
       return emailPathOf(name);
     },
+
+    /**
+     * Der Ordner der übernommenen E-Mail-Dateien (A-A-98).
+     *
+     * Die zweite Methode ohne Wirkung. Sie gibt den Wert heraus, den dieser
+     * Adapter ohnehin führt, statt daß der Aufrufer ihn aus einem Pfad
+     * zurückrechnet — zwei Zerlegungen desselben Pfades sind die Bauart, an
+     * der T-313-1 hing. Ob der Ordner existiert, sagt sie nicht.
+     */
+    emailFileFolder(): string | null {
+      return emailDirectory;
+    },
+
+    /**
+     * Ist das ein Name, den das **Bildverzeichnis** tragen kann? (T-315.)
+     *
+     * Dieselbe Rolle wie {@link emailFilePathOf} im anderen Ordner, mit einem
+     * Unterschied, der aus dem Bestand kommt und nicht aus dem Geschmack: Für
+     * eine Bildkopie steht in `todo_attachment.target` der **bloße Name**, und
+     * `removeImage` nimmt ihn so. Ein Pfad, den niemand benutzt, wäre ein Pfad
+     * mehr im Speicher und einer mehr, der in eine Protokollzeile rutschen kann
+     * (B-2.4).
+     *
+     * Geprüft wird über `pathOf` und damit an derselben Stelle wie beim Lesen,
+     * beim Auflisten und beim Entfernen — eine Form, ein Prüfort.
+     */
+    imageNameOf(name: string): string | null {
+      return pathOf(name) === null ? null : name;
+    },
+
+    /**
+     * Der Ordner der Bildkopien (A-A-18, A-A-98, T-315).
+     *
+     * Wortgleich die Begründung von {@link emailFileFolder}: Der Aufräumlauf
+     * fragt den Bestand, welche Namen er in **diesem** Ordner erwartet, und
+     * dafür muß jemand sagen, welcher gemeint ist. Ob er existiert, sagt sie
+     * nicht.
+     */
+    imageFolder(): string | null {
+      return directory;
+    },
   };
 }
 

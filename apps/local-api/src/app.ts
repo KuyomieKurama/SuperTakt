@@ -314,12 +314,25 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
      *
      * Der Aufgabenbereich darf lesen, nach einer Call-Nummer suchen, ein Todo
-     * anlegen und die bestehende Buchungsroute nutzen. **Anhängen darf er
-     * nicht** — weder einen Verweis noch eine Datei noch ein Bild. Es gibt
-     * dafür keine Route mehr: Pull Request #16 hatte eine gebaut, F-21 hat
-     * gegen sie entschieden, und E-100 hat sie samt Fähigkeit im `AddinUnit`
-     * entfernt (T-247). A-19.19 ist damit strukturell wahr, nicht zugesagt;
-     * `proof:addin` Abschnitt 18f mißt es am fertigen Dienst.
+     * anlegen und die bestehende Buchungsroute nutzen.
+     *
+     * **Anhängen darf er an ein vorhandenes Todo nicht** — und nur das ist die
+     * Zusage. Sie war bis E-108 weiter gefaßt: Bis dahin entstand über das
+     * Add-in **gar kein** Anhang, Pull Request #16 hatte eine eigene Route
+     * dafür gebaut, F-21 hat gegen sie entschieden und E-100 sie samt
+     * Fähigkeit im `AddinUnit` entfernt (T-247). Seit E-108 und T-304 gilt die
+     * **halbierte** Fassung von A-19.19: Beim **Anlegen** aus einer E-Mail
+     * entstehen Anhänge — die Nachricht als Datei und ihre Dateianhänge
+     * (A-19.22, A-19.23) —, am **gefundenen** Todo weiterhin nicht.
+     *
+     * Der Unterschied liegt im Typ und nicht in einer Zusage: Die Naht
+     * (`features/todos/email-attachments.ts`) nimmt **keine** `TodoId`
+     * entgegen, sondern eine Funktion, die eine erzeugt. Es gibt unter
+     * `/addin` keine Tür, die eine Kennung entgegennimmt und einen Anhang
+     * erzeugt (A-A-82, A-A-21′); `proof:addin` Abschnitt 18 mißt das am
+     * fertigen Dienst — an der **Wirkung** am Trägertodo, nicht am Namen der
+     * Route.
+     *
      * Kein Löschen, kein Export, kein Zugriff auf den Vermerk eines fremden
      * Todos, keine Einstellungen. Daneben erreicht das Add-in-Token nur noch
      * `GET /health` — „Verbindung prüfen", ohne Inhalt und ohne Wirkung.
@@ -372,7 +385,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
       inTransaction: <T,>(work: (unit: AddinUnit) => Promise<T>): Promise<T> =>
         context.transactions.inTransaction(work),
       now: () => context.clock.now(),
-      emailAttachments: createEmailAttachmentIntake(context),
+      emailAttachments: createEmailAttachmentIntake(context, runtime.logger),
     };
     api.route('/addin', createAddinRoutes(addinDeps));
   }

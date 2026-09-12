@@ -9634,10 +9634,26 @@ Leser die Route für vergessen halten.
    `CLAUDE.md`. A-10.9 ist mit E-100 geändert: **keine Handlung** am gefundenen Todo. Der Eintrag
    schützt damit einen Satz, den es nicht mehr geben darf.
 
-Nicht betroffen und eigens nachgesehen: `docs/glossar.md` (Zeilen 139-140, 157, 187) und
-`apps/web/src/features/todos/Attachments.tsx:82` sagen weiterhin richtig, daß über das Add-in keine
-Anhänge entstehen. Diese vier der ursprünglich sechs Stellen sind mit E-100 wahr geworden, ohne
-angefaßt zu werden — genau die Wirkung, die E-100 Punkt 1 beabsichtigt hat.
+**Berichtigt am 2026-09-12 (T-313, A-A-70). Dieser Absatz war seit dem 2026-09-11 falsch, und
+er ist der einzige Träger der überholten Zusage, der aus meiner eigenen Feder stammt.** Mit **E-108**
+entstehen über das Add-in Anhänge — beim **Anlegen** eines Todos aus einer E-Mail, und nur dort
+(A-19.19 in der Fassung vom 2026-09-11, A-19.22 bis A-19.34). Der Satz „über das Add-in entstehen
+keine Anhänge" ist damit nicht mehr wahr, gleich wo er steht. Nachgemessen am 2026-09-12:
+
+- `apps/web/src/features/todos/Attachments.tsx:75-80` ist in T-302 berichtigt und sagt heute das
+  Richtige — die Fläche dort ist die für ein **vorhandenes** Todo, und an einem vorhandenen entsteht
+  weiterhin nichts.
+- `docs/glossar.md` trägt die überholte Zusage **weiterhin und an drei Stellen** (im Abschnitt zur
+  Frist, im Abschnitt zum Anhang und in der Begriffstafel unter „Anhang"). Sie gehört documenter.
+  Gemeldet in T-265, offen seit dreizehn Tagen; der e2e-tester hat sie in T-311 erneut gezählt.
+
+**Was aus diesem Absatz über ihn hinaus gilt:** Dieses Papier hat eine Behauptung über den Bestand
+aufgestellt (*„sagen weiterhin richtig"*), sie datiert **nicht** und sie an keine Messung gebunden.
+Eine Entscheidung sechs Wochen später hat sie umgedreht, und niemand sah es, weil an ihr keine Zahl
+hing. Es ist derselbe Fehler wie in 32 und 36 — eine erfüllte Auflage, die niemand nachzählt —, nur
+diesmal am eigenen Papier und über eine **fremde** Datei. Regel: Wer in diesem Papier eine Aussage
+über eine Zeile in einem anderen Bestand schreibt, schreibt Datum und Meßbefehl daneben, oder er
+schreibt sie nicht.
 
 ---
 
@@ -12348,3 +12364,410 @@ jedesmal dieselbe billige Frage danebengeschrieben, ohne sie zu stellen. Sie zu 
 heute vier Minuten gedauert, und die Antwort war „nein, es wird nie entfernt". **Ein Risiko, das
 sechsmal angemeldet und nie bewertet wird, ist kein Risiko mehr, sondern eine Gewohnheit** — und
 eine Gewohnheit liest der nächste Prüfer als erledigt.
+
+---
+
+## 40. Wiedervorlage T-313 (2026-09-12) — der Lauf, der löscht: drei Wege an vier Sicherungen vorbei, und eine Grenze, die nicht feuern kann
+
+**Stand der Werkzeuge, zum vierten Mal in Folge:** Semgrep über den Guardian-Dienst — **nicht
+verfügbar** (`semgrep` steht in keinem Pfad dieser Umgebung). `42crunch-audit` — **nicht
+verfügbar**, obwohl `apps/local-api/openapi/takt-local-api.yaml` seit T-309 die neue Fläche
+beschreibt und damit zum ersten Mal ein lohnendes Ziel wäre (336 074 Bytes, Stand 2026-09-12
+01:40). Das Sicherheitstor aus Abschnitt 8 verlangt beides; beides fehlt seit T-241. **Was unten
+steht, ist gefahren** — Node 22.23.2 auf Windows 11, echter Dienst, echte SQLite, echte Dateien,
+echtes HTTP über einen eigenen Prozeß.
+
+### 40.1 Der Aufräumlauf — angegriffen wie die Vorlage in 39.4.1, und er hat drei Löcher
+
+`sweepOrphanedEmailFiles` (E-111) hat vier Sicherungen und einen Widerspruchsriegel. Gemessen
+wurde nicht, ob sie dastehen, sondern ob eine Datei **mit Eigentümer** trotzdem fällt. Aufbau:
+echter `createAttachmentBlobPort` auf einem frischen Anwendungsdatenverzeichnis, echte Datenbank
+über `openDatabase(':memory:')` mit `migrateToLatest`, echte Dateien über `storeEmailFile`, echte
+Zeilen in `todo_attachment`, echter Lauf mit der Verdrahtung aus `main.ts:361-374`.
+
+**Was hält — sieben Fälle, alle gemessen:**
+
+| Fall | Ergebnis |
+|---|---|
+| Grundfall: 3 Dateien, 2 mit Zeile | `{read:3, owned:2, removed:1}` — die Waise fort, beide anderen da |
+| Vierte Anhangsart im Bestand | `refused: 'unknown_kinds'`, `removed: 0` |
+| `emailFileCount` wirft | `refused: 'unavailable'`, `removed: 0` |
+| **Alle** Pfade in abweichender Schreibweise | `refused: 'contradiction'`, beide Dateien überleben |
+| Fremder Name (`rechnung.pdf`) im Ordner | unsichtbar, überlebt |
+| Unterverzeichnis in erzeugter Namensform | unsichtbar, Ordner und Inhalt überleben |
+| Hardlink auf ein Benutzerdokument, erzeugte Namensform | Link fällt, **Opfer überlebt** |
+
+Der Riegel aus E-111 trägt also genau den Fall, für den er geschrieben wurde. Was er nicht trägt,
+sind drei andere, und alle drei enden mit **gelöschtem Kundenmaterial, dessen Zeile stehenbleibt**.
+
+#### T-313-1 — Eine Zeile, die paßt, entwaffnet den Riegel für alle anderen (**muß**)
+
+Der Widerspruchsriegel steht hinter `if (known.size === 0)`. **Eine einzige** zuzuordnende Datei
+macht `known.size === 1`, und damit wird `emailFileCount()` nie gefragt. Gemessen mit zwei
+Dateien, zwei Zeilen, davon eine mit abweichender Pfadschreibweise:
+
+```
+{ read: 2, owned: 1, removed: 1 }   Datei A da, Datei B FORT, Zeile B steht
+```
+
+Dasselbe mit Schrägstrichen statt Rückstrichen im `target`: identisches Ergebnis. Der Vergleich in
+`knownEmailFileTargets` ist ein **zeichengleicher** `IN`-Vergleich über einen Pfad auf einem
+Dateisystem, das Pfade **nicht** zeichengleich vergleicht. Auf Windows sind
+`C:\…\email-attachments\<hex>.eml` und `c:\…` dieselbe Datei und zwei Zeichenketten;
+`resolve()` vereinheitlicht die Trennzeichen, aber nicht die Groß- und Kleinschreibung und nicht
+die Kurznamensform.
+
+Das ist die Falle aus E-111 („`listEmailFiles()` liefert Namen, `target` trägt Pfade") ein zweites
+Mal — behoben ist die Richtung *Name gegen Pfad*, offen ist die Richtung *Pfad gegen Pfad*. Und die
+Reichweite ist asymmetrisch: Solange **alle** abweichen, hält der Riegel; sobald **eine** paßt,
+fallen alle übrigen. Ein Bestand, der über seine Lebenszeit zwei Schreibweisen von
+`%LOCALAPPDATA%` gesehen hat, ist genau dieser Mischfall.
+
+**Gegenmittel A-A-98.**
+
+#### T-313-2 — `origin='user'` auf einer Zeile in diesem Ordner kostet die Datei (**muß**)
+
+`knownEmailFileTargets` fragt mit **zwei** Bedingungen: `origin = 'email' AND kind = 'file'`.
+`emailFileCount` zählt mit **denselben** zwei. Das ist als Zusage gebaut („zwei Antworten über
+dieselbe Menge"), und es ist zugleich der Grund, warum der Riegel diesen Fall **nicht sehen kann**:
+Verliert eine Zeile ihr `origin='email'`, verschwindet sie aus der Abfrage **und** aus der Zählung
+zugleich. Beide sagen null, der Widerspruch entsteht nie, und die Datei fällt. Gemessen:
+
+```
+zwei Dateien, zwei Zeilen mit origin='user', kind='file', target auf die Dateien
+{ read: 2, owned: 0, removed: 2 }   beide Dateien FORT, beide Zeilen stehen
+```
+
+Der Quelltextkommentar an `knownEmailFileTargets` hat diese Richtung durchdacht und **falsch herum
+entschieden**: *„`kind = 'file'` allein träfe auch den Pfad, den der Benutzer selbst eingetragen
+hat … die Folge wäre, daß das Aufräumen eine Datei stehen ließe (unschädlich) oder, in der anderen
+Richtung ohne `origin`, eine fremde löschte (nicht wiedergutzumachen)."* Der zweite Halbsatz stimmt
+nicht: **Ohne** `origin` ist die Eigentümermenge **größer**, also wird **weniger** gelöscht. Die
+Bedingung, die hier Sicherheit schaffen sollte, ist die, die die Löschung auslöst — der Kommentar
+hat den harmlosen Fall für den teuren gehalten.
+
+Erreichbar über: das Löschen des Trägertodos bei einem zweiten, vom Benutzer selbst eingetragenen
+Dateianhang auf dieselbe Datei (`ON DELETE CASCADE` nimmt die `email`-Zeile, die `user`-Zeile
+bleibt); und über jeden Weg, der `origin` auf seinen Vorgabewert zurücksetzt.
+
+**Gegenmittel A-A-98.**
+
+#### T-313-3 — Migration 0023 zurück und wieder vor macht aus dem Aufräumlauf einen Löschlauf (**sollte**)
+
+`0023_attachment_origin.down.sql` läßt `origin` fallen, die Hinrichtung legt sie mit
+`DEFAULT 'user'` wieder an. Jede übernommene Zeile ist danach `origin='user'` — der Fall aus
+T-313-2, aber für **alle** Dateien auf einmal. Gemessen:
+
+```
+2 Zeilen, 2 Dateien -> { read: 2, owned: 0, removed: 2 } -> 2 Zeilen, 0 Dateien
+```
+
+Der Rückweg sagt über sich selbst: *„das Aufräumen verliert seine Bedingung, bevor es die Dateien
+verliert — wer diesen Rückweg fährt, räumt den Ordner von Hand."* Das ist die **freundlichere**
+Hälfte der Wahrheit. Der Lauf verliert seine Bedingung nicht, er behält sie und beantwortet sie mit
+„niemandem" — und räumt den Ordner selbst, beim nächsten Start, ohne Rückfrage. Der Satz gehört
+berichtigt, und er gehört in dieselbe Datei.
+
+Reichweite, ehrlich: `migrateDownTo` wird im Erzeugnis **von keiner Stelle** gerufen (gemessen —
+nur `proof-db-permissions.mjs` und `proof-export.mjs`, beide auf einem `mkdtemp`-Verzeichnis). Es
+ist ein Weg für den, der von Hand zurückgeht, und keiner, den ein Benutzer unbeabsichtigt fährt.
+Deshalb **sollte** und nicht **muß** — die Behebung ist dieselbe wie für T-313-2.
+
+### 40.2 Das schreibende Token — 570 GB in der Stunde, und kein Riegel über der Zeit
+
+Gemessen am zusammengesetzten Dienst mit echtem Anwendungsdatenverzeichnis, gültiges Add-in-Token,
+`POST /api/v1/addin/todos`:
+
+| Messung | Wert |
+|---|---|
+| Ein Ruf, 25 Dateien à 1,99 MB | **201**, 25 Dateien, 47,4 MB, **183 ms** |
+| Zehn Rufe hintereinander | **453 MB in 2,8 s = 162 MB/s** |
+| Hochgerechnet auf eine Stunde | **≈ 570 GB**, ≈ 18 000 Dateien, ≈ 720 Todos |
+
+Die drei Grenzen aus A-19.30a gelten **je Ruf**. Über die Zeit gibt es nichts: keine Drosselung an
+dieser Route (die Kette in `app.ts:168-190` führt kein Glied dafür), keine Gesamtmenge, keine
+Zahl im Bestand. **Und der Aufräumlauf hilft hier ausdrücklich nicht:** Jede dieser Dateien hat eine
+Zeile, also einen Eigentümer, also ist sie für `sweepOrphanedEmailFiles` unantastbar — richtig so,
+und genau deshalb ist sie kein Ersatz für eine Grenze.
+
+**Was ein Prozeß mit dem Token in einer Stunde anrichtet** (T-313-4, **sollte**): Er füllt die
+Systempartition. Die Folgen sind nicht auf Takt beschränkt — eine volle Systempartition unter
+Windows kostet das Auslagern, das Anmelden und die Ereignisanzeige. Takt selbst verliert dabei
+zuerst die **Datenbank**: `takt.db`, `-wal` und `-shm` liegen im selben Verzeichnisbaum. Ein
+`SQLITE_FULL` mitten in einer Transaktion ist behandelt, ein voller Datenträger beim `-wal`-Umlauf
+ist der Fall, den niemand geprüft hat.
+
+**Die Einordnung, die dazugehört und die die Sache kleiner macht:** Wer das Token hat, ist ein
+Prozeß **unter demselben Benutzerkonto** (VG-1), und ein solcher Prozeß kann die Platte auch ohne
+Takt vollschreiben. Was Takt hinzufügt, ist nicht die Fähigkeit, sondern die **Zurechnung**: Die
+Bytes liegen unter dem Namen von SuperTakt, im Anwendungsdatenverzeichnis von SuperTakt, als
+Anhänge an Todos von SuperTakt — und in jeder Datensicherung nach A-20 reisen sie mit. Der Schaden
+ist Speicher, der Befund ist die Zurechnung. **Gegenmittel A-A-99.**
+
+**T-313-5 (muß) — die mittlere der drei Grenzen kann nicht feuern.** `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES`
+steht auf 48 MB; `ADDIN_ATTACHMENT_MAX_BODY_BYTES` steht auf 64 MiB. Base64 bläht um genau 4/3 auf,
+also ist ein Rumpf mit mehr als 48 MiB Rohdaten **immer** größer als 64 MiB. Gemessen, fünf
+Anläufe, jeder über der Summengrenze:
+
+```
+25 x 1,92 MiB = 48,0 MiB roh | Rumpf 64,0 MiB -> 413
+24 x 2,00 MiB = 48,0 MiB roh | Rumpf 64,0 MiB -> 413
+30 x 1,62 MiB = 48,6 MiB roh | Rumpf 64,9 MiB -> 413
+49 x 1,00 MiB = 49,0 MiB roh | Rumpf 65,3 MiB -> 413
+25 x 1,91 MiB = 47,7 MiB roh | Rumpf 63,6 MiB -> 201, 25 Dateien
+```
+
+`total_too_large` ist über die Leitung **unerreichbar**. Zum Vergleich, dieselbe Messung für die
+beiden anderen Gründe: `too_many` feuert (26 Dateien → ein `too_many`; 30 → fünf), `too_large`
+feuert (eine 26-MiB-Datei → Todo entsteht, Datei nicht).
+
+Das ist kein Schönheitsfehler, sondern ein Verstoß gegen A-19.29 in genau dem Fall, für den
+A-19.30a geschrieben wurde: Wer die Summe reißt, bekommt **413 auf die ganze Anfrage** — kein Todo,
+keine namentliche Meldung, ein Satz über die Anfragegröße statt über die Anhänge. Die Grenze, die
+T-309 eigens mit einer eigenen Kennung ausgestattet hat, gibt es in der Fläche nicht. Entweder die
+Rumpfgrenze steigt über `48 MiB · 4/3 + Spielraum`, oder die Summengrenze sinkt unter das, was der
+Rumpf trägt. **Gegenmittel A-A-100.**
+
+### 40.3 Die Speicherspitze — gemessen, und die Reihenfolge in der Kette kostet nichts
+
+Gemessen an einem **echten** HTTP-Dienst (`@hono/node-server`, eigener Prozeß, RSS alle 5 ms
+abgetastet, Rumpf vom Elternprozeß gestreamt, damit die Bytes nicht schon im gemessenen Heap
+liegen):
+
+| Anfrage | Antwort | RSS-Spitze im Dienst |
+|---|---|---|
+| Grundlinie | — | **96 MB** |
+| 255 MiB **ohne Nachweis** | 401 | **96 MB** — unverändert |
+| 255 MiB mit **Add-in-Token** | 401 | **96 MB** — unverändert |
+| 300 MiB ohne Nachweis | 413 | **96 MB** — unverändert |
+| 64 MiB mit Sitzungsgeheimnis | 422 | 285 MB |
+| **255 MiB mit Sitzungsgeheimnis** | 422 | **856 – 1128 MB** |
+| 2 × 255 MiB gleichzeitig | 2 × 422 | **1379 MB** |
+| 4 × 255 MiB gleichzeitig | 4 × 422 | **1818 MB** |
+
+**Drei Antworten, alle drei gemessen:**
+
+1. **Die Frage des code-reviewers ist beantwortet, und die Antwort ist entwarnend.** Daß
+   `bodyLimitByRoute()` in der Kette **vor** `authGuard` steht, kostet **keinen Speicher**: Ein
+   Rumpf ohne Nachweis wird nicht gelesen, die Spitze bleibt auf der Grundlinie. Der Rumpf ist zu
+   diesem Zeitpunkt ein Strom, den niemand verbraucht; erst der Anwendungsfall hinter `authGuard`
+   materialisiert ihn. Was die Reihenfolge kostet, ist **eine Auskunft**: Ein Prozeß **ohne**
+   Nachweis unterscheidet an `413` gegen `401`, welche Route in welcher Grenzklasse liegt —
+   gemessen: 70 MiB auf `POST /addin/todos` → `413`, 60 MiB auf dieselbe Route → `401`. Das ist
+   ein Orakel über die Fläche und kein Zugriff. **Schwere: niedrig** (T-313-6). Der Tausch wäre
+   möglich, kostete aber die Zusage, daß ein Riesenrumpf **vor** jeder Arbeit fällt. Ich empfehle,
+   es **so zu lassen** und die Auskunft zu benennen, statt sie zu tauschen.
+2. **Die 256 MiB sind mit dem Add-in-Token nicht erreichbar.** `credentialPolicy` senkt die
+   Anforderung ausschließlich unter `/addin`; `POST /data-transfer/archive` mit dem Add-in-Token
+   ergibt **401**. Die teure Fläche hängt am **Sitzungsgeheimnis**, und das reist über `stdin`
+   zwischen Hülle und Sidecar — nicht in der Prozeßliste, nicht auf der Platte, nicht in der
+   Umgebung (`access/session-secret.ts`). Der Satz aus dem Auftrag — *„der Dienst ist für jeden
+   Prozeß auf dem Rechner erreichbar"* — gilt für die **Adresse**, nicht für diese Route.
+3. **Der Faktor ist drei, nicht eins — und das ist die Zahl, die in A-19.34 fehlt.** 64 MiB kosten
+   189 MB über der Grundlinie, 255 MiB kosten 760 bis 1032 MB. Die Spitze ist rund **3,3-mal** der
+   zugelassene Rumpf: einmal der Rumpf als Bytes, einmal als Zeichenkette, einmal als
+   JSON-Baum. Die Vorhersage von domain-dev (934 MB) liegt innerhalb meiner Meßspanne; die
+   Schwankung kommt vom Zeitpunkt der Müllabfuhr und nicht vom Verfahren.
+
+**T-313-7 (sollte) — an der teuersten Route steht keine Gleichzeitigkeitsgrenze.** Vier parallele
+Einspielungen erreichen 1,8 GB; die Kette kennt kein Glied, das eine zweite Einspielung ablehnt,
+solange eine läuft. Eine Einspielung ist von Natur aus ein Vorgang, den es nur **einmal** gibt —
+sie ersetzt den ganzen Bestand (`replaceAll`). Zwei gleichzeitig sind nicht nur teuer, sie sind
+fachlich sinnlos. **Gegenmittel A-A-101.** Das kostet eine Zeile und nimmt der Zahl 256 ihre
+Multiplikatoren.
+
+### 40.4 Der Nachbau der `.eml` — R-28 ist strukturell geschlossen, und diesmal gefahren
+
+Der code-reviewer hat R-28 für geschlossen erklärt und dabei **gerechnet**. Ich habe **gefahren**:
+`buildRebuiltEml` direkt aufgerufen, die erzeugte Base64 dekodiert, den Kopf vom Rumpf getrennt und
+für jeden Fall gemessen: Menge der physischen Kopfzeilennamen gegen die neun, die wir selbst
+schreiben; `multipart` irgendwo im Kopf; `boundary` irgendwo im Kopf; jede Rumpfzeile gegen
+`[A-Za-z0-9+/]*={0,2}`; jede Kopfzeile gegen druckbares ASCII.
+
+**20 Angriffe, 0 Durchbrüche.** Darunter: ein Betreff, der einen vollständigen `multipart/mixed`
+mit `Content-Disposition: attachment; filename="pwn.exe"` und einem base64-Teil mitbringt; `CR`
+allein; `LF` allein; ein Anzeigename mit `CRLF`; eine Adresse mit `>`, `<`, `,` und `;`; eine
+Adresse mit einem Zeilenvorschub (die `$`-Falle aus anderen Sprachen); ein Rumpf, der wie
+Kopfzeilen samt Trennmarke aussieht; ein Betreff, der die Zeichenfolgen `?=` und `=?UTF-8?B?` roh
+enthält; ein Betreff aus 250 Emoji; ein `NUL` und ein `0x7f`. In **jedem** Fall: neun eigene
+Kopfzeilen oder weniger, kein `multipart`, keine Trennmarke, Rumpf ausnahmslos im Base64-Alphabet.
+Ein einziger Fall wurde **abgelehnt** — `body === null` —, und das ist der gewollte.
+
+**Die Verschärfung über A-A-96 hinaus trägt, und sie ist die bessere Auflage.** A-A-96 verlangte,
+die Trennmarke zu **erzeugen**; gebaut ist etwas Stärkeres, nämlich **keine**. Eine Marke, die es
+nicht gibt, kann nicht erraten werden. Ich nehme die Formulierung aus A-A-96 an dieser Stelle
+zurück und ersetze sie: **Wer `multipart` nicht braucht, baut es nicht.** Die erzeugte Marke wird
+erst dann wieder zur Auflage, wenn jemand einen zweiten Teil einführt — und der Satz dazu steht
+bereits im Kopf von `eml.ts`.
+
+**T-313-8 (sollte) — die einzige gemessene Schwäche des Nachbaus ist keine Einschleusung, sondern
+eine Zeile.** `Subject` faltet korrekt (gemessen: längste physische Zeile **81 Zeichen**, ob der
+Betreff 50 oder 4000 Zeichen hat). `From`, `To` und `Cc` falten **nicht**:
+
+```
+ein Empfänger, Anzeigename 400 Zeichen  ->  längste Kopfzeile    667
+ein Empfänger, Anzeigename 800 Zeichen  ->  längste Kopfzeile   1316
+20 Empfänger, Anzeigename 20 Zeichen    ->  längste Kopfzeile   1212
+200 Empfänger                           ->  längste Kopfzeile  12292
+```
+
+Die Schwelle liegt bei rund **17 Empfängern** oder einem Anzeigenamen ab rund **500 Zeichen** —
+beides in einem Verteiler alltäglich. RFC 5322 Abschnitt 2.1.1 setzt 998. Das ist der Befund des
+code-reviewers (Nr. 6), hier mit Zahlen. **Sicherheitlich** ist daran eines: Eine Zeile über 998
+Zeichen ist der klassische Boden für **Auseinanderlaufen zwischen Lesern** — der eine schneidet
+ab, der andere faltet, der dritte lehnt ab, und dieselbe Datei bedeutet für zwei Programme zwei
+verschiedene Dinge. Bei einer Datei, die als Beleg weitergereicht wird, ist das mehr als
+Kosmetik. Schwere bleibt **sollte**: Der Angreifer gewinnt keine Struktur, er verliert
+Zuverlässigkeit.
+
+### 40.5 Die zwanzig Auflagen aus 39.9 gegen den gebauten Code
+
+Erfüllt heißt hier: **woran gemessen**. Ein Bericht ist kein Nachweis.
+
+| Auflage | Stand | Woran gemessen |
+|---|---|---|
+| **A-A-78** Name erzeugt, fremder Name als Anzeigename | **erfüllt** | 25 Angriffsnamen über die **echte Route** geschickt: 25 Zeilen, 25 Dateien, jeder Plattenname in der Form `<32 Hex>[.endung]`, kein roher Name im Pfad (der einzige Treffer meiner Suche war `.bashrc` — die Endung, die A-A-78 ausdrücklich überträgt). Endungen auf der Platte: `txt, exe, pdf, gz, bashrc, bat, sh` und keine. `emailFileExtension` über 31 Fälle: `NUL`→null, `COM1`→null, `CONOUT$`→null, `rechnung.lnk::$DATA`→null, Endung hinter einem U+200B→null, hinter U+202E→null, `rechnung.pdf` + 20 Leerzeichen + `.exe`→`exe`, `X.LNK`→`lnk`. `proof:db-permissions` hält `ANGRIFFSNAMEN.length === 25` als Gegenprobe gegen das Schrumpfen der Liste (E-107) |
+| **A-A-78** Gegenprobe *„Anzeigename trägt alle 25 unverändert"* | **halb** | Gemessen von mir, nicht vom Bestand: 23 von 25 kommen zeichengleich an. Die beiden Abweichungen sind **richtig** und keine Lücke — der 300-Zeichen-Name wird auf 255 gekürzt, **in der Mitte, mit sichtbarer Marke, Endung `.exe` erhalten** (`shortenEmailDisplayName`, gemessen), und ein `NUL` fällt unterwegs. Was fehlt, ist ein **Prüffall** dieser Richtung; A-A-78 verlangt ihn ausdrücklich |
+| **A-A-79** `wx`, `0600`/`0700`, kein `existsSync` | **halb** | `open(full,'wx',FILE_MODE)` im Quelltext, `proof:db-permissions` mißt `0700` am Ordner und `0600` an der Datei unter absichtlich weiter `umask` im echten Startpfad. **Der verlangte Prüffall mit dem baumelnden Symlink fehlt** — im ganzen Baum steht kein `symlink` in einem Prüffall. Die Eigenschaft hält durch `O_CREAT` zusammen mit `O_EXCL`, sie ist nur nicht gemessen |
+| **A-A-80** (teurere Alternative) | **entfallen** | A-A-78 ist gebaut; diese Auflage war ausdrücklich als Ersatz formuliert und nicht als Ergänzung |
+| **A-A-81** gezählt beim Lesen, drei Grenzen vor dem ersten Byte | **halb — siehe T-313-5** | Je Datei: gemessen (26 MiB → Todo entsteht, Datei nicht, Verzeichnis unverändert). Anzahl: gemessen (26 Dateien → ein `too_many`, 30 → fünf). **Summe: über die Leitung unerreichbar.** `detail.size` kommt in keiner Rechnung vor — gezählt wird an der Zeichenkette und danach am dekodierten Puffer |
+| **A-A-82** eine Tür, sie hängt am Anlegen | **erfüllt** | `createTodo` reicht `create` **hinein**, die Fähigkeit bekommt keine Todo-Kennung; `proof:addin` 18/18d mißt die **Wirkung** am Trägertodo und schickt `todoId`, `todoID`, `targetTodoId`, `existingTodoId` mit — danach null am vorhandenen Todo. `proof:route-policy` hält `addinSurface.length` |
+| **A-A-83** kein verwaistes Byte | **erfüllt, mit neuer Kehrseite** | `try`/`catch` um die Transaktion, der Fangzweig entfernt jede Datei dieses Laufs (T-309); Prüffälle mit werfenden Attrappen als Stolperdraht. Dazu der Aufräumlauf aus E-111 für den harten Abbruch. **Die Kehrseite ist 40.1**: Der Lauf, der A-A-83 vervollständigt, löscht auf drei gemessenen Wegen Material **mit** Eigentümer |
+| **A-A-84** Herkunft im Bestand | **erfüllt** | Spalte `origin` aus Migration 0023 mit `CHECK (origin IN ('user','email'))`, Vorgabe `user`; gemessen über die Route: 25 Zeilen mit `origin='email'`. Im Archiv geführt (`repo-data-archive.ts`), Archivfassung 6 |
+| **A-A-85** Rückfrage nennt die Herkunft | **erfüllt** | `AttachmentOpenDialog.tsx:404-413`: *„Diese Datei stammt aus einer E-Mail von …"*, Absender über `<Foreign>`; eigener Zweig für „aus einer E-Mail **ohne** bekannten Absender" |
+| **A-A-86** abgesetzte Endung | **erfüllt** | Derselbe Dialog, eigene Zeile mit dem Urteil daneben; `extensionOf` aus derselben Rechnung wie der Ausführungssatz |
+| **A-A-87** Cloud-Verweis nennt seinen Wirt | **nicht geprüft** | Ich habe die Zeile nicht gemessen. Siehe 40.7 Punkt 3 |
+| **A-A-88** MIME wird geschrieben, nicht gelesen | **halb** | Mustersuche über `apps/web/src`, `apps/outlook-addin/src`, `packages`: **null** Treffer für `innerHTML`, `dangerouslySetInnerHTML`, `srcdoc`, `<iframe`. Es gibt keinen MIME-Zerleger. **Der verlangte eigene Nachweislauf fehlt**; getragen wird die Zusage heute von `proof:addin` Prüfung B-12.1, und die mißt den Aufgabenbereich, nicht `apps/web` |
+| **A-A-89′** kein EWS, genau ein `getAsFileAsync` | **erfüllt** | `proof:addin` Abschnitt 22, mit Gegenprobe in beide Richtungen (eingefügte EWS-Zeile macht rot, entferntes `getAsFileAsync` ebenso). Im Baum: `makeEwsRequestAsync` nur im Wächter selbst und in einer erläuternden `.d.ts`, `ReadWriteMailbox` nur im Manifestkommentar, im Wächter und in derselben `.d.ts` |
+| **A-A-90** die Datensicherung sagt, daß sie wächst | **erfüllt** | `DATA_ARCHIVE_VERSION = 6`, `data.files[]` im Archiv, die Einspielung schreibt nur, was eine Zeile nennt, und warnt über `unclaimedFiles`, `unwritableFiles`, `foreignPaths` und über fehlende Bytes aus Archiven der Fassungen 1 bis 5 |
+| **A-A-91′** kein Rechtszuwachs | **erfüllt** | `<Permissions>ReadItem</Permissions>` zeichengleich im Manifest, gemessen in A-A-89′ |
+| **A-A-92** der Wurzelspeicher bekommt ein Ende | **nicht erfüllt — unverändert offen** | Mustersuche über `apps/desktop/src-tauri/src` und die `.ps1`: **null** Treffer für eine Entfernung aus `Cert:\CurrentUser\Root` und **null** für ein Löschen von `taskpane-key.pem`. Genau diese Null ist die Gegenprobe. Terminiert auf „vor der Auslieferung" (T-297-6) — der Termin ist nicht abgelaufen, die Auflage ist nicht erfüllt |
+| **A-A-93** am Ende wird nie gekürzt | **halb** | `apps/web`: `proof:clamp` mit Fixpunkt über die Aufrufer, drei Löcher benannt (T-307). Aufgabenbereich: von Hand richtig gebaut — `.attachments__line` und `.attachments__name` tragen `overflow-wrap: anywhere` und ausdrücklich **kein** `text-overflow`, mit ausgeschriebener Begründung an Ort und Stelle; die drei kürzenden Selektoren dort (`chip__label`, `tagpicker__create-text`, `tagrow__path`) sind Tagnamen und keine Dateinamen. **Gemessen wird der Aufgabenbereich von keinem Wächter** — wer dort morgen ein `text-overflow` an `.attachments__name` schreibt, wird von nichts rot. Dazu die gute Hälfte: die Kürzung im **Bestand** ist in der Mitte, mit Marke, Endung erhalten (gemessen) |
+| **A-A-94** `MinVersion` niedrig, Fähigkeit zur Laufzeit | **erfüllt** | `<Set Name="Mailbox" MinVersion="1.1"/>` im Manifest — niedriger als die 1.8 der Vorlage und weit unter der 1.14, die `getAsFileAsync` braucht. Damit ist der Rückfallweg erreichbar, und genau das war der Punkt |
+| **A-A-95** Quarantäne für den Zwischenweg | **gegenstandslos** | Der Zwischenweg ist nicht gebaut; die Anhänge fahren im Anlegeruf mit |
+| **A-A-96** kodiert erzeugen statt zusammenkleben | **erfüllt und überholt** | 20 Angriffe, 0 Durchbrüche (40.4). Die Auflage ist in ihrer Trennmarken-Hälfte durch etwas Stärkeres ersetzt: kein `multipart`, also keine Marke |
+| **A-A-97** „nachgebaut" hängt an der Datei | **erfüllt** | Kopfzeile `X-SuperTakt-Rebuilt: yes` in der Datei, Vorspann als erster Absatz im lesbaren Rumpf, Spalte `rebuilt` mit `CHECK (rebuilt IN (0,1) AND (rebuilt = 0 OR origin = 'email'))`, im Archiv geführt, an der Anhangszeile (`AttachmentRow`) und in der Rückfrage (`AttachmentOpenDialog`) |
+
+**Zählung: von zwanzig sind elf erfüllt, sechs halb, eine nicht erfüllt, eine nicht geprüft, zwei
+gegenstandslos.** Keine der sechs halben ist an ihrer **Wirkung** offen — alle sechs sind an ihrer
+**Messung** offen. Das ist der bessere der beiden Zustände und trotzdem derselbe Fehler, den dieses
+Papier seit Kapitel 30 zählt: Eine Eigenschaft, die nur im Quelltext richtig ist, ist eine
+Momentaufnahme (T-156-4, wörtlich).
+
+### 40.6 Die vier neuen Auflagen
+
+| Kennung | Auflage | Messung |
+|---|---|---|
+| **A-A-98** | **Der Eigentümer wird an der Datei gefragt, nicht an ihrer Herkunft.** Die Frage, ob eine liegende Datei gelöscht werden darf, wird mit der **weitesten** Bedingung gestellt, die einen Eigentümer finden kann: jede Zeile in `todo_attachment`, deren letzter Pfadbestandteil dieser Name ist — ohne `origin`, ohne `kind`, ohne Rücksicht auf die Schreibweise des Pfades davor. Gelöscht wird nur, was **keine** Zeile nennt. Begründung: Die enge Bedingung ist die **löschende** Richtung; sie zu weiten kostet eine liegengebliebene Datei, sie eng zu lassen kostet Kundenmaterial. Zusätzlich: Der Widerspruchsriegel darf nicht an `known.size === 0` hängen — **jede** nicht zuzuordnende Datei ist ein Widerspruch, sobald der Bestand Dateianhänge in diesem Ordner führt | Drei Prüffälle, jeder mit der heutigen Messung als Gegenprobe: (1) zwei Dateien, eine Zeile zeichengleich, eine mit abweichender Schreibweise des Pfades — **beide** Dateien überleben, heute fällt eine; (2) zwei Dateien, beide Zeilen `origin='user'`, `kind='file'` — beide überleben, heute fallen beide; (3) Migration 0023 zurück und wieder vor, danach der Lauf — alle Dateien überleben, heute fallen alle. Dazu die Gegenprobe nach oben: eine echte Waise fällt weiterhin. **Und dieselben drei Fälle für `sweepOrphanedImages`**, bevor jemand annimmt, der ältere Lauf sei geprüft |
+| **A-A-99** | **Eine Grenze über die Zeit, nicht nur je Ruf.** Die Bytes, die über `POST /addin/todos` in das Anwendungsdatenverzeichnis geschrieben werden, bekommen eine Grenze, die **über Aufrufe hinweg** gilt. Welche Bauart — eine Gesamtmenge im Bestand, eine Drosselung an der Route, ein Deckel auf übernommene Dateien je Tag — ist eine Produktfrage; daß es **eine** gibt, ist keine. Ohne sie ist die einzige Obergrenze die Plattengröße, und die Dateien tragen den Namen von SuperTakt | Ein Lauf schickt in Folge, was die Grenze überschreitet, und mißt: Der Ruf, der sie reißt, wird abgewiesen, die Meldung nennt die Grenze, und auf der Platte liegt nichts aus diesem Ruf. Gegenprobe: der Ruf knapp darunter kommt durch. Die heutige Zahl — 162 MB/s, rund 570 GB in der Stunde — gehört als Ausgangswert in den Prüffall |
+| **A-A-100** | **Eine Grenze, die der Transport vorwegnimmt, ist keine Grenze.** `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES` und `ADDIN_ATTACHMENT_MAX_BODY_BYTES` werden so aufeinander gelegt, daß die **fachliche** zuerst greift: Rumpfgrenze mindestens Summengrenze mal 4/3 plus Spielraum für Gerüst und Namen. Sonst antwortet die Route auf eine Anhangsfrage mit einem Satz über die Anfragegröße, verliert das Todo und meldet keine Datei namentlich — gegen A-19.29 und A-19.30a | Der Prüffall aus A-A-81, der heute `413` bekommt: Rohsumme über 48 MB → **201**, Todo entsteht, jede nicht übernommene Datei steht namentlich in `rejected` mit `reason: 'total_too_large'` und `bytes: null`. Gegenprobe: ein Rumpf über der **neuen** Rumpfgrenze bekommt weiterhin `413`. Dazu ein Festpunkt, der die beiden Zahlen gegeneinander hält und rot wird, wenn eine von beiden wandert |
+| **A-A-101** | **Eine Einspielung zur Zeit.** `POST /data-transfer/archive` nimmt eine zweite Anfrage nicht an, solange eine läuft — sie ersetzt den ganzen Bestand, zwei gleichzeitig sind fachlich sinnlos und kosten den doppelten Speicher. Dazu gehört die ehrliche Zahl im Papier und in A-19.34: **die Spitze ist rund das 3,3-fache des zugelassenen Rumpfes**, nicht der Rumpf | Zwei gleichzeitige Einspielungen: eine wird bearbeitet, eine mit eigenem Schlüssel abgewiesen; die RSS-Spitze bleibt in der Größenordnung eines einzelnen Laufs. Gegenprobe: nacheinander gehen beide durch |
+
+### 40.7 Was ich nicht bewerten kann, und woran es liegt
+
+Kein „vermutlich unkritisch". Die folgende Liste ist vollständig.
+
+1. **Office.js — unverändert der größte blinde Fleck, und er ist derselbe wie in T-297.** Ob
+   `getAsFileAsync` wirklich EML/MIME liefert, in welcher Kodierung, ob `isSetSupported('Mailbox',
+   '1.14')` auf einem echten Wirt das Erwartete sagt, ob `attachments[].size` angekündigt oder
+   wirklich ist, ob `isInline` überall gleich gesetzt wird, was Outlook beim Öffnen einer
+   nachgebauten `.eml` tatsächlich anzeigt: **alles ungemessen**. Es braucht einen Windows-Rechner
+   mit installiertem Outlook und einem eingerichteten Aufgabenbereich; in dieser Umgebung gibt es
+   weder das eine noch das andere. Meine ganze Bewertung des Nachbaus mißt, was **wir** erzeugen —
+   sie mißt nicht, was Outlook damit tut. Das ist die Hälfte, die fehlt, und sie ist die größere.
+2. **Semgrep und 42Crunch, zum vierten Mal.** Kein SAST-Lauf, kein Lieferkettenlauf, kein
+   Geheimnislauf, kein Audit über `takt-local-api.yaml`. Das Sicherheitstor aus Abschnitt 8 ist
+   damit **nicht** vollständig gefahren, und es war es zuletzt in T-183. Was an seiner Stelle
+   steht, sind Mustersuchen von Hand — die finden, wonach ich suche, und nichts sonst.
+3. **A-A-87 (Cloud-Verweis nennt seinen Wirt).** Nicht gemessen. Die Fläche liegt in der
+   Anhangszeile der Oberfläche; ich habe sie weder gelesen noch gefahren, weil die Zeit in 40.1
+   steckte. Der Stand aus T-297 gilt unverändert: **unbewertet**.
+4. **Der Symlink im E-Mail-Verzeichnis.** Der Fall aus 40.1 ließ sich auf diesem Rechner nicht
+   fahren — `symlinkSync` scheitert mit `EPERM`, weil Windows dafür Administratorrechte oder den
+   Entwicklermodus verlangt. Auf POSIX filtert `entry.isFile()` einen Symlink heraus; das ist am
+   Quelltext gelesen und nicht gemessen. **Der Hardlink ist gemessen** und harmlos: Das Opfer
+   überlebt, nur der Link fällt.
+5. **macOS und Linux.** Alle Messungen dieses Kapitels liefen auf Windows 11. Die Pfadfragen aus
+   40.1 stellen sich dort anders — ein Dateisystem, das zeichengleich vergleicht, hat T-313-1
+   nicht, und eines mit Groß-/Kleinschreibungsfaltung (APFS in seiner Vorgabe) hat es genauso.
+   Ungemessen.
+6. **Der volle Datenträger.** Die Hochrechnung in 40.2 ist eine Hochrechnung: 162 MB/s über 2,8
+   Sekunden, nicht über eine Stunde. Was bei `SQLITE_FULL` im `-wal`-Umlauf wirklich geschieht, ist
+   nicht gefahren — dafür müßte ich eine Partition füllen.
+7. **Die Kette unter Last.** Gemessen ist, daß ein unbeantworteter Rumpf keinen Speicher kostet.
+   Nicht gemessen ist, was fünfzig gleichzeitig offene 255-MiB-Ströme **ohne** Nachweis am
+   Betriebssystem kosten — Steckplätze, Sockelspeicher, Dateizeiger. Das ist eine Frage an den
+   Node-Server und nicht an diese Kette.
+8. **`sweepOrphanedImages`.** Der ältere Bruder des Laufs aus 40.1, seit T-176, mit derselben
+   Bauart und denselben zwei Riegeln. Ob er dieselben drei Löcher hat, habe ich **nicht** gemessen.
+   Er fragt an einem **Namen** statt an einem Pfad, also fällt T-313-1 dort vermutlich aus — aber
+   „vermutlich" ist genau das Wort, das in diesem Papier nichts verloren hat. Steht als offener
+   Punkt in A-A-98.
+
+### 40.8 Für `risks.md` — zum Eintragen (die Datei gehört dem Orchestrator)
+
+1. **R-21 — hoch, unverändert in der Einstufung, erweitert in der Begründung.** Der Weg in den
+   Bestand ist seit E-108 eine E-Mail. Neu nachzutragen: **Die Bytes einer fremden E-Mail liegen
+   jetzt im Anwendungsdatenverzeichnis**, mit erzeugtem Namen (A-A-78 gemessen erfüllt) und
+   `0600`/`0700` (gemessen). Die Prüfung des Öffnen-Befehls gilt unverändert. Was hinzukommt und in
+   R-21 fehlt: Aus diesen Bytes wird beim Aufräumen ein **Löschziel**, und ein Fehler in dieser
+   Richtung ist nicht wiedergutzumachen (T-313-1 bis T-313-3).
+2. **R-23 — hoch, unverschoben, und der Text ist heute nachweislich zu optimistisch.** A-A-92 ist
+   **nicht** gebaut; die Messung von heute ist dieselbe wie die von T-297: null Deinstallationspfad,
+   null Löschen des privaten Schlüssels. Nachzutragen ist das Datum der zweiten Messung und der
+   Termin: **vor der Auslieferung**, und der ist mit jedem Tag näher.
+3. **R-24 — hoch, Beschreibung weiter zu eng, plus eine neue Hälfte.** Die drei Unterschiede aus
+   T-297 gelten (der Benutzer wählt nicht, es kommt täglich, die Bytes entstehen). **Neu:** Die
+   fremde Datei bekommt jetzt eine **zweite Karriere** als Gegenstand eines Laufs, der beim Start
+   löscht. R-24 handelte vom Hereinkommen; ab heute handelt es auch vom Verschwinden.
+4. **R-27 — mittel, und der Träger hat gewechselt.** Der CSS-Deckel in `apps/web` ist gebaut und
+   bewacht (`proof:clamp`), der im Aufgabenbereich ist gebaut und **nicht** bewacht. Die Kürzung
+   im **Bestand** ist gemessen richtig (Mitte, Marke, Endung erhalten). R-27 bleibt offen, aber es
+   steht nur noch auf einem Bein, und das gehört in den Text.
+5. **R-28 — herabzustufen, nicht zu schließen.** Der Nachbau ist mit 20 gefahrenen Angriffen
+   strukturell dicht (40.4). Was R-28 in seinem **Kern** benennt — *„dieser Bestand erzeugt jetzt
+   ein Format, das ein anderes Programm interpretiert"* — bleibt wahr, und es bleibt wahr für
+   jede künftige Erweiterung dieser Datei. Vorschlag: **von hoch auf niedrig**, mit dem Satz
+   daneben, daß die Einstufung an **einer** Bauentscheidung hängt (kein `multipart`) und mit ihr
+   zurückkommt.
+6. **Eine neue Nummer ist fällig: R-29 — „Der Lauf, der löscht".** Begründung: Dieser Bestand hat
+   einen Weg, der **ohne Klick Kundendaten entfernt**, und er entscheidet das an einer Zeichenkette
+   aus dem Bestand. Drei Wege daran vorbei sind heute gemessen (40.1). Das ist kein Fall von R-21
+   (dort geht es um das Hereinkommen) und keiner von R-24 (dort um die fremde Datei als Quelle).
+   Einstufung **hoch**: Der Schaden ist Datenverlust ohne Wiederherstellung und ohne Spur außer
+   einer Zahl im Protokoll. Gegenmittel **A-A-98**. — *Zur Ehrlichkeit gehört dazu:* Es gab bereits
+   einen solchen Lauf, `sweepOrphanedImages` seit T-176. Ob er dieselben Löcher hat, ist **nicht**
+   gemessen (40.7 Punkt 8); der offene Punkt gehört in R-29 und nicht in einen Nebensatz.
+7. **Keine neue Nummer für die Speicherspitze.** Sie ist gemessen, sie hängt am
+   Sitzungsgeheimnis und nicht am Add-in-Token, sie kostet keinen Datenverlust, und ihr Gegenmittel
+   (A-A-101) ist eine Zeile. Ein Risikoeintrag dafür wäre eine Gewohnheit im Sinne des Schlußsatzes
+   von Kapitel 39.
+
+### 40.9 Urteil
+
+**Nacharbeit.** Die Fläche ist deutlich besser gebaut als die Vorlage, gegen die T-297 geschrieben
+wurde: Der Nachbau hält zwanzig gefahrene Angriffe, der Name auf der Platte ist erzeugt und über
+fünfundzwanzig Angriffsnamen gemessen, die Tür hängt am Anlegen, Herkunft und Nachbau stehen im
+Bestand und in der Rückfrage. Elf der zwanzig Auflagen sind erfüllt, sechs weitere sind an ihrer
+Wirkung erfüllt und nur an ihrer Messung offen.
+
+Freigegeben wird trotzdem nicht, und der Grund ist ein einziger: **Es gibt in diesem Bestand seit
+E-111 einen Lauf, der beim Start ohne Rückfrage Kundendaten löscht, und ich habe heute drei Wege
+gemessen, auf denen er Dateien entfernt, deren Zeile stehenbleibt.** Zwei davon brauchen keine
+außergewöhnliche Lage. Ein Fehler in dieser Richtung ist der einzige in diesem ganzen Kapitel, der
+sich nicht zurücknehmen läßt.
+
+**Freigegeben, sobald A-A-98 gebaut und mit den drei Gegenproben aus 40.1 gemessen ist.** A-A-100
+gehört in denselben Auftrag, weil eine Grenze, die nicht feuern kann, in der nächsten Prüfung als
+erfüllt gilt. A-A-99 und A-A-101 dürfen in die nächste Welle; die sechs halben Auflagen aus 40.5
+ebenso, **mit** ihrem Termin. A-A-92 bleibt auf „vor der Auslieferung" und ist der Posten, der von
+allen am längsten stillsteht.
+
+**Der Satz, der mir aus dieser Wiedervorlage bleibt.** In T-297 habe ich zwanzig Auflagen gegen
+eine fremde Vorlage geschrieben, und die schwerste davon — A-A-78 — hat gehalten: Die ganze Klasse
+„geprüfter Name ≠ aufgelöster Name" ist an der Anlegeseite **unmöglich** geworden statt abgewehrt.
+Genau dieselbe Klasse ist auf der **Löschseite** wiedergekommen, in einem Lauf, den es zur Zeit
+jener Auflagen noch nicht gab, und sie kostet dort nicht eine Lücke, sondern Daten. **Eine
+Fehlerklasse, die an einer Tür geschlossen wird, sucht sich die nächste** — und die nächste war
+diesmal nicht eine Tür, sondern ein Aufräumlauf, den jemand gebaut hat, um eine meiner Auflagen zu
+erfüllen.

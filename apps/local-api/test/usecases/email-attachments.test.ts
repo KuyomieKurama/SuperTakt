@@ -59,6 +59,16 @@ import {
   type FreshTodo,
 } from '../../src/features/todos/email-attachments.ts';
 import type { AppContext, UseCaseResult } from '../../src/context.ts';
+import { createLogger } from '../../src/logger.ts';
+
+/**
+ * Ein Protokoll, das nichts ausgibt. `attachEmailToNewTodo` bekommt seit
+ * E-111 einen `Logger` in der Signatur — er trägt hier nichts zur
+ * Zusicherung bei (der Prüffall dafür steht in
+ * `email-attachments-rollback.test.ts`), also genügt ein echter Schreiber
+ * ohne Ziel.
+ */
+const testLogger = createLogger(() => undefined);
 
 const todoId = (value: string) => value as unknown as TodoId;
 const attachmentId = (value: string) => value as unknown as AttachmentId;
@@ -197,7 +207,7 @@ describe('attachEmailToNewTodo — scheitert das Anlegen des Todos (A-A-83, erst
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, failingCreate(error));
+    const result = await attachEmailToNewTodo(context, intake, failingCreate(error), testLogger);
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
@@ -229,7 +239,7 @@ describe('attachEmailToNewTodo — die Größengrenze greift, bevor der Blob-Por
         failed: [],
       };
 
-      const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+      const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error('unreachable');
@@ -257,7 +267,7 @@ describe('attachEmailToNewTodo — die Größengrenze greift, bevor der Blob-Por
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -296,7 +306,7 @@ describe('attachEmailToNewTodo — ein Fehlschlag je Datei ist ein Ergebnis, kei
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -334,7 +344,7 @@ describe('attachEmailToNewTodo — Reihenfolge und Herkunft (A-19.33, A-A-84, A-
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -369,7 +379,7 @@ describe('attachEmailToNewTodo — Fehlschläge aus dem Aufgabenbereich (A-19.29
       failed: [{ displayName: longName, reason: 'not_released', bytes: null }],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -410,7 +420,7 @@ describe('attachEmailToNewTodo — keine zweite Namensprüfung, nameEmailFile de
 
     const intake: EmailIntake = { sender: null, message: null, files, links: [], failed: [] };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -450,7 +460,7 @@ describe('attachEmailToNewTodo — Cloud-Verweise (A-19.25)', () => {
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
@@ -461,7 +471,7 @@ describe('attachEmailToNewTodo — Cloud-Verweise (A-19.25)', () => {
     expect(result.value.attachments.attached[0]?.target).toBe('https://example.test/dokument');
   });
 
-  it(`der ${MAX_EMAIL_ATTACHMENT_COUNT + 1}. Anhang wird "rejected" — die Anzahlgrenze greift VOR der Formprüfung der (an sich gültigen) Adresse`, async () => {
+  it(`der ${MAX_EMAIL_ATTACHMENT_COUNT + 1}. Anhang wird "too_many" (NICHT "rejected") — dieselbe Anzahlgrenze wie bei Dateien, mit ihrem EIGENEN Grund (A-19.30a, A-19.30b), und sie greift VOR der Formprüfung der (an sich gültigen) Adresse`, async () => {
     const blobs = fakeBlobs();
     const context = fakeContext({ attachmentBlobs: blobs, unitCreate: async (input) => ok(makeAttachment(input)) });
 
@@ -479,16 +489,43 @@ describe('attachEmailToNewTodo — Cloud-Verweise (A-19.25)', () => {
       failed: [],
     };
 
-    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
     expect(result.value.attachments.attached.length).toBeGreaterThanOrEqual(MAX_EMAIL_ATTACHMENT_COUNT);
     expect(result.value.attachments.attached).toHaveLength(MAX_EMAIL_ATTACHMENT_COUNT);
     expect(result.value.attachments.failed).toEqual([
-      { displayName: 'Zusätzlich', reason: 'rejected', bytes: null },
+      { displayName: 'Zusätzlich', reason: 'too_many', bytes: null },
     ]);
   });
+
+  it(
+    `dieselbe Anzahlgrenze bei DATEIEN: die ${MAX_EMAIL_ATTACHMENT_COUNT + 1}. Datei wird "too_many" mit ` +
+      'bytes: null — sie nennt ihren eigenen Wert und keinen aus too_large (A-19.30a, A-19.30b)',
+    async () => {
+      const blobs = fakeBlobs();
+      const context = fakeContext({ attachmentBlobs: blobs, unitCreate: async (input) => ok(makeAttachment(input)) });
+
+      const files = Array.from({ length: MAX_EMAIL_ATTACHMENT_COUNT + 1 }, (_, index) => ({
+        displayName: `datei-${index}.pdf`,
+        base64: base64Of(`inhalt-${index}`),
+      }));
+
+      const intake: EmailIntake = { sender: null, message: null, files, links: [], failed: [] };
+
+      const result = await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value.attachments.attached).toHaveLength(MAX_EMAIL_ATTACHMENT_COUNT);
+      expect(result.value.attachments.failed).toEqual([
+        { displayName: 'datei-25.pdf', reason: 'too_many', bytes: null },
+      ]);
+      // Die 26. Datei erreicht storeEmailFile nie — sie fällt VOR dem Ablegen.
+      expect(blobs.storeCalls).toHaveLength(MAX_EMAIL_ATTACHMENT_COUNT);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -519,7 +556,7 @@ describe('attachEmailToNewTodo — der Absender wird normalisiert (Migration 002
       failed: [],
     };
 
-    await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(captured).toBe(expected);
   });
@@ -545,7 +582,7 @@ describe('attachEmailToNewTodo — der Absender wird normalisiert (Migration 002
       failed: [],
     };
 
-    await attachEmailToNewTodo(context, intake, succeedingCreate({}));
+    await attachEmailToNewTodo(context, intake, succeedingCreate({}), testLogger);
 
     expect(captured).toHaveLength(640);
     expect(longSender.startsWith(captured ?? '\0')).toBe(true);

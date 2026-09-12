@@ -40,7 +40,14 @@ import type {
   TaktError,
   TodoId,
 } from '@takt/domain';
-import { err, isAttachmentKind, ok, taktError } from '@takt/domain';
+import {
+  attachmentTargetFileName,
+  attachmentTargetNamesFile,
+  err,
+  isAttachmentKind,
+  ok,
+  taktError,
+} from '@takt/domain';
 
 import { chunk, integer, placeholders, text, type SqlConnection, type SqlRow } from './database.ts';
 import { attempt } from './errors.ts';
@@ -51,6 +58,35 @@ import type { IdSource } from './ids.ts';
 const ATTACHMENT_COLUMNS =
   'a.id, a.todo_id, a.kind, a.title, a.target, a.position, a.created_at, ' +
   'a.origin, a.origin_sender, a.display_name, a.rebuilt';
+
+/**
+ * Das Fluchtzeichen der `LIKE`-Muster in dieser Datei (A-A-98).
+ *
+ * Ein Rückstrich, und das ist bei Windows-Pfaden **kein** Widerspruch: Geflohen
+ * wird das **Muster**, nicht der Wert. Jeder Rückstrich eines Pfades wird dabei
+ * verdoppelt und steht danach für genau einen Rückstrich — `%` und `_` aus einem
+ * Dateinamen verlieren ihre Sonderbedeutung, statt sie zu behalten. Ohne diese
+ * Zeile wäre ein Anhangspfad mit `_` ein Muster, das mehr trifft, als es soll.
+ */
+const LIKE_ESCAPE = '\\';
+
+/** Ein Wert als `LIKE`-Muster, ohne Sonderbedeutung. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => LIKE_ESCAPE + character);
+}
+
+/**
+ * Wie viele Namen höchstens in **einer** `LIKE`-Kette stehen.
+ *
+ * Kleiner als {@link PARAMETER_CHUNK} (500), und der Grund ist nicht die Zahl
+ * der Parameter, sondern die Tiefe des Ausdrucks: Eine Kette aus `OR` ist für
+ * SQLite ein linksgeneigter Baum, und `SQLITE_MAX_EXPR_DEPTH` liegt in der
+ * Vorgabe bei 1000. Eine Kette, die diese Grenze reißt, wäre kein falsches
+ * Ergebnis, sondern ein **Wurf** — und dieser Wurf landete im Aufräumlauf, der
+ * daraufhin `unavailable` meldet und nichts anfaßt. Das ist der gutartige
+ * Ausgang, und trotzdem ist er unnötig.
+ */
+const NAME_LIKE_CHUNK = 100;
 
 /**
  * Zeilen, deren Art die Domäne nicht kennt, werden **übergangen**.
@@ -225,33 +261,24 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
       return rows.map((row) => text(row, 'target'));
     },
 
-    async knownImageTargets(names) {
-      const known = new Set<string>();
-      if (names.length === 0) return known;
-
-      /*
-       * Gefragt wird nach den **gefundenen Dateien**, in Blöcken, über
-       * `ix_todo_attachment_image` — den Teilindex aus Migration 0015, der
-       * genau für diese Frage angelegt wurde. Kein `SELECT target FROM
-       * todo_attachment WHERE kind = 'image'` ohne Bedingung: Das lüde alle
-       * Bildziele des Bestands in den Speicher, um am Ende dieselbe Teilmenge
-       * zu bilden.
-       *
-       * Die Zeilen dieser Abfrage tragen nur `target` — den **erzeugten**
-       * Namen einer Kopie (A-A-17). Weder Titel noch Vermerk noch Todo werden
-       * dabei gelesen.
-       */
-      for (const block of chunk([...names])) {
-        const rows = conn
-          .prepare(
-            `SELECT a.target FROM todo_attachment a
-              WHERE a.kind = 'image' AND a.target IN (${placeholders(block.length)})`,
-          )
-          .all(...block);
-        for (const row of rows) known.add(text(row, 'target'));
-      }
-      return known;
-    },
+    /*
+     * **`knownImageTargets` ist in T-315 gestrichen**, und zwar ersatzlos: Die
+     * Frage stellt jetzt `attachmentsNamingFiles` weiter unten, für beide
+     * Aufräumläufe und mit der Regel aus `@takt/domain`.
+     *
+     * Was hier stand, war schnell und falsch — `kind = 'image' AND target IN
+     * (namen)`, zeichengleich, über den Teilindex. Drei gemessene Wege hinaus,
+     * und jeder kostete eine Bildkopie des Benutzers: abweichende
+     * Groß-/Kleinschreibung, ein anderes `kind` auf der Zeile, und eine Zeile,
+     * die dieselbe Datei mit ihrem **vollen Pfad** nennt, während hier mit
+     * bloßen Namen gefragt wurde. Der letzte Weg entsteht ohne jeden Fehler und
+     * ohne Schreibzugriff an der Tür vorbei: Ein Dateianhang, der auf eine
+     * Bildkopie zeigt, ist eine gewöhnliche Eingabe.
+     *
+     * Wer die schnelle Frage vermißt, liest zuerst den Kopf von
+     * {@link attachmentsNamingFiles}: Der Index machte sie schnell **und**
+     * falsch, und die teure Richtung ist hier die richtige.
+     */
 
     async knownKinds() {
       /*
@@ -268,11 +295,23 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
 
     async imageCount() {
       /*
-       * Über `ix_todo_attachment_image` — denselben Teilindex wie
-       * `knownImageTargets`, und das ist Absicht: Die Zahl soll aus **derselben
-       * Menge** kommen, gegen die dort gefragt wird. Käme sie woanders her,
-       * verglichen der Aufrufer zwei Antworten über zwei verschiedene Dinge,
-       * und der Widerspruch, den er sucht, wäre keiner mehr.
+       * **Die enge Frage — und seit T-315 ist ihre Enge die Eigenschaft**
+       * (wortgleich die Begründung von {@link emailFileCount} seit T-314).
+       *
+       * Sie zählt über `ix_todo_attachment_image` mit `kind = 'image'` und hängt
+       * damit als einzige der drei Fragen des Bildlaufs **gar nicht** am
+       * `target`. Genau deshalb steht sie noch da: Wenn `target` seine Gestalt
+       * gewechselt hat — weder der Name am Ende noch der Ordner am Anfang
+       * wiederzufinden —, sagt sie als einzige weiter „der Bestand führt
+       * Bildanhänge".
+       *
+       * Bis T-315 stand hier das Gegenteil: Die Zahl solle aus **derselben**
+       * Menge kommen wie die Abfrage, gegen die sie sprechen sollte
+       * (`knownImageTargets`, ebenfalls `kind = 'image'`). Das war der
+       * Denkfehler. Zwei Antworten auf dieselbe Frage widersprechen einander
+       * nie — verlor eine Zeile ihr `kind`, fiel sie aus beiden zugleich, null
+       * stand gegen null, und die Datei fiel. Die Abfrage ist jetzt weit, diese
+       * Zahl ist eng, und erst dadurch sind es zwei Fragen.
        */
       const row = conn
         .prepare(`SELECT COUNT(*) AS total FROM todo_attachment WHERE kind = 'image'`)
@@ -290,23 +329,163 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
          * behauptet, die es nicht gibt.
          *
          * Bis T-188 stand hier `? 0`, und das war der teuerste denkbare Wert.
-         * Diese Zahl ist der **Widerspruchsriegel** aus T-179 B-1: Findet
-         * `sweepOrphanedImages` Bilddateien, ordnet ihnen aber keinen einzigen
-         * Anhang zu, dann entscheidet allein `imageCount() > 0` darüber, ob der
-         * Lauf abbricht oder **jede gefundene Datei als Waise löscht**. Eine
-         * `0` aus einer unmöglichen Lage öffnet genau diesen Riegel: Der
-         * Unmöglichkeitsfall hätte still das Gegenteil dessen ausgelöst, wofür
-         * die Zahl gebaut wurde.
+         * Diese Zahl ist einer der beiden **Widerspruchsriegel** des Bildlaufs
+         * (T-179 B-1, seit T-315 gegen die weite Eigentümerfrage gehalten):
+         * Findet `sweepOrphanedImages` Bilddateien ohne Eigentümer, dann
+         * entscheidet `imageCount()` mit darüber, ob der Lauf abbricht oder
+         * **jede gefundene Datei als Waise löscht**. Eine `0` aus einer
+         * unmöglichen Lage öffnet genau diesen Riegel: Der Unmöglichkeitsfall
+         * hätte still das Gegenteil dessen ausgelöst, wofür die Zahl gebaut
+         * wurde.
          *
          * Den Zweig zu streichen ginge nur mit einer Zusicherung am
          * Übersetzer, und die verschöbe dieselbe Annahme ungeprüft in die
          * Laufzeit. Deshalb dieselbe Antwort, die `text` und `integer` in
          * `database.ts` auf denselben Fall geben: ein lauter Fehler statt eines
-         * stillen Rückfalls. Der Aufrufer fängt ihn — `image-sweep.ts` hat für
-         * genau diese Zusage eine Klammer um alle fünf Schritte, schreibt eine
+         * stillen Rückfalls. Der Aufrufer fängt ihn — `orphan-sweep.ts` hat für
+         * genau diese Zusage eine Klammer um alle Schritte, schreibt eine
          * `warn`-Zeile und faßt nichts an.
          */
         throw new Error('COUNT(*) über die Bildanhänge lieferte keine Zeile.');
+      }
+      return integer(row, 'total');
+    },
+
+    async attachmentsNamingFiles(names) {
+      /*
+       * **Keine Abkürzung für die leere Liste, und das ist Absicht.** `chunk`
+       * liefert für eine leere Menge keine Blöcke, die Schleife läuft nicht,
+       * und die Antwort ist dieselbe. Ein Zweig, der nur eine Anweisung spart,
+       * ist an dieser Stelle ein Zweig ohne Prüffall — und in einer Datei, die
+       * über Löschungen entscheidet, sind ungeprüfte Zweige das teuerste
+       * Sparergebnis.
+       */
+      const owned = new Set<string>();
+
+      /*
+       * ==================================================================
+       * Die weiteste Bedingung kann keinen Index benutzen, und das ist der
+       * Preis, den A-A-98 ausdrücklich bezahlt
+       * ==================================================================
+       *
+       * Gefragt ist „welche Zeile nennt diesen **Namen**" — ein Vergleich am
+       * **Ende** einer Zeichenkette. Kein Index dieser Datenbank steht auf dem
+       * Ende von `target`; jede Frage dieser Art ist ein vollständiger Lauf
+       * über die Tabelle. Bis T-313 stand hier statt dessen ein zeichengleiches
+       * `IN` über `ix_todo_attachment_email`, und das war schnell und falsch:
+       * Es hat `c:\…` nicht als denselben Pfad wie `C:\…` erkannt und eine
+       * Datei mit Eigentümer entfernt (T-313-1).
+       *
+       * **Seit T-315 stellen beide Aufräumläufe diese eine Frage** — die
+       * übernommenen E-Mail-Dateien und die Bildkopien. Der Bildlauf hatte bis
+       * dahin seine eigene, engere Fassung (`knownImageTargets`), und sie war
+       * die ältere und ausgelieferte: Sie kostete eine Bildkopie schon dann,
+       * wenn eine Zeile dieselbe Datei mit ihrem **vollen Pfad** nannte. Wer
+       * hier eine zweite Fassung für einen dritten Ordner anlegt, baut denselben
+       * Fehler ein drittes Mal.
+       *
+       * **Die Vorauswahl hier ist absichtlich weiter als die Entscheidung.**
+       * `LIKE '%name%'` trifft jede Zeile, die den Namen **irgendwo** trägt;
+       * entschieden wird danach in `attachmentTargetNamesFile` (@takt/domain),
+       * und die Regel steht dort ein einziges Mal. Eine Vorauswahl, die enger
+       * wäre als die Entscheidung, hielte Zeilen zurück, die der Entscheider
+       * als Eigentümer erkannt hätte — und jede zurückgehaltene Zeile ist eine
+       * gelöschte Datei. Wer diese Anweisung ändert, prüft zuerst diesen Satz.
+       *
+       * `LIKE` faltet in SQLite ASCII (kein `ICU` geladen) — dieselbe Faltung
+       * wie in der Domäne, und aus demselben Grund dort ausgeschrieben.
+       *
+       * Gelesen wird ausschließlich `target` (B-2.4).
+       */
+      for (const block of chunk([...names], NAME_LIKE_CHUNK)) {
+        const rows = conn
+          .prepare(
+            `SELECT a.target FROM todo_attachment a
+              WHERE ${block.map(() => `a.target LIKE ? ESCAPE '${LIKE_ESCAPE}'`).join(' OR ')}`,
+          )
+          .all(...block.map((name) => `%${escapeLike(name)}%`));
+        for (const row of rows) {
+          const target = text(row, 'target');
+          // `Set.add` auf einen vorhandenen Namen ist ein Aufruf ohne Wirkung;
+          // eine vorgeschaltete Abfrage spart ihn und kostet einen Zweig, den
+          // niemand prüft. Siehe oben.
+          for (const name of block) {
+            if (attachmentTargetNamesFile(target, name)) owned.add(name);
+          }
+        }
+      }
+      return owned;
+    },
+
+    async attachmentNamesUnder(directory) {
+      const names = new Set<string>();
+      const root = directory.replace(/[\\/]+$/, '');
+      if (root === '') return names;
+
+      /*
+       * **Die andere Achse:** der Anfang des Pfades statt sein Ende. Beide
+       * Trennerschreibweisen, weil ein Bestand aus einem Windows-Rechner auf
+       * einem Linux-Dienst gelesen werden kann und umgekehrt; die Faltung
+       * besorgt `LIKE`.
+       *
+       * Was dieser Vergleich **nicht** trifft: die Kurznamensform
+       * (`C:\PROGRA~1`), Verbindungspunkte, einen zweiten Laufwerksbuchstaben
+       * auf dasselbe Ziel. Das ist hingenommen und nicht übersehen — diese
+       * Antwort bremst den Aufräumlauf, sie löscht nie. Eine zu kleine Antwort
+       * kostet eine Bremse; eine zu kleine Antwort von
+       * {@link attachmentsNamingFiles} kostete eine Datei.
+       */
+      // Erst der Ordner in der jeweiligen Trennerschreibweise, **dann** die
+      // Flucht über das Ganze: Ein Rückstrich, der erst nach dem Fliehen
+      // angehängt würde, wäre im Muster ein Fluchtzeichen und kein Trenner.
+      const windows = `${root.replace(/\//g, '\\')}\\`;
+      const posix = `${root.replace(/\\/g, '/')}/`;
+      const patterns = [`${escapeLike(windows)}%`, `${escapeLike(posix)}%`];
+      const rows = conn
+        .prepare(
+          `SELECT a.target FROM todo_attachment a
+            WHERE a.target LIKE ? ESCAPE '${LIKE_ESCAPE}'
+               OR a.target LIKE ? ESCAPE '${LIKE_ESCAPE}'`,
+        )
+        .all(...patterns);
+      for (const row of rows) names.add(attachmentTargetFileName(text(row, 'target')));
+      return names;
+    },
+
+    async emailFileCount() {
+      /*
+       * **Die enge Frage — und seit T-314 ist ihre Enge die Eigenschaft.**
+       *
+       * Sie zählt über `ix_todo_attachment_email` mit
+       * `origin = 'email' AND kind = 'file'` und ist damit die einzige der drei
+       * Fragen des Aufräumlaufs, die überhaupt nicht am Pfad hängt. Genau
+       * deshalb steht sie noch da: Wenn `target` seine Gestalt gewechselt hat —
+       * weder der Name am Ende noch der Ordner am Anfang wiederzufinden —,
+       * sagt sie als einzige weiter „der Bestand führt übernommene Dateien".
+       *
+       * Bis T-313 war sie die **einzige** Gegenfrage, und sie stellte dieselbe
+       * Bedingung wie die Abfrage, der sie widersprechen sollte. Zwei Antworten
+       * auf dieselbe Frage widersprechen einander nie: Verlor eine Zeile ihr
+       * `origin`, fiel sie aus beiden zugleich, null stand gegen null, und
+       * beide Dateien wurden entfernt (T-313-2). Die Abfrage ist jetzt weit,
+       * diese Zahl ist eng, und erst dadurch sind es zwei Fragen.
+       */
+      const row = conn
+        .prepare(
+          `SELECT COUNT(*) AS total FROM todo_attachment
+            WHERE origin = 'email' AND kind = 'file'`,
+        )
+        .get();
+      if (row === undefined) {
+        /*
+         * **Unerreichbar, und trotzdem kein `0`** — wortgleich die Begründung
+         * von {@link imageCount}: Diese Zahl ist einer der beiden
+         * Widerspruchsriegel des E-Mail-Aufräumlaufs. Eine `0` aus einer
+         * unmöglichen Lage öffnete genau den Riegel, für den sie gebaut ist.
+         * Ein lauter Fehler statt eines stillen Rückfalls; der Aufrufer hat
+         * dafür seine Klammer und faßt danach nichts an.
+         */
+        throw new Error('COUNT(*) über die übernommenen E-Mail-Dateien lieferte keine Zeile.');
       }
       return integer(row, 'total');
     },

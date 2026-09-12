@@ -1319,15 +1319,45 @@ Hoffnung.
    Der Nachweis besteht aus drei Riegeln, von denen jeder einzelne eine Datei verschont:
    `listImages` nennt nur Namen, die der Adapter erzeugt haben könnte (32 Hexziffern, vier
    Endungen) und nur Dateien — ein Unterordner, eine fremde Datei, eine halbe Kopie bleiben
-   unsichtbar; `knownImageTargets` wird **gefragt**, und nur eine Antwort ohne den Namen macht
-   ihn zum Waisen; bleibt die Antwort aus, wird gar nichts entfernt; `removeImage` misst die Form
-   noch einmal und verlässt sich nicht auf den Aufrufer.
+   unsichtbar; `attachmentsNamingFiles` wird **gefragt**, und nur eine Antwort ohne den Namen
+   macht ihn zum Waisen; bleibt die Antwort aus, wird gar nichts entfernt; `removeImage` misst die
+   Form noch einmal und verlässt sich nicht auf den Aufrufer.
 2. **Still, wenn nichts liegt.** Der Regelfall schreibt keine Zeile. Gemeldet wird eine Zahl, und
    nur, wenn wirklich etwas fort ist. Ein Lauf, der bei jedem Start seine Untätigkeit meldet,
    wird nach dem dritten Mal nicht mehr gelesen.
 3. **Er hält den Start nicht auf.** Ein Verzeichniseintrag (5 000 Dateien: knapp 4 ms gemessen)
-   und eine Abfrage in Blöcken über den Teilindex `ix_todo_attachment_image` aus Migration 0015.
-   Die Tabelle wird nicht in den Speicher geladen.
+   und die Eigentümerfrage, die seit T-315 ein vollständiger Lauf über `todo_attachment` ist
+   (`LIKE '%name%'`) — einmal beim Start und nur, wenn im Ordner überhaupt Dateien liegen. Die
+   Tabelle wird dabei nicht in den Speicher geladen; gelesen wird ausschließlich `target`.
+
+**T-315 hat diesen Lauf auf dieselbe Bauart gezogen wie den aus 5.6b — und der Anlaß gehört
+hierher, weil er allgemein ist.** Bis dahin war er eine **Abschrift** desselben Verfahrens: eigene
+Eigentümerfrage (`knownImageTargets`, `kind = 'image' AND target IN (namen)`), eigener Riegel
+(`known.size === 0 && imageCount() > 0`), eigener Ablauf. T-314 hat die eine Fassung berichtigt;
+diese blieb stehen — und sie war die **ältere und ausgelieferte**. Gemessen wurden vier Löschwege,
+drei davon lagen ausschließlich hier:
+
+> **Zwei Fassungen derselben Eigentümerfrage sind der Fehler, nicht die zweite Datei.** Wer eine
+> Regel berichtigt, sucht zuerst ihre Abschriften; sonst berichtigt er die Hälfte des Bestands.
+
+Der vierte Weg ist der, den die Sicherheitsprüfung nicht kannte und der **keine besonderen Rechte**
+braucht: Der Lauf fragte mit bloßen **Namen**; eine Zeile, die dieselbe Datei mit ihrem **vollen
+Pfad** nennt, war für ihn unsichtbar — und so ein Pfad kommt durch die **gewöhnliche** Tür
+(absolut, vorhanden, `.png`). Ein Benutzer, der einen Anhang der Art „Datei" auf eine Bildkopie im
+Anwendungsdatenverzeichnis zeigen läßt, verlor sie beim nächsten Start. Das ist kein Angriff, das
+ist ein Bedienweg.
+
+Seit T-315 steht das Verfahren in `features/todos/orphan-sweep.ts` **einmal**; `image-sweep.ts` und
+`email-file-sweep.ts` sagen nur noch, welcher Ordner gemeint ist (Liste, Entfernungswert, enge
+Zählung, Sätze im Protokoll). **Zwei Läufe bleiben es**: zwei Ordner, zwei Bedingungen — ein
+gemeinsamer Lauf über beide Ordner müßte die Dateien des jeweils anderen übergehen. Die
+Eigentümerfrage ist dieselbe wie dort (`attachmentTargetNamesFile` in `@takt/domain`), der Riegel
+fragt auf zwei Achsen (`attachmentNamesUnder` am Anfang des Pfades, `imageCount` gar nicht am Pfad),
+und er wird gestellt, **sobald überhaupt etwas fallen würde** — nicht erst bei leerer
+Eigentümermenge. Die zweite Achse wird dabei gegen die Zahl der zugeordneten Dateien gehalten
+(`claimed > owned`) und nicht gegen Null; gegen Null gehalten schwieg sie, sobald **eine einzige**
+Datei noch zugeordnet werden konnte, und genau dieser gemischte Fall war der teuerste. Der
+Rückgabewert ist auch hier ein Bericht (`read`, `owned`, `removed`, `refused`) und keine Zahl.
 
 **Die Reihenfolge ist Teil des Nachweises, nicht eine Frage des Geschmacks:** erst das
 Verzeichnis lesen, dann den Bestand fragen. Eine Kopie, die zwischen beiden Schritten entsteht,
@@ -1374,16 +1404,113 @@ hereinkommt und **wie** ihr Anzeigename lautet.
    geschrieben worden und es gibt nichts aufzuräumen. Scheitert danach eine Zeile, geht ihre
    Datei im selben Lauf. Eine Zusage am Aufrufstapel ist stärker als eine an einem Zeitgeber, und
    sie fällt nicht lautlos aus.
+
+   **Sie gilt seit T-309 auch für den geworfenen Fehlschlag, und vorher tat sie es nicht.** Bis
+   dahin lief die Anhangstransaktion ungefangen: Ein `Result`-Fehlschlag einer Zeile räumte auf,
+   ein **Wurf** aus der Transaktion — `SQLITE_BUSY`, ein Fehler beim Vergeben der Stelle — verließ
+   die Naht und ließ die geschriebenen Bytes ohne Eigentümer liegen (T-307 Befund 1). Die Zusage
+   war damit zur Hälfte erfüllt, und die gemessene Hälfte war die erfüllte. Heute klammert ein
+   `try`/`catch` den Ruf, entfernt **jede** Datei dieses Laufs und wirft danach weiter. Daß jede
+   fallen darf und nicht nur die ohne Zeile, ist keine Nachlässigkeit, sondern folgt aus dem
+   Transaktionsport: Er nimmt vor dem Weiterwerfen ein `ROLLBACK` vor, also gibt es nach einem
+   Wurf keine Zeile aus diesem Lauf.
+
+   **Was diese Klammer nicht kann, deckt seit T-309 ein zweiter Riegel.** Sie reicht so weit wie
+   der Prozeß: Ein hart beendeter Dienst zwischen Schreiben und `COMMIT` hinterläßt eine Datei,
+   auf die keine Zeile zeigt — Kundenmaterial aus einer fremden E-Mail, das keine Anhangsliste
+   nennt und keine Datensicherung erwähnt, denn die liest den Bestand und nicht den Ordner.
+   Dagegen steht `features/todos/email-file-sweep.ts`: erst das Verzeichnis lesen, dann den
+   Bestand fragen, damit eine frische Übernahme überlebt. Zwei Läufe und nicht einer — zwei
+   Ordner, zwei Bedingungen; ein gemeinsamer Lauf müßte die Dateien des jeweils anderen übergehen
+   und hätte damit eine Gelegenheit mehr, Material mit Eigentümer zu löschen.
+
+   **T-314 hat diesen Lauf umgebaut, und der Grund gehört hierher, weil er allgemein ist.** Er
+   war nach dem Vorbild des Bildlaufs (5.5) gebaut und fragte nach dem Eigentümer einer liegenden
+   Datei mit `origin = 'email' AND kind = 'file'` über einen **zeichengleichen** Pfadvergleich.
+   Der security-checker hat drei Wege gemessen, auf denen er Dateien entfernte, deren Zeile
+   stehenblieb: eine abweichende Schreibweise desselben Pfades (`C:…` gegen `c:/…`), eine Zeile,
+   die ihr `origin` verloren hat, und der Rückweg von Migration 0023 samt Wiedervorgehen, der es
+   allen Zeilen auf einmal nimmt. Alle drei hatten **eine** Ursache:
+
+   > Die Frage nach dem Eigentümer war **enger** als die Menge der möglichen Eigentümer. Eine
+   > engere Bedingung findet weniger Eigentümer und löscht **mehr**. An einem Lauf, der ohne Zutun
+   > des Benutzers löscht, ist die enge Bedingung nie die vorsichtige.
+
+   Seit T-314 (A-A-98) fragt der Lauf mit der **weitesten** Bedingung, die einen Eigentümer finden
+   kann: `attachmentTargetNamesFile` in `@takt/domain` vergleicht den **Namen** — ohne `origin`,
+   ohne `kind`, ohne Rücksicht auf die Schreibweise des Pfades davor. Die Regel steht dort ein
+   einziges Mal; der Adapter hat nur eine **weitere** Vorauswahl (`LIKE '%name%'`), nie eine engere.
+
+   Der zweite Umbau betrifft den Widerspruchsriegel, und er ist die eigentliche Lehre. Er hing an
+   `emailFileCount()` — einer Zahl, die mit **derselben** Bedingung zählte wie die Abfrage, der
+   sie widersprechen sollte, und die außerdem nur bei **leerer** Antwort überhaupt gefragt wurde.
+   Beides war falsch: Verlor eine Zeile ihr `origin`, fiel sie aus Abfrage und Zählung zugleich,
+   null stand gegen null; und eine einzige passende Zeile entwaffnete den Riegel für alle anderen.
+
+   > **Ein Riegel, der dieselbe Frage stellt wie die Abfrage, kann nur bestätigen, was die Abfrage
+   > schon behauptet hat.** Er muß die Menge von der **anderen Seite** bestimmen.
+
+   Heute sind es **zwei** Gegenfragen auf zwei verschiedenen Achsen, und beide werden gestellt,
+   sobald überhaupt etwas fallen würde: `attachmentNamesUnder(ordner)` fragt am **Anfang** des
+   Pfades — welche Namen erwartet der Bestand in diesem Ordner, und liegt dort etwas davon nicht?
+   `emailFileCount()` fragt **gar nicht** am Pfad und trägt damit den Fall, in dem `target` seine
+   Gestalt gewechselt hat. Keine der beiden ist der Riegel allein.
+
+   **Seit T-315 gilt jeder Satz dieses Absatzes auch für den Bildlauf** (5.5), und zwar nicht durch
+   eine zweite Abschrift, sondern weil beide dasselbe Verfahren aus `orphan-sweep.ts` benutzen.
+
+   Zwei Dinge waren daran neu gegenüber dem Bildlauf, und beide sind Auflagen aus T-309 — heute
+   trägt sie der Bildlauf mit:
+
+   - **Der Lauf fragt mit dem Pfad, nicht mit dem Namen.** `listEmailFiles()` liefert erzeugte
+     Namen, `todo_attachment.target` trägt bei einer übernommenen Datei den vollen Pfad. Der Lauf
+     rechnet über `emailFilePathOf()` um und fragt in der Form, in der der Bestand führt — wer
+     hier Namen gegen Pfade hielte, bekäme auf jede Frage „unbekannt" und leerte bei jedem Start
+     das Verzeichnis. „Geprüft wird, was benutzt wird", mit umgekehrtem Vorzeichen.
+   - **Er meldet, woran er gemessen hat.** Sein Rückgabewert ist kein `number`, sondern ein
+     Bericht mit `read`, `owned`, `removed` und `refused`. Ein Lauf, der nur die entfernten
+     Dateien zählt, sagt bei einer kaputten Verzeichnisabfrage dasselbe wie bei einem sauberen
+     Bestand: null. Das ist die Bauart der Wächter, die dieser Bestand nachschärfen mußte — eine
+     Abwesenheit, die auch dann gemeldet wird, wenn niemand hingesehen hat.
+
+   **Und der Wurf endet nicht mehr in einer 500** (E-111). Bis T-309 wurde er nach dem Aufräumen
+   weitergeworfen; die Route antwortete 500, **obwohl das Todo stand**, der Benutzer drückte noch
+   einmal und bekam ein zweites Todo mit derselben Call-Nummer. Die Regel, die daraus folgt, gilt
+   über diesen Fall hinaus: **Eine Antwort darf den Aufrufer nicht dazu bringen, etwas zu
+   wiederholen, das bereits geschehen ist.** Was das Todo betrifft, ist der Vorgang gelungen; was
+   die Anhänge betrifft, ist er vollständig fehlgeschlagen — und A-19.29 kennt diesen Zustand
+   bereits, denn null ist weniger. Der Wurf verschwindet dabei nicht: Er geht mit `error` ins
+   Protokoll (`attachment_email_rows_threw`), und das ist die einzige Stelle dieser Naht, die
+   diese Stufe benutzt. Was **nicht** in der Zeile steht, ist der Wurf selbst — `Logger` hat
+   keinen Parameter für ein Ausnahmeobjekt, und `error.message` trägt bei einem Dateisystem- oder
+   SQLite-Fehler regelmäßig einen Pfad (B-2.4, T-132).
 4. **Ein Fehlschlag je Datei ist ein Ergebnis und kein Abbruch** (A-19.29). Das Ergebnis nennt,
    wie viele übernommen wurden und **welche nicht, mit Namen und Grund**. Die Gründe sind eine
-   geschlossene Menge von acht Werten aus `docs/design/addin-anhangsuebernahme-fluss.md` 6.2 —
+   geschlossene Menge von neun Werten aus `docs/design/addin-anhangsuebernahme-fluss.md` 6.2 —
    kein Freitext, keine durchgereichte Fehlermeldung von Office oder vom Betriebssystem.
 
-**Drei Grenzen, alle vor dem ersten Byte auf der Platte** (A-A-81): 25 MB je Datei, 48 MB Summe je
-Übernahme, 25 Dateien. Gezählt wird **beim Dekodieren** und nie an einer Ankündigung — die Naht
+**Drei Grenzen, alle vor dem ersten Byte auf der Platte** (A-19.30a, A-A-81): 25 MB je Datei,
+48 MB Summe je Übernahme, 25 Dateien. **Jede nennt beim Melden ihren eigenen Wert** (A-19.30b) und
+hat dafür ihre eigene Kennung: `too_large`, `total_too_large`, `too_many`. Bis T-309 meldete die
+Summe `too_large` und die Anzahl `rejected`; der Satz zur Summe nannte dann die Grenze je Datei
+und widersprach sich bei jeder Datei unter 25 MB selbst (T-308 F-1). Gezählt wird **beim Dekodieren** und nie an einer Ankündigung — die Naht
 nimmt gar keine Größenangabe entgegen, damit keine zu glauben ist. Die Summengrenze ist die
-Umrechnung der Rumpfgrenze dieser einen Route (64 MB, `ADDIN_ATTACHMENT_MAX_BODY_BYTES`): Base64
+Umrechnung der Rumpfgrenze dieser einen Route (`ADDIN_ATTACHMENT_MAX_BODY_BYTES`): Base64
 bläht um ein Drittel auf, und zwei Grenzen über dieselbe Sache dürfen einander nicht verdecken.
+
+**Und bis T-314 haben sie einander verdeckt** (T-313-5, A-A-100). Die Rumpfgrenze stand als eigene
+Zahl daneben — 64 MiB gegen 48 MiB Summe —, und weil base64 um **genau** 4/3 aufbläht, sind 48 MiB
+Nutzlast exakt 64 MiB Zeichenkette. Darüber liegen noch JSON-Gerüst, Anzeigenamen, Betreff und
+Absender. Gemessen: fünf Anläufe über der Summengrenze, **alle 413**. Damit konnte
+`total_too_large` über die Leitung **nie feuern** — einer der drei Gründe aus A-19.30a war
+unerreichbar, und der Benutzer bekam statt einer namentlichen Meldung einen abgewiesenen Rumpf
+ohne Namen und ohne Grund. Von den beiden Wegen daraus ist der gewählte, **die Rumpfgrenze zu
+heben** (auf `Summe · 4/3 + 8 MiB`, gerechnet und nicht danebengeschrieben): Die Summengrenze zu
+senken kostete dem Benutzer Anhänge, die er nicht ausgesucht hat; die Rumpfgrenze zu heben kostet
+flüchtigen Speicher auf einer Route mit Token. **Die Grenze ist damit erreichbar, nicht
+abgeschafft** — 48 MiB gelten unverändert, und wer sie reißt, bekommt 201 mit `rejected`. Der
+Festpunkt in `proof:route-policy` Abschnitt 8 hält die beiden Zahlen gegeneinander und wird rot,
+wenn eine von beiden wandert.
 Das ist die **dritte** benannte Ausnahme von B-1.7 neben der Datensicherung.
 
 **Ein eigener Ordner**, `<appdata>/email-attachments/`, `0700`, Dateien `0600`, ausdrücklich
@@ -1399,13 +1526,22 @@ steht das als Eigenschaft an der Datei im Bestand, überlebt die Datensicherung 
 später an der Anhangszeile und in der Rückfrage vor dem Öffnen (A-19.22b, A-A-97).
 
 **Die Gründe sind eine geschlossene Menge, und sie steht an genau einer Stelle** —
-`packages/domain/src/email-attachment.ts`, acht Werte (T-301). In derselben Welle war im
+`packages/domain/src/email-attachment.ts`, neun Werte (T-301, T-309). In derselben Welle war im
 Aufgabenbereich eine zweite entstanden; entschieden ist, daß die Domäne die Quelle ist und der
 Aufgabenbereich auf sie abbildet. Dabei hat die Liste `rebuild_rejected` aufgenommen — der Nachbau
 kann abgelehnt werden, und das ist seit E-109 der einzige Fall, in dem die E-Mail selbst fehlt —
 und `mailbox_closed` gestrichen, weil dieser Zustand seit E-109 unerreichbar ist. Ein Grund, der
 nicht eintreten kann, ist ein Satz, der das Gegenteil des Bestands behauptet. Aus derselben Datei
 kommen die drei Grenzen; das Add-in **liest** sie und baut sie nicht nach.
+
+Mit T-309 ist dieselbe Prüfung über die **ganze** Liste gefahren statt über einen Eintrag, und
+zwar an der Erreichbarkeit: Für jeden Grund wurde gesucht, wer ihn erzeugt. `connection` hatte
+**niemanden** — der Aufgabenbereich sammelt lokal und schickt genau einmal, und reißt dieser Ruf,
+gibt es kein Todo und der Fall ist die Fehlerfläche statt der Ergebnisliste; der Dienst kann ihn
+gar nicht feststellen, denn was bei ihm ankommt, ist angekommen. Er ist deshalb gestrichen, aus
+demselben Satz wie `mailbox_closed`. Dazu kamen `total_too_large` und `too_many`, die vorher nur
+auf dem Bildschirm des Aufgabenbereichs vorkamen und jetzt über die Leitung reisen, weil A-19.30b
+es verlangt.
 
 ### 5.6c Die Datensicherung trägt diese Dateien mit (T-301, A-19.34, A-A-90)
 

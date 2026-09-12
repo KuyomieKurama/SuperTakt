@@ -138,6 +138,15 @@ arbeitet, ist damit nicht durch das Qualitätstor.** Der Stand solcher Arbeit he
 Security-Checker ihn gesehen haben. Und beim Wiederaufsetzen wird zuerst der Abstand zwischen
 `git log` und `board.md` gemessen, bevor irgendetwas gebaut wird.
 
+**Kollisionsfrei heißt nicht „verschiedene Dateien", sondern „verschiedene Schnittstellen".**
+Gelernt am 2026-09-12: T-315 (domain-dev) und T-316 (unit-tester) liefen parallel, nach der
+Hoheitstabelle sauber getrennt — `src/` gegen `test/`. domain-dev strich dabei
+`AttachmentPort.knownImageTargets`, und **zwanzig vorbestehende Prüffälle** wurden rot, die
+keinem der beiden Aufträge gehörten. Der unit-tester hat sie richtigerweise **nicht** repariert;
+gegen einen Zwischenstand zu prüfen ist schlimmer als eine Lücke. Wer eine Schnittstelle umbaut
+und wer sie mißt, gehören in **aufeinanderfolgende** Wellen, auch wenn ihre Dateipfade sich nie
+berühren. Der Fehler lag beim Orchestrator, nicht bei den Agenten.
+
 Agenten sprechen nicht miteinander. Alles läuft über `board.md`, die Berichte und den
 Orchestrator.
 
@@ -232,8 +241,12 @@ R-22. Bei jeder Freigabe zu prüfen:
 - In der Oberfläche heißt sie ausschließlich **„Frist"**.
 - Verweis und Datei speichern eine Zeichenkette. Ein **Bild** wird ins Anwendungsdatenverzeichnis
   kopiert und als `data:`-Adresse angezeigt — die CSP bleibt, wie sie ist.
-- **Über das Add-in entstehen keine Anhänge.** Strukturell, nicht per Voreinstellung. Ein Anhang
-  aus einer E-Mail wäre ein von außen geschriebener Öffnen-Befehl.
+- **Über das Add-in entstehen Anhänge nur beim Anlegen** (E-108, A-19.19 in der Fassung vom
+  2026-09-11). An einem **bereits vorhandenen** Todo entsteht keiner — weder im Duplikatfall
+  (A-10.9) noch sonst; das ist strukturell, nicht per Voreinstellung, und die Naht führt keinen
+  Parameter, mit dem ein vorhandenes Todo benannt werden könnte. Was beim Anlegen entsteht, ist
+  ein von außen geschriebener Öffnen-Befehl und wird entsprechend behandelt: erzeugter Name auf
+  der Platte, fremder Name nur als Anzeigename, Endung stets sichtbar (A-19.23a/b).
 - Der Öffnen-Befehl der Hülle prüft **bei jedem Aufruf** und nach Art getrennt: Verweis nur `http`
   und `https`, kein UNC; Datei nur ein vorhandener absoluter Pfad, kein UNC; ein Bild öffnet gar
   nichts. Eine Prüfung allein im Eingabefeld trägt nicht — zwischen Eingabe und Öffnen liegt der
