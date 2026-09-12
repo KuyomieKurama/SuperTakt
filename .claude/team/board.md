@@ -1,11 +1,194 @@
 # Aufgabenboard — SuperTakt
 
-Stand: 2026-09-10, **T-247 — F-21 beantwortet, die Anhäng-Fläche des Add-ins fällt: ABGESCHLOSSEN**
-(drei Freigaben, Dokumentation nachgezogen, `pnpm check` Exit 0). Als Nächstes: **T-249 — Schritt 0
-der Umstrukturierung**, die Wächter pfadunabhängig machen, bevor eine Datei umzieht.
-Davor: **T-245 — Bestandsaufnahme nach zwölf Commits von außen** und **T-246 — die
-Werkzeugkette steht auf einem Windows-Rechner**, erster Rust-Lauf dort 68/68. Der Stand davor
-war der 2026-09-08 mit T-244.
+Stand: 2026-09-11, **T-273 bis T-288 — die Versionsprüfung greift jetzt immer, und die
+Kanban-Karte trägt drei Marken**. Zwei Aufträge des Auftraggebers, sechzehn Arbeiten, zwei
+Entscheidungen (E-105, E-106) und eine geschärfte Anforderung (A-18.11). Freigaben zu T-288
+stehen aus. Davor: **T-249 bis T-272 — die featureweise Umstrukturierung** (abgeschlossen),
+**T-247 — F-21 beantwortet** (abgeschlossen), **T-245 — Bestandsaufnahme nach zwölf Commits von
+außen** und **T-246 — die Werkzeugkette steht auf einem Windows-Rechner**.
+
+## T-297 bis T-3xx — Anhänge aus dem Outlook-Add-in (Auftrag vom 2026-09-11)
+
+Auftrag des Auftraggebers: Aus einer E-Mail heraus ein Todo anlegen, das die **E-Mail selbst als
+Datei** und **alle ihre Dateianhänge** trägt. Vorbild ist die Outlook-Bridge zu Super
+Productivity (ZIP vom Auftraggeber). Abnahme: zwei Dateianhänge ⇒ **drei** Anhänge am Todo.
+
+**E-108 hebt E-100 zur Hälfte auf.** Beim **Anlegen** entstehen Anhänge, am **gefundenen** Todo
+weiterhin nicht — A-10.9 bleibt unverändert. A-19.19 ist neu gefaßt, Abschnitt 19.5 mit
+A-19.22 bis A-19.33 ist neu in `docs/spec.md`.
+
+### Der Befund aus der Vorlage, und er halbiert den Nutzen der Vorlage
+
+**Die Bridge hängt die E-Mail nicht als Datei an.** `src/client/email-attachments.ts` sammelt
+die **Dateianhänge**; die Nachricht selbst wird ein Deep-Link plus ein auf 2500 Zeichen
+gekürzter Textauszug — genau das, was der Auftrag ausschließt. „Bestehende Logik nachbilden"
+trägt für A-19.23 vollständig und für A-19.22 **gar nicht**.
+
+Was die Vorlage sonst hergibt: `getAttachmentContentAsync` (Mailbox **1.8**, Manifest fordert
+1.1 ⇒ Laufzeitprüfung und **stille** Degradierung — bei uns durch A-19.31 verboten), Inline-
+Bilder ausgefiltert, Cloud-Anhänge werden Verweis, 25 MB je Datei, Einzelfehler brechen die
+übrigen nicht ab.
+
+### Drei Weichen, vom Auftraggeber gestellt
+
+| Weiche | Gewählt | Preis, ausdrücklich angenommen |
+|---|---|---|
+| E-Mail als Datei | **Original-MIME über EWS** | Manifest braucht `ReadWriteMailbox` statt `ReadItem` — ganzes Postfach, lesen und schreiben. EWS kann mandantenseitig aus sein ⇒ A-19.31 |
+| Öffnen | **gewöhnlicher Dateianhang** | Weg von fremder E-Mail bis zur Ausführung einer `.bat`/`.lnk`/`.exe` steht offen; gesichert allein durch die Rückfrage mit vollem Pfad |
+| Größe | **eigene Grenze je Datei** | dritte Ausnahme von B-1.7 neben der Datensicherung; 1 MB aller übrigen Routen bleibt |
+
+### Welle 1 — Bewertung und Fluß, gebaut wird noch nichts
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-297 | Bewertung **vor** dem Bau: erweitertes Postfachrecht, fremde Binärdatei im Datenverzeichnis (Pfadausbruch, reservierte Namen, Doppelendungen, RTL-Zeichen), Pfad aus fremder Hand am Öffnen-Befehl. A-A-21 ist ab jetzt falsch und wird nachgezogen; **R-21 und R-24 bekommen endlich ihre Bewertung** statt der siebten Anmeldung | security-checker | `docs/bedrohungsmodell.md` |
+| T-298 | Der Fluß: sechs Zustände, darunter der wichtigste — **teilweise gelungen** darf weder wie Erfolg noch wie Fehlschlag aussehen. Wortlaute ausgeschrieben, nicht beschrieben | ux-designer | eigenes Artefakt unter `docs/design/` |
+
+**Bewußt nicht gestartet:** jede Umsetzung in `apps/**`. „Beide Wege sind im Bedrohungsmodell
+bewertet, bevor sie gebaut werden" steht seit der Versionsprüfung in `CLAUDE.md`; hier kommen
+drei Wege auf einmal. Ebenfalls nicht gestartet: der ui-designer (wartet auf T-298) und
+`proof:addin` Abschnitt 18, der heute die Abwesenheit **jeder** Anhangstür unter `/addin` mißt
+und mit der Umsetzung in **einem** Auftrag fällt.
+
+
+### Welle 1 — Ergebnis
+
+**T-298 (ux-designer) fertig.** Sieben Zustände plus einer für das Recht. Tragend ist die
+Reihenfolge **erst sammeln, dann anlegen** — nur so hinterläßt „Abbrechen" nichts und ist die
+Fehlgrundliste vollständig, bevor das Todo existiert. Das Häkchen der Vorlage entfällt, ihre
+stille Degradierung ist an drei Stellen ersetzt. Nachholen geht **nur in SuperTakt**, weil ein
+Anhang am bestehenden Todo genau die Tür wäre, die E-108 zuhält.
+
+**T-297 (security-checker) fertig — Urteil: Nacharbeit vor dem Bau.** Neues Kapitel 39 im
+Bedrohungsmodell, A-A-21 berichtigt, 18 Auflagen A-A-78 bis A-A-95. Er hat die Vorlage nicht
+gelesen, sondern **gefahren**: `sanitizeFileName`/`uniqueTargetPath` zeichengleich nachgebaut,
+25 Angriffsnamen, echte Dateien — **25 hinein, 25 auf der Platte, null Ablehnungen.**
+
+**E-109 hebt E-108 Punkt 1 auf.** `getAsFileAsync` liefert die Nachricht als EML/MIME in Base64
+mit **read item** (Mailbox 1.14). EWS und `ReadWriteMailbox` entfallen, A-19.32 ist neu gefaßt:
+kein weitergehendes Recht als bisher. Auf älterem Outlook wird die `.eml` nachgebaut und **als
+Nachbau gekennzeichnet** (A-19.22a, A-19.22b).
+
+**A-19.23 gegen A-A-17 entschieden.** Der fremde Name wird **Anzeigename**, den Namen auf der
+Platte bestimmt SuperTakt, die Endung bleibt (A-19.23a). Damit ist die Klasse „geprüfter Name ≠
+aufgelöster Name" nicht abgewehrt, sondern **unmöglich** — dritter Fall dieser Klasse nach
+T-156-1 und T-164-1.
+
+**R-21, R-23 und R-24 sind bewertet** statt zum siebten Mal angemeldet, R-26 und R-27 neu. Die
+schwerste Auskunft: In `apps/desktop/**` gibt es **keinen Deinstallationspfad** — Zertifikat und
+privater Schlüssel bleiben stehen, auch wenn SuperTakt entfernt ist.
+
+**Zwischenfall am Rand, und er gehört ins Protokoll.** Drei Agenten haben beim Beschreiben des
+Rechts-nach-links-Angriffs die Steuerzeichen **roh** in ihre Dateien geschrieben; `pnpm check`
+war dadurch an der **ersten** Stufe rot. Der Wächter kann nicht unterscheiden, ob ein solches
+Zeichen einen Angriff ausführt oder ihn erklärt — und er soll es nicht können. Ein
+Bedrohungsmodell, das seine Beispiele wörtlich trägt, wird selbst zum Träger.
+
+### Welle 2 — gebaut, beide Hälften
+
+| ID | Rolle | Ergebnis |
+|---|---|---|
+| T-299 | domain-dev | Aufnahme, Ablage, Migration **0023**. Der fremde Name wird **Anzeigename** und berührt den Pfad nur über die Endung; den Plattennamen erzeugt SuperTakt (`<32 Hex>[.endung]`, `0700`/`0600`, `open(…, 'wx')` statt `existsSync`+`writeFile`). **Kein zweiter Namensfilter.** Drei Grenzen greifen vor dem ersten Byte, gemessen am Dekodierten |
+| T-300 | integration-dev | `getAsFileAsync` mit Laufzeitprüfung, Nachbau kodiert erzeugt — **keine Trennmarke, weil es keinen zweiten Teil gibt**: einteiliges `text/plain`, Verschärfung über die Auflage hinaus. Cloud-Anhänge erst nach `normalizeAttachmentLink`. `proof:addin` 290/0 |
+| T-301 | domain-dev | Archivfassung **5 → 6**, die Bytes wandern mit (A-19.34). **Die eigentliche Arbeit war der Pfad, nicht die Bytes** — `todo_attachment.target` trägt den Pfad des Quellrechners und wird beim Einspielen neu gesetzt, auch ohne Bytes. Einspielgrenze **256 MiB, gemessen**: V8-Wand bei 536 870 888 Zeichen, darüber irreführendes 422 statt 413 |
+| T-302 | frontend-dev | **`proof:clamp` — R-27 beantwortet.** Zwei Mengen, ihr Schnitt ist der Befund: 34 deckelnde Klassen gegen 20 Stellen mit Herkunftstyp `UncappedText`. Neun Gegenproben, darunter die Untergrenze bei leerer Deckelmenge |
+| T-303 | ux-designer | Entwurf auf E-109 nachgezogen. **Drei Sätze gestrichen, einer davon wahr** |
+
+**Der beinahe stehengebliebene Fehler lag in der alten Richtung**, wie im Auftrag gewarnt:
+`if (schemaVersion !== 5) idle_keep_timer_running = 1` hätte mit der 6 eine korrekt geführte
+Einstellung überschrieben. Alle Vergleiche stehen jetzt als `<`/`<=`.
+
+**Drei Regeln sind aus dieser Welle hervorgegangen und gelten künftig allgemein:**
+
+1. **Die Gründe über die Leitung dürfen gröber sein als die auf dem Bildschirm**, solange jede
+   Kennung auf genau einen Satz fällt. Daraus folgt, daß `too_many` und `total_too_large` im
+   Add-in bleiben — beide stehen **vor dem Klick** fest und reisen nie über die Leitung.
+2. **Eine Zusage, ein Recht nicht auszunutzen, das man nicht hat, erzeugt beim Leser erst die
+   Vorstellung des Rechts.** Deshalb fiel „SuperTakt liest ausschließlich die offene Nachricht"
+   mit — ein Satz, der **wahr war**.
+3. **Wer eine Menge über CSS-Wähler bildet, bildet sie über den Gegenstand, nicht über den
+   Anfang.** `.screen:has(> .board) > .board` ist nicht `.screen`; der erste Lauf hat daran die
+   ganze Detailansicht zum Deckel erklärt.
+
+### Welle 3 — läuft
+
+| ID | Aufgabe | Rolle |
+|---|---|---|
+| T-304 | Die Naht schließen, `createTodoSchema` liest das Feld, `ATTACHMENTS_TRAVEL_WITH_CREATE` auf `true` — **und `proof:addin` Abschnitt 18 von Name auf Wirkung** (A-A-82): zugesichert bleibt nicht „es gibt keine Anhangsroute", sondern „über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da war" | integration-dev |
+| T-305 | Archivfassung im Prüffall, und die fünf Messungen aus T-301, die bisher nur im Bericht stehen — ein Bericht ist kein Prüffall | unit-tester |
+
+**Offen, ohne Termin:** der Versionswächter-Strang (T-296, fünfte Runde, wartet auf Freigabe),
+E-107 (braucht `erwartetAlle`), die Speicherspitze je Anfrage — **gemessen von 333 MB auf
+934 MB** —, die der security-checker noch nicht gesehen hat, und rund fünfzig unversionierte
+Einträge im Arbeitsbaum.
+
+## T-273 bis T-288 — Die Versionsprüfung, und was an ihr hing
+
+Auftrag des Auftraggebers: „Kannst du die Versionsprüfung mal überarbeiten? Diese greift nicht
+immer." Der Befund war einzeilig und der Weg dahin nicht: `schedule()` stand im Erfolgszweig,
+im Fehlerzweig stand nichts. **Ein einziger Fehlschlag beendete die Prüfung für die Laufzeit der
+Anwendung** — genau die Bedingung, unter der man sie am nötigsten hätte.
+
+### Der Weg, in vier Schritten
+
+| | Was |
+|---|---|
+| T-273 | `schedule(minIntervalMs)` in Fehlerzweig **und** `catch`. Der Fehler selbst ist damit behoben |
+| T-279 | Der letzte Prüfzeitpunkt in den Bestand (Migration 0022), dazu ein Streuwert auf den Mindestabstand gegen den Gleichtakt vieler Rechner |
+| T-285 | **T-279 teilweise zurückgenommen.** Der gespeicherte Wert wurde gelesen — und sperrte die Prüfung über den Neustart hinweg. Der Boden gilt **innerhalb eines Laufs**; ein Programmstart fragt immer einmal (E-106) |
+| T-288 | Der Wächter, der den zurückgenommenen Weg verschlossen halten soll, maß den **Bezeichner** statt den **Zugriff**. Jetzt vier Gestalten statt zwei |
+
+**Die Lehre steht in E-106 und ist teurer als der Fehler:** Ich hatte die Frage nach dem
+Speichern gestellt und dabei **nur den Nutzen genannt**. Daß derselbe Wert die Prüfung nach einem
+Neustart blockiert, stand in keiner Zeile der Frage. Gefunden hat es ein Prüffall (TP-VER-11),
+nicht die Entscheidung. Eine Entscheidung, die nur ihren Nutzen kennt, ist keine Entscheidung.
+
+### Was daran hing, ohne daß danach gesucht wurde
+
+- **A-18.11 zweimal geschärft.** Der alte Wortlaut ließ „kein zweiter Versuch" so lesen, daß der
+  Fehler richtig war. Jetzt: kein wiederholtes Nachfragen **im selben Prüflauf**, der Takt bleibt
+  unberührt, der Mindestabstand gilt **innerhalb eines Laufs**.
+- **Der Wächter `rueckweg` war zweimal zu schlagen** (T-287). Eine Datei im Ordner des Prüfers,
+  die die Spalte unmittelbar las, ließ den Lauf bei 35/0 grün. Weil die Datensicherung
+  `app_setting` als fremder Text vollständig ersetzt, wäre ein wiederhergestellter Leser ein
+  **stiller Ausschalter** der Versionsprüfung über ein präpariertes Archiv.
+- **Der Bestandswert war nie bewertet.** `last_version_check_at` ist seit E-106 in der Praxis der
+  Startzeitpunkt der letzten Sitzung, auf die Sekunde — der einzige Wert dieses Bestands, der
+  etwas über **Benutzung ohne Buchung** sagt, ohne Zutun entsteht und durch kein Zutun
+  verschwindet. Eingestuft als gering; aufgenommen, weil sie vorher nicht da war.
+- **R-19 neu begründet statt wiederholt:** Die Frequenz schadet nicht uns, sondern den Nachbarn
+  hinter derselben Quelladresse (344/h gegen ein Kontingent von 60), und seit der geschärften
+  A-18.11 klärt sich ein erschöpftes Kontingent nicht mehr von selbst. Der Preis, der nicht
+  wegargumentiert wird: **jeder Programmstart ist von außen sichtbar**.
+
+### Der zweite Auftrag: das Kanban-Board (T-281 bis T-283)
+
+Aus dem Bildschirmfoto des Auftraggebers: Überfällig-Marke und Abspielknopf überlagern sich,
+sobald eine Karte drei Marken trägt. **Zwei Ursachen, nicht eine** — `.kcard__top` hatte kein
+`flex-wrap`, und `max-width: 100%` an der Fristmarke war wirkungslos, weil `.deadline`
+`flex: none` trägt. Dazu TP-KANBAN-07, der den Fall in **Pixeln** mißt, und ein Designpapier
+(`docs/design/kartenkopf-board.md`), das die Rangfolge der Kopfzeile erstmals überhaupt festhält
+— sie stand vorher **nirgends** in `docs/design/**`.
+
+**Nebenbefund T-284:** Der Hochlauf prüfte die gewählte Gestaltung gegen eine **Form**
+(`/^[a-z-]{1,40}$/`) statt gegen die **Liste** der neunzehn Gestaltungen. Unbekanntes — auch das
+alte `clear` — wird jetzt auf `classic` abgebildet (E-105).
+
+### Offen aus dieser Welle
+
+| Nr | Was | Bei wem |
+|---|---|---|
+| T-289 | **Zwei Prüfer, zwei Urteile.** security-checker: freigegeben — kam aber **dreimal** durch, nicht durch eine Lücke, sondern durch eine **zu weite Zusage** („über seinen Port oder gar nicht" gegen gemessen „faßt keine Datenbank **unmittelbar** an"; der Unterschied ist eine Zeile `import`). code-reviewer: **nicht freigegeben** — der Rumpf-Ausdruck über `VersionCheckStorePort` bricht am ersten `}` und urteilt bei verschachtelter Signatur grün. **Der Befund stammt aus T-285, nicht aus T-288.** Tor bei alledem grün, Exit 0 | → T-290 |
+| T-290 | **Fertig, Tor vollständig grün (Exit 0), `proof:release-safety` 37 → 43.** Klammerzählung statt `[^}]*` (der blockierende Befund war aus T-285), fünfte Gestalt mißt die **Importmenge** des Prüferordners gegen sieben Quellen — V1b ist damit rot, vorher ließ dieselbe Datei den Lauf bei 37/0 durch. **Vier** zu weite Sätze zurückgenommen, nicht drei: die **grüne** Zeile in Abschnitt 2 sagte „ein Programmstart prüft immer einmal" zu, was der Lauf nicht mißt — im Auftrag stand sie nicht | → T-291 |
+| T-291 | **Wieder nicht freigegeben, dritte Runde.** Zwei blockierende Messungen an der reparierten Stelle selbst: die Mitgliederregel `/(\w+)\s*\(/` sieht nur Methodensyntax — `readonly read: () => Promise<…>` macht den ganzen Prüfsatz **0 Befunde** bei Lauf 43/0, und genau diese Schreibweise ist der **Hausstil derselben Datei**; der Klammerzähler kennt keine Zeichenketten. Dazu zwei `mittel` derselben Bauart: `FORBIDDEN_IN_SOURCE = []` bleibt 43/0, und der Zweig „dritte Adresse auf github.com" läßt sich ersatzlos entfernen. Bestätigt hat er dagegen: 43 von unten nachgerechnet, alle **sechs** Mutationen nachgefahren (nicht zwei), `erwartet` trennt nachweislich, Schnitt verhaltensgleich | → T-292 |
+| T-292 | **Fertig, Tor grün, `proof:release-safety` 43 → 51.** `interfaceRumpf` und `/(\w+)\s*\(/` sind weg; `portMitglieder()` liest über `ts.createSourceFile`, wie die beiden Nachbarn im selben Ordner. Untergrenze: **null gelesene Mitglieder ist rot** — das war allen drei Ausfällen gemeinsam. Beide `mittel`- und alle drei `niedrig`-Befunde mit erledigt. **Der Kausalnachweis ist das Bemerkenswerte:** mit Compiler und Untergrenze, aber ohne die acht neuen Verstoßeinträge läuft der Lauf **43/0, zeichengleich zu T-290** — die +8 sind ausschließlich Gegenproben, der Umstieg selbst bewegt die Zahl nicht | → T-293 |
+| T-293 | **Nicht freigegeben, vierte Runde — aber die Klasse ist zu.** Beide Befunde aus T-291 sind rot, dazu **29 weitere Formen** am Leser gemessen (Zeichenkettenliteral-Namen, Index- und Rufsignatur, generischer Port, Syntaxfehler, sieben Aliasformen) — alle in der sicheren Richtung. Der Kausalnachweis M11 hält zeichengleich. Blockierend: `portMitglieder` ignoriert **`heritageClauses`** — ein über `extends` geerbtes `read` macht alle fünf Gestalten grün, gemessen auch mit einer Basis aus `@takt/domain`, also aus einer **erlaubten** Importquelle. **Und eine Berichtigung:** „die Untergrenze, die allen drei Ausfällen gemeinsam war" ist falsch — der Leser fand in allen drei Fällen genau **ein** Mitglied (`write`), nie null; sie hätte keinen gefangen. Der Satz steht an drei Stellen und hatte schon zwei Leser getäuscht | → T-294 |
+| T-294 | **Fertig, Tor grün, 51 → 68 (nicht 64).** `heritageClauses` ⇒ Meßfehlschlag, beidseitig gemessen: ohne die Regel bleiben **beide** Bauarten des code-reviewers unbemerkt, mit ihr sind beide rot. Aus „drei Zeilen `null`" wurde ein Rückgabewert **mit Grund** — vier Meßfehlschläge hinter einem Satz wären nach der Zählvorschrift eine Gegenprobe für vier Zweige gewesen. **Die Abweichung ist der Ertrag:** vier Zusätze in `rueckweg`, darunter „kennt kein `write` mehr" — der Prüfsatz heißt „kann `write` und sonst nichts", gegengeprobt war nur das „sonst nichts" | → T-295 |
+| T-295 | Freigabe zu T-294 (code-reviewer), danach der security-checker | läuft |
+| — | R-23 (Wurzelspeicher) und R-24 (Fremdimport) sind **nie** sicherheitsbewertet worden; der security-checker meldet es zum **fünften** Mal an. Seine billige Einstiegsfrage: *Bleibt das Zertifikat nach einer Deinstallation im Wurzelspeicher stehen?* | Auftraggeber |
+| — | Toter `clear`-Code: rund 100 Zeilen in `app.css`, 5 in `packages/ui-tokens/tokens.css` | zwei Hoheiten, eine Aufgabe |
+| — | Sechzehn Arbeiten dieser Welle liegen **unversioniert** im Arbeitsbaum | Auftraggeber |
+
 
 ## T-249 bis T-272 — Die featureweise Umstrukturierung
 
@@ -1696,7 +1879,7 @@ Erzeugnis ohne sie ausgeliefert wird**. Was daraus folgt, gehört in jede Freiga
 | ID | Aufgabe | Blockiert durch |
 |---|---|---|
 | T-B02 | Add-in gegen die Referenzbilder | Referenzbilder liegen nicht vor |
-| T-B05 | Windows-Prüfliste, jetzt sieben Punkte | Kein Windows-Rechner. Wichtigster Punkt: Takt mit gesetzter Umgebungsvariable starten und prüfen, dass trotzdem der richtige Name im Export landet (B-8.1, E-042). **Neu:** Nach der Installation muss `…\Takt\taskpane\index.html` existieren — dass NSIS Ressourcen nach `$INSTDIR` legt, ist die unbewiesene Annahme, auf der die Auslieferung des Add-ins steht. |
+| T-B05 | Windows-Prüfliste, jetzt sieben Punkte | **Nicht mehr blockiert, seit T-246 (2026-09-10) die Werkzeugkette auf einem Windows-Rechner steht — nur nicht abgearbeitet.** Wichtigster Punkt: Takt mit gesetzter Umgebungsvariable starten und prüfen, dass trotzdem der richtige Name im Export landet (B-8.1, E-042). **Neu:** Nach der Installation muss `…\Takt\taskpane\index.html` existieren — dass NSIS Ressourcen nach `$INSTDIR` legt, ist die unbewiesene Annahme, auf der die Auslieferung des Add-ins steht. |
 | T-B08 | Die `.AppImage` mit Playwright fahren | Playwright hat auf Linux keinen Anknüpfungspunkt für Tauris Webview — belegt über die Bibliotheksabhängigkeiten und das Fehlen jeder Tauri-Unterstützung in der Schnittstelle, anders als bei Electron. Keine Auslassung, eine Grenze. |
 | T-B06 | 42Crunch-Audit und -Scan | `42c-ast` nicht installiert, keine Zugangsberechtigung. **Es gibt keinen Auditwert.** |
 | T-B09 | Barrierefreiheit mit einem **echten** Vorleseprogramm messen (O-DA, O-DN, jede Live-Region, jeder zugängliche Name) | Kein Orca und kein NVDA in dieser Umgebung (T-172). Bis dahin gilt: gemessen ist der Bedienungshilfen-Baum, **nicht** die Aussprache. Vor der Gesamtfreigabe einmal auf einem Rechner mit Vorleseprogramm zu fahren. |

@@ -45,31 +45,65 @@
  * Obergrenze bei ununterbrochenem Fehlschlag liegt bei 24 Anfragen je Tag.
  *
  * ===========================================================================
- * Zwei Ergänzungen aus T-279, und beide betreffen den Boden, nicht den Takt
+ * Ein Programmstart prüft immer einmal; der Boden gilt innerhalb des Laufs
  * ===========================================================================
  *
- * **1. Der Bezugspunkt des Bodens überlebt den Prozeß** — sofern der
- * Zusammenbau einen {@link VersionCheckStorePort} mitgibt (Migration 0022,
- * `app_setting.last_version_check_at`). Vorher lag er ausschließlich hier im
- * Arbeitsspeicher: Ein neu gestarteter Dienst kannte keinen letzten Zeitpunkt,
- * also griff kein Boden, also ging nach dem Startabstand eine Anfrage hinaus.
- * Gemessen (T-276) sind das rund **344 Anfragen je Stunde** für den, der den
- * Sidecar in einer Schleife startet — das 5,7fache des GitHub-Kontingents.
+ * **1. Die erste Prüfung eines Prozeßlaufs hält nichts auf** (T-285). A-V-11
+ * sagt: „zwischen zwei ausgehenden Anfragen liegt mindestens `minIntervalMs`"
+ * — eine Aussage über den **Betrieb**, nicht über Prozeßgrenzen. Beim ersten
+ * Prüflauf eines Starts gibt es in diesem Prozeß keine vorige Anfrage, also
+ * hält kein Boden, also geht nach dem Startabstand eine Anfrage hinaus. Jede
+ * **weitere** Planung desselben Laufs hält den Boden wie eh und je, samt
+ * Streuwert.
  *
- * Der tragende Grund ist trotzdem nicht dieser Weg: Wer ihn geht, setzt die
- * Zeitmarke auch mit `sqlite3` zurück (VG-3). **Der Bestandswert ist die Abwehr
- * gegen den Unfall, nicht gegen den Angriff**, und er ist vor allem die
- * Gleichbehandlung mit `skipped_version` (A-18.10) und den offenen
- * Inaktivitätsphasen (A-24.7): drei Werte derselben Fläche, drei gleiche
- * Lebensdauern.
+ * T-279 hatte das anders gebaut: Der Bezugspunkt wurde beim ersten Prüflauf aus
+ * dem Bestand geholt, und damit reichte der Boden über den Neustart hinweg. Den
+ * Preis dafür hat ein Prüffall gefunden (TP-VER-11) und der Benutzer bezahlt:
+ * **Ein Neustart bewirkte bis zu eine Stunde lang gar nichts.** Verschärfend,
+ * weil der Bezugspunkt **vor** der Anfrage geschrieben wird — richtig so, sonst
+ * umginge ein Absturz ihn —, setzte ihn auch ein *fehlgeschlagener* Versuch:
+ * Start ohne Netz um 9:00, Neustart um 9:10, keine Prüfung bis 10:00. Der
+ * Neustart ist die einzige Selbsthilfe, die dieses Erzeugnis gegen „die
+ * Versionsprüfung greift nicht" anbietet — E-069 kennt keinen Knopf „jetzt
+ * prüfen" —, und sie war damit stillgelegt.
+ *
+ * **Was der gespeicherte Wert seither ist, und was nicht** (Migration 0022,
+ * `app_setting.last_version_check_at`): Er wird weiter geschrieben, vor jeder
+ * ausgehenden Anfrage, und er nimmt am Round-Trip der Datensicherung teil
+ * (A-20.4). Er ist eine **Tatsache** — „wann wurde zuletzt gefragt" — und
+ * **keine Sperre über Prozeßgrenzen**. Gelesen wird er von keinem Betriebspfad
+ * mehr; wer ihn wieder liest, um eine Anfrage zu verhindern, baut T-279 nach
+ * und nimmt dem Benutzer denselben Hebel ein zweites Mal.
  *
  * **2. Auf den Boden kommt ein Streuwert** — 0 bis 25 % obendrauf, also bei 60
  * Minuten höchstens 15 (A-V-11, T-275-8). Er bricht die Gleichschaltung
  * mehrerer Installationen hinter einer Quelladresse, die nach einem gemeinsamen
  * `403` sonst für immer im selben Takt weiterklopfen. Er streut **nur nach
  * oben**: Ein Streuwert, der auch verkürzte, hübe die Zusage aus A-V-11′
- * Punkt 4 auf. Die Obergrenze bleibt deshalb bei **24 je Kalendertag**; der
- * Erwartungswert sinkt auf rund **21,3**.
+ * Punkt 4 auf.
+ *
+ * ===========================================================================
+ * Die Zahlen, damit sie der nächste Leser nicht schätzt (T-285, neu gerechnet)
+ * ===========================================================================
+ *
+ * **Innerhalb eines Laufs** bleibt alles, wie es war: 1 Anfrage je 24 Stunden
+ * im Erfolgsfall, höchstens **24 je Kalendertag** bei ununterbrochenem
+ * Fehlschlag, Erwartungswert mit Streuwert rund **21,3**.
+ *
+ * **Über Prozeßgrenzen hinweg gilt diese Obergrenze nicht.** Jeder
+ * Programmstart bringt genau eine Anfrage mit; die Obergrenze eines
+ * Kalendertages ist damit `24 + Anzahl der Starts an diesem Tag`. Für einen
+ * Benutzer, der die Anwendung morgens startet und abends beendet, sind das
+ * 25 — für den Grenzfall der Startschleife die aus T-276 gemessenen rund
+ * **344 je Stunde** (kürzester vollständiger Zyklus 10 474 ms), also rund
+ * **8 250 je Kalendertag** und das 5,7fache dessen, was GitHub nicht
+ * angemeldeten Aufrufern je Stunde zugesteht.
+ *
+ * Dieser Grenzfall ist mit der Entscheidung zu T-285 **in Kauf genommen**, und
+ * zwar mit Begründung: Wer den Sidecar in einer Schleife startet, setzt eine
+ * Zeitmarke im Bestand ohnehin mit `sqlite3` zurück (VG-3). Der Bestandswert
+ * war die Abwehr gegen den Unfall, nicht gegen den Angriff — und ihr Preis war
+ * die einzige Selbsthilfe des Benutzers.
  *
  * ===========================================================================
  * Warum die erste Anfrage nicht in derselben Millisekunde steht
@@ -121,6 +155,12 @@ export const VERSION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
  * darüber hinaus für die ganze Laufzeit des Prozesses und ist die Zusage, daß
  * aus „der nächste Versuch kommt" kein Klopfen wird.
  *
+ * **Für die Laufzeit des Prozesses — und nicht darüber hinaus** (T-285). Die
+ * erste Anfrage eines Starts hält er nicht auf: In diesem Prozeß gibt es dann
+ * keine vorige Anfrage, und A-V-11 spricht vom Abstand **zwischen zwei**
+ * ausgehenden Anfragen. Zwischen T-279 und T-285 reichte er über den Neustart
+ * hinweg und machte damit jeden Neustart bis zu eine Stunde lang wirkungslos.
+ *
  * Er schützt gegen einen Zeitgeber, der aus irgendeinem Grund öfter feuert —
  * eine zurückgestellte Systemuhr, ein Ruhezustand, ein künftiger zweiter
  * Auslöser, an den heute niemand denkt. Der Takt oben ist die Absicht, dieser
@@ -169,18 +209,32 @@ export interface VersionChecker {
 }
 
 /**
- * Wo der Bezugspunkt des harten Bodens liegt, wenn er den Prozeß überleben soll
- * (A-V-11, Migration 0022, T-279).
+ * Wohin der Zeitpunkt der letzten Anfrage geht (Migration 0022,
+ * `app_setting.last_version_check_at`, A-20.4, T-279, T-285).
+ *
+ * ===========================================================================
+ * Was der Wert ist — und was er seit T-285 ausdrücklich nicht mehr ist
+ * ===========================================================================
+ *
+ * Er ist eine **Tatsache**: „wann hat dieses Erzeugnis zuletzt gefragt". Er
+ * wird vor jeder ausgehenden Anfrage geschrieben und nimmt am Round-Trip der
+ * Datensicherung teil (A-20.4, `repo-data-archive.ts`).
+ *
+ * Er ist **keine Sperre über Prozeßgrenzen**. Bis T-285 wurde er beim ersten
+ * Prüflauf gelesen und hielt den Boden über einen Neustart hinweg; genau das
+ * hat dem Benutzer seine einzige Selbsthilfe genommen, wenn die Prüfung nicht
+ * greift (Begründung im Kopf dieser Datei). Deshalb hat dieser Port **kein
+ * `read`**: Der Prüfer schreibt, er liest nicht. Wer hier ein Lesen wieder
+ * anhängt, baut T-279 nach.
  *
  * ===========================================================================
  * Warum der Port hier steht und nicht `@takt/storage` heißt
  * ===========================================================================
  *
- * Die Versionsprüfung kennt kein SQL und keine Tabelle. Sie kennt zwei Fragen:
- * „wann war die letzte Anfrage" und „merke dir diese hier". Was daraus wird —
- * eine Spalte in `app_setting`, eine Datei, gar nichts —, entscheidet der
- * Zusammenbau (`composition.ts`), und er ist die einzige Stelle, die beide
- * Seiten kennt.
+ * Die Versionsprüfung kennt kein SQL und keine Tabelle. Sie kennt einen Satz:
+ * „merke dir diesen Zeitpunkt". Was daraus wird — eine Spalte in
+ * `app_setting`, eine Datei, gar nichts —, entscheidet der Zusammenbau
+ * (`composition.ts`), und er ist die einzige Stelle, die beide Seiten kennt.
  *
  * `Date` und nicht `Timestamp`: Der Prüfer hat eine Uhr (`options.now`) und
  * keine Meinung über die Schreibweise eines Zeitstempels. Die Umrechnung in die
@@ -192,17 +246,16 @@ export interface VersionChecker {
  *
  * **Keine Fläche und keine Auskunft.** Der Wert geht durch keine Route, in
  * keine Antwort und in keine Oberfläche. A-18.11 verbietet „kein Hinweis, keine
- * Fehlerfläche"; ein „zuletzt geprüft" wäre beides.
+ * Fehlerfläche"; ein „zuletzt geprüft" wäre beides. Die vollständige
+ * Datensicherung ist keine Auskunft in diesem Sinn — sie ist der Bestand
+ * selbst (A-20.4).
  *
  * **Keine Abwehr gegen einen feindlichen lokalen Prozeß.** Wer den Sidecar in
- * einer Schleife startet, kommt mit `sqlite3` auch an die gemerkte Zeitmarke
- * (VG-3). Der Port schützt gegen den **Unfall** — den Entwicklerrechner, den
- * zwanzigfachen Doppelklick, eine künftige Neustartautomatik —, und der ist
- * real genug.
+ * einer Schleife startet, kommt mit `sqlite3` an dieselbe Datei (VG-3). Das war
+ * vor T-285 so und ist danach so — und es ist der Grund, warum dieser Wert als
+ * Sperre wenig und als Tatsache viel taugt.
  */
 export interface VersionCheckStorePort {
-  /** Der gemerkte Zeitpunkt als ISO-8601-Zeichenkette, oder `null` für „noch nie". */
-  read(): Promise<string | null>;
   /** Merkt den Zeitpunkt einer ausgehenden Anfrage. Wird **vor** der Anfrage gerufen. */
   write(at: Date): Promise<void>;
 }
@@ -223,11 +276,12 @@ export interface VersionCheckerOptions {
   readonly intervalMs?: number;
   readonly minIntervalMs?: number;
   /**
-   * Wo der Bezugspunkt des Bodens den Prozeß überlebt — **optional**.
+   * Wohin der Zeitpunkt der letzten Anfrage geschrieben wird — **optional**.
    *
-   * Ohne Angabe bleibt er im Arbeitsspeicher, und das ist genau das Verhalten
-   * bis T-279. Optional ist hier keine Bequemlichkeit, sondern eine Bedingung
-   * des Zusammenbaus: `compose()` läuft auch **ohne** Datenbank
+   * Ohne Angabe wird er nirgends gemerkt, und **am Verhalten ändert das
+   * nichts** (T-285): Der Boden hängt an `lastRequestAt` im Arbeitsspeicher,
+   * nicht am Bestand. Optional ist hier deshalb keine Bequemlichkeit, sondern
+   * eine Bedingung des Zusammenbaus: `compose()` läuft auch **ohne** Datenbank
    * (`databaseLocation` fehlt — so laufen `proof:openapi` und
    * `proof:route-policy`). Es gibt dann keinen Bestand, an dem etwas hängen
    * könnte, und einen zu erfinden wäre schlimmer als keiner.
@@ -284,63 +338,41 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
   let stopped = false;
+  /*
+   * Der Bezugspunkt des Bodens, und er liegt **im Arbeitsspeicher** (T-285).
+   *
+   * `null` heißt „in diesem Prozeß ist noch keine Anfrage hinausgegangen" — und
+   * genau das macht die erste Prüfung eines Starts frei: `elapsed` wird dann
+   * `Infinity`, kein Boden greift, eine Anfrage geht hinaus. Ein Programmstart
+   * prüft immer einmal.
+   *
+   * Der gleichnamige Wert im Bestand (`app_setting.last_version_check_at`) wird
+   * geschrieben und **nicht** hierher zurückgelesen. Er ist eine Tatsache, keine
+   * Sperre.
+   */
   let lastRequestAt: number | null = null;
   const control = new AbortController();
 
   /*
-   * Der Bestandswert (T-279). `null` heißt „es gibt keinen" — entweder wurde
-   * keiner mitgegeben (kein Bestand im Zusammenbau), oder er hat einmal
-   * versagt und ist danach abgelegt worden.
+   * Wohin der Zeitpunkt geht (T-279, T-285). `null` heißt „nirgendwohin" —
+   * entweder wurde kein Speicher mitgegeben (kein Bestand im Zusammenbau), oder
+   * er hat einmal versagt und ist danach abgelegt worden.
    *
-   * **Ein Fehlschlag der Speicherung darf die Versionsprüfung nicht beenden.**
-   * Sie tut dann, was sie bis T-279 immer getan hat: Sie merkt sich den
-   * Zeitpunkt im Arbeitsspeicher. Das ist ein schlechterer Boden, aber ein
-   * Boden.
+   * **Ein Fehlschlag der Speicherung darf die Versionsprüfung nicht beenden**,
+   * und seit T-285 kostet er auch am Verhalten nichts mehr: Der Boden mißt
+   * `lastRequestAt` im Arbeitsspeicher und bleibt richtig, auch wenn die Tabelle
+   * nichts annimmt. Verloren geht dann die Tatsache, nicht die Zusage.
    */
   let store: VersionCheckStorePort | null = options.store ?? null;
-  let restored = false;
-
-  function forgetStore(sentence: string, key: string): void {
-    store = null;
-    // Genau **eine** Zeile über die ganze Laufzeit: Danach gibt es keinen
-    // Speicher mehr, der ein zweites Mal versagen könnte. `info` und nicht
-    // `warn` — der Betrieb ist ungestört, und `proof:access` Abschnitt 0e mißt,
-    // daß im Normalfall keine Warnung erscheint.
-    options.logger.lifecycle('info', sentence, key);
-  }
 
   /**
-   * Holt den Bezugspunkt **einmal** aus dem Bestand — beim ersten Prüflauf.
+   * Merkt den Zeitpunkt einer ausgehenden Anfrage — im Arbeitsspeicher **und**,
+   * wenn es einen gibt, im Bestand.
    *
-   * Nicht beim Bauen: `compose()` öffnet die Datenbank, bevor `main.ts` die
-   * Migrationen fährt. Ein Lesen im Zusammenbau liefe gegen ein Schema ohne die
-   * Spalte aus 0022.
-   *
-   * Ein unbrauchbarer gespeicherter Wert heißt „noch nie gefragt" und führt zu
-   * keinem Wurf — dieselbe Regel wie bei der übersprungenen Fassung (T-136-4).
-   * Die konservative Richtung ist hier ausdrücklich die andere als dort: Ein
-   * unlesbarer Wert öffnet den Boden für **eine** Anfrage, statt ihn für immer
-   * zu schließen.
-   */
-  async function restore(): Promise<void> {
-    if (restored || store === null) return;
-    restored = true;
-    try {
-      const stored = await store.read();
-      if (stored === null) return;
-      const parsed = Date.parse(stored);
-      if (Number.isFinite(parsed) && lastRequestAt === null) lastRequestAt = parsed;
-    } catch {
-      forgetStore(
-        'Der Zeitpunkt der letzten Versionsprüfung ließ sich nicht lesen. SuperTakt läuft unverändert weiter.',
-        'version_check_state_unreadable',
-      );
-    }
-  }
-
-  /**
-   * Merkt den Zeitpunkt einer ausgehenden Anfrage — im Arbeitsspeicher **und**
-   * im Bestand.
+   * Zwei Werte, zwei Aufgaben: Der im Arbeitsspeicher trägt den Boden für den
+   * Rest dieses Laufs, der im Bestand ist die Tatsache für die Datensicherung
+   * (A-20.4). Zurückgelesen wird der zweite nie — siehe
+   * {@link VersionCheckStorePort}.
    *
    * **Wirft nie.** Der Aufrufer steht zwischen `inFlight = true` und dem
    * `try`/`finally`, das es zurücksetzt; ein Wurf von hier ließe den Prüfer für
@@ -352,7 +384,13 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
     try {
       await store.write(at);
     } catch {
-      forgetStore(
+      store = null;
+      // Genau **eine** Zeile über die ganze Laufzeit: Danach gibt es keinen
+      // Speicher mehr, der ein zweites Mal versagen könnte. `info` und nicht
+      // `warn` — der Betrieb ist ungestört, und `proof:access` Abschnitt 0e mißt,
+      // daß im Normalfall keine Warnung erscheint.
+      options.logger.lifecycle(
+        'info',
         'Der Zeitpunkt der letzten Versionsprüfung ließ sich nicht merken. SuperTakt läuft unverändert weiter.',
         'version_check_state_unwritable',
       );
@@ -478,22 +516,20 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
     if (stopped || inFlight) return;
 
     /*
-     * Der Bezugspunkt aus dem Bestand, genau einmal je Prozeßlauf (T-279).
+     * **Die erste Prüfung eines Prozeßlaufs geht immer hinaus** (T-285).
      *
-     * Er steht **vor** der Rechnung darunter, weil er sonst nichts bewirkte:
-     * Der allererste Prüflauf nach einem Neustart ist genau der, bei dem
-     * `lastRequestAt` noch `null` ist — und genau der ging bis T-279 ohne Boden
-     * hinaus.
+     * Sie braucht dafür keine Fallunterscheidung: `lastRequestAt` ist beim
+     * ersten Durchgang `null`, `elapsed` damit `Infinity`, und kein Boden greift.
+     * Das ist der ganze Mechanismus — und deshalb steht hier auch kein Lesen aus
+     * dem Bestand mehr. Zwischen T-279 und T-285 stand es genau an dieser Stelle
+     * und hat jeden Neustart bis zu eine Stunde lang wirkungslos gemacht
+     * (TP-VER-11).
      *
-     * Das `await` ist die einzige Unterbrechung vor dem Boden; ein `stop()`
-     * kann hineinfallen, deshalb die zweite Abfrage.
+     * Der harte Boden darunter ist kein zweites Mal derselbe Takt: Er greift auch
+     * dann, wenn der Zeitgeber aus einem Grund früher feuert, den hier niemand
+     * vorhergesehen hat. Für jede Planung **nach** der ersten Anfrage gilt er
+     * unverändert.
      */
-    await restore();
-    if (stopped) return;
-
-    // Der harte Boden. Er ist kein zweites Mal derselbe Takt: Er greift auch
-    // dann, wenn der Zeitgeber aus einem Grund früher feuert, den hier niemand
-    // vorhergesehen hat.
     const elapsed = lastRequestAt === null ? Infinity : options.now().getTime() - lastRequestAt;
 
     /*
@@ -592,9 +628,11 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
        *
        * Die Obergrenze, die daraus folgt, ist gerechnet und nicht geschätzt:
        * bei ununterbrochenem Fehlschlag höchstens **24** ausgehende Anfragen je
-       * 24 Stunden gegen 1 im Erfolgsfall. GitHub gesteht nicht angemeldeten
-       * Aufrufern 60 je Stunde und Quelladresse zu; eine je Stunde ist ein
-       * Sechzigstel davon.
+       * 24 Stunden **innerhalb eines Laufs** gegen 1 im Erfolgsfall. GitHub
+       * gesteht nicht angemeldeten Aufrufern 60 je Stunde und Quelladresse zu;
+       * eine je Stunde ist ein Sechzigstel davon. Jeder weitere Programmstart
+       * bringt seit T-285 eine weitere Anfrage mit — die Tagesgrenze ist deshalb
+       * `24 + Anzahl der Starts`, ausgerechnet im Kopf dieser Datei.
        */
       if (lookup.reason !== 'aborted') {
         report(options.logger, lookup.reason, lookup.statusCode);

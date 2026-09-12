@@ -70,7 +70,10 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
+import { nameEmailFile } from '@takt/domain';
 import { CONNECTION_PRAGMAS, DATABASE_FILE_MODE, openConnection, openDatabase } from '@takt/storage';
+
+import { createAttachmentBlobPort } from '../src/access/attachment-store.ts';
 
 import { appDataDirIn, isolatedAppDataEnv } from './proof-appdata.mjs';
 import { dienstEinstieg } from './source-resolve.mjs';
@@ -306,6 +309,121 @@ try {
 
     child.kill('SIGTERM');
     await sleep(300);
+  }
+
+  // ---------------------------------------------------------------------------
+  section('5  Der Ordner der übernommenen E-Mail-Dateien (A-19.23, A-A-78, A-A-79)');
+  // ---------------------------------------------------------------------------
+  //
+  // Dieselbe Zusage wie für die Bildkopien in A-A-27, für einen zweiten Ordner:
+  // Verzeichnis `0700`, Datei `0600`, **ausdrücklich gesetzt** und nicht der
+  // `umask` überlassen — die steht in diesem Lauf absichtlich auf `0o000`.
+  //
+  // Der zweite Teil dieses Abschnitts ist kein Rechteproblem, und er steht
+  // trotzdem hier: **Der Name auf der Platte ist erzeugt** (A-A-78). Die
+  // Angriffsnamen stammen aus der Tafel des security-checkers (T-297,
+  // Bedrohungsmodell 39.4.1), in der die Vorlage 25 Namen hereinließ und 25
+  // Dateien schrieb. Gemessen wird hier nicht, ob ein Filter sie abweist,
+  // sondern daß **keiner von ihnen im Pfad vorkommt** — die Fehlerklasse ist
+  // nicht abgewehrt, sondern unmöglich.
+  {
+    const dataHome = await scratch('takt-proof-perm-mail-');
+    const appDir = appDataDirIn(dataHome);
+    const port = createAttachmentBlobPort(appDir, { lifecycle: () => undefined });
+    const mailDir = join(appDir, 'email-attachments');
+
+    const stored = await port.storeEmailFile(Buffer.from('Beispielinhalt'), 'pdf');
+    check('eine übernommene E-Mail-Datei wird abgelegt', stored.ok === true, JSON.stringify(stored));
+
+    if (stored.ok) {
+      check('der Ordner liegt mit 0700', mode(mailDir) === 0o700, octal(mode(mailDir)));
+      check(
+        'die Datei liegt mit 0600 — trotz weiter umask',
+        mode(stored.path) === 0o600,
+        octal(mode(stored.path)),
+      );
+      check(
+        'der Name ist erzeugt: 32 Hexziffern und die übernommene Endung',
+        /^[0-9a-f]{32}\.pdf$/.test(stored.name),
+        stored.name,
+      );
+    }
+
+    // Die Tafel aus 39.4.1. **Keine rohen Richtungszeichen in dieser Datei**
+    // (proof:codepoints) — sie stehen als Bezeichner und werden zur Laufzeit
+    // gebildet. Dieselbe Regel, die das Bedrohungsmodell für sich selbst
+    // aufgestellt hat: Wer einen Angriff über ein unsichtbares Zeichen
+    // beschreibt, schreibt den Bezeichner und nicht das Zeichen.
+    const ANGRIFFSNAMEN = [
+      '..\\..\\..\\Startup\\x.bat',
+      '../../../x.sh',
+      '..',
+      'C:\\Windows\\System32\\calc.exe',
+      '\\\\wirt\\freigabe\\x.txt',
+      '//wirt/freigabe/x.txt',
+      'NUL',
+      'CON.txt',
+      'prn.pdf',
+      'COM1',
+      'CONOUT$',
+      'CONIN$',
+      'LPT9.txt',
+      'rechnung.lnk.',
+      'rechnung.lnk ',
+      'rechnung.pdf.exe',
+      `Rechnung.pdf${' '.repeat(20)}.exe`,
+      `rechnung${String.fromCodePoint(0x202e)}xcod.exe`,
+      `rechnung${String.fromCodePoint(0x2067)}fdp.exe`,
+      'rechnung.txt:evil.lnk',
+      'rechnung.lnk::$DATA',
+      `rechnung.pdf${String.fromCodePoint(0)}.exe`,
+      `${'A'.repeat(400)}.exe`,
+      '   ',
+      '???',
+    ];
+    check(
+      'die Fallliste ist die des Bedrohungsmodells 39.4.1 und schrumpft nicht (E-107)',
+      ANGRIFFSNAMEN.length === 25,
+      String(ANGRIFFSNAMEN.length),
+    );
+
+    const imPfad = [];
+    const falscheForm = [];
+    for (const roh of ANGRIFFSNAMEN) {
+      const benennung = nameEmailFile(roh);
+      if (!benennung.ok) continue;
+      const abgelegt = await port.storeEmailFile(Buffer.from('x'), benennung.extension);
+      if (!abgelegt.ok) continue;
+      if (!/^[0-9a-f]{32}(\.[a-z0-9]{1,16})?$/.test(abgelegt.name)) falscheForm.push(roh);
+      // Verglichen wird der **ganze Pfad** und nicht nur der Name: Ein
+      // Verzeichniswechsel stünde dort und nicht hier.
+      if (roh.trim() !== '' && abgelegt.path.includes(roh.trim())) imPfad.push(roh);
+    }
+    check('kein roher Name kommt im erzeugten Pfad vor', imPfad.length === 0, imPfad.join(' | '));
+    check(
+      'jeder erzeugte Name hat die Form `<32 Hexziffern>[.<endung>]`',
+      falscheForm.length === 0,
+      falscheForm.join(' | '),
+    );
+
+    // Gegenprobe zur Rechteprüfung: **jede** Datei in diesem Ordner ist eng,
+    // nicht nur die erste. Dieselbe Bauart wie in Abschnitt 4.
+    const inhalt = await readdir(mailDir);
+    const zuWeit = inhalt
+      .map((name) => [name, mode(join(mailDir, name))])
+      .filter(([, m]) => m !== null && (m & 0o077) !== 0);
+    check(
+      `keine der ${inhalt.length} übernommenen Dateien ist für andere lesbar`,
+      zuWeit.length === 0,
+      zuWeit.map(([name, m]) => `${name} ${octal(m)}`).join(', '),
+    );
+
+    // A-A-83 und „geprüft wird, was benutzt wird": Ein `target`, das nicht in
+    // diesen Ordner zeigt, wird **nicht angefaßt**. Ohne diese Zeile wäre der
+    // Löschpfad ein Werkzeug, mit dem ein geschriebener Bestandswert beliebige
+    // Dateien entfernt (VG-3).
+    const urteil = await port.removeEmailFile(join(appDir, 'takt.db'));
+    check('ein Ziel außerhalb des Ordners wird abgewiesen', urteil === 'unknown_name', urteil);
   }
 } finally {
   process.umask(vorherigeUmask);

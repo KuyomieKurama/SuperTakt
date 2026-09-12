@@ -2149,8 +2149,19 @@ body:has(.scrim) .toast {
 
 
 /* Auf der Kanban-Karte steht sie in der Kopfzeile neben dem
-   Erledigt-Kennzeichen und darf umbrechen, statt die Zeile zu sprengen. */
+   Erledigt-Kennzeichen und darf umbrechen, statt die Zeile zu sprengen.
+   Bis T-281 war das nur eine Absicht im Kommentar: `max-width` deckelt die
+   Breite, aber `.deadline` steht auf `flex: none` und schrumpfte deshalb
+   nicht, und die Kopfzeile brach nicht um. Beides steht jetzt hier.
+
+   `flex: 0 1 auto` laesst die Marke schrumpfen, `min-width` bleibt dabei auf
+   `auto` — das ist der Boden, unter den kein Flex-Element faellt, und damit
+   der Grund, weshalb hier nichts abgeschnitten wird. Reicht der Platz einer
+   ganzen Zeile nicht, stapeln Zustandswort und Datum uebereinander (`wrap`),
+   statt ueber den Kartenrand hinauszulaufen. Lesbar bleibt beides. */
 .kcard__deadline {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   max-width: 100%;
 }
 
@@ -2250,15 +2261,90 @@ body:has(.scrim) .toast {
   cursor: default;
 }
 
+/*
+ * **Kein Deckel am Zeilenende** (A-19.23b, Auflage A-A-93, R-27).
+ *
+ * Bis T-302 trugen beide Zeilen `truncate` — `overflow: hidden`,
+ * `text-overflow: ellipsis`, `white-space: nowrap`. Das nimmt einem Namen die
+ * **Endung**, ohne ein Zeichen zu veraendern: Der Benutzer liest `Rechnung…`,
+ * bestaetigt, und startet eine `.exe`. Weder `visibleText` noch `proof:foreign`
+ * sehen das — dort ist nichts zu behandeln und ein CSS-Deckel hat keinen Typ.
+ *
+ * Statt dessen umbrechen. Der Umbruch kostet Hoehe und keine Auskunft; eine
+ * Anhangsliste ist keine Tabelle mit festen Spalten. Wer hier wieder deckeln
+ * will, macht `pnpm --filter @takt/web proof:clamp` rot.
+ */
 .attachment__label {
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
 }
 
 /* Der volle Wert in einer zweiten, kleineren Zeile. Bei einer Datei ist der
-   Pfad die einzige Auskunft darueber, was gleich startet. */
+   Pfad die einzige Auskunft darueber, was gleich startet; bei einem Verweis
+   steht hier der Wirt, den A-A-87 vor dem Klick sichtbar verlangt.
+   `anywhere` und nicht `break-word`: Ein Pfad hat keine Wortgrenzen. */
 .attachment__value {
   font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Herkunft und Nachbau an der Zeile (A-A-84, A-A-87, A-19.22b) ---- */
+
+.attachment__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-block: 2px;
+}
+
+/* Eine Marke traegt immer ein **Wort** und nie nur Farbe oder Symbol
+   (SC 1.4.1). Sie bricht mit dem Absendernamen um, statt ihn abzuschneiden. */
+.attachment__mark {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.attachment__mark-icon {
+  display: inline-flex;
+  flex: none;
+  /* Das Symbol sitzt auf der ersten Zeile des Satzes, auch wenn er umbricht. */
+  align-items: center;
+  height: calc(var(--text-xs) * 1.4);
+  color: inherit;
+}
+
+.attachment__mark--email {
+  color: var(--text-secondary);
+}
+
+/*
+ * Der Nachbau ist **kein Fehlschlag** (A-19.31 kennt „geklappt" und „etwas
+ * fehlt"; dies ist der dritte Zustand: es hat geklappt, aber anders). Deshalb
+ * Warnton und nicht Fehlerfarbe — die bleibt der Zeile vorbehalten, die sich
+ * nicht oeffnen liess.
+ */
+/*
+ * „(nachgebaut)" steht **hinter dem Namen**, in derselben Zeile — die Form aus
+ * dem Entwurf des ux-designers (T-303, 6.3a), wo sie `– die E-Mail (nachgebaut)`
+ * heisst. `inline-flex` mit `baseline`, damit die Klammer auf der Grundlinie
+ * des Namens sitzt und nicht daneben schwebt; `white-space: nowrap` ist hier
+ * **erlaubt und richtig**, weil es eigener Text von zwölf Zeichen ist und kein
+ * fremder Name — die Zusage aus A-A-93 gilt dem Namen, nicht der Klammer.
+ */
+.attachment__rebuilt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-inline-start: var(--space-1);
+  color: var(--warning-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
 }
 
 /* Flaeche E: der Grund steht **in der Zeile** und nicht im Meldungsstapel —
@@ -2429,12 +2515,67 @@ body:has(.scrim) .toast {
 }
 
 .openfile__path {
-  margin: 0;
+  /* Nach unten Luft: Seit T-302 folgt die abgesetzte Endung (A-A-86), und die
+     beiden duerfen nicht wie ein Absatz aussehen. */
+  margin: 0 0 var(--space-3);
   color: var(--text-secondary);
   font-size: var(--text-xs);
   /* Umbrechen statt kuerzen. `anywhere` und nicht `break-word`: Ein Pfad hat
      keine Wortgrenzen, an denen sich sinnvoll trennen liesse. */
   overflow-wrap: anywhere;
+}
+
+/*
+ * Der Name aus der E-Mail (A-19.23a). Er steht **unter** dem Namen auf der
+ * Platte: Oben steht, was geoeffnet wird; hier steht, was der Benutzer gelesen
+ * hat. Ruhiger gesetzt als jener — er bestimmt nichts.
+ */
+.openfile__name--foreign {
+  margin-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-weight: var(--weight-regular);
+}
+
+/*
+ * Die aufgeloeste Endung, abgesetzt (Auflage A-A-86). Zwischen lesbarem Namen
+ * und Endung koennen beliebig viele Zeichen stehen, und eine Pfadzeile bricht
+ * um — dann steht die Endung irgendwo in der Mitte des Kastens. Hier steht sie
+ * fuer sich, mit ihrem Urteil daneben.
+ */
+.openfile__extension {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.openfile__extension-value {
+  font-weight: var(--weight-semibold);
+}
+
+.openfile__extension-verdict {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+/* Dieselbe Warnfarbe wie der Satz darueber. Die Farbe ist die Wiederholung,
+   das Wort „wird ausgefuehrt" ist die Aussage (SC 1.4.1). */
+.openfile__extension--executes {
+  color: var(--danger-text);
+}
+
+.openfile__extension--executes .openfile__extension-verdict {
+  color: var(--danger-text);
+  font-weight: var(--weight-semibold);
+}
+
+.openfile__extension-none {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
 /* ==================================================================== */

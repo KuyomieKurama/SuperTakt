@@ -31,7 +31,20 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   timer_idle: { columns: ['id', 'session_id', 'todo_id', 'started_at', 'returned_at', 'note'], orderBy: 'id' },
   timer_heartbeat: { columns: ['time_entry_id', 'seen_at'], orderBy: 'time_entry_id' },
   todo_attachment_kind: { columns: ['kind'], orderBy: 'kind' },
-  todo_attachment: { columns: ['id', 'todo_id', 'kind', 'title', 'target', 'position', 'created_at'], orderBy: 'todo_id, position, id' },
+  /**
+   * Die vier Spalten aus Migration 0023 stehen hier, weil A-20.4 den
+   * **fachlichen Bestand** verlangt und nicht die Zeilen, an die jemand zuerst
+   * denkt: Ohne `origin` ist ein Anhang aus einer fremden E-Mail nach einem
+   * Round-Trip von einem selbst eingetragenen nicht mehr zu unterscheiden, und
+   * ohne `rebuilt` sieht eine nachgebaute `.eml` aus wie die ursprüngliche
+   * Nachricht (A-A-84, A-A-97 — beide verlangen den Round-Trip ausdrücklich).
+   *
+   * **Was hier nicht steht, sind die Bytes.** Eine übernommene E-Mail-Datei
+   * liegt als Datei im Anwendungsdatenverzeichnis; das Archiv trägt bisher nur
+   * die Bildkopien. Der Zustand ist benannt und nicht verschwiegen — die
+   * Sicherung meldet ihn als Warnung (A-A-90, `exportDataArchive`).
+   */
+  todo_attachment: { columns: ['id', 'todo_id', 'kind', 'title', 'target', 'position', 'created_at', 'origin', 'origin_sender', 'display_name', 'rebuilt'], orderBy: 'todo_id, position, id' },
   pool: { columns: ['id', 'name', 'match_mode', 'include_subfolders', 'position', 'created_at', 'updated_at', 'placement', 'completion', 'export_state'], orderBy: 'position, id' },
   pool_rule: { columns: ['pool_id', 'role', 'tag_id', 'folder_id', 'status_id'], orderBy: 'pool_id, role, tag_id, folder_id, status_id' },
   default_tag: { columns: ['tag_id', 'position', 'created_at'], orderBy: 'position, tag_id' },

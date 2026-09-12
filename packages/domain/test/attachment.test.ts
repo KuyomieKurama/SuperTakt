@@ -54,6 +54,8 @@ import {
   isNormalizedAttachmentLink,
   isUncPath,
   normalizeAttachmentLink,
+  attachmentTargetFileName,
+  attachmentTargetNamesFile,
 } from '../src/attachment.ts';
 
 // ---------------------------------------------------------------------------
@@ -772,5 +774,136 @@ describe('attachmentLabel — zwei verschiedene Anhänge tragen nie dieselbe Ers
     const zwei = attachmentLabel('file', 'Rechnung', '/home/nutzer/zwei.pdf');
     expect(eins).toBe(zwei);
     expect(eins).toBe('Rechnung');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-316 (unit-tester) — A-A-98: die Eigentümerfrage des Aufräumlaufs
+// (`apps/local-api/src/features/todos/email-file-sweep.ts`), rein und ohne
+// Datenbank prüfbar. `attachmentTargetNamesFile` entscheidet, ob eine liegende
+// Datei mit Kundenmaterial gelöscht wird — siehe T-314-domain-dev.md Abschnitt
+// 1.1 und den Kopfkommentar der Funktion selbst: "Im Zweifel true", weil ein
+// falsches "false" eine Rechnung ohne Rückfrage entfernt.
+// ---------------------------------------------------------------------------
+
+describe('attachmentTargetFileName — der gefaltete letzte Namensbestandteil (A-A-98)', () => {
+  it('faltet Groß-/Kleinschreibung ASCII, nicht Unicode', () => {
+    expect(attachmentTargetFileName('C:\\Mails\\RECHNUNG.EML')).toBe('rechnung.eml');
+  });
+
+  it('beide Trennerschreibweisen liefern denselben Namen', () => {
+    expect(attachmentTargetFileName('C:\\a\\b\\datei.eml')).toBe('datei.eml');
+    expect(attachmentTargetFileName('/a/b/datei.eml')).toBe('datei.eml');
+  });
+
+  it('nachgestellte Punkte und Leerzeichen fallen — derselbe Name wie beim Öffnen (A-A-5\u2032)', () => {
+    expect(attachmentTargetFileName('C:\\Mails\\datei.eml.')).toBe('datei.eml');
+    expect(attachmentTargetFileName('C:\\Mails\\datei.eml ')).toBe('datei.eml');
+  });
+
+  it('ein Name ohne Trenner ist bereits der ganze Wert', () => {
+    expect(attachmentTargetFileName('datei.eml')).toBe('datei.eml');
+  });
+});
+
+describe('attachmentTargetNamesFile — die weiteste Eigentümerfrage, die einen finden kann (A-A-98)', () => {
+  it('ein zeichengleicher Pfad nennt seine eigene Datei', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml', 'rechnung.eml')).toBe(true);
+  });
+
+  it('abweichende Groß-/Kleinschreibung ändert nichts an der Antwort (T-313-1)', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\RECHNUNG.EML', 'rechnung.eml')).toBe(true);
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml', 'RECHNUNG.EML')).toBe(true);
+  });
+
+  it('beide Trennerschreibweisen nennen dieselbe Datei — kein zeichengleicher Pfadvergleich (T-313-1)', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml', 'rechnung.eml')).toBe(true);
+    expect(attachmentTargetNamesFile('c:/Mails/rechnung.eml', 'rechnung.eml')).toBe(true);
+  });
+
+  it('ein nachgestellter Punkt am gespeicherten Pfad ändert nichts', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml.', 'rechnung.eml')).toBe(true);
+  });
+
+  it('großzügiger als "letzter Pfadbestandteil": ein Pfad, der auf den Namen ENDET, nennt ihn auch dann, wenn der letzte Bestandteil länger ist', () => {
+    // "unterordner-rechnung.eml" endet auf "rechnung.eml", ist aber selbst der
+    // letzte Namensbestandteil und ungleich ihm -- die Funktion bejaht trotzdem,
+    // weil ein falsches "false" hier teurer ist als ein falsches "true"
+    // (Kopfkommentar von attachmentTargetNamesFile).
+    expect(attachmentTargetNamesFile('C:\\Mails\\unterordner-rechnung.eml', 'rechnung.eml')).toBe(
+      true,
+    );
+  });
+
+  it('ein Name, der NICHT am Ende steht, macht die Datei nicht zum Eigentum', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml.txt', 'rechnung.eml')).toBe(false);
+    expect(attachmentTargetNamesFile('C:\\Mails\\anderedatei.eml', 'rechnung.eml')).toBe(false);
+  });
+
+  it('ein leerer Dateiname ist niemals Eigentümer — auch nicht bei einem leeren Pfad', () => {
+    expect(attachmentTargetNamesFile('', '')).toBe(false);
+    expect(attachmentTargetNamesFile('C:\\Mails\\rechnung.eml', '')).toBe(false);
+  });
+
+  it('ist unabhängig von Herkunft und Art — die Funktion kennt kein "origin", kein "kind" (T-313-2, T-313-3)', () => {
+    // Diese Funktion nimmt nur den Pfad und den gesuchten Namen entgegen -- es
+    // gibt syntaktisch gar keine Möglichkeit, origin oder kind hier einzuengen.
+    // Der Prüffall hält das lediglich fest: Zwei Aufrufe mit demselben Pfad
+    // und Namen, die sich nur in der Reihenfolge/Form des Pfades unterscheiden,
+    // liefern dasselbe Ergebnis, unabhängig davon, ob eine Zeile "user" oder
+    // "email" als Herkunft trüge -- eine Information, die hier nicht existiert.
+    expect(attachmentTargetNamesFile('/var/data/email-attachments/abc.eml', 'abc.eml')).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Die weitere Grenze: Zeichen, die anderswo Sonderbedeutung tragen (T-319)
+  // ---------------------------------------------------------------------------
+  //
+  // Diese Funktion selbst kennt kein SQL — die Zeichen "%" und "_" sind für
+  // sie gewöhnliche Namensbestandteile, buchstäblich verglichen über
+  // `endsWith`. Die vier Fälle unten sind trotzdem hier festgehalten, weil sie
+  // der Adapter (`repo-attachments.ts`, `attachmentsNamingFiles`) ohne
+  // Sonderbehandlung an SQLite weiterreicht (`LIKE ... ESCAPE`); die Regel, was
+  // "nennt die Datei" heißt, steht ausschließlich hier.
+
+  it('ein Dateiname mit dem Zeichen "%" darin wird wie jedes andere Zeichen buchstäblich verglichen', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rabatt%20prozent.eml', 'rabatt%20prozent.eml')).toBe(
+      true,
+    );
+    expect(attachmentTargetNamesFile('C:\\Mails\\rabattXXXXXprozent.eml', 'rabatt%20prozent.eml')).toBe(
+      false,
+    );
+  });
+
+  it('ein Dateiname mit dem Zeichen "_" darin wird wie jedes andere Zeichen buchstäblich verglichen', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\vertrag_2024.eml', 'vertrag_2024.eml')).toBe(true);
+    expect(attachmentTargetNamesFile('C:\\Mails\\vertragX2024.eml', 'vertrag_2024.eml')).toBe(false);
+  });
+
+  it('ein gesuchter Name, der selbst einen Pfadtrenner trägt, wird buchstäblich am Ende gesucht', () => {
+    expect(
+      attachmentTargetNamesFile('C:\\Mails\\unterordner\\datei.eml', 'unterordner\\datei.eml'),
+    ).toBe(true);
+    expect(attachmentTargetNamesFile('C:\\Mails\\datei.eml', 'unterordner\\datei.eml')).toBe(false);
+  });
+
+  it('ein sehr langer Name ändert nichts an Vergleich oder Ergebnis', () => {
+    const longName = `${'a'.repeat(400)}.eml`;
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${longName}`, longName)).toBe(true);
+  });
+
+  it('Unicode-Normalform wird NICHT ausgeglichen — nur ASCII wird gefaltet (siehe attachmentTargetFileName): ein zusammengesetztes und ein zerlegtes Zeichen gelten als verschieden', () => {
+    // "é" als ein Zeichen (NFC, U+00E9) gegen "e" + kombinierender Akut (NFD,
+    // U+0065 U+0301) — sichtbar identisch, aber zwei verschiedene
+    // Zeichenketten. `asciiLower` fasst nur A-Z an; für alles andere bleibt der
+    // Bestand ungefaltet. Ein falsches "false" hier ist der sichere Fehlschlag
+    // (die Datei bleibt liegen statt gelöscht zu werden) — siehe Kopfkommentar
+    // der Funktion: "Im Zweifel true", und hier fehlt der Zweifel eben nicht.
+    const nfc = '\u00e9tat.eml'; // "état.eml", vorkomponiert
+    const nfd = 'e\u0301tat.eml'; // "état.eml", zerlegt in e + ´
+    expect(nfc).not.toBe(nfd); // die beiden Literale sind wirklich verschieden
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfc}`, nfc)).toBe(true);
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfc}`, nfd)).toBe(false);
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfd}`, nfc)).toBe(false);
   });
 });

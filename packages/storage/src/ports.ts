@@ -19,6 +19,7 @@ import type {
   Attachment,
   AttachmentCreate,
   AttachmentId,
+  AttachmentKind,
   CalendarDay,
   DefaultTag,
   ExportAuditEntry,
@@ -283,27 +284,42 @@ export interface AttachmentPort {
    */
   imageTargets(todoId: TodoId): Promise<readonly string[]>;
   /**
-   * Welche dieser Namen gehören noch zu einem Anhang? (A-A-18)
+   * Die **übernommenen E-Mail-Dateien** eines Todos, bevor es gelöscht wird
+   * (A-19.23, A-A-83, dieselbe Sache wie {@link imageTargets}).
    *
-   * Die Frage des Aufräumens beim Start: Im Bildverzeichnis liegen Dateien,
-   * und gesucht sind die **ohne Eigentümer**. Gefragt wird deshalb nach den
-   * gefundenen Dateien und nicht nach allen Zeilen — die Antwort ist eine
-   * Teilmenge der Frage, und ihre Größe hängt an dem, was auf der Platte
-   * liegt, nicht an der Größe des Bestands.
+   * Gefragt wird nach `kind = 'file' AND origin = 'email'` — also nach den
+   * Dateien, die **SuperTakt selbst** ins Anwendungsdatenverzeichnis geschrieben
+   * hat. Ein vom Benutzer eingetragener Dateipfad (`origin = 'user'`) steht
+   * ausdrücklich **nicht** darin: Der zeigt auf eine Datei, die dem Benutzer
+   * gehört und die niemals mitgelöscht werden darf.
    *
-   * Der Adapter fragt in Blöcken über `ix_todo_attachment_image`
-   * (`target` mit `WHERE kind = 'image'`, Migration 0015) und lädt die Tabelle
-   * nicht in den Speicher.
+   * Das ist die schärfste Zusage dieses Ports. Wer die Bedingung `origin` hier
+   * wegläßt, hat ein Todo gebaut, dessen Löschung die Rechnung des Kunden aus
+   * dem Dokumentenordner entfernt.
    *
-   * **Die Richtung ist Inhalt.** Wer stattdessen alle Bildziele holte und
-   * gegen das Verzeichnis abgliche, bekäme dieselbe Antwort und eine Abfrage,
-   * die mit dem Bestand wächst. Wer aus der Antwort auf „nicht vorhanden"
-   * schließt, muss außerdem wissen, wann er gefragt hat: Erst das Verzeichnis
-   * lesen, dann fragen — in dieser Reihenfolge ist eine Zeile, die zwischen
-   * beiden Schritten entsteht, in der Antwort enthalten. Umgekehrt wäre sie es
-   * nicht, und die frische Kopie fiele dem Aufräumen zum Opfer.
+   * Der zurückgegebene Wert ist der gespeicherte `target` — der **Pfad**. Was
+   * daraus gelöscht werden darf, entscheidet der Blob-Port noch einmal
+   * (`AttachmentBlobPort.removeEmailFile`), und zwar an der Form: Zwischen
+   * dieser Abfrage und dem `rm` liegt der Bestand, in den ohne diesen Port
+   * geschrieben werden kann (VG-1, VG-3).
    */
-  knownImageTargets(names: readonly string[]): Promise<ReadonlySet<string>>;
+  emailFileTargets(todoId: TodoId): Promise<readonly string[]>;
+  /*
+   * **Gestrichen in T-315: `knownImageTargets(names)`.**
+   *
+   * Sie fragte mit `kind = 'image' AND target IN (namen)` — zeichengleich, über
+   * den Teilindex, schnell. Und sie war die **löschende** Frage: Jede Zeile, die
+   * aus ihr herausfiel, machte die Datei auf der Platte zur Waise. Drei Wege
+   * hinaus sind gemessen (T-314 Abschnitt 4, T-315): eine abweichende
+   * Groß-/Kleinschreibung, ein `kind`, das nicht `image` ist, und — der Weg ohne
+   * besondere Rechte — eine Zeile, die dieselbe Datei mit ihrem **vollen Pfad**
+   * nennt, während die Abfrage mit bloßen Namen fragte.
+   *
+   * An ihrer Stelle steht {@link attachmentsNamingFiles}: **eine** Frage für
+   * beide Aufräumläufe, in ihrer weitesten Fassung, mit der Regel in
+   * `@takt/domain`. Eine zweite, engere Fassung derselben Frage hat hier nichts
+   * mehr zu suchen — genau ihre Zweitfassung war der Fehler.
+   */
   /**
    * Welche Arten führt der Bestand? (A-A-36.)
    *
@@ -317,10 +333,13 @@ export interface AttachmentPort {
    * 0015 hat die Arten zu **Daten** gemacht, damit eine vierte Art ein `INSERT`
    * ist und kein Tabellenumbau. Jede Stelle, die über Arten **rechnet**, hat
    * damit eine Annahme über eine Menge, die absichtlich wachsen darf.
-   * {@link knownImageTargets} ist eine solche Stelle: Sie filtert hart auf
+   * {@link imageCount} ist eine solche Stelle: Sie zählt hart über
    * `kind = 'image'`, weil `ix_todo_attachment_image` ein Teilindex über genau
-   * diese Bedingung ist, und ihre **leere** Antwort wird vom Aufräumlauf als
-   * Beweis der Verwaistheit gelesen (Bedrohungsmodell 23.3.3).
+   * diese Bedingung ist (Bedrohungsmodell 23.3.3). **Seit T-315 zeigt ihre Enge
+   * in die bremsende Richtung:** Eine vierte Art, die ebenfalls eine Kopie im
+   * Bildverzeichnis hält, macht diese Zahl zu klein und den Widerspruchsriegel
+   * stumpfer — sie macht die Löschung nicht weiter. Bis T-315 war es umgekehrt,
+   * und deshalb steht die Artenprüfung überhaupt hier.
    *
    * Diese Methode erlaubt dem Aufrufer, die Annahme zu **prüfen**, statt sie zu
    * haben. Sie ist billig — eine Tabelle mit drei Zeilen ohne Bedingung — und
@@ -338,24 +357,162 @@ export interface AttachmentPort {
    * Die Frage, mit der sich eine **leere** Antwort widerlegen läßt
    * ---------------------------------------------------------------------------
    *
-   * {@link knownImageTargets} beantwortet „welche dieser Namen kennt der
-   * Bestand". Eine **leere** Antwort heißt für den Aufräumlauf „keiner davon
-   * gehört noch jemandem" — und sie heißt dasselbe, wenn die Abfrage selbst
-   * nichts mehr findet, weil sich unter ihr etwas verschoben hat: eine künftige
-   * Änderung an `target` (ein Präfix, eine Normalisierung) oder an `kind`. Der
-   * nächste Start löschte dann den **ganzen** Bildbestand, und die einzige Spur
-   * wäre eine `info`-Zeile mit einer Zahl.
+   * {@link attachmentsNamingFiles} beantwortet „welche dieser liegenden Dateien
+   * nennt der Bestand" — am **Ende** des Pfades. Eine **leere** oder zu kleine
+   * Antwort heißt für den Aufräumlauf „die übrigen gehören niemandem", und sie
+   * heißt dasselbe, wenn die Frage selbst nicht mehr trifft, weil sich unter ihr
+   * etwas verschoben hat: eine Änderung an `target` (ein Präfix, eine Kennung
+   * statt eines Namens) oder an `kind`. Der nächste Start löschte dann den
+   * **ganzen** Bildbestand, und die einzige Spur wäre eine `info`-Zeile mit
+   * einer Zahl.
    *
-   * Diese Zahl macht daraus einen **Widerspruch**, den man sehen kann: Der
-   * Bestand sagt, er führe Bildanhänge, und zugleich gehört ihm keine einzige
-   * der Dateien, die dort liegen. Beides zusammen ist kein Aufräumfall, sondern
-   * ein Zeichen, daß die Frage nicht mehr trifft.
+   * Diese Zahl hängt als einzige **gar nicht** am `target` und macht daraus
+   * einen Widerspruch, den man sehen kann: Der Bestand führt mehr Bildanhänge,
+   * als der Ordner Eigentümer findet. Beides zusammen ist kein Aufräumfall,
+   * sondern ein Zeichen, daß die Zuordnung nicht mehr trifft.
    *
-   * Sie zählt über denselben Teilindex `ix_todo_attachment_image` und lädt
-   * nichts in den Speicher.
+   * **Seit T-315 ist sie die zweite Achse und nicht mehr die Zweitfassung der
+   * ersten** — dieselbe Berichtigung wie bei {@link emailFileCount} in T-314.
+   * Bis dahin stellte sie dieselbe `kind = 'image'`-Bedingung wie die Abfrage,
+   * der sie widersprechen sollte, und zwei Antworten auf dieselbe Frage
+   * widersprechen einander nie. Verglichen wird sie jetzt mit dem Ergebnis der
+   * **weiten** Frage, und der Aufrufer stellt sie **immer**, sobald überhaupt
+   * etwas fallen würde — nicht erst bei leerer Antwort.
+   *
+   * Sie zählt über den Teilindex `ix_todo_attachment_image` und lädt nichts in
+   * den Speicher.
    */
   imageCount(): Promise<number>;
+  /**
+   * **Welche dieser liegenden Dateien nennt der Bestand?** (A-A-98, T-313-1,
+   * T-313-2, T-315.)
+   *
+   * **Die Frage beider Aufräumläufe** — der übernommenen E-Mail-Dateien und der
+   * Bildkopien. Seit T-315 gibt es sie genau einmal; bis dahin hatte der
+   * Bildlauf seine eigene, engere Fassung (`knownImageTargets`), und die
+   * Doppelung war der Grund, warum die Berichtigung aus T-314 die Hälfte des
+   * Bestands nicht erreichte.
+   *
+   * ---------------------------------------------------------------------------
+   * Die weiteste Bedingung, die einen Eigentümer finden kann — und warum die
+   * engere die löschende ist
+   * ---------------------------------------------------------------------------
+   *
+   * Gefragt wird mit **Namen** und nicht mit Pfaden, **ohne** `origin`, **ohne**
+   * `kind` und ohne Rücksicht auf die Schreibweise des Pfades davor. Die Regel
+   * selbst liegt in `@takt/domain` (`attachmentTargetNamesFile`) und
+   * ausschließlich dort; dieser Port hat sie nicht zu wiederholen.
+   *
+   * Bis T-313 stand hier die Frage `origin = 'email' AND kind = 'file'` über
+   * **Pfade**, und sie war als Sicherheit gedacht. Gemessen ist sie das
+   * Gegenteil: Eine Zeile, die ihr `origin` verliert, verschwindet aus der
+   * Antwort — und was aus dieser Antwort verschwindet, wird **gelöscht**. Zwei
+   * Wege dorthin sind gefahren worden (`ON DELETE CASCADE` auf ein zweites,
+   * selbst eingetragenes Anhangsrecht; der Rückweg von Migration 0023 mit
+   * `DEFAULT 'user'` beim Wiedervorgehen), und ein dritter lag in der
+   * Schreibweise: `C:\…` und `c:/…` sind dieselbe Datei und zwei Zeichenketten.
+   *
+   * **Die Richtung ist entschieden:** Eine Zeile zuviel in der Antwort läßt eine
+   * Datei liegen; eine Zeile zuwenig entfernt Kundenmaterial ohne Rückfrage und
+   * ohne Wiederherstellung. Im Zweifel also **mehr** Eigentümer.
+   *
+   * Zurück kommt eine Teilmenge von `names`, Zeichen für Zeichen so, wie sie
+   * hereingegeben wurden. Gelesen wird ausschließlich `target` — kein Titel,
+   * kein Anzeigename, kein Absender, kein Todo (B-2.4).
+   */
+  attachmentsNamingFiles(names: readonly string[]): Promise<ReadonlySet<string>>;
+  /**
+   * **Welche Dateinamen erwartet der Bestand in diesem Ordner?** (A-A-98.)
+   *
+   * ---------------------------------------------------------------------------
+   * Die Menge wird von der **anderen** Seite bestimmt, und das ist der ganze
+   * Punkt
+   * ---------------------------------------------------------------------------
+   *
+   * Der Widerspruchsriegel des Aufräumlaufs hing bis T-313 an einer Zahl, die
+   * mit **derselben** Bedingung gezählt wurde wie die Abfrage, gegen die sie
+   * sprechen sollte. Zwei Antworten auf dieselbe Frage können einander nicht
+   * widersprechen: Verlor eine Zeile ihr `origin`, fiel sie aus beiden zugleich,
+   * null stand gegen null, und der Riegel sah nichts.
+   *
+   * Diese Frage spannt die Menge deshalb an einer anderen Achse auf — am
+   * **Anfang** des Pfades statt an seinem Ende: Welche Zeilen zeigen überhaupt
+   * in diesen Ordner? Der Aufrufer hält das Ergebnis gegen das, was dort
+   * wirklich liegt. Nennt der Bestand Dateien, die es nicht gibt, **und** liegen
+   * zugleich Dateien da, die keine Zeile nennt, dann trifft die Zuordnung nicht
+   * mehr, und es wird nichts entfernt.
+   *
+   * **Auch der Bildlauf stellt sie seit T-315**, obwohl `target` dort den bloßen
+   * Namen trägt und diese Antwort im Regelfall deshalb **leer** ist. Das ist
+   * kein Leerlauf: Genau auf dieser Achse fällt eine Zeile auf, die **doch**
+   * einen Pfad in das Bildverzeichnis trägt — und so eine Zeile entsteht durch
+   * die gewöhnliche Tür (ein Dateianhang auf eine Bildkopie).
+   *
+   * **Ohne `origin`, ohne `kind`** — aus demselben Grund wie oben. Verglichen
+   * wird der Ordnerpräfix in beiden Trennerschreibweisen und in ASCII-Faltung;
+   * der Vergleich ist damit nicht vollständig (Kurznamensform,
+   * Verbindungspunkte), und das ist tragbar: Diese Antwort **bremst** nur, sie
+   * löscht nie. Eine zu kleine Antwort kostet eine Bremse, keine Datei.
+   *
+   * Zurück kommen **gefaltete Namen** ({@link attachmentTargetFileName}) und
+   * keine Pfade — der Aufrufer braucht nichts anderes, und ein Pfad weniger im
+   * Speicher ist ein Pfad weniger im Protokoll (B-2.4).
+   */
+  attachmentNamesUnder(directory: string): Promise<ReadonlySet<string>>;
+  /**
+   * **Welche Dateinamen nennt der Bestand für Anhänge dieser Art?** (A-A-98,
+   * T-320.)
+   *
+   * ---------------------------------------------------------------------------
+   * Wofür das da ist, und wofür ausdrücklich nicht
+   * ---------------------------------------------------------------------------
+   *
+   * {@link attachmentNamesUnder} spannt seine Menge am **Anfang** des Pfades
+   * auf. Für die übernommenen E-Mail-Dateien trägt das, weil `target` dort den
+   * vollen Pfad führt. Für die **Bildkopien** trägt es nicht: Dort steht im
+   * `target` der bloße erzeugte Name, kein Ordner steht davor, und die Antwort
+   * ist im Regelfall **leer**. Der Bildlauf hatte damit von seinen beiden
+   * Gegenfragen faktisch nur eine — `missing` war dort immer 0, und die ganze
+   * Last lag auf `claimed > owned` (T-318, Befund `orphan-sweep.ts:420`).
+   *
+   * Diese Frage schließt die Lücke: Sie nennt die Namen, die der Bestand für
+   * Anhänge dieser Art führt, unabhängig davon, ob `target` ein Pfad ist oder
+   * ein bloßer Name. Der Aufrufer hält sie gegen das, was wirklich im Ordner
+   * liegt; was er dabei findet, **bremst** ihn — es löscht nie.
+   *
+   * **Was sie nicht ist: eine dritte unabhängige Achse.** Sie hängt an
+   * derselben Spalte wie {@link imageCount}, und zwei Antworten auf dieselbe
+   * Frage widersprechen einander nie (T-313-2, T-315). Sie macht die Zahl
+   * `missing` im Protokoll rechenbar und weitet die Bremse; sie ersetzt keine
+   * der drei vorhandenen Fragen.
+   *
+   * Zurück kommen **gefaltete Namen** ({@link attachmentTargetFileName}) und
+   * keine Pfade — derselbe Grund wie bei {@link attachmentNamesUnder}: Ein Pfad
+   * weniger im Speicher ist ein Pfad weniger im Protokoll (B-2.4).
+   */
+  attachmentNamesOfKind(kind: AttachmentKind): Promise<ReadonlySet<string>>;
+  /**
+   * Wie viele übernommene E-Mail-Dateien führt der Bestand insgesamt?
+   * (T-309, dieselbe Rolle wie {@link imageCount} — seit T-314 aber **nicht**
+   * mehr die einzige Gegenfrage.)
+   *
+   * Der **zweite** Riegel des E-Mail-Aufräumlaufs, und der einzige, der auch
+   * dann noch etwas sagt, wenn `target` seine Gestalt vollständig gewechselt hat
+   * — wenn also weder der Name am Ende noch der Ordner am Anfang wiederzufinden
+   * ist. Dann sagt diese Zahl weiterhin „der Bestand führt übernommene
+   * Dateien", während {@link attachmentsNamingFiles} keiner liegenden Datei
+   * einen Eigentümer zuordnet und {@link attachmentNamesUnder} leer ist. Diese
+   * drei Antworten zusammen sind der Widerspruch; keine von ihnen ist er allein.
+   *
+   * Gezählt wird über `ix_todo_attachment_email` mit `origin = 'email' AND
+   * kind = 'file'`. **Daß diese Bedingung eng ist, ist hier die Eigenschaft und
+   * nicht der Fehler:** Sie ist die einzige der drei, die überhaupt nicht am
+   * Pfad hängt. Der Fehler aus T-313-2 war nicht ihre Enge, sondern daß die
+   * **Abfrage** dieselbe Enge hatte.
+   */
+  emailFileCount(): Promise<number>;
 }
+
 
 /**
  * Die **Bytes** eines Bildanhangs (E-071 Punkt 2, A-A-15 bis A-A-18).
@@ -466,11 +623,285 @@ export interface AttachmentBlobPort {
    * Fehlschlag: Wo nichts liegt, ist auch nichts verwaist.
    *
    * Diese Methode beantwortet keine Anfrage. Sie ist die eine Hälfte des
-   * Aufräumens beim Start; die andere ist
-   * {@link AttachmentPort.knownImageTargets}.
+   * Aufräumens beim Start; die andere ist seit T-315
+   * {@link AttachmentPort.attachmentsNamingFiles} — dieselbe Frage, die auch der
+   * Lauf über die E-Mail-Dateien stellt.
    */
   listImages(): Promise<readonly string[]>;
+
+  /**
+   * Ist das ein Name, den das **Bildverzeichnis** tragen kann? (A-A-18, T-315.)
+   *
+   * Zurück kommt der Name selbst — der Wert, mit dem {@link removeImage}
+   * arbeitet — oder `null`, wenn die Form nicht stimmt oder es gar kein
+   * Anwendungsdatenverzeichnis gibt. Sie fragt das Dateisystem **nicht**; ob die
+   * Datei da ist, sagt sie nicht.
+   *
+   * ---------------------------------------------------------------------------
+   * Warum ein Name und kein Pfad — und warum überhaupt eine Methode
+   * ---------------------------------------------------------------------------
+   *
+   * Dieselbe Rolle wie {@link emailFilePathOf} im anderen Ordner: Der Aufräumlauf
+   * braucht **einen** Wert, unter dem er eine Datei später entfernt, und er
+   * braucht ihn, bevor er den Bestand fragt. Für eine übernommene E-Mail-Datei
+   * ist dieser Wert der volle Pfad (er steht so in `todo_attachment.target`), für
+   * eine Bildkopie ist es der bloße Name (so steht er dort, und so nimmt ihn
+   * {@link removeImage}).
+   *
+   * Einen Pfad zurückzugeben, den niemand benutzt, wäre ein Pfad mehr im
+   * Speicher und einer mehr, der in eine Protokollzeile rutschen kann (B-2.4).
+   * Die Formprüfung bleibt damit an **einer** Stelle im Adapter — dieselbe, die
+   * {@link listImages} und {@link removeImage} anwenden.
+   */
+  imageNameOf(name: string): string | null;
+
+  /**
+   * **Der Ordner** der Bildkopien auf diesem Rechner — oder `null`, wenn es kein
+   * Anwendungsdatenverzeichnis gibt (A-A-18, A-A-98, T-315).
+   *
+   * Wortgleich die Begründung von {@link emailFileFolder}, nur für den anderen
+   * Ordner: Der Aufräumlauf spannt seinen Widerspruchsriegel **von der anderen
+   * Seite** auf und fragt den Bestand, welche Namen er in **diesem** Ordner
+   * erwartet ({@link AttachmentPort.attachmentNamesUnder}). Dafür muß jemand
+   * sagen, welcher Ordner gemeint ist; ihn aus einem Dateipfad zurückzurechnen
+   * wäre dieselbe Zerlegung an einer zweiten Stelle.
+   *
+   * Sie gibt **keine** Auskunft darüber, ob der Ordner existiert.
+   */
+  imageFolder(): string | null;
+
+  /**
+   * Legt eine **Datei aus einer fremden E-Mail** ab (A-19.23, A-A-78, A-A-79).
+   *
+   * -------------------------------------------------------------------------
+   * Was diese Methode **nicht** entgegennimmt, und das ist ihr ganzer Punkt
+   * -------------------------------------------------------------------------
+   *
+   * **Keinen Namen.** Nicht den aus der E-Mail, nicht einen bereinigten, nicht
+   * einen vorgeschlagenen. Der Name auf der Platte ist `<32 Hexziffern>` mit
+   * der Endung, die der Aufrufer aus `nameEmailFile` der Domäne bekommen hat —
+   * und die ist auf `[a-z0-9]`, höchstens 16 Zeichen, beschränkt.
+   *
+   * Damit sind Pfadausbruch, Gerätename (`NUL`, `COM1`, `CON.txt`),
+   * Richtungszeichen, Doppelendung, Kollision und Kappung **nicht abgewehrt,
+   * sondern unmöglich** — die Fehlerklasse aus T-297 (25 Namen hinein, 25
+   * Dateien auf der Platte, null Ablehnungen) kommt nie in die Nähe eines
+   * Pfadbestandteils. Ein zweiter Namensfilter wäre der teurere und
+   * schwächere Weg (A-A-80 nennt ihn ausdrücklich als Alternative, nicht als
+   * Ergänzung).
+   *
+   * **Keine Größenangabe.** `detail.size` ist eine Behauptung des Absenders
+   * (A-A-15, A-A-81). Gezählt wird, was ankommt: `data.byteLength`, vom
+   * Aufrufer geprüft, und hier ein zweites Mal als Boden.
+   *
+   * -------------------------------------------------------------------------
+   * Geschrieben wird ohne Ausweichen und ohne Nachsehen (A-A-79)
+   * -------------------------------------------------------------------------
+   *
+   * `open(ziel, 'wx', 0600)` in einem Verzeichnis mit `0700` — **kein**
+   * `existsSync`-dann-`writeFile` wie in der Vorlage. Das ist ein TOCTOU-Paar,
+   * und es folgt auf POSIX einem **baumelnden** Symlink an einen fremden Ort.
+   * Ein bereits vorhandener Eintrag ist ein **Fehlschlag** und kein Ausweichen
+   * auf „(2)"; bei einem erzeugten Namen aus 128 Bit ist er so wahrscheinlich
+   * wie eine doppelte UUID.
+   *
+   * Zurück kommt der **volle Pfad**: Er ist der Wert, der in
+   * `todo_attachment.target` landet, denn eine übernommene Datei ist ein
+   * gewöhnlicher Dateianhang (A-19.26) und wird über den Öffnen-Befehl der
+   * Hülle geöffnet — der einen absoluten Pfad verlangt.
+   */
+  storeEmailFile(
+    data: Uint8Array,
+    extension: string | null,
+  ): Promise<
+    | { readonly ok: true; readonly name: string; readonly path: string; readonly bytes: number }
+    | { readonly ok: false; readonly reason: EmailFileFailure }
+  >;
+
+  /**
+   * Entfernt eine übernommene E-Mail-Datei (A-A-83, dieselbe Sache wie
+   * {@link removeImage}).
+   *
+   * **Der Pfad wird geprüft, bevor gelöscht wird**, und zwar an derselben
+   * Form, in der er erzeugt wurde: Der Ordner muß der Ordner der E-Mail-Dateien
+   * sein und der Name muß einer sein, den {@link storeEmailFile} erzeugt haben
+   * könnte. Zwischen dem Schreiben und diesem Aufruf liegt der Bestand, und in
+   * den wird ohne diesen Port geschrieben (VG-1, VG-3) — ein `target`, das
+   * jemand auf `takt.db` gesetzt hat, darf hier nicht zu einem `rm` werden.
+   *
+   * Das ist wörtlich die Lehre aus T-156-1, T-164-1 und T-297: **Geprüft wird,
+   * was benutzt wird.**
+   */
+  removeEmailFile(target: string): Promise<BlobRemoval>;
+
+  /**
+   * Die Namen der E-Mail-Dateien, die im Ordner liegen — dieselbe Rolle wie
+   * {@link listImages} und mit derselben Zusage: nur Namen, die dieser Port
+   * erzeugt haben könnte, und nur Dateien.
+   */
+  listEmailFiles(): Promise<readonly string[]>;
+
+  // -------------------------------------------------------------------------
+  // Die Datensicherung trägt die Bytes mit (A-19.34, A-A-90, Archivfassung 6)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Liest eine übernommene E-Mail-Datei zurück — für die Datensicherung
+   * (A-19.34).
+   *
+   * -------------------------------------------------------------------------
+   * Warum es diese Methode überhaupt gibt
+   * -------------------------------------------------------------------------
+   *
+   * Bis T-301 nahm die Sicherung die **Zeile** mit und die **Datei** nicht. Der
+   * Befund, der das umgeworfen hat, war eine Messung und keine Vorliebe: Ein
+   * **Bild**anhang reist samt Bytes (`ArchivedImage`), eine übernommene Rechnung
+   * nicht. Dieselbe Handlung des Benutzers, zwei Ergebnisse — und danach ein
+   * Anhang, der auf dem neuen Rechner auf nichts zeigt.
+   *
+   * -------------------------------------------------------------------------
+   * Der Eingabewert ist der `target` aus dem Bestand, nicht ein Name
+   * -------------------------------------------------------------------------
+   *
+   * Für eine E-Mail-Datei steht in `todo_attachment.target` der **volle Pfad**
+   * (A-19.26: sie ist ein gewöhnlicher Dateianhang und wird über den
+   * Öffnen-Befehl der Hülle geöffnet, der einen absoluten Pfad verlangt). Er
+   * wird hier **nicht benutzt, wie er dasteht**, sondern durch dieselbe Form
+   * zurückgeprüft, durch die er beim Schreiben ging — genau wie bei
+   * {@link removeEmailFile} und aus demselben Grund: Zwischen dem Schreiben und
+   * diesem Aufruf liegt der Bestand, und in den kann ohne diesen Port
+   * geschrieben werden (VG-1, VG-3). Ein `target`, das jemand auf `takt.db`
+   * oder auf ein Dokument des Benutzers gesetzt hat, darf **niemals** in eine
+   * Datensicherung wandern.
+   *
+   * **Gezählt wird beim Lesen** (A-A-15), nicht aus `stat`: Die Datei liegt im
+   * Anwendungsdatenverzeichnis, und jeder Prozeß im Benutzerkonto kann sie
+   * ersetzen. Über {@link MAX_EMAIL_ATTACHMENT_BYTES} bricht der Lauf ab —
+   * nichts gelesen, nichts kodiert.
+   *
+   * Zurück kommt der **erzeugte Name** (ohne Ordner) und die Bytes. Der Name
+   * ist der Schlüssel, unter dem die Datei im Archiv steht und unter dem
+   * {@link restoreEmailFile} sie wieder anlegt; der Pfad des Quellrechners geht
+   * das Zielsystem nichts an.
+   */
+  readEmailFile(
+    target: string,
+  ): Promise<
+    | { readonly ok: true; readonly name: string; readonly data: Uint8Array }
+    | { readonly ok: false; readonly reason: EmailFileReadFailure }
+  >;
+
+  /**
+   * Schreibt eine E-Mail-Datei aus einem Datenarchiv zurück (A-19.34).
+   *
+   * Das Gegenstück zu {@link restoreImage}, und mit denselben zwei
+   * Unterschieden zu {@link storeEmailFile}:
+   *
+   *  - **Der Name kommt mit** und wird nicht erzeugt. Er stammt aus dem Archiv
+   *    und ist damit **fremder Text** — deshalb geht er durch dieselbe Form wie
+   *    jeder gelesene Name (`<32 Hexziffern>[.<endung>]`). Ein Eintrag namens
+   *    `../takt.db` scheitert hier, nicht an einer Prüfung weiter vorn.
+   *  - **Ein vorhandener Eintrag wird überschrieben**, nicht abgelehnt. Das
+   *    Einspielen eines Archivs **ersetzt** den Bestand (A-20.5); ein Archiv,
+   *    das auf demselben Rechner entstanden ist, nennt Namen, die dort schon
+   *    liegen. `wx` wäre hier falsch: Es machte den Regelfall zum Fehlschlag.
+   *    Geschrieben wird über eine Nachbardatei und `rename` — ein Abbruch
+   *    mitten im Schreiben hinterläßt dann **die alte** Datei und keine halbe.
+   *
+   * Zurück kommt der **volle Pfad** auf **diesem** Rechner. Er ist der Wert,
+   * den der Aufrufer in `todo_attachment.target` einträgt, und er ist der
+   * Grund, warum A-19.34 überhaupt aufgeht: Der Pfad im Archiv ist der des
+   * Quellrechners und dort, wo die Sicherung ankommt, sicher falsch.
+   */
+  restoreEmailFile(
+    name: string,
+    data: Uint8Array,
+  ): Promise<
+    | { readonly ok: true; readonly path: string; readonly bytes: number }
+    | { readonly ok: false; readonly reason: EmailFileFailure }
+  >;
+
+  /**
+   * Wo eine E-Mail-Datei dieses Namens auf **diesem** Rechner läge — ohne
+   * nachzusehen, ob sie da ist.
+   *
+   * Die einzige Methode dieses Ports, die nichts tut: keine Anfrage an das
+   * Dateisystem, kein Lesen, kein Schreiben, deshalb auch kein `Promise`.
+   *
+   * Sie ist trotzdem nötig, und zwar für genau einen Fall: Ein Archiv der
+   * Fassungen 1 bis 5 trägt die Zeilen, aber **keine Bytes**. Der Pfad in der
+   * Zeile ist der des Quellrechners. Ihn stehen zu lassen hieße, dem Benutzer
+   * in der Rückfrage vor dem Öffnen einen Pfad zu nennen, den es hier nicht
+   * gibt — eine Aussage über einen fremden Rechner an der Stelle, an der er
+   * eine über seinen erwartet (A-A-6). Der Aufrufer setzt deshalb auch ohne
+   * Bytes den **hiesigen** Pfad ein; die Datei fehlt dann, und **das** ist der
+   * Zustand aus A-19.15, den die Oberfläche an Ort und Stelle sagt.
+   *
+   * `null`, wenn der Name keiner ist, den dieser Port erzeugt hätte, oder wenn
+   * es gar kein Anwendungsdatenverzeichnis gibt.
+   */
+  emailFilePathOf(name: string): string | null;
+
+  /**
+   * **Der Ordner** der übernommenen E-Mail-Dateien auf diesem Rechner — oder
+   * `null`, wenn es kein Anwendungsdatenverzeichnis gibt (A-A-98).
+   *
+   * Die zweite Methode dieses Ports, die nichts tut. Sie steht hier, weil der
+   * Aufräumlauf seinen Widerspruchsriegel **von der anderen Seite** aufspannen
+   * muß: Er fragt den Bestand, welche Namen er in **diesem** Ordner erwartet
+   * ({@link AttachmentPort.attachmentNamesUnder}), und dafür muß jemand sagen,
+   * welcher Ordner gemeint ist. Ihn aus `emailFilePathOf` zurückzurechnen wäre
+   * dieselbe Zerlegung an einer zweiten Stelle — und zwei Zerlegungen desselben
+   * Pfades sind die Bauart, an der T-313-1 hing.
+   *
+   * Sie gibt **keine** Auskunft darüber, ob der Ordner existiert.
+   */
+  emailFileFolder(): string | null;
 }
+
+/**
+ * Warum eine übernommene E-Mail-Datei nicht gelesen werden konnte (A-19.34).
+ *
+ * Geschlossener Vorrat, vier Werte, keiner trägt einen Pfad oder eine Meldung
+ * des Betriebssystems. Kein `not_an_image`-Gegenstück: Was für eine Datei das
+ * ist, entscheidet in diesem Bestand niemand (A-A-88).
+ */
+export type EmailFileReadFailure =
+  /**
+   * Der `target` ist keiner, den {@link AttachmentBlobPort.storeEmailFile}
+   * erzeugt hätte — oder es gibt kein Verzeichnis. Es wurde **nichts** gelesen.
+   */
+  | 'unknown_name'
+  /** Nicht vorhanden, nicht lesbar. Der Regelfall nach A-19.15. */
+  | 'unreadable'
+  /** Über {@link MAX_EMAIL_ATTACHMENT_BYTES} — beim Lesen gezählt, nicht aus `stat`. */
+  | 'too_large'
+  /** Leer. Eine Datei ohne Bytes ist keine. */
+  | 'empty';
+
+/**
+ * Warum eine E-Mail-Datei nicht abgelegt werden konnte.
+ *
+ * Geschlossener Vorrat, und deutlich kürzer als {@link ImageBlobFailure}: Es
+ * wird nichts **gelesen** — die Bytes liegen bereits im Speicher — und nichts
+ * an einer Kopfsignatur erkannt. Eine E-Mail-Datei ist ein Bytefeld; was für
+ * eines, entscheidet weder dieser Port noch sonst jemand in diesem Bestand
+ * (A-A-88).
+ */
+export type EmailFileFailure =
+  /** Leer. Eine Datei ohne Bytes ist keine. */
+  | 'empty'
+  /** Über {@link MAX_EMAIL_ATTACHMENT_BYTES} — an den Bytes gezählt. */
+  | 'too_large'
+  /**
+   * Die Endung ist keine, die dieser Port an einen erzeugten Namen hängt.
+   * Kommt nicht vor, solange der Aufrufer `nameEmailFile` der Domäne fragt —
+   * und steht hier, weil „kommt nicht vor" keine Zusage ist, sondern eine
+   * Erwartung an den Aufrufer.
+   */
+  | 'bad_extension'
+  /** Kein Ort eingerichtet, Verzeichnis nicht anlegbar, Schreiben gescheitert. */
+  | 'write_failed';
 
 /**
  * Was aus dem Entfernen einer Bildkopie geworden ist (A-A-18).
@@ -478,7 +909,7 @@ export interface AttachmentBlobPort {
  * Geschlossener Vorrat, drei Werte, keiner davon trägt einen Pfad oder eine
  * Fehlermeldung des Betriebssystems.
  */
-export type ImageRemoval =
+export type BlobRemoval =
   /** Sie liegt danach nicht mehr da — gelöscht, oder es gab sie schon nicht mehr. */
   | 'removed'
   /**
@@ -488,6 +919,17 @@ export type ImageRemoval =
   | 'unknown_name'
   /** Sie liegt noch da. Der Grund steht im Protokoll, nicht in diesem Wert. */
   | 'failed';
+
+/**
+ * Der bisherige Name von {@link BlobRemoval}.
+ *
+ * Er stammt aus T-159, als es nur Bildkopien gab. Seit A-19.23 entfernt
+ * derselbe Vorrat auch übernommene E-Mail-Dateien; der Typ ist zeichengleich
+ * geblieben, nur sein Name war eine Aussage über den einen Aufrufer, den es
+ * damals gab. Beide Namen stehen, damit die Umbenennung keinen Aufrufer
+ * kostet, der mit der Sache nichts zu tun hat.
+ */
+export type ImageRemoval = BlobRemoval;
 
 /** Warum eine Bilddatei nicht gelesen oder nicht übernommen werden konnte. */
 export type ImageBlobFailure =
@@ -1278,8 +1720,30 @@ export interface DefaultTagPort {
 }
 
 /**
- * Der Bezugspunkt des harten Bodens der Versionsprüfung (A-V-11, Migration
- * 0022, T-279).
+ * Der Zeitpunkt der letzten Anfrage der Versionsprüfung (A-V-11, A-20.4,
+ * Migration 0022, T-279, T-285).
+ *
+ * ===========================================================================
+ * Wozu der Wert da ist — und wozu seit T-285 nicht mehr
+ * ===========================================================================
+ *
+ * Er war in T-279 der **Bezugspunkt des harten Bodens über Prozeßgrenzen
+ * hinweg**: Ein neu gestarteter Dienst las ihn und schwieg, wenn die letzte
+ * Anfrage weniger als eine Stunde zurücklag. Das ist zurückgenommen. Der
+ * Boden gilt innerhalb eines Laufs, und **ein Programmstart prüft immer
+ * einmal** — sonst nähme ein Neustart dem Benutzer die einzige Selbsthilfe,
+ * die E-069 ihm läßt (Begründung in
+ * `apps/local-api/src/features/version/version.ts`).
+ *
+ * Was bleibt, ist eine **Tatsache**: „wann hat dieses Erzeugnis zuletzt
+ * gefragt". Sie wird vor jeder ausgehenden Anfrage geschrieben und nimmt am
+ * Round-Trip der Datensicherung teil (A-20.4). **Kein Betriebspfad liest sie
+ * mehr.** {@link VersionCheckStatePort.lastCheckAt} bleibt trotzdem stehen —
+ * als die Naht, an der ein Prüffall den Schreiber überhaupt messen kann
+ * (`packages/storage/test/repo-version-check.test.ts`). Ein Schreiber ohne
+ * Leser ist ein Schreiber ohne Nachweis.
+ *
+ * Wer `lastCheckAt()` wieder an die Versionsprüfung hängt, baut T-279 nach.
  *
  * ===========================================================================
  * Warum das ein eigener Port ist und nicht ein Feld in `AppSettingsPort`
@@ -1308,15 +1772,23 @@ export interface DefaultTagPort {
  *
  * Es gibt kein „zurücksetzen" und kein „löschen". `null` entsteht genau einmal,
  * nämlich durch die Migration, und heißt „noch nie gefragt". Eine Tür, die den
- * Boden aufheben kann, wäre die Umkehrung des Zwecks.
+ * Wert von außen verstellt, wäre eine Fläche für einen Wert, den niemand
+ * sehen soll.
  */
 export interface VersionCheckStatePort {
   /**
    * Der Zeitpunkt der letzten **ausgehenden** Anfrage, oder `null`.
    *
-   * `null` heißt „noch nie gefragt" — und damit „kein Boden". Das ist der
-   * Zustand jedes Bestands unmittelbar nach Migration 0022 und der Grund, warum
-   * der erste Start danach wie bisher genau einmal fragt.
+   * `null` heißt „noch nie gefragt". Das ist der Zustand jedes Bestands
+   * unmittelbar nach Migration 0022.
+   *
+   * **Seit T-285 liest das kein Betriebspfad mehr** — weder die
+   * Versionsprüfung noch eine Route noch die Datensicherung (die liest die
+   * Spalte über `repo-data-archive.ts`). Die Frage bleibt, weil sie die
+   * einzige Naht ist, an der {@link VersionCheckStatePort.recordCheck}
+   * nachweisbar ist. Sie wieder an die Versionsprüfung zu hängen hieße, den
+   * Boden über Prozeßgrenzen zurückzuholen und den Neustart erneut
+   * stillzulegen.
    *
    * Ein Zeitstempel aus der Zukunft ist möglich (verstellte Uhr, eingespielte
    * Datensicherung von einem anderen Rechner) und wird hier **nicht**

@@ -1,10 +1,15 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Timestamp } from '@takt/domain';
+import type { Timestamp, TodoId } from '@takt/domain';
 import { openDatabase, type OpenedDatabase } from '@takt/storage';
 
+import { createAttachmentBlobPort } from '../../src/access/attachment-store.ts';
 import type { AppContext } from '../../src/context.ts';
-import { exportDataArchive, importDataArchive } from '../../src/features/data-transfer/data-transfer.ts';
+import { exportDataArchive, importDataArchive, type TaktDataArchive } from '../../src/features/data-transfer/data-transfer.ts';
 import { importSuperProductivity, importTodoist, parseCsv } from '../../src/features/data-transfer/foreign.ts';
+import { createLogger } from '../../src/logger.ts';
 
 const NOW = '2026-09-08T10:00:00Z' as Timestamp;
 
@@ -19,6 +24,50 @@ async function setup(): Promise<{ readonly database: OpenedDatabase; readonly co
       system: { windowsUser: () => 'Importprüfung' },
     } as unknown as AppContext,
   };
+}
+
+/** Ein eigenes, leeres Anwendungsdatenverzeichnis — steht für einen Rechner. */
+function tempAppDataDir(): string {
+  return mkdtempSync(join(tmpdir(), 'takt-data-transfer-'));
+}
+
+/**
+ * Wie {@link setup}, aber mit einem ECHTEN `attachmentBlobs`-Port auf einem
+ * eigenen Anwendungsdatenverzeichnis (A-19.34). Die Zeilenprüfungen in
+ * `data-transfer.test.ts` brauchen das nicht — ein leeres `todo_attachment`
+ * ruft `attachmentBlobs` nie auf —, aber alles, was eine E-Mail-Datei
+ * tatsächlich liest oder schreibt, schon: Der Pfad reist über das
+ * Dateisystem, nicht über SQL.
+ */
+async function setupWithFiles(): Promise<{
+  readonly database: OpenedDatabase;
+  readonly context: AppContext;
+  readonly appDataDir: string;
+}> {
+  const database = openDatabase({ location: ':memory:', now: () => NOW });
+  await database.migrations.migrateToLatest();
+  const appDataDir = tempAppDataDir();
+  return {
+    database,
+    appDataDir,
+    context: {
+      transactions: database.transactions,
+      clock: { now: () => NOW },
+      system: { windowsUser: () => 'Importprüfung' },
+      attachmentBlobs: createAttachmentBlobPort(appDataDir, createLogger(() => undefined)),
+    } as unknown as AppContext,
+  };
+}
+
+/**
+ * Derselbe Bestand, aber mit einem ANDEREN Anwendungsdatenverzeichnis — steht
+ * für einen zweiten Rechner, auf dem dieselbe Sicherung eingespielt wird.
+ */
+function withOtherAppDataDir(context: AppContext, appDataDir: string): AppContext {
+  return {
+    ...context,
+    attachmentBlobs: createAttachmentBlobPort(appDataDir, createLogger(() => undefined)),
+  } as unknown as AppContext;
 }
 
 describe('Fremdimport — Todoist und Super Productivity (A-20.7)', () => {
@@ -292,7 +341,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
       await unit.settings.update({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15, now: NOW });
     });
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(5);
+    expect(archive.schemaVersion).toBe(6);
     await database.transactions.inTransaction(async (unit) => {
       await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5, now: NOW });
     });
@@ -493,6 +542,268 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
         }],
       },
     });
+
+    expect(result.ok).toBe(false);
+    await database.transactions.inTransaction(async (unit) => {
+      expect((await unit.todos.search({})).items.map((todo) => todo.title)).toContain('Muss erhalten bleiben');
+    });
+  });
+});
+
+/**
+ * T-305 — die Lücke, die der Bericht von T-301/T-299 benannt, aber nicht
+ * geprüft hat: A-19.34 (Fassung 6 trägt die Bytes übernommener Dateien) und
+ * A-19.22b (Kennzeichnung überlebt den Rundlauf). Siehe
+ * `.claude/team/reports/T-301-domain-dev.md` Abschnitt 1 und 7.3.
+ */
+describe('A-19.34 — die Bytes der übernommenen Dateien reisen mit dem Archiv (T-301, T-305)', () => {
+  let opened: OpenedDatabase | null = null;
+  const appDataDirs: string[] = [];
+  afterEach(() => {
+    opened?.close();
+    opened = null;
+    for (const dir of appDataDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** Legt ein Todo mit genau einem aus einer E-Mail übernommenen Dateianhang an — mit einer echten Datei auf der Platte. */
+  async function createEmailAttachment(
+    database: OpenedDatabase,
+    context: AppContext,
+    bytes: Buffer,
+    options: { readonly displayName?: string; readonly rebuilt?: boolean; readonly originSender?: string } = {},
+  ): Promise<{ readonly todoId: TodoId; readonly name: string; readonly path: string }> {
+    const stored = await context.attachmentBlobs.storeEmailFile(bytes, 'pdf');
+    if (!stored.ok) throw new Error(`Testaufbau: storeEmailFile ist fehlgeschlagen (${stored.reason})`);
+    return database.transactions.inTransaction(async (unit) => {
+      const todo = await unit.todos.create(
+        { title: 'Mit E-Mail-Anhang', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+        [],
+      );
+      const created = await unit.attachments.create({
+        todoId: todo.id,
+        kind: 'file',
+        title: null,
+        target: stored.path,
+        now: NOW,
+        origin: 'email',
+        originSender: options.originSender ?? 'kunde@beispiel.test',
+        displayName: options.displayName ?? 'Rechnung Müller.pdf',
+        rebuilt: options.rebuilt ?? false,
+      });
+      if (!created.ok) throw new Error('Testaufbau: attachments.create ist fehlgeschlagen');
+      return { todoId: todo.id, name: stored.name, path: stored.path };
+    });
+  }
+
+  it('Rundlauf über zwei Anwendungsdatenverzeichnisse: Bytes, Pfad, display_name und rebuilt überleben (A-19.34, A-19.22b)', async () => {
+    const { database, context, appDataDir: dirA } = await setupWithFiles();
+    opened = database;
+    appDataDirs.push(dirA);
+    const bytes = Buffer.from('%PDF-1.4 Testinhalt für den Rundlauf über zwei Rechner');
+    const { todoId, path: pathOnA } = await createEmailAttachment(database, context, bytes, {
+      displayName: 'Rechnung Müller.pdf',
+      rebuilt: true,
+      originSender: 'kunde@beispiel.test',
+    });
+
+    const archive = await exportDataArchive(context);
+    expect(archive.schemaVersion).toBe(6);
+    expect(archive.data.files).toHaveLength(1);
+    expect(archive.data.files[0]?.base64).toBe(bytes.toString('base64'));
+    // Die Bytes sind da — die Sicherung meldet keinen Verlust.
+    expect(archive.warnings.some((line) => line.includes('übernommene'))).toBe(false);
+
+    const dirB = tempAppDataDir();
+    appDataDirs.push(dirB);
+    const contextB = withOtherAppDataDir(context, dirB);
+
+    const result = await importDataArchive(contextB, archive);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.files).toBe(1);
+    expect(result.value.warnings.some((line) => line.includes('fehl'))).toBe(false);
+
+    await database.transactions.inTransaction(async (unit) => {
+      const [attachment] = await unit.attachments.list(todoId);
+      expect(attachment).toBeDefined();
+      if (attachment === undefined) return;
+      // Der Pfad reist NICHT mit — er zeigt jetzt in dirB, nicht mehr in dirA.
+      expect(attachment.target).not.toBe(pathOnA);
+      expect(attachment.target.startsWith(dirB)).toBe(true);
+      expect(attachment.target.includes(dirA)).toBe(false);
+      expect(readFileSync(attachment.target)).toEqual(bytes);
+      // display_name, rebuilt und originSender überleben den Rundlauf unverändert (A-19.22b, A-A-85).
+      expect(attachment.displayName).toBe('Rechnung Müller.pdf');
+      expect(attachment.rebuilt).toBe(true);
+      expect(attachment.originSender).toBe('kunde@beispiel.test');
+      expect(attachment.origin).toBe('email');
+    });
+  });
+
+  it('der Pfad reist NICHT mit, auch OHNE Bytes — eine Fassung-5-Sicherung auf einem fremden Rechner zeigt lokal und meldet den Verlust LAUT (A-19.15)', async () => {
+    const { database, context, appDataDir: dirA } = await setupWithFiles();
+    opened = database;
+    appDataDirs.push(dirA);
+    const bytes = Buffer.from('Inhalt, der beim Sichern in Fassung 5 nicht mitgenommen wird');
+    const { todoId, path: pathOnA } = await createEmailAttachment(database, context, bytes);
+
+    const archive = await exportDataArchive(context);
+    // Eine Sicherung der Fassung 5 kennt data.files nicht — dieselbe
+    // Bauart wie bei den übrigen "legacy"-Prüffällen in dieser Datei.
+    const legacyArchive = { ...archive, schemaVersion: 5, data: { ...archive.data, files: [] } };
+
+    const dirC = tempAppDataDir();
+    appDataDirs.push(dirC);
+    const contextC = withOtherAppDataDir(context, dirC);
+
+    const result = await importDataArchive(contextC, legacyArchive);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.files).toBe(0);
+    // A-19.15 — sie schweigt nicht: "1 der 1 … fehlt … und liegt auch nicht auf diesem Rechner."
+    expect(result.value.warnings.join(' ')).toContain(
+      '1 der 1 aus E-Mails übernommenen Dateien fehlt in dieser Sicherung und liegt auch nicht auf diesem Rechner.',
+    );
+
+    await database.transactions.inTransaction(async (unit) => {
+      const [attachment] = await unit.attachments.list(todoId);
+      expect(attachment).toBeDefined();
+      if (attachment === undefined) return;
+      expect(attachment.target).not.toBe(pathOnA);
+      expect(attachment.target.startsWith(dirC)).toBe(true);
+      expect(attachment.target.includes(dirA)).toBe(false);
+    });
+  });
+
+  it('dieselbe Fassung-5-Sicherung auf DEMSELBEN Rechner bleibt STILL — die Datei liegt noch da (Gegenprobe zu A-19.15)', async () => {
+    const { database, context, appDataDir: dirA } = await setupWithFiles();
+    opened = database;
+    appDataDirs.push(dirA);
+    const bytes = Buffer.from('Bleibt lokal liegen und wird nicht vermisst');
+    await createEmailAttachment(database, context, bytes);
+
+    const archive = await exportDataArchive(context);
+    const legacyArchive = { ...archive, schemaVersion: 5, data: { ...archive.data, files: [] } };
+
+    // Eingespielt auf demselben Zusammenhang — dieselbe Datei liegt noch in dirA.
+    const result = await importDataArchive(context, legacyArchive);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.warnings.some((line) => line.includes('fehl') || line.includes('nicht auf diesem Rechner'))).toBe(false);
+  });
+});
+
+/**
+ * T-301 fand beim Heben der Fassungsnummer einen Fehler, der beinahe
+ * stehengeblieben wäre: `if (schemaVersion !== 5) idle_keep_timer_running = 1`
+ * hätte mit der 6 eine korrekt geführte Einstellung überschrieben. Dieser Test
+ * hält genau das fest — er wäre mit dem alten `!== 5`-Vergleich ROT.
+ */
+describe('T-301/T-305 — die alte Richtung: eine Fassung-6-Sicherung überschreibt eine gesetzte Einstellung NICHT', () => {
+  let opened: OpenedDatabase | null = null;
+  afterEach(() => { opened?.close(); opened = null; });
+
+  it('Regression: idleKeepTimerRunning=false überlebt den Rundlauf einer Fassung-6-Sicherung, statt auf den Vorgabewert true zurückzuspringen', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ idleKeepTimerRunning: false, idleThresholdMinutes: 45, now: NOW });
+    });
+
+    const archive = await exportDataArchive(context);
+    expect(archive.schemaVersion).toBe(6);
+    expect(archive.data.tables.app_setting[0]?.['idle_keep_timer_running']).toBe(0);
+
+    // Der Bestand ändert sich, bevor die Sicherung wieder eingespielt wird —
+    // genau die Reihenfolge, in der `schemaVersion !== 5` zuschlagen würde:
+    // Eine Fassung-6-Sicherung ist nicht die Fassung 5, also wahr, also würde
+    // die Zeile überschrieben.
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.settings.update({ idleKeepTimerRunning: true, now: NOW });
+    });
+
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    await database.transactions.inTransaction(async (unit) => {
+      expect((await unit.settings.load()).idleKeepTimerRunning).toBe(false);
+      expect((await unit.settings.load()).idleThresholdMinutes).toBe(45);
+    });
+  });
+});
+
+/**
+ * T-301 Abschnitt 4 nennt neun Abweisungen, die er beim Messen gefahren hat.
+ * Vor T-305 stand dafür kein einziger Prüffall. Eine Untergrenze auf die
+ * Anzahl der Fälle hält fest, dass hier "nichts gefunden" nicht "nichts
+ * gesehen" bedeutet (siehe Auftrag).
+ */
+describe('parseArchive — die neun Abweisungen aus T-301 Abschnitt 4 (Fassung 6, A-19.34)', () => {
+  let opened: OpenedDatabase | null = null;
+  afterEach(() => { opened?.close(); opened = null; });
+
+  const VALID_FILE_NAME = 'a'.repeat(32);
+  const VALID_BASE64 = Buffer.from('Testinhalt').toString('base64');
+
+  type Mutator = (archive: TaktDataArchive) => unknown;
+
+  const CASES: readonly (readonly [string, Mutator])[] = [
+    ['Fassung 7 — über der höchsten lesbaren', (a) => ({ ...a, schemaVersion: 7 })],
+    ['Fassung 0', (a) => ({ ...a, schemaVersion: 0 })],
+    ['die Fassung als Zeichenkette "6" statt einer Zahl', (a) => ({ ...a, schemaVersion: '6' })],
+    [
+      'Fassung 5 MIT data.files — behauptet zwei Dinge, von denen eines nicht stimmt',
+      (a) => ({
+        ...a,
+        schemaVersion: 5,
+        data: { ...a.data, files: [{ name: VALID_FILE_NAME, base64: VALID_BASE64 }] },
+      }),
+    ],
+    [
+      'ein Dateiname mit Pfadausbruch ("../../takt.db")',
+      (a) => ({ ...a, data: { ...a.data, files: [{ name: '../../takt.db', base64: VALID_BASE64 }] } }),
+    ],
+    [
+      'ein absoluter Pfad als Dateiname ("C:/Windows/x.dll")',
+      (a) => ({ ...a, data: { ...a.data, files: [{ name: 'C:/Windows/x.dll', base64: VALID_BASE64 }] } }),
+    ],
+    [
+      'Base64 mit Leerraum',
+      (a) => ({ ...a, data: { ...a.data, files: [{ name: VALID_FILE_NAME, base64: 'AAAA AAAA' }] } }),
+    ],
+    [
+      'leerer Inhalt — eine übernommene Datei ohne Bytes',
+      (a) => ({ ...a, data: { ...a.data, files: [{ name: VALID_FILE_NAME, base64: '' }] } }),
+    ],
+    [
+      'doppelter Name — zwei Aussagen über dieselbe Datei',
+      (a) => ({
+        ...a,
+        data: {
+          ...a.data,
+          files: [
+            { name: VALID_FILE_NAME, base64: VALID_BASE64 },
+            { name: VALID_FILE_NAME, base64: VALID_BASE64 },
+          ],
+        },
+      }),
+    ],
+  ];
+
+  it('deckt mindestens die neun im Bericht genannten Abweisungen ab', () => {
+    expect(CASES.length).toBeGreaterThanOrEqual(9);
+  });
+
+  it.each(CASES)('weist ab: %s', async (_name, mutate) => {
+    const { database, context } = await setup();
+    opened = database;
+    const archive = await exportDataArchive(context);
+    await database.transactions.inTransaction(async (unit) => {
+      await unit.todos.create(
+        { title: 'Muss erhalten bleiben', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
+        [],
+      );
+    });
+
+    const result = await importDataArchive(context, mutate(archive));
 
     expect(result.ok).toBe(false);
     await database.transactions.inTransaction(async (unit) => {

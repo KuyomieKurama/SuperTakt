@@ -44,6 +44,7 @@ import type {
   TechnicalKey,
   Timestamp,
   Todo,
+  UncappedText,
 } from "../../api/types";
 
 /* ==================================================================== */
@@ -198,6 +199,19 @@ export interface TodoFilter {
 export type AttachmentKind = "link" | "image" | "file";
 
 /**
+ * Die Herkunft eines Anhangs (A-A-84).
+ *
+ *  - `user` — der Benutzer hat ihn selbst eingetragen. Er kennt die Quelle.
+ *  - `email` — er kam über das Outlook-Add-in aus einer E-Mail mit (A-19.23).
+ *    Name und Inhalt bestimmt der Absender.
+ *
+ * Ein dritter Wert ist heute keiner: Der Dienst bildet Unbekanntes auf `user`
+ * ab, weil `email` eine Herkunft **behauptete**, die niemand nachweisen kann —
+ * und die Rückfrage vor dem Öffnen läse sie vor.
+ */
+export type AttachmentOrigin = "user" | "email";
+
+/**
  * Ein Anhang, wie der Dienst ihn liefert (A-19.8).
  *
  * **`title` und `value` sind fremder Text**, und das ist keine Förmlichkeit.
@@ -227,6 +241,47 @@ export interface Attachment {
   /** Reihenfolge am Todo, vom Dienst vergeben. */
   readonly position: number;
   readonly createdAt: Timestamp;
+  /**
+   * Woher dieser Anhang stammt (A-A-84) — **gespeichert**, nicht aus dem Pfad
+   * geraten.
+   *
+   * Der Unterschied, den dieses Feld trägt, ist der aus R-21: Ein Anhang, den
+   * der Benutzer selbst eingetragen hat, hat eine Herkunft, die er kennt. Ein
+   * Anhang aus einer E-Mail liegt Tage später zwischen seinen eigenen, und ein
+   * Fremder hat ihn geschickt. Die Rückfrage vor dem Öffnen sagt das (A-A-85),
+   * und die Zeile sagt es auch (A-A-87).
+   */
+  readonly origin: AttachmentOrigin;
+  /**
+   * Der Absender der E-Mail, aus der dieser Anhang stammt — **fremder Text**
+   * (A-A-85). `null` heißt „gibt es nicht", nicht „unbekannt".
+   */
+  readonly originSender: ForeignText | null;
+  /**
+   * Der Name aus fremder Hand (A-19.23a) — der Dateiname, wie er in der E-Mail
+   * stand. `null` bei jedem Anhang, den der Benutzer selbst eingetragen hat.
+   *
+   * **Er ist nicht `title` und nicht `target`**, und die Trennung ist der Punkt:
+   * `title` gehört dem Benutzer, `target` ist der von SuperTakt **erzeugte**
+   * Pfad (`<32 Hexziffern>[.<endung>]`, A-A-78), und dieses Feld ist der
+   * einzige Wert am Anhang, den ein Absender frei bestimmt hat.
+   *
+   * Der Typ ist deshalb `UncappedText` und nicht `ForeignText`: An seinem Ende
+   * steht die Endung, und an der Endung hängt, was beim Bestätigen startet
+   * (A-19.23b, A-A-93).
+   */
+  readonly displayName: UncappedText | null;
+  /**
+   * Diese Datei ist ein **Nachbau** der E-Mail und nicht die ursprüngliche
+   * Nachricht (A-19.22a, A-19.22b, A-A-97).
+   *
+   * Die Kennzeichnung hängt an der **Datei** und nicht am Augenblick des
+   * Anlegens: Sie steht an der Anhangszeile und in der Rückfrage vor dem
+   * Öffnen, und sie übersteht die Datensicherung. Ein Hinweis, der nur beim
+   * Anlegen im Aufgabenbereich erschien, wäre drei Wochen später nirgends — und
+   * der Benutzer sitzt dann hier.
+   */
+  readonly rebuilt: boolean;
 }
 
 /**

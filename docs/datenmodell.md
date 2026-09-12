@@ -952,30 +952,55 @@ Der Wert geht in **keine** Adresse. Die Adresse zur Release-Seite baut die Hüll
 die sie selbst geprüft hat (A-V-16); die übersprungene Fassung entscheidet nur darüber, ob ein
 Hinweis erscheint. Schaden im schlimmsten Fall: ein unterdrückter Hinweis.
 
-**`last_version_check_at` — der Bezugspunkt des harten Bodens (A-V-11, T-279).** Seit Migration
-0022. `TEXT`, ISO-8601 in UTC, sekundengenau, mit `Z` — dieselbe eine Form wie jeder andere
-Zeitstempel dieses Schemas. `NULL` heißt „noch nie gefragt" und ist der Zustand jedes bestehenden
-Bestands nach der Migration.
+**`last_version_check_at` — die Tatsache „wann wurde zuletzt gefragt" (A-V-11, A-20.4, T-279,
+T-285).** Seit Migration 0022. `TEXT`, ISO-8601 in UTC, sekundengenau, mit `Z` — dieselbe eine
+Form wie jeder andere Zeitstempel dieses Schemas. `NULL` heißt „noch nie gefragt" und ist der
+Zustand jedes bestehenden Bestands nach der Migration.
 
-Er steht aus **demselben** Grund hier wie `skipped_version` eine Absatzlänge weiter oben, und das
-ist der eigentliche Punkt: A-18.10 hält die übersprungene Fassung im Bestand, A-24.7 hält die
-offenen Inaktivitätsphasen im Bestand — „nicht im Arbeitsspeicher und nicht im Browserspeicher".
-Der Bezugspunkt des Bodens ist ein Wert derselben Fläche und hatte bis T-279 eine **andere**
-Lebensdauer als sein direkter Nachbar in derselben Tabellenzeile, ohne daß irgendwo stand, warum.
+**Der Zweck dieses Werts hat sich mit T-285 geändert, und das gehört hierher und nicht in einen
+Bericht.** In T-279 war er der **Bezugspunkt des harten Bodens über Prozeßgrenzen hinweg**: Der
+Dienst las ihn beim ersten Prüflauf, und ein Neustart innerhalb einer Stunde prüfte deshalb
+nicht. Seit T-285 wird er **geschrieben und nicht gelesen** — eine Tatsache, keine Sperre. Er
+nimmt am Round-Trip der Datensicherung teil (A-20.4) und beantwortet die Frage „wann hat dieses
+Erzeugnis zuletzt gefragt"; mehr nicht.
 
-Was sich damit ändert, ist gemessen und nicht geschätzt (T-276): Ein neu gestarteter Dienst kannte
-keinen letzten Zeitpunkt, also griff kein Boden, also ging nach dem Startabstand von 10 s eine
-Anfrage hinaus. Wer den Sidecar in einer Schleife startet und beendet, erreicht damit **344
-ausgehende Anfragen je Stunde** — das 5,7fache dessen, was GitHub nicht angemeldeten Aufrufern je
-Stunde und Quelladresse überhaupt zugesteht.
+Der Grund ist der Preis, den T-279 nicht beziffert hatte und den der Prüffall TP-VER-11 gefunden
+hat: **Ein Neustart bewirkte bis zu eine Stunde lang nichts.** Weil der Zeitpunkt **vor** der
+Anfrage geschrieben wird — richtig so, sonst umginge ein Absturz ihn —, setzte ihn auch ein
+fehlgeschlagener Versuch. Start ohne Netz um 9:00, Neustart um 9:10, keine Prüfung bis 10:00.
+Der Neustart ist die einzige Selbsthilfe, die E-069 dem Benutzer läßt, wenn die Versionsprüfung
+nicht greift. **Ein Programmstart prüft seither immer einmal**; der Boden gilt innerhalb eines
+Laufs (A-V-11 wörtlich: „zwischen zwei ausgehenden Anfragen").
 
-**Und die Grenze gehört danebengeschrieben, sonst ist der Satz oben eine falsche Zusage:** Derselbe
-Prozeß, der den Sidecar in einer Schleife startet, kommt mit `sqlite3` an diese Datei und setzt die
-Zeitmarke zurück. Das ist VG-3 und war es vorher auch. **Die Spalte ist keine Abwehr gegen einen
-feindlichen lokalen Prozeß, sondern gegen den Unfall** — den Entwicklerrechner, an dem `pnpm
-desktop` bei jedem Rust-Neubau einen neuen Sidecar mit der echten Abholfunktion startet; den
-zwanzigfachen Doppelklick nach einem Startproblem; eine Neustartautomatik, die heute niemand gebaut
-hat und die morgen jemand baut, ohne diesen Zusammenhang zu kennen.
+Was der Wert damit **nicht** mehr leistet, ist gemessen und nicht geschätzt (T-276): Ein neu
+gestarteter Dienst kennt keinen letzten Zeitpunkt, also griff kein Boden, also geht nach dem
+Startabstand von 10 s eine Anfrage hinaus. Wer den Sidecar in einer Schleife startet und
+beendet, erreicht damit wieder **344 ausgehende Anfragen je Stunde** — das 5,7fache dessen, was
+GitHub nicht angemeldeten Aufrufern je Stunde und Quelladresse zugesteht.
+
+**Und die Grenze gehört danebengeschrieben, sonst wäre der Rückbau eine Nachlässigkeit:**
+Derselbe Prozeß, der den Sidecar in einer Schleife startet, kommt mit `sqlite3` an diese Datei
+und setzt die Zeitmarke zurück. Das ist VG-3 und war es vorher auch. **Die Spalte war keine
+Abwehr gegen einen feindlichen lokalen Prozeß, sondern gegen den Unfall** — den
+Entwicklerrechner, an dem `pnpm desktop` bei jedem Rust-Neubau einen neuen Sidecar startet; den
+zwanzigfachen Doppelklick nach einem Startproblem; eine Neustartautomatik, die heute niemand
+gebaut hat. Der Auftraggeber hat den Unfallschutz gegen die Selbsthilfe des Benutzers abgewogen
+und sich für die Selbsthilfe entschieden.
+
+**Die Migration 0022 selbst behauptet weiterhin den alten Zweck**, und das ist kein Versehen:
+Der Läufer vergleicht eine Prüfsumme über den Dateiinhalt (`checksum_mismatch`). Eine gelaufene
+Migration im Wortlaut zu ändern bräche jeden bestehenden Bestand. Der Text von 0022 ist damit
+ein **Zeitzeuge des Standes vom 2026-09-11**, und dieser Absatz hier ist die gültige Auskunft
+(A-A-77).
+
+Damit das auch jemand merkt, der in `packages/storage/migrations/` steht und nicht hier: Neben
+der Migration liegt seit T-288 die Beistelldatei **`0022_last_version_check_at.hinweis.md`**. Sie
+benennt den überholten Zweck und den **falschen Zeiger** darin — der Abschnitt „Form" verweist
+für den Zukunftsfall auf „`run()` … erkennt an `elapsed < 0`" und nennt damit eine Stelle, die
+den Bestandswert seit T-285 nicht mehr liest; der `elapsed < 0`-Zweig bewacht heute den
+Bezugspunkt im Arbeitsspeicher desselben Laufs. Läufer und Erzeuger sehen die Datei nicht: beide
+filtern auf `NNNN_name.(up|down).sql`, die Prüfsumme bleibt unberührt, `pnpm proof:migrations`
+zählt unverändert 44 Dateien.
 
 Drei Unterschiede zu `skipped_version`, und alle drei folgen daraus, daß dieser Wert **niemandem
 gehört**:
@@ -983,15 +1008,42 @@ gehört**:
 | | `skipped_version` | `last_version_check_at` |
 |---|---|---|
 | Wer schreibt | der Benutzer über `PATCH /settings` | allein die Versionsprüfung des Dienstes |
-| Wer liest | Oberfläche und Domäne über `GET /settings` | allein die Versionsprüfung des Dienstes |
+| Wer liest | Oberfläche und Domäne über `GET /settings` | **niemand** im Betrieb; die Datensicherung liest die Spalte |
 | Rolle des CHECK | zweite Wache hinter der Prüfung an der Tür | **einzige** Wache — es gibt keine Tür |
 
-Er erscheint deshalb **in keiner Route**: nicht in `GET /settings`, nicht in `PATCH /settings`, in
-keiner Antwort und in keiner Oberfläche (A-V-14′, A-18.11). Ein „zuletzt geprüft: 14:03" wäre die
-Fehlerfläche, die A-18.11 ausschließt, und eine Schaltfläche daneben wäre die von E-069
-ausgeschlossene Route mit einer Hand darauf. Er hängt aus demselben Grund nicht an `AppSettingsPort`
-und nicht an der `UnitOfWork`, sondern an einem eigenen `VersionCheckStatePort` mit genau zwei
-Fragen; ein „zurücksetzen" gibt es dort nicht.
+Er erscheint **in keiner Route außer der Datensicherung** (A-20.4), und dort als **Zeile des
+Archivs, nicht als Einstellung**: nicht in `GET /settings`, nicht in `PATCH /settings`, in
+keiner Antwort als Einstellungsfeld und in keiner Oberfläche (A-V-14′, A-18.11). Der Satz stand
+hier bis T-288 ohne die Ausnahme und war seit T-279 zu weit — `GET /api/v1/data-transfer/archive`
+**ist** eine Route und antwortet mit dem Wert; zwei Absätze weiter unten steht es auch so. Die
+Unterscheidung, auf die es ankommt, ist nicht „Route ja oder nein", sondern: Der Wert verläßt
+den Dienst nur im vollständigen Abzug des Bestands, den der Benutzer ausdrücklich auslöst, und
+nie als Auskunft über den Zustand der Versionsprüfung. Ein „zuletzt geprüft: 14:03" wäre
+die Fehlerfläche, die A-18.11 ausschließt, und eine Schaltfläche daneben wäre die von E-069
+ausgeschlossene Route mit einer Hand darauf. Er hängt aus demselben Grund nicht an
+`AppSettingsPort` und nicht an der `UnitOfWork`, sondern an einem eigenen
+`VersionCheckStatePort`. Dessen `lastCheckAt()` hat seit T-285 **keinen Aufrufer im Betrieb**
+und bleibt als die Naht stehen, an der `recordCheck()` überhaupt nachweisbar ist; daß niemand
+sie wieder an die Versionsprüfung hängt, mißt `proof:release-safety` seit T-290 in **fünf
+Gestalten** — ein Leser über `lastCheckAt`, ein `read` am Port, ein roher
+`SELECT last_version_check_at` am Port vorbei, ein `SELECT *`, das auch den Spaltennamen umgeht,
+und die festgenagelte **Importmenge** des Ordners, die den *geliehenen* Port ausschließt (A-V-27,
+A-V-28). Die Gestalten messen den Baum in **einer** Prüfung; die **sechsundzwanzig** Gegenproben
+daneben messen den Wächter, nicht den Baum. Sechs davon sind in T-292 dazugekommen und liegen
+alle an der zweiten Gestalt: Sie wird seit dort vom TypeScript-Compiler gelesen statt von einem
+regulären Ausdruck, weil dreimal hintereinander eine andere Schreibweise desselben `read`
+unsichtbar blieb — zuletzt `readonly read: () => Promise<string | null>;` als Eigenschaft und
+ein `}` in einer Zeichenkette der Nachbarsignatur. Sechs weitere kamen in T-294 dazu, und sie
+liegen neben der Schreibweise: ein `read`, das über `extends` aus einer Basisschnittstelle
+hereinkommt, zwei `interface` gleichen Namens, die TypeScript zusammenführt — beide machten
+den ganzen Prüfsatz grün, während der Rückweg gebaut dastand (T-293) —, dazu die beiden
+übrigen Meßfehlschläge, der Zweig „der Port kennt kein `write` mehr" — die kein Verstoß je
+erreicht hatte — und die Untergrenze „`version.ts` nicht im Baum", die bis dahin nur als
+Nebenwirkung fiel. Vier weitere kamen in T-296 dazu, und sie schließen die dritte Tür
+derselben Klasse: die **Deklarationszusammenführung über eine Datei- oder Blockgrenze**
+(`declare module`, `declare global`) und den Portnamen in einer zweiten gelesenen Datei; eine
+zusätzliche Datei mit fünf Zeilen und ohne einen einzigen Import hielt den Lauf sonst bei
+68/0 grün, während der Rückweg übersetzte (T-295). Ein „zurücksetzen" gibt es dort nicht.
 
 `updated_at` bleibt beim Schreiben unangetastet. Es ist der Zeitpunkt der letzten
 **Einstellungsänderung** und über `GET /settings` sichtbar; würde eine ausgehende Anfrage ihn
@@ -1026,6 +1078,43 @@ Datei, Bild. Sie hängen am **bestehenden** Todo und sind keine zweite Struktur 
 | `target` | Der Wert. Was darin steht, hängt an der Art — siehe die Tabelle unten. |
 | `position` | Reihenfolge des Hinzufügens, je Todo ab 0 (A-19.8). Bestimmt der Adapter, nicht der Aufrufer. |
 | `created_at` | Zeitstempel wie überall: Text, UTC, sekundengenau (2.2). |
+| `origin` | Seit 0023. `'user'` oder `'email'` (A-A-84). Woher der Anhang stammt — **Eigenschaft, keine Ableitung**. Vorgabe `'user'`: Jeder Anhang aus der Zeit vor A-19.23 ist vom Benutzer eingetragen. |
+| `origin_sender` | Seit 0023. Der Absender, **fremder Text**, höchstens 640 Zeichen (A-A-85). Nur bei `origin = 'email'`; der CHECK erzwingt das. `NULL` heißt „gibt es nicht". |
+| `display_name` | Seit 0023. Der Name aus der E-Mail, **fremder Text**, höchstens 255 Zeichen (A-19.23a). Steht **neben** `title` und nicht darin — siehe unten. |
+| `rebuilt` | Seit 0023. `0`/`1`. Ist die `.eml` ein **Nachbau** statt der ursprünglichen Nachricht (A-19.22b, A-A-97)? `1` nur zusammen mit `origin = 'email'`; der CHECK erzwingt das. |
+
+#### Die vier Spalten aus 0023 — warum sie nicht eine sind (A-19.22b, A-19.23a, A-A-84, A-A-97)
+
+Mit E-108 entstehen Anhänge beim Anlegen eines Todos aus einer E-Mail. Vier Tatsachen über einen
+solchen Anhang müssen den Neustart, die Anzeige von übermorgen und den Round-Trip der
+Datensicherung überleben, und keine davon hatte bis 0023 eine Spalte.
+
+**Ein Feld `source` mit `user` / `email` / `email_rebuilt` wäre kürzer und falsch.** Herkunft und
+Nachbau sind zwei unabhängige Tatsachen; daß heute nur die `.eml` nachgebaut werden kann, ist eine
+Aussage über den Code und keine über die Sache.
+
+**`display_name` steht neben `title` und nicht darin.** `title` ist, was der **Benutzer** gewählt
+hat (A-19.10); `display_name` ist, was der **Absender** die Datei genannt hat. Der Unterschied ist
+die Bedingung dafür, daß die anzeigende Fläche weiß, welche Regeln gelten: Bei fremdem Text ist die
+Endung **stets sichtbar**, und am Ende wird **nie** gekürzt (A-19.23b, A-A-93, R-27). Eine Kürzung
+am Zeilenende nähme der Rückfrage vor dem Öffnen die Endung, **ohne ein einziges Zeichen zu
+verändern** — der einzige bekannte Weg, sie zum Lügen zu bringen.
+
+**Warum hier ein CHECK und keine Nachschlagetabelle wie bei `kind`.** Für die Art gab es die
+Auflage „eine vierte Art ohne Tabellenumbau" (siehe unten); für die Herkunft gibt es sie nicht, und
+es gibt auch keinen Kandidaten für einen dritten Wert. Dazu kommt eine Schranke von SQLite, die die
+Frage ohnehin entscheidet: `ALTER TABLE … ADD COLUMN` läßt eine `REFERENCES`-Klausel nur zu, wenn
+der Vorgabewert `NULL` ist — eine Nachschlagetabelle wäre also entweder eine Spalte mit `NULL` als
+drittem, unbenanntem Zustand oder ein vollständiger Tabellenumbau. Der Preis des CHECK gehört
+benannt: Ein dritter Herkunftswert kostet später einen Umbau.
+
+**Der Name auf der Platte ist nicht `display_name`.** Bei `origin = 'email'` und `kind = 'file'`
+steht in `target` ein Pfad auf `<appdata>/email-attachments/<32 Hexziffern>[.<endung>]` — ein
+**erzeugter** Name (A-A-78). Aus dem fremden Namen wird ausschließlich die Endung übernommen,
+kleingeschrieben, auf `[a-z0-9]` beschränkt, höchstens 16 Zeichen. Damit sind Pfadausbruch,
+Gerätename (`NUL`, `COM1`, `CON.txt`), Richtungszeichen, Doppelendung, Kollision und Kappung nicht
+abgewehrt, sondern **unmöglich**. Der Anlaß ist gemessen: T-297 hat die Vorlage gefahren — 25
+Angriffsnamen hinein, 25 Dateien auf der Platte, null Ablehnungen (Bedrohungsmodell 39.4.1).
 
 #### Warum die Art eine eigene Tabelle ist und kein CHECK
 
@@ -2287,6 +2376,54 @@ denselben Bestand zu setzen. Genau die kennt die Spalte nicht und hätte den Wer
 gelesen; der Rückweg stellt also den Zustand her, der zu ihr paßt. Der Satz steht im Kopf der
 Rückwärtsdatei.
 
+### 8.4l Migration 0023 — vier Spalten, ein Teilindex, und die Reihenfolge, die daraus folgt (T-299, A-19.22b)
+
+`0023_attachment_origin` hängt vier Spalten an `todo_attachment` (`origin`, `origin_sender`,
+`display_name`, `rebuilt`) und legt den Teilindex `ix_todo_attachment_email` an. Vorwärts vier
+`ALTER TABLE … ADD COLUMN` und ein `CREATE INDEX`, rückwärts ein `DROP INDEX` und vier
+`ALTER TABLE … DROP COLUMN`.
+
+**Die Reihenfolge des Rückwegs ist Inhalt und keine Sorgfalt.** Drei Abhängigkeiten erzwingen sie,
+und jede würde einzeln einen Tabellenumbau nötig machen, wenn man sie übersähe:
+
+1. **Der Index fällt zuerst.** `ix_todo_attachment_email` steht auf `target` mit
+   `WHERE origin = 'email'`. Solange er existiert, weist SQLite ein `DROP COLUMN origin` ab — eine
+   Spalte in einem Index läßt sich nicht fallen lassen.
+2. **`rebuilt` fällt vor `origin`.** Sein CHECK lautet `rebuilt = 0 OR origin = 'email'` und nennt
+   damit eine zweite Spalte.
+3. **`origin_sender` fällt vor `origin`.** Aus demselben Grund.
+
+Danach ist jede der vier Spalten in keinem Index, keiner Sicht, keinem Trigger und keinem anderen
+CHECK — genau die Bedingung, unter der SQLite `DROP COLUMN` zuläßt.
+
+**Gemessen** gegen `node:sqlite` aus Node 22.23.2 auf Windows 11, alle Migrationen 0001 bis 0023
+vorwärts, danach:
+
+| Fall | Ergebnis |
+|---|---|
+| 0023 vorwärts | vier Spalten da, Vorgabe einer neuen Zeile ohne Angabe: `origin = 'user'`, `origin_sender = NULL`, `display_name = NULL`, `rebuilt = 0` |
+| `rebuilt = 1` bei `origin = 'user'` | abgewiesen (CHECK) |
+| `origin = 'sonstwas'` | abgewiesen (CHECK) |
+| `origin_sender` gesetzt bei `origin = 'user'` | abgewiesen (CHECK) |
+| `display_name` aus 256 Zeichen | abgewiesen (CHECK) |
+| 0023 rückwärts | die vier Spalten weg, die Zeilen erhalten (2 von 2), `todo_attachment_kind` und beide Indizes aus 0015 unberührt |
+| 0023 erneut vorwärts | vier Spalten wieder da, Zeilen erhalten |
+
+**Was der Rückweg kostet, und er sagt es im eigenen Kopf.** Die Herkunft jedes Anhangs ist danach
+weg — ein Anhang aus einer fremden E-Mail ist von einem selbst eingetragenen nicht mehr zu
+unterscheiden, und die Rückfrage vor dem Öffnen verliert den Satz aus A-A-85. Schwerer wiegt die
+Kennzeichnung „nachgebaut": Eine `.eml`, die aus Office.js-Feldern zusammengesetzt wurde, sieht
+danach aus wie die ursprüngliche Nachricht — sie trägt keine Kopfzeilen, kein DKIM, kein S/MIME und
+keine Empfangsstempel, und niemand sieht ihr das an. Genau diesen Zustand schließt A-19.22b aus.
+Der Anzeigename fällt mit; die Anhangsliste ist danach eine Liste von Hexziffern, die Dateien
+selbst bleiben vollständig.
+
+**Und wie bei 0015 bleiben die Dateien liegen** — hier mit einem Zusatz, der 0015 nicht hatte: Ohne
+die Spalte `origin` kann danach niemand mehr sagen, welche Datei im Anwendungsdatenverzeichnis
+SuperTakt selbst geschrieben hat und welche dem Benutzer gehört. Das Aufräumen verliert seine
+Bedingung, bevor es die Dateien verliert. **Wer diesen Rückweg fährt, räumt das Verzeichnis
+`email-attachments` neben `takt.db` von Hand.**
+
 ### 8.5 Nachgewiesen
 
 Alle Migrationen wurden gegen SQLite 3.51.3 ausgeführt und in T-013 gegen SQLite 3.53.4 sowie
@@ -2357,7 +2494,7 @@ gegen `node:sqlite` aus Node 22 wiederholt:
 | 0015 vorwärts (T-146) | 14 → 15: `todo_attachment` und `todo_attachment_kind` mit drei Zeilen, `ix_todo_attachment_todo` und `ix_todo_attachment_image`. Stand danach **19 Tabellen, 37 benannte Indizes, 17 Trigger, 1 Sicht**; `integrity_check` = ok |
 | 0015, die zweite Wache auf der Art | `INSERT` mit `kind = 'video'`: `FOREIGN KEY constraint failed`. `DELETE FROM todo_attachment_kind` für eine **benutzte** Art: ebenso (RESTRICT); für eine unbenutzte: geht durch |
 | 0015, `ON DELETE CASCADE` | Todo gelöscht: seine Anhangszeilen gehen mit. Die **Dateien** nicht — das leistet der Anwendungsfall, siehe 3.8 |
-| 0014/0015, die Zugriffspfade (T-159) | `EXPLAIN QUERY PLAN`: die Fristsortierung nimmt `ix_todo_due_date` als **covering index**; `imageTargets` und die Anhangsliste eines Todos nehmen beide `ix_todo_attachment_todo`; die Suche nach einem Bildnamen nimmt `ix_todo_attachment_image`. Kein `SCAN` in den vier Abfragen |
+| 0014/0015, die Zugriffspfade (T-159) | `EXPLAIN QUERY PLAN`: die Fristsortierung nimmt `ix_todo_due_date` als **covering index**; `imageTargets` und die Anhangsliste eines Todos nehmen beide `ix_todo_attachment_todo`; die Suche nach einem Bildnamen nahm `ix_todo_attachment_image`. Kein `SCAN` in den vier Abfragen. **Seit T-315 gilt der letzte Punkt nicht mehr** — die Suche nach dem Eigentümer einer liegenden Datei ist ein `SCAN` über `todo_attachment`, weil die weiteste Bedingung keinen Index benutzen kann; sie läuft einmal beim Start und nur, wenn im Ordner Dateien liegen |
 | **0 → 15 → 13 → 15 auf einem Bestand mit Inhalt** (T-159, Node 22.23.2, `node:sqlite`) | vorher: ein Todo mit Frist `2026-09-30`, internem Vermerk, einer Buchung und drei Anhängen (Verweis, Datei, Bild). Nach 15 → 13: **kein** Rest von `todo_attachment*` in `sqlite_master`, keine Spalte `due_date`, Todo, Vermerk und Buchung unversehrt. Nach 13 → 15: beide Tabellen wieder da, `todo_attachment_kind` wieder mit drei Zeilen, Frist `NULL` und Anhänge 0 — genau der angesagte Verlust, nicht mehr; Vermerk und Todo unverändert. Danach 19/37/17/1, `integrity_check` = ok, `foreign_key_check` leer |
 
 **Seit T-021 läuft das Verfahren nicht mehr von Hand, sondern über den Läufer**
@@ -2408,7 +2545,8 @@ Drei Eigenschaften des Läufers, die eine Erwähnung wert sind:
 | `ix_todo_call_number` (partiell) | A-10.9: Duplikaterkennung im Add-in |
 | `ix_todo_due_date` (partiell, `(due_date, id) WHERE due_date IS NOT NULL`) | A-19.6: Sortieren und Filtern nach Frist. Beide Schlüssel der Blätterung aus einem Durchlauf |
 | `ix_todo_attachment_todo` (`(todo_id, position, id)`) | A-19.8: die Anhänge eines Todos in stabiler Ordnung — und `listMany` für mehrere Todos in **einer** Abfrage, kein N+1 in der Liste |
-| `ix_todo_attachment_image` (partiell, `(target) WHERE kind = 'image'`) | „Gibt es zu dieser Datei im Bildverzeichnis noch einen Eigentümer?" — die Gegenrichtung von A-A-18, für ein Aufräumen ohne Tabellendurchlauf. Er bedient **nicht** `imageTargets(todoId)`; das tut `ix_todo_attachment_todo` |
+| `ix_todo_attachment_image` (partiell, `(target) WHERE kind = 'image'`) | „Gibt es zu dieser Datei im Bildverzeichnis noch einen Eigentümer?" — so war er gedacht (A-A-18), und **seit T-315 trägt er davon noch eine Frage**: `imageCount` als die zweite Gegenfrage des Aufräumlaufs, die gar nicht am Pfad hängt. Die Eigentümerfrage selbst hing bis dahin als `knownImageTargets` über demselben Schnitt — zeichengleich, mit bloßen Namen und mit `kind = 'image'` — und war damit schnell **und falsch**: eine abweichende Groß-/Kleinschreibung, ein anderes `kind` auf der Zeile oder eine Zeile, die dieselbe Datei mit ihrem **vollen Pfad** nennt, kosteten je eine Bildkopie des Benutzers, deren Zeile stehenblieb (T-314 Abschnitt 4). Die Methode ist gestrichen; gefragt wird mit `attachmentsNamingFiles` (ein `LIKE '%name%'` über die Tabelle, einmal beim Start) und der Regel aus `@takt/domain`, für **beide** Aufräumläufe. **Das ist ein bewußt bezahlter Preis:** Der Index machte die Frage schnell und falsch. Er bedient **nicht** `imageTargets(todoId)`; das tut `ix_todo_attachment_todo`. **Seit T-320 trägt er eine zweite Frage:** `attachmentNamesOfKind('image')` nennt die Namen, die der Bestand für Bildanhänge führt — die erste Gegenfrage des Bildlaufs (`attachmentNamesUnder`, am Anfang des Pfades) antwortet dort im Regelfall leer, weil `target` bei einer Bildzeile den bloßen Namen trägt, und der Riegel hing damit auf einer einzigen lebenden Achse (T-318). **Sie ist keine dritte, unabhängige Achse** — sie hängt an derselben Spalte wie `imageCount` —, sie macht die Zahl `missing` im Protokoll rechenbar und weitet die Bremse. Vereinigt werden beide Antworten in der Verdrahtung (`apps/local-api/src/main.ts`) und nicht im Verfahren: Für die übernommenen E-Mail-Dateien wäre dieselbe Ergänzung falsch, denn `kind = 'file'` trägt dort auch jeden vom Benutzer eingetragenen Pfad |
+| `ix_todo_attachment_email` (partiell, `(target) WHERE origin = 'email'`, seit 0023) | Dieselbe Frage für die aus E-Mails übernommenen Dateien (A-19.23, A-A-83). Seit T-314 trägt er davon noch **eine**: `emailFileCount` als die zweite Gegenfrage des Aufräumlaufs. Die erste Fassung hatte daneben `knownEmailFileTargets` über denselben Schnitt gestellt, ausdrücklich mit derselben Bedingung, „damit der Widerspruch über **eine** Menge geht" — und genau das war der Fehler: Zwei Antworten auf dieselbe Frage widersprechen einander nie. Verlor eine Zeile ihr `origin`, fiel sie aus beiden zugleich, und beide Dateien wurden entfernt (T-313-2). Die Eigentümerfrage hängt heute an keinem Index mehr, weil die weiteste Bedingung keinen benutzen kann (`attachmentsNamingFiles`, ein `LIKE '%name%'` über die Tabelle, einmal beim Start); `attachmentNamesUnder` läuft über den Ordnerpräfix und ebenfalls ohne diesen Index. **Das ist ein bewußt bezahlter Preis:** Der Index machte die Frage schnell und falsch. `origin = 'email'` allein und nicht zusätzlich `kind = 'file'`: Ein Cloud-Verweis (A-19.25) hat dieselbe Herkunft, kostet im Index eine Zeile und schadet nicht; eine Bedingung über zwei Spalten machte den Index enger und die Abfrage nicht schneller |
 | `ix_todo_open`, `ix_todo_completed` (partiell) | Dashboard: offene und erledigte Todos |
 | `ix_todo_tag_reverse` | „Welche Todos tragen dieses Tag" — Grundlage der Pool-Abfrage |
 | `ux_todo_status_default` (partiell, Konstante) | genau eine Standardspalte für neu angelegte Todos |
@@ -2428,3 +2566,147 @@ darauf behauptete einen Zugriffspfad, den kein Abfrageplan je wählen würde.
 Partielle Indizes tragen hier viel Gewicht: Sie sind kleiner, weil sie nur die betroffenen Zeilen
 enthalten, und in vier Fällen erzwingen sie eine fachliche Regel, die sonst in einer Prüfung im
 Code stünde und dort verloren gehen könnte.
+
+## 10. Das Datenarchiv — die Fassungen 1 bis 6 (A-20, A-19.34)
+
+Das eigene Archiv ist **kein** Abbild der Datenbankdatei, sondern eine versionierte JSON-Form des
+fachlichen Bestands: Formatkennung `de.supertakt.data-archive`, ganzzahlige `schemaVersion`,
+Zeitpunkt, Erzeuger `Takt`, dazu `data.tables`, `data.images`, `data.files` und `warnings`.
+Sichten, Zugriffstoken und das Migrationsbuch stehen ausdrücklich **nicht** darin.
+
+Es ist der lesbarste Bestand des ganzen Erzeugnisses. Eine Sicherung nach A-20 enthält **mehr**
+Kundendaten als jeder Abrechnungsexport: interne Vermerke, Fristen, Anhänge samt Bildkopien — und
+seit Fassung 6 die aus E-Mails übernommenen Dateien. Base64 ist auch hier keine Verschlüsselung.
+
+### 10.1 Was jede Fassung gebracht hat
+
+| Fassung | Neu | Auftrag |
+|---|---|---|
+| 1 | Tabellen und Bildkopien (`data.images`, Bytes) | A-20 |
+| 2 | `design_theme`, `density` | A-21 |
+| 3 | `prompt_on_timer_stop` | A-22 |
+| 4 | `idle_detection_enabled`, `idle_threshold_minutes` | A-24 |
+| 5 | `timer_idle`, `idle_keep_timer_running` | A-24.7 |
+| **6** | **`data.files` — die aus E-Mails übernommenen Dateien samt Bytes** | **A-19.34, T-301** |
+
+Zwei Spalten sind ohne Fassungssprung hinzugekommen, und beide Male aus demselben Grund: Wo „Feld
+fehlt im Archiv" und der Vorgabewert **dieselbe Aussage** sind, gibt es nichts zu raten.
+`last_version_check_at` ist NULL-fähig, und NULL heißt „noch nie gefragt" (Migration 0022, T-279).
+Die vier Spalten aus Migration 0023 (`origin`, `origin_sender`, `display_name`, `rebuilt`) kamen
+aus derselben Überlegung: In einer Fassung ohne sie konnte ein E-Mail-Anhang gar nicht entstehen.
+
+**Fassung 6 ist anders, und daran hängt die ganze Entscheidung.** Ein Archiv der Fassung 5 kann
+sehr wohl Zeilen mit `origin = 'email'` tragen — nur eben ohne die Bytes dahinter. „Feld fehlt"
+heißt dort **nicht** „es gab nichts", sondern „es gab etwas, und es ist nicht hier". Genau diesen
+Unterschied trägt eine Fassungsnummer.
+
+### 10.2 Warum die Bytes mitreisen (A-A-90, entschieden am 2026-09-11)
+
+Der Grund war eine Messung, keine Vorliebe: Das Archiv trug seit Fassung 1 **Bildanhänge samt
+Bytes** (`ArchivedImage`). Ohne A-19.34 überlebte ein Bild die Sicherung und eine Rechnung nicht —
+dieselbe Handlung des Benutzers, zwei Ergebnisse.
+
+`ArchivedFile` hat zwei Felder und ein bewusst fehlendes drittes:
+
+| Feld | Inhalt |
+|---|---|
+| `name` | der **erzeugte** Name, `<32 Hexziffern>[.<endung>]` — nicht der Pfad, nicht der Anzeigename aus der E-Mail (A-A-78) |
+| `base64` | die Bytes, höchstens `MAX_EMAIL_ATTACHMENT_BYTES` (25 MiB) dekodiert |
+| `mediaType` | **gibt es nicht.** Bei einem Bild wird die Kopfsignatur gemessen und gegen die Endung gehalten; hier gibt es nichts zu messen. Was für eine Datei das ist, entscheidet in diesem Bestand niemand (A-A-88) |
+
+### 10.3 Der Pfad gehört dem Rechner, nicht dem Archiv
+
+`todo_attachment.target` trägt für eine E-Mail-Datei den **vollen Pfad** — A-19.26 macht sie zu
+einem gewöhnlichen Dateianhang, und der Öffnen-Befehl der Hülle verlangt einen absoluten Pfad. Im
+Archiv ist das der Pfad des **Quellrechners**.
+
+Das Einspielen setzt ihn deshalb **neu**: aus dem Namen im Archiv und dem hiesigen Ordner. Ohne
+diesen Schritt lägen die Bytes richtig auf der Platte und jeder Anhang zeigte trotzdem auf einen
+Rechner, den es hier nicht gibt — A-19.34 wäre an der letzten Zeile gescheitert.
+
+**Auch dann, wenn die Bytes fehlen** (Fassungen 1 bis 5). Den fremden Pfad stehen zu lassen hieße,
+dem Benutzer in der Rückfrage vor dem Öffnen die Ortsangabe eines anderen Rechners vorzulesen
+(A-A-6). Der hiesige Pfad mit fehlender Datei ist der ehrlichere Zustand — und genau der, den
+A-19.15 an Ort und Stelle anzeigt. Ein Name, den dieser Bestand nie erzeugt hätte, bleibt
+unangetastet und wird gezählt gemeldet.
+
+### 10.4 Was ein Archiv der Fassungen 1 bis 6 nach dieser Änderung erlebt
+
+| Fassung | Beim Einspielen |
+|---|---|
+| 1 | gelesen; Darstellung, Leistungsfrage, Inaktivität und `timer_idle` kommen aus den Vorgaben, und es kann **keine** Zeile geben, der eine Datei fehlt |
+| 2 | wie 1, Darstellung kommt aus dem Archiv |
+| 3 | wie 2, Leistungsfrage kommt aus dem Archiv |
+| 4 | wie 3, Inaktivitätserkennung kommt aus dem Archiv |
+| 5 | wie 4, `timer_idle` und `idle_keep_timer_running` kommen aus dem Archiv — **und es ist die einzige Fassung, bei der Dateien fehlen können**: Anhänge entstehen wieder, Pfade zeigen hierher, die Dateien nur, wenn sie ohnehin hier liegen; was fehlt, steht als Zahl in den Warnungen |
+| 6 | vollständig, einschließlich der Bytes |
+| alles andere (0, 7, `"6"`, fehlend) | **abgewiesen**, nicht geraten; der Bestand bleibt unverändert |
+
+**Die gefährliche Richtung ist die alte, und sie hat in dieser Änderung einen Fehler gekostet, der
+beinahe stehengeblieben wäre.** Die Zeile `if (schemaVersion !== 5) idle_keep_timer_running = 1`
+war richtig, solange 5 die höchste Fassung war. Mit der 6 hätte sie die Einstellung in einem
+Archiv **überschrieben**, das sie ordentlich führt. Jeder Fassungsvergleich in dieser Schleife
+steht deshalb als `<` oder `<=`, nie als `!==`.
+
+### 10.5 Die Rumpfgrenze — gemessen, nicht geschätzt
+
+Das Herunterladen kennt keine Grenze; das **Einspielen** hat eine, denn der Rumpf einer Anfrage
+ist begrenzt (B-1.7). Mit mitreisenden Dateien wurde die alte Zahl zu klein für ihren eigenen
+Gegenstand: **zwei** Dateien der vollen Einzelgröße (25 MiB, base64 33,3 MB) rissen 64 MB — und
+schon vorher taten es **sechs** Bildkopien à 8 MiB.
+
+Gemessen am 2026-09-11 auf dem Zielsystem (Windows 11, 8 GB, Node 22.23.2) über die Kette, die
+eine Anfrage wirklich durchläuft — Rumpf als Buffer, `request.text()`, `JSON.parse`,
+`Buffer.from(base64)` je Datei:
+
+| Rumpf | Nutzlast | Spitze RSS | Spitze Halde | Dauer |
+|---|---|---|---|---|
+| 66,7 MB | 50 MB | 333 MB | 137 MB | 108 ms |
+| 133,3 MB | 100 MB | 533 MB | 271 MB | 203 ms |
+| **266,7 MB** | **200 MB** | **934 MB** | **537 MB** | **455 ms** |
+| 400,0 MB | 300 MB | 1 333 MB | 804 MB | 731 ms |
+| 500,0 MB | 375 MB | 1 684 MB | 1 004 MB | 876 ms |
+
+Daraus **256 MiB** (`DATA_ARCHIVE_MAX_BODY_BYTES`), aus drei Gründen:
+
+1. **Die harte Wand liegt bei 512 MiB und gehört nicht uns.** V8 setzt `MAX_STRING_LENGTH` auf
+   536 870 888 Zeichen; darüber **wirft** `request.json()`, und aus dem Wurf wird ein 422 mit einem
+   Satz über ein „nicht unterstütztes Archiv" — eine Auskunft, die auf die falsche Ursache zeigt.
+   Eine Rumpfgrenze muss darunter liegen, damit statt dessen ein sauberes 413 kommt. 256 MiB ist
+   genau die Hälfte.
+2. **Die Halde trägt es.** V8 gibt einem 8-GB-Rechner 2 096 MB; bei 266,7 MB Rumpf stehen 537 MB
+   darin — Faktor 3,9 Luft. Bei 500 MB sind es 1 004 MB: Es läuft, aber nur, solange sonst wenig
+   läuft, und der Dienst liegt neben Outlook auf demselben Rechner.
+3. **Die Zeit reicht.** 455 ms gegen `REQUEST_TIMEOUT_MS` von 15 s.
+
+Die Grenze gilt für **genau** `POST /api/v1/data-transfer/archive`, nicht für das Präfix: Die
+Fremdimporte daneben (A-20.7) tragen keine eingebetteten Bytes und behalten ihre 64 MB. Eine
+Ausnahme, deren Menge an einem Präfix aufgespannt ist statt an der Anforderung, wächst mit jeder
+Nachbarroute mit, ohne dass es jemand entscheidet (E-099 Punkt 3).
+
+**Eine Zahl löst das Problem nicht, und deshalb hängt eine zweite Maßnahme daran:** Die Sicherung
+sagt es, wenn sie größer wird, als das Einspielen annimmt — mit beiden Zahlen, in `warnings`.
+Gerechnet wird über die Länge der eingebetteten Base64-Ketten; das ist eine **untere Schranke** für
+den Rumpf (Base64 braucht in JSON keine Maskierung, jedes Zeichen ist ein Byte), also kann die
+Warnung nicht falsch alarmieren. Sie kann schweigen, wo es knapp wird — dann spricht die Tür des
+Einspielens mit einem 413.
+
+### 10.6 Nachgewiesen
+
+Gemessen am 2026-09-11 gegen echtes SQLite (`node:sqlite`, Node 22.23.2) und echtes Dateisystem,
+zwei Anwendungsdatenverzeichnisse als zwei Rechner:
+
+| Fall | Ergebnis |
+|---|---|
+| Todo aus einer E-Mail mit Nachricht, zwei Dateien und einem Cloud-Verweis | 4 Anhänge, 3 Dateien auf der Platte |
+| Sicherung | Fassung 6, 3 Einträge in `data.files`, 4,00 MB JSON bei 3 MB Nutzlast |
+| Einspielen auf dem **zweiten** Rechner | 3 Dateien zurückgeschrieben, 3 auf der Platte, Bytes zeichengleich |
+| `target` nach dem Einspielen | zeigt auf das **hiesige** Verzeichnis; kein Pfad des Quellrechners überlebt |
+| `display_name` und `rebuilt` | unverändert (A-19.22b, A-19.23a) |
+| dieselbe Sicherung als Fassung 5 (`data.files` entfernt) | gelesen, 0 Dateien geschrieben, Pfade zeigen trotzdem hierher, Warnung „3 der 3 … fehlen" |
+| Fassung 7, 0, `"6"` | abgewiesen |
+| Fassung 5 **mit** `data.files` | abgewiesen |
+| Dateiname `../../takt.db`, `C:/Windows/x.dll` | abgewiesen |
+| Base64 mit Leerraum, leerer Rumpf, doppelter Name | abgewiesen |
+| Datei im Archiv, die keine Zeile nennt | **nicht** geschrieben, gemeldet |
+| `target` von Hand auf eine fremde Datei gebogen, danach gesichert | die fremde Datei wandert **nicht** ins Archiv und bleibt unberührt |

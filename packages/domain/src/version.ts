@@ -442,6 +442,20 @@ export function decideUpdateNotice(input: UpdateNoticeInput): UpdateNotice {
  * ein mittlerer Zyklus von 60 + 7,5 = 67,5 Minuten ergibt 1440 / 67,5 ≈ **21,3**
  * Anfragen je Tag. In der Praxis sind es 21, selten 22; für 24 müßten
  * vierundzwanzig Ziehungen nacheinander null ergeben.
+ *
+ * **Die Zahl gilt für einen Lauf** (T-285). Der Boden hat einen Bezugspunkt,
+ * und der liegt im Arbeitsspeicher des Dienstes; ein Programmstart bringt
+ * deshalb immer eine Anfrage mit, gleich wie kurz die letzte zurückliegt. Die
+ * Obergrenze eines Kalendertages ist damit `24 + Anzahl der Starts`. Das ist
+ * A-V-11 wörtlich — „zwischen **zwei** ausgehenden Anfragen" ist eine Aussage
+ * über den Betrieb, nicht über Prozeßgrenzen —, und es ist die Entscheidung zu
+ * T-285: Zwischen T-279 und T-285 hielt ein gespeicherter Zeitpunkt den Boden
+ * über den Neustart hinweg und legte damit die einzige Selbsthilfe still, die
+ * E-069 dem Benutzer läßt.
+ *
+ * Diese Funktion weiß davon nichts und soll nichts davon wissen: Sie rechnet
+ * eine Frist aus einer Frist, einem Boden und einer Ziehung. Der Satz steht
+ * hier, weil die Zahl darüber sonst mehr verspricht, als sie hält.
  */
 export const VERSION_CHECK_JITTER_RATIO = 0.25;
 

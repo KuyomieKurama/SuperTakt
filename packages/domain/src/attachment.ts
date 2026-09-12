@@ -154,6 +154,55 @@ export function isKnownAttachmentKindSet(kinds: readonly string[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Herkunft — die Eigenschaft am Anhang (A-A-84)
+// ---------------------------------------------------------------------------
+
+/**
+ * Woher ein Anhang stammt.
+ *
+ * **Zweiwertig, nie leer, nie mehrdeutig** — dieselbe Bauart wie der
+ * Exportstatus, und aus demselben Grund: Eine Eigenschaft, an der eine
+ * Rückfrage vor einem Programmstart hängt (A-A-85), darf nicht „unbekannt"
+ * sein können.
+ *
+ *  - `user` — der Benutzer hat den Anhang selbst eingetragen. Er weiß, woher
+ *    die Datei kommt, weil er sie gewählt hat. Das ist der Zustand jedes
+ *    Anhangs, den es vor A-19.23 gab, und deshalb der Vorgabewert der
+ *    Migration.
+ *  - `email` — der Anhang ist beim Anlegen eines Todos aus einer E-Mail
+ *    entstanden (A-19.22, A-19.23). Ab dieser Fassung ist der **häufigste**
+ *    Dateianhang einer, den ein Fremder geschickt hat, und der Benutzer sieht
+ *    ihn Tage später zwischen seinen eigenen (Bedrohungsmodell 39.5.2).
+ *
+ * **Warum das hier steht und nicht in `email-attachment.ts`:** Es ist ein Feld
+ * von {@link Attachment}, so wie {@link AttachmentKind} eines ist. Es dort zu
+ * führen ergäbe einen Kreis zwischen den beiden Dateien für einen Typ, der zu
+ * dieser gehört. Die Richtung ist damit eindeutig: `email-attachment.ts` liest
+ * hier, nicht umgekehrt.
+ */
+export type AttachmentOrigin = 'user' | 'email';
+
+/**
+ * Die Herkünfte als Datensatz. Dieselbe Bauart wie
+ * {@link ATTACHMENT_KIND_PRESENCE}: Ein neuer Wert im Typ ohne Eintrag hier
+ * ist ein Typfehler und keine stille Lücke.
+ */
+export const ATTACHMENT_ORIGIN_PRESENCE: Readonly<Record<AttachmentOrigin, true>> = Object.freeze({
+  user: true,
+  email: true,
+});
+
+/** Die Herkünfte in fester Reihenfolge. */
+export const ATTACHMENT_ORIGINS: readonly AttachmentOrigin[] = Object.freeze(
+  Object.keys(ATTACHMENT_ORIGIN_PRESENCE) as AttachmentOrigin[],
+);
+
+/** Ist das eine bekannte Herkunft? **Wörtlich** verglichen, ohne Normalisierung. */
+export function isAttachmentOrigin(value: string): value is AttachmentOrigin {
+  return Object.prototype.hasOwnProperty.call(ATTACHMENT_ORIGIN_PRESENCE, value);
+}
+
+// ---------------------------------------------------------------------------
 // Der Wert
 // ---------------------------------------------------------------------------
 
@@ -183,15 +232,80 @@ export interface Attachment {
   /** Reihenfolge des Hinzufügens. Stabil über alle Ladevorgänge (A-19.8). */
   readonly position: number;
   readonly createdAt: Timestamp;
+  /**
+   * Woher dieser Anhang stammt (A-A-84). `AttachmentOrigin` steht in
+   * `email-attachment.ts`; hier steht `string`-frei der Wert selbst.
+   *
+   * **Eine Eigenschaft und keine Ableitung.** Nicht aus dem Pfad gelesen,
+   * nicht aus dem Ordner geraten — sonst hinge die Rückfrage vor einem
+   * Programmstart (A-A-85) an einer Vermutung.
+   */
+  readonly origin: AttachmentOrigin;
+  /**
+   * Der Absender der E-Mail, aus der dieser Anhang stammt — **fremder Text**.
+   * `null` bei `origin === 'user'` und dann, wenn die Nachricht keinen
+   * hergab.
+   *
+   * Er steht hier und nicht nur in einer Meldung beim Anlegen, weil A-A-85 ihn
+   * in der Rückfrage vor dem Öffnen verlangt: *„Diese Datei stammt aus einer
+   * E-Mail von …"*. Ein Hinweis, der nur beim Anlegen erscheint, ist drei
+   * Wochen später nirgends.
+   */
+  readonly originSender: string | null;
+  /**
+   * Der Anzeigename aus fremder Hand (A-19.23a). `null`, wenn es keinen gibt.
+   *
+   * **Getrennt von `title`, und das ist der Punkt.** `title` ist, was der
+   * **Benutzer** gewählt hat (A-19.10); `displayName` ist, was der **Absender**
+   * die Datei genannt hat. Beides in ein Feld zu legen hieße, der anzeigenden
+   * Fläche die Auskunft zu nehmen, welche Regeln gelten: Für fremden Text ist
+   * die Endung stets sichtbar und am Ende wird nie gekürzt (A-19.23b, A-A-93);
+   * für den eigenen Titel gilt das nicht.
+   *
+   * Auf der Platte steht er **nie** (A-A-78). Dort steht ein erzeugter Name.
+   */
+  readonly displayName: string | null;
+  /**
+   * Ist diese Datei ein **Nachbau** statt der ursprünglichen Nachricht?
+   * (A-19.22b, A-A-97.)
+   *
+   * `true` nur bei der `.eml` aus A-19.22a, die aus den Office.js-Feldern
+   * zusammengesetzt wurde, weil Outlook die Nachricht nicht hergab. Die
+   * Kennzeichnung hängt an der **Datei** und nicht am Augenblick: Sie steht
+   * hier im Bestand, übersteht den Round-Trip der Datensicherung (A-20.4) und
+   * ist damit auch in drei Wochen noch da.
+   *
+   * Der Grund ist kein Ordnungssinn: Eine Datei, die für die ursprüngliche
+   * Nachricht gehalten werden kann, ohne es zu sein, ist in einem Vorgang, aus
+   * dem eine Rechnung wird, eine falsche Auskunft über ein Beweisstück. Sie
+   * trägt keine Kopfzeilen, kein DKIM, kein S/MIME und keine Empfangsstempel
+   * — und sie wird weitergereicht: an die Buchhaltung, in eine Akte.
+   */
+  readonly rebuilt: boolean;
 }
 
-/** Was zum Anlegen eines Anhangs nötig ist. Geprüft, bevor es hierher kommt. */
+/**
+ * Was zum Anlegen eines Anhangs nötig ist. Geprüft, bevor es hierher kommt.
+ *
+ * Die vier Felder aus A-A-84 und A-A-97 sind **freiwillig**, und das ist
+ * Absicht: Der gewöhnliche Weg — der Benutzer trägt einen Verweis, einen Pfad
+ * oder ein Bild ein — nennt sie nicht, und der Adapter setzt `origin: 'user'`,
+ * `rebuilt: false` und zweimal `null`. Wer sie nennt, tut es sichtbar.
+ */
 export interface AttachmentCreate {
   readonly todoId: TodoId;
   readonly kind: AttachmentKind;
   readonly title: string | null;
   readonly target: string;
   readonly now: Timestamp;
+  /** Siehe {@link Attachment.origin}. Fehlt: `'user'`. */
+  readonly origin?: AttachmentOrigin;
+  /** Siehe {@link Attachment.originSender}. Fehlt: `null`. */
+  readonly originSender?: string | null;
+  /** Siehe {@link Attachment.displayName}. Fehlt: `null`. */
+  readonly displayName?: string | null;
+  /** Siehe {@link Attachment.rebuilt}. Fehlt: `false`. */
+  readonly rebuilt?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -670,7 +784,20 @@ function lastNameSegment(path: string): string {
  * Takt nicht annimmt; eine `.lnk` tut dort ohnehin nichts.
  */
 function effectiveNameSegment(path: string): string {
-  const name = lastNameSegment(path);
+  return trimResolvedTail(lastNameSegment(path));
+}
+
+/**
+ * Nachgestellte Punkte und Leerzeichen fallen — der Teil von
+ * {@link effectiveNameSegment}, der **ohne** die Zerlegung in Pfadbestandteile
+ * auskommt (T-320).
+ *
+ * Eigen, weil {@link attachmentTargetNamesFile} genau diese Hälfte auf den
+ * **gesuchten Namen** anwenden muß und die andere ausdrücklich nicht: Ein
+ * gesuchter Name, der selbst einen Trenner trägt, wird buchstäblich am Ende
+ * gesucht, und das ist eine zugesagte Eigenschaft.
+ */
+function trimResolvedTail(name: string): string {
   let end = name.length;
   while (end > 0) {
     const character = name[end - 1];
@@ -781,6 +908,141 @@ export function fileExtensionOf(path: string): string {
   const dot = name.lastIndexOf('.');
   if (dot === -1 || dot === name.length - 1) return '';
   return name.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * ASCII-Faltung — und **nur** ASCII (A-A-98).
+ *
+ * `toLowerCase()` faltet nach Unicode und ist dabei nicht längentreu: `İ` wird
+ * zu zwei Zeichen, `ẞ` zu `ß`, und die türkische Regel für `I` hängt an der
+ * Umgebung. Was hier gefaltet wird, entscheidet darüber, ob eine Datei mit
+ * Kundenmaterial **gelöscht** wird; eine Faltung, die je nach Laufzeit ein
+ * anderes Ergebnis liefert, ist an dieser Stelle keine Erleichterung, sondern
+ * eine zweite Antwort auf dieselbe Frage.
+ *
+ * Dieselbe Faltung benutzt SQLite in `LIKE` (ASCII, ohne `ICU`). Damit sind die
+ * Vorauswahl im Adapter und die Entscheidung hier **dieselbe** Regel und nicht
+ * zwei — genau die Trennung, an der T-313-1 hing.
+ */
+function asciiLower(value: string): string {
+  return value.replace(/[A-Z]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) - 65 + 97),
+  );
+}
+
+/**
+ * Der Dateiname, den ein gespeicherter Pfad nennt — gefaltet (A-A-98).
+ *
+ * Der letzte Namensbestandteil, so wie Windows ihn beim Öffnen auflöst
+ * ({@link effectiveNameSegment}: nachgestellte Punkte und Leerzeichen fallen),
+ * anschließend ASCII-gefaltet. Beide Trenner zählen auf jeder Plattform —
+ * derselbe Grund wie bei {@link fileExtensionOf}: Der Wert kommt aus einem
+ * Bestand, der auf einem anderen Betriebssystem entstanden sein kann.
+ */
+export function attachmentTargetFileName(target: string): string {
+  return asciiLower(effectiveNameSegment(target));
+}
+
+/**
+ * **Nennt dieser gespeicherte Pfad diese liegende Datei?** (A-A-98, T-313-1,
+ * T-313-2, T-313-3.)
+ *
+ * ===========================================================================
+ * Diese Funktion entscheidet über eine Löschung, und sie entscheidet in die
+ * teure Richtung nur widerwillig
+ * ===========================================================================
+ *
+ * Die **beiden** Aufräumläufe — übernommene E-Mail-Dateien und Bildkopien,
+ * `apps/local-api/src/features/todos/orphan-sweep.ts` — entfernen eine Datei
+ * genau dann, wenn **keine** Zeile in `todo_attachment` sie nennt. Die Frage,
+ * was „nennt" heißt, steht hier und an keiner zweiten Stelle. Seit T-315 gilt
+ * das wörtlich: Der Bildlauf hatte bis dahin seine eigene, engere Fassung
+ * derselben Frage (`kind = 'image' AND target IN (namen)`), und **drei** der
+ * vier dort gemessenen Löschwege lagen ausschließlich in dieser Zweitfassung.
+ *
+ * **Die Richtung ist entschieden, und sie steht hier ausdrücklich:** Ein
+ * falsches `true` läßt eine Datei liegen, die niemandem mehr gehört — ein
+ * Schönheitsfehler in einem Ordner. Ein falsches `false` entfernt eine Rechnung
+ * aus der E-Mail eines Kunden, ohne Rückfrage, ohne Papierkorb und ohne Spur
+ * außer einer Zahl im Protokoll. **Die beiden Fehler sind nicht gleich teuer,
+ * also ist die Funktion nicht symmetrisch:** Im Zweifel `true`.
+ *
+ * Deshalb ist die Bedingung die **weiteste**, die einen Eigentümer finden kann:
+ *
+ *  - **Kein `origin`, kein `kind`.** Die engere Frage war der Fehler, den T-313
+ *   gemessen hat: `origin = 'email' AND kind = 'file'` ist die Bedingung, die
+ *   **löscht** — verliert eine Zeile ihr `origin` (`ON DELETE CASCADE` auf ein
+ *   zweites, selbst eingetragenes Anhangsrecht; der Rückweg von Migration 0023,
+ *   der die Spalte fallen läßt und mit `DEFAULT 'user'` neu anlegt), dann
+ *   verschwindet sie aus der Frage und ihre Datei fällt. Der Quelltext an
+ *   `knownEmailFileTargets` hatte diese Richtung genau verkehrt herum
+ *   aufgeschrieben. Im Bildverzeichnis hieß dieselbe Enge `kind = 'image'`, und
+ *   sie kostete dort zwei Dateien in einer Messung, deren Zeilen unverändert
+ *   stehenblieben (T-314 Abschnitt 4).
+ *  - **Mit Namen, nicht mit Zeilen — und deshalb auch gegen den vollen Pfad.**
+ *   Der Bildlauf fragte mit bloßen Namen (`target IN (namen)`); eine Zeile, die
+ *   dieselbe Datei mit ihrem **vollen Pfad** nennt, war für ihn unsichtbar, und
+ *   so ein Pfad entsteht durch die gewöhnliche Tür: ein Dateianhang, der auf
+ *   eine Bildkopie zeigt, ist absolut, vorhanden und trägt `.png`. Das ist kein
+ *   Angriff, das ist ein Bedienweg — und hier ist er zu, weil der Name am Ende
+ *   des Pfades gefunden wird.
+ *  - **Ohne Rücksicht auf die Schreibweise des Pfades davor.** Verglichen wird
+ *   der Name, nicht der Pfad. `C:\…\email-attachments\<hex>.eml` und
+ *   `c:/…/email-attachments/<hex>.eml` sind dieselbe Datei und zwei
+ *   Zeichenketten; ein zeichengleicher Vergleich hielt die zweite für
+ *   herrenlos.
+ *  - **Und großzügiger als „letzter Pfadbestandteil".** Ein Pfad, der auf
+ *   diesen Namen **endet**, nennt ihn ebenfalls — auch wenn sein letzter
+ *   Bestandteil länger ist. Das trifft mehr Zeilen als nötig und verschont
+ *   damit mehr Dateien als nötig; siehe die Richtung oben.
+ *
+ * **Was sie nicht ist:** eine Aussage darüber, ob der Pfad in **diesem** Ordner
+ * liegt. Das ist Absicht. Ein Pfad, der denselben Namen in einem anderen Ordner
+ * nennt, verschont die Datei hier — und das ist der billige Fehler.
+ *
+ * ===========================================================================
+ * Beide Argumente werden gleich behandelt — seit T-320, und der Unterschied
+ * war eine Enge
+ * ===========================================================================
+ *
+ * Bis T-320 lief `target` durch {@link attachmentTargetFileName} (letzter
+ * Namensbestandteil, nachgestellte Punkte und Leerzeichen gekürzt, gefaltet),
+ * `fileName` dagegen nur durch die Faltung. Ein liegender Name mit
+ * nachgestelltem Leerzeichen — auf POSIX möglich — fand seine Zeile deshalb
+ * **nicht**, und eine Zeile, die nicht gefunden wird, ist eine Datei, die
+ * fällt (T-318, Befund `attachment.ts:993`).
+ *
+ * Die Unsymmetrie ist aufgehoben, ohne eine der beiden Fassungen aufzugeben:
+ * Gefragt wird **beides**, der Name wie übergeben und der um Punkte und
+ * Leerzeichen gekürzte. Damit ist diese Fassung Zeichen für Zeichen weiter als
+ * die vorige — sie findet jeden Eigentümer, den jene fand, und zusätzlich die,
+ * die an der Kürzung hängen. Eine Fassung, die `fileName` **nur** kürzt, wäre
+ * es nicht: Ein `target` ohne Trenner, das auf `x.png.` endet, nennt `x.png.`,
+ * aber nicht `x.png`.
+ *
+ * **Was ausdrücklich nicht mitgeht, ist die Zerlegung in Pfadbestandteile.**
+ * `fileName` läuft durch {@link trimResolvedTail} und **nicht** durch
+ * {@link attachmentTargetFileName}: Ein gesuchter Name, der selbst einen
+ * Trenner trägt, wird weiterhin buchstäblich am Ende gesucht. Das ist eine
+ * zugesagte Eigenschaft — und die Enge kostet hier nichts, weil beide
+ * Aufräumläufe ausschließlich erzeugte Namen fragen (32 Hexziffern und eine
+ * Endung, kein Trenner).
+ *
+ * Der Preis steht oben in der Richtung: mehr Eigentümer, mehr verschonte
+ * Dateien. Genau so herum ist es gewollt.
+ */
+export function attachmentTargetNamesFile(target: string, fileName: string): boolean {
+  if (fileName === '') return false;
+  const folded = asciiLower(target);
+  // Erst die Frage in der Gestalt, in der sie gestellt wurde. Sie ist die
+  // ältere und für jeden erzeugten Namen die einzige, die überhaupt greift.
+  if (folded.endsWith(asciiLower(fileName))) return true;
+
+  // Dann dieselbe Frage an dem Namen, den Windows beim Öffnen auflöst — auf
+  // **beiden** Seiten und nicht nur auf der des `target`.
+  const name = asciiLower(trimResolvedTail(fileName));
+  if (name === '') return false;
+  return folded.endsWith(name) || attachmentTargetFileName(target) === name;
 }
 
 /**
@@ -1014,9 +1276,40 @@ export function attachmentLabel(
   kind: AttachmentKind,
   title: string | null,
   target: string,
+  /**
+   * Der Name aus fremder Hand (A-19.23a) — der Anzeigename einer aus einer
+   * E-Mail übernommenen Datei. Fehlt bei jedem Anhang, den der Benutzer selbst
+   * eingetragen hat, und dann ändert dieser Parameter nichts.
+   *
+   * -------------------------------------------------------------------------
+   * Warum er **zwischen** Titel und Ableitung steht, und nicht davor oder
+   * dahinter
+   * -------------------------------------------------------------------------
+   *
+   * **Der Titel gewinnt weiter.** Er ist das, was der Benutzer selbst gewählt
+   * hat (A-19.10); eine Angabe aus einer fremden E-Mail über seine eigene zu
+   * stellen wäre die falsche Reihenfolge, und sie wäre neu — heute gewinnt der
+   * Titel über alles.
+   *
+   * **Die Ableitung verliert.** Sie wäre hier `4a…c1.pdf` — der **erzeugte**
+   * Name auf der Platte (A-A-78). Der sagt einem Menschen nichts, und drei
+   * Anhänge aus derselben E-Mail hießen drei zufällige Hexzahlen. Genau den
+   * Zustand schließt die zweite Hälfte dieser Funktion aus (T-165, X-04): Zwei
+   * verschiedene Anhänge tragen nie dieselbe Beschriftung — aber eine, die
+   * niemand wiedererkennt, erfüllt den Buchstaben und verfehlt den Zweck,
+   * genau wie der bloße Wirt bis T-157.
+   *
+   * **Der Parameter ist freiwillig**, damit kein bestehender Aufrufer ihn
+   * nennen muß. Wer ihn nennt, bekommt dieselbe Funktion mit einer Stufe mehr;
+   * die Reihenfolge ist an einer Stelle beschrieben und nicht an dreien.
+   */
+  displayName: string | null = null,
 ): string {
   const trimmed = title === null ? '' : title.trim();
   if (trimmed !== '') return trimmed;
+
+  const foreign = displayName === null ? '' : displayName.trim();
+  if (foreign !== '') return foreign;
 
   switch (kind) {
     case 'link': {

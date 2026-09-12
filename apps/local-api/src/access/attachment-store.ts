@@ -82,9 +82,16 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 import {
   IMAGE_SIGNATURE_BYTES,
   MAX_ATTACHMENT_IMAGE_BYTES,
+  MAX_EMAIL_ATTACHMENT_BYTES,
   imageMediaTypeOf,
 } from '@takt/domain';
-import type { AttachmentBlobPort, ImageBlobFailure, ImageRemoval } from '@takt/storage';
+import type {
+  AttachmentBlobPort,
+  BlobRemoval,
+  EmailFileReadFailure,
+  ImageBlobFailure,
+  ImageRemoval,
+} from '@takt/storage';
 
 import type { Logger } from '../logger.ts';
 import { DIR_MODE, FILE_MODE } from './paths.ts';
@@ -105,6 +112,36 @@ import { DIR_MODE, FILE_MODE } from './paths.ts';
  */
 export function attachmentDirectory(appDataDir: string): string {
   return join(appDataDir, 'attachments');
+}
+
+/**
+ * Wo die übernommenen E-Mail-Dateien liegen (A-19.23, A-A-79) — ein **eigener**
+ * Ordner neben den Bildkopien.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum nicht derselbe Ordner
+ * ---------------------------------------------------------------------------
+ *
+ * Die beiden Bestände haben unterschiedliche Zusagen, und beide Zusagen hängen
+ * daran, daß ein Aufräumlauf **alles** im Ordner beurteilen kann:
+ *
+ *  - `attachments/` enthält ausschließlich Bildkopien mit vier bekannten
+ *    Endungen. `listImages` nennt nur Namen dieser Form; was sonst darin läge,
+ *    wäre für das Aufräumen unsichtbar und bliebe ewig liegen.
+ *  - `email-attachments/` enthält Dateien mit **beliebiger** Endung, und ihre
+ *    Zugehörigkeit steht an einer anderen Spalte (`origin = 'email'`).
+ *
+ * Lägen beide zusammen, müßte jede der beiden Abfragen die Dateien der anderen
+ * richtig übergehen — und ein Fehler dabei löscht Kundenmaterial, das einen
+ * Eigentümer hat. Das ist genau der Zustand, den das Bedrohungsmodell in 23.3.3
+ * für die **leere Antwort** beschreibt. Zwei Ordner sind die billigere Antwort
+ * darauf: Jede Frage hat ihren eigenen Ort, und keine muß die andere kennen.
+ *
+ * Der Ordner heißt technisch und nicht sichtbar; wie `identifier` und
+ * `generator` behält er seinen Namen (A-21).
+ */
+export function emailFileDirectory(appDataDir: string): string {
+  return join(appDataDir, 'email-attachments');
 }
 
 /**
@@ -130,6 +167,41 @@ export function attachmentDirectory(appDataDir: string): string {
  * Vergleich ist der Boden darunter.
  */
 const GENERATED_NAME_SHAPE = /^[0-9a-f]{32}\.(?:png|jpg|gif|webp)$/;
+
+/**
+ * Die Form eines erzeugten Namens für eine E-Mail-Datei:
+ * `<32 Hexziffern>` mit **höchstens einer** Endung aus `[a-z0-9]`, höchstens
+ * 16 Zeichen — oder ganz ohne Endung.
+ *
+ * ---------------------------------------------------------------------------
+ * Dieselbe Rolle wie {@link GENERATED_NAME_SHAPE}, und derselbe Grund
+ * ---------------------------------------------------------------------------
+ *
+ * Die Menge der Endungen ist hier **offen** und darf es sein: Eine übernommene
+ * Datei behält ihr Format (A-19.23), und welches das ist, entscheidet der
+ * Absender. Was **nicht** offen ist, ist die Form: genau ein Punkt, danach
+ * ausschließlich Kleinbuchstaben und Ziffern.
+ *
+ * Was diese eine Zeile damit ausschließt, ist die vollständige Tafel aus
+ * T-297 (Bedrohungsmodell 39.4.1):
+ *
+ *  - **Pfadausbruch** — kein `/`, kein `\`, kein `..`, kein Doppelpunkt.
+ *  - **Gerätenamen** — `NUL`, `COM1`, `CON.txt`, `prn.pdf`, `CONOUT$` beginnen
+ *    sämtlich nicht mit 32 Hexziffern. Das ist der Fall, der bei der Vorlage
+ *    als Datei anlegte, was Windows anschließend **nicht sieht** (39.4.2).
+ *  - **Nachgestellte Punkte und Leerzeichen** — der aufgelöste Name ist der
+ *    gespeicherte, es gibt nichts abzuschneiden (A-A-5′).
+ *  - **Richtungs- und Formatzeichen** — nicht in `[a-f0-9a-z]`.
+ *  - **Doppelendung** — genau ein Punkt.
+ *  - **Kappung** — 32 + 1 + 16 Zeichen sind auf jedem Dateisystem ein Name.
+ *  - **Kollision** — 128 Bit aus `randomUUID`.
+ *
+ * Und sie tut es, indem sie **beschreibt, was wir erzeugen**, statt
+ * aufzuzählen, was ein Angreifer schicken könnte. Das ist der Unterschied
+ * zwischen A-A-78 und A-A-80, und es ist der Grund, warum hier keine Liste
+ * reservierter Windows-Namen steht.
+ */
+const GENERATED_FILE_NAME_SHAPE = /^[0-9a-f]{32}(?:\.[a-z0-9]{1,16})?$/;
 
 /** Endung je Bildart. Erzeugt, nicht aus der Quelle übernommen (A-A-17). */
 const EXTENSION_BY_MEDIA_TYPE: Readonly<Record<string, string>> = Object.freeze({
@@ -219,6 +291,82 @@ export function createAttachmentBlobPort(
         'error',
         'Das Bildverzeichnis der Anhänge ließ sich nicht anlegen. Bildanhänge sind bis auf Weiteres nicht möglich.',
         'attachment_image_directory_unavailable',
+      );
+      return null;
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Die E-Mail-Dateien (A-19.23, A-A-78, A-A-79, A-A-83)
+  // -------------------------------------------------------------------------
+
+  const emailDirectory = appDataDir === null ? null : emailFileDirectory(appDataDir);
+
+  /**
+   * Der Pfad einer E-Mail-Datei — oder `null`, wenn der Name keiner ist, den
+   * dieser Port erzeugt hätte.
+   *
+   * Zeichengleich zu {@link pathOf} und aus demselben Grund; die einzige
+   * Abweichung ist die Form (siehe {@link GENERATED_FILE_NAME_SHAPE}).
+   */
+  const emailPathOf = (name: string): string | null => {
+    if (emailDirectory === null) return null;
+    if (!GENERATED_FILE_NAME_SHAPE.test(name)) return null;
+    const full = resolve(emailDirectory, name);
+    const root = resolve(emailDirectory);
+    if (full !== join(root, name) || !full.startsWith(root + sep)) return null;
+    return full;
+  };
+
+  /**
+   * Der Pfad, den `todo_attachment.target` führt — zurückgeprüft.
+   *
+   * ---------------------------------------------------------------------------
+   * **Geprüft wird, was benutzt wird.** Die Falle, die dieser Bestand dreimal
+   * hatte (T-156-1, T-164-1, T-297)
+   * ---------------------------------------------------------------------------
+   *
+   * Der Wert kommt aus dem Bestand, und in den Bestand kann geschrieben werden,
+   * ohne durch diesen Port zu gehen: über eine Route (VG-1), über `sqlite3` auf
+   * die Bestandsdatei (VG-3), über eine künftige Migration. Ein `target`, das
+   * jemand auf `..\\takt.db` oder auf ein Dokument des Benutzers gesetzt hat,
+   * darf hier **nie** zu einem `rm` werden.
+   *
+   * Deshalb wird der Pfad nicht benutzt, wie er dasteht, sondern **neu
+   * gebildet**: Der letzte Namensbestandteil geht durch dieselbe Form, durch
+   * die er beim Schreiben ging, und der daraus gebildete Pfad muß zeichengleich
+   * der übergebene sein. Ist er es nicht, wird nichts angefaßt.
+   *
+   * Das ist der Unterschied zwischen „den Pfad prüfen" und „den geprüften Pfad
+   * benutzen", und er ist der ganze Inhalt dieser Funktion.
+   */
+  const emailPathFromTarget = (target: string): string | null => {
+    if (emailDirectory === null) return null;
+    const lastSeparator = Math.max(target.lastIndexOf('/'), target.lastIndexOf('\\'));
+    const name = target.slice(lastSeparator + 1);
+    const full = emailPathOf(name);
+    if (full === null) return null;
+    // Zeichengleich: Der neu gebildete Pfad **ist** der übergebene. Ein
+    // `target`, das auf denselben Namen in einem anderen Ordner zeigt, fällt
+    // hier — nicht an einer Prüfung des fremden Werts, sondern daran, daß der
+    // eigene ein anderer ist.
+    return resolve(target) === full ? full : null;
+  };
+
+  const ensureEmailDirectory = async (): Promise<string | null> => {
+    if (emailDirectory === null) return null;
+    try {
+      await mkdir(emailDirectory, { recursive: true, mode: DIR_MODE });
+      // Dieselbe Nachbesserung wie beim Bildverzeichnis: `mkdir` setzt den
+      // Modus nur bei einer neu angelegten Ebene und filtert ihn durch die
+      // `umask`. `0700` ist eine Zusage (E-018) und keine Voreinstellung.
+      if (process.platform !== 'win32') await chmod(emailDirectory, DIR_MODE);
+      return emailDirectory;
+    } catch {
+      logger.lifecycle(
+        'error',
+        'Das Verzeichnis der übernommenen E-Mail-Dateien ließ sich nicht anlegen. Anhänge aus E-Mails sind bis auf Weiteres nicht möglich.',
+        'attachment_email_directory_unavailable',
       );
       return null;
     }
@@ -496,6 +644,294 @@ export function createAttachmentBlobPort(
         names.push(entry.name);
       }
       return names;
+    },
+
+    // -----------------------------------------------------------------------
+    // A-19.23 — die Datei aus einer fremden E-Mail
+    // -----------------------------------------------------------------------
+
+    async storeEmailFile(data: Uint8Array, extension: string | null) {
+      /*
+       * **Der Boden unter der Grenze des Aufrufers** (A-A-81).
+       *
+       * Der Anwendungsfall zählt bereits, und er zählt an derselben Zahl:
+       * `data.byteLength`. Diese beiden Zeilen sind trotzdem keine Doppelung,
+       * sondern die Zusage dieses Ports gegenüber **jedem** Aufrufer — auch
+       * einem, der morgen dazukommt. Eine Grenze, die nur der heutige Aufrufer
+       * hält, ist keine Grenze des Ports.
+       */
+      if (data.byteLength === 0) return { ok: false as const, reason: 'empty' as const };
+      if (data.byteLength > MAX_EMAIL_ATTACHMENT_BYTES) {
+        return { ok: false as const, reason: 'too_large' as const };
+      }
+
+      /*
+       * Die Endung kommt aus `nameEmailFile` der Domäne und ist dort auf
+       * `[a-z0-9]`, höchstens 16 Zeichen, beschränkt. Hier wird sie **noch
+       * einmal** gemessen, und zwar an derselben Form, die den erzeugten Namen
+       * beschreibt — nicht aus Mißtrauen gegen die Domäne, sondern weil dieser
+       * Port seine eigene Zusage hält: Was er schreibt, entspricht
+       * {@link GENERATED_FILE_NAME_SHAPE}. Eine Zusage, die von einem Aufrufer
+       * abhängt, ist eine Erwartung.
+       */
+      const suffix = extension === null ? '' : `.${extension}`;
+      const name = `${randomUUID().replaceAll('-', '')}${suffix}`;
+      if (!GENERATED_FILE_NAME_SHAPE.test(name)) {
+        return { ok: false as const, reason: 'bad_extension' as const };
+      }
+
+      const ready = await ensureEmailDirectory();
+      const full = emailPathOf(name);
+      if (ready === null || full === null) {
+        return { ok: false as const, reason: 'write_failed' as const };
+      }
+
+      /*
+       * **`wx` und kein `existsSync`-dann-`writeFile`** (A-A-79).
+       *
+       * Die Vorlage prüft die Zieladresse mit `existsSync` frei und schreibt
+       * danach: ein TOCTOU-Paar, und auf POSIX zugleich ein Symlink-Folgen —
+       * ein **baumelnder** Symlink an dieser Stelle läßt `existsSync` falsch
+       * sagen und `writeFile` durch ihn hindurch schreiben, mit fremdem Inhalt
+       * an einen fremden Ort. `wx` legt an **oder scheitert**; einem Symlink
+       * folgt es nicht.
+       *
+       * Ein vorhandener Eintrag ist deshalb ein Fehlschlag nach A-19.29 und
+       * kein Ausweichen auf „(2)". Bei 128 Bit aus `randomUUID` ist er so
+       * wahrscheinlich wie eine doppelte Kennung im ganzen Bestand.
+       *
+       * **Kein `.tmp` und kein `rename`** wie bei der Bildkopie: Dort ist der
+       * Zwischenschritt nötig, weil ein Abbruch mitten im Schreiben ein halbes
+       * Bild unter einem gültigen Namen hinterließe, das die Anzeige für
+       * vollständig hält. Hier hinterließe er eine halbe Datei unter einem
+       * Namen, den **keine Zeile nennt** — der Zeilenschreiber kommt erst
+       * danach, und scheitert er, räumt der Aufrufer ohnehin auf (A-A-83).
+       * Ein `.tmp` daneben wäre eine zweite Datei mit demselben Problem.
+       */
+      try {
+        const out = await open(full, 'wx', FILE_MODE);
+        try {
+          await out.writeFile(data);
+        } finally {
+          await out.close();
+        }
+        // Ausdrücklich gesetzt und nicht der `umask` überlassen (E-018).
+        if (process.platform !== 'win32') await chmod(full, FILE_MODE);
+      } catch {
+        // Ein Schreibvorgang, der mitten im Lauf abbrach, hat eine angelegte
+        // Datei hinterlassen. Sie gehört zu keiner Zeile und geht mit.
+        await rm(full, { force: true }).catch(() => undefined);
+        return { ok: false as const, reason: 'write_failed' as const };
+      }
+
+      return { ok: true as const, name, path: full, bytes: data.byteLength };
+    },
+
+    async removeEmailFile(target: string): Promise<BlobRemoval> {
+      const full = emailPathFromTarget(target);
+      if (full === null) return 'unknown_name';
+
+      try {
+        // `force: true`: Eine Datei, die es nicht gibt, ist kein Fehlschlag —
+        // dieselbe Begründung wie bei `removeImage`.
+        await rm(full, { force: true });
+        return 'removed';
+      } catch {
+        /*
+         * Dieselbe Zeile wie bei der Bildkopie und aus demselben Grund: Eine
+         * Datei ohne Eigentümer ist Kundenmaterial, und das Protokoll ist der
+         * einzige Ort, an dem man sie wiederfindet.
+         *
+         * Genannt wird der **erzeugte** Name — und er darf genannt werden,
+         * nicht weil dieser Port ihn erzeugt hat, sondern weil diese Zeile für
+         * jeden anderen unerreichbar ist: `emailPathFromTarget` ist längst mit
+         * `unknown_name` zurückgekehrt, wenn die Form nicht stimmt. Nie der
+         * Anzeigename, nie der Absender, nie der Betreff (A-A-83).
+         */
+        logger.lifecycle(
+          'warn',
+          `Eine übernommene E-Mail-Datei ließ sich nicht entfernen und liegt weiter im Anwendungsdatenverzeichnis: ${full.slice(Math.max(full.lastIndexOf('/'), full.lastIndexOf('\\')) + 1)}`,
+          'attachment_email_remove_failed',
+        );
+        return 'failed';
+      }
+    },
+
+    async listEmailFiles(): Promise<readonly string[]> {
+      if (emailDirectory === null) return [];
+
+      let entries;
+      try {
+        entries = await readdir(emailDirectory, { withFileTypes: true });
+      } catch {
+        // Kein Verzeichnis, keine Rechte: eine **leere Liste** und keine
+        // Meldung. Der Regelfall ist die frische Einrichtung, und wo nichts
+        // liegt, ist auch nichts verwaist.
+        return [];
+      }
+
+      // Nur Namen, die dieser Port erzeugt haben könnte, und nur Dateien. Was
+      // diese Liste nicht nennt, wird nie entfernt — im Zweifel liegen lassen.
+      const names: string[] = [];
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (!GENERATED_FILE_NAME_SHAPE.test(entry.name)) continue;
+        names.push(entry.name);
+      }
+      return names;
+    },
+
+    // -----------------------------------------------------------------------
+    // A-19.34 — die Bytes reisen mit der Datensicherung
+    // -----------------------------------------------------------------------
+
+    async readEmailFile(
+      target: string,
+    ): Promise<
+      | { ok: true; name: string; data: Uint8Array }
+      | { ok: false; reason: EmailFileReadFailure }
+    > {
+      /*
+       * **Geprüft wird, was benutzt wird** — dieselbe Funktion wie beim
+       * Löschen, und derselbe Grund (T-156-1, T-164-1, T-297). Zwischen dem
+       * Schreiben und diesem Lesen liegt der Bestand, und in den kann ohne
+       * diesen Port geschrieben werden (VG-1, VG-3).
+       *
+       * Ohne diese Zeile wäre die Datensicherung ein Lesewerkzeug für jede
+       * Datei, die der Benutzer lesen darf: Ein `target`, das jemand auf
+       * `takt.db`, auf die Tokendatei oder auf ein Dokument gesetzt hat, käme
+       * base64-kodiert in einem Archiv wieder heraus.
+       */
+      const full = emailPathFromTarget(target);
+      if (full === null) return { ok: false, reason: 'unknown_name' };
+      const name = full.slice(Math.max(full.lastIndexOf('/'), full.lastIndexOf('\\')) + 1);
+
+      let handle;
+      try {
+        handle = await open(full, 'r');
+      } catch {
+        // Weg, verschoben, ein Bestand ohne seinen Ordner: A-19.15 und kein
+        // Fehler des Dienstes. Der Aufrufer macht daraus eine Warnung im
+        // Archiv, keine Fehlerfläche.
+        return { ok: false, reason: 'unreadable' };
+      }
+
+      const blocks: Buffer[] = [];
+      let total = 0;
+      try {
+        for (;;) {
+          const block = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+          const { bytesRead } = await handle.read(block, 0, READ_CHUNK_BYTES, null);
+          if (bytesRead === 0) break;
+          total += bytesRead;
+          /*
+           * **Beim Lesen gezählt und nicht aus `stat`** (A-A-15). Die Grenze
+           * galt beim Hereinnehmen; ob sie beim Herausgeben noch gilt, ist eine
+           * zweite Frage: Die Datei liegt im Anwendungsdatenverzeichnis, und
+           * jeder Prozeß im Benutzerkonto kann sie ersetzen (VG-3). Eine über
+           * Nacht auf 2 GiB gewachsene Datei wird nicht in den Arbeitsspeicher
+           * gelesen und erst recht nicht base64-kodiert.
+           */
+          if (total > MAX_EMAIL_ATTACHMENT_BYTES) return { ok: false, reason: 'too_large' };
+          blocks.push(block.subarray(0, bytesRead));
+        }
+      } catch {
+        return { ok: false, reason: 'unreadable' };
+      } finally {
+        await handle.close().catch(() => undefined);
+      }
+
+      if (total === 0) return { ok: false, reason: 'empty' };
+      return { ok: true, name, data: Buffer.concat(blocks, total) };
+    },
+
+    async restoreEmailFile(name: string, data: Uint8Array) {
+      if (data.byteLength === 0) return { ok: false as const, reason: 'empty' as const };
+      if (data.byteLength > MAX_EMAIL_ATTACHMENT_BYTES) {
+        return { ok: false as const, reason: 'too_large' as const };
+      }
+
+      /*
+       * Der Name kommt aus dem Archiv und ist **fremder Text**. `emailPathOf`
+       * ist die einzige Stelle, an der er zu einem Pfad wird, und es läßt nur
+       * `<32 Hexziffern>[.<endung>]` durch — `..\\takt.db` scheitert hier und
+       * nicht an einer Prüfung weiter vorn.
+       */
+      const ready = await ensureEmailDirectory();
+      const full = emailPathOf(name);
+      if (full === null) return { ok: false as const, reason: 'bad_extension' as const };
+      if (ready === null) return { ok: false as const, reason: 'write_failed' as const };
+
+      /*
+       * **Nachbardatei und `rename`, nicht `wx`** — der eine Unterschied zu
+       * `storeEmailFile`, und er ist Inhalt: Ein Archiv, das auf **diesem**
+       * Rechner entstanden ist, nennt Namen, die hier schon liegen. `wx`
+       * machte den Regelfall zum Fehlschlag. Der Umweg über `.tmp` hält
+       * zugleich die Zusage, die `wx` dort hält: Ein Abbruch mitten im
+       * Schreiben hinterläßt die **alte** Datei, nie eine halbe unter einem
+       * Namen, den eine Zeile nennt.
+       */
+      const temporary = `${full}.tmp`;
+      try {
+        const out = await open(temporary, 'w', FILE_MODE);
+        try {
+          await out.write(data);
+        } finally {
+          await out.close();
+        }
+        // Ausdrücklich gesetzt und nicht der `umask` überlassen (E-018).
+        if (process.platform !== 'win32') await chmod(temporary, FILE_MODE);
+        await rename(temporary, full);
+      } catch {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        return { ok: false as const, reason: 'write_failed' as const };
+      }
+      return { ok: true as const, path: full, bytes: data.byteLength };
+    },
+
+    emailFilePathOf(name: string): string | null {
+      return emailPathOf(name);
+    },
+
+    /**
+     * Der Ordner der übernommenen E-Mail-Dateien (A-A-98).
+     *
+     * Die zweite Methode ohne Wirkung. Sie gibt den Wert heraus, den dieser
+     * Adapter ohnehin führt, statt daß der Aufrufer ihn aus einem Pfad
+     * zurückrechnet — zwei Zerlegungen desselben Pfades sind die Bauart, an
+     * der T-313-1 hing. Ob der Ordner existiert, sagt sie nicht.
+     */
+    emailFileFolder(): string | null {
+      return emailDirectory;
+    },
+
+    /**
+     * Ist das ein Name, den das **Bildverzeichnis** tragen kann? (T-315.)
+     *
+     * Dieselbe Rolle wie {@link emailFilePathOf} im anderen Ordner, mit einem
+     * Unterschied, der aus dem Bestand kommt und nicht aus dem Geschmack: Für
+     * eine Bildkopie steht in `todo_attachment.target` der **bloße Name**, und
+     * `removeImage` nimmt ihn so. Ein Pfad, den niemand benutzt, wäre ein Pfad
+     * mehr im Speicher und einer mehr, der in eine Protokollzeile rutschen kann
+     * (B-2.4).
+     *
+     * Geprüft wird über `pathOf` und damit an derselben Stelle wie beim Lesen,
+     * beim Auflisten und beim Entfernen — eine Form, ein Prüfort.
+     */
+    imageNameOf(name: string): string | null {
+      return pathOf(name) === null ? null : name;
+    },
+
+    /**
+     * Der Ordner der Bildkopien (A-A-18, A-A-98, T-315).
+     *
+     * Wortgleich die Begründung von {@link emailFileFolder}: Der Aufräumlauf
+     * fragt den Bestand, welche Namen er in **diesem** Ordner erwartet, und
+     * dafür muß jemand sagen, welcher gemeint ist. Ob er existiert, sagt sie
+     * nicht.
+     */
+    imageFolder(): string | null {
+      return directory;
     },
   };
 }

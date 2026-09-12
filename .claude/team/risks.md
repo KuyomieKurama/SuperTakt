@@ -266,8 +266,17 @@ Dinge ändern sich damit auf einmal:
    sie den Browser des Benutzers. Das ist der gefährlichste Weg in diesem Vorhaben.
 3. **Jede Anfrage ist ein Lebenszeichen.** Wer sie sieht, weiß, dass dieser Rechner Takt in
    dieser Fassung fährt. A-18.12 verbietet, mehr mitzuschicken als nötig.
+   Seit E-106 ist das Lebenszeichen **eines je Programmstart**; wer die Verbindung sieht, bekommt
+   je Rechner und Tag eine ungefähre **Einschaltzeit** dazu. Der Inhalt hält A-18.12, der
+   **Zeitpunkt** ist selbst eine Angabe über die Nutzung.
 4. **Der Ausgang steht offen, auch wenn niemand ihn braucht.** Er gehört bei jeder künftigen
    Freigabe geprüft, nicht nur bei dieser Aufgabe.
+5. **Die Frequenz schadet nicht uns, sondern den Nachbarn.** Ein Prozeß, der den Sidecar in einer
+   Schleife startet, erreicht rund 344 Anfragen je Stunde und kann damit das GitHub-Kontingent
+   **einer Quelladresse** erschöpfen — die Aktualisierungsmeldung fällt dann für alle
+   Installationen hinter dieser Adresse still aus. Schaden an der **Verfügbarkeit eines
+   Sicherheitskanals**, kein Datenabfluß. Kein Verstärker: Wer den Sidecar in einer Schleife
+   starten kann, ruft dieselbe Adresse unmittelbar auf — SuperTakt ist der langsamste Weg dorthin.
 
 **Umgang:** Festgelegt in E-064: Adresse fest im Erzeugnis, keine Weiterleitung auf einen fremden
 Wirt, Zeitüberschreitung, Obergrenze der gelesenen Antwort, aus der Antwort verlässt nur eine
@@ -303,6 +312,30 @@ nach Art getrennt, kein UNC-Pfad, und eine Rückfrage, die den vollen Pfad nennt
 startet. Das Bedrohungsmodell bewertet die Grenze vor dem Bau.
 
 ---
+
+**Bewertet am 2026-09-11 (T-297), und die Bewertung verschiebt das Risiko, statt es zu bestätigen.**
+Bis heute mußte ein Pfad **eingetippt** werden — das war die stillschweigende Bremse dieses
+Risikos, und sie stand in keiner Zeile. Ab A-19.23 genügt eine E-Mail. Der Weg von fremder Hand
+bis zum Startknopf ist damit nicht neu, aber er ist zum ersten Mal **bequem**.
+
+Gemessen wurde die Vorlage, nicht gelesen: `sanitizeFileName` und `uniqueTargetPath` der
+Outlook-Bridge zeichengleich nachgebaut, 25 Angriffsnamen, echte Dateien, Node 22 auf Windows 11.
+**25 hinein, 25 auf der Platte, null Ablehnungen.** Pfadausbruch, absolute Pfade und UNC fängt
+sie in beiden Schreibweisen; Gerätenamen, Doppelendungen und Richtungszeichen nicht. Vier von
+fünf Gerätenamen (`NUL`, `COM1`, `CON.txt`, `prn.pdf`) landen als Datei, die Windows
+anschließend **nicht sieht** — ein Anhang, der von Anfang an tot ist, während die Oberfläche
+„übernommen" meldet. Das ist der dritte Fall der Klasse „geprüfter Name ≠ aufgelöster Name".
+
+Die Gegenmaßnahme ist deshalb nicht ein besserer Filter: Der fremde Name wird **Anzeigename**,
+den Namen auf der Platte bestimmt SuperTakt (A-19.23a). Damit ist die Klasse nicht abgewehrt,
+sondern **unmöglich**.
+
+
+**Nachgetragen am 2026-09-12 (T-313).** Die Bytes einer fremden E-Mail liegen jetzt wirklich im
+Anwendungsdatenverzeichnis — mit erzeugtem Namen und `0600`/`0700`, beides gemessen. **Neu und
+in der anderen Richtung:** Aus ihnen wird beim Aufräumen ein **Löschziel**. Ein Fehler beim
+Hereinlassen ist eine Lücke; ein Fehler beim Entfernen ist nicht wiedergutzumachen. Siehe R-29.
+
 
 ## R-22 — Ein Verweis kann alles sein, was wie eine Adresse aussieht
 
@@ -359,6 +392,48 @@ Windows-Rechner fahren (T-B05).
 
 ---
 
+**Bewertet am 2026-09-11 (T-297), gemessen und unangenehm.** In `apps/desktop/**` gibt es
+**keinen Deinstallationspfad**. Das Zertifikat bleibt dauerhaft in `Cert:CurrentUserRoot`
+stehen, der private Schlüssel dauerhaft als `taskpane-key.pem` — auch wenn SuperTakt längst
+entfernt ist. Damit ist die Frage beantwortet, die der security-checker seit dem 2026-09-10
+gestellt hatte, und die Antwort lautet: ja, es bleibt stehen.
+
+Die Kette, die daraus folgt: Schlüssel lesen → `127.0.0.1:17844` binden, solange SuperTakt
+nicht läuft → Outlook lädt den Aufgabenbereich **des Angreifers** über eine **gültige**
+TLS-Verbindung, ohne Warnung, weil das Zertifikat im Wurzelspeicher des Benutzers liegt und dort
+niemand mehr nach ihm sieht.
+
+**Die Beute hat sich im Lauf desselben Tages zweimal geändert.** Vor E-108: das Takt-Token. Nach
+E-108 in seiner ersten Fassung: das ganze Postfach samt Sendeberechtigung. Nach **E-109**: wieder
+das Takt-Token, weil `ReadWriteMailbox` entfallen ist. Die Einstufung dieses Risikos hängt
+damit an einer Entscheidung, die anderswo getroffen wurde — das ist der Grund, ihn hier
+aufzuschreiben, und nicht bloß eine Buchhaltung.
+
+**Offen bleibt**, ob die Rücknahme auf das Takt-Token die Schwere senkt. Der security-checker ist
+gefragt; ich trage seine Einstufung nach und rate sie nicht.
+
+
+**Nachgemessen am 2026-09-11, und es begrenzt ehrlich, ohne zu entlasten.** Das Zertifikat ist
+**kein CA-Zertifikat** (`basicConstraints` kritisch und leer, `certificate.ts:159`) und trägt
+als alternativen Namen ausschließlich `localhost` und die Loopback-Adresse (`:170`). Die
+Wirkung reicht damit **nicht** über `localhost` hinaus — der Absatz oben, der von einem
+„Generalschlüssel für das Konto" spricht, beschreibt die Bauart des Speichers, nicht dieses
+Zertifikat.
+
+**Die Einstufung bleibt trotzdem „hoch", und der Grund ist nicht die Beute, sondern die Dauer.**
+Der Aufgabenbereich ist genau das, was ein Angreifer hier will; ein Vertrauensanker, den
+**niemand je entfernt**, mit dem privaten Schlüssel daneben, läßt ihn sich **dauerhaft** als
+dieser Aufgabenbereich ausgeben — auch nach der Deinstallation, wenn niemand mehr hinsieht.
+
+**Was sich ändert, ist der Termin, nicht die Schwere:** von „vor dem Bau" auf **vor der
+Auslieferung**. Damit hängt T-B05 mit daran.
+
+
+**Zweite Messung am 2026-09-12, Ergebnis identisch:** weiterhin **kein Deinstallationspfad**,
+A-A-92 ist nicht gebaut. Zweimal null gemessen, an zwei Tagen. Termin bleibt **vor der
+Auslieferung**; T-B05 hängt mit daran.
+
+
 ## R-24 — Ein Fremdbackup ist eine fremde Datei, und aus ihr entstehen Dateipfade
 
 **Schwere:** hoch. **Betrifft:** security-checker, domain-dev, integration-dev. Neu am
@@ -380,6 +455,20 @@ Import trägt zusätzlich, aber nicht statt dessen: zwischen Import und Öffnen 
 Ausdrücklich zu messen ist, daß ein importierter Pfad denselben Weg nimmt wie ein eingetippter.
 
 ---
+
+**Bewertet am 2026-09-11 (T-297).** Die Beschreibung dieses Risikos ist seit E-108 **zu eng**:
+Sie spricht von einem Fremdbackup, aus dem **Zeiger** entstehen — Verweise und Dateipfade. Ab
+A-19.23 entstehen aus fremder Hand die **Bytes selbst**, und sie entstehen nicht mehr bei einem
+seltenen Umzug, sondern bei jeder E-Mail, aus der ein Todo wird.
+
+Der Unterschied ist nicht graduell. Ein Zeiger ins Leere ist ein Anhang, der sich nicht öffnen
+läßt (A-19.15). Eine Datei, die wirklich im Datenverzeichnis liegt, öffnet sich.
+
+
+**Nachgetragen am 2026-09-12 (T-313): eine zweite Hälfte.** Bisher handelte dieser Eintrag vom
+**Hereinkommen** — eine fremde Datei wird zur Quelle eines Anhangs. Ab heute auch vom
+**Verschwinden**: Dieselbe fremde Datei ist Gegenstand eines Laufs, der beim Start löscht.
+
 
 ## R-25 — Eine Zusage, die der Nachbar bricht, ist schlimmer als keine Zusage
 
@@ -409,3 +498,162 @@ unter `/addin`, nicht mehr nur die Wirkung eines Aufrufs der Anlegetür (T-247).
 künftigen Wächter gilt E-099 Punkt 3. Wer eine Abwesenheit zusichert, spannt seine Menge an der
 Anforderung auf, nicht an der Route, die er kennt. Das Risiko ist mit T-247 nicht erledigt,
 sondern auf seinen nächsten Anlaß vertagt.
+
+## R-26 — zurückgezogen
+
+Am 2026-09-11 angelegt („Das Postfach hinter dem Add-in") und **am selben Tag wieder
+gestrichen**, auf Einspruch des security-checkers: Die Grenze ist nicht abgesichert worden,
+sie ist **nie entstanden** — mit E-109 fiel `ReadWriteMailbox`, bevor eine Zeile davon gebaut
+war. Ein Risiko, das eine Fläche beschreibt, die es nicht gibt, ist derselbe Fehler wie ein
+Wächter, der eine Abwesenheit mißt, die nicht mehr gilt.
+
+Die Lehre daraus war nie ein Risiko, sondern eine Arbeitsweise, und sie steht dort, wo sie
+hingehört: in **E-109** — vor der Frage steht die Suche. Die Nummer bleibt unbesetzt.
+
+## R-27 — Die Kürzung, die kein Wächter sieht
+
+**Schwere:** offen, beim security-checker. **Betrifft:** security-checker, frontend-dev.
+Neu am 2026-09-11 (T-297, A-A-93).
+
+Die Rückfrage vor dem Öffnen einer Datei nennt den vollen Pfad. Das ist seit A-19.18 die eine
+Sicherung zwischen einem fremden Anhang und der Standardanwendung — und seit A-19.23 steht in
+diesem Pfad ein Name aus fremder Hand.
+
+Der Befund ist, daß diese Sicherung **ohne ein einziges verändertes Zeichen** ausfallen kann: Ein
+Deckel in der Darstellung, der den Namen am Ende kürzt, nimmt der Rückfrage die **Endung**. Der
+Benutzer bestätigt `Rechnung…` und startet eine `.exe`. Kein Wächter dieses Bestands sieht
+das, weil kein Zeichen falsch ist — die Prüfläufe messen Text, und der Text ist in Ordnung.
+
+Daraus folgt A-19.23b: Wo ein Anzeigename aus fremder Hand erscheint, ist die Endung **stets**
+sichtbar. Und daraus folgt die allgemeinere Frage, die dieser Eintrag offen hält: **Wie mißt man
+eine Zusage über die Darstellung?** Die zweite Bauart desselben Fehlers, das Richtungszeichen,
+ist als Zeichen zu fangen. Die Kürzung ist es nicht.
+
+**Beantwortet am 2026-09-11 (T-302), und die Antwort war besser als die Frage.** Dieser Eintrag
+hielt offen: *Wie mißt man eine Zusage über die Darstellung?* Die Prüfläufe messen Text, und bei
+einer Kürzung ist der Text in Ordnung.
+
+Die Lösung: **Der Deckel hat keinen Typ, aber einen Namen — und die Stelle, an der er wirkt,
+hat auch einen.** `proof:clamp` rechnet zwei Mengen und mißt ihren Schnitt:
+
+- **Menge D**, jede CSS-Klasse, deren Regel `text-overflow`, `-webkit-line-clamp`,
+  `white-space: nowrap|pre` oder `overflow[-x]: hidden|clip` erklärt — aus den Stilblättern
+  gelesen, heute 34;
+- **Menge A**, jeder Wert vom Herkunftstyp `UncappedText`, beim Übersetzer erfragt, samt
+  Elternelementen und einem Fixpunkt über Bausteingrenzen — heute 20 Stellen in 9 Bausteinen,
+  70 Elemente.
+
+Ein Schnitt der beiden ist der Befund. Dazu neun Gegenproben, darunter die, daß der Lauf bei
+leerer Deckelmenge **still bliebe** — die Untergrenze, ohne die „nichts gefunden" von „nichts
+gesehen" nicht zu unterscheiden ist.
+
+**Ein Detail daraus gehört über diesen Lauf hinaus festgehalten:** Der erste Lauf las
+`.screen:has(> .board) > .board` als `.screen` — er nahm den **Anfang** des Wählers statt
+seinen **Gegenstand**. Das ist die Art Fehler, die als grün durchgeht. Wer eine Menge über
+Wähler bildet, bildet sie über den Gegenstand.
+
+**Was offen bleibt, ausgesprochen:** Der Lauf mißt **Quelltext, keine Pixel**. Der Fall aus
+A-A-93 — 200 Zeichen Anzeigename, `.exe` am Ende, gerenderte Breite — gehört dem e2e-tester
+und fehlt. Von Hand gemessen bei 420 px, hell und dunkel: Name vollständig, Endung sichtbar.
+Eine Handmessung ist ein Stand, kein Nachweis.
+
+
+**Nachgetragen am 2026-09-12 (T-313): der Träger hat gewechselt, die Einstufung sinkt auf
+mittel.** `apps/web` ist gebaut **und** bewacht (`proof:clamp`, dazu der Prüffall gegen das
+lebende DOM aus T-311). Der **Aufgabenbereich** ist gebaut und **nicht** bewacht. Die Kürzung im
+Bestand ist gemessen richtig — in der Mitte, Marke sichtbar, Endung erhalten. R-27 bleibt offen,
+steht aber nur noch auf **einem** Bein, und das gehört hier hin, damit niemand den Rest für
+gedeckt hält.
+
+
+## R-28 — Ein selbst erzeugtes Format ist eine neue Rolle
+
+**Schwere:** niedrig seit dem 2026-09-12 (vorher: offen) — **20 gefahrene Angriffe, 0 Durchbrüche**.
+Die Einstufung hängt an **einer** Bauentscheidung: Der Nachbau erzeugt **kein** `multipart`, und
+was es nicht gibt, kann niemand treffen. Wird diese Entscheidung je zurückgenommen, kommt die
+Einstufung mit ihr zurück. Der Kern bleibt für jede künftige Erweiterung wahr: Dieser Bestand
+erzeugt ein Format, das ein anderes Programm interpretiert.
+
+**Schwere vor der Messung:** offen, beim security-checker. **Betrifft:** security-checker, integration-dev.
+Neu am 2026-09-11 (T-297-15, T-297-16; Auflagen A-A-96 und A-A-97).
+
+Mit dem Rückfall aus A-19.22a **erzeugt** dieser Bestand zum ersten Mal aus fremdem Text ein
+Format, das ein **anderes Programm** interpretiert. Bisher hat er fremden Text gelesen, geprüft
+und abgelegt; jetzt schreibt er ihn in eine `.eml`, die Outlook öffnet.
+
+Betreff, Absender und Textkörper kommen aus der Nachricht und damit von außen. Wer sie
+zusammenklebt, gibt dem Absender die Feder: Ein Zeilenumbruch im Betreff schreibt eigene
+Kopfzeilen, eigene Kopfzeilen schreiben `multipart/mixed`, und in den so entstandenen Teil paßt
+ein **Anhang**, der in unserem Datenverzeichnis liegt und den Outlook zum Doppelklick anbietet —
+**ohne Größengrenze, ohne Namensprüfung, ohne die Auflagen aus A-19.23**, weil er nie ein Anhang
+in deren Sinne war. Dasselbe über die Trennmarke.
+
+Die Abwehr ist deshalb die **Kodierung, nicht die Suche**: jeden Teil base64, die Trennmarke
+erzeugen wie einen Anhangsnamen, ein `CR` oder `LF` im Wert einer Kopfzeile ist ein
+Ablehnungsgrund. Eine Liste verbotener Zeichenfolgen wäre hier der alte Fehler in neuer Lage.
+
+**Der zweite Teil betrifft die Kennzeichnung.** „Nachgebaut" hängt an der **Datei**, überlebt den
+Round-Trip der Datensicherung und steht in der Rückfrage vor dem Öffnen. A-19.31 kennt
+„geklappt" und „etwas fehlt" — dies ist ein **dritter** Zustand, und ein Hinweis, der nur beim
+Anlegen erscheint, ist drei Wochen später nirgends.
+
+**Der Eintrag steht hier und nicht nur im Bedrohungsmodell**, weil er eine Grenze verschiebt, die
+dieses Vorhaben bisher getragen hat: „Takt liest fremden Text, Takt schreibt ihn nicht."
+
+## R-29 — Der Lauf, der löscht
+
+**Schwere:** hoch. **Betrifft:** domain-dev, security-checker. Neu am 2026-09-12 (T-313-1 bis
+T-313-3, T-314; Auflagen A-A-98 und A-A-100).
+
+Dieser Bestand hat seit E-111 einen Weg, der **ohne Zutun des Benutzers Kundendaten entfernt** —
+und er entscheidet darüber an einer Zeichenkette aus der Datenbank. Das ist keine Abwandlung von
+R-21 (dort geht es ums Hereinkommen) und keine von R-24 (dort ist die fremde Datei die Quelle).
+Der Schaden ist **Datenverlust ohne Wiederherstellung und ohne Spur** außer einer Zahl im
+Protokoll.
+
+**Drei Wege daran vorbei waren gemessen** (T-313), alle geschlossen in T-314. Der teuerste war
+nicht ein Loch, sondern ein Denkfehler in einer Auflage des Orchestrators: Der Widerspruchsriegel
+sollte über **dieselbe** Bedingung zählen wie die Abfrage. Ein Riegel, der dieselbe Frage stellt,
+kann aber nur bestätigen, was die Abfrage ohnehin behauptet. Er fragt seither auf **zwei
+Achsen** — einmal am Anfang des Pfades, einmal gar nicht am Pfad.
+
+**Die Umkehr, die den Lauf trägt:** Die Eigentümerfrage ist jetzt die **weiteste**, die einen
+Eigentümer finden kann — ohne `origin`, ohne `kind`, namensbasiert —, und der SQL-Filter
+darunter ist ausdrücklich **weiter** als nötig, nie enger. Wer weniger fragt, löscht mehr.
+
+**Der offene Punkt, und er ist größer als der behobene.** `sweepOrphanedImages` hat **dieselbe
+Bauart** und ist älter. Gemessen am 2026-09-12, nicht vermutet:
+
+- T-313-1 trägt dort **strukturell** — der Riegel hängt weiter an `known.size === 0`; Auslöser
+  ist die Groß-/Kleinschreibung statt der Pfadschreibweise.
+- T-313-2 trägt mit `kind='image'` statt `origin`: **beide Dateien fort, beide Zeilen stehen.**
+- Ein **vierter Weg**, den die Sicherheitsprüfung nicht genannt hat und der **ohne besondere
+  Rechte** erreichbar ist: Der Bildlauf fragt mit bloßen **Namen**. Eine Zeile, die dieselbe
+  Datei mit ihrem **vollen Pfad** nennt, ist für ihn unsichtbar — und so ein Pfad kommt durch die
+  **gewöhnliche** Tür (absolut, vorhanden, `.png`). Gemessen: `entfernt = 1, Dateien = 0,
+  Zeilen = 1`.
+
+Das ist kein neues Risiko dieser Welle. Es ist ein **bestehendes**, das erst sichtbar wurde, als
+jemand denselben Mechanismus ein zweites Mal baute und dabei gemessen wurde.
+
+**Nachgetragen am 2026-09-12 (T-318), und es ist der Grund, diesen Eintrag NICHT zu schließen.**
+Der code-reviewer hat die Aufräumläufe freigegeben — und im selben Lauf **zwei weitere Stellen**
+gefunden, die dieselbe Frage enger beantworten, außerhalb jedes Aufräumlaufs:
+
+`apps/local-api/src/features/todos/attachments.ts:341` und
+`apps/local-api/src/features/todos/todos.ts:377` entfernen die Datei allein an `kind`
+beziehungsweise `origin` **der gelöschten Zeile**. Das ist eine zweite, engere Antwort auf „wem
+gehört diese Datei" — und sie entscheidet eine Löschung.
+
+**Der Verlust tritt hier ohne Startlauf ein:** Der in T-314 gemessene vierte Weg — ein Anhang der
+Art `file`, der den vollen Pfad einer Bildkopie trägt und durch `checkAttachmentPath`
+kommt — führt dazu, daß **Todo A zu löschen Todo B seinen Anhang kostet**. Kein Angriff, kein
+Neustart, ein gewöhnlicher Bedienweg.
+
+**Die Auflage des Prüfers, wörtlich übernommen:** *Für die Aufräumläufe ist R-29 zu, für die
+Klasse nicht.* Die Klasse heißt: **Wer eine Datei entfernt, muß fragen, ob sie noch jemandem
+gehört — und zwar mit der weitesten Frage, nicht mit der nächstliegenden.** Beide Stellen stehen
+hinter dem `COMMIT`; dort genügt dieselbe Frage, die der Aufräumlauf stellt.
+
+Dieser Eintrag bleibt offen, bis die Frage an **jeder** löschenden Stelle dieselbe ist.
+

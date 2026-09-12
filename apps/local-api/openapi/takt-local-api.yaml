@@ -142,14 +142,23 @@ tags:
 
       Vier Routen, mehr nicht: Baum und Vorbelegungen lesen, nach einer
       Call-Nummer suchen, ein Todo anlegen und Zeit buchen. Kein Löschen,
-      **kein Anhang irgendeiner Art** (A-19.19, F-21), kein Datei- oder
-      Bildzugriff, kein Export, kein Zugriff auf den internen Vermerk eines
-      fremden Todos, keine Einstellungen.
+      kein Datei- oder Bildzugriff, kein Export, kein Zugriff auf den
+      internen Vermerk eines fremden Todos, keine Einstellungen.
+
+      **Und an einem vorhandenen Todo kein Anhang** (A-19.19 in der Fassung
+      von E-108). Der Satz hieß bis E-108 „kein Anhang irgendeiner Art"; er
+      ist seither halbiert und nicht gestrichen. Beim **Anlegen** aus einer
+      E-Mail entstehen Anhänge — die Nachricht als Datei und ihre
+      Dateianhänge (A-19.22, A-19.23, A-19.33) —, am **gefundenen** Todo
+      weiterhin nicht.
 
       Bis T-247 war eine fünfte Route dabei, die einen http(s)-Verweis an
       ein vorhandenes Todo hängte. Sie ist mit der Entscheidung zu F-21
-      ersatzlos entfernt; Anhänge entstehen ausschließlich in der
-      Hauptanwendung.
+      ersatzlos entfernt und **nicht** wiedergekommen: Es gibt unter `/addin`
+      keine Tür, die eine Todo-Kennung entgegennimmt und einen Anhang
+      erzeugt. Der Weg, der seit T-304 offen ist, führt ausschließlich über
+      `POST /addin/todos`, also über ein Todo, das in demselben Ruf erst
+      entsteht.
 
       Der Grund ist nicht Sparsamkeit: Das Add-in weist sich mit dem
       **dauerhaften** Token aus, die Oberfläche mit dem Sitzungsgeheimnis
@@ -3348,7 +3357,15 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [tagTree, pools, statuses, defaultStatusId, defaultTagIds]
+                    required:
+                      [
+                        tagTree,
+                        pools,
+                        statuses,
+                        defaultStatusId,
+                        defaultTagIds,
+                        emailAttachments,
+                      ]
                     properties:
                       tagTree: { $ref: '#/components/schemas/TagTree' }
                       pools:
@@ -3371,6 +3388,25 @@ paths:
                           Reihenfolge**. Der Aufgabenbereich zeigt sie damit so
                           an, wie die Hauptanwendung sie führt, ohne selbst zu
                           sortieren.
+                      emailAttachments:
+                        allOf:
+                          [{ $ref: '#/components/schemas/AddinEmailAttachmentSupport' }]
+                        description: |
+                          **Daß** dieser Dienst Anhänge aus einer E-Mail annimmt
+                          (A-19.22, E-108, seit T-304).
+
+                          Fehlt dieses Feld, bietet der Aufgabenbereich die
+                          Übernahme gar nicht an — er sammelt nichts ein und
+                          verspricht nichts. Ein Text, der eine Handlung nennt,
+                          die es nicht gibt, ist derselbe Fehler wie ein
+                          fehlender Satz (E-100 Punkt 3).
+
+                          **Die Grenzen stehen nicht darin.** Sie sind eine
+                          Fachregel und stehen in `packages/domain`; der
+                          Aufgabenbereich liest sie von dort. Was er von **hier**
+                          braucht, kann aus keinem Paket kommen: Add-in und
+                          Dienst werden getrennt installiert und können
+                          auseinanderlaufen.
         '400': { $ref: '#/components/responses/TokenInUrl' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
@@ -3440,10 +3476,20 @@ paths:
         Die Standard-Tags (A-9) kommen im Anwendungsfall dazu, nicht im Add-in
         — deshalb gelten sie über beide Wege gleichermaßen (A-9.5).
 
-        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074) —
-        und **nur** sie. Über diese Route entsteht weiterhin **kein Anhang**
-        (A-19.19): Der Rumpf hat kein Anhangsfeld, und die Anhangsrouten
-        liegen außerhalb von `/addin`. Siehe `dueDate` unten.
+        **Seit T-149 kann das Add-in eine Frist setzen** (A-19.21, E-074).
+        Siehe `dueDate` unten.
+
+        **Seit T-304 entstehen über diese Route Anhänge** (A-19.22 bis
+        A-19.33, E-108) — die E-Mail selbst als Datei und ihre Dateianhänge,
+        im Feld `attachments` unten. Bis dahin stand hier das Gegenteil, und
+        es stimmte: A-19.19 verbot jeden Anhang aus dem Add-in. E-108 hat den
+        Satz **halbiert**, nicht gestrichen — am **gefundenen** Todo entsteht
+        weiterhin keiner.
+
+        Der Unterschied ist strukturell und nicht eine Einstellung: Die Naht
+        dahinter nimmt keine `TodoId` entgegen, sondern die Anlegefunktion
+        selbst, und es gibt unter `/addin` keine zweite Tür, die eine Kennung
+        entgegennimmt und eine Datei ablegt (A-A-82).
       requestBody:
         required: true
         content:
@@ -3634,21 +3680,64 @@ paths:
                     E-074 Punkt 1): Sie ändert nichts an Pools, Spalten,
                     Buchungen oder Export. Sie ordnet und filtert die
                     Todo-Liste, und das tut sie in der Hauptanwendung.
+                attachments:
+                  oneOf:
+                    - { $ref: '#/components/schemas/AddinEmailAttachments' }
+                    - { type: 'null' }
+                  default: null
+                  description: |
+                    Die **Anhänge aus der geöffneten E-Mail** (A-19.22 bis
+                    A-19.33, E-108, seit T-304). Freiwillig; `null` und eine
+                    leere Liste bedeuten dasselbe wie „ohne Anhänge", und der
+                    Anlegevorgang selbst ändert sich dadurch in keiner Weise.
 
-                    **Ein Anhang kommt über diese Anfrage nicht dazu**
-                    (E-074 Punkt 3). `POST /addin/todos` hat kein Anhangsfeld;
-                    ein trotzdem mitgeschicktes `attachments`, `attachment`
-                    oder `attachmentUrl` wird von der Eingabeprüfung still
-                    verworfen und hat keine Wirkung: Die Antwort ist `201`,
-                    und die Anhangstabelle bleibt leer (gemessen in
-                    `proof:addin` Abschnitt 18).
+                    **Der Rumpf dieser einen Route darf 72 MiB**
+                    (`ADDIN_ATTACHMENT_MAX_BODY_BYTES`) gegen 1 MB an jeder
+                    anderen Route des Dienstes. Die Ausnahme hängt an dieser
+                    Methode auf diesem Pfad und nicht am Präfix `/addin`: Eine
+                    Ausnahme, deren Menge an einem Präfix aufgespannt ist,
+                    wächst mit jeder Nachbarroute mit, ohne daß es jemand
+                    entscheidet (E-099 Punkt 3).
 
-                    **Und über keine andere Route unter `/addin` entsteht
-                    einer** (A-19.19, F-21). Bis T-247 gab es dafür eine
+                    **Die Zahl steht nicht für sich, sie ist gerechnet**
+                    (A-A-100, T-314): `MAX_EMAIL_ATTACHMENT_TOTAL_BYTES · 4/3`
+                    plus 8 MiB Spielraum für JSON-Gerüst, Namen, Betreff und
+                    Absender. Bis T-314 stand hier die Zahl 64 MiB daneben, und
+                    weil Base64 um **genau** 4/3 aufbläht, war eine Anfrage an
+                    der Summengrenze immer schon über der Rumpfgrenze: Die
+                    fachliche Meldung `total_too_large` konnte über die Leitung
+                    **nie** feuern (fünf Anläufe, alle `413` — T-313-5). Eine
+                    Grenze, die der Transport vorwegnimmt, ist keine Grenze.
+                    Seither greift die fachliche zuerst: Eine Rohsumme über
+                    48 MiB ergibt `201`, das Todo entsteht, und jede nicht
+                    übernommene Datei steht namentlich in `rejected`.
+
+                    **Bis T-304 wurde dieses Feld still verworfen.** `z.object`
+                    streicht unbekannte Schlüssel, statt sie abzuweisen — und
+                    genau deshalb hat der Aufgabenbereich bis dahin nichts
+                    mitgeschickt. Ein Feld, das gesendet und stillschweigend
+                    gestrichen wird, ist der Ausfall, den A-19.31 ausschließt:
+                    Der Aufgabenbereich hätte „3 Anhänge hängen daran" gemeldet,
+                    und es hinge keiner daran.
+
+                    **Anhänge kommen über diese Anfrage sehr wohl dazu** — seit
+                    E-108 und T-304, im Feld `attachments` weiter unten. Der
+                    Unterschied zur Frist bleibt trotzdem der aus E-074 Punkt 3:
+                    Eine Frist ist ein Tag, den die Anwendung **anzeigt**; ein
+                    Anhang ist eine Adresse, die sie auf Klick **öffnet**
+                    (R-21, R-22). Deshalb ist die Frist ein Feld mit einer
+                    Formprüfung, und der Anhang ist eine ganze Datei mit eigener
+                    Herkunft, eigenem Deckel und eigener Rückfrage.
+
+                    **Was es weiterhin nicht gibt, ist ein Anhang an einem
+                    vorhandenen Todo** (A-A-82). Bis T-247 gab es dafür eine
                     schmale Ausnahme: `POST /addin/todos/{todoId}/attachments`
                     hängte den Deep-Link auf die geöffnete Outlook-Nachricht
                     an ein vorhandenes Todo. Diese Route ist ersatzlos
-                    entfernt.
+                    entfernt, und E-108 hat sie nicht zurückgebracht: Der
+                    Unterschied ist nicht die Vorsicht, sondern die
+                    **Reichweite**. Jene Tür nahm eine Kennung entgegen; diese
+                    kann nur an das hängen, was im selben Aufruf entstanden ist.
 
                     Auf diesen Pfad gibt es danach **zwei** richtige
                     Antworten, und sie widersprechen einander nicht, weil sie
@@ -3664,21 +3753,31 @@ paths:
 
                     Zugesagt und gemessen wird deshalb die zweite:
                     `proof:addin` Abschnitt 18f schickt die Anfrage mit einem
-                    **gültigen** Add-in-Token, erwartet `404`, zählt
-                    `todo_attachment` nach und hält als Gegenprobe die
-                    Nachbarroute `…/time-entries` daneben — sie darf weder
-                    `404` noch `401` antworten, sonst spräche der `404`
-                    darüber über den Aufbau der Messung statt über die Route.
+                    **gültigen** Add-in-Token, erwartet `404` und hält als
+                    Gegenprobe die Nachbarroute `…/time-entries` daneben — sie
+                    darf weder `404` noch `401` antworten, sonst spräche der
+                    `404` darüber über den Aufbau der Messung statt über die
+                    Route.
 
                     Diese Beschreibung sagte bis T-247 das Gegenteil — „mit
                     `401`, nicht mit `404`" — und stand damit gegen ihren
                     eigenen Wächter. Gemessen ist der `404`.
 
-                    Anhänge legt, liest und löscht ausschließlich die
-                    Hauptanwendung über `/todos/{todoId}/attachments`. Diese
-                    Routen liegen außerhalb von `/addin`, stehen nicht in
-                    `SHARED_PATHS` und sind für ein Add-in-Token damit
-                    unerreichbar.
+                    **Gemessen wird seit T-304 die Wirkung und nicht der Name.**
+                    Bis dahin zählte Abschnitt 18 „null Zeilen in
+                    `todo_attachment`". Das war die richtige Messung für die
+                    damalige Zusage und wäre für die heutige falsch. Er zählt
+                    jetzt die Zeilen **an einem vorhandenen Todo**: Der Lauf
+                    legt eines über die Haupttür an, ruft danach diese Route mit
+                    Anhängen **und** einer mitgeschickten `todoId` des
+                    vorhandenen Todos — und prüft, daß die Anhänge am **neuen**
+                    Todo hängen und das vorhandene weiterhin null hat.
+
+                    Anhänge an einem vorhandenen Todo legt, liest und löscht
+                    ausschließlich die Hauptanwendung über
+                    `/todos/{todoId}/attachments`. Diese Routen liegen außerhalb
+                    von `/addin`, stehen nicht in `SHARED_PATHS` und sind für
+                    ein Add-in-Token damit unerreichbar.
       responses:
         '201':
           description: Angelegt.
@@ -4030,8 +4129,13 @@ paths:
       summary: Vollständige Takt-Datensicherung erzeugen
       description: |
         Liefert ein versioniertes JSON-Archiv des vollständigen fachlichen
-        Bestands einschließlich Bildanhängen. Sichten, Zugriffstoken und das
+        Bestands einschließlich Bildanhängen und der aus E-Mails übernommenen
+        Dateien — jeweils samt Bytes (A-19.34). Sichten, Zugriffstoken und das
         interne Migrationsbuch sind nicht enthalten.
+
+        Die Antwort hat **keine** Größengrenze; der Rumpf beim Wiedereinspielen
+        hat eine (256 MiB). Überschreitet das Archiv sie, steht das als Satz in
+        `warnings` — mit beiden Zahlen.
       responses:
         '200':
           description: Vollständiges Archiv.
@@ -4049,7 +4153,17 @@ paths:
       tags: [Daten]
       operationId: importDataArchive
       summary: Takt-Datensicherung wiederherstellen
-      description: Ersetzt den fachlichen Bestand atomar durch ein Archiv der unterstützten Fassung.
+      description: |
+        Ersetzt den fachlichen Bestand atomar durch ein Archiv der Fassungen 1
+        bis 6. Jede andere Fassung wird abgewiesen, nicht geraten.
+
+        Der Dateipfad eines aus einer E-Mail übernommenen Anhangs wird dabei
+        **neu gesetzt**: Im Archiv steht der Pfad des Quellrechners, eingespielt
+        wird der hiesige (A-19.34). Ein Archiv der Fassungen 1 bis 5 trägt keine
+        Dateibytes; was dadurch fehlt, nennt `warnings` mit einer Zahl.
+
+        Rumpfgrenze 256 MiB — die einzige Route unter `/data-transfer` mit
+        dieser Ausnahme; die Fremdimporte daneben bleiben bei 64 MB.
       requestBody:
         required: true
         content:
@@ -4228,9 +4342,14 @@ components:
         Sitzungsgeheimnis entsteht bei jedem Start neu, kommt über `stdin` von
         der Hülle und berührt die Platte nie. Ein entwendetes Add-in-Token
         kommt genau so weit, wie die vier Add-in-Operationen reichen — es liest
-        keinen internen Vermerk, ändert keine Einstellung, kann **überhaupt
-        keinen Anhang** anlegen, lesen oder löschen (A-19.19, F-21) und löst
-        keinen Exportlauf aus.
+        keinen internen Vermerk, ändert keine Einstellung, **liest und löscht
+        keinen Anhang** und legt an einem **vorhandenen** Todo keinen an
+        (A-19.19 in der Fassung von E-108), und es löst keinen Exportlauf aus.
+        Was es seit T-304 kann, ist an **ein Todo, das es im selben Ruf
+        anlegt**, die E-Mail und ihre Dateien hängen — mehr Reichweite gibt
+        ihm das nicht: Ein entwendetes Token kann damit Todos mit Dateien
+        erzeugen, aber keines fremden Todos Anhang lesen, ändern oder
+        entfernen.
 
         Die Anforderung fällt am Pfad und nicht an einer gepflegten
         Aufzählung: Eine künftig hinzugefügte Operation außerhalb von `/addin`
@@ -4481,25 +4600,50 @@ components:
         mediaType: { type: string }
         base64: { type: string, description: Bildbytes in Base64-Kodierung. }
 
+    ArchivedFile:
+      type: object
+      required: [name, base64]
+      description: |
+        Eine aus einer E-Mail übernommene Datei samt Bytes (A-19.23, A-19.34).
+        Kein `mediaType`: Was für eine Datei das ist, entscheidet in diesem
+        Bestand niemand (A-A-88).
+      properties:
+        name:
+          type: string
+          pattern: '^[0-9a-f]{32}([.][a-z0-9]{1,16})?$'
+          description: |
+            Der von SuperTakt erzeugte Name, nicht der Pfad und nicht der
+            Anzeigename aus der E-Mail (A-A-78).
+        base64: { type: string, description: Dateibytes in Base64-Kodierung — höchstens 25 MiB dekodiert. }
+
     DataArchive:
       type: object
       required: [format, schemaVersion, createdAt, generator, data, warnings]
       properties:
         format: { type: string, const: de.supertakt.data-archive }
-        schemaVersion: { type: integer, const: 5 }
+        schemaVersion:
+          type: integer
+          const: 6
+          description: |
+            Erzeugt wird stets die Fassung 6. Eingelesen werden 1 bis 6; Fassung
+            6 ist die erste, die `data.files` führt.
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         generator: { type: string, const: Takt }
         data:
           type: object
-          required: [tables, images]
+          required: [tables, images, files]
           properties:
             tables: { $ref: '#/components/schemas/DataArchiveTables' }
             images: { type: array, items: { $ref: '#/components/schemas/ArchivedImage' } }
+            files:
+              type: array
+              description: Neu in Fassung 6. In einem eingelesenen Archiv der Fassungen 1 bis 5 leer.
+              items: { $ref: '#/components/schemas/ArchivedFile' }
         warnings: { type: array, items: { type: string } }
 
     DataImportSummary:
       type: object
-      required: [source, todos, projects, sections, tags, timeEntries, images, warnings]
+      required: [source, todos, projects, sections, tags, timeEntries, images, files, warnings]
       properties:
         source: { type: string, enum: [takt, todoist, super-productivity] }
         todos: { type: integer, minimum: 0 }
@@ -4508,6 +4652,10 @@ components:
         tags: { type: integer, minimum: 0 }
         timeEntries: { type: integer, minimum: 0 }
         images: { type: integer, minimum: 0 }
+        files:
+          type: integer
+          minimum: 0
+          description: Zurückgeschriebene, aus E-Mails übernommene Dateien (A-19.34). Bei Fremdimporten stets 0.
         warnings: { type: array, items: { type: string } }
 
     Id:
@@ -4861,7 +5009,8 @@ components:
         `ExportGroup` tragen kein Anhangsfeld, und `ExportSourcePath` bleibt
         bei zwölf Werten. Eine Vorlage — auch eine beliebige, nicht nur die
         Standardvorlage — kann einen Anhang deshalb gar nicht auflösen (R-06).
-      required: [id, todoId, kind, title, target, position, createdAt]
+      required:
+        [id, todoId, kind, title, target, position, createdAt, origin, originSender, displayName, rebuilt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         todoId: { $ref: '#/components/schemas/Id' }
@@ -4900,6 +5049,69 @@ components:
             Aufrufer setzt sie. Zwei Anhänge auf derselben Stelle machten die
             Reihenfolge wieder zu der der Datenbank.
         createdAt: { $ref: '#/components/schemas/Timestamp' }
+        origin:
+          type: string
+          enum: [user, email]
+          description: |
+            Woher dieser Anhang stammt (A-A-84, Migration 0023).
+
+            * `user` — der Benutzer hat ihn selbst eingetragen. Er weiß, woher
+              die Datei kommt, weil er sie gewählt hat. Das ist der Zustand
+              jedes Anhangs, den es vor A-19.23 gab.
+            * `email` — er ist beim Anlegen eines Todos aus einer E-Mail
+              entstanden (A-19.22, A-19.23). Der häufigste Dateianhang ist
+              damit einer, den ein **Fremder** geschickt hat, und der Benutzer
+              sieht ihn Tage später zwischen seinen eigenen.
+
+            **Eine Eigenschaft und keine Ableitung.** Nicht aus dem Pfad
+            gelesen, nicht aus dem Ordner geraten — sonst hinge die Rückfrage
+            vor einem Programmstart an einer Vermutung. Sie übersteht den
+            Round-Trip der Datensicherung (A-20.4).
+        originSender:
+          oneOf: [{ type: string, minLength: 1, maxLength: 640 }, { type: 'null' }]
+          description: |
+            Der Absender der E-Mail — **fremder Text** (A-A-85). `null` heißt
+            „gibt es nicht"; bei `origin: user` steht hier immer `null`.
+
+            Die Rückfrage vor dem Öffnen nennt ihn: *„Diese Datei stammt aus
+            einer E-Mail von …"*. Er steht deshalb im Bestand und nicht nur in
+            einer Meldung beim Anlegen — die ist drei Wochen später nirgends.
+        displayName:
+          oneOf: [{ type: string, minLength: 1, maxLength: 255 }, { type: 'null' }]
+          description: |
+            Der Name aus der E-Mail — **fremder Text** (A-19.23a). `null` bei
+            jedem Anhang, den der Benutzer selbst eingetragen hat.
+
+            **Getrennt von `title`, und das ist der Punkt.** `title` ist, was
+            der Benutzer gewählt hat (A-19.10); dies ist, was der Absender die
+            Datei genannt hat. Wer beides in ein Feld legte, nähme der
+            anzeigenden Fläche die Auskunft, welche Regeln gelten: Bei diesem
+            Wert ist die **Endung stets sichtbar**, und am Ende wird **nie**
+            gekürzt (A-19.23b, A-A-93) — eine Kürzung am Zeilenende nähme der
+            Rückfrage die Endung, ohne ein einziges Zeichen zu verändern.
+
+            **Auf der Platte steht er nie** (A-A-78). Dort steht ein erzeugter
+            Name aus 32 Hexziffern und der übernommenen Endung. Damit sind
+            Pfadausbruch, Gerätename, Richtungszeichen und Kollision nicht
+            abgewehrt, sondern unmöglich.
+        rebuilt:
+          type: boolean
+          description: |
+            Ist diese Datei ein **Nachbau** statt der ursprünglichen Nachricht?
+            (A-19.22b, A-A-97.)
+
+            `true` nur bei der `.eml` aus A-19.22a, die aus den Office.js-
+            Feldern zusammengesetzt wurde, weil Outlook die Nachricht nicht
+            hergab. Sie trägt denselben Inhalt nach A-19.22 — und **keine** der
+            ursprünglichen Kopfzeilen, kein DKIM, kein S/MIME, keine
+            Empfangsstempel.
+
+            Die Kennzeichnung hängt an der **Datei** und nicht am Augenblick:
+            Sie steht hier, sie steht an der Anhangszeile, sie steht in der
+            Rückfrage vor dem Öffnen, und sie übersteht die Datensicherung.
+            Eine Datei, die für die ursprüngliche Nachricht gehalten werden
+            kann, ohne es zu sein, ist in einem Vorgang, aus dem eine Rechnung
+            wird, eine falsche Auskunft über ein Beweisstück.
 
     AttachmentCreate:
       description: |
@@ -6467,7 +6679,7 @@ components:
         sich nur noch gemeinsam ändern lässt. Dass beide dasselbe sagen, ist
         gewollt und wird gemessen — `proof:addin`, Abschnitt 11 — und nicht
         dadurch erzwungen, dass es nur eine Zeile gibt.
-      required: [todo, addedDefaultTagIds, createdTags]
+      required: [todo, addedDefaultTagIds, createdTags, attachments]
       properties:
         todo: { $ref: '#/components/schemas/Todo' }
         addedDefaultTagIds:
@@ -6482,6 +6694,272 @@ components:
             nur Kennungen, damit der Aufgabenbereich den neuen Namen in seiner
             Erfolgsmeldung zeigen kann, ohne `GET /addin/context` erneut zu
             holen.
+        attachments:
+          oneOf:
+            - { $ref: '#/components/schemas/AddinCreatedAttachments' }
+            - { type: 'null' }
+          description: |
+            Was aus den mitgeschickten Anhängen geworden ist (A-19.29, A-19.33,
+            E-108, seit T-304) — oder `null`, wenn keine mitgeschickt wurden.
+
+            `null` und `{ "stored": 0, "rejected": [] }` sind **nicht**
+            dasselbe. Das erste heißt „es war keiner dabei", das zweite „es
+            waren welche dabei, und keiner ist angekommen"; der Aufgabenbereich
+            schreibt daraus zwei verschiedene Sätze (A-19.31).
+
+    AddinCreatedAttachments:
+      type: object
+      description: |
+        Das Ergebnis der Anhangsübernahme an `POST /addin/todos` (A-19.29,
+        A-19.33).
+
+        **Ohne Pfade, und das ist Absicht.** Der Dienst kennt für jede abgelegte
+        Datei den vollen Pfad im Anwendungsdatenverzeichnis; er steht
+        ausdrücklich nicht in dieser Antwort. Ein Pfad ist eine Ortsangabe über
+        **einen** Rechner und gehört in die Hauptanwendung, die ihn vor dem
+        Öffnen nennen muß (A-19.14) — nicht in ein Browsersteuerelement
+        innerhalb von Outlook.
+
+        Der Aufgabenbereich braucht ihn auch nicht: Er braucht eine **Zahl** für
+        „3 Anhänge hängen daran" und die **Namen** derer, die es nicht geworden
+        sind.
+      required: [stored, rejected]
+      properties:
+        stored:
+          type: integer
+          minimum: 0
+          description: |
+            Wie viele Anhänge am neuen Todo hängen — die Zahl aus A-19.33.
+
+            Sie kommt aus dem Bestand und nicht aus der Zählung des Aufrufers:
+            „3 Anhänge hängen daran" ist eine Aussage über den Bestand, und über
+            den weiß der Dienst Bescheid.
+        rejected:
+          type: array
+          description: |
+            Was der Dienst **nicht** angenommen hat, in der Reihenfolge des
+            Rufs, mit Namen und Grund (A-19.29).
+
+            Was der **Aufgabenbereich** selbst nicht übernehmen konnte, steht
+            hier nicht: Er kennt es, zeigt es an derselben Stelle und hat dafür
+            feinere Gründe als diese Liste. Die Gründe über die Leitung dürfen
+            gröber sein als die auf dem Bildschirm, solange jede Kennung hier
+            auf genau einen Satz dort fällt.
+
+            **Diese Liste kann jede angekündigte Datei enthalten, und die
+            Antwort bleibt trotzdem 201** (E-111). Scheitert das Eintragen der
+            Zeilen als Ganzes — ein Fehler der Speicherung, keine Aussage über
+            eine einzelne Datei —, dann ist `stored` gleich `0`, jede Datei
+            steht hier mit `rejected`, und die bereits abgelegten Bytes sind
+            wieder entfernt (A-A-83). **Kein 500:** Das Todo steht, und eine
+            Fehlerantwort brächte den Aufrufer dazu, es ein zweites Mal
+            anzulegen — mit derselben Call-Nummer. Eine Antwort darf den
+            Aufrufer nicht dazu bringen, etwas zu wiederholen, das bereits
+            geschehen ist. Der Grund des Fehlschlags steht im Protokoll des
+            Dienstes und nicht in dieser Antwort (B-2.4).
+          items:
+            type: object
+            required: [displayName, reason, bytes]
+            properties:
+              displayName:
+                type: string
+                description: |
+                  Der Name aus der E-Mail — **fremder Text** (A-19.23a). Bereits
+                  auf 255 Zeichen gekürzt, und zwar **in der Mitte**: Die Endung
+                  bleibt sichtbar (A-19.23b).
+              reason:
+                type: string
+                enum:
+                  - too_large
+                  - total_too_large
+                  - too_many
+                  - not_released
+                  - timeout
+                  - rejected
+                  - not_a_web_address
+                  - rebuild_rejected
+                  - outlook_too_old
+                description: |
+                  Warum die Datei nicht übernommen wurde — eine **geschlossene
+                  Menge** und kein Freitext (A-19.29, AB-3).
+
+                  Die neun Kennungen stehen in
+                  `packages/domain/src/email-attachment.ts` und sind die einzige
+                  Liste; der **Satz** dazu gehört der Fläche, die ihn zeigt.
+                  Eine Fehlermeldung aus fremder Hand durchzureichen wäre fremder
+                  Text an einer Stelle, an der ein Mensch eine Auskunft von
+                  SuperTakt erwartet, und sie verriete Innenleben (B-2.4).
+
+                  An dieser Tür entstehen davon fünf: `too_large`,
+                  `total_too_large`, `too_many`, `rejected` und
+                  `not_a_web_address`. Die übrigen vier stellt der
+                  Aufgabenbereich fest, bevor ein Byte hier ankommt.
+
+                  **Jede der drei Grenzen hat ihre eigene Kennung** (A-19.30a,
+                  A-19.30b): je Datei `too_large`, Summe `total_too_large`,
+                  Anzahl `too_many`. Bis T-309 meldete eine gerissene
+                  Summengrenze `too_large`, und der Satz daraus nannte die
+                  Grenze je Datei — für eine 2-MB-Datei ein Satz, der sich
+                  selbst widerspricht.
+
+                  **`connection` gibt es seit T-309 nicht mehr.** Niemand
+                  erzeugte ihn: Der Aufgabenbereich sammelt lokal und schickt
+                  genau einmal, und was hier ankommt, ist angekommen. Ein
+                  Grund, den nichts erzeugt, ist eine Zusage, die nie geprüft
+                  wird — dasselbe Urteil wie bei `mailbox_closed` (E-109).
+              bytes:
+                oneOf: [{ type: integer, minimum: 0 }, { type: 'null' }]
+                description: |
+                  Die **gemessene** Größe in Bytes — nur bei `too_large`, sonst
+                  `null`.
+
+                  Auch bei `total_too_large` und `too_many` steht hier
+                  `null`, und das ist Absicht (A-19.30b): Die Größe *dieser*
+                  Datei neben einem Satz über die **Summe** oder die **Anzahl**
+                  wäre eine zweite Aussage, die von etwas anderem handelt als
+                  der Satz daneben.
+
+                  Gemessen und nicht angekündigt (A-A-81): Es ist die Zahl, die
+                  aus der Base64-Zeichenkette folgt und danach am dekodierten
+                  Puffer bestätigt wird, nicht die, die jemand danebengeschrieben
+                  hat.
+
+    AddinEmailAttachmentSupport:
+      type: object
+      description: |
+        **Daß** dieser Dienst Anhänge aus einer E-Mail annimmt (A-19.22, E-108,
+        seit T-304).
+
+        **Hier stehen keine Grenzen.** Die drei Zahlen aus A-A-81 — 25 MB je
+        Datei, 48 MB in der Summe, 25 Stück — sind eine Fachregel und stehen in
+        `packages/domain/src/email-attachment.ts`. Der Aufgabenbereich liest sie
+        von dort; er führt `@takt/domain` ohnehin. Dieselbe Zahl über zwei Wege
+        zu verteilen ist die Gelegenheit, sie verschieden zu ändern.
+
+        Was hier stehen **muß** und nirgends sonst stehen kann, ist die Auskunft
+        über den laufenden Dienst: Add-in und Dienst werden getrennt installiert
+        und können auseinanderlaufen. Ein neuer Aufgabenbereich an einem älteren
+        Dienst sammelte sonst Anhänge ein, deren Tür das Feld nicht liest — und
+        verlöre sie still (A-19.31).
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+          description: |
+            `true` heißt: `POST /addin/todos` liest das Feld `attachments`.
+
+            Heute immer `true` — der Dienst, der diese Zeile ausliefert, ist
+            derselbe, der die Tür führt. Ein `false` wäre eine Behauptung über
+            eine Fläche, die es in demselben Erzeugnis gibt.
+
+    AddinEmailAttachments:
+      type: object
+      description: |
+        Die Anhänge der geöffneten E-Mail, im Rumpf von `POST /addin/todos`
+        (A-19.22 bis A-19.33, E-108, seit T-304).
+
+        **Warum im Rumpf des Anlegens und nicht in einer zweiten Anfrage.** Weil
+        eine zweite Anfrage eine Todo-Kennung tragen müßte. Es gibt unter
+        `/addin` keinen Aufruf, der eine Todo-Kennung entgegennimmt und einen
+        Anhang erzeugt — weder eine Route noch ein Feld noch einen Parameter
+        der Fähigkeit dahinter. Anhänge entstehen ausschließlich in **derselben**
+        Handlung, die das Todo entstehen läßt.
+
+        **Der Absender steht am Umschlag**, nicht am einzelnen Anhang: Er gehört
+        der Nachricht. Am Eintrag stünde er zwanzigmal, und zwei Anhänge
+        derselben Anfrage könnten zwei verschiedene Herkünfte behaupten — die
+        Rückfrage vor dem Öffnen läse Wochen später eine davon vor.
+
+        **Es gibt keine Größenangabe.** `AttachmentDetails.size` aus Office.js
+        ist eine Behauptung des Absenders und keine Grenze; was nicht da ist,
+        kann nicht geglaubt werden. Gezählt wird an der Zeichenkette und danach
+        am dekodierten Puffer.
+      properties:
+        sender:
+          oneOf: [{ type: string, maxLength: 2048 }, { type: 'null' }]
+          default: null
+          description: |
+            Der Absender der E-Mail — **fremder Text** (A-A-84, A-A-85).
+            `null`, wenn Outlook keinen hergab.
+
+            Er geht als Eigenschaft an jeden Anhang dieses Laufs und steht
+            Wochen später in der Rückfrage vor dem Öffnen („Diese Datei stammt
+            aus einer E-Mail von …"). Ein Wert, den es nur im Augenblick des
+            Anlegens gäbe, wäre dann nicht mehr da.
+
+            Der Deckel hier liegt **über** der Fachgrenze (640 Zeichen): Was
+            länger ankommt, wird gekürzt und nicht abgewiesen.
+        items:
+          type: array
+          maxItems: 100
+          default: []
+          description: |
+            Die Anhänge, in der Reihenfolge der Nachricht — **drei Gestalten**,
+            unterschieden am `kind`.
+
+            `maxItems` liegt bewußt **über** der Fachgrenze von 25 Stück: Die
+            26. Datei wird namentlich abgewiesen (`rejected`), wie A-19.29 es
+            verlangt. Läge der Deckel auf 25, bekäme der Benutzer statt dessen
+            ein `422` über die ganze Anfrage — kein Todo, keine Namen, kein
+            Grund je Datei, und das für Anhänge, die nicht er ausgewählt hat.
+          items:
+            oneOf:
+              - type: object
+                required: [kind, displayName, contentBase64, rebuilt]
+                properties:
+                  kind: { type: string, enum: [message] }
+                  displayName: { type: string, minLength: 1, maxLength: 1020 }
+                  contentBase64: { type: string, minLength: 1, maxLength: 67108864 }
+                  rebuilt:
+                    type: boolean
+                    description: |
+                      `true` heißt: **nachgebaut**, nicht das Original
+                      (A-19.22a, A-19.22b, A-A-97).
+
+                      Outlook gab die ursprüngliche Nachricht nicht als Datei
+                      her, und der Aufgabenbereich hat sie aus den verfügbaren
+                      Angaben zusammengesetzt. Die Kennzeichnung geht in den
+                      Bestand, übersteht den Round-Trip der Datensicherung und
+                      steht später an der Anhangszeile **und** in der Rückfrage
+                      vor dem Öffnen. Ein Hinweis, der nur beim Anlegen
+                      erschiene, ist drei Wochen später nirgends.
+
+                      **Nur die Nachricht trägt dieses Feld.** Ein gewöhnlicher
+                      Dateianhang kann strukturell nicht als Nachbau
+                      gekennzeichnet werden — nachgebaut wird eine Nachricht.
+                description: |
+                  Die **E-Mail selbst** als Datei (A-19.22). Genau eine je
+                  Anlegeruf; eine zweite wird als gewöhnlicher Dateianhang
+                  behandelt und nicht stillschweigend fallengelassen.
+              - type: object
+                required: [kind, displayName, contentBase64]
+                properties:
+                  kind: { type: string, enum: [file] }
+                  displayName: { type: string, minLength: 1, maxLength: 1020 }
+                  contentBase64: { type: string, minLength: 1, maxLength: 67108864 }
+                description: |
+                  Ein **Dateianhang** derselben E-Mail (A-19.23, A-19.26).
+
+                  `displayName` ist **fremder Text** und wird nie ein
+                  Pfadbestandteil (A-A-78). Den Namen auf der Platte erzeugt
+                  SuperTakt; aus dem fremden Namen wird genau eine Angabe
+                  übernommen — die Endung, kleingeschrieben, auf `[a-z0-9]` und
+                  16 Zeichen beschränkt.
+              - type: object
+                required: [kind, displayName, url]
+                properties:
+                  kind: { type: string, enum: [link] }
+                  displayName: { type: string, minLength: 1, maxLength: 1020 }
+                  url: { type: string, minLength: 1, maxLength: 2048 }
+                description: |
+                  Ein **Cloud-Anhang** (A-19.25) — ein Verweis, keine Datei.
+
+                  Die Adresse wird gegen A-A-2 und A-A-3 geprüft und **in ihrer
+                  Normalform** gespeichert: Was im Bestand steht, ist genau das,
+                  was angezeigt und was geöffnet wird. Eine Adresse, die dabei
+                  fällt, wird nach A-19.29 mit `not_a_web_address` gemeldet und
+                  nicht gespeichert — andernfalls entstünde ein Anhang, der von
+                  Anfang an tot ist, während die Antwort „übernommen" meldete.
 
     AddinTodoMatch:
       type: object

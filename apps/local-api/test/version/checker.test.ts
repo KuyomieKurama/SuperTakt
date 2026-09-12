@@ -66,18 +66,27 @@ afterEach(() => {
  * Ein echter, migrierter Bestand samt dem Adapter, den `composition.ts`
  * zwischen `VersionCheckStatePort` (Zeitstempel) und `VersionCheckStorePort`
  * (`Date`) baut — wörtlich dieselbe Verdrahtung, damit dieser Prüffall genau
- * die Naht mißt, durch die T-279 tatsächlich läuft, und nicht eine eigene
- * Nachbildung davon.
+ * die Naht mißt, durch die die Versionsprüfung tatsächlich läuft, und nicht
+ * eine eigene Nachbildung davon.
+ *
+ * Seit T-285 hat `VersionCheckStorePort` **kein `read` mehr** — der Prüfer
+ * schreibt, er liest nicht (E-106). `versionCheckState` wird trotzdem
+ * zurückgegeben: Es ist die einzige Naht, an der ein Prüffall den
+ * geschriebenen Wert unabhängig vom Prüfer nachweisen kann (Fall „der
+ * Zeitpunkt steht bereits im Speicher" unten).
  */
-async function openStoreBackedDatabase(): Promise<{ readonly database: OpenedDatabase; readonly store: VersionCheckStorePort }> {
+async function openStoreBackedDatabase(): Promise<{
+  readonly database: OpenedDatabase;
+  readonly store: VersionCheckStorePort;
+  readonly versionCheckState: ReturnType<typeof createVersionCheckStatePort>;
+}> {
   const database = openDatabase({ location: ':memory:', now: () => toTimestamp(new Date()) });
   await database.migrations.migrateToLatest();
   const versionCheckState = createVersionCheckStatePort(database.connection);
   const store: VersionCheckStorePort = {
-    read: () => versionCheckState.lastCheckAt(),
     write: (at: Date) => versionCheckState.recordCheck(toTimestamp(at)),
   };
-  return { database, store };
+  return { database, store, versionCheckState };
 }
 
 describe('createVersionChecker — "er tut nichts, bis start() gerufen wird"', () => {
@@ -366,15 +375,29 @@ describe('A-V-12 — stop() beendet einen laufenden Aufruf und räumt den Zeitge
 });
 
 /**
- * T-280 — Befund aus dem T-279-Bericht des domain-dev: „Ein Neustart fragt
- * nicht erneut" ist der Satz, der die zweite Verschärfung trägt, und er
- * braucht die Gegenprobe OHNE Speicher — sonst wird er über einer leeren
- * Menge wahr. Beide Fälle stehen deshalb nebeneinander, am selben Aufbau,
- * und beide gegen den ECHTEN Adapter aus `packages/storage` (nicht gegen eine
- * eigene Nachbildung des Speichers).
+ * E-106 — Rücknahme der Prozeßgrenzen-Sperre aus T-279 (T-285): Ein
+ * Programmstart prüft **immer einmal**. Der Mindestabstand aus A-V-11 gilt
+ * **innerhalb** eines Prüflaufs, nicht über Prozeßgrenzen hinweg. Der
+ * Bestandswert (`app_setting.last_version_check_at`, Migration 0022) bleibt
+ * — er wird weiter geschrieben und nimmt am Round-Trip der Datensicherung
+ * teil (A-20.4) —, aber kein Betriebspfad liest ihn mehr, um eine Anfrage
+ * aufzuhalten.
+ *
+ * Bis T-285 stand hier das Gegenteil (T-279/T-280): „der zweite Prüfer fragt
+ * NICHT erneut". T-285 hat das umgedreht, weil genau dieser Satz TP-VER-11
+ * lahmgelegt hat — der einzige E2E-Fall, der den Dienst neu startet, fiel in
+ * die Zeitüberschreitung, weil ein neu gestarteter Dienst gar nicht mehr
+ * fragte. Die beiden ersten Fälle hier stehen deshalb bewußt als Paar: der
+ * eine zeigt, daß ein neuer Prüfer trotz frischem Bestandswert fragt, der
+ * andere zeigt die Gegenrichtung, daß der Boden INNERHALB desselben Laufs
+ * unverändert hält — sonst wäre aus „kein Boden über Prozeßgrenzen" ein „gar
+ * kein Boden mehr" geworden.
+ *
+ * Beide gegen den ECHTEN Adapter aus `packages/storage` (nicht gegen eine
+ * eigene Nachbildung des Speichers) — dieselbe Bauart wie zuvor unter T-280.
  */
-describe('T-279/T-280 — der Bezugspunkt des Bodens überlebt einen "Neustart" (Migration 0022)', () => {
-  it('zwei Prüfer auf demselben Speicher: der zweite fragt NICHT erneut — der Boden hält über die Prozeßgrenze', async () => {
+describe('E-106 — ein Programmstart prüft immer einmal; der Boden gilt innerhalb eines Laufs (Migration 0022)', () => {
+  it('zwei Prüfer nacheinander auf demselben Speicher: der zweite fragt TROTZDEM — der Boden hält nicht über die Prozeßgrenze', async () => {
     const { database, store } = await openStoreBackedDatabase();
     try {
       const counting1 = countingSource(async () => ({ ok: true, version: '1.0.0' }));
@@ -393,8 +416,11 @@ describe('T-279/T-280 — der Bezugspunkt des Bodens überlebt einen "Neustart" 
       checker1.stop();
 
       // "Neustart": ein zweiter, unabhängiger Prüfer — neuer Prozeß, gleicher
-      // Bestand. Derselbe `store`-Adapter, aber eine frisch gebaute Prüfer-
+      // Bestand, derselbe `store`-Adapter, aber eine frisch gebaute Prüfer-
       // Instanz, so wie ein neu gestarteter Sidecar eine frische Instanz wäre.
+      // E-106: `lastRequestAt` dieser Instanz ist `null`, der Bestand wird
+      // dafür nicht befragt — also fragt sie sofort, obwohl der Wert im
+      // Bestand nur Sekundenbruchteile alt ist.
       const counting2 = countingSource(async () => ({ ok: true, version: '1.0.0' }));
       const checker2 = createVersionChecker({
         logger: silentLogger,
@@ -407,53 +433,65 @@ describe('T-279/T-280 — der Bezugspunkt des Bodens überlebt einen "Neustart" 
       });
       checkers.push(checker2);
       checker2.start();
-      // Genug Zeit für einen Aufruf, der ohne Boden fällig wäre (startDelayMs 5).
-      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(counting2.calls()).toBe(0);
+      // Deutlich unter dem Boden von 30 000 ms: Hielte der Boden noch über die
+      // Prozeßgrenze, bliebe counting2 hier bei 0 und der Aufruf liefe in die
+      // Zeitüberschreitung.
+      await waitUntil(() => counting2.calls() === 1, 500);
+      expect(counting2.calls()).toBe(1);
     } finally {
       database.close();
     }
   });
 
-  it('Gegenprobe: OHNE Speicher fragt der "neue" Prüfer sehr wohl erneut — sonst wäre der obige Satz über einer leeren Menge wahr', async () => {
-    const counting1 = countingSource(async () => ({ ok: true, version: '1.0.0' }));
-    const checker1 = createVersionChecker({
-      logger: silentLogger,
-      now: () => new Date(),
-      source: counting1.source,
-      startDelayMs: 5,
-      intervalMs: 10_000,
-      minIntervalMs: 30_000,
-      // kein store — das Verhalten von vor T-279.
-    });
-    checkers.push(checker1);
-    checker1.start();
-    await waitUntil(() => counting1.calls() === 1);
-    checker1.stop();
+  it('Gegenrichtung: INNERHALB eines Laufs hält der Boden weiterhin, auch mit angeschlossenem Speicher — derselbe Prüfer fragt nach einem Fehlschlag nicht sofort wieder', async () => {
+    // Ohne diesen Fall wäre der obige Satz leicht als „gar kein Boden mehr"
+    // mißzuverstehen. Er ist derselbe Aufbau wie „aber NICHT sofort" oben
+    // (A-V-11), diesmal ausdrücklich MIT dem echten `store` — damit ein Leser
+    // sieht, daß der angeschlossene Speicher am Boden innerhalb des Laufs
+    // nichts ändert.
+    const { database, store } = await openStoreBackedDatabase();
+    try {
+      const zeitpunkte: number[] = [];
+      const counting = countingSource(async () => {
+        zeitpunkte.push(Date.now());
+        return { ok: false, reason: 'unreachable' };
+      });
+      const checker = createVersionChecker({
+        logger: silentLogger,
+        now: () => new Date(),
+        source: counting.source,
+        startDelayMs: 5,
+        intervalMs: 10_000,
+        minIntervalMs: 300,
+        store,
+      });
+      checkers.push(checker);
 
-    const counting2 = countingSource(async () => ({ ok: true, version: '1.0.0' }));
-    const checker2 = createVersionChecker({
-      logger: silentLogger,
-      now: () => new Date(),
-      source: counting2.source,
-      startDelayMs: 5,
-      intervalMs: 10_000,
-      minIntervalMs: 30_000,
-    });
-    checkers.push(checker2);
-    checker2.start();
-    await waitUntil(() => counting2.calls() === 1);
+      checker.start();
+      await waitUntil(() => counting.calls() === 1);
 
-    expect(counting2.calls()).toBe(1);
+      // 200 ms nach dem Fehlschlag: der Boden von 300 ms ist noch nicht um.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(counting.calls()).toBe(1);
+
+      // Und er stimmt auch gemessen, nicht nur gezählt.
+      await waitUntil(() => counting.calls() === 2, 3_000);
+      expect(zeitpunkte[1]! - zeitpunkte[0]!).toBeGreaterThanOrEqual(300);
+    } finally {
+      database.close();
+    }
   });
 
-  it('der Zeitpunkt steht bereits IM Speicher, während die Anfrage noch läuft — geschrieben wird vor dem fetch, nicht danach (T-279)', async () => {
-    const { database, store } = await openStoreBackedDatabase();
+  it('der Zeitpunkt steht bereits IM Speicher, während die Anfrage noch läuft — geschrieben wird vor dem fetch, nicht danach (T-279, unverändert gültig)', async () => {
+    // `store` selbst hat seit T-285 kein `read` mehr (E-106) — gemessen wird
+    // deshalb über `versionCheckState.lastCheckAt()`, derselben Naht, über die
+    // auch die Datensicherung liest (A-20.4).
+    const { database, store, versionCheckState } = await openStoreBackedDatabase();
     try {
       let duringRequest: string | null | undefined;
       const counting = countingSource(async () => {
-        duringRequest = await store.read();
+        duringRequest = await versionCheckState.lastCheckAt();
         return { ok: true, version: '1.0.0' };
       });
       const checker = createVersionChecker({
@@ -475,42 +513,11 @@ describe('T-279/T-280 — der Bezugspunkt des Bodens überlebt einen "Neustart" 
     }
   });
 
-  it('ein lesend werfender Speicher beendet die Prüfung nicht und protokolliert genau EINE Zeile ("_unreadable")', async () => {
-    const lines: string[] = [];
-    const logger = createLogger((line) => lines.push(line));
-    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
-    const throwingStore: VersionCheckStorePort = {
-      read: () => Promise.reject(new Error('Speicher kaputt (Lesen)')),
-      write: async () => undefined,
-    };
-    const checker = createVersionChecker({
-      logger,
-      now: () => new Date(),
-      source: counting.source,
-      startDelayMs: 5,
-      intervalMs: 10_000,
-      minIntervalMs: 20,
-      store: throwingStore,
-    });
-    checkers.push(checker);
-
-    checker.start();
-    await waitUntil(() => checker.current().state === 'known');
-    // Ein Herzschlag, damit ein zweiter (fälschlicher) Versuch sichtbar würde.
-    await new Promise((resolve) => setTimeout(resolve, 60));
-
-    const unreadable = lines.filter((line) => line.includes('version_check_state_unreadable'));
-    expect(unreadable.length).toBe(1);
-    // Die Prüfung selbst lief trotzdem durch — kein Wurf verließ `run()`.
-    expect(checker.current()).toEqual({ state: 'known', latestVersion: '1.0.0' });
-  });
-
   it('ein schreibend werfender Speicher beendet die Prüfung nicht und protokolliert genau EINE Zeile ("_unwritable")', async () => {
     const lines: string[] = [];
     const logger = createLogger((line) => lines.push(line));
     const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
     const throwingStore: VersionCheckStorePort = {
-      read: async () => null,
       write: () => Promise.reject(new Error('Speicher kaputt (Schreiben)')),
     };
     const checker = createVersionChecker({
@@ -531,6 +538,36 @@ describe('T-279/T-280 — der Bezugspunkt des Bodens überlebt einen "Neustart" 
     const unwritable = lines.filter((line) => line.includes('version_check_state_unwritable'));
     expect(unwritable.length).toBe(1);
     expect(checker.current()).toEqual({ state: 'known', latestVersion: '1.0.0' });
+  });
+
+  it('die Spalte wird weiter geschrieben — vor jeder ausgehenden Anfrage, unabhängig davon, daß sie kein Betriebspfad mehr liest (A-20.4)', async () => {
+    // Der einzige verbliebene Zweck des Bestandswerts ist der Round-Trip der
+    // Datensicherung (A-20.4). Ein Prüffall, der das Schreiben unabhängig vom
+    // Prüfer nachweist, verhindert, daß die Spalte beim nächsten Aufräumen als
+    // „ungenutzt" fällt — genau die Sorge aus dem T-285-Bericht.
+    const { database, store, versionCheckState } = await openStoreBackedDatabase();
+    try {
+      expect(await versionCheckState.lastCheckAt()).toBeNull();
+
+      const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+      const checker = createVersionChecker({
+        logger: silentLogger,
+        now: () => new Date(),
+        source: counting.source,
+        startDelayMs: 5,
+        store,
+      });
+      checkers.push(checker);
+
+      checker.start();
+      await waitUntil(() => counting.calls() === 1);
+
+      const written = await versionCheckState.lastCheckAt();
+      expect(written).not.toBeNull();
+      expect(typeof written).toBe('string');
+    } finally {
+      database.close();
+    }
   });
 });
 

@@ -87,8 +87,13 @@ Deshalb stehen sie hier vorn und nicht am Ende eines Nachtrags.
 > — sie ist von einer richtigen nicht zu unterscheiden und überlebt jede Gegenprobe, die dieselbe
 > Fixtur benutzt. Wo eine ältere Messung die Wartezeit nicht hatte, gilt ihr **dunkler** Teil als
 > ungeprüft; der helle ist unberührt, weil beim Laden im hellen Thema kein Übergang läuft.
-> **Nicht betroffen sind Maße:** Breiten, Höhen und Abstände hängen an keinem Themenblock — dort
-> genügt ein Thema (11.7).
+> **Nicht betroffen sind Maße — aber nur, was den _Farbmodus_ angeht** (berichtigt in 15):
+> Breiten, Höhen und Abstände hängen an keinem **Farb**block, dort genügt ein Modus (11.7). An
+> einer **Gestaltung** hängen sie sehr wohl: `:root[data-design-theme="clear"]` setzt
+> `--text-2xs` von 11 auf 12 px und `--sidebar-width` von 240 auf 216 px (`tokens.css:655-659`),
+> und T-281 hat gemessen, was das kostet — die Umbruchschwelle der Kanban-Kopfzeile verschiebt
+> sich dadurch von 308 auf **324 px**. Wer ein Maß mißt, mißt deshalb **einen** Farbmodus und
+> **jede** Gestaltung, die ein Maß- oder Typotoken neu setzt.
 
 > **Regel T-7 — eine Berichtigung steht an der Stelle, die sie berichtigt.** Ein Nachtrag am Ende
 > eines Papiers ist die **Herleitung**, nicht der **Ort**. Was verbindlich wird, wird in den
@@ -2225,9 +2230,14 @@ zeilenlokal. Der Auftrag lautet deshalb:
    `.eentry__spacer`, und der ist `width: 0` (`components.css:3169-3172`) — die reopened-Zeile ist
    die schmalste Lesefläche der Liste, und sie ist es **nur** in ihrer eigenen Zeile. Dazu eine
    lange Leistung aus `tests/fixtures/`.
-2. **Zu messen bei 1280×720 und 1024×640** — beides bleibt. **Ein Thema genügt:** Breiten hängen an
-   keinem Themenblock (Regel T-6, letzter Satz). Wer beide misst, misst dieselbe Zahl zweimal; wer
-   dabei umschaltet, wartet trotzdem 600 ms, sonst mißt er nebenbei eine Zwischenfarbe.
+2. **Zu messen bei 1280×720 und 1024×640** — beides bleibt. **Ein Farbmodus genügt:** Breiten
+   hängen an keinem Farbblock (Regel T-6, letzter Satz, in der berichtigten Fassung). Wer beide
+   misst, misst dieselbe Zahl zweimal; wer dabei umschaltet, wartet trotzdem 600 ms, sonst mißt er
+   nebenbei eine Zwischenfarbe. **Eine Gestaltung genügt hier ebenfalls, aber nicht mehr
+   selbstverständlich, sondern gerechnet:** `clear` verschmälert die Seitenleiste um 24 px und
+   macht die Zeile damit **breiter**; `classic` ist also der schlechtere Fall und der richtige
+   Meßpunkt. Ein `--text-2xs` kommt in `.eentry` nicht vor (`.badge` steht auf `--text-xs`).
+   Beides ist nachgesehen und nicht angenommen (T-283, Nachtrag 15).
 3. **Festzuhalten sind zwei Zahlen je Fenster:** die Pixelbreite von `.eentry__note` und die Zahl
    der Zeichen, die vor dem `truncate` stehen bleiben.
 4. **Die Schwelle bleibt, ihr Ort ändert sich:** Bleiben in der Zeile aus Punkt 1 **weniger als
@@ -2633,3 +2643,56 @@ strenge Schranke gilt leicht als die vorsichtige Wahl. Sie ist es nicht: Sie erk
 Fläche für zu kurz und liefert damit den Grund, eine Gestalt zu ändern, die in Ordnung ist. Der
 Schaden einer falschen Schranke hängt nicht an ihrer Richtung, sondern daran, daß jemand nach ihr
 handelt.
+
+---
+
+# 15. Nachtrag T-283 — ein Maß hängt doch an einem Block, nur nicht an dem vermuteten
+
+**Vorlage:** T-281 (Messung), T-283 (Urteil). Die Gestaltentscheidung selbst steht in
+`docs/design/kartenkopf-board.md` und wird hier **nicht** wiederholt. Hierher gehört genau das,
+was an **diesem** Papier zu berichtigen war.
+
+**Was hier stand.** Regel T-6 endete mit: *„Nicht betroffen sind Maße: Breiten, Höhen und Abstände
+hängen an keinem Themenblock — dort genügt ein Thema."* Der Satz war als Erleichterung gemeint:
+Wer eine Breite mißt, soll nicht zweimal messen.
+
+**Was ihn widerlegt.** Er sagt „Thema" und meint „Farbmodus". Takt hat aber **zwei** Achsen, und
+sie sind ausdrücklich getrennt (A-21, `theme.ts:74`: „Gestaltung und Farbmodus belegen getrennte
+Attribute"). Auf der zweiten liegt ein Block, der Maße setzt:
+
+```
+:root[data-design-theme="clear"] {   /* tokens.css:655-659 */
+  --sidebar-width: 13.5rem;          /* statt 15rem  */
+  --text-2xs: 0.75rem;               /* statt 0.6875rem */
+}
+```
+
+Gemessen von frontend-dev in T-281, Chromium, an der Kopfzeile der Kanban-Karte: Die Breite, ab der
+die Zeile überläuft, liegt in der Regelgestaltung bei **308 px** und unter dieser Gestaltung bei
+**324 px**. Derselbe Bestand, dasselbe Bauteil, dieselbe Engine, **16 px Unterschied** — allein aus
+einer Gestaltung. Hätte T-281 nur die Regelgestaltung gemessen, wäre die Aussage „bis 336 px ist
+alles in Ordnung" entstanden, und sie wäre für einen Teil der Benutzer falsch gewesen.
+
+**Die berichtigte Fassung steht in 0.1** (Regel T-7). Sie lautet: ein **Farbmodus** genügt, **jede
+Gestaltung**, die ein Maß- oder Typotoken neu setzt, muß mit.
+
+**Wie viele das sind, und warum die Antwort trotzdem keine Entwarnung ist.** Nachgesehen in
+`apps/web/src/styles/theme-palettes.css`: Die neunzehn wählbaren Gestaltungen setzen ausschließlich
+Farben; der Kopf der Datei sagt es selbst („Surface effects do not change layout, typography, or
+interaction geometry"). Es ist also **genau eine** — `clear` —, und sie ist nicht einmal mehr
+auswählbar: `themePresets.ts:33-36` bildet sie beim Setzen auf `classic` ab. **Trotzdem kommt sie
+vor.** Der frühe Startskript `apps/web/public/startup-appearance.js:10` prüft den Wert aus dem
+Zwischenspeicher gegen eine **Form** (`/^[a-z-]{1,40}$/`) und nicht gegen die Liste — ein
+Alteintrag setzt `data-design-theme="clear"` für die Zeit bis zum Hochlauf der Anwendung. Die
+Gestaltung mit den abweichenden Maßen ist damit unerreichbar und sichtbar zugleich.
+
+**Die Lehre, und sie ist dieselbe wie in B-22, eine Achse weiter:** Ein Satz, der eine ganze
+Klasse von Messungen für überflüssig erklärt, muß seine Klasse **benennen** und nicht bloß meinen.
+„Thema" hat hier zwei Bedeutungen, und die Regel galt nur für eine davon. Der Irrtum kostet nichts,
+solange niemand nach ihm mißt — und er kostet eine ganze Meßreihe, sobald es jemand tut.
+
+**B-24 — eine Regel, die eine Messung erspart, ist gefährlicher als eine, die eine verlangt.** T-6
+hat in seinem ersten Teil (600 ms warten) eine Messung **hinzugefügt** und in seinem letzten eine
+**erlassen**. Der hinzugefügte Teil hat sich in drei Wellen bewährt; der erlassene war von Anfang
+an zu weit. Wer eine Erleichterung in eine Regel schreibt, schreibt die Bedingung dazu, unter der
+sie gilt — sonst wird aus „hier genügt eins" ein „überall genügt eins".

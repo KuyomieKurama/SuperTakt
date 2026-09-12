@@ -248,10 +248,18 @@ describe('TP-NOTE-02 — Eigenschaftstest: der Todo-Marker erscheint in KEINER g
     const base64Result = renderExportGroup(group, builtinTemplate, context);
     const base64Serialized = JSON.stringify(base64Result);
     const mergedTextEncoded = toBase64(`${BOOKING_MARKER_A}; ${BOOKING_MARKER_B}`);
-    // Die genaue Zusammenführung ist Gegenstand von note-merging.test.ts; hier
-    // genügt der Nachweis, dass IRGENDEINE base64-Form mit den Buchungsmarkern
-    // auftaucht — der Zweck ist die Gegenprobe, nicht die Zusammenführungsregel.
-    expect(base64Serialized === mergedTextEncoded || base64Serialized.length > 2).toBe(true);
+    // T-321: Die vorige Fassung dieser Zusicherung war
+    // `base64Serialized === mergedTextEncoded || base64Serialized.length > 2`
+    // — das zweite Glied ist für JEDES gerenderte, nicht-triviale JSON-Objekt
+    // wahr (gemessen: schon ein leeres Notizfeld ergibt eine Länge von 50),
+    // unabhängig davon, ob der Buchungsmarker je erschien. Die Gegenprobe war
+    // damit für genau den Fall wirkungslos, den R-18 als Risiko benennt: eine
+    // Vorlage, die das Feld über `base64` ausgibt. `toContain` prüft
+    // stattdessen, dass die base64-Form der zusammengeführten Buchungsmarker
+    // tatsächlich als Teilzeichenkette im serialisierten Ergebnis auftaucht;
+    // die genaue Zusammenführungsregel selbst ist weiterhin Gegenstand von
+    // note-merging.test.ts, nicht dieser Datei.
+    expect(base64Serialized).toContain(mergedTextEncoded);
   });
 
   it('TP-NOTE-01 ergänzend: selbst wenn jemand versucht hätte, "todo.notiz" in eine generierte Vorlage zu schmuggeln, lehnt die Validierung sie vorher ab', () => {

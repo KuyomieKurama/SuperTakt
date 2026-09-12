@@ -2785,3 +2785,239 @@ falsche Kommentar beschrieb nicht den Code, sondern die **geprüfte** Wirklichke
 (`export-status.ts:257`). Ein Satz, der die Testlücke beschreibt und für eine Beschreibung der
 Regel gehalten wird, ist unauffällig, solange beide dasselbe sagen — und genau deshalb fällt er
 nicht auf.
+
+## E-105 — Eine unbekannte Gestaltung wird klassisch dargestellt, nicht verworfen
+
+**Anlaß:** T-284. `startup-appearance.js` prüfte die Gestaltung aus dem Zwischenspeicher gegen
+eine **Form** (`/^[a-z-]{1,40}$/`), während die drei Nachbarwerte in derselben Abfrage gegen
+ausgeschriebene **Listen** geprüft werden. Ein Altwert setzte damit `data-design-theme` auf jede
+Zeichenkette aus Kleinbuchstaben — darunter `clear`, das seit A-21 nicht mehr wählbar ist und
+im Hochlauf gemessen andere Maße trug (`--text-2xs: .75rem` gegen `.6875rem`).
+
+**Entscheidung.**
+
+1. Geprüft wird gegen die **Liste**, wie bei `theme`, `mode` und `density`.
+2. Ein unbekannter Wert wird **auf `classic` abgebildet**, nicht verworfen — und das gilt über
+   `clear` hinaus für jeden unbekannten Wert. `CLAUDE.md` sagt zu A-21 „die alte Auswahl `clear`
+   wird klassisch dargestellt"; die Verallgemeinerung folgt demselben Gedanken: Klassisch **ist**
+   der Standard, und ein Hochlauf, der eine unbekannte Angabe fallen läßt, zeigt einen anderen
+   Zustand als einer, der sie abbildet. Zwei Wege zum selben Bild sind schlechter als einer.
+3. Der erzwungene Farbmodus fällt mit zurück: `mode` im Zwischenspeicher ist die Betriebsart der
+   **gespeicherten** Gestaltung, und `classic` ist `auto`.
+
+**Zur Abschrift, die bleibt.** Die Liste steht zweimal — einmal in `themePresets.ts`, einmal im
+Hochlauf. Sie beim Bau zu erzeugen hätte den Bündler in genau den Pfad gezogen, dessen Zusage
+lautet, **ohne** Bündler zu laufen (A-21.4, T-060), und die einzige von Hand prüfbare Datei im
+Auslieferungsbündel zu einem Erzeugnis gemacht. Die Abschrift bleibt deshalb — aber sie kann
+nicht **still** altern: Der Prüffall fährt den Hochlauf einmal je Eintrag beider Listen; ein
+fehlender Eintrag macht genau zwei Fälle rot.
+
+Das ist die allgemeine Antwort auf den Befund, der dieser Sitzung zehnmal begegnet ist: **Wenn
+eine Menge kopiert werden muß, wird die Kopie gegen die Quelle gemessen** — nicht gegen ihre
+eigene Form.
+
+## E-106 — Der Mindestabstand gilt im Lauf, nicht über Neustarts (hebt T-279 teilweise auf)
+
+**Anlaß:** T-279 hat den letzten Prüfzeitpunkt in den Bestand geschrieben, damit der Boden aus
+A-V-11 einen Neustart des Sidecars überlebt. Der gemessene Hebel davor: rund 344 Anfragen je
+Stunde durch wiederholte Starts gegen 24 je Tag im Betrieb.
+
+**Der Preis war beim Entscheiden nicht sichtbar**, und ein Prüffall hat ihn gefunden:
+`TP-VER-11` — der einzige, der den Dienst neu startet — fiel danach in die Zeitüberschreitung,
+weil der neu gestartete Dienst **gar nicht mehr fragte**. Verschärfend: Der Boden wird **vor**
+dem `fetch` geschrieben (richtig so, sonst umginge ein Absturz ihn), also setzt ihn auch ein
+**fehlgeschlagener** Versuch.
+
+Damit galt: Start ohne Netz um 9:00, Neustart um 9:10 — keine Prüfung bis 10:00. Ausgerechnet
+der Griff, zu dem ein Benutzer greift, wenn er vermutet, die Prüfung habe nicht gegriffen, war
+wirkungslos geworden. Der Auftraggeber war mit „die Versionsprüfung greift nicht immer" gekommen.
+
+**Entscheidung.**
+
+1. **Ein Programmstart fragt immer einmal**, gleich wann zuletzt gefragt wurde.
+2. **Der Mindestabstand gilt innerhalb eines Laufs.** Das ist der Wortlaut von A-V-11, genau
+   gelesen: „zwischen zwei ausgehenden Anfragen" ist eine Aussage über den Betrieb, nicht über
+   Prozeßgrenzen. Vor T-279 war es so, und niemand hat es beanstandet.
+3. **Die Spalte `last_version_check_at` bleibt** und wird weiter vor jeder Anfrage geschrieben —
+   ab jetzt als **Tatsache** für die Datensicherung, nicht als Sperre. Migration 0022 steht auf
+   `main`; sie zurückzunehmen wäre teurer als sie zu behalten. `proof:release-safety` mißt seit
+   T-285, daß niemand sie wieder **liest**.
+4. **Der Neustart-Hebel ist damit wieder offen**, und das ist abgewogen, nicht übersehen. Die
+   Begründung stammt aus der Messung zu T-276: „Ein Bestandswert ist keine Abwehr gegen einen
+   Prozeß im Benutzerkonto, sondern gegen den Unfall." Der Preis dieses Unfallschutzes war, dem
+   Benutzer seine einzige Selbsthilfe zu nehmen. Neue Obergrenze: 24 je Lauf, über Prozeßgrenzen
+   `24 + Zahl der Starts` — für den gewöhnlichen Benutzer 25 am Tag.
+
+**Was aus diesem Vorgang zu lernen ist**, und es ist der Grund, warum diese Entscheidung eine
+eigene Nummer bekommt statt einer Zeile in T-279: Die Frage an den Auftraggeber lautete „soll der
+Boden einen Neustart überleben?" und nannte den Nutzen. Sie nannte den **Preis** nicht, weil ihn
+niemand kannte — er wurde erst sichtbar, als ein Prüffall darauf bestand, den Dienst neu zu
+starten. **Eine Entscheidung, die nur ihren Nutzen kennt, ist keine Entscheidung, sondern ein
+Vorschlag mit Unterschrift.** Wo der Preis unbekannt ist, gehört das in die Frage.
+
+**Migration 0022 behauptet weiter den alten Zweck** und läßt sich nicht berichtigen: Der Läufer
+prüft eine Prüfsumme über den Dateiinhalt, und eine geänderte Migration gälte jedem bestehenden
+Bestand als nachträglich verändert. Die gültige Auskunft steht in `docs/datenmodell.md` 8.4k.
+
+## E-107 — Eine Markenliste bekommt eine Gegenprobe für ihr Leersein, nicht eine je Marke
+
+**Frage aus T-294.** Die Zählvorschrift des code-reviewers lautet „so viele Gegenproben wie
+unterscheidbare Befundsätze". Angewandt auf `proof-release-safety.mjs` ergibt sie 68 Prüfungen.
+Sie läßt eine Frage offen: Zwei Prüfungen halten **Markenlisten** — `download` vierzehn Marken,
+`optionen` sieben —, und eine ganze Liste erzeugt einen einzigen Befundsatz. Je Marke eine
+Gegenprobe wären 68 → **87**.
+
+**Entschieden: nein, und statt dessen die Lücke schließen, die wirklich offen ist.**
+
+Vierzehn Gegenproben an vierzehn Marken messen vierzehnmal denselben Mechanismus. Sie fügen
+keine Fehlerart hinzu: Fällt die Liste aus, fällt sie ganz; fällt eine einzelne Marke heraus,
+ist das **kein anderer Mechanismus**, sondern ein kleinerer Ausfall desselben. Der Preis wäre
+neunzehn Einträge, die den Lauf länger machen und seine Aussage nicht.
+
+Ungemessen ist statt dessen das **teilweise** Leeren — genau der Fall, den T-291 eine Prüfung
+weiter gefunden hat (`FORBIDDEN_IN_SOURCE = []` blieb grün) und der dort mit einer Gegenprobe
+geschlossen wurde. Die Lücke ist also nicht „welche Marke fehlt", sondern „**merkt der Lauf,
+wenn die Liste schrumpft**". Das ist **eine** Gegenprobe je Liste, nicht vierzehn.
+
+**Die Regel, über diesen Fall hinaus:** Eine Gegenprobe gehört an jede Stelle, an der ein
+**anderer** Fehler entsteht — nicht an jedes Element einer Menge, die gemeinsam ausfällt. Wer
+je Element gegenprobt, kauft Zahlen und keine Sicherheit; die Zahl wächst mit der Liste, die
+Aussage nicht.
+
+**Der Anlaß, es überhaupt zu entscheiden**, steht in den Risiken von T-294 und ist ernster als
+die Frage: 44 Verstoßeinträge gegen sieben Prüfungen — **der Lauf mißt zu drei Vierteln sich
+selbst.** Das ist der richtige Zustand für einen Wächter, der viermal geschlagen wurde, aber er
+hat eine Grenze. Wo eine Gegenprobe nur noch bestätigt, daß ein bereits gegengeprobter
+Mechanismus auch beim Nachbarwert greift, ist sie Ballast.
+
+## E-108 — Anhänge aus dem Add-in: beim Anlegen ja, am gefundenen Todo nein (hebt E-100 zur Hälfte auf)
+
+**Auftrag des Auftraggebers vom 2026-09-11.** Aus einer E-Mail heraus soll ein neues Todo
+entstehen, das die **E-Mail selbst als Datei** und **alle ihre Dateianhänge** trägt. Vorbild ist
+die Outlook-Bridge zu Super Productivity.
+
+**E-100 fällt damit — aber nur zur Hälfte, und die andere Hälfte ist die wichtigere.** Gefallen
+war am 2026-09-10 die Tür, die an ein **vorhandenes** Todo anhängte. Diese Tür bleibt zu:
+A-10.9 ändert sich nicht, im Duplikatfall wird weiterhin nur hingewiesen. Neu ist ausschließlich
+der Weg beim **Anlegen**. Wer das später ausweitet, hebt E-108 auf und nicht nur eine Zeile Code.
+
+**Was die Bridge nicht liefert, und es ist die Hälfte des Auftrags.** Gelesen am 2026-09-11:
+`src/client/email-attachments.ts` sammelt die **Dateianhänge** und lädt sie über einen eigenen
+Endpunkt in den Ablageordner. Die **E-Mail selbst** hängt sie nicht an — sie legt einen
+Deep-Link (`outlook.office.com/mail/deeplink/read/…`) und einen auf 2500 Zeichen gekürzten
+Textauszug ab. Genau das schließt der Auftrag aus. „Bestehende Logik nachbilden" trägt also für
+A-19.23 vollständig und für A-19.22 **gar nicht**.
+
+**Drei Weichen, vom Auftraggeber gestellt, zwei davon gegen meine Empfehlung:**
+
+1. **Die E-Mail kommt als Original-MIME über EWS**, nicht als selbst gebaute `.eml`. Preis,
+   ausdrücklich genannt und ausdrücklich angenommen: Das Manifest braucht `ReadWriteMailbox`
+   statt `ReadItem` — das Add-in darf damit im **ganzen Postfach** lesen und schreiben, nicht
+   nur an der offenen Nachricht. Dazu kann EWS mandantenseitig abgeschaltet sein; deshalb
+   A-19.31, damit daraus kein stiller Ausfall wird.
+2. **Übernommene Dateien sind gewöhnliche Dateianhänge** und damit über die Hülle mit der
+   Standardanwendung zu öffnen — nach Rückfrage mit vollem Pfad. Der Weg von einer fremden
+   E-Mail bis zur Ausführung einer `.bat`, `.lnk` oder `.exe` steht damit offen und ist allein
+   durch diese Rückfrage gesichert. Das ist R-21 an einer neuen Stelle und gehört bewertet,
+   bevor es gebaut wird.
+3. **Eine eigene Größengrenze je Datei** (Vorschlag 25 MB wie die Bridge). Dritte Ausnahme von
+   B-1.7 neben der Datensicherung; die 1-MB-Grenze aller übrigen Routen bleibt.
+
+**Was in einem Auftrag zusammengehört** — die Regel aus E-100 gilt in die Gegenrichtung genauso:
+A-19.19 in der Spezifikation, A-A-21 im Bedrohungsmodell und `proof:addin` Abschnitt 18, der
+heute die Abwesenheit **jeder** Anhangstür unter `/addin` mißt. Ein Wächter, der eine Abwesenheit
+mißt, die es nicht mehr gibt, ist kein harmloser Rest: Er ist ein Satz, der das Gegenteil des
+Bestands behauptet, und davon hatte dieser Bestand am 2026-09-10 sechs.
+
+**Die Reihenfolge ist nicht verhandelbar.** „Beide Wege sind im Bedrohungsmodell bewertet, bevor
+sie gebaut werden" steht seit der Versionsprüfung in `CLAUDE.md`. Hier kommen drei Wege auf
+einmal: ein erweitertes Postfachrecht, eine fremde Binärdatei im Datenverzeichnis und ein Pfad
+aus fremder Hand am Öffnen-Befehl. Gebaut wird nach der Bewertung, nicht daneben.
+
+## E-109 — Die Nachricht kommt über `getAsFileAsync`; EWS und `ReadWriteMailbox` entfallen (hebt E-108 Punkt 1 auf)
+
+**Gemessen am 2026-09-11, wenige Stunden nach E-108.** `Office.context.mailbox.item.getAsFileAsync`
+liefert die aktuelle Nachricht **als EML/MIME in Base64**. Mindestrecht: **read item**.
+Anforderungssatz: Mailbox **1.14**. Die Angabe stammt aus der Beschreibung der Schnittstelle,
+nicht aus einer Erinnerung.
+
+**Damit ist der Preis von E-108 Punkt 1 hinfällig, ohne daß sein Nutzen fällt.** Der Auftraggeber
+wollte das Original und hatte dafür `ReadWriteMailbox` angenommen. Er bekommt das Original mit
+`ReadItem`. Es entfallen: der Zugriff auf das ganze Postfach, das Senden im Namen des Benutzers,
+das Löschen von Spuren, die Posteingangsregel als Beharrlichkeit — die vier Punkte, die der
+security-checker in T-297 als W-1 bewertet hatte. A-19.32 ist entsprechend neu gefaßt: **kein
+weitergehendes Recht als bisher.**
+
+**Der Rückfall ist entschieden (A-19.22a, A-19.22b):** Ältere Outlook-Fassungen ohne Mailbox 1.14
+bekommen eine aus den Office.js-Feldern **nachgebaute** `.eml`, und sie ist am Anhang **als
+Nachbau gekennzeichnet**. Der Grund für die Kennzeichnung ist nicht Ordnungsliebe: Eine Datei,
+die für die ursprüngliche Nachricht gehalten werden kann, ohne es zu sein, ist in einem Vorgang,
+aus dem eine Rechnung wird, eine falsche Auskunft über ein Beweisstück.
+
+**Die Lehre, und sie ist dieselbe wie bei E-106, nur andersherum.** E-106 entstand, weil eine
+Frage nur ihren Nutzen nannte. E-109 entsteht, weil eine Frage nur **zwei** Möglichkeiten nannte
+— und die dritte war die beste. Der Auftraggeber hat zwischen Nachbau und `ReadWriteMailbox`
+gewählt, weil ihm niemand gesagt hatte, daß Original und `ReadItem` zusammengehen. Wer zwei Wege
+zur Wahl stellt, hat damit noch nicht gezeigt, daß es nur zwei gibt. **Vor der Frage steht die
+Suche, nicht danach.**
+
+**Was von der Bewertung aus T-297 bleibt**, unberührt von dieser Änderung: der fremde Dateiname
+als Pfadbestandteil (A-A-78 bis A-A-82), die Kürzung, die der Rückfrage die Endung nimmt
+(A-A-93), der Cloud-Verweis als Adresse aus fremder Hand, und R-21 an neuer Stelle — bis heute
+mußte ein Pfad eingetippt werden, ab A-19.23 genügt eine E-Mail.
+
+## E-110 — Eine Antwort darf nicht zur Wiederholung dessen verleiten, was schon geschehen ist
+
+**Frage aus T-309.** Beim Anlegen eines Todos aus einer E-Mail laufen die Anhangszeilen in einer
+zweiten Transaktion, nachdem das Todo bereits festgeschrieben ist. Ein **Wurf** dort ließ die
+Route mit 500 antworten. domain-dev hat die Folge selbst benannt: *„Das Todo überlebt den Wurf,
+die Route antwortet 500; ein zweiter Versuch erzeugt ein Duplikat."*
+
+**Entschieden: kein 500, wenn das Todo steht.** Der Aufrufer bekommt den Zustand, der wahr ist —
+das Todo ist angelegt, die Anhänge sind vollständig fehlgeschlagen. A-19.29 kennt diesen Zustand
+bereits: „Ein Todo, das mit weniger Anhängen entsteht als die E-Mail trägt, sagt das." **Null ist
+weniger.**
+
+**Die Regel dahinter gilt über diesen Fall hinaus:** Eine Antwort darf den Aufrufer nicht dazu
+bringen, etwas zu wiederholen, das bereits geschehen ist. Ein Fehlerschluß, der zu einem zweiten
+Todo mit derselben Call-Nummer führt, richtet einen Schaden an, den der Benutzer nicht verursacht
+hat und nicht sehen kann — und er richtet ihn genau an der Stelle an, gegen die A-10.9 und die
+ganze Duplikatwarnung gebaut sind.
+
+**Die Gegenposition ist notiert und nicht unbegründet.** domain-dev hat eingewandt, ein Wurf sei
+ein **unerwarteter** Zustand, und ihn als gewöhnliches Ergebnis auszugeben verwische das. Richtig.
+Deshalb gehört der Wurf ins Protokoll — mit Stufe `error` und eigenem Grund —, während der
+Aufrufer die Wahrheit über den Bestand bekommt. Zwei verschiedene Leser, zwei verschiedene
+Auskünfte, beide wahr.
+
+**Eine Grenze, die dabei sichtbar wurde und nicht still gelöst ist (offen):** Der **Wortlaut** des
+Wurfs steht nicht in der Protokollzeile. `Logger` hat strukturell keinen Parameter für ein
+Ausnahmeobjekt, und `error.message` trägt bei SQLite- und Dateisystemfehlern regelmäßig einen
+Pfad — das ist B-2.4 und T-132. „In voller Schärfe protokollieren" braucht damit einen eigenen
+Diagnosekanal, und der ist eine Entscheidung, keine Codezeile.
+
+## E-111 — Der Aufräumlauf für herrenlose E-Mail-Dateien
+
+**Frage aus T-309.** Das `try`/`catch` um die Anhangstransaktion reicht so weit wie der Prozeß.
+Ein **harter Abbruch** zwischen Schreiben und `COMMIT` hinterläßt eine Datei im
+Anwendungsdatenverzeichnis, auf die keine Zeile zeigt.
+
+**Entschieden: der Lauf wird gebaut**, nach dem Vorbild des Bildlaufs, verdrahtet beim Start.
+Der Grund ist nicht Ordnungsliebe: Es geht um **Kundendaten aus einer fremden E-Mail**, die
+unbemerkt liegenbleiben. Niemand fände sie — kein Bestand zeigt auf sie, keine Datensicherung
+erwähnt sie, keine Anhangsliste nennt sie.
+
+**Zwei Auflagen, beide gebaut:**
+
+- **Eine Untergrenze**, und sie steckt im Rückgabewert statt in einer Zahl:
+  `{ read, owned, removed, refused }`. „Null Waisen" ist damit von „null gelesene Dateien"
+  unterscheidbar — der Fehler, den dieser Bestand dreizehnmal nachschärfen mußte.
+- **Nie eine Datei löschen, auf die eine Zeile zeigt.** Vier Sicherungen plus ein
+  Widerspruchsriegel, der über **dieselbe** Bedingung zählt wie die Abfrage; sonst wäre der
+  Widerspruch ein Vergleich zweier verschiedener Mengen.
+
+**Die Falle, die der Bildlauf nicht hat** und die aus dem Aufräumlauf beinahe einen Löschlauf
+gemacht hätte: `listEmailFiles()` liefert **Namen**, `todo_attachment.target` trägt **Pfade**.
+Ohne Umrechnung wäre jede Datei herrenlos gewesen. Es ist derselbe Fehler wie „geprüfter Name ≠
+aufgelöster Name" (T-156-1, T-164-1, T-297), diesmal in der löschenden Richtung — und dort kostet
+er nicht eine Lücke, sondern Daten.

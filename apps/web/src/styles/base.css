@@ -326,6 +326,40 @@ output {
 }
 
 /*
+ * Das Gegenstueck zu `.truncate` — und der Grund, warum es eine eigene Klasse
+ * ist und nicht das Weglassen einer (A-19.23b, Auflage A-A-93, R-27).
+ *
+ * Sie traegt `shared/ui/ForeignName.tsx`: einen Dateinamen aus fremder Hand.
+ * An seinem **Ende** steht die Endung, und an der Endung haengt, ob beim
+ * Bestaetigen eine PDF aufgeht oder ein Programm startet. Ein Deckel nimmt sie
+ * weg, ohne ein Zeichen zu veraendern — die einzige bekannte Bauart, an der
+ * Behandlung fremden Textes vorbei die Rueckfrage zum Luegen zu bringen.
+ *
+ * Drei Zeilen, und jede ist eine Zusage:
+ *
+ *  - `overflow-wrap: anywhere` — ein Dateiname hat keine Wortgrenzen, an denen
+ *    sich sinnvoll trennen liesse. Er bricht um, wo er muss, statt die Zeile zu
+ *    sprengen. `break-word` genuegt nicht: Es bricht ein langes Wort erst, wenn
+ *    es allein in einer Zeile steht, und laesst die Zeile vorher ueberlaufen.
+ *  - `white-space: normal` — ausdruecklich, nicht geerbt. Ein `nowrap` von
+ *    oben macht zusammen mit einem `overflow: hidden` irgendeines Elternteils
+ *    genau den Deckel, den diese Klasse ausschliesst.
+ *  - `min-width: 0` — in einer Flex-Spalte ist die Mindestbreite eines
+ *    Elements sonst die seines laengsten unteilbaren Inhalts. Ohne diese Zeile
+ *    sprengte ein langer Name das Layout, und der naechste, der das sieht,
+ *    griffe zu `.truncate`.
+ *
+ * Was hier bewusst **nicht** steht: `overflow`, `text-overflow`,
+ * `-webkit-line-clamp`, `max-width`, `max-height`. `proof:clamp` liest diese
+ * Regel und wird rot, sobald eine davon dazukommt.
+ */
+.foreign-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/*
  * `hidden` schlaegt jede Klassenregel — T-059.
  *
  * Ark UI blendet zugeklappte Listen aus, indem es das HTML-Attribut `hidden`

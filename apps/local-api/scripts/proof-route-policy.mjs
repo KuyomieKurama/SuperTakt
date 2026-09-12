@@ -92,7 +92,12 @@ import ts from 'typescript';
 import { paketQuelle } from './source-resolve.mjs';
 
 import { compose } from '../src/composition.ts';
-import { API_BASE_PATH } from '../src/config.ts';
+import {
+  ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES,
+  ADDIN_ATTACHMENT_MAX_BODY_BYTES,
+  API_BASE_PATH,
+} from '../src/config.ts';
+import { MAX_EMAIL_ATTACHMENT_COUNT, MAX_EMAIL_ATTACHMENT_TOTAL_BYTES } from '@takt/domain';
 import {
   ADDIN_PATH_PREFIX,
   SHARED_PATHS,
@@ -850,6 +855,71 @@ try {
       wrong.map(([p]) => p).join(', '),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  section('8  Der Festpunkt: die Rumpfgrenze traegt die Summengrenze (A-A-100)');
+  // ---------------------------------------------------------------------------
+  /*
+   * **Warum diese vier Zusicherungen hier stehen und nicht in einem Prueffall.**
+   *
+   * T-313-5 hat gemessen, dass `total_too_large` ueber die Leitung nicht feuern
+   * konnte: 48 MiB Summengrenze gegen 64 MiB Rumpfgrenze, und base64 blaeht um
+   * genau 4/3 auf. Fuenf Anlaeufe ueber der Summengrenze, alle 413. Damit war
+   * einer der drei Gruende aus A-19.30a unerreichbar — derselbe Fehler, fuer den
+   * `mailbox_closed` und `connection` gestrichen wurden, nur an einer Grenze
+   * statt an einem Grund.
+   *
+   * Der Bau haelt die beiden Zahlen jetzt aneinander (`config.ts` rechnet die
+   * eine aus der anderen). Diese Zusicherungen sind der Riegel darunter: Wer die
+   * Ableitung durch eine Zahl ersetzt oder den Spielraum aufbraucht, wird hier
+   * rot — und zwar **ohne** eine 70-MiB-Anfrage zu fahren, die das Tor um eine
+   * Minute und einen Viertel-Gigabyte verlaengerte. Gemessen wird die Zusage,
+   * nicht die Leitung; die Leitung hat der security-checker gemessen, und der
+   * Prueffall dafuer gehoert dem unit-tester.
+   */
+  {
+    const base64 = (bytes) => Math.ceil(bytes / 3) * 4;
+    const traegt = ADDIN_ATTACHMENT_MAX_BODY_BYTES - base64(MAX_EMAIL_ATTACHMENT_TOTAL_BYTES);
+
+    check(
+      'die Rumpfgrenze traegt die base64-Fassung der ganzen Summengrenze',
+      ADDIN_ATTACHMENT_MAX_BODY_BYTES >= base64(MAX_EMAIL_ATTACHMENT_TOTAL_BYTES),
+      `Rumpf ${ADDIN_ATTACHMENT_MAX_BODY_BYTES} < base64(Summe) ${base64(MAX_EMAIL_ATTACHMENT_TOTAL_BYTES)}`,
+    );
+
+    check(
+      'und darueber liegt der Spielraum fuer Geruest und Namen',
+      traegt >= ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES,
+      `Spielraum ${traegt} < ${ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES}`,
+    );
+
+    /*
+     * Die Gegenprobe nach unten: Der Spielraum muss die Felder wirklich tragen,
+     * die eine Anfrage an der Fachgrenze mitbringt — aufgerundete base64 je
+     * Datei, ein JSON-Objekt je Datei, und die Textfelder der Nachricht.
+     */
+    const schlimmstenfalls =
+      MAX_EMAIL_ATTACHMENT_COUNT * 4 * (4 + 1024 + 256) + 64 * 1024;
+    check(
+      'der Spielraum traegt Namen, Geruest und Aufrundung einer vollen Anfrage',
+      ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES > schlimmstenfalls,
+      `Spielraum ${ADDIN_ATTACHMENT_BODY_HEADROOM_BYTES} <= gerechnet ${schlimmstenfalls}`,
+    );
+
+    /*
+     * Und die Gegenprobe nach oben: Das Fenster, in dem `total_too_large`
+     * ueberhaupt feuern kann, ist nicht null. Eine Rohsumme knapp ueber der
+     * Fachgrenze muss als Rumpf noch durchpassen — sonst antwortet die Route auf
+     * eine Anhangsfrage wieder mit einem Satz ueber die Anfragegroesse.
+     */
+    const knappDarueber = MAX_EMAIL_ATTACHMENT_TOTAL_BYTES + 1024 * 1024;
+    check(
+      'eine Rohsumme 1 MiB ueber der Fachgrenze passt als Rumpf noch durch',
+      base64(knappDarueber) < ADDIN_ATTACHMENT_MAX_BODY_BYTES,
+      `base64(${knappDarueber}) = ${base64(knappDarueber)} >= ${ADDIN_ATTACHMENT_MAX_BODY_BYTES}`,
+    );
+  }
+
 } finally {
   service.database.close();
   await rm(dataDir, { recursive: true, force: true });

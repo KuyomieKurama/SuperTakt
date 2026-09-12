@@ -13,7 +13,7 @@
  * Unterschied zwischen „sieht ähnlich aus" und „ist dasselbe System".
  */
 
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 
 import { visibleText } from '../text/hidden.ts';
 import { fieldParts, type FieldAria } from './field.ts';
@@ -69,6 +69,16 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly loading?: boolean;
   readonly full?: boolean;
   readonly children: ReactNode;
+  /**
+   * Der Knopf als **Fokusziel** (Entwurf 10.1).
+   *
+   * Seit React 19 ist `ref` eine gewöhnliche Eigenschaft einer Funktions­­
+   * komponente; sie steht hier trotzdem ausgeschrieben, weil
+   * `ButtonHTMLAttributes` sie nicht führt. Gebraucht wird sie für Z5 und Z6:
+   * Nach einem Fehlschlag und nach einem Abbruch springt der Fokus zurück auf
+   * „Neue Aufgabe anlegen" — dorthin, wo der nächste Versuch beginnt.
+   */
+  readonly ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({
@@ -354,6 +364,7 @@ export function Section({
   description,
   children,
   actions,
+  headingRef,
 }: {
   readonly title: string;
   /**
@@ -368,11 +379,27 @@ export function Section({
   readonly description?: string | undefined;
   readonly children: ReactNode;
   readonly actions?: ReactNode;
+  /**
+   * Die Überschrift als **Fokusziel** (Entwurf 10.1, AK-21).
+   *
+   * Wo sie gesetzt ist, bekommt die Überschrift `tabindex="-1"`: nicht in der
+   * Tabulatorfolge, aber anspringbar. Beim Übergang Z0 → Z1 und → Z3/Z4
+   * verschwindet der Knopf, auf dem der Fokus stand; ohne Zuweisung fiele er
+   * auf `<body>`, und ein Benutzer mit Vorlesehilfe wüsste nicht mehr, wo er
+   * ist. **Nur wo gesetzt** — ein `tabindex` an jeder Überschrift des Bereichs
+   * wäre ein Versprechen, das niemand eingelöst hat.
+   */
+  readonly headingRef?: Ref<HTMLHeadingElement>;
 }) {
   return (
     <section className="pane-section">
       <header className="pane-section__header">
-        <h2 className="pane-section__title">{title}</h2>
+        <h2
+          className="pane-section__title"
+          {...(headingRef === undefined ? {} : { ref: headingRef, tabIndex: -1 })}
+        >
+          {title}
+        </h2>
         {actions}
       </header>
       {description !== undefined ? <p className="pane-section__lead">{description}</p> : null}

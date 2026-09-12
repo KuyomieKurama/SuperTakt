@@ -24,6 +24,8 @@ import { HTTPException } from 'hono/http-exception';
 import { asStorageFailure } from '@takt/storage';
 
 import {
+  ADDIN_ATTACHMENT_MAX_BODY_BYTES,
+  DATA_ARCHIVE_MAX_BODY_BYTES,
   API_BASE_PATH,
   DATA_TRANSFER_MAX_BODY_BYTES,
   MAX_BODY_BYTES,
@@ -46,12 +48,13 @@ import {
 import type { AccessRuntime } from './runtime.ts';
 import type { AppContext } from './context.ts';
 import { createAddinRoutes } from './routes/addin/index.ts';
-import type { AddinDeps } from './routes/addin/ports.ts';
+import type { AddinUnit } from './routes/addin/ports.ts';
 import { createBoardRoutes } from './features/board/routes.ts';
 import { createExportRoutes } from './features/export/routes.ts';
 import { createSettingsRoutes } from './features/settings/routes.ts';
 import { createStructureRoutes } from './features/structure/routes.ts';
 import { createTimeEntryRoutes, createTimerRoutes } from './features/timer/routes.ts';
+import { createEmailAttachmentIntake } from './features/todos/email-attachments.ts';
 import { createSearchRoutes, createTodoRoutes } from './features/todos/routes.ts';
 import { createVersionRoutes } from './features/version/routes.ts';
 import { createDataTransferRoutes } from './features/data-transfer/routes.ts';
@@ -80,7 +83,53 @@ export interface AppOptions {
   readonly versionState?: () => VersionCheckState;
 }
 
-/** Eine größere, weiterhin feste Rumpfgrenze nur für vollständige Datenarchive. */
+/**
+ * Eine größere, weiterhin feste Rumpfgrenze — für **drei** Wege und sonst
+ * keinen (B-1.7).
+ *
+ * ===========================================================================
+ * Drei Ausnahmen, und jede ist benannt
+ * ===========================================================================
+ *
+ *  0. **Die eigene Datensicherung** (A-20.4, A-19.34) — seit die übernommenen
+ *     Dateien samt Bytes mitreisen, die größte von allen. Sie hängt an genau
+ *     einer Methode auf genau einem Pfad, `POST /data-transfer/archive`, und
+ *     **nicht** am Präfix: Die Fremdimporte daneben tragen keine eingebetteten
+ *     Bytes und behalten ihre 64 MB. Die Begründung der Zahl steht an
+ *     {@link DATA_ARCHIVE_MAX_BODY_BYTES}, samt Messung.
+ *  1. **Fremdimporte** (A-20.7) mit einem Todoist-CSV oder einem
+ *     Super-Productivity-JSON.
+ *  2. **Das Anlegen eines Todos aus einer E-Mail** mit seinen Anhängen
+ *     (A-19.22 bis A-19.33, E-108 Punkt 3). Die Nachricht selbst und ihre
+ *     Dateien kommen Base64-kodiert **in einem** Rumpf; das ist die Weiche aus
+ *     Bedrohungsmodell 39.4.5, und sie ist die sichere: Der andere Weg —
+ *     Datei für Datei zum Dienst und danach anlegen — wäre eine Stelle, an der
+ *     ein Aufrufer mit gültigem Token Dateien in das
+ *     Anwendungsdatenverzeichnis schreibt, **ohne daß ein Todo entsteht**.
+ *
+ * Für jede andere Route bleibt es bei {@link MAX_BODY_BYTES}, also einem
+ * Megabyte. **Es gibt keine vierte Ausnahme**, und wer eine baut, hebt B-1.7
+ * auf und nicht eine Zeile Code.
+ *
+ * ===========================================================================
+ * Warum zwei der drei an **einer** Methode und **einem** Pfad hängen
+ * ===========================================================================
+ *
+ * `startsWith(`${API_BASE_PATH}/addin`)` wäre kürzer und falsch: Es hübe die
+ * Grenze für **jede** Add-in-Route, auch für die drei, die nichts anlegen.
+ * Eine Ausnahme, deren Menge an einem Präfix aufgespannt ist statt an der
+ * Anforderung, wächst mit jeder neuen Nachbarroute mit, ohne daß es jemand
+ * entscheidet — derselbe Fehler, den E-099 Punkt 3 für Abwesenheitszusagen
+ * beschreibt, nur in die andere Richtung.
+ *
+ * Deshalb: genau `POST` auf genau `/addin/todos`. Ein `GET` auf denselben Pfad
+ * bekommt sie nicht, ein `POST` auf `/addin/todos/…/time-entries` auch nicht.
+ *
+ * Für die Datensicherung gilt dasselbe, und die Reihenfolge der Abfragen unten
+ * sagt es: `POST /data-transfer/archive` wird **vor** dem Präfix geprüft. Das
+ * `GET` auf denselben Pfad — die Sicherung herunterladen — hat gar keinen Rumpf
+ * und bekommt die Ausnahme nicht.
+ */
 function bodyLimitByRoute(): MiddlewareHandler<TaktEnv> {
   const ordinary = bodyLimit({
     maxSize: MAX_BODY_BYTES,
@@ -90,11 +139,23 @@ function bodyLimitByRoute(): MiddlewareHandler<TaktEnv> {
     maxSize: DATA_TRANSFER_MAX_BODY_BYTES,
     onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
   });
+  const dataArchive = bodyLimit({
+    maxSize: DATA_ARCHIVE_MAX_BODY_BYTES,
+    onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
+  });
+  const addinAttachments = bodyLimit({
+    maxSize: ADDIN_ATTACHMENT_MAX_BODY_BYTES,
+    onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
+  });
+  const ADDIN_CREATE_PATH = `${API_BASE_PATH}/addin/todos`;
+  const ARCHIVE_PATH = `${API_BASE_PATH}/data-transfer/archive`;
   return (c, next) => {
-    const limit = c.req.path.startsWith(`${API_BASE_PATH}/data-transfer`)
-      ? dataTransfer
-      : ordinary;
-    return limit(c, next);
+    if (c.req.method === 'POST' && c.req.path === ARCHIVE_PATH) return dataArchive(c, next);
+    if (c.req.path.startsWith(`${API_BASE_PATH}/data-transfer`)) return dataTransfer(c, next);
+    if (c.req.method === 'POST' && c.req.path === ADDIN_CREATE_PATH) {
+      return addinAttachments(c, next);
+    }
+    return ordinary(c, next);
   };
 }
 
@@ -253,12 +314,25 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * Die schmale Fläche des Outlook-Add-ins (T-019, RR-1).
      *
      * Der Aufgabenbereich darf lesen, nach einer Call-Nummer suchen, ein Todo
-     * anlegen und die bestehende Buchungsroute nutzen. **Anhängen darf er
-     * nicht** — weder einen Verweis noch eine Datei noch ein Bild. Es gibt
-     * dafür keine Route mehr: Pull Request #16 hatte eine gebaut, F-21 hat
-     * gegen sie entschieden, und E-100 hat sie samt Fähigkeit im `AddinUnit`
-     * entfernt (T-247). A-19.19 ist damit strukturell wahr, nicht zugesagt;
-     * `proof:addin` Abschnitt 18f mißt es am fertigen Dienst.
+     * anlegen und die bestehende Buchungsroute nutzen.
+     *
+     * **Anhängen darf er an ein vorhandenes Todo nicht** — und nur das ist die
+     * Zusage. Sie war bis E-108 weiter gefaßt: Bis dahin entstand über das
+     * Add-in **gar kein** Anhang, Pull Request #16 hatte eine eigene Route
+     * dafür gebaut, F-21 hat gegen sie entschieden und E-100 sie samt
+     * Fähigkeit im `AddinUnit` entfernt (T-247). Seit E-108 und T-304 gilt die
+     * **halbierte** Fassung von A-19.19: Beim **Anlegen** aus einer E-Mail
+     * entstehen Anhänge — die Nachricht als Datei und ihre Dateianhänge
+     * (A-19.22, A-19.23) —, am **gefundenen** Todo weiterhin nicht.
+     *
+     * Der Unterschied liegt im Typ und nicht in einer Zusage: Die Naht
+     * (`features/todos/email-attachments.ts`) nimmt **keine** `TodoId`
+     * entgegen, sondern eine Funktion, die eine erzeugt. Es gibt unter
+     * `/addin` keine Tür, die eine Kennung entgegennimmt und einen Anhang
+     * erzeugt (A-A-82, A-A-21′); `proof:addin` Abschnitt 18 mißt das am
+     * fertigen Dienst — an der **Wirkung** am Trägertodo, nicht am Namen der
+     * Route.
+     *
      * Kein Löschen, kein Export, kein Zugriff auf den Vermerk eines fremden
      * Todos, keine Einstellungen. Daneben erreicht das Add-in-Token nur noch
      * `GET /health` — „Verbindung prüfen", ohne Inhalt und ohne Wirkung.
@@ -272,11 +346,46 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
      * `TransactionPort` erfüllt ihn ohne Übersetzungsadapter, der etwas
      * verlieren könnte.
      */
-    // Kontextuell typisieren: Parameters<...> würde den generischen
-    // Transaktionsrückgabewert T zu unknown verbreitern.
-    const addinDeps: AddinDeps = {
-      inTransaction: (work) => context.transactions.inTransaction(work),
+    /*
+     * **Die Anhangsübernahme aus einer E-Mail** (A-19.22 bis A-19.33, E-108,
+     * E-109). Der Absatz oben ist damit zur Hälfte überholt und zur anderen
+     * Hälfte schärfer als vorher:
+     *
+     *  - **Am gefundenen Todo bleibt es beim Nein.** A-10.9 ändert sich nicht,
+     *    im Duplikatfall wird weiterhin nur hingewiesen. E-108 hebt E-100
+     *    ausdrücklich nur zur Hälfte auf.
+     *  - **Beim Anlegen entstehen Anhänge** — und zwar strukturell nur dort:
+     *    {@link EmailAttachmentIntake} nimmt keine Todo-Kennung entgegen,
+     *    sondern die **Funktion, die eine erzeugt**. Es gibt in dieser Fläche
+     *    keinen Parameter vom Typ `TodoId`, und damit keinen Aufruf, der einen
+     *    Anhang an ein bestehendes Todo hängt (A-A-21′ (b) und (c), A-A-82).
+     *
+     * Das ist der Unterschied zwischen einer Zusage und einer Struktur: Die
+     * alte Fassung sagte „Anhängen darf er nicht" und hatte dafür die Fähigkeit
+     * entfernt; diese hier hat eine Fähigkeit, die das bestehende Todo gar
+     * nicht erreichen **kann**.
+     */
+    /*
+     * **Ohne Anmerkung am Literal, und das ist kein Versehen.** Bis hierher
+     * stand `const addinDeps: AddinDeps = { … }`; die Anmerkung typisierte
+     * `inTransaction` kontextuell (`Parameters<…>` verbreiterte den generischen
+     * Rückgabewert `T` zu `unknown`). Die generische Form steht deshalb jetzt
+     * ausgeschrieben da und leistet dasselbe.
+     *
+     * Weg ist die Anmerkung, weil dieses Objekt eine Fähigkeit **mehr** trägt,
+     * als `AddinDeps` heute nennt: Der Zusammenbau ist fertig, bevor die Tür
+     * gebaut ist, und `AddinDeps` gehört der Tür. Eine Anmerkung am Literal
+     * machte aus dieser Naht einen Übersetzungsfehler statt einer Stelle, an
+     * der beide Seiten unabhängig voneinander wachsen können; der Aufruf
+     * `createAddinRoutes(addinDeps)` prüft die Zuweisbarkeit weiterhin
+     * vollständig. Sobald `AddinDeps` das Feld führt, ist die Naht zu und
+     * diese Erklärung überflüssig.
+     */
+    const addinDeps = {
+      inTransaction: <T,>(work: (unit: AddinUnit) => Promise<T>): Promise<T> =>
+        context.transactions.inTransaction(work),
       now: () => context.clock.now(),
+      emailAttachments: createEmailAttachmentIntake(context, runtime.logger),
     };
     api.route('/addin', createAddinRoutes(addinDeps));
   }

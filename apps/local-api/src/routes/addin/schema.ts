@@ -39,6 +39,13 @@ import { z } from 'zod';
  * und sie wäre obendrein falsch: Sie nähme `2026-02-30` an.
  */
 import {
+  MAX_EMAIL_ATTACHMENT_COUNT,
+  MAX_EMAIL_ATTACHMENT_TOTAL_BYTES,
+  MAX_EMAIL_DISPLAY_NAME_CHARACTERS,
+} from '@takt/domain';
+
+import {
+  attachmentUrlSchema,
   dueDateSchema,
   nameSchema,
   titleSchema,
@@ -135,6 +142,130 @@ export const ADDIN_TAG_IDS_MAX = 200;
  * Add-in-Nachweises beide Türen gegeneinander, für `tagIds` wie für `tagNames`.
  */
 export const ADDIN_TAG_NAMES_MAX = 50;
+
+// ---------------------------------------------------------------------------
+// Die Anhänge aus der E-Mail (A-19.22 bis A-19.33, E-108) — T-304
+// ---------------------------------------------------------------------------
+
+/*
+ * ===========================================================================
+ * Warum diese Deckel **über** den Fachgrenzen liegen und nicht auf ihnen
+ * ===========================================================================
+ *
+ * Dieselbe Überlegung wie bei {@link ADDIN_CALL_NUMBER_MAX_LENGTH}, und hier
+ * wiegt sie schwerer: A-19.29 und A-19.30 verlangen, daß eine nicht übernommene
+ * Datei **namentlich** gemeldet wird, mit Grund. Läge der Transportdeckel auf
+ * der Fachgrenze, bekäme der Benutzer statt dessen ein `422` über die ganze
+ * Anfrage — kein Todo, keine Namen, kein Grund je Datei, und das für einen
+ * Anhang, den nicht er ausgewählt hat, sondern ein Absender.
+ *
+ * Die Fachgrenzen stehen in `@takt/domain` (`MAX_EMAIL_ATTACHMENT_BYTES`,
+ * `…_TOTAL_BYTES`, `…_COUNT`, `MAX_EMAIL_DISPLAY_NAME_CHARACTERS`) und werden
+ * von `attachEmailToNewTodo` durchgesetzt. Was hier steht, ist ausschließlich
+ * die Abwehr unbegrenzter Eingabe (B-1.7) — und jede dieser Zahlen ist **aus
+ * der Fachgrenze gerechnet** und nicht daneben gesetzt, damit sie mitzieht,
+ * wenn jemand die Fachgrenze verschiebt.
+ */
+
+/**
+ * Wie viele Anhänge eine Anfrage höchstens **nennen** darf.
+ *
+ * Das Vierfache der Fachgrenze. Die 26. Datei wird nach A-19.29 benannt
+ * abgewiesen (`rejected`), die 101. gar nicht erst gelesen — dann ist die
+ * Anfrage kein Postfachinhalt mehr, sondern ein Skript.
+ */
+export const ADDIN_ATTACHMENTS_MAX = MAX_EMAIL_ATTACHMENT_COUNT * 4;
+
+/**
+ * Wie lang ein **Anzeigename** über die Leitung sein darf.
+ *
+ * Das Vierfache der Fachgrenze. Ein längerer Name wird von
+ * `shortenEmailDisplayName` **in der Mitte gekürzt**, nicht abgewiesen
+ * (A-19.23b, A-A-93) — ein Deckel auf 255 machte daraus eine Abweisung und
+ * nähme dem Benutzer die Datei statt der überzähligen Zeichen.
+ */
+export const ADDIN_ATTACHMENT_NAME_MAX_LENGTH = MAX_EMAIL_DISPLAY_NAME_CHARACTERS * 4;
+
+/**
+ * Wie lang eine **Base64-Zeichenkette** sein darf.
+ *
+ * Gerechnet aus der Summengrenze: `48 MB · 4/3 = 64 MiB`, also genau das, was
+ * die Rumpfgrenze dieser einen Route (`ADDIN_ATTACHMENT_MAX_BODY_BYTES`)
+ * ohnehin trägt. Die Zahl ist damit in der Praxis **nie** die bindende Grenze:
+ * Eine Datei über der Einzelgrenze (25 MB) kommt durch dieses Schema und wird
+ * von der Domäne mit `too_large` und ihrer **gemessenen** Größe gemeldet — so,
+ * wie A-19.30 es verlangt. Erst was auch den Rumpf sprengte, fällt hier.
+ *
+ * Sie steht trotzdem da, weil ein Feld ohne Deckel ein Feld ohne Deckel ist.
+ */
+export const ADDIN_ATTACHMENT_BASE64_MAX_LENGTH = (MAX_EMAIL_ATTACHMENT_TOTAL_BYTES / 3) * 4;
+
+/**
+ * Der **Absender** der E-Mail, fremder Text (A-A-84, A-A-85).
+ *
+ * Er geht als Eigenschaft an jeden Anhang dieses Laufs und steht Wochen später
+ * in der Rückfrage vor dem Öffnen. Die Domäne kürzt ihn auf 640 Zeichen; der
+ * Deckel hier liegt darüber, aus demselben Grund wie beim Anzeigenamen.
+ */
+export const ADDIN_ATTACHMENT_SENDER_MAX_LENGTH = 2048;
+
+/**
+ * Ein einzelner Anhang im Rumpf — **drei Gestalten, unterschieden am `kind`**.
+ *
+ * Eine unterschiedene Vereinigung und kein Objekt mit lauter freiwilligen
+ * Feldern: `{ kind: 'link', contentBase64: '…' }` soll abgewiesen und nicht
+ * ausgelegt werden. Dieselbe Bauart wie `attachmentInput` an der Haupttür, und
+ * aus demselben Grund (Befund um `{ kind: 'file', url: … }`).
+ *
+ * **`rebuilt` trägt nur die Nachricht** (A-A-97). Ein gewöhnlicher Dateianhang
+ * kann strukturell nicht als Nachbau gekennzeichnet werden, weil seine Gestalt
+ * kein Feld dafür hat — nachgebaut wird eine **Nachricht**, alles andere kommt,
+ * wie es ist.
+ *
+ * **Und es gibt keine Größenangabe** (A-A-15, A-A-81). `detail.size` aus
+ * Office.js ist eine Behauptung des Absenders; was nicht da ist, kann nicht
+ * geglaubt werden. Gezählt wird an der Zeichenkette und danach am dekodierten
+ * Puffer, beides in der Domäne.
+ */
+const attachmentDisplayName = z.string().min(1).max(ADDIN_ATTACHMENT_NAME_MAX_LENGTH);
+const attachmentBase64 = z.string().min(1).max(ADDIN_ATTACHMENT_BASE64_MAX_LENGTH);
+
+const emailAttachmentItemSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('message'),
+    displayName: attachmentDisplayName,
+    contentBase64: attachmentBase64,
+    rebuilt: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal('file'),
+    displayName: attachmentDisplayName,
+    contentBase64: attachmentBase64,
+  }),
+  z.object({
+    kind: z.literal('link'),
+    displayName: attachmentDisplayName,
+    url: attachmentUrlSchema,
+  }),
+]);
+
+/**
+ * Der Umschlag: **eine** E-Mail, ihr Absender und ihre Anhänge.
+ *
+ * Warum ein Umschlag und nicht eine nackte Liste: Der Absender gehört der
+ * **Nachricht** und nicht einem einzelnen Anhang. Ihn an jeden Eintrag zu
+ * schreiben hieße zuzulassen, daß zwei Anhänge derselben Anfrage zwei
+ * verschiedene Herkünfte behaupten — und die Rückfrage vor dem Öffnen läse eine
+ * davon vor.
+ *
+ * **Keine Todo-Kennung.** Nicht hier, nicht im Eintrag, nirgends an dieser Tür.
+ * Was dieser Rumpf trägt, hängt an dem Todo, das **dieselbe Anfrage** anlegt,
+ * und an keinem anderen (A-A-82, E-108).
+ */
+export const emailAttachmentsSchema = z.object({
+  sender: z.string().max(ADDIN_ATTACHMENT_SENDER_MAX_LENGTH).nullable().default(null),
+  items: z.array(emailAttachmentItemSchema).max(ADDIN_ATTACHMENTS_MAX).default([]),
+});
 
 export const createTodoSchema = z.object({
   /**
@@ -293,30 +424,59 @@ export const createTodoSchema = z.object({
    * ein Zeitzonenanhang ebenso.
    *
    * ---------------------------------------------------------------------------
-   * Was an dieser Stelle **nicht** dazukommt
+   * Was neben ihr steht — und was daran **nicht** möglich ist
    * ---------------------------------------------------------------------------
    *
-   * Ein Anhang. A-19.19 bleibt unangetastet, und zwar strukturell: Diese Tür
-   * hat kein Anhangsfeld, und Anhänge hängen als Unterressource unter
-   * `/api/v1/todos/{todoId}/attachments` — außerhalb von `/addin` und für das
-   * Add-in-Token unerreichbar (A-A-21). Der Unterschied ist Art und nicht
-   * Vorsicht (E-074 Punkt 3): Eine Frist ist ein Tag, den die Anwendung
-   * **anzeigt**; ein Anhang ist eine Adresse, die sie auf Klick **öffnet**
-   * (R-21, R-22). Ein `attachments` im Rumpf dieser Anfrage fällt in zod
-   * still weg — gemessen wird das trotzdem, und zwar an der Wirkung
-   * (`proof:addin` Abschnitt 18: null Zeilen in `todo_attachment`).
+   * Seit E-108 steht neben ihr {@link createTodoSchema.attachments}. Der
+   * Unterschied zwischen beiden bleibt trotzdem der aus E-074 Punkt 3: Eine
+   * Frist ist ein Tag, den die Anwendung **anzeigt**; ein Anhang ist eine
+   * Adresse, die sie auf Klick **öffnet** (R-21, R-22). Deshalb ist die Frist
+   * ein Feld mit einer Formprüfung, und der Anhang ist eine ganze Datei mit
+   * eigener Herkunft, eigenem Deckel und eigener Rückfrage.
    *
-   * **Und seit T-247 gilt der Satz wieder für den ganzen Teilbaum.** Zwischen
-   * PR #16 und der Entscheidung zu F-21 stand er hier, während nebenan
-   * `POST /addin/todos/{todoId}/attachments` einen Verweis anlegte: eine
-   * zweite Tür, die aufging, während diese hier ihre Abwesenheit zusicherte.
-   * Der Auftraggeber hat F-21 **gegen** das Anhängen entschieden; die Route ist
-   * samt Schema gefallen. Abschnitt 18 des Nachweislaufs misst deshalb nicht
-   * mehr nur die Wirkung an dieser Tür, sondern zusätzlich, dass es die andere
-   * **nicht gibt** (404 mit gültigem Add-in-Token, kein Pfad unter `/addin`
-   * mit `attachment` im Namen).
+   * **Was auch mit ihm nicht möglich ist: an ein vorhandenes Todo anhängen.**
+   * Diese Tür führt kein Feld, das ein Todo benennt, und die Fähigkeit
+   * dahinter (`AddinDeps.emailAttachments`) hat keinen Parameter vom Typ
+   * `TodoId` — A-A-82 steht damit im Typ und nicht in diesem Satz.
    */
   dueDate: dueDateSchema.default(null),
+  /**
+   * Die **Anhänge aus der geöffneten E-Mail** (A-19.22 bis A-19.33, E-108).
+   *
+   * ---------------------------------------------------------------------------
+   * Warum sie im Rumpf des Anlegens fahren und nicht in einer zweiten Anfrage
+   * ---------------------------------------------------------------------------
+   *
+   * Weil eine zweite Anfrage eine Todo-Kennung tragen müßte. Genau das ist die
+   * Tür, die A-A-82 zuhält: „Es gibt keinen Aufruf, der eine Todo-Kennung
+   * entgegennimmt und einen Anhang erzeugt." Anhänge entstehen ausschließlich
+   * in **derselben** Handlung, die das Todo entstehen läßt — und deshalb an
+   * genau dieser Stelle, im Rumpf von `POST /addin/todos`.
+   *
+   * Ein `null` und eine leere Liste sind hier dasselbe wie „ohne Anhänge"; der
+   * Anlegevorgang selbst ändert sich dadurch in keiner Weise.
+   *
+   * ---------------------------------------------------------------------------
+   * Das Feld wird **gelesen**, und das ist der Unterschied zu gestern
+   * ---------------------------------------------------------------------------
+   *
+   * Bis T-304 stand hier der Satz, ein mitgeschicktes `attachments` falle in
+   * zod still weg. Das stimmte — `z.object` streicht unbekannte Schlüssel —,
+   * und genau deshalb hat der Aufgabenbereich bis dahin **nichts** mitgeschickt
+   * (`ATTACHMENTS_TRAVEL_WITH_CREATE`). Ein Feld, das gesendet und stillschweigend
+   * gestrichen wird, ist der Ausfall, den A-19.31 ausschließt: Der
+   * Aufgabenbereich hätte „3 Anhänge hängen daran" gemeldet, und es hinge
+   * keiner daran.
+   *
+   * Die Reihenfolge war deshalb: erst die Tür liest das Feld, dann fährt es
+   * mit. `proof:addin` Abschnitt 22 hält beides gegeneinander und wird rot, wer
+   * es andersherum tut.
+   *
+   * Die Rumpfgrenze dieser einen Route liegt bei 64 MB
+   * (`ADDIN_ATTACHMENT_MAX_BODY_BYTES`, `config.ts`); jede andere Route des
+   * Dienstes bleibt bei 1 MB.
+   */
+  attachments: emailAttachmentsSchema.nullable().default(null),
 });
 
 /**
