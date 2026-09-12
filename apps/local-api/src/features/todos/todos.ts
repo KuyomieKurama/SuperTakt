@@ -37,7 +37,7 @@ import type { Page, Pagination, UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
 import { NO_ENTRIES, completionMovementStates, poolMovementNamer } from '../../pool-movement.ts';
-import { type AttachmentView, toAttachmentView } from './attachments.ts';
+import { type AttachmentView, releaseUnclaimedBlobs, toAttachmentView } from './attachments.ts';
 import { AbortTodoCreate, resolveTagNames } from '../../tag-names.ts';
 
 export interface CreateTodoInput {
@@ -348,6 +348,22 @@ export async function loadTodo(
  * die Dateien zu entfernen hieße, sie bei einem Abbruch verloren zu haben,
  * während das Todo noch dasteht. Von den beiden möglichen Halbzuständen ist
  * „Zeile weg, Datei liegt noch" der behebbare.
+ *
+ * ---------------------------------------------------------------------------
+ * Was hier gelesen wird, ist eine **Kandidatenliste** und kein Eigentumsnachweis
+ * (T-320)
+ * ---------------------------------------------------------------------------
+ *
+ * `imageTargets` und `emailFileTargets` fragen eng und am Todo. Das ist an
+ * dieser Stelle richtig: Sie sagen, welche Dateien SuperTakt für **dieses**
+ * Todo selbst geschrieben hat, und halten einen vom Benutzer eingetragenen
+ * Dateipfad heraus.
+ *
+ * Sie sagen **nicht**, wem eine Datei gehört — und bis T-320 entschieden sie
+ * genau das. Ein Dateianhang an **Todo B**, der auf eine Bildkopie von Todo A
+ * zeigt, kommt durch die gewöhnliche Tür (absolut, vorhanden, `.png`); Todo A
+ * zu löschen kostete B sein Bild. Die Eigentümerfrage stellt seit T-320
+ * `releaseUnclaimedBlobs` — einmal, weit und hinter dem `COMMIT`.
  */
 export async function removeTodo(context: AppContext, id: TodoId): Promise<UseCaseResult<void>> {
   const outcome = await context.transactions.inTransaction(async (unit) => {
@@ -369,27 +385,19 @@ export async function removeTodo(context: AppContext, id: TodoId): Promise<UseCa
   });
 
   if (!outcome.ok) return err(outcome.error);
-  for (const target of outcome.value.emailFiles) {
-    // Dieselbe Begründung wie bei den Bildkopien eine Schleife weiter: Das Todo
-    // **ist** gelöscht, und daran ändert eine liegengebliebene Datei nichts.
-    // Still ist der Fehlschlag nicht — er steht mit dem erzeugten Namen im
-    // Protokoll.
-    await context.attachmentBlobs.removeEmailFile(target);
-  }
-  for (const name of outcome.value.images) {
-    /*
-     * Der Rückgabewert wird bewußt nicht in die Antwort getragen (T-159): Das
-     * Todo **ist** gelöscht, und daran ändert eine liegengebliebene Kopie
-     * nichts. Ein Abbruch mitten in dieser Schleife wäre der schlechtere
-     * Ausgang — er ließe die übrigen Kopien liegen und meldete zugleich einen
-     * Fehlschlag für einen Vorgang, der stattgefunden hat.
-     *
-     * Still ist er trotzdem nicht: `removeImage` schreibt den Fehlschlag mit
-     * dem erzeugten Namen ins Protokoll, und der Wert steht hier für den, der
-     * daraus später mehr machen will (etwa ein Aufräumen beim nächsten Start).
-     */
-    await context.attachmentBlobs.removeImage(name);
-  }
+  /*
+   * **Eine Frage für alle Dateien dieses Todos**, in derselben Reihenfolge wie
+   * bisher: erst die übernommenen E-Mail-Dateien, dann die Bildkopien.
+   *
+   * Ein Fehlschlag beim Entfernen wird nicht in die Antwort getragen (T-159):
+   * Das Todo **ist** gelöscht, und daran ändert eine liegengebliebene Datei
+   * nichts. Still ist er nicht — der Blob-Port schreibt ihn mit dem erzeugten
+   * Namen ins Protokoll (A-A-18).
+   */
+  await releaseUnclaimedBlobs(context, [
+    ...outcome.value.emailFiles.map((target) => ({ kind: 'emailFile' as const, target })),
+    ...outcome.value.images.map((target) => ({ kind: 'image' as const, target })),
+  ]);
   return ok(undefined);
 }
 

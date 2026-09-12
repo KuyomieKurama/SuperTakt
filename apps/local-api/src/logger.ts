@@ -120,3 +120,32 @@ function stripQuery(path: string): string {
 function defaultWrite(line: string): void {
   process.stderr.write(`${line}\n`);
 }
+
+/**
+ * Die **Art** eines Wurfs als Wert für einen Grund — und kein Wort daraus
+ * (B-2.4, T-320).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum nicht einfach `error.constructor.name`
+ * ---------------------------------------------------------------------------
+ *
+ * Weil {@link REASON_SHAPE} für einen Wert `[a-z0-9_]{1,32}` verlangt und
+ * `TypeError` mit einem Großbuchstaben beginnt. Ein Grund mit einem einzigen
+ * unerlaubten Zeichen wird **als Ganzes** zu {@link UNCLASSIFIED_REASON} — die
+ * Zeile verlöre dann nicht nur die Art des Fehlers, sondern auch die Zahlen
+ * daneben. Der Klassenname wird deshalb hier gefaltet und beschnitten, bevor er
+ * an eine Zeile kommt.
+ *
+ * **Was nie hineingerät, ist `error.message`.** Dort steht bei einem
+ * Dateisystem- oder SQLite-Fehler regelmäßig ein Pfad (T-132). Ein Klassenname
+ * trägt keinen — er kommt aus dem Erzeugnis und nicht aus der Umgebung.
+ *
+ * Ein Wurf, der kein `Error` ist (eine geworfene Zeichenkette, ein `undefined`
+ * aus einer fremden Portfassung), bekommt `unknown`. Die Zeile sagt dann „hier
+ * war ein Wurf, und er hatte keine Art" — mehr weiß sie wirklich nicht.
+ */
+export function errorKindValue(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown';
+  const folded = error.constructor.name.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  return folded === '' ? 'unknown' : folded.slice(0, 32);
+}

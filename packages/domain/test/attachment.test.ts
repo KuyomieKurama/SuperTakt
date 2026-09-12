@@ -854,4 +854,56 @@ describe('attachmentTargetNamesFile — die weiteste Eigentümerfrage, die einen
     // "email" als Herkunft trüge -- eine Information, die hier nicht existiert.
     expect(attachmentTargetNamesFile('/var/data/email-attachments/abc.eml', 'abc.eml')).toBe(true);
   });
+
+  // ---------------------------------------------------------------------------
+  // Die weitere Grenze: Zeichen, die anderswo Sonderbedeutung tragen (T-319)
+  // ---------------------------------------------------------------------------
+  //
+  // Diese Funktion selbst kennt kein SQL — die Zeichen "%" und "_" sind für
+  // sie gewöhnliche Namensbestandteile, buchstäblich verglichen über
+  // `endsWith`. Die vier Fälle unten sind trotzdem hier festgehalten, weil sie
+  // der Adapter (`repo-attachments.ts`, `attachmentsNamingFiles`) ohne
+  // Sonderbehandlung an SQLite weiterreicht (`LIKE ... ESCAPE`); die Regel, was
+  // "nennt die Datei" heißt, steht ausschließlich hier.
+
+  it('ein Dateiname mit dem Zeichen "%" darin wird wie jedes andere Zeichen buchstäblich verglichen', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\rabatt%20prozent.eml', 'rabatt%20prozent.eml')).toBe(
+      true,
+    );
+    expect(attachmentTargetNamesFile('C:\\Mails\\rabattXXXXXprozent.eml', 'rabatt%20prozent.eml')).toBe(
+      false,
+    );
+  });
+
+  it('ein Dateiname mit dem Zeichen "_" darin wird wie jedes andere Zeichen buchstäblich verglichen', () => {
+    expect(attachmentTargetNamesFile('C:\\Mails\\vertrag_2024.eml', 'vertrag_2024.eml')).toBe(true);
+    expect(attachmentTargetNamesFile('C:\\Mails\\vertragX2024.eml', 'vertrag_2024.eml')).toBe(false);
+  });
+
+  it('ein gesuchter Name, der selbst einen Pfadtrenner trägt, wird buchstäblich am Ende gesucht', () => {
+    expect(
+      attachmentTargetNamesFile('C:\\Mails\\unterordner\\datei.eml', 'unterordner\\datei.eml'),
+    ).toBe(true);
+    expect(attachmentTargetNamesFile('C:\\Mails\\datei.eml', 'unterordner\\datei.eml')).toBe(false);
+  });
+
+  it('ein sehr langer Name ändert nichts an Vergleich oder Ergebnis', () => {
+    const longName = `${'a'.repeat(400)}.eml`;
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${longName}`, longName)).toBe(true);
+  });
+
+  it('Unicode-Normalform wird NICHT ausgeglichen — nur ASCII wird gefaltet (siehe attachmentTargetFileName): ein zusammengesetztes und ein zerlegtes Zeichen gelten als verschieden', () => {
+    // "é" als ein Zeichen (NFC, U+00E9) gegen "e" + kombinierender Akut (NFD,
+    // U+0065 U+0301) — sichtbar identisch, aber zwei verschiedene
+    // Zeichenketten. `asciiLower` fasst nur A-Z an; für alles andere bleibt der
+    // Bestand ungefaltet. Ein falsches "false" hier ist der sichere Fehlschlag
+    // (die Datei bleibt liegen statt gelöscht zu werden) — siehe Kopfkommentar
+    // der Funktion: "Im Zweifel true", und hier fehlt der Zweifel eben nicht.
+    const nfc = '\u00e9tat.eml'; // "état.eml", vorkomponiert
+    const nfd = 'e\u0301tat.eml'; // "état.eml", zerlegt in e + ´
+    expect(nfc).not.toBe(nfd); // die beiden Literale sind wirklich verschieden
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfc}`, nfc)).toBe(true);
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfc}`, nfd)).toBe(false);
+    expect(attachmentTargetNamesFile(`C:\\Mails\\${nfd}`, nfc)).toBe(false);
+  });
 });

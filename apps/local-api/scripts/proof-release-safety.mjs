@@ -75,7 +75,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 /*
  * Der TypeScript-Compiler, und warum er hier steht (T-292).
@@ -198,8 +198,45 @@ const EXTRA_FILES = [
 
 const READ_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.js', '.mjs', '.rs', '.json', '.toml', '.html']);
 
-/** Prüfdateien gehören nicht dazu (Begründung im Kopf, Punkt b). */
-const SKIP_DIRECTORIES = new Set(['node_modules', 'dist', 'target', 'test', 'tests', '__tests__']);
+/**
+ * Was beim Ablaufen des Baums übersprungen wird — und was **seit T-320 nicht
+ * mehr**.
+ *
+ * ===========================================================================
+ * `test`, `tests` und `__tests__` standen hier und waren die fünfte gemessene
+ * Umgehung dieses Wächters
+ * ===========================================================================
+ *
+ * Sie wurden auf **jeder** Tiefe übersprungen, also auch unterhalb eines
+ * Quellordners. `apps/local-api/tsconfig.json` hat `"include": ["src"]` und
+ * keinen `exclude`; eine Datei unter `src/**` liegt damit im
+ * Übersetzungsprogramm, auch wenn ein Verzeichnis auf dem Weg `test` heißt.
+ * Gemessen (T-318, B-1):
+ *
+ *     src/features/version/test/augment.ts
+ *       export {};
+ *       declare module '../version.ts' {
+ *         interface VersionCheckStorePort { read(): Promise<string | null> }
+ *       }
+ *
+ * `port.read()` übersetzt, `tsc` gibt 0 zurück — und keine der beiden Zusagen
+ * über den Baum sah die Datei, weil dieser Lauf sie nicht las. Die Klasse war
+ * damit nicht geschlossen, sondern ein Verzeichnis tiefer gezogen.
+ *
+ * **Die drei Namen zu streichen kostet nichts:** Die sieben Prüfordner des
+ * Bestands (`apps/{desktop,local-api,outlook-addin,web}/test`,
+ * `packages/{domain,export,storage}/test`) sind sämtlich Geschwister von `src`
+ * und liegen ohnehin außerhalb jedes `SOURCE_ROOTS`-Laufs — gemessen mit
+ * `find … -type d -name test` (T-318, T-320). Sie waren hier wirkungslos und
+ * öffneten dabei genau eine Tür.
+ *
+ * **Das allein wäre aber wieder eine Verzeichnisliste**, und die fünf
+ * Niederlagen dieses Wächters kamen jede daher, daß er den Baum anders bestimmt
+ * hat als der Compiler. Deshalb steht daneben {@link uebersetzungsprogramm}:
+ * Die Menge wird nicht mehr nur gelaufen, sondern zusätzlich beim Compiler
+ * **erfragt**.
+ */
+const SKIP_DIRECTORIES = new Set(['node_modules', 'dist', 'target']);
 
 function walk(directory, out) {
   for (const entry of readdirSync(directory)) {
@@ -226,12 +263,161 @@ function walk(directory, out) {
  */
 
 /**
+ * Das **Übersetzungsprogramm** des Dienstes, beim Compiler erfragt (T-320).
+ *
+ * ===========================================================================
+ * Warum der Wächter den Baum nicht mehr allein bestimmt
+ * ===========================================================================
+ *
+ * Dieser Lauf urteilt in Abwesenheiten: **nirgends** eine zweite Adresse,
+ * **nirgends** ein Herunterladen, **nirgends** ein zweiter Erweiterungsblock.
+ * Jede dieser Aussagen wird über einer nicht gelesenen Datei wahr. Fünfmal ist
+ * er an genau dieser Stelle unterlegen, und jedes Mal, weil **seine** Menge an
+ * dem aufgespannt war, was er zu lesen gewohnt ist, statt an dem, was der
+ * Compiler sieht (E-099 Punkt 3; zuletzt T-318 B-1).
+ *
+ * Deshalb wird die Menge jetzt zweimal bestimmt und vereinigt:
+ *
+ *  1. **Gelaufen** über die acht Quellordner aus {@link SOURCE_ROOTS} — das ist
+ *     die weitere der beiden für alles außerhalb des Dienstes (`apps/web`,
+ *     `apps/desktop`, `apps/outlook-addin`, `packages/export`).
+ *  2. **Erfragt** über `apps/local-api/tsconfig.json`: `include`, `exclude` und
+ *     `files` wertet `ts.parseJsonConfigFileContent` nach den Regeln des
+ *     Compilers aus, und `ts.createProgram` legt die **transitive** Hülle
+ *     darüber. Damit ist jede Datei erfaßt, die der Dienst wirklich übersetzt —
+ *     auch eine unter `src/**\/test/**`, auch eine, die nur über eine
+ *     Importzeile aus einem Ordner hereinkommt, den keine Liste hier nennt.
+ *
+ * Was eine Deklarationszusammenführung bewirken kann, entscheidet sich genau in
+ * dieser Menge: Zwei Deklarationen verschmelzen nur innerhalb **eines**
+ * Programms. Wer sie messen will, muß das Programm fragen.
+ *
+ * ===========================================================================
+ * Was weiterhin draußen bleibt, und zwar benannt
+ * ===========================================================================
+ *
+ *  - **`node_modules/**`**, einschließlich `@types`. Eine Erweiterung von dort
+ *    wirkt im selben Programm und wird hier nicht gefangen. Sie wird ausgelassen,
+ *    weil jede zweite `.d.ts` eines Fremdpakets ein `declare module` trägt und
+ *    Zusage 1 daran restlos untergehen würde; die Abwehr dagegen ist `pnpm audit`
+ *    und die Sperrdatei, nicht dieser Lauf. Der Eintrag steht in der Liste bei
+ *    `checkNoStoreReadback`.
+ *  - Alles **außerhalb des Vorhabens** (ein Pfad, der aus `ROOT` hinausführt).
+ *
+ * ===========================================================================
+ * Der stumme Ausgang ist zu — dieselbe Regel wie bei den Quellordnern
+ * ===========================================================================
+ *
+ * Eine Konfiguration, die sich nicht lesen läßt, ein Programm ohne Dateien, ein
+ * Programm ohne die Datei, um die es geht: **Abbruch mit Namen** und kein leerer
+ * Fund. Ein Programm, das nicht gemessen werden konnte, ist der Zustand, in dem
+ * jede Aussage über es wahr wird (T-249-1).
+ */
+const PROGRAM_CONFIG = { paket: '@takt/local-api', pfad: 'tsconfig.json' };
+
+/**
+ * Die Datei, die im Programm liegen **muß**, damit die Messung etwas bedeutet.
+ *
+ * Sie trägt `VersionCheckStorePort`. Ein Programm ohne sie ist kein Programm
+ * über die Versionsprüfung, und die beiden Zusagen über den Baum wären darüber
+ * leer.
+ */
+const PROGRAM_REQUIRED_FILE = 'apps/local-api/src/features/version/version.ts';
+
+/**
+ * Die Untergrenze des Programms.
+ *
+ * Rund die Hälfte des heutigen Standes (121 eigene Dateien, gemessen am
+ * 2026-09-12). Sie soll rot werden, wenn die Auflösung zusammenbricht, nicht
+ * wenn jemand aufräumt — dieselbe Vorschrift wie bei {@link SOURCE_ROOTS}.
+ */
+const PROGRAM_MINIMUM = 60;
+
+/**
+ * Einmal aufgelöst, mehrfach gefragt.
+ *
+ * `ts.createProgram` kostet rund eine halbe Sekunde und rund 190 MB; der Lauf
+ * fragt dreimal (der Baum, und zwei Prüfsätze in Abschnitt 0). Ein Zwischenwert
+ * ist hier kein Tempowunsch, sondern die Zusage, daß alle drei **dieselbe**
+ * Menge sehen — zwei Auflösungen wären zwei Antworten auf dieselbe Frage, und
+ * das ist in dieser Datei der wiederkehrende Fehler.
+ */
+let programmZwischenwert = null;
+
+function uebersetzungsprogramm() {
+  if (programmZwischenwert !== null) return programmZwischenwert;
+  programmZwischenwert = aufloesenDesProgramms();
+  return programmZwischenwert;
+}
+
+function aufloesenDesProgramms() {
+  const configPath = join(paketVerzeichnis(PROGRAM_CONFIG.paket), PROGRAM_CONFIG.pfad);
+  const gelesen = ts.readConfigFile(configPath, (pfad) => {
+    try {
+      return readFileSync(pfad, 'utf8');
+    } catch {
+      return undefined;
+    }
+  });
+  if (gelesen.error !== undefined || gelesen.config === undefined) {
+    scheitern(
+      `Übersetzungsprogramm ${PROGRAM_CONFIG.paket}/${PROGRAM_CONFIG.pfad} lesen`,
+      `${configPath} ließ sich nicht als Konfiguration lesen.`,
+      'Ohne die Konfiguration bestimmt wieder eine Verzeichnisliste den Baum — und genau',
+      'daran ist dieser Lauf fünfmal unterlegen (T-320).',
+    );
+  }
+  const parsed = ts.parseJsonConfigFileContent(gelesen.config, ts.sys, dirname(configPath));
+  if (parsed.errors.length > 0) {
+    scheitern(
+      `Übersetzungsprogramm ${PROGRAM_CONFIG.paket}/${PROGRAM_CONFIG.pfad} auflösen`,
+      `${parsed.errors.length} Fehler beim Auswerten von include/exclude/files.`,
+      'Eine halb aufgelöste Konfiguration nennt zu wenige Dateien, und zu wenige Dateien',
+      'machen jede Abwesenheitsaussage wahr.',
+    );
+  }
+
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  const eigen = [];
+  for (const file of program.getSourceFiles()) {
+    const pfad = relative(ROOT, file.fileName).split(sep).join('/');
+    // Außerhalb des Vorhabens (`../…`) und alles aus `node_modules` — beides
+    // oben benannt und nicht stillschweigend.
+    if (pfad === '' || pfad.startsWith('../')) continue;
+    if (pfad.includes('node_modules/')) continue;
+    eigen.push({ voll: file.fileName, pfad });
+  }
+
+  if (eigen.length < PROGRAM_MINIMUM) {
+    scheitern(
+      `Übersetzungsprogramm ${PROGRAM_CONFIG.paket}/${PROGRAM_CONFIG.pfad} messen`,
+      `${eigen.length} eigene Datei(en) im Programm, verlangt sind mindestens ${PROGRAM_MINIMUM}.`,
+      'Ein Programm, das fast leer ist, ist nicht aufgelöst worden — und über einem nicht',
+      'aufgelösten Programm ist jede Aussage dieses Laufs wahr.',
+    );
+  }
+  if (!eigen.some((datei) => datei.pfad === PROGRAM_REQUIRED_FILE)) {
+    scheitern(
+      `Übersetzungsprogramm ${PROGRAM_CONFIG.paket}/${PROGRAM_CONFIG.pfad} messen`,
+      `${PROGRAM_REQUIRED_FILE} liegt nicht im aufgelösten Programm.`,
+      'Dann ist das gemessene Programm nicht das der Versionsprüfung, und die beiden',
+      'Zusagen über den Baum wären darüber leer.',
+    );
+  }
+  return eigen;
+}
+
+/**
  * Sammelt den Baum — und bricht ab, wo er ihn nicht findet (T-249-1).
  *
  * Die beiden `continue` und das leere `catch`, die hier bis T-249-1 standen,
  * waren der stumme Ausgang: ein fehlender Quellordner, ein fehlendes Manifest,
  * und die Aussagen dieses Laufs wurden über ihnen leer und damit wahr. Jetzt
  * ist beides ein Abbruch mit Namen.
+ *
+ * Seit T-320 kommt die zweite Hälfte dazu: die Dateien, die der Compiler
+ * übersetzt ({@link uebersetzungsprogramm}). Vereinigt und einmal gezählt — ein
+ * Pfad, den beide Wege nennen, wird einmal gelesen.
  */
 function collectTree() {
   const files = [];
@@ -285,16 +471,37 @@ function collectTree() {
     }
     files.push(full);
   }
+
+  /*
+   * **Und die zweite Hälfte: was der Compiler übersetzt** (T-320).
+   *
+   * Sie steht hier und nicht an einer eigenen Prüfung, weil sie den **Baum**
+   * betrifft und damit alle sieben Prüfungen zugleich — nicht nur die beiden
+   * Zusagen, an denen die Lücke gemessen wurde. Eine Adresse, ein `fetch` oder
+   * ein Öffnen-Befehl in einer Datei, die der Dienst übersetzt, ist derselbe
+   * Verstoß, ganz gleich in welchem Verzeichnis er steht.
+   */
+  const programm = uebersetzungsprogramm();
+  bilanz.push(`Übersetzungsprogramm: ${programm.length}`);
+  for (const datei of programm) files.push(datei.voll);
+
   process.stdout.write(`        ${bilanz.join(', ')}\n`);
 
-  return files.map((full) => {
-    const source = readFileSync(full, 'utf8');
+  // Einmal je Pfad. Beide Wege nennen heute dieselben Dateien des Dienstes;
+  // zweimal gelesen wäre jeder Befund darin zweimal gemeldet.
+  const gesehen = new Set();
+  const tree = [];
+  for (const full of files) {
     const path = relative(ROOT, full).split(sep).join('/');
+    if (gesehen.has(path)) continue;
+    gesehen.add(path);
+    const source = readFileSync(full, 'utf8');
     // In JSON und TOML gibt es keine Kommentare der obigen Bauart; sie laufen
     // trotzdem durch denselben Schritt, weil ein `//` in einer Adresse dort
     // genauso in einer Zeichenkette steht.
-    return { path, source, code: stripComments(source) };
-  });
+    tree.push({ path, source, code: stripComments(source) });
+  }
+  return tree;
 }
 
 // ===========================================================================
@@ -983,13 +1190,26 @@ function portMitglieder(quelltext, name, dateiname = 'port.ts') {
  *    trägt keiner von ihnen eine der fünf Marken (T-290 nachgemessen), morgen
  *    ist das eine Zeile in einer fremden Datei;
  *  - alles außerhalb des gelesenen Baums, und das ist mehr, als es klingt.
- *    Gelesen werden die acht `src`-Wurzeln aus `SOURCE_ROOTS` und die zehn
- *    Einzeldateien aus `EXTRA_FILES`. **Draußen** liegen: jeder `scripts/`-Baum
- *    (auch dieser Lauf selbst), `packages/ui-tokens/**`, `apps/web/public/**`
- *    (dort liegt mit `startup-appearance.js` ausgelieferter Laufzeitcode),
- *    `packages/storage/migrations/**` **ganz** — nicht nur die `.sql`-Dateien,
- *    auch eine `helper.ts` neben ihnen würde nicht gelesen —, dazu die
- *    Prüfordner und `dist/`;
+ *    Gelesen werden die acht `src`-Wurzeln aus `SOURCE_ROOTS`, die zehn
+ *    Einzeldateien aus `EXTRA_FILES` und **seit T-320 das Übersetzungsprogramm
+ *    des Dienstes** ({@link uebersetzungsprogramm}). **Draußen** liegen: jeder
+ *    `scripts/`-Baum (auch dieser Lauf selbst), `packages/ui-tokens/**`,
+ *    `apps/web/public/**` (dort liegt mit `startup-appearance.js`
+ *    ausgelieferter Laufzeitcode), `packages/storage/migrations/**` — die
+ *    `.sql`-Dateien ganz, eine `helper.ts` neben ihnen nur dann, wenn der
+ *    Dienst sie **importiert** —, dazu die sieben Prüfordner neben den
+ *    `src`-Wurzeln und `dist/`;
+ *  - **`node_modules/**`, einschließlich `@types/**`.** Eine
+ *    Deklarationserweiterung von dort wirkt im selben Programm und würde hier
+ *    nicht gefangen. Sie ist ausgelassen, weil jede zweite `.d.ts` eines
+ *    Fremdpakets ein `declare module` trägt und Zusage 1 daran restlos
+ *    unterginge; die Abwehr dagegen sind die Sperrdatei und `pnpm audit`. Der
+ *    Eintrag stand bis T-320 in dieser Liste nicht und gehört hierher, weil er
+ *    die einzige verbliebene Lücke **innerhalb** des Übersetzungsprogramms ist;
+ *  - `src/**\/test/**` stand hier bis T-320 **nicht** und war die Lücke, an der
+ *    dieser Lauf zum fünften Mal unterlegen ist (T-318 B-1). Sie ist zu — der
+ *    Baum liest diese Dateien jetzt, und zwei Prüfsätze in Abschnitt 0 halten
+ *    das fest;
  *  - ein Zugriff über einen **anderen Prozeß** auf dieselbe Datei. Das war nie
  *    Sache dieses Laufs und ist VG-3.
  *
@@ -1257,7 +1477,30 @@ function findeErweiterungsbloecke(files) {
   return findings;
 }
 
-/** Zusage 2: der Portname steht genau einmal im gelesenen Baum (T-296). */
+/**
+ * Zusage 2: der Portname steht genau einmal im gelesenen Baum (T-296).
+ *
+ * ---------------------------------------------------------------------------
+ * Der Befundsatz sagt seit T-320 nur noch, was gemessen ist (Befund T-318 zu
+ * Zeile 1261)
+ * ---------------------------------------------------------------------------
+ *
+ * Gesammelt wird **rekursiv** über `ts.forEachChild`, und das ist Absicht: Die
+ * laute Richtung ist hier die billige. Getroffen wird damit aber auch eine
+ * Deklaration im Rumpf einer Funktion oder in einem `namespace` mit Bezeichner
+ * — und die führt TypeScript **nicht** mit der obersten zusammen (T-296 und
+ * T-318 haben es beide mit `tsc` 5.9.3 gemessen: `TS2339`).
+ *
+ * Bis T-320 stand im Satz trotzdem „welche der beiden Deklarationen der Prüfer
+ * einsetzt, entscheidet eine Importzeile". Für einen Funktionsrumpf ist das
+ * schlicht falsch — jene Deklaration ist nicht importierbar. Es war genau der
+ * Satz, den T-296 an `portMitglieder` zu Recht nicht schreiben wollte.
+ *
+ * Der Satz nennt jetzt die **Tatsache** (der Name steht ein zweites Mal im
+ * Baum) und den **Grund**, warum das reicht (dieser Leser mißt die Gestalt an
+ * genau einer Datei, und er weiß nicht, welche der beiden gilt) — ohne über die
+ * Zusammenführung eine Aussage zu treffen, die er nicht gemessen hat.
+ */
 function findeZweiteDeklarationDesPorts(files, name) {
   const findings = [];
   for (const file of files) {
@@ -1280,7 +1523,7 @@ function findeZweiteDeklarationDesPorts(files, name) {
     ts.forEachChild(lesbarerBaum(file.source, file.path), besuche);
     if (getroffen) {
       findings.push(
-        `${file.path}: deklariert \`${name}\` ein zweites Mal — die Gestalt des Ports wird an ${VERSION_CHECKER_FILE} gemessen, und welche der beiden Deklarationen der Prüfer einsetzt, entscheidet eine Importzeile, die dieser Leser nicht liest (T-296)`,
+        `${file.path}: \`${name}\` steht hier ein zweites Mal im Baum — die Gestalt des Ports wird an ${VERSION_CHECKER_FILE} gemessen, und dieser Leser kann nicht sagen, welche der beiden Deklarationen für einen Aufrufer gilt (T-296, Satz auf das Gemessene gekürzt in T-320)`,
       );
     }
   }
@@ -1824,6 +2067,19 @@ const COUNTER_PROOFS = {
    * Einträge sind, steht bei ihnen: Jede plausible schwächere Umsetzung dieses
    * Wächters trennt sie, und zwar jede anders.
    *
+   * Einer ist in T-320 dazugekommen, und er ist die **fünfte** gemessene
+   * Niederlage derselben Klasse:
+   *
+   *  - (α) ZZ-F′: dieselbe Erweiterung wie (x), aber unter `src/**\/test/**`.
+   *    Sie lag im Übersetzungsprogramm und außerhalb des gelesenen Baums, weil
+   *    `SKIP_DIRECTORIES` drei Verzeichnisnamen auf **jeder** Tiefe übersprang
+   *    (T-318 B-1). Der Eintrag mißt das Erkennen; daß der Baum die Datei
+   *    überhaupt liefert, messen zwei eigene Prüfsätze in Abschnitt 0. Die
+   *    Lehre daraus steht bei {@link uebersetzungsprogramm} und ist die von
+   *    E-099 Punkt 3: **Wer eine Abwesenheit zusichert, spannt seine Menge an
+   *    der Anforderung auf** — hier also an dem, was der Compiler übersetzt,
+   *    nicht an einer Verzeichnisliste.
+   *
    * Zwei Dinge an der Form, beide Absicht:
    *
    *  - `erwartet` nagelt fest, **woran** die Gegenprobe rot wird. Ohne das wäre
@@ -2120,7 +2376,7 @@ const COUNTER_PROOFS = {
         `  read(): Promise<string | null>;\n` +
         `  write(at: Date): Promise<void>;\n` +
         `}\n`,
-      erwartet: /deklariert `VersionCheckStorePort` ein zweites Mal/,
+      erwartet: /`VersionCheckStorePort` steht hier ein zweites Mal im Baum/,
     },
     {
       /*
@@ -2145,6 +2401,39 @@ const COUNTER_PROOFS = {
       source:
         `export {};\n` +
         `declare module './version.ts' {\n` +
+        `  interface VersionCheckStorePort {\n` +
+        `    read(): Promise<string | null>;\n` +
+        `  }\n` +
+        `}\n`,
+      erwartet: /erweitert fremde Deklarationen/,
+    },
+    {
+      /*
+       * (α) ZZ-F′ — **dieselbe Erweiterung, ein Verzeichnis tiefer**, und das
+       * war die fünfte gemessene Niederlage dieses Laufs (T-318 B-1, gebaut in
+       * T-320).
+       *
+       * `SKIP_DIRECTORIES` übersprang `test`, `tests` und `__tests__` auf jeder
+       * Tiefe. `apps/local-api/tsconfig.json` hat `"include": ["src"]` und
+       * keinen `exclude` — die Datei lag damit **im Übersetzungsprogramm** und
+       * **außerhalb des gelesenen Baums**. Zusage 1 sah sie nicht, Zusage 2
+       * nicht, Gestalt 5 nicht (kein Import). Gemessen mit `tsc`: `port.read()`
+       * übersetzt, Exit 0.
+       *
+       * **Was dieser Eintrag mißt und was nicht — und der Unterschied gehört
+       * dazugesagt.** Er setzt die Datei unmittelbar in den erfundenen Baum;
+       * er beweist damit, daß Zusage 1 sie **erkennt**, wenn sie sie bekommt.
+       * Daß `collectTree` sie **liefert**, mißt er nicht — das messen zwei
+       * eigene Prüfsätze in Abschnitt 0 („keine Prüfordnernamen in
+       * `SKIP_DIRECTORIES`" und „jede Datei des Übersetzungsprogramms liegt im
+       * gelesenen Baum"). Beide Hälften sind nötig, und keine trägt allein:
+       * Genau die zweite fehlte in T-296, und deshalb war die Klasse nicht zu.
+       */
+      name: 'die Erweiterung liegt unter `src/**/test/**` — im Übersetzungsprogramm, bis T-320 außerhalb des gelesenen Baums (T-318, ZZ-F′)',
+      path: 'apps/local-api/src/features/version/test/augment.ts',
+      source:
+        `export {};\n` +
+        `declare module '../version.ts' {\n` +
         `  interface VersionCheckStorePort {\n` +
         `    read(): Promise<string | null>;\n` +
         `  }\n` +
@@ -2299,10 +2588,53 @@ try {
   }
 
   check(
-    `der Baum ist gelesen (${tree.length} Dateien aus ${SOURCE_ROOTS.length} Quellordnern)`,
+    `der Baum ist gelesen (${tree.length} Dateien aus ${SOURCE_ROOTS.length} Quellordnern und dem Übersetzungsprogramm)`,
     tree.length > 100,
     `nur ${tree.length}`,
   );
+
+  /*
+   * =========================================================================
+   * Und die beiden Sätze über den **Baum selbst** (T-320)
+   * =========================================================================
+   *
+   * Die Gegenprobe (α) setzt die Erweiterung unmittelbar in den erfundenen Baum
+   * und mißt damit, daß Zusage 1 sie **erkennt**. Sie mißt nicht, daß
+   * `collectTree` sie **liefert** — und genau diese Hälfte fehlte in T-296, als
+   * die Klasse für geschlossen erklärt wurde. Die beiden Sätze hier sind die
+   * fehlende Hälfte.
+   */
+  {
+    const pruefordner = ['test', 'tests', '__tests__'].filter((name) => SKIP_DIRECTORIES.has(name));
+    check(
+      'kein Prüfordnername in `SKIP_DIRECTORIES` — er überspränge auch `src/**/test/**`, und das liegt im Übersetzungsprogramm (T-318, ZZ-F′)',
+      pruefordner.length === 0,
+      `übersprungen: ${pruefordner.join(' ')}`,
+    );
+  }
+  {
+    /*
+     * Der tragende Satz: **Was der Compiler übersetzt, hat dieser Lauf
+     * gelesen.**
+     *
+     * Er ist heute durch die Bauart von `collectTree` erfüllt und nicht durch
+     * einen Zufall — und er steht trotzdem da. Der Tag, an dem jemand die
+     * Vereinigung wieder filtert (ein Ordnername, eine Endung, eine
+     * Bequemlichkeit), ist der Tag, an dem dieser Satz die Messung ist und nicht
+     * mehr die Beschreibung. Fünfmal ist dieser Wächter an genau dieser Naht
+     * unterlegen; ein Prüfsatz, der beim sechsten Mal rot wird, kostet drei
+     * Zeilen.
+     */
+    const gelesen = new Set(tree.map((file) => file.path));
+    const fehlend = uebersetzungsprogramm()
+      .map((datei) => datei.pfad)
+      .filter((pfad) => !gelesen.has(pfad));
+    check(
+      `jede Datei des Übersetzungsprogramms liegt im gelesenen Baum (${uebersetzungsprogramm().length})`,
+      fehlend.length === 0,
+      `nicht gelesen: ${fehlend.slice(0, 5).join(' ')}${fehlend.length > 5 ? ` … (+${fehlend.length - 5})` : ''}`,
+    );
+  }
   check(
     'die eine Stelle mit der Adresse liegt vor',
     tree.some((file) => file.path === API_URL_FILE),
@@ -2380,9 +2712,19 @@ try {
        * „irgendein Befund reicht". Es wird damit zweimal rot: hier und in
        * Abschnitt 0, der alle Einträge gegenzählt. Die stille Richtung wäre die
        * falsche.
+       *
+       * **Gefragt wird mit `instanceof RegExp` und nicht mit `!== undefined`**
+       * (T-318, T-320). Beide Fassungen standen drei Zeilen auseinander — die
+       * strenge in Abschnitt 0, die lose hier. Ein versehentliches
+       * `erwartet: 'text'` wäre damit mitten im Lauf ein **Wurf** gewesen
+       * (`injection.erwartet.test is not a function`) statt eines roten
+       * Prüfsatzes. Ein Wächter, der abstürzt, statt rot zu werden, gibt dem
+       * Leser die falsche Auskunft: kein Ergebnis sieht aus wie ein Werkzeug-
+       * und nicht wie ein Bestandsproblem.
        */
       const getroffen =
-        injection.erwartet !== undefined && findings.some((fund) => injection.erwartet.test(fund));
+        injection.erwartet instanceof RegExp &&
+        findings.some((fund) => injection.erwartet.test(fund));
       check(
         label,
         getroffen,

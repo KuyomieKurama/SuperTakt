@@ -724,6 +724,126 @@ describe('createAttachmentPort.attachmentsNamingFiles — die weiteste Eigentüm
     expect(owned.has(namen[0] as string)).toBe(true);
     expect(owned.has(namen[1] as string)).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // Die SQL-Vorauswahl arbeitet mit `LIKE '%name%'` — ein Name, der selbst ein
+  // Muster wäre (`%`, `_`), ein Pfadtrenner darin, eine leere Zeichenkette oder
+  // eine ungewöhnliche Länge sind genau die Werte, an denen eine Vorauswahl
+  // reißen würde, bevor die Entscheidung in @takt/domain überhaupt gefragt
+  // wird. Jeder Fall hier hat ein reales Gegenstück: E-Mail-Anhänge tragen
+  // häufig Unterstriche im Namen, seltener auch das andere SQL-Platzhalterzeichen.
+  // -------------------------------------------------------------------------
+
+  it('eine leere Zeichenkette in der Namensliste bleibt ausgeschlossen — obwohl das SQL-Muster "%%" jede Zeile träfe', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\echtedatei.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles(['', 'echtedatei.eml']);
+    expect(owned.has('')).toBe(false);
+    expect(owned.has('echtedatei.eml')).toBe(true);
+    expect(owned.size).toBe(1);
+  });
+
+  it('ein Name mit dem SQL-Platzhalterzeichen "%" wird nur bei buchstäblicher Übereinstimmung gefunden, nicht als Muster', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    // Diese Zeile trägt den Namen buchstäblich, "%" und alles.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\rabatt%20prozent.eml',
+      now: NOW,
+    });
+    // Diese Zeile enthielte "rabatt" und "prozent.eml" nur dann, wenn "%" als
+    // Wildcard statt als Zeichen gelesen würde — buchstäblich ist der Name
+    // anders und darf nicht gefunden werden.
+    const decoy = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: decoy.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\rabattXXXXXprozent.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles(['rabatt%20prozent.eml']);
+    expect(owned.has('rabatt%20prozent.eml')).toBe(true);
+    expect(owned.size).toBe(1);
+  });
+
+  it('ein Name mit dem SQL-Platzhalterzeichen "_" wird nur bei buchstäblicher Übereinstimmung gefunden, nicht als Ein-Zeichen-Wildcard', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\vertrag_2024.eml',
+      now: NOW,
+    });
+    // "vertragX2024.eml" träfe das Muster "%vertrag_2024.eml%" nur, wenn "_"
+    // als "ein beliebiges Zeichen" statt als Unterstrich gelesen würde.
+    const decoy = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: decoy.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\vertragX2024.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles(['vertrag_2024.eml']);
+    expect(owned.has('vertrag_2024.eml')).toBe(true);
+    expect(owned.size).toBe(1);
+  });
+
+  it('ein Name mit einem Pfadtrenner darin wird trotzdem nur buchstäblich verglichen', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    // Ein ungewöhnlicher, aber möglicher Anzeigename: der gespeicherte Pfad
+    // endet buchstäblich auf diese Zeichenkette samt Rückstrich darin.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: 'C:\\Users\\nutzer\\AppData\\email-attachments\\unterordner\\datei.eml',
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles(['unterordner\\datei.eml']);
+    expect(owned.has('unterordner\\datei.eml')).toBe(true);
+  });
+
+  it('ein sehr langer Name (weit über eine gewöhnliche Dateiendung hinaus) wird noch korrekt gefunden', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    const longName = `${'a'.repeat(400)}.eml`;
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      origin: 'email',
+      target: `C:\\Users\\nutzer\\AppData\\email-attachments\\${longName}`,
+      now: NOW,
+    });
+
+    const owned = await db.unit.attachments.attachmentsNamingFiles([longName]);
+    expect(owned.has(longName)).toBe(true);
+  });
 });
 
 describe('createAttachmentPort.attachmentNamesUnder — die erste Gegenfrage, am Anfang des Pfades (A-A-98)', () => {

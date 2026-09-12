@@ -635,3 +635,25 @@ Bauart** und ist älter. Gemessen am 2026-09-12, nicht vermutet:
 
 Das ist kein neues Risiko dieser Welle. Es ist ein **bestehendes**, das erst sichtbar wurde, als
 jemand denselben Mechanismus ein zweites Mal baute und dabei gemessen wurde.
+
+**Nachgetragen am 2026-09-12 (T-318), und es ist der Grund, diesen Eintrag NICHT zu schließen.**
+Der code-reviewer hat die Aufräumläufe freigegeben — und im selben Lauf **zwei weitere Stellen**
+gefunden, die dieselbe Frage enger beantworten, außerhalb jedes Aufräumlaufs:
+
+`apps/local-api/src/features/todos/attachments.ts:341` und
+`apps/local-api/src/features/todos/todos.ts:377` entfernen die Datei allein an `kind`
+beziehungsweise `origin` **der gelöschten Zeile**. Das ist eine zweite, engere Antwort auf „wem
+gehört diese Datei" — und sie entscheidet eine Löschung.
+
+**Der Verlust tritt hier ohne Startlauf ein:** Der in T-314 gemessene vierte Weg — ein Anhang der
+Art `file`, der den vollen Pfad einer Bildkopie trägt und durch `checkAttachmentPath`
+kommt — führt dazu, daß **Todo A zu löschen Todo B seinen Anhang kostet**. Kein Angriff, kein
+Neustart, ein gewöhnlicher Bedienweg.
+
+**Die Auflage des Prüfers, wörtlich übernommen:** *Für die Aufräumläufe ist R-29 zu, für die
+Klasse nicht.* Die Klasse heißt: **Wer eine Datei entfernt, muß fragen, ob sie noch jemandem
+gehört — und zwar mit der weitesten Frage, nicht mit der nächstliegenden.** Beide Stellen stehen
+hinter dem `COMMIT`; dort genügt dieselbe Frage, die der Aufräumlauf stellt.
+
+Dieser Eintrag bleibt offen, bis die Frage an **jeder** löschenden Stelle dieselbe ist.
+

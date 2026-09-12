@@ -50,6 +50,7 @@ import type {
 import type { Result, TaktError, Timestamp, TimeEntryId } from '@takt/domain';
 
 import type { ExportFaultInjection } from './features/export/export.ts';
+import type { Logger } from './logger.ts';
 
 /**
  * Der gemeinsame Zusammenhang aller Anwendungsfälle.
@@ -97,6 +98,26 @@ export interface AppContext {
    * der Abrechnung steht.
    */
   readonly system: SystemPort;
+  /**
+   * Der Protokollschreiber des Dienstes — **freiwillig** und nur für das, was
+   * sonst niemand erführe (T-320).
+   *
+   * Er steht hier, seit ein Anwendungsfall eine Frage stellt, deren Fehlschlag
+   * eine **unterbliebene** Handlung ist: `releaseUnclaimedBlobs`
+   * (`features/todos/attachments.ts`) fragt nach dem `COMMIT`, ob eine Datei
+   * noch jemandem gehört. Kann diese Frage nicht beantwortet werden, bleibt die
+   * Datei liegen — die richtige Richtung, aber ohne Zeile wäre sie unsichtbar.
+   * Der Adapter kann sie nicht schreiben: Er wird gar nicht erst gerufen.
+   *
+   * **Freiwillig und nicht Pflicht**, damit ein Prüffall einen Zusammenhang
+   * ohne ihn bauen kann. Im Zusammenbau ist er immer gesetzt
+   * (`composition.ts`) und es ist derselbe wie überall sonst.
+   *
+   * Was hier hineingeschrieben werden darf, steht in `logger.ts` und nicht im
+   * Ermessen des Aufrufers: ein deutscher Satz und ein Grund aus einem engen
+   * Zeichenvorrat, nie ein Wert aus dem Bestand (B-2.4).
+   */
+  readonly logger?: Logger;
   /**
    * Für den Prüfpfad: ein Haken mitten im Exportlauf (siehe `features/export/export.ts`).
    *

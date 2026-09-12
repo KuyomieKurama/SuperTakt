@@ -354,10 +354,35 @@ export async function main(options: MainOptions = {}): Promise<void> {
           context.transactions.inTransaction((unit) =>
             unit.attachments.attachmentsNamingFiles(names),
           ),
+        /*
+         * **Die erste Gegenfrage trägt im Bildverzeichnis nur zur Hälfte —
+         * deshalb stehen hier zwei Abfragen und nicht eine** (T-318, T-320).
+         *
+         * `attachmentNamesUnder` spannt die Menge am **Anfang** des Pfades auf.
+         * Eine gewöhnliche Bildzeile führt im `target` aber den bloßen Namen,
+         * kein Ordner steht davor, und die Antwort ist im Regelfall **leer** —
+         * `missing` war damit für diesen Lauf immer 0, und von den beiden
+         * Gegenfragen lebte nur `claimed > owned`.
+         *
+         * `attachmentNamesOfKind('image')` nennt die Namen, die der Bestand für
+         * Bildanhänge führt, gleich ob `target` dort einen Namen oder einen
+         * Pfad trägt. Die Vereinigung beider ist die Menge „was der Bestand in
+         * diesem Ordner erwartet". Sie kann nur **größer** werden, und größer
+         * heißt hier ausschließlich: mehr Anlaß zu bremsen, nie mehr Anlaß zu
+         * löschen.
+         *
+         * **Die Vereinigung steht hier und nicht in `orphan-sweep.ts`**, weil
+         * sie den Ordner betrifft und nicht das Verfahren: Für die übernommenen
+         * E-Mail-Dateien wäre dieselbe Ergänzung falsch — `kind = 'file'` trägt
+         * dort auch jeden vom Benutzer eingetragenen Pfad, und der zeigt
+         * absichtlich anderswohin.
+         */
         attachmentNamesUnder: (directory) =>
-          context.transactions.inTransaction((unit) =>
-            unit.attachments.attachmentNamesUnder(directory),
-          ),
+          context.transactions.inTransaction(async (unit) => {
+            const under = await unit.attachments.attachmentNamesUnder(directory);
+            const named = await unit.attachments.attachmentNamesOfKind('image');
+            return new Set([...under, ...named]);
+          }),
         imageCount: () =>
           context.transactions.inTransaction((unit) => unit.attachments.imageCount()),
         removeImage: (name) => context.attachmentBlobs.removeImage(name),

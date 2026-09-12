@@ -784,7 +784,20 @@ function lastNameSegment(path: string): string {
  * Takt nicht annimmt; eine `.lnk` tut dort ohnehin nichts.
  */
 function effectiveNameSegment(path: string): string {
-  const name = lastNameSegment(path);
+  return trimResolvedTail(lastNameSegment(path));
+}
+
+/**
+ * Nachgestellte Punkte und Leerzeichen fallen — der Teil von
+ * {@link effectiveNameSegment}, der **ohne** die Zerlegung in Pfadbestandteile
+ * auskommt (T-320).
+ *
+ * Eigen, weil {@link attachmentTargetNamesFile} genau diese Hälfte auf den
+ * **gesuchten Namen** anwenden muß und die andere ausdrücklich nicht: Ein
+ * gesuchter Name, der selbst einen Trenner trägt, wird buchstäblich am Ende
+ * gesucht, und das ist eine zugesagte Eigenschaft.
+ */
+function trimResolvedTail(name: string): string {
   let end = name.length;
   while (end > 0) {
     const character = name[end - 1];
@@ -986,11 +999,50 @@ export function attachmentTargetFileName(target: string): string {
  * **Was sie nicht ist:** eine Aussage darüber, ob der Pfad in **diesem** Ordner
  * liegt. Das ist Absicht. Ein Pfad, der denselben Namen in einem anderen Ordner
  * nennt, verschont die Datei hier — und das ist der billige Fehler.
+ *
+ * ===========================================================================
+ * Beide Argumente werden gleich behandelt — seit T-320, und der Unterschied
+ * war eine Enge
+ * ===========================================================================
+ *
+ * Bis T-320 lief `target` durch {@link attachmentTargetFileName} (letzter
+ * Namensbestandteil, nachgestellte Punkte und Leerzeichen gekürzt, gefaltet),
+ * `fileName` dagegen nur durch die Faltung. Ein liegender Name mit
+ * nachgestelltem Leerzeichen — auf POSIX möglich — fand seine Zeile deshalb
+ * **nicht**, und eine Zeile, die nicht gefunden wird, ist eine Datei, die
+ * fällt (T-318, Befund `attachment.ts:993`).
+ *
+ * Die Unsymmetrie ist aufgehoben, ohne eine der beiden Fassungen aufzugeben:
+ * Gefragt wird **beides**, der Name wie übergeben und der um Punkte und
+ * Leerzeichen gekürzte. Damit ist diese Fassung Zeichen für Zeichen weiter als
+ * die vorige — sie findet jeden Eigentümer, den jene fand, und zusätzlich die,
+ * die an der Kürzung hängen. Eine Fassung, die `fileName` **nur** kürzt, wäre
+ * es nicht: Ein `target` ohne Trenner, das auf `x.png.` endet, nennt `x.png.`,
+ * aber nicht `x.png`.
+ *
+ * **Was ausdrücklich nicht mitgeht, ist die Zerlegung in Pfadbestandteile.**
+ * `fileName` läuft durch {@link trimResolvedTail} und **nicht** durch
+ * {@link attachmentTargetFileName}: Ein gesuchter Name, der selbst einen
+ * Trenner trägt, wird weiterhin buchstäblich am Ende gesucht. Das ist eine
+ * zugesagte Eigenschaft — und die Enge kostet hier nichts, weil beide
+ * Aufräumläufe ausschließlich erzeugte Namen fragen (32 Hexziffern und eine
+ * Endung, kein Trenner).
+ *
+ * Der Preis steht oben in der Richtung: mehr Eigentümer, mehr verschonte
+ * Dateien. Genau so herum ist es gewollt.
  */
 export function attachmentTargetNamesFile(target: string, fileName: string): boolean {
   if (fileName === '') return false;
-  const name = asciiLower(fileName);
-  return asciiLower(target).endsWith(name) || attachmentTargetFileName(target) === name;
+  const folded = asciiLower(target);
+  // Erst die Frage in der Gestalt, in der sie gestellt wurde. Sie ist die
+  // ältere und für jeden erzeugten Namen die einzige, die überhaupt greift.
+  if (folded.endsWith(asciiLower(fileName))) return true;
+
+  // Dann dieselbe Frage an dem Namen, den Windows beim Öffnen auflöst — auf
+  // **beiden** Seiten und nicht nur auf der des `target`.
+  const name = asciiLower(trimResolvedTail(fileName));
+  if (name === '') return false;
+  return folded.endsWith(name) || attachmentTargetFileName(target) === name;
 }
 
 /**

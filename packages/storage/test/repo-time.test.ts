@@ -122,6 +122,7 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
       { title: 'T', callNumber: null, statusId: null, tagIds: [], note: '', now: NOW },
       [],
     );
+    let firstCreatedId: string | undefined;
     for (const [start, end] of [
       ['2026-08-29T08:00:00Z', '2026-08-29T08:10:00Z'],
       ['2026-08-30T08:00:00Z', '2026-08-30T08:10:00Z'],
@@ -129,6 +130,7 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
     ] as const) {
       const result = await db.unit.timeEntries.create({ todoId: todo.id, startedAt: ts(start), endedAt: ts(end), note: '' }, NOW);
       expect(result.ok).toBe(true);
+      if (result.ok && firstCreatedId === undefined) firstCreatedId = result.value.id;
     }
 
     const byTodo = await db.unit.timeEntries.search({ todoId: todo.id });
@@ -136,6 +138,21 @@ describe('createTimeEntryPort — manuelle Buchungen (A-6.1, A-6.9)', () => {
 
     const byDay = await db.unit.timeEntries.search({ fromDay: day('2026-08-30'), toDay: day('2026-08-30') });
     expect(byDay.total).toBe(1);
+
+    // Der Titel dieses Prüffalls verspricht seit T-027 auch "exportStatus" —
+    // bis T-319 rief keiner der drei Aufrufe oben den Filter tatsächlich mit
+    // einem gesetzten Wert auf (`filter.exportStatus !== undefined` blieb auf
+    // der wahren Seite ungeprüft). Zwei Buchungen sind offen (Vorgabe beim
+    // Anlegen); eine wird hier exportiert markiert, damit beide Seiten des
+    // Filters etwas zu unterscheiden haben.
+    expect(firstCreatedId).not.toBeUndefined();
+    db.conn
+      .prepare("UPDATE time_entry SET export_status = 'exported', export_count = 1 WHERE id = ?")
+      .run(firstCreatedId as string);
+    const byOpen = await db.unit.timeEntries.search({ todoId: todo.id, exportStatus: 'open' });
+    expect(byOpen.total).toBe(2);
+    const byExported = await db.unit.timeEntries.search({ todoId: todo.id, exportStatus: 'exported' });
+    expect(byExported.total).toBe(1);
 
     const page = await db.unit.timeEntries.search({ todoId: todo.id }, { limit: 1 });
     expect(page.items).toHaveLength(1);

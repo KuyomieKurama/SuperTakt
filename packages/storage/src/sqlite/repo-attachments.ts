@@ -452,6 +452,32 @@ export function createAttachmentPort(conn: SqlConnection, ids: IdSource): Attach
       return names;
     },
 
+    async attachmentNamesOfKind(kind) {
+      /*
+       * **Die andere Hälfte der ersten Gegenfrage — für einen Ordner, dessen
+       * `target` gar keinen Pfad trägt** (T-320).
+       *
+       * `attachmentNamesUnder` fragt am Anfang des Pfades und antwortet dem
+       * Bildlauf deshalb im Regelfall leer: Eine gewöhnliche Bildzeile führt im
+       * `target` den bloßen Namen. Diese Frage hängt statt dessen an der Art
+       * und faltet den Namen aus dem `target` heraus — egal ob dort ein Name
+       * steht oder ein Pfad.
+       *
+       * **`kind` ist gebunden und nicht eingesetzt**, obwohl der Vorrat
+       * geschlossen ist und aus der Domäne kommt. Eine Zeichenkette in eine
+       * Anweisung zu setzen ist an dieser Stelle kein Tempogewinn, sondern die
+       * Gewohnheit, die irgendwann an einem Wert aus dem Bestand bricht.
+       *
+       * Gelesen wird ausschließlich `target` (B-2.4).
+       */
+      const names = new Set<string>();
+      const rows = conn
+        .prepare('SELECT a.target FROM todo_attachment a WHERE a.kind = ?')
+        .all(kind);
+      for (const row of rows) names.add(attachmentTargetFileName(text(row, 'target')));
+      return names;
+    },
+
     async emailFileCount() {
       /*
        * **Die enge Frage — und seit T-314 ist ihre Enge die Eigenschaft.**

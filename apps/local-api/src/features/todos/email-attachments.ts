@@ -612,6 +612,20 @@ export async function attachEmailToNewTodo<T>(
      * eigene Protokollzeile (`attachment_email_remove_failed`). Wirft eine
      * fremde Portfassung trotzdem, darf sie die zweite Datei nicht am Leben
      * lassen — dieselbe Bauart wie beim `ROLLBACK` eine Ebene tiefer.
+     *
+     * **Hier wird nicht nach einem Eigentümer gefragt** (T-320, R-29), und das
+     * ist begründet und nicht vergessen: Jede Datei in {@link written} ist in
+     * **diesem** Aufruf entstanden, trägt einen frisch erzeugten Namen aus
+     * `randomUUID()` und hat nach dem `ROLLBACK` nachweislich keine Zeile. Ein
+     * anderer Eigentümer müßte 128 Zufallsbits erraten haben, bevor die Datei
+     * geschrieben wurde.
+     *
+     * Die Frage wäre an dieser Stelle sogar schädlich: Sie braucht den Bestand,
+     * und dieser Zweig läuft gerade deshalb, **weil** der Bestand sich
+     * verweigert hat. Eine unbeantwortbare Frage ließe Kundenmaterial aus einer
+     * fremden E-Mail ohne Eigentümer liegen — genau der Zustand, gegen den
+     * A-A-83 geschrieben ist. Die Regel und ihre Grenze stehen ausgeschrieben
+     * in `releaseUnclaimedBlobs` (`attachments.ts`).
      */
     for (const entry of written) {
       try {
@@ -660,6 +674,12 @@ export async function attachEmailToNewTodo<T>(
    *
    * Gemeldet wird es als `rejected` — SuperTakt hat die Datei nicht
    * angenommen, und das stimmt: Die Bytes waren da, die Zeile nicht.
+   *
+   * **Auch hier ohne Eigentümerfrage**, aus demselben Grund wie im `catch`
+   * darüber (T-320, R-29): Die Datei ist in diesem Aufruf entstanden, trägt
+   * einen frisch erzeugten Namen und hat nachweislich keine Zeile bekommen —
+   * `rejected` sagt genau das. Wer diese Schleife einmal auf eine Datei
+   * ausdehnt, die **vor** diesem Aufruf lag, braucht `releaseUnclaimedBlobs`.
    */
   const rejectedIndices = new Set(rows.rejected);
   for (const entry of written) {

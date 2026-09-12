@@ -178,6 +178,11 @@ export function compose(options: CompositionOptions): Composition {
           // Beiwerk: Ein Fehlschlag beim Entfernen einer Bildkopie hat keinen
           // anderen Empfänger (T-159, A-A-18).
           attachmentBlobs: createAttachmentBlobPort(options.appDataDir ?? null, logger),
+          // Derselbe Protokollschreiber, den auch der Blob-Port bekommt. Er
+          // steht im Zusammenhang für den einen Fall, den kein Adapter melden
+          // kann: eine Entfernung, die **unterbleibt**, weil die
+          // Eigentümerfrage nicht beantwortbar war (T-320, `context.ts`).
+          logger,
           // E-010, E-042: Der Windows-Benutzername kommt über die zweite
           // `stdin`-Zeile herein und wird von hier bis in `export_run` und
           // `export_audit` durchgereicht. Es gibt auf dem ganzen Weg keine

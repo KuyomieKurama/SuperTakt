@@ -165,7 +165,7 @@
 import { attachmentTargetFileName, isKnownAttachmentKindSet } from '@takt/domain';
 import type { BlobRemoval } from '@takt/storage';
 
-import type { Logger } from '../../logger.ts';
+import { type Logger, errorKindValue } from '../../logger.ts';
 
 /**
  * Was der Lauf braucht — und sonst nichts.
@@ -437,7 +437,7 @@ export async function sweepOrphanedBlobs(
       // hat dafür seine eigene Zeile geschrieben. Gezählt wird, was fort ist.
       if ((await ports.remove(entry.handle)) === 'removed') removed += 1;
     }
-  } catch {
+  } catch (error) {
     /*
      * Keiner der Schritte **soll** werfen — der Adapter beantwortet ein
      * unlesbares Verzeichnis mit einer leeren Liste und einen gescheiterten
@@ -452,11 +452,24 @@ export async function sweepOrphanedBlobs(
      * Lage — und sie werfen ausdrücklich, damit hier abgebrochen statt gelöscht
      * wird. Verschluckt wird nichts: Die Zeile sagt, daß abgebrochen wurde, und
      * die Zahlen darunter sagen, wie weit es gekommen war.
+     *
+     * **Seit T-320 steht auch die Art des Wurfs dabei** (T-318). Bis dahin war
+     * es ein `catch` ohne Bindung, und der Grund ging restlos verloren — dabei
+     * tragen die beiden Stellen, die wirklich werfen (`imageCount`,
+     * `emailFileCount`), einen genauen Satz. B-2.4 verbietet den **Wert** aus
+     * dem Bestand, nicht die Art des Fehlers.
+     *
+     * Was dasteht, ist ein Klassenname, gefaltet und beschnitten
+     * ({@link errorKindValue}) — kein Pfad, keine Meldung, kein `errno`. Der
+     * rohe `error.constructor.name` ginge hier **nicht**: Er beginnt mit einem
+     * Großbuchstaben, `REASON_SHAPE` weist ihn ab, und die ganze Zeile würde zu
+     * `unclassified` — samt der beiden Zahlen daneben.
      */
     logger.lifecycle(
       'warn',
       voice.unavailable,
-      `${voice.sweepKey}_unavailable files=${String(read)} removed=${String(removed)}`,
+      `${voice.sweepKey}_unavailable files=${String(read)} removed=${String(removed)} ` +
+        `reason=${errorKindValue(error)}`,
     );
     return { read, owned, removed, refused: 'unavailable' };
   }

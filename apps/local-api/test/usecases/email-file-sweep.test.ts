@@ -65,6 +65,24 @@ function darfNichtAufgerufenWerden(name: string): never {
   throw new Error(`darf in diesem Fall nicht aufgerufen werden: ${name}`);
 }
 
+/**
+ * Die Gestalt eines Grund-**Werts** aus `REASON_SHAPE` (logger.ts, nicht
+ * exportiert, weil sie eine interne Prüfung des Loggers ist): Kleinbuchstaben,
+ * Ziffern und Unterstrich, ein bis 32 Zeichen. `errorKindValue` faltet einen
+ * Klassennamen genau dahin (T-320).
+ *
+ * Ein Prüffall, der einen zusammengesetzten Grund gegen diese Gestalt statt
+ * gegen eine feste Zeichenkette hält, bleibt auch dann grün, wenn eine
+ * künftige Fehlerklasse einen anderen — aber weiterhin gestaltkonformen —
+ * Namen liefert. Zusätzlich zur Gestalt wird unten trotzdem der heute bekannte
+ * Wert (`error`, aus dem generischen `new Error(...)` der Attrappe) geprüft:
+ * die Gestalt allein ließe auch `unclassified` durch, und genau das darf hier
+ * nicht passieren (T-320-domain-dev.md: der wörtliche Vorschlag
+ * `error.constructor.name` hätte wegen des Großbuchstabens in `TypeError` die
+ * ganze Zeile — samt `files=`/`removed=` — auf `unclassified` gefaltet).
+ */
+const REASON_VALUE_SHAPE = /^[a-z0-9_]{1,32}$/;
+
 const KNOWN_KINDS: readonly string[] = ATTACHMENT_KINDS;
 
 /** Ein vollständiger Satz Attrappen, die jeder darf-nicht-aufgerufen-werden. */
@@ -686,9 +704,20 @@ describe('sweepOrphanedEmailFiles — ein Abbruch mitten im Entfernen verschluck
       removed: 1,
       refused: 'unavailable',
     });
-    expect(lines).toEqual([
-      expect.objectContaining({ level: 'warn', reason: 'attachment_email_sweep_unavailable files=2 removed=1' }),
-    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.level).toBe('warn');
+    // Die Gestalt statt einer festen Zeichenkette (T-321, siehe REASON_VALUE_SHAPE
+    // oben) — und ausdrücklich NICHT `UNCLASSIFIED_REASON`: Nur so ist bezeugt,
+    // daß `reason=…` tatsächlich als eigenes Feld durchkam und nicht die ganze
+    // Zeile beim Riegel `REASON_SHAPE` gescheitert ist.
+    const match = lines[0]?.reason?.match(
+      /^attachment_email_sweep_unavailable files=2 removed=1 reason=(?<kind>.+)$/,
+    );
+    expect(match).not.toBeNull();
+    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
+    expect(match?.groups?.kind).toMatch(REASON_VALUE_SHAPE);
+    // Der heute bekannte Wert: ein generischer `new Error('EBUSY')` faltet zu 'error'.
+    expect(match?.groups?.kind).toBe('error');
     // Kein Pfad, kein technischer Fehlercode in der Meldung (B-2.4).
     expect(lines[0]?.message).not.toMatch(/EBUSY|C:\\|errno/i);
   });
@@ -731,6 +760,13 @@ describe('sweepOrphanedEmailFiles — ein Abbruch mitten im Entfernen verschluck
       refused: 'unavailable',
     });
     expect(lines).toHaveLength(1);
-    expect(lines[0]?.reason).toBe('attachment_email_sweep_unavailable files=0 removed=0');
+    const match = lines[0]?.reason?.match(
+      /^attachment_email_sweep_unavailable files=0 removed=0 reason=(?<kind>.+)$/,
+    );
+    expect(match).not.toBeNull();
+    expect(lines[0]?.reason).not.toBe(UNCLASSIFIED_REASON);
+    expect(match?.groups?.kind).toMatch(REASON_VALUE_SHAPE);
+    // Der heute bekannte Wert: ein generischer `new Error('SQLITE_BUSY')` faltet zu 'error'.
+    expect(match?.groups?.kind).toBe('error');
   });
 });

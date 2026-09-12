@@ -19,6 +19,7 @@ import type {
   Attachment,
   AttachmentCreate,
   AttachmentId,
+  AttachmentKind,
   CalendarDay,
   DefaultTag,
   ExportAuditEntry,
@@ -458,6 +459,38 @@ export interface AttachmentPort {
    * Speicher ist ein Pfad weniger im Protokoll (B-2.4).
    */
   attachmentNamesUnder(directory: string): Promise<ReadonlySet<string>>;
+  /**
+   * **Welche Dateinamen nennt der Bestand für Anhänge dieser Art?** (A-A-98,
+   * T-320.)
+   *
+   * ---------------------------------------------------------------------------
+   * Wofür das da ist, und wofür ausdrücklich nicht
+   * ---------------------------------------------------------------------------
+   *
+   * {@link attachmentNamesUnder} spannt seine Menge am **Anfang** des Pfades
+   * auf. Für die übernommenen E-Mail-Dateien trägt das, weil `target` dort den
+   * vollen Pfad führt. Für die **Bildkopien** trägt es nicht: Dort steht im
+   * `target` der bloße erzeugte Name, kein Ordner steht davor, und die Antwort
+   * ist im Regelfall **leer**. Der Bildlauf hatte damit von seinen beiden
+   * Gegenfragen faktisch nur eine — `missing` war dort immer 0, und die ganze
+   * Last lag auf `claimed > owned` (T-318, Befund `orphan-sweep.ts:420`).
+   *
+   * Diese Frage schließt die Lücke: Sie nennt die Namen, die der Bestand für
+   * Anhänge dieser Art führt, unabhängig davon, ob `target` ein Pfad ist oder
+   * ein bloßer Name. Der Aufrufer hält sie gegen das, was wirklich im Ordner
+   * liegt; was er dabei findet, **bremst** ihn — es löscht nie.
+   *
+   * **Was sie nicht ist: eine dritte unabhängige Achse.** Sie hängt an
+   * derselben Spalte wie {@link imageCount}, und zwei Antworten auf dieselbe
+   * Frage widersprechen einander nie (T-313-2, T-315). Sie macht die Zahl
+   * `missing` im Protokoll rechenbar und weitet die Bremse; sie ersetzt keine
+   * der drei vorhandenen Fragen.
+   *
+   * Zurück kommen **gefaltete Namen** ({@link attachmentTargetFileName}) und
+   * keine Pfade — derselbe Grund wie bei {@link attachmentNamesUnder}: Ein Pfad
+   * weniger im Speicher ist ein Pfad weniger im Protokoll (B-2.4).
+   */
+  attachmentNamesOfKind(kind: AttachmentKind): Promise<ReadonlySet<string>>;
   /**
    * Wie viele übernommene E-Mail-Dateien führt der Bestand insgesamt?
    * (T-309, dieselbe Rolle wie {@link imageCount} — seit T-314 aber **nicht**

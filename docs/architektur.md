@@ -1459,6 +1459,32 @@ hereinkommt und **wie** ihr Anzeigename lautet.
    **Seit T-315 gilt jeder Satz dieses Absatzes auch für den Bildlauf** (5.5), und zwar nicht durch
    eine zweite Abschrift, sondern weil beide dasselbe Verfahren aus `orphan-sweep.ts` benutzen.
 
+   **Und seit T-320 gilt er für jede Entfernung einer Datei, nicht nur für die beiden Läufe.**
+   Der code-reviewer hat in T-318 gemessen, daß dieselbe zu enge Frage eine Tür weiter noch einmal
+   stand — in `removeAttachment` und in `removeTodo`, und dort ohne Umweg über einen Startlauf:
+   Todo A trägt eine Bildkopie, Todo B einen **Dateianhang** auf denselben vollen Pfad (absolut,
+   vorhanden, `.png`, also durch `checkAttachmentPath` hindurch und ein gewöhnlicher Bedienweg).
+   Wer A löschte, nahm B sein Bild mit. Die beiden Löschpfade fragten an `kind` beziehungsweise
+   `origin` **der gelöschten Zeile** — das beschreibt die Zeile und nicht die Datei.
+
+   > **Wer eine Datei entfernt, muß fragen, ob sie noch jemandem gehört — mit der weitesten
+   > Frage, nicht mit der nächstliegenden.** (R-29.)
+
+   Beide Pfade stellen die Frage jetzt über `releaseUnclaimedBlobs`
+   (`features/todos/attachments.ts`), **hinter** dem `COMMIT`: Die gelöschte Zeile ist dann fort,
+   und eine nicht leere Antwort heißt eindeutig „gehört noch jemand anderem". Die enge Frage
+   bleibt daneben stehen und behält ihre Rolle — `imageTargets`/`emailFileTargets` sagen, welche
+   Dateien SuperTakt für dieses Todo **selbst geschrieben** hat, und halten einen vom Benutzer
+   eingetragenen Pfad heraus. Sie ist eine Kandidatenliste, kein Eigentumsnachweis.
+
+   **Drei Stellen entfernen weiterhin ohne diese Frage, und das ist begründet:** der Rückbau einer
+   Bildkopie nach einem gescheiterten `INSERT` und die beiden Aufräumzweige der E-Mail-Übernahme.
+   Alle drei entfernen eine Datei, die im **selben Aufruf** entstanden ist, einen frisch erzeugten
+   Namen aus `randomUUID()` trägt und nie eine Zeile bekommen hat. Dort wäre die Frage sogar
+   schädlich: Sie braucht den Bestand, und zwei dieser Zweige laufen gerade deshalb, weil der
+   Bestand sich verweigert hat — eine unbeantwortbare Frage ließe Kundenmaterial aus einer fremden
+   E-Mail ohne Eigentümer liegen (A-A-83).
+
    Zwei Dinge waren daran neu gegenüber dem Bildlauf, und beide sind Auflagen aus T-309 — heute
    trägt sie der Bildlauf mit:
 
