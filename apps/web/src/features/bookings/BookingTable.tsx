@@ -10,6 +10,7 @@ import {
   type ExportStatus,
 } from "../../shared/ui/ExportStatus";
 import { Icon } from "../../shared/ui/Icon";
+import type { RunAreaSurface } from "../../shared/ui/ScreenBody";
 import { Menu, type MenuEntry } from "../../shared/ui/Menu";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
@@ -92,6 +93,19 @@ export interface BookingTableProps {
   readonly activeRowId?: string;
   readonly caption: string;
   readonly className?: string;
+  /**
+   * Die Merkmale eines Laufbereichs, wenn diese Tabellenflaeche **selbst** der
+   * Laufbereich der Ansicht ist (T-323 6.3, `runAreaSurface`).
+   *
+   * Sie gehen an die Flaeche und nicht an einen Umschlag darum, und das ist der
+   * ganze Punkt: Ein `sticky thead` klebt an dem Bildlaufkasten, der ihm am
+   * naechsten ist, und bei einer Tabelle ist das immer das `.table-wrap`. Erst
+   * wenn dieselbe Flaeche beide Achsen traegt — `overflow-y` aus
+   * `.screen__body`, `overflow-x` aus `.table-wrap` —, steht der Kopf beim
+   * senkrechten Lauf still **und** wandert beim waagerechten mit seiner Spalte
+   * (T-322 5.1, 5.2).
+   */
+  readonly surface?: RunAreaSurface;
 }
 
 const COLUMNS: ReadonlyArray<{
@@ -152,12 +166,13 @@ export function BookingTable({
   activeRowId,
   caption,
   className,
+  surface,
 }: BookingTableProps) {
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const someSelected = rows.some((row) => selectedIds.has(row.id));
 
   return (
-    <div className={cx("table-wrap", className)}>
+    <div className={cx("table-wrap", className)} {...(surface ?? {})}>
       <table className="table">
         <caption className="visually-hidden">{caption}</caption>
         <thead>

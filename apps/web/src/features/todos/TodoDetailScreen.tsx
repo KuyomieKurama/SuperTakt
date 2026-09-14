@@ -31,6 +31,7 @@ import {
   plural,
 } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import {
   BookingFormDialog,
@@ -226,7 +227,26 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
 
   return (
     <section className="screen">
-      <AsyncBoundary state={detail.state} label="Todo wird geladen" rows={5} onRetry={detail.reload}>
+      {/*
+        Ein Laufbereich, Name: der Titel des Todos (T-322 4.3). Fest ist der
+        Kopf mit den drei Aktionen auf **dieses** Todo — „Timer starten",
+        „Bearbeiten", „Zeit von Hand"; bei langer Buchungshistorie waren sie
+        bisher weggescrollt. Die Nebenspalte läuft im selben Bereich: Sie ist
+        keine Steuerung, sondern Inhalt desselben Gegenstands, und bei ≤ 68 rem
+        fallen die Spalten ohnehin untereinander.
+
+        Diese Ansicht baut ihren Kopf **innerhalb** der Ladehülle — der Titel
+        ist das Todo. Im Lade- und Fehlerzustand gibt es hier also keinen festen
+        Teil, sondern nur den einen Laufbereich; `fallbackFrame` stellt ihn.
+        Einen Namen trägt er dann nicht, weil es noch keinen gibt.
+      */}
+      <AsyncBoundary
+        state={detail.state}
+        label="Todo wird geladen"
+        rows={5}
+        onRetry={detail.reload}
+        fallbackFrame={(content) => <ScreenBody>{content}</ScreenBody>}
+      >
         {(value, refreshing) => {
           const todo = value.todo.todo;
           const running = timer.isRunningFor(todo.id);
@@ -282,128 +302,130 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 }
               />
 
-              <div className="detail">
-                <div className="detail__main">
-                  <TodoDoneSwitch todo={todo} />
+              <ScreenBody label={foreignText(todo.title)}>
+                <div className="detail">
+                  <div className="detail__main">
+                    <TodoDoneSwitch todo={todo} />
 
-                  <TodoNoteCard
-                    todoId={todoId}
-                    note={value.note}
-                    onSaved={(saved) => detail.replace({ ...value, note: saved })}
-                  />
+                    <TodoNoteCard
+                      todoId={todoId}
+                      note={value.note}
+                      onSaved={(saved) => detail.replace({ ...value, note: saved })}
+                    />
 
-                  {/*
-                    Anhänge (A-19.11): unmittelbar am Todo sichtbar und dort
-                    verwaltbar — hinzufügen, öffnen, entfernen. `version` reicht
-                    das Änderungssignal der Anwendung durch, damit ein zweites
-                    Fenster oder der Aufgabenbereich des Add-ins nicht an einer
-                    veralteten Liste vorbeiläuft (T-097).
-                  */}
-                  <Card
-                    title="Anhänge"
-                    description="Ein Verweis öffnet den Browser, eine Datei die Standardanwendung des Systems, ein Bild wird hier gezeigt. Geöffnet wird nur auf Ihren Klick."
-                  >
-                    <Attachments todoId={todo.id} todoTitle={todo.title} version={version} />
-                  </Card>
+                    {/*
+                      Anhänge (A-19.11): unmittelbar am Todo sichtbar und dort
+                      verwaltbar — hinzufügen, öffnen, entfernen. `version` reicht
+                      das Änderungssignal der Anwendung durch, damit ein zweites
+                      Fenster oder der Aufgabenbereich des Add-ins nicht an einer
+                      veralteten Liste vorbeiläuft (T-097).
+                    */}
+                    <Card
+                      title="Anhänge"
+                      description="Ein Verweis öffnet den Browser, eine Datei die Standardanwendung des Systems, ein Bild wird hier gezeigt. Geöffnet wird nur auf Ihren Klick."
+                    >
+                      <Attachments todoId={todo.id} todoTitle={todo.title} version={version} />
+                    </Card>
 
-                  <Card
-                    title="Buchungen"
-                    description="Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."
-                    flush
-                  >
-                    {groups.length === 0 ? (
-                      <EmptyState
-                        icon="clock"
-                        compact
-                        title="Noch keine Zeit erfasst"
-                        description="Starten Sie den Timer oder tragen Sie eine Zeit von Hand ein."
-                        action={
-                          <Button
-                            variant="primary"
-                            iconStart="play"
-                            onClick={() => timer.toggle(todo.id, todo.title)}
-                          >
-                            Timer starten
-                          </Button>
-                        }
-                      />
-                    ) : (
-                      <ul className="daygroups">
-                        {groups.map((group) => (
-                          <li key={group.day} className="daygroup">
-                            <div className="daygroup__head">
-                              <h4 className="daygroup__day">{formatDayLabel(group.day)}</h4>
-                              <span className="daygroup__meta">
-                                {plural(group.entries.length, "Buchung", "Buchungen")}
-                                {group.openSeconds > 0
-                                  ? ` · ${formatDuration(group.openSeconds)} offen`
-                                  : " · vollständig exportiert"}
-                              </span>
-                            </div>
-
-                            {group.blocked ? (
-                              <p className="daygroup__blocked">
-                                <Icon name="alert-triangle" size={14} />
-                                <span>
-                                  Diese Tagesgruppe hat keinen Leistungstext und geht so nicht in
-                                  den Export. Der übrige Export läuft trotzdem — sie bleibt offen
-                                  und erscheint beim nächsten Mal wieder.
+                    <Card
+                      title="Buchungen"
+                      description="Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."
+                      flush
+                    >
+                      {groups.length === 0 ? (
+                        <EmptyState
+                          icon="clock"
+                          compact
+                          title="Noch keine Zeit erfasst"
+                          description="Starten Sie den Timer oder tragen Sie eine Zeit von Hand ein."
+                          action={
+                            <Button
+                              variant="primary"
+                              iconStart="play"
+                              onClick={() => timer.toggle(todo.id, todo.title)}
+                            >
+                              Timer starten
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <ul className="daygroups">
+                          {groups.map((group) => (
+                            <li key={group.day} className="daygroup">
+                              <div className="daygroup__head">
+                                <h4 className="daygroup__day">{formatDayLabel(group.day)}</h4>
+                                <span className="daygroup__meta">
+                                  {plural(group.entries.length, "Buchung", "Buchungen")}
+                                  {group.openSeconds > 0
+                                    ? ` · ${formatDuration(group.openSeconds)} offen`
+                                    : " · vollständig exportiert"}
                                 </span>
-                              </p>
-                            ) : null}
+                              </div>
 
-                            <ul className="entry-list">
-                              {group.entries.map((entry) => (
-                                <li key={entry.id} className="entry-row">
-                                  <ExportStatusBadge
-                                    state={exportDisplayState(entry.exportStatus, entry.exportCount)}
-                                    size="sm"
-                                    {...(entry.exportStatus === "open" && entry.exportCount > 0
-                                      ? { detail: `${String(entry.exportCount)}× exportiert` }
-                                      : {})}
-                                  />
-                                  <span className="entry-row__period">
-                                    {formatTimeRange(entry.startedAt, entry.endedAt)}
+                              {group.blocked ? (
+                                <p className="daygroup__blocked">
+                                  <Icon name="alert-triangle" size={14} />
+                                  <span>
+                                    Diese Tagesgruppe hat keinen Leistungstext und geht so nicht in
+                                    den Export. Der übrige Export läuft trotzdem — sie bleibt offen
+                                    und erscheint beim nächsten Mal wieder.
                                   </span>
-                                  <span className="entry-row__duration tabular">
-                                    {formatDuration(entry.durationSeconds)}
-                                  </span>
-                                  <span className="entry-row__note grow truncate">
-                                    {entry.note.length === 0 ? (
-                                      <span className="muted">Ohne Leistung</span>
-                                    ) : (
-                                      <Foreign value={entry.note} />
-                                    )}
-                                  </span>
-                                  <span className="entry-row__source">
-                                    {TIME_ENTRY_SOURCE_LABEL[entry.source]}
-                                  </span>
-                                  <Menu
-                                    trigger={<Icon name="more-horizontal" size={16} />}
-                                    triggerLabel="Menü für diese Buchung"
-                                    entries={entryMenu(entry)}
-                                    align="end"
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Card>
+                                </p>
+                              ) : null}
+
+                              <ul className="entry-list">
+                                {group.entries.map((entry) => (
+                                  <li key={entry.id} className="entry-row">
+                                    <ExportStatusBadge
+                                      state={exportDisplayState(entry.exportStatus, entry.exportCount)}
+                                      size="sm"
+                                      {...(entry.exportStatus === "open" && entry.exportCount > 0
+                                        ? { detail: `${String(entry.exportCount)}× exportiert` }
+                                        : {})}
+                                    />
+                                    <span className="entry-row__period">
+                                      {formatTimeRange(entry.startedAt, entry.endedAt)}
+                                    </span>
+                                    <span className="entry-row__duration tabular">
+                                      {formatDuration(entry.durationSeconds)}
+                                    </span>
+                                    <span className="entry-row__note grow truncate">
+                                      {entry.note.length === 0 ? (
+                                        <span className="muted">Ohne Leistung</span>
+                                      ) : (
+                                        <Foreign value={entry.note} />
+                                      )}
+                                    </span>
+                                    <span className="entry-row__source">
+                                      {TIME_ENTRY_SOURCE_LABEL[entry.source]}
+                                    </span>
+                                    <Menu
+                                      trigger={<Icon name="more-horizontal" size={16} />}
+                                      triggerLabel="Menü für diese Buchung"
+                                      entries={entryMenu(entry)}
+                                      align="end"
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </Card>
+                  </div>
+
+                  <TodoDetailAside
+                    todo={todo}
+                    today={today}
+                    totalSeconds={value.todo.totalSeconds}
+                    openSeconds={value.todo.openSeconds}
+                    totalQuarters={value.totalQuarters}
+                    previewProblem={value.previewProblem}
+                    onEdit={() => setEditOpen(true)}
+                  />
                 </div>
-
-                <TodoDetailAside
-                  todo={todo}
-                  today={today}
-                  totalSeconds={value.todo.totalSeconds}
-                  openSeconds={value.todo.openSeconds}
-                  totalQuarters={value.totalQuarters}
-                  previewProblem={value.previewProblem}
-                  onEdit={() => setEditOpen(true)}
-                />
-              </div>
+              </ScreenBody>
 
               <TodoFormDialog open={editOpen} todo={todo} onClose={() => setEditOpen(false)} />
 

@@ -87,7 +87,13 @@ test.describe('Bewegungssatz — Hauptanwendung gegen Aufgabenbereich, dieselbe 
       // --- Hauptanwendung: Timerstart auf der Detailansicht (S-03) ----------
       await gotoTodo(page, uiTodo.id);
       await expect(page.locator('.done-switch strong')).toHaveText('Erledigt');
-      const main = page.locator('#inhalt');
+      // Geltungsbereich `.screen` statt `#inhalt` (T-330, E-114): Die Marke
+      // sitzt seit T-326 auf dem Laufbereich (`ScreenBody`), nicht mehr auf
+      // dem Rahmen der Ansicht — ein Knopf im `.screen__header` läge damit
+      // außerhalb. `.screen` ist die Ansicht selbst (Kopf **und**
+      // Laufbereich, genau ein Treffer je Route) und trifft dieselbe Menge
+      // wie zuvor `#inhalt` auf `.app__main`.
+      const main = page.locator('.screen');
       const [startResponse] = await Promise.all([
         page.waitForResponse(
           (response) => response.url().includes('/timer/start') && response.request().method() === 'POST',
@@ -183,7 +189,8 @@ test.describe('Bewegungssatz — Hauptanwendung gegen Aufgabenbereich, dieselbe 
 
       await gotoTodo(page, todo.id);
       await expect(page.locator('.done-switch strong')).toHaveText('Erledigt');
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt`, siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       const [startResponse] = await Promise.all([
         page.waitForResponse(
           (response) => response.url().includes('/timer/start') && response.request().method() === 'POST',

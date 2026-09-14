@@ -677,28 +677,70 @@ export interface AddinBookResult {
  * `POST /addin/todos/:todoId/time-entries` — die Bestätigung, nach der
  * Buchung (A-6.1, A-10.9). `startedAt`/`endedAt` im Format
  * `YYYY-MM-DDTHH:MM:SSZ` (Sekundengenauigkeit, `schema.ts` der Add-in-Routen).
+ *
+ * Nimmt bewusst **beliebige zusätzliche Felder** entgegen (`Record<string,
+ * unknown>`), nicht nur die drei genannten — TP-ANH-13 (A-19.19, A-A-82,
+ * A-10.9 in der Fassung von E-100) schickt hier probeweise ein `attachments`-
+ * Feld mit, um zu prüfen, dass die Buchungstür es stillschweigend verwirft
+ * und **kein** Anhang am gefundenen Todo entsteht — die einzige Tür, an der
+ * das Add-in ein bereits vorhandenes Todo überhaupt berührt.
  */
 export async function addinBookOnTodo(
   todoId: string,
-  input: { startedAt: string; endedAt: string; note?: string },
+  input: { startedAt: string; endedAt: string; note?: string } & Record<string, unknown>,
 ): Promise<AddinBookResult> {
+  const { startedAt, endedAt, note, ...rest } = input;
   return call<AddinBookResult>(`/addin/todos/${todoId}/time-entries`, {
     method: 'POST',
-    body: JSON.stringify({ startedAt: input.startedAt, endedAt: input.endedAt, note: input.note ?? '' }),
+    body: JSON.stringify({ startedAt, endedAt, note: note ?? '', ...rest }),
   });
 }
 
 /**
- * `POST /addin/todos` — Vorbereitung/Spotcheck für TP-ANH-13 (A-19.19).
+ * Ein einzelner Anhang im Umschlag von `POST /addin/todos` (A-19.22 bis
+ * A-19.33, E-108) — dieselbe unterschiedene Vereinigung wie
+ * `emailAttachmentItemSchema` in `apps/local-api/src/routes/addin/schema.ts`
+ * (fremde Hoheit, hier nur zeichengleich nachgebildet, damit dieser Testlauf
+ * gültige Rümpfe bauen kann).
+ */
+export type AddinEmailAttachmentItemInput =
+  | { readonly kind: 'message'; readonly displayName: string; readonly contentBase64: string; readonly rebuilt: boolean }
+  | { readonly kind: 'file'; readonly displayName: string; readonly contentBase64: string }
+  | { readonly kind: 'link'; readonly displayName: string; readonly url: string };
+
+/** Der Umschlag: eine E-Mail, ihr Absender, ihre Anhänge (A-A-82). */
+export interface AddinEmailAttachmentsInput {
+  readonly sender?: string | null;
+  readonly items: readonly AddinEmailAttachmentItemInput[];
+}
+
+/** Was `POST /addin/todos` über mitgeschickte Anhänge zurückmeldet (A-19.29, A-19.33). */
+export interface AddinCreatedAttachmentsResult {
+  readonly stored: number;
+  readonly rejected: readonly {
+    readonly displayName: string;
+    readonly reason: string;
+    readonly bytes: number | null;
+  }[];
+}
+
+/**
+ * `POST /addin/todos` — Anlegen, wahlweise mit Anhängen aus einer E-Mail
+ * (A-19.22 bis A-19.33, E-108, T-304) und für TP-ANH-13 (A-19.19, A-A-82,
+ * E-100) außerdem als Trägerin eines Schmuggelversuchs: ein zusätzliches
+ * Feld (z. B. `todoId`), mit dem ein Aufrufer versuchen könnte, den Anhang
+ * an ein **vorhandenes** Todo statt an das neu angelegte zu hängen. Die Tür
+ * führt kein Feld dafür (`AddinDeps.emailAttachments` hat keinen Parameter
+ * vom Typ `TodoId`) — ein unbekannter Schlüssel fällt in zod still weg,
+ * ändert also nichts an der Wirkung, und genau das prüft der Testfall, statt
+ * es zu behaupten.
  *
- * Bewusst **ohne** `dueDate`: Die Frist-Route des Add-ins entsteht gerade erst
- * (Welle V, siehe Auftrag T-150) und wird hier nicht vorgezogen. Diese
- * Funktion trägt ausschließlich das, was TP-ANH-13 braucht — einen Titel und
- * ein zusätzliches, unbekanntes Feld, mit dem sich prüfen lässt, dass über das
- * Add-in strukturell kein Anhang entsteht.
+ * Bewusst **ohne** `dueDate`: Diese Funktion trägt nur, was die
+ * Anhangs-Testfälle brauchen.
  */
 export interface AddinCreatedTodo {
   readonly todo: { readonly id: string; readonly title: string };
+  readonly attachments: AddinCreatedAttachmentsResult | null;
 }
 
 export async function addinCreateTodo(
@@ -724,6 +766,16 @@ export interface Attachment {
   readonly target: string;
   readonly position: number;
   readonly createdAt: string;
+  /**
+   * Herkunft, Absender, Anzeigename und Nachbau-Kennzeichnung (A-A-84,
+   * A-A-85, A-19.23a, A-19.22b) — seit Migration 0023 Teil jeder Antwort,
+   * hier nachgetragen, weil `attachment-handoff-to-app.spec.ts` sie über die
+   * echte Tür liest statt sie anzunehmen.
+   */
+  readonly origin?: 'user' | 'email';
+  readonly originSender?: string | null;
+  readonly displayName?: string | null;
+  readonly rebuilt?: boolean;
 }
 
 /** Dieselbe unterschiedene Vereinigung wie `AttachmentCreate` in `apps/web/src/api/types.ts`. */

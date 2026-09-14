@@ -228,6 +228,22 @@ export interface ReleaseSourcePort {
   /**
    * Fragt einmal. Wirft nicht — jeder Ausgang ist ein benannter Wert.
    *
+   * **Und sie kommt zurück.** Wer diesen Port einsetzt, bringt seine eigene
+   * Gesamtfrist mit; der Prüfer hat keine und bekommt seit T-360 ausdrücklich
+   * keine (die Begründung steht an der einen `await`-Zeile in `version.ts`).
+   * Eine Zusage, die nie einlöst, hält `run()` an: `inFlight` bleibt wahr, kein
+   * Zeitgeber wird gestellt, und die Versionsprüfung ist für die Laufzeit des
+   * Prozesses tot — **ohne eine Zeile im Protokoll**, also stiller als jeder
+   * Fehlschlag (gemessen T-356/T-357: 1 Anfrage, 0 Zeilen). Das ist keine
+   * Höflichkeitsbitte an einen künftigen zweiten Adapter, sondern die
+   * Bedingung, unter der dieser Port überhaupt gereicht werden darf.
+   *
+   * Der gebaute Adapter löst sie mit `AbortSignal.timeout` ein
+   * ({@link VERSION_CHECK_TIMEOUT_MS}), und die Frist trägt **auch den Rumpf**
+   * — gegen einen tropfenden Wirt gemessen: Ausgang nach 5 002 ms mit
+   * `timeout` (T-357). Daß die Marke dasteht, mißt `proof:release-safety`
+   * (`REQUIRED_IN_SOURCE`).
+   *
    * @param signal wird vom Anhalten des Dienstes ausgelöst (A-V-12). Die
    *   Gesamtfrist kommt aus dieser Datei und nicht vom Aufrufer: Sie ist eine
    *   Eigenschaft der Verbindung, nicht des Anlasses.

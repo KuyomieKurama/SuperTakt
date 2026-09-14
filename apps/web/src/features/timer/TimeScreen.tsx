@@ -29,6 +29,7 @@ import {
   plural,
 } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody, ScreenFrame } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { StatTile } from "../../shared/ui/StatTile";
 import { BookingFormDialog } from "../bookings/BookingDialogs";
@@ -134,7 +135,30 @@ export function TimeScreen() {
         refreshing={data.state.status === "ready" && data.state.refreshing}
       />
 
-      <AsyncBoundary state={data.state} label="Zeiterfassung wird geladen" onRetry={data.reload}>
+      {/*
+        **Die eine Ansicht mit zwei Laufbereichen** (T-322 4.5): links „woran
+        arbeite ich als nächstes", rechts „was habe ich heute schon erfaßt". Wer
+        in der Tagesliste nach unten sieht, soll den Timer und die Todo-Suche
+        nicht verlieren — und umgekehrt. Dasselbe Muster wie beim Kanban:
+        Kartenkopf steht, Kartenrumpf läuft.
+
+        Die Namen sind die vorhandenen Kartenüberschriften „Todo wählen" und
+        „Buchungen von heute". Bei ≤ 68 rem fallen die Spalten untereinander
+        (bestehende Regel in `app.css`), und dann gilt R-2: **ein** Laufbereich
+        über beide, der Rahmen selbst, mit dem Namen „Zeiterfassung". Zwei
+        senkrechte Bildlaufflächen untereinander teilen die Höhe und machen
+        beide unbrauchbar.
+
+        Im Lade- und Fehlerzustand gibt es hier nur einen Laufbereich: Der
+        Zweispalter entsteht erst mit den Daten, und ein Skelett braucht keine
+        zwei Bildlaufflächen.
+      */}
+      <AsyncBoundary
+        state={data.state}
+        label="Zeiterfassung wird geladen"
+        onRetry={data.reload}
+        fallbackFrame={(content) => <ScreenBody label="Zeiterfassung">{content}</ScreenBody>}
+      >
         {(value) => {
           const todaySeconds = value.entries.reduce((sum, entry) => sum + entry.durationSeconds, 0);
           const openSeconds = value.entries
@@ -144,234 +168,246 @@ export function TimeScreen() {
           const candidates = filterTodos(value.todos, search);
 
           return (
-            <div className="time-layout">
-              <div className="time-layout__main">
-                <Card title="Timer" description="Es läuft höchstens einer.">
-                  {timer.running === null ? (
-                    <div className="timer-panel timer-panel--idle">
-                      <TimerDisplay state="idle" display="00:00:00" size="lg" />
-                      <p className="timer-panel__hint">
-                        Kein Timer läuft. Wählen Sie unten ein Todo — oder starten Sie den Timer
-                        direkt aus der Todo-Liste, dem Kanban-Board oder dem Dashboard.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="timer-panel timer-panel--running">
-                      <TimerDisplay
-                        state="running"
-                        size="lg"
-                        display={formatStopwatch(timer.elapsedSeconds)}
-                        todoTitle={timer.running.todoTitle}
-                        detail={`seit ${formatTime(timer.running.entry.startedAt)} Uhr`}
-                        onStop={timer.requestStop}
-                      />
-                      <p className="timer-panel__hint">
-                        Beim Stoppen fragt SuperTakt nach der Leistung. Sie geht in die Abrechnung —
-                        im Unterschied zum Vermerk, der in SuperTakt bleibt.
-                      </p>
-                    </div>
-                  )}
-                </Card>
+            <ScreenFrame label="Zeiterfassung" className="screen__body--split">
+              <div className="time-layout">
+                <div className="time-layout__main">
+                  <Card title="Timer" description="Es läuft höchstens einer.">
+                    {timer.running === null ? (
+                      <div className="timer-panel timer-panel--idle">
+                        <TimerDisplay state="idle" display="00:00:00" size="lg" />
+                        <p className="timer-panel__hint">
+                          Kein Timer läuft. Wählen Sie unten ein Todo — oder starten Sie den Timer
+                          direkt aus der Todo-Liste, dem Kanban-Board oder dem Dashboard.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="timer-panel timer-panel--running">
+                        <TimerDisplay
+                          state="running"
+                          size="lg"
+                          display={formatStopwatch(timer.elapsedSeconds)}
+                          todoTitle={timer.running.todoTitle}
+                          detail={`seit ${formatTime(timer.running.entry.startedAt)} Uhr`}
+                          onStop={timer.requestStop}
+                        />
+                        <p className="timer-panel__hint">
+                          Beim Stoppen fragt SuperTakt nach der Leistung. Sie geht in die Abrechnung —
+                          im Unterschied zum Vermerk, der in SuperTakt bleibt.
+                        </p>
+                      </div>
+                    )}
+                  </Card>
 
-                <Card
-                  title="Todo wählen"
-                  description="Startet der Timer auf einem erledigten Todo, ist es danach wieder offen."
-                  actions={
-                    <>
-                      <SearchField
-                        label="Todos durchsuchen"
-                        value={search}
-                        onChange={setSearch}
-                        placeholder="Titel oder Call-Nummer …"
-                      />
-                      {/*
-                        E-039, Befund C-04. Derselbe Schalter wie in S-02 und
-                        S-04 — und er ist die Bedingung dafür, dass der Satz in
-                        der Kartenbeschreibung überhaupt einlösbar ist.
-                      */}
-                      <FilterToggle
-                        label="Erledigte einblenden"
-                        pressed={showDone}
-                        onChange={setShowDone}
-                        hint="Voreingestellt ausgeblendet"
-                      />
-                    </>
-                  }
-                  flush
-                >
-                  {!showDone && value.hiddenDone > 0 ? (
-                    <p className="hidden-notice">
-                      <Icon name="info" size={14} />
-                      <span>
-                        {plural(value.hiddenDone, "erledigtes Todo ist", "erledigte Todos sind")}{" "}
-                        ausgeblendet. Startet der Timer auf einem davon, ist es wieder offen und
-                        erscheint hier erneut.
-                      </span>
-                      <Button size="sm" variant="ghost" onClick={() => setShowDone(true)}>
-                        Einblenden
-                      </Button>
-                    </p>
-                  ) : null}
-
-                  {candidates.length === 0 ? (
-                    <EmptyState
-                      compact
-                      icon="search"
-                      title={
-                        search.trim().length === 0
-                          ? showDone
-                            ? "Noch kein Todo"
-                            : "Kein offenes Todo"
-                          : "Kein Treffer"
-                      }
-                      description={
-                        search.trim().length === 0
-                          ? showDone
-                            ? "Legen Sie zuerst ein Todo an — Zeit wird immer auf ein Todo gebucht."
-                            : "Alle Todos sind erledigt. Blenden Sie sie ein: Ein Timerstart hebt das Kennzeichen auf und holt das Todo in seine Pools zurück."
-                          : showDone
-                            ? "Kein Todo passt zu dieser Eingabe."
-                            : "Kein offenes Todo passt zu dieser Eingabe. Erledigte sind ausgeblendet."
-                      }
-                      {...(showDone || search.trim().length > 0
-                        ? {}
-                        : {
-                            action: (
-                              <Button variant="secondary" onClick={() => setShowDone(true)}>
-                                Erledigte einblenden
-                              </Button>
-                            ),
-                          })}
-                    />
-                  ) : (
-                    <ul className="pick-list">
-                      {candidates.slice(0, 30).map((todo) => {
-                        const running = runningTodoId === todo.id;
-                        const done = todo.completedAt !== null;
-                        /*
-                          A-2.5, T-005n Abschnitt 1 Regel 1: Nach dem
-                          Timerstart darf die Zeile nicht so aussehen, als
-                          wäre sie nie erledigt gewesen. Der dritte
-                          Anzeigezustand lebt in der Sitzung (`reactivated`)
-                          und endet, sobald der Benutzer das Kennzeichen
-                          selbst anfasst.
-                        */
-                        const reactivated = !done && timer.reactivated.has(todo.id);
-                        return (
-                          <li key={todo.id} className={cx("pick-row", running && "pick-row--running")}>
-                            <IconButton
-                              label={
-                                running
-                                  ? `Timer für ${quotedName(todo.title)} stoppen`
-                                  : `Timer für ${quotedName(todo.title)} starten`
-                              }
-                              icon={running ? "pause" : "play"}
-                              variant={running ? "primary" : "secondary"}
-                              onClick={() => timer.toggle(todo.id, todo.title)}
-                            />
-                            <a className="pick-row__title grow truncate" href={href("todo", todo.id)}>
-                              <Foreign value={todo.title} />
-                            </a>
-                            <DoneFlag state={doneFlagState(done, reactivated)} />
-                            {todo.callNumber === null ? null : (
-                              <span className="pick-row__call">
-                                Call <Foreign value={todo.callNumber} />
-                              </span>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              iconStart="plus"
-                              onClick={() => setManualFor(todo)}
-                            >
-                              Von Hand
-                            </Button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </Card>
-              </div>
-
-              <aside className="time-layout__side">
-                <Card title="Heute">
-                  <div className="stat-grid stat-grid--tight">
-                    <StatTile
-                      label="Erfasst"
-                      value={formatDuration(todaySeconds)}
-                      detail={plural(value.entries.length, "Buchung", "Buchungen")}
-                    />
-                    <StatTile
-                      label="Noch offen"
-                      value={formatDuration(openSeconds)}
-                      tone="warning"
-                      detail={
-                        value.previewProblem !== null
-                          ? "Was der Export daraus macht, ist gerade nicht abrufbar."
-                          : value.quarters === null
-                            ? "Noch nicht exportiert."
-                            : `Ergibt beim Export ${formatQuarters(value.quarters)}.`
-                      }
-                    />
-                  </div>
                   {/*
-                    Der Grund steht unter den Kacheln und nicht in ihnen: Eine
-                    Kachel traegt eine Zahl, keine Fehlermeldung. Ohne ihn
-                    fehlte auch die Warnung ueber Tagesgruppen ohne Leistung
-                    (E-034), ohne dass jemand merkt, warum.
+                    Laufbereich A trägt seit T-348 die Sprungmarke (T-344 8.5):
+                    Er ist der Inhaltshalt dieser Ansicht. Der `--split`-Rahmen
+                    behält Halt, Rolle und Namen — er ist unterhalb von 68 rem
+                    der einzige senkrechte Läufer —, gibt aber die Marke ab.
+                    Oberhalb ruht sein Halt; der Preis steht hier statt im
+                    Kleingedruckten.
                   */}
-                  {value.previewProblem === null ? null : (
-                    <p className="daygroup__blocked">
-                      <Icon name="alert-triangle" size={14} />
-                      <span>
-                        Was der Export aus den offenen Buchungen macht, ließ sich nicht
-                        abrufen: {value.previewProblem} Die erfasste Zeit stimmt trotzdem —
-                        nur der gerundete Wert fehlt, und geraten wird er nicht.
-                      </span>
-                    </p>
-                  )}
-                  {value.blockedGroups > 0 ? (
-                    <p className="daygroup__blocked">
-                      <Icon name="alert-triangle" size={14} />
-                      <span>
-                        {plural(value.blockedGroups, "Tagesgruppe hat", "Tagesgruppen haben")} noch
-                        keinen Leistungstext und {value.blockedGroups === 1 ? "geht" : "gehen"} so
-                        nicht in den Export. Die Export-Ansicht zeigt, welche.
-                      </span>
-                    </p>
-                  ) : null}
-                </Card>
+                  <Card
+                    title="Todo wählen"
+                    runArea="Todo wählen"
+                    anchor
+                    description="Startet der Timer auf einem erledigten Todo, ist es danach wieder offen."
+                    actions={
+                      <>
+                        <SearchField
+                          label="Todos durchsuchen"
+                          value={search}
+                          onChange={setSearch}
+                          placeholder="Titel oder Call-Nummer …"
+                        />
+                        {/*
+                          E-039, Befund C-04. Derselbe Schalter wie in S-02 und
+                          S-04 — und er ist die Bedingung dafür, dass der Satz in
+                          der Kartenbeschreibung überhaupt einlösbar ist.
+                        */}
+                        <FilterToggle
+                          label="Erledigte einblenden"
+                          pressed={showDone}
+                          onChange={setShowDone}
+                          hint="Voreingestellt ausgeblendet"
+                        />
+                      </>
+                    }
+                    flush
+                  >
+                    {!showDone && value.hiddenDone > 0 ? (
+                      <p className="hidden-notice">
+                        <Icon name="info" size={14} />
+                        <span>
+                          {plural(value.hiddenDone, "erledigtes Todo ist", "erledigte Todos sind")}{" "}
+                          ausgeblendet. Startet der Timer auf einem davon, ist es wieder offen und
+                          erscheint hier erneut.
+                        </span>
+                        <Button size="sm" variant="ghost" onClick={() => setShowDone(true)}>
+                          Einblenden
+                        </Button>
+                      </p>
+                    ) : null}
 
-                <Card title="Buchungen von heute" flush>
-                  {value.entries.length === 0 ? (
-                    <EmptyState
-                      compact
-                      icon="clock"
-                      title="Heute noch nichts erfasst"
-                      description="Der erste Timerstart legt die erste Buchung an."
-                    />
-                  ) : (
-                    <ul className="entry-list">
-                      {[...value.entries]
-                        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-                        .map((entry) => (
-                          <TodayRow key={entry.id} entry={entry} />
-                        ))}
-                    </ul>
-                  )}
-                </Card>
-              </aside>
+                    {candidates.length === 0 ? (
+                      <EmptyState
+                        compact
+                        icon="search"
+                        title={
+                          search.trim().length === 0
+                            ? showDone
+                              ? "Noch kein Todo"
+                              : "Kein offenes Todo"
+                            : "Kein Treffer"
+                        }
+                        description={
+                          search.trim().length === 0
+                            ? showDone
+                              ? "Legen Sie zuerst ein Todo an — Zeit wird immer auf ein Todo gebucht."
+                              : "Alle Todos sind erledigt. Blenden Sie sie ein: Ein Timerstart hebt das Kennzeichen auf und holt das Todo in seine Pools zurück."
+                            : showDone
+                              ? "Kein Todo passt zu dieser Eingabe."
+                              : "Kein offenes Todo passt zu dieser Eingabe. Erledigte sind ausgeblendet."
+                        }
+                        {...(showDone || search.trim().length > 0
+                          ? {}
+                          : {
+                              action: (
+                                <Button variant="secondary" onClick={() => setShowDone(true)}>
+                                  Erledigte einblenden
+                                </Button>
+                              ),
+                            })}
+                      />
+                    ) : (
+                      <ul className="pick-list">
+                        {candidates.slice(0, 30).map((todo) => {
+                          const running = runningTodoId === todo.id;
+                          const done = todo.completedAt !== null;
+                          /*
+                            A-2.5, T-005n Abschnitt 1 Regel 1: Nach dem
+                            Timerstart darf die Zeile nicht so aussehen, als
+                            wäre sie nie erledigt gewesen. Der dritte
+                            Anzeigezustand lebt in der Sitzung (`reactivated`)
+                            und endet, sobald der Benutzer das Kennzeichen
+                            selbst anfasst.
+                          */
+                          const reactivated = !done && timer.reactivated.has(todo.id);
+                          return (
+                            <li key={todo.id} className={cx("pick-row", running && "pick-row--running")}>
+                              <IconButton
+                                label={
+                                  running
+                                    ? `Timer für ${quotedName(todo.title)} stoppen`
+                                    : `Timer für ${quotedName(todo.title)} starten`
+                                }
+                                icon={running ? "pause" : "play"}
+                                variant={running ? "primary" : "secondary"}
+                                onClick={() => timer.toggle(todo.id, todo.title)}
+                              />
+                              <a className="pick-row__title grow truncate" href={href("todo", todo.id)}>
+                                <Foreign value={todo.title} />
+                              </a>
+                              <DoneFlag state={doneFlagState(done, reactivated)} />
+                              {todo.callNumber === null ? null : (
+                                <span className="pick-row__call">
+                                  Call <Foreign value={todo.callNumber} />
+                                </span>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                iconStart="plus"
+                                onClick={() => setManualFor(todo)}
+                              >
+                                Von Hand
+                              </Button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </Card>
+                </div>
 
-              {manualFor === null ? null : (
-                <BookingFormDialog
-                  open
-                  todoId={manualFor.id}
-                  todoTitle={manualFor.title}
-                  onClose={() => setManualFor(null)}
-                />
-              )}
-            </div>
+                <aside className="time-layout__side">
+                  <Card title="Heute">
+                    <div className="stat-grid stat-grid--tight">
+                      <StatTile
+                        label="Erfasst"
+                        value={formatDuration(todaySeconds)}
+                        detail={plural(value.entries.length, "Buchung", "Buchungen")}
+                      />
+                      <StatTile
+                        label="Noch offen"
+                        value={formatDuration(openSeconds)}
+                        tone="warning"
+                        detail={
+                          value.previewProblem !== null
+                            ? "Was der Export daraus macht, ist gerade nicht abrufbar."
+                            : value.quarters === null
+                              ? "Noch nicht exportiert."
+                              : `Ergibt beim Export ${formatQuarters(value.quarters)}.`
+                        }
+                      />
+                    </div>
+                    {/*
+                      Der Grund steht unter den Kacheln und nicht in ihnen: Eine
+                      Kachel traegt eine Zahl, keine Fehlermeldung. Ohne ihn
+                      fehlte auch die Warnung ueber Tagesgruppen ohne Leistung
+                      (E-034), ohne dass jemand merkt, warum.
+                    */}
+                    {value.previewProblem === null ? null : (
+                      <p className="daygroup__blocked">
+                        <Icon name="alert-triangle" size={14} />
+                        <span>
+                          Was der Export aus den offenen Buchungen macht, ließ sich nicht
+                          abrufen: {value.previewProblem} Die erfasste Zeit stimmt trotzdem —
+                          nur der gerundete Wert fehlt, und geraten wird er nicht.
+                        </span>
+                      </p>
+                    )}
+                    {value.blockedGroups > 0 ? (
+                      <p className="daygroup__blocked">
+                        <Icon name="alert-triangle" size={14} />
+                        <span>
+                          {plural(value.blockedGroups, "Tagesgruppe hat", "Tagesgruppen haben")} noch
+                          keinen Leistungstext und {value.blockedGroups === 1 ? "geht" : "gehen"} so
+                          nicht in den Export. Die Export-Ansicht zeigt, welche.
+                        </span>
+                      </p>
+                    ) : null}
+                  </Card>
+
+                  <Card title="Buchungen von heute" runArea="Buchungen von heute" flush>
+                    {value.entries.length === 0 ? (
+                      <EmptyState
+                        compact
+                        icon="clock"
+                        title="Heute noch nichts erfasst"
+                        description="Der erste Timerstart legt die erste Buchung an."
+                      />
+                    ) : (
+                      <ul className="entry-list">
+                        {[...value.entries]
+                          .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+                          .map((entry) => (
+                            <TodayRow key={entry.id} entry={entry} />
+                          ))}
+                      </ul>
+                    )}
+                  </Card>
+                </aside>
+
+                {manualFor === null ? null : (
+                  <BookingFormDialog
+                    open
+                    todoId={manualFor.id}
+                    todoTitle={manualFor.title}
+                    onClose={() => setManualFor(null)}
+                  />
+                )}
+              </div>
+            </ScreenFrame>
           );
         }}
       </AsyncBoundary>

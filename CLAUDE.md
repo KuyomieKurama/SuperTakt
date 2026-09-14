@@ -138,6 +138,15 @@ arbeitet, ist damit nicht durch das Qualitätstor.** Der Stand solcher Arbeit he
 Security-Checker ihn gesehen haben. Und beim Wiederaufsetzen wird zuerst der Abstand zwischen
 `git log` und `board.md` gemessen, bevor irgendetwas gebaut wird.
 
+**Kollisionsfrei heißt nicht „verschiedene Dateien", sondern „verschiedene Schnittstellen".**
+Gelernt am 2026-09-12: T-315 (domain-dev) und T-316 (unit-tester) liefen parallel, nach der
+Hoheitstabelle sauber getrennt — `src/` gegen `test/`. domain-dev strich dabei
+`AttachmentPort.knownImageTargets`, und **zwanzig vorbestehende Prüffälle** wurden rot, die
+keinem der beiden Aufträge gehörten. Der unit-tester hat sie richtigerweise **nicht** repariert;
+gegen einen Zwischenstand zu prüfen ist schlimmer als eine Lücke. Wer eine Schnittstelle umbaut
+und wer sie mißt, gehören in **aufeinanderfolgende** Wellen, auch wenn ihre Dateipfade sich nie
+berühren. Der Fehler lag beim Orchestrator, nicht bei den Agenten.
+
 Agenten sprechen nicht miteinander. Alles läuft über `board.md`, die Berichte und den
 Orchestrator.
 
@@ -232,8 +241,12 @@ R-22. Bei jeder Freigabe zu prüfen:
 - In der Oberfläche heißt sie ausschließlich **„Frist"**.
 - Verweis und Datei speichern eine Zeichenkette. Ein **Bild** wird ins Anwendungsdatenverzeichnis
   kopiert und als `data:`-Adresse angezeigt — die CSP bleibt, wie sie ist.
-- **Über das Add-in entstehen keine Anhänge.** Strukturell, nicht per Voreinstellung. Ein Anhang
-  aus einer E-Mail wäre ein von außen geschriebener Öffnen-Befehl.
+- **Über das Add-in entstehen Anhänge nur beim Anlegen** (E-108, A-19.19 in der Fassung vom
+  2026-09-11). An einem **bereits vorhandenen** Todo entsteht keiner — weder im Duplikatfall
+  (A-10.9) noch sonst; das ist strukturell, nicht per Voreinstellung, und die Naht führt keinen
+  Parameter, mit dem ein vorhandenes Todo benannt werden könnte. Was beim Anlegen entsteht, ist
+  ein von außen geschriebener Öffnen-Befehl und wird entsprechend behandelt: erzeugter Name auf
+  der Platte, fremder Name nur als Anzeigename, Endung stets sichtbar (A-19.23a/b).
 - Der Öffnen-Befehl der Hülle prüft **bei jedem Aufruf** und nach Art getrennt: Verweis nur `http`
   und `https`, kein UNC; Datei nur ein vorhandener absoluter Pfad, kein UNC; ein Bild öffnet gar
   nichts. Eine Prüfung allein im Eingabefeld trägt nicht — zwischen Eingabe und Öffnen liegt der
@@ -279,11 +292,16 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
 
 - **Datensicherung (A-20).** Ein eigenes Archiv, JSON, mit Formatkennung
   `de.supertakt.data-archive`, ganzzahliger Schemafassung, Zeitpunkt und Erzeuger. **Der Code
-  steht auf Fassung 5** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
-  liest 1 bis 5 und weist alles andere ab — die Spezifikation nennt in A-24.7 die Fassung 4 und
-  kennt die 5 nicht. Das ist der zweite ungedeckte Punkt; er ist klein und gehört trotzdem
-  benannt. Unbekannte Fassungen werden **abgewiesen, nicht geraten**, und ein ungültiges Archiv
-  verändert nichts.
+  steht auf Fassung 6** (`DATA_ARCHIVE_VERSION`, `apps/local-api/src/features/data-transfer/data-transfer.ts`),
+  liest 1 bis 6 und weist alles andere ab. Fassung 6 trägt die **Bytes** der übernommenen
+  E-Mail-Dateien (A-19.34); Fassung 5 kannte sie nicht, und ein Archiv der Fassung 5 sagt beim
+  Einspielen auf einem fremden Rechner ausdrücklich, wie viele Dateien fehlen — es schweigt
+  nicht. A-24.7 beziffert die Fassung seit dem 2026-09-11 **nicht mehr**; die führende Angabe
+  ist `DATA_ARCHIVE_VERSION`. Unbekannte Fassungen werden **abgewiesen, nicht geraten**, und ein
+  ungültiges Archiv verändert nichts.
+- **Der Pfad reist nicht mit.** `todo_attachment.target` trägt den vollen Pfad des
+  Quellrechners. Das Einspielen setzt ihn neu — **vor** dem Schreiben und **auch ohne Bytes** —,
+  sonst liest die Rückfrage vor dem Öffnen eine Ortsangabe über einen fremden Rechner vor.
 - **Der Round-Trip ist die Anforderung**, nicht das Herunterladen (A-20.4): Export und
   anschließender Import stellen denselben fachlichen Bestand her, einschließlich Kennungen,
   Zeitstempeln und Protokollen. Zugriffstoken und Migrationsbuch bleiben draußen.
@@ -293,9 +311,15 @@ noch pnpm noch Cargo zur Verfügung. Bei jeder Freigabe zu prüfen:
   bricht **vor** dem ersten Schreibzugriff ab. Aus einem Fremdbackup entstehen Verweise und
   Dateipfade als Anhänge — die Prüfung aus Abschnitt 19 gilt dort genauso, denn ein Pfad aus
   einer fremden Datei ist ein von außen geschriebener Öffnen-Befehl.
-- **Der Rumpf des Archivs darf 64 MB** (`DATA_TRANSFER_MAX_BODY_BYTES`) gegen 1 MB im
-  Normalfall. Das ist eine bewusste Ausnahme für eingebettete Bildanhänge und die einzige
-  Stelle, an der B-1.7 gelockert ist.
+- **Drei Rumpfgrenzen, nicht mehr eine.** 1 MB im Normalfall (`MAX_BODY_BYTES`, B-1.7);
+  64 MB für die **Fremdimporte** (`DATA_TRANSFER_MAX_BODY_BYTES`); **256 MiB** für
+  `POST /data-transfer/archive` (`DATA_ARCHIVE_MAX_BODY_BYTES`), seit die Datensicherung die
+  Bytes der Anhänge mitträgt (A-19.34). Die 256 MiB sind **gemessen, nicht geschätzt**: Die
+  V8-Wand liegt bei 536 870 888 Zeichen, darüber wirft `request.json()` und der Dienst
+  antwortet mit einem irreführenden 422 statt 413. Die alte 64-MB-Grenze riß schon bei zwei
+  25-MiB-Dateien — und bereits ohne A-19.34 bei sechs Bildkopien. **Der Preis steht dabei:**
+  die Speicherspitze je Anfrage steigt gemessen von 333 MB auf 934 MB, und ein Riegel im
+  Anwendungsfall hilft nicht, weil der Rumpf vorher gelesen ist.
 - **Darstellung (A-21).** Die sichtbare Marke heißt SuperTakt; technische Kennungen und
   Datenpfade behalten ihre Namen — `identifier` bleibt `de.takt.desktop`, `generator` im Archiv
   bleibt `Takt`, die Kopfzeile bleibt `X-Takt-Token`. **Klassisch ist der Standard**, die alte
@@ -384,8 +408,8 @@ sind in `docs/design/supertakt-layout.md` beschrieben.
 
 Das Tor heißt `pnpm check` und fährt in dieser Reihenfolge: `typecheck`, `boundaries`,
 `contrast`, `proof:all`, `verify:bundle`, `test:coverage`, `test:rust`, `build`, `audit`.
-`proof:all` sind **neunzehn** Nachweisläufe. Einer steht ausdrücklich **nicht** darin und läuft
-einzeln: `proof:engines` (braucht WebKitGTK und seit PR #9 auch `python3-gi-cairo`).
+`proof:all` sind **zweiundzwanzig** Nachweisläufe. Einer steht ausdrücklich **nicht** darin
+und läuft einzeln: `proof:engines` (braucht WebKitGTK und seit PR #9 auch `python3-gi-cairo`).
 `proof:followup` gibt es seit T-247 nicht mehr — es prüfte ausschließlich die Anhangsroute des
 Add-ins und ist mit ihr gefallen (E-100).
 `pnpm test:e2e` fährt drei Playwright-Konfigurationen nacheinander.

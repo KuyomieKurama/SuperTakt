@@ -402,7 +402,13 @@ test.describe('TP-BUILD-02 — mit nachgebildeter Hülle', () => {
     // Code wie im Entwicklungsbetrieb, nur eben nicht mehr im Quelltext.
     await expect(page.locator('.done-switch strong')).toHaveText('Erledigt');
 
-    const main = page.locator('#inhalt');
+    // `.screen` statt `#inhalt` (T-330, E-114): Seit T-326 sitzt die Marke
+    // `#inhalt` auf dem Laufbereich (`ScreenBody`), nicht mehr auf dem
+    // Rahmen der Ansicht — die Knöpfe „Timer starten"/„Timer stoppen" stehen
+    // im `.screen__header` und lägen damit außerhalb. `.screen` ist die
+    // Ansicht selbst (Kopf **und** Laufbereich, genau ein Treffer je Route)
+    // und trifft dieselbe Menge wie zuvor `#inhalt` auf `.app__main`.
+    const main = page.locator('.screen');
     await main.getByRole('button', { name: 'Timer starten' }).first().click();
     await expect(main.getByRole('button', { name: 'Timer stoppen' })).toBeVisible();
     await expect(page.locator('.done-switch strong')).toHaveText('Erledigt aufgehoben');

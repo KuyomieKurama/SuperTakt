@@ -35,11 +35,19 @@ export default defineConfig({
   // TP-ANH-10 Stufe 2) — geschähe das hier, risse es jeder anderen Datei
   // dieser Reihe den Dienst unter den Füßen weg. Eigene Konfiguration,
   // derselbe Port, derselbe Ausschlussgrund.
+  //
+  // T-352: `timer-stop-announcement.spec.ts` braucht seit `T-350-domain-dev.md`
+  // Abschnitt 5 denselben echten Neustart — `captureTimerRecovery`
+  // (`apps/local-api/src/features/timer/timer.ts`) erfaßt eine verwaiste
+  // Buchung ausschließlich beim Start des Dienstprozesses, und die drei
+  // betroffenen Fälle brauchen deshalb einen Neustart **nach** dem Anlegen
+  // des Eintrags. Eigene Konfiguration, derselbe Port, derselbe Ausschlussgrund.
   testIgnore: [
     'web-build-smoke.spec.ts',
     'outlook-addin-build.spec.ts',
     'version-check-live.spec.ts',
     'attachment-persistence-live.spec.ts',
+    'timer-stop-announcement.spec.ts',
   ],
 
   // Ein einziger lokaler Dienst, eine einzige SQLite-Datei (E-001, E-018).

@@ -31,6 +31,7 @@ import {
   todayCalendarDay,
 } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody, runAreaSurface } from "../../shared/ui/ScreenBody";
 import { RefreshHint, ScreenHeader } from "../../shared/ui/ScreenHeader";
 import {
   BookingFormDialog,
@@ -344,8 +345,13 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
         />
       </ScreenHeader>
 
+      {/*
+        Die Trefferliste der Todo-Einschränkung steht (T-322 4.6): Sie ist Teil
+        der Filtereingabe, steht unmittelbar darunter, ist vorübergehend und auf
+        sechs Einträge gedeckelt.
+      */}
       {todoSearch.trim().length > 0 && data.state.status === "ready" ? (
-        <ul className="pick-list pick-list--inline" aria-label="Todo für den Filter wählen">
+        <ul className="screen__bar pick-list pick-list--inline" aria-label="Todo für den Filter wählen">
           {data.state.value.todos
             .filter((todo) => todo.title.toLowerCase().includes(todoSearch.trim().toLowerCase()))
             .slice(0, 6)
@@ -366,7 +372,24 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
         </ul>
       ) : null}
 
-      <AsyncBoundary state={data.state} label="Buchungen werden geladen" rows={8} onRetry={data.reload}>
+      {/*
+        Ein Laufbereich, Name „Buchungen" (T-322 4.6). Fest sind Kopf,
+        Filterleiste, Zählzeile und die Auswahlleiste: Sie beantwortet die
+        Auswahl **in** der Tabelle, während man in ihr ankreuzt, und ist eine
+        Live-Region — sie steht heute als letztes Element vor der Tabelle, sie
+        festzumachen ändert die Reihenfolge nicht.
+
+        Der Laufbereich **ist** die Tabellenfläche und trägt beide Achsen
+        (T-322 5.1): Ein Tabellenkopf, der senkrecht klebt, sich waagerecht aber
+        nicht mit dem Rumpf bewegt, stünde über den falschen Spalten.
+      */}
+      <AsyncBoundary
+        state={data.state}
+        label="Buchungen werden geladen"
+        rows={8}
+        onRetry={data.reload}
+        fallbackFrame={(content) => <ScreenBody label="Buchungen">{content}</ScreenBody>}
+      >
         {(value, refreshing) => {
           const rows = toRows(value.page.items, value.titles, sort);
           const selectedEntries = value.page.items.filter((entry) => selected.has(entry.id));
@@ -380,66 +403,72 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
 
           if (rows.length === 0) {
             return (
-              <TableShell>
-                <EmptyState
-                  icon={activeFilters.length === 0 ? "clock" : "search"}
-                  title={
-                    activeFilters.length === 0
-                      ? "Noch keine Zeitbuchung"
-                      : "Keine Buchung passt zu diesen Filtern"
-                  }
-                  description={
-                    activeFilters.length === 0
-                      ? "Starten Sie den Timer auf einem Todo — die erste Buchung entsteht beim Stoppen."
-                      : "Setzen Sie einen Filter zurück oder erweitern Sie den Zeitraum."
-                  }
-                  action={
-                    activeFilters.length === 0 ? (
-                      <Button variant="primary" iconStart="clock" onClick={() => navigate("time")}>
-                        Zur Zeiterfassung
-                      </Button>
-                    ) : (
-                      <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                        Filter zurücksetzen
-                      </Button>
-                    )
-                  }
-                />
-              </TableShell>
+              <ScreenBody label="Buchungen">
+                <TableShell>
+                  <EmptyState
+                    icon={activeFilters.length === 0 ? "clock" : "search"}
+                    title={
+                      activeFilters.length === 0
+                        ? "Noch keine Zeitbuchung"
+                        : "Keine Buchung passt zu diesen Filtern"
+                    }
+                    description={
+                      activeFilters.length === 0
+                        ? "Starten Sie den Timer auf einem Todo — die erste Buchung entsteht beim Stoppen."
+                        : "Setzen Sie einen Filter zurück oder erweitern Sie den Zeitraum."
+                    }
+                    action={
+                      activeFilters.length === 0 ? (
+                        <Button variant="primary" iconStart="clock" onClick={() => navigate("time")}>
+                          Zur Zeiterfassung
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
+                          Filter zurücksetzen
+                        </Button>
+                      )
+                    }
+                  />
+                </TableShell>
+              </ScreenBody>
             );
           }
 
           return (
             <>
-              <div className="bulkbar" role="status" aria-live="polite">
-                <RefreshHint active={refreshing} />
-                {selected.size === 0 ? (
-                  <span className="bulkbar__hint">
-                    Zeilen auswählen, um mehrere Buchungen auf einmal zu bearbeiten.
-                  </span>
-                ) : (
-                  <>
-                    <span className="bulkbar__count">
-                      {plural(selected.size, "Buchung ausgewählt", "Buchungen ausgewählt")} ·{" "}
-                      {formatDuration(selectedSeconds)}
+              <div className="screen__bar">
+                <div className="bulkbar" role="status" aria-live="polite">
+                  <RefreshHint active={refreshing} />
+                  {selected.size === 0 ? (
+                    <span className="bulkbar__hint">
+                      Zeilen auswählen, um mehrere Buchungen auf einmal zu bearbeiten.
                     </span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      iconStart="rotate-ccw"
-                      disabled={exportedSelected === 0}
-                      onClick={() => setBulkOpen(true)}
-                    >
-                      Exportstatus zurücksetzen ({exportedSelected})
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                      Auswahl aufheben
-                    </Button>
-                  </>
-                )}
+                  ) : (
+                    <>
+                      <span className="bulkbar__count">
+                        {plural(selected.size, "Buchung ausgewählt", "Buchungen ausgewählt")} ·{" "}
+                        {formatDuration(selectedSeconds)}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        iconStart="rotate-ccw"
+                        disabled={exportedSelected === 0}
+                        onClick={() => setBulkOpen(true)}
+                      >
+                        Exportstatus zurücksetzen ({exportedSelected})
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                        Auswahl aufheben
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <BookingTable
+                className="screen__body"
+                surface={runAreaSurface("Buchungen", true)}
                 rows={rows}
                 caption="Alle Zeitbuchungen mit Exportstatus, Zeitraum, Dauer und Leistung"
                 selectedIds={selected}

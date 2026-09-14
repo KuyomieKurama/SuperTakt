@@ -18,6 +18,7 @@ import type {
   Attachment,
   AttachmentId,
   AttachmentKind,
+  AttachmentOrigin,
   DefaultTag,
   ExportAuditEntry,
   ExportAuditEvent,
@@ -51,7 +52,7 @@ import type {
   TodoNote,
   TodoStatus,
 } from '@takt/domain';
-import { normalizeVersion } from '@takt/domain';
+import { isAttachmentOrigin, normalizeVersion } from '@takt/domain';
 
 import { boolean, integer, text, textOrNull, type SqlRow, type SqlValue } from './database.ts';
 
@@ -125,6 +126,22 @@ export function toAttachment(row: SqlRow): Attachment {
     target: text(row, 'target'),
     position: integer(row, 'position'),
     createdAt: asTimestamp(text(row, 'created_at')),
+    /*
+     * Herkunft und Nachbau-Kennzeichen (A-A-84, A-A-97, Migration 0023).
+     *
+     * **Ein unbekannter Wert wird `user`**, nicht „unbekannt" und nicht ein
+     * Wurf. Die Begründung ist E-105 in der Gegenrichtung: Eine Zeile, die aus
+     * einer neueren Fassung stammt oder an der Tür vorbei geschrieben wurde
+     * (VG-3), soll den **vorsichtigeren** Zustand bekommen — und vorsichtig
+     * ist hier `user`, weil `email` eine Aussage über die Herkunft **behauptet**,
+     * die dann niemand gemacht hat. Ein Anhang, der fälschlich „stammt aus
+     * einer E-Mail von …" trüge, wäre eine falsche Auskunft an genau der
+     * Stelle, an der A-A-85 eine richtige verlangt.
+     */
+    origin: isAttachmentOrigin(text(row, 'origin')) ? (text(row, 'origin') as AttachmentOrigin) : 'user',
+    originSender: textOrNull(row, 'origin_sender'),
+    displayName: textOrNull(row, 'display_name'),
+    rebuilt: boolean(row, 'rebuilt'),
   };
 }
 

@@ -101,6 +101,56 @@ export type CalendarDay = string;
 export type ForeignText = string & { readonly __foreignText?: undefined };
 
 /**
+ * Fremder Text, der auf dem Bildschirm **niemals am Ende gekürzt** werden darf
+ * (A-19.23b, Auflage A-A-93, R-27).
+ *
+ * ---------------------------------------------------------------------------
+ * Die Fehlerart, gegen die diese Marke steht
+ * ---------------------------------------------------------------------------
+ *
+ * `ForeignText` trägt gegen Zeichen, die die Anzeige **verändern** — das
+ * Richtungszeichen, die Nullbreite. `visibleText` ersetzt sie durch eine
+ * sichtbare Marke, und `proof:foreign` mißt, daß die Behandlung stattfindet.
+ *
+ * Ein Deckel in der Darstellung verändert **kein einziges Zeichen**. Ein
+ * `text-overflow: ellipsis`, ein `-webkit-line-clamp`, ein `white-space:
+ * nowrap` in einer engen Spalte, ein `slice(0, n)` im Quelltext: Der Text ist
+ * danach in Ordnung, und die Anzeige lügt trotzdem. Sie lügt genau an der
+ * Stelle, an der die einzige Sicherung zwischen einem fremden Anhang und
+ * `ShellExecuteW` hängt — der Benutzer bestätigt `Rechnung…` und startet eine
+ * `.exe`. Weder `visibleText` noch `proof:foreign` sehen das: Es gibt nichts
+ * zu behandeln, und ein CSS-Deckel hat keinen Typ.
+ *
+ * ---------------------------------------------------------------------------
+ * Was die Marke daran ändert: der Deckel bekommt einen Gegenspieler mit Typ
+ * ---------------------------------------------------------------------------
+ *
+ * Ein Wert dieses Typs sagt: *An dieser Zeichenkette hängt eine Entscheidung,
+ * deren Grundlage das **Ende** ist — die Endung.* Daraus folgen drei Regeln,
+ * und alle drei mißt `scripts/proof-clamp.mjs`:
+ *
+ *  1. Er geht in die Anzeige ausschließlich über `shared/ui/ForeignName.tsx`
+ *     oder über einen Parameter, der selbst `UncappedText` heißt. Damit ist die
+ *     Menge der Anzeigestellen **gerechnet** und nicht aufgezählt.
+ *  2. Weder das aufnehmende Element noch eines seiner Elternelemente in
+ *     derselben Datei trägt eine CSS-Klasse, die am Zeilenende deckelt. Die
+ *     Menge der deckelnden Klassen wird aus den Stilblättern **gelesen**, nicht
+ *     abgeschrieben.
+ *  3. Aus ihm wird im Quelltext nichts herausgeschnitten (`slice`,
+ *     `substring`, `substr`), und keine Ersatzmarke wird angehängt.
+ *
+ * Gekürzt werden darf er, wenn es sein muß, **in der Mitte** — das tut der
+ * Dienst beim Anlegen (`shortenEmailDisplayName`), die Kürzung ist dort
+ * sichtbar, und das Ende bleibt stehen.
+ *
+ * Die Marke ist wie `ForeignText` **freiwillig und leer**: Sie ändert nichts an
+ * der Zuweisbarkeit und nichts zur Laufzeit. Ein `UncappedText` **ist** fremder
+ * Text — der Schnitt mit `ForeignText` ist Absicht, damit jede Behandlung aus
+ * E-063 unverändert auf ihm arbeitet und `proof:foreign` ihn weiter sieht.
+ */
+export type UncappedText = ForeignText & { readonly __uncappedText?: undefined };
+
+/**
  * Was der Benutzer **dieser** Oberfläche gerade selbst schreibt oder abschickt:
  * der Inhalt eines Eingabefeldes, ein Suchbegriff, der Rumpf einer Anfrage.
  *

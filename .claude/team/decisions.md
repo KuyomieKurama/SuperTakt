@@ -2785,3 +2785,438 @@ falsche Kommentar beschrieb nicht den Code, sondern die **geprüfte** Wirklichke
 (`export-status.ts:257`). Ein Satz, der die Testlücke beschreibt und für eine Beschreibung der
 Regel gehalten wird, ist unauffällig, solange beide dasselbe sagen — und genau deshalb fällt er
 nicht auf.
+
+## E-105 — Eine unbekannte Gestaltung wird klassisch dargestellt, nicht verworfen
+
+**Anlaß:** T-284. `startup-appearance.js` prüfte die Gestaltung aus dem Zwischenspeicher gegen
+eine **Form** (`/^[a-z-]{1,40}$/`), während die drei Nachbarwerte in derselben Abfrage gegen
+ausgeschriebene **Listen** geprüft werden. Ein Altwert setzte damit `data-design-theme` auf jede
+Zeichenkette aus Kleinbuchstaben — darunter `clear`, das seit A-21 nicht mehr wählbar ist und
+im Hochlauf gemessen andere Maße trug (`--text-2xs: .75rem` gegen `.6875rem`).
+
+**Entscheidung.**
+
+1. Geprüft wird gegen die **Liste**, wie bei `theme`, `mode` und `density`.
+2. Ein unbekannter Wert wird **auf `classic` abgebildet**, nicht verworfen — und das gilt über
+   `clear` hinaus für jeden unbekannten Wert. `CLAUDE.md` sagt zu A-21 „die alte Auswahl `clear`
+   wird klassisch dargestellt"; die Verallgemeinerung folgt demselben Gedanken: Klassisch **ist**
+   der Standard, und ein Hochlauf, der eine unbekannte Angabe fallen läßt, zeigt einen anderen
+   Zustand als einer, der sie abbildet. Zwei Wege zum selben Bild sind schlechter als einer.
+3. Der erzwungene Farbmodus fällt mit zurück: `mode` im Zwischenspeicher ist die Betriebsart der
+   **gespeicherten** Gestaltung, und `classic` ist `auto`.
+
+**Zur Abschrift, die bleibt.** Die Liste steht zweimal — einmal in `themePresets.ts`, einmal im
+Hochlauf. Sie beim Bau zu erzeugen hätte den Bündler in genau den Pfad gezogen, dessen Zusage
+lautet, **ohne** Bündler zu laufen (A-21.4, T-060), und die einzige von Hand prüfbare Datei im
+Auslieferungsbündel zu einem Erzeugnis gemacht. Die Abschrift bleibt deshalb — aber sie kann
+nicht **still** altern: Der Prüffall fährt den Hochlauf einmal je Eintrag beider Listen; ein
+fehlender Eintrag macht genau zwei Fälle rot.
+
+Das ist die allgemeine Antwort auf den Befund, der dieser Sitzung zehnmal begegnet ist: **Wenn
+eine Menge kopiert werden muß, wird die Kopie gegen die Quelle gemessen** — nicht gegen ihre
+eigene Form.
+
+## E-106 — Der Mindestabstand gilt im Lauf, nicht über Neustarts (hebt T-279 teilweise auf)
+
+**Anlaß:** T-279 hat den letzten Prüfzeitpunkt in den Bestand geschrieben, damit der Boden aus
+A-V-11 einen Neustart des Sidecars überlebt. Der gemessene Hebel davor: rund 344 Anfragen je
+Stunde durch wiederholte Starts gegen 24 je Tag im Betrieb.
+
+**Der Preis war beim Entscheiden nicht sichtbar**, und ein Prüffall hat ihn gefunden:
+`TP-VER-11` — der einzige, der den Dienst neu startet — fiel danach in die Zeitüberschreitung,
+weil der neu gestartete Dienst **gar nicht mehr fragte**. Verschärfend: Der Boden wird **vor**
+dem `fetch` geschrieben (richtig so, sonst umginge ein Absturz ihn), also setzt ihn auch ein
+**fehlgeschlagener** Versuch.
+
+Damit galt: Start ohne Netz um 9:00, Neustart um 9:10 — keine Prüfung bis 10:00. Ausgerechnet
+der Griff, zu dem ein Benutzer greift, wenn er vermutet, die Prüfung habe nicht gegriffen, war
+wirkungslos geworden. Der Auftraggeber war mit „die Versionsprüfung greift nicht immer" gekommen.
+
+**Entscheidung.**
+
+1. **Ein Programmstart fragt immer einmal**, gleich wann zuletzt gefragt wurde.
+2. **Der Mindestabstand gilt innerhalb eines Laufs.** Das ist der Wortlaut von A-V-11, genau
+   gelesen: „zwischen zwei ausgehenden Anfragen" ist eine Aussage über den Betrieb, nicht über
+   Prozeßgrenzen. Vor T-279 war es so, und niemand hat es beanstandet.
+3. **Die Spalte `last_version_check_at` bleibt** und wird weiter vor jeder Anfrage geschrieben —
+   ab jetzt als **Tatsache** für die Datensicherung, nicht als Sperre. Migration 0022 steht auf
+   `main`; sie zurückzunehmen wäre teurer als sie zu behalten. `proof:release-safety` mißt seit
+   T-285, daß niemand sie wieder **liest**.
+4. **Der Neustart-Hebel ist damit wieder offen**, und das ist abgewogen, nicht übersehen. Die
+   Begründung stammt aus der Messung zu T-276: „Ein Bestandswert ist keine Abwehr gegen einen
+   Prozeß im Benutzerkonto, sondern gegen den Unfall." Der Preis dieses Unfallschutzes war, dem
+   Benutzer seine einzige Selbsthilfe zu nehmen. Neue Obergrenze: 24 je Lauf, über Prozeßgrenzen
+   `24 + Zahl der Starts` — für den gewöhnlichen Benutzer 25 am Tag.
+
+**Was aus diesem Vorgang zu lernen ist**, und es ist der Grund, warum diese Entscheidung eine
+eigene Nummer bekommt statt einer Zeile in T-279: Die Frage an den Auftraggeber lautete „soll der
+Boden einen Neustart überleben?" und nannte den Nutzen. Sie nannte den **Preis** nicht, weil ihn
+niemand kannte — er wurde erst sichtbar, als ein Prüffall darauf bestand, den Dienst neu zu
+starten. **Eine Entscheidung, die nur ihren Nutzen kennt, ist keine Entscheidung, sondern ein
+Vorschlag mit Unterschrift.** Wo der Preis unbekannt ist, gehört das in die Frage.
+
+**Migration 0022 behauptet weiter den alten Zweck** und läßt sich nicht berichtigen: Der Läufer
+prüft eine Prüfsumme über den Dateiinhalt, und eine geänderte Migration gälte jedem bestehenden
+Bestand als nachträglich verändert. Die gültige Auskunft steht in `docs/datenmodell.md` 8.4k.
+
+## E-107 — Eine Markenliste bekommt eine Gegenprobe für ihr Leersein, nicht eine je Marke
+
+**Frage aus T-294.** Die Zählvorschrift des code-reviewers lautet „so viele Gegenproben wie
+unterscheidbare Befundsätze". Angewandt auf `proof-release-safety.mjs` ergibt sie 68 Prüfungen.
+Sie läßt eine Frage offen: Zwei Prüfungen halten **Markenlisten** — `download` vierzehn Marken,
+`optionen` sieben —, und eine ganze Liste erzeugt einen einzigen Befundsatz. Je Marke eine
+Gegenprobe wären 68 → **87**.
+
+**Entschieden: nein, und statt dessen die Lücke schließen, die wirklich offen ist.**
+
+Vierzehn Gegenproben an vierzehn Marken messen vierzehnmal denselben Mechanismus. Sie fügen
+keine Fehlerart hinzu: Fällt die Liste aus, fällt sie ganz; fällt eine einzelne Marke heraus,
+ist das **kein anderer Mechanismus**, sondern ein kleinerer Ausfall desselben. Der Preis wäre
+neunzehn Einträge, die den Lauf länger machen und seine Aussage nicht.
+
+Ungemessen ist statt dessen das **teilweise** Leeren — genau der Fall, den T-291 eine Prüfung
+weiter gefunden hat (`FORBIDDEN_IN_SOURCE = []` blieb grün) und der dort mit einer Gegenprobe
+geschlossen wurde. Die Lücke ist also nicht „welche Marke fehlt", sondern „**merkt der Lauf,
+wenn die Liste schrumpft**". Das ist **eine** Gegenprobe je Liste, nicht vierzehn.
+
+**Die Regel, über diesen Fall hinaus:** Eine Gegenprobe gehört an jede Stelle, an der ein
+**anderer** Fehler entsteht — nicht an jedes Element einer Menge, die gemeinsam ausfällt. Wer
+je Element gegenprobt, kauft Zahlen und keine Sicherheit; die Zahl wächst mit der Liste, die
+Aussage nicht.
+
+**Der Anlaß, es überhaupt zu entscheiden**, steht in den Risiken von T-294 und ist ernster als
+die Frage: 44 Verstoßeinträge gegen sieben Prüfungen — **der Lauf mißt zu drei Vierteln sich
+selbst.** Das ist der richtige Zustand für einen Wächter, der viermal geschlagen wurde, aber er
+hat eine Grenze. Wo eine Gegenprobe nur noch bestätigt, daß ein bereits gegengeprobter
+Mechanismus auch beim Nachbarwert greift, ist sie Ballast.
+
+## E-108 — Anhänge aus dem Add-in: beim Anlegen ja, am gefundenen Todo nein (hebt E-100 zur Hälfte auf)
+
+**Auftrag des Auftraggebers vom 2026-09-11.** Aus einer E-Mail heraus soll ein neues Todo
+entstehen, das die **E-Mail selbst als Datei** und **alle ihre Dateianhänge** trägt. Vorbild ist
+die Outlook-Bridge zu Super Productivity.
+
+**E-100 fällt damit — aber nur zur Hälfte, und die andere Hälfte ist die wichtigere.** Gefallen
+war am 2026-09-10 die Tür, die an ein **vorhandenes** Todo anhängte. Diese Tür bleibt zu:
+A-10.9 ändert sich nicht, im Duplikatfall wird weiterhin nur hingewiesen. Neu ist ausschließlich
+der Weg beim **Anlegen**. Wer das später ausweitet, hebt E-108 auf und nicht nur eine Zeile Code.
+
+**Was die Bridge nicht liefert, und es ist die Hälfte des Auftrags.** Gelesen am 2026-09-11:
+`src/client/email-attachments.ts` sammelt die **Dateianhänge** und lädt sie über einen eigenen
+Endpunkt in den Ablageordner. Die **E-Mail selbst** hängt sie nicht an — sie legt einen
+Deep-Link (`outlook.office.com/mail/deeplink/read/…`) und einen auf 2500 Zeichen gekürzten
+Textauszug ab. Genau das schließt der Auftrag aus. „Bestehende Logik nachbilden" trägt also für
+A-19.23 vollständig und für A-19.22 **gar nicht**.
+
+**Drei Weichen, vom Auftraggeber gestellt, zwei davon gegen meine Empfehlung:**
+
+1. **Die E-Mail kommt als Original-MIME über EWS**, nicht als selbst gebaute `.eml`. Preis,
+   ausdrücklich genannt und ausdrücklich angenommen: Das Manifest braucht `ReadWriteMailbox`
+   statt `ReadItem` — das Add-in darf damit im **ganzen Postfach** lesen und schreiben, nicht
+   nur an der offenen Nachricht. Dazu kann EWS mandantenseitig abgeschaltet sein; deshalb
+   A-19.31, damit daraus kein stiller Ausfall wird.
+2. **Übernommene Dateien sind gewöhnliche Dateianhänge** und damit über die Hülle mit der
+   Standardanwendung zu öffnen — nach Rückfrage mit vollem Pfad. Der Weg von einer fremden
+   E-Mail bis zur Ausführung einer `.bat`, `.lnk` oder `.exe` steht damit offen und ist allein
+   durch diese Rückfrage gesichert. Das ist R-21 an einer neuen Stelle und gehört bewertet,
+   bevor es gebaut wird.
+3. **Eine eigene Größengrenze je Datei** (Vorschlag 25 MB wie die Bridge). Dritte Ausnahme von
+   B-1.7 neben der Datensicherung; die 1-MB-Grenze aller übrigen Routen bleibt.
+
+**Was in einem Auftrag zusammengehört** — die Regel aus E-100 gilt in die Gegenrichtung genauso:
+A-19.19 in der Spezifikation, A-A-21 im Bedrohungsmodell und `proof:addin` Abschnitt 18, der
+heute die Abwesenheit **jeder** Anhangstür unter `/addin` mißt. Ein Wächter, der eine Abwesenheit
+mißt, die es nicht mehr gibt, ist kein harmloser Rest: Er ist ein Satz, der das Gegenteil des
+Bestands behauptet, und davon hatte dieser Bestand am 2026-09-10 sechs.
+
+**Die Reihenfolge ist nicht verhandelbar.** „Beide Wege sind im Bedrohungsmodell bewertet, bevor
+sie gebaut werden" steht seit der Versionsprüfung in `CLAUDE.md`. Hier kommen drei Wege auf
+einmal: ein erweitertes Postfachrecht, eine fremde Binärdatei im Datenverzeichnis und ein Pfad
+aus fremder Hand am Öffnen-Befehl. Gebaut wird nach der Bewertung, nicht daneben.
+
+## E-109 — Die Nachricht kommt über `getAsFileAsync`; EWS und `ReadWriteMailbox` entfallen (hebt E-108 Punkt 1 auf)
+
+**Gemessen am 2026-09-11, wenige Stunden nach E-108.** `Office.context.mailbox.item.getAsFileAsync`
+liefert die aktuelle Nachricht **als EML/MIME in Base64**. Mindestrecht: **read item**.
+Anforderungssatz: Mailbox **1.14**. Die Angabe stammt aus der Beschreibung der Schnittstelle,
+nicht aus einer Erinnerung.
+
+**Damit ist der Preis von E-108 Punkt 1 hinfällig, ohne daß sein Nutzen fällt.** Der Auftraggeber
+wollte das Original und hatte dafür `ReadWriteMailbox` angenommen. Er bekommt das Original mit
+`ReadItem`. Es entfallen: der Zugriff auf das ganze Postfach, das Senden im Namen des Benutzers,
+das Löschen von Spuren, die Posteingangsregel als Beharrlichkeit — die vier Punkte, die der
+security-checker in T-297 als W-1 bewertet hatte. A-19.32 ist entsprechend neu gefaßt: **kein
+weitergehendes Recht als bisher.**
+
+**Der Rückfall ist entschieden (A-19.22a, A-19.22b):** Ältere Outlook-Fassungen ohne Mailbox 1.14
+bekommen eine aus den Office.js-Feldern **nachgebaute** `.eml`, und sie ist am Anhang **als
+Nachbau gekennzeichnet**. Der Grund für die Kennzeichnung ist nicht Ordnungsliebe: Eine Datei,
+die für die ursprüngliche Nachricht gehalten werden kann, ohne es zu sein, ist in einem Vorgang,
+aus dem eine Rechnung wird, eine falsche Auskunft über ein Beweisstück.
+
+**Die Lehre, und sie ist dieselbe wie bei E-106, nur andersherum.** E-106 entstand, weil eine
+Frage nur ihren Nutzen nannte. E-109 entsteht, weil eine Frage nur **zwei** Möglichkeiten nannte
+— und die dritte war die beste. Der Auftraggeber hat zwischen Nachbau und `ReadWriteMailbox`
+gewählt, weil ihm niemand gesagt hatte, daß Original und `ReadItem` zusammengehen. Wer zwei Wege
+zur Wahl stellt, hat damit noch nicht gezeigt, daß es nur zwei gibt. **Vor der Frage steht die
+Suche, nicht danach.**
+
+**Was von der Bewertung aus T-297 bleibt**, unberührt von dieser Änderung: der fremde Dateiname
+als Pfadbestandteil (A-A-78 bis A-A-82), die Kürzung, die der Rückfrage die Endung nimmt
+(A-A-93), der Cloud-Verweis als Adresse aus fremder Hand, und R-21 an neuer Stelle — bis heute
+mußte ein Pfad eingetippt werden, ab A-19.23 genügt eine E-Mail.
+
+## E-110 — Eine Antwort darf nicht zur Wiederholung dessen verleiten, was schon geschehen ist
+
+**Frage aus T-309.** Beim Anlegen eines Todos aus einer E-Mail laufen die Anhangszeilen in einer
+zweiten Transaktion, nachdem das Todo bereits festgeschrieben ist. Ein **Wurf** dort ließ die
+Route mit 500 antworten. domain-dev hat die Folge selbst benannt: *„Das Todo überlebt den Wurf,
+die Route antwortet 500; ein zweiter Versuch erzeugt ein Duplikat."*
+
+**Entschieden: kein 500, wenn das Todo steht.** Der Aufrufer bekommt den Zustand, der wahr ist —
+das Todo ist angelegt, die Anhänge sind vollständig fehlgeschlagen. A-19.29 kennt diesen Zustand
+bereits: „Ein Todo, das mit weniger Anhängen entsteht als die E-Mail trägt, sagt das." **Null ist
+weniger.**
+
+**Die Regel dahinter gilt über diesen Fall hinaus:** Eine Antwort darf den Aufrufer nicht dazu
+bringen, etwas zu wiederholen, das bereits geschehen ist. Ein Fehlerschluß, der zu einem zweiten
+Todo mit derselben Call-Nummer führt, richtet einen Schaden an, den der Benutzer nicht verursacht
+hat und nicht sehen kann — und er richtet ihn genau an der Stelle an, gegen die A-10.9 und die
+ganze Duplikatwarnung gebaut sind.
+
+**Die Gegenposition ist notiert und nicht unbegründet.** domain-dev hat eingewandt, ein Wurf sei
+ein **unerwarteter** Zustand, und ihn als gewöhnliches Ergebnis auszugeben verwische das. Richtig.
+Deshalb gehört der Wurf ins Protokoll — mit Stufe `error` und eigenem Grund —, während der
+Aufrufer die Wahrheit über den Bestand bekommt. Zwei verschiedene Leser, zwei verschiedene
+Auskünfte, beide wahr.
+
+**Eine Grenze, die dabei sichtbar wurde und nicht still gelöst ist (offen):** Der **Wortlaut** des
+Wurfs steht nicht in der Protokollzeile. `Logger` hat strukturell keinen Parameter für ein
+Ausnahmeobjekt, und `error.message` trägt bei SQLite- und Dateisystemfehlern regelmäßig einen
+Pfad — das ist B-2.4 und T-132. „In voller Schärfe protokollieren" braucht damit einen eigenen
+Diagnosekanal, und der ist eine Entscheidung, keine Codezeile.
+
+## E-111 — Der Aufräumlauf für herrenlose E-Mail-Dateien
+
+**Frage aus T-309.** Das `try`/`catch` um die Anhangstransaktion reicht so weit wie der Prozeß.
+Ein **harter Abbruch** zwischen Schreiben und `COMMIT` hinterläßt eine Datei im
+Anwendungsdatenverzeichnis, auf die keine Zeile zeigt.
+
+**Entschieden: der Lauf wird gebaut**, nach dem Vorbild des Bildlaufs, verdrahtet beim Start.
+Der Grund ist nicht Ordnungsliebe: Es geht um **Kundendaten aus einer fremden E-Mail**, die
+unbemerkt liegenbleiben. Niemand fände sie — kein Bestand zeigt auf sie, keine Datensicherung
+erwähnt sie, keine Anhangsliste nennt sie.
+
+**Zwei Auflagen, beide gebaut:**
+
+- **Eine Untergrenze**, und sie steckt im Rückgabewert statt in einer Zahl:
+  `{ read, owned, removed, refused }`. „Null Waisen" ist damit von „null gelesene Dateien"
+  unterscheidbar — der Fehler, den dieser Bestand dreizehnmal nachschärfen mußte.
+- **Nie eine Datei löschen, auf die eine Zeile zeigt.** Vier Sicherungen plus ein
+  Widerspruchsriegel, der über **dieselbe** Bedingung zählt wie die Abfrage; sonst wäre der
+  Widerspruch ein Vergleich zweier verschiedener Mengen.
+
+**Die Falle, die der Bildlauf nicht hat** und die aus dem Aufräumlauf beinahe einen Löschlauf
+gemacht hätte: `listEmailFiles()` liefert **Namen**, `todo_attachment.target` trägt **Pfade**.
+Ohne Umrechnung wäre jede Datei herrenlos gewesen. Es ist derselbe Fehler wie „geprüfter Name ≠
+aufgelöster Name" (T-156-1, T-164-1, T-297), diesmal in der löschenden Richtung — und dort kostet
+er nicht eine Lücke, sondern Daten.
+
+---
+
+## E-112 — Fester Teil ist die Steuerung, Laufbereich ist der Inhalt, Rückfall ist der Seitenlauf
+
+**Entschieden am 2026-09-12** aus T-322 (Offene Frage 5) und T-323, auf den Auftrag des
+Auftraggebers vom selben Tag: Jede Ansicht richtet sich nach dem verfügbaren Inhaltsbereich, und
+läuft etwas über, läuft ausschließlich der betroffene Bereich.
+
+Die Regel gilt über diesen Auftrag hinaus und ist in drei Sätzen zu haben:
+
+1. **Die Naht liegt unter dem, was die Auswahl steuert.** Bildschirmkopf, Bereichsreiter,
+   Filterleiste samt Zählzeile und die eine Leiste, die eine Auswahl im Inhalt beantwortet, stehen
+   fest. Was die Auswahl **zeigt**, läuft. Wer eine neue Ansicht baut, zieht die Naht an dieser
+   Frage und nicht an der Optik.
+2. **Ein Laufbereich je Fläche und Achse; zwei nur nebeneinander, nie übereinander.** Zwei
+   untereinanderliegende Laufbereiche geben dem Benutzer zwei Bildlaufleisten für eine Blickachse.
+   Fällt ein Nebeneinander bei schmalem Fenster untereinander, wird aus zwei wieder einer.
+3. **Der Rückfall ist der heutige Zustand.** Unterschreitet die Höhe des **Inhaltsbereichs** —
+   nicht des Fensters — die Grenze, läuft wieder der Rahmen als Einziges. Kein Abschneiden, keine
+   unerreichbare Fläche. Entschieden in CSS, nicht in JavaScript, damit unterwegs kein Fokus
+   verlorengeht.
+
+**Der Preis steht dabei, und er ist eine Fehlerklasse, keine Unbequemlichkeit.** Der Bildlauf zieht
+von einer Fläche (`.app__main`) in viele. Damit wird jede Falle, die T-057 einmal gekostet hat, zu
+einer Falle je Ansicht: die Rinne der Bildlaufleiste, die außen bleibt, während der Lauf nach innen
+zieht — und, teurer, ein absolut positionierter Nachfahre ohne umschließenden Block, der den
+Dokumentbildlauf still zurückbringt. Deshalb ist die Zusage „keine Ansicht macht das Dokument höher
+oder breiter als das Fenster" ein Meßsatz und kein Satz in einem Papier.
+
+**Berichtigt am 2026-09-13, siehe E-113:** Dieser Absatz schloß ursprünglich mit „deshalb bekommt
+`.screen__body` ausdrücklich **kein** `position: relative`". Das war die falsche Folgerung aus der
+richtigen Falle, und T-326 hat sie gemessen widerlegt.
+
+**Ebenfalls berichtigt, Punkt 3:** „läuft wieder der Rahmen als Einziges" ist als Zusage zu weit.
+Im Rückfall läuft der Rahmen, und der Laufbereich kann innerhalb seines Bodens von 4 rem weiter
+laufen — verschachtelt, nicht übereinander. Gehalten wird, daß das **Dokument** nie läuft und keine
+Fläche unerreichbar wird; nicht, daß genau eine Bildlaufleiste sichtbar ist. Der Mechanismus dafür
+ist selbsttätig und kommt ohne Schwellenzahl aus; eine Höhenabfrage könnte ohnehin nur das Fenster
+messen, und Punkt 3 spricht vom Inhaltsbereich.
+
+**Zwei Flächen sind ausgenommen und bleiben es:** die Startbilder (`.boot`) und die Musterseite —
+sie hängen nicht in dieser Hülle. Der Outlook-Aufgabenbereich ebenfalls; er hängt in Outlooks
+Rahmen. Sollte der Auftraggeber ihn einschließen wollen, ist das ein eigener Auftrag und nicht
+diese Regel.
+
+---
+
+## E-113 — Der umschließende Block wandert mit dem Bildlauf
+
+**Entschieden am 2026-09-13** gegen die eigene Vorgabe aus E-112 und gegen
+`docs/design/fensterfeste-flaechen.md` Abschnitt 8.4, weil T-326 das Gegenteil **gemessen** hat.
+
+E-112 und das Mechanismuspapier verboten `position: relative` an `.screen__body` mit Verweis auf
+T-057 Ursache 2: Es solle bei **genau einem** umschließenden Block für absolut positionierte
+Nachfahren bleiben. Die Regel war richtig, solange `.app__main` selbst der Laufbereich war. Sie ist
+falsch, sobald der Bildlauf eine Ebene tiefer zieht — denn dann bezieht sich ein
+`span.visually-hidden` **im** Laufbereich weiterhin auf `.app__main`, liegt außerhalb des
+Bildlaufkastens, in dem es steht, und vergrößert statt dessen den Bildlaufbereich des **Rahmens**.
+
+Gemessen ohne die Zeile, `scrollHeight/clientHeight` des Rahmens bei 768 px Fensterhöhe:
+
+| Ansicht | Rahmen | Verstöße |
+|---|---|---|
+| Todos | 4242/768 | 128 |
+| Buchungen | 3564/768 | 140 |
+| Zeiterfassung | 5723/768 | 76 |
+| Todo-Detail | 5338/768 | 81 |
+| Protokoll | 3573/768 | 55 |
+| Tags | 1224/768 | — |
+| Dashboard | 905/768 | — |
+
+Mit der Zeile: alle elf auf 768/768. Es ist **dieselbe Klasse wie T-057**, eine Ebene höher — nicht
+ihr Gegenteil.
+
+**Die Regel, die daraus wird und die über diesen Fall hinausgeht:** Ein Bildlaufkasten muß der
+umschließende Block seiner eigenen absoluten Nachfahren sein. Wandert der Bildlauf, wandert
+`position: relative` mit ihm. „Genau ein umschließender Block" war nie das Ziel — das Ziel war, daß
+kein absoluter Nachfahre aus dem Kasten fällt, in dem er steht.
+
+**Und die Lehre über die Entscheidung selbst:** Beide Designpapiere sind gegeneinander gelesen
+worden und lagen deckungsgleich — an dieser Stelle waren sie deckungsgleich **falsch**. Zwei
+Papiere, die einander bestätigen, sind keine Messung. Der frontend-dev hat richtig gehandelt:
+gebaut, gemessen, die Abweichung als Abweichung gemeldet und die Entscheidung nicht selbst
+getroffen.
+
+---
+
+## E-114 — Ein Wortlautabgleich findet Zeichenketten, keine Geltungsbereiche
+
+**Entschieden am 2026-09-13** aus T-323 gegen T-326.
+
+Vor der Verlegung von `id="inhalt"` vom Rahmen an den Laufbereich hat T-323 den E-087-Abgleich
+gefahren und **eine** Fundstelle in `tests/**` gemeldet, mit dem Zusatz, sie bleibe gültig. T-326
+hat danach gebaut und gemessen: **sieben** vorbestehende End-zu-End-Dateien fallen —
+einschließlich genau der einen, die als gültig eingeschätzt worden war. Sie benutzen `#inhalt`
+nicht als Text, sondern als **Geltungsbereich** für Knöpfe, die im Kopf stehen und damit künftig
+außerhalb liegen.
+
+E-087 bleibt, wie es ist, und bekommt einen zweiten Satz: **Wer eine Kennung verlegt, sucht nicht
+ihren Wortlaut, sondern ihre Benutzung.** Eine Kennung, die irgendwo einen Geltungsbereich
+aufspannt, trägt jeden Prüffall in diesem Bereich mit — und keiner davon nennt sie ein zweites Mal.
+Der Wortlautabgleich hätte hier auch bei fehlerfreier Ausführung sechs der sieben Fälle nicht
+gefunden.
+
+**Die Kosten sind diesmal gering, und der Grund dafür ist kein Zufall:** Der Auftrag hat dem
+frontend-dev ausdrücklich verboten, rot gewordene fremde Prüffälle zu reparieren. Deshalb stehen
+sieben Dateien mit Datei, Zeile und Behebungsvorschlag im Bericht, statt daß sie unauffällig
+mitgeändert worden wären.
+
+---
+
+## E-115 — Ein fester Teil, der bei 960 × 640 nicht paßt, ist nicht fest
+
+**Entschieden am 2026-09-13** aus T-340 (Regel), T-338 (Bild) und T-330 (Messung).
+
+Der End-zu-End-Meßsatz fand zehn Verstöße gegen die Zusage über den Rahmen, an sechs Ansichten bei
+960 × 640, 831 × 640 und 640 × 480. T-334 hielt sie für den geordneten Rückfall nach R-3. **Das ist
+falsch, und drei Wege führen zu demselben Schluß:**
+
+- **Die Regel** (T-340): 960 × 640 ist die getragene Untergrenze aus `tauri.conf.json`, kein
+  Sonderfall darunter. Greift der Rückfall dort schon, greift er im Regelbetrieb.
+- **Das Bild** (T-338): Bei **1280 × 480** — gleiche geringe Höhe, aber breit — gibt es **null**
+  Verstöße, während schmalere Fenster bei gleicher oder größerer Höhe welche haben. Der Auslöser ist
+  also **Breite**, nicht Höhe; R-3 ist für den niedrigen Fall geschrieben und trifft nicht zu. Drei
+  der Überlaufzahlen (274/221/108 px) sind mit **anderen Testdaten** reproduziert — es liegt auch
+  nicht an der Datenmenge.
+- **Die Rechnung** (T-340): 640 − 52 Kopf = 588 Rahmen, − 24 Innenabstand = 564, − 64 Boden ⇒
+  **fester Teil ≤ 500 px bei 960 × 640**. Die 588 decken sich mit der von T-330 unabhängig
+  gemessenen `clientHeight`.
+
+**Die Regel:** Ein fester Teil, der bei 960 × 640 nicht in sein Budget paßt, ist kein fester Teil —
+er ist ein Inhalt, der sich als Kopf ausgibt. Waagerecht gibt es dabei **keinen** Rückfall: `.app__main`
+trägt `overflow-x: hidden`, eine Überbreite ist ein **Schnitt**, keine Bildlaufstelle.
+
+**Die Antwort auf die Ausgangsfrage ist beides, getrennt:** Der Geltungsbereich der Zusage wird auf
+die getragenen Größen geschärft (darunter mißt eine eigene, schwächere Zusage weiter), **und** der
+feste Teil wird behoben. Wer nur das eine täte, hätte entweder einen Meßsatz, der Richtiges rot
+meldet, oder einen, der einen echten Fehler durchläßt.
+
+**Zwei Stellen sind namentlich betroffen:** der Kanban-Kopf (in T-334 behoben) und die Filterleisten
+von Todos, Buchungen und Protokoll — **dieselbe Fehlerfamilie, nur noch nicht dorthin gezogen**.
+Die Bereichsschiene der Einstellungen (577 px gegen ~535 erlaubte) ist nach der Regel ebenfalls zu
+hoch, verursacht aber gemessen **keinen** Verstoß, weil der Rahmen ihn örtlich abfängt — geringe
+Schwere, eigener Termin.
+
+---
+
+## E-116 — Eine Bestätigungsfläche hängt am Fenster, nie an dem, was sie bestätigt
+
+**Entschieden am 2026-09-13** aus R-31 (T-332 gefunden, T-334 behoben, T-337 an der Menge geprüft).
+
+Die Rückfrage vor dem Öffnen einer Datei hing in `glass` und `liquid-glass` an der Karte: Knopf
+„Öffnen" bei y = 952, außerhalb des Fensters, die Fläche rollte mit. A-19 verlangt diese Rückfrage;
+eine Bestätigungsfläche, die in zwei von neunzehn Gestaltungen nicht erreichbar ist, ist keine
+Bestätigung.
+
+**Die Fehlerklasse, und sie ist der Grund für die Entscheidung:** `position: fixed` sichert die
+Verankerung **nicht** zu. Jede Mal-Eigenschaft eines Vorfahren — hier `backdrop-filter` an der
+Karte — verschiebt den umschließenden Block. Zugesichert wird deshalb **strukturell**: Portal am
+Dokumentkörper, nicht eine Positionsangabe, der man ansieht, was sie meint.
+
+Das gilt für jede Bestätigungsfläche, nicht nur für diese: Löschabfragen, die Abfrage vor dem Öffnen
+eines Verweises, die Dialoge der Datensicherung. Und es gilt in beide Richtungen — **erreichbar**
+und **fangend**: eine Fläche, hinter die der Tabulator gelangt oder die sich mit `Escape` als
+Zustimmung schließen läßt, ist an der anderen Achse derselbe Fehler.
+
+---
+
+## E-117 — Ein Quelltextlauf sichert die Bauart zu, nicht die Wirkung
+
+**Entschieden am 2026-09-13** aus T-359, nach vier Anläufen an derselben Zusage.
+
+Die Zusage „jede Bestätigungsfläche hängt am Fenster" (A-25.6, erster Teilsatz) ist viermal
+nachgebessert worden: erst am Namen `scrim`, dann an der Zahl der Portale, dann an der Eigenschaft
+in **einer** Schreibweise, zuletzt an der gerechneten Erklärung. Jedes Mal war die Richtung richtig
+und die Menge zu eng; jedes Mal fand der nächste Prüfer eine Gestalt mehr.
+
+**Der vierte Anlauf hat die Runde nicht durch eine fünfte beendet, sondern durch eine Grenze:**
+„Hängt am Fenster" ist eine Eigenschaft des **gerechneten Kastens**, nicht des Textes. Zwischen
+beiden liegt die Kaskade, und ein Quelltextleser ist keine Kaskade. Vier stille Gestalten sind
+benannt — Klassenname erst zur Laufzeit, Stilblatt außerhalb `apps/web/src`, `node.style.position`
+im Effekt, fremde Fläche — ausdrücklich als **Beispiele**, nicht als abarbeitbare Liste.
+
+**Die Regel, die daraus wird:**
+
+1. **Der Quelltextlauf sichert die Bauart zu** — was im Bestand steht, ist so gebaut, wie es sein
+   soll. Seine Menge hängt an der gerechneten Erklärung, nicht an einer Schreibweise.
+2. **Die Wirkung sichert eine Messung am gerenderten Bild zu** — über alle neunzehn Gestaltungen
+   und beide Modi, wie `contrast` es seit T-337 fährt. T-353 hat auf diesem Weg zwei Teilsätze von
+   A-25.6 geschlossen, die kein Lauf zusichern konnte.
+3. **Beide Hälften werden benannt, wo die Zusage steht** — im Kopf der Regel, nicht nur im Bericht.
+   Eine Zusage, die ihre eigene Grenze verschweigt, wird zitiert, als hätte sie keine.
+
+**Und der Nachweis über den Wächter gehört dazu.** T-359 hat 19 Mutationen gefahren, jeden
+Mechanismus einzeln auf den Stand davor zurückgebaut: 19 von 19 gefangen. Ohne diese Probe ist
+„alle Gestalten sind rot" wieder nur eine Behauptung über einen Wächter — und genau diese
+Behauptung ist in dieser Kette dreimal grün gewesen und blind.
+

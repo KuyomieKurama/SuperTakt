@@ -99,7 +99,14 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
 
     try {
       await gotoTodo(page, todo.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114): Seit T-326 sitzt die Marke
+      // `#inhalt` auf dem Laufbereich (`ScreenBody`), nicht mehr auf dem
+      // Rahmen der Ansicht — der Knopf „Zeit von Hand" steht im
+      // `.screen__header` und läge damit außerhalb. `.screen` ist die
+      // Ansicht selbst (Kopf **und** Laufbereich, genau ein Treffer je
+      // Route) und trifft dieselbe Menge wie zuvor `#inhalt` auf
+      // `.app__main`.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Zeit von Hand' }).click();
 
       const dialog = page.getByRole('dialog', { name: 'Zeit von Hand erfassen' });
@@ -172,7 +179,8 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
 
     try {
       await gotoTodo(page, todo.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Zeit von Hand' }).click();
 
       const dialog = page.getByRole('dialog', { name: 'Zeit von Hand erfassen' });
@@ -225,7 +233,8 @@ test.describe('Buchung von Hand liefert die Poolbewegung (E-061 Nachtrag, O-V)',
       const checkbox = page.locator('.done-switch input[type="checkbox"]');
       await expect(checkbox).toBeChecked();
 
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Zeit von Hand' }).click();
 
       const dialog = page.getByRole('dialog', { name: 'Zeit von Hand erfassen' });

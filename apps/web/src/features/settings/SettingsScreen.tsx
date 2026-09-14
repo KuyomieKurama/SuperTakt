@@ -15,6 +15,7 @@ import { cx } from "../../lib/cx";
 import { formatDateTime, plural } from "../../lib/format";
 import type { Density } from "./theme";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { RunArea, ScreenFrame } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { AddinSettings } from "./AddinSettings";
 import { DataTransferSettings } from "./DataTransferSettings";
@@ -99,7 +100,7 @@ interface AreaDescriptor {
   Deshalb hoechstens fuenf Woerter, und die Verneinung zum Status steht
   nicht hier, sondern in der Karte (`StatusSettings`, Auflage Z-01).
 */
-const AREA_LIST: readonly AreaDescriptor[] = [
+const AREA_LIST = [
   { area: "darstellung", label: "Darstellung", icon: "sun", hint: "Themes, Farbmodus und Zeilendichte" },
   { area: "timer", label: "Timer", icon: "clock", hint: "Leistung beim Stoppen" },
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
@@ -118,7 +119,14 @@ const AREA_LIST: readonly AreaDescriptor[] = [
     icon: "monitor",
     hint: "Abrechnungsname, Ablageort, Meldungen",
   },
-];
+  /*
+    `as const satisfies` und nicht `: readonly AreaDescriptor[]` (T-334): Die
+    Liste ist seit der Streichung von `PANEL_LABEL` **die** Quelle des
+    Bereichsnamens, und `panelLabel` braucht dafuer ein erstes Element, das der
+    Typpruefer kennt. Gepruft wird trotzdem gegen `AreaDescriptor` — ein
+    falscher Schluessel oder ein unbekanntes Zeichen bricht hier ab.
+  */
+] as const satisfies readonly AreaDescriptor[];
 
 function readArea(query: Readonly<Record<string, string>>): SettingsArea {
   const value = query["bereich"];
@@ -128,6 +136,25 @@ function readArea(query: Readonly<Record<string, string>>): SettingsArea {
 export interface SettingsScreenProps {
   /** Der Bereich steht in der Adresse (`?bereich=…`). */
   readonly query: Readonly<Record<string, string>>;
+}
+
+/**
+ * Der zugängliche Name des Laufbereichs — **ein vorhandener Text** (T-322 4.11).
+ *
+ * Er kommt aus {@link AREA_LIST} und damit aus **derselben** Liste, die die
+ * Schiene beschriftet: Der Name des Bereichs ist genau der Text, den der
+ * Benutzer angeklickt hat, um hierherzukommen.
+ *
+ * Bis T-334 stand daneben eine zweite vollständige Abbildung über
+ * `SettingsArea`, und sie war bereits auseinandergelaufen: „Outlook-Add-in" und
+ * „Arbeitsplatz" hießen dort „Einstellungen" — derselbe zugängliche Name wie
+ * der Rahmen darum, also zwei ineinanderliegende Gebiete gleichen Namens
+ * (T-331, AK-15). Zwei Listen, die dasselbe bezeichnen, laufen auseinander;
+ * eine kann es nicht. Kein neuer Oberflächentext: Beide Werte stehen sichtbar
+ * in der Schiene.
+ */
+function panelLabel(area: SettingsArea): string {
+  return AREA_LIST.find((item) => item.area === area)?.label ?? AREA_LIST[0].label;
 }
 
 export function SettingsScreen({ query }: SettingsScreenProps) {
@@ -153,43 +180,65 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
         refreshing={structure.state.status === "ready" && structure.state.refreshing}
       />
 
-      <div className="settings-layout">
-        <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
-          <ul className="settings-rail__list">
-            {AREA_LIST.map((item) => (
-              <li key={item.area} className={["export", "standardtags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
-                <a
-                  className={cx(
-                    "settings-rail__item",
-                    item.area === active && "settings-rail__item--current",
-                  )}
-                  href={href("settings", undefined, { bereich: item.area })}
-                  aria-current={item.area === active ? "page" : undefined}
-                >
-                  <span className="settings-rail__icon">
-                    <Icon name={item.icon} size={16} />
-                  </span>
-                  <span className="settings-rail__text">
-                    <span className="settings-rail__label">{item.label}</span>
-                    <span className="settings-rail__hint">{item.hint}</span>
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+      {/*
+        Ein Laufbereich neben einer **festen** Spalte (T-322 4.11). Die
+        Bereichsschiene hat eine im Quelltext festgelegte Zahl von Einträgen und
+        steht deshalb; der Bereichsinhalt läuft — „Daten", „Outlook-Add-in" und
+        „Darstellung" sind die längsten Flächen der Anwendung. Das ist keine
+        Ausnahme von R-1, sondern R-1 auf zwei Achsen: Die Schiene steuert die
+        Auswahl, der Bereich ist die Auswahl.
 
-        <div className="settings-panel">
-          <AsyncBoundary
-            state={structure.state}
-            label="Einstellungen werden geladen"
-            rows={4}
-            onRetry={structure.reload}
-          >
-            {() => <SettingsAreaPanel area={active} />}
-          </AsyncBoundary>
+        Die Schiene hat dafür ihr `position: sticky` verloren (`app.css`): Eine
+        feste Spalte braucht keine Klebung, und eine Klebung, die nichts mehr
+        bewirkt, ist eine tote Zusage (T-322 Abschnitt 9 Nr. 1).
+      */}
+      {/*
+        Ohne `label` und damit ohne Halt, ohne Rolle, ohne Namen und ohne die
+        Sprungmarke (T-344 8.5). Der Rahmen laeuft in keiner getragenen Form;
+        ein Halt an ihm war eine Station, hinter der **acht** Verweise der
+        Bereichsschiene lagen — neun Tabulatorschritte bis zum Inhalt statt
+        null. Die Marke sitzt jetzt an der `RunArea` darunter, und die
+        Sprungmarke fuehrt damit an der Schiene vorbei: Das ist ihr Zweck.
+      */}
+      <ScreenFrame>
+        <div className="settings-layout">
+          <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
+            <ul className="settings-rail__list">
+              {AREA_LIST.map((item) => (
+                <li key={item.area} className={["export", "standardtags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
+                  <a
+                    className={cx(
+                      "settings-rail__item",
+                      item.area === active && "settings-rail__item--current",
+                    )}
+                    href={href("settings", undefined, { bereich: item.area })}
+                    aria-current={item.area === active ? "page" : undefined}
+                  >
+                    <span className="settings-rail__icon">
+                      <Icon name={item.icon} size={16} />
+                    </span>
+                    <span className="settings-rail__text">
+                      <span className="settings-rail__label">{item.label}</span>
+                      <span className="settings-rail__hint">{item.hint}</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <RunArea label={panelLabel(active)} className="settings-panel" anchor>
+            <AsyncBoundary
+              state={structure.state}
+              label="Einstellungen werden geladen"
+              rows={4}
+              onRetry={structure.reload}
+            >
+              {() => <SettingsAreaPanel area={active} />}
+            </AsyncBoundary>
+          </RunArea>
         </div>
-      </div>
+      </ScreenFrame>
     </section>
   );
 }

@@ -31,7 +31,20 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
   timer_idle: { columns: ['id', 'session_id', 'todo_id', 'started_at', 'returned_at', 'note'], orderBy: 'id' },
   timer_heartbeat: { columns: ['time_entry_id', 'seen_at'], orderBy: 'time_entry_id' },
   todo_attachment_kind: { columns: ['kind'], orderBy: 'kind' },
-  todo_attachment: { columns: ['id', 'todo_id', 'kind', 'title', 'target', 'position', 'created_at'], orderBy: 'todo_id, position, id' },
+  /**
+   * Die vier Spalten aus Migration 0023 stehen hier, weil A-20.4 den
+   * **fachlichen Bestand** verlangt und nicht die Zeilen, an die jemand zuerst
+   * denkt: Ohne `origin` ist ein Anhang aus einer fremden E-Mail nach einem
+   * Round-Trip von einem selbst eingetragenen nicht mehr zu unterscheiden, und
+   * ohne `rebuilt` sieht eine nachgebaute `.eml` aus wie die ursprüngliche
+   * Nachricht (A-A-84, A-A-97 — beide verlangen den Round-Trip ausdrücklich).
+   *
+   * **Was hier nicht steht, sind die Bytes.** Eine übernommene E-Mail-Datei
+   * liegt als Datei im Anwendungsdatenverzeichnis; das Archiv trägt bisher nur
+   * die Bildkopien. Der Zustand ist benannt und nicht verschwiegen — die
+   * Sicherung meldet ihn als Warnung (A-A-90, `exportDataArchive`).
+   */
+  todo_attachment: { columns: ['id', 'todo_id', 'kind', 'title', 'target', 'position', 'created_at', 'origin', 'origin_sender', 'display_name', 'rebuilt'], orderBy: 'todo_id, position, id' },
   pool: { columns: ['id', 'name', 'match_mode', 'include_subfolders', 'position', 'created_at', 'updated_at', 'placement', 'completion', 'export_state'], orderBy: 'position, id' },
   pool_rule: { columns: ['pool_id', 'role', 'tag_id', 'folder_id', 'status_id'], orderBy: 'pool_id, role, tag_id, folder_id, status_id' },
   default_tag: { columns: ['tag_id', 'position', 'created_at'], orderBy: 'position, tag_id' },
@@ -56,6 +69,23 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
    * Der Wert wandert damit über den Round-Trip nach A-20.4 wie jeder andere.
    * Er ist trotzdem **keine Einstellung**: keine Route liest ihn, keine
    * schreibt ihn (siehe `VersionCheckStatePort`).
+   *
+   * **Der Absatz darüber ist der Stand von T-279 und trägt seit T-285 nicht
+   * mehr** (E-106, nachgelesen in T-364): Der Boden aus A-V-11 gilt innerhalb
+   * eines Laufs und hängt an einem Wert im Arbeitsspeicher; ein Programmstart
+   * fragt immer einmal. **Kein Einspielen kann den Boden mehr aufheben** —
+   * nicht, weil die Spalte hier steht, sondern weil sie niemand mehr liest.
+   * Der Grund, warum sie trotzdem hier steht, ist seither allein der
+   * Round-Trip: Was aus dem Archiv nicht zurückkommt, ist verloren.
+   *
+   * **Was mitreist, kann veraltet sein** (A-A-124). Der Zeitpunkt friert ein,
+   * sobald der Prüfer seinen Speicher nach einem Wurf ablegt — gemessen 52
+   * Stunden in einem Lauf von 63 Anfragen —, und auf einem fremden Rechner
+   * beschreibt er eine Anfrage, die dieses Erzeugnis nie gestellt hat. Das
+   * Archiv sagt ihn trotzdem, wie er dasteht: Ihn hier zu unterschlagen hieße,
+   * eine Zeile des Bestands beim Round-Trip zu verlieren, und die Freiheit von
+   * veralteten Zeitpunkten gehört an die Stelle, die sie schreibt, nicht an
+   * die, die sie abzieht.
    */
   app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running', 'last_version_check_at'], orderBy: 'id' },
 });

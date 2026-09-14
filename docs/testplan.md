@@ -945,6 +945,65 @@ A-5.5): durch E-054/E-055 unberührt — das Öffnen einer Karte zur Detailansic
 Bedienung, die sich an der Spaltendefinition ändert. **Noch nicht als eigene Datei unter
 `tests/e2e/**` automatisiert** (weder vor noch nach T-081); nicht Gegenstand dieses Auftrags.
 
+### TP-KANBAN-07 — Kopfzeile der Kanban-Karte mit drei Marken in schmaler Spalte
+**Anforderungen:** A-5.5, A-19.4, A-19.5, A-19.6, T-144 Abschnitt 8.2 (drei Marken: Call-Nummer,
+Erledigt-Kennzeichen, Frist), T-281, T-282
+**Ebene:** End-to-End (`tests/e2e/kanban-card-header-overflow.spec.ts`, eigene Datei statt
+`kanban.spec.ts` — derselbe Grund wie bei `deadline-computed-state.spec.ts`: ein einzelner,
+scharf umrissener Fall, der eine eigene Fensterbreite braucht und die übrigen Fälle der Datei
+nicht mit sich ziehen soll)
+**Vorbedingung:** Keine.
+
+**Der Befund, den dieser Fall festhält.** Ein Bildschirmfoto zeigte auf einer Kanban-Karte mit
+Call-Nummer, Erledigt-Kennzeichen **und** Frist die Abspieltaste über dem roten
+„⚠ Überfällig …" — die dritte Marke ragte aus der Karte heraus und legte sich über
+`.kcard__actions`. Der Fall war bis T-282 **nie geprüft**: Es gab keinen Testfall „drei Marken,
+schmale Spalte", weder in dieser Datei noch anderswo — sonst wäre der Befund vorher aufgefallen.
+T-281 hat die Ursache behoben (`.kcard__top` bricht um, `.kcard__deadline` schrumpft tatsächlich
+statt nur eine wirkungslose `max-width` zu tragen) und das am Musterbaustein
+(`designsystem.html`) gemessen; dieser Fall ist die erste Messung am echten Board-Bildschirm.
+
+**Schritte:**
+1. Über die API zwei Todos mit demselben Tag anlegen: eines mit Call-Nummer und einer Frist in
+   der Vergangenheit (drei Marken auf der Karte: Call-Nummer, „Erledigt", „Überfällig …"), eines
+   mit Call-Nummer und **ohne** Frist (zwei Marken, A-19.5: ein Todo ohne Frist trägt die dritte
+   Marke gar nicht).
+2. Über die Oberfläche eine Board-Spalte mit diesem Tag als Bedingung anlegen (dieselbe Bedienung
+   wie TP-KANBAN-01, nicht über die API).
+3. Das Fenster auf eine Breite verengen, bei der die Spalte auf ihre in `.board`
+   (`grid-auto-columns: minmax(17rem, 21rem)`) festgelegte **Mindestbreite** von 17 rem (272 px)
+   fällt — nicht durch eine feste Breite im Testcode, sondern durch ein schmales
+   `page.setViewportSize`, dieselbe Bedingung, unter der der Fehler am Bildschirm entstand. Eine
+   solche Spur wächst ohne `fr`-Einheit nur, wenn im Container mehr Platz übrig bleibt, als die
+   Summe der Mindestbreiten aller Spuren braucht; unterhalb der 52-rem-Schwelle legt sich die
+   Seitenleiste als Band über den Kopf (`app.css`, „Schmales Fenster"), und bei ausreichend
+   schmalem Fenster bleibt für eine einzelne Spalte kein Wachstumsspielraum mehr — nachgemessen,
+   nicht nur gerechnet (Schritt 4).
+4. Für jedes unmittelbare Kind von `.kcard__top` der Drei-Marken-Karte in Pixeln messen: rechter
+   Rand ≤ rechter Rand von `.kcard__main`; keine Überschneidung (Rechteckschnitt) mit
+   `.kcard__actions`; `scrollWidth` ≤ aufgerundetem `clientWidth` (kein abgeschnittener Text).
+5. Gegenprobe an der Zwei-Marken-Karte: genau zwei Kinder von `.kcard__top`, beide auf derselben
+   Zeile (gleiche vertikale Mitte, `align-items: center` zentriert unterschiedlich hohe Marken auf
+   derselben Grundlinie, nicht an der oberen Kante).
+
+**Erwartetes Ergebnis:** Die gemessene Spaltenbreite liegt bei 272 px ± 1,5 px (Sub-Pixel-Rundung
+der Layout-Engine). Keine der drei Marken der ersten Karte ragt aus `.kcard__main`, keine
+überschneidet `.kcard__actions`, keine verliert Text. Die zweite Karte trägt zwei Marken in einer
+Zeile, ohne `.kcard__deadline`.
+
+**Gegenprobe des Falls selbst (T-282, Auflage 1 — Fassung 2026-09-11).** Die Regeln aus T-281
+(`.kcard__top { flex-wrap: wrap; … }` in `components.css`, `.kcard__deadline { flex: 0 1 auto;
+flex-wrap: wrap; }` in `app.css`) probehalber auf den Stand vor T-281 zurückgesetzt: Der Fall
+fällt, und zwar an genau der Stelle, die den gemeldeten Schaden beschreibt — rechter Rand der
+Frist-Marke bei 274,05 px gegen einen zulässigen rechten Rand von 229 px (`.kcard__main`),
+45 px Überlauf. Byte-genau zurückgestellt (`git checkout HEAD --`, Prüfsummenvergleich
+SHA-256 vor Rücksetzung und nach Wiederherstellung identisch: `app.css`
+`eaab5269a41b6f2698fc025309d5d57682fe7fd294cd00b1f00b61d9f3daa502`, `components.css`
+`9e9845181ca83a1807f7557760f8b857e84f63c96454a118be5485dab920f339`). Der Fall misst damit die
+**Wirkung** (Ränder und `scrollWidth` am gerenderten Baum), nicht die Regel selbst — ein Umbau,
+der dieselbe Wirkung mit anderen CSS-Mitteln erzielt, bleibt grün; ein Umbau, der sie zerstört,
+wird rot, unabhängig davon, welche Regel dafür verantwortlich ist.
+
 ---
 
 ## 9. Export von Anfang bis Ende (A-8.1 bis A-8.6, A-8.8, A-8.9, E-011)
@@ -3730,6 +3789,12 @@ Text, Farbe oder Symbol, geprüft am Text und nicht allein an der Farbe, wegen S
 ohne Frist zeigt an derselben Stelle **nichts**, keinen leeren Platzhalter (dieselbe Falle wie
 A-18.5/`TP-VER-08`: eine Fläche, die für „nichts" trotzdem ein Element reserviert).
 
+**Sichtbar ist nicht dasselbe wie unverdeckt** (Nachtrag T-282): Auf der Kanban-Karte trägt die
+Frist als dritte Marke neben Call-Nummer und Erledigt-Kennzeichen — bei schmaler Spalte legte sich
+eine der drei Marken über die Kartenaktionen (Timer-/Menüknopf), obwohl sie im DOM vorhanden und
+diesem Fall nach „sichtbar" war. Diese Geometrie, nicht die bloße Anwesenheit, prüft eigens
+`TP-KANBAN-07` (Abschnitt 8).
+
 #### TP-FRIST-09 — Der Zustand wird **gerechnet**, nicht gespeichert (E-070 Punkt 3)
 
 **Ebene:** zweigleisig, absichtlich — ein einzelner Unit-Fall (Aufruf derselben reinen Funktion
@@ -3906,27 +3971,64 @@ Prüfung:** Frist und Anhänge dürfen im Vorlagen-Editor als Feldquelle gar nic
 sein — derselbe Nachweis wie `TP-NOTE-01` („die Quellenauswahl im Vorlageneditor listet niemals
 ‚Vermerk‘"), hier auf zwei neue Felder angewandt.
 
-#### TP-ANH-13 — Über das Add-in entstehen keine Anhänge (A-19.19, E-072 Punkt 1)
+#### TP-ANH-13 — An einem vorhandenen Todo entsteht über das Add-in kein Anhang (A-19.19 in der Fassung von E-108, A-A-82, A-10.9/E-100) — **neu gefasst T-311**
 
-**Ebene:** Integration (`apps/local-api/test/routes/addin/**`, Hoheit unit-tester/integration-dev),
-ergänzt um einen E2E-Spotcheck über das Add-in-Taskpane (wie
-`outlook-addin-build.spec.ts`/`run-outlook-taskpane.mjs`).
+**Bis zum 2026-09-11 maß dieser Fall die volle Abwesenheit** — „über das Add-in entstehen keine
+Anhänge" (A-19.19 alt, E-072 Punkt 1). Seit **E-108** ist das falsch: Über `POST /addin/todos`
+entstehen seit T-304 Anhänge, und zwar **beim Anlegen eines neuen Todos aus einer E-Mail**.
+`.claude/team/reports/T-308-spec-ux-reviewer.md` Befund F-2 stellt fest, dass der bis dahin
+gültige Testfall (`tests/e2e/attachment-export-and-addin-exclusion.spec.ts`) und dieser
+Testplaneintrag seither **das Gegenteil des Bestands** behaupteten — dieselbe Fehlerklasse, wegen
+der `proof:addin` Abschnitt 18 am 2026-09-10 von Name auf Wirkung umgestellt wurde (T-247), nur
+diesmal im Wächter selbst.
 
-**Schritt 1 (Integration):** `POST /addin/todos` (oder die zuständige Route, Name aus dem Bau) mit
-einem zusätzlichen Feld, das einen Anhang beschreiben würde (z. B. `attachments: [...]` oder
-`attachmentUrl`), im Rumpf mitschicken.
-**Erwartung:** Die Antwort ist entweder eine Ablehnung des unbekannten Felds (422, falls die Route
-mit `.strict()`/gleichwertig geschützt ist) oder ein stillschweigendes Verwerfen — **so oder so**
-entsteht **kein** Anhang am angelegten oder gebuchten Todo (Nachschau über die reguläre Tür).
-**Schritt 2 (E2E-Spotcheck):** Eine simulierte E-Mail mit erkennbarer Call-Nummer über das
-Add-in-Taskpane verarbeiten; das Taskpane selbst bietet an keiner Stelle ein Eingabefeld für einen
-Anhang.
-**Strukturelle Bedingung (E-072 Punkt 1 wörtlich: „nicht per Voreinstellung, sondern
-strukturell"):** Ein Nachweis nach dem Vorbild von `proof:addin`/`proof:route-policy` — die
-Add-in-Türen (`apps/local-api/src/routes/addin/**`, `apps/outlook-addin/**`) enthalten **keinen**
-Code-Pfad, der ein Anhangsfeld liest oder schreibt. Dieselbe Prüfbauart wie R-06 für die
-Todo-Notiz im Exportmotor: nicht „das Eingabefeld fehlt heute", sondern „es gibt keine Leitung,
-über die es entstehen könnte".
+Was A-19.19 (neu) und A-A-82 im Bedrohungsmodell weiterhin zusagen, ist die **engere** Hälfte der
+alten Zusage: **an einem Todo, das vorher schon da war, entsteht über das Add-in kein Anhang** —
+auch nicht im Duplikatfall (A-10.9, E-100), auch nicht über die neue Anlegetür (sie führt kein
+Feld, das ein vorhandenes Todo benennt). Genau diese engere Hälfte mißt der Fall jetzt, und er
+mißt sie an der **Wirkung**: Ein Fall, der nur den Statuscode einer abgelehnten Anfrage liest,
+wird rot, sobald jemand die Tür wirklich ausweitet, aber auch grün, solange ein Aufrufer die neue
+Gestalt (`{ sender, items }`) nicht trifft — und genau daran ist der alte Fall am 2026-09-11
+gescheitert, aus dem falschen Grund grün geblieben zu sein wäre ein zweiter Fehler derselben Art.
+
+**Ebene:** E2E-Spotcheck über die echte HTTP-Tür (`tests/e2e/attachment-export-and-addin-exclusion
+.spec.ts`), ergänzt um Integration (`apps/local-api/test/routes/addin/**`, Hoheit
+unit-tester/integration-dev) und den strukturellen Nachweis `proof:addin`
+Abschnitt 18f/`proof:route-policy` (Hoheit domain-dev/integration-dev, `apps/local-api/**`,
+`apps/outlook-addin/**`). **Der E2E-Fall allein ist kein struktureller Nachweis über die Menge der
+Türen** — er hat keine Untergrenze über „wie viele Routen unter `/addin` wurden angefahren" und
+behauptet das auch nicht; diese Untergrenze (neun Türen gesucht, neun zu) trägt ausschließlich
+`proof:addin` 18f, fremde Hoheit. Was der E2E-Fall zusätzlich zu diesem strukturellen Nachweis
+trägt, ist die Prüfung **an den beiden konkreten Stellen**, an denen das Add-in ein vorhandenes
+Todo im Rumpf überhaupt berührt:
+
+**Schritt 1 — die Anlegetür, ein Schmuggelversuch über eine mitgeschickte Kennung:** Ein
+vorhandenes Todo anlegen. `POST /addin/todos` mit Titel, einem gültigen Anhangsumschlag
+(`attachments: { sender, items: [...] }`) **und** einem zusätzlichen Feld, das die Kennung des
+vorhandenen Todos trägt (z. B. `todoId`), aufrufen.
+**Erwartung:** Die Antwort ist 201 mit einem **neuen** Todo (Kennung ungleich der mitgeschickten).
+Das neue Todo trägt den/die Anhänge (Gegenprobe: `attachments.stored` und eine Nachschau über
+`GET /todos/:id/attachments` sind beide größer null — sonst wäre die folgende Nullmessung aus dem
+falschen Grund richtig). Das **vorhandene** Todo hat weiterhin null Anhänge.
+
+**Schritt 2 — die Duplikat-Ankündigung und die Buchungstür (A-10.9, E-100):** Ein Todo mit einer
+Call-Nummer anlegen; `GET /addin/todo-matches` mit derselben Call-Nummer aufrufen.
+**Erwartung:** Der Treffer erscheint (`searched: true`, Todo in `matches`), und die Antwort trägt
+strukturell **keine** Anhangsauskunft (kein Schlüssel `attachments` am Treffer) — die Ankündigung
+ist eine Angabe, keine Handlung (A-10.9 wörtlich). Danach: `POST
+/addin/todos/:todoId/time-entries` auf das gefundene Todo mit einem zusätzlichen `attachments`-Feld
+im Rumpf aufrufen (die einzige Route unter `/addin`, die heute eine Todo-Kennung im Pfad entgegen-
+nimmt — die Oberfläche des Aufgabenbereichs ruft sie seit F-21/E-100 nicht mehr auf, die Route
+selbst steht trotzdem, und A-10.9 spricht über die Handlung, nicht über die Existenz einer Route).
+**Erwartung:** Die Buchung entsteht, das mitgeschickte Anhangsfeld hat **keine** Wirkung — das
+gefundene Todo hat weiterhin null Anhänge.
+
+**Strukturelle Bedingung, weiterhin gültig (E-072 Punkt 1 wörtlich: „nicht per Voreinstellung,
+sondern strukturell"), jetzt auf die engere Zusage angewandt:** Die Add-in-Türen
+(`apps/local-api/src/routes/addin/**`, `apps/outlook-addin/**`) enthalten **keinen** Code-Pfad, der
+eine Todo-Kennung **und** ein Anhangsfeld in derselben Anfrage liest — A-A-82 im Typ (`AddinDeps
+.emailAttachments` hat keinen Parameter vom Typ `TodoId`), nicht nur im Kommentar. Dieselbe
+Prüfbauart wie R-06 für die Todo-Notiz im Exportmotor.
 
 #### TP-ANH-14 — Nichts öffnet sich von selbst (A-19.18)
 
@@ -4020,6 +4122,62 @@ Filter nach Endung, der sich umgehen ließe).
 
 ---
 
+### 25.4 Anhänge aus einer E-Mail, beim Anlegen (A-19.22 bis A-19.34, E-108, E-109, T-304) — nachgetragen T-311
+
+**Dieser Unterabschnitt fehlte vollständig, bis T-311 ihn nachträgt.** E-108/E-109 und die Welle,
+die T-304 gebaut hat, haben Abschnitt 19.5 der Spezifikation (A-19.22 bis A-19.34) und A-A-82 bis
+A-A-97 im Bedrohungsmodell neu geschaffen, ohne dass dieser Plan mitgezogen wäre — genau die
+Lücke, die `.claude/team/reports/T-308-spec-ux-reviewer.md` unter „A-19.33, Abschnitt 2" benennt:
+Die **erste** Naht (Office.js → Nutzlast → Bestand) ist mit echtem SQLite gemessen
+(`apps/outlook-addin/scripts/proof-addin.mjs` Abschnitt 18), die **zweite** (Bestand →
+Hauptfenster) war bis dahin nur **von Hand** gemessen (T-302, bei 420 px) — eine Zahl aus einem
+Bericht ist ein Stand, kein Nachweis. TP-ANH-23 unten schließt genau diese zweite Naht E2E und
+ist zugleich die einzige e2e-Messung der Nachbau-Kennzeichnung im Hauptfenster (A-19.22b, die drei
+Orte aus `docs/design/addin-anhangsuebernahme-fluss.md` Abschnitt 3 sind sonst nur an Quelltext und
+Kommentar gemessen) und der ersten sichtbaren Endung eines fremden Namens jenseits der
+Speichergrenze (A-19.23b, A-A-93, R-27).
+
+#### TP-ANH-23 — Übernommene Anhänge erscheinen vollständig im Hauptfenster (A-19.33 zweite Naht, A-19.22b, A-19.23b, A-A-93, R-27)
+
+**Ebene:** E2E, über die echte HTTP-Tür `POST /addin/todos` (kein Office.js-Host nötig — dieselbe
+Einschränkung wie bei TP-ANH-13: die Naht Office.js → Nutzlast bleibt eine benannte, hinnehmbare
+Lücke, die einen echten Windows-Rechner mit Outlook braucht, T-308 Abschnitt 2 Punkt 1).
+
+**Vorbedingung:** Ein Umschlag mit **drei** Anhängen in einer Anfrage: die Nachricht selbst als
+Nachbau gekennzeichnet (`kind: "message"`, `rebuilt: true` — der Fall aus A-19.22a, in dem
+Outlook die Mailbox-Fassung 1.14 nicht hat), eine gewöhnliche Datei, und eine Datei mit einem
+**200 Zeichen langen Anzeigenamen mit `.exe` am Ende** (204 Zeichen insgesamt — unter der
+Speichergrenze von 255 Zeichen, `MAX_EMAIL_DISPLAY_NAME_CHARACTERS`, geht also **unverändert** in
+den Bestand und ist eine reine Darstellungsfrage).
+**Schritt:** `POST /addin/todos` mit diesem Umschlag aufrufen; das neu angelegte Todo in
+`apps/web` aufschlagen (`gotoTodo`); die Anhangsliste auszählen und lesen.
+**Erwartung, mit einer echten Untergrenze und nicht „mindestens eine":**
+
+- Genau **drei** Zeilen in der Anhangsliste — nicht „eine oder mehr". Ein Prüffall über eine
+  Menge braucht eine Untergrenze auf die Zahl der geprüften Dinge, sonst mißt er nur die
+  Anwesenheit der Karte.
+- Die Nachricht trägt die Kennzeichnung „(nachgebaut)" **an der Zeile** und **im zugänglichen
+  Namen** des Öffnen-Knopfes (A-19.22b) sowie die Herkunftszeile mit dem Absender (A-A-84, A-A-85).
+- Die gewöhnliche Datei trägt **keine** Nachbau-Kennzeichnung.
+- Der 200-Zeichen-Name erscheint **vollständig**, mit sichtbarer `.exe`-Endung — gemessen als
+  echte, zur Laufzeit berechnete Darstellung (Randposition des Elements im sichtbaren Fenster,
+  kein Vorfahre beschneidet die tatsächliche Position mit `overflow(-x): hidden`), **nicht** nur
+  am Quelltext gemessen. Das ist der Unterschied zu `proof:clamp` (fremde Hoheit,
+  `apps/web/scripts/proof-clamp.mjs`): Der liest Klassennamen im Quelltext und wird rot, wenn eine
+  deckelnde Klasse **dazukommt** — er sieht keine zur Laufzeit geerbte oder von außen gesetzte
+  Eigenschaft, die denselben Schaden anrichtet, ohne dass sich der Quelltext ändert. Beide Prüfungen
+  ergänzen sich; keine ersetzt die andere.
+- Dieselbe Messung **zusätzlich bei einem schmalen Viewport (420 px, wie T-302 von Hand
+  geprüft hat)** — hier automatisiert statt behauptet.
+
+**Gegenprobe, ohne die die Zeilenzahl aus dem falschen Grund richtig wäre:** Vor der Messung im
+Hauptfenster wird `attachments.stored === 3` aus der Antwort von `POST /addin/todos` und die
+Zeilenzahl über `GET /todos/:id/attachments` gelesen — beide müssen mit der später gezählten
+Zeilenzahl übereinstimmen, sonst zeigte ein leeres oder halb gefülltes Ergebnis dieselbe Zahl wie
+ein vollständiges.
+
+---
+
 ### Zusammenfassung: Lauffähigkeit dieses Abschnitts
 
 | Fälle | Ebene | Zusätzlich zum Bau nötig | Grenze dieser Umgebung |
@@ -4034,17 +4192,34 @@ Filter nach Endung, der sich umgehen ließe).
 | `TP-ANH-08` | Unit + E2E-Spotcheck | reine Ableitungsfunktion für die Bezeichnung | keine |
 | `TP-ANH-10` | E2E, mit Prozess-Neustart | Neustart-Fähigkeit (liegt seit T-142 in `tests/e2e/support/**`, hier auf Frist/Anhänge statt Versionsprüfung angewandt) | keine |
 | `TP-ANH-12` | Integration | Frist/Anhang testweise über mehrere Vorlagen exportieren | keine |
-| `TP-ANH-13` | Integration + E2E-Spotcheck + struktureller Nachweis | Add-in-Route baut, ohne ein Anhangsfeld zu kennen | keine |
+| `TP-ANH-13` | E2E-Spotcheck (echte HTTP-Tür) + Integration + struktureller Nachweis | Add-in-Anlegetür baut Anhänge, ohne ein Feld für ein vorhandenes Todo zu führen (E-108, T-304) | keine — **läuft** (siehe unten) |
 | `TP-ANH-14` | E2E | Ereigniswache über eine ganze Interaktionsfolge | keine |
 | `TP-ANH-15` bis `-18` | Integration (Tür) + Rust-Einheitentest (Öffnen-Befehl) | Formprüfung an beiden Stellen | die **tatsächliche** Ablehnung durch `open`/`ShellExecuteW` selbst (jenseits der Formprüfung) ist unter Linux nicht messbar |
 | `TP-ANH-19`, `-20` | E2E (Rückfrage) + Rust-Einheitentest | Rückfrage-Dialog, Formprüfung | die tatsächliche Ausführung einer `.bat`/`.lnk` durch das Betriebssystem ist unter Linux nicht messbar und wird hier nicht behauptet |
+| `TP-ANH-23` | E2E (echte HTTP-Tür, kein Office.js-Host) | Anhänge aus einer E-Mail beim Anlegen (E-108, T-304) | die Naht Office.js → Nutzlast (T-308 Abschnitt 2 Punkt 1) — echter Windows-Rechner mit Outlook nötig |
 
-Kein einziger Fall dieses Abschnitts ist heute ausführbar — derselbe erwartete Zustand wie bei
-Abschnitt 24 vor dem Bau. Zwei Klassen von Grenzen sind vorweg benannt statt stillschweigend
-ausgelassen: die Wahl zwischen Integration und E2E bei `TP-FRIST-09`, die erst der Bau auflöst, und
-die Betriebssystemebene bei `TP-ANH-15` bis `-20`, die diese Umgebung grundsätzlich nicht erreicht
-(T-B08) und die ein Rust-Einheitentest neben dem jeweiligen Öffnen-Befehl tragen muss, so wie
-`release.rs` es für die Versionsprüfung bereits vormacht.
+**Diese Zusammenfassung stammt aus der Planung vor dem Bau (T-142) und ist an dieser Stelle seit
+T-150 nicht mehr richtig** — der Satz „kein einziger Fall dieses Abschnitts ist heute ausführbar"
+galt für den Planungsstand, nicht mehr für den Bestand: `TP-ANH-01` bis `-20` (mit den zwei
+`TP-ANH-20`-Ausnahmen aus dem Nachtrag oben) laufen seit T-150 als echte, grüne Playwright-Fälle,
+`TP-ANH-13` seit T-311 in seiner neu gefassten Form ebenfalls (gemessen, s. u.), und `TP-ANH-23`
+ist mit T-311 neu dazugekommen und läuft ebenfalls. Diese Lücke zwischen dem hier stehenden Satz
+und dem tatsächlichen Bestand ist derselbe Fehler, den T-311 an TP-ANH-13 behoben hat, nur in der
+Rahmung statt im Fall selbst — sie wird hier benannt und nicht stillschweigend mitgezogen, weil
+eine vollständige Überarbeitung dieser Zusammenfassung außerhalb des Auftrags T-311 liegt.
+
+Zwei Klassen von Grenzen sind vorweg benannt statt stillschweigend ausgelassen: die Wahl zwischen
+Integration und E2E bei `TP-FRIST-09`, die erst der Bau auflöst, und die Betriebssystemebene bei
+`TP-ANH-15` bis `-20`, die diese Umgebung grundsätzlich nicht erreicht (T-B08) und die ein
+Rust-Einheitentest neben dem jeweiligen Öffnen-Befehl tragen muss, so wie `release.rs` es für die
+Versionsprüfung bereits vormacht.
+
+**Gemessen (T-311), nicht nur behauptet:** `TP-ANH-13` (beide Testfälle in
+`tests/e2e/attachment-export-and-addin-exclusion.spec.ts`) und `TP-ANH-23`
+(`tests/e2e/addin-attachment-handoff-to-app.spec.ts`) sind auf dieser Maschine
+(Windows, Werkzeugkette benutzerlokal) tatsächlich gegen den echten lokalen Dienst gelaufen —
+`pnpm exec playwright test -c tests/e2e/playwright.config.ts <Datei>` — und bestanden. Kein Befund
+aus dem „nicht gelaufen, keine Deckung"-Grundsatz dieses Bestands trifft auf diese beiden Fälle zu.
 
 ---
 
@@ -4698,3 +4873,324 @@ mit einem ausdrücklichen Verweis auf diese Fehlerklasse (O-IW/O-KB, Abschnitt 3
 Kommentartext, kein Prüffall und kein Ausgang geändert — 6/6 unverändert grün.
 
 **Nachweis:** `pnpm test:e2e` vollständig, siehe Bericht `.claude/team/reports/T-240-e2e-tester.md`.
+
+## 33. Nachtrag aus T-330 (Welle 3 — die sieben roten Dateien und der Meßsatz für fensterfeste Flächen)
+
+**Anlaß.** T-326 hat `id="inhalt"` und `tabIndex={-1}` vom Rahmen (`.app__main`) an den
+Laufbereich (`ScreenBody.tsx`) verlegt (E-113 und die Sprungmarken-Begründung in
+`docs/design/fensterfeste-flaechen.md` Abschnitt 8.5). Sieben vorbestehende Dateien benutzten
+`#inhalt` als **Geltungsbereich** für Knöpfe, die im **Kopf** der jeweiligen Ansicht stehen und
+damit außerhalb des neuen, engeren Laufbereichs liegen — sie wurden dadurch rot, ohne daß sich die
+geprüfte Handlung geändert hätte.
+
+### Die sieben Dateien, repariert (E-114)
+
+`pool-movement-sentence.spec.ts`, `todo-revival.spec.ts`, `manual-booking-movement.spec.ts`,
+`timer-prompt-setting.spec.ts`, `timer-stop-announcement.spec.ts`, `web-build-smoke.spec.ts` und
+`attachment-legacy-todo-regression.spec.ts` — vierzehn Fundstellen, `page.locator('#inhalt')` →
+`page.locator('.screen')`. Begründung: `.screen` ist das einzige Kind von `.app__main`
+(Zusicherung A3, Abschnitt 9.1 unten) und trug damit vor T-326 genau dieselbe Menge an Elementen
+wie `#inhalt` auf `.app__main` — Kopf **und** Laufbereich zusammen. Der Tausch ändert den
+Geltungsbereich zurück auf sein ursprüngliches Maß, ohne die geprüfte Frage („welcher Knopf wird
+geklickt, welcher Toast erscheint, welche Bewegung wird gemeldet") zu berühren. Kein Ausgang, kein
+erwarteter Wert und keine Behauptung wurde in einer dieser Dateien verändert.
+
+**Achte Fundstelle gesucht, nicht gefunden (E-114 zweiter Satz).** `git grep '#inhalt'` **plus**
+ein roher Lauf über `tests/`, `apps/*/src`, `packages/*/src` (Bauergebnisse ausgeschlossen,
+insbesondere `apps/desktop/src-tauri/taskpane/` und `apps/local-api/src/taskpane/`) fanden
+`tests/e2e/version-check-live.spec.ts` an vier Stellen (`await
+expect(page.locator('#inhalt')).toBeVisible()`). Geprüft und **unverändert gelassen**: Diese
+Stelle benutzt `#inhalt` nicht als Geltungsbereich für einen Knopf im Kopf, sondern als
+Bereitschaftsmarke („die Anwendung ist geladen") — und die Marke existiert nach T-326 unverändert,
+nur an einem anderen Element (`ScreenBody` statt `.app__main`). Die Frage „ist etwas mit dieser
+`id` sichtbar" bleibt dieselbe Frage mit derselben Antwort; kein Geltungsbereich, keine
+Reparatur nötig.
+
+### `tests/e2e/viewport-fit.spec.ts` (neu) — der Meßsatz aus `fensterfeste-flaechen.md` Abschnitt 9
+
+Vier Prüffälle gegen `ROUTE_NAMES` aus `apps/web/src/app/router.ts` (E-099 Punkt 3: die Menge ist
+an der Anforderung aufgespannt, nicht an einer selbst geführten Liste) und fünf Fenstergrößen
+(Abschnitt 9.2): A1 (`document.scrollingElement` wächst nie), A2 (`.app__main` hat im getragenen
+Bereich nichts zu laufen), A3 (genau ein Laufbereich je Ansicht), A4/A5 (Kopf bleibt, Laufbereich
+läuft wirklich — Todos, Buchungen, Tags, mit echtem Überschuß nach Abschnitt 9.4), A6
+(Buchungsübersicht bei 960px: der waagerechte Lauf erreicht seinen Kasten) und A7 (die
+Bildlaufleisten-Rinne hält die Breite zwischen kurzer und langer Todo-Liste).
+
+**Zwei Zustände aus Abschnitt 9.3 Punkt 4 fehlen absichtlich, mit Begründung im Dateikopf:**
+
+- **„Unbekannte Adresse" ist über `page.goto()` nicht erreichbar — eigener Befund.** `parseRoute`
+  (`router.ts`) fällt für jeden nicht erkannten Adressteil auf `DEFAULT_ROUTE` (Dashboard) zurück,
+  nicht auf `UnknownScreen`. Dieselbe Falle wie beim vorbestehenden Fund zur Sprungmarke
+  (`board.md`: „`parseRoute('#inhalt')` kennt die Adresse nicht und fällt auf die Vorgaberoute
+  zurück"). `UnknownScreen` (`App.tsx`) hängt an `case "todo": route.id === null`, und dieser
+  Zweig ist über eine echte Navigation mit dem heutigen Stand nicht erreichbar: Jede Kennung aus
+  `#/todos/<Kennung>` ist nach `decodeSegment` eine nicht-leere Zeichenkette, und ohne Kennung
+  liefert `parseRoute` den Namen `"todos"`, nicht `"todo"`. Ein Prüffall, der trotzdem eine
+  erfundene Adresse ansteuert, würde in Wahrheit das Dashboard messen. Eigener Auftrag, nicht
+  Teil von T-330.
+- **„Ladeersatz" und „gescheitertes Nachladen"** ließen sich nur über eine Netzabfangregel auf den
+  jeweiligen `lazy()`-Baustein erzwingen — gebaut, aber in dieser Aufgabe **nicht gegen einen
+  echten Lauf geprüft** (siehe Nachweis unten). Bewußt ausgelassen statt ungeprüft eingebaut.
+
+**Nachweis — teilweise, nicht vollständig (siehe Bericht `.claude/team/reports/T-330-e2e-tester.md`).**
+`pnpm exec tsc -p tests/e2e/tsconfig.json --noEmit`: 0 Fehler, für den gesamten Bestand unter
+`tests/e2e/**` einschließlich aller acht hier genannten Dateien. `pnpm exec playwright test -c
+tests/e2e/playwright.config.ts --list`: alle vier neuen Fälle korrekt erkannt. **Kein echter
+Playwright-Lauf** gegen den lokalen Dienst: Ein eigener, aus einem fehlgeschlagenen
+Hintergrundversuch verwaister `vite`-Prozeß belegte Port 5173 für den Rest der Sitzung, das
+Töten dieses Prozesses wurde vom Freigabesystem der Umgebung abgelehnt. Die sieben reparierten
+Dateien und `viewport-fit.spec.ts` sind damit **nicht gemessen**, nicht „grün" — Befund und
+Abhilfe stehen im Bericht.
+
+## 34. Nachtrag aus T-345 (Welle 7 — A8/9.6 gebaut und gemessen, die zwei nachgeholten Läufe, sechs rote Fälle)
+
+**Anlaß.** `T-343-spec-ux-reviewer.md` B-04: Der Meßsatz, auf den sich beide Designpapiere
+berufen, war trotz der Behauptung im Präsens („zusätzlich zugesichert") nicht gebaut — A8 und
+9.6 fehlten vollständig, A7s zweite Hälfte maß nur die Breitenhälfte, die zwei neuen
+Fenstergrößen aus T-339 fehlten, und B-03 hatte den Geltungsbereich von A2 an einer inzwischen
+widerlegten Papierfassung festgemacht. Dazu: die zwei durch T-330s `&&`-Verkettung nie
+angelaufenen `test:e2e`-Teilläufe, und sechs rote Fälle aus laufender Arbeit.
+
+### `tests/e2e/viewport-fit.spec.ts` — A8/9.6 gebaut, A2/A2b getrennt, A7 zweite Hälfte, zwei neue Größen
+
+**Sieben Fenstergrößen statt fünf** (9.2): die alten fünf plus 1200×820 (Kopf umgebrochen,
+Zeiterfassung noch zweispaltig) und 1024×640 (die benannte A8-Ausnahme des Rahmens bei
+1024×640, 9.6 Punkt 2).
+
+**A2 in zwei getrennt benannte Zusicherungen geteilt** (B-03, E-115/AK-02, A-25.4): A2 (stark)
+mißt `.app__main` gegen `scrollHeight/scrollWidth ≤ clientHeight/clientWidth + 1` nur an den
+vier Größen, die **beide** Maße ≥ 960×640 erfüllen (1280×820, 960×640, 1200×820, 1024×640). An
+den übrigen drei (831×640, 1280×480, 640×480) mißt A2b die schwächere Zusage aus 7.2: `.app__main`
+darf laufen, solange sein `overflow-y` nicht `hidden` ist (nichts wird unerreichbar). Der alte
+Satz „A2 gilt bei allen [Größen]" zitierte eine von zwei widersprüchlichen Papierfassungen
+(T-323 7.1 gegen T-340/E-115) und damit die falsche.
+
+**A8 (9.6) vollständig gebaut**, als `measureRunAreaChildren()`: die Menge
+(`.screen__body:not(.screen__body--frame)`, `.runarea`, `.kcolumn__body`, unterhalb 68rem
+zusätzlich `.screen__body--split`), die Ausnahme (`.screen__body--frame` selbst zählt nicht),
+nur Kinder im Fluß (`position` weder `fixed` noch `absolute`), und **beide** Untergrenzen aus
+9.6 — mindestens ein Laufbereich gefunden, mindestens einer läuft wirklich —, global über den
+ganzen Lauf gezählt statt je Ansicht/Größe (Begründung im Dateikopf: nicht jede der elf
+Ansichten hat bei jeder der sieben Größen echten Überschuß, eine Untergrenze je Zelle wäre dort
+blind rot).
+
+**A7, zweite Hälfte** (Kopfkante = Inhaltskante, seit T-334): läuft jetzt in derselben
+Navigation wie A1/A2/A3/A8 mit, an den vier getragenen Größen über alle elf Ansichten —
+44 Kombinationen, dieselbe Zahl wie T-334s „44 von 44 Fälle auf 0 gebracht", mit einer
+Selbstprüfung (`expect(GETRAGEN_SIZES.length).toBe(4)`), die auffallen läßt, wenn sich die Zahl
+der getragenen Größen künftig ändert.
+
+**Rot zuerst — die Gegenprobe.** Ein neuer, von jedem Dienst unabhängiger Fall
+(`page.setContent()`, kein `globalSetup`, kein Netz) baut den Fehler aus T-334 mechanisch nach:
+ein Flex-Kind mit `overflow: hidden` hat nach CSS Flexbox §4.5 eine automatische Mindesthöhe von
+0. Ohne die T-334-Behebung (`flex: none` an den direkten Kindern eines Laufbereichs) findet
+`measureRunAreaChildren` die Karte als Verstoß; mit der Behebung nicht. Beide Fälle **echt
+gefahren** — belegt, daß die neue A8-Meßfunktion den historischen Fehler tatsächlich gefangen
+hätte, nicht nur der Vorschrift nach.
+
+**Nachweis — vollständig, nicht nur teilweise wie in T-330.** `pnpm exec tsc -p
+tests/e2e/tsconfig.json --noEmit`: 0 Fehler. `pnpm exec playwright test -c
+tests/e2e/playwright.config.ts viewport-fit.spec.ts`: **6 von 6 grün**, 27,2s, echter lokaler
+Dienst und echte Oberfläche, `ss -ltn` vor und nach ohne Rest auf 5173/17843/17844. Die Gegenprobe
+lief zusätzlich **isoliert**, ohne `globalSetup`, über eine eigene, nach dem Lauf wieder entfernte
+Ausführungskonfiguration — beide Fälle bestanden dort genauso.
+
+### Die zwei nie gelaufenen `test:e2e`-Teilläufe, einzeln nachgeholt
+
+`pnpm run test:e2e:version-check` (`playwright.version-check.config.ts`, `TP-VER-10` bis `-13`
+plus die E-077-Gegenprobe): **5 von 5 grün**, 48,8s. `pnpm run test:e2e:attachment-persistence`
+(`playwright.attachment-persistence.config.ts`, `TP-ANH-10` Stufe 2 und `TP-ANH-21`): **2 von 2
+grün**, 3,5s. Beide waren durch die `&&`-Verkettung von `pnpm test:e2e` in T-330 nie einzeln
+angelaufen (Auftrag T-345 Abschnitt 4).
+
+**Nebenbefund beim ersten Lauf von `test:e2e:version-check`: derselbe Waisenprozeß-Fehler wie in
+`services.ts#startWeb` (T-330), unbehoben in zwei weiteren Kopien.** `version-check-services.ts
+#startVersionCheckWeb` und `attachment-persistence-services.ts#startAttachmentPersistenceWeb`
+starten `vite` ohne `detached: true`, und ihre `stop…Web`-Gegenstücke riefen `child.kill('SIGTERM')`
+auf dem unmittelbaren `pnpm`-Kindprozeß auf — dasselbe Muster, das in `services.ts` bereits mit
+Prozeßgruppen-Kill behoben ist. Gemessen: Nach einem vollständig grünen Lauf von
+`test:e2e:version-check` blieb `vite` auf Port 5173 hängen. Behoben in beiden Dateien (dieselbe
+Bauform wie `services.ts#killShellChildTree`, als eigene kleine Kopie je Datei — beide Dateien
+begründen das bereits in ihrem eigenen Kopf: eigene, absichtlich kleine Kopie statt einer Ausfuhr
+aus `services.ts`), dazu `stop…Web` auf `async` umgestellt und die beiden `globalSetup`-Aufrufer
+(`global-setup-version-check.ts`, `global-setup-attachment-persistence.ts`) auf `await` nachgezogen
+— ohne `await` bräche der Node-Prozeß vor der Signalisierung ab. Beide Konfigurationen danach
+zweimal wiederholt: sauber, kein Rest auf 5173.
+
+### TP-VER-10 als Gegenprobe der Klasse R-33 verknüpft und gefahren
+
+`tests/e2e/version-check-live.spec.ts` trägt jetzt einen Kommentar unmittelbar vor `TP-VER-10`,
+der ihn ausdrücklich als Gegenprobe von R-33 (`.claude/team/risks.md`, „Die Meldung, die nie
+ankommt") und als Beleg für A-A-111 (`.claude/team/board.md`) verknüpft: Vier Nachweisläufe über
+den Quelltext messen ausschließlich, ob die Anfrage hinausgeht — K-4 aus T-337 schaltet
+stattdessen die **Auskunft** an die Oberfläche ab. `TP-VER-10` mißt den Dialog auf dem Bildschirm
+und wäre von einem solchen Ausschalter rot, gleich an welcher der von R-33 noch offen genannten
+Stellen er säße (`current()`, Route, Antwortgestalt, Oberfläche). **Gefahren: grün**, 5 von 5 in
+derselben Datei (siehe oben). Das sagt: Am heutigen, tatsächlich zusammengebauten Dienst kommt die
+Auskunft beim Benutzer an — der Fall ist bereit, sobald jemand (A-A-111, domain-dev, eigene
+Welle) den in R-33 noch offen genannten Rest der Klasse angeht, ihn ohne weitere Änderung als
+Gegenprobe zu benutzen.
+
+### Sechs rote Fälle — untersucht, drei behoben, zwei bestätigt anwendungsseitig, einer nicht reproduziert
+
+**`tests/e2e/kanban.spec.ts:288` (TP-KANBAN-04) — Prüffall, behoben.** `promptOnTimerStop` ist
+voreingestellt eingeschaltet (A-22, `PreferencesContext.tsx`), und der frische E2E-Bestand trägt
+keine eigene Einstellung — der Dialog „Timer stoppen" erscheint beim Stoppen also. Der Prüffall
+prüfte das mit `if (await stopDialog.isVisible().catch(() => false))` — `isVisible()` **wartet
+nicht**, war unmittelbar nach dem Klick noch `false`, und der Timer lief danach ungestoppt bis
+zum 15-Sekunden-Zeitlimit der letzten Zusicherung weiter (gemessen: `kcard--running` blieb 34
+Abfragen lang bestehen). Ersetzt durch `stopDialog.waitFor({ state: 'visible', timeout: 5_000 })`
+— dieselbe Frage („erscheint der Dialog, und wenn ja, wird er bedient"), nur mit echtem Warten.
+Nachgewiesen: 5 von 5 in `kanban.spec.ts`, isoliert und im Verbund mit den drei übrigen
+Dateien dieses Abschnitts.
+
+**`tests/e2e/toast-eviction.spec.ts:123` — Prüffall, behoben.** Der Fall friert die Uhr der Seite
+ein (`page.clock.install`/`pauseAt`, T-120), damit die Achtsekundenfrist der Meldungen den
+festen Ablauf nicht durcheinanderbringt. Die erste Navigation (Board) geschah bewußt **vor** dem
+Einfrieren; die zweite (Todos) nicht — und die Todos-Ansicht wurde in diesem Fall zuvor nie
+besucht. Unter bereits angehaltener Uhr blieb sie gemessen dauerhaft bei „Ansicht wird geladen …"
+hängen (60-Sekunden-Zeitlimit, der Knopf „Erledigte einblenden" erschien nie). Behoben durch ein
+kurzes `resume()` vor und ein erneutes `pauseAt(...)` nach dieser einen Navigation — kostenlos für
+die geprüfte Sache, weil vor dieser Stelle nur die Meldung mit Rückweg (ohne Achtsekundenfrist)
+steht und die vier aktionslosen Meldungen erst danach entstehen. Nachgewiesen: grün, isoliert und
+im Verbund.
+
+**`tests/e2e/timer-stop-announcement.spec.ts:216, :316, :368` — Anwendung, nicht behoben.**
+Ursache: `apps/local-api/src/features/timer/timer.ts:31-35` (`captureTimerRecovery`) und
+`:358-361`/`:400-404` (`loadOrphanedTimer`/`resolveOrphanedTimer`). Ein neues Gatter
+`context.timerRecovery` erfaßt **einmalig beim Start des Dienstprozesses**, welcher Eintrag zu
+diesem Zeitpunkt bereits lief („only a timer from the previous run is orphaned", Kommentar an
+Ort und Stelle) — ein Eintrag, der **nach** diesem Start über die rohe API begonnen wird (wie in
+allen drei Fällen dieser Datei), trägt eine andere Kennung als `context.timerRecovery.entryId`
+und gilt seitdem ausdrücklich **nicht mehr** als verwaist. Das ist eine fachlich engere, in sich
+konsistente Fassung von E-036 (eine Ansicht des Todos, für die die Anwendung schon vorher wußte,
+zählt nicht als Programmabsturz) — keine Regression, sondern eine Verschärfung, die drei Fälle
+dieser Datei aus der Zeit vor dieser Regel geerbt haben: Sie simulieren „Hülle weg, stdin zu"
+über einen rohen `startTimer`-Aufruf gegen den **bereits laufenden** gemeinsamen Dienst und
+können unter der neuen Regel keinen echten Wiedererkennungsfall mehr erzeugen, gleich wie sie
+geschrieben sind. Eine tragfähige Behebung bräuchte einen echten Dienst-Neustart **nach** dem
+Anlegen des Eintrags — dieselbe Bauform wie `attachment-persistence-live.spec.ts`
+(`services.ts#restartLocalApi`) — und damit eine eigene Ausführungskonfiguration außerhalb der
+gemeinsamen Testreihe, weil ein Neustart mitten in der geteilten Reihe jedem parallel oder danach
+laufenden Fall den Dienst unter den Füßen wegzöge (dieselbe Begründung wie in
+`playwright.attachment-persistence.config.ts`). Das reicht über die Dateihoheit dieses Auftrags
+hinaus (`package.json` ist gemeinsame Datei, `pnpm test:e2e` müßte eine dritte Zeile bekommen) —
+Befund gemeldet, nicht angefaßt. Nachgewiesen rot: 3 von 3, reproduzierbar, isoliert und im
+Verbund.
+
+**`tests/e2e/attachment-crud.spec.ts:35` — nicht reproduziert.** Zweimal gefahren, isoliert und im
+Verbund mit den drei übrigen Dateien dieses Abschnitts: beide Male grün. Der Auftrag nannte diese
+Zeile als rot; dieser Lauf konnte das nicht nachvollziehen. Möglich: bereits durch eine
+anderswo laufende Änderung behoben, oder eine Empfindlichkeit, die diese Maschine zu diesem
+Zeitpunkt nicht getroffen hat. Nicht angefaßt, weil nichts zu beheben war, das sich zeigte.
+
+**Gesamtnachweis der vier Dateien dieses Abschnitts, nach den Behebungen:** `pnpm exec playwright
+test -c tests/e2e/playwright.config.ts timer-stop-announcement.spec.ts toast-eviction.spec.ts
+attachment-crud.spec.ts kanban.spec.ts`: 13 Fälle, 10 grün, 3 rot (die drei genannten,
+anwendungsseitigen), 1,5 Minuten, `ss -ltn` vor und nach ohne Rest.
+
+## 35. Nachtrag aus T-352 (Welle 8 — A2a, A9, `.board` in A8, die drei Timer-Fälle auf die Neustart-Vorrichtung)
+
+**Anlaß.** `T-351-spec-ux-reviewer.md` B-19: drei Lücken im eigenen Meßsatz aus T-345, dazu
+`T-348-frontend-dev.md`'s Übergabe Punkt 2 (`.board` fehlt in `A8_RUN_AREA_SELECTORS`) und
+`T-350-domain-dev.md`'s Rezept für die drei roten Timer-Fälle aus Abschnitt 34 oben. Alle vier
+Behebungen liegen in `tests/e2e/**`, wie beauftragt.
+
+### `tests/e2e/viewport-fit.spec.ts`
+
+- **A8 nahm `.screen__body--frame` in jeder Größe aus**, mit dem seit T-344 widerlegten
+  9.6-Wortlaut als Begründung im Kommentar. `measureRunAreaChildren` bekommt einen zweiten
+  Parameter `includeFrame`, vom Aufrufer mit `getragen` belegt: Der Rahmen wird jetzt nur
+  **unterhalb** von 960×640 ausgenommen. Gegenprobe (T-352, A8): eine eigene, minimale Seite mit
+  demselben Flexbox-Fehlermodus wie die T-334-Gegenprobe, an `.screen__body--frame` statt an
+  `.screen__body` — mit `includeFrame: false` bleibt der Überlauf ungesehen, mit
+  `includeFrame: true` meldet A8 ihn.
+- **`.board` fehlte in `A8_RUN_AREA_SELECTORS`** — seit T-348 der waagerechte Laufbereich der
+  Kanban-Ansicht (AK-15), gemessen wie jeder andere Laufbereich. Ergänzt; kein Prüffall dadurch
+  rot geworden (die Menge wurde nur um eine Fläche zu groß, nicht falsch).
+- **A2a fehlte vollständig.** Die Breitenhälfte von A2 (`main.scrollWidth ≤ clientWidth + 1`)
+  stand nur innerhalb `if (getragen)`; unterhalb dessen prüfte A2b ausschließlich
+  `overflow-y !== 'hidden'`, nie die Breite. A2a läuft jetzt unconditioned über alle sieben
+  Fenstergrößen des Hauptlaufs, plus ein eigener, kleiner Testfall bei 320×256 (9.2 letzter Satz:
+  „nur A1 und A2a", ohne A3/A4/A7/A8) — als eigener Fall statt einer achten Zeile in
+  `WINDOW_SIZES`, weil eine achte Größe im Hauptlauf jede der übrigen Zusicherungen einzeln hätte
+  ausnehmen müssen.
+- **A9 existiert jetzt** (9.1, 9.7; T-322 AK-14). Drei Teile: (a) der Kasten mit `id="inhalt"` hat
+  über die vier getragenen Größen aggregiert (nicht in jeder einzelnen) eine **eigene**
+  Laufstrecke — `overflow` läßt tatsächlich laufen, nicht nur `scrollHeight > clientHeight`
+  (gemessen: Ein Kasten mit `overflow-y: visible` erfüllt letzteres, obwohl `scrollTop` dort für
+  immer 0 bleibt — genau der Zustand von Laufbereich A der Zeiterfassung unterhalb von 68rem);
+  (b) `#inhalt` ist mit `tabIndex === 0` selbst fokussierbar — die strukturelle Fassung von „kein
+  weiterer Tabulatorhalt dazwischen", ohne die echte Marke `<a href="#inhalt">` anzuklicken (siehe
+  unten); (c) je Größe, in den zwei Zweigen aus 9.7 — der Kasten selbst, oder (abschließend
+  aufgezählt: nur Zeiterfassung unterhalb von 68rem) sein nächster laufender Vorfahr.
+  `a9TargetsOf` öffnet die Einstellungen mit `?bereich=daten` statt der Vorgabe „Darstellung":
+  Letztere ist gemessen zu kurz (671/671 bei 1280×820), `DefaultTagSettings` (`standardtags`)
+  ebenfalls (671/671 — sie zeigt nur ein Suchfeld und Chips, nicht den ganzen Tag-Baum als Liste),
+  `DataTransferSettings` (`daten`) überläuft zuverlässig (786/671).
+  Die echte Sprungmarke `<a href="#inhalt">` wird **bewusst nicht angeklickt**: Sie ändert
+  `location.hash`, und `useRoute` liest daraus über `parseRoute` eine neue Route — für den Kopf
+  „inhalt" gibt es keinen Fall, also `DEFAULT_ROUTE` (Dashboard). Das ist keine neue Beobachtung
+  (derselbe Satz steht schon im Kopfkommentar dieser Datei zur Sprungmarke selbst, aus T-330); ein
+  echter Klick striche die gerade geprüfte Ansicht weg, bevor (c) gemessen ist. (b) prüft deshalb
+  strukturell (`tabIndex === 0`), (c) fokussiert `#inhalt` direkt per `element.focus()`.
+- **Zwei Chromium-Eigenheiten im Headless-Betrieb, gemessen statt vermutet** (Zeitkosten dieser
+  Aufgabe, siehe Bericht): `page.keyboard.press('PageDown'/'ArrowRight')` bewegt in dieser Umgebung
+  nur, wenn zuvor mindestens eine `page.mouse`-Bewegung über der betroffenen Fläche stattgefunden
+  hat, **und** `scrollTop`/`scrollLeft` zeigen den neuen Wert nicht sofort nach
+  `keyboard.press()` — eine Messung braucht eine kurze Wartezeit (`page.waitForTimeout(200)`)
+  danach. Ohne beides meldete A9 an praktisch jeder Ansicht „bewegt nichts", obwohl der Bildlauf in
+  Wirklichkeit funktionierte.
+
+Nachgewiesen: `pnpm exec playwright test -c tests/e2e/playwright.config.ts viewport-fit.spec.ts` —
+**10 von 10 grün**, 1,3 Minuten, `ss -ltn` vor und nach ohne Rest.
+
+### `tests/e2e/timer-stop-announcement.spec.ts` — die drei roten Fälle aus Abschnitt 34, jetzt behoben
+
+Fachlich geklärt in `T-350-domain-dev.md`: Die Verengung auf „beim Start des Dienstprozesses
+vorgefunden" ist die erste tatsächliche Umsetzung von E-036, nicht ihre Verschärfung. Die drei
+Fälle (`:259` `recorded`, `:359` `orphan_discarded`, `:418` `timer_too_short`) stellten den
+verwaisten Zustand über einen rohen `startTimer`-Aufruf gegen den **bereits laufenden**
+gemeinsamen Dienst her — nach der neuen, korrekten Regel kann das nie mehr als verwaist gelten.
+
+**Umgestellt auf die Neustart-Vorrichtung** aus T-350 Abschnitt 5, dieselbe Bauart wie
+`attachment-persistence-live.spec.ts`: `services.ts#restartLocalApi` **nach** dem Anlegen des
+Eintrags (und nach dem Lebenszeichen, wo eines gebraucht wird) und **vor** der ersten Navigation.
+Das braucht eine eigene Ausführungskonfiguration, weil ein echter Dienst-Neustart mitten in der
+geteilten Hauptreihe jeder anderen Datei den Dienst unter den Füßen wegzöge — derselbe Grund wie
+bei `TP-ANH-10`:
+
+- `tests/e2e/support/timer-stop-announcement-services.ts` (neu) — startet ausschließlich die
+  Oberfläche, eigene kleine Kopie statt einer Ausfuhr aus `services.ts` (derselbe Grund wie bei
+  `attachment-persistence-services.ts`/`version-check-services.ts`).
+- `tests/e2e/support/global-setup-timer-stop-announcement.ts` (neu).
+- `tests/e2e/playwright.timer-stop-announcement.config.ts` (neu) — `testMatch:
+  'timer-stop-announcement.spec.ts'`.
+- `tests/e2e/playwright.config.ts` — die Datei kommt in `testIgnore` (derselbe Ausschlussgrund wie
+  `attachment-persistence-live.spec.ts`).
+- `timer-stop-announcement.spec.ts` selbst — `test.beforeAll`/`test.afterAll` starten und beenden
+  den lokalen Dienst jetzt **innerhalb** der Datei (`startLocalApi`/`stopGithubStub`, unverändert
+  wiederverwendet); die drei betroffenen Fälle rufen `restartLocalApi` an der im Rezept genannten
+  Stelle. Die fachliche Frage jedes Falls ist unverändert — nur der Weg dorthin. Die drei übrigen
+  Fälle der Datei (der einfache `recorded`-Fall, `discarded` bei zu kurzem Timer über die
+  Oberfläche, die Live-Region-Bauart) sind unbetroffen und laufen unverändert gegen denselben,
+  jetzt selbst gestarteten Dienst mit.
+
+**Reicht über die Dateihoheit dieses Auftrags hinaus:** `package.json` ist eine gemeinsame Datei.
+Vorschlag an den Orchestrator: `test:e2e` um `&& pnpm run test:e2e:timer-stop-announcement`
+ergänzen, mit einer neuen Zeile `"test:e2e:timer-stop-announcement": "playwright test -c
+tests/e2e/playwright.timer-stop-announcement.config.ts"` daneben — dieselbe Form wie die
+bestehenden Zeilen für `test:e2e:attachment-persistence` und `test:e2e:version-check`. Bis dahin
+läuft diese Datei bei einem bloßen `pnpm test:e2e` **gar nicht** mit (sie ist aus der Hauptreihe
+ausgeschlossen und noch in keiner der drei bestehenden Zeilen benannt) — der Auftrag hat deshalb
+alle vier Ausführungskonfigurationen einzeln gefahren, siehe Bericht.
+
+Nachgewiesen: `pnpm exec playwright test -c tests/e2e/playwright.timer-stop-announcement.config.ts`
+— **6 von 6 grün**, 14,7 Sekunden, `ss -ltn` vor und nach ohne Rest.
+
+### Nicht angefasst, wie beauftragt
+
+**R-34** (`.claude/team/risks.md`): `dataArchive.replaceAll` als zweiter, nicht erfaßter Eingang
+für offene Timer-Einträge. Die Behebung ist ein Polaritätswechsel über fünf Dateien in
+`apps/local-api/src/**` und gehört in dieselbe Welle wie ihr Prüffall — hier nicht gebaut, damit
+nicht gegen einen Zwischenstand gemessen wird.

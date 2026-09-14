@@ -145,7 +145,7 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       source: 'timer',
     };
 
-    const result = decideOrphanedTimer({ running, heartbeatAt: timestamp('2026-08-31T22:30:00Z'), resolution: 'discard' });
+    const result = decideOrphanedTimer({ running, heartbeatAt: timestamp('2026-08-31T22:30:00Z'), resolution: 'discard', now: timestamp('2026-09-01T09:00:00Z') });
 
     expect(result).toEqual({ kind: 'discarded', reason: 'orphan_discarded', durationSeconds: 0 });
   });
@@ -159,7 +159,7 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       source: 'timer',
     };
 
-    const result = decideOrphanedTimer({ running, heartbeatAt: null, resolution: 'discard' });
+    const result = decideOrphanedTimer({ running, heartbeatAt: null, resolution: 'discard', now: timestamp('2026-09-01T09:00:00Z') });
 
     expect(result).toEqual({ kind: 'discarded', reason: 'orphan_discarded', durationSeconds: 0 });
   });
@@ -181,6 +181,9 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       running,
       heartbeatAt: timestamp('2026-08-31T22:01:00Z'),
       resolution: 'book_until_heartbeat',
+      // `now` liegt hinter dem Lebenszeichen — der Deckel nach oben (T-371)
+      // greift hier nicht, `min(heartbeatAt, now)` bleibt beim Lebenszeichen.
+      now: timestamp('2026-09-01T09:00:00Z'),
     });
 
     expect(result.kind).toBe('recorded');
@@ -209,7 +212,7 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       source: 'timer',
     };
 
-    const result = decideOrphanedTimer({ running, heartbeatAt: null, resolution: 'book_until_heartbeat' });
+    const result = decideOrphanedTimer({ running, heartbeatAt: null, resolution: 'book_until_heartbeat', now: timestamp('2026-09-01T09:00:00Z') });
 
     expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
   });
@@ -229,6 +232,7 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
       running,
       heartbeatAt: timestamp('2026-08-31T22:00:00Z'),
       resolution: 'book_until_heartbeat',
+      now: timestamp('2026-09-01T09:00:00Z'),
     });
 
     expect(result).toEqual({ kind: 'discarded', reason: 'timer_too_short', durationSeconds: 0 });
@@ -252,8 +256,69 @@ describe('TP-TIMER-04 — verwaister Timer nach Absturz (E-036), decideOrphanedT
     };
 
     for (const resolution of ['book_until_heartbeat', 'discard'] as const) {
-      const result = decideOrphanedTimer({ running, heartbeatAt: timestamp('2026-08-31T22:05:00Z'), resolution });
+      const result = decideOrphanedTimer({ running, heartbeatAt: timestamp('2026-08-31T22:05:00Z'), resolution, now: timestamp('2026-09-01T09:00:00Z') });
       expect(['recorded', 'discarded']).toContain(result.kind);
+    }
+  });
+
+  /**
+   * T-375 (Bericht T-371-domain-dev.md, Abschnitt 3 und 8, offene Frage 2):
+   * `now` ist am Typ **optional** geblieben, weil ein Pflichtfeld die sechs
+   * Fälle oben zu `tsc`-Fehlern gemacht hätte. Sie sind jetzt nachgezogen
+   * (alle sechs übergeben `now`, ohne daß sich eine Erwartung geändert hat) —
+   * diese beiden Fälle testen den Deckel selbst, direkt in der Domäne, statt
+   * ihn nur über den Anwendungsfall in `apps/local-api` zu sehen.
+   */
+  it('der Deckel nach oben (T-371): "now" vor dem Lebenszeichen gewinnt — gebucht wird nie in die Zukunft', () => {
+    const running: RunningTimeEntry = {
+      id: 'te-orphan' as never,
+      todoId: todoId('todo-a'),
+      startedAt: timestamp('2026-08-31T22:00:00Z'),
+      note: 'Rückruf begonnen',
+      source: 'timer',
+    };
+
+    // Das Lebenszeichen liegt hinter der Wanduhr des fragenden Laufs — eine
+    // fremde Uhr, die vorgeht (T-370, T-371). Gebucht wird höchstens bis
+    // "now", nicht bis zum Lebenszeichen.
+    const result = decideOrphanedTimer({
+      running,
+      heartbeatAt: timestamp('2026-08-31T23:00:00Z'),
+      resolution: 'book_until_heartbeat',
+      now: timestamp('2026-08-31T22:20:00Z'),
+    });
+
+    expect(result.kind).toBe('recorded');
+    if (result.kind === 'recorded') {
+      expect(result.entry.endedAt).toBe(timestamp('2026-08-31T22:20:00Z'));
+      expect(result.entry.durationSeconds).toBe(20 * 60);
+      expect(result.entry.durationSeconds).not.toBe(60 * 60); // bis zum Lebenszeichen wäre falsch
+    }
+  });
+
+  it('der Deckel nach oben (T-371): eine "now" vor dem Start verwirft, statt eine negative Dauer zu buchen', () => {
+    const running: RunningTimeEntry = {
+      id: 'te-orphan' as never,
+      todoId: todoId('todo-a'),
+      startedAt: timestamp('2026-08-31T22:00:00Z'),
+      note: '',
+      source: 'timer',
+    };
+
+    const result = decideOrphanedTimer({
+      running,
+      heartbeatAt: timestamp('2026-08-31T23:00:00Z'),
+      resolution: 'book_until_heartbeat',
+      // Eine rückwärts laufende Uhr: "now" liegt vor dem Start des Timers.
+      now: timestamp('2026-08-31T21:00:00Z'),
+    });
+
+    // Verworfen, wie jede zu kurze Buchung — die Dauer selbst bleibt negativ
+    // (`decideTimerStop` rechnet sie unverändert durch), gebucht wird davon nichts.
+    expect(result.kind).toBe('discarded');
+    if (result.kind === 'discarded') {
+      expect(result.reason).toBe('timer_too_short');
+      expect(result.durationSeconds).toBeLessThan(0);
     }
   });
 });

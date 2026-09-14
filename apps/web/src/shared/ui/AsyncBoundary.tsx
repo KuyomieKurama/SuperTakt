@@ -16,6 +16,22 @@ export interface AsyncBoundaryProps<T> {
   readonly label: string;
   readonly rows?: number;
   readonly onRetry: () => void;
+  /**
+   * Umschlag für Skelett und Fehlerfläche (T-326).
+   *
+   * Ohne Angabe stehen beide dort, wo der Aufrufer die Grenze gesetzt hat — der
+   * Regelfall: Der Laufbereich der Ansicht liegt außen, Skelett und
+   * Fehlerfläche liegen darin (T-322 R-5).
+   *
+   * Drei Ansichten setzen ihren Laufbereich erst **innerhalb** des
+   * Erfolgsfalls, weil eine feste Leiste an den Daten hängt — die Auswahlleiste
+   * der Buchungen, die Werkzeugzeile des Boards — oder weil der Bildschirmkopf
+   * selbst aus den Daten entsteht (Todo-Detailansicht, T-322 4.3). Dort gäbe es
+   * im Lade- und im Fehlerzustand gar keinen Laufbereich, und eine Ansicht ohne
+   * Laufbereich geht gut, bis die Daten wachsen (T-323, Zusicherung A3).
+   * Dieser Umschlag gibt ihnen einen.
+   */
+  readonly fallbackFrame?: (content: ReactNode) => ReactNode;
   readonly children: (value: T, refreshing: boolean) => ReactNode;
 }
 
@@ -24,14 +40,19 @@ export function AsyncBoundary<T>({
   label,
   rows = 4,
   onRetry,
+  fallbackFrame,
   children,
 }: AsyncBoundaryProps<T>) {
+  const framed = (content: ReactNode): ReactNode =>
+    fallbackFrame === undefined ? content : fallbackFrame(content);
+
   if (state.status === "loading") {
-    return <LoadingBlock label={label} rows={rows} />;
+    return <>{framed(<LoadingBlock label={label} rows={rows} />)}</>;
   }
 
   if (state.status === "error") {
     return (
+      <>{framed(
       <InlineMessage
         tone="danger"
         title="Das ließ sich nicht laden"
@@ -43,7 +64,8 @@ export function AsyncBoundary<T>({
       >
         {state.message}
         {state.code === null ? null : <span className="message__code"> ({state.code})</span>}
-      </InlineMessage>
+      </InlineMessage>,
+      )}</>
     );
   }
 

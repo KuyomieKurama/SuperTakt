@@ -18,7 +18,15 @@ test('A-22.1: Leistungsabfrage ausschalten, direkt buchen und wieder einschalten
     await expect(prompt).not.toBeChecked();
 
     await gotoTodo(page, todo.id);
-    const main = page.locator('#inhalt');
+    // `.screen` statt `#inhalt` (T-330, E-114): Seit T-326 sitzt die Marke
+    // `#inhalt` auf dem Laufbereich (`ScreenBody`), nicht mehr auf dem
+    // Rahmen der Ansicht — die Knöpfe „Timer starten"/„Timer stoppen" stehen
+    // im `.screen__header` und lägen damit außerhalb. `.screen` ist die
+    // Ansicht selbst (Kopf **und** Laufbereich, genau ein Treffer je Route)
+    // und trifft dieselbe Menge wie zuvor `#inhalt` auf `.app__main` — auch
+    // nach der Navigation zu `todoB` weiter unten, weil der Locator bei
+    // jeder Aktion neu ausgewertet wird.
+    const main = page.locator('.screen');
     await main.getByRole('button', { name: 'Timer starten', exact: true }).first().click();
     await expect(main.getByRole('button', { name: 'Timer stoppen', exact: true })).toBeVisible();
     await page.waitForTimeout(1200); // The real timer must exceed the discard threshold.
@@ -55,7 +63,8 @@ for (const promptOnStop of [false, true]) {
       await cleanupAnyTimer();
       await setTimerPrompt(promptOnStop);
       await gotoTodo(page, todoA.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Timer starten', exact: true }).first().click();
       await expect(main.getByRole('button', { name: 'Timer stoppen', exact: true })).toBeVisible();
       await page.waitForTimeout(1200);

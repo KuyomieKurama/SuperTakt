@@ -1,11 +1,1489 @@
 # Aufgabenboard — SuperTakt
 
-Stand: 2026-09-10, **T-247 — F-21 beantwortet, die Anhäng-Fläche des Add-ins fällt: ABGESCHLOSSEN**
-(drei Freigaben, Dokumentation nachgezogen, `pnpm check` Exit 0). Als Nächstes: **T-249 — Schritt 0
-der Umstrukturierung**, die Wächter pfadunabhängig machen, bevor eine Datei umzieht.
-Davor: **T-245 — Bestandsaufnahme nach zwölf Commits von außen** und **T-246 — die
-Werkzeugkette steht auf einem Windows-Rechner**, erster Rust-Lauf dort 68/68. Der Stand davor
-war der 2026-09-08 mit T-244.
+Stand: 2026-09-12, **T-322 bis T-325 — fensterfeste Flächen (Auftrag vom 2026-09-12) und die
+Freigaberunde über die Löschpfade**. Davor: **T-273 bis T-288 — die Versionsprüfung greift jetzt immer, und die
+Kanban-Karte trägt drei Marken**. Zwei Aufträge des Auftraggebers, sechzehn Arbeiten, zwei
+Entscheidungen (E-105, E-106) und eine geschärfte Anforderung (A-18.11). Freigaben zu T-288
+stehen aus. Davor: **T-249 bis T-272 — die featureweise Umstrukturierung** (abgeschlossen),
+**T-247 — F-21 beantwortet** (abgeschlossen), **T-245 — Bestandsaufnahme nach zwölf Commits von
+außen** und **T-246 — die Werkzeugkette steht auf einem Windows-Rechner**.
+
+## T-322 bis T-325 — Fensterfeste Flächen (Auftrag vom 2026-09-12)
+
+Auftrag des Auftraggebers: Jede Ansicht richtet Breite und Höhe nach dem verfügbaren
+Inhaltsbereich des Fensters, unter Abzug von Kopfleiste, Navigation und Seitenleiste. Kein Inhalt
+darf die Seite über das Fenster hinaus verlängern oder verbreitern; läuft etwas über, läuft
+**ausschließlich der betroffene Inhaltsbereich**. Einheitlich auf allen Ansichten, mitwachsend bei
+Fenstergrößenänderung, bestehendes Design und bestehende Funktion unangetastet.
+
+**Der Ausgangspunkt ist gemessen, nicht vermutet.** Das Fenster scrollt heute schon nicht:
+`.app` trägt `height: 100%` und `overflow: hidden` (`apps/web/src/styles/app.css:91`). Der Befund
+liegt eine Ebene tiefer — `.app__main` ist der **einzige** Laufbereich der Anwendung
+(`app.css:272`), und deshalb läuft die ganze Seite samt Bildschirmkopf, Filterleiste und
+Zählzeile. **Kanban und Formulardialoge sind bereits fensterfest**
+(`apps/web/src/styles/viewport-layout.css`, 103 Zeilen); die übrigen elf Adressen aus
+`apps/web/src/app/router.ts` sind es nicht. Der Präzedenzfall steht damit im Bestand, die Regel
+fehlt.
+
+### Welle 1 — entschieden wird, gebaut wird noch nichts
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-322 | Der Fluß je Ansicht: **was** steht, **was** läuft, einer oder mehrere Laufbereiche je Ansicht, Verhalten im niedrigen Fenster, Tastatur und Fokus, Tabellenkopf und waagerechter Lauf der Buchungen, Leer- und Ladezustände in der Mitte **wovon** | ux-designer | `docs/design/fensterfeste-flaechen-fluss.md` |
+| T-323 | Der Mechanismus: Höhenkette und `min-height: 0`, benannte Klassen für festen Kopf und Laufbereich, Ort des Innenabstands (heute trägt `.app__main` Abstand **und** Bildlauf), waagerechter Lauf, Bildlaufrinnen, klebende Köpfe über Token, kleinste getragene Fenstergröße, Verträglichkeit mit `viewport-layout.css`, Portalen, `.scrim`, `.toast-layer` und `.boot` — dazu die **Vorschrift für den Meßsatz** | ui-designer | `docs/design/fensterfeste-flaechen.md` |
+| T-324 | Freigaberunde über T-320 und T-321 (Commit `311b26e`): Signaturänderung `AttachmentPort.attachmentNamesOfKind`, `attachmentTargetNamesFile` symmetrisch, die Löschpfade als **Klasse**, der Versionswächter in sechster Runde, und die Zusicherung aus T-321 an ihrer eigenen Menge gemessen | code-reviewer | eigener Bericht |
+| T-325 | Sicherheitsfreigabe über dieselben beiden: **R-29 an der Klasse** statt an zwei Namen, der Namensvergleich als Sicherheitsgrenze (Achsen aus T-319 und T-297), die Reichweite der neuen Portmethode, und der stille Ausschalter aus T-287 über ein präpariertes Archiv | security-checker | eigener Bericht, `docs/bedrohungsmodell.md` nur bei neuer Bedrohung |
+
+**Bewußt nicht gestartet:** der frontend-dev. Die Regel steht im Ablauf — bei stark verändertem
+Layout kommt die Designentscheidung vor der Umsetzung, und hier ist die Entscheidung, **welcher**
+Bereich je Ansicht den Lauf trägt, keine Nebenwirkung einer CSS-Zeile. Ebenfalls nicht gestartet:
+der e2e-tester für den Meßsatz aus T-323 Punkt 8 — er mißt sonst gegen einen Zwischenstand, und
+das ist die Lehre vom 2026-09-12 (T-315/T-316) in derselben Gestalt. Beide gehören in Welle 2.
+
+**Die Abgrenzung ist hart gezogen und der einzige Grund, warum T-322 und T-323 nebeneinander
+laufen dürfen:** T-322 entscheidet **was**, T-323 entscheidet **wie**. Zwei Papiere, zwei
+Hoheiten, keine gemeinsame Datei.
+
+### Welle 1 — Ergebnis
+
+**T-322 (ux-designer) fertig.** Tabelle steht/läuft für elf Ansichten, Zustandsmaschine Z0–Z7,
+22 Akzeptanzkriterien, zwölf Stellen benannt, die heute vom Seitenlauf leben. Zehn Ansichten
+bekommen einen Laufbereich, die Zeiterfassung zwei nebeneinander — und bei ≤ 68 rem, wo die
+Spalten untereinander fallen, wieder einen. Die Namen aller Laufbereiche kommen aus **vorhandenen
+Überschriften**: kein neuer Oberflächentext, keine Streichung, E-087 nicht ausgelöst.
+
+**T-323 (ui-designer) fertig.** `.app__main` wird vom einzigen Laufbereich zum **Rahmen**
+(`minmax(0, 1fr)`, kein Innenabstand); jede Ansicht bringt `.screen__header`, 0..n `.screen__bar`
+und **genau einen** `.screen__body`. Höhenkette elfstufig von `html` abwärts, jede Stufe
+begründet. Der Innenabstand wandert aus dem Rahmen in die drei benannten Teile — die Inhaltsspalte
+bleibt gerechnet **pixelgleich**, verschoben wird genau ein Rand. Mindestgröße **960 × 640**,
+gelesen aus `minWidth`/`minHeight` in `tauri.conf.json`, nicht erfunden.
+
+**Zwei Befunde aus T-323, die über den Auftrag hinausgehen** — beide am Quelltext gemessen:
+
+- **`.table thead th { position: sticky; top: 0 }` ist heute wirkungslos.** `.table-wrap` ist
+  durch `overflow-x: auto` Bildlaufkasten auf **beiden** Achsen und fängt das Kleben ab. Der
+  klebende Tabellenkopf der Buchungen greift erst, wenn `.table-wrap` selbst der senkrechte
+  Laufbereich ist. Eine Zusage, die seit ihrer Einführung nichts getan hat.
+- **`id="inhalt"`/`tabIndex={-1}` muß von `.app__main` an den Laufbereich wandern**, sonst rollt
+  nach der Sprungmarke Bild-ab nichts mehr (SC 2.1.1). Der E-087-Abgleich ist gemacht: eine
+  Fundstelle in `tests/**`, als Geltungsbereich benutzt, bleibt gültig.
+
+**Beide Papiere liegen deckungsgleich.** T-322s Rückfallregel R-3 und T-323s Rückfall ohne
+Medienquery meinen dasselbe; die vier `:has()`-Zeilen aus `viewport-layout.css` fallen in beiden
+Fassungen im **selben** Auftrag wie der Umbau. `.list-more` ist von T-322 beantwortet: läuft, am
+Ende der Liste — T-323s Rückfrage dazu ist damit erledigt.
+
+**T-324 (code-reviewer) — nicht freigegeben, zwei blockierende Befunde.** Strang A ist inhaltlich
+richtig: Die Menge der acht Löschstellen hat er **selbst** aufgespannt statt die Liste aus T-320
+nachzulesen, keine neunte gefunden, `data-transfer` eingeschlossen; `attachmentNamesOfKind` fließt
+ausschließlich in `missing` und kann keine Löschung entscheiden. Sie blockiert trotzdem, weil
+**nichts sie hält**: `releaseUnclaimedBlobs`, `releasableBlobOf`, `removeAttachment` und
+`removeTodo` kommen im ganzen Prüfbestand nicht vor, und `vitest.config.ts` mißt
+`apps/local-api/src` gar nicht erst. Strang B blockiert, weil die Klasse nur **umgezogen** ist:
+Der Baum folgt seit T-320 dem Compiler, die Menge der gelesenen Dateien folgt der
+handgeschriebenen Endungsliste `istTypescriptDatei` — `.cts` fehlt, gemessen an einer
+`src/augment.cts`, deren `declare module`-Zusammenführung greift, während beide Zusagen sie
+überspringen.
+
+**T-325 (security-checker) — freigegeben**, vier Befunde, keiner blockierend. Inventar unabhängig
+nachgezählt (acht, dasselbe Ergebnis wie T-324, getrennt aufgespannt), `releaseUnclaimedBlobs` in
+zehn Lagen am echten Bestand gefahren samt Gegenprobe auf rot. Der Namensvergleich trägt in **27
+Gestalten**; die vier, die er nicht trägt, sind auf der Namensseite durch die Formprüfung des
+Blob-Adapters unerreichbar. Neuer Abschnitt 41 im Bedrohungsmodell, A-A-102 bis A-A-105.
+
+**Zweimal dieselbe Klasse, von zwei Prüfern unabhängig gefunden, aus zwei Richtungen:** der
+code-reviewer an der **Endungsliste** des Wächters, der security-checker an einem übersetzenden
+Ausschalter in `composition.ts`, der über die Spalte `locale` wirkt und vier Läufe grün läßt. Der
+gemeinsame Kern: `proof:release-safety` mißt seit sechs Runden **Namen und Ordner**, nicht die
+**Verdrahtung**. Eingetragen als R-30, R-29 fortgeschrieben und **offen** gelassen.
+
+**Entschieden als E-112** (aus T-322 Offene Frage 5): Naht unter der Steuerung, ein Laufbereich je
+Fläche und Achse, Rückfall auf den Seitenlauf. Mit dem Preis im Text — der Bildlauf zieht von
+einer Fläche in viele, und damit wird jede Falle aus T-057 zu einer Falle je Ansicht.
+
+**Vom Orchestrator entschieden, ohne Rückfrage:** R-3 gilt auch fürs Kanban (T-322 OF-1) — der
+Präzedenzfall wird angeglichen, nicht ausgenommen. Der Rinnenversatz am rechten Kopfrand wird
+**nicht** vorgeschrieben (T-323 OF-2): der einzige Weg dahin hat zwei in drei Maschinen ungemessene
+Kanten, und eine Vorschrift ohne Messung ist in diesem Bestand schon zweimal teuer gewesen.
+
+**Offen, an den Auftraggeber:** Gilt „fensterfest" auch für den Outlook-Aufgabenbereich? Beide
+Papiere schließen ihn aus — er hängt in Outlooks Rahmen und lag nie in dieser Hülle. Ebenfalls
+offen: soll die Semgrep-Anmeldung eingerichtet werden (T-325 konnte nicht messen), und soll
+`proof:access` auf einem Rechner ohne laufenden Dienst nachgefahren werden — sechs Läufe aus T-324
+und einer aus T-325 sind an der Portbelegung durch die offene Anwendung gescheitert und heißen
+deshalb **nicht gemessen**, nicht grün.
+
+### Welle 2 — gebaut wird, und die Nacharbeit aus T-324
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-326 | Der Umbau selbst: Rahmen, `.screen__header` / `.screen__bar` / `.screen__body`, Rollenverteilung je Ansicht nach T-322, Höhenkette nach T-323, `viewport-layout.css` Z. 54–67 im selben Auftrag, `id="inhalt"` an den Laufbereich, `.table-wrap` als senkrechter Laufbereich der Buchungen, `ROUTE_NAMES` in `router.ts` | frontend-dev | `apps/web/**` |
+| T-327 | Der Wächter an der **Verdrahtung** statt am Namen: Dateimenge über die `SourceFile`-Objekte des Programms statt über `istTypescriptDatei`, `.cts`/`.d.cts`, Gegenprobe mit eigenem `erwartet`, Kopf b und Lückenliste nachziehen, die beiden `vite.config.ts` in die gelesene Menge, A-A-105 als sechste Gestalt | domain-dev | `apps/local-api/scripts/**` |
+| T-328 | Die drei fehlenden Messungen aus T-324: `releaseUnclaimedBlobs` samt der Gegenprobe aus T-320, `attachmentNamesOfKind`, `file-port.test.ts:66` — und die Frage, warum `vitest.config.ts` `apps/local-api/src` nicht mißt | unit-tester | `apps/*/test/**`, `packages/*/test/**` |
+
+**Bewußt nicht gestartet:**
+
+- **e2e-tester** für `tests/e2e/viewport-fit.spec.ts` nach T-323 Abschnitt 9. `ROUTE_NAMES`
+  entsteht erst in T-326; ein Lauf, der gegen einen Zwischenstand mißt, ist schlimmer als eine
+  Lücke. Folgewelle.
+- **unit-tester und visual-qa auf den Oberflächenflächen.** T-326 ändert zugängliche Namen und
+  Tabulatorwege. Wer eine Schnittstelle umbaut und wer sie mißt, gehören in aufeinanderfolgende
+  Wellen — das ist die Lehre vom 2026-09-12 aus T-315/T-316, und sie gilt für Namen genauso wie
+  für Portsignaturen.
+- **A-A-103** (die SQL-Vorauswahl, die enger ist als die Entscheidung). Sie sitzt in
+  `repo-attachments.ts`, also auf derselben Fläche, die T-328 gerade zu messen beginnt. Erst die
+  Messung, dann der Eingriff — aus demselben Grund. Folgewelle, und A-A-103 zuerst, weil sie in
+  die Richtung Datenverlust zeigt.
+- **A-A-102** (der Wächter über eine neunte Löschstelle) hängt an T-327s Umbau derselben
+  Werkzeugkette und wäre ein zweiter Agent in denselben Dateien.
+
+### Welle 2 — Ergebnis
+
+**T-326 (frontend-dev) gebaut und gemessen, braucht Review.** Elf Ansichten, fester Kopf, 0..n
+feste Leisten, genau ein benannter Laufbereich; Zeiterfassung zwei nebeneinander, Einstellungen
+feste Schiene, Board waagerecht. Gemessen mit einem Wegwerfaufbau auf eigenen Ports: **88 Paare**
+aus 11 Ansichten × 8 Fenstergrößen und **400 Kombinationen** aus 20 Gestaltungen × 2 Dichten × 2
+Farbmodi. Der klebende Tabellenkopf greift zum ersten Mal (402,30 px vor und nach 2848 px
+Bildlauf), die Rinne hält die Inhaltsbreite bei kurzer und langer Liste auf 1030 px, der Portalfall
+R-323-1 ist geprüft (Abstand 36 → 36).
+
+**T-327 (domain-dev) fertig, braucht Review.** Der Baum kommt aus **sieben** Übersetzungsprogrammen
+statt aus einem; ob eine Datei TypeScript trägt, beantwortet `ts.getScriptKindFromFileName` ohne
+stillen Rückfall. Kausalnachweis getrennt: Umbau allein 76 → 83 Prüfsätze bei Verstoßeinträgen
+**49 → 49**, Gegenproben dann 83 → 106 und 49 → 72. Vier beidseitige Messungen; die feinste trennt
+die Zweige gegeneinander — derselbe Ausschalter **ohne** Datenbankmarke gibt genau einen Befund
+statt vier, womit gemessen ist, daß Satz (a) trägt und (c) allein nicht.
+
+**T-328 (unit-tester) fertig.** 14 Prüffälle, alle rot-zuerst **am echten Vorzustand**
+nachgewiesen: der alte `removeTodo`-Kontrollfluß aus `4a52edc` in einer Wegwerfdatei nachgebaut,
+fiel mit `expected [] to include '<hex>.png'`. Voller Lauf 1887 grün.
+
+**Drei Funde, die niemand bestellt hatte:**
+
+1. **`apps/desktop/sidecar/entry.ts` wurde nie gelesen** — der Einstiegspunkt der ausgelieferten
+   Sidecar-Binärdatei lag gemessen in einem Übersetzungsprogramm und in keiner Wächtermenge. Nach
+   zwei bekannten Lücken zu suchen hat eine dritte gefunden, die kein Bericht genannt hatte.
+2. **`file-port.test.ts:66` konnte nie etwas messen.** `['ok', false].includes(result.ok as never)
+   || result.ok === true` ist per `node -e` für **alle drei** möglichen Ausgänge wahr, den falschen
+   eingeschlossen. Dieselbe Klasse wie T-321, nur schärfer.
+3. **`vitest.config.ts` ist seit dem Erstcommit `d9555d0` nie angefaßt worden** — auch nicht bei
+   der Umstrukturierung T-249 bis T-272, die `apps/local-api/src` sein heutiges Gewicht gegeben
+   hat. Gemessen: 42,28 % Anweisungen, 37,68 % Zweige, 31,02 % Funktionen, isoliert und kombiniert
+   identisch. In die Schwelle aufgenommen wäre `test:coverage` sofort rot. Der unit-tester hat
+   nichts angefaßt und die Zahl gemeldet — richtig so; die Entscheidung ist teuer und gehört nicht
+   in einen Prüfauftrag.
+
+**Drei Entscheidungen, alle drei beim Orchestrator, alle drei getroffen:**
+
+- **E-113** — `position: relative` gehört an den Laufbereich, gegen E-112 und gegen T-323
+  Abschnitt 8.4. T-326 hat das Gegenteil gemessen: ohne die Zeile bekommt der **Rahmen** eine
+  zweite Bildlaufleiste (Todos 4242/768 bei 128 Verstößen, Buchungen 3564/768 bei 140, und so
+  fort), mit ihr stehen alle elf auf 768/768. Es ist dieselbe Klasse wie T-057, eine Ebene höher.
+  **Zwei Papiere, die einander bestätigen, sind keine Messung.**
+- **Z6 entschieden zugunsten von T-323.** AK-02 („null innere Laufbereiche im Rückfall") ist als
+  Zusage zurückgenommen: Eine Höhenabfrage könnte nur das Fenster messen, R-3 spricht aber vom
+  Inhaltsbereich. Im Rückfall läuft der Rahmen, der Laufbereich kann in seinem Boden von 4 rem
+  weiterlaufen — verschachtelt, nicht übereinander. Gehalten wird AK-01 und „nichts unerreichbar".
+  E-112 Punkt 3 ist entsprechend berichtigt.
+- **E-114** — ein Wortlautabgleich findet Zeichenketten, keine Geltungsbereiche. T-323 meldete
+  **eine** Fundstelle für `#inhalt` und schätzte sie als gültig ein; T-326 hat **sieben** rote
+  Dateien gemessen, jene eine eingeschlossen. E-087 bekommt einen zweiten Satz.
+
+**Vorbestehend gefunden, nicht behoben:** Die Sprungmarke „Zum Inhalt springen" führt heute auf das
+Dashboard — `parseRoute("#inhalt")` kennt die Adresse nicht und fällt auf die Vorgaberoute, der
+Fokus landet auf `<body>`. Unabhängig von T-326, eigener Auftrag.
+
+### Welle 3 — Freigabe, Augenschein und die sieben roten Dateien
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-329 | Augenschein über elf Ansichten gegen T-322 und T-323, in zwei Gestaltungen und beiden Dichten; die 22 Akzeptanzkriterien nachgefahren statt nachgelesen | visual-qa | eigener Bericht |
+| T-330 | Die sieben roten End-zu-End-Dateien auf `.screen` umstellen **und** `tests/e2e/viewport-fit.spec.ts` nach T-323 Abschnitt 9 bauen — `ROUTE_NAMES` steht bereit | e2e-tester | `tests/e2e/**` |
+| T-331 | Freigaberunde über T-326 (einschließlich E-113) und T-327 (Zählvorschrift, die drei zweiseitigen Messungen) | code-reviewer | eigener Bericht |
+| T-332 | A-A-105 als gebaut vermerken, mit der gemessenen Berichtigung, daß Satz (c) baubar ist und allein nicht trägt; dazu der Umbau von T-326 auf neue Flächen nach außen geprüft | security-checker | eigener Bericht, `docs/bedrohungsmodell.md` |
+
+**Bewußt nicht gestartet:** das Nachziehen beider Designpapiere auf E-113 und die
+Z6-Entscheidung (Abschnitt 8.4, AK-02). Findet T-331 an T-326 etwas, wandert es in dieselben zwei
+Papiere — sie zweimal anzufassen wäre der teurere Weg. Welle 4, ui-designer und ux-designer, je
+eigenes Papier. Ebenfalls nicht gestartet: der documenter (arbeitet als Letzter), der Auftrag zu `parseRoute`,
+A-A-102 und A-A-103, die Entscheidung über `vitest.config.ts`, und jeder Versuch, R-30 zu
+schließen, bevor T-331 und T-332 den Wächter gesehen haben — ein Wächter, der sich selbst für
+fertig erklärt, ist in dieser Kette fünfmal zurückgekommen.
+
+### Welle 3 — Ergebnis: dreimal Nacharbeit, einmal freigegeben
+
+**Und die Entscheidung, R-30 nicht auf Zuruf zu schließen, hat sich in derselben Welle bezahlt
+gemacht** — zwei Prüfer haben unabhängig drei Gestalten gefunden, die der neue Wächter durchläßt.
+
+**T-331 (code-reviewer) — beide Stränge nicht freigegeben.**
+
+Strang A, ein Befund hoher Schwere: `apps/web/src/styles/viewport-layout.css:303` — die Kinder von
+`.screen__body` und `.runarea` behalten `flex-shrink: 1`. Jede `.card` trägt `overflow: hidden`,
+hat damit nach Flexbox §4.5 die automatische Mindesthöhe 0 und **schrumpft, statt daß der
+Laufbereich läuft**. Gemessen bei 1280 × 820: eine Karte in `.settings-panel` steht auf 671 px bei
+1489 px Inhalt — **818 px abgeschnitten, und keine Fläche läuft**; eine Legendenkarte fiel auf 2 px
+zusammen, `clientHeight` 0. Betroffen: Dashboard, Export, Protokoll, Einstellungen. **Kein
+Akzeptanzsatz fängt es — AK-01 wird durch das Abschneiden sogar besser.** Es ist dieselbe Klasse,
+die T-326 für `.time-layout__* > .card` einzeln mit `flex: none` behoben hat; an der allgemeinen
+Stelle fehlt sie. Dazu drei mittlere: 10 px Rinnenversatz zwischen festem Kopf und Inhalt,
+`PANEL_LABEL` als zweite Liste neben `AREA_LIST`, und `base.css:41` ist jetzt **falsch**, nicht
+unvollständig.
+
+Bestätigt hat er, was am fragilsten aussah: **`ROUTE_NAMES` trägt** — fehlender Eintrag TS2741,
+überzähliger TS2353, falscher Wert TS2322, alle drei mit `tsc` nachgemessen.
+
+Strang B scheitert an einer Zeile: Die Lückenliste bei `proof-release-safety.mjs:1638` ist
+unvollständig. Satz 6a spannt seine Menge an `version.ts` auf statt an der Anforderung „wer kann
+über die ausgehende Anfrage entscheiden". Die Zählvorschrift dagegen stimmt zeichengenau, von
+unten nachgerechnet: 23 neue Gegenproben + 7 neue Nicht-Gegenproben + 3 umbenannte = 106.
+
+**T-329 (visual-qa) — Nacharbeit.** Zwei hohe Befunde in **ausdrücklich getragenen** Fensterbreiten,
+die reine Höhen- und Breitenmessungen nicht zeigen konnten: **V1** der Kanban-Kopf zerfällt
+zwischen 960 und 1087 px in Ein-Wort-Zeilen und schneidet den Titel auf „K" ab (T-326 hatte die
+Ursache, aber die Lage falsch beschrieben); **V2** die Zeiterfassung überlagert bei ≤ 68 rem den
+Inhalt beider Spalten unlesbar. T-326s 88 Paare und 400 Kombinationen waren an diesen Stellen
+grün, weil sie Höhe und Breite gemessen haben und nicht Lesbarkeit.
+
+**T-330 (e2e-tester) — teilweise, und der Grund lag beim Orchestrator.** Die sieben Dateien sind
+umgestellt (14 Fundstellen, begründet über eine eigene Zusicherung statt blind nach Vorschlag),
+`viewport-fit.spec.ts` steht, `docs/testplan.md` hat Abschnitt 33, und die E-114-Nachsuche fand
+eine **achte** Fundstelle, die sich als andere Bauart erwies und richtigerweise unverändert blieb.
+**Kein Fall war gegen einen echten Lauf geprüft:** ein verwaister `vite` aus einem eigenen
+Fehlversuch hielt Port 5173, zwei Beendigungsversuche wurden abgelehnt. Er hat das als Mangel
+gemeldet statt `tsc` und `--list` als Nachweis auszugeben — richtig. Port vom Orchestrator
+freigegeben, Lauf fortgesetzt.
+
+**T-332 (security-checker) — A-A-105 freigegeben mit verengter Zusage, ein Strang nicht
+freigegeben.** Er hat mit einem **eigenen** Ausschalter kontrolliert statt mit dem bekannten: die
+bekannte Bauart ist rot (105/1), **drei Gestalten gleicher Wirkung kommen durch** — der
+`source`-Port aus T-331, sowie K-1 (`recordCheck` wartet einen aus `app_setting.locale` gelesenen
+Abstand ab, `composition.ts` und `main.ts` bleiben zeichengleich) und K-2. Beide messen am echten
+Prüfer **0 statt 14** ausgehende Anfragen bei Lauf 106/0. Der eigentliche Hebel ist kein
+Wächterproblem: `version.ts:385` wartet unbefristet auf ein fremdes Versprechen, und `:592`/`:594`
+stellen `await remember(...)` vor `await source.latest(...)` — **ein Wurf ist behandelt, ein
+Nie-Eintreffen nicht** (A-A-106).
+
+Freigegeben: keine Fläche nach außen (null Netzmarken in allen hinzugefügten Zeilen,
+`proof:shell-surface` 7 + 54), kein Satz verloren (233 entfernte Zeichenketten gemessen),
+`proof:clamp` 21/0.
+
+**Nicht freigegeben und älter als alles in dieser Welle:** In `glass` und `liquid-glass` hängt die
+Rückfrage vor dem Öffnen einer Datei an der Karte statt am Fenster — Knopf „Öffnen" bei y = 952,
+**außerhalb des Fensters**, die Fläche rollt mit. Mit den Stilblättern aus `HEAD` dieselbe
+Geometrie; der Befund gehört nicht T-326. Eine Bestätigungsfläche, die in zwei von neunzehn
+Gestaltungen nicht erreichbar ist, ist keine Bestätigung. Eingetragen als **R-31**, Gegenmittel
+A-A-108.
+
+**R-30 bleibt offen** und ist um die drei durchgekommenen Gestalten ergänzt. Der siebte
+Wächtername schließt ihn nicht — A-A-106 schließt ihn.
+
+### Welle 4 — Nacharbeit aus drei Prüfberichten
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-334 | `flex-shrink` an den Kindern der Laufbereiche (hoch, T-331), Rinnenversatz, `PANEL_LABEL`/`AREA_LIST`, `base.css:41` berichtigen; V1 Kanban-Kopf 960–1087 px und V2 Zeiterfassung ≤ 68 rem (T-329); **A-A-108** — Portal nach `document.body` in `DialogSurface` (R-31, vorbestehend) | frontend-dev | `apps/web/**` |
+| T-335 | Lückenliste `:1638` an der Anforderung aufspannen statt an `version.ts`, `:486`, **A-A-107** (`CHECKER_CALL_KEYS`, Wertform des Schlüssels `source`) — und die drei durchgekommenen Gestalten aus T-331 und T-332 beidseitig gemessen | domain-dev | `apps/local-api/scripts/**` |
+
+**Bewußt nicht gestartet:** **A-A-106** (`version.ts:385`, das unbefristete Warten) — es ist der
+eigentliche Hebel hinter R-30, sitzt aber in `apps/local-api/src/features/version/**`, und T-335
+baut gerade den Wächter, der genau diese Stelle mißt. Wer eine Stelle umbaut und wer sie mißt,
+gehören in aufeinanderfolgende Wellen. Welle 5, mit Prüffall. Ebenfalls nicht gestartet: das
+Nachziehen der Designpapiere (wartet jetzt zusätzlich auf T-334), der `parseRoute`-Auftrag,
+A-A-102, A-A-103, die Entscheidung über `vitest.config.ts`, und der documenter.
+
+### Welle 4 — Ergebnis
+
+**T-334 (frontend-dev) fertig**, alle vier Punkte behoben und jeder mit Vorher/Nachher im Browser
+gemessen. Die Zahlen sagen, wieviel verdeckt war: Karte „Timer" 2 → 170 px, Export „Vorlage und
+Rundung" 67 → 352 px (**der von B-6.1 verlangte Base64-Satz war damit unerreichbar**),
+Protokoll-Legende 2 → 180 px; der Export lief vorher **gar nicht** (613/613), jetzt 2283/613.
+Rinnenversatz über 44 gemessene Fälle auf 0. Die Rückfrage vor dem Öffnen einer Datei hängt per
+Portal am Dokumentkörper — 1280 × 820 bei (0,0) statt 644 × 298 bei (265,364). `proof:surface` ist
+um den Portalfall erweitert, statt den Befund stehenzulassen.
+
+**Ein eigener Befund, den keiner der drei Prüfer hatte:** `.screen__actions` war bei 960 px um
+89 px abgeschnitten — „Spalten verwalten" an der **getragenen Mindestbreite** unsichtbar, schon vor
+T-326, weil `.app__main` `overflow-x: hidden` trägt. V1 hatte die Ursache, nicht diese Folge.
+
+**T-335 (domain-dev) fertig.** Gestalt 6 heißt nicht mehr „die Verdrahtung", sondern **„die
+Entscheidungsfläche"**, und ihre Menge ist an der Anforderung neu gezogen: 6a über **beide**
+Entscheidungsmodule, 6e/6f über die Tür, durch die ein Port hereinkommt, 6g über die Warteliste vor
+der Anfrage. Alle drei gemeldeten Gestalten rot, beidseitig gemessen (alter Leser 106/0, neuer je
+129/1), jede über zwei bis drei unabhängige Zweige. Acht Mutationen am Leser selbst. Lauf
+**130/0**, `erwartet` 72 → 96. A-A-107 gebaut.
+
+**Ein vierter Ausschalter derselben Klasse, beim Bauen gefunden und mitgeschlossen:**
+`aufgeloesteQuelle` löste nur relative Importquellen auf — `apps/local-api/package.json` hat
+**keine** `exports`-Tabelle, und `apps/desktop/sidecar/entry.ts` deep-importiert im ausgelieferten
+Sidecar `@takt/local-api/src/main.ts`. Ein Import über `@takt/local-api/src/features/version/…`
+ging bis heute still durch 6a.
+
+**Die ehrliche Grenze, und sie ist der Ertrag des Auftrags.** Beide Prüfer und der Bauende kommen
+unabhängig zum selben Schluß: **Die Klasse ist über den Quelltext nicht vollständig schließbar.**
+T-335 hat den Beweis beim Bauen gefunden — `async recordCheck(at) { return new Promise<void>(() =>
+undefined); }` hat kein `await`, kein `setTimeout`, keine Datenbankmarke und keinen fremden Namen,
+und wirkt wie K-1. Deshalb steht an dieser einen Stelle ein Zeichenvergleich statt einer Regel, mit
+benanntem Preis. Was die Klasse wirklich schließt, mißt **Anfragen statt Zeichen** — und das wird
+erst mit **A-A-106** baubar.
+
+**Ein Fehler des Orchestrators, fürs Protokoll:** Der Nachtrag mit T-330s A2-Messung ging an T-335
+statt an T-334. T-335 hat ihn als fremde Hoheit zurückgewiesen und nichts angefaßt — richtig.
+Verloren ist nichts, weil T-334 dieselbe Klasse unabhängig gefunden und behoben hat. Die Lehre ist
+trotzdem nicht „ging gut aus": Zwei Agenten derselben Welle sind über ihre Kennung ununterscheidbar,
+sobald man sie über eine Zeichenfolge anspricht.
+
+**Offen und ungeklärt:** Sind T-330s zehn A2-Verstöße bei 960×640 / 831×640 / 640×480 echte Fehler
+oder der **richtige** Rückfall nach R-3? T-334 hat unabhängig gemessen, daß `div.settings-layout`
+bei 1024 × 640 um 86 px über den Rahmen ragt, und hält genau das für richtig — seine Vorschrift
+nimmt `.screen__body--frame` deshalb aus der Meßmenge. Beide Messungen können stimmen. **Erst
+klären, dann messen.**
+
+### Welle 5 — läuft: das Qualitätstor über die Nacharbeit
+
+| ID | Aufgabe | Rolle |
+|---|---|---|
+| T-336 | Freigabe über T-334 (Sammelregel, `Scrim`, drei selbst getroffene Gestaltungsentscheidungen, erweiterter `proof:surface`) und T-335 (Zählvorschrift 106 → 130, der bewußte Zeichenvergleich und sein Preis) | code-reviewer |
+| T-337 | A-A-108 an der **Menge** statt am Fall — hängt *jede* Bestätigungsfläche am Fenster, und fängt sie den Tabulator? Dazu T-335 mit einem **eigenen** Ausschalter und die Prüfung der behaupteten Grenze | security-checker |
+| T-338 | Augenschein über die fünf behobenen Stellen — und das **Bild** zur offenen A2-Frage | visual-qa |
+| T-339 | `fensterfeste-flaechen.md`: Abschnitt 8.4 (E-113), `scrollbar-gutter` an der Rahmenansicht, `flex-basis: 10rem`, der geschärfte Meßsatz samt seiner Untergrenzen | ui-designer |
+| T-340 | `-fluss.md`: AK-02 zurücknehmen, Namen der Einstellungs-Laufbereiche, „eine Bestätigungsfläche hängt am Fenster" — und die **Regelentscheidung** zur A2-Frage | ux-designer |
+
+**Kein Agent ändert in dieser Welle `apps/**` oder `tests/**`.** Alle fünf messen oder beschreiben
+einen stehenden Stand — das ist die Bedingung dafür, daß fünf nebeneinander laufen dürfen.
+
+**Bewußt nicht gestartet, und jedes mit Grund:**
+
+- **A-A-106.** T-335s Gestalt 6g mißt genau die Warteliste, die A-A-106 umbaut — der Bauende würde
+  `CHECKER_AWAITED_BEFORE_REQUEST` ändern, während der Prüfer denselben Lauf freigibt. Erst die
+  Freigabe, dann der Umbau.
+- **Die sechs roten End-zu-End-Fälle** und der Nachlauf des A2-Meßsatzes. Beide brauchen Änderungen
+  in `apps/**`, und dort mißt gerade der Augenschein.
+- **Die A2-Klärung als Messung.** Sie ist zuerst eine Regelfrage (T-340) und ein Bild (T-338), nicht
+  ein Lauf. Erst klären, dann messen.
+
+### Welle 5 — Ergebnis: drei Freigaben, drei blockierende Befunde, zwei Entscheidungen
+
+**Die A2-Frage ist beantwortet, und sie war keine Meßfrage** (E-115). Drei Wege, ein Schluß: die
+Regel (960 × 640 ist die getragene Untergrenze), das Bild (bei **1280 × 480** null Verstöße — der
+Auslöser ist **Breite**, nicht Höhe, und drei Überlaufzahlen sind mit anderen Testdaten reproduziert),
+die Rechnung (**fester Teil ≤ 500 px bei 960 × 640**, und die 588 px Rahmenhöhe decken sich mit
+T-330s unabhängig gemessener `clientHeight`). T-334s Annahme, es sei der Rückfall R-3, ist widerlegt.
+Es ist dieselbe Familie wie der Kanban-Kopf, nur nicht zu den Filterleisten von Todos, Buchungen und
+Protokoll gezogen.
+
+**Drei blockierende Befunde, alle von einer Art: die Messung maß etwas anderes als die Zusage.**
+
+| Wo | Was | Beleg |
+|---|---|---|
+| `viewport-layout.css:221` | `overflow: hidden` am festen Kopf schneidet den **Fokusring** ab (4 px, 5 unter `prefers-contrast: more`) | 3 427 verschiedene Bildpunkte von 135 200 — **T-334s Bildmessung verglich unfokussierte Köpfe** |
+| `proof-surface.mjs:1458` | die Zusage zu A-A-108 ist am **Portalfall** aufgespannt statt an der Anforderung | vier Mutationen, alle **28/0 grün**, eine in einer Datei, die der Lauf nie erreicht |
+| `proof-release-safety.mjs:1383` | die Lückenliste hängt noch an den Gestalten 1–5 | zwei Ausschalter über eine Umgebungsvariable, **130/0 grün** — gegen die Zusage „keine Umgebungsvariable", die der Port zwei Zeilen über sich selbst führt |
+
+**R-31 geschlossen, an der Menge gemessen** — drei Stellen zeichnen eine Abdunklung, alle über
+`Scrim`; 342 Messungen (19 Paletten × 2 Modi × 9 Flächen), eine einzige Geometrie, 822
+Tabulatorschritte, keiner außerhalb. **Und der wichtigste Satz der ganzen Welle handelt vom ersten
+Meßlauf, der nichts maß:** `designsystem.tsx` lädt `startup.css` nicht, also keine Paletten — 67
+Karten, **null** mit `backdrop-filter`. 342 grüne Zahlen hätten „in `glass` ist alles gut" gesagt,
+ohne daß `glass` an war. Erst die **feuernde** Gegenprobe machte daraus eine Aussage. Eine Meßreihe
+ohne feuernde Gegenprobe mißt ihre eigene Abwesenheit.
+
+**R-30 bleibt offen, mit berichtigtem Beleg.** T-335s `new Promise(() => undefined)` wäre heute rot;
+der bessere Beleg ist **K-7** — dieselbe Technik, vier Zeilen versetzt in den Rumpf des
+`write`-Literals, den 6b als Literal prüft, aber nicht liest: 130/0, **0 statt 1** Anfrage. Die
+Lücke liegt nicht in der Schreibweise, sondern in der Stelle.
+
+**Neu: R-32** (der Wächter über die Abdunklungen) und **R-33** — die Meldung, die nie ankommt: K-4
+schaltet nicht die Anfrage ab, sondern die **Auskunft**. Für den Benutzer dasselbe Ergebnis. Wer nur
+die Anfrage zusichert, hat die halbe Strecke zugesichert.
+
+**Eine Zahl aus T-334 ist falsch und wandert sonst weiter:** Die Umbruchschwelle des Kopfes ist nicht
+~1067 px, sondern **≈ 1259** — nachgerechnet aus T-334s eigenen Zahlen (160 + 16 + 785,3 = 961,3
+gegen 982 px Inhaltsbreite bei 1280, also die 20,7 px Luft, die er selbst beziffert). Fachlich heißt
+das: Der **umbrochene** Kopf ist über die getragene Breite 960–1259 die **Regelgestalt**. Wer
+zwischen 1100 und 1259 gegen die alte Zahl prüft, meldet einen Fehler, den es nicht gibt.
+
+**Entschieden:** E-115 (fester Teil ≤ 500 px, Zusage schärfen **und** beheben), E-116 (eine
+Bestätigungsfläche hängt am Fenster — `position: fixed` sichert das nicht zu, weil jede
+Mal-Eigenschaft eines Vorfahren den umschließenden Block verschiebt).
+
+### Welle 6 — läuft
+
+Gestartet: **T-341** (frontend-dev), **T-342** (domain-dev), **T-343** (spec-ux-reviewer).
+Nicht gestartet: der e2e-Nachlauf und die sechs roten Fälle — T-341 bewegt gerade `apps/web/**`,
+dort zu messen hieße gegen einen Zwischenstand messen. A-A-106 und A-A-111 warten auf die Freigabe
+des Wächters, den T-342 gerade umbaut. Beides Welle 7.
+
+### Welle 6 — Ergebnis
+
+**T-343 (spec-ux-reviewer) — nicht freigegeben, fünf blockierende Befunde, und der erste trifft den
+Orchestrator.** Der ganze Auftrag hatte **keine Anforderungs-ID**; keine der zitierten trägt.
+Nachgetragen als **Abschnitt 25, A-25.1 bis A-25.7** in `docs/spec.md`, nach dem Hausbrauch vom
+Vortag und ausdrücklich als **bestätigungsbedürftig** gekennzeichnet.
+
+**B-02 ist mein Fehler und E-113 zum zweiten Mal:** Ich habe die Berichtigung der beiden Papiere auf
+zwei Agenten aufgeteilt, die einander nicht lesen konnten — T-339 erklärt den 86-px-Überlauf bei
+1024 × 640 für richtig und macht ihn zur benannten Ausnahme, T-340 und E-115 nennen ihn einen
+Fehler. **Die Behebung gehört in einen Auftrag.**
+
+**B-04:** Der Meßsatz, auf den sich beide Papiere berufen, ist **nicht gebaut** — A8 und 9.6 fehlen
+vollständig, während 9.4 im Präsens behauptet, er sei „zusätzlich zugesichert". **B-07:**
+Tastaturregression — `tabIndex` und Sprungmarke sitzen auf `.screen__body--frame`, einem Kasten,
+der im getragenen Fenster nicht läuft; nach „Zum Inhalt springen" tut Bild-ab nichts.
+
+**Die erbetene Einzelfreigabe ist erteilt, aber enger gefaßt:** Der umbrochene Kopf trägt A-13.1 und
+A-13.2 und ist gegenüber vorher in jedem Punkt besser — er ist aber die Regelgestalt **einer von elf
+Ansichten**, nicht der halben getragenen Breite aller.
+
+**T-341 (frontend-dev) fertig.** Der Fokusring war nicht ein Knopf, sondern **acht Ansichten plus
+die Kanban-Werkzeugzeile**, je 0,0 px: im Bild **null** Ringpunkte oben gegen 50–1 806 an den drei
+anderen Kanten. Nachher 4,0 px (5,0 unter `prefers-contrast: more`), 22 von 22, und ohne Fokus sind
+9 von 11 Ansichten pixelgleich. Regel G mißt die Verankerung jeder gezeichneten Abdunklung: ohne sie
+32/0 grün, mit ihr 33/1 rot; `proof:surface` 28 → 34.
+
+**Die Ursache der Filterleisten ist zwei Pixel breit:** `@container (max-width: 40rem)` gegen
+**39,88 rem** Behälterinhalt an der getragenen Untergrenze — der feste Teil sprang dort um 70 px auf
+89,9 % des Budgets. Schwelle jetzt gerechnet: 449,3 → 379,3 px, 75,9 %. **Und die Schwelle des
+Kopfumbruchs ist gemessen: 1259 px** (1260 nicht umgebrochen, 1259 umgebrochen) — T-339s Rechnung
+trifft exakt, T-334s „~1067" ist im Bericht berichtigt.
+
+**Damit klärt sich B-03 von selbst:** Bei 831 × 640 und 640 × 480 bleiben die Verstöße
+**unvermeidlich** — dort nimmt die Hülle 225 statt 52 px (Bandnavigation 173 px), der
+kleinstmögliche Kopf ist ≈ 188 px gegen 175 px Budget. Genau die Größen, die T-340 als richtigen
+Rückfall eingestuft hat. A2 gilt ab 960 × 640, darunter mißt die schwächere Zusage; die zehn
+Verstöße sind aufgeteilt und beide Teile erklärt.
+
+**T-342 (domain-dev) fertig, 145/0.** Er hat nicht drei Namen nachgetragen, sondern den Weg in
+**vier Arten von Stellen** geordnet — gelesen, eingegrenzt, **nur durchlaufen**, außerhalb des
+Baums. **Die dritte Art ist die Klasse, und alle drei Ausschalter saßen darin.** Drei neue Sätze:
+6h liest den Rumpf des Portliterals, 6i die freien Laufzeitnamen, 6j den Ausdruck der Auskunft. 6i
+ist keine Namensliste — ein Modul kommt auf genau zwei Wegen an etwas heran, das es nicht selbst
+erklärt hat, und die erste Tür nagelt Gestalt 5 seit T-290. Jede Gestalt beidseitig gemessen, vorher
+130/0 grün, nachher je 144/1.
+
+**Zu K-4: die Stelle ja, die Klasse nein.** Derselbe Ausschalter wirkt auch in `current()`, in der
+Route, in der Antwortgestalt und in der Oberfläche. Der vollständige Nachweis existiert bereits —
+aber am **Verhalten**: `tests/e2e/version-check-live.spec.ts` TP-VER-10 mißt den Dialog auf dem
+Bildschirm und wird von K-4 rot. R-33 ist halbiert, nicht geschlossen.
+
+**Ein Fehler im Auftragstext, fürs Protokoll:** Ich hatte A-A-110 und A-A-111 gegenüber dem
+Bedrohungsmodell vertauscht beschriftet. T-342 ist dem Bedrohungsmodell gefolgt und hat beide
+gebaut — richtig.
+
+### Welle 7 — Ergebnis
+
+**T-344 (ui-designer, beide Papiere in einem Auftrag) — die drei Widersprüche sind entschieden.**
+A8 nimmt `.screen__body--frame` nur noch **unterhalb** 960 × 640 aus; „getragen" heißt in beiden
+Papieren dasselbe, die zweite Zeile heißt jetzt **„bedienbar im Browserbetrieb"**. B-07 entschieden:
+die Sprungmarke zeigt auf den **Inhaltshalt**, AK-14 verlangt **null** Zwischenschritte statt
+„genau einen", und neu ist **A9** — Bild-ab muß meßbar etwas bewegen. Er hat dabei **OF-6 selbst
+entschieden** (die Bereichsschiene verliert bei knapper Höhe ihren Zusatz); ohne das wäre B-02 eine
+Berichtigung ohne Ausweg geblieben.
+
+Sein Satz über den Irrtum ist der brauchbarste dieser Welle: T-334 maß 86 px, T-341 maß 62 px —
+dieselbe Sache aus verschiedener Höhe. **Eine Messung trägt eine Zahl, keine Einordnung.**
+
+**Zwei Dinge, die in Welle 8 niemand übersehen darf:** Die B-07-Entscheidung **verlegt eine
+Kennung** — E-114 gilt, der bauende Auftrag sucht die **Benutzung** von `#inhalt` (elf Dateien,
+sieben als Geltungsbereich), nicht den Wortlaut. Und A8 ist bei 1024 × 640 **in der Vorschrift** rot — im
+gebauten Lauf grün, weil er `.screen__body--frame` noch in jeder Größe ausnimmt (T-351 B-19).
+Dieser Satz stand hier zwei Wellen lang falsch: er galt dem Papier, nicht dem Bestand.
+
+**T-345 (e2e-tester) — B-04 zur Hälfte geschlossen** (berichtigt am 2026-09-13 nach T-351; „geschlossen" war zu weit). A8 und 9.6 vollständig gebaut, beide Untergrenzen, A7s
+zweite Hälfte über 44 Kombinationen, A2 aufgeteilt in die starke Zusage (vier Größen ≥ 960 × 640)
+und eine schwache daneben. **Der rot-zuerst-Nachweis, der bis heute auf einer Handmessung ruhte,
+steht jetzt als Lauf:** eine dienst- und portunabhängige Gegenprobe über `page.setContent()`, die
+T-334s Flexbox-Fehler mechanisch nachbaut — beidseitig gefahren, vorher rot, nachher grün. Lauf
+gegen die echte Anwendung 6/6 grün.
+
+**TP-VER-10 verknüpft und gefahren** (5/5 grün), und **beide nie gelaufenen Konfigurationen
+nachgeholt**: `version-check` 5/5, `attachment-persistence` 2/2.
+
+**Dabei die dritte und vierte Kopie derselben Fehlannahme gefunden.** `version-check-services.ts`
+und `attachment-persistence-services.ts` trugen weiterhin das Waisenmuster von vor T-330. Damit
+sind es **vier** eigenständige Kopien derselben Windows-only-Annahme — T-263 hatte die zweite
+erkannt und als „braucht einen eigenen Auftrag" zurückgestellt, und der Auftrag kam nie. Alle vier
+sind jetzt behoben und geprüft.
+
+**Sechs rote Fälle, sauber getrennt:** `kanban.spec.ts:288` und `toast-eviction.spec.ts:123` waren
+Wettläufe **im Prüffall** (ein nicht abgewartetes `isVisible()`, eine Navigation unter bereits
+angehaltener Uhr) — behoben und grün. Die drei in `timer-stop-announcement.spec.ts` liegen in der
+**Anwendung**: ein neues `context.timerRecovery` in `apps/local-api/src/features/timer/timer.ts`
+verengt „verwaist" auf Einträge vor dem Start des laufenden Dienstes. Gemeldet, nicht angefaßt.
+`attachment-crud.spec.ts:35` ließ sich zweimal nicht nachstellen.
+
+**T-346 (code-reviewer) — beide Stränge Nacharbeit, je ein blockierender Befund**, und beide an der
+Zusage statt am Lauf. Die CSS-Arbeit aus T-341 ist **freigegeben** (die „zwei Pixel" sind echt:
+40 rem − 39,88 rem = 1,92 px, vier Behälterbreiten exakt linear). Blockierend: `classTokensOf` liest
+den Kopf einer Vorlagenzeichenkette nicht — und **6i's Zusage** „genau zwei Wege" ist widerlegt.
+**Er blockiert dabei nicht den Lauf, sondern den Wortlaut für `risks.md`** — 145/0 ist richtig,
+falsch wäre erst „die Menge der Türen ist geschlossen". Derselbe Fehler, der in T-289/T-290 vier zu
+weite Sätze gekostet hat, diesmal vor dem Eintragen erwischt.
+
+**T-347 (security-checker) — Teil 1 nicht freigegeben, und der Befund ist eine neue Bauart.** Regel
+G fängt die vier Gestalten aus R-32; **acht weitere kommen durch**. Die schwerste, **G-4**, erzeugt
+eine **falsche** Zusage statt einer fehlenden: vier Zeilen mit einem eigenen Namen `createPortal`
+lassen den Lauf die Fläche als verankert **melden**, während sie an ihrer Karte hängt. Eine Zeile in
+zwei Regeln ist die Ursache. Teil 2 freigegeben mit Nacharbeit (ein dritter Weg über einen
+gerechneten Quellnamen, und eine **fünfte Art von Stelle** — `packages/domain` kommt im ganzen Lauf
+nicht vor). Teil 3 sauber.
+
+**Sechs von neun Torstufen sind auf diesem Stand grün gemessen** — `typecheck`, `boundaries`,
+`contrast`, `test:coverage` (91,83 %), `test:rust` 69/0, `audit`, dazu fünfzehn Nachweisläufe.
+**Nicht gefahren:** `verify:bundle` und sieben portgebundene Nachweise (Ports waren an T-345
+vergeben, und zeitweise hielt eine echte `pnpm desktop`-Sitzung des Benutzers 5173/17843/17844 —
+richtigerweise unangetastet gelassen).
+
+### Welle 8 — Ergebnis
+
+**T-351 (spec-ux-reviewer) — nicht freigegeben, und drei der fünf Befunde sind Sätze von mir.**
+Abschnitt 25 deckte den Auftrag vollständig, sagte aber an drei Stellen **mehr**: A-25.5 kannte die
+zwei benannten Ausnahmen nicht, A-25.7 nahm eine erteilte Einzelfreigabe zurück und widersprach
+A-25.5 im selben Abschnitt, A-25.8 fehlte ganz — damit war gewollter Bestand (Startbilder,
+Musterseite, Aufgabenbereich) zur Verletzung erklärt. **Alle drei berichtigt.** Ein nachgetragener
+Abschnitt, der mehr zusichert als verlangt war, ist derselbe Fehler wie ein fehlender.
+
+**Und er hat zwei falsche Sätze in diesem Board gefunden.** „B-04 geschlossen" war zu weit. Und
+„A8 bleibt bei 1024 × 640 beabsichtigt rot" galt der **Vorschrift**, nicht dem **Bestand** — der
+gebaute Lauf nimmt `.screen__body--frame` weiterhin in jeder Größe aus und ist dort grün. Der Satz
+stand zwei Wellen lang falsch und hätte eine Nacharbeit ausgelöst, die nichts zu tun gehabt hätte.
+Beides berichtigt. **B-20** neu: A9 verlangt „die Bildlaufstelle genau dieses Kastens", 8.5 sagt für
+die Zeiterfassung unter 68 rem, daß dort der Rahmen rollt — zwei der vier Meßgrößen liegen darunter.
+
+**T-348 (frontend-dev) fertig, `proof:surface` 34/0 → 45/0.** A-A-112 behoben — `portalRufOf` löst
+`createPortal` gegen seine Einfuhr auf, örtlicher Name geht vor; das schließt G-4 und G-7 mit
+derselben Funktion. **Regel G ist neu aufgespannt: die Menge kommt aus den Stilblättern**
+(`position: fixed` plus volle Ausdehnung) statt aus dem Namen `scrim`. Alle acht Gestalten je 44/1
+rot, Nullpunkt 45/0, vier Dateien byteweise gleich. A9 am **Verhalten** gemessen: Einstellungen
+Bild-ab 0 → 392 px, Kanban Pfeil rechts 0 → 36 px. Bereichsschiene ohne Zusatz **415 px**, Rahmen
+bei 1024 × 640 577/515 → **515/515**.
+
+**Er sichert ausdrücklich zwei der fünf Teilsätze von A-25.6 zu, nicht fünf** — „vollständig
+sichtbar" und „fängt den Fokus" sind Fragen an das Bild, nicht an einen Quelltextlauf —, und diese
+Grenze steht **im Kopf der Regel**, nicht nur im Bericht.
+
+**T-349 (domain-dev) fertig, 145/0 → 154/0.** A-A-106 an der Fachstelle: `remember` synchron, das
+Schreiben angestoßen statt abgewartet, im Rumpf der Anfrage genau ein `await`. Gemessen: ein
+Speicher, dessen `write` nie eintrifft, ergibt **0 → 10 Anfragen**. Beim Bauen fiel die Lücke eine
+Zeile weiter rechts auf — ein Warten **hinter** der Anfrage war dieselbe Klasse; der Wächter mißt
+jetzt den ganzen Rumpf. Ehrlich benannt: die Klasse ist enger, nicht zu; die Reihenfolgezusage ist
+schwächer geworden; und `checker.test.ts` ist **aus dem falschen Grund grün** — weil der Adapter
+synchron schreibt, nicht weil der Prüfer wartet. Dritter Fall dieser Klasse nach T-321 und
+`file-port.test.ts:66`.
+
+**T-350 (domain-dev) fertig — der Verdacht aus dem Auftrag ist widerlegt, nicht abgewogen.** Die
+Verengung ist **richtig**: sie ist nicht eine Verschärfung von E-036, sondern dessen **erste
+tatsächliche Umsetzung**. `orphaned()` lieferte jede Zeile mit `ended_at IS NULL` — und weil
+`ux_time_entry_running` nur eine zuläßt, war das **immer der gerade laufende Timer**: die Abfrage
+beantwortete „ist etwas abgestürzt?" mit dem Timer, den der Benutzer laufen sieht. Auf zwei Wegen
+gemessen, darunter mit `kill -9` am echten Dienst. Die drei Prüffälle weichen, nicht die Anwendung.
+
+**Dabei eine hohe Lücke gefunden, eingetragen als R-34:** `dataArchive.replaceAll` ist ein
+**zweiter Eingang** für offene Einträge, und er kommt nach dem Start. Ein eingespieltes Archiv mit
+laufendem Timer gilt nicht als verwaist — ein Stopp buchte **39 600 s Wanduhr statt 1 200 s**.
+Wörtlich der Schaden, gegen den E-036 gebaut wurde, und er landet in der Abrechnung. Nicht behoben:
+die Behebung ist ein Polaritätswechsel über fünf Dateien.
+
+### Welle 9 — Ergebnis
+
+**Drei Freigaben, zwei Nacharbeiten, und `pnpm test:e2e` fährt zum ersten Mal alle vier
+Konfigurationen.**
+
+**T-352 (e2e-tester) fertig, 130/130 grün.** B-19 geschlossen: A8s `--frame`-Ausnahme gilt nur noch
+unterhalb 960 × 640 — **mit einem Gegenprobenpaar, das zeigt, daß die alte Ausnahme den bekannten
+E-115-Überlauf verdeckt hätte**; `.board` steht in der Meßmenge; A2a ist **ohne Untergrenze** über
+alle sieben Größen gebaut, dazu ein eigener Fall bei 320 × 256. A9 ist nach T-354s Berichtigung
+gebaut, die **mitten im Auftrag** eintraf. Dabei zwei echte Eigenheiten von Chromium ohne Kopf
+gefunden und umgangen (eine vorherige Mausbewegung ist nötig; `scrollTop` hinkt nach
+`keyboard.press()` kurz nach) — im Quelltext dokumentiert statt weggeschliffen. Die drei
+Timer-Fälle laufen jetzt über eine echte Neustart-Vorrichtung mit eigener Konfiguration.
+
+**Die `&&`-Verkettung in `test:e2e` ist gefallen** (Orchestrator): Alle vier Konfigurationen laufen
+jetzt immer, der Exitcode ist die Veroderung. Bisher blieben nach einem roten ersten Lauf die
+übrigen **ungefahren** — genau das hat in T-330 den Nachweis gekostet.
+
+**T-353 (visual-qa) — freigegeben, keine neuen Befunde**, erster Augenschein seit T-338. Er hat
+dabei die **zwei Teilsätze von A-25.6 geschlossen, die T-348 ausdrücklich nicht zusicherte**: Die
+Rückfrage ist in `classic`, `dark-base` und `glass` vollständig im Fenster und fängt den Fokus über
+zehn Tabulatorschritte. Sein erster Verdacht auf einen abgeschnittenen Fokusring war **sein eigener
+Vorzeichenfehler** — offengelegt und mit einem Zoombild widerlegt.
+
+**T-354 (ui-designer) fertig.** A9 (c) hatte eine **Identität** gemessen, wo eine **Wirkung**
+gemeint war. Jetzt zwei Zweige, und der zweite ist **abschließend aufgezählt** — offen formuliert
+wäre die Marke am Rahmen der Einstellungen bei 1024 × 640 grün gewesen, **also grün an genau dem
+E-115-Befund, aus dem A9 entstand**. AK-25 ist zurückgeschnitten und trägt jetzt einen Meßstand über
+alle fünf Teilsätze.
+
+**T-355 (unit-tester) fertig.** Rot-zuerst gegen `HEAD` geführt und byteweise zurückgesetzt. Der
+aus dem falschen Grund grüne T-279-Fall sagt jetzt, daß er das **synchrone Schreiben des Adapters**
+mißt — und daneben steht ein Fall, der die **heutige, schwächere** Zusage festnagelt: angestoßen,
+aber bei Abschluß der Anfrage nicht abgeschlossen.
+
+**T-356 (code-reviewer): B und C freigegeben, A Nacharbeit.** Der wertvollste Satz betrifft R-34:
+**ein `captureTimerRecovery` hinter `replaceAll` bringt gemessen 1 200 s statt 39 600 s** — eine
+Zeile, nicht der Polaritätswechsel über fünf Dateien. Blockierend an Strang A: Regel G kommt aus
+**einer Schreibweise** der Eigenschaft, nicht aus der Eigenschaft.
+
+**T-357 (security-checker): Teil 1 nicht freigegeben.** **Elf** Gestalten kommen durch, zwei davon
+im Browser nachgemessen — in `glass` hängt die feste Fläche an der Karte (Knopf bei y = 5481
+außerhalb), und eine Palette mit `.scrim { position: static }` legt sie unter das Fenster, **während
+der Lauf „1, davon 1 verankert" meldet**. Teil 2 trägt in jeder Lage; drei Reste, darunter: der
+fünfte Weg braucht **kein `await`** — ein synchroner Riegel ist 154/0 grün und drückt 40 Anfragen
+auf 3.
+
+**R-34 ist geschärft und ist der einzige Punkt der Liste, der ohne Zutun eines Angreifers Geld
+bewegt:** keine Obergrenze (gemessen `"Zeit": 8 999 868` in einer Exportzeile), **kein Angreifer
+nötig** (eine ehrliche Sicherung mit laufendem Timer genügt), und der Wert steht **nicht in der
+Datei** — ihn rechnet der empfangende Rechner aus.
+
+### Welle 10 — Ergebnis (zweiter Anlauf; der erste starb am Abrechnungslimit)
+
+**Alle drei Agenten der Welle starben am 2026-09-13 gegen 21:07 gleichzeitig an einem harten
+API-Fehler** — nicht an der Aufgabe. Sie hinterließen **fünf halbfertige Produktivdateien**, T-360
+sogar zwei Quelldateien und ihren Wächter zugleich. Der zweite Anlauf bekam deshalb als **ersten
+Schritt** den eigenen Zwischenstand: lesen, den Lauf einmal dagegen fahren, begründet weiterbauen
+oder verwerfen. **Das hat sich in allen drei Fällen sofort bezahlt gemacht.**
+
+**T-358 — R-34 zur Hälfte geschlossen, und die andere Hälfte erst dadurch sichtbar.** Er hat vier
+Behauptungen des Abbruchs bestätigt und **eine widerlegt:** Der Leser, den der erste Anlauf als
+harmlos abtat, war *gereiht* vor dem Schreiben, lief aber **nach dem COMMIT und vor der Aufnahme** —
+und sah 39 600 s ohne Waisenmeldung. Deshalb liegt die Aufnahme jetzt mit `replaceAll` in **einer**
+Klammer. Nebenläufig mit 17 Lesern, je viermal: HEAD 0/17, zwei Klammern 16/17, **eine Klammer
+17/17**.
+
+**Und die Restbehauptung, die er messen statt behaupten sollte, trifft zu:** Ein direkter
+`POST /timer/stop` nach dem Einspielen bucht **weiterhin 39 600 s** — `stopTimer` fragt
+`foundAtServiceStart` nicht, der Schutz liegt allein in der **Anzeige**. Der Polaritätswechsel über
+fünf Dateien hätte daran ebenfalls nichts geändert.
+
+**T-359 — der vorgefundene Stand lief nicht** (`TypeError`, Absturz mitten in Regel G). Verwerfen
+ging nicht, weil `git diff` derselben Datei auch T-334, T-339, T-341 und T-348 trägt — `HEAD` steht
+noch auf `311b26e`. Er hat weitergebaut und jede Zeile als unbewiesen behandelt. `proof:surface`
+**54/0**, alle vierzehn Gestalten rot, und **19 Mutationen** gefahren — jeder Mechanismus einzeln
+zurückgebaut, **19 von 19 gefangen**. Dabei zwei echte Fehler im Zwischenstand, einer davon in genau
+der von A-A-119 verbotenen Richtung: ein unlesbarer Wert fiel **still** aus der Menge.
+
+**Die vierte Runde endet nicht durch eine fünfte, sondern durch eine Grenze — E-117.**
+
+**T-360 — 154/0 → 158/0.** Seine **erste Nachstellung war rot aus dem falschen Grund** (`Awaited`
+ist kein festgenagelter Name, 6i sprach an); mit ausschließlich festgenagelten Namen ist die Gestalt
+`tsc` Exit 0, **154/0 grün, 0 statt 40 Anfragen**. 6g-1 mißt jetzt den **Weg** vom
+`setTimeout`-Rückruf bis zum Rumpf mit der Anfrage. Der synchrone Riegel ist **teilweise** gefangen
+— die Schleife, nicht der fremde Aufruf, der synchron nicht zurückkehrt; benannt statt behauptet.
+Rest 4 entschieden: kein zweiter Riegel für die Quelle, tragende Zahl selbst nachgemessen (5 002 ms,
+`reason: timeout`).
+
+### Welle 11 — vorgemerkt, nicht gestartet
+
+| Was | Rolle |
+|---|---|
+| **`stopTimer` fragt dieselbe Frage wie die Anzeige** — der offene Rest von R-34, und der einzige Weg, auf dem heute noch 39 600 s in eine Buchung gelangen | domain-dev, `features/timer/**` |
+| **A-A-124**: ein abgelegter Speicher hinterläßt einen **veralteten** statt eines fehlenden Zeitpunkts, und der reist in die Datensicherung | domain-dev, `packages/storage/**` |
+| Prüffälle A–E zu T-358 (Fall E hält die **eine** Transaktionsklammer), Prüffall zum Timer-Neustart | unit-tester, **nach** der Behebung |
+| Die Browsermessung für die **Wirkung** nach E-117, 19 Gestaltungen × 2 Modi | visual-qa oder ein eigener Lauf — Entscheidung offen |
+| Freigaberunde über T-358/T-359/T-360, dann `pnpm check` als Ganzes, dann documenter | Qualitätstor |
+
+### Welle 11 — Ergebnis
+
+**Neuer Auftrag des Auftraggebers vom 2026-09-14:** „baue hier bitte eine Tabelle hin. Wie auf den
+anderen Seiten. Plus Man muss nicht alle Tags sehen, diese können auch ruhig angezeigt werden, wenn
+man darüber hovert." Gemeint ist die Todo-Liste.
+
+**T-361 (ux) und T-362 (ui), getrennt vergeben — und beide fanden unabhängig dasselbe:** Das
+Exportprotokoll ist **gar keine Tabelle** (`<ul>`/`.auditrow`). Drei Befunde am Bestand prägten den
+Entwurf stärker als der Auftragstext: **die Todo-Liste hat heute keine Mehrfachauswahl** (das
+führende Kästchen ist das Erledigt-Kennzeichen — wer `BookingTable` kopiert, erbt Kopf-Kästchen und
+`aria-selected` und erfindet still eine Auswahl, die keine Aktion verwerten kann); der klebende Kopf
+erzwingt, daß der Hinweis auf ausgeblendete Todos in den **festen** Teil wandert; und neun
+Prüfstellen in acht Dateien benutzen `.todo-row` als Geltungsbereich.
+
+**Die Tags:** Die Zahl bleibt als Knopf in der Zeile, die Marken erscheinen mit vollem Ordnerpfad —
+**mit Eingabe, mit Tippen und mit Überfahren**, in dieser Reihenfolge der Verbindlichkeit. SC 1.4.13
+in drei Zusagen ausbuchstabiert. Die Fläche nimmt **nicht** `DialogSurface` (keine Bestätigung,
+keine Fokusfalle), sondern die Portalform — sie braucht Verankerung, und `.table-wrap` trägt beide
+Achsen, würde sie also **abschneiden**.
+
+**T-362 hat einen Fehler im Auftragstext des Orchestrators widerlegt:** A8 mißt
+`child.scrollHeight > child.clientHeight + 1` — das Kind gegen **sich selbst**, nie gegen den
+Laufbereich. Meine Fassung hätte jede laufende Liste rot gemacht. Papier und Kurzform berichtigt.
+
+**A-25.9 nachgetragen** (T-361 OF-1): A-25.7 zählt die erlaubten Gestaltänderungen **abschließend**
+auf — die Schärfung nach T-351 hatte die nächste Änderung gleich mit ausgeschlossen.
+
+**T-363 — R-34 geschlossen, und der Eintrag war größer als sein Name.** Der Auftrag nannte den
+direkten Stopp „den letzten Weg"; gemessen waren es **drei**, plus ein vierter, der die anderen
+wieder geöffnet hätte. Die zweite Zeile ändert alles: derselbe Schaden entstand nach einem
+**gewöhnlichen Absturz ohne jedes Archiv**. Der Einspielweg war der Anlaß, nicht die Bedingung.
+`timerRecovery` bleibt begründet **optional** — an der Ausfallrichtung der `undefined`-Abzweigung
+hängt seit dieser Änderung Geld.
+
+**T-364 — der Vorschlag aus T-360 ist gebaut, gemessen und widerlegt.** `write(null)` führt über
+denselben Kanal, der eben versagt hat: in drei von vier Fehlerlagen wirft auch das `UPDATE … = NULL`,
+der Wert blieb **genauso 52 h alt**, und der Lauf fiel 158/0 → 157/1. Der wirksame Hebel liegt beim
+**Prüfer**: ablegen nur den Speicher, der **nie antwortet**, nicht den, der **wirft**. 119 Zeilen
+geliefert, **alle Kommentar** — die Auskunft, nicht die Behebung.
+
+**Neu gefunden, zweite Achse von R-30:** `recordCheck` hält unter fremder Schreibsperre die
+Ereignisschleife **5 004 ms** an, auf dem Weg **vor** der Anfrage — während der Port sagt, ein
+Adapter dürfe nicht synchron blockieren.
+
+### Welle 12 — läuft (gestartet 2026-09-14)
+
+Sechs Agenten, gestartet in einer Nachricht. **Zwei Punkte des Plans sind bewußt
+zurückgehalten**, beide aus derselben Regel: wer eine Schnittstelle umbaut und wer sie mißt,
+gehören in aufeinanderfolgende Wellen (T-315/T-316).
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-365** | Die Todo-Tabelle bauen — acht Spalten, klebender Kopf, Tag-Fläche im Portal; `.todo-row`/`.todo-row__title` überleben als Haken am `<tr>`; B-03 (`theme-palettes.css:464/469`) im selben Auftrag; E-087-Abgleich selbst neu gefahren | frontend-dev | `apps/web/**` |
+| **T-366** | Die beiden Papiere **gegeneinander messen** — Prüfweg ist F-1 bis F-10 in `todo-tabelle.md` 0; Übereinstimmung ist kein Nachweis. Dazu: deckt A-25.9 in seinem heutigen Wortlaut wirklich alles? | spec-ux-reviewer | nur der eigene Bericht |
+| **T-367** | A-A-124: die drei Stellen (a/b/c) in `features/version/version.ts` nach T-364 Abschnitt 5, einfache Fassung; die drei unwahr werdenden Sätze im selben Auftrag | domain-dev | `apps/local-api/src/features/version/**` |
+| **T-368** | Prüffälle T-358 A–E und T-363 A–H, rot zuerst, ohne `git stash` (der Baum trägt fremde unversionierte Arbeit) | unit-tester | `packages/*/test/**`, `apps/*/test/**` **ohne** `test/version/**` und `repo-version-check.test.ts` |
+| **T-369** | Freigaberunde über **T-358 und T-363** — die eine Transaktionsklammer, die drei Wege plus der vierte, die `undefined`-Abzweigung von `context.timerRecovery` | code-reviewer | nur der eigene Bericht |
+| **T-370** | Sicherheitsprüfung über **T-358 und T-363** — Obergrenze, das Archiv als fremde Datei unter der weiter gefaßten Klammer, die Reihenfolge der Pfadneusetzung, E-001 | security-checker | eigener Bericht, `docs/bedrohungsmodell.md` nur bei echter Unwahrheit |
+
+**Nicht gestartet, mit Grund:**
+
+- **Die zwölf `.todo-row`-Fundstellen in acht e2e-Dateien** (`todo-tabelle.md` 10.1). Der board-Plan
+  wollte sie „im selben Auftrag"; die Hoheitstabelle verbietet dem frontend-dev `tests/e2e/**`.
+  Aufgelöst über T-361 Annahme 4: die Klasse überlebt am `<tr>`, die Geltungsbereiche bleiben
+  grün, und der e2e-tester bekommt sie samt A10 bis A15 in der **nächsten** Welle.
+- **T-364 Abschnitt 6** (vier Versionsprüffälle) — T-367 baut in derselben Datei. Nächste Welle.
+- **Freigaberunde über T-359, T-360 und T-364.** T-359 mißt `apps/web/**`, in das T-365 gerade
+  baut; T-360 und T-364 liegen in `features/version/**`, in das T-367 gerade baut. Beides wären
+  Zwischenstände.
+- **`pnpm check` als Ganzes und der documenter** — erst nach den Freigaben.
+
+**Entschieden ohne Rückfrage (T-362 OF-1):** Das Exportprotokoll (`.auditrow`, eine `<ul>`) wird
+**nicht** mit zur Tabelle. Der Auftrag zeigt auf die Todo-Liste; „wie auf den anderen Seiten" ist
+ein Verweis auf ein Vorbild, keine Bestellung für eine zweite Ansicht. Wer das anders will,
+bestellt es eigens.
+
+### Welle 12 — Ergebnis
+
+**T-366 (spec-ux-reviewer) fertig — Urteil Nacharbeit, acht blockierende Befunde.** Der Prüfweg war
+F-1 bis F-10, und er hat die erwartete Fehlerklasse **nicht** gefunden: Beide Papiere haben sich an
+ihre Hoheit gehalten. Die gefährliche Klasse war die **Rückgabe** — Spaltenbudget und
+Bildlaufausgang reicht jedes Papier an das andere zurück, und **beide bleiben unbeantwortet**.
+
+**Zwei Paare zugesicherter Sätze schließen einander aus**, bei jedem denkbaren Bau ist einer rot:
+TT-08 (gleiche Zeilenhöhe bei 20 und 200 Zeichen) gegen `todo-tabelle.md` 4.4 (der Titel bricht um,
+die lange Zeile wächst), und TT-04 (bei 960 px **kein** waagerechter Lauf) gegen A12, das genau
+diesen Lauf zur **Bedingung für Grün** macht.
+
+**Der teuerste Befund ist B-3, und er ist gerechnet:** Die sieben festen Spalten ergeben aus den
+Breiten des Bestands ≈ 56,5 rem gegen ein Budget von 44 rem, mit dem Titelboden ≈ 72,5 rem gegen
+`min-width: 60rem`. **Die Tabelle liefe damit auch im Standardfenster waagerecht** — genau der
+Zustand, den der Auftraggeber beanstandet hat. TT-05, TT-06 und „Erledigt aufgehoben darf nicht
+gekürzt werden" sind gemeinsam unerfüllbar, und niemand hatte die Summe gerechnet: T-362 setzte die
+Auflage, T-361 reichte die Zahl mit „ist zu messen" zurück.
+
+**B-4 ist der Befund mit der weitesten Folge:** `HoverCard` und `Tooltip` sind nicht-fokussierbare
+Anzeigen. Ü-1 war damit keine Bauentscheidung, sondern **die Frage, ob eine zugesagte Fläche
+überhaupt einlösbar ist** — und sie war an den frontend-dev delegiert.
+
+**Und der Satz, der den Auftrag rechtfertigt:** Denselben falschen Vorgriff — „die übrigen Tags"
+setzt sichtbare Marken voraus, während T-361 5.2 ausdrücklich **keine** zeigt — enthalten **zwei
+unabhängige Papiere und die Spezifikation**. Übereinstimmung ist kein Nachweis.
+
+**Acht Entscheidungen des Orchestrators, noch am selben Tag, und T-365 bekam sie im Lauf
+nachgereicht:**
+
+| | Entschieden | Wer gewinnt |
+|---|---|---|
+| **B-1** | Der Titel **bricht um**, er wird nicht gekürzt. TT-07 und TT-08 fallen | T-362 — der Bestand behandelt den Titel in der **Hauptrolle** schon mit Umbruch (`app.css:5230`); ein `title`-Attribut ist bei Tastaturfokus nicht erreichbar |
+| **B-2** | Waagerechter Lauf **unterhalb 1280 erlaubt**, TT-04 rückt auf 1280 | T-362 — A-25.2 verbietet ihn nicht, SC 1.4.10 nimmt zweidimensionalen Inhalt aus |
+| **B-3** | **Harte Grenze: bei 1280 × 820 (982 px) läuft nichts waagerecht.** Kürzungsreihenfolge: Erledigt und Status in **eine** Spalte (`.table__primary`/`.table__secondary`), dann die Call-Zelle ohne das Wort „Call". Reicht das nicht, **meldet T-365 die Summe und baut nicht weiter** | neu entschieden |
+| **B-4** | **Popover**, nicht `HoverCard`, nicht `Tooltip`. Fokussierbarer Inhalt, `aria-expanded`/`aria-controls`, dazu die Zeigeröffnung. Ü-1 ist entschieden, nicht delegiert | T-361s P2 — und A-25.9 verlangt es jetzt ausdrücklich |
+| **B-5** | Verläßt der Anker das Sichtfeld, **schließt** die Fläche; bei Tastatur steht der Fokus danach auf dem Auslöser | T-362 — SC 1.4.13 „beständig" verbietet den **Zeitgeber**, nicht das Schließen bei weggerolltem Anker |
+| **B-6** | `.todo-row`/`.todo-row__title` **überleben** am `<tr>`. Der Paletteneintrag wird dadurch **schärfer**, nicht gegenstandslos: eine Kartenregel auf einer Tabellenzeile verhält sich anders | T-361 |
+| **B-7** | `docs/spec.md` A-25.9 **nachgeschärft**: Tabellenunterschrift, der in den festen Teil rückende Hinweis und der Nachladefuß sind jetzt gedeckt — drei von sechs Gestaltänderungen waren es nicht | erledigt |
+| **B-8** | A-25.9: „die übrigen erscheinen" → „**sie** erscheinen". Sichtbar bleibt die Zahl, keine Marke. Dazu der Satz zum Tastaturfokus der Fläche | erledigt |
+
+**Nicht antastbar, egal wie eng B-3 wird:** die `ExportSummaryStrip` in der Buchungen-Zelle (der
+Exportstand ist **überall** eindeutig sichtbar — Hausregel, nicht nur A-13.5) und das Zustandswort
+in der Frist-Zelle (A-19.4/A-19.5).
+
+**Zahlkorrektur:** Es sind **12** lebende `.todo-row`-Fundstellen in **8** e2e-Dateien, nicht neun.
+T-361s Prosa war falsch, seine Tabelle richtig — und der Bericht trug die falsche Zahl weiter.
+T-362 zählte richtig.
+
+**T-362 OF-2 ist damit beantwortet: ja.** `.todo-row` ist im ganzen Palettenblatt der einzige
+Zeilenbezeichner; `lines` und `zen` behalten danach keine Regel auf Zeilenebene.
+
+**Offen aus T-366, für die nächste Welle:** B-3 zurück an den ui-designer, falls T-365 die Summe
+nicht unterbringt; `todo-tabelle.md` 9.4 (der Vorrat mißt gegen eine Voraussetzung, die B-8
+aufgehoben hat); A14 ist modalitätsblind und mißt TT-18 in **keiner** Richtung; SC 1.4.13
+„überfahrbar" hat auf **keiner** der beiden Seiten einen Mechanismus — weder Nachlauf noch Versatz.
+
+**T-369 (code-reviewer) fertig — T-358 kleine Nacharbeit, T-363 Nacharbeit. R-34 wird wieder
+geöffnet.** Der Prüfer hat nicht geglaubt, sondern nachgefahren: die eine Klammer aus T-358 trägt,
+17 von 17 Lesern sahen `bookableSeconds = 1200`, gemessen über den echten `importDataArchive`.
+
+**Der Befund, der die Runde rechtfertigt:** T-363 hat die Menge der Wege an den **Routen**
+aufgespannt, die er kannte. An der **Anforderung** aufgespannt sind es **sechs, und zwei stehen
+offen** — `beginIdle` (`idle.ts:71`) und `separateIdle` bei der Rückkehr (`idle.ts:41`) buchen auf
+einem beim Dienststart vorgefundenen Eintrag gemessen **39 000 s**, während der Dialog für
+denselben Eintrag 1 200 s anbietet. **Und niemand muß dafür etwas tun:** `useIdleTimer` schickt das
+selbsttätig, sobald der Benutzer weggeht. Das ist E-099 Punkt 3 zum zweiten Mal in derselben
+Woche — wer eine Abwesenheit oder eine Vollständigkeit zusichert, spannt seine Menge an der
+Anforderung auf, nicht an der Route, die er kennt.
+
+**Zwei weitere Befunde:** Der Deckel greift **nur nach unten** — ein Lebenszeichen aus der Zukunft
+bucht gemessen 43 200 s bei 39 600 s Wanduhr. Und `startTimer` erzeugt eine **geschlossene**
+Buchung 06:00 → 18:00 neben einem **laufenden** Eintrag ab 17:00: eine Überlappung, die es an
+`HEAD` nicht gab, also eine Regression aus T-363 und ein Verstoß gegen A-24.
+
+**Der unscheinbarste Satz ist der wertvollste:** Die eine Klammer trägt, **weil**
+`unit-of-work.ts:236` `next` zurückgibt und `queue` eine Ableitung davon ist. Diese Zusage steht
+**nirgends geschrieben und in keinem Prüffall**. Wer `unit-of-work.ts` umbaut, öffnet R-34 wieder,
+ohne es zu merken — das gehört festgenagelt, bevor es jemand tut.
+
+**Nicht sofort gestartet, und der Prüfer sagt selbst warum:** Der domain-dev-Auftrag für die beiden
+idle-Türen liegt in `features/timer/**`, und dort mißt in dieser Welle gerade der unit-tester
+(T-368). Derselbe Schnittstellenumbau wie T-315/T-316. Er geht in die **nächste** Welle, nach
+T-368.
+
+**Läufe, die T-369 selbst gefahren hat:** `typecheck` Exit 0, `vitest apps/local-api/test` 352
+grün, `packages/*` 1 283 grün, `boundaries` grün, `proof:openapi` 115/0, `proof:layers` 36/0,
+`proof:callers` 74/0. Portbindende Läufe **nicht** gefahren und ausdrücklich nicht als grün
+gemeldet.
+
+**Zwei Fragen an den Orchestrator, offen:** Gehört der Deckel „nie nach jetzt" in
+`decideOrphanedTimer` (`packages/domain`) oder vorerst lokal in `bookingEndOfStop`? Und soll eine
+**eingespielte** offene `timer_idle`-Phase wie ein vorgefundener Eintrag behandelt werden (A-24
+gegen E-036)?
+
+**T-367 (domain-dev) fertig — A-A-124 gebaut, verkleinert, nicht geschlossen.** Sieben neue
+Codezeilen, zwei entfernt, eine geändert; der Rest der 99 Zeilen ist Kommentar. Gebaut ist die
+**einfache** Fassung, und er hat den Grund nachgeliefert, statt die Empfehlung zu übernehmen: Die
+Drei-Würfe-Variante bräuchte einen Zähler, dessen Zahl an nichts hängt — genau die Bauart „Zusage
+an einer fernen Zahl", die dieser Bestand schon einmal bezahlt hat.
+
+**Gemessen in beide Richtungen**, gegen eine Meßkopie mit genau der einen zurückgedrehten Zeile:
+nach einer vorübergehenden Dateisperre ist der Wert vorher **60 h** alt, nachher **0 h**, bei
+gleichen 42 ausgehenden Anfragen und je genau einer Protokollzeile. `typecheck` Exit 0,
+`proof:release-safety` **158/0** (die Vorgabe aus T-364 gehalten — `write(null)` hatte sie auf
+157/1 gedrückt), `proof:codepoints` 46/0, `boundaries` grün, `apps/local-api/test/version` 52/52
+und `packages/storage` 468/468 grün — **ohne eine Änderung an einer Prüfdatei**.
+
+**Der Auftrag nannte drei unwahr werdende Sätze; es waren acht.** Fünf in `version.ts` (dazu die
+Erklärung an `let store`, die Prosa zur Frist in `remember`, die Typdoku) und drei außerhalb
+(`repo-version-check.ts`, `ports.ts`, `docs/architektur.md`/`datenmodell.md`). Er hat die drei
+außerhalb angefaßt, obwohl der Auftrag es nicht verlangte — reiner Kommentar, durch seine Zeile
+gemessen falsch, und nach E-081 Punkt 4 gehören sie in denselben Auftrag. Richtig so.
+
+**E-087 selbst neu gefahren**, beide Wege: der `unwritable`-Satz stand an genau einer Stelle; die
+drei Fundstellen in `checker.test.ts` (595, 703, 713) nennen ausschließlich den **Schlüssel**
+`version_check_state_unwritable`, nie den Satz.
+
+**Nebenbefund, den er richtigerweise nicht angefaßt hat:** `vitest run apps/local-api` ergibt sieben
+rote Fälle, alle in `usecases/timer-recovery-booking.test.ts` und
+`usecases/data-transfer-timer-recovery.test.ts` — Timer- und Datensicherungsteil, also die Fläche,
+auf der in derselben Welle T-368 rot-zuerst arbeitet. Keine Einfuhr aus `features/version`.
+
+**Drei offene Punkte aus T-367:** `docs/bedrohungsmodell.md` Abschnitt 45 nennt „2 von 40
+Schreibversuchen" und ist überholt (gehört dem security-checker; Wortlaut liegt in seinem Bericht,
+Abschnitt 2). Ob die Spalte langfristig fällt, ist unverändert offen — sie ist der **einzige** Weg,
+der A-A-124 vollständig schließt. Und A-A-125 ist nachgemessen statt übernommen:
+`repo-version-check.ts:130` hält unter fremdem `BEGIN EXCLUSIVE` **5 004 ms**, ein paralleler
+`setInterval` mit 10 ms Takt kam **null Mal** dran statt rund 500 Mal.
+
+**T-368 (unit-tester) fertig — dreizehn Prüffälle, und die ehrliche Zahl steht dabei.** Zwei neue
+Dateien unter `apps/local-api/test/usecases/`, gebaut gegen zwei echte
+`openDatabase({location:':memory:'})`-Bestände als Quell- und Zielrechner, ohne HTTP und ohne Port.
+`apps/local-api/test` steht von 352 auf **365 grün**, 2 übersprungen, 0 rot;
+`pnpm test:coverage` über den Arbeitsbereich Exit 0.
+
+**Rot zuerst, und er sagt, wie weit es trägt:** **Zehn der dreizehn** Fälle sind nachweislich rot
+gegen die echte `HEAD`-Fassung der jeweiligen Produktivdatei. **Drei sind es nicht** — T358-C/D und
+T363-C/F/H messen dokumentierte Invarianten statt neuer Verengungen und bleiben bei jeder erprobten
+Gegenfassung grün. **Das steht offen im Bericht und in der Tabelle**, statt als Rot-Nachweis
+mitgezählt zu werden. Ihr Wert liegt im Weiterlaufen als Dokumentation, nicht als Regressionsalarm;
+bei einem künftigen Bruch der Invariante werden sie nicht von selbst rot.
+
+**Der wertvollste Einzelfall ist T358-E.** Er ist zusätzlich rot gegen die im T-358-Bericht selbst
+**verworfene** Zwei-Transaktionen-Anordnung — während T358-A dort erwartungsgemäß **grün** bleibt.
+Das ist genau die Warnung aus dem Auftrag: Ein Prüffall, der nur die 1 200 s mißt, bleibt grün,
+wenn jemand die Lesung wieder in eine zweite Klammer zieht. Jetzt gibt es einen, der es nicht tut.
+
+**Der rote Stand ohne `git stash`:** `data-transfer.ts` und `timer.ts` je einmal kurzzeitig durch
+`git show HEAD:…` ersetzt und danach **byte-identisch** zurückgeschrieben, mit `md5sum`- und
+`git diff --stat`-Nachweis im Bericht. Der Baum trägt weiterhin nur die vorbestehenden
+unversionierten Änderungen.
+
+**Ein Befund am Rand, der eine Ausfallrichtung bestätigt:** Quellrechner-Kontexte brauchten
+ausdrücklich `timerRecovery: { entryId: null }` vor dem Start — sonst behandelt `touchHeartbeat`
+nach T-363 auch den **frischen** Quell-Timer als vorgefunden und schreibt kein zweites
+Lebenszeichen. Kein Produktivfehler, sondern die dokumentierte Ausfallrichtung der
+`undefined`-Abzweigung, an der seit T-363 Geld hängt.
+
+**Hinweis für die nächste Welle:** T363-E und T363-F decken nur den **Erfolgsweg** von `startTimer`.
+Die Fehlschlagspfade (T-363 Risiko 5) sind ungemessen — und genau dort hat T-369 die Überlappung
+06:00 → 18:00 gefunden.
+
+**`features/timer/**` ist damit wieder frei.** Der Reparaturauftrag aus T-369 (die beiden
+idle-Türen, der Deckel nach oben, die Überlappung) kann starten, sobald T-370 seinen Augenschein
+auf `timer.ts` beendet hat.
+
+**T-370 (security-checker) fertig — T-358 freigegeben, T-363 nicht freigegeben.** Er hat **keine
+Zahl** der beiden Vorberichte übernommen, sondern alles neu gefahren: ohne HTTP, über
+`exportDataArchive` → `importDataArchive` → Timer, zwei `:memory:`-Bestände, **zwei Uhren**.
+
+**T-358 hält in allen vier Punkten.** Die eine Klammer ist nicht nur gemessen, sondern
+**strukturell dicht** — und er nennt den Grund genauer als T-369: `queue = next.then(…)` wird in
+`unit-of-work.ts` **vor** der `await`-Fortsetzung des Aufrufers angehängt. Drei ungültige Archive
+ändern nichts, auch nicht die Aufnahme; der Pfad wird weiterhin vor dem Schreiben und auch ohne
+Bytes neu gesetzt; 1 MiB / 64 MiB / 256 MiB unberührt; keine zweite Adresse, E-001 gewahrt.
+
+**T-363 blockiert an B-1 — dieselben zwei idle-Türen, unabhängig gefunden und schärfer gemessen.**
+Von **sieben** Stellen, die `ended_at` auf einen offenen Eintrag schreiben, fragen zwei
+`foundAtServiceStart` nicht. Gemessen **mit Archiv und ohne Archiv, in beiden Stellungen von
+`idleKeepTimerRunning`**: `GET /timer/orphaned` bietet 1 200 s an, danach bucht
+`POST /timer/idle/begin` + `/idle/return` **06:00:00Z → 17:05:00Z = 39 900 s**, `export_status =
+open`. Der einzige Riegel liegt wieder in der **Anzeige**, und `GET /timer/orphaned` wird nur beim
+Seitenaufbau geholt.
+
+**B-2 ist der schwerste neue Befund, und er ist eine Verschlimmerung durch T-363.** Der neue Deckel
+`heartbeatAt` reist im **selben Archiv** wie `started_at` und wird gegen `now` nicht geprüft. Start
+`2026-09-13` (unauffällig), Lebenszeichen `9999-12-31` → der Stopp bucht **251 613 021 599 s**,
+Exportzeile **`"Zeit": 69 892 506`**. An `HEAD` waren es dort 39 600 s. Gegenmittel
+`min(heartbeatAt, now)` in `decideOrphanedTimer`, **nicht** in `bookingEndOfStop`.
+
+**B-3:** A-A-127 unberührt — weiterhin **keine Obergrenze**, nur verschoben von 6,4 × 10¹⁰ auf
+2,84 × 10¹¹ s. **B-4:** `data-transfer.ts` behauptet im Kommentar weiterhin 39 600 s, gemessen sind
+es 1 200 s.
+
+**`docs/bedrohungsmodell.md` Kapitel 46 neu** (A-A-128 bis A-A-130), weil **vier gemessene Zeilen**
+aus 45.4 unwahr geworden sind — und weil der Satz „der Weg braucht keinen Angreifer" auf keinen
+gemessenen Fall dieses Kapitels mehr zutraf. Er hat ihn nicht stehenlassen und nicht gestrichen,
+sondern neu gemessen.
+
+**Läufe, die er selbst gefahren hat:** `vitest apps/local-api/test` 352 grün, `packages/*` 1 283
+grün, `typecheck` Exit 0, `boundaries` grün über 530 Dateien; `proof:openapi` 115/0,
+`route-policy` 48/0, `layers` 36/0, `callers` 74/0, `db-permissions` 27/0, `release-safety` 158/0,
+`access` 111/0, `conflicts` 154/0 (Port 17843 vorher mit `ss -ltnp` als frei geprüft). Semgrep
+`p/typescript` + `p/secrets`: **0 Befunde**. **42Crunch nicht gefahren und nicht als grün
+gemeldet** — ein Audit lüde die Beschreibung zu einem fremden Dienst hoch, und das ist genau die
+Grenze aus E-001; ersatzweise am Diff gelesen: nur Beschreibungstexte, kein neuer Pfad, kein
+geändertes Schema, kein berührtes `security`-Element.
+
+### Welle 13 — läuft (gestartet 2026-09-14)
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-371** | **R-34 wirklich schließen:** B-1 (die beiden idle-Türen), B-2 (`min(heartbeatAt, now)` in `decideOrphanedTimer`), die Überlappung 06:00 → 18:00 aus T-369, B-4. Die Menge **an der Anforderung** aufspannen und in einer Tabelle aller sieben Stellen belegen | domain-dev | `apps/local-api/**` ohne `routes/addin/` und ohne `features/version/**`, `packages/domain/**`, `packages/storage/**` |
+
+**Warum ein Agent und nicht zwei:** B-1 liegt in `features/timer/**`, B-2 in `packages/domain` —
+nach der Hoheitstabelle trennbar. Aber `decideOrphanedTimer` ist die **Schnittstelle**, die der
+Timer-Teil aufruft. Wer sie umbaut und wer sie benutzt, gehören nicht nebeneinander (T-315/T-316).
+
+**T-365 (frontend-dev) fertig — die Tabelle steht, und der wertvollste Teil des Berichts ist die
+Stelle, an der er der Anweisung nicht gefolgt ist.** Zwei neue Dateien (`TodoTable.tsx`,
+`TodoTagsCell.tsx`), `TodoRow.tsx` entfernt, drei Stilblätter. Nichts außerhalb `apps/web/**`,
+`tests/e2e/**` nicht angefaßt.
+
+**Gebaut:** acht Spalten, `table-layout: fixed` mit `<colgroup>`, `min-width: 60rem`; der
+Laufbereich wechselt seine Bauform mit dem Zustand, der Kopf klebt dadurch **zum ersten Mal**, der
+Ausblendhinweis steht als `.screen__bar` fest, „Weitere laden" ist der `<tfoot>`. Titel und
+Statusname **brechen um**. Die Tag-Zelle zeigt `todo.tagIds.length` in einem `button` mit
+`aria-expanded`/`aria-controls`; die Fläche ist ein nicht-modaler **Popover**, nimmt den
+Tastaturfokus an, ist mit `Escape` abweisbar, überfahrbar und ohne Zeitgeber.
+
+**B-3 hat sich aufgelöst, und zwar gegen die Anordnung des Orchestrators.** Gemessen: sieben feste
+Spalten **696 px = 43,5 rem** gegen ein Budget von 44 rem; Titel 17,8 rem bei 1280, 16,4 rem bei
+960; bei 1280 × 820 `scrollWidth === clientWidth`. **T-366 hatte 56,5 rem gerechnet** — aus den
+Breiten, die der Bestand für dieselben Inhalte führt —, und darauf hatte der Orchestrator die
+Zusammenlegung von „Erledigt" und „Status" angeordnet. **Sie war nicht nötig und ist nicht
+gebaut.** T-365 hat gemessen statt zu gehorchen, die Abweichung benannt und zurückgefragt. Richtig
+so. Die Lehre gehört in beide Papiere: eine zurückgereichte Zahl ist keine geklärte Zahl, und eine
+aus fremden Breiten gerechnete ist ein Verdacht, kein Maß.
+
+**Ü-1 ist gemessen und die Wahl aus T-362 widerlegt:** `@ark-ui/react/hover-card` **liegt vor**
+(5.39.0, `@zag-js/hover-card@1.43.3`) — und ist trotzdem unbrauchbar: sein Inhalt trägt
+`tabIndex: -1` **ohne Weg hinein**, und `TRIGGER_BLUR` schließt ihn, sobald der Fokus hineinwandert.
+Die Entscheidung B-4 war also nicht nur richtig, sondern die einzig mögliche. Offen bleibt eine
+Abweichung, die er selbst benennt: der Inhalt trägt `role="dialog"`.
+
+**A13 bestätigt (T-362 R-a):** Blockelement 662 px (Inhaltsbreite), wandert beim Rollen aus dem
+Bild; `tfoot` 958,5 px (Tabellenbreite), bleibt. F-7 geht **nicht** an T-361 zurück. **Ausgang aus
+6.2:** die Fläche schließt — und der Nebenbefund gehört ins Papier: gemessen wird die **Bewegung
+des Ankers**, nicht das Eintreffen des Ereignisses, sonst schlösse ein nachlaufendes
+Scroll-Ereignis die Fläche im selben Augenblick, in dem sie aufgeht.
+
+**Nachweise:** `typecheck`, `boundaries`, `contrast` (0/522), **`proof:all` 22 Läufe, 0
+fehlgeschlagen**, `build`, `vitest apps/web` (213) — alle grün. `viewport-fit.spec.ts` 10/10.
+**45 vorbestehende e2e-Fälle aus elf Dateien grün, ohne eine Zeile Prüfcode zu ändern** — die
+Auflage aus B-6 trägt, die zwölf `.todo-row`-Fundstellen halten. `proof:clamp` bleibt bei 37
+Deckelklassen. **TT-24 neu gemessen mit stehendem Hinweis bei 960 × 640: fester Teil 73,5 %, kein
+Befund** — T-361 R-3 ist damit widerlegt. Seine Sondierungsseiten lagen unter
+`apps/web/t365-probe/` und sind restlos entfernt.
+
+**Ein Nebensatz mit Folgen:** Sein `typecheck` war zwischenzeitlich rot wegen
+`apps/local-api/src/features/timer/head-t371-timer.ts` — einer **Meßkopie aus der parallelen
+Welle**, die im Quellbaum lag. Solange so etwas dort liegt, ist jeder `typecheck`-, `boundaries`-
+und `proof:*`-Lauf **jedes** anderen Agenten rot, und keiner kann sehen, warum. T-371 hat den
+Hinweis im Lauf bekommen.
+
+### Welle 14 — läuft (gestartet 2026-09-14, neben T-371)
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-372** | Augenschein über Tabelle und Tag-Fläche: sieben Paletten, beide Dichten, 1280 × 820 und 960 × 640, die vier Zustände, **SC 1.4.13 „überfahrbar" am echten Zeiger** (T-366 sagt, dafür gibt es auf keiner Seite einen Mechanismus), N-2 und N-6 | visual-qa | nur der eigene Bericht |
+| **T-373** | `todo-tabelle.md` nachziehen: B-4 (Popover statt `HoverCard`, `role="dialog"` entscheiden), B-6, 9.4 nach B-8, **A14 ist modalitätsblind**, „überfahrbar" braucht einen Mechanismus, die gemessenen Zahlen statt der gerechneten, `TableShell` nach `shared/ui/`? | ui-designer | `docs/design/todo-tabelle.md` |
+| **T-374** | `todo-tabelle-fluss.md` nachziehen: TT-07/TT-08 fallen (B-1), TT-04 rückt auf 1280 (B-2), TT-18 dreht sich (B-5), die Zählung in §13 (neun statt zwölf) und in §12, TT-24 mit 73,5 % eintragen, R-3 widerlegt | ux-designer | `docs/design/todo-tabelle-fluss.md` |
+
+**Nicht gestartet:** der e2e-tester (A10–A15, TT-01 bis TT-30, die zwölf `.todo-row`-Stellen) —
+seine Meßlatte sind genau die Zusicherungen, die T-373 und T-374 gerade umschreiben; er kommt
+**danach**. Dazu die Wiedervorlage von T-363 beim security-checker, die Freigaberunde über T-365
+und T-367, T-364 Abschnitt 6, `pnpm check` als Ganzes, documenter.
+
+**T-371 (domain-dev) fertig — und er hat die Menge von unten aufgespannt, nicht von oben.** Statt
+die beiden Zeilen aus dem Auftrag zu reparieren, ist er an der **Speicherung** angesetzt: **drei**
+`UPDATE … SET ended_at`-Anweisungen, alle in `repo-time.ts`, darüber **sieben** Aufrufe im Dienst.
+Dieselbe Sieben, die T-370 gezählt hat — **unabhängig erreicht**, und das ist der Nachweis, den
+zwei Vorgänger schuldig geblieben sind. Zwei Türen fragten nicht; beide gehen jetzt durch
+`bookingEndOf`.
+
+**Der beste Teil ist nicht die Behebung, sondern der Wächter:** `proof:layers` **Abschnitt 7 zieht
+die Menge bei jedem Lauf aus der Platte**, damit die **achte** Tür rot wird, bevor ein Prüfer sie
+findet. 36/0 → **51/0**. Genau das, was E-099 Punkt 3 verlangt: Wer eine Vollständigkeit zusichert,
+spannt seine Menge an der Anforderung auf — und stellt einen Wächter daneben, der sie nachzählt.
+
+**Beidseitig gemessen:** die idle-Türen **39 000 s → `409 conflict`, keine Buchung** (mit Archiv,
+ohne Archiv, in **beiden** Stellungen von `idleKeepTimerRunning`); der Deckel
+**251 613 021 599 s → 39 600 s**; die Überlappung `06:00 → 9999-12-31` neben laufendem Eintrag ab
+`17:00` **weg**; der gewöhnliche Fall zeichengleich (39 600 s Stopp, 39 000 s Idle-Buchung).
+
+**Die Entscheidung, die der Auftrag ihm überlassen hatte — deckeln oder abweisen —, hat er
+getrennt beantwortet, und die Trennlinie ist gut:** `beginIdle` **weist ab**, `completeReturn`
+**deckelt**. Nicht der Weg entscheidet, sondern **ob es einen anderen Ausgang gibt**. Ohne offene
+Inaktivität stehen Stopp und Verwaistendialog offen, und ein Deckel schlösse dort eine Buchung,
+**während der Benutzer weg ist**, und nähme ihm den E-036-Ausgang „verwerfen". Bei der Rückkehr
+wäre Abweisen dagegen eine echte Sackgasse — Stopp und Dialog verweigern beide bei unbestätigter
+Rückkehr —, also wird gedeckelt; gemessen nicht tot: 14 400 s → 1 200 s.
+
+**`decideOrphanedTimer.now` bleibt vorerst optional**, weil ein Pflichtfeld sechs vorbestehende
+Domänenfälle zu `tsc`-Fehlern gemacht hätte. `proof:layers` mißt statt dessen, daß **alle drei**
+Aufrufer den Wert übergeben.
+
+**Die Folge, vom Orchestrator nachgemessen:** `vitest apps/local-api/test` steht bei **18 rot /
+347 grün / 2 übersprungen**, und **alle achtzehn liegen in `usecases/idle.test.ts`**. `typecheck`
+ist grün — der rote Befund, den T-371 in `TodoTagsCell.tsx` meldete, war ein **Zwischenstand** aus
+der Überlappung mit T-365 und ist es nicht mehr. T-371 hat die achtzehn richtigerweise **nicht**
+repariert.
+
+**Und er hat seinen eigenen Verfahrensfehler aufgeschrieben, statt ihn verschwinden zu lassen:**
+Seine Meßkopien lagen zeitweise unter `apps/local-api/src/**` und haben den `typecheck` des
+frontend-dev rot gemacht. Behoben, Baum gegengelesen, die betroffenen Läufe erneut gefahren.
+
+**Offen aus T-371:** B-5 (das A-24-Zuordnungsfenster aus einem Archiv, 39 000 s) ist **nur
+benannt**. A-A-127 — weiterhin keine Obergrenze für eine Dauer. Und sein eigener Satz, der stehen
+bleiben sollte: **R-34 ist nicht zu schließen, bevor die achtzehn Fälle grün sind und ein Fall die
+idle-Tür mißt — sonst ist die Schließung zum dritten Mal eine Behauptung.**
+
+### Welle 15 — läuft (gestartet 2026-09-14, neben T-372/T-373/T-374)
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-375** | Die achtzehn roten Fälle in `usecases/idle.test.ts` — **und die Behauptung dahinter nachmessen**, nicht übernehmen: T-371 sagt, **eine** Fixture-Zeile mache alle 23 grün ohne eine geänderte Erwartung. Dazu die fünf benannten Fälle (idle-Tür in beiden Stellungen, eingespielte offene Inaktivität, **Gegenprobe eigener Timer**, Zukunfts-Lebenszeichen an Dialog **und** Stopp, nebenläufiger Leser gegen `unit-of-work.ts`), die Fehlschlagspfade von `startTimer`, die sechs Domänenfälle zu `decideOrphanedTimer.now` | unit-tester | `packages/*/test/**`, `apps/*/test/**` ohne `test/version/**` und `repo-version-check.test.ts` |
+
+### Welle 14 und 15 — abgebrochen am Abrechnungslimit (2026-09-14, ~01:5x)
+
+**Alle vier Agenten starben gleichzeitig** an `rate_limit` / HTTP 429 („monthly spend limit",
+Rücksetzung 03:20 Europe/Berlin) — **nicht an der Aufgabe**. Zum zweiten Mal in dieser Reihe; beim
+ersten Mal (Welle 10) hinterließen drei Agenten **fünf halbfertige Produktivdateien**.
+
+**Diesmal nicht.** Der Orchestrator hat den Baum unmittelbar danach gegengelesen:
+`git status --porcelain` zeigt **keine Meßdatei, keine Sondierungsseite, keinen halben Stand** —
+die unversionierten Einträge sind ausschließlich die Berichte und die Artefakte aus T-322 bis
+T-371. Grund: Alle vier starben **vor** ihrem ersten Schreibzugriff. T-373 stand bei „Now the edits
+to my paper", T-374 bei §3.1, T-372 beim Schreiben eines Startbild-Skripts, T-375 vor dem ersten
+Werkzeugaufruf.
+
+**Stand beim Abbruch, gemessen und nicht vermutet:**
+
+- `pnpm typecheck` **grün** (alle acht Projekte, Test- und e2e-Konfigurationen eingeschlossen).
+- `vitest apps/local-api/test` **18 rot / 347 grün / 2 übersprungen**, alle achtzehn in
+  `usecases/idle.test.ts` — die bekannte Fixture-Lücke aus T-371, unverändert.
+- `apps/web` unberührt seit T-365 (`proof:all` 22/0, `contrast` 0/522, `vitest apps/web` 213 grün).
+- Die vier Designpapiere unverändert; **T-373 und T-374 haben keine Zeile geschrieben.**
+
+**Beim Wiederaufsetzen sind das die vier Aufträge, unverändert gültig:** T-372 (visual-qa,
+Augenschein), T-373 (ui-designer, `todo-tabelle.md`), T-374 (ux-designer,
+`todo-tabelle-fluss.md`), T-375 (unit-tester, die achtzehn Fälle plus fünf neue). Sie brauchen
+**keinen** ersten Schritt „lies deinen eigenen Zwischenstand" wie der zweite Anlauf der Welle 10 —
+es gibt keinen.
+
+### Zwischenstand committet und gepusht (2026-09-14, `a5641e1`)
+
+132 Dateien, +40 873 / −2 455, auf `feature/outlook-anhaenge-und-versionspruefung`. Der
+Auftraggeber hat es so verlangt; die Nachricht nennt den roten Stand ausdrücklich, statt ihn zu
+verschweigen.
+
+**Das Tor ist rot, und der Orchestrator hat es vor dem Neustart selbst nachgefahren statt es aus
+der Oberfläche abzulesen** (`gh` steht auf diesem Rechner nicht zur Verfügung):
+
+```
+Test Files  1 failed | 98 passed | 1 skipped (100)
+     Tests  18 failed | 1885 passed | 2 skipped (1905)
+```
+
+**Alle achtzehn in `apps/local-api/test/usecases/idle.test.ts`**, alle unter
+`A-24: Inaktivität und Zeitaufteilung`. `typecheck`, `boundaries`, `contrast` und `proof:all`
+(22 Läufe) sind grün. Es ist die im Commit benannte Fixture-Lücke, kein neuer Befund.
+
+### Welle 16 — läuft (gestartet 2026-09-14, 09:36, nach Rücksetzung des Limits)
+
+Dieselben vier Aufträge wie Welle 14/15, unverändert gültig — sie hatten beim Abbruch keine Zeile
+geschrieben.
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-375** | Die achtzehn Fälle, **und T-371s Behauptung dahinter nachmessen statt übernehmen**; dazu die fünf Fälle, die R-34 schließen, die Fehlschlagspfade von `startTimer`, die sechs Domänenfälle zu `decideOrphanedTimer.now` | unit-tester | `packages/*/test/**`, `apps/*/test/**` ohne `test/version/**` |
+| **T-372** | Augenschein: sieben Paletten, beide Dichten, 1280 × 820 und 960 × 640, vier Zustände, **SC 1.4.13 „überfahrbar" am echten Zeiger**, N-2 und N-6 | visual-qa | nur der eigene Bericht |
+| **T-373** | `todo-tabelle.md` nachziehen | ui-designer | `docs/design/todo-tabelle.md` |
+| **T-374** | `todo-tabelle-fluss.md` nachziehen | ux-designer | `docs/design/todo-tabelle-fluss.md` |
+
+**T-373 (ui-designer) fertig.** Siebzehn Abschnitte geändert, und **jede Änderung trägt die
+Entscheidung, die sie umsetzt** — die Berichtigungsliste im Kopf ordnet sie B-1…B-8 und N-2…N-10
+zu, damit der nächste Abgleich **nachschlagen statt lesen** muß. Das ist die Antwort auf E-113,
+und sie ist billiger als jede Absprache.
+
+**Ü-1 ist aufgelöst und die Rollenfrage gleich mit:** gebaut ist `@ark-ui/react/popover` mit
+`modal={false}`; `role="dialog"` **bleibt**, weil ein Dialog seinen Anspruch über `aria-modal`
+erhebt und nicht über den Namen. Die Auflage „nie `aria-modal`, nie `.scrim`" bekommt mit **A16**
+einen Wächter — eine Zusage ohne Wächter war in diesem Bestand schon dreimal grün und blind.
+
+**Neu ist 5.5: SC 1.4.13 „überfahrbar" hat endlich einen Mechanismus** (220/220 ms, `gutter: 4`),
+und der Kernsatz ist der wertvolle: **Versatz und Nachlauf sind ein Paar**, und die Fläche selbst
+muß `pointerenter` hören. T-366 hatte gemessen, daß auf **keiner** der beiden Seiten ein
+Mechanismus stand.
+
+**A14 ist nach Modalität in A14a/A14b geteilt** und um zwei Gegenproben ergänzt — der Befund aus
+T-366, daß sie die Entscheidung aus B-5 in **keiner** Richtung maß, ist damit zu.
+
+**`.todo-row` überlebt am `<tr>`, der Paletteneintrag fällt trotzdem** — und die Begründung ist
+gemessen, nicht behauptet: `box-shadow: none` löschte die Aktivmarkierung, `--bg-canvas` nähme nur
+dieser Tabelle das Zebra. Die **Wirkungs**frage geht ungekürzt an visual-qa.
+
+**Ein Befund für den frontend-dev (Ü-2):** `.table__row.todo-row--running` ist gegenüber
+`.table__row:nth-child(even)` **gleich** gewichtet und gewinnt nur über die Blattreihenfolge — der
+Kommentar an der Stelle behauptet das Gegenteil. Die haltbare Form steht im Bestand
+(`components.css:846-848`).
+
+**Offen aus T-373:** trägt `role="dialog"`? **OF-5** — die sichtbare Unterscheidung des
+Erledigt-Kästchens hat er **nicht erfunden**, weil A-25.9 sie nicht nennt; visual-qa soll messen,
+bevor jemand eine Form erfindet. **OF-6** — „Erledigt, Erledigt" im Vorlesefluß, angenommen und
+benannt. **F-8** bleibt bewußt unbeantwortet: die Randmarkierung steht als Bauform mit Preis da,
+die Entscheidung gehört dem Schwesterpapier.
+
+**T-374 (ux-designer) fertig.** Zweite Fassung, ebenfalls mit Zuordnungstabelle vorn. **Die fünf
+Befunde, die gegen sein Papier gingen, sind umgeschrieben statt weginterpretiert** — das ist der
+Unterschied, auf den es ankam: §4 vollständig neu (Titel bricht um; TT-07/TT-08 gestrichen, Ersatz
+**TT-31/TT-32**, **R-10 neu**), TT-04 auf 1280 samt 10.1/10.2, TT-18 verlangt das Schließen in
+**beiden** Modalitäten samt **TT-34** als Gegenprobe, §13 zählt **zwölf** statt neun Fundstellen,
+§12 **dreizehn** statt zehn Einträge.
+
+**Und die drei, die für ihn gingen, hat er nicht als Freispruch genommen:** R-3 ist mit 73,5 % als
+**widerlegt geführt, nicht gestrichen** — ein widerlegtes Risiko, das stehenbleibt, ist mehr wert
+als ein verschwundenes.
+
+**Der Preis von B-1 steht jetzt da, wo er hingehört:** **R-10** — die Zeilenhöhe hängt wieder an
+den Daten, gemessen **76,6 px bei 110 Zeichen**. Das ist die Kehrseite der Entscheidung, den Titel
+umbrechen zu lassen, und sie ist eine Frage an den Augenschein.
+
+**Drei Ergänzungen über den Auftrag hinaus:** N-1 (Affordanz der Kopfzellen, TT-03 geschärft), N-4
+(keine Randmarkierung, **TT-33 neu**), N-6 (der zweite Weg entschieden, §9 Z0/Z4 berichtigt,
+**R-11 neu**).
+
+**Beide Verfasser melden dieselbe Lage, und sie haben recht:** Der Abgleich zwischen den Papieren
+hat wieder **nicht** stattgefunden — E-113 zum dritten Mal. T-374 hat `todo-tabelle.md` sogar in
+einem **Zwischenstand** gelesen (Kopf geschrieben, Rumpf 5.3/6.2 noch erste Fassung) und verweist
+deshalb nur über Abschnittsnummern. Gemildert durch die Zuordnungstabellen in beiden Papieren,
+**nicht aufgehoben**.
+
+**T-375 (unit-tester) fertig — das Tor ist grün.** Vom Orchestrator nachgefahren:
+`pnpm test:coverage` **1 914 grün / 2 übersprungen / 0 rot** über 101 Dateien (vorher 18 rot),
+`typecheck` grün über alle acht Projekte, `git status` ohne Meßrest.
+
+**Er hat T-371s Behauptung nicht übernommen, sondern einzeln nachgemessen** — und sie hält: Die
+eine Fixture-Zeile stellt alle achtzehn wieder her, **und jeder nagelt danach dieselbe Behauptung
+fest wie vorher**. Die beiden Archiv-Fälle, bei denen der Verdacht am größten war, umgehen
+`importDataArchive` ganz und berühren `foundAtServiceStart` nie.
+
+**Vier der fünf benannten Fälle stehen** in `idle-service-start-guard.test.ts` (acht Prüffälle):
+`beginIdle` in **beiden** Stellungen, der gedeckelte `completeReturn` mit und ohne Lebenszeichen,
+**die Gegenprobe auf den eigenen Timer**, das Zukunfts-Lebenszeichen an **beiden** Stellen. Rot
+hergestellt über `git show 311b26e:…` und byte-identisch zurückgeschrieben, mit `md5sum`- und
+`git diff --stat`-Nachweis.
+
+**Der wertvollste Absatz ist eine Berichtigung an den beiden Prüfern:** Die wörtliche Mutation, vor
+der T-371 gewarnt hat (`return next` → `return queue`), ist **nicht still** — `queue` löst stets zu
+`undefined` auf und bricht den Rückgabewert für jeden Aufrufer; der bestehende Prüfstand fängt das
+breit. **Der wirklich stille Rückschritt ist die verworfene Zwei-Transaktionen-Anordnung**, und die
+fängt Fall E mit 17 Lesern zuverlässig: **0/17 gegen 17/17 über fünf Wiederholungen**. Er nennt das
+ausdrücklich eine Berichtigung, keinen Widerspruch.
+
+**`decideOrphanedTimer.now`:** die sechs vorbestehenden Domänenaufrufe übergeben den Wert jetzt,
+dazu zwei neue Deckelfälle — das Pflichtfeld ist damit vorbereitet.
+
+**Beide Bedingungen von T-371 für R-34 sind erfüllt.** Geschlossen wird der Eintrag trotzdem noch
+nicht: T-371 hat weder Code-Review noch Sicherheitsprüfung gesehen (T-370 hat T-363 geprüft, nicht
+T-371).
+
+**Ein Befund am Rand, der in die nächste Welle gehört:** Ein Lauf zeigte einen **flatternden** Fall
+in `apps/local-api/test/version/checker.test.ts` — außerhalb seiner Hoheit, von T-358 schon einmal
+als flatternd benannt; der Wiederholungslauf war grün. Ein flatternder Fall im Tor ist ein eigener
+Auftrag.
+
+**T-376 (spec-ux-reviewer) gestartet — eng begrenzt**, kein zweiter voller Durchgang:
+die fünf Stellen, die beide Verfasser selbst benannt haben (TT-31/TT-32 gegen das Schwesterpapier;
+„mitgewandert" in 9.3, das nach B-5 rot wäre; der Vorrat in 9.4, der **zwei** Fälle braucht; die
+neue Rollenentscheidung `role="dialog"`, die noch niemand geprüft hat; der Mechanismus zu
+„überfahrbar" in 5.5), dazu die **zwei Achsen des ersten Durchgangs**: gibt es wieder eine Frage,
+die **beide** dem jeweils anderen zuschreiben — und haben beide dieselbe gemessene Zahl aus
+derselben Quelle übernommen, ohne daß jemand sie geprüft hat.
+
+### Welle 10 — Plan, wie gestartet
+
+| Was | Rolle |
+|---|---|
+| **R-34**, kleine Form: `captureTimerRecovery` hinter `replaceAll` (A-A-126), mit T-350 Abschnitt 4 als Gegenprobe | domain-dev |
+| Regel G an der **Eigenschaft** statt an einer Schreibweise (A-A-119 bis A-A-122, elf Gestalten aus T-357, drei aus T-356), Regel H ohne Absageweg | frontend-dev |
+| A-A-123 bis A-A-125: zwei Zeilen in `features/version/**`, 6g-1 mißt den Rumpf statt den Eintritt, der synchrone Riegel | domain-dev |
+| Prüffall zu R-34 und zum Timer-Neustart | unit-tester, **nach** der Behebung |
+| Freigaberunde, dann `pnpm check` als Ganzes, dann documenter | Qualitätstor |
+
+### Welle 8 — Plan, wie gestartet
+
+| Was | Rolle |
+|---|---|
+| **A-A-112** (`createPortal` gegen seine Einfuhr auflösen — behebt G-4 und G-7 mit einer Zeile), `classTokensOf` für Vorlagenzeichenketten, die übrigen G-Gestalten; **Sprungmarke und Halte nach 8.5** samt E-114-Suche über die **Benutzung** von `#inhalt`; `.board` als benannter Laufbereich; die Bereichsschiene nach 7.5 | frontend-dev |
+| **A-A-106**, der dritte Weg (gerechneter Quellname), die fünfte Art von Stelle, A-A-117/118 | domain-dev |
+| Die drei Fälle in `timer.ts` (`context.timerRecovery`) | domain-dev, eigener Auftrag |
+| A2/A2a nach T-344, A9, der Kopfkommentar in `viewport-fit.spec.ts:34-45`; **A8 ist bei 1024 × 640 in der Vorschrift rot, im gebauten Lauf aber grün** — er nimmt `.screen__body--frame` weiterhin in jeder Größe aus (T-351 B-19). Der Satz „beabsichtigt rot" galt dem Papier, nicht dem Bestand | e2e-tester, **nach** frontend-dev |
+| Erneut über beide Papiere | spec-ux-reviewer |
+
+### Welle 7 — Plan, wie gestartet
+
+| Was | Rolle |
+|---|---|
+| **B-02, B-03, B-07 in einem Auftrag**: beide Papiere gegeneinander berichtigen, `.screen__body--frame` als Sprungziel entscheiden | ui-designer **und** ux-designer gemeinsam — getrennt vergeben wäre es E-113 zum dritten Mal |
+| **B-04**: A8 und 9.6 bauen, die zwei Untergrenzen, A7s zweite Hälfte, die zwei neuen Größen; TP-VER-10 als Gegenprobe zu R-33 verknüpfen und fahren; die zwei nie gelaufenen Konfigurationen; die sechs roten Fälle | e2e-tester |
+| **A-A-106** (`version.ts:385`) und der fehlende Satz in `repo-version-check.ts:78` samt `composition.ts` | domain-dev, jetzt frei — der Wächter steht |
+| Freigaberunde über T-341 und T-342 | code-reviewer, security-checker |
+| Zehn nicht blockierende Befunde aus T-343 (B-06, B-08 bis B-15) | verteilt |
+
+**Ursprünglicher Plan der Welle:**
+
+| Was | Rolle |
+|---|---|
+| Fokusring am festen Kopf; die Filterleisten von Todos, Buchungen, Protokoll auf das Höhenbudget aus E-115; `proof:surface` an der **Verankerung** statt an Portalen (A-A-109); die berichtigte Schwelle ≈ 1259 | frontend-dev |
+| Lückenliste `:1383` an der Anforderung; K-7 (Rumpf des `write`-Literals) und die Umgebungsvariablen-Gestalten; A-A-110 | domain-dev |
+| A-A-111 — die Auskunft mitmessen, nicht nur die Anfrage (R-33) | domain-dev, eigene Welle nach dem Wächter |
+| A-A-106 — das unbefristete Warten in `version.ts:385` | domain-dev, **nach** der Freigabe des Wächters |
+| Meßsatz A8/9.6 nachziehen, die beiden nie gelaufenen `test:e2e`-Konfigurationen, die sechs roten Fälle | e2e-tester |
+| spec-ux-reviewer über beide berichtigten Papiere — insbesondere die Freigabe des umbrochenen Kopfes als Regelgestalt über die halbe getragene Breite | spec-ux-reviewer |
+
+**Nummernhinweis:** T-335 wollte den Rest von R-30 als „R-31" führen — die Nummer ist vergeben.
+Vergeben sind jetzt R-32 und R-33.
+
+| Was | Rolle | Warum jetzt |
+|---|---|---|
+| A-A-106: `version.ts:385`, das unbefristete Warten; `await remember(…)` vor `await source.latest(…)` | domain-dev | Der eigentliche Hebel hinter R-30. T-335 hat den Wächter gebaut, der die Stelle mißt — jetzt ist die nächste Welle da |
+| A2 klären, Vorschrift nach T-334 nachziehen, dann erneut fahren; `test:e2e:version-check` und `…:attachment-persistence` ohne `&&`-Abhängigkeit nachholen | e2e-tester | `pnpm test:e2e` ist als Ganzes weiterhin **nicht** nachgewiesen |
+| Sechs rote Fälle zuteilen: drei `timer-stop-announcement` (lastfrei reproduziert, Vermutung widerlegt), `attachment-crud:35`, `kanban:288` (TP-KANBAN-04), `toast-eviction:123` | offen | Der Timer-Befund ist der schwerste: reproduzierbar, Ursache in `apps/**` |
+| Freigaberunde über T-334 und T-335, je mit **eigenem** Ausschalter bzw. eigenem Augenschein | code-reviewer, security-checker, visual-qa | T-334 meldet eine sichtbare Layoutänderung unterhalb ~1067 px |
+| Designpapiere nachziehen: E-113, Z6/AK-02, `scrollbar-gutter` an der Rahmenansicht, `flex-basis: 10rem`, Name des Einstellungs-Laufbereichs | ui-designer, ux-designer | Jetzt vollständig; vorher wären sie zweimal angefaßt worden |
+
+**Weiter offen, ohne Termin:** `exports`-Tabelle für `apps/local-api` (Entscheidung), A-A-102,
+A-A-103, `parseRoute`/Sprungmarke, die Entscheidung über `vitest.config.ts` (42,28 % — Schwelle
+heute rot), `verify:bundle` bindet 17844 und gehört auf die Liste der portgebundenen Läufe, der
+documenter, und rund 320 MB Meßkopien in `~/.cache/t332*`, die nur der Benutzer löschen kann.
+
+## T-297 bis T-3xx — Anhänge aus dem Outlook-Add-in (Auftrag vom 2026-09-11)
+
+Auftrag des Auftraggebers: Aus einer E-Mail heraus ein Todo anlegen, das die **E-Mail selbst als
+Datei** und **alle ihre Dateianhänge** trägt. Vorbild ist die Outlook-Bridge zu Super
+Productivity (ZIP vom Auftraggeber). Abnahme: zwei Dateianhänge ⇒ **drei** Anhänge am Todo.
+
+**E-108 hebt E-100 zur Hälfte auf.** Beim **Anlegen** entstehen Anhänge, am **gefundenen** Todo
+weiterhin nicht — A-10.9 bleibt unverändert. A-19.19 ist neu gefaßt, Abschnitt 19.5 mit
+A-19.22 bis A-19.33 ist neu in `docs/spec.md`.
+
+### Der Befund aus der Vorlage, und er halbiert den Nutzen der Vorlage
+
+**Die Bridge hängt die E-Mail nicht als Datei an.** `src/client/email-attachments.ts` sammelt
+die **Dateianhänge**; die Nachricht selbst wird ein Deep-Link plus ein auf 2500 Zeichen
+gekürzter Textauszug — genau das, was der Auftrag ausschließt. „Bestehende Logik nachbilden"
+trägt für A-19.23 vollständig und für A-19.22 **gar nicht**.
+
+Was die Vorlage sonst hergibt: `getAttachmentContentAsync` (Mailbox **1.8**, Manifest fordert
+1.1 ⇒ Laufzeitprüfung und **stille** Degradierung — bei uns durch A-19.31 verboten), Inline-
+Bilder ausgefiltert, Cloud-Anhänge werden Verweis, 25 MB je Datei, Einzelfehler brechen die
+übrigen nicht ab.
+
+### Drei Weichen, vom Auftraggeber gestellt
+
+| Weiche | Gewählt | Preis, ausdrücklich angenommen |
+|---|---|---|
+| E-Mail als Datei | **Original-MIME über EWS** | Manifest braucht `ReadWriteMailbox` statt `ReadItem` — ganzes Postfach, lesen und schreiben. EWS kann mandantenseitig aus sein ⇒ A-19.31 |
+| Öffnen | **gewöhnlicher Dateianhang** | Weg von fremder E-Mail bis zur Ausführung einer `.bat`/`.lnk`/`.exe` steht offen; gesichert allein durch die Rückfrage mit vollem Pfad |
+| Größe | **eigene Grenze je Datei** | dritte Ausnahme von B-1.7 neben der Datensicherung; 1 MB aller übrigen Routen bleibt |
+
+### Welle 1 — Bewertung und Fluß, gebaut wird noch nichts
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| T-297 | Bewertung **vor** dem Bau: erweitertes Postfachrecht, fremde Binärdatei im Datenverzeichnis (Pfadausbruch, reservierte Namen, Doppelendungen, RTL-Zeichen), Pfad aus fremder Hand am Öffnen-Befehl. A-A-21 ist ab jetzt falsch und wird nachgezogen; **R-21 und R-24 bekommen endlich ihre Bewertung** statt der siebten Anmeldung | security-checker | `docs/bedrohungsmodell.md` |
+| T-298 | Der Fluß: sechs Zustände, darunter der wichtigste — **teilweise gelungen** darf weder wie Erfolg noch wie Fehlschlag aussehen. Wortlaute ausgeschrieben, nicht beschrieben | ux-designer | eigenes Artefakt unter `docs/design/` |
+
+**Bewußt nicht gestartet:** jede Umsetzung in `apps/**`. „Beide Wege sind im Bedrohungsmodell
+bewertet, bevor sie gebaut werden" steht seit der Versionsprüfung in `CLAUDE.md`; hier kommen
+drei Wege auf einmal. Ebenfalls nicht gestartet: der ui-designer (wartet auf T-298) und
+`proof:addin` Abschnitt 18, der heute die Abwesenheit **jeder** Anhangstür unter `/addin` mißt
+und mit der Umsetzung in **einem** Auftrag fällt.
+
+
+### Welle 1 — Ergebnis
+
+**T-298 (ux-designer) fertig.** Sieben Zustände plus einer für das Recht. Tragend ist die
+Reihenfolge **erst sammeln, dann anlegen** — nur so hinterläßt „Abbrechen" nichts und ist die
+Fehlgrundliste vollständig, bevor das Todo existiert. Das Häkchen der Vorlage entfällt, ihre
+stille Degradierung ist an drei Stellen ersetzt. Nachholen geht **nur in SuperTakt**, weil ein
+Anhang am bestehenden Todo genau die Tür wäre, die E-108 zuhält.
+
+**T-297 (security-checker) fertig — Urteil: Nacharbeit vor dem Bau.** Neues Kapitel 39 im
+Bedrohungsmodell, A-A-21 berichtigt, 18 Auflagen A-A-78 bis A-A-95. Er hat die Vorlage nicht
+gelesen, sondern **gefahren**: `sanitizeFileName`/`uniqueTargetPath` zeichengleich nachgebaut,
+25 Angriffsnamen, echte Dateien — **25 hinein, 25 auf der Platte, null Ablehnungen.**
+
+**E-109 hebt E-108 Punkt 1 auf.** `getAsFileAsync` liefert die Nachricht als EML/MIME in Base64
+mit **read item** (Mailbox 1.14). EWS und `ReadWriteMailbox` entfallen, A-19.32 ist neu gefaßt:
+kein weitergehendes Recht als bisher. Auf älterem Outlook wird die `.eml` nachgebaut und **als
+Nachbau gekennzeichnet** (A-19.22a, A-19.22b).
+
+**A-19.23 gegen A-A-17 entschieden.** Der fremde Name wird **Anzeigename**, den Namen auf der
+Platte bestimmt SuperTakt, die Endung bleibt (A-19.23a). Damit ist die Klasse „geprüfter Name ≠
+aufgelöster Name" nicht abgewehrt, sondern **unmöglich** — dritter Fall dieser Klasse nach
+T-156-1 und T-164-1.
+
+**R-21, R-23 und R-24 sind bewertet** statt zum siebten Mal angemeldet, R-26 und R-27 neu. Die
+schwerste Auskunft: In `apps/desktop/**` gibt es **keinen Deinstallationspfad** — Zertifikat und
+privater Schlüssel bleiben stehen, auch wenn SuperTakt entfernt ist.
+
+**Zwischenfall am Rand, und er gehört ins Protokoll.** Drei Agenten haben beim Beschreiben des
+Rechts-nach-links-Angriffs die Steuerzeichen **roh** in ihre Dateien geschrieben; `pnpm check`
+war dadurch an der **ersten** Stufe rot. Der Wächter kann nicht unterscheiden, ob ein solches
+Zeichen einen Angriff ausführt oder ihn erklärt — und er soll es nicht können. Ein
+Bedrohungsmodell, das seine Beispiele wörtlich trägt, wird selbst zum Träger.
+
+### Welle 2 — gebaut, beide Hälften
+
+| ID | Rolle | Ergebnis |
+|---|---|---|
+| T-299 | domain-dev | Aufnahme, Ablage, Migration **0023**. Der fremde Name wird **Anzeigename** und berührt den Pfad nur über die Endung; den Plattennamen erzeugt SuperTakt (`<32 Hex>[.endung]`, `0700`/`0600`, `open(…, 'wx')` statt `existsSync`+`writeFile`). **Kein zweiter Namensfilter.** Drei Grenzen greifen vor dem ersten Byte, gemessen am Dekodierten |
+| T-300 | integration-dev | `getAsFileAsync` mit Laufzeitprüfung, Nachbau kodiert erzeugt — **keine Trennmarke, weil es keinen zweiten Teil gibt**: einteiliges `text/plain`, Verschärfung über die Auflage hinaus. Cloud-Anhänge erst nach `normalizeAttachmentLink`. `proof:addin` 290/0 |
+| T-301 | domain-dev | Archivfassung **5 → 6**, die Bytes wandern mit (A-19.34). **Die eigentliche Arbeit war der Pfad, nicht die Bytes** — `todo_attachment.target` trägt den Pfad des Quellrechners und wird beim Einspielen neu gesetzt, auch ohne Bytes. Einspielgrenze **256 MiB, gemessen**: V8-Wand bei 536 870 888 Zeichen, darüber irreführendes 422 statt 413 |
+| T-302 | frontend-dev | **`proof:clamp` — R-27 beantwortet.** Zwei Mengen, ihr Schnitt ist der Befund: 34 deckelnde Klassen gegen 20 Stellen mit Herkunftstyp `UncappedText`. Neun Gegenproben, darunter die Untergrenze bei leerer Deckelmenge |
+| T-303 | ux-designer | Entwurf auf E-109 nachgezogen. **Drei Sätze gestrichen, einer davon wahr** |
+
+**Der beinahe stehengebliebene Fehler lag in der alten Richtung**, wie im Auftrag gewarnt:
+`if (schemaVersion !== 5) idle_keep_timer_running = 1` hätte mit der 6 eine korrekt geführte
+Einstellung überschrieben. Alle Vergleiche stehen jetzt als `<`/`<=`.
+
+**Drei Regeln sind aus dieser Welle hervorgegangen und gelten künftig allgemein:**
+
+1. **Die Gründe über die Leitung dürfen gröber sein als die auf dem Bildschirm**, solange jede
+   Kennung auf genau einen Satz fällt. Daraus folgt, daß `too_many` und `total_too_large` im
+   Add-in bleiben — beide stehen **vor dem Klick** fest und reisen nie über die Leitung.
+2. **Eine Zusage, ein Recht nicht auszunutzen, das man nicht hat, erzeugt beim Leser erst die
+   Vorstellung des Rechts.** Deshalb fiel „SuperTakt liest ausschließlich die offene Nachricht"
+   mit — ein Satz, der **wahr war**.
+3. **Wer eine Menge über CSS-Wähler bildet, bildet sie über den Gegenstand, nicht über den
+   Anfang.** `.screen:has(> .board) > .board` ist nicht `.screen`; der erste Lauf hat daran die
+   ganze Detailansicht zum Deckel erklärt.
+
+### Welle 3 — läuft
+
+| ID | Aufgabe | Rolle |
+|---|---|---|
+| T-304 | Die Naht schließen, `createTodoSchema` liest das Feld, `ATTACHMENTS_TRAVEL_WITH_CREATE` auf `true` — **und `proof:addin` Abschnitt 18 von Name auf Wirkung** (A-A-82): zugesichert bleibt nicht „es gibt keine Anhangsroute", sondern „über diese Tür entsteht kein Anhang an einem Todo, das vorher schon da war" | integration-dev |
+| T-305 | Archivfassung im Prüffall, und die fünf Messungen aus T-301, die bisher nur im Bericht stehen — ein Bericht ist kein Prüffall | unit-tester |
+
+**Offen, ohne Termin:** der Versionswächter-Strang (T-296, fünfte Runde, wartet auf Freigabe),
+E-107 (braucht `erwartetAlle`), die Speicherspitze je Anfrage — **gemessen von 333 MB auf
+934 MB** —, die der security-checker noch nicht gesehen hat, und rund fünfzig unversionierte
+Einträge im Arbeitsbaum.
+
+## T-273 bis T-288 — Die Versionsprüfung, und was an ihr hing
+
+Auftrag des Auftraggebers: „Kannst du die Versionsprüfung mal überarbeiten? Diese greift nicht
+immer." Der Befund war einzeilig und der Weg dahin nicht: `schedule()` stand im Erfolgszweig,
+im Fehlerzweig stand nichts. **Ein einziger Fehlschlag beendete die Prüfung für die Laufzeit der
+Anwendung** — genau die Bedingung, unter der man sie am nötigsten hätte.
+
+### Der Weg, in vier Schritten
+
+| | Was |
+|---|---|
+| T-273 | `schedule(minIntervalMs)` in Fehlerzweig **und** `catch`. Der Fehler selbst ist damit behoben |
+| T-279 | Der letzte Prüfzeitpunkt in den Bestand (Migration 0022), dazu ein Streuwert auf den Mindestabstand gegen den Gleichtakt vieler Rechner |
+| T-285 | **T-279 teilweise zurückgenommen.** Der gespeicherte Wert wurde gelesen — und sperrte die Prüfung über den Neustart hinweg. Der Boden gilt **innerhalb eines Laufs**; ein Programmstart fragt immer einmal (E-106) |
+| T-288 | Der Wächter, der den zurückgenommenen Weg verschlossen halten soll, maß den **Bezeichner** statt den **Zugriff**. Jetzt vier Gestalten statt zwei |
+
+**Die Lehre steht in E-106 und ist teurer als der Fehler:** Ich hatte die Frage nach dem
+Speichern gestellt und dabei **nur den Nutzen genannt**. Daß derselbe Wert die Prüfung nach einem
+Neustart blockiert, stand in keiner Zeile der Frage. Gefunden hat es ein Prüffall (TP-VER-11),
+nicht die Entscheidung. Eine Entscheidung, die nur ihren Nutzen kennt, ist keine Entscheidung.
+
+### Was daran hing, ohne daß danach gesucht wurde
+
+- **A-18.11 zweimal geschärft.** Der alte Wortlaut ließ „kein zweiter Versuch" so lesen, daß der
+  Fehler richtig war. Jetzt: kein wiederholtes Nachfragen **im selben Prüflauf**, der Takt bleibt
+  unberührt, der Mindestabstand gilt **innerhalb eines Laufs**.
+- **Der Wächter `rueckweg` war zweimal zu schlagen** (T-287). Eine Datei im Ordner des Prüfers,
+  die die Spalte unmittelbar las, ließ den Lauf bei 35/0 grün. Weil die Datensicherung
+  `app_setting` als fremder Text vollständig ersetzt, wäre ein wiederhergestellter Leser ein
+  **stiller Ausschalter** der Versionsprüfung über ein präpariertes Archiv.
+- **Der Bestandswert war nie bewertet.** `last_version_check_at` ist seit E-106 in der Praxis der
+  Startzeitpunkt der letzten Sitzung, auf die Sekunde — der einzige Wert dieses Bestands, der
+  etwas über **Benutzung ohne Buchung** sagt, ohne Zutun entsteht und durch kein Zutun
+  verschwindet. Eingestuft als gering; aufgenommen, weil sie vorher nicht da war.
+- **R-19 neu begründet statt wiederholt:** Die Frequenz schadet nicht uns, sondern den Nachbarn
+  hinter derselben Quelladresse (344/h gegen ein Kontingent von 60), und seit der geschärften
+  A-18.11 klärt sich ein erschöpftes Kontingent nicht mehr von selbst. Der Preis, der nicht
+  wegargumentiert wird: **jeder Programmstart ist von außen sichtbar**.
+
+### Der zweite Auftrag: das Kanban-Board (T-281 bis T-283)
+
+Aus dem Bildschirmfoto des Auftraggebers: Überfällig-Marke und Abspielknopf überlagern sich,
+sobald eine Karte drei Marken trägt. **Zwei Ursachen, nicht eine** — `.kcard__top` hatte kein
+`flex-wrap`, und `max-width: 100%` an der Fristmarke war wirkungslos, weil `.deadline`
+`flex: none` trägt. Dazu TP-KANBAN-07, der den Fall in **Pixeln** mißt, und ein Designpapier
+(`docs/design/kartenkopf-board.md`), das die Rangfolge der Kopfzeile erstmals überhaupt festhält
+— sie stand vorher **nirgends** in `docs/design/**`.
+
+**Nebenbefund T-284:** Der Hochlauf prüfte die gewählte Gestaltung gegen eine **Form**
+(`/^[a-z-]{1,40}$/`) statt gegen die **Liste** der neunzehn Gestaltungen. Unbekanntes — auch das
+alte `clear` — wird jetzt auf `classic` abgebildet (E-105).
+
+### Offen aus dieser Welle
+
+| Nr | Was | Bei wem |
+|---|---|---|
+| T-289 | **Zwei Prüfer, zwei Urteile.** security-checker: freigegeben — kam aber **dreimal** durch, nicht durch eine Lücke, sondern durch eine **zu weite Zusage** („über seinen Port oder gar nicht" gegen gemessen „faßt keine Datenbank **unmittelbar** an"; der Unterschied ist eine Zeile `import`). code-reviewer: **nicht freigegeben** — der Rumpf-Ausdruck über `VersionCheckStorePort` bricht am ersten `}` und urteilt bei verschachtelter Signatur grün. **Der Befund stammt aus T-285, nicht aus T-288.** Tor bei alledem grün, Exit 0 | → T-290 |
+| T-290 | **Fertig, Tor vollständig grün (Exit 0), `proof:release-safety` 37 → 43.** Klammerzählung statt `[^}]*` (der blockierende Befund war aus T-285), fünfte Gestalt mißt die **Importmenge** des Prüferordners gegen sieben Quellen — V1b ist damit rot, vorher ließ dieselbe Datei den Lauf bei 37/0 durch. **Vier** zu weite Sätze zurückgenommen, nicht drei: die **grüne** Zeile in Abschnitt 2 sagte „ein Programmstart prüft immer einmal" zu, was der Lauf nicht mißt — im Auftrag stand sie nicht | → T-291 |
+| T-291 | **Wieder nicht freigegeben, dritte Runde.** Zwei blockierende Messungen an der reparierten Stelle selbst: die Mitgliederregel `/(\w+)\s*\(/` sieht nur Methodensyntax — `readonly read: () => Promise<…>` macht den ganzen Prüfsatz **0 Befunde** bei Lauf 43/0, und genau diese Schreibweise ist der **Hausstil derselben Datei**; der Klammerzähler kennt keine Zeichenketten. Dazu zwei `mittel` derselben Bauart: `FORBIDDEN_IN_SOURCE = []` bleibt 43/0, und der Zweig „dritte Adresse auf github.com" läßt sich ersatzlos entfernen. Bestätigt hat er dagegen: 43 von unten nachgerechnet, alle **sechs** Mutationen nachgefahren (nicht zwei), `erwartet` trennt nachweislich, Schnitt verhaltensgleich | → T-292 |
+| T-292 | **Fertig, Tor grün, `proof:release-safety` 43 → 51.** `interfaceRumpf` und `/(\w+)\s*\(/` sind weg; `portMitglieder()` liest über `ts.createSourceFile`, wie die beiden Nachbarn im selben Ordner. Untergrenze: **null gelesene Mitglieder ist rot** — das war allen drei Ausfällen gemeinsam. Beide `mittel`- und alle drei `niedrig`-Befunde mit erledigt. **Der Kausalnachweis ist das Bemerkenswerte:** mit Compiler und Untergrenze, aber ohne die acht neuen Verstoßeinträge läuft der Lauf **43/0, zeichengleich zu T-290** — die +8 sind ausschließlich Gegenproben, der Umstieg selbst bewegt die Zahl nicht | → T-293 |
+| T-293 | **Nicht freigegeben, vierte Runde — aber die Klasse ist zu.** Beide Befunde aus T-291 sind rot, dazu **29 weitere Formen** am Leser gemessen (Zeichenkettenliteral-Namen, Index- und Rufsignatur, generischer Port, Syntaxfehler, sieben Aliasformen) — alle in der sicheren Richtung. Der Kausalnachweis M11 hält zeichengleich. Blockierend: `portMitglieder` ignoriert **`heritageClauses`** — ein über `extends` geerbtes `read` macht alle fünf Gestalten grün, gemessen auch mit einer Basis aus `@takt/domain`, also aus einer **erlaubten** Importquelle. **Und eine Berichtigung:** „die Untergrenze, die allen drei Ausfällen gemeinsam war" ist falsch — der Leser fand in allen drei Fällen genau **ein** Mitglied (`write`), nie null; sie hätte keinen gefangen. Der Satz steht an drei Stellen und hatte schon zwei Leser getäuscht | → T-294 |
+| T-294 | **Fertig, Tor grün, 51 → 68 (nicht 64).** `heritageClauses` ⇒ Meßfehlschlag, beidseitig gemessen: ohne die Regel bleiben **beide** Bauarten des code-reviewers unbemerkt, mit ihr sind beide rot. Aus „drei Zeilen `null`" wurde ein Rückgabewert **mit Grund** — vier Meßfehlschläge hinter einem Satz wären nach der Zählvorschrift eine Gegenprobe für vier Zweige gewesen. **Die Abweichung ist der Ertrag:** vier Zusätze in `rueckweg`, darunter „kennt kein `write` mehr" — der Prüfsatz heißt „kann `write` und sonst nichts", gegengeprobt war nur das „sonst nichts" | → T-295 |
+| T-295 | Freigabe zu T-294 (code-reviewer), danach der security-checker | läuft |
+| — | R-23 (Wurzelspeicher) und R-24 (Fremdimport) sind **nie** sicherheitsbewertet worden; der security-checker meldet es zum **fünften** Mal an. Seine billige Einstiegsfrage: *Bleibt das Zertifikat nach einer Deinstallation im Wurzelspeicher stehen?* | Auftraggeber |
+| — | Toter `clear`-Code: rund 100 Zeilen in `app.css`, 5 in `packages/ui-tokens/tokens.css` | zwei Hoheiten, eine Aufgabe |
+| — | Sechzehn Arbeiten dieser Welle liegen **unversioniert** im Arbeitsbaum | Auftraggeber |
+
 
 ## T-249 bis T-272 — Die featureweise Umstrukturierung
 
@@ -1696,7 +3174,7 @@ Erzeugnis ohne sie ausgeliefert wird**. Was daraus folgt, gehört in jede Freiga
 | ID | Aufgabe | Blockiert durch |
 |---|---|---|
 | T-B02 | Add-in gegen die Referenzbilder | Referenzbilder liegen nicht vor |
-| T-B05 | Windows-Prüfliste, jetzt sieben Punkte | Kein Windows-Rechner. Wichtigster Punkt: Takt mit gesetzter Umgebungsvariable starten und prüfen, dass trotzdem der richtige Name im Export landet (B-8.1, E-042). **Neu:** Nach der Installation muss `…\Takt\taskpane\index.html` existieren — dass NSIS Ressourcen nach `$INSTDIR` legt, ist die unbewiesene Annahme, auf der die Auslieferung des Add-ins steht. |
+| T-B05 | Windows-Prüfliste, jetzt sieben Punkte | **Nicht mehr blockiert, seit T-246 (2026-09-10) die Werkzeugkette auf einem Windows-Rechner steht — nur nicht abgearbeitet.** Wichtigster Punkt: Takt mit gesetzter Umgebungsvariable starten und prüfen, dass trotzdem der richtige Name im Export landet (B-8.1, E-042). **Neu:** Nach der Installation muss `…\Takt\taskpane\index.html` existieren — dass NSIS Ressourcen nach `$INSTDIR` legt, ist die unbewiesene Annahme, auf der die Auslieferung des Add-ins steht. |
 | T-B08 | Die `.AppImage` mit Playwright fahren | Playwright hat auf Linux keinen Anknüpfungspunkt für Tauris Webview — belegt über die Bibliotheksabhängigkeiten und das Fehlen jeder Tauri-Unterstützung in der Schnittstelle, anders als bei Electron. Keine Auslassung, eine Grenze. |
 | T-B06 | 42Crunch-Audit und -Scan | `42c-ast` nicht installiert, keine Zugangsberechtigung. **Es gibt keinen Auditwert.** |
 | T-B09 | Barrierefreiheit mit einem **echten** Vorleseprogramm messen (O-DA, O-DN, jede Live-Region, jeder zugängliche Name) | Kein Orca und kein NVDA in dieser Umgebung (T-172). Bis dahin gilt: gemessen ist der Bedienungshilfen-Baum, **nicht** die Aussprache. Vor der Gesamtfreigabe einmal auf einem Rechner mit Vorleseprogramm zu fahren. |

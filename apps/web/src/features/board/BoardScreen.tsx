@@ -17,6 +17,7 @@ import { formatTime, plural } from "../../lib/format";
 import { poolPlacementMessage, RULE_WHAT_MOVES_A_CARD } from "../../lib/labels";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody, ScreenFrame, runAreaSurface } from "../../shared/ui/ScreenBody";
 import { RefreshHint, ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { PoolFormDialog } from "../structure/PoolFormDialog";
 import { PoolRenameDialog } from "../structure/PoolRenameDialog";
@@ -391,7 +392,23 @@ export function BoardScreen() {
         {announcement}
       </p>
 
-      <AsyncBoundary state={data.state} label="Board wird geladen" rows={4} onRetry={data.reload}>
+      {/*
+        Das Board war vor T-326 schon fensterfest, und das Muster dieses Umbaus
+        ist von hier verallgemeinert: Kopf und Werkzeugzeile stehen, `.board`
+        läuft waagerecht, jede `.kcolumn__body` senkrecht (T-322 4.4,
+        „unverändert"). Geändert hat sich der Weg dorthin — statt vier
+        `:has()`-Regeln trägt jetzt `.screen__body--frame` den Rahmen, und
+        **R-3 gilt auch hier**: Unter der Höhe, ab der eine Spalte abgeschnitten
+        würde, läuft wieder der Rahmen. Der Rückfall ist dort die bessere
+        Bedienung und keine Regression, sondern eine Rückkehr.
+      */}
+      <AsyncBoundary
+        state={data.state}
+        label="Board wird geladen"
+        rows={4}
+        onRetry={data.reload}
+        fallbackFrame={(content) => <ScreenBody label="Kanban">{content}</ScreenBody>}
+      >
         {(value, refreshing) => {
           const columnName = new Map(value.board.columns.map((view) => [view.column.id, view.column.name]));
           const appearances = new Map(
@@ -401,88 +418,109 @@ export function BoardScreen() {
 
           if (value.board.columns.length === 0) {
             return (
-              <BoardEmptyState
-                pools={pools}
-                poolsKnown={structure.state.status === "ready"}
-                onOpenSetup={() => setSetupOpen(true)}
-                onAdopt={(pool) => setPlacement(pool, "both")}
-              />
+              <ScreenBody label="Kanban">
+                <BoardEmptyState
+                  pools={pools}
+                  poolsKnown={structure.state.status === "ready"}
+                  onOpenSetup={() => setSetupOpen(true)}
+                  onAdopt={(pool) => setPlacement(pool, "both")}
+                />
+              </ScreenBody>
             );
           }
 
           return (
             <>
-              <div className="board__bar">
-                <p className="board__stamp">
-                  Stand {formatTime(value.board.generatedAt)} ·{" "}
-                  {plural(value.board.columns.length, "Spalte", "Spalten")}
-                  {value.board.appearances.length === 0
-                    ? ""
-                    : ` · ${plural(value.board.appearances.length, "Karte steht", "Karten stehen")} in mehreren Spalten`}
-                </p>
-                <RefreshHint active={refreshing} />
-                <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
-                  Neu berechnen
-                </Button>
-              </div>
-
-              <div className="board">
-                {value.board.columns.map((view) => (
-                  <BoardColumn
-                    key={view.column.id}
-                    view={view}
-                    columnName={columnName}
-                    appearances={appearances}
-                    summaries={value.summaries}
-                    highlighted={highlighted}
-                    seedTagIds={seedTagsOf(view.column)}
-                    lookup={lookup}
-                    entries={columnMenu(view.column)}
-                    onEditRule={() => setRuleForm({ pool: view.column })}
-                    onAdd={() => setCreateIn(view.column)}
-                    onOpenTodo={(todo) => navigate("todo", todo.id)}
-                    onEditTodo={setEditingTodo}
-                    onToggleDone={toggleDone}
-                    onToggleTimer={(todo) => timer.toggle(todo.id, todo.title)}
-                    onHighlight={(todo, columns) => {
-                      const next = highlighted === todo.id ? null : todo.id;
-                      setHighlighted(next);
-                      setAnnouncement(
-                        next === null
-                          ? "Hervorhebung aufgehoben."
-                          : /*
-                               Jeder Name einzeln behandelt (O-AT): `join` auf
-                               einer Reihe fremden Textes ergibt gewöhnlichen
-                               Text — die Herkunft fällt dabei ab, und mit ihr
-                               die Pflicht. Der Satz wird angesagt; ein
-                               Richtungszeichen in einem Regelnamen drehte
-                               ihn um.
-                             */
-                            `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].map(quotedName).join(", ")}.`,
-                      );
-                    }}
-                    isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
-                    isReactivated={(todo) => timer.reactivated.has(todo.id)}
-                    today={today}
-                    statusName={(todo) => structure.statusName(todo.statusId)}
-                  />
-                ))}
-              </div>
-
-              {partial ? (
-                <div className="list-more">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setPerColumn((current) => current + PAGE_SIZE)}
-                  >
-                    Mehr Karten je Spalte laden (derzeit {perColumn})
-                  </Button>
-                  <p className="list-more__hint">
-                    Das Board wird dabei neu berechnet — nur so bleibt die Auskunft „steht auch
-                    in …“ für jede Karte vollständig.
+              {/* Die Werkzeugzeile steht (T-322 4.4). Der Umschlag trägt den
+                  seitlichen Innenabstand der Ansicht, nicht die Zeile selbst. */}
+              <div className="screen__bar">
+                <div className="board__bar">
+                  <p className="board__stamp">
+                    Stand {formatTime(value.board.generatedAt)} ·{" "}
+                    {plural(value.board.columns.length, "Spalte", "Spalten")}
+                    {value.board.appearances.length === 0
+                      ? ""
+                      : ` · ${plural(value.board.appearances.length, "Karte steht", "Karten stehen")} in mehreren Spalten`}
                   </p>
+                  <RefreshHint active={refreshing} />
+                  <Button size="sm" variant="ghost" iconStart="rotate-ccw" onClick={data.reload}>
+                    Neu berechnen
+                  </Button>
                 </div>
-              ) : null}
+              </div>
+
+              {/*
+                Der Rahmen ohne Halt, das Board mit (T-344 8.5). `.board` ist
+                die **waagerechte** Laufstrecke der Ansicht; der Rahmen darum
+                laeuft in keiner getragenen Form. Nach der Sprungmarke bewegen
+                Pfeil links/rechts und Pos1/Ende das Board — Bild-ab tut dort
+                nichts, weil senkrecht die Spalte laeuft und nicht das Board
+                (`.board` traegt `overflow-y: hidden`). Das ist die Aufteilung
+                der Achsen und keine Luecke; heute ist nach der Marke **keine**
+                der beiden Achsen bedienbar.
+
+                Der Name „Kanban" ist die vorhandene Ueberschrift der Ansicht,
+                kein neuer Oberflaechentext (A-25.7).
+              */}
+              <ScreenFrame>
+                <div className="board" {...runAreaSurface("Kanban", true)}>
+                  {value.board.columns.map((view) => (
+                    <BoardColumn
+                      key={view.column.id}
+                      view={view}
+                      columnName={columnName}
+                      appearances={appearances}
+                      summaries={value.summaries}
+                      highlighted={highlighted}
+                      seedTagIds={seedTagsOf(view.column)}
+                      lookup={lookup}
+                      entries={columnMenu(view.column)}
+                      onEditRule={() => setRuleForm({ pool: view.column })}
+                      onAdd={() => setCreateIn(view.column)}
+                      onOpenTodo={(todo) => navigate("todo", todo.id)}
+                      onEditTodo={setEditingTodo}
+                      onToggleDone={toggleDone}
+                      onToggleTimer={(todo) => timer.toggle(todo.id, todo.title)}
+                      onHighlight={(todo, columns) => {
+                        const next = highlighted === todo.id ? null : todo.id;
+                        setHighlighted(next);
+                        setAnnouncement(
+                          next === null
+                            ? "Hervorhebung aufgehoben."
+                            : /*
+                                 Jeder Name einzeln behandelt (O-AT): `join` auf
+                                 einer Reihe fremden Textes ergibt gewöhnlichen
+                                 Text — die Herkunft fällt dabei ab, und mit ihr
+                                 die Pflicht. Der Satz wird angesagt; ein
+                                 Richtungszeichen in einem Regelnamen drehte
+                                 ihn um.
+                               */
+                              `${quotedName(todo.title)} steht in ${columns.length + 1} Spalten: ${[view.column.name, ...columns].map(quotedName).join(", ")}.`,
+                        );
+                      }}
+                      isTimerRunning={(todo) => timer.isRunningFor(todo.id)}
+                      isReactivated={(todo) => timer.reactivated.has(todo.id)}
+                      today={today}
+                      statusName={(todo) => structure.statusName(todo.statusId)}
+                    />
+                  ))}
+                </div>
+
+                {partial ? (
+                  <div className="list-more">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setPerColumn((current) => current + PAGE_SIZE)}
+                    >
+                      Mehr Karten je Spalte laden (derzeit {perColumn})
+                    </Button>
+                    <p className="list-more__hint">
+                      Das Board wird dabei neu berechnet — nur so bleibt die Auskunft „steht auch
+                      in …“ für jede Karte vollständig.
+                    </p>
+                  </div>
+                ) : null}
+              </ScreenFrame>
             </>
           );
         }}

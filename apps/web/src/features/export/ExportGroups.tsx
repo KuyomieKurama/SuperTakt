@@ -7,6 +7,7 @@ import { Icon } from "../../shared/ui/Icon";
 import { Button } from "../../shared/ui/Primitives";
 import { foreignText } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { runAreaSurface, type RunAreaSurface } from "../../shared/ui/ScreenBody";
 
 /**
  * Exportvorschau nach Tagesgruppen — S-07, A-8.6, E-020, E-025, E-031, E-034.
@@ -145,6 +146,39 @@ export interface ExportGroupListProps {
    */
   readonly renderRowDetail?: (groupId: string) => ReactNode;
   readonly className?: string;
+  /**
+   * Steht diese Liste **innerhalb** einer aufgeklappten Todo-Gruppe?
+   *
+   * Dann bekommt ihre Tabellenflaeche keinen Tabulatorhalt: Sie liegt schon in
+   * einem und wuerde je aufgeklappter Zeile einen weiteren erzeugen. Nur die
+   * aeuszerste Flaeche traegt Halt, Rolle und Namen (T-344 8.5 B-06).
+   */
+  readonly nested?: boolean;
+}
+
+/*
+ * Die beiden Tabellenueberschriften, je einmal getippt.
+ *
+ * Sie stehen als `<caption class="visually-hidden">` **und** als zugaenglicher
+ * Name der laufenden Flaeche. Zwei Fassungen desselben Satzes waeren zwei
+ * Wahrheiten ueber dieselbe Tabelle; hier ist es eine.
+ */
+const TODO_TABLE_CAPTION = "Export nach Todo, aufklappbar nach Tagen";
+const DAY_TABLE_CAPTION = "Tagesgruppen für den Export";
+
+/**
+ * Der Tabellenlauf als benannter Halt (AK-15, T-344 8.5 B-06).
+ *
+ * **Gemessen und nicht geglaubt:** T-344 laeszt die Laufstrecke eines
+ * Bausteins ohne eigenen Halt, solange in ihrer **rechtesten** Spalte ein
+ * fokussierbares Element steht — sonst holt kein Tabulatorschritt sie ins Bild.
+ * In beiden Exporttabellen steht dort heute reiner Text: „Ausgewaehlte Tage"
+ * traegt eine Zahl, „Exportzeit" traegt `{quarters} h`. Die fokussierbaren
+ * Elemente — Aufklappknopf und Auswahlkaestchen — liegen ganz **links**. Also
+ * bekommt die Flaeche doch einen Halt.
+ */
+function tableSurface(label: string, nested: boolean | undefined): RunAreaSurface | Record<string, never> {
+  return nested === true ? {} : runAreaSurface(label);
 }
 
 function toggleOnRowDoubleClick(event: MouseEvent<HTMLTableRowElement>, toggle: () => void) {
@@ -165,9 +199,9 @@ export function ExportGroupList(props: ExportGroupListProps) {
   const selectable = props.models.filter(model => model.blockedReason === null);
   const selected = selectable.filter(model => props.selectedGroupIds.has(model.group.id)).length;
   const allSelected = selectable.length > 0 && selected === selectable.length;
-  return <div className={cx("table-wrap", props.className)}>
+  return <div className={cx("table-wrap", props.className)} {...tableSurface(TODO_TABLE_CAPTION, props.nested)}>
     <table className="table export-todo-table">
-      <caption className="visually-hidden">Export nach Todo, aufklappbar nach Tagen</caption>
+      <caption className="visually-hidden">{TODO_TABLE_CAPTION}</caption>
       <colgroup>
         <col className="export-col--expand" /><col className="export-col--select" />
         <col className="export-col--status" /><col className="export-col--call" /><col />
@@ -223,7 +257,7 @@ function ExportTodoGroup(props: ExportGroupListProps) {
       <td className="table__cell--center tabular">{selected}</td>
     </tr>
     <tr id={bodyId} hidden={!open} className="export-todo__details">
-      <td colSpan={8}><ExportDayGroupList {...props} className="export-todo__days" /></td>
+      <td colSpan={8}><ExportDayGroupList {...props} className="export-todo__days" nested /></td>
     </tr>
   </tbody>;
 }
@@ -238,11 +272,12 @@ function ExportDayGroupList({
   onEditEntry,
   renderRowDetail,
   className,
+  nested,
 }: ExportGroupListProps) {
   return (
-    <div className={cx("table-wrap", className)}>
+    <div className={cx("table-wrap", className)} {...tableSurface(DAY_TABLE_CAPTION, nested)}>
       <table className="table export-day-table">
-        <caption className="visually-hidden">Tagesgruppen für den Export</caption>
+        <caption className="visually-hidden">{DAY_TABLE_CAPTION}</caption>
         <colgroup>
           <col className="export-col--expand" /><col className="export-col--select" />
           <col className="export-col--status" /><col className="export-col--date" />

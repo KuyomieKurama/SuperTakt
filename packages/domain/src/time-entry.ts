@@ -442,6 +442,19 @@ export const decideTimerStart = (input: {
 };
 
 /**
+ * Der frühere zweier Zeitpunkte.
+ *
+ * Nicht exportiert und absichtlich klein: Sie trägt die eine Rechenart, mit
+ * der {@link decideOrphanedTimer} seinen Deckel bildet. Verglichen wird über
+ * `Date.parse` und nicht lexikographisch — ein Zeitstempel aus einer fremden
+ * Datei hält sich nicht zwangsläufig an die feste Breite, mit der die
+ * Speicherung rechnet (`calendarDayBounds` in kernel.ts sagt, warum das dort
+ * anders sein darf).
+ */
+const earlierOf = (a: Timestamp, b: Timestamp): Timestamp =>
+  Date.parse(a) <= Date.parse(b) ? a : b;
+
+/**
  * Was mit einer verwaisten Buchung geschieht (E-036).
  *
  * Verwaist ist eine Buchung ohne Ende, die beim Start der Anwendung vorgefunden
@@ -457,20 +470,63 @@ export const decideTimerStart = (input: {
  * Bis der Benutzer geantwortet hat, bleibt die Buchung unvollständig und geht
  * in keinen Export: Sie hat kein `ended_at`, und `v_export_candidate` führt
  * ausschließlich abgeschlossene Buchungen.
+ *
+ * ---------------------------------------------------------------------------
+ * Der Deckel greift in **beide** Richtungen (T-371, R-34, A-24)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-371 fing diese Regel nur das zu **kleine** Ende ab: „höchstens bis zum
+ * Lebenszeichen". Das Lebenszeichen reist im selben Archiv wie `started_at`
+ * (`timer_heartbeat` steht in `DATA_ARCHIVE_TABLES`) und trägt deshalb die Uhr
+ * eines **fremden** Rechners. Geht sie vor, liegt `heartbeatAt` hinter der
+ * Wanduhr des fragenden Laufs, und der Deckel hob die Buchung, statt sie zu
+ * begrenzen. Gemessen in T-370 über den echten Einspielweg: Start
+ * `2026-09-13`, Lebenszeichen `9999-12-31` → **251 613 021 599 s** in einer
+ * Buchung mit `export_status = 'open'`, Exportzeile `"Zeit": 69 892 506`.
+ *
+ * Deshalb `now`: die Wanduhr des Laufs, der fragt. Gebucht wird bis
+ * `min(heartbeatAt, now)` — nie bis zu einem Zeitpunkt, den dieser Rechner
+ * noch nicht erreicht hat. Zwei Folgen, die keine Nebenwirkungen sind, sondern
+ * der Zweck:
+ *
+ *  - **Keine Buchung in der Zukunft.** Eine Zeile, deren `ended_at` hinter der
+ *    Wanduhr liegt, ist nicht nur falsch abgerechnet; sie überlappt auch mit
+ *    allem, was dieser Lauf danach noch startet (A-24, „ohne Überlappung").
+ *    Genau das hatte `startTimer` seit T-363: geschlossene Buchung
+ *    `06:00 → 18:00` neben einem laufenden Eintrag ab `17:00`.
+ *  - **Eine rückwärts laufende Uhr verwirft.** Liegt `now` vor `startedAt`,
+ *    rechnet {@link decideTimerStop} eine negative Dauer und gibt
+ *    `timer_too_short`. Die billige Richtung: keine Buchung statt einer
+ *    erfundenen.
+ *
+ * `now` ist **freiwillig**, und das ist eine Vorsichtsmaßnahme mit Preis. Ohne
+ * den Wert gibt es keinen Deckel nach oben — die teure Ausfallrichtung. Ein
+ * Pflichtfeld wäre die ehrlichere Zusage, ist aber heute nicht schreibbar,
+ * ohne sechs vorbestehende Prüffälle in `packages/domain/test/timer.test.ts`
+ * zu `tsc`-Fehlern zu machen, und Prüffälle gehören dem unit-tester. Alle drei
+ * Aufrufstellen des Erzeugnisses übergeben ihn (`features/timer/timer.ts`);
+ * `proof:layers` Abschnitt 7 mißt das gegen die Platte, statt es zu behaupten.
  */
 export const decideOrphanedTimer = (input: {
   readonly running: RunningTimeEntry;
   /** Letztes Lebenszeichen, `null` wenn nie eines geschrieben wurde. */
   readonly heartbeatAt: Timestamp | null;
   readonly resolution: 'book_until_heartbeat' | 'discard';
+  /**
+   * Wanduhr des fragenden Laufs — der Deckel nach oben. Fehlt sie, gibt es
+   * keinen; siehe den Absatz „Der Deckel greift in beide Richtungen".
+   */
+  readonly now?: Timestamp;
 }): TimerStopDecision => {
   if (input.resolution === 'discard') {
     return { kind: 'discarded', reason: 'orphan_discarded', durationSeconds: 0 };
   }
 
+  const untilHeartbeat = input.heartbeatAt ?? input.running.startedAt;
+
   return decideTimerStop({
     running: input.running,
     note: input.running.note,
-    now: input.heartbeatAt ?? input.running.startedAt,
+    now: input.now === undefined ? untilHeartbeat : earlierOf(untilHeartbeat, input.now),
   });
 };

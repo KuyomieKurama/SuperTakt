@@ -341,9 +341,25 @@ test.describe('TP-KANBAN-04 — Timer auf erledigter Karte hebt „Erledigt“ a
 
       // A-5.6 bleibt: der Timer lässt sich weiterhin direkt von der Karte aus
       // stoppen, ohne die Detailansicht zu öffnen.
+      //
+      // T-345, rot vorgefunden und hier behoben (Prüffall, nicht Anwendung):
+      // `promptOnTimerStop` ist voreingestellt eingeschaltet (A-22,
+      // `PreferencesContext.tsx`), und dieser frische E2E-Bestand trägt noch
+      // keine eigene Einstellung dazu — der Dialog „Timer stoppen" erscheint
+      // also. `stopDialog.isVisible()` **wartet nicht**; unmittelbar nach dem
+      // Klick war er noch nicht gezeichnet, das `if` verneinte fälschlich, und
+      // der Timer lief ungestoppt bis zum 15s-Zeitlimit der letzten
+      // Zusicherung weiter (gemessen: `kcard--running` blieb 34 Abfragen lang
+      // bestehen). `waitFor` mit kurzer Frist stellt dieselbe Frage —
+      // „erscheint der Dialog, und wenn ja, wird er bedient" — nur mit
+      // tatsächlichem Warten statt einer Momentaufnahme.
       await cardInOpen.getByRole('button', { name: /Timer für/ }).click();
       const stopDialog = page.getByRole('dialog', { name: 'Timer stoppen' });
-      if (await stopDialog.isVisible().catch(() => false)) {
+      const stopDialogAppeared = await stopDialog
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (stopDialogAppeared) {
         await stopDialog.getByRole('button', { name: 'Stoppen und buchen' }).click();
         await expect(stopDialog).toBeHidden();
       }

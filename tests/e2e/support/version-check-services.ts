@@ -158,6 +158,17 @@ export async function startVersionCheckWeb(): Promise<ChildProcessWithoutStdin> 
     // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
     // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
     shell: process.platform === 'win32',
+    // Nur außerhalb von Windows (T-345, derselbe Fund und dieselbe Behebung
+    // wie in `services.ts#startWeb`, T-330): Macht diesen Prozeß zum
+    // Anführer einer eigenen Prozeßgruppe, damit `stopVersionCheckWeb` das
+    // Enkelkind `vite` mit erreicht und nicht nur `pnpm` selbst. Gemessen
+    // (T-345): ohne diese Zeile blieb `vite` nach einem vollständig grünen
+    // Lauf dieser Datei auf Port 5173 hängen — derselbe Befund wie in
+    // `services.ts`, nur bisher nicht hierher übertragen. Diese Datei hält
+    // bewusst eine **eigene** kleine Kopie statt eines Imports aus
+    // `services.ts` (Dateikopf, „eigene, absichtlich sehr kleine Kopie"),
+    // deshalb wird die Behebung hier dupliziert und nicht dort exportiert.
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: VERSION_CHECK_API_BASE_URL,
@@ -176,14 +187,39 @@ export async function startVersionCheckWeb(): Promise<ChildProcessWithoutStdin> 
       return response !== null && response.ok;
     }, 15_000, 'Vite-Entwicklungsserver antwortet auf 5173');
   } catch (error) {
-    child.kill('SIGTERM');
+    await stopVersionCheckWeb(child);
     throw new Error(`${String(error)}\nAusgabe:\n${log}`);
   }
 
   return child;
 }
 
-export function stopVersionCheckWeb(child: ChildProcessWithoutStdin): void {
+/**
+ * Beendet den mit `startVersionCheckWeb` gestarteten Prozeßbaum (T-345,
+ * derselbe Fund und dieselbe Behebung wie `services.ts#killShellChildTree`,
+ * hier als eigene kleine Kopie statt eines Imports von dort, siehe
+ * Dateikopf). Ein einfaches `child.kill('SIGTERM')` träfe nur `pnpm` und
+ * ließe `vite` als Waise auf Port 5173 zurück — gemessen an dieser Datei
+ * (T-345): nach einem vollständig grünen Lauf blieb der Prozeß hängen, bis
+ * er hier gefunden und von Hand beendet wurde.
+ *
+ * **Muß awaited werden.** `globalSetup` in `global-setup-version-check.ts`
+ * rief diese Funktion bisher ohne `await` auf; das kostete nichts, solange
+ * sie synchron war, würde aber denselben Waisenprozeß erzeugen, sobald sie
+ * — wie jetzt — auf das Ende des Kindprozesses wartet und der Node-Prozeß
+ * vorher beendet wird.
+ */
+export async function stopVersionCheckWeb(child: ChildProcessWithoutStdin): Promise<void> {
+  if (process.platform !== 'win32' && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
+      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
+      child.kill('SIGTERM');
+    }
+    return;
+  }
   child.kill('SIGTERM');
 }
 

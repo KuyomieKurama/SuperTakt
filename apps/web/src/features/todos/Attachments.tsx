@@ -72,9 +72,23 @@ import { Button, EmptyState, InlineMessage, LoadingBlock } from "../../shared/ui
  * zweite Schreibpfad. Ein Feld, das gut prüft, verführt dazu, die zweite
  * Prüfung für Verdopplung zu halten.
  *
- * **Über das Add-in entsteht hier nichts** (A-19.19). Diese Routen liegen
- * außerhalb von `/addin` und sind damit von selbst geschlossen
- * (Auflage A-A-21).
+ * **Über das Add-in entsteht hier nichts.** Diese Routen liegen außerhalb von
+ * `/addin` und sind damit von selbst geschlossen (Auflage A-A-21). Seit E-108
+ * entstehen Anhänge über den Aufgabenbereich beim **Anlegen** eines Todos aus
+ * einer E-Mail (A-19.19 in der Fassung vom 2026-09-11) — an einem bereits
+ * vorhandenen Todo weiterhin nicht, und diese Fläche ist genau die für ein
+ * vorhandenes.
+ *
+ * ===========================================================================
+ * Was ein Anhang aus einer E-Mail hier anders macht (T-302)
+ * ===========================================================================
+ *
+ * Nichts am Ablauf, alles an der Auskunft. Die Zeile nennt Herkunft und
+ * Nachbau (`AttachmentRow`), die Rückfrage nennt beides noch einmal und dazu
+ * den Anzeigenamen aus der E-Mail und die abgesetzte Endung (A-A-85, A-A-86,
+ * A-A-97). Geöffnet wird weiterhin ausschließlich über den Befehl der Hülle,
+ * der bei **jedem** Aufruf prüft — zwischen Übernahme und Öffnen liegt der
+ * Bestand (E-072).
  */
 
 /**
@@ -312,9 +326,19 @@ export function Attachments({ todoId, todoTitle, version = 0 }: AttachmentsProps
         onSaved={list.reload}
       />
 
+      {/*
+        Die vier neuen Angaben gehen **aus dem Bestand** in die Rückfrage und
+        nicht aus dem Augenblick (A-A-84, A-A-97): Sie hängen am Anhang, den der
+        Benutzer angeklickt hat, und stehen deshalb noch da, wenn die E-Mail
+        drei Wochen alt ist.
+      */}
       <AttachmentOpenDialog
         open={pendingOpen !== null}
         path={pendingOpen?.target ?? ""}
+        displayName={pendingOpen?.displayName ?? null}
+        originSender={pendingOpen?.originSender ?? null}
+        fromEmail={pendingOpen?.origin === "email"}
+        rebuilt={pendingOpen?.rebuilt ?? false}
         foreseenRefusal={pendingOpen === null ? null : foreseenRefusalText(pendingOpen.target)}
         refusal={dialogRefusal}
         busy={opening}

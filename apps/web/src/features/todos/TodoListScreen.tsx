@@ -33,8 +33,11 @@ import { formatCount, plural } from "../../lib/format";
 import { doneFlagState } from "../../lib/labels";
 import { doneMovementSentence, withMovement } from "../../lib/movement";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { TableShell } from "../bookings/BookingTable";
+import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
-import { TodoRow } from "./TodoRow";
+import { TodoTable } from "./TodoTable";
+import type { TodoTagLabel } from "./TodoTagsCell";
 import { TodoListFilters, DEADLINE_FILTER_LABEL, TODO_SORT_LABEL } from "./TodoListFilters";
 import { TodoFormDialog } from "./TodoFormDialog";
 import { foreignText, quotedName } from "../../lib/foreign";
@@ -126,6 +129,12 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
   const today = useToday();
 
   const [formOpen, setFormOpen] = useState(false);
+  /*
+    Welche Zeile ihre Tag-Fläche offen hat — **einer** für die ganze Ansicht.
+    Genau eine Fläche ist offen; ein zweiter Auslöser schließt die erste
+    (T-361 6.2). Läge der Zustand in der Zelle, müßten sich die Zellen kennen.
+  */
+  const [openTagsTodoId, setOpenTagsTodoId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Todo | undefined>(undefined);
   const [pendingDelete, setPendingDelete] = useState<Todo | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -429,92 +438,152 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
         />
       </ScreenHeader>
 
+      {/*
+        Ein Laufbereich, Name „Todos" (T-322 4.2). Fest sind Kopf, Filterleiste
+        und Zählzeile: Wer 300 Todos durchscrollt, soll weiter sehen, wonach
+        gefiltert wird — und die Zählzeile ist die **Antwort** auf den Filter,
+        nicht auf die Liste. Eine Ansage (`role="status"`), deren sichtbare
+        Fassung weggescrollt ist, ist eine halbe Ansage.
+
+        **Seit T-365 wechselt der Laufbereich seine Bauform mit dem Zustand**,
+        und der Kopf der Tabelle klebt dadurch zum ersten Mal: Ein `sticky
+        thead` klebt an dem Bildlaufkasten, der ihm am nächsten ist, und bei
+        einer Tabelle ist das immer das `.table-wrap`. Also **ist** der
+        Laufbereich im gefüllten Zustand die Tabellenfläche (`.screen__body
+        .table-wrap`, Blockfluß); im Leer-, Lade- und Fehlerzustand bleibt er
+        der Stapel, denn `display: block` nähme dem Bildschirmleerzustand sein
+        `margin-block: auto`.
+
+        Daraus folgen zwei Umzüge, und sie sind erzwungen und nicht gewählt
+        (A-25.9 deckt beide): Der Hinweis „n erledigte Todos sind ausgeblendet"
+        hat im Laufbereich kein Geschwister mehr und steht jetzt als
+        `.screen__bar` **fest** darüber — an derselben Stelle des Bildschirms
+        wie vorher, aber er rollt nicht mehr weg, und das ist ein Gewinn: Er
+        erklärt eine Liste, die man gerade durchsieht. Und „Weitere laden" wird
+        der **Fuß der Tabelle**; ein Blockelement im waagerecht laufenden
+        Kasten wäre so breit wie dessen Inhaltsbreite und wanderte beim Rollen
+        aus dem Bild.
+
+        Der Hinweis kennt seine Zahl erst, wenn die Antwort da ist
+        (`totalWithDone - page.total`). Er steht deshalb **im** Erfolgszweig
+        und nicht im Lade- oder Fehlerzustand — dieselbe Bauform, die die
+        Buchungsübersicht für ihre Auswahlleiste führt. Ihn in den
+        Bildschirmzustand zu heben hieße, im Ladezustand die Zahl des
+        vorherigen Laufs zu zeigen.
+      */}
       <AsyncBoundary
         state={list.state}
         label="Todos werden geladen"
         rows={6}
         onRetry={list.reload}
+        fallbackFrame={(content) => <ScreenBody label="Todos">{content}</ScreenBody>}
       >
         {(value) => {
           const hiddenCount = showDone ? 0 : Math.max(0, value.totalWithDone - value.page.total);
           const todos = value.page.items;
+          const notice =
+            hiddenCount === 0 ? null : (
+              <div className="screen__bar">
+                <HiddenDoneNotice count={hiddenCount} onShow={() => setShowDone(true)} />
+              </div>
+            );
 
           if (todos.length === 0) {
             return (
               <>
-                <HiddenDoneNotice count={hiddenCount} onShow={() => setShowDone(true)} />
-                {activeFilters.length === 0 ? (
-                  <EmptyState
-                    icon="inbox"
-                    title="Noch kein Todo"
-                    description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
-                    action={
-                      <Button
-                        variant="primary"
-                        iconStart="plus"
-                        onClick={() => {
-                          setEditing(undefined);
-                          setFormOpen(true);
-                        }}
-                      >
-                        Neues Todo
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <EmptyState
-                    icon="search"
-                    title="Kein Todo passt zu diesen Filtern"
-                    description="Setzen Sie einen Filter zurück oder blenden Sie erledigte Todos ein."
-                    action={
-                      <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                        Filter zurücksetzen
-                      </Button>
-                    }
-                  />
-                )}
+                {notice}
+                <ScreenBody label="Todos">
+                  <TableShell>
+                    {activeFilters.length === 0 ? (
+                      <EmptyState
+                        icon="inbox"
+                        title="Noch kein Todo"
+                        description="SuperTakt erfasst Zeit auf Todos. Legen Sie das erste an — Titel genügt."
+                        action={
+                          <Button
+                            variant="primary"
+                            iconStart="plus"
+                            onClick={() => {
+                              setEditing(undefined);
+                              setFormOpen(true);
+                            }}
+                          >
+                            Neues Todo
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <EmptyState
+                        icon="search"
+                        title="Kein Todo passt zu diesen Filtern"
+                        description="Setzen Sie einen Filter zurück oder blenden Sie erledigte Todos ein."
+                        action={
+                          <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
+                            Filter zurücksetzen
+                          </Button>
+                        }
+                      />
+                    )}
+                  </TableShell>
+                </ScreenBody>
               </>
             );
           }
 
+          const loadedAll = value.page.nextCursor === null && todos.length >= value.page.total;
+
           return (
             <>
-              <HiddenDoneNotice count={hiddenCount} onShow={() => setShowDone(true)} />
-
-              <ul className="todo-list" aria-label="Todos">
-                {todos.map((todo) => (
-                  <TodoRow
-                    key={todo.id}
-                    todo={todo}
-                    summary={value.summaries.byTodo.get(todo.id) ?? EMPTY_SUMMARY}
-                    statusName={structure.statusName(todo.statusId)}
-                    running={timer.isRunningFor(todo.id)}
-                    doneState={doneFlagState(
+              {notice}
+              <ScreenBody label="Todos" className="table-wrap">
+                <TodoTable
+                  today={today}
+                  openTagsTodoId={openTagsTodoId}
+                  onOpenTags={setOpenTagsTodoId}
+                  rows={todos.map((todo) => ({
+                    todo,
+                    summary: value.summaries.byTodo.get(todo.id) ?? EMPTY_SUMMARY,
+                    statusName: structure.statusName(todo.statusId),
+                    running: timer.isRunningFor(todo.id),
+                    doneState: doneFlagState(
                       todo.completedAt !== null,
                       timer.reactivated.has(todo.id),
-                    )}
-                    today={today}
-                    onToggleDone={() => toggleDone(todo)}
-                    onToggleTimer={() => timer.toggle(todo.id, todo.title)}
-                    menu={rowMenu(todo)}
-                    tagLabels={todo.tagIds
-                      .map((id) => structure.tagInfo(id))
-                      .filter((info): info is NonNullable<typeof info> => info !== undefined)}
-                  />
-                ))}
-              </ul>
-
-              {value.page.nextCursor === null && todos.length >= value.page.total ? null : (
-                <div className="list-more">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setLimit((current) => current + PAGE_SIZE)}
-                    disabled={todos.length >= value.page.total}
-                  >
-                    Weitere laden ({formatCount(Math.max(0, value.page.total - todos.length))} übrig)
-                  </Button>
-                </div>
-              )}
+                    ),
+                    /*
+                      Nicht auflösbare Kennungen werden **nicht weggeworfen**:
+                      Stünde der Strukturbestand auf `error`, zeigte eine Zeile
+                      mit elf Tags sonst nichts und sähe aus wie ein Todo ohne
+                      Tags. „Unbekannt" ist derselbe Ersatz, den der Filterchip
+                      dieser Ansicht schon benutzt.
+                    */
+                    tagLabels: todo.tagIds.map<TodoTagLabel>((id) => {
+                      const info = structure.tagInfo(id);
+                      return info === undefined
+                        ? { name: "Unbekannt", path: [] }
+                        : { name: info.tag.name, path: info.path };
+                    }),
+                    menu: rowMenu(todo),
+                    onToggleDone: () => toggleDone(todo),
+                    onToggleTimer: () => timer.toggle(todo.id, todo.title),
+                  }))}
+                  {...(loadedAll
+                    ? {}
+                    : {
+                        footer: (
+                          <div className="list-more">
+                            <Button
+                              variant="secondary"
+                              onClick={() => setLimit((current) => current + PAGE_SIZE)}
+                              disabled={todos.length >= value.page.total}
+                            >
+                              Weitere laden (
+                              {formatCount(Math.max(0, value.page.total - todos.length))} übrig)
+                            </Button>
+                          </div>
+                        ),
+                      })}
+                />
+              </ScreenBody>
             </>
           );
         }}

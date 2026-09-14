@@ -14,7 +14,7 @@ import { createBrowserApiClient, type ApiClient } from '../api/client.ts';
 import { createTimedEvaluator, type Evaluator } from '../callnumber/evaluate.ts';
 import { spawnBrowserChannel, supportsWorker } from '../callnumber/browser-channel.ts';
 import { detectCallNumber, type Detection } from '../callnumber/detect.ts';
-import { readHost, type HostState } from '../office/host.ts';
+import { onItemChanged, readHost, type HostState } from '../office/host.ts';
 import { createSettingsStore, type AddinSettings } from '../settings/store.ts';
 import { Button, Callout, Section, Skeleton } from './Primitives.tsx';
 import { SettingsView } from './SettingsView.tsx';
@@ -64,6 +64,27 @@ export function App() {
     setHost(null);
     setHostAttempt((current) => current + 1);
   }, []);
+
+  /**
+   * Outlook hat eine andere Nachricht geöffnet (A-19.31, Entwurf 6.6, D-06).
+   *
+   * Der Aufgabenbereich lässt sich anheften (`SupportsPinning` im Manifest);
+   * dann bleibt er beim Wechsel der Nachricht stehen und zeigte bis hierher
+   * **die alte**. Neu gelesen wird deshalb, ohne den Bereich auszuhängen:
+   * `retryHost` setzt den Wirt auf `null` und nähme dem Formular seinen Platz
+   * — und mit ihm dem Satz, der sagt, warum eine laufende Übernahme gerade
+   * abgebrochen wurde.
+   */
+  useEffect(
+    () =>
+      onItemChanged(() => {
+        setDetection(null);
+        void readHost().then((state) => {
+          setHost(state);
+        });
+      }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +234,7 @@ function Body({
       detection={detection}
       api={api}
       hasToken={settings.hasToken}
+      attachments={host.attachments}
       onOpenSettings={onOpenSettings}
       onConnected={onConnected}
     />

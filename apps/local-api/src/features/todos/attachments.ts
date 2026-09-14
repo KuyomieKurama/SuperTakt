@@ -37,12 +37,14 @@ import type {
   AttachmentCreate,
   AttachmentId,
   AttachmentKind,
+  AttachmentOrigin,
   ImageMediaType,
   PathRejection,
   TodoId,
 } from '@takt/domain';
 import {
   MAX_ATTACHMENT_IMAGE_BYTES,
+  attachmentTargetFileName,
   checkAttachmentPath,
   err,
   normalizeAttachmentLink,
@@ -52,6 +54,7 @@ import {
 import type { ImageBlobFailure } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
+import { errorKindValue } from '../../logger.ts';
 
 /**
  * Was hereinkommt, um einen Anhang anzulegen.
@@ -100,6 +103,29 @@ export interface AttachmentView {
   readonly target: string;
   readonly position: number;
   readonly createdAt: string;
+  /**
+   * Woher der Anhang stammt (A-A-84). Er steht in der Antwort, weil die
+   * Rückfrage vor dem Öffnen ihn braucht (A-A-85) und weil die Anhangsliste an
+   * ihm entscheidet, welche Regeln für den angezeigten Namen gelten
+   * (A-19.23b, A-A-93).
+   *
+   * **Gespeichert wird geliefert.** Das ist kein abgeleiteter Wert, der sich
+   * aus dem Pfad raten ließe — genau das verbietet A-A-84.
+   */
+  readonly origin: AttachmentOrigin;
+  /** Der Absender, **fremder Text** (A-A-85). `null` heißt „gibt es nicht". */
+  readonly originSender: string | null;
+  /**
+   * Der Name aus fremder Hand (A-19.23a), **fremder Text**. `null` bei jedem
+   * Anhang, den der Benutzer selbst eingetragen hat.
+   *
+   * Getrennt von `title`, damit die anzeigende Fläche weiß, welche Regeln
+   * gelten: Bei diesem Wert ist die Endung stets sichtbar und am Ende wird nie
+   * gekürzt.
+   */
+  readonly displayName: string | null;
+  /** Nachbau statt ursprünglicher Nachricht (A-19.22b, A-A-97). */
+  readonly rebuilt: boolean;
 }
 
 export function toAttachmentView(attachment: Attachment): AttachmentView {
@@ -111,6 +137,10 @@ export function toAttachmentView(attachment: Attachment): AttachmentView {
     target: attachment.target,
     position: attachment.position,
     createdAt: attachment.createdAt,
+    origin: attachment.origin,
+    originSender: attachment.originSender,
+    displayName: attachment.displayName,
+    rebuilt: attachment.rebuilt,
   };
 }
 
@@ -246,6 +276,11 @@ export async function addAttachment(
     // Die Zeile ist nicht entstanden. Die Kopie geht mit — sonst läge sie
     // ohne Eigentümer im Bildverzeichnis (A-A-18).
     //
+    // **Ohne Eigentümerfrage, und das ist begründet** (T-320, R-29): Der Name
+    // kommt gerade eben aus `randomUUID()`, die Datei ist Sekunden alt, und die
+    // einzige Zeile, die sie je nennen sollte, ist nicht entstanden. Die Regel
+    // und ihre Grenze stehen in {@link releaseUnclaimedBlobs}.
+    //
     // Gelingt auch das nicht, bleibt es beim Fehlschlag des INSERT als
     // Antwort: Der Benutzer hat keinen Anhang bekommen, und das ist die
     // Auskunft, die ihn angeht. Die liegengebliebene Kopie steht seit T-159
@@ -271,13 +306,185 @@ async function insert(
 }
 
 /**
+ * Eine Datei, die mit einer gelöschten Zeile fallen **soll** — und der Wert,
+ * mit dem der Blob-Port sie entfernt.
+ *
+ * `target` ist Zeichen für Zeichen der gespeicherte Wert: beim Bild der bloße
+ * erzeugte Name, bei der übernommenen E-Mail-Datei der volle Pfad (A-19.26).
+ * Die Form prüft der Blob-Port noch einmal an dem Wert, den er benutzt — hier
+ * wird nichts umgeschrieben.
+ */
+export interface ReleasableBlob {
+  readonly kind: 'image' | 'emailFile';
+  readonly target: string;
+}
+
+/**
+ * **Entfernt die Dateien, die danach niemandem mehr gehören — und nur diese**
+ * (A-A-98, A-A-18, A-19.23, R-29, T-320).
+ *
+ * ===========================================================================
+ * Die Regel, und sie gilt über diese Funktion hinaus
+ * ===========================================================================
+ *
+ * **Wer eine Datei entfernt, muß fragen, ob sie noch jemandem gehört — mit der
+ * weitesten Frage, nicht mit der nächstliegenden.**
+ *
+ * Die weiteste Frage ist `attachmentsNamingFiles`: über **Namen** statt über
+ * Zeilen, **ohne** `kind`, **ohne** `origin`, **ohne** Todo, ASCII-gefaltet und
+ * ohne Rücksicht auf die Schreibweise des Pfades davor. Die Regel selbst liegt
+ * in `@takt/domain` (`attachmentTargetNamesFile`) und an keiner zweiten Stelle;
+ * genau dieselbe Frage stellen die beiden Aufräumläufe beim Start
+ * (`orphan-sweep.ts`).
+ *
+ * Die **nächstliegende** Frage wäre „welche Art hatte die Zeile, die ich gerade
+ * gelöscht habe" — und genau die stand bis T-320 in {@link removeAttachment}
+ * und in `removeTodo`. Sie beantwortete „wem gehört diese Datei" ein zweites
+ * Mal und enger, und ihre Antwort entschied eine Löschung. Der Preis war
+ * gemessen und brauchte weder einen Angriff noch einen Aufräumlauf noch einen
+ * Neustart (T-314 vierter Weg, T-318):
+ *
+ *   Todo A trägt eine Bildkopie `<hex>.png`. Todo B trägt einen **Dateianhang**
+ *   auf denselben vollen Pfad — absolut, vorhanden, `.png`, kein UNC, keine
+ *   Umleitungsendung, also durch `checkAttachmentPath` hindurch und ein
+ *   gewöhnlicher Bedienweg. Wer nun A löscht, nimmt B sein Bild mit.
+ *
+ * ===========================================================================
+ * Warum das **hinter** dem `COMMIT` steht und nicht davor
+ * ===========================================================================
+ *
+ * Weil die gelöschte Zeile dann bereits fort ist. Eine nicht leere Antwort
+ * heißt deshalb eindeutig „gehört noch **jemand anderem**" — vor dem `COMMIT`
+ * fände die Frage die eigene Zeile und keine Datei fiele je.
+ *
+ * ===========================================================================
+ * Was **nicht** durch diese Funktion geht, und warum das kein Versäumnis ist
+ * ===========================================================================
+ *
+ * Drei Stellen entfernen Dateien ohne diese Frage, und alle drei teilen eine
+ * Eigenschaft, die sie von einer Löschung unterscheidet: **Die Datei ist in
+ * demselben Aufruf entstanden, trägt einen frisch erzeugten Namen aus
+ * `randomUUID()` und hat nie eine Zeile bekommen** —
+ * {@link addAttachment} nach einem gescheiterten `INSERT` und die beiden
+ * Aufräumzweige in `email-attachments.ts` (A-A-83). Ein anderer Eigentümer
+ * müßte 128 Zufallsbits erraten haben, bevor sie geschrieben wurde.
+ *
+ * Dort wäre die Frage sogar schädlich: Sie braucht den Bestand, und jene beiden
+ * Zweige laufen gerade deshalb, **weil** der Bestand sich verweigert hat. Eine
+ * unbeantwortbare Frage ließe dort Kundenmaterial aus einer fremden E-Mail ohne
+ * Eigentümer liegen — der Zustand, gegen den A-A-83 geschrieben ist.
+ *
+ * ===========================================================================
+ * Der Fehlschlag
+ * ===========================================================================
+ *
+ * Läßt sich die Frage nicht beantworten, fällt **nichts**. Das ist der billige
+ * Fehler (eine Datei zuviel im Anwendungsdatenverzeichnis) gegen den teuren
+ * (Kundenmaterial mit Eigentümer, ohne Rückfrage und ohne Papierkorb). Der Wurf
+ * wird **nicht** weitergereicht: Der Anhang beziehungsweise das Todo ist
+ * gelöscht, und eine Antwort, die den Aufrufer zum Wiederholen bringt, wäre
+ * derselbe Fehler wie vor E-111.
+ *
+ * Still ist der Fehlschlag nicht — er bekommt eine Zeile mit der **Art** des
+ * Wurfs und einer Zahl. Kein Pfad, kein Name, kein Wert aus dem Bestand
+ * (B-2.4).
+ */
+export async function releaseUnclaimedBlobs(
+  context: AppContext,
+  blobs: readonly ReleasableBlob[],
+): Promise<void> {
+  /*
+   * Gefragt wird mit dem **Namen**, nicht mit dem gespeicherten Wert: Beim Bild
+   * sind beide gleich, bei der übernommenen Datei ist der Wert ein Pfad, und
+   * ein Pfad fände eine zweite Zeile mit anderer Schreibweise nicht. Dieselbe
+   * Faltung, in der die Antwort kommt (`attachmentTargetFileName`).
+   *
+   * Ein Wert ohne beurteilbaren Namen fällt heraus und kommt in keiner Richtung
+   * wieder vor — er wird weder gefragt noch entfernt. Im Zweifel liegen lassen.
+   */
+  const names = new Set<string>();
+  for (const blob of blobs) {
+    const name = attachmentTargetFileName(blob.target);
+    if (name !== '') names.add(name);
+  }
+  if (names.size === 0) return;
+
+  let owners: ReadonlySet<string>;
+  try {
+    owners = await context.transactions.inTransaction((unit) =>
+      unit.attachments.attachmentsNamingFiles([...names]),
+    );
+  } catch (error) {
+    context.logger?.lifecycle(
+      'warn',
+      'Es ließ sich nicht feststellen, ob die Dateien des gelöschten Eintrags noch anderswo gebraucht werden. Sie bleiben deshalb im Anwendungsdatenverzeichnis liegen.',
+      `attachment_release_unavailable files=${String(names.size)} reason=${errorKindValue(error)}`,
+    );
+    return;
+  }
+
+  let kept = 0;
+  for (const blob of blobs) {
+    const name = attachmentTargetFileName(blob.target);
+    if (name === '') continue;
+    if (owners.has(name)) {
+      // **Der ganze Punkt dieser Funktion.** Eine andere Zeile nennt diese
+      // Datei noch; sie bleibt liegen, und der Benutzer merkt nichts — außer
+      // daß sein anderer Anhang sich weiter öffnen läßt.
+      kept += 1;
+      continue;
+    }
+    /*
+     * Der Aufrufer bekommt `ok`, auch wenn eine Datei liegen bleibt — der
+     * **Eintrag** ist entfernt, und das stimmt. Aus einem Fehlschlag hier einen
+     * Fehler zu machen, hieße einen Vorgang zurückzumelden, der stattgefunden
+     * hat, und eine Zeile, die es nicht mehr gibt, ließe sich ohnehin nicht
+     * wiederherstellen. Der Fehlschlag steht seit T-159 im Protokoll (A-A-18).
+     */
+    if (blob.kind === 'image') await context.attachmentBlobs.removeImage(blob.target);
+    else await context.attachmentBlobs.removeEmailFile(blob.target);
+  }
+
+  if (kept > 0) {
+    context.logger?.lifecycle(
+      'info',
+      `${String(kept)} Datei(en) des gelöschten Eintrags bleiben liegen, weil ein anderer Anhang sie noch nennt.`,
+      `attachment_release_claimed files=${String(kept)}`,
+    );
+  }
+}
+
+/**
+ * Welche Datei mit einem gelöschten Anhang **überhaupt in Frage kommt** — und
+ * `null`, wenn keine.
+ *
+ * Diese Frage ist eng, und hier ist die Enge richtig: Sie sagt nicht, wem eine
+ * Datei gehört, sondern welchen Ordner SuperTakt für diese Zeile selbst
+ * beschrieben hat. Ein vom Benutzer eingetragener Pfad (`origin = 'user'`)
+ * steht deshalb nicht darin — die Datei dahinter gehört ihm, Takt hat sie nie
+ * kopiert, und das Löschen eines Anhangs darf sie nicht mitnehmen (Migration
+ * 0015, A-19.23).
+ *
+ * Wem sie gehört, entscheidet danach {@link releaseUnclaimedBlobs} — und zwar
+ * weit.
+ */
+export function releasableBlobOf(attachment: Attachment): ReleasableBlob | null {
+  if (attachment.kind === 'image') return { kind: 'image', target: attachment.target };
+  if (attachment.kind === 'file' && attachment.origin === 'email') {
+    return { kind: 'emailFile', target: attachment.target };
+  }
+  return null;
+}
+
+/**
  * Einen Anhang entfernen (A-19.11).
  *
- * Bei einem Bild geht die Kopie **mit** (A-A-18). Die Reihenfolge ist Inhalt:
- * erst die Zeile, dann die Datei. Umgekehrt bliebe bei einem Abbruch dazwischen
- * ein Anhang ohne Bild zurück — und das ist der schlechtere von beiden
- * Endzuständen, weil der Benutzer ihn sieht und nicht versteht. Bleibt die
- * Datei liegen, sieht er nichts und der nächste Löschvorgang holt sie nicht
+ * Bei einem Bild geht die Kopie **mit** (A-A-18) — **wenn sie danach niemandem
+ * mehr gehört** (T-320, {@link releaseUnclaimedBlobs}). Die Reihenfolge ist
+ * Inhalt: erst die Zeile, dann die Datei. Umgekehrt bliebe bei einem Abbruch
+ * dazwischen ein Anhang ohne Bild zurück — und das ist der schlechtere von
+ * beiden Endzuständen, weil der Benutzer ihn sieht und nicht versteht. Bleibt
+ * die Datei liegen, sieht er nichts und der nächste Löschvorgang holt sie nicht
  * mehr ein; deshalb steht sie unmittelbar hinter dem `COMMIT` und nicht
  * irgendwann später.
  */
@@ -300,14 +507,21 @@ export async function removeAttachment(
   });
 
   if (!outcome.ok) return err(outcome.error);
-  if (outcome.value.kind === 'image') {
-    // Der Benutzer bekommt `ok`, auch wenn die Datei liegen bleibt — der
-    // **Anhang** ist entfernt, und das stimmt. Aus einem Fehlschlag hier einen
-    // Fehler zu machen, hieße einen Vorgang zurückzumelden, der stattgefunden
-    // hat, und eine Zeile, die es nicht mehr gibt, ließe sich ohnehin nicht
-    // wiederherstellen. Der Fehlschlag steht seit T-159 im Protokoll (A-A-18).
-    await context.attachmentBlobs.removeImage(outcome.value.target);
-  }
+  /*
+   * **Zwei Fragen, und sie sind nicht dieselbe** (T-320).
+   *
+   *  1. {@link releasableBlobOf} — eng: Hat SuperTakt für diese Zeile selbst
+   *     eine Datei geschrieben? Eine **übernommene** E-Mail-Datei kommt in
+   *     Frage (A-19.23, A-A-83), ein vom Benutzer eingetragener Pfad
+   *     ausdrücklich nicht. Die Unterscheidung hängt an `origin` und an nichts
+   *     sonst — nicht am Ordner, nicht an der Form des Pfads.
+   *  2. {@link releaseUnclaimedBlobs} — weit: Nennt sie noch **eine andere**
+   *     Zeile? Bis T-320 fehlte diese zweite Frage, und die erste entschied
+   *     allein. Sie ist die falsche Frage dafür: Sie beschreibt die gelöschte
+   *     Zeile und nicht die Datei.
+   */
+  const blob = releasableBlobOf(outcome.value);
+  if (blob !== null) await releaseUnclaimedBlobs(context, [blob]);
   return ok(undefined);
 }
 

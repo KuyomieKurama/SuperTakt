@@ -107,6 +107,29 @@ test.describe.serial('TP-VER-10 bis TP-VER-13 — Versionsprüfung im Browser', 
     await stub.close();
   });
 
+  /*
+   * Gegenprobe der Klasse R-33 (`.claude/team/risks.md` „Die Meldung, die nie
+   * ankommt") und Beleg für A-A-111 (`.claude/team/board.md` Welle 7): Vier
+   * Nachweisläufe über den Quelltext (`proof:layers`, `proof:route-policy`,
+   * `proof:callers`, `apps/local-api/scripts/proof-release-safety.mjs`)
+   * messen ausschließlich, **ob die Anfrage hinausgeht** — K-4 aus T-337 geht
+   * daran vorbei, weil es nicht die Anfrage abschaltet, sondern die
+   * **Auskunft** an die Oberfläche (`versionState` liefert `{state:
+   * 'unknown'}`, obwohl der Dienst die neue Fassung längst kennt). Für den
+   * Benutzer ist das Ergebnis identisch mit R-30: er erfährt nichts.
+   *
+   * Dieser Fall hier mißt genau das, was kein Quelltextwächter sehen kann —
+   * **den Dialog auf dem Bildschirm**, aus der tatsächlichen Antwort von
+   * `GET /version-check` gerendert (`openApp`/`expectDialogFacts` unten, kein
+   * Literal). Bleibt die Auskunft irgendwo auf dem Weg vom Dienst zur
+   * Oberfläche hängen — an der von T-342 geschlossenen Stelle oder an einer
+   * der von R-33 noch offen genannten (`current()`, Route, Antwortgestalt,
+   * Oberfläche selbst) —, bleibt der Dialog aus, und dieser Fall wird rot,
+   * ohne daß irgendein Nachweislauf dafür angepaßt werden müßte. Das ist der
+   * Fall, in dem ein Verhaltensprüffall leistet, was ein Quelltextwächter
+   * strukturell nicht kann: Er fragt nicht „geht die Anfrage hinaus", sondern
+   * „kommt beim Benutzer etwas an".
+   */
   test('TP-VER-10 — der Dialog nennt installierte und verfügbare Fassung sowie den Verweis, ohne Vorauswahl (A-18.6, A-18.7)', async ({
     page,
   }) => {

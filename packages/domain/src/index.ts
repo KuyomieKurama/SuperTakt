@@ -27,6 +27,7 @@ export * from './call-number.ts';
 export * from './characters.ts';
 export * from './due-date.ts';
 export * from './attachment.ts';
+export * from './email-attachment.ts';
 export * from './text-length.ts';
 export * from './enumeration.ts';
 export * from './tag.ts';

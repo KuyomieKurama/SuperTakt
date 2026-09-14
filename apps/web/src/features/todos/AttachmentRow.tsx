@@ -5,6 +5,7 @@ import { ATTACHMENT_KIND_LABEL, attachmentLabel } from "./attachmentLabel";
 import { cx } from "../../lib/cx";
 import { foreignText, quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
+import { ForeignName } from "../../shared/ui/ForeignName";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { IconButton, Skeleton } from "../../shared/ui/Primitives";
 
@@ -18,6 +19,30 @@ import { IconButton, Skeleton } from "../../shared/ui/Primitives";
  * eigenen Vorschaubildes; **geöffnet wird ausschließlich über die
  * Rückmeldungen nach oben** — das Laden einer Liste öffnet nichts (A-19.18,
  * Auflage A-A-24).
+ *
+ * ===========================================================================
+ * Seit T-302: die Herkunft steht an der Zeile, und nichts wird am Ende gekürzt
+ * ===========================================================================
+ *
+ * **Kein Deckel** (A-19.23b, Auflage A-A-93, R-27). Bis T-302 trugen
+ * Beschriftung und Wertzeile die Klasse `truncate` — `overflow: hidden`,
+ * `text-overflow: ellipsis`, `white-space: nowrap`. In einer engen Spalte nimmt
+ * das einem Namen die **Endung**, ohne ein Zeichen zu verändern, und die Zeile
+ * darunter ist die, deren Klick ein Programm startet. Beide Zeilen brechen
+ * jetzt um ({@link ForeignName}, `.attachment__value`); `scripts/proof-clamp.mjs`
+ * mißt, daß hier und in jedem Elternelement keine deckelnde Klasse steht.
+ *
+ * **Die Herkunft ist eine Eigenschaft, keine Verzierung** (A-A-84, A-A-87). Ein
+ * Anhang aus einer E-Mail ist nicht dasselbe wie einer, den der Benutzer selbst
+ * gewählt hat: Name und Inhalt bestimmt ein Fremder (R-21). Das steht als
+ * eigene Zeile unter der Beschriftung — **nicht** als Symbol allein und nicht
+ * nur als Farbe, denn beides ist für eine Vorlesehilfe keine Auskunft.
+ *
+ * **Der Nachbau steht dabei** (A-19.22b, Auflage A-A-97). Er hängt an der
+ * **Datei** und nicht am Augenblick des Anlegens. Ein Hinweis, der nur im
+ * Aufgabenbereich erschien, wäre drei Wochen später nirgends — und dann sitzt
+ * der Benutzer hier, vor einer Datei, die aussieht wie ein Beleg und keiner
+ * ist.
  */
 
 const KIND_ICON: Readonly<Record<AttachmentKind, IconName>> = {
@@ -86,6 +111,99 @@ function AttachmentPreview({ todoId, attachment }: { readonly todoId: Id; readon
 }
 
 /* ==================================================================== */
+/* Fläche F — Herkunft und Nachbau (A-A-84, A-A-87, A-19.22b)           */
+/* ==================================================================== */
+
+/**
+ * Die **Herkunft** an der Zeile (Auflage A-A-84, A-A-87).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum sie an der Zeile steht und nicht nur in der Rückfrage
+ * ---------------------------------------------------------------------------
+ *
+ * Die Rückfrage nennt sie auch (A-A-85) — aber sie erscheint erst **nach** dem
+ * Klick, und bei einem Verweis erscheint sie nach A-A-7 gar nicht. Die Liste
+ * ist die Stelle, an der ein Mensch seine Anhänge überblickt: Wer hier nicht
+ * sieht, welcher davon aus fremder Hand kam, hat die Unterscheidung aus R-21
+ * nicht. Sie ist der ganze Unterschied zwischen „ich habe diese Datei gewählt"
+ * und „jemand hat sie mir geschickt".
+ *
+ * **Der Absender steht dabei.** „Aus einer E-Mail" ist eine Gattung, „von
+ * diesem Absender" ist eine Auskunft — und sie ist die, an der ein Mensch
+ * erkennt, ob er dieser Datei traut. Er ist fremder Text und geht durch
+ * `<Foreign>`.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das eine eigene Zeile ist und kein Symbol am Rand
+ * ---------------------------------------------------------------------------
+ *
+ * Ein Symbol allein ist für eine Vorlesehilfe keine Auskunft, und eine Farbe
+ * allein ist keine (SC 1.4.1). Die Marke trägt deshalb ein **Wort**; das Symbol
+ * steht mit `aria-hidden` daneben.
+ *
+ * Der Nachbau steht **nicht** hier, sondern unmittelbar hinter dem Namen
+ * ({@link RebuiltMark}): Er ist eine Aussage über **diese Datei**, nicht über
+ * ihren Weg hierher, und der Entwurf des ux-designers stellt ihn dort in
+ * Klammern hinter den Namen.
+ */
+function AttachmentOriginMarks({ attachment }: { readonly attachment: Attachment }) {
+  if (attachment.origin !== "email") return null;
+
+  return (
+    <span className="attachment__marks">
+      <span className="attachment__mark attachment__mark--email">
+        <span className="attachment__mark-icon" aria-hidden>
+          <Icon name="inbox" size={12} />
+        </span>
+        {attachment.originSender === null ? (
+          <span>Aus einer E-Mail</span>
+        ) : (
+          <span>
+            Aus einer E-Mail von <Foreign value={attachment.originSender} />
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * „(nachgebaut)" — die Kennzeichnung aus A-19.22b, an der Zeile.
+ *
+ * ---------------------------------------------------------------------------
+ * Wortgleich mit dem Aufgabenbereich, und **nicht** im selben Element
+ * ---------------------------------------------------------------------------
+ *
+ * Der Entwurf des ux-designers (F-06 in T-303) verlangt die Wortgleichheit und
+ * überläßt die Fläche dem Hauptfenster. Dort steht sie als
+ * `– die E-Mail (nachgebaut)`: eine Art des Anhangs, in Klammern hinter dem
+ * Namen, in derselben Form wie `(als Verweis)`.
+ *
+ * Übernommen ist die **Form** und das **Wort**, nicht die Verschmelzung: Im
+ * Aufgabenbereich steht vor der Klammer der Satz „die E-Mail", den SuperTakt
+ * selbst geschrieben hat. Hier steht der Anzeigename aus fremder Hand, und an
+ * ihn ein eigenes Wort anzuhängen hieße, eigenen und fremden Text in **einer**
+ * Zeichenkette zu mischen — an genau der Zeile, deren Klick ein Programm
+ * startet. Ein Absender, der seine Datei `Nachtrag.eml (nachgebaut)` nennt,
+ * hätte damit eine Kennzeichnung erfunden, die er nicht hat. Deshalb ein
+ * eigenes Element neben {@link ForeignName} und nicht in ihm.
+ *
+ * Der Ton ist **Warnung ohne Fehlerfarbe** — dieselbe Wahl wie in Z3a des
+ * Entwurfs: Es ist kein Fehlschlag, es fehlt nichts, und wer den Warnton hier
+ * verbraucht, hat ihn nicht mehr, wenn wirklich etwas fehlt.
+ */
+function RebuiltMark() {
+  return (
+    <span className="attachment__rebuilt">
+      <span className="attachment__mark-icon" aria-hidden>
+        <Icon name="alert-triangle" size={12} />
+      </span>
+      (nachgebaut)
+    </span>
+  );
+}
+
+/* ==================================================================== */
 /* Fläche C und E — eine Zeile                                          */
 /* ==================================================================== */
 
@@ -129,13 +247,26 @@ export function AttachmentRow({ todoId, attachment, onOpen, onRemove, failure, b
             className="attachment__open"
             onClick={onOpen}
             disabled={busy}
-            aria-label={`${kind} öffnen: ${quotedName(label)}`}
+            /*
+              Die Kennzeichnung steht auch im zugänglichen Namen. Ein Wort, das
+              nur zu sehen ist, gibt es für eine Vorlesehilfe nicht — und sie
+              liest den Namen des Knopfes, nicht die Zeile darum.
+            */
+            aria-label={`${kind} öffnen: ${quotedName(label)}${
+              attachment.rebuilt ? " (nachgebaut)" : ""
+            }`}
           >
-            <Foreign className="attachment__label truncate" value={label} />
+            <ForeignName className="attachment__label" value={label} />
+            {attachment.rebuilt ? <RebuiltMark /> : null}
           </button>
         ) : (
-          <Foreign className="attachment__label truncate" value={label} />
+          <>
+            <ForeignName className="attachment__label" value={label} />
+            {attachment.rebuilt ? <RebuiltMark /> : null}
+          </>
         )}
+
+        <AttachmentOriginMarks attachment={attachment} />
 
         {/*
           Der volle Wert steht in einer zweiten, kleineren Zeile — bei einer
@@ -146,7 +277,15 @@ export function AttachmentRow({ todoId, attachment, onOpen, onRemove, failure, b
         {attachment.kind === "image" ? (
           <span className="attachment__value muted">{kind}</span>
         ) : (
-          <span className="attachment__value muted truncate" title={foreignText(attachment.target)}>
+          /*
+            **Ohne `truncate`** (A-A-93): Bei einer Datei ist das der Pfad, der
+            gleich an die Standardanwendung geht, und sein Ende entscheidet.
+            Bei einem Verweis steht hier der Wirt, und A-A-87 verlangt ihn
+            **vor** dem Klick sichtbar — ein Deckel nähme ihn bei einer langen
+            Adresse als erstes weg. Das `title` bleibt: Es ist die zweite
+            Auskunft für den Zeiger, keine Ersatz für die erste.
+          */
+          <span className="attachment__value muted" title={foreignText(attachment.target)}>
             <Foreign value={attachment.target} />
           </span>
         )}

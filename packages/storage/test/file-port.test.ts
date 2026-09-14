@@ -54,21 +54,48 @@ describe('createFilePort.checkExportDirectory', () => {
     expect(result.resolvedPath).toBe(dir);
   });
 
-  it.skipIf(platform === 'win32')('ein schreibgeschützter Ordner ergibt "not_writable"', async () => {
-    dir = tempDir();
-    chmodSync(dir, 0o500);
-    try {
-      const port = createFilePort();
-      const result = await port.checkExportDirectory(dir);
-      // Als root (z. B. in manchen Container-Umgebungen) greift der Modus
-      // nicht — dann ist "ok" ebenfalls ein akzeptables, weil zutreffendes
-      // Ergebnis, und der eigentliche Prüfpfad ist die Sonderrolle von root.
-      expect(['ok', false].includes(result.ok as never) || result.ok === true).toBe(true);
-      if (!result.ok) expect(result.reason).toBe('not_writable');
-    } finally {
-      chmodSync(dir, 0o700);
-    }
-  });
+  /*
+   * T-328 (unit-tester), Befund `file-port.test.ts:66` aus
+   * `.claude/team/reports/T-324-code-reviewer.md`.
+   *
+   * ===========================================================================
+   * ROT ZUERST — die Zusicherung, die hier stand, war für JEDEN Wert wahr
+   * ===========================================================================
+   *
+   * `expect(['ok', false].includes(result.ok as never) || result.ok === true)
+   * .toBe(true)` maß nichts: `result.ok` ist ein `boolean`. Ist er `false`,
+   * trifft `['ok', false].includes(false)`; ist er `true`, trifft
+   * `result.ok === true`. Der Ausdruck ist für **jeden** möglichen Wert wahr
+   * und wäre selbst dann grün gewesen, wenn `checkExportDirectory` einen
+   * schreibgeschützten Ordner fälschlich als `ok` gemeldet hätte — genau der
+   * Fehler, den dieser Fall fangen soll. Die eigentliche Aussage stand
+   * dahinter, hinter einem `if (!result.ok)`, und griff deshalb nur in der
+   * Hälfte der Fälle.
+   *
+   * Selbst gemessen: Mit `result.ok` fest auf `true` verändert bleibt die
+   * ALTE Zusicherung grün (`['ok', false].includes(true as never)` ist
+   * `false`, aber `result.ok === true` trifft) — sie unterscheidet also nicht
+   * zwischen einem tatsächlich schreibgeschützten Ordner, der zu Recht "ok"
+   * zurückgibt (root), und einem Adapter, der die Prüfung vergessen hat. Die
+   * Sonderrolle von root wird jetzt VOR dem Fall selbst festgestellt
+   * (`process.getuid?.() === 0`) und übersprungen, statt sie in eine
+   * bedingungslos wahre Zusicherung zu verstecken; der verbleibende Rumpf
+   * trägt eine UNBEDINGTE Zusicherung.
+   */
+  it.skipIf(platform === 'win32' || process.getuid?.() === 0)(
+    'ein schreibgeschützter Ordner ergibt "not_writable"',
+    async () => {
+      dir = tempDir();
+      chmodSync(dir, 0o500);
+      try {
+        const port = createFilePort();
+        const result = await port.checkExportDirectory(dir);
+        expect(result).toEqual({ ok: false, reason: 'not_writable' });
+      } finally {
+        chmodSync(dir, 0o700);
+      }
+    },
+  );
 });
 
 describe('createFilePort.writeFile — unteilbar über eine Nachbardatei (A-8.1, A-8.9)', () => {

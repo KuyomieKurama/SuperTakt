@@ -17,6 +17,7 @@ import { useAsync } from "../../app/useAsync";
 import type { ExportAuditEvent } from "../../lib/labels";
 import { formatCount, plural } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { RefreshHint, ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { StatTile } from "../../shared/ui/StatTile";
 import { ExportTabs } from "./ExportTabs";
@@ -173,147 +174,156 @@ export function ExportAuditScreen({ query }: ExportAuditScreenProps) {
       </ScreenHeader>
 
       {/*
-        Ohne Überschrift und ohne Beschreibung (T-181, ST-03). Die Überschrift
-        erklärte eine Liste, die sichtbar darunter steht, und die Beschreibung
-        trug eine interne Befundnummer (Regel S-19). Die Karte bleibt als
-        Fläche, die Legende steht damit unmittelbar in der Ansicht.
+        Ein Laufbereich, Name „Exportprotokoll" (T-322 4.9). Fest sind Kopf,
+        Bereichsreiter und Filterleiste samt Zählzeile — hier zählt das doppelt:
+        Der Filter wirkt nur über die **geladenen** Zeilen, und die Zählzeile
+        sagt genau das. Beim Protokoll ist der Irrtum „kurze Liste =
+        vollständige Antwort" der teuerste.
       */}
-      <Card>
-        <dl className="auditlegend">
-          {(["exported", "reset", "not_billed"] as const).map((value) => (
-            <div className="auditlegend__item" key={value}>
-              <dt className="auditlegend__term">{auditEventLabel(value)}</dt>
-              <dd className="auditlegend__text">{AUDIT_EVENT_DESCRIPTION[value]}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="auditlegend__note">
-          Eine Zeile lässt sich weder ändern noch löschen — es gibt dafür keine Route, und die
-          Speicherung verbietet beides zusätzlich. Wer eine Buchung zurücksetzt und erneut
-          exportiert, findet beides hier nebeneinander.
-        </p>
-      </Card>
-
-      <AsyncBoundary
-        state={data.state}
-        label="Das Exportprotokoll wird geladen"
-        rows={6}
-        onRetry={data.reload}
-      >
-        {(value, refreshing) => {
-          if (value.rows.length === 0) {
-            return (
-              <EmptyState
-                icon="clock"
-                title="Noch kein Vorgang protokolliert"
-                description="Sobald der erste Export läuft, eine Buchung zurückgesetzt oder eine Zeit als „nicht abgerechnet“ abgehakt wird, steht es hier — mit Zeitpunkt, Buchung und Lauf."
-                action={
-                  <Button variant="secondary" iconStart="download" onClick={() => navigate("export")}>
-                    Zur Export-Ansicht
-                  </Button>
-                }
-              />
-            );
-          }
-
-          if (visible.length === 0) {
-            return (
-              <EmptyState
-                icon="search"
-                title="Kein Vorgang passt zu diesen Filtern"
-                description="Der Filter wirkt über die geladenen Zeilen. Laden Sie weitere, wenn Sie einen älteren Vorgang suchen — oder setzen Sie den Filter zurück."
-                action={
-                  <>
-                    {value.nextCursor === null ? null : (
-                      <Button variant="primary" iconStart="arrow-down" onClick={loadMore}>
-                        Weitere laden
-                      </Button>
-                    )}
-                    <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
-                      Filter zurücksetzen
-                    </Button>
-                  </>
-                }
-              />
-            );
-          }
-
-          const counts = countByEvent(value.rows);
-          /*
-            Befund C-25: Eine Kachel mit einer Zahl liest sich als Gesamtzahl,
-            besonders in einem Protokoll. Diese drei zaehlen ueber die
-            **geladenen** Zeilen, weil die Route keine Zaehlung je Ereignis
-            liefert — das stand bis T-045 nur in der Zeile ueber dem Filter und
-            nicht an der Zahl selbst. Jetzt sagt jede Kachel ihren Umfang; sind
-            alle Vorgaenge geladen, sagt sie auch das.
-          */
-          const complete = value.rows.length >= value.total;
-          const scope = complete
-            ? value.total === 1
-              ? "Gezählt über den einen Vorgang."
-              : `Gezählt über alle ${formatCount(value.total)} Vorgänge.`
-            : `Gezählt über ${formatCount(value.rows.length)} von ${formatCount(value.total)} Vorgängen — ohne die noch nicht geladenen.`;
-
-          return (
-            <>
-              <div className="stat-grid stat-grid--tight">
-                <StatTile
-                  label={auditEventLabel("exported")}
-                  value={formatCount(counts.exported)}
-                  detail={`In eine Datei geschrieben. ${scope}`}
-                />
-                <StatTile
-                  label={auditEventLabel("reset")}
-                  value={formatCount(counts.reset)}
-                  tone="warning"
-                  detail={`Danach geht dieselbe Zeit erneut in die Abrechnung. ${scope}`}
-                />
-                <StatTile
-                  label={auditEventLabel("not_billed")}
-                  value={formatCount(counts.not_billed)}
-                  detail={`Nie exportiert, bewusst nicht abgerechnet. ${scope}`}
-                />
+      <ScreenBody label="Exportprotokoll">
+        {/*
+          Ohne Überschrift und ohne Beschreibung (T-181, ST-03). Die Überschrift
+          erklärte eine Liste, die sichtbar darunter steht, und die Beschreibung
+          trug eine interne Befundnummer (Regel S-19). Die Karte bleibt als
+          Fläche, die Legende steht damit unmittelbar in der Ansicht.
+        */}
+        <Card>
+          <dl className="auditlegend">
+            {(["exported", "reset", "not_billed"] as const).map((value) => (
+              <div className="auditlegend__item" key={value}>
+                <dt className="auditlegend__term">{auditEventLabel(value)}</dt>
+                <dd className="auditlegend__text">{AUDIT_EVENT_DESCRIPTION[value]}</dd>
               </div>
+            ))}
+          </dl>
+          <p className="auditlegend__note">
+            Eine Zeile lässt sich weder ändern noch löschen — es gibt dafür keine Route, und die
+            Speicherung verbietet beides zusätzlich. Wer eine Buchung zurücksetzt und erneut
+            exportiert, findet beides hier nebeneinander.
+          </p>
+        </Card>
 
-              {/*
-                Der zweite Umfang, der ebenso leicht ueberlesen wird: Die
-                Kacheln zaehlen ueber alle geladenen Zeilen und nicht ueber den
-                gesetzten Filter. Sonst zeigte die Kachel eines nicht
-                gewaehlten Vorgangs eine Zahl, die in der Liste darunter
-                nirgends vorkommt.
-              */}
-              {complete && activeFilters.length === 0 ? null : (
-                <p className="auditcount__scope">
-                  <Icon name="info" size={14} />
-                  <span>
-                    {complete
-                      ? "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter."
-                      : activeFilters.length === 0
-                        ? "Ältere Vorgänge sind noch nicht geladen. „Weitere laden“ am Ende der Liste erhöht beide Zahlen."
-                        : "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter. Ältere sind zudem noch nicht geladen."}
-                  </span>
-                </p>
-              )}
+        <AsyncBoundary
+          state={data.state}
+          label="Das Exportprotokoll wird geladen"
+          rows={6}
+          onRetry={data.reload}
+        >
+          {(value, refreshing) => {
+            if (value.rows.length === 0) {
+              return (
+                <EmptyState
+                  icon="clock"
+                  title="Noch kein Vorgang protokolliert"
+                  description="Sobald der erste Export läuft, eine Buchung zurückgesetzt oder eine Zeit als „nicht abgerechnet“ abgehakt wird, steht es hier — mit Zeitpunkt, Buchung und Lauf."
+                  action={
+                    <Button variant="secondary" iconStart="download" onClick={() => navigate("export")}>
+                      Zur Export-Ansicht
+                    </Button>
+                  }
+                />
+              );
+            }
 
-              <RefreshHint active={refreshing} />
+            if (visible.length === 0) {
+              return (
+                <EmptyState
+                  icon="search"
+                  title="Kein Vorgang passt zu diesen Filtern"
+                  description="Der Filter wirkt über die geladenen Zeilen. Laden Sie weitere, wenn Sie einen älteren Vorgang suchen — oder setzen Sie den Filter zurück."
+                  action={
+                    <>
+                      {value.nextCursor === null ? null : (
+                        <Button variant="primary" iconStart="arrow-down" onClick={loadMore}>
+                          Weitere laden
+                        </Button>
+                      )}
+                      <Button variant="secondary" iconStart="rotate-ccw" onClick={resetAll}>
+                        Filter zurücksetzen
+                      </Button>
+                    </>
+                  }
+                />
+              );
+            }
 
-              <ExportAuditList models={visible} onOpenTodo={(todoId) => navigate("todo", todoId)} />
+            const counts = countByEvent(value.rows);
+            /*
+              Befund C-25: Eine Kachel mit einer Zahl liest sich als Gesamtzahl,
+              besonders in einem Protokoll. Diese drei zaehlen ueber die
+              **geladenen** Zeilen, weil die Route keine Zaehlung je Ereignis
+              liefert — das stand bis T-045 nur in der Zeile ueber dem Filter und
+              nicht an der Zahl selbst. Jetzt sagt jede Kachel ihren Umfang; sind
+              alle Vorgaenge geladen, sagt sie auch das.
+            */
+            const complete = value.rows.length >= value.total;
+            const scope = complete
+              ? value.total === 1
+                ? "Gezählt über den einen Vorgang."
+                : `Gezählt über alle ${formatCount(value.total)} Vorgänge.`
+              : `Gezählt über ${formatCount(value.rows.length)} von ${formatCount(value.total)} Vorgängen — ohne die noch nicht geladenen.`;
 
-              {value.nextCursor === null ? (
-                <p className="auditlist__end muted">
-                  Das ist der Anfang des Protokolls — ältere Vorgänge gibt es nicht.
-                </p>
-              ) : (
-                <div className="list-more">
-                  <Button variant="secondary" loading={refreshing} onClick={loadMore}>
-                    Weitere laden ({formatCount(Math.max(0, value.total - value.rows.length))} übrig)
-                  </Button>
+            return (
+              <>
+                <div className="stat-grid stat-grid--tight">
+                  <StatTile
+                    label={auditEventLabel("exported")}
+                    value={formatCount(counts.exported)}
+                    detail={`In eine Datei geschrieben. ${scope}`}
+                  />
+                  <StatTile
+                    label={auditEventLabel("reset")}
+                    value={formatCount(counts.reset)}
+                    tone="warning"
+                    detail={`Danach geht dieselbe Zeit erneut in die Abrechnung. ${scope}`}
+                  />
+                  <StatTile
+                    label={auditEventLabel("not_billed")}
+                    value={formatCount(counts.not_billed)}
+                    detail={`Nie exportiert, bewusst nicht abgerechnet. ${scope}`}
+                  />
                 </div>
-              )}
-            </>
-          );
-        }}
-      </AsyncBoundary>
+
+                {/*
+                  Der zweite Umfang, der ebenso leicht ueberlesen wird: Die
+                  Kacheln zaehlen ueber alle geladenen Zeilen und nicht ueber den
+                  gesetzten Filter. Sonst zeigte die Kachel eines nicht
+                  gewaehlten Vorgangs eine Zahl, die in der Liste darunter
+                  nirgends vorkommt.
+                */}
+                {complete && activeFilters.length === 0 ? null : (
+                  <p className="auditcount__scope">
+                    <Icon name="info" size={14} />
+                    <span>
+                      {complete
+                        ? "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter."
+                        : activeFilters.length === 0
+                          ? "Ältere Vorgänge sind noch nicht geladen. „Weitere laden“ am Ende der Liste erhöht beide Zahlen."
+                          : "Die Kacheln zählen über alle geladenen Vorgänge und nicht über den gesetzten Filter. Ältere sind zudem noch nicht geladen."}
+                    </span>
+                  </p>
+                )}
+
+                <RefreshHint active={refreshing} />
+
+                <ExportAuditList models={visible} onOpenTodo={(todoId) => navigate("todo", todoId)} />
+
+                {value.nextCursor === null ? (
+                  <p className="auditlist__end muted">
+                    Das ist der Anfang des Protokolls — ältere Vorgänge gibt es nicht.
+                  </p>
+                ) : (
+                  <div className="list-more">
+                    <Button variant="secondary" loading={refreshing} onClick={loadMore}>
+                      Weitere laden ({formatCount(Math.max(0, value.total - value.rows.length))} übrig)
+                    </Button>
+                  </div>
+                )}
+              </>
+            );
+          }}
+        </AsyncBoundary>
+      </ScreenBody>
     </section>
   );
 }

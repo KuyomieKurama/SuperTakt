@@ -158,6 +158,25 @@ function fakeTimeEntries(presence: Presence): AddinUnit['timeEntries'] {
   };
 }
 
+/**
+ * Attrappe für `AddinDeps.emailAttachments` seit T-304 (E-108): Diese Datei
+ * prüft `findMatches`/`bookOnTodo`, keine Anhangsübernahme, darum reicht der
+ * Anlegevorgang unverändert durch — kein Anhang entsteht, keiner scheitert.
+ *
+ * Achtung beim Lesen dieses Prüffalls: Die Attrappe sagt nichts darüber aus,
+ * *was* `createEmailAttachmentIntake`/`attachEmailToNewTodo` wirklich tun —
+ * das mißt `apps/local-api/test/features/todos/email-attachments.test.ts`
+ * (T-306). Hier steht sie nur, damit `AddinDeps` vollständig bleibt.
+ */
+const passthroughEmailAttachments: AddinDeps['emailAttachments'] = async (_intake, create) => {
+  const created = await create();
+  if (!created.ok) return created;
+  return ok({
+    created: created.value.value,
+    attachments: { attached: [], failed: [] },
+  });
+};
+
 function buildDeps(unit: {
   todos: Pick<AddinUnit['todos'], 'load' | 'findByCallNumber' | 'clearDone'>;
   timeEntries: AddinUnit['timeEntries'];
@@ -166,6 +185,7 @@ function buildDeps(unit: {
   return {
     inTransaction: (work) => work(unit as unknown as AddinUnit),
     now: () => NOW,
+    emailAttachments: passthroughEmailAttachments,
   };
 }
 

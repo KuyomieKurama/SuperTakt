@@ -1,6 +1,7 @@
 import { INDIRECT_EXTENSIONS, attachmentLabel as domainAttachmentLabel } from "@takt/domain";
 import type {
   ForeignText,
+  UncappedText,
 } from "../../api/types";
 import type {
   Attachment,
@@ -105,6 +106,28 @@ import type {
  * {@link foreseeableRefusalOf} sagt der Rückfrage, dass Takt ihn gar nicht
  * öffnet. Die **Abweisung** steht wie immer in `attachment.rs`
  * (`has_stream_separator`), nicht hier.
+ *
+ * ---------------------------------------------------------------------------
+ * Drei Rückgaben heißen seit T-302 `UncappedText` (A-19.23b, A-A-93, R-27)
+ * ---------------------------------------------------------------------------
+ *
+ * {@link fileNameOf}, {@link effectiveFileNameOf} und {@link extensionOf} geben
+ * nicht mehr `ForeignText` zurück, sondern `UncappedText`. Der Unterschied ist
+ * keine Verfeinerung, sondern eine zweite Zusage über denselben Wert:
+ *
+ *  - `ForeignText` sagt: *Dieser Text kann die Anzeige umordnen; behandle ihn.*
+ *  - `UncappedText` sagt: *An seinem **Ende** hängt eine Entscheidung; zeige
+ *    ihn ganz.*
+ *
+ * Für genau diese drei gilt beides, und für sie zuerst: Sie sind die Auskunft
+ * der Rückfrage darüber, **was** beim Bestätigen startet. Ein Deckel am
+ * Zeilenende nähme ihnen die Endung, ohne ein Zeichen zu verändern — die
+ * Fehlerart, die `visibleText` nicht sieht und die R-27 offenhält.
+ * `scripts/proof-clamp.mjs` mißt sie.
+ *
+ * {@link attachmentLabel} gibt aus demselben Grund `UncappedText` zurück: Fehlt
+ * der Titel, steht dort seit A-19.23a der **Anzeigename aus der E-Mail**, und
+ * der ist der freieste Wert, den ein Absender an diesem Anhang bestimmt.
  */
 
 /**
@@ -155,7 +178,7 @@ function lastSeparator(value: ForeignText): number {
  * Wert** zurück. Eine leere Zeichenkette gibt diese Funktion nie zurück,
  * solange sie eine bekommt (A-19.12).
  */
-export function fileNameOf(path: ForeignText): ForeignText {
+export function fileNameOf(path: ForeignText): UncappedText {
   const cut = lastSeparator(path);
   const tail = cut === -1 ? path : path.slice(cut + 1);
   return tail.length === 0 ? path : tail;
@@ -182,7 +205,7 @@ const TRAILING_IGNORED = /[. ]+$/u;
  * Bleibt nach dem Abschneiden nichts übrig — ein Name aus lauter Punkten —,
  * kommt der volle Name zurück. A-19.12 wörtlich: nie eine leere Zeile.
  */
-export function effectiveFileNameOf(path: ForeignText): ForeignText {
+export function effectiveFileNameOf(path: ForeignText): UncappedText {
   const name = fileNameOf(path);
   const trimmed = name.replace(TRAILING_IGNORED, "");
   return trimmed.length === 0 ? name : trimmed;
@@ -214,7 +237,7 @@ function hasStreamSeparator(path: ForeignText): boolean {
  * Endung, und was davor steht, ist die Datei, die wirklich aufgeht. Über einen
  * solchen Namen trifft diese Funktion deshalb keine Aussage.
  */
-export function extensionOf(path: ForeignText): ForeignText {
+export function extensionOf(path: ForeignText): UncappedText {
   const name = effectiveFileNameOf(path);
   if (hasStreamSeparator(path)) return "";
   const dot = name.lastIndexOf(".");
@@ -292,8 +315,13 @@ export function foreseeableRefusalOf(path: ForeignText): ForeseeableRefusal | nu
  * (E-063, Auflage A-A-6 Punkt 2). Die Domäne maskiert nichts und sagt das im
  * eigenen Kopfkommentar — die Behandlung bleibt Sache der Anzeige.
  */
-export function attachmentLabel(attachment: Attachment): ForeignText {
-  return domainAttachmentLabel(attachment.kind, attachment.title, attachment.target);
+export function attachmentLabel(attachment: Attachment): UncappedText {
+  return domainAttachmentLabel(
+    attachment.kind,
+    attachment.title,
+    attachment.target,
+    attachment.displayName,
+  );
 }
 
 /** „Verweis", „Bild", „Datei" — die Wörter aus A-19.9, an einer Stelle. */

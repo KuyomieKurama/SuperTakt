@@ -33,6 +33,7 @@ import {
   type TemplateDeviation,
 } from "./exportTemplateModel";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { ExportTabs } from "./ExportTabs";
 import {
@@ -509,199 +510,210 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
         <ExportTabs active="templates" />
       </ScreenHeader>
 
-      <AsyncBoundary
-        state={editor.state}
-        label="Exportvorlagen werden geladen"
-        rows={4}
-        onRetry={editor.reload}
-      >
-        {(value) => (
-          <div className="tpl-layout">
-            <TemplateList
-              templates={list}
-              selectedId={creating ? NEW_TEMPLATE_ID : (shown?.id ?? null)}
-              activeTemplateId={activeTemplateId}
-              onCopy={beginCopy}
-              onDelete={setConfirmDelete}
-            />
+      {/*
+        Ein Laufbereich, Name „Exportvorlagen" (T-322 4.8). Fest sind Kopf und
+        Bereichsreiter. Die Vorlagenliste läuft mit und bleibt klebend wie
+        bisher — ihre Länge hängt an den Daten, und als feste Spalte bräuchte sie
+        einen eigenen Laufbereich samt Namen für eine Liste, die meist drei
+        Einträge hat. **Der Bezug der Klebung ist jetzt dieser Laufbereich**
+        statt `.app__main`; ohne ihn fiele der Bedienweg „Vorlage wechseln, ohne
+        nach oben zu scrollen" still weg (T-322 Abschnitt 9 Nr. 2).
+      */}
+      <ScreenBody label="Exportvorlagen">
+        <AsyncBoundary
+          state={editor.state}
+          label="Exportvorlagen werden geladen"
+          rows={4}
+          onRetry={editor.reload}
+        >
+          {(value) => (
+            <div className="tpl-layout">
+              <TemplateList
+                templates={list}
+                selectedId={creating ? NEW_TEMPLATE_ID : (shown?.id ?? null)}
+                activeTemplateId={activeTemplateId}
+                onCopy={beginCopy}
+                onDelete={setConfirmDelete}
+              />
 
-            <div className="tpl-editor">
-              <div className="tpl-preview-action"><Button variant="secondary" onClick={() => setPreviewOpen(true)}>Vorschau öffnen</Button></div>
-              {/*
-                Die Notiz-Grenze wird an der **Antwort** noch einmal gezogen
-                (A-7.2, R-06). Der Dienst haelt sie an seinem eigenen
-                Uebersetzer fest; steht hier trotzdem etwas, ist das kein
-                Schoenheitsfehler, sondern ein Befund — und er gehoert
-                ausgesprochen, nicht stillschweigend weggefiltert.
-              */}
-              {noteSourceIsAbsent(value.catalog) ? null : (
-                <InlineMessage
-                  tone="danger"
-                  title="Der Dienst hat Feldquellen geliefert, die nicht wählbar sein dürfen"
-                >
-                  SuperTakt bietet sie nicht an:{" "}
-                  {value.catalog.rejectedNoteSources.map((path) => `„${path}“`).join(", ")}. Der
-                  interne Vermerk eines Todos geht in keinen Export (A-7.2). Melden Sie das bitte —
-                  an der Auswahlliste dieses Editors ändert es nichts, aber es gehört geprüft.
-                </InlineMessage>
-              )}
+              <div className="tpl-editor">
+                <div className="tpl-preview-action"><Button variant="secondary" onClick={() => setPreviewOpen(true)}>Vorschau öffnen</Button></div>
+                {/*
+                  Die Notiz-Grenze wird an der **Antwort** noch einmal gezogen
+                  (A-7.2, R-06). Der Dienst haelt sie an seinem eigenen
+                  Uebersetzer fest; steht hier trotzdem etwas, ist das kein
+                  Schoenheitsfehler, sondern ein Befund — und er gehoert
+                  ausgesprochen, nicht stillschweigend weggefiltert.
+                */}
+                {noteSourceIsAbsent(value.catalog) ? null : (
+                  <InlineMessage
+                    tone="danger"
+                    title="Der Dienst hat Feldquellen geliefert, die nicht wählbar sein dürfen"
+                  >
+                    SuperTakt bietet sie nicht an:{" "}
+                    {value.catalog.rejectedNoteSources.map((path) => `„${path}“`).join(", ")}. Der
+                    interne Vermerk eines Todos geht in keinen Export (A-7.2). Melden Sie das bitte —
+                    an der Auswahlliste dieses Editors ändert es nichts, aber es gehört geprüft.
+                  </InlineMessage>
+                )}
 
-              {draft === null ? null : (
-                <>
-                  <Card
-                    title={readOnly ? "Standardvorlage" : creating ? "Neue Vorlage" : "Vorlage"}
-                    description={
-                      readOnly
-                        ? "Die Struktur, die das Abrechnungstool erwartet. Sie lässt sich nicht ändern — aber kopieren."
-                        : "Name und Felder. Die Reihenfolge der Felder ist die Reihenfolge der Schlüssel in der Datei."
-                    }
-                    actions={
-                      readOnly ? (
-                        <Button
-                          variant="primary"
-                          iconStart="copy"
-                          onClick={() => {
-                            if (shown === null) return;
-                            beginCopy(shown);
-                          }}
-                        >
-                          Kopie anlegen
-                        </Button>
-                      ) : (
-                        <div className="tpl-editor__actions">
-                          {dirty ? (
-                            <Button variant="ghost" onClick={discard}>
-                              Verwerfen
-                            </Button>
-                          ) : null}
+                {draft === null ? null : (
+                  <>
+                    <Card
+                      title={readOnly ? "Standardvorlage" : creating ? "Neue Vorlage" : "Vorlage"}
+                      description={
+                        readOnly
+                          ? "Die Struktur, die das Abrechnungstool erwartet. Sie lässt sich nicht ändern — aber kopieren."
+                          : "Name und Felder. Die Reihenfolge der Felder ist die Reihenfolge der Schlüssel in der Datei."
+                      }
+                      actions={
+                        readOnly ? (
                           <Button
                             variant="primary"
-                            iconStart="check"
-                            loading={saving}
-                            disabled={saveBlocked || (!dirty && !creating)}
-                            onClick={save}
+                            iconStart="copy"
+                            onClick={() => {
+                              if (shown === null) return;
+                              beginCopy(shown);
+                            }}
                           >
-                            Speichern
+                            Kopie anlegen
                           </Button>
-                        </div>
-                      )
-                    }
-                  >
-                    {readOnly ? (
-                      <BuiltinNotice fields={builtinFields} />
-                    ) : (
-                      <TextField
-                        label="Name der Vorlage"
-                        value={draft.name}
-                        onChange={(next) =>
-                          setDraft((previous) =>
-                            previous === null ? previous : { ...previous, name: next },
-                          )
-                        }
-                        required
-                        maxLength={MAX_NAME_LENGTH}
-                        hint="Nur für Sie. In der Datei steht dieser Name nicht."
-                        {...(draft.name.trim().length === 0
-                          ? { error: "Ohne Namen lässt sich die Vorlage nicht wiederfinden." }
-                          : {})}
+                        ) : (
+                          <div className="tpl-editor__actions">
+                            {dirty ? (
+                              <Button variant="ghost" onClick={discard}>
+                                Verwerfen
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="primary"
+                              iconStart="check"
+                              loading={saving}
+                              disabled={saveBlocked || (!dirty && !creating)}
+                              onClick={save}
+                            >
+                              Speichern
+                            </Button>
+                          </div>
+                        )
+                      }
+                    >
+                      {readOnly ? (
+                        <BuiltinNotice fields={builtinFields} />
+                      ) : (
+                        <TextField
+                          label="Name der Vorlage"
+                          value={draft.name}
+                          onChange={(next) =>
+                            setDraft((previous) =>
+                              previous === null ? previous : { ...previous, name: next },
+                            )
+                          }
+                          required
+                          maxLength={MAX_NAME_LENGTH}
+                          hint="Nur für Sie. In der Datei steht dieser Name nicht."
+                          {...(draft.name.trim().length === 0
+                            ? { error: "Ohne Namen lässt sich die Vorlage nicht wiederfinden." }
+                            : {})}
+                        />
+                      )}
+
+                      <div className="live-region" role="status">
+                        {dirty ? (
+                          <p className="tpl-dirty">
+                            <Icon name="pencil" size={13} />
+                            <span>
+                              Ungespeicherte Änderungen. Die Vorschau zeigt den aktuellen Entwurf — auf
+                              den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
+                            </span>
+                          </p>
+                        ) : null}
+                      </div>
+
+                      {unreadable === null ? null : (
+                        <InlineMessage tone="danger" title="Diese Vorlage lässt sich nicht anzeigen">
+                          {unreadable} Solange das so ist, wird sie hier nicht bearbeitet — eine
+                          halb gelesene Vorlage zu speichern hieße, Felder stillschweigend zu
+                          verlieren.
+                        </InlineMessage>
+                      )}
+
+                      {saveError !== null && errorIndex === null ? (
+                        <TemplateSaveError message={saveError} />
+                      ) : null}
+
+                      <TemplateFields
+                        fields={draft.fields}
+                        catalog={value.catalog}
+                        builtinFields={builtinFields}
+                        duplicates={duplicates}
+                        errorIndex={errorIndex}
+                        errorMessage={saveError === null ? null : messageWithoutFieldPrefix(saveError)}
+                        readOnly={readOnly}
+                        onChange={updateField}
+                        onRemove={removeField}
+                        onDuplicate={duplicateField}
+                        onMove={moveField}
+                        onDrop={dropField}
+                        onAdd={addField}
+                      />
+                    </Card>
+
+                    {readOnly || creating ? null : (
+                      <DeviationPanel
+                        deviations={deviations}
+                        builtinName={builtin?.name ?? "Standardvorlage"}
                       />
                     )}
 
-                    <div className="live-region" role="status">
-                      {dirty ? (
-                        <p className="tpl-dirty">
-                          <Icon name="pencil" size={13} />
-                          <span>
-                            Ungespeicherte Änderungen. Die Vorschau zeigt den aktuellen Entwurf — auf
-                            den <strong>Export</strong> wirken sie sich erst nach dem Speichern aus.
-                          </span>
-                        </p>
-                      ) : null}
-                    </div>
-
-                    {unreadable === null ? null : (
-                      <InlineMessage tone="danger" title="Diese Vorlage lässt sich nicht anzeigen">
-                        {unreadable} Solange das so ist, wird sie hier nicht bearbeitet — eine
-                        halb gelesene Vorlage zu speichern hieße, Felder stillschweigend zu
-                        verlieren.
-                      </InlineMessage>
+                    {shown === null || shown.isBuiltin || activeTemplateId === shown.id ? null : (
+                      <Card
+                        title="Diese Vorlage benutzen"
+                        description="Der Export nimmt die Vorlage, die in den Einstellungen aktiv ist."
+                      >
+                        <div className="tpl-activate">
+                          <p className="tpl-activate__text">
+                            Aktiv ist derzeit{" "}
+                            <strong>
+                              <Foreign
+                                value={
+                                  list.find((template) => template.id === activeTemplateId)?.name ??
+                                  builtin?.name ??
+                                  "die Standardvorlage"
+                                }
+                              />
+                            </strong>
+                            . Änderungen an dieser Vorlage wirken sich erst auf einen Export aus,
+                            wenn sie aktiv ist.
+                          </p>
+                          <Button
+                            variant="secondary"
+                            iconStart="check"
+                            loading={mutation.busy}
+                            onClick={() => activate(shown)}
+                          >
+                            Für den Export verwenden
+                          </Button>
+                        </div>
+                      </Card>
                     )}
+                  </>
+                )}
+              </div>
 
-                    {saveError !== null && errorIndex === null ? (
-                      <TemplateSaveError message={saveError} />
-                    ) : null}
-
-                    <TemplateFields
-                      fields={draft.fields}
-                      catalog={value.catalog}
-                      builtinFields={builtinFields}
-                      duplicates={duplicates}
-                      errorIndex={errorIndex}
-                      errorMessage={saveError === null ? null : messageWithoutFieldPrefix(saveError)}
-                      readOnly={readOnly}
-                      onChange={updateField}
-                      onRemove={removeField}
-                      onDuplicate={duplicateField}
-                      onMove={moveField}
-                      onDrop={dropField}
-                      onAdd={addField}
-                    />
-                  </Card>
-
-                  {readOnly || creating ? null : (
-                    <DeviationPanel
-                      deviations={deviations}
-                      builtinName={builtin?.name ?? "Standardvorlage"}
-                    />
-                  )}
-
-                  {shown === null || shown.isBuiltin || activeTemplateId === shown.id ? null : (
-                    <Card
-                      title="Diese Vorlage benutzen"
-                      description="Der Export nimmt die Vorlage, die in den Einstellungen aktiv ist."
-                    >
-                      <div className="tpl-activate">
-                        <p className="tpl-activate__text">
-                          Aktiv ist derzeit{" "}
-                          <strong>
-                            <Foreign
-                              value={
-                                list.find((template) => template.id === activeTemplateId)?.name ??
-                                builtin?.name ??
-                                "die Standardvorlage"
-                              }
-                            />
-                          </strong>
-                          . Änderungen an dieser Vorlage wirken sich erst auf einen Export aus,
-                          wenn sie aktiv ist.
-                        </p>
-                        <Button
-                          variant="secondary"
-                          iconStart="check"
-                          loading={mutation.busy}
-                          onClick={() => activate(shown)}
-                        >
-                          Für den Export verwenden
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
-                </>
-              )}
+              <DialogSurface open={previewOpen} onDismiss={() => setPreviewOpen(false)} className="dialog dialog--wide tpl-preview-dialog">
+                <div className="dialog__head">
+                  <Dialog.Title className="dialog__title">Vorschau</Dialog.Title>
+                  <Button variant="ghost" onClick={() => setPreviewOpen(false)}>Schließen</Button>
+                </div>
+                <div className="dialog__body">
+                  {previewOpen ? <TemplatePreview catalog={value.catalog} stale={dirty} unsaved={creating} fields={draftFields} /> : null}
+                </div>
+              </DialogSurface>
             </div>
-
-            <DialogSurface open={previewOpen} onDismiss={() => setPreviewOpen(false)} className="dialog dialog--wide tpl-preview-dialog">
-              <div className="dialog__head">
-                <Dialog.Title className="dialog__title">Vorschau</Dialog.Title>
-                <Button variant="ghost" onClick={() => setPreviewOpen(false)}>Schließen</Button>
-              </div>
-              <div className="dialog__body">
-                {previewOpen ? <TemplatePreview catalog={value.catalog} stale={dirty} unsaved={creating} fields={draftFields} /> : null}
-              </div>
-            </DialogSurface>
-          </div>
-        )}
-      </AsyncBoundary>
+          )}
+        </AsyncBoundary>
+      </ScreenBody>
 
       <ConfirmDialog
         open={confirmDelete !== null}

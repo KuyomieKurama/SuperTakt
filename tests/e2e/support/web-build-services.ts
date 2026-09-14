@@ -448,6 +448,11 @@ export async function startWebPreview(
       stdio: ['ignore', 'pipe', 'pipe'],
       // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand.
       shell: process.platform === 'win32',
+      // Nur außerhalb von Windows (T-330, siehe `killChildTree`): Macht diesen
+      // Prozeß zum Anführer einer eigenen Prozeßgruppe, damit
+      // `process.kill(-pid, 'SIGTERM')` beim Aufräumen das Enkelkind
+      // `vite preview` mit erreicht, nicht nur `pnpm` selbst.
+      detached: process.platform !== 'win32',
     },
   );
 
@@ -517,18 +522,24 @@ export async function startWebPreview(
  * „fremde, aber erreichbare Gegenstelle" auf einem geteilten Port beschrieb
  * und die der Auftraggeber als wiederkehrendes Problem benennt
  * (`board.md`: „Hängende Prozesse auf 5173 und 17844 haben heute mehrfach
- * Läufe verfälscht"). `taskkill /t /f` beendet unter Windows den ganzen
- * Baum; auf anderen Plattformen bleibt `SIGTERM` (kein `shell: true` dort,
- * kein Enkelkind-Problem).
+ * Läufe verfälscht"). `taskkill /t /f` beendet unter Windows den ganzen Baum.
  *
- * Absichtlich nur hier behoben, nicht in `services.ts#stopServices` (dort
- * spawnt `startWeb()` den Entwicklungsserver über dieselbe
- * `shell: true`-Bauart und trägt vermutlich dasselbe Risiko) — diese Datei
- * bedient ausschließlich `playwright.web-build.config.ts` und die eigenen,
- * neuen Gegenproben dieser Aufgabe; `services.ts` bedient die ganze
- * Hauptreihe (110 Fälle), eine Änderung dort verlangt einen eigenen,
- * isoliert gegengelesenen Auftrag statt eines Nebenschauplatzes in T-263.
- * Gemeldet, nicht mitbehoben — siehe Bericht.
+ * **Berichtigt (T-330, 2026-09-13): „kein Enkelkind-Problem" außerhalb von
+ * Windows war eine falsche Annahme, jetzt gemessen widerlegt — hier direkt
+ * am dritten Waisenprozeß dieser Aufgabe.** Nach einem vollständig grünen
+ * Lauf von `web-build-smoke.spec.ts` (9/9 bestanden) blieben auf dieser
+ * Maschine gleich **zwei** `vite preview`-Prozesse zurück, einer auf 5173,
+ * einer auf dem Zufallsport der Gegenprobe (T-259/O-CI-Bauart) — `pnpm exec
+ * vite preview …` bleibt ein echtes Enkelkind, auch ohne `shell: true`,
+ * genau wie an `services.ts#startWeb` gemessen (siehe dort). `startWebPreview`
+ * startet den Prozeß deshalb jetzt mit `detached: true` (nur außerhalb von
+ * Windows), und diese Funktion signalisiert die **Prozeßgruppe** (negative
+ * PID) statt nur den unmittelbaren Kindprozeß, mit `child.kill('SIGTERM')`
+ * als Rückweg. **Dieselbe Berichtigung wie in `services.ts#killShellChildTree`**
+ * — beide Dateien hatten unabhängig voneinander dieselbe falsche Annahme
+ * geschrieben, weil T-263 diese Datei ausdrücklich als Nebenschauplatz nicht
+ * auf `services.ts` übertragen hat (siehe Verlauf dieses Kommentars in der
+ * Versionsgeschichte); jetzt sind beide auf demselben Stand.
  */
 async function killChildTree(child: ChildProcessWithoutStdin): Promise<void> {
   if (process.platform === 'win32' && child.pid !== undefined) {
@@ -538,6 +549,15 @@ async function killChildTree(child: ChildProcessWithoutStdin): Promise<void> {
       // Bereits beendet, oder nie wirklich gestartet — kein zweiter Versuch nötig.
     }
     return;
+  }
+  if (child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+      return;
+    } catch {
+      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
+      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
+    }
   }
   child.kill('SIGTERM');
 }

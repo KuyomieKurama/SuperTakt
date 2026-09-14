@@ -26,7 +26,7 @@
  * `duplicate/rule.ts` an der Stelle, an der bis T-104 `offerMovement` stand.
  */
 
-import type { PoolMovement } from '@takt/domain';
+import type { EmailAttachmentFailureReason, PoolMovement } from '@takt/domain';
 
 export interface TagDto {
   readonly id: string;
@@ -68,6 +68,33 @@ export interface TodoStatusDto {
   readonly isDefault: boolean;
 }
 
+/**
+ * **Daß** dieser Dienst Anhänge aus einer E-Mail annimmt (A-19.22, E-108).
+ *
+ * ---------------------------------------------------------------------------
+ * Ein Feld, nicht drei Zahlen (T-304)
+ * ---------------------------------------------------------------------------
+ *
+ * In T-300 trug dieser Block die drei Grenzen aus A-A-81. Sie stehen jetzt in
+ * `packages/domain` und werden von dort gelesen (`TAKEOVER_LIMITS` in
+ * `attachments/model.ts`): Eine Grenze ist eine Fachregel, und eine Fachregel
+ * über zwei Wege zu verteilen ist die Gelegenheit, sie verschieden zu ändern.
+ *
+ * Was **hier** stehen muß und nirgends sonst stehen kann, ist die Auskunft
+ * über den laufenden Dienst: Add-in und Dienst werden getrennt installiert und
+ * können auseinanderlaufen. Ein neuer Aufgabenbereich an einem älteren Dienst
+ * sammelte sonst Anhänge ein, deren Tür das Feld nicht liest — und verlöre sie
+ * still (A-19.31, E-100 Punkt 3).
+ *
+ * Deshalb bleibt der Block optional und deshalb ist er die Naht: Fehlt er,
+ * **bietet der Aufgabenbereich die Übernahme gar nicht an**. Kein Satz
+ * verspricht dann etwas, was hinterher nicht geschieht.
+ */
+export interface EmailAttachmentSupportDto {
+  /** `true` heißt: `POST /addin/todos` liest das Feld `attachments`. */
+  readonly accepted: boolean;
+}
+
 export interface AddinContextDto {
   readonly tagTree: TagTreeDto;
   readonly pools: readonly PoolDto[];
@@ -75,6 +102,14 @@ export interface AddinContextDto {
   readonly defaultStatusId: string;
   /** Standard-Tags aus A-9.1, in ihrer konfigurierten Reihenfolge. */
   readonly defaultTagIds: readonly string[];
+  /**
+   * Fehlt, solange der Dienst keine Anhänge aus dem Add-in annimmt.
+   *
+   * `?` und nicht `| null`: Unter `exactOptionalPropertyTypes` ist „das Feld
+   * fehlt" etwas anderes als „es ist `null`", und hier ist genau das Erste
+   * gemeint — ein älterer Dienst weiß von diesem Feld nichts.
+   */
+  readonly emailAttachments?: EmailAttachmentSupportDto;
 }
 
 export interface TodoMatchDto {
@@ -174,6 +209,49 @@ export interface CreateTodoResponseDto {
    * der Name aus dieser Antwort gezeigt und nicht der aus dem Eingabefeld.
    */
   readonly createdTags: readonly TagDto[];
+  /**
+   * Was der Dienst von den mitgeschickten Anhängen **tatsächlich** abgelegt
+   * hat (A-19.29, A-19.33).
+   *
+   * `null`, wenn im Anlegeruf kein Anhang dabei war; **fehlt**, solange der
+   * Dienst keine Anhänge annimmt. Für den Aufgabenbereich sind beide Fälle
+   * derselbe: Es hängt keiner daran, und niemand hat etwas anderes behauptet.
+   *
+   * Die Zahl in der Erfolgsmeldung kommt aus dieser Antwort und nicht aus der
+   * eigenen Zählung des Aufgabenbereichs: „3 Anhänge hängen daran" ist eine
+   * Aussage über den Bestand, und über den Bestand weiß der Dienst Bescheid.
+   * Was der Aufgabenbereich selbst weiß, sind die Anhänge, die es **nicht** bis
+   * zum Anlegeruf geschafft haben — die kennt der Dienst nicht.
+   */
+  readonly attachments?: CreatedAttachmentsDto | null;
+}
+
+export interface CreatedAttachmentsDto {
+  /** Wie viele Anhänge am Todo hängen. */
+  readonly stored: number;
+  /**
+   * Welche der mitgeschickten der Dienst abgewiesen hat, in der Reihenfolge des
+   * Rufs — **mit Grund** (A-19.29).
+   *
+   * Der Grund ist eine der acht Kennungen der Domäne
+   * (`EmailAttachmentFailureReason`); der Satz dazu entsteht hier, in
+   * `attachments/reasons.ts`. Ein Freitext des Dienstes stünde an dieser Stelle
+   * als fremder Satz in einer Fläche, die sonst nur eigene zeigt (AB-3).
+   *
+   * `bytes` ist gesetzt, wo der Grund eine Größe nennt (`too_large`), sonst
+   * `null`. Sie ist **gemessen** und nicht angekündigt (A-A-81).
+   *
+   * **Kein Pfad.** Der Dienst kennt für jede abgelegte Datei den vollen Pfad im
+   * Anwendungsdatenverzeichnis; er steht ausdrücklich nicht in dieser Antwort.
+   * Ein Pfad ist eine Ortsangabe über **einen** Rechner (Befund T-301) und
+   * gehört in die Hauptanwendung, die ihn vor dem Öffnen nennen muß — nicht in
+   * ein Browsersteuerelement innerhalb von Outlook.
+   */
+  readonly rejected: readonly {
+    readonly displayName: string;
+    readonly reason: EmailAttachmentFailureReason;
+    readonly bytes: number | null;
+  }[];
 }
 
 export interface TimeEntryDto {

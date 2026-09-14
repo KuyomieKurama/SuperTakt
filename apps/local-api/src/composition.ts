@@ -178,6 +178,11 @@ export function compose(options: CompositionOptions): Composition {
           // Beiwerk: Ein Fehlschlag beim Entfernen einer Bildkopie hat keinen
           // anderen Empfänger (T-159, A-A-18).
           attachmentBlobs: createAttachmentBlobPort(options.appDataDir ?? null, logger),
+          // Derselbe Protokollschreiber, den auch der Blob-Port bekommt. Er
+          // steht im Zusammenhang für den einen Fall, den kein Adapter melden
+          // kann: eine Entfernung, die **unterbleibt**, weil die
+          // Eigentümerfrage nicht beantwortbar war (T-320, `context.ts`).
+          logger,
           // E-010, E-042: Der Windows-Benutzername kommt über die zweite
           // `stdin`-Zeile herein und wird von hier bis in `export_run` und
           // `export_audit` durchgereicht. Es gibt auf dem ganzen Weg keine
@@ -198,20 +203,26 @@ export function compose(options: CompositionOptions): Composition {
    * Die Versionsprüfung (A-18.2, E-069).
    *
    * ===========================================================================
-   * Was sie über den Bestand weiß — und was sich in T-279 daran geändert hat
+   * Was sie über den Bestand weiß — und was davon eine Sperre ist
    * ===========================================================================
    *
-   * Hier stand bis T-279: „Sie hängt an keiner Datenbank." Das war der Stand
-   * und ist es nicht mehr. **Was sie weiß, liegt weiterhin im Arbeitsspeicher**
-   * — die zuletzt gemeldete Fassung, der Zustand `unknown`/`known` —, und was
+   * Hier stand bis T-279: „Sie hängt an keiner Datenbank." **Was sie weiß,
+   * liegt weiterhin im Arbeitsspeicher** — die zuletzt gemeldete Fassung, der
+   * Zustand `unknown`/`known`, der Bezugspunkt des harten Bodens —, und was
    * übersprungen wurde, ist eine Einstellung wie jede andere und wird über
    * `/settings` gelesen.
    *
-   * **Ein Wert liegt jetzt im Bestand: der Bezugspunkt des harten Bodens**
-   * (`app_setting.last_version_check_at`, Migration 0022, A-V-11). Er erfüllt
-   * damit dieselbe Regel wie seine beiden Nachbarn `skipped_version` (A-18.10)
-   * und die offenen Inaktivitätsphasen (A-24.7): im Bestand, nicht im
-   * Arbeitsspeicher, nicht im Browserspeicher.
+   * **Ein Wert geht in den Bestand: der Zeitpunkt der letzten Anfrage**
+   * (`app_setting.last_version_check_at`, Migration 0022). Er ist seit T-285
+   * eine **Tatsache** und keine Sperre: Er wird vor jeder ausgehenden Anfrage
+   * geschrieben, nimmt am Round-Trip der Datensicherung teil (A-20.4) und wird
+   * von keinem Betriebspfad zurückgelesen.
+   *
+   * Zwischen T-279 und T-285 wurde er gelesen und hielt den Boden über einen
+   * Neustart hinweg. Das ist zurückgenommen, und zwar nicht als Nachlässigkeit:
+   * Ein Programmstart prüft immer einmal (A-18.11 in der Lesart von T-285),
+   * weil der Neustart die einzige Selbsthilfe des Benutzers ist, wenn die
+   * Prüfung nicht greift. Die Verdrahtung unten hat deshalb **kein `read`**.
    *
    * ===========================================================================
    * Warum die Anbindung optional ist
@@ -219,17 +230,15 @@ export function compose(options: CompositionOptions): Composition {
    *
    * Weil `compose()` **ohne** Datenbank läuft: Fehlt `databaseLocation`, ist
    * `database` hier `null` — so fahren `proof:openapi` und
-   * `proof:route-policy`. Ohne Port bleibt es beim Verhalten vor T-279, und
-   * damit bleibt jeder bestehende Prüffall und jeder Nachweislauf unverändert
-   * gültig, ohne eine Attrappe zu brauchen.
+   * `proof:route-policy`. Ohne Port wird der Zeitpunkt nirgends gemerkt, und am
+   * Verhalten der Prüfung ändert das nichts.
    *
    * ===========================================================================
    * Was hier ausdrücklich **nicht** entsteht
    * ===========================================================================
    *
    * Keine Route, kein Feld, keine Auskunft. Der Wert wandert von hier in genau
-   * eine Richtung — vom Prüfer in die Tabelle — und kommt auf genau einem Weg
-   * zurück, nämlich in den Prüfer. `GET /settings` kennt ihn nicht,
+   * eine Richtung — vom Prüfer in die Tabelle. `GET /settings` kennt ihn nicht,
    * `PATCH /settings` kann ihn nicht setzen (A-V-14′, A-18.11).
    *
    * Der Adapter ist **hier** und nicht im Prüfer: Er ist die einzige Stelle,
@@ -246,7 +255,6 @@ export function compose(options: CompositionOptions): Composition {
       ? {}
       : {
           store: {
-            read: () => versionCheckState.lastCheckAt(),
             write: (at: Date) => versionCheckState.recordCheck(toTimestamp(at)),
           },
         }),
