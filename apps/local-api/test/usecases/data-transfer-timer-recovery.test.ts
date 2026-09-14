@@ -280,6 +280,59 @@ describe('R-34 — importDataArchive führt die Timer-Aufnahme nach (T-358 Absch
 
     ziel.database.close();
   });
+
+  /**
+   * Fall F (T-375) — die ungeschriebene Zusage aus `unit-of-work.ts:264/278`
+   * fest genagelt: `return next` und nicht `return queue`.
+   *
+   * Fall E oben genügt formal — er ist rot gegen die verworfene
+   * Zwei-Transaktionen-Anordnung (nachgemessen im Bericht des unit-testers
+   * dieser Aufgabe) —, aber er hat genau **einen** nebenher gereihten Leser.
+   * T-358 und T-370 haben mit **siebzehn** gemessen, weil ein einzelner Leser
+   * unter der Zwei-Transaktionen-Anordnung nur mit einer gewissen
+   * Wahrscheinlichkeit in das offene Fenster trifft (T-358: 16 von 17 richtig,
+   * 1 falsch — nicht 0 von 17). Dieser Fall fährt dieselben siebzehn Leser wie
+   * Fall E, nur mehr davon, und alle synchron vor dem ersten `await` gestartet
+   * — genau die Bauart, mit der Fall E den Mechanismus mißt, nicht nur die
+   * Zahl.
+   *
+   * Selbst gemessen (fünf Wiederholungen je Seite, siehe Bericht T-375):
+   *
+   *     Zwei-Transaktionen-Anordnung (verworfen)   0 von 17 sahen 1200 s, alle 17 sahen `null`
+   *     Diese Anordnung (aktuell)                  17 von 17 sahen 1200 s, in jedem der 5 Läufe
+   *
+   * Wer `unit-of-work.ts:278` von `return next` auf `return queue` ändert,
+   * ändert nicht nur die Reihenfolge, sondern auch den Rückgabewert selbst
+   * (`queue` löst immer zu `undefined` auf) — das reißt praktisch jeden
+   * anderen Prüffall, der `await unit.…` auswertet, sofort und unübersehbar
+   * mit; dieser Fall ist deshalb keine Absicherung gegen *diese* eine
+   * Änderung, sondern gegen die schwerer zu findende Regression, welche die
+   * **Reihenfolge** der beiden Anweisungen (Warteschlangen-Anhängen vor der
+   * Rückgabe) verschiebt oder die Aufnahme wieder auf zwei Klammern zieht.
+   */
+  it('Fall F — siebzehn nebenher gereihte Leser sehen nie den Zwischenstand (unit-of-work.ts:264/278, R-34)', async () => {
+    const archive = await archiveWithRunningTimer();
+
+    const ziel = await machine(TARGET_CLOCK);
+    const zielBase = withTimerRecovery(ziel.context, null);
+    await captureTimerRecovery(zielBase);
+
+    // Wie in Fall E: beide Seiten werden VOR dem Warten gestartet, damit sie
+    // sich synchron, im Aufrufzeitpunkt, in dieselbe Warteschlange einreihen.
+    const importPromise = importDataArchive(zielBase, archive);
+    const readers = Array.from({ length: 17 }, () => loadOrphanedTimer(zielBase));
+
+    const [imported, ...results] = await Promise.all([importPromise, ...readers]);
+
+    expect(imported.ok).toBe(true);
+    // Jeder einzelne der siebzehn Leser — nicht nur die Mehrheit.
+    for (const result of results) {
+      expect(result?.bookableSeconds).toBe(1200);
+      expect(result?.bookableSeconds).not.toBe(39600);
+    }
+
+    ziel.database.close();
+  });
 });
 
 /**

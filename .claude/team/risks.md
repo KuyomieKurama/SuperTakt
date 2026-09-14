@@ -1065,3 +1065,39 @@ umbaut, öffnet R-34 wieder, ohne es zu merken.
 Schreibvorgang. Und der Wurf in `timer.ts:422` rollt richtig zurück, aber `app.onError` wirft die
 Meldung weg — im Fehlerfall steht der Grund nirgends.
 
+### R-34 — beide Bedingungen für die Schließung sind erfüllt (2026-09-14, T-371 und T-375)
+
+T-371 hat die Menge **von unten an der Speicherung** aufgespannt — drei `UPDATE … SET ended_at` in
+`repo-time.ts`, darüber sieben Aufrufe im Dienst, dieselbe Sieben wie T-370 und unabhängig
+erreicht. Beide offenen Türen gehen jetzt durch `bookingEndOf`; `beginIdle` **weist ab**,
+`completeReturn` **deckelt**. `decideOrphanedTimer` deckelt auf `min(heartbeatAt, now)`. Die
+Überlappung in `startTimer` ist weg. **`proof:layers` Abschnitt 7 zieht die Menge der Türen bei
+jedem Lauf aus der Platte** (36/0 → 51/0), damit die achte rot wird, bevor ein Prüfer sie findet.
+
+T-371 hatte die Schließung an zwei Bedingungen geknüpft — „sonst ist sie zum dritten Mal eine
+Behauptung". **Beide sind erfüllt:** Die achtzehn Fälle in `idle.test.ts` sind grün, und ein Fall
+mißt die idle-Tür. `pnpm test:coverage` steht vom Orchestrator nachgefahren bei **1 914 grün / 0
+rot** über 101 Dateien.
+
+**Die Fixture-Lücke war wirklich nur eine Lücke, und das ist nachgemessen statt angenommen.**
+T-375 hat für jeden der achtzehn einzeln geprüft, ob er danach dieselbe Behauptung festnagelt wie
+vorher. Die beiden Archiv-Fälle, bei denen der Verdacht am größten war, umgehen
+`importDataArchive` ganz und berühren `foundAtServiceStart` nie — sie messen die Treue des
+Round-Trips und sind von B-1/B-2 unberührt.
+
+**Berichtigung an der Zusage aus `unit-of-work.ts`:** Die oben notierte Sorge war zur Hälfte
+falsch. Die wörtliche Mutation, vor der T-371 gewarnt hat (`return next` → `return queue`), ist
+**nicht still** — `queue` löst stets zu `undefined` auf, bricht damit den Rückgabewert für jeden
+Aufrufer und wird vom bestehenden Prüfstand breit gefangen. **Der wirklich stille Rückschritt** —
+die früher verworfene Zwei-Transaktionen-Anordnung — wird von Fall E mit 17 Lesern zuverlässig
+gefangen: **0/17 gegen 17/17 über fünf Wiederholungen**. Die Zusage bleibt damit ein **gemessenes
+Verhalten, kein typgesicherter Vertrag**.
+
+**Noch nicht geschlossen, und zwar aus Verfahrensgründen:** T-371 hat weder Code-Review noch
+Sicherheitsprüfung gesehen. T-370 hat T-363 geprüft, nicht T-371. Der Eintrag bleibt offen, bis
+die Freigaberunde über T-371 durch ist.
+
+**Weiter offen, unabhängig davon:** **B-5** — das A-24-Zuordnungsfenster aus einem Archiv bietet
+gemessen 39 000 s zur Verteilung an; nur benannt, nicht behoben. **A-A-127** — weiterhin keine
+Obergrenze für eine Dauer.
+

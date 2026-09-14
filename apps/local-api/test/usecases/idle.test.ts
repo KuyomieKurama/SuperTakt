@@ -24,7 +24,7 @@ describe('A-24: Inaktivität und Zeitaufteilung', () => {
     await db.migrations.migrateToLatest();
     unit = await db.transactions.inTransaction(value => Promise.resolve(value));
     clock = ts('2026-09-08T08:50:00Z');
-    context = { transactions: db.transactions, clock: { now: () => clock } } as AppContext;
+    context = { transactions: db.transactions, clock: { now: () => clock }, timerRecovery: { entryId: null } } as AppContext;
     first = (await unit.todos.create({ title: 'Aufgabe A', callNumber: null, statusId: null, tagIds: [], note: '', now: clock }, [])).id;
     second = (await unit.todos.create({ title: 'Aufgabe B', callNumber: null, statusId: null, tagIds: [], note: '', now: clock }, [])).id;
     const started = await unit.timer.start(first, false, ts('2026-09-08T08:00:00Z'));

@@ -1115,6 +1115,136 @@ Augenschein), T-373 (ui-designer, `todo-tabelle.md`), T-374 (ux-designer,
 **keinen** ersten Schritt „lies deinen eigenen Zwischenstand" wie der zweite Anlauf der Welle 10 —
 es gibt keinen.
 
+### Zwischenstand committet und gepusht (2026-09-14, `a5641e1`)
+
+132 Dateien, +40 873 / −2 455, auf `feature/outlook-anhaenge-und-versionspruefung`. Der
+Auftraggeber hat es so verlangt; die Nachricht nennt den roten Stand ausdrücklich, statt ihn zu
+verschweigen.
+
+**Das Tor ist rot, und der Orchestrator hat es vor dem Neustart selbst nachgefahren statt es aus
+der Oberfläche abzulesen** (`gh` steht auf diesem Rechner nicht zur Verfügung):
+
+```
+Test Files  1 failed | 98 passed | 1 skipped (100)
+     Tests  18 failed | 1885 passed | 2 skipped (1905)
+```
+
+**Alle achtzehn in `apps/local-api/test/usecases/idle.test.ts`**, alle unter
+`A-24: Inaktivität und Zeitaufteilung`. `typecheck`, `boundaries`, `contrast` und `proof:all`
+(22 Läufe) sind grün. Es ist die im Commit benannte Fixture-Lücke, kein neuer Befund.
+
+### Welle 16 — läuft (gestartet 2026-09-14, 09:36, nach Rücksetzung des Limits)
+
+Dieselben vier Aufträge wie Welle 14/15, unverändert gültig — sie hatten beim Abbruch keine Zeile
+geschrieben.
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-375** | Die achtzehn Fälle, **und T-371s Behauptung dahinter nachmessen statt übernehmen**; dazu die fünf Fälle, die R-34 schließen, die Fehlschlagspfade von `startTimer`, die sechs Domänenfälle zu `decideOrphanedTimer.now` | unit-tester | `packages/*/test/**`, `apps/*/test/**` ohne `test/version/**` |
+| **T-372** | Augenschein: sieben Paletten, beide Dichten, 1280 × 820 und 960 × 640, vier Zustände, **SC 1.4.13 „überfahrbar" am echten Zeiger**, N-2 und N-6 | visual-qa | nur der eigene Bericht |
+| **T-373** | `todo-tabelle.md` nachziehen | ui-designer | `docs/design/todo-tabelle.md` |
+| **T-374** | `todo-tabelle-fluss.md` nachziehen | ux-designer | `docs/design/todo-tabelle-fluss.md` |
+
+**T-373 (ui-designer) fertig.** Siebzehn Abschnitte geändert, und **jede Änderung trägt die
+Entscheidung, die sie umsetzt** — die Berichtigungsliste im Kopf ordnet sie B-1…B-8 und N-2…N-10
+zu, damit der nächste Abgleich **nachschlagen statt lesen** muß. Das ist die Antwort auf E-113,
+und sie ist billiger als jede Absprache.
+
+**Ü-1 ist aufgelöst und die Rollenfrage gleich mit:** gebaut ist `@ark-ui/react/popover` mit
+`modal={false}`; `role="dialog"` **bleibt**, weil ein Dialog seinen Anspruch über `aria-modal`
+erhebt und nicht über den Namen. Die Auflage „nie `aria-modal`, nie `.scrim`" bekommt mit **A16**
+einen Wächter — eine Zusage ohne Wächter war in diesem Bestand schon dreimal grün und blind.
+
+**Neu ist 5.5: SC 1.4.13 „überfahrbar" hat endlich einen Mechanismus** (220/220 ms, `gutter: 4`),
+und der Kernsatz ist der wertvolle: **Versatz und Nachlauf sind ein Paar**, und die Fläche selbst
+muß `pointerenter` hören. T-366 hatte gemessen, daß auf **keiner** der beiden Seiten ein
+Mechanismus stand.
+
+**A14 ist nach Modalität in A14a/A14b geteilt** und um zwei Gegenproben ergänzt — der Befund aus
+T-366, daß sie die Entscheidung aus B-5 in **keiner** Richtung maß, ist damit zu.
+
+**`.todo-row` überlebt am `<tr>`, der Paletteneintrag fällt trotzdem** — und die Begründung ist
+gemessen, nicht behauptet: `box-shadow: none` löschte die Aktivmarkierung, `--bg-canvas` nähme nur
+dieser Tabelle das Zebra. Die **Wirkungs**frage geht ungekürzt an visual-qa.
+
+**Ein Befund für den frontend-dev (Ü-2):** `.table__row.todo-row--running` ist gegenüber
+`.table__row:nth-child(even)` **gleich** gewichtet und gewinnt nur über die Blattreihenfolge — der
+Kommentar an der Stelle behauptet das Gegenteil. Die haltbare Form steht im Bestand
+(`components.css:846-848`).
+
+**Offen aus T-373:** trägt `role="dialog"`? **OF-5** — die sichtbare Unterscheidung des
+Erledigt-Kästchens hat er **nicht erfunden**, weil A-25.9 sie nicht nennt; visual-qa soll messen,
+bevor jemand eine Form erfindet. **OF-6** — „Erledigt, Erledigt" im Vorlesefluß, angenommen und
+benannt. **F-8** bleibt bewußt unbeantwortet: die Randmarkierung steht als Bauform mit Preis da,
+die Entscheidung gehört dem Schwesterpapier.
+
+**T-374 (ux-designer) fertig.** Zweite Fassung, ebenfalls mit Zuordnungstabelle vorn. **Die fünf
+Befunde, die gegen sein Papier gingen, sind umgeschrieben statt weginterpretiert** — das ist der
+Unterschied, auf den es ankam: §4 vollständig neu (Titel bricht um; TT-07/TT-08 gestrichen, Ersatz
+**TT-31/TT-32**, **R-10 neu**), TT-04 auf 1280 samt 10.1/10.2, TT-18 verlangt das Schließen in
+**beiden** Modalitäten samt **TT-34** als Gegenprobe, §13 zählt **zwölf** statt neun Fundstellen,
+§12 **dreizehn** statt zehn Einträge.
+
+**Und die drei, die für ihn gingen, hat er nicht als Freispruch genommen:** R-3 ist mit 73,5 % als
+**widerlegt geführt, nicht gestrichen** — ein widerlegtes Risiko, das stehenbleibt, ist mehr wert
+als ein verschwundenes.
+
+**Der Preis von B-1 steht jetzt da, wo er hingehört:** **R-10** — die Zeilenhöhe hängt wieder an
+den Daten, gemessen **76,6 px bei 110 Zeichen**. Das ist die Kehrseite der Entscheidung, den Titel
+umbrechen zu lassen, und sie ist eine Frage an den Augenschein.
+
+**Drei Ergänzungen über den Auftrag hinaus:** N-1 (Affordanz der Kopfzellen, TT-03 geschärft), N-4
+(keine Randmarkierung, **TT-33 neu**), N-6 (der zweite Weg entschieden, §9 Z0/Z4 berichtigt,
+**R-11 neu**).
+
+**Beide Verfasser melden dieselbe Lage, und sie haben recht:** Der Abgleich zwischen den Papieren
+hat wieder **nicht** stattgefunden — E-113 zum dritten Mal. T-374 hat `todo-tabelle.md` sogar in
+einem **Zwischenstand** gelesen (Kopf geschrieben, Rumpf 5.3/6.2 noch erste Fassung) und verweist
+deshalb nur über Abschnittsnummern. Gemildert durch die Zuordnungstabellen in beiden Papieren,
+**nicht aufgehoben**.
+
+**T-375 (unit-tester) fertig — das Tor ist grün.** Vom Orchestrator nachgefahren:
+`pnpm test:coverage` **1 914 grün / 2 übersprungen / 0 rot** über 101 Dateien (vorher 18 rot),
+`typecheck` grün über alle acht Projekte, `git status` ohne Meßrest.
+
+**Er hat T-371s Behauptung nicht übernommen, sondern einzeln nachgemessen** — und sie hält: Die
+eine Fixture-Zeile stellt alle achtzehn wieder her, **und jeder nagelt danach dieselbe Behauptung
+fest wie vorher**. Die beiden Archiv-Fälle, bei denen der Verdacht am größten war, umgehen
+`importDataArchive` ganz und berühren `foundAtServiceStart` nie.
+
+**Vier der fünf benannten Fälle stehen** in `idle-service-start-guard.test.ts` (acht Prüffälle):
+`beginIdle` in **beiden** Stellungen, der gedeckelte `completeReturn` mit und ohne Lebenszeichen,
+**die Gegenprobe auf den eigenen Timer**, das Zukunfts-Lebenszeichen an **beiden** Stellen. Rot
+hergestellt über `git show 311b26e:…` und byte-identisch zurückgeschrieben, mit `md5sum`- und
+`git diff --stat`-Nachweis.
+
+**Der wertvollste Absatz ist eine Berichtigung an den beiden Prüfern:** Die wörtliche Mutation, vor
+der T-371 gewarnt hat (`return next` → `return queue`), ist **nicht still** — `queue` löst stets zu
+`undefined` auf und bricht den Rückgabewert für jeden Aufrufer; der bestehende Prüfstand fängt das
+breit. **Der wirklich stille Rückschritt ist die verworfene Zwei-Transaktionen-Anordnung**, und die
+fängt Fall E mit 17 Lesern zuverlässig: **0/17 gegen 17/17 über fünf Wiederholungen**. Er nennt das
+ausdrücklich eine Berichtigung, keinen Widerspruch.
+
+**`decideOrphanedTimer.now`:** die sechs vorbestehenden Domänenaufrufe übergeben den Wert jetzt,
+dazu zwei neue Deckelfälle — das Pflichtfeld ist damit vorbereitet.
+
+**Beide Bedingungen von T-371 für R-34 sind erfüllt.** Geschlossen wird der Eintrag trotzdem noch
+nicht: T-371 hat weder Code-Review noch Sicherheitsprüfung gesehen (T-370 hat T-363 geprüft, nicht
+T-371).
+
+**Ein Befund am Rand, der in die nächste Welle gehört:** Ein Lauf zeigte einen **flatternden** Fall
+in `apps/local-api/test/version/checker.test.ts` — außerhalb seiner Hoheit, von T-358 schon einmal
+als flatternd benannt; der Wiederholungslauf war grün. Ein flatternder Fall im Tor ist ein eigener
+Auftrag.
+
+**T-376 (spec-ux-reviewer) gestartet — eng begrenzt**, kein zweiter voller Durchgang:
+die fünf Stellen, die beide Verfasser selbst benannt haben (TT-31/TT-32 gegen das Schwesterpapier;
+„mitgewandert" in 9.3, das nach B-5 rot wäre; der Vorrat in 9.4, der **zwei** Fälle braucht; die
+neue Rollenentscheidung `role="dialog"`, die noch niemand geprüft hat; der Mechanismus zu
+„überfahrbar" in 5.5), dazu die **zwei Achsen des ersten Durchgangs**: gibt es wieder eine Frage,
+die **beide** dem jeweils anderen zuschreiben — und haben beide dieselbe gemessene Zahl aus
+derselben Quelle übernommen, ohne daß jemand sie geprüft hat.
+
 ### Welle 10 — Plan, wie gestartet
 
 | Was | Rolle |
