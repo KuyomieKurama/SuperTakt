@@ -69,6 +69,23 @@ const TABLES: Readonly<Record<DataArchiveTable, TableDefinition>> = Object.freez
    * Der Wert wandert damit über den Round-Trip nach A-20.4 wie jeder andere.
    * Er ist trotzdem **keine Einstellung**: keine Route liest ihn, keine
    * schreibt ihn (siehe `VersionCheckStatePort`).
+   *
+   * **Der Absatz darüber ist der Stand von T-279 und trägt seit T-285 nicht
+   * mehr** (E-106, nachgelesen in T-364): Der Boden aus A-V-11 gilt innerhalb
+   * eines Laufs und hängt an einem Wert im Arbeitsspeicher; ein Programmstart
+   * fragt immer einmal. **Kein Einspielen kann den Boden mehr aufheben** —
+   * nicht, weil die Spalte hier steht, sondern weil sie niemand mehr liest.
+   * Der Grund, warum sie trotzdem hier steht, ist seither allein der
+   * Round-Trip: Was aus dem Archiv nicht zurückkommt, ist verloren.
+   *
+   * **Was mitreist, kann veraltet sein** (A-A-124). Der Zeitpunkt friert ein,
+   * sobald der Prüfer seinen Speicher nach einem Wurf ablegt — gemessen 52
+   * Stunden in einem Lauf von 63 Anfragen —, und auf einem fremden Rechner
+   * beschreibt er eine Anfrage, die dieses Erzeugnis nie gestellt hat. Das
+   * Archiv sagt ihn trotzdem, wie er dasteht: Ihn hier zu unterschlagen hieße,
+   * eine Zeile des Bestands beim Round-Trip zu verlieren, und die Freiheit von
+   * veralteten Zeitpunkten gehört an die Stelle, die sie schreibt, nicht an
+   * die, die sie abzieht.
    */
   app_setting: { columns: ['id', 'export_directory', 'active_export_template_id', 'rounding_mode', 'locale', 'theme', 'updated_at', 'skipped_version', 'design_theme', 'density', 'prompt_on_timer_stop', 'idle_detection_enabled', 'idle_threshold_minutes', 'idle_keep_timer_running', 'last_version_check_at'], orderBy: 'id' },
 });

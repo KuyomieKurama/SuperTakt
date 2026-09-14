@@ -24,8 +24,26 @@
  * den tatsächlichen Wortlaut aus `reports/T-102-frontend-dev.md` Abschnitt 2).
  * Kein Literal ohne Gegenlesen: die Wortlaute stehen auch in
  * `apps/web/src/app/TimerContext.tsx#confirmOrphan`.
+ *
+ * **Berichtigt T-352 (`.claude/team/reports/T-350-domain-dev.md` Abschnitt 5,
+ * `T-351-spec-ux-reviewer.md`, `docs/testplan.md` Abschnitt 34).** Die drei
+ * Fälle bei `POST /timer/orphaned/resolve` (E-036, unten und in der zweiten
+ * `describe`-Gruppe) stellten den verwaisten Zustand bis dahin über einen
+ * rohen `startTimer`-Aufruf gegen den **bereits laufenden** Dienst her, mit
+ * der Begründung „`loadOrphanedTimer` meldet **jeden** zum Zeitpunkt des
+ * Ladens unvollständigen Eintrag als verwaist". Das war die **Fehlfassung**:
+ * `captureTimerRecovery` (`apps/local-api/src/features/timer/timer.ts`)
+ * erfaßt seit T-350 ausschließlich, was **beim Start des Dienstprozesses**
+ * bereits lief — die erste tatsächliche Umsetzung von E-036, nicht seine
+ * Verschärfung (ein Eintrag, der erst nach dem Start beginnt, war noch nie
+ * ein Programmabsturz). Die drei Fälle stellen den Zustand deshalb jetzt über
+ * einen echten Prozess-Neustart her (`services.ts#restartLocalApi`, dieselbe
+ * Bauart wie `attachment-persistence-live.spec.ts`, eigene
+ * Ausführungskonfiguration `playwright.timer-stop-announcement.config.ts`).
+ * Die fachliche Frage jedes Falls bleibt unverändert — nur der Weg dorthin.
  */
 import { test, expect } from '@playwright/test';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import { poolMovementSentence, type PoolMovement } from '../../packages/domain/src/pool-movement.ts';
 import {
@@ -42,6 +60,31 @@ import {
   touchTimerHeartbeat,
 } from './support/api';
 import { gotoTodo } from './support/nav';
+import { restartLocalApi, startLocalApi, stopGithubStub } from './support/services';
+
+/**
+ * Eigene Ausführungskonfiguration seit T-352 (`playwright.timer-stop
+ * -announcement.config.ts`, Begründung dort): Drei Fälle dieser Datei
+ * brauchen einen echten Prozess-Neustart des lokalen Dienstes, dieselbe
+ * Bauart wie `attachment-persistence-live.spec.ts`. Der Dienst startet
+ * deshalb **innerhalb** dieser Datei selbst statt über die geteilte
+ * Hauptreihe — die drei übrigen, unbetroffenen Fälle laufen unverändert
+ * gegen diesen selbst gestarteten Dienst mit.
+ */
+let localApi: ChildProcessWithoutNullStreams;
+
+test.beforeAll(async () => {
+  localApi = await startLocalApi();
+});
+
+test.afterAll(async () => {
+  localApi.kill('SIGTERM');
+  // O-CI: `startLocalApi`/`restartLocalApi` starten seit T-166 nebenbei eine
+  // lokale GitHub-Attrappe (`services.ts#ensureGithubStub`) statt echt nach
+  // außen zu greifen — die räumt hier auf, wie in
+  // `attachment-persistence-live.spec.ts`.
+  await stopGithubStub();
+});
 
 test.afterEach(async () => {
   // Dasselbe Muster wie in `todo-revival.spec.ts`/`kanban.spec.ts` (T-048):
@@ -63,7 +106,13 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
 
     try {
       await gotoTodo(page, todo.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114): Seit T-326 sitzt die Marke
+      // `#inhalt` auf dem Laufbereich (`ScreenBody`), nicht mehr auf dem
+      // Rahmen der Ansicht — die Knöpfe „Timer starten"/„Timer stoppen"
+      // stehen im `.screen__header` und lägen damit außerhalb. `.screen` ist
+      // die Ansicht selbst (Kopf **und** Laufbereich, genau ein Treffer je
+      // Route) und trifft dieselbe Menge wie zuvor `#inhalt` auf `.app__main`.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Timer starten' }).first().click();
       await expect(main.getByRole('button', { name: 'Timer stoppen' })).toBeVisible();
 
@@ -148,7 +197,8 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
 
     try {
       await gotoTodo(page, todo.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Timer starten' }).first().click();
       const stopButton = main.getByRole('button', { name: 'Timer stoppen' });
       await expect(stopButton).toBeVisible();
@@ -206,22 +256,18 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
     }
   });
 
-  test('`POST /timer/orphaned/resolve` (E-036): dieselbe Auskunft, ohne Prozessabschuss ausgelöst', async ({
+  test('`POST /timer/orphaned/resolve` (E-036): dieselbe Auskunft, nach echtem Dienst-Neustart', async ({
     page,
   }) => {
-    // E-036: „Hülle weg, stdin zu“ — im Testrahmen läuft der Dienst ohne
-    // Tauri-Hülle direkt aus dem Quelltext (`support/services.ts`) und hört
-    // auf `stdin`, dessen Schließen ihn beendet. Diesen Prozess abzuschießen
-    // würde jeden folgenden Testfall in derselben Datei mitreißen und ist
-    // ausdrücklich nicht der Auftrag. Stattdessen wird derselbe **Zustand**
-    // hergestellt, den ein Absturz hinterließe — ein laufender Timer, den die
-    // gerade erst startende Oberfläche noch nicht kennt —, ohne den Dienst
-    // anzufassen: `loadOrphanedTimer` (`usecases/timer.ts`) meldet **jeden**
-    // zum Zeitpunkt des Ladens unvollständigen Eintrag als verwaist, unabhängig
-    // vom Alter des letzten Lebenszeichens. Ein über die rohe API gestarteter
-    // Timer, den diese — bei ihrer ersten Navigation frische — Seite beim
-    // Hochfahren vorfindet, ist für die Oberfläche ununterscheidbar von einem
-    // Timer, der einen Absturz überlebt hat.
+    test.setTimeout(60_000);
+    // E-036: „Hülle weg, stdin zu“ — **berichtigt T-352**, siehe Dateikopf.
+    // `captureTimerRecovery` erfaßt eine verwaiste Buchung ausschließlich
+    // beim Start des Dienstprozesses; ein über die rohe API gestarteter
+    // Timer gilt dem **bereits laufenden** Dienst nie als verwaist, gleich
+    // wie lange man wartet. Hergestellt wird deshalb ein echter
+    // Prozess-Neustart mit demselben Bestand (`services.ts#restartLocalApi`)
+    // **nach** dem Anlegen des Eintrags und **vor** der ersten Navigation
+    // dieser (frischen) Seite — die Reihenfolge ist Inhalt (T-350 Abschnitt 5).
     await cleanupAnyTimer();
 
     const run = Date.now();
@@ -239,6 +285,10 @@ test.describe('Stopp-Anzeige trägt den Bewegungssatz mit Anlass „booking“',
       // (`decideOrphanedTimer`: `now = heartbeatAt ?? startedAt`).
       await page.waitForTimeout(1500);
       await touchTimerHeartbeat();
+
+      // --- der eigentliche Prozess-Neustart, derselbe Bestand -------------
+      // Erst danach findet `captureTimerRecovery` den Eintrag als verwaist.
+      localApi = await restartLocalApi(localApi);
 
       // Erste Navigation dieser (frischen) Seite — der `TimerProvider` startet
       // seine Einmal-Abfrage `GET /timer/orphaned` erst jetzt.
@@ -307,6 +357,10 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
    * tatsächlichen Quelltext von `TimerContext.tsx` gegengelesen.
    */
   test('„Verwerfen“ liefert `orphan_discarded`, mit eigenem Text', async ({ page }) => {
+    test.setTimeout(60_000);
+    // Berichtigt T-352, siehe Dateikopf: Der verwaiste Zustand entsteht über
+    // einen echten Dienst-Neustart, nicht über einen rohen `startTimer` gegen
+    // den bereits laufenden Dienst.
     await cleanupAnyTimer();
 
     const run = Date.now();
@@ -324,6 +378,9 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
       // einen zu kurzen Timer (das wäre der andere Fall dieser Datei).
       await page.waitForTimeout(1500);
       await touchTimerHeartbeat();
+
+      // --- der eigentliche Prozess-Neustart, derselbe Bestand -------------
+      localApi = await restartLocalApi(localApi);
 
       await gotoTodo(page, todo.id);
 
@@ -359,6 +416,8 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
   });
 
   test('„zu kurz“ bleibt `timer_too_short`, mit einem anderen Text als „Verwerfen“', async ({ page }) => {
+    test.setTimeout(60_000);
+    // Berichtigt T-352, siehe Dateikopf.
     await cleanupAnyTimer();
 
     const run = Date.now();
@@ -369,9 +428,16 @@ test.describe('`POST /timer/orphaned/resolve` unterscheidet den Grund einer verw
       const started = await startTimer(todo.id);
       if (started.kind !== 'started') throw new Error('Timer konnte nicht gestartet werden.');
 
-      // Kein Lebenszeichen und keine Wartezeit — `now = heartbeatAt ??
-      // startedAt` (`decideOrphanedTimer`) bleibt unter einer Sekunde, die
-      // Vorgabe „Bis zum letzten Lebenszeichen buchen" findet nichts.
+      // Kein zusätzliches Lebenszeichen und keine Wartezeit — `startTimer`
+      // schreibt selbst sofort das erste Lebenszeichen (E-036: sonst verwürfe
+      // ein Neustart unmittelbar nach dem Start die Buchung), und nach dem
+      // Neustart steht deshalb `heartbeatAt === startedAt`: `bookableSeconds`
+      // bleibt bei 0, die Vorgabe „Bis zum letzten Lebenszeichen buchen"
+      // findet nichts (T-350 Abschnitt 5, Punkt 1).
+      //
+      // --- der eigentliche Prozess-Neustart, derselbe Bestand -------------
+      localApi = await restartLocalApi(localApi);
+
       await gotoTodo(page, todo.id);
 
       const orphanDialog = page.getByRole('dialog', { name: 'Eine Buchung ohne Ende' });
@@ -467,7 +533,8 @@ test.describe('Bauart der Meldefläche im Leistungsfeld beim Timer-Stopp (Zusatz
 
     try {
       await gotoTodo(page, todo.id);
-      const main = page.locator('#inhalt');
+      // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung im ersten Fall dieser Datei.
+      const main = page.locator('.screen');
       await main.getByRole('button', { name: 'Timer starten' }).first().click();
       const stopButton = main.getByRole('button', { name: 'Timer stoppen' });
       await expect(stopButton).toBeVisible();

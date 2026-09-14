@@ -1111,8 +1111,10 @@
    also im Regelbereich und bei der Mindestbreite immer vor. Mit dem Umbruch
    bleibt bis hinunter zu 240 px alles innerhalb der Karte.
 
-   Es ist dieselbe Regel, die die Todo-Zeile in S-02 fuer dieselben drei Marken
-   schon traegt (`.todo-row__meta`) — hier fehlte sie, und nur hier.
+   Es ist dieselbe Regel, die S-02 fuer dieselben Marken schon traegt — bis
+   T-365 als `.todo-row__meta` an der Listenzeile, seither als
+   `.todo-cell--deadline .deadline` in der Fristspalte der Todo-Tabelle
+   (`app.css`). Hier fehlte sie, und nur hier.
 
    Die Zeilenluecke ist kleiner als die Spaltenluecke: Die zweite Zeile gehoert
    sichtbar zum selben Block und soll ihn nicht zu einem zweiten Absatz
@@ -2339,6 +2341,49 @@
  * was jetzt die Positionierung uebernimmt — einschliesslich des Umklappens am
  * Bildschirmrand, das es vorher gar nicht gab.
  */
+/*
+ * Die Tag-Flaeche der Todo-Tabelle (T-365, A-25.9).
+ *
+ * Kein neues Token, keine neue Erhebung: Sie nimmt, was `.menu` und
+ * `.select__content` daneben schon tragen. Vier Zeilen haben trotzdem einen
+ * eigenen Grund, weil sie sonst beim naechsten Aufraeumen fallen:
+ *
+ *  - `z-index: var(--z-popover)` ist **Pflicht und kein Beiwerk**. Ark UI liest
+ *    die Ebene vom gemessenen `z-index` des Inhalts ab und setzt sie auf die
+ *    Huelle; steht hier nichts, liegt die Flaeche in einem Dialog dahinter.
+ *    320 liegt ueber `--z-sticky` (10) — damit ist zugesichert, dass die
+ *    Tag-Flaeche nie unter dem klebenden Tabellenkopf verschwindet.
+ *  - **Deckend**, aus einem Token. In `glass` und `liquid-glass` sind `.card`
+ *    und `.filterbar` absichtlich zu 92 % deckend; die Flaeche ist keines von
+ *    beiden und bleibt deckend, sonst liest man den Tabelleninhalt durch die
+ *    Tags hindurch.
+ *  - `overscroll-behavior: contain`: Eine Flaeche mit mehr Tags als 16rem
+ *    laeuft in sich. Ohne diese Zeile griffe das Rad am Ende auf die Tabelle
+ *    darunter durch und rollte die Zeile weg, an der die Flaeche haengt.
+ *  - `outline: none` am Inhalt waere falsch: Er **nimmt** den Tastaturfokus
+ *    (A-25.9), und erst dadurch laufen `Bild ab`, `Pos1` und `Ende` in ihm.
+ */
+.tagsurface {
+  display: flex;
+  flex-wrap: wrap;
+  /* Siehe `.popover-layer`: Ark UI liest die Ebene hier ab. */
+  z-index: var(--z-popover);
+  gap: var(--space-1);
+  max-width: min(24rem, calc(100vw - 2rem));
+  max-height: min(16rem, var(--available-height, 16rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.tagsurface[data-state="open"] {
+  animation: popover-in var(--motion-base) var(--ease-out);
+}
+
 .menu {
   display: flex;
   flex-direction: column;

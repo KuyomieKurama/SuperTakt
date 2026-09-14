@@ -32,6 +32,23 @@
   background-color: var(--bg-canvas);
 }
 
+/*
+ * Derselbe Ladeersatz, aber **innerhalb** der Huelle (T-326, T-323 8.6).
+ *
+ * `.boot` traegt `min-height: 100dvh` — richtig fuer die freistehenden
+ * Startbilder, die nicht in `.app` haengen und weiterhin das Dokument scrollen
+ * duerfen (`base.css` nennt sie ausdruecklich). Als gestrecktes Rasterkind des
+ * Rahmens waere es hoeher als der Rahmen, und der Ladekreis stuende in seiner
+ * Mitte — also **unterhalb der sichtbaren Flaeche**. Bis T-326 fiel das nicht
+ * auf, weil `.app__main` selbst lief.
+ *
+ * Eine Zeile, kein neues Aussehen: Der Kasten ist als Rasterkind ohnehin
+ * rahmenhoch, `.boot` zentriert weiterhin.
+ */
+.boot--inline {
+  min-block-size: 0;
+}
+
 .boot > .card {
   width: min(38rem, 100%);
 }
@@ -128,6 +145,19 @@
      Inhaltsabhaengiges — sonst haenge die Breite der Suche doch wieder daran,
      ob gerade ein Timer laeuft. */
   --app-header-timer-min-width: 19rem;
+
+  /* Der Innenabstand der Arbeitsflaeche (T-326, `viewport-layout.css`).
+     Ein lokaler Eigenwert und **kein neues Token**: Der Wert kommt aus
+     `--space-6`, der Name spart die Wiederholung an vier Stellen — `.screen`
+     oben, `.screen__header` und `.screen__bar` seitlich, `.screen__body`
+     seitlich und unten — und macht den schmalen Fall zu einer Zeile statt zu
+     vier. Dieselbe Bauform wie `--app-header-height` und
+     `--app-header-timer-width` darueber.
+
+     Er steht hier und nicht an `.app__main`, weil `.screen__body--frame` seinen
+     Kindern denselben Abstand weiterreicht und `var()` sich am Ort des
+     Lesers aufloest, nicht am Ort des Schreibers. */
+  --screen-inset: var(--space-6);
 }
 
 /*
@@ -262,15 +292,51 @@
 }
 
 /*
- * Der einzige Kasten der Anwendung, der scrollt.
+ * Der **Rahmen** der Arbeitsflaeche — seit T-326 nicht mehr der Laeufer.
  *
- * `scrollbar-gutter: stable` ist der Kern der Behebung von Ursache 2: Der Platz
- * fuer die Bildlaufleiste ist immer reserviert, ob sie erscheint oder nicht.
- * Gemessen vorher: 1190px auf Ansichten mit langem Inhalt gegen 1200px auf
- * kurzen. Nachher: eine einzige Breite auf allen neun Punkten.
+ * Bis T-326 war dies der einzige Kasten der Anwendung, der scrollte, und
+ * deshalb lief alles darin mit: Bildschirmkopf, Filterleiste, Zaehlzeile,
+ * Registerreiter. Der Auftraggeber sah nicht eine wachsende Seite, sondern eine
+ * **Steuerung, die weglaeuft**. Der Bildlauf liegt jetzt eine Ebene tiefer, in
+ * genau einem benannten Laufbereich je Ansicht (`viewport-layout.css`, E-112).
+ *
+ * Vier Zeilen sind dafuer neu oder weg, und jede hat ihren Grund:
+ *
+ *  - `display: grid` mit **einem** Fach aus zwei `minmax(0, 1fr)` macht den
+ *    Rahmen zu einer Flaeche von genau Fensterrestgroesse. Das Kind wird
+ *    dadurch ohne `height: 100%` auf die Rahmenhoehe gestreckt; die beiden
+ *    `minmax(0, …)` sind die **zweite Null** der Hoehenkette und verhindern,
+ *    dass das Kind das Fach aufdrueckt. Ein `height: 100%` am Kind waere der
+ *    Ersatz — es haengt aber daran, dass der Elternteil eine bestimmte Hoehe
+ *    hat, und das ist eine Zusage mehr als noetig.
+ *  - `padding: 0` statt `var(--space-6)`: Ein nicht laufendes Kind eines
+ *    laufenden Kastens gibt es nicht, also musste eines von beiden wandern. Es
+ *    wandert der Innenabstand (`--screen-inset`), und der Bildlauf bleibt
+ *    formal hier — als Notausgang, siehe unten.
+ *  - `scrollbar-gutter: stable` ist **weg**, und das ist keine Ruecknahme von
+ *    Ursache 2 aus T-057, sondern ihr Umzug: Die Rinne sitzt jetzt an jedem
+ *    Laufbereich (`viewport-layout.css`). Hier waere sie leerer Rand neben der
+ *    Rinne des Laufbereichs. Gemessen war der Sprung damals 1190px gegen
+ *    1200px zwischen Ansichten mit langem und mit kurzem Inhalt; **derselbe
+ *    Sprung entsteht innerhalb einer Ansicht**, sobald ein Filter eine Liste
+ *    von kurz auf lang bringt — und dort ist er schlimmer, weil der Benutzer
+ *    ihn ausloest und dabei hinsieht.
+ *  - `overflow-y: auto` **bleibt**. Im getragenen Fensterbereich hat dieser
+ *    Kasten nichts zu laufen, weil `.screen` genau die Rahmenhoehe hat; es
+ *    erscheint also keine Leiste, und die Zusage „nur der Inhaltsbereich
+ *    laeuft" gilt sichtbar. Wird das Fenster so niedrig, dass Kopf und feste
+ *    Leisten zusammen mehr als die Rahmenhoehe minus 4rem brauchen, wird der
+ *    Inhalt von `.screen` echt hoeher als der Rahmen — und **dann** laeuft der
+ *    Rahmen und traegt den Kopf mit hinaus. Das ist der Rueckfall aus T-322
+ *    R-3, und er ist selbsttaetig: keine Medienstufe, keine Schwellenzahl, die
+ *    bei der naechsten Aenderung am Kopf falsch wird.
  */
 .app__main {
   grid-area: main;
+  /* Stufe 5 der Hoehenkette (T-326). Genau ein Fach, genau Fensterrestgroesse. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   /*
    * `position: relative` ist hier kein Beiwerk, sondern die zweite Haelfte der
    * Behebung von Ursache 2 — und die einzige gemessene Ueberraschung dieser
@@ -296,18 +362,37 @@
    * nicht bei der Hilfsklasse.
    */
   position: relative;
+  /*
+   * Stufe 4: doppelt gesichert und absichtlich. Die Nullen in den beiden
+   * Spurlisten genuegen dem Buchstaben nach (bei `minmax(0, …)` greift die
+   * inhaltsabhaengige Mindestgroesse nicht), aber die Zusicherung soll
+   * ueberleben, dass jemand die Spurliste umschreibt.
+   */
   min-width: 0;
   min-height: 0;
-  padding: var(--space-6);
+  /* Der Innenabstand liegt seit T-326 an den drei Teilen der Ansicht
+     (`--screen-inset`, `viewport-layout.css`). Kein Innenabstand, kein
+     Hintergrund, keine Rinne — siehe den Kopf dieses Blocks. */
+  padding: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   /* Ein Bildlauf innerhalb des Inhalts soll nicht auf das Fenster
      durchschlagen, wenn er am Ende angekommen ist. */
   overscroll-behavior: contain;
 }
 
-.app__main:focus-visible {
+/*
+ * Der Fokusring des Laufbereichs (T-322 R-4, Abschnitt 9 Nr. 5).
+ *
+ * Er stand bis T-326 an `.app__main`, weil dort der Bildlauf lag; er wandert
+ * mit dem Lauf. Der negative Versatz ist dort, weil ein Ring **ausserhalb** des
+ * Kastens an der Rahmenkante vom `overflow: hidden` der Huelle abgeschnitten
+ * wuerde — und dieser Grund gilt am Laufbereich genauso, denn er liegt bündig
+ * an derselben Kante.
+ */
+.screen__body:focus-visible,
+.runarea:focus-visible,
+.board:focus-visible {
   outline-offset: calc(var(--focus-ring-offset) * -2);
 }
 
@@ -852,10 +937,59 @@ body:has(.scrim) .toast {
   gap: var(--space-4);
 }
 
+/*
+ * Titel und Aktionen in einer Zeile — **und in zweien, wenn die eine nicht
+ * reicht** (T-334, Befund T-329 V1, hoch).
+ *
+ * Ohne den Umbruch gewinnt `.screen__actions` (`flex: none`) jeden Streit um
+ * die Breite, und die einzige Flaeche, die noch nachgeben kann, ist `.grow`
+ * mit Titel und Erklaersatz. Im Kanban sind die Aktionen 785px breit (der
+ * Umschalter „Erledigte einblenden" traegt seinen Erklaersatz bei sich);
+ * gemessen in Chromium, `.grow`-Breite ueber die Fensterbreite:
+ *
+ *   1280px  190,7px   Kopf 158,8px hoch
+ *   1100px   10,7px   Kopf 536,8px hoch
+ *   1087px und darunter bis 831px: **0px** — ein Wort je Zeile, 20 Zeilen,
+ *                     und vom Titel „Kanban" bleibt das „K"
+ *
+ * 960px ist die getragene Untergrenze (T-323 7.1), nicht der Rueckfallbereich.
+ *
+ * `flex-basis: 10rem` an `.grow` ist die Grenze, ab der umbrochen wird, und sie
+ * ist gemessen und nicht gewaehlt: Die engste Titelspalte der Anwendung ist die
+ * des Kanban bei 1280px mit 180,7px, und 160px liegen darunter. Damit bleibt
+ * **jede** Ansicht bei 1280px und darueber auf einer Zeile und zeichengleich —
+ * nachgemessen an allen elf Ansichten; das Kanban hat dabei 20,7px Luft, jede
+ * andere Ansicht mehr. Gebrochen wird erst, wenn die Titelspalte sonst unter
+ * 160px fiele, und dann ist der Umbruch die bessere von zwei Wahrheiten.
+ * `flex-grow: 1` aus `.grow` bleibt und fuellt die Zeile wie bisher.
+ */
 .screen__headline {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-4);
+}
+
+.screen__headline > .grow {
+  flex-basis: 10rem;
+}
+
+/*
+ * Und die zweite Haelfte desselben Befundes: Steht die Aktionsgruppe nach dem
+ * Umbruch allein auf ihrer Zeile und ist trotzdem breiter als diese, muss sie
+ * **in sich** umbrechen duerfen. `flex: none` (Regel darueber) verbot ihr das,
+ * und das Ergebnis war nicht etwa ein Bildlauf, sondern ein Schnitt:
+ * `.app__main` traegt `overflow-x: hidden`. Gemessen bei 960px ragte die Gruppe
+ * 89px ueber den Kopf hinaus — „Spalten verwalten" war an der getragenen
+ * Mindestbreite nicht mehr zu sehen, und zwar schon vor T-326.
+ *
+ * Geschrumpft wird dabei nur, wenn ein Element **allein** breiter ist als seine
+ * Zeile; solange Titel und Aktionen nebeneinander passen, aendert sich nichts
+ * (nachgemessen an allen elf Ansichten bei 1440 und 1280px).
+ */
+.screen__headline > .screen__actions {
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 /* Ohne `lead` steht neben der Titelzeile nur noch die Aktion, und `flex-start`
@@ -1437,7 +1571,7 @@ body:has(.scrim) .toast {
 
 @container (max-width: 68rem) {
   .todo-list__filter-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(9rem, 1fr));
   }
 
   .todo-list__filter-grid > .search {
@@ -1445,7 +1579,39 @@ body:has(.scrim) .toast {
   }
 }
 
-@container (max-width: 40rem) {
+/*
+ * Die Stufe von vier auf zwei Spalten — und **warum sie nicht mehr bei 40rem
+ * steht** (T-341, Befund T-338 Abschnitt 7, E-115).
+ *
+ * 40rem war eine runde Zahl, und sie lag zwei Bildpunkte auf der falschen
+ * Seite der getragenen Mindestbreite. Gemessen in Chromium, Inhaltsbreite des
+ * Behaelters (`.todo-list__filters`, `container-type: inline-size`) und Hoehe
+ * von `.screen__header`:
+ *
+ *   970px Fenster   40,50rem   4 Spalten zu 152,5px   Kopf 367,3px
+ *   960px Fenster   39,88rem   2 Spalten zu 312px     Kopf 437,3px
+ *
+ * **960 × 640 ist die getragene Untergrenze** (`tauri.conf.json`, E-115), und
+ * dort sprang der feste Teil um **70px** — 449,3px gegen ein Budget von 500px,
+ * also 90% davon. Ein Kopf, der an der Untergrenze 90% seines Budgets braucht,
+ * ist eine Zeile Text davon entfernt, den Rahmen zum Laufen zu bringen; genau
+ * das ist die Fehlerfamilie, die E-115 beschreibt.
+ *
+ * Die neue Schwelle ist **gerechnet und nicht gewaehlt**: Vier Spalten von
+ * mindestens 9rem mit drei Zwischenraeumen von `--space-3` sind
+ * 4 × 144 + 3 × 12 = **612px = 38,25rem**. Dieselbe 9rem steht als
+ * Spaltenmindestmass eine Regel darueber — die Schwelle und das Mass sind
+ * derselbe Wert, zweimal geschrieben, und nicht zwei Zahlen, die
+ * auseinanderlaufen koennen. Unterhalb greift die zweispaltige Stufe wie
+ * bisher, und `minmax(9rem, …)` kann darum nie ueberlaufen.
+ *
+ * Woher die 9rem: aus dem, was heute schon ausgeliefert wird. Bei 1024px
+ * Fenster stehen vier Spalten zu **166px** nebeneinander; an der getragenen
+ * Untergrenze werden daraus **150,5px**. Das ist die engste Stufe, an der die
+ * vier Felder noch in einer Zeile stehen — 10rem je Spalte braeuchte
+ * 4 × 160 + 36 = 676px und paesse an 960px Fenster nicht mehr.
+ */
+@container (max-width: 38.25rem) {
   .todo-list__filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1466,64 +1632,66 @@ body:has(.scrim) .toast {
   }
 }
 
-.todo-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin: 0;
+/* ==================================================================== */
+/* Die Todo-Tabelle — S-02, A-25.9                                      */
+/* ==================================================================== */
+
+/*
+ * Keine zweite Tabellenbauart: `.table-wrap` als Laufbereich, `.table` darin,
+ * klebender Kopf, feste Spaltenbreiten über `<colgroup>` — dieselbe Form, die
+ * die Exporttabellen schon tragen (`.export-todo-table`, weiter unten).
+ *
+ * `table-layout: fixed` und nicht das Verfahren der Buchungstabelle: Dort ist
+ * jede Spalte kurz und formatiert. Hier **ist der Titel der Inhalt** — beliebig
+ * lang, von außen (Add-in, Fremdimport), notfalls ein einziges Wort ohne
+ * Wortgrenze. Bei `auto` mißt der Browser die Spalten am Inhalt, und die Breite
+ * der Tabelle hinge daran, welche hundert Todos gerade geladen sind.
+ *
+ * `min-width: 60rem` = 960px, gerechnet und nicht abgeschrieben: Die
+ * Inhaltsbreite im Standardfenster 1280 × 820 beträgt 982px
+ * (1280 − Seitenleiste 240 − 2 × 24 Einzug − 10 Rinne). 61rem ließe 6px übrig,
+ * dieselbe Enge, die für die Kopfschwelle schon als nicht stabil galt.
+ * Unterhalb von 1280 läuft die Tabelle waagerecht in sich — zulässig und
+ * vorgesehen: `.table-wrap` ist einer von genau zwei Kästen mit waagerechtem
+ * Lauf, und SC 1.4.10 nimmt zweidimensionalen Inhalt aus.
+ */
+.todo-table {
+  min-width: 60rem;
+  table-layout: fixed;
 }
 
-.todo-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--row-height);
-  padding: var(--space-2) var(--row-padding-x);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-surface);
-  transition: background-color var(--motion-fast) var(--ease-out);
-}
+/*
+ * Die Spaltenbreiten, gemessen und nicht geschätzt (T-365).
+ *
+ * Gemessen wurde der gerechnete Kasten jedes Zellinhalts in seiner breitesten
+ * Ausprägung, im Browser mit den Stilblättern dieses Erzeugnisses. Die Summe
+ * der sieben festen Spalten ist 43,5rem; bei `min-width: 60rem` bleiben der
+ * Titelspalte damit 16,5rem, und im Standardfenster 17,9rem.
+ *
+ * Genau **eine** Spalte hat keine Breite: der Titel. Zwei elastische Spalten in
+ * einer Tabelle mit festem Layout teilen den Rest nach einem Verfahren, das
+ * niemand mehr nachrechnet.
+ */
+.todo-col--done { width: 9rem; }
+.todo-col--call { width: 4.5rem; }
+.todo-col--status { width: 7rem; }
+.todo-col--deadline { width: 7.5rem; }
+.todo-col--tags { width: 3.5rem; }
+.todo-col--bookings { width: 6.5rem; }
+.todo-col--actions { width: 5.5rem; }
 
-.todo-row:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--border-default);
-}
-
-.todo-row:focus-within {
-  border-color: var(--border-accent);
-}
-
-.todo-row--done .todo-row__title {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-
-.todo-row--running {
-  border-color: var(--timer-running-fg);
-  background-color: var(--timer-running-bg);
-}
-
-.todo-row__check {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
-  cursor: pointer;
-}
-
-.todo-row__check input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--accent-bg);
-}
-
-.todo-row__main {
-  flex: 1 1 auto;
-  min-width: 0;
+/*
+ * Der Titel wird **nicht gekürzt, sondern umgebrochen** — `anywhere` und nicht
+ * `break-word`: `break-word` bricht ein langes Wort erst, wenn es allein in
+ * einer Zeile steht, und läßt die Zeile vorher überlaufen.
+ *
+ * `height` an `.table tbody td` wirkt als **Mindest**höhe: Einzeilige Titel
+ * stehen weiter auf genau einer Zeilenhöhe, nur die seltene lange Zeile wächst.
+ * Es gibt also keine zweite Zeilenhöhe und keine neue Konstante — und keinen
+ * neuen Deckel, der Inhalt verbirgt, ohne daß ein Lauf es merkt.
+ */
+.todo-cell--title {
+  overflow-wrap: anywhere;
 }
 
 .todo-row__title {
@@ -1538,41 +1706,145 @@ body:has(.scrim) .toast {
   text-decoration: underline;
 }
 
-.todo-row__meta {
-  display: flex;
-  flex-wrap: wrap;
+/* Erledigt: durchgestrichener Titel — drei Merkmale trägt die Zeile (Kästchen,
+   Etikett, Durchstreichung), keines davon Farbe allein. */
+.todo-row--done .todo-row__title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/*
+ * Der laufende Timer ist die **einzige** Zeilenfärbung (E-027, A-6.1). Eine
+ * zweite, konkurrierende — etwa für Überfälligkeit — machte beide unlesbar,
+ * und die häufigere verdrängte die dringendere. Überfälligkeit bleibt deshalb
+ * eine Aussage der Frist-**Zelle**.
+ *
+ * Zwei Klassen im Selektor, damit die Zeilenfärbung das Zebra schlägt:
+ * `.table__row:nth-child(even)` ist gleich spezifisch, und wer sich auf die
+ * Reihenfolge zweier Stilblätter verläßt, verliert beim nächsten Umbau.
+ */
+.table__row.todo-row--running,
+.table__row.todo-row--running:hover {
+  background-color: var(--timer-running-bg);
+  color: var(--timer-running-fg);
+}
+
+/* Kästchen und Kennzeichen stehen nebeneinander in Spalte 1. Ein Kasten im
+   `td` und nicht am `td` selbst: `display: flex` auf einer Tabellenzelle nähme
+   ihr die Zellrolle. */
+.todo-cell__stack,
+.todo-cell__actions {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+  max-width: 100%;
 }
 
-.todo-row__call {
-  font-family: var(--font-mono);
-}
-
-.todo-row__tags {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
+.todo-cell__actions {
   gap: var(--space-1);
-  max-width: 18rem;
 }
 
-.todo-row__more {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+/*
+ * „Erledigt aufgehoben" (A-2.5, I-05, Befund C-23) steht in **voller**
+ * Beschriftung da und wird nicht gekürzt. Reicht die Spalte nicht — in den
+ * Gestaltungen mit größerer Grundschrift —, bricht das Etikett um; zwei Zeilen
+ * seiner Schriftgröße bleiben innerhalb der Zeilenhöhe, die Zeile wächst also
+ * nicht. Dafür muß `flex: none` des Bausteins hier weichen, und das Symbol
+ * darf trotzdem nicht schrumpfen.
+ */
+.todo-cell--done .doneflag {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.todo-row__export {
+.todo-cell--done .doneflag > svg,
+.todo-cell--deadline .deadline > svg {
   flex: none;
 }
 
-.todo-row__actions {
-  display: flex;
+.todo-row__check {
+  display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: center;
+  min-width: var(--hit-target-min);
+  min-height: var(--hit-target-min);
+  cursor: pointer;
+}
+
+.todo-row__check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent-bg);
+}
+
+/*
+ * Die Fristzelle. Wort, Symbol und Datum bleiben zeichengleich stehen (A-19.4,
+ * A-19.5); wird es eng, wandert das Datum unter das Wort, statt daß eines von
+ * beiden verschwindet. Zwei Zeilen dieser Schriftgröße passen in die
+ * Zeilenhöhe.
+ */
+.todo-cell--deadline .deadline {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+/*
+ * Der Exportstand: Form und Zahl tragen die Aussage, die Farbe verstärkt sie
+ * nur (A-13.5). Er wird **nie** gekürzt — der Exportstand ist überall
+ * eindeutig sichtbar. Bei vier Zuständen in einer Zelle bricht der Streifen um.
+ */
+.todo-cell--bookings .summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+/*
+ * Der Statusname ist fremder Text und bricht um statt zu kürzen — dieselbe
+ * Entscheidung wie beim Titel und aus demselben Grund: Ein Deckel verbirgt
+ * Inhalt, ohne daß ein Lauf es merkt, und `proof:clamp` bekommt hier keine
+ * neue Deckelklasse.
+ */
+.todo-cell--status {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Der Auslöser der Tag-Fläche. Sichtbar ist die **Zahl**; sein zugänglicher
+ * Name ist die Zahl mit dem Wort („11 Tags"). Mindestens 24 × 24 CSS-Pixel
+ * (SC 2.5.8) — damit ist zugleich die Berührungsanforderung erfüllt.
+ */
+.todo-tags__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--hit-target-min);
+  min-height: var(--hit-target-min);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.todo-tags__trigger:hover,
+.todo-tags__trigger[data-state="open"] {
+  border-color: var(--border-control);
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Der Fuß der Tabelle trägt „Weitere laden" und spannt über alle Spalten —
+   damit er beim waagerechten Rollen nicht aus dem Bild wandert. */
+.todo-table__foot > td {
+  height: auto;
+  border-bottom: 0;
+  padding: 0;
 }
 
 .list-more {
@@ -4290,9 +4562,18 @@ body:has(.scrim) .toast {
   align-items: start;
 }
 
+/*
+ * Die Bereichsschiene ist seit T-326 eine **feste Spalte** neben dem
+ * Laufbereich und klebt nicht mehr (T-322 4.11, Abschnitt 9 Nr. 1). Ihre Zahl
+ * von Eintraegen steht im Quelltext; eine Spalte mit festem Umfang steht, eine
+ * Spalte, deren Laenge an den Daten haengt, laeuft.
+ *
+ * `position: sticky; top: 0` ist deshalb **gefallen** und nicht stehengeblieben:
+ * Eine Klebung, die nichts mehr bewirkt, ist eine tote Zusage — der naechste
+ * Durchgang liest sie als Absicht und baut daran weiter.
+ */
 .settings-rail {
-  position: sticky;
-  top: 0;
+  min-block-size: 0;
 }
 
 .settings-rail__list {
@@ -4407,15 +4688,51 @@ body:has(.scrim) .toast {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-rail {
-    position: static;
-  }
-
   .settings-rail__list {
     flex-direction: row;
     flex-wrap: wrap;
   }
 
+  .settings-rail__hint {
+    display: none;
+  }
+}
+
+/*
+ * Knappe Hoehe: derselbe Rueckzug an der zweiten Achse (T-344 7.5, E-115).
+ *
+ * **Der Fall, gemessen.** Die Schiene ist mit Zusatz 576,7 px hoch — acht
+ * Eintraege mit je zwei Zeilen. Der Rahmen der Einstellungen ist
+ * `Fensterhoehe − 125`, also 515 px bei 640. Bei 1024 × 640 lief er deshalb um
+ * 62 px ueber, und der letzte Eintrag („Arbeitsplatz") war nicht mehr sichtbar:
+ * ein fester Teil, der in der getragenen Groesze nicht in sein Hoehenbudget
+ * paszt, und damit der einzige bekannte E-115-Verstosz.
+ *
+ * Bei 60 rem Breite und schmaler trat er nie auf — dort nimmt die Stufe
+ * darueber den Zusatz ohnehin weg. **Der Ausgleich war also da; er hing nur an
+ * der falschen Achse.**
+ *
+ * **Die Schwelle ist gerechnet, nicht gerundet** (die Lehre aus T-341 3.3, wo
+ * eine runde 40 rem zwei Pixel auf der falschen Seite der getragenen Untergrenze
+ * lag): 576,7 px Schiene + 125 px Kette ⇒ die Schiene paszt erst ab ≈ 702 px
+ * Fensterhoehe. `44rem` sind 704 px — die naechste Stufe darueber, mit 2,3 px
+ * Luft nach oben und voller Wirkung nach unten.
+ *
+ * **Eine Fensterhoehenabfrage, obwohl R-3 am Inhaltsbereich miszt.** Sie ist
+ * keine Zusage, sondern Vorsorge: AK-23 beziffert das Budget ausdruecklich ohne
+ * Huellenmeldung, und genau diesen Zustand trifft sie. Steht eine Meldung, ist
+ * der Inhaltsbereich kleiner als das Fenster und es greift der Rueckfall — der
+ * Rahmen laeuft, nichts wird abgeschnitten. Die Abfrage kann **zu wenig** tun,
+ * nie zu viel. Eine Behaelterabfrage waere genauer und ist ausgeschlossen: Sie
+ * braeuchte `container-type: size`, und Groeszenbehalt macht den Kasten zum
+ * umschlieszenden Block fuer feste Positionierung (T-323 8.3).
+ *
+ * **Kein Textabbau nach E-087.** Der Zusatz faellt nicht aus dem Bestand; er
+ * ist in einer Fenstergroesze nicht sichtbar — dieselbe Bedingung, unter der er
+ * oben schon verschwindet. Die Beschriftung bleibt in jeder Groesze, und der
+ * Zusatz ist nirgends die einzige Fassung.
+ */
+@media (max-height: 44rem) {
   .settings-rail__hint {
     display: none;
   }
@@ -4669,15 +4986,24 @@ body:has(.scrim) .toast {
 /* Schmalere Fenster (A-13.8)                                           */
 /* ==================================================================== */
 
+/*
+ * Bis T-365 stand hier zusätzlich `.todo-row__tags { display: none }`: Unter
+ * 1088px waren die Tags einer Todo-Zeile **gar nicht** sichtbar und über keinen
+ * anderen Weg erreichbar als die Detailansicht. Das war unter einer Flex-Zeile
+ * die einzige Antwort — eine Zeile, die nicht waagerecht laufen kann, muß etwas
+ * weglassen.
+ *
+ * Eine **Tabelle kann waagerecht laufen**, und damit ist die Regel
+ * gegenstandslos: Die Tag-Spalte steht in jeder Fensterbreite in der Tabelle und
+ * wandert höchstens aus dem Bild, wo man sie durch Rollen wiederholt. Es
+ * entfällt also keine Funktion und kein Text, sondern ein Weglassen — ein
+ * Bildlauf ist sichtbar, eine verschwundene Spalte nicht.
+ */
 @media (max-width: 68rem) {
   .detail,
   .time-layout,
   .tags-split {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .todo-row__tags {
-    display: none;
   }
 }
 
@@ -4699,6 +5025,10 @@ body:has(.scrim) .toast {
       "side"
       "head"
       "main";
+    /* Ersetzt zeichengleich das bisherige `.app__main { padding: var(--space-4) }`
+       (T-326): Der Abstand sitzt jetzt an den drei Teilen der Ansicht, und eine
+       Zeile am Eigenwert stellt alle vier Stellen zugleich um. */
+    --screen-inset: var(--space-4);
   }
 
   .app__sidebar {
@@ -4730,10 +5060,6 @@ body:has(.scrim) .toast {
   .app__header-timer {
     flex: 0 1 auto;
     min-width: 0;
-  }
-
-  .app__main {
-    padding: var(--space-4);
   }
 
   .field-row {
@@ -4784,16 +5110,16 @@ body:has(.scrim) .toast {
   padding-block-start: var(--space-5);
 }
 
-:root[data-design-theme="clear"] .screen--dashboard > .card {
+:root[data-design-theme="clear"] .screen--dashboard > .screen__body > .card {
   flex-direction: row;
   align-items: center;
   border-inline-start: 3px solid var(--border-strong);
 }
-:root[data-design-theme="clear"] .screen--dashboard > .card > .card__header {
+:root[data-design-theme="clear"] .screen--dashboard > .screen__body > .card > .card__header {
   flex: 0 0 auto;
   border-block-end: 0;
 }
-:root[data-design-theme="clear"] .screen--dashboard > .card > .card__body {
+:root[data-design-theme="clear"] .screen--dashboard > .screen__body > .card > .card__body {
   min-width: 0;
   flex: 1;
 }
@@ -4857,7 +5183,7 @@ body:has(.scrim) .toast {
 @media (max-width: 32rem) {
   :root[data-design-theme="clear"] .app__header { height: auto; flex-wrap: wrap; padding-block: var(--space-2); }
   :root[data-design-theme="clear"] .app__header-timer { flex: 1 1 100%; }
-  :root[data-design-theme="clear"] .screen--dashboard > .card { flex-direction: column; align-items: stretch; }
+  :root[data-design-theme="clear"] .screen--dashboard > .screen__body > .card { flex-direction: column; align-items: stretch; }
   :root[data-design-theme="clear"] .screen--dashboard .stat-grid,
   :root[data-design-theme="clear"] .screen--dashboard .stat-grid:has(.stat--danger) { grid-template-columns: minmax(0, 1fr); }
   :root[data-design-theme="clear"] .screen--dashboard .stat { border-inline-end: 0; }

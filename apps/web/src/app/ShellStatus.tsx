@@ -12,6 +12,7 @@ import { cx } from "../lib/cx";
 import { focusFirstWithin, keepTabInside } from "../lib/focus";
 import { Icon } from "../shared/ui/Icon";
 import { Button } from "../shared/ui/Primitives";
+import { Scrim } from "../shared/ui/DialogSurface";
 
 /**
  * Takt — die drei Zustaende, die die Huelle beim Start meldet (Abschnitt 15).
@@ -752,7 +753,14 @@ function BlockingDialog({ children }: BlockingDialogProps) {
   }, []);
 
   return (
-    <div className="scrim scrim--blocking" onKeyDown={onKeyDown}>
+    /*
+      Dieselbe Verankerung wie bei jedem anderen Dialog (A-A-108, T-334): Die
+      Abdunklung haengt am Dokumentkoerper. Hier steht heute kein Vorfahr mit
+      `backdrop-filter` im Weg — die Zusage soll aber an der Bauart haengen und
+      nicht daran, wo diese Flaeche gerade eingehaengt ist. Begruendung bei
+      {@link Scrim}.
+    */
+    <Scrim className="scrim--blocking" onKeyDown={onKeyDown}>
       <div
         ref={dialogRef}
         role="alertdialog"
@@ -763,7 +771,7 @@ function BlockingDialog({ children }: BlockingDialogProps) {
       >
         {children({ titleId, descriptionId })}
       </div>
-    </div>
+    </Scrim>
   );
 }
 

@@ -1,9 +1,53 @@
 /*
- * Viewport-gebundene Flaechen.
+ * Fensterfeste Flaechen — das Muster (T-326).
  *
- * Formulardialoge und das Kanban sollen sich nach dem verfuegbaren Fenster
- * richten. Kopf und Fuss bleiben dabei erreichbar; nur der Teil, dessen Inhalt
- * wachsen kann, bekommt einen eigenen Laufbereich.
+ * Vorlagen: `docs/design/fensterfeste-flaechen.md` (Mechanismus, T-323) und
+ * `docs/design/fensterfeste-flaechen-fluss.md` (Rollenverteilung je Ansicht,
+ * T-322). Entscheidung: E-112.
+ *
+ * Bis T-326 trug diese Datei **zwei Sonderfaelle** — die Formulardialoge und
+ * das Kanban — und beide ueber `:has()`. Sie traegt jetzt das allgemeine
+ * Muster: Das Fenster ist der Rahmen, `.app__main` ist der Rahmenkasten, und
+ * in jeder Ansicht gibt es genau einen benannten Laufbereich. Alles vor ihm
+ * steht still, alles in ihm laeuft, und nichts von beidem macht die Seite
+ * groesser. Die vier `:has()`-Regeln fuer das Board sind damit **gefallen**:
+ * ein Sonderfall neben einer allgemeinen Regel ist die schlechtere von zwei
+ * Wahrheiten (T-323 Abschnitt 8.1, R-323-3).
+ *
+ * Die Formulardialoge bleiben unberuehrt. Sie sind der **Praezedenzfall**
+ * dieses Musters und kein Anwendungsfall davon: Ein Dialog haengt in
+ * `.scrim`, sein umschliessender Block ist das Fenster und nicht `.app__main`.
+ *
+ * Drei Regeln tragen das Muster, und sie gelten ohne Ausnahme:
+ *
+ *  1. **Die Null an jeder Fuge.** Flex- und Rasterkinder haben
+ *     `min-height: auto`, und `auto` heisst „mindestens so hoch wie der
+ *     Inhalt". Ohne die Null laeuft nicht der Inhalt, sondern die Seite.
+ *  2. **Was stehenbleibt, schrumpft nicht** (`flex: none`). Ein Kopf, der
+ *     schrumpfen darf, schneidet seinen eigenen Text ab, bevor der Inhalt zu
+ *     laufen beginnt.
+ *  3. **Genau ein Laufbereich je Ebene und Achse.** Zwei Bildlaufpositionen
+ *     fuer denselben Inhalt sind ein Fehler, kein Komfort. Wo eine Ansicht
+ *     zwei braucht (Zeiterfassung), stehen sie **nebeneinander**, und die
+ *     Ebene darueber rahmt und laeuft nicht.
+ *
+ * Was hier **nicht** vorkommt und nicht vorkommen darf: `vh`, `dvh` oder
+ * `calc(100vh - …)` an irgendeiner Stufe innerhalb von `.app`. Die Huelle
+ * kennt ihre Hoehe aus `base.css` (`html, body, #root { height: 100% }`) und
+ * `app.css` (`.app { height: 100%; overflow: hidden }`); eine zweite,
+ * unabhaengig gerechnete Hoehe waere eine zweite Wahrheit und bei jeder
+ * Aenderung an Kopf, Meldungsband oder Fassungshinweis falsch. `dvh` bleibt
+ * dort, wo sein umschliessender Block wirklich das Fenster ist — `.scrim`,
+ * `.toast-layer`, `.shellnotes`.
+ *
+ * Und was hier **verboten** ist: `transform`, `filter`, `backdrop-filter`,
+ * `perspective`, `will-change` oder `contain` an `.app`, `.app__main`,
+ * `.screen`, `.screen__body` oder `.runarea`. Jede dieser Eigenschaften macht
+ * den Kasten zum umschliessenden Block fuer feste Positionierung — und dann
+ * zentriert sich der Dialog im Inhaltsbereich statt im Fenster, und der
+ * Meldungsstapel klebt an dessen Ecke (T-323 Abschnitt 8.3). Die Versuchung
+ * hat einen Namen: `contain: paint` „fuer die Bildlaufleistung". Wer Leistung
+ * braucht, misst zuerst.
  */
 
 /* Formulardialoge: statt einer starren 60-vh-Grenze nimmt der Rumpf genau den
@@ -47,50 +91,649 @@
   }
 }
 
-/* Kanban: Sobald ein echtes Board da ist, gehoert die vertikale Laufstrecke
-   den Spalten und nicht der ganzen Anwendung. Der Bildschirmkopf und die
-   Board-Werkzeugzeile bleiben stehen; horizontal bleibt der vorhandene
-   Board-Laufweg unangetastet. */
-.app__main:has(> .screen > .board) {
-  overflow-y: hidden;
+/* ==================================================================== */
+/* Der Vertrag einer Ansicht                                            */
+/* ==================================================================== */
+
+/*
+ * .app__main                      Rahmen. Ein Rasterfach, Fensterrestgroesse,
+ *                                 kein Innenabstand (siehe `app.css`).
+ * └── .screen                     genau ein Kind, immer. Flex-Spalte, auf
+ *     │                           Rahmengroesse gestreckt.
+ *     ├── .screen__header         fest. `ScreenHeader.tsx`.
+ *     ├── .screen__bar            fest, 0..n. Auswahlleiste, Werkzeugzeile,
+ *     │                           Meldeband — eine Leiste, die T-322
+ *     │                           ausdruecklich stehenlaesst.
+ *     └── .screen__body           laeuft. Genau einer.
+ *
+ * Zwei Bezeichner fuer den Ausnahmefall:
+ *
+ * .screen__body--frame            laeuft nicht, rahmt. Fuer die Zeiterfassung
+ *                                 (zwei Laufspalten nebeneinander), fuer die
+ *                                 Einstellungen (feste Schiene neben
+ *                                 laufendem Bereich) und fuer das Board
+ *                                 (dessen Lauf waagerecht ist).
+ * .runarea                        „dieser Kasten nimmt den Rest und laeuft" —
+ *                                 dieselbe Regelmenge wie `.screen__body`, an
+ *                                 beliebiger Tiefe.
+ */
+
+/*
+ * Stufe 6 der Hoehenkette. `.screen` ist ein gestrecktes Rasterkind; ohne die
+ * Null ist seine Mindesthoehe die seines Inhalts, der Kasten waechst ueber den
+ * Rahmen, und der Rahmen schneidet ab. `min-inline-size` steht als
+ * `min-width: 0` in `app.css` und bleibt dort.
+ *
+ * Der obere Innenabstand wandert von `.app__main` hierher (T-323 3.4): Der Kopf
+ * beginnt 24px unter der Kopfleiste, wie bisher. `--screen-inset` steht an
+ * `.app` und ist **kein neues Token** — der Wert kommt aus `--space-6`, der
+ * Name spart die Wiederholung an vier Stellen und macht den schmalen Fall zu
+ * einer Zeile statt zu vier.
+ */
+.screen {
+  min-block-size: 0;
+  padding-block-start: var(--screen-inset, var(--space-6));
 }
 
-.app__main > .screen:has(> .board) {
-  height: 100%;
-  min-height: 0;
-}
-
-.screen:has(> .board) > .screen__header,
-.screen:has(> .board) > .board__bar,
-.screen:has(> .board) > .list-more {
+/*
+ * Stufe 7, Regel 2 — und ausdruecklich eine **Sammelregel** und keine
+ * Markierungsklasse je Leiste: Damit kann kein Kind die Laufstrecke an sich
+ * nehmen, auch keines, das naechstes Jahr dazukommt. Der Standard eines
+ * Flex-Kindes ist `flex: 0 1 auto`; ein Kopf, der schrumpft, schneidet seinen
+ * Text ab.
+ *
+ * Absolut und fest positionierte Kinder sind keine Flex-Elemente und von
+ * dieser Regel unberuehrt — `.scrim` eines Dialogs und `.visually-hidden`
+ * einer Meldefläche liegen weiter dort, wo sie im Quelltext stehen.
+ */
+.screen > * {
   flex: none;
 }
 
-.screen:has(> .board) > .board {
+/*
+ * Regel 2, zweiter Teil — **im** Laufbereich, und sie ist derselbe Satz wie
+ * oben, eine Ebene tiefer. Nachgetragen in T-334 (Befund T-331
+ * `viewport-layout.css:303`, hoch).
+ *
+ * Der erste Bau dieser Datei hatte sie nur fuer die Zeiterfassung, dort von
+ * Hand gefunden und einzeln geschrieben (`.time-layout__* > .card`, weiter
+ * unten). Gemessen, was an der allgemeinen Stelle fehlte — Chromium 1280 × 820,
+ * echte Ansichten, `Hoehe / scrollHeight / clientHeight` der Karte:
+ *
+ *   Dashboard, Karte „Timer"          2 / 168 / 0      — unsichtbar
+ *   Export, „Vorlage und Rundung"    67 / 350 / 65     — 285px abgeschnitten
+ *   Export, Karte des Laufergebnis   84 / 437 / 82     — 355px abgeschnitten
+ *   Protokoll, Legendenkarte          2 / 178 / 0      — unsichtbar
+ *   Einstellungen „Daten", 3 Karten  je 27 bis 61px abgeschnitten
+ *
+ * Der Grund steht in CSS-Flexbox §4.5: Ein Flex-Kind mit `overflow != visible`
+ * hat die automatische Mindesthoehe **0**. Jede `.card` traegt
+ * `overflow: hidden` (`components.css`), gibt deshalb als Erste nach — und der
+ * Laufbereich hat danach nichts mehr zu laufen. Das ist T-322 R-d woertlich:
+ * Inhalt wird unerreichbar. Und es wird von keinem der 22 Akzeptanzsaetze
+ * gefangen: AK-01 fragt den **Rahmen**, und dessen Zahl wird durch das
+ * Abschneiden besser.
+ *
+ * `:not(.screen__body--frame)`, weil ein Rahmen seinen Kindern das Gegenteil
+ * sagt (Stufe 11, weiter unten) und beide Regeln sonst bei gleicher
+ * Spezifitaet von der Quellreihenfolge abhingen.
+ *
+ * Absolut und fest positionierte Kinder sind auch hier keine Flex-Elemente und
+ * unberuehrt.
+ */
+.screen > .screen__body:not(.screen__body--frame) > *,
+.runarea > *,
+.screen__body--frame .kcolumn__body > * {
+  flex: none;
+}
+
+/*
+ * Der Innenabstand links und rechts sitzt an den drei Teilen und nicht mehr am
+ * Rahmen — 24px, wie bisher. Eine Leiste traegt ihn **selbst** und nicht ihr
+ * Inhalt: Wer eine Leiste baut, deren Element eine eigene Polsterung oder einen
+ * Rahmen hat, legt `.screen__bar` als Umschlag darum.
+ *
+ * `overflow: hidden` **nur** der Rinne wegen (T-334, Befund T-331
+ * `viewport-layout.css:160`): `scrollbar-gutter` wirkt ausschliesslich an einem
+ * Bildlaufkasten, und ohne die Rinne endete der feste Teil rechts weiter aussen
+ * als der laufende darunter — gemessen 1256 gegen 1246 bei 1280px, waehrend mit
+ * den Stilblaettern vor T-326 beide bei 1246 endeten. Der Auftrag war, die
+ * Inhaltsspalte zeichengleich zu lassen.
+ *
+ * Ein Kopf hat nichts abzuschneiden: Sein Inhalt umbricht (siehe
+ * `.screen__headline` in `app.css`), und aufgeklappte Listen und Menues liegen
+ * seit T-059 in einem Portal am Dokumentkoerper. `overflow` auf **beiden**
+ * Achsen und nicht nur `overflow-y`, weil `overflow-y: hidden` die andere Achse
+ * auf `auto` rechnet — und eine eigene Bildlaufleiste im festen Teil ist genau
+ * das, was AK-04 verbietet.
+ *
+ * Der Satz „ein Kopf hat nichts abzuschneiden" stimmt fuer **Inhalt**. Er
+ * stimmte nicht fuer den **Fokusring**, und das ist der Befund T-336
+ * `viewport-layout.css:221` (hoch), behoben in T-341 mit den zwei Zeilen
+ * darunter.
+ *
+ * Der Ring liegt ausserhalb des Randkastens: `outline-offset` plus
+ * `outline-width` (`base.css`), also 4px in der Vorgabe und **5px** unter
+ * `prefers-contrast: more` (`--focus-ring-width` wird dort 3px,
+ * `packages/ui-tokens/tokens.css`). Und der Kopf hat dort, wo er ihn braucht,
+ * **null** Luft: Gemessen bei 1280 × 820 gegen die Klippkante (`overflow:
+ * hidden` klippt am Polsterkasten), je Ansicht das oberste fokussierbare
+ * Element im Kopf —
+ *
+ *   .screen__header  8 von 11 Ansichten haben ein fokussierbares Element;
+ *                    alle 8 mit **0,0px** Luft nach oben
+ *   .screen__bar     Kanban: ebenfalls 0,0px nach oben
+ *   nach unten       Dashboard 0,0px, Export und Vorlagen je 1,0px
+ *
+ * Im Bild, mit **gesetztem** Fokus und `:focus-visible` bestaetigt: Bildpunkte
+ * in `--focus-ring-color` im Band ueber der Oberkante des fokussierten Knopfes
+ * **0** in allen acht Ansichten und in beiden Kontrasteinstellungen, waehrend
+ * links, rechts und unten 50 bis 1 806 Punkte stehen — der Zaehler misst also
+ * wirklich den Ring, und oben fehlt er ganz.
+ *
+ * **Die Messung in T-334 hat das nicht sehen koennen**: Sie verglich zwei
+ * Aufnahmen **unfokussierter** Koepfe (17, 23 und 32 abweichende Bildpunkte bei
+ * groesstem Unterschied 2 von 255 — Kantenglaettung). Ohne Fokus gibt es keinen
+ * Ring, und eine Zusage ueber das Abschneiden, die am unfokussierten Zustand
+ * gemessen wird, misst ihre eigene Abwesenheit.
+ *
+ * ## Die Behebung: die Rinne behalten, den Ring hereinholen
+ *
+ * `overflow: clip` mit `overflow-clip-margin` waere die Eigenschaft, die genau
+ * das sagt — sie faellt aus, weil `scrollbar-gutter` **nur** an einem
+ * Bildlaufkasten wirkt und `clip` keiner ist. Dann kaeme der 10px-Versatz
+ * zurueck, den diese Zeile gerade beseitigt hat.
+ *
+ * Statt dessen ein Polster in Ringhoehe **und** ein negativer Rand desselben
+ * Betrages. In einer Flex-Spalte zieht der negative Rand die Aussenkante um
+ * genau den Betrag zurueck, den das Polster innen hinzufuegt: Die Aussengroesse
+ * des Kastens bleibt gleich, seine **Klippkante** wandert um 4px (5px) nach
+ * aussen, und die Inhaltsspalte bleibt zeichengleich. Der Zwischenraum zu den
+ * Nachbarn ist `--space-5` = 20px (`.screen { gap }` in `app.css`) und damit
+ * fuenfmal so gross wie die Reserve — der feste Teil ueberlagert den
+ * Laufbereich also weiterhin nicht, und genau dafuer steht `overflow: hidden`
+ * hier.
+ *
+ * Der Wert steht als **Eigenwert an dieser Regel** und nicht als Token: Er hat
+ * genau zwei Leser, und beide stehen in diesen zwei Zeilen. Er aus den
+ * Fokustoken zu rechnen statt ihn zu beziffern ist die ganze Zusage — unter
+ * `prefers-contrast: more` waechst der Ring auf 5px, und eine gesetzte 4 waere
+ * dort wieder falsch.
+ */
+.screen__header,
+.screen__bar {
+  --screen-focus-reserve: calc(var(--focus-ring-width) + var(--focus-ring-offset));
+  padding-inline: var(--screen-inset, var(--space-6));
+  padding-block: var(--screen-focus-reserve);
+  margin-block: calc(-1 * var(--screen-focus-reserve));
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+/*
+ * Stufe 9 und 10 — die Zeilen, an denen alles haengt.
+ *
+ * `min-block-size: 4rem` ist **kein Null, sondern ein Boden**, und der Sinn ist
+ * derselbe: Die Mindesthoehe eines Flex-Kindes ist auf der Hauptachse
+ * inhaltsabhaengig (`auto`). Bliebe sie das, waere der Laufbereich mindestens
+ * so hoch wie seine Liste, die Spalte wuechse, `.screen` ueberliefe den Rahmen
+ * — und es liefe die Seite statt des Inhalts.
+ *
+ * Woher die 4rem: aus Token gerechnet. Eine Tabellenzeile (`--row-height`,
+ * 40px in der Vorgabedichte, 32px in „kompakt") plus der untere Innenabstand
+ * des Laufbereichs (`--space-6`, 24px) sind 64px. Die Aussage dahinter:
+ * **mindestens eine Zeile plus ihr Fussabstand bleibt sichtbar, sonst
+ * uebernimmt der Rahmen.** Genau daran haengt der Rueckfall aus T-322 R-3:
+ * Wird das Fenster so niedrig, dass Kopf und feste Leisten zusammen mehr als
+ * die Rahmenhoehe minus 4rem brauchen, wird der Inhalt von `.screen` echt
+ * hoeher als der Rahmen — und **dann**, und nur dann, laeuft `.app__main`
+ * wieder als Einziges und traegt den Kopf mit hinaus. Selbsttaetig, ohne
+ * `@media (max-height: …)` und ohne Schwellenzahl, die bei der naechsten
+ * Aenderung am Kopf falsch wird.
+ *
+ * `scrollbar-gutter: stable` ist Ursache 2 aus T-057, eine Ebene tiefer: Der
+ * Platz fuer die Leiste ist immer reserviert, ob sie erscheint oder nicht.
+ * Sonst haengt die Inhaltsbreite daran, wie lang die Liste gerade ist —
+ * gemessen damals 1190 gegen 1200px. Derselbe Sprung entsteht **innerhalb**
+ * einer Ansicht, sobald ein Filter eine Liste von kurz auf lang bringt, und
+ * dort ist er schlimmer, weil der Benutzer ihn ausloest und dabei hinsieht.
+ */
+.screen__body,
+.runarea {
+  min-block-size: 4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  /*
+   * ===========================================================================
+   * E-113 — Der umschliessende Block wandert mit dem Bildlauf. **Entschieden.**
+   * ===========================================================================
+   *
+   * Die Regel, und sie gilt ueber diese Zeile hinaus: **Ein Bildlaufkasten muss
+   * der umschliessende Block seiner eigenen absoluten Nachfahren sein. Wandert
+   * der Bildlauf, wandert `position: relative` mit ihm.** Entschieden am
+   * 2026-09-13 (E-113) gegen die eigene Vorgabe aus E-112 und gegen
+   * `docs/design/fensterfeste-flaechen.md` 8.4 — beide sind damit nachgezogen,
+   * einschliesslich der Pflichtentabelle, in der diese Zeile jetzt **Pflicht**
+   * ist und nicht mehr verboten.
+   *
+   * Der Grund, und nicht nur der Verweis: „Genau ein umschliessender Block" war
+   * nie das Ziel. Das Ziel war, dass **kein absoluter Nachfahre aus dem Kasten
+   * faellt, in dem er steht**. Solange `.app__main` selbst der Laufbereich war,
+   * fielen beide Saetze zusammen; sobald der Bildlauf eine Ebene tiefer zieht,
+   * trennen sie sich — und das Verbot nahm den falschen mit. Es ist **dieselbe
+   * Klasse wie T-057**, eine Ebene hoeher, nicht ihr Gegenteil.
+   *
+   * Die Zeile gilt deshalb auch an `.runarea` und an `.kcolumn__body` (Stufe 11
+   * weiter unten), **obwohl im Board heute kein absoluter Nachfahre steht**: Der
+   * erste, der dazukommt, soll die zweite Bildlaufleiste nicht zurueckbringen.
+   *
+   * Was die Entscheidung ausgeloest hat, steht hier, damit der naechste Leser
+   * nicht wieder auf die Papiere allein baut: Ein absolut positionierter
+   * Nachfahre wird an seiner statischen Stelle plaziert, aber gegen
+   * `.app__main` — er laeuft mit dem Bildlauf des Laufbereichs **nicht mit**
+   * und bleibt bei y ≈ Listenende stehen. Damit traegt er zum Bildlaufbereich
+   * des **Rahmens** bei, und der Rahmen bekommt seine eigene Bildlaufleiste
+   * neben der des Laufbereichs. Gemessen (Chromium 1280 × 820, erfundener
+   * Vorrat, `.app__main.scrollHeight / clientHeight`):
+   *
+   *   Todos        4242 / 768   128 Verstoesse (`.todo-row__check`, `.summary-strip__item`, `.chip`)
+   *   Todo-Detail  5338 / 768    81 Verstoesse
+   *   Buchungen    3564 / 768   140 Verstoesse (`.table__secondary`, Zellen)
+   *   Zeiterfassung 5723 / 768   76 Verstoesse (`.badge`)
+   *   Protokoll    3573 / 768    55 Verstoesse (`.auditrow__actor`, `.auditrow__transition`)
+   *   Tags         1224 / 768     4 Verstoesse (`.chip`)
+   *   Dashboard     905 / 768     4 Verstoesse (`.badge`)
+   *
+   * Jeder Verstoss ist ein `span.visually-hidden` — dieselbe Hilfsklasse, die in
+   * T-057 die **Fenster**bildlaufleiste erzeugte, eine Ebene hoeher. Zwei
+   * senkrechte Bildlaufleisten nebeneinander sind genau das Symptom, das dieser
+   * Auftrag beheben soll (T-322 AK-03, R-b, Abschnitt 9 Nr. 7: „die teuerste
+   * Falle dieses Umbaus").
+   *
+   * Mit dieser Zeile liegt der umschliessende Block **im** Laufbereich: Der
+   * Nachfahre laeuft mit, `.app__main.scrollHeight === clientHeight`, eine
+   * Leiste. `.app__main` behaelt `position: relative` fuer alles, was **nicht**
+   * im Laufbereich liegt (Kopf, Leisten, Ladeersatz) — es gibt also zwei
+   * umschliessende Bloecke, und das ist die Folge, die T-323 vermeiden wollte.
+   * Sie ist harmlos: `position: relative` ohne `z-index` bildet keinen
+   * Stapelzusammenhang und ist **kein** umschliessender Block fuer feste
+   * Positionierung. Auf `.scrim` und `.toast-layer` kommt es dabei ohnehin
+   * nicht mehr an: Sie haengen seit T-334 durch ein Portal am Dokumentkoerper
+   * und nicht an einer Positionsangabe (E-116) — `proof:surface` Regel G misst
+   * das.
+   *
+   * Die Alternative waere, jeden Umschlag eines `.visually-hidden` einzeln
+   * positioniert zu machen — sieben Klassen heute, und die achte, die naechstes
+   * Jahr dazukommt, bricht die Zusage still. Deshalb hier und nicht dort.
+   *
+   * **Und die Lehre ueber die Entscheidung selbst, weil sie sich wiederholen
+   * wird:** Beide Designpapiere sind gegeneinander gelesen worden und lagen
+   * deckungsgleich — an dieser Stelle waren sie deckungsgleich **falsch**. Zwei
+   * Papiere, die einander bestaetigen, sind keine Messung.
+   */
+  position: relative;
+}
+
+/*
+ * Das zweite Stueck des Namens: „nimmt den Rest". Als Flex-Kind ist diese Zeile
+ * der Grund, warum der Kartenrumpf laeuft und nicht der Kartenkopf weicht; als
+ * Rasterkind (Bereichsinhalt der Einstellungen) ist sie wirkungslos und stoert
+ * nicht.
+ */
+.runarea {
   flex: 1 1 auto;
-  min-height: 0;
+}
+
+/*
+ * Stufe 11 — dieselbe Ueberlegung eine Ebene tiefer, fuer die drei Ansichten
+ * mit Rahmen. **Hier** gehoert die Null hin und nicht an `.screen > .screen__body`
+ * (siehe oben): Der Kasten darin ist das Layoutraster beziehungsweise das
+ * Board, und beide sollen die Rahmenhoehe **annehmen** und nicht aufdruecken.
+ *
+ * Gemessen, warum die Zeile nicht weggelassen werden kann: Die
+ * inhaltsabhaengige Mindesthoehe eines Rasters ist die seines hoechsten Kindes,
+ * und ein Bildlaufkasten darin zaehlt dabei mit seiner **ganzen**
+ * Inhaltshoehe — `overflow` nullt nur die Mindesthoehe des Kastens selbst, nicht
+ * seinen Beitrag zum Elternteil. Ohne die Null stand die Zeiterfassung bei
+ * 5723px in einem 768px hohen Rahmen, und keine der beiden Laufspalten lief.
+ */
+.screen__body--frame > * {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+/*
+ * Stufe 8 und der senkrechte Rhythmus des laufenden Teils.
+ *
+ * `flex: 1 1 auto` — der Laufbereich ist das einzige Kind, das den Rest nimmt.
+ * Hoehere Spezifitaet (0,2,0) als die Sammelregel `.screen > *` (0,1,0), also
+ * unabhaengig von der Quellreihenfolge.
+ *
+ * **Kein `min-block-size: 0` hier**, obwohl T-323 3.2 die Zeile an dieser
+ * Stelle fuehrt: Die eigene Prosa desselben Papiers (Stufe 9, Abschnitt 7.2)
+ * verlangt den Boden von 4rem, und `0` wuerde ihn wegen der hoeheren
+ * Spezifitaet ueberschreiben. Mit `0` schrumpfte der Laufbereich im niedrigen
+ * Fenster auf null, der Kopf blieb stehen, und der Inhalt laege in einem
+ * nullhohen Bildlaufkasten — praktisch unerreichbar (T-322 AK-18). Der Boden
+ * bleibt, und der Rueckfall greift ueber ihn.
+ *
+ * `gap: var(--space-5)` ist das
+ * bisherige `gap` von `.screen`, jetzt fuer den laufenden Teil — zwischen Kopf
+ * und Laufbereich stehen dieselben 20px wie bisher zwischen Kopf und erstem
+ * Baustein.
+ *
+ * **Kein `padding-block-start`.** Zwei unabhaengige Gruende, beide zaehlen:
+ * Erstens macht ihn das `gap` von `.screen` unnoetig. Zweitens liesse er einen
+ * klebenden Tabellenkopf (`top: 0`) unter sich einen Streifen laufenden Inhalts
+ * sehen (T-323 6.2).
+ *
+ * `padding-block-end` liegt **im** Laufbereich und laeuft mit, genau wie der
+ * untere Innenabstand von `.app__main` bisher.
+ */
+.screen > .screen__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-inline: var(--screen-inset, var(--space-6));
+  padding-block-end: var(--screen-inset, var(--space-6));
+}
+
+/*
+ * Der Bildschirmleerzustand zentriert sich **im Laufbereich** (T-322 R-5,
+ * AK-07): Kopf, Bereichsreiter und Primaeraktion stehen sichtbar darueber, eine
+ * Mitte des Fensters laege teilweise hinter ihnen.
+ *
+ * `margin-block: auto` und ausdruecklich **nicht** `justify-content: center` am
+ * Laufbereich: Der Leerzustand ist ein Flex-Element, und `auto`-Raender nehmen
+ * den freien Platz ueber und unter **ihm** zu gleichen Teilen. Was ueber ihm
+ * steht, bleibt dabei, wo es ist — in der Export-Ansicht ist das die Karte
+ * „Vorlage und Rundung", und ein zentrierter Stapel haette sie mitgenommen.
+ * Das waere eine Aenderung der Gestaltung (T-322 AK-05). Bleibt kein freier
+ * Platz, ist `auto` null, und nichts verschiebt sich.
+ *
+ * Nur **direkte** Kinder: Ein Kartenleerzustand („Heute noch nichts erfasst")
+ * liegt in einem `.card__body` und wird nicht gedehnt und nicht verschoben
+ * (AK-07, zweite Haelfte). Die drei Selektoren sind die drei Bauformen, in denen
+ * ein Bildschirmleerzustand vorkommt: der Leerzustand selbst, der Leerzustand
+ * an Tabellenstelle (`TableShell`, S-06) und der des Boards.
+ */
+.screen__body > .empty,
+.screen__body > .table-shell,
+.screen__body > .board-setup {
+  margin-block: auto;
+}
+
+/*
+ * Ein Laufbereich, der **selbst** die Tabellenflaeche ist (T-323 6.3): kein
+ * Stapel aus Bausteinen, sondern ein Kasten mit genau einer Tabelle darin.
+ * `.screen__body` bringt die Groessenrechnung und `overflow-y`, `.table-wrap`
+ * bringt `overflow-x` — zusammen ein Kasten, der auf beiden Achsen laeuft, und
+ * das `sticky` des Tabellenkopfes (`components.css`, `.table thead th`) greift
+ * zum ersten Mal. Ohne diese Bauform klebt es nicht: Ein `sticky thead` klebt
+ * an dem Bildlaufkasten, der ihm am naechsten ist, und bei einer Tabelle ist
+ * das immer das `.table-wrap`.
+ */
+.screen > .screen__body.table-wrap {
+  display: block;
+}
+
+/*
+ * Der Rahmen einer Ansicht mit zwei Laufspalten, mit einer festen Spalte oder
+ * mit waagerechtem Lauf. Er **rahmt** und laeuft im getragenen Fensterbereich
+ * nicht: Seine Kinder nehmen genau seine Hoehe an (Stufe 11 darueber), also hat
+ * er nichts zu laufen, und es erscheint keine Leiste.
+ *
+ * `overflow-y: auto` statt des `overflow: hidden` aus T-323 3.2 — eine
+ * Abweichung mit gemessenem Grund. Mit `hidden` gilt fuer den Rahmen dieselbe
+ * Rechnung wie fuer den Laufbereich: Er faellt auf den Boden von 4rem, und was
+ * darin **feststeht**, wird abgeschnitten — die Bereichsschiene der
+ * Einstellungen (acht Eintraege, gemessen etwa 420px), die 12rem Mindesthoehe
+ * einer Kanban-Spalte, die Karte „Timer". Das ist T-322 R-d, der schwerste
+ * denkbare Fehler dieses Umbaus: Inhalt wird unerreichbar.
+ *
+ * Mit `auto` ist der Rueckfall derselbe wie eine Ebene hoeher und genauso
+ * selbsttaetig: Reicht der Platz fuer die festen Teile nicht, laeuft der Rahmen,
+ * und alles bleibt erreichbar. Im getragenen Bereich kostet die Zeile nichts —
+ * es gibt dort nichts zu laufen. `overflow-x: hidden`, weil der waagerechte Lauf
+ * dem `.board` und dem `.table-wrap` gehoert und keinem dritten Kasten
+ * (Abschnitt 4 des Papiers).
+ *
+ * `scrollbar-gutter: stable` und nicht `auto` (berichtigt in T-334): Der erste
+ * Bau hat hier gespart — „keine Rinne, die im Regelfall leer bliebe" —, und
+ * damit endete die Inhaltsspalte der drei Rahmenansichten **10px weiter
+ * rechts** als die der acht uebrigen. Vor T-326 reservierte `.app__main` die
+ * Rinne fuer alle elf; gemessen bei 1280px endete jede Inhaltsspalte bei
+ * 1246px. Genau das ist wiederhergestellt: Kopf und Inhalt enden in **jeder**
+ * Ansicht an derselben Kante, und die Kante ist die von vorher. Der Preis ist
+ * eine leere Rinne im Regelfall — 10px, die vorher auch leer waren.
+ *
+ * `overscroll-behavior: auto`: Ein Rad, das im Rueckfall an seinem Ende
+ * ankommt, darf nach aussen durchgreifen.
+ *
+ * `padding-block-end` bleibt (kein `0` wie in T-323 3.2): Die 24px unter Board,
+ * Karten und Bereich sind bisher der untere Innenabstand von `.app__main`, und
+ * sie bleiben damit zeichengleich dort, wo sie sind. Die `.runarea`n liegen in
+ * Karten, die ihren Innenabstand selbst tragen.
+ */
+.screen__body--frame {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
+}
+
+/* ==================================================================== */
+/* Zeiterfassung (S-05) — die eine Ansicht mit zwei Laufbereichen        */
+/* ==================================================================== */
+
+/*
+ * Links „woran arbeite ich als naechstes", rechts „was habe ich heute schon
+ * erfasst" (T-322 4.5). Beide Spalten tragen dasselbe Muster wie das Kanban:
+ * Kartenkopf steht, Kartenrumpf laeuft.
+ *
+ * `align-items: stretch` statt des `start` aus `app.css` (T-323 8.8): Ohne das
+ * sind die Spalten inhaltshoch, und die `.runarea` darin hat keine Hoehe zu
+ * teilen. Nur hier und nur fuer diese eine Ansicht — `.detail`, `.tags-split`,
+ * `.tpl-layout` und `.dash-columns` haben einen Laufbereich und behalten
+ * `start`.
+ */
+.screen__body--frame > .time-layout {
+  align-items: stretch;
+}
+
+.time-layout__main,
+.time-layout__side {
+  min-block-size: 0;
+}
+
+/*
+ * Regel 2 eine Ebene tiefer, und sie ist hier **gemessen** noetig: `.card`
+ * traegt `overflow: hidden` (`components.css`). Eine Karte, die als Flex-Kind
+ * schrumpfen darf, schneidet damit ihren eigenen Inhalt ab — im ersten Bau
+ * dieser Aufgabe stand von der Karte „Timer" nur noch Titel und Beschreibung
+ * da, Anzeige und Startknopf waren weg, und von der Karte „Heute" nur der
+ * Titel. Was steht, steht: `flex: none`.
+ *
+ * **Nicht ueberfluessig geworden** durch die Sammelregel oben (T-334): Diese
+ * Karten sind Kinder von `.time-layout__main` und `.time-layout__side`, also
+ * eine Ebene unter dem Rahmen und in keinem `.screen__body` und keiner
+ * `.runarea`. Die Sammelregel greift dort nicht, und ohne diese Zeilen faellt
+ * der Befund aus dem ersten Bau zurueck.
+ */
+.time-layout__main > .card,
+.time-layout__side > .card {
+  flex: none;
+}
+
+/* Die Karte, deren Rumpf laeuft, nimmt den Rest ihrer Spalte. Hoehere
+   Spezifitaet als die Regel darueber, also unabhaengig von der Reihenfolge. */
+.time-layout__main > .card:last-child,
+.time-layout__side > .card:last-child {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.time-layout .card__header {
+  flex: none;
+}
+
+/*
+ * R-2 aus T-322: **Fallen zwei Spalten untereinander, werden ihre Laufbereiche
+ * zu einem.** Zwei senkrechte Bildlaufflaechen untereinander teilen die Hoehe
+ * und machen beide unbrauchbar (AK-03).
+ *
+ * Die Umbruchstufe ist die bestehende aus `app.css` („Schmalere Fenster,
+ * A-13.8"). Unterhalb davon uebernimmt der Rahmen selbst den Lauf — er traegt
+ * die Sprungmarke und den Namen der Ansicht, ist also in beiden Faellen
+ * dieselbe Flaeche mit demselben Tabulatorhalt. Entschieden in CSS und nicht in
+ * JavaScript: Eine Zustandsaenderung, die nur Gestaltungsregeln umlegt, laesst
+ * den Fokus stehen (AK-19).
+ */
+@media (max-width: 68rem) {
+  .screen__body--frame.screen__body--split {
+    min-block-size: 4rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  /*
+   * Der Rahmen wird hier selbst zum Laufbereich, also gilt fuer sein Kind
+   * dieselbe Regel 2 wie fuer jedes andere Kind eines Laufbereichs — und die
+   * Zeile davor (`.screen__body--frame > *`, Stufe 11) sagt das Gegenteil.
+   *
+   * Nachgetragen in T-334 (Befund T-329 V2, hoch). Ohne sie schrumpfte das
+   * Raster auf die Rahmenhoehe, und weil die beiden Spalten `min-block-size: 0`
+   * tragen, teilten sich zwei inhaltsabhaengige Rasterzeilen diese Hoehe zu
+   * gleichen Teilen: gemessen bei 1000 × 700 je **267,6px** hoch bei einem
+   * Inhalt von 1862 und 3289px. Der Inhalt lief nicht, er malte sich
+   * uebereinander — die zweite Karte der linken Spalte reichte bis y = 1986,
+   * die rechte Spalte begann bei y = 408. Text lag auf Text.
+   *
+   * `min-block-size: auto` gibt den Rasterzeilen ihre Inhaltshoehe zurueck;
+   * `flex: none` laesst das Raster so hoch werden, wie es ist. Dann laeuft
+   * genau eine Flaeche — der Rahmen —, und das ist R-2 aus T-322.
+   */
+  .screen__body--split > .time-layout {
+    flex: none;
+  }
+
+  .screen__body--split .time-layout__main,
+  .screen__body--split .time-layout__side {
+    min-block-size: auto;
+  }
+
+  .screen__body--split .runarea {
+    min-block-size: 0;
+    overflow-y: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+  }
+
+  .screen__body--split .time-layout__main > .card:last-child,
+  .screen__body--split .time-layout__side > .card:last-child {
+    flex: none;
+  }
+}
+
+/* ==================================================================== */
+/* Einstellungen (S-09, S-10, S-13) — feste Schiene, laufender Bereich   */
+/* ==================================================================== */
+
+/*
+ * Die Bereichsschiene hat eine im Quelltext festgelegte Zahl von Eintraegen
+ * und steht deshalb (T-322 R-2, 4.11); der Bereichsinhalt laeuft. Das ist
+ * keine Ausnahme von R-1, sondern R-1 auf zwei Achsen: Die Schiene steuert die
+ * Auswahl, der Bereich ist die Auswahl.
+ *
+ * `.settings-rail` hat dafuer sein `position: sticky` verloren (`app.css`) —
+ * eine feste Spalte braucht keine Klebung, und eine Klebung, die nichts mehr
+ * bewirkt, ist eine tote Zusage (T-322 Abschnitt 9 Nr. 1).
+ */
+.screen__body--frame > .settings-layout {
+  align-items: stretch;
+}
+
+/*
+ * Die Schiene steht, aber sie **dehnt sich nicht**. Gemessen: Die Gestaltung
+ * „Klassisch" gibt ihr eine Trennlinie (`border-right`, `app.css`), und mit
+ * `stretch` wuchs die Linie von der Hoehe der acht Eintraege (etwa 420px) auf
+ * die volle Rahmenhoehe (gemessen 671px). Das ist neue Optik, und die ist in
+ * dieser Aufgabe verboten. `align-self: start` haelt die Schiene auf ihrer
+ * bisherigen Hoehe; gedehnt wird nur der Bereich daneben, und genau der laeuft.
+ */
+.screen__body--frame > .settings-layout > .settings-rail {
+  align-self: start;
+}
+
+@media (max-width: 60rem) {
+  /* Ein Band ueber dem Bereich statt einer Spalte daneben (bestehende Stufe in
+     `app.css`). Zwei Zeilen statt einer: Die Schiene bleibt so hoch, wie sie
+     ist, und nur der Bereich nimmt den Rest — ohne die Zeilenangabe verteilte
+     `stretch` die freie Hoehe gleichmaessig auf beide. */
+  .screen__body--frame > .settings-layout {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
+/* ==================================================================== */
+/* Kanban (S-04) — waagerecht aussen, senkrecht innen                    */
+/* ==================================================================== */
+
+/*
+ * Bereits vor T-326 fensterfest, und das Muster ist von hier verallgemeinert:
+ * Kopf und Werkzeugzeile stehen, `.board` laeuft waagerecht, jede
+ * `.kcolumn__body` senkrecht. Geaendert hat sich der **Weg dorthin** — statt
+ * vier `:has()`-Regeln traegt jetzt `.screen__body--frame` den Rahmen.
+ *
+ * Der Boden des Boards ist gerechnet und nicht geraten: `.kcolumn` hat
+ * `min-height: 12rem` (`components.css`), `.board` hat `padding-bottom:
+ * var(--space-3)`. Zusammen ist das die Hoehe, unter der eine Spalte
+ * abgeschnitten wuerde — und damit die Hoehe, ab der stattdessen der Rahmen
+ * laufen soll (T-322 4.4: **R-3 gilt auch hier**; der Rueckfall ist dort die
+ * bessere Bedienung und keine Regression, sondern eine Rueckkehr).
+ */
+.screen__body--frame > .board {
+  min-block-size: calc(12rem + var(--space-3));
   align-items: stretch;
   overflow-y: hidden;
   overscroll-behavior: contain;
 }
 
-.screen:has(> .board) .kcolumn {
+/* „Mehr Karten je Spalte laden" bleibt, was es ist: ein Fuss unter dem Board
+   und nicht in ihm. Er liegt im Rahmen, damit `.screen__body` das letzte Kind
+   von `.screen` bleibt, und schrumpft nicht. */
+.screen__body--frame > .list-more {
+  flex: none;
+}
+
+.screen__body--frame .kcolumn {
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
 }
 
-.screen:has(> .board) .kcolumn__head,
-.screen:has(> .board) .kcolumn__rule {
+.screen__body--frame .kcolumn__head,
+.screen__body--frame .kcolumn__rule {
   flex: none;
 }
 
-.screen:has(> .board) .kcolumn__body {
+/* Dasselbe wie `.runarea`, eine Ebene tiefer und unter eigenem Namen. Die
+   Spalte bringt ihren Namen und ihren Tabulatorhalt aus `BoardColumn.tsx` mit. */
+.screen__body--frame .kcolumn__body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  /* Aus demselben Grund wie bei `.screen__body` und `.runarea`: Ein absolut
+     positionierter Nachfahre gehoert in den Kasten, der laeuft. Im Board steht
+     heute keiner — gemessen, null Fundstellen —, und genau deshalb steht die
+     Zeile hier: Der erste, der dazukommt, soll nicht die Bildlaufleiste des
+     Rahmens zurueckbringen. */
+  position: relative;
 }
 
 /* Die beiden Positionsknopfe bilden eine kleine, zusammengehoerige Gruppe in

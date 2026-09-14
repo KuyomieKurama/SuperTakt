@@ -645,7 +645,123 @@ export async function importDataArchive(
     }),
   };
 
-  await context.transactions.inTransaction(async (unit) => unit.dataArchive.replaceAll(tables));
+  /*
+   * Schreiben und Aufnehmen in **einer** Klammer (R-34, A-A-126, E-036).
+   *
+   * ===========================================================================
+   * Warum hier überhaupt etwas aufgenommen wird
+   * ===========================================================================
+   *
+   * `captureTimerRecovery` (`features/timer/timer.ts`) fragt **einmal beim
+   * Start des Dienstes**, welcher offene Zeiteintrag schon dalag; nur dieser
+   * gilt später als verwaist (`foundAtServiceStart`, dort). `replaceAll` ist
+   * der **zweite Eingang** für einen offenen Eintrag, und er kommt **nach**
+   * dem Start: Ein Archiv, das bei laufendem Timer entstanden ist, trägt eine
+   * `time_entry`-Zeile ohne Ende und das mitgereiste `timer_heartbeat` mit.
+   * Ohne eine Nachführung gilt der eingespielte Eintrag als Timer **dieses**
+   * Laufs — er zeigt sich als laufend seit dem Startzeitpunkt des
+   * Quellrechners, und ein Stopp bucht die Wanduhr dazwischen.
+   *
+   * Gemessen über `exportDataArchive` → `importDataArchive`, Uhr des
+   * Zielrechners elf Stunden hinter der des Quellrechners (T-350 Abschnitt 4,
+   * nachgemessen in T-358): **ohne** die Nachführung antwortet
+   * `GET /timer/orphaned` mit `null` und `POST /timer/orphaned/resolve` mit
+   * `timer_not_running` — es gibt keinen Weg, die Buchung richtig zu schließen;
+   * **mit** ihr meldet `GET /timer/orphaned` `bookableSeconds: 1200` und
+   * `resolve {book_until_heartbeat}` bucht **1 200 s** bis zum mitgereisten
+   * Lebenszeichen statt **39 600 s** Wanduhr. Elf Stunden, die niemand
+   * gearbeitet hat, gehen sonst in die Abrechnung.
+   *
+   * ===========================================================================
+   * Warum in **derselben** Transaktion und nicht in einer zweiten dahinter
+   * ===========================================================================
+   *
+   * Die naheliegende Form wäre `replaceAll` in der einen Klammer und ein
+   * `await captureTimerRecovery(context)` unmittelbar dahinter. Sie ist
+   * **gemessen undicht**, und zwar nicht am Rand: `inTransaction` reiht alle
+   * Transaktionen dieser Verbindung in **eine** Warteschlange
+   * (`packages/storage/src/sqlite/unit-of-work.ts`). Wer sich einreiht,
+   * **während** `replaceAll` läuft, steht damit **vor** der Aufnahme — er liest
+   * den frisch eingespielten Eintrag, findet ihn nicht in der noch alten
+   * Aufnahme und hält ihn deshalb für einen laufenden Timer dieses Laufs. Kein
+   * Dialog, und ein Stopp auf Wanduhr.
+   *
+   * Gemessen mit siebzehn nebenher abgeschickten `GET /timer/orphaned` gegen
+   * ein Archiv mit 2 001 Todos, viermal wiederholt und jedes Mal gleich:
+   *
+   *   zwei Klammern   16 sahen 1 200 s verwaist, **1 sah einen laufenden Timer
+   *                   mit 39 600 s und keine Waisenmeldung**
+   *   eine Klammer    17 sahen 1 200 s verwaist, 0 sahen daneben
+   *
+   * Das Fenster ist genau so breit wie `replaceAll` dauert — bei einem Archiv
+   * an der 256-MiB-Grenze also kein Sekundenbruchteil. Deshalb steht die
+   * Lesung **in** der Klammer: Zwischen dem Schreiben und der Lesung von
+   * `running()` kann sich nichts einreihen, weil beide dieselbe Transaktion
+   * sind.
+   *
+   * `captureTimerRecovery` **von hier aus zu rufen geht nicht** und ist keine
+   * Geschmacksfrage: Verschachtelte Transaktionen werden von der Klammer
+   * ausdrücklich abgewiesen („Verschachtelte Transaktionen sind unzulässig",
+   * gemessen). Übrig bleibt, dieselbe **eine** Frage hier zu stellen. Was
+   * „verwaist" *heißt*, wird dabei nicht abgeschrieben — diese Regel steht
+   * weiterhin an genau einer Stelle, `foundAtServiceStart` in `timer.ts`.
+   *
+   * ===========================================================================
+   * Drei Fälle, in denen nichts entsteht, was es nicht vorher gab
+   * ===========================================================================
+   *
+   * **Ein Archiv ohne laufenden Timer.** `running()` liefert `null`, die
+   * Aufnahme wird `null`. Das ist keine Erfindung, sondern die Lage:
+   * `replaceAll` hat jeden vorher offenen Eintrag mit ersetzt, es gibt
+   * buchstäblich keinen mehr. Gemessen mit einem Zielrechner, der selbst einen
+   * verwaisten Eintrag hatte: danach `GET /timer` → `null`,
+   * `GET /timer/orphaned` → `null`, `POST /timer/stop` → `timer_not_running`.
+   *
+   * **Ein ungültiges Archiv.** `parseArchive` bricht weiter oben ab und kommt
+   * hier nie an; ein Wurf aus der Klammer rollt zurück und übergeht die
+   * Zuweisung, weil sie **hinter** dem `await` steht und in keinem `finally`.
+   * Gemessen mit drei Formen (unbekannte Fassung, fremde Formatkennung, gar
+   * kein Objekt): `entryId` unverändert, `bookableSeconds` unverändert, Zahl
+   * der Todos unverändert. „Ein ungültiges Archiv verändert nichts" gilt damit
+   * auch für das, was der Dienst über den Bestand im Kopf hat.
+   *
+   * **Ein Zusammenhang ohne `timerRecovery`.** Dann wird nichts zugewiesen,
+   * und es gilt wieder jeder offene Eintrag als verwaist — dieselbe
+   * Ausfallrichtung wie in `captureTimerRecovery`, und die ungefährlichere.
+   *
+   * ===========================================================================
+   * Was diese Klammer deckt — und was daneben steht (Stand T-371)
+   * ===========================================================================
+   *
+   * Bis T-363 stand hier, ein direkter `POST /timer/stop` buche „auch mit
+   * dieser Klammer" 39 600 s. Das war wahr, als es geschrieben wurde, und ist
+   * es seit T-363 nicht mehr: **gemessen 1 200 s.** Ein Satz über eine Lücke,
+   * die zu ist, ist derselbe Fehler wie ein Satz über eine Handlung, die es
+   * nicht gibt (CLAUDE.md, E-100) — deshalb steht hier der gemessene Stand und
+   * nicht die Geschichte.
+   *
+   * Diese Klammer deckt **eine** Sache: daß zwischen dem Schreiben des Archivs
+   * und der Nachführung der Aufnahme kein Leser gerät. Bis wohin danach
+   * gebucht wird, entscheidet sie nicht — das tut `bookingEndOf`
+   * (`features/timer/timer.ts`) an jeder Stelle, die einen offenen Eintrag
+   * schließt. Gemessen nach dieser Klammer, Zieluhr elf Stunden voraus:
+   *
+   *     POST /timer/stop                        1 200 s
+   *     POST /timer/start {stopRunning:true}    1 200 s
+   *     POST /timer/idle/begin                  409 conflict (T-371)
+   *     POST /timer/heartbeat                   schreibt nichts, `seenAt: null`
+   *
+   * **Offen und benannt:** Trägt das Archiv eine **offene**
+   * Inaktivitätsphase, bietet der A-24-Dialog nach der Rückkehr ein
+   * Zuordnungsfenster über die Uhrdifferenz an — gemessen 39 000 s. Kein
+   * stiller Weg (der Benutzer müßte die Stunden ausdrücklich auf Todos
+   * verteilen), aber unbewertet; R-34, Nebenpunkt aus T-371.
+   */
+  const timerAfterImport = await context.transactions.inTransaction(async (unit) => {
+    await unit.dataArchive.replaceAll(tables);
+    return (await unit.timer.running())?.id ?? null;
+  });
+  if (context.timerRecovery !== undefined) context.timerRecovery.entryId = timerAfterImport;
 
   let restoredImages = 0;
   for (const image of parsed.value.data.images) {

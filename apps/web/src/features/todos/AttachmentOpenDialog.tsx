@@ -9,6 +9,7 @@ import { Foreign } from "../../shared/ui/Foreign";
 import { ForeignName } from "../../shared/ui/ForeignName";
 import { Icon } from "../../shared/ui/Icon";
 import { Button } from "../../shared/ui/Primitives";
+import { Scrim } from "../../shared/ui/DialogSurface";
 
 /**
  * Takt — die Rückfrage vor dem Öffnen einer **Datei** (E-072 Punkt 3, R-21,
@@ -335,7 +336,16 @@ export function AttachmentOpenDialog({
   const nameDiverges = effectiveName !== rawName;
 
   return (
-    <div className="scrim" onKeyDown={onKeyDown}>
+    /*
+      Die Abdunklung haengt am Dokumentkoerper und nicht dort, wo dieser Dialog
+      im Baum steht (A-A-108, T-334). Er steht im Rumpf der Karte „Anhaenge",
+      und in den Gestaltungen `glass` und `liquid-glass` traegt jede `.card`
+      `backdrop-filter` — ohne das Portal ist die Karte der umschliessende
+      Block, die Abdunklung deckt die Anwendung nicht mehr, und die Rueckfrage
+      rollt mit dem Laufbereich weg. Begruendung und Messung stehen bei
+      {@link Scrim}.
+    */
+    <Scrim onKeyDown={onKeyDown}>
       <div
         ref={dialogRef}
         role="alertdialog"
@@ -570,6 +580,6 @@ export function AttachmentOpenDialog({
           )}
         </div>
       </div>
-    </div>
+    </Scrim>
   );
 }

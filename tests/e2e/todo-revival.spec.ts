@@ -64,14 +64,21 @@ async function loadTodoDone(todoId: string): Promise<boolean> {
 
 /**
  * Stoppt einen laufenden Timer über die Oberfläche, ohne ihn zu buchen zu
- * vergessen. Auf `#inhalt` beschränkt (nicht `page`-weit): Die Kopfleiste
- * trägt seit T-040 (Begriffsvereinheitlichung C-17) denselben Wortlaut
- * „Timer stoppen" wie die Seite selbst — ein page-weiter Locator träfe daher
- * zwei Elemente (Kopfleiste und Seite) und würde im Playwright-Strict-Mode
- * abgelehnt.
+ * vergessen. Auf `.screen` beschränkt (nicht `page`-weit): Der globale
+ * Kopf trägt seit T-040 (Begriffsvereinheitlichung C-17) denselben Wortlaut
+ * „Timer stoppen" wie die Ansicht selbst — ein page-weiter Locator träfe
+ * daher zwei Elemente (globaler Kopf und Ansicht) und würde im
+ * Playwright-Strict-Mode abgelehnt.
+ *
+ * **T-330 (E-114):** vormals `#inhalt`. Seit T-326 sitzt diese Marke auf dem
+ * Laufbereich (`ScreenBody`) und nicht mehr auf dem Rahmen der Ansicht — ein
+ * Knopf im `.screen__header` läge damit außerhalb ihres Geltungsbereichs.
+ * `.screen` ist die Ansicht selbst (Kopf **und** Laufbereich, genau ein
+ * Treffer je Route) und trifft dieselbe Menge wie zuvor `#inhalt` auf
+ * `.app__main`; die Frage, die dieser Testfall stellt, bleibt unverändert.
  */
 async function stopRunningTimer(page: import('@playwright/test').Page): Promise<void> {
-  const main = page.locator('#inhalt');
+  const main = page.locator('.screen');
   const stopButton = main.getByRole('button', { name: /Timer stoppen|Zeiterfassung stoppen/ });
   if ((await stopButton.count()) === 0) return;
   await stopButton.first().click();
@@ -103,7 +110,8 @@ test.describe('I-05 — Timerstart auf einem erledigten Todo hebt Erledigt auf, 
     await gotoTodo(page, todo.id);
     await expect(page.locator('.done-switch strong')).toHaveText('Erledigt');
 
-    const main = page.locator('#inhalt');
+    // `.screen` statt `#inhalt` (T-330, E-114), siehe Anmerkung bei `stopRunningTimer`.
+    const main = page.locator('.screen');
     await main.getByRole('button', { name: 'Timer starten' }).first().click();
     await expect(main.getByRole('button', { name: 'Timer stoppen' })).toBeVisible();
 

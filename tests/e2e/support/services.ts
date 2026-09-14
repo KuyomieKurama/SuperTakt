@@ -97,13 +97,13 @@ const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const execFileAsync = promisify(execFile);
 
 /**
- * Beendet einen mit `shell: true` gestarteten Kindprozess samt seinem ganzen
+ * Beendet den mit `startWeb` gestarteten Kindprozess samt seinem ganzen
  * Prozessbaum.
  *
  * **Gemessen, nicht vermutet (T-263, an `web-build-services.ts#startWebPreview`
  * zuerst gefunden, hier auf denselben Fund an `startWeb` angewandt):**
  * `child.kill('SIGTERM')` allein beendet unter Windows nur den unmittelbaren
- * Kindprozess. `startWeb` startet wegen `shell: process.platform ===
+ * Kindprozess. `startWeb` startete dafür wegen `shell: process.platform ===
  * 'win32'` ein `cmd.exe`, das `pnpm` aufruft, das wiederum den eigentlichen
  * `vite`-Prozess als **Enkelkind** startet — `SIGTERM` an das `cmd.exe`
  * lässt dieses Enkelkind unter Windows als Waise weiterlaufen, mit Port 5173
@@ -115,12 +115,24 @@ const execFileAsync = promisify(execFile);
  * Auftraggeber als wiederkehrendes Problem benennt (`board.md`: „Hängende
  * Prozesse auf 5173 und 17844 haben heute mehrfach Läufe verfälscht").
  * `spawnLocalApi`/`restartLocalApi` sind davon **nicht** betroffen — `node`
- * wird dort ohne `shell: true` direkt gestartet, kein Enkelkind, `SIGTERM`
+ * wird dort ohne Zwischenprogramm direkt gestartet, kein Enkelkind, `SIGTERM`
  * trifft den richtigen Prozess.
  *
- * `taskkill /t /f` beendet unter Windows den ganzen Baum; auf anderen
- * Plattformen bleibt `SIGTERM` (kein `shell: true` dort, kein
- * Enkelkind-Problem).
+ * **Berichtigt (T-330, 2026-09-13): „kein Enkelkind-Problem" außerhalb von
+ * Windows war eine falsche Annahme, jetzt gemessen widerlegt.** `startWeb`
+ * ruft `pnpm exec vite …` **ohne** `shell: true` — trotzdem bleibt `vite`
+ * ein echtes Enkelkind: `pnpm` exect sich nicht in `vite` hinein, sondern
+ * startet es als eigenen Kindprozess (`ps` zeigt drei getrennte PIDs:
+ * `node …/pnpm exec vite…` → `node …/pnpm.mjs exec vite…` → `node
+ * …/vite.js…`). Nach einem vollständigen, fehlerfrei durchlaufenen
+ * `stopServices()` blieb der `vite`-Prozess dieser Kette am Leben und Port
+ * 5173 belegt — derselbe Befund wie unter Windows, nur ohne die Ursache
+ * `shell: true`. `startWeb` startet den Prozess deshalb jetzt mit
+ * `detached: true` (nur außerhalb von Windows, siehe dort), was ihn zum
+ * Anführer einer eigenen Prozessgruppe macht; `killShellChildTree` signalisiert
+ * die **Gruppe** (negative PID), nicht nur den unmittelbaren Kindprozess.
+ *
+ * `taskkill /t /f` beendet unter Windows weiterhin den ganzen Baum.
  */
 async function killShellChildTree(child: ChildProcessWithoutStdin): Promise<void> {
   if (process.platform === 'win32' && child.pid !== undefined) {
@@ -130,6 +142,18 @@ async function killShellChildTree(child: ChildProcessWithoutStdin): Promise<void
       // Bereits beendet, oder nie wirklich gestartet — kein zweiter Versuch nötig.
     }
     return;
+  }
+  // Gruppe statt Einzelprozeß (siehe Dateikopf dieser Funktion, T-330): nur
+  // wirksam, wenn `startWeb` mit `detached: true` gestartet hat — sonst (z. B.
+  // ein bereits beendeter Prozeß ohne `pid`) bleibt `child.kill` der Rückweg.
+  if (child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+      return;
+    } catch {
+      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
+      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
+    }
   }
   child.kill('SIGTERM');
 }
@@ -346,6 +370,13 @@ async function startWeb(): Promise<ChildProcessWithoutStdin> {
     // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
     // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
     shell: process.platform === 'win32',
+    // Nur außerhalb von Windows (T-330, siehe `killShellChildTree`): Macht
+    // diesen Prozeß zum Anführer einer eigenen Prozeßgruppe, damit
+    // `process.kill(-pid, 'SIGTERM')` beim Aufräumen das Enkelkind `vite`
+    // mit erreicht, nicht nur `pnpm` selbst. Unter Windows hat `detached`
+    // eine andere Bedeutung (ein unabhängiges Konsolenfenster) und bleibt
+    // deshalb aus — dort leistet `taskkill /t /f` das Aufräumen bereits.
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: API_BASE_URL,

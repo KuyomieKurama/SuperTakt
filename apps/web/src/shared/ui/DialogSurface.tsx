@@ -3,11 +3,15 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  type FocusEvent,
+  type KeyboardEvent,
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { Dialog } from "@ark-ui/react/dialog";
 import { focusFirstWithin } from "../../lib/focus";
+import { cx } from "../../lib/cx";
 
 /**
  * Takt — die Zustandsmaschine unter allen modalen Dialogen (E-076 Stufe 1).
@@ -364,8 +368,7 @@ export function DialogSurface({
           T-072. Er greift auch dann, wenn nichts entfernt wurde, etwa wenn
           sich ein Knopf durch seine eigene Wirkung sperrt.
         */
-        <div
-          className="scrim"
+        <Scrim
           onBlur={(event) => {
             // `null` heißt: Der Fokus ging **nirgendwohin**. Ging er an ein
             // anderes Element, gehört er dorthin.
@@ -382,8 +385,75 @@ export function DialogSurface({
           >
             {children}
           </Dialog.Content>
-        </div>
+        </Scrim>
       ) : null}
     </Dialog.Root>
+  );
+}
+
+/* ==================================================================== */
+/* Die Abdunklung — und warum sie am Dokumentkoerper haengt             */
+/* ==================================================================== */
+
+export interface ScrimProps {
+  /** Zusatzklasse der Abdunklung. Genau ein Wert kommt vor: `scrim--blocking`. */
+  readonly className?: string;
+  readonly onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  readonly onBlur?: (event: FocusEvent<HTMLDivElement>) => void;
+  readonly children: ReactNode;
+}
+
+/**
+ * Die Abdunklung eines modalen Dialogs — **immer** am Dokumentkörper (A-A-108).
+ *
+ * ## Warum ein Portal, gemessen und nicht vermutet
+ *
+ * `.scrim` ist `position: fixed; inset: 0` (`components.css`). „Fest" heißt
+ * aber nicht „am Fenster", sondern „am umschließenden Block", und jeder
+ * Vorfahr mit `transform`, `filter`, `backdrop-filter`, `perspective`,
+ * `contain` oder `will-change` wird zu einem solchen. In den Gestaltungen
+ * `glass` und `liquid-glass` trägt **jede `.card`** `backdrop-filter`
+ * (`theme-palettes.css`). Ein Dialog, der im Rumpf einer Karte steht — die
+ * Rückfrage vor dem Öffnen einer Datei (A-19.14) steht in der Karte „Anhänge" —
+ * hängt dann an der Karte statt am Fenster.
+ *
+ * Gemessen in Chromium bei 1280 × 820, Rückfrage vor dem Öffnen:
+ *
+ *   klassisch      Abdunklung 1280 × 820 bei (0,0), bleibt beim Rollen stehen
+ *   glass          Abdunklung  644 × 298 bei (265,364) — sie verdeckt die
+ *                  Anwendung nicht und **rollt mit** (y 364 → 152 nach 600px)
+ *
+ * Eine Bestätigungsfläche, die in zwei von neunzehn Gestaltungen nicht
+ * zuverlässig erreichbar ist, ist keine Bestätigung — und A-19 verlangt, dass
+ * die Oberfläche vor dem Öffnen einer Datei fragt. Eingetragen als R-31.
+ *
+ * ## Warum das Portal und nicht die Eigenschaft an der Karte
+ *
+ * Weil die Karte ihr `backdrop-filter` behalten soll: Es ist die Gestaltung,
+ * nicht der Fehler. Und weil die Gegenrichtung — die Eigenschaft überall
+ * verbieten — bei der nächsten Palette wieder aufgeht. Das Portal gilt
+ * **strukturell**: Wo ein Dialog im Baum steht, entscheidet nicht mehr, wo
+ * seine Abdunklung liegt.
+ *
+ * **`document.body` und nicht `#root`.** `#root` liegt in der Höhenkette
+ * (`height: 100%`, `base.css`) und darunter `.app` mit `overflow: hidden`; der
+ * Dokumentkörper ist die einzige Stelle, an der kein künftiger Umbau der Hülle
+ * den umschließenden Block wieder verschiebt. `body:has(.scrim) .toast-layer`
+ * (`app.css`) trifft weiterhin — der Dialog ist danach ein direktes Kind.
+ *
+ * **Ereignisse steigen weiter auf.** React reicht sie durch den Portalknoten
+ * an den Baum, in dem `<Scrim>` steht; `onKeyDown` und `onBlur` der Aufrufer
+ * arbeiten unverändert.
+ *
+ * **Kein `transform`, kein `contain` dazu.** T-323 Abschnitt 8.3 verbietet sie
+ * an Rahmen und Laufbereich, und dieses Portal ist die Antwort auf dieselbe
+ * Frage von der anderen Seite.
+ */
+export function Scrim({ className, onKeyDown, onBlur, children }: ScrimProps) {
+  return createPortal(
+    <div className={cx("scrim", className)} onKeyDown={onKeyDown} onBlur={onBlur}>
+      {children}
+    </div>,
+    document.body,
   );
 }

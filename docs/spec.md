@@ -517,6 +517,39 @@ angelehnt an Super Productivity. Eigenständige Umsetzung für SuperTakt.
 
 ---
 
+## 25. Fensterfeste Flächen
+
+*Nachgetragen am 2026-09-13 — war bis dahin ungedeckt (T-343 B-01). Wortlaut aus dem Auftrag des
+Auftraggebers vom 2026-09-12 und den Entscheidungen E-112, E-115 und E-116. Am selben Tag nach
+T-351 berichtigt: A-25.5 und A-25.7 sagten mehr zu als Auftrag und Entscheidungen, A-25.8 fehlte —
+ein nachgetragener Abschnitt, der mehr zusichert als verlangt war, ist derselbe Fehler wie ein
+fehlender. **A-25.9 am 2026-09-14 aus dem Auftrag des Auftraggebers vom selben Tag ergänzt** (T-361
+OF-1): A-25.7 zählt die erlaubten Gestaltänderungen abschließend auf, und die Todo-Tabelle stand
+nicht darin — die Schärfung nach T-351 hatte die nächste Änderung mit ausgeschlossen. **Am
+2026-09-14 nach T-366 (B-7, B-8) nachgeschärft:** A-25.9 zählte drei Gestaltänderungen auf, die
+Umstellung verlangt sechs — die Tabellenunterschrift, der in den festen Teil rückende Hinweis und
+der Nachladefuß waren ungedeckt, also dieselbe Lücke, die A-25.9 gerade geschlossen hatte. Und
+„die übrigen erscheinen auf Anforderung" setzte eine sichtbare Teilmenge voraus, die der Entwurf
+ausdrücklich nicht zeigt: sichtbar bleibt die Zahl, keine Marke. Der Satz zum Tastaturfokus hält
+die Wahl der Fläche an der Anforderung fest statt an einem Baustein. Auch A-25.9
+ist bestätigungsbedürftig.*
+**Bestätigungsbedürftig: Der Auftraggeber hat den Auftrag gestellt, diesen Abschnitt aber nicht
+gelesen.**
+
+| ID | Anforderung |
+|---|---|
+| A-25.1 | Jede Ansicht richtet Breite und Höhe nach dem verfügbaren Inhaltsbereich des Fensters, unter Abzug von Kopfleiste, Navigation und Seitenleiste. Das Layout folgt Änderungen der Fenstergröße selbsttätig. |
+| A-25.2 | Kein Inhalt verlängert oder verbreitert die Seite über das Fenster hinaus. Läuft Inhalt über, läuft ausschließlich der betroffene Inhaltsbereich. |
+| A-25.3 | Die Aufteilung ist auf allen Ansichten dieselbe: ein fester Teil, der die Auswahl steuert, und ein Laufbereich, der zeigt, was die Auswahl ergibt. Je Fläche und Achse genau ein Laufbereich; zwei nur nebeneinander, nie übereinander. |
+| A-25.4 | Die getragene Fenstergröße ist mindestens 960 × 640 (`minWidth`/`minHeight` der Hülle). Der feste Teil einer Ansicht paßt dort in sein Höhenbudget; ein fester Teil, der es nicht tut, ist kein fester Teil. Unterhalb der getragenen Größe läuft der Rahmen; abgeschnitten wird nichts, unerreichbar wird nichts. |
+| A-25.5 | Jeder Laufbereich ist mit der Tastatur erreichbar und trägt einen zugänglichen Namen. Ausgenommen sind die in den Designpapieren benannten Fälle: der Laufbereich des Todo-Details im Lade- und Fehlerzustand, und die Laufstrecken innerhalb einzelner Bausteine. Die Sprungmarke „Zum Inhalt springen“ führt auf eine Fläche, die auch tatsächlich läuft. |
+| A-25.6 | Eine Bestätigungsfläche hängt am Fenster, nie an dem, was sie bestätigt — in jeder Gestaltung. Sie ist vollständig sichtbar, rollt nicht weg und fängt den Tastaturfokus; Abbrechen ist nie Zustimmung. |
+| A-25.7 | Bestehende Funktion bleibt erhalten, und es entsteht kein neuer Oberflächentext und fällt keiner weg. Die sichtbare Gestalt ändert sich nur dort, wo eine Freigabe es ausdrücklich erlaubt — der umbrochene Kopf, der Wegfall des Zusatzes an der Bereichsschiene bei knapper Höhe, und die zugänglichen Namen und Halte, die A-25.5 verlangt. |
+| A-25.9 | Die Todo-Liste wird als Tabelle dargestellt, nach demselben Muster wie die Buchungsübersicht. Ihre Kopfzeile, ihre Spaltenüberschriften, die Tabellenunterschrift, die ihren zugänglichen Namen trägt, und der zugängliche Name des Tag-Auslösers sind damit gedeckt; sie sind keine Ausnahme von A-25.7, sondern die Gestalt, die dieser Abschnitt verlangt. Gedeckt ist ebenso, daß der Hinweis auf ausgeblendete erledigte Todos dabei in den festen Teil rückt und der Nachladeknopf zum Fuß der Tabelle wird. Nicht alle Tags eines Todos müssen dauerhaft sichtbar sein — sie erscheinen auf Anforderung, und dieselbe Auskunft ist ohne Zeigegerät erreichbar; die Fläche, die sie zeigt, nimmt den Tastaturfokus an. |
+| A-25.8 | Drei Flächen sind ausgenommen und bleiben es: die Startbilder, die Musterseite und der Outlook-Aufgabenbereich. Die ersten beiden hängen nicht in der Hülle der Anwendung, der dritte hängt im Rahmen von Outlook; sie rollen weiter das Dokument. |
+
+---
+
 ## Anhang A — Was nicht vorliegt
 
 - Der klickbare Framer-Prototyp (`docs/prototype/takt-ui-konzept.html`). Bis er nachgereicht

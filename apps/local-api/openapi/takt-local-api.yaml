@@ -1936,6 +1936,15 @@ paths:
       tags: [Timer]
       operationId: getRunningTimer
       summary: Laufenden Timer lesen
+      description: |
+        `elapsedSeconds` ist die **Wanduhr seit dem Start**, zum Zeitpunkt der
+        Anfrage gerechnet und nirgends gespeichert. Es ist ausdrücklich **nicht**
+        die Dauer, die ein Stopp buchen würde: Wurde der Eintrag beim Start des
+        Dienstes vorgefunden (Absturz, Abmeldung, eingespielte Datensicherung),
+        bucht `POST /timer/stop` höchstens bis zum letzten Lebenszeichen, und
+        die anzuzeigende Zahl steht in `GET /timer/orphaned`
+        (`bookableSeconds`). Wer eine Dauer anzeigt, über die der Benutzer
+        entscheiden soll, fragt deshalb dort und nicht hier (E-036, T-363).
       responses:
         '200':
           description: '`data` ist `null`, wenn kein Timer läuft.'
@@ -2144,14 +2153,38 @@ paths:
       operationId: stopTimer
       summary: Timer stoppen
       description: |
-        Schreibt Ende, Dauer und Leistung in einem Zug. Die Dauer entsteht
-        aus einer monotonen Messung, nicht aus der Differenz zweier
-        Wanduhrzeiten — eine Zeitumstellung während eines laufenden Timers darf
-        die Abrechnung nicht verändern.
+        Schreibt Ende, Dauer und Leistung in einem Zug. Die Dauer ist die
+        Differenz zwischen Start und Ende (`secondsBetween` in `@takt/domain`);
+        beide stehen als UTC-Zeitstempel im Bestand, eine Zeitumstellung
+        verschiebt sie deshalb nicht.
+
+        (Bis T-363 stand hier „Die Dauer entsteht aus einer monotonen Messung,
+        nicht aus der Differenz zweier Wanduhrzeiten". Das war nie so:
+        `ClockPort` führt zwar `monotonicSeconds`, aber keine Stelle des Timers
+        fragt es. Die Beschreibung ist an den Code angeglichen und nicht
+        umgekehrt — eine monotone Dauermessung änderte die Abrechnung und
+        gehört in einen eigenen Auftrag.)
 
         Läuft der Timer kürzer als eine Sekunde, wird nichts gebucht. Das ist
         der Doppelklick auf „Start", nicht geleistete Arbeit. Der Dienst
         antwortet mit `200` und `kind: "discarded"`; das ist kein Fehler.
+
+        **Das Ende ist nicht in jedem Fall „jetzt" (E-036, R-34).** Wurde der
+        laufende Eintrag beim **Start des Dienstes vorgefunden** — Absturz,
+        Abmeldung oder eine eingespielte Datensicherung, die bei laufendem
+        Timer entstand —, bucht der Stopp höchstens bis zum letzten
+        Lebenszeichen. Das ist dieselbe Dauer, die `GET /timer/orphaned` als
+        `bookableSeconds` ausweist und die `POST /timer/orphaned/resolve` mit
+        `book_until_heartbeat` schreibt. Der Gegenausgang „verwerfen" läßt sich
+        über diese Route nicht ausdrücken und bleibt dem Dialog vorbehalten;
+        fehlt das Lebenszeichen ganz, ist die Dauer 0 und die Antwort lautet
+        `kind: "discarded"` mit `reason: "timer_too_short"`.
+
+        Bis T-363 buchte ein direkter Stopp auch dort die Wanduhr — eine zweite
+        Zahl für denselben Eintrag, und welche in der Abrechnung landete,
+        entschied der Weg durch die Oberfläche. Gemessen über den echten
+        Einspielweg mit elf Stunden Uhrversatz: **39 600 Sekunden** über diese
+        Route gegen **1 200 Sekunden** über den Dialog.
 
         **Die Antwort sagt, was die Buchung bewegt hat** (`poolMovement`,
         E-058 Punkt 6). Die erste abgeschlossene Buchung eines Todos setzt „hat
@@ -2243,7 +2276,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/OriginRejected' }
         '409':
-          description: Es läuft kein Timer (`timer_not_running`).
+          description: |
+            Es läuft kein Timer (`timer_not_running`) — oder es wartet eine
+            unbestätigte Rückkehr aus einer inaktiven Zeit (`conflict`, A-24).
+            Im zweiten Fall läuft der Timer weiter und es wurde nichts
+            geschrieben; zuerst ist `POST /timer/idle/return` an der Reihe.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -2270,6 +2307,17 @@ paths:
 
         Der Aufruf ist mehrfach ausführbar und ohne weitere Wirkung: Er
         überschreibt denselben Wert.
+
+        **Ein beim Dienststart vorgefundener Eintrag bekommt kein neues
+        Lebenszeichen** (T-363). Er wartet auf die Antwort aus E-036, und das
+        Lebenszeichen ist der Beleg, daß ein **lebender** Lauf mitgeschrieben
+        hat. Würde es weitergeschrieben, wanderte die Grenze „bis zum letzten
+        Lebenszeichen" mit der Wanduhr mit, und aus dem Angebot des Dialogs
+        würde stillschweigend „bis jetzt" — genau das, was E-036 ausschließt.
+        Gemessen: Ein einziger Aufruf hob `bookableSeconds` des vorgefundenen
+        Eintrags von 1 200 auf 39 600. Der Dienst antwortet in diesem Fall mit
+        `200` und `seenAt: null`; die Oberfläche braucht dafür nichts zu
+        wissen, sie wertet den Wert nicht aus.
 
         **Läuft kein Timer, ist das kein Fehler.** Der Dienst antwortet mit
         `200` und `seenAt: null` — „nichts zu tun". Die Oberfläche schickt
@@ -2302,14 +2350,21 @@ paths:
                           - { $ref: '#/components/schemas/Timestamp' }
                           - { type: 'null' }
                         description: |
-                          Der geschriebene Zeitpunkt, oder `null`, wenn kein
-                          Timer lief und deshalb nichts zu schreiben war.
+                          Der geschriebene Zeitpunkt, oder `null` — entweder
+                          lief kein Timer, oder der laufende Eintrag wurde beim
+                          Dienststart vorgefunden und wartet auf die Antwort aus
+                          E-036 (T-363). Geschrieben wurde in beiden Fällen
+                          nichts.
               examples:
                 geschrieben:
                   value:
                     data:
                       seenAt: '2026-03-02T09:03:00Z'
                 keinTimer:
+                  value:
+                    data:
+                      seenAt: null
+                wartetAufAntwort:
                   value:
                     data:
                       seenAt: null
@@ -2349,6 +2404,22 @@ paths:
         - Timer
       operationId: beginIdle
       summary: Laufenden Timer vor der inaktiven Zeit anhalten (A-24)
+      description: |
+        Merkt eine erkannte Abwesenheit vor. Ob der Timer dabei anhält oder
+        weiterläuft, entscheidet die Einstellung `idleKeepTimerRunning`; der
+        Vorgabewert ist „weiterlaufen".
+
+        **Auf einer beim Dienststart vorgefundenen Buchung wird abgewiesen**
+        (`409 conflict`, seit T-371, R-34, E-036). Ein Eintrag ohne Ende, den
+        dieser Lauf nicht gestartet hat, stammt aus einem abgestürzten oder
+        eingespielten Lauf: Er hat keine aktive Zeit, die eine Rückkehr
+        abschließen könnte. Bis T-371 buchte diese Route dort gemessen
+        **39 000 s**, während `GET /timer/orphaned` für denselben Eintrag
+        1 200 s auswies — und zwar ohne jede Handlung des Benutzers, weil die
+        Oberfläche die Abwesenheit von selbst meldet. Der Ausweg ist
+        `GET /timer/orphaned` samt `POST /timer/orphaned/resolve` oder ein
+        `POST /timer/stop`; beide buchen höchstens bis zum letzten
+        Lebenszeichen.
       responses:
         '200':
           description: Ergebnis; wiederholtes Auflösen erzeugt keine weiteren Buchungen.
@@ -2376,7 +2447,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '409':
-          description: Die Zuordnung ist ungültig oder der Timerzustand hat sich geändert.
+          description: |
+            `conflict` — der Timerzustand hat sich geändert, es wartet bereits
+            eine andere inaktive Zeit, die Inaktivitätserkennung ist
+            ausgeschaltet, oder die laufende Buchung wurde beim Dienststart
+            **vorgefunden** und muß zuerst über `POST /timer/orphaned/resolve`
+            oder `POST /timer/stop` entschieden werden (T-371).
           content:
             application/json:
               schema:
@@ -6088,6 +6164,14 @@ components:
             Rückfrage die Zahl nennen kann, statt den Benutzer raten zu lassen —
             gerechnet in der Domäne (`decideOrphanedTimer`), nicht in der
             Oberfläche.
+
+            **Nie über die Wanduhr hinaus** (T-371). Das Lebenszeichen reist im
+            selben Archiv wie der Startzeitpunkt und trägt deshalb die Uhr des
+            Quellrechners. Geht sie vor, liegt `heartbeatAt` hinter „jetzt"; die
+            Domäne deckelt in diesem Fall auf `min(heartbeatAt, jetzt)`. Ohne
+            den Deckel wies diese Route für ein Archiv mit dem Lebenszeichen
+            `9999-12-31` gemessen **251 613 021 599 s** aus, und ein Stopp
+            schrieb dieselbe Zahl in eine exportierbare Buchung.
 
     ExportTemplate:
       type: object

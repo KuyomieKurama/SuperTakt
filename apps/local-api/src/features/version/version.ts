@@ -132,6 +132,42 @@
  * `stop()` auslöst (A-V-12). Sonst hielte ein Netzaufruf, der auf eine Antwort
  * wartet, die Ereignisschleife über die Abschaltfrist hinaus — genau der Weg zu
  * einem verwaisten Sidecar (17.2, B-1.6 Punkt 3).
+ *
+ * ===========================================================================
+ * Auf dem Weg zur Anfrage wird auf nichts gewartet (A-A-106, T-349)
+ * ===========================================================================
+ *
+ * Bis T-349 stand `await remember(…)` vor `await source.latest(…)`. Ein Wurf
+ * war behandelt, ein **Nie-Eintreffen** nicht: Ein Speicher, dessen Zusage nie
+ * einlöst, ließ `inFlight` auf wahr stehen, stellte keinen Zeitgeber und
+ * beendete die Versionsprüfung für die Laufzeit des Prozesses — **ohne eine
+ * Zeile im Protokoll**. Das ist stiller als jeder Fehlschlag und war damit der
+ * bequemste Ausschalter dieses Erzeugnisses (T-332 K-1, Bedrohungsmodell 42.4,
+ * R-30).
+ *
+ * Seither gilt: **Im Rumpf, in dem die Anfrage steht, gibt es genau ein
+ * `await` — die Anfrage selbst.** Sie trägt ihre eigene Gesamtfrist (A-V-5) und
+ * den `AbortController` aus `stop()`. Alles andere auf diesem Weg ist synchron;
+ * das Schreiben in den Bestand wird angestoßen und nicht abgewartet.
+ *
+ * Das ist die ganze Zusage, und sie ist mit Absicht **eine über den Weg** und
+ * nicht eine über den Speicher. Ein Wächter kann die Menge derer eng ziehen,
+ * die ein Versprechen geben dürfen; solange der Weg auf eines wartet, ist jeder
+ * von ihnen ein Ausschalter. `proof:release-safety` mißt sie mit 6g-1 in beide
+ * Richtungen: jedes weitere `await` in diesem Rumpf ist ein Befund, und
+ * verschwindet das `await` an der Anfrage selbst, ist auch das einer — dann
+ * mißt der Leser nichts mehr.
+ *
+ * **Und seit T-360 gilt der Satz für den Weg statt für diesen einen Rumpf**
+ * (Befund T-356). „In dem Rumpf, in dem die Anfrage steht" war eine Zusage über
+ * eine Stelle: Wer die Anfrage in eine örtliche Hilfsfunktion schiebt,
+ * verschiebt den gemessenen Rumpf mit und stellt sein hängendes `await` in
+ * `run()` — `tsc` Exit 0, der Lauf grün, **0 statt 40** ausgehende Anfragen.
+ * Gemessen wird deshalb der ganze Weg vom `setTimeout`-Rückruf bis hierher, und
+ * dazu die **Schleife**: Ein Riegel, der synchron nicht zurückkehrt, hält alles
+ * an, ohne je zu warten (A-A-125). Was das **nicht** schließt, steht als
+ * benannte Lücke im Nachweis — ein fremder Aufruf, der synchron nicht
+ * zurückkehrt, hat keine Schleife, sondern einen Namen.
  */
 
 import type { Logger } from '../../logger.ts';
@@ -170,6 +206,25 @@ export const VERSION_CHECK_MIN_INTERVAL_MS = 60 * 60 * 1_000;
 
 /** Abstand der ersten Anfrage zum Start (Begründung im Kopf dieser Datei). */
 export const VERSION_CHECK_START_DELAY_MS = 10_000;
+
+/**
+ * Die Frist, nach der ein Schreiben in den Bestand als „kommt nicht mehr" gilt
+ * (A-A-106, T-349).
+ *
+ * **Sie hält nichts auf.** Der Weg zur ausgehenden Anfrage wartet seit T-349
+ * auf kein Schreiben mehr (Begründung bei `remember` in
+ * {@link createVersionChecker}). Diese Frist entscheidet allein darüber, wann
+ * aus dem Schweigen eines Speichers **eine Zeile im Protokoll** wird — und daß
+ * der Speicher danach abgelegt ist, statt bei jeder Prüfung ein neues
+ * Versprechen offenzulassen.
+ *
+ * Dieselbe Zahl wie die Gesamtfrist der ausgehenden Anfrage (A-V-5,
+ * `VERSION_CHECK_TIMEOUT_MS`), und aus demselben Grund: Was länger braucht als
+ * der ganze Gang über das Netz, ist kein langsamer Schreibzugriff mehr. Der
+ * gebaute Adapter schreibt synchron im Aufruf; im Betrieb läuft diese Frist
+ * nie ab.
+ */
+export const VERSION_CHECK_STORE_DEADLINE_MS = 5_000;
 
 /**
  * Die längste Frist, die Node einem `setTimeout` glaubt.
@@ -256,7 +311,17 @@ export interface VersionChecker {
  * Sperre wenig und als Tatsache viel taugt.
  */
 export interface VersionCheckStorePort {
-  /** Merkt den Zeitpunkt einer ausgehenden Anfrage. Wird **vor** der Anfrage gerufen. */
+  /**
+   * Merkt den Zeitpunkt einer ausgehenden Anfrage. Wird **vor** der Anfrage
+   * gerufen — und seit T-349 **nicht abgewartet** (A-A-106).
+   *
+   * Was das für einen Adapter heißt: Er darf langsam sein, er darf werfen, und
+   * er darf seine Zusage nie einlösen. Keines davon hält die Versionsprüfung
+   * auf; das Nie-Einlösen kostet nach {@link VERSION_CHECK_STORE_DEADLINE_MS}
+   * den Speicher und **eine** Zeile im Protokoll. Was er **nicht** darf, ist
+   * synchron blockieren — dagegen hilft keine Frist, und das ist keine Lücke
+   * dieses Ports, sondern die Eigenschaft einer Ereignisschleife.
+   */
   write(at: Date): Promise<void>;
 }
 
@@ -287,6 +352,17 @@ export interface VersionCheckerOptions {
    * könnte, und einen zu erfinden wäre schlimmer als keiner.
    */
   readonly store?: VersionCheckStorePort;
+  /**
+   * Wie lange ein angestoßenes Schreiben schweigen darf, bevor es als
+   * ausgefallen gilt — ohne Angabe {@link VERSION_CHECK_STORE_DEADLINE_MS}.
+   *
+   * Die Naht ist **für die Messung** da und nicht für den Betrieb: Ein Prüffall
+   * setzt hier Millisekunden statt Sekunden und mißt damit ohne Wartezeit, daß
+   * ein Speicher, der nie antwortet, genau eine Zeile kostet und sonst nichts
+   * (A-A-106). Die Verdrahtung setzt sie nicht; `proof:release-safety` (6b)
+   * nagelt die Schlüssel des Aufrufobjekts fest, und dieser gehört nicht dazu.
+   */
+  readonly storeDeadlineMs?: number;
   /**
    * Woher der Streuwert auf den Boden kommt (A-V-11, T-275-8). Ohne Angabe
    * `Math.random`.
@@ -333,6 +409,7 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   const intervalMs = options.intervalMs ?? VERSION_CHECK_INTERVAL_MS;
   const minIntervalMs = options.minIntervalMs ?? VERSION_CHECK_MIN_INTERVAL_MS;
   const random = options.random ?? Math.random;
+  const storeDeadlineMs = options.storeDeadlineMs ?? VERSION_CHECK_STORE_DEADLINE_MS;
 
   let state: VersionCheckState = { state: 'unknown' };
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -356,7 +433,9 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
   /*
    * Wohin der Zeitpunkt geht (T-279, T-285). `null` heißt „nirgendwohin" —
    * entweder wurde kein Speicher mitgegeben (kein Bestand im Zusammenbau), oder
-   * er hat einmal versagt und ist danach abgelegt worden.
+   * er hat auf eine Schreibung **nie geantwortet** und ist danach abgelegt
+   * worden. Ein Speicher, der **wirft**, wird seit T-367 nicht mehr abgelegt;
+   * die Begründung steht bei `forgetStore` (A-A-124).
    *
    * **Ein Fehlschlag der Speicherung darf die Versionsprüfung nicht beenden**,
    * und seit T-285 kostet er auch am Verhalten nichts mehr: Der Boden mißt
@@ -365,36 +444,285 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
    */
   let store: VersionCheckStorePort | null = options.store ?? null;
 
+  /*
+   * Die Fristen der angestoßenen Schreibzugriffe, solange sie schweben
+   * (T-360).
+   *
+   * Es ist eine **Menge** und kein einzelner Wert, weil `remember` je Anfrage
+   * eine eigene Frist stellt und zwei Anfragen sich im Betrieb zwar nicht
+   * überholen (zwischen ihnen liegt der Boden von einer Stunde, die Frist sind
+   * fünf Sekunden), das Modul diese Zahl aber nicht kennt. Eine Zusage, die an
+   * einer fernen Zahl hängt, ist keine.
+   *
+   * Wozu sie dient, steht an zwei Stellen: bei der Frist in {@link remember}
+   * (`stop()` räumt ab, was schwebt) und bei `stop()` selbst.
+   */
+  const schwebendeFristen = new Set<ReturnType<typeof setTimeout>>();
+
+  /*
+   * Ob die **eine** Zeile über einen versagenden Speicher schon geschrieben
+   * ist (A-A-123, T-367).
+   *
+   * Bis T-360 hing diese Zusage an einer fernen Zahl (dem Boden von einer
+   * Stunde gegen eine Frist von fünf Sekunden), bis T-367 an einem
+   * Nebeneffekt (der Ablage des Speichers). Jetzt steht sie in einem eigenen
+   * Wert, gilt für **beide** Gründe zusammen und damit für das Modul statt
+   * für eine Funktion. Sie mußte umziehen, weil der Wurf seit T-367 nicht
+   * mehr ablegt — eine Zusage, die an einem Nebeneffekt hängt, den es nicht
+   * mehr gibt, ist keine.
+   */
+  let storeFailureLogged = false;
+
   /**
-   * Merkt den Zeitpunkt einer ausgehenden Anfrage — im Arbeitsspeicher **und**,
-   * wenn es einen gibt, im Bestand.
+   * Merkt den Zeitpunkt einer ausgehenden Anfrage — im Arbeitsspeicher
+   * **sofort**, im Bestand **nebenher** (A-A-106, T-349).
    *
    * Zwei Werte, zwei Aufgaben: Der im Arbeitsspeicher trägt den Boden für den
    * Rest dieses Laufs, der im Bestand ist die Tatsache für die Datensicherung
    * (A-20.4). Zurückgelesen wird der zweite nie — siehe
    * {@link VersionCheckStorePort}.
    *
+   * ===========================================================================
+   * Warum diese Funktion nichts zurückgibt, worauf jemand warten könnte
+   * ===========================================================================
+   *
+   * Bis T-349 war sie `async` und stand als `await remember(…)` **vor** der
+   * Anfrage. Ein **Wurf** aus `store.write` war behandelt; ein
+   * **Nie-Eintreffen** nicht. Ein Speicher, dessen Zusage nie einlöst, hielt
+   * `run()` an dieser Zeile an: `inFlight` stand auf wahr, kein Zeitgeber war
+   * gestellt, und die Versionsprüfung war für die Laufzeit des Prozesses tot —
+   * **ohne eine Zeile im Protokoll**, also stiller als jeder Fehlschlag
+   * (T-332 K-1, Bedrohungsmodell 42.4).
+   *
+   * Der Fehler lag nicht an `store.write`, sondern an der Bauart: **Wer auf dem
+   * Weg zur Anfrage auf ein fremdes Versprechen wartet, macht jeden, der dieses
+   * Versprechen gibt, zum Ausschalter der Versionsprüfung.** Ein Wächter kann
+   * dagegen die Menge der Versprechenden eng ziehen; aufheben kann er den Weg
+   * nicht. Deshalb ist der Weg jetzt **synchron**: `lastRequestAt` steht sofort,
+   * das Schreiben wird angestoßen und nicht abgewartet, und `run()` kommt an die
+   * Anfrage, gleich was der Speicher tut.
+   *
+   * Der einzige verbliebene `await` auf diesem Weg ist die Anfrage selbst, und
+   * sie trägt ihre eigene Gesamtfrist (A-V-5, `AbortSignal.timeout` in
+   * `source.ts`) sowie den `AbortController` aus `stop()`.
+   *
+   * ===========================================================================
+   * Was von T-279 bleibt — und was ehrlicherweise nicht
+   * ===========================================================================
+   *
+   * Angestoßen wird weiterhin **vor** der Anfrage und nicht danach, und der
+   * gebaute Adapter führt sein `UPDATE` im Aufruf aus
+   * (`packages/storage/src/sqlite/repo-version-check.ts`): Der Zeitpunkt steht
+   * im Bestand, bevor die Anfrage hinausgeht. **Zugesichert ist seit T-349 aber
+   * nur der Anstoß, nicht der Abschluß.** Ein Adapter, der sein Schreiben
+   * künftig in eine Warteschlange legte, schriebe womöglich erst danach.
+   *
+   * Der Preis ist benannt und klein: Der Wert ist seit T-285 **kein
+   * Betriebspfad** mehr, sondern eine Tatsache für die Datensicherung (A-20.4).
+   * Was ein Absturz zwischen Anstoß und Schreiben kostet, ist eine fehlende
+   * Angabe in einer Sicherung — nicht ein fehlender Boden. Gegen den Boden hilft
+   * ohnehin `lastRequestAt`, und der steht in der ersten Zeile.
+   *
+   * ===========================================================================
+   * Die Frist, und warum sie trotzdem da ist
+   * ===========================================================================
+   *
+   * Sie hält nichts mehr auf. Sie verwandelt **Schweigen in eine Zeile**: Ein
+   * Speicher, der nie antwortet, wäre sonst von einem, der geschrieben hat, in
+   * nichts zu unterscheiden — und genau diese Ununterscheidbarkeit war der Kern
+   * von T-332 K-1. Nach ihrem Ablauf — und seit T-367 **nur** nach ihrem
+   * Ablauf — wird der Speicher abgelegt: `store = null`, **eine** Zeile im
+   * Protokoll, der Takt unberührt.
+   *
+   * Der **Wurf** geht seit T-367 einen anderen Weg: Er meldet, legt aber nicht
+   * ab, und der nächste Takt versucht es erneut. Warum die beiden Gründe
+   * ungleich behandelt werden, steht bei `forgetStore` (A-A-124).
+   *
    * **Wirft nie.** Der Aufrufer steht zwischen `inFlight = true` und dem
    * `try`/`finally`, das es zurücksetzt; ein Wurf von hier ließe den Prüfer für
    * die Laufzeit des Prozesses als „gerade beschäftigt" stehen.
    */
-  async function remember(at: Date): Promise<void> {
+  function remember(at: Date): void {
     lastRequestAt = at.getTime();
+    const target = store;
+    if (target === null) return;
+
+    let settled = false;
+    /*
+     * Die Frist hält **nichts** auf. Sie ist `unref()`t, damit ein Erzeugnis,
+     * das fertig ist, nicht auf sie wartet, und sie wird abgeräumt, sobald das
+     * Schreiben ausgeht — im Betrieb ist das dieselbe Ereignisschleifenrunde.
+     *
+     * **Sie wird außerdem geführt, nicht nur gestellt** (T-360, Befund T-356 zu
+     * dieser Zeile). `unref()` heißt „hält die Ereignisschleife nicht am
+     * Leben", nicht „feuert nicht": Solange der Dienst noch lauscht, kommt sie
+     * an — auch **nach** `stop()`. Gemessen war das eine `info`-Zeile nach dem
+     * Abschalten, also eine Wirkung auf eine Senke, die beim Herunterfahren
+     * geschlossen sein kann. A-V-12 sagt „räumt den Zeitgeber weg", und das
+     * gilt für jeden dieses Prüfers, nicht nur für den Takt. Deshalb steht die
+     * Frist in {@link schwebendeFristen}, bis sie ausgeht, und `stop()` räumt
+     * ab, was dann noch darin steht.
+     */
+    const deadline = setTimeout(() => {
+      schwebendeFristen.delete(deadline);
+      if (settled) return;
+      settled = true;
+      forgetStore('timeout');
+    }, storeDeadlineMs);
+    deadline.unref();
+    schwebendeFristen.add(deadline);
+
+    /*
+     * Der Anstoß, und er wird ausdrücklich **nicht** zurückgegeben: Es gibt
+     * nichts, worauf ein Aufrufer warten könnte, und damit keinen Weg, auf dem
+     * ein fremdes Versprechen den Weg zur Anfrage anhielte (A-A-106).
+     *
+     * Der Rumpf wirft nie nach außen — der `catch` fängt auch einen Wurf, der
+     * beim **Aufruf** von `write` entsteht und nicht erst in seiner Zusage.
+     * Eine unbehandelte Ablehnung gäbe es damit auch dann nicht, wenn die Zusage
+     * erst nach Ablauf der Frist eintrifft.
+     */
+    void (async () => {
+      let threw = false;
+      try {
+        await target.write(at);
+      } catch {
+        threw = true;
+      }
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      schwebendeFristen.delete(deadline);
+      /*
+       * **Melden, nicht ablegen** (T-367, A-A-124). Ein Wurf ist beschränkt:
+       * Er kommt sofort, hält die Anfrage nicht auf und sagt nichts über den
+       * nächsten Versuch. Ihn abzulegen kostete die Tatsache für die
+       * Datensicherung, ohne etwas zu gewinnen — Begründung und Messung bei
+       * `forgetStore`.
+       */
+      if (threw) reportStoreFailure('threw');
+    })();
+  }
+
+  /**
+   * Schreibt die **eine** Zeile über einen versagenden Speicher — genau eine
+   * über die ganze Laufzeit, für **beide** Gründe zusammen (A-A-123).
+   *
+   * `info` und nicht `warn` — der Betrieb ist ungestört, und `proof:access`
+   * Abschnitt 0e mißt, daß im Normalfall keine Warnung erscheint.
+   *
+   * ===========================================================================
+   * Warum die Zusage hier steht und nicht in {@link forgetStore} (A-A-123)
+   * ===========================================================================
+   *
+   * Bis T-360 stand sie als Begründung „danach gibt es keinen Speicher mehr,
+   * der ein zweites Mal versagen könnte" am Rand. Sie gilt für jede Frist, die
+   * **nach** der Ablage gestellt wird, und für keine, die **davor** schon
+   * schwebte: Jede abgelaufene Frist schrieb ihre eigene Zeile. Im Erzeugnis
+   * blieb es trotzdem bei einer, weil zwischen zwei Anfragen der Boden von
+   * einer Stunde liegt und die Frist fünf Sekunden sind — die Zusage hing also
+   * an einer fernen Zahl und nicht an einer Funktion. Gemessen bei Takt 5 ms
+   * und Frist 120 ms: **110** Zeilen `version_check_state_write_timeout`
+   * (T-356), bei Takt 10 ms und Frist 20 ms zwei (T-357).
+   *
+   * T-360 hat daraus eine Aussage über das Modul gemacht, indem
+   * {@link forgetStore} sich selbst prüfte. Seit T-367 trägt sie nicht mehr die
+   * **Ablage**, sondern die **Meldung**: Der Wurf legt den Speicher nicht mehr
+   * ab (Begründung bei {@link forgetStore}), also gäbe es für ihn keine Ablage,
+   * an der eine Zusage hängen könnte. Ein Riegel an einem Nebeneffekt ist
+   * keiner — dieselbe Lehre wie bei der fernen Zahl darüber.
+   *
+   * **Beide Gründe teilen sich die eine Zeile.** Wirft der Speicher erst und
+   * schweigt danach, steht im Protokoll der erste der beiden Gründe und kein
+   * zweiter. Das ist gewollt: A-18.12 verlangt Stille, und zwei Zeilen über
+   * denselben Speicher sagen nicht mehr als eine.
+   */
+  function reportStoreFailure(reason: VersionCheckStoreFailure): void {
+    if (storeFailureLogged) return;
+    storeFailureLogged = true;
+    const described = describeVersionCheckStoreFailure(reason);
+    options.logger.lifecycle('info', described.sentence, described.key);
+  }
+
+  /**
+   * Legt den Speicher ab — seit T-367 die Antwort auf **`timeout` allein**.
+   *
+   * ===========================================================================
+   * Warum nur der stumme Speicher abgelegt wird (A-A-124)
+   * ===========================================================================
+   *
+   * Die beiden Gründe sind nicht gleich schwer, und bis T-364 wurden sie
+   * gleich behandelt:
+   *
+   *  - Ein Speicher, der **wirft**, ist beschränkt und harmlos. Der Wurf kommt
+   *    sofort, hält die ausgehende Anfrage nicht auf (A-A-106 bleibt
+   *    unberührt) und sagt nichts über den nächsten Versuch. Ihn abzulegen
+   *    kostete die Tatsache für die Datensicherung, ohne irgend etwas zu
+   *    gewinnen.
+   *  - Ein Speicher, der **nie antwortet**, ist unbeschränkt. Bei ihm ist die
+   *    Ablage die einzige Handhabe gegen ein Versprechen ohne Ende; ohne sie
+   *    bliebe je Anfrage eines offen. Deshalb bleibt dieser Weg, wie er war.
+   *
+   * ===========================================================================
+   * Was der Benutzer im Bestand hat — und warum das an dieser Zeile hing
+   * ===========================================================================
+   *
+   * Solange auch der Wurf ablegte, wurde von da an kein Zeitpunkt mehr gemerkt,
+   * und `app_setting.last_version_check_at` trug den **letzten geglückten** Wert
+   * weiter — nicht nichts. Eine Datensicherung nach A-20 sagte danach
+   * „zuletzt geprüft am …" und nannte einen beliebig alten Zeitpunkt, der
+   * dabei gültig aussieht. **Ein veralteter Zeitpunkt ist schlimmer als
+   * keiner**, weil ein fehlender „ich weiß es nicht" sagt.
+   *
+   * Gemessen (T-364, echter Prüfer, echter Adapter, echte Datei, Sperre geht
+   * auf und wieder zu): **ein** fehlgeschlagener von 63 Schreibversuchen
+   * genügte, danach 51 ausgehende Anfragen ohne einen weiteren Eintrag, und der
+   * Wert war am Ende **52 Stunden** alt. In dieser Fassung heilt dieselbe Lage
+   * nach dem nächsten Intervall: **1 Stunde** statt 52.
+   *
+   * **Am Port ist das nicht aufzulösen**, und das ist gemessen und nicht
+   * geschlossen (T-364, gegen den Vorschlag aus T-360). Ein „vergiß den Wert"
+   * führte über denselben Kanal, der eben versagt hat: In drei von vier
+   * gemessenen Fehlerlagen des gebauten Adapters wirft auch das
+   * `UPDATE … = NULL` (nur lesende Verbindung, geschlossene Verbindung,
+   * gesperrte Datei); die vierte verlangt eine Systemuhr außerhalb der Jahre
+   * 0001 bis 9999. Der Wert blieb dabei genauso 52 Stunden alt, und
+   * `proof:release-safety` fiel von 158/0 auf 157/1. Ein Bestand kann über
+   * einen versagenden Kanal nicht sagen, daß er nichts weiß; deshalb behält
+   * `null` in dieser Spalte genau **eine** Bedeutung: „noch nie gefragt".
+   *
+   * Bleibt die Datei dauerhaft unbeschreibbar, steht dort weiter der alte Wert.
+   * Dagegen hilft keine Bauform — auch ein `null` müßte geschrieben werden.
+   *
+   * ===========================================================================
+   * Was diese Fassung kostet, und es gehört hierher
+   * ===========================================================================
+   *
+   * Ein Speicher, der synchron blockiert **und** wirft — die fremd gesperrte
+   * Datei —, blockiert danach **je Intervall** statt einmal. Gemessen mit 50 ms
+   * Blockade, Takt 10 ms, Fenster 600 ms: 10 ausgehende Anfragen statt 55. Im
+   * Erzeugnis sind das höchstens 5 s je Stunde (`busy_timeout` in
+   * `database.ts`), und nur solange die Datei fremd gesperrt ist — eine Lage,
+   * in der ohnehin jede andere Anfrage des Dienstes in dieselben 5 s läuft.
+   *
+   * Daß dieser Adapter überhaupt synchron blockieren kann, ist die **zweite
+   * Achse von R-30** (A-A-125) und ein eigener Meßgegenstand: `recordCheck`
+   * hält unter fremder Schreibsperre die Ereignisschleife gemessene 5 004 ms
+   * an, und zwar auf dem Weg **vor** der ausgehenden Anfrage.
+   *
+   * **Der Takt bleibt unberührt** (A-18.11): Hier wird kein Zeitgeber gestellt,
+   * keiner abgeräumt und kein Zustand angefaßt. Verloren geht die Tatsache für
+   * die Datensicherung, nicht die Versionsprüfung.
+   */
+  function forgetStore(reason: VersionCheckStoreFailure): void {
+    /*
+     * Wer schon abgelegt ist, wird nicht ein zweites Mal abgelegt. Die Zusage
+     * „genau eine Zeile" steht seit T-367 nicht mehr an dieser Zeile, sondern
+     * in {@link reportStoreFailure} — dort gilt sie für beide Gründe.
+     */
     if (store === null) return;
-    try {
-      await store.write(at);
-    } catch {
-      store = null;
-      // Genau **eine** Zeile über die ganze Laufzeit: Danach gibt es keinen
-      // Speicher mehr, der ein zweites Mal versagen könnte. `info` und nicht
-      // `warn` — der Betrieb ist ungestört, und `proof:access` Abschnitt 0e mißt,
-      // daß im Normalfall keine Warnung erscheint.
-      options.logger.lifecycle(
-        'info',
-        'Der Zeitpunkt der letzten Versionsprüfung ließ sich nicht merken. SuperTakt läuft unverändert weiter.',
-        'version_check_state_unwritable',
-      );
-    }
+    store = null;
+    reportStoreFailure(reason);
   }
 
   /** Eine Ziehung in `[0, 1)`. Eine kaputte Quelle ergibt 0 und damit den blanken Boden. */
@@ -565,7 +893,7 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
         'Die Systemuhr ist zurückgestellt worden. Die Versionsprüfung nimmt ihren Bezugspunkt neu.',
         'version_check_clock_moved_backwards',
       );
-      await remember(options.now());
+      remember(options.now());
       scheduleFloor(minIntervalMs);
       return;
     }
@@ -577,7 +905,8 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
 
     inFlight = true;
     /*
-     * **Gemerkt wird vor der Anfrage, nicht danach** (T-279).
+     * **Gemerkt wird vor der Anfrage, nicht danach** (T-279) — und seit T-349
+     * ohne `await` (A-A-106).
      *
      * Danach wäre der naheliegende Ort und der falsche: Ein Absturz **während**
      * der Anfrage — und die kann bis zur Frist dauern — ließe den Bestand ohne
@@ -588,9 +917,57 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
      * Der Preis ist benannt: Eine Anfrage, die gar nicht erst zustande kommt,
      * verbraucht trotzdem einen Boden. Das ist die richtige Richtung — sie
      * ging hinaus, oder sie hätte hinausgehen sollen; beides ist ein Versuch.
+     *
+     * **Diese Zeile trägt kein `await`, und das ist die Zusage aus A-A-106.**
+     * Der Boden hängt an `lastRequestAt`, und der steht nach der ersten
+     * Anweisung von {@link remember}. Alles Weitere — der Schreibzugriff, seine
+     * Frist, sein Fehlschlag — läuft nebenher und kann diesen Weg nicht mehr
+     * anhalten. Wer hier wieder ein `await` einsetzt, baut T-332 K-1 nach; der
+     * Nachweis `proof:release-safety` (6g-1) wird davon rot — und seit T-360
+     * ebenso, wer die Anfrage eine Funktion tiefer schiebt und das `await` hier
+     * stehen läßt (Befund T-356).
      */
-    await remember(options.now());
+    remember(options.now());
     try {
+      /*
+       * **Das einzige Warten dieses Moduls — und es bekommt keinen Riegel**
+       * (T-360, Entscheidung zur benannten Restklasse aus T-349).
+       *
+       * Die Lage ist gemessen: Eine Quelle, deren `latest` nie antwortet,
+       * ergibt **1** Anfrage, Zustand `unknown`, **0** Protokollzeilen — auch
+       * dann, wenn sie auf das Signal hört, denn `control` löst nur `stop()`
+       * aus (T-356, T-357). Das ist derselbe Ausschalter wie T-332 K-1, eine
+       * Naht weiter rechts.
+       *
+       * Der naheliegende Riegel wäre derselbe wie beim Speicher: eine eigene
+       * Frist, nach deren Ablauf `run()` weitermacht. Er ist **nicht** gebaut,
+       * und zwar aus drei Gründen, die hier zusammen stehen, weil sie einzeln
+       * nicht tragen:
+       *
+       *  1. **Die Quelle bringt ihre Frist selbst mit**, und das ist gemessen
+       *     statt zugesagt: `AbortSignal.timeout(5 000)` in `source.ts` (A-V-5)
+       *     trägt **auch den Rumpf** — gegen einen tropfenden Wirt bricht die
+       *     Abfrage nach 5 002 ms mit `timeout` ab (T-357). Die Marke
+       *     `AbortSignal.timeout` steht in `REQUIRED_IN_SOURCE` von
+       *     `proof:release-safety`; verschwindet sie, wird der Lauf rot.
+       *  2. **Ein Riegel hieße überlappende ausgehende Anfragen.** Wir können
+       *     ein fremdes Versprechen nicht beenden, nur stehenlassen: Wer nach
+       *     der Frist weitermacht, hat die erste Anfrage noch unterwegs, wenn
+       *     die zweite hinausgeht. Genau die eine, selbstgetaktete Anfrage ist
+       *     aber der Grund, warum dieses Modul überhaupt so gebaut ist (siehe
+       *     den Kopf dieser Datei: das Lebenszeichen aus R-19 und die 60
+       *     Anfragen je Stunde).
+       *  3. **Er kostete die Zusage, die heute mißt.** Ein Riegel steht als
+       *     `Promise.race([…])`, und damit stünde die Anfrage nicht mehr
+       *     unmittelbar unter dem einen `await` — der Wächter 6g-1 mißt genau
+       *     das (gemessen: `Promise.all` daneben ist rot). Eine gemessene
+       *     Zusage gegen eine ungemessene zu tauschen ist kein Gewinn.
+       *
+       * **Was bleibt, ist benannt:** Wer diesen Port einsetzt, bringt eine
+       * eigene Gesamtfrist mit; der Prüfer hat keine. Das steht als Bedingung
+       * an `ReleaseSourcePort` in `source.ts` und ist die Stelle, an der ein
+       * künftiger zweiter Adapter geprüft wird.
+       */
       const lookup = await source.latest(control.signal);
       if (stopped) return;
 
@@ -672,6 +1049,20 @@ export function createVersionChecker(options: VersionCheckerOptions): VersionChe
         clearTimeout(timer);
         timer = null;
       }
+      /*
+       * **Jeder** Zeitgeber dieses Prüfers, nicht nur der Takt (A-V-12, T-360).
+       *
+       * Die Fristen der angestoßenen Schreibzugriffe sind `unref()`t, und das
+       * hat T-349 als „feuert nicht mehr" gelesen. Gemessen (T-356) kam nach
+       * `stop()` noch genau **eine** `info`-Zeile an: Solange der Dienst
+       * lauscht, lebt die Ereignisschleife, und eine Frist, die niemand
+       * abräumt, läuft ab. Fachlich war es folgenlos — kein Zeitgeber, kein
+       * Zustand, kein Takt hängen daran —, aber es ist eine Wirkung nach dem
+       * Abschalten, und die Senke des Protokolls kann beim Herunterfahren
+       * geschlossen sein.
+       */
+      for (const frist of schwebendeFristen) clearTimeout(frist);
+      schwebendeFristen.clear();
       // Bricht einen laufenden `fetch` samt Lesen des Rumpfes ab. Ohne ihn
       // hielte eine Antwort, auf die noch gewartet wird, das Anhalten auf.
       control.abort();
@@ -756,6 +1147,79 @@ export function describeVersionCheckFailure(
         key: 'version_check_unreachable',
       };
   }
+}
+
+/**
+ * Warum der Zeitpunkt der letzten Anfrage nicht im Bestand steht (A-A-106).
+ *
+ * Zwei Werte, und beide sind **folgenlos für den Betrieb**: `threw` — der
+ * Speicher hat abgelehnt; `timeout` — er hat innerhalb von
+ * {@link VERSION_CHECK_STORE_DEADLINE_MS} gar nichts gesagt. Bis T-349 gab es
+ * nur den ersten, und der zweite war der Fall, der die Versionsprüfung still
+ * anhielt (T-332 K-1).
+ *
+ * **In der Folge sind sie seit T-367 nicht mehr gleich** (A-A-124): Nur
+ * `timeout` legt den Speicher für die Laufzeit ab; ein `threw` wird gemeldet,
+ * und der nächste Takt versucht es erneut. Die Begründung steht bei
+ * `forgetStore` in {@link createVersionChecker}, die Messung in
+ * `.claude/team/reports/T-364-domain-dev.md`.
+ */
+export type VersionCheckStoreFailure = 'threw' | 'timeout';
+
+/**
+ * Derselbe Bau wie {@link describeVersionCheckFailure}: ein Schlüssel herein,
+ * ein Satz und ein Grund heraus, rein und ohne laufenden Dienst prüfbar.
+ *
+ * In beiden Hälften steht kein Pfad, kein Geheimnis, keine Adresse und keine
+ * fremde Zeichenkette; die Sätze sind Konstanten, die Gründe stehen in
+ * demselben geschlossenen Vorrat wie jeder andere (A-V-20). **Der Benutzer
+ * sieht keinen von beiden** — sie stehen im Protokoll, nicht auf einer Fläche
+ * (A-18.12).
+ */
+export function describeVersionCheckStoreFailure(reason: VersionCheckStoreFailure): {
+  readonly sentence: string;
+  readonly key: string;
+} {
+  if (reason === 'timeout') {
+    return {
+      /*
+       * Der Satz nennt die **Folge** und nicht nur den Vorgang — dieselbe
+       * Lehre wie bei `too_large` (Befund T-145-3): Ab hier merkt sich dieses
+       * Erzeugnis den Zeitpunkt gar nicht mehr, und in einer Datensicherung
+       * steht danach der **letzte geglückte** und nicht keiner. Die
+       * Versionsprüfung selbst läuft unverändert weiter, und genau das ist der
+       * Unterschied zum Stand vor T-349.
+       *
+       * **Seit T-367 gilt dieser Satz für genau den einen Weg, für den er
+       * geschrieben ist**: den Speicher, der nie antwortet. Der Wurf legt nicht
+       * mehr ab, und sein Satz sagt deshalb etwas anderes (A-A-124).
+       */
+      sentence:
+        'Der Zeitpunkt der letzten Versionsprüfung wurde innerhalb der Frist nicht gespeichert und wird ab jetzt nicht mehr gemerkt. SuperTakt läuft unverändert weiter.',
+      key: 'version_check_state_write_timeout',
+    };
+  }
+  return {
+    /*
+     * Der zweite Grund hat seit T-367 eine **andere** Folge als der erste
+     * (A-A-124), und der Satz sagt sie.
+     *
+     * Die Geschichte dieser Zeile in zwei Schritten: Bis T-360 sagte sie
+     * „ließ sich nicht merken" und beschrieb damit **einen** Schreibversuch,
+     * während der Speicher auch auf diesem Weg für die ganze Laufzeit abgelegt
+     * wurde — der Satz sagte weniger, als geschah. T-360 hat deshalb „und wird
+     * ab jetzt nicht mehr gemerkt" angehängt. T-367 hat die **Sache** geheilt
+     * statt den Satz: Ein Wurf legt nicht mehr ab, der nächste Takt versucht es
+     * erneut, und der angehängte Halbsatz wäre jetzt seinerseits unwahr.
+     *
+     * Ein Protokollsatz, der mehr sagt, als geschieht, ist derselbe Fehler wie
+     * einer, der weniger sagt — nur in die andere Richtung. Deshalb steht hier
+     * jetzt die **wiederholte** Folge und nicht die endgültige.
+     */
+    sentence:
+      'Der Zeitpunkt der letzten Versionsprüfung ließ sich nicht merken. SuperTakt läuft unverändert weiter und versucht es beim nächsten Mal erneut.',
+    key: 'version_check_state_unwritable',
+  };
 }
 
 /**

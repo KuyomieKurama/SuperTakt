@@ -162,7 +162,22 @@ test.describe('Toast-Stapel: eine Meldung mit Rückweg wird nicht verdrängt (W-
       // (`q`, siehe `support/nav.ts#gotoTodos`). „Erledigte einblenden": Ohne
       // sie zeigt die Liste keine der vier bereits erledigten Zeilen
       // (`TodoListScreen.tsx`, Vorgabe `showDone = false`).
+      //
+      // T-345, rot vorgefunden und hier behoben (Prüffall, nicht Anwendung):
+      // Die Todos-Ansicht wurde in diesem Fall noch nie besucht — anders als
+      // das Board, dessen erste Navigation vor `pauseAt` lief (Dateikopf,
+      // „damit der Seitenaufbau selbst noch mit echt laufenden Zeitgebern
+      // geschieht"). Unter der bereits angehaltenen Uhr blieb die Ansicht
+      // gemessen dauerhaft bei „Ansicht wird geladen …" hängen (60s-Zeitlimit,
+      // `getByRole('button', { name: 'Erledigte einblenden' })` nie
+      // gefunden) — derselbe Grund, nur an der zweiten statt der ersten
+      // Navigation. Ein kurzes `resume()`/erneutes `pauseAt(...)` kostet
+      // nichts an der geprüften Sache: Vor dieser Stelle trägt nur die
+      // Meldung mit Rückweg (ohne Achtsekundenfrist, siehe `evict()`), die
+      // vier aktionslosen Meldungen entstehen erst danach.
+      await page.clock.resume();
       await gotoTodos(page, { q: String(run) });
+      await page.clock.pauseAt(new Date(Date.now() + 2000));
       await page.getByRole('button', { name: 'Erledigte einblenden' }).click();
 
       // Vier Meldungen ohne Aktion, nacheinander — das Zurücknehmen von

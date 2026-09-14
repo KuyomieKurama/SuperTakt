@@ -48,7 +48,13 @@ test.describe('TP-ANH-11 — bestehende Todos ohne Frist und ohne Anhang funktio
 
     // Der gewohnte Ablauf: Timer starten, stoppen, Erledigt setzen — alles
     // unverändert, obwohl das Todo keine der neuen Eigenschaften trägt.
-    const main = page.locator('#inhalt');
+    // `.screen` statt `#inhalt` (T-330, E-114): Seit T-326 sitzt die Marke
+    // `#inhalt` auf dem Laufbereich (`ScreenBody`), nicht mehr auf dem
+    // Rahmen der Ansicht — die Knöpfe „Timer starten"/„Timer stoppen" stehen
+    // im `.screen__header` und lägen damit außerhalb. `.screen` ist die
+    // Ansicht selbst (Kopf **und** Laufbereich, genau ein Treffer je Route)
+    // und trifft dieselbe Menge wie zuvor `#inhalt` auf `.app__main`.
+    const main = page.locator('.screen');
     await main.getByRole('button', { name: 'Timer starten' }).first().click();
     await expect(main.getByRole('button', { name: 'Timer stoppen' })).toBeVisible();
     await main.getByRole('button', { name: 'Timer stoppen' }).click();

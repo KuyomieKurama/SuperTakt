@@ -1686,8 +1686,100 @@ Ausnahme ist kein Zustand, sondern ein Ort, und dieser Ort ist
    **Die Spalte bleibt und wird weiter geschrieben.** Sie ist seither eine **Tatsache** („wann
    wurde zuletzt gefragt") und **keine Sperre**: Sie nimmt am Round-Trip der Datensicherung
    teil (A-20.4) und wird von keinem Betriebspfad gelesen. `VersionCheckStorePort` hat deshalb
-   kein `read`, und `proof:release-safety` mißt den Rückweg als eigene Prüfung in **fünf
-   Gestalten** mit **sechsundzwanzig** Gegenproben.
+   kein `read`, und `proof:release-safety` mißt den Rückweg als eigene Prüfung in **sechs
+   Gestalten** mit **einhundert** Gegenproben.
+
+   **Und sie wird seit T-349 angestoßen, nicht abgewartet** (A-A-106). Bis dahin stand
+   `await remember(…)` vor der ausgehenden Anfrage, und `remember` wartete auf `store.write`.
+   Ein **Wurf** von dort war behandelt; eine Zusage, die **nie eintrifft**, nicht: `inFlight`
+   blieb auf wahr, kein Zeitgeber wurde gestellt, und die Versionsprüfung war für die Laufzeit
+   des Prozesses tot — **ohne eine Zeile im Protokoll**, also stiller als jeder Fehlschlag. Der
+   Sicherheitsprüfer hat genau das gebaut, ohne `composition.ts` oder `main.ts` anzufassen:
+   ein Schreibadapter, der vor dem `UPDATE` einen aus `app_setting` gelesenen „Mindestabstand"
+   abwartet — **0 statt 14** ausgehende Anfragen, und kein Lauf sah etwas (T-332 K-1,
+   Bedrohungsmodell 42.4).
+
+   Der Fehler lag nicht am Adapter, sondern am Weg: **Wer auf dem Weg zur Anfrage auf ein
+   fremdes Versprechen wartet, macht jeden, der dieses Versprechen gibt, zum Ausschalter der
+   Versionsprüfung.** Ein Wächter kann die Menge der Versprechenden eng ziehen; den Weg hebt er
+   nicht auf. Deshalb gilt jetzt: **Im Rumpf, in dem die Anfrage steht, gibt es genau ein
+   `await` — die Anfrage selbst**, und sie trägt ihre Gesamtfrist von 5 000 ms (A-V-5) und den
+   `AbortController` aus `stop()`. Der Schreibzugriff wird angestoßen; eine `unref()`te Frist
+   von 5 000 ms verwandelt das Schweigen eines Speichers in **eine** Zeile im Protokoll
+   (`version_check_state_write_timeout`) und legt ihn ab — derselbe Weg wie beim Wurf, der Takt
+   unberührt (A-18.11, A-18.12: der Benutzer sieht nichts).
+
+   **Und seit T-360 gilt die Zusage für den Weg, nicht für einen Rumpf** (Befund T-356).
+   „Im Rumpf, in dem die Anfrage steht" war eine Zusage über eine **Stelle** und nicht über die
+   Anforderung. Wer die Anfrage in eine örtliche Hilfsfunktion schiebt — `return await
+   source.latest(…)`, tadellos —, verschiebt den gemessenen Rumpf mit und stellt sein hängendes
+   `await` in den, den der Zeitgeber ruft: `tsc` Exit 0, `proof:release-safety` **154/0 grün**,
+   am Modul **0 statt 40** ausgehenden Anfragen, Zustand `unknown`, **0** Protokollzeilen.
+   Gemessen wird deshalb der **Weg**: vom `setTimeout`-Rückruf bis zu dem Rumpf mit der Anfrage
+   wartet jedes Glied auf genau eines — das nächste Glied, das letzte auf die Anfrage.
+
+   **Der fünfte Weg braucht dabei kein `await`, und nur seine eine Gestalt ist gemessen**
+   (A-A-125). Ein synchroner Riegel — eine Schleife, die nicht zurückkehrt — hält die
+   Ereignisschleife an, ohne je zu warten; in `run()` friert er den Dienst ein, in `remember`
+   drückt er die Anfragen leise von **40 auf 3** und läßt das Protokoll leer. Beide Gestalten
+   waren 154/0 grün und sind seit T-360 rot, weil der Lauf auf dem Weg **und** in allem, was
+   von ihm aus synchron erreichbar ist, nach Schleifen sucht. **Geschlossen ist die Klasse
+   damit nicht:** Ein fremder Aufruf, der synchron nicht zurückkehrt, hat keine Schleife,
+   sondern einen Namen, und für `now`, `logger` und den Rumpf eines fremden Pakets liest kein
+   Lauf etwas. Das steht als benannte Lücke im Nachweis.
+
+   **Genau eine Protokollzeile — jetzt als Aussage über das Modul** (A-A-123). Bis T-360 hing
+   sie an einer fernen Zahl: `forgetStore` schrieb je abgelaufener Frist eine Zeile, und daß es
+   trotzdem eine blieb, lag am Boden von einer Stunde gegen eine Frist von fünf Sekunden.
+   Gemessen bei Takt 5 ms und Frist 120 ms: **24 Zeilen** in 600 ms (T-356 zählte 110 in einem
+   längeren Fenster). Ein `if (store === null) return;` als erste Zeile macht daraus **eine** —
+   gemessen, in derselben Lage. **Und `stop()` räumt seit T-360 jeden Zeitgeber ab**, nicht nur
+   den Takt: `unref()` heißt „hält die Ereignisschleife nicht am Leben", nicht „feuert nicht",
+   und gemessen kam nach dem Abschalten noch **eine** `info`-Zeile an (jetzt **null**).
+
+   **Nur der stumme Speicher wird abgelegt, der werfende nicht** (A-A-124, T-367). Bis dahin
+   legte **jeder** Fehlschlag den Speicher für die Laufzeit ab;
+   `app_setting.last_version_check_at` trug danach den letzten geglückten Wert weiter, und eine
+   Datensicherung sagte „zuletzt geprüft am …" mit einem beliebig alten Zeitpunkt, der gültig
+   aussieht — ein veralteter Zeitpunkt ist schlimmer als keiner, weil ein fehlender „ich weiß
+   es nicht" sagt. Gemessen (T-364, echter Prüfer gegen eine echte Datei, Sperre geht auf und
+   wieder zu): **ein** fehlgeschlagener von 63 Schreibversuchen genügte, danach 51 Anfragen ohne
+   einen weiteren Eintrag, am Ende ein **52 Stunden alter** Wert. Seit T-367 heilt dieselbe Lage
+   nach dem nächsten Intervall: **1 Stunde statt 52**.
+
+   **Am Port ist das nicht aufzulösen, und das ist gemessen** (T-364, gegen den Vorschlag aus
+   T-360). Ein „vergiß den Wert" führte über denselben Kanal, der eben versagt hat: In drei
+   von vier gemessenen Fehlerlagen des gebauten Adapters wirft auch das `UPDATE … = NULL` (nur
+   lesende Verbindung, geschlossene Verbindung, gesperrte Datei), der Wert blieb genauso 52
+   Stunden alt, und `proof:release-safety` fiel dabei von 158/0 auf 157/1. Der wirksame Hebel
+   liegt beim Prüfer: Ein Wurf ist beschränkt und harmlos — er kommt sofort, hält die Anfrage
+   nicht auf und sagt nichts über den nächsten Versuch —, also wird er **gemeldet und nicht
+   abgelegt**; abgelegt wird allein der Speicher, der **nie antwortet**, weil dort die Ablage die
+   einzige Handhabe gegen ein Versprechen ohne Ende ist. Die Zusage „genau eine Protokollzeile"
+   zog dabei von der Ablage in eine eigene Meldefunktion um und gilt jetzt für **beide** Gründe
+   zusammen. **Der Preis steht daneben:** Ein Speicher, der synchron blockiert und wirft,
+   blockiert danach je Intervall statt einmal (gemessen 10 Anfragen statt 55 bei 50 ms Blockade;
+   im Erzeugnis höchstens 5 s je Stunde, `busy_timeout`).
+
+   **Die Quelle bekommt denselben Riegel ausdrücklich nicht.** Eine Quelle, deren `latest` nie
+   antwortet, hält `run()` weiterhin auf — gemessen: **1** Anfrage, Zustand `unknown`, **0**
+   Protokollzeilen. Drei Gründe stehen gegen einen Riegel, und sie tragen nur zusammen: Die
+   gebaute Quelle bringt ihre Gesamtfrist selbst mit, und die trägt **auch den Rumpf** (gegen
+   einen eigenen tropfenden Wirt gemessen: Ausgang nach **5 002 ms** mit `reason: timeout`); ein
+   Riegel hieße **überlappende** ausgehende Anfragen, weil ein fremdes Versprechen nicht zu
+   beenden, sondern nur stehenzulassen ist; und er stünde als `Promise.race([…])` und nähme der
+   Anfrage damit die Stelle unmittelbar unter dem einen `await`, an der der Nachweis heute mißt.
+   Was bleibt, steht als **Bedingung am Port**: Wer `ReleaseSourcePort` einsetzt, bringt eine
+   eigene Gesamtfrist mit; der Prüfer hat keine.
+
+   **Was dabei ehrlich schwächer geworden ist:** Zugesichert ist der **Anstoß** vor der
+   Anfrage, nicht der **Abschluß**. Der gebaute Adapter führt sein `UPDATE` synchron im Aufruf
+   aus, also steht der Zeitpunkt weiterhin im Bestand, bevor die Anfrage hinausgeht — gemessen
+   mit einem künstlich verzögerten Adapter fällt genau diese Eigenschaft weg. Der Preis ist
+   klein und benannt: Der Wert ist seit T-285 kein Betriebspfad mehr, sondern eine Tatsache für
+   die Datensicherung; was ein Absturz zwischen Anstoß und Schreiben kostet, ist eine fehlende
+   Angabe in einer Sicherung, nicht ein fehlender Boden — der hängt an `lastRequestAt` im
+   Arbeitsspeicher und steht in der ersten Zeile von `remember`.
 
    **Die Gestalt des Ports wird seit T-292 vom TypeScript-Compiler gelesen, nicht von einem
    regulären Ausdruck.** Das ist keine Geschmacksfrage, sondern das Ergebnis von drei

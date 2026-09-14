@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
+import { runAreaSurface } from "./ScreenBody";
 
 /* ==================================================================== */
 /* Knopf                                                                */
@@ -155,6 +156,35 @@ export interface CardProps {
   /** Ohne Innenabstand, zum Beispiel wenn eine Tabelle buendig sitzen soll. */
   readonly flush?: boolean;
   readonly className?: string;
+  /**
+   * Ist der Kartenrumpf der **Laufbereich** seiner Spalte (T-326, `.runarea`)?
+   *
+   * Dann nimmt er den Rest der Karte, laeuft senkrecht und traegt einen
+   * zugaenglichen Namen — und der Kartenkopf steht. Genau eine Ansicht braucht
+   * das an zwei Karten: die Zeiterfassung („Todo waehlen" und „Buchungen von
+   * heute", T-322 4.5). Der Wert **ist** die Kartenueberschrift und kein neuer
+   * Text; er steht hier zusaetzlich, weil ein `aria-label` eine Zeichenkette
+   * braucht und `title` ein `string` ist, aber auch leer sein darf.
+   *
+   * Der Rumpf und nicht ein Kasten darin: Ein zusaetzlicher Umschlag waere eine
+   * zweite Flaeche mit demselben Zweck, und `overflow: hidden` an `.card`
+   * schneidet ohnehin bereits an der Kartenkante ab.
+   */
+  readonly runArea?: string;
+  /**
+   * Traegt dieser Laufbereich die Sprungmarke „Zum Inhalt springen"?
+   *
+   * Genau eine Karte im ganzen Bestand tut das: „Todo waehlen" in der
+   * Zeiterfassung — Laufbereich A und damit der **Inhaltshalt** dieser Ansicht
+   * (T-344 8.5). Der Rahmen darum laeuft oberhalb von 68 rem nicht; unterhalb
+   * hoert A auf zu laufen, und dann rollt Bild-ab auf A den Rahmen. Das tut der
+   * Browser von selbst — eine zweite Kennung an einer Breitenschwelle waere
+   * eine zweite Wahrheit ueber die 68 rem.
+   *
+   * Ohne `runArea` wirkungslos: Eine Marke ohne Laufstrecke ist genau der
+   * Fehler, den T-344 behoben hat.
+   */
+  readonly anchor?: boolean;
   readonly children: ReactNode;
 }
 
@@ -166,6 +196,8 @@ export function Card({
   footer,
   flush = false,
   className,
+  runArea,
+  anchor = false,
   children,
 }: CardProps) {
   const headingId = id === undefined ? undefined : `${id}-title`;
@@ -188,7 +220,12 @@ export function Card({
           {actions !== undefined ? <div className="card__actions">{actions}</div> : null}
         </header>
       ) : null}
-      <div className={cx("card__body", flush && "card__body--flush")}>{children}</div>
+      <div
+        className={cx("card__body", flush && "card__body--flush", runArea !== undefined && "runarea")}
+        {...(runArea === undefined ? {} : runAreaSurface(runArea, anchor))}
+      >
+        {children}
+      </div>
       {footer !== undefined ? <footer className="card__footer">{footer}</footer> : null}
     </section>
   );

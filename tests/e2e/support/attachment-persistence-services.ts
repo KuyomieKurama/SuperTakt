@@ -56,6 +56,14 @@ export async function startAttachmentPersistenceWeb(): Promise<ChildProcessWitho
     // Unter Windows ist `pnpm` eine `.cmd`; ohne Shell findet sie niemand
     // (`spawn pnpm ENOENT`, dieselbe Bauart wie in T-249-7 zuerst gemessen).
     shell: process.platform === 'win32',
+    // Nur außerhalb von Windows (T-345, derselbe Fund und dieselbe Behebung
+    // wie in `services.ts#startWeb` und `version-check-services.ts
+    // #startVersionCheckWeb`, T-330): Macht diesen Prozeß zum Anführer einer
+    // eigenen Prozeßgruppe, damit `stopAttachmentPersistenceWeb` das
+    // Enkelkind `vite` mit erreicht. Gemessen (T-345, dieselbe Ursache
+    // dreimal in dieser Datei-Familie): ohne diese Zeile blieb `vite` nach
+    // einem vollständig grünen Lauf dieser Datei auf Port 5173 hängen.
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       VITE_TAKT_BASE_URL: API_BASE_URL,
@@ -74,13 +82,33 @@ export async function startAttachmentPersistenceWeb(): Promise<ChildProcessWitho
       return response !== null && response.ok;
     }, 15_000, 'Vite-Entwicklungsserver antwortet auf 5173');
   } catch (error) {
-    child.kill('SIGTERM');
+    await stopAttachmentPersistenceWeb(child);
     throw new Error(`${String(error)}\nAusgabe:\n${log}`);
   }
 
   return child;
 }
 
-export function stopAttachmentPersistenceWeb(child: ChildProcessWithoutStdin): void {
+/**
+ * Beendet den mit `startAttachmentPersistenceWeb` gestarteten Prozeßbaum
+ * (T-345, dieselbe Behebung wie `services.ts#killShellChildTree` und
+ * `version-check-services.ts#stopVersionCheckWeb`, hier als eigene kleine
+ * Kopie statt eines Imports, siehe Dateikopf). **Muß awaited werden** —
+ * `global-setup-attachment-persistence.ts` rief diese Funktion bisher ohne
+ * `await` auf; das kostete nichts, solange sie synchron war, erzeugt aber
+ * denselben Waisenprozeß, sobald sie — wie jetzt — auf die Signalisierung
+ * wartet und der Node-Prozeß vorher beendet wird.
+ */
+export async function stopAttachmentPersistenceWeb(child: ChildProcessWithoutStdin): Promise<void> {
+  if (process.platform !== 'win32' && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
+      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
+      child.kill('SIGTERM');
+    }
+    return;
+  }
   child.kill('SIGTERM');
 }

@@ -12771,3 +12771,1576 @@ jener Auflagen noch nicht gab, und sie kostet dort nicht eine Lücke, sondern Da
 Fehlerklasse, die an einer Tür geschlossen wird, sucht sich die nächste** — und die nächste war
 diesmal nicht eine Tür, sondern ein Aufräumlauf, den jemand gebaut hat, um eine meiner Auflagen zu
 erfüllen.
+
+---
+
+## 41. Prüfung T-325 (2026-09-12) — die Klasse „wer löscht, fragt" gemessen, und der sechste Weg am Versionswächter vorbei
+
+Gegenstand: Zweig `feature/outlook-anhaenge-und-versionspruefung`, Spitze `311b26e` gegen `4a52edc`
+(T-320 domain-dev, T-321 unit-tester; Vorlauf T-318 code-reviewer). Zwei Fragen, in dieser
+Reihenfolge: Ist die **Klasse** aus R-29 zu — „eine Datei entfernen, die eine andere Zeile noch
+nennt" —, und fängt der Versionswächter die **Bauart** aus 37 (T-287) oder nur die Bezeichner,
+an denen fünf Runden gescheitert sind.
+
+### 41.1 Was gefahren wurde, und was ausdrücklich nicht
+
+| Lauf | Ergebnis |
+|---|---|
+| `pnpm run typecheck` | grün, Exit 0 |
+| `pnpm run boundaries` | grün, „Notiz-Trennung: alle Schichten unverletzt" |
+| `node apps/local-api/scripts/proof-release-safety.mjs` | **76 bestanden, 0 fehlgeschlagen** |
+| `proof:layers` / `proof:callers` / `proof:route-policy` | 36/0, 74/0, 48/0 |
+| `vitest run packages/{domain,storage,export}/test apps/local-api/test` | 75 Dateien, **1 618 grün**, 2 übersprungen, Exit 0 |
+| `pnpm audit` | „No known vulnerabilities found" |
+| eigene Messung: 27 Namensgestalten gegen `attachmentTargetNamesFile` | 0 Abweichungen, 4 offene Gestalten (41.3) |
+| eigene Messung: 10 Gestalten Vorauswahl gegen Entscheidung, echte `node:sqlite` | **3 Asymmetrien** (41.4) |
+| eigene Messung: 10 Lagen `releaseUnclaimedBlobs`, echter Bestand, Attrappen-Blobport | 0 Abweichungen, Gegenprobe dreht auf rot (41.2) |
+| eigene Messung: stiller Ausschalter der Versionsprüfung, `tsc` Exit 0 | **vier Wächter bleiben grün** (41.6) |
+
+**Nicht gefahren, und keiner davon ist abgebrochen:** `pnpm check` als Ganzes, `test:coverage`,
+`test:rust`, `build`, `verify:bundle`, `contrast`, `test:e2e`, `proof:engines`,
+`proof:surface`/`clamp`/`foreign`/`locked`/`shell-surface`/`addin`/`taskpane`/`openapi`/
+`export`/`export-api`/`tags`/`conflicts`/`codepoints`/`migrations`/`template-fields`. **`proof:access`
+ist umgebungsbedingt nicht gelaufen:** Auf `127.0.0.1:17843` und `:17844` lauscht auf diesem Rechner
+ein echter `takt-local-api`, und der Lauf verlangt beide Ports für sich. Das ist kein Befund am Code,
+es ist eine Aussage über den Läufer — und es gehört hierher, weil ein Prüflauf, der an einem
+belegten Port scheitert, in der nächsten Runde als „grün" erinnert wird.
+
+**Semgrep (SAST, Geheimnisse, Lieferkette): nicht gefahren.** Der Guardian-Dienst antwortet
+„Not logged into Semgrep Guardian"; eine Anmeldung ist keine Handlung, die dieser Prüfer von sich
+aus vornimmt. **42Crunch-Audit gegen `apps/local-api/openapi/takt-local-api.yaml`: nicht gefahren** —
+der Änderungsumfang berührt keine Route und keine Beschreibung; `proof:openapi` ist von T-320
+unberührt geblieben.
+
+### 41.2 Die Löschklasse — das Inventar, an der Platte gemessen
+
+Gesucht über `removeImage|removeEmailFile|unlink|rmdir|removeFile|fs\.rm|remove_file|std::fs::remove`
+in `apps/local-api/src`, `packages/{storage,domain,export}/src`, `apps/{web,outlook-addin}/src` und
+`apps/desktop/src-tauri/src`. **Die Hülle entfernt keine Datei** — in Rust kommt keine dieser Marken
+vor, auch nicht in `attachment.rs`. Damit gibt es in diesem Erzeugnis genau **drei** Stellen, die
+eine Datei im Anwendungsdatenverzeichnis wirklich aufhebt: den Blob-Adapter, den Token-Speicher und
+den Exportordner. Alles andere geht über `AttachmentBlobPort`.
+
+| Stelle | Fragt? |
+|---|---|
+| `features/todos/attachments.ts:524` (`removeAttachment`) | **ja**, seit T-320 |
+| `features/todos/todos.ts:397` (`removeTodo`) | **ja**, seit T-320 |
+| `features/todos/orphan-sweep.ts:438` (beide Aufräumläufe) | ja, seit T-315 |
+| `features/todos/attachments.ts:288` (Rückbau nach gescheitertem `INSERT`) | nein, begründet im Quelltext |
+| `features/todos/email-attachments.ts:632`, `:693` | nein, begründet im Quelltext |
+| `access/attachment-store.ts` (`.tmp`, `wx`-Fehlschlag) | nein — eigene, gerade angelegte Datei |
+| `access/token-store.ts:136` | nein — eigene `.tmp` des Sitzungsgeheimnisses |
+| `packages/storage/src/sqlite/file-port.ts:228` (`removeFile`) | nein — Exportordner, eigener Namensraum |
+
+**Der Einspielweg entfernt keine Datei.** `importDataArchive` ersetzt `todo_attachment` vollständig
+(`replaceAll`) und **läßt die Dateien liegen**; was danach niemand nennt, ist ein Waisenkind und
+fällt erst im Aufräumlauf, also unter der weitesten Frage. Das ist die richtige Richtung und gehört
+festgehalten, weil es die einzige Stelle im Bestand ist, an der fremder Text Zeilen **verschwinden**
+läßt.
+
+`releaseUnclaimedBlobs` selbst ist an einem echten Bestand gemessen, nicht am Kommentar:
+Bildkopie mit fremdem Beansprucher (voller Pfad, andere Schreibweise, nachgestellter Punkt,
+`kind = 'link'`) bleibt jedes Mal liegen; ohne Beansprucher fällt sie; im Stapel fällt genau die
+unbeanspruchte; ein `target` ohne beurteilbaren Namen wird weder gefragt noch entfernt; wirft die
+Frage, fällt **nichts**, der Wurf wird nicht weitergereicht und die Zeile trägt
+`attachment_release_unavailable files=1 reason=typeerror`. **Die Gegenprobe zur Messung selbst** —
+Eigentümerantwort blind auf die leere Menge — läßt die Datei wieder fallen; die Messung hängt an der
+Frage und nicht an einem Zufall.
+
+**Die Klasse ist damit zu, und der Satz hat eine Grenze.** Zu ist sie an den acht Stellen, die es
+heute gibt, und an der Eigenschaft, daß jede Aufhebung einer Datei entweder durch
+`releaseUnclaimedBlobs` geht, durch den Aufräumlauf, oder eine Datei betrifft, die im **selben
+Aufruf** aus `randomUUID()` entstanden ist und nie eine Zeile bekommen hat. **Nicht** zu ist sie als
+Wächter: Kein Lauf dieses Bestands bemerkt eine **neunte** Stelle. T-320 hat einen solchen Lauf
+bewußt nicht gebaut, mit der Begründung, seine Menge wäre „an der Route aufgespannt" (E-099 Punkt 3).
+Diese Begründung trägt hier **nicht**: Die Menge „jeder Aufruf von `removeImage`/`removeEmailFile`
+außerhalb des Adapters" ist an der **Anforderung** aufgespannt, denn das Inventar oben zeigt
+gemessen, daß es keinen zweiten Weg zum Aufheben einer Blob-Datei gibt. **Gegenmittel A-A-102.**
+
+### 41.3 Der Namensvergleich als Löschentscheidung — 27 Gestalten, vier offene
+
+Gemessen gegen `attachmentTargetNamesFile` (`packages/domain/src/attachment.ts:1034`), die Achsen aus
+T-319 und die Angriffsnamen aus 39.4.1. Steuer- und Richtungszeichen stehen hier über ihre Kennung
+und nicht als Zeichen.
+
+**Trägt** (Eigentümer gefunden, Datei bleibt liegen): bloßer Name gegen bloßen Namen; voller
+POSIX- und Windows-Pfad; Groß-/Kleinschreibung auf **beiden** Seiten; nachgestellter Punkt und
+nachgestelltes Leerzeichen auf **beiden** Seiten (das ist die Symmetrie aus T-320); `%` und `_` im
+Namen samt Lockvogelzeile; Pfadtrenner im gesuchten Namen (buchstäblich am Ende, anderer Ordner
+trifft nicht); Name mit 400 Zeichen; `U+202E` im `target` vor dem Namen; `..` im `target`;
+Gerätename `CON.png`; Doppelendung `k.png.exe` gegen `k.png` trifft **nicht** und soll nicht.
+
+**Offen** — der Vergleich sagt „kein Eigentümer", und das ist die gefährliche Richtung:
+
+1. `U+00A0`, `U+200B` und `U+0000` am Ende des `target`.
+2. NFC gegen NFD desselben sichtbaren Zeichens, in beide Richtungen.
+
+**Alle vier sind auf der Namensseite unerreichbar, und der Boden dafür ist nicht der Vergleich.**
+Der Name, mit dem gefragt wird, entscheidet keine Löschung allein: Er geht danach an
+`removeImage`/`removeEmailFile`, und dort prüft der Adapter die **Form** —
+`GENERATED_NAME_SHAPE` (`access/attachment-store.ts:169`) und `GENERATED_FILE_NAME_SHAPE` (`:204`).
+Ein Name, der nicht aus 32 Hexziffern und einer kleingeschriebenen Endung besteht, bekommt
+`unknown_name`, und es fällt nichts. Gemessen an den beiden Wegen, auf denen fremder Text in
+`todo_attachment.target` kommt (Archiveinspielung, `sqlite3` nach VG-3): Ein Bildeintrag mit
+`target = '/anderswo/<hex>.png'` läuft in `unknown_name`, ein E-Mail-Eintrag mit bloßem Namen
+ebenfalls, weil `emailPathFromTarget` den neu gebildeten Pfad zeichengleich gegen den übergebenen
+hält. **Auf der Namensseite kommt deshalb ausschließlich ein erzeugter Name an, und der ist reines
+ASCII ohne Normalform und ohne Anhang.**
+
+Was damit **noch** offen bleibt, liegt auf der Seite der **anderen** Zeile und trifft genau die
+Fälle, in denen zwei verschiedene Zeichenketten dieselbe Datei meinen: die Windows-Kurznamensform
+(`AAAAAA~1.PNG`), ein sinnbildlicher oder harter Verweis, ein Verbindungspunkt, ein zweiter
+Laufwerksbuchstabe auf dasselbe Ziel. Jeder davon braucht eine Zeile, deren `target` der Benutzer
+selbst eingetragen hat (`kind = 'file'`, `origin = 'user'`), und kostet dann eine Datei, deren Zeile
+stehenbleibt — dieselbe Richtung wie der vierte Weg aus 40, nur eine Schreibweise tiefer.
+`attachmentNamesUnder` nennt die Kurznamensform ausdrücklich als hingenommen; für
+`attachmentTargetNamesFile`, wo dieselbe Blindheit **eine Datei** kostet und nicht eine Bremse,
+steht der Satz nirgends. **Gegenmittel A-A-104** — ein Satz, keine weitere Frage: Eine Frage, die
+das Dateisystem einbezöge, gehörte nicht in `@takt/domain`.
+
+### 41.4 Die Vorauswahl ist seit T-320 **enger** als die Entscheidung
+
+Das ist der eine Befund dieser Prüfung, der eine Zusage im Quelltext unwahr macht.
+`repo-attachments.ts` sagt über seinen eigenen `LIKE`: *„Die Vorauswahl hier ist absichtlich weiter
+als die Entscheidung. … Eine Vorauswahl, die enger wäre als die Entscheidung, hielte Zeilen zurück,
+die der Entscheider als Eigentümer erkannt hätte — und jede zurückgehaltene Zeile ist eine gelöschte
+Datei. Wer diese Anweisung ändert, prüft zuerst diesen Satz."* T-318 hat den Satz für die damalige
+Entscheidung nachgerechnet und bestätigt. T-320 hat danach **die Entscheidung** geändert, nicht die
+Anweisung — und damit den Satz gebrochen: Der neue dritte Zweig (`trimResolvedTail` auf den
+**gesuchten** Namen) verlangt nicht mehr, daß der Name wie übergeben eine Teilzeichenkette des
+`target` ist.
+
+Gemessen mit echter `node:sqlite` und dem echten Port (eine Zeile, ein Name):
+
+| gesuchter Name | `target` der Zeile | reine Entscheidung | Vorauswahl + Entscheidung |
+|---|---|---|---|
+| `<hex>.png.` | `/x/<hex>.png` | **wahr** | **falsch** |
+| `<hex>.png` + Leerzeichen | `/x/<hex>.png` | **wahr** | **falsch** |
+| `<hex>.png..` | `/x/<hex>.png` | **wahr** | **falsch** |
+
+**Heute fällt dadurch keine Datei**, und das ist gemessen und nicht gehofft: Beide Aufrufer geben
+einen Namen herein, der die Kürzung schon hinter sich hat (`attachmentTargetFileName` in
+`releaseUnclaimedBlobs`) oder die Form bestanden hat (`handleOf` → `pathOf` im Aufräumlauf). Der
+Befund ist deshalb **niedrig** und **latent** — und er ist genau die Bauart, die dieses Papier
+zweimal teuer bezahlt hat: eine tragende Eigenschaft, die niemand mehr prüft, weil sie im Kommentar
+als geprüft dasteht. **Gegenmittel A-A-103.**
+
+### 41.5 `attachmentNamesOfKind` — eine Bremse, keine Eigentümerantwort
+
+Die neue Portmethode liefert **nur** die Zeilen einer Art (`WHERE a.kind = ?`), also ausdrücklich
+nicht alle, die einen Namen beanspruchen. Für eine Löschentscheidung wäre das derselbe Fehler wie
+gar keine Frage. Sie entscheidet aber keine: Sie hat genau **einen** Aufrufer (`main.ts:383`), wird
+dort mit `attachmentNamesUnder` zu `expected` vereinigt, und `expected` speist ausschließlich
+`missing` — eine **Bremse** (`refused: 'contradiction'`). Eine zu kleine Antwort kostet dort eine
+Bremse, nie eine Datei; eine zu große kostet einen stillstehenden Aufräumlauf. Damit ist die Enge
+hier richtig, und der Name der Methode ist die einzige Gefahr daran: Er klingt wie ein Inventar.
+Die Portbeschreibung sagt es bereits („Was sie nicht ist: eine dritte unabhängige Achse"); ein
+Aufrufer, der sie je als Eigentümerantwort liest, hat den Satz gelesen und verworfen.
+
+**Ein Nebenbefund, nicht neu:** Ein präpariertes Archiv kann mit **einer** Bildzeile, deren `target`
+auf einen Ordner außerhalb zeigt, den Bildaufräumlauf dauerhaft bremsen. Das war über
+`claimed > owned` schon vorher so; die Vereinigung fügt keine neue Klasse hinzu. Der Zustand ist die
+sichere Richtung und steht als offene Frage bei T-320 — er gehört nicht in eine neue Nummer.
+
+### 41.6 Der sechste Weg am Versionswächter vorbei — gemessen
+
+Die Bauart aus 37 heißt: **Weil die Datensicherung `app_setting` als fremden Text vollständig
+ersetzt, ist jeder Leser dieser Tabelle, dessen Wert über die ausgehende Anfrage entscheidet, ein
+stiller Ausschalter der Versionsprüfung über ein präpariertes Archiv** — still im Sinn von A-18.11.
+Der Wächter mißt diese Bauart an fünf Gestalten: dem Bezeichner `lastCheckAt` im gelesenen Baum, dem
+Spaltennamen `last_version_check_at` im gelesenen Baum, dem unmittelbaren Datenbankgriff **im Ordner
+des Prüfers**, der Importmenge **dieses Ordners** und der Gestalt des Ports. T-320 hat die fünfte
+Umgehung geschlossen (`src/**/test/**` liegt jetzt im Baum, dazu das Übersetzungsprogramm) — das ist
+nachgefahren und trägt: 76/0, und der Prüfsatz ZZ-F′ steht mit eigenem `erwartet` daneben.
+
+**Die Bauart ist damit nicht zu.** Gemessen in einer Meßkopie des Zweigs (`git archive` von
+`311b26e`, Kratzverzeichnis, `node_modules` verlinkt): ein Ausschalter in
+`apps/local-api/src/composition.ts` — **außerhalb** des Prüferordners —, der eine **andere** Spalte
+von `app_setting` liest (`locale`) und daraus `startDelayMs` und `intervalMs` auf rund 24 Tage setzt.
+Defensiv geschrieben, damit kein Prüflauf an einem Wurf statt an einer Messung scheitert.
+
+| Lauf über die Meßkopie **mit** dem Ausschalter | Ergebnis |
+|---|---|
+| `tsc -p apps/local-api/tsconfig.json --noEmit` | **Exit 0** |
+| `proof:release-safety` | **76 bestanden, 0 fehlgeschlagen** |
+| `proof:route-policy` | 48/0 |
+| `proof:layers` | 36/0 |
+
+Kein Bezeichner, kein Spaltenname, keine Datei im Prüferordner, keine Änderung am Port. **Die
+Lückenliste des Wächters ist dabei ehrlich** — sie sagt bei `checkNoStoreReadback` selbst, ein
+Prüffall am Verhalten trage „nur so weit, wie die Nähte verdrahtet sind", und eine neue optionale
+Option bliebe ungesetzt und grün. T-320 verspricht also nicht mehr, als es gemessen hat. Offen ist
+die **Klasse**, und sie ist offen an einer Stelle, an der niemand hinsieht: der **Verdrahtung**.
+Heute ist dort nichts — `createVersionChecker` bekommt `logger`, `now`, eine Abholfunktion aus dem
+Prüfpfad und einen **schreibenden** Verschluß, `versionCheck.start()` steht unbedingt im Rumpf von
+`main()`, und keine der fünf Datenbankmarken kommt in `composition.ts` oder `main.ts` vor (gezählt:
+0 von 5 in beiden Dateien). Genau deshalb kostet ein Wächter darüber heute nichts.
+**Gegenmittel A-A-105.**
+
+### 41.7 Was hingenommen bleibt, ohne Gegenmittel
+
+**Zwischen der Frage und dem Aufheben liegt ein Augenblick.** `releaseUnclaimedBlobs` fragt nach dem
+`COMMIT` und entfernt danach. Eine Zeile, die in diesem Fenster entsteht und dieselbe Datei nennt,
+verliert sie. Der Aufräumlauf kehrt dieselbe Reihenfolge um („erst das Verzeichnis, dann der
+Bestand") und überlebt das Fenster; hier läßt sich das nicht spiegeln, weil die Datei bereits liegt.
+Das Fenster ist Millisekunden breit und verlangt eine Zeile, die genau auf Takts eigene Kopie zeigt
+— und vor T-320 fiel die Datei in **jedem** dieser Fälle. Die Richtung ist besser geworden;
+hingenommen, benannt, keine Nummer.
+
+### 41.8 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-102** | **Eine neunte löschende Stelle darf nicht unbemerkt entstehen.** Ein Prüfsatz nagelt beide Richtungen fest: (1) keine Marke `fs.rm`/`unlink`/`rmdir`/`rmSync` in `apps/local-api/src` und `packages/*/src` außerhalb von `access/attachment-store.ts`, `access/token-store.ts` und `sqlite/file-port.ts`; (2) jeder Aufruf von `removeImage`/`removeEmailFile` außerhalb des Adapters liegt in einer benannten Liste, und **eine Liste, die ins Leere zeigt, ist ein Befund**. Die Menge ist an der Anforderung aufgespannt und nicht an einer Route: Das Inventar aus 41.2 zeigt gemessen, daß es keinen zweiten Weg zum Aufheben einer Blob-Datei gibt | Eine Meßkopie mit einem neunten `removeImage`-Aufruf ohne Frage wird rot; eine Meßkopie, in der ein Listeneintrag verschwindet, ebenfalls |
+| **A-A-103** | **Die SQL-Vorauswahl ist wieder weiter als die Entscheidung.** `attachmentsNamingFiles` sucht mit der Teilzeichenkette, die die Entscheidung **mindestens** verlangt — also mit dem um nachgestellte Punkte und Leerzeichen gekürzten Namen —, und `@takt/domain` stellt sie als eine ausgewiesene Funktion bereit, damit die Regel an einer Stelle bleibt. Wer statt dessen die Vorbedingung zusagt („es kommen nur gekürzte oder formgeprüfte Namen herein"), schreibt sie an `attachmentsNamingFiles` und **mißt** sie | Die drei Gestalten aus 41.4: gesuchter Name mit nachgestelltem Punkt, mit nachgestelltem Leerzeichen, mit zwei Punkten — Vorauswahl und reine Entscheidung sagen dasselbe. Gegenprobe: die alte Fassung wird an genau diesen drei rot |
+| **A-A-104** | **Der Satz über die Grenze des Vergleichs steht bei ihm.** Im Kopf von `attachmentTargetNamesFile` steht, was er **nicht** entscheidet: Kurznamensform, sinnbildlicher und harter Verweis, Verbindungspunkt, zweiter Laufwerksbuchstabe, Normalform und Groß-/Kleinschreibung außerhalb von ASCII. Dazu der Boden, der sie unschädlich macht — auf der Namensseite kommt ausschließlich ein erzeugter Name an, und die Form prüft der Adapter noch einmal. Keine weitere Frage: Eine Frage an das Dateisystem gehört nicht in die Domäne | Der Satz steht da, und er nennt die vier Gestalten aus 41.3 über ihre Kennung statt als Zeichen |
+| **A-A-105** | **Die Verdrahtung der Versionsprüfung wird gemessen, nicht gelesen.** Eine sechste Gestalt in `checkNoStoreReadback`: (a) das Aufrufobjekt von `createVersionChecker` trägt ausschließlich die festgenagelten Schlüssel, jeder mit einer festgenagelten Wertform — `logger`, die Uhr, die Abholfunktion aus den Optionen des Zusammenbaus, ein Verschluß mit **einer** Methode `write`; (b) `versionCheck.start()` kommt genau einmal vor und **nicht** in einer Bedingung; (c) zusätzlich und billig: keine der fünf Datenbankmarken in einer Datei, die `createVersionChecker` oder `versionCheck` nennt. **(c) allein trägt nicht** — der Weg über `unit.settings.load()` trägt keine der Marken —, tragend sind (a) und (b). Beide sind mit dem Übersetzungsprogramm meßbar, das der Lauf seit T-320 ohnehin auflöst | Der Ausschalter aus 41.6, zeichengleich in eine Meßkopie gesetzt, wird rot; dazu eine Gegenprobe je Teil (ein fünfter Schlüssel im Aufrufobjekt, ein `if` um `start()`) |
+
+### 41.9 Urteil
+
+**Für die Löschklasse: freigegeben.** Die Frage ist an jeder der drei löschenden Stellen dieselbe und
+die weiteste, die eine namensbasierte Regel stellen kann; die drei Stellen ohne Frage sind über eine
+**Eigenschaft** begründet und nicht über Bequemlichkeit; der Fehlschlag der Frage läßt nichts fallen
+und ist nicht still; die Gegenprobe zur Messung dreht auf rot. R-29 ist damit an seinen Stellen zu —
+**als Wächter ist die Klasse offen** (A-A-102), und das ist der Satz, mit dem der Eintrag
+weiterlebt, nicht der, mit dem er geschlossen wird.
+
+**Für den Versionswächter: Nacharbeit, und sie ist nicht dringend.** Die fünfte Umgehung ist
+geschlossen und nachgefahren. Der sechste Weg ist gemessen, er liegt in der Verdrahtung, und dort
+steht heute nichts, was ihn benutzt. Was fehlt, ist der Wächter darüber (A-A-105) — nicht eine
+Behebung, denn es gibt nichts zu beheben.
+
+**Der Satz, der mir aus dieser Prüfung bleibt.** 41.4 ist der zweite Fall in diesem Papier, in dem
+eine Zusage nicht durch einen neuen Angriff unwahr wurde, sondern dadurch, daß jemand die **andere**
+Hälfte eines Paares verbessert hat. T-320 hat eine Unsymmetrie im Vergleich behoben — richtig, mit
+Begründung, mit Prüffall — und dabei die Ungleichung zwischen Vorauswahl und Entscheidung gekippt,
+die drei Zeilen weiter als tragend ausgeschrieben steht. **Wer eine Seite einer Ungleichung weiter
+macht, hat die Ungleichung angefaßt.** Der Kommentar, der das verlangt, stand da; gelesen hat ihn
+niemand, weil er auf der Seite stand, die sich nicht geändert hat.
+
+**Nachtrag vom 2026-09-13:** A-A-105 ist gebaut (T-327) und in Abschnitt 42 nachgemessen. Die
+Auflage steht, die **Klasse** aus 41.6 steht nicht — zwei Wege daran vorbei sind dort gemessen.
+
+---
+
+## 42. Nachmessung T-332 (2026-09-13) — A-A-105 gebaut, die Klasse offen: zwei Ausschalter, die kein Lauf sieht, und eine Rückfrage, die man wegrollen kann
+
+Gegenstand: Arbeitsbaum des Zweigs `feature/outlook-anhaenge-und-versionspruefung` über `311b26e`
+— T-327 (`apps/local-api/scripts/proof-release-safety.mjs`), T-326 (`apps/web/**`), T-328
+(`*/test/**`). Zwei Fragen: Ist A-A-105 **gebaut**, gemessen mit einem Ausschalter, den der Wächter
+nicht kennt — und hat der Oberflächenumbau eine Fläche nach außen geöffnet oder eine Zusicherung
+still verloren.
+
+### 42.1 Was gefahren wurde, und was ausdrücklich nicht
+
+| Lauf | Ergebnis |
+|---|---|
+| `pnpm run typecheck` (Arbeitsbaum) | **Exit 0** — der von T-327 gemeldete Rest aus T-326 ist weg |
+| `pnpm run boundaries` | grün, „Notiz-Trennung: alle Schichten unverletzt" |
+| `pnpm run proof:shell-surface` | **7 Prüfungen und 54 Gegenproben bestanden**; `connect-src` trägt genau die vier zugesagten Marken, `img-src` bleibt `'self'` und `data:` |
+| `pnpm run proof:clamp` | **21 bestanden, 0 fehlgeschlagen**; 35 deckelnde Klassen aus 7 Stilblättern, 20 Anzeigestellen in 9 Bausteinen, 71 geprüfte Elemente |
+| `proof:release-safety` in der Meßkopie, unverändert | **106 bestanden, 0 fehlgeschlagen** (zweimal: vor und nach allen Eingriffen) |
+| `proof:layers` / `proof:route-policy` / `proof:callers` in der Meßkopie | 36/0, 48/0, 74/0 |
+| eigene Messung K-0 (Kontrolle, bekannte Bauart) | **105/1**, vier Befunde aus zwei Zweigen (42.3) |
+| eigene Messung K-1 (neue Gestalt, Verdrahtung unberührt) | **106/0 grün** — und die Prüfung ist tot (42.4) |
+| eigene Messung K-2 (neue Gestalt, erlaubter Schlüssel) | **106/0 grün** — und die Anfrage geht nie hinaus (42.5) |
+| eigene Messung K-3 (zweites Mitglied im Verschluß) | **rot, zweifach**: `tsc` TS2379 **und** 105/1 (42.6) |
+| eigene Messung: Wirkung von K-1 und K-2 am echten Prüfer, echte `node:sqlite` | 0 statt 14 ausgehende Anfragen (42.4, 42.5) |
+| eigene Messung: umschließender Block je Farbthema, Chromium 1280 × 820 | Rahmen und Laufbereich sauber, `.card` nicht (42.8.3) |
+
+**Nicht gefahren, und keiner davon ist abgebrochen:** `pnpm check` als Ganzes, `test:coverage`,
+`test:rust`, `build`, `verify:bundle`, `contrast`, `audit`, `proof:engines`, `test:e2e` (T-330
+arbeitet parallel daran) und die **portgebundenen** Nachweisläufe `proof:access`, `conflicts`,
+`tags`, `export-api`, `addin-wiring`: Auf `127.0.0.1:17843` und `:17844` läuft die Anwendung des
+Benutzers, und ein Lauf, der an einem belegten Port scheitert, heißt „nicht gemessen" und nicht
+„grün" (derselbe Satz wie in 41.1).
+
+**Semgrep (SAST, Geheimnisse, Lieferkette): nicht gefahren.** Der Guardian-Dienst antwortet
+unverändert „Not logged into Semgrep Guardian"; eine Anmeldung nimmt dieser Prüfer nicht von sich
+aus vor. **42Crunch-Audit: nicht gefahren** — der Änderungsumfang berührt keine Route und keine
+Zeile von `apps/local-api/openapi/takt-local-api.yaml`.
+
+### 42.2 Die Meßkopie, und warum sie diesmal ohne Eingriff in den Wächter mißt
+
+Kopie des **Arbeitsbaums** (nicht `git archive`: der Wächter selbst ist unversioniert geändert),
+ohne `.git`, ohne `apps/desktop/src-tauri/target`, mit einem Verweis der Wurzel-`node_modules` auf
+das echte Vorhaben. Die paketeigenen `node_modules` sind mitkopiert, und ihre Verweise auf
+Arbeitsbereichspakete sind **relativ** (`apps/desktop/node_modules/@takt/local-api` zeigt auf
+`../../../local-api`). Damit löst jedes der sieben Übersetzungsprogramme **innerhalb** der Kopie
+auf, alle Untergrenzen halten, und die Untergrenze von `@takt/desktop` mußte **nicht** angefaßt
+werden — anders als in der Meßkopie von T-327, in der sie für die Messung auf 1 stand. Der Wächter,
+der hier mißt, ist damit zeichengleich der gebaute.
+
+Nullpunkt vor dem ersten Eingriff: **106/0**. Nullpunkt nach dem letzten Rücksetzen: **106/0**.
+
+### 42.3 Die Kontrolle zuerst — sonst mißt eine grüne Zahl gar nichts
+
+Eigene Fassung des Ausschalters aus 41.6, nicht die von T-327 übernommene: `SELECT locale FROM
+app_setting` in `composition.ts`, daraus `startDelayMs` und `intervalMs` auf rund 24 Tage, als
+Streuung `...tempo` in das Aufrufobjekt.
+
+`tsc` Exit 0, Lauf **105 bestanden, 1 fehlgeschlagen**, vier Befunde aus **zwei** unabhängigen
+Zweigen: 6b („streut Identifier ein — die Schlüsselmenge ist damit nicht gemessen") und dreimal 6d
+(`prepare(`, `SELECT `, `FROM app_setting` in der Verdrahtungsdatei). Damit ist gemessen, daß der
+Lauf in dieser Kopie **lebt** und die Bauart aus 41.6 wirklich fängt. T-327s Zahl ist unabhängig
+nachgefahren.
+
+### 42.4 K-1 — der Ausschalter, der die Verdrahtung nicht anfaßt
+
+`composition.ts` und `main.ts` bleiben **zeichengleich**. Geändert ist eine einzige Datei,
+`packages/storage/src/sqlite/repo-version-check.ts`, und zwar die Stelle, an der ein Schreibzugriff
+auf `app_setting` ohnehin steht: `recordCheck` wartet vor dem `UPDATE` einen „Mindestabstand"
+ab, den es aus `app_setting.locale` liest. Ein unlesbarer Wert bedeutet keinen Abstand; der
+präparierte Wert bedeutet rund 24 Tage.
+
+**Warum das die Versionsprüfung abschaltet, und zwar vollständig:** `remember()` steht seit T-279
+**vor** der Anfrage (`version.ts:592` — `await remember(options.now())`, danach erst
+`await source.latest(...)` auf `:594`), und `remember` **wartet** auf `store.write` (`:385`). Ein
+**Wurf** von dort ist behandelt — `store = null`, eine Zeile im Protokoll, der Betrieb läuft
+weiter. Eine Zusage, die **nie eintrifft**, ist nicht behandelt: `inFlight` steht seit `:578` auf
+wahr, es wird kein neuer Zeitgeber gestellt, und der Prüfer ist für die Laufzeit des Prozesses tot.
+
+Gemessen am echten Prüfer mit echter `node:sqlite` und einer Attrappe als Quelle, 400 ms je Lage,
+`intervalMs` 30 ms:
+
+| Lage | ausgehende Anfragen | Zustand | Protokoll | `last_version_check_at` |
+|---|---|---|---|---|
+| Original, `locale = de-DE` | 14 | `known` | leer | gesetzt |
+| Original, `locale` präpariert | 14 | `known` | leer | gesetzt |
+| K-1, `locale = de-DE` | 14 | `known` | leer | gesetzt |
+| **K-1, `locale` präpariert** | **0** | `unknown` | **leer** | `null` |
+
+**Es ist stiller als ein Fehlschlag.** Ein Fehlschlag schreibt seinen Grund ins Protokoll (A-18.11);
+hier steht nicht eine Zeile. Der Prozeß, der die vier Lagen nacheinander fuhr, kehrte nicht zurück
+— das ist derselbe Befund noch einmal, von der anderen Seite gesehen.
+
+Die Läufe darüber, alle in der Meßkopie mit K-1:
+
+| Lauf | Ergebnis |
+|---|---|
+| `tsc -p packages/storage/tsconfig.json --noEmit` / `apps/local-api` | Exit 0 / Exit 0 |
+| `proof:release-safety` | **106 bestanden, 0 fehlgeschlagen** |
+| `proof:layers` / `proof:route-policy` / `proof:callers` | 36/0 / 48/0 / 74/0 |
+
+Kein Bezeichner, kein Spaltenname außer dem, der dort ohnehin steht, keine Datei im Prüferordner,
+keine Änderung am Port — **und keine Änderung an der Verdrahtung**. Gestalt 6 mißt, wer den Prüfer
+baut, welche Schlüssel das Aufrufobjekt trägt und in welcher Form. Sie mißt nicht, **was der Wert
+hinter einem erlaubten Schlüssel tut**, und `store` ist der Wert, auf den die ausgehende Anfrage
+wartet. **Gegenmittel A-A-106**, und es ist ausnahmsweise keines am Wächter, sondern am Code: Ein
+fremdes Versprechen darf auf dem Weg zur Anfrage nicht unbegrenzt warten dürfen.
+
+### 42.5 K-2 — der erlaubte Schlüssel mit der erlaubten Wertform
+
+Zweiter Weg, andere Richtung. In `composition.ts` steht jetzt
+
+    const releaseSource = options.releaseSource ?? releaseWindow(database);
+    …
+    ...(releaseSource === undefined ? {} : { source: releaseSource }),
+
+und `releaseWindow` liegt in `apps/local-api/src/features/settings/` — **außerhalb** des
+Prüferordners, ohne eine Einfuhr aus dem Prüfmodul, mit der Datenbankmarke bei sich. Es liefert im
+Regelfall `undefined` (dann gilt die eingebaute Quelle) und beim präparierten Wert eine Quelle, die
+ohne Netzweg `{ ok: false, reason: 'unreachable' }` beantwortet.
+
+`source` ist ein **festgenagelter** Schlüssel, und `Identifier` ist eine **erlaubte** Wertform.
+6d bleibt grün, weil in der Verdrahtung keine Marke steht. 6a bleibt grün, weil die Nachbardatei das
+Prüfmodul nicht einführt. 6c ist unberührt.
+
+| Lauf | Ergebnis |
+|---|---|
+| `tsc -p apps/local-api/tsconfig.json --noEmit` | Exit 0 |
+| `proof:release-safety` | **106 bestanden, 0 fehlgeschlagen** |
+| `proof:layers` / `proof:route-policy` / `proof:callers` | 36/0 / 48/0 / 74/0 |
+| Wirkung, echter Prüfer, 400 ms | `locale = de-DE`: 14 Anfragen, `known`. Präpariert: **0 Anfragen**, `unknown` |
+
+**Im Erzeugnis greift es.** `apps/desktop/sidecar/entry.ts` ruft `main()` **ohne** Optionen,
+`main.ts:221` reicht `releaseSource` nur weiter, wenn es gesetzt ist — im ausgelieferten Zusammenbau
+ist es also `undefined`, und der Rückfall auf `releaseWindow` ist der Betriebsfall und nicht der
+Prüffall. Ein Unterschied zu K-1: Hier steht je Versuch eine Zeile `version_check_unreachable` im
+Protokoll. Still im Sinn von A-18.11 ist auch das — der Benutzer sieht nichts.
+
+**Was hier zu eng gefaßt war, ist die Wertform.** Heute steht an dieser Stelle
+`options.releaseSource`, also ein `PropertyAccessExpression`. `Identifier` ist erlaubt, ohne daß
+es heute gebraucht würde. **Gegenmittel A-A-107** — die Verengung kostet an diesem Bestand nichts
+und macht K-2 rot.
+
+### 42.6 K-3 — was **nicht** trägt, und das gehört genauso hierher
+
+A-A-105a verlangt im Wortlaut „ein Verschluß mit **einer** Methode `write`"; der gebaute Leser
+nagelt nur die **Art** des Werts fest (Objektliteral), nicht seine Mitglieder. Gemessen mit einem
+zweiten Mitglied (`zuletzt: () => versionCheckState.lastCheckAt()`): Der **Compiler** weist es ab
+(`TS2379`, `exactOptionalPropertyTypes`, „`zuletzt` does not exist in type
+`VersionCheckStorePort`"), und der Lauf wird zusätzlich rot — Gestalt 1 sieht `lastCheckAt`
+außerhalb von Deklaration und Adapter (105/1). Die engere Zusage ist damit an anderer Stelle
+gedeckt; kein Befund.
+
+### 42.7 A-A-105 ist gebaut — und die Klasse aus R-30 ist es nicht
+
+**Gebaut.** Die Auflage aus 41.8 steht im Lauf, und zwar weiter als vorgeschlagen: (a) die
+Schlüssel **und** ihre Wertformen, dazu eine Einfuhrliste des Prüfmoduls in beiden Richtungen, (b)
+`start()` genau einmal, gerufen, unbedingt, mit dem Feldnamen **aus der Deklaration** statt aus dem
+Wächter, (c) keine Datenbankmarke in der Verdrahtung. Die Kontrolle in 42.3 ist mit einem eigenen
+Ausschalter gefahren und wird rot. Der Lauf steht bei 106/0, und seine Untergrenzen fangen den
+leeren Leser.
+
+**Die Berichtigung, um die T-327 gebeten hat, ist gemessen und wird aufgenommen:** (c) ist
+**baubar** — heute stehen 0 von 5 Marken in `composition.ts` und `main.ts` — und **trägt allein
+nicht**; der Weg über einen Nachbarn trägt keine Marke (T-327 M-5, und 42.5 zeigt dasselbe an einer
+Stelle, an der auch 6b nichts sieht).
+
+**Und eine zweite, die weiter reicht:** (a) bis (d) **zusammen** schließen die Klasse aus 41.6
+nicht. Die Klasse heißt „jeder Leser von `app_setting`, dessen Wert über die ausgehende Anfrage
+entscheidet". Gestalt 6 mißt die **Gestalt der Verdrahtung**; K-1 faßt sie nicht an, K-2 hält sich
+an sie. Der Satz, der über diesen Lauf gesagt werden darf, ist deshalb genau dieser: *Er mißt, wer
+den Prüfer baut, mit welchen Schlüsseln und daß er gestartet wird.* Nicht: *Der Bestand kann die
+Versionsprüfung nicht abschalten.*
+
+**R-30 kann geschlossen werden** — die Auflage, an der er hing, steht. Was übrig ist, ist eine
+neue, engere Sache und gehört unter eine eigene Nummer, mit A-A-106 und A-A-107 als Inhalt.
+
+### 42.8 Der Oberflächenumbau (T-326) — eine Fläche, die nicht entstand, und eine, die schon offen war
+
+#### 42.8.1 Nach außen ist nichts entstanden
+
+Der Änderungsumfang ist `apps/web/src/**`: 18 geänderte Dateien, eine neue (`shared/ui/ScreenBody.tsx`),
+2 430 Zeilen dazu. Gesucht über **alle hinzugefügten Zeilen** nach `fetch(`, `XMLHttpRequest`,
+`WebSocket`, `EventSource`, `http://`, `https://`, `src=`, `@import`, `url(`, `import(`,
+`navigator.`, `window.open`, `localStorage`, `sessionStorage`, `indexedDB`, `postMessage`:
+**null Treffer**. `apps/desktop/**` ist unberührt, `tauri.conf.json` also auch; `proof:shell-surface`
+mißt die vier Marken in `connect-src` zeichengleich und bleibt grün (7 + 54). `router.ts` bekommt
+**keine** neue Route, sondern eine vollständig getypte Liste der elf vorhandenen.
+
+#### 42.8.2 Kein Satz ist verlorengegangen
+
+Gemessen nach der Vorschrift aus E-087, über den **Wortlaut** und nicht über die Zeile: 233
+satzartige Zeichenketten stehen in den **entfernten** Zeilen des Umbaus; 220 davon stehen unverändert
+wieder in den Quellen. Von den 13 übrigen sind zwölf **Prosa aus CSS-Kommentaren** (die
+Begründungstexte der alten Fassung) und eine ist ein Umbruch: `label="Zeiterfassung wird geladen"`
+steht seit dem Umbau auf einer eigenen Zeile.
+
+Die beiden Sätze, nach denen die Aufgabe ausdrücklich fragt, stehen und sind erreichbar:
+
+- **Der Ordnerbefund** (B-6.1 Punkt 1) steht in `ExportScreen.tsx:599` in einer **festen** Leiste
+  (`.screen__bar`) **über** dem Laufbereich. Er kann nicht weggerollt werden, und die Begründung
+  daneben ist der Grund, warum „Export ausführen" gesperrt ist.
+- **Der Base64-Satz** steht in `ExportScreen.tsx:719` (`<Base64Notice/>`) im Laufbereich, in der
+  Karte „Vorlage und Rundung", also in der Ansicht und nicht in einem Hilfetext — wie B-6.1
+  Punkt 1 es verlangt.
+- **Die Rückfrage vor dem Öffnen einer Datei** (A-19) liegt in
+  `features/todos/AttachmentOpenDialog.tsx`; die Datei ist von T-326 **nicht angefaßt**, der volle
+  Pfad steht unverändert darin. Erreichbar ist sie trotzdem nicht überall — siehe 42.8.3.
+
+#### 42.8.3 Der umschließende Block: der Rahmen ist sauber, die Karte ist es nicht
+
+Gemessen im Browser (Chromium über Playwright, 1280 × 820, echte Stilblätter in der Ladereihenfolge
+aus `index.html` und `main.tsx`, nachgebaute Klassenkette aus dem Quelltext), für sieben Farbthemen,
+an `.app`, `.app__main`, `.screen`, `.screen__body`, `.card`, `.app__sidebar`, `.app__header`:
+
+| Farbthema | `transform` / `filter` / `backdrop-filter` / `perspective` / `will-change` / `contain` |
+|---|---|
+| klassisch, velvet, zen, lines, rainbow | **keine** an keinem der sieben Kästen |
+| glass, liquid-glass | **keine** an `.app`, `.app__main`, `.screen`, `.screen__body` — `backdrop-filter: blur(16px) saturate(1.15)` an **`.card`**, `.app__sidebar`, `.app__header` |
+
+**Damit ist die Auflage aus T-323 eingehalten:** Rahmen und Laufbereich tragen keine dieser
+Eigenschaften, in keinem Farbthema. `.screen__body` trägt `position: relative` — das bildet weder
+einen Stapelzusammenhang noch einen umschließenden Block für feste Positionierung, und die Begründung
+im Quelltext ist an dieser Stelle richtig.
+
+**Eine Ebene tiefer stimmt es nicht.** `backdrop-filter` macht die **Karte** zum umschließenden
+Block für jedes feste Kind. Und ein Dialog hängt dort: `Attachments.tsx:335` (die Rückfrage vor dem
+Öffnen, A-19) und `:352` (die Rückfrage vor dem Entfernen eines Anhangs) stehen im Rumpf der Karte
+„Anhänge", `TodoDetailScreen.tsx:323`. Gemessen an derselben Kette, mit einem Dialog von 413 px
+Höhe:
+
+| Farbthema | Abdunklung (`.scrim`) | Dialog | Knopf „Öffnen" |
+|---|---|---|---|
+| klassisch, velvet | 1280 × 820 bei (0,0) — das Fenster | bei y = 215 | im Fenster, treffbar |
+| **glass, liquid-glass** | **644 × 1344 bei (265,121)** — die Karte | bei y = 591 | **bei y = 952, außerhalb des Fensters, nicht treffbar** |
+
+Nach 600 px Bildlauf im Laufbereich steht dieselbe Abdunklung bei y = −479: **die Rückfrage rollt
+mit.** `.card` trägt zusätzlich `overflow: hidden`, schneidet also an ihrer Kante ab.
+
+**Das ist nicht durch T-326 entstanden.** Dieselbe Messung mit den Stilblättern aus `HEAD`
+(`git show HEAD:apps/web/src/styles/*.css`) ergibt für glass dieselbe Geometrie: 644 × 1344 bei
+(265,121). Ursache ist die Verbindung aus einer Palette nach A-21 (`theme-palettes.css:453` bis `:457`) und
+einem Dialog, der im Quelltext **innerhalb** einer Karte steht — beides älter als der Umbau. Was
+T-326 hinzufügt, ist der Laufbereich, in dem die falsch verankerte Fläche jetzt **wegrollt** statt
+mit der ganzen Ansicht zu wandern; und was T-326 **nicht** getan hat, ist die verbotene Eigenschaft
+an Rahmen oder Laufbereich zu setzen.
+
+Betroffen sind 2 der 19 wählbaren Paletten (`glass`, `liquid-glass`, `themePresets.ts:18` und `:20`); die
+Vorgabe `classic` ist es nicht. Bei `prefers-reduced-transparency: reduce` fällt `backdrop-filter`
+weg (`theme-palettes.css:484` bis `:488`) und mit ihr der Fehler. **Gegenmittel A-A-108.**
+
+Warum das eine Sicherheitsfrage ist und nicht nur eine hübsche: Die Rückfrage vor dem Öffnen einer
+Datei ist die **einzige** Kontrolle zwischen einem Pfad aus dem Bestand und der Standardanwendung
+des Systems (Abschnitt 19, A-19.14). Eine Bestätigungsfläche, deren Knöpfe außerhalb des Fensters
+liegen und deren Abdunklung die Anwendung nicht verdeckt, ist keine Bestätigungsfläche mehr,
+sondern ein Kasten in einer Karte. Der Fokusfang bleibt (er hängt am Dokument, T-152), die Tastatur
+trägt also weiter — die Maus nicht.
+
+#### 42.8.4 Der Schnitt aus T-302 hält
+
+`proof:clamp` steht bei **21 bestanden, 0 fehlgeschlagen**: 35 deckelnde Klassen (T-302 zählte 34,
+der Umbau bringt eine dazu) gegen 20 Anzeigestellen für fremde Namen in 9 Bausteinen, 71 geprüfte
+Elemente einschließlich der Eltern, davon 9 Gegenproben. Die neuen Zugänglichkeitsnamen der
+Laufbereiche (`ScreenBody label={foreignText(...)}`) sind keine sichtbare Anzeigestelle und tragen
+`foreignText` bereits.
+
+### 42.9 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-106** | **Die ausgehende Anfrage wartet auf kein fremdes Versprechen ohne Frist.** `remember()` darf den Weg zur Anfrage nicht blockieren können: entweder wird `store.write` nicht mehr abgewartet, oder es bekommt eine Frist, nach der derselbe Weg gilt wie beim Wurf — `store = null`, **eine** Zeile im Protokoll, der Takt läuft weiter. Der Grund für die Reihenfolge aus T-279 (erst merken, dann fragen) bleibt davon unberührt; heute ist die Zusage ohnehin synchron erfüllt, die Frist kostet also nichts | Ein Prüffall mit einem Speicher, dessen `write` **nie** eintrifft: Die Anfrage geht trotzdem hinaus, `inFlight` fällt zurück, und im Protokoll steht genau eine Zeile. Gegenprobe: der heutige Stand liefert 0 Anfragen und eine leere Zeilenliste (42.4) |
+| **A-A-107** | **Die Wertform von `source` ist so eng wie der heutige Bestand.** In `CHECKER_CALL_KEYS` trägt `source` nur noch `PropertyAccessExpression` — die Naht ist die Abholfunktion **aus den Optionen des Zusammenbaus** (E-066 Punkt 1) und kein beliebiger örtlicher Bezeichner. Dasselbe gilt für jeden künftigen Schlüssel: Die erlaubte Form ist die gebaute, nicht die denkbare | K-2 aus 42.5, zeichengleich in eine Meßkopie gesetzt, wird rot; der heutige Bestand (`source: options.releaseSource`) bleibt grün |
+| **A-A-108** | **Eine Bestätigungsfläche hängt am Fenster, nicht an einer Karte.** `.scrim` bekommt einen umschließenden Block, der garantiert das Fenster ist — der gerade Weg ist ein Portal nach `document.body` in `DialogSurface`, an **einer** Stelle für alle Dialoge. Solange das nicht steht, darf kein Dialog im Rumpf einer Karte stehen (heute: `Attachments.tsx:335` und `:352`). Ein Lauf darüber mißt die **Anforderung** und nicht die Stelle: kein `.scrim` hat einen Vorfahren mit `backdrop-filter`, `filter`, `transform`, `perspective`, `contain` oder `will-change` | Die Messung aus 42.8.3 in `glass`: Abdunklung 1280 × 820 bei (0,0) statt 644 × 1344 bei (265,121), Knopf im Fenster und treffbar. Gegenprobe: der heutige Stand ist an genau diesen beiden Zahlen rot |
+
+### 42.10 Urteil, je Strang
+
+**A-A-105 und der Versionswächter: freigegeben, mit einer Berichtigung und einer Verengung.** Die
+Auflage aus 41.8 ist gebaut und mit einer eigenen Kontrolle nachgemessen (105/1 bei der bekannten
+Bauart). Die Zusage darüber darf nur so weit gehen, wie 42.7 sie zieht: gemessen ist die
+**Verdrahtung**, nicht die Klasse. A-A-106 und A-A-107 sind **Nacharbeit, nicht dringend** — am
+Bestand ist heute nichts abgeschaltet, und beide Wege verlangen fremden Code **und** ein
+präpariertes Archiv.
+
+**Der Oberflächenumbau, Fläche nach außen: freigegeben.** Keine Adresse, kein Abrufweg, keine
+Erweiterung der Zusage; `proof:shell-surface` und `proof:clamp` grün, `typecheck` und `boundaries`
+grün.
+
+**Der Oberflächenumbau, Erreichbarkeit der Rückfrage: nicht freigegeben** — A-A-108. Der Befund ist
+älter als T-326 und gehört nicht diesem Auftrag zur Last; er ist hier zum ersten Mal **gemessen**,
+und er trifft die Rückfrage aus A-19. Zwei Paletten von neunzehn, und in beiden liegt der Knopf
+„Öffnen" außerhalb des Fensters.
+
+**Der Satz, der mir aus dieser Prüfung bleibt.** Fünf Runden lang wurde dieser Wächter an
+**Namen** angegriffen, und T-327 hat den Sprung auf die **Gestalt** getan — richtig, gemessen,
+zweiseitig. Der nächste Weg lag trotzdem daneben, und zwar an der Stelle, die eine Gestaltprüfung
+gerade nicht sieht: **hinter** einem erlaubten Schlüssel. Wer eine Verdrahtung mißt, mißt einen
+Bauplan; ob ein Kabel Strom führt, steht nicht darin. Für die zwei Werte, auf die diese Anfrage
+wartet — `store` und `source` —, ist die Frage nicht „steht der Schlüssel da", sondern „wie lange
+kann das dauern".
+
+---
+
+## 43. Freigabe T-337 (2026-09-13) — die Rückfrage hängt am Fenster, der Versionswächter fängt drei von vier, und ein Wächter mißt nicht die Anforderung, die er trägt
+
+Geprüft wurden T-334 (die Abdunklung als Portal, A-A-108) und T-335 (die Entscheidungsfläche des
+Versionswächters). Beide Stränge sind **selbst nachgemessen** und nicht übernommen: eigener
+Meßaufbau, eigener Nullpunkt, eigene Ausschalter, und in beiden Fällen eine Gegenprobe, die zeigt,
+daß das Meßgerät den Fehlerfall überhaupt sehen kann.
+
+### 43.1 Der Meßaufbau, und der Fehler darin, der zuerst gefunden werden mußte
+
+Gemessen im Browser (Chromium 1234 über `playwright-core` 1.62.1, 1280 × 820) gegen die
+**Musterseite des Designsystems** (`/designsystem.html`, eigener Entwicklungsserver auf
+`127.0.0.1:18937`; `17843`, `17844` und `5173` blieben ungebunden und unberührt). Sie zeichnet die
+echten Bausteine — `AttachmentOpenDialog`, `ConfirmDialog`, `FormDialog`, `UpdateDialog` — ohne
+den lokalen Dienst.
+
+**Der erste Lauf maß nichts, und das ist der wichtigste Satz über diesen Aufbau.**
+`designsystem.tsx` lädt `tokens.css`, `base.css`, `components.css`, `app.css` und `showcase.css` —
+**nicht** `startup.css`, und damit nicht `theme-palettes.css`. Ein `data-design-theme="glass"` auf
+dem Wurzelelement hat dort keine Wirkung: gemessen **67 Karten, 0 mit `backdrop-filter`**, und
+`prefers-reduced-transparency` stand auf `no-preference`. 342 grüne Messungen später wäre die
+Zusage „in `glass` ist alles gut" ausgesprochen worden, ohne daß `glass` je an war. Erst mit
+eingeschossenem `theme-palettes.css` tragen **67 von 67** Karten `blur(16px) saturate(1.15)`. Im
+Erzeugnis ist die Palette dagegen aktiv: `apps/web/index.html:17` verweist auf `startup.css`, und
+das führt beide Dateien ein.
+
+Daraus die Regel, die über diesen Fall hinausgeht: **Wer eine Gestaltung mißt, mißt zuerst, ob die
+Gestaltung anliegt.** Eine Musterseite ist nicht das Erzeugnis; sie lädt, was ihr Einstiegspunkt
+lädt.
+
+### 43.2 A-A-108 — die Menge, nicht der Fall
+
+**Am Quelltext ist die Menge geschlossen.** Im ganzen Bestand gibt es genau **drei** Stellen, die
+eine Abdunklung zeichnen, und alle drei gehen durch denselben Baustein `Scrim`
+(`apps/web/src/shared/ui/DialogSurface.tsx:453`, Portal nach `document.body`):
+
+| Ort | Was daran hängt |
+|---|---|
+| `shared/ui/DialogSurface.tsx:371` | `ConfirmDialog` (Löschabfragen), `FormDialog`, `InfoDialog`, `UpdateDialog`, die Vorlagenvorschau |
+| `features/todos/AttachmentOpenDialog.tsx:348` | die Rückfrage vor dem Öffnen einer **Datei** (A-19.14) |
+| `app/ShellStatus.tsx:763` | die beiden sperrenden Meldungen (`scrim--blocking`) |
+
+Gesucht wurde nicht nach `Scrim`, sondern nach der **Eigenschaft**: `aria-modal`,
+`role="dialog"`, `role="alertdialog"`, `<DialogSurface`, `className="dialog`. Außerhalb dieser drei
+Wurzeln steht keine vierte. Ebenso geprüft: kein Stilblatt setzt eine der sechs Eigenschaften auf
+`html` oder `body` — die einzigen Vorfahren, die das Portal noch übrigläßt. `backdrop-filter`
+steht an genau zwei Stellen im ganzen Bestand (`theme-palettes.css:455` an `.card`,
+`.filterbar`, `.app__sidebar`, `.app__header`; `components.css:3480` an `.scrim--blocking`
+selbst), `filter` und `transform` nirgends an einem Vorfahren der Abdunklung.
+
+**Im Browser gemessen, 19 Paletten × 2 Modi × 9 Bestätigungsflächen = 342 Messungen:**
+
+| Gemessen | Ergebnis |
+|---|---|
+| Geometrie der Abdunklung | **eine einzige über alle 342**: `1280 × 820 bei (0,0)` |
+| Elternknoten | **342 × `body`** |
+| Vorfahr mit `transform`/`filter`/`backdrop-filter`/`perspective`/`contain`/`will-change` | **0 von 342** |
+| Lage nach 600 px Bildlauf | **unverändert in allen 342** |
+| Knöpfe außerhalb des Fensters oder nicht treffbar (`elementFromPoint`) | **0 von 342** |
+
+**Die Gegenprobe feuert.** Dieselbe Abdunklung unter `glass` von Hand in eine `.card` mit
+`backdrop-filter` gehängt — also der Zustand vor T-334 — ergibt **958 × 666 bei (297, −36333)**,
+deckt das Fenster nicht, trägt `blur(16px) saturate(1.15)` in der Elternkette, und **beide**
+Knöpfe sind außerhalb und nicht treffbar. Das Meßgerät sieht den Fehler; die 342 sauberen
+Messungen sind damit eine Aussage und keine Tautologie. (Ehrlich dazu: von vier angesetzten
+Gegenproben hat **eine** wirklich umgehängt — nach dem erzwungenen Neuladen war das
+Paletten-Merkmal fort. Eine feuernde Gegenprobe trägt die Aussage, vier hätten sie nicht stärker
+gemacht.)
+
+### 43.3 Die zweite Hälfte derselben Frage: fangend, und Escape ist keine Zustimmung
+
+Eine Bestätigungsfläche, hinter die der Tabulator gelangt, ist keine. Gemessen mit **echter**
+Tastaturbedienung (Fokus auf den Auslöser, `Enter`) in `classic`, `glass` und `liquid-glass`, vier
+Flächen je Palette:
+
+| Gemessen | Ergebnis |
+|---|---|
+| Fokus beim Öffnen | **12 × innerhalb** der Abdunklung (Kasten bzw. erstes Feld) |
+| **Shift+Tab als erster Tastendruck** — der Fall, den `AttachmentOpenDialog` eigens behandelt | 12 × innerhalb |
+| 16 Tabulatorschritte je Fall (192 gesamt) | **0 × außerhalb** |
+| Escape | schließt in 12 von 12 |
+| Fokus nach Escape | **12 × zurück auf dem Auslöser** |
+
+Dazu 45 weitere Tastaturmessungen aus dem Hauptlauf (fünf Paletten, 14 Tabulatorschritte je Fall,
+630 gesamt): **0 × außerhalb**, Escape schließt 45 von 45.
+
+**Escape ist an keiner Stelle Zustimmung**, und das ist am Quelltext über die ganze Menge geprüft,
+nicht an einem Fall:
+
+- `ConfirmDialog.tsx:189` — `onDismiss={onCancel}`.
+- `AttachmentOpenDialog.tsx:281` — Escape ruft `onCancel()`, und nur wenn nicht gearbeitet wird.
+- `FormDialog.tsx:340` — `onDismiss={onCancel}`, dazu `closeOnEscape={!busy}`.
+- `UpdateDialog.tsx:116` — `onDismiss={onPostpone}`. **Nicht `onSkip`.** Das ist die Stelle, an der
+  ein Escape sonst eine **gespeicherte** Entscheidung träfe: „Überspringen" schreibt eine Fassung
+  in den Bestand (A-18.10). `postpone` setzt ausschließlich Zustand im Arbeitsspeicher
+  (`useUpdateNotice.ts:137`, `:295`) — die Meldung kommt nach einem Neustart wieder.
+- `ShellStatus.tsx` — **kein** Escape. Beide Sperrmeldungen enden nicht dadurch, daß man sie
+  wegdrückt; SC 2.1.2 bleibt über die Schaltfläche gewahrt.
+
+### 43.4 Der Wächter über A-A-108 mißt nicht die Anforderung, die A-A-108 aufschreibt
+
+A-A-108 formuliert sein Abnahmekriterium an der **Anforderung**: „kein `.scrim` hat einen
+Vorfahren mit `backdrop-filter`, `filter`, `transform`, `perspective`, `contain` oder
+`will-change`". Gebaut wurde in `proof-surface.mjs` etwas anderes, und es ist sorgfältig gebaut:
+Regel F liest bei jedem `createPortal` das **Ziel**, verlangt wörtlich `document.body` und genau
+zwei Argumente, meldet jedes andere Ziel und jede andere Argumentzahl, trägt drei neue
+Gegenproben und eine Untergrenze (`portale > 0`, sonst rot). Als Zusage über **Portale** ist der
+Lauf gut.
+
+Er ist keine Zusage über **Abdunklungen**. Regel F läuft den JSX-Baum unter `.app` nach
+Rasterflächen seiner **Kinder** ab; eine Abdunklung, die tief in einer Karte gezeichnet wird,
+kommt darin nicht vor.
+
+**Gemessen (K-8).** In eine Meßkopie eine fünfte Bestätigungsfläche gesetzt, die ihre Abdunklung
+selbst zeichnet — `<div className="scrim">` mit `role="alertdialog"` im Rumpf von
+`features/todos/Attachments.tsx`, also genau dort, wo der Befund aus 42.8.3 saß:
+
+```
+tsc -p apps/web/tsconfig.json --noEmit   Exit 0
+proof:surface                            28 bestanden, 0 fehlgeschlagen
+proof:clamp                              21/0      proof:foreign  21/0
+```
+
+Die Fläche liegt unter `glass` wieder an der Karte — dieselbe Geometrie wie in der Gegenprobe aus
+43.2 —, und **kein Lauf sagt etwas dazu**. Das ist dieselbe Familie wie die sieben Fälle am
+Versionswächter: **die Menge ist an der Bauart aufgespannt, die wir gebaut haben, nicht an der
+Eigenschaft, die wir zugesagt haben.** Gegenmittel **A-A-109**.
+
+### 43.5 Der Versionswächter — drei eigene Ausschalter, und der vierte kommt durch
+
+Nullpunkt in einer **eigenen** vollständigen Kopie des Baums selbst nachgefahren, nicht
+übernommen: `proof:release-safety` **130 bestanden, 0 fehlgeschlagen**; `proof:layers` 36/0,
+`proof:route-policy` 48/0, `proof:callers` 74/0.
+
+| | Gestalt | Ort | `tsc` | `release-safety` | Wirkung |
+|---|---|---|---|---|---|
+| **K-4** | **Die Meldung, die nie ankommt.** Die Prüfung läuft, die Anfrage geht hinaus — nur die Auskunft an die Oberfläche wird über `app_setting.locale` auf `{ state: 'unknown' }` gelegt | `composition.ts:267` (`versionState`), Leser in einem neuen Modul unter `features/settings/` | **Exit 0** | **130/0 grün** | **1 Anfrage wie immer**, Route liefert `unknown` statt `known/99.0.0` |
+| **K-5** | Ein **Umhüller** vor `createVersionCheckStatePort`, der vor dem Weiterreichen wartet | ebenda | Exit 0 | **127/3 rot** | — |
+| **K-6** | Derselbe Umhüller als `Proxy`, der `recordCheck` nirgends beim Namen nennt | ebenda | Exit 0 | **125/5 rot** | — |
+| **K-7** | **Der Rumpf des `write`-Literals.** `store.write` wartet, bevor es den Adapter ruft; der Adapter bleibt zeichengleich | `composition.ts:257`, im Aufrufobjekt selbst | **Exit 0** | **130/0 grün** | **0 statt 1** Anfrage, Route bleibt `unknown` |
+
+K-5 und K-6 sind **gute Nachrichten über den Lauf**: 6g leitet den Adapter aus der **Verdrahtung**
+her statt aus einem festen Pfad, und es trägt eine Untergrenze — K-6 fällt über „das Mitglied
+`recordCheck` steht 0-mal, genau einmal ist die Zusage" und „das festgenagelte Adaptermitglied
+wird von der Verdrahtung nicht mehr gerufen". Wer den Adapter austauscht, wird gesehen; wer ihn
+versteckt, auch.
+
+**K-7 ist die Lücke, und sie liegt vier Zeilen vor der Stelle, die am teuersten bewacht wird.**
+Der Lauf nagelt fest, daß `store` ein **Objektliteral** ist (6b), daß der Port genau **ein**
+Mitglied `write` hat, und die Anweisungen des Adapters **hinter** `write` zeichengleich (6g). Was
+er nicht liest, ist der **Rumpf von `write` selbst** — und das ist die eine Stelle, an der die
+Verdrahtung zwischen Prüfer und Adapter etwas einfügen kann:
+
+```ts
+store: {
+  write: async (at: Date) => {
+    await schreibfenster?.();               // Wert aus app_setting
+    return versionCheckState.recordCheck(toTimestamp(at));
+  },
+},
+```
+
+Gemessen am zusammengebauten Dienst, beide Richtungen, dieselbe Kopie:
+
+```
+Schalter AUS   Anfragen hinaus: 1   Route: {"state":"known","latestVersion":"99.0.0"}
+Schalter AN    Anfragen hinaus: 0   Route: {"state":"unknown","latestVersion":null}
+```
+
+Das ist **die Technik aus K-1**, um vier Zeilen versetzt. T-335 sagt zu Recht, K-1 sei heute rot;
+die Technik ist es nicht.
+
+### 43.6 K-4 ist der Befund, der über den Wächter hinausgeht
+
+K-5 bis K-7 fragen: *kommt die Anfrage hinaus?* K-4 fragt die Frage, um die es in A-18 wirklich
+geht: *erfährt der Benutzer davon?* R-30 schreibt es selbst hin — bei unsignierten Erzeugnissen ist
+die Aktualisierungsmeldung der einzige Weg, auf dem eine Sicherheitsbehebung den Benutzer
+erreicht. Für dieses Schutzziel ist ein Ausschalter an der **Auskunft** genauso vollständig wie
+einer an der **Anfrage**, und er ist billiger zu bauen: Er braucht den Prüfer nicht anzufassen,
+keinen Port, keine Naht, kein Wartezeitverhalten. Gestalt 6 heißt seit T-335 „die
+Entscheidungsfläche" und ist an der Frage „wer kann über die ausgehende Anfrage entscheiden"
+aufgespannt — **diese Frage ist eine Zeile zu eng.** Gegenmittel **A-A-110**.
+
+Zwei Dinge, die dabei **nicht** offen sind und die dazugehören:
+
+- **„Überspringen" trägt keinen solchen Schalter.** `decideUpdateNotice` vergleicht die
+  übersprungene Fassung auf **Gleichheit** (`packages/domain/src/version.ts:379`,
+  `comparePrecedence(...) === 0`). Ein präpariertes Archiv mit `skipped_version = '999.0.0'`
+  unterdrückt genau diese eine Fassung und keine höhere. Der Weg, der hier zuerst zu vermuten war,
+  ist zu.
+- **Die Loopback-Grenze hält auch im Meßaufbau.** Beim Bauen der Meßhilfe hat `hostGuard` jede
+  Anfrage mit unpassendem `Host` mit `403 host_not_allowed` abgewiesen, bis der Kopf auf
+  `127.0.0.1:<Port>` stand. B-1.3 ist damit beiläufig gegengemessen.
+
+### 43.7 Die Grenze, die drei Beteiligte unabhängig ziehen — sie stimmt, und ihr Beweis nicht mehr
+
+T-335 nennt als Beweis, daß die Klasse über den Quelltext nicht schließbar ist:
+
+```ts
+async recordCheck(at: Timestamp): Promise<void> { return new Promise<void>(() => undefined); }
+```
+
+**Dieses Beispiel trägt heute nicht mehr** — es steht in der Deklaration, die 6g zeichengleich
+festnagelt, und wäre rot. Der Satz darüber stimmt trotzdem, und K-7 ist sein besserer Beleg: Die
+Lücke liegt nicht in der Schreibweise, sondern in der **Stelle**, und jede Stelle, die ein Leser
+nennt, ist die Stelle, die er kennt. Gemessen sind in dieser Runde vier Stellen, drei davon
+bewacht und eine nicht; A-A-109 zeigt dieselbe Bauart an einer ganz anderen Fläche.
+
+Die Zusage, die `proof:release-safety` ab heute tragen darf, lautet deshalb wie von T-335
+geschrieben — mit **einem** Zusatz: *Was er nicht mißt, steht bei `checkNoStoreReadback`
+aufgezählt; zu dieser Aufzählung gehören seit T-337 der **Rumpf des `write`-Literals** und die
+**Auskunft an die Oberfläche**.*
+
+### 43.8 Der Oberflächenumbau nach außen
+
+Über **alle** unversionierten Änderungen an `apps/web/**` und `packages/ui-tokens/**` (2 787
+hinzugefügte Zeilen) nach `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `http://`,
+`https://`, `src=`, `@import`, `url(`, `import(`, `navigator.`, `window.open`, `localStorage`,
+`sessionStorage`, `indexedDB`, `postMessage`, `new Image`, `Worker(` gesucht: **null Treffer**.
+`apps/desktop/**` ist unberührt, `tauri.conf.json` damit auch; `proof:shell-surface` bestätigt
+**7 Prüfungen und 54 Gegenproben**. Die CSP ist nicht geöffnet worden.
+
+**Kein Satz ist verlorengegangen.** Nach E-087 über den **Wortlaut** gemessen, über die
+Quellverzeichnisse **und** `git`, Bauergebnisse ausgeschlossen: 356 satzartige Zeichenketten
+stehen in den entfernten Zeilen, 317 stehen unverändert wieder da. Die 39 übrigen sind einzeln
+nachgesehen und alle erklärt — CSS-Selektoren, Bruchstücke aus Schablonenzeichenketten, Prosa aus
+Kommentaren, und in einem Fall (`Gezeigt und geschrieben wird der gespeicherte Stand dieser
+Vorlage.`) bloß eine neue Einrückung. Der von B-6.1 verlangte Base64-Satz steht in
+`ExportScreen.tsx:719` im Laufbereich, der Ordnerbefund in der festen Leiste; beide sind
+erreichbar.
+
+### 43.9 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-109** | **Die Zusage über Abdunklungen wird an der Abdunklung aufgespannt, nicht am Portal.** Ein Lauf mißt: **jedes** JSX-Element, dessen Klassenliste `scrim` enthält, steht in `shared/ui/DialogSurface.tsx` im Baustein `Scrim` — es gibt genau eines, und jede weitere Fundstelle ist ein Befund. Das ist über den Quelltext vollständig entscheidbar und damit die Form, die A-A-108 verlangt hat. Die heutige Portalregel bleibt daneben stehen; sie mißt eine andere Frage und mißt sie gut | K-8: `<div className="scrim">` im Rumpf von `Attachments.tsx`, zeichengleich in eine Meßkopie gesetzt, wird rot. Gegenprobe: der heutige Bestand bleibt grün, und das **Entfernen** des Portals aus `Scrim` bleibt über die vorhandene Untergrenze rot |
+| **A-A-110** | **Die Entscheidungsfläche endet nicht an der Anfrage, sondern an der Meldung.** Gestalt 6 nimmt die **Auskunft** auf: der Ausdruck, der `versionState` an `createApp` reicht, trägt ausschließlich den Aufruf des Prüfers — keine Bedingung, kein zweiter Zweig, kein fremder Aufruf davor. Dieselbe Bauart wie 6b für das Aufrufobjekt, an der Stelle, an der die Meldung entsteht | K-4, zeichengleich in eine Meßkopie gesetzt, wird rot; der heutige Bestand (`versionState: () => versionCheck.current()`) bleibt grün |
+| **A-A-111** | **Der Rumpf von `store.write` gehört zur Menge.** 6g liest die Anweisungen des `write`-Mitglieds im Aufrufobjekt mit derselben Strenge wie die des Adapters dahinter: auf dem Weg zur Anfrage wird dort auf nichts gewartet, und der Rumpf besteht aus dem einen Aufruf des festgenagelten Adaptermitglieds. Sonst ist die teuerste Zusage dieses Laufs — der Zeichenvergleich über ein fremdes Paket — durch vier Zeilen Verdrahtung zu umgehen | K-7, zeichengleich in eine Meßkopie gesetzt, wird rot; der heutige Bestand bleibt grün. Gegenprobe am Verhalten: mit K-7 und gesetztem Schalter **0 statt 1** ausgehende Anfrage |
+
+### 43.10 Urteil, je Strang
+
+**A-A-108, die Verankerung der Rückfrage: freigegeben.** Am Quelltext ist die Menge geschlossen —
+drei Wurzeln, ein Baustein, ein Portal —, im Browser über 19 Paletten × 2 Modi × 9 Flächen
+gemessen, mit einer Gegenprobe, die den alten Zustand sichtbar macht. Die Fläche ist fangend, und
+Escape ist an keiner Stelle Zustimmung; am heikelsten Punkt — dem Überspringen einer Fassung —
+ausdrücklich nicht. **R-31 ist damit behebbar**, sobald der End-zu-End-Fall aus
+`tests/e2e/viewport-fit.spec.ts` ihn hält.
+
+**Der Wächter über A-A-108: nicht freigegeben** — A-A-109. Gebaut ist eine Zusage über Portale,
+aufgeschrieben war eine über Abdunklungen. Der Unterschied ist gemessen und kostet heute nichts;
+er kostet beim fünften Dialog.
+
+**Der Oberflächenumbau nach außen: freigegeben.** Keine Adresse, kein Datenweg, keine Erweiterung
+der CSP, kein verlorener Satz.
+
+**T-335, die verengte Menge: freigegeben mit Nacharbeit.** Drei von vier eigenen Ausschaltern
+sind rot, und zwei davon fallen über Zweige, die T-335 ausdrücklich als Untergrenze gebaut hat —
+das ist die Arbeit, die zählt. **Nicht freigegeben ist die Zusage über die Klasse**: K-7 und K-4
+kommen durch, beide mit `tsc` Exit 0 und 130/0, beide am Verhalten gegengemessen. A-A-110 und
+A-A-111 sind Nacharbeit; **dringend ist keiner von beiden**, denn jeder verlangt fremden Code
+**und** ein präpariertes Archiv, und am heutigen Bestand ist nichts abgeschaltet.
+
+**Der Satz, der mir aus dieser Prüfung bleibt.** Ich habe in dieser Runde zweimal beinahe eine
+Zusage ausgesprochen, die weiter gewesen wäre als das Gemessene — einmal über `glass`, das gar
+nicht an war, und einmal über eine Anforderung, die der Lauf nicht mißt, sondern nur trägt. Beide
+Male war die Rettung dieselbe Handlung: **erst die Gegenprobe, dann das Urteil.** Ein grüner Lauf
+ohne eine feuernde Gegenprobe ist keine Nachricht über den Bestand, sondern eine über das
+Meßgerät.
+
+## 44. Prüfung T-347 (2026-09-13) — der Wächter zählt eine Abdunklung als verankert, die nirgends hängt; und die dritte Tür, die es nach 6i nicht geben kann
+
+Geprüft wurden T-341 (Regel G über die Verankerung der Abdunklungen, A-A-109) und T-342 (die
+Lückenliste an der Anforderung; 6h, 6i, 6j). Beide Stränge sind **selbst nachgemessen**: eigene
+Meßkopien, eigener Nullpunkt, eigene Gestalten, jede beidseitig.
+
+**Meßorte.** `apps/**` und `packages/**` blieben in dieser Welle unberührt; jede Gestalt lief in
+einer Kopie außerhalb des Arbeitsbaums. Die Kopie ist als Meßort belegt und nicht angenommen:
+für den Oberflächenlauf `proof:surface` **34/0** und `tsc` Exit 0 wie im Arbeitsbaum; für den
+Versionslauf `proof:release-safety` **145/0**, `tsc` Exit 0 für Dienst und Domäne, und ein
+absichtlich eingesetzter Typfehler macht `tsc` in der Kopie **Exit 2** — ohne diese Gegenprobe
+wäre jedes „Exit 0" darin eine Aussage über die Kopie und nicht über die Gestalt.
+
+### 44.1 Regel G — acht Gestalten, acht mal grün
+
+Regel G verlangt: jedes JSX-Element, dessen **Klassenliste** den Namen `scrim` enthält, steht
+lexikalisch im gezeichneten Argument eines `createPortal(…, document.body)`. T-341 hat vier
+Rückkehrgestalten aus R-32 beidseitig gemessen; alle vier sind rot. Die fünfte bis achte stehen
+hier, und sie sind es nicht.
+
+| | Gestalt | `tsc` | `proof:surface` | Ernte |
+|---|---|---|---|---|
+| Nullpunkt | — | Exit 0 | **34 / 0** | 1, davon 1 verankert |
+| **G-1** | die Klassenliste steht in einem Schablonenliteral mit Einsetzung — `scrim` plus ein Bezeichner | Exit 0 | **34 / 0 grün** | **1** — die Fläche wird nicht gesehen |
+| **G-2** | `const ABDUNKLUNG = "scrim"; <div className={ABDUNKLUNG}>` | Exit 0 | **34 / 0 grün** | **1** |
+| **G-3** | `createElement("div", { className: "scrim" }, …)` — kein JSX | Exit 0 | **34 / 0 grün** | **1** |
+| **G-4** | ein **eigener** Name `createPortal`, der nichts portaliert | Exit 0 | **34 / 0 grün** | **2, davon 2 verankert** |
+| **G-5** | dieselbe Abdunklung unter dem Klassennamen `rueckfrage-flaeche`, samt `position: fixed; inset: 0` im Stilblatt | Exit 0 | **34 / 0 grün** | **1** |
+| **G-6** | die Fläche hängt richtig, aber `onDismiss` ruft `onConfirm` — Escape ist Zustimmung | Exit 0 | **34 / 0 grün** | 1, davon 1 verankert |
+| **G-7** | derselbe eigene `createPortal` gegen **Regel F**: ein direktes Kind von `.app` ohne Rasterzuordnung | Exit 0 | **34 / 0 grün** | `.app`: **7 Kinder, 4 durch ein Portal** |
+| **G-8** | `.scrim { position: static }` — das Portal bleibt, die Eigenschaft fällt | Exit 0 | **34 / 0 grün** | 1, davon 1 verankert |
+
+Vier Klassen, und drei davon sind mehr als ein blinder Fleck.
+
+**(a) Die Klasse wird nur als Zeichenkette gelesen.** `classTokensOf`
+(`apps/web/scripts/proof-surface.mjs:345`) sammelt aus dem `className`-Ausdruck jeden
+`StringLiteral` und jedes `NoSubstitutionTemplateLiteral`. Ein `TemplateHead` ist keines von
+beiden (G-1), ein Bezeichner erst recht nicht (G-2). Der Lauf **schweigt** über einen Ausdruck,
+den er nicht lesen kann, statt ihn zu melden — und das ist die unsichere Richtung. Für die
+Zwischenstufe (`createPortal(<Innen />, …)`) hat T-341 ausdrücklich anders entschieden und meldet
+lieber zuviel; an derselben Datei, zwölf Zeilen weiter, gilt die Regel nicht.
+
+**(b) `createPortal` wird am Namen geglaubt.** Beide Regeln prüfen `callee(node) ===
+'createPortal'` (`:1118` für Regel F, `:1339` für Regel G) und **nie**, ob der Name aus
+`react-dom` stammt. Vier Zeilen genügen:
+
+```
+const createPortal = (knoten: ReactElement, _ziel: unknown): ReactElement => knoten;
+```
+
+Danach ist die Abdunklung wieder an ihrer Karte, und die Schlußzeile des Laufs sagt
+`Flächen mit der Klasse scrim: 2, davon 2 in einem createPortal(…, document.body)`. Das ist nicht
+ein blinder Fleck, sondern eine **falsche Zusage**: Der Lauf nennt Datei und Zeile und nennt sie
+verankert. Dieselbe vier Zeilen nehmen ein beliebiges Kind von `.app` aus Regel F heraus (G-7,
+Portalzähler 3 → 4). Eine Zeile behebt beides.
+
+**(c) Der Klassenname ist nicht die Anforderung.** A-25.6 und E-116 sprechen von
+**Bestätigungsflächen**, nicht von `.scrim`. G-5 ist zeichengleich dieselbe Abdunklung unter einem
+zweiten Namen; der Lauf sieht sie nicht, und er sieht auch die heutige Menge der übrigen festen
+Flächen nicht — `.toast-layer`, `.skip-link` und `.idle-reminder` tragen `position: fixed` und
+stehen unter keiner Zusage. `.idle-reminder` ist dabei nicht theoretisch: Sie ist die Fläche, über
+die A-24 inaktive Zeit zuordnen läßt. Heute hängt sie richtig — `TimerProvider` steht in
+`App.tsx:217` **über** `.app` —, aber nichts mißt das. Die Menge ist am **Stilblatt** vollständig
+aufspannbar: `position: fixed` kommt in `apps/web/src/styles/**` an genau vier Stellen vor
+(`base.css:299`, `app.css:768`, `app.css:5038`, `components.css:2436`).
+
+**(d) Regel G sichert eine Stelle im Quelltext zu, keine Verankerung und erst recht keine
+Erreichbarkeit.** Daß die Fläche am Fenster hängt, folgt aus der Quelltextstelle nur unter zwei
+Annahmen, die kein Lauf mißt: daß `createPortal` das echte ist (G-4 bricht sie) und daß `.scrim`
+`position: fixed` trägt (G-8 bricht sie — der Lauf bleibt 34/0 und meldet weiter „1 von 1
+verankert", während die Fläche gar nicht mehr positioniert ist). **Die zweite Achse aus E-116 —
+erreichbar und fangend — ist von Regel G überhaupt nicht berührt:** G-6 macht Escape zur
+Zustimmung, und der Lauf bleibt grün. Das ist keine Schwäche der Regel, sondern die Grenze ihrer
+Gattung. A-25.6 hat fünf Teilsätze; Regel G trägt den ersten, für eine Teilmenge der Flächen.
+
+### 44.2 Der Versionswächter — zwei eigene Ausschalter, einer davon still in jeder Messung
+
+Nullpunkt `proof:release-safety` **145/0**, `tsc` Exit 0.
+
+| | Gestalt | `tsc` | `release-safety` | Einheitenprüfungen |
+|---|---|---|---|---|
+| **K-9a** | `checkVersion` in `packages/domain/src/version.ts` weist jede Fassung ab | Exit 0 | **145 / 0 grün** | `domain/test/version.test.ts` **31 von 81 rot** |
+| **K-9b** | `versionCheckDelayWithJitter` gibt mindestens 2³¹−1 ms zurück (24,8 Tage) | Exit 0 | **145 / 0 grün** | dieselbe Datei **17 von 81 rot** |
+| **K-10** | `const { env } = await import('node:process')` in `latest()` | Exit 0 | **144 / 1 rot** | — |
+| **K-10c** | dasselbe, aber der Quellname ist **gerechnet**: `await import(teile.join(':'))` | Exit 0 | **145 / 0 grün** | `apps/local-api/test/version` **49 von 49 grün** |
+
+**K-10 ist die gute Nachricht.** Die festgenagelte Einfuhrliste (Gestalt 5, T-290) liest auch die
+**dynamische** Einfuhr und meldet `node:process` mit Ort und Grund. Die Tür, die T-336 Z-2/Z-3
+benutzt hätten, ist zweifach zu.
+
+**K-10c ist die dritte Tür, und sie widerlegt den Satz, den 6i trägt.** Der Satz lautet: „Ein
+Modul kommt auf genau zwei Wegen an etwas heran, das es nicht selbst erklärt hat — über eine
+Einfuhr oder über einen freien Laufzeitnamen … Zusammen ist das geschlossen."
+`await import(teile.join(':'))` ist **keines von beidem**: Der Quellname steht in keiner
+Einfuhrliste, weil er zur Übersetzungszeit nicht dasteht; einen freien Namen gibt es nicht, weil
+`import` ein Schlüsselwort ist und `teile` wie `env` gebunden sind. `ts.isMetaProperty` ist in
+`freieLaufzeitnamen` bedacht und fängt `import.meta` — der Aufruf `import(…)` ist keine
+Metaeigenschaft. Wirkung am Modul gemessen, mit gestellter Attrappe für `fetch`:
+
+```
+Nullpunkt                          Anfragen 1   {"ok":true,"version":"99.0.0"}
+K-10c ohne Umgebungsvariable       Anfragen 1   {"ok":true,"version":"99.0.0"}
+K-10c mit TAKT_SKIP_UPDATE_CHECK=1 Anfragen 0   {"ok":false,"reason":"no_release"}
+```
+
+`no_release` ist der Grund, den A-18 ausdrücklich **still** behandelt: kein Hinweis, keine
+Fehlerfläche. Der Ausschalter ist in jedem Lauf grün, in jedem Prüffall grün und im Betrieb
+unsichtbar, bis ihn jemand setzt.
+
+**K-9 ist die fünfte Art von Stelle.** T-342 ordnet den Weg in vier Arten — gelesen, eingegrenzt,
+nur durchlaufen, außerhalb des gelesenen Baums. `packages/domain/src/version.ts` ist in **keiner**
+davon zu Hause: Es liegt im gelesenen Baum (`SOURCE_ROOTS` führt `@takt/domain`), es liegt auf dem
+Weg, und es wird über eine **festgenagelte Einfuhr** erreicht — festgenagelt ist aber der
+**Name**, nicht der Rumpf dahinter. Die Zeichenkette `packages/domain` kommt in
+`proof-release-safety.mjs` **kein einziges Mal** vor. Die Aufzählung unter Art (III) nennt sechs
+Stellen und diese nicht; sie ist damit wieder eine Liste der bekannten Fälle — genau die Bauart,
+gegen die T-342 eine Ebene höher geschrieben ist.
+
+Der Preis ist dabei klein und soll es bleiben: **die Einheitenprüfungen fangen K-9**, 31
+beziehungsweise 17 rote Fälle. Das ist die richtige Arbeitsteilung und keine Lücke im Tor. Der
+Satz, der zu eng ist, ist nicht „der Lauf mißt zu wenig", sondern „**zusammen ist das
+geschlossen**".
+
+**Und die Taxonomie selbst trägt eine Naht.** Die vier Arten trennen **Stellen**; gemessen werden
+aber **Eigenschaften von Stellen**. Der Rumpf von `latest()` ist zugleich Art (I) — seine
+Einfuhren und seine freien Namen sind festgenagelt — und Art (III) für alles übrige, und genau in
+diesem Rest sitzt K-10c. Eine Einteilung, die vollständig sein soll, muß deshalb an der
+Eigenschaft aufgespannt sein und nicht an der Stelle; sonst ist „alle vier Arten benannt" keine
+Aussage über Abdeckung.
+
+### 44.3 Der Weg von `versionState` bis zum Bildschirm — die Abgrenzung trägt, die Reihenfolge ändert sich
+
+T-342 grenzt zu K-4 ab: **die Stelle ja, die Klasse nein**, und schlägt zwei Wege vor — einen
+zweiten, kleinen Lauf über den Weg von `versionState` bis zum Dialog, oder den Prüffall TP-VER-10
+am Verhalten. Die Abgrenzung ist richtig, und sie ist an der richtigen Kante gezogen: 6j mißt den
+Ausdruck, in dem die Auskunft den Zusammenbau verläßt, und mehr kann ein Leser dieses Baums nicht.
+
+Zwei Messungen ordnen die beiden Vorschläge neu:
+
+- **Der zweite Lauf würde K-9 nicht sehen.** Er begänne bei `versionState`; K-9a sitzt drei Nähte
+  davor, in einem fremden Paket. Wer die Klasse „die Meldung kommt nicht an" schließen will, muß
+  **vor** `current()` anfangen, nicht dahinter.
+- **TP-VER-10 sieht K-10c nicht.** Der Prüffall setzt die Umgebung selbst
+  (`tests/e2e/support/services.ts:257`, `version-check-services.ts:102`) und setzt
+  `TAKT_SKIP_UPDATE_CHECK` nicht. Ein **bedingter** Ausschalter ist für eine Verhaltensmessung
+  unsichtbar, solange sie die Bedingung nicht herstellt — das ist keine Schwäche von TP-VER-10,
+  sondern die Gattungsgrenze von der anderen Seite.
+
+Daraus die Ordnung: **TP-VER-10 fängt, was unbedingt abschaltet** (K-4, K-9a, K-9b); **die
+Türanalyse fängt, was bedingt abschaltet** (K-10, K-10c). Beide werden gebraucht, und keiner von
+beiden ersetzt den anderen. R-33 ist damit auf dem richtigen Weg — aber der zweite Lauf ist nicht
+der nächste Schritt, sondern der dritte.
+
+### 44.4 Die billigen Fragen an T-341
+
+- **Keine neue Adresse, kein neuer Datenweg, keine Erweiterung der CSP.** In dieser Welle ist
+  **kein einziger Laufzeitpfad** geändert: T-341 fasst zwei Stilblätter und einen Prüflauf an,
+  T-342 einen Prüflauf. Die beiden Stilblätter tragen **kein** `url(…)`, kein `@import`, kein
+  `image-set`, keine Adresse. `apps/desktop/**` ist unberührt, `proof:shell-surface` **7 Prüfungen
+  und 54 Gegenproben**, Exit 0.
+- **Die Fokusring-Reserve macht nichts sichtbar, was verdeckt sein soll.** Die Regel
+  (`viewport-layout.css:263`) gibt `.screen__header` und `.screen__bar` ein Polster in Ringhöhe
+  und denselben Betrag als negativen Rand; die **Klippkante** wandert damit um 4 px nach außen
+  (5 px unter `prefers-contrast: more`). In dem Band steht nichts, was verdeckt sein müßte:
+  `.visually-hidden` hängt an `clip-path: inset(50%)` bei 1 px Größe und ist von einem Polster des
+  Behälters unberührt; `.done-switch input` ist `opacity: 0`; die einzige aufklappende Fläche der
+  Hülle (`.gsearch__panel`, `position: absolute`) steht in `.app__header` (`App.tsx:360`) und
+  nicht in einem Bildschirmkopf — in `.screen__header` und `.screen__bar` gibt es keinen absolut
+  positionierten Nachfahren.
+- **Und nichts wird verdeckt, was sichtbar sein muß.** Der Zwischenraum ist `--space-5` = 20 px;
+  bei 4 px Reserve je Kante bleiben 12 bis 16 px, bei 5 px 10 bis 15 px. Die Kästen berühren sich
+  nicht, und selbst wenn sie es täten, malte das spätere Geschwister über den Kopf und nicht
+  umgekehrt. Der Zweck von `overflow: hidden` — die Rinne — hält.
+
+### 44.5 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-112** | **Ein Wächter glaubt einen Namen nicht, den er auflösen kann.** Regel F und Regel G entscheiden am Bezeichner `createPortal`, ob eine Fläche das Raster verläßt beziehungsweise am Fenster hängt. Der Bezeichner ist gegen seine Herkunft zu prüfen: Einfuhr aus `react-dom`, sonst Befund. Eine **lokale** Bindung dieses Namens ist ein Befund und kein Portal | G-4: die Abdunklung wird als „verankert" gezählt (Ernte 2 von 2), `proof:surface` 34/0. G-7: ein Kind von `.app` ohne Rasterzuordnung bleibt ungemeldet, Portalzähler 3 → 4. Gegenprobe: der heutige Bestand bleibt grün |
+| **A-A-113** | **Was ein Wächter nicht lesen kann, meldet er.** Kann Regel G die Klassenliste eines JSX-Elements nicht vollständig als Zeichenkette lesen — Schablonenliteral mit Einsetzung, Bezeichner, Aufruf —, ist das ein Befund und kein Schweigen. Dieselbe sichere Richtung, die T-341 für die Zwischenstufe schon gewählt hat | G-1 und G-2: `tsc` Exit 0, `proof:surface` 34/0, Ernte unverändert 1 |
+| **A-A-114** | **Die Menge der Bestätigungsflächen steht im Stilblatt, nicht im Bauteilnamen.** Aufgespannt wird an `position: fixed` in `apps/web/src/styles/**`: jede Klasse, die es trägt, steht auf einer benannten Liste mit ihrer Begründung, und jede Fläche, die A-25.6 unterliegt, hängt an einem aufgelösten Portal. Damit kommen `.toast-layer`, `.skip-link` und `.idle-reminder` unter dieselbe Zusage. Zusätzlich: eine Abdunklung entsteht nur über JSX — `createElement` mit einem Klassennamen ist ein Befund | G-5 (zweiter Klassenname, 34/0 grün) und G-3 (`createElement`, 34/0 grün). Gegenprobe: die vier heutigen Fundstellen von `position: fixed` sind vollständig aufgezählt |
+| **A-A-115** | **Die Verankerung hängt an der Eigenschaft, also wird die Eigenschaft gemessen.** `.scrim { position: fixed; inset: 0 }` ist die Hälfte der Zusage aus E-116; sie steht heute unter keinem Lauf. Der Zeichenvergleich gehört neben Regel G, mit seinem Bestätigungsort in der Meldung | G-8: `position: static` statt `fixed`, `proof:surface` 34/0, und die Schlußzeile meldet weiter „1 von 1 verankert" |
+| **A-A-116** | **Die zweite Achse aus E-116 wird am Verhalten gemessen und von keinem Quelltextleser behauptet.** „Fängt den Tastaturfokus" und „Abbrechen ist nie Zustimmung" (A-25.6) bekommen einen benannten End-zu-End-Fall je Dialogbauart. Regel G schreibt in ihren Kopf, welchen Teilsatz von A-25.6 sie trägt und welche vier sie nicht trägt | G-6: `onDismiss` ruft `onConfirm`, `tsc` Exit 0, `proof:surface` 34/0 |
+| **A-A-117** | **Die dritte Tür.** 6i sichert zu, ein Modul komme auf genau zwei Wegen an Fremdes heran. Ein dynamischer Aufruf `import(…)` mit **nicht literalem** Quellnamen ist ein dritter. Er ist zu melden — für die beiden Entscheidungsmodule genügt: `import(…)` mit einem Argument, das kein Zeichenkettenliteral ist, ist ein Befund. Der Satz bei `MODUL_LAUFZEITNAMEN` ist entsprechend zu berichtigen, solange er nicht gemessen ist | K-10c: `tsc` Exit 0, `proof:release-safety` 145/0, `apps/local-api/test/version` 49/49 grün, am Modul gemessen 0 statt 1 Anfrage. Gegenprobe: K-10 mit literalem Quellnamen ist rot (144/1) |
+| **A-A-118** | **Die fünfte Art von Stelle.** Die Lückenliste bei `checkNoStoreReadback` nennt den Rumpf einer Funktion, die ein Entscheidungsmodul aus einem **anderen Paket** einführt. Festgenagelt ist der Name, nicht das Verhalten dahinter; `packages/domain` kommt im Lauf nicht vor. Dazu der Satz, welche **Eigenschaft** je Art gemeint ist — dieselbe Stelle ist für Einfuhren gelesen und für alles übrige nur durchlaufen | K-9a und K-9b: `tsc` Exit 0, 145/0 grün; gefangen werden beide von den Einheitenprüfungen (31 beziehungsweise 17 rote Fälle), nicht von diesem Lauf |
+
+### 44.6 Urteil, je Teil
+
+**Teil 1, Regel G: nicht freigegeben.** Die vier Rückkehrgestalten aus R-32 sind rot, und das ist
+echte Arbeit — der Fall, um den R-32 geschrieben wurde, ist zu. Aber **R-32 ist nicht
+geschlossen**: vier weitere Gestalten derselben Klasse kommen durch, und eine davon (G-4) macht
+den Lauf nicht bloß blind, sondern läßt ihn eine Verankerung **behaupten**, die es nicht gibt.
+A-A-112 bis A-A-116 sind Nacharbeit. **Dringend ist keine davon** — heute gibt es genau eine
+Stelle, die die Klasse erzeugt, sie geht durch das echte Portal, und `.idle-reminder` hängt über
+`.app`. Der Preis fällt beim nächsten Dialog an, und A-A-112 kostet eine Zeile.
+
+**Teil 2, 6h und 6j: freigegeben.** Beide sind an der Stelle aufgespannt und beidseitig gemessen;
+K-7 und K-4 sind rot, und der eigene Beleg ist berichtigt statt stillschweigend ersetzt. Der
+Umbau der Lückenliste von Gestalten auf Arten von Stellen ist die richtige Bewegung.
+
+**Teil 2, 6i: freigegeben mit Nacharbeit.** Die Messung trägt — Z-2 und Z-3 sind rot, und die
+dynamische Einfuhr mit literalem Quellnamen ebenfalls. **Die Zusage daneben trägt nicht:** „genau
+zwei Wege … zusammen geschlossen" ist mit K-10c widerlegt. A-A-117 schließt die Tür, A-A-118 die
+Art. Bis dahin ist der Satz im Quelltext auf das zu kürzen, was gemessen ist.
+
+**Teil 2, die Abgrenzung zu K-4 und der Weg von R-33: freigegeben.** „Die Stelle ja, die Klasse
+nein" ist richtig und an der richtigen Kante gezogen. Die Reihenfolge der beiden Gegenmittel
+kehrt sich um: erst TP-VER-10 als benannte Gegenprobe (T-345 verknüpft ihn gerade), dann die
+Türanalyse, und der zweite kleine Lauf zuletzt — er beginnt hinter der Stelle, an der K-9 sitzt.
+
+**Teil 3: freigegeben.** Keine Adresse, kein Datenweg, keine Erweiterung der CSP, kein
+Laufzeitpfad geändert. Die Fokusring-Reserve legt genau das Band frei, das der Ring braucht; in
+diesem Band steht nichts, was verdeckt sein müßte, und nichts Sichtbares wird verdeckt.
+
+**Der Satz, der mir aus dieser Prüfung bleibt.** Zweimal in Folge hat ein Wächter dieselbe Gattung
+verwechselt: Eine Aussage über eine **Stelle im Quelltext** wurde als Aussage über das
+**Verhalten** geführt. T-337 hat das an der Menge gefunden (Portale statt Abdunklungen), T-347
+findet es an der Auflösung (der Name `createPortal` statt der Einfuhr, der Klassenname statt der
+Eigenschaft). Ein Quelltextleser darf jeden Namen benutzen, den er **auflösen** kann — und muß
+melden, was er nicht auflösen kann. Wo er statt dessen schweigt, ist seine grüne Zahl eine
+Aussage über sein eigenes Sichtfeld.
+
+---
+
+## 45. Prüfung T-357 (2026-09-13) — eine Menge über eine Schreibweise, ein Hebel der hält, und ein Archiv, das elf Stunden in eine Rechnung schreibt
+
+Geprüft wurden T-348 (Regel G neu aufgespannt, Regel H neu, A-A-112 behoben), T-349 (A-A-106
+gebaut, A-A-117 gebaut, A-A-118 benannt) und T-350 (R-34, die erste Bewertung dieser Fläche).
+Alle drei Stränge sind **selbst nachgemessen**, mit eigenem Aufbau und eigenem Nullpunkt.
+
+**Meßorte.** `apps/**` und `packages/**` standen in dieser Welle still. Jede Gestalt wurde
+einzeln in den Arbeitsbaum gesetzt, gemessen und aus einer Sicherung zurückgeschrieben; jede
+berührte Datei ist danach **byteweise gleich** (`md5`, je Gestalt geprüft, und `git status` über
+die drei berührten Dateien leer). Die Browsermessung läuft über `page.setContent` mit den
+Stilblättern als Text — **kein Port, kein Dienst**. Die eine Netzmessung bindet einen flüchtigen
+Port auf `127.0.0.1`; 17843, 17844 und 5173 waren vorher und nachher frei.
+
+### 45.1 Regel G und H — elf Gestalten, elfmal grün
+
+Nullpunkt `proof:surface`: **45 bestanden, 0 fehlgeschlagen**, Ernte
+„Fensterfeste Klassen aus den Stilblättern: `.scrim`. Flächen darunter: 1, davon 1 in einem
+`createPortal(…, document.body)`", „Absagewege: 91".
+
+| | Gestalt | `tsc` | `proof:surface` | Ernte |
+|---|---|---|---|---|
+| Nullpunkt | — | Exit 0 | **45 / 0** | 1 Fläche, 1 verankert; 91 Absagewege |
+| **N-1** | zweite Vollfläche, `position: fixed !important; inset: 0 !important` | Exit 0 | **45 / 0 grün** | Menge unverändert `.scrim` |
+| **N-2** | `position: var(--feste-lage)` mit `--feste-lage: fixed` | Exit 0 | **45 / 0 grün** | unverändert |
+| **N-3** | `position: fixed` und `inset: 0` in **zwei** Regeln desselben Selektors | Exit 0 | **45 / 0 grün** | unverändert |
+| **N-4** | volle Ausdehnung über `top/left/width/height` statt über vier Kanten | Exit 0 | **45 / 0 grün** | unverändert |
+| **N-5** | Ausdehnung erst zur Laufzeit: `style={{ position: "fixed", inset: 0 }}` | Exit 0 | **45 / 0 grün** | unverändert |
+| **N-6** | eine Palette erklärt `.scrim { position: absolute }` | — | **45 / 0 grün** | „1, davon 1 verankert" |
+| **N-6b** | eine Palette erklärt `.scrim { position: static }` | — | **45 / 0 grün** | „1, davon 1 verankert" |
+| **N-7** | eine Palette legt `backdrop-filter` auf den Dokumentkörper | — | **45 / 0 grün** | unverändert |
+| **H-1** | `if (e.key !== "Escape") return;` — dahinter `confirmOpen()` | Exit 0 | **45 / 0 grün** | 91 Absagewege |
+| **H-2** | `switch (e.key) { case "Escape": confirmOpen() }` | Exit 0 | **45 / 0 grün** | 91 |
+| **H-3** | Absageweg unter dem Namen `onRequestClose` | (Attrappe) | **45 / 0 grün** | 92 |
+| **H-4** | `["Escape", "Esc"].includes(e.key)` — dahinter `confirmOpen()` | Exit 0 | **45 / 0 grün** | 91 |
+
+Drei Klassen, und zwei davon sind mehr als ein blinder Fleck.
+
+**(a) Die Menge kommt nicht aus der Eigenschaft, sondern aus einer Schreibweise der
+Eigenschaft.** `fensterfesteKlassen` liest `position\s*:\s*fixed\s*(?:;|$|})` und dazu `inset: 0`
+oder alle vier Kanten. `!important` (N-1) bricht den ersten Ausdruck, eine Variable (N-2) ebenso,
+zwei Regeln statt einer (N-3) brechen die Und-Verknüpfung im Rumpf, und `width/height` (N-4) ist
+dieselbe Fläche in anderen Worten. Keine dieser vier steht unter der Grenze, die T-348 in den
+Kopf der Regel geschrieben hat („nur JSX und `createElement` im gelesenen Baum; ein Klassenname,
+der erst zur Laufzeit entsteht, bleibt ungelesen") — es sind statisch geschriebene Stilblätter
+mit statisch geschriebenem JSX. **Der Satz aus T-347 gilt eine Runde später wieder:** eine
+Aussage über ein Muster wurde als Aussage über eine Eigenschaft geführt.
+
+**Und die Folge ist gemessen, nicht behauptet.** Im Browser, 1280 × 820, Palette `glass`, mit den
+echten Stilblättern:
+
+| Fläche | Lage | Kasten | Knopf „Öffnen" |
+|---|---|---|---|
+| Abdunklung am Dokumentkörper (heute) | `fixed` | 1280 × 820 bei (0, 0) | y = 415, **im Fenster** |
+| dieselbe Fläche **in einer Karte** (N-1 bis N-5) | `fixed` | 980 × 11 998 bei (265, −523) | y = 5481, **außerhalb** |
+
+Der Grund steht in `theme-palettes.css:453`: In `glass` und `liquid-glass` trägt `.card` ein
+`backdrop-filter`, und das erzeugt für jeden festen Nachfahren einen umschließenden Block. **Jede
+zweite Bestätigungsfläche, die jemand künftig in einer Karte zeichnet, ist damit in zwei von
+neunzehn Gestaltungen unerreichbar** — genau R-31 —, und der Lauf sieht sie nur, wenn ihr
+Stilblatt die vom Ausdruck erwartete Schreibweise trifft.
+
+**(b) „In jeder Gestaltung" mißt dieser Lauf nicht.** Die Menge entsteht aus der **Vereinigung**
+aller sieben Stilblätter. Eine Palette, die die Eigenschaft später widerruft, nimmt die Klasse
+nicht aus der Menge — die Grundregel steht weiter in `components.css`. Gemessen:
+
+| Palettenregel | `proof:surface` | Abdunklung am Dokumentkörper, gemessen |
+|---|---|---|
+| `:root[data-design-theme="glass"] .scrim { position: absolute }` | **45 / 0 grün** | 1280 × 820 bei (0, 0) — heute folgenlos, weil der Körper nicht läuft |
+| `:root[data-design-theme="glass"] .scrim { position: static }` | **45 / 0 grün** | **1280 × 98 bei (0, 820)**, Knopf y = 874 — **außerhalb des Fensters** |
+| `body { backdrop-filter: blur(2px) }` / `body { transform: translateZ(0) }` | **45 / 0 grün** | unverändert — der Körperkasten **ist** das Fenster |
+
+Die zweite Zeile ist dieselbe Bauart wie G-8, die T-348 geschlossen hat, nur unter einem
+Palettenselektor: Der Lauf meldet weiter **„1, davon 1 verankert"**, während die Fläche in einer
+Gestaltung nachweislich unter dem Fenster liegt. Das ist wieder eine **falsche Zusage**, nicht
+eine fehlende — die Gattung, die T-347 als die schwerste benannt hat. Die dritte Zeile ist die
+gute Nachricht dazu: Der von T-348 als „mittelbar" bezeichnete Weg über einen umschließenden
+Block am Körper ist heute **wirkungslos**, und zwar gemessen; er wird es in dem Augenblick nicht
+mehr sein, in dem der Körper selbst eine Ausdehnung über das Fenster hinaus bekommt.
+
+**(c) Regel H erntet drei Schreibweisen eines Weges, nicht den Weg.** Ein Absageweg ist heute der
+Wert eines JSX-Attributs `onDismiss`/`onCancel`/`onClose` oder der Zweig hinter einem `===`
+Vergleich mit `"Escape"`. Die Wächterklausel mit `!==` (H-1), der `switch`-Fall (H-2) und der
+Listenvergleich (H-4) sind **dieselbe Taste, derselbe Rumpf, dieselbe Datei** — und alle drei
+sind unsichtbar, mit `tsc` Exit 0. H-3 zeigt dieselbe Kante an den Attributnamen und hebt dabei
+die Zahl der Absagewege von 91 auf 92, ohne den Befund zu sehen. **Die Grenze, die im Kopf der
+Regel steht** („ein Rückruf, der über eine fremde Datei, eine Abbildung oder einen Zustandshaken
+zurückkommt"), beschreibt die **Erreichbarkeit** — die Lücke liegt eine Stufe davor, in der
+**Ernte**.
+
+### 45.2 Die Selbstauskunft über A-25.6, in beide Richtungen geprüft
+
+T-348 schreibt, sein Lauf trage von den fünf Teilsätzen zwei, einen mittelbar, zwei nicht.
+Geprüft, und zwar in beide Richtungen — zu weit **und** zu eng:
+
+| Teilsatz | Auskunft T-348 | gemessen |
+|---|---|---|
+| 1. hängt am Fenster, **in jeder Gestaltung** | ja | **zu weit.** Die Menge ist eine über eine Schreibweise (N-1 bis N-4), die Ernte kennt keine Stilangabe am Element (N-5), und „in jeder Gestaltung" ist an der Vereinigung der Blätter gemessen, nicht je Palette (N-6b: grün, Fläche außerhalb des Fensters) |
+| 2. ist vollständig sichtbar | nein | **richtig** — kein Satz dieses Laufs mißt Größe oder Lage |
+| 3. rollt nicht weg | mittelbar | **richtig, und die Grenze ist schärfer als vermutet:** der umschließende Block am Körper ist heute wirkungslos (N-7), die Gefahr sitzt an der Palette (N-6b) |
+| 4. fängt den Tastaturfokus | nein | **richtig** |
+| 5. Abbrechen ist nie Zustimmung | ja, Grenze „fremde Datei" | **zu weit.** Drei Schreibweisen desselben Weges in **derselben** Datei kommen durch (H-1, H-2, H-4) |
+
+Zu eng ist die Auskunft nirgends: Der Lauf sagt an keiner Stelle weniger, als er kann.
+
+### 45.3 A-A-106 — der Hebel hält, der Riegel daneben nicht
+
+Eigener Aufbau, nur das Modul, Attrappen für Quelle und Speicher, Takt 10 ms, Meßfenster 400 ms.
+
+| Lage des Speichers | ausgehende Anfragen | Zustand | Protokollzeilen | Schreibversuche |
+|---|---|---|---|---|
+| schreibt sofort | 40 | `known` | 0 | 40 |
+| **antwortet nie** (Frist 20 ms) | **40** | `known` | **2** × `…write_timeout` | 2 |
+| wirft (abgelehnte Zusage) | 40 | `known` | 1 × `…unwritable` | 1 |
+| wirft **synchron** beim Aufruf | 40 | `known` | 1 × `…unwritable` | 1 |
+| langsam (200 ms), Frist 20 ms | 40 | `known` | **2** × `…write_timeout` | 2 |
+| langsam (15 ms), Frist 20 ms | 40 | `known` | 0 | 40 |
+| **blockiert synchron** (150 ms je Aufruf) | **3** | `known` | **0** | 3 |
+
+**Der Hebel selbst ist eingelöst.** Ein Speicher, der schweigt, wirft oder trödelt, hält die
+ausgehende Anfrage nicht mehr auf; der Ausschalter aus T-332 K-1 schaltet nichts ab. Das ist der
+Kern von A-A-106, und er trägt in jeder Lage, die ich gebaut habe.
+
+**Drei Befunde daneben.**
+
+**(a) „Genau eine Zeile" ist eine Eigenschaft des Taktes, nicht des Codes.** `forgetStore` prüft
+nicht, ob der Speicher schon abgelegt ist. Zwei Fristen, die vor der ersten Ablage gestellt
+wurden, laufen beide ab und schreiben beide. Gemessen: **zwei** Zeilen. Im Erzeugnis ist der
+Abstand zweier Anfragen mindestens eine Stunde und die Frist fünf Sekunden — dort bleibt es eine
+Zeile. Die Zusage im Quelltext lautet aber „**Genau eine über die ganze Laufzeit**", und das ist
+eine Aussage über das Modul, nicht über seine Verdrahtung. Eine Zeile behebt es.
+
+**(b) Der abgelegte Speicher bleibt abgelegt, und die Datensicherung trägt danach einen
+veralteten Wert, keinen fehlenden.** Nach der ersten abgelaufenen Frist kommen von 40 Anfragen
+**2** Schreibversuche zustande; die übrigen 38 Zeitpunkte werden nie gemerkt. Ein Archiv nach
+A-20, das danach gezogen wird, sagt „zuletzt geprüft am …" und nennt einen Zeitpunkt, der
+beliebig alt sein kann. Für die Abrechnung ist das folgenlos; für den harten Boden aus A-V-11
+kostet es **höchstens eine zusätzliche Anfrage je Programmstart**, weil der Boden innerhalb eines
+Laufs am Arbeitsspeicher hängt und die erste Prüfung eines Laufs ohnehin hinausgeht (T-285).
+Nachgemessen und ausdrücklich mitgeteilt: Der **übersprungene Fassungswert** ist von alledem
+unberührt — er läuft über die Einstellungen (`settings/routes.ts:47`, Formprüfung am Etikett) und
+nicht über diesen Speicher.
+
+**(c) Zwei Schreibvorgänge, zwei Zeitpunkte.** Ein Speicher, der erst nach der Frist antwortet und
+dann doch schreibt, schreibt den Zeitpunkt, den er bekommen hat; beide späten Schreibvorgänge
+sind angekommen. Der Bestand ist damit nicht falsch, nur alt.
+
+**Die Stille nach A-18.12 hält.** In jeder Lage oben: `current()` geht den gewöhnlichen Weg
+(`unknown` → `known`), es entsteht keine Fläche, keine Meldung, kein Hinweis; die einzigen
+Ausgänge sind `info`-Zeilen im Protokoll mit Schlüsseln aus dem geschlossenen Vorrat. Ein
+Zeitablauf bringt nichts auf den Bildschirm.
+
+**Der nächste Ausgang derselben Klasse — gemessen, und er ist total.**
+
+| Lage der Quelle | Anfragen | Zustand nach 400 ms | Protokoll |
+|---|---|---|---|
+| `latest` antwortet nie, ignoriert das Signal | **1** | `unknown` | **0 Zeilen** |
+| `latest` antwortet nie, **hört** auf das Signal | **1** | `unknown` | **0 Zeilen** |
+
+Beide Male steht `inFlight` auf wahr, und jeder weitere Durchgang kehrt in der ersten Zeile um.
+Die zweite Zeile ist die interessante: Eine **wohlerzogene** Quelle hilft nicht, denn niemand
+bricht ab — `control` wird nur von `stop()` ausgelöst. Es ist der stille Ausgang aus T-332 K-1,
+eine Naht weiter rechts, und er ist stiller als jeder Fehlschlag.
+
+**Was ihn heute eng hält, ist nachgemessen statt geglaubt.** Die gebaute Quelle trägt
+`AbortSignal.timeout(5 000)` (A-V-5). Der Verdacht lag nahe, daß die Frist nur die Kopfzeilen
+trägt, weil `readBounded(response, signal)` das **Abschaltsignal** und nicht das verbundene
+bekommt. Gemessen gegen einen eigenen Wirt auf einem flüchtigen Port, der 200 und Kopfzeilen
+schickt und den Rumpf dann tropfen läßt: **Ausgang nach 5 002 ms, `{"ok":false,"reason":"timeout"}`**.
+Die Gesamtfrist trägt den Rumpf; das zweite Argument dient nur der Einordnung des Wurfs. Die
+Zusage in `source.ts:169` stimmt.
+
+**Der fünfte Weg, den T-349 nicht ausgeschlossen hat — hier ist er.** Vier Gestalten gegen
+`proof:release-safety` (Nullpunkt **154 / 0**):
+
+| | Gestalt | `tsc` | Lauf |
+|---|---|---|---|
+| R-1 | die Anfrage steckt in einer örtlichen Hilfsfunktion, davor ein hängendes `await` | Exit 0 | **153 / 1 rot** |
+| R-2 | `await Promise.all([source.latest(…), nie()])` — die Anfrage steht unter dem `await` | Exit 0 | **153 / 1 rot** |
+| R-3 | ein hängendes `await` **hinter** der Anfrage | Exit 0 | **153 / 1 rot** |
+| **R-4** | **kein `await` dazu** — ein synchroner Riegel vor der Anfrage | Exit 0 | **154 / 0 grün** |
+
+6g-1 hält gegen alles, was auf einem `await` steht — auch dort, wo ich es nicht erwartet hatte
+(R-2: die Anfrage steht formal unter dem einen erlaubten `await` und wird trotzdem gemeldet).
+**Seine Achse ist das `await`, und ein Riegel braucht keines.** Die Lage ist dabei nicht
+symmetrisch: R-4 in `run()` friert den ganzen Dienst ein und ist damit laut; die leise Fassung ist
+der synchron blockierende **Speicher** aus der Tabelle oben — Anfragen 40 → 3, Protokoll leer.
+Der Port sagt diesen Fall in seinem eigenen Kommentar an („Was er **nicht** darf, ist synchron
+blockieren — dagegen hilft keine Frist"); der Lauf sagt ihn nicht an. Der Satz „ein fünfter Weg
+ist nicht ausgeschlossen" ist damit **richtig und belegt**, und R-30 gehört um die Achse ergänzt:
+nicht nur „ein fremdes Versprechen hängt", sondern auch „ein fremder Aufruf **kehrt nicht
+zurück**".
+
+### 45.4 R-34 — der fremde Wert, den der eigene Rechner ausrechnet
+
+Erste Bewertung dieser Fläche. Gemessen über die Anwendungsfälle (`importDataArchive`,
+`loadOrphanedTimer`, `stopTimer`, `previewExport`), ohne HTTP, mit der Standardvorlage.
+
+| Fall | Start im Archiv | verwaist? | gebuchte Dauer | Exportzeile |
+|---|---|---|---|---|
+| 1a | 11 Stunden vor jetzt, Lebenszeichen nach 20 Minuten | **nein** | **39 600 s** | `{"Call":"999001","Zeit":11,…}` |
+| 1b | 1970-01-01 | **nein** | **1 789 300 800 s** | `"Zeit": 497 028` |
+| 1c | 1000-01-01 | **nein** | **32 399 524 800 s** | `"Zeit": 8 999 868` |
+| 1d | 2030-01-01 (Zukunft) | nein | — | Stopp **verworfen**, `timer_too_short` |
+| 1e | keine Zeitangabe | — | — | Einspielen **wirft** (CHECK), nichts geändert |
+| 2a | abgeschlossene Buchung, 1000-01-01 bis 2026-09-12 | — | aus dem Archiv | `"Zeit": 8 999 840` |
+
+**Die Antwort auf die erste Frage ist ja, und sie ist enger begründet, als die Zahlen vermuten
+lassen.** Ein Archiv bringt eine beliebige Dauer in eine Buchung, aber **auf zwei verschiedenen
+Wegen mit verschiedener Schwere**:
+
+- **2a ist die Datensicherung, wie sie gemeint ist.** Eine abgeschlossene Buchung trägt ihre
+  Spanne mit; sie *muß* mitreisen, sonst gäbe es den Round-Trip aus A-20.4 nicht. Wer die Datei
+  ändert, ändert seine eigenen Abrechnungsdaten — dieselbe Vertrauensgrenze wie die SQLite-Datei
+  daneben (VG-3). Kein Gegenmittel, keine Auflage.
+- **1a bis 1c sind etwas anderes.** Der Wert steht **nicht** in der Datei. In der Datei steht ein
+  Anfangszeitpunkt; die Dauer rechnet der **empfangende** Rechner aus, jetzt, aus seiner eigenen
+  Uhr, und schreibt sie als frisch gemessene Arbeitszeit in eine offene Buchung. Sie ist von einer
+  echten Messung nicht zu unterscheiden, weil sie **eine** ist — nur nicht von Arbeit.
+
+**Und der schwerste Fall kommt ohne Angreifer aus.** Für 1a genügt eine Datensicherung, die ein
+Benutzer selbst gezogen hat, **während ein Timer lief** (T-350 hat genau das über den echten
+Export-/Importweg gemessen: 39 600 s Wanduhr gegen 1 200 s bis zum mitgereisten Lebenszeichen).
+Wer sie vier Wochen später auf einem neuen Rechner einspielt, sieht einen Timer, der seit vier
+Wochen läuft, und bucht beim Stopp vier Wochen. Ein präpariertes Archiv ist die Zuspitzung, nicht
+die Voraussetzung.
+
+**Die Obergrenze, und wo sie steht.** Es gibt keine Obergrenze für eine Dauer. `time_entry` prüft
+`duration_seconds >= 1` und sonst nichts; `packages/domain` kennt eine **Mindest**dauer
+(`MINIMUM_DURATION_SECONDS`) und keine Höchstdauer; die Rundung aus E-008 rundet **auf**. Die
+einzige wirksame Schranke ist die Formprüfung der Zeitangabe
+(`started_at GLOB '[0-9][0-9][0-9][0-9]-…'`): vier Stellen für das Jahr. Daraus folgt als
+tatsächliche Obergrenze rund **6,4 × 10¹⁰ Sekunden** ≈ 17,8 Millionen Stunden in **einer** Zeile
+der Exportdatei. Gemessen sind 8 999 868.
+
+**Zwei Richtungen, in denen die Bauart nicht trägt — beide nachgemessen.**
+
+- **Der interne Vermerk bleibt draußen, auch über das Archiv.** `export_template` steht in
+  `DATA_ARCHIVE_TABLES`; ein Archiv kann also eine Vorlage einspielen. Eine Vorlage mit der
+  Feldquelle `todo.note` wird beim **Benutzen** abgewiesen — `export_source_forbidden`, als
+  Entwurf und als gespeicherte Vorlage gleichermaßen —, und `readExportSource` ist ein
+  geschlossener Schalter mit `default: null`. Die Notizgrenze aus A-7.2 hält an der Archivkante.
+  Der Preis ist eine Verweigerung: Eine eingespielte Vorlage kann den Export **unmöglich** machen,
+  nicht undicht.
+- **`WindowsUser` kommt nicht aus dem Archiv.** Er kommt über die zweite `stdin`-Zeile der Hülle
+  (`runtime.ts:35`, E-010/E-042) und steht in keiner Archivspalte. Von den vier Feldern der
+  Standardvorlage sind damit drei aus dem Archiv setzbar (`Call`, `Zeit`, `Notiz`) und eines
+  nicht.
+
+**Was sonst aus einem Archiv in eine Rechnung mündet** — am Spaltenschnitt gelesen, nicht
+gemessen: `export_status` und `export_count` reisen mit, und die Prüfregeln des Schemas erzwingen
+nur ihre **innere** Stimmigkeit. Ein Archiv kann eine bereits exportierte Buchung wieder als
+`open` einspielen (zweite Abrechnung) oder eine offene als `exported` (stille Auslassung), und
+`export_audit` reist in derselben Datei — die Spur kann die Frage also nicht beantworten. Das ist
+dieselbe Klasse wie 2a: der Round-Trip verlangt es, und die Grenze ist die Datei selbst.
+
+**Wer die Tür öffnet.** `POST /data-transfer/archive` liegt außerhalb von `/addin` und verlangt
+damit den Sitzungsnachweis (`requiredCredentialForPath` → `session`) **und** eine zugelassene
+Herkunft. Eine fremde Seite im Browser erreicht sie nicht; ein lokaler Prozeß mit dem Sitzungswert
+erreicht sie, und der hat ohnehin die Datei (VG-3). Der Weg ist also der Benutzer mit einer Datei
+— Wiederherstellung oder Weitergabe.
+
+**Was hält.** Ein ungültiges Archiv verändert nichts: Bei einer verletzten Schemaregel bricht die
+Umschaltung ab, die Transaktion rollt zurück, und der Bestand steht danach unverändert da
+(gemessen). Nach außen erscheint dabei `internal_error` mit dem immer gleichen Satz — kein SQL,
+kein Innenleben. Der Preis ist eine **500 statt einer 422**: Die Prüfung in `parseArchive` liest
+Gestalt und Skalare, die inhaltliche Prüfung machen die `CHECK`-Regeln der Datenbank, und die
+kommen als Wurf. Das ist Nacharbeit an der Auskunft, keine Lücke.
+
+### 45.5 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-119** | **Eine Menge über eine Eigenschaft wird nicht über eine Schreibweise gezogen.** `fensterfesteKlassen` muß `!important`, einen Variablenwert, getrennte Regeln desselben Selektors und die Ausdehnung über `width`/`height` erfassen — oder melden, was es nicht auflösen kann (A-A-113, dieselbe Richtung). Ein `position`-Wert, der keine Konstante ist, ist ein Befund und kein Schweigen | N-1 bis N-4: `tsc` Exit 0, `proof:surface` 45/0 grün, Menge unverändert; im Browser 980 × 11 998 bei (265, −523), Knopf außerhalb |
+| **A-A-120** | **„In jeder Gestaltung" wird je Gestaltung gemessen.** Die Eigenschaft einer fensterfesten Klasse darf von keiner späteren Regel widerrufen werden: Jede Regel in `apps/web/src/styles/**`, die `position` einer Klasse aus der Menge setzt, ist ein Befund, wenn sie nicht wieder `fixed` sagt. Alternativ die Messung im Browser über 19 Paletten × 2 Modi wie T-337 | N-6b: `proof:surface` 45/0 grün und die Schlußzeile meldet „1, davon 1 verankert", während die Fläche bei (0, 820) außerhalb des Fensters liegt |
+| **A-A-121** | **Die Stilangabe am Element gehört in die Ernte von Regel G** — `style={{ position: "fixed", … }}` ist dieselbe Fläche ohne Stilblatt. Wo das nicht gebaut wird, steht es als benannte Grenze im Kopf der Regel, und zwar als Grenze der **Ernte**, nicht als Grenze der Auflösung | N-5: `tsc` Exit 0, 45/0 grün |
+| **A-A-122** | **Regel H spannt ihre Ernte an der Handlung auf, nicht an drei Schreibweisen.** Ein Rumpf, der auf die Taste `Escape` reagiert, ist ein Absageweg — gleich ob über `===`, `!==` mit Wächterklausel, `switch` oder einen Listenvergleich; ein Attribut, dessen Name auf ein Schließen deutet, ebenfalls. Was nicht erfaßt wird, steht im Kopf | H-1, H-2, H-4: `tsc` Exit 0, 45/0 grün, Absagewege unverändert 91. H-3: 92 Wege, Befund ungesehen |
+| **A-A-123** | **Die Zusage „genau eine Zeile" gilt für das Modul oder gar nicht.** `forgetStore` schreibt je abgelaufener Frist eine Zeile; zwei Fristen, die vor der ersten Ablage gestellt wurden, schreiben zwei. Entweder eine Ablage, die sich selbst prüft, oder der Satz im Quelltext wird auf das gekürzt, was gilt | zwei Zeilen `version_check_state_write_timeout` bei Takt 10 ms und Frist 20 ms |
+| **A-A-124** | **Ein abgelegter Speicher bleibt für die Laufzeit abgelegt — das gehört in den Satz daneben.** Der Bestandswert ist danach **veraltet**, nicht fehlend; eine Datensicherung nach A-20 trägt einen Zeitpunkt, der beliebig alt sein kann, und sieht dabei gültig aus | 2 von 40 Schreibversuchen nach der ersten abgelaufenen Frist |
+| **A-A-125** | **Der fünfte Weg hat keine `await`-Achse.** Die Lückenliste von 6g-1 nennt ausdrücklich, daß ein **synchron** nicht zurückkehrender Aufruf auf dem Weg zur Anfrage von diesem Lauf nicht gesehen wird — der Port sagt es bereits, der Lauf nicht. R-30 wird um diese Achse ergänzt | R-4: `tsc` Exit 0, `proof:release-safety` **154/0 grün**; leise Fassung am Speicher: 40 → 3 Anfragen, Protokoll leer |
+| **A-A-126** | **Ein offener Zeiteintrag, den dieser Lauf nicht gestartet hat, ist verwaist.** Die Polarität der Aufnahme dreht sich (T-350 Abschnitt 4), **oder** das Einspielen behandelt den mitgereisten laufenden Eintrag ausdrücklich: auf sein mitgereistes Lebenszeichen deckeln oder abschließen. Eine Zeitdifferenz gegen die eigene Uhr eines fremden Rechners ist keine Messung | 1a: 39 600 s statt 1 200 s, Exportzeile `"Zeit": 11`; 1b: `"Zeit": 497 028`; 1c: `"Zeit": 8 999 868` |
+| **A-A-127** | **Eine Dauer, die in eine Rechnung geht, bekommt eine nennbare Obergrenze.** Heute begrenzt allein die Formprüfung der Zeitangabe (vier Stellen im Jahr) auf rund 6,4 × 10¹⁰ Sekunden. Wo keine harte Grenze gewollt ist, sagt die Oberfläche vor dem Buchen und vor dem Export, daß eine einzelne Buchung über einer nennbaren Schwelle liegt | 1b und 1c: gebucht und exportiert ohne Rückfrage und ohne Hinweis |
+
+### 45.6 Urteil, je Teil
+
+**Teil 1 (T-348): nicht freigegeben.** Was gebaut ist, ist echte Arbeit und in jedem Punkt besser
+als vorher: Alle acht Gestalten aus T-347 sind rot, `createPortal` wird gegen seine Einfuhr
+aufgelöst, und die Menge hängt nicht mehr an einem Namen. Aber die neue Menge hängt an einer
+**Schreibweise**, und die Zusage darüber ist zu weit: elf Gestalten kommen durch, davon vier
+gewöhnliche Stilblattschreibweisen, drei Schreibweisen desselben Absageweges in derselben Datei,
+und eine — N-6b — läßt den Lauf erneut eine Verankerung **behaupten**, die in einer Gestaltung
+gemessen nicht besteht. Nacharbeit: A-A-119 bis A-A-122. **Dringend ist keine davon:** Heute
+zeichnet genau eine Stelle eine Abdunklung, sie geht durch das echte Portal, und keine der
+neunzehn Paletten faßt `position` an. Der Preis fällt bei der nächsten Bestätigungsfläche an.
+
+**Teil 2 (T-349): freigegeben, mit drei Auflagen.** Der Hebel ist gebaut und trägt in jeder Lage,
+die ich bauen konnte: Ein Speicher, der schweigt, wirft oder trödelt, hält die Anfrage nicht mehr
+auf. Die Stille nach A-18.12 hält ausnahmslos; ein Zeitablauf bringt nichts auf den Bildschirm.
+Der Wächter hält gegen drei `await`-Gestalten, darunter zwei, die ich für Lücken gehalten hatte.
+Die Zusage „genau eine Zeile" stimmt für die Verdrahtung und nicht für das Modul (A-A-123), der
+abgelegte Speicher hinterläßt einen **veralteten** statt eines fehlenden Wertes (A-A-124), und der
+fünfte Weg ist gemessen und braucht kein `await` (A-A-125). Der Satz „ein fünfter ist nicht
+ausgeschlossen" war richtig; die Reihenfolgeschwäche ist für die Datensicherung folgenlos und für
+den übersprungenen Fassungswert ohne Berührung.
+
+**Teil 3 (T-350 und R-34): die Verengung freigegeben, das Risiko bestätigt und geschärft.** Die
+Messung von T-350 stimmt, ihre Zurückhaltung war richtig, und die Bewertung fällt schwerer aus als
+das gemeldete Beispiel: Die Dauer ist nicht begrenzt (gemessen bis 8 999 868 Stunden in einer
+Exportzeile), der Weg braucht **keinen Angreifer** — eine ehrliche Datensicherung mit laufendem
+Timer genügt —, und der Wert wird vom empfangenden Rechner erzeugt und ist deshalb von einer
+echten Messung nicht zu unterscheiden. R-34 bleibt **hoch** und offen; A-A-126 und A-A-127 sind
+die Gegenmittel. Der Todo-Vermerk, `WindowsUser` und das Rückrollen eines ungültigen Archivs
+halten — nachgemessen.
+
+**Der Satz, der mir aus dieser Prüfung bleibt.** Dreimal in Folge stand an derselben Stelle
+derselbe Fehler, jedesmal eine Stufe tiefer: erst die falsche **Menge** (Portale statt
+Abdunklungen), dann die falsche **Auflösung** (der Name statt der Einfuhr), jetzt die falsche
+**Beschreibung** einer richtigen Eigenschaft (ein regulärer Ausdruck über `position: fixed` statt
+der Lage, die daraus folgt). Und daneben, in der Abrechnung, die Umkehrung desselben Musters: Dort
+ist der Wert echt gemessen — und beschreibt trotzdem nichts, was geschehen ist. **Eine Zahl wird
+nicht dadurch wahr, daß ein Rechner sie ausgerechnet hat.**
+
+## 46. Prüfung T-370 (2026-09-14) — R-34 an vier Türen zu, an zweien offen, und ein Deckel, der aus derselben fremden Datei kommt wie der Anfang
+
+Gegenstand: **T-358** (die Aufnahme des Timer-Zustands wandert beim Einspielen in **dieselbe**
+Transaktionsklammer wie `replaceAll`) und **T-363** (`stopTimer`, `startTimer` und `touchHeartbeat`
+stellen dieselbe Frage wie die Anzeige). Beide sind Gegenmittel zu **R-34** und zu **A-A-126** aus
+Abschnitt 45.5.
+
+**Meßweg.** Kein HTTP, kein Port, keine Datei auf der Platte. Zwei `openDatabase({ location:
+':memory:' })` als zwei Rechner, zwei bewegliche Uhren, der echte Anwendungsfallweg
+`exportDataArchive` → `importDataArchive` → `loadOrphanedTimer`/`stopTimer`/`startTimer`/
+`beginIdle`/`returnFromIdle`, node 22.23.2. Quelluhr `T0 = 2026-09-13T06:00:00Z`, Lebenszeichen
+`T0 + 1 200 s`, Zieluhr `T0 + 39 600 s`. Die Zahlen unten sind **neu gefahren**, nicht aus den
+Berichten der beiden Aufträge übernommen.
+
+### 46.1 Die Tabelle aus 45.4, noch einmal gemessen
+
+Vier Zeilen der Bewertung von T-357 sind durch diese beiden Arbeiten **unwahr geworden**, und das
+in die gute Richtung:
+
+| Fall | 45.4 (2026-09-13) | T-370 (2026-09-14) |
+|---|---|---|
+| 1a `POST /timer/stop` nach dem Einspielen | **39 600 s**, Exportzeile `"Zeit": 11` | **1 200 s**, `"Zeit": 0,5` |
+| 1a `GET /timer/orphaned` | `null` — kein Weg, richtig zu buchen | `bookableSeconds = 1 200` |
+| 1b Start `1970-01-01`, Lebenszeichen `+20 min` | **1 789 300 800 s**, `"Zeit": 497 028` | **1 200 s**, `"Zeit": 0,5` |
+| 1c Start `1000-01-01`, **kein** Lebenszeichen | **32 399 524 800 s**, `"Zeit": 8 999 868` | **verworfen**, `timer_too_short` |
+| Timer **dieses** Laufs, elf Stunden | 39 600 s | 39 600 s — unverändert, und das ist der Punkt |
+| `POST /timer/start {stopRunning:true}` auf dem vorgefundenen Eintrag | (unbewertet) | **1 200 s**, Ende `06:20:00Z` |
+| `POST /timer/heartbeat` auf dem vorgefundenen Eintrag | (unbewertet) | `seenAt: null`, `bookableSeconds` bleibt **1 200** |
+| Zusammenhang **ohne** `timerRecovery`, elf Stunden Wanduhr | (unbewertet) | **verworfen** — die Ausfallrichtung ist die billige |
+
+**Der schwerste Fall aus 45.4 ist zu.** „Eine Datensicherung, die ein Benutzer selbst gezogen hat,
+während ein Timer lief" führt nicht mehr zu elf gebuchten Stunden, weder über den Stopp noch über
+die Schaltfläche „Ein Timer läuft. Stoppen?" daneben. Der Weg **ohne jedes Archiv** — der
+gewöhnliche Absturz, für den E-036 überhaupt geschrieben wurde — ist mitgeschlossen. Der Satz
+„der Weg braucht keinen Angreifer" trifft auf keinen der gemessenen Fälle mehr zu.
+
+### 46.2 Die drei Zusagen von T-358, nachgemessen
+
+- **Eine Klammer statt zweier, und zwar strukturell.** Siebzehn nebenher abgeschickte
+  `GET /timer/orphaned` gegen ein Archiv mit 2 000 Todos: **17 von 17** sahen
+  `bookableSeconds = 1 200`, keiner sah einen laufenden Timer ohne Waisenmeldung. Das ist nicht
+  Glück: `inTransaction` hängt `queue = next.then(…)` **vor** der `await`-Fortsetzung des
+  Aufrufers an dieselbe Zusage; wer sich während `replaceAll` einreiht, bekommt seine
+  Fortsetzung deshalb erst **nach** der Zuweisung an `timerRecovery.entryId`. Die Eigenschaft
+  hängt damit an der Reihenfolge zweier Zeilen in `unit-of-work.ts` und wird von keinem Lauf
+  gemessen — siehe A-A-128.
+- **Ein ungültiges Archiv verändert nichts, auch nicht die Aufnahme.** Drei Formen
+  (`schemaVersion: 99`, fremde Formatkennung, `"kaputt"`) gegen einen Zielrechner mit eigenem
+  verwaisten Eintrag: je `validation_error`; danach `timerRecovery.entryId` zeichengleich,
+  `bookableSeconds` 1 200 → 1 200, Todos 1 → 1, Titel unverändert `eigenes`. Das gültige Archiv
+  unmittelbar danach spielt ein und setzt beides neu. Die längere Klammer nimmt nicht mehr und
+  läßt nicht mehr stehen: Sie hat eine **Lesung** dazubekommen, keinen Schreibvorgang, und die
+  Zuweisung steht hinter dem `await` und in keinem `finally`.
+- **Der Pfad reist weiterhin nicht mit, und weiterhin vor dem Schreiben.** Ein Archiv **ohne
+  Bytes** (0 Dateien) mit `target = C:\Users\anna\AppData\Roaming\de.takt.desktop\email\<32
+  Hexziffern>.eml` landet auf dem Zielrechner als `<Anwendungsdatenverzeichnis>/email-attachments/
+  <32 Hexziffern>.eml`. Das Umschreiben geschieht beim Bau von `tables` und damit **vor**
+  `replaceAll`; die Umklammerung hat daran nichts verschoben.
+- **Die drei Rumpfgrenzen sind unberührt**: 1 MiB, 64 MiB, 256 MiB stehen zeichengleich in
+  `config.ts`. Die Speicherspitze je Anfrage wird von der Umklammerung nicht berührt — sie
+  entsteht beim Lesen des Rumpfes, lange vor der Transaktion. Nachgemessen habe ich sie **nicht**.
+- **Keine zweite Adresse.** In keinem der drei Artefakte steht eine Adresse außerhalb von
+  `127.0.0.1`; E-001 ist unberührt.
+
+### 46.3 Der fünfte und der sechste Weg: `features/timer/idle.ts`
+
+T-363 hat seine Menge an den Routen aufgespannt, die der Auftrag kannte — Stopp, Verdrängung,
+Lebenszeichen. Die **Anforderung** lautet aber: *jede* Stelle, die `ended_at` auf einen offenen
+Eintrag schreibt, urteilt über Geld. Am Bestand aufgespannt sind das **sieben** Aufrufstellen
+(dreimal `unit.timer.stop` in `timer.ts`, einmal der verdrängende `unit.timer.start`, zweimal in
+`idle.ts`, dazu `separateIdle`), und **zwei** davon fragen `foundAtServiceStart` nicht:
+
+```
+idle.ts:71   beginIdle       → unit.timer.stop(running.note, input.startedAt)
+idle.ts:41   completeReturn  → unit.timer.separateIdle(running.id, pending.startedAt, …)
+```
+
+Gemessen, mit Archiv und **ohne** Archiv, in **beiden** Stellungen von `idleKeepTimerRunning`
+(Vorgabe: eingeschaltet), Zieluhr `17:45`, inaktive Zeit ab `17:05`:
+
+```
+GET /timer/orphaned                       bookableSeconds = 1 200
+POST /timer/idle/begin                    ok
+POST /timer/idle/return                   ok
+  time_entry: 06:00:00Z -> 17:05:00Z  =  39 900 s  (export_status = open)
+```
+
+**Neununddreißigtausendneunhundert Sekunden auf einer abrechenbaren Zeile**, während dieselbe
+Anwendung für denselben Eintrag 1 200 s als buchbar ausweist. Das ist der Schaden aus R-34,
+unverändert in Art und Größe, nur durch eine andere Tür.
+
+Drei Eigenschaften machen ihn schwerer als einen Randfall:
+
+1. **Er braucht keine Handlung, die nach einer Buchung aussieht.** Die Inaktivitätserkennung
+   schickt `begin` und `return` von selbst (`useIdleTimer.ts`, Zweisekundentakt); der Benutzer tut
+   nichts als weggehen und wiederkommen.
+2. **Er greift auch dort, wo E-036 den Dialog gar nicht zeigt.** Die Oberfläche hält die
+   Inaktivitätserkennung an, solange der Verwaistendialog offen steht
+   (`blocked: … || orphan !== null`) — aber `GET /timer/orphaned` wird nur beim Aufbau der Seite
+   geholt. Nach einem Einspielen **im laufenden Betrieb** ist `orphan` in der Anzeige `null`, der
+   Riegel also offen. Es ist wieder ein Schutz in der Anzeige und nicht im Dienst — genau das,
+   was T-363 an den anderen drei Türen beseitigt hat.
+3. **Beide Stellungen der Einstellung führen zum selben Betrag.** `idleKeepTimerRunning = false`
+   schreibt die Buchung bereits in `begin`; `= true` schreibt sie in `separateIdle` beim
+   `return`. Eine Einstellung ist hier kein Gegenmittel.
+
+Daneben, ohne Geldbezug und deshalb nur benannt: Das Zuordnungsfenster, das der A-24-Dialog nach
+einer **eingespielten** offenen `timer_idle`-Zeile anbietet, ist gemessen `06:10 → 17:00` =
+**39 000 s**. Kein stiller Weg — der Benutzer müßte diese Stunden ausdrücklich auf Todos verteilen
+—, aber es ist derselbe Uhrversatz, diesmal in einem Dialog.
+
+**Was dort hält.** `unit.timeEntries.update` kann einen laufenden Eintrag nicht schließen: `loadOne`
+liefert für `ended_at IS NULL` grundsätzlich `null`, die Route antwortet `not_found`. Und
+`foreign.ts` legt ausschließlich Zeilen **mit** `endedAt` an — aus einem Fremdimport entsteht kein
+offener Eintrag. Beide Wege sind strukturell zu, nicht durch eine Prüfung.
+
+### 46.4 Der Deckel kommt aus derselben Datei wie der Anfang
+
+T-363 ersetzt die Wanduhr durch das **letzte Lebenszeichen**. Das ist richtig und es ist die Zusage
+aus E-036 — nur ist `timer_heartbeat` eine Tabelle in `DATA_ARCHIVE_TABLES` und damit derselbe
+fremde Inhalt wie `time_entry.started_at`. `decideOrphanedTimer` prüft `heartbeatAt` gegen nichts;
+insbesondere nicht gegen `now`.
+
+| Archiv | `GET /timer/orphaned` | `POST /timer/stop` | Exportzeile |
+|---|---|---|---|
+| Start `1000-01-01`, Lebenszeichen `9999-12-31` | 284 012 524 799 s | **284 012 524 799 s** | `"Zeit": 78 892 368` |
+| Start `2026-09-13`, Lebenszeichen `9999-12-31` | 251 613 021 599 s | **251 613 021 599 s** | `"Zeit": 69 892 506` |
+
+Die zweite Zeile ist die unangenehme: Ein Anfangszeitpunkt, der vollkommen gewöhnlich aussieht,
+und ein Lebenszeichen aus der Zukunft. **An dieser Stelle buchte HEAD 39 600 s** (`stopTimer` nahm
+die Wanduhr); der ausgelieferte Stand bucht 251 613 021 599 s. Für ein **präpariertes** Archiv ist
+der Stopp damit großzügiger geworden, nicht enger.
+
+Drei Einordnungen, damit das nicht größer klingt, als es ist:
+
+- Der Wert war seit E-036 über `POST /timer/orphaned/resolve` erreichbar. T-363 hat ihn nicht
+  erfunden, sondern den zweiten Weg auf denselben Wert gelegt — was für sich genommen richtig ist
+  („zwei Zahlen für denselben Eintrag sind der Fehler").
+- Er braucht ein **verändertes** Archiv. Der Fall ohne Angreifer ist mit 46.1 zu.
+- Die alte Obergrenze aus 45.4 (rund 6,4 × 10¹⁰ s, aus der Vierstelligkeit des Jahres im
+  `started_at`-CHECK) ist damit nicht gefallen, sondern **verschoben**: Jetzt spannt sie sich
+  zwischen zwei vierstelligen Jahren auf und liegt bei rund 2,84 × 10¹¹ s.
+
+**A-A-127 ist damit nicht erledigt, sondern dringlicher.** Es gibt weiterhin keine Obergrenze für
+eine Dauer: `duration_seconds >= 1` ist die einzige Schranke der Speicherung,
+`MINIMUM_DURATION_SECONDS` die einzige der Domäne, und E-008 rundet **auf**.
+
+### 46.5 Was unverändert hält
+
+- **Der Todo-Vermerk bleibt draußen.** Die Notizgrenze aus A-7.2 ist von beiden Arbeiten nicht
+  berührt; `pnpm boundaries` meldet „Notiz-Trennung: alle Schichten unverletzt" über 530
+  Quelldateien außerhalb der Domäne.
+- **`WindowsUser` kommt weiterhin nicht aus dem Archiv** (zweite `stdin`-Zeile der Hülle).
+- **Die Tür bleibt, wo sie war.** `POST /data-transfer/archive` und `POST /timer/idle/*` liegen
+  außerhalb von `/addin` und verlangen den Sitzungsnachweis **und** eine zugelassene Herkunft
+  (`requiredCredentialForPath` → `session`); `proof:access` 111/0 und `proof:route-policy` 48/0
+  grün. Eine fremde Seite im Browser erreicht keine der beiden. Der Weg ist der Benutzer mit einer
+  Datei — oder, bei 46.3, die eigene Oberfläche.
+- **Base64 bleibt Kodierung.** Eine Sicherung nach A-20 trägt weiterhin mehr lesbare Kundendaten
+  als jeder Abrechnungsexport; daran ändert keine der beiden Arbeiten etwas.
+- **Semgrep**: `p/typescript` + `p/secrets` über die drei Artefakte, 111 Regeln, 11 Dateien,
+  **0 Befunde**; `p/secrets` über 385 versionierte Quell-, Prüf- und Dokumentdateien, **0
+  Befunde**. Kein Zugangsdatum, keine echte Call-Nummer in den Diffs — die einzige fünfstellige
+  Zahl darin ist `17843`.
+- **42Crunch nicht gefahren.** Weder die CLI noch Zugangsdaten stehen in dieser Umgebung; ein
+  Audit lüde außerdem die Beschreibung des Dienstes zu einem fremden Dienst hoch. Gemeldet, nicht
+  grün. Die Änderungen an `takt-local-api.yaml` sind ausschließlich Beschreibungstexte — kein
+  neuer Pfad, kein geändertes Schema, kein berührtes `security`-Element; `proof:openapi` 115/0.
+
+### 46.6 Auflagen
+
+| Nr. | Auflage | Nachweis |
+|---|---|---|
+| **A-A-128** | **Wer eine offene Buchung schließt, stellt dieselbe Frage wie die Anzeige — und die Menge wird an der Anforderung aufgespannt, nicht an den Routen des Befundes** (E-099 Punkt 3). Jede Stelle, die `ended_at` auf einen Eintrag ohne Ende schreibt, geht über `foundAtServiceStart`; heute gilt das für fünf von sieben. Ein Lauf zieht die Menge aus der Platte (`timer.stop`, `timer.start`, `separateIdle`) und meldet jede Aufrufstelle **ohne** diese Frage als Befund. Dazu gehört der Prüffall, daß `importDataArchive` **eine** Transaktion eröffnet — die Reihenfolgezusage aus 46.2 hängt sonst an zwei ungemessenen Zeilen in `unit-of-work.ts` | `POST /timer/idle/begin` + `/idle/return` auf dem vorgefundenen Eintrag: **39 900 s**, `export_status = open`, während `GET /timer/orphaned` 1 200 s auswies — mit Archiv, ohne Archiv, in beiden Stellungen von `idleKeepTimerRunning` |
+| **A-A-129** | **Ein Deckel, der aus derselben fremden Datei kommt wie der Anfang, ist kein Deckel.** `heartbeatAt` reist im Archiv mit; gebucht wird höchstens bis `min(heartbeatAt, now)`. Die Stelle ist `decideOrphanedTimer` in `packages/domain`, damit Dialog und Stopp ihn **gemeinsam** bekommen — nicht `bookingEndOfStop`, sonst ist es wieder eine zweite Meinung | Start `2026-09-13`, Lebenszeichen `9999-12-31`: Stopp bucht **251 613 021 599 s**, Exportzeile `"Zeit": 69 892 506`. HEAD buchte an derselben Stelle 39 600 s |
+| **A-A-130** | **Ein Satz im Quelltext, der eine offene Lücke behauptet, die zu ist, ist derselbe Fehler wie umgekehrt.** `data-transfer.ts` sagt weiterhin, `stopTimer` frage `foundAtServiceStart` nicht und buche „auch mit dieser Klammer" 39 600 s, und nennt das den Restpunkt von R-34. Beim Schließen einer Lücke gehören die Sätze über sie in denselben Auftrag — in beide Richtungen | gemessen 1 200 s an genau dieser Stelle; der Absatz steht unverändert |
+
+### 46.7 Urteil
+
+**T-358: freigegeben, mit einer Auflage.** Jede der vier Zusagen ist neu gefahren und hält — die
+eine Klammer, das unveränderliche Ergebnis eines ungültigen Archivs einschließlich der Aufnahme,
+der Pfad, der auch ohne Bytes neu gesetzt wird, und die unberührten Rumpfgrenzen. Die Änderung
+nimmt der Fläche genau das, was sie ihr nehmen sollte, und fügt keine neue hinzu. Die Auflage ist
+A-A-130 und betrifft einen Absatz, nicht eine Zeile Code: Der Kommentar an der Klammer beschreibt
+seit T-363 eine Lücke, die es nicht mehr gibt.
+
+**T-363: nicht freigegeben.** Was gebaut ist, ist die wichtigste Verengung dieses Papiers seit
+Wochen: Drei Türen zu elf unverdienten Stunden sind beidseitig gemessen zu, der gewöhnliche Fall
+ist zeichengleich geblieben, und der vierte Befund — das Lebenszeichen, das den Deckel im
+Minutentakt anhob — war der Fund, ohne den die anderen drei binnen einer Minute wieder offen
+gewesen wären. Aber die Menge ist an den Routen aufgespannt, die der Auftrag kannte, und nicht an
+der Anforderung: **`features/timer/idle.ts` schließt denselben vorgefundenen Eintrag auf zwei
+weiteren Wegen mit der Wanduhr**, gemessen 39 900 s in einer abrechenbaren Zeile, ohne Zutun eines
+Angreifers und ohne eine Handlung, die nach einer Buchung aussieht. Das ist R-34, unverändert in
+Art und Größe. Nacharbeit: **A-A-128** (blockierend), **A-A-129**.
+
+**R-34 bleibt offen, aber nicht mehr hoch.** Die Fläche ist gemessen kleiner geworden: Von den
+fünf Türen, durch die ein vorgefundener Eintrag die Wanduhr in die Abrechnung trägt, sind drei zu
+(Stopp, Verdrängung, Lebenszeichen), und an den beiden verbliebenen braucht es Inaktivität statt
+eines Klicks. Der Rest mit Angreifer — ein Lebenszeichen aus der Zukunft — ist
+größer geworden, nicht kleiner. Die Einstufung gehört dem Orchestrator; meine Empfehlung lautet
+**mittel**, mit A-A-128 als der einen Zeile, die sie auf **niedrig** bringt.
+
+**Der Satz, der aus dieser Prüfung bleibt.** T-247 hat gelehrt, daß ein Wächter die Anforderung
+messen muß und nicht die Tür, die er kennt. Hier steht dieselbe Lehre ohne Wächter: Ein Auftrag,
+der „drei Wege" findet, wo der Vorgänger einen sah, hat **nicht** damit bewiesen, daß es drei sind
+— er hat bewiesen, daß das Zählen am falschen Ende anfing. Die Frage lautet nicht „welche Routen
+kenne ich", sondern „wer schreibt `ended_at`".

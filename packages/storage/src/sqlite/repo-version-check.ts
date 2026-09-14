@@ -34,6 +34,48 @@
  * hängen hieße, T-279 nachzubauen.
  *
  * ===========================================================================
+ * Was ein Wurf aus dieser Datei kostet — und was er nicht kann (T-364, A-A-124)
+ * ===========================================================================
+ *
+ * **Die Tatsache für den Rest des Laufs — bis T-367.** Warf `recordCheck` ein
+ * einziges Mal, legte der Prüfer den Speicher ab und merkte sich bis zum
+ * Programmende keinen Zeitpunkt mehr. Gemessen am echten Prüfer gegen eine
+ * echte Datei, mit einer Sperre, die nach kurzer Zeit wieder aufging: **ein**
+ * fehlgeschlagener von 63 Schreibversuchen, danach 51 ausgehende Anfragen ohne
+ * einen weiteren Eintrag. Der Bestand trug am Ende einen **52 Stunden alten**
+ * Zeitpunkt — veraltet, nicht fehlend —, und die Datensicherung trägt ihn mit.
+ *
+ * **Seit T-367 kostet ein Wurf aus dieser Datei den Rest des Laufs nicht mehr**
+ * (`reportStoreFailure` und `forgetStore` in
+ * `apps/local-api/src/features/version/version.ts`): Er wird gemeldet — genau
+ * eine Protokollzeile über die ganze Laufzeit —, aber der Speicher bleibt, und
+ * der nächste Takt ruft wieder hier an. In derselben gemessenen Lage ist der
+ * Wert danach **1 Stunde statt 52 Stunden** alt. Was ein Wurf aus dieser Datei
+ * heute kostet, ist **ein** Schreibvorgang und ein Eintrag im Protokoll.
+ *
+ * **Löschen hilft dagegen nicht**, und das ist gemessen und nicht gemutmaßt:
+ * Der Weg zu diesem Wert ist derselbe Kanal, der eben versagt hat. Bei einer
+ * nur lesenden Verbindung, einer geschlossenen Verbindung und einer gesperrten
+ * Datei wirft auch das `UPDATE … = NULL`. Die Begründung im ganzen steht bei
+ * {@link VersionCheckStatePort}; hier steht sie, weil jemand, der diese Datei
+ * um ein „vergiß den Wert" erweitern will, es hier zuerst liest.
+ *
+ * **Dieses `UPDATE` ist synchron.** Es kehrt zurück, bevor ein Zeitgeber mit
+ * 0 ms drankommt (gemessen). Die Frist von fünf Sekunden, die der Prüfer über
+ * ein angestoßenes Schreiben legt (A-A-106), kann für diesen Adapter also nie
+ * ablaufen — und seit T-367 ist der einzige Weg, der noch ablegt, genau
+ * dieser: Abgelegt wird nur noch der Speicher, der **nie antwortet**, und das
+ * ist ein Adapter, den es hier nicht gibt. Dieser hier wirft, und ein Wurf legt
+ * nicht mehr ab.
+ *
+ * **Und es kann die Ereignisschleife anhalten.** `busy_timeout = 5000`
+ * (`database.ts`): Hält ein zweiter Schreiber die Datei, steht dieser Aufruf
+ * gemessene **5 004 ms** und wirft danach `database is locked`. Der Port des
+ * Prüfers sagt, was ein Adapter nicht dürfe, sei „synchron blockieren" — dieser
+ * tut es unter einer Sperre. Das ist die zweite Achse von R-30 (A-A-125) an
+ * ihrer Stelle im Bestand und kein Gedankenfall.
+ *
+ * ===========================================================================
  * Warum die Anweisungen erst beim Aufruf vorbereitet werden
  * ===========================================================================
  *

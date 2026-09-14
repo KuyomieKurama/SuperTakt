@@ -38,8 +38,17 @@ html {
  * `height: 100%` ist eine feste Groesse und keine Untergrenze. Sie loest sich
  * bei `html` gegen den Anfangsblock des Fensters auf; `body` und `#root`
  * reichen sie durch. Was hoeher wird als das Fenster, muss sich seitdem selbst
- * um seinen Bildlauf kuemmern — in der Anwendung tut das genau ein Kasten,
- * `.app__main`.
+ * um seinen Bildlauf kuemmern — seit T-326 tut das genau ein **benannter
+ * Laufbereich je Ansicht** (`.screen__body` beziehungsweise `.runarea`,
+ * `viewport-layout.css`, E-112), dazu die Spalten des Boards
+ * (`.kcolumn__body`) und die Tabellenflaeche (`.table-wrap`). `.app__main`
+ * rahmt nur; es laeuft ausschliesslich im Rueckfall, wenn der feste Teil einer
+ * Ansicht hoeher wird als der Rahmen minus 4rem (T-322 R-3).
+ *
+ * Bis T-326 stand hier „genau ein Kasten, `.app__main`". Der Satz war danach
+ * **falsch** und nicht bloss unvollstaendig, und ein Kommentar, der die Huelle
+ * falsch beschreibt, hat in diesem Bestand schon zwei Leser getaeuscht
+ * (T-331). Berichtigt in T-334.
  *
  * Kein `overflow: hidden` auf `body`: Die Startbilder (`.boot`) und die
  * Musterseite haengen nicht in dieser Huelle und duerfen weiterhin das

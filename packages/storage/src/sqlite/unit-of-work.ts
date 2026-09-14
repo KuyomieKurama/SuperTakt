@@ -233,6 +233,34 @@ export function createTransactionPort(conn: SqlConnection, options: UnitOptions 
         );
       }
 
+      /*
+       * **`next` und nicht `queue` — und daran hängt Geld** (T-369, T-370,
+       * T-371, R-34).
+       *
+       * Der Rückgabewert dieser Funktion ist `next`, die Zusage der eigenen
+       * Transaktion. `queue` ist eine **Ableitung** davon und wird eine
+       * Mikroaufgabe **später** erfüllt. Aus dieser Reihenfolge folgt eine
+       * Zusage, die bisher nirgends aufgeschrieben war:
+       *
+       *   Der Code **hinter dem `await`** des Aufrufers läuft garantiert
+       *   **vor** der nächsten hier eingereihten Transaktion.
+       *
+       * `importDataArchive` (A-20) verläßt sich darauf. Es schreibt das Archiv
+       * und liest den laufenden Eintrag in **einer** Klammer, weist aber
+       * `context.timerRecovery.entryId` erst hinter dem `await` zu — bewußt,
+       * weil ein Fehlschlag beim `COMMIT` die Aufnahme sonst auf einen
+       * Eintrag zeigen ließe, den es nicht gibt. Daß trotzdem kein nebenher
+       * fragender Leser zwischen `COMMIT` und Zuweisung gerät, leistet
+       * ausschließlich diese Zeile. Gemessen (T-358, in T-369 und T-370
+       * unabhängig nachgefahren): 17 von 17 nebenläufigen Lesern sahen den
+       * Eintrag als verwaist; mit zwei Klammern sah einer einen laufenden
+       * Timer über elf Stunden.
+       *
+       * **Wer hier `return queue` schriebe, öffnete R-34 wieder, und nichts
+       * würde rot.** Ein Prüffall dafür fehlt bis heute; er gehört dem
+       * unit-tester (T-358 Abschnitt 8 Fall E, erweitert um einen nebenher
+       * gereihten Leser). Bis er steht, ist dieser Absatz die einzige Wache.
+       */
       const next = queue.then(() => run(work));
 
       // Die Kette darf nicht an einem Fehlschlag reißen: Der nächste Aufrufer

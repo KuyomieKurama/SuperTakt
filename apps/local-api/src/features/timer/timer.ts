@@ -20,18 +20,284 @@
  *     Timer läuft — oder in dem zwei Timer als beendet gelten und keiner läuft.
  */
 
-import type { PoolMovement, RunningTimeEntry, TimeEntry, Timestamp, TodoId } from '@takt/domain';
+import type {
+  PoolMovement,
+  RunningTimeEntry,
+  TimeEntry,
+  TimeEntryId,
+  Timestamp,
+  TodoId,
+} from '@takt/domain';
 import { decideOrphanedTimer, err, ok, taktError } from '@takt/domain';
+import type { UnitOfWork } from '@takt/storage';
 
 import { type AppContext, type UseCaseResult, now } from '../../context.ts';
 import { NO_ENTRIES } from '../../pool-movement.ts';
 import { movementOfBooking, movementOfStart, presenceBeforeBooking } from './movement.ts';
 
-/** Capture once before serving requests: only a timer from the previous run is orphaned. */
+/**
+ * Die Aufnahme beim Dienststart — und was „verwaist" überhaupt heißt (E-036,
+ * geprüft in T-350).
+ *
+ * ---------------------------------------------------------------------------
+ * Der Satz, um den es geht
+ * ---------------------------------------------------------------------------
+ *
+ * „Verwaist ist eine Buchung ohne Ende, die **beim Start der Anwendung**
+ * vorgefunden wird: Absturz, Abmeldung, Stromausfall." So steht es in der
+ * Domäne (`decideOrphanedTimer`, `packages/domain/src/time-entry.ts`), und so
+ * steht es in E-036. „Beim Start vorgefunden" ist der ganze Inhalt der Regel —
+ * und diese Funktion ist die einzige Stelle, an der er tatsächlich gemessen
+ * wird.
+ *
+ * **Die Speicherung mißt ihn nicht.** `TimerHeartbeatPort.orphaned()` liefert
+ * jede Zeile mit `ended_at IS NULL`, ohne Rücksicht auf den Zeitpunkt — und
+ * weil `ux_time_entry_running` genau eine solche Zeile zuläßt (A-6.8), ist das
+ * **immer** der gerade laufende Timer. Ohne diese Aufnahme beantwortete
+ * `GET /timer/orphaned` die Frage „ist etwas abgestürzt?" also mit dem Timer,
+ * den der Benutzer in diesem Augenblick sichtbar laufen sieht. Gemessen
+ * (T-350, in einem Prozeß, ohne HTTP): Ein Timer, der in derselben
+ * Dienstsitzung gestartet wurde, gilt heute **nicht** als verwaist — vorher
+ * hätte ein Neuladen der Seite den Dialog „Eine Buchung ohne Ende" darüber
+ * gestellt. Der Kommentar der Speicherung („die beim Start vorgefundene
+ * unvollständige Buchung") sagt seit jeher etwas zu, was ihre Abfrage nicht
+ * einlöst; eingelöst wird es hier.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum das kein Widerspruch zu A-24.7 ist
+ * ---------------------------------------------------------------------------
+ *
+ * A-24.7 verlangt, daß offene Phasen Neuladen, Neustart und Datensicherung
+ * überleben, und CLAUDE.md schärft nach: in SQLite, nicht im Arbeitsspeicher.
+ * Hier steht ein Wert im Arbeitsspeicher — aber er ist **kein Zustand**,
+ * sondern eine **Beobachtung**, die bei jedem Start aus SQLite neu gewonnen
+ * wird. Der offene Eintrag selbst liegt im Bestand und überlebt alles; die
+ * Frage „lag er schon da, als ich hochkam?" wird bei jedem Start neu
+ * beantwortet und kommt deshalb nach einem Neustart nicht abhanden, sondern
+ * entsteht dort überhaupt erst.
+ *
+ * Gemessen (T-350, echter Dienst auf 17843, `kill -9` zwischen zwei Läufen,
+ * derselbe Bestand): Der Eintrag aus Lauf 1 ist in Lauf 2 verwaist,
+ * `bookableSeconds` steht auf dem Abstand bis zum letzten Lebenszeichen und
+ * nicht auf der Wanduhr. Die Verengung nimmt der Anwendung also **nichts** von
+ * dem, wofür die Erkennung gebaut wurde.
+ *
+ * ---------------------------------------------------------------------------
+ * Zwei Mechanismen, eine Trennlinie: hat der Prozeß überlebt?
+ * ---------------------------------------------------------------------------
+ *
+ * E-036 und A-24 fragen dasselbe („da lief ein Timer, und niemand hat
+ * gearbeitet") auf zwei Seiten derselben Linie:
+ *
+ *   Prozeß **tot**      → E-036. Beim nächsten Start: bis zum letzten
+ *                         Lebenszeichen buchen oder verwerfen.
+ *   Prozeß **am Leben** → A-24. Die Abwesenheit wird vorgemerkt, der Timer
+ *                         läuft weiter, die Rückkehr schließt die aktive Zeit
+ *                         ab (`idle.ts`, `timer_idle` in SQLite).
+ *
+ * Ein Eintrag, der beides beanspruchte, hätte zwei Dialoge über denselben
+ * Sachverhalt. Genau das war der Anlaß dieser Aufnahme, und deshalb steht
+ * darunter in beiden Anwendungsfällen zusätzlich die Abfrage auf eine offene
+ * Inaktivitätsphase.
+ *
+ * ---------------------------------------------------------------------------
+ * Der zweite Eingang, und wer die Frage stellt (T-350, T-358, T-363, R-34)
+ * ---------------------------------------------------------------------------
+ *
+ * Die Aufnahme geschieht **einmal** beim Start. Offene Einträge entstehen im
+ * Betrieb nur durch `unit.timer.start` (`startTimer` hier,
+ * `resolveIdle`/`returnFromIdle` in `idle.ts`) — und durch
+ * `dataArchive.replaceAll` (A-20, `features/data-transfer/data-transfer.ts`).
+ * Dieser zweite Eingang kommt **nach** dem Start: Ein Archiv, das bei
+ * laufendem Timer entstand, trägt eine `time_entry`-Zeile ohne Ende und das
+ * mitgereiste `timer_heartbeat`. `importDataArchive` stellt deshalb dieselbe
+ * Frage wie diese Funktion noch einmal, und zwar **in derselben Transaktion**
+ * wie `replaceAll`; eine zweite Klammer dahinter ließ gemessen einen nebenher
+ * fragenden Leser zwischen `COMMIT` und Aufnahme geraten (T-358).
+ *
+ * ---------------------------------------------------------------------------
+ * Wer die Frage stellt, entscheidet über die Zahl auf der Rechnung (T-363)
+ * ---------------------------------------------------------------------------
+ *
+ * Bis T-363 stellten sie ausschließlich {@link loadOrphanedTimer} und
+ * {@link resolveOrphanedTimer} — der Schutz lag damit in der **Anzeige**, und
+ * wer den Weg über den Dialog nicht nahm, bekam die Wanduhr. Gemessen über den
+ * echten Anwendungsfallweg, Zieluhr elf Stunden hinter der Quelluhr:
+ *
+ *   `POST /timer/stop` auf dem eingespielten Eintrag   **39 600 s**
+ *   derselbe Eintrag über den Dialog                   1 200 s
+ *
+ * Und dasselbe **ohne jedes Archiv**: Nach einem gewöhnlichen Absturz buchte
+ * ein direkter Stopp ebenfalls 39 600 s — der Fall, für den E-036 überhaupt
+ * geschrieben wurde. Der zweite Eingang war also nicht der einzige Weg zu den
+ * elf Stunden, sondern der auffälligere.
+ *
+ * Seit T-363 fragen {@link stopTimer} und {@link touchHeartbeat} dieselbe
+ * Frage wie die Anzeige. Die Regel dazu steht weiterhin an **einer** Stelle:
+ * {@link foundAtServiceStart}, und was aus ihr folgt, in
+ * {@link bookingEndOf}.
+ *
+ * ---------------------------------------------------------------------------
+ * Und T-363 hat seine Menge trotzdem zu klein gespannt (T-371)
+ * ---------------------------------------------------------------------------
+ *
+ * Zwei unabhängige Prüfungen haben dasselbe gefunden: Von den Stellen, die
+ * `ended_at` auf einen offenen Eintrag schreiben, fragten **zwei** die Frage
+ * nicht — `beginIdle` und `completeReturn` in `idle.ts`. Beide buchten auf
+ * einem vorgefundenen Eintrag gemessen die Wanduhr eines fremden Rechners
+ * (39 900 s gegen 1 200 s im Dialog), beide **ohne Zutun des Benutzers**:
+ * `useIdleTimer` schickt sie von selbst, sobald jemand weggeht.
+ *
+ * Seit T-371 sind {@link foundAtServiceStart} und {@link bookingEndOf}
+ * deshalb **exportiert** und `idle.ts` fragt durch sie. Die Menge ist an der
+ * Anforderung aufgespannt und nicht an den Routen (E-099 Punkt 3):
+ * `proof:layers` Abschnitt 7 zählt die Schreibstellen aus der Platte und
+ * verlangt für jede den Nachweis, daß sie fragt — eine achte Tür wird rot,
+ * bevor sie gemessen werden muß.
+ */
 export async function captureTimerRecovery(context: AppContext): Promise<void> {
   if (context.timerRecovery !== undefined) {
     context.timerRecovery.entryId = await context.transactions.inTransaction(async (unit) => (await unit.timer.running())?.id ?? null);
   }
+}
+
+/**
+ * Die Regel aus {@link captureTimerRecovery}, an genau einer Stelle.
+ *
+ * Bis T-350 stand sie zweimal wörtlich in einer `if`-Bedingung — einmal in
+ * {@link loadOrphanedTimer}, einmal in {@link resolveOrphanedTimer}. Zwei
+ * Abschriften einer Regel sind eine Regel, die einmal geändert werden kann;
+ * und ein `!==` in einer längeren Bedingung trägt seinen Namen nicht, weshalb
+ * drei End-zu-Ende-Fälle sie erst beim Fehlschlagen bemerkt haben.
+ *
+ * **Kein Zusammenhang, keine Verengung.** Fehlt `timerRecovery` ganz, gilt
+ * jeder offene Eintrag als verwaist — das ist die Lage vor E-036s Aufnahme und
+ * ausdrücklich nicht die Zusage des Erzeugnisses: `composition.ts` setzt das
+ * Feld in dem einen Zweig, in dem überhaupt ein `AppContext` entsteht. Übrig
+ * bleibt der von Hand gebaute Zusammenhang eines Prüffalls, und dort ist „ohne
+ * Aufnahme sieht alles verwaist aus" die ehrlichere Vorgabe als „ohne Aufnahme
+ * ist nichts mehr verwaist", die jede Wiedererkennung stillschweigend
+ * abschaltete.
+ *
+ * **Seit T-363 hängt an der Ausfallrichtung Geld, nicht nur ein Dialog.**
+ * Vorher hieß „kein Zusammenhang" nur, daß die Waisenfrage öfter gestellt
+ * wird; jetzt heißt sie zusätzlich, bis wohin ein Stopp bucht
+ * ({@link bookingEndOf}). Beide Richtungen sind damit nicht mehr
+ * gleichwertig: „im Zweifel verwaist" bucht **höchstens** bis zum letzten
+ * Lebenszeichen, „im Zweifel nicht verwaist" bucht die Wanduhr. Deshalb bleibt
+ * das Feld freiwillig und diese Zeile defensiv — eine Pflicht im Typ würde von
+ * jedem von Hand gebauten Zusammenhang mit `as unknown as AppContext` ohnehin
+ * stumm unterlaufen, nähme aber genau diese `undefined`-Abzweigung mit und
+ * drehte die Ausfallrichtung dabei auf die teure Seite (Begründung im Bericht
+ * zu T-363, Punkt 3).
+ */
+export function foundAtServiceStart(context: AppContext, entryId: TimeEntryId): boolean {
+  return context.timerRecovery === undefined || context.timerRecovery.entryId === entryId;
+}
+
+/**
+ * Bis wohin eine Buchung reicht, die einen **offenen** Eintrag schließt —
+ * dieselbe Frage, die die Anzeige stellt (T-363, T-371, R-34, E-036).
+ *
+ * ---------------------------------------------------------------------------
+ * Warum die Funktion seit T-371 `wish` heißt und nicht mehr `wallClock`
+ * ---------------------------------------------------------------------------
+ *
+ * T-363 hat sie als `bookingEndOfStop` gebaut, für die eine Stelle, die der
+ * Auftrag kannte. Gemessen waren es **sieben** Stellen, an denen `ended_at`
+ * auf einen offenen Eintrag geschrieben wird, und **zwei** davon — beide in
+ * `idle.ts` — stellten die Frage nicht: Auf einem vorgefundenen Eintrag buchte
+ * die Inaktivitätserkennung gemessen **39 900 s**, während `GET /timer/orphaned`
+ * für denselben Eintrag 1 200 s auswies (T-369, T-370). Die Menge war an den
+ * Routen aufgespannt statt an der Anforderung — E-099 Punkt 3.
+ *
+ * Der Unterschied zwischen den Stellen ist nicht die Regel, sondern der
+ * **Wunsch**: Der Stopp will bis „jetzt" schließen, die Verdrängung ebenso,
+ * die Inaktivität bis zum Beginn der Abwesenheit. Deshalb nimmt diese Funktion
+ * den Wunsch entgegen und gibt zurück, was davon übrigbleibt:
+ *
+ *     Timer **dieses** Laufs      → `wish`, unverändert.
+ *     beim Start **vorgefunden**  → `min(wish, letztes Lebenszeichen)`.
+ *
+ * `wish` ist damit zugleich die **Obergrenze** dieses Weges. Jede Aufrufstelle
+ * leitet ihn aus einem Wert ab, der nicht hinter ihrer eigenen Wanduhr liegt;
+ * der Deckel nach oben entsteht dadurch in `decideOrphanedTimer` von selbst
+ * (dort steht, warum er dorthin gehört und nicht hierher).
+ *
+ * ---------------------------------------------------------------------------
+ * Zwei Fälle, und nur der zweite ist eine Verengung
+ * ---------------------------------------------------------------------------
+ *
+ *   Timer **dieses** Laufs   → der Wunsch des Weges, unverändert. Der
+ *                              gewöhnliche Fall: gestartet, gearbeitet,
+ *                              gestoppt.
+ *   Beim Start **vorgefunden** → höchstens bis zum letzten Lebenszeichen.
+ *
+ * Der zweite Fall ist die Buchung, über die {@link loadOrphanedTimer} schon
+ * heute `bookableSeconds` berichtet und die {@link resolveOrphanedTimer} auf
+ * „bis zum Lebenszeichen buchen" schreibt. Bis T-363 gab ein direkter
+ * `POST /timer/stop` daneben eine **zweite** Zahl für denselben Eintrag — die
+ * Wanduhr. Zwei Zahlen für eine Buchung sind kein Kompromiß, sondern der
+ * Fehler: Welche in der Abrechnung landet, entschied der Weg durch die
+ * Oberfläche.
+ *
+ * ---------------------------------------------------------------------------
+ * Warum der Stopp bucht und nicht verweigert — und `beginIdle` umgekehrt
+ * ---------------------------------------------------------------------------
+ *
+ * Der Stopp ist bereits eine **Antwort** des Benutzers, die
+ * Inaktivitätserkennung ist es nicht: `useIdleTimer` schickt `idle/begin` von
+ * selbst, sobald jemand vom Rechner weggeht. Deshalb fällt die Entscheidung
+ * dort anders aus und steht in `idle.ts` begründet — dieselbe Frage, zwei
+ * Ausgänge, und der Unterschied ist nicht der Weg, sondern ob eine Person
+ * geantwortet hat.
+ *
+ * Die naheliegende Alternative wäre, den Stopp mit `conflict` abzuweisen
+ * („beantworten Sie zuerst die Frage aus E-036") — so, wie es die Zeile
+ * darüber für eine offene Inaktivitätsphase tut. Dagegen sprechen zwei Dinge.
+ * Erstens ist der Stopp bereits eine Antwort: Der Benutzer sagt „buchen", und
+ * genau diesen Ausgang bietet der Dialog als Vorgabe an; das Gegenteil
+ * („verwerfen") kann `POST /timer/stop` nicht ausdrücken und muß deshalb beim
+ * Dialog bleiben. Zweitens holt die Oberfläche `GET /timer/orphaned` nur beim
+ * Aufbau der Seite — nach einem Einspielen im laufenden Betrieb gibt es den
+ * Dialog also gar nicht zu beantworten, und eine Abweisung ließe den Benutzer
+ * vor einem Timer stehen, den er nicht schließen kann.
+ *
+ * Gebucht wird mit der **Leistung aus dem Stopp** und nicht mit der am Eintrag
+ * gespeicherten; {@link resolveOrphanedTimer} hat keine und nimmt deshalb die
+ * gespeicherte. Das ist der einzige Unterschied zwischen beiden Wegen.
+ *
+ * ---------------------------------------------------------------------------
+ * Ohne Lebenszeichen
+ * ---------------------------------------------------------------------------
+ *
+ * Dann liefert `decideOrphanedTimer` `discarded`, und diese Funktion gibt den
+ * **Startzeitpunkt** zurück: `timer.stop` rechnet daraus die Dauer 0, verwirft
+ * die Buchung und räumt die Zeile ab — derselbe Weg wie im Dialog, und es gibt
+ * keinen zweiten, auf dem eine Buchung entstehen könnte. Erreichbar ist das
+ * fast nur über ein Archiv ohne `timer_heartbeat`: `startTimer` schreibt das
+ * erste Lebenszeichen sofort mit.
+ *
+ * Gefragt wird `heartbeat.lastSeen` und nicht `heartbeat.orphaned`, obwohl die
+ * Anzeige letzteres nimmt. Es ist dieselbe Zeile: `orphaned()` ist `running()`
+ * plus ein `LEFT JOIN` auf dasselbe Lebenszeichen, und `ux_time_entry_running`
+ * läßt genau einen offenen Eintrag zu. Hier liegt die Kennung bereits vor.
+ */
+export async function bookingEndOf(
+  context: AppContext,
+  unit: UnitOfWork,
+  running: RunningTimeEntry,
+  wish: Timestamp,
+): Promise<Timestamp> {
+  if (!foundAtServiceStart(context, running.id)) return wish;
+
+  const decision = decideOrphanedTimer({
+    running,
+    heartbeatAt: await unit.heartbeat.lastSeen(running.id),
+    resolution: 'book_until_heartbeat',
+    now: wish,
+  });
+  return decision.kind === 'recorded' ? decision.entry.endedAt : running.startedAt;
 }
 
 export interface RunningTimerView {
@@ -150,8 +416,67 @@ export async function startTimer(
     const presenceBefore =
       before === null ? null : await presenceBeforeBooking(unit, todoId);
 
-    const result = await unit.timer.start(todoId, stopRunning, timestamp);
-    if (!result.ok) return err(result.error);
+    /*
+     * Der **verdrängte** Timer, wenn er beim Dienststart vorgefunden wurde
+     * (T-363, R-34, E-036).
+     *
+     * -----------------------------------------------------------------------
+     * Die dritte Tür zu denselben elf Stunden
+     * -----------------------------------------------------------------------
+     *
+     * `unit.timer.start(todoId, true, now)` schließt den laufenden Timer
+     * **mit demselben Zeitpunkt**, mit dem es den neuen eröffnet — Wanduhr,
+     * ohne Rücksicht darauf, woher der laufende stammt. Gemessen nach dem
+     * Einspielen einer Sicherung mit laufendem Timer, Uhrversatz elf Stunden:
+     * die verdrängte Buchung stand auf **39 600 s**, während
+     * `GET /timer/orphaned` für denselben Eintrag 1 200 s auswies. Es ist
+     * dieselbe Zahl wie beim direkten Stopp und derselbe Fehler; nur ist der
+     * Weg dorthin der bequemere — die Oberfläche fragt beim Start auf einem
+     * anderen Todo „Ein Timer läuft. Stoppen?", und ein Ja genügt (A-6.8).
+     *
+     * Deshalb wird ein vorgefundener Eintrag **vorher** und gedeckelt
+     * geschlossen, und der Start läuft danach ohne Verdrängung. Dieselbe Regel,
+     * dieselbe Funktion ({@link bookingEndOf}), dieselbe Zahl wie im Dialog.
+     *
+     * -----------------------------------------------------------------------
+     * Warum zwei Schritte hier keinen Teilzustand hinterlassen
+     * -----------------------------------------------------------------------
+     *
+     * Beide Schritte stehen in **derselben** Klammer, die der Anwendungsfall
+     * ohnehin aufspannt. Der Port weist einen Start aus genau zwei fachlichen
+     * Gründen ab — das Todo gibt es nicht, oder eine inaktive Zeit wartet auf
+     * Zuordnung —, und beide werden **vor** dem Schließen geprüft (`before`
+     * oben, `idle.pending()` hier). Bleibt ein Fehlschlag der Speicherung, und
+     * dann darf nichts stehenbleiben: Ein zurückgegebener Fehler rollt die
+     * Klammer **nicht** zurück, ein Wurf schon (`unit-of-work.ts`; dieselbe
+     * Begründung wie in `idle.ts`). Der Wurf wird zu `internal_error`, und der
+     * Bestand ist unverändert.
+     */
+    let displaced: TimeEntry | null = null;
+    let closedBeforeStart = false;
+    if (running !== null && stopRunning && before !== null && foundAtServiceStart(context, running.id)) {
+      const pendingIdle = await unit.idle.pending();
+      if (pendingIdle === null || pendingIdle.returnedAt !== null) {
+        const closed = await unit.timer.stop(running.note, await bookingEndOf(context, unit, running, timestamp));
+        // Nichts geschrieben — `timer_not_running` ist hier nicht erreichbar,
+        // `running` wurde eine Zeile weiter oben aus derselben Transaktion
+        // gelesen. Die Abzweigung steht trotzdem da, statt den Ausgang zu
+        // unterstellen.
+        if (!closed.ok) return err(closed.error);
+        displaced = closed.value.kind === 'recorded' ? closed.value.entry : null;
+        closedBeforeStart = true;
+      }
+    }
+
+    const result = await unit.timer.start(todoId, closedBeforeStart ? false : stopRunning, timestamp);
+    if (!result.ok) {
+      if (closedBeforeStart) {
+        throw new Error(`Der Timerstart schlug fehl, nachdem die vorgefundene Buchung geschlossen war (${result.error.code}).`);
+      }
+      return err(result.error);
+    }
+
+    const stopped = closedBeforeStart ? displaced : result.value.stopped;
 
     // Ein frisch gestarteter Timer bekommt sofort sein erstes Lebenszeichen
     // (E-036). Ohne es wüsste ein Neustart unmittelbar nach dem Start nicht,
@@ -162,7 +487,7 @@ export async function startTimer(
     return ok({
       kind: 'started' as const,
       started: result.value.started,
-      stopped: result.value.stopped,
+      stopped,
       doneCleared: result.value.doneCleared,
       poolMovement: await movementOfStart(unit, {
         todo: before,
@@ -170,7 +495,7 @@ export async function startTimer(
         doneCleared: result.value.doneCleared,
         // Der gestoppte Timer wird zu einer **offenen** Buchung (E-032), und
         // nur wenn er auf demselben Todo lief, betrifft das dieses hier.
-        bookedOnThisTodo: result.value.stopped?.todoId === todoId,
+        bookedOnThisTodo: stopped?.todoId === todoId,
       }),
     });
   });
@@ -268,12 +593,20 @@ export type ResolveOrphanedTimerResult = StopOutcome<'timer_too_short' | 'orphan
 
 
 /**
- * Timer stoppen (A-6.2, A-6.4, A-7.3).
+ * Timer stoppen (A-6.2, A-6.4, A-7.3, E-036).
  *
  * Die Leistung wird beim Stoppen erfasst und in derselben Anweisung
  * geschrieben wie das Ende. Bleibt sie leer, entsteht trotzdem eine Buchung —
  * sie ist nur nicht exportierbar (E-034), und die Exportvorschau sagt das mit
  * Grund und bietet an, den Text nachzutragen.
+ *
+ * **Das Ende ist nicht in jedem Fall „jetzt".** Wurde der laufende Eintrag beim
+ * Start des Dienstes **vorgefunden** — Absturz, Abmeldung, eingespielte
+ * Datensicherung —, wird höchstens bis zum letzten Lebenszeichen gebucht, also
+ * dieselbe Dauer, die {@link loadOrphanedTimer} als `bookableSeconds` anzeigt.
+ * Bis T-363 war das die Wanduhr und damit eine zweite Zahl für denselben
+ * Eintrag: gemessen **39 600 s** gegen die **1 200 s** des Dialogs. Die
+ * Begründung steht an {@link bookingEndOf}.
  */
 export async function stopTimer(
   context: AppContext,
@@ -303,7 +636,25 @@ export async function stopTimer(
         ? null
         : { todoId: running.todoId, presence: await presenceBeforeBooking(unit, running.todoId) };
 
-    const result = await unit.timer.stop(note, timestamp);
+    /*
+     * Bis wohin gebucht wird — und das ist seit T-363 nicht mehr immer „jetzt"
+     * (R-34, E-036). Läuft der Timer dieses Laufs, ist es die Wanduhr; wurde
+     * der Eintrag beim Start **vorgefunden**, höchstens das letzte
+     * Lebenszeichen. Die Begründung steht an {@link bookingEndOf}, die
+     * Regel in der Domäne.
+     *
+     * `timer.stop` bekommt den Wert wie jeder andere Zeitpunkt auch: Es gibt
+     * weiterhin genau einen Weg, auf dem eine Buchung entsteht, und genau eine
+     * Stelle, die über die Mindestdauer urteilt.
+     *
+     * **Der Aufruf steht ausgeschrieben und nicht hinter einem Namen** (T-371).
+     * Eine Zwischenvariable läse sich schöner, rückte die Frage aber wieder
+     * von der Schreibstelle weg — und genau das war die Bauart, die in
+     * `idle.ts` zwei Türen offen ließ. `proof:layers` Abschnitt 7 mißt die
+     * Schreibstelle, nicht die Umgebung; was hier steht, muß dort sichtbar
+     * sein.
+     */
+    const result = await unit.timer.stop(note, running === null ? timestamp : await bookingEndOf(context, unit, running, timestamp));
     if (!result.ok) return err(result.error);
     if (result.value.kind === 'discarded') {
       return ok({
@@ -328,12 +679,42 @@ export async function stopTimer(
  * den Abrechnungsdaten nicht an. Läuft kein Timer, ist das kein Fehler,
  * sondern die Antwort „nichts zu tun": Die Oberfläche schickt weiter, bis sie
  * selbst merkt, dass der Timer aus ist.
+ *
+ * ---------------------------------------------------------------------------
+ * Ein vorgefundener Eintrag bekommt **kein** neues Lebenszeichen (T-363)
+ * ---------------------------------------------------------------------------
+ *
+ * Das Lebenszeichen ist der Beleg, daß ein **lebender** Lauf diese Buchung
+ * mitgeschrieben hat. Genau darauf stützt sich die Frage aus E-036: „bis zum
+ * letzten Lebenszeichen buchen" heißt „bis dahin, wo der abgestürzte Lauf
+ * zuletzt zu sehen war". Wird der Wert danach weitergeschrieben, wandert die
+ * Grenze mit der Wanduhr, und aus dem Angebot des Dialogs wird stillschweigend
+ * „bis jetzt" — das, was E-036 ausdrücklich ausschließt.
+ *
+ * Gemessen (T-363, ohne HTTP, Uhr elf Stunden weiter): `bookableSeconds` des
+ * vorgefundenen Eintrags springt durch **ein einziges** `POST /timer/heartbeat`
+ * von **1 200** auf **39 600**, und ein Stopp bucht danach wieder die vollen
+ * elf Stunden. Die Oberfläche schickt dieses Lebenszeichen von selbst: Sie
+ * startet ihren Minutentakt, sobald `GET /timer` einen laufenden Timer meldet,
+ * und das tut es für den vorgefundenen Eintrag ebenso wie für jeden anderen.
+ * Der Deckel aus E-036 („der Schaden ist auf ein Schreibintervall begrenzt")
+ * hielt damit nur, solange niemand die Oberfläche öffnete.
+ *
+ * Die Gegenrichtung ist bedacht und sie ist die billigere: Wer nach einem
+ * Neustart **weitergearbeitet** hat, ohne den Dialog zu beantworten, bucht
+ * beim Stopp nur bis zum Absturz und muß die Buchung von Hand verlängern. Der
+ * Fehler geht damit zu Lasten der eigenen Zeit, nicht zu Lasten der Rechnung
+ * des Kunden — und es gibt für die Zeit danach ohnehin keinen Beleg.
+ *
+ * Der Rückgabewert `null` sagt hier dasselbe wie bei „kein Timer": geschrieben
+ * wurde nichts. Die Oberfläche wertet ihn nicht aus.
  */
 export async function touchHeartbeat(context: AppContext): Promise<UseCaseResult<Timestamp | null>> {
   const timestamp = now(context);
   return context.transactions.inTransaction(async (unit) => {
     const running = await unit.timer.running();
     if (running === null) return ok(null);
+    if (foundAtServiceStart(context, running.id)) return ok(null);
     await unit.heartbeat.touch(running.id, timestamp);
     return ok(timestamp);
   });
@@ -356,9 +737,15 @@ export interface OrphanedTimerView {
  * abrechnet.
  */
 export async function loadOrphanedTimer(context: AppContext): Promise<OrphanedTimerView | null> {
+  // Die Wanduhr geht mit in die Domäne: Der Dialog nennt seit T-371 dieselbe
+  // Zahl wie der Stopp, auch wenn das mitgereiste Lebenszeichen aus der
+  // Zukunft kommt. Zwei Zahlen für denselben Eintrag sind der Fehler, gegen
+  // den T-363 gebaut wurde — ein Deckel, den nur eine der beiden Seiten kennt,
+  // stellte ihn wieder her.
+  const timestamp = now(context);
   return context.transactions.inTransaction(async (unit) => {
     const orphan = await unit.heartbeat.orphaned();
-    if (orphan === null || (context.timerRecovery !== undefined && context.timerRecovery.entryId !== orphan.running.id)) return null;
+    if (orphan === null || !foundAtServiceStart(context, orphan.running.id)) return null;
     const idle = await unit.idle.pending();
     if (idle !== null && idle.returnedAt === null && idle.id === orphan.running.id) return null;
 
@@ -368,6 +755,7 @@ export async function loadOrphanedTimer(context: AppContext): Promise<OrphanedTi
       running: orphan.running,
       heartbeatAt: orphan.heartbeatAt,
       resolution: 'book_until_heartbeat',
+      now: timestamp,
     });
 
     return {
@@ -401,14 +789,19 @@ export async function resolveOrphanedTimer(
     if (idle !== null && idle.returnedAt === null) return err(taktError('conflict', 'Die Rückkehr aus der inaktiven Zeit muss zuerst bestätigt werden.'));
 
     const orphan = await unit.heartbeat.orphaned();
-    if (orphan === null || (context.timerRecovery !== undefined && context.timerRecovery.entryId !== orphan.running.id)) {
+    if (orphan === null || !foundAtServiceStart(context, orphan.running.id)) {
       return err(taktError('timer_not_running', 'Es gibt keine unvollständige Buchung.'));
     }
 
+    // `timestamp` als Deckel nach oben (T-371): Seit E-036 konnte diese Route
+    // ein Lebenszeichen aus der Zukunft ungeprüft in ein `ended_at` schreiben —
+    // gemessen 251 613 021 599 s aus einem Archiv mit `9999-12-31`. Der Deckel
+    // liegt in `decideOrphanedTimer`; hier steht nur, wer die Uhr liest.
     const decision = decideOrphanedTimer({
       running: orphan.running,
       heartbeatAt: orphan.heartbeatAt,
       resolution,
+      now: timestamp,
     });
 
     if (decision.kind === 'discarded') {
@@ -451,7 +844,6 @@ export async function resolveOrphanedTimer(
         poolMovement: null,
       });
     }
-    void timestamp;
     return ok({
       kind: 'recorded' as const,
       entry: stopped.value.entry,

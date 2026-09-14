@@ -672,6 +672,17 @@ letzten Zeitpunkt, an dem die Anwendung nachweislich lief. Ob überhaupt gebucht
 der Benutzer (E-036); bis dahin bleibt die Buchung unvollständig und erscheint in keinem Export,
 weil `v_export_candidate` ausschließlich abgeschlossene Buchungen führt.
 
+**Was das Schema nicht beantwortet: „ist diese Buchung verwaist?"** (T-350). Das Schema kennt nur
+„ohne Ende", und wegen `ux_time_entry_running` gibt es davon höchstens eine — nämlich den gerade
+laufenden Timer. „Ohne Ende" und „verwaist" sind deshalb **nicht** dasselbe: Verwaist ist nach
+E-036 eine Buchung ohne Ende, die beim **Start der Anwendung** vorgefunden wird. Diesen Unterschied
+mißt weder eine Spalte noch ein Index, sondern eine Aufnahme beim Dienststart
+(`captureTimerRecovery`, `apps/local-api/src/features/timer/timer.ts`); sie liest denselben
+Bestand und hält fest, welche Zeile schon da war, bevor der Dienst zu antworten begann. Wer den
+Zustand nur am Schema abliest, hält jeden laufenden Timer für verwaist. Dieselbe Trennlinie
+scheidet E-036 von A-24: dort der tote Prozeß, hier der lebende mit abwesendem Benutzer
+(`timer_idle`).
+
 **Warum eine eigene Tabelle und keine Spalte auf `time_entry`.** Drei Gründe:
 
 1. Es ist der einzige Schreibvorgang in Takt, der im Minutentakt läuft. Er darf nicht die Zeile
@@ -963,6 +974,43 @@ Dienst las ihn beim ersten Prüflauf, und ein Neustart innerhalb einer Stunde pr
 nicht. Seit T-285 wird er **geschrieben und nicht gelesen** — eine Tatsache, keine Sperre. Er
 nimmt am Round-Trip der Datensicherung teil (A-20.4) und beantwortet die Frage „wann hat dieses
 Erzeugnis zuletzt gefragt"; mehr nicht.
+
+**Wie wahr dieser Wert ist — gemessen (T-364, behoben in T-367, A-A-124).** Er ist so wahr, wie
+der Prüfer ihn fortschreibt. **Bis T-367** hörte der nach **einem** Fehlschlag damit auf: Warf
+`recordCheck` ein einziges Mal, legte der Prüfer den Speicher für die Laufzeit des Prozesses ab.
+Gemessen am echten Prüfer gegen eine echte Datei, mit einer Sperre, die nach kurzer Zeit wieder
+aufging: **ein** fehlgeschlagener von 63 Schreibversuchen, danach 51 ausgehende Anfragen ohne
+einen weiteren Eintrag, am Ende ein **52 Stunden alter** Zeitpunkt in der Spalte. Er war damit
+**veraltet und nicht fehlend** — und das ist der unangenehmere Zustand, weil ein fehlender Wert
+„ich weiß es nicht" sagt und ein alter „zuletzt geprüft am …". Die Datensicherung trägt ihn mit;
+auf einem fremden Rechner beschriebe er eine Anfrage, die dieses Erzeugnis nie gestellt hat.
+
+**Seit T-367 legt ein Wurf den Speicher nicht mehr ab** — er wird gemeldet, und der nächste Takt
+schreibt wieder. In derselben gemessenen Lage ist der Wert danach **1 Stunde statt 52 Stunden**
+alt. Abgelegt wird allein der Speicher, der **nie antwortet**; für den gebauten Adapter ist
+dieser Weg unerreichbar, weil sein `UPDATE` synchron zurückkehrt. Was bleibt: Ist die Datei
+**dauerhaft** unbeschreibbar, steht hier weiter der alte Wert — dagegen hilft keine Bauform, denn
+auch ein `NULL` müßte geschrieben werden.
+
+**Am Bestand ist das nicht zu beheben**, und auch das ist gemessen und nicht abgewogen worden:
+Ein „vergiß den Wert" (`recordCheck(null)`) führte über denselben Kanal, der eben versagt hat. In
+drei von vier gemessenen Fehlerlagen — nur lesende Verbindung, geschlossene Verbindung, gesperrte
+Datei — wirft auch das Löschen; die vierte, eine Verletzung des CHECK aus 0022, verlangt eine
+Systemuhr außerhalb der Jahre 0001 bis 9999. Bei der vorübergehenden Sperre blieb der Wert mit
+Löschversuch **genauso** 52 Stunden alt wie ohne. **Der Bestand bleibt deshalb bei zwei Fragen**
+(`lastCheckAt`, `recordCheck`); die Behebung gehört zum Prüfer und lautet: Ein Speicher, der
+**wirft**, ist beschränkt und harmlos und wird nicht abgelegt — abgelegt wird allein der, der
+**nie** antwortet. Die Rechnung dazu steht in `.claude/team/reports/T-364-domain-dev.md`;
+**gebaut ist sie in T-367** (`apps/local-api/src/features/version/version.ts`, drei Stellen:
+`reportStoreFailure`, `forgetStore`, der Wurf in `remember`). Der Bestand bleibt dabei
+unverändert — keine Migration, kein drittes Portmitglied, `NULL` behält genau eine Bedeutung.
+
+**Der Boden hängt an alldem nicht.** Seit E-106 gilt der Mindestabstand innerhalb eines Laufs und
+mißt einen Wert im Arbeitsspeicher; ob die Spalte einen alten Zeitpunkt, einen neuen oder `NULL`
+trägt, ändert an der Zahl der ausgehenden Anfragen nichts — in allen drei gemessenen Fassungen
+gingen dieselben 63 hinaus. Auch das Einspielen einer Datensicherung kann den Boden nicht mehr
+aufheben, und die gegenteilige Begründung in `repo-data-archive.ts` ist als Stand von T-279
+gekennzeichnet.
 
 Der Grund ist der Preis, den T-279 nicht beziffert hatte und den der Prüffall TP-VER-11 gefunden
 hat: **Ein Neustart bewirkte bis zu eine Stunde lang nichts.** Weil der Zeitpunkt **vor** der

@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createVersionCheckStatePort, openDatabase, toTimestamp, type OpenedDatabase } from '@takt/storage';
 
 import { createLogger } from '../../src/logger.ts';
-import { createVersionChecker } from '../../src/features/version/version.ts';
+import { createVersionChecker, describeVersionCheckStoreFailure } from '../../src/features/version/version.ts';
 import type {
   ReleaseLookup,
   ReleaseSourcePort,
@@ -483,10 +483,24 @@ describe('E-106 — ein Programmstart prüft immer einmal; der Boden gilt innerh
     }
   });
 
-  it('der Zeitpunkt steht bereits IM Speicher, während die Anfrage noch läuft — geschrieben wird vor dem fetch, nicht danach (T-279, unverändert gültig)', async () => {
+  it('der Zeitpunkt steht bereits IM Speicher, während die Anfrage noch läuft — WEIL DER EINGESETZTE ADAPTER SEIN UPDATE SYNCHRON IM AUFRUF AUSFÜHRT, nicht weil der Prüfer das Schreiben abwartet (T-279; seit A-A-106/T-349 keine Zusicherung des Prüfers mehr — siehe der Fall danach)', async () => {
     // `store` selbst hat seit T-285 kein `read` mehr (E-106) — gemessen wird
     // deshalb über `versionCheckState.lastCheckAt()`, derselben Naht, über die
     // auch die Datensicherung liest (A-20.4).
+    //
+    // WICHTIG, seit T-349 (A-A-106): Dieser Fall wäre auch dann grün, wenn der
+    // Prüfer überhaupt nicht mehr auf den Speicher wartet — er wäre es sogar
+    // dann, wenn `remember()` das Schreiben nur ANSTÖSST. Der Grund, warum
+    // `duringRequest` hier bereits einen Wert trägt, ist NICHT ein wartender
+    // Prüfer, sondern daß `createVersionCheckStatePort(...).recordCheck()`
+    // (`packages/storage/src/sqlite/repo-version-check.ts`) sein `UPDATE`
+    // vollständig SYNCHRON ausführt, bevor die umgebende `async`-Funktion
+    // überhaupt beim ersten `await` unterbricht — das Schreiben ist damit
+    // bereits erledigt, lange bevor `source.latest()` gerufen wird, ganz gleich
+    // ob der Prüfer selbst wartet oder nicht. Dieser Fall mißt also die
+    // Synchronität DES ADAPTERS, nicht eine Zusage DES PRÜFERS. Die Zusage des
+    // Prüfers — nur der ANSTOSS ist zugesichert, nicht der ABSCHLUSS — mißt
+    // erst der folgende Fall, mit einem Adapter, der tatsächlich Zeit braucht.
     const { database, store, versionCheckState } = await openStoreBackedDatabase();
     try {
       let duringRequest: string | null | undefined;
@@ -511,6 +525,49 @@ describe('E-106 — ein Programmstart prüft immer einmal; der Boden gilt innerh
     } finally {
       database.close();
     }
+  });
+
+  it('A-A-106/T-349 — zugesichert ist seit dem Umbau NUR DER ANSTOSS vor der Anfrage, NICHT ihr ABSCHLUSS: ein Speicher, der wirklich Zeit braucht, hat beim Abschluß der Anfrage noch nicht geschrieben', async () => {
+    // Die Gegenprobe zum Fall oben, mit einem Speicher, dessen Versprechen
+    // sich NICHT synchron einlöst (echtes `setTimeout`, keine Attrappe eines
+    // Bestands). Das ist die eigentliche Zusage aus T-349, Abschnitt 1.2 des
+    // Berichts: „Zugesichert ist seit T-349 nur der Anstoß vor der Anfrage,
+    // nicht der Abschluß." Vor T-349 wäre das falsch gewesen — `remember()`
+    // wartete synchron auf `store.write()`, bevor die Anfrage überhaupt
+    // losging, und ein Speicher mit echter Verzögerung hätte sein Versprechen
+    // dann zwingend VOR dem Abschluß der Anfrage eingelöst.
+    let writeCalled = false;
+    let writeSettled = false;
+    const delayedStore: VersionCheckStorePort = {
+      write: () =>
+        new Promise<void>((resolve) => {
+          writeCalled = true;
+          setTimeout(() => {
+            writeSettled = true;
+            resolve();
+          }, 80);
+        }),
+    };
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    const checker = createVersionChecker({
+      logger: silentLogger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      store: delayedStore,
+    });
+    checkers.push(checker);
+
+    checker.start();
+    await waitUntil(() => checker.current().state === 'known');
+
+    // Angestoßen ist der Schreibzugriff bereits …
+    expect(writeCalled).toBe(true);
+    // … aber sein Versprechen ist zum Zeitpunkt des Abschlusses der Anfrage
+    // ausdrücklich noch NICHT eingelöst: Die Anfrage ist ohne ihn fertig
+    // geworden, weil der Weg dorthin auf kein fremdes Versprechen mehr
+    // wartet.
+    expect(writeSettled).toBe(false);
   });
 
   it('ein schreibend werfender Speicher beendet die Prüfung nicht und protokolliert genau EINE Zeile ("_unwritable")', async () => {
@@ -568,6 +625,99 @@ describe('E-106 — ein Programmstart prüft immer einmal; der Boden gilt innerh
     } finally {
       database.close();
     }
+  });
+});
+
+/**
+ * A-A-106 — T-355, gegen den Bericht von T-349 (`.claude/team/reports/
+ * T-349-domain-dev.md`, Abschnitt 8, Offene Frage 1).
+ *
+ * Bis T-349 stand `await remember(…)` VOR `await source.latest(…)`, und
+ * `remember` wartete selbst auf `store.write(…)`. Ein Speicher, dessen Zusage
+ * NIE einlöst, ließ `run()` an dieser Stelle für die Laufzeit des Prozesses
+ * stehen — `inFlight` blieb wahr, kein Zeitgeber wurde gestellt, keine Zeile
+ * erschien im Protokoll (T-332 K-1, Bedrohungsmodell 42.4, R-30). Seit T-349
+ * ist der Weg zur Anfrage synchron; eine `unref()`te Frist
+ * (`storeDeadlineMs`, ohne Angabe `VERSION_CHECK_STORE_DEADLINE_MS`) macht aus
+ * dem Schweigen eines Speichers stattdessen GENAU EINE Protokollzeile
+ * (`version_check_state_write_timeout`) und legt ihn danach ab.
+ *
+ * Vorgabe für den Aufbau des Prüffalls stammt wörtlich aus dem T-349-Bericht:
+ * `storeDeadlineMs` klein setzen, `store.write` NIE einlösen, prüfen, daß die
+ * Anfrage trotzdem hinausgeht, `current()` "known" wird und im Protokoll
+ * genau eine Zeile mit dem neuen Schlüssel steht.
+ */
+describe('A-A-106 — ein Speicher, dessen write() nie eintrifft, hält die Prüfung nicht auf (T-349)', () => {
+  it('die Anfrage geht dennoch hinaus, der Zustand wird "known", der Takt läuft unverändert weiter, und im Protokoll steht GENAU EINE Zeile ("_write_timeout"), nicht je Lauf eine neue', async () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const counting = countingSource(async () => ({ ok: true, version: '1.0.0' }));
+    const silentStore: VersionCheckStorePort = {
+      // Löst NIE ein — genau der Fall, der die Versionsprüfung bis T-349 für
+      // die gesamte Laufzeit des Prozesses stillgelegt hat, ohne eine einzige
+      // Protokollzeile (T-332 K-1).
+      write: () => new Promise<void>(() => {}),
+    };
+    const checker = createVersionChecker({
+      logger,
+      now: () => new Date(),
+      source: counting.source,
+      startDelayMs: 5,
+      intervalMs: 30,
+      minIntervalMs: 10,
+      // Meßnaht aus T-349 (Abschnitt 6.2 des Berichts): Millisekunden statt
+      // der Sekunden aus dem Betrieb, damit dieser Fall ohne Wartezeit auf
+      // die echte Fünf-Sekunden-Frist mißt.
+      storeDeadlineMs: 20,
+      store: silentStore,
+    });
+    checkers.push(checker);
+
+    checker.start();
+
+    // Anforderung 1: Der stumme Speicher hält die Prüfung NICHT auf. Das ist
+    // der ganze Grund für A-A-106 — vor T-349 wäre dieser `waitUntil`-Aufruf
+    // hier in die Zeitüberschreitung gelaufen, weil "run()" nie an die
+    // Anfrage gekommen wäre.
+    await waitUntil(() => checker.current().state === 'known');
+    expect(checker.current()).toEqual({ state: 'known', latestVersion: '1.0.0' });
+
+    // Anforderung 4: Der Takt bleibt unberührt (A-18.11) — eine weitere
+    // Anfrage folgt auf dem gewöhnlichen Intervall, obwohl der Speicher nie
+    // geantwortet hat und längst abgelegt ist.
+    await waitUntil(() => counting.calls() >= 2, 3_000);
+
+    // Genug Zeit für die Speicherfrist (20 ms) UND einen weiteren Lauf, damit
+    // sich ein etwaiger zweiter Protokolleintrag zeigen könnte.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const timeoutLines = lines.filter((line) => line.includes('version_check_state_write_timeout'));
+    // Anforderung 2: GENAU eine — nicht je Lauf eine neue. "Kein zweiter
+    // Versuch im selben Prüflauf" ist A-18.11, hier übertragen auf das
+    // Ablegen des Speichers: Nach der ersten Zeile gibt es keinen Speicher
+    // mehr, der ein zweites Mal versagen könnte.
+    expect(timeoutLines.length).toBe(1);
+
+    // Anforderung 3: Still nach A-18.12 — kein anderer Grund, kein Wurf, und
+    // insbesondere keine zweite Art von Protokollzeile für denselben Speicher.
+    const unwritableLines = lines.filter((line) => line.includes('version_check_state_unwritable'));
+    expect(unwritableLines.length).toBe(0);
+  });
+
+  it('describeVersionCheckStoreFailure ist rein und trennt die zwei Gründe an ihrem Schlüssel (A-V-20)', () => {
+    const timeout = describeVersionCheckStoreFailure('timeout');
+    expect(timeout.key).toBe('version_check_state_write_timeout');
+    expect(timeout.sentence.length).toBeGreaterThan(0);
+
+    const threw = describeVersionCheckStoreFailure('threw');
+    expect(threw.key).toBe('version_check_state_unwritable');
+    expect(threw.sentence.length).toBeGreaterThan(0);
+
+    // Zwei verschiedene Gründe, zwei verschiedene Sätze — sonst könnte ein
+    // Leser des Protokolls "eingetroffen, aber abgelehnt" nicht von "nie
+    // eingetroffen" unterscheiden (genau die Ununterscheidbarkeit aus T-332
+    // K-1, jetzt auf den zweiten Grund übertragen).
+    expect(timeout.sentence).not.toBe(threw.sentence);
   });
 });
 

@@ -40,6 +40,38 @@ export type RouteName =
   | "tags"
   | "settings";
 
+/*
+ * Alle Ansichten der Anwendung, an **einer** Stelle geführt.
+ *
+ * Warum das nicht bloß eine Bequemlichkeit ist: Ein Meßsatz, der „alle Seiten"
+ * prüfen soll (T-323 Abschnitt 9.3), muß seine Menge an der **Anforderung**
+ * aufspannen und nicht an den Stellen, die der Schreiber kannte (Hausregel
+ * E-099 Punkt 3). Eine Liste von elf Adressen in einer Prüfdatei wäre die
+ * zweite Wahrheit — und die zwölfte Ansicht käme lautlos daran vorbei.
+ *
+ * Der Schlüssel ist die Route, der Wert dieselbe Route. Das ist der ganze
+ * Trick: Der Typ `{ [Name in RouteName]: Name }` ist **vollständig** gegen
+ * `RouteName` getypt, also ist ein fehlender Eintrag ein Typfehler und ein
+ * überzähliger auch. `Object.values` liefert daraus `RouteName[]` ohne eine
+ * einzige Typzusicherung.
+ */
+const ROUTE_NAME_BY_NAME: { readonly [Name in RouteName]: Name } = {
+  dashboard: "dashboard",
+  todos: "todos",
+  todo: "todo",
+  board: "board",
+  time: "time",
+  bookings: "bookings",
+  export: "export",
+  templates: "templates",
+  exportAudit: "exportAudit",
+  tags: "tags",
+  settings: "settings",
+};
+
+/** Die Menge „Ansicht der Anwendung". Reihenfolge: die der Navigation. */
+export const ROUTE_NAMES: readonly RouteName[] = Object.values(ROUTE_NAME_BY_NAME);
+
 export interface Route {
   readonly name: RouteName;
   /** Kennung des angezeigten Datensatzes, wenn die Route eine trägt. */

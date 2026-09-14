@@ -56,6 +56,7 @@ import {
   plural,
 } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
+import { ScreenBody } from "../../shared/ui/ScreenBody";
 import { ScreenHeader } from "../../shared/ui/ScreenHeader";
 import { ExportTabs } from "./ExportTabs";
 import { GroupRowDetail, type TemplateFieldsResult } from "./GroupRowDetail";
@@ -586,346 +587,371 @@ export function ExportScreen() {
         <ExportTabs active="export" />
       </ScreenHeader>
 
+      {/*
+        Die Ordnerwarnung **steht** (T-322 4.7), und sie ist die einzige der drei
+        Fehlermeldungen dieser Ansicht, die das darf: Sie ist der Grund, warum
+        „Export ausführen" gesperrt ist, und eine gesperrte Schaltfläche ohne
+        Grund daneben ist eine Sackgasse. Knopf und Begründung dürfen nicht auf
+        zwei Bildlaufstellen fallen. Sie steht außerdem **oberhalb** von allem
+        Laufenden und kann deshalb fest werden, ohne die Reihenfolge zu ändern.
+      */}
       {directoryProblem === null ? null : (
-        <InlineMessage
-          tone="warning"
-          title={directoryProblem.title}
-          className="message--inline-action"
-          action={
-            <Button size="sm" variant="secondary" onClick={() => navigate("settings", undefined, { bereich: "export" })}>
-              In den Einstellungen prüfen
+        <div className="screen__bar">
+          <InlineMessage
+            tone="warning"
+            title={directoryProblem.title}
+            className="message--inline-action"
+            action={
+              <Button size="sm" variant="secondary" onClick={() => navigate("settings", undefined, { bereich: "export" })}>
+                In den Einstellungen prüfen
+              </Button>
+            }
+          >
+            {directoryProblem.body}
+          </InlineMessage>
+        </div>
+      )}
+
+      {/*
+        Ein Laufbereich, Name „Export" (T-322 4.7). Fest sind Kopf mit „Export
+        ausführen" — die teuerste Aktion der Anwendung, bisher nach dreißig
+        Tagesgruppen nicht mehr zu sehen — und die Bereichsreiter.
+
+        Die Zusammenfassungszeile (`.export-summary`) bleibt **im** Laufbereich,
+        obwohl sie sachlich in den festen Teil gehörte: Sie steht heute *unter*
+        der Karte „Vorlage und Rundung", und sie festzumachen hieße, sie über
+        diese Karte zu heben — eine Änderung der Reihenfolge und damit des
+        Designs (T-322 4.7, OF-2).
+      */}
+      <ScreenBody label="Export">
+        {result === null ? null : (
+          <RunResult result={result} rowCount={resultRows} onDismiss={() => setResult(null)} />
+        )}
+
+        <Card
+          title="Vorlage und Rundung"
+          description="Beides bestimmt, was in der Datei steht — und wie viel abgerechnet wird."
+          actions={
+            <Button
+              size="sm"
+              variant="secondary"
+              iconStart="pencil"
+              onClick={() => navigate("templates", activeTemplateId ?? undefined)}
+            >
+              Vorlagen bearbeiten
             </Button>
           }
         >
-          {directoryProblem.body}
-        </InlineMessage>
-      )}
-
-      {result === null ? null : (
-        <RunResult result={result} rowCount={resultRows} onDismiss={() => setResult(null)} />
-      )}
-
-      <Card
-        title="Vorlage und Rundung"
-        description="Beides bestimmt, was in der Datei steht — und wie viel abgerechnet wird."
-        actions={
-          <Button
-            size="sm"
-            variant="secondary"
-            iconStart="pencil"
-            onClick={() => navigate("templates", activeTemplateId ?? undefined)}
-          >
-            Vorlagen bearbeiten
-          </Button>
-        }
-      >
-        <div className="export-settings">
-          {/*
-            Diese Ansicht rechnet und schreibt mit der **gespeicherten**
-            Vorlage, weil der Lauf sie nimmt. Wer im Vorlageneditor gerade an
-            einem ungespeicherten Entwurf arbeitet, sieht dort etwas anderes
-            als hier — und der Satz steht an der Auswahl, die es betrifft.
-            Vorgeschichte: `docs/decisions/export.md`.
-          */}
-          <div className="export-settings__fact">
-            <div className="export-settings__label"><span>Exportvorlage</span><InfoHint label="Hinweis zur Exportvorlage">
-              Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
-              Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
-            </InfoHint></div>
-            <Select
-              hideLabel
-              label="Exportvorlage"
-              value={activeTemplateId ?? ""}
-              onChange={setTemplateId}
-              options={
-                templates.state.status === "ready"
-                  ? templates.state.value.map((template) => ({
-                      value: template.id,
-                      label: template.isBuiltin
-                    ? `${foreignText(template.name)} (mitgeliefert)`
-                    : foreignText(template.name),
-                    }))
-                  : [{ value: "", label: "wird geladen …" }]
-              }
-            />
-          </div>
-          <div className="export-settings__fact">
-            <span className="export-settings__label"><span className="overline">Rundung</span><InfoHint label="Hinweis: Rundung">
-              Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
-              Tagesgruppe, nicht auf die einzelne Buchung.
-            </InfoHint></span>
-            <strong>
-              {settings === null ? "—" : ROUNDING_MODE_LABEL[settings.roundingMode]}
-            </strong>
-          </div>
-          <div className="export-settings__fact">
-            <span className="export-settings__label"><span className="overline">Exportordner</span><InfoHint label="Hinweis: Exportordner">
-              {directoryState === "ok"
-                ? "Vorhanden und beschreibbar — soeben geprüft."
-                : (directoryProblem?.title ?? "Zustand unbekannt.")}
-            </InfoHint></span>
-            <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
-              {settings?.exportDirectory ?? "nicht gewählt"}
-            </strong>
-            <Button
-              size="sm"
-              variant="primary"
-              iconStart="folder-open"
-              onClick={() => navigate("settings", undefined, { bereich: "export" })}
-            >
-              Ordner ändern
-            </Button>
-          </div>
-          <div className="export-settings__fact">
-            <span className="export-settings__label"><span className="overline">Abgerechnet unter</span><InfoHint label="Hinweis: Abgerechnet unter">
-              {billingUser.length === 0
-                ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
-                : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
-            </InfoHint></span>
-            <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
-              {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
-            </strong>
-          </div>
-        </div>
-
-        {/*
-          B-6.1 Punkt 1 verlangt diesen Satz ausdrücklich „nicht in einem
-          Hilfetext, sondern in der Ansicht" — und zwar neben dem Exportziel.
-          Hier ist die Ansicht, in der die Datei entsteht.
-        */}
-        <Base64Notice className="export-settings__base64" />
-
-        <ExportDirectoryConcernList concerns={directoryAdvice.concerns} />
-
-        {/*
-          T-039: Was das Betriebssystem über den Ordner sagt — und was es
-          nicht sagt. Dieselbe Auskunft wie in S-09, an der Stelle, an der die
-          Datei entsteht. Eine Warnung, die nur in den Einstellungen steht,
-          sieht beim Exportieren niemand.
-        */}
-        <ExportDirectoryTraitList traits={directoryTraits} state={directoryState} />
-      </Card>
-
-      <AsyncBoundary
-        state={data.state}
-        label="Offene Buchungen werden geladen"
-        rows={6}
-        onRetry={data.reload}
-      >
-        {(value) => {
-          if (layoutError !== null) {
-            return (
-              <InlineMessage
-                tone="danger"
-                title="Die Gliederung ließ sich nicht abrufen"
-                action={
-                  <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={data.reload}>
-                    Erneut versuchen
-                  </Button>
-                }
-              >
-                {layoutError} Solange die Gliederung fehlt, wird nichts zur Auswahl gestellt — eine
-                geratene Zeilenzahl wäre schlimmer als keine.
-              </InlineMessage>
-            );
-          }
-
-          if (layout.length === 0) {
-            return (
-              <EmptyState
-                icon="check-circle"
-                title="Nichts zu exportieren"
-                description="Alle erfassten Zeiten sind bereits exportiert. Neue Buchungen erscheinen hier von selbst."
-                action={
-                  <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
-                    Zur Zeiterfassung
-                  </Button>
+          <div className="export-settings">
+            {/*
+              Diese Ansicht rechnet und schreibt mit der **gespeicherten**
+              Vorlage, weil der Lauf sie nimmt. Wer im Vorlageneditor gerade an
+              einem ungespeicherten Entwurf arbeitet, sieht dort etwas anderes
+              als hier — und der Satz steht an der Auswahl, die es betrifft.
+              Vorgeschichte: `docs/decisions/export.md`.
+            */}
+            <div className="export-settings__fact">
+              <div className="export-settings__label"><span>Exportvorlage</span><InfoHint label="Hinweis zur Exportvorlage">
+                Gezeigt und geschrieben wird der <strong>gespeicherte</strong> Stand dieser Vorlage.
+                Ein Entwurf, der im Vorlageneditor noch nicht gespeichert ist, wirkt hier nicht mit.
+              </InfoHint></div>
+              <Select
+                hideLabel
+                label="Exportvorlage"
+                value={activeTemplateId ?? ""}
+                onChange={setTemplateId}
+                options={
+                  templates.state.status === "ready"
+                    ? templates.state.value.map((template) => ({
+                        value: template.id,
+                        label: template.isBuiltin
+                      ? `${foreignText(template.name)} (mitgeliefert)`
+                      : foreignText(template.name),
+                      }))
+                    : [{ value: "", label: "wird geladen …" }]
                 }
               />
-            );
-          }
+            </div>
+            <div className="export-settings__fact">
+              <span className="export-settings__label"><span className="overline">Rundung</span><InfoHint label="Hinweis: Rundung">
+                Auf die nächste Viertelstunde, mindestens 0,25 — angewandt auf die Summe der
+                Tagesgruppe, nicht auf die einzelne Buchung.
+              </InfoHint></span>
+              <strong>
+                {settings === null ? "—" : ROUNDING_MODE_LABEL[settings.roundingMode]}
+              </strong>
+            </div>
+            <div className="export-settings__fact">
+              <span className="export-settings__label"><span className="overline">Exportordner</span><InfoHint label="Hinweis: Exportordner">
+                {directoryState === "ok"
+                  ? "Vorhanden und beschreibbar — soeben geprüft."
+                  : (directoryProblem?.title ?? "Zustand unbekannt.")}
+              </InfoHint></span>
+              <strong className="mono truncate" title={settings?.exportDirectory ?? undefined}>
+                {settings?.exportDirectory ?? "nicht gewählt"}
+              </strong>
+              <Button
+                size="sm"
+                variant="primary"
+                iconStart="folder-open"
+                onClick={() => navigate("settings", undefined, { bereich: "export" })}
+              >
+                Ordner ändern
+              </Button>
+            </div>
+            <div className="export-settings__fact">
+              <span className="export-settings__label"><span className="overline">Abgerechnet unter</span><InfoHint label="Hinweis: Abgerechnet unter">
+                {billingUser.length === 0
+                  ? "Der Dienst nennt keinen Benutzernamen. In der Datei steht trotzdem einer — welcher, zeigt danach das Exportprotokoll."
+                  : "Dieser Name steht in jeder Zeile der Datei. SuperTakt bekommt ihn vom Betriebssystem; über keine Einstellung lässt er sich ändern."}
+              </InfoHint></span>
+              <strong className="mono truncate" title={billingUser.length === 0 ? undefined : billingUser}>
+                {billingUser.length === 0 ? "kein Name gemeldet" : billingUser}
+              </strong>
+            </div>
+          </div>
 
-          const models = layout.map<ExportGroupViewModel>((group) => {
-            const todo = value.titles.get(group.todoId);
-            const insight = insights.get(group.key);
-            const entries = group.entryIds
-              .map((id) => value.byId.get(id))
-              .filter((entry): entry is TimeEntry => entry !== undefined)
-              .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
-            const included = entries.filter((entry) => !excluded.has(entry.id));
+          {/*
+            B-6.1 Punkt 1 verlangt diesen Satz ausdrücklich „nicht in einem
+            Hilfetext, sondern in der Ansicht" — und zwar neben dem Exportziel.
+            Hier ist die Ansicht, in der die Datei entsteht.
+          */}
+          <Base64Notice className="export-settings__base64" />
 
-            const groupData: ExportGroupData = {
-              id: group.key,
-              todoId: group.todoId,
-              todoTitle: todo?.title ?? "Unbekanntes Todo",
-              callNumber: todo?.callNumber ?? null,
-              day: formatDayLabel(group.day),
-              entries: entries.map((entry) => ({
-                id: entry.id,
-                period: formatTimeRange(entry.startedAt, entry.endedAt),
-                duration: formatDuration(entry.durationSeconds),
-                source: entry.source,
-                note: entry.note,
-                exportCount: entry.exportCount,
-              })),
-            };
+          <ExportDirectoryConcernList concerns={directoryAdvice.concerns} />
 
-            return {
-              group: groupData,
-              excludedEntryIds: new Set(
-                entries.filter((entry) => excluded.has(entry.id)).map((entry) => entry.id),
-              ),
-              // Beim Nachrechnen bleibt der bisherige Wert stehen. Ein Feld,
-              // das bei jedem Klick auf „…" springt, laesst den Vergleich
-              // vorher/nachher nicht zu — und genau der ist der Sinn (E-031).
-              quarters:
-                insight === undefined
-                  ? "…"
-                  : insight.quarters !== null
-                    ? formatQuarters(insight.quarters)
-                    : "—",
-              mergedNote: previewNote(included),
-              blockedReason: insight?.blockedReason ?? null,
-            };
-          });
+          {/*
+            T-039: Was das Betriebssystem über den Ordner sagt — und was es
+            nicht sagt. Dieselbe Auskunft wie in S-09, an der Stelle, an der die
+            Datei entsteht. Eine Warnung, die nur in den Einstellungen steht,
+            sieht beim Exportieren niemand.
+          */}
+          <ExportDirectoryTraitList traits={directoryTraits} state={directoryState} />
+        </Card>
 
-          const selectedGroupIds = new Set(
-            layout.map((group) => group.key).filter((key) => !deselected.has(key)),
-          );
-
-          const rowCount = totals?.rows.length ?? 0;
-          const blockedCount = models.filter((model) => model.blockedReason !== null).length;
-
-          return (
-            <>
-              {/*
-                Der Fehlschlag der Gesamtvorschau steht als Meldung da, mit
-                einem Weg zurück — nicht als Null in der Zusammenfassung
-                (A-8.6). Sie ist zugleich die sichtbare Begründung dafür, dass
-                „Export ausführen" gesperrt ist: Eine gesperrte Schaltfläche
-                ohne Grund daneben ist eine Sackgasse.
-              */}
-              {totalsState.kind === "failed" ? (
+        <AsyncBoundary
+          state={data.state}
+          label="Offene Buchungen werden geladen"
+          rows={6}
+          onRetry={data.reload}
+        >
+          {(value) => {
+            if (layoutError !== null) {
+              return (
                 <InlineMessage
                   tone="danger"
-                  title="Die Gesamtvorschau ließ sich nicht abrufen"
+                  title="Die Gliederung ließ sich nicht abrufen"
                   action={
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      iconStart="rotate-ccw"
-                      onClick={() => setTotalsAttempt((attempt) => attempt + 1)}
-                    >
+                    <Button size="sm" variant="secondary" iconStart="rotate-ccw" onClick={data.reload}>
                       Erneut versuchen
                     </Button>
                   }
                 >
-                  {totalsState.message} Solange sie fehlt, weiß SuperTakt nicht, wie viele Zeilen
-                  und wie viele Stunden dieser Lauf schreiben würde — deshalb ist „Export
-                  ausführen" gesperrt. Eine Null an dieser Stelle wäre keine Auskunft, sondern
-                  eine Behauptung. Die Auswahl darunter bleibt erhalten.
+                  {layoutError} Solange die Gliederung fehlt, wird nichts zur Auswahl gestellt — eine
+                  geratene Zeilenzahl wäre schlimmer als keine.
                 </InlineMessage>
-              ) : null}
+              );
+            }
 
-              <div className="export-summary" role="status" aria-live="polite">
-                <span className="export-summary__count">
-                  {plural(selectedIds.length, "Buchung", "Buchungen")}
-                  {totalsState.kind === "ready"
-                    ? ` in ${plural(rowCount, "Exportzeile", "Exportzeilen")}`
-                    : null}
-                </span>
-                {totalsState.kind === "pending" ? (
-                  <span className="export-summary__pending">
-                    <Spinner size={13} label="Zeilen und Stunden werden gerechnet" />
-                    <span>Zeilen und Stunden werden gerechnet …</span>
-                  </span>
-                ) : null}
+            if (layout.length === 0) {
+              return (
+                <EmptyState
+                  icon="check-circle"
+                  title="Nichts zu exportieren"
+                  description="Alle erfassten Zeiten sind bereits exportiert. Neue Buchungen erscheinen hier von selbst."
+                  action={
+                    <Button variant="secondary" iconStart="clock" onClick={() => navigate("time")}>
+                      Zur Zeiterfassung
+                    </Button>
+                  }
+                />
+              );
+            }
+
+            const models = layout.map<ExportGroupViewModel>((group) => {
+              const todo = value.titles.get(group.todoId);
+              const insight = insights.get(group.key);
+              const entries = group.entryIds
+                .map((id) => value.byId.get(id))
+                .filter((entry): entry is TimeEntry => entry !== undefined)
+                .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+              const included = entries.filter((entry) => !excluded.has(entry.id));
+
+              const groupData: ExportGroupData = {
+                id: group.key,
+                todoId: group.todoId,
+                todoTitle: todo?.title ?? "Unbekanntes Todo",
+                callNumber: todo?.callNumber ?? null,
+                day: formatDayLabel(group.day),
+                entries: entries.map((entry) => ({
+                  id: entry.id,
+                  period: formatTimeRange(entry.startedAt, entry.endedAt),
+                  duration: formatDuration(entry.durationSeconds),
+                  source: entry.source,
+                  note: entry.note,
+                  exportCount: entry.exportCount,
+                })),
+              };
+
+              return {
+                group: groupData,
+                excludedEntryIds: new Set(
+                  entries.filter((entry) => excluded.has(entry.id)).map((entry) => entry.id),
+                ),
+                // Beim Nachrechnen bleibt der bisherige Wert stehen. Ein Feld,
+                // das bei jedem Klick auf „…" springt, laesst den Vergleich
+                // vorher/nachher nicht zu — und genau der ist der Sinn (E-031).
+                quarters:
+                  insight === undefined
+                    ? "…"
+                    : insight.quarters !== null
+                      ? formatQuarters(insight.quarters)
+                      : "—",
+                mergedNote: previewNote(included),
+                blockedReason: insight?.blockedReason ?? null,
+              };
+            });
+
+            const selectedGroupIds = new Set(
+              layout.map((group) => group.key).filter((key) => !deselected.has(key)),
+            );
+
+            const rowCount = totals?.rows.length ?? 0;
+            const blockedCount = models.filter((model) => model.blockedReason !== null).length;
+
+            return (
+              <>
+                {/*
+                  Der Fehlschlag der Gesamtvorschau steht als Meldung da, mit
+                  einem Weg zurück — nicht als Null in der Zusammenfassung
+                  (A-8.6). Sie ist zugleich die sichtbare Begründung dafür, dass
+                  „Export ausführen" gesperrt ist: Eine gesperrte Schaltfläche
+                  ohne Grund daneben ist eine Sackgasse.
+                */}
                 {totalsState.kind === "failed" ? (
-                  <span className="export-summary__danger">
-                    <Icon name="alert-triangle" size={14} />
-                    Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet
-                  </span>
+                  <InlineMessage
+                    tone="danger"
+                    title="Die Gesamtvorschau ließ sich nicht abrufen"
+                    action={
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        iconStart="rotate-ccw"
+                        onClick={() => setTotalsAttempt((attempt) => attempt + 1)}
+                      >
+                        Erneut versuchen
+                      </Button>
+                    }
+                  >
+                    {totalsState.message} Solange sie fehlt, weiß SuperTakt nicht, wie viele Zeilen
+                    und wie viele Stunden dieser Lauf schreiben würde — deshalb ist „Export
+                    ausführen" gesperrt. Eine Null an dieser Stelle wäre keine Auskunft, sondern
+                    eine Behauptung. Die Auswahl darunter bleibt erhalten.
+                  </InlineMessage>
                 ) : null}
-                <span className="export-summary__total tabular">
-                  {totals === null ? "—" : formatQuarters(totals.totalQuarters)}
-                  <span className="export-summary__unit"> h</span>
-                </span>
-                {totals !== null && totals.previouslyExportedCount > 0 ? (
-                  <span className="export-summary__warn">
-                    <Icon name="rotate-ccw" size={14} />
-                    {plural(
-                      totals.previouslyExportedCount,
-                      "Zeile enthält eine schon einmal exportierte Buchung",
-                      "Zeilen enthalten schon einmal exportierte Buchungen",
-                    )}
+
+                <div className="export-summary" role="status" aria-live="polite">
+                  <span className="export-summary__count">
+                    {plural(selectedIds.length, "Buchung", "Buchungen")}
+                    {totalsState.kind === "ready"
+                      ? ` in ${plural(rowCount, "Exportzeile", "Exportzeilen")}`
+                      : null}
                   </span>
-                ) : null}
+                  {totalsState.kind === "pending" ? (
+                    <span className="export-summary__pending">
+                      <Spinner size={13} label="Zeilen und Stunden werden gerechnet" />
+                      <span>Zeilen und Stunden werden gerechnet …</span>
+                    </span>
+                  ) : null}
+                  {totalsState.kind === "failed" ? (
+                    <span className="export-summary__danger">
+                      <Icon name="alert-triangle" size={14} />
+                      Zeilen und Stunden unbekannt — die Vorschau hat nicht geantwortet
+                    </span>
+                  ) : null}
+                  <span className="export-summary__total tabular">
+                    {totals === null ? "—" : formatQuarters(totals.totalQuarters)}
+                    <span className="export-summary__unit"> h</span>
+                  </span>
+                  {totals !== null && totals.previouslyExportedCount > 0 ? (
+                    <span className="export-summary__warn">
+                      <Icon name="rotate-ccw" size={14} />
+                      {plural(
+                        totals.previouslyExportedCount,
+                        "Zeile enthält eine schon einmal exportierte Buchung",
+                        "Zeilen enthalten schon einmal exportierte Buchungen",
+                      )}
+                    </span>
+                  ) : null}
+                  {blockedCount > 0 ? (
+                    <span className="export-summary__warn">
+                      <Icon name="alert-triangle" size={14} />
+                      {plural(blockedCount, "Gruppe bleibt stehen", "Gruppen bleiben stehen")} —
+                      ohne Leistung kein Export
+                    </span>
+                  ) : null}
+                </div>
+
                 {blockedCount > 0 ? (
-                  <span className="export-summary__warn">
-                    <Icon name="alert-triangle" size={14} />
-                    {plural(blockedCount, "Gruppe bleibt stehen", "Gruppen bleiben stehen")} —
-                    ohne Leistung kein Export
-                  </span>
+                  <details className="export-legend">
+                    <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
+                    <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
+                    <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
+                    <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
+                  </details>
                 ) : null}
-              </div>
 
-              {blockedCount > 0 ? (
-                <details className="export-legend">
-                  <summary><Icon name="info" size={14} /><span>Legende</span><Icon name="chevron-down" size={12} /></summary>
-                  <p><strong>Leistung fehlt:</strong> Leistungstext in einer Buchung ergänzen.</p>
-                  <p><strong>Alle Buchungen ausgeschlossen:</strong> Mindestens eine Buchung auswählen.</p>
-                  <p>Betroffene Gruppen bleiben offen; der übrige Export läuft weiter.</p>
-                </details>
-              ) : null}
+                <ExportGroupList
+                  models={models}
+                  selectedGroupIds={selectedGroupIds}
+                  expandedGroupIds={expanded}
+                  onToggleGroup={(groupId) =>
+                    setDeselected((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(groupId)) next.delete(groupId);
+                      else next.add(groupId);
+                      return next;
+                    })
+                  }
+                  onToggleExpanded={(groupId) =>
+                    setExpanded((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(groupId)) next.delete(groupId);
+                      else next.add(groupId);
+                      return next;
+                    })
+                  }
+                  onToggleEntry={(_groupId, entryId) =>
+                    setExcluded((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(entryId)) next.delete(entryId);
+                      else next.add(entryId);
+                      return next;
+                    })
+                  }
+                  onEditEntry={(_groupId, entryId) => {
+                    const entry = value.entries.find((candidate) => candidate.id === entryId);
+                    if (entry !== undefined) setEditEntry(entry);
+                  }}
+                  renderRowDetail={(groupId) => (
+                    <GroupRowDetail
+                      row={rowByGroup.get(groupId) ?? null}
+                      deselected={deselected.has(groupId)}
+                      blocked={(insights.get(groupId)?.blockedReason ?? null) !== null}
+                      template={templateFields}
+                      catalog={catalog}
+                    />
+                  )}
+                />
 
-              <ExportGroupList
-                models={models}
-                selectedGroupIds={selectedGroupIds}
-                expandedGroupIds={expanded}
-                onToggleGroup={(groupId) =>
-                  setDeselected((previous) => {
-                    const next = new Set(previous);
-                    if (next.has(groupId)) next.delete(groupId);
-                    else next.add(groupId);
-                    return next;
-                  })
-                }
-                onToggleExpanded={(groupId) =>
-                  setExpanded((previous) => {
-                    const next = new Set(previous);
-                    if (next.has(groupId)) next.delete(groupId);
-                    else next.add(groupId);
-                    return next;
-                  })
-                }
-                onToggleEntry={(_groupId, entryId) =>
-                  setExcluded((previous) => {
-                    const next = new Set(previous);
-                    if (next.has(entryId)) next.delete(entryId);
-                    else next.add(entryId);
-                    return next;
-                  })
-                }
-                onEditEntry={(_groupId, entryId) => {
-                  const entry = value.entries.find((candidate) => candidate.id === entryId);
-                  if (entry !== undefined) setEditEntry(entry);
-                }}
-                renderRowDetail={(groupId) => (
-                  <GroupRowDetail
-                    row={rowByGroup.get(groupId) ?? null}
-                    deselected={deselected.has(groupId)}
-                    blocked={(insights.get(groupId)?.blockedReason ?? null) !== null}
-                    template={templateFields}
-                    catalog={catalog}
-                  />
-                )}
-              />
+                <ExportRunList runs={value.runs} />
+              </>
+            );
+          }}
+        </AsyncBoundary>
 
-              <ExportRunList runs={value.runs} />
-            </>
-          );
-        }}
-      </AsyncBoundary>
+        {templates.state.status === "loading" ? <Spinner size={14} label="Vorlagen werden geladen" /> : null}
+      </ScreenBody>
 
       {/*
         Der einmalige Hinweis beim ersten Lauf in einen neu gewählten Ordner
@@ -974,8 +1000,6 @@ export function ExportScreen() {
           onClose={() => setEditEntry(null)}
         />
       )}
-
-      {templates.state.status === "loading" ? <Spinner size={14} label="Vorlagen werden geladen" /> : null}
     </section>
   );
 }

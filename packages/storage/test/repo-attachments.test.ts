@@ -908,6 +908,115 @@ describe('createAttachmentPort.attachmentNamesUnder — die erste Gegenfrage, am
   });
 });
 
+/**
+ * T-328 (unit-tester), Befund `repo-attachments.ts:473` aus
+ * `.claude/team/reports/T-324-code-reviewer.md`.
+ *
+ * ===========================================================================
+ * ROT ZUERST
+ * ===========================================================================
+ *
+ * `attachmentNamesOfKind` entstand mit T-320 und hatte laut Messung des
+ * code-reviewers **null** Abdeckung — die ganze Methode (Zeilen 473 bis 478)
+ * lief in keinem Prüffall. Ohne diesen Block bricht `it.each` unten nicht ab,
+ * sondern es gibt ihn schlicht nicht: Vor diesem Commit warf `db.unit
+ * .attachments.attachmentNamesOfKind` in keinem Test — der erste Fall
+ * (`'image'` liefert nur Bildnamen) wäre am nicht existierenden Aufruf
+ * gescheitert, nicht an einer falschen Antwort.
+ *
+ * ===========================================================================
+ * Was gemessen wird — genau der vom code-reviewer benannte Aufbau
+ * ===========================================================================
+ *
+ * Drei Zeilen der Arten `image`, `file` und `link`, davon die Bildzeile mit
+ * einem VOLLEN PFAD im `target` (nicht dem bloßen erzeugten Namen) — genau
+ * der Fall, für den diese Methode gebaut wurde (T-320: `attachmentNamesUnder`
+ * findet eine gewöhnliche Bildzeile nicht, weil dort kein Ordner vor dem
+ * Namen steht; diese Methode fragt statt dessen über `kind` und faltet den
+ * Namen aus dem `target` heraus, gleich ob dort ein Name oder ein Pfad
+ * steht). Die Zusicherung: Die Antwort nennt die gefalteten Namen der
+ * Bildzeilen und NICHT die der anderen beiden Arten.
+ */
+describe('createAttachmentPort.attachmentNamesOfKind — die zweite Hälfte der ersten Gegenfrage, über die Art statt über den Pfad (A-A-98, T-320)', () => {
+  let db: TestDatabase;
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('nennt AUSSCHLIESSLICH die gefalteten Namen der Zeilen der gefragten Art — nicht die der anderen', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+
+    // Bildzeile mit vollem Pfad im target (Mischschreibung, Windows-Trenner) —
+    // genau der Fall, für den attachmentNamesUnder blind ist.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'image',
+      title: null,
+      target: 'C:\\App\\attachments\\ABCDEF0123456789ABCDEF0123456789.png',
+      now: NOW,
+    });
+    // Dateianhang (vom Benutzer eingetragener Pfad) — muss draussen bleiben.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'file',
+      title: null,
+      target: '/home/nutzer/rechnung.pdf',
+      now: NOW,
+    });
+    // Verweis — muss draussen bleiben.
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'link',
+      title: null,
+      target: 'https://example.invalid/seite',
+      now: NOW,
+    });
+
+    const namen = await db.unit.attachments.attachmentNamesOfKind('image');
+
+    expect(namen).toEqual(new Set(['abcdef0123456789abcdef0123456789.png']));
+    expect(namen.has('rechnung.pdf')).toBe(false);
+    expect(namen.has('https://example.invalid/seite')).toBe(false);
+    expect(namen.size).toBe(1);
+  });
+
+  it('ohne jede Zeile dieser Art: eine leere Menge', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'link',
+      title: null,
+      target: 'https://example.invalid/anderswo',
+      now: NOW,
+    });
+
+    expect(await db.unit.attachments.attachmentNamesOfKind('image')).toEqual(new Set());
+  });
+
+  it('Gegenprobe: nach der Art gefragt, findet eine Bildzeile mit BLOSSEM Namen (kein Pfad davor) sich selbst — der Regelfall, den attachmentNamesUnder allein verfehlt', async () => {
+    db = openTestDatabase();
+    const todo = await createTodo(db);
+    await db.unit.attachments.create({
+      todoId: todo.id,
+      kind: 'image',
+      title: null,
+      target: 'fedcba9876543210fedcba9876543210.png',
+      now: NOW,
+    });
+
+    // attachmentNamesUnder fragt am Anfang eines Pfades und antwortet einer
+    // gewöhnlichen Bildzeile deshalb IMMER leer (T-318, T-320) — das ist der
+    // Zustand, den diese zweite Frage schließt.
+    expect(await db.unit.attachments.attachmentNamesUnder('/beliebiger/ordner')).toEqual(new Set());
+    expect(await db.unit.attachments.attachmentNamesOfKind('image')).toEqual(
+      new Set(['fedcba9876543210fedcba9876543210.png']),
+    );
+  });
+});
+
 describe('createAttachmentPort.emailFileCount — die zweite Gegenfrage, ganz ohne Pfad (A-A-98, T-313-2)', () => {
   let db: TestDatabase;
 

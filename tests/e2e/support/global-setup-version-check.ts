@@ -20,6 +20,9 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   const web = await startVersionCheckWeb();
 
   return async () => {
-    stopVersionCheckWeb(web);
+    // T-345: `stopVersionCheckWeb` wartet jetzt auf den Prozeßgruppen-Kill
+    // (derselbe Waisenfund wie in `services.ts`) — ohne `await` bräche der
+    // Node-Prozeß ab, bevor die Signalisierung greift.
+    await stopVersionCheckWeb(web);
   };
 }

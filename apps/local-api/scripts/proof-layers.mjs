@@ -797,6 +797,235 @@ section('6  Gegenproben — jede eingesetzte Verletzung muß auffallen');
   );
 }
 
+// ---------------------------------------------------------------------------
+section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Frage');
+// ---------------------------------------------------------------------------
+/*
+ * ===========================================================================
+ * Warum dieser Abschnitt hier steht und nicht in einem eigenen Lauf
+ * ===========================================================================
+ *
+ * Er mißt dieselbe Sorte Zusage wie die Abschnitte darüber: **eine Regel der
+ * Domäne darf in der Anwendungsfallschicht nicht ein zweites Mal entschieden
+ * werden.** Abschnitt 1 hält HTTP aus der Fachlogik heraus; dieser Abschnitt
+ * hält die Fachlogik davor, an sieben Stellen verschieden zu antworten.
+ *
+ * ===========================================================================
+ * Der Anlaß — zweimal dieselbe zu kleine Menge (R-34, E-099 Punkt 3)
+ * ===========================================================================
+ *
+ * T-363 hat den Weg „ein vorgefundener Eintrag wird höchstens bis zum letzten
+ * Lebenszeichen gebucht" an **drei** Routen geschlossen und R-34 für erledigt
+ * erklärt. Zwei unabhängige Prüfungen haben danach dieselben **zwei** offenen
+ * Türen in `features/timer/idle.ts` gemessen: 39 000 s auf einer abrechenbaren
+ * Zeile, während der Dialog für denselben Eintrag 1 200 s auswies. Die Menge
+ * war an den Routen aufgespannt, die der Auftrag kannte, nicht an der
+ * Anforderung.
+ *
+ * Dieser Abschnitt spannt sie an der Anforderung auf, und zwar von unten:
+ *
+ *  1. **Die Speicherung** — jede SQL-Anweisung, die `ended_at` auf eine
+ *     bestehende Zeile schreibt. Das ist die vollständige Menge der Stellen,
+ *     an denen aus einem offenen Eintrag überhaupt eine Buchung werden kann;
+ *     unterhalb davon gibt es keinen Weg mehr. Sie muß in **einer** Datei
+ *     liegen und ihre Zahl ist festgeschrieben.
+ *  2. **Die Anwendungsfälle** — jeder Aufruf der Ports, die diese Anweisungen
+ *     auslösen (`timer.stop`, `timer.separateIdle`, `timer.start` mit
+ *     Verdrängung). Jeder einzelne muß entweder durch `bookingEndOf` fragen
+ *     oder namentlich in `BEGRUENDETE_AUSNAHMEN` stehen.
+ *
+ * Eine achte Tür ist damit rot, **bevor** jemand sie mißt — und eine Ausnahme,
+ * die niemand mehr trifft, ebenfalls (E-103, zweiseitig wie in Abschnitt 5).
+ */
+{
+  const STORAGE_DATEIEN = quellbaum('@takt/storage', 'src', {
+    mindestens: 10,
+    endungen: new Set(['.ts']),
+  });
+  const SET_ENDED_AT = /UPDATE\s+time_entry\s+SET\s+ended_at/g;
+
+  const schreibstellen = STORAGE_DATEIEN.flatMap((pfad) => {
+    const text = readFileSync(pfad, 'utf8');
+    const treffer = text.match(SET_ENDED_AT) ?? [];
+    return treffer.map(() => relative(paketVerzeichnis('@takt/storage'), pfad).split(sep).join('/'));
+  });
+
+  check(
+    'die Speicherung schreibt `ended_at` auf eine bestehende Zeile in genau einer Datei',
+    new Set(schreibstellen).size === 1 && schreibstellen[0] === 'src/sqlite/repo-time.ts',
+    [...new Set(schreibstellen)].join(', ') || 'keine gefunden',
+  );
+  check(
+    'es sind genau die drei bekannten Anweisungen (separateIdle, start-Verdrängung, stop)',
+    schreibstellen.length === 3,
+    `${schreibstellen.length} gefunden`,
+  );
+
+  /**
+   * Die Aufrufe, die eine dieser drei Anweisungen auslösen können.
+   *
+   * `timer.start` ist dabei, weil der Port den laufenden Eintrag **selbst**
+   * schließt, sobald `stopRunning` wahr ist — ein Aufruf mit einem literalen
+   * `false` kann das nicht und zählt deshalb nicht mit.
+   */
+  const SCHLIESSENDE_AUFRUFE = /\.timer\.(?:stop|separateIdle|start)\s*\(/;
+  const LITERAL_FALSE = /\.timer\.start\s*\([^,]+,\s*false\s*,/;
+
+  /**
+   * Aufrufe, die **nicht** durch `bookingEndOf` fragen und trotzdem richtig
+   * sind. Jeder Eintrag trägt seinen Grund, und Abschnitt 7 prüft in beide
+   * Richtungen: Ein Eintrag, der nichts mehr trifft, ist rot (E-103 Punkt 1).
+   *
+   * Verglichen wird der **normalisierte Wortlaut** der Zeile. Das ist Absicht:
+   * Wer einen dieser Aufrufe ändert, ändert damit die Frage, bis wohin gebucht
+   * wird — und soll das hier aufschreiben müssen, statt es unbemerkt zu tun.
+   */
+  const BEGRUENDETE_AUSNAHMEN = [
+    {
+      zeile: "const removed = await unit.timer.stop('', orphan.running.startedAt);",
+      grund:
+        'resolveOrphanedTimer, Ausgang „verwerfen" (E-036): Der Zeitpunkt ist der Startzeitpunkt, ' +
+        'die Dauer wird 0 und die Zeile fällt weg. Die Frage ist zwei Zeilen darüber über ' +
+        '`foundAtServiceStart` bereits gestellt.',
+    },
+    {
+      zeile: 'const stopped = await unit.timer.stop(orphan.running.note, decision.entry.endedAt);',
+      grund:
+        'resolveOrphanedTimer, Ausgang „bis zum Lebenszeichen buchen" (E-036): Das Ende kommt ' +
+        'unmittelbar aus `decideOrphanedTimer` — dieselbe Regel, die `bookingEndOf` benutzt, nur ' +
+        'ohne den Umweg.',
+    },
+    {
+      zeile: 'const result = await unit.timer.start(todoId, closedBeforeStart ? false : stopRunning, timestamp);',
+      grund:
+        'startTimer: Ein **vorgefundener** verdrängter Eintrag ist eine Zeile darüber bereits über ' +
+        '`bookingEndOf` geschlossen (`closedBeforeStart`); dann verdrängt dieser Aufruf nichts mehr. ' +
+        'Sonst schließt der Port einen Timer **dieses** Laufs bei „jetzt" — die Wanduhr ist dort richtig.',
+    },
+  ];
+
+  const normal = (z) => z.trim().replace(/\s+/gu, ' ');
+
+  /**
+   * Prosa zählt nicht. Die Dateien dieses Bestands erklären sich ausführlich,
+   * und in `timer.ts` steht der Aufruf `unit.timer.start(todoId, true, now)`
+   * als Zitat in einem Absatz darüber, warum er **nicht** mehr so geschieht.
+   * Ein Wächter, der ein Zitat für eine Tür hält, ist genauso wertlos wie
+   * einer, der eine Tür übersieht — nur lauter.
+   */
+  const istProsa = (zeile) => /^(\*|\/\/|\/\*)/u.test(zeile);
+
+  const aufrufe = anwendungsfallNamen.flatMap((n) =>
+    inhaltVon(n)
+      .split('\n')
+      .map((zeile, i) => ({ datei: n, nr: i + 1, zeile: normal(zeile) }))
+      .filter(({ zeile }) => !istProsa(zeile) && SCHLIESSENDE_AUFRUFE.test(zeile) && !LITERAL_FALSE.test(zeile)),
+  );
+
+  check(
+    'die Menge der schließenden Aufrufe ist nicht leer',
+    aufrufe.length >= 4,
+    `${aufrufe.length} gefunden`,
+  );
+
+  const ausnahmeWortlaut = BEGRUENDETE_AUSNAHMEN.map(({ zeile }) => normal(zeile));
+  const ungefragt = aufrufe.filter(
+    ({ zeile }) => !zeile.includes('bookingEndOf(') && !ausnahmeWortlaut.includes(zeile),
+  );
+
+  check(
+    `alle ${aufrufe.length} schließenden Aufrufe fragen über \`bookingEndOf\` oder stehen begründet in der Ausnahmeliste`,
+    ungefragt.length === 0,
+    ungefragt.map(({ datei, nr, zeile }) => `${datei}:${nr} ${zeile}`).join(' | '),
+  );
+
+  const toteAusnahme = ausnahmeWortlaut.filter(
+    (wortlaut) => !aufrufe.some(({ zeile }) => zeile === wortlaut),
+  );
+  check(
+    `alle ${BEGRUENDETE_AUSNAHMEN.length} Ausnahmen treffen heute eine Zeile auf der Platte (E-103 Punkt 1)`,
+    toteAusnahme.length === 0,
+    toteAusnahme.join(' | '),
+  );
+
+  /*
+   * Der Deckel nach oben ist eine Zusage der Domäne, aber nur so gut wie die
+   * Aufrufer: `decideOrphanedTimer` deckelt auf `min(heartbeatAt, now)` — und
+   * `now` ist freiwillig, weil ein Pflichtfeld sechs vorbestehende Prüffälle
+   * zu `tsc`-Fehlern machte. Hier wird deshalb gemessen, was der Typ nicht
+   * verlangen kann: **jeder** Aufruf im Dienst übergibt den Wert.
+   */
+  const orphanAufrufe = anwendungsfallNamen.flatMap((n) => {
+    const text = inhaltVon(n);
+    return [...text.matchAll(/decideOrphanedTimer\s*\(\{([\s\S]*?)\}\)/gu)].map((treffer) => ({
+      datei: n,
+      hatNow: /(^|[\s,{])now\s*:/u.test(treffer[1]),
+    }));
+  });
+  check(
+    'es gibt Aufrufe von `decideOrphanedTimer` im Dienst',
+    orphanAufrufe.length >= 3,
+    `${orphanAufrufe.length} gefunden`,
+  );
+  check(
+    `alle ${orphanAufrufe.length} Aufrufe von \`decideOrphanedTimer\` übergeben den Deckel \`now\``,
+    orphanAufrufe.every(({ hatNow }) => hatNow),
+    orphanAufrufe.filter(({ hatNow }) => !hatNow).map(({ datei }) => datei).join(', '),
+  );
+}
+
+// ---------------------------------------------------------------------------
+section('8  Gegenproben zu Abschnitt 7 — jede eingesetzte Tür muß auffallen');
+// ---------------------------------------------------------------------------
+{
+  const normal = (z) => z.trim().replace(/\s+/gu, ' ');
+  const SCHLIESSENDE_AUFRUFE = /\.timer\.(?:stop|separateIdle|start)\s*\(/;
+  const LITERAL_FALSE = /\.timer\.start\s*\([^,]+,\s*false\s*,/;
+  const faengt = (zeile) => SCHLIESSENDE_AUFRUFE.test(zeile) && !LITERAL_FALSE.test(zeile);
+
+  check(
+    'Gegenprobe: eine achte Tür ohne `bookingEndOf` wird gefunden',
+    faengt('await unit.timer.stop(running.note, input.startedAt);') &&
+      !normal('await unit.timer.stop(running.note, input.startedAt);').includes('bookingEndOf('),
+  );
+  check(
+    'Gegenprobe: dieselbe Tür **mit** `bookingEndOf` wird nicht beanstandet',
+    normal(
+      'await unit.timer.stop(running.note, await bookingEndOf(context, unit, running, input.startedAt));',
+    ).includes('bookingEndOf('),
+  );
+  check(
+    'Gegenprobe: ein `timer.start` mit literalem `false` gilt nicht als schließend',
+    !faengt('await unit.timer.start(pending.todoId, false, end);'),
+  );
+  check(
+    'Gegenprobe: ein `timer.start` mit `true` gilt als schließend',
+    faengt('await unit.timer.start(todoId, true, timestamp);'),
+  );
+  const istProsa = (zeile) => /^(\*|\/\/|\/\*)/u.test(zeile);
+  check(
+    'Gegenprobe: dieselbe Zeile als Kommentar zitiert gilt nicht als Tür',
+    istProsa(normal(' * `unit.timer.start(todoId, true, now)` schließt den laufenden Timer')) &&
+      istProsa(normal('// await unit.timer.stop(running.note, input.startedAt);')),
+  );
+  check(
+    'Gegenprobe: eine echte Zeile gilt weiterhin als Tür',
+    !istProsa(normal('    const result = await unit.timer.stop(note, endsAt);')),
+  );
+  check(
+    'Gegenprobe: `UPDATE time_entry SET ended_at` wird im Text gefunden',
+    /UPDATE\s+time_entry\s+SET\s+ended_at/u.test(
+      "conn.prepare('UPDATE time_entry SET ended_at = ?, updated_at = ? WHERE id = ?')",
+    ),
+  );
+  check(
+    'Gegenprobe: ein `decideOrphanedTimer` ohne `now` wird gefunden',
+    ![...'decideOrphanedTimer({ running, heartbeatAt, resolution })'.matchAll(
+      /decideOrphanedTimer\s*\(\{([\s\S]*?)\}\)/gu,
+    )].every((treffer) => /(^|[\s,{])now\s*:/u.test(treffer[1])),
+  );
+}
+
 console.log(`\n${'═'.repeat(58)}`);
 console.log(`${passed} bestanden, ${failed} fehlgeschlagen.`);
 if (failed > 0) {

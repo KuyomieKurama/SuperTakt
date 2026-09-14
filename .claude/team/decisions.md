@@ -3021,3 +3021,202 @@ gemacht hätte: `listEmailFiles()` liefert **Namen**, `todo_attachment.target` t
 Ohne Umrechnung wäre jede Datei herrenlos gewesen. Es ist derselbe Fehler wie „geprüfter Name ≠
 aufgelöster Name" (T-156-1, T-164-1, T-297), diesmal in der löschenden Richtung — und dort kostet
 er nicht eine Lücke, sondern Daten.
+
+---
+
+## E-112 — Fester Teil ist die Steuerung, Laufbereich ist der Inhalt, Rückfall ist der Seitenlauf
+
+**Entschieden am 2026-09-12** aus T-322 (Offene Frage 5) und T-323, auf den Auftrag des
+Auftraggebers vom selben Tag: Jede Ansicht richtet sich nach dem verfügbaren Inhaltsbereich, und
+läuft etwas über, läuft ausschließlich der betroffene Bereich.
+
+Die Regel gilt über diesen Auftrag hinaus und ist in drei Sätzen zu haben:
+
+1. **Die Naht liegt unter dem, was die Auswahl steuert.** Bildschirmkopf, Bereichsreiter,
+   Filterleiste samt Zählzeile und die eine Leiste, die eine Auswahl im Inhalt beantwortet, stehen
+   fest. Was die Auswahl **zeigt**, läuft. Wer eine neue Ansicht baut, zieht die Naht an dieser
+   Frage und nicht an der Optik.
+2. **Ein Laufbereich je Fläche und Achse; zwei nur nebeneinander, nie übereinander.** Zwei
+   untereinanderliegende Laufbereiche geben dem Benutzer zwei Bildlaufleisten für eine Blickachse.
+   Fällt ein Nebeneinander bei schmalem Fenster untereinander, wird aus zwei wieder einer.
+3. **Der Rückfall ist der heutige Zustand.** Unterschreitet die Höhe des **Inhaltsbereichs** —
+   nicht des Fensters — die Grenze, läuft wieder der Rahmen als Einziges. Kein Abschneiden, keine
+   unerreichbare Fläche. Entschieden in CSS, nicht in JavaScript, damit unterwegs kein Fokus
+   verlorengeht.
+
+**Der Preis steht dabei, und er ist eine Fehlerklasse, keine Unbequemlichkeit.** Der Bildlauf zieht
+von einer Fläche (`.app__main`) in viele. Damit wird jede Falle, die T-057 einmal gekostet hat, zu
+einer Falle je Ansicht: die Rinne der Bildlaufleiste, die außen bleibt, während der Lauf nach innen
+zieht — und, teurer, ein absolut positionierter Nachfahre ohne umschließenden Block, der den
+Dokumentbildlauf still zurückbringt. Deshalb ist die Zusage „keine Ansicht macht das Dokument höher
+oder breiter als das Fenster" ein Meßsatz und kein Satz in einem Papier.
+
+**Berichtigt am 2026-09-13, siehe E-113:** Dieser Absatz schloß ursprünglich mit „deshalb bekommt
+`.screen__body` ausdrücklich **kein** `position: relative`". Das war die falsche Folgerung aus der
+richtigen Falle, und T-326 hat sie gemessen widerlegt.
+
+**Ebenfalls berichtigt, Punkt 3:** „läuft wieder der Rahmen als Einziges" ist als Zusage zu weit.
+Im Rückfall läuft der Rahmen, und der Laufbereich kann innerhalb seines Bodens von 4 rem weiter
+laufen — verschachtelt, nicht übereinander. Gehalten wird, daß das **Dokument** nie läuft und keine
+Fläche unerreichbar wird; nicht, daß genau eine Bildlaufleiste sichtbar ist. Der Mechanismus dafür
+ist selbsttätig und kommt ohne Schwellenzahl aus; eine Höhenabfrage könnte ohnehin nur das Fenster
+messen, und Punkt 3 spricht vom Inhaltsbereich.
+
+**Zwei Flächen sind ausgenommen und bleiben es:** die Startbilder (`.boot`) und die Musterseite —
+sie hängen nicht in dieser Hülle. Der Outlook-Aufgabenbereich ebenfalls; er hängt in Outlooks
+Rahmen. Sollte der Auftraggeber ihn einschließen wollen, ist das ein eigener Auftrag und nicht
+diese Regel.
+
+---
+
+## E-113 — Der umschließende Block wandert mit dem Bildlauf
+
+**Entschieden am 2026-09-13** gegen die eigene Vorgabe aus E-112 und gegen
+`docs/design/fensterfeste-flaechen.md` Abschnitt 8.4, weil T-326 das Gegenteil **gemessen** hat.
+
+E-112 und das Mechanismuspapier verboten `position: relative` an `.screen__body` mit Verweis auf
+T-057 Ursache 2: Es solle bei **genau einem** umschließenden Block für absolut positionierte
+Nachfahren bleiben. Die Regel war richtig, solange `.app__main` selbst der Laufbereich war. Sie ist
+falsch, sobald der Bildlauf eine Ebene tiefer zieht — denn dann bezieht sich ein
+`span.visually-hidden` **im** Laufbereich weiterhin auf `.app__main`, liegt außerhalb des
+Bildlaufkastens, in dem es steht, und vergrößert statt dessen den Bildlaufbereich des **Rahmens**.
+
+Gemessen ohne die Zeile, `scrollHeight/clientHeight` des Rahmens bei 768 px Fensterhöhe:
+
+| Ansicht | Rahmen | Verstöße |
+|---|---|---|
+| Todos | 4242/768 | 128 |
+| Buchungen | 3564/768 | 140 |
+| Zeiterfassung | 5723/768 | 76 |
+| Todo-Detail | 5338/768 | 81 |
+| Protokoll | 3573/768 | 55 |
+| Tags | 1224/768 | — |
+| Dashboard | 905/768 | — |
+
+Mit der Zeile: alle elf auf 768/768. Es ist **dieselbe Klasse wie T-057**, eine Ebene höher — nicht
+ihr Gegenteil.
+
+**Die Regel, die daraus wird und die über diesen Fall hinausgeht:** Ein Bildlaufkasten muß der
+umschließende Block seiner eigenen absoluten Nachfahren sein. Wandert der Bildlauf, wandert
+`position: relative` mit ihm. „Genau ein umschließender Block" war nie das Ziel — das Ziel war, daß
+kein absoluter Nachfahre aus dem Kasten fällt, in dem er steht.
+
+**Und die Lehre über die Entscheidung selbst:** Beide Designpapiere sind gegeneinander gelesen
+worden und lagen deckungsgleich — an dieser Stelle waren sie deckungsgleich **falsch**. Zwei
+Papiere, die einander bestätigen, sind keine Messung. Der frontend-dev hat richtig gehandelt:
+gebaut, gemessen, die Abweichung als Abweichung gemeldet und die Entscheidung nicht selbst
+getroffen.
+
+---
+
+## E-114 — Ein Wortlautabgleich findet Zeichenketten, keine Geltungsbereiche
+
+**Entschieden am 2026-09-13** aus T-323 gegen T-326.
+
+Vor der Verlegung von `id="inhalt"` vom Rahmen an den Laufbereich hat T-323 den E-087-Abgleich
+gefahren und **eine** Fundstelle in `tests/**` gemeldet, mit dem Zusatz, sie bleibe gültig. T-326
+hat danach gebaut und gemessen: **sieben** vorbestehende End-zu-End-Dateien fallen —
+einschließlich genau der einen, die als gültig eingeschätzt worden war. Sie benutzen `#inhalt`
+nicht als Text, sondern als **Geltungsbereich** für Knöpfe, die im Kopf stehen und damit künftig
+außerhalb liegen.
+
+E-087 bleibt, wie es ist, und bekommt einen zweiten Satz: **Wer eine Kennung verlegt, sucht nicht
+ihren Wortlaut, sondern ihre Benutzung.** Eine Kennung, die irgendwo einen Geltungsbereich
+aufspannt, trägt jeden Prüffall in diesem Bereich mit — und keiner davon nennt sie ein zweites Mal.
+Der Wortlautabgleich hätte hier auch bei fehlerfreier Ausführung sechs der sieben Fälle nicht
+gefunden.
+
+**Die Kosten sind diesmal gering, und der Grund dafür ist kein Zufall:** Der Auftrag hat dem
+frontend-dev ausdrücklich verboten, rot gewordene fremde Prüffälle zu reparieren. Deshalb stehen
+sieben Dateien mit Datei, Zeile und Behebungsvorschlag im Bericht, statt daß sie unauffällig
+mitgeändert worden wären.
+
+---
+
+## E-115 — Ein fester Teil, der bei 960 × 640 nicht paßt, ist nicht fest
+
+**Entschieden am 2026-09-13** aus T-340 (Regel), T-338 (Bild) und T-330 (Messung).
+
+Der End-zu-End-Meßsatz fand zehn Verstöße gegen die Zusage über den Rahmen, an sechs Ansichten bei
+960 × 640, 831 × 640 und 640 × 480. T-334 hielt sie für den geordneten Rückfall nach R-3. **Das ist
+falsch, und drei Wege führen zu demselben Schluß:**
+
+- **Die Regel** (T-340): 960 × 640 ist die getragene Untergrenze aus `tauri.conf.json`, kein
+  Sonderfall darunter. Greift der Rückfall dort schon, greift er im Regelbetrieb.
+- **Das Bild** (T-338): Bei **1280 × 480** — gleiche geringe Höhe, aber breit — gibt es **null**
+  Verstöße, während schmalere Fenster bei gleicher oder größerer Höhe welche haben. Der Auslöser ist
+  also **Breite**, nicht Höhe; R-3 ist für den niedrigen Fall geschrieben und trifft nicht zu. Drei
+  der Überlaufzahlen (274/221/108 px) sind mit **anderen Testdaten** reproduziert — es liegt auch
+  nicht an der Datenmenge.
+- **Die Rechnung** (T-340): 640 − 52 Kopf = 588 Rahmen, − 24 Innenabstand = 564, − 64 Boden ⇒
+  **fester Teil ≤ 500 px bei 960 × 640**. Die 588 decken sich mit der von T-330 unabhängig
+  gemessenen `clientHeight`.
+
+**Die Regel:** Ein fester Teil, der bei 960 × 640 nicht in sein Budget paßt, ist kein fester Teil —
+er ist ein Inhalt, der sich als Kopf ausgibt. Waagerecht gibt es dabei **keinen** Rückfall: `.app__main`
+trägt `overflow-x: hidden`, eine Überbreite ist ein **Schnitt**, keine Bildlaufstelle.
+
+**Die Antwort auf die Ausgangsfrage ist beides, getrennt:** Der Geltungsbereich der Zusage wird auf
+die getragenen Größen geschärft (darunter mißt eine eigene, schwächere Zusage weiter), **und** der
+feste Teil wird behoben. Wer nur das eine täte, hätte entweder einen Meßsatz, der Richtiges rot
+meldet, oder einen, der einen echten Fehler durchläßt.
+
+**Zwei Stellen sind namentlich betroffen:** der Kanban-Kopf (in T-334 behoben) und die Filterleisten
+von Todos, Buchungen und Protokoll — **dieselbe Fehlerfamilie, nur noch nicht dorthin gezogen**.
+Die Bereichsschiene der Einstellungen (577 px gegen ~535 erlaubte) ist nach der Regel ebenfalls zu
+hoch, verursacht aber gemessen **keinen** Verstoß, weil der Rahmen ihn örtlich abfängt — geringe
+Schwere, eigener Termin.
+
+---
+
+## E-116 — Eine Bestätigungsfläche hängt am Fenster, nie an dem, was sie bestätigt
+
+**Entschieden am 2026-09-13** aus R-31 (T-332 gefunden, T-334 behoben, T-337 an der Menge geprüft).
+
+Die Rückfrage vor dem Öffnen einer Datei hing in `glass` und `liquid-glass` an der Karte: Knopf
+„Öffnen" bei y = 952, außerhalb des Fensters, die Fläche rollte mit. A-19 verlangt diese Rückfrage;
+eine Bestätigungsfläche, die in zwei von neunzehn Gestaltungen nicht erreichbar ist, ist keine
+Bestätigung.
+
+**Die Fehlerklasse, und sie ist der Grund für die Entscheidung:** `position: fixed` sichert die
+Verankerung **nicht** zu. Jede Mal-Eigenschaft eines Vorfahren — hier `backdrop-filter` an der
+Karte — verschiebt den umschließenden Block. Zugesichert wird deshalb **strukturell**: Portal am
+Dokumentkörper, nicht eine Positionsangabe, der man ansieht, was sie meint.
+
+Das gilt für jede Bestätigungsfläche, nicht nur für diese: Löschabfragen, die Abfrage vor dem Öffnen
+eines Verweises, die Dialoge der Datensicherung. Und es gilt in beide Richtungen — **erreichbar**
+und **fangend**: eine Fläche, hinter die der Tabulator gelangt oder die sich mit `Escape` als
+Zustimmung schließen läßt, ist an der anderen Achse derselbe Fehler.
+
+---
+
+## E-117 — Ein Quelltextlauf sichert die Bauart zu, nicht die Wirkung
+
+**Entschieden am 2026-09-13** aus T-359, nach vier Anläufen an derselben Zusage.
+
+Die Zusage „jede Bestätigungsfläche hängt am Fenster" (A-25.6, erster Teilsatz) ist viermal
+nachgebessert worden: erst am Namen `scrim`, dann an der Zahl der Portale, dann an der Eigenschaft
+in **einer** Schreibweise, zuletzt an der gerechneten Erklärung. Jedes Mal war die Richtung richtig
+und die Menge zu eng; jedes Mal fand der nächste Prüfer eine Gestalt mehr.
+
+**Der vierte Anlauf hat die Runde nicht durch eine fünfte beendet, sondern durch eine Grenze:**
+„Hängt am Fenster" ist eine Eigenschaft des **gerechneten Kastens**, nicht des Textes. Zwischen
+beiden liegt die Kaskade, und ein Quelltextleser ist keine Kaskade. Vier stille Gestalten sind
+benannt — Klassenname erst zur Laufzeit, Stilblatt außerhalb `apps/web/src`, `node.style.position`
+im Effekt, fremde Fläche — ausdrücklich als **Beispiele**, nicht als abarbeitbare Liste.
+
+**Die Regel, die daraus wird:**
+
+1. **Der Quelltextlauf sichert die Bauart zu** — was im Bestand steht, ist so gebaut, wie es sein
+   soll. Seine Menge hängt an der gerechneten Erklärung, nicht an einer Schreibweise.
+2. **Die Wirkung sichert eine Messung am gerenderten Bild zu** — über alle neunzehn Gestaltungen
+   und beide Modi, wie `contrast` es seit T-337 fährt. T-353 hat auf diesem Weg zwei Teilsätze von
+   A-25.6 geschlossen, die kein Lauf zusichern konnte.
+3. **Beide Hälften werden benannt, wo die Zusage steht** — im Kopf der Regel, nicht nur im Bericht.
+   Eine Zusage, die ihre eigene Grenze verschweigt, wird zitiert, als hätte sie keine.
+
+**Und der Nachweis über den Wächter gehört dazu.** T-359 hat 19 Mutationen gefahren, jeden
+Mechanismus einzeln auf den Stand davor zurückgebaut: 19 von 19 gefangen. Ohne diese Probe ist
+„alle Gestalten sind rot" wieder nur eine Behauptung über einen Wächter — und genau diese
+Behauptung ist in dieser Kette dreimal grün gewesen und blind.
+

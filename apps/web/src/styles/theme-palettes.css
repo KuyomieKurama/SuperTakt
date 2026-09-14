@@ -461,12 +461,29 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 18%, transparent), var(--shadow-lg);
 }
 
-:root[data-design-theme="lines"] :is(.card, .todo-row, .filterbar) {
+/*
+ * `.todo-row` stand bis T-365 in beiden Listen, und die Klasse gibt es noch —
+ * sie ueberlebt als Haken am `<tr>` der Todo-Tabelle, weil zwoelf Pruefstellen
+ * sie als Geltungsbereich benutzen (E-114). **Die Regel gilt ihr trotzdem
+ * nicht mehr**, und das ist gemessen und nicht Geschmack: Eine Kartenregel
+ * verhaelt sich auf einer Tabellenzeile anders als auf einer Karte.
+ *
+ *   `lines` — `box-shadow: none` loeschte am `<tr>` die Regel
+ *   `.table__row--active { box-shadow: inset 0 0 0 1px var(--border-accent) }`,
+ *   also die Markierung der Zeile im Zugriff. `border-color` taete dort gar
+ *   nichts: Die Kanten einer Tabelle sitzen an den Zellen.
+ *   `zen` — `background-color: var(--bg-canvas)` schlaegt das Zebra
+ *   (`.table__row:nth-child(even)`) und nur in dieser einen Gestaltung, waehrend
+ *   die Buchungstabelle daneben ihr Zebra behaelt.
+ *
+ * `.card` und `.filterbar` bleiben; sie sind weiterhin Kaesten.
+ */
+:root[data-design-theme="lines"] :is(.card, .filterbar) {
   border-color: var(--border-control);
   box-shadow: none;
 }
 
-:root[data-design-theme="zen"] :is(.card, .todo-row, .filterbar) {
+:root[data-design-theme="zen"] :is(.card, .filterbar) {
   background-color: var(--bg-canvas);
   box-shadow: none;
 }

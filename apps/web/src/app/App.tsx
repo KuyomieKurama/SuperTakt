@@ -11,6 +11,7 @@ import {
   type UserNameFinding,
 } from "./ShellStatus";
 import { Button, Card, EmptyState, InlineMessage, Spinner } from "../shared/ui/Primitives";
+import { ScreenBody } from "../shared/ui/ScreenBody";
 import { DashboardScreen } from "./DashboardScreen";
 import { connect, quitApplication, readShellState, type ConnectionState } from "./connection";
 import { GlobalSearch } from "./GlobalSearch";
@@ -363,9 +364,26 @@ function Workspace({
         </div>
       </header>
 
-      <main className="app__main" id="inhalt" tabIndex={-1}>
+      {/*
+        Der **Rahmen** der Arbeitsfläche, seit T-326 nicht mehr der Läufer.
+
+        `id="inhalt"` und `tabIndex={-1}` standen bis dahin hier. Sie sind an
+        den Laufbereich gewandert (`shared/ui/ScreenBody.tsx`): Läuft das Kind
+        und bliebe die Marke am Rahmen, hätte der Benutzer nach „Zum Inhalt
+        springen" den Fokus auf einem Kasten, der nichts zu rollen hat — Bild-ab
+        täte nichts (SC 2.1.1, T-323 Abschnitt 8.5). `<main>` bleibt als
+        Landmarke stehen; die Sprungmarke landet darin statt darauf.
+
+        Der Ladeersatz bekommt `.boot--inline`: `.boot` trägt
+        `min-height: 100dvh` — richtig für die freistehenden Startbilder, die
+        nicht in dieser Hülle hängen, falsch für ein gestrecktes Rasterkind
+        eines Rahmens, der etwa 76% der Fensterhöhe hat. Der Ladekreis stünde
+        sonst in der Mitte eines zu hohen Kastens, also unterhalb der sichtbaren
+        Fläche (T-323 Abschnitt 8.6).
+      */}
+      <main className="app__main">
         <ScreenLoadBoundary key={route.name}>
-          <Suspense fallback={<div className="boot" role="status"><Spinner label="Ansicht wird geladen" /><p>Ansicht wird geladen …</p></div>}>
+          <Suspense fallback={<div className="boot boot--inline" role="status"><Spinner label="Ansicht wird geladen" /><p>Ansicht wird geladen …</p></div>}>
             <Screen route={route} />
           </Suspense>
         </ScreenLoadBoundary>
@@ -403,18 +421,29 @@ function Screen({ route }: { readonly route: Route }) {
   }
 }
 
+/*
+  Die unbekannte Adresse ist eine der drei Flächen, die **keine** Ansicht sind
+  und trotzdem im Rahmen hängen (T-323 Abschnitt 8.6). Ohne `.screen` und
+  `.screen__body` hätte sie nach dem Wegfall des Innenabstands von `.app__main`
+  keinen mehr und läge bündig an der Rahmenkante. Der Leerzustand zentriert sich
+  in seinem Laufbereich (T-322 R-5) — hier füllt er ihn ganz.
+*/
 function UnknownScreen() {
   return (
-    <EmptyState
-      icon="search"
-      title="Diese Ansicht gibt es nicht"
-      description="Die Adresse führt ins Leere. Über die Navigation links geht es weiter."
-      action={
-        <Button variant="primary" onClick={() => (window.location.hash = href("dashboard"))}>
-          Zum Dashboard
-        </Button>
-      }
-    />
+    <section className="screen">
+      <ScreenBody label="Diese Ansicht gibt es nicht">
+        <EmptyState
+          icon="search"
+          title="Diese Ansicht gibt es nicht"
+          description="Die Adresse führt ins Leere. Über die Navigation links geht es weiter."
+          action={
+            <Button variant="primary" onClick={() => (window.location.hash = href("dashboard"))}>
+              Zum Dashboard
+            </Button>
+          }
+        />
+      </ScreenBody>
+    </section>
   );
 }
 
@@ -422,10 +451,21 @@ class ScreenLoadBoundary extends Component<{ children: ReactNode }, { failed: bo
   override state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   override render() {
-    if (this.state.failed) return <InlineMessage tone="danger" title="Die Ansicht konnte nicht geladen werden"
-      action={<Button onClick={() => window.location.reload()}>Erneut laden</Button>}>
-      Bitte laden Sie die Anwendung erneut.
-    </InlineMessage>;
+    /*
+      Dieselbe Auflage wie bei `UnknownScreen`: eine Fläche im Rahmen, die keine
+      Ansicht ist, braucht `.screen` und einen Laufbereich — sonst liegt die
+      Meldung bündig an der Rahmenkante (T-323 Abschnitt 8.6). Sie steht oben im
+      Laufbereich, nicht in seiner Mitte: eine Fehlerfläche steht dort, wo der
+      Inhalt begonnen hätte (T-322 R-5).
+    */
+    if (this.state.failed) return <section className="screen">
+      <ScreenBody label="Die Ansicht konnte nicht geladen werden">
+        <InlineMessage tone="danger" title="Die Ansicht konnte nicht geladen werden"
+          action={<Button onClick={() => window.location.reload()}>Erneut laden</Button>}>
+          Bitte laden Sie die Anwendung erneut.
+        </InlineMessage>
+      </ScreenBody>
+    </section>;
     return this.props.children;
   }
 }

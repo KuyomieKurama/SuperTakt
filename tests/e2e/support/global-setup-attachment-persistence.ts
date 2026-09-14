@@ -14,6 +14,10 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   const web = await startAttachmentPersistenceWeb();
 
   return async () => {
-    stopAttachmentPersistenceWeb(web);
+    // T-345: `stopAttachmentPersistenceWeb` wartet jetzt auf den
+    // Prozeßgruppen-Kill (derselbe Waisenfund wie in `services.ts` und
+    // `version-check-services.ts`) — ohne `await` bräche der Node-Prozeß ab,
+    // bevor die Signalisierung greift.
+    await stopAttachmentPersistenceWeb(web);
   };
 }

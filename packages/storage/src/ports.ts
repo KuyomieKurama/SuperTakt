@@ -1774,6 +1774,37 @@ export interface DefaultTagPort {
  * nämlich durch die Migration, und heißt „noch nie gefragt". Eine Tür, die den
  * Wert von außen verstellt, wäre eine Fläche für einen Wert, den niemand
  * sehen soll.
+ *
+ * ---------------------------------------------------------------------------
+ * Die dritte Frage ist in T-364 gebaut, gemessen und abgelehnt (A-A-124)
+ * ---------------------------------------------------------------------------
+ *
+ * Der Vorschlag lautete `recordCheck(null)` — „vergiß, was dort steht" —, damit
+ * der Bestand nach einem abgelegten Speicher „unbekannt" sagt statt eines
+ * veralteten Zeitpunkts. Gemessen am echten Prüfer, am gebauten Adapter und an
+ * einer echten Datei:
+ *
+ *  - **Das Löschen kommt nicht an.** Es führe über denselben Kanal, der eben
+ *    versagt hat. In **drei von vier** gemessenen Fehlerlagen wirft es ein
+ *    zweites Mal (nur lesende Verbindung, geschlossene Verbindung, gesperrte
+ *    Datei). Die vierte — eine Verletzung des CHECK aus Migration 0022 —
+ *    verlangt eine Systemuhr außerhalb der Jahre 0001 bis 9999.
+ *  - **Am Fall selbst ändert es nichts.** Bei einer Sperre, die nach kurzer
+ *    Zeit wieder aufging, blieb der Wert mit dem Löschversuch **genauso** alt
+ *    wie ohne (52 h in einem Lauf von 63 Anfragen).
+ *  - **Es kostet an der bewachten Grenze.** `proof:release-safety` fällt von
+ *    158/0 auf 157/1: Zwei zeichengleiche Zusagen (A-A-105e am Adapter,
+ *    A-A-111 an der Verdrahtung) wären von Hand zu bestätigen, und der Port des
+ *    Prüfers bekäme eine zweite Gestalt an der Stelle, an der „kein Rückweg"
+ *    zehn Runden gekostet hat.
+ *
+ * Was den Wert wieder wahr macht, liegt nicht an diesem Port, sondern beim
+ * Prüfer: Ein Speicher, der **wirft**, ist beschränkt und harmlos und darf
+ * nicht für die Laufzeit abgelegt werden; abzulegen ist allein der, der **nie**
+ * antwortet — und der ist für den gebauten Adapter unerreichbar, weil dessen
+ * `UPDATE` synchron zurückkehrt. Messung und Vorschlag:
+ * `.claude/team/reports/T-364-domain-dev.md`; **gebaut in T-367**, ohne eine
+ * Zeile an diesem Port — die zwei Fragen sind zwei geblieben.
  */
 export interface VersionCheckStatePort {
   /**
