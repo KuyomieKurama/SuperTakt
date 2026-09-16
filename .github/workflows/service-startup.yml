@@ -1,0 +1,76 @@
+name: Service startup
+
+on:
+  push:
+    branches:
+      - main
+      - fix/windows-service-startup
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/local-api/**'
+      - 'apps/web/**'
+      - 'packages/storage/**'
+      - 'tests/e2e/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/service-startup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-startup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  startup:
+    name: Service startup (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+      - name: Install locked dependencies
+        run: |
+          set -euo pipefail
+          manager="$(node -p "require('./package.json').packageManager")"
+          npm install --global "$manager"
+          pnpm install --frozen-lockfile
+      - name: Typecheck source and tests
+        run: pnpm run typecheck
+      - name: Test readiness, timeouts, and native failures
+        run: pnpm exec vitest run apps/web/test/service-startup.test.ts
+      - name: Build and exercise the bundled service on this platform
+        run: pnpm run verify:bundle
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test startup and existing recovery dialogs in the browser
+        run: >-
+          pnpm exec playwright test --config tests/e2e/playwright.config.ts
+          tests/e2e/service-startup.spec.ts
+          tests/e2e/startup-appearance.spec.ts
+          tests/e2e/shell-quit-failure.spec.ts
+          tests/e2e/shell-username-lock.spec.ts
+          --retries=0
+      - name: Preserve browser failure reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: service-startup-${{ matrix.os }}
+          path: |
+            test-results-e2e/
+            playwright-report-e2e/
+          retention-days: 7
