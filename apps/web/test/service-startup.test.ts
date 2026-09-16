@@ -104,7 +104,8 @@ describe("service startup readiness", () => {
   });
 
   it("rejects a response that does not confirm readiness", async () => {
-    health.mockResolvedValueOnce({ status: "starting" } as { status: "ok" });
+    // Deliberately model an invalid response crossing the untyped HTTP boundary.
+    health.mockResolvedValueOnce({ status: "starting" } as unknown as { status: "ok" });
     await expect(waitForService(handshake, readState)).rejects.toThrow("Startbereitschaft nicht bestätigt");
     expect(health).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
@@ -215,6 +216,7 @@ describe("application connection integration", () => {
   });
 
   it("also waits for readiness in the explicit development fallback", async () => {
+    vi.stubEnv("DEV", true);
     vi.mocked(isShellAvailable).mockReturnValue(false);
     vi.stubEnv("VITE_TAKT_BASE_URL", connection.baseUrl);
     vi.stubEnv("VITE_TAKT_TOKEN", connection.secret);
