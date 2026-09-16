@@ -3,7 +3,7 @@ import { request } from "./client";
 import type { SearchResult } from "./types";
 
 export function checkHealth(signal?: AbortSignal): Promise<{ status: "ok" }> {
-  return request<{ status: "ok" }>("/health", signal === undefined ? {} : { signal });
+  return request<{ status: "ok" }>("/health", { ...(signal === undefined ? {} : { signal }) });
 }
 
 /** Trifft Titel, Call-Nummer und Leistungstexte. Nie den Vermerk (A-7.1). */

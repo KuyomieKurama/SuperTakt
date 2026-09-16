@@ -41,6 +41,7 @@ test('keeps data readers unmounted until the authenticated service is ready', as
 });
 
 test('shows an authentication failure without retrying it as a slow startup', async ({ page }) => {
+  await page.clock.install();
   await page.addInitScript(installShellShim, SHIM_ARGS);
   let probes = 0;
   await page.route('**/api/v1/health', async route => {
@@ -57,5 +58,16 @@ test('shows an authentication failure without retrying it as a slow startup', as
   await expect(page.getByText('E2E: Startnachweis abgewiesen.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Erneut versuchen', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeHidden();
-  expect(probes).toBe(1);
+  // The development server renders StrictMode: its initial effect runs twice.
+  // Each connection attempt must stop after its first authentication rejection.
+  expect(probes).toBe(2);
+  await page.clock.runFor(5000);
+  expect(probes).toBe(2);
+
+  // Only the user's explicit retry starts another attempt.
+  await page.getByRole('button', { name: 'Erneut versuchen', exact: true }).click();
+  await expect(page.getByText('E2E: Startnachweis abgewiesen.')).toBeVisible();
+  expect(probes).toBe(3);
+  await page.clock.runFor(5000);
+  expect(probes).toBe(3);
 });
