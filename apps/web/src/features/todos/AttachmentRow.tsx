@@ -51,9 +51,7 @@ const KIND_ICON: Readonly<Record<AttachmentKind, IconName>> = {
   file: "folder",
 };
 
-/* ==================================================================== */
 /* Fläche D — das Vorschaubild (A-19.13)                                */
-/* ==================================================================== */
 
 /**
  * Das Vorschaubild eines Bildanhangs.
@@ -110,9 +108,7 @@ function AttachmentPreview({ todoId, attachment }: { readonly todoId: Id; readon
   );
 }
 
-/* ==================================================================== */
 /* Fläche F — Herkunft und Nachbau (A-A-84, A-A-87, A-19.22b)           */
-/* ==================================================================== */
 
 /**
  * Die **Herkunft** an der Zeile (Auflage A-A-84, A-A-87).
@@ -203,9 +199,7 @@ function RebuiltMark() {
   );
 }
 
-/* ==================================================================== */
 /* Fläche C und E — eine Zeile                                          */
-/* ==================================================================== */
 
 interface AttachmentRowProps {
   readonly todoId: Id;

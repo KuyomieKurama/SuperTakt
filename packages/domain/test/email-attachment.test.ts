@@ -63,7 +63,6 @@ import {
   shortenEmailDisplayName,
 } from '../src/email-attachment.ts';
 
-// ---------------------------------------------------------------------------
 // Base64 ohne Bibliothek — die Domäne bekommt bewußt keine Umgebungstypen
 // (`packages/domain/tsconfig.json`: "types": []), also auch kein `Buffer`.
 // Für die Grenzprüfungen genügt eine Zeichenkette der richtigen LÄNGE und
@@ -71,7 +70,6 @@ import {
 // Polsterung. Die drei Bausteine sind von Hand geprüfte, bekannte
 // Kodierungen ("A" → "QQ==", "AB" → "QUI=", "ABC" → "QUJD") und lassen sich
 // gefahrlos aneinanderreihen, weil nur der LETZTE Baustein Polsterung trägt.
-// ---------------------------------------------------------------------------
 
 const THREE_BYTES_ENCODED = 'QUJD';
 const ONE_BYTE_ENCODED_PADDED = 'QQ==';
@@ -87,9 +85,7 @@ function base64OfExactByteLength(byteLength: number): string {
   return head + TWO_BYTES_ENCODED_PADDED;
 }
 
-// ---------------------------------------------------------------------------
 // Die neun Fehlgründe — eine geschlossene Menge (T-301, T-309)
-// ---------------------------------------------------------------------------
 
 describe('EMAIL_ATTACHMENT_FAILURE_REASONS — neun Gründe, und connection/mailbox_closed sind keine mehr (T-301, T-309)', () => {
   it('genau neun Gründe, keiner mehr und keiner weniger', () => {
@@ -143,9 +139,7 @@ describe('EMAIL_ATTACHMENT_FAILURE_REASONS — neun Gründe, und connection/mail
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die drei Grenzen — vor dem ersten Byte, am Dekodierten gemessen (A-A-81)
-// ---------------------------------------------------------------------------
 
 describe('admitEmailAttachment — drei Grenzen, jede an ihrer eigenen Achse (A-A-81)', () => {
   it('genau an der Größengrenze je Datei: zulässig', () => {
@@ -244,9 +238,7 @@ describe('admitEmailAttachment — drei Grenzen, jede an ihrer eigenen Achse (A-
   );
 });
 
-// ---------------------------------------------------------------------------
 // decodedBase64ByteLength — die Länge am Puffer, nie an einer Ankündigung
-// ---------------------------------------------------------------------------
 
 describe('decodedBase64ByteLength — gerechnet am dekodierten Puffer, eng in der Form (A-A-81)', () => {
   it('leere Zeichenkette: 0 Bytes', () => {
@@ -304,10 +296,8 @@ describe('decodedBase64ByteLength — gerechnet am dekodierten Puffer, eng in de
   });
 });
 
-// ---------------------------------------------------------------------------
 // nameEmailFile / emailFileExtension — die Fälle, an denen die Vorlage
 // gescheitert ist (T-297, 39.4.1)
-// ---------------------------------------------------------------------------
 
 describe('nameEmailFile / emailFileExtension — Gerätenamen, Doppelendungen, keine Endung, sehr lange Endung (A-A-78)', () => {
   it.each(['NUL', 'nul', 'COM1', 'CONOUT$', 'CONIN$'])(
@@ -419,9 +409,7 @@ describe('nameEmailFile / emailFileExtension — Gerätenamen, Doppelendungen, k
   });
 });
 
-// ---------------------------------------------------------------------------
 // shortenEmailDisplayName — die Endung bleibt, die Marke ist sichtbar (A-19.23b)
-// ---------------------------------------------------------------------------
 
 describe('shortenEmailDisplayName — Kürzung in der Mitte, Ende (und damit die Endung) bleibt VOLLSTÄNDIG stehen (A-19.23b, A-A-93)', () => {
   it(`ein Name mit genau ${MAX_EMAIL_DISPLAY_NAME_CHARACTERS} Zeichen bleibt unverändert`, () => {

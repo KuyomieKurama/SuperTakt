@@ -296,9 +296,7 @@ export function createAttachmentBlobPort(
     }
   };
 
-  // -------------------------------------------------------------------------
   // Die E-Mail-Dateien (A-19.23, A-A-78, A-A-79, A-A-83)
-  // -------------------------------------------------------------------------
 
   const emailDirectory = appDataDir === null ? null : emailFileDirectory(appDataDir);
 
@@ -646,9 +644,7 @@ export function createAttachmentBlobPort(
       return names;
     },
 
-    // -----------------------------------------------------------------------
     // A-19.23 — die Datei aus einer fremden E-Mail
-    // -----------------------------------------------------------------------
 
     async storeEmailFile(data: Uint8Array, extension: string | null) {
       /*
@@ -781,9 +777,7 @@ export function createAttachmentBlobPort(
       return names;
     },
 
-    // -----------------------------------------------------------------------
     // A-19.34 — die Bytes reisen mit der Datensicherung
-    // -----------------------------------------------------------------------
 
     async readEmailFile(
       target: string,

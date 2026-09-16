@@ -1,3 +1,4 @@
+import { recordLogs } from '../support/record-logs.ts';
 /**
  * Takt — T-160 (unit-tester), O-DC: `AttachmentBlobPort.removeImage` bekommt
  * einen Prüffall (A-A-18, T-159).
@@ -50,7 +51,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createAttachmentBlobPort, imageDigest } from '../../src/access/attachment-store.ts';
-import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../../src/logger.ts';
+import { UNCLASSIFIED_REASON } from '../../src/logger.ts';
 
 /** Eine Form, die `GENERATED_NAME_SHAPE` trägt — 32 Hexziffern, Endung `png`. */
 const NAME = '0123456789abcdef0123456789abcdef.png';
@@ -61,17 +62,9 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1
 /** Eine echte JPEG-Kopfsignatur. */
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-interface Recorded {
-  readonly logger: Logger;
-  readonly lines: { level: string; message: string; reason?: string }[];
-}
 
-/** Derselbe Aufbau wie in `test/startup.test.ts` — die echte Ausgabe, nur abgefangen. */
-function recording(): Recorded {
-  const lines: { level: string; message: string; reason?: string }[] = [];
-  const logger = createLogger((line) => lines.push(JSON.parse(line) as never));
-  return { logger, lines };
-}
+
+
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), 'takt-attachment-store-'));
@@ -96,7 +89,7 @@ describe('createAttachmentBlobPort.removeImage — die drei Werte aus ImageRemov
     const target = join(attachmentsDir, NAME);
     writeFileSync(target, 'x');
 
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.removeImage(NAME);
@@ -108,7 +101,7 @@ describe('createAttachmentBlobPort.removeImage — die drei Werte aus ImageRemov
 
   it('eine Kopie, die es längst nicht mehr gibt, ist KEIN Fehlschlag ("removed", `force: true`)', async () => {
     withAttachmentsDirectory();
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     // Keine Datei je angelegt — das Ziel ("sie liegt danach nicht mehr da")
@@ -121,7 +114,7 @@ describe('createAttachmentBlobPort.removeImage — die drei Werte aus ImageRemov
 
   it('ein Name, der die Form nicht trägt, ergibt "unknown_name" — ohne Dateisystemzugriff und ohne Protokollzeile', async () => {
     const { attachmentsDir } = withAttachmentsDirectory();
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const zuKurz = NAME.slice(0, -5) + '.png'; // 31 statt 32 Hexziffern
@@ -149,7 +142,7 @@ describe('createAttachmentBlobPort.removeImage — die drei Werte aus ImageRemov
   });
 
   it('ohne eingerichtetes Anwendungsdatenverzeichnis ist jeder Name "unknown_name"', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(null, logger);
 
     const result = await port.removeImage(NAME);
@@ -166,7 +159,7 @@ describe('createAttachmentBlobPort.removeImage — die drei Werte aus ImageRemov
     const target = join(attachmentsDir, NAME);
     mkdirSync(target);
 
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.removeImage(NAME);
@@ -209,7 +202,7 @@ describe('createAttachmentBlobPort.listImages — der Verzeichnis-Riegel des Auf
   }
 
   it('ohne eingerichtetes Anwendungsdatenverzeichnis ist die Liste leer, ohne Dateisystemzugriff', async () => {
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(null, logger);
 
     expect(await port.listImages()).toEqual([]);
@@ -220,7 +213,7 @@ describe('createAttachmentBlobPort.listImages — der Verzeichnis-Riegel des Auf
     // `withAttachmentsDirectory` wird bewusst NICHT aufgerufen -- `attachments/`
     // existiert an dieser Stelle noch nicht, wie bei einer frischen Installation.
     appDataDir = tempDir();
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     expect(await port.listImages()).toEqual([]);
@@ -243,7 +236,7 @@ describe('createAttachmentBlobPort.listImages — der Verzeichnis-Riegel des Auf
     // `entry.isFile()` muss ihn ausschließen.
     mkdirSync(join(attachmentsDir, '33333333333333333333333333333333.png'));
 
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const gefunden = [...(await port.listImages())].sort();
@@ -252,7 +245,7 @@ describe('createAttachmentBlobPort.listImages — der Verzeichnis-Riegel des Auf
 
   it('ein leeres, wirklich vorhandenes Verzeichnis ergibt eine leere Liste', async () => {
     withAttachmentsDirectory();
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     expect(await port.listImages()).toEqual([]);
@@ -281,7 +274,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
 
   it('ein relativer Quellpfad ist "unreadable" — ohne dass irgendetwas gelesen wird (A-A-11)', async () => {
     appDataDir = tempDir();
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.copyImage('relativ/bild.png');
@@ -292,7 +285,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
 
   it('ohne eingerichtetes Anwendungsdatenverzeichnis ist das Ergebnis "write_failed"', async () => {
     const quellpfad = quellDatei(PNG_BYTES);
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(null, logger);
 
     const result = await port.copyImage(quellpfad);
@@ -302,7 +295,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
 
   it('eine nicht vorhandene Quelldatei ist "unreadable"', async () => {
     appDataDir = tempDir();
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.copyImage(join(appDataDir, 'gibt-es-nicht.png'));
@@ -313,7 +306,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
   it('eine echte PNG-Datei wird kopiert: erzeugter Name, richtiger MediaType, Bytezahl, und dieselben Bytes liegen unter dem erzeugten Namen', async () => {
     appDataDir = tempDir();
     const quellpfad = quellDatei(PNG_BYTES);
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.copyImage(quellpfad);
@@ -336,7 +329,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
   it('Bytes ohne eine der vier Kopfsignaturen ergeben "not_an_image" — die Endung der Quelle zählt nicht', async () => {
     appDataDir = tempDir();
     const quellpfad = quellDatei(Buffer.from('dies ist kein Bild, nur Text'));
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.copyImage(quellpfad);
@@ -347,7 +340,7 @@ describe('createAttachmentBlobPort.copyImage — bislang ohne Prüffall (O-DJ)',
   it('eine leere Quelldatei ergibt "empty"', async () => {
     appDataDir = tempDir();
     const quellpfad = quellDatei(Buffer.alloc(0));
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.copyImage(quellpfad);
@@ -375,7 +368,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
 
   it('ein Name, der die Form nicht trägt, ergibt "bad_name" — ohne Dateisystemzugriff', async () => {
     const { attachmentsDir } = withAttachmentsDirectory();
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage('../../takt.db');
@@ -387,7 +380,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
   });
 
   it('ohne eingerichtetes Anwendungsdatenverzeichnis ist jeder Name "bad_name"', async () => {
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(null, logger);
 
     const result = await port.readImage(NAME);
@@ -397,7 +390,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
 
   it('eine Kopie, die es nicht (mehr) gibt, ist "unreadable" (A-19.15) — kein Wurf', async () => {
     withAttachmentsDirectory();
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage(NAME);
@@ -408,7 +401,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
   it('eine echte Kopie liefert dieselben Bytes und den MediaType aus dem INHALT zurück', async () => {
     const { attachmentsDir } = withAttachmentsDirectory();
     writeFileSync(join(attachmentsDir, NAME), PNG_BYTES);
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage(NAME);
@@ -425,7 +418,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
     // gefragt (Kopfkommentar von `readImage`).
     const { attachmentsDir } = withAttachmentsDirectory();
     writeFileSync(join(attachmentsDir, NAME), JPEG_BYTES);
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage(NAME);
@@ -438,7 +431,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
   it('eine Kopie ohne gültige Kopfsignatur ergibt "not_an_image", trotz gültigem Namen', async () => {
     const { attachmentsDir } = withAttachmentsDirectory();
     writeFileSync(join(attachmentsDir, NAME), 'kein Bild, nur Text');
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage(NAME);
@@ -449,7 +442,7 @@ describe('createAttachmentBlobPort.readImage — bislang ohne Prüffall (O-DJ)',
   it('eine leere Kopie ergibt "empty"', async () => {
     const { attachmentsDir } = withAttachmentsDirectory();
     writeFileSync(join(attachmentsDir, NAME), Buffer.alloc(0));
-    const { logger } = recording();
+    const { logger } = recordLogs();
     const port = createAttachmentBlobPort(appDataDir, logger);
 
     const result = await port.readImage(NAME);

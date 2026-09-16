@@ -1,22 +1,6 @@
 /**
- * Takt — Uhr und Windows-Benutzername als Ports.
- *
- * ---------------------------------------------------------------------------
- * Warum die Dauer nicht aus zwei Wanduhrzeiten entsteht
- * ---------------------------------------------------------------------------
- *
- * `now()` liefert die Wanduhr, `monotonicSeconds()` eine Quelle, die nur
- * vorwärts läuft. Der Unterschied ist keine Feinheit: Stellt sich die Uhr
- * während eines laufenden Timers — Zeitumstellung, Abgleich über das Netz,
- * Benutzer korrigiert das Datum —, dann ergibt die Differenz zweier
- * Wanduhrzeiten eine falsche Dauer. Nach der Aufrundung aus E-008 landet sie
- * in einer Rechnung.
- *
- * Der Zeitstempel ist sekundengenau und in UTC: `YYYY-MM-DDTHH:MM:SSZ`. Nicht
- * feiner, weil die Speicherung die Dauer aus Start und Ende berechnet und
- * Bruchteile dort ohnehin abgeschnitten würden — und weil die CHECKs im Schema
- * genau diese Form über `GLOB` erzwingen. Ein Zeitstempel mit Millisekunden
- * käme gar nicht erst in die Tabelle.
+ * Dauern mit der monotonen Uhr messen, damit Änderungen der Wanduhr sie nicht verfälschen.
+ * Zeitstempel bleiben sekundengenaues UTC für das Schema.
  */
 
 import type { ClockPort, SystemPort } from '../ports.ts';

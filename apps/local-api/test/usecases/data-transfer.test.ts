@@ -334,6 +334,22 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
   let opened: OpenedDatabase | null = null;
   afterEach(() => { opened?.close(); opened = null; });
 
+  it('NoExport survives archive 8 and defaults to false for archive 7', async () => {
+    const { database, context } = await setup();
+    opened = database;
+    const todo = await database.transactions.inTransaction(unit => unit.todos.create({
+      title: 'Interne Aufgabe', callNumber: null, statusId: null, tagIds: [], note: '', noExport: true, now: NOW,
+    }, []));
+    const archive = await exportDataArchive(context);
+    expect((await importDataArchive(context, archive)).ok).toBe(true);
+    await database.transactions.inTransaction(async unit => expect((await unit.todos.load(todo.id))?.noExport).toBe(true));
+    const legacy = { ...archive, schemaVersion: 7, data: { ...archive.data, tables: { ...archive.data.tables,
+      todo: archive.data.tables.todo.map(row => { const { no_export: _removed, ...rest } = row; return rest; }),
+    } } };
+    expect((await importDataArchive(context, legacy)).ok).toBe(true);
+    await database.transactions.inTransaction(async unit => expect((await unit.todos.load(todo.id))?.noExport).toBe(false));
+  });
+
   it('A-21.5: Archivfassung 4 stellt Darstellung und Timer-Einstellung wieder her', async () => {
     const { database, context } = await setup();
     opened = database;
@@ -341,7 +357,7 @@ describe('Takt-Datenarchiv (A-20.4 und A-20.5)', () => {
       await unit.settings.update({ theme: 'dark', designTheme: 'catppuccin-mocha', density: 'compact', promptOnTimerStop: false, idleDetectionEnabled: false, idleKeepTimerRunning: false, idleThresholdMinutes: 15, now: NOW });
     });
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(6);
+    expect(archive.schemaVersion).toBe(10);
     await database.transactions.inTransaction(async (unit) => {
       await unit.settings.update({ theme: 'light', designTheme: 'classic', density: 'comfortable', promptOnTimerStop: true, idleDetectionEnabled: true, idleKeepTimerRunning: true, idleThresholdMinutes: 5, now: NOW });
     });
@@ -607,7 +623,7 @@ describe('A-19.34 — die Bytes der übernommenen Dateien reisen mit dem Archiv 
     });
 
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(6);
+    expect(archive.schemaVersion).toBe(10);
     expect(archive.data.files).toHaveLength(1);
     expect(archive.data.files[0]?.base64).toBe(bytes.toString('base64'));
     // Die Bytes sind da — die Sicherung meldet keinen Verlust.
@@ -711,7 +727,7 @@ describe('T-301/T-305 — die alte Richtung: eine Fassung-6-Sicherung überschre
     });
 
     const archive = await exportDataArchive(context);
-    expect(archive.schemaVersion).toBe(6);
+    expect(archive.schemaVersion).toBe(10);
     expect(archive.data.tables.app_setting[0]?.['idle_keep_timer_running']).toBe(0);
 
     // Der Bestand ändert sich, bevor die Sicherung wieder eingespielt wird —
@@ -746,7 +762,7 @@ describe('parseArchive — die neun Abweisungen aus T-301 Abschnitt 4 (Fassung 6
   type Mutator = (archive: TaktDataArchive) => unknown;
 
   const CASES: readonly (readonly [string, Mutator])[] = [
-    ['Fassung 7 — über der höchsten lesbaren', (a) => ({ ...a, schemaVersion: 7 })],
+    ['Fassung 11 — über der höchsten lesbaren', (a) => ({ ...a, schemaVersion: 11 })],
     ['Fassung 0', (a) => ({ ...a, schemaVersion: 0 })],
     ['die Fassung als Zeichenkette "6" statt einer Zahl', (a) => ({ ...a, schemaVersion: '6' })],
     [

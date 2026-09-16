@@ -1,62 +1,8 @@
 /**
- * Takt — der Sicherungspunkt um mehrere Anweisungen, die nur gemeinsam gelten
- * (R-10, architektur.md 3.2, ecc:error-handling).
- *
- * ---------------------------------------------------------------------------
- * Wogegen
- * ---------------------------------------------------------------------------
- *
- * Ein fachlicher Fehlschlag ist im Adapter ein **Wert** und kein Wurf: `attempt`
- * fängt die SQLite-Störung und übersetzt sie in einen `TaktError`, den der
- * Aufrufer als `err(...)` weiterreicht. Das ist gewollt — eine
- * Namenskollision ist keine Ausnahme, sondern eine Antwort.
- *
- * Die Transaktionsklammer (`unit-of-work.ts`) nimmt aber nur bei einem **Wurf**
- * zurück. Ein Rückgabewert ist für sie ein erfolgreicher Durchlauf, und sie
- * schreibt fest. Wer also in einer Methode zwei Anweisungen schreibt und den
- * Fehlschlag der zweiten als Wert meldet, hinterlässt die erste — dauerhaft,
- * mitten in einer Klammer, die genau das ausschließen sollte:
- *
- * ```
- *   inTransaction(unit => unit.todoStatuses.update(id, {name, isDefault:true}))
- *                                   │
- *                                   ├─ UPDATE … SET is_default = 0    ✔ steht
- *                                   └─ UPDATE … SET name = 'Offen'    ✘ belegt
- *                                          ↓
- *                                   err('name_conflict')  ← kein Wurf
- *                                          ↓
- *                                   COMMIT                ← die 0 bleibt
- * ```
- *
- * Ergebnis: kein Bestand hat mehr eine Standardspalte, und die Anwendung
- * meldet nichts als „Name bereits vergeben". T-041 hat denselben Bau im
- * Exportprotokoll gemessen (Protokollzeile geschrieben, Statuswechsel
- * gescheitert, Zeile blieb stehen); T-047 hat ihn an sechs weiteren Stellen
- * gefunden.
- *
- * ---------------------------------------------------------------------------
- * Wie
- * ---------------------------------------------------------------------------
- *
- * Ein `SAVEPOINT` um die Anweisungen, `RELEASE` bei Erfolg, `ROLLBACK TO` bei
- * einem Fehlschlag. `ROLLBACK TO` beendet die **äußere** Transaktion nicht: Sie
- * läuft weiter, alles davor bleibt stehen, und der Aufrufer bekommt seinen
- * Fehlschlag als Wert, so wie bisher. Nur die halbe Änderung ist weg.
- *
- * **Voraussetzung.** Eine offene Transaktion. Ohne sie eröffnet `SAVEPOINT` in
- * SQLite selbst eine, und `RELEASE` schreibt sie fest — der Vorgang wird dann
- * seine eigene Transaktion. Das ist kein Schaden, aber es ist ein anderes
- * Verhalten, und deshalb steht es hier. Alle Aufrufer in Takt laufen über
- * `TransactionPort.inTransaction`.
- *
- * **Ein Wurf, der kein SQLite-Fehler ist**, geht unverändert durch: `attempt`
- * wirft ihn weiter, der Sicherungspunkt bleibt ungelöst, und die äußere
- * Klammer nimmt ohnehin alles zurück. Ein Programmierfehler soll ein
- * Programmierfehler bleiben.
- *
- * **Der Name** geht in eine SQL-Anweisung ein und darf deshalb nie aus einer
- * Eingabe stammen. Er ist an jeder Aufrufstelle eine Konstante im Quelltext;
- * `SAVEPOINT_NAME` hält das fest, statt es zu hoffen.
+ * Fehlerwerte rollen eine äußere Transaktion nicht zurück; deshalb zusammengehörige Anweisungen
+ * mit SAVEPOINT absichern.
+ * Eine äußere Transaktion ist vorausgesetzt. Nicht-SQLite-Ausnahmen weiterwerfen;
+ * Sicherungspunktnamen dürfen nie aus Eingaben stammen.
  */
 
 import type { TaktError } from '@takt/domain';

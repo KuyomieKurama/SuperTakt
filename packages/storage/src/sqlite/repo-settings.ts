@@ -1,14 +1,6 @@
 /**
- * Takt — Exportvorlagen, Einstellungen und Standard-Tags (A-8.7, A-9.*, E-005, E-011).
- *
- * Die **Feldliste** einer Vorlage wird hier nicht gedeutet.
- * `ExportTemplateEnvelope.definition` ist in der Domäne `unknown`, weil das
- * Vorlagenformat dem Motor in `packages/export` gehört und sich
- * weiterentwickeln können soll, ohne dass Schema oder Domäne mitwandern
- * (E-005, Migration 0005). Dieses Paket prüft nur, dass es gültiges JSON ist —
- * das erzwingt ohnehin schon der CHECK `json_valid(definition)`. Die fachliche
- * Prüfung macht `validateExportTemplateDefinition`, und sie steht im
- * Anwendungsfall **vor** dem Schreiben.
+ * Die Speicherung prüft nur gültiges JSON. Das Vorlagenformat muss der Anwendungsfall vor dem
+ * Schreiben fachlich prüfen.
  */
 
 import type { AppSettingsPort, DefaultTagPort, ExportTemplatePort } from '../ports.ts';

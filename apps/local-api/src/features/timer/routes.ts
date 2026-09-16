@@ -160,6 +160,7 @@ export function createTimeEntryRoutes(context: AppContext): Hono<TaktEnv> {
     const page = await listTimeEntries(
       context,
       {
+        excludeNoExport: !readFlag(query['includeNoExport']),
         ...(query['todoId'] === undefined ? {} : { todoId: query['todoId'] as TodoId }),
         ...(query['exportStatus'] === undefined
           ? {}

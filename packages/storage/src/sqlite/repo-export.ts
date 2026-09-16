@@ -1,48 +1,7 @@
 /**
- * Takt — Export: Lesen, Festschreiben, Zurücksetzen, Protokoll
- * (A-7.2, A-8.8, E-012, E-020, E-032, R-06, R-10).
- *
- * ---------------------------------------------------------------------------
- * Die Leseseite kennt den Vermerk nicht
- * ---------------------------------------------------------------------------
- *
- * `openCandidates` und `openGroups` lesen ausschließlich `v_export_candidate`.
- * Diese Sicht führt die Spalte `todo_note.body` nicht — die Grenze aus A-7.2
- * liegt im Schema und nicht in einer Vereinbarung (R-06). Auch die
- * Tagnamen kommen aus einer zweiten Abfrage über `todo_tag` und `tag`, nicht
- * aus einer Erweiterung der Sicht: Was der Export sieht, bleibt so schmal wie
- * möglich.
- *
- * `WHERE export_status = 'open'` steht in der Sicht und wird hier **nicht**
- * wiederholt und **nicht** aufgeweicht. Eine bereits exportierte Buchung
- * desselben Tages darf nicht in die Tagesgruppe geraten; sonst würde ihre Zeit
- * ein zweites Mal abgerechnet, und die Domäne könnte es nicht bemerken, weil
- * sie nur sieht, was diese Sicht liefert (R-10).
- *
- * ---------------------------------------------------------------------------
- * `recordRun` — der schreibende Teil von A-8.8, und **nur** dieser
- * ---------------------------------------------------------------------------
- *
- * Diese Datei schreibt keine Datei und rendert keine Zeile. Sie bekommt einen
- * fertigen Lauf übergeben und schreibt ihn fest:
- *
- *   1. `export_run`
- *   2. je Zeile ein `export_run_group`, dazu die `export_run_entry`
- *   3. `export_status = 'exported'`, `export_count + 1` für jede enthaltene Buchung
- *   4. je Buchung eine Protokollzeile `export_audit` mit Lauf **und** Gruppe
- *
- * Alle vier Schritte laufen in der Transaktion, die der Aufrufer geöffnet hat.
- * Es gibt keinen Weg, 3 ohne 4 zu tun: Beides steht in derselben Schleife, und
- * die Tabelle `export_audit` hat einen CHECK, der eine Zeile ohne Lauf und
- * Gruppe ablehnt.
- *
- * **Warum das Rendern nicht hier steht.** Der Vorlagen-Motor lebt in
- * `packages/export`, und dieses Paket kennt weder Dateisystem noch Datenbank
- * (R-06). Läge das Rendern hier, müsste die Speicherung den Motor einbinden —
- * und ein austauschbarer Adapter (E-001) trüge dann das Vorlagenformat mit
- * sich. Die Klammer selbst gehört trotzdem hierher, weil sie eine
- * Datenbanktransaktion ist. Der Anwendungsfall in `apps/local-api` setzt beides
- * zusammen; die Reihenfolge steht in architektur.md 3.2.
+ * Exportkandidaten ausschließlich aus der gefilterten Sicht ohne internen Vermerk lesen.
+ * Lauf, Gruppen, Markierungen und Protokoll gemeinsam in der bereits geöffneten Transaktion
+ * schreiben.
  */
 
 import type {
@@ -230,14 +189,14 @@ export function createExportPort(conn: SqlConnection, ids: IdSource): ExportPort
         const stale = conn
           .prepare(
             `SELECT COUNT(*) AS n FROM time_entry
-              WHERE id IN (${placeholders(block.length)}) AND (export_status <> 'open' OR ended_at IS NULL)`,
+              WHERE id IN (${placeholders(block.length)}) AND (export_status <> 'open' OR ended_at IS NULL OR todo_id IN (SELECT id FROM todo WHERE no_export = 1))`,
           )
           .get(...(block as readonly SqlValue[]));
         if (stale !== undefined && integer(stale, 'n') > 0) {
           return err(
             taktError(
               'time_entry_locked',
-              'Mindestens eine Buchung dieses Laufs ist inzwischen exportiert oder noch nicht abgeschlossen. Es wurde nichts geändert.',
+              'Mindestens eine Buchung dieses Laufs ist inzwischen exportiert, nicht abgeschlossen oder mit NoExport ausgeschlossen. Es wurde nichts geändert.',
             ),
           );
         }

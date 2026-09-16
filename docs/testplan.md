@@ -5194,3 +5194,13 @@ Nachgewiesen: `pnpm exec playwright test -c tests/e2e/playwright.timer-stop-anno
 für offene Timer-Einträge. Die Behebung ist ein Polaritätswechsel über fünf Dateien in
 `apps/local-api/src/**` und gehört in dieselbe Welle wie ihr Prüffall — hier nicht gebaut, damit
 nicht gegen einen Zwischenstand gemessen wird.
+
+## Nachtrag Outlook-Mail-Zuordnung (15.09.2026)
+
+A-10.11–A-10.15 erlauben das Ergänzen vorhandener Todos über einen strikten Mail-Endpunkt.
+Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelten nun für
+**nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
+Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
+Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
+konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).

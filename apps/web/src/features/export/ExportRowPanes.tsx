@@ -121,9 +121,7 @@ export function ExportRowPanes({
   );
 }
 
-/* ==================================================================== */
 /* Hilfen — Darstellung, keine Rechnung                                 */
-/* ==================================================================== */
 
 /**
  * Die Zellen einer Zeile — **mit der Herkunft des Schlüssels im Typ** (O-AT,

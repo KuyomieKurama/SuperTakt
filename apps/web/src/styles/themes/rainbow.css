@@ -1,0 +1,42 @@
+/* @theme {"label":"Rainbow","mode":"auto","hint":"Mehrfarbige Akzente und sanfte Verläufe","order":12} */
+:root[data-design-theme="rainbow"] {
+  --preset-canvas: #f8f5ff;
+  --preset-surface: #ffffff;
+  --preset-ink: #302747;
+  --preset-muted: #5e576f;
+  --preset-accent: #8050b5;
+  --preset-link: #8050b5;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #794cab;
+  --preset-accent-active: #754aa4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="rainbow"]:not([data-theme="light"]) {
+  --preset-canvas: #0e0b1a;
+  --preset-surface: #15102a;
+  --preset-ink: #ece6ff;
+  --preset-muted: #bdb7d0;
+  --preset-accent: #b66bff;
+  --preset-link: #b76cff;
+  --preset-on: #101010;
+  --preset-accent-hover: #ba74ff;
+  --preset-accent-active: #bd7aff;
+  }
+}
+
+:root[data-design-theme="rainbow"][data-theme="dark"] {
+  --preset-canvas: #0e0b1a;
+  --preset-surface: #15102a;
+  --preset-ink: #ece6ff;
+  --preset-muted: #bdb7d0;
+  --preset-accent: #b66bff;
+  --preset-link: #b76cff;
+  --preset-on: #101010;
+  --preset-accent-hover: #ba74ff;
+  --preset-accent-active: #bd7aff;
+}
+
+:root[data-design-theme="rainbow"] .app {
+  background-image: radial-gradient(ellipse at top left, color-mix(in srgb, #b66bff 12%, transparent), transparent 50%), radial-gradient(ellipse at bottom right, color-mix(in srgb, #2fe0e6 10%, transparent), transparent 55%);
+}

@@ -22,3 +22,22 @@ describe('A-23: native certificate facts', () => {
     expect(parseOutlookCertificate({ supported: false })).toEqual({ supported: false });
   });
 });
+
+
+describe('cross-platform certificate stores', () => {
+  it('keeps partial installation distinct from a successful TLS probe', () => {
+    expect(parseOutlookCertificate({ ...facts, https: 'ready', trustScope: 'linux_nss', toolsAvailable: true,
+      installFailed: true, trustStores: [{ kind: 'chromium', installed: true }, { kind: 'firefox', installed: false }] }))
+      .toMatchObject({ installed: false, https: 'ready', installFailed: true, trustStores: [{ installed: true }, { installed: false }] });
+  });
+  it('accepts a macOS user keychain and strips extra store fields', () => {
+    expect(parseOutlookCertificate({ ...facts, trustScope: 'macos_user', trustStores: [{ kind: 'macos', installed: true, extra: 'discard' }] }))
+      .toMatchObject({ trustStores: [{ kind: 'macos', installed: true }] });
+    const parsed = parseOutlookCertificate({ ...facts, trustStores: [{ kind: 'macos', installed: true, extra: 'discard' }] });
+    if (!parsed.supported) throw new Error('Expected certificate facts');
+    expect(parsed.trustStores?.[0]).toEqual({ kind: 'macos', installed: true });
+  });
+  it.each([{ trustScope: 'anywhere' }, { trustStores: [{ kind: 'arbitrary', installed: true }] }, { trustStores: [{ kind: 'chromium', installed: 'yes' }] }, { installFailed: 'no' }, { toolsAvailable: 1 }])('rejects malformed store metadata', extra => {
+    expect(() => parseOutlookCertificate({ ...facts, ...extra })).toThrow();
+  });
+});

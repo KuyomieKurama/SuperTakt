@@ -7,9 +7,7 @@ import { useAsync } from "../../app/useAsync";
 import { formatDateTime } from "../../lib/format";
 import { AsyncBoundary } from "../../shared/ui/AsyncBoundary";
 import { getTokenStatus, rotateToken } from "./api";
-/* ==================================================================== */
 /* Outlook-Add-in (S-13)                                                */
-/* ==================================================================== */
 
 /**
  * Das Add-in-Token steht genau einmal auf dem Bildschirm.

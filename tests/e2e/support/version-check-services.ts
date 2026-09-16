@@ -1,3 +1,4 @@
+import { sleep, waitFor } from './wait-for';
 /**
  * Takt — Start/Stop/Neustart des lokalen Dienstes für die Versionsprüfung im
  * End-zu-Ende-Lauf (T-142, `TP-VER-10` bis `TP-VER-13`).
@@ -56,24 +57,6 @@ export const VERSION_CHECK_API_BASE_URL = 'http://127.0.0.1:17843/api/v1';
 export const E2E_VERSION_CHECK_DATA_DIR = join(tmpdir(), 'takt-e2e-version-check-data');
 
 type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError: unknown = null;
-  while (Date.now() < deadline) {
-    try {
-      if (await check()) return;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
-  }
-  throw new Error(`Zeitüberschreitung beim Warten auf: ${label}. Letzter Fehler: ${String(lastError)}`);
-}
 
 /**
  * Startet `version-check-entry.ts` gegen die angegebene GitHub-Attrappe.

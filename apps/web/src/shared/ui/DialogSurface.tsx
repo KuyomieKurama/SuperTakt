@@ -391,9 +391,7 @@ export function DialogSurface({
   );
 }
 
-/* ==================================================================== */
 /* Die Abdunklung — und warum sie am Dokumentkoerper haengt             */
-/* ==================================================================== */
 
 export interface ScrimProps {
   /** Zusatzklasse der Abdunklung. Genau ein Wert kommt vor: `scrim--blocking`. */

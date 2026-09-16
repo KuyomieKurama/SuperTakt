@@ -57,9 +57,7 @@ export function foreignText(value: ForeignText): string {
   return visibleText(value);
 }
 
-/* ==================================================================== */
 /* Die Grenze zum Wert ohne Typ (O-AT, T-133)                           */
-/* ==================================================================== */
 
 /**
  * Fremder Text aus einem Wert, über den der Typ nichts sagt. `null`, wenn

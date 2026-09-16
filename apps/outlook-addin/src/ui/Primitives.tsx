@@ -325,7 +325,7 @@ export function Chip({ label, path, tone = 'default', onRemove, removeLabel }: C
         Nachbarchips, das dann an einem anderen Chip zu hängen scheint.
       */}
       {path !== undefined && path.length > 0 ? (
-        <Foreign className="chip__path" value={path} />
+        <><Foreign className="chip__path" value={path} /><span className="chip__path" aria-hidden="true">›</span></>
       ) : null}
       <Foreign className="chip__label" value={label} />
       {note !== null ? (

@@ -3220,3 +3220,29 @@ Mechanismus einzeln auf den Stand davor zurückgebaut: 19 von 19 gefangen. Ohne 
 „alle Gestalten sind rot" wieder nur eine Behauptung über einen Wächter — und genau diese
 Behauptung ist in dieser Kette dreimal grün gewesen und blind.
 
+
+## Outlook-Mail-Zuordnung — Auftrag vom 15.09.2026
+
+Der Auftrag ersetzt E-100/E-108 gezielt: Die Mail-Zuordnung zu vorhandenen Aufgaben ist
+jetzt erlaubt, ausschließlich über den begrenzten Anwendungsfall nach A-10.11–A-10.15.
+Persönliche Aufgabenvermerke und Mailverlauf bleiben getrennt. Keine zusätzliche Bridge,
+keine Pool-Projektzuordnung, kein allgemeiner AttachmentPort für das Add-in.
+Migration 0025 und Archivfassung 7 sichern Mailidentität, Wiederholungsbelege und Planung.
+Siehe `docs/outlook-bridge-alignment.md`; frühere Gegenentscheidungen sind historisch.
+
+## Zertifikatseinrichtung plattformübergreifend (Auftrag vom 15.09.2026)
+
+Der Auftraggeber verlangt den funktionierenden Vertrauensbutton auch unter Linux.
+A-23.2–5 gelten deshalb jetzt für Windows, Linux und macOS. Die bestehenden
+Bestätigungs- und Fingerabdruckgrenzen bleiben erhalten. Linux nutzt NSS-Peer-
+Vertrauen im Benutzerkonto, macOS den Benutzerschlüsselbund. Die App unterscheidet
+Vertrauensspeicher und geprüfte HTTPS-Verbindung und erklärt Teilfehler sowie
+fehlende Werkzeuge. Kein Import beim bloßen Anzeigen der Einstellungen.
+
+## NoExport — 15.09.2026 (A-26)
+
+Auf ausdrücklichen Nutzerwunsch können Aufgaben Zeit erfassen und zugleich von
+Buchungsübersicht und Export ausgeschlossen sein. Schaltbares Aufgabenflag,
+standardmäßig aus; keine neue Zeitbuchungsart und keine Löschung von Zeiten.
+Ausschluss in SQL vor Pagination und im finalen Export-Schreibpfad. Beim
+Ausschalten werden offene Zeiten wieder exportierbar. Historie bleibt erhalten.

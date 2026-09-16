@@ -3,14 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../api/client";
 import {
   listExportTemplates,
-  updateSettings,
-} from "../../api/endpoints";
-import {
   createExportTemplate,
   deleteExportTemplate,
   getExportSources,
   updateExportTemplate,
 } from "./api";
+import { updateSettings } from "../settings/api";
 import type { DraftText, ExportTemplate, ForeignText } from "../../api/types";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { FormDialog, TextField } from "../../shared/ui/FormDialog";
@@ -147,9 +145,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
    */
   const shown = creating ? null : (selected ?? builtin ?? list[0] ?? null);
 
-  /* ---------------------------------------------------------------- */
   /* Entwurf                                                          */
-  /* ---------------------------------------------------------------- */
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -179,7 +175,6 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
     setCopyNameTouched(false);
     setCopyDialog(template);
   };
-
 
   /**
    * Der Entwurf wird neu aufgesetzt, sobald eine andere Vorlage gewählt wird
@@ -262,16 +257,12 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
     [readOnly, builtinFields, draftFields, catalog],
   );
 
-  /* ---------------------------------------------------------------- */
   /* Verlassen mit ungespeicherten Änderungen                          */
-  /* ---------------------------------------------------------------- */
 
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   useLeaveGuard(dirty, setPendingHref);
 
-  /* ---------------------------------------------------------------- */
   /* Vorgänge                                                          */
-  /* ---------------------------------------------------------------- */
 
   const updateField = useCallback((key: string, next: ExportFieldDefinition) => {
     setDraft((previous) =>
@@ -784,9 +775,7 @@ export function TemplatesScreen({ templateId }: TemplatesScreenProps) {
   );
 }
 
-/* ==================================================================== */
 /* Die Standardvorlage erklären                                         */
-/* ==================================================================== */
 
 function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefinition[] }) {
   return (
@@ -812,9 +801,7 @@ function BuiltinNotice({ fields }: { readonly fields: readonly ExportFieldDefini
   );
 }
 
-/* ==================================================================== */
 /* Abweichungen von der Standardvorlage                                 */
-/* ==================================================================== */
 
 function DeviationPanel({
   deviations,
@@ -862,9 +849,7 @@ function DeviationPanel({
   );
 }
 
-/* ==================================================================== */
 /* Hilfen                                                               */
-/* ==================================================================== */
 
 /**
  * Hält den Benutzer auf, bevor ungespeicherte Änderungen verloren gehen (§15).

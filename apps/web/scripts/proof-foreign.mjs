@@ -154,9 +154,7 @@ const srcRoot = requireDirectory(
   "den Quellbaum, über den dieser Nachweis urteilt",
 );
 
-/* ==================================================================== */
 /* 0a Pfade — eine Schreibweise, und zwar die des Übersetzers           */
-/* ==================================================================== */
 
 /*
  * ---------------------------------------------------------------------------
@@ -211,9 +209,7 @@ const sameFile = (left, right) => comparable(left) === comparable(right);
 const displayPath = (from, fileName) =>
   path.relative(from, fileName).split(path.sep).join("/");
 
-/* ==================================================================== */
 /* 0  Werkzeug                                                          */
-/* ==================================================================== */
 
 let passed = 0;
 let failed = 0;
@@ -478,9 +474,7 @@ const parameterTakesForeign = (call, argument) => {
   return isForeign(checker.getTypeOfSymbolAtLocation(symbol, call));
 };
 
-/* ==================================================================== */
 /* 1  Die Herkunft steht an einem Ort                                   */
-/* ==================================================================== */
 
 heading("1  Die Herkunft steht an einem Ort und wird nicht abgeschrieben");
 
@@ -489,6 +483,7 @@ const VOCABULARY = new Set([
   "Id",
   "Timestamp",
   "CalendarDay",
+  "LocalTime",
   "ForeignText",
   "DraftText",
   "ServiceText",
@@ -509,9 +504,7 @@ const VOCABULARY = new Set([
   "ExportValue",
 ]);
 
-/* ==================================================================== */
 /* 1a Die Anker — aufgelöst, nicht abgeschrieben (T-249-2)              */
-/* ==================================================================== */
 
 /*
  * ---------------------------------------------------------------------------
@@ -766,9 +759,7 @@ check("die drei Behandlungen nehmen fremden Text an und geben gewöhnlichen zur�
   );
 });
 
-/* ==================================================================== */
 /* 2  Kein fremder Wert steht roh in der Anzeige                        */
-/* ==================================================================== */
 
 heading("2  Kein fremder Wert steht roh in der Anzeige");
 
@@ -1008,9 +999,7 @@ check("und jede Datei unter `src` liegt tatsächlich im Programm", () => {
   );
 });
 
-/* ==================================================================== */
 /* 3  Kein fremder Wert wird roh in einen Satz eingebaut                */
-/* ==================================================================== */
 
 heading("3  Kein fremder Wert wird roh in einen Satz eingebaut");
 
@@ -1079,9 +1068,7 @@ check("und die Prüfung hat auch Reihen fremden Textes gesehen", () => {
   assert.ok(foreignJoins > 2, `nur ${String(foreignJoins)} Reihen fremden Textes gesehen`);
 });
 
-/* ==================================================================== */
 /* 4  Die Herkunft geht unterwegs nicht verloren                        */
-/* ==================================================================== */
 
 heading("4  Die Herkunft geht unterwegs nicht verloren");
 
@@ -1215,9 +1202,7 @@ check("kein fremder Wert wird in ein Feld ohne Herkunft geschrieben", () => {
   assert.deepEqual(found, [], `Herkunft verloren:\n        ${found.join("\n        ")}`);
 });
 
-/* ==================================================================== */
 /* 5  Eingabefelder bleiben unbehandelt                                 */
-/* ==================================================================== */
 
 heading("5  Eingabefelder bleiben unbehandelt (E-063 Punkt 1)");
 
@@ -1266,9 +1251,7 @@ check("kein Eingabefeld zeigt behandelten Text", () => {
   assert.deepEqual(treatedInputs, [], `behandeltes Eingabefeld: ${treatedInputs.join(", ")}`);
 });
 
-/* ==================================================================== */
 /* 6  Die Grenze zum Wert ohne Typ                                      */
-/* ==================================================================== */
 
 heading("6  Was aus einem Wert ohne Typ als Text herausfällt, trägt eine Herkunft");
 
@@ -1445,9 +1428,7 @@ check("und sie wird auch benutzt", () => {
   assert.ok(crossingCalls > 3, `nur ${String(crossingCalls)} Aufrufe der Übergangsstelle gesehen`);
 });
 
-/* ==================================================================== */
 /* 7  Zwei stille Ausgaenge und der Uebersetzer selbst                  */
-/* ==================================================================== */
 
 heading("7  Zwei stille Ausgänge, und der Übersetzer wird selbst gefragt");
 
@@ -1620,9 +1601,7 @@ check("und das Programm, über das hier geurteilt wird, übersetzt fehlerfrei", 
   );
 });
 
-/* ==================================================================== */
 /* 8  Die Gegenprobe                                                    */
-/* ==================================================================== */
 
 heading("8  Gegenprobe — jede eingesetzte Verletzung muss auffallen");
 
@@ -1709,8 +1688,6 @@ for (const probe of COUNTER_PROOFS) {
     );
   });
 }
-
-/* ==================================================================== */
 
 process.stdout.write(
   `\n${"═".repeat(58)}\n${String(passed)} bestanden, ${String(failed)} fehlgeschlagen.\n` +

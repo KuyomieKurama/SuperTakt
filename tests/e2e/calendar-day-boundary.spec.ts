@@ -1,34 +1,11 @@
+import { todayAt } from './support/local-time';
 /**
- * Die Tagesgrenze in Ortszeit statt UTC (T-041, Code-Review-Befund, T-048).
- *
- * `packages/storage/src/sqlite/repo-time.ts` bestimmte den Kalendertag einer
- * Buchung für den Zeitbuchungs-Filter bis T-041 über `date(started_at)` —
- * eine reine UTC-Auswertung des gespeicherten Zeitstempels — während die
- * Fachlogik (`toCalendarDay`, `packages/domain/src/kernel.ts`) und der Export
- * längst in Ortszeit rechneten. Diese Maschine läuft in `Europe/Berlin`
- * (UTC+2 im Sommer): Eine Buchung, die **kurz nach Mitternacht Ortszeit**
- * beginnt, liegt in UTC noch im **Vortag** — genau das Fenster, das T-024
- * nachgemessen hat („00:00 bis 02:00 Ortszeit"). Der Filter „Ab Tag"/„Bis
- * Tag" in S-06 (`fromDay`/`toDay`, `BookingsScreen.tsx`) ist der einzige Ort
- * der Oberfläche, der diesen Wert überhaupt entgegennimmt — deshalb wird hier
- * geprüft, nicht am Export (der schon vorher richtig rechnete).
- *
- * Eine Buchung um 23:30 Ortszeit — der Auftragswortlaut — liegt bei einem
- * Rechner mit positivem UTC-Versatz (wie diesem) technisch **nicht** in der
- * Fehlerzone: 23:30 CEST ist 21:30 UTC, also derselbe UTC-Kalendertag. Sie
- * ist trotzdem als Kontrollfall unten mit dabei (muss ohnehin bestehen); der
- * eigentliche, unterscheidende Nachweis läuft über eine Buchung kurz nach
- * Mitternacht Ortszeit, wo UTC- und Ortstag tatsächlich auseinanderfallen.
+ * Kurz nach Mitternacht in Europe/Berlin unterscheiden sich UTC- und Ortstag. Der Abendfall
+ * allein würde diesen Fehler nicht erkennen.
  */
 import { test, expect } from '@playwright/test';
 
 import { createTimeEntry, createTodo, deleteTimeEntry, listTimeEntriesByTodo } from './support/api';
-/** Ein Zeitpunkt heute, in der Ortszeit dieses Testlaufs. */
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 /** Der Ortstag (YYYY-MM-DD) eines Datums, in derselben Zone wie der Dienst (Systemzone). */
 function localCalendarDay(date: Date): string {

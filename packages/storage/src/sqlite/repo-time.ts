@@ -1,29 +1,7 @@
 /**
- * Takt — Zeitbuchungen, Timer und Lebenszeichen (A-6.*, A-2.5, E-036).
- *
- * ---------------------------------------------------------------------------
- * Nur ein Timer gleichzeitig — dreifach gesichert, und jede Ebene hat ihren Grund
- * ---------------------------------------------------------------------------
- *
- *  1. `decideTimerStart` in der Domäne liefert `confirmation_required`, wenn
- *     schon einer läuft und der Benutzer nicht zugestimmt hat. Das ist die
- *     Rückfrage aus A-6.8 — sie **fragt**, statt einen Fehler zu zeigen.
- *  2. Der Anwendungsfall setzt Stopp, gegebenenfalls das Aufheben von
- *     „Erledigt" und den neuen Start in **eine** Transaktion. Ein Abbruch
- *     dazwischen hinterlässt keinen der Teilschritte.
- *  3. `ux_time_entry_running`, ein eindeutiger Teilindex auf `ended_at IS
- *     NULL`, verhindert den zweiten laufenden Timer strukturell. Er ersetzt 1
- *     und 2 nicht, sondern sichert sie ab: Was die Regel zu prüfen vergisst,
- *     weist die Datenbank ab.
- *
- * ---------------------------------------------------------------------------
- * Warum Ende und Dauer nicht getrennt geschrieben werden
- * ---------------------------------------------------------------------------
- *
- * `duration_seconds` ist eine berechnete Spalte (`GENERATED ALWAYS AS ...
- * STORED`). Sie kann gar nicht von Start und Ende abweichen, weil sie nicht
- * geschrieben wird. Eine mitgeführte Dauer wäre eine zweite Wahrheit über
- * dieselbe Zeit — und die eine, die in die Rechnung ginge.
+ * Rückfrage, gemeinsame Transaktion und eindeutiger Index sichern unterschiedliche Teile der
+ * Ein-Timer-Regel.
+ * Die Datenbank berechnet die Dauer aus Start und Ende; sie wird nicht separat geschrieben.
  */
 
 import type { TimeEntryFilter, TimeEntryPort, TimerHeartbeatPort, TimerPort, Page, Pagination } from '../ports.ts';
@@ -75,6 +53,9 @@ function filterConditions(
   const boundsOf = (day: CalendarDay): CalendarDayBounds =>
     timeZone === undefined ? calendarDayBounds(day) : calendarDayBounds(day, timeZone);
 
+  if (filter.excludeNoExport === true) {
+    parts.push('todo_id IN (SELECT id FROM todo WHERE no_export = 0)');
+  }
   if (filter.todoId !== undefined) {
     parts.push('todo_id = ?');
     params.push(filter.todoId);

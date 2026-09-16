@@ -58,7 +58,7 @@
  * Stelle. Neu ist hier allein, **wer fragt**.
  */
 
-import { err, ok, planIdleAllocation, taktError, type IdleAllocation, type Result, type TaktError, type TimeEntryId, type Timestamp } from '@takt/domain';
+import { err, ok, planIdlePeriods, taktError, type IdleAllocation, type Result, type TaktError, type TimeEntryId, type Timestamp } from '@takt/domain';
 import type { IdleSession, UnitOfWork } from '@takt/storage';
 import { now, type AppContext, type UseCaseResult } from '../../context.ts';
 import { bookingEndOf, foundAtServiceStart } from './timer.ts';
@@ -125,7 +125,7 @@ async function completeReturn(context: AppContext, unit: UnitOfWork, pending: Id
     throw new IdleWriteFailure(taktError('conflict', 'Der Timer wurde während der inaktiven Zeit geändert.'));
   }
   await unit.idle.returned(pending.id, end);
-  // Existing saved sessions from the previous version had already stopped.
+  // Bei gespeicherten Sitzungen der Vorversion war der Timer bereits gestoppt.
   if (running === null && (await unit.settings.load()).idleKeepTimerRunning) {
     const continued = requireSuccess(await unit.timer.start(pending.todoId, false, end));
     await unit.heartbeat.touch(continued.started.id, timestamp);
@@ -136,7 +136,13 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
   const timestamp = now(context);
   return transaction(context, async unit => {
     const existing = await unit.idle.pending();
-    if (existing !== null) return existing.id === input.entryId ? ok(await view(unit)) : err(taktError('conflict', 'Es wartet bereits eine andere inaktive Zeit auf Zuordnung.'));
+    if (existing !== null) {
+      if ([...(existing.previousPeriods ?? []), existing].some(period => period.id === input.entryId)) return ok(await view(unit));
+      if (existing.returnedAt === null) return err(taktError('conflict', 'Die Rückkehr der letzten inaktiven Zeit ist noch offen.'));
+      if ((existing.previousPeriods?.length ?? 0) >= 127 || Date.parse(input.startedAt) < Date.parse(existing.returnedAt)) {
+        return err(taktError('validation_error', 'Die neue inaktive Zeit überschneidet eine vorhandene Phase oder die Sammlung ist voll.'));
+      }
+    }
     const settings = await unit.settings.load();
     if (!settings.idleDetectionEnabled) return err(taktError('conflict', 'Die Inaktivitätserkennung ist ausgeschaltet.'));
     const running = await unit.timer.running();
@@ -164,7 +170,7 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
         end - start < settings.idleThresholdMinutes * 60_000) {
       return err(taktError('validation_error', 'Die inaktive Zeit liegt nicht innerhalb des laufenden Timers oder ist kürzer als die eingestellte Schwelle.'));
     }
-    const pending = { id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: null, note: running.note };
+    const pending: IdleSession = { id: running.id, todoId: running.todoId, startedAt: input.startedAt, returnedAt: null, note: running.note };
     // Zweite Wand, absichtlich doppelt (T-371): Die Abweisung oben macht diese
     // Zeile für einen vorgefundenen Eintrag unerreichbar — aber eine
     // Schreibstelle, die ihre Frage einer `if`-Bedingung weiter oben
@@ -173,7 +179,11 @@ export function beginIdle(context: AppContext, input: { entryId: TimeEntryId; st
     // zurück; die Zeile kostet also nichts und hält, wenn jemand die
     // Abweisung entfernt. `proof:layers` Abschnitt 7 mißt sie mit.
     if (!settings.idleKeepTimerRunning) requireSuccess(await unit.timer.stop(running.note, await bookingEndOf(context, unit, running, input.startedAt)));
-    await unit.idle.begin(pending);
+    if (existing === null) await unit.idle.begin(pending);
+    else {
+      const { previousPeriods: previous = [], ...last } = existing;
+      await unit.idle.replace({ ...pending, previousPeriods: [...previous, last] });
+    }
     if (input.returnedAt !== undefined) await completeReturn(context, unit, pending, input.returnedAt, timestamp);
     return ok(await view(unit));
   });
@@ -203,7 +213,7 @@ export function resolveIdle(context: AppContext, input: { id: TimeEntryId; alloc
     if (pending === null) return ok({ recordedSeconds: 0, breakSeconds: 0, resumed: false, alreadyResolved: true });
     if (pending.id !== input.id) return err(taktError('conflict', 'Es wartet inzwischen eine andere inaktive Zeit auf Zuordnung.'));
     if (pending.returnedAt === null) return err(taktError('conflict', 'Bestätigen Sie zuerst Ihre Rückkehr.'));
-    const planned = planIdleAllocation(pending.startedAt, pending.returnedAt, input.allocations);
+    const planned = planIdlePeriods([...(pending.previousPeriods ?? []), pending], input.allocations);
     if (!planned.ok) return planned;
     // Check every target before the first mutation; later errors still roll back.
     for (const part of planned.value) {

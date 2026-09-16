@@ -26,8 +26,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { TimeEntryId, Timestamp } from '@takt/domain';
-import { openDatabase, type OpenedDatabase, type TransactionPort } from '@takt/storage';
+import { type TransactionPort } from '@takt/storage';
 
+import { createTimerMachine as machine, type TimerMachine as Machine } from '../support/timer-machine.ts';
 import type { AppContext } from '../../src/context.ts';
 import {
   DATA_ARCHIVE_FORMAT,
@@ -49,34 +50,9 @@ const T0 = '2026-09-13T06:00:00Z' as Timestamp;
 const HEARTBEAT_AT = '2026-09-13T06:20:00Z' as Timestamp; // T0 + 1200 s
 const TARGET_CLOCK = '2026-09-13T17:00:00Z' as Timestamp; // T0 + 39600 s
 
-interface Machine {
-  readonly database: OpenedDatabase;
-  readonly context: AppContext;
-  setClock(value: Timestamp): void;
-}
-
-/** Ein eigener Bestand mit einer eigenen, beweglichen Uhr — steht für einen Rechner. */
-async function machine(initial: Timestamp): Promise<Machine> {
-  let current = initial;
-  const database = openDatabase({ location: ':memory:', now: () => current });
-  await database.migrations.migrateToLatest();
-  const context = {
-    transactions: database.transactions,
-    clock: { now: () => current },
-    system: { windowsUser: () => 'Prüfrechner' },
-  } as unknown as AppContext;
-  return {
-    database,
-    context,
-    setClock(value: Timestamp) {
-      current = value;
-    },
-  };
-}
-
 /** Derselbe Zusammenhang, aber mit einer eigenen `timerRecovery`-Aufnahme (Vorgabe, Abschnitt 8). */
 function withTimerRecovery(context: AppContext, entryId: TimeEntryId | null): AppContext {
-  return { ...context, timerRecovery: { entryId } } as unknown as AppContext;
+  return { ...context, timerRecovery: { entryId } };
 }
 
 /**
@@ -256,7 +232,7 @@ describe('R-34 — importDataArchive führt die Timer-Aufnahme nach (T-358 Absch
     expect(zielBase.timerRecovery?.entryId).toBeNull();
 
     const counting = countingTransactions(ziel.context.transactions);
-    const zielForImport = { ...zielBase, transactions: counting.port } as unknown as AppContext;
+    const zielForImport = { ...zielBase, transactions: counting.port };
 
     // Beide Aufrufe werden absichtlich VOR dem Warten gestartet: Sie reihen
     // sich synchron, im Aufrufzeitpunkt, in dieselbe Warteschlange

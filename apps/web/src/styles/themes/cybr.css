@@ -1,0 +1,12 @@
+/* @theme {"label":"Cybr","mode":"dark","hint":"Cyberpunk · tiefe Flächen und Neonakzente","order":2} */
+:root[data-design-theme="cybr"] {
+  --preset-canvas: #030408;
+  --preset-surface: #0a0e1a;
+  --preset-ink: #d5d8e2;
+  --preset-muted: #a8acb6;
+  --preset-accent: #29becc;
+  --preset-link: #29becc;
+  --preset-on: #101010;
+  --preset-accent-hover: #36c2cf;
+  --preset-accent-active: #3ec4d1;
+}

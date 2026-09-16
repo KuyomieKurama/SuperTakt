@@ -81,9 +81,7 @@ function fail(message) {
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
 // Vor dem Bau: liegt der Aufgabenbereich bereit? (T-054)
-// ---------------------------------------------------------------------------
 
 const taskpaneIndex = join(stagingDir, 'index.html');
 if (!existsSync(stagingDir) || !statSync(stagingDir).isDirectory() || !existsSync(taskpaneIndex)) {
@@ -101,9 +99,7 @@ if (!existsSync(stagingDir) || !statSync(stagingDir).isDirectory() || !existsSyn
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
 // Vor dem Bau: liegt die Lizenzbeilage bereit? (T-068, T-075)
-// ---------------------------------------------------------------------------
 //
 // Dieselbe Sorte Prüfung wie beim Aufgabenbereich und aus demselben Grund: Das
 // Paket entsteht auch ohne die Beilage und sieht vollständig aus. Nur ist es
@@ -129,9 +125,7 @@ if (!existsSync(licenseFile)) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Die Fassung des Erzeugnisses (T-075)
-// ---------------------------------------------------------------------------
 //
 // `tauri.conf.json` trägt `"version": "0.0.0"` — der Entwicklungswert. Wird aus
 // einem Etikett heraus veröffentlicht, muss das Erzeugnis die Fassung des

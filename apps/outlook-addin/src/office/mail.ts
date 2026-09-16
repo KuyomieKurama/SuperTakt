@@ -104,6 +104,10 @@ export { MAX_TITLE_CHARACTERS };
  */
 
 export interface MailFacts {
+  readonly internetMessageId?: string;
+  readonly itemId?: string;
+  readonly mailboxAddress?: string;
+  readonly outlookLink?: string;
   readonly subject: string;
   /** Nur-Text-Fassung. HTML wird nicht übernommen (B-12.1). */
   readonly body: string;
@@ -148,10 +152,9 @@ export const EMPTY_MAIL: MailFacts = Object.freeze({
  * UTF-16-Einheiten gezählt wird, steht in `../text/cut.ts`: Die Tür zählt so.
  */
 export const suggestTitle = (subject: string): string => {
-  const withoutPrefixes = subject.replace(/^(?:(?:AW|WG|RE|FW|FWD|ANTW)\s*:\s*)+/i, '');
-  const visible = dropHidden(withoutPrefixes);
+  const visible = dropHidden(subject);
   const collapsed = visible.replace(/\s+/g, ' ').trim();
-  return cutToCharacterBoundary(collapsed, MAX_TITLE_CHARACTERS);
+  return cutToCharacterBoundary(collapsed, MAX_TITLE_CHARACTERS) || 'E-Mail bearbeiten';
 };
 
 /**

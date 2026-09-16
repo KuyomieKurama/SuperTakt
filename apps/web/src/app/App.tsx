@@ -1,7 +1,5 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
-import {
-  listTimeEntries,
-} from "../api/endpoints";
+import { listTimeEntries } from "../features/bookings/api";
 import {
   listTodos,
 } from "../features/todos/api";
@@ -30,11 +28,9 @@ import { useDataFreshness } from "./useDataFreshness";
 import { useRoute } from "./useRoute";
 
 const BoardScreen = lazy(() => import("../features/board/BoardScreen").then(module => ({ default: module.BoardScreen })));
-const BookingsScreen = lazy(() => import("../features/bookings/BookingsScreen").then(module => ({ default: module.BookingsScreen })));
 const ExportAuditScreen = lazy(() => import("../features/export/ExportAuditScreen").then(module => ({ default: module.ExportAuditScreen })));
 const ExportScreen = lazy(() => import("../features/export/ExportScreen").then(module => ({ default: module.ExportScreen })));
 const SettingsScreen = lazy(() => import("../features/settings/SettingsScreen").then(module => ({ default: module.SettingsScreen })));
-const TagsScreen = lazy(() => import("../features/tags/TagsScreen").then(module => ({ default: module.TagsScreen })));
 const TemplatesScreen = lazy(() => import("../features/export/TemplatesScreen").then(module => ({ default: module.TemplatesScreen })));
 const TimeScreen = lazy(() => import("../features/timer/TimeScreen").then(module => ({ default: module.TimeScreen })));
 const TodoDetailScreen = lazy(() => import("../features/todos/TodoDetailScreen").then(module => ({ default: module.TodoDetailScreen })));
@@ -95,9 +91,7 @@ export function App() {
   return <ConnectedApp route={route} revisit={revisit} />;
 }
 
-/* ==================================================================== */
 /* Verbindung                                                           */
-/* ==================================================================== */
 
 function ConnectedApp({
   route,
@@ -255,9 +249,7 @@ function NoShellNotice() {
   );
 }
 
-/* ==================================================================== */
 /* Arbeitsfläche                                                        */
-/* ==================================================================== */
 
 function Workspace({
   route,
@@ -325,9 +317,7 @@ function Workspace({
       */}
       <aside className="app__sidebar">
         <a className="brand" href={href("dashboard")}>
-          <span className="brand__mark" aria-hidden>
-            ST
-          </span>
+          <img className="brand__mark" src="/favicon-192.png" alt="" />
           <span className="brand__name">SuperTakt</span>
         </a>
 
@@ -405,15 +395,15 @@ function Screen({ route }: { readonly route: Route }) {
     case "time":
       return <TimeScreen />;
     case "bookings":
-      return <BookingsScreen query={route.query} />;
+      return <ExportScreen query={{ status: "", von: "", bis: "", ...route.query }} />;
     case "export":
-      return <ExportScreen />;
+      return <ExportScreen key={JSON.stringify(route.query)} query={route.query} />;
     case "exportAudit":
       return <ExportAuditScreen query={route.query} />;
     case "templates":
       return <TemplatesScreen templateId={route.id} />;
     case "tags":
-      return <TagsScreen />;
+      return <SettingsScreen query={{ ...route.query, bereich: "tags" }} />;
     case "settings":
       return <SettingsScreen query={route.query} />;
     default:

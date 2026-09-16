@@ -2,15 +2,12 @@ import { useState } from "react";
 import type { Id } from "../../api/types";
 import { Button, Card, EmptyState, InlineMessage } from "../../shared/ui/Primitives";
 import { TagInput } from "../tags/TagInput";
-import { navigate } from "../../app/router";
 import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useAsync, useMutation } from "../../app/useAsync";
 import { plural } from "../../lib/format";
 import { listDefaultTags, setDefaultTags } from "./api";
-/* ==================================================================== */
 /* Standard-Tags (S-10, I-12)                                           */
-/* ==================================================================== */
 
 export function DefaultTagSettings() {
   const structure = useStructure();
@@ -48,12 +45,8 @@ export function DefaultTagSettings() {
           compact
           icon="tag"
           title="Noch kein Tag"
-          description="Legen Sie zuerst Tags an — erst dann lässt sich einer als Standard setzen."
-          action={
-            <Button iconStart="tag" onClick={() => navigate("tags")}>
-              Zur Tag-Verwaltung
-            </Button>
-          }
+          description="Legen Sie unten unter „Tags und Ordner“ einen Tag an. Danach können Sie ihn hier als Standard auswählen."
+
         />
       ) : (
         <TagInput

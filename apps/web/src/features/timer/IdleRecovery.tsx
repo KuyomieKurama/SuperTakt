@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { resolveIdleSession, returnFromIdle, type IdleAllocation, type IdleSession } from './api';
 import type { DraftText, ForeignText, Id } from '../../api/types';
+import { errorMessage } from '../../api/client';
 import { useMutation } from '../../app/useAsync';
 import { useToasts } from '../../app/ToastContext';
 import { formatDuration, formatStopwatch, formatTimeRange } from '../../lib/format';
@@ -26,7 +27,7 @@ export function parseIdleDuration(value: string): number | null {
 }
 
 export function IdleRecovery({ session, changed, running, resumeAfter = false }: { readonly session: IdleSession; readonly changed: () => void; readonly running: boolean; readonly resumeAfter?: boolean }) {
-  const [open, setOpen] = useState(session.returnedAt !== null);
+  const [open, setOpen] = useState(true);
   const [mode, setMode] = useState<Mode>('break');
   const [rows, setRows] = useState<Row[]>([{ key: 0, todoId: session.todoId, title: session.todoTitle, duration: '', note: session.note }]);
   const sequence = useRef(1);
@@ -34,8 +35,31 @@ export function IdleRecovery({ session, changed, running, resumeAfter = false }:
   const toasts = useToasts();
   const submitting = useRef(false);
   const [validation, setValidation] = useState<string | null>(null);
-  useEffect(() => { if (session.returnedAt !== null) setOpen(true); }, [session.returnedAt]);
-  const seconds = session.returnedAt === null ? 0 : Math.floor((Date.parse(session.returnedAt) - Date.parse(session.startedAt)) / 1000);
+  const dismissed = useRef<string | null>(null);
+  useEffect(() => {
+    if (dismissed.current !== session.id) setOpen(true);
+  }, [session.id, session.returnedAt]);
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    if (session.returnedAt !== null) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [session.returnedAt]);
+  const periods = [...(session.previousPeriods ?? []), session];
+  const seconds = periods.reduce((sum, period) => sum + (Math.max(0, Math.floor(((period.returnedAt === null ? nowMs : Date.parse(period.returnedAt)) - Date.parse(period.startedAt)) / 1000))), 0);
+  const returning = useRef(false);
+  useEffect(() => {
+    if (session.returnedAt !== null) return;
+    // Actual interaction is a reliable fallback when the native idle sample lags.
+    const returned = () => {
+      if (returning.current) return;
+      returning.current = true;
+      void returnFromIdle(session.id).then(changed).catch(cause => setValidation(errorMessage(cause))).finally(() => { returning.current = false; });
+    };
+    window.addEventListener('pointerdown', returned);
+    window.addEventListener('keydown', returned);
+    return () => { window.removeEventListener('pointerdown', returned); window.removeEventListener('keydown', returned); };
+  }, [session.id, session.returnedAt, changed]);
   const assigned = rows.reduce((sum, row) => sum + (parseIdleDuration(row.duration) ?? 0), 0);
   const remaining = seconds - assigned;
   const changeRow = (key: number, patch: Partial<Row>) => { setRows(items => items.map(row => row.key === key ? { ...row, ...patch } : row)); setValidation(null); };
@@ -64,21 +88,22 @@ export function IdleRecovery({ session, changed, running, resumeAfter = false }:
   };
 
   return <>
-    <aside className="idle-reminder" aria-label="Inaktive Zeit">
+    {open ? null : <aside className="idle-reminder" aria-label="Inaktive Zeit">
       <span>{session.returnedAt === null ? (running ? 'Inaktivität erkannt · Timer läuft weiter.' : 'Inaktivität erkannt · Timer pausiert.') : 'Inaktive Zeit wartet auf Zuordnung.'}</span>
       <Button variant="secondary" disabled={mutation.busy} onClick={() => {
         if (session.returnedAt !== null) { setOpen(true); return; }
         void mutation.run(async () => { await returnFromIdle(session.id); changed(); });
       }}>{session.returnedAt === null ? 'Ich bin wieder da' : 'Zeit zuordnen'}</Button>
       <span role="alert">{!open ? mutation.error : null}</span>
-    </aside>
-    <FormDialog open={open && session.returnedAt !== null} title="👋 Willkommen zurück" wide={mode === 'split'}
+    </aside>}
+    <FormDialog open={open} submitDisabled={session.returnedAt === null} title="👋 Willkommen zurück" wide={mode === 'split'}
       submitLabel={mode === 'break' ? 'Als Pause übernehmen' : 'Zeit buchen'} cancelLabel="Später" busy={mutation.busy}
-      error={validation ?? mutation.error} onSubmit={submit} onCancel={() => setOpen(false)}>
+      error={validation ?? mutation.error} onSubmit={submit} onCancel={() => { dismissed.current = session.id; setOpen(false); }}>
       <div className="idle-summary">
         <span className="muted">Sie waren inaktiv für</span>
         <strong className="idle-summary__duration">{formatStopwatch(seconds)}</strong>
-        <span className="muted">{session.returnedAt === null ? '' : formatTimeRange(session.startedAt, session.returnedAt)}</span>
+        {periods.length > 1 ? <span className="muted">{periods.length} Inaktivitätsphasen · aktive Zeit dazwischen bleibt erhalten</span> : null}
+        {periods.map(period => <span className="muted" key={period.id}>{period.returnedAt === null ? 'Rückkehr wird erkannt …' : formatTimeRange(period.startedAt, period.returnedAt)}</span>)}
         <span className="idle-summary__task" title={foreignText(session.todoTitle)}><Foreign value={session.todoTitle} /></span>
       </div>
       <fieldset className="idle-mode"><legend>Was haben Sie in dieser Zeit gemacht?</legend>

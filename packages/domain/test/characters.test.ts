@@ -1,39 +1,5 @@
-/**
- * Takt — T-127, die Ränder der EINEN Zeichenklasse (E-063, T-117, T-119, T-122).
- *
- * `packages/domain/src/characters.ts` ist seit T-122 der maßgebliche Ort dieser
- * Regel: Dienst, Add-in und der Windows-Benutzername lesen sie, statt sie
- * abzuschreiben (T-125, Abschnitt 1.1). Bis heute (T-127) gab es dafür keine
- * eigene Testdatei unter `packages/domain/test/**` — die Klasse wurde bislang
- * nur an ihren vier Lesern gemessen (u. a.
- * `apps/local-api/test/http/input.test.ts`,
- * `apps/outlook-addin/test/text/hidden.test.ts`), nicht an der Quelle selbst.
- * Genau das ist die Lücke aus T-121, Risiko 2 / offene Frage 2: Die Datei lag
- * bei 48 % Zeilenabdeckung im ersten Bericht dieser Aufgabe — die Zahl ist seit
- * T-122 durch die vier Leser auf 97,22 % Anweisungen gewachsen, aber die
- * Ränder waren bislang nirgends an der Quelle selbst nachgewiesen, sondern nur
- * mittelbar über die Wächter, die sie lesen.
- *
- * Gemessen werden hier alle drei Behandlungen aus E-063 (abweisen, fallen
- * lassen, sichtbar machen) und ihre Ränder, wörtlich nach dem Auftrag T-127:
- *
- *   abgewiesen: C0, C1, DEL, die Bidi-Einbettungen/-Überschreibungen und
- *   -Isolate, sowie die drei Marken U+061C/U+200E/U+200F.
- *   angenommen: U+061B, U+061D, U+200B–U+200D (ZWJ hält Emoji zusammen — der
- *   Familien-Emoji-Fall gehört dazu) und U+2010.
- *
- * Und die eine Nuance, die den einzelnen Rand von den drei Behandlungen
- * unterscheidet: Der Steuer-Leerraum aus C0 (`CONTROL_WHITESPACE`,
- * `U+0009`–`U+000D`) wird an der Tür (`hasForbiddenNameCharacter`) genauso
- * abgewiesen wie jedes andere C0-Zeichen — die Tür kennt keine Ausnahme —,
- * bleibt aber für `hasHiddenCharacter`/`dropHiddenCharacters`/`visibleText`
- * unauffällig: Er trennt Wörter und wird nicht als unsichtbares Zeichen
- * behandelt, sondern (in `visibleText`) zu einem gewöhnlichen Leerzeichen.
- *
- * Reine Codepunkt-Prüfung, kein rohes Steuer- oder Richtungszeichen im
- * Quelltext dieser Datei (T-112-H2): jedes Zeichen der Klasse steht als
- * `String.fromCodePoint(...)`.
- */
+/** Steuer-Leerraum wird in Namen abgewiesen, bei der Textanzeige aber als gewöhnlicher Leerraum behandelt.
+ * Steuerzeichen im Test über Codepunkte erzeugen, damit der Quelltext lesbar bleibt. */
 import { describe, expect, it } from 'vitest';
 import {
   CONTROL_WHITESPACE,

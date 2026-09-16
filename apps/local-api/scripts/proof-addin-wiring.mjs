@@ -1,3 +1,4 @@
+import { waitForPortFree } from './port-probe.mjs';
 /**
  * Takt — Nachweis, dass die Add-in-Fläche am echten Dienst hängt
  * (T-019 offene Fragen 1 und 2, E-009, A-9.5, A-10.4, A-10.9, R-15).
@@ -31,7 +32,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
-import { createConnection } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { isolatedAppDataEnv } from './proof-appdata.mjs';
 import { dienstEinstieg } from './source-resolve.mjs';
@@ -46,36 +46,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Ein Verbindungsversuch, der scheitert, heißt "frei"; einer, der ankommt, heißt "belegt". */
-function portFree(port) {
-  return new Promise((done) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
-    socket.once('connect', () => {
-      socket.destroy();
-      done(false);
-    });
-    socket.once('error', () => done(true));
-    setTimeout(() => {
-      socket.destroy();
-      done(true);
-    }, 500).unref();
-  });
-}
 
-/**
- * Wartet, statt sofort aufzugeben, bis Port {@link PORT} frei ist (T-029,
- * Risiko 5 — dasselbe Muster wie in `proof-access.mjs`, das sich denselben
- * Port teilt). Ohne diese Wartestufe hielte `waitForService()` weiter unten
- * einen noch nicht ganz beendeten vorigen Lauf für den eigenen Dienst.
- */
-async function waitForPortFree(port, timeoutMs = 5000) {
-  const until = Date.now() + timeoutMs;
-  do {
-    if (await portFree(port)) return true;
-    await sleep(150);
-  } while (Date.now() < until);
-  return false;
-}
 
 /** Die Herkunft des Aufgabenbereichs (E-046, T-019 Annahme 1). */
 const ADDIN_ORIGIN = 'https://localhost:17844';
@@ -173,9 +144,7 @@ try {
   check('der Dienst kommt hoch', up, stderr.slice(-300));
   if (!up) throw new Error('Dienst nicht erreichbar');
 
-  // ---------------------------------------------------------------------------
   section('1  Die Herkunft des Aufgabenbereichs ist zugelassen (T-019 offene Frage 1)');
-  // ---------------------------------------------------------------------------
   {
     const health = await call('/health', { token: sessionSecret, origin: ADDIN_ORIGIN });
     check(
@@ -199,9 +168,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('2  Ein Add-in-Token entsteht und wirkt (E-009, TP-ADDIN-08, Dienstanteil)');
-  // ---------------------------------------------------------------------------
   let addinToken = null;
   {
     const before = await call('/addin/context', { token: 'takt_' + 'x'.repeat(43) });
@@ -245,9 +212,7 @@ try {
     addinToken = newToken;
   }
 
-  // ---------------------------------------------------------------------------
   section('3  Die vier Add-in-Routen gegen den echten Datenpfad');
-  // ---------------------------------------------------------------------------
   let todoId = null;
   {
     // Ein Standard-Tag einrichten, damit A-9.5 prüfbar wird.
@@ -336,9 +301,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('4  Die Fläche des Add-in-Tokens bleibt schmal (RR-1, B-2.9 Punkt 3)');
-  // ---------------------------------------------------------------------------
   {
     const token = await call('/token', { token: addinToken });
     check(
@@ -361,9 +324,7 @@ try {
     check('Sicherheitsmeldungen bleiben der Hülle vorbehalten', notices.status === 401, `Status ${notices.status}`);
   }
 
-  // ---------------------------------------------------------------------------
   section('5  Der Vermerk verlässt die Add-in-Fläche nicht (A-7.2, R-06)');
-  // ---------------------------------------------------------------------------
   {
     const note = await call(`/todos/${todoId}/note`, { secret: sessionSecret });
     check('über die Hauptfläche ist der Vermerk lesbar', note.status === 200, `Status ${note.status}`);
@@ -387,9 +348,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('6  Kein Geheimnis in der Ausgabe des Dienstes (B-2.4)');
-  // ---------------------------------------------------------------------------
   {
     const output = `${stdout}\n${stderr}`;
     check('die Protokollausgabe enthält kein Token', !/takt_[A-Za-z0-9_-]{43}/.test(output));

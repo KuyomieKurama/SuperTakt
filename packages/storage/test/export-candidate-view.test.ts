@@ -1,22 +1,4 @@
-/**
- * Takt — T-010b, `v_export_candidate` gegen ein echtes Schema (R-06, R-10, A-6.8, A-6.9, A-8.8).
- *
- * `packages/storage/test/` existierte bislang nicht (T-010 hat das begründet
- * ausgelassen, siehe `.claude/team/reports/T-009-domain-dev.md`, Abschnitt
- * "Risiken": "R-10 bleibt scharf. Die Domäne rechnet korrekt über das, was sie
- * bekommt. Ob sie nur offene Buchungen bekommt, entscheidet
- * `v_export_candidate` — also SQL, nicht diese Regeln.").
- *
- * `groupExportCandidates` in `packages/domain/src/export.ts` filtert bewusst
- * NICHT nach Exportstatus — der Kommentar dort sagt wörtlich, dass genau diese
- * Sicht die Filterung trägt. Fällt hier eine bereits exportierte oder eine
- * noch laufende (verwaiste, E-036) Buchung durch, rechnet die Anwendung sie
- * ein zweites Mal ab bzw. vierzehn Stunden zu viel — und die Domäne hat keine
- * Möglichkeit, das zu bemerken, weil sie nur sieht, was diese Sicht liefert.
- *
- * Läuft gegen ein echtes `node:sqlite` mit allen vier Migrationen, nicht gegen
- * eine Attrappe (siehe `support/migrated-database.ts`).
- */
+/** Die SQL-Sicht muss laufende und exportierte Buchungen ausschließen; die Domäne filtert sie nicht erneut. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import { insertTimeEntry, insertTodo, openMigratedDatabase } from './support/migrated-database.js';

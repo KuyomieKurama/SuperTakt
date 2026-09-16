@@ -49,9 +49,7 @@ import { Foreign } from "../../shared/ui/Foreign";
  * der Ansicht und nicht bloß in diesem Kommentar.
  */
 
-/* ==================================================================== */
 /* Der Name, unter dem abgerechnet wird                                 */
-/* ==================================================================== */
 
 export interface BillingUserFactProps {
   /** Wie der Dienst ihn meldet. Leer heißt: er meldet keinen. */
@@ -125,9 +123,7 @@ export function BillingUserFact({ user, className }: BillingUserFactProps) {
   );
 }
 
-/* ==================================================================== */
 /* Befunde zum Ablageort                                                */
-/* ==================================================================== */
 
 const IMPACT_LABEL: Readonly<Record<DatabaseLocationImpact, string>> = {
   confidentiality: "Die Kundendaten verlassen diesen Rechner",
@@ -175,9 +171,7 @@ function DatabaseLocationConcernList({
   );
 }
 
-/* ==================================================================== */
 /* Der Ablageort des Bestandes                                          */
-/* ==================================================================== */
 
 /** Welcher Pfad zuletzt kopiert wurde, und ob es geklappt hat. */
 interface CopyFeedback {

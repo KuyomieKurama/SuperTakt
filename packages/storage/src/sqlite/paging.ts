@@ -1,19 +1,5 @@
-/**
- * Takt — Blätterung mit Fortsetzungsmarke (architektur.md 5.1).
- *
- * Keine Seitenzahlen. Listen in Takt verschieben sich unter einem laufenden
- * Timer: Jede Minute schreibt das Lebenszeichen, jeder Stopp ändert eine
- * Buchung, jede Änderung hebt ein Todo in der Sortierung nach oben. Eine
- * Seitenzahl zeigt dann Einträge doppelt oder gar nicht. Der Aufwand ist
- * derselbe, der Fehler entfällt.
- *
- * Die Marke ist der Sortierschlüssel der zuletzt gelieferten Zeile, nicht ein
- * Zähler. Sie ist base64url-kodiert — nicht als Verschleierung, sondern damit
- * sie ohne Anführungszeichen in eine URL passt und niemand auf die Idee kommt,
- * sie zu zerlegen und daraus einen Offset zu rechnen.
- */
+/** Fortsetzung über Sortierschlüssel statt Seitenzahl: laufende Änderungen verschieben Seiten. */
 
-/** Vorgabe und Obergrenze je Seite. Eine Anfrage kann kleiner wählen, nie größer. */
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
 
@@ -24,53 +10,21 @@ export function pageSize(limit: number | undefined): number {
   return Math.min(rounded, MAX_PAGE_SIZE);
 }
 
-/**
- * Der Sortierschlüssel einer Zeile: die Ordnungsspalte und die Kennung.
- *
- * Die Kennung steht immer dabei. Ohne sie hätten zwei Zeilen mit gleichem
- * Zeitstempel keine bestimmte Reihenfolge, und eine Blätterung über sie hinweg
- * ließe je nach Tagesform eine aus.
- */
+/** Die Kennung löst Gleichstände im Sortierwert eindeutig auf. */
 export interface Cursor {
   readonly sort: string;
   readonly id: string;
 }
 
-/**
- * Der Trenner zwischen Ordnungswert und Kennung: `U+0000`.
- *
- * **Als Escape-Folge und nicht als rohes Zeichen** (T-125-6). Ein rohes NUL im
- * Quelltext macht die Datei für Git zu einer *Binärdatei*: `git diff` zeigt
- * dann nur „Bin“, `git grep -I` überspringt sie, und kein Review kann sie
- * lesen. Genau das war hier vom ersten Commit an der Fall — die Datei stand im
- * Baum und ist nie in einem Diff sichtbar gewesen. Am Verhalten ändert die
- * Schreibweise nichts: `'\u0000'` ist derselbe eine Codepunkt.
- *
- * Der Schaden ist nicht theoretisch. Ein rohes Steuerzeichen sieht in jeder
- * Ausgabe wie ein Leerzeichen aus und wandert beim Zitieren unbemerkt weiter;
- * beim Aufschreiben dieses Fundes ist es dem Prüfer zweimal in die eigene
- * Arbeit geraten, und beim Beheben einem Werkzeug in den Befehl.
- *
- * Warum überhaupt `U+0000`: Der Trenner muss ein Zeichen sein, das weder in
- * einer Kennung noch in einem Zeitstempel vorkommen kann. Beide sind
- * ASCII-Text ohne Steuerzeichen — NUL kann in keinem von beiden auftreten und
- * teilt die Marke deshalb eindeutig.
- */
+// NUL kommt weder in Kennungen noch Zeitstempeln vor und trennt sie eindeutig.
+// Als Escape schreiben: ein rohes NUL würde Git die Datei als binär behandeln.
 const SEPARATOR = '\u0000';
 
 export function encodeCursor(cursor: Cursor): string {
   return Buffer.from(`${cursor.sort}${SEPARATOR}${cursor.id}`, 'utf8').toString('base64url');
 }
 
-/**
- * Liest eine Marke. Eine unlesbare Marke ergibt `null` und damit die erste
- * Seite — kein Fehler.
- *
- * Begründung: Eine Marke ist ein Fortsetzungspunkt, kein Auftrag. Wird sie
- * durch einen Neustart oder einen Zeilenumbruch im Browserverlauf beschädigt,
- * ist „von vorn" die richtige Antwort und nicht „Fehler 400". Ein Aufrufer,
- * der die Marke selbst erfindet, bekommt dasselbe.
- */
+/** Unlesbare Marken ergeben null: der Aufrufer beginnt wieder auf der ersten Seite. */
 export function decodeCursor(raw: string | undefined): Cursor | null {
   if (raw === undefined || raw === '') return null;
   try {

@@ -1,29 +1,14 @@
 import { cx } from "../../lib/cx";
 import { handleRouteLinkClick, href } from "../../app/router";
 
-/**
- * Die drei Bereiche des Exports (T-005, Abschnitt 7; T-040 für den dritten).
- *
- * S-07 schreibt die Datei, S-14 legt fest, was darin steht, das Protokoll
- * hält fest, was geschehen ist. Alle drei gehören zum selben
- * Navigationspunkt: Der Vorlageneditor braucht eine Vorschau auf tatsächlich
- * offenen Buchungen, und das sind genau die Daten von S-07; das Protokoll
- * beantwortet die Frage, die unmittelbar vor jedem Zurücksetzen steht.
- * Lägen sie in den Einstellungen, wären sie von ihrem Gegenstand getrennt.
- *
- * Umgesetzt als Verweise in einer Liste, nicht als ARIA-Registerkarten: Es
- * sind drei Adressen mit eigenem Verlauf und keine drei Bereiche derselben
- * Seite. `aria-current="page"` sagt, wo man ist.
- *
- * **Sie steht bei ihrem Merkmal und nicht bei den geteilten Bausteinen**
- * (T-256): Ihre drei Adressen sind die drei Ansichten von `features/export`,
- * und alle drei Aufrufstellen liegen dort. Ein Baustein, den genau ein Merkmal
- * braucht, bleibt bei diesem Merkmal.
+/** Die Bereiche des Exports haben eigene Adressen und Browserhistorie.
+ * Export enthält Buchungen, Bearbeitung und Dateivorschau.
+ * Vorlagen und Protokoll ergänzen Konfiguration und Verlauf.
  */
 export function ExportTabs({
   active,
 }: {
-  readonly active: "export" | "templates" | "exportAudit";
+  readonly active: "export" | "bookings" | "templates" | "exportAudit";
 }) {
   /*
     Kein `hint` und kein `title` (T-181, ST-02). Die drei Zusätze erklärten

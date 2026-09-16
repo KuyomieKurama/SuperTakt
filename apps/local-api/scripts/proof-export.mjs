@@ -87,9 +87,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Aufbau
-// ---------------------------------------------------------------------------
 
 const workDir = await mkdtemp(join(tmpdir(), 'takt-proof-export-'));
 const exportDir = join(workDir, 'exporte');
@@ -180,9 +178,7 @@ async function clearExportDir() {
 }
 
 try {
-  // -------------------------------------------------------------------------
   section('1  Der gute Fall — Datei geschrieben und alle Buchungen markiert');
-  // -------------------------------------------------------------------------
   {
     const { database, context, entries, todoId } = await freshContext();
 
@@ -254,9 +250,7 @@ try {
     await clearExportDir();
   }
 
-  // -------------------------------------------------------------------------
   section('2  Nur offene Buchungen fließen in eine Tagesgruppe (R-10)');
-  // -------------------------------------------------------------------------
   {
     const { database, context, entries } = await freshContext();
 
@@ -299,9 +293,7 @@ try {
     await clearExportDir();
   }
 
-  // -------------------------------------------------------------------------
   section('3  Kein Lauf ohne Zeilen — keine leere Datei');
-  // -------------------------------------------------------------------------
   {
     const { database, context } = await freshContext();
     await runExport(context, { templateId: null, timeEntryIds: [] });
@@ -319,9 +311,7 @@ try {
     await clearExportDir();
   }
 
-  // -------------------------------------------------------------------------
   section('4  ABBRUCH nach der Datei, vor dem Markieren — der teure Fall');
-  // -------------------------------------------------------------------------
   {
     const { database, context } = await freshContext({
       afterFileWritten: () => {
@@ -356,9 +346,7 @@ try {
     database.close();
   }
 
-  // -------------------------------------------------------------------------
   section('5  ABBRUCH nach dem Markieren, vor dem Festschreiben');
-  // -------------------------------------------------------------------------
   {
     const { database, context } = await freshContext({
       beforeCommit: () => {
@@ -391,9 +379,7 @@ try {
     database.close();
   }
 
-  // -------------------------------------------------------------------------
   section('6  Nach einem Abbruch ist der Bestand vollständig benutzbar');
-  // -------------------------------------------------------------------------
   {
     const faults = { afterFileWritten: () => { throw new Error('Abbruch'); } };
     const { database, context } = await freshContext(faults);
@@ -423,9 +409,7 @@ try {
     await clearExportDir();
   }
 
-  // -------------------------------------------------------------------------
   section('7  E-034 — eine Gruppe ohne Leistungstext hält den Lauf nicht auf');
-  // -------------------------------------------------------------------------
   {
     const { database, context, todoId } = await freshContext();
 
@@ -464,9 +448,7 @@ try {
     await clearExportDir();
   }
 
-  // -------------------------------------------------------------------------
   section('8  Migration vorwärts und rückwärts');
-  // -------------------------------------------------------------------------
   {
     const database = openDatabase({ location: join(workDir, 'migration.db'), now: () => clock.now() });
 
@@ -507,9 +489,7 @@ try {
     database.close();
   }
 
-  // -------------------------------------------------------------------------
   section('9  Der Exportordner ist Benutzereingabe (E-011, R-11)');
-  // -------------------------------------------------------------------------
   {
     const { database, context } = await freshContext();
 
@@ -533,9 +513,7 @@ try {
     database.close();
   }
 
-  // -------------------------------------------------------------------------
   section('10  Was an einem Ort belegbar ist, und was nicht (T-039, B-5.2)');
-  // -------------------------------------------------------------------------
   {
     const port = createFilePort();
     const insight = createDirectoryInsightPort();
@@ -622,9 +600,7 @@ try {
       `${elapsed} ms`,
     );
   }
-  // -------------------------------------------------------------------------
   section('11  Zurücksetzen und Ausbuchen: beides oder keines (R-10, T-041)');
-  // -------------------------------------------------------------------------
   /*
    * Der Befund, den `proof:openapi` in T-041 gefunden hat, und zwar über den
    * einzigen Weg, auf dem er sichtbar wird: „kein Aufruf des Durchlaufs endet
@@ -752,9 +728,7 @@ try {
     );
     database.close();
   }
-  // -------------------------------------------------------------------------
   section('12  Migration 0007 — die Reihenfolge des Protokolls kennt die Datenbank (R-10)');
-  // -------------------------------------------------------------------------
   /*
    * Abschnitt 11 misst die **Wirkung**: „nicht abrechnen" schlägt nicht mehr
    * fehl. Er wäre aber auch grün, wenn allein der Zähler in `ids.ts` trüge und
@@ -867,9 +841,7 @@ try {
     database.close();
   }
 
-  // -------------------------------------------------------------------------
   section('13  Sicherungspunkte — die halbe Änderung bleibt nicht stehen (T-047)');
-  // -------------------------------------------------------------------------
   /*
    * Derselbe Bau wie der Wettlauf aus T-041, nur an anderen Tischen.
    *

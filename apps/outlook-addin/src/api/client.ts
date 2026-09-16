@@ -1,3 +1,4 @@
+import type { MailMetadata } from '@takt/domain';
 /**
  * Takt — der Zugang zum lokalen Dienst (A-10.3, E-009, R-09, B-2.4).
  *
@@ -56,6 +57,11 @@ export interface ApiClientOptions {
 }
 
 export interface CreateTodoRequest {
+  readonly requestId?: string;
+  readonly mail?: MailMetadata;
+  readonly mode?: 'auto' | 'new';
+  readonly dueTime?: string | null;
+  readonly estimateMinutes?: number | null;
   readonly title: string;
   readonly callNumber: string | null;
   readonly statusId: string | null;
@@ -65,22 +71,7 @@ export interface CreateTodoRequest {
   readonly note: string;
   /** `null` heißt „ohne Frist". */
   readonly dueDate: string | null;
-  /**
-   * Die E-Mail und ihre Dateien, als **Teil des Anlegens** (A-19.22 bis
-   * A-19.33 in der Fassung von E-108, A-A-82).
-   *
-   * ---------------------------------------------------------------------------
-   * Warum im Rumpf des Anlegens und nicht in einer zweiten Anfrage
-   * ---------------------------------------------------------------------------
-   *
-   * Weil eine zweite Anfrage eine Todo-Kennung tragen müßte. Es gibt keinen
-   * Aufruf, der eine Todo-Kennung entgegennimmt und einen Anhang erzeugt — weder
-   * hier noch im Dienst, und das steht dort im **Typ** der Fähigkeit und nicht
-   * in einem Satz daneben.
-   *
-   * `null` heißt „ohne Anhänge" und ist der Zustand, solange die Übernahme
-   * nicht angeboten wird.
-   */
+
   readonly attachments: EmailAttachmentEnvelope | null;
 }
 
@@ -120,26 +111,22 @@ export interface BookRequest {
   readonly note: string;
 }
 
+export interface AppendMailRequest {
+  readonly todoId: string;
+  readonly requestId: string;
+  readonly mail: MailMetadata;
+  readonly callNumber: string;
+  readonly note: string;
+  readonly attachments: EmailAttachmentEnvelope | null;
+}
+
 export interface ApiClient {
+  appendMail(input: AppendMailRequest): Promise<ApiResult<CreateTodoResponseDto>>;
   checkConnection(): Promise<ApiResult<true>>;
   loadContext(): Promise<ApiResult<AddinContextDto>>;
   findMatches(callNumber: string): Promise<ApiResult<MatchResponseDto>>;
   createTodo(input: CreateTodoRequest): Promise<ApiResult<CreateTodoResponseDto>>;
-  /**
-   * Bucht Zeit auf ein vorhandenes Todo.
-   *
-   * **Die einzige schreibende Handlung an einem fremden Todo, die dieser
-   * Zugang kennt.** An einem **vorhandenen** Todo legt er keinen Anhang an:
-   * Es gibt dafür weder eine Methode hier noch eine Route unter `/addin`.
-   *
-   * **Das gilt unverändert weiter, obwohl seit T-304 über
-   * {@link ApiClient.createTodo} Anhänge entstehen.** Sie entstehen
-   * ausschließlich **beim Anlegen** und fahren deshalb im Rumpf jenes Aufrufs
-   * mit; A-10.9 ändert sich nicht, im Duplikatfall wird weiterhin nur
-   * hingewiesen. Diese Methode hier ist die einzige mit einer Todo-Kennung in
-   * der Signatur — und sie nimmt keine Datei entgegen. Beides zusammen mit
-   * einer Kennung wäre die Tür, die A-A-82 zuhält.
-   */
+
   book(input: BookRequest): Promise<ApiResult<BookResponseDto>>;
 }
 
@@ -214,12 +201,15 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
     };
     if (body !== undefined) init.body = JSON.stringify(body);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+    init.signal = controller.signal;
     let response: Response;
     try {
       response = await options.fetch(url.toString(), init);
     } catch {
-      return { ok: false, kind: 'unreachable', code: null, message: MESSAGES.unreachable };
-    }
+      return { ok: false, kind: 'unreachable', code: null, message: method === 'POST' ? `${MESSAGES.unreachable} Die Anfrage kann bereits gespeichert sein; bitte mit denselben Eingaben erneut versuchen.` : MESSAGES.unreachable };
+    } finally { clearTimeout(timeout); }
 
     if (!response.ok) {
       const kind = kindForStatus(response.status);
@@ -261,6 +251,12 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
     },
     createTodo(input: CreateTodoRequest) {
       return call<CreateTodoResponseDto>('POST', '/api/v1/addin/todos', undefined, input);
+    },
+    appendMail(input: AppendMailRequest) {
+      return call<CreateTodoResponseDto>('POST', `/api/v1/addin/todos/${encodeURIComponent(input.todoId)}/mails`, undefined, {
+        requestId: input.requestId, callNumber: input.callNumber, mail: input.mail,
+        note: input.note, attachments: input.attachments,
+      });
     },
     book(input: BookRequest) {
       return call<BookResponseDto>(

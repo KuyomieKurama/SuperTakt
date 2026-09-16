@@ -5,7 +5,7 @@ import { text, type SqlConnection } from './database.ts';
 export function createIdleTimerPort(conn: SqlConnection): IdleTimerPort {
   return {
     async pending(): Promise<IdleSession | null> {
-      const row = conn.prepare('SELECT session_id, todo_id, started_at, returned_at, note FROM timer_idle WHERE id = 1').get();
+      const row = conn.prepare('SELECT session_id, todo_id, started_at, returned_at, note, previous_periods FROM timer_idle WHERE id = 1').get();
       if (row === undefined) return null;
       return {
         id: text(row, 'session_id') as TimeEntryId,
@@ -13,11 +13,16 @@ export function createIdleTimerPort(conn: SqlConnection): IdleTimerPort {
         startedAt: text(row, 'started_at') as Timestamp,
         returnedAt: row['returned_at'] === null ? null : text(row, 'returned_at') as Timestamp,
         note: text(row, 'note'),
+        previousPeriods: JSON.parse(text(row, 'previous_periods')) as IdleSession[],
       };
     },
     async begin(session) {
       conn.prepare('INSERT INTO timer_idle (id, session_id, todo_id, started_at, returned_at, note) VALUES (1, ?, ?, ?, ?, ?)')
         .run(session.id, session.todoId, session.startedAt, session.returnedAt, session.note);
+    },
+    async replace(session) {
+      conn.prepare('UPDATE timer_idle SET session_id = ?, todo_id = ?, started_at = ?, returned_at = ?, note = ?, previous_periods = ? WHERE id = 1')
+        .run(session.id, session.todoId, session.startedAt, session.returnedAt, session.note, JSON.stringify(session.previousPeriods ?? []));
     },
     async returned(id, at) {
       conn.prepare('UPDATE timer_idle SET returned_at = ? WHERE session_id = ? AND returned_at IS NULL').run(at, id);

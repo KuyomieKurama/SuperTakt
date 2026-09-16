@@ -175,9 +175,7 @@ const DATEIEN = quellbaum('@takt/local-api', 'src', { mindestens: 40, endungen: 
 /** Wie eine Datei in der Ausgabe heißt: immer mit `/`, immer ab `src/`. */
 const name = (pfad) => `src/${relative(WURZEL, pfad).split(sep).join('/')}`;
 
-// ---------------------------------------------------------------------------
 // Die Ausnahmen — der eingehende Adapter, der HTTP kennen **darf**
-// ---------------------------------------------------------------------------
 
 /**
  * Randordner: hier ist HTTP nicht der Verstoß, sondern die Aufgabe.
@@ -283,9 +281,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Die Marken (Reichweite im Kopfabsatz, A-A-55)
-// ---------------------------------------------------------------------------
 
 /** `hono`, `hono/http-exception`, `@hono/node-server` — mit beliebigem Untermodul. */
 const HONO_MODUL = String.raw`@?hono(?:\/[^'"\`]*)?`;
@@ -490,9 +486,7 @@ console.log(
     `dieser Lauf vor T-268 gemessen hat: ${ausserhalbDerAltenMenge.join(', ') || '—'}`,
 );
 
-// ---------------------------------------------------------------------------
 section('1  Kein Anwendungsfall kennt HTTP');
-// ---------------------------------------------------------------------------
 {
   const mitHono = anwendungsfallNamen.flatMap((n) =>
     HONO_BINDUNGEN.filter(({ marke }) => marke.test(inhaltVon(n))).map(({ weg }) => ({ datei: n, weg })),
@@ -548,9 +542,7 @@ section('1  Kein Anwendungsfall kennt HTTP');
   );
 }
 
-// ---------------------------------------------------------------------------
 section('2  Gegenrichtung: die Ausnahme trifft noch etwas (E-103 Punkt 2)');
-// ---------------------------------------------------------------------------
 {
   const ohneHono = alsNamen(routen).filter((n) => !bindetHono(inhaltVon(n)));
   check(
@@ -560,9 +552,7 @@ section('2  Gegenrichtung: die Ausnahme trifft noch etwas (E-103 Punkt 2)');
   );
 }
 
-// ---------------------------------------------------------------------------
 section('3  Keine Route öffnet eine Transaktionsklammer');
-// ---------------------------------------------------------------------------
 {
   const mitKlammer = alsNamen(routen).filter((n) => inhaltVon(n).includes('inTransaction('));
   check('keine Routendatei ruft `inTransaction(`', mitKlammer.length === 0, mitKlammer.join(', '));
@@ -571,9 +561,7 @@ section('3  Keine Route öffnet eine Transaktionsklammer');
   check('keine Routendatei bindet `@takt/storage` ein', mitSpeicherung.length === 0, mitSpeicherung.join(', '));
 }
 
-// ---------------------------------------------------------------------------
 section('4  Jeder Merkmalsordner ist an seinen Dateinamen zu erkennen');
-// ---------------------------------------------------------------------------
 
 /**
  * Der Prüfsatz als Funktion — damit die Gegenprobe in Abschnitt 6 **ihn** mißt
@@ -600,9 +588,7 @@ const merkmale = readdirSync(join(WURZEL, 'features'), { withFileTypes: true })
   }
 }
 
-// ---------------------------------------------------------------------------
 section('5  Die Ausnahmeliste gegen die Wirklichkeit (E-103, A-A-75)');
-// ---------------------------------------------------------------------------
 
 /** Welche Einträge der Ausnahmelisten treffen heute **nichts**? */
 function toteAusnahmen(randordner, einstiegsdateien, namen) {
@@ -640,9 +626,7 @@ function toteAusnahmen(randordner, einstiegsdateien, namen) {
   check('keine Einstiegsdatei ist zugleich Rand oder Route', doppelt.length === 0, doppelt.join(', '));
 }
 
-// ---------------------------------------------------------------------------
 section('6  Gegenproben — jede eingesetzte Verletzung muß auffallen');
-// ---------------------------------------------------------------------------
 {
   /**
    * Eine Fassung des Baums mit **einer** veränderten Datei. Die Gegenprobe
@@ -797,9 +781,7 @@ section('6  Gegenproben — jede eingesetzte Verletzung muß auffallen');
   );
 }
 
-// ---------------------------------------------------------------------------
 section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Frage');
-// ---------------------------------------------------------------------------
 /*
  * ===========================================================================
  * Warum dieser Abschnitt hier steht und nicht in einem eigenen Lauf
@@ -974,9 +956,7 @@ section('7  Jede Stelle, die einen offenen Eintrag schließt, stellt dieselbe Fr
   );
 }
 
-// ---------------------------------------------------------------------------
 section('8  Gegenproben zu Abschnitt 7 — jede eingesetzte Tür muß auffallen');
-// ---------------------------------------------------------------------------
 {
   const normal = (z) => z.trim().replace(/\s+/gu, ' ');
   const SCHLIESSENDE_AUFRUFE = /\.timer\.(?:stop|separateIdle|start)\s*\(/;

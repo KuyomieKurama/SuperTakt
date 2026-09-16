@@ -120,9 +120,7 @@ const performed = [];
 const note = (text) => performed.push(text);
 const fail = (text) => violations.push(text);
 
-// ---------------------------------------------------------------------------
 // Werkzeug
-// ---------------------------------------------------------------------------
 
 async function exists(target) {
   try {
@@ -175,9 +173,7 @@ function specifiers(source) {
  * statt über eine eigene Zeile mit `path.sep`. */
 const relativeToRepo = (file) => displayPath(repoRoot, file);
 
-// ---------------------------------------------------------------------------
 // Schicht 2 — die Einstiegspunkte von @takt/domain bleiben eng
-// ---------------------------------------------------------------------------
 
 const allowedEntryPoints = new Set(['.', './export', './package.json']);
 
@@ -211,9 +207,7 @@ async function checkDomainEntryPoints() {
   note(`Einstiegspunkte von @takt/domain geprüft: ${entries.join(', ')}`);
 }
 
-// ---------------------------------------------------------------------------
 // Schicht 1 — die Exportfläche selbst kennt den Vermerk nicht
-// ---------------------------------------------------------------------------
 
 // Die Endungen sind die der Dateien, die wirklich dort liegen (T-029). Die
 // Liste ist absichtlich abschließend und nennt **eine** Schreibweise: Stünden
@@ -307,9 +301,7 @@ async function checkExportSurface() {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Schicht 4 — packages/export sieht nur @takt/domain/export
-// ---------------------------------------------------------------------------
 
 const forbiddenForExportPackage = [
   { prefix: '@takt/storage', reason: 'Der Exportmotor darf die Speicherung nicht kennen; er bekommt fertige ExportGroup-Werte übergeben.' },
@@ -405,9 +397,7 @@ async function checkExportPackage() {
   note(`packages/export: ${sources.length} Quelldatei(en) auf Importe geprüft.`);
 }
 
-// ---------------------------------------------------------------------------
 // Zusatz — niemand greift an der exports-Tabelle vorbei in die Domäne
-// ---------------------------------------------------------------------------
 
 /**
  * Was beim Suchen nach Paketen nicht betreten wird.
@@ -506,8 +496,6 @@ async function checkDeepImports() {
 
   note(`${checked} Quelldatei(en) außerhalb der Domäne auf Tiefenzugriffe geprüft.`);
 }
-
-// ---------------------------------------------------------------------------
 
 await checkDomainEntryPoints();
 await checkExportSurface();

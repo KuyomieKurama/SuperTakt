@@ -37,6 +37,7 @@ import { KanbanCard, KanbanColumn, type KanbanCardData } from "./Kanban";
  */
 
 interface BoardColumnProps {
+  readonly priorities?: readonly { id: string; name: string; weight: number }[];
   readonly view: BoardColumnView;
   /**
    * Spaltenname je Kennung — **fremder Text** (O-AT, T-133). Bis dahin
@@ -69,6 +70,7 @@ interface BoardColumnProps {
 }
 
 export function BoardColumn({
+  priorities = [],
   view,
   columnName,
   appearances,
@@ -129,7 +131,7 @@ export function BoardColumn({
           })}
     >
       {view.todos.length === 0 ? (
-        <BoardColumnEmpty reach={reach} onEditRule={onEditRule} onOpenTags={() => navigate("tags")} />
+        <BoardColumnEmpty reach={reach} onEditRule={onEditRule} onOpenTags={() => navigate("settings", undefined, { bereich: "tags" })} />
       ) : (
         view.todos.map((todo) => {
           const others = (appearances.get(todo.id) ?? [])
@@ -148,6 +150,7 @@ export function BoardColumn({
                 isTimerRunning(todo),
                 isReactivated(todo),
                 others,
+                priorities.find(priority => priority.id === todo.priorityId)?.name,
               )}
               entries={cardMenu(todo, others.length > 0, highlighted === todo.id, {
                 open: () => onOpenTodo(todo),
@@ -168,9 +171,7 @@ export function BoardColumn({
   );
 }
 
-/* ==================================================================== */
 /* Der Leerzustand einer einzelnen Spalte                               */
-/* ==================================================================== */
 
 /**
  * Drei Leerzustände, nicht einer und nicht zwei (T-079, E-057, T-083).
@@ -341,9 +342,12 @@ function toCard(
   timerRunning: boolean,
   reactivated: boolean,
   otherColumns: readonly ForeignText[],
+  priorityName?: string,
 ): KanbanCardData {
   return {
     id: todo.id,
+    tagCount: todo.tagIds.length,
+    ...(priorityName ? { priorityName } : {}),
     title: todo.title,
     callNumber: todo.callNumber,
     tags: todo.tagIds

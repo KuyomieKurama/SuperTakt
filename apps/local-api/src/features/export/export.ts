@@ -291,14 +291,12 @@ export async function runExport(
   // Der Haken kommt aus dem Zusammenbau, nicht aus der Anfrage.
   const faults = input.faults ?? context.exportFaults;
 
-  // ---------------------------------------------------------------------
   // 1. Der Ordner. Vor der Transaktion, weil ein fehlender Ordner kein Grund
   //    ist, eine Schreibsperre zu nehmen — und weil die Meldung dieselbe
   //    bleibt, ob gerade jemand anders schreibt oder nicht.
   //
   //    Geprüft wird bei **jedem** Lauf, nicht nur beim Einstellen: Ein
   //    Netzlaufwerk kann seit dem letzten Mal verschwunden sein (R-11).
-  // ---------------------------------------------------------------------
   const settings = await context.transactions.inTransaction((unit) => unit.settings.load());
   const directory = await context.files.checkExportDirectory(settings.exportDirectory);
 
@@ -316,12 +314,10 @@ export async function runExport(
 
   try {
     const result = await context.transactions.inTransaction(async (unit) => {
-      // -----------------------------------------------------------------
       // 3. Lesen und planen. Beides vollständig, **bevor** irgendetwas
       //    geschrieben wird — genau das macht A-8.8 durchsetzbar: Ein
       //    Fehlschlag beim Rendern kann keine halbe Datei hinterlassen, weil
       //    es zu diesem Zeitpunkt noch nichts zurückzunehmen gibt.
-      // -----------------------------------------------------------------
       const template = await resolveTemplate(unit, input.templateId ?? settings.activeExportTemplateId);
       if (!template.ok) throw new AbortExport(template.error);
 
@@ -367,10 +363,8 @@ export async function runExport(
         );
       }
 
-      // -----------------------------------------------------------------
       // 4. Die Datei. Erst Nachbardatei, dann umbenennen — das Umbenennen
       //    innerhalb desselben Dateisystems ist unteilbar (siehe FilePort).
-      // -----------------------------------------------------------------
       const fileName = exportFileName(timestamp);
       const written = await context.files.writeFile(
         directory.resolvedPath,
@@ -382,11 +376,9 @@ export async function runExport(
       writtenPath = written.value.path;
       faults?.afterFileWritten?.();
 
-      // -----------------------------------------------------------------
       // 5. Festschreiben in derselben Transaktion. `recordRun` setzt den
       //    Status **und** schreibt je Buchung eine Protokollzeile; es gibt
       //    keinen Weg, das eine ohne das andere zu tun (R-10).
-      // -----------------------------------------------------------------
       const recorded = await unit.export.recordRun({
         templateId: template.value.id,
         // Abzug der Vorlage. Ohne ihn schriebe eine spätere Änderung an der
@@ -413,12 +405,10 @@ export async function runExport(
 
     return ok(result);
   } catch (error) {
-    // -------------------------------------------------------------------
     // 6. Aufräumen. Die Transaktion ist an dieser Stelle **bereits**
     //    zurückgenommen — das erledigt die Klammer. Was bleibt, ist die
     //    Datei, und die muss fort: Sonst läge im Ordner eine Abrechnung, die
     //    es nach der Datenbank nie gegeben hat.
-    // -------------------------------------------------------------------
     if (writtenPath !== null) {
       await removeFile(writtenPath);
     }

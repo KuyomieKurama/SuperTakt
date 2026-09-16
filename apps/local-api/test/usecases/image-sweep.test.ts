@@ -1,3 +1,4 @@
+import { recordLogs } from '../support/record-logs.ts';
 /**
  * Takt — T-317 (unit-tester): der Aufräumlauf für verwaiste Bildkopien, nach
  * der Vereinheitlichung in T-315 (A-A-18, A-A-36, A-A-98, T-313, T-314,
@@ -43,18 +44,11 @@ import {
   type OrphanedImageSweep,
 } from '../../src/features/todos/image-sweep.ts';
 import type { OrphanSweepReport } from '../../src/features/todos/orphan-sweep.ts';
-import { createLogger, UNCLASSIFIED_REASON, type Logger } from '../../src/logger.ts';
+import { UNCLASSIFIED_REASON } from '../../src/logger.ts';
 
-interface Recorded {
-  readonly logger: Logger;
-  readonly lines: { level: string; message: string; reason?: string }[];
-}
 
-function recording(): Recorded {
-  const lines: { level: string; message: string; reason?: string }[] = [];
-  const logger = createLogger((line) => lines.push(JSON.parse(line) as never));
-  return { logger, lines };
-}
+
+
 
 function darfNichtAufgerufenWerden(name: string): never {
   throw new Error(`darf in diesem Fall nicht aufgerufen werden: ${name}`);
@@ -118,7 +112,7 @@ describe('sweepOrphanedImages — Riegel 0 (A-A-36): die Artmenge des Bestands',
         return ['link', 'file']; // "image" fehlt
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -147,7 +141,7 @@ describe('sweepOrphanedImages — Riegel 0 (A-A-36): die Artmenge des Bestands',
         return [];
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -167,7 +161,7 @@ describe('sweepOrphanedImages — Riegel 1: eine leere Verzeichnisliste beendet 
         return [];
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -208,7 +202,7 @@ describe('sweepOrphanedImages — imageNameOf filtert VOR jeder Frage an den Bes
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -243,7 +237,7 @@ describe('sweepOrphanedImages — imageNameOf filtert VOR jeder Frage an den Bes
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -281,7 +275,7 @@ describe('sweepOrphanedImages — ohne Waise wird NICHT gefragt (T-313-2: eine u
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -324,7 +318,7 @@ describe('sweepOrphanedImages — der Widerspruchsriegel: ZWEI Achsen, gestellt 
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -370,7 +364,7 @@ describe('sweepOrphanedImages — der Widerspruchsriegel: ZWEI Achsen, gestellt 
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -416,7 +410,7 @@ describe('sweepOrphanedImages — der Widerspruchsriegel: ZWEI Achsen, gestellt 
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -461,7 +455,7 @@ describe('sweepOrphanedImages — der Widerspruchsriegel: ZWEI Achsen, gestellt 
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -521,7 +515,7 @@ describe('sweepOrphanedImages — die Verschärfung "claimed > owned" (T-315): a
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -571,7 +565,7 @@ describe('sweepOrphanedImages — no_folder: kein Ordner bestimmbar, sobald eine
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -626,7 +620,7 @@ describe('sweepOrphanedImages — Reihenfolge: erst das Verzeichnis, dann der Be
         return 'removed';
       },
     };
-    const { logger } = recording();
+    const { logger } = recordLogs();
 
     await sweepOrphanedImages(ports, logger);
 
@@ -672,7 +666,7 @@ describe('sweepOrphanedImages — Reihenfolge: erst das Verzeichnis, dann der Be
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -711,7 +705,7 @@ describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt de
         return name === waiseEins ? 'failed' : 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -751,7 +745,7 @@ describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt de
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -806,7 +800,7 @@ describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt de
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -828,7 +822,6 @@ describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt de
   });
 });
 
-// ---------------------------------------------------------------------------
 // Die neun Fälle aus T-315-domain-dev.md Abschnitt 4 — mit echten Adaptern auf
 // einer frischen SQLite-Datenbank gemessen. Hier als Attrappen nachgebaut:
 // Was `attachmentsNamingFiles`/`attachmentNamesUnder` bei abweichender
@@ -838,7 +831,6 @@ describe('sweepOrphanedImages — ein Abbruch mitten im Entfernen verschluckt de
 // packages/domain/test/attachment.test.ts nachgewiesen (attachmentTargetNamesFile
 // kennt weder "kind" noch "origin" und vergleicht ASCII-gefaltet). Hier wird
 // geprüft, dass sweepOrphanedImages die jeweilige Antwort korrekt auswertet.
-// ---------------------------------------------------------------------------
 describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Abschnitt 4', () => {
   it('T-313-1: zwei Kopien, eine Zeile zeichengleich, eine mit abweichender Groß-/Kleinschreibung — BEIDE bleiben da', async () => {
     const einsExakt = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.PNG';
@@ -871,7 +863,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -910,7 +902,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -956,7 +948,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -996,7 +988,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1038,7 +1030,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1085,7 +1077,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1128,7 +1120,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1167,7 +1159,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return darfNichtAufgerufenWerden('removeImage');
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1217,7 +1209,7 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
         return 'removed';
       },
     };
-    const { logger, lines } = recording();
+    const { logger, lines } = recordLogs();
 
     const report = await sweepOrphanedImages(ports, logger);
 
@@ -1231,13 +1223,11 @@ describe('sweepOrphanedImages — die neun Meßfälle aus T-315-domain-dev.md Ab
   });
 });
 
-// ---------------------------------------------------------------------------
 // KINDS_HOLDING_IMAGE_FILES — die Auswertung der Tafel KIND_OWNS_IMAGE_FILE
 // (Kopfkommentar von image-sweep.ts). Eine Zusicherung, die genau EINE Art
 // erwartet: Wer eine vierte Art mit "true" einträgt, muß diesen Prüffall
 // ändern, bevor er ihn grün bekommt -- und wird dabei an imageCount()
 // erinnert (die enge Zählung müßte diese Art dann mitzählen).
-// ---------------------------------------------------------------------------
 describe('KINDS_HOLDING_IMAGE_FILES — die Auswertung der Tafel, die eine vierte Art bemerken muß', () => {
   it('heute genau eine Art: "image"', () => {
     expect(KINDS_HOLDING_IMAGE_FILES).toEqual(['image']);

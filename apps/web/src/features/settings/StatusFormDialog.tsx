@@ -9,9 +9,7 @@ import { useToasts } from "../../app/ToastContext";
 import { useMutation } from "../../app/useAsync";
 import { quotedName } from "../../lib/foreign";
 import { createTodoStatus, updateTodoStatus } from "./api";
-/* ==================================================================== */
 /* Anlegen und Umbenennen                                               */
-/* ==================================================================== */
 
 export interface StatusFormDialogProps {
   readonly open: boolean;

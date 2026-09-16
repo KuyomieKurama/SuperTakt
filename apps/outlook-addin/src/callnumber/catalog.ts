@@ -62,11 +62,5 @@ export const PATTERN_CATALOG: readonly PatternSuggestion[] = Object.freeze([
   },
 ]);
 
-/**
- * Auslieferungswert (S-13, „auf Auslieferungswert zurücksetzen").
- *
- * Der erste Eintrag des Vorrats. Bewusst **kein** allgemeineres Muster: Ein
- * Auslieferungswert, der auf mehr zutrifft als nötig, ist die Voreinstellung,
- * über die R-15 stolpert.
- */
-export const DEFAULT_PATTERN = PATTERN_CATALOG[0]?.source ?? '\\b(TCK-\\d{6})\\b';
+/** Empty selects the fixed baseline. Existing saved patterns remain explicit overrides. */
+export const DEFAULT_PATTERN = '';

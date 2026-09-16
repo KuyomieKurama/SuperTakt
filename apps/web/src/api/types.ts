@@ -17,8 +17,7 @@
  * die Oberfläche erzeugt keine davon selbst.
  */
 
-import type { PoolMovement, DesignTheme, Density } from "@takt/domain";
-import type { ExportStatus } from "../shared/ui/ExportStatus";
+import type { PoolMovement, DesignTheme, Density, ExportStatus } from "@takt/domain";
 import type {
   PoolCompletionFilter,
   PoolExportFilter,
@@ -58,10 +57,10 @@ export type Id = string;
 export type Timestamp = string;
 /** Kalendertag ohne Zeitzone: `2026-03-02`. */
 export type CalendarDay = string;
+/** Local clock time without timezone: HH:mm. */
+export type LocalTime = string;
 
-/* ==================================================================== */
 /* Herkunft als Typ (E-063, T-129)                                      */
-/* ==================================================================== */
 
 /**
  * **Warum hier keine Zeichenkette mehr bloß `string` heißt.**
@@ -210,9 +209,7 @@ export type SecretText = string;
  */
 export type EncodedBytes = string;
 
-/* ==================================================================== */
 /* Umschlag und Blätterung                                              */
-/* ==================================================================== */
 
 /** Jede erfolgreiche Antwort trägt genau ein Feld: `data`. */
 export interface Envelope<T> {
@@ -229,9 +226,7 @@ export interface Page<T> {
   readonly total: number;
 }
 
-/* ==================================================================== */
 /* Fehler                                                               */
-/* ==================================================================== */
 
 /**
  * Ein einzelner Befund in `error.details`.
@@ -271,9 +266,7 @@ export interface ErrorEnvelope {
   readonly running?: RunningTimeEntry;
 }
 
-/* ==================================================================== */
 /* Todos                                                                */
-/* ==================================================================== */
 
 /**
  * Ein Todo, wie der Dienst es liefert.
@@ -314,14 +307,16 @@ export interface Todo {
    * nicht im Export (A-19.17). Sortieren und Filtern der Liste sind Anzeige und
    * etwas anderes als ein Regelterm (E-074 Punkt 1).
    */
+  readonly dueTime?: LocalTime | null;
+  readonly estimateMinutes?: number | null;
+  readonly noExport?: boolean;
+  readonly priorityId?: string | null;
   readonly dueDate: CalendarDay | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;
 }
 
-/* ==================================================================== */
 /* Status eines Todos (A-5.4, E-023, E-054)                              */
-/* ==================================================================== */
 
 /**
  * Ein Statuswert.
@@ -345,9 +340,7 @@ export interface TodoStatus {
   readonly updatedAt: Timestamp;
 }
 
-/* ==================================================================== */
 /* Tags, Ordner, Pools                                                  */
-/* ==================================================================== */
 
 export interface Tag {
   readonly id: Id;
@@ -584,9 +577,7 @@ export type PoolPatch = Partial<PoolWrite>;
  */
 export type PoolSurfaceQuery = "pool" | "board" | "all";
 
-/* ==================================================================== */
 /* Zeitbuchungen und Timer                                              */
-/* ==================================================================== */
 
 export interface TimeEntry {
   readonly id: Id;
@@ -624,11 +615,10 @@ export interface TimeEntryFilter {
   readonly toDay?: CalendarDay;
   /** R-10 — schon einmal exportierte, inzwischen offene Buchungen. */
   readonly onlyPreviouslyExported?: boolean;
+  readonly includeNoExport?: boolean;
 }
 
-/* ==================================================================== */
 /* Export                                                               */
-/* ==================================================================== */
 
 export interface ExportTemplate {
   readonly id: Id;
@@ -710,9 +700,7 @@ export interface ExportPreview {
   readonly templateName: ForeignText | null;
 }
 
-/* ==================================================================== */
 /* Einstellungen                                                        */
-/* ==================================================================== */
 
 export interface AppSettings {
   /** `null` heißt: noch nicht gewählt, Export nicht möglich (E-011). */
@@ -877,12 +865,16 @@ export interface SettingsView {
   readonly databasePath: FileSystemPath | null;
 }
 
-/* ==================================================================== */
 /* Suche (E-038)                                                        */
-/* ==================================================================== */
 
 export interface SearchResult {
   readonly todos: Page<Todo>;
   /** Getroffen über den Leistungstext. Der Vermerk ist kein Suchfeld (A-7.1). */
   readonly timeEntries: readonly TimeEntry[];
+}
+
+/** Gemeinsame Cursor-Paginierung der Listenrouten. */
+export interface Pagination {
+  readonly cursor?: PageCursor;
+  readonly limit?: number;
 }

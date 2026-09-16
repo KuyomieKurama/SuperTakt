@@ -54,6 +54,7 @@ import {
   outlookBridgeBillingNotes,
   readOutlookBridge,
   trackedMilliseconds,
+  ownTaskTimeByDay,
   wasTransferred,
 } from './super-productivity-time.ts';
 
@@ -329,24 +330,12 @@ function superProductivityData(value: unknown): UseCaseResult<ExternalData> {
     const id = String(item['id'] ?? `task-${String(index + 1)}`);
     const project = projectNames.get(String(item['projectId'])) ?? 'Eingang';
     const tagIds = Array.isArray(item['tagIds']) ? item['tagIds'].map(String) : [];
-    const timeByDay: Record<string, number> = {};
     const rawTime = trackedMilliseconds(item['timeSpentOnDay']);
     const children = Array.isArray(item['subTaskIds']) ? [...new Set(item['subTaskIds'].map(String))] : [];
-    const childTime: Record<string, number> = {};
-    for (const childId of children) {
-      if (childId === id) continue;
-      for (const [day, ms] of Object.entries(trackedMilliseconds(rawById.get(childId)?.['timeSpentOnDay']))) {
-        childTime[day] = (childTime[day] ?? 0) + ms;
-      }
-    }
-    for (const [day, ms] of Object.entries(rawTime)) {
-      // SP führt die Tageszeiten der Unteraufgaben auch an der Elternaufgabe.
-      // Nur der nicht bereits durch vorhandene Kinder gedeckte Rest bleibt hier.
-      const ownMs = Math.max(0, ms - (childTime[day] ?? 0));
-      if (ownMs < ms) parentDays += 1;
-      if (ownMs >= 1000) timeByDay[day] = Math.floor(ownMs / 1000);
-      else if (ownMs > 0) shortDays += 1;
-    }
+    const ownTime = ownTaskTimeByDay(id, rawTime, children, rawById);
+    const timeByDay = ownTime.secondsByDay;
+    parentDays += ownTime.parentDays;
+    shortDays += ownTime.shortDays;
     const billingNotes = outlookBridgeBillingNotes(text(item['notes']) ?? '', Object.keys(timeByDay));
     unassignedNotes += billingNotes.unassigned;
     inferredNotes += billingNotes.inferred;

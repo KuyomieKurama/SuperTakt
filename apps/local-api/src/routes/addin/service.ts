@@ -71,9 +71,7 @@ import type {
 
 import type { AddinDeps } from './ports.ts';
 
-// ---------------------------------------------------------------------------
 // A-10.4 — alles, was der Aufgabenbereich beim Öffnen braucht, in einem Zug
-// ---------------------------------------------------------------------------
 
 /**
  * Der Startzustand des Aufgabenbereichs.
@@ -89,6 +87,7 @@ import type { AddinDeps } from './ports.ts';
  * hat.
  */
 export interface AddinContext {
+  readonly mailAssignment: { readonly accepted: boolean };
   readonly tagTree: TagTree;
   readonly pools: readonly Pool[];
   readonly statuses: readonly TodoStatus[];
@@ -150,6 +149,7 @@ export const loadContext = (deps: AddinDeps): Promise<AddinContext> =>
        * ausgeliefert. Was hier nachgesehen werden könnte, gäbe es nicht.
        */
       emailAttachments: { accepted: true },
+      mailAssignment: { accepted: deps.assignMail !== undefined },
     };
   });
 
@@ -157,9 +157,7 @@ export const loadContext = (deps: AddinDeps): Promise<AddinContext> =>
 const orderedDefaultTagIds = (defaults: readonly DefaultTag[]): readonly TagId[] =>
   [...defaults].sort((left, right) => left.position - right.position).map((entry) => entry.tagId);
 
-// ---------------------------------------------------------------------------
 // A-10.9 / R-15 — das Duplikatangebot
-// ---------------------------------------------------------------------------
 
 /**
  * Ein gefundenes Todo, so wie es dem Benutzer **vor** der Entscheidung gezeigt
@@ -386,9 +384,7 @@ export const findMatches = async (
   });
 };
 
-// ---------------------------------------------------------------------------
 // A-10.5 / A-9.5 — ein Todo aus der E-Mail anlegen
-// ---------------------------------------------------------------------------
 
 export interface AddinCreateTodoInput {
   readonly title: string;
@@ -424,6 +420,8 @@ export interface AddinCreateTodoInput {
    * haben. `tagNames` darüber ist freiwillig aus dem umgekehrten Grund: Dort
    * ist die Abwesenheit eine leere Liste und keine Aussage.
    */
+  readonly dueTime?: string | null;
+  readonly estimateMinutes?: number | null;
   readonly dueDate: CalendarDay | null;
   /**
    * Die Anhänge aus der geöffneten E-Mail (A-19.22 bis A-19.33, E-108).
@@ -630,7 +628,7 @@ export const createTodo = async (
  * Aufgabenbereich selbst nicht übernehmen konnte, zeigt er selbst, mit seinen
  * eigenen — feineren — Gründen. Siehe {@link AddinCreateTodoInput.attachments}.
  */
-const toEmailIntake = (envelope: AddinEmailAttachments): EmailIntake => {
+export const toEmailIntake = (envelope: AddinEmailAttachments): EmailIntake => {
   let message: IncomingEmailMessage | null = null;
   const files: IncomingEmailFile[] = [];
   const links: IncomingEmailLink[] = [];
@@ -716,6 +714,8 @@ const createTodoOnly = async (
           // schreibt `dueDate ?? null`, und `null` ist hier bereits der Wert
           // und kein fehlendes Feld.
           dueDate: input.dueDate,
+          dueTime: input.dueTime ?? null,
+          estimateMinutes: input.estimateMinutes ?? null,
           now,
         },
         effectiveTagIds,
@@ -746,9 +746,7 @@ const createTodoOnly = async (
   }
 };
 
-// ---------------------------------------------------------------------------
 // A-10.9 — auf ein vorhandenes Todo buchen
-// ---------------------------------------------------------------------------
 
 export interface AddinBookInput {
   readonly todoId: TodoId;

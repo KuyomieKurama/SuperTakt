@@ -1,5 +1,5 @@
-import { listTimeEntries } from "../../api/endpoints";
-import type { ExportPreview, ForeignText, Id, SkippedExportGroup, TimeEntry } from "../../api/types";
+import { listTimeEntries } from "../bookings/api";
+import type { ExportPreview, ForeignText, Id, SkippedExportGroup, TimeEntry, TimeEntryFilter } from "../../api/types";
 
 /**
  * Takt — woraus die Export-Ansicht ihre Tagesgruppen bildet (S-07, E-020,
@@ -41,13 +41,15 @@ export interface GroupInsight {
   readonly blockedReason: string | null;
 }
 
-export async function collectOpenEntries(): Promise<readonly TimeEntry[]> {
+export const collectOpenEntries = (filter: Omit<TimeEntryFilter, "exportStatus" | "includeNoExport"> = {}) => collectExportEntries({ ...filter, exportStatus: "open" });
+
+export async function collectExportEntries(filter: Omit<TimeEntryFilter, "includeNoExport"> = {}): Promise<readonly TimeEntry[]> {
   const out: TimeEntry[] = [];
   let cursor: string | undefined;
   let pages = 0;
   do {
     const page = await listTimeEntries(
-      { exportStatus: "open" },
+      filter,
       cursor === undefined ? { limit: PAGE_SIZE } : { limit: PAGE_SIZE, cursor },
     );
     out.push(...page.items);

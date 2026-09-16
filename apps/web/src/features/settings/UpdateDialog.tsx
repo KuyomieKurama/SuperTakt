@@ -4,60 +4,9 @@ import { DialogSurface } from "../../shared/ui/DialogSurface";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, IconButton } from "../../shared/ui/Primitives";
 
-/**
- * Takt — der Hinweis auf eine neuere Fassung (A-18.6 bis A-18.9).
- *
- * ===========================================================================
- * Die eine Eigenschaft, die diesen Dialog von jedem anderen unterscheidet
- * ===========================================================================
- *
- * **Es gibt keine Vorauswahl** (A-18.7 wörtlich: „Es gibt keine Vorauswahl,
- * die eine der beiden Antworten für ihn trifft"). Das hat drei sichtbare
- * Folgen, und jede davon weicht bewusst von `ConfirmDialog` ab:
- *
- *  1. **Beide Knöpfe tragen dieselbe Gestalt** (`secondary`). Der
- *     Bestätigungsdialog hebt seinen rechten Knopf hervor — hier wäre genau
- *     das die Vorauswahl, und zwar für die Antwort, die den Benutzer aus der
- *     Anwendung heraus zu einer unsignierten Datei führt.
- *  2. **Der Fokus liegt beim Öffnen auf dem Dialog selbst** und nicht auf
- *     einem der Knöpfe. Ein Fokus auf „Installieren" machte ein bloßes Enter
- *     zur Antwort; ein Fokus auf „Überspringen" machte es zur anderen. Der
- *     Dialog trägt dafür `tabIndex={-1}` — das setzt seit T-152 die
- *     Zustandsmaschine — und wird angesagt, weil Titel und Beschreibung an ihm
- *     hängen (ARIA APG: „if focusing an element would be inappropriate, focus
- *     the dialog"). Die Wahl steht als `initialFocus` unten und ist die einzige
- *     Abweichung dieses Dialogs von der gemeinsamen Fläche.
- *  3. **Escape und der Schließknopf beantworten nichts.** Sie stellen den
- *     Hinweis für diesen Lauf zurück; beim nächsten Start steht er wieder da.
- *     „Überspringen" ist eine Entscheidung und soll keine sein, die jemand
- *     versehentlich mit Escape trifft (R-20 von der anderen Seite: Der
- *     Hinweis soll wegzubekommen sein, aber nicht aus Versehen für immer).
- *
- * ===========================================================================
- * Der Verweis ist ein **Knopf**, kein `<a href>`
- * ===========================================================================
- *
- * Ein Anker führte den Webview selbst nach github.com. Es gibt in der Hülle
- * **keinen** Wächter über Navigationen (`on_navigation` ist nicht gesetzt), und
- * die Anwendung hätte den Benutzer damit aus seiner eigenen Oberfläche
- * getragen — in ein Fenster ohne Adresszeile, in dem er nicht sehen kann, wo er
- * ist. Der Knopf ruft stattdessen den Öffnen-Befehl der Hülle, und der nimmt
- * **keine Adresse** entgegen, sondern die Fassungsbezeichnung (E-064 Punkt 4,
- * Auflage A-V-18).
- *
- * Die Adresse steht trotzdem da — als Text, zum Lesen und zum Kopieren. A-18.6
- * verlangt den Verweis, und ein Knopf allein ist eine Zusicherung: Der Benutzer
- * soll vor dem Klick sehen, wohin er geschickt wird.
- *
- * ===========================================================================
- * Was der Dialog verspricht, und was er nicht verspricht
- * ===========================================================================
- *
- * Er sagt im Vorspann ausdrücklich, dass Takt **nichts** herunterlädt und
- * **nichts** installiert (A-18.9). Das ist keine Bescheidenheit, sondern die
- * Erwartung, die der Knopf sonst weckt: „Installieren" heißt in fast jeder
- * anderen Anwendung „jetzt läuft eine Aktualisierung". Hier heißt es „eine
- * Seite geht auf".
+/** A-18.6–9: Versionsvergleich und Öffnen der offiziellen Release-Seite.
+ * Beide Aktionen bleiben gleich gewichtet; initialer Fokus liegt auf dem Dialog.
+ * Schließen stellt nur zurück. Der native Öffnen-Befehl bleibt die einzige Navigation.
  */
 export interface UpdateDialogProps {
   readonly open: boolean;
@@ -117,17 +66,17 @@ export function UpdateDialog({
       contentRef={contentRef}
       /* Punkt 2 im Kopf dieser Datei: der Kasten selbst, kein Knopf. */
       initialFocus={(content) => content}
-      className="dialog dialog--form"
+      className="dialog dialog--form update-dialog"
     >
       <div className="dialog__head dialog__head--form">
+        <span className="update-dialog__icon"><Icon name="download" size={22} /></span>
         <div className="grow">
           <Dialog.Title className="dialog__title">
-            Eine neuere Fassung von SuperTakt ist verfügbar
+            Update verfügbar
           </Dialog.Title>
           <Dialog.Description asChild>
             <p className="dialog__lead">
-              SuperTakt lädt nichts herunter und installiert nichts. „Installieren" öffnet die
-              Release-Seite dieser Fassung im Browser; alles Weitere entscheiden Sie dort.
+              Eine neue Version von SuperTakt ist bereit.
             </p>
           </Dialog.Description>
         </div>
@@ -137,14 +86,18 @@ export function UpdateDialog({
       </div>
 
       <div className="dialog__body dialog__body--form">
-        <dl className="facts">
-          <dt>Installiert</dt>
-          <dd className="mono">{installed}</dd>
-          <dt>Verfügbar</dt>
-          <dd className="mono">{available}</dd>
-          <dt>Release-Seite</dt>
-          <dd className="mono">{url}</dd>
-        </dl>
+        <div className="update-dialog__versions">
+          <dl><dt>Installiert</dt><dd>{installed}</dd></dl>
+          <Icon name="chevron-right" size={20} />
+          <dl className="update-dialog__available"><dt>Neue Version</dt><dd>{available}</dd></dl>
+        </div>
+        <p className="update-dialog__explanation">
+          Die Release-Seite öffnet sich im Browser. Download und Installation starten Sie dort selbst.
+        </p>
+        <details className="update-dialog__source">
+          <summary>Offizielle Release-Seite auf GitHub <Icon name="link" size={14} /></summary>
+          <p>{url}</p>
+        </details>
 
         {/*
           Die Live-Region steht **immer**, auch leer — dieselbe Begründung wie
@@ -162,8 +115,7 @@ export function UpdateDialog({
         </div>
 
         <p className="dialog__hint">
-          Der Hinweis kehrt beim nächsten Start zurück, solange Sie ihn nicht überspringen.
-          „Überspringen" gilt genau dieser Fassung — eine spätere meldet sich wieder.
+          Überspringen blendet nur diese Version aus. Schließen erinnert beim nächsten Start.
         </p>
       </div>
 
@@ -174,7 +126,7 @@ export function UpdateDialog({
       */}
       <div className="dialog__footer">
         <Button variant="secondary" iconEnd="arrow-up-right" onClick={onInstall} disabled={busy}>
-          Installieren
+          Release-Seite öffnen
         </Button>
         <Button variant="secondary" onClick={onSkip} loading={busy}>
           Überspringen

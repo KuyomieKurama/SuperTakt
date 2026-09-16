@@ -149,9 +149,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   const runningRef = useRef<RunningTimerView | null>(null);
   runningRef.current = running;
 
-  /* ---------------------------------------------------------------- */
   /* Laden und Fortzählen                                              */
-  /* ---------------------------------------------------------------- */
 
   const refresh = useCallback(() => {
     void getRunningTimer()
@@ -217,9 +215,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     return anchor.seconds + Math.max(0, Math.floor((Date.now() - anchor.atMs) / 1000));
   }, [anchor, tick]);
 
-  /* ---------------------------------------------------------------- */
   /* Stoppen                                                           */
-  /* ---------------------------------------------------------------- */
 
   /**
    * Was der Stopp gebucht hat — und wohin die Buchung das Todo bewegt hat
@@ -315,9 +311,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
       .finally(() => setBusy(false));
   }, [performStop, stopNote]);
 
-  /* ---------------------------------------------------------------- */
   /* A-6.8 — die Rückfrage                                             */
-  /* ---------------------------------------------------------------- */
 
   /**
    * A-6.8 — erst stoppen, dann starten.
@@ -434,9 +428,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     });
   }, [conflict, conflictNote, performSwitch]);
 
-  /* ---------------------------------------------------------------- */
   /* Starten                                                           */
-  /* ---------------------------------------------------------------- */
 
   const start = useCallback(
     (todoId: Id, todoTitle: ForeignText) => {
@@ -475,9 +467,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
     [requestStop, start],
   );
 
-  /* ---------------------------------------------------------------- */
   /* E-036 — die verwaiste Buchung                                     */
-  /* ---------------------------------------------------------------- */
 
   const confirmOrphan = useCallback(() => {
     /*
@@ -588,7 +578,7 @@ export function TimerProvider({ children }: { readonly children: ReactNode }) {
   return (
     <TimerContext.Provider value={api}>
       {children}
-      {idle.session === null ? null : <IdleRecovery key={idle.session.id} session={idle.session} changed={idle.refresh} running={running !== null} resumeAfter={!idleKeepTimerRunning} />}
+      {idle.session === null ? null : <IdleRecovery key={idle.session.previousPeriods?.[0]?.id ?? idle.session.id} session={idle.session} changed={idle.refresh} running={running !== null} resumeAfter={!idleKeepTimerRunning} />}
       <div role="alert">{idle.error === null ? null : <aside className="idle-reminder">Inaktivität konnte nicht geprüft werden: {idle.error}<Button onClick={idle.refresh}>Erneut prüfen</Button></aside>}</div>
 
       <FormDialog

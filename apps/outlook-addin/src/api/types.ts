@@ -96,6 +96,7 @@ export interface EmailAttachmentSupportDto {
 }
 
 export interface AddinContextDto {
+  readonly mailAssignment?: { readonly accepted: boolean };
   readonly tagTree: TagTreeDto;
   readonly pools: readonly PoolDto[];
   readonly statuses: readonly TodoStatusDto[];
@@ -188,10 +189,13 @@ export interface TodoDto {
    * `@takt/domain`; das tut die Hauptanwendung, weil dort die Liste steht,
    * die er ordnet. Der Aufgabenbereich hat keine Liste.
    */
+  readonly dueTime?: string | null;
+  readonly estimateMinutes?: number | null;
   readonly dueDate: string | null;
 }
 
 export interface CreateTodoResponseDto {
+  readonly outcome?: 'created' | 'appended' | 'already_present';
   readonly todo: TodoDto;
   /** Welche Tags der Dienst nach A-9.5 ergänzt hat. */
   readonly addedDefaultTagIds: readonly string[];

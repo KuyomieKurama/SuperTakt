@@ -1,37 +1,4 @@
-/**
- * Takt — die Verbindung zu SQLite (E-003, E-035).
- *
- * Dies ist die einzige Datei im Projekt, die `node:sqlite` einbindet. Alles
- * darüber arbeitet gegen `SqlConnection`, und diese Schnittstelle beschreibt
- * genau das, was die Adapter brauchen: vorbereitete Anweisungen, ein `exec`
- * für Migrationen, und Schließen.
- *
- * ---------------------------------------------------------------------------
- * Warum `node:sqlite` und keine Fremdbibliothek
- * ---------------------------------------------------------------------------
- *
- * E-035. Der Sidecar wird als eigenständige Binärdatei gebündelt (E-044); eine
- * Bibliothek mit nativer Erweiterung müsste dabei mitgeschleppt und je
- * Plattform gebaut werden. `node:sqlite` liegt in der Laufzeit, die ohnehin
- * mitgeliefert wird, und ist damit ein Teil weniger in der Lieferkette
- * (pnpm-workspace.yaml, „Takt hält Kundendaten").
- *
- * ---------------------------------------------------------------------------
- * Synchron unter einer asynchronen Fläche
- * ---------------------------------------------------------------------------
- *
- * `node:sqlite` ist bewusst synchron. Die Ports in `ports.ts` geben trotzdem
- * `Promise` zurück — nicht aus Bequemlichkeit, sondern weil sie den Adapter
- * austauschbar halten sollen (E-001, „zumindest derzeit"). Ein Adapter gegen
- * einen Dienst wäre zwangsläufig asynchron; wäre die Portfläche synchron,
- * müsste bei einem Wechsel jeder Aufrufer umgeschrieben werden.
- *
- * Die Folge ist wichtig und steht deshalb hier und nicht in einer Fußnote:
- * Zwischen zwei `await` in einem Anwendungsfall kann die Ereignisschleife eine
- * **andere** Anfrage bedienen. Innerhalb einer offenen SQLite-Transaktion auf
- * derselben Verbindung wäre das ein zweiter Schreiber in derselben Klammer.
- * `unit-of-work.ts` verhindert es mit einer Reihung; die Begründung steht dort.
- */
+/** Asynchrone Ports können Anfragen zwischen zwei `await` verschränken; `unit-of-work.ts` serialisiert deshalb Transaktionen. */
 
 import { chmodSync, statSync } from 'node:fs';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -304,9 +271,7 @@ function wrap(db: DatabaseSync): SqlConnection {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Auslesen einzelner Spalten — mit Aussage statt mit Vermutung
-// ---------------------------------------------------------------------------
 
 /**
  * `noUncheckedIndexedAccess` macht jeden Spaltenzugriff zu `SqlValue |

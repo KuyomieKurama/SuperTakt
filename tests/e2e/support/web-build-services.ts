@@ -1,3 +1,5 @@
+import { killChildTree } from './child-process';
+import { waitFor } from './wait-for';
 /**
  * Takt — baut `apps/web` und serviert genau dieses Ergebnis statisch (T-055).
  *
@@ -89,24 +91,6 @@ const execFileAsync = promisify(execFile);
  * einen echten Typfehler ergibt.
  */
 type ChildProcessWithoutStdin = ChildProcessByStdio<null, Readable, Readable>;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError: unknown = null;
-  while (Date.now() < deadline) {
-    try {
-      if (await check()) return;
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(150);
-  }
-  throw new Error(`Zeitüberschreitung beim Warten auf: ${label}. Letzter Fehler: ${String(lastError)}`);
-}
 
 /**
  * `pnpm --filter @takt/web build` — derselbe Befehl aus `apps/web/package.json`,
@@ -505,61 +489,6 @@ export async function startWebPreview(
   }
 
   return child;
-}
-
-/**
- * Beendet `child` samt seinem ganzen Prozessbaum.
- *
- * **Gemessen, nicht vermutet (T-263):** `child.kill('SIGTERM')` allein
- * beendet unter Windows nur den unmittelbaren Kindprozess. Dieser hier ist
- * wegen `shell: process.platform === 'win32'` beim Start ein `cmd.exe`, das
- * `pnpm` aufruft, das wiederum den eigentlichen `vite preview`-Prozess als
- * **Enkelkind** startet — `SIGTERM` an das `cmd.exe` lässt dieses Enkelkind
- * unter Windows als Waise weiterlaufen, mit dem Port weiterhin belegt.
- * Reproduziert an dieser Datei selbst: Nach einem Testlauf dieser Reihe
- * blieben `vite preview`-Prozesse auf 5173/34173/34174 zurück und
- * blockierten den nächsten Lauf — genau die Bauart, die T-259 schon als
- * „fremde, aber erreichbare Gegenstelle" auf einem geteilten Port beschrieb
- * und die der Auftraggeber als wiederkehrendes Problem benennt
- * (`board.md`: „Hängende Prozesse auf 5173 und 17844 haben heute mehrfach
- * Läufe verfälscht"). `taskkill /t /f` beendet unter Windows den ganzen Baum.
- *
- * **Berichtigt (T-330, 2026-09-13): „kein Enkelkind-Problem" außerhalb von
- * Windows war eine falsche Annahme, jetzt gemessen widerlegt — hier direkt
- * am dritten Waisenprozeß dieser Aufgabe.** Nach einem vollständig grünen
- * Lauf von `web-build-smoke.spec.ts` (9/9 bestanden) blieben auf dieser
- * Maschine gleich **zwei** `vite preview`-Prozesse zurück, einer auf 5173,
- * einer auf dem Zufallsport der Gegenprobe (T-259/O-CI-Bauart) — `pnpm exec
- * vite preview …` bleibt ein echtes Enkelkind, auch ohne `shell: true`,
- * genau wie an `services.ts#startWeb` gemessen (siehe dort). `startWebPreview`
- * startet den Prozeß deshalb jetzt mit `detached: true` (nur außerhalb von
- * Windows), und diese Funktion signalisiert die **Prozeßgruppe** (negative
- * PID) statt nur den unmittelbaren Kindprozeß, mit `child.kill('SIGTERM')`
- * als Rückweg. **Dieselbe Berichtigung wie in `services.ts#killShellChildTree`**
- * — beide Dateien hatten unabhängig voneinander dieselbe falsche Annahme
- * geschrieben, weil T-263 diese Datei ausdrücklich als Nebenschauplatz nicht
- * auf `services.ts` übertragen hat (siehe Verlauf dieses Kommentars in der
- * Versionsgeschichte); jetzt sind beide auf demselben Stand.
- */
-async function killChildTree(child: ChildProcessWithoutStdin): Promise<void> {
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    try {
-      await execFileAsync('taskkill', ['/pid', String(child.pid), '/t', '/f']);
-    } catch {
-      // Bereits beendet, oder nie wirklich gestartet — kein zweiter Versuch nötig.
-    }
-    return;
-  }
-  if (child.pid !== undefined) {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-      return;
-    } catch {
-      // Gruppe bereits weg, oder Plattform ohne Prozeßgruppen-Unterstützung —
-      // der Einzelprozeß-Versuch darunter bleibt der Rückweg.
-    }
-  }
-  child.kill('SIGTERM');
 }
 
 export async function stopChild(child: ChildProcessWithoutStdin): Promise<void> {

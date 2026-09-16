@@ -1,0 +1,12 @@
+/* @theme {"label":"Catppuccin Latte","mode":"light","hint":"Helle Pastellfarben","order":15} */
+:root[data-design-theme="catppuccin-latte"] {
+  --preset-canvas: #eff1f5;
+  --preset-surface: #e6e9ef;
+  --preset-ink: #4c4f69;
+  --preset-muted: #555871;
+  --preset-accent: #8839ef;
+  --preset-link: #7241bd;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #8137e2;
+  --preset-accent-active: #7c35d9;
+}

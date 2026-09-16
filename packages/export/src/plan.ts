@@ -1,23 +1,6 @@
 /**
- * Takt — der Plan eines Exportlaufs (A-8.1, A-8.8, R-17, E-034).
- *
- * **Was hier steht und was nicht.** Hier steht, *was* in die Datei kommt und
- * *welche* Buchungen damit als exportiert zu markieren sind. Hier steht
- * **nicht** das Schreiben und nicht die Transaktionsklammer: Der Vorlagen-Motor
- * kennt weder Dateisystem noch Datenbank, und er darf `@takt/storage` nicht
- * einmal benennen (R-06). Die Klammer selbst ist `ExportPort.runExport` in
- * `packages/storage/src/ports.ts`.
- *
- * Die Aufteilung ist genau die, die A-8.8 durchsetzbar macht: Der Plan entsteht
- * vollständig, **bevor** irgendetwas geschrieben wird. Erst wenn er steht — mit
- * jeder Zeile, jeder Summe und jeder ausgelassenen Gruppe — beginnt der
- * schreibende Teil. Ein Fehlschlag beim Rendern kann damit keine halb
- * geschriebene Datei und keine halb gesetzte Markierung hinterlassen; es gibt
- * zu diesem Zeitpunkt noch nichts, was zurückzunehmen wäre.
- *
- * Und es ist derselbe Plan für Vorschau und Datei (R-17). Die Vorschau in S-07
- * und S-14 zeigt `rows` und `skipped`, der Lauf schreibt `rows` und markiert
- * `timeEntryIds` — aus einer Rechnung, nicht aus zweien.
+ * Den vollständigen Plan vor jedem Schreibzugriff erstellen. Vorschau und Export verwenden
+ * dieselben Zeilen und Buchungskennungen.
  */
 
 import type { ExportGroup, ExportSystemContext } from '@takt/domain/export';

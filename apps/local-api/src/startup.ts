@@ -73,9 +73,7 @@ export interface StartupDiagnosis {
   readonly key: string;
 }
 
-// ---------------------------------------------------------------------------
 // Die Bausteine des Schlüssels
-// ---------------------------------------------------------------------------
 
 /**
  * Ein Paar `name=wert` — oder nichts.
@@ -96,9 +94,7 @@ function pair(name: string, value: string | number | null): string {
 /** Fügt Wortmarke und Paare zusammen; leere Paare verschwinden rückstandsfrei. */
 const key = (mark: string, ...parts: readonly string[]): string => `${mark}${parts.join('')}`;
 
-// ---------------------------------------------------------------------------
 // Die Sätze
-// ---------------------------------------------------------------------------
 
 /**
  * Was der Benutzer liest.
@@ -153,9 +149,7 @@ const SENTENCES = Object.freeze({
   unknown: 'Der Datenbestand konnte nicht auf den Stand dieser Fassung gebracht werden. SuperTakt startet nicht.',
 });
 
-// ---------------------------------------------------------------------------
 // Die Einordnung
-// ---------------------------------------------------------------------------
 
 /**
  * Ein Wurf ohne angehängten Grund, so weit einordbar, wie es ohne seine
@@ -273,9 +267,7 @@ export function describeStoreOpenFailure(error: unknown): StartupDiagnosis {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Der Schritt selbst
-// ---------------------------------------------------------------------------
 
 /** Was der Migrationsschritt vom Läufer braucht — und sonst nichts. */
 export type MigrationStep = Pick<MigrationRunnerPort, 'state' | 'migrateToLatest'>;

@@ -1,0 +1,12 @@
+/* @theme {"label":"Nord-Snow-Storm","mode":"light","hint":"Helles Schneeweiß und arktisches Blau","order":10} */
+:root[data-design-theme="nord-snow-storm"] {
+  --preset-canvas: #eceff4;
+  --preset-surface: #ffffff;
+  --preset-ink: #2e3440;
+  --preset-muted: #5c616a;
+  --preset-accent: #3c6386;
+  --preset-link: #3c6386;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #395e7f;
+  --preset-accent-active: #385b7a;
+}

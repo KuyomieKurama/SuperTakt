@@ -41,7 +41,7 @@ export async function gotoTime(page: Page): Promise<void> {
 }
 
 export async function gotoBookings(page: Page): Promise<void> {
-  await page.goto('/#/buchungen');
+  await page.goto('/#/export/buchungen');
 }
 
 export async function gotoExport(page: Page): Promise<void> {

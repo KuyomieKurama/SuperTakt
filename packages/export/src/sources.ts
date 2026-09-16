@@ -1,18 +1,4 @@
-/**
- * Takt — die Feldquellen als geschlossene Liste (E-017, E-033, R-06, B-3.1).
- *
- * Jede Quelle ist eine **ausgeschriebene Zugriffsfunktion**, kein ausgewerteter
- * Pfad. Das ist der Unterschied, an dem die Datenschutzgrenze hängt: Ein
- * generischer Auflöser `get(objekt, "a.b.c")` wäre ein Leseprimitiv auf alles,
- * was man ihm übergibt. Jedes Feld, das irgendwann an `ExportGroup` oder
- * `ExportCandidate` dazukommt, wäre damit sofort exportierbar, ohne dass es
- * jemand entschieden hätte. Der `switch` unten kann das nicht: Was keinen Zweig
- * hat, hat keinen Wert.
- *
- * `booking.*` gibt es nicht (E-033). Seit E-020 entsteht eine Exportzeile aus
- * einer Tagesgruppe; ein Pfad, der weiter `booking` hieße und die Gruppe meinte,
- * wäre der stille Bedeutungswechsel, den T-013 beseitigt hat.
- */
+/** Explizite Feldzugriffe verhindern, dass neue Eigenschaften unbeabsichtigt exportierbar werden. */
 
 import type { ExportGroup, ExportSourcePath, ExportSystemContext } from '@takt/domain/export';
 import { roundToQuarterHours } from '@takt/domain/export';

@@ -1,8 +1,5 @@
 import { useCallback, useState } from "react";
-import {
-  deleteTimeEntry,
-  listTimeEntries,
-} from "../../api/endpoints";
+import { deleteTimeEntry, listTimeEntries } from "../bookings/api";
 import { getTodo, getTodoNote } from "./api";
 import { errorMessage } from "../../api/client";
 import type { Id, TimeEntry } from "../../api/types";
@@ -16,6 +13,7 @@ import { Icon } from "../../shared/ui/Icon";
 import { Menu, type MenuEntry } from "../../shared/ui/Menu";
 import { Button, Card, EmptyState } from "../../shared/ui/Primitives";
 import { previewOpenEntries } from "../../app/dayGroup";
+import { openAttachmentLink } from "../../app/connection";
 import { useRefresh } from "../../app/RefreshContext";
 import { useStructure } from "../../app/StructureContext";
 import { useTimer } from "../timer/TimerContext";
@@ -94,11 +92,11 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
     const [todo, note, entries] = await Promise.all([
       getTodo(todoId),
       getTodoNote(todoId),
-      listTimeEntries({ todoId }, { limit: 200 }),
+      listTimeEntries({ todoId, includeNoExport: true }, { limit: 200 }),
     ]);
 
     const openIds = entries.items
-      .filter((entry) => entry.exportStatus === "open")
+      .filter((entry) => !todo.todo.noExport && entry.exportStatus === "open")
       .map((entry) => entry.id);
 
     /*
@@ -229,8 +227,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
     <section className="screen">
       {/*
         Ein Laufbereich, Name: der Titel des Todos (T-322 4.3). Fest ist der
-        Kopf mit den drei Aktionen auf **dieses** Todo — „Timer starten",
-        „Bearbeiten", „Zeit von Hand"; bei langer Buchungshistorie waren sie
+        Kopf mit „Timer starten" und „Bearbeiten"; bei langer Buchungshistorie waren sie
         bisher weggescrollt. Die Nebenspalte läuft im selben Bereich: Sie ist
         keine Steuerung, sondern Inhalt desselben Gegenstands, und bei ≤ 68 rem
         fallen die Spalten ohnehin untereinander.
@@ -288,16 +285,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                     <Button variant="secondary" iconStart="pencil" onClick={() => setEditOpen(true)}>
                       Bearbeiten
                     </Button>
-                    <Button
-                      variant="ghost"
-                      iconStart="plus"
-                      onClick={() => {
-                        setEditingEntry(undefined);
-                        setBookingOpen(true);
-                      }}
-                    >
-                      Zeit von Hand
-                    </Button>
+
                   </>
                 }
               />
@@ -306,6 +294,21 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                 <div className="detail">
                   <div className="detail__main">
                     <TodoDoneSwitch todo={todo} />
+
+                    {(value.todo.mails?.length ?? 0) > 0 ? <Card title="E-Mail-Verlauf">
+                      {value.todo.mails?.map(mail => <article key={mail.identity} className="todo-mail-entry">
+                        <h3><Foreign value={mail.subject} /></h3>
+                        <p>{mail.kind} · <Foreign value={mail.sender} /> · {mail.receivedAt ? new Date(mail.receivedAt).toLocaleString('de-DE') : 'Zeitpunkt nicht verfügbar'}</p>
+                        {mail.outlookLink ? <Button variant="ghost" onClick={() => {
+                          if (!mail.outlookLink) return;
+                          void openAttachmentLink(mail.outlookLink).then(result => {
+                            if (result.outcome !== "opened") toasts.failure("Outlook ließ sich nicht öffnen", "Der Rückverweis konnte auf diesem Rechner nicht geöffnet werden.");
+                          }).catch(() => toasts.failure("Outlook ließ sich nicht öffnen", "Der Rückverweis konnte auf diesem Rechner nicht geöffnet werden."));
+                        }}>In Outlook öffnen</Button> : null}
+                        {mail.excerpt ? <p style={{ whiteSpace: 'pre-wrap' }}><Foreign value={mail.excerpt} /></p> : null}
+                        {mail.personalNote ? <p style={{ whiteSpace: 'pre-wrap' }}>Eigene Notiz: <Foreign value={mail.personalNote} /></p> : null}
+                      </article>)}
+                    </Card> : null}
 
                     <TodoNoteCard
                       todoId={todoId}
@@ -324,12 +327,24 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                       title="Anhänge"
                       description="Ein Verweis öffnet den Browser, eine Datei die Standardanwendung des Systems, ein Bild wird hier gezeigt. Geöffnet wird nur auf Ihren Klick."
                     >
-                      <Attachments todoId={todo.id} todoTitle={todo.title} version={version} />
+                      <Attachments todoId={todo.id} todoTitle={todo.title} mails={value.todo.mails ?? []} version={version} />
                     </Card>
 
                     <Card
-                      title="Buchungen"
-                      description="Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."
+                      title={todo.noExport ? "Erfasste Zeit" : "Buchungen"}
+                      actions={
+                        <Button
+                          variant="ghost"
+                          iconStart="plus"
+                          onClick={() => {
+                            setEditingEntry(undefined);
+                            setBookingOpen(true);
+                          }}
+                        >
+                          Zeit von Hand
+                        </Button>
+                      }
+                      description={todo.noExport ? "Nach Kalendertag gruppiert. Von der Abrechnung ausgeschlossen." : "Nach Kalendertag gruppiert — so entsteht auch die Exportzeile."}
                       flush
                     >
                       {groups.length === 0 ? (
@@ -356,7 +371,7 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                                 <h4 className="daygroup__day">{formatDayLabel(group.day)}</h4>
                                 <span className="daygroup__meta">
                                   {plural(group.entries.length, "Buchung", "Buchungen")}
-                                  {group.openSeconds > 0
+                                  {todo.noExport ? " · NoExport" : group.openSeconds > 0
                                     ? ` · ${formatDuration(group.openSeconds)} offen`
                                     : " · vollständig exportiert"}
                                 </span>
@@ -376,13 +391,13 @@ export function TodoDetailScreen({ todoId }: TodoDetailScreenProps) {
                               <ul className="entry-list">
                                 {group.entries.map((entry) => (
                                   <li key={entry.id} className="entry-row">
-                                    <ExportStatusBadge
+                                    {todo.noExport && entry.exportStatus === "open" ? <span className="muted">NoExport</span> : <ExportStatusBadge
                                       state={exportDisplayState(entry.exportStatus, entry.exportCount)}
                                       size="sm"
                                       {...(entry.exportStatus === "open" && entry.exportCount > 0
                                         ? { detail: `${String(entry.exportCount)}× exportiert` }
                                         : {})}
-                                    />
+                                    />}
                                     <span className="entry-row__period">
                                       {formatTimeRange(entry.startedAt, entry.endedAt)}
                                     </span>

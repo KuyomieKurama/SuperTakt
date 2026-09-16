@@ -1,24 +1,4 @@
-/**
- * Takt — Zusammenführung der Leistungstexte einer Tagesgruppe
- * (E-020, E-026, E-028, A-7.4).
- *
- * Seit E-020 entsteht eine Exportzeile je Todo und Kalendertag. Damit müssen
- * die Leistungstexte mehrerer Buchungen zu einem Text werden.
- *
- * **Diese Funktion sortiert nicht.** Die Reihenfolge steht bereits fest:
- * `groupExportCandidates` in `packages/domain/src/export.ts` sortiert die
- * Buchungen einer Gruppe nach Startzeit, und diese Reihenfolge ist zugleich die
- * Reihenfolge der Textabschnitte. Ein zweites Sortieren hier wäre eine zweite
- * Stelle, an der sich die Reihenfolge ändern könnte.
- *
- * **Es wird nie zurückgeparst** (E-028). Wer wissen will, welche Buchungen in
- * einer Exportzeile stecken, fragt `export_run_entry`; die Beziehung steht in
- * der Datenbank, nicht im Text. Sobald man aufhört, den Text parsen zu wollen,
- * ist ein Semikolon mitten im Text kein Problem mehr — und genau deshalb bleibt
- * er unverändert: kein Escaping, kein Ersetzen, keine Kürzung. `\;` oder `;;`
- * stünde wörtlich auf einer Kundenrechnung, und ein Komma statt des Semikolons
- * hieße, Kundendaten still umzuschreiben.
- */
+/** Die Eingabereihenfolge bleibt erhalten. Texte werden unverändert zusammengefügt; Buchungsbeziehungen kommen aus `export_run_entry`, niemals aus zurückgeparstem Text. */
 
 import type { ExportNoteSeparator } from '@takt/domain/export';
 

@@ -1,0 +1,38 @@
+/* @theme {"label":"Plainspace","mode":"auto","hint":"Warme Papierfarben und dezente Akzente","order":11} */
+:root[data-design-theme="plainspace"] {
+  --preset-canvas: #ece5d4;
+  --preset-surface: #faf6ef;
+  --preset-ink: #1f1c17;
+  --preset-muted: #4f4c47;
+  --preset-accent: #3f7473;
+  --preset-link: #3b6a69;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #3c6e6d;
+  --preset-accent-active: #3a6a69;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="plainspace"]:not([data-theme="light"]) {
+  --preset-canvas: #1c1916;
+  --preset-surface: #28231e;
+  --preset-ink: #eee5d6;
+  --preset-muted: #c2baae;
+  --preset-accent: #a8c5bc;
+  --preset-link: #a8c5bc;
+  --preset-on: #101010;
+  --preset-accent-hover: #adc8c0;
+  --preset-accent-active: #b1cbc3;
+  }
+}
+
+:root[data-design-theme="plainspace"][data-theme="dark"] {
+  --preset-canvas: #1c1916;
+  --preset-surface: #28231e;
+  --preset-ink: #eee5d6;
+  --preset-muted: #c2baae;
+  --preset-accent: #a8c5bc;
+  --preset-link: #a8c5bc;
+  --preset-on: #101010;
+  --preset-accent-hover: #adc8c0;
+  --preset-accent-active: #b1cbc3;
+}

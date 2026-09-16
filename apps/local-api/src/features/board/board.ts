@@ -104,6 +104,9 @@ export interface BoardView {
 }
 
 export interface BoardRequest {
+  readonly priorityIds?: readonly string[];
+  readonly withoutPriority?: boolean;
+  readonly sortByPriority?: boolean;
   /**
    * Erledigte Karten einblenden (E-039). Vorgabe `false` — dieselbe wie in
    * Pool-Ansichten, und aus demselben Grund: Ein Timerstart, der „Erledigt"
@@ -162,7 +165,11 @@ export function loadBoard(context: AppContext, request: BoardRequest): Promise<B
       column.completion !== 'any' || request.includeCompleted;
 
     const filterFor = (column: Pool): TodoFilter =>
-      showsCompleted(column) ? {} : { onlyOpen: true };
+      ({ ...(showsCompleted(column) ? {} : { onlyOpen: true }),
+        ...(request.priorityIds ? { priorityIds: request.priorityIds } : {}),
+        ...(request.withoutPriority ? { withoutPriority: true } : {}),
+        ...(request.sortByPriority ? { sortByPriority: true } : {}),
+      });
 
     const views: BoardColumnView[] = [];
     const rules: BoardColumnRule[] = [];

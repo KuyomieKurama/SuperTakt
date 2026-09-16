@@ -39,9 +39,7 @@ import { Button, InlineMessage, type MessageTone } from "../../shared/ui/Primiti
  * er sich einlässt.
  */
 
-/* ==================================================================== */
 /* Befunde anzeigen                                                     */
-/* ==================================================================== */
 
 const CONCERN_TONE: Readonly<Record<ExportDirectoryConcern["verdict"], MessageTone>> = {
   reject: "danger",
@@ -82,9 +80,7 @@ export function ExportDirectoryConcernList({
   );
 }
 
-/* ==================================================================== */
 /* Was das Betriebssystem über den Ordner sagt (T-039)                  */
-/* ==================================================================== */
 
 interface TraitText {
   readonly title: string;
@@ -185,9 +181,7 @@ export function ExportDirectoryTraitList({
   );
 }
 
-/* ==================================================================== */
 /* Der stehende Satz zu Base64 (B-6.1 Punkt 1)                          */
-/* ==================================================================== */
 
 /**
  * Der Satz, den S-07 in der Ansicht führen muss — nicht in einem Hilfetext.
@@ -208,9 +202,7 @@ export function Base64Notice({ className }: { readonly className?: string }) {
   );
 }
 
-/* ==================================================================== */
 /* Das Feld                                                             */
-/* ==================================================================== */
 
 /** Der geprüfte Zustand des Ordners beim Dienst, in einem Satz (R-11). */
 /**

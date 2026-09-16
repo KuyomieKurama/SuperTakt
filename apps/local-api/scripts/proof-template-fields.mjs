@@ -88,9 +88,7 @@ const field = (name, source = 'todo.callNumber', transformation = 'raw') => ({
   transformation,
 });
 
-// ---------------------------------------------------------------------------
 section('1  Die Prüffunktion selbst — die Messreihe aus T-023');
-// ---------------------------------------------------------------------------
 {
   const rejected = [
     ['__proto__', 'der Name, mit dem das Feld still verschwand'],
@@ -159,9 +157,7 @@ section('1  Die Prüffunktion selbst — die Messreihe aus T-023');
   );
 }
 
-// ---------------------------------------------------------------------------
 section('2  Der Renderer verschluckt auch dann nichts, wenn die Prüfung umgangen wird');
-// ---------------------------------------------------------------------------
 {
   const group = {
     todoId: '01920000-0000-7000-8000-00000000000a',
@@ -217,10 +213,8 @@ section('2  Der Renderer verschluckt auch dann nichts, wenn die Prüfung umgange
   }
 }
 
-// ---------------------------------------------------------------------------
 // Ab hier gegen den zusammengesetzten Dienst. Warum `app.fetch` und kein
 // eigener Prozess: siehe Kopf von `proof-route-policy.mjs`.
-// ---------------------------------------------------------------------------
 
 const dataDir = await mkdtemp(join(tmpdir(), 'takt-proof-fields-'));
 const exportDir = await mkdtemp(join(tmpdir(), 'takt-export-'));
@@ -270,9 +264,7 @@ async function call(path, { method = 'GET', body } = {}) {
 }
 
 try {
-  // ---------------------------------------------------------------------------
   section('3  Durch den vollständigen HTTP-Stapel — beim Speichern abgewiesen');
-  // ---------------------------------------------------------------------------
   {
     const before = await call('/export/templates');
     const countBefore = before.body?.data?.items?.length ?? before.body?.data?.length ?? 0;
@@ -337,9 +329,7 @@ try {
     }
   }
 
-  // ---------------------------------------------------------------------------
   section('4  Die Vorschau mit ungespeicherter Definition (E-051) hält ebenso');
-  // ---------------------------------------------------------------------------
   {
     const proto = await call('/export/preview', {
       method: 'POST',
@@ -377,9 +367,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('5  An Oberfläche und Route vorbei: per INSERT direkt in SQLite');
-  // ---------------------------------------------------------------------------
   {
     // Ein Todo mit einer Buchung, damit es beim Lauf etwas zu exportieren gäbe.
     const todo = await call('/todos', {

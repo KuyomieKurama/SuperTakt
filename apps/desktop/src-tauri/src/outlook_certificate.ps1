@@ -1,4 +1,4 @@
-# A-23: fixed local certificate operation. Input is data on stdin, never code.
+# Eingaben über stdin sind Daten und dürfen nicht als Code ausgeführt werden.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -11,7 +11,7 @@ function Fingerprint($certificate) {
 }
 
 function IsLocalServerCertificate($certificate) {
-    # Exact SAN of SuperTakt: localhost and 127.0.0.1, no additional names.
+    # Erlaubte Zertifikatsnamen: ausschließlich localhost und 127.0.0.1.
     $san = @($certificate.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.17' })
     $basic = @($certificate.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.19' })
     $eku = @($certificate.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.37' })
@@ -31,8 +31,7 @@ function CheckHttps($fingerprint) {
     $tls = $null
     try {
         if (-not $tcp.ConnectAsync('127.0.0.1', 17844).Wait(3000)) { return 'unreachable' }
-        # No validation callback: Schannel checks the Windows trust store,
-        # certificate lifetime and the localhost hostname normally.
+        # Ohne eigenen Prüfcallback validiert Schannel Vertrauen, Gültigkeit und Hostnamen.
         $tls = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false)
         $tls.ReadTimeout = 3000
         $tls.WriteTimeout = 3000
@@ -72,16 +71,15 @@ try {
     if ($inputData.action -eq 'trust') {
         if (-not $validProfile -or -not $validNow) { throw 'certificate_invalid' }
         if ($inputData.fingerprint -cnotmatch '^[A-F0-9]{64}$' -or $inputData.fingerprint -cne $fingerprint) { throw 'certificate_changed' }
-        # Use the Windows PKI import cmdlet, as Microsoft's Office add-in setup
-        # does. Import only a locked snapshot of the already-confirmed public
-        # certificate; never reopen the original file or export the private key.
+        # Nur eine gesperrte Kopie des bestätigten öffentlichen Zertifikats importieren;
+        # die Ursprungsdatei nicht erneut öffnen und keinen privaten Schlüssel exportieren.
         $snapshot = [IO.Path]::GetTempFileName()
         $locked = $null
         try {
             [IO.File]::WriteAllBytes($snapshot, $certificate.RawData)
             $locked = [IO.File]::Open($snapshot, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-            # Windows import opens its input with read sharing. Hold a read-only
-            # lock and verify the snapshot after locking, so no writer can swap it.
+            # Der Import benötigt Lesezugriff. Nach der Schreibsperre erneut prüfen,
+            # damit niemand die bestätigte Kopie austauschen kann.
             $hash = [System.Security.Cryptography.SHA256]::Create()
             try { $snapshotHash = ([BitConverter]::ToString($hash.ComputeHash($locked))).Replace('-', '') }
             finally { $hash.Dispose() }
@@ -113,7 +111,7 @@ try {
         https = $https
     } | ConvertTo-Json -Compress
 } catch {
-    # Never print file contents, keys, or exception details.
+    # Keine Dateiinhalte, Schlüssel oder Ausnahmedetails ausgeben.
     $code = $_.Exception.Message
     if ($code -notin @('certificate_missing', 'certificate_invalid', 'certificate_changed', 'trust_failed', 'operation_invalid')) { $code = 'inspection_failed' }
     @{ error = $code } | ConvertTo-Json -Compress

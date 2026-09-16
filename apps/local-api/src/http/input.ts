@@ -1,14 +1,4 @@
-/**
- * Takt — Eingaben am Rand prüfen (ecc:api-design, B-1.7, B-4.3).
- *
- * Ein Typ am Rand ist eine **Behauptung**, keine Prüfung. Alles, was aus einer
- * Anfrage kommt, geht durch ein Schema, bevor ein Anwendungsfall es sieht —
- * auch dann, wenn der Aufrufer die eigene Oberfläche ist: Der Dienst kann nicht
- * wissen, wer ihn anspricht (B-2.9, RR-1).
- *
- * Die Grenzen sind dieselben wie in der OpenAPI-Beschreibung. Sie stehen hier
- * ein zweites Mal, weil die Beschreibung nichts erzwingt — sie beschreibt.
- */
+/** Auch Eingaben der eigenen Oberfläche müssen die Schemas durchlaufen; ihre Typangaben ersetzen keine Prüfung. */
 
 import { z } from 'zod';
 

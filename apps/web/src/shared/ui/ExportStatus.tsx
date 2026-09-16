@@ -1,3 +1,4 @@
+import type { ExportStatus } from "@takt/domain";
 import { cx } from "../../lib/cx";
 import { Icon, type IconName } from "./Icon";
 
@@ -58,7 +59,7 @@ import { Icon, type IconName } from "./Icon";
  * Fachlicher Exportstatus. Genau zwei Werte, so wie `time_entry.export_status`
  * in der Datenbank und `ExportStatus` in `packages/domain` (A-6.9, E-032).
  */
-export type ExportStatus = "open" | "exported";
+export type { ExportStatus } from "@takt/domain";
 
 /**
  * Anzeigezustand. Wird aus Status und `exportCount` abgeleitet und existiert

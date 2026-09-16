@@ -1,37 +1,4 @@
-/**
- * Takt — aus geprüften Tagnamen Tags machen (T-058, T-061, T-062).
- *
- * ---------------------------------------------------------------------------
- * Warum das ein eigenes Modul ist und keine Zeile in `todos.ts`
- * ---------------------------------------------------------------------------
- *
- * Bis T-062 stand diese Auflösung zweimal im Baum: einmal hier — damals als
- * nicht exportierte Funktion in `features/todos/todos.ts` —, einmal als
- * abgeschriebene Fassung in `routes/addin/service.ts`. Nicht aus Nachlässigkeit:
- * Der Ordner der Anwendungsfälle gehörte nicht zur Dateihoheit des Add-ins, und
- * was nicht exportiert ist, lässt sich nicht importieren. Die Gleichheitsregel selbst (`tag-name.ts`
- * in der Domäne) war **nie** gedoppelt; gedoppelt war die Auflösung drumherum.
- *
- * Der `export` allein hätte gereicht, um die zweite Fassung zu löschen. Ein
- * eigenes Modul ist trotzdem der bessere Ort, aus demselben Grund, aus dem
- * `@takt/domain/export` ein schmaler Einstiegspunkt neben `@takt/domain` ist:
- * Wer nur diese eine Regel braucht, soll nicht das Modul mit `createTodo`,
- * `searchEverything` und `setDefaultTags` einbinden müssen. Ein Import sagt
- * dann auch, was geholt wurde.
- *
- * ---------------------------------------------------------------------------
- * Aufzurufen ausschließlich **innerhalb** einer Transaktion
- * ---------------------------------------------------------------------------
- *
- * Der Parameter ist eine Arbeitseinheit und kein `AppContext`. Eine
- * Arbeitseinheit gibt es nur aus `inTransaction` heraus — die Signatur sagt
- * also, wo diese Funktion stehen darf.
- *
- * Der Abbruch ist ein **Wurf** und kein Rückgabewert. Das ist keine
- * Geschmacksfrage: Die Transaktionsklammer nimmt nur bei einem Wurf zurück; ein
- * Fehlschlag als Wert ist für sie ein gelungener Durchlauf, und sie schreibt
- * fest (T-047). Siehe `AbortTodoCreate`.
- */
+/** Nur innerhalb einer Transaktion aufrufen. Fehler müssen geworfen werden, damit die Transaktion zurückrollt. */
 
 import type { Tag, TagNameCandidate, TaktError, Timestamp } from '@takt/domain';
 import type { TagPort } from '@takt/storage';

@@ -6,9 +6,7 @@ import { plural } from "../../lib/format";
 import { quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
 import type { MoveHandleKey } from "./StatusSettings";
-/* ==================================================================== */
 /* Eine Zeile der Verwaltung                                            */
-/* ==================================================================== */
 
 export interface StatusRowProps {
   readonly status: TodoStatus;

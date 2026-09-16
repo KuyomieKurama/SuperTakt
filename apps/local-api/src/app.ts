@@ -1,3 +1,5 @@
+import { createPriorityRoutes } from "./features/priorities/routes.ts";
+import { createMailAssignment } from './routes/addin/mail-assignment.ts';
 /**
  * Takt — die Anwendung des lokalen Dienstes (T-011, T-021).
  *
@@ -162,9 +164,7 @@ function bodyLimitByRoute(): MiddlewareHandler<TaktEnv> {
 export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hono<TaktEnv> {
   const app = new Hono<TaktEnv>();
 
-  // ---------------------------------------------------------------------------
   // Die Kette. Reihenfolge ist Inhalt — Begründung in http/guards.ts.
-  // ---------------------------------------------------------------------------
   app.use('*', securityHeaders());
   app.use('*', requestLog(runtime));
   app.use('*', hostGuard(runtime));
@@ -282,13 +282,12 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
    */
   api.route('/version-check', createVersionRoutes(options.versionState ?? (() => ({ state: 'unknown' }))));
 
-  // ---------------------------------------------------------------------------
   // Fachrouten (T-021). Alle **hinter** der Kette oben, keine daneben.
-  // ---------------------------------------------------------------------------
   const context = options.context;
   if (context !== undefined) {
     const structure = createStructureRoutes(context);
 
+    api.route('/priorities', createPriorityRoutes(context));
     api.route('/todos', createTodoRoutes(context));
     api.route('/search', createSearchRoutes(context));
     api.route('/tag-tree', structure.tagTree);
@@ -386,6 +385,7 @@ export function createApp(runtime: AccessRuntime, options: AppOptions = {}): Hon
         context.transactions.inTransaction(work),
       now: () => context.clock.now(),
       emailAttachments: createEmailAttachmentIntake(context, runtime.logger),
+      assignMail: createMailAssignment(context),
     };
     api.route('/addin', createAddinRoutes(addinDeps));
   }

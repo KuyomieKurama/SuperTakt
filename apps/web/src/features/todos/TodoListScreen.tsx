@@ -617,9 +617,7 @@ export function TodoListScreen({ query }: TodoListScreenProps) {
   );
 }
 
-/* ==================================================================== */
 /* Ausgeblendete erledigte Todos (B-19, E-039)                          */
-/* ==================================================================== */
 
 function HiddenDoneNotice({
   count,

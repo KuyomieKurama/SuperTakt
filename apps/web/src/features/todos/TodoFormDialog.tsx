@@ -1,5 +1,7 @@
+import { DateField } from "../../shared/ui/DateField";
+import { listPriorities } from "../settings/api";
 import { enumerateNames, MAX_TITLE_CHARACTERS } from "@takt/domain";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   createTodo,
   updateTodo,
@@ -10,7 +12,7 @@ import { FormDialog, TextField } from "../../shared/ui/FormDialog";
 import { NoteField } from "../../shared/ui/NoteField";
 import { Select } from "../../shared/ui/Select";
 import { TagInput } from "../tags/TagInput";
-import { useMutation } from "../../app/useAsync";
+import { useAsync, useMutation } from "../../app/useAsync";
 import { useStructure } from "../../app/StructureContext";
 import { useToasts } from "../../app/ToastContext";
 import { useRefresh } from "../../app/RefreshContext";
@@ -59,7 +61,9 @@ export function TodoFormDialog({
 }: TodoFormDialogProps) {
   const structure = useStructure();
   const toasts = useToasts();
-  const { bump } = useRefresh();
+  const { bump, version } = useRefresh();
+  const priorities = useAsync(listPriorities, [open], [version]);
+  const [priorityId, setPriorityId] = useState("");
   const mutation = useMutation();
 
   const statuses = structure.state.status === "ready" ? structure.state.value.statuses : [];
@@ -77,6 +81,10 @@ export function TodoFormDialog({
    * Hinsicht ein gültiges Todo (A-19.1).
    */
   const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
+  const noExportHintId = useId();
+  const [noExport, setNoExport] = useState(false);
+  const [estimateMinutes, setEstimateMinutes] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
 
   useEffect(() => {
@@ -88,6 +96,10 @@ export function TodoFormDialog({
     setNewTagNames([]);
     setNote("");
     setDueDate(todo?.dueDate ?? "");
+    setDueTime(todo?.dueTime ?? "");
+    setEstimateMinutes(todo?.estimateMinutes?.toString() ?? "");
+    setNoExport(todo?.noExport ?? false);
+    setPriorityId(todo?.priorityId ?? "");
     setTitleTouched(false);
   }, [open, todo, defaultStatusId, presetTagIds]);
 
@@ -114,6 +126,10 @@ export function TodoFormDialog({
           note,
           // Leeres Feld heißt „keine Frist" und nicht „leerer Tag" (A-19.1).
           dueDate: dueDate.length === 0 ? null : dueDate,
+          dueTime: dueDate ? dueTime || "00:00" : null,
+          estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
+          noExport,
+          priorityId: priorityId || null,
         });
         structure.reload();
         bump();
@@ -163,6 +179,10 @@ export function TodoFormDialog({
         tagIds: [...tagIds, ...freshTags.map((tag) => tag.id)],
         // Ein geleertes Feld **entfernt** die Frist (A-19.3, drittes Verb).
         dueDate: dueDate.length === 0 ? null : dueDate,
+          dueTime: dueDate ? dueTime || "00:00" : null,
+          estimateMinutes: estimateMinutes ? Number(estimateMinutes) : null,
+          noExport,
+          priorityId: priorityId || null,
       });
       if (freshTags.length > 0) structure.reload();
       bump();
@@ -214,22 +234,39 @@ export function TodoFormDialog({
         Die **Frist** (A-19.2, A-19.3). Sie heißt in der Oberfläche ausschließlich
         so — nicht „Fälligkeitsdatum", nicht „fällig am", nicht „Deadline".
 
-        `type="date"` und nicht `datetime-local`: Die Frist ist ein Tag, keine
-        Uhrzeit (E-070 Punkt 1). Eine Uhrzeit brächte einen vierten Zustand
-        („in zwei Stunden fällig"), und der ist ohne Erinnerung sinnlos.
+        A-10.14: Keep the calendar day independent of optional local clock time.
+        Neither input performs timezone conversion.
 
         Das Feld liefert von sich aus `YYYY-MM-DD` und nichts anderes. Das ist
         Bedienkomfort und **keine** Kontrolle: Geprüft wird die Form an der Tür
         des Dienstes — existierender Tag, Jahr zwischen 1970 und 2999
         (Auflage A-A-19).
       */}
-      <TextField
+      <DateField
+        wide
         label="Frist"
-        type="date"
         value={dueDate}
-        onChange={setDueDate}
-        hint="Ein Tag, keine Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export."
+        onChange={value => {
+          setDueDate(value);
+          if (!value) setDueTime("");
+        }}
+        time={{ value: dueTime, onChange: setDueTime }}
+        hint="Ohne Datum keine Frist. Die Uhrzeit ist 00:00, bis du sie änderst."
       />
+      <label className="todo-export-option">
+        <span className="todo-export-option__text">
+          <span className="todo-export-option__title" id={`${noExportHintId}-label`}>NoExport</span>
+          <span className="todo-export-option__hint" id={noExportHintId}>Zeit erfassen, ohne die Aufgabe in Buchungen oder im Export anzuzeigen.</span>
+        </span>
+        <input className="todo-export-option__switch" type="checkbox" role="switch" checked={noExport}
+          onChange={event => setNoExport(event.target.checked)} aria-labelledby={`${noExportHintId}-label`} aria-describedby={noExportHintId} />
+      </label>
+      <Select label="Priorität" value={priorityId} onChange={setPriorityId}
+        hint="Die Werte und ihre Gewichtung stehen in den Einstellungen unter „Prioritäten“."
+        options={[{ value: "", label: "Keine Priorität" }, ...(priorities.state.status === "ready" ? priorities.state.value.map(priority => ({ value: priority.id, label: `${priority.name} · ${priority.weight}` })) : [])]} />
+      {priorities.state.status === "error" ? <p role="alert">{priorities.state.message}</p> : null}
+      <TextField label="Zeitschätzung in Minuten" type="number" value={estimateMinutes} onChange={setEstimateMinutes} />
+
 
       {/*
         Ein **Wegweiser**, kein Vortrag (T-181, ST-05 mit Auflage Z-02 aus

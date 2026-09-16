@@ -48,10 +48,6 @@ export type PatternRejection =
   | 'syntax'
   /** Leeres Muster. Trifft überall, liefert nichts. */
   | 'empty'
-  /** Ohne Erfassungsgruppe gäbe es nur den Gesamttreffer (B-4.3 Punkt 1). */
-  | 'no_capture_group'
-  /** Trifft auf die leere Zeichenkette zu — also auf jede E-Mail (B-4.3 Punkt 2). */
-  | 'matches_empty'
   /** Rückverweis oder Rückschau — die häufigsten Backtracking-Ursachen (B-4.1 Punkt 5). */
   | 'backreference_or_lookbehind'
   /** Verschachtelte Quantoren oder Alternative mit gleichem Präfix (B-4.1 Punkt 3). */
@@ -63,7 +59,7 @@ export interface PatternCheckOk {
   readonly ok: true;
   /** Das geprüfte Muster, unverändert. */
   readonly source: string;
-  /** Anzahl der Erfassungsgruppen. Verwendet wird immer Gruppe 1. */
+  /** Number of captures; use group 1 when present, otherwise the full match. */
   readonly groupCount: number;
 }
 
@@ -110,10 +106,6 @@ const MESSAGES: Readonly<Record<Exclude<PatternRejection, 'syntax'>, string>> = 
    * kürzer.
    */
   empty: 'Der Ausdruck ist leer. Ein Muster steht in der Liste darüber, oder es lässt sich hier eintragen.',
-  no_capture_group:
-    'Der Ausdruck braucht eine Klammer um den Teil, der die Call-Nummer ist — zum Beispiel TCK-(\\d{6}) statt TCK-\\d{6}. Übernommen wird immer der Inhalt der ersten Klammer.',
-  matches_empty:
-    'Dieser Ausdruck trifft auch auf leeren Text zu und damit auf jede E-Mail. Er wurde nicht gespeichert.',
   backreference_or_lookbehind:
     'Rückverweise (\\1) und Rückschau ((?<=…)) sind nicht zugelassen: Sie sind die häufigste Ursache für Ausdrücke, die bei langen E-Mails minutenlang rechnen.',
   catastrophic_shape:
@@ -127,26 +119,21 @@ const reject = (reason: Exclude<PatternRejection, 'syntax'>): PatternCheckError 
   message: MESSAGES[reason],
 });
 
-/**
- * Zählt die Erfassungsgruppen, **ohne** das Muster auf einem Text laufen zu
- * lassen.
- *
- * Der Kniff: `muster|` trifft an Position 0 immer, weil der leere Zweig der
- * Alternative sofort passt. Das Ergebnis enthält trotzdem einen Eintrag je
- * Erfassungsgruppe des Musters. Es wird also nichts durchsucht und nichts
- * zurückverfolgt — die Laufzeit ist unabhängig vom Muster.
- *
- * Genau deshalb steht diese Prüfung hier und nicht im Worker: Sie kann nicht
- * hängenbleiben.
- */
-const countCaptureGroups = (source: string): number | null => {
-  try {
-    const probe = new RegExp(`${source}|`);
-    const result = probe.exec('');
-    return result === null ? null : result.length - 1;
-  } catch {
-    return null;
+/** Count captures lexically; never execute a user expression in the UI thread. */
+const countCaptureGroups = (source: string): number => {
+  let count = 0;
+  let escaped = false;
+  let inClass = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source.charAt(index);
+    if (escaped) { escaped = false; continue; }
+    if (character === '\\') { escaped = true; continue; }
+    if (inClass) { if (character === ']') inClass = false; continue; }
+    if (character === '[') { inClass = true; continue; }
+    if (character === '(' && (source[index + 1] !== '?' ||
+      (source[index + 2] === '<' && source[index + 3] !== '=' && source[index + 3] !== '!'))) count += 1;
   }
+  return count;
 };
 
 /**
@@ -332,26 +319,6 @@ export const checkPattern = (source: unknown): PatternCheck => {
   }
 
   const groupCount = countCaptureGroups(source);
-  if (groupCount === null) {
-    // Das Muster ließ sich übersetzen, `muster|` aber nicht — etwa bei einer
-    // Alternative, die am Ende offen bleibt. Als Syntaxfehler behandeln.
-    return {
-      ok: false,
-      reason: 'syntax',
-      message:
-        'Der Ausdruck ist nicht gültig: Er lässt sich nicht in eine Alternative einsetzen und ist damit unvollständig.',
-    };
-  }
-  if (groupCount === 0) {
-    return reject('no_capture_group');
-  }
-
-  // B-4.3 Punkt 2: trifft der Ausdruck auf `""`, trifft er auf jede E-Mail.
-  // Die Auswertung auf der leeren Zeichenkette kann nicht zurückverfolgen —
-  // es gibt keine Eingabe, über die zurückzuverfolgen wäre.
-  if (new RegExp(source).test('')) {
-    return reject('matches_empty');
-  }
-
+  // Empty-match validation runs in the time-limited worker.
   return { ok: true, source, groupCount };
 };

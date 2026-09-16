@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { CalendarDay, ForeignText } from "../../api/types";
 import { cx } from "../../lib/cx";
 import { DONE_FLAG_LABEL, doneFlagState } from "../../lib/labels";
@@ -8,7 +8,7 @@ import { ExportSummaryStrip } from "../../shared/ui/ExportSummaryStrip";
 import { Icon } from "../../shared/ui/Icon";
 import { Menu, type MenuEntry } from "../../shared/ui/Menu";
 import { IconButton } from "../../shared/ui/Primitives";
-import { TagChip } from "../../shared/ui/Tag";
+import { TodoTagsCell } from "../todos/TodoTagsCell";
 import { foreignText, quotedName } from "../../lib/foreign";
 import { Foreign } from "../../shared/ui/Foreign";
 
@@ -75,6 +75,8 @@ export interface KanbanCardData {
   readonly title: ForeignText;
   readonly callNumber: ForeignText | null;
   readonly tags: readonly KanbanTagRef[];
+  readonly tagCount?: number;
+  readonly priorityName?: ForeignText;
   /** Bereits formatierte Gesamtdauer, zum Beispiel "4:15 h". */
   readonly trackedDisplay: string;
   readonly exportSummary: ExportSummary;
@@ -142,6 +144,7 @@ export function KanbanCard({
   highlighted = false,
   today,
 }: KanbanCardProps) {
+  const [tagsOpen, setTagsOpen] = useState(false);
   const cardFlagState = doneFlagState(card.done, card.reactivated === true);
   const others = card.appearance?.otherColumns ?? [];
 
@@ -210,18 +213,10 @@ export function KanbanCard({
           </button>
         ) : null}
 
-        {card.tags.length > 0 ? (
-          <div className="kcard__tags">
-            {card.tags.map((tag) => (
-              <TagChip
-                key={`${tag.path?.join("/") ?? ""}/${tag.label}`}
-                label={tag.label}
-                size="sm"
-                {...(tag.path === undefined ? {} : { path: tag.path })}
-              />
-            ))}
-          </div>
-        ) : null}
+        <div className="kcard__tags">
+          {card.priorityName ? <span className="kcard__priority"><Icon name="arrow-up" size={12} /><Foreign value={card.priorityName} /></span> : null}
+          <TodoTagsCell count={card.tagCount ?? card.tags.length} tags={card.tags.map(tag => ({ name: tag.label, path: tag.path ?? [] }))} open={tagsOpen} onOpenChange={setTagsOpen} />
+        </div>
 
         <div className="kcard__foot">
           <ExportSummaryStrip summary={card.exportSummary} />

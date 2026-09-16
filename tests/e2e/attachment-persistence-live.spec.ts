@@ -1,15 +1,7 @@
+import { localDayFromToday } from './support/local-time';
 /**
- * TP-ANH-10, Stufe 2 (docs/testplan.md, Abschnitt 25.2) — T-150. Seit T-187
- * zusätzlich TP-ANH-21 (O-FI) in derselben Datei — dieselbe Bauart, derselbe
- * echte Neustart, dieselbe Ausführungskonfiguration, ein anderer Anlass.
- *
- * Ein echter Prozess-Neustart des lokalen Dienstes, mit demselben Bestand —
- * dieselbe Bauart wie `TP-VER-11`/`-12` für die Versionsprüfung (T-142), hier
- * ohne Attrappe (kein Netzwerk beteiligt): Eine Prüfung, die nur die Seite neu
- * lädt (Stufe 1, `attachment-crud.spec.ts`), unterscheidet Persistenz im
- * Bestand nicht von Persistenz im Arbeitsspeicher des Dienstes. Läuft in einer
- * eigenen Ausführungskonfiguration (`playwright.attachment-persistence
- * .config.ts`) — Begründung dort.
+ * Persistenz durch echten Dienstneustart mit demselben Bestand prüfen; Neuladen der Seite reicht
+ * dafür nicht.
  */
 import { test, expect } from '@playwright/test';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -28,15 +20,6 @@ import { appDataDirIn } from './support/app-data-isolation';
 /** Ein minimales, gültiges 1×1-PNG (rot) — selbst erzeugt, keine echten Bilddaten. */
 const MINIMAL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-
-function isoDay(offsetDays: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${String(year)}-${month}-${day}`;
-}
 
 let localApi: ChildProcessWithoutNullStreams;
 
@@ -64,7 +47,7 @@ test.describe('TP-ANH-10 Stufe 2 — Frist und Anhänge überstehen einen echten
     await writeFile(filePath, 'E2E-Testinhalt, keine echten Kundendaten.\n', 'utf8');
     await writeFile(imagePath, Buffer.from(MINIMAL_PNG_BASE64, 'base64'));
 
-    const dueDate = isoDay(21);
+    const dueDate = localDayFromToday(21);
     const todo = await createTodo({ title: `E2E-ANH-RESTART-${Date.now()}`, dueDate });
     await createAttachment(todo.id, { kind: 'link', url: 'https://beispiel.example/tp-anh-10' });
     await createAttachment(todo.id, { kind: 'file', path: filePath });

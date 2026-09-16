@@ -43,10 +43,8 @@ const tagId = (value: string) => value as unknown as TagId;
 const poolId = (value: string) => value as unknown as PoolId;
 const todoId = (value: string) => value as unknown as TodoId;
 
-// ---------------------------------------------------------------------------
 // Fall 1 — eine Karte in mehreren Spalten (der Fall, den es bei Status nicht
 // geben konnte).
-// ---------------------------------------------------------------------------
 
 describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig stehen (E-054)', () => {
   it('eine Karte, die zwei Spaltenregeln erfüllt, erscheint mit beiden Kennungen in Spaltenreihenfolge', () => {
@@ -143,9 +141,7 @@ describe('boardAppearances — eine Karte kann in mehreren Spalten gleichzeitig 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fall 2 — leere Regel trifft nichts, auch im Modus "all".
-// ---------------------------------------------------------------------------
 
 describe('boardAppearances — eine Spalte ohne Regel zeigt nichts, nicht alles (T-009, A-3.4)', () => {
   it('eine leere Regel im Modus "any" trifft keine Karte', () => {
@@ -192,11 +188,9 @@ describe('boardAppearances — eine Spalte ohne Regel zeigt nichts, nicht alles 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fall 3 — mehrere zutreffende Regelterme derselben Spalte ergeben eine
 // Nennung, nicht mehrere. Das ist der Fall, an dem eine falsche Umsetzung
 // dieselbe Karte doppelt zeigt.
-// ---------------------------------------------------------------------------
 
 describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zählen als EINE Nennung', () => {
   it('Modus "any" mit fünf Regel-Tags: eine Karte mit dreien davon erscheint einmal, nicht dreimal', () => {
@@ -256,7 +250,6 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
     ]);
   });
 
-  // -------------------------------------------------------------------------
   // Rot vor Grün: eine Vergleichsimplementierung, die exakt den beschriebenen
   // Fehler begeht — sie zählt zutreffende Regel-Tags statt zutreffende
   // Spalten und hängt die Spaltenkennung für jeden Treffer erneut an. Diese
@@ -268,7 +261,6 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
   // mitgeschnittene Fehlermeldung). Die jetzige, dauerhaft grüne Fassung hält
   // beide Ergebnisse ausdrücklich auseinander, damit der Unterschied im
   // Prüflauf sichtbar bleibt statt nach der Korrektur zu verschwinden.
-  // -------------------------------------------------------------------------
   function boardAppearancesCountingRuleTerms(
     columns: readonly BoardColumnRule[],
     cards: readonly BoardCard[],
@@ -350,7 +342,6 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fall 4 — die Übereinstimmung zwischen SQL-Abfrage und Domänenregel.
 //
 // `packages/domain` kennt kein SQL (E-001) — die Abfrageseite selbst lässt
@@ -364,7 +355,6 @@ describe('boardAppearances — mehrere zutreffende Regelterme EINER Spalte zähl
 // `matchesPool` nach und vergleicht es gegen `boardAppearances` — laufen sie
 // auseinander, hat `boardAppearances` entweder eine eigene Regel erfunden
 // oder falsch angewendet.
-// ---------------------------------------------------------------------------
 
 describe('boardAppearances — Übereinstimmung mit matchesPool (derselben Regel wie die SQL-Mitgliederabfrage)', () => {
   it('die Menge der Mehrfachnennungen entspricht exakt dem, was matchesPool je Spalte und Karte unabhängig ermittelt', async () => {
@@ -409,9 +399,7 @@ describe('boardAppearances — Übereinstimmung mit matchesPool (derselben Regel
   });
 });
 
-// ---------------------------------------------------------------------------
 // Randfälle: keine Spalten, keine Karten.
-// ---------------------------------------------------------------------------
 
 describe('boardAppearances — Randfälle', () => {
   it('keine Spalten ergibt keine Mehrfachnennung, ganz gleich wie viele Karten', () => {

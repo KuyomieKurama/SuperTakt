@@ -602,9 +602,7 @@ export const createFakeStore = (options = {}) => {
   };
 };
 
-// ---------------------------------------------------------------------------
 // T-078 — der Bestand für die fünf Regelachsen aus T-076
-// ---------------------------------------------------------------------------
 
 /**
  * Die Kennungen des Achsen-Bestands. Wieder UUID Fassung 7, wieder erfunden.
@@ -776,9 +774,7 @@ export const AXIS_POOLS = Object.freeze([
   },
 ]);
 
-// ---------------------------------------------------------------------------
 // T-086 — der Bestand für den leeren Ordner (E-057)
-// ---------------------------------------------------------------------------
 
 /**
  * Die Kennungen des E-057-Bestands. Wieder erfunden, wieder UUID Fassung 7.
@@ -917,9 +913,7 @@ export const E057_POOLS = Object.freeze([
   },
 ]);
 
-// ---------------------------------------------------------------------------
 // T-090 — der Bestand für die Anzeigefläche (E-054, E-056)
-// ---------------------------------------------------------------------------
 
 /**
  * Die Kennungen des Flächen-Bestands. Erfunden, UUID Fassung 7, wie alles hier.

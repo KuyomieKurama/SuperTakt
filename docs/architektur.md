@@ -2211,3 +2211,33 @@ und nicht ein stiller Sprung beim nächsten `pnpm install`.
 erzeugen, was auf Dauer richtig ist, aber die vorhandene, handgeschriebene Beschreibung mit 54
 Operationen wäre dafür neu zu schreiben. Das gehört in eine eigene Aufgabe, sobald die
 Fachlogik-Routen stehen, nicht in die Prüfschicht.
+
+## Nachtrag Outlook-Mail-Zuordnung (15.09.2026)
+
+A-10.11–A-10.15 erlauben das Ergänzen vorhandener Todos über einen strikten Mail-Endpunkt.
+Die früheren absoluten Anhangsverbote (insbesondere A-A-21/A-A-71/A-A-82) gelten nun für
+**nicht validierte bzw. allgemeine** Schreibzugriffe. Die neue Ausnahme prüft Call-Nummer,
+Mailidentität, Rumpffelder, Größen und Links serverseitig und verändert keine Zeit- oder
+Exportdaten. Die fünf erlaubten Add-in-Routen werden weiter als feste Menge geprüft.
+Migration 0025, Archivfassung 7, Transaktions-/Dateiaufräumablauf, Identitätsfallback und
+konkrete Testpfade stehen in [Outlook-Angleichung](outlook-bridge-alignment.md).
+
+### Plattformübergreifende Zertifikatseinrichtung (A-23)
+
+`outlook_certificate.rs` bedient die vorhandenen zwei IPC-Befehle unter Windows,
+Linux und macOS. Windows nutzt weiterhin den PowerShell-Adapter; Linux/macOS
+verwenden `outlook_certificate_unix.rs`. X.509-Prüfung, SHA-256 und temporäre
+öffentliche Kopien liegen innerhalb der Hülle. Linux schreibt eng begrenztes
+Serververtrauen in die NSS-Benutzerspeicher, macOS in den Benutzerschlüsselbund.
+Der Renderer erhält ausschließlich geprüfte öffentliche Fakten, Speicherzustände
+und das getrennte HTTPS-Ergebnis. Details: [Zertifikatseinrichtung](outlook-certificate-setup.md).
+
+### NoExport (A-26, Migration 0026)
+
+`todo.no_export` ist ein Boolean mit Standard 0 und CHECK (0, 1). Die
+Exportkandidatensicht filtert es aus; `recordRun` prüft es beim Festschreiben erneut.
+Die Zeitbuchung bleibt unverändert. `/time-entries` schließt NoExport vor Sortierung,
+Zählung und Seitenauswahl aus. Aufgabenansicht und Zeiterfassung fragen bewusst mit
+`includeNoExport=true`; Buchungsübersicht und Export tun dies nicht.
+Datenarchiv 8 trägt die Spalte; Archive 1–7 ergänzen false. Das Flag ersetzt keine
+historischen Exportmarkierungen und verändert keine bereits erzeugte Datei.

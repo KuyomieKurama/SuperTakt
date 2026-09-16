@@ -363,7 +363,6 @@ describe('createAttachmentPort.imageTargets — nur die Bildziele, in Vorbereitu
   });
 });
 
-// -----------------------------------------------------------------------
 // T-317 (unit-tester) — `knownImageTargets` ist in T-315 ersatzlos gestrichen
 // worden (siehe T-315-domain-dev.md Abschnitt 3.1): Die engere Zweitfassung
 // derselben Eigentümerfrage war genau die Doppelung, die den in T-313/T-314
@@ -375,14 +374,11 @@ describe('createAttachmentPort.imageTargets — nur die Bildziele, in Vorbereitu
 // Gegenprobe "eine Zeile der Art image/link/file mit demselben Namenswert
 // zählt ebenfalls als Eigentümer"). Dieser Block wurde deshalb ersatzlos
 // gestrichen, nicht als "veraltet" stehengelassen.
-// -----------------------------------------------------------------------
 
-// -----------------------------------------------------------------------
 // T-174 (unit-tester), Nachtrag zur Deckungsschwelle: `knownKinds` und
 // `imageCount` sind während dieser Welle (T-178, A-A-36 / T-179 B-1) in
 // dieser Datei entstanden und hatten bis hierher keinen Prüffall — der
 // Grund, warum `packages/storage/src/**` unter 80 % Zweigdeckung fiel.
-// -----------------------------------------------------------------------
 describe('createAttachmentPort.knownKinds — die Nachschlagetabelle (A-A-36)', () => {
   let db: TestDatabase;
 
@@ -577,7 +573,6 @@ describe('Eine Art, die die Domäne nicht kennt, wird beim Lesen übergangen —
   });
 });
 
-// -----------------------------------------------------------------------
 // T-316 (unit-tester) — A-A-98: die Eigentümerfrage des Aufräumlaufs für
 // übernommene E-Mail-Dateien, an der echten, migrierten Datenbank gemessen
 // (T-313-1 bis T-313-3, T-314-domain-dev.md Abschnitt 1 und 2).
@@ -593,7 +588,6 @@ describe('Eine Art, die die Domäne nicht kennt, wird beim Lesen übergangen —
 // Vergleich statt LIKE, oder eine engere Antwort in
 // attachmentTargetNamesFile selbst — lässt mindestens einen der drei Fälle
 // rot werden.
-// -----------------------------------------------------------------------
 describe('createAttachmentPort.attachmentsNamingFiles — die weiteste Eigentümerfrage (A-A-98)', () => {
   let db: TestDatabase;
 
@@ -725,14 +719,12 @@ describe('createAttachmentPort.attachmentsNamingFiles — die weiteste Eigentüm
     expect(owned.has(namen[1] as string)).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
   // Die SQL-Vorauswahl arbeitet mit `LIKE '%name%'` — ein Name, der selbst ein
   // Muster wäre (`%`, `_`), ein Pfadtrenner darin, eine leere Zeichenkette oder
   // eine ungewöhnliche Länge sind genau die Werte, an denen eine Vorauswahl
   // reißen würde, bevor die Entscheidung in @takt/domain überhaupt gefragt
   // wird. Jeder Fall hier hat ein reales Gegenstück: E-Mail-Anhänge tragen
   // häufig Unterstriche im Namen, seltener auch das andere SQL-Platzhalterzeichen.
-  // -------------------------------------------------------------------------
 
   it('eine leere Zeichenkette in der Namensliste bleibt ausgeschlossen — obwohl das SQL-Muster "%%" jede Zeile träfe', async () => {
     db = openTestDatabase();

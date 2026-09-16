@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { errorMessage } from "../../api/client";
-import { deletePool, updatePool } from "../../api/endpoints";
+import { deletePool, updatePool } from "../structure/api";
 import type { Pool, PoolPlacement } from "../../api/types";
 import { useRefresh } from "../../app/RefreshContext";
 import { navigate } from "../../app/router";

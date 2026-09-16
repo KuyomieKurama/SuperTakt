@@ -1,0 +1,12 @@
+/* @theme {"label":"Arc","mode":"dark","hint":"Schiefergrau mit blauen Akzenten","order":1} */
+:root[data-design-theme="arc"] {
+  --preset-canvas: #2d323d;
+  --preset-surface: #383c4a;
+  --preset-ink: #d3dae3;
+  --preset-muted: #bfc5cf;
+  --preset-accent: #5294e2;
+  --preset-link: #a3c0e3;
+  --preset-on: #101010;
+  --preset-accent-hover: #5c9ae4;
+  --preset-accent-active: #639fe5;
+}

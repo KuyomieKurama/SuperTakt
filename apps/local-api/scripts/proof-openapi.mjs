@@ -1,86 +1,4 @@
-/**
- * Takt — Nachweis, dass die Schnittstellenbeschreibung den Dienst beschreibt
- * (T-039).
- *
- * Aufruf:  pnpm --filter @takt/local-api proof:openapi
- *
- * ===========================================================================
- * Warum dieser Lauf existiert
- * ===========================================================================
- *
- * Dreimal ist `apps/local-api/openapi/takt-local-api.yaml` vom Dienst
- * abgewichen, und dreimal hat es jemand von Hand gefunden:
- *
- *  - T-022: vier Befunde.
- *  - T-029: zwölf. Darunter der Seitenumschlag, der bei **keiner** Listenroute
- *    stimmte — wer `response.data.map(...)` schrieb, merkte es zur Laufzeit.
- *  - T-038/T-039: `reopenIfDone`, ein Rumpffeld, das der Dienst nicht mehr
- *    kennt. Der Satz des integration-dev dazu: „Wer gegen die Beschreibung
- *    baut, baut C-03 nach."
- *
- * Jedes Mal war die Beschreibung *plausibel*. Das ist ihre Eigenart: Sie wird
- * nicht ausgeführt, also fällt nichts auf. Dieser Lauf führt sie aus — nicht
- * als Prüfwerkzeug für Anfragen, sondern als Vergleich gegen die einzige
- * Wahrheit, die es gibt: den zusammengebauten Dienst.
- *
- * ===========================================================================
- * Was verglichen wird, und was nicht
- * ===========================================================================
- *
- * **1. Routen, beide Richtungen.** Die Aufzählung kommt aus `Hono#routes` des
- * über `compose` gebauten Dienstes, nicht aus einer gepflegten Liste. Eine neue
- * Route ohne Beschreibung wird rot, eine beschriebene Route ohne Dienst
- * ebenfalls.
- *
- * **2. Anfragerümpfe.** Jede Route mit Rumpf prüft ihre Eingabe mit einem
- * zod-Schema. `z.toJSONSchema` macht daraus JSON Schema, und das wird gegen
- * das gehalten, was die Beschreibung über denselben Rumpf sagt: Feldnamen,
- * Pflichtfelder, Obergrenzen, Aufzählungen.
- *
- * Die Zuordnung „Route → Schema" steht nicht hier, sondern als
- * `REQUEST_SCHEMAS` in den Routendateien selbst. Das ist Absicht: Wer eine
- * Route hinzufügt, sieht die Zuordnung neben seiner Arbeit und nicht in einem
- * Skript, von dem er nichts weiß. Fehlt der Eintrag, wird dieser Lauf rot.
- *
- * **3. Der Leser selbst.** Abschnitt 0 prüft an bekannten Stellen, dass er die
- * Datei wirklich liest. Ohne das wäre ein kaputter Leser die schlimmste aller
- * Möglichkeiten: grün, weil er nichts findet.
- *
- * **4. Antwortgestalten und Statuscodes (T-041).** Das war bis dahin die
- * offene Hälfte — und die, in der die teuersten Befunde lagen:
- *
- *  - T-022: `GET /settings` und `POST /todos` lieferten eine Hülle, wo die
- *    Beschreibung die Entität versprach. Wer dagegen baute, las `undefined`
- *    und bekam keine Fehlermeldung, sondern eine leere Anzeige.
- *  - T-029: der Seitenumschlag stimmte bei **keiner** Listenroute.
- *  - T-039: `POST /timer/start` antwortete laut Beschreibung mit `409
- *    timer_already_running`, tatsächlich mit `200` und
- *    `kind: confirmation_required`.
- *
- * Dreimal derselbe Fehlertyp, dreimal von Hand gefunden, jedes Mal erst,
- * nachdem jemand dagegen gebaut hatte. `service-scenario.mjs` baut den Dienst
- * einmal mit einem kleinen festen Bestand auf und fährt **jede** der 64
- * Operationen mindestens einmal an; `schema-match.mjs` hält jede Antwort gegen
- * das, was die Beschreibung über sie sagt. Der Statuscode zählt dabei so viel
- * wie der Rumpf: Eine Beschreibung, die 409 verspricht und 200 bekommt, führt
- * zu einer Oberfläche, die einen Fehlerfall behandelt, den es nicht gibt — und
- * den echten nicht.
- *
- * **Was auch dieser Lauf nicht prüft.** Ob die Werte **stimmen**. Er misst
- * Gestalt, nicht Verhalten: dass `durationSeconds` da ist und eine Zahl, nicht
- * dass sie die richtige Zahl ist. Dafür gibt es die Prüfsuite und die übrigen
- * Nachweispfade. Und er misst nur, was der Durchlauf auslöst — ein
- * Fehlerfall, den niemand herbeiführt, bleibt unbeschrieben messbar falsch.
- * Deshalb führt der Durchlauf auch Abweisungen herbei und nicht nur
- * Erfolgsfälle.
- *
- * **Die Regel über allen Nachweispfaden** steht ausgeschrieben im Kopf von
- * `proof-route-policy.mjs` (A-A-55, T-206): *Keine Zusicherung darf bestehen,
- * ohne daß das Geprüfte stattgefunden hat.* Drei Stellen dieses Laufs sind
- * ihre Anwendung — die Weigerung über die Routenliste in Abschnitt 2
- * (A-A-51), die einseitige Aufzählung in Abschnitt 3 (A-A-53) und die
- * Untergrenze der Vermerksmessung in Abschnitt 6 (A-A-52).
- */
+/** Vergleicht Routen und ausgelöste HTTP-Antworten mit OpenAPI. Die Prüfung misst Form und Statuscodes; korrekte Werte und nicht ausgelöste Fehlerfälle brauchen eigene Tests. */
 
 import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
@@ -95,6 +13,7 @@ import { compose } from '../src/composition.ts';
 import { API_BASE_PATH } from '../src/config.ts';
 import { statusFor } from '../src/http/problem.ts';
 import { errorStatus } from '../src/errors.ts';
+import { REQUEST_SCHEMAS as PRIORITY_SCHEMAS } from '../src/features/priorities/routes.ts';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/features/todos/routes.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/features/structure/routes.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/features/timer/routes.ts';
@@ -169,9 +88,7 @@ function section(title) {
 const text = readFileSync(SPEC_PATH, 'utf8');
 const doc = parseYaml(text);
 
-// ---------------------------------------------------------------------------
 section('0  Der Leser liest die Datei — sonst wäre alles Folgende wertlos');
-// ---------------------------------------------------------------------------
 
 check('die Beschreibung ist OpenAPI 3.1', doc?.openapi === '3.1.0', String(doc?.openapi));
 
@@ -247,9 +164,7 @@ check(
     doc.paths['/addin/todo-matches'].get.parameters[0].name === 'callNumber',
 );
 
-// ---------------------------------------------------------------------------
 section('1  Jeder Verweis zeigt auf etwas, und nichts liegt unbenutzt herum');
-// ---------------------------------------------------------------------------
 
 const refs = [...text.matchAll(/#\/components\/([A-Za-z]+)\/([A-Za-z0-9]+)/g)].map((m) => [m[1], m[2]]);
 const dangling = refs.filter(([kind, name]) => doc.components?.[kind]?.[name] === undefined);
@@ -282,9 +197,7 @@ check(
   orphans.join(', '),
 );
 
-// ---------------------------------------------------------------------------
 section('2  Die Routen: die Aufzählung kommt aus dem Dienst, nicht von Hand');
-// ---------------------------------------------------------------------------
 
 /** Ein Tokenspeicher im Arbeitsspeicher — hier wird nichts geschrieben. */
 const memoryStore = () => ({
@@ -411,11 +324,10 @@ check(
   outside.join(', '),
 );
 
-// ---------------------------------------------------------------------------
 section('3  Die Anfragerümpfe: Feldnamen, Pflichtfelder, Obergrenzen');
-// ---------------------------------------------------------------------------
 
 const REQUEST_SCHEMAS = {
+  ...PRIORITY_SCHEMAS,
   ...TODO_SCHEMAS,
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
@@ -590,9 +502,7 @@ check(
   facetProblems.join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('4  Was T-038 entfernt hat, steht auch nicht mehr in der Beschreibung');
-// ---------------------------------------------------------------------------
 
 check(
   '`reopenIfDone` kommt in der Beschreibung nur noch als Rückblick vor',
@@ -619,9 +529,7 @@ check(
   booking.description.includes('201') && booking.description.includes('reopenIfDone'),
 );
 
-// ---------------------------------------------------------------------------
 section('5  Der Vergleicher prüft sich selbst — sonst wäre alles Folgende grün aus Versehen');
-// ---------------------------------------------------------------------------
 
 /*
  * Ein Vergleicher, der nichts findet, sieht genauso aus wie eine Beschreibung,
@@ -698,9 +606,7 @@ check(
   ).length === 1,
 );
 
-// ---------------------------------------------------------------------------
 section('6  Der Durchlauf: jede Operation wird angefahren');
-// ---------------------------------------------------------------------------
 
 const operations = new Map();
 for (const [path, item] of Object.entries(doc.paths)) {
@@ -804,9 +710,7 @@ check(
   `geliefert ${JSON.stringify(createdStatus?.body?.data?.color)}`,
 );
 
-// ---------------------------------------------------------------------------
 section('7  Die Statuscodes: was der Dienst liefert, steht in der Beschreibung');
-// ---------------------------------------------------------------------------
 
 const observed = new Map();
 const undescribedStatus = [];
@@ -895,9 +799,7 @@ check(
   missingChain.slice(0, 6).join(' | ') + (missingChain.length > 6 ? ` … (${missingChain.length})` : ''),
 );
 
-// ---------------------------------------------------------------------------
 section('8  Die Antwortrümpfe: Pflichtfelder, unbeschriebene Felder, Gestalt');
-// ---------------------------------------------------------------------------
 
 const shapeProblems = [];
 const headerProblems = [];
@@ -971,9 +873,7 @@ check(
   matchedResponses >= 60,
 );
 
-// ---------------------------------------------------------------------------
 section('9  Die Fehlerschlüssel: benannt, und mit dem Statuscode des Dienstes');
-// ---------------------------------------------------------------------------
 
 /** Welchen Statuscode der Dienst zu einem Schlüssel liefert, aus seinen zwei Tabellen. */
 const serviceStatusOf = (code) => {
@@ -1038,9 +938,7 @@ check(
   wrongCodeStatus.join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('10  Beispiele und Fragezeichenparameter');
-// ---------------------------------------------------------------------------
 
 /*
  * Ein Beispiel ist das, was ein Leser zuerst ansieht und zuletzt prüft. Wenn
@@ -1148,9 +1046,7 @@ check(
   unreadParameters.join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('11  Das Board: dieselbe Karte in mehreren Spalten (E-054)');
-// ---------------------------------------------------------------------------
 
 /*
  * Der Fall, den es vor E-054 nicht geben konnte.
@@ -1289,9 +1185,7 @@ check(
   disagreements.join(' | ') || `Regel ${byDomain.size}, Abfrage ${multiple.length}`,
 );
 
-// ---------------------------------------------------------------------------
 section('12  Die Regel ist eine Struktur mit benannten Feldern (T-076)');
-// ---------------------------------------------------------------------------
 
 /*
  * Der Auftraggeber wollte den Status als Regel — und hat, mit einem Vorbild vor
@@ -1370,9 +1264,7 @@ check(
   `Tagspalte ${asList(tagColumn)} | Statusspalte ${asList(onlyStatus)}`,
 );
 
-// ---------------------------------------------------------------------------
 // Der zweite Durchgang: Erledigt und Exportstatus
-// ---------------------------------------------------------------------------
 
 const boardRecords = records.filter((record) => record.operationId === 'getBoard');
 const lateBoard = boardRecords[boardRecords.length - 1]?.body?.data;
@@ -1488,9 +1380,7 @@ check(
   lateProblems.join(' | ') || 'keine Mehrfachnennung im zweiten Durchgang',
 );
 
-// ---------------------------------------------------------------------------
 section('13  Die Frage „ist diese Regel leer" steht einmal (T-080)');
-// ---------------------------------------------------------------------------
 
 /*
  * Bis T-080 stand die Bedingung „alle Achsen neutral" dreimal da: in
@@ -1679,9 +1569,7 @@ check(
   blind.length > 0 ? `wirkungslos: ${blind.join(', ')}` : 'die neutrale Regel gilt nicht als leer',
 );
 
-// ---------------------------------------------------------------------------
 section('14  Ein Ordnerterm ohne Tags trifft nichts, statt zu verschwinden (E-057)');
-// ---------------------------------------------------------------------------
 
 /*
  * Der Befund aus T-080, den T-082 behebt.
@@ -1929,9 +1817,7 @@ check(
   'die Ableitung urteilt nicht wie E-057',
 );
 
-// ---------------------------------------------------------------------------
 section('15  Die Poolbewegung bei Start, Stopp und verwaister Buchung (E-058) und die Sperre auf einem Ordner in einer Regel');
-// ---------------------------------------------------------------------------
 
 /*
  * **Der Befund hinter E-058.** Der Satz „Die Karte bleibt, wo sie ist — die
@@ -2326,9 +2212,7 @@ check(
   folderDeletes.map((record) => record.status).join(', '),
 );
 
-// ---------------------------------------------------------------------------
 section('16  Die Zeichenklasse steht in der Domäne, und beide Türen sagen dasselbe (T-122, E-063)');
-// ---------------------------------------------------------------------------
 
 /*
  * Die Lehre aus T-119, eine Ebene höher angewandt.
@@ -2399,7 +2283,6 @@ check(
   );
 }
 
-// ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed > 0) {
   console.log('\nFehlgeschlagen:');

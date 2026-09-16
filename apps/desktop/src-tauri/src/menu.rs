@@ -1,12 +1,3 @@
-//! Takt — das Anwendungsmenü.
-//!
-//! Kurz gehalten. Ein Menü ist kein Ort für Fachfunktionen: Alles, was der
-//! Benutzer regelmäßig tut, gehört sichtbar in die Oberfläche und nicht zwei
-//! Klicks tief in eine Leiste, die unter Windows ohnehin selten benutzt wird.
-//! Hier stehen nur die Dinge, die es **nur** hier geben kann — Beenden mit
-//! Tastenkürzel und die Angaben zur Anwendung.
-//!
-//! Alle Beschriftungen auf Deutsch (`CLAUDE.md`).
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager};

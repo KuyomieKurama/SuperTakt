@@ -68,9 +68,7 @@ class Reader {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Flussausdrücke
-// ---------------------------------------------------------------------------
 
 class Flow {
   constructor(text) {
@@ -267,9 +265,7 @@ const readInline = (raw) => {
   return plain(trimmed);
 };
 
-// ---------------------------------------------------------------------------
 // Blockstruktur
-// ---------------------------------------------------------------------------
 
 /** Zerlegt `schlüssel: rest`; gibt `null`, wenn die Zeile keine Zuordnung ist. */
 const splitKey = (body) => {

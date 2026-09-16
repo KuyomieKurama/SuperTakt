@@ -4,9 +4,20 @@ Dieses Dokument beschreibt das öffentliche Sicherungsformat aus A-20 und die
 Zuordnung der beiden Fremdformate. Der Abrechnungsexport aus A-8 ist davon
 unabhängig.
 
-## Format `de.supertakt.data-archive`, Schemafassung 1
+## Format `de.supertakt.data-archive`
 
-Eine Sicherung ist UTF-8-kodiertes JSON mit diesem Umschlag:
+Die maßgeblichen Angaben stehen in
+[`data-transfer.ts`](../apps/local-api/src/features/data-transfer/data-transfer.ts):
+`DATA_ARCHIVE_VERSION` bestimmt die Schreibfassung, `READABLE_VERSIONS` die lesbaren
+Fassungen und `parseArchive` deren Prüfung und Ergänzungen. Aktuell wird Fassung 10
+geschrieben; Fassungen 1 bis 10 werden gelesen. Unbekannte Fassungen werden abgewiesen.
+Die Erzeugerkennung bleibt aus Kompatibilitätsgründen `Takt`.
+
+### Historischer Umschlag der Fassung 1
+
+Das folgende gekürzte Beispiel dokumentiert die ursprüngliche Form, **kein heute
+vollständig importierbares Archiv**. Es fehlen die vorgeschriebenen Tabellen.
+Eine Sicherung ist UTF-8-kodiertes JSON:
 
 ```json
 {
@@ -26,33 +37,35 @@ Eine Sicherung ist UTF-8-kodiertes JSON mit diesem Umschlag:
 eine ganze Zahl und entscheidet, welcher Leser zuständig ist. Fassung 1 wird
 nicht stillschweigend auf eine unbekannte spätere Fassung angewendet.
 
-`data.tables` ist ein normalisiertes relationales Abbild. Jede Beziehung wird
-über dieselbe stabile Kennung ausgedrückt, die Takt intern verwendet. Die
-Spaltenlisten sind Teil der Fassung 1; zusätzliche oder fehlende Spalten werden
-beim Wiederherstellen abgewiesen.
+### Aktueller Inhalt und Kompatibilität
 
-| Tabelle | Inhalt |
-|---|---|
-| `todo_status` | Statusspalten, Reihenfolge und Standardstatus |
-| `tag_folder`, `tag`, `todo_tag` | Ordnerbaum, Tags und Zuordnungen |
-| `todo`, `todo_note` | Aufgaben einschließlich Frist, Erledigt-Zeitpunkt und Vermerk |
-| `time_entry`, `timer_heartbeat` | Zeitbuchungen, Exportzustand und laufender Timer |
-| `todo_attachment_kind`, `todo_attachment` | Anhangsarten und Anhänge |
-| `pool`, `pool_rule` | Pools/Kanban-Spalten und ihre vollständigen Regeln |
-| `default_tag` | Standard-Tags samt Reihenfolge |
-| `export_template` | eingebaute und eigene Exportvorlagen |
-| `export_run`, `export_run_group`, `export_run_entry`, `export_audit` | Exportläufe, Tagesgruppen, beteiligte Buchungen und unveränderliches Protokoll |
-| `app_setting` | Anwendungseinstellungen |
+`data.tables` ist ein normalisiertes relationales Abbild mit stabilen Kennungen.
+Die vollständige Tabellenmenge steht in
+[`DATA_ARCHIVE_TABLES`](../packages/storage/src/ports.ts), die Prüfung der
+Tabellen und Spalten in
+[`repo-data-archive.ts`](../packages/storage/src/sqlite/repo-data-archive.ts).
+Eine zweite Tabellenliste wird hier nicht gepflegt. Token, Migrationsbuch,
+abgeleitete Sichten und temporäre Dateien gehören nicht zum Archiv.
 
-Bildanhänge stehen zusätzlich unter `data.images` als Objekte mit `name`,
-`mediaType` und Base64-kodierten Bytes. Der Tabellenverweis bleibt dadurch
-unverändert, während die Datei selbst transportierbar wird. Verweis- und
-Dateianhänge brauchen keine eingebetteten Bytes; ihr Ziel steht in
-`todo_attachment`.
+Bildkopien werden unter `data.images` mit `name`, `mediaType` und `base64`
+transportiert. Seit Fassung 6 enthält `data.files` zusätzlich die Bytes aus E-Mails
+übernommener Dateien als `{ name, base64 }`. Diese Liste ist für die aktuelle
+Schreibfassung erforderlich, auch wenn sie leer ist. Gewöhnliche Dateiverweise
+und Webverweise bleiben Ziele in `todo_attachment`; ihre externen Inhalte werden
+nicht eingebettet. Base64 ist keine Verschlüsselung.
 
-Nicht enthalten sind das Sitzungs- und Add-in-Token, das Datenbank-
-Migrationsbuch, abgeleitete Sichten und temporäre Dateien. Eine Warnung im
-obersten `warnings`-Feld nennt Bildkopien, die beim Sichern nicht lesbar waren.
+Die Fassungen markieren historische Erweiterungen: Darstellung in Fassung 2,
+Leistungsfrage in 3, offene Inaktivitätsphasen (`timer_idle`) in 4 und die
+Vorgängerform ohne eingebettete E-Mail-Dateien in 5. Fassung 9 ergänzt die
+bereits abgeschlossenen, noch nicht zugeordneten Inaktivitätsphasen in
+`timer_idle.previous_periods`; ältere Archive erhalten eine leere Liste. Die genaue Ergänzung älterer
+Archive steht bei `parseArchive`. Die früheren Fassungen bleiben als solche
+lesbar; die Anwendung rät keine unbekannte Bedeutung.
+
+Beim Einspielen werden die Pfade übernommener Dateien auf den Zielrechner
+umgesetzt. Fehlen deren Bytes sowohl in einer älteren Sicherung als auch auf
+dem Rechner, nennt das Ergebnis die Anzahl fehlender Dateien. Auch nicht lesbare
+Bildkopien und übernommene Dateien werden beim Sichern als Warnungen ausgewiesen.
 
 ### Round-Trip und Erweiterung
 
@@ -60,7 +73,9 @@ Vor dem ersten Schreiben werden Umschlag, alle Tabellen, Spalten und skalaren
 Werte geprüft. Der Tabellenbestand wird in einer Transaktion ersetzt und die
 Datenbank-Trigger werden anschließend in ihrer ursprünglichen Definition
 wieder eingesetzt. Fremdschlüssel werden spätestens beim Festschreiben
-geprüft. Bilddateien werden atomar unter ihrem erzeugten Namen restauriert.
+geprüft. Bildkopien und übernommene Dateien werden unter ihren erzeugten Namen restauriert.
+Der Dateischritt ist keine gemeinsame Transaktion mit SQLite; Fehler und Warnungen
+werden deshalb vom Import ausdrücklich zurückgemeldet.
 
 Eine inkompatible Änderung erhält eine neue `schemaVersion`. Der bisherige
 Leser bleibt geschlossen; Migrationen zwischen Archivfassungen werden als
@@ -110,3 +125,5 @@ ebenfalls gelesen.
 
 Fremdimporte sind additiv. Jeder Lauf erhält einen eigenen Importordner und
 kollisionsfreie Poolnamen; vorhandene Takt-Daten werden dabei nicht ersetzt.
+
+Fassung 10 enthält `todo_priority` (Name und Gewichtung) und `todo.priority_id`. Ältere Archive erhalten eine leere Prioritätsliste und keine Zuordnung.

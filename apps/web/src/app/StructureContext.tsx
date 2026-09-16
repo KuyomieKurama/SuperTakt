@@ -1,9 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
-import {
-  listPools,
-  listTodoStatuses,
-  getSettings,
-} from "../api/endpoints";
+import { listPools } from "../features/structure/api";
+import { listTodoStatuses, getSettings } from "../features/settings/api";
 import { getTagTree } from "../features/tags/api";
 import type {
   AppSettings,

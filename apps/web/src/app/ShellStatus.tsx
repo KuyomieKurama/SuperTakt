@@ -64,9 +64,7 @@ import { Scrim } from "../shared/ui/DialogSurface";
  * muss dann den Fall ohne Huelle abfangen, den `isShellAvailable()` beschreibt.
  */
 
-/* ==================================================================== */
 /* Zustandsform — die Typen der Huelle, nicht nachgebaut                */
-/* ==================================================================== */
 
 /**
  * Die Namen der Huelle bleiben die Namen der Oberflaeche.
@@ -80,9 +78,7 @@ export type ShellDirectoryReport = DirectoryReport;
 export type ShellServiceExit = ServiceExit;
 export type ShellStateSnapshot = ShellState;
 
-/* ==================================================================== */
 /* Auswertung                                                           */
-/* ==================================================================== */
 
 /**
  * Die Startmeldungen ohne den Synchronisierungshinweis.
@@ -104,9 +100,7 @@ export function startupProblems(state: ShellStateSnapshot): readonly string[] {
   return state.problems.filter((problem) => problem !== sync);
 }
 
-/* ==================================================================== */
 /* „Takt beenden" — der Knopf, der nichts sagte (O-AF, T-124)           */
-/* ==================================================================== */
 
 /**
  * Wie lange „Takt beenden" arbeiten darf, bevor die Oberflaeche sagt, dass es
@@ -285,9 +279,7 @@ function QuitButton({
   );
 }
 
-/* ==================================================================== */
 /* Startmeldung — problems                                              */
-/* ==================================================================== */
 
 export interface StartupProblemNoticeProps {
   /** Die Saetze der Huelle, unveraendert. Leer heisst: nichts anzeigen. */
@@ -364,9 +356,7 @@ export function StartupProblemNotice({
   );
 }
 
-/* ==================================================================== */
 /* Datenordner — directory.syncWarning (R-13, B-7.1)                    */
-/* ==================================================================== */
 
 export interface SyncFolderNoticeProps {
   /** Der Befund der Huelle im Klartext. Nennt den Ordner im ersten Satz. */
@@ -435,9 +425,7 @@ export function SyncFolderNotice({ warning, detail, className }: SyncFolderNotic
   );
 }
 
-/* ==================================================================== */
 /* Sperrmeldung — serviceExit                                           */
-/* ==================================================================== */
 
 export interface ServiceStoppedPanelProps {
   readonly exit: ShellServiceExit;
@@ -545,9 +533,7 @@ export function ServiceStoppedOverlay({ exit, onQuit }: ServiceStoppedOverlayPro
   );
 }
 
-/* ==================================================================== */
 /* Der Windows-Benutzername (O-AJ, T-124)                               */
-/* ==================================================================== */
 
 /**
  * Was an dem Windows-Benutzernamen dieses Rechners auffaellt.
@@ -712,9 +698,7 @@ export function UserNameBlockedOverlay({ dataPath, onQuit }: UserNameBlockedOver
   );
 }
 
-/* ==================================================================== */
 /* Der sperrende Rahmen — einmal fuer beide Sperrmeldungen              */
-/* ==================================================================== */
 
 interface BlockingDialogProps {
   readonly children: (ids: {
@@ -775,9 +759,7 @@ function BlockingDialog({ children }: BlockingDialogProps) {
   );
 }
 
-/* ==================================================================== */
 /* Zusammenstellung                                                     */
-/* ==================================================================== */
 
 export interface ShellStatusProps {
   /** Das Ergebnis von `shellState()` aus der Huelle. */

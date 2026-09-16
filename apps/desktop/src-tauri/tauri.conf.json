@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "identifier": "de.takt.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --filter @takt/web dev",
+    "beforeDevCommand": "node scripts/register-linux-dev-icon.mjs && pnpm --filter @takt/web dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "pnpm --filter @takt/web build",
     "frontendDist": "../../web/dist"
@@ -172,7 +172,7 @@
       // dass die Auslieferungsplattform an einem Zweig haengt, den auf diesem
       // Rechner nie jemand ausfuehrt. Genau diese Sorte Luecke ist T-054.
       "deb": {
-        "depends": [],
+        "depends": ["libnss3-tools", "openssl"],
         "files": {
           "/usr/bin/taskpane": "taskpane"
         }

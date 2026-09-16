@@ -1,23 +1,7 @@
+import { localDayFromToday } from './support/local-time';
 /**
- * TP-FRIST-01, TP-FRIST-02, TP-FRIST-03, TP-FRIST-08, TP-FRIST-11
- * (docs/testplan.md, Abschnitt 25.1) — T-150.
- *
- * Die Frist entsteht, ändert sich und verschwindet wieder — und sie ist an
- * jeder Stelle sichtbar, an der ein Todo als Zeile oder Karte erscheint, ohne
- * dass man es öffnen muss (A-19.4). Ein Todo ohne Frist zeigt dort **nichts**,
- * keinen Platzhalter (A-19.5) — und die Frist bewegt kein Todo durch Pools
- * oder Spalten (A-19.7).
- *
- * **Abweichung vom Plan aus T-142 (docs/testplan.md, TP-FRIST-08):** Der Plan
- * nannte "Dashboard-Kachel „Zuletzt bearbeitet"" als dritte Anzeigestelle.
- * Gebaut ist das anders (`DashboardScreen.tsx`, Kommentar dort wörtlich: "es
- * steht hier kein `DeadlineFlag`"): Das Dashboard zeigt statt einer Frist je
- * Zeile eine **Zahl** überfälliger Todos in einer eigenen Kachel, die nur bei
- * einem Wert größer null erscheint (A-19.4 ist damit auf andere Weise erfüllt
- * — "was ist überfällig" statt "wann ist wessen Frist"). Dieser Fall prüft
- * deshalb die drei tatsächlich gebauten Stellen: Todo-Liste (S-02),
- * Kanban-Karte (S-04) und Detailansicht (S-03) — plus, ergänzend, die
- * Dashboard-Kachel selbst.
+ * Fristen in Liste, Karte und Detail prüfen; das Dashboard zeigt stattdessen die Anzahl
+ * überfälliger Todos.
  */
 import { test, expect } from '@playwright/test';
 
@@ -40,16 +24,6 @@ import { createBoardColumn } from './support/actions';
 import { API_BASE_URL, SESSION_SECRET, TOKEN_HEADER, WEB_BASE_URL } from './support/session';
 import { gotoBoard, gotoDashboard, gotoTodo, gotoTodos } from './support/nav';
 
-/** Ein Kalendertag `offsetDays` von heute, in Ortszeit (`YYYY-MM-DD`). */
-function isoDay(offsetDays: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${String(year)}-${month}-${day}`;
-}
-
 /** Dasselbe Format wie `formatCalendarDay` (`apps/web/src/lib/format.ts`): `DD.MM.YYYY`. */
 function germanDate(day: string): string {
   const [year, month, dayOfMonth] = day.split('-');
@@ -61,8 +35,8 @@ test.describe('TP-FRIST-01/02/03/08 — Setzen, Ändern, Entfernen, sichtbar ohn
     page,
   }) => {
     const title = `E2E-FRIST-${Date.now()}`;
-    const later = isoDay(30);
-    const overdue = isoDay(-4);
+    const later = localDayFromToday(30);
+    const overdue = localDayFromToday(-4);
 
     // --- TP-FRIST-01: anlegen, mit Frist ------------------------------------
     const todo = await createTodo({ title, dueDate: later });
@@ -108,7 +82,8 @@ test.describe('TP-FRIST-01/02/03/08 — Setzen, Ändern, Entfernen, sichtbar ohn
       'aria-label',
       `Überfällig — Frist: ${germanDate(overdue)}`,
     );
-    await expect(deadlineCard.locator('.deadline')).toContainText('Überfällig');
+    await expect(deadlineCard.locator('.deadline')).not.toContainText('Überfällig');
+    await expect(deadlineCard.locator('.deadline')).toHaveClass(/deadline--overdue/);
     await expect(deadlineCard.locator('.deadline')).not.toContainText(germanDate(later));
 
     await gotoTodos(page, { q: title });
@@ -196,11 +171,11 @@ test.describe('TP-FRIST-11 — Die Frist ist keine Achse (A-19.7)', () => {
 
     // Die Frist auf "überfällig" setzen und wieder ändern — dieselbe Regel
     // (Tags) bleibt die einzige, nach der sich Pool-Zugehörigkeit richtet.
-    await updateTodoDueDate(todo.id, isoDay(-2));
+    await updateTodoDueDate(todo.id, localDayFromToday(-2));
     await gotoTodos(page, { pool: pool.id });
     await expect(row).toBeVisible();
 
-    await updateTodoDueDate(todo.id, isoDay(10));
+    await updateTodoDueDate(todo.id, localDayFromToday(10));
     await gotoTodos(page, { pool: pool.id });
     await expect(row).toBeVisible();
 

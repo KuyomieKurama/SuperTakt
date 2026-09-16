@@ -1,35 +1,4 @@
-/**
- * Takt — vom fachlichen Fehler zum Statuscode (architektur.md 5.2, 5.3).
- *
- * ===========================================================================
- * Die Zuordnung steht an **genau einer** Stelle
- * ===========================================================================
- *
- * Die Domäne kennt keinen Statuscode (E-001). Sie meldet `TaktError` mit einem
- * englischen `code` und einem deutschen Satz; hier wird daraus eine Antwort.
- * Die Trennung ist der Grund, warum sich die Bewertung eines Falls ändern
- * lässt, ohne eine Fachregel anzufassen — architektur.md 5.2 nennt genau das
- * für den Fall, dass T-003 `403` und `401` zusammenlegen will.
- *
- * ```
- *   400  Anfrage nicht lesbar
- *   404  not_found
- *   409  Widerspruch zum Zustand — der Aufrufer kann es später erneut versuchen
- *        oder erst etwas anderes ändern
- *   422  gelesen und für fachlich unzulässig befunden
- *   500  unerwartet; immer derselbe Text, nie Innenleben
- * ```
- *
- * **`400` gegen `422`:** `400` heißt, der Dienst konnte die Anfrage nicht
- * lesen; `422`, er hat sie gelesen und für unzulässig befunden. Für das Add-in
- * ist der Unterschied nützlich — er sagt, ob der Aufruf oder die Eingabe des
- * Benutzers falsch war.
- *
- * **Was nie in einer Antwort steht:** Ablaufverfolgung, SQL-Meldung, Dateipfad
- * außerhalb des gewählten Exportordners, das Token, Innenleben der Datenbank
- * (B-2.4). Die Sätze kommen aus der Domäne und sind dort Konstanten; dieser
- * Übersetzer setzt nichts ein.
- */
+/** Fehlerantworten dürfen weder Stacktraces noch SQL, Pfade oder Geheimnisse enthalten. */
 
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';

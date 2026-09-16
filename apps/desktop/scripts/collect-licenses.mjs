@@ -1,3 +1,4 @@
+import { targetTriple } from './rust-target.mjs';
 /**
  * Takt — die Lizenzbeilage für die ausgelieferten Pakete (T-068 R-1/R-2, T-075).
  *
@@ -111,25 +112,6 @@ function note(text) {
 }
 
 /**
- * Das Ziel-Tripel kommt von `rustc`, nicht aus `process.platform` — dieselbe
- * Regel wie in `build-sidecar.mjs`, und aus demselben Grund: `--filter-platform`
- * will das Tripel und nicht „Linux".
- */
-function targetTriple() {
-  const result = spawnSync('rustc', ['-vV'], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    fail('`rustc -vV` ist fehlgeschlagen. Ohne die Rust-Toolchain gibt es kein Ziel-Tripel.');
-  }
-  const line = String(result.stdout)
-    .split('\n')
-    .find((entry) => entry.startsWith('host:'));
-  if (line === undefined) {
-    fail('`rustc -vV` nennt kein `host:`.');
-  }
-  return line.slice('host:'.length).trim();
-}
-
-/**
  * Sammelt die Lizenztexte eines Ordners.
  *
  * Nur die oberste Ebene: Ein `LICENSE` in einem Unterordner gehört zu einem
@@ -168,9 +150,7 @@ function licenseTextsIn(dir) {
   return texts;
 }
 
-// ---------------------------------------------------------------------------
 // 1 — Rust
-// ---------------------------------------------------------------------------
 
 const triple = targetTriple();
 step(1, `Rust-Abhängigkeiten für ${triple} auflösen`);
@@ -243,9 +223,7 @@ for (const id of shipped) {
 }
 note(`${components.length} Kisten (Obermenge, siehe Kopf dieser Datei)`);
 
-// ---------------------------------------------------------------------------
 // 2 — npm
-// ---------------------------------------------------------------------------
 
 step(2, 'npm-Abhängigkeiten der Auslieferung auflösen');
 
@@ -293,9 +271,7 @@ for (const [spdx, entries] of Object.entries(byLicense)) {
 }
 note(`${npmCount} npm-Pakete (nur Laufzeitabhängigkeiten, ohne die eigenen)`);
 
-// ---------------------------------------------------------------------------
 // 3 — Die Node-Laufzeit im Sidecar
-// ---------------------------------------------------------------------------
 
 step(3, `Lizenztext der eingebetteten Node-Laufzeit v${NODE_VERSION}`);
 
@@ -346,9 +322,7 @@ components.push({
 });
 note(`${Math.round(nodeLicense.length / 1024)} KiB aus ${archive.file}`);
 
-// ---------------------------------------------------------------------------
 // 4 — Texte zusammenlegen
-// ---------------------------------------------------------------------------
 
 step(4, 'Gleiche Texte zusammenlegen');
 
@@ -377,9 +351,7 @@ components.sort(
 
 const withoutText = components.filter((entry) => entry.texts.length === 0);
 
-// ---------------------------------------------------------------------------
 // 5 — Schreiben
-// ---------------------------------------------------------------------------
 
 step(5, 'Beilage schreiben');
 

@@ -1,31 +1,13 @@
+import { todayAt } from './support/local-time';
 /**
- * Drei weitere Kernfälle aus dem Auftrag T-012, nachgezogen für T-048:
- *
- * 1. Gemischter Exportstatus in einer Tagesgruppe: Ist eine von drei
- *    Buchungen exportiert, wird ohne sie summiert (Abschnitt 9a, E-020).
- * 2. „Nicht abrechnen" (E-047): Status danach `exported`, Zähler bleibt 0,
- *    die Buchung verschwindet aus der Exportauswahl, eigener Ereignistyp,
- *    und der Verlauf sagt ausdrücklich, dass die Begründung freiwillig war
- *    (T-040, bei mir angemeldeter Fall 2).
- * 3. Gesperrte Tagesgruppe (E-034): Fehlt die Leistung, ist die Gruppe nicht
- *    exportierbar, der übrige Export läuft trotzdem, die Gruppe bleibt offen.
- *
- * Der Export-Bestätigungsdialog läuft seit T-045 über `confirmExportRun`
- * (siehe `support/actions.ts`) — das seit T-045 mögliche „Mir ist
- * bewusst"-Kontrollkästchen erscheint nur beim ersten Lauf in einen Ordner
- * und wird dort mitbehandelt.
+ * Bereits exportierte Buchungen nicht erneut summieren; gesperrte Gruppen offen lassen. „Nicht
+ * abrechnen“ erhöht den Exportzähler nicht.
  */
 import { test, expect } from '@playwright/test';
 
 import { createTimeEntry, createTodo, deleteTimeEntry, listTimeEntriesByTodo } from './support/api';
 import { runExportFromScreen } from './support/actions';
 import { gotoExport, gotoTodo } from './support/nav';
-
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 test('gemischter Exportstatus: eine von drei Buchungen exportiert, Rest wird ohne sie summiert', async ({
   page,

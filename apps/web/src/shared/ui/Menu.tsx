@@ -148,9 +148,7 @@ function useSelectHandler(
   }, [actions, beforeAction]);
 }
 
-/* ==================================================================== */
 /* Auswahlliste an einem Ausloeser                                      */
-/* ==================================================================== */
 
 export interface MenuProps {
   /** Inhalt des Ausloesers. */
@@ -320,9 +318,7 @@ export function Menu({
   );
 }
 
-/* ==================================================================== */
 /* Kontextmenue an der Zeigerposition                                   */
-/* ==================================================================== */
 
 export interface ContextMenuState {
   readonly x: number;

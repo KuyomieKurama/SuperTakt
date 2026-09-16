@@ -83,9 +83,7 @@ export interface StatusOption {
   readonly name: string;
 }
 
-/* ==================================================================== */
 /* Der gemeinsame Rahmen                                                */
-/* ==================================================================== */
 
 /**
  * Beschriftung, Zustand, Hilfetext — und dazwischen die Chips.
@@ -186,9 +184,7 @@ function PickerField({
   );
 }
 
-/* ==================================================================== */
 /* Ordner                                                               */
-/* ==================================================================== */
 
 /** Vergleichsform eines Pfades: klein geschrieben, Trenner als Leerzeichen. */
 function searchKey(path: readonly string[]): string {
@@ -300,9 +296,7 @@ export function FolderPicker({
   );
 }
 
-/* ==================================================================== */
 /* Status                                                               */
-/* ==================================================================== */
 
 /**
  * Die Status einer Regel — mehrere möglich, nichts gewählt heißt „Alle".

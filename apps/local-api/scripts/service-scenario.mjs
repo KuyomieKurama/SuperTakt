@@ -307,9 +307,7 @@ export async function runScenario() {
   const quiet = (method, path, body) => call(method, path, body);
 
   try {
-    // -----------------------------------------------------------------------
     // Zugriff und Auskunft
-    // -----------------------------------------------------------------------
     await record('health', 'GET', '/health', '/health');
     /*
      * Die Versionspruefung (A-18.2, E-069).
@@ -325,9 +323,7 @@ export async function runScenario() {
     await record('rotateToken', 'POST', '/token', '/token');
     await record('getSecurityNotices', 'GET', '/security/notices', '/security/notices');
 
-    // -----------------------------------------------------------------------
     // Ordner, Tags, Pools (A-3, A-4)
-    // -----------------------------------------------------------------------
     const rootFolder = await record('createTagFolder', 'POST', '/tag-folders', '/tag-folders', {
       name: 'Mandant Beispiel',
     });
@@ -401,9 +397,7 @@ export async function runScenario() {
 
     await record('listPools', 'GET', '/pools', '/pools');
 
-    // -----------------------------------------------------------------------
     // Kanban-Spalten (A-5)
-    // -----------------------------------------------------------------------
     const statuses = await record('listTodoStatuses', 'GET', '/todo-statuses', '/todo-statuses');
     const statusId = statuses.body.data[0].id;
     // Ein zweiter, den kein Todo dieses Durchlaufs trägt. Er ist die Gegenprobe
@@ -439,9 +433,12 @@ export async function runScenario() {
       `/todo-statuses/${extraStatusId}`,
     );
 
-    // -----------------------------------------------------------------------
+    const priority = await record('createPriority', 'POST', '/priorities', '/priorities', { name: 'Dringend', weight: 100 });
+    await record('listPriorities', 'GET', '/priorities', '/priorities');
+    await record('updatePriority', 'PUT', '/priorities/{id}', `/priorities/${priority.body.data.id}`, { name: 'Sehr dringend', weight: 200 });
+    await record('deletePriority', 'DELETE', '/priorities/{id}', `/priorities/${priority.body.data.id}`);
+
     // Todos, Vermerk, Erledigt (A-2, A-7)
-    // -----------------------------------------------------------------------
     const todo = await record('createTodo', 'POST', '/todos', '/todos', {
       title: 'Akte 4711 — Schriftsatz',
       callNumber: 'C-4711-2026',
@@ -534,7 +531,6 @@ export async function runScenario() {
     });
     const secondTodoId = second.body.data.todo.id;
 
-    // -----------------------------------------------------------------------
     // Kanban-Board: Spalten sind Regeln (A-5.3, A-5.4, E-054)
     //
     // Vier Spalten, und der Bestand ist so gewählt, dass genau der Fall
@@ -548,7 +544,6 @@ export async function runScenario() {
     // `matchesPool` in der Domäne gebildet — genau dieselben Spalten nennt, die
     // die Abfrage geliefert hat. Laufen die beiden auseinander, zeigt das Board
     // eine Karte und behauptet daneben, sie stünde dort nicht.
-    // -----------------------------------------------------------------------
     const boardTag = await quiet('POST', '/tags', { name: 'Rückfrage', folderId: rootFolderId });
     const boardTagId = boardTag.body.data.id;
     await quiet('PATCH', `/todos/${todoId}`, { tagIds: [tagId, boardTagId] });
@@ -586,7 +581,6 @@ export async function runScenario() {
       rule: [],
     });
 
-    // -----------------------------------------------------------------------
     // Die fünf Achsen aus T-076, jede als eigene Spalte
     //
     // Der Bestand ist so gewählt, dass die Antworten nicht zufällig richtig
@@ -594,7 +588,6 @@ export async function runScenario() {
     // `boardTagId`. Damit muss `status` **beide** enthalten, `mixed` **eines**
     // und `excluded` das **andere** — drei verschiedene Mengen aus demselben
     // Bestand, und keine davon ist die Tagspalte.
-    // -----------------------------------------------------------------------
     await record('createPool', 'POST', '/pools', '/pools', {
       name: BOARD_COLUMNS.status,
       placement: 'board',
@@ -668,7 +661,6 @@ export async function runScenario() {
       rule: [{ kind: 'folder', folderId: barrenFolderId }],
     });
 
-    // -----------------------------------------------------------------------
     // Derselbe leere Ordner, aber **nicht allein** (E-057)
     //
     // Die Spalte darüber besteht nur aus dem Ordnerterm; sie ist nach dem
@@ -683,7 +675,6 @@ export async function runScenario() {
     // **Ausschluß** über denselben leeren Ordner schließt nichts aus. Die
     // Spalte führt deshalb genau dieselben Karten wie die Spalte über das Tag
     // allein — „keiner davon" über nichts läßt in Ruhe, statt einzuengen.
-    // -----------------------------------------------------------------------
     await quiet('POST', '/pools', {
       name: BOARD_COLUMNS.emptyFolderAndStatus,
       placement: 'board',
@@ -724,9 +715,7 @@ export async function runScenario() {
     // Und die Fläche, auf der der ursprüngliche Pool **nicht** steht.
     await record('listPools', 'GET', '/pools', '/pools?placement=board');
 
-    // -----------------------------------------------------------------------
     // Timer (A-6). Beide Ausgänge des Starts, beide Ausgänge des Stopps.
-    // -----------------------------------------------------------------------
     await record('getRunningTimer', 'GET', '/timer', '/timer');
     await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId });
     tick(180);
@@ -755,9 +744,7 @@ export async function runScenario() {
       resolution: 'book_until_heartbeat',
     });
 
-    // -----------------------------------------------------------------------
     // Zeitbuchungen (A-6.1, A-7.3)
-    // -----------------------------------------------------------------------
     await record('getIdleSession', 'GET', '/timer/idle', '/timer/idle');
     await quiet('POST', '/timer/start', { todoId });
     const idleTimer = (await quiet('GET', '/timer')).body.data;
@@ -798,9 +785,7 @@ export async function runScenario() {
     );
     await record('searchEverything', 'GET', '/search', '/search?q=Akte');
 
-    // -----------------------------------------------------------------------
     // Vorlagen, Vorschau, Lauf (A-8, E-049, E-051)
-    // -----------------------------------------------------------------------
     const definition = {
       version: 1,
       fields: [
@@ -879,9 +864,7 @@ export async function runScenario() {
       { reason: 'Kulanz' },
     );
 
-    // -----------------------------------------------------------------------
     // Die schmale Fläche des Add-ins (T-019)
-    // -----------------------------------------------------------------------
     await record('getAddinContext', 'GET', '/addin/context', '/addin/context');
     await record(
       'findAddinDuplicates',
@@ -910,6 +893,11 @@ export async function runScenario() {
       // beschriebe eine Fläche, die es nicht gibt — und aus genau dieser
       // Sorte Satz ist der Befund entstanden, der zu E-100 führte.
 
+      await record('appendAddinMail', 'POST', '/addin/todos/{todoId}/mails', `/addin/todos/${addinTodoId}/mails`, {
+        requestId: '00000000-0000-4000-8000-000000000077', callNumber: addinTodo.body.data.todo.callNumber,
+        mail: { identity: 'openapi-mail-proof', subject: 'AW: Prüfmail', sender: 'proof@example.test', receivedAt: null, internetMessageId: null, outlookLink: null, excerpt: null },
+        note: 'Getrennte Ergänzung', attachments: null,
+      });
       // Erst erledigt setzen, damit die Buchung ihre Wirkung zeigen kann:
       // `doneCleared` und `poolMovement` stehen dann nicht auf ihrem Ruhewert.
       // (Bis T-104 hießen die drei Listen `poolNames`, `enteringPoolNames`
@@ -925,7 +913,6 @@ export async function runScenario() {
       );
     }
 
-    // -----------------------------------------------------------------------
     // Die Buchung von Hand, die **erste** eines Todos (E-061 Nachtrag, O-V)
     //
     // Der Aufruf oben bei „Zeitbuchungen" bucht auf `todoId`, und das Todo hat
@@ -940,7 +927,6 @@ export async function runScenario() {
     // Bestand, über den bereits berichtet wurde. Der Bestand danach wird
     // gelesen und nicht angenommen — `GET /time-entries` und `GET /board`
     // stehen unmittelbar darunter.
-    // -----------------------------------------------------------------------
     const untouched = await quiet('POST', '/todos', {
       title: 'Akte 4714 — Nachtrag von Hand',
       callNumber: 'C-4714-2026',
@@ -955,7 +941,6 @@ export async function runScenario() {
       note: 'Nachgetragen',
     });
 
-    // -----------------------------------------------------------------------
     // Das Board ein **zweites** Mal — jetzt mit Buchungen und mit Erledigt
     //
     // Die drei Achsen `done`, `openWork` und `exported` (T-076) konnten beim
@@ -973,12 +958,10 @@ export async function runScenario() {
     // Der Bestand der Buchungen wird nicht angenommen, sondern gelesen:
     // `GET /time-entries` ist der zweite, unabhängige Weg zu derselben
     // Auskunft, und `proof-openapi.mjs` hält die beiden gegeneinander.
-    // -----------------------------------------------------------------------
     await quiet('PUT', `/todos/${secondTodoId}/done`);
     await record('searchTimeEntries', 'GET', '/time-entries', '/time-entries?limit=100');
     await record('getBoard', 'GET', '/board', '/board');
 
-    // -----------------------------------------------------------------------
     // Die Bewegung durch die Pools, die ein Timerstart auslöst (E-058)
     //
     // Der Start hebt „Erledigt" auf (A-2.5). Seit E-055 ist das keine
@@ -997,7 +980,6 @@ export async function runScenario() {
     // ist kürzer als eine Sekunde und wird verworfen (A-6.2). Der Bestand steht
     // danach wieder so da wie vorher, bis auf das aufgehobene Kennzeichen —
     // und das ist die Wirkung, um die es geht.
-    // -----------------------------------------------------------------------
     await record('startTimer', 'POST', '/timer/start', '/timer/start', { todoId: secondTodoId });
     await quiet('POST', '/timer/stop', { note: '' });
 
@@ -1034,10 +1016,8 @@ export async function runScenario() {
     tick(120);
     await record('stopTimer', 'POST', '/timer/stop', '/timer/stop', { note: 'Nachtrag zur Akte' });
 
-    // -----------------------------------------------------------------------
     // Löschen. Jeweils an einem eigens dafür angelegten Stück, damit der
     // erfolgreiche Ausgang (204) gemessen wird und nicht ein Konflikt.
-    // -----------------------------------------------------------------------
     const spareEntry = await quiet('POST', '/time-entries', {
       todoId,
       startedAt: '2026-03-01T08:00:00Z',
@@ -1082,7 +1062,6 @@ export async function runScenario() {
       `/export/templates/${spareTemplate.body.data.id}`,
     );
 
-    // -----------------------------------------------------------------------
     // Die Abweisungen.
     //
     // Sie stehen hier nicht der Vollständigkeit halber. Eine beschriebene
@@ -1093,7 +1072,6 @@ export async function runScenario() {
     // Beschreibung, die 409 verspricht und 200 bekommt, führt zu einer
     // Oberfläche, die einen Fehlerfall behandelt, den es nicht gibt, und den
     // echten nicht (T-039, `POST /timer/start`).
-    // -----------------------------------------------------------------------
     const unknownId = '01931f4e-0000-7000-8000-0000000000ff';
 
     // 404 — es gibt das Ding nicht.
@@ -1177,11 +1155,9 @@ export async function runScenario() {
     tick(3600);
     await record('runExport', 'POST', '/export/runs', '/export/runs', { templateId });
 
-    // -----------------------------------------------------------------------
     // Datensicherung und Migration (A-20). Das native Archiv geht einmal durch
     // den vollständigen Round-Trip; die beiden Fremdformate ergänzen danach
     // je einen kleinen, aber strukturell aussagekräftigen Bestand.
-    // -----------------------------------------------------------------------
     const archive = await record('exportDataArchive', 'GET', '/data-transfer/archive', '/data-transfer/archive');
     await record('importDataArchive', 'POST', '/data-transfer/archive', '/data-transfer/archive', {
       archive: archive.body.data,

@@ -1,33 +1,5 @@
-/**
- * Takt — die Prüfschicht des lokalen Dienstes (T-011).
- *
- * Reihenfolge ist hier Inhalt, nicht Geschmack:
- *
- * ```
- *  1  securityHeaders    immer, auch auf jeder Abweisung
- *  2  requestLog         misst und protokolliert, ohne Werte aus der Anfrage
- *  3  hostGuard          B-1.3  DNS-Rebinding        ── gegen A-02
- *  4  originGuard        B-1.2, B-1.4  fremde Seite  ── gegen A-02
- *  5  urlSecretGuard     B-2.4  Token in der Adresse
- *  6  contentTypeGuard   B-1.2  erzwingt Vorabanfrage ── gegen A-02
- *  7  bodyLimit          B-1.7
- *  8  authGuard          B-1.1, B-2.5, B-2.6         ── gegen A-03
- *  9  credentialPolicy   B-2.10  welcher der beiden Nachweise ── gegen RR-1
- * ```
- *
- * Glied 9 ist die Umkehr der Vorgabe aus T-034: `authGuard` klärt, **ob** ein
- * gültiger Nachweis vorliegt, `credentialPolicy` klärt, **welcher** — und
- * verlangt für alles außerhalb von `/api/v1/addin` das Sitzungsgeheimnis.
- *
- * Die Herkunftsprüfungen (3, 4, 6) stehen **vor** dem Nachweis (8). Zwei
- * Gründe: Ein Angreifer, der über die Herkunft schon abgewiesen wird, kann am
- * Token nicht einmal einen Zeitunterschied beobachten (B-1.3 Punkt 2). Und die
- * Wirkung einer zustandsändernden Anfrage tritt nicht ein, bevor die Herkunft
- * geklärt ist.
- *
- * Die Kette hängt als **eine** Middleware vor **allen** Routen, nicht je Route.
- * Sonst ist die nächste neue Route die vergessene (B-1.1 Punkt 1).
- */
+/** Die gemeinsame Prüfkette gilt vor allen Routen. Herkunftsprüfungen müssen vor der Tokenprüfung liegen, um Zeitvergleiche am Token zu verhindern.
+ * `credentialPolicy` beschränkt das Add-in-Token auf `/api/v1/addin`; außerhalb ist das Sitzungsgeheimnis erforderlich. */
 
 import type { Context, MiddlewareHandler } from 'hono';
 

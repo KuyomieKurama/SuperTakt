@@ -1,19 +1,4 @@
-/**
- * Takt — Base64 über UTF-8 (A-8.4, A-8.9).
- *
- * `Notiz` geht als Base64 an das Abrechnungstool. Die Eingabe ist UTF-8, und
- * genau daran scheitern die üblichen Umsetzungen: `btoa` nimmt nur Latin-1 und
- * wirft bei „Ä"; `Buffer.from` gibt es in der Oberfläche nicht, wo dieselbe
- * Zeile für die Vorschau entsteht (R-17). Beide Wege wären in einer der beiden
- * Laufzeiten falsch oder gar nicht vorhanden.
- *
- * Deshalb steht die Kodierung hier ausgeschrieben: erst Text nach UTF-8-Bytes,
- * dann Bytes nach Base64. Das ist ein Kodierverfahren, keine Fachregel — es
- * gibt nichts, was dadurch doppelt beschrieben würde.
- *
- * A-8.9 ausdrücklich: Base64 ist eine Kodierung, keine Verschlüsselung. Die
- * Datei enthält Kundendaten im Klartextäquivalent.
- */
+/** UTF-8-Kodierung für Browser und Dienst: `btoa` unterstützt nur Latin-1, `Buffer` fehlt im Browser. Base64 verschlüsselt keine Kundendaten. */
 
 /** Das Standardalphabet nach RFC 4648, Abschnitt 4. Kein URL-sicheres. */
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';

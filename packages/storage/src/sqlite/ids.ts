@@ -1,61 +1,8 @@
 /**
- * Takt — Kennungen (UUIDv7).
- *
- * Zufällig genug, um nicht erraten zu werden, und nach Erzeugungszeit
- * sortierbar. Das zweite ist hier kein Schmuck: Die Sortierschlüssel des
- * Exports hängen an Zeitstempel plus Kennung, jede Blätterung setzt die
- * Kennung als eindeutigen zweiten Schlüssel hinter `updated_at`, und der
- * Trigger aus Migration 0006 entscheidet damit, welche Protokollzeile die
- * jüngste ist (siehe unten). Eine rein zufällige Kennung (UUIDv4) machte alle
- * drei Reihenfolgen willkürlich.
- *
- * Aufbau nach RFC 9562, Abschnitt 5.7, mit dem Zähler aus Abschnitt 6.2
- * („Method 1: Fixed-Length Dedicated Counter Bits"):
- *
- * ```
- *   48 Bit  Unix-Zeit in Millisekunden, big endian
- *    4 Bit  Version (7)
- *   12 Bit  Zähler innerhalb derselben Millisekunde
- *    2 Bit  Variante (10)
- *   62 Bit  Zufall
- * ```
- *
- * ===========================================================================
- * Warum ein Zähler, und was ohne ihn passiert ist (T-041)
- * ===========================================================================
- *
- * Bis T-041 standen in den zwölf Bit hinter der Version **Zufallsbits**. Damit
- * war „nach Erzeugungszeit sortierbar" nur zwischen Millisekunden wahr;
- * innerhalb einer Millisekunde war die Reihenfolge zweier Kennungen ein
- * Münzwurf. Der Kopf dieser Datei hat das trotzdem als Eigenschaft
- * versprochen, und an einer Stelle wurde darauf gebaut:
- *
- * `trg_time_entry_exported_needs_provenance` (Migration 0006) sucht die
- * **jüngste** Protokollzeile einer Buchung mit
- * `ORDER BY occurred_at DESC, id DESC`. `occurred_at` hat Sekundenauflösung
- * (`Timestamp` schneidet Millisekunden ab), also entschied regelmäßig die
- * Kennung — und damit der Zufall. Gemessen: In vierzig Durchläufen schlug
- * „nicht abrechnen" neunmal fehl, weil der Trigger die ältere Zeile für die
- * jüngste hielt. Die bereits geschriebene Protokollzeile blieb dabei stehen:
- * ein Protokoll, das „nicht abgerechnet" bezeugt, und eine Buchung, die weiter
- * offen ist und in den nächsten Export läuft (R-10).
- *
- * Der Zähler macht die Zusage wahr, statt sie zurückzunehmen. Er läuft je
- * Millisekunde von einem zufälligen Startwert aufwärts — zufällig, damit aus
- * zwei Kennungen nicht ablesbar ist, wie viele dazwischen vergeben wurden, und
- * mit Luft nach oben, damit ein Überlauf nicht im Betrieb eintritt.
- *
- * Läuft er dennoch über oder springt die Uhr zurück, wird die **Zeit**
- * fortgeschrieben statt der Zähler zurückgesetzt (RFC 9562, 6.2, „clock
- * rollback"): Eine Kennung, die um wenige Millisekunden in der Zukunft liegt,
- * ist harmlos; eine, die kleiner ist als ihre Vorgängerin, bricht genau die
- * Eigenschaft, für die es diesen Zähler gibt.
- *
- * Der Zufall kommt aus `node:crypto` und nicht aus `Math.random`. Kennungen
- * stehen in Adressen und in Exportdateien; ein vorhersagbarer Generator wäre
- * eine unnötige Angriffsfläche. Die 62 unteren Bit bleiben vollständig
- * zufällig — der Zähler nimmt nur die zwölf, die ohnehin unter der Zeit
- * stehen, und ändert an der Unratbarkeit nichts Nennenswertes.
+ * UUIDv7 mit monotonem Zähler nach RFC 9562: Protokollreihenfolgen benötigen auch innerhalb
+ * derselben Millisekunde geordnete Kennungen.
+ * Bei Überlauf oder rückwärts laufender Uhr die logische Zeit erhöhen; Zufallsbits aus
+ * `node:crypto` beziehen.
  */
 
 import { randomBytes } from 'node:crypto';

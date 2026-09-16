@@ -41,6 +41,7 @@ declare namespace Office {
   }
 
   interface UserProfile {
+    readonly emailAddress?: string;
     readonly accountType?: string;
   }
 
@@ -76,6 +77,9 @@ declare namespace Office {
   }
 
   interface MessageRead {
+    readonly notificationMessages?: {
+      replaceAsync(key: string, details: { type: string; message: string; icon?: string; persistent?: boolean }, callback?: (result: AsyncResult<void>) => void): void;
+    };
     readonly itemId?: string;
     readonly itemType?: string;
     readonly subject?: string;
@@ -131,7 +135,10 @@ declare namespace Office {
    */
   const EventType: { readonly ItemChanged: unknown };
 
+  namespace AddinCommands { interface Event { completed(): void; } }
+  const actions: { associate(name: string, handler: (event: AddinCommands.Event) => void): void };
   interface Context {
+    readonly officeTheme?: { readonly bodyBackgroundColor?: string };
     readonly mailbox?: Mailbox;
     readonly requirements?: RequirementSetSupport;
   }

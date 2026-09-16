@@ -1,7 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { ExportTabs } from "../export/ExportTabs";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { errorMessage } from "../../api/client";
-import { listTimeEntries } from "../../api/endpoints";
-import { resetExportStatus } from "./api";
+import {
+  listTimeEntries,
+  resetExportStatus,
+} from "./api";
 import {
   listTodos,
 } from "../todos/api";
@@ -19,7 +22,7 @@ import { FilterBar, FilterToggle, SearchField, type ActiveFilter } from "../../s
 import { Select } from "../../shared/ui/Select";
 import { ContextMenu, type ContextMenuState, type MenuEntry } from "../../shared/ui/Menu";
 import { Button, EmptyState } from "../../shared/ui/Primitives";
-import { TextField } from "../../shared/ui/FormDialog";
+import { DateField } from "../../shared/ui/DateField";
 import { useRefresh } from "../../app/RefreshContext";
 import { navigate } from "../../app/router";
 import { useToasts } from "../../app/ToastContext";
@@ -62,20 +65,29 @@ const PAGE_SIZE = 200;
 
 export interface BookingsScreenProps {
   readonly query: Readonly<Record<string, string>>;
+  readonly embedded?: {
+    entries: readonly TimeEntry[];
+    titles: ReadonlyMap<Id, { title: string; callNumber: string | null }>;
+    selected: ReadonlySet<Id>;
+    setSelected: Dispatch<SetStateAction<ReadonlySet<Id>>>;
+    resetFilters: () => void;
+  };
 }
 
-export function BookingsScreen({ query }: BookingsScreenProps) {
+export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
   const toasts = useToasts();
   const { version, bump } = useRefresh();
 
   const [status, setStatus] = useState<ExportStatus | "">((query["status"] as ExportStatus) ?? "");
-  const [onlyPrevious, setOnlyPrevious] = useState(false);
+  const [onlyPrevious, setOnlyPrevious] = useState(query["vorher"] === "1");
   const [fromDay, setFromDay] = useState(query["von"] ?? "");
   const [toDay, setToDay] = useState(query["bis"] ?? "");
-  const [todoSearch, setTodoSearch] = useState("");
+  const [todoSearch, setTodoSearch] = useState(query["suche"] ?? "");
   const [todoId, setTodoId] = useState<string>(query["todo"] ?? "");
 
-  const [selected, setSelected] = useState<ReadonlySet<Id>>(() => new Set());
+  const [ownSelected, setOwnSelected] = useState<ReadonlySet<Id>>(() => new Set());
+  const selected = embedded?.selected ?? ownSelected;
+  const setSelected = embedded?.setSelected ?? setOwnSelected;
   const [sort, setSort] = useState<{ column: SortColumn; direction: SortDirection }>({
     column: "period",
     direction: "descending",
@@ -99,17 +111,27 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
     [status, onlyPrevious, fromDay, toDay, todoId],
   );
 
-  const data = useAsync(async () => {
+  const standaloneData = useAsync(async () => {
+    if (embedded) return { page: { items: embedded.entries, total: embedded.entries.length, nextCursor: null }, titles: embedded.titles, todos: [] };
     const [page, todos] = await Promise.all([
       listTimeEntries(filter, { limit: PAGE_SIZE }),
-      listTodos({}, { limit: 200 }),
+      listTodos(todoSearch.trim() ? { search: todoSearch.trim() } : {}, { limit: 200 }),
     ]);
     const titles = new Map<Id, { title: ForeignText; callNumber: ForeignText | null }>();
     for (const todo of todos.items) {
       titles.set(todo.id, { title: todo.title, callNumber: todo.callNumber });
     }
-    return { page, titles, todos: todos.items };
-  }, [filter], [version]);
+    const search = todoSearch.trim().toLocaleLowerCase();
+    const matching = search === "" ? page.items : page.items.filter(entry => {
+      const todo = titles.get(entry.todoId);
+      return `${todo?.title ?? ""} ${todo?.callNumber ?? ""}`.toLocaleLowerCase().includes(search);
+    });
+    return { page: search === "" ? page : { ...page, items: matching, total: matching.length }, titles, todos: todos.items };
+  }, [filter, todoSearch], [version]);
+
+  const data = embedded ? { state: { status: "ready" as const, refreshing: false,
+    value: { page: { items: embedded.entries, total: embedded.entries.length, nextCursor: null }, titles: embedded.titles, todos: [] } }, reload: () => bump() } : standaloneData;
+  const Body = embedded ? "div" : ScreenBody;
 
   const activeFilters = useMemo<readonly ActiveFilter[]>(() => {
     const entries: ActiveFilter[] = [];
@@ -138,17 +160,21 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
     if (todoId !== "") {
       entries.push({ id: "todo", field: "Todo", value: "eingeschränkt", onRemove: () => setTodoId("") });
     }
+    if (todoSearch.trim()) {
+      entries.push({ id: "search", field: "Suche", value: todoSearch.trim(), onRemove: () => setTodoSearch("") });
+    }
     return entries;
-  }, [status, onlyPrevious, fromDay, toDay, todoId]);
+  }, [status, onlyPrevious, fromDay, toDay, todoId, todoSearch]);
 
   const resetAll = useCallback(() => {
+    if (embedded) { embedded.resetFilters(); return; }
     setStatus("");
     setOnlyPrevious(false);
     setFromDay("");
     setToDay("");
     setTodoId("");
     setTodoSearch("");
-  }, []);
+  }, [embedded]);
 
   const toggleRow = useCallback((id: Id) => {
     setSelected((previous) => {
@@ -157,7 +183,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
       else next.add(id);
       return next;
     });
-  }, []);
+  }, [setSelected]);
 
   const bulkReset = useCallback(
     (reason: string) => {
@@ -284,16 +310,12 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
   );
 
   return (
-    <section className="screen">
-      <ScreenHeader
+    <section className={embedded ? "export-bookings" : "screen"}>
+      {embedded ? null : <ScreenHeader
         title="Buchungen"
-        lead="Alle Zeitbuchungen mit ihrem Exportstatus. Gefiltert wird über genau zwei Statuswerte."
-        actions={
-          <Button variant="secondary" iconStart="download" onClick={() => navigate("export")}>
-            Zur Export-Ansicht
-          </Button>
-        }
+        lead="Zeitbuchungen prüfen, bearbeiten und nach Exportstatus filtern."
       >
+        <ExportTabs active="bookings" />
         <FilterBar
           label="Buchungen filtern"
           resultLabel={
@@ -321,8 +343,8 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                 onChange={setOnlyPrevious}
                 hint="Einengung innerhalb des Status, kein eigener Statuswert"
               />
-              <TextField label="Ab Tag" type="date" value={fromDay} onChange={setFromDay} />
-              <TextField label="Bis Tag" type="date" value={toDay} onChange={setToDay} />
+              <DateField label="Ab Tag" value={fromDay} onChange={setFromDay} />
+              <DateField label="Bis Tag" value={toDay} onChange={setToDay} />
               <Button
                 size="sm"
                 variant="ghost"
@@ -343,14 +365,14 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
             </>
           }
         />
-      </ScreenHeader>
+      </ScreenHeader>}
 
       {/*
         Die Trefferliste der Todo-Einschränkung steht (T-322 4.6): Sie ist Teil
         der Filtereingabe, steht unmittelbar darunter, ist vorübergehend und auf
         sechs Einträge gedeckelt.
       */}
-      {todoSearch.trim().length > 0 && data.state.status === "ready" ? (
+      {!embedded && todoSearch.trim().length > 0 && data.state.status === "ready" ? (
         <ul className="screen__bar pick-list pick-list--inline" aria-label="Todo für den Filter wählen">
           {data.state.value.todos
             .filter((todo) => todo.title.toLowerCase().includes(todoSearch.trim().toLowerCase()))
@@ -388,7 +410,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
         label="Buchungen werden geladen"
         rows={8}
         onRetry={data.reload}
-        fallbackFrame={(content) => <ScreenBody label="Buchungen">{content}</ScreenBody>}
+        fallbackFrame={(content) => <Body label="Buchungen">{content}</Body>}
       >
         {(value, refreshing) => {
           const rows = toRows(value.page.items, value.titles, sort);
@@ -403,22 +425,22 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
 
           if (rows.length === 0) {
             return (
-              <ScreenBody label="Buchungen">
+              <Body label="Buchungen">
                 <TableShell>
                   <EmptyState
-                    icon={activeFilters.length === 0 ? "clock" : "search"}
+                    icon={!embedded && activeFilters.length === 0 ? "clock" : "search"}
                     title={
-                      activeFilters.length === 0
+                      !embedded && activeFilters.length === 0
                         ? "Noch keine Zeitbuchung"
                         : "Keine Buchung passt zu diesen Filtern"
                     }
                     description={
-                      activeFilters.length === 0
+                      !embedded && activeFilters.length === 0
                         ? "Starten Sie den Timer auf einem Todo — die erste Buchung entsteht beim Stoppen."
                         : "Setzen Sie einen Filter zurück oder erweitern Sie den Zeitraum."
                     }
                     action={
-                      activeFilters.length === 0 ? (
+                      !embedded && activeFilters.length === 0 ? (
                         <Button variant="primary" iconStart="clock" onClick={() => navigate("time")}>
                           Zur Zeiterfassung
                         </Button>
@@ -430,7 +452,7 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
                     }
                   />
                 </TableShell>
-              </ScreenBody>
+              </Body>
             );
           }
 
@@ -467,8 +489,8 @@ export function BookingsScreen({ query }: BookingsScreenProps) {
               </div>
 
               <BookingTable
-                className="screen__body"
-                surface={runAreaSurface("Buchungen", true)}
+                className={embedded ? "export-bookings__table" : "screen__body"}
+                {...(embedded ? {} : { surface: runAreaSurface("Buchungen", true) })}
                 rows={rows}
                 caption="Alle Zeitbuchungen mit Exportstatus, Zeitraum, Dauer und Leistung"
                 selectedIds={selected}

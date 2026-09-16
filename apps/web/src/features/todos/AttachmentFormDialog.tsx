@@ -154,6 +154,7 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
       */}
       <RadioRow<AttachmentKind>
         label="Art"
+        className="attachment-kind"
         value={kind}
         onChange={(next) => {
           setKind(next);
@@ -162,9 +163,9 @@ export function AttachmentFormDialog({ open, todoId, onClose, onSaved }: Attachm
           setPickerNote(null);
         }}
         options={[
-          { value: "link", label: "Verweis", hint: "Eine Adresse. SuperTakt merkt sie sich und öffnet sie im Browser." },
-          { value: "image", label: "Bild", hint: "SuperTakt legt eine Kopie neben seinen Daten ab und zeigt sie als Vorschaubild." },
-          { value: "file", label: "Datei", hint: "Ein Pfad. SuperTakt merkt ihn sich und öffnet die Datei mit der Standardanwendung." },
+          { value: "link", label: "Verweis", icon: "link" },
+          { value: "image", label: "Bild", icon: "image" },
+          { value: "file", label: "Datei", icon: "folder" },
         ]}
       />
 

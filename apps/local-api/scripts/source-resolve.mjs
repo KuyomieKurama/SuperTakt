@@ -122,9 +122,7 @@ function resolveOrFail(title, work) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Wurzel und Pakete — aufgesetzt auf die gemeinsame Fassung
-// ---------------------------------------------------------------------------
 
 /**
  * Die Wurzel des Arbeitsbereichs, **erlaufen** statt gezählt.
@@ -154,9 +152,7 @@ export function paketVerzeichnis(name) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Quelldateien über ein Merkmal
-// ---------------------------------------------------------------------------
 
 /**
  * Was beim Suchen nicht betreten wird.

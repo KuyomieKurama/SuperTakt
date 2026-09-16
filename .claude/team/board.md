@@ -3192,3 +3192,287 @@ Erzeugnis ohne sie ausgeliefert wird**. Was daraus folgt, gehört in jede Freiga
 | ~~F-20~~ | **Beantwortet 2026-09-05: beides ja** (A-19.20, A-19.21, E-074). Ursprünglich: Zwei Fragen zu Abschnitt 19, für die es keine Anforderungs-ID gibt und die deshalb nicht gebaut werden (E-073 Punkt 4): **(a)** Soll sich die Todo-Liste nach der Frist **sortieren und filtern** lassen? A-19.4 verlangt Sichtbarkeit, nicht Sortierung. **(b)** Soll das **Outlook-Add-in** eine Frist setzen dürfen? Für Anhänge ist das ausgeschlossen (A-19.19), für die Frist steht nichts da. |
 | ~~F-21~~ | **Beantwortet 2026-09-10: gegen das Anhängen (E-100).** Die Route fällt, A-19.19 bleibt unverändert stehen und wird dadurch wieder wahr; A-10.9 ändert sich mit, weil das Angebot am gefundenen Todo ganz entfällt. Umgesetzt in T-247. Ursprünglich: **Der Widerspruch aus T-245-1, und er ist die dringendste der Fragen.** Seit PR #16 hängt der Aufgabenbereich die geöffnete Outlook-Nachricht als Verweis an ein vorhandenes Todo, statt Zeit zu buchen. A-19.19 verbietet genau das — „Über das Outlook-Add-in entstehen **keine** Anhänge" — und steht unverändert in der Spezifikation. Entweder fällt A-19.19 und wird durch eine Anforderung ersetzt, die die enge Form beschreibt (nur `http(s)`, keine Datei, kein Bild, idempotent), oder die Route fällt. Ein Drittes gibt es nicht: Der Bestand behauptet an sechs Stellen die Abwesenheit einer Fläche, die es gibt. |
 | F-22 | Sollen die drei blockierten Punkte T-B05, T-B07 und T-B09 vor der Auslieferung fallen oder mit ihr? Die Antwort vom 2026-09-06 hat die Umgebung geklärt, nicht die Entscheidung. Seit den Abschnitten 20 bis 24 wiegt sie schwerer: Der Zertifikatsweg nach A-23 ist **ausschließlich** Windows-Code, und kein Prüffall davon ist je auf Windows gelaufen — außer im Bauauftrag, den PR #9 gerade erst wieder grün bekommen hat. |
+
+## T-377 bis T-381 — Welle 17, läuft (gestartet 2026-09-14)
+
+**Neuer Auftrag des Auftraggebers:** „ich habe dir mal Icons neben dem quelle.png hinterlegt. Das
+sollen die neuen Icons für die App werden."
+
+**Vom Orchestrator nachgemessen, bevor der Auftrag gestellt wurde:** In `apps/desktop/icons/`
+liegen zwei neue unversionierte Dateien, `SuperTakt-icon-transparent-1024x1024.png` und die 512er
+Fassung. Beide **RGBA**, Farbtyp 6, 8 bit; die Transparenz ist **echt** — Ecken `(0,0,0,0)`, an
+drei Stellen je Datei geprüft, nicht weiß. Die 1024er hat genau die Größe, die die Bildkette
+ohnehin erwartet. Motiv: abgerundetes dunkles Quadrat, „ST"-Monogramm, blauer Zifferblattbogen,
+Haken.
+
+**Der Kopfkommentar von `make-icon.mjs` sagt den Fall wörtlich voraus:** „wenn der Auftraggeber
+eines hat, ersetzt er `icons/quelle.png` und ruft `tauri icon` erneut auf." Genau das ist
+eingetreten — und dasselbe Skript ist damit eine **Falle**: Es erzeugt `quelle.png` neu und
+überschriebe die Zeichnung des Auftraggebers mit dem alten Taktstrich, ohne Warnung.
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-377** | Das neue Symbol als Quelle einziehen, **alle** Plattformformate neu erzeugen (auch die zehn `Square*Logo.png` und `StoreLogo.png`), über die 512er Fassung begründet entscheiden, **`make-icon.mjs` entschärfen**, und jeden Ort prüfen, an dem das Symbol sichtbar wird | frontend-dev | `apps/desktop/**`, `apps/web/**`, `packages/ui-tokens/**` |
+| **T-378** | **S-1** (blockierend: „in jedem dieser Fälle" verlangt wörtlich eine Tastatursperre — 6.2 **und** §10), S-3/S-4/S-8, F-8 schließen, R-10 mit dem Augenschein, **die Klärung 73,5 % gegen 81,7 % samt Nenner** | ux-designer | `docs/design/todo-tabelle-fluss.md` |
+| **T-379** | **N-2 entscheiden** (drei Agenten haben die Form richtigerweise nicht erfunden; jetzt ist der Punkt), S-2/S-5/S-6/S-7, die **zwei halbfalschen Gründe** der Rollenentscheidung berichtigen, Ü-2 als lesbaren Auftrag ins Papier | ui-designer | `docs/design/todo-tabelle.md` |
+| **T-380** | Freigaberunde über **T-371** — die Menge der Türen ein **viertes** Mal aufspannen, den Wächter gegen seine eigene Zusage messen, beide Hälften auf **Sackgassen** prüfen | code-reviewer | nur der eigene Bericht |
+| **T-381** | **Wiedervorlage** über T-371 — er hat B-1 bis B-4 selbst gefunden und T-363 deshalb nicht freigegeben; jeder seiner vier Befunde einzeln nachgemessen, nicht aus dem Bericht übernommen | security-checker | eigener Bericht, `docs/bedrohungsmodell.md` |
+
+**Warum T-380 und T-381 auf denselben Gegenstand:** Absicht. Zwei Raster auf einen Geldpfad, und
+**an R-34 hängt beides** — er ist der schwerste offene Eintrag der Liste, und T-371 hat bisher
+weder Code-Review noch Sicherheitsprüfung gesehen (T-370 prüfte T-363, den Vorgänger). Beide sollen
+ausdrücklich sagen, ob R-34 geschlossen werden darf. T-371 hat selbst darum gebeten, es nicht
+vorschnell zu tun.
+
+**Nicht gestartet, mit Grund:** Der e2e-Durchgang (TT-01 bis TT-34, A10–A16, die zwölf
+`.todo-row`-Stellen, der Randfall am unteren Fensterrand) — seine Meßlatte sind genau die
+Zusicherungen, die T-378 und T-379 gerade umschreiben. Dazu die Freigaberunde über T-365 und T-367,
+T-364 Abschnitt 6, der flatternde Fall in `apps/local-api/test/version/checker.test.ts`,
+`pnpm check` als Ganzes, documenter.
+
+### Zwischenfall — zwei Berichte sind beim Zweigwechsel verlorengegangen (2026-09-14, ~19:56)
+
+Der Auftraggeber hat den Arbeitszweig über **Pull Request #18 nach `main`** übernommen (Squash,
+`7eeb073`) und den Arbeitsbaum auf `main` umgestellt. **Zu diesem Zeitpunkt liefen noch fünf
+Agenten.** Zwei Berichte waren gerade fertig geworden und deshalb **unversioniert** — sie sind
+weg:
+
+- `.claude/team/reports/T-372-visual-qa.md`
+- `.claude/team/reports/T-376-spec-ux-reviewer.md`
+
+Mit ihnen die Board-Einträge zu beiden, weil `board.md` beim Wechsel auf den Stand von `main`
+zurückfiel.
+
+**Nichts an Code oder Prüffällen ist verloren.** Nachgemessen: `a521ff2` steht unverändert auf
+`origin/feature/outlook-anhaenge-und-versionspruefung`, und `main` trägt den gesamten Inhalt per
+Squash — `TodoTable.tsx`, `idle-service-start-guard.test.ts`, beide Designpapiere und die Berichte
+bis T-375 sind in `HEAD` verfolgt.
+
+**Die Lehre ist nicht „nicht mergen", sondern eine Regel, die es noch nicht gab:** Ein Bericht ist
+erst dann sicher, wenn er versioniert ist. Solange eine Welle läuft, ist jeder Zweigwechsel und
+jedes Aufräumen im Arbeitsbaum eine Handlung an **fremder, unversionierter Arbeit**. Wer während
+einer laufenden Welle den Zweig wechselt, nimmt in Kauf, daß Berichte fehlen — und die Agenten
+merken es, wie dieser Fall zeigt, erst beim Lesen.
+
+**Beide Agenten sind fortgesetzt worden** und schreiben ihre Berichte aus dem eigenen Verlauf neu.
+Es ist nichts neu zu messen.
+
+**Und der Fall hat zweimal gezeigt, daß die Agenten richtig arbeiten:** T-378 und T-379 haben die
+fehlenden Dateien unabhängig voneinander **gemessen** (`T-37*.md` liefert 370, 371, 373, 374, 375;
+Suchlauf über den ganzen Baum leer), es gemeldet — und die Befunde, von denen sie nur die Nummern
+kannten, **nicht geraten**. Genau das ist die Regel: Bei einer Blockade rät ein Agent nicht.
+
+### T-378 (ux-designer) — teilweise, S-1 behoben
+
+**S-1 ist an beiden Stellen im selben Griff behoben.** 6.2 trägt jetzt eine Tabelle mit **acht**
+Ausgängen und je einer Spalte „Fokus danach" und „Warum", §10 dieselbe Trennung mit demselben
+Wortlaut. Die Zusage lautet nicht mehr „jeder Ausgang gibt ihn auf den Auslöser zurück", sondern
+**„kein Ausgang läßt den Fokus ins Leere fallen, und keiner hält ihn fest"** — fünf geben ihn
+zurück, zwei ausdrücklich nicht.
+
+**Er hat die Frage nicht aus dem Papier beantwortet, sondern am Bau:**
+`getNextTabbableAfterTrigger` in `@zag-js/dom-query/dist/proxy-tab-focus.js` (Tab → nächster Halt
+**nach** dem Auslöser; Shift+Tab → Auslöser) und
+`restoreFocus = !(event.detail.focusable || event.detail.contextmenu)` in `popover.machine.js`.
+Dabei traten **zwei Ausgänge** zutage, die in **keiner** der beiden Fassungen standen. **TT-35** ist
+neu und mißt genau den Ausgang, den A14b nicht mißt.
+
+**Zur Zahlendiskrepanz — und er berichtigt dabei den Auftrag:** In das Papier gehört **keine** der
+beiden Prozentzahlen als tragende Aussage. AK-23 (`fensterfeste-flaechen-fluss.md:1037`) ist in
+**absoluten Pixeln** geschrieben: 588 px Inhaltsbereich, 24 px Anschlag, 4 rem Boden, höchstens
+**500 px** für den festen Teil. Tragend sind ab jetzt **432,3 px gegen 500 px** und **108 px gegen
+64 px**. Die beiden Prozentzahlen stehen mit Zähler und Nenner daneben. **Nicht die Nenner weichen
+ab, sondern die Zähler:** 73,5 % zählt die Leisten (432,3 px), 81,7 % alles, was nicht Laufbereich
+ist (588 − 108 ≈ 480 px), beides gegen 588 px; die Kette geht auf 0,4 px auf. Er kennzeichnet das
+als **gerechnet, nicht gemessen**, und hängt keine Last daran. R-3 bleibt als widerlegt geführt.
+
+**Offen aus T-378:** S-3, S-4, S-8 — nur die Nummern bekannt, nicht geraten.
+
+### T-379 (ui-designer) — teilweise, N-2 entschieden
+
+**N-2 ist entschieden, und der Befund, der sie möglich machte, ist der eigentliche Gewinn:** Die
+vierte Unterscheidung **fehlt gar nicht**. Die erste der drei Auflagen aus 3.2 — **Wortkopf statt
+Kästchen** — ist **sichtbar** und stand nur deshalb dreimal unter „strukturell", weil sie neben
+`aria-selected` und der Sammelleiste aufgezählt war.
+
+**Gemessen statt behauptet:** Über einer Auswahlspalte steht in diesem Bestand **kein** Wort — vier
+Tabellen gelesen (`BookingTable.tsx:180-183`, `ExportGroups.tsx:212`, `:288`, `TodoTable.tsx:142`).
+Über Spalte 1 der Todo-Tabelle steht eines, und **der Kopf klebt**, also steht es in jeder
+Bildlaufstellung da. Sie erfüllt alle vier Bedingungen aus 3.2 und ist von A-25.9 gedeckt — **eine
+Ergänzung der Spezifikation ist für diesen Ausgang nicht nötig.** Die Bedingung des ux-designers
+(Rücknahme zeichengleich) bekommt mit **A17** einen Wächter.
+
+**S-2 stimmt:** `TableShell` im Ladezustand ist **nicht gebaut**. 8.1a entscheidet die Frage jetzt,
+statt sie zu beschreiben.
+
+**Zwei Befunde über den Auftrag hinaus:**
+
+- **TT-36 gab es schon.** Der ux-designer hat die Rücknahme-Bedingung **unabhängig** als Meßlatte
+  aufgeschrieben (`todo-tabelle-fluss.md` §14, Z. 1310-1320). A17 und TT-36 sind **eine** Zusage an
+  zwei Adressen. Und TT-36 ist dort an die Antwort „**keine** sichtbare Unterscheidung" geknüpft —
+  die getroffene ist eine **dritte** („keine **neu erfundene**"); ohne einen Halbsatz an TT-36 liest
+  der nächste die Meßlatte als hinfällig.
+- **Ü-2 fängt heute kein Lauf.** `typecheck`, `boundaries`, `contrast`, `proof:*`, `build`, A10 bis
+  A17 — **keiner liest eine Hintergrundfarbe**. Sichtbar wird der Bruch ausschließlich an einer
+  laufenden Zeile mit **gerader** Ordnungszahl. Deshalb strukturell beheben statt bewachen (10.5).
+
+**Er hat alle vier Gründe der Rollenentscheidung geprüft**, nicht nur den im Auftrag genannten:
+Grund 3 ist ein Strohmann, Grund 1 unvollständig; Grund 2 trägt allein. Die Entscheidung bleibt.
+
+**Offen aus T-379:** S-5, S-6, S-7 — nur die Nummern bekannt, nicht geraten.
+
+### T-377 (frontend-dev) — Das neue Anwendungssymbol ist eingezogen
+
+**Werkzeugkette war vorhanden** (Node v22.23.2, pnpm 11.3.0, cargo 1.89.0, `@tauri-apps/cli`
+2.11.4), es ist gefahren und nicht behauptet: `typecheck` grün, `boundaries` grün (532 Dateien),
+**`proof:all` Exitcode 0, alle 22 Läufe**, `build` grün. **Alle 17 Plattformdateien haben neue
+Bytes** — der Schnitt der Prüfsummenlisten vorher/nachher ist **leer**, die Dateimenge identisch.
+Das ist der Nachweis, daß keine alte übriggeblieben ist.
+
+**Vier Entscheidungen, jede begründet:**
+
+1. **`quelle.png` behält den Namen, bekommt die neuen Bytes.** Der Name sagt die **Rolle**, und die
+   ist unverändert wahr; eine Rolle veraltet nicht. `SuperTakt-icon-transparent-1024x1024.png` sagt
+   statt dessen den **Inhalt** — zwei Fakten, die die Datei selbst schon trägt und die beim
+   nächsten Austausch lügen. Dazu zeigen `docs/bedrohungsmodell.md` und mehrere Berichte auf den
+   Pfad.
+2. **Die 512er fällt.** Die Kette erzeugt ohnehin ein 512 × 512 (`icon.png`), und es ist gemessen
+   dasselbe Motiv (Motivanteil 77,1 % gegen 77,3 %). Zwei Quellen für ein Symbol sind zwei
+   Wahrheiten.
+3. **`make-icon.mjs` fällt** — und **vorher** gemessen, beide Läufe wie in `CLAUDE.md` verlangt:
+   `git grep` findet nur `board.md` und zwei historische Berichte, der rohe Lauf über `apps/*/src`,
+   `apps/*/scripts`, `scripts`, `tests`, `docs`, `.github` und alle `package.json` findet
+   **nichts**. In keinem Ablauf scharf, aber **für jeden Menschen scharf**. Sein Wissen ist nach
+   `apps/desktop/README.md` gewandert — dort stand über das Symbol vorher **kein Wort** (gemessen).
+4. **`tauri icon` legt ungefragt `icons/android/` und `icons/ios/` an** — 35 Dateien, 1,4 MiB.
+   SuperTakt hat keine Mobilziele; entfernt, **und daß sie entstehen, steht jetzt in der README**.
+
+**Der Befund, nach dem niemand gefragt hatte:** Die **Weboberfläche hatte überhaupt kein
+Reitersymbol** — kein `rel="icon"`, `public/` enthielt nur `startup-appearance.js`,
+`/favicon.ico` → **404**. Behoben mit zwei lokalen Dateien aus derselben Quelle. Und die Probe
+dazu: `favicon-32.png` ist **byteweise identisch** mit `src-tauri/icons/32x32.png`
+(`e3eb4820fb33…`) — daran fällt ein vergessener Nachzug auf.
+
+`tauri.conf.json` **nicht angefaßt** — die fünf Einträge nennen Dateinamen, und die haben sich
+nicht geändert. `proof:shell-surface` grün.
+
+**Zwei Messungen, damit sie später niemand für Fehler der Kette hält:** Von 1 048 576 Bildpunkten
+sind **613 393 teildurchsichtig und nur 1 832 voll deckend** — der Bildkörper liegt durchgehend bei
+Alpha 253 (99,2 % Deckung, unsichtbar). Die Ecken sind echt transparent. Der Bestand wächst um
+**rund 2,3 MiB**; die gelieferten Bytes sind **nicht** nachkomprimiert worden.
+
+**Für den Augenschein:** Das Motiv füllt **77,1 %** der Kantenlänge, der alte Taktstrich füllte
+**88,1 %**. Bei 32 × 32 bleiben dem Zeichen rund 25 Pixel, „S" und „T" rücken optisch zusammen.
+**Eigenschaft der Zeichnung, nicht der Kette** — ein engerer Beschnitt wäre ein Eingriff ins Werk
+des Auftraggebers, und er hat ihn deshalb nicht vorgenommen.
+
+**Nicht gefahren und nicht als grün gemeldet:** `test:coverage`, `test:rust`, `audit`, `test:e2e`,
+`verify:bundle`, `pnpm check` als Ganzes (kein TypeScript, Rust oder CSS angefaßt), und **kein
+`tauri build`** — das Symbol im fertigen Installationspaket ist an der Konfiguration nachgelesen,
+nicht am Erzeugnis gemessen.
+
+**Drei Befunde außerhalb seiner Hoheit, keiner angefaßt:**
+
+- **B-1 — der Outlook-Aufgabenbereich verweist auf fünf Symboldateien, die es nicht gibt.**
+  `apps/outlook-addin/manifest.xml` Zeilen 46, 47, 121, 122, 123 nennen `takt-16/32/64/80/128.png`
+  unter `https://localhost:17844/assets/`; keine liegt im Quellbaum. Vorbestehend (T-019 Punkt 6),
+  jetzt billig zu beheben. **→ T-384 gestartet.**
+- **B-2 — das Markenzeichen *in* der Oberfläche ist jetzt anders gefärbt.** `App.tsx:327-331`
+  zeichnet „ST" auf `--accent-bg` (#2159da); das neue Symbol trägt dieselben Buchstaben auf fast
+  schwarzem Grund (Mittelpixel 16,20,24). **Buchstaben und Form stimmen, der Grund nicht.**
+  Gestaltungsentscheidung — **Frage an den Auftraggeber**, nicht an einen Agenten.
+- **B-3 — `docs/bedrohungsmodell.md:2342`** sagt „die 16 PNG … das Quellsymbol ein blaues ‚T'".
+  Beides stimmt nicht mehr (17 Dateien, kein blaues T). Gehört dem security-checker.
+
+**Offen aus T-377:** Soll ein Nachweislauf die Gleichheit von `favicon-32.png` und `32x32.png`
+messen? Heute ist das eine Zeile in zwei READMEs, **und kein Lauf mißt es**.
+
+### T-382 bis T-384 — Nachträge, laufen
+
+| ID | Aufgabe | Rolle | Hoheit |
+|---|---|---|---|
+| **T-382** | S-3/S-4/S-8 (Formulierungen stehen in T-376 wörtlich), **der Halbsatz an TT-36** — A17 und TT-36 sind eine Zusage an zwei Adressen, und TT-36 hängt an einer Antwort, die N-2 überholt hat —, die Zahlen als **gemessen bestätigt** nachtragen, §15.4 schließen | ux-designer | `docs/design/todo-tabelle-fluss.md` |
+| **T-383** | S-5/S-6/S-7, den Abgleich der **vier** Rollengründe gegen T-376 (trägt am Ende nur einer?), 10.5 ohne Bericht lesbar machen | ui-designer | `docs/design/todo-tabelle.md` |
+| **T-384** | Die fünf fehlenden `takt-*.png` des Aufgabenbereichs aus **derselben** Quelle, samt Probe wie bei `favicon-32.png`; vorher messen, **was Outlook heute tut, wenn ein Symbol fehlt** | integration-dev | `apps/outlook-addin/**`, `apps/local-api/src/routes/addin/**` |
+
+### T-380 (code-reviewer) — Nacharbeit. R-34 darf nicht geschlossen werden.
+
+**Der blockierende Befund ist eine Verschlimmerung gegenüber `HEAD`, und er sitzt in der Domäne:**
+`packages/domain/src/time-entry.ts:454`, `earlierOf`. Der Deckel fällt gegen ein Lebenszeichen, das
+die `CHECK`-Form der Speicherung **erfüllt** und von `Date.parse` **nicht gelesen** wird —
+`9999-99-99T99:99:99Z` erfüllt das GLOB der Migration 0003. `Date.parse(a) <= Date.parse(b)` ist bei
+`NaN` **false**, also kommt `b` = `now` zurück.
+
+Gemessen über den echten Weg `exportDataArchive` → `importDataArchive`: `bookableSeconds = 39600`,
+`POST /timer/stop` bucht **39 600 s, `export_status = open`**. **Derselbe Fall brach gegen
+`git show 311b26e:…` laut ab** („Spalte duration_seconds ist keine Zahl") und buchte **nichts**.
+
+**T-371 hat damit einen lauten Fehlschlag in eine stille, exportbereite Elf-Stunden-Buchung
+verwandelt.** Das ist genau die Richtung, in die R-34 nie wieder kippen durfte. Der Fix steht:
+in `decideOrphanedTimer:525` ist ein **unlesbares** Lebenszeichen **keines**, dann greift der
+bestehende `discarded`-Zweig.
+
+**Zweiter hoher Befund — eine Sackgasse**, `apps/local-api/src/features/timer/idle.ts:190`. Archiv
+mit offener Inaktivitätsphase, deren `startedAt` hinter der Zieluhr liegt: `idle/return` →
+`validation_error`, `timer/stop` → `conflict`, `timer/orphaned` → `null`, `orphaned/resolve` →
+`conflict`. **Alle vier Ausgänge zu, und der Timer läuft weiter.** Genau das, wonach der Auftrag zu
+suchen bat. Die Begründung im Kopf von `idle.ts` ist richtig gedacht, greift aber **eine Prüfung zu
+spät**.
+
+**Die vier Auftragsfragen, alle gemessen statt beantwortet:**
+
+- **Sieben Türen** — unabhängig über die `TimerPort`-Fläche bestätigt. Das ist jetzt der **vierte**
+  Weg, auf dem dieselbe Sieben herauskommt: der Nachweis, nicht der Befund.
+- **Der Wächter mißt seine eigene Zusage nicht ganz.** Elf Mutationen in der Meßkopie, **sieben
+  rot, vier grün** — `src/main.ts`, `src/startup.ts`, die Randordner und
+  `const timer = unit.timer; timer.stop(…)`. **Zweizeiliger Fix** (`alleNamen` statt
+  `anwendungsfallNamen`, `\btimer\.` statt `\.timer\.`) schließt alle vier und läßt den
+  unveränderten Baum bei 51/0 — auch das gefahren. Ein Wächter, der gegen sich selbst gemessen
+  wird, statt geglaubt zu werden.
+- **`now` als Pflichtfeld ist heute gefahrlos:** 7 tsc-Projekte Exit 0, 220 Prüffälle grün, **mit
+  Gegenprobe, daß die Messung beißt.**
+- **B-5 ist jetzt beziffert:** Fenster 25 200 s, gebucht 25 200 s, `export_status = open` — ohne
+  Angreifer, **eine Dialoghandlung entfernt.**
+
+**Der Kommentar in `unit-of-work.ts:259` ist nach T-375s Berichtigung in zwei Sätzen unwahr**
+(„nichts würde rot"; „ein Prüffall fehlt bis heute" — Fall F steht in
+`data-transfer-timer-recovery.test.ts:313`). `app.ts:422` wirft `error.message` weiterhin weg.
+
+**Eigene Läufe:** `typecheck` Exit 0 über alle acht Projekte, `boundaries` grün (532 Dateien),
+`proof:layers` 51/0, `proof:openapi` 115/0, `proof:callers` 74/0, `vitest apps/local-api/test
+packages/{domain,storage,export}/test` **1 659 grün / 2 übersprungen / 0 rot**. Die Meßkopie lief
+über `git archive HEAD` im **Kritzelverzeichnis** — nicht im Quellbaum.
+
+**Nicht gestartet:** Der Reparaturauftrag geht **nicht** los, solange T-381 dieselben Dateien liest.
+Zwei Prüfer auf einen Geldpfad war Absicht; einen davon gegen einen Zwischenstand messen zu lassen
+wäre T-315/T-316.
+
+### T-382 (ux-designer) — fertig, vierte Fassung
+
+S-3, S-4 und S-8 nach dem wörtlichen Vorschlag aus T-376 umgesetzt: 6.3 trägt statt der Delegation
+die **Antwort** (Nachlauf und Versatz als Paar, lückenloser Anschluß ausgeschlossen); 12.1 hat zwei
+Deckungszeilen mehr — die wechselnde Zeilenhöhe (R-10, gedeckt als **Vorgabefolge der
+Tabellenform**, mit dem Vermerk, daß die Gegenmeinung einen Halbsatz in A-25.9 bräuchte und das der
+Orchestrator entscheidet) und die drei Wegnahmen als **Verlegungen**; 15.4 zitiert die Entscheidung
+des Schwesterpapiers statt die Frage offenzulassen.
+
+**Den Halbsatz an TT-36 hat er an allen drei Stellen geschrieben, an denen die Bedingung steht** —
+TT-36, die Prosa in 3.2 und OF-7 — „**weil genau das die Lehre aus S-1 desselben Papiers ist**".
+Überall steht jetzt, daß die dritte Antwort („keine **neu erfundene**", Wortkopf über Spalte 1) die
+Meßlatte **nicht entlastet, sondern begründet**, und daß TT-36 und **A17** eine Zusage an zwei
+Adressen sind. Das ist die richtige Lehre aus dem eigenen blockierenden Befund, an derselben Datei,
+zwei Aufträge später.
+
+**Die Zahl ist entkennzeichnet und belegt:** T-372 B-1 (588 px / 107,7 px / 480,3 px, direkt
+gemessen) — gleicher Nenner, gleicher Laufbereich, abweichender Zähler. Die Rekonstruktion aus
+T-378 trifft zu.
+
+**Und er hat die Empfehlung des Augenscheins nicht blind befolgt:** T-372 wollte 432,3 px durch
+480,3 px **ersetzt** sehen; AK-23 zieht die `.screen`-Anschläge aber getrennt ab, und sein
+500-px-Rest meint den Zähler 432,3 px. Jetzt stehen **beide** Zahlen mit ihrem Bezug, und TT-24
+sagt, welche wogegen gemessen wird.
+
+**OF-7 führt er als *beantwortet im Schwesterpapier*, nicht als von ihm entschieden** — „es
+stehenzulassen wäre wieder S-3". Die vier Kleinigkeiten aus T-376 Abschnitt 5, darunter sein
+**eigener** falscher Verweis „A-25.9 Satz 4" (richtig: Satz 2), sind bewußt **nicht** angefaßt und
+im Papier als nicht angefaßt vermerkt.

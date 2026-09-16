@@ -1,3 +1,6 @@
+import { TagAdministration } from "../tags/TagAdministration";
+import { PoolAdministration } from "../tags/PoolAdministration";
+import { PrioritySettings } from "./PrioritySettings";
 import { THEME_PRESETS, themePreset } from "./themePresets";
 import { useEffect } from "react";
 import { listSecurityNotices, type SecurityNoticeKind } from "./api";
@@ -62,11 +65,9 @@ const NOTICE_LABEL: Readonly<Record<SecurityNoticeKind, string>> = {
   file_permissions_wide: "Eine Datei im Datenordner hat zu weite Rechte",
 };
 
-/* ==================================================================== */
 /* Die Bereiche                                                         */
-/* ==================================================================== */
 
-const AREAS = ["darstellung", "timer", "export", "daten", "standardtags", "status", "addin", "arbeitsplatz"] as const;
+const AREAS = ["darstellung", "timer", "export", "daten", "tags", "regeln", "status", "prioritaeten", "addin", "arbeitsplatz"] as const;
 
 type SettingsArea = (typeof AREAS)[number];
 
@@ -106,11 +107,13 @@ const AREA_LIST = [
   { area: "export", label: "Export", icon: "download", hint: "Zielordner, Vorlage, Rundung" },
   { area: "daten", label: "Daten", icon: "folder-open", hint: "Sichern, wiederherstellen, umziehen" },
   {
-    area: "standardtags",
-    label: "Standard-Tags",
+    area: "tags",
+    label: "Tags",
     icon: "tag",
-    hint: "Tags für jedes neue Todo",
+    hint: "Tags, Ordner und Standard-Tags",
   },
+  { area: "regeln", label: "Regeln", icon: "filter", hint: "Pools und Kanban-Spalten" },
+  { area: "prioritaeten", label: "Prioritäten", icon: "arrow-up", hint: "Prioritäten und ihre Gewichtung" },
   { area: "status", label: "Status", icon: "inbox", hint: "Statuswerte eines Todos" },
   { area: "addin", label: "Outlook-Add-in", icon: "shield", hint: "Zugang des Add-ins" },
   {
@@ -129,7 +132,7 @@ const AREA_LIST = [
 ] as const satisfies readonly AreaDescriptor[];
 
 function readArea(query: Readonly<Record<string, string>>): SettingsArea {
-  const value = query["bereich"];
+  const value = query["bereich"] === "standardtags" ? "tags" : query["bereich"];
   return AREAS.find((area) => area === value) ?? AREAS[0];
 }
 
@@ -205,7 +208,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
           <nav className="settings-rail" aria-label="Bereiche der Einstellungen">
             <ul className="settings-rail__list">
               {AREA_LIST.map((item) => (
-                <li key={item.area} className={["export", "standardtags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
+                <li key={item.area} className={["export", "tags", "addin"].includes(item.area) ? "settings-rail__section-start" : undefined}>
                   <a
                     className={cx(
                       "settings-rail__item",
@@ -245,6 +248,7 @@ export function SettingsScreen({ query }: SettingsScreenProps) {
 
 /** Der Inhalt eines Bereichs. Jeder Zweig ist eine Karte oder eine Reihe. */
 function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
+  const structure = useStructure();
   switch (area) {
     case "darstellung":
       return <DisplaySettings />;
@@ -254,8 +258,16 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
       return <ExportSettings />;
     case "daten":
       return <DataTransferSettings />;
-    case "standardtags":
-      return <DefaultTagSettings />;
+    case "tags":
+      return structure.state.status === "ready" ? <>
+        <DefaultTagSettings />
+        <TagAdministration tree={structure.state.value.tagTree} />
+      </> : null;
+    case "regeln":
+      return structure.state.status === "ready"
+        ? <PoolAdministration rules={structure.state.value.rules} /> : null;
+    case "prioritaeten":
+      return <PrioritySettings />;
     case "status":
       return <StatusSettings />;
     case "addin":
@@ -270,9 +282,7 @@ function SettingsAreaPanel({ area }: { readonly area: SettingsArea }) {
   }
 }
 
-/* ==================================================================== */
 /* Darstellung                                                          */
-/* ==================================================================== */
 
 const DENSITY_LABEL: Readonly<Record<Density, string>> = {
   comfortable: "Normal — mehr Luft zwischen den Zeilen",
@@ -371,9 +381,7 @@ function DisplaySettings() {
   );
 }
 
-/* ==================================================================== */
 /* Arbeitsplatz — Benutzername und Ablageort (C-20, E-042, R-13)        */
-/* ==================================================================== */
 
 /**
  * Zwei Auskünfte des Dienstes, beide unveränderlich.
@@ -417,9 +425,7 @@ function WorkstationFacts() {
   );
 }
 
-/* ==================================================================== */
 /* Sicherheitsmeldungen                                                 */
-/* ==================================================================== */
 
 function SecurityNotices() {
   const notices = useAsync(() => listSecurityNotices(), []);

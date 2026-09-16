@@ -1,32 +1,6 @@
 /**
- * Takt — Todos und der interne Vermerk (A-2.*, A-5.*, A-7.1, A-7.2, A-10.9).
- *
- * ---------------------------------------------------------------------------
- * Die Notiz-Trennung auf der Leseseite
- * ---------------------------------------------------------------------------
- *
- * In dieser Datei gibt es **keine** Abfrage, die `todo` und `todo_note`
- * verbindet — außer in `createTodoNotePort`, und dort ausschließlich auf
- * `todo_note` allein. `SELECT *` kommt nirgends vor: Jede Spalte ist
- * ausgeschrieben, damit eine später ergänzte Spalte nicht von selbst in einen
- * Datensatz gerät, den ein Exportpfad in der Hand hält (A-7.2, R-06).
- *
- * ---------------------------------------------------------------------------
- * Welche `tagIds` `create` liest — die Antwort auf offene Frage 4 aus T-019
- * ---------------------------------------------------------------------------
- *
- * `create(input, tagIds)` führt die Liste zweimal, und das ist kein Versehen:
- *
- *  - `input.tagIds` sind die **ausdrücklich gewählten** Tags. So steht es im
- *    Vertrag von `TodoCreate` in todo.ts: „Die Standard-Tags aus A-9 kommen im
- *    Anwendungsfall dazu."
- *  - Das zweite Argument ist die **wirksame** Liste, also die gewählten
- *    zuzüglich der Standard-Tags aus `applyDefaultTags`.
- *
- * Geschrieben wird das zweite Argument. `input.tagIds` wird von diesem Adapter
- * **nicht** gelesen. Damit greift A-9.5 unabhängig davon, ob der Aufrufer die
- * Ergänzung vorgenommen hat oder nicht — und ein Aufrufer, der beide gleich
- * übergibt (so macht es das Add-in), bekommt dasselbe Ergebnis.
+ * Interne Vermerke getrennt und Spalten ausdrücklich lesen. Beim Anlegen gilt die wirksame
+ * Tagliste aus dem zweiten Argument einschließlich Standard-Tags.
  */
 
 import type {
@@ -53,7 +27,7 @@ import type {
   TodoNote,
   TodoUpdate,
 } from '@takt/domain';
-import { dueComparison, err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
+import { validTodoSchedule, dueComparison, err, ok, poolRuleMatchesNothing, taktError } from '@takt/domain';
 
 import { chunk, integer, placeholders, text, textOrNull, type SqlConnection, type SqlRow, type SqlValue } from './database.ts';
 import { attemptAtomically } from './atomic.ts';
@@ -73,7 +47,7 @@ import type { IdSource } from './ids.ts';
  * wird gerechnet und nie gespeichert (E-070 Punkt 3).
  */
 const TODO_COLUMNS =
-  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.due_date, t.created_at, t.updated_at';
+  't.id, t.title, t.call_number, t.status_id, t.completed_at, t.due_date, t.due_time, t.estimate_minutes, t.no_export, t.priority_id, (SELECT weight FROM todo_priority WHERE id = t.priority_id) AS priority_weight, t.created_at, t.updated_at';
 
 /**
  * Der Ersatzwert, mit dem ein Todo **ohne** Frist beim Sortieren ans Ende
@@ -130,6 +104,8 @@ function buildConditions(
   resolvedPools: readonly ResolvedPool[],
 ): readonly Condition[] {
   const conditions: Condition[] = [];
+  if (filter.withoutPriority) conditions.push({ sql: 't.priority_id IS NULL', params: [] });
+  if (filter.priorityIds?.length) conditions.push({ sql: `t.priority_id IN (${placeholders(filter.priorityIds.length)})`, params: [...filter.priorityIds] });
 
   if (filter.search !== undefined && filter.search.trim() !== '') {
     // `LIKE` mit umschließenden Prozentzeichen. Die Sonderzeichen `%` und `_`
@@ -484,7 +460,11 @@ export function createTodoPort(
       );
 
       const limit = pageSize(pagination?.limit);
-      const cursor = decodeCursor(pagination?.cursor);
+      const decodedCursor = decodeCursor(pagination?.cursor);
+      // Wie unlesbare Marken beginnen auch Marken einer anderen Sortierung
+      // wieder auf der ersten Seite; niemals NaN an SQLite übergeben.
+      const cursor = filter.sortByPriority && decodedCursor !== null &&
+        !Number.isFinite(Number(decodedCursor.sort)) ? null : decodedCursor;
 
       /**
        * Zwei Ordnungen, und die zweite ist Anzeige (A-19.20, E-074 Punkt 1).
@@ -512,7 +492,13 @@ export function createTodoPort(
        * oder doppelt liefert — und das fiele erst auf der dritten Seite auf.
        */
       const direction = filter.sortByDueDate;
-      const order =
+      const order = filter.sortByPriority ? {
+        key: 'COALESCE((SELECT weight FROM todo_priority WHERE id = t.priority_id), -9007199254740992)',
+        params: [] as SqlValue[],
+        sql: 'ORDER BY COALESCE((SELECT weight FROM todo_priority WHERE id = t.priority_id), -9007199254740992) DESC, t.id DESC',
+        comparator: '<',
+        read: (row: SqlRow): string => String(row['priority_weight'] ?? -9007199254740992),
+      } :
         direction === undefined
           ? {
               key: 't.updated_at',
@@ -546,9 +532,9 @@ export function createTodoPort(
               // zweimal davor und nicht einmal.
               params: [
                 ...order.params,
-                cursor.sort,
+                filter.sortByPriority ? Number(cursor.sort) : cursor.sort,
                 ...order.params,
-                cursor.sort,
+                filter.sortByPriority ? Number(cursor.sort) : cursor.sort,
                 cursor.id,
               ] as SqlValue[],
             };
@@ -593,18 +579,19 @@ export function createTodoPort(
     },
 
     async create(input: TodoCreate, tagIds: readonly TagId[]): Promise<Todo> {
+      if (!validTodoSchedule(input.dueDate, input.dueTime, input.estimateMinutes)) throw new Error('Frist, Uhrzeit oder Schätzung sind ungültig.');
       const id = ids.next() as TodoId;
       const statusId = input.statusId ?? defaultStatusId(conn);
 
       conn
         .prepare(
-          `INSERT INTO todo (id, title, call_number, status_id, completed_at, due_date, created_at, updated_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`,
+          `INSERT INTO todo (id, title, call_number, status_id, completed_at, due_date, due_time, estimate_minutes, no_export, priority_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
         )
         // `dueDate` kommt geprüft herein (`checkDueDate` in der Domäne, an der
         // Tür). Der Adapter urteilt nicht — der CHECK aus Migration 0014 ist
         // die zweite Wache und nicht die erste.
-        .run(id, input.title, input.callNumber, statusId, input.dueDate ?? null, input.now, input.now);
+        .run(id, input.title, input.callNumber, statusId, input.dueDate ?? null, input.dueTime ?? null, input.estimateMinutes ?? null, input.noExport === true ? 1 : 0, input.priorityId ?? null, input.now, input.now);
 
       writeTags(id, tagIds, input.now);
 
@@ -648,6 +635,7 @@ export function createTodoPort(
       // und **alle** Tags verloren hat, während die Antwort von einem
       // Validierungsfehler spricht. Mit den Tags ginge die
       // Pool-Zugehörigkeit (A-3.4), die aus ihnen abgeleitet wird.
+      if (!validTodoSchedule(input.dueDate === undefined ? existing.dueDate : input.dueDate, input.dueDate === null ? null : input.dueTime === undefined ? existing.dueTime : input.dueTime, input.estimateMinutes === undefined ? existing.estimateMinutes : input.estimateMinutes)) return err(taktError('validation_error', 'Frist, Uhrzeit oder Schätzung sind ungültig.'));
       const outcome = attemptAtomically(conn, 'takt_todo_update', () => {
         const sets: string[] = [];
         const params: SqlValue[] = [];
@@ -678,6 +666,22 @@ export function createTodoPort(
         // Auch wenn nur Tags geändert werden, wandert `updated_at` mit: Die
         // Liste sortiert danach, und eine Änderung, die nicht nach oben
         // rückt, sieht aus wie keine Änderung.
+        if (input.dueTime !== undefined || input.dueDate === null) {
+          sets.push('due_time = ?');
+          params.push(input.dueDate === null ? null : input.dueTime ?? null);
+        }
+        if (input.priorityId !== undefined) {
+          sets.push('priority_id = ?');
+          params.push(input.priorityId);
+        }
+        if (input.noExport !== undefined) {
+          sets.push('no_export = ?');
+          params.push(input.noExport ? 1 : 0);
+        }
+        if (input.estimateMinutes !== undefined) {
+          sets.push('estimate_minutes = ?');
+          params.push(input.estimateMinutes);
+        }
         sets.push('updated_at = ?');
         params.push(input.now);
         params.push(id);

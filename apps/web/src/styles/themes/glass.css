@@ -1,0 +1,54 @@
+/* @theme {"label":"Glass","mode":"auto","hint":"Dezent durchscheinende Glasflächen","order":6} */
+:root[data-design-theme="glass"] {
+  --preset-canvas: #eef1f5;
+  --preset-surface: #ffffff;
+  --preset-ink: #252932;
+  --preset-muted: #55585f;
+  --preset-accent: #3866ad;
+  --preset-link: #3866ad;
+  --preset-on: #ffffff;
+  --preset-accent-hover: #3661a4;
+  --preset-accent-active: #345d9d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-design-theme="glass"]:not([data-theme="light"]) {
+  --preset-canvas: #131314;
+  --preset-surface: #232326;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbbbc;
+  --preset-accent: #83b9f3;
+  --preset-link: #83b9f3;
+  --preset-on: #101010;
+  --preset-accent-hover: #8abdf4;
+  --preset-accent-active: #8fc0f4;
+  }
+}
+
+:root[data-design-theme="glass"][data-theme="dark"] {
+  --preset-canvas: #131314;
+  --preset-surface: #232326;
+  --preset-ink: #e6e6e6;
+  --preset-muted: #bbbbbc;
+  --preset-accent: #83b9f3;
+  --preset-link: #83b9f3;
+  --preset-on: #101010;
+  --preset-accent-hover: #8abdf4;
+  --preset-accent-active: #8fc0f4;
+}
+:root[data-design-theme="glass"] .app {
+  background-image: radial-gradient(ellipse at top right, color-mix(in srgb, var(--accent-bg) 18%, transparent), transparent 60%);
+}
+
+:root[data-design-theme="glass"] :is(.card, .filterbar, .app__sidebar, .app__header) {
+  background-color: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(115%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent), var(--shadow-sm);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-design-theme="glass"] :is(.card, .filterbar, .app__sidebar, .app__header) {
+    background-color: var(--bg-surface);
+    backdrop-filter: none;
+  }
+}

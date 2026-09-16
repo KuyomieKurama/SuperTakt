@@ -12,10 +12,10 @@
     "proof:clamp": "node scripts/proof-clamp.mjs",
     "proof:surface": "node scripts/proof-surface.mjs",
     "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "build:designsystem": "tsc -p tsconfig.json --noEmit && node scripts/build-designsystem.mjs",
+    "build": "node ../../scripts/sync-themes.mjs && tsc -p tsconfig.json --noEmit && vite build",
+    "build:designsystem": "node ../../scripts/sync-themes.mjs && tsc -p tsconfig.json --noEmit && node scripts/build-designsystem.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../scripts/sync-themes.mjs && tsc -p tsconfig.json --noEmit",
     "contrast": "node scripts/contrast-check.mjs",
     "contrast:md": "node scripts/contrast-check.mjs --markdown"
   },

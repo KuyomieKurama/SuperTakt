@@ -1,114 +1,20 @@
 /**
- * Takt — die Frist eines Todos (A-19.1 bis A-19.7, A-19.20, E-070, E-074,
- * A-A-19).
- *
- * ===========================================================================
- * Ein Tag, und es ist **derselbe** Tag wie beim Export
- * ===========================================================================
- *
- * Die Frist ist ein Kalendertag ohne Uhrzeit (E-070 Punkt 1), und der
- * Tagesbegriff ist der aus E-025: `toCalendarDay` in `kernel.ts`, dieselbe
- * Funktion, die die Tagesgruppierung des Exports benutzt. Es gibt hier keinen
- * zweiten — diese Datei rechnet **keinen** Tag aus, sie bekommt ihn.
- *
- * Der Grund steht in E-070 Punkt 2 und ist kein Schönheitsargument: Ein
- * zweiter Tagesbegriff im selben Programm hieße, daß „heute fällig" und „heute
- * gebucht" an einem Reisetag verschiedene Tage meinen. Wer `dueState` aufruft,
- * übergibt deshalb `today` — und die eine Stelle, an der `today` entsteht, ist
- * `toCalendarDay(clock.now(), timeZone)`.
- *
- * ===========================================================================
- * Der Zustand wird gerechnet, nie gespeichert (E-070 Punkt 3)
- * ===========================================================================
- *
- * Gespeichert ist der Tag. „Überfällig" entsteht aus ihm und aus heute. Ein
- * gespeicherter Zustand wäre über Nacht falsch, ohne daß jemand etwas angefaßt
- * hat — und niemand hätte einen Anlaß, ihn neu zu schreiben.
- *
- * Deshalb ist {@link dueState} rein: zwei Werte hinein, ein Wert heraus, keine
- * Uhr, kein Bestand, kein HTTP. Ein Prüffall, der die Uhr über Mitternacht
- * stellt, mißt hier gar nichts — er mißt, ob das **System** die Funktion bei
- * jeder Anfrage neu ruft. Das ist der Fall: `listTodos` und `loadTodo` lesen
- * die Uhr je Anfrage.
- *
- * ===========================================================================
- * Der vierte Fall ist ein Wert und kein `null`
- * ===========================================================================
- *
- * A-19.5 nennt drei Zustände und sagt im selben Atemzug: „Ein Todo ohne Frist
- * hat keinen dieser Zustände." Das ist **eine Auskunft** und keine fehlende.
- * `dueState` gibt dafür `'no_due_date'` zurück und nicht `null`.
- *
- * Der Unterschied kostet eine Zeile und spart eine Klasse Fehler: Ein `null`
- * zwingt jeden Aufrufer zu einer Verzweigung, deren Ausgang er selbst benennen
- * muß — und die naheliegende Benennung ist „später fällig" oder ein leerer
- * Text. Beides behauptet etwas. Mit vier Werten steht der Fall im Typ; wer ihn
- * vergißt, bekommt von `tsc` keine Vollständigkeit über eine Vereinigung
- * geschenkt, sondern eine Meldung (siehe {@link DUE_STATE_PRESENCE}).
- *
- * ===========================================================================
- * Was hier **nicht** steht
- * ===========================================================================
- *
- * Die Frist ist **keine Achse** (E-070 Punkt 4, E-074 Punkt 1, A-19.7,
- * A-19.17). Sie taucht deshalb weder in `PoolRule` noch in `ExportSourcePath`
- * auf, und diese Datei liefert nichts, was ein Regelterm oder eine Feldquelle
- * werden könnte. Sortieren und Filtern sind Anzeige: Sie ordnen eine Liste,
- * sie ordnen kein Todo einem Pool zu.
- *
- * Rein: gleiche Eingabe, gleiche Ausgabe, kein Zugriff auf Uhr, Datei, Netz
- * oder Datenbank.
+ * Den Vergleichstag mit derselben Zeitzone wie im Export bestimmen.
+ * Der Fälligkeitszustand wird je Anfrage berechnet, damit er über Mitternacht nicht veraltet.
  */
 
 import type { CalendarDay, Result, TaktError } from './kernel.ts';
 import { err, ok, taktError } from './kernel.ts';
 
-// ---------------------------------------------------------------------------
 // Die Form eines Tages
-// ---------------------------------------------------------------------------
 
-/**
- * `YYYY-MM-DD`, und nichts daneben (A-A-19).
- *
- * Kein `2026-2-3`, kein `2026-02-30T00:00:00Z`, kein Zeitzonenanhang. Die Form
- * ist derselbe Ausdruck wie `daySchema` an der Tür des Dienstes — dort bindet
- * er an zod, hier steht er als Regel. Zwei Fassungen einer Form wären zwei
- * Gelegenheiten, sie verschieden zu ändern (E-063 Punkt 5); die Tür liest
- * deshalb diese Konstante.
- */
 export const DUE_DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
-/**
- * Die Bandbreite der Jahre (A-A-19).
- *
- * **Warum überhaupt eine.** `0000-01-01` und `999999-01-01` bestehen keine
- * Formprüfung, die nur auf Ziffern schaut, und sie sind keine Frist, sondern
- * eine Eingabe, die die Anzeige zerlegen soll. 1970 ist der Anfang der
- * Zeitrechnung, in der dieses Programm rechnet; 2999 ist so weit jenseits
- * jeder Frist, daß darüber hinaus nichts Gutes gemeint sein kann.
- *
- * Beide Grenzen gehören **dazu**.
- */
+/** Beide Jahresgrenzen sind eingeschlossen. */
 export const MIN_DUE_YEAR = 1970;
 export const MAX_DUE_YEAR = 2999;
 
-/**
- * Ist das ein Tag, den es gibt?
- *
- * Drei Prüfungen, und die dritte ist die, die man vergißt:
- *
- *  1. Die Form (`YYYY-MM-DD`).
- *  2. Die Bandbreite des Jahres.
- *  3. **Der Tag existiert.** `2026-02-30` paßt auf die Form und ist keiner.
- *     Ohne diese Prüfung entstünde in jeder Rechnung darüber ein
- *     `Invalid Date`, und der taucht an einer Stelle auf, an der ihn niemand
- *     erwartet.
- *
- * Der Existenztest geht über `Date.UTC` und den **Rückweg**: Ein Datum, das
- * sich beim Zurückschreiben ändert, hat sich beim Anlegen verschoben. Das ist
- * der einzige Test, der ohne einen eigenen Kalender auskommt — und ein eigener
- * Kalender wäre die zweite Wahrheit neben der der Laufzeit.
- */
+/** Den Rückweg über UTC prüfen: `Date.UTC` verschiebt ungültige Tage statt sie abzuweisen. */
 export function isCalendarDay(value: string): value is CalendarDay {
   if (!DUE_DATE_SHAPE.test(value)) return false;
 
@@ -134,25 +40,13 @@ export function isCalendarDay(value: string): value is CalendarDay {
 export const DUE_DATE_MESSAGE =
   `Eine Frist ist ein Tag der Form JJJJ-MM-TT zwischen ${String(MIN_DUE_YEAR)} und ${String(MAX_DUE_YEAR)}. Eine Uhrzeit gehört nicht dazu.`;
 
-/**
- * Eine Frist aus einer Eingabe — geprüft, nicht behauptet.
- *
- * `null` heißt „keine Frist" und ist ein gültiger Wert (A-19.1); die Tür
- * unterscheidet ihn von „nicht genannt", und diese Funktion sieht ihn deshalb
- * gar nicht erst.
- *
- * **Der abgewiesene Wert steht nicht in der Meldung.** Er kann aus einer
- * fremden E-Mail stammen (A-19.21, E-074 Punkt 4) — dieselbe Regel wie bei der
- * Zeichenklasse (B-4.3 Punkt 5).
- */
+/** Abgewiesene Fremdwerte dürfen nicht in die Fehlermeldung gelangen. */
 export function checkDueDate(value: string): Result<CalendarDay, TaktError<'validation_error'>> {
   if (!isCalendarDay(value)) return err(taktError('validation_error', DUE_DATE_MESSAGE));
   return ok(value);
 }
 
-// ---------------------------------------------------------------------------
 // Die vier Zustände
-// ---------------------------------------------------------------------------
 
 /**
  * Wie ein Todo zu seiner Frist steht (A-19.5).
@@ -189,15 +83,8 @@ export function isDueState(value: string): value is DueState {
 }
 
 /**
- * Der Zustand einer Frist, gerechnet aus ihr und aus heute (A-19.5, A-19.6).
- *
- * Ein **Tagesvergleich** und kein Zeitvergleich (E-070 Punkt 1). Beide Werte
- * sind `YYYY-MM-DD` fester Breite; ein lexikographischer Vergleich ist dort
- * derselbe wie ein kalendarischer, und deshalb steht hier kein `Date`.
- *
- * Gleichheit ist ein **eigener** Ausgang und kein Sonderfall von „vorher" oder
- * „nachher": „heute fällig" ist der Zustand, der in der Oberfläche anders
- * aussieht als beides.
+ * Für gültige Tage fester Breite stimmt die lexikografische mit der kalendarischen Reihenfolge
+ * überein.
  */
 export function dueState(day: CalendarDay | null, today: CalendarDay): DueState {
   if (day === null) return 'no_due_date';
@@ -206,30 +93,11 @@ export function dueState(day: CalendarDay | null, today: CalendarDay): DueState 
   return 'due_later';
 }
 
-// ---------------------------------------------------------------------------
 // Filtern (A-19.20) — dieselbe Regel, in der Form, die eine Abfrage braucht
-// ---------------------------------------------------------------------------
 
 /**
- * Die Bedingung eines Zustands als Vergleich gegen den heutigen Tag.
- *
- * ---------------------------------------------------------------------------
- * Wozu es diesen zweiten Ausdruck derselben Regel gibt
- * ---------------------------------------------------------------------------
- *
- * {@link dueState} beantwortet „welchen Zustand hat **dieses** Todo".
- * Eine Abfrage stellt die umgekehrte Frage: „welche Zeilen haben diesen
- * Zustand". Sie kann dafür nicht jede Zeile laden — das ist dieselbe Auflage
- * wie bei den Tag-Ordnern (nicht die ganze Tabelle in den Speicher).
- *
- * Statt die Umkehrung im SQL-Adapter noch einmal zu erfinden — der sechste
- * Fall derselben Doppelung, siehe `calendarDayBounds` — liefert die Domäne
- * sie: vier Vergleiche, geschlossen aufgezählt. Der Adapter hat darüber einen
- * `switch` und **keine** Zeichenkettenarithmetik; kommt ein fünfter Zustand,
- * bricht der Übersetzer ab.
- *
- * `kind: 'none'` trägt bewußt keinen Tag: „hat keine Frist" ist kein
- * Vergleich, sondern die Abwesenheit eines Wertes.
+ * Liefert die umgekehrte Bedingung für SQL-Abfragen, damit der Adapter die Tagesregel nicht erneut
+ * implementiert.
  */
 export type DueComparison =
   | { readonly kind: 'none' }
@@ -272,34 +140,15 @@ export function matchesDueComparison(day: CalendarDay | null, comparison: DueCom
   }
 }
 
-// ---------------------------------------------------------------------------
 // Sortieren (A-19.20, E-074 Punkt 2)
-// ---------------------------------------------------------------------------
 
 /** Aufsteigend heißt: die nächste Frist zuerst. */
 export type DueSortDirection = 'asc' | 'desc';
 
 /**
- * Vergleicht zwei Fristen — und ein Todo **ohne** Frist steht in **beiden**
- * Richtungen am Ende (E-074 Punkt 2).
- *
- * ---------------------------------------------------------------------------
- * Warum kein Platzhalterdatum
- * ---------------------------------------------------------------------------
- *
- * Weil ein leeres Feld kein früher Wert ist und auch kein später. Es als
- * `1970-01-01` zu sortieren macht aus „keine Frist" ein „am dringendsten", und
- * das fällt niemandem auf, bis es in einer Abrechnung steht. Es als
- * `9999-12-31` zu sortieren dreht denselben Fehler nur um: In der absteigenden
- * Richtung stünden dann alle fristlosen Todos vorn.
- *
- * Die Antwort ist, die Abwesenheit **vor** dem Wertvergleich zu behandeln.
- * Erst dann kehrt die Richtung nur noch die Fristen um und nicht die Frage,
- * ob eine da ist.
- *
- * Rückgabe wie bei `Array#sort`: negativ, wenn `a` vor `b` steht. `0` heißt
- * „nicht zu unterscheiden" — der Aufrufer entscheidet dann über einen zweiten
- * Schlüssel (der Adapter nimmt die Kennung, damit die Blätterung stabil ist).
+ * Fehlende Fristen vor dem Richtungsvergleich behandeln, damit sie in beiden Richtungen zuletzt
+ * stehen.
+ * Bei Gleichheit braucht die Blätterung einen stabilen zweiten Sortierschlüssel.
  */
 export function compareByDueDate(
   a: CalendarDay | null,

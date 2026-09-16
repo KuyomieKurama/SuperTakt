@@ -1,8 +1,6 @@
 import type { Id, PoolRuleTerm } from "../../api/types";
 
-/* ==================================================================== */
 /* Terme: Tags und Ordner in einer Liste                                */
-/* ==================================================================== */
 
 /**
  * Die Tags einer Termliste. Ordnerterme bleiben, wo sie sind.

@@ -79,9 +79,7 @@ export const BOOKING_ROWS: readonly BookingRowData[] = [
   },
 ];
 
-/* ==================================================================== */
 /* Regeln — die Namen hinter den Kennungen (T-079)                      */
-/* ==================================================================== */
 
 /*
  * Die Musterseite loest keine Regel auf: Welche Karte eine Regel trifft,
@@ -544,9 +542,7 @@ export const TAG_TREE: readonly TagTreeNode[] = [
   },
 ];
 
-/* ==================================================================== */
 /* Tagesgruppen der Exportvorschau — E-020, E-025, E-031, E-034         */
-/* ==================================================================== */
 
 /**
  * Beispielgruppen fuer S-07. Eine Gruppe ist ein Todo an einem Kalendertag;
@@ -750,9 +746,7 @@ export function exportGroupOutcome(
   return outcome;
 }
 
-/* ==================================================================== */
 /* Exportprotokoll (S-07, Bereich „Protokoll") — R-10, Befund C-01      */
-/* ==================================================================== */
 
 /**
  * Drei Vorgaenge an **derselben** Buchung, in der Reihenfolge, in der man sie

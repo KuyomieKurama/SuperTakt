@@ -58,9 +58,7 @@ import {
   attachmentTargetNamesFile,
 } from '../src/attachment.ts';
 
-// ---------------------------------------------------------------------------
 // Die drei Arten
-// ---------------------------------------------------------------------------
 
 describe('ATTACHMENT_KIND_PRESENCE / isAttachmentKind / ATTACHMENT_KINDS (A-19.9)', () => {
   it('genau drei Arten', () => {
@@ -80,9 +78,7 @@ describe('ATTACHMENT_KIND_PRESENCE / isAttachmentKind / ATTACHMENT_KINDS (A-19.9
   );
 });
 
-// ---------------------------------------------------------------------------
 // Grenzwerte — die Bildgrenze an ihrer Herkunft gemessen (T-134-Anspruch)
-// ---------------------------------------------------------------------------
 
 describe('Grenzwerte', () => {
   it('MAX_ATTACHMENT_LINK_BYTES ist 2048 (die Browser-Konvention)', () => {
@@ -162,9 +158,7 @@ describe('Grenzwerte', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Verweis — normalizeAttachmentLink (A-A-2, A-A-3, A-A-13, A-A-14)
-// ---------------------------------------------------------------------------
 
 describe('normalizeAttachmentLink — Normalform (A-A-13)', () => {
   it('eine bereits normale Adresse bleibt unverändert', () => {
@@ -329,9 +323,7 @@ describe('isNormalizedAttachmentLink — der Festpunkt, den der Öffnen-Befehl d
   });
 });
 
-// ---------------------------------------------------------------------------
 // Datei — checkAttachmentPath, isUncPath, isAbsoluteAttachmentPath, fileExtensionOf
-// ---------------------------------------------------------------------------
 
 describe('checkAttachmentPath — die Form eines Dateipfads (A-A-4, A-A-5)', () => {
   it('eine leere Zeichenkette ist path_empty', () => {
@@ -500,7 +492,6 @@ describe('fileExtensionOf — das letzte Punktsegment, kleingeschrieben', () => 
     expect(fileExtensionOf('/home/nutzer/BERICHT.PDF')).toBe('pdf');
   });
 
-  // ---------------------------------------------------------------------
   // T-174 (unit-tester): Dieser Fall trug bis hierher die Unix-Sicht ("ein
   // führender Punkt versteckt die Datei und hinterläßt keine Endung"). Das
   // war eine ECHTE Abweichung, kein Geschmack: T-179 (code-reviewer, Auflage
@@ -547,9 +538,7 @@ describe('fileExtensionOf — das letzte Punktsegment, kleingeschrieben', () => 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Bild — imageMediaTypeOf (A-A-16)
-// ---------------------------------------------------------------------------
 
 describe('imageMediaTypeOf — erkannt an der Kopfsignatur, nicht an der Endung (A-A-16)', () => {
   it('IMAGE_SIGNATURE_BYTES ist 12 — die Länge der längsten Signatur (WebP)', () => {
@@ -610,9 +599,7 @@ describe('imageMediaTypeOf — erkannt an der Kopfsignatur, nicht an der Endung 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Beschriftung (A-19.12) — nie eine leere Zeile
-// ---------------------------------------------------------------------------
 
 describe('attachmentLabel — nie eine leere Zeile (A-19.12)', () => {
   it('ein gesetzter Titel gewinnt, unabhängig von Art und Ziel', () => {
@@ -629,7 +616,6 @@ describe('attachmentLabel — nie eine leere Zeile (A-19.12)', () => {
     expect(attachmentLabel('image', null, 'erzeugter-name.png')).toBe('erzeugter-name.png');
   });
 
-  // ---------------------------------------------------------------------
   // T-174 (unit-tester), O-EM: die zwei Fälle unten trugen bis hierher die
   // ALTE Regel ("nur der Wirtsname", "nur der Dateiname"). T-168-domain-dev.md
   // hat sie bewusst rot gelassen (die Beschriftung gehört unit-tester) und die
@@ -644,7 +630,6 @@ describe('attachmentLabel — nie eine leere Zeile (A-19.12)', () => {
   // sind genau die Beschriftungen, die zwei verschiedene Anhänge (zwei
   // Ordner, zwei Wirte mit unterschiedlichem Pfad) auf dieselbe Zeichenkette
   // zusammenfallen ließen.
-  // ---------------------------------------------------------------------
 
   it('Verweis ohne Titel: der ganze gespeicherte Wert, nur "https://" entfällt (T-168 O-DU)', () => {
     expect(attachmentLabel('link', null, 'http://beispiel.example/Seite')).toBe(
@@ -719,7 +704,6 @@ describe('attachmentLabel — nie eine leere Zeile (A-19.12)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // T-174 (unit-tester), O-EM — der eigentliche Inhalt von X-04 (T-165):
 // Unterscheidbarkeit statt Zeichenkette.
 //
@@ -730,7 +714,6 @@ describe('attachmentLabel — nie eine leere Zeile (A-19.12)', () => {
 // des Öffnen- und des Entfernen-Knopfes (T-168-domain-dev.md, Abschnitt 1.2).
 // Ein Fall, der nur eine Zeichenkette prüft, hält die Regel nicht fest,
 // sondern nur ihr heutiges Aussehen (Auftrag T-174, Punkt O-EM, wörtlich).
-// ---------------------------------------------------------------------------
 
 describe('attachmentLabel — zwei verschiedene Anhänge tragen nie dieselbe Ersatzbeschriftung (X-04)', () => {
   it('drei Verweise auf denselben Wirt und zwei gleichnamige Dateien in zwei Ordnern ergeben fünf verschiedene Beschriftungen', () => {
@@ -777,14 +760,12 @@ describe('attachmentLabel — zwei verschiedene Anhänge tragen nie dieselbe Ers
   });
 });
 
-// ---------------------------------------------------------------------------
 // T-316 (unit-tester) — A-A-98: die Eigentümerfrage des Aufräumlaufs
 // (`apps/local-api/src/features/todos/email-file-sweep.ts`), rein und ohne
 // Datenbank prüfbar. `attachmentTargetNamesFile` entscheidet, ob eine liegende
 // Datei mit Kundenmaterial gelöscht wird — siehe T-314-domain-dev.md Abschnitt
 // 1.1 und den Kopfkommentar der Funktion selbst: "Im Zweifel true", weil ein
 // falsches "false" eine Rechnung ohne Rückfrage entfernt.
-// ---------------------------------------------------------------------------
 
 describe('attachmentTargetFileName — der gefaltete letzte Namensbestandteil (A-A-98)', () => {
   it('faltet Groß-/Kleinschreibung ASCII, nicht Unicode', () => {
@@ -855,9 +836,7 @@ describe('attachmentTargetNamesFile — die weiteste Eigentümerfrage, die einen
     expect(attachmentTargetNamesFile('/var/data/email-attachments/abc.eml', 'abc.eml')).toBe(true);
   });
 
-  // ---------------------------------------------------------------------------
   // Die weitere Grenze: Zeichen, die anderswo Sonderbedeutung tragen (T-319)
-  // ---------------------------------------------------------------------------
   //
   // Diese Funktion selbst kennt kein SQL — die Zeichen "%" und "_" sind für
   // sie gewöhnliche Namensbestandteile, buchstäblich verglichen über

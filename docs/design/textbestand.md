@@ -948,7 +948,7 @@ verlangt hat** (E-078 Punkt 3). Wer eine neue Fassung will, legt sie **diesem** 
 | SP-01 | `AttachmentOpenDialog.tsx:211-215` | „Takt übergibt diese Datei an die Standardanwendung des Systems — dasselbe wie ein Doppelklick …" | **R-21**, E-072 Punkt 3, Auflage **A-A-6** Eigenschaft 3, A-19.18 | Nennt die **Wirkung** statt der Handlung. Ein kurzer Satz verschleiert hier einen Programmstart. |
 | SP-02 | `AttachmentOpenDialog.tsx:217-241` | „Diese Datei wird dabei ausgeführt." + Dateiname + **vollständiger Pfad** | **R-21**, A-A-6 Eigenschaften 1 und 2 | Der Pfad wird **nie** gekürzt. Beide Teile gehen durch `foreignText` (E-063). |
 | SP-03 | `TodoListScreen.tsx:504` | „Ein Todo ohne Frist steht in beiden Richtungen am Ende. Es hat keinen Wert, keinen frühesten und keinen spätesten." | **E-074 Punkt 2**, A-19.20 | **Abwesenheit.** Ohne den Satz hält der Benutzer die Sortierung für kaputt. |
-| SP-04 | `TodoFormDialog.tsx:227` | „Ein Tag, keine Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." | **V-03/V-04** (T-154, sinngleicher Satz im Add-in), **E-074 Punkt 4**, A-19.1, A-19.7, E-070 Punkt 4 | **Abwesenheit.** E-078 nennt diesen Satz namentlich als Beispiel. |
+| SP-04 | `TodoFormDialog.tsx:227` | „Ein Kalendertag mit optionaler Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export." | **V-03/V-04** (T-154, sinngleicher Satz im Add-in), **E-074 Punkt 4**, A-19.1, A-19.7, E-070 Punkt 4 | **Abwesenheit.** E-078 nennt diesen Satz namentlich als Beispiel. |
 | SP-05 | `TodoDetailScreen.tsx:421` und `:429-432` | „… sie steht in keinem Export." / „Keine Frist gesetzt. Dieses Todo ist deshalb weder überfällig noch heute fällig — es hat schlicht keinen dieser Zustände." | **A-19.5**, A-19.8, E-070 Punkt 4 | **Abwesenheit**, wörtlich aus A-19.5. |
 | SP-06 | `ConfirmDialog.tsx:37-57, 134-158` — die **Bauart** von `refusal` samt dauerhaft leerer Live-Region, und jeder Text, der darin landet | **B-5** (T-116), **SC 4.1.3** | Eine Region, die erst mit ihrem Inhalt in den Baum kommt, wird nicht angesagt. Gilt gleichlautend in `AttachmentOpenDialog.tsx:248`, `UpdateDialog.tsx:155`, `ShellStatus.tsx:271`. |
 | SP-07 | `BookingsScreen.tsx:534, 538`; `BookingDialogs.tsx:320, 325` | „Dieselbe Arbeitszeit geht beim nächsten Export erneut in die Abrechnung." + „Mir ist klar, dass diese Zeiten dadurch ein zweites Mal abgerechnet werden können." | **E-012**, **R-10** | **Folge** einer Handlung, aus der eine Doppelabrechnung entstehen kann. Der einzige Ort, an dem sie steht. |
@@ -3403,3 +3403,7 @@ steht in 11.8 und gilt unverändert daneben.
 3. **An frontend-dev, klein und außerhalb dieses Auftrags:** Die Liste der ausgelassenen Gruppen
    kann zwei Zeilen mit gleichem sichtbarem Text zeigen (15.5, letzter Absatz). Gehört zu 12.6 (a)
    und nicht hierher.
+
+SP-04: Der aktuelle Auftrag zur Outlook-Angleichung ersetzt die Beschränkung auf
+eine Frist ohne Uhrzeit (A-10.14). Der geschützte Hinweis nennt jetzt die optionale
+Uhrzeit; seine Aussagen zu Pools, Spalten, Buchungen und Export bleiben bestehen.

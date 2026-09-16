@@ -60,6 +60,11 @@ getrandom = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+# Inspect the public local certificate without parsing localized tool output.
+x509-parser = { version = "=0.17.0", features = ["verify"] }
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting"] }
+tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = "0.31"

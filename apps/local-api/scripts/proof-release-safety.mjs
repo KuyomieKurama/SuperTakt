@@ -1,171 +1,6 @@
-/**
- * Takt — Nachweis, dass die eine Verbindung nach außen genau eine bleibt
- * (E-066 Punkt 4, A-18.3, A-18.9, A-V-1 bis A-V-7, A-V-16, R-19).
- *
- * Aufruf:  pnpm --filter @takt/local-api proof:release-safety
- *
- * ===========================================================================
- * Warum dieser Lauf existiert
- * ===========================================================================
- *
- * E-066 Punkt 1 erlaubt, dass der Zusammenbau im selben Prozess eine andere
- * Abholfunktion einsetzt — sonst wäre der Prüflauf gegen eine Nachbildung von
- * GitHub nicht zu bauen, ohne A-18.3 aufzuweichen. Diese Erlaubnis steht unter
- * einer **Bedingung**, und sie ist wörtlich aufgeschrieben:
- *
- *   „Es muss ein Nachweis messen, dass im ausgelieferten Zusammenbau **kein**
- *    Weg zu einer anderen Adresse führt. Ohne diesen Nachweis ist die Naht ein
- *    Schalter, den nur noch niemand gefunden hat."
- *
- * Dieser Lauf ist die Bedingung. Er misst fünf Dinge über den ganzen
- * Quellbaum:
- *
- *   1. **Genau eine Adresse.** Die Abfrageadresse steht einmal, und jede andere
- *      Adresse auf github.com ist die Release-Seite an ihren zwei gemessenen
- *      Orten — keine dritte, keine zusammengesetzte, keine aus einem gelesenen
- *      Wert.
- *   2. **Kein Weg von einer Antwort zum Öffnen-Befehl.** Die Felder, in denen
- *      GitHub Adressen und fremden Text liefert, werden nirgends gelesen, und
- *      der Öffnen-Befehl nimmt nichts entgegen, was eine Adresse sein könnte.
- *      Das ist B-18.2, die schwerste Bedrohung dieses Vorhabens: Der Benutzer
- *      klickt „Installieren" in dem Augenblick, in dem er darauf eingestellt
- *      ist, eine **unsignierte** Datei zu holen und auszuführen.
- *   3. **Nirgends ein Herunterladen.** A-18.9 sagt es ohne Einschränkung:
- *      keine Datei, zu keinem Zeitpunkt, auch nicht nach einer Rückfrage.
- *   4. **Kein Rückweg vom Bestand in die Versionsprüfung** (T-285). Der
- *      Zeitpunkt der letzten Anfrage wird geschrieben und nicht gelesen. Wer
- *      ihn wieder liest, um eine Anfrage zu verhindern, legt den Neustart
- *      still — und der Neustart ist die einzige Selbsthilfe, die E-069 dem
- *      Benutzer läßt, wenn die Prüfung nicht greift.
- *   5. **Niemand außerhalb entscheidet über Anfrage und Meldung** (T-327,
- *      T-335, T-342, A-A-105, A-A-110, A-A-111, R-30). Die vier Punkte darüber
- *      messen den Weg **in** den Prüfer; dieser mißt die Entscheidungsfläche
- *      darum herum — wer den Prüfer und seinen Port **baut**, **womit** beide
- *      gebaut werden, **wodurch** ein Port in den Zusammenbau kommt, **daß**
- *      gestartet wird, **worauf** auf dem Weg vom geplanten Eintritt bis zur
- *      Anfrage gewartet wird und ob dort eine **Schleife** steht —
- *      einschließlich der Anweisungen des einen Adapters —, **was** in den Rümpfen zwischen
- *      Prüfer und Adapter steht, **was** die beiden Entscheidungsmodule aus der
- *      Laufzeit nehmen, und **wie** die Auskunft den Zusammenbau verläßt. Ein
- *      Ausschalter braucht keinen der Namen aus Punkt 4 — er braucht nur eine
- *      Option mehr im Aufrufobjekt, vier Zeilen in einem Portliteral oder ein
- *      `process.env` in einem Rumpf. Alle drei sind gemessen und alle drei sind
- *      rot.
- *
- * ===========================================================================
- * Warum der Lauf sich selbst mißt
- * ===========================================================================
- *
- * Ein Nachweis, der nur „grün" sagen kann, ist eine Behauptung. T-134 hat
- * genau daran den alten Zahlenvergleich scheitern lassen. Abschnitt 0 setzt
- * deshalb zu **jeder** Prüfung einen Verstoß in einen erfundenen Baum und
- * erwartet, dass sie rot wird. Bleibt eine Prüfung dabei grün, ist der Lauf
- * insgesamt rot — auch dann, wenn der echte Baum sauber ist.
- *
- * Dazu kommt die Gegenprobe an den Leser selbst: Ein Kommentar ist kein Code.
- * Diese Datei nennt `html_url`, `ProxyAgent` und `downloadAndInstall` in ihrer
- * eigenen Beschreibung, `version/source.ts` ebenso — ein Leser, der Kommentare
- * mitliest, wäre an seinem eigenen Text rot und müßte weichgeklopft werden,
- * bis er nichts mehr findet. Er entfernt sie deshalb, und Abschnitt 0 mißt,
- * daß er es richtig tut: Zeichenketten bleiben stehen, Kommentare fallen.
- *
- * ===========================================================================
- * Die Lücke liegt nicht in der Schreibweise, sondern in der **Stelle**
- * ===========================================================================
- *
- * Der Satz gehört an diese Stelle, weil er der teuerste ist, den dieser Bestand
- * über seine Wächter gelernt hat, und weil die **vorige** Fassung davon falsch
- * war. Beide stehen hier, die alte zuerst — stillschweigend zu ersetzen wäre
- * genau die Bauart, gegen die Abschnitt 0 geschrieben ist.
- *
- * **Die alte Fassung (T-335, Abschnitt 6), und ihr Irrtum.** Dort stand, die
- * Klasse sei über den Quelltext nicht schließbar, und als Beleg dafür:
- *
- *     async recordCheck(at: Timestamp): Promise<void> {
- *       return new Promise<void>(() => undefined);   // wartet ohne `await`
- *     }
- *
- * Der **Satz** stimmt. Der **Beleg** stimmt seit T-335 nicht mehr: Genau diese
- * Anweisungen stehen in der Deklaration, die 6g-2 zeichengleich festnagelt
- * ({@link ADAPTER_ANWEISUNGEN}), und der code-reviewer hat sie in T-336
- * nachgebaut — `tsc` Exit 0, Lauf **129/1 rot**. Ein Beleg, der heute rot ist,
- * belegt nichts. Wer den alten Satz zitiert, zitiert damit eine Messung von
- * gestern.
- *
- * **Die heutige Fassung (T-337 K-7), und sie sagt etwas Schärferes.** Dieselbe
- * Technik, vier Zeilen weiter links — nicht im Adapter, sondern im **Rumpf des
- * `write`-Literals**, das 6b als Literal prüfte und niemand las:
- *
- *     store: { write: async (at) => { await nie(); await repo.recordCheck(at); } }
- *
- * `tsc` Exit 0, Lauf **130/0 grün**, am zusammengebauten Dienst **0 statt 1**
- * ausgehende Anfrage. Es fehlte **keine Schreibweise**: `await`, `new Promise`,
- * `setTimeout` — jede Liste verbotener Namen wäre der nächste Name gewesen. Es
- * fehlte eine **Stelle**.
- *
- * **Daraus die Regel, die über diesen Fall hinausgeht:** Ein Literal, das als
- * Literal geprüft, aber nicht **gelesen** wird, ist eine Stelle, an der jede
- * Schreibweise durchkommt. Wer einen Weg festnagelt, nagelt jede Stelle auf ihm
- * fest — oder er schreibt die ungelesene Stelle in die Lückenliste bei
- * {@link checkNoStoreReadback}, damit der nächste sie findet. Drei solche
- * Stellen waren am 2026-09-13 offen und sind seit T-342 gemessen: der Rumpf des
- * Portliterals (6h), der Rumpf der Entscheidungsmodule (6i) und der Ausdruck
- * der Auskunft (6j).
- *
- * ===========================================================================
- * Was dieser Lauf **nicht** prüft
- * ===========================================================================
- *
- * **a) Bauskripte.** `apps/desktop/scripts/**` lädt beim Bauen eine
- * Node-Binärdatei und prüft ihre Prüfsummen — das ist der Auslieferungsweg
- * (VG-7) und nicht das ausgelieferte Erzeugnis. A-18.9 spricht von dem, was
- * **Takt** tut, während es läuft. Die Lieferkette ist eine andere Frage mit
- * einem anderen Gegenmittel (5.10, `verify-node-checksums.mjs`).
- *
- * **b) Prüfdateien — aber nur die *neben* einer Quellwurzel** (auf das
- * Gemessene gekürzt in T-327, Befund T-324 zu Zeile 68). Die sieben Prüfordner
- * dieses Bestands (`apps/{desktop,local-api,outlook-addin,web}/test`,
- * `packages/{domain,export,storage}/test`) sind Geschwister von `src`, liegen
- * in keinem der sieben gelesenen Übersetzungsprogramme und dürfen deshalb
- * Adressen und Antwortfelder nennen — eine Nachbildung der GitHub-Antwort muß
- * `tag_name` schreiben können, sonst prüft sie nichts.
- *
- * **Der Grund ist seit T-327 kein Ortsargument mehr, sondern ein Argument über
- * das Programm:** Zwei Deklarationen verschmelzen nur innerhalb **eines**
- * Programms, und die Prüfprogramme (`tsconfig.test.json` je Paket) sind nicht
- * die Programme des Erzeugnisses. Was in einem Prüfordner steht, kann die
- * ausgelieferten Programme nicht ändern.
- *
- * **Ein Prüfordner *unter* einer Quellwurzel ist etwas anderes und wird
- * gelesen.** `apps/local-api/tsconfig.json` hat `"include": ["src"]`; eine
- * Datei unter `src/**` liegt damit im Programm des Dienstes, auch wenn ein
- * Verzeichnis auf dem Weg `test` heißt. Das war die fünfte gemessene Umgehung
- * dieses Laufs (T-318 B-1), seit T-320 ist sie zu, und die Gegenprobe (α) setzt
- * ihren Verstoß ausdrücklich dorthin. Wer aus diesem Absatz wieder einen
- * Eintrag in {@link SKIP_DIRECTORIES} macht, öffnet sie erneut — ein eigener
- * Prüfsatz in Abschnitt 0 wird dann rot.
- *
- * **c) Verhalten.** Dieser Lauf liest Quelltext. Ob der Aufruf zur Laufzeit
- * tatsächlich eine Weiterleitung ablehnt, mißt ein Prüffall gegen einen
- * Prüfserver (T-140, TP-VER-25) und nicht ein regulärer Ausdruck.
- *
- * ===========================================================================
- * Was dieser Lauf **kostet**, und der Absatz gehört in den Kopf (Befund T-336)
- * ===========================================================================
- *
- * **d) Er wird rot, wenn sich `packages/storage` ändert.** Seit T-335 vergleicht
- * 6g-2 die Anweisungen von `recordCheck` in
- * `packages/storage/src/sqlite/repo-version-check.ts` **zeichengleich**; seit
- * T-342 ebenso die Stelle `store.write` im Portliteral von
- * `apps/local-api/src/composition.ts` und den Ausdruck der Auskunft daneben.
- * Drei Zeichenvergleiche, zwei Pakete, und der eine davon greift über eine
- * Paketgrenze. Das ist **gewollt**: Es sind die drei Stellen dieses Bestands,
- * deren Anweisungen darüber entscheiden, ob überhaupt gefragt wird und ob die
- * Antwort ankommt. Bestätigt wird bei {@link ADAPTER_ANWEISUNGEN},
- * {@link PORTLITERAL_ANWEISUNGEN} und {@link AUSKUNFT_ANWEISUNGEN}; die Meldung
- * nennt den Ort jeweils mit. Prosa ist frei — der Leser liest Anweisungen und
- * keine Kommentare.
- */
+/** Prüft feste Release-Adressen, abgeschlossene Datenflüsse und den unveränderten Anfrageweg; Gegenproben müssen Verstöße erkennen.
+ * Alle Dateien unter `src` werden geprüft, auch dort liegende Tests. Bauskripte und getrennte Testprogramme bleiben außerhalb.
+ * Adapter, Portliteral und Auskunft werden paketübergreifend auf identische Anweisungen geprüft. Laufzeitverhalten braucht eigene Tests. */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -228,9 +63,7 @@ function check(name, condition, detail = '') {
   }
 }
 
-// ===========================================================================
 // Der Baum
-// ===========================================================================
 
 /**
  * Was gelesen wird. Ausgeschrieben und nicht „alles außer": Wer einen Ordner
@@ -768,9 +601,7 @@ function collectTree() {
   return tree;
 }
 
-// ===========================================================================
 // Die Prüfungen — als Funktionen über eine Dateiliste
-// ===========================================================================
 //
 // Sie nehmen die Liste entgegen und geben Befunde zurück. Genau deshalb sind
 // sie in Abschnitt 0 mit einem erfundenen Baum zu füttern, in dem ein Verstoß
@@ -1808,9 +1639,7 @@ function findeFremdeImporteImPrueferordner(ordner) {
   return findings;
 }
 
-// ===========================================================================
 // Gestalt 6: die Verdrahtung (A-A-105, R-30)
-// ===========================================================================
 
 /**
  * Wer das Prüfmodul überhaupt in die Hand bekommt — und mit welchen Namen
@@ -3028,9 +2857,7 @@ function findeDatenbankgriffInDerVerdrahtung(files) {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
 // 6e und 6f: die Tür, durch die ein Port hereinkommt (T-335, A-A-105d)
-// ---------------------------------------------------------------------------
 
 /**
  * 6e und 6f zusammen, weil die zweite ohne die erste nichts wüßte.
@@ -3209,9 +3036,7 @@ function pruefeTuerenDesPorts(files) {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
 // 6g: die Warteliste und der Adapter dahinter (T-335, A-A-105e)
-// ---------------------------------------------------------------------------
 
 /**
  * Die Anweisungen eines Knotens, ohne Prosa und ohne Einrückung.
@@ -3826,10 +3651,8 @@ function pruefeAdapterHinterDemPort(files) {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
 // 6h, 6i, 6j: die drei Stellen, die gegangen und nicht gelesen wurden
 // (T-342, A-A-110, A-A-111, Befunde T-336 Z-2/Z-3 und T-337 K-4/K-7)
-// ---------------------------------------------------------------------------
 
 /**
  * 6h: **Der Rumpf der Portliterale in der Verdrahtung** (A-A-111).
@@ -6555,8 +6378,6 @@ const COUNTER_PROOFS = {
   ],
 };
 
-// ===========================================================================
-
 try {
   const tree = collectTree();
 
@@ -6764,9 +6585,7 @@ try {
     );
   }
 
-  // -------------------------------------------------------------------------
   section('1  Gegenproben: jede Prüfung wird von einem eingesetzten Verstoß rot');
-  // -------------------------------------------------------------------------
 
   for (const definition of CHECKS) {
     const entry = COUNTER_PROOFS[definition.id];
@@ -6855,18 +6674,14 @@ try {
     check(`kein Ausgang, und wird auch nicht dafür gehalten: ${name}`, !mentionsGlobalFetch(code), code);
   }
 
-  // -------------------------------------------------------------------------
   section('2  Der Baum, wie er ist');
-  // -------------------------------------------------------------------------
 
   for (const definition of CHECKS) {
     const findings = definition.run(tree);
     check(definition.name, findings.length === 0, findings.join(' | '));
   }
 
-  // -------------------------------------------------------------------------
   section('3  Die beiden Adressen stehen dort, wo sie stehen sollen');
-  // -------------------------------------------------------------------------
 
   {
     const source = tree.find((file) => file.path === API_URL_FILE);

@@ -11,7 +11,8 @@ Anlass: Auftrag des Auftraggebers vom 2026-09-14, umgesetzt als T-362.
 höher —, [supertakt-layout.md](supertakt-layout.md), [theme-palettes.md](theme-palettes.md),
 [traeger-und-zusage.md](traeger-und-zusage.md), [textabbau-gestalt.md](textabbau-gestalt.md).
 
-**Stand: 2026-09-14, nach T-366 und T-365 berichtigt (T-373).** Die erste Fassung dieses Papiers
+**Stand: 2026-09-14, nach T-366 und T-365 berichtigt (T-373), nach dem Gegenlesen aus T-376 und dem
+Augenschein aus T-372 nachgezogen (T-379), um S-5, S-6 und S-7 ergänzt (T-383).** Die erste Fassung dieses Papiers
 entstand **vor dem Bau**; keine ihrer Zahlen war an dieser Tabelle gemessen. Inzwischen hat T-366
 beide Papiere gegeneinander gehalten und acht blockierende Widersprüche gefunden, der Orchestrator
 hat alle acht entschieden, und T-365 hat gebaut und dabei vier offene Punkte dieses Papiers
@@ -45,6 +46,34 @@ billig, weil er nicht mehr lesen muß, sondern nachschlagen kann.
 | 10.1–10.3 | die Fundstellenliste ist keine Bruchliste mehr; Ü-1 aus der Reihenfolge genommen; die vier Berichtspunkte mit Ergebnis | **B-6**, T-365 |
 | 10.4 (neu) | `TableShell` zieht nach `shared/ui/` — eigener Auftrag; der Ankerwächter bleibt vorerst örtlich | T-365 offene Frage 1 |
 | 11 | OF-2, OF-3 und OF-4 beantwortet; OF-1 bleibt offen; **OF-5** (sichtbare Unterscheidung des Erledigt-Kästchens) und **OF-6** (Doppelung im Vorlesefluß) kommen dazu | **N-9**, **N-2**, **N-10**, T-365 |
+
+**Zweite Runde, nach dem Gegenlesen (T-379).** Dieselbe Form, damit der nächste Abgleich auch die
+Berichtigungen der Berichtigung nachschlagen kann:
+
+| Abschnitt | Was sich geändert hat | Entscheidung |
+|---|---|---|
+| 5.3 | **Zwei der vier Gründe für `role="dialog"` sind berichtigt.** Die Entscheidung bleibt; Grund 4 („die Gegenrichtung kostet TF-3") war falsch, Grund 3 schlug einen Strohmann, Grund 1 zählte den ernsthaften Gegenkandidaten nicht auf. Neu am installierten Paket gemessen | T-376, Rollenfrage |
+| 8.1 | Der Ladezustand steht jetzt so da, **wie er gebaut ist** — Stapelform ohne `TableShell`; die drei Zustandszeilen tragen ihre wirklichen Fundstellen. Dazu die Entscheidung selbst, samt Verweis auf 9.1 des Schwesterpapiers | **S-2** aus T-376 |
+| 8.1 | **N-2 ist entschieden:** keine vierte, erfundene Gestalt — die sichtbare Unterscheidung ist der **Wortkopf über der Spalte**, und sie ist gebaut, gedeckt und klebt | **N-2**, T-372 |
+| 9.3 | **A17 neu** — die Rücknahme, an der die Antwort auf N-2 hängt, bekommt einen Wächter; sie ist dieselbe Zusage wie **TT-36** des Schwesterpapiers, an eine zweite Adresse gerichtet. Aus acht Zusicherungen werden neun | **N-2** |
+| **10.5 (neu)** | Ü-2 steht als **Auftrag** da: Datei, Zeile, heutige Form, haltbare Form, und was geschieht, wenn jemand die Blattreihenfolge ändert | T-373 Ü-2 |
+| 11 | **OF-5 beantwortet** (8.1). OF-1 und OF-6 bleiben, wie sie standen | **N-2** |
+
+**Dritte Runde, der Nachtrag (T-383).** T-379 konnte **S-5, S-6 und S-7** nicht ausführen: Der
+Bericht, der sie benennt, lag nicht auf der Platte — er ist beim Wechsel des Arbeitsbaums nach
+`main` verlorengegangen, solange er unversioniert war. Gemeldet statt geraten war dort richtig; ein
+Papier nach einer erfundenen Auflage zu ändern ist derselbe Fehler wie eine Auflage ohne Deckung zu
+bauen. Der Bericht liegt wieder vor, seine Befunde stehen zeichengleich zur ersten Fassung, und hier
+stehen ihre Umsetzungen:
+
+| Abschnitt | Was sich geändert hat | Entscheidung |
+|---|---|---|
+| 4.3a | Die dritte Spalte heißt nicht mehr „gemessen breitester Inhalt", sondern **„Platzbedarf der Zelle (Inhalt + Polsterung)"**, und jede Zeile trägt die Einheit. Sie ließ sich vorher nur mit **zwei** Einheiten lesen: fünf Zeilen ohne Polsterung, zwei mit. Dazu die **engste Stelle** des Budgets, gerechnet statt vermutet | **S-7** |
+| 4.3a | Die 43,5 rem stehen jetzt aus **zwei** Messungen — T-365 und der Augenschein, zeichengleich | T-372 |
+| 5.3 | Der Abgleich mit dem Gegenleser steht am Kasten: **welche zwei Gründe er meint**, welchen dieses Papier selbst gefunden hat. Grund 4 nennt jetzt, **was die Gegenrichtung wirklich kostet**, und die Zuspitzung an den Orchestrator ist ausdrücklich zurückgezogen | **S-5** |
+| 9.4 | „mindestens einem Tag" → **„genau einem Tag"**. Sonst hakt **ein** Datensatz beide Zeilen des Vorrats ab, und ungemessen bleibt genau der Regelfall, dessentwegen der Punkt berichtigt wurde | **S-6** |
+| 7.2, 11 | Der Augenschein ist **freigegeben**, ohne blockierenden Bildbefund; OF-2 ist damit auch in seiner zweiten Hälfte beantwortet, und die Auflage aus N-9 ist eingelöst | T-372 |
+| 10.5 | Der Ü-2-Auftrag steht ohne einen Bericht daneben lesbar: Abnahme dazu, und der Satz, daß dieser Abschnitt vollständig ist | T-373 Ü-2 |
 
 **Nicht geändert, und das ist Absicht:** die Liste F-1 bis F-10 in Abschnitt 0. Sie ist die Grenze
 zum Schwesterpapier und gilt unverändert. Dieses Papier beantwortet auch in dieser Fassung keine
@@ -345,20 +374,84 @@ Gegenteil zugesagt („bei 960 px läuft die Tabellenfläche **nicht** waagerech
 **Gemessen von T-365** im Browser mit den Stilblättern des Erzeugnisses, acht Fensterformen, dazu
 `clear`, `zen` und `kompakt`. Kein Zellinhalt läuft in irgendeiner Messung über seine Zelle hinaus.
 
-| Spalte | `<col>` | gemessen breitester Inhalt | Verhalten |
+> **Die Einheit der dritten Spalte ist der Platzbedarf der *ganzen Zelle*: Inhalt plus Polsterung.**
+> Die Polsterung sind **2 × 12 px** in der Vorgabedichte — `.table tbody td { padding: 0 var(--row-padding-x) }`
+> (`components.css:798`) mit `--row-padding-x: var(--space-3)` (`tokens.css:321`, `:333`); die
+> Kopfzelle trägt dieselbe seitliche Polsterung (`components.css:759`). Wo T-365 den reinen Inhalt
+> gemessen hat, steht die Polsterung als Summand daneben — **gerechnet, nicht nachgemessen**.
+
+| Spalte | `<col>` | Platzbedarf der Zelle (Inhalt + Polsterung) | Verhalten |
 |---|---|---|---|
-| Erledigt | 9 rem / 144 px | Kästchen 24 + 8 + `DoneFlag` „Erledigt aufgehoben" 133,7 | Etikett bricht um, Zeilenhöhe bleibt 40 px |
-| Call | 4,5 rem / 72 px | 46,8 (dicktengleich, sechs Ziffern) | nie gekürzt |
+| Erledigt | 9 rem / 144 px | Kästchen 24 + Abstand 8 + `DoneFlag` „Erledigt aufgehoben" 133,7 **+ 24 = 189,7** | Etikett bricht um, Zeilenhöhe bleibt 40 px |
+| Call | 4,5 rem / 72 px | sechs dicktengleiche Ziffern 46,8 **+ 24 = 70,8** | paßt, **1,2 px Luft**; nie gekürzt |
 | **Titel** | **keine** | — | Umbruch, 4.4 |
-| Status | 7 rem / 112 px | „In Bearbeitung" 91,7 | Umbruch, kein Deckel |
-| Frist | 7,5 rem / 120 px | „Heute fällig 31.12.2026" 141,7 | bricht um |
-| Tags | 3,5 rem / 56 px | Kopf „TAGS" 53,3 | Auslöser ≥ 24 × 24 |
-| Buchungen | 6,5 rem / 104 px | Streifen mit vier Zuständen 140,1 | bricht um, nie gekürzt |
-| Aktionen | 5,5 rem / 88 px | 2 × 28 + 4 + 24 = 84 | — |
+| Status | 7 rem / 112 px | „In Bearbeitung" 91,7 **+ 24 = 115,7** | Umbruch, kein Deckel |
+| Frist | 7,5 rem / 120 px | „Heute fällig 31.12.2026" 141,7 **+ 24 = 165,7** | bricht um |
+| Tags | 3,5 rem / 56 px | Kopfzelle „TAGS" **53,3 — hier schon einschließlich Polsterung gemessen** (Wort rund 29) | paßt, 2,7 px Luft; Auslöser ≥ 24 × 24 |
+| Buchungen | 6,5 rem / 104 px | Streifen mit vier Zuständen 140,1 **+ 24 = 164,1** | bricht um, nie gekürzt |
+| Aktionen | 5,5 rem / 88 px | 2 × 28 + Abstand 4 **+ 24 = 84** | paßt, 4 px Luft |
+
+**Warum die Einheit jetzt dasteht, und was ohne sie geschah** (S-7 aus dem Gegenlesen): Die Spalte
+hieß „gemessen breitester Inhalt" und ließ sich **nur mit zwei Einheiten** lesen — fünf Zeilen
+nannten den reinen Inhalt, zwei nannten Inhalt **und** Polsterung. Welche Zeile welche ist, ist
+nicht Auslegung, sondern Rechnung; beide Male geht die andere Lesart nicht auf:
+
+- **Call, 46,8 px, ist reiner Inhalt.** 46,8 ÷ 6 Ziffern = 7,8 px, und das ist genau 0,6 × 13 px —
+  die Dickte einer dicktengleichen Schrift in `--text-sm` (`tokens.css:291`; die Zelle trägt
+  `.mono`). Läse man 46,8 als Inhalt + Polsterung, blieben 3,8 px je Ziffer, und die gibt es bei
+  13 px nicht.
+- **Tags, 53,3 px, ist Inhalt *plus* Polsterung.** „TAGS" steht in der Kopfzelle in Versalien bei
+  `--text-2xs` = 11 px mit Sperrung, also rund 29 px. Wäre 53,3 der reine Inhalt, stünden
+  53,3 + 24 = 77,3 px in einer 56-px-Spalte — und weil `.table thead th` `white-space: nowrap`
+  trägt (`components.css:768`), liefe der Kopf **über**, statt umzubrechen. T-365 hat gemessen, daß
+  nichts überläuft.
+- **Aktionen, 84 px, ebenfalls** — 2 × 28 (`--control-height-sm`, `tokens.css:411`: Symbolknopf und
+  `.table__row-menu`) plus 4 px Abstand sind 60; auf 84 kommt die Zeile nur mit der Polsterung.
+
+**Die Summe bleibt davon unberührt:** Sie kommt aus den `<col>`-Breiten und nicht aus dieser Spalte.
+Der Befund ist die Einheit — wer die Tabelle später gegen einen geänderten Kopf, eine geänderte
+Schrift oder eine geänderte Dichte hält, rechnet sonst fünf Zeilen mit der falschen.
 
 > **Summe der sieben festen Spalten: 696 px = 43,5 rem** gegen das Budget von 44 rem aus 4.3.
 > **Titelspalte 17,8 rem** (284,5 px) bei 1280 × 820 und **16,4 rem** (262,5 px) bei 960 und 1024 —
 > der Boden von 16 rem hält überall. Bei 1280 × 820 ist `scrollWidth === clientWidth`.
+
+**Die Zahl steht aus zwei Messungen, nicht aus einer.** Der Augenschein (T-372) hat die
+`<col>`-Breiten unabhängig im Browser gelesen — 144 + 72 + 112 + 120 + 56 + 104 + 88 = 696 px,
+Titelspalte 284,5 px, 1030/1030 bei 1280 × 820 — und kommt zeichengleich auf 43,5 rem. Er ist
+**freigegeben und meldet keinen blockierenden Bildbefund**; die Grenze aus 9.1 (ein Quelltextlauf
+sichert die Bauart zu, nicht die Wirkung) ist damit an dieser Stelle von der richtigen Seite
+eingelöst.
+
+#### Die engste Stelle des Budgets — und sie ist nicht die, die man vermutet
+
+Vier der sieben festen Spalten brechen um; bei den drei übrigen ist die Luft die ganze Reserve:
+
+| Spalte | Platzbedarf | `<col>` | Luft |
+|---|---|---|---|
+| **Call** | 70,8 px | 72 px | **1,2 px** |
+| Tags | 53,3 px | 56 px | 2,7 px |
+| Aktionen | 84 px | 88 px | 4 px |
+
+Der Gegenleser hat die **Tags**-Spalte als die engste benannt; gerechnet ist es in der Vorgabeform
+die **Call**-Spalte, und der Unterschied ist nicht akademisch: Eine sechsstellige Call-Nummer in
+dicktengleicher Schrift hat **keine Umbruchstelle**. Wird sie zu breit, läuft sie über ihre Zelle
+hinaus, statt umzubrechen — und gekürzt wird sie nie (A-10.9, `TodoTable.tsx:235-237`).
+
+Zwei Richtungen, in die sich diese Reserve bewegt, und sie sind verschieden:
+
+- **Mit der Dichte wächst sie.** In „kompakt" fällt `--row-padding-x` auf `--space-2` = 8 px
+  (`tokens.css:430`), die `<col>`-Breiten bleiben (4.2, 7.1). Jede Zelle bekommt also 8 px **mehr**
+  Luft; die Dichte kann das Budget nicht sprengen.
+- **Mit der Schrift schrumpft sie.** `clear` hebt `--text-2xs` von 11 auf 12 px (`tokens.css:658`).
+  Das trifft die **Kopfzellen**: „TAGS" wächst um rund ein Elftel und verbraucht damit fast die
+  ganzen 2,7 px der Tags-Spalte — dort ist der Gegenleser im Ergebnis näher dran als in der
+  Vorgabeform. `--text-sm`, an dem die Call-Nummer hängt, rührt `clear` nicht an.
+
+**Daraus die Auflage, und sie ist billig:** Wer `--text-sm`, `--text-2xs`, die dicktengleiche
+Schrift oder einen Spaltenkopf anfaßt, mißt diese drei Spalten nach. Gemessen sind drei Gestaltungen
+(`clear`, `zen`, `kompakt`), nicht neunzehn — und in genau diesen drei Spalten ist der Abstand
+zwischen „paßt" und „läuft über" kleiner als ein Zeichen.
 
 Damit ist die vom Orchestrator angeordnete **Zusammenlegung von „Erledigt" und „Status" nicht nötig
 und nicht gebaut**. Die Anweisung lautete „kürzen, bis es paßt"; es paßt mit acht Spalten.
@@ -563,29 +656,87 @@ handgeschriebener Positionierer erst recht nicht. Genau den hat T-059 abgeschaff
 #### `role="dialog"` an einer Auskunftsfläche — die Abweichung, die T-365 selbst benennt
 
 T-365 führt sie als R-1: Der Inhalt des Popovers trägt `role="dialog"`, und 5.1 hatte den Rollennamen
-als Einwand gegen `DialogSurface` aufgeführt. **Entschieden: die Rolle bleibt.** Vier Gründe, und
-der vierte ist eine Auflage, nicht eine Begründung:
+als Einwand gegen `DialogSurface` aufgeführt. **Entschieden: die Rolle bleibt.**
 
-1. **ARIA hat für diese Fläche keine eigene Rolle.** Sie ist kein `tooltip` (der nimmt den Fokus
-   nicht an — genau daran ist der Kandidat oben gescheitert), kein `menu` (nichts darin ist eine
-   Handlung), kein `listbox` (nichts darin ist wählbar). `region` wäre ein **Orientierungspunkt**:
-   Eine Tabelle mit hundert Zeilen bekäme hundert benannte Landmarken in ihr Verzeichnis, und das
-   ist meßbar schlechter als ein Rollenname, den man einmal hört. Bleibt der nicht-modale Dialog,
-   und der ist das APG-Muster für genau diesen Fall.
+> **Berichtigung nach T-376 (2026-09-14), Abgleich nachgetragen im Nachtrag T-383.** Die Entscheidung
+> ist gegengelesen und **nicht** angegriffen worden — **zwei ihrer vier Gründe schon: Grund 3 und
+> Grund 4.** Der Grund, warum das nicht bloß Kosmetik ist: Beim nächsten Umbau liest jemand die
+> **Begründung**, nicht die Entscheidung. Eine richtige Entscheidung mit halbfalscher Begründung
+> fällt beim ersten Gegenwind in die falsche Richtung um.
+>
+> | | stand da | Befund | gefunden von |
+> |---|---|---|---|
+> | Grund 4 | „Angenommen wird das, weil die Gegenrichtung **TF-3 kostet** — und TF-3 steht wörtlich in A-25.9." | **Falsch, und es war der Satz, der dem Orchestrator vorgelegt wurde.** TF-3 hängt am **Baustein**, nicht am Rollennamen — gemessen unten. Ein anderer Rollenname nähme der Fläche den Tastaturfokus nicht, und A-25.9 nennt keinen Rollennamen; sie würde also von einer Gegenentscheidung gar nicht berührt. **Was die Gegenrichtung statt dessen kostet, steht jetzt in Grund 4 selbst.** | Gegenleser **und** dieses Papier, unabhängig und gleichlautend |
+> | Grund 3 | „Nähme man die Rolle weg, zeigte `aria-controls` auf ein `div` **ohne Rolle**." | **Strohmann.** Die Gegenrichtung war nie „keine Rolle", sondern „eine andere Rolle". Der Kern des Satzes stimmt — ein `div` ohne Rolle trägt keinen zugänglichen Namen —, er widerlegt nur den falschen Gegner. | Gegenleser **und** dieses Papier, unabhängig und gleichlautend |
+> | Grund 1 | zählte `tooltip`, `menu`, `listbox` und `region` auf | **Unvollständig.** `group` fehlte, und `group` ist der ernsthafte Gegenkandidat: Er trägt einen zugänglichen Namen, er hat einen Anfang und ein Ende, und er ist keine Landmarke. Er muß an der Sache widerlegt werden, nicht durch Auslassung. | dieses Papier; der Gegenleser führt **denselben** Punkt unter Grund 3 mit („die naheliegendste Gegenkandidatin gar nicht zu nennen") |
+>
+> **Der Abgleich geht damit auf, und das ist nicht Formsache.** Hätten beide Seiten verschiedene
+> Gründe gemeint, trügen **drei** der vier nicht, und die Entscheidung hinge an einem einzigen. Sie
+> meinen dieselben zwei; der dritte Punkt ist derselbe Punkt an einer anderen Nummer, weil der
+> Gegenkandidat `group` bei ihm unter „falscher Gegner" und hier unter „fehlender Gegner" steht.
+> Getragen wird die Entscheidung weiterhin von Grund 2 allein, wenn alle anderen fielen.
+>
+> **Zurückgezogen ist mit Grund 4 auch die Zuspitzung, mit der er dem Orchestrator vorgelegt wurde:**
+> „Wer sie umdrehen will, **dreht A-25.9 mit um**" (Bericht zu T-373, Annahme 1 und OF 1). Der Satz
+> ist falsch. Wer die Rolle umdrehen will, braucht eine Entscheidung **dieses** Papiers und keine
+> Änderung der Spezifikation — und er bekommt sie, wenn er Grund 1 bis 3 an der Sache widerlegt.
+
+Vier Gründe also weiterhin, zwei davon neu, und der vierte ist eine Auflage, nicht eine Begründung:
+
+1. **ARIA hat für diese Fläche keine eigene Rolle, und der ernsthafte Gegenkandidat heißt `group`.**
+   Sie ist kein `tooltip` (der nimmt den Fokus nicht an — genau daran ist der Kandidat oben
+   gescheitert), kein `menu` (nichts darin ist eine Handlung), kein `listbox` (nichts darin ist
+   wählbar). `region` wäre ein **Orientierungspunkt**: Eine Tabelle mit hundert Zeilen bekäme
+   hundert benannte Landmarken in ihr Verzeichnis. `group` bliebe übrig und wäre nicht falsch — er
+   trägt einen Namen und eine Grenze. Er ist nur **schwächer**: Er sagt nichts darüber, daß hier
+   eine Schicht **aufgegangen** ist, und genau das ist an einer Fläche, die auf Betätigung
+   erscheint und auf `Escape` verschwindet, die Auskunft, auf die es ankommt. Der nicht-modale
+   Dialog ist das APG-Muster für genau diesen Fall.
 2. **Was ein Dialog behauptet, behauptet er über `aria-modal`, nicht über seinen Namen.** Ohne
    `aria-modal`, ohne Abdunklung und ohne Fokusfalle hört der Benutzer „Dialog, 11 Tags" und kann
    die Fläche mit `Tabulator` oder `Escape` jederzeit verlassen. Das ist eine Beschreibung dessen,
-   was sie tut, keine Aufforderung. Die Berichtigung in 5.1 trennt beides.
-3. **Der Rollenname trägt hier die Anbindung.** `aria-expanded` und `aria-controls` am Auslöser
-   zeigen auf einen Kasten, der einen zugänglichen Namen hat (`plural(count, "Tag", "Tags")` — kein
-   neues Wort, A-25.7). Nähme man die Rolle weg, zeigte ein `aria-controls` auf ein `div` ohne
-   Rolle und ohne Grenze; die Fläche hätte dann keinen Anfang und kein Ende, die man hören kann.
+   was sie tut, keine Aufforderung. Die Berichtigung in 5.1 trennt beides. **Dieser Grund ist
+   unverändert und trägt die Entscheidung allein, wenn alle anderen fielen.**
+3. **Rollenname und `aria-haspopup` sind ein Paar, und das Paar setzt der Baustein.** Gemessen am
+   installierten Stand (`@zag-js/popover@1.43.3`, `dist/popover.connect.js`):
+
+   | Zeile | was gesetzt wird | an wem |
+   |---|---|---|
+   | `:107` | `aria-haspopup: "dialog"` | Auslöser |
+   | `:110` | `aria-controls` auf die Kennung des Inhalts | Auslöser |
+   | `:147` | `tabIndex: -1` | Inhalt |
+   | `:148` | `role: "dialog"` | Inhalt |
+
+   Wer nur `:148` überschreibt, hinterläßt einen Auslöser, der einen **Dialog** ankündigt, und
+   einen Inhalt, der eine **Gruppe** ist — zwei Aussagen über dieselbe Fläche, und die falsche ist
+   die, die zuerst vorgelesen wird. Wer beide überschreibt, schreibt am Baustein vorbei; genau das
+   hat T-059 abgeschafft. Der zugängliche Name der Fläche (`plural(count, "Tag", "Tags")` — kein
+   neues Wort, A-25.7) hängt daran mit: Ein `div` ohne Rolle trägt kein `aria-label`.
 4. **Der Preis steht dabei, und daraus folgt die Auflage.** Eine Vorlesehilfe sagt „Dialog" über
    eine Fläche, die nichts entscheidet; wer das Wort hört, kann eine Modalität erwarten, die es
-   nicht gibt. Angenommen wird das, weil die Gegenrichtung TF-3 kostet — und TF-3 steht seit dem
-   2026-09-14 wörtlich in A-25.9. **Die Auflage:** `aria-modal` wird an dieser Fläche **nie**
-   gesetzt, und es kommt nie ein `.scrim` dazu. Beides zusammen macht den Einwand aus 5.1 wahr, und
-   zwar still. Der e2e-tester mißt es als Gegenprobe zu A16 (9.3).
+   nicht gibt. **Das ist der ganze Preis, und er wird angenommen** — nicht, weil die Gegenrichtung
+   etwas kostete, das in der Spezifikation steht, sondern weil der Gegenkandidat schlechter ist
+   (Grund 1) und der Umbau am Baustein vorbeiginge (Grund 3).
+
+   **Und weil beide Seiten mit Preis dastehen sollen, hier der der Gegenrichtung — er ist ein
+   anderer, als bis zum 2026-09-14 hier stand:**
+
+   | Gegenrichtung | kostet |
+   |---|---|
+   | `role="group"` statt `dialog` | die hörbare Auskunft, daß hier eine Schicht **aufgegangen** ist — und die Übereinstimmung mit dem `aria-haspopup="dialog"`, das derselbe Baustein am Auslöser setzt (Grund 3) |
+   | **gar keine** Rolle | die hörbare Grenze und mit ihr den zugänglichen Namen: Ein `div` ohne Rolle trägt kein `aria-label` |
+   | beide | **TF-3 nicht.** Der Tastaturfokus hängt am `tabIndex: -1` des Bausteins und am Fokusruf der Zelle, nicht am Rollennamen — der Absatz unter dieser Liste. |
+
+   **Die Auflage:** `aria-modal` wird an dieser Fläche **nie** gesetzt, und es kommt nie ein
+   `.scrim` dazu. Beides zusammen macht den Einwand aus 5.1 wahr, und zwar still. Der e2e-tester
+   mißt es als Gegenprobe zu A16 (9.3).
+
+**Was TF-3 wirklich trägt, damit es niemand ein zweites Mal am Rollennamen sucht:** `tabIndex: -1`
+am Inhalt (`popover.connect.js:147`) macht die Fläche programmatisch fokussierbar, und
+`TodoTagsCell.tsx:167-176` setzt den Fokus — aber nur, wenn die Fläche **verlangt** wurde
+(`mode === "intent"`). Beides ist unabhängig vom Rollennamen. A-25.9 verlangt, daß „die Fläche, die
+sie zeigt, den Tastaturfokus annimmt"; eingelöst wird dieser Satz an diesen beiden Stellen und an
+keiner dritten.
 
 **Was ausdrücklich nicht in Frage kommt: das `title`-Attribut.** `TagChip` setzt heute eines am
 nicht-interaktiven `<span>` (`shared/ui/Tag.tsx:149-153`). In der Tabellenzelle wäre das der falsche
@@ -916,6 +1067,15 @@ Papiers selbst zieht (E-117). **Die Bedingung, unter der A-25.7 und A-21.3 gewah
 deshalb nicht „es ist dieselbe Optik", sondern: es entsteht keine neue Optik, und ob die vorhandene
 an dieser zweiten Stelle trägt, mißt visual-qa vor der Freigabe — nicht danach** (N-9).
 
+**Gemessen, und die Bedingung ist eingelöst (T-372, freigegeben).** Der Augenschein hat `classic`,
+`zen`, `lines`, `plainspace`, `dracula`, `glass` und `liquid-glass` je bei 1280 × 820 am Bild
+angesehen: Zebra, Zeilenhöhe und Kontrast stehen geordnet, und auf einer Tabellenzeile ist **keine
+Kartenkante und keine Erhebung** mehr zu sehen. **Kein blockierender Bildbefund.** Die zwölf übrigen
+Gestaltungen sind nicht einzeln angesehen worden, und die Begründung dafür ist dieselbe Messung, die
+diesen Abschnitt ausgelöst hat: Außerhalb von `lines` und `zen` trägt kein Palettenblatt eine Regel
+auf `.todo-row`, und beide sind geprüft. Der Satz darüber bleibt trotzdem stehen — er ist die
+**Regel** und nicht der Befund. Beim nächsten Paletteneintrag auf einer Zeile gilt er wieder.
+
 ---
 
 ## 8. Zustände und responsives Verhalten
@@ -927,10 +1087,10 @@ Zustand in der Tabellenform trägt:
 
 | Zustand | Bauform | Zeile |
 |---|---|---|
-| **Laden** | `AsyncBoundary` mit `rows={6}`, `.loading-block` im `ScreenBody` in Stapelform | `TodoListScreen.tsx:446-451` |
-| **Leer, ohne Filter** | `ScreenBody` (Stapelform) > `TableShell` > `EmptyState` mit Primäraktion „Neues Todo" | `BookingsScreen.tsx:406-433` als Vorbild |
-| **Leer, mit Filter** | dasselbe, `EmptyState` mit „Filter zurücksetzen" | dito |
-| **Fehler** | `AsyncBoundary` `onRetry`, `fallbackFrame` | `TodoListScreen.tsx:450` |
+| **Laden** | `AsyncBoundary` mit `rows={6}`; `LoadingBlock` im `ScreenBody` in **Stapelform**, **ohne** `TableShell` und ohne Kopfzeile | `TodoListScreen.tsx:474-480`, `AsyncBoundary.tsx:49-51` |
+| **Leer, ohne Filter** | `ScreenBody` (Stapelform) > `TableShell` > `EmptyState` mit Primäraktion „Neues Todo" | `TodoListScreen.tsx:495-514` |
+| **Leer, mit Filter** | dasselbe, `EmptyState` mit „Filter zurücksetzen" | `TodoListScreen.tsx:515-526` |
+| **Fehler** | `AsyncBoundary` `onRetry` + `fallbackFrame`, `InlineMessage` in Stapelform | `TodoListScreen.tsx:478-479`, `AsyncBoundary.tsx:53-69` |
 | **Zeile: normal / Zebra** | `.table__row`, `:nth-child(even)` | `components.css:805-811` |
 | **Zeile: Zeiger darüber** | `.table__row:hover` → `--bg-hover` | `:812` |
 | ~~**Zeile: ausgewählt**~~ | ~~`.table__row--selected`~~ — **gestrichen (N-3).** Die Todo-Tabelle hat keine Auswahl; das Kästchen in Spalte 1 ändert einen Zustand und markiert nichts. Ein Zustand, der in der Liste steht, wird beim nächsten Lesen gebaut. | ~~`:815`~~ |
@@ -983,15 +1143,129 @@ bereits die haltbare Form, und zwar zwei Bildschirme weiter oben:
 
 **Die Form ist: den Zebra-Fall mit aufzählen, nicht die Gewichtung hochschrauben.** Sie gewinnt
 unabhängig von der Reihenfolge der Blätter, und sie ist die zweite Fundstelle einer vorhandenen
-Bauform statt einer zweiten Bauform — die Regel aus Abschnitt 2.3. Übergabepunkt Ü-2 an den
-frontend-dev; es ist eine Zeile, und sie ist kein Befund, solange die Reihenfolge steht.
+Bauform statt einer zweiten Bauform — die Regel aus Abschnitt 2.3. **Als Auftrag mit Datei, Zeile
+und Gegenprobe steht das in 10.5 (Ü-2)**; hier steht nur, warum es die richtige Form ist.
 
-**Zum Ladezustand, weil T-366 (N-5e) die Frage offen gefunden hat:** Das Skelett hat **keine**
-Kopfzeile und soll trotzdem nach Tabelle aussehen. Das leistet die vorhandene Bauform ohne eine neue
-Zeile: `TableShell` zeichnet den Rahmen an Tabellenstelle, `.loading-block` mit `rows={6}` die
-gleich hohen Balken darin. Gleich hohe Balken **sind** das Tabellenmerkmal — eine Liste hätte
-ungleiche. Einen Kopf zu zeichnen, den es gleich darauf in echt gibt, wäre die teurere und die
-unehrlichere Lösung: Er stünde über Spalten, deren Breiten erst die Daten festlegen.
+### 8.1a Das Ladeskelett — entschieden, und diesmal an dem gemessen, was gebaut ist
+
+> **Berichtigung nach T-376 (S-2).** Die vorige Fassung schrieb hier: „`TableShell` zeichnet den
+> Rahmen an Tabellenstelle, `.loading-block` mit `rows={6}` die gleich hohen Balken darin."
+> **Gebaut ist das nicht.** `fallbackFrame` legt um Skelett und Fehlerfläche ausschließlich einen
+> `ScreenBody` (`TodoListScreen.tsx:479`); `AsyncBoundary` setzt darin `LoadingBlock`
+> (`AsyncBoundary.tsx:49-51`). Ein `TableShell` kommt im Ladezustand an keiner Stelle vor — es steht
+> nur im **Leer**zustand (`:496`). Ein Papier, das eine Bauform zusichert, die es nicht gibt, ist
+> schlechter als eines, das schweigt: Der nächste Leser hält die Abweichung für einen Baufehler und
+> „behebt" sie.
+
+**Die Frage, die dahinter steht** (T-366 N-5e, und das Schwesterpapier führt sie in 15.4 bis heute
+als die einzige unbeantwortete): Wie sieht ein Ladeskelett aus, das **keine** Kopfzeile hat und
+trotzdem nach Tabelle aussieht?
+
+> **Entschieden: Der Ladezustand behält die Stapelform des Bestands. Es kommt kein `TableShell`
+> dazu, und es kommt kein gezeichnetes Tabellengerüst dazu.**
+
+Drei Gründe, und der zweite ist der, der die Entscheidung trägt:
+
+1. **Es ist der heutige Zustand, und er ist damit von A-25.7 ohne Zutun gedeckt.** Die Umstellung
+   auf die Tabelle ändert den Ladezustand nicht — dieselbe Lage wie bei den Dichten (7.1) und bei
+   der Frist-Zelle (weiter oben): Was sich nicht ändert, braucht keine Deckung in A-25.9. Jede
+   andere Antwort wäre **neue Gestalt** und müßte vor dem Bau in A-25.9 stehen.
+2. **Ein Gerüst im Ladezustand verspricht Spalten, die der nächste Zustand zurücknimmt.** Das
+   Schwesterpapier hat in 9.1 entschieden, daß die Kopfzeile **mit den Zeilen** erscheint und nicht
+   vorher, weil es in Z3 (leer) und Z4 (Fehler) gar keine Tabelle gibt. Ein Rahmen an
+   Tabellenstelle im Ladezustand machte dieselbe Zusage eine Ebene tiefer und nähme sie in Z3
+   ebenso zurück. **Die beiden Papiere sagen damit dasselbe, und dieser Absatz ist die Stelle, an
+   der sie sich treffen.**
+3. **Gleich hohe Balken sind bereits das Tabellenmerkmal.** `LoadingBlock` mit `rows={6}` zeichnet
+   sechs gleich hohe Balken; eine Liste hätte ungleiche. Mehr Tabelle als das kann ein Zustand
+   nicht behaupten, in dem noch keine Spaltenbreite feststeht — sie hängen an den Daten (4.2).
+
+**Der Preis steht dabei:** Der Sprung von Z0 nach Z1 kostet eine Zeilenhöhe, weil die Kopfzeile
+dazukommt. Er ist von Z7 des Schwesterpapiers gedeckt („die Bildlaufstelle darf dabei springen")
+und ist der kleinere Preis gegenüber einem Gerüst, das zweimal in beide Richtungen wechselt.
+
+**Damit ist 15.4 des Schwesterpapiers beantwortet und gehört nicht mehr in dessen Liste der offenen
+Fragen.** Die Frage war richtig an dieses Papier adressiert — sie ist eine Gestaltfrage —, und sie
+ist hier beantwortet, nicht zurückgereicht.
+
+### 8.1b Das Erledigt-Kästchen in Spalte 1 — N-2 ist entschieden
+
+Die Lage, unverändert richtig beschrieben: In `BookingTable` und in `ExportGroups` **ist** die erste
+Spalte mit Kästchen eine Auswahl; in der Todo-Tabelle ist dasselbe Bild eine Zustandsänderung, und
+ein Fehlklick markiert ein Todo als erledigt. T-365 hat die drei **strukturellen** Auflagen gebaut
+und keine vierte, **sichtbare** erfunden; T-373 hat sie ebenfalls nicht erfunden; visual-qa hat sie
+am Bild angesehen und die Entscheidung ausdrücklich nicht an sich gezogen. Jedesmal richtig — und
+jetzt ist der Punkt, an dem entschieden wird.
+
+> **Entschieden: Es kommt keine neu erfundene Gestalt dazu. Die sichtbare Unterscheidung ist der
+> Wortkopf über der Spalte — und sie ist bereits gebaut, bereits gedeckt und sie klebt.**
+
+**Der Befund, der die Entscheidung möglich macht, ist, daß die vierte Unterscheidung nicht fehlt.**
+Die **erste** der drei Auflagen aus 3.2 — „die Kopfzelle trägt das Wort ‚Erledigt' und kein
+Kontrollkästchen" — ist nicht nur strukturell. Sie ist **sichtbar**, und sie ist dreimal
+hintereinander unter „strukturell" abgelegt worden, weil sie in derselben Aufzählung stand wie
+`aria-selected` und die Sammelleiste, die es beide wirklich nur im Baum gibt. Gelesen an den vier
+Tabellen des Bestands:
+
+| Tabelle | Kopfzelle der Spalte 1 | Was die Spalte ist | Zeile |
+|---|---|---|---|
+| Buchungsübersicht | **Kontrollkästchen**, „Alle sichtbaren Buchungen auswählen" | Auswahl | `BookingTable.tsx:180-183` |
+| Export nach Todo | **Kontrollkästchen**, „Alle exportierbaren Tagesgruppen auswählen" | Auswahl | `ExportGroups.tsx:212` |
+| Tagesgruppen (geschachtelt) | verborgenes Wort „Auswahl", **sichtbar leer** | Auswahl | `ExportGroups.tsx:288` |
+| **Todo-Tabelle** | **das Wort „Erledigt"** | Zustand | `TodoTable.tsx:142` |
+
+> **Die Regel, die daraus folgt, ist die Anwesenheit des Wortes und nicht die Abwesenheit des
+> Kästchens:** Über einer Auswahlspalte steht in diesem Bestand **kein Wort**. Über Spalte 1 der
+> Todo-Tabelle steht eines. Das ist die einzige Spalte im ganzen Bestand, bei der das so ist.
+
+Sie erfüllt die vier Bedingungen, die das Schwesterpapier in 3.2 an jede zulässige Antwort stellt —
+und das ist der Grund, aus dem sie zulässig ist, während eine erfundene Form es nicht wäre:
+
+| Bedingung aus 3.2 | erfüllt, weil |
+|---|---|
+| **kein neuer sichtbarer Text** | A-25.9 deckt die Spaltenüberschriften ausdrücklich. „Erledigt" steht dort ohnehin; es wird nichts hinzugefügt. **Eine Ergänzung der Spezifikation ist für diese Antwort nicht nötig** — und das ist der Unterschied zu jedem anderen Ausgang. |
+| **nicht Farbe allein** (SC 1.4.1) | Es ist ein Wort. Es trägt in der Graustufenprobe zeichengleich. |
+| **im leeren Zustand wirksam** | Der Kopf steht, bevor irgendein Kästchen angefaßt wurde, und er steht unabhängig vom Zustand der Zeilen. Der Fehlklick ist der Schaden — und die Unterscheidung steht **vor** ihm da. |
+| **verträglich mit kompakter Dichte und 24 × 24 px** | Der Kopf ist kein Ziel und kostet keine Trefferfläche. Spalte 1 ist in beiden Dichten 9 rem breit (4.3a), das Wort „ERLEDIGT" mißt weniger. |
+
+**Und hier zahlt sich Abschnitt 3 aus:** Der Kopf **klebt** (3.1, gemessen von A10). Die
+Unterscheidung steht damit nicht nur im ersten Bild, sondern in **jeder** Bildlaufstellung über
+ihrer Spalte. Ohne den klebenden Kopf wäre dieselbe Antwort schwach — ab Zeile 20 wäre sie
+weggerollt. **A10 mißt seit dieser Entscheidung nicht mehr nur ein Layout: Es mißt die sichtbare
+Unterscheidung, mit der die Todo-Tabelle sagt, daß sie keine Auswahl ist.** Wer A10 künftig für
+einen reinen Bildlauftest hält und ihn lockert, nimmt N-2 mit weg.
+
+**Der Preis steht dabei, in vier Sätzen:**
+
+1. **Wer nur auf eine Zeile sieht, sieht dasselbe Bild wie bei einer Auswahlspalte.** Die
+   Unterscheidung verlangt einen Blick nach oben. Das wird angenommen.
+2. **Ein Fehlklick setzt weiterhin mit einem Klick „Erledigt".** Das ist heute schon so
+   (`TodoRow.tsx`), und die Tabelle ändert daran nichts. Getragen wird das Risiko deshalb über die
+   **Rücknahme** und nicht über die Gestalt — das ist genau der Ausgang, den 3.2 des
+   Schwesterpapiers für diesen Fall vorgesehen hat.
+3. **Daraus folgt die Bedingung, und sie ist ab jetzt eine Zusage mit Wächter.** Das Markieren aus
+   der Tabelle heraus führt denselben Weg wie heute aus der Liste — `undoDoneAction` im Toast,
+   zeichengleich und ohne Zwischenschritt (`TodoListScreen.tsx:262-308`, der Rückweg an `:302`).
+   Fällt er weg, ist N-2 neu zu entscheiden. Gemessen wird das als **A17** (9.3) und im
+   Schwesterpapier als **TT-36** — eine Zusage an zwei Adressen, siehe den Kasten in 9.3. Ohne sie
+   wäre die Bedingung genau das, was dieses Papier an drei anderen Stellen beklagt: ein Satz in
+   einem Designpapier, den kein Lauf liest.
+4. **Bekommt die Todo-Tabelle je eine Mehrfachauswahl** (F-2, heute „nein"), fällt die
+   Unterscheidung in sich zusammen — dann stünde ein Wort über einer Spalte, die beides ist. N-2
+   ist dann keine Gestaltfrage mehr, sondern wieder offen.
+
+> **Eine Falle für den nächsten Leser, deshalb ausgeschrieben.** Das Schwesterpapier knüpft TT-36
+> an die Antwort „**keine** sichtbare Unterscheidung" („Wer OF-7 mit ‚keine' beantwortet, hat damit
+> TT-36 zugesagt"). Diese Antwort hier ist eine dritte: **keine neu erfundene** Gestalt, weil eine
+> vorhandene trägt. Daraus folgt **nicht**, daß die Bedingung entfällt — im Gegenteil. Die
+> vorhandene Unterscheidung steht über der Spalte und nicht in der Zeile; wer nur auf die Zeile
+> sieht, ist genau in der Lage, für die TT-36 geschrieben wurde. **TT-36 und A17 gelten
+> unverändert.**
+
+**Was ausdrücklich nicht entschieden wurde:** eine andere Kästchenform, eine andere Tönung, ein
+Symbol, ein Zusatz in der Zelle. Jedes davon wäre eine **Gestaltänderung**, A-25.7 zählt die
+erlaubten abschließend auf, A-25.9 nennt sie nicht — sie müßte also **vor** dem Bau in die
+Spezifikation, nicht danach. Diese Reihe hat den umgekehrten Weg zweimal bezahlt.
 
 ### 8.2 Responsiv
 
@@ -1037,9 +1311,9 @@ Danach die Aufteilung, und sie folgt der Hausform:
 - **Bauart, statisch.** Ein `proof:`-Lauf, billig und schnell, der die Zusagen aus Abschnitt 2.3
   gegen die Platte hält. **Vorschlag an den Orchestrator, nicht Teil dieser Vorschrift** — dieselbe
   Einstufung, die `fensterfeste-flaechen.md` 9.5 für den entsprechenden Lauf hat.
-- **Wirkung, gerendert.** Acht neue Zusicherungen in `tests/e2e/viewport-fit.spec.ts` (sechs in der
+- **Wirkung, gerendert.** Neun neue Zusicherungen in `tests/e2e/viewport-fit.spec.ts` (sechs in der
   ersten Fassung; A14 ist nach B-5 in A14a/A14b geteilt, A16 kam mit der Rollenentscheidung aus 5.3
-  dazu), im
+  dazu, A17 mit der Entscheidung zu N-2 aus 8.1b), im
   Vorgabelauf von `pnpm test:e2e`, an denselben sieben Fenstergrößen und mit demselben Vorrat.
   **Gebaut wird sie vom e2e-tester**; hier steht die Vorschrift.
 
@@ -1071,7 +1345,7 @@ nächsten Bau gegen die falsche Zahl gemessen.** Der Satz aus dem Auftrag ist am
 und dort widerlegt worden; er ist in `fensterfeste-flaechen.md` 9.1 nachgetragen, damit die nächste
 Lesung ihn nicht noch einmal macht.
 
-### 9.3 Die acht neuen Zusicherungen
+### 9.3 Die neun neuen Zusicherungen
 
 Menge der Ansichten wie bisher über `ROUTE_NAMES` (9.3 des Mechanismuspapiers); die hier genannten
 gelten je auf der Todo-Ansicht, A10 zusätzlich auf der Buchungsübersicht.
@@ -1086,6 +1360,7 @@ gelten je auf der Todo-Ansicht, A10 zusätzlich auf der Buchungsübersicht.
 | **A14b** | *Tastatur-Weg: dasselbe, und der Fokus kommt zurück.* | Fläche mit `Eingabe` öffnen (Fokus ist danach **in** der Fläche), rollen ⇒ `count() === 0` **und** `document.activeElement` ist der Auslöser. | Nicht, daß der Auslöser sichtbar ist — das mißt der Bildlauf selbst. |
 | **A15** | *Die Tag-Fläche liegt über dem klebenden Kopf.* | Fläche an einer Zeile nahe dem oberen Rand öffnen; `elementFromPoint` in der Mitte der Fläche liefert einen Knoten **innerhalb** der Fläche. Gegenprobe im selben Lauf: `--z-popover` am Inhalt entfernt ⇒ rot. | Nicht, daß sie im Bild lesbar ist. |
 | **A16** | *Die Fläche ist ein Kasten, kein Anspruch.* | `.tagsurface` hat **kein** `aria-modal`, und im Dokument steht **kein** `.scrim`, während sie offen ist. | Nicht, daß `role="dialog"` die beste Rolle ist — das ist eine Entscheidung (5.3), keine Messung. |
+| **A17** | *Die Rücknahme überlebt den Umzug in die Tabelle.* | Ein offenes Todo über das Kästchen in Spalte 1 als erledigt markieren ⇒ ein Toast mit der Schaltfläche **„Rückgängig"** steht da; Betätigen stellt den offenen Zustand wieder her, **in einem Schritt und ohne Rückfrage**. Gegenprobe im selben Lauf: Beim **Zurücknehmen** erscheint kein zweiter Rückweg (`TodoListScreen.tsx:288-304` — die Rücknahme einer Rücknahme braucht keine). | Nicht, daß der Fehlklick unwahrscheinlich ist. A17 mißt den Ausweg, nicht den Weg hinein. |
 
 **Die zwei Untergrenzen gelten auch hier, und sie zählen ihre eigene Menge** (9.6 des
 Mechanismuspapiers, E-111): Der Lauf meldet, **wie viele** Tabellen er gefunden hat und **wie
@@ -1114,10 +1389,31 @@ weglassen.
 | **A14c** | Fläche mit 40 Marken öffnen, **in ihr** rollen (`scrollTop = 40`) ⇒ sie ist **noch offen**. | Den Wächter, der jedes Bildlaufereignis nimmt. Ohne diese Probe schließt sich die Fläche beim Lesen selbst, und A14a/A14b sind trotzdem grün. |
 | **A14d** | Einen Auslöser anklicken, der nur **halb im Bild** steht (der Klick rollt ihn hinein) ⇒ die Fläche ist danach **offen**. | Den Wächter, der auf das **Ereignis** statt auf die **Bewegung des Ankers** hört — er schließt die Fläche im selben Augenblick, in dem sie aufgeht (6.2). In der Sondierung von T-365 reproduzierbar rot. |
 
-**Die Gegenprobe, verbindlich** (E-117 Punkt „Nachweis über den Wächter"): Jede der acht
+#### Warum A17 in diesem Meßsatz steht und nicht in einem Prüffall zur Todo-Liste (N-2)
+
+> **A17 und TT-36 des Schwesterpapiers sind *eine* Zusage, nicht zwei.** T-374 hat dieselbe
+> Bedingung unabhängig als Meßlatte aufgeschrieben (`todo-tabelle-fluss.md` §14, TT-36) — dort als
+> **Abnahmekriterium für den frontend-dev**, hier als **Zusicherung für den e2e-tester**, weil der
+> seinen Auftrag aus 9.3 bekommt und nicht aus §14. Daß beide Papiere unabhängig auf denselben Satz
+> gekommen sind, ist der seltene gute Fall von E-113; damit er einer bleibt, gilt: **Wer eine der
+> beiden anfaßt, faßt die andere mit an.** Gemessen wird der Vorgang einmal, nicht zweimal.
+
+A17 mißt nichts, was dieser Umbau **gebaut** hat — der Rückweg im Toast steht seit T-118. Es steht
+trotzdem hier, und zwar aus einem Grund, der zum Meßsatz gehört: **Die Entscheidung zu N-2 hängt an
+ihm.** 8.1b nimmt keine sichtbare Gestalt auf und trägt das Risiko des Fehlklicks stattdessen über
+die Rücknahme. Eine Entscheidung, die an einer Eigenschaft hängt, die niemand mißt, ist eine
+Entscheidung auf Widerruf — und diesen Widerruf würde niemand bemerken, weil das Verschwinden eines
+Toasts nichts rot macht.
+
+**Das ist die Hausform dieses Papiers, hier zum dritten Mal:** A16 bewacht die Auflage aus 5.3,
+A14c/A14d bewachen die Mechanik aus 6.2, A17 bewacht die Bedingung aus 8.1b. Wer eine der drei für
+Beiwerk hält, streicht jeweils die Zusage mit, die sie trägt.
+
+**Die Gegenprobe, verbindlich** (E-117 Punkt „Nachweis über den Wächter"): Jede der neun
 Zusicherungen wird einmal mit dem Zustand **vor** dem Bau gefahren und muß rot werden —
 `position: sticky` am `thead` entfernt ⇒ A10 rot; `table-layout: fixed` entfernt ⇒ A12 rot;
-`.tagsurface` ohne Portal ⇒ A14a oder A15 rot; `modal={true}` ⇒ A16 rot. Acht von acht. Ohne diese
+`.tagsurface` ohne Portal ⇒ A14a oder A15 rot; `modal={true}` ⇒ A16 rot; `action: undoDoneAction(…)`
+an `TodoListScreen.tsx:302` entfernt ⇒ A17 rot. Neun von neun. Ohne diese
 Probe ist „alles grün" wieder nur eine Behauptung über einen Wächter, und genau diese Behauptung
 ist in diesem Bestand dreimal grün gewesen und blind.
 
@@ -1125,16 +1421,23 @@ ist in diesem Bestand dreimal grün gewesen und blind.
 
 Ergänzt zu `fensterfeste-flaechen.md` 9.4, Punkt „Todo-Liste". Zusätzlich nötig:
 
-- **ein Todo mit mindestens einem Tag und ein Todo mit mehr Tags, als die Fläche ohne eigenen Lauf
-  faßt** (B-8). Die erste Fassung verlangte „ein Todo mit mehr Tags, als die **Zelle** zeigt" — und
-  maß damit gegen eine Voraussetzung, die es nicht mehr gibt: Die Zelle zeigt **keine einzige
-  Marke**, nur die Zahl, und den Auslöser gibt es an jeder Zeile mit mindestens einem Tag. Der alte
-  Satz hätte den Vorrat auf einen Sonderfall verengt und den Regelfall ungemessen gelassen. Das
-  zweite Todo bleibt nötig, aber aus einem anderen Grund: Es ist der einzige Vorrat, an dem der
-  **innere Lauf** der Fläche entsteht — und damit die Vorbedingung von A14c und von TT-19;
+- **ein Todo mit *genau einem* Tag und ein Todo mit mehr Tags, als die Fläche ohne eigenen Lauf
+  faßt** (B-8; „genau einem" seit **S-6** aus dem Gegenlesen). Die erste Fassung verlangte „ein Todo
+  mit mehr Tags, als die **Zelle** zeigt" — und maß damit gegen eine Voraussetzung, die es nicht
+  mehr gibt: Die Zelle zeigt **keine einzige Marke**, nur die Zahl, und den Auslöser gibt es an
+  jeder Zeile mit mindestens einem Tag. Der alte Satz hätte den Vorrat auf einen Sonderfall verengt
+  und den Regelfall ungemessen gelassen. **„Mindestens einem" hätte denselben Fehler ein zweites Mal
+  gemacht, nur leiser:** Das zweite Todo erfüllt die Bedingung mit, und wer den Vorrat nach dem
+  Wortlaut anlegt, hakt beide Zeilen mit **einem** Datensatz ab — dann fehlt genau der Regelfall
+  wieder, dessentwegen dieser Punkt berichtigt wurde. Das zweite Todo bleibt trotzdem nötig, aber aus
+  einem anderen Grund: Es ist der einzige Vorrat, an dem der **innere Lauf** der Fläche entsteht —
+  und damit die Vorbedingung von A14c und von TT-19;
 - **ein Todo ganz ohne Tags** — die Gegenprobe zu beidem: Dort darf **kein** Auslöser stehen, und
   eine leere Fläche gibt es nicht (8.1). Ohne diese Zeile ist „ohne Tags kein Knopf" eine Zusage
   ohne Wächter;
+- **ein offenes Todo** — Vorbedingung von A17 (N-2). Es muß offen sein, weil der Rückweg nur beim
+  **Setzen** des Kennzeichens entsteht und nicht beim Zurücknehmen (`TodoListScreen.tsx:288-304`);
+  ein Vorrat aus lauter erledigten Todos ließe A17 grün werden, ohne etwas gemessen zu haben;
 - ein Todo mit **einem** sehr langen Titel ohne Wortgrenzen (steht schon dort — die
   `.foreign-name`-Fehlerklasse trifft die Breite);
 - mehr Todos, als in eine Fensterhöhe passen (steht schon dort — Vorbedingung von A10).
@@ -1204,7 +1507,7 @@ Bezeichner zeigt, erklärt nichts mehr (N-7).
    `.todo-row__title` bleiben** (B-6); der Paletteneintrag fällt trotzdem, und die Begründung steht
    als Kommentar an der Stelle (7.2).
 5. Messen: `pnpm check`, dazu `viewport-fit.spec.ts` im vorhandenen Stand (er muß grün bleiben) und
-   die acht neuen Zusicherungen aus 9.3 als Auftrag an den e2e-tester.
+   die neun neuen Zusicherungen aus 9.3 als Auftrag an den e2e-tester.
 
 ### 10.3 Was der frontend-dev berichten mußte, statt es zu entscheiden — und was er gemessen hat
 
@@ -1249,6 +1552,82 @@ mit. Er hat heute einen Leser. Eine Fläche in einem zweiachsigen Laufkasten ist
 (OF-3); erst wenn es die zweite gibt, ist die gemeinsame Form an der Sache gemessen und nicht an
 der Ähnlichkeit zweier Dateien.
 
+### 10.5 Ü-2 — eine Zeile, die heute nur über die Blattreihenfolge gewinnt
+
+**Auftrag an den frontend-dev. Eine Regel, drei Zeilen, keine neue Bauform.**
+
+> **Dieser Abschnitt ist der ganze Auftrag.** Datei, Zeile, heutige Form, was daran nicht stimmt,
+> haltbare Form, Abnahme und die Antwort darauf, was ihn heute fängt — alles steht hier. Es ist kein
+> Bericht danebenzulegen und keiner nachzuschlagen; wer das tut, liest nur dieselben Zahlen ein
+> zweites Mal.
+
+| | |
+|---|---|
+| **Datei, Zeile** | `apps/web/src/styles/app.css:1726-1730` (der Kommentar dazu: `:1721-1725`) |
+| **An wen** | frontend-dev, eigener kleiner Auftrag. **Regel und Kommentar in *einem* Auftrag** (E-081 Punkt 4) — ein Kommentar, der eine Begründung behauptet, die die Regel nicht mehr trägt, ist schlimmer als keiner. |
+| **Gefunden in** | T-373, beim Nachziehen von 8.1 |
+| **Dringlichkeit** | keine — es ist **kein Befund**, solange die Blattreihenfolge steht. Es ist eine Zeile, die beim nächsten Umbau still bricht. |
+| **Abnahme** | Zwei Dinge, beide ohne Browser prüfbar: (1) Der Wähler `.table__row.todo-row--running:nth-child(even)` steht in der Regel; er wiegt 0-3-0 gegen 0-2-0 des Zebras und gewinnt damit in **jeder** Blattreihenfolge. (2) Der Kommentar darüber begründet die **Aufzählung** und nicht mehr die Zahl der Klassen. Wer doch einen Browser zur Hand hat: Timer auf einer Zeile mit **gerader** Ordnungszahl starten — sie trägt `--timer-running-bg`, nicht `--bg-surface-alt`. |
+
+**Heutige Form:**
+
+```css
+/* … wer sich auf die Reihenfolge zweier Stilblätter verläßt, verliert beim nächsten Umbau. */
+.table__row.todo-row--running,
+.table__row.todo-row--running:hover {
+  background-color: var(--timer-running-bg);
+  color: var(--timer-running-fg);
+}
+```
+
+**Was daran nicht stimmt.** Der Kommentar darüber sagt, zwei Klassen im Wähler sorgten dafür, daß
+die Zeilenfärbung das Zebra schlägt — **und im selben Atemzug, daß beide gleich gewichtet sind.**
+Das zweite ist richtig, das erste folgt daraus nicht. Gerechnet:
+
+| Wähler | Gewicht |
+|---|---|
+| `.table__row:nth-child(even)` (`components.css:809-811`) | 0-2-0 — eine Klasse **plus eine Pseudoklasse** |
+| `.table__row.todo-row--running` (`app.css:1726`) | 0-2-0 — zwei Klassen |
+
+Bei gleichem Gewicht entscheidet die Reihenfolge im Blatt. Sie steht in `main.tsx:5-8`:
+`base.css`, `components.css`, `app.css`, `viewport-layout.css` — `app.css` kommt **nach**
+`components.css`, und nur deshalb gewinnt die laufende Zeile. (`designsystem.tsx:4-8` hat dieselbe
+Reihenfolge; die Musterseite verhält sich also gleich.)
+
+**Haltbare Form** — dieselbe, die der Bestand für genau diesen Fall zwei Bildschirme weiter oben
+schon führt (`components.css:846-848`, exportierte Zeilen): den Zebra-Fall **mit aufzählen**, statt
+die Gewichtung hochzuschrauben.
+
+```css
+.table__row.todo-row--running,
+.table__row.todo-row--running:nth-child(even),
+.table__row.todo-row--running:hover {
+  background-color: var(--timer-running-bg);
+  color: var(--timer-running-fg);
+}
+```
+
+Die mittlere Zeile wiegt 0-3-0 und schlägt das Zebra **unabhängig von jeder Blattreihenfolge**. Der
+Kommentar darüber gehört mitgeändert: Er begründet ab dann die Aufzählung und nicht mehr die
+Klassenzahl. **Streichung und Begründung im selben Auftrag** (E-081 Punkt 4).
+
+**Was rot wird, wenn jemand die Blattreihenfolge ändert — und das ist der eigentliche Grund für
+diesen Eintrag: nichts.**
+
+| Lauf | fängt es? |
+|---|---|
+| `typecheck`, `boundaries`, `build` | nein — es ist gültiges CSS in jeder Reihenfolge |
+| `contrast` | nein — er mißt Tokenpaare, nicht die Kaskade |
+| `proof:clamp`, die übrigen `proof:`-Läufe | nein — sie lesen Regeln, nicht das gerechnete Ergebnis |
+| `viewport-fit.spec.ts`, A10 bis A17 | nein — keine dieser Zusicherungen liest eine Hintergrundfarbe |
+| Augenschein | **nur mit Glück** — sichtbar wird es ausschließlich an einer laufenden Zeile mit **gerader** Ordnungszahl. Steht der Timer auf der ersten oder dritten Zeile, sieht das Bild richtig aus. |
+
+Ein Fehler, der von jedem Lauf durchgelassen wird und im Bild nur jedes zweite Mal auftritt, sieht
+hinterher nicht wie eine Regel aus, sondern wie ein Zeichenfehler — und danach sucht niemand in der
+Kaskade. **Deshalb wird er strukturell behoben und nicht bewacht:** Die haltbare Form braucht keinen
+Wächter, weil sie die Bedingung gar nicht erst hat. Das ist dieselbe Wahl wie beim Portal in 5.2 —
+eine Zusage, die aus dem Bau folgt, statt einer, die gemessen werden muß.
+
 ---
 
 ## 11. Offene Fragen
@@ -1256,8 +1635,8 @@ der Ähnlichkeit zweier Dateien.
 | # | Frage | Stand | An wen |
 |---|---|---|---|
 | **OF-1** | Der Auftrag nennt das Exportprotokoll als Tabellenvorbild; es ist keine Tabelle (2.1). War es mitgemeint — soll also auch `.auditrow` zur Tabelle werden? | **offen** | Auftraggeber über den Orchestrator |
-| ~~**OF-2**~~ | Fällt mit `.todo-row` die letzte Fläche, die in `lines` und `zen` eine **Zeile** wie eine Karte behandelt? | **beantwortet: ja** (N-9, an `theme-palettes.css` gemessen — `.todo-row` ist im ganzen Blatt der einzige Zeilenbezeichner). Die Folge steht in 7.2 und ist entschieden: Der Eintrag fällt, obwohl die Klasse bleibt. **Ob es im Bild auffällt, ist damit nicht beantwortet** — das mißt visual-qa vor der Freigabe, und dieses Papier nimmt es nicht vorweg. | visual-qa |
+| ~~**OF-2**~~ | Fällt mit `.todo-row` die letzte Fläche, die in `lines` und `zen` eine **Zeile** wie eine Karte behandelt? | **beantwortet: ja** (N-9, an `theme-palettes.css` gemessen — `.todo-row` ist im ganzen Blatt der einzige Zeilenbezeichner). Die Folge steht in 7.2 und ist entschieden: Der Eintrag fällt, obwohl die Klasse bleibt. **Die zweite Hälfte — ob es im Bild auffällt — ist seit T-372 ebenfalls beantwortet: nein.** Sieben Gestaltungen am Bild, darunter beide betroffenen (`lines`, `zen`); Zebra, Zeilenhöhe und Kontrast geordnet, keine Kartenkante auf einer Zeile, **kein blockierender Bildbefund** (7.2). | erledigt |
 | ~~**OF-3**~~ | Die Tag-Fläche ist die erste angeheftete Fläche im Bestand, deren Anker in einem **zweiachsigen** Laufkasten liegt (6.1). | **teilweise beantwortet.** Der Fall ist gebaut und gemessen (6.2), und der Ausgang ist „schließt" — damit hängt hier nichts mehr an der Nachführung der Bibliothek. Offen bleibt die **Bestandsfrage**: Tragen `Select`, `Menu` oder `TagInput` denselben Fall schon irgendwo, ohne daß es gemessen wurde? Das ist ab jetzt eine Frage an den Bestand, keine an diesen Auftrag. | e2e-tester im Zuge von A14a/A14b |
 | ~~**OF-4**~~ | Trifft die Rechnung aus 6.3 zu? | **beantwortet: ja** — 662 px gegen 958,5 px, gemessen an drei Fensterbreiten. F-7 wird nicht teurer und geht nicht an T-361 zurück. | erledigt |
-| **OF-5** | **Das Erledigt-Kästchen in Spalte 1 (N-2, T-365 offene Frage 2).** Drei Unterscheidungen gegen eine Auswahl sind gebaut, alle **strukturell**: eigener Klassenname, kein `aria-selected`, eigener zugänglicher Name je Zeile. Eine vierte, **sichtbare** hat T-365 zu Recht nicht erfunden. Dieses Papier erfindet sie auch nicht: Sie wäre neue Gestalt, A-25.9 nennt sie nicht, und A-25.7 verbietet sie damit. **Die Frage ist trotzdem echt** — ein Fehlklick markiert ein Todo als erledigt, und das Bild ist dasselbe wie bei einer Auswahlspalte. Bevor jemand eine Form erfindet, gehört ans Bild gemessen, ob der Wortkopf „Erledigt" über der Spalte reicht. | **offen** | visual-qa, danach Orchestrator |
+| ~~**OF-5**~~ | **Das Erledigt-Kästchen in Spalte 1 (N-2, T-365 offene Frage 2).** | **Beantwortet in 8.1b (T-379): keine erfundene Gestalt.** Die sichtbare Unterscheidung ist der **Wortkopf** über der Spalte — über einer Auswahlspalte steht in diesem Bestand kein Wort (vier Tabellen gelesen), über Spalte 1 der Todo-Tabelle eines, und der Kopf **klebt**. Sie erfüllt die vier Bedingungen aus 3.2 des Schwesterpapiers, sie ist gebaut und von A-25.9 gedeckt — **eine Ergänzung der Spezifikation ist dafür nicht nötig.** Der Preis: Wer nur eine Zeile ansieht, sieht dasselbe Bild wie bei einer Auswahl; getragen wird das über die **Rücknahme**, und die bekommt mit **A17** (hier) und **TT-36** (Schwesterpapier) ihren Wächter. Wieder offen ist die Frage genau dann, wenn die Todo-Tabelle je eine Mehrfachauswahl bekommt (F-2). | erledigt |
 | **OF-6** | **Die Doppelung im Vorlesefluß** (N-10 Punkt 2): Eine Vorlesehilfe liest im Tabellenmodus „Erledigt, Erledigt" (Kopf und `DoneFlag`) und „Tags, 11 Tags" (Kopf und Auslösername). Den Namen des Auslösers auf die Zahl allein zu kürzen wäre **schlechter**: Im Fokusmodus wird die Kopfzelle nicht zuverlässig mitgelesen, und „11" allein ist keine Auskunft. **Dieses Papier nimmt die Doppelung an** und schreibt sie hin, statt sie zu übersehen. Offen ist nur, ob jemand sie für einen Befund hält. | **angenommen, benannt** | spec-ux-reviewer |

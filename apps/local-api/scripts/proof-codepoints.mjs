@@ -207,9 +207,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Die Klasse
-// ---------------------------------------------------------------------------
 
 /**
  * Das Gerüst einer Textdatei: Tabulator und Zeilenumbruch.
@@ -305,9 +303,7 @@ function lesbar(text) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
 // Der Leser
-// ---------------------------------------------------------------------------
 
 /**
  * Sucht die beanstandeten Zeichen in einem Text.
@@ -350,9 +346,7 @@ function ausschnitt(text, zeile) {
   return gezeigt.length <= 80 ? gezeigt : `${gezeigt.slice(0, 80)}…`;
 }
 
-// ---------------------------------------------------------------------------
 // Die Ausnahmen
-// ---------------------------------------------------------------------------
 
 /**
  * Dateien, die ein solches Zeichen **roh** tragen dürfen, mit Zahl und Grund.
@@ -421,9 +415,7 @@ function wendeAusnahmenAn(funde, ausnahmen) {
   return { offen, ungueltig };
 }
 
-// ---------------------------------------------------------------------------
 // Die Dateien
-// ---------------------------------------------------------------------------
 
 /**
  * Endungen, deren Inhalt keine Codepunkte sind.
@@ -470,9 +462,7 @@ function zuPruefendeDateien() {
   return { versioniert, neu, alle: [...versioniert, ...neu] };
 }
 
-// ===========================================================================
 section('1. Die Klasse kommt aus der Domäne, der Unterschied wird gerechnet');
-// ===========================================================================
 
 check(
   'die Domänenklasse ist da und nicht leer',
@@ -534,9 +524,7 @@ check(
     .join(' '),
 );
 
-// ===========================================================================
 section('2. Die versionierten und die neuen Dateien');
-// ===========================================================================
 
 let dateien = [];
 let neueDateien = [];
@@ -646,9 +634,7 @@ check(
   `${offen.length} Fundstelle(n)`,
 );
 
-// ===========================================================================
 section('3. Die Binärdateien sind welche');
-// ===========================================================================
 
 check(
   'jede übersprungene Datei ist wirklich binär (Nullbyte in den ersten 8000)',
@@ -669,9 +655,7 @@ check(
   );
 }
 
-// ===========================================================================
 section('4. Die Ausnahmeliste');
-// ===========================================================================
 
 check(
   'jede Ausnahme trifft genau so oft zu, wie sie behauptet',
@@ -695,9 +679,7 @@ console.log(
     (AUSNAHMEN.length === 0 ? ' — kein versionierter Text braucht ein rohes solches Zeichen' : ''),
 );
 
-// ===========================================================================
 section('5. Und der Prüfer prüft sich selbst');
-// ===========================================================================
 
 /*
  * Jedes Zeichen wird **gebaut**. `String.fromCodePoint(...)` und nichts zwischen
@@ -883,7 +865,6 @@ const PROBE = [
   }
 }
 
-// ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed > 0) {
   console.log('\nFehlgeschlagen:');

@@ -1,35 +1,4 @@
-/**
- * Takt — Anhänge eines Todos (A-19.8 bis A-19.15, E-071, A-A-18).
- *
- * ---------------------------------------------------------------------------
- * Diese Datei verbindet nichts mit dem Export, und das ist keine Zufälligkeit
- * ---------------------------------------------------------------------------
- *
- * Es gibt hier keine Abfrage, die `todo_attachment` mit `time_entry`,
- * `export_run_entry` oder `v_export_candidate` verbindet — dieselbe Aussage
- * wie im Kopf von `repo-todos.ts` über `todo_note`. `SELECT *` kommt nirgends
- * vor: Jede Spalte ist ausgeschrieben, damit eine später ergänzte nicht von
- * selbst in einen Datensatz gerät (A-19.17, R-06).
- *
- * Der eigentliche Schutz liegt aber nicht hier, sondern im Typ:
- * `ExportCandidate` und `ExportGroup` haben kein Anhangsfeld, und
- * `ExportSourcePath` bleibt bei zwölf Werten (A-A-20). Eine Vorlage — auch
- * eine beliebige, nicht nur die Standardvorlage — kann einen Anhang deshalb
- * gar nicht auflösen.
- *
- * ---------------------------------------------------------------------------
- * `position` bestimmt der Adapter
- * ---------------------------------------------------------------------------
- *
- * Sie ist die nächste freie Stelle an diesem Todo, gelesen in derselben
- * Transaktion, in der eingefügt wird. Kein Aufrufer gibt sie an: Zwei Anhänge
- * auf derselben Stelle machten die Reihenfolge wieder zu der der Datenbank,
- * und A-19.8 verlangt eine stabile.
- *
- * Die Kennung steht als zweiter Sortierschlüssel daneben. Sie ist UUIDv7 und
- * damit nach Erzeugungszeit sortierbar — zwei Anhänge, die dieselbe Stelle
- * trügen, kämen so trotzdem in der Reihenfolge ihres Entstehens.
- */
+/** Anhänge gehören nicht in Exportabfragen. Ihre Position wird beim Einfügen innerhalb derselben Transaktion vergeben. */
 
 import type { AttachmentPort } from '../ports.ts';
 import type {

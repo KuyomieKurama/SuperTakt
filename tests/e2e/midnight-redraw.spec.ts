@@ -1,33 +1,7 @@
+import { localDayFromToday, todayAt } from './support/local-time';
 /**
- * TP-FRIST-11 bis TP-FRIST-13 (docs/testplan.md, Abschnitt 25.1) — T-187, O-ER.
- *
- * Übernimmt als feste Reihe, was T-172 (visual-qa) erstmals wirklich **gesehen**
- * hat statt nur am Code abgeleitet: Ein über `page.clock` gefälschter
- * Mitternachtswechsel löst den in `useToday()` gestellten Zeitgeber aus, und
- * drei client-seitig gerechnete Flächen zeichnen **ohne jedes Neuladen der
- * Seite** neu (Fälle M1/M2, M4/M5, M6/M7 aus `.claude/team/reports
- * /T-172-visual-qa.md`). Ohne diese Reihe wäre die Behebung aus O-CO/O-DG
- * (`TodoListScreen.tsx`, `TimeScreen.tsx`, `DashboardScreen.tsx` — vollständige
- * Abhängigkeitslisten statt eines eingefrorenen `useMemo`) am nächsten Umbau
- * still zurückgefallen, ohne dass etwas rot geworden wäre.
- *
- * **Dieselbe Bauart wie `deadline-computed-state.spec.ts` (TP-FRIST-09):**
- * `page.clock.install()` **vor** der Navigation, `page.clock.fastForward()`
- * danach — kein echtes Warten, keine Abhängigkeit von der Tageszeit, zu der
- * dieser Lauf tatsächlich startet.
- *
- * **Die Grenze, die keine Behebung ist (T-172, Fall M3):** Der Fristfilter
- * "Überfällig" der Todo-Liste geht als `dueStates` an den **Dienst**
- * (`TodoListScreen.tsx`, Kommentar bei `list = useAsync(...)`), und dort
- * rechnet `dueState` gegen die **echte** Systemuhr des `local-api`-Prozesses
- * (E-070 Punkt 3) — nicht gegen die gefälschte Browser-Uhr dieses Tests. Eine
- * gefälschte Browser-Uhr überquert diese Grenze nicht, und das ist Architektur,
- * kein Fehler: Die Zeilen-Marke (`DeadlineFlag`, client-seitig) und der
- * Fristfilter (serverseitig) beantworten dieselbe Frage aus zwei
- * verschiedenen Prozessen mit zwei verschiedenen Uhren. `TP-FRIST-11` misst
- * unten beide Seiten in einem Fall — die Marke wechselt, der Filter nicht —,
- * damit diese Grenze **eingecheckt** bleibt und nicht nur in einem Bericht
- * steht, der irgendwann verblasst.
+ * Die gefälschte Browser-Uhr beeinflusst den Dienst nicht: Zeilenmarken wechseln über
+ * Mitternacht, der serverseitige Filter folgt seiner echten Uhr.
  */
 import { test, expect } from '@playwright/test';
 
@@ -39,22 +13,6 @@ import {
   listTimeEntriesByTodo,
 } from './support/api';
 import { gotoDashboard, gotoTime, gotoTodos } from './support/nav';
-
-/** Ein Kalendertag `offsetDays` von heute, in Ortszeit (`YYYY-MM-DD`). */
-function isoDay(offsetDays: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${String(year)}-${month}-${day}`;
-}
-
-function todayAt(hour: number, minute: number): string {
-  const now = new Date();
-  now.setHours(hour, minute, 0, 0);
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
 
 /** 23:59 Ortszeit heute — derselbe Ausgangspunkt wie `deadline-computed-state.spec.ts`. */
 function nearMidnight(): Date {
@@ -70,7 +28,7 @@ test.describe('TP-FRIST-11 — Zeilen-Marke der Todo-Liste zeichnet über Mitter
     test.setTimeout(60_000);
 
     const title = `E2E-MIDNIGHT-ROW-${Date.now()}`;
-    const todo = await createTodo({ title, dueDate: isoDay(0) });
+    const todo = await createTodo({ title, dueDate: localDayFromToday(0) });
 
     await page.clock.install({ time: nearMidnight() });
     await gotoTodos(page, { q: title });
@@ -79,7 +37,8 @@ test.describe('TP-FRIST-11 — Zeilen-Marke der Todo-Liste zeichnet über Mitter
     await expect(row.locator('.deadline')).toContainText('Heute fällig');
 
     await page.clock.fastForward('00:10:00');
-    await expect(row.locator('.deadline')).toContainText('Überfällig');
+    await expect(row.locator('.deadline')).not.toContainText('Überfällig');
+    await expect(row.locator('.deadline')).toHaveClass(/deadline--overdue/);
 
     // Fall M3 (die Grenze): derselbe gefälschte Übergang ändert nichts an dem,
     // was der Dienst gegen seine eigene, echte Uhr als „überfällig" führt.

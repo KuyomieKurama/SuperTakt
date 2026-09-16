@@ -1,19 +1,4 @@
-/**
- * Takt — Routen für Todos, Vermerk und Erledigt-Kennzeichen
- * (A-2.*, A-5.*, A-7.1, A-7.2, architektur.md 5.1).
- *
- * `/todos/{id}/done` ist eine **eigene Ressource** und kein Feld: `PUT` setzt
- * erledigt, `DELETE` hebt es auf. Der Vorgang hat eine eigene Bedeutung (A-2.4,
- * I-03), und er hat einen eigenen Fehlerfall.
- *
- * `/todos/{id}/note` ist ebenfalls eine eigene Ressource — und das ist die
- * vierte Schicht der Notiz-Trennung (architektur.md 4). Der Vermerk hängt an
- * keiner Todo-Antwort. Wer ihn will, fragt ihn ausdrücklich, und dieser Aufruf
- * ist im Quelltext auffindbar.
- *
- * Diese Datei enthält keine Fachregel. Sie liest die Anfrage, prüft ihre
- * Gestalt, ruft einen Anwendungsfall und übersetzt dessen Ergebnis.
- */
+/** Vermerke werden ausschließlich über die eigene Ressource geladen, nie mit einer Todo-Antwort. */
 
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -67,6 +52,7 @@ import {
   readPagination,
   textSchema,
   titleSchema,
+  toFieldErrors,
 } from '../../http/input.ts';
 import type { TaktEnv } from '../../http/guards.ts';
 
@@ -98,6 +84,10 @@ const createSchema = z.object({
    * nichts zu entfernen. Beim Ändern sind die beiden verschieden, siehe
    * `updateSchema`.
    */
+  dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  noExport: z.boolean().optional(),
+  priorityId: idSchema.nullish(),
+  estimateMinutes: z.number().int().min(1).max(525600).nullable().optional(),
   dueDate: dueDateSchema.optional(),
 });
 
@@ -114,6 +104,10 @@ const updateSchema = z.object({
    * `exactOptionalPropertyTypes` in diesem Baum, und ohne die Unterscheidung
    * gäbe es keinen Weg, eine gesetzte Frist wieder loszuwerden.
    */
+  dueTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  noExport: z.boolean().optional(),
+  priorityId: idSchema.nullish(),
+  estimateMinutes: z.number().int().min(1).max(525600).nullable().optional(),
   dueDate: dueDateSchema.optional(),
 });
 
@@ -292,7 +286,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
       tagId: query['tagId'],
       poolId: query['poolId'],
     });
-    if (!filters.success) return failValidation(c, toIssues(filters.error));
+    if (!filters.success) return failValidation(c, toFieldErrors(filters.error));
 
     const { statusId: statusIds, tagId: tagIds, poolId: poolIds } = filters.data;
 
@@ -305,14 +299,14 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
     let dueStates: readonly DueState[] | undefined;
     if (query['dueState'] !== undefined) {
       const parsedStates = dueStateListSchema.safeParse(query['dueState']);
-      if (!parsedStates.success) return failValidation(c, toIssues(parsedStates.error));
+      if (!parsedStates.success) return failValidation(c, toFieldErrors(parsedStates.error));
       dueStates = parsedStates.data as DueState[];
     }
 
     let sortByDueDate: DueSortDirection | undefined;
     if (query['sortByDueDate'] !== undefined) {
       const parsedSort = dueSortSchema.safeParse(query['sortByDueDate']);
-      if (!parsedSort.success) return failValidation(c, toIssues(parsedSort.error));
+      if (!parsedSort.success) return failValidation(c, toFieldErrors(parsedSort.error));
       sortByDueDate = parsedSort.data;
     }
 
@@ -337,7 +331,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.post('/', async (c) => {
     const parsed = createSchema.safeParse(await readJson(c.req.raw));
-    if (!parsed.success) return failValidation(c, toIssues(parsed.error));
+    if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
     const result = await createTodo(context, {
       title: parsed.data.title,
@@ -346,6 +340,10 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
       tagIds: parsed.data.tagIds as TagId[],
       tagNames: parsed.data.tagNames,
       note: parsed.data.note,
+      dueTime: parsed.data.dueTime ?? null,
+      estimateMinutes: parsed.data.estimateMinutes ?? null,
+      noExport: parsed.data.noExport ?? false,
+      priorityId: parsed.data.priorityId ?? null,
       // `?? null` faßt „fehlt" und `null` zusammen: Beim **Anlegen** gibt es
       // keine Frist zu entfernen, beide heißen „ohne Frist" (A-19.1).
       dueDate: (parsed.data.dueDate ?? null) as CalendarDay | null,
@@ -363,7 +361,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.patch('/:todoId', async (c) => {
     const parsed = updateSchema.safeParse(await readJson(c.req.raw));
-    if (!parsed.success) return failValidation(c, toIssues(parsed.error));
+    if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
     const result = await updateTodo(context, c.req.param('todoId') as TodoId, {
       ...(parsed.data.title === undefined ? {} : { title: parsed.data.title }),
@@ -373,6 +371,10 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
       // **Nicht** `?? null`: Hier sind „fehlt" und `null` zwei verschiedene
       // Anweisungen (A-19.3), und die zweite ist die einzige, mit der sich
       // eine gesetzte Frist wieder entfernen läßt.
+      ...(parsed.data.dueTime === undefined ? {} : { dueTime: parsed.data.dueTime }),
+      ...(parsed.data.priorityId === undefined ? {} : { priorityId: parsed.data.priorityId }),
+      ...(parsed.data.noExport === undefined ? {} : { noExport: parsed.data.noExport }),
+      ...(parsed.data.estimateMinutes === undefined ? {} : { estimateMinutes: parsed.data.estimateMinutes }),
       ...(parsed.data.dueDate === undefined
         ? {}
         : { dueDate: parsed.data.dueDate as CalendarDay | null }),
@@ -385,9 +387,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
     return result.ok ? c.body(null, 204) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Der interne Vermerk (A-7.1, A-7.2). Eigene Ressource, eigener Aufruf.
-  // -------------------------------------------------------------------------
   routes.get('/:todoId/note', async (c) => {
     const result = await loadTodoNote(context, c.req.param('todoId') as TodoId);
     return result.ok ? data(c, result.value) : fail(c, result.error);
@@ -395,48 +395,16 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.put('/:todoId/note', async (c) => {
     const parsed = noteSchema.safeParse(await readJson(c.req.raw));
-    if (!parsed.success) return failValidation(c, toIssues(parsed.error));
+    if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
     const result = await writeTodoNote(context, c.req.param('todoId') as TodoId, parsed.data.text);
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Anhänge (A-19.8 bis A-19.15) — Unterressource des Todos
-  // -------------------------------------------------------------------------
   /*
-   * ===========================================================================
-   * Warum die Anhänge hier hängen und nicht unter `/attachments`
-   * ===========================================================================
-   *
-   * Weil ein Anhang ohne sein Todo nichts ist (spec.md, Kopf von Abschnitt 19:
-   * „hängt am bestehenden Todo und ist keine zweite Struktur daneben"). Die
-   * Kennung des Todos steht damit im Pfad und nicht im Rumpf, und es gibt keine
-   * Adresse, unter der ein Anhang ohne seinen Eigentümer erreichbar wäre.
-   *
-   * ===========================================================================
-   * Und warum das zugleich A-19.19 strukturell erfüllt
-   * ===========================================================================
-   *
-   * `/api/v1/todos/…` liegt **außerhalb** von `/api/v1/addin` und steht nicht
-   * in `SHARED_PATHS`. `requiredCredentialForPath` (`access/route-policy.ts`)
-   * schließt damit alles hier von selbst für ein Add-in-Token — ohne einen
-   * einzigen neuen Wächter, und `proof:route-policy` Abschnitt 4 fährt jede
-   * Route der zusammengebauten Anwendung mit dem Add-in-Token an und mißt es
-   * mit, ohne daß jemand daran denken muß (A-A-21).
-   *
-   * Das ist die stärkere und zugleich billigere Form von „über das Add-in
-   * entstehen keine Anhänge": nicht ein Feld, das dort fehlt, sondern **keine
-   * Leitung**, über die es entstehen könnte (E-072 Punkt 1, R-06).
-   *
-   * ===========================================================================
-   * Es öffnet sich hier nichts
-   * ===========================================================================
-   *
-   * Keine dieser Routen ruft `open`, keine startet etwas, keine holt etwas vor
-   * (A-19.18, A-A-24). `GET …/image` liefert **Bytes**; die Oberfläche baut
-   * daraus eine `data:`-Adresse (E-071 Punkt 3). Das Öffnen liegt in der Hülle,
-   * hinter einer Formprüfung, die bei jedem Aufruf neu läuft (E-072 Punkt 2).
+   * Anhänge gehören ihrem Todo. Die zentrale Routenrichtlinie sperrt diese Pfade
+   * für Add-in-Tokens. Bildabrufe liefern nur Bytes; geprüftes Öffnen bleibt in der Hülle.
    */
   routes.get('/:todoId/attachments', async (c) => {
     const result = await listAttachments(context, c.req.param('todoId') as TodoId);
@@ -445,7 +413,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
 
   routes.post('/:todoId/attachments', async (c) => {
     const parsed = addAttachmentSchema.safeParse(await readJson(c.req.raw));
-    if (!parsed.success) return failValidation(c, toIssues(parsed.error));
+    if (!parsed.success) return failValidation(c, toFieldErrors(parsed.error));
 
     const todoId = c.req.param('todoId') as TodoId;
     const title = parsed.data.title ?? null;
@@ -499,9 +467,7 @@ export function createTodoRoutes(context: AppContext): Hono<TaktEnv> {
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // -------------------------------------------------------------------------
   // Erledigt (A-2.4, A-2.5)
-  // -------------------------------------------------------------------------
   routes.put('/:todoId/done', async (c) => {
     const result = await markTodoDone(context, c.req.param('todoId') as TodoId);
     return result.ok ? data(c, doneBody(result.value)) : fail(c, result.error);
@@ -528,7 +494,7 @@ export function createSearchRoutes(context: AppContext): Hono<TaktEnv> {
   routes.get('/', async (c) => {
     const term = c.req.query('q') ?? '';
     const checked = nameSchema.safeParse(term);
-    if (!checked.success) return failValidation(c, toIssues(checked.error), 'Ein Suchbegriff fehlt.');
+    if (!checked.success) return failValidation(c, toFieldErrors(checked.error), 'Ein Suchbegriff fehlt.');
 
     return data(c, await searchEverything(context, checked.data, readPagination(c.req.query())));
   });
@@ -536,34 +502,7 @@ export function createSearchRoutes(context: AppContext): Hono<TaktEnv> {
   return routes;
 }
 
-/**
- * Der Antwortrumpf von `PUT` und `DELETE /todos/{todoId}/done` (E-060).
- *
- * ---------------------------------------------------------------------------
- * Warum das Todo **flach** dasteht und nicht unter `todo`
- * ---------------------------------------------------------------------------
- *
- * Weil beide Routen seit jeher das Todo selbst zurückgeben und jeder Aufrufer
- * es so liest. `poolMovement` kommt hinzu, es nimmt nichts weg: Wer die Antwort
- * heute als `Todo` liest, liest sie morgen unverändert weiter, und wer den
- * Bewegungssatz will, liest ein Feld mehr. Ein Umbau nach `{ todo, poolMovement }`
- * hätte dieselbe Auskunft gegeben und jede vorhandene Aufrufstelle gebrochen —
- * für nichts.
- *
- * Die Gestalt ist damit dieselbe wie an `POST /timer/start`: das Ergebnis der
- * Handlung und die Bewegung nebeneinander, nicht ineinander.
- *
- * Diese Datei entscheidet nichts Fachliches. Sie setzt zusammen, was der
- * Anwendungsfall geliefert hat.
- */
+/** Die flache Todo-Antwort bleibt für vorhandene Aufrufer erhalten; `poolMovement` ergänzt sie. */
 function doneBody(result: TodoDoneResult): Todo & { poolMovement: PoolMovement | null } {
   return { ...result.todo, poolMovement: result.poolMovement };
-}
-
-function toIssues(error: z.ZodError): { field: string; message: string; code: string }[] {
-  return error.issues.map((issue) => ({
-    field: issue.path.length === 0 ? '(rumpf)' : issue.path.join('.'),
-    message: issue.message,
-    code: issue.code,
-  }));
 }

@@ -186,6 +186,7 @@ import { buildTypeIndex, normalizePath, scanCallers, CALL_SHAPES } from './calle
  */
 import { BLIND_FETCH_CALL, describeStray, strayGlobalFetch } from './fetch-scan.mjs';
 import { BLIND_REQUEST_CALL, strayRequestAccess } from './request-scan.mjs';
+import { REQUEST_SCHEMAS as PRIORITY_SCHEMAS } from '../src/features/priorities/routes.ts';
 import { REQUEST_SCHEMAS as TODO_SCHEMAS } from '../src/features/todos/routes.ts';
 import { REQUEST_SCHEMAS as STRUCTURE_SCHEMAS } from '../src/features/structure/routes.ts';
 import { REQUEST_SCHEMAS as TIME_SCHEMAS } from '../src/features/timer/routes.ts';
@@ -272,9 +273,7 @@ const ADDIN_SOURCE_DIR = join(paketVerzeichnis('@takt/outlook-addin'), 'src');
 /** Ein Ort unterhalb eines Quellordners, so wie dieser Lauf ihn benennt. */
 const alsName = (wurzel, datei) => relative(wurzel, datei).split(sep).join('/');
 
-// ---------------------------------------------------------------------------
 // Die Ernte — hochgezogen, weil Abschnitt 0 schon über sie urteilt
-// ---------------------------------------------------------------------------
 
 /*
  * Bis T-250-2 entstand die Ernte erst in Abschnitt 1. Sie steht jetzt hier,
@@ -315,9 +314,7 @@ const webFiles = quellbaum('@takt/web', 'src', {
   .filter((file) => isBundledSource(file))
   .map((file) => ({ name: alsName(WEB_SOURCE_DIR, file), source: readFileSync(file, 'utf8') }));
 
-// ---------------------------------------------------------------------------
 // Die Aufrufdateien der Oberfläche — an der Anforderung aufgespannt (F-22)
-// ---------------------------------------------------------------------------
 
 /**
  * Wo ein Aufruf an den Dienst stehen darf, seit F-22.
@@ -428,6 +425,7 @@ const WEB_CALLER_NAMES = WEB_CALLER_FILES.map((datei) => datei.name);
 const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
 
 const REQUEST_SCHEMAS = {
+  ...PRIORITY_SCHEMAS,
   ...TODO_SCHEMAS,
   ...STRUCTURE_SCHEMAS,
   ...TIME_SCHEMAS,
@@ -455,9 +453,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Die Operationen des Dienstes, nach „METHODE /pfad/{}"
-// ---------------------------------------------------------------------------
 
 const doc = parseYaml(readFileSync(SPEC_PATH, 'utf8'));
 const matcher = createMatcher(doc);
@@ -709,9 +705,7 @@ const ADDIN_CALLER = {
 const addin = inspect(addinText, ADDIN_CALLER);
 const addinOf = (kind) => addin.findings.filter((finding) => finding.kind === kind);
 
-// ---------------------------------------------------------------------------
 section('0  Der Leser liest die Dateien — sonst wäre alles Folgende wertlos');
-// ---------------------------------------------------------------------------
 
 /*
  * Zuerst: **welche** Dateien (F-22 Punkt 3 und 4). Die Herleitung steht oben
@@ -905,9 +899,7 @@ check(
   result.unreadable.join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('1  Es gibt keinen Weg zum Dienst außer den gemessenen Dateien');
-// ---------------------------------------------------------------------------
 
 /*
  * Dieser Lauf liest die Aufrufdateien der Oberfläche. Diese Beschränkung ist
@@ -1061,9 +1053,7 @@ check(
   strayRequest.map(describeStray).join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('2  Jeder Aufruf trifft eine Operation, die es gibt');
-// ---------------------------------------------------------------------------
 
 check('kein Aufruf zeigt auf einen Weg, den der Dienst nicht führt', of('route').length === 0, [
   ...new Set(of('route').map((finding) => finding.message)),
@@ -1088,6 +1078,7 @@ const NOT_CALLED_BY_UI = new Set([
   'findAddinDuplicates',
   'createAddinTodo',
   'createAddinTimeEntry',
+  'appendAddinMail',
   /*
    * Hier standen bis T-253-2 `getBoard` (T-066) und `getVersionCheck` (T-138).
    * Beide waren **Übergaben** an frontend-dev — „die Oberfläche ruft diese
@@ -1186,9 +1177,7 @@ check(
   'die Regel sagt zu jeder Kennung dasselbe',
 );
 
-// ---------------------------------------------------------------------------
 section('3  Die Rümpfe: jeder gesendete Schlüssel wird auch gelesen');
-// ---------------------------------------------------------------------------
 
 check(
   'kein Rumpfschlüssel, den die getroffene Route nicht kennt',
@@ -1318,9 +1307,7 @@ check(
   'die Regel sagt zu jedem Namen dasselbe',
 );
 
-// ---------------------------------------------------------------------------
 section('4  Die Fragezeichenparameter: jeder gesendete Name ist beschrieben');
-// ---------------------------------------------------------------------------
 
 check(
   'kein Abfrageschlüssel, den die getroffene Operation nicht führt',
@@ -1330,9 +1317,7 @@ check(
     .join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('5  Die blinden Flecken sind gezählt, nicht übergangen');
-// ---------------------------------------------------------------------------
 
 check(
   'kein Rumpf und keine Abfrage, deren Schlüssel dieser Leser nicht kennt',
@@ -1349,9 +1334,7 @@ check(
   withBody >= 25 && withQuery >= 5,
 );
 
-// ---------------------------------------------------------------------------
 section('6  Der Prüfer prüft sich selbst — mit den drei Namen aus T-050');
-// ---------------------------------------------------------------------------
 
 /*
  * Ein Prüfer, der nichts findet, sieht genauso aus wie eine Datei, die stimmt.
@@ -1760,9 +1743,7 @@ check(
   blindRequestForms.map((form) => form.name).join(', '),
 );
 
-// ---------------------------------------------------------------------------
 section('7  Der zweite Aufrufer: der Aufgabenbereich des Add-ins (T-132, O-M)');
-// ---------------------------------------------------------------------------
 
 /*
  * Dieselben vier Fragen wie oben, an derselben Stelle beantwortet: Liest der
@@ -1892,9 +1873,7 @@ check(
     .join(' | '),
 );
 
-// ---------------------------------------------------------------------------
 section('8  Und der Add-in-Leser prüft sich ebenfalls selbst');
-// ---------------------------------------------------------------------------
 
 /*
  * Dieselbe Probe wie in Abschnitt 6, mit den Namen dieser Tür. Ohne sie wäre
@@ -1965,7 +1944,6 @@ check(
  */
 proveFetchGuard('der Aufgabenbereich', addinFiles, ADDIN_FETCH_HOME);
 
-// ---------------------------------------------------------------------------
 console.log(`\n${passed} bestanden, ${failed} fehlgeschlagen`);
 if (failed > 0) {
   console.log('\nFehlgeschlagen:');

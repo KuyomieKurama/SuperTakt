@@ -1,47 +1,5 @@
-//! Takt — Lebenszyklus des lokalen Dienstes (E-004, B-1.6, R-04).
-//!
-//! Die Hülle startet den Sidecar und beendet ihn wieder. Beides ist
-//! Sicherheitsfunktion und nicht Bequemlichkeit:
-//!
-//! - **Start.** Der Sidecar bekommt sein Startgeheimnis über `stdin`, nicht
-//!   über die Befehlszeile. Befehlszeilen sind für jeden Prozess im System
-//!   sichtbar — `ps`, Task-Manager, WMI —, und ein Geheimnis dort ist keines
-//!   (B-1.6 Punkt 2). Ohne dieses Geheimnis beendet sich der Dienst mit Code 78;
-//!   damit kann ihn niemand sonst starten und auf die echte Datenbank zeigen.
-//!
-//! - **Zweite Zeile: der Windows-Benutzername (E-042).** Über denselben Kanal
-//!   geht der Name, den `identity.rs` vom Betriebssystem gelesen hat. Nicht
-//!   über `USERNAME` — `set USERNAME=fremder && Takt.exe` würde sonst genügen,
-//!   um fremde Arbeitszeit unter eigenem Namen abzurechnen (B-8.1). Nicht über
-//!   die Befehlszeile, aus demselben Grund wie das Geheimnis. Ohne diese Zeile
-//!   startet der Dienst ebenfalls nicht: Ein Export ohne Urheber wäre nicht
-//!   nachvollziehbar.
-//!
-//!   **Beide Zeilen gehen in einem einzigen Schreibvorgang heraus.** Der Leser
-//!   auf der Gegenseite nimmt sie in einem Zug auf; würde die Hülle sie
-//!   getrennt schicken, wäre das zwar auch lesbar, aber der umgekehrte Fehler
-//!   ist der teure: Zwei nacheinander geschaltete Leser verschlucken die
-//!   zweite Zeile, wenn sie im selben Datenblock liegt. Ein Schreibvorgang
-//!   hält beide Seiten auf dem Fall, der geprüft ist.
-//!
-//! - **Ende.** Ein verwaister Sidecar lauscht weiter auf `127.0.0.1:17843`,
-//!   hält Kundendaten und hat kein Fenster mehr, in dem man ihn bemerkt. Das
-//!   ist ein Sicherheitsproblem und kein Schönheitsfehler (B-1.6 Punkte 3
-//!   und 4).
-//!
-//! ## Zwei Wege ins Ende, und warum es zwei braucht
-//!
-//! 1. **Die Hülle beendet ihn ausdrücklich** — beim Schließen des Fensters und
-//!    beim Verlassen der Ereignisschleife. Das deckt den geordneten Weg.
-//!
-//! 2. **Die Röhre reißt.** Stirbt die Hülle hart — `kill -9`, Absturz,
-//!    Abmeldung, Stromausfall —, kommt sie zu keinem Aufräumen mehr. Dann
-//!    schließt das Betriebssystem ihr Ende der `stdin`-Röhre, der Dienst
-//!    bemerkt das Ende und beendet sich selbst (`watchParentLink` in
-//!    `apps/local-api/src/access/session-secret.ts`).
-//!
-//! Der zweite Weg ist der wichtigere: Er wirkt genau in den Fällen, in denen
-//! der erste nicht mehr laufen kann. Er ist mit `sidecar:verify` nachgewiesen.
+//! Geheimnis und Betriebssystem-Benutzername gemeinsam als zwei Zeilen über stdin übertragen, niemals als Argumente.
+//! Die Hülle beendet den Dienst ausdrücklich; bei einem Absturz muss zusätzlich das Ende der stdin-Verbindung den Dienst stoppen.
 
 use std::sync::Mutex;
 
@@ -230,7 +188,7 @@ pub fn start(app: &AppHandle, os_user: &str) -> Result<(), String> {
     // Erst prüfen, dann starten. Umgekehrt hinge ein Kindprozess fünf Sekunden
     // an einer Röhre, aus der nie etwas Gültiges kommt.
     let line = handshake_line(&service.secret, os_user)?;
-    // Serialize process creation with shutdown, including a close during preparation.
+    // Prozessstart und Beenden serialisieren, auch beim Schließen während der Vorbereitung.
     let mut child_slot = service.child.lock().map_err(|_| "Der Dienstzustand ist nicht verfügbar.")?;
     if service.stopping.load(std::sync::atomic::Ordering::SeqCst) {
         return Ok(());

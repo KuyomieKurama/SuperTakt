@@ -1,7 +1,7 @@
 import { MAX_NAME_LENGTH } from "@takt/domain";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../../api/client";
-import { updatePool } from "../../api/endpoints";
+import { updatePool } from "./api";
 import type { DraftText, Pool } from "../../api/types";
 import { FormDialog, TextField } from "../../shared/ui/FormDialog";
 import { InlineMessage } from "../../shared/ui/Primitives";

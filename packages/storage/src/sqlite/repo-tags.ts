@@ -1,31 +1,6 @@
 /**
- * Takt — Tags, Tag-Ordner und Pools (A-3.*, A-4.*, A-9.*, E-022).
- *
- * ---------------------------------------------------------------------------
- * Beliebig tief, ohne die Tabelle in den Speicher zu laden
- * ---------------------------------------------------------------------------
- *
- * Der Baum ist eine Adjazenzliste (E-022). Drei Zugriffsarten kommen vor, und
- * jede hat ihre eigene Abfrage:
- *
- *  - `ancestors(id)` — die Kette nach oben. Rekursive Abfrage über den
- *    Primärschlüssel: je Ebene ein Indexzugriff. Bei zehn Ebenen zehn Zugriffe.
- *    Grundlage der Zyklusprüfung aus A-4.6.
- *  - `subtree(id)` — alles darunter. Rekursive Abfrage über
- *    `ix_tag_folder_parent`: je Ebene ein Indexzugriff, nie ein
- *    Volltabellenscan. Grundlage für „Tags dieses Ordners und aller
- *    Unterordner" (A-3.3).
- *  - `loadTree()` — der ganze Baum in **einem** Aufruf (A-10.4). Zwei
- *    Abfragen: alle Ordner, alle Tags. Zusammengesetzt wird im Speicher. Das
- *    ist hier ausdrücklich richtig — der Aufrufer will ohnehin alles, und ein
- *    Aufruf je Ebene wäre genau das N+1, das A-10.4 ausschließt.
- *
- * Die Zyklusprüfung selbst steht **nicht** hier, sondern als `checkFolderMove`
- * in `packages/domain/src/tag.ts`. Dieser Adapter lädt die Kette und schreibt;
- * er urteilt nicht. Beides — Prüfung und Schreiben — geschieht innerhalb
- * derselben Transaktion, sonst könnten zwei gleichzeitige Verschiebungen
- * aneinander vorbei laufen und einen Kreis erzeugen, den beide für ausgeschlossen
- * hielten.
+ * Vorfahren und Teilbäume rekursiv laden; nur `loadTree` benötigt den ganzen Bestand.
+ * Zyklusprüfung und Verschiebung müssen in derselben Transaktion liegen.
  */
 
 import type { PoolPort, TagFolderPort, TagPort, Page, Pagination } from '../ports.ts';
@@ -576,7 +551,6 @@ export function createTagFolderPort(conn: SqlConnection, ids: IdSource): TagFold
     },
   };
 }
-
 
 /**
  * Pools (A-3.1 bis A-3.4).

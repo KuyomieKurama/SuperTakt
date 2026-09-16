@@ -13,6 +13,25 @@
       Browserbetrieb — in der Reiterleiste und im Verlauf.
     -->
     <title>SuperTakt</title>
+    <!--
+      Das Anwendungssymbol im Browserbetrieb (T-377). Bis dahin stand hier
+      nichts: Der Browser fragte `/favicon.ico`, bekam 404 und zeigte im
+      Reiter das leere Standardblatt — sichtbar nur im Browser, denn die
+      Hülle zieht ihr Fenster- und Taskleistensymbol aus
+      `apps/desktop/src-tauri/icons/` und nicht von hier.
+
+      Beide Dateien liegen **lokal** in `public/` und stammen aus derselben
+      Quelle wie die Symbole der Hülle (`apps/desktop/icons/quelle.png`);
+      `favicon-32.png` ist mit `src-tauri/icons/32x32.png` byteweise
+      identisch. Zur Laufzeit wird nichts nachgeladen (E-001), und die CSP
+      bleibt, wie sie ist — `img-src 'self' data:` deckt beide ab.
+
+      Zwei Größen, weil zwei Dinge sie lesen: 32 der Reiter (16 CSS-Pixel,
+      auf hochauflösenden Schirmen 32 Gerätepixel), 192 das Lesezeichen und
+      die Verknüpfung auf dem Schreibtisch.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
     <script src="/startup-appearance.js"></script>
     <link rel="stylesheet" href="/src/styles/startup.css" />
   </head>

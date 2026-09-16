@@ -1,77 +1,7 @@
-/**
- * Takt — Nachweis, dass die gebündelte Sidecar-Binärdatei wirklich läuft (R-04).
- *
- * Ein Bündelvorgang, der ohne Fehler durchläuft, beweist nichts. Er beweist,
- * dass der Bündler zufrieden war. Ob die entstandene Datei startet, ob sie die
- * Laufzeitbausteine findet, ob der Übergabeweg für das Startgeheimnis
- * funktioniert und ob sie wieder stirbt, wenn die Hülle geht — das entscheidet
- * sich beim Ausführen und nirgends sonst.
- *
- * ===========================================================================
- * Was T-053 an diesem Lauf geändert hat
- * ===========================================================================
- *
- * T-053 war der vierte Fall, in dem ein grüner Nachweis eine Anwendung deckte,
- * die nicht startet. Der Dienst brach beim Öffnen der Datenbank mit
- * `Invalid URL` ab, weil er die Migrationsdateien über `import.meta.url` suchte
- * — eine Frage, die im CommonJS-Bündel keine Antwort hat. Elf Nachweispfade,
- * 556 Vitest-Fälle und 28 End-to-End-Fälle liefen daran vorbei, weil sie alle
- * aus dem **Quelltext** laufen, wo dieselbe Frage eine Antwort hat.
- *
- * Drei Lücken hatte dieser Lauf selbst:
- *
- *   1. Er lief nicht in `pnpm check` und nicht in `pnpm desktop`, sondern nur
- *      in `app:build`. Ein Nachweis, den niemand ausführt, ist eine Behauptung.
- *   2. Er startete die Binärdatei **dort, wo sie gebaut wird** — nicht in dem
- *      Verzeichnisbild, in dem sie ausgeliefert wird. Der Aufgabenbereich sucht
- *      sein Bündel neben `process.execPath`; im Bauordner liegt dort nichts,
- *      also fiel nie auf, ob er es überhaupt finden kann.
- *   3. Er sah den zweiten Port gar nicht an. Der Dienst lauscht auf 17843, der
- *      Aufgabenbereich auf 17844. Geprüft wurde einer von beiden.
- *
- * Deshalb baut dieser Lauf jetzt ein **Installationsbild** in einem
- * Wegwerfordner — Binärdatei, daneben ein `taskpane`-Bündel — und startet den
- * Dienst von dort, mit einem Arbeitsverzeichnis, in dem nichts liegt. Wer sich
- * zur Laufzeit auf den Ort des Quelltextes oder auf `process.cwd()` verlässt,
- * fällt hier auf und nicht beim Auftraggeber.
- *
- * ---------------------------------------------------------------------------
- * Zwanzig Prüfungen, alle gegen die **gebündelte** Datei
- * ---------------------------------------------------------------------------
- *
- *   1  Ohne Startzeilen endet der Dienst mit 78                      B-1.6.2
- *   2  Die Abbruchmeldung nennt kein Geheimnis                       B-2.4
- *   3  Mit Geheimnis, aber ohne Benutzernamen: ebenfalls 78          E-042
- *   4  Die Meldung nennt den fehlenden Benutzernamen als Grund       E-042
- *   5  Auch diese Meldung nennt kein Geheimnis                       B-2.4
- *   6  Mit beiden Zeilen über `stdin` kommt er hoch                  T-011
- *   7  Die Ausgabe meldet keinen Startfehler                         T-053
- *   8  `GET /health` mit dem Sitzungsgeheimnis ergibt 200            B-1.1
- *   9  Die Antwort ist `{"data":{"status":"ok"}}`                    B-1.1
- *  10  Dieselbe Anfrage ohne Nachweis ergibt 401                     B-1.1
- *  11  Der Bestand ist migriert: die Fachroute antwortet             T-053
- *  12  Die vorbelegten Spalten aus Migration 0002 sind da            T-053
- *  13  Die Datenbankdatei liegt im Anwendungsdatenverzeichnis        E-018
- *  14  Der Aufgabenbereich meldet sich auf 17844                     E-046
- *  15  Er liefert die `index.html` **aus dem Bündel neben der Datei** E-046
- *  16  Eine Endung außerhalb der Positivliste ergibt 403             E-046
- *  17  Kodierte Aufwärtsschritte liefern keine fremde Datei          R-11
- *  18  Das von der Hülle angelegte Verzeichnis bleibt bei 0700       B-7.2
- *  19  Endet `stdin`, endet der Prozess — kein verwaister Dienst     B-1.6.3
- *  20  In der ganzen Ausgabe steht kein Geheimnis                    B-2.4
- *
- * Prüfung 3 ist die, die es ohne E-042 nicht gäbe: Sie belegt, dass der Dienst
- * ohne Urheber gar nicht erst hochkommt, statt später eine Abrechnung ohne
- * Namen zu schreiben. Prüfung 11 und 12 sind die, die es ohne T-053 nicht gäbe:
- * Ein Dienst, der lauscht, aber keinen Bestand hat, ist eine Anwendung ohne
- * Inhalt — und genau das hätte man ihm von außen nicht angesehen.
- *
- * Der Lauf lenkt das Anwendungsdatenverzeichnis in einen Wegwerfordner und
- * fasst die echten Daten des Benutzers nicht an — unter Windows über
- * `%LOCALAPPDATA%`, sonst über `XDG_DATA_HOME`. Warum das zwei Variablen sind
- * und nicht eine, steht bei `APP_DATA` weiter unten.
- */
+/** Startet das gebaute Installationsbild in einem temporären Verzeichnis mit leerem Arbeitsverzeichnis.
+ * API, Aufgabenbereich, Geheimnisübergabe und Prozessende werden an der ausgelieferten Binärdatei geprüft; Benutzerdaten bleiben außerhalb. */
 
+import { stageTaskpane } from './build-taskpane.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
@@ -207,14 +137,10 @@ function buildInstallation(root, binary) {
   chmodSync(installed, 0o755);
 
   const taskpaneDir = join(installDir, 'taskpane');
-  mkdirSync(join(taskpaneDir, 'assets'), { recursive: true });
-  writeFileSync(
-    join(taskpaneDir, 'index.html'),
-    `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Takt</title></head>` +
-      `<body><p id="mark">${TASKPANE_MARK}</p><script src="./assets/taskpane.js"></script></body></html>\n`,
-    'utf8',
-  );
-  writeFileSync(join(taskpaneDir, 'assets', 'taskpane.js'), `export const mark = '${TASKPANE_MARK}';\n`, 'utf8');
+  // Exercise the production build/staging path, including both command entries.
+  stageTaskpane({ target: taskpaneDir });
+  const indexPath = join(taskpaneDir, 'index.html');
+  writeFileSync(indexPath, readFileSync(indexPath, 'utf8') + `\n<!-- ${TASKPANE_MARK} -->\n`, 'utf8');
   // Eine Datei mit einer Endung, die nicht auf der Positivliste steht. Sie
   // liegt bewusst *im* Bündel: Der Nachweis ist nicht „gibt es nicht", sondern
   // „gibt es, wird aber nicht ausgeliefert".
@@ -353,9 +279,7 @@ async function taskpaneRequestOrNull(path, ca) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Vorbedingungen
-// ---------------------------------------------------------------------------
 
 const binary = binaryPath();
 if (!existsSync(binary)) {
@@ -402,9 +326,7 @@ process.stdout.write(
 const secret = randomBytes(32).toString('hex');
 
 try {
-  // -------------------------------------------------------------------------
   // 1 und 2 — Ohne jede Startzeile endet der Dienst (B-1.6 Punkt 2)
-  // -------------------------------------------------------------------------
   const lonely = startSidecar(installed, emptyCwd, join(root, 'lonely'), null);
   lonely.child.stdin.end();
   const lonelyCode = await lonely.waitForExit(15_000);
@@ -415,9 +337,7 @@ try {
     lonely.read().slice(0, 120),
   );
 
-  // -------------------------------------------------------------------------
   // 3 bis 5 — Geheimnis ja, Benutzername nein (E-042)
-  // -------------------------------------------------------------------------
   const nameless = startSidecar(installed, emptyCwd, join(root, 'nameless'), secret, null);
   const namelessCode = await nameless.waitForExit(15_000);
   check(
@@ -438,9 +358,7 @@ try {
     await nameless.waitForExit(5_000);
   }
 
-  // -------------------------------------------------------------------------
   // 6 und 7 — Mit beiden Startzeilen kommt er hoch, und zwar ohne Fehler
-  // -------------------------------------------------------------------------
   const service = startSidecar(installed, emptyCwd, dataDir, secret, 'pruefer');
   const up = await service.waitForOutput(`lauscht auf 127.0.0.1:${PORT}`, 30_000);
   check('Mit beiden Startzeilen über stdin kommt der Dienst hoch', up, service.read().slice(0, 600));
@@ -461,9 +379,7 @@ try {
   );
 
   if (up) {
-    // -----------------------------------------------------------------------
     // 8 bis 10 — Der Nachweispfad steht auch in der gebündelten Fassung
-    // -----------------------------------------------------------------------
     const good = await fetch(`${BASE}/health`, { headers: { 'X-Takt-Token': secret } });
     const body = await good.json();
     check('GET /health mit Sitzungsgeheimnis ergibt 200', good.status === 200, `war ${good.status}`);
@@ -472,7 +388,6 @@ try {
     const bad = await fetch(`${BASE}/health`);
     check('Dieselbe Anfrage ohne Nachweis ergibt 401', bad.status === 401, `war ${bad.status}`);
 
-    // -----------------------------------------------------------------------
     // 11 bis 13 — Der Bestand ist da (T-053)
     //
     // `/health` beweist, dass der Dienst antwortet. Es beweist nicht, dass er
@@ -483,7 +398,6 @@ try {
     // `todo-statuses` ist die richtige Wahl, weil Migration 0002 die Spalten
     // vorbelegt: Eine leere Liste wäre hier kein „noch nichts angelegt",
     // sondern eine Datenmigration, die nicht gelaufen ist.
-    // -----------------------------------------------------------------------
     const statuses = await fetch(`${BASE}/todo-statuses`, { headers: { 'X-Takt-Token': secret } });
     const statusBody = statuses.status === 200 ? await statuses.json() : null;
     check(
@@ -502,13 +416,11 @@ try {
       preparedDir,
     );
 
-    // -----------------------------------------------------------------------
     // 14 bis 17 — Der zweite Port: der Aufgabenbereich (E-046)
     //
     // Er findet sein Bündel über `process.execPath`. Deshalb läuft dieser
     // Nachweis aus dem Installationsbild und nicht aus dem Bauordner: Nur dort
     // liegt neben der Binärdatei überhaupt ein `taskpane`.
-    // -----------------------------------------------------------------------
     const taskpaneUp = await service.waitForOutput(`https://localhost:${TASKPANE_PORT}`, 20_000);
     check('Der Aufgabenbereich meldet sich auf Port 17844', taskpaneUp, service.read().slice(-600));
 
@@ -526,6 +438,14 @@ try {
         index.status === 200 && index.body.includes(TASKPANE_MARK),
         `Status ${String(index.status)}${index.error ? `, ${index.error}` : ''}`,
       );
+
+      const commands = await taskpaneRequestOrNull('/commands.html', ca);
+      check('Der echte Schnellbefehl wird aus dem gebauten Paket ausgeliefert', commands.status === 200 && /<script[^>]*src="[^"]*commands[^"]*\.js"/.test(commands.body), `Status ${commands.status}`);
+      const scriptPaths = [...commands.body.matchAll(/<script[^>]*src="([^"]+)"/g)].map(match => match[1]).filter(path => !path.startsWith('https:'));
+      for (const script of scriptPaths) {
+        const resource = await taskpaneRequestOrNull(new URL(script, 'https://localhost/commands.html').pathname, ca);
+        check(`Funktionsskript im Paket erreichbar: ${script}`, resource.status === 200 && resource.body.length > 0, `Status ${resource.status}`);
+      }
 
       const pem = await taskpaneRequestOrNull('/nicht-ausliefern.pem', ca);
       check(
@@ -545,9 +465,7 @@ try {
       process.stdout.write('  ----  Die drei Prüfungen am Aufgabenbereich entfallen: Der Port kam nicht hoch.\n');
     }
 
-    // -----------------------------------------------------------------------
     // 18 — Rechte des Anwendungsdatenverzeichnisses (B-7.2)
-    // -----------------------------------------------------------------------
     // Das Verzeichnis legt die **Hülle** an, nicht der Dienst (E-018, T-011
     // Risiko 2). Geprüft wird deshalb, dass der Dienst ein vorbereitetes
     // Verzeichnis mit 0700 annimmt und die Rechte nicht aufweitet — nicht,
@@ -559,9 +477,7 @@ try {
       check('Das von der Hülle angelegte Verzeichnis bleibt bei 0700', mode === 0o700, `war ${mode.toString(8)}`);
     }
 
-    // -----------------------------------------------------------------------
     // 19 — Endet stdin, endet der Prozess (B-1.6 Punkt 3)
-    // -----------------------------------------------------------------------
     service.child.stdin.end();
     const code = await service.waitForExit(10_000);
     check('Nach dem Schließen von stdin endet der Dienst', code !== null, 'lief weiter');

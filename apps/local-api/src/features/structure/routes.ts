@@ -49,6 +49,7 @@ import {
   idSchema,
   nameSchema,
   patchOf,
+  commaSeparatedIds,
   readFlag,
   readJson,
   readPagination,
@@ -223,11 +224,9 @@ export function createStructureRoutes(context: AppContext): {
   readonly pools: Hono<TaktEnv>;
   readonly statuses: Hono<TaktEnv>;
 } {
-  // ---------------------------------------------------------------------------
   const tagTree = new Hono<TaktEnv>();
   tagTree.get('/', async (c) => data(c, await loadTagTree(context)));
 
-  // ---------------------------------------------------------------------------
   const tags = new Hono<TaktEnv>();
 
   tags.get('/', async (c) => {
@@ -270,7 +269,6 @@ export function createStructureRoutes(context: AppContext): {
     return result.ok ? c.body(null, 204) : fail(c, result.error);
   });
 
-  // ---------------------------------------------------------------------------
   const folders = new Hono<TaktEnv>();
 
   folders.post('/', async (c) => {
@@ -313,7 +311,6 @@ export function createStructureRoutes(context: AppContext): {
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // ---------------------------------------------------------------------------
   const pools = new Hono<TaktEnv>();
 
   /**
@@ -420,16 +417,18 @@ export function createStructureRoutes(context: AppContext): {
    * dessen „Erledigt" ein Timerstart aufgehoben hat, ohne Zutun wieder hier.
    */
   pools.get('/:poolId/todos', async (c) => {
+    const priorityIds = commaSeparatedIds.optional().safeParse(c.req.query("priorityId"));
+    if (!priorityIds.success) return failValidation(c, toFieldErrors(priorityIds.error));
     const result = await listPoolMembers(
       context,
       c.req.param('poolId') as PoolId,
       readFlag(c.req.query('includeCompleted')),
       readPagination(c.req.query()),
+      { ...(priorityIds.data ? { priorityIds: priorityIds.data } : {}), withoutPriority: readFlag(c.req.query("withoutPriority")), sortByPriority: readFlag(c.req.query("sortByPriority")) },
     );
     return result.ok ? data(c, result.value) : fail(c, result.error);
   });
 
-  // ---------------------------------------------------------------------------
   const statuses = new Hono<TaktEnv>();
 
   statuses.get('/', async (c) => data(c, await listStatuses(context)));

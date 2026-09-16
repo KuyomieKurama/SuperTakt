@@ -1,48 +1,6 @@
-//! Takt — die installierte Fassung und der Weg zur Release-Seite (A-18.1,
-//! A-18.6, A-18.8, E-067, Auflagen A-V-15 und A-V-16).
-//!
-//! ## Warum dieses Modul die Vertrauensgrenze ist und nicht ihre Absicherung
-//!
-//! T-136 hat `tauri-plugin-shell 2.3.6` gemessen, nicht vermutet:
-//! `Shell::open` (`src/lib.rs:76-78`) reicht an `open::open(None, …)` durch,
-//! und `open::open` (`src/open.rs:122-136`) sagt im eigenen Quelltext
-//! *„when running directly from Rust code we don't need to validate the
-//! path"*. Der `OpenScope` mit dem Prüfausdruck wird ausschließlich betreten,
-//! wenn der Aufruf **aus JavaScript** kommt.
-//!
-//! Zwischen der Antwort von GitHub und `xdg-open` beziehungsweise
-//! `ShellExecuteW` steht damit genau **eine** Kontrolle: [`is_release_version`]
-//! in dieser Datei. Kein zweites Netz, keine Vorgabeprüfung, die im Zweifel
-//! greift (Befund T-136-1).
-//!
-//! Der zweite Teil derselben Auflage steht nicht hier, sondern in
-//! `capabilities/default.json`: Dort darf **keine** `shell:`-Zeile stehen. Der
-//! Vorgabesatz `shell:default` enthält `allow-open`, und dessen Prüfausdruck
-//! `^((mailto:\w+)|(tel:\w+)|(https?://\w+)).+` lässt jede `https:`-Adresse
-//! durch — eine offene Weiterleitung in den Browser des Benutzers, ausgelöst
-//! von einem eingeschleusten Skript im Webview. Beide Hälften misst
-//! `scripts/proof-shell-surface.mjs`, damit sie nicht bloß zugesagt sind
-//! (E-067 Punkt 3).
-//!
-//! ## Was der Befehl **nicht** entgegennimmt
-//!
-//! Keine Adresse. Kein Schema, keinen Wirt, keinen Pfad, keine Abfrage. Nur
-//! die Fassungsbezeichnung, und die wird geprüft, bevor sie in eine hier fest
-//! stehende Adresse eingesetzt wird (E-064 Punkt 4). Die naheliegende Form —
-//! `html_url` aus der Antwort an einen Öffnen-Befehl reichen — wäre wörtlich
-//! eine offene Weiterleitung, deren Ziel nicht ein Reiter ist, sondern der
-//! Browser des Benutzers (B-18.2).
-//!
-//! ## Und die Fassung kommt aus der Binärdatei
-//!
-//! [`takt_installed_version`] liest `app.package_info().version` — die beim
-//! Bauen eingeprägte Angabe. **Nicht** aus einer Datei neben der ausführbaren
-//! Datei, nicht aus einer Umgebungsvariablen, nicht aus einem Argument
-//! (A-V-15, E-067 Punkt 1). Läge die Zahl daneben, könnte jeder Prozess im
-//! Benutzerkonto sie herabsetzen und Takt dauerhaft eine
-//! Aktualisierungsaufforderung zeigen lassen — auf einen Knopf, bei dem der
-//! Benutzer darauf eingestellt ist, eine unsignierte Datei zu holen und
-//! auszuführen (T-136-3).
+//! Rust-Aufrufe von `Shell::open` umgehen den JavaScript-OpenScope; Versionsprüfung und feste Zieladresse bilden die Sicherheitsgrenze.
+//! Die Fähigkeitenliste darf keine allgemeine `shell:`-Freigabe enthalten.
+//! Die installierte Version stammt aus der Binärdatei, niemals aus Umgebung, Argumenten oder Begleitdateien.
 
 use tauri_plugin_shell::ShellExt;
 

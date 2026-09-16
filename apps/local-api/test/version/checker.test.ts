@@ -14,7 +14,7 @@
  * Netzverhalten (Frist, Weiterleitung, Obergrenze) ist bereits Gegenstand von
  * `source.test.ts`. Hier zählt nur, WANN und WIE OFT `latest()` gerufen wird.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createVersionCheckStatePort, openDatabase, toTimestamp, type OpenedDatabase } from '@takt/storage';
 
 import { createLogger } from '../../src/logger.ts';
@@ -769,4 +769,28 @@ describe('T-279 — der Streuwert auf den Boden wirkt am laufenden Prüfer (A-V-
 
     expect(abstand).toBeGreaterThanOrEqual(200);
   });
+});
+
+it('mehrfaches Starten verschiebt weder die erste Prüfung noch den laufenden Takt', async () => {
+  vi.useFakeTimers();
+  const source = countingSource(async () => ({ ok: true, version: '2.0.0' }));
+  const checker = createVersionChecker({
+    logger: silentLogger, now: () => new Date(), source: source.source,
+    startDelayMs: 100, intervalMs: 10_000, minIntervalMs: 1_000, random: () => 0,
+  });
+  try {
+    checker.start();
+    await vi.advanceTimersByTimeAsync(50);
+    checker.start();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(source.calls()).toBe(1);
+    checker.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(source.calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(source.calls()).toBe(2);
+  } finally {
+    checker.stop();
+    vi.useRealTimers();
+  }
 });

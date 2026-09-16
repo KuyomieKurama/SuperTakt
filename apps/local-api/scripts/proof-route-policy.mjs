@@ -128,9 +128,7 @@ function section(title) {
   console.log(`\n${title}`);
 }
 
-// ---------------------------------------------------------------------------
 // Aufbau: echte SQLite in einem Wegwerfordner, echte Migration, echtes Token.
-// ---------------------------------------------------------------------------
 
 const dataDir = await mkdtemp(join(tmpdir(), 'takt-proof-policy-'));
 const stolenDir = await mkdtemp(join(tmpdir(), 'takt-beute-'));
@@ -423,9 +421,7 @@ function concrete(path) {
 const VERMERK = 'GEHEIMER-INTERNER-VERMERK-Kunde-Meier-Kuendigung';
 
 try {
-  // ---------------------------------------------------------------------------
   section('1  Vorbereitung: ein echtes Add-in-Token und ein Todo mit Vermerk');
-  // ---------------------------------------------------------------------------
   check(
     'ein Add-in-Token ist erzeugt',
     typeof addinToken === 'string' && addinToken.startsWith('takt_'),
@@ -453,9 +449,7 @@ try {
     `Status ${noteBySession.status}`,
   );
 
-  // ---------------------------------------------------------------------------
   section('2  Die Messungen aus T-023, mit ausschließlich dem Add-in-Token');
-  // ---------------------------------------------------------------------------
   {
     const read = await call(`/todos/${todoId}/note`, { token: addinToken });
     check(
@@ -553,9 +547,7 @@ try {
     check('das Todo ist noch da', survives.status === 200, `Status ${survives.status}`);
   }
 
-  // ---------------------------------------------------------------------------
-  section('3  Die vier Routen, die das Add-in wirklich braucht, bleiben offen');
-  // ---------------------------------------------------------------------------
+  section('3  Die fünf Routen, die das Add-in wirklich braucht, bleiben offen');
   {
     const context = await call('/addin/context', { token: addinToken });
     check(
@@ -594,6 +586,14 @@ try {
 
     const addinTodoId = posted.body?.data?.todo?.id ?? posted.body?.data?.id;
     if (typeof addinTodoId === 'string') {
+      const mailBody = { requestId: '00000000-0000-4000-8000-000000000001', callNumber: 'TCK-000010',
+        mail: { identity: 'route-policy-mail', subject: 'AW: TCK-000010', sender: 'test@example.invalid', receivedAt: null,
+          internetMessageId: null, outlookLink: null, excerpt: null }, note: '', attachments: null };
+      const appended = await call(`/addin/todos/${addinTodoId}/mails`, { method: 'POST', token: addinToken, body: mailBody });
+      check('POST /addin/todos/{id}/mails erlaubt ausschließlich die Mail-Ergänzung', appended.status === 200 && appended.body?.data?.outcome === 'appended', appended.text.slice(0, 240));
+      const overwrite = await call(`/addin/todos/${addinTodoId}/mails`, { method: 'POST', token: addinToken, body: { ...mailBody, title: 'Verbotene Änderung' } });
+      check('die Mail-Ergänzung weist Aufgabenfelder ab', overwrite.status === 422, overwrite.text.slice(0, 240));
+
       const booked = await call(`/addin/todos/${addinTodoId}/time-entries`, {
         method: 'POST',
         token: addinToken,
@@ -613,9 +613,7 @@ try {
     }
   }
 
-  // ---------------------------------------------------------------------------
   section('4  Prüfung 24 — jede registrierte Route außerhalb von /addin ergibt 401');
-  // ---------------------------------------------------------------------------
   const { routes, opaque, allEntries } = collectRoutes();
   const foreign = routes.filter((r) => requiredCredentialForPath(r.path) === 'session');
   const own = routes.filter((r) => requiredCredentialForPath(r.path) === 'any');
@@ -693,8 +691,8 @@ try {
   // eine fünfte Tür auf einem Pfad aufgeht, den `ADDIN_FLAECHE` gar nicht
   // kennt.
   check(
-    `die Add-in-Fläche sind genau vier Routen (${addinSurface.length})`,
-    addinSurface.length === 4,
+    `die Add-in-Fläche sind genau fünf Routen (${addinSurface.length})`,
+    addinSurface.length === 5,
     addinSurface.map((r) => `${r.method} ${r.path}`).join(', '),
   );
   check(
@@ -755,9 +753,7 @@ try {
     closedAddin.join(' | '),
   );
 
-  // ---------------------------------------------------------------------------
   section('5  Gegenprobe — dieselben Routen mit dem Sitzungsgeheimnis ergeben nicht 401');
-  // ---------------------------------------------------------------------------
   {
     const wrongly = [];
     for (const route of foreign) {
@@ -775,9 +771,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('6  Die Grenze des Teilbaums hält auch von der Seite');
-  // ---------------------------------------------------------------------------
   {
     const lookalike = await call(`${API_BASE_PATH}/addintern/context`, {
       token: addinToken,
@@ -822,9 +816,7 @@ try {
     check('ohne jeden Nachweis bleibt auch die Add-in-Fläche zu', none.status === 401, `Status ${none.status}`);
   }
 
-  // ---------------------------------------------------------------------------
   section('7  Die reine Entscheidungsfunktion, ohne laufenden Dienst');
-  // ---------------------------------------------------------------------------
   {
     const cases = [
       [`${API_BASE_PATH}/health`, 'any'],
@@ -856,9 +848,7 @@ try {
     );
   }
 
-  // ---------------------------------------------------------------------------
   section('8  Der Festpunkt: die Rumpfgrenze traegt die Summengrenze (A-A-100)');
-  // ---------------------------------------------------------------------------
   /*
    * **Warum diese vier Zusicherungen hier stehen und nicht in einem Prueffall.**
    *

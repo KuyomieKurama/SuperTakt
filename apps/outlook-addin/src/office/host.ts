@@ -91,8 +91,10 @@ function waitForOfficeReady(timeoutMs: number): Promise<boolean> {
  */
 const readBody = (item: Office.MessageRead): Promise<string | null> =>
   new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 15000);
     try {
       item.body.getAsync(Office.CoercionType.Text, (result) => {
+        clearTimeout(timer);
         resolve(
           result.status === Office.AsyncResultStatus.Succeeded && typeof result.value === 'string'
             ? result.value
@@ -100,6 +102,7 @@ const readBody = (item: Office.MessageRead): Promise<string | null> =>
         );
       });
     } catch {
+      clearTimeout(timer);
       resolve(null);
     }
   });
@@ -216,7 +219,7 @@ const readAttachmentAccess = (
 export const onItemChanged = (handler: () => void): (() => void) => {
   if (!hasOfficeHost()) return () => undefined;
 
-  const mailbox = Office.context.mailbox;
+  const mailbox = Office.context?.mailbox;
   if (mailbox === undefined || typeof mailbox.addHandlerAsync !== 'function') {
     return () => undefined;
   }
@@ -245,12 +248,20 @@ export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
     return { kind: 'office_not_ready' };
   }
 
-  const item = Office.context.mailbox?.item;
+  const item = Office.context?.mailbox?.item;
   if (item === undefined) {
     return { kind: 'no_item' };
   }
 
   const body = await readBody(item);
+  if (Office.context.mailbox?.item !== item) return { kind: 'no_item' };
+  let outlookLink: string | undefined;
+  if (item.itemId && typeof Office.context.mailbox?.convertToRestId === 'function') {
+    try {
+      const restId = Office.context.mailbox.convertToRestId(item.itemId, Office.MailboxEnums.RestVersion.v2_0);
+      outlookLink = `https://outlook.office.com/mail/deeplink/read/${encodeURIComponent(restId)}`;
+    } catch { /* A missing link does not block an otherwise valid message. */ }
+  }
 
   /*
    * Für das **Formular** ist ein nicht gelesener Text dasselbe wie keiner: Die
@@ -261,6 +272,10 @@ export const readHost = async (timeoutMs = 15_000): Promise<HostState> => {
    */
   const mail: MailFacts = {
     ...EMPTY_MAIL,
+    ...(item.internetMessageId ? { internetMessageId: item.internetMessageId } : {}),
+    ...(item.itemId ? { itemId: item.itemId } : {}),
+    ...(Office.context.mailbox?.userProfile?.emailAddress ? { mailboxAddress: Office.context.mailbox.userProfile.emailAddress } : {}),
+    ...(outlookLink ? { outlookLink } : {}),
     subject: item.subject ?? '',
     body: body ?? '',
     senderName: item.from?.displayName ?? '',
