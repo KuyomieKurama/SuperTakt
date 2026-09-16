@@ -167,6 +167,24 @@ const readErrorBody = async (response: Response): Promise<ErrorShape> => {
 export const createApiClient = (options: ApiClientOptions): ApiClient => {
   const base = options.baseUrl.replace(/\/+$/, '');
 
+  // Nur lesend prüfen: Ein fehlgeschlagener POST kann bereits gespeichert sein.
+  const serviceResponds = async (token: string): Promise<boolean> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      await options.fetch(`${base}/api/v1/health`, {
+        method: 'GET', headers: { [TOKEN_HEADER]: token }, credentials: 'omit',
+        cache: 'no-store', signal: controller.signal,
+      });
+      // Auch eine HTTP-Fehlerantwort belegt, dass der Dienst antwortet.
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   const call = async <T>(
     method: 'GET' | 'POST',
     path: string,
@@ -208,7 +226,18 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
     try {
       response = await options.fetch(url.toString(), init);
     } catch {
-      return { ok: false, kind: 'unreachable', code: null, message: method === 'POST' ? `${MESSAGES.unreachable} Die Anfrage kann bereits gespeichert sein; bitte mit denselben Eingaben erneut versuchen.` : MESSAGES.unreachable };
+      clearTimeout(timeout);
+      const retryNote = method === 'POST'
+        ? ' Die Anfrage kann bereits gespeichert sein; bitte mit denselben Eingaben erneut versuchen.' : '';
+      if (controller.signal.aborted) {
+        return { ok: false, kind: 'failed', code: 'request_timeout',
+          message: `SuperTakt hat nicht innerhalb von 90 Sekunden geantwortet.${retryNote}` };
+      }
+      if (method === 'POST' && await serviceResponds(token)) {
+        return { ok: false, kind: 'failed', code: 'transfer_interrupted',
+          message: `Die Übertragung wurde unterbrochen. SuperTakt antwortet auf die anschließende Verbindungsprüfung.${retryNote}` };
+      }
+      return { ok: false, kind: 'unreachable', code: null, message: `${MESSAGES.unreachable}${retryNote}` };
     } finally { clearTimeout(timeout); }
 
     if (!response.ok) {

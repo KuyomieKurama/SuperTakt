@@ -124,7 +124,8 @@ export interface AppOptions {
  * entscheidet — derselbe Fehler, den E-099 Punkt 3 für Abwesenheitszusagen
  * beschreibt, nur in die andere Richtung.
  *
- * Deshalb: genau `POST` auf genau `/addin/todos`. Ein `GET` auf denselben Pfad
+ * Deshalb: genau `POST` auf `/addin/todos` oder `/addin/todos/:todoId/mails`.
+ * Beide übertragen dieselben E-Mail-Daten. Ein `GET` auf denselben Pfad
  * bekommt sie nicht, ein `POST` auf `/addin/todos/…/time-entries` auch nicht.
  *
  * Für die Datensicherung gilt dasselbe, und die Reihenfolge der Abfragen unten
@@ -150,11 +151,12 @@ function bodyLimitByRoute(): MiddlewareHandler<TaktEnv> {
     onError: (c) => c.json(errorEnvelope('payload_too_large'), errorStatus('payload_too_large')),
   });
   const ADDIN_CREATE_PATH = `${API_BASE_PATH}/addin/todos`;
+  const ADDIN_APPEND_PATH = new RegExp(`^${ADDIN_CREATE_PATH}/[^/]+/mails$`);
   const ARCHIVE_PATH = `${API_BASE_PATH}/data-transfer/archive`;
   return (c, next) => {
     if (c.req.method === 'POST' && c.req.path === ARCHIVE_PATH) return dataArchive(c, next);
     if (c.req.path.startsWith(`${API_BASE_PATH}/data-transfer`)) return dataTransfer(c, next);
-    if (c.req.method === 'POST' && c.req.path === ADDIN_CREATE_PATH) {
+    if (c.req.method === 'POST' && (c.req.path === ADDIN_CREATE_PATH || ADDIN_APPEND_PATH.test(c.req.path))) {
       return addinAttachments(c, next);
     }
     return ordinary(c, next);
