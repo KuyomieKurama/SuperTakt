@@ -377,7 +377,7 @@ export function BoardScreen() {
       */}
       <ScreenHeader
         title="Kanban"
-        lead="Aufgaben im Blick – nach deinen Spalten und Prioritäten."
+        lead="Aufgaben im Blick – nach Ihren Spalten und Prioritäten."
         actions={<Button variant="secondary" iconStart="filter" onClick={() => setSetupOpen(true)}>
           Spalten verwalten
         </Button>}
@@ -401,7 +401,7 @@ export function BoardScreen() {
         </section>
       </div>
 
-      {priorities.state.status === "error" ? <p role="alert">{priorities.state.message}</p> : null}
+      <p role="alert">{priorities.state.status === "error" ? priorities.state.message : null}</p>
       <p className="visually-hidden" role="status" aria-live="polite">
         {announcement}
       </p>

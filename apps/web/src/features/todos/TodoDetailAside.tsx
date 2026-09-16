@@ -59,7 +59,7 @@ export function TodoDetailAside({
       */}
       <Card
         title="Frist"
-        description="Ein Kalendertag mit optionaler Uhrzeit."
+        description="Ein Kalendertag mit optionaler Uhrzeit; sie steht in keinem Export."
         className="detail__deadline-card"
         actions={
           <IconButton

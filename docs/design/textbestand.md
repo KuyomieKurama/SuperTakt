@@ -956,7 +956,7 @@ verlangt hat** (E-078 Punkt 3). Wer eine neue Fassung will, legt sie **diesem** 
 | SP-09 | `NoteField.tsx:46-59` — Banner, Marke und `help` beider Feldarten | „Verlässt Takt · steht in der Abrechnung" / „Bleibt in Takt. Wird nie exportiert — auch nicht über eine eigene Exportvorlage." | **E-016**, **R-06**, **R-08** | **Abwesenheit** plus der wahrscheinlichste Bedienfehler des Produkts. Banner und Marke sind das Paar Sicht/Gehör und gehören zusammen. |
 | SP-10 | `SettingsScreen.tsx:524, 527` | „Die Exportdatei enthält lesbare Kundennotizen. Base64 ist eine Kodierung, keine Verschlüsselung — wer die Datei öffnen kann, kann sie lesen." | **B-5.2**, B-6.1, security-checker | **Folge**, und sie steht so auch in `CLAUDE.md`. |
 | SP-11 | `ShellStatus.tsx:216-242, 318-364, 393-435, 455-512, 620-691` | fünf Sperr- und Startmeldungen | **O-AF**, **F-15**, **O-AJ**, **B-2.4**, **B-4.3 Punkt 5**, **R-13**, **B-7.1**, E-036, SC 2.1.2 | **Absage** und **Abwesenheit**. Erscheinen nur im Fehlerzustand. Der Benutzername steht in keiner davon — das ist der Punkt. |
-| SP-12 | `UpdateDialog.tsx:129-131` und `:164-167` | „Takt lädt nichts herunter und installiert nichts. „Installieren" öffnet die Release-Seite …" / „„Überspringen" gilt genau dieser Fassung — eine spätere meldet sich wieder." | **A-18.9**, **A-18.10**, **A-18.11**, E-064, **R-20** | **Abwesenheit** gegen die Erwartung, die das Wort „Installieren" in jeder anderen Anwendung weckt. |
+| SP-12 | `UpdateDialog.tsx` | „Die Release-Seite öffnet sich im Browser. Download und Installation starten Sie dort selbst." / „Überspringen blendet nur diese Version aus. Schließen erinnert beim nächsten Start." | **A-18.9**, **A-18.10**, **A-18.11**, E-064, **R-20** | **Abwesenheit** automatischer Installation; passend zum ausdrücklich gewünschten kompakten Dialog und der Aktion „Release-Seite öffnen“. |
 | SP-13 | `Attachments.tsx:109-140` — die neun Absagegründe | „Diese Adresse lässt sich nicht öffnen: Takt öffnet nur „http" und „https" …" | **R-22**, A-19.16, A-19.17, E-072 | **Absage mit Begründung.** Jeder Grund nennt, **warum** — sonst steht der Benutzer vor einem Anhang, der nichts tut. |
 | SP-14 | `lib/exportDirectoryAdvice.ts`, `lib/databaseLocationAdvice.ts` — alle `body`- und `remedy`-Texte | „Alles, was Takt hier ablegt, wird kurz darauf hochgeladen …" | **B-5.1**, **B-5.2**, **B-5.3**, **R-11**, **R-13**, E-018, security-checker | **Absage/Folge**, zustandsgebunden. Muster für Abschnitt 8. |
 | SP-15 | `labels.ts:438` und `:457` | „Ausgebuchte Buchungen zählen mit …" / „„Abgerechnet" meint den Exportstatus der Buchungen …" | **S-1** (R-2), **W-7** (R-2a), E-047, E-050, E-059 | **Folge/Abwesenheit.** Zwei Wörter, die sich zu widersprechen scheinen und beide richtig sind. **Nachtrag T-180:** Ort und Umfang sind **nicht mehr verhandelbar** — UM-02 ist mit E-081 entfallen, die Bauart steht. Es fällt allein die Klammer „(E-047)" nach ST-03. |
@@ -3407,3 +3407,8 @@ steht in 11.8 und gilt unverändert daneben.
 SP-04: Der aktuelle Auftrag zur Outlook-Angleichung ersetzt die Beschränkung auf
 eine Frist ohne Uhrzeit (A-10.14). Der geschützte Hinweis nennt jetzt die optionale
 Uhrzeit; seine Aussagen zu Pools, Spalten, Buchungen und Export bleiben bestehen.
+
+SP-12: Der Benutzerauftrag zur kompakten Update-Anzeige ersetzt den früheren
+Button „Installieren“ durch „Release-Seite öffnen“. Die Sperrliste schützt den
+neuen, gleichbedeutenden Hinweis auf den manuellen Download und die Installation
+sowie das versionsbezogene Überspringen. Der Prüfungsumfang bleibt bestehen.

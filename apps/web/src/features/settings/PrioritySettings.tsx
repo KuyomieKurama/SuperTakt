@@ -35,6 +35,6 @@ export function PrioritySettings() {
     <ConfirmDialog open={removing !== null} title="Priorität löschen?" description={removing ? `„${removing.name}“ wird entfernt.` : ''}
       consequence="Zugeordnete Todos bleiben erhalten und haben danach keine Priorität." confirmLabel="Löschen" tone="danger" busy={mutation.busy}
       onCancel={() => setRemoving(null)} onConfirm={() => { if (!removing) return; void mutation.run(async () => { await deletePriority(removing.id); setRemoving(null); bump(); }); }} />
-    {removing && mutation.error ? <p role="alert">{mutation.error}</p> : null}
+    <p role="alert">{removing ? mutation.error : null}</p>
   </Card>;
 }

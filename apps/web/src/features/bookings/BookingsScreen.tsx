@@ -124,7 +124,8 @@ export function BookingsScreen({ query, embedded }: BookingsScreenProps) {
     const search = todoSearch.trim().toLocaleLowerCase();
     const matching = search === "" ? page.items : page.items.filter(entry => {
       const todo = titles.get(entry.todoId);
-      return `${todo?.title ?? ""} ${todo?.callNumber ?? ""}`.toLocaleLowerCase().includes(search);
+      return (todo?.title.toLocaleLowerCase().includes(search) ?? false)
+        || (todo?.callNumber?.toLocaleLowerCase().includes(search) ?? false);
     });
     return { page: search === "" ? page : { ...page, items: matching, total: matching.length }, titles, todos: todos.items };
   }, [filter, todoSearch], [version]);

@@ -310,7 +310,7 @@ export interface Todo {
   readonly dueTime?: LocalTime | null;
   readonly estimateMinutes?: number | null;
   readonly noExport?: boolean;
-  readonly priorityId?: string | null;
+  readonly priorityId?: Id | null;
   readonly dueDate: CalendarDay | null;
   readonly createdAt: Timestamp;
   readonly updatedAt: Timestamp;

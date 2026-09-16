@@ -267,7 +267,8 @@ export function ExportScreen({ query = {} }: { readonly query?: Readonly<Record<
     const search = todoSearch.trim().toLocaleLowerCase();
     const matchingEntries = search === "" ? entries : entries.filter(entry => {
       const todo = titles.get(entry.todoId);
-      return `${todo?.title ?? ""} ${todo?.callNumber ?? ""}`.toLocaleLowerCase().includes(search);
+      return (todo?.title.toLocaleLowerCase().includes(search) ?? false)
+        || (todo?.callNumber?.toLocaleLowerCase().includes(search) ?? false);
     });
     return { entries: matchingEntries, byId, titles, runs: runs.items, filterKey };
   }, [filterKey], [version]);

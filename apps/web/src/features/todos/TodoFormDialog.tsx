@@ -251,7 +251,7 @@ export function TodoFormDialog({
           if (!value) setDueTime("");
         }}
         time={{ value: dueTime, onChange: setDueTime }}
-        hint="Ohne Datum keine Frist. Die Uhrzeit ist 00:00, bis du sie änderst."
+        hint="Ein Kalendertag mit optionaler Uhrzeit. Optional — leer lassen heißt: keine Frist. Sie ändert nichts an Pools, Spalten, Buchungen oder Export. Die Uhrzeit ist 00:00, bis Sie sie ändern."
       />
       <label className="todo-export-option">
         <span className="todo-export-option__text">
@@ -264,7 +264,7 @@ export function TodoFormDialog({
       <Select label="Priorität" value={priorityId} onChange={setPriorityId}
         hint="Die Werte und ihre Gewichtung stehen in den Einstellungen unter „Prioritäten“."
         options={[{ value: "", label: "Keine Priorität" }, ...(priorities.state.status === "ready" ? priorities.state.value.map(priority => ({ value: priority.id, label: `${priority.name} · ${priority.weight}` })) : [])]} />
-      {priorities.state.status === "error" ? <p role="alert">{priorities.state.message}</p> : null}
+      <p role="alert">{priorities.state.status === "error" ? priorities.state.message : null}</p>
       <TextField label="Zeitschätzung in Minuten" type="number" value={estimateMinutes} onChange={setEstimateMinutes} />
 
 

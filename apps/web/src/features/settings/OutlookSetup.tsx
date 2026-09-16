@@ -93,7 +93,7 @@ export function OutlookSetup() {
             </li>)}</ul> : null}
             {facts.toolsAvailable === false ? <InlineMessage tone="warning" title="Zertifikatswerkzeuge fehlen">Für die Einrichtung werden OpenSSL und unter Linux die NSS-Werkzeuge mit certutil benötigt. Installieren Sie die fehlenden Werkzeuge und wählen Sie „Erneut prüfen“.</InlineMessage> : null}
             {facts.installFailed ? <InlineMessage tone="warning" title="Vertrauen nicht vollständig hinterlegt">Mindestens ein Zertifikatsspeicher konnte nicht geändert werden. Schließen Sie den Browser vollständig und versuchen Sie es erneut. Erfolgreiche Einträge bleiben erhalten.</InlineMessage> : null}
-            {facts.trustScope === "linux_nss" ? <p>Der Import gilt für den gemeinsamen Chromium-/Brave-Speicher und die hier erkannten Firefox-Profile dieses Benutzerkontos. Starten Sie den Browser nach dem Import vollständig neu. Separat abgeschottete Browser benötigen gegebenenfalls eine eigene Einrichtung.</p> : null}
+            {facts.trustScope === "linux_nss" ? <p>Der Import gilt für den gemeinsamen Zertifikatsspeicher von Chromium und Brave und die hier erkannten Firefox-Profile dieses Benutzerkontos. Starten Sie den Browser nach dem Import vollständig neu. Separat abgeschottete Browser benötigen gegebenenfalls eine eigene Einrichtung.</p> : null}
             <InlineMessage tone={facts.https === "ready" && facts.installed ? "success" : "warning"} title={facts.https === "ready" ? "Lokaler HTTPS-Server geprüft" : "HTTPS-Zugang noch nicht bereit"}>
               {HTTPS_LABEL[facts.https]}
             </InlineMessage>
