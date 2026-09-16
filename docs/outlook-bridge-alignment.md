@@ -1,5 +1,28 @@
 # Outlook-Angleichung (A-10.11)
 
+## Übertragungsfehler beim Anhängen (16.09.2026)
+
+Die vollständige API-Prüfkette erlaubte größere E-Mail-Rümpfe nur bei
+`POST /addin/todos`. Die Mail-Ergänzung unter
+`POST /addin/todos/:todoId/mails` wurde dagegen bereits über 1 MiB mit HTTP 413
+abgewiesen. Beide Routen verwenden jetzt dieselbe E-Mail-Rumpfgrenze;
+benachbarte Routen behalten die allgemeine Grenze. Der Regressionstest in
+`proof-route-policy.mjs` prüft Neuanlage, Ergänzung und Wiederholung mit derselben
+größeren Nachricht sowie die unveränderten Grenzen benachbarter Routen.
+
+Ein Transportfehler beim Senden löst im Add-in jetzt eine auf fünf Sekunden
+begrenzte, authentifizierte GET-Verbindungsprüfung aus. Antwortet der Dienst,
+meldet das Add-in die unterbrochene Übertragung statt pauschaler
+Nichterreichbarkeit. Der 90-Sekunden-Sendeabbruch erhält eine eigene Meldung.
+Schreibanfragen werden nicht automatisch wiederholt; der Hinweis auf eine
+möglicherweise bereits erfolgte Speicherung bleibt erhalten.
+
+Verifikation: 55 Route-Policy-Prüfungen, 17 Tests für API-Client und
+Mail-Zuordnung sowie die betroffenen Typprüfungen bestanden.
+Der gemeldete Fehler betraf eine kurze Mail ohne Dateien bei ansonsten
+funktionierendem Add-in. Dafür ist die Größenabweichung keine gesicherte
+Erklärung. Eine Reproduktion in einem echten Outlook-Client steht aus.
+
 ## Abgleich vor der Umsetzung
 
 Referenz: KuyomieKurama/SP-OutlookBridge, am 15.09.2026 eingelesener Git-Stand.

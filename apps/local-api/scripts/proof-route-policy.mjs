@@ -157,6 +157,7 @@ function build(location) {
     sessionSecret,
     windowsUser: 't.beispiel',
     databaseLocation: location,
+    appDataDir: dataDir,
   });
 }
 
@@ -593,6 +594,30 @@ try {
       check('POST /addin/todos/{id}/mails erlaubt ausschließlich die Mail-Ergänzung', appended.status === 200 && appended.body?.data?.outcome === 'appended', appended.text.slice(0, 240));
       const overwrite = await call(`/addin/todos/${addinTodoId}/mails`, { method: 'POST', token: addinToken, body: { ...mailBody, title: 'Verbotene Änderung' } });
       check('die Mail-Ergänzung weist Aufgabenfelder ab', overwrite.status === 422, overwrite.text.slice(0, 240));
+
+      // Eine E-Mail kann bereits ohne separate Dateien die allgemeine 1-MiB-Grenze überschreiten.
+      const largeAttachments = { sender: 'test@example.invalid', items: [{
+        kind: 'file', displayName: 'nachricht.eml',
+        contentBase64: Buffer.from('Subject: Test\r\n\r\n' + 'x'.repeat(1024 * 1024)).toString('base64'),
+      }] };
+      const largeMail = { ...mailBody, requestId: '00000000-0000-4000-8000-000000000002',
+        mail: { ...mailBody.mail, identity: 'route-policy-large-mail' }, attachments: largeAttachments };
+      const largeCreated = await call('/addin/todos', { method: 'POST', token: addinToken,
+        body: { title: 'Große E-Mail', callNumber: 'TCK-000011', attachments: largeAttachments } });
+      check('Neuanlage übernimmt E-Mail-Daten über 1 MiB',
+        largeCreated.status === 201 && largeCreated.body?.data?.attachments?.stored === 1, largeCreated.text.slice(0, 240));
+      const largeAppended = await call(`/addin/todos/${addinTodoId}/mails`, {
+        method: 'POST', token: addinToken, body: largeMail });
+      check('Mail-Ergänzung übernimmt dieselben E-Mail-Daten über 1 MiB',
+        largeAppended.status === 200 && largeAppended.body?.data?.attachments?.stored === 1, largeAppended.text.slice(0, 240));
+      const repeated = await call(`/addin/todos/${addinTodoId}/mails`, {
+        method: 'POST', token: addinToken, body: largeMail });
+      check('Wiederholung der großen Mail-Ergänzung erzeugt keine Dublette',
+        repeated.status === 200 && repeated.body?.data?.outcome === 'already_present', repeated.text.slice(0, 240));
+      for (const path of [`/addin/todos/${addinTodoId}/time-entries`, `/addin/todos/${addinTodoId}/mails/extra`]) {
+        const limited = await call(path, { method: 'POST', token: addinToken, body: largeMail });
+        check(`Nachbarroute ${path} behält die allgemeine Rumpfgrenze`, limited.status === 413, limited.text.slice(0, 240));
+      }
 
       const booked = await call(`/addin/todos/${addinTodoId}/time-entries`, {
         method: 'POST',

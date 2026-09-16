@@ -37,13 +37,9 @@
  * die Oberfläche ohne Hülle überhaupt weiterläuft, fällt im
  * Auslieferungsbündel mit `import.meta.env.DEV` weg.
  *
- * **Eine Einschränkung, hier nachgemessen:** Der Rückfalltext von
- * `kind: "failed"` ist der einzige, den ein ausgeliefertes Bündel zeigen kann
- * — `App.tsx` gibt `state.message` aus, und dieser Zweig läuft auch **mit**
- * Hülle. Er erscheint allerdings nur, wenn `serviceHandshake()` etwas wirft,
- * das kein `Error` ist; sonst steht dort die Meldung der Hülle. Auch er zählt
- * nicht als Träger — er sagt nichts, was die Fläche um ihn herum nicht schon
- * sagt.
+ * Unlike most no-shell messages above, `kind: "failed"` is reachable in a
+ * packaged desktop build. `Error` and non-empty string rejections retain
+ * the native diagnosis; only other rejection values use the fallback.
  *
  * Wer hier einen Satz streicht oder hinzufügt, ändert deshalb keinen
  * Textbestand. Er ändert eine Notlage.
@@ -59,7 +55,9 @@ import type {
 import { hasForbiddenNameCharacter } from "@takt/domain";
 import type { ForeignText } from "../api/types";
 import type { IdleActivity } from "@takt/desktop/shell";
-import { setConnection, type Connection } from "../api/client";
+import type { Connection } from "../api/client";
+import { waitForService } from "./serviceStartup";
+import { foreignText, foreignTextFrom } from "../lib/foreign";
 import type { ShellStateSnapshot, UserNameFinding } from "./ShellStatus";
 
 /**
@@ -149,38 +147,37 @@ function developmentFallback(): Connection | null {
   return { baseUrl, headerName: "X-Takt-Token", secret };
 }
 
-/** Stellt die Verbindung her und meldet, was dabei herauskam. */
+/** Connect to the authenticated API before exposing the workspace. */
 export async function connect(): Promise<ConnectionState> {
   const shell = await loadShell();
 
-  if (shell === null || !shell.isShellAvailable()) {
-    const fallback = developmentFallback();
-    if (fallback !== null) {
-      setConnection(fallback);
-      return { kind: "ready", shell: null, userName: "unknown" };
-    }
-    return { kind: "no_shell" };
-  }
-
   try {
-    setConnection(await shell.serviceHandshake());
+    let handshake: () => Promise<Connection>;
+    if (shell === null || !shell.isShellAvailable()) {
+      const fallback = developmentFallback();
+      if (fallback === null) return { kind: "no_shell" };
+      handshake = async () => fallback;
+    } else {
+      handshake = () => shell.serviceHandshake();
+    }
+
+    const [shellSnapshot, userName] = await Promise.all([
+      waitForService(handshake, readShellState),
+      readUserNameFinding(),
+    ]);
+    return { kind: "ready", shell: shellSnapshot, userName };
   } catch (cause) {
+    const nativeMessage = foreignTextFrom(cause);
     return {
       kind: "failed",
       message:
         cause instanceof Error
           ? cause.message
-          : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
+          : nativeMessage !== null && nativeMessage.trim().length > 0
+            ? foreignText(nativeMessage)
+            : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
     };
   }
-
-  // Beide Fragen an die Huelle, nebeneinander: Sie haengen nicht voneinander
-  // ab, und der Start soll nicht zweimal auf denselben Kanal warten.
-  const [shellSnapshot, userName] = await Promise.all([
-    readShellState(),
-    readUserNameFinding(),
-  ]);
-  return { kind: "ready", shell: shellSnapshot, userName };
 }
 
 /**
