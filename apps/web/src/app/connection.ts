@@ -57,6 +57,7 @@ import type { ForeignText } from "../api/types";
 import type { IdleActivity } from "@takt/desktop/shell";
 import type { Connection } from "../api/client";
 import { waitForService } from "./serviceStartup";
+import { foreignText, foreignTextFrom } from "../lib/foreign";
 import type { ShellStateSnapshot, UserNameFinding } from "./ShellStatus";
 
 /**
@@ -166,13 +167,14 @@ export async function connect(): Promise<ConnectionState> {
     ]);
     return { kind: "ready", shell: shellSnapshot, userName };
   } catch (cause) {
+    const nativeMessage = foreignTextFrom(cause);
     return {
       kind: "failed",
       message:
         cause instanceof Error
           ? cause.message
-          : typeof cause === "string" && cause.trim().length > 0
-            ? cause
+          : nativeMessage !== null && nativeMessage.trim().length > 0
+            ? foreignText(nativeMessage)
             : "Die Verbindung zum lokalen Dienst kam nicht zustande.",
     };
   }

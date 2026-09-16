@@ -206,6 +206,17 @@ describe("application connection integration", () => {
     expect(health).not.toHaveBeenCalled();
   });
 
+  it("makes hidden direction characters in native error text visible", async () => {
+    vi.mocked(serviceHandshake).mockRejectedValue("Startfehler: Datei\u202egnp.exe");
+    const result = await connect();
+    expect(result.kind).toBe("failed");
+    if (result.kind !== "failed") throw new Error("Expected a startup failure");
+    expect(result.message).toContain("Startfehler: Datei");
+    expect(result.message).toContain("gnp.exe");
+    expect(result.message).not.toContain("\u202e");
+    expect(health).not.toHaveBeenCalled();
+  });
+
   it("does not probe or manufacture credentials without the shell or a development connection", async () => {
     vi.mocked(isShellAvailable).mockReturnValue(false);
     vi.stubEnv("VITE_TAKT_BASE_URL", "");
