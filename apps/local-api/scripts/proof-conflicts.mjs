@@ -475,6 +475,17 @@ section('1  Jeder eindeutige Index des Schemas hat einen eigenen Satz');
     );
   }
 
+  run(
+    'INSERT INTO todo_priority (id, name, weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    'priority-original', 'High', 10, T, T,
+  );
+  provoke('ux_todo_priority_name', 'name_conflict', () =>
+    run(
+      'INSERT INTO todo_priority (id, name, weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      'priority-duplicate', 'HIGH', 20, T, T,
+    ),
+  );
+
   provoke('ux_todo_status_name', 'name_conflict', () =>
     run(
       'INSERT INTO todo_status (id, name, position, is_default, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',

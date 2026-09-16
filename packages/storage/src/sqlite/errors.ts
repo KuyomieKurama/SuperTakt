@@ -115,6 +115,12 @@ const UNIQUE_INDEX: readonly {
   readonly message: string;
 }[] = Object.freeze([
   {
+    index: 'ux_todo_priority_name',
+    columns: ['todo_priority.name'],
+    code: 'name_conflict',
+    message: 'Eine Priorität mit diesem Namen existiert bereits.',
+  },
+  {
     index: 'ux_time_entry_running',
     columns: [],
     code: 'timer_already_running',
